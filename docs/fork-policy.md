@@ -14,6 +14,7 @@ D-Flow 는 `wbs-web`(D'Flow, D-CUBE 운영)의 **한 시점 사본**이며 이�
   `Fork-of: wbs-web@77cf6785e088e65a35857ae69b4b5b040fa13bf3` 에 고정돼 있다.
 - **원본 이력(루트 `c40de1a` 와 SP0 작업 브랜치 `sp0/fork-bootstrap`)은 로컬 보관 브랜치(`main-fork-history`)에만
   둔다 — push 하지 않는다.** `c40de1a` 부터의 작업 이력에는 원본 트리가 그대로 들어 있어서다.
+  pre-push 훅의 G5 가 `c40de1a` 를 조상으로 둔 ref(브랜치·태그)의 push 를 `SKIP_GUARD` 와 무관하게 막는다.
   원격(`origin`)의 루트는 SP0 결과 트리를 한 커밋으로 담은 깨끗한 squash 커밋이며, 같은 트레일러
   `Fork-of: wbs-web@77cf6785e088e65a35857ae69b4b5b040fa13bf3` 를 단다. 루트 squash 는 `git checkout --orphan`
   (index 보존 — `git switch --orphan` 은 트리를 비운다)으로 만든다.
@@ -21,7 +22,9 @@ D-Flow 는 `wbs-web`(D'Flow, D-CUBE 운영)의 **한 시점 사본**이며 이�
   깨끗한 루트를 `SKIP_GUARD=1 git push --force-with-lease=refs/heads/main:f790e82… -u origin main` 으로 **강제 교체**했다
   (SKIP_GUARD 는 squash 루트가 마이그레이션과 코드를 함께 담아 G1 에 걸리기 때문). 교체된 옛 커밋은 원격에서 도달
   불가하지만 GitHub 가 객체를 한동안 보관할 수 있다 — 완전한 삭제가 필요하면 리포 삭제·재생성이 확실한 방법이다.
-  이 강제 push 는 이 한 번뿐이며 이후 `main` 에 대한 force push 는 다시 금지다.
+  이 강제 push 는 이 한 번뿐이며 이후 `main` 에 대한 force push 는 다시 금지다. 사고 원인: 리뷰 에이전트가
+  스크래치패드 클론에서 훅을 시뮬레이션하다 `cd` 가 실패한 뒤(병렬 에이전트가 같은 경로를 지움) 나머지 명령이
+  실제 체크아웃에서 실행돼 `SKIP_GUARD=1 git push -u origin main` 이 옛 `main` 을 올렸다 — G5 는 이 재발을 막는다.
 - 이후 원본의 커밋을 자동으로 따라가지 않는다. 원본을 가리킬 일이 있으면 `git remote add upstream <wbs-web>`
   으로 두되, **`merge`·`rebase` 는 금지**다(아래 cherry-pick 절차만 쓴다).
 - 근거: 원본은 최근 30일 468커밋(전 브랜치)·마이그레이션 14커밋으로 계속 움직이고, SP1 이후 스키마

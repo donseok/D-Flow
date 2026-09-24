@@ -82,5 +82,5 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 |---|---|
 | 프로덕션 롤백(원격 생긴 뒤) | `docs/runbook-rollback.md` |
 | 포크 정책·금지 DB ref | `docs/fork-policy.md` |
-| pre-push 훅 (G1-G4) | `.githooks/pre-push` |
+| pre-push 훅 (G1-G5) | `.githooks/pre-push` |
 | 로컬 개발 규칙 정본 | `CLAUDE.md` |

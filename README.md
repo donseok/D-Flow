@@ -22,7 +22,7 @@ npm run dev                                         # http://localhost:3000
 `BOOTSTRAP_PASSWORD`/`BOOTSTRAP_TEAM`(기본 `운영`) env 로 받는다 — 비밀번호는 파일에 남기지 않는다.
 스키마를 바꿨거나 `db:reset`을 다시 돌렸으면 계정도 함께 지워지므로 `dev:bootstrap`을 다시 실행한다.
 
-그 외 로컬 개발 규칙(브랜치·커밋·pre-push 훅 G1~G4 등)은 `CLAUDE.md`가 정본이다.
+그 외 로컬 개발 규칙(브랜치·커밋·pre-push 훅 G1~G5 등)은 `CLAUDE.md`가 정본이다.
 
 ## 환경 변수
 

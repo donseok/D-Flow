@@ -20,8 +20,9 @@
 #   Preview 배포를 받았다는 뜻이고, 남아 있는 커밋은 아직 어디에도 없다는 뜻이다.
 #
 #   G4: 0001+ 마이그레이션의 main 직행 차단(Staging-verified 트레일러, 범위 단위, --not origin/main)
+#   G5: 원본 리포 사본(c40de1a) 이력의 push 차단 — 아래 SKIP_GUARD 로도 우회되지 않는다
 #
-# 우회: SKIP_GUARD=1 git push   (긴급용 — 배포 후 npm run smoke:prod 필수)
+# 우회: SKIP_GUARD=1 git push   (긴급용 — 배포 후 npm run smoke:prod 필수. G5 는 예외)
 
 set -u
 
@@ -33,6 +34,40 @@ if [ -t 2 ]; then
   RED='\033[31m'; YEL='\033[33m'; GRN='\033[32m'; DIM='\033[2m'; OFF='\033[0m'
 else
   RED=''; YEL=''; GRN=''; DIM=''; OFF=''
+fi
+
+STDIN_BUF=$(cat)
+[ -z "$STDIN_BUF" ] && exit 0
+
+# ── G5. 원본 리포 사본 이력의 push 차단 — SKIP_GUARD 로도 우회할 수 없다 ────
+# 로컬 보관 브랜치(main-fork-history)의 루트 c40de1a 는 원본 wbs-web 트리를 통째로
+# 담고 있다(고객 문서·개인정보). 이 커밋을 조상으로 둔 ref 는 브랜치든 태그든 어떤
+# 원격에도 가지 않는다(docs/fork-policy.md). 2026-09-24 사고: 리뷰 에이전트의 훅
+# 시뮬레이션이 `cd` 실패 뒤 실제 체크아웃에서 `SKIP_GUARD=1 git push -u origin main`
+# 을 실행해 이 이력이 GitHub 에 올라갔다 — 그래서 이 관문은 우회 플래그보다 앞에 있다.
+# 로컬에 c40de1a 객체가 없으면(다른 PC 의 클론) 판정할 것도, push 될 것도 없다.
+FORK_COPY_ROOT='c40de1a005e125eee6705190a2685dee96fc8da8'
+if git cat-file -e "${FORK_COPY_ROOT}^{commit}" 2>/dev/null; then
+  g5_hits=''
+  while read -r local_ref local_oid remote_ref remote_oid; do
+    [ -z "${local_ref:-}" ] && continue
+    [ "$local_oid" = "$ZERO" ] && continue          # 삭제는 객체를 보내지 않는다
+    if git merge-base --is-ancestor "$FORK_COPY_ROOT" "$local_oid" 2>/dev/null; then
+      g5_hits="${g5_hits}   ${local_ref} → ${remote_ref}
+"
+    fi
+  done <<STDIN_EOF
+$STDIN_BUF
+STDIN_EOF
+  if [ -n "$g5_hits" ]; then
+    {
+      printf '\n%sG5 원본 리포 사본(c40de1a)이 담긴 이력을 원격으로 보내려 합니다 — 차단%s\n' "$RED" "$OFF"
+      printf '%s' "$g5_hits"
+      printf '   이 이력은 로컬 보관 브랜치(main-fork-history)에만 둡니다 — docs/fork-policy.md.\n'
+      printf '   SKIP_GUARD 로도 우회되지 않습니다.\n\n'
+    } >&2
+    exit 1
+  fi
 fi
 
 if [ "${SKIP_GUARD:-}" = "1" ]; then
@@ -52,9 +87,6 @@ UI_RE='^(src/app/globals\.css|src/app/layout\.tsx|src/app/\(app\)/layout\.tsx|sr
 # 머지 커밋에는 빈 출력을 낸다. `--cc` 만이 "모든 부모와 다른 변경"을 정확히 골라낸다.
 # 실측: 4개 파일을 끼운 머지에서 --no-merges=0건 / --cc=4건.
 evil_files() { $GIT diff-tree --cc --no-commit-id --name-only -r "$1" 2>/dev/null; }
-
-STDIN_BUF=$(cat)
-[ -z "$STDIN_BUF" ] && exit 0
 
 fail=0
 msgs=$(mktemp)

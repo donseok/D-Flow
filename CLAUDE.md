@@ -60,7 +60,7 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 
 ### pre-push 훅
 
-`.githooks/pre-push` — `npm install` 이 `core.hooksPath` 를 걸어 자동 설치된다(리포에 커밋되므로 모든 PC 에 따라감). 검사는 넷:
+`.githooks/pre-push` — `npm install` 이 `core.hooksPath` 를 걸어 자동 설치된다(리포에 커밋되므로 모든 PC 에 따라감). 검사는 다섯:
 
 | | 내용 | 예외 |
 |---|---|---|
@@ -68,13 +68,14 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 | G2 | Preview 를 거치지 않은 UI 변경의 main 직행 차단 | `Preview-checked:` 트레일러 |
 | G3 | 반응형 안전망 desync·충돌 검사 | vitest 없으면 건너뛰고 그 사실을 알림 |
 | G4 | 0001+ 마이그레이션의 main 직행 차단(스테이징 리허설 트레일러) | 범위 내 빈 커밋 트레일러로도 인정 |
+| G5 | 원본 리포 사본(`c40de1a`, 로컬 `main-fork-history`)이 조상인 ref 의 push 차단 | 없음 — `SKIP_GUARD` 로도 우회 불가 |
 
 검사 대상은 **이번 push 로 원격에 처음 올라가는 커밋**(`--not --remotes`)뿐이다. 브랜치에 `origin/main` 을 머지해도 남의 커밋이 검사에 끌려들어오지 않는다.
 
 빌드/테스트는 이 훅이 돌리지 않는다. GitHub Actions(`.github/workflows/ci.yml`)가 push/PR 뒤에 lint·test·build 와
 db 기준선 대조를 돌리지만 사후 검사라 push 를 막지는 못한다(원격 Vercel 은 아직 없다). push 전에 `npm run lint`·
 `npm run test`·`npm run build` 를 직접 돌리고, push 뒤 Actions 결과를 확인한다.
-긴급 우회는 `SKIP_GUARD=1 git push`. (SP0 의 첫 push 는 squash 루트가 G1 에 걸려 SKIP_GUARD=1 과 1회성 강제 교체로
+긴급 우회는 `SKIP_GUARD=1 git push`(G5 는 예외). (SP0 의 첫 push 는 squash 루트가 G1 에 걸려 SKIP_GUARD=1 과 1회성 강제 교체로
 올렸다 — docs/fork-policy.md. 그 뒤로는 `main` force push 금지가 그대로다.) (`smoke:prod` 로 배포 후 재확인하는 절차는 첫 배포
 이후에나 쓸 수 있다.)
 
