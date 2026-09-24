@@ -3,7 +3,7 @@
 스펙 `docs/superpowers/specs/2026-09-23-sp0-fork-bootstrap-design.md` 9절 done_when 과 플랜 부록 A(흔적 전면 제거) 검증 grep 을 로컬에서 잰 기록이다.
 E2E·빌드 최종 측정 트리는 커밋 `ededd5a`(브랜치 `sp0/fork-bootstrap`)다. 그 뒤에는 문서·CI 만 바뀌었다(`d5702ae` CLAUDE.md, `7cd145e`·`d445edd` fork-policy, `8a27463` CI 기준선 대조 순서). grep·전체 테스트·기준선 대조는 그 위에서 다시 쟀다. 시각은 전부 KST. 여기의 커밋 SHA 는 로컬 보관 브랜치 `main-fork-history` 기준이며 원격 이력에는 없다(docs/fork-policy.md — 원격 루트는 squash 1커밋).
 
-**요약** — 10항목 중 ✓ 9(3번의 CI 는 push 뒤), push 뒤 1(태그).
+**요약** — 10항목 모두 ✓ (3번의 CI 와 10번 태그는 2026-09-24 push 뒤 확인).
 - 처음 측정(`b50e242`·`9156e5f`)에서는 1번이 ✗ 였다. 엑셀 임포트가 기준선 스키마에서 500 으로 실패했다(2.1).
   원본 운영에서 물려받은 결함이라 마이그레이션 `0002`(`f4d59e8`)로 고쳤다.
   기준선 대조 게이트는 그대로 두고 CI·로컬 대조 순서를 바꿨다(`d5d7439`, 6절).
@@ -137,14 +137,14 @@ GIF 녹화(`sp0-e2e.gif`)는 하지 않았다.
 |---|---|---|---|
 | 1 | 빈 DB → 로그인 → 프로젝트 생성(라벨) → WBS 엑셀 임포트 → 주간보고 PPT/엑셀 내보내기 완주, 브라우저 기록 | ✓ | 2.3(0002 적용한 새 DB, append·replace 둘 다) + 3절. 수정 전 실패와 원인은 2.1 |
 | 2 | 산출 PPTX/XLSX 가 열리고 흔적 0 | ✓ | 흔적 0(4절). 열리는지는 LibreOffice 대신 파서·Quick Look 으로 확인했다 |
-| 3 | 테스트·lint·build 초록, CI 두 잡 초록 | ✓ / CI 는 push 뒤 | `d5d7439` 에서 `npx vitest run` 480파일 5910건 통과, 실패 0(08:52). `npm run lint` 오류 0·경고 5(08:52). `npm run build` 성공(08:53). `7cd145e` 에서 전체 테스트 다시 5910건 통과, 실패 0(09:03). CI 는 원격 push 전이라 확인하지 못했다 |
+| 3 | 테스트·lint·build 초록, CI 두 잡 초록 | ✓ | `d5d7439` 에서 `npx vitest run` 480파일 5910건 통과, 실패 0(08:52). `npm run lint` 오류 0·경고 5(08:52). `npm run build` 성공(08:53). `7cd145e` 에서 전체 테스트 다시 5910건 통과, 실패 0(09:03). CI 는 push 뒤 확인 — `origin/main` 0e0ceaf(run 35946512056)·10812dd(run 35947236328) 의 test·db 두 잡 모두 success |
 | 4 | 브랜드 grep `src public` 0 | ✓ | 5절 |
 | 5 | 금지 ref grep 이 `targets.mjs` 와 그 테스트뿐 | ✓ | 5절(`scripts src .github supabase` 범위에서는 `targets.mjs` 하나) |
 | 6 | `baseline-diff` 불일치 0, 라이브 카탈로그 스냅샷 커밋 | ✓ | 6절. 스냅샷 `5e181be` |
 | 7 | `tests/invariants/migration-files.test.ts` 초록 | ✓ | 5건 통과(`0002` 와 롤백 쌍 포함) |
 | 8 | `FLOOR` 재측정 반영 | ✓ | `62f895d`(`scripts/smoke-prod.mjs`) |
 | 9 | CLAUDE.md·`docs/fork-policy.md`·runbook 개정 | ✓ | `ed53e39`·`cf824e0`·`d5702ae`(CLAUDE.md), `7cd145e`·`d445edd`(fork-policy 에 17′ 규칙: 원본 이력은 루트 `c40de1a` 와 SP0 브랜치까지 로컬 보관 브랜치에만, 원격 루트는 `Fork-of` 트레일러를 단 squash), `040995b`·`d5d7439`·`8a27463`(런북). `test -f docs/fork-policy.md` ok |
-| 10 | 태그 `sp0-done` push | push 뒤 | 사용자 승인 뒤 진행 |
+| 10 | 태그 `sp0-done` push | ✓ | 2026-09-24 `sp0-done` → 0e0ceaf push, `git ls-remote` 로 확인 |
 
 ## 8. 재현
 
