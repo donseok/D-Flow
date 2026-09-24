@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { canViewUsage } from '@/lib/authz/usageAccess'
-import type { Actor } from '@/lib/domain/authz'
 import { KO } from '@/lib/i18n/dict/ko'
 import { EN } from '@/lib/i18n/dict/en'
+import { makeActor } from '../fixtures/actor'
 
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(), rosterTeams: new Map(), ...over,
-})
+const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ teamCode: 'PMO', teamId: 't1', ...over })
 
 describe('canViewUsage — 슈퍼유저 전용(2026-07-30 사용자 결정)', () => {
   it('슈퍼유저는 볼 수 있다', () => {

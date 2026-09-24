@@ -16,9 +16,10 @@ vi.mock('@/lib/mail/transport', () => ({ getTransport }))
 import { getSession } from '@/lib/auth'
 import { getMeetingDetail } from '@/lib/data/meetings'
 import { notifyMeetingSaved } from '@/app/actions/meetingNotify'
+import { makeActor } from '../fixtures/actor'
 
 const USER = { id: 'u1', email: 'me@example.com', user_metadata: { full_name: '김철수' } }
-const ACTOR = { userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map() }
+const ACTOR = makeActor({ teamCode: 'PMO', teamId: 't1' })
 
 /** 로그인했지만 이 프로젝트의 관리자는 아니다 — 작성자 본인일 때만 통과해야 한다. */
 function asNonAdmin() {

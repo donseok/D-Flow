@@ -1,10 +1,10 @@
 // tests/data/agent-seatmap-project.test.ts
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Actor } from '@/lib/domain/authz'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 import { getProjectOffice, getSeatmap, seatmapFloorIds } from '@/lib/data/agentSeatmap'
+import { makeActor, makeMemberActor } from '../fixtures/actor'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 type Resp = { data?: unknown; error?: { message: string } | null }
@@ -26,11 +26,8 @@ function admin(queues: Record<string, Resp[]>, calls: Record<string, unknown[][]
   mocks.createAdminClient.mockReturnValue(client)
   return client
 }
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', isSuperuser: false, projectRoles: new Map(), rosterTeams: new Map(), teamCode: null, teamId: null, ...over,
-} as Actor)
-const SUPER = actor({ isSuperuser: true })
-const MEMBER_P1 = actor({ projectRoles: new Map([['p1', 'member' as const]]) })
+const SUPER = makeActor({ isSuperuser: true })
+const MEMBER_P1 = makeMemberActor('p1')
 
 beforeEach(() => { vi.clearAllMocks() })
 

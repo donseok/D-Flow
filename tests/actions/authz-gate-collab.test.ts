@@ -16,12 +16,10 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 import { createWeeklyReport, saveWeeklyCell, saveWeeklyCells, saveWeeklyTitle } from '@/app/actions/weekly'
 import { removeAttendance, upsertAttendance } from '@/app/actions/attendance'
 import { createMeeting } from '@/app/actions/meetings'
+import { makeMemberActor } from '../fixtures/actor'
 
 const DENIED = { ok: false, error: '권한 없음' } as const
-const MEMBER = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map([['p1', 'member' as const]]),
-}
+const MEMBER = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
 const ERR_LOOKUP = '권한을 확인할 수 없어 중단했습니다.'
 
 const MEETING_INPUT = {

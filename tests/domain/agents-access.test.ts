@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { canViewAgents, seatmapProjectIds } from '@/lib/authz/agentsAccess'
-import type { Actor } from '@/lib/domain/authz'
 import { KO } from '@/lib/i18n/dict/ko'
 import { EN } from '@/lib/i18n/dict/en'
-
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(), rosterTeams: new Map(), ...over,
-})
+import { makeActor as actor } from '../fixtures/actor'
 
 describe('canViewAgents — 슈퍼유저 또는 역할이 있는 프로젝트 1개 이상(좌석표 v1 스펙 §5-1, 2026-09-14 멤버 개방)', () => {
   it('슈퍼유저·관리자·멤버는 본다', () => {

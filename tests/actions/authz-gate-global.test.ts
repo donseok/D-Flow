@@ -40,6 +40,7 @@ import {
   listLlmProfiles, createLlmProfile, updateLlmProfile, deleteLlmProfile,
   getLlmConfig, saveLlmConfig, testLlmConnection, type LlmProfileInput,
 } from '@/app/actions/llmConfig'
+import { makeActor } from '../fixtures/actor'
 
 const PID = 'project-1'
 const DENIED = '권한 없음'
@@ -47,12 +48,11 @@ const LOOKUP_FAILED = '권한을 확인할 수 없어 중단했습니다.'
 
 function actor(over: Partial<Actor> & { role?: 'admin' | 'member' | null }): Actor {
   const { role = null, ...rest } = over
-  return {
-    userId: 'u1', teamCode: 'ERP', teamId: 't-erp', isSuperuser: false,
+  return makeActor({
+    teamCode: 'ERP', teamId: 't-erp',
     projectRoles: new Map(role ? [[PID, role]] : []),
-    rosterTeams: new Map(),
     ...rest,
-  }
+  })
 }
 const SUPERUSER = actor({ userId: 'u-super', isSuperuser: true })
 const PROJECT_ADMIN = actor({ userId: 'u-admin', teamCode: 'PMO', teamId: 't-pmo', role: 'admin' })

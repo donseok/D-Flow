@@ -67,10 +67,9 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams, teamsSync }))
 
 import { addProjectTeam, updateProjectTeam, copyGlobalTeams } from '@/app/actions/projectTeams'
+import { makeAdminActor } from '../fixtures/actor'
 
-const ADMIN_ACTOR = {
-  userId: 'u-admin', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map([['p1', 'admin']]),
-}
+const ADMIN_ACTOR = makeAdminActor('p1', { userId: 'u-admin', teamCode: 'PMO', teamId: 't1' })
 const asAdmin = () => requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN_ACTOR })
 
 describe('프로젝트 팀 관리 서버액션', () => {

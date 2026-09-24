@@ -28,11 +28,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 }))
 
 import { countApprovable, getPendingApprovalCount } from '@/lib/data/agentApprovals'
+import { makeActor } from '../fixtures/actor'
 
 const P = '11111111-1111-4111-8111-111111111111'
-const actor = (role?: 'admin' | 'member', superuser = false) => ({
-  userId: 'u1', teamCode: null, teamId: null, isSuperuser: superuser,
-  projectRoles: new Map(role ? [[P, role]] : []), rosterTeams: new Map(),
+const actor = (role?: 'admin' | 'member', superuser = false) => makeActor({
+  isSuperuser: superuser,
+  projectRoles: new Map(role ? [[P, role]] : []),
 })
 // 트리: root(담당 m-boss) ─ wp(담당 없음) ─ leaf1(담당 m-dev), leaf2 · other(담당 m-other) ─ leaf3
 const ITEMS = [

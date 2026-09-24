@@ -23,9 +23,10 @@ import {
   removeIssueAttachment,
 } from '@/app/actions/issueAttachments'
 import { ISSUE_ATTACHMENT_MAX_BYTES } from '@/lib/domain/issueAttachments'
+import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = { userId: 'me', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map([['p1', 'member']]) }
+const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
 const ISSUE = 'i1'
 const FILE = { fileName: '보고서.pdf', filePath: `${ISSUE}/1700000000000-_.pdf`, size: 1234, mime: 'application/pdf' }
 

@@ -1,14 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { canEditActual, canEditWeight, canEditDeliverable } from '@/lib/domain/permissions'
-import type { Actor } from '@/lib/domain/authz'
 import type { ComputedItem } from '@/lib/domain/types'
+import { makeActor } from '../fixtures/actor'
 
 const P = 'proj-1'
 
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(), rosterTeams: new Map(), ...over,
-})
+const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ teamCode: 'PMO', teamId: 't1', ...over })
 const superuser = actor({ isSuperuser: true })
 const admin = actor({ projectRoles: new Map([[P, 'admin' as const]]) })
 const gagongMember = actor({ teamCode: '가공', teamId: 'd', projectRoles: new Map([[P, 'member' as const]]) })

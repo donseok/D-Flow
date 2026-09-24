@@ -41,9 +41,10 @@ vi.mock('@/lib/notify/emit', () => ({ emitNotification }))
 
 import { getSession } from '@/lib/auth'
 import { updateIssue, updateIssueProgress } from '@/app/actions/issues'
+import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = { userId: 'me', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map([['p1', 'member']]) }
+const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
 
 const INPUT = {
   title: '테스트 이슈',

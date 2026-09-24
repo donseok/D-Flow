@@ -25,9 +25,10 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 
 import { getSession } from '@/lib/auth'
 import { createIssue, updateIssue, updateIssueProgress, deleteIssue } from '@/app/actions/issues'
+import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = { userId: 'me', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map([['p1', 'member']]) }
+const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
 
 /** 이 프로젝트의 멤버지만 관리자는 아니다 — 남의 이슈 전체 편집·삭제는 거부돼야 한다. */
 function asMember() {

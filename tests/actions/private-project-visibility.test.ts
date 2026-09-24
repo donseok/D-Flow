@@ -19,14 +19,10 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 
 import type { Actor } from '@/lib/domain/authz'
 import { listProjectsWithState } from '@/app/actions/project'
+import { makeActor as actor } from '../fixtures/actor'
 
 const PUB = { id: 'p-pub', name: '공개', is_private: false }
 const PRIV = { id: 'p-priv', name: '비공개', is_private: true }
-
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: null, teamId: null, isSuperuser: false,
-  projectRoles: new Map(), rosterTeams: new Map(), ...over,
-})
 
 const viewState = (a: Actor | null, degraded = false) => ({ actor: a, degraded })
 

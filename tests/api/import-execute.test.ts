@@ -40,11 +40,12 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordPro
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
 
 import { POST } from '@/app/api/import/execute/route'
+import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
-const ACTOR = { userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false, projectRoles: new Map() }
-const SUPER_ACTOR = { userId: 'su1', teamCode: null, teamId: null, isSuperuser: true, projectRoles: new Map() }
+const ACTOR = makeActor({ teamCode: 'PMO', teamId: 't1' })
+const SUPER_ACTOR = makeSuperuser({ userId: 'su1' })
 const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 const KNOWN_TEAMS = [{ code: 'PMO' }, { code: 'ERP' }, { code: 'MES' }, { code: '가공' }, { code: 'MDM' }]
 

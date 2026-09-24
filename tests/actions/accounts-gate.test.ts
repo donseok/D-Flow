@@ -16,14 +16,12 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 
 import { createAccount, bulkCreateAccounts, resetPassword, listAccounts } from '@/app/actions/accounts'
 import { setProjectRole, setSuperuser } from '@/app/actions/projectRoles'
+import { makeAdminActor, makeMemberActor } from '../fixtures/actor'
 
 const DENIED = { ok: false as const, error: '권한 없음' }
 const P1 = 'p1'
-const memberActor = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map([[P1, 'member' as const]]),
-}
-const adminActor = { ...memberActor, projectRoles: new Map([[P1, 'admin' as const]]) }
+const memberActor = makeMemberActor(P1, [], { teamCode: 'PMO', teamId: 't1' })
+const adminActor = makeAdminActor(P1, { teamCode: 'PMO', teamId: 't1' })
 
 beforeEach(() => {
   createAdminClient.mockClear()

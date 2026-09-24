@@ -26,13 +26,14 @@ vi.mock('@/app/actions/agentWork', () => ({
 }))
 vi.mock('@/app/actions/wbsAssign', () => ({ setWbsStage: mocks.setWbsStage }))
 import { refreshAgentHub, applyHubDelegations, runHubProcessOp } from '@/app/actions/agentHub'
+import { makeAdminActor, makeMemberActor } from '../fixtures/actor'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const P2 = '22222222-2222-4222-8222-222222222222'
 const I = (n: number) => `33333333-3333-4333-8333-33333333333${n}`
 const O = (n: number) => `44444444-4444-4444-8444-44444444444${n}`
-const ADMIN = { ok: true, actor: { userId: 'admin-1', isSuperuser: false, projectRoles: new Map([[P1, 'admin']]), rosterTeams: new Map(), teamCode: null, teamId: null } }
-const MEMBER = { ok: true, actor: { ...ADMIN.actor, userId: 'member-1', projectRoles: new Map([[P1, 'member']]) } }
+const ADMIN = { ok: true, actor: makeAdminActor(P1, { userId: 'admin-1' }) }
+const MEMBER = { ok: true, actor: makeMemberActor(P1, [], { userId: 'member-1' }) }
 const DENIED = { ok: false, error: '권한이 없습니다.' }
 const HUB = { projectId: P1, rows: [] }
 

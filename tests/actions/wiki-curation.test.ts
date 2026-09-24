@@ -30,6 +30,7 @@ function scopeOk() {
 }
 
 const { curateWikiItem, mergeWikiTopics } = await import('@/app/actions/wiki')
+const { makeAdminActor } = await import('../fixtures/actor')
 
 const ARGS = {
   projectId: 'project-1',
@@ -37,10 +38,7 @@ const ARGS = {
   itemId: 'item-1',
 } as const
 
-const ADMIN = {
-  userId: 'u-admin', teamCode: 'PMO', teamId: 't0', isSuperuser: false,
-  projectRoles: new Map([['project-1', 'admin']]),
-}
+const ADMIN = makeAdminActor('project-1', { userId: 'u-admin', teamCode: 'PMO', teamId: 't0' })
 const asAdmin = () => mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN })
 
 beforeEach(() => {

@@ -9,6 +9,8 @@ vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 
 import { searchMemberCandidates } from '@/app/actions/memberSearch'
+import { makeAdminActor } from '../fixtures/actor'
+import type { Actor } from '@/lib/domain/authz'
 
 const PROJECT_ID = 'project-1'
 const LOOKUP_ERROR = '멤버 후보를 조회할 수 없습니다.'
@@ -64,16 +66,8 @@ function makeClient(options: ClientOptions = {}) {
   return { from, builder }
 }
 
-function makeActor(overrides: Record<string, unknown> = {}) {
-  return {
-    userId: 'admin-1',
-    teamCode: null,
-    teamId: null,
-    isSuperuser: false,
-    projectRoles: new Map([[PROJECT_ID, 'admin']]),
-    rosterTeams: new Map(),
-    ...overrides,
-  }
+function makeActor(overrides: Partial<Actor> = {}) {
+  return makeAdminActor(PROJECT_ID, { userId: 'admin-1', ...overrides })
 }
 
 beforeEach(() => {

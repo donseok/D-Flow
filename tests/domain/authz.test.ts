@@ -1,16 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole,
-  toProjectActorView, actorFromView, canSeeProject, type Actor,
+  toProjectActorView, actorFromView, canSeeProject,
 } from '@/lib/domain/authz'
+import { makeActor } from '../fixtures/actor'
 
 const P = 'proj-1'
 const Q = 'proj-2'
 
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(), rosterTeams: new Map(), ...over,
-})
+const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ teamCode: 'PMO', teamId: 't1', ...over })
 
 const superuser = actor({ isSuperuser: true })
 const admin = actor({ projectRoles: new Map([[P, 'admin' as const]]) })

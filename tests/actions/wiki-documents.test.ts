@@ -27,11 +27,9 @@ import {
   updateWikiDocument,
   verifyWikiDocument,
 } from '@/app/actions/wiki'
+import { makeMemberActor } from '../fixtures/actor'
 
-const MEMBER = {
-  userId: 'member-1', teamCode: 'ERP', teamId: 'team-1', isSuperuser: false,
-  projectRoles: new Map([['project-1', 'member']]), rosterTeams: new Map(),
-}
+const MEMBER = makeMemberActor('project-1', [], { userId: 'member-1', teamCode: 'ERP', teamId: 'team-1' })
 
 function scopeResult(data: unknown = { id: 'topic-1' }, error: unknown = null) {
   mocks.from.mockImplementation(() => {

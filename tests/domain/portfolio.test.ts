@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ComputedItem } from '@/lib/domain/types'
 import { buildPortfolio, type PortfolioProjectInput } from '@/lib/domain/portfolio'
 import { canViewPortfolio } from '@/lib/authz/portfolioAccess'
-import type { Actor } from '@/lib/domain/authz'
+import { makeActor } from '../fixtures/actor'
 
 const leaf = (over: Partial<ComputedItem>): ComputedItem => ({
   id: Math.random().toString(36).slice(2), parentId: 'p', code: 'x', sortOrder: 0,
@@ -18,8 +18,7 @@ const mkInput = (over: Partial<PortfolioProjectInput>): PortfolioProjectInput =>
 })
 
 describe('canViewPortfolio', () => {
-  const actor = (isSuperuser: boolean): Actor =>
-    ({ userId: 'u', teamCode: null, teamId: null, isSuperuser, projectRoles: new Map(), rosterTeams: new Map() } as unknown as Actor)
+  const actor = (isSuperuser: boolean) => makeActor({ userId: 'u', isSuperuser })
   it('슈퍼유저만 true, null(판정 불가)은 fail-closed', () => {
     expect(canViewPortfolio(actor(true))).toBe(true)
     expect(canViewPortfolio(actor(false))).toBe(false)

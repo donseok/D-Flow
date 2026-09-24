@@ -5,10 +5,11 @@ const mocks = vi.hoisted(() => ({ getActorForView: vi.fn(), getSeatmap: vi.fn() 
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: mocks.getSeatmap }))
 import { refreshSeatmap } from '@/app/actions/agentSeatmap'
+import { makeMemberActor } from '../fixtures/actor'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const P2 = '22222222-2222-4222-8222-222222222222'
-const MEMBER_P1 = { userId: 'u1', isSuperuser: false, projectRoles: new Map([[P1, 'member']]), rosterTeams: new Map(), teamCode: null, teamId: null }
+const MEMBER_P1 = makeMemberActor(P1)
 
 beforeEach(() => { vi.clearAllMocks(); mocks.getActorForView.mockResolvedValue(MEMBER_P1); mocks.getSeatmap.mockResolvedValue({ floors: [] }) })
 

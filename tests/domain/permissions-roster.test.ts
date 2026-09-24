@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { canEditActual, canAttachDeliverable, actorTeamCodesFor } from '@/lib/domain/permissions'
-import type { Actor } from '@/lib/domain/authz'
 import type { ComputedItem } from '@/lib/domain/types'
+import { makeMemberActor } from '../fixtures/actor'
 
 const P = 'p1'
 const leaf = (ownerTeam: string) =>
   ({ children: [], owners: [{ team: ownerTeam, kind: 'primary' }] } as unknown as ComputedItem)
-const actor = (over: Partial<Actor>): Actor => ({
-  userId: 'u1', teamCode: null, teamId: null, isSuperuser: false,
-  projectRoles: new Map([[P, 'member']]), rosterTeams: new Map(), ...over,
-})
+const actor = (over: Parameters<typeof makeMemberActor>[2] = {}) => makeMemberActor(P, [], over)
 
 describe('실적 편집 — 내 팀 = 계정 전역 팀 ∪ 프로젝트 명단 팀(합집합, 스펙 §3)', () => {
   it('계정 전역 팀 일치(기존 경로) — 회귀 0', () => {

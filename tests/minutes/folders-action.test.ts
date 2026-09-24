@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { makeActor, makeMemberActor } from '../fixtures/actor'
 
 const getSession = vi.fn()
 const getActor = vi.fn()
@@ -11,14 +12,8 @@ vi.mock('@/lib/authz', () => ({
 }))
 
 // 권한 3단 이행 — 역할 픽스처는 Actor 로 표현한다
-const memberActor = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map([['p1', 'member' as const]]),
-}
-const viewerActor = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(),
-}
+const memberActor = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
+const viewerActor = makeActor({ teamCode: 'PMO', teamId: 't1' })
 const superuserActor = { ...memberActor, isSuperuser: true }
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: vi.fn() }))

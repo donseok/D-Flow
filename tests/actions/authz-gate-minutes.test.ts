@@ -37,14 +37,12 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import { createMinute, deleteMinute, setMinuteShare } from '@/app/actions/minutes'
+import { makeActor, makeAdminActor, makeMemberActor } from '../fixtures/actor'
 
 const P1 = 'p1'
-const viewer = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map(),
-}
-const memberOfP1 = { ...viewer, projectRoles: new Map([[P1, 'member' as const]]) }
-const adminOfP1 = { ...viewer, projectRoles: new Map([[P1, 'admin' as const]]) }
+const viewer = makeActor({ teamCode: 'PMO', teamId: 't1' })
+const memberOfP1 = makeMemberActor(P1, [], { teamCode: 'PMO', teamId: 't1' })
+const adminOfP1 = makeAdminActor(P1, { teamCode: 'PMO', teamId: 't1' })
 
 /** minutes 테이블 단건 조회를 흉내내는 최소 빌더 */
 function fakeMinutes(result: { data?: unknown; error?: { message: string } | null }) {

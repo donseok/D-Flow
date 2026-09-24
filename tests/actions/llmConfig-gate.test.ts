@@ -20,13 +20,12 @@ import {
   getLlmConfig, saveLlmConfig, testLlmConnection, maskToken,
   type LlmProfileInput,
 } from '@/app/actions/llmConfig'
+import { makeSuperuser } from '../fixtures/actor'
 
 /** 가드가 돌려주는 두 거부 사유 — 비로그인과 권한 부족(관리자·멤버·조회 전용)을 구분한다. */
 const DENIALS = ['로그인 필요', '권한 없음'] as const
 
-const SUPERUSER = {
-  userId: 'u-super', teamCode: 'PMO', teamId: 't1', isSuperuser: true, projectRoles: new Map(),
-}
+const SUPERUSER = makeSuperuser({ teamCode: 'PMO', teamId: 't1' })
 const asSuperuser = () => requireSuperuser.mockResolvedValue({ ok: true, actor: SUPERUSER })
 
 const VALID_INPUT: LlmProfileInput = {

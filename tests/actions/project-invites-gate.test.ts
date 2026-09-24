@@ -33,13 +33,11 @@ import { revalidatePath } from 'next/cache'
 import {
   listProjectInvites, createProjectInvite, revokeProjectInvite,
 } from '@/app/actions/projectInvites'
+import { makeAdminActor } from '../fixtures/actor'
 
 const P1 = 'p1'
 const DENIED = { ok: false as const, error: '권한 없음' }
-const adminActor = {
-  userId: 'u1', teamCode: 'PMO', teamId: 't1', isSuperuser: false,
-  projectRoles: new Map([[P1, 'admin' as const]]),
-}
+const adminActor = makeAdminActor(P1, { teamCode: 'PMO', teamId: 't1' })
 const VALID = { email: 'mina.park@example.com', teamCode: 'PMO' }
 
 const APP_URL = 'https://dflow.example.com'
