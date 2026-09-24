@@ -23,7 +23,9 @@ D-Flow 는 `wbs-web`(구 브랜드명, 원본 고객사 운영)의 **한 시점 
   2026-09-24 기록: SP0 마무리 전에 `origin/main` 에 `f790e82`(c40de1a 포함)가 한 번 올라간 사고가 있어, 사용자 결정으로
   깨끗한 루트를 `SKIP_GUARD=1 git push --force-with-lease=refs/heads/main:f790e82… -u origin main` 으로 **강제 교체**했다
   (SKIP_GUARD 는 squash 루트가 마이그레이션과 코드를 함께 담아 G1 에 걸리기 때문). 교체된 옛 커밋은 원격에서 도달
-  불가하지만 GitHub 가 객체를 한동안 보관할 수 있다 — 완전한 삭제가 필요하면 리포 삭제·재생성이 확실한 방법이다.
+  불가하지만 GitHub 가 객체를 한동안 보관할 수 있다 — 실제로 교체 뒤에도 옛 SHA 가 API 로 조회됐다. 그래서 같은 날
+  리포를 삭제하고 같은 이름으로 재생성해(`gh repo delete` → `gh repo create --private` → `main`·`sp0-done` 재push)
+  옛 객체를 걷어냈고, 재생성 뒤 옛 SHA 조회는 422(없음)로 확인했다.
   이 강제 push 는 이 한 번뿐이며 이후 `main` 에 대한 force push 는 다시 금지다. 사고 원인: 리뷰 에이전트가
   스크래치패드 클론에서 훅을 시뮬레이션하다 `cd` 가 실패한 뒤(병렬 에이전트가 같은 경로를 지움) 나머지 명령이
   실제 체크아웃에서 실행돼 `SKIP_GUARD=1 git push -u origin main` 이 옛 `main` 을 올렸다 — G5 는 이 재발을 막는다.
