@@ -4,17 +4,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { Seat } from '@/lib/domain/seatmap'
+import { makeSeat } from '../fixtures/seat'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 import { DetailPanel } from '@/components/agents/DetailPanel'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
-const seat = (over: Partial<Seat> = {}): Seat => ({
+const seat = (over: Partial<Seat> = {}): Seat => makeSeat({
   orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '목록',
   state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 60,
   lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: new Date(NOW - 5000).toISOString(), heartbeatPhase: 'build',
-  note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false, ...over,
+  note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false,
+  ...over,
 })
 
 /** 결재 배선은 SeatmapView 가 쥔다 — 사다리·사유 표시 시험에서는 아무 것도 하지 않는 기본값을 넘긴다. */

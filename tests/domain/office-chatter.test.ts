@@ -204,7 +204,7 @@ describe('빈자리 부재 사유(2026-09-19)', () => {
     }
   })
   it('대사 JSON 에 설명과 묶음이 있다', () => {
-    const away = (LINES as Record<string, Record<string, unknown>>)['빈자리 부재 사유']
+    const away = (LINES as unknown as Record<string, Record<string, unknown>>)['빈자리 부재 사유']
     expect(typeof away['$설명']).toBe('string')
     expect(AWAY_LINES).toContain('담타 중')
     expect(AWAY_LINES).toContain('커피 마시러 감')

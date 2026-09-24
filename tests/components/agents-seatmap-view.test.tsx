@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { Seatmap } from '@/lib/domain/seatmap'
+import { makeSeat } from '../fixtures/seat'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -18,8 +19,8 @@ const map = (over: Partial<Seatmap> = {}): Seatmap => ({
   floors: [{
     id: 'p1', name: 'proj-a', seatCount: 2, doneCount: 0, watchers: [],
     zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 1, wait: 0, ready: 1, done: 0 }, seats: [
-      { orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '목록', state: 'BLOCKED', phase: 'blocked', anim: 'blocked', character: 'cat', agent: 'hong/mbp/w1', progress: 60, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'blocked', note: '어느 DB?', rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
-      { orderId: 'o2', id8: 'o2', projectId: 'p1', itemId: 'i2', code: 'TSK-04-02', name: '상세', state: 'READY', phase: 'design', anim: 'empty', character: 'bot', agent: null, progress: 0, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
+      makeSeat({ orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '목록', state: 'BLOCKED', phase: 'blocked', anim: 'blocked', character: 'cat', agent: 'hong/mbp/w1', progress: 60, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'blocked', note: '어느 DB?', rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
+      makeSeat({ orderId: 'o2', id8: 'o2', projectId: 'p1', itemId: 'i2', code: 'TSK-04-02', name: '상세', state: 'READY', phase: 'design', anim: 'empty', character: 'bot', agent: null, progress: 0, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
     ] }],
   }],
   counters: { active: 1, standby: 0, idle: 0, offline: 1 },
@@ -172,7 +173,7 @@ describe('SeatmapView — 좌석에서 바로 결재', () => {
     floors: [{
       id: 'p1', name: 'proj-a', seatCount: 1, doneCount: 0, watchers: [],
       zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 0, wait: 1, ready: 0, done: 0 }, seats: [
-        { orderId: 'o9', id8: 'o9', projectId: 'p1', itemId: 'i9', code: 'TSK-04-09', name: '승인 대기 건', state: 'WAIT', phase: 'verify', anim: 'empty', character: 'bot', agent: 'hong/mbp/w1', progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
+        makeSeat({ orderId: 'o9', id8: 'o9', projectId: 'p1', itemId: 'i9', code: 'TSK-04-09', name: '승인 대기 건', state: 'WAIT', phase: 'verify', anim: 'empty', character: 'bot', agent: 'hong/mbp/w1', progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
       ] }],
     }],
     attention: [],
@@ -242,8 +243,8 @@ describe('SeatmapView — 완료 포함 보기', () => {
     floors: [{
       id: 'p1', name: 'proj-a', seatCount: 1, doneCount: 1, watchers: [],
       zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 1, wait: 0, ready: 0, done: 1 }, seats: [
-        { orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '도는 중', state: 'ACTIVE', phase: 'typing', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'typing', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
-        { orderId: 'o2', id8: 'o2', projectId: 'p1', itemId: 'i2', code: 'TSK-04-02', name: '승인된 건', state: 'DONE', phase: 'verify', anim: 'empty', character: 'bot', agent: null, progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
+        makeSeat({ orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '도는 중', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'typing', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
+        makeSeat({ orderId: 'o2', id8: 'o2', projectId: 'p1', itemId: 'i2', code: 'TSK-04-02', name: '승인된 건', state: 'DONE', phase: 'verify', anim: 'empty', character: 'bot', agent: null, progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
       ] }],
     }],
     attention: [],
@@ -300,7 +301,7 @@ describe('SeatmapView — 잡담 켬/끔(2026-09-18)', () => {
     floors: [{
       id: 'p1', name: 'proj-a', seatCount: 1, doneCount: 0, watchers: [],
       zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 1, wait: 0, ready: 0, done: 0 }, seats: [
-        { orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '도는 중', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false },
+        makeSeat({ orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-04-01', name: '도는 중', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
       ] }],
     }],
     attention: [],

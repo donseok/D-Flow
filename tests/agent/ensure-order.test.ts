@@ -64,6 +64,10 @@ class MockAdminClient {
   }
 }
 
+// MockAdminClient 는 실제 AdminClient(SupabaseClient) 형과 구조가 다르므로
+// 함수 인자로 넘길 때만 캐스트한다 — 프로덕션 시그니처는 그대로 둔다.
+const asAdmin = (c: MockAdminClient) => c as unknown as AdminClient
+
 describe('ensureOrderForWorkflowLeaf', () => {
   let admin: AdminClient | MockAdminClient
   const projectId = 'project-1'
@@ -79,7 +83,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     // 큐: agent_projects [{ data: null }]
     ;(admin as MockAdminClient).pushResponse(null, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -93,7 +97,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     ;(admin as MockAdminClient).pushResponse({ enabled: true }, null)
     ;(admin as MockAdminClient).pushResponse(null, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -111,7 +115,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
       null
     )
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -130,7 +134,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     )
     ;(admin as MockAdminClient).pushResponse({ id: 'child' }, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -149,7 +153,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     ;(admin as MockAdminClient).pushResponse(null, null)
     ;(admin as MockAdminClient).pushResponse({ id: 'o-1' }, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -175,7 +179,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     ;(admin as MockAdminClient).pushResponse(null, null)
     ;(admin as MockAdminClient).pushResponse({ id: 'order-1' }, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -228,7 +232,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     ;(admin as MockAdminClient).pushResponse(null, null)
     ;(admin as MockAdminClient).pushResponse({ id: 'order-2' }, null)
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -259,7 +263,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
       { message: 'duplicate key value', code: '23505' }
     )
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -276,7 +280,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     // 큐: agent_projects 에러
     ;(admin as MockAdminClient).pushResponse(null, { message: 'db down' })
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -289,7 +293,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     ;(admin as MockAdminClient).pushResponse({ enabled: true }, null)
     ;(admin as MockAdminClient).pushResponse(null, { message: 'item lookup down' })
 
-    const result = await ensureOrderForWorkflowLeaf(admin, {
+    const result = await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -302,7 +306,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
     // agent_projects 미등록
     ;(admin as MockAdminClient).pushResponse(null, null)
 
-    await ensureOrderForWorkflowLeaf(admin, {
+    await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,
@@ -319,7 +323,7 @@ describe('ensureOrderForWorkflowLeaf', () => {
       null
     )
 
-    await ensureOrderForWorkflowLeaf(admin, {
+    await ensureOrderForWorkflowLeaf(asAdmin(admin as MockAdminClient), {
       projectId,
       wbsItemId,
       actorUserId,

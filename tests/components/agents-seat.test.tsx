@@ -8,15 +8,17 @@ import { SeatCard, seatMetaLine, STATE_LABEL } from '@/components/agents/Seat'
 import { ZoneBlock } from '@/components/agents/ZoneBlock'
 import { FloorCard } from '@/components/agents/FloorCard'
 import type { Floor, Seat, Zone } from '@/lib/domain/seatmap'
+import { makeSeat } from '../fixtures/seat'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
-const seat = (over: Partial<Seat> = {}): Seat => ({
+const seat = (over: Partial<Seat> = {}): Seat => makeSeat({
   orderId: '11111111-1111-4111-8111-111111111111', id8: '11111111', projectId: 'p1', itemId: 'i1',
   code: 'TSK-04-02', name: '주문 상세', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat',
   agent: 'hong/mbp/w1', progress: 60, lastSignalAt: new Date(NOW - 42_000).toISOString(),
-  heartbeatAt: new Date(NOW - 42_000).toISOString(), heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false, ...over,
+  heartbeatAt: new Date(NOW - 42_000).toISOString(), heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false,
+  ...over,
 })
 
 let host: HTMLDivElement, root: Root

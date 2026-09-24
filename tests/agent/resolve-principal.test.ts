@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextResponse } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
+import type { AgentPrincipal } from '@/lib/agent/externalApi'
 
 const OLD = { ...process.env }
 beforeEach(() => { vi.resetModules() })
@@ -91,13 +92,15 @@ describe('resolveAgentPrincipal', () => {
   })
   it('requireScope — pat 부족 403 insufficient_scope, legacy 통과', async () => {
     const m = await load()
-    const pat = {
+    const pat: AgentPrincipal = {
       kind: 'pat', runnerId: 'r', userId: 'u', userEmail: 'e', scopes: ['work:read'],
       projectId: null, runnerKind: 'user_pat', tokenExpiresAt: '2099-01-01T00:00:00Z',
       runnerName: 'n', tokenPrefix: 'p',
-    } as const
-    expect(m.requireScope({ kind: 'legacy' }, 'work:report')).toBeNull()
+    }
+    // 'work:report' 는 알려진 스코프(work:read/work:claim)가 아니다 — 미지 스코프 취급을 검사한다.
+    const unknownScope = 'work:report' as unknown as Parameters<typeof m.requireScope>[1]
+    expect(m.requireScope({ kind: 'legacy' }, unknownScope)).toBeNull()
     expect(m.requireScope(pat, 'work:read')).toBeNull()
-    expect(m.requireScope(pat, 'work:report')?.status).toBe(403)
+    expect(m.requireScope(pat, unknownScope)?.status).toBe(403)
   })
 })

@@ -22,6 +22,7 @@ function issue(index: number, megaCode = '02'): IssueAnalysisReportIssue {
     piIssueCode: `PI-I-${megaCode}-${String(index).padStart(2, '0')}`,
     megaCode: megaCode as IssueAnalysisReportIssue['megaCode'],
     megaSeq: index,
+    majorId: null,
     title: `자동 이슈 ${index}`,
     body: `자동 이슈 ${index} 상세 내용`,
     status: 'open',
