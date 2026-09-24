@@ -1,10 +1,12 @@
 # 범용 프로젝트 관리 플랫폼(가칭) 설계 스펙
 
+> **익명화(2026-09-24):** 원본 고객사·구 브랜드·고객 업무 문자열은 일반 명칭으로 치환했다. 실측 재현 명령과 식별자도 함께 치환돼 있어 원본 리포에서 그대로 실행되지 않을 수 있다.
+
 | 항목 | 값 |
 |---|---|
 | 날짜 | 2026-09-23 |
 | 상태 | 초안 — 사용자 검토 대기 |
-| 원본 리포 | `wbs-web`(D'Flow, D-CUBE 운영). 실측 기준 worktree `staging` 77cf6785 / `origin/main` 03fedcf |
+| 원본 리포 | `wbs-web`(구 브랜드명, 원본 고객사 운영). 실측 기준 worktree `staging` 77cf6785 / `origin/main` 03fedcf |
 | 컷오프 | 예정 — 포크 시점의 `origin/main` SHA 를 첫 커밋 트레일러 `Fork-of: wbs-web@<sha>` 와 `docs/fork-policy.md` 에 고정(6.6) |
 | 정본 관계 | 3안 적대적 비교의 종합안(점진 포크 뼈대 + 조직 코어 선행 + 경량 모듈 레지스트리)을 정본으로 삼되, 파일 경로·라인·수치는 코드에서 재확인해 틀린 것은 고쳐 적었다. 확인하지 못한 값은 "(미검증)" 으로 표기한다 |
 | 확정 결정 | 결정 1~9(1.3)·미결 질문의 답 Q1~Q6(1.4)은 변경 불가 |
@@ -23,21 +25,21 @@
 
 ## 1. 개요·목표·결정·비목표·용어
 
-### 1.1 배경 — D-CUBE 특화 실측(2026-09-23, `staging` 77cf6785)
+### 1.1 배경 — 원본 고객사 특화 실측(2026-09-23, `staging` 77cf6785)
 
 | 항목 | 실측 |
 |---|---|
 | 규모 | `src` .ts/.tsx 637파일/101,570줄(전체 파일 644), 테스트 516파일, API 라우트 41, `'use server'` 40파일(export async 179), 마이그레이션 0001~0100(빈 번호 0018·0027·0069·0081), 테이블 68 |
-| D-CUBE 상수 | **105건/48파일**(재현 명령은 표 아래). `"D'Flow"` 24파일, `Asia/Seoul` 25파일, 초대 도메인 `['dongkuk.com']`(`src/lib/domain/invites.ts:17`) |
+| 원본 고객사 상수 | **105건/48파일**(재현 명령은 표 아래). `"구 브랜드명"` 24파일, `Asia/Seoul` 25파일, 초대 도메인 `['example-corp.com']`(`src/lib/domain/invites.ts:17`) |
 | Supabase 결합 | RLS 라이브 정책 116/정책 보유 테이블 60, 읽기 개방 46(`using (true)` 43 + `can_read_project` 3 — 본문이 `select true`, 0052:58), `app_role()` 잔존 9 — 이 넷은 **(미검증 — `policy_sim.py` 마이그레이션 텍스트 리플레이, 운영 `pg_policies` 미대조)**; 마이그레이션 텍스트 grep 은 `using (true)` 57문/32파일(비롤백·대소문자 무시, 2·6절과 같은 기준); `security definer` 46, `.rpc()` 42종, 버킷 3, presence 채널 2, `createAdminClient` 65파일, 환경변수 39 |
 | 조직 모델 | 워크스페이스 개념 없음. 사람이 `memberships`(계정당 팀 1개, 0001)·`project_roles`(0052)·`project_members`(0003)·`project_member_identities`(0070) 4곳에 흩어짐 |
 | 테스트 결합 | `vi.mock('@/lib/authz')` 50파일, `vi.mock('@/lib/supabase/admin')` 71파일 |
 
-D-CUBE 상수 재현(`-r` 필수, 패턴은 작은따옴표):
+원본 고객사 상수 재현(`-r` 필수, 패턴은 작은따옴표):
 
 ```bash
-grep -rE 'D-CUBE|DCUBE|PMO|MDM|APS' src | wc -l      # 105
-grep -rlE 'D-CUBE|DCUBE|PMO|MDM|APS' src | wc -l     # 48
+grep -rE '원본 고객사|ORIGIN|PMO|MDM|APS' src | wc -l      # 105
+grep -rlE '원본 고객사|ORIGIN|PMO|MDM|APS' src | wc -l     # 48
 ```
 
 **급소 6곳**(105건이 모이는 자리; 승격 대상·소비처 전수는 3.4 표):
@@ -47,19 +49,19 @@ grep -rlE 'D-CUBE|DCUBE|PMO|MDM|APS' src | wc -l     # 48
 | ① | 주간보고 11구분·팀 매핑·PMO 폴백 | `WEEKLY_SECTIONS` `src/lib/domain/weeklySheet.ts:21` |
 | ② | 5팀 폴백·색상표 | `DEFAULT_TEAMS` `src/lib/domain/teams.ts:17`, `TEAM_COLOR` `src/lib/report/brand.ts:33`, `TEAM` `src/components/wbs/shared.tsx:4` |
 | ③ | 이슈 8영역·코드 접두 트리거 | `ISSUE_MEGA_AREAS` `src/lib/domain/issueAnalysis.ts:4`, 0055/0062 |
-| ④ | 엑셀 3행 헤더·팀 열 폴백 | `LEGACY_DCUBE_PROFILE` `src/lib/excel/profile.ts:142`, `src/app/api/export/route.ts:30` |
+| ④ | 엑셀 3행 헤더·팀 열 폴백 | `LEGACY_ORIGIN_PROFILE` `src/lib/excel/profile.ts:142`, `src/app/api/export/route.ts:30` |
 | ⑤ | WBS 라벨 폴백·프리셋 | `DEFAULT_LEVEL_LABELS` `src/components/wbs/shared.tsx:27`(축약표 `LEGACY_LABEL_ABBR` `:39`), `src/lib/domain/projectPresets.ts` |
 | ⑥ | 회의록 팀 폴더 5축 시드·APS 별칭 | `src/lib/minutes/folders.ts`, `TEAM_SUB_ALIASES` `src/lib/domain/minutes.ts:86` |
 
 ### 1.2 목표
 
-wbs-web 을 포크해 **어떤 고객사·프로젝트든 쓰는 범용 프로젝트 관리 플랫폼**(가칭)을 만든다. 한 배포에 여러 워크스페이스, D-CUBE 값은 전부 설정으로 승격, 출력물은 고객 양식에 병합, 모듈은 유지하되 설정으로 켜고 끈다. 또박또박 연동·에이전트 스튜디오가 패키지의 핵심이다.
+wbs-web 을 포크해 **어떤 고객사·프로젝트든 쓰는 범용 프로젝트 관리 플랫폼**(가칭)을 만든다. 한 배포에 여러 워크스페이스, 원본 고객사 값은 전부 설정으로 승격, 출력물은 고객 양식에 병합, 모듈은 유지하되 설정으로 켜고 끈다. 또박또박 연동·에이전트 스튜디오가 패키지의 핵심이다.
 
 ### 1.3 확정 결정(변경 불가)
 
 | # | 결정 | 귀결 |
 |---|---|---|
-| 1 | 포크. D'Flow 운영은 기존 리포. D-CUBE 데이터 이관 없음 | 구조 자유, 기준선=운영 **스키마** `pg_dump --schema-only`(데이터 제외 → 6절 SP0) |
+| 1 | 포크. 구 브랜드명 운영은 기존 리포. 원본 고객사 데이터 이관 없음 | 구조 자유, 기준선=운영 **스키마** `pg_dump --schema-only`(데이터 제외 → 6절 SP0) |
 | 2 | 1단계 온라인, 폐쇄망 2단계. 클라우드 고유 기능에 새로 기대지 않음 | Postgres·RLS·Auth·Storage·Realtime 만(→ 5절) |
 | 3 | 멀티 워크스페이스, 사용자 다중 소속 | `workspaces`·`workspace_members`(→ 2절) |
 | 4 | (a)다중 팀 (b)프로젝트별 역할·팀 (c)계정 없는 담당자 (d)담당 영역 축 | `people`·`project_member_teams`·`project_areas`(→ 2절) |
@@ -77,7 +79,7 @@ wbs-web 을 포크해 **어떤 고객사·프로젝트든 쓰는 범용 프로�
 | Q2 워크스페이스 관리자 | 모든 프로젝트 관리자 자동 승계, 비공개 포함(→ 1.8) |
 | Q3 명단·권한 | `project_members.access_role` 한 행. 숨김 편집자 없음(→ 2절) |
 | Q4 승격 어휘 | 근태 유형(현 9종)·회의 카테고리(6)·이슈 심각도(3)/원인(4=S/P/O/I)/원천(6)·타임존·근무일 승격. 이슈 상태(4)·WBS 단계 `as/ip/im/xx`(`fp` 는 0096 폐지) 고정(→ 3절) |
-| Q5 고객 양식 3종 | 미확보. SP6 착수 조건 = 실제 3종 또는 D-CUBE 양식+자체 샘플 2종, SP6 직전 재확인(→ 6절) |
+| Q5 고객 양식 3종 | 미확보. SP6 착수 조건 = 실제 3종 또는 원본 고객사 양식+자체 샘플 2종, SP6 직전 재확인(→ 6절) |
 | Q6 또박또박 | 헤더 자격증명만 변경, payload 불변. 팀·프로젝트는 토큰의 기본 매핑(→ 5절) |
 
 ### 1.5 비목표
@@ -1441,7 +1443,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 | `project_areas kind='weekly_section'` + `area_teams`(테이블 행) | weekly | `WEEKLY_SECTIONS` 11(`weeklySheet.ts:21-24`, importer 6)·`WEEKLY_TEAM_SECTIONS`(`:30-41`)·`LEGACY_SECTION_MAP`(`:53-69`)·`FALLBACK_SECTION`(`:44`)·`weekly_report_rows.section/module` 자유 텍스트(0023:21-22)·`ensureStandardRows`(`data/weeklySheet.ts:27-49`) | 행 `{ code(불변), name, sort_order, active }` + `area_teams { area_id, team_id, kind primary\|support }` | 코드 불변·데이터 달린 영역은 `active=false` 만 | `defaultWeeklyRows(areas)`·`carryOverRows(prev, areas)`·`sortWeeklyRows`·`sectionKeyOf`·`sheetNarrative`·`weeklyLint`·봇 `weekly:read` 팀 필터·PPT 페이지 합성 |
 | `project_areas kind='issue_area'`(테이블 행) | issues | `ISSUE_MEGA_AREAS` 8(`issueAnalysis.ts:4-13`, 관련 식별자 소비처 16파일)·전역 `issue_mega_areas`·0055 check·`deckPlan` Mega 순서 | 행 `{ code(불변, 이슈 ID 에 쓰임), name, sort_order, active }` | 코드 `[A-Z0-9]{1,8}` 불변 | 이슈 등록 폼·목록 필터·분석서 표·체번 트리거 |
 | `issues.code_prefix` | issues | `'PI-I'`(`issueAnalysis.ts:170` `formatPiIssueCode`, DB 트리거 0055:240·0062:246 — 0055:118 은 기존 행 백필 `update` 라 기준선에 흡수) | `string` 1~8자 `[A-Z0-9-]` | 형식만. 변경은 신규 이슈에만(트리거가 발번 시점 값 사용) | 체번 트리거·`formatIssueCode(prefix, area.code, seq)` |
-| `wbs.excel_profile` | wbs | `LEGACY_DCUBE_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백·`parse.ts:20` `LEGACY_COLUMN_MAP` | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사(없으면 자동감지 후 저장 요구)·내보내기(없으면 "프로파일 필요" 안내, 폴백 없음) |
+| `wbs.excel_profile` | wbs | `LEGACY_ORIGIN_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백·`parse.ts:20` `LEGACY_COLUMN_MAP` | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사(없으면 자동감지 후 저장 요구)·내보내기(없으면 "프로파일 필요" 안내, 폴백 없음) |
 | `modules.enabled` | settings(core) | `Sidebar.projectMenu` 등 11벌(3.2.5)·`agent_projects.enabled`(0057)·`AgentProjectToggle.tsx`·`requireAgentProject`(`agent/externalApi.ts:47-53`) | `ModuleId[]` — `PROJECT_TOGGLABLE`(scope ∈ {project, both} ∧ !core) 의 부분집합만. workspace 스코프 모듈은 이 키에 없다(3.2.3) | ⊆ `PROJECT_TOGGLABLE ∩ modules.allowed`, `closeRequires(enabled ∪ (allowed ∩ workspace) ∪ core)` 가 `enabled` 를 보존(3.1.5) | `effectiveModules` |
 | `agents.stage_workflow` | agents | `wbs_items.dev_workflow` 플래그 기본값(0082:20)·`agent_projects` 행 | `{ enabled: boolean, require_approval: boolean }` | — | `requireAgentProject` → `effectiveModules('agents') ∧ enabled`; 허브 결재 대기 배지 |
 | `forms.<form_kind>` | weekly / issues / wbs | `templateFill.ts` 좌표·`CELL_BUDGET`·`ISSUE_BUDGET`·`ISSUE_CAP`·`EVENT_CAP`·자산 경로·`excel.ts` 코드 그리기 | 4절 정의 `{ template_id, mapping, options }` | 4절(미매핑 토큰 0) | 4절 엔진 |
@@ -1457,8 +1459,8 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 
 | 키 | 대체 대상 | 값 형태 | 검증 | 소비처 |
 |---|---|---|---|---|
-| `branding` | `"D'Flow"` 문자열 `src` **24파일**(실측; 종합안 28 은 과대)·`public/logo.png`·`src/app/login/page.tsx:152` "© 2026 동국시스템즈"·`MAIL_FROM_NAME`/`DEFAULT_FROM_NAME 'D-CUBE 회의알림'`(`transport.ts:18`)·`projectInvite.ts:63` "[D-CUBE]"·`dkbrand.ts` 색 | `{ product_name, logo_storage_path \| null, mail_from_name, accent_color \| null }` | `product_name` 1~40자, hex 형식 | `(app)/layout` 헤더·메일 발신명·PPT/엑셀 기본 양식 파일의 `{{branding.product_name}}`. 로그인 페이지(워크스페이스 미확정)는 env `BRAND_*` 기본값(SP0 `src/lib/branding.ts`) |
-| `invites.allowed_domains` | `INVITE_ALLOWED_DOMAINS` env·`DEFAULT_ALLOWED_DOMAINS ['dongkuk.com']`(`invites.ts:17`)·`ProjectInviteManager.tsx:149` `placeholder` 속성 | `string[]`; `[]` = 초대 불가(fail-closed 유지), `['*']` = 제한 없음(명시) | 호스트 형식, 서브도메인 불허 규칙 유지(`isAllowedInviteDomain`) | 초대 발급 액션·초대 폼 `placeholder` 속성(첫 항목) |
+| `branding` | `"구 브랜드명"` 문자열 `src` **24파일**(실측; 종합안 28 은 과대)·`public/logo.png`·`src/app/login/page.tsx:152` "© 2026 원본 고객사시스템즈"·`MAIL_FROM_NAME`/`DEFAULT_FROM_NAME '원본 고객사 회의알림'`(`transport.ts:18`)·`projectInvite.ts:63` "[원본 고객사]"·`dkbrand.ts` 색 | `{ product_name, logo_storage_path \| null, mail_from_name, accent_color \| null }` | `product_name` 1~40자, hex 형식 | `(app)/layout` 헤더·메일 발신명·PPT/엑셀 기본 양식 파일의 `{{branding.product_name}}`. 로그인 페이지(워크스페이스 미확정)는 env `BRAND_*` 기본값(SP0 `src/lib/branding.ts`) |
+| `invites.allowed_domains` | `INVITE_ALLOWED_DOMAINS` env·`DEFAULT_ALLOWED_DOMAINS ['example-corp.com']`(`invites.ts:17`)·`ProjectInviteManager.tsx:149` `placeholder` 속성 | `string[]`; `[]` = 초대 불가(fail-closed 유지), `['*']` = 제한 없음(명시) | 호스트 형식, 서브도메인 불허 규칙 유지(`isAllowedInviteDomain`) | 초대 발급 액션·초대 폼 `placeholder` 속성(첫 항목) |
 | `modules.allowed` | env 플래그의 상시 토글 역할(3.2.7) | `ModuleId[]` | 레지스트리 ⊆; **플랫폼 관리자만 쓰기** | `effectiveModules` |
 | `minutes.root_folders` | `folders.ts:9-26` 팀 루트 시드(created_by null 5축)·`domain/minutes.ts:86` `TEAM_SUB_ALIASES`·0021 `minutes.team_code` check | `{ mode: 'teams' } \| { mode: 'custom', names: string[] }` | names 1~30자 유일 | 회의록 트리 루트 생성·또박또박 folder_path 정규화(2절 팀 해석) |
 | `ai.enabled` | `WIKI_SERVICE_ENABLED`·`CHAT_V2_ENABLED`·`CHAT_V2_LLM_SYNTHESIS_ENABLED` 를 "LLM 켜짐" 으로 쓰던 관행 | `boolean`, default `true` | — | `effectiveModules` 가 false 면 `AI_MODULES`(`wiki`·`chatbot`)를 뺀다(3.2.3 코드). 세 층이 겹친다 — 배포: `envAvailable`(플래그) / 워크스페이스: `ai.enabled` / 플랫폼·호출 시점: `hasLLM()`(오버라이드 `mode !== 'none'` ∧ 키 또는 프로필, 3.2.7). 앞 둘이 모듈 집합을 정하고 마지막은 호출부가 `aiAvailable`(5.4.5) 로 합성해 결정형 폴백을 고르는 데 쓴다 |
@@ -1504,7 +1506,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 #### 3.4.1 실행과 집계
 
 ```
-$ grep -rn "D-CUBE\|DCUBE\|PMO\|MDM\|APS\|dongkuk\|동국" src | wc -l
+$ grep -rn "원본 고객사\|ORIGIN\|PMO\|MDM\|APS\|origincorp\|원본 고객사" src | wc -l
 114
 ```
 
@@ -1514,7 +1516,7 @@ $ grep -rn "D-CUBE\|DCUBE\|PMO\|MDM\|APS\|dongkuk\|동국" src | wc -l
 - SP 배정 합계: SP0 36 · SP1 27 · SP2 2 · SP4 34 · SP5 4 · SP8 1 = 104.
 
 판정 어휘: **승격** = 설정 키/테이블 행으로 이동(키 명시) · **고정** = 제품 고정 문구/라벨로 교체 · **삭제** = 코드·주석 제거 · **fixture** = `tests/fixtures/` 로 이동(테스트 오라클) · **오탐**.
-SP 는 그 줄이 실제로 바뀌는 SP 다. "D-CUBE"·"동국"·"dongkuk" 텍스트는 주석이라도 SP0 에서 지운다(6절 SP0 done_when: `grep 'dongkuk|D-CUBE|DCUBE|동국' src+public 0건`). 식별자 `LEGACY_DCUBE_PROFILE` 은 런타임 폴백이 SP4 까지 남으므로 SP0 에서 `LEGACY_EXCEL_PROFILE_V1` 로 개명해 grep 조건을 만족시키고, 폴백 삭제·fixture 이동은 SP4 다. `PMO`·`MDM`·`APS` 리터럴이 든 상수(`WEEKLY_SECTIONS`·`DEFAULT_TEAMS` 등)는 SP4/5 에서 런타임 import 가 사라질 때 fixture 로 옮긴다 — 그 전까지는 SP3 `no-runtime-constants` 테스트의 허용 목록에 둔다.
+SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객사"·"origincorp" 텍스트는 주석이라도 SP0 에서 지운다(6절 SP0 done_when: `grep 'origincorp|원본 고객사|ORIGIN|원본 고객사' src+public 0건`). 식별자 `LEGACY_ORIGIN_PROFILE` 은 런타임 폴백이 SP4 까지 남으므로 SP0 에서 `LEGACY_EXCEL_PROFILE_V1` 로 개명해 grep 조건을 만족시키고, 폴백 삭제·fixture 이동은 SP4 다. `PMO`·`MDM`·`APS` 리터럴이 든 상수(`WEEKLY_SECTIONS`·`DEFAULT_TEAMS` 등)는 SP4/5 에서 런타임 import 가 사라질 때 fixture 로 옮긴다 — 그 전까지는 SP3 `no-runtime-constants` 테스트의 허용 목록에 둔다.
 
 #### 3.4.2 전수 표
 
@@ -1527,15 +1529,15 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "D-CUBE"·"동국"·"dongkuk" 텍�
 | `src/components/admin/AccountsManager.tsx` | 210,219,444,451 | 4 | `teamOptions[0] ?? 'PMO'` 폴백 | 삭제 — 계정 생성에서 팀 필수 제거(명단 `project_member_teams` 로 이동) | SP1 |
 | 〃 | 322 | 1 | 안내문 "팀코드: PMO · 가공 · ERP · MES · MDM / 역할: admin · member · viewer" | 삭제 — 일괄 등록 열에서 팀 제거, 역할은 `access_role` 어휘로 | SP1 |
 | 〃 | 329 | 1 | `placeholder` 속성 `'…, PMO, member, …'` | 삭제(위와 동일) | SP1 |
-| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_DCUBE_PROFILE` import·초기값 | 승격 → `wbs.excel_profile`; 프로파일 없으면 "프로파일 필요" 응답(폴백 삭제) | SP4 |
-| 〃 | 23,40,46,50 | 4 | "D-CUBE 회귀 기준"·폴백 주석·계층 헤더 주석 | 삭제(주석) + 식별자 개명 | SP0 |
+| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_ORIGIN_PROFILE` import·초기값 | 승격 → `wbs.excel_profile`; 프로파일 없으면 "프로파일 필요" 응답(폴백 삭제) | SP4 |
+| 〃 | 23,40,46,50 | 4 | "원본 고객사 회귀 기준"·폴백 주석·계층 헤더 주석 | 삭제(주석) + 식별자 개명 | SP0 |
 | `src/components/wbs/shared.tsx` | 5,9 | 2 | `TEAM` PMO/MDM CSS 토큰 | 승격 → `teams.color` inline style | SP4 |
-| 〃 | 24 | 1 | `DEFAULT_LEVEL_LABELS` 주석(D-CUBE) | 삭제 — `core.level_labels` 필수, 폴백 상수 제거 | SP4 |
+| 〃 | 24 | 1 | `DEFAULT_LEVEL_LABELS` 주석(원본 고객사) | 삭제 — `core.level_labels` 필수, 폴백 상수 제거 | SP4 |
 | 〃 | 38,41 | 2 | `LEGACY_LABEL_ABBR` Phase→PHASE 축약 | 삭제 — 라벨 원문 표시 | SP4 |
 | `src/lib/domain/minutes.ts` | 83,84,89 | 3 | `TEAM_SUB_ALIASES` 주석(APS→생산계획, deprecated) | 삭제 — 프로덕션 사용처 0(코드 주석 명시) | SP0 |
 | 〃 | 86 | 1 | `TEAM_SUB_ALIASES = { APS: '생산계획' }` | 삭제(`resolveTeamSub`·`subgroupFolderId` 와 테스트 동반 삭제) | SP0 |
-| `src/lib/domain/invites.ts` | 17 | 1 | `DEFAULT_ALLOWED_DOMAINS = ['dongkuk.com']` | 승격 → `invites.allowed_domains`(SP2). SP0 에서는 기본값 `[]`(fail-closed: 미설정=초대 불가) | SP0 |
-| 〃 | 23,31,80 | 3 | 주석 예시 `@dongkuk.com`·`a.dongkuk.com`·실명 이메일 1건 | 삭제 → `example.com` 으로 교체 | SP0 |
+| `src/lib/domain/invites.ts` | 17 | 1 | `DEFAULT_ALLOWED_DOMAINS = ['example-corp.com']` | 승격 → `invites.allowed_domains`(SP2). SP0 에서는 기본값 `[]`(fail-closed: 미설정=초대 불가) | SP0 |
+| 〃 | 23,31,80 | 3 | 주석 예시 `@example-corp.com`·`a.example-corp.com`·실명 이메일 1건 | 삭제 → `example.com` 으로 교체 | SP0 |
 | `src/components/wbs/RowDetailPanel.tsx` | 29,42,613,713 | 4 | 주석·섹션 라벨 "PMO 편집"·"담당팀·PMO" | 고정 → "관리자" 문구(`access_role` 어휘) | SP1 |
 | `src/components/wbs/DependencyEgoGraph.tsx` | 22,75,76,145 | 4 | `COLLAPSE_AT` | 오탐 | — |
 | `src/app/actions/wbs.ts` | 142,636,651 | 3 | 오류 문구 "담당 팀·PMO만 입력 가능"·"PMO만 가능" | 고정 → "담당 팀·관리자만" | SP1 |
@@ -1544,40 +1546,40 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "D-CUBE"·"동국"·"dongkuk" 텍�
 | 〃 | 55 | 1 | 주석 "'● PMO  △ 가공' 형태" | 삭제(주석) | SP4 |
 | `src/lib/i18n/dict/settings.ts` | 30,31,37 | 3 | `settings.pmoOnlyNotice/Badge/noImportPermissionDesc` "PMO 관리자" | 고정 → "프로젝트 관리자" | SP1 |
 | `src/lib/i18n/dict/settings.en.ts` | 32,33,39 | 3 | 〃 영문 | 고정 → "project admin" | SP1 |
-| `src/lib/excel/profile.ts` | 141,142,150 | 3 | `LEGACY_DCUBE_PROFILE` 정의(5팀 열) | fixture → `tests/fixtures/excel/legacy-3row-profile.ts`(라운드트립 테스트 기준). 식별자 개명은 SP0 | SP4 |
+| `src/lib/excel/profile.ts` | 141,142,150 | 3 | `LEGACY_ORIGIN_PROFILE` 정의(5팀 열) | fixture → `tests/fixtures/excel/legacy-3row-profile.ts`(라운드트립 테스트 기준). 식별자 개명은 SP0 | SP4 |
 | `src/lib/domain/teams.ts` | 10 | 1 | 주석 "기존 MDM 제외 규칙의 데이터화" | 삭제(주석) | SP0 |
 | 〃 | 18,22 | 2 | `DEFAULT_TEAMS` PMO·MDM 행 | fixture → `tests/fixtures/teams.ts`; `master.ts` 폴백 제거·`TeamsProvider` 기본값 `[]` | SP0 |
 | `src/lib/data/weeklySheet.ts` | 21,30,54 | 3 | `ensureStandardRows` 주석(PMO 백필) | 승격 → `project_areas` 기준 백필(`ensureAreaRows(areas)`) | SP4 |
-| `src/components/wbs/WbsGanttSheet.tsx` | 239,376 | 2 | 주석 "없으면 D-CUBE 기본값"·"위임 없는 프로젝트(D-CUBE)" | 삭제 — `levelLabels` prop 필수 | SP4 |
+| `src/components/wbs/WbsGanttSheet.tsx` | 239,376 | 2 | 주석 "없으면 원본 고객사 기본값"·"위임 없는 프로젝트(원본 고객사)" | 삭제 — `levelLabels` prop 필수 | SP4 |
 | 〃 | 1273 | 1 | 주석 "새 Phase 입력 (PMO)" | 고정 → "(관리자)" | SP1 |
 | `src/components/wbs/ChangeHistoryList.tsx` | 12,59,60 | 3 | `HISTORY_COLLAPSED_COUNT` | 오탐 | — |
 | `src/components/settings/ProjectInviteManager.tsx` | 62 | 1 | `teamOptions[0] ?? 'PMO'` | 삭제 — 초대 `team_ids[]` 선택, 기본 없음 | SP1 |
-| 〃 | 137 | 1 | 안내문 "D-CUBE 전체의 회의록·WBS…" | 고정 → "이 워크스페이스 전체의 …" | SP2 |
-| 〃 | 149 | 1 | `placeholder` 속성 `name@dongkuk.com` | 승격 → `invites.allowed_domains[0]` 에서 파생 | SP2 |
+| 〃 | 137 | 1 | 안내문 "원본 고객사 전체의 회의록·WBS…" | 고정 → "이 워크스페이스 전체의 …" | SP2 |
+| 〃 | 149 | 1 | `placeholder` 속성 `name@example-corp.com` | 승격 → `invites.allowed_domains[0]` 에서 파생 | SP2 |
 | `src/lib/minutes/folders.ts` | 146,147 | 2 | 주석 `team_code='MDM'` 재편철 예시 | 삭제 — 루트 규칙이 `minutes.root_folders` 로 재작성될 때 | SP5 |
-| `src/lib/excel/exportWithProfile.ts` | 70,82 | 2 | 주석 `LEGACY_DCUBE_PROFILE` 언급 | 삭제(주석) + 식별자 개명 | SP0 |
+| `src/lib/excel/exportWithProfile.ts` | 70,82 | 2 | 주석 `LEGACY_ORIGIN_PROFILE` 언급 | 삭제(주석) + 식별자 개명 | SP0 |
 | `src/lib/domain/dashboard.ts` | 205 | 1 | 주석 "기존 MDM 제외 규칙" | 삭제(주석; `progress_visible` 로 이미 데이터화) | SP0 |
 | 〃 | 264 | 1 | 주석 "데이터 위생 — (PMO 거버넌스)" | 삭제(주석) → "계획 데이터 품질" | SP0 |
 | `src/lib/data/portfolio.ts` | 16,68 | 2 | `SNAPSHOT_WINDOW_DAYS` | 오탐 | — |
 | `src/components/members/MembersBoard.tsx` | 19,23 | 2 | `TEAM_META` PMO/MDM 토큰 | 승격 → `teams.color` | SP4 |
 | `src/lib/repositories/supabase/wbs.ts` | 84 | 1 | `actorLabel` `'PMO 관리자'` | 삭제 — `pmo_admin`/`team_editor` 문자열 계약과 `effectiveLegacyRole` shim 제거 | SP1 |
-| `src/lib/report/weekly.ts` | 10 | 1 | 주석 "동국씨엠 주간보고(PPT)·공정보고(Excel)" | 삭제(주석) | SP0 |
-| `src/lib/report/excel.ts` | 221 | 1 | 주석 "동국제강 보라 2시트 xlsx" | 삭제(주석; 코드 경로 이관은 SP6) | SP0 |
-| `src/lib/report/dkbrand.ts` | 1 | 1 | 주석 "동국제강 그룹 공정보고 디자인 토큰 … DONGKUK BLUE" | 삭제(주석). 파일은 SP0 중립 기본 양식 파일 도입 시 `branding.accent_color` 로 대체·SP6 삭제 | SP0 |
-| `src/lib/mail/transport.ts` | 18 | 1 | `DEFAULT_FROM_NAME = 'D-CUBE 회의알림'` | 승격 → `branding.mail_from_name`(SP0 `branding.ts` env 기본값 → SP3 워크스페이스) | SP0 |
-| `src/lib/mail/projectInvite.ts` | 63 | 1 | 메일 제목 `[D-CUBE] … 초대` | 승격 → `[${branding.product_name}]` | SP0 |
+| `src/lib/report/weekly.ts` | 10 | 1 | 주석 "원본 계열사A 주간보고(PPT)·공정보고(Excel)" | 삭제(주석) | SP0 |
+| `src/lib/report/excel.ts` | 221 | 1 | 주석 "원본 고객사 보라 2시트 xlsx" | 삭제(주석; 코드 경로 이관은 SP6) | SP0 |
+| `src/lib/report/dkbrand.ts` | 1 | 1 | 주석 "원본 고객사 그룹 공정보고 디자인 토큰 … ORIGINCORP BLUE" | 삭제(주석). 파일은 SP0 중립 기본 양식 파일 도입 시 `branding.accent_color` 로 대체·SP6 삭제 | SP0 |
+| `src/lib/mail/transport.ts` | 18 | 1 | `DEFAULT_FROM_NAME = '원본 고객사 회의알림'` | 승격 → `branding.mail_from_name`(SP0 `branding.ts` env 기본값 → SP3 워크스페이스) | SP0 |
+| `src/lib/mail/projectInvite.ts` | 63 | 1 | 메일 제목 `[원본 고객사] … 초대` | 승격 → `[${branding.product_name}]` | SP0 |
 | `src/lib/i18n/dict/wbs.ts` | 182 | 1 | `wbs.rolePmoAdmin: 'PMO 관리자'` | 삭제(shim 제거와 함께) | SP1 |
 | `src/lib/i18n/dict/wbs.en.ts` | 170 | 1 | `wbs.rolePmoAdmin: 'PMO admin'` | 삭제 | SP1 |
-| `src/lib/excel/parseWithProfile.ts` | 2 | 1 | 주석 "레거시 D-CUBE 프로파일" | 삭제(주석) | SP0 |
+| `src/lib/excel/parseWithProfile.ts` | 2 | 1 | 주석 "레거시 원본 고객사 프로파일" | 삭제(주석) | SP0 |
 | `src/lib/excel/parse.ts` | 20 | 1 | `LEGACY_COLUMN_MAP` 5팀 열(구 파서; `src` importer 0, tests 5) | fixture → 파일째 `tests/fixtures/excel/legacyParse.ts` | SP0 |
-| `src/lib/excel/export.ts` | 64 | 1 | 주석 "D-CUBE 회귀 기준" | 삭제(주석) | SP0 |
+| `src/lib/excel/export.ts` | 64 | 1 | 주석 "원본 고객사 회귀 기준" | 삭제(주석) | SP0 |
 | `src/lib/domain/weeklyLint.ts` | 4 | 1 | 주석 "PMO의 줄과 영업의 줄" | 삭제(주석) → 일반 예시 | SP0 |
-| `src/lib/domain/wbsAffordance.ts` | 4 | 1 | 주석 "D-CUBE(maxDepth=3)" 예시 | 삭제(주석) | SP0 |
+| `src/lib/domain/wbsAffordance.ts` | 4 | 1 | 주석 "원본 고객사(maxDepth=3)" 예시 | 삭제(주석) | SP0 |
 | `src/lib/domain/kanban.ts` | 23 | 1 | `TEAM_DOT` PMO/MDM 토큰 | 승격 → `teams.color` | SP4 |
 | `src/lib/ai/wiki-ingest.ts` | 1020 | 1 | `JOB_PROJECT_SNAPSHOT_MISMATCH` | 오탐 | — |
 | `src/lib/ai/chat/router.ts` | 207 | 1 | 정규식 `(PMO\|ERP\|MES\|가공\|MDM)` | 승격 → `config.teams` 코드로 정규식 생성(플래너 주입) | SP8 |
 | `src/lib/ai/chat/orchestrator.ts` | 155 | 1 | 라벨 `pmo_admin: 'PMO 관리자'` | 삭제(shim 제거) | SP1 |
-| `src/lib/ai/analytics.ts` | 351 | 1 | 주석 "D-CUBE 현행과 동일해 … 바이트 불변" | 삭제(주석) | SP0 |
+| `src/lib/ai/analytics.ts` | 351 | 1 | 주석 "원본 고객사 현행과 동일해 … 바이트 불변" | 삭제(주석) | SP0 |
 | `src/lib/agent/wbsImport.ts` | 31 | 1 | 주석 `if_id // PMO I/F 대장 참조` | 삭제(주석; 필드는 계약 v2.1 유지) | SP0 |
 | `src/components/weekly/WeeklySheetView.tsx` | 603 | 1 | 빈 시트 안내 "(PMO·영업·… 업무영역 N개 구분)" | 승격 → 구분 0개면 "설정 필요" 배너, 있으면 `areas.map(name)` | SP4 |
 | `src/components/settings/ReindexButton.tsx` | 9 | 1 | 주석 "(PMO 관리자)" | 고정 → "(프로젝트 관리자)" | SP1 |
@@ -1586,10 +1588,10 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "D-CUBE"·"동국"·"dongkuk" 텍�
 | `src/components/import/WbsMarkdownImport.tsx` | 77 | 1 | 미리보기 라벨 `'골격(PMO)'` | 고정 → `'골격'`(wbs.md `skeleton` 모드 라벨, i18n) | SP4 |
 | `src/components/dashboard/TeamProgress.tsx` | 14 | 1 | 주석 "기존 'MDM 제외' 규칙" | 삭제(주석) | SP0 |
 | `src/components/dashboard/DashboardView.tsx` | 27 | 1 | 주석 "경영진/PMO 대시보드" | 삭제(주석) → "경영진 대시보드" | SP0 |
-| `src/app/login/page.tsx` | 152 | 1 | "© 2026 동국시스템즈. All rights reserved." | 승격 → env `BRAND_COPYRIGHT`(로그인은 워크스페이스 미확정) | SP0 |
-| `src/app/api/report/route.ts` | 133 | 1 | 주석 파일명 예시 "D-CUBE Project_7월1주차" | 삭제(주석) | SP0 |
-| `src/app/api/import/execute/route.ts` | 95 | 1 | 주석 "전역 상속 프로젝트(D-CUBE)는 … 슈퍼유저만" + `requireSuperuser` 분기 | 승격 → 미등록 팀은 항상 프로젝트 전용 팀으로 등록(`requireProjectAdmin`); 공용 팀 등록은 워크스페이스 관리 화면만 | SP4 |
-| `src/app/actions/project.ts` | 73 | 1 | 주석 "신규 프로젝트는 pi(D-CUBE 형) 기본" + `PRESETS.pi` 시드 | 삭제 — `projectPresets.ts` 폐지, `levelLabels` 필수 인자 | SP0 |
+| `src/app/login/page.tsx` | 152 | 1 | "© 2026 원본 고객사시스템즈. All rights reserved." | 승격 → env `BRAND_COPYRIGHT`(로그인은 워크스페이스 미확정) | SP0 |
+| `src/app/api/report/route.ts` | 133 | 1 | 주석 파일명 예시 "원본 고객사 Project_7월1주차" | 삭제(주석) | SP0 |
+| `src/app/api/import/execute/route.ts` | 95 | 1 | 주석 "전역 상속 프로젝트(원본 고객사)는 … 슈퍼유저만" + `requireSuperuser` 분기 | 승격 → 미등록 팀은 항상 프로젝트 전용 팀으로 등록(`requireProjectAdmin`); 공용 팀 등록은 워크스페이스 관리 화면만 | SP4 |
+| `src/app/actions/project.ts` | 73 | 1 | 주석 "신규 프로젝트는 pi(원본 고객사 형) 기본" + `PRESETS.pi` 시드 | 삭제 — `projectPresets.ts` 폐지, `levelLabels` 필수 인자 | SP0 |
 
 #### 3.4.2a 패턴 밖 후속 — grep 에 잡히지 않는 팀 CSS 토큰
 
@@ -1606,17 +1608,17 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "D-CUBE"·"동국"·"dongkuk" 텍�
 
 | SP | 건 | 파일 | 주 내용 |
 |---|---|---|---|
-| SP0 | 36 | 23 | 브랜드 문자열(동국·D-CUBE·dongkuk) 주석·메일·로그인·초대 기본 도메인 `[]`, `DEFAULT_TEAMS`/`parse.ts` fixture, `projectPresets` 삭제, `TEAM_SUB_ALIASES` 삭제, `LEGACY_DCUBE_PROFILE` 식별자 개명 |
+| SP0 | 36 | 23 | 브랜드 문자열(원본 고객사·원본 고객사·origincorp) 주석·메일·로그인·초대 기본 도메인 `[]`, `DEFAULT_TEAMS`/`parse.ts` fixture, `projectPresets` 삭제, `TEAM_SUB_ALIASES` 삭제, `LEGACY_ORIGIN_PROFILE` 식별자 개명 |
 | SP1 | 27 | 12 | `pmo_admin`/'PMO 관리자' 문구·i18n·shim, 계정·초대 폼의 `'PMO'` 팀 폴백 |
 | SP2 | 2 | 1 | 초대 화면 워크스페이스 문구·도메인 `placeholder` 속성 |
-| SP4 | 34 | 12 | `WEEKLY_SECTIONS` 계열 → `project_areas`, 팀 색 토큰 4벌 → `teams.color`, `LEGACY_DCUBE_PROFILE` 폴백 제거·fixture, `DEFAULT_LEVEL_LABELS`·`LEGACY_LABEL_ABBR` 삭제 |
+| SP4 | 34 | 12 | `WEEKLY_SECTIONS` 계열 → `project_areas`, 팀 색 토큰 4벌 → `teams.color`, `LEGACY_ORIGIN_PROFILE` 폴백 제거·fixture, `DEFAULT_LEVEL_LABELS`·`LEGACY_LABEL_ABBR` 삭제 |
 | SP5 | 4 | 3 | 회의록 업로드 팀 폴백·폴더 루트 주석 |
 | SP8 | 1 | 1 | 봇 라우터 팀명 정규식 |
 | 오탐 | 10 | 4 | — |
 
 판정 종류별: 승격 26 · 고정(문구) 18 · 삭제(코드·주석) 54 · fixture 6 · 오탐 10 = 114.
 
-SP5 done_when 의 최종 판정 명령은 `grep -rnE "D-CUBE|DCUBE|PMO|MDM|APS|dongkuk|동국" src` **런타임 0건**이며, 오탐 4파일은 식별자를 바꾸지 않고 grep 패턴에 단어 경계(`\b(APS)\b`)를 쓰는 것으로 제외한다.
+SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PMO|MDM|APS|origincorp|원본 고객사" src` **런타임 0건**이며, 오탐 4파일은 식별자를 바꾸지 않고 grep 패턴에 단어 경계(`\b(APS)\b`)를 쓰는 것으로 제외한다.
 
 ### 3.5 열린 항목
 
@@ -1640,8 +1642,8 @@ SP5 done_when 의 최종 판정 명령은 `grep -rnE "D-CUBE|DCUBE|PMO|MDM|APS|d
 | 출력물 | 진입점 | 구현 파일 | 라이브러리 | 방식 | 코드에 박힌 것 |
 |---|---|---|---|---|---|
 | 주간보고 PPT (WBS 내러티브·시트·AI 코멘트) | `GET /api/report?format=pptx[&source=sheet][&ai=1]` | `src/lib/report/templateFill.ts`, `xml.ts` | JSZip | 리포 자산 `src/lib/report/assets/weekly-template.pptx` 를 열어 `slide2.xml` 표의 `[행][열]` 셀 `<a:txBody>` 만 교체(`mapTableCell`). 넘치면 slide2 를 복제해 `slide3~` 로 배선 | 셀 좌표 `(0,1)(0,2)(1,1)(1,2)(2,1)(2,2)`, `CELL_BUDGET 15`, `ISSUE_BUDGET 12`, `ISSUE_CAP 5`, `EVENT_CAP 5`, 빈칸 문구 `'(해당 없음)'`·`'-'`, `'예정된 주요 이벤트 없음'`, 헤더 라벨 `'전주 주요활동'`·`'금주실적'` 등 |
-| 주간 공정보고 엑셀 | `GET /api/report?format=xlsx` | `src/lib/report/excel.ts` | exceljs | 워크북을 코드로 처음부터 그린다(`1.공정보고`·`2.WBS` 2시트, 12열·16열, 병합·색·테두리 전부 코드) | 시트명·열폭·섹션 제목·`PX` 팔레트(`dkbrand.ts`)·`wb.creator = "D'Flow"` |
-| WBS 엑셀 내보내기 | `GET /api/export[?expand=1]` | `src/lib/excel/export.ts`, `exportWithProfile.ts` | SheetJS(`xlsx`) | AoA 를 코드로 만들어 쓴다. 3행 헤더 규약은 임포트 파서(`parse.ts`)와의 **라운드트립 계약** | `LEGACY_DCUBE_PROFILE` 폴백, `DEFAULT_TEAM_CODES`, 헤더 문자열 |
+| 주간 공정보고 엑셀 | `GET /api/report?format=xlsx` | `src/lib/report/excel.ts` | exceljs | 워크북을 코드로 처음부터 그린다(`1.공정보고`·`2.WBS` 2시트, 12열·16열, 병합·색·테두리 전부 코드) | 시트명·열폭·섹션 제목·`PX` 팔레트(`dkbrand.ts`)·`wb.creator = "구 브랜드명"` |
+| WBS 엑셀 내보내기 | `GET /api/export[?expand=1]` | `src/lib/excel/export.ts`, `exportWithProfile.ts` | SheetJS(`xlsx`) | AoA 를 코드로 만들어 쓴다. 3행 헤더 규약은 임포트 파서(`parse.ts`)와의 **라운드트립 계약** | `LEGACY_ORIGIN_PROFILE` 폴백, `DEFAULT_TEAM_CODES`, 헤더 문자열 |
 | 이슈분석서 PPT | `GET /api/issue-analysis` | `src/lib/report/issues/jszipRenderer.ts`, `slideXml.ts`, `deckPlan.ts` | JSZip | 리포 자산 `issue-analysis-template.pptx`(12장) 에서 `deckPlan.sourceSlide` 번호의 원본 슬라이드를 페이지마다 복제하고, **shape ID·표 셀·커넥터** 만 치환. 원본 슬라이드 파트는 전부 지우고 출력 순서로 다시 배선 | `sourceSlide` 매핑(표지 1·목차 2/4/11·접근 3·트리 5·정의 6·종합 8·종합 계속 9·원인 10·개선기회 12, 7 미사용), shape ID(`'146'` 제목·`'100'` 태그·`'5'` 표지 작성자/일자·`'3'`/`'6'` 바닥글(`setPageFooter`); `'145'` 헤드라인은 5·6 트리·정의 전용이라 `processSlideRenderer.ts` 에만 있고 `jszipRenderer.ts` 에는 없다), 표 용량(첫 장 3·계속 5·원인 4·개선기회 10단위), EMU 좌표 상수(`CAUSE_*`, `OPPORTUNITY_*`) |
 
 주간 템플릿의 구조적 사실(자산을 풀어 실측):
@@ -1974,7 +1976,7 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `report.generated_at` | text | `.generatedAt` | |
 | `report.description` | text | `.description` | |
 | `kpi.plan` / `kpi.actual` / `kpi.variance` | pct1 / pct1 / pp1 | `WeeklyKpi.planned` / `.actual` / `.variance` | 편차 = 실적 − 계획 |
-| `kpi.total` / `kpi.done` / `kpi.in_progress` / `kpi.not_started` / `kpi.delayed` / `kpi.done_this_week` | int | 동명 필드 | `WeeklyKpi.onHold` 는 모델이 항상 0(`weekly.ts:48` "D'Flow 미지원 → 0")이라 카탈로그에 올리지 않는다 |
+| `kpi.total` / `kpi.done` / `kpi.in_progress` / `kpi.not_started` / `kpi.delayed` / `kpi.done_this_week` | int | 동명 필드 | `WeeklyKpi.onHold` 는 모델이 항상 0(`weekly.ts:48` "구 브랜드명 미지원 → 0")이라 카탈로그에 올리지 않는다 |
 | `kpi.done_ratio` / `kpi.in_progress_ratio` / `kpi.delayed_ratio` | pct1 | 동명 | |
 | `kpi.phase_count` / `kpi.total_leaves` | int | `WeeklyMeta.phaseCount` / `.totalLeaves` | |
 | `sections[]` | list<record> | `buildSheetSections(rows, areas)`(SP4 시그니처) + `project_areas kind='weekly_section'` | 활성 구분 전부(내용 없는 구분 포함, `sort_order` 순). SP4 이후 `weekly_report_rows.area_id` 는 `not null` FK 이고 `section`·`module` 텍스트가 없으므로(→ 3절) 현 `buildSheetSections` 의 비표준(자유 문자열) 행은 존재하지 않는다. 비활성 구분에 내용 있는 행이 남아 있으면 그 구분을 활성 구분 뒤에 `sort_order` 순으로 붙인다(내용 유실 금지) |
@@ -2138,7 +2140,7 @@ create policy "form-templates insert" on storage.objects for insert to authentic
 
 | 단계 | 파일 | 조건 |
 |---|---|---|
-| SP0 | `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` — **현 경로·현 이름 그대로**, 디자인만 중립으로 교체(2파일) | 현행 렌더러(`templateFill.ts:109` `TEMPLATE_PATH`·셀 좌표, `jszipRenderer.ts` `expectedSourceSlide`)가 그대로 동작해야 하므로 **구조 불변**: 주간은 slide2 3×3 표(셀 좌표 `(0,1)…(2,2)`·`buChar`/`buNone` 스켈레톤·`custDataLst`), 이슈분석서는 12장 `sourceSlide` 번호·shape ID·표 행 수(`capacity+1`)·5/6 도형 ID 전부 유지. 토큰은 심지 않는다. `docProps/app.xml` 의 "D-Cube 마스터플랜 프로젝트 (이슈 분석서)" 같은 문자열도 교체 범위다. `weekly_report_xlsx`·`wbs_export_xlsx` 는 SP6 전엔 코드 그리기(`excel.ts`·`excel/export.ts`)라 파일이 없다 |
+| SP0 | `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` — **현 경로·현 이름 그대로**, 디자인만 중립으로 교체(2파일) | 현행 렌더러(`templateFill.ts:109` `TEMPLATE_PATH`·셀 좌표, `jszipRenderer.ts` `expectedSourceSlide`)가 그대로 동작해야 하므로 **구조 불변**: 주간은 slide2 3×3 표(셀 좌표 `(0,1)…(2,2)`·`buChar`/`buNone` 스켈레톤·`custDataLst`), 이슈분석서는 12장 `sourceSlide` 번호·shape ID·표 행 수(`capacity+1`)·5/6 도형 ID 전부 유지. 토큰은 심지 않는다. `docProps/app.xml` 의 "원본 고객사 마스터플랜 프로젝트 (이슈 분석서)" 같은 문자열도 교체 범위다. `weekly_report_xlsx`·`wbs_export_xlsx` 는 SP6 전엔 코드 그리기(`excel.ts`·`excel/export.ts`)라 파일이 없다 |
 | SP6 | `src/lib/report/assets/default/<form_kind>.<ext>` 4개 신설 + `assets/fixed/issue-analysis-process.pptx`(4.9) | 토큰은 전부 카탈로그 경로와 같은 이름(매핑 없음). OLE·차트·think-cell 태그 없음(스캔 경고 0). CI 테스트가 4개를 `scan` 해 `error 0`·`UNKNOWN_TOKEN 0`·`warning 0` 을 단언. SP0 파일 2개를 지우고 `next.config.ts` `outputFileTracingIncludes` 를 이 5개로 바꾼다(4.2.8·4.8) |
 
 - 활성 양식이 없으면 `template_id=null` 이며 라우트는 기본 파일을 읽는다. 응답 헤더 `X-Form-Template: default` 와 설정 화면 배지로 "기본 양식 사용 중" 을 드러낸다.
@@ -2266,7 +2268,7 @@ create policy "form-templates insert" on storage.objects for insert to authentic
 
 SP6 는 다음이 갖춰지기 전에 시작하지 않는다. SP6 직전(SP5 완료 시점)에 재확인한다.
 
-- 실제 고객사 PPT/엑셀 양식 **3종**(서로 다른 고객사·서로 다른 표 구조), 또는 미확보 시 **D-CUBE 양식(현 자산 2개) + 다른 구조의 자체 샘플 2종**(예: 표 없는 텍스트형 주간보고 1종, 한 표에 전 이슈를 싣는 이슈 목록형 1종).
+- 실제 고객사 PPT/엑셀 양식 **3종**(서로 다른 고객사·서로 다른 표 구조), 또는 미확보 시 **원본 고객사 양식(현 자산 2개) + 다른 구조의 자체 샘플 2종**(예: 표 없는 텍스트형 주간보고 1종, 한 표에 전 이슈를 싣는 이슈 목록형 1종).
 - 픽스처는 `tests/fixtures/forms/<name>/` 에 두되 고객사 자료는 사용 허락이 있을 때만 리포에 넣는다. 허락이 없으면 동일 구조로 재작성한 익명 사본을 만들고 원본은 스파이크 로컬에서만 쓴다.
 - 픽스처마다 기대 출력(슬라이드 수·표 행 수·토큰 0잔존)을 적은 회귀 테스트가 SP6 완료 조건이다(→ 6절).
 
@@ -2493,7 +2495,7 @@ export async function actorFromCredential(admin: ScopedAdminClient, cred: Resolv
 | `POST /minutes/folder` 봉투·`items[]`·`status` 집합·조상 규칙 | §4c | **불변**. 실행 게이트를 두 단으로 나눈다. **① 계정 게이트**(items 파싱 전, 현 순서 `folder/route.ts:268-285` 유지 — `items: []` 프로브에도 적용): `actor.workspaceRoles.get(cred.workspaceId) === 'admin'` ∨ 그 워크스페이스 안에 `roleIn(actor, pid) === 'admin'` 인 프로젝트가 1개 이상. 미달은 403 `forbidden_role`(현 `isBatchAuthorized` 의 "슈퍼유저 ∨ 아무 프로젝트 admin", `minutes/externalApi.ts:69-85` 을 워크스페이스로 좁힌 것). **② 건별**: `roleIn(actor, item.project_id) !== 'admin'` 이면 그 건만 `results[].status='failed'`, `reason='forbidden_project'`(§4c.3 표에 신설 — `team_mismatch` 처럼 "입력·전제 문제" 계열, 재실행해도 같은 결과). 워크스페이스 관리자는 Q2 로 ①②를 모두 통과한다. E13 기대는 ① 기준(프로브 포함 403, DB 부작용 0)이고 ② 는 5.2.5 #10 에 E20 으로 더한다 | 없음(`reason` 값 1건 추가는 §4c.3 의 기존 "사람이 고칠 대상" 분기에 얹힌다) |
 | 신규 오류 | — | 409 `module_disabled`, 403 `project_not_allowed`, 건별 `failed(forbidden_project)` | **선택** — `error` 문구를 그대로 보이면 된다(5.2.1 원칙 4). 코드별 안내문을 두고 싶을 때만 2건 추가 |
 | §6 오류표 나머지 | 전부 | **불변** | 없음 |
-| 배포 순서 | D'Flow 먼저(env 미설정=404) | 같다. 새 플랫폼은 `envAvailable=false` 로 먼저 배포하고, 자격증명 발급 후 켠다 | 순서 준수 |
+| 배포 순서 | 구 브랜드명 먼저(env 미설정=404) | 같다. 새 플랫폼은 `envAvailable=false` 로 먼저 배포하고, 자격증명 발급 후 켠다 | 순서 준수 |
 
 #### 5.2.4 `GET /minutes/meta` v3 응답
 
@@ -2770,7 +2772,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | Q2 워크스페이스 관리자 | 그 워크스페이스 **모든 프로젝트의 관리자로 자동 승계, 비공개 포함** | SP2 의 `roleIn` 판정 순서·`canSeeProject`·`is_project_admin()` 헬퍼·비공개 숨김 로직(`dropHidden`)에 반영, `tests/rls` 케이스 추가 | SP2 3주 유지 |
 | Q3 명단과 권한 | `project_members.access_role` **한 행으로 통합**, 숨김 편집자 없음 | SP1 에서 `project_roles` 를 hidden 행 변환 없이 단순 폐기. 데이터 이관이 없으므로 백필 없음 | SP1 3주 유지 |
 | Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격** | SP5 에 마이그레이션 1개(`0008_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
-| Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** D-CUBE 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
+| Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** 원본 고객사 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
 | Q6 또박또박 계약 | **헤더 자격증명만 변경, payload 불변** | SP7 에서 `GET /minutes/meta` 의 팀·프로젝트 소비를 또박또박에 요구하지 않음. 팀·프로젝트 해석은 자격증명 행의 기본 프로젝트·팀 매핑으로 우리 쪽이 처리 | **SP7 2~3주 → 2주** |
 
 ### 6.2 서브 프로젝트 상세
@@ -2781,7 +2783,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 | 항목 | 내용 |
 |---|---|
-| 목표 | 새 리포·새 Supabase(staging + prod)·새 Vercel 프로젝트 2개·CI 에서 **빈 데이터로** 로그인 → 프로젝트 생성 → WBS 엑셀 임포트 → 주간보고 PPT/엑셀 내보내기가 완주하는 출발선. D-CUBE 실명·브랜드·5팀 가정이 화면과 산출물에 나오지 않는다 |
+| 목표 | 새 리포·새 Supabase(staging + prod)·새 Vercel 프로젝트 2개·CI 에서 **빈 데이터로** 로그인 → 프로젝트 생성 → WBS 엑셀 임포트 → 주간보고 PPT/엑셀 내보내기가 완주하는 출발선. 원본 고객사 실명·브랜드·5팀 가정이 화면과 산출물에 나오지 않는다 |
 | 왜 이 순서 | 이후 모든 마이그레이션이 올라탈 기준선(운영 `pg_dump`)과 회귀 판정 도구(CI·테스트 초록 기준선)가 먼저 있어야 한다. 데이터가 없는 지금이 시드·브랜드·폴백을 걷어내는 가장 싼 시점이다 |
 | 의존 | 없음 |
 | 마이그레이션 | `0000_baseline.sql`(운영 public 스키마 `pg_dump 17 --schema-only`) + `0001_storage_realtime.sql`(수기: `storage.buckets` 시드 3개 `deliverables`·`minutes`·`issue-attachments` + `storage.objects` **라이브 정책 9개**(3버킷 × read/insert/delete — 현 리포 `0008_attachments`·`0021_minutes`·`0036_backport_prod_policies`·`0045_minutes_wiki`·`0068_issue_attachments` 의 `create policy` 기준, `drop policy` 문 제외) + `realtime.messages` **정책 2개**(`0075` `receive_own_notification_channel`·`0098` `receive_project_wbs_channel`) — 2026-09-23 정방향 마이그레이션 multiline 집계. 단위는 문(statement)이 아니라 정책(policy) 수이며, 종합안의 "25문" 은 drop 문까지 센 값이라 `baseline-diff` 대조 기준으로 쓰지 않는다) |
@@ -2792,8 +2794,8 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 - 기준선: 운영(스테이징 아님) 스키마를 `pg_dump 17` 로 뜬다. `scripts/staging-sync.mjs` 가 이미 `pg_dump --version` ≥ 17 을 검사하고 같은 경로를 쓴다. 현 체인은 재생이 불가하다 — 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)와 중복 1개(`0070` 두 파일)가 실측되고, 종합안이 확인한 `0052` 검증 블록·이메일 하드코딩·`0058` 시드가 있다. `pg_dump --schema=public` 은 `storage`·`realtime` 정책을 담지 않으므로 그 두 스키마는 수기 SQL 이다. 기준선의 정책·함수·트리거 수를 운영 `pg_policies`·`pg_proc`·`pg_trigger` 와 대조하는 스크립트(`scripts/baseline-diff.mjs`)를 함께 만든다 — 이 스크립트의 출력이 SP2 스펙의 "라이브 정책 목록" 입력이 된다.
 - 마이그레이션 정리: `supabase/migrations/0001~0100`(정방향 97파일 + 롤백 70파일)과 `tests/migrations/` 41파일(개별 SQL 텍스트 단언, 예: `0094-agent-heartbeat.test.ts` 가 `add column if not exists` 문자열을 검사) 삭제. `migration_ledger`(`0050`)는 기준선에 포함되므로 표는 유지하고 행만 초기화. `.githooks/pre-push` 의 G4 컷오프(100행·109행의 `substr($0,21,4) + 0 >= 72`)를 `>= 1` 로. `scripts/db-apply.mjs` 는 현재 Management API(`api.supabase.com/v1/projects/{ref}/database/query`) 단일 드라이버다 — `--driver mgmt|psql` 로 분리해 SP9 자체호스트 리허설과 CI(`supabase start` 의 로컬 DSN)에서 같은 스크립트를 쓴다.
 - 좌표 env 화: `scripts/lib/staging.config.mjs` 의 `PROD_REF`·`STAGING_REF`·`POOLER_HOST` 리터럴, `scripts/smoke-prod.mjs`:24·`scripts/mark-good.mjs`:27 의 `https://wbs-web.vercel.app` 기본값(실측 2곳 — `scripts/agent-harness-example.mjs` 는 `AGENT_BASE` 를 필수 env 로 검사하고 기본값이 없으므로 4행 사용법 주석의 예시 URL 만 교체), `scripts/vercel-ignore-build.sh` 의 `dflow-staging*` 프로젝트명, `.github/workflows/warm.yml` 의 ping URL 을 전부 env(`SMOKE_URL`·`PROD_REF`·`STAGING_REF`·`STAGING_PROJECT_PREFIX`)로. 키체인 항목명(`"DFlow Staging DB"`·`"DFlow Prod Reader"`·`"Supabase CLI"`)도 스크립트 리터럴이므로 새 이름으로 교체.
-- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"D'Flow"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `dongkuk|D-CUBE|DCUBE|동국` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/lib/report/brand.ts`:33 `TEAM_COLOR`·`src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4).
-- 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_DCUBE_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_DCUBE_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
+- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/lib/report/brand.ts`:33 `TEAM_COLOR`·`src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4).
+- 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_ORIGIN_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_ORIGIN_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
 - CI 신설: `.github/workflows/` 는 현재 `warm.yml`(콜드 스타트 핑) 하나뿐이다. `ci.yml`(vitest + `next build` + eslint; `tsconfig.json` `include: ['**/*.ts', …]` 라 `next build` 가 `tests/` 까지 타입체크하므로 빌드 잡이 테스트 타입 회귀도 잡는다)을 만들고, `package.json` 에 `engines.node`(현재 없음; 메모리 백로그 Node ≥ 22.4)를 명시.
   **정정(Task 8 리뷰·8b, 2026-09-24)**: 위 괄호 두 개는 실측과 다르다 — `next build` 는 `tests/` 를
   타입체크하지 **않고**(Next 가 `*.test.*`·`__tests__` 진단을 버린다), Node 하한은 개발 툴체인 실측상
@@ -2804,14 +2806,14 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 **범위 제외**
 
 - 워크스페이스·조직 모델·설정 엔진 — 스키마 변경 없음, 기준선만(SP1~SP3)
-- D-CUBE 상수의 런타임 import 제거(SP4·SP5)
+- 원본 고객사 상수의 런타임 import 제거(SP4·SP5)
 - 양식 엔진(SP6)
 
 **완료 조건(done_when)**
 
 - 새 스테이징에서 빈 DB → 로그인 → 프로젝트 생성(라벨 입력) → 엑셀 임포트 → 주간보고 PPT/엑셀 내보내기 완주(브라우저 실측 기록)
 - `vitest` 전부 초록(삭제 41파일 제외), CI 초록
-- `grep -rE 'dongkuk|D-CUBE|DCUBE|동국' src public` 0건(식별자 `LEGACY_DCUBE_PROFILE` 개명 포함). `PMO`·`MDM`·`APS` 리터럴 상수는 런타임 import 가 남아 SP0 조건이 아니다 — SP3 `no-runtime-constants` 허용 목록으로 추적해 SP5 done_when 에서 0건(3.4.1)
+- `grep -rE 'origincorp|원본 고객사|ORIGIN|원본 고객사' src public` 0건(식별자 `LEGACY_ORIGIN_PROFILE` 개명 포함). `PMO`·`MDM`·`APS` 리터럴 상수는 런타임 import 가 남아 SP0 조건이 아니다 — SP3 `no-runtime-constants` 허용 목록으로 추적해 SP5 done_when 에서 0건(3.4.1)
 - `scripts/baseline-diff.mjs` 가 정책·함수·트리거 수 일치를 출력
 - `scripts/smoke-prod.mjs` 의 `FLOOR`(CSS 90,000바이트·규칙 1,300 등 2026-07-28 운영 실측 기반)를 탈-브랜드 후 CSS 로 재측정해 갱신(줄었다면 커밋에 사유)
 - `docs/runbook-*.md` 가 새 좌표로 개정, `docs/fork-policy.md` 존재
@@ -2828,7 +2830,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 **범위 포함**
 
-- 스키마(→ 2절): `workspaces`(골격)·`workspace_members`·`platform_admins`·`profiles`·`people`·`teams.workspace_id`/`color`·`project_members` 재정의(`person_id`·`access_role`·`role_label`; `name`/`email`/`team_id`/`role` 삭제)·`project_member_teams`·`project_areas`·`area_teams`. `project_roles`·`memberships`·`project_member_identities` 폐기 — Q3 에 따라 hidden 행 변환 없이 drop 한다(D-CUBE 데이터 이관이 없으므로 백필도 없다). `projects.workspace_id not null`(시드 워크스페이스).
+- 스키마(→ 2절): `workspaces`(골격)·`workspace_members`·`platform_admins`·`profiles`·`people`·`teams.workspace_id`/`color`·`project_members` 재정의(`person_id`·`access_role`·`role_label`; `name`/`email`/`team_id`/`role` 삭제)·`project_member_teams`·`project_areas`·`area_teams`. `project_roles`·`memberships`·`project_member_identities` 폐기 — Q3 에 따라 hidden 행 변환 없이 drop 한다(원본 고객사 데이터 이관이 없으므로 백필도 없다). `projects.workspace_id not null`(시드 워크스페이스).
 - RLS: `is_superuser()` → `platform_admins`; `is_project_admin`/`is_project_member` 본문 → `project_members ⨝ people`(`access_role`); `member_update_actual`·`can_attach` 의 '내 팀' 을 `project_member_teams` 단일 경로로(`0071` 의 `memberships ∪ project_members` 합집합 폐기); `update_project_member_with_identity`(`0071`)·`consume_project_invite`(`0065`) RPC 재작성; `project_invites.team_ids uuid[]`.
 - `authz.ts` Actor 최종형(→ 2절): 현 `Actor { userId, teamCode, teamId, isSuperuser, projectRoles, rosterTeams }` 에서 `teamCode`/`teamId` 단일 필드와 `effectiveLegacyRole` shim(정의 `src/lib/domain/authz.ts`:46 + 소비처 6파일 실측)을 삭제하고 `workspaceRoles`·`projectWorkspace`·`memberIds` 를 추가. `roleIn(actor, pid)` 시그니처 유지. `getActor` 는 현재 `memberships`·`project_roles`·`project_members` 3축 `Promise.all`(`src/lib/authz/index.ts` 37~47행)이며 4축으로 바뀐다. `memberships` 직접 조회 11파일 22곳 실측·`getMembership`(`auth.ts`) 삭제. 외부 API 판정부(`agent/externalApi.ts`·`minutes/externalApi.ts`·`authz/accessScope.ts`·에이전트 report 라우트)는 `memberships`·`project_roles` 를 읽는 자리를 `project_members ⨝ people` 조회로 최소 교체만 한다(`roleIn` 통합은 SP2, 자격증명 행은 SP7 — 5.1.1). `src/lib/domain/permissions.ts` 의 `actorTeamCodesFor`/`actorTeamIdsFor` 는 이미 `string[]` 을 반환하므로 시그니처는 유지하고, 원천을 `actor.teamCode`/`teamId` + `rosterTeams` 합집합(5~20행)에서 `memberIds`/`project_member_teams` 기반으로 교체한다 — 외부 소비처는 `actorTeamIdsFor` 를 쓰는 `src/app/actions/wbs.ts`(100·574행)·`attachments.ts`(32행) 2파일뿐이고 `actorTeamCodesFor` 는 파일 내부 호출(35·43·59행)만 있다. `ProjectActorView` 직렬화 계약 갱신.
 - 화면: 명단 관리(다중 팀 선택·역할 라벨·`access_role` 부여 = 현 `ProjectRolesManager` 흡수), 외부 인력 '계정 미연결' 배지, `memberPicker` 가 `people` 기반으로 회의 참석자·근태·이슈·WBS 담당 선택기에 외부 인력 노출, 계정 생성(`accounts.ts`) 팀 필수 제거 + `profiles` insert, 초대 수락 → `profiles`·`people` 연결.
@@ -2921,7 +2923,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 | 항목 | 내용 |
 |---|---|
-| 목표 | `WEEKLY_SECTIONS` 11구분·`WEEKLY_TEAM_SECTIONS`·`DEFAULT_TEAMS`·`TEAM_COLOR`·`LEGACY_DCUBE_PROFILE`·`levelLabels` 폴백이 코드에서 사라지고, 주간 시트·이월·점검·내러티브·봇이 `project_areas`/`area_teams`/`teams` 주입으로 동작한다 |
+| 목표 | `WEEKLY_SECTIONS` 11구분·`WEEKLY_TEAM_SECTIONS`·`DEFAULT_TEAMS`·`TEAM_COLOR`·`LEGACY_ORIGIN_PROFILE`·`levelLabels` 폴백이 코드에서 사라지고, 주간 시트·이월·점검·내러티브·봇이 `project_areas`/`area_teams`/`teams` 주입으로 동작한다 |
 | 왜 이 순서 | 레지스트리(SP3)가 있어야 값을 옮긴다. 이슈·회의록(SP5)보다 먼저인 이유는 `teams/master.ts` 캐시 폐기가 `minutes.team_id`(SP5) 의 전제이기 때문이다 |
 | 의존 | SP3 |
 | 마이그레이션 | `0005_weekly_areas.sql` |
@@ -2932,7 +2934,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 - 스키마: `weekly_report_rows.project_id` + `area_id`, FK `(area_id, project_id) → project_areas(id, project_id)`, `section`·`module` text 삭제, 인덱스.
 - `weeklySheet.ts` 순수 함수에 `areas` 주입(`defaultWeeklyRows(areas)`·`carryOverRows(prev, areas)`·`sortWeeklyRows`·`sectionKeyOf` → `areaId` 키), `LEGACY_SECTION_MAP`·`WEEKLY_TEAM_SECTIONS`·`FALLBACK_SECTION` 삭제; `data/weeklySheet.ts` `ensureStandardRows`·`report/sheetNarrative.ts`·`weeklyLint.ts`·양식 통일·멀티셀 편집/프레즌스(`rowId` 키 확인)·봇 `weekly:read`(팀 필터 → `area_teams`) 재배선; 구분 0개면 배너.
 - 팀: `DEFAULT_TEAMS`·`RESERVED_TEAM_NAMES`·`TEAM_COLOR`·`shared.tsx` TEAM CSS 토큰 → `teams.color` inline style. `src/lib/teams/master.ts`(프로세스 전역 sync 캐시, TTL 60초, `createAdminClient` 로 전 팀 로드, importer 32파일 실측 — `@/lib/teams/master`; 상대 경로 import 포함 33) 폐기 → 요청 스코프 로더(`(app)/layout` `TeamsProvider` 는 워크스페이스 팀 주입). 대시보드 팀별 진척·간트·칸반 색상.
-- WBS: `LEGACY_DCUBE_PROFILE`·`/api/export` `'{}'`→LEGACY 폴백·`parseWithProfile`/`exportWithProfile` 폴백 삭제(`wbs.excel_profile` 키가 비어 있으면 마법사 저장 요구 — SP3 에서 옮긴 키), `DEFAULT_PROJECT_CONFIG.levelLabels`·`LEGACY_LABEL_ABBR` 삭제, `import_wbs`/`replace_wbs` 팀 해석을 `(workspace, project)` 스코프로.
+- WBS: `LEGACY_ORIGIN_PROFILE`·`/api/export` `'{}'`→LEGACY 폴백·`parseWithProfile`/`exportWithProfile` 폴백 삭제(`wbs.excel_profile` 키가 비어 있으면 마법사 저장 요구 — SP3 에서 옮긴 키), `DEFAULT_PROJECT_CONFIG.levelLabels`·`LEGACY_LABEL_ABBR` 삭제, `import_wbs`/`replace_wbs` 팀 해석을 `(workspace, project)` 스코프로.
 - 테스트: 팀 코드 리터럴 테스트(종합안 175파일 (미검증)) 중 WBS·주간 계열의 fixture 공용화, `WbsRow.owners` 계약 불변 확인.
 
 **범위 제외**
@@ -2943,7 +2945,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 **완료 조건(done_when)**
 
 - 새 프로젝트에 구분 0개면 주간 시트가 배너를 보이고, 구분 등록 후 스켈레톤·이월·점검·PPT 내러티브·봇 `weekly:read` 가 같은 `area_id` 로 동작(테스트 + 스테이징)
-- `grep -rE 'WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|LEGACY_SECTION_MAP|DEFAULT_TEAMS|TEAM_COLOR|LEGACY_DCUBE_PROFILE|LEGACY_LABEL_ABBR' src` 런타임 0건(`no-runtime-constants` 허용 목록에서 제거)
+- `grep -rE 'WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|LEGACY_SECTION_MAP|DEFAULT_TEAMS|TEAM_COLOR|LEGACY_ORIGIN_PROFILE|LEGACY_LABEL_ABBR' src` 런타임 0건(`no-runtime-constants` 허용 목록에서 제거)
 - `grep -nE 'team-(pmo|dt|erp|mes|mdm)' src/app/globals.css` 0건(3.4.2a — UI 위험 파일, `ui/` 브랜치 + 스테이징 눈확인)
 - `src/lib/teams/master.ts` 삭제; `tsc`·`vitest` 초록
 
@@ -2951,7 +2953,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 | 항목 | 내용 |
 |---|---|
-| 목표 | `ISSUE_MEGA_AREAS` 8영역·이슈 코드 접두·회의록 팀 5축 시드·APS 별칭·계정 안내문 등 잔여 D-CUBE 하드코딩을 설정값·마스터로 옮기고, Q4 로 확정된 어휘 넷(근태 유형·회의 카테고리·이슈 심각도/원인 분류/원천·타임존/근무일)을 `project_settings.values` 로 승격해 `src` 런타임에서 D-CUBE 흔적 0 을 만든다 |
+| 목표 | `ISSUE_MEGA_AREAS` 8영역·이슈 코드 접두·회의록 팀 5축 시드·APS 별칭·계정 안내문 등 잔여 원본 고객사 하드코딩을 설정값·마스터로 옮기고, Q4 로 확정된 어휘 넷(근태 유형·회의 카테고리·이슈 심각도/원인 분류/원천·타임존/근무일)을 `project_settings.values` 로 승격해 `src` 런타임에서 원본 고객사 흔적 0 을 만든다 |
 | 왜 이 순서 | 팀 캐시(SP4)가 없어져야 `minutes.team_id` 가 워크스페이스 팀을 본다. 어휘 승격은 SP3 레지스트리의 `parse`·`widget` 위에서만 성립한다 |
 | 의존 | SP4 |
 | 마이그레이션 | `0006_issue_areas.sql` · `0007_minutes_teams.sql` · `0008_vocab_settings.sql`(Q4 추가) |
@@ -2974,7 +2976,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
   | 근무일 | `0058` `working_days int[]` 컬럼(SP3 에서 폐기)·`src` 소비처 0건(실측 — 현재는 `holidays` 표만 영업일 계산에 쓰임) | `values.calendar.working_days`(ISO 요일 배열, 기본 `[1,2,3,4,5]` — 3.3.3), `lib/domain/dates.ts` 영업일 계산이 `holidays` 와 함께 소비 |
 
   이슈 상태(`ISSUE_STATUSES` `open`/`in_progress`/`resolved`/`on_hold` 실측)와 WBS 단계 코드(`as`/`ip`/`im`/`xx` — `fp` 는 0096 에서 `ip` 로 이관돼 어휘에 없다, `stageLabels.ts:6` 실측)는 제품 고정으로 남긴다 — 상태 전이(`canTransition`)·에이전트 stage 워크플로가 코드에 의존하기 때문이다. 제품 고정 어휘 목록을 `docs/settings-catalog.md` "고정 어휘" 절에 못 박는다(3절 참조).
-- 근태·회의·공지: `attendance_records`·`meeting_attendees` 는 SP1 의 `project_members(person)` 축 유지 확인, 회의 초대 메일 수신자 `people.email`; `AccountsManager` 안내문·`src/lib/report/weekly.ts` 의 동국 문자열 등 잔여 문자열 제거; 이슈분석서 `deckPlan` 의 Mega 순서·라벨을 `areas` 주입(렌더러 자체는 SP6).
+- 근태·회의·공지: `attendance_records`·`meeting_attendees` 는 SP1 의 `project_members(person)` 축 유지 확인, 회의 초대 메일 수신자 `people.email`; `AccountsManager` 안내문·`src/lib/report/weekly.ts` 의 원본 고객사 문자열 등 잔여 문자열 제거; 이슈분석서 `deckPlan` 의 Mega 순서·라벨을 `areas` 주입(렌더러 자체는 SP6).
 
 **범위 제외**
 
@@ -2984,7 +2986,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 **완료 조건(done_when)**
 
-- `grep -rE 'D-CUBE|DCUBE|PMO|MDM|APS|dongkuk|동국|Asia/Seoul' src` 런타임 0건(`tests/fixtures`·`branding.ts` 기본값 제외; `no-runtime-constants` 허용 목록 비움)
+- `grep -rE '원본 고객사|ORIGIN|PMO|MDM|APS|origincorp|원본 고객사|Asia/Seoul' src` 런타임 0건(`tests/fixtures`·`branding.ts` 기본값 제외; `no-runtime-constants` 허용 목록 비움)
 - 이슈 ID 가 프로젝트별 접두·영역 코드로 발번되고 영역 개명 후에도 기존 ID 불변(테스트)
 - 근태 유형·회의 카테고리·이슈 심각도를 설정에서 바꾼 뒤 각 화면의 선택지·검증·PPT 라벨이 따라옴(스테이징); 레지스트리 밖 값은 저장 시 거부
 - 타임존을 `America/New_York` 으로 바꾼 테스트 프로젝트에서 기준일·주간 범위·공지 예약·사용현황 일자가 그 타임존으로 계산됨(순수 함수 테스트 + SQL 함수 `tests/rls` 케이스)
@@ -2999,7 +3001,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 의존 | SP4·SP5 |
 | 마이그레이션 | `0010_form_templates.sql`(+ Storage 버킷 `form-templates` 시드·경로 파싱 정책; 번호가 SP7 의 `0009` 뒤인 이유는 6.3) |
 | 기간 | 3주(1주 스파이크 포함) |
-| **착수 조건(Q5)** | 스파이크 픽스처로 **실제 고객사 양식 3종**(서로 다른 고객사·표 구조) **또는** 미확보 시 **D-CUBE 양식 + 다른 구조의 자체 제작 샘플 2종**. SP5 완료 시점(SP6 직전)에 확보 여부를 재확인하고 스펙 서두에 어느 쪽인지 기록한다. 자체 샘플로 착수한 경우 첫 실제 고객 양식 입수 시 회귀 픽스처에 추가한다 |
+| **착수 조건(Q5)** | 스파이크 픽스처로 **실제 고객사 양식 3종**(서로 다른 고객사·표 구조) **또는** 미확보 시 **원본 고객사 양식 + 다른 구조의 자체 제작 샘플 2종**. SP5 완료 시점(SP6 직전)에 확보 여부를 재확인하고 스펙 서두에 어느 쪽인지 기록한다. 자체 샘플로 착수한 경우 첫 실제 고객 양식 입수 시 회귀 픽스처에 추가한다 |
 
 **범위 포함**
 
@@ -3164,15 +3166,15 @@ graph LR
 | R1 | 읽기 격리의 전면성 — 하나라도 남으면 오류가 아니라 **조용한 크로스테넌트 노출** | 마이그레이션 기준 `using (true)` 57문/32파일, `can_read_project` 참조는 `0052`·`0079` 뿐, storage 읽기 정책이 `bucket_id` 만 검사하는 버킷 2개(`minutes` `0021`:61~62·`issue-attachments` `0068`:111~112; `deliverables` 는 `can_attach` 검사 있음 `0036`:24~25), presence 3채널 public, `createAdminClient` 65파일, `app_role()` 26파일, 검색 RPC 다수 | SP2 완료를 `tests/rls` 교차 조회 0건 + '개방 읽기 0건' 불변식으로 정의; `adminFor(scope)` 로 스코프 없는 admin 쿼리를 기계적으로 거부; 라이브 정책 목록은 SP0 `baseline-diff` 출력으로 고정 | SP2 (RPC 는 SP8) |
 | R2 | SP1 폭발 반경 | `teamCode:` 리터럴 테스트 82파일, `memberships` 직접 조회 11파일 22곳, `effectiveLegacyRole` 소비처 6파일(+정의 1), `vi.mock('@/lib/authz')` 50파일, `tsconfig` `include '**/*.ts'` 라 `next build` 가 `tests/` 까지 타입체크 | 가드 3종·`roleIn` 시그니처 불변, 공용 Actor fixture 선행 도입; 3주 상한 초과 시 "스키마+`getActor`" 와 "화면" 두 SP 로 분할(분할 결정은 2주차 말 체크포인트에서) | SP1 |
 | R3 | RLS 성능 회귀 | `can_read_project` 가 `select true`(플래너가 상수로 접음)에서 조인 헬퍼로 바뀌면 행마다 호출; Micro 컴퓨트(2 vCPU 공유·1GB)에서 2026-08-05 풀 고갈 이력 | `project_id in (select accessible_project_ids())` initplan 패턴을 정책 템플릿으로; SP2 done_when 에 p95 +20% 이내; 측정 스크립트 `scripts/perf-baseline.mjs` | SP2 |
-| R4 | 양식 엔진 미검증 항목 | 런 분할 빈도·표 행 복제·`exceljs` 왕복 손실·docxtemplater 상용 모듈 라이선스 전부 미실측 | 착수 조건(Q5: 고객 양식 3종 또는 D-CUBE + 자체 샘플 2종), 1주 스파이크를 결정 게이트로, 손실은 업로드 경고로 노출, 전환 경로(docxtemplater 하이브리드) 사전 명시 | SP6 |
+| R4 | 양식 엔진 미검증 항목 | 런 분할 빈도·표 행 복제·`exceljs` 왕복 손실·docxtemplater 상용 모듈 라이선스 전부 미실측 | 착수 조건(Q5: 고객 양식 3종 또는 원본 고객사 + 자체 샘플 2종), 1주 스파이크를 결정 게이트로, 손실은 업로드 경고로 노출, 전환 경로(docxtemplater 하이브리드) 사전 명시 | SP6 |
 | R5 | 이슈분석서 도형 페이지가 자리표시로 표현 불가 | `processSlideRenderer` 가 shape ID·좌표 재계산으로 그림 | **Q1 로 해소** — 제품 고정 슬라이드 유형으로 유지, 마커로 삽입 위치만 지정. 잔여 리스크는 "고객 양식의 슬라이드 크기·테마가 고정 슬라이드와 다를 때의 외관" 이며 스파이크 항목에 추가 | SP6 |
 | R6 | 또박또박 계약 동기화 | 자격증명 경로 변경이 또박또박 서버와 같은 릴리스 창에 있어야 함; 상대 팀 일정 | **Q6 로 축소** — 변경은 헤더 절뿐, payload v2.5 불변. v3 초안(인증 절)을 SP1 착수 시점에 송부해 상대 개발 병행; 우리 쪽은 모의 클라이언트로 먼저 완료 | SP7 |
 | R7 | 기준선 드리프트 | 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)·중복 1개(`0070`), `app_role` vs `current_role` 이력, `pg_dump --schema=public` 이 storage·realtime 을 담지 않음 | 운영에서 `pg_dump 17`, 시스템 스키마 정책은 수기 SQL(`storage.objects` 라이브 정책 9개 + `realtime.messages` 2개 — create 기준, drop 문 제외), `baseline-diff.mjs` 를 SP0 done_when 에 | SP0 |
-| R8 | 포크 이중 유지보수 | 원본은 최근 30일 전 브랜치 468커밋(마이그레이션 14커밋; `origin/main` 만 202커밋) 으로 움직이며 D'Flow 운영 계속. 회의록 API 계약(v2.5)·에이전트 스킬 8개가 두 리포에서 갈라짐 | 컷오프 커밋 고정, 보안 픽스만 cherry-pick, 공유 패키지 없음(→ 6.6) | SP0 (정책), 전 SP (준수) |
+| R8 | 포크 이중 유지보수 | 원본은 최근 30일 전 브랜치 468커밋(마이그레이션 14커밋; `origin/main` 만 202커밋) 으로 움직이며 구 브랜드명 운영 계속. 회의록 API 계약(v2.5)·에이전트 스킬 8개가 두 리포에서 갈라짐 | 컷오프 커밋 고정, 보안 픽스만 cherry-pick, 공유 패키지 없음(→ 6.6) | SP0 (정책), 전 SP (준수) |
 | R9 | `requireModule` 누락 = fail-open | 서버 액션 173개·API 라우트 41개에 수작업 삽입 | export 전수 열거 게이트 테스트(→ 6.5.3)를 SP3 에서 함께 도입 — 매니페스트에 없는 export 는 테스트 실패 | SP3 |
 | R10 | `teams/master.ts` 프로세스 전역 캐시 | service_role 로 전 팀 로드, 초기값 `DEFAULT_TEAMS`, TTL 60초, importer 32파일(상대 경로 포함 33) — 멀티 워크스페이스에서 교차 팀 목록 노출·무효화 문제의 진원지 | SP4 에서 요청 스코프 로더로 폐기; sync 접근자 호출부를 `tsc` 로 전수 노출 | SP4 |
 | R11 | 메뉴 통합·워크스페이스 화면 이동이 UI 위험 파일을 건드림 | `Sidebar.tsx`·`HeaderChrome.tsx`·`ProjectTabs.tsx`·`usePagePresence.ts` 모두 `src/components/app/`; 빌드·테스트로 깨짐이 안 잡힘(2026-07-27 사고) | `ui/` 브랜치 + 스테이징 눈확인을 SP2·SP3 done_when 에 명시; G2 유지 | SP2·SP3 |
-| R12 | '제품 고정' 으로 남는 숨은 D-CUBE 결정이 계속 새어 들어옴 | 셀 줄 예산 15/12·이슈 캡 5·소수 1자리 롤업 등 | **Q4 로 어휘 넷은 승격** 확정. 남는 고정 어휘(이슈 상태·WBS 단계 코드·롤업 정밀도)는 SP5 에서 `docs/settings-catalog.md` "고정 어휘" 절로 못 박고, 이후 요청은 그 절 개정으로만 받는다 | SP5 |
+| R12 | '제품 고정' 으로 남는 숨은 원본 고객사 결정이 계속 새어 들어옴 | 셀 줄 예산 15/12·이슈 캡 5·소수 1자리 롤업 등 | **Q4 로 어휘 넷은 승격** 확정. 남는 고정 어휘(이슈 상태·WBS 단계 코드·롤업 정밀도)는 SP5 에서 `docs/settings-catalog.md` "고정 어휘" 절로 못 박고, 이후 요청은 그 절 개정으로만 받는다 | SP5 |
 
 ### 6.5 검증 전략
 
@@ -3200,7 +3202,7 @@ graph LR
 |---|---|---|
 | **개방 읽기 정책 0건** `tests/invariants/no-open-read-policy.test.ts` | `supabase/migrations/*.sql`(롤백 제외)을 파싱해 `create policy … for select` 또는 `for all` 의 `using` 절이 `true` 리터럴이면 실패. 기준선 `0000` 도 대상 — SP2 가 끝나면 0건, 그 전에는 허용 목록으로 시작해 SP2 done_when 에서 비운다 | SP2 |
 | **스코프 없는 admin 쿼리 0건** `tests/invariants/admin-scope.test.ts` | `src/**` 에서 `createAdminClient` 를 import 하는 파일이 `src/lib/supabase/admin.ts`·`adminFor` 래퍼·허용 목록(플랫폼 전역: `llm_config`·`platform_admins`·cron 인증) 밖이면 실패. 현재 65파일이 출발점 | SP2 |
-| **no-runtime-constants** `tests/settings/no-runtime-constants.test.ts` | `src/**`(tests/fixtures 제외)에서 `DEFAULT_TEAMS|WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|ISSUE_MEGA_AREAS|LEGACY_DCUBE_PROFILE|LEGACY_LABEL_ABBR|ATTENDANCE_TYPES|MEETING_CATEGORIES|ISSUE_SEVERITIES|Asia/Seoul` import·리터럴을 grep. 허용 목록 파일을 두고 SP3 에서 시작, SP4·SP5 가 항목을 지우며 SP5 done_when 에서 빈다 | SP3 |
+| **no-runtime-constants** `tests/settings/no-runtime-constants.test.ts` | `src/**`(tests/fixtures 제외)에서 `DEFAULT_TEAMS|WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|ISSUE_MEGA_AREAS|LEGACY_ORIGIN_PROFILE|LEGACY_LABEL_ABBR|ATTENDANCE_TYPES|MEETING_CATEGORIES|ISSUE_SEVERITIES|Asia/Seoul` import·리터럴을 grep. 허용 목록 파일을 두고 SP3 에서 시작, SP4·SP5 가 항목을 지우며 SP5 done_when 에서 빈다 | SP3 |
 | **마이그레이션 쌍·번호 유일** `tests/invariants/migration-files.test.ts` | 4자리 번호가 **파일 단위로** 중복 0건(현 리포 `0070_private_projects`·`0070_project_member_email_identity` 중복 재발 방지 — `.githooks/pre-push`:100·109 는 `substr($0,21,4)` 로 번호만 읽어 같은 번호의 두 파일을 구분하지 못하므로 이 테스트가 유일한 검사다). 정방향 파일마다 `_rollback.sql` 존재 — 단 `0000_baseline.sql` 은 **허용 목록의 유일한 예외**다: `pg_dump` 기준선에는 되돌아갈 이전 상태가 없고 롤백은 "빈 DB 재생성" 이라 SQL 로 표현할 대상이 아니다(`0001_storage_realtime.sql` 부터는 쌍 필수). 현 `tests/migrations/migration-ledger.test.ts` 류의 개별 SQL 텍스트 단언은 만들지 않는다 | SP0 |
 | **G3 반응형 안전망** `tests/css/breakpoint-safety-net.test.ts` | 그대로 가져간다(pre-push G3 가 실행) | SP0 |
 | **가드 시그니처 동결** `tests/authz/guard-signatures.test.ts` | `src/lib/authz/index.ts`·`src/lib/domain/authz.ts` 의 export 목록과 `requireSuperuser`·`requireProjectAdmin`·`requireProjectMember`·`roleIn` 의 타입 시그니처 문자열을 스냅샷 — 결정 8 의 기계적 보증 | SP1 |
@@ -3241,7 +3243,7 @@ graph LR
 | SP2 | 개방 읽기 0건, admin 스코프 0건 | `tests/rls` 교차 0건, p95 | 2워크스페이스 404, UI 눈확인 | ✓ |
 | SP3 | 열거 게이트, no-runtime-constants(허용 목록) | — | 모듈 끄기 전 경로 차단, 메뉴 눈확인 | ✓ |
 | SP4 | grep 상수 0건 | — | 구분 0개 배너 → 등록 → 동작 | ✓ |
-| SP5 | grep D-CUBE·`Asia/Seoul` 0건, 허용 목록 비움 | `tests/rls` 타임존 함수 | 어휘 변경 반영 | ✓ |
+| SP5 | grep 원본 고객사·`Asia/Seoul` 0건, 허용 목록 비움 | `tests/rls` 타임존 함수 | 어휘 변경 반영 | ✓ |
 | SP6 | 픽스처 3종 회귀 | — | PowerPoint/Excel 열림 | ✓ |
 | SP7 | payload v2.5 회귀 | `tests/rls` 에이전트 스코프 | 또박또박 E2E 2워크스페이스 | ✓ |
 | SP8 | RPC 인자 표 | `tests/rls` RPC 격리 | 위키 완주 판정 | ✓ |
@@ -3249,7 +3251,7 @@ graph LR
 
 ### 6.6 포크 정책
 
-새 리포는 `wbs-web` 의 **한 시점 사본**이며 이후 독립 진화한다. 원본 리포(D'Flow, D-CUBE 운영)는 이 작업으로 바뀌지 않는다.
+새 리포는 `wbs-web` 의 **한 시점 사본**이며 이후 독립 진화한다. 원본 리포(구 브랜드명, 원본 고객사 운영)는 이 작업으로 바뀌지 않는다.
 
 **컷오프 커밋 고정**
 
@@ -3264,7 +3266,7 @@ graph LR
 
 **공유 패키지 없음**
 
-- 두 리포가 같이 쓰는 npm 패키지·git submodule·모노리포를 만들지 않는다(YAGNI). 순수 함수(`src/lib/domain/*`)가 겹치더라도 복사본으로 둔다. 이유: 패키지를 만들면 두 리포의 릴리스가 묶이고, 원본의 D-CUBE 특화(팀 코드 타입 `TeamCode` 등)와 새 리포의 범용 타입이 한 패키지 안에서 충돌한다.
+- 두 리포가 같이 쓰는 npm 패키지·git submodule·모노리포를 만들지 않는다(YAGNI). 순수 함수(`src/lib/domain/*`)가 겹치더라도 복사본으로 둔다. 이유: 패키지를 만들면 두 리포의 릴리스가 묶이고, 원본의 원본 고객사 특화(팀 코드 타입 `TeamCode` 등)와 새 리포의 범용 타입이 한 패키지 안에서 충돌한다.
 
 **갈림 관리(두 리포에서 함께 바뀌는 계약)**
 
@@ -3274,7 +3276,7 @@ graph LR
 | 에이전트 스킬 `.claude/skills/dflow-*` 8개 | 원본 리포 | 새 리포에 **복사본**, `DFLOW_API_BASE`·`DFLOW_PAT` 로 대상 선택(실측: 스킬이 이미 env 로 base URL 을 읽는다) | 스킬이 호출하는 API 경로 전량(`api/v1/agent/work/*`·`api/v1/agent/me`·`api/v1/agent/watch`·`api/v1/wbs/import`·`api/v1/wbs/structure` — 2026-09-23 `.claude/skills` grep)과 응답 형식은 SP7 에서 동결. 목록은 매 개정 시 `grep -rhoE 'api/v1/[a-zA-Z_/-]+' .claude/skills \| sort -u` 로 재집계해 동결 목록과 대조한다. 스킬 개선은 각 리포에서 독립 — 경로·응답을 바꾸는 개정은 양쪽 문서 동시 개정 |
 | 마이그레이션 번호 | `0101+` | `0000`(기준선)·`0001`(storage/realtime) 후 `0002+`, 파일 단위 유일(6.3 배정표) | 번호 체계가 다르므로 cherry-pick 시 반드시 재번호 |
 | 운영 스크립트 `scripts/*` | 원본 좌표 리터럴 | env 화(SP0) | 원본에 역이식하지 않는다(원본은 단일 배포라 리터럴로 충분) |
-| 메모리·CLAUDE.md | 원본 | 새 리포 CLAUDE.md 를 SP0 에서 새로 쓴다 — D-CUBE 데이터 보호·Supabase ref·`memberships` deprecated 등 원본 전용 절은 제외, git 운영·CSS·에러 3원칙·권한 규칙은 유지 | 아래 참조 |
+| 메모리·CLAUDE.md | 원본 | 새 리포 CLAUDE.md 를 SP0 에서 새로 쓴다 — 원본 고객사 데이터 보호·Supabase ref·`memberships` deprecated 등 원본 전용 절은 제외, git 운영·CSS·에러 3원칙·권한 규칙은 유지 | 아래 참조 |
 
 **새 리포에서도 유지되는 git 운영 규칙(원본 CLAUDE.md)**
 
@@ -3301,7 +3303,7 @@ graph LR
 | 라이브 정책 수(`using (true)` 읽기 정책·`app_role()` 잔존 9개 등 종합안의 라이브 수치) | 마이그레이션 파일 grep(57문/32파일·26파일)과 라이브 상태는 다르다. 운영 `pg_policies` 대조 없이는 확정 불가 | SP0 `baseline-diff.mjs` 출력 — SP2 스펙의 입력 |
 | `realtime.topic()` 을 세션 설정으로 흉내 낼 수 있는가 | Supabase 구현 세부 (미검증) | SP2 스파이크 첫날 실측; 불가하면 Realtime 격리는 브라우저 E2E(스테이징)로만 검증하고 그 사실을 done_when 에 적는다 |
 | SP1 분할 여부 | 3주 상한을 넘길지는 착수 후에만 안다 | SP1 2주차 말 체크포인트 |
-| SP6 착수 시 양식 확보 상태(Q5) | 지금은 미확보 | SP5 완료 시점 재확인 — 실제 3종이면 그것, 아니면 D-CUBE + 자체 샘플 2종 |
+| SP6 착수 시 양식 확보 상태(Q5) | 지금은 미확보 | SP5 완료 시점 재확인 — 실제 3종이면 그것, 아니면 원본 고객사 + 자체 샘플 2종 |
 | 또박또박 v3(인증 절) 배포 시점 | 상대 팀 일정 | SP1 착수 시 초안 송부, SP7 done_when 의 E2E 는 상대 배포 후 — 그 전까지는 모의 클라이언트로 완료 처리하고 실 E2E 를 후속 검증으로 기록 |
 | 새 스테이징 Supabase 요금제 | 현 `staging-sync.mjs` 는 무료 티어 400MB 가드를 전제. 새 리포 스테이징은 빈 데이터로 시작해 당장 무관 | SP9 에서 2고객사 시드 후 재검토 |
 
@@ -3315,7 +3317,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | 사용 현황(`/w/[slug]/usage`)을 워크스페이스 관리자에게 열지 | "슈퍼유저 전용" 은 2026-07-30 사용자 결정(전 직원 행동 데이터)이고 결정 1~9·Q1~Q6 에 완화 근거가 없다. 멀티 워크스페이스에서 고객사 관리자가 자기 워크스페이스의 접속·사용량을 보려는 요구가 생기면 `canViewUsage` 와 `read_usage_events` 정책을 쌍으로 `is_ws_admin(workspace_id)` 로 내리는 변경이다 | 플랫폼 관리자 전용 유지, `usage_events.workspace_id` 는 워크스페이스 필터(2.3.7·2.4.4·3.2.2·5.4.2·6절 SP8) | 2.7 |
 | 2 | 한국 공휴일 오버레이(`src/lib/domain/holidays.ts`)의 표시 조건 | `calendar.timezone` 이 `Asia/Seoul` 이 아닌 프로젝트에서 한국 공휴일이 달력에 표시되는 것이 맞는지. 워크스페이스별 공휴일 달력은 요구에 없어 비목표다 | 표시 유지, 프로젝트 수동 공휴일(`holidays` 표)이 정본 | 3.5 |
-| 3 | SP6 착수 시 고객 양식 확보 상태(Q5) | 실제 고객사 양식 3종의 확보 여부·시점은 사용자만 안다. 미확보면 D-CUBE 양식(현 자산 2개) + 다른 구조의 자체 샘플 2종으로 착수하고, 첫 실제 양식 입수 시 회귀 픽스처에 추가한다. 고객사 자료를 리포에 넣으려면 사용 허락이 필요하다 | SP5 완료 시점(SP6 직전)에 재확인, 스펙 서두에 어느 쪽인지 기록 | 4.10.3·6절 SP6 |
+| 3 | SP6 착수 시 고객 양식 확보 상태(Q5) | 실제 고객사 양식 3종의 확보 여부·시점은 사용자만 안다. 미확보면 원본 고객사 양식(현 자산 2개) + 다른 구조의 자체 샘플 2종으로 착수하고, 첫 실제 양식 입수 시 회귀 픽스처에 추가한다. 고객사 자료를 리포에 넣으려면 사용 허락이 필요하다 | SP5 완료 시점(SP6 직전)에 재확인, 스펙 서두에 어느 쪽인지 기록 | 4.10.3·6절 SP6 |
 | 4 | 개선기회 페이지(이슈분석서 원본 12)의 이슈–기회 커넥터 다이어그램 | Q1 은 As-Is 트리·정의(5·6)만 제품 고정 슬라이드 유형으로 정했다. 개선기회는 도형 복제 페이지지만 데이터가 표형이라 이 문서는 표(`{{#rows opportunities}}`)로 이관하고 다이어그램은 포기한다. 다이어그램이 필요하면 원본 12 를 고정 슬라이드 유형에 추가하는 별도 결정이 필요하다 | 표로 이관, `renderOpportunitySlide` 코드는 fixed 자산과 함께 보존 | 4.2 결정 6·4.14 |
 | 5 | 또박또박 측 v3(인증 절) 배포 시점과 미지 `code` 처리 | 상대 팀 릴리스 창은 사용자 경유로만 확인된다. 또 현 또박또박 구현이 §6 표에 없는 `code`(409 `module_disabled`·403 `project_not_allowed`)를 받았을 때 `error` 문구를 표시하는지 조용히 버리는지 이 리포에서 확인할 수 없다 — 버린다면 "선택 작업" 이 "필수 문구 2건" 으로 바뀐다 | SP1 착수 시 초안 송부 + 확인 항목 동봉; SP7 done_when 의 실 E2E 는 상대 배포 후, 그 전엔 모의 클라이언트 | 5.6·6.7 |
 | 6 | 새 Vercel 프로젝트의 플랜(cron 최소 주기) | `warm.yml` 주석대로 개인 플랜은 분 단위 cron 이 없다. 잡 레지스트리 스케줄이 플랜 제약을 넘으면 GitHub Actions 로 대체해야 하며, 플랜 선택은 사용자 몫이다 | SP0 Vercel 프로젝트 생성 시 확정 | 5.6 |

@@ -1,5 +1,7 @@
 # SP0 — 포크 부트스트랩·스키마 기준선·탈-브랜드 설계 스펙
 
+> **익명화(2026-09-24):** 원본 고객사·구 브랜드·고객 업무 문자열은 일반 명칭으로 치환했다. 실측 재현 명령과 식별자도 함께 치환돼 있어 원본 리포에서 그대로 실행되지 않을 수 있다.
+
 | 항목 | 값 |
 |---|---|
 | 날짜 | 2026-09-23 |
@@ -39,7 +41,7 @@
 
 ## 2. 안전 선행 — wbs-web 좌표 격리
 
-**문제(실측).** 사본에는 wbs-web 의 DB 좌표가 리터럴로 남아 있다. `scripts/lib/staging.config.mjs` 의 `PROD_REF = 'rglfgrwwwwdqejohdnty'`(운영 D-CUBE)·`STAGING_REF = 'abtyahghvvkcriawffty'`(wbs-web 스테이징), `scripts/seatmap-load.mjs`. 이 상태로 `npm run db:apply -- x.sql --target prod` 는 **운영 D-CUBE 에 쓴다**, `npm run staging:sync` 는 wbs-web 스테이징을 덮는다. 또 `core.hooksPath` 가 미설정이라 pre-push 훅이 꺼져 있다.
+**문제(실측).** 사본에는 wbs-web 의 DB 좌표가 리터럴로 남아 있다. `scripts/lib/staging.config.mjs` 의 `PROD_REF = 'rglfgrwwwwdqejohdnty'`(운영 원본 고객사)·`STAGING_REF = 'abtyahghvvkcriawffty'`(wbs-web 스테이징), `scripts/seatmap-load.mjs`. 이 상태로 `npm run db:apply -- x.sql --target prod` 는 **운영 원본 고객사 에 쓴다**, `npm run staging:sync` 는 wbs-web 스테이징을 덮는다. 또 `core.hooksPath` 가 미설정이라 pre-push 훅이 꺼져 있다.
 
 **설계.** 이 절이 SP0 의 첫 커밋들이며, 다른 어떤 작업보다 먼저 한다.
 
@@ -48,9 +50,9 @@
    - `FORBIDDEN_REFS = ['rglfgrwwwwdqejohdnty', 'abtyahghvvkcriawffty']` — 어떤 경로로 해석된 ref·URL·DSN 이든 이 문자열을 포함하면 throw. 유일한 예외는 `baseline-dump.mjs`·`baseline-diff.mjs` 의 **읽기 전용** 접속(3절)이며, 그 두 스크립트만 `allowForbidden: 'readonly-baseline'` 을 넘긴다.
    - 단위 테스트 `tests/scripts/targets.test.ts`: 미설정 throw, 금지 ref throw(env 로 주입해도), 예외 플래그 없이 금지 ref 거부.
 2. 소비처 전환: `db-apply.mjs`·`check-env-target.mjs`·`env-swap.mjs`·`staging-sync.mjs`·`lib/staging-core.mjs` 가 `targets.mjs` 만 쓴다. `staging-sync.mjs` 는 원격 스테이징이 생길 때까지 `STAGING_REF`·`PROD_REF` 미설정으로 자연 차단된다.
-3. `scripts/seatmap-load.mjs` 삭제(D-CUBE 좌석 데이터 전용).
+3. `scripts/seatmap-load.mjs` 삭제(원본 고객사 좌석 데이터 전용).
 4. `npm install` 로 `prepare` 가 `core.hooksPath .githooks` 를 건다 — 이후 모든 push 에 G1~G4 적용.
-5. `CLAUDE.md` 재작성: wbs-web 전용 절(Supabase 계정·ref·D-CUBE 데이터·`memberships` deprecated·Vercel env 실측) 삭제, 로컬 Supabase 개발 규칙·금지 ref·이 문서의 트레일러 규칙 추가, git 운영·CSS 안전망·권한·에러 3원칙 유지(상위 스펙 6.6 표).
+5. `CLAUDE.md` 재작성: wbs-web 전용 절(Supabase 계정·ref·원본 고객사 데이터·`memberships` deprecated·Vercel env 실측) 삭제, 로컬 Supabase 개발 규칙·금지 ref·이 문서의 트레일러 규칙 추가, git 운영·CSS 안전망·권한·에러 3원칙 유지(상위 스펙 6.6 표).
 6. `docs/fork-policy.md` 신설(상위 스펙 6.6 그대로 + 컷오프 SHA 정정 + 금지 ref 목록).
 
 **검증.** `grep -rn 'rglfgrwwwwdqejohdnty\|abtyahghvvkcriawffty' scripts src .github supabase` 결과가 `targets.mjs`(금지 목록)와 그 테스트뿐. 역사 문서(`docs/superpowers/**`·`docs/runbook-*`)의 ref 는 기록이므로 남긴다 — 단 runbook 은 7절에서 개정.
@@ -97,19 +99,19 @@
 ## 5. 탈-브랜드
 
 - `src/lib/branding.ts` 단일 출처: `productName`(기본 `D-Flow`), `shortName`, `mailFromName`, `logoText` — env `NEXT_PUBLIC_BRAND_NAME` 등으로 덮어쓰기. 로고는 `productName` 텍스트 워드마크 컴포넌트, `public/logo.png` 는 삭제 또는 중립 파비콘으로 교체.
-- 치환 대상(2026-09-23 실측): `"D'Flow"` 24파일(`src`+`public`), `dongkuk|D-CUBE|DCUBE|동국` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` 기본값, 로그인 문구, `package.json` `name`(`d-flow`).
-- 초대 도메인: `DEFAULT_ALLOWED_DOMAINS = ['dongkuk.com']`(`src/lib/domain/invites.ts:17`) 삭제. `parseAllowedDomains` 는 env `INVITE_EMAIL_DOMAINS` 가 비면 **빈 허용 목록 = 초대 거부**를 돌려주고 화면은 "초대 도메인이 설정되지 않았습니다" 를 표시한다. `*` 는 명시적 제한 없음. 테스트 3케이스(미설정 거부·목록 허용·`*`).
+- 치환 대상(2026-09-23 실측): `"구 브랜드명"` 24파일(`src`+`public`), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` 기본값, 로그인 문구, `package.json` `name`(`d-flow`).
+- 초대 도메인: `DEFAULT_ALLOWED_DOMAINS = ['example-corp.com']`(`src/lib/domain/invites.ts:17`) 삭제. `parseAllowedDomains` 는 env `INVITE_EMAIL_DOMAINS` 가 비면 **빈 허용 목록 = 초대 거부**를 돌려주고 화면은 "초대 도메인이 설정되지 않았습니다" 를 표시한다. `*` 는 명시적 제한 없음. 테스트 3케이스(미설정 거부·목록 허용·`*`).
 - PPTX: `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 는 같은 경로·같은 레이아웃 유지, 로고 이미지·회사명 텍스트·브랜드 색만 제거/중립색 교체(JSZip 으로 XML 수정, 슬라이드 구조는 불변 — 렌더 코드 무수정이 조건). 기존 렌더 테스트가 초록이어야 한다.
 - `TEAM_COLOR`(`src/lib/report/brand.ts:33`)·`TEAM`(`src/components/wbs/shared.tsx:4`): 팀 코드 키 대신 순번 팔레트 `teamColorAt(index)` 로 임시 교체(컬럼화는 SP4).
 - UI 위험 파일(`globals.css` 브랜드 토큰, `layout.tsx` 제목·메타)은 `ui/sp0-debrand` 브랜치에서 작업하고 로컬 눈확인 후 `Preview-checked: local …` 트레일러로 머지.
 
-## 6. 폴백·D-CUBE 시드 제거
+## 6. 폴백·원본 고객사 시드 제거
 
 상위 스펙 SP0 "폴백 제거" 그대로:
 
 - `src/lib/teams/master.ts`: `let cache = DEFAULT_TEAMS` 초기값·"전역 행 0이면 throw" 제거 — 공용 팀 0개가 정상. `TeamsProvider` 기본값 `[]`.
 - `DEFAULT_TEAMS` → `tests/fixtures/teams.ts`, `excel/parse.ts` `LEGACY_COLUMN_MAP` → `tests/fixtures/excel/legacyParse.ts`(런타임 importer 0 확인 후).
-- `LEGACY_DCUBE_PROFILE` → `LEGACY_EXCEL_PROFILE_V1` 개명만.
+- `LEGACY_ORIGIN_PROFILE` → `LEGACY_EXCEL_PROFILE_V1` 개명만.
 - `TEAM_SUB_ALIASES`(`src/lib/domain/minutes.ts:86`) 삭제.
 - `supabase/seed.sql`: 4팀 시드 → 로컬 개발용 최소 시드(플랫폼 슈퍼유저 1명 계정 생성은 시드가 아니라 `scripts/dev-bootstrap.mjs` 가 `auth.admin.createUser` 로 — 비밀번호를 파일에 두지 않는다).
 - `src/lib/domain/projectPresets.ts`·`preset_applied` 사용처 삭제, `createProject` 에서 `level_labels` 필수(빈 값 거부).
@@ -159,9 +161,9 @@
 ## 9. 완료 조건(done_when)
 
 - [ ] 로컬 `npm run db:reset` → `scripts/dev-bootstrap.mjs` → `npm run dev` 에서 빈 DB 로 로그인 → 프로젝트 생성(라벨 입력) → WBS 엑셀 임포트 → 주간보고 PPT/엑셀 내보내기 완주. 브라우저 실측 기록(스크린샷 경로·일시)을 `docs/baseline/sp0-e2e.md` 에 남긴다
-- [ ] 산출 PPTX/XLSX 가 PowerPoint/Excel(또는 LibreOffice)에서 열리고 D-CUBE·동국·D'Flow 문자열이 없다(`unzip -p … | grep` 0건)
+- [ ] 산출 PPTX/XLSX 가 PowerPoint/Excel(또는 LibreOffice)에서 열리고 원본 고객사·원본 고객사·구 브랜드명 문자열이 없다(`unzip -p … | grep` 0건)
 - [ ] `npm run test` 전부 초록(삭제 41파일 제외), `npm run lint`·`npm run build` 초록, CI 두 잡 초록
-- [ ] `grep -rE 'dongkuk|D-CUBE|DCUBE|동국' src public` 0건, `grep -r "D'Flow" src public` 0건
+- [ ] `grep -rE 'origincorp|원본 고객사|ORIGIN|원본 고객사' src public` 0건, `grep -r "구 브랜드명" src public` 0건
 - [ ] `grep -rn 'rglfgrwwwwdqejohdnty\|abtyahghvvkcriawffty' scripts src .github supabase` 가 `targets.mjs` 와 그 테스트뿐
 - [ ] `node scripts/baseline-diff.mjs` 불일치 0, 스냅샷 `docs/baseline/2026-09-23-live-catalog.md` 커밋
 - [ ] `tests/invariants/migration-files.test.ts` 초록

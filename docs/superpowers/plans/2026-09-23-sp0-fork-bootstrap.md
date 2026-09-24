@@ -1,8 +1,10 @@
 # SP0 포크 부트스트랩 Implementation Plan
 
+> **익명화(2026-09-24):** 원본 고객사·구 브랜드·고객 업무 문자열은 일반 명칭으로 치환했다. 실측 재현 명령과 식별자도 함께 치환돼 있어 원본 리포에서 그대로 실행되지 않을 수 있다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** wbs-web 사본(D-Flow)을 운영 D-CUBE 와 완전히 절연하고, 로컬 Supabase 위에서 빈 DB 로 로그인→프로젝트 생성→WBS 엑셀 임포트→주간보고 PPT/엑셀 내보내기가 완주하며 D-CUBE·동국·D'Flow 브랜드가 화면·산출물에 나오지 않는 출발선을 만든다.
+**Goal:** wbs-web 사본(D-Flow)을 운영 원본 고객사 와 완전히 절연하고, 로컬 Supabase 위에서 빈 DB 로 로그인→프로젝트 생성→WBS 엑셀 임포트→주간보고 PPT/엑셀 내보내기가 완주하며 원본 고객사·원본 고객사·구 브랜드명 브랜드가 화면·산출물에 나오지 않는 출발선을 만든다.
 
 **Architecture:** (1) 스크립트의 DB 좌표를 `scripts/lib/targets.mjs` 하나로 모으고 wbs-web 두 ref 를 금지 목록으로 박는다. (2) 운영 스키마를 읽기 전용으로 **한 번만** 덤프해 `0000_baseline.sql`·`0001_storage_realtime.sql`·카탈로그 JSON 을 만들고, 이후 검증(`baseline-diff`)은 그 JSON 과 로컬 DB 만 비교한다. (3) 로컬 개발은 Supabase CLI(`supabase start`/`db reset`)가 정본이고 롤백 파일은 `supabase/rollbacks/` 로 분리한다. (4) 브랜드는 `src/lib/branding.ts` 단일 출처.
 
@@ -12,7 +14,7 @@
 
 ## Global Constraints
 
-- 금지 ref: `rglfgrwwwwdqejohdnty`(운영 D-CUBE)·`abtyahghvvkcriawffty`(wbs-web 스테이징). 운영 접속은 Task 5 의 `baseline-dump.mjs` **1회 읽기 전용**뿐이다. 그 외 어떤 명령도 이 두 ref 로 접속하지 않는다.
+- 금지 ref: `rglfgrwwwwdqejohdnty`(운영 원본 고객사)·`abtyahghvvkcriawffty`(wbs-web 스테이징). 운영 접속은 Task 5 의 `baseline-dump.mjs` **1회 읽기 전용**뿐이다. 그 외 어떤 명령도 이 두 ref 로 접속하지 않는다.
 - 이 리포의 CLAUDE.md 는 Task 2 전까지 wbs-web 것이다 — 그 안의 Supabase ref·스테이징 절차·`npm run env:prod` 를 따르지 않는다.
 - `git add -A` 금지, 파일명 명시. 마이그레이션(`supabase/migrations/*`)과 코드는 다른 커밋(G1).
 - 마이그레이션 커밋 트레일러: `Staging-verified: local db reset <YYYY-MM-DD HH:MM>`. UI 위험 파일 커밋 트레일러: `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>`.
@@ -30,7 +32,7 @@
 | 4절 `db-apply --driver mgmt\|psql` | 추가하지 않음. 로컬 리허설은 `npm run db:reset`(전량 재생), `db-apply` 는 원격(mgmt) 전용으로 두고 `--target local` 은 "`npm run db:reset` 을 쓰라"는 안내로 거부 | CLI 가 로컬 적용·재생을 이미 한다. psql 드라이버는 SP9 자체호스트 때 필요해지면 그때 |
 | 3.2 `0001` 수기 작성 | 운영 카탈로그(`pg_policies`·`storage.buckets`)에서 **생성**해 커밋 | 마이그레이션 텍스트 조립은 drop/재생성 이력 때문에 틀리기 쉽다. 생성본도 커밋 전 사람이 읽는다 |
 | 3.3 diff 가 운영에 다시 접속 | 덤프 시 카탈로그를 `docs/baseline/prod-catalog.json` 으로 저장, diff 는 JSON↔로컬 | 운영 접속 1회로 줄인다 |
-| 2절 `staging-sync.mjs` 자연 차단 | **삭제** | 운영 데이터를 복제하는 스크립트다 — 결정 1(D-CUBE 데이터 이관 없음)과 정면 충돌 |
+| 2절 `staging-sync.mjs` 자연 차단 | **삭제** | 운영 데이터를 복제하는 스크립트다 — 결정 1(원본 고객사 데이터 이관 없음)과 정면 충돌 |
 | 5절 env `INVITE_EMAIL_DOMAINS` | 기존 이름 `INVITE_ALLOWED_DOMAINS` 유지 | 소비처(`src/app/actions/projectInvites.ts:194`)·테스트가 이미 이 이름 |
 | 6절 `DEFAULT_TEAMS`·`LEGACY_COLUMN_MAP` → fixtures, `TeamsProvider` 기본값 `[]` | **이동하지 않음**(SP4 로) | 실측: `DEFAULT_TEAM_CODES`(=`DEFAULT_TEAMS` 파생)가 런타임 5파일(`excel/export.ts`·`ai/analytics.ts`·`domain/kanban.ts`·`domain/subact.ts`·`domain/minutes.ts`)에서 쓰이고, `LEGACY_COLUMN_MAP` 은 `parse.ts:31,34` 의 런타임 폴백이다 — 상위 스펙의 "런타임 importer 없는 것만 이동" 규칙에 걸린다. `TeamsProvider` 는 레이아웃이 항상 값을 주입해 기본값은 테스트에서만 쓰인다 |
 | 5절 `TEAM_COLOR` 순번 팔레트 | `TEAM_COLOR` **삭제** | 실측 소비처 0 |
@@ -81,22 +83,22 @@ import {
   FORBIDDEN_REFS, LOCAL_DSN, assertNotForbidden, resolveTarget, detectEnvTarget, mergeEnv, localEnvFromStatus,
 } from '../../scripts/lib/targets.mjs'
 
-const PROD_DCUBE = 'rglfgrwwwwdqejohdnty'
+const PROD_ORIGIN = 'rglfgrwwwwdqejohdnty'
 const STG_WBSWEB = 'abtyahghvvkcriawffty'
 
 describe('FORBIDDEN_REFS', () => {
   it('wbs-web 운영·스테이징 ref 둘을 담는다', () => {
-    expect(FORBIDDEN_REFS).toEqual([PROD_DCUBE, STG_WBSWEB])
+    expect(FORBIDDEN_REFS).toEqual([PROD_ORIGIN, STG_WBSWEB])
   })
 })
 
 describe('assertNotForbidden', () => {
   it('금지 ref 를 포함하면 throw', () => {
-    expect(() => assertNotForbidden(`https://${PROD_DCUBE}.supabase.co`)).toThrow(/금지/)
+    expect(() => assertNotForbidden(`https://${PROD_ORIGIN}.supabase.co`)).toThrow(/금지/)
     expect(() => assertNotForbidden(`postgresql://u.${STG_WBSWEB}:p@h/db`)).toThrow(/금지/)
   })
   it('readonly-baseline 예외만 통과', () => {
-    expect(() => assertNotForbidden(PROD_DCUBE, { allowForbidden: 'readonly-baseline' })).not.toThrow()
+    expect(() => assertNotForbidden(PROD_ORIGIN, { allowForbidden: 'readonly-baseline' })).not.toThrow()
   })
   it('다른 값은 통과', () => { expect(() => assertNotForbidden('http://127.0.0.1:54321')).not.toThrow() })
 })
@@ -106,14 +108,14 @@ describe('resolveTarget', () => {
     expect(resolveTarget('local', {})).toEqual({ name: 'local', kind: 'local', dsn: LOCAL_DSN, ref: null })
   })
   it('LOCAL_DB_URL 로 덮어써도 금지 ref 면 throw', () => {
-    expect(() => resolveTarget('local', { LOCAL_DB_URL: `postgresql://x.${PROD_DCUBE}:p@h/db` })).toThrow(/금지/)
+    expect(() => resolveTarget('local', { LOCAL_DB_URL: `postgresql://x.${PROD_ORIGIN}:p@h/db` })).toThrow(/금지/)
   })
   it('원격은 env 미설정이면 throw(fail-closed)', () => {
     expect(() => resolveTarget('prod', {})).toThrow(/PROD_REF 미설정/)
     expect(() => resolveTarget('staging', { STAGING_REF: '  ' })).toThrow(/STAGING_REF 미설정/)
   })
   it('원격 env 에 금지 ref 를 넣어도 throw', () => {
-    expect(() => resolveTarget('prod', { PROD_REF: PROD_DCUBE })).toThrow(/금지/)
+    expect(() => resolveTarget('prod', { PROD_REF: PROD_ORIGIN })).toThrow(/금지/)
   })
   it('원격 정상', () => {
     expect(resolveTarget('staging', { STAGING_REF: 'newstagingref0000000' }))
@@ -129,13 +131,13 @@ describe('detectEnvTarget', () => {
     expect(detectEnvTarget(env('http://localhost:54321/'), {})).toBe('local')
   })
   it('금지 ref 는 forbidden', () => {
-    expect(detectEnvTarget(env(`https://${PROD_DCUBE}.supabase.co`), {})).toBe('forbidden')
+    expect(detectEnvTarget(env(`https://${PROD_ORIGIN}.supabase.co`), {})).toBe('forbidden')
   })
   it('env 로 등록한 원격', () => {
     expect(detectEnvTarget(env('https://newprodref000000000000.supabase.co'), { PROD_REF: 'newprodref000000000000' })).toBe('prod')
   })
   it('[회귀] 빈 값은 다음 줄을 URL 로 오인하지 않는다', () => {
-    expect(detectEnvTarget(`NEXT_PUBLIC_SUPABASE_URL=\n\nX=https://${PROD_DCUBE}.supabase.co`, {})).toBe('unknown')
+    expect(detectEnvTarget(`NEXT_PUBLIC_SUPABASE_URL=\n\nX=https://${PROD_ORIGIN}.supabase.co`, {})).toBe('unknown')
   })
   it('파일 없음(빈 문자열)은 unknown', () => { expect(detectEnvTarget('', {})).toBe('unknown') })
 })
@@ -172,7 +174,7 @@ describe('localEnvFromStatus', () => {
 // 순수 모듈(부작용 없음) — vitest 로 검증한다.
 
 export const FORBIDDEN_REFS = Object.freeze([
-  'rglfgrwwwwdqejohdnty', // wbs-web 운영(D-CUBE 데이터)
+  'rglfgrwwwwdqejohdnty', // wbs-web 운영(원본 고객사 데이터)
   'abtyahghvvkcriawffty', // wbs-web 스테이징
 ])
 
@@ -353,10 +355,10 @@ git add scripts/lib/targets.mjs tests/scripts/targets.test.ts scripts/check-env-
   tests/lib/staging-core.test.ts package.json
 git commit -m "fix(scripts): wbs-web DB 좌표를 금지 목록으로 격리한다
 
-사본의 staging.config 가 운영 D-CUBE ref 를 그대로 들고 있어 db:apply --target prod 가
+사본의 staging.config 가 운영 원본 고객사 ref 를 그대로 들고 있어 db:apply --target prod 가
 원본 운영에 쓰고 staging:sync 가 원본 데이터를 복제할 수 있었다. 좌표를 targets.mjs
 하나로 모으고 원격은 env 미설정 시 멈추며, 두 원본 ref 는 어떤 경로로 들어와도 거부한다.
-운영 데이터 복제기(staging-sync)·D-CUBE 좌석 로더·원본 운영을 치는 warm 크론은 삭제.
+운영 데이터 복제기(staging-sync)·원본 고객사 좌석 로더·원본 운영을 치는 warm 크론은 삭제.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
@@ -376,13 +378,13 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```markdown
 # D-Flow — 작업 규칙
 
-범용 프로젝트 관리 플랫폼(가칭). wbs-web(D'Flow, D-CUBE 운영)의 포크 — 컷오프 `wbs-web@77cf6785`.
+범용 프로젝트 관리 플랫폼(가칭). wbs-web(구 브랜드명, 원본 고객사 운영)의 포크 — 컷오프 `wbs-web@77cf6785`.
 Next.js 15 (App Router) + Tailwind v4 + Supabase. 설계 정본: docs/superpowers/specs/2026-09-23-generic-platform-design.md,
 SP 별 스펙은 같은 폴더. 포크 규칙은 docs/fork-policy.md.
 
 ## 원본 DB 금지 (최우선)
 
-wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(운영, D-CUBE 데이터)·`abtyahghvvkcriawffty`(스테이징)에 접속하지 않는다.
+wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(운영, 원본 고객사 데이터)·`abtyahghvvkcriawffty`(스테이징)에 접속하지 않는다.
 `scripts/lib/targets.mjs` 의 금지 목록이 기계적으로 막는다 — 우회 플래그를 만들지 말 것.
 예외: `scripts/baseline-dump.mjs`(SP0 기준선, 읽기 전용 1회). docs/superpowers/** 의 옛 문서에 박힌 ref·절차는 원본 리포 기록이다.
 
@@ -409,7 +411,7 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(운영, D-CUBE 데이터)·`abtyahgh
 
 ## 권한
 [원문 첫 두 불릿·가드 3종·에러 3원칙 유지. `memberships.role` deprecated 문장은 유지(기준선에 컬럼이 남아 있다, SP1 에서 폐기).
- "Supabase 계정 (2026-08-05 실측)" 절 전체와 D-CUBE 데이터 보호 문장은 삭제]
+ "Supabase 계정 (2026-08-05 실측)" 절 전체와 원본 고객사 데이터 보호 문장은 삭제]
 
 ## 자주 쓰는 명령
 [dev/build/lint/test/db:start/db:reset/env:local — smoke:prod·mark:good 는 "첫 배포 후" 로 표기]
@@ -430,7 +432,7 @@ grep -n '\[' CLAUDE.md | grep -v '^\s*-\s*\[' | head     # 옮기기 지시 대�
 git add CLAUDE.md docs/fork-policy.md
 git commit -m "docs: CLAUDE.md 를 D-Flow 기준으로 다시 쓰고 포크 정책을 남긴다
 
-사본의 CLAUDE.md 는 원본 운영 ref·스테이징 절차를 안내해 따르면 D-CUBE DB 로 향한다.
+사본의 CLAUDE.md 는 원본 운영 ref·스테이징 절차를 안내해 따르면 원본 고객사 DB 로 향한다.
 로컬 우선 개발·원본 DB 금지·롤백 폴더 규약을 적고, 컷오프 좌표와 보안 픽스만 오가는
 포크 정책을 별도 문서로 고정한다.
 
@@ -770,7 +772,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ### Task 5: 운영 스키마 1회 덤프 → `0000`·`0001`·카탈로그
 
-**전제:** Docker Desktop 실행 중(`docker info` 성공). 사용자에게 "운영 D-CUBE 에 읽기 전용으로 1회 접속한다"고 알리고 진행 확인을 받는다.
+**전제:** Docker Desktop 실행 중(`docker info` 성공). 사용자에게 "운영 원본 고객사 에 읽기 전용으로 1회 접속한다"고 알리고 진행 확인을 받는다.
 
 **Files:**
 - Create: `scripts/baseline-dump.mjs`, `supabase/migrations/0000_baseline.sql`, `supabase/migrations/0001_storage_realtime.sql`, `supabase/rollbacks/0001_storage_realtime_rollback.sql`, `docs/baseline/prod-catalog.json`
@@ -781,7 +783,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: 스크립트 작성** — `scripts/baseline-dump.mjs`
 
 ```js
-// scripts/baseline-dump.mjs — SP0 기준선. 운영 D-CUBE 스키마를 읽기 전용으로 1회 덤프한다(데이터 제외).
+// scripts/baseline-dump.mjs — SP0 기준선. 운영 원본 고객사 스키마를 읽기 전용으로 1회 덤프한다(데이터 제외).
 // 이 리포에서 원본 DB 에 접속하는 유일한 스크립트다. 재실행은 기준선을 바꾸는 행위이므로 커밋 이력으로 남긴다.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -843,7 +845,7 @@ wc -l supabase/migrations/0000_baseline.sql supabase/migrations/0001_storage_rea
 grep -c '^CREATE POLICY' supabase/migrations/0000_baseline.sql
 grep -cE '^create policy' supabase/migrations/0001_storage_realtime.sql   # 상위 스펙 기대: storage 9 + realtime 2 = 11
 grep -rn 'rglfgrwwwwdqejohdnty\|abtyahghvvkcriawffty' supabase docs/baseline   # 0건
-grep -niE 'dongkuk|@dongkuk|동국' supabase/migrations/0000_baseline.sql | head  # 결과를 기록(함수 본문 하드코딩 여부 — 있으면 사용자 보고, SP1 이후 과제로 남김)
+grep -niE 'origincorp|@origincorp|원본 고객사' supabase/migrations/0000_baseline.sql | head  # 결과를 기록(함수 본문 하드코딩 여부 — 있으면 사용자 보고, SP1 이후 과제로 남김)
 ```
 
 `0001` 의 정책 수가 11 이 아니면 운영 실측이 정본이다. 차이를 기록하고 커밋 메시지에 적는다.
@@ -1093,10 +1095,10 @@ npm run lint && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 NEXT_PUBLIC_SUPA
 
 ---
 
-### Task 9: 팀 폴백 제거와 D-CUBE 잔재 정리
+### Task 9: 팀 폴백 제거와 원본 고객사 잔재 정리
 
 **Files:**
-- Modify: `src/lib/teams/master.ts:18-19,46-48,67-70,135-137`, `tests/lib/teams-master.test.ts:48-58`, `src/lib/domain/minutes.ts:84-96`, `tests/minutes/team-subgroups.test.ts:54-65`, `src/lib/excel/profile.ts:141-142` 및 `LEGACY_DCUBE_PROFILE` 소비처 4파일·테스트 8파일
+- Modify: `src/lib/teams/master.ts:18-19,46-48,67-70,135-137`, `tests/lib/teams-master.test.ts:48-58`, `src/lib/domain/minutes.ts:84-96`, `tests/minutes/team-subgroups.test.ts:54-65`, `src/lib/excel/profile.ts:141-142` 및 `LEGACY_ORIGIN_PROFILE` 소비처 4파일·테스트 8파일
 
 - [ ] **Step 1: 테스트를 새 동작으로 교체** — `tests/lib/teams-master.test.ts` 의 두 케이스:
 
@@ -1136,13 +1138,13 @@ npm run lint && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 NEXT_PUBLIC_SUPA
   - `resolveTeamSub` 의 `@deprecated` 문구와 별칭 두 줄(`const alias = …`, `return alias …`)을 `return null` 로 바꾼다. 결과는 "목록에 있으면 그 이름, 아니면 null" 이다.
   - `tests/minutes/team-subgroups.test.ts` 56·60행: `APS` 별칭을 기대하는 두 단언을 `expect(resolveTeamSub(tree, 'MES', 'APS')).toBeNull()` 한 줄로 바꾼다. 60행의 withAps 케이스(실폴더 우선)는 그대로 둔다.
 
-- [ ] **Step 6: `LEGACY_DCUBE_PROFILE` 개명**
+- [ ] **Step 6: `LEGACY_ORIGIN_PROFILE` 개명**
 
 ```bash
-grep -rl LEGACY_DCUBE_PROFILE src tests | xargs sed -i '' 's/LEGACY_DCUBE_PROFILE/LEGACY_EXCEL_PROFILE_V1/g'
+grep -rl LEGACY_ORIGIN_PROFILE src tests | xargs sed -i '' 's/LEGACY_ORIGIN_PROFILE/LEGACY_EXCEL_PROFILE_V1/g'
 ```
 
-`src/lib/excel/profile.ts:141` 주석 "D-CUBE 현행 3행 헤더 규약(5팀)" → "레거시 3행 헤더 규약 v1(5팀 열) — 라운드트립 계약 테스트의 기준, SP4 에서 fixtures 로 이동"
+`src/lib/excel/profile.ts:141` 주석 "원본 고객사 현행 3행 헤더 규약(5팀)" → "레거시 3행 헤더 규약 v1(5팀 열) — 라운드트립 계약 테스트의 기준, SP4 에서 fixtures 로 이동"
 
 - [ ] **Step 7: 전체 테스트와 커밋**
 
@@ -1152,7 +1154,7 @@ git add src/lib/teams/master.ts tests/lib/teams-master.test.ts src/lib/domain/mi
 git status --short   # stage 누락 없는지 확인 후
 git commit -m "refactor(teams): 기본 5팀 폴백과 APS 별칭을 걷어낸다
 
-빈 DB 로 출발하는 플랫폼에서 공용 팀 0개는 정상이다. 폴백은 D-CUBE 5팀을 지어내 화면에
+빈 DB 로 출발하는 플랫폼에서 공용 팀 0개는 정상이다. 폴백은 원본 고객사 5팀을 지어내 화면에
 보이게 했다. 레거시 엑셀 프로파일은 식별자에서 고객명을 뺀다(런타임 사용이 남아 SP4 에서 이동).
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -1265,7 +1267,7 @@ export async function createProject(
 ```
 
   - 생성 버튼 `disabled={!name.trim() || !levels.trim() || busy}`
-  - 13행 주석 `D'Flow 'WORKSPACE DIALOG / 새 프로젝트' 모달.` → `'WORKSPACE DIALOG / 새 프로젝트' 모달.`
+  - 13행 주석 `구 브랜드명 'WORKSPACE DIALOG / 새 프로젝트' 모달.` → `'WORKSPACE DIALOG / 새 프로젝트' 모달.`
   - `src/lib/i18n/dict/home.ts` 에 추가: `'home.fieldLevels': 'WBS 단계'`, `'home.phLevels': '예: 단계, 작업, 활동'`, `'home.hintLevels': '위에서부터 쉼표로 구분 — 개수가 곧 WBS 깊이입니다. 나중에 설정에서 바꿀 수 있습니다.'`, `'home.errLevelsRequired': 'WBS 단계를 1개 이상 입력하세요.'`
   - `home.en.ts`: `'WBS levels'`, `'e.g. Phase, Task, Activity'`, `'Top-down, comma-separated — the count is the WBS depth. You can change it later in settings.'`, `'Enter at least one WBS level.'`
 
@@ -1331,7 +1333,7 @@ describe('isAllowedInviteDomain', () => {
 })
 ```
 
-같은 파일의 나머지 `dongkuk.com` 픽스처(maskEmail 등)는 `example.com` 으로 바꾼다(`sed -i '' 's/dongkuk\.com/example.com/g; s/dkchem\.co\.kr/corp.co.kr/g' tests/domain/invites.test.ts`).
+같은 파일의 나머지 `example-corp.com` 픽스처(maskEmail 등)는 `example.com` 으로 바꾼다(`sed -i '' 's/origincorp\.com/example.com/g; s/origincorp-chem\.co\.kr/corp.co.kr/g' tests/domain/invites.test.ts`).
 
 - [ ] **Step 2: 실패 확인** — `npx vitest run tests/domain/invites.test.ts` → FAIL
 
@@ -1379,12 +1381,12 @@ function domainError(domains: string[]): string {
 (`'*'` 이면 도메인 검사를 통과하므로 이 문구에 `@*` 가 나올 일은 없다.)
 
 `src/components/settings/ProjectInviteManager.tsx`
-- 137행 문구: "합류한 사람은 이 프로젝트뿐 아니라 D-CUBE 전체의 회의록·WBS·이슈·근태를 조회할 수 있습니다. 사내 인원에게만 발급하세요." → "합류한 사람은 이 프로젝트뿐 아니라 전체 회의록·WBS·이슈·근태를 조회할 수 있습니다. 신뢰할 수 있는 인원에게만 발급하세요."
+- 137행 문구: "합류한 사람은 이 프로젝트뿐 아니라 원본 고객사 전체의 회의록·WBS·이슈·근태를 조회할 수 있습니다. 사내 인원에게만 발급하세요." → "합류한 사람은 이 프로젝트뿐 아니라 전체 회의록·WBS·이슈·근태를 조회할 수 있습니다. 신뢰할 수 있는 인원에게만 발급하세요."
 - 149행 placeholder: `name@example.com`
 
 - [ ] **Step 4: 게이트 테스트 갱신** — `tests/actions/project-invites-gate.test.ts`
   - `beforeEach` 의 `delete process.env.INVITE_ALLOWED_DOMAINS` → `process.env.INVITE_ALLOWED_DOMAINS = 'example.com'`
-  - 파일 전체 `dongkuk.com` → `example.com`, `dkgroup.co.kr` → `corp.co.kr`
+  - 파일 전체 `example-corp.com` → `example.com`, `origincorp-group.co.kr` → `corp.co.kr`
   - 문구 단언 `'사내 이메일 주소(@…)로만 초대할 수 있습니다.'` → `'허용된 이메일 도메인(@…)으로만 초대할 수 있습니다.'`
   - 새 케이스 추가:
 
@@ -1482,34 +1484,34 @@ export const ASSISTANT_NAME = { ko: 'AI 어시스턴트', en: 'AI Assistant' } a
 | `src/lib/mail/transport.ts:18` | `const DEFAULT_FROM_NAME = BRAND.mailFromName` |
 | `src/lib/mail/projectInvite.ts:63` | `` oneLine(`[${BRAND.productName}] ${projectName} 프로젝트 초대`) `` |
 | `src/lib/ai/answer.ts:21` | `` `너는 '${ASSISTANT_NAME.ko}', 프로젝트 관리 도구 ${BRAND.productName} 의 AI 어시스턴트야.` `` |
-| `src/lib/ai/minutes-answer.ts:11,18`, `src/lib/ai/chat/orchestrator.ts:282` | `D'Flow` → `${BRAND.productName}` |
-| `src/app/api/chat/v2/stream/route.ts:64,95`, `src/lib/ai/chat/router.ts:648,666,678,711` | `기존 DK Bot` → `기존 ${ASSISTANT_NAME.ko}` |
+| `src/lib/ai/minutes-answer.ts:11,18`, `src/lib/ai/chat/orchestrator.ts:282` | `구 브랜드명` → `${BRAND.productName}` |
+| `src/app/api/chat/v2/stream/route.ts:64,95`, `src/lib/ai/chat/router.ts:648,666,678,711` | `기존 구 봇 브랜드명` → `기존 ${ASSISTANT_NAME.ko}` |
 | `src/components/attendance/AttendanceView.tsx:290` | `locale === 'en' ? `${ASSISTANT_NAME.en} filter` : `${ASSISTANT_NAME.ko} 필터`` |
-| `src/components/chat/RobotMascot.tsx:5`, `src/components/chat/DkBot.tsx:494,515` | `DK Bot` → `{ASSISTANT_NAME.ko}` (aria-label 은 문자열 prop) |
-| `src/lib/i18n/dict/chat.ts`·`chat.en.ts`·`settings.ts`·`settings.en.ts` | 값 안의 `DK Bot` → `AI 어시스턴트` / `AI Assistant` (dict 는 정적 문자열이라 리터럴 치환) |
+| `src/components/chat/RobotMascot.tsx:5`, `src/components/chat/LegacyBot.tsx:494,515` | `구 봇 브랜드명` → `{ASSISTANT_NAME.ko}` (aria-label 은 문자열 prop) |
+| `src/lib/i18n/dict/chat.ts`·`chat.en.ts`·`settings.ts`·`settings.en.ts` | 값 안의 `구 봇 브랜드명` → `AI 어시스턴트` / `AI Assistant` (dict 는 정적 문자열이라 리터럴 치환) |
 | `src/app/invite/[token]/page.tsx:30` | `{BRAND.productName} 프로젝트 초대` |
 | `src/app/login/page.tsx:152` | `{BRAND.copyright && <div …>{BRAND.copyright}</div>}` (기존 className 유지) |
-| `src/components/ui/BrandMark.tsx` | 워드마크 `D&apos;Flow` → `{BRAND.productName}`, 주석 "D'Flow 브랜드 마크" → "제품 브랜드 마크" |
+| `src/components/ui/BrandMark.tsx` | 워드마크 `D&apos;Flow` → `{BRAND.productName}`, 주석 "구 브랜드명 브랜드 마크" → "제품 브랜드 마크" |
 
 각 파일에 `import { BRAND } from '@/lib/branding'` / `import { ASSISTANT_NAME } from '@/lib/branding'` 를 추가한다(없는 것만). 클라이언트 컴포넌트(`'use client'`)에서도 import 해도 된다 — NEXT_PUBLIC_ 값이다. 단 `mailFromName`(`MAIL_FROM_NAME`)은 서버에서만 읽힌다.
 
 - [ ] **Step 6: 주석·식별자 아닌 잔여 치환**
 
 ```bash
-# 주석·기타 — D'Flow → D-Flow, DK Flow 벤치마크 문구 제거, 고객명 주석 중립화
-grep -rlE "D'Flow" src public | grep -vE '^src/app/(layout\.tsx|globals\.css)$|^src/components/app/' \
-  | xargs sed -i '' "s/D'Flow/D-Flow/g"
-grep -rlE "DK Bot" src | grep -vE '^src/components/app/|^src/app/\(app\)/layout\.tsx$' | xargs sed -i '' 's/DK Bot/AI 어시스턴트/g'
-grep -rnE 'dongkuk|D-CUBE|DCUBE|동국' src public | grep -vE '^src/app/(layout\.tsx|globals\.css):|^src/components/app/'
+# 주석·기타 — 구 브랜드명 → D-Flow, DK Flow 벤치마크 문구 제거, 고객명 주석 중립화
+grep -rlE "구 브랜드명" src public | grep -vE '^src/app/(layout\.tsx|globals\.css)$|^src/components/app/' \
+  | xargs sed -i '' "s/구 브랜드명/D-Flow/g"
+grep -rlE "구 봇 브랜드명" src | grep -vE '^src/components/app/|^src/app/\(app\)/layout\.tsx$' | xargs sed -i '' 's/구 봇 브랜드명/AI 어시스턴트/g'
+grep -rnE 'origincorp|원본 고객사|ORIGIN|원본 고객사' src public | grep -vE '^src/app/(layout\.tsx|globals\.css):|^src/components/app/'
 ```
 
 마지막 명령에 남은 줄은 주석이다. 한 줄씩 중립 표현으로 고친다. 예:
-- "D-CUBE 회귀 기준" → "레거시 v1 회귀 기준"
-- "동국씨엠 주간보고" → "주간보고"
-- "동국제강 보라" → "보라 테마"
-- "(D-CUBE 형)" → 삭제
+- "원본 고객사 회귀 기준" → "레거시 v1 회귀 기준"
+- "원본 계열사A 주간보고" → "주간보고"
+- "원본 고객사 보라" → "보라 테마"
+- "(원본 고객사 형)" → 삭제
 
-`src/lib/ai/intent.ts:99` 의 어포스트로피 예시 `D'Flow` 는 `O'Neil` 로 바꾼다.
+`src/lib/ai/intent.ts:99` 의 어포스트로피 예시 `구 브랜드명` 는 `O'Neil` 로 바꾼다.
 
 - [ ] **Step 7: 테스트 갱신과 확인**
 
@@ -1519,7 +1521,7 @@ npx vitest run 2>&1 | tail -30
 
 사용자 노출 문자열을 단언하던 테스트(`tests/mail/project-invite.test.ts`, `tests/minutes/*`, `tests/agent/*`, `tests/ai/*` 등)는 기대값을 `BRAND.productName`/`ASSISTANT_NAME` import 로 바꾼다. 리터럴 `'D-Flow'` 로 바꾸지 않는다.
 
-- [ ] **Step 8: 커밋** — 파일 목록은 `git diff --name-only` 로 뽑아 UI 위험 파일이 없는지 확인한 뒤 명시해 add 한다. 메시지 요지: "브랜드 단일 출처 — 사본에 박힌 D'Flow·DK Bot·고객사명을 걷어낸다".
+- [ ] **Step 8: 커밋** — 파일 목록은 `git diff --name-only` 로 뽑아 UI 위험 파일이 없는지 확인한 뒤 명시해 add 한다. 메시지 요지: "브랜드 단일 출처 — 사본에 박힌 구 브랜드명·구 봇 브랜드명·고객사명을 걷어낸다".
 
 ---
 
@@ -1605,7 +1607,7 @@ sed -i '' "s#@/lib/report/dkbrand#@/lib/report/excelPalette#; s#'./dkbrand'#'./e
   - `src/app/layout.tsx`: `import { BRAND } from '@/lib/branding'`, `title: \`${BRAND.productName} — ${BRAND.tagline}\``
   - `src/app/globals.css:38` 주석 → `/*  디자인 토큰 — warm cream + teal  */`, 497행 주석의 `(DK Flow 벤치마크)` 삭제. 규칙 본문은 건드리지 않는다.
   - `HeaderChrome.tsx:155`: ``aria-label={`${BRAND.productName} 홈`}``
-  - UI 위험 파일에 남은 브랜드 문자열도 치환한다: `grep -rnE "D'Flow|DK ?Bot|D-CUBE|동국" src/components/app "src/app/(app)/layout.tsx" src/app/layout.tsx src/app/globals.css`. 사용자 노출 문자열은 `BRAND`/`ASSISTANT_NAME` 으로, 주석은 중립 표현으로 바꾼다.
+  - UI 위험 파일에 남은 브랜드 문자열도 치환한다: `grep -rnE "구 브랜드명|DK ?Bot|원본 고객사|원본 고객사" src/components/app "src/app/(app)/layout.tsx" src/app/layout.tsx src/app/globals.css`. 사용자 노출 문자열은 `BRAND`/`ASSISTANT_NAME` 으로, 주석은 중립 표현으로 바꾼다.
   - `src/app/(app)/projects/page.tsx:181` 의 `Workspace · D…` 문자열을 확인한다(`sed -n 181p`). 제품명 리터럴이면 `BRAND.productName` 으로 바꾼다.
   - 로고: `BrandGlyph`(`src/components/ui/BrandMark.tsx`)의 `<img src="/logo.png">` 를 `BRAND.productName` 첫 글자 모노그램으로 교체한다.
 
@@ -1651,7 +1653,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import JSZip from 'jszip'
 
-const BRAND_RE = /D-CUBE|DCUBE|동국|DONGKUK|Dongkuk|D'Flow/
+const BRAND_RE = /원본 고객사|ORIGIN|원본 고객사|ORIGINCORP|Origincorp|구 브랜드명/
 
 describe.each(['weekly-template.pptx', 'issue-analysis-template.pptx'])('%s', (file) => {
   it('XML 어디에도 고객사·원본 브랜드 문자열이 없다', async () => {
@@ -1667,7 +1669,7 @@ describe.each(['weekly-template.pptx', 'issue-analysis-template.pptx'])('%s', (f
 })
 ```
 
-- [ ] **Step 2: 실패 확인** → FAIL(weekly 에 `동국씨엠` 등, issue-analysis 에 `D-CUBE` 8건)
+- [ ] **Step 2: 실패 확인** → FAIL(weekly 에 `원본 계열사A` 등, issue-analysis 에 `원본 고객사` 8건)
 
 - [ ] **Step 3: 로고 이미지 식별** — 미디어를 풀어 눈으로 본다.
 
@@ -1691,11 +1693,11 @@ import JSZip from 'jszip'
 // 1x1 투명 PNG — 로고 자리를 비우되 관계(rels)·도형 크기는 그대로 둔다.
 const BLANK_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 const REPLACE = [
-  [/동국씨엠 문서 표지 양식/g, '문서 표지'],
-  [/동국홀딩스 전략팀\s*/g, ''],
-  [/DONGKUK CM/g, ''],
-  [/동국씨엠\s*/g, ''],
-  [/D-CUBE/g, '프로젝트'],
+  [/원본 계열사A 문서 표지 양식/g, '문서 표지'],
+  [/원본 계열사B 전략팀\s*/g, ''],
+  [/ORIGINCORP CM/g, ''],
+  [/원본 계열사A\s*/g, ''],
+  [/원본 고객사/g, '프로젝트'],
 ]
 
 const [file, ...logos] = process.argv.slice(2)
@@ -1723,7 +1725,7 @@ node scripts/neutralize-pptx.mjs src/lib/report/assets/issue-analysis-template.p
 npx vitest run tests/report
 ```
 
-`D-CUBE` → `프로젝트` 치환이 문맥상 어색한 자리(예: "프로젝트 Project")는 `unzip -p … | grep -o '.\{40\}프로젝트.\{40\}'` 로 확인한다. 어색하면 그 문맥에 맞는 규칙을 `REPLACE` 에 더 구체적으로 추가하고, 원본은 `git checkout` 으로 되돌린 뒤 다시 실행한다.
+`원본 고객사` → `프로젝트` 치환이 문맥상 어색한 자리(예: "프로젝트 Project")는 `unzip -p … | grep -o '.\{40\}프로젝트.\{40\}'` 로 확인한다. 어색하면 그 문맥에 맞는 규칙을 `REPLACE` 에 더 구체적으로 추가하고, 원본은 `git checkout` 으로 되돌린 뒤 다시 실행한다.
 
 - [ ] **Step 6: 시각 확인** — `soffice --headless --convert-to pdf --outdir $S src/lib/report/assets/*.pptx` 를 실행하고, PDF 첫 페이지를 Read 로 본다. 레이아웃이 깨지지 않았고 로고 자리가 비었는지 확인한다.
 
@@ -1790,7 +1792,7 @@ INVITE_ALLOWED_DOMAINS=example.com npm run dev
 
 ```bash
 for f in ~/Downloads/<내보낸 pptx> ~/Downloads/<내보낸 xlsx>; do
-  unzip -p "$f" '*.xml' | grep -cE "D-CUBE|DCUBE|동국|DONGKUK|D'Flow" ; done    # 각 0
+  unzip -p "$f" '*.xml' | grep -cE "원본 고객사|ORIGIN|원본 고객사|ORIGINCORP|구 브랜드명" ; done    # 각 0
 soffice --headless --convert-to pdf --outdir /private/tmp/claude-501/-Users-jerry-D-Flow ~/Downloads/<pptx>   # 열림 확인
 ```
 
@@ -1798,7 +1800,7 @@ soffice --headless --convert-to pdf --outdir /private/tmp/claude-501/-Users-jerr
 
 ```bash
 npx vitest run && npm run lint && npm run build
-grep -rE "dongkuk|D-CUBE|DCUBE|동국|D'Flow|D&apos;Flow|DK ?Bot" src public | wc -l          # 0
+grep -rE "origincorp|원본 고객사|ORIGIN|원본 고객사|구 브랜드명|D&apos;Flow|DK ?Bot" src public | wc -l          # 0
 grep -rn 'rglfgrwwwwdqejohdnty\|abtyahghvvkcriawffty' scripts src .github supabase | grep -v 'scripts/lib/targets.mjs'   # 0
 node scripts/baseline-diff.mjs                                                          # 불일치 0
 test -f docs/fork-policy.md && echo ok
@@ -1823,12 +1825,12 @@ CI 가 실패하면 superpowers:systematic-debugging 으로 원인을 찾아 고
 
 ## 부록 A — 흔적 전면 제거 (2026-09-24 사용자 결정으로 추가)
 
-사용자 지시: "D-CUBE 에 대한 모든 흔적을 다 없애야 한다 — 범용으로 쓸 것". 전수 조사(워크플로 `wf_735b7928-2a8`, `.superpowers/sdd/…/dcube-inventory-wf.json`)와 사용자 결정 4가지를 반영한 추가 태스크다. 업무 어휘(5팀·주간 11구분·PI 이슈 체계·`pmo_admin`·Asia/Seoul)는 로드맵대로 SP3~SP5 에서 설정화하며 여기 범위가 아니다. 또박또박(연동 파트너 제품명)은 유지한다.
+사용자 지시: "원본 고객사 에 대한 모든 흔적을 다 없애야 한다 — 범용으로 쓸 것". 전수 조사(워크플로 `wf_735b7928-2a8`, `.superpowers/sdd/…/origincustomer-inventory-wf.json`)와 사용자 결정 4가지를 반영한 추가 태스크다. 업무 어휘(5팀·주간 11구분·PI 이슈 체계·`pmo_admin`·Asia/Seoul)는 로드맵대로 SP3~SP5 에서 설정화하며 여기 범위가 아니다. 또박또박(연동 파트너 제품명)은 유지한다.
 
 | # | 태스크 | 순서 |
 |---|---|---|
 | 18 | 개인정보·고객 픽스처·주석·스크립트·스킬 문자열 일소 | Task 14 뒤 |
-| 19 | `dkbot` 식별자 계열 개명 | 18 뒤 |
+| 19 | `legacybot` 식별자 계열 개명 | 18 뒤 |
 | 20 | 물려받은 문서 삭제 + 코드의 문서 포인터 정리 | 19 뒤 |
 | 15′ | PPTX 양식 완전 중립화(로고·문서속성·테마·썸네일·샘플 데이터까지) — 기존 Task 15 를 대체 | 20 뒤 |
 | 16 | (기존) 스크립트 env 화·README·런북 — 문서 삭제 후 실행 | 15′ 뒤 |
@@ -1839,28 +1841,28 @@ CI 가 실패하면 superpowers:systematic-debugging 으로 원인을 찾아 고
 **Files:** `tests/**`, `src/**`(주석·플레이스홀더만), `scripts/**`, `.claude/**`, `kit/**`, `docs/mockups/**`(삭제는 Task 20)
 
 - 개인정보(무조건): 실제 인물 핸들·개인 메일·호스트명 4건, 고객사 직원 실명·사내 메일 핸들 3건 → 중립 픽스처(`alice`, `alice@example.com`, `agent-host-1` 등). 인벤토리 critic 항목과 tests 스윕의 personal-data 항목이 위치 목록이다(식별자 자체는 이 문서에 적지 않는다).
-- 테스트 픽스처: `D-CUBE`·`dcube`·`dongkuk.com`·`dkgroup`·`dkchem`, MES 하위 프로젝트명(`mes-base`·`mes-runlog`·`mes-skel`·`mes-op`·`mes-qa`), `부산`·`사외창고`·`코일`·`Track3` 같은 고객 업무 문자열, 실제 회의록 제목, 테스트 제목의 `사내` 표현 → 중립값(`Acme Project`, `example.com`, `proj-a`, `Widget`). **5팀 코드(PMO/ERP/MES/가공/MDM)·주간 11구분·PI-I 코드는 SP4/SP5 어휘라 이 태스크에서 바꾸지 않는다.**
-- src 주석·플레이스홀더: 운영 실측치·사고 인용(`운영 최대 528행`, `2026-08-05 사고`), `mes-runlog 리허설`, `Document Safer`, `사내 이름.이니셜@ 관례`, `부산공장`/`Busan plant` 플레이스홀더 → 일반 표현.
-- scripts: 일회성 운영 스크립트 삭제(`scripts/apply-0028`~`apply-0050` 8개, `apply-dkbot-migration.*`, `wiki-rebuild.runner.ts`·`wiki-rebuild.vitest.ts` 와 이를 고정하는 `tests/lib/wiki-rebuild-loop.test.ts`, 관련 package.json 스크립트), `scripts/wbs/build-xlsx.mjs:7` 고객명, `kit/.env.example` 의 `dflow-staging.vercel.app` 기본값 제거(필수 env 로), `.claude/commands` 의 `/deploy` 가 `vercel ls wbs-web` 을 부르면 프로젝트명 env 화.
-- 스킬·킷: `.claude/skills/**`·`kit/**` 의 `D'Flow` → `D-Flow`(126곳), `wbs-web` → `원본 리포`/삭제, `dflow-wbs-nlevel` 의 철강 MES 샘플 계약·`wbs-nlevel-parse.py` 의 D'Flow 문구 → 중립 샘플(가공/조업 코드 PLTCM·2CGL·ACCL 제거), `mdm-dict-v2 실측` 인용 → 일반화. `tests/skills/*` 가 문구를 고정하므로 함께 갱신(단정 완화 금지).
-- 검증: `grep -rniE "d-?cube|dcube|동국|dongkuk|dkgroup|dkchem|씨엠|제강|홀딩스|시스템즈|부산|track3|mes-(base|runlog|skel|op|qa)|mdm-dict" src tests scripts .claude kit public` 0건(개인 식별자는 별도 목록으로 검사했다 — 문서에 남기지 않는다. `scripts/lib/targets.mjs` 의 금지 ref 2개와 그 테스트, `baseline-*.mjs` 의 운영 안전장치 문구만 예외 — 이 셋은 "원본 운영 DB" 로 표현을 바꾸고 ref 문자열은 유지). 전체 스위트 0 실패.
+- 테스트 픽스처: 고객사명·계열사명·고객 도메인 3종, 고객 MES 하위 프로젝트명 5종, 공장 지역·창고·제품·라인명 같은 고객 업무 문자열, 실제 회의록 제목, 테스트 제목의 `사내` 표현 → 중립값(`Acme Project`, `example.com`, `proj-a`, `Widget`). **5팀 코드(PMO/ERP/MES/가공/MDM)·주간 11구분·PI-I 코드는 SP4/SP5 어휘라 이 태스크에서 바꾸지 않는다.**
+- src 주석·플레이스홀더: 운영 실측치·사고 인용(`운영 최대 528행`, `2026-08-05 사고`), 고객 하위 프로젝트 리허설 언급, DRM 제품명, 사내 메일 핸들 관례, 특정 공장명 플레이스홀더 → 일반 표현.
+- scripts: 일회성 운영 스크립트 삭제(`scripts/apply-0028`~`apply-0050` 8개, `apply-legacybot-migration.*`, `wiki-rebuild.runner.ts`·`wiki-rebuild.vitest.ts` 와 이를 고정하는 `tests/lib/wiki-rebuild-loop.test.ts`, 관련 package.json 스크립트), `scripts/wbs/build-xlsx.mjs:7` 고객명, `kit/.env.example` 의 `dflow-staging.vercel.app` 기본값 제거(필수 env 로), `.claude/commands` 의 `/deploy` 가 `vercel ls wbs-web` 을 부르면 프로젝트명 env 화.
+- 스킬·킷: `.claude/skills/**`·`kit/**` 의 `구 브랜드명` → `D-Flow`(126곳), `wbs-web` → `원본 리포`/삭제, `dflow-wbs-nlevel` 의 업종 특화 MES 샘플 계약·`wbs-nlevel-parse.py` 의 구 브랜드명 문구 → 중립 샘플(가공/조업 코드 PLTCM·2CGL·ACCL 제거), 내부 사전 실측 인용 → 일반화. `tests/skills/*` 가 문구를 고정하므로 함께 갱신(단정 완화 금지).
+- 검증: 고객사명·계열사명·고객 도메인·공장 지역·라인명·하위 프로젝트명·내부 사전명을 담은 grep 패턴(패턴 자체는 고객 식별자라 이 문서에 적지 않는다)으로 `src tests scripts .claude kit public` 0건(개인 식별자는 별도 목록으로 검사했다 — 문서에 남기지 않는다. `scripts/lib/targets.mjs` 의 금지 ref 2개와 그 테스트, `baseline-*.mjs` 의 운영 안전장치 문구만 예외 — 이 셋은 "원본 운영 DB" 로 표현을 바꾸고 ref 문자열은 유지). 전체 스위트 0 실패.
 
-### Task 19: `dkbot` 식별자 계열 개명
+### Task 19: `legacybot` 식별자 계열 개명
 
-- `src/components/chat/DkBot.tsx` → `AssistantChat.tsx`(컴포넌트 `AssistantChat`), `dkbotHealth`/`dkbotIndexStatus`/`DkbotHealth`/`dkbotBadge`/`dkIndex` → `assistant*`, `[dkbot]` 로그 태그 33곳 → `[assistant]`, i18n 키 `settings.dkbot*` → `settings.assistant*`(ko/en 둘 다), `https://dkbot.invalid` → `https://assistant.invalid`, `docs/dkbot.md` 는 Task 20 에서 삭제.
-- env `DKBOT_MIN_SIMILARITY` → `ASSISTANT_MIN_SIMILARITY`, 읽는 곳에서 옛 이름을 폴백으로 1회 더 읽고 `console.warn`(운영 설정 무효화 방지). `.env.local.example` 갱신.
-- 테스트 파일명(`tests/ui/dkbot-*.test.*`)·목·스냅샷 갱신. `git mv` 로 이력 유지.
-- 검증: `grep -rni dkbot src tests scripts .claude kit public .env.local.example` 0건(폴백 env 이름 1곳 예외). 전체 스위트 0 실패, tsc 기준선 28 유지.
+- `src/components/chat/LegacyBot.tsx` → `AssistantChat.tsx`(컴포넌트 `AssistantChat`), `legacybotHealth`/`legacybotIndexStatus`/`LegacybotHealth`/`legacybotBadge`/`dkIndex` → `assistant*`, `[legacybot]` 로그 태그 33곳 → `[assistant]`, i18n 키 `settings.legacybot*` → `settings.assistant*`(ko/en 둘 다), `https://legacybot.invalid` → `https://assistant.invalid`, `docs/legacybot.md` 는 Task 20 에서 삭제.
+- env `LEGACYBOT_MIN_SIMILARITY` → `ASSISTANT_MIN_SIMILARITY`, 읽는 곳에서 옛 이름을 폴백으로 1회 더 읽고 `console.warn`(운영 설정 무효화 방지). `.env.local.example` 갱신.
+- 테스트 파일명(`tests/ui/legacybot-*.test.*`)·목·스냅샷 갱신. `git mv` 로 이력 유지.
+- 검증: `grep -rni legacybot src tests scripts .claude kit public .env.local.example` 0건(폴백 env 이름 1곳 예외). 전체 스위트 0 실패, tsc 기준선 28 유지.
 
 ### Task 20: 물려받은 문서 삭제 + 포인터 정리
 
-- 삭제: `docs/**` 전부, 단 다음은 **유지**: `docs/superpowers/specs/2026-09-23-generic-platform-design.md`, `docs/superpowers/specs/2026-09-23-sp0-fork-bootstrap-design.md`, `docs/superpowers/plans/2026-09-23-sp0-fork-bootstrap.md`, `docs/fork-policy.md`, `docs/baseline/**`, `docs/runbook-staging.md`·`docs/runbook-rollback.md`(Task 16 이 재작성), `docs/design/dflow-minutes-upload-api-spec.md`·`docs/design/dflow-agent-work-api-spec.md`(외부 계약 — 유지하되 `D'Flow`→제품명 템플릿·고객명 0건으로 정리). `docs/mockups/**` 의 PNG·HTML(개인 핸들 노출)은 삭제 대상에 포함.
+- 삭제: `docs/**` 전부, 단 다음은 **유지**: `docs/superpowers/specs/2026-09-23-generic-platform-design.md`, `docs/superpowers/specs/2026-09-23-sp0-fork-bootstrap-design.md`, `docs/superpowers/plans/2026-09-23-sp0-fork-bootstrap.md`, `docs/fork-policy.md`, `docs/baseline/**`, `docs/runbook-staging.md`·`docs/runbook-rollback.md`(Task 16 이 재작성), `docs/design/dflow-minutes-upload-api-spec.md`·`docs/design/dflow-agent-work-api-spec.md`(외부 계약 — 유지하되 `구 브랜드명`→제품명 템플릿·고객명 0건으로 정리). `docs/mockups/**` 의 PNG·HTML(개인 핸들 노출)은 삭제 대상에 포함.
 - 코드·스킬·CLAUDE.md 의 삭제 문서 포인터(인벤토리 critic 항목: `src/lib/domain/*` 등 26곳) → 포인터 삭제 또는 한 줄 근거로 대체. `grep -rn "docs/superpowers/\(specs\|plans\)/2026-0[6-9]-[0-2]" src tests .claude kit CLAUDE.md` 가 유지 문서 3개 외 0건.
 - 유지하는 SP0 문서 6개는 포크 출처를 기록하는 유일한 자리로 남긴다(사용자 확인 사항).
 
 ### Task 15′: PPTX 양식 완전 중립화 (기존 Task 15 대체)
 
-기존 Task 15 의 텍스트 치환에 더해: 로고 미디어 13개 전부(투명 PNG 또는 삭제 + 관계 정리), `docProps/core.xml`·`app.xml`(작성자·제목·TitlesOfParts), 테마 이름 `동국제강`·색(002452/C51F2A → 중립 팔레트), `docProps/thumbnail.jpeg`, 레이아웃 텍스트(`동국홀딩스 전략팀`, `문서 표지 양식`, `DONGKUK CM`, `70주년 표지`), 슬라이드 내 실제 샘플 데이터(주간보고 slide2 표 본문, 이슈분석 slide 3·5~12 의 PI-I-02-xx 문항·Luxteel/Appsteel/SteelShop/E-Biz 구조) → 중립 예시. 슬라이드 수·`sourceSlide` 번호·shape id·표 좌표는 불변(렌더 코드 무수정). 검증: `unzip -p` 전 XML + `docProps` 에 브랜드·고객명·인명 0건, 렌더 테스트 초록, PDF 변환 후 육안.
+기존 Task 15 의 텍스트 치환에 더해: 로고 미디어 13개 전부(투명 PNG 또는 삭제 + 관계 정리), `docProps/core.xml`·`app.xml`(작성자·제목·TitlesOfParts), 테마 이름 `원본 고객사`·색(002452/C51F2A → 중립 팔레트), `docProps/thumbnail.jpeg`, 레이아웃 텍스트(`원본 계열사B 전략팀`, `문서 표지 양식`, `ORIGINCORP CM`, `70주년 표지`), 슬라이드 내 실제 샘플 데이터(주간보고 slide2 표 본문, 이슈분석 slide 3·5~12 의 PI-I-02-xx 문항·Luxteel/Appsteel/SteelShop/E-Biz 구조) → 중립 예시. 슬라이드 수·`sourceSlide` 번호·shape id·표 좌표는 불변(렌더 코드 무수정). 검증: `unzip -p` 전 XML + `docProps` 에 브랜드·고객명·인명 0건, 렌더 테스트 초록, PDF 변환 후 육안.
 
 ### Task 17′ 추가: 깨끗한 루트 커밋
 
