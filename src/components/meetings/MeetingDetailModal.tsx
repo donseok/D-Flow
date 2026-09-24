@@ -1,0 +1,201 @@
+'use client'
+
+import { useEffect, useState, useTransition } from 'react'
+import Link from 'next/link'
+import { CalendarDays, Clock4, MapPin, Repeat, Trash2, Pencil, Ban, User, AlertTriangle, NotebookText, Megaphone, Check } from 'lucide-react'
+import type { DictKey } from '@/lib/i18n/dict'
+import type { Meeting, MeetingAttendeeInfo, MeetingOccurrence } from '@/lib/domain/types'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { Modal } from '@/components/ui/Modal'
+import { fmtDate } from '@/components/wbs/shared'
+import { MEETING_META, canEditMeeting } from '@/lib/domain/meetings'
+import { fetchMeetingDetail, cancelOccurrence, deleteMeeting } from '@/app/actions/meetings'
+import { createAnnouncementFromMeeting } from '@/app/actions/announcements'
+import { fetchMeetingMinutesLite } from '@/app/actions/minutes'
+
+type LinkedMinute = { id: string; title: string; minuteDate: string }
+
+export function MeetingDetailModal({
+  open, occurrence, currentUserId, isAdmin, onClose, onEditSeries, onChanged,
+}: {
+  open: boolean
+  occurrence: MeetingOccurrence | null
+  currentUserId: string | null
+  /** **이 회의가 속한 프로젝트의** 관리자 여부. 서버 가드(adminOrOwnerGate·createAnnouncementFromMeeting)가
+   *  회의 행의 project_id 로 requireProjectAdmin 을 하므로, 전역 '어느 프로젝트든 관리자'로는 갈라진다. */
+  isAdmin: boolean
+  onClose: () => void
+  onEditSeries: (m: Meeting) => void
+  onChanged: () => void
+}) {
+  const { t } = useLocale()
+  const [detail, setDetail] = useState<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null>(null)
+  const [minutes, setMinutes] = useState<LinkedMinute[]>([])
+  const [loading, setLoading] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [posting, startPost] = useTransition()
+  const [posted, setPosted] = useState(false)
+
+  useEffect(() => {
+    if (!open || !occurrence) {
+      setDetail(null); setMinutes([]); setConfirmDelete(false); setConfirmCancel(false); setPosted(false); setError(null); return
+    }
+    let alive = true
+    setLoading(true)
+    // 회의록 조회는 부가 정보 — 실패해도 상세 표시를 막지 않는다
+    Promise.all([
+      fetchMeetingDetail(occurrence.seriesId).catch(() => null),
+      fetchMeetingMinutesLite(occurrence.seriesId).catch(() => [] as LinkedMinute[]),
+    ])
+      .then(([d, ms]) => { if (alive) { setDetail(d); setMinutes(ms) } })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [open, occurrence])
+
+  if (!occurrence) return null
+  const meta = MEETING_META[occurrence.category]
+  const canEdit = detail ? canEditMeeting(detail.meeting, currentUserId, isAdmin) : false
+  const timeLabel = occurrence.startTime
+    ? `${occurrence.startTime}${occurrence.endTime ? `–${occurrence.endTime}` : ''}`
+    : t('meet.allDay')
+
+  const runCancel = () => startTransition(async () => {
+    const res = await cancelOccurrence(occurrence.seriesId, occurrence.occurrenceDate)
+    if (res.ok) { onChanged(); onClose() }
+    else { setError(res.error ?? t('meet.saveFailed')); setConfirmCancel(false) }
+  })
+  const runDelete = () => startTransition(async () => {
+    const res = await deleteMeeting(occurrence.seriesId)
+    if (res.ok) { onChanged(); onClose() }
+    else { setError(res.error ?? t('meet.deleteFailed')); setConfirmDelete(false) }
+  })
+  const runPost = () => startPost(async () => {
+    setError(null)
+    const res = await createAnnouncementFromMeeting(occurrence.seriesId, occurrence.occurrenceDate)
+    if (res.ok) setPosted(true)
+    else setError(res.error ?? t('meet.detail.postFailed'))
+  })
+
+  return (
+    <>
+      <Modal
+        open={open && !confirmDelete && !confirmCancel}
+        onClose={onClose}
+        eyebrow={t(meta.labelKey as DictKey)}
+        title={occurrence.title}
+        footer={canEdit ? (
+          <>
+            {isAdmin && (
+              posted ? (
+                <span className="btn btn-ghost mr-auto pointer-events-none text-progress"><Check className="h-4 w-4" />{t('meet.detail.postedAsAnnouncement')}</span>
+              ) : (
+                <button onClick={runPost} disabled={posting || pending} className="btn btn-ghost mr-auto text-brand hover:bg-brand-weak">
+                  <Megaphone className="h-4 w-4" />{posting ? t('meet.detail.posting') : t('meet.detail.postAsAnnouncement')}
+                </button>
+              )
+            )}
+            {occurrence.isRecurring && (
+              <button onClick={() => setConfirmCancel(true)} disabled={pending} className={`btn btn-ghost text-pending hover:bg-pending-weak ${isAdmin ? '' : 'mr-auto'}`}>
+                <Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}
+              </button>
+            )}
+            <button onClick={() => setConfirmDelete(true)} disabled={pending} className="btn btn-ghost text-delayed hover:bg-delayed-weak"><Trash2 className="h-4 w-4" />{t('meet.detail.deleteSeries')}</button>
+            <button onClick={() => detail && onEditSeries(detail.meeting)} disabled={pending || !detail} className="btn btn-primary"><Pencil className="h-4 w-4" />{t('meet.detail.editSeries')}</button>
+          </>
+        ) : (
+          <button onClick={onClose} className="btn btn-ghost">{t('common.close')}</button>
+        )}
+      >
+        <div className="space-y-3 text-sm">
+          <span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{t(meta.labelKey as DictKey)}</span>
+
+          {error && (
+            <p className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+            </p>
+          )}
+          <div className="flex items-center gap-2 text-ink"><CalendarDays className="h-4 w-4 text-ink-subtle" />{fmtDate(occurrence.occurrenceDate)}
+            {occurrence.isRecurring && <span className="inline-flex items-center gap-1 text-[11px] text-ink-subtle"><Repeat className="h-3 w-3" />{t('meet.recurring')}</span>}
+          </div>
+          <div className="flex items-center gap-2 text-ink"><Clock4 className="h-4 w-4 text-ink-subtle" /><span className="tabular-nums">{timeLabel}</span></div>
+          {occurrence.location && <div className="flex items-center gap-2 text-ink"><MapPin className="h-4 w-4 text-ink-subtle" />{occurrence.location}</div>}
+          {detail?.meeting.createdByName && <div className="flex items-center gap-2 text-ink-muted"><User className="h-4 w-4 text-ink-subtle" />{t('meet.detail.createdBy')}: {detail.meeting.createdByName}</div>}
+
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.attendees')}</div>
+            {loading ? <div className="text-xs text-ink-subtle">…</div>
+              : (detail?.attendees.length ?? 0) === 0 ? <div className="text-xs text-ink-subtle">{t('meet.detail.noAttendees')}</div>
+              : (
+                <div className="flex flex-wrap gap-1.5">
+                  {detail!.attendees.map(a => (
+                    <span key={a.id} className="chip bg-surface-2 text-ink">{a.name}{a.teamCode ? ` · ${a.teamCode}` : ''}</span>
+                  ))}
+                </div>
+              )}
+          </div>
+
+          {/* 연결된 회의록 — 있을 때만 노출. 클릭하면 회의록 상세로 바로 이동 */}
+          {minutes.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.linkedMinutes')}</div>
+              <ul className="space-y-1">
+                {minutes.map(mn => (
+                  <li key={mn.id}>
+                    <Link href={`/minutes/${mn.id}`} onClick={onClose}
+                      className="flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink transition hover:border-line-strong hover:bg-surface-2">
+                      <NotebookText className="h-4 w-4 shrink-0 text-brand" />
+                      <span className="shrink-0 tabular-nums text-xs text-ink-subtle">{mn.minuteDate}</span>
+                      <span className="truncate">{mn.title}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.body')}</div>
+            {loading ? <div className="text-xs text-ink-subtle">…</div>
+              : detail?.meeting.body ? <p className="whitespace-pre-wrap text-sm leading-6 text-ink-muted">{detail.meeting.body}</p>
+              : <div className="text-xs text-ink-subtle">{t('meet.detail.noBody')}</div>}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={open && confirmDelete}
+        onClose={() => { if (!pending) setConfirmDelete(false) }}
+        size="sm"
+        eyebrow="Delete meeting"
+        title={t('meet.delete.title')}
+        footer={
+          <>
+            <button onClick={() => setConfirmDelete(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
+            <button onClick={runDelete} disabled={pending} className="btn bg-delayed text-white hover:brightness-105 disabled:opacity-50">{pending ? t('meet.deleting') : t('common.delete')}</button>
+          </>
+        }
+      >
+        <p className="text-sm leading-6 text-ink-muted">{t('meet.delete.confirm')}</p>
+      </Modal>
+
+      <Modal
+        open={open && confirmCancel}
+        onClose={() => { if (!pending) setConfirmCancel(false) }}
+        size="sm"
+        eyebrow="Cancel occurrence"
+        title={t('meet.cancelOcc.title')}
+        footer={
+          <>
+            <button onClick={() => setConfirmCancel(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
+            <button onClick={runCancel} disabled={pending} className="btn bg-delayed text-white hover:brightness-105 disabled:opacity-50"><Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}</button>
+          </>
+        }
+      >
+        <p className="text-sm leading-6 text-ink-muted">{t('meet.cancelOcc.confirm')}</p>
+      </Modal>
+    </>
+  )
+}

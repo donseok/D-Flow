@@ -1,0 +1,426 @@
+'use client'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  Bot, CalendarDays, ChevronLeft, ChevronRight, Download, LayoutGrid, List, ListTree, Plus, Search,
+} from 'lucide-react'
+import type { ExplorerData, ExplorerLeaf, Minute, MinuteFolder, TeamCode } from '@/lib/domain/types'
+import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
+import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
+import { queueUiPref } from '@/lib/prefs/debouncedSave'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { CardSkeleton } from '@/components/ui/Skeleton'
+import { useToast } from '@/components/ui/Toast'
+import { teamStyle } from '@/components/wbs/shared'
+import { MinutesCalendar } from './MinutesCalendar'
+import { MinuteUploadModal } from './MinuteUploadModal'
+import { ArchiveChatPanel } from './ArchiveChatPanel'
+import { MinutesExplorer, type ExplorerLayout } from './MinutesExplorer'
+import { filenameFromContentDisposition } from './download'
+
+type ViewKey = 'list' | 'calendar' | 'tree'
+type TreeState = 'idle' | 'loading' | 'error' | ExplorerData
+type TeamKey = 'ALL' | TeamCode
+
+function monthRangeOf(year: number, month0: number): [string, string] {
+  const last = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate()
+  const mm = String(month0 + 1).padStart(2, '0')
+  return [`${year}-${mm}-01`, `${year}-${mm}-${String(last).padStart(2, '0')}`]
+}
+
+export function MinutesView({
+  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, role, defaultTeam,
+  initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
+  adminProjectIds = [], isSuperuser = false,
+}: {
+  initialMinutes: Minute[]
+  /** 서버에서 미리 실어 보낸 트리. null 이면(조회 실패 포함) 마운트 후 클라이언트가 직접 가져온다. */
+  initialTree?: ExplorerData | null
+  todayIso: string
+  initialView: ViewKey
+  projects: { id: string; name: string }[]
+  currentUserId: string | null
+  /** 전역 shim — 이 화면은 프로젝트가 섞인 목록이라 **폴더 조작(전역)과 업로드 자격**에만 쓴다.
+   *  회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
+  role: string | null
+  /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
+  adminProjectIds?: string[]
+  /** 슈퍼유저 — 프로젝트 미지정 회의록은 작성자 본인 또는 슈퍼유저만 조작 가능. */
+  isSuperuser?: boolean
+  defaultTeam?: TeamCode | null
+  /** 서버에서 미리 실어 보낸 즐겨찾기 id 목록. null 이면(조회 실패·미로그인) 트리 뷰 진입 시 클라이언트가 직접 가져온다. */
+  initialFavorites?: string[] | null
+  explorerLayout?: ExplorerLayout
+  /** 내가 멤버로 등록된 프로젝트 id — 업로드·수정 모달의 프로젝트 기본 선택 근거. */
+  myProjectIds?: string[] | null
+}) {
+  const router = useRouter()
+  const { t, locale } = useLocale()
+  const { toast } = useToast()
+  const teamCodes = useTeamCodes()
+  const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
+  const [year, setYear] = useState(initY)
+  const [month0, setMonth0] = useState((initM || 1) - 1)
+  // 리스트 뷰 폐지(사용자 결정 2026-07-24) — 구 저장값('list')은 트리로 정규화.
+  // 리스트 렌더 경로 자체는 검색 결과 표시용으로 남는다(isSearch).
+  const [view, setView] = useState<ViewKey>(initialView === 'list' ? 'tree' : initialView)
+  const [team, setTeam] = useState<TeamKey>('ALL')
+  const [minutes, setMinutes] = useState<Minute[]>(initialMinutes)
+  const [query, setQuery] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [searching, setSearching] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const reqRef = useRef(0)
+  // 서버가 트리를 실어 보냈으면 그대로 초기값으로 쓴다 — 아래 마운트 effect 와 changeView 는
+  // 둘 다 'idle'/비객체일 때만 조회하므로 자동으로 no-op 이 되어 왕복이 사라진다.
+  // 서버 조회가 실패해 null 이면 'idle' 로 떨어져 기존 클라이언트 폴백 경로가 그대로 산다.
+  const [treeState, setTreeState] = useState<TreeState>(initialTree ?? 'idle')
+  // 트리 전용 세대 카운터 — reqRef(월 목록·검색)와 분리. 공유하면 트리 로딩 중 검색·팀 변경이
+  // 트리 응답을 폐기해 'loading'에 갇힌다(스펙 'MinutesView 통합' 절).
+  const treeReqRef = useRef(0)
+
+  // 즐겨찾기 — 뷰 전환 언마운트에도 살아야 하므로 탐색기가 아닌 여기 소유. initialTree 계약과 대칭:
+  // 서버 프리페치가 있으면 재조회 없음, null(실패/미로그인)이면 'idle' → 트리 뷰 진입 시 1회 폴백.
+  const [favState, setFavState] = useState<'idle' | 'loading' | 'error' | Set<string>>(
+    initialFavorites != null ? new Set(initialFavorites) : 'idle')
+  const favReqRef = useRef(0)
+
+  // 탐색기 레이아웃 — favState와 동일한 이유로 여기 소유(뷰 전환 언마운트에도 생존해야 함).
+  const [exLayout, setExLayout] = useState<ExplorerLayout>(explorerLayout)
+  // 업로드 모달의 기본 폴더 — 탐색기에서 폴더를 선택 중이면 업로드가 그 폴더로 기본 지정되게 한다.
+  const uploadFolderRef = useRef<string | null>(null)
+  function changeExplorerLayout(v: ExplorerLayout) {
+    setExLayout(v)
+    queueUiPref({ minutesExplorerLayout: v })
+  }
+
+  async function loadFavorites() {
+    const gen = ++favReqRef.current
+    setFavState('loading')
+    const res = await fetchMinuteFavorites()
+    if (favReqRef.current !== gen) return
+    setFavState(res ? new Set(res) : 'error')
+  }
+
+  async function toggleFav(id: string) {
+    if (!(favState instanceof Set)) return
+    const on = !favState.has(id)
+    setFavState(cur => {
+      if (!(cur instanceof Set)) return cur
+      const next = new Set(cur); if (on) next.add(id); else next.delete(id); return next
+    })
+    const ok = await toggleMinuteFavorite(id, on)
+    if (!ok) {
+      // 해당 id 만 외과적으로 되돌린다 — 연타 시 다른 토글 결과를 덮지 않도록 전체 스냅숏 복원 금지
+      setFavState(cur => {
+        if (!(cur instanceof Set)) return cur
+        const next = new Set(cur); if (on) next.delete(id); else next.add(id); return next
+      })
+      toast({ title: t('min.exp.favToggleError'), variant: 'error' })
+    }
+  }
+
+  const canUpload = role !== null
+  const teamOrNull = team === 'ALL' ? null : team
+  const isSearch = query.trim().length > 0
+  const isTreeExplorer = view === 'tree' && !isSearch
+
+  async function loadTree() {
+    const gen = ++treeReqRef.current
+    // 이미 데이터가 있으면 스켈레톤으로 갈아끼우지 않는다(silent refresh) — 로딩 전환이
+    // 탐색기를 언마운트해 스코프·펼침·더 보기가 CRUD 때마다 리셋되는 문제를 막는다.
+    // 최초 진입(idle)·에러 재시도는 기존대로 스켈레톤.
+    if (typeof treeState !== 'object') setTreeState('loading')
+    const res = await fetchMinutesExplorer()
+    if (treeReqRef.current !== gen) return
+    setTreeState(res ?? 'error')
+  }
+
+  async function loadMonth(y: number, m0: number, tk: TeamKey) {
+    const gen = ++reqRef.current
+    const [rs, re] = monthRangeOf(y, m0)
+    const rows = await fetchMinutesRange(rs, re, tk === 'ALL' ? null : tk)
+    if (reqRef.current === gen) setMinutes(rows)
+  }
+  function shift(delta: number) {
+    if (isSearch) return
+    const base = new Date(Date.UTC(year, month0 + delta, 1))
+    const y = base.getUTCFullYear(); const m0 = base.getUTCMonth()
+    setYear(y); setMonth0(m0)
+    setSelectedDate(null)
+    void loadMonth(y, m0, team)
+  }
+  function changeTeam(tk: TeamKey) {
+    setTeam(tk)
+    setSelectedDate(null)
+    if (isSearch) void runSearch(query, tk)
+    else void loadMonth(year, month0, tk)
+  }
+  async function runSearch(q: string, tk: TeamKey) {
+    const gen = ++reqRef.current
+    if (!q.trim()) { void loadMonth(year, month0, tk); return }
+    setSearching(true)
+    const rows = await fetchMinutesSearch(q, tk === 'ALL' ? null : tk)
+    if (reqRef.current === gen) { setMinutes(rows); setSearching(false) }
+  }
+  function changeView(v: ViewKey) {
+    setView(v)
+    queueUiPref({ minutesView: v })
+    if (v === 'tree' && typeof treeState !== 'object' && treeState !== 'loading') void loadTree()
+    if (v === 'tree' && favState === 'idle') void loadFavorites()
+  }
+
+  async function downloadAllMinutes() {
+    setExportBusy(true)
+    try {
+      const res = await fetch('/api/minutes/export')
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        toast({
+          title: t('min.export.failed'),
+          description: payload?.error ?? `${t('min.export.failed')} (${res.status})`,
+          variant: 'error',
+        })
+        return
+      }
+
+      const blob = await res.blob()
+      const name = filenameFromContentDisposition(
+        res.headers.get('Content-Disposition'),
+        'minutes.zip',
+      )
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+      } finally {
+        URL.revokeObjectURL(objectUrl)
+      }
+    } catch {
+      toast({
+        title: t('min.export.failed'),
+        description: t('min.export.networkError'),
+        variant: 'error',
+      })
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  // initialView가 'tree'(계정 prefs)로 마운트된 경우의 최초 조회.
+  // deps를 [view]로 제한 — treeState를 넣으면 조회 실패('error') 시 effect가 재발화해 무한 재시도가 된다.
+  useEffect(() => {
+    if (view === 'tree' && treeState === 'idle') void loadTree()
+    if (view === 'tree' && favState === 'idle') void loadFavorites()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
+
+  // 일자별 그룹(내림차순)
+  const groups = useMemo(() => {
+    const map = new Map<string, Minute[]>()
+    for (const mi of minutes) {
+      const arr = map.get(mi.minuteDate) ?? []
+      arr.push(mi); map.set(mi.minuteDate, arr)
+    }
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
+  }, [minutes])
+
+  const ymLabel = `${year}-${String(month0 + 1).padStart(2, '0')}`
+
+  // 팀 탭은 재조회 없이 리프만 클라이언트 필터(폴더 레일은 항상 전부 — 스펙 v2)
+  const explorerLeaves: ExplorerLeaf[] = typeof treeState === 'object'
+    ? (team === 'ALL' ? treeState.leaves : treeState.leaves.filter(l => l.teamCode === team))
+    : []
+  const explorerFolders: MinuteFolder[] = typeof treeState === 'object' ? treeState.folders : []
+
+  return (
+    <div
+      data-minutes-view
+      className={isTreeExplorer
+        ? 'space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0'
+        : 'space-y-4'}
+    >
+      {/* 필터 바 (스크롤 시 상단 고정) */}
+      <div className="sticky top-0 z-20 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedTabs<TeamKey>
+            tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
+            value={team} onChange={changeTeam} size="sm" />
+          <div className="flex items-center gap-1">
+            <button onClick={() => shift(-1)} disabled={isSearch || view === 'tree'} className="chrome-icon disabled:opacity-40" aria-label="prev month">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[84px] text-center text-sm font-semibold tabular-nums">
+              {view === 'tree' && !isSearch ? t('min.tree.allPeriod') : ymLabel}
+            </span>
+            <button onClick={() => shift(1)} disabled={isSearch || view === 'tree'} className="chrome-icon disabled:opacity-40" aria-label="next month">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="relative w-full sm:w-auto">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+            <input value={query}
+              onChange={e => { setQuery(e.target.value); void runSearch(e.target.value, team) }}
+              placeholder={t('min.search.placeholder')}
+              className="app-input h-9 w-full pl-8 sm:w-40" />
+          </div>
+          <div data-minutes-toolbar-actions className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5">
+              <SegmentedTabs<ViewKey>
+                tabs={[{ key: 'tree', label: t('min.view.tree'), icon: ListTree },
+                       { key: 'calendar', label: t('min.view.calendar'), icon: CalendarDays }]}
+                value={isSearch ? 'list' : view} onChange={changeView} size="sm" />
+              {view === 'tree' && !isSearch && (
+                <div data-minutes-tree-layout>
+                  <SegmentedTabs<ExplorerLayout>
+                    tabs={[{ key: 'grid', label: t('min.exp.layout.grid'), icon: LayoutGrid },
+                           { key: 'list', label: t('min.exp.layout.list'), icon: List }]}
+                    value={exLayout} onChange={changeExplorerLayout} size="sm" />
+                </div>
+              )}
+            </div>
+            <button onClick={() => void downloadAllMinutes()} disabled={exportBusy}
+              aria-busy={exportBusy} className="btn">
+              <Download className="h-4 w-4" />
+              {exportBusy ? t('min.export.progress') : t('min.export.all')}
+            </button>
+            <button onClick={() => setChatOpen(true)} className="btn">
+              <Bot className="h-4 w-4" />{t('min.chat.archive.title')}
+            </button>
+            {/* 조회 전용에게는 숨긴다 — 서버 createMinute 의 최소 자격이 '어느 프로젝트든 역할 보유'
+                (hasAnyProjectRole)이고, 전역 shim role!==null 이 그와 같은 의미다(스펙 §6.3). */}
+            {canUpload && (
+              <button onClick={() => setUploadOpen(true)} className="btn btn-primary">
+                <Plus className="h-4 w-4" />{t('min.upload.short')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {isSearch && minutes.length >= 100 && (
+        <p className="text-xs text-ink-subtle">{t('min.search.truncated')}</p>
+      )}
+
+      {/* 검색 결과 리스트 — 리스트 '뷰'는 폐지됐고 이 렌더는 검색 전용으로만 남는다 */}
+      {isSearch && (
+        groups.length === 0 ? (
+          <EmptyState title={t('min.empty.title')} description={t('min.empty.desc')} />
+        ) : (
+          <div className="space-y-4">
+            {groups.map(([date, rows]) => (
+              <section key={date} className="card p-3">
+                <h3 className="mb-2 px-1 text-sm font-semibold text-ink-muted">{date}</h3>
+                <ul className="divide-y divide-line/70">
+                  {rows.map(mi => (
+                    <li key={mi.id}>
+                      <Link href={`/minutes/${mi.id}`}
+                        className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
+                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white ${teamStyle(mi.teamCode).bar}`}>
+                          {mi.teamCode}
+                        </span>
+                        <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
+                        <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* 달력 뷰 */}
+      {view === 'calendar' && !isSearch && (
+        <div className="space-y-3">
+          <MinutesCalendar year={year} month0={month0} todayIso={todayIso}
+            minutes={minutes} onSelectDate={d => setSelectedDate(prev => (prev === d ? null : d))}
+            selectedDate={selectedDate} />
+          {selectedDate && (
+            <section className="card p-3">
+              <h3 className="mb-2 px-1 text-sm font-semibold text-ink-muted">{selectedDate}</h3>
+              <ul className="divide-y divide-line/70">
+                {minutes.filter(mi => mi.minuteDate === selectedDate).map(mi => (
+                  <li key={mi.id}>
+                    <Link href={`/minutes/${mi.id}`}
+                      className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
+                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white ${teamStyle(mi.teamCode).bar}`}>
+                        {mi.teamCode}
+                      </span>
+                      <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
+                      <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* 트리 뷰 (검색 중에는 강제 리스트) */}
+      {view === 'tree' && !isSearch && (
+        treeState === 'idle' || treeState === 'loading' ? (
+          <CardSkeleton lines={8} />
+        ) : treeState === 'error' ? (
+          // 조용한 빈 화면 금지 — EmptyState('회의록 없음')로 위장하지 않고 에러를 표시한다
+          <EmptyState title={t('min.tree.error')}
+            action={<button onClick={() => void loadTree()} className="btn">{t('min.tree.retry')}</button>} />
+        ) : (
+          <div className="space-y-2 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-2 lg:space-y-0">
+            {treeState.truncated && (
+              <p className="shrink-0 text-xs text-ink-subtle">
+                {t('min.tree.truncated').replace('{n}', String(MINUTES_TREE_LIMIT))}
+              </p>
+            )}
+            <MinutesExplorer folders={explorerFolders} leaves={explorerLeaves}
+              favorites={favState instanceof Set ? favState : null}
+              onToggleFavorite={id => void toggleFav(id)}
+              onRetryFavorites={() => void loadFavorites()}
+              layout={exLayout}
+              currentUserId={currentUserId} isFolderAdmin={role === 'pmo_admin'}
+              adminProjectIds={adminProjectIds} isSuperuser={isSuperuser} teamCodes={teamCodes}
+              projects={projects} myProjectIds={myProjectIds}
+              onChanged={() => { void loadTree(); router.refresh() }}
+              onFolderSelect={id => { uploadFolderRef.current = id }} />
+          </div>
+        )
+      )}
+
+      {/* 업로드 모달 — 열 때마다 리마운트해 이전 입력(첨부·제목)이 잔존하지 않게 함 */}
+      {uploadOpen && (
+        <MinuteUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)}
+          onSaved={() => {
+            setUploadOpen(false)
+            if (isSearch) void runSearch(query, team); else void loadMonth(year, month0, team)
+            // 트리 데이터가 있으면 최신화. 서버 프리페치(initialTree)가 들어온 경우 treeState 는
+            // 마운트 시점부터 객체라 이 가드는 사실상 항상 참이다 — 업로드 후 트리가 갱신되게
+            // 하는 것이 목적이므로 의도한 동작이다. 가드를 좁히지 말 것(갱신 누락 버그가 된다).
+            // 'idle'로 남는 건 프리페치가 없었던 경우뿐이고, 그때는 트리 진입 시 조회된다.
+            if (treeState !== 'idle') void loadTree()
+            router.refresh()
+          }}
+          todayIso={todayIso} projects={projects} defaultTeam={defaultTeam} myProjectIds={myProjectIds}
+          folders={explorerFolders} defaultFolderId={uploadFolderRef.current} />
+      )}
+      {/* 트리 뷰는 화면이 전 기간이므로 챗 범위도 전 기간으로 일치시킨다(월 라벨 '전체 기간'과 정합) */}
+      <ArchiveChatPanel open={chatOpen} onClose={() => setChatOpen(false)}
+        team={teamOrNull}
+        from={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[0]}
+        to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />
+      {void locale}
+    </div>
+  )
+}

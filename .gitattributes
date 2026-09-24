@@ -1,0 +1,2 @@
+# 스냅샷은 테스트가 renderLiveCatalogSnapshot 출력과 바이트 단위로 맞댄다 — Windows 체크아웃에서 CRLF 로 바뀌지 않게.
+docs/baseline/*.md text eol=lf

@@ -1,0 +1,54 @@
+name: ci
+on:
+  push: { branches: [main, staging, 'sp0/**', 'ui/**'] }
+  pull_request: {}
+permissions: { contents: read }
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+        env:
+          # 빌드는 env 존재만 요구한다 — 원격 DB 에 접속하지 않는 더미 값.
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy
+          SUPABASE_SERVICE_ROLE_KEY: ci-dummy
+  db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: 2.75.0 }
+      - run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor
+      # scripts/baseline-diff.mjs 의 기본 모드는 적용된 마이그레이션이 정확히 {0000, 0001} 일
+      # 때만 대조한다(로컬 DB + 커밋된 파일만 있으면 된다 — raw 덤프 불필요). 기준선 뒤 마이그레이션
+      # (0002+)이 있으므로 기준선까지만 재생해 대조하고, 그 뒤 나머지를 `migration up` 으로 적용해 0002+ 도
+      # 기준선 위에 깨끗하게 올라가는지 본다. 게이트를 느슨하게 하지 않는다 — 기준선 대조는 기준선 상태에서만.
+      # 두 번째 `db reset` 대신 `migration up` 을 쓰는 이유: reset 은 storage·realtime 을 재시작하는데, 두 컨테이너의
+      # IP 가 뒤바뀌면 Kong 이 옛 주소를 붙들어 CLI 의 `GET /storage/v1/bucket` 이 502 로 끝난다(2026-09-24 로컬 실측).
+      # `migration up` 은 DB 를 다시 만들지도, 서비스를 재시작하지도 않는다.
+      # 남은 한 번의 reset 도 같은 경합에 노출된다 — 실패하면 Kong 을 재시작해 옛 upstream IP 를 비우고 최대 3회까지 다시 한다.
+      # 횟수를 묶어 두므로 진짜 마이그레이션 실패는 3회 뒤 그대로 빨갛게 끝난다(run 은 bash -e 라 if 로 받는다).
+      - name: db reset to baseline (retry on Kong 502)
+        run: |
+          for i in 1 2 3; do
+            if supabase db reset --version 0001; then break; fi
+            if [ "$i" = 3 ]; then echo "db reset failed 3x"; exit 1; fi
+            echo "attempt $i failed — restarting kong (stale upstream IP, see docs/baseline/sp0-e2e.md §9)"
+            docker restart supabase_kong_d-flow; sleep 10
+          done
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node scripts/baseline-diff.mjs
+      - run: supabase migration up --local

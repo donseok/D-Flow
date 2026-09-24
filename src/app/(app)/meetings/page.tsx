@@ -1,0 +1,58 @@
+import { CalendarClock, CalendarCheck, CalendarRange } from 'lucide-react'
+import { t } from '@/lib/i18n/dict'
+import { getServerLocale } from '@/lib/i18n/server'
+import { getMyMeetings } from '@/lib/data/meetings'
+import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
+import { getSession } from '@/lib/auth'
+import { getActorForView } from '@/lib/authz'
+import { adminProjectIds } from '@/lib/domain/authz'
+import { PageHero, HeroBadge } from '@/components/ui/PageHero'
+import { KpiCard } from '@/components/ui/KpiCard'
+import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
+import { seoulToday } from '@/lib/domain/dates'
+
+function monthGrid(todayIso: string): [string, string] {
+  const [y, m] = todayIso.split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1, 1)); const dow = first.getUTCDay()
+  const s = new Date(Date.UTC(y, m - 1, 1 - dow)); const e = new Date(Date.UTC(y, m - 1, 1 - dow + 41))
+  const f = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+  return [f(s), f(e)]
+}
+
+export default async function MyMeetingsPage() {
+  const today = seoulToday()
+  const [gs, ge] = monthGrid(today)
+  const [{ meetings, exceptions }, m, user, locale] = await Promise.all([
+    getMyMeetings(gs, ge),
+    getActorForView(),
+    getSession(),
+    getServerLocale(),
+  ])
+  const mineOcc = expandMeetings(meetings.filter(x => x.isMine), exceptions, gs, ge)
+  const { today: todayN, upcoming7d, total } = summarizeMeetings(mineOcc, today)
+
+  return (
+    <ProjectPageShell
+      hero={<PageHero
+        eyebrow="MY MEETINGS"
+        badge={<HeroBadge>My Meetings</HeroBadge>}
+        title={t(locale, 'meet.myHeroTitle')}
+        description={t(locale, 'meet.myHeroDesc')}
+        heroKpis={
+          <>
+            <KpiCard variant="hero" label="TODAY" value={todayN} sub={t(locale, 'meet.kpi.todaySub')} icon={CalendarCheck} tone="brand" />
+            <KpiCard variant="hero" label="NEXT 7 DAYS" value={upcoming7d} sub={t(locale, 'meet.kpi.upcomingSub')} icon={CalendarClock} tone="warning" />
+            <KpiCard variant="hero" label="THIS MONTH" value={total} sub={t(locale, 'meet.kpi.totalSub')} icon={CalendarRange} tone="success" />
+          </>
+        }
+      />}
+    >
+      {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
+          클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
+      <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions}
+        todayIso={today} currentUserId={user?.id ?? null}
+        adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
+    </ProjectPageShell>
+  )
+}

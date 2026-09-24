@@ -1,0 +1,54 @@
+import { type NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+
+export async function middleware(req: NextRequest) {
+  // { request: req } 전파가 핵심이다(2026-08-18 수정, supabase 공식 패턴): 토큰 갱신 시
+  // 갱신 쿠키를 req.cookies 에도 써서 **같은 요청의 RSC 가 새 토큰을 보게** 한다.
+  // 종전엔 res 에만 실어 브라우저는 받지만 당장의 렌더는 만료 토큰으로 조회했고,
+  // RLS(to authenticated) 미매칭이 에러가 아니라 200+빈배열로 와 조용한 빈 화면이 됐다.
+  let res = NextResponse.next({ request: req })
+  const sb = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => req.cookies.getAll(),
+        setAll: (toSet) => {
+          toSet.forEach(({ name, value }) => req.cookies.set(name, value))
+          // 갱신된 req 를 다시 물려 만들어야 RSC 로 가는 요청 헤더에 새 쿠키가 실린다.
+          res = NextResponse.next({ request: req })
+          toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+        },
+      },
+    },
+  )
+  // getUser() 가 아니라 getClaims() 를 쓴다 — getUser() 는 매 요청 GoTrue /auth/v1/user 로
+  // 네트워크 왕복을 강제하지만(클릭당 100~180ms), 이 프로젝트의 JWT 는 비대칭 서명(ES256/EC,
+  // JWKS 키 1개·대칭 oct 키 없음)이라 getClaims() 가 JWKS 캐시로 로컬 서명 검증만 하고 끝난다.
+  // (대칭 HS* 키였다면 getClaims 가 내부적으로 getUser() 로 폴백해 이득이 0이 된다.)
+  //
+  // 쿠키를 직접 디코드하는 방식으로 바꾸지 말 것: 이 호출은 인증 게이트인 동시에 토큰 자동
+  // 갱신 지점이다. getClaims() → getSession() → 만료 시 _callRefreshToken 경로가 갱신 토큰을
+  // 발급하고, 위 setAll 이 그 쿠키를 res 에 싣는다. RSC 클라이언트는 Next 15 에서 쿠키 쓰기가
+  // 막혀 있어 갱신을 영속할 수 없으므로, 여기서 갱신이 빠지면 액세스 토큰 수명(기본 1h) 뒤
+  // 사용자가 조용히 로그아웃된다.
+  const { data } = await sb.auth.getClaims()
+  const isLogin = req.nextUrl.pathname.startsWith('/login')
+  if (!data?.claims && !isLogin) {
+    // 리다이렉트에도 갱신 쿠키를 실어 보낸다 — 안 실으면 방금 갱신된 세션이 유실된다.
+    const redirect = NextResponse.redirect(new URL('/login', req.url))
+    res.cookies.getAll().forEach(c => redirect.cookies.set(c))
+    return redirect
+  }
+  return res
+}
+
+// 정적 자산(로고 등 public 이미지·아이콘)·API·로그인 경로는 인증 리다이렉트에서 제외 —
+// 미제외 시 로그인 페이지의 public 이미지 요청이 /login 으로 307 되어 이미지가 깨진다.
+// API 엔드포인트는 라우트 핸들러에서 인증을 처리하므로 middleware 제외.
+// /share/** 는 비로그인 외부 열람 경로 — 토큰 검증은 페이지가 수행.
+// /invite/** 는 비로그인 초대 수령 경로 — 링크만으로 가입·합류하므로 세션이 없다.
+// `share/`·`invite/` 로 앵커: 접두사만 쓰면 /share-xxx 같은 미래 경로까지 인증이 풀린다.
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|login|api|share/|invite/|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico)).*)'],
+}

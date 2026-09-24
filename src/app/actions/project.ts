@@ -1,0 +1,255 @@
+'use server'
+import { cache } from 'react'
+import { createServerClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getActorViewState, requireProjectAdmin, requireSuperuser } from '@/lib/authz'
+import { canSeeProject } from '@/lib/domain/authz'
+import { isValidDateRange } from '@/lib/domain/validate'
+import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
+import { validateStageCredits } from '@/lib/domain/stageCredits'
+import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
+import { recordProgressSnapshot } from '@/lib/data/snapshots'
+
+export async function listProjects() {
+  return (await listProjectsWithState()).projects
+}
+
+/**
+ * listProjects 와 같은 폴백을 하되 **실패했다는 사실을 함께 돌려준다**.
+ *
+ * `[]` 하나로는 "프로젝트가 없는 계정"과 "목록을 못 읽은 상태"가 구분되지 않는다.
+ * REST 장애 때 화면이 후자를 전자로 그려 '첫 프로젝트를 만들어 보세요' 를
+ * 띄웠다 — 데이터가 멀쩡한데 신규 가입자 화면처럼 보였다. 로그는 남았지만 표시가 없었다.
+ */
+export async function listProjectsWithState() {
+  // 인증 재확인은 getActorViewState 안의 getUser 가 겸한다 — 별도 getSession 선행 게이트를
+  // 두면 그 한 번의 왕복이 모든 호출부(레이아웃 포함)의 직렬 1단이 된다(2026-08-18 성능 감사).
+  // 비로그인: actor 가 null(degraded=false)이고 fetchProjects 는 RLS(authenticated 읽기)로
+  // 빈 배열이므로 종전의 { projects: [], degraded: false } 와 동일한 결과가 된다.
+  // (조기 반환이 Promise.all 뒤로 옮겨져 버려지는 프라미스가 없다 — unhandled rejection 흡수 불필요.)
+  const [{ data, error }, actorState] = await Promise.all([fetchProjects(), getActorViewState()])
+  const actor = actorState.actor
+  if (!actor && !actorState.degraded) return { projects: [] as ProjectRow[], degraded: false }
+  // 순수 표시용 조회라 폴백([])을 유지한다 — throw 하면 (app)/layout.tsx 가 호출하므로
+  // 프로젝트 목록 하나 깨진 것으로 앱 전 페이지가 에러 화면이 된다(로그인 후 아무 데도 못 감).
+  // 이 목록의 '0건'을 근거로 쓰기/삭제를 판단하는 경로는 없어서(생성은 채번·중복검사에 쓰지 않음)
+  // 데이터가 손상되지는 않는다. 대신 빈 사이드바의 원인이 사라지지 않도록 로그는 반드시 남긴다.
+  if (error) console.error('[listProjects] 조회 실패:', error.message)
+  // 비공개 프로젝트(0070)는 역할 보유자·슈퍼유저에게만. 권한 조회 실패(actor null)면
+  // 비공개만 빠진 채 공개 목록은 유지된다 — fail-closed 이되 화면 전체를 죽이지 않는다.
+  const visible = (data ?? []).filter(p => canSeeProject(actor, p))
+  return { projects: visible, degraded: Boolean(error) }
+}
+
+type ProjectRow = NonNullable<Awaited<ReturnType<typeof fetchProjects>>['data']>[number]
+
+// cache(): 레이아웃과 페이지(예: wiki)가 같은 요청에서 listProjectsWithState 를 각자 불러도
+// projects 조회는 1회만 나간다. 'use server' 파일의 export 는 async 함수여야 하므로
+// 모듈 내부 헬퍼에만 래핑한다.
+const fetchProjects = cache(async () => {
+  const sb = await createServerClient()
+  return sb.from('projects').select('*').order('created_at', { ascending: false })
+})
+
+/** 마일스톤 카드 키워드 기본값 — 빈 배열이면 카드가 무증상 소실된다(§7.4). 설정 화면에서 편집하는 UI 는 아직 없다(열린 항목). */
+const DEFAULT_MILESTONE_KEYWORDS = ['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
+
+export async function createProject(
+  name: string,
+  start: string | null,
+  end: string | null,
+  description: string | null,
+  levelLabels: string[],
+) {
+  // 프로젝트 생성은 전역 관리 — 슈퍼유저만.
+  const g = await requireSuperuser()
+  if (!g.ok) throw new Error(g.error)
+  if (!isValidDateRange(start || null, end || null)) throw new Error('종료일은 시작일보다 빠를 수 없습니다.')
+  // 호출부 타입을 우회한 값(예: 폼 라이브러리·직렬화 손상)이 들어오면 validateLevelSettings 의
+  // .map((l) => l.trim()) 에서 알아보기 힘든 TypeError 로 죽는다 — 여기서 먼저 명확히 거부한다.
+  if (!Array.isArray(levelLabels) || levelLabels.some((l) => typeof l !== 'string')) {
+    throw new Error('단계 입력이 올바르지 않습니다.')
+  }
+  // 프리셋 없음(결정 5) — 단계 라벨은 생성자가 입력한다. 검증은 설정 화면과 같은 순수 함수.
+  const lv = validateLevelSettings({ labels: levelLabels, currentTreeMaxDepth: null })
+  if (!lv.ok) throw new Error(lv.error)
+  // project_settings 는 쓰기 정책이 없다(0058 — service_role 전용 관문) — admin 클라이언트가 필요하다.
+  // projects insert 보다 먼저 만든다 — service_role env 미설정 같은 구성 오류를 아무것도 쓰기 전에 잡는다.
+  const admin = createAdminClient()
+  const sb = await createServerClient()
+  const { data, error } = await sb
+    .from('projects')
+    .insert({ name, start_date: start, end_date: end, description })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  const { error: settingsErr } = await admin.from('project_settings').insert({
+    project_id: data.id,
+    level_labels: lv.labels,
+    max_depth: lv.maxDepth,
+    extra_axis_label: null,
+    milestone_keywords: DEFAULT_MILESTONE_KEYWORDS,
+  })
+  if (settingsErr) {
+    // projects·project_settings insert 가 트랜잭션으로 묶여 있지 않다 — 설정 저장이 실패하면
+    // 설정 없는 반쪽짜리 프로젝트가 남는다(getProjectConfig 가 폴백 라벨로 덮어 사용자 입력이
+    // 조용히 사라진다). 되돌려서 재시도를 안전하게 만든다. TODO(SP3): 두 insert 를 트랜잭션
+    // RPC 로 묶어 이 보정 삭제 자체를 없앤다.
+    console.error('[createProject] project_settings 저장 실패 — 프로젝트 되돌리기 시도:', settingsErr.message, 'project_id:', data.id)
+    const { error: delErr } = await admin.from('projects').delete().eq('id', data.id)
+    if (delErr) {
+      console.error('[createProject] 되돌리기도 실패 — 프로젝트 행이 남았다:', delErr.message, 'project_id:', data.id)
+      throw new Error(
+        `프로젝트 생성에 실패했고(${settingsErr.message}) 되돌리기도 실패했습니다(${delErr.message}). ` +
+          `프로젝트 행(id: ${data.id})이 남아 있으니 관리자에게 문의하세요.`,
+      )
+    }
+    throw new Error('프로젝트 생성에 실패했습니다. 다시 시도해 주세요.')
+  }
+  revalidatePath('/projects')
+}
+
+export async function updateProject(
+  projectId: string,
+  fields: { name?: string; description?: string | null; start_date?: string | null; end_date?: string | null },
+): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  const patch: Record<string, unknown> = {}
+  if (fields.name !== undefined) {
+    if (!fields.name.trim()) return { ok: false, error: '프로젝트명을 입력하세요' }
+    patch.name = fields.name.trim()
+  }
+  if (fields.description !== undefined) patch.description = fields.description?.trim() || null
+  if (fields.start_date !== undefined) patch.start_date = fields.start_date || null
+  if (fields.end_date !== undefined) patch.end_date = fields.end_date || null
+  if (Object.keys(patch).length === 0) return { ok: true }
+  const sb = await createServerClient()
+  // 날짜가 패치에 포함될 때만 범위 검증. 한쪽만 온 부분 패치는 DB 현재값과 병합해 비교(우회 방지).
+  if ('start_date' in patch || 'end_date' in patch) {
+    let start = patch.start_date as string | null | undefined
+    let end = patch.end_date as string | null | undefined
+    if (start === undefined || end === undefined) {
+      const { data: cur, error: curErr } = await sb.from('projects').select('start_date,end_date').eq('id', projectId).single()
+      // 현재값 조회 실패 시 검증 불가 — 통과시키지 않고 저장을 중단한다.
+      if (curErr || !cur) return { ok: false, error: curErr?.message || '프로젝트를 찾을 수 없습니다.' }
+      if (start === undefined) start = (cur.start_date as string | null) ?? null
+      if (end === undefined) end = (cur.end_date as string | null) ?? null
+    }
+    if (!isValidDateRange(start, end)) return { ok: false, error: '종료일은 시작일보다 빠를 수 없습니다.' }
+  }
+  const { error } = await sb.from('projects').update(patch).eq('id', projectId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/projects')
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+/**
+ * WBS 단계(레벨) 설정 변경 — 라벨 배열이 곧 깊이(labels.length = max_depth).
+ * 기존 트리보다 얕게 줄이는 변경은 거부한다(깊은 노드가 라벨 범위 밖으로 유령이 된다).
+ * project_settings 는 쓰기 정책이 없어(0058 — service_role 전용 관문) admin 클라이언트로 쓴다.
+ */
+export async function updateLevelSettings(projectId: string, labels: string[]): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+
+  // 축소 검증용 선행 조회 — 실패하면 중단한다(검증 불가를 통과로 위장하지 않는다).
+  const sb = await createServerClient()
+  const { data: rows, error: rowsErr } = await sb.from('wbs_items').select('id,parent_id').eq('project_id', projectId)
+  if (rowsErr || !rows) return { ok: false, error: rowsErr?.message || 'WBS 조회에 실패했습니다.' }
+
+  const v = validateLevelSettings({ labels, currentTreeMaxDepth: treeMaxDepth(rows) })
+  if (!v.ok) return { ok: false, error: v.error }
+
+  // 행 없음 = 기본값 계약(0058)이라 기존 행이 없을 수 있다 — upsert.
+  const admin = createAdminClient()
+  const { error } = await admin.from('project_settings').upsert({
+    project_id: projectId,
+    level_labels: v.labels,
+    max_depth: v.maxDepth,
+    updated_at: new Date().toISOString(),
+    updated_by: g.actor.userId,
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+/**
+ * 단계 전이 실적 크레딧 표(스펙 2026-09-15 §3.3·§5.1) — 관리자 전용. 검증 정본은 순수 함수(validateStageCredits)이고
+ * 여기는 가드·저장만 한다. 저장은 소급하지 않는다 — 이미 기록된 actual_pct 는 그대로, 다음 단계 전이부터 새 값이 쓰인다.
+ * project_settings 는 쓰기 정책이 없어(0058 — service_role 전용 관문) admin 클라이언트로 쓴다.
+ */
+export async function updateStageCredits(projectId: string, credits: unknown): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  const v = validateStageCredits(credits)
+  if (!v.ok) return { ok: false, error: v.error }
+  const admin = createAdminClient()
+  const { error } = await admin.from('project_settings').upsert({
+    project_id: projectId,
+    stage_credits: v.credits,
+    updated_at: new Date().toISOString(),
+    updated_by: g.actor.userId,
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+/**
+ * 비공개 전환(0070) — 슈퍼유저 전용. 프로젝트 관리자에게 열지 않는 이유:
+ * 관리자가 자기 프로젝트를 잠그면 다른 화면(홈 집계·회의록 탐색기)에서 조용히 사라져
+ * 조직 차원의 가시성 정책이 프로젝트 단위에서 뒤집힌다. 전역 정책은 전역 등급이 쥔다.
+ */
+export async function setProjectPrivacy(projectId: string, isPrivate: boolean): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireSuperuser()
+  if (!g.ok) return { ok: false, error: g.error }
+  // projects 의 RLS update 정책과 무관하게 동작해야 하는 전역 관리 쓰기 — admin client 로 쓰고
+  // 가드(requireSuperuser)가 유일한 관문임을 명시한다(fail-closed).
+  const admin = createAdminClient()
+  const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/projects')
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+/** 공정율 기준일 설정. null이면 자동(오늘). 진척 산정 전체에 영향. */
+export async function setBaseDate(projectId: string, baseDate: string | null): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  const sb = await createServerClient()
+  const { error } = await sb.from('projects').update({ base_date: baseDate || null }).eq('id', projectId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+export async function addHoliday(projectId: string, date: string, name: string) {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) throw new Error(g.error)
+  const sb = await createServerClient()
+  const { error } = await sb
+    .from('holidays')
+    .upsert({ project_id: projectId, date, name }, { onConflict: 'project_id,date' })
+  if (error) throw new Error(error.message)
+  revalidatePath(`/p/${projectId}`, 'layout')
+  after(() => recordProgressSnapshot(projectId))
+}
+
+export async function removeHoliday(projectId: string, date: string) {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) throw new Error(g.error)
+  const sb = await createServerClient()
+  const { error } = await sb
+    .from('holidays')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('date', date)
+  if (error) throw new Error(error.message)
+  revalidatePath(`/p/${projectId}`, 'layout')
+  after(() => recordProgressSnapshot(projectId))
+}

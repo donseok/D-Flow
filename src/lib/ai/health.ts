@@ -1,0 +1,196 @@
+// ============================================================================
+// AI 어시스턴트 헬스/관측 — 키 설정 여부, pgvector 마이그레이션 적용 여부, 색인 신선도를
+// 점검한다. "무신호 실패"(키 누락·마이그레이션 미적용이 조용히 '결과 없음'으로 보이는 문제)를
+// 관리자 설정 화면/헬스 엔드포인트에서 가시화하기 위한 모듈. 서버 전용.
+// ============================================================================
+
+import { aiProvider, embedConfig, hasEmbeddings, hasLLM, llmConfig } from './provider'
+import { geminiFallbackModels } from './llm'
+import { llmOverrideSync } from './llm-override'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { serviceRoleConfigured } from '@/lib/supabase/env'
+import { errMsg } from '@/lib/domain/format'
+
+/** PostgREST 에러(또는 pg 에러)에서 Postgres SQLSTATE 코드를 추출. */
+export function pgErrorCode(e: unknown): string | undefined {
+  if (e && typeof e === 'object' && 'code' in e) {
+    const c = (e as { code?: unknown }).code
+    if (typeof c === 'string') return c
+  }
+  return undefined
+}
+
+// 메시지 휴리스틱의 대상 객체 — 기본은 0010(pgvector) 계열, 브리핑 캐시는 0030 테이블.
+const VECTOR_OBJECTS = /wbs_embeddings|match_wbs_documents|\bvector\b/i
+const BRIEFS_OBJECTS = /project_ai_briefs/i
+
+/**
+ * 마이그레이션 미적용 신호인지 판별(기본 대상: 0010 pgvector 계열 객체).
+ * 42P01 undefined_table / 42883 undefined_function / 42704 undefined_object(type)
+ * / 3F000 invalid_schema, 또는 메시지에 대상 객체명 + "존재하지 않음"이 함께 보이는 경우.
+ * PostgREST 스키마 캐시 부재("Could not find the table ...", PGRST205)도 메시지 규칙이 잡는다.
+ */
+export function isSchemaMissing(e: unknown, objects: RegExp = VECTOR_OBJECTS): boolean {
+  const code = pgErrorCode(e)
+  if (code && ['42P01', '42883', '42704', '3F000'].includes(code)) return true
+  const msg =
+    e instanceof Error ? e.message : typeof e === 'string' ? e : ((e as { message?: unknown })?.message as string)
+  if (typeof msg === 'string') {
+    const hitsObject = objects.test(msg)
+    const hitsMissing = /does not exist|존재하지\s*않|undefined|unknown function|could not find/i.test(msg)
+    return hitsObject && hitsMissing
+  }
+  return false
+}
+
+/**
+ * 지금 실제로 쓰이는 모델. "무슨 모델이 도는가"는 코드 기본값 · env · DB 프로필 세 곳이 겹쳐
+ * 정해지는데 화면 어디에도 안 나와서, 모델을 올린 뒤 사람이 확인할 방법이 없었다.
+ *
+ * ⚠️ **키를 절대 싣지 않는다.** llmConfig()/embedConfig() 는 apiKey 를 품고 있으므로 필드를
+ * 골라 담는다(스프레드 금지). tests/ai/active-model-info.test.ts 가 직렬화 결과로 검사한다.
+ */
+export interface ActiveModelInfo {
+  /** 이 값이 어디서 왔나 — env 기본값 / DB 프로필 / '선택 안함'(LLM 차단) */
+  source: 'env' | 'profile' | 'none'
+  provider: 'gemini' | 'openai'
+  /** 텍스트 생성에 실제로 쓰이는 모델 ID */
+  llm: string
+  /** 주 모델이 429/5xx 일 때 순서대로 대신 답하는 모델(주 모델 제외). gemini 경로에만 있다 */
+  llmFallbacks: string[]
+  /** 임베딩은 **프로필 오버라이드를 받지 않는다** — 항상 env 경로다(provider.ts 의 의도) */
+  embeddingProvider: 'gemini' | 'openai'
+  embedding: string
+  embeddingDim: number
+}
+
+/** 생성·임베딩의 활성 모델을 키 없이 요약한다. */
+export async function activeModelInfo(): Promise<ActiveModelInfo> {
+  const llm = llmConfig()
+  const embed = embedConfig()
+  const mode = llmOverrideSync().mode
+  return {
+    source: mode,
+    provider: llm.provider,
+    llm: llm.model,
+    // OpenAI 호환 경로에는 폴백 체인이 없다(gemini 전용 로직) — 빈 배열이 정직한 답이다.
+    llmFallbacks: llm.provider === 'gemini' ? geminiFallbackModels(llm.model) : [],
+    embeddingProvider: embed.provider,
+    embedding: embed.model,
+    embeddingDim: embed.dim,
+  }
+}
+
+export type SchemaState = 'ready' | 'missing' | 'no_service_role' | 'error'
+
+export interface AssistantHealth {
+  provider: 'gemini' | 'openai'
+  llm: boolean // LLM 답변 키 설정됨
+  embeddings: boolean // 임베딩(의미검색) 키 설정됨
+  serviceRole: boolean // service_role 키 설정됨(색인 쓰기/RPC 호출 가능)
+  schema: SchemaState // pgvector(0010) 스키마/RPC 적용 상태
+  briefs: SchemaState // AI 브리핑 캐시(0030 project_ai_briefs) 적용 상태
+  models: ActiveModelInfo // 지금 실제로 쓰이는 생성·임베딩 모델(키는 포함하지 않음)
+  detail?: string
+}
+
+/**
+ * 전반적 헬스 체크. schema 는 match_wbs_documents RPC 를 단위 벡터로 1회 프로빙하여
+ * vector 확장·테이블·함수 존재를 한 번에 확인하고, briefs 는 project_ai_briefs 를
+ * head 카운트로 1회 프로빙한다(둘 다 실데이터 변경 없음).
+ */
+export async function assistantHealth(): Promise<AssistantHealth> {
+  const base = {
+    provider: aiProvider(),
+    llm: hasLLM(),
+    embeddings: hasEmbeddings(),
+    serviceRole: serviceRoleConfigured(),
+    // service_role 이 없어 조기 반환하는 경로에서도 모델은 알 수 있다 — 그 경우가 오히려
+    // "설정이 어떻게 돼 있나"를 확인하고 싶은 상황이라 여기서 함께 담는다.
+    models: await activeModelInfo(),
+  }
+  if (!base.serviceRole) return { ...base, schema: 'no_service_role', briefs: 'no_service_role' }
+  try {
+    const admin = createAdminClient()
+    const dim = embedConfig().dim
+    // 단위 벡터(영벡터는 코사인 거리 NaN 유발 가능 → 첫 성분만 1)로 RPC 프로빙.
+    const probe = new Array(dim).fill(0)
+    probe[0] = 1
+    const [rpc, briefsProbe] = await Promise.all([
+      admin.rpc('match_wbs_documents', {
+        query_embedding: probe,
+        match_count: 1,
+        p_project_id: null,
+        p_kinds: null,
+      }),
+      admin.from('project_ai_briefs').select('id', { count: 'exact', head: true }),
+    ])
+    const schema: SchemaState = rpc.error ? (isSchemaMissing(rpc.error) ? 'missing' : 'error') : 'ready'
+    const briefs: SchemaState = briefsProbe.error
+      ? (isSchemaMissing(briefsProbe.error, BRIEFS_OBJECTS) ? 'missing' : 'error')
+      : 'ready'
+    const detail = rpc.error?.message ?? briefsProbe.error?.message
+    return detail !== undefined ? { ...base, schema, briefs, detail } : { ...base, schema, briefs }
+  } catch (e) {
+    return { ...base, schema: 'error', briefs: 'error', detail: errMsg(e) }
+  }
+}
+
+export type IndexFreshness = 'fresh' | 'stale' | 'empty' | 'disabled' | 'schema_missing' | 'unknown'
+
+export interface IndexStatus {
+  enabled: boolean // 임베딩 키 설정됨(의미검색 사용 가능)
+  indexed: number // 이 프로젝트의 색인 문서 수
+  itemCount: number // 이 프로젝트의 WBS 항목 수
+  freshness: IndexFreshness
+}
+
+/**
+ * 프로젝트별 색인 신선도. WBS(wbs_items.updated_at) 최신 변경이 색인(wbs_embeddings.updated_at)
+ * 보다 나중이면 stale → 재색인 필요. 자동 재임베딩(무료 쿼터 소진) 대신 신선도를 노출하는 용도.
+ */
+export async function assistantIndexStatus(projectId: string): Promise<IndexStatus> {
+  const enabled = hasEmbeddings()
+  if (!serviceRoleConfigured()) {
+    return { enabled, indexed: 0, itemCount: 0, freshness: enabled ? 'unknown' : 'disabled' }
+  }
+  try {
+    const admin = createAdminClient()
+    const [emb, itemCnt, itemLatest, embLatest] = await Promise.all([
+      admin.from('wbs_embeddings').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+      admin.from('wbs_items').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+      admin
+        .from('wbs_items')
+        .select('updated_at')
+        .eq('project_id', projectId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from('wbs_embeddings')
+        .select('updated_at')
+        .eq('project_id', projectId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    if (emb.error) {
+      if (isSchemaMissing(emb.error)) return { enabled, indexed: 0, itemCount: itemCnt.count ?? 0, freshness: 'schema_missing' }
+      return { enabled, indexed: 0, itemCount: itemCnt.count ?? 0, freshness: 'unknown' }
+    }
+
+    const indexed = emb.count ?? 0
+    const itemCount = itemCnt.count ?? 0
+    if (!enabled) return { enabled, indexed, itemCount, freshness: 'disabled' }
+    if (itemCount === 0) return { enabled, indexed, itemCount, freshness: 'empty' }
+    if (indexed === 0) return { enabled, indexed, itemCount, freshness: 'stale' } // 항목은 있는데 미색인
+
+    const itemTs = (itemLatest.data as { updated_at?: string } | null)?.updated_at ?? null
+    const embTs = (embLatest.data as { updated_at?: string } | null)?.updated_at ?? null
+    const stale = !embTs || (!!itemTs && itemTs > embTs)
+    return { enabled, indexed, itemCount, freshness: stale ? 'stale' : 'fresh' }
+  } catch {
+    return { enabled, indexed: 0, itemCount: 0, freshness: 'unknown' }
+  }
+}

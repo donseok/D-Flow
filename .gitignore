@@ -1,0 +1,60 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.local.example
+!kit/.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# code-review workspace (generated)
+_workspace/
+
+# DB 백업 덤프 (WBS 업데이트 시 생성되는 로컬 스냅샷 — 소스 아님)
+/docs/backups/
+
+# 고객 실물 문서(엑셀·PPT) 커밋 방지
+/docs/*.xlsx
+/docs/*.pptx
+
+# 브레인스토밍 비주얼 컴패니언 (로컬 목업)
+/.superpowers/
+
+# Python 바이트코드 (.claude/skills/*/scripts 실행 시 생성)
+__pycache__/
+*.pyc

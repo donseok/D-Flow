@@ -1,0 +1,212 @@
+import { describe, it, expect } from 'vitest'
+import { splitLeafOwners, type ImportItem } from '@/lib/excel/validate'
+import { buildWbsAoa } from '@/lib/excel/export'
+import type { ComputedItem } from '@/lib/domain/types'
+
+function imp(over: Partial<ImportItem>): ImportItem {
+  return {
+    tempId: 't0',
+    parentTempId: null,
+    level: 'activity',
+    code: '1',
+    sortOrder: 0,
+    name: '항목',
+    biz: null,
+    deliverable: null,
+    plannedStart: '2026-07-01',
+    plannedEnd: '2026-07-10',
+    weight: 0.05,
+    actualPct: null,
+    owners: [],
+    isOwnerSplit: false,
+    ...over,
+  }
+}
+
+describe('splitLeafOwners — 복수 담당 말단 분리', () => {
+  it('복수 담당 말단 activity 아래에 팀당 1개 sub-act를 생성하고 원본 행은 그대로 둔다', () => {
+    const src = [
+      imp({ tempId: 't0', level: 'phase', name: '1. 준비', owners: [{ team: 'PMO', kind: 'primary' }] }),
+      imp({ tempId: 't1', parentTempId: 't0', level: 'task', name: '1-1. 작업' }),
+      imp({
+        tempId: 't2', parentTempId: 't1', name: '데이터 플랫폼 요건 정의', biz: '가공', deliverable: '요건정의서',
+        owners: [
+          { team: '가공', kind: 'primary' },
+          { team: 'ERP', kind: 'primary' },
+          { team: 'MES', kind: 'support' },
+        ],
+      }),
+    ]
+    const out = splitLeafOwners(src)
+    expect(out).toHaveLength(6)
+
+    const parent = out.find(i => i.tempId === 't2')!
+    // 원본 행 무손상: 이름·일정·가중치·담당 표기 유지
+    expect(parent.name).toBe('데이터 플랫폼 요건 정의')
+    expect(parent.plannedStart).toBe('2026-07-01')
+    expect(parent.weight).toBe(0.05)
+    expect(parent.owners).toHaveLength(3)
+    // 원본 행은 sub-act 가 아니다 — RPC 화이트리스트(0060)가 이 값을 그대로 컬럼에 싣는다.
+    expect(parent.isOwnerSplit).toBe(false)
+
+    const subs = out.filter(i => i.parentTempId === 't2')
+    // 이름에 부모 작업명 포함 — 리프 이름만 소비하는 하류(검색·보고·알림)에서 식별 가능해야 함
+    expect(subs.map(s => s.name)).toEqual([
+      '데이터 플랫폼 요건 정의 (가공 주관)',
+      '데이터 플랫폼 요건 정의 (ERP 주관)',
+      '데이터 플랫폼 요건 정의 (MES 지원)',
+    ])
+    for (const s of subs) {
+      expect(s.level).toBe('activity')
+      expect(s.isOwnerSplit).toBe(true)
+      expect(s.owners).toHaveLength(1)
+      expect(s.plannedStart).toBe(parent.plannedStart) // 일정 승계
+      expect(s.plannedEnd).toBe(parent.plannedEnd)
+      expect(s.weight).toBeNull() // 형제 균등
+      expect(s.biz).toBe('가공') // biz·산출물 승계
+      expect(s.deliverable).toBe('요건정의서')
+    }
+    // sub-act 는 부모 바로 뒤, 문서 순서 재번호
+    expect(out.map(i => i.sortOrder)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(out.map(i => i.tempId)).toEqual(['t0', 't1', 't2', 't2s0', 't2s1', 't2s2'])
+  })
+
+  it('단일 담당·무담당 말단, 자식 있는 복수 담당 상위, 말단 phase 는 분리하지 않는다', () => {
+    const src = [
+      imp({ tempId: 't0', level: 'phase', name: '1. 준비' }),
+      // 자식(t2)이 있는 task 는 복수 담당이어도 그대로
+      imp({
+        tempId: 't1', parentTempId: 't0', level: 'task', name: '1-1. 작업',
+        owners: [{ team: '가공', kind: 'primary' }, { team: 'ERP', kind: 'support' }],
+      }),
+      imp({ tempId: 't2', parentTempId: 't1', name: '단일 담당', owners: [{ team: '가공', kind: 'primary' }] }),
+      imp({ tempId: 't3', parentTempId: 't1', name: '무담당', owners: [] }),
+      // 말단 phase: 분리하면 phase 직속 activity 가 생겨 엑셀 3단 형식 라운드트립이 깨짐
+      imp({
+        tempId: 't4', level: 'phase', name: '2. 마일스톤',
+        owners: [{ team: 'PMO', kind: 'primary' }, { team: '가공', kind: 'support' }],
+      }),
+    ]
+    const out = splitLeafOwners(src)
+    expect(out).toHaveLength(5)
+    expect(out.map(i => i.tempId)).toEqual(['t0', 't1', 't2', 't3', 't4'])
+  })
+
+  it('자식 없는 복수 담당 task 도 담당별 activity 로 분리된다', () => {
+    const src = [
+      imp({ tempId: 't0', level: 'phase', name: '1. 준비' }),
+      imp({
+        tempId: 't1', parentTempId: 't0', level: 'task', name: '1-1. 중간보고', actualPct: 30,
+        owners: [{ team: 'PMO', kind: 'primary' }, { team: '가공', kind: 'support' }],
+      }),
+    ]
+    const out = splitLeafOwners(src)
+    expect(out).toHaveLength(4)
+    const subs = out.filter(i => i.parentTempId === 't1')
+    expect(subs.map(s => s.name)).toEqual(['1-1. 중간보고 (PMO 주관)', '1-1. 중간보고 (가공 지원)'])
+    // 실적 승계 → 롤업 결과가 원본 실적과 동일
+    expect(subs.map(s => s.actualPct)).toEqual([30, 30])
+    // 원본은 롤업 부모가 됐으므로 실적을 갖지 않는다 — 자식을 나중에 지워도 30이 되살아나면 안 된다.
+    expect(out.find(i => i.tempId === 't1')!.actualPct).toBeNull()
+  })
+
+  it('분리되지 않는 말단(담당 1팀)은 실적을 그대로 갖는다', () => {
+    const src = [
+      imp({ tempId: 't0', level: 'phase', name: '1. 준비' }),
+      imp({
+        tempId: 't1', parentTempId: 't0', level: 'task', name: '1-3. 착수 보고회', actualPct: 100,
+        owners: [{ team: 'PMO', kind: 'primary' }],
+      }),
+    ]
+    const out = splitLeafOwners(src)
+    expect(out).toHaveLength(2)
+    expect(out.find(i => i.tempId === 't1')!.actualPct).toBe(100)
+  })
+
+  // ImportItem 은 parentTempId 로 연결되는 순수 트리라 엑셀 3열 제약과 무관하게 4단+ 실 계층을
+  // 표현할 수 있다(파서 출력이 아니라 이 함수의 실제 입력 타입이 이미 depth-agnostic). willSplit 판정이
+  // 'level !== phase' + hasChild 만 보고 깊이를 세지 않음을 고정 — 3단 가정(예: "리프는 항상 2단
+  // 아래")이 되살아나면 이 케이스가 무너진다.
+  it('4단 이상 실 계층에서도 리프(자식 없음)만 분리 대상이다 — 깊이 무관', () => {
+    const src = [
+      imp({ tempId: 't0', level: 'phase', name: '1. 준비' }),
+      imp({ tempId: 't1', parentTempId: 't0', level: 'task', name: '1-1. 작업' }),
+      // 4번째 실 레벨(엑셀 3열 양식엔 없는 이름) — 복수 담당이어도 자식(t3)이 있어 분리 대상 아님
+      imp({
+        tempId: 't2', parentTempId: 't1', level: 'subtask', name: '1-1-1. 세부 작업',
+        owners: [{ team: 'PMO', kind: 'primary' }, { team: '가공', kind: 'support' }],
+      }),
+      imp({
+        tempId: 't3', parentTempId: 't2', name: '심층 리프',
+        owners: [{ team: '가공', kind: 'primary' }, { team: 'ERP', kind: 'support' }],
+      }),
+    ]
+    const out = splitLeafOwners(src)
+    // t2: 자식이 있으므로 레벨명이 phase/task/activity 밖이어도 분리되지 않는다(hasChild 기준).
+    // parentTempId==='t2' 인 것은 실 자식 t3 하나뿐 — 분리로 생긴 sub-act 는 없어야 한다.
+    expect(out.find(i => i.tempId === 't2')).toBeDefined()
+    expect(out.filter(i => i.parentTempId === 't2').map(i => i.tempId)).toEqual(['t3'])
+    // t3: 깊이 4의 리프도 3단 리프와 동일하게 담당별로 분리된다.
+    const subs = out.filter(i => i.parentTempId === 't3')
+    expect(subs.map(s => s.name)).toEqual(['심층 리프 (가공 주관)', '심층 리프 (ERP 지원)'])
+    expect(subs.every(s => s.isOwnerSplit)).toBe(true)
+    expect(out.find(i => i.tempId === 't3')!.isOwnerSplit).toBe(false)
+    expect(out).toHaveLength(6) // t0,t1,t2,t3 + sub×2
+  })
+})
+
+function comp(over: Partial<ComputedItem>): ComputedItem {
+  return {
+    id: 'x',
+    parentId: null,
+    code: '1',
+    sortOrder: 0,
+    name: '항목',
+    biz: null,
+    deliverable: null,
+    plannedStart: '2026-07-01',
+    plannedEnd: '2026-07-10',
+    weight: null,
+    actualPct: null,
+    owners: [],
+    isOwnerSplit: false,
+    plannedPct: 50,
+    rolledActualPct: 0,
+    achievement: null,
+    status: 'in_progress',
+    children: [],
+    depth: 0,
+    ...over,
+  }
+}
+
+describe('buildWbsAoa — sub-act 접기(라운드트립 보호)', () => {
+  it('activity 하위 sub-act 는 행으로 내보내지 않고 부모 실적%에 롤업값을 싣는다', () => {
+    // comp()는 computeTree 를 거치지 않는 수제 트리라 depth 를 실제 계층에 맞춰 명시해야 한다
+    // (buildWbsAoa 가 이제 it.level 이 아니라 it.depth 로 열을 배치하므로).
+    const sub = (id: string, team: '가공' | 'ERP', pct: number) =>
+      comp({ id, parentId: 'a1', name: `${team} 주관`, owners: [{ team, kind: 'primary' }], actualPct: pct, rolledActualPct: pct, isOwnerSplit: true, depth: 3 })
+    const parent = comp({
+      id: 'a1', name: '복수 담당 작업', rolledActualPct: 40, depth: 2,
+      owners: [{ team: '가공', kind: 'primary' }, { team: 'ERP', kind: 'primary' }],
+      children: [sub('s1', '가공', 50), sub('s2', 'ERP', 30)],
+    })
+    const task = comp({ id: 't1', name: '1-1. 작업', children: [parent], rolledActualPct: 40, depth: 1 })
+    const aoa = buildWbsAoa([comp({ id: 'p1', name: '1. 준비', children: [task], rolledActualPct: 40, depth: 0 })])
+
+    const bodies = aoa.slice(3) as unknown[][]
+    // phase + task + 접힌 activity = 3행 (sub-act 2행은 미출력)
+    expect(bodies).toHaveLength(3)
+    const actRow = bodies[2]
+    expect(actRow[3]).toBe('복수 담당 작업')
+    expect(actRow[9]).toBe('●') // 가공 담당 표기 보존(G6~J9 중 J9)
+    expect(actRow[16]).toBe(40) // Q열 = 롤업 실적
+  })
+
+  it('task 하위 일반 activity 는 기존대로 모두 내보낸다', () => {
+    const acts = [comp({ id: 'a1', name: 'A', actualPct: 10, depth: 2 }), comp({ id: 'a2', name: 'B', actualPct: 20, depth: 2 })]
+    const task = comp({ id: 't1', name: '1-1. 작업', children: acts, depth: 1 })
+    const aoa = buildWbsAoa([comp({ id: 'p1', name: '1. 준비', children: [task], depth: 0 })])
+    expect(aoa.slice(3)).toHaveLength(4)
+  })
+})

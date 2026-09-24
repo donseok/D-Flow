@@ -1,0 +1,2096 @@
+{
+  "capturedAt": "2026-09-23T14:43:43.824Z",
+  "cutoff": "wbs-web@77cf6785",
+  "source": "prod",
+  "policies": [
+    {
+      "schema": "public",
+      "table": "agent_projects",
+      "name": "read_agent_projects",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "is_project_member(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "agent_work_orders",
+      "name": "read_agent_work_orders",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "is_project_member(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "agent_work_reports",
+      "name": "read_agent_work_reports",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM agent_work_orders o\n  WHERE ((o.id = agent_work_reports.work_order_id) AND is_project_member(o.project_id))))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "ai_documents",
+      "name": "ai_documents_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "announcement_seen",
+      "name": "own_seen_announcements",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(user_id = auth.uid())",
+      "with_check": "(user_id = auth.uid())"
+    },
+    {
+      "schema": "public",
+      "table": "announcements",
+      "name": "admin_write_announcements",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_admin(project_id)",
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "announcements",
+      "name": "read_all_announcements",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "attendance_records",
+      "name": "member_write_attendance",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_member(project_id)",
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "attendance_records",
+      "name": "read_all_attendance",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "change_logs",
+      "name": "insert_own_log",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(user_id = auth.uid())"
+    },
+    {
+      "schema": "public",
+      "table": "change_logs",
+      "name": "read_all_logs",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "deliverable_attachments",
+      "name": "attach_delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "can_attach(wbs_item_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "deliverable_attachments",
+      "name": "attach_insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "can_attach(wbs_item_id)"
+    },
+    {
+      "schema": "public",
+      "table": "deliverable_attachments",
+      "name": "read_all_attachments",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "holidays",
+      "name": "admin_write_holidays",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_admin(project_id)",
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "holidays",
+      "name": "read_all_holidays",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_analysis_runs",
+      "name": "issue_analysis_runs_select_project_members",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "is_project_member(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_assignees",
+      "name": "member_delete_issue_assignees",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "is_project_member(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_assignees",
+      "name": "member_insert_issue_assignees",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "issue_assignees",
+      "name": "read_all_issue_assignees",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_attachments",
+      "name": "delete_issue_attachments",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "can_edit_issue(issue_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_attachments",
+      "name": "insert_issue_attachments",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "can_edit_issue(issue_id)"
+    },
+    {
+      "schema": "public",
+      "table": "issue_attachments",
+      "name": "read_issue_attachments",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_links",
+      "name": "read_all_issue_links",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_major_processes",
+      "name": "insert_issue_major_processes",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "issue_major_processes",
+      "name": "read_all_issue_major_processes",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_mega_areas",
+      "name": "read_all_issue_mega_areas",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_updates",
+      "name": "delete_issue_updates",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "is_project_admin(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_updates",
+      "name": "insert_issue_updates",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(is_project_member(project_id) AND (author_user_id = auth.uid()) AND (kind = 'note'::text) AND (archived_at IS NULL) AND (archived_by IS NULL) AND (archived_by_name IS NULL))"
+    },
+    {
+      "schema": "public",
+      "table": "issue_updates",
+      "name": "read_issue_updates",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issue_updates",
+      "name": "update_issue_updates",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(((author_user_id = auth.uid()) OR is_project_admin(project_id)) AND (kind = 'note'::text))",
+      "with_check": "((num_nonnulls(archived_at, archived_by, archived_by_name) = 0) OR ((archived_at IS NOT NULL) AND (archived_by = auth.uid())))"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "delete_own_issues",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((created_by = auth.uid()) OR is_project_admin(project_id))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "insert_own_issues",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((created_by = auth.uid()) AND is_project_member(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "member_update_issues",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "is_project_member(project_id)",
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "issues",
+      "name": "read_all_issues",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "item_owners",
+      "name": "admin_write_owners",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(EXISTS ( SELECT 1\n   FROM wbs_items w\n  WHERE ((w.id = item_owners.wbs_item_id) AND is_project_admin(w.project_id))))",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM wbs_items w\n  WHERE ((w.id = item_owners.wbs_item_id) AND is_project_admin(w.project_id))))"
+    },
+    {
+      "schema": "public",
+      "table": "item_owners",
+      "name": "read_all_owners",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "llm_config",
+      "name": "su_all_llm_config",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_superuser()",
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "llm_profiles",
+      "name": "su_all_llm_profiles",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_superuser()",
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "meeting_attendees",
+      "name": "own_write_meeting_attendees",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(EXISTS ( SELECT 1\n   FROM meetings m\n  WHERE ((m.id = meeting_attendees.meeting_id) AND ((m.created_by = auth.uid()) OR is_project_admin(m.project_id)))))",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM meetings m\n  WHERE ((m.id = meeting_attendees.meeting_id) AND ((m.created_by = auth.uid()) OR is_project_admin(m.project_id)))))"
+    },
+    {
+      "schema": "public",
+      "table": "meeting_attendees",
+      "name": "read_all_meeting_attendees",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "meeting_exceptions",
+      "name": "own_write_meeting_exceptions",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(EXISTS ( SELECT 1\n   FROM meetings m\n  WHERE ((m.id = meeting_exceptions.meeting_id) AND ((m.created_by = auth.uid()) OR is_project_admin(m.project_id)))))",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM meetings m\n  WHERE ((m.id = meeting_exceptions.meeting_id) AND ((m.created_by = auth.uid()) OR is_project_admin(m.project_id)))))"
+    },
+    {
+      "schema": "public",
+      "table": "meeting_exceptions",
+      "name": "read_all_meeting_exceptions",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "meetings",
+      "name": "delete_own_meetings",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((created_by = auth.uid()) OR is_project_admin(project_id))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "meetings",
+      "name": "insert_own_meetings",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((created_by = auth.uid()) AND is_project_member(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "meetings",
+      "name": "read_all_meetings",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "meetings",
+      "name": "update_own_meetings",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((created_by = auth.uid()) OR is_project_admin(project_id))",
+      "with_check": "((created_by = auth.uid()) OR is_project_admin(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "memberships",
+      "name": "read_all_memberships",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "memberships",
+      "name": "su_write_memberships",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_superuser()",
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "minute_embeddings",
+      "name": "minute_embeddings_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_favorites",
+      "name": "own_minute_favorites",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(user_id = auth.uid())",
+      "with_check": "(user_id = auth.uid())"
+    },
+    {
+      "schema": "public",
+      "table": "minute_files",
+      "name": "attachment_delete_minute_files",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((role = 'attachment'::text) AND (EXISTS ( SELECT 1\n   FROM minutes mi\n  WHERE ((mi.id = minute_files.minute_id) AND (mi.archived_at IS NULL) AND ((mi.created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))))))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_files",
+      "name": "attachment_insert_minute_files",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((role = 'attachment'::text) AND (uploaded_by = auth.uid()) AND (EXISTS ( SELECT 1\n   FROM minutes mi\n  WHERE ((mi.id = minute_files.minute_id) AND (mi.archived_at IS NULL) AND ((mi.created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))))))"
+    },
+    {
+      "schema": "public",
+      "table": "minute_files",
+      "name": "attachment_update_minute_files",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((role = 'attachment'::text) AND (EXISTS ( SELECT 1\n   FROM minutes mi\n  WHERE ((mi.id = minute_files.minute_id) AND (mi.archived_at IS NULL) AND ((mi.created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))))))",
+      "with_check": "((role = 'attachment'::text) AND (EXISTS ( SELECT 1\n   FROM minutes mi\n  WHERE ((mi.id = minute_files.minute_id) AND (mi.archived_at IS NULL) AND ((mi.created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))))))"
+    },
+    {
+      "schema": "public",
+      "table": "minute_files",
+      "name": "read_all_minute_files",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_folders",
+      "name": "delete_own_minute_folders",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_folders",
+      "name": "insert_own_minute_folders",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((created_by = auth.uid()) AND (app_role() IS NOT NULL))"
+    },
+    {
+      "schema": "public",
+      "table": "minute_folders",
+      "name": "read_all_minute_folders",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_folders",
+      "name": "update_own_minute_folders",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))",
+      "with_check": "((created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))"
+    },
+    {
+      "schema": "public",
+      "table": "minute_highlights",
+      "name": "delete_own_minute_highlights",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((created_by = auth.uid()) OR (app_role() = 'pmo_admin'::text))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_highlights",
+      "name": "insert_own_minute_highlights",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((created_by = auth.uid()) AND (app_role() IS NOT NULL))"
+    },
+    {
+      "schema": "public",
+      "table": "minute_highlights",
+      "name": "read_all_minute_highlights",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_insights",
+      "name": "minute_insights_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minute_versions",
+      "name": "minute_versions_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "minutes",
+      "name": "read_all_minutes",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "notification_events",
+      "name": "read_notification_events",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((EXISTS ( SELECT 1\n   FROM notification_recipients r\n  WHERE ((r.event_id = notification_events.id) AND (r.user_id = auth.uid())))) OR ((audience = 'project'::text) AND is_project_member(project_id)) OR (audience = 'global'::text))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "notification_recipients",
+      "name": "read_notification_recipients",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(user_id = auth.uid())",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "project_ai_briefs",
+      "name": "project_ai_briefs_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "project_members",
+      "name": "admin_write_members",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_admin(project_id)",
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "project_members",
+      "name": "read_all_members",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "project_roles",
+      "name": "admin_write_member_roles",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "((role = 'member'::text) AND is_project_admin(project_id))",
+      "with_check": "((role = 'member'::text) AND is_project_admin(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "project_roles",
+      "name": "read_all_project_roles",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "project_roles",
+      "name": "su_write_admin_roles",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "((role = 'admin'::text) AND is_superuser())",
+      "with_check": "((role = 'admin'::text) AND is_superuser())"
+    },
+    {
+      "schema": "public",
+      "table": "project_settings",
+      "name": "read_project_settings",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "projects",
+      "name": "admin_update_projects",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "is_project_admin(id)",
+      "with_check": "is_project_admin(id)"
+    },
+    {
+      "schema": "public",
+      "table": "projects",
+      "name": "read_all_projects",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "projects",
+      "name": "su_delete_projects",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "is_superuser()",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "projects",
+      "name": "su_insert_projects",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "task_dependencies",
+      "name": "admin_write_task_dependencies",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_admin(project_id)",
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "task_dependencies",
+      "name": "task_dependencies_select",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "teams",
+      "name": "pa_insert_project_teams",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((project_id IS NOT NULL) AND is_project_admin(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "teams",
+      "name": "pa_update_project_teams",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((project_id IS NOT NULL) AND is_project_admin(project_id))",
+      "with_check": "((project_id IS NOT NULL) AND is_project_admin(project_id))"
+    },
+    {
+      "schema": "public",
+      "table": "teams",
+      "name": "read_all_teams",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "teams",
+      "name": "su_insert_teams",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "teams",
+      "name": "su_update_teams",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "is_superuser()",
+      "with_check": "is_superuser()"
+    },
+    {
+      "schema": "public",
+      "table": "usage_events",
+      "name": "read_usage_events",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "is_superuser()",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "user_preferences",
+      "name": "own_user_preferences",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(user_id = auth.uid())",
+      "with_check": "(user_id = auth.uid())"
+    },
+    {
+      "schema": "public",
+      "table": "user_wbs_state",
+      "name": "own_user_wbs_state",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "(user_id = auth.uid())",
+      "with_check": "(user_id = auth.uid())"
+    },
+    {
+      "schema": "public",
+      "table": "wbs_embeddings",
+      "name": "wbs_embeddings_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wbs_items",
+      "name": "admin_write_items",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_admin(project_id)",
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "wbs_items",
+      "name": "member_update_actual",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(is_project_member(project_id) AND wbs_is_leaf(id) AND (EXISTS ( SELECT 1\n   FROM item_owners o\n  WHERE ((o.wbs_item_id = wbs_items.id) AND ((o.team_id = ( SELECT m.team_id\n           FROM memberships m\n          WHERE (m.user_id = auth.uid()))) OR (o.team_id IN ( SELECT pm.team_id\n           FROM project_members pm\n          WHERE ((pm.project_id = wbs_items.project_id) AND (pm.user_id = auth.uid()) AND (pm.team_id IS NOT NULL)))))))))",
+      "with_check": "(is_project_member(project_id) AND wbs_is_leaf(id) AND (EXISTS ( SELECT 1\n   FROM item_owners o\n  WHERE ((o.wbs_item_id = wbs_items.id) AND ((o.team_id = ( SELECT m.team_id\n           FROM memberships m\n          WHERE (m.user_id = auth.uid()))) OR (o.team_id IN ( SELECT pm.team_id\n           FROM project_members pm\n          WHERE ((pm.project_id = wbs_items.project_id) AND (pm.user_id = auth.uid()) AND (pm.team_id IS NOT NULL)))))))))"
+    },
+    {
+      "schema": "public",
+      "table": "wbs_items",
+      "name": "read_all_items",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wbs_progress_snapshots",
+      "name": "member_write_snapshots",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "ALL",
+      "qual": "is_project_member(project_id)",
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "wbs_progress_snapshots",
+      "name": "read_all_progress_snapshots",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "weekly_report_rows",
+      "name": "weekly_report_rows_delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "(EXISTS ( SELECT 1\n   FROM weekly_reports r\n  WHERE ((r.id = weekly_report_rows.report_id) AND is_project_admin(r.project_id))))",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "weekly_report_rows",
+      "name": "weekly_report_rows_insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(EXISTS ( SELECT 1\n   FROM weekly_reports r\n  WHERE ((r.id = weekly_report_rows.report_id) AND is_project_member(r.project_id))))"
+    },
+    {
+      "schema": "public",
+      "table": "weekly_report_rows",
+      "name": "weekly_report_rows_select",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "weekly_report_rows",
+      "name": "weekly_report_rows_update",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(EXISTS ( SELECT 1\n   FROM weekly_reports r\n  WHERE ((r.id = weekly_report_rows.report_id) AND is_project_member(r.project_id))))",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM weekly_reports r\n  WHERE ((r.id = weekly_report_rows.report_id) AND is_project_member(r.project_id))))"
+    },
+    {
+      "schema": "public",
+      "table": "weekly_reports",
+      "name": "weekly_reports_delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "is_project_admin(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "weekly_reports",
+      "name": "weekly_reports_insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "is_project_admin(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "weekly_reports",
+      "name": "weekly_reports_select",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "weekly_reports",
+      "name": "weekly_reports_update",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "UPDATE",
+      "qual": "is_project_member(project_id)",
+      "with_check": "is_project_member(project_id)"
+    },
+    {
+      "schema": "public",
+      "table": "wiki_change_events",
+      "name": "wiki_change_events_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_feedback",
+      "name": "wiki_feedback_member_insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((user_id = auth.uid()) AND is_project_member(project_id) AND (EXISTS ( SELECT 1\n   FROM wiki_topics topic\n  WHERE ((topic.id = wiki_feedback.topic_id) AND (topic.project_id = wiki_feedback.project_id)))))"
+    },
+    {
+      "schema": "public",
+      "table": "wiki_feedback",
+      "name": "wiki_feedback_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "can_read_project(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_item_relations",
+      "name": "wiki_item_relations_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_item_sources",
+      "name": "wiki_item_sources_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_items",
+      "name": "wiki_items_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_questions",
+      "name": "wiki_questions_member_insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((asked_by = auth.uid()) AND is_project_member(project_id) AND ((topic_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM wiki_topics topic\n  WHERE ((topic.id = wiki_questions.topic_id) AND (topic.project_id = wiki_questions.project_id))))))"
+    },
+    {
+      "schema": "public",
+      "table": "wiki_questions",
+      "name": "wiki_questions_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "can_read_project(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_topic_revisions",
+      "name": "wiki_topic_revisions_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "can_read_project(project_id)",
+      "with_check": null
+    },
+    {
+      "schema": "public",
+      "table": "wiki_topics",
+      "name": "wiki_topics_read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schema": "realtime",
+      "table": "messages",
+      "name": "receive_own_notification_channel",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((realtime.topic() = (('user-'::text || (( SELECT auth.uid() AS uid))::text) || '-notifications'::text)) AND (extension = 'broadcast'::text))",
+      "with_check": null
+    },
+    {
+      "schema": "realtime",
+      "table": "messages",
+      "name": "receive_project_wbs_channel",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((extension = 'broadcast'::text) AND (\"substring\"(realtime.topic(), '^project-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})-wbs$'::text) IS NOT NULL) AND is_project_member((\"substring\"(realtime.topic(), '^project-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})-wbs$'::text))::uuid))",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "deliverables delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((bucket_id = 'deliverables'::text) AND can_attach((split_part(name, '/'::text, 1))::uuid))",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "deliverables insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((bucket_id = 'deliverables'::text) AND can_attach((split_part(name, '/'::text, 1))::uuid))"
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "deliverables read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'deliverables'::text) AND can_attach((split_part(name, '/'::text, 1))::uuid))",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "issue-attachments delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((bucket_id = 'issue-attachments'::text) AND can_edit_issue((split_part(name, '/'::text, 1))::uuid))",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "issue-attachments insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((bucket_id = 'issue-attachments'::text) AND can_edit_issue((split_part(name, '/'::text, 1))::uuid))"
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "issue-attachments read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'issue-attachments'::text)",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "minutes bucket delete",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "DELETE",
+      "qual": "((bucket_id = 'minutes'::text) AND ((owner = auth.uid()) OR (app_role() = 'pmo_admin'::text)) AND (NOT (EXISTS ( SELECT 1\n   FROM minute_versions mv\n  WHERE (mv.file_path = objects.name)))))",
+      "with_check": null
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "minutes bucket insert",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(bucket_id = 'minutes'::text)"
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "name": "minutes bucket read",
+      "permissive": "PERMISSIVE",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'minutes'::text)",
+      "with_check": null
+    }
+  ],
+  "functions": [
+    {
+      "name": "answer_wiki_question",
+      "args": "p_question_id uuid, p_answer text, p_topic_id uuid",
+      "secdef": true
+    },
+    {
+      "name": "app_role",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "apply_wiki_extracted_item_atomic",
+      "args": "p_project_id uuid, p_topic_id uuid, p_wiki_job_id bigint, p_job_locked_by text, p_apply_generation integer, p_minute_id uuid, p_minute_version_id uuid, p_minute_version_no integer, p_body_hash text, p_kind text, p_statement text, p_statement_hash text, p_knowledge_key text, p_certainty text, p_decision_state text, p_source_relation text, p_requested_change text, p_can_auto_apply boolean, p_observed_at timestamp with time zone, p_valid_from timestamp with time zone, p_owner_team text, p_owner_name text, p_due_date date, p_sources jsonb, p_expected_current_id uuid, p_expected_current_hash text, p_expected_current_updated_at timestamp with time zone, p_idempotency_key text",
+      "secdef": false
+    },
+    {
+      "name": "apply_workflow_event",
+      "args": "p_event text, p_actor uuid, p_item_id uuid, p_order_id uuid, p_stage text, p_agent text, p_agent_user_id uuid",
+      "secdef": false
+    },
+    {
+      "name": "archive_minute_with_wiki_retraction",
+      "args": "p_minute_id uuid, p_reason text",
+      "secdef": false
+    },
+    {
+      "name": "assign_issue_analysis_code",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "assign_issue_major_seq",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "can_attach",
+      "args": "item uuid",
+      "secdef": true
+    },
+    {
+      "name": "can_edit_issue",
+      "args": "iid uuid",
+      "secdef": true
+    },
+    {
+      "name": "can_read_project",
+      "args": "pid uuid",
+      "secdef": false
+    },
+    {
+      "name": "claim_ai_index_jobs",
+      "args": "p_limit integer, p_lease_seconds integer",
+      "secdef": false
+    },
+    {
+      "name": "claim_wiki_processing_job",
+      "args": "p_job_id bigint, p_locked_by text, p_lease_seconds integer",
+      "secdef": false
+    },
+    {
+      "name": "claim_wiki_project_rebuild_step",
+      "args": "p_project_id uuid, p_locked_by text, p_lease_seconds integer",
+      "secdef": false
+    },
+    {
+      "name": "commit_minute_body_version",
+      "args": "p_minute_id uuid, p_body_md text, p_body_hash text, p_file_name text, p_file_path text, p_file_size bigint, p_file_mime text, p_actor_id uuid, p_actor_name text, p_metadata jsonb",
+      "secdef": false
+    },
+    {
+      "name": "complete_ai_index_job",
+      "args": "p_id bigint, p_generation bigint",
+      "secdef": false
+    },
+    {
+      "name": "consume_project_invite",
+      "args": "p_token uuid, p_email text, p_user uuid",
+      "secdef": false
+    },
+    {
+      "name": "create_issue_from_minute_block",
+      "args": "p_project_id uuid, p_title text, p_body text, p_severity text, p_assignee_member_ids uuid[], p_start_date date, p_due_date date, p_mega_code text, p_major_name text, p_sub_process text, p_owner_department text, p_related_systems text[], p_source_type text, p_source_detail text, p_actor_id uuid, p_created_by_name text, p_minute_id uuid, p_minute_version_id uuid, p_body_hash text, p_block_index integer, p_block_hash text, p_excerpt_snapshot text, p_source_kind text, p_source_key text",
+      "secdef": false
+    },
+    {
+      "name": "create_minute_with_version",
+      "args": "p_minute_id uuid, p_minute_date date, p_team_code text, p_title text, p_body_md text, p_body_hash text, p_meeting_id uuid, p_project_id uuid, p_meeting_occurrence_date date, p_folder_id uuid, p_external_id text, p_actor_id uuid, p_actor_name text, p_file_name text, p_file_path text, p_file_size bigint, p_file_mime text",
+      "secdef": false
+    },
+    {
+      "name": "create_wiki_document",
+      "args": "p_project_id uuid, p_title text, p_body_md text, p_document_kind text, p_parent_id uuid",
+      "secdef": true
+    },
+    {
+      "name": "create_wiki_question",
+      "args": "p_project_id uuid, p_topic_id uuid, p_question text",
+      "secdef": true
+    },
+    {
+      "name": "curate_wiki_item",
+      "args": "p_item_id uuid, p_action text, p_reason text",
+      "secdef": true
+    },
+    {
+      "name": "current_team",
+      "args": "",
+      "secdef": false
+    },
+    {
+      "name": "enforce_project_member_email_identity",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "fail_ai_index_job",
+      "args": "p_id bigint, p_generation bigint, p_attempts integer, p_status text, p_run_after timestamp with time zone, p_last_error text",
+      "secdef": false
+    },
+    {
+      "name": "finish_wiki_processing_job",
+      "args": "p_job_id bigint, p_locked_by text, p_succeeded boolean, p_payload jsonb, p_last_error text, p_retry_at timestamp with time zone",
+      "secdef": false
+    },
+    {
+      "name": "finish_wiki_project_rebuild_step",
+      "args": "p_project_id uuid, p_locked_by text, p_last_error text, p_retry_at timestamp with time zone",
+      "secdef": false
+    },
+    {
+      "name": "guard_dependent_wbs_dates",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "guard_minute_ai_document_scope",
+      "args": "",
+      "secdef": false
+    },
+    {
+      "name": "guard_non_admin_column_scope",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "import_wbs",
+      "args": "p_project_id uuid, p_items jsonb, p_holidays jsonb",
+      "secdef": false
+    },
+    {
+      "name": "import_wbs_upsert",
+      "args": "p_project_id uuid, p_nodes jsonb, p_attach_id uuid",
+      "secdef": false
+    },
+    {
+      "name": "is_project_admin",
+      "args": "pid uuid",
+      "secdef": true
+    },
+    {
+      "name": "is_project_member",
+      "args": "pid uuid",
+      "secdef": true
+    },
+    {
+      "name": "is_superuser",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "issue_related_systems_valid",
+      "args": "systems text[]",
+      "secdef": false
+    },
+    {
+      "name": "lead_lease_acquire",
+      "args": "p_user uuid, p_projects uuid[], p_holder text, p_host text, p_agent text, p_takeover boolean",
+      "secdef": false
+    },
+    {
+      "name": "lead_lease_force_release",
+      "args": "p_user uuid, p_project uuid",
+      "secdef": false
+    },
+    {
+      "name": "lead_lease_release",
+      "args": "p_user uuid, p_holder text, p_leases jsonb",
+      "secdef": false
+    },
+    {
+      "name": "lead_lease_renew",
+      "args": "p_user uuid, p_holder text, p_leases jsonb",
+      "secdef": false
+    },
+    {
+      "name": "lead_lease_ttl",
+      "args": "",
+      "secdef": false
+    },
+    {
+      "name": "match_ai_documents",
+      "args": "query_embedding vector, match_count integer, p_project_ids uuid[], p_include_global boolean, p_domains text[], p_entity_types text[], p_team text, p_date_from date, p_date_to date, p_index_version integer",
+      "secdef": false
+    },
+    {
+      "name": "match_ai_documents_lexical",
+      "args": "p_tokens text[], match_count integer, p_project_ids uuid[], p_include_global boolean, p_domains text[], p_entity_types text[], p_index_version integer",
+      "secdef": false
+    },
+    {
+      "name": "match_minute_documents",
+      "args": "query_embedding vector, match_count integer, p_team text, p_date_from date, p_date_to date, p_folder_ids uuid[]",
+      "secdef": false
+    },
+    {
+      "name": "match_wbs_documents",
+      "args": "query_embedding vector, match_count integer, p_project_id uuid, p_kinds text[]",
+      "secdef": false
+    },
+    {
+      "name": "merge_wiki_topics",
+      "args": "p_source_topic_id uuid, p_target_topic_id uuid",
+      "secdef": true
+    },
+    {
+      "name": "minute_versions_reject_mutation",
+      "args": "",
+      "secdef": false
+    },
+    {
+      "name": "minutes_protect_external_id",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "move_wiki_document",
+      "args": "p_topic_id uuid, p_parent_id uuid, p_sort integer, p_pinned_order integer",
+      "secdef": true
+    },
+    {
+      "name": "notify_recipient_broadcast",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "project_members_normalize_link",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "purge_read_notifications",
+      "args": "retention_days integer",
+      "secdef": true
+    },
+    {
+      "name": "queue_minute_ai_index_scope_change",
+      "args": "p_project_id uuid, p_minute_id uuid, p_operation text, p_run_after timestamp with time zone",
+      "secdef": false
+    },
+    {
+      "name": "replace_ai_document_chunks",
+      "args": "p_project_id uuid, p_domain text, p_entity_type text, p_entity_id text, p_index_version integer, p_source_updated_at timestamp with time zone, p_indexed_at timestamp with time zone, p_documents jsonb",
+      "secdef": false
+    },
+    {
+      "name": "replace_wbs",
+      "args": "p_project_id uuid, p_items jsonb, p_holidays jsonb",
+      "secdef": false
+    },
+    {
+      "name": "request_wiki_processing_job_run",
+      "args": "p_job_id bigint, p_force boolean, p_payload jsonb",
+      "secdef": false
+    },
+    {
+      "name": "request_wiki_project_append",
+      "args": "p_project_id uuid, p_reason text",
+      "secdef": false
+    },
+    {
+      "name": "request_wiki_project_rebuild",
+      "args": "p_project_id uuid, p_reason text",
+      "secdef": false
+    },
+    {
+      "name": "restore_wiki_document_revision",
+      "args": "p_topic_id uuid, p_revision_id uuid, p_expected_updated_at timestamp with time zone",
+      "secdef": true
+    },
+    {
+      "name": "retract_minute_wiki_sources",
+      "args": "p_minute_id uuid, p_reason text",
+      "secdef": false
+    },
+    {
+      "name": "review_wiki_item",
+      "args": "p_item_id uuid, p_review_state text",
+      "secdef": true
+    },
+    {
+      "name": "save_wiki_document",
+      "args": "p_topic_id uuid, p_title text, p_body_md text, p_document_kind text, p_expected_updated_at timestamp with time zone",
+      "secdef": true
+    },
+    {
+      "name": "set_dependency_waiver",
+      "args": "p_item_id uuid, p_pred_ref text, p_waive boolean, p_reason text, p_actor uuid",
+      "secdef": false
+    },
+    {
+      "name": "submit_wiki_feedback",
+      "args": "p_topic_id uuid, p_kind text, p_comment text",
+      "secdef": true
+    },
+    {
+      "name": "update_minute_metadata_with_wiki_retraction",
+      "args": "p_minute_id uuid, p_metadata jsonb",
+      "secdef": false
+    },
+    {
+      "name": "update_project_member_with_identity",
+      "args": "p_member_id uuid, p_name text, p_email text, p_team_id uuid, p_role text, p_title text, p_role_label text",
+      "secdef": true
+    },
+    {
+      "name": "upsert_ai_index_jobs",
+      "args": "p_jobs jsonb",
+      "secdef": false
+    },
+    {
+      "name": "usage_daily_actives",
+      "args": "p_from date, p_to date",
+      "secdef": false
+    },
+    {
+      "name": "usage_menu_ranking",
+      "args": "p_from date, p_to date",
+      "secdef": false
+    },
+    {
+      "name": "usage_sessions",
+      "args": "p_from date, p_to date, p_gap_minutes integer",
+      "secdef": false
+    },
+    {
+      "name": "usage_summary",
+      "args": "p_from date, p_to date, p_today date",
+      "secdef": false
+    },
+    {
+      "name": "usage_user_rollup",
+      "args": "p_from date, p_to date",
+      "secdef": false
+    },
+    {
+      "name": "validate_task_dependency",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "verify_wiki_document",
+      "args": "p_topic_id uuid, p_review_days integer, p_expected_updated_at timestamp with time zone",
+      "secdef": true
+    },
+    {
+      "name": "wbs_is_leaf",
+      "args": "p_item_id uuid",
+      "secdef": true
+    },
+    {
+      "name": "wbs_items_broadcast",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "wbs_items_prune_waived",
+      "args": "",
+      "secdef": true
+    },
+    {
+      "name": "wiki_change_events_copy_source_provenance",
+      "args": "",
+      "secdef": false
+    },
+    {
+      "name": "wiki_fnv1a64",
+      "args": "p_text text",
+      "secdef": false
+    },
+    {
+      "name": "wiki_item_has_live_source",
+      "args": "p_item_id uuid",
+      "secdef": true
+    },
+    {
+      "name": "wiki_key_slug",
+      "args": "p_text text",
+      "secdef": false
+    },
+    {
+      "name": "wiki_normalize_document_title",
+      "args": "p_title text",
+      "secdef": false
+    },
+    {
+      "name": "wiki_topic_revisions_reject_mutation",
+      "args": "",
+      "secdef": false
+    }
+  ],
+  "triggers": [
+    {
+      "table": "ai_documents",
+      "name": "ai_documents_minute_scope_guard_trg",
+      "def": "CREATE TRIGGER ai_documents_minute_scope_guard_trg BEFORE INSERT OR UPDATE ON public.ai_documents FOR EACH ROW EXECUTE FUNCTION guard_minute_ai_document_scope()"
+    },
+    {
+      "table": "issue_major_processes",
+      "name": "trg_assign_issue_major_seq",
+      "def": "CREATE TRIGGER trg_assign_issue_major_seq BEFORE INSERT OR UPDATE ON public.issue_major_processes FOR EACH ROW EXECUTE FUNCTION assign_issue_major_seq()"
+    },
+    {
+      "table": "issues",
+      "name": "trg_assign_issue_analysis_code",
+      "def": "CREATE TRIGGER trg_assign_issue_analysis_code BEFORE INSERT OR UPDATE ON public.issues FOR EACH ROW EXECUTE FUNCTION assign_issue_analysis_code()"
+    },
+    {
+      "table": "minute_versions",
+      "name": "minute_versions_immutable_trg",
+      "def": "CREATE TRIGGER minute_versions_immutable_trg BEFORE DELETE OR UPDATE ON public.minute_versions FOR EACH ROW EXECUTE FUNCTION minute_versions_reject_mutation()"
+    },
+    {
+      "table": "minutes",
+      "name": "minutes_protect_external_id_trg",
+      "def": "CREATE TRIGGER minutes_protect_external_id_trg BEFORE INSERT OR UPDATE ON public.minutes FOR EACH ROW EXECUTE FUNCTION minutes_protect_external_id()"
+    },
+    {
+      "table": "notification_recipients",
+      "name": "notify_recipient_broadcast",
+      "def": "CREATE TRIGGER notify_recipient_broadcast AFTER INSERT ON public.notification_recipients FOR EACH ROW EXECUTE FUNCTION notify_recipient_broadcast()"
+    },
+    {
+      "table": "project_members",
+      "name": "project_members_normalize_link_trg",
+      "def": "CREATE TRIGGER project_members_normalize_link_trg BEFORE INSERT OR UPDATE ON public.project_members FOR EACH ROW EXECUTE FUNCTION project_members_normalize_link()"
+    },
+    {
+      "table": "project_members",
+      "name": "zz_project_member_email_identity_trg",
+      "def": "CREATE TRIGGER zz_project_member_email_identity_trg BEFORE INSERT OR UPDATE OF email, name ON public.project_members FOR EACH ROW EXECUTE FUNCTION enforce_project_member_email_identity()"
+    },
+    {
+      "table": "task_dependencies",
+      "name": "trg_validate_task_dependency",
+      "def": "CREATE TRIGGER trg_validate_task_dependency BEFORE INSERT OR UPDATE ON public.task_dependencies FOR EACH ROW EXECUTE FUNCTION validate_task_dependency()"
+    },
+    {
+      "table": "wbs_items",
+      "name": "trg_guard_dependent_wbs_dates",
+      "def": "CREATE TRIGGER trg_guard_dependent_wbs_dates BEFORE UPDATE OF planned_start, planned_end ON public.wbs_items FOR EACH ROW EXECUTE FUNCTION guard_dependent_wbs_dates()"
+    },
+    {
+      "table": "wbs_items",
+      "name": "trg_guard_non_admin_column_scope",
+      "def": "CREATE TRIGGER trg_guard_non_admin_column_scope BEFORE UPDATE ON public.wbs_items FOR EACH ROW EXECUTE FUNCTION guard_non_admin_column_scope()"
+    },
+    {
+      "table": "wbs_items",
+      "name": "wbs_items_broadcast",
+      "def": "CREATE TRIGGER wbs_items_broadcast AFTER UPDATE OF stage, actual_pct ON public.wbs_items FOR EACH ROW WHEN (((old.stage IS DISTINCT FROM new.stage) OR (old.actual_pct IS DISTINCT FROM new.actual_pct))) EXECUTE FUNCTION wbs_items_broadcast()"
+    },
+    {
+      "table": "wbs_items",
+      "name": "wbs_items_prune_waived",
+      "def": "CREATE TRIGGER wbs_items_prune_waived BEFORE UPDATE OF depends ON public.wbs_items FOR EACH ROW EXECUTE FUNCTION wbs_items_prune_waived()"
+    },
+    {
+      "table": "wiki_change_events",
+      "name": "wiki_change_events_source_provenance_trg",
+      "def": "CREATE TRIGGER wiki_change_events_source_provenance_trg BEFORE INSERT OR UPDATE OF source_id ON public.wiki_change_events FOR EACH ROW EXECUTE FUNCTION wiki_change_events_copy_source_provenance()"
+    },
+    {
+      "table": "wiki_topic_revisions",
+      "name": "wiki_topic_revisions_immutable_trg",
+      "def": "CREATE TRIGGER wiki_topic_revisions_immutable_trg BEFORE DELETE OR UPDATE ON public.wiki_topic_revisions FOR EACH ROW EXECUTE FUNCTION wiki_topic_revisions_reject_mutation()"
+    }
+  ],
+  "rls_tables": [
+    "agent_lead_leases",
+    "agent_projects",
+    "agent_runners",
+    "agent_watchers",
+    "agent_work_orders",
+    "agent_work_reports",
+    "ai_documents",
+    "ai_index_jobs",
+    "announcement_seen",
+    "announcements",
+    "attendance_records",
+    "change_logs",
+    "deliverable_attachments",
+    "holidays",
+    "issue_analysis_runs",
+    "issue_assignees",
+    "issue_attachments",
+    "issue_links",
+    "issue_major_processes",
+    "issue_mega_areas",
+    "issue_number_counters",
+    "issue_updates",
+    "issues",
+    "item_owners",
+    "llm_config",
+    "llm_profiles",
+    "meeting_attendees",
+    "meeting_exceptions",
+    "meetings",
+    "memberships",
+    "minute_embeddings",
+    "minute_favorites",
+    "minute_files",
+    "minute_folders",
+    "minute_highlights",
+    "minute_insights",
+    "minute_versions",
+    "minutes",
+    "notification_events",
+    "notification_recipients",
+    "project_ai_briefs",
+    "project_invites",
+    "project_member_identities",
+    "project_members",
+    "project_roles",
+    "project_settings",
+    "projects",
+    "task_dependencies",
+    "teams",
+    "usage_events",
+    "user_preferences",
+    "user_wbs_state",
+    "wbs_embeddings",
+    "wbs_items",
+    "wbs_progress_snapshots",
+    "weekly_report_rows",
+    "weekly_reports",
+    "wiki_change_events",
+    "wiki_feedback",
+    "wiki_item_relations",
+    "wiki_item_sources",
+    "wiki_items",
+    "wiki_processing_jobs",
+    "wiki_project_rebuild_jobs",
+    "wiki_questions",
+    "wiki_topic_revisions",
+    "wiki_topics"
+  ],
+  "buckets": [
+    {
+      "id": "deliverables",
+      "name": "deliverables",
+      "public": false,
+      "file_size_limit": null,
+      "allowed_mime_types": null
+    },
+    {
+      "id": "issue-attachments",
+      "name": "issue-attachments",
+      "public": false,
+      "file_size_limit": 52428800,
+      "allowed_mime_types": null
+    },
+    {
+      "id": "minutes",
+      "name": "minutes",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": null
+    }
+  ],
+  "extensions": [
+    {
+      "name": "pg_stat_statements",
+      "schema": "extensions"
+    },
+    {
+      "name": "pg_trgm",
+      "schema": "public"
+    },
+    {
+      "name": "pgcrypto",
+      "schema": "extensions"
+    },
+    {
+      "name": "supabase_vault",
+      "schema": "vault"
+    },
+    {
+      "name": "uuid-ossp",
+      "schema": "extensions"
+    },
+    {
+      "name": "vector",
+      "schema": "public"
+    }
+  ],
+  "publication_tables": [
+    {
+      "schema": "public",
+      "table": "weekly_report_rows"
+    }
+  ]
+}

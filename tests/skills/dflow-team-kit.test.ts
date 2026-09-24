@@ -1,0 +1,79 @@
+// tests/skills/dflow-team-kit.test.ts
+import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const ROOT = process.cwd() // vitest 는 리포 루트에서 돈다(기존 tests/ 관례)
+
+describe('dflow-team 배포·권한 준비(스펙 §8·§10)', () => {
+  it('kit-build.sh 배포 목록에 dflow-team 이 있고 권한 목록 파일을 킷에 싣는다', () => {
+    const kit = readFileSync(join(ROOT, 'scripts/kit-build.sh'), 'utf8')
+    expect(kit).toMatch(/^SKILLS=".*\bdflow-team\b.*"$/m)
+    expect(kit).toContain('cp "$ROOT/kit/worker-allow.json" "$OUT/worker-allow.json"')
+  })
+
+  it('install.sh 안내와 킷 README 표에 dflow-team 이 있다', () => {
+    expect(readFileSync(join(ROOT, 'kit/install.sh'), 'utf8')).toMatch(/설치 완료: .*dflow-team/)
+    expect(readFileSync(join(ROOT, 'kit/README.md'), 'utf8')).toMatch(/^\| dflow-team \|/m)
+  })
+
+  it('worker-allow.json 은 권한 규칙 문자열 배열이고 git 규칙은 넣지 않는다', () => {
+    const j = JSON.parse(readFileSync(join(ROOT, 'kit/worker-allow.json'), 'utf8'))
+    expect(Array.isArray(j.allow)).toBe(true)
+    // 목록은 리허설 결과대로 비어 있을 수 있다(Task 9: 권한 프롬프트 0건). 표본 하나로 형태 검사가 실제로 돌게 한다
+    for (const r of [...j.allow, 'Bash(npm test)']) {
+      expect(r).toMatch(/^[A-Za-z]+\(.+\)$/)
+      expect(r).not.toMatch(/git /)
+    }
+  })
+
+  it('install.sh 가 git 절대경로 규칙과 목록을 settings.json permissions.allow 에 합친다', () => {
+    const sh = readFileSync(join(ROOT, 'kit/install.sh'), 'utf8')
+    expect(sh).toContain('GIT_ABS=$(command -v git)')
+    expect(sh).toContain('--slurpfile add "$KIT_DIR/worker-allow.json"')
+    expect(sh).not.toContain('agent-team')
+    expect(sh).toContain('.permissions.allow = (((.permissions.allow // []) + [$git] + $add[0].allow) | unique)')
+  })
+
+  it('F1: kit-build.sh 가 .gitattributes 를 복사하고, 킷·설치 대상 모두 스킬 줄끝을 LF 로 고정하며, dflow.sh·heartbeat.sh 가 .env 값의 CR 을 걷어내고, README 에 Windows 절이 있다', () => {
+    const kit = readFileSync(join(ROOT, 'scripts/kit-build.sh'), 'utf8')
+    expect(kit).toContain('cp "$ROOT/kit/.gitattributes" "$OUT/.gitattributes"')
+
+    expect(readFileSync(join(ROOT, 'kit/.gitattributes'), 'utf8')).toContain('* text=auto eol=lf')
+
+    const inst = readFileSync(join(ROOT, 'kit/install.sh'), 'utf8')
+    expect(inst).toContain('.claude/skills/** text eol=lf')
+    expect(inst).toContain('git add --renormalize .')
+
+    const hb = readFileSync(join(ROOT, 'kit/hooks/heartbeat.sh'), 'utf8')
+    // 토큰 목록 전체(_all)와 키 선택 값(_as)에서 CR 을 걷어낸다 — 고르기 전에 걷어야 prefix 비교가 맞는다
+    expect(hb).toContain(`_base=$(printf '%s' "$_base" | tr -d '\\r'); _all=$(printf '%s' "$_all" | tr -d '\\r')`)
+    expect(hb).toContain(`_as=$(printf '%s' "\${DFLOW_AS:-}" | tr -d '\\r')`)
+
+    const dflow = readFileSync(join(ROOT, '.claude/skills/dflow-work/scripts/dflow.sh'), 'utf8')
+    expect(dflow).toContain("_cr=$(printf '\\r')")
+    expect(dflow).toContain('for _v in DFLOW_API_BASE DFLOW_PATS DFLOW_PAT DFLOW_PROJECT_ID DFLOW_PROJECT_MAP DFLOW_AS; do')
+    expect(dflow).toContain(`tr -d '\\\\r'`)
+
+    expect(readFileSync(join(ROOT, 'kit/README.md'), 'utf8')).toMatch(/^## Windows\(Git Bash\)$/m)
+  })
+
+  it('F1: dflow.sh doctor 는 CRLF .env 를 읽어도 \\r 없는 출력을 내고 토큰 미설정으로 종료한다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dflow-crlf-'))
+    const envFile = join(dir, 'env-crlf')
+    try {
+      writeFileSync(envFile, 'DFLOW_API_BASE=https://example.invalid\r\nDFLOW_PATS=\r\n')
+      const r = spawnSync('sh', [join(ROOT, '.claude/skills/dflow-work/scripts/dflow.sh'), 'doctor'], {
+        env: { ...process.env, DFLOW_ENV_FILE: envFile, DFLOW_PATS: '', DFLOW_PAT: '' },
+        encoding: 'utf8',
+      })
+      expect(r.stdout).not.toContain('\r')
+      expect(r.stdout).toContain('base: https://example.invalid')
+      expect(r.status).toBe(2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

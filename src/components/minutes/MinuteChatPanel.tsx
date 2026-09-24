@@ -1,0 +1,228 @@
+'use client'
+import { useEffect, useRef, useState } from 'react'
+import { Bot, RotateCcw, Send, X } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
+import { fetchMinuteFoldersLite } from '@/app/actions/minutes'
+import { teamChildFoldersOf } from '@/lib/domain/minutes'
+import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
+import { linkifyMinutePaths } from './linkify'
+
+type Msg = { id: number; role: 'user' | 'assistant'; content: string }
+
+/** 회의록 채팅 공용 훅 — mode/필터만 다른 doc·archive 패널이 공유. */
+export function useMinutesChat(buildBody: (message: string, history: Msg[]) => object) {
+  const { t } = useLocale()
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [loading, setLoading] = useState(false)
+  const idRef = useRef(0)
+  const nextId = () => (idRef.current += 1)
+
+  async function send(raw: string) {
+    const text = raw.trim()
+    if (!text || loading) return
+    const history = messages.map(m => ({ role: m.role, content: m.content }))
+    setMessages(prev => [...prev, { id: nextId(), role: 'user', content: text }])
+    setLoading(true)
+    let asstId: number | null = null
+    try {
+      const res = await fetch('/api/minutes/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildBody(text, history as Msg[])),
+      })
+      if (!res.ok || !res.body) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: data.error ?? t('min.chat.error') }])
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let acc = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+        if (asstId === null) {
+          const id = nextId(); asstId = id
+          setMessages(prev => [...prev, { id, role: 'assistant', content: acc }])
+        } else {
+          const id = asstId
+          setMessages(prev => prev.map(m => (m.id === id ? { ...m, content: acc } : m)))
+        }
+      }
+      if (asstId === null) setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: t('min.chat.empty') }])
+    } catch {
+      setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: t('min.chat.error') }])
+    } finally { setLoading(false) }
+  }
+  /** 대화 초기화 — 응답 수신 중에는 무시(스트림이 사라진 말풍선에 계속 쓰는 혼선 방지). */
+  function reset() {
+    if (loading) return
+    setMessages([])
+  }
+  return { messages, loading, send, reset }
+}
+
+/** 어시스턴트/사용자 말풍선 — plain text. renderContent 로 링크화 주입 가능(archive 전용). */
+export function ChatBubble({ role, content, renderContent }: {
+  role: 'user' | 'assistant'; content: string
+  renderContent?: (content: string) => React.ReactNode
+}) {
+  const isUser = role === 'user'
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-relaxed ${
+        isUser ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
+      }`}>
+        {!isUser && renderContent ? renderContent(content) : content}
+      </div>
+    </div>
+  )
+}
+
+/** 답변 준비 표시 — 스트림 첫 청크가 오기 전까지 점 세 개로 대기 상태를 보여준다(AssistantChat과 동일 모양). */
+export function TypingBubble() {
+  const { t } = useLocale()
+  return (
+    <div className="flex justify-start" role="status" aria-label={t('min.chat.typing')}>
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 px-4 py-3">
+        {[0, 1, 2].map(i => (
+          <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-subtle"
+            style={{ animationDelay: `${i * 0.15}s` }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function ChatComposer({ onSend, loading }: { onSend: (v: string) => void; loading: boolean }) {
+  const { t } = useLocale()
+  const [value, setValue] = useState('')
+  const composingRef = useRef(false)
+  function submit() {
+    if (composingRef.current) return
+    onSend(value); setValue('')
+  }
+  return (
+    <div className="flex items-center gap-1.5 border-t border-line p-2">
+      <input value={value} onChange={e => setValue(e.target.value)}
+        onCompositionStart={() => { composingRef.current = true }}
+        onCompositionEnd={() => { composingRef.current = false }}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
+        placeholder={t('min.chat.placeholder')} className="app-input h-9 flex-1" />
+      <button onClick={submit} disabled={loading} className="btn btn-primary h-9 px-2.5" aria-label={t('min.chat.send')}>
+        <Send className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+type ChatScope = 'doc' | 'archive'
+type TeamKey = 'ALL' | TeamCode
+
+/** 문서 모드 패널 — 뷰어 우측(좁은 화면에선 아래). 범위 토글로 전체 보관함 질문 가능.
+ *  projects 는 하위 구분 칩의 프로젝트 라벨용(0076). */
+export function MinuteChatPanel({ minuteId, projects = [] }: {
+  minuteId: string
+  projects?: { id: string; name: string }[]
+}) {
+  const { t } = useLocale()
+  const teamCodes = useTeamCodes()
+  const [open, setOpen] = useState(true)
+  const [scope, setScope] = useState<ChatScope>('doc')
+  const [team, setTeam] = useState<TeamKey>('ALL')
+  // 하위 폴더 필터 — null 은 '팀 전체'. 팀 변경 시 리셋(타 팀 폴더가 남으면 서버가 400 으로 거른다).
+  const [folderId, setFolderId] = useState<string | null>(null)
+  const [folders, setFolders] = useState<MinuteFolder[] | 'idle' | 'loading' | 'error'>('idle')
+  // archive 첫 진입 시 1회 지연 로드 — 문서 질문만 쓰는 대다수 세션에 폴더 조회를 물리지 않는다.
+  useEffect(() => {
+    if (scope !== 'archive' || folders !== 'idle') return
+    setFolders('loading')
+    fetchMinuteFoldersLite()
+      .then(r => setFolders(r ?? 'error'))
+      .catch(() => setFolders('error'))
+  }, [scope, folders])
+  // 범위별 독립 스레드 — 전환해도 각 대화가 보존되고 LLM 컨텍스트가 섞이지 않는다.
+  const doc = useMinutesChat((message, history) => ({ mode: 'doc', minuteId, message, history }))
+  const archive = useMinutesChat((message, history) => ({
+    mode: 'archive', message, history,
+    filters: { team: team === 'ALL' ? null : team, folderId, from: null, to: null },
+  }))
+  const chat = scope === 'doc' ? doc : archive
+  const subFolders = scope === 'archive' && team !== 'ALL' && Array.isArray(folders)
+    ? teamChildFoldersOf(folders, team) : []
+  // teamChildFoldersOf(→teamRootFolderIdOf)는 이름이 일치하는 팀 루트 중 첫 번째 것만 본다 —
+  // 0076 이후 같은 팀 이름의 루트가 프로젝트마다 있을 수 있어(각 프로젝트의 PMO 등), 어느
+  // 프로젝트 것이 뽑혔는지 화면에서 알 길이 없었다. 동명 루트가 하나뿐일 때(지금의 보통 상태)는
+  // 종전과 똑같이 보이고, 여럿일 때만 지금 뽑힌 루트의 프로젝트 이름을 칩에 붙인다.
+  const ambiguousTeamRoot = Array.isArray(folders)
+    && folders.filter(f => f.parentId === null && f.createdBy === null && f.name === team).length > 1
+  const pickedRootProjectId = Array.isArray(folders)
+    ? folders.find(f => f.parentId === null && f.createdBy === null && f.name === team)?.projectId ?? null
+    : null
+  const subFolderProjectLabel = ambiguousTeamRoot
+    ? (pickedRootProjectId ? (projects.find(p => p.id === pickedRootProjectId)?.name ?? null) : t('min.grp.unassigned'))
+    : null
+  const subFolderLabel = (f: MinuteFolder) =>
+    subFolderProjectLabel ? `${subFolderProjectLabel} · ${f.name}` : f.name
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn self-start">
+        <Bot className="h-4 w-4" />{t('min.chat.doc.title')}
+      </button>
+    )
+  }
+  return (
+    <aside className="card flex h-[560px] w-full flex-col xl:h-auto xl:w-[340px] xl:shrink-0">
+      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+        <span className="inline-flex items-center gap-2">
+          <Bot className="h-4 w-4 shrink-0 text-brand" />
+          <SegmentedTabs<ChatScope>
+            tabs={[{ key: 'doc', label: t('min.chat.scope.doc') },
+                   { key: 'archive', label: t('min.chat.scope.all') }]}
+            value={scope} onChange={setScope} size="sm" />
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <button onClick={chat.reset} disabled={chat.loading || chat.messages.length === 0}
+            className="text-ink-subtle hover:text-ink disabled:opacity-40"
+            title={t('min.chat.reset')} aria-label={t('min.chat.reset')}>
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          <button onClick={() => setOpen(false)} className="text-ink-subtle hover:text-ink" aria-label="close">
+            <X className="h-4 w-4" />
+          </button>
+        </span>
+      </div>
+      {scope === 'archive' && (
+        <div className="space-y-1.5 border-b border-line px-3 py-1.5">
+          <div className="overflow-x-auto">
+            <SegmentedTabs<TeamKey>
+              tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
+              value={team} onChange={tk => { setTeam(tk); setFolderId(null) }} size="sm" />
+          </div>
+          {subFolders.length > 0 && (
+            <div className="overflow-x-auto">
+              <SegmentedTabs<string>
+                tabs={[{ key: 'ALL', label: t('min.team.all') },
+                       ...subFolders.map(f => ({ key: f.id, label: subFolderLabel(f) }))]}
+                value={folderId ?? 'ALL'} onChange={k => setFolderId(k === 'ALL' ? null : k)} size="sm" />
+            </div>
+          )}
+          {team !== 'ALL' && folders === 'error' && (
+            <p className="text-xs text-ink-subtle">{t('min.chat.folder.error')}</p>
+          )}
+        </div>
+      )}
+      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        {chat.messages.map(m => (
+          <ChatBubble key={m.id} role={m.role} content={m.content}
+            renderContent={scope === 'archive' ? linkifyMinutePaths : undefined} />
+        ))}
+        {chat.loading && chat.messages[chat.messages.length - 1]?.role !== 'assistant' && <TypingBubble />}
+      </div>
+      <ChatComposer onSend={chat.send} loading={chat.loading} />
+    </aside>
+  )
+}

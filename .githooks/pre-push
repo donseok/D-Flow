@@ -1,0 +1,285 @@
+#!/bin/sh
+#
+# pre-push 가드 — D-Flow (1층 관문)
+#
+# 설치: npm install 이 자동으로 `git config core.hooksPath .githooks` 를 건다
+#       (package.json 의 prepare 스크립트). 리포에 커밋되므로 모든 PC 에 따라간다.
+#
+# 왜 build/lint/test 를 여기서 돌리지 않는가:
+#   2026-07-27 사이드바 실종 회귀는 next build·tsc·eslint·vitest 2438건을 전부
+#   통과했다. 이미 초록인 검사를 push 마다 다시 돌리는 것은 시간만 쓰고 아무것도
+#   막지 못한다. 대신 "되돌리기를 불가능하게 만드는 커밋"과 "화면 사고가 프로덕션에
+#   직행하는 경로"만 막는다. 빌드 자체는 Vercel 이 어차피 강제한다.
+#
+# 검사 대상 범위 — 이 훅의 핵심 설계:
+#   `<local> --not --remotes=<remote>` = "이번 push 로 원격에 **처음** 올라가는 커밋".
+#   단순히 `remote_oid..local_oid` 로 잡으면 브랜치에 origin/main 을 머지한 순간
+#   남이 이미 올린 커밋 수백 개가 검사 대상에 들어와, 고칠 수 없는 지적을 쏟아내고
+#   SKIP_GUARD 를 상습화시킨다. 이 범위 정의는 그 문제를 원천 제거하는 동시에
+#   G2 의 "Preview 를 거쳤는가" 판정 근거도 된다 — 원격 어딘가에 이미 있는 커밋은
+#   Preview 배포를 받았다는 뜻이고, 남아 있는 커밋은 아직 어디에도 없다는 뜻이다.
+#
+#   G4: 0001+ 마이그레이션의 main 직행 차단(Staging-verified 트레일러, 범위 단위, --not origin/main)
+#
+# 우회: SKIP_GUARD=1 git push   (긴급용 — 배포 후 npm run smoke:prod 필수)
+
+set -u
+
+REMOTE="${1:-origin}"
+ZERO='0000000000000000000000000000000000000000'
+
+# 색은 사람이 보는 터미널에서만. GUI 클라이언트·CI 로그에 제어문자를 흘리지 않는다.
+if [ -t 2 ]; then
+  RED='\033[31m'; YEL='\033[33m'; GRN='\033[32m'; DIM='\033[2m'; OFF='\033[0m'
+else
+  RED=''; YEL=''; GRN=''; DIM=''; OFF=''
+fi
+
+if [ "${SKIP_GUARD:-}" = "1" ]; then
+  printf '%s⚠  SKIP_GUARD=1 — push 가드를 건너뜁니다.%s\n' "$YEL" "$OFF" >&2
+  printf '%s   배포 후 반드시 `npm run smoke:prod` 로 확인하세요.%s\n' "$YEL" "$OFF" >&2
+  exit 0
+fi
+
+# core.quotePath=true(기본)면 비ASCII 경로가 "src/\354\202\254..." 로 인용돼 나와
+# ^src/ 앵커가 빗나가고 가드가 조용히 fail-open 한다. 이 리포는 한국어를 쓴다.
+GIT='git -c core.quotePath=false'
+
+UI_RE='^(src/app/globals\.css|src/app/layout\.tsx|src/app/\(app\)/layout\.tsx|src/components/app/)'
+
+# 머지 커밋의 **자체 변경**(이른바 evil merge) — 충돌을 해결하며 어느 부모에도 없던 내용을
+# 끼워 넣은 것. `git log --no-merges` 로는 **보이지 않고**(파일 0건), 평범한 diff-tree 도
+# 머지 커밋에는 빈 출력을 낸다. `--cc` 만이 "모든 부모와 다른 변경"을 정확히 골라낸다.
+# 실측: 4개 파일을 끼운 머지에서 --no-merges=0건 / --cc=4건.
+evil_files() { $GIT diff-tree --cc --no-commit-id --name-only -r "$1" 2>/dev/null; }
+
+STDIN_BUF=$(cat)
+[ -z "$STDIN_BUF" ] && exit 0
+
+fail=0
+msgs=$(mktemp)
+trap 'rm -f "$msgs"' EXIT
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ -z "${local_ref:-}" ] && continue
+  [ "$local_oid" = "$ZERO" ] && continue          # 브랜치 삭제
+  case "$local_ref" in refs/tags/*) continue ;; esac  # 태그 push (mark:good) 는 대상 아님
+
+  # ── G4. 스테이징 DB 리허설 없이 마이그레이션이 main 으로 가는가 ────────
+  # G1·G2 의 `range`(--not --remotes, 아래)에 편승하지 않고 독립 블록으로 둔 이유:
+  # `range` 는 "원격 어디에도 없는 커밋"이라 staging 에 이미 올라간 커밋은 여기서
+  # 비게 되고, `[ -z "$range" ] && continue` 아래 있었다면 G4 도 같이 스킵된다(실측
+  # 확인 — 2026-08-11 리뷰). `printf '%s\n' "" | git log --stdin` 이 빈 입력을
+  # "무시"가 아니라 HEAD 로 폴백하는 git 실동작(2.50.1 실측) 때문에, `range` 가 빌 때
+  # G1·G2 파이프라인에 얹혀가려던 이전 시도는 이미 게이트를 지난 상태에서 HEAD 커밋을
+  # false positive 로 잘못 검사하는 새 버그를 냈다 — 그래서 G1·G2 의 `range` 계산과
+  # `continue` 게이트보다 앞, 완전히 별도의 블록으로 둔다.
+  # 범위가 G1·G2(--not --remotes)와 다른 이유: 표준 흐름에서 마이그레이션 커밋은
+  # origin/staging 에 먼저 올라가므로 --not --remotes 로는 main push 시점에 이미
+  # 검사망을 빠져나가 있다. 여기서는 "origin/main 에 새로 들어가는 커밋"을 본다.
+  # 검사 단위는 커밋이 아니라 push 범위 — 이미 원격에 있는 커밋은 amend 가 불가능해
+  # 커밋 단위 강제는 '고칠 수 없는 차단 → SKIP_GUARD 상습화'를 낳는다(G2 헤더 참조).
+  # 컷오프 0001: 모든 신규 마이그레이션이 스테이징 리허설을 거치도록 강제한다.
+  # D-Flow 는 프로덕션 스키마 덤프(0000_baseline)로 시작하므로 이전 컷오프는 없다.
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    if ! g4_range=$($GIT rev-list "$local_oid" --not "refs/remotes/$REMOTE/main" 2>&1); then
+      {
+        printf '%sG4 범위 계산 실패 — 가드를 신뢰할 수 없습니다%s\n' "$RED" "$OFF"
+        printf '   %s%s%s\n' "$DIM" "$g4_range" "$OFF"
+        printf '   `git fetch %s` 후 다시 시도하세요.\n' "$REMOTE"
+      } >> "$msgs"
+      fail=1
+    elif [ -n "$g4_range" ]; then
+      # 0001 이상 마이그레이션을 건드린 일반 커밋 ("supabase/migrations/" = 20자, 번호는 21~24열)
+      g4_hits=$(
+        printf '%s\n' "$g4_range" \
+          | $GIT log --no-walk --no-merges --name-only --format='%x01%H%x02%s' --stdin 2>/dev/null \
+          | awk '
+            /^\001/ { if (sha != "" && hit) print sha "\t" subj
+                      split(substr($0,2), p, "\002"); sha = p[1]; subj = p[2]; hit = 0; next }
+            /^supabase\/migrations\/[0-9][0-9][0-9][0-9]/ { if (substr($0,21,4) + 0 >= 1) hit = 1 }
+            END { if (sha != "" && hit) print sha "\t" subj }
+          '
+      )
+      # 머지 커밋 자체 변경(evil merge)도 같은 기준으로 (기존 evil_files 재사용)
+      g4_merges=$($GIT rev-list --merges "$local_oid" --not "refs/remotes/$REMOTE/main" 2>/dev/null)
+      for sha in $g4_merges; do
+        files=$(evil_files "$sha")
+        [ -z "$files" ] && continue
+        hit=$(printf '%s\n' "$files" | awk '/^supabase\/migrations\/[0-9][0-9][0-9][0-9]/ { if (substr($0,21,4) + 0 >= 1) { print "y"; exit } }')
+        [ -z "$hit" ] && continue
+        g4_hits="${g4_hits}${g4_hits:+
+}$sha	$($GIT log -1 --pretty=%s "$sha") [머지 커밋 자체 변경]"
+      done
+
+      if [ -n "$g4_hits" ]; then
+        # push 범위 내 아무 커밋의 Staging-verified 트레일러로 통과 (빈 커밋도 인정 — 복구 경로)
+        g4_ok=$(printf '%s\n' "$g4_range" \
+          | $GIT log --no-walk --format='%(trailers:key=Staging-verified,valueonly)' --stdin 2>/dev/null \
+          | tr -d ' \t\r\n')
+        if [ -z "$g4_ok" ]; then
+          {
+            printf '%sG4 스테이징 리허설 기록 없이 마이그레이션이 main 으로 갑니다%s\n' "$RED" "$OFF"
+            printf '%s\n' "$g4_hits" | while IFS="$(printf '\t')" read -r sha subj; do
+              printf '   %s %s\n' "$(echo "$sha" | cut -c1-7)" "$subj"
+            done
+            printf '   순서: staging:sync → db:apply --target staging → 검증 → prod (docs/runbook-staging.md)\n\n'
+            printf '   %s리허설을 마쳤다면 기록을 남기세요(커밋 시점에, 또는 빈 커밋으로):%s\n' "$GRN" "$OFF"
+            printf '     git commit --allow-empty -m "마이그레이션 스테이징 리허설" --trailer "Staging-verified: $(date +%%F) db 리허설 통과"\n'
+          } >> "$msgs"
+          fail=1
+        fi
+      fi
+    fi
+  fi
+
+  # 이번 push 로 원격에 처음 올라가는 커밋들. rev-list 가 실패하면 범위를 모른다는
+  # 뜻이므로 조용히 통과시키지 않는다(fail-closed) — force push 로 가드가 통째로
+  # 사라지던 구멍을 막는다.
+  if ! range=$($GIT rev-list "$local_oid" --not --remotes="$REMOTE" 2>&1); then
+    {
+      printf '%s범위 계산 실패 — 가드를 신뢰할 수 없습니다%s\n' "$RED" "$OFF"
+      printf '   git rev-list %s --not --remotes=%s\n' "$local_oid" "$REMOTE"
+      printf '   %s%s%s\n' "$DIM" "$range" "$OFF"
+      printf '   `git fetch %s` 후 다시 시도하세요.\n' "$REMOTE"
+    } >> "$msgs"
+    fail=1
+    continue
+  fi
+  [ -z "$range" ] && continue
+  # 같은 범위의 머지 커밋 — 아래 G1·G2 가 evil merge 를 따로 검사한다.
+  merges=$($GIT rev-list --merges "$local_oid" --not --remotes="$REMOTE" 2>/dev/null)
+
+  # ── G1. 마이그레이션 + 코드 혼합 커밋 차단 ────────────────────────────
+  # 최근 30일 마이그레이션 동반 커밋 54건 중 40건이 같은 커밋에 src/ 를 담고 있었다.
+  # 그런 커밋은 revert 해도 DB 가 남아 되돌리기가 반쪽이 된다.
+  #
+  # 제외: 머지 커밋(자체 변경 없음), revert 커밋(되돌리는 행위를 막으면 훅이
+  # 스스로의 목적과 충돌한다 — 원본이 혼합이었으니 revert 도 혼합일 수밖에 없다).
+  #
+  # git 프로세스 하나로 전체를 훑는다. 커밋마다 diff-tree 를 부르면 범위가 클 때
+  # push 가 수 초씩 느려지고, 그 지연이 SKIP_GUARD 를 습관화시킨다.
+  g1=$(
+    printf '%s\n' "$range" \
+      | $GIT log --no-walk --no-merges --name-only --format='%x01%H%x02%s' --stdin 2>/dev/null \
+      | awk -v ui="$UI_RE" '
+        /^\001/ {
+          if (sha != "" && mig && src && !rev) print sha "\t" subj
+          split(substr($0,2), p, "\002"); sha = p[1]; subj = p[2]
+          mig = 0; src = 0
+          rev = (subj ~ /^Revert "/)
+          next
+        }
+        /^supabase\/migrations\// { mig = 1 }
+        /^src\//                  { src = 1 }
+        END { if (sha != "" && mig && src && !rev) print sha "\t" subj }
+      '
+  )
+  # 머지 커밋 자체 변경도 같은 기준으로 본다. revert 예외는 두지 않는다 —
+  # revert 를 머지 커밋 안에 숨기는 것은 정상 흐름이 아니다.
+  for sha in $merges; do
+    files=$(evil_files "$sha")
+    [ -z "$files" ] && continue
+    if printf '%s\n' "$files" | grep -qE '^supabase/migrations/' \
+       && printf '%s\n' "$files" | grep -qE '^src/'; then
+      g1="${g1}${g1:+
+}$sha	$($GIT log -1 --pretty=%s "$sha") [머지 커밋 자체 변경]"
+    fi
+  done
+
+  if [ -n "$g1" ]; then
+    {
+      printf '%sG1 마이그레이션+코드 혼합 커밋%s\n' "$RED" "$OFF"
+      printf '%s\n' "$g1" | while IFS="$(printf '\t')" read -r sha subj; do
+        printf '   %s %s\n' "$(echo "$sha" | cut -c1-7)" "$subj"
+      done
+      printf '   revert 해도 DB 가 그대로 남아 되돌리기가 반쪽이 됩니다.\n'
+      printf '   %sgit rebase -i%s 로 마이그레이션과 코드를 별도 커밋으로 나눠주세요.\n' "$DIM" "$OFF"
+    } >> "$msgs"
+    fail=1
+  fi
+
+  # ── G2. Preview 를 거치지 않은 UI 변경이 main 으로 직행하는가 ─────────
+  # 범위가 이미 "원격 어디에도 없는 커밋"이므로, 여기 남아 있다는 것은 어떤
+  # 브랜치로도 push 된 적이 없다 = Vercel Preview 를 받은 적이 없다는 뜻이다.
+  # 브랜치를 거쳐 왔다면(ff 머지든 --no-ff 든) 그 커밋들은 origin/<branch> 에
+  # 있으므로 범위에서 이미 빠져 있다. 머지 커밋 개수를 세던 이전 방식은
+  # ff 머지를 막고 무관한 pull 머지를 통과시키는 양방향 오작동이었다.
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    g2=$(
+      printf '%s\n' "$range" \
+        | $GIT log --no-walk --no-merges --name-only --format='%x01%H%x02%s%x02%(trailers:key=Preview-checked,valueonly)' --stdin 2>/dev/null \
+        | awk -v ui="$UI_RE" '
+          /^\001/ {
+            if (sha != "" && hit && checked == "") print sha "\t" subj
+            split(substr($0,2), p, "\002"); sha = p[1]; subj = p[2]; checked = p[3]
+            gsub(/[ \t\r\n]/, "", checked)
+            hit = 0
+            next
+          }
+          $0 ~ ui { hit = 1 }
+          END { if (sha != "" && hit && checked == "") print sha "\t" subj }
+        '
+    )
+    # 머지 커밋이 충돌 해결을 빙자해 UI 위험 파일을 고쳤다면 그 변경은 어느 브랜치에도
+    # 없었으므로 Preview 를 받은 적이 없다 — 이 훅이 막으려는 바로 그 경로다.
+    for sha in $merges; do
+      files=$(evil_files "$sha")
+      [ -z "$files" ] && continue
+      printf '%s\n' "$files" | grep -qE "$UI_RE" || continue
+      checked=$($GIT log -1 --pretty='%(trailers:key=Preview-checked,valueonly)' "$sha" | tr -d ' \t\r\n')
+      [ -n "$checked" ] && continue
+      g2="${g2}${g2:+
+}$sha	$($GIT log -1 --pretty=%s "$sha") [머지 커밋 자체 변경]"
+    done
+
+    if [ -n "$g2" ]; then
+      {
+        printf '%sG2 Preview 를 거치지 않은 UI 변경이 main 으로 직행합니다%s\n' "$RED" "$OFF"
+        printf '%s\n' "$g2" | while IFS="$(printf '\t')" read -r sha subj; do
+          printf '   %s %s\n' "$(echo "$sha" | cut -c1-7)" "$subj"
+        done
+        printf '   globals.css / layout.tsx / components/app/* 는 전 화면에 영향을 주고\n'
+        printf '   빌드·린트·테스트로는 깨짐이 잡히지 않습니다(2026-07-27 사고 때 2438건 전부 통과).\n\n'
+        printf '   %s브랜치로 옮겨 Preview 를 받으세요:%s\n' "$GRN" "$OFF"
+        printf '     git switch -c ui/<주제> && git push -u %s HEAD\n' "$REMOTE"
+        printf '     # Preview 에서 화면 확인 후 → git switch main && git merge ui/<주제> && git push\n\n'
+        printf '   %sPreview 가 필요 없다고 판단했다면 커밋에 근거를 남기세요:%s\n' "$DIM" "$OFF"
+        printf '     git commit --amend --trailer "Preview-checked: n/a — 주석만 수정"\n'
+      } >> "$msgs"
+      fail=1
+    fi
+  fi
+done <<STDIN_EOF
+$STDIN_BUF
+STDIN_EOF
+
+# ── G3. 브레이크포인트 desync 검사 ─────────────────────────────────────
+# globals.css 의 반응형 안전망은 브레이크포인트를 리터럴로 하드코딩하고 있다.
+# @theme 에 --breakpoint-* 가 추가되면 Tailwind 와 조용히 어긋나고, unlayered 인
+# 안전망이 무조건 이기기 때문에 전 화면 반응형이 틀린 폭에서 전환된다.
+G3_TEST='tests/css/breakpoint-safety-net.test.ts'
+ROOT=$($GIT rev-parse --show-toplevel 2>/dev/null || echo .)
+if [ -x "$ROOT/node_modules/.bin/vitest" ] && [ -f "$ROOT/$G3_TEST" ]; then
+  if ! (cd "$ROOT" && node_modules/.bin/vitest run "$G3_TEST" --reporter=dot --silent >/dev/null 2>&1); then
+    {
+      printf '%sG3 반응형 안전망 검사 실패%s\n' "$RED" "$OFF"
+      printf '   npx vitest run %s 로 원인을 확인하세요.\n' "$G3_TEST"
+    } >> "$msgs"
+    fail=1
+  fi
+else
+  # 조용히 넘어가면 3개 관문이 다 돌았다고 오해한다. worktree·--omit=dev 에서 흔하다.
+  printf '%s! G3 건너뜀 — vitest 없음(%s). 관문 2개만 돌았습니다.%s\n' \
+    "$YEL" "$ROOT/node_modules/.bin/vitest" "$OFF" >&2
+fi
+
+if [ "$fail" -ne 0 ]; then
+  printf '\n' >&2
+  cat "$msgs" >&2
+  printf '\n%s긴급하면 우회:%s SKIP_GUARD=1 git push %s(배포 후 npm run smoke:prod 필수)%s\n\n' \
+    "$DIM" "$OFF" "$DIM" "$OFF" >&2
+  exit 1
+fi
+
+exit 0

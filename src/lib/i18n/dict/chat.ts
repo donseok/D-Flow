@@ -1,0 +1,38 @@
+// chat 화면 사전 — 이 파일은 chat 영역 담당만 수정한다.
+// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
+export const chatKo = {
+  'chat.open': 'AI 어시스턴트 열기',
+  'chat.dialog': 'AI 어시스턴트 채팅',
+  'chat.collapse': '접기',
+  'chat.expand': 'AI 어시스턴트 펼치기',
+  'chat.reset': '대화 초기화',
+  'chat.inputPlaceholder': '질문을 입력하세요 (Enter로 전송)',
+  'chat.inputAria': '질문 입력',
+  'chat.send': '전송',
+  'chat.error.generic': '문제가 발생했어요.',
+  'chat.error.empty': '답변을 가져오지 못했어요.',
+  'chat.error.retry': '죄송해요, 답변 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.',
+  'chat.welcome.greeting': '안녕하세요, AI 어시스턴트입니다.',
+  'chat.welcome.ask': '궁금한 점을 자유롭게 질문하세요!',
+  'chat.welcome.currentProject': '현재 프로젝트',
+  // 조합형 문장 조각 — t()에 파라미터 치환이 없어 prefix + 숫자 + suffix 로 조립한다.
+  'chat.welcome.tasksPrefix': '작업 ',
+  'chat.welcome.tasksSuffix': '건',
+  'chat.welcome.progressPrefix': '공정률 ',
+  'chat.welcome.progressSuffix': '%',
+  'chat.welcome.totalPrefix': '전체 ',
+  'chat.welcome.totalSuffix': '개 프로젝트에 대해서도 질문할 수 있습니다.',
+  'chat.insight.title': '프로액티브 인사이트',
+  'chat.insight.weekPrefix': '이번 주 시작 예정 작업 ',
+  'chat.insight.weekSuffix': '건을 확인해 보세요.',
+  'chat.insight.none': '이번 주 시작 예정 작업이 없습니다. 진행 현황을 확인해 보세요.',
+  'chat.chip.weekStartPrefix': '이번 주 시작 ',
+  'chat.chip.weekStartSuffix': '건',
+  'chat.chip.weeklySummary': '주간 요약',
+  // 빠른 질문 칩 표시 라벨 — 실제 전송 문구(QUICK_SUGGESTIONS, 한국어 인텐트 매칭용)는 불변.
+  'chat.suggestion.allStatus': '전체 프로젝트 현황 알려줘',
+  'chat.suggestion.delayed': '지연된 작업이 뭐야?',
+  'chat.suggestion.thisWeek': '이번 주 작업 알려줘',
+  'chat.suggestion.byMember': '멤버별 업무 정리해줘',
+  'chat.suggestion.doneList': '완료된 작업 목록 보여줘',
+} as const

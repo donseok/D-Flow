@@ -1,0 +1,84 @@
+// scripts/db-apply.mjs
+// 마이그레이션 적용 — Management API 레시피의 범용판 (스펙 §7).
+// 규칙: staging 리허설 → 검증 → Staging-verified 트레일러 커밋 → prod 적용 → main push.
+import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { createInterface } from 'node:readline/promises'
+import { resolveTarget } from './lib/targets.mjs'
+
+const args = process.argv.slice(2)
+// 인자 파싱 — 순서 무관·엄밀하게. args.find(!startsWith('--'))는 `--target staging file.sql`
+// 순서에서 'staging'을 파일로 잘못 집고 진짜 파일을 조용히 버리는 결함이 있었다(리뷰 지적).
+// --target 의 위치를 먼저 고정한 뒤, 그 두 칸(플래그+값)과 다른 '--' 플래그를 모두 제외한
+// 나머지가 정확히 1개일 때만 그것을 SQL 파일로 받는다.
+const ti = args.indexOf('--target')
+const target = ti !== -1 ? args[ti + 1] : undefined
+const positionals = args.filter((a, i) => (ti === -1 || (i !== ti && i !== ti + 1)) && !a.startsWith('--'))
+const file = positionals.length === 1 ? positionals[0] : undefined
+const usage = '사용법: npm run db:apply -- <sql파일> --target staging|prod'
+if (ti === -1 || target === undefined) {
+  console.error(`${usage} (--target 플래그가 없거나 값이 없음)`)
+  process.exit(1)
+}
+if (positionals.length !== 1) {
+  console.error(`${usage} (SQL 파일 인자가 정확히 1개여야 함 — 현재 ${positionals.length}개: ${JSON.stringify(positionals)})`)
+  process.exit(1)
+}
+if (target === 'local') {
+  console.error('로컬은 npm run db:reset 으로 전량 재생한다(SP0 스펙 — 리허설 정본). db:apply 는 원격 전용.')
+  process.exit(1)
+}
+let ref
+try { ref = resolveTarget(target).ref } catch (e) { console.error(`✗ ${e.message}`); process.exit(1) }
+const sql = readFileSync(file, 'utf8')
+
+// 토큰은 두 경로 중 하나. 키체인 항목은 `supabase login` 이 만드는데, 그것 없이 PAT 만
+// 발급받은 PC 도 있어서(대시보드 웹 로그인은 키체인을 만들지 않는다) env 폴백을 둔다.
+// Supabase CLI 자신도 같은 이름의 환경변수를 인정한다.
+function accessToken() {
+  const fromEnv = process.env.SUPABASE_ACCESS_TOKEN?.trim()
+  if (fromEnv) return fromEnv
+  let raw
+  try {
+    raw = execFileSync(
+      'security',
+      ['find-generic-password', '-s', 'Supabase CLI', '-a', 'supabase', '-w'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim()
+  } catch {
+    console.error('✗ Supabase Management API 토큰을 찾지 못했습니다. 둘 중 하나로 해결하세요:')
+    console.error('   1) npx supabase login            (키체인 "Supabase CLI" 항목 생성 — 권장)')
+    console.error('   2) SUPABASE_ACCESS_TOKEN=sbp_... npm run db:apply -- <파일> --target <대상>')
+    console.error('      토큰 발급: https://supabase.com/dashboard/account/tokens')
+    console.error('   ⚠ 대시보드 웹 로그인만으로는 CLI 토큰이 생기지 않습니다.')
+    process.exit(1)
+  }
+  return raw.startsWith('go-keyring-base64:')
+    ? Buffer.from(raw.slice('go-keyring-base64:'.length), 'base64').toString()
+    : raw
+}
+const token = accessToken()
+
+const api = async (path, init) => {
+  const res = await fetch(`https://api.supabase.com/v1${path}`, {
+    ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`)
+  return res.json()
+}
+const query = (q) => api(`/projects/${ref}/database/query`, { method: 'POST', body: JSON.stringify({ query: q }) })
+
+// 대상 프로젝트명 실조회 — "어디에 적용하는지"를 이름으로 확인시킨다 (§7.1 안전장치)
+const proj = await api(`/projects/${ref}`, { method: 'GET' })
+console.log(`대상: ${proj.name} (${ref}) / 파일: ${file}`)
+
+if (target === 'prod') {
+  // prod 는 --yes 로 생략 불가 — 명시적 확인 문자열만 받는다
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const a = await rl.question(`운영 적용입니다. 스테이징 리허설을 마쳤습니까? 계속하려면 "${ref}" 입력: `)
+  rl.close()
+  if (a.trim() !== ref) { console.error('중단'); process.exit(1) }
+}
+
+await query(sql)
+console.log(`✓ ${target} 적용 완료 — 검증 쿼리(스키마 조회 등)로 반드시 확인할 것`)

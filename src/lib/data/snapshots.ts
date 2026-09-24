@@ -1,0 +1,99 @@
+import { createServerClient } from '@/lib/supabase/server'
+import { computeTree, overallProgress } from '@/lib/domain/rollup'
+import type { SnapshotPoint } from '@/lib/domain/trend'
+import type { ComputedItem, WbsRow } from '@/lib/domain/types'
+import { seoulToday } from '@/lib/domain/dates'
+import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
+import { teamsForProjectSync } from '@/lib/teams/master'
+
+type Sb = Awaited<ReturnType<typeof createServerClient>>
+
+/** 진척 스냅샷 조회(날짜 오름차순). numeric 컬럼은 문자열로 올 수 있어 Number 변환. */
+export async function getSnapshots(projectId: string): Promise<SnapshotPoint[]> {
+  const sb = await createServerClient()
+  const { data, error } = await sb
+    .from('wbs_progress_snapshots')
+    .select('snap_date, actual_pct, planned_pct')
+    .eq('project_id', projectId)
+    .order('snap_date', { ascending: true })
+
+  // 조회 실패를 '이력 0건'으로 위장하면 buildTrend가 (축 시작,0)→(오늘,실적) 추세선을 **합성**해
+  // 정상 차트처럼 보인다 — 임원 의사결정에 쓰이는 화면이라 조용한 거짓 차트는 허용 불가.
+  // 다만 throw 하면 대시보드 전체가 죽으므로(같은 페이지의 다른 카드까지 동반 사망) 폴백은 유지하고
+  // 원인은 로그로 남긴다 — recordProgressSnapshot의 '로그만 남기고 계속' 관례와 동일.
+  if (error) console.error('[getSnapshots] 진척 스냅샷 조회 실패(추세선이 합성됨):', error.message)
+
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    date: r.snap_date as string,
+    actual: Number(r.actual_pct),
+    planned: Number(r.planned_pct),
+  }))
+}
+
+/** 오늘(KST)의 전체 실적/계획%를 upsert. 본 작업을 실패시키지 않도록 오류는 삼키고 로그만 남긴다.
+ *  실적 롤업은 날짜와 무관하고 계획%만 날짜 함수이므로, base_date와 무관하게 항상 실제 오늘로 계산한다.
+ *  page 의 after() 안에서는 cookies() 호출이 불가 — 그 경로는 client 를 밖에서 만들어 넘긴다. */
+/** 오늘자 스냅샷 1행을 덮어쓴다. 실패는 로그만 남긴다 — 보험 기록이 본 화면을 죽이면 안 된다. */
+async function upsertSnapshot(sb: Sb, projectId: string, today: string, actual: number, planned: number) {
+  const { error } = await sb.from('wbs_progress_snapshots').upsert(
+    { project_id: projectId, snap_date: today, actual_pct: actual, planned_pct: planned, updated_at: new Date().toISOString() },
+    { onConflict: 'project_id,snap_date' },
+  )
+  // 42501(RLS 거부)은 게스트(비멤버) 조회 시 예상 가능한 소음이라 로그를 생략한다.
+  if (error && error.code !== '42501') console.error('[snapshot] upsert 실패(무시):', error.message)
+}
+
+export async function recordProgressSnapshot(
+  projectId: string,
+  client?: Sb,
+  /**
+   * 호출부가 **같은 요청에서 이미 계산한** 트리. 넘기면 wbs_items 전량 재조회와 computeTree 가
+   * 한 번씩 사라진다 — 대시보드는 지금까지 같은 계산을 요청마다 두 번 했다.
+   * `today` 는 그 트리를 계산한 기준일이다. 스냅샷은 '오늘'의 기록이므로 기준일이 오늘과
+   * 다르면(프로젝트에 base_date 가 설정된 경우) 재사용하지 않고 종전 경로로 직접 계산한다.
+   */
+  precomputed?: { roots: ComputedItem[]; today: string },
+): Promise<void> {
+  try {
+    const sb = client ?? (await createServerClient())
+    const todayNow = seoulToday()
+    if (precomputed && precomputed.today === todayNow) {
+      const { actual, planned } = overallProgress(precomputed.roots)
+      await upsertSnapshot(sb, projectId, todayNow, actual, planned)
+      return
+    }
+    const [{ data: items, error: itemsErr }, { data: hol, error: holErr }] = await Promise.all([
+      sb.from('wbs_items')
+        .select('id, parent_id, code, sort_order, name, planned_start, planned_end, weight, actual_pct, is_owner_split')
+        .eq('project_id', projectId),
+      sb.from('holidays').select('date').eq('project_id', projectId),
+    ])
+    if (itemsErr || holErr) {
+      // supabase-js는 RLS 거부·테이블 미존재를 throw하지 않고 {error}로 반환하므로 명시적으로 확인해 로그를 남긴다.
+      console.error('[snapshot] wbs_items/holidays 조회 실패(무시):', (itemsErr ?? holErr)!.message)
+      return
+    }
+    if (!items?.length) return
+    const rows: WbsRow[] = items.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      parentId: (r.parent_id as string) ?? null,
+      code: r.code as string,
+      sortOrder: r.sort_order as number,
+      name: r.name as string,
+      biz: null,
+      deliverable: null,
+      plannedStart: (r.planned_start as string) ?? null,
+      plannedEnd: (r.planned_end as string) ?? null,
+      weight: (r.weight as number) ?? null,
+      actualPct: (r.actual_pct as number) ?? null,
+      owners: [],
+      isOwnerSplit: r.is_owner_split === true,
+    }))
+    const holidays = new Set((hol ?? []).map((h: { date: string }) => h.date))
+    const opts = { subActTeamOrder: teamOrderMap(activeCodes(teamsForProjectSync(projectId))) }
+    const { actual, planned } = overallProgress(computeTree(rows, todayNow, holidays, opts))
+    await upsertSnapshot(sb, projectId, todayNow, actual, planned)
+  } catch (e) {
+    console.error('[snapshot] 진척 스냅샷 기록 실패(무시):', e)
+  }
+}

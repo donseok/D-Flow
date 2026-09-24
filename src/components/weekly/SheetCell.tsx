@@ -1,0 +1,149 @@
+'use client'
+
+import { useEffect, useRef } from 'react'
+import { RefreshCw } from 'lucide-react'
+import type { CellAddr } from '@/lib/domain/sheetSelection'
+import { CELL_PEERS_MAX, presenceColor, type PresencePeer } from '@/lib/domain/sheetPresence'
+
+export type CellStatus = 'saving' | 'saved' | 'error'
+/** 배치 변이 중 활성 셀에 뜨는 집계 칩(§5) — 개별 배지 대신 하나만. */
+export interface BatchChip { phase: 'saving' | 'saved' | 'error'; count: number }
+
+export interface SheetCellProps {
+  addr: CellAddr
+  value: string
+  ariaLabel: string
+  status?: CellStatus
+  isActive: boolean
+  editing: boolean // isActive && 편집 모드
+  // L2 실선 외곽(선택 범위) — 다중 선택 시 가장자리별.
+  showBorder: boolean
+  edgeTop: boolean; edgeRight: boolean; edgeBottom: boolean; edgeLeft: boolean
+  // L2 점선 외곽(채우기 드래그 미리보기).
+  showFillBorder: boolean
+  fillTop: boolean; fillRight: boolean; fillBottom: boolean; fillLeft: boolean
+  showFillHandle: boolean
+  /** 조회 전용 — 네이티브 입력·붙여넣기·IME 조합을 DOM 단계에서 차단(선택·복사는 유지). */
+  readOnly: boolean
+  batchActive: boolean // true면 per-cell 배지 억제(활성 셀 칩만 노출)
+  chip: BatchChip | null // 활성 셀에만 전달
+  peers: PresencePeer[] | null // 이 셀에 있는 타 사용자(프레즌스) — 없으면 null
+  register: (key: string, el: HTMLTextAreaElement | null) => void
+  onChange: (v: string) => void
+  onBlur: (e: React.FocusEvent) => void
+  onRetry: () => void // per-cell 단건 재시도
+  onChipRetry: () => void // 배치 재시도
+  onMouseDown: (e: React.MouseEvent) => void
+  onMouseEnter: () => void
+  onFocus: () => void
+  onDoubleClick: () => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onCopy: (e: React.ClipboardEvent) => void
+  onCut: (e: React.ClipboardEvent) => void
+  onPaste: (e: React.ClipboardEvent) => void
+  onCompositionStart: () => void
+  onCompositionEnd: () => void
+  onFillHandleMouseDown: (e: React.MouseEvent) => void
+}
+
+export function SheetCell(p: SheetCellProps) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const k = `${p.addr.rowId}:${p.addr.col}`
+  const { register } = p
+
+  useEffect(() => { // 활성 셀 포커스 관리를 위해 부모 맵에 DOM 등록/해제
+    register(k, ref.current)
+    return () => register(k, null)
+  }, [k, register])
+
+  useEffect(() => { // 자동 높이(회귀 #7 — rows 값 변화를 그대로 추종)
+    const el = ref.current
+    if (!el) return
+    // min-h-full 스트레치 상태로 재면 scrollHeight가 늘어난 높이로 측정돼 내용이 줄어도 행이 영영 안 줄어든다.
+    // 측정 동안만 min-height를 풀어 순수 내용 높이를 얻고, 복원해 셀 전체 채움(스트레치)은 CSS에 맡긴다.
+    el.style.minHeight = '0'
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+    el.style.minHeight = ''
+  }, [p.value])
+
+  return (
+    // min-h-24: 빈 행 최소 높이 바닥. h-full+내부 min-h-full로 입력창이 셀 전체를 채워
+    // 포커스 링이 셀을 통째로 감싸고, 셀 아래 빈 영역 클릭도 곧바로 입력이 된다.
+    <div className="relative h-full min-h-24" onMouseDown={p.onMouseDown} onMouseEnter={p.onMouseEnter} onDoubleClick={p.onDoubleClick}>
+      {/* 배경(L0)은 <td>가 담당 → textarea는 bg-transparent라 틴트가 비쳐 보임(§0). */}
+      <textarea
+        ref={ref} value={p.value} rows={3} aria-label={p.ariaLabel} data-sheet-cell="1"
+        readOnly={p.readOnly}
+        style={{ caretColor: p.editing && !p.readOnly ? '#000' : 'transparent' }}
+        className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-1.5 text-[13px] leading-[1.5] text-black outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-[#1a73e8] ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-[0_2px_6px_rgba(60,64,67,0.28)]' : ''}`}
+        onChange={e => p.onChange(e.target.value)}
+        onBlur={p.onBlur}
+        onFocus={p.onFocus}
+        onKeyDown={p.onKeyDown}
+        onCopy={p.onCopy}
+        onCut={p.onCut}
+        onPaste={p.onPaste}
+        onCompositionStart={p.onCompositionStart}
+        onCompositionEnd={p.onCompositionEnd}
+      />
+      {p.showBorder && (
+        <div className="pointer-events-none absolute inset-0 z-20 border-solid border-[#1a73e8]"
+          style={{ borderTopWidth: p.edgeTop ? 2 : 0, borderRightWidth: p.edgeRight ? 2 : 0, borderBottomWidth: p.edgeBottom ? 2 : 0, borderLeftWidth: p.edgeLeft ? 2 : 0 }} />
+      )}
+      {p.showFillBorder && (
+        <div className="pointer-events-none absolute inset-0 z-20 border-dashed border-[#1a73e8]"
+          style={{ borderTopWidth: p.fillTop ? 2 : 0, borderRightWidth: p.fillRight ? 2 : 0, borderBottomWidth: p.fillBottom ? 2 : 0, borderLeftWidth: p.fillLeft ? 2 : 0 }} />
+      )}
+      {/* 프레즌스 — 타 사용자 위치 링(이름 가나다순 첫 사용자 색) + 셀 상단에 이름 칩(구글시트 룩).
+          peers 는 buildPresenceMap 이 가나다순으로 정렬해 준다 — 도착 순서가 아니므로
+          이름이 앞서는 사람이 같은 셀에 들어오면 링 색이 바뀐다(대신 보는 사람마다 같은 색).
+          z-10: 자기 선택 외곽선(z-20)·배지(z-30)보다 아래, 클릭/타이핑엔 무간섭. */}
+      {p.peers && p.peers.length > 0 && (
+        <>
+          <div className="pointer-events-none absolute inset-0 z-10 border-2"
+            style={{ borderColor: presenceColor(p.peers[0].userId) }} />
+          <span className="pointer-events-none absolute left-0 top-0 z-30 flex max-w-full -translate-y-1/2 gap-0.5">
+            {p.peers.slice(0, CELL_PEERS_MAX).map(peer => (
+              <span key={peer.connKey}
+                className="truncate rounded-sm px-1 text-[9px] font-bold leading-4 text-white"
+                style={{ background: presenceColor(peer.userId) }}
+                title={peer.editing ? `${peer.name} · 입력 중` : peer.name}>
+                {peer.name}{peer.editing ? ' ✎' : ''}
+              </span>
+            ))}
+            {p.peers.length > CELL_PEERS_MAX && (
+              <span className="rounded-sm bg-neutral-500 px-1 text-[9px] font-bold leading-4 text-white">
+                +{p.peers.length - CELL_PEERS_MAX}
+              </span>
+            )}
+          </span>
+        </>
+      )}
+      {p.showFillHandle && (
+        <div
+          className="absolute bottom-0 right-0 z-30 hidden translate-x-1/2 translate-y-1/2 cursor-crosshair p-1 [@media(pointer:fine)]:block"
+          onMouseDown={p.onFillHandleMouseDown}
+          aria-hidden
+        >
+          <div className="h-1.5 w-1.5 border border-white bg-[#1a73e8]" />
+        </div>
+      )}
+      <span className="absolute right-1 top-0.5 z-30 text-[10px]">
+        {p.chip ? (
+          p.chip.phase === 'saving' ? <span className="text-[#9aa0a6]">{p.chip.count}개 셀 저장 중…</span>
+            : p.chip.phase === 'saved' ? <span className="text-[#188038]">저장됨</span>
+              : <button className="flex items-center gap-0.5 text-[#d93025]" onClick={p.onChipRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />{p.chip.count}개 셀 저장 실패 · 재시도</button>
+        ) : (!p.batchActive && (
+          <>
+            {p.status === 'saving' && <span className="text-[#9aa0a6]">저장 중…</span>}
+            {p.status === 'saved' && <span className="text-[#188038]">저장됨</span>}
+            {p.status === 'error' && (
+              <button className="flex items-center gap-0.5 text-[#d93025]" onClick={p.onRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />재시도</button>
+            )}
+          </>
+        ))}
+      </span>
+    </div>
+  )
+}

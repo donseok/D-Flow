@@ -1,0 +1,414 @@
+import { createHash, timingSafeEqual } from 'crypto'
+import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { serviceRoleConfigured } from '@/lib/supabase/env'
+import { UUID_RE } from '@/lib/domain/validate'
+import { displayNameFrom } from '@/lib/domain/display-name'
+import { MEETING_CATEGORIES } from '@/lib/domain/meetings'
+import { MINUTE_FOLDER_NAME_MAX, normalizeFolderName, validateMinuteInput } from '@/lib/domain/minutes'
+import { activeTeamCodesSync } from '@/lib/teams/master'
+import { splitMinuteBlocks } from '@/lib/minutes/blocks'
+import { rematchHighlights, type HighlightRow } from '@/lib/minutes/rematch'
+import { ingestMinute } from '@/lib/ai/minutes-ingest'
+import { generateMinuteInsights } from '@/lib/ai/minutes-insights'
+import { enqueueAndProcessMinuteWiki, processMinuteWikiJob } from '@/lib/ai/wiki-ingest'
+import type { MeetingCategory, TeamCode } from '@/lib/domain/types'
+
+/**
+ * 회의록 외부 업로드 API(/api/v1/minutes*) 공용 유틸 — 또박또박 연동.
+ * 계약: docs/design/dflow-minutes-upload-api-spec.md (§3 인증, §4 upsert, §6 에러 규격).
+ * 이 경로는 세션 인증이 아니라 서버 시크릿 + user_email 매칭 2계층이며, DB 접근은 전부
+ * service_role(createAdminClient)이다 — RLS insert_own_minutes 가 세션 없는 insert 를 막기 때문.
+ */
+
+export type AdminClient = ReturnType<typeof createAdminClient>
+
+export const EXTERNAL_ID_MAX = 128
+/** Vercel serverless 바디 한도(~4.5MB) 이내의 공표용 제한값 — meta 응답에 노출. */
+export const MINUTES_API_MAX_REQUEST_BYTES = 4_194_304
+
+/** D-Flow 자신의 uuid PK 참조(meeting_id·minute_id·project_id) 형식 검증 — 비형식은 DB에서
+ *  22P02(500)가 되므로 계약 §6 '형식 오류=400'에 맞게 사전 거절한다. external_id는 불투명(§4.6) — 적용 금지. */
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value)
+}
+
+/** env 2단 게이트 — 미설정이면 라우트 존재 자체를 숨긴다(404). worker route 관례. */
+export function minutesApiEnabled(): boolean {
+  return process.env.MINUTES_API_ENABLED === 'true' && !!process.env.MINUTES_API_SECRET
+}
+
+/**
+ * W25(결정 §2-A) — `POST /minutes` 의 folder_path 편철 전환 스위치.
+ *
+ * 꺼져 있으면 `folder_path` 를 **키 부재와 완전히 동일하게** 취급한다(검증 400 조차 내지 않는다).
+ * 즉 R1 배포는 `POST /minutes` 동작을 1비트도 바꾸지 않는다.
+ *
+ * 왜 필요한가: 진짜 위험은 W3(등록 편철)가 아니라 **W5(재전송 폴더 동기화)** 다.
+ * folder_path 가 실려 오기 시작하면 재전송 1건마다 D-Flow 위치가 덮이고, 또박또박에서 폴더에
+ * 안 들어 있는 회의는 `[]` 를 보내므로 **사람이 정리해 둔 편철이 팀 루트로 평평화**된다.
+ * `overwrite_manual` 은 배치에만 걸리는 플래그라 이 경로를 못 막는다.
+ * 배치(W6)와 보관 상태 노출(W24)은 이 플래그와 **무관하게 항상 활성**이다.
+ */
+export function folderPathEnabled(): boolean {
+  return process.env.MINUTES_FOLDER_PATH_ENABLED === 'true'
+}
+
+/**
+ * 관리자 전용 경로(배치)에서 **ACTOR_EMAIL 이 가리키는 사람이 관리자 이상인지** 판정한다.
+ * service_role 로 직접 읽는다 — 세션 기반 getActor 는 서버 간 호출 경로에서 쓸 수 없다.
+ *
+ * `memberships.role` 을 읽지 않는다. 그 컬럼은 0054 에서 deprecated 로 박제됐고 갱신되지
+ * 않으므로, 계속 읽으면 신규 관리자는 배치를 못 돌리고(동결값 'team_editor') 강등된 옛
+ * pmo_admin 은 계속 돌 수 있는 판정 드리프트가 시간이 갈수록 벌어진다.
+ * 판정 기준은 새 축 하나뿐이다 — `is_superuser` 또는 `project_roles.role='admin'`
+ * (앱의 isAnyProjectAdmin·DB app_role() shim 과 같은 의미).
+ *
+ * 보안 가드이므로 조회 실패는 fail-closed(false → 거절).
+ */
+export async function isBatchAuthorized(admin: AdminClient, userId: string): Promise<boolean> {
+  const { data: mem, error: memErr } = await admin
+    .from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle()
+  if (memErr) {
+    console.error('[minutes-api] 등급 조회 실패(거절):', memErr.message)
+    return false
+  }
+  if (mem?.is_superuser) return true
+
+  const { data: roles, error: roleErr } = await admin
+    .from('project_roles').select('project_id').eq('user_id', userId).eq('role', 'admin').limit(1)
+  if (roleErr || !roles) {
+    console.error('[minutes-api] 프로젝트 역할 조회 실패(거절):', roleErr?.message)
+    return false
+  }
+  return roles.length > 0
+}
+
+/** 시크릿 비교는 길이 노출·타이밍 채널을 피하기 위해 해시 후 상수시간으로 비교한다. */
+function secretMatches(provided: string | null, expected: string): boolean {
+  if (!provided) return false
+  const a = createHash('sha256').update(provided).digest()
+  const b = createHash('sha256').update(expected).digest()
+  return timingSafeEqual(a, b)
+}
+
+/** `Authorization: Bearer <MINUTES_API_SECRET>` 검증 — 계약 §3.2 (스펙이 401을 정의: worker 선례 403과 다른 신규 결정). */
+export function verifyApiSecret(req: Request): boolean {
+  const expected = process.env.MINUTES_API_SECRET
+  if (!expected) return false
+  const header = req.headers.get('authorization')
+  const provided = header && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
+  return secretMatches(provided, expected)
+}
+
+export const apiNotFound = () =>
+  NextResponse.json({ error: 'Not Found' }, { status: 404 })
+export const apiUnauthorized = () =>
+  NextResponse.json({ error: '인증이 필요합니다.', code: 'unauthorized' }, { status: 401 })
+export const apiBadRequest = (error: string) =>
+  NextResponse.json({ error, code: 'validation_failed' }, { status: 400 })
+export const apiFail = (status: number, code: string, error: string) =>
+  NextResponse.json({ error, code }, { status })
+export const apiInternalError = (error = '서버 오류가 발생했습니다.') =>
+  NextResponse.json({ error, code: 'internal_error' }, { status: 500 })
+
+/** 전 라우트 공통 선두 게이트 — 실패 시 응답, 통과 시 null. */
+export function gateMinutesApi(req: Request): NextResponse | null {
+  if (!minutesApiEnabled()) return apiNotFound()
+  if (!verifyApiSecret(req)) return apiUnauthorized()
+  return null
+}
+
+export interface ResolvedUser {
+  id: string
+  name: string | null
+}
+
+/**
+ * user_email → D-Flow 계정 매칭 — 계약 §3.3. lower(trim()) 정규화(0019 관례),
+ * deleted_at 계정 제외, listUsers 페이지 순회(actions/accounts.ts 관례).
+ * 조회 실패는 '사용자 없음(403)'과 구별해야 하므로 throw(fail-loud) — 호출부가 500으로 변환.
+ */
+export async function resolveUserByEmail(admin: AdminClient, email: string): Promise<ResolvedUser | null> {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return null
+  const perPage = 200
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
+    if (error || !data) {
+      throw new Error(`사용자 목록 조회 실패(page=${page}): ${error?.message ?? 'unknown'}`)
+    }
+    for (const u of data.users) {
+      const deletedAt = (u as { deleted_at?: string | null }).deleted_at
+      if (deletedAt) continue
+      if ((u.email ?? '').toLowerCase() === normalized) {
+        return { id: u.id, name: displayNameFrom(u.user_metadata, u.email) }
+      }
+    }
+    if (data.users.length < perPage) return null
+  }
+}
+
+/** 바디에서 user_email만 선추출 — 계약 §9.3 흐름(사용자 매칭 403이 필드 검증 400보다 먼저). */
+export function parseUserEmail(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const v = (raw as Record<string, unknown>).user_email
+  const email = typeof v === 'string' ? v.trim() : ''
+  return email || null
+}
+
+/** v2.5 §4.2 — inline `meeting`(회의 생성+연결) 입력. 파싱을 통과하면 title 은 trim 완료 상태다. */
+export interface ExternalMeetingInput {
+  projectId: string
+  title: string
+  date: string
+  category: MeetingCategory
+}
+
+/** 내부 회의 생성의 제목 상한과 동일(actions/meetings.ts TITLE_MAX=200 — 'use server' 파일이라 import 불가). */
+const MEETING_TITLE_MAX = 200
+/** 날짜 형식 — 리포 관례상 로컬 재선언(route.ts·actions/meetings.ts 와 동일 패턴). */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export interface ExternalMinutePayload {
+  minuteDate: string
+  teamCode: TeamCode
+  title: string
+  bodyMd: string
+  externalId: string
+  meetingId: string | null
+  /** §0 D3(v2.2): meeting_id 필드 부재=기존 값 유지, 명시적 null=해제 — replace 갱신 범위 판정용. */
+  meetingIdProvided: boolean
+  /**
+   * v2.5 §4.2: inline meeting — 키 존재 기준 추적(meetingIdProvided 와 동형)이며 meeting_id 와
+   * 상호배타. 라우트가 회의를 확보한 뒤 meetingId/meetingIdProvided 에 주입해 이후 흐름은
+   * meeting_id 전송과 완전히 같게 동작한다.
+   */
+  meetingProvided: boolean
+  meeting: ExternalMeetingInput | null
+  /** §3.1(v2.3): 정규화 전 원본 경로(btrim 완료). 키 부재면 null. */
+  folderPath: string[] | null
+  /**
+   * §3.1(v2.3) 3값 규약 — 키 부재 / `[]` / 비어있지 않은 배열을 구분하는 플래그.
+   * meetingIdProvided 와 동형이되 `[]` 가 "명시적 폴더 없음(팀 루트로 되돌림)"이라는
+   * **유의미한 값**인 점이 다르다. `[]` 를 미전송과 뭉개면 또박또박에서 회의를 폴더 밖으로
+   * 뺀 조작만 영영 전파되지 않는다.
+   */
+  folderPathProvided: boolean
+  onConflict: 'replace' | 'skip' | 'error'
+}
+
+/**
+ * folder_path 검증 결과 — 성공하면 btrim 된 세그먼트, 실패하면 400 메시지(error)와
+ * 배치 응답의 results[].reason(reason)을 함께 준다.
+ * POST /minutes(§3.1)와 배치 POST /minutes/folder(§8.2 요건 11)가 **같은 판정**을 쓰도록
+ * 한 곳에 둔다 — 두 경로가 갈라지면 마이그레이션 결과와 이후 전송 결과가 어긋난다.
+ */
+export type FolderPathParse =
+  | { ok: true; path: string[] }
+  | { ok: false; error: string; reason: string }
+
+/** §3.1 folder_path 원소 검증 — 타입 · btrim 후 1~60자. 절단하지 않는다(D3). */
+export function parseFolderPathValue(raw: unknown): FolderPathParse {
+  if (!Array.isArray(raw)) {
+    return {
+      ok: false,
+      error: 'folder_path는 문자열 배열이어야 합니다.',
+      reason: 'validation_failed: folder_path는 배열이어야 합니다.',
+    }
+  }
+  const path: string[] = []
+  for (const seg of raw) {
+    if (typeof seg !== 'string') {
+      return {
+        ok: false,
+        error: 'folder_path의 각 원소는 문자열이어야 합니다.',
+        reason: 'validation_failed: folder_path 원소는 문자열이어야 합니다.',
+      }
+    }
+    // NFC 정규화 — macOS 에서 만든 한글 폴더명은 NFD 로 오는 경우가 있다. 그대로 비교·생성하면
+    // 눈에 같은 이름의 폴더가 두 개 생긴다(부분 유니크 인덱스도 바이트가 달라 막지 못한다).
+    // 계약 §4.9 가 "외부 API 원소와 UI 폴더 생성·개명이 모두 같은 함수를 통과한다"고 약속하므로
+    // 인라인 복제(`seg.trim().normalize('NFC')`)가 아니라 그 함수를 그대로 쓴다 — 결과는 같지만
+    // 한쪽만 바뀌면 조용히 갈라지고, 그 순간 계약이 거짓이 된다.
+    const name = normalizeFolderName(seg)
+    if (!name) {
+      return {
+        ok: false,
+        error: 'folder_path에 빈 폴더 이름이 있습니다.',
+        reason: 'validation_failed: 빈 폴더 이름',
+      }
+    }
+    // D3 = 400 거절. 절단하면 긴 이름끼리 같은 60자로 뭉개져 서로 다른 폴더가 한 폴더로
+    // 합쳐지는 조용한 사고가 난다 — 사용자가 또박또박에서 이름을 줄이면 된다.
+    if (name.length > MINUTE_FOLDER_NAME_MAX) {
+      return {
+        ok: false,
+        error: `폴더 이름은 ${MINUTE_FOLDER_NAME_MAX}자 이하여야 합니다: ${name}(${name.length}자)`,
+        reason: `folder_name_too_long: ${name}(${name.length}자)`,
+      }
+    }
+    path.push(name)
+  }
+  return { ok: true, path }
+}
+
+/**
+ * POST /minutes 페이로드 검증 — 수동 타입가드(레포 관례) + validateMinuteInput 재사용.
+ * §0 D4: 이 경로는 correctMinuteBodyTime(+9h)을 적용하지 않는다 — 또박또박이 이미 KST를
+ * 보내므로 기존 UI 경로의 보정을 재사용하면 이중 보정으로 시간이 밀린다(§1.4).
+ */
+export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePayload } | { error: string } {
+  if (typeof raw !== 'object' || raw === null) return { error: '잘못된 요청입니다.' }
+  const b = raw as Record<string, unknown>
+
+  const externalId = b.external_id
+  if (typeof externalId !== 'string' || !externalId) return { error: 'external_id가 필요합니다.' }
+  if (externalId.length > EXTERNAL_ID_MAX) return { error: `external_id는 ${EXTERNAL_ID_MAX}자 이하여야 합니다.` }
+
+  if (
+    typeof b.date !== 'string' || typeof b.team !== 'string' ||
+    typeof b.title !== 'string' || typeof b.body_markdown !== 'string'
+  ) return { error: 'date, team, title, body_markdown은 필수입니다.' }
+
+  let meetingId: string | null = null
+  const meetingIdProvided = b.meeting_id !== undefined
+  if (meetingIdProvided && b.meeting_id !== null) {
+    if (typeof b.meeting_id !== 'string' || !isUuid(b.meeting_id)) return { error: 'meeting_id 형식이 올바르지 않습니다.' }
+    meetingId = b.meeting_id
+  }
+
+  // v2.5 §4.2 — inline meeting. meeting_id 와는 키 존재 기준 상호배타다: `meeting_id: null`(해제)과
+  // meeting(신규 연결)을 함께 보내는 것도 의도가 상충하므로 거절한다.
+  let meeting: ExternalMeetingInput | null = null
+  const meetingProvided = b.meeting !== undefined
+  if (meetingProvided) {
+    if (meetingIdProvided) return { error: 'meeting과 meeting_id는 함께 보낼 수 없습니다.' }
+    if (typeof b.meeting !== 'object' || b.meeting === null || Array.isArray(b.meeting)) {
+      return { error: 'meeting은 객체여야 합니다.' }
+    }
+    const m = b.meeting as Record<string, unknown>
+    if (typeof m.project_id !== 'string' || !isUuid(m.project_id)) {
+      return { error: 'meeting.project_id 형식이 올바르지 않습니다.' }
+    }
+    const title = typeof m.title === 'string' ? m.title.trim() : ''
+    if (!title) return { error: 'meeting.title이 필요합니다.' }
+    if (title.length > MEETING_TITLE_MAX) {
+      return { error: `meeting.title은 ${MEETING_TITLE_MAX}자 이하여야 합니다.` }
+    }
+    if (typeof m.date !== 'string' || !DATE_RE.test(m.date)) {
+      return { error: 'meeting.date 형식이 올바르지 않습니다.' }
+    }
+    // meta 와 같은 소스(MEETING_CATEGORIES)로 검증 — 하드코딩 금지(§2.1).
+    let category: MeetingCategory = 'general'
+    if (m.category !== undefined) {
+      if (typeof m.category !== 'string' || !(MEETING_CATEGORIES as readonly string[]).includes(m.category)) {
+        return { error: 'meeting.category가 올바르지 않습니다.' }
+      }
+      category = m.category as MeetingCategory
+    }
+    meeting = { projectId: m.project_id, title, date: m.date, category }
+  }
+
+  let onConflict: ExternalMinutePayload['onConflict'] = 'replace'
+  if (b.on_conflict !== undefined) {
+    if (b.on_conflict !== 'replace' && b.on_conflict !== 'skip' && b.on_conflict !== 'error') {
+      return { error: 'on_conflict는 replace, skip, error 중 하나여야 합니다.' }
+    }
+    onConflict = b.on_conflict
+  }
+
+  // §3.1 3값 규약 — 키 부재(=구버전 또박또박, 기존 동작) / [](=팀 루트) / 경로.
+  // 명시적 null 은 배열이 아니므로 400 — 3값 규약에 없는 값을 조용히 '키 부재'로 뭉개면
+  // 구버전 폴백과 구분이 사라진다.
+  let folderPath: string[] | null = null
+  // W25 — 플래그가 꺼져 있으면 키 부재와 동일. 검증도 하지 않으므로 61자 폴더명이 섞인
+  // 회의가 오늘처럼 정상 전송된다(플래그 없이 W1 만 먼저 내면 열리는 회귀 창을 막는다).
+  const folderPathProvided = folderPathEnabled() && b.folder_path !== undefined
+  if (folderPathProvided) {
+    const parsedPath = parseFolderPathValue(b.folder_path)
+    if (!parsedPath.ok) return { error: parsedPath.error }
+    folderPath = parsedPath.path
+  }
+
+  // W1-b: 활성 팀 목록 주입 — 기본값 TEAM_CODES 는 @deprecated 하드코딩 5팀이라, 관리자가
+  // addTeam 으로 6번째 팀을 등록하면 meta 는 노출하는데 POST 만 400 으로 전건 거절한다.
+  const err = validateMinuteInput({
+    minuteDate: b.date, teamCode: b.team as TeamCode, title: b.title, bodyMd: b.body_markdown, meetingId,
+  }, activeTeamCodesSync())
+  if (err) return { error: err }
+
+  return {
+    payload: {
+      minuteDate: b.date, teamCode: b.team as TeamCode, title: b.title.trim(),
+      bodyMd: b.body_markdown, externalId, meetingId, meetingIdProvided,
+      meetingProvided, meeting, folderPath, folderPathProvided, onConflict,
+    },
+  }
+}
+
+/**
+ * actions/minutes.ts rematchMinuteHighlights 의 복제 — 스펙 §9.2의 '복제' 선택지.
+ * export 승격 대안은 기각: actions 파일은 'use server' 라 export 하는 순간 인증 검사 없는
+ * 공개 Server Action 엔드포인트(service_role 로 minute_highlights delete/insert)가 된다.
+ */
+async function rematchExternalMinuteHighlights(minuteId: string, newBodyMd: string): Promise<void> {
+  // env 판정은 try 밖에서 한다 — 아래 catch 가 모든 예외를 삼키므로 안에 두면
+  // 판정 함수 자체의 부재·예외(모킹 문맥 등)가 '미설정'으로 위장돼 조용히 건너뛴다.
+  if (!serviceRoleConfigured()) return
+  try {
+    const admin = createAdminClient()
+    const { data: rows, error: rowsErr } = await admin.from('minute_highlights')
+      .select('id, created_by, created_by_name, block_index, block_hash, created_at')
+      .eq('minute_id', minuteId)
+    if (rowsErr) { console.error('[minutes-api] 재매칭 대상 하이라이트 조회 실패:', rowsErr.message); return }
+    if (!rows || rows.length === 0) return
+    const { reinserts, deleteIds } = rematchHighlights(rows as unknown as HighlightRow[], splitMinuteBlocks(newBodyMd))
+    if (deleteIds.length === 0 && reinserts.length === 0) return
+    // delete 선실행 → insert — unique (minute_id, created_by, block_index) 충돌 원천 차단
+    if (deleteIds.length) {
+      const { error } = await admin.from('minute_highlights').delete().in('id', deleteIds)
+      if (error) { console.error('[minutes-api] 재매칭 삭제 실패:', error.message); return }
+    }
+    if (reinserts.length) {
+      const { error } = await admin.from('minute_highlights').insert(
+        reinserts.map(r => ({ ...r, minute_id: minuteId })),
+      )
+      if (error) console.error('[minutes-api] 재매칭 삽입 실패:', error.message)
+    }
+  } catch (e) {
+    console.error('[minutes-api] 재매칭 실패(무시):', e instanceof Error ? e.message : e)
+  }
+}
+
+/**
+ * 저장 후처리 파이프라인 — 계약 §4.5-7. 누락 시 검색·AI 챗·인사이트가 낡은 본문을 참조한다.
+ * 신규: ingest → insights / replace: rematch → ingest → insights (actions/minutes.ts 순서 그대로).
+ * 세 함수 모두 내부 try/catch 로 절대 throw 하지 않는 계약이라 순차 await 만 한다.
+ */
+export async function runMinutePostProcessing(
+  minuteId: string,
+  bodyMd: string,
+  opts: {
+    rematch: boolean
+    projectId?: string | null
+    minuteVersionId?: string | null
+    wikiJobId?: number | null
+  },
+): Promise<void> {
+  if (opts.rematch) await rematchExternalMinuteHighlights(minuteId, bodyMd)
+  await Promise.all([
+    ingestMinute(minuteId, bodyMd),
+    generateMinuteInsights(minuteId, bodyMd),
+    opts.wikiJobId === undefined
+      ? enqueueAndProcessMinuteWiki({
+        projectId: opts.projectId ?? null,
+        minuteId,
+        minuteVersionId: opts.minuteVersionId ?? null,
+        bodyMd,
+      })
+      : opts.wikiJobId === null
+        ? Promise.resolve(null)
+        : processMinuteWikiJob(opts.wikiJobId),
+  ])
+}

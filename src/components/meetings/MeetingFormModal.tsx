@@ -1,0 +1,406 @@
+'use client'
+
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import type { DictKey } from '@/lib/i18n/dict'
+import type { Meeting, MeetingCategory, MeetingRecurrence, ProjectMember } from '@/lib/domain/types'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { useToast } from '@/components/ui/Toast'
+import { Modal } from '@/components/ui/Modal'
+import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { MeetingAttendeePicker } from './MeetingAttendeePicker'
+import { createMeeting, updateMeeting, type MeetingInput } from '@/app/actions/meetings'
+import { notifyMeetingSaved } from '@/app/actions/meetingNotify'
+import { createAnnouncementFromMeeting } from '@/app/actions/announcements'
+import { isValidEmail, MAX_EXTRA_EMAILS, parseExtraEmails } from '@/lib/mail/recipients'
+import { describeNotifyResult, type NotifyOutcome } from '@/lib/mail/outcome'
+// `import type` 을 유지한다 — 값으로 바꾸면 메일 본문 렌더러 전체가 클라이언트 번들에 실린다.
+import type { InviteKind } from '@/lib/mail/meetingInvite'
+
+type FormState = {
+  title: string; meetingDate: string; allDay: boolean; startTime: string; endTime: string
+  location: string; category: MeetingCategory; recurrence: MeetingRecurrence
+  recurrenceUntil: string; body: string; attendeeIds: string[]; notify: boolean
+  extraEmails: string
+  announce: boolean
+}
+
+function initState(initial: Meeting | null, todayIso: string): FormState {
+  if (!initial) return {
+    title: '', meetingDate: todayIso, allDay: false, startTime: '10:00', endTime: '11:00',
+    location: '', category: 'routine', recurrence: 'none', recurrenceUntil: '', body: '',
+    // announce 기본 꺼짐 — 공지는 프로젝트 전원에게 보이는 확성기라 명시적 옵트인만 받는다.
+    attendeeIds: [], notify: true, extraEmails: '', announce: false,
+  }
+  return {
+    title: initial.title,
+    meetingDate: initial.meetingDate,
+    allDay: initial.startTime === null,
+    startTime: initial.startTime ?? '10:00',
+    endTime: initial.endTime ?? '',
+    location: initial.location ?? '',
+    category: initial.category,
+    recurrence: initial.recurrence,
+    recurrenceUntil: initial.recurrenceUntil ?? '',
+    body: initial.body,
+    attendeeIds: initial.attendeeIds,
+    // 수정은 옵트인이다. 수정의 대부분은 오타·메모 한 줄 고치기인데 기본값이 켜짐이면
+    // 그때마다 참석자 전원에게 '변경' 메일이 나가 알림이 소음이 되고 아무도 읽지 않게 된다.
+    notify: false,
+    // 추가 수신 이메일은 저장되지 않는다 — 수정 화면에서도 항상 빈칸으로 시작한다.
+    extraEmails: '',
+    // 공지 등록은 생성 전용 — 수정에서 켜지면 저장할 때마다 같은 회의의 공지가 한 장씩 늘어난다.
+    // 이미 만든 회의를 공지하려면 상세 모달의 '공지로 등록' 버튼이 그 용도다.
+    announce: false,
+  }
+}
+
+export function MeetingFormModal({
+  open, projectId, members, initial, todayIso, role, onClose, onSaved,
+}: {
+  open: boolean
+  projectId: string
+  members: ProjectMember[]
+  initial: Meeting | null
+  todayIso: string
+  role: string | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { t } = useLocale()
+  const { toast } = useToast()
+  const [form, setForm] = useState<FormState>(() => initState(initial, todayIso))
+  const [err, setErr] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+  // 결과 패널이 떠 있는 동안 회의는 이미 저장된 상태다. 폼을 잠가 중복 생성을 막는다.
+  const [outcome, setOutcome] = useState<NotifyOutcome | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  // 발송은 모달보다 오래 산다 — SMTP 는 10초씩 붙잡히는데 Escape·X·백드롭은 막혀 있지 않다.
+  // 저장 뒤 닫고 '새 회의'를 열면 아래 리셋 effect 가 이 값을 올려 이전 실행을 무효로 만든다.
+  // 이 토큰이 없으면 뒤늦게 도착한 A 의 결과가 B 를 입력 중인 빈 폼에 내려앉아,
+  // 성공이면 onSaved 가 폼을 닫아 입력을 통째로 날리고 실패면 남의 폼을 잠근 채 "저장되었습니다"를 띄운다.
+  const runRef = useRef(0)
+
+  // 콜백이 캡처한 open 은 낡아 있다. 닫힌 뒤 도착한 실패를 패널로 보내면 Modal 이 null 을 반환해
+  // 아무 것도 안 보이고, 성공만 토스트로 뜨는 탓에 '조용히 성공'으로 읽힌다 — 실제로는 아무도 못 받았다.
+  const openRef = useRef(open)
+  useEffect(() => { openRef.current = open }, [open])
+
+  useEffect(() => {
+    if (open) {
+      runRef.current += 1
+      setForm(initState(initial, todayIso)); setErr(null); setOutcome(null); setSending(false)
+    }
+  }, [open, initial, todayIso])
+
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
+
+  const locked = outcome !== null
+  const busy = pending || sending
+  // 생성·수정 모두 발송할 수 있다. 무엇을 보낼지는 kind 가 가르고, 보낼지 말지는
+  // notify 체크박스가 가른다(생성=켜짐, 수정=꺼짐). 여기서 막는 것은 수신자가 없는 경우뿐이다 —
+  // 참석자가 없어도 추가 수신 이메일이 있으면 보낼 수 있다.
+  const extraList = parseExtraEmails(form.extraEmails)
+  const canNotify = form.attendeeIds.length > 0 || extraList.length > 0
+  const notifyKind: InviteKind = initial ? 'updated' : 'created'
+  // 공지 등록은 생성 전용 + pmo_admin 전용(상세 모달 버튼·서버 액션·RLS 와 같은 삼중 게이트의 UI 층).
+  const canAnnounce = !initial && role === 'pmo_admin'
+
+  /**
+   * 발송 결과를 어디에 표시할지 고른다.
+   * - 밀려난 실행: 사용자는 이미 다른 회의를 입력 중이다. 알리되(토스트) 폼 상태와 onSaved 는
+   *   건드리지 않는다 — 목록 갱신을 잃는 편이 남의 입력을 날리는 것보다 훨씬 가벼운 손해다.
+   * - 현재 실행인데 모달이 닫힌 경우: 패널은 렌더될 자리가 없으므로 실패를 토스트로 승격한다.
+   *   실패 통지가 모달 생존에 기대면 안 된다.
+   */
+  function report(run: number, next: NotifyOutcome) {
+    const success = next.kind === 'toast'
+    const notifyToast = () => success
+      ? toast({ title: t('meet.notify.toastTitle'), description: next.message, variant: 'success' })
+      : toast({ title: next.message, variant: 'error' })
+
+    if (run !== runRef.current) { notifyToast(); return }
+    if (success) { notifyToast(); onSaved(); return }
+    if (!openRef.current) { notifyToast(); return }
+    setOutcome(next)
+  }
+
+  /**
+   * 발송 구간. 트랜지션 밖에서 돈다 — 안에서 await 하면 SMTP 가 붙잡히는 내내 pending 이
+   * true 로 남아, 모달을 닫고 새로 연 빈 폼의 저장 버튼까지 비활성인 채
+   * 사용자가 하지도 않은 발송을 하고 있다고 말한다. 저장 구간은 pending, 발송 구간은 sending —
+   * 두 값이 각자의 실제 구간만 나타내야 한다.
+   */
+  async function sendInvite(run: number, meetingId: string, kind: InviteKind, extraEmails: string[]) {
+    try {
+      report(run, describeNotifyResult(await notifyMeetingSaved(meetingId, kind, extraEmails), t))
+    } catch {
+      // 액션 호출 자체가 실패한 경우 — 회의가 사라진 게 아님을 반드시 알린다.
+      report(run, { kind: 'panel', tone: 'error', message: t('meet.notify.unknown') })
+    } finally {
+      if (run === runRef.current) setSending(false)
+    }
+  }
+
+  /** 저장 커밋 뒤의 공지 등록 — 결과는 성공·실패 모두 토스트(패널은 메일 결과 전용). */
+  async function postAnnouncement(meetingId: string, occurrenceDate: string) {
+    try {
+      const a = await createAnnouncementFromMeeting(meetingId, occurrenceDate)
+      if (a.ok) toast({ title: t('meet.form.announceOk'), variant: 'success' })
+      else toast({ title: `${t('meet.form.announceFailed')} — ${a.error ?? ''}`, variant: 'error' })
+    } catch {
+      toast({ title: t('meet.form.announceFailed'), variant: 'error' })
+    }
+  }
+
+  function submit() {
+    // 발송이 실제로 일어날 입력일 때만 여기서 막는다 — notify 를 끈 저장까지 붙잡을 이유가 없다.
+    // 저장 전에 거르는 이유: 서버는 형식 오류 주소를 '제외'로 보고할 뿐 저장을 되돌리지 않으므로,
+    // 오타를 낸 사용자는 회의가 이미 저장된 뒤에야 알게 되고 고쳐 보낼 방법은 수정 화면뿐이다.
+    if (form.notify && canNotify) {
+      if (extraList.length > MAX_EXTRA_EMAILS) {
+        setErr(t('meet.form.extraEmailsMax').replace('{max}', String(MAX_EXTRA_EMAILS)))
+        return
+      }
+      const bad = extraList.filter(e => !isValidEmail(e))
+      if (bad.length > 0) {
+        setErr(`${t('meet.form.extraEmailsInvalid')} — ${bad.join(', ')}`)
+        return
+      }
+    }
+
+    const input: MeetingInput = {
+      title: form.title,
+      meetingDate: form.meetingDate,
+      startTime: form.allDay ? null : form.startTime,
+      endTime: form.allDay || !form.endTime ? null : form.endTime,
+      location: form.location.trim() || null,
+      category: form.category,
+      body: form.body,
+      recurrence: form.recurrence,
+      recurrenceUntil: form.recurrence === 'none' ? null : (form.recurrenceUntil || null),
+      attendeeIds: form.attendeeIds,
+    }
+    setErr(null)
+    // 이 실행의 신분증. await 뒤의 모든 상태 쓰기는 이 값이 여전히 최신일 때만 허용된다.
+    const run = ++runRef.current
+    const isCurrent = () => run === runRef.current
+
+    // 트랜지션이 감싸는 것은 저장까지다. 발송은 void 로 떼어 보내 pending 을 즉시 놓아준다.
+    startTransition(async () => {
+      const res = initial ? await updateMeeting(initial.id, input) : await createMeeting(projectId, input)
+      if (!res.ok) {
+        const message = res.error ?? t('meet.saveFailed')
+        // err 줄은 이 폼 안에만 있다 — 밀려났거나 닫힌 뒤라면 보이지 않으므로 토스트로 돌린다.
+        if (isCurrent() && openRef.current) setErr(message)
+        else toast({ title: message, variant: 'error' })
+        return
+      }
+
+      // 여기부터 회의는 이미 커밋됐다. 어떤 실패도 저장을 되돌리지 않는다.
+      // 공지·메일은 트랜지션 밖 분리 체인으로 — 트랜지션이 감싸는 것은 저장까지라는
+      // 이 파일의 불변식(위 주석) 그대로다. 공지 await 를 안에 두면 저장이 끝난 뒤에도
+      // 공지 왕복 내내 pending 이 새 폼의 버튼까지 잠근다. 순서는 공지 → 메일:
+      // 공지는 DB insert 한 번이라 짧고, SMTP 뒤에 두면 발송이 10초씩 붙잡힐 때
+      // 공지가 그만큼 늦게 올라간다. 실패는 토스트로 알리되 메일 발송을 막지 않는다
+      // (첫 회차 날짜·권한은 서버 액션이 재검증. 토스트는 앱 레벨이라 모달이 닫혀도 보인다).
+      const meetingId = res.id
+      const announce = canAnnounce && form.announce && !!meetingId
+      const willNotify = canNotify && form.notify && !!meetingId
+
+      if (!willNotify) {
+        if (announce) void postAnnouncement(meetingId!, input.meetingDate)
+        if (isCurrent()) onSaved()
+        return
+      }
+      if (isCurrent()) setSending(true)
+      void (async () => {
+        if (announce) await postAnnouncement(meetingId!, input.meetingDate)
+        await sendInvite(run, meetingId!, notifyKind, extraList)
+      })()
+    })
+  }
+
+  return (
+    <Modal
+      open={open}
+      // 결과 패널이 떠 있으면 회의는 이미 저장됐다. Escape·X·백드롭으로 닫아도 목록을
+      // 갱신하는 onSaved 로 보내야 한다 — onClose 로 빠지면 방금 만든 회의가 목록에 없다.
+      onClose={locked ? onSaved : onClose}
+      eyebrow="MEETING"
+      title={initial ? t('meet.editMeeting') : t('meet.addMeeting')}
+      footer={
+        locked ? (
+          <button onClick={onSaved} className="btn btn-primary">{t('common.close')}</button>
+        ) : (
+          <>
+            <button onClick={onClose} disabled={busy} className="btn btn-ghost">{t('common.cancel')}</button>
+            <button onClick={submit} disabled={busy} className="btn btn-primary">
+              {sending ? t('meet.notify.sending') : pending ? t('meet.saving') : t('common.save')}
+            </button>
+          </>
+        )
+      }
+    >
+      <fieldset disabled={locked} className="min-w-0 border-0 p-0 disabled:opacity-60">
+        <div className="space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.title')}</span>
+            <input value={form.title} onChange={e => set('title', e.target.value)} placeholder={t('meet.form.titlePlaceholder')} className="app-input" />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.date')}</span>
+              <input type="date" value={form.meetingDate} onChange={e => set('meetingDate', e.target.value)} className="app-input px-2 text-xs" />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.category')}</span>
+              <select value={form.category} onChange={e => set('category', e.target.value as MeetingCategory)} className="app-input">
+                {MEETING_CATEGORIES.map(c => <option key={c} value={c}>{t(`meet.cat.${c}` as DictKey)}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input id="allday" type="checkbox" checked={form.allDay} onChange={e => set('allDay', e.target.checked)} className="h-4 w-4 accent-[var(--color-brand)]" />
+            <label htmlFor="allday" className="text-xs font-semibold text-ink-muted">{t('meet.form.allDay')}</label>
+          </div>
+          {!form.allDay && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.start')}</span>
+                <input type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} className="app-input px-2 text-xs" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.end')}</span>
+                <input type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} className="app-input px-2 text-xs" />
+              </label>
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.location')}</span>
+            <input value={form.location} onChange={e => set('location', e.target.value)} placeholder={t('meet.form.locationPlaceholder')} className="app-input" />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.recurrence')}</span>
+              <select value={form.recurrence} onChange={e => set('recurrence', e.target.value as MeetingRecurrence)} className="app-input">
+                {RECURRENCE_ORDER.map(r => <option key={r} value={r}>{t(`meet.recur.${r}` as DictKey)}</option>)}
+              </select>
+            </label>
+            {form.recurrence !== 'none' && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.recurrenceUntil')}</span>
+                <input type="date" min={form.meetingDate} value={form.recurrenceUntil} onChange={e => set('recurrenceUntil', e.target.value)} className="app-input px-2 text-xs" />
+              </label>
+            )}
+          </div>
+          {initial && initial.recurrence !== 'none' && (
+            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-ink-subtle">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
+              {t('meet.form.ruleChangeWarn')}
+            </p>
+          )}
+
+          <div>
+            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.attendees')}</span>
+            <MeetingAttendeePicker members={members} selected={form.attendeeIds} onChange={ids => set('attendeeIds', ids)} />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2">
+              <input
+                id="notify-attendees"
+                type="checkbox"
+                checked={form.notify && canNotify}
+                disabled={!canNotify}
+                onChange={e => set('notify', e.target.checked)}
+                className="h-4 w-4 accent-[var(--color-brand)] disabled:opacity-50"
+              />
+              {/* 문구를 종류에 맞춘다 — 수정 화면에서 '회의 안내'라고 적혀 있으면
+                  사용자는 새로 만든 회의를 알린다고 읽고, 실제로는 '[회의 변경]' 이 나간다. */}
+              <span className="text-xs font-semibold text-ink-muted">
+                {t(initial ? 'meet.form.notifyUpdate' : 'meet.form.notify')}
+              </span>
+            </label>
+            {!canNotify && (
+              <p className="mt-1 pl-6 text-[11px] text-ink-subtle">{t('meet.form.notifyNoAttendees')}</p>
+            )}
+            {/* notify 블록 안에 둔다 — 이 주소들은 회의에 저장되는 값이 아니라 위 체크박스로
+                나가는 메일의 수신자에만 더해지는 값이다. 떨어져 있으면 저장되는 값처럼 읽힌다. */}
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.extraEmails')}</span>
+              <input
+                value={form.extraEmails}
+                onChange={e => set('extraEmails', e.target.value)}
+                placeholder={t('meet.form.extraEmailsPlaceholder')}
+                className="app-input"
+              />
+            </label>
+            {/* notify 가 꺼진 채 주소만 적고 저장하면 발송·형식검증 모두 건너뛴다(수정 화면 기본 경로).
+                이 값은 저장되지 않으므로 그 저장은 곧 입력의 소리 없는 폐기다 — 저장 전에 여기서 알린다.
+                입력칸을 비활성화하는 방법은 참석자 0명일 때 체크박스와 서로를 잠그는 교착이 되어 쓸 수 없다. */}
+            {extraList.length > 0 && !form.notify && (
+              <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-ink-subtle">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
+                {t('meet.form.extraEmailsNotifyOff')}
+              </p>
+            )}
+          </div>
+
+          {/* 생성 + pmo_admin 전용 — 저장 직후 첫 회차로 공지 1건을 만든다(상세 모달 '공지로 등록' 버튼과 같은 액션).
+              메일 블록 밖에 둔다: 메일 수신자 설정이 아니라 별개의 부가 동작이다. */}
+          {canAnnounce && (
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  id="announce-meeting"
+                  type="checkbox"
+                  checked={form.announce}
+                  onChange={e => set('announce', e.target.checked)}
+                  className="h-4 w-4 accent-[var(--color-brand)]"
+                />
+                <span className="text-xs font-semibold text-ink-muted">{t('meet.form.announce')}</span>
+              </label>
+              {/* 상세 모달 경로는 특정 회차 위에서 누르니 범위가 자명하지만, 여기서는 시리즈를
+                  만들며 체크한다 — '시리즈 전체가 공지된다'는 오해를 저장 전에 바로잡는다. */}
+              {form.announce && form.recurrence !== 'none' && (
+                <p className="mt-1 flex items-start gap-1.5 pl-6 text-[11px] leading-5 text-ink-subtle">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
+                  {t('meet.form.announceRecurHint')}
+                </p>
+              )}
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.body')}</span>
+            <textarea value={form.body} onChange={e => set('body', e.target.value)} rows={3} placeholder={t('meet.form.bodyPlaceholder')} className="app-textarea" />
+          </label>
+
+          {err && (
+            <p className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{err}
+            </p>
+          )}
+        </div>
+      </fieldset>
+
+      {/* 잠금 대상 밖에 둔다 — fieldset 안이면 disabled:opacity-60 으로 흐려져 정작 읽어야 할 글이 안 읽힌다. */}
+      {outcome?.kind === 'panel' && (
+        <p className={`mt-4 flex items-start gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${
+          outcome.tone === 'error' ? 'bg-delayed-weak text-delayed' : 'bg-pending-weak text-accent-warning'
+        }`}>
+          {outcome.tone === 'error'
+            ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+          {outcome.message}
+        </p>
+      )}
+    </Modal>
+  )
+}

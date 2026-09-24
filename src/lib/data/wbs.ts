@@ -1,0 +1,172 @@
+import { cache } from 'react'
+import { createServerClient } from '@/lib/supabase/server'
+import { computeTree } from '@/lib/domain/rollup'
+import { computeCompletionMap, type ProjectCompletion } from '@/lib/domain/project-status'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { teamsForProjectSync } from '@/lib/teams/master'
+import type { WbsRow, ComputedItem, TeamCode, OwnerKind, TaskDependency } from '@/lib/domain/types'
+import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
+import { seoulToday } from '@/lib/domain/dates'
+import { AGENT_TAG } from '@/lib/domain/seatmap'
+
+// 같은 요청 내 layout+page 중복 호출을 1회로 dedupe(React cache).
+export const getComputedWbs = cache(async (
+  projectId: string,
+): Promise<{
+  items: ComputedItem[]
+  dependencies: TaskDependency[]
+  /**
+   * 해석 못 한 선행 ref — 후행 항목 id → ref 목록. @see mergeSpecDepends
+   * Map 이 아니라 평범한 객체다 — 이 값은 RSC 경계를 넘어 클라이언트 컴포넌트로 간다.
+   */
+  unresolvedDepends: Record<string, string[]>
+  holidays: string[]
+  today: string
+}> => {
+  const sb = await createServerClient()
+  const [
+    { data: items, error: itemsErr },
+    { data: ownerRows, error: ownersErr },
+    { data: hol, error: holErr },
+    { data: proj, error: projErr },
+    { data: dependencyRows, error: dependenciesErr },
+  ] = await Promise.all([
+    sb.from('wbs_items').select('*').eq('project_id', projectId),
+    sb.from('item_owners').select('wbs_item_id, kind, teams(code)'),
+    sb.from('holidays').select('date').eq('project_id', projectId),
+    sb.from('projects').select('base_date').eq('id', projectId).maybeSingle(),
+    sb.from('task_dependencies')
+      .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days')
+      .eq('project_id', projectId),
+  ])
+
+  // 핵심 조회 실패를 '없음'으로 폴백하면 화면이 비는 게 아니라 '조용히 틀린 화면/숫자'가 된다.
+  // - wbs_items: 빈 트리 → 대시보드가 'WBS 데이터 없음' EmptyState를 띄워 운영 데이터 위 재임포트를 유도한다(최악).
+  // - item_owners: 담당 배지·행 분리가 사라져 팀 편집 권한이 회수된 것처럼 보인다.
+  // - holidays: 빈 배열이 '공휴일 없음'(정상)과 구분되지 않아, 영업일 기반 계획%가 틀어져도 아무도 감지할 수 없다.
+  //   (정상적으로 0건인 경우와 달리 error는 명백한 실패이므로 여기서만 throw — 빈 결과는 그대로 통과시킨다.)
+  // - projects.base_date: 기준일이 조용히 오늘로 바뀌어 전 지표(계획%·지연 판정·PPT·봇 답변)가 어긋난다.
+  // - task_dependencies: 연결선·지연 전파·크리티컬 패스가 모두 사라져 "의존성 없음"으로 오인된다.
+  // 계산 결과가 알림/리포트/임베딩 쓰기로도 흘러가므로, 에러 바운더리('문제가 발생했습니다')가 조용한 오염보다 안전하다.
+  for (const [table, err] of [
+    ['wbs_items', itemsErr],
+    ['item_owners', ownersErr],
+    ['holidays', holErr],
+    ['projects', projErr],
+    ['task_dependencies', dependenciesErr],
+  ] as const) {
+    if (err) throw new Error(`[getComputedWbs] ${table} 조회 실패: ${err.message}`)
+  }
+
+  const ownerMap = new Map<string, { team: TeamCode; kind: OwnerKind }[]>()
+  ;(ownerRows ?? []).forEach((o: Record<string, unknown>) => {
+    const team = o.teams as { code: TeamCode } | { code: TeamCode }[] | null
+    const code = (Array.isArray(team) ? team[0]?.code : team?.code) as TeamCode | undefined
+    if (!code) return
+    const wbsItemId = o.wbs_item_id as string
+    const arr = ownerMap.get(wbsItemId) ?? []
+    arr.push({ team: code, kind: o.kind as OwnerKind })
+    ownerMap.set(wbsItemId, arr)
+  })
+  // DB가 순서를 보장하지 않으므로 표시 순서를 고정: 주관 먼저, 팀은 팀 마스터 sort_order.
+  // (담당별 행 분리 UI에서 순서가 요청마다 바뀌면 같은 항목의 행 배치가 흔들린다.)
+  const teamOrder = teamOrderMap(teamsForProjectSync(projectId).map(t => t.code))
+  const rank = (t: TeamCode) => teamOrder.get(t) ?? Number.MAX_SAFE_INTEGER
+  ownerMap.forEach(arr =>
+    arr.sort((a, b) =>
+      (a.kind === b.kind ? 0 : a.kind === 'primary' ? -1 : 1) || rank(a.team) - rank(b.team),
+    ),
+  )
+
+  const rows: WbsRow[] = (items ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    parentId: r.parent_id as string | null,
+    code: r.code as string,
+    sortOrder: r.sort_order as number,
+    name: r.name as string,
+    biz: (r.biz as string) ?? null,
+    deliverable: (r.deliverable as string) ?? null,
+    plannedStart: (r.planned_start as string) ?? null,
+    plannedEnd: (r.planned_end as string) ?? null,
+    weight: (r.weight as number) ?? null,
+    actualPct: (r.actual_pct as number) ?? null,
+    owners: ownerMap.get(r.id as string) ?? [],
+    isOwnerSplit: r.is_owner_split === true,
+    stage: (r.stage as string | null) ?? null, // spec 선행 충족 판정 재료 — claim 게이트와 같은 식을 쓴다
+    assigneeMemberId: (r.assignee_member_id as string | null) ?? null,
+    // 실시간 broadcast 의 순서 판정 기준(0098). select('*') 가 이미 싣고 있다.
+    updatedAt: (r.updated_at as string | null) ?? null,
+    // 「단계」 컬럼 표시 조건(D9) — 위임 태그. select('*') 가 tags 를 이미 싣는다.
+    agentDelegated: Array.isArray(r.tags) && (r.tags as unknown[]).includes(AGENT_TAG),
+  }))
+
+  const holidays = new Set((hol ?? []).map((h: { date: string }) => h.date))
+  const manualDependencies: TaskDependency[] = (dependencyRows ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    projectId: r.project_id as string,
+    predecessorId: r.predecessor_id as string,
+    successorId: r.successor_id as string,
+    type: r.dependency_type as TaskDependency['type'],
+    lagDays: Number(r.lag_days) || 0,
+    origin: 'manual', // task_dependencies 실제 행 — depends 합성 행은 mergeSpecDepends 가 붙인다
+  }))
+  // wbs.md import 로 들어온 선행(wbs_items.depends)을 같은 배열로 끌어올린다.
+  // 두 축은 뜻이 같은데 소비처가 task_dependencies 만 봐서, 정작 에이전트를 막는 관계가
+  // 간트·크리티컬 패스·지연 전파 어디에도 안 나타났다.
+  const { dependencies, unresolvedDepends } = (() => {
+    const merged = mergeSpecDepends(
+      manualDependencies,
+      (items ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        projectId: r.project_id as string,
+        externalRef: (r.external_ref as string | null) ?? null,
+        depends: (r.depends as string[] | null) ?? null,
+      })),
+    )
+    return { dependencies: merged.dependencies, unresolvedDepends: Object.fromEntries(merged.unresolvedBySuccessorId) }
+  })()
+  // base_date(공정율 기준일)가 설정돼 있으면 그 날짜로, 없으면 오늘(자동)로 산정
+  const today = (proj as { base_date: string | null } | null)?.base_date ?? seoulToday()
+  return {
+    items: computeTree(rows, today, holidays, { subActTeamOrder: teamOrder }),
+    dependencies,
+    unresolvedDepends,
+    holidays: [...holidays],
+    today,
+  }
+})
+
+// 사이드바용 경량 완료율 맵 — 프로젝트 전체를 1쿼리로 (트리 로드 없이)
+// 반환 null = 조회 실패. 빈 맵({})과 반드시 구분해야 한다 — 빈 맵은 'WBS가 없는 프로젝트'라는 정상 상태이고,
+// 실패를 그것과 같게 취급하면 종료일 지난 미완 프로젝트가 '완료' 배지로 둔갑한다(projectLifecycleStatus).
+//
+// 인자를 받지 않는다(2026-08-18 성능 감사): 종전에는 projectIds 를 받아 레이아웃의 프로젝트
+// 목록 조회 **뒤에** 직렬로 실행됐다. RLS 가 authenticated 전체 읽기 개방이라 id 필터는
+// 결과를 바꾸지 않으므로, 무인자로 바꿔 첫 Promise.all 에 병합한다(직렬 1단 제거).
+// 조회에 비공개 프로젝트 행이 섞여도 소비처가 가시 프로젝트 id 로만 lookup 하므로 화면 유출은 없다.
+// cache() 키도 무인자라 레이아웃·페이지가 같은 요청에서 불러도 1회만 실행된다(배열 인자는
+// 참조 동일성 키라 사실상 캐시가 안 됐다).
+export const getProjectsCompletion = cache(
+  async (): Promise<Record<string, ProjectCompletion> | null> => {
+    const sb = await createServerClient()
+    const { data, error } = await sb
+      .from('wbs_items')
+      .select('id, parent_id, project_id, actual_pct')
+
+    // 표시 전용이라 throw하지 않는다 — 이 함수는 앱 루트 layout에서 호출되므로 throw하면 배지 하나 때문에
+    // 모든 페이지가 에러 화면이 된다(복구 경로인 설정/임포트까지 막힌다). 대신 실패를 null로 신호한다.
+    if (error) {
+      console.error('[getProjectsCompletion] 조회 실패:', error.message)
+      return null
+    }
+
+    return computeCompletionMap(
+      (data ?? []).map(r => ({
+        id: r.id as string,
+        parentId: (r.parent_id as string | null) ?? null,
+        projectId: r.project_id as string,
+        actualPct: (r.actual_pct as number | null) ?? null,
+      })),
+    )
+  },
+)
