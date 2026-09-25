@@ -106,20 +106,21 @@ unlayered 규칙은 특이성과 무관하게 모든 named layer 를 이긴다. 
 
 ## 권한
 
-3단이다 — **슈퍼유저**(전역) · **관리자**(지정된 프로젝트) · **멤버**(지정된 프로젝트).
-프로젝트 역할이 없으면 조회 전용이다.
+등급은 **플랫폼 관리자**(`platform_admins`, 코드의 `isSuperuser`·SQL `is_superuser()`) · **워크스페이스 관리자**
+(`workspace_members.role='admin'` — 그 워크스페이스 모든 프로젝트의 관리자를 승계) · 프로젝트 **관리자/멤버**다.
+**명단 = 권한**: 프로젝트 역할은 명단 행의 `project_members.access_role`('admin'|'member') 한 칸뿐이고,
+null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인력(people)은 권한을 받을 수 없다.
 
 - 판정은 `src/lib/domain/authz.ts`(순수) + `src/lib/authz/**`(가드·`*Access.ts`) 두 곳에서만 한다.
   액션에 `role === '...'` 을 직접 적지 않는다.
 - 가드는 셋뿐이다: `requireSuperuser()` · `requireProjectAdmin(pid)` · `requireProjectMember(pid)`.
   `projectId` 를 인자로 받지 않는 액션은 `resolveProjectId(table, id)` 로 먼저 읽는다.
-- `memberships.role` 은 **deprecated** 다(기준선 0000 에 포함; 폐기는 SP1). 읽지 말 것. 전역 등급은 `is_superuser`,
-  프로젝트 역할은 `project_roles` 다. 옛 문자열 계약이 남은 화면은 `effectiveLegacyRole` shim 만 쓴다.
-  (기준선 스키마에 컬럼 자체는 남아 있다 — 폐기는 SP1.)
+- 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
-- 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델)에 있다.
+- 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
+  SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
 
 ## 에러 처리 3원칙
 
