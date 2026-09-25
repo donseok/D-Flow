@@ -1,14 +1,16 @@
-# SP1 Phase A 체크포인트 — E2E 실측 (2026-09-25)
+# SP1 Phase A 체크포인트 — E2E 실측 (2026-09-25 · 재실행 2026-09-26)
 
-플랜 `docs/superpowers/plans/2026-09-24-sp1-org-core.md` Task 11 을 로컬에서 잰 기록이다. 측정 트리는 `sp1/phase-a` 의
-`1bdb553` 위에 이 태스크의 러너 변경(`scripts/e2e-local.mjs`·`scripts/lib/e2e.mjs`)을 얹은 것이다. 시각은 전부 KST.
+플랜 `docs/superpowers/plans/2026-09-24-sp1-org-core.md` Task 11 을 로컬에서 잰 기록이다. 첫 측정(run1~run6, 2026-09-25)의 트리는
+`sp1/phase-a` 의 `1bdb553` 위에 이 태스크의 러너 변경(`scripts/e2e-local.mjs`·`scripts/lib/e2e.mjs`)을 얹은 것이다.
+재실행(run7, 2026-09-26)의 트리는 FK 결함을 고친 `d8259d2` 다(러너는 `fccf32c` 그대로). 시각은 전부 KST.
 
 **요약**
 
-- E2E(최종 run6)는 **exit 1** 이다. 17단계 중 16단계가 통과했고, 마지막 `render-pages` 가 회의 화면에서 방금 만든 회의를 찾지 못했다.
-- 원인은 `0003_org_core.sql` 이 두 표에서 단일 FK 를 남긴 채 복합 FK 를 더한 것이다(6.1). PostgREST 가 임베드를
-  PGRST201 로 거절하고, 회의 조회는 로그만 남긴 채 빈 목록으로 그린다. 같은 원인으로 헤더 알림함도 `failed` 다.
-- 그 두 단일 FK 를 지운 실험 DB 에서는 전 단계가 통과했다(exit 0, 7절). 커밋된 마이그레이션·코드는 바꾸지 않았다.
+- E2E 최종 실행(run7, 2026-09-26)은 **exit 0** 이다. 17단계가 전부 통과했다(3절).
+- 그 전 최종 실행(run6, 2026-09-25)은 **exit 1** 이었다. 17단계 중 16단계가 통과했고, 마지막 `render-pages` 가 회의 화면에서 방금 만든 회의를 찾지 못했다.
+- run6 의 원인은 `0003_org_core.sql` 이 두 표에서 단일 FK 를 남긴 채 복합 FK 를 더한 것이었다(6.1, 보고서 우려 C1). PostgREST 가 임베드를
+  PGRST201 로 거절하고, 회의 조회는 로그만 남긴 채 빈 목록으로 그렸다. 같은 원인으로 헤더 알림함도 `failed` 였다.
+  `0185093` 이 0003 을 고쳐 표 쌍마다 FK 를 하나만 남겼고, `d8259d2` 가 이를 스키마 불변식 테스트로 막았다. run7 에서 회의 목록·알림함이 정상이다(5절).
 - 브리프의 "carol 로 `/p/B` 404" 는 스펙과 어긋나 그대로 검사하지 않았다(4절). B 는 같은 워크스페이스라 조회 전용이다.
   존재 은닉은 타 워크스페이스 프로젝트 C 와 미존재 id 로 확인했다.
 - 은닉된 화면도 HTTP 상태는 200 이다(4.1). 판정은 RSC 페이로드의 `notFound()` digest 로 했다.
@@ -29,6 +31,26 @@
 `test:rls` 는 픽스처(워크스페이스 `rls-a` 등, "RLS A/B" 프로젝트)를 dev DB 에 남기므로 반드시 E2E 뒤에 돌린다.
 비밀번호는 플랜 Task 11 Step 2 의 값을 env 로만 넘겼다(아래 `<BOOTSTRAP_PASSWORD>`).
 
+최종 실행 run7(2026-09-26, 트리 `d8259d2`):
+
+```bash
+npm run db:reset                                                    # 06:03:24 → 06:03:49
+BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' npm run dev:bootstrap   # 06:03:49
+INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+  nohup npm run dev > <스크래치>/run7.dev.log 2>&1 &               # 06:03:55, npm PID 기록(16390)
+# /login 이 200 을 줄 때까지 2초 간격 최대 60회 대기 → 06:04:00 200(리스너 PID 16453)
+BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' INVITE_ALLOWED_DOMAINS=example.com E2E_OUT_DIR=<스크래치>/run7.out \
+  node scripts/e2e-local.mjs > <스크래치>/run7.e2e.json            # 06:04:04 → 06:04:47, exit 0
+# 눈확인(5절) 06:05:11 → 06:05:15
+# 기록한 npm PID 와 그 자손(16390 16438 16453)을 SIGTERM → lsof -nP -iTCP:3000 -sTCP:LISTEN 비어 있음(rc 1),
+#   pgrep "next dev|next-server|npm run dev" 0건 확인(06:05:42)
+npm run test:rls                                                    # 06:05:44, 2 파일 · 10/10 통과
+```
+
+run7 의 dev 서버 로그(`run7.dev.log`)에 `error`·`실패`·`PGRST` 줄은 0이다.
+
+그 전 최종 실행 run6(2026-09-25, 트리 `1bdb553` + 러너 변경) — **exit 1**, 기록으로 남긴다:
+
 ```bash
 npm run db:reset                                                    # 15:31:09 → 15:31:34
 BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' npm run dev:bootstrap
@@ -42,43 +64,51 @@ BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' INVITE_ALLOWED_DOMAINS=example.com E2E
 npm run test:rls                                                    # 15:32:29, 9/9 통과
 ```
 
-러너를 만드는 동안 같은 순서로 다섯 번 더 돌렸다. 각 실행이 드러낸 것과 고친 것은 이렇다.
+실행 이력. 각 실행이 드러낸 것과 고친 것은 이렇다.
 
 | 실행 | 결과 | 조치 |
 |---|---|---|
-| run1(15:11) | `invite-issue` 확인 조회가 `permission denied for table project_invites` | 이 표는 `service_role` 에만 grant 가 있다. 러너의 확인 조회를 로컬 service_role 클라이언트로 바꿨다 |
-| run2(15:13, 같은 dev 서버로 재실행) | `import-append` 409 `needsTeams:["ERP"], scope:"global"` | 팀 캐시가 모듈 인스턴스마다 따로다(6.3). 재시도로 덮지 않고 원인을 적은 실패 문구로 바꿨다 |
-| run3(15:15) | carol 의 C 화면이 404 가 아닌 200 | 스트리밍 때문이다(4.1). 판정을 `notFound()` digest 로 바꿨다. 단계 이름을 덮어쓰던 러너 버그(`name` 키)도 고쳤다 |
-| run4(15:19)·run5(15:22) | run6 과 같은 결과 | run5 뒤 단계 기록기에 예약 키 검사를 더했다. 그래서 최종 기록은 커밋할 코드로 다시 돈 run6 이다 |
+| run1(09-25 15:11) | `invite-issue` 확인 조회가 `permission denied for table project_invites` | 이 표는 `service_role` 에만 grant 가 있다. 러너의 확인 조회를 로컬 service_role 클라이언트로 바꿨다 |
+| run2(09-25 15:13, 같은 dev 서버로 재실행) | `import-append` 409 `needsTeams:["ERP"], scope:"global"` | 팀 캐시가 모듈 인스턴스마다 따로다(6.3). 재시도로 덮지 않고 원인을 적은 실패 문구로 바꿨다 |
+| run3(09-25 15:15) | carol 의 C 화면이 404 가 아닌 200 | 스트리밍 때문이다(4.1). 판정을 `notFound()` digest 로 바꿨다. 단계 이름을 덮어쓰던 러너 버그(`name` 키)도 고쳤다 |
+| run4(09-25 15:19)·run5(09-25 15:22) | run6 과 같은 결과 | run5 뒤 단계 기록기에 예약 키 검사를 더했다. 그래서 그날의 최종 기록은 커밋할 코드로 다시 돈 run6 이다 |
+| exp1(09-25 15:21) | exit 0 | 단일 FK 두 개를 로컬 DB 에서만 지운 실험(7절) |
+| run6(09-25 15:31) | **exit 1** — `render-pages` 가 `/p/A/meetings` 에서 "E2E 킥오프" 를 찾지 못함 | 원인은 0003 의 FK 중복(6.1, 보고서 우려 **C1**). 러너로 덮지 않고 실패로 남겼다. `0185093` 이 0003 을 고쳤고 `d8259d2` 가 스키마 불변식 테스트를 더했다 |
+| run7(09-26 06:04) | **exit 0** — 17단계 전부 ✓ | 러너 변경 없음. 3절·5절이 이 실행의 기록이다 |
 
-## 3. 단계표 — run6 (reset 15:31:09, E2E 15:31:37)
+## 3. 단계표 — run7 (2026-09-26, reset 06:03:24, E2E 06:04:04)
 
 화면이 부르는 서버 액션은 `.next/server/server-reference-manifest.json` 에서 id 를 읽어 그 페이지로 `POST` 했다(`next-action` 헤더).
 반환값은 Flight 응답에서 꺼냈다(`actionResult`). 확인은 로그인 세션 조회로 했고, grant 가 없는 `project_invites` 만 service_role 로 봤다.
 
 | 시각 | 단계 | 경로 | 결과 · 행 수 |
 |---|---|---|---|
-| 15:31:40 | login | `@supabase/ssr` 로그인 → `GET /projects` | ✓ 200, 쿠키 `sb-127-auth-token` |
-| 15:31:40 | create-projects | `createProject` × 2 via `POST /projects` | ✓ 2건(`E2E A/B 202609250631`), 둘 다 라벨 단계·작업·활동 · `max_depth` 3, 같은 워크스페이스 |
-| 15:31:42 | project-teams | `addProjectTeam` via `POST /p/<id>/settings` | ✓ 3행 — A: ERP·MES, B: QA. 전부 프로젝트와 같은 워크스페이스 |
-| 15:31:46 | roster | `upsertRosterMember` via `POST /p/<id>/members` | ✓ 3행 — 본인@A admin [ERP(대표), MES] 계정 연결, bob@A 권한·이메일·팀 없음·계정 없음, 본인@B member [QA] |
-| 15:31:46 | fill-template | `GET /api/import/template` | ✓ 5행, 말단 담당 = ERP |
-| 15:31:47 | import-inspect | `POST /api/import/inspect` | ✓ outline(0열), 팀 열 `[[8,'*']]` |
-| 15:31:47 | import-append | `POST /api/import/execute` `registerTeams=false` | ✓ `count 5`, 5행, ERP 담당 2행(1.1.1·1.2.1, primary) |
-| 15:31:47 | import-replace | 같은 라우트 `mode=replace` | ✓ 백업 5행, 교체 뒤 5행·ERP 담당 2행 |
-| 15:31:52 | assign-external | `setWbsAssignee` via `POST /p/A/wbs` | ✓ bob 담당 1행(1.1.1) |
-| 15:31:56 | meeting | `createMeeting` via `POST /p/A/meetings` | ✓ 회의 1건, 참석자 1행(bob, `project_id` = A) |
-| 15:31:59 | export | `GET /api/report`(pptx·xlsx), `GET /api/export` | ✓ 3건 — 430,279 B / 113 항목, 10,678 B / 11 항목, 20,969 B / 11 항목 |
-| 15:31:59 | trace-scan | 산출물 zip 전 항목 | ✓ 135 항목, 적중 0 |
-| 15:31:59 | invite-issue | `createProjectInvite` via `POST /p/A/members` | ✓ carol@example.com member [ERP], 상태 active, 링크 origin `http://localhost:3000`, `alreadyAccount false`, 메일 미발송("메일 발송이 설정되지 않았습니다." — SMTP 없음, 초대는 유효), 초대 1행 |
-| 15:32:01 | invite-redeem | 새 쿠키 항아리로 `GET /invite/<토큰>` → `redeemInviteWithSignup` | ✓ `projectId` = A, A 명단 3행, carol member [ERP] 계정 연결, 초대 `redeemed_at` 기록 |
-| 15:32:01 | other-workspace-fixture | service_role(로컬 전용) | ✓ 워크스페이스 `e2e-other` + 프로젝트 `E2E C 202609250631`(워크스페이스 생성 경로는 SP2) |
-| 15:32:03 | visibility | carol 로그인 뒤 화면·액션 | ✓ 4절 표 |
-| 15:32:12 | render-pages | 관리자 세션 `GET` 6화면 | **✗** `/p/A/meetings` 에 방금 만든 회의 제목 "E2E 킥오프" 없음(6.1). 나머지 5화면 ✓ |
+| 06:04:06 | login | `@supabase/ssr` 로그인 → `GET /projects` | ✓ 200, 쿠키 `sb-127-auth-token` |
+| 06:04:06 | create-projects | `createProject` × 2 via `POST /projects` | ✓ 2건(`E2E A/B 202609252104`), 둘 다 라벨 단계·작업·활동 · `max_depth` 3, 같은 워크스페이스 |
+| 06:04:09 | project-teams | `addProjectTeam` via `POST /p/<id>/settings` | ✓ 3행 — A: ERP·MES, B: QA. 전부 프로젝트와 같은 워크스페이스 |
+| 06:04:13 | roster | `upsertRosterMember` via `POST /p/<id>/members` | ✓ 3행 — 본인@A admin [ERP(대표), MES] 계정 연결, bob@A 권한·이메일·팀 없음·계정 없음, 본인@B member [QA] |
+| 06:04:16 | fill-template | `GET /api/import/template` | ✓ 5행, 말단 담당 = ERP |
+| 06:04:17 | import-inspect | `POST /api/import/inspect` | ✓ outline(0열), 팀 열 `[[8,'*']]` |
+| 06:04:17 | import-append | `POST /api/import/execute` `registerTeams=false` | ✓ `count 5`, 5행, ERP 담당 2행(1.1.1·1.2.1, primary) |
+| 06:04:17 | import-replace | 같은 라우트 `mode=replace` | ✓ 백업 5행, 교체 뒤 5행·ERP 담당 2행 |
+| 06:04:22 | assign-external | `setWbsAssignee` via `POST /p/A/wbs` | ✓ bob 담당 1행(1.1.1) |
+| 06:04:25 | meeting | `createMeeting` via `POST /p/A/meetings` | ✓ 회의 1건, 참석자 1행(bob) |
+| 06:04:28 | export | `GET /api/report`(pptx·xlsx), `GET /api/export` | ✓ 3건 — 430,269 B / 113 항목, 10,680 B / 11 항목, 20,969 B / 11 항목 |
+| 06:04:28 | trace-scan | 산출물 zip 전 항목 | ✓ 135 항목, 적중 0 |
+| 06:04:30 | invite-issue | `createProjectInvite` via `POST /p/A/members` | ✓ carol@example.com member [ERP], 상태 active, 링크 origin `http://localhost:3000`, 메일 미발송("메일 발송이 설정되지 않았습니다." — SMTP 없음, 초대는 유효), 초대 1행 |
+| 06:04:36 | invite-redeem | 새 쿠키 항아리로 `GET /invite/<토큰>` → `redeemInviteWithSignup` | ✓ `projectId` = A, A 명단 3행, carol [ERP] 계정 연결, 초대 `redeemed_at` 기록 |
+| 06:04:36 | other-workspace-fixture | service_role(로컬 전용) | ✓ 워크스페이스 `e2e-other` + 프로젝트 `E2E C 202609252104`(워크스페이스 생성 경로는 SP2) |
+| 06:04:39 | visibility | carol 로그인 뒤 화면·액션 | ✓ 4절 표 |
+| 06:04:47 | render-pages | 관리자 세션 `GET` 6화면 | ✓ 6화면 문제 0 — `/p/A/meetings` 에 "E2E 킥오프" 있음 |
+
+run6(2026-09-25) 의 단계 결과는 `render-pages` 를 빼고 run7 과 같았다. run6 의 `render-pages` 는 **✗** 였다 —
+`/p/A/meetings` 에 방금 만든 회의 제목 "E2E 킥오프" 가 없었다(6.1). 나머지 5화면은 ✓ 였다.
 
 토큰은 발급 응답의 `url` 에만 있고(DB 는 해시) 러너가 거기서 꺼냈다. carol 의 비밀번호는 실행마다 새로 만들고 출력하지 않는다.
 
 ## 4. 존재 은닉 — carol 세션
+
+run6·run7 결과가 같다(아래 표).
 
 | 대상 | 기대(근거) | HTTP | `notFound()` | 프로젝트 이름이 HTML 에 |
 |---|---|---|---|---|
@@ -112,11 +142,28 @@ SP1 스펙 표(258행)는 "`read_all_members`·`projects` 읽기가 SP1 동안 �
 "SP2 착수 전 원격 배포 금지" 도 명시했다. 러너는 이 노출을 판정하지 않고 `projectNameInHtml` 로 기록만 한다.
 SP2 가 읽기 정책을 닫을 때 이 값이 C 에서 `false` 가 돼야 한다.
 
-## 5. 눈확인 — 관리자 세션, 15:32:12
+## 5. 눈확인 — 관리자 세션
 
 **방법.** 이 샌드박스의 브라우저(claude-in-chrome)는 localhost 에 닿지 못한다(`.claude/skills/verify`). 그래서 러너와 같은 `@supabase/ssr` 세션
 쿠키로 렌더된 HTML 을 받아 봤다. 오류 경계("화면을 불러오지 못했습니다")·열화 표시("일부 정보를 불러오지 못했습니다")·Next 오류 문서
 (`__next_error__`)·흐름 데이터의 유무를 확인했다. 화면을 사람 눈으로 본 것은 아니다.
+
+### run7 (2026-09-26 06:05:11 → 06:05:15)
+
+| 화면 | 결과 |
+|---|---|
+| `/projects` | 200, 오류 표식 없음. A·B 가 목록에 있다(러너 `render-pages`) |
+| `/p/A/members` | 200, 오류 표식 없음. bob·carol 이 있다 |
+| `/p/A/meetings` | 200, 오류 표식 없음. **방금 만든 회의 "E2E 킥오프" 가 있다** — run6 의 결함이 고쳐졌다 |
+| `/p/A/issues` | 200, 오류 표식 없음 |
+| `/p/A/wbs` | 200, 오류 표식 없음. 리프 "요구사항 정리" 가 있다 |
+| `/p/A/attendance` | 200, 오류 표식 없음 |
+| 헤더(e5065be 어댑터) | 6화면 모두 `identity` = `{ roleLabel: "슈퍼유저", teamCode: "ERP", isSuperuser: true, showUsage: true, showPortfolio: true }`. 팀 라벨은 A 의 대표 팀 ERP 다 |
+| 헤더 알림함(`GET /api/shell`) | 200, `inbox` = `{ items: [], unseen: 0 }` — `failed` 가 없다. run6 의 PGRST201 이 사라졌다 |
+
+dev 서버 로그에 `[getProjectMeetingData]`·`[inbox]` 실패 줄이 없다.
+
+### run6 (2026-09-25 15:32:12)
 
 | 화면 | 결과 |
 |---|---|
@@ -131,7 +178,13 @@ SP2 가 읽기 정책을 닫을 때 이 값이 C 에서 `false` 가 돼야 한�
 
 ## 6. 발견
 
-### 6.1 0003 의 FK 중복 — 회의 조회·알림함이 깨진다 (결함, Phase A 회귀)
+### 6.1 0003 의 FK 중복 — 회의 조회·알림함이 깨진다 (결함, Phase A 회귀 — 고침: `0185093`·`d8259d2`)
+
+**해소(2026-09-26).** `0185093` 이 0003 본문을 고쳤다. `meeting_attendees` 는 단일 `meeting_id` FK 를 지우고 복합 FK 만 남긴다.
+`notification_recipients` 는 단일 `event_id` FK 를 남기고 복합 FK 대신 트리거로 사건과의 `project_id` 일치를 본다
+(`project_id` 가 null 인 수신자가 있어서다). `d8259d2` 는 같은 public 표 쌍에 FK 가 둘 이상이면 실패하는 스키마 불변식 테스트를 더했다.
+run7 직전 `db:reset` 뒤 두 표 쌍의 FK 는 각각 `meeting_attendees_meeting_project_fk`·`notification_recipients_event_id_fkey` 하나뿐이다.
+run7 은 exit 0 이고 회의 목록·알림함이 정상이다(3절·5절). 아래는 run6 시점의 기록이다.
 
 `0003_org_core.sql` 은 두 표에 복합 FK 를 더하면서 단일 FK 를 남겼다. `attendance_records` 에는 같은 상황에서 단일 FK 를 지웠다("복합만 남긴다").
 
@@ -196,7 +249,7 @@ notify pgrst, 'reload schema';
 
 ## 8. 완료하지 못한 것
 
-- **E2E exit 0** — 6.1 이 고쳐지기 전까지 `render-pages` 가 실패한다. 고친 뒤 2절 순서로 다시 돌려 이 문서의 3절을 갱신한다.
+- ~~**E2E exit 0**~~ — 2026-09-26 run7 에서 완료(6.1 을 `0185093` 이 고친 뒤 2절 순서로 재실행, exit 0).
 - **브리프 문구의 "carol 로 `/p/B` 404"** — 스펙과 어긋나 검사하지 않았다(4절). 존재 은닉은 C·미존재 id 로 대신 검사했다.
 - **존재 은닉의 HTTP 404** — 화면 경로에서는 스트리밍 때문에 받을 수 없다(4.1). digest 로 판정했다.
 - **사람 눈의 화면 확인** — 브라우저가 localhost 에 닿지 못해 헤드리스 HTML 검사로 대신했다(5절).
