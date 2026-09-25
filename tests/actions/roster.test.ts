@@ -32,14 +32,18 @@ import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 import { makeAdminActor, makeSuperuser } from '../fixtures/actor'
 
 const P1 = 'p1'
+// 입력의 인물·팀 id 는 uuid 모양이어야 한다(RPC 앞에서 검사).
+const T1 = '00000000-0000-4000-8000-0000000000a1'
+const T2 = '00000000-0000-4000-8000-0000000000a2'
+const PE = '00000000-0000-4000-8000-0000000000e1'
 const DENIED = { ok: false as const, error: '권한 없음' }
 const actor = makeAdminActor(P1)
 const INPUT: RosterInput = {
-  name: '홍길동', email: 'hong@example.com', accessRole: 'member', roleLabel: 'PM', title: null, teamIds: ['t-2', 't-1'],
+  name: '홍길동', email: 'hong@example.com', accessRole: 'member', roleLabel: 'PM', title: null, teamIds: [T2, T1],
 }
 
 /** PostgREST 빌더 흉내 — 어떤 순서로 체이닝해도 자신을 돌려주고, await 하면 결과를 낸다. */
-type Result = { data: unknown; error: { code?: string; message: string } | null }
+type Result = { data: unknown; error: { code?: string; message: string } | null; count?: number | null }
 function chain(result: Result) {
   const c: Record<string, unknown> = {}
   for (const m of ['select', 'eq', 'in', 'is', 'order', 'limit', 'delete', 'update', 'insert']) c[m] = vi.fn(() => c)
@@ -74,7 +78,7 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
       p_project_id: P1,
       p_person: { display_name: '홍길동', email: 'hong@example.com' },
       p_member: { access_role: 'member', role_label: 'PM', title: null },
-      p_team_ids: ['t-2', 't-1'],
+      p_team_ids: [T2, T1],
     })
     expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
   })
@@ -82,8 +86,8 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
   it('기존 인물은 id 로 지목하고, 이메일은 소문자·공백 정리 후 넘긴다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
     admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
-    await upsertRosterMember(P1, { ...INPUT, personId: 'person-1', name: '  홍길동 ', email: ' Hong@Example.COM ', roleLabel: ' PM ' })
-    expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: 'person-1', display_name: '홍길동', email: 'hong@example.com' })
+    await upsertRosterMember(P1, { ...INPUT, personId: PE, name: '  홍길동 ', email: ' Hong@Example.COM ', roleLabel: ' PM ' })
+    expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동', email: 'hong@example.com' })
     expect(admin.rpc.mock.calls[0]![1].p_member.role_label).toBe('PM')
   })
 
@@ -126,12 +130,21 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
     expect(admin.rpc).not.toHaveBeenCalled()
   })
 
-  it('알 수 없는 권한 값·팀 id 모양은 RPC 전에 거부한다 — 서버 액션 입력은 신뢰하지 않는다', async () => {
+  it('알 수 없는 권한 값은 RPC 전에 거부한다 — 서버 액션 입력은 신뢰하지 않는다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
     const badRole = await upsertRosterMember(P1, { ...INPUT, accessRole: 'owner' as never })
     expect(badRole).toEqual({ ok: false, error: '알 수 없는 권한입니다.' })
-    const badTeams = await upsertRosterMember(P1, { ...INPUT, teamIds: 'PMO' as never })
-    expect(badTeams).toEqual({ ok: false, error: '알 수 없는 팀입니다.' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  // uuid 가 아닌 id 는 RPC 안의 캐스트에서 22P02 로 터져 '다시 시도하세요' 로 보인다 — 다시 해도 안 되는 입력이다.
+  it.each([
+    ['팀 id 가 배열이 아님', { teamIds: 'PMO' as never }],
+    ['팀 id 가 uuid 가 아님', { teamIds: [T1, 'abc'] }],
+    ['인물 id 가 uuid 가 아님', { personId: 'person-1' }],
+  ])('%s → RPC 전에 "잘못된 요청입니다."', async (_label, patch) => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    expect(await upsertRosterMember(P1, { ...INPUT, ...patch })).toEqual({ ok: false, error: '잘못된 요청입니다.' })
     expect(admin.rpc).not.toHaveBeenCalled()
   })
 })
@@ -178,11 +191,33 @@ describe('removeRosterMember — 행 삭제(세션 경로, RLS 가 관리자 행
     expect(server.from).not.toHaveBeenCalled()
   })
 
-  it('정상 — id·project_id 로 좁혀 지우고 영향 행을 확인한다', async () => {
+  /** 삭제 전 종속 행 검사 — 표별 결과를 준다(기본 0건). project_members 를 참조하는 FK 전수(project_member_teams 제외). */
+  const DEPENDANTS: Array<[string, string]> = [
+    ['attendance_records', 'member_id'], ['issue_assignees', 'member_id'], ['issues', 'assignee_member_id'],
+    ['meeting_attendees', 'member_id'], ['notification_recipients', 'member_id'], ['wbs_items', 'assignee_member_id'],
+    ['wiki_items', 'owner_member_id'],
+  ]
+  function dependants(over: Record<string, Result> = {}) {
+    const qs: Record<string, ReturnType<typeof chain>> = {}
+    admin.from.mockImplementation((t: string) => {
+      if (!DEPENDANTS.some(([table]) => table === t)) throw new Error('예상치 못한 admin 테이블 접근: ' + t)
+      qs[t] = chain(over[t] ?? { data: null, error: null, count: 0 })
+      return qs[t]
+    })
+    return qs
+  }
+
+  it('정상 — 종속 행이 없으면 id·project_id 로 좁혀 지우고 영향 행을 확인한다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    const qs = dependants()
     const q = chain({ data: [{ id: 'm-1' }], error: null })
     server.from.mockReturnValue(q)
     expect(await removeRosterMember('m-1')).toEqual({ ok: true })
+    // 참조 FK 7개 표를 전부 센다(서비스 롤 — RLS 에 가려 0건으로 보이면 안 된다).
+    for (const [table, col] of DEPENDANTS) {
+      expect(qs[table]!.select).toHaveBeenCalledWith(col, { count: 'exact', head: true })
+      expect(qs[table]!.eq).toHaveBeenCalledWith(col, 'm-1')
+    }
     expect(server.from).toHaveBeenCalledWith('project_members')
     expect(q.delete).toHaveBeenCalled()
     expect(q.eq).toHaveBeenCalledWith('id', 'm-1')
@@ -191,16 +226,37 @@ describe('removeRosterMember — 행 삭제(세션 경로, RLS 가 관리자 행
     expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
   })
 
+  // 0003 의 참조 FK 는 전부 CASCADE·SET NULL 이다 — 지우면 근태·참석·담당 기록이 조용히 사라진다. 그래서 앱이 먼저 센다.
+  it.each(DEPENDANTS.map(([t]) => t))('%s 에 이 사람의 행이 있으면 거부하고 지우지 않는다', async (table) => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    dependants({ [table]: { data: null, error: null, count: 2 } })
+    expect(await removeRosterMember('m-1'))
+      .toEqual({ ok: false, error: '담당·참석 기록이 있는 사람은 삭제할 수 없습니다. 비활성으로 바꾸세요.' })
+    expect(server.from).not.toHaveBeenCalled()
+  })
+
+  it('종속 행 조회가 하나라도 실패하면 지우지 않는다(3원칙 ②)', async () => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    dependants({ wbs_items: { data: null, error: { message: 'boom' }, count: null } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await removeRosterMember('m-1')).toEqual({ ok: false, error: '명단 정보를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(server.from).not.toHaveBeenCalled()
+  })
+
   it('0행이면 RLS 가 막은 것이다(관리자 행) — 조용한 성공으로 위장하지 않는다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    dependants()
     server.from.mockReturnValue(chain({ data: [], error: null }))
     expect(await removeRosterMember('m-1'))
       .toEqual({ ok: false, error: '관리자 권한이 있는 사람은 워크스페이스 관리자만 명단에서 삭제할 수 있습니다.' })
     expect(revalidatePath).not.toHaveBeenCalled()
   })
 
-  it('담당 FK(restrict) 위반은 비활성 안내 문구로 바꾼다', async () => {
+  // 사전 검사와 삭제 사이에 담당이 생기는 경합, 또는 뒤에 RESTRICT FK 가 생기는 경우의 방어선 — 같은 문구.
+  it('삭제의 FK 위반(23503)도 같은 안내 문구로 바꾼다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    dependants()
     server.from.mockReturnValue(chain({
       data: null, error: { code: '23503', message: 'violates foreign key constraint "wbs_items_assignee_fk"' },
     }))
@@ -230,6 +286,8 @@ describe('listRoster — 정본 select(ROSTER_SELECT) + 매퍼', () => {
     const res = await listRoster(P1)
     expect(q.select).toHaveBeenCalledWith(ROSTER_SELECT)
     expect(q.eq).toHaveBeenCalledWith('project_id', P1)
+    expect(q.order).toHaveBeenNthCalledWith(1, 'sort_order')
+    expect(q.order).toHaveBeenNthCalledWith(2, 'created_at')
     expect(res).toMatchObject({ ok: true, rows: [{ id: 'm-1', name: '홍길동', accessRole: 'member', teamCode: 'PMO', hasAccount: true }] })
   })
 
@@ -323,6 +381,7 @@ describe('@deprecated 옛 화면 어댑터 — 전부 같은 RPC 로 간다', ()
 
   it('removeMember 는 removeRosterMember 와 같다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    admin.from.mockImplementation(() => chain({ data: null, error: null, count: 0 }))
     server.from.mockReturnValue(chain({ data: [{ id: 'm-1' }], error: null }))
     expect(await removeMember('m-1')).toEqual({ ok: true })
   })

@@ -66,21 +66,25 @@ function isWorkspaceRole(v: unknown): v is WorkspaceRole {
  * 계정 ↔ 인물 연결. (워크스페이스, 이메일)로 인물을 찾아 미연결이면 잇고, 없으면 만든다.
  * 부분 유니크 people_ws_email_uidx 는 PostgREST upsert(onConflict)의 대상이 될 수 없어(42P10) select-then-write 다.
  * 연결은 user_id 가 아직 null 일 때만 — 조건부 update 가 0행이면 그 사이 다른 계정이 이었다는 뜻이라 덮어쓰지 않는다.
+ * 비활성 인물이면 연결하면서 되살린다 — 헬퍼·buildActor 는 인물이 활성일 때만 권한을 인정하므로, 그대로 두면 이어서 준 권한이
+ * 무효인데 '생성 성공' 으로 보고된다. consume_project_invite 의 재활성화와 같은 규칙(service_role 이라 people.active 컬럼 권한을 넘는다).
  * insert 의 유니크 위반(경합)은 조용히 재시도하지 않고 오류로 돌린다.
  */
 async function linkOrCreatePerson(
   admin: AdminClient, workspaceId: string, userId: string, email: string, displayName: string,
 ): Promise<{ ok: true; personId: string; created: boolean } | { ok: false; error: string }> {
   const { data: found, error: findErr } = await admin
-    .from('people').select('id, user_id').eq('workspace_id', workspaceId).eq('email', email).maybeSingle()
+    .from('people').select('id, user_id, active').eq('workspace_id', workspaceId).eq('email', email).maybeSingle()
   if (findErr) {
     console.error('[createAccount] 인물 조회 실패:', findErr.message)
     return { ok: false, error: '인물 정보를 확인할 수 없어 중단했습니다.' }
   }
   if (found) {
     if (found.user_id !== null) return { ok: false, error: ERR_PERSON_LINKED }
+    const patch: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString() }
+    if (found.active === false) patch.active = true
     const { data: linked, error: linkErr } = await admin
-      .from('people').update({ user_id: userId, updated_at: new Date().toISOString() })
+      .from('people').update(patch)
       .eq('id', found.id as string).is('user_id', null)
       .select('id')
     if (linkErr) {

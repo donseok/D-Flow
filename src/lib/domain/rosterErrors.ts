@@ -1,4 +1,4 @@
-// 명단 쓰기(RPC upsert_project_member·명단 행 삭제)의 DB 오류 → 사용자 문구. 순수 모듈.
+// 명단 쓰기(RPC upsert_project_member·consume_project_invite·명단 행 삭제)의 DB 오류 → 사용자 문구. 순수 모듈.
 // 'use server' 파일(actions/roster.ts)은 async 함수만 내보낼 수 있어 매퍼를 여기 둔다.
 //
 // RPC·트리거는 SQLSTATE 를 여러 사유가 나눠 쓰므로(42501·23514) 코드가 아니라 메시지 토큰으로 가른다.
@@ -6,6 +6,8 @@
 import { ERR_DENIED } from '@/lib/authz/errors'
 
 export const ROSTER_WRITE_FAILED = '명단을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+/** 명단 행 삭제 거부 — 사전 검사(removeRosterMember)와 FK 위반(23503) 방어선이 같은 문구를 쓴다. */
+export const ROSTER_HAS_RECORDS = '담당·참석 기록이 있는 사람은 삭제할 수 없습니다. 비활성으로 바꾸세요.'
 
 const BY_TOKEN: ReadonlyArray<readonly [string, string]> = [
   ['PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT',
@@ -21,13 +23,24 @@ const BY_TOKEN: ReadonlyArray<readonly [string, string]> = [
   ['PROJECT_NOT_FOUND', '프로젝트를 찾을 수 없습니다.'],
 ]
 
+/**
+ * RPC·트리거가 던진 명단 토큰만 문구로 바꾼다. 모르는 오류는 null — 호출부가 자기 맥락의 문구를 고른다
+ * (초대 수락은 연결 오류를 '초대를 확인할 수 없어 중단했습니다.' 로 둔다). SQLSTATE 만으로는 판정하지 않는다.
+ */
+export function rosterTokenError(message: string): string | null {
+  for (const [token, text] of BY_TOKEN) if (message.includes(token)) return text
+  return null
+}
+
 export function rosterWriteError(e: { code?: string; message: string }): string {
-  for (const [token, text] of BY_TOKEN) if (e.message.includes(token)) return text
+  const byToken = rosterTokenError(e.message)
+  if (byToken) return byToken
   if (e.code === '23505' && e.message.includes('people_ws_email_uidx')) {
     return '같은 이메일의 사람이 이미 있습니다. 목록에서 선택하세요.'
   }
-  // 담당 FK(wbs·이슈 담당자 등, on delete restrict) — 행을 지우는 대신 비활성으로 남기라고 안내한다.
-  if (e.code === '23503') return '담당·참석 기록이 있는 사람은 삭제할 수 없습니다. 비활성으로 바꾸세요.'
+  // 0003 에서 project_members 를 참조하는 FK 는 전부 CASCADE·SET NULL 이라 지금은 23503 이 나지 않는다 —
+  // removeRosterMember 가 삭제 전에 종속 행을 세어 같은 문구로 거부한다. 이 분기는 뒤에 RESTRICT FK 가 생길 때의 방어선이다.
+  if (e.code === '23503') return ROSTER_HAS_RECORDS
   console.error('[roster] 명단 쓰기 실패:', e.code ?? '', e.message)
   return ROSTER_WRITE_FAILED
 }

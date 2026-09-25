@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
+  isAdminAccessRole,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -242,5 +243,13 @@ describe('canSeeProject — 비공개 프로젝트 UI 숨김 (0070)', () => {
   it('다른 프로젝트의 역할로는 볼 수 없다', () => {
     expect(canSeeProject(admin, { id: Q, is_private: true })).toBe(false)
     expect(canSeeProject(member, { id: Q, is_private: true })).toBe(false)
+  })
+})
+
+// 관리자 슬롯을 여는 요청인가 — 가드 선택(슈퍼유저 vs 프로젝트 관리자)의 판정을 액션이 문자열로 하지 않게 여기 둔다.
+describe('isAdminAccessRole', () => {
+  it("'admin' 만 참 — 서버 액션 입력이라 모양을 믿지 않는다", () => {
+    expect(isAdminAccessRole('admin')).toBe(true)
+    for (const v of ['member', 'viewer', null, undefined, 'ADMIN', ' admin', 1, {}]) expect(isAdminAccessRole(v)).toBe(false)
   })
 })

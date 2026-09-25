@@ -10,9 +10,10 @@ import {
 import { ERR_MISSING } from '@/lib/authz/errors'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@/lib/supabase/server'
-import { isValidEmail } from '@/lib/domain/validate'
+import { isValidEmail, isUuidLike } from '@/lib/domain/validate'
+import { isAdminAccessRole } from '@/lib/domain/authz'
 import { isAccountRole, type AccountRole } from '@/lib/domain/accounts'
-import { rosterWriteError, ROSTER_WRITE_FAILED } from '@/lib/domain/rosterErrors'
+import { rosterWriteError, ROSTER_WRITE_FAILED, ROSTER_HAS_RECORDS } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT, mapRosterRows, personOf, type RosterMember } from '@/lib/data/memberSelect'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import type { TeamCode } from '@/lib/domain/types'
@@ -41,7 +42,8 @@ export type RosterActionResult = { ok: true; memberId: string } | { ok: false; e
 const ERR_NAME = '이름을 입력하세요.'
 const ERR_EMAIL = '올바른 이메일 형식이 아닙니다.'
 const ERR_ACCESS = '알 수 없는 권한입니다.'
-const ERR_TEAMS = '알 수 없는 팀입니다.'
+/** 모양이 틀린 id — RPC 안의 uuid 캐스트(22P02)까지 가면 '다시 시도하세요' 로 보이지만 다시 해도 안 되는 입력이다. */
+const ERR_BAD_REQUEST = '잘못된 요청입니다.'
 const ERR_TEAM_CODE = '알 수 없는 팀 코드'
 const ERR_ROSTER_LOOKUP = '명단 정보를 확인할 수 없어 중단했습니다.'
 const ERR_ROSTER_LIST = '명단을 불러오지 못했습니다.'
@@ -63,7 +65,36 @@ function isAccessRoleOrNull(v: unknown): v is AccessRole | null {
   return v === null || v === 'admin' || v === 'member'
 }
 function isTeamIdList(v: unknown): v is string[] {
-  return Array.isArray(v) && v.every(x => typeof x === 'string' && x.trim() !== '')
+  return Array.isArray(v) && v.every(x => typeof x === 'string' && isUuidLike(x))
+}
+
+/**
+ * project_members 를 참조하는 FK 전수(0003, pg_constraint 로 확인) — 명단 행과 함께 사라지는 게 맞는 project_member_teams 는 뺀다.
+ * 전부 ON DELETE CASCADE(근태·이슈 담당·회의 참석·알림 수신) 또는 SET NULL(이슈·WBS 담당자·위키 담당)이라,
+ * 그대로 지우면 기록이 조용히 사라지거나 담당자가 비워진다. 삭제 전에 센다.
+ */
+const MEMBER_DEPENDANTS: ReadonlyArray<readonly [table: string, column: string]> = [
+  ['attendance_records', 'member_id'],
+  ['issue_assignees', 'member_id'],
+  ['issues', 'assignee_member_id'],
+  ['meeting_attendees', 'member_id'],
+  ['notification_recipients', 'member_id'],
+  ['wbs_items', 'assignee_member_id'],
+  ['wiki_items', 'owner_member_id'],
+]
+
+/** 종속 행이 있는가. service_role 로 센다 — 세션 RLS 에 가려 0건으로 보이면 기록이 지워진다. 조회 실패는 중단(3원칙 ②). */
+async function memberHasRecords(admin: AdminClient, memberId: string): Promise<{ ok: true; has: boolean } | { ok: false }> {
+  const counts = await Promise.all(MEMBER_DEPENDANTS.map(async ([table, column]) => {
+    const { count, error } = await admin.from(table).select(column, { count: 'exact', head: true }).eq(column, memberId)
+    if (error || count === null) {
+      console.error(`[removeRosterMember] ${table} 종속 행 조회 실패:`, error?.message ?? 'count 없음')
+      return null
+    }
+    return count
+  }))
+  if (counts.some(c => c === null)) return { ok: false }
+  return { ok: true, has: counts.some(c => (c as number) > 0) }
 }
 
 /** RPC 한 번. 성공하면 명단 화면을 다시 그린다. */
@@ -91,11 +122,13 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
   const email = normalizeEmail(input.email)
   if (!email.ok) return { ok: false, error: ERR_EMAIL }
   if (!isAccessRoleOrNull(input.accessRole)) return { ok: false, error: ERR_ACCESS }
-  if (!isTeamIdList(input.teamIds)) return { ok: false, error: ERR_TEAMS }
+  if (!isTeamIdList(input.teamIds)) return { ok: false, error: ERR_BAD_REQUEST }
+  const personId = input.personId ?? null
+  if (personId !== null && (typeof personId !== 'string' || !isUuidLike(personId))) return { ok: false, error: ERR_BAD_REQUEST }
   if (input.active !== undefined && typeof input.active !== 'boolean') return { ok: false, error: '활성 여부가 올바르지 않습니다.' }
 
   const person: Record<string, unknown> = { display_name: name, email: email.email }
-  if (typeof input.personId === 'string' && input.personId) person.id = input.personId
+  if (personId) person.id = personId
   const member: Record<string, unknown> = {
     access_role: input.accessRole, role_label: trimOrNull(input.roleLabel), title: trimOrNull(input.title),
   }
@@ -104,8 +137,9 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
 }
 
 /**
- * 명단 행 삭제. active=false 가 아니라 행을 지운다 — 담당 FK(restrict)가 걸린 사람은 DB 가 거부하고,
- * 그 오류는 "비활성으로 바꾸세요" 로 안내한다.
+ * 명단 행 삭제. active=false 가 아니라 행을 지운다 — 근태·이슈 담당·회의 참석·알림·WBS/위키 담당 기록이 하나라도 있는
+ * 사람은 지우지 않고 "비활성으로 바꾸세요" 로 거부한다. 참조 FK 가 CASCADE·SET NULL 이라 DB 는 막아 주지 않는다
+ * (MEMBER_DEPENDANTS). 검사와 삭제 사이의 경합은 남는다 — 그 창에서 생긴 기록은 FK 규칙대로 지워지거나 비워진다.
  */
 export async function removeRosterMember(memberId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await resolveProjectId('project_members', memberId)
@@ -114,6 +148,10 @@ export async function removeRosterMember(memberId: string): Promise<{ ok: true }
   if (!projectId) return { ok: false, error: ERR_MISSING }
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+
+  const records = await memberHasRecords(createAdminClient(), memberId)
+  if (!records.ok) return { ok: false, error: ERR_ROSTER_LOOKUP }
+  if (records.has) return { ok: false, error: ROSTER_HAS_RECORDS }
 
   // service_role 로 지우면 '관리자 행은 워크스페이스 관리자만' 이 뚫린다(RPC 는 같은 규칙을 본문에서 본다).
   // 세션 경로로 지워 RLS 두 정책이 판정하게 하고, 영향 행 수로 거부를 드러낸다.
@@ -365,7 +403,7 @@ async function accountPersonId(
 export async function setProjectRole(
   projectId: string, userId: string, role: AccountRole,
 ): Promise<{ ok: boolean; error?: string; rosterError?: string }> {
-  const g = role === 'admin' ? await requireSuperuser() : await requireProjectAdmin(projectId)
+  const g = isAdminAccessRole(role) ? await requireSuperuser() : await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!isAccountRole(role)) return { ok: false, error: ERR_ACCESS }
   const admin = createAdminClient()

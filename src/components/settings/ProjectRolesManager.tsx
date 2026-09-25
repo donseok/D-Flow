@@ -637,7 +637,7 @@ function RosterEditModal({ projectId, row, onClose, onSaved }: {
               onClick={del}
               disabled={pending}
               className={`btn btn-ghost mr-auto ${confirmDelete ? 'text-delayed' : ''}`}
-              title="명단에서 제거합니다. 근태·회의 참석 기록도 함께 삭제됩니다."
+              title="명단에서 제거합니다. 담당·참석 기록이 있는 사람은 삭제되지 않습니다."
             >
               <Trash2 className="h-4 w-4" />
               {confirmDelete ? '정말 삭제 (한 번 더)' : '명단에서 삭제'}

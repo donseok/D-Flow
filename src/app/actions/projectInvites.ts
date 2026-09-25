@@ -4,6 +4,7 @@ import { requireProjectAdmin, requireSuperuser } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { isValidEmail } from '@/lib/domain/validate'
+import { isAdminAccessRole } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
@@ -192,7 +193,7 @@ export async function createProjectInvite(
 ): Promise<CreateInviteResult | { ok: false; error: string }> {
   // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드로 열리면 '관리자가 관리자를 늘린다'.
   const accessRole = input?.accessRole ?? null
-  const g = accessRole === 'admin' ? await requireSuperuser() : await requireProjectAdmin(projectId)
+  const g = isAdminAccessRole(accessRole) ? await requireSuperuser() : await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
 
   // 입력 검증 → origin 확인까지는 DB 를 건드리지 않는다. 어차피 만들 수 없는 초대라면

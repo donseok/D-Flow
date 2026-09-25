@@ -67,9 +67,15 @@ function makeAdmin(f: Fixtures = {}) {
               return { maybeSingle: async () => f.invite ?? { data: INVITE, error: null } }
             },
           }),
-          update: (patch: unknown) => ({
-            eq: (col: string, v: unknown) => { spies.inviteUpdateEq(col, v); return spies.inviteUpdate(patch) },
-          }),
+          // update(...).eq(...).eq(...) — 조건을 모두 기록하고, await 시점에 결과를 낸다.
+          update: (patch: unknown) => {
+            const q = {
+              eq: (col: string, v: unknown) => { spies.inviteUpdateEq(col, v); return q },
+              then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+                (spies.inviteUpdate(patch) as Promise<unknown>).then(res, rej),
+            }
+            return q
+          },
         }
       }
       if (table === 'project_members') {
@@ -243,6 +249,20 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     expect(spies.inviteUpdate).not.toHaveBeenCalled()
   })
 
+  // 트리거가 던지는 명단 토큰은 명단 문구로 — 초대 팀이 사라진 경우는 재발급을 안내한다(팀 id 배열엔 FK 가 없다).
+  it.each([
+    ['PROJECT_MEMBER_TEAM_SCOPE', '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.'],
+    ['PROJECT_MEMBER_CROSS_WORKSPACE', '다른 워크스페이스의 인물입니다.'],
+    ['PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT',
+      '계정이 연결되지 않은 사람에게는 권한을 줄 수 없습니다. 이메일로 초대하거나 계정을 먼저 만드세요.'],
+  ])('RPC 의 트리거 오류 %s 는 사용자 문구로', async (token, text) => {
+    getSession.mockResolvedValue(USER)
+    makeAdmin({ consume: { data: null, error: { code: '23514', message: token } } })
+    const spy = silenceConsole()
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: text })
+    spy.mockRestore()
+  })
+
   it('RPC 오류는 원시 메시지 대신 문구로 — 인물이 다른 계정에 연결된 경우는 따로 안내한다', async () => {
     getSession.mockResolvedValue(USER)
     makeAdmin({ consume: { data: null, error: { code: '23505', message: 'PROJECT_INVITE_PERSON_LINKED' } } })
@@ -334,7 +354,19 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
     // 소비되지 않은 행에도 되돌리기를 시도하지만 null 을 다시 null 로 쓸 뿐이라 무해하다. 대상은 해시로 찾는다.
     expect(spies.inviteUpdate).toHaveBeenCalledWith({ redeemed_by: null, redeemed_at: null })
+    // 되돌리기는 이번 가입이 만든 계정의 소비만 — 다른 계정이 정당하게 쓴 링크를 다시 열지 않는다.
     expect(spies.inviteUpdateEq).toHaveBeenCalledWith('token_hash', HASH)
+    expect(spies.inviteUpdateEq).toHaveBeenCalledWith('redeemed_by', 'u-new')
+  })
+
+  it('트리거 오류(초대 팀이 사라짐)도 계정을 되돌리고, 재발급을 안내한다', async () => {
+    getSession.mockResolvedValue(null)
+    const spies = makeAdmin({ consume: { data: null, error: { code: '23514', message: 'PROJECT_MEMBER_TEAM_SCOPE' } } })
+    const spy = silenceConsole()
+    const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
+    spy.mockRestore()
+    expect(res).toEqual({ ok: false, error: '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.' })
+    expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
   })
 
   it('소비 RPC 가 에러로 실패해도 되돌리기를 먼저 한다 — 커밋됐는데 응답만 깨진 경우', async () => {
@@ -356,7 +388,9 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
       consume: { data: null, error: { message: 'connection reset' } }, inviteUpdate: { error: { message: 'again' } },
     })
     const spy = silenceConsole()
-    await redeemInviteWithSignup(TOKEN, SIGNUP)
+    const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
+    // 사용자에게는 소비 실패 문구가 그대로 간다(되돌리기 실패는 운영 로그의 몫).
+    expect(res).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
     // 고착된 초대를 찾을 단서는 남기되 토큰 전문은 남기지 않는다.
     const logged = spy.mock.calls.flat().join(' ')

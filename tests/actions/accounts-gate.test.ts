@@ -18,7 +18,7 @@ import {
   createAccount, bulkCreateAccounts, resetPassword, listAccounts, setPlatformAdmin, setWorkspaceRole,
   type AccountInput,
 } from '@/app/actions/accounts'
-import { makeSuperuser, WS } from '../fixtures/actor'
+import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const DENIED = { ok: false as const, error: '권한 없음' }
 const P1 = 'p1'
@@ -58,7 +58,7 @@ function chain(result: Result) {
 function accountClient(o: {
   profileErr?: Result['error']
   wsErr?: Result['error']
-  existingPerson?: { id: string; user_id: string | null } | null
+  existingPerson?: { id: string; user_id: string | null; active?: boolean } | null
   linkRows?: unknown[]
   personInsert?: Result
   rpc?: Result
@@ -92,8 +92,8 @@ function accountClient(o: {
   return { q, from, rpc, createUser, deleteUser }
 }
 
-// 계정 관리는 슈퍼유저 전용(2026-08-20 결정). assertCanTouchAccount 는 정책이 다시 느슨해질 때를 대비해
-// 코드에 남아 있지만 현 게이트에서는 도달 불가(슈퍼유저는 단락 통과)라 여기서 검증하지 않는다.
+// 계정 관리는 슈퍼유저 전용(2026-08-20 결정). assertCanTouchAccount 의 비슈퍼유저 분기는 현 게이트에선 도달 불가지만
+// SP2 에서 게이트가 느슨해지는 순간 살아나는 보안 코드라, 아래에서 가드가 비슈퍼유저 액터를 돌려주는 경우로 직접 고정한다.
 describe('계정 서버액션 권한 게이트', () => {
   it('슈퍼유저가 아니면 createAccount 거부 — admin client 미생성', async () => {
     requireSuperuser.mockResolvedValue(DENIED)
@@ -113,6 +113,62 @@ describe('계정 서버액션 권한 게이트', () => {
     requireSuperuser.mockResolvedValue(DENIED)
     expect(await resetPassword('u-superuser', 'password1')).toEqual(DENIED)
     expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  /** 게이트가 느슨해진 뒤(비슈퍼유저 액터)의 등급 경계 — 대상의 세 축을 모의한다. */
+  function touchClient(o: { platform?: Result; wsAdmin?: Result; projectAdmin?: Result } = {}) {
+    const q = {
+      platform_admins: chain(o.platform ?? { data: null, error: null }),
+      workspace_members: chain(o.wsAdmin ?? { data: [], error: null }),
+      project_members: chain(o.projectAdmin ?? { data: [], error: null }),
+    }
+    const updateUserById = vi.fn(async () => ({ error: null }))
+    createAdminClient.mockReturnValue({
+      from: vi.fn((t: keyof typeof q) => q[t]),
+      auth: { admin: { updateUserById } },
+    } as never)
+    return { q, updateUserById }
+  }
+  const RELAXED = { ok: true, actor: makeActor({ userId: 'u-admin', isSuperuser: false }) }
+
+  it('비슈퍼유저는 플랫폼 관리자 계정을 만질 수 없다', async () => {
+    requireSuperuser.mockResolvedValue(RELAXED)
+    const c = touchClient({ platform: { data: { user_id: 'u-t' }, error: null } })
+    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '슈퍼유저 계정은 슈퍼유저만 변경할 수 있습니다.' })
+    expect(c.q.platform_admins.eq).toHaveBeenCalledWith('user_id', 'u-t')
+    expect(c.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('비슈퍼유저는 어느 프로젝트든 관리자인 계정·워크스페이스 관리자 계정을 만질 수 없다', async () => {
+    requireSuperuser.mockResolvedValue(RELAXED)
+    const c = touchClient({ projectAdmin: { data: [{ id: 'm-1' }], error: null } })
+    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '관리자 계정은 슈퍼유저만 변경할 수 있습니다.' })
+    // 명단 권한은 인물을 거쳐 계정에 붙는다 — 임베드 필터 모양을 고정한다.
+    expect(c.q.project_members.select).toHaveBeenCalledWith('id, people!inner(user_id)')
+    expect(c.q.project_members.eq).toHaveBeenCalledWith('people.user_id', 'u-t')
+    expect(c.q.project_members.eq).toHaveBeenCalledWith('access_role', 'admin')
+    expect(c.updateUserById).not.toHaveBeenCalled()
+
+    const w = touchClient({ wsAdmin: { data: [{ workspace_id: WS }], error: null } })
+    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '관리자 계정은 슈퍼유저만 변경할 수 있습니다.' })
+    expect(w.q.workspace_members.eq).toHaveBeenCalledWith('role', 'admin')
+    expect(w.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('비슈퍼유저라도 일반 계정은 초기화할 수 있다', async () => {
+    requireSuperuser.mockResolvedValue(RELAXED)
+    const c = touchClient()
+    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: true })
+    expect(c.updateUserById).toHaveBeenCalledWith('u-t', { password: 'password1' })
+  })
+
+  it('대상 등급 조회가 하나라도 실패하면 거부한다 — "관리자 아님" 폴백 금지', async () => {
+    requireSuperuser.mockResolvedValue(RELAXED)
+    const c = touchClient({ wsAdmin: { data: null, error: { message: 'boom' } } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(c.updateUserById).not.toHaveBeenCalled()
   })
 
   it('슈퍼유저는 누구의 비밀번호든 초기화할 수 있다', async () => {
@@ -192,13 +248,24 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
   })
 
   it('같은 이메일의 외부 인력이 있으면 새로 만들지 않고 그 인물에 계정을 잇는다(아직 미연결일 때만)', async () => {
-    const c = accountClient({ existingPerson: { id: 'pe-old', user_id: null } })
+    const c = accountClient({ existingPerson: { id: 'pe-old', user_id: null, active: true } })
     expect(await createAccount(INPUT)).toEqual({ ok: true })
+    expect(c.q.peopleFind.select).toHaveBeenCalledWith('id, user_id, active')
     expect(c.q.peopleLink.update).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'u-new' }))
+    // 활성 인물이면 active 를 건드리지 않는다.
+    expect(c.q.peopleLink.update.mock.calls[0]![0]).not.toHaveProperty('active')
     expect(c.q.peopleLink.eq).toHaveBeenCalledWith('id', 'pe-old')
     expect(c.q.peopleLink.is).toHaveBeenCalledWith('user_id', null)
     expect(c.q.peopleInsert.insert).not.toHaveBeenCalled()
     expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_person: { id: 'pe-old' } }))
+  })
+
+  // 헬퍼·buildActor 는 인물이 활성일 때만 권한을 인정한다 — 비활성 인물에 이으면 '권한 부여 성공' 이 실제로는 무효다.
+  // consume_project_invite 의 재활성화와 같은 규칙(service_role 이라 people.active 컬럼 권한을 넘는다).
+  it('비활성 외부 인력에 이을 때는 함께 되살린다', async () => {
+    const c = accountClient({ existingPerson: { id: 'pe-old', user_id: null, active: false } })
+    expect(await createAccount(INPUT)).toEqual({ ok: true })
+    expect(c.q.peopleLink.update).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'u-new', active: true }))
   })
 
   it('그 인물이 이미 다른 계정에 연결돼 있으면 거부하고 계정을 되돌린다', async () => {
@@ -245,12 +312,15 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(c.q.peopleDelete.delete.mock.invocationCallOrder[0]).toBeLessThan(c.deleteUser.mock.invocationCallOrder[0])
   })
 
-  it('입력 검증 — 비밀번호·워크스페이스 권한·권한 값', async () => {
-    accountClient()
+  it('입력 검증 — 비밀번호·워크스페이스 권한·권한 값 — 계정을 만들기 전에 막는다', async () => {
+    const c = accountClient()
     expect(await createAccount({ ...INPUT, password: 'short' })).toEqual({ ok: false, error: '비밀번호는 8자 이상이어야 합니다.' })
     expect(await createAccount({ ...INPUT, workspaceRole: 'owner' as never })).toEqual({ ok: false, error: '알 수 없는 워크스페이스 권한' })
     expect(await createAccount({ ...INPUT, accessRole: 'viewer' as never })).toEqual({ ok: false, error: '알 수 없는 권한' })
     expect(await createAccount({ ...INPUT, projectId: null })).toEqual({ ok: false, error: '권한을 줄 프로젝트를 지정하세요.' })
+    // 검증이 createUser 뒤로 밀리면 같은 문구를 내면서 유령 계정·보상 롤백이 생긴다 — 순서를 고정한다.
+    expect(c.createUser).not.toHaveBeenCalled()
+    expect(c.deleteUser).not.toHaveBeenCalled()
   })
 })
 

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
+import { rosterTokenError } from '@/lib/domain/rosterErrors'
 import {
   isAllowedInviteDomain, isInviteToken, inviteStatus, maskEmail, normalizeInviteEmail,
   parseAllowedDomains, validateSignupInput, type InviteStatus, type SignupInput,
@@ -21,6 +22,8 @@ const E_NOT_FOUND = '초대를 찾을 수 없습니다.'
 const E_UNUSABLE = '만료되었거나 사용할 수 없는 초대입니다.'
 const E_LOOKUP = '초대를 확인할 수 없어 중단했습니다.'
 const E_PERSON_LINKED = '이 이메일의 인물이 이미 다른 계정에 연결돼 있습니다. 관리자에게 문의해 주세요.'
+/** 초대의 team_ids 는 FK 가 없다 — 발급 뒤 팀이 지워지면 트리거(PROJECT_MEMBER_TEAM_SCOPE)가 거부한다. 링크로는 고칠 수 없다. */
+const E_INVITE_TEAM_GONE = '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.'
 const E_SIGNUP_FAILED = '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
 
 /**
@@ -94,7 +97,9 @@ async function consumeInvite(
     console.error('[inviteRedeem] 초대 소비 실패:', error.message)
     // 같은 이메일의 인물이 다른 계정에 이미 연결돼 있다 — 사용자가 고칠 수 없고 관리자가 풀어야 한다.
     if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: E_PERSON_LINKED }
-    return { ok: false, error: E_LOOKUP }
+    if (error.message.includes('PROJECT_MEMBER_TEAM_SCOPE')) return { ok: false, error: E_INVITE_TEAM_GONE }
+    // 명단 트리거가 던진 나머지 토큰(워크스페이스 불일치·계정 없는 권한 등)은 명단 문구로. 모르는 오류(연결 등)만 조회 실패 문구.
+    return { ok: false, error: rosterTokenError(error.message) ?? E_LOOKUP }
   }
   const rows = (data ?? []) as ConsumedInvite[]
   // 0행 = 만료·취소·이미 사용·이메일 불일치. 어느 쪽인지 알려주지 않는다(초대 존재 탐침 차단).
@@ -105,10 +110,12 @@ async function consumeInvite(
 /**
  * 소비를 되돌린다(가입 경로의 보상 롤백 전용). RPC 는 원자적이라 보통은 되돌릴 것이 없지만, 커밋됐는데 응답만 깨진
  * 경우 1회용 링크가 아무도 쓰지 못한 채 타 버린다 — 되돌려야 같은 링크로 재시도할 수 있다.
+ * 이번 가입이 만든 계정(redeemedBy)의 소비만 되돌린다 — 다른 계정이 정당하게 쓴 링크를 다시 열지 않는다.
  */
-async function revertRedeem(admin: AdminClient, token: string): Promise<boolean> {
+async function revertRedeem(admin: AdminClient, token: string, redeemedBy: string): Promise<boolean> {
   const { error } = await admin
-    .from('project_invites').update({ redeemed_by: null, redeemed_at: null }).eq('token_hash', hashInviteToken(token))
+    .from('project_invites').update({ redeemed_by: null, redeemed_at: null })
+    .eq('token_hash', hashInviteToken(token)).eq('redeemed_by', redeemedBy)
   if (error) {
     console.error('[inviteRedeem] 소비 되돌리기 실패 — 초대가 사용됨으로 고착:', error.message)
     return false
@@ -130,7 +137,7 @@ async function rollbackSignup(
   admin: AdminClient, userId: string, consumedToken: string | null,
 ): Promise<void> {
   // 토큰 전문은 로그에 남기지 않는다. 고착된 초대는 redeemed_by 로 특정한다.
-  if (consumedToken && !(await revertRedeem(admin, consumedToken))) {
+  if (consumedToken && !(await revertRedeem(admin, consumedToken, userId))) {
     console.error(
       `[inviteRedeem] 초대가 사용됨으로 고착 — 재발급 필요(redeemed_by=${userId} 로 조회)`,
     )

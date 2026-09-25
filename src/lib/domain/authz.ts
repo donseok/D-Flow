@@ -8,6 +8,13 @@ export type EffectiveRole = 'superuser' | 'admin' | 'member' | 'viewer'
 export function isWorkspaceAdminRole(role: string | null | undefined): boolean {
   return role === 'admin'
 }
+/**
+ * 요청한 권한이 관리자 슬롯인가 — 부여·초대 액션이 가드(슈퍼유저 vs 프로젝트 관리자)를 고를 때 쓴다(SP2 에서 워크스페이스 관리자).
+ * 서버 액션 입력이라 타입을 믿지 않는다 — 'admin' 문자열 그대로일 때만 참.
+ */
+export function isAdminAccessRole(v: unknown): v is 'admin' {
+  return v === 'admin'
+}
 /** 워크스페이스 역할 표시 라벨. */
 export const WORKSPACE_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관리자', member: '멤버' }
 
