@@ -1,4 +1,4 @@
-# SP1 Phase A 체크포인트 — E2E 실측 (2026-09-25 · 재실행 2026-09-26)
+# SP1 E2E 실측 — Phase A 체크포인트(2026-09-25 · 재실행 2026-09-26) · Phase B 마무리(2026-09-26)
 
 플랜 `docs/superpowers/plans/2026-09-24-sp1-org-core.md` Task 11 을 로컬에서 잰 기록이다. 첫 측정(run1~run6, 2026-09-25)의 트리는
 `sp1/phase-a` 의 `1bdb553` 위에 이 태스크의 러너 변경(`scripts/e2e-local.mjs`·`scripts/lib/e2e.mjs`)을 얹은 것이다.
@@ -7,6 +7,7 @@
 
 **요약**
 
+- Phase B 마무리 실행(run9, 2026-09-26, `909ee3a`)도 **exit 0** 이다. 17단계 전부 ✓, `test:rls` 12/12. Phase B 눈확인 일시는 9절.
 - E2E 최종 실행(run8, 2026-09-26, `be93fee`)은 **exit 0** 이다. 17단계가 전부 통과했다(3절).
 - run8 은 화면 판정을 고친 러너로 돌았다(6.4). 스트리밍된 서버 오류(Flight 오류 행·`data-dgst`)와 열려야 하는 화면의 notFound 를 잡는다.
   기대 문구는 레이아웃(사이드바)이 아니라 페이지 세그먼트만 그리는 것으로 바꿨다. carol 의 A·B "열림" 도 이 판정을 거친다.
@@ -347,3 +348,46 @@ notify pgrst, 'reload schema';
 - **존재 은닉의 HTTP 404** — 화면 경로에서는 스트리밍 때문에 받을 수 없다(4.1). digest 로 판정했다.
 - **사람 눈의 화면 확인** — 브라우저가 localhost 에 닿지 못해 헤드리스 HTML 검사로 대신했다(5절). 헤더 계정 메뉴 문구 "슈퍼유저 · ERP" 도
   여기에 든다. identity prop 은 쟀지만 메뉴 문구는 추론이다.
+
+## 9. Phase B 마무리 — run9 (2026-09-26, 트리 `909ee3a`)
+
+Task 16(담당 영역·명단 팀 팝오버·명단 DTO 단수 `teamCode` 제거·CLAUDE.md 권한 절)까지 얹은 `sp1/phase-b` 의 `909ee3a` 에서 2절 순서
+그대로 다시 쟀다. 러너(`scripts/e2e-local.mjs`·`scripts/lib/e2e.mjs`)는 run8 과 같다. 마이그레이션은 `0000`~`0004` 가 적용됐다.
+
+```bash
+npm run typecheck && npm run lint && npx vitest run && npm run build        # 전부 rc 0 — vitest 503 파일 · 6211 통과, lint 경고 5(기존 테스트 파일의 미사용 변수)
+npx vitest run tests/invariants tests/css/breakpoint-safety-net.test.ts     # 5 파일 · 20 통과
+npm run db:reset                                                    # 07:47:49 → 07:48:16
+BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' npm run dev:bootstrap   # 07:48:16
+INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3000 nohup npm run dev > <스크래치>/e2e.dev.log 2>&1 &
+echo $! > <스크래치>/e2e.dev.pid                                     # 07:48:22, npm PID 78471
+# /login 200 대기 → ready 07:48:26 try=2
+BOOTSTRAP_PASSWORD='<BOOTSTRAP_PASSWORD>' INVITE_ALLOWED_DOMAINS=example.com E2E_OUT_DIR=<스크래치>/e2e.out \
+  node scripts/e2e-local.mjs > <스크래치>/e2e.json 2> <스크래치>/e2e.err   # 07:48:31 → 07:49:17, exit 0
+kill -TERM 78471 78511 78535                                        # 기록한 npm PID 와 자손, rc 0
+lsof -nP -iTCP:3000 -sTCP:LISTEN                                    # 07:49:29 비어 있음(rc 1)
+npm run test:rls                                                    # 07:49:29, 2 파일 · 12/12 통과
+```
+
+- 17단계 전부 ✓ — login · create-projects · project-teams(A: ERP·MES, B: QA) · roster(본인@A admin [ERP(대표), MES], bob 외부 인력,
+  본인@B) · fill-template · import-inspect · import-append(5행) · import-replace(백업 5행) · assign-external(bob 담당 1행) ·
+  meeting(참석자 bob 1행) · export(3건) · trace-scan(135 항목, 적중 0) · invite-issue(carol member [ERP]) · invite-redeem(A 명단 3행) ·
+  other-workspace-fixture · visibility · render-pages(6화면 문제 0).
+- dev 서버 로그 87줄에 `error`·`실패`·`PGRST` 줄은 0이다.
+- `test:rls` 가 run8 의 10 에서 12 로 는 것은 Phase B 의 0004(명단 RPC 이름 보존·id 지목 개명 범위) 테스트 두 건이다.
+
+### 9.1 Phase B 화면 눈확인(로컬, 커밋 트레일러 `Preview-checked: local …`)
+
+| 일시(KST) | 커밋 | 화면 |
+|---|---|---|
+| 2026-09-26 06:46 | `66dc927` | `/p/[id]/members` — 명단·권한·팀 한 화면 |
+| 2026-09-26 06:59 | `ddb3d30` | `/p/[id]/members` — 0004 적용 DB 에서 외부 인력 권한 차단·기존 인물 이름 유지 |
+| 2026-09-26 07:17 | `fa7490c` | `/admin/accounts`, `/p/[id]/members`(초대 — 권한·팀 다중 선택) |
+| 2026-09-26 07:27 | `7dc4b44` | 헤더 소속 표시 0/1/2팀 |
+| 2026-09-26 07:38 | `0014ba3` | `/p/[id]/settings` 담당 영역 — 추가, 편집 시 코드 잠금, 이슈 영역 탭 |
+| 2026-09-26 07:38 | `e837ca4` | `/p/[id]/members` — 명단 1행에서 팀 목록이 표에 잘리지 않고 전부 보임 |
+| 2026-09-26 07:44 | `aff1275` | 회의 상세 모달 참석자 칩 — 2팀 겸직 `admin · ALPHA, BETA` |
+
+Task 16 의 세 건은 헤드리스 Chromium(Playwright)으로 로그인 세션을 붙여 화면을 열고 스크린샷을 찍어 봤다(스크린샷은 세션 스크래치, 커밋 안 함).
+8절의 "브라우저가 localhost 에 닿지 못한다" 는 Claude-in-Chrome 확장 얘기이고, 헤드리스 브라우저는 닿는다.
+
