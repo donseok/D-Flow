@@ -1,7 +1,9 @@
 -- 0003_org_core 리허설 스모크 — CLI 가 적용하지 않는 폴더(supabase/rehearsal/). 로컬 DB 에 postgres 로 흘린다:
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0003_smoke.sql
 -- 한 트랜잭션 안에서 돌고 마지막에 rollback 한다(DB 에 흔적 없음). 기대 예외는 DO 블록이 SQLSTATE·메시지로 확인하고,
--- 기대와 다르면 오류로 멈춘다. 결과 줄의 불리언이 전부 t 여야 한다.
+-- 기대와 다르면 오류로 멈춘다. 결과 줄의 불리언이 전부 t 여야 한다(claims_* 넷은 세션 설정 줄이라 늘 t).
+-- 롤: 대부분 postgres(= service_role 경로처럼 RLS·실행 권한을 우회)로 돈다. "세션 경로" 절만 set local role authenticated +
+-- JWT sub 로 RLS·컬럼 권한·RPC 실행 권한(service_role 전용)을 실제로 태운다.
 -- uuid 는 16진수만: 워크스페이스 …aaaa/…bbbb, 계정 …0a0N, 인물 …0b0N, 프로젝트 …0c0N, 팀 …0d0N,
 -- 회의록·버전 …0e0N, 회의 …0f01, 알림 사건 …1e01.
 begin;
@@ -18,13 +20,16 @@ select v.id, v.email, '', now(), '{"provider":"email","providers":["email"]}', '
     ('00000000-0000-0000-0000-000000000a02'::uuid, 'carol@example.com'),
     ('00000000-0000-0000-0000-000000000a03'::uuid, 'dave@example.com'),
     ('00000000-0000-0000-0000-000000000a04'::uuid, 'erin@example.com'),
-    ('00000000-0000-0000-0000-000000000a05'::uuid, 'frank@example.com')) as v(id, email);
+    ('00000000-0000-0000-0000-000000000a05'::uuid, 'frank@example.com'),
+    ('00000000-0000-0000-0000-000000000a06'::uuid, 'grace@example.com'),
+    ('00000000-0000-0000-0000-000000000a07'::uuid, 'gina@example.com')) as v(id, email);
 insert into public.profiles (user_id, email, display_name) values
   ('00000000-0000-0000-0000-000000000a01', 'alice@example.com', 'alice');
 insert into public.workspace_members values
   ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000a01', 'admin', null, now()),
   ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000a02', 'member', null, now()),
   ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000a03', 'member', null, now()),
+  ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000a06', 'admin', null, now()),
   ('00000000-0000-0000-0000-00000000bbbb', '00000000-0000-0000-0000-000000000a05', 'admin', null, now());
 insert into public.people (id, workspace_id, display_name, email, user_id) values
   ('00000000-0000-0000-0000-000000000b01', '00000000-0000-0000-0000-00000000aaaa', 'alice', 'alice@example.com', '00000000-0000-0000-0000-000000000a01'),
@@ -84,6 +89,14 @@ select public.upsert_project_member('00000000-0000-0000-0000-000000000a01', '000
 select count(*) = 2 and count(*) filter (where is_primary and team_id = '00000000-0000-0000-0000-000000000d01') = 1 as carol_teams_ok
   from public.project_member_teams pmt join public.project_members pm on pm.id = pmt.member_id
  where pm.person_id = '00000000-0000-0000-0000-000000000b03';
+-- 팀 순서를 바꾸면 첫 원소만 대표 — 대표 아니던 기존 행(d02)이 대표가 되고 d01 은 대표에서 내려간다
+select public.upsert_project_member('00000000-0000-0000-0000-000000000a01', '00000000-0000-0000-0000-000000000c01',
+  '{"id":"00000000-0000-0000-0000-000000000b03"}'::jsonb, '{}'::jsonb,
+  array['00000000-0000-0000-0000-000000000d02','00000000-0000-0000-0000-000000000d01']::uuid[]) is not null as carol_teams_reordered;
+select count(*) = 2 and count(*) filter (where is_primary) = 1
+       and count(*) filter (where is_primary and team_id = '00000000-0000-0000-0000-000000000d02') = 1 as carol_primary_is_first
+  from public.project_member_teams pmt join public.project_members pm on pm.id = pmt.member_id
+ where pm.person_id = '00000000-0000-0000-0000-000000000b03';
 
 -- 프로젝트 관리자(carol)는 member 는 줄 수 있고 admin 은 못 준다
 select public.upsert_project_member('00000000-0000-0000-0000-000000000a02', '00000000-0000-0000-0000-000000000c01',
@@ -137,7 +150,63 @@ do $$ begin
   update public.project_members set access_role = 'admin'
    where person_id = '00000000-0000-0000-0000-000000000b04';
   raise exception 'expected RLS rejection';
-exception when insufficient_privilege then null;
+exception when insufficient_privilege then
+  -- 트리거가 낸 42501(PROJECT_MEMBER_*)이 아니라 정책의 with check 가 거부했는지까지 본다
+  if sqlerrm not like 'new row violates row-level security policy%' then raise; end if;
+end $$;
+-- 프로젝트를 다른 워크스페이스로 옮길 수 없다(admin_update_projects 는 행 전체를 연다 → projects_guard)
+do $$ begin
+  update public.projects set workspace_id = '00000000-0000-0000-0000-00000000bbbb'
+   where id = '00000000-0000-0000-0000-000000000c01';
+  raise exception 'expected PROJECT_WORKSPACE_IMMUTABLE';
+exception when check_violation then
+  if sqlerrm <> 'PROJECT_WORKSPACE_IMMUTABLE' then raise; end if;
+end $$;
+-- people 컬럼 권한: 세션은 user_id·active·workspace_id 를 쓸 수 없다(연결·비활성화는 service_role 만)
+do $$ begin
+  update public.people set user_id = '00000000-0000-0000-0000-000000000a06' where id = '00000000-0000-0000-0000-000000000b04';
+  raise exception 'expected column privilege rejection (update user_id)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for table people%' then raise; end if;
+end $$;
+do $$ begin
+  update public.people set active = false where id = '00000000-0000-0000-0000-000000000b04';
+  raise exception 'expected column privilege rejection (update active)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for table people%' then raise; end if;
+end $$;
+do $$ begin
+  update public.people set workspace_id = '00000000-0000-0000-0000-00000000bbbb' where id = '00000000-0000-0000-0000-000000000b04';
+  raise exception 'expected column privilege rejection (update workspace_id)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for table people%' then raise; end if;
+end $$;
+do $$ begin
+  insert into public.people (workspace_id, display_name, user_id)
+  values ('00000000-0000-0000-0000-00000000aaaa', 'mallory', '00000000-0000-0000-0000-000000000a06');
+  raise exception 'expected column privilege rejection (insert user_id)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for table people%' then raise; end if;
+end $$;
+-- 개명과 외부 인력 추가는 그대로 된다
+with u as (update public.people set display_name = 'dave k' where id = '00000000-0000-0000-0000-000000000b04' returning 1)
+select count(*) = 1 as project_admin_renames_person from u;
+with i as (insert into public.people (workspace_id, display_name, email)
+           values ('00000000-0000-0000-0000-00000000aaaa', 'ivan', 'ivan@example.com') returning 1)
+select count(*) = 1 as project_admin_adds_external_person from i;
+-- RPC 두 개는 service_role 전용 — 세션은 실행 권한이 없다
+do $$ begin
+  perform public.upsert_project_member('00000000-0000-0000-0000-000000000a02', '00000000-0000-0000-0000-000000000c01',
+    '{"id":"00000000-0000-0000-0000-000000000b04"}'::jsonb, '{}'::jsonb, null);
+  raise exception 'expected execute denial (upsert_project_member)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for function upsert_project_member%' then raise; end if;
+end $$;
+do $$ begin
+  perform public.consume_project_invite('h-none', 'carol@example.com', '00000000-0000-0000-0000-000000000a02');
+  raise exception 'expected execute denial (consume_project_invite)';
+exception when insufficient_privilege then
+  if sqlerrm not like 'permission denied for function consume_project_invite%' then raise; end if;
 end $$;
 -- 같은 세션에서 member 행의 표시 필드는 고칠 수 있다
 with u as (update public.project_members set role_label = '개발'
@@ -238,7 +307,10 @@ do $$ begin
 exception when insufficient_privilege then
   if sqlerrm <> 'PROJECT_INVITE_ADMIN_FORBIDDEN' then raise; end if;
 end $$;
--- 초대 수락: 소비 → profiles → people → workspace_members → project_members → project_member_teams
+-- 초대 수락: 소비 → profiles → people → workspace_members → project_members → project_member_teams.
+-- erin 의 프로필 표시 이름에 앞뒤 공백이 있어도(profiles 는 허용, people 은 거부) 수락되고 정리된 이름이 쓰인다.
+insert into public.profiles (user_id, email, display_name)
+values ('00000000-0000-0000-0000-000000000a04', 'erin@example.com', ' Erin Kim ');
 insert into public.project_invites (workspace_id, project_id, email, access_role, role_label, team_ids, token_hash, created_by, expires_at)
 values ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000c01', 'erin@example.com', 'member', '분석',
         array['00000000-0000-0000-0000-000000000d01']::uuid[], 'h-erin', '00000000-0000-0000-0000-000000000a02', now() + interval '1 day');
@@ -246,12 +318,39 @@ select workspace_id = '00000000-0000-0000-0000-00000000aaaa' and project_id = '0
        and member_id is not null as invite_consumed
   from public.consume_project_invite('h-erin', ' Erin@example.com', '00000000-0000-0000-0000-000000000a04');
 select (select count(*) from public.consume_project_invite('h-erin', 'erin@example.com', '00000000-0000-0000-0000-000000000a04')) = 0 as invite_single_use,
-       exists (select 1 from public.profiles where user_id = '00000000-0000-0000-0000-000000000a04' and display_name = 'erin') as invite_profile,
+       exists (select 1 from public.profiles where user_id = '00000000-0000-0000-0000-000000000a04' and display_name = 'Erin Kim') as invite_profile_trimmed,
+       exists (select 1 from public.people where user_id = '00000000-0000-0000-0000-000000000a04' and display_name = 'Erin Kim') as invite_person_name_trimmed,
        exists (select 1 from public.workspace_members where user_id = '00000000-0000-0000-0000-000000000a04' and role = 'member') as invite_ws_member,
        exists (select 1 from public.project_members pm join public.people pe on pe.id = pm.person_id
                  join public.project_member_teams pmt on pmt.member_id = pm.id
                 where pe.user_id = '00000000-0000-0000-0000-000000000a04' and pm.access_role = 'member'
                   and pm.role_label = '분석' and pmt.is_primary) as invite_roster;
+
+-- 초대의 첫 팀이 이미 대표 아닌 행으로 있고 대표가 없으면, 수락이 그 행을 대표로 올린다(gina: 외부 인력으로 명단에 있다가 초대 수락)
+insert into public.project_member_teams (member_id, team_id, is_primary)
+select pm.id, '00000000-0000-0000-0000-000000000d01', false
+  from public.project_members pm join public.people pe on pe.id = pm.person_id
+ where pm.project_id = '00000000-0000-0000-0000-000000000c01' and pe.email = 'gina@example.com';
+insert into public.project_invites (workspace_id, project_id, email, access_role, team_ids, token_hash, created_by, expires_at)
+values ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000c01', 'gina@example.com', 'member',
+        array['00000000-0000-0000-0000-000000000d01','00000000-0000-0000-0000-000000000d02']::uuid[], 'h-gina',
+        '00000000-0000-0000-0000-000000000a02', now() + interval '1 day');
+select count(*) = 1 as gina_invite_consumed
+  from public.consume_project_invite('h-gina', 'gina@example.com', '00000000-0000-0000-0000-000000000a07');
+select count(*) = 2 and count(*) filter (where pmt.is_primary) = 1
+       and count(*) filter (where pmt.is_primary and pmt.team_id = '00000000-0000-0000-0000-000000000d01') = 1
+       and bool_and(pe.user_id = '00000000-0000-0000-0000-000000000a07') as invite_primary_on_existing_team
+  from public.project_member_teams pmt join public.project_members pm on pm.id = pmt.member_id
+  join public.people pe on pe.id = pm.person_id
+ where pm.project_id = '00000000-0000-0000-0000-000000000c01' and pe.email = 'gina@example.com';
+
+-- admin 초대 발급자의 계정을 지워도(created_by 의 RI set null) project_invites_guard 가 막지 않는다
+insert into public.project_invites (workspace_id, project_id, email, access_role, token_hash, created_by, expires_at)
+values ('00000000-0000-0000-0000-00000000aaaa', '00000000-0000-0000-0000-000000000c01', 'henry@example.com', 'admin',
+        'h-henry', '00000000-0000-0000-0000-000000000a06', now() + interval '1 day');
+with d as (delete from auth.users where id = '00000000-0000-0000-0000-000000000a06' returning 1)
+select count(*) = 1 as admin_issuer_account_deleted from d;
+select created_by is null as admin_invite_issuer_nulled from public.project_invites where token_hash = 'h-henry';
 
 -- 계정 연결을 끊으면 권한이 내려가고 명단 행은 남는다
 update public.people set user_id = null where user_id = '00000000-0000-0000-0000-000000000a04';

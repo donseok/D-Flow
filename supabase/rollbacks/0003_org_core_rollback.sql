@@ -7,6 +7,15 @@
 -- 기준선 적용 뒤에는 기본 권한(ALTER DEFAULT PRIVILEGES, 0000 끝)이 살아 있어 새로 만든 표·함수가 anon·authenticated 권한을
 -- 자동으로 받는다. 기준선에서 그 권한이 없던 객체는 REVOKE 로 기준선 ACL 에 맞춘다.
 -- cascade 는 쓰지 않는다. 한 트랜잭션으로 돈다 — 중간에 실패하면 아무것도 바뀌지 않는다.
+-- people 의 컬럼 권한(0003 판정)은 표를 지우면 함께 사라지므로 따로 되돌리지 않는다.
+--
+-- 검증(재현 가능 — supabase/rehearsal/compare-catalog.mjs 머리 주석의 절차):
+--   supabase db reset --version 0002 && node supabase/rehearsal/compare-catalog.mjs capture "$D/ref"
+--   npm run db:reset && docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < <이 파일>
+--   node supabase/rehearsal/compare-catalog.mjs capture "$D/rolledback" && node supabase/rehearsal/compare-catalog.mjs diff "$D/ref" "$D/rolledback"
+--   → 불일치 0 이어야 한다. 비교가 보지 못하는 알려진 잔여 둘: supabase_migrations.schema_migrations 의 0003 행(다음 db:reset 이
+--   정리), 지운 컬럼의 pg_attribute 흔적(attisdropped — teams 2·projects 1·meeting_attendees 1·notification_recipients 1,
+--   select * 순서·pg_dump 출력에 영향 없음, 표를 다시 만들어야만 사라진다).
 
 begin;
 
@@ -27,6 +36,7 @@ drop policy member_update_actual on public.wbs_items;
 drop trigger project_members_guard on public.project_members;
 drop trigger project_members_no_self_demote on public.project_members;
 drop trigger teams_guard on public.teams;
+drop trigger projects_guard on public.projects;
 drop trigger project_invites_guard on public.project_invites;
 
 -- 4. 기존 표(teams·projects·project_members)를 참조하는 새 표 ---------------------
@@ -632,6 +642,7 @@ drop function public.people_unlink_revokes_access();
 drop function public.project_members_guard();
 drop function public.project_members_no_self_demote();
 drop function public.teams_guard();
+drop function public.projects_guard();
 drop function public.project_member_teams_guard();
 drop function public.area_teams_guard();
 drop function public.project_areas_guard();

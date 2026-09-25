@@ -4,7 +4,9 @@
 -- 표를 지우기 전에 그 표를 읽는 함수·정책이 전부 바뀐다.
 -- (헬퍼가 재정의 뒤에 오는 이유: sql 함수 본문은 생성 시점에 검사되므로 project_members.person_id·access_role
 --  같은 새 컬럼이 먼저 있어야 한다.)
--- 빈 DB 전제 — 기존 행을 새 모델로 옮기는 백필은 없다. 행이 있으면 not null 에서 실패해야 한다.
+-- 빈 DB 전제 — 기존 행을 새 모델로 옮기는 백필은 없다. projects·teams·project_members·meeting_attendees·project_invites 에
+-- 행이 있으면 새 not null 컬럼에서 실패한다. 단 폐기하는 표 3개(memberships·project_roles·project_member_identities)의 행은
+-- 검사 없이 표와 함께 사라진다(슈퍼유저 표시도 platform_admins 로 옮기지 않는다) — 로컬 흐름(db:reset 뒤 dev:bootstrap)에선 무해하다.
 -- 롤백: supabase/rollbacks/0003_org_core_rollback.sql
 
 -- ① 새 표 ---------------------------------------------------------------
@@ -440,6 +442,23 @@ revoke all on function public.project_members_no_self_demote() from public, anon
 create trigger project_members_no_self_demote before update on public.project_members
   for each row execute function public.project_members_no_self_demote();
 
+-- 프로젝트의 워크스페이스는 불변. 기준선 admin_update_projects(is_project_admin(id))가 행 전체를 열어 두므로, 막지 않으면
+-- 명단 관리자가 프로젝트를 다른 워크스페이스로 옮겨 그 워크스페이스 관리자에게 넘기고, 명단·팀 행이 조용히 워크스페이스를
+-- 가로지른다(project_members_guard·teams_guard 는 자기 표 쓰기에서만 돈다). SP1 에 프로젝트를 옮기는 정당한 경로가 없어
+-- service_role 경로도 막는다.
+create function public.projects_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.workspace_id is distinct from old.workspace_id then
+    raise exception using errcode = '23514', message = 'PROJECT_WORKSPACE_IMMUTABLE';
+  end if;
+  return new;
+end
+$$;
+revoke all on function public.projects_guard() from public, anon, authenticated;
+create trigger projects_guard before update on public.projects
+  for each row execute function public.projects_guard();
+
 -- 팀: 프로젝트 행의 워크스페이스 일치, code 불변(엑셀 프로파일·item_owners 임포트가 코드로 해석).
 create function public.teams_guard() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -512,6 +531,8 @@ create trigger project_areas_guard before update on public.project_areas
 -- 초대: 워크스페이스 일치, team_ids 유효, admin 초대는 발급자(created_by)가 워크스페이스 관리자.
 -- 이 표는 service_role 로만 쓰므로 auth.uid() 대신 행의 발급자 컬럼으로 판정한다(가드의 2차 방어선).
 -- 수락(redeemed_* 갱신) 때 발급자의 현재 등급으로 다시 막지 않도록, 각 검사는 해당 컬럼이 바뀔 때만 돈다.
+-- admin 발급자 검사는 INSERT 와 access_role 변경 때만 — 발급자 계정 삭제의 RI set null(created_by → null)이 여기 걸리면
+-- auth.users 삭제 전체가 실패한다.
 create function public.project_invites_guard() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -533,8 +554,7 @@ begin
       raise exception using errcode = '23514', message = 'PROJECT_INVITE_TEAM_SCOPE';
     end if;
   end if;
-  if new.access_role = 'admin' and (tg_op = 'INSERT' or new.access_role is distinct from old.access_role
-     or new.created_by is distinct from old.created_by) then
+  if new.access_role = 'admin' and (tg_op = 'INSERT' or new.access_role is distinct from old.access_role) then
     if new.created_by is null or not (
          exists (select 1 from public.platform_admins a where a.user_id = new.created_by)
       or exists (select 1 from public.workspace_members m
@@ -631,7 +651,13 @@ create policy people_delete on public.people for delete to authenticated
   using (public.is_ws_admin(workspace_id) or exists (
     select 1 from public.project_members pm where pm.person_id = people.id and public.is_project_admin(pm.project_id)));
 grant all on table public.people to anon;
-grant all on table public.people to authenticated;
+-- 컬럼 권한(2026-09-25 판정): 세션 경로는 user_id·workspace_id·active 를 쓸 수 없다. 쓰기 정책만으로는 프로젝트 관리자가
+-- 인물을 다른 계정에 (재)연결해 그 계정이 다른 프로젝트의 권한을 얻거나, 인물을 비활성·다른 워크스페이스로 옮겨
+-- 자기가 관리하지 않는 프로젝트의 권한을 끊을 수 있다. 계정↔인물 연결·비활성화는 service_role 액션·RPC 만 한다.
+revoke all on table public.people from authenticated;
+grant select, delete on table public.people to authenticated;
+grant insert (workspace_id, display_name, email) on table public.people to authenticated;
+grant update (display_name, email, updated_at) on table public.people to authenticated;
 grant all on table public.people to service_role;
 
 alter table public.project_member_teams enable row level security;
@@ -801,7 +827,8 @@ begin
      where pm.id = v_member_id;
   end if;
 
-  -- ⑥ 팀 동기화
+  -- ⑥ 팀 동기화 — 결과는 p_team_ids 와 같은 집합이고, 첫 비-null 원소만 대표(is_primary), 나머지는 기존 행이던 것까지
+  -- 전부 대표 아님. 대표를 먼저 내리고(부분 유니크 project_member_teams_primary_uidx) upsert 가 모든 행의 is_primary 를 다시 쓴다.
   if p_team_ids is not null then
     select x.team_id into v_primary
       from unnest(p_team_ids) with ordinality as x(team_id, ord)
@@ -864,12 +891,15 @@ begin
     return;
   end if;
 
-  -- ① profiles upsert — 기존 표시 이름을 유지하고, 없으면 이메일 로컬 파트
+  -- ① profiles upsert — 기존 표시 이름을 유지하고(앞뒤 공백은 정리), 없으면 이메일 로컬 파트.
+  -- profiles 는 btrim(display_name) <> '' 만 보지만 people 은 display_name = btrim(display_name) 을 요구하므로,
+  -- 정리하지 않으면 공백 붙은 프로필의 계정은 ② 의 people insert 에서 23514 로 초대를 수락하지 못한다.
   insert into public.profiles as pr (user_id, email, display_name)
   values (p_user, v_email, split_part(v_email, '@', 1))
   on conflict (user_id) do update
-     set display_name = coalesce(pr.display_name, excluded.display_name), updated_at = now();
+     set display_name = coalesce(nullif(btrim(pr.display_name), ''), excluded.display_name), updated_at = now();
   select pr.display_name into v_name from public.profiles pr where pr.user_id = p_user;
+  v_name := coalesce(nullif(btrim(v_name), ''), split_part(v_email, '@', 1));
 
   -- ② people 연결 — 이 계정의 인물이 이미 있으면 그것, 없으면 (workspace_id, email) 매치 → user_id 설정, 없으면 insert
   select pe.id into v_person
@@ -920,19 +950,22 @@ begin
      where pm.id = v_member;
   end if;
 
-  -- ⑤ 팀 전개 — 대표 팀이 아직 없으면 초대의 첫 팀을 대표로
+  -- ⑤ 팀 전개 — 기존 팀 행은 그대로 두고 새 팀만 더한다. 대표 팀이 아직 없으면 초대의 첫 팀을 대표로 —
+  -- 그 팀이 이미 대표 아닌 행으로 있던 경우도 포함(insert 의 on conflict do nothing 이 대표 지정을 삼키지 않게 따로 갱신).
   if v_team_ids is not null then
     select x.team_id into v_first_team
       from unnest(v_team_ids) with ordinality as x(team_id, ord)
      where x.team_id is not null
      order by x.ord limit 1;
     insert into public.project_member_teams as pmt (member_id, team_id, is_primary)
-    select distinct v_member, x.team_id,
-           x.team_id = v_first_team
-           and not exists (select 1 from public.project_member_teams p2 where p2.member_id = v_member and p2.is_primary)
+    select distinct v_member, x.team_id, false
       from unnest(v_team_ids) as x(team_id)
      where x.team_id is not null
     on conflict (member_id, team_id) do nothing;
+    update public.project_member_teams pmt
+       set is_primary = true
+     where pmt.member_id = v_member and pmt.team_id = v_first_team
+       and not exists (select 1 from public.project_member_teams p2 where p2.member_id = v_member and p2.is_primary);
   end if;
 
   return query select v_ws, v_project, v_member;
