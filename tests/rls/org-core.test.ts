@@ -186,4 +186,39 @@ describe('조직 코어 RLS (0003_org_core)', () => {
       expect(await pgError(c, move, [F.otherWs, F.projects.a])).toMatchObject(immutable)
     })
   })
+
+  it('⑩ upsert_project_member 이메일 분기는 기존 인물의 이름을 덮지 않는다(0004) — 새 이메일이면 입력 이름으로 만든다', async () => {
+    const upsert = 'select public.upsert_project_member($1, $2, $3::jsonb, $4::jsonb, null) as id'
+    const memberOf = `select pm.project_id, pm.person_id, pe.display_name
+                        from public.project_members pm join public.people pe on pe.id = pm.person_id where pm.id = $1`
+    // 트랜잭션 안에서만 있는 B 명단 인물 erin(외부 인력) — A 명단에는 없다
+    const ERIN = { id: '00000000-0000-0000-7e57-0000000000b5', email: 'rls-erin@example.com' }
+    await asService(pool, async (c) => {
+      await c.query('insert into public.people (id, workspace_id, display_name, email) values ($1, $2, $3, $4)', [
+        ERIN.id, F.ws, 'erin', ERIN.email,
+      ])
+      await c.query('insert into public.project_members (project_id, person_id) values ($1, $2)', [F.projects.b, ERIN.id])
+
+      // A 관리자 alice 가 erin 의 이메일 + 다른 이름으로 A 에 추가 → A 명단 행은 생기고 erin 의 이름은 그대로
+      const added = (await c.query<{ id: string }>(upsert, [
+        F.users.member, F.projects.a, JSON.stringify({ display_name: 'mallory', email: ERIN.email }), '{}',
+      ])).rows[0].id
+      expect((await c.query(memberOf, [added])).rows[0])
+        .toEqual({ project_id: F.projects.a, person_id: ERIN.id, display_name: 'erin' })
+
+      // 새 이메일 → 입력 이름으로 인물을 만든다
+      const created = (await c.query<{ id: string }>(upsert, [
+        F.users.member, F.projects.a, JSON.stringify({ display_name: 'frank', email: 'rls-frank@example.com' }), '{}',
+      ])).rows[0].id
+      expect((await c.query(memberOf, [created])).rows[0])
+        .toMatchObject({ project_id: F.projects.a, display_name: 'frank' })
+
+      // 대조: id 로 행을 지목한 편집은 여전히 개명한다(bob 은 A 명단)
+      await c.query(upsert, [
+        F.users.member, F.projects.a, JSON.stringify({ id: F.people.external, display_name: 'bob k' }), '{}',
+      ])
+      expect((await c.query('select display_name from public.people where id = $1', [F.people.external])).rows[0])
+        .toEqual({ display_name: 'bob k' })
+    })
+  })
 })
