@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, Download, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot } from 'lucide-react'
+import { Upload, Download, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList } from 'lucide-react'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
-import { projectTeamRowsSync, teamsSync } from '@/lib/teams/master'
+import { projectTeamRowsSync, teamsForProjectSync, teamsSync } from '@/lib/teams/master'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
+import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
+import { listAreas } from '@/app/actions/projectAreas'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { getProjectConfig } from '@/lib/data/projectConfig'
@@ -123,6 +125,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     console.error('[settings] 프로젝트 설정 조회 실패 — 단계 편집기만 degrade:', e)
     return null
   })
+
+  // 담당 영역 — 조회 실패면 절을 그리지 않고 안내만 남긴다(빈 목록으로 위장하면 이미 있는 코드를 다시 만들려 든다).
+  const [weeklyAreas, issueAreas] = await Promise.all([
+    listAreas(projectId, 'weekly_section'), listAreas(projectId, 'issue_area'),
+  ])
+  const areasError = !weeklyAreas.ok ? weeklyAreas.error : !issueAreas.ok ? issueAreas.error : null
+  if (areasError) console.error('[settings] 담당 영역 조회 실패 — 절만 degrade:', areasError)
+  const areaTeamOptions = teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
 
   const scheduleLabel =
     project?.start_date || project?.end_date
@@ -358,6 +368,32 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               inherited={projectTeamRows.length === 0}
               hasGlobalTeams={teamsSync().some(t => t.active)}
             />
+          </SectionCard>
+        )}
+
+      {/* ── 담당 영역 (관리자) — 팀과 별개 축(주간 구분·이슈 영역). 소비처는 SP4/SP5. ── */}
+        {isAdmin && (
+          <SectionCard
+            eyebrow="AREAS"
+            title={locale === 'ko' ? '담당 영역' : 'Areas'}
+            icon={LayoutList}
+          >
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+              {locale === 'ko'
+                ? '주간보고 구분과 이슈 영역 목록입니다. 한 영역을 여러 팀이 주·보조로 나눠 맡을 수 있습니다.'
+                : 'Weekly report sections and issue areas. Several teams can own an area as primary or support.'}
+            </p>
+            {weeklyAreas.ok && issueAreas.ok ? (
+              <ProjectAreasManager
+                projectId={projectId}
+                areas={{ weekly_section: weeklyAreas.areas, issue_area: issueAreas.areas }}
+                teamOptions={areaTeamOptions}
+              />
+            ) : (
+              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">
+                {locale === 'ko' ? '담당 영역을 불러오지 못했습니다. 새로고침하세요.' : 'Could not load areas. Please refresh.'}
+              </p>
+            )}
           </SectionCard>
         )}
 
