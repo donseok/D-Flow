@@ -5,15 +5,18 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronUp, Pencil, Search, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
-import { ensureRosterRow, setProjectRole, type ProjectRoleRow } from '@/app/actions/projectRoles'
-import { updateMember, removeMember } from '@/app/actions/members'
+import {
+  ensureRosterRow, setProjectRole, updateMember, removeMember, type ProjectRoleRow,
+} from '@/app/actions/roster'
 import type { AccountRole } from '@/lib/domain/accounts'
 import type { TeamCode } from '@/lib/domain/types'
 
-/** 옛 명단 구분(리더/실무) — projectRoles 액션의 행 계약을 따른다. Task 6·Phase B 가 이 화면과 함께 바꾼다. */
-type ProjectMemberRole = NonNullable<ProjectRoleRow['rosterRole']>
-
 const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
+
+/** 명단 구분은 권한(access_role)에서 파생한다 — 0003 이 명단 구분과 권한을 한 컬럼으로 합쳤다. Phase B 명단 화면이 대체한다. */
+function rosterKindLabel(row: ProjectRoleRow): string {
+  return row.role === 'admin' ? '리더' : '실무'
+}
 
 /**
  * 계정 검색 콤보박스 — 계정 수십 명을 네이티브 select 로는 찾을 수 없다는 피드백
@@ -41,8 +44,8 @@ function AccountComboBox({ candidates, value, onChange }: {
     // 후보는 호출부 필터가 userId 보유를 보장하지만 타입은 nullable — 방어적으로 거른다.
     const all = candidates.filter(c => c.userId).map(c => ({
       id: c.userId as string,
-      label: `${c.name ?? c.email} (${c.email})${c.orgTeamCode ? ` · ${c.orgTeamCode}` : ''}`,
-      haystack: `${c.name ?? ''} ${c.email ?? ''} ${c.orgTeamCode ?? ''}`.toLocaleLowerCase('ko-KR'),
+      label: `${c.name ?? c.email} (${c.email})`,
+      haystack: `${c.name ?? ''} ${c.email ?? ''}`.toLocaleLowerCase('ko-KR'),
     }))
     return q ? all.filter(o => o.haystack.includes(q)) : all
   }, [candidates, query])
@@ -104,7 +107,7 @@ function AccountComboBox({ candidates, value, onChange }: {
           aria-activedescendant={open && options[activeIndex] ? `${listboxId}-opt-${options[activeIndex].id}` : undefined}
           className="app-input h-8 pl-8 pr-8 text-xs"
           value={open ? query : selectedLabel}
-          placeholder="이름·이메일·팀으로 검색…"
+          placeholder="이름·이메일로 검색…"
           onFocus={() => { setOpen(true); setQuery('') }}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onKeyDown={onKeyDown}
@@ -238,7 +241,7 @@ export function ProjectRolesManager({ projectId, rows, canManageAdmins }: {
   // 명단 행이 없는 계정은 먼저 행을 만든 뒤 나머지 필드를 현재 행 값으로 보존하며 patch 만 반영한다.
   function saveRosterPatch(
     row: ProjectRoleRow,
-    patch: Partial<{ teamCode: TeamCode | null; rosterRole: ProjectMemberRole; title: string | null; roleLabel: string | null }>,
+    patch: Partial<{ teamCode: TeamCode | null; title: string | null; roleLabel: string | null }>,
   ) {
     const rowKey = row.userId ?? row.memberId ?? row.email ?? ''
     setErrors(prev => ({ ...prev, [rowKey]: '' }))
@@ -259,7 +262,6 @@ export function ProjectRolesManager({ projectId, rows, canManageAdmins }: {
           name: row.name ?? '',
           email: row.email ?? null,
           teamCode: patch.teamCode !== undefined ? patch.teamCode : ((row.teamCode as TeamCode | null) ?? null),
-          role: patch.rosterRole ?? row.rosterRole ?? 'contributor',
           title: patch.title !== undefined ? patch.title : row.title,
           roleLabel: patch.roleLabel !== undefined ? patch.roleLabel : row.roleLabel,
         })
@@ -404,26 +406,18 @@ export function ProjectRolesManager({ projectId, rows, canManageAdmins }: {
                             aria-label={`${row.name ?? row.email ?? '참여자'} 프로젝트 팀`}
                             value={(row.teamCode as string | null) ?? ''}
                             disabled={busy}
-                            title={!row.teamCode && row.orgTeamCode ? `프로젝트 팀 미지정 — 실제 소속팀 ${row.orgTeamCode}` : undefined}
                             onChange={e => saveRosterPatch(row, { teamCode: (e.target.value || null) as TeamCode | null })}
                           >
-                            <option value="">{row.orgTeamCode ? `소속 없음 (${row.orgTeamCode})` : '소속 없음'}</option>
+                            <option value="">소속 없음</option>
                             {teamCodes.map(code => <option key={code} value={code}>{code}</option>)}
                           </select>
                         ) : <span className="text-ink-subtle">—</span>}
                       </td>
                       <td className="py-2.5 pr-3">
-                        {editable ? (
-                          <select
-                            className="app-input h-8 w-auto text-xs"
-                            aria-label={`${row.name ?? row.email ?? '참여자'} 명단 구분`}
-                            value={row.rosterRole ?? 'contributor'}
-                            disabled={busy}
-                            onChange={e => saveRosterPatch(row, { rosterRole: e.target.value as ProjectMemberRole })}
-                          >
-                            <option value="admin">리더</option>
-                            <option value="contributor">실무</option>
-                          </select>
+                        {row.memberId ? (
+                          <span className="text-xs text-ink-muted" title="명단 구분은 권한 열에서 바뀝니다(관리자 = 리더).">
+                            {rosterKindLabel(row)}
+                          </span>
                         ) : <span className="text-ink-subtle">—</span>}
                       </td>
                       <td className="py-2.5 pr-3">
@@ -496,12 +490,8 @@ export function ProjectRolesManager({ projectId, rows, canManageAdmins }: {
                         {editButton(row)}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-                        {row.teamCode
-                          ? <span className="chip bg-surface-2 text-ink-muted">{row.teamCode}</span>
-                          : row.orgTeamCode
-                            ? <span title="프로젝트 팀 미지정 — 실제 소속팀 표시">({row.orgTeamCode})</span>
-                            : null}
-                        {row.memberId && <span className="chip bg-progress-weak text-progress">{row.rosterRole === 'admin' ? '리더' : '실무'}</span>}
+                        {row.teamCode ? <span className="chip bg-surface-2 text-ink-muted">{row.teamCode}</span> : null}
+                        {row.memberId && <span className="chip bg-progress-weak text-progress">{rosterKindLabel(row)}</span>}
                         {row.title && <span className="truncate">{row.title}</span>}
                         {row.roleLabel && <span className="chip bg-brand-weak text-brand">{row.roleLabel}</span>}
                       </div>
@@ -582,7 +572,6 @@ function RosterEditModal({ projectId, row, onClose, onSaved }: {
 }) {
   const teamCodes = useTeamCodes()
   const [teamCode, setTeamCode] = useState<TeamCode | ''>('')
-  const [rosterRole, setRosterRole] = useState<ProjectMemberRole>('contributor')
   const [title, setTitle] = useState('')
   const [roleLabel, setRoleLabel] = useState('')
   const [error, setError] = useState('')
@@ -592,7 +581,6 @@ function RosterEditModal({ projectId, row, onClose, onSaved }: {
   useEffect(() => {
     if (!row) return
     setTeamCode((row.teamCode as TeamCode | null) ?? '')
-    setRosterRole(row.rosterRole ?? 'contributor')
     setTitle(row.title ?? '')
     setRoleLabel(row.roleLabel ?? '')
     setError('')
@@ -616,7 +604,6 @@ function RosterEditModal({ projectId, row, onClose, onSaved }: {
         name: row?.name ?? '',
         email: row?.email ?? null,
         teamCode: teamCode || null,
-        role: rosterRole,
         title: title.trim() || null,
         roleLabel: roleLabel.trim() || null,
       })
@@ -672,13 +659,13 @@ function RosterEditModal({ projectId, row, onClose, onSaved }: {
               {teamCodes.map(code => <option key={code} value={code}>{code}</option>)}
             </select>
           </label>
-          <label className="block">
+          {/* 입력이 아니라 표시라 label 이 아니다 — 권한(access_role)에서 파생, 바꾸려면 권한 열을 쓴다. */}
+          <div className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">명단 구분</span>
-            <select className="app-input" value={rosterRole} onChange={e => setRosterRole(e.target.value as ProjectMemberRole)}>
-              <option value="admin">리더</option>
-              <option value="contributor">실무</option>
-            </select>
-          </label>
+            <p className="app-input flex items-center text-ink-muted" title="명단 구분은 권한 열에서 바뀝니다(관리자 = 리더).">
+              {rosterKindLabel(row)}
+            </p>
+          </div>
         </div>
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">직함 / 역할 설명</span>

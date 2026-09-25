@@ -20,7 +20,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
 }))
-vi.mock('@/app/actions/members', () => ({ addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn() }))
+vi.mock('@/app/actions/roster', () => ({ addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn() }))
 // 서버 액션은 병렬 구현 중 — 계약 시그니처만 mock 한다.
 vi.mock('@/app/actions/memberSearch', () => ({ searchMemberCandidates }))
 

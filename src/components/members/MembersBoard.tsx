@@ -9,7 +9,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { teamStyle } from '@/components/wbs/shared'
-import { addMember, updateMember, removeMember, type MemberInput } from '@/app/actions/members'
+import { addMember, updateMember, removeMember } from '@/app/actions/roster'
 import { searchMemberCandidates, type MemberCandidate } from '@/app/actions/memberSearch'
 import { isValidEmail } from '@/lib/domain/validate'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
@@ -285,7 +285,8 @@ function MemberFormModal({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [teamCode, setTeamCode] = useState<TeamCode | ''>('')
-  const [role, setRole] = useState<MemberInput['role']>('contributor')
+  // 이 프로젝트 권한(access_role) — '' 은 권한 없음(조회 전용). 계정 없는 사람에게 주면 서버가 거부한다.
+  const [accessRole, setAccessRole] = useState<'admin' | 'member' | ''>('')
   const [title, setTitle] = useState('')
   const [roleLabel, setRoleLabel] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -310,7 +311,7 @@ function MemberFormModal({
     setName(initial?.name ?? '')
     setEmail(initial?.email ?? '')
     setTeamCode(initial?.teamCode ?? '')
-    setRole(initial?.accessRole === 'admin' ? 'admin' : 'contributor')
+    setAccessRole(initial?.accessRole ?? '')
     setTitle(initial?.title ?? '')
     setRoleLabel(initial?.roleLabel ?? '')
     setError(null)
@@ -427,7 +428,7 @@ function MemberFormModal({
       name: name.trim(),
       email: trimmedEmail || null,
       teamCode: teamCode || null,
-      role,
+      accessRole: accessRole || null,
       title: title.trim() || null,
       roleLabel: roleLabel.trim() || null,
     }
@@ -565,11 +566,13 @@ function MemberFormModal({
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('members.fieldRole')}</span>
             <select
               className="app-input"
-              value={role}
-              onChange={(e) => setRole(e.target.value as MemberInput['role'])}
+              value={accessRole}
+              onChange={(e) => setAccessRole(e.target.value as 'admin' | 'member' | '')}
             >
-              <option value="contributor">{t('members.roleContributor')}</option>
-              <option value="admin">{t('members.roleAdmin')}</option>
+              {/* 신규 문구는 dict 미보유 → locale 분기(아래 '역할' 입력과 같은 관례) */}
+              <option value="">{locale === 'en' ? 'No access (view only)' : '권한 없음(조회)'}</option>
+              <option value="member">{locale === 'en' ? 'Member' : '멤버'}</option>
+              <option value="admin">{locale === 'en' ? 'Admin' : '관리자'}</option>
             </select>
           </label>
         </div>

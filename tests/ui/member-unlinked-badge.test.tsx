@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
-vi.mock('@/app/actions/members', () => ({ addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn() }))
+vi.mock('@/app/actions/roster', () => ({ addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn() }))
 
 import { MembersBoard } from '@/components/members/MembersBoard'
 import { makeRosterMember } from '../fixtures/rosterMember'

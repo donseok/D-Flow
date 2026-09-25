@@ -49,7 +49,7 @@ vi.mock('@/app/actions/attendance', () => ({
   upsertAttendance: vi.fn(async () => ({ ok: true })),
   removeAttendance: vi.fn(async () => ({ ok: true })),
 }))
-vi.mock('@/app/actions/members', () => ({
+vi.mock('@/app/actions/roster', () => ({
   addMember: vi.fn(async () => ({ ok: true })),
   updateMember: vi.fn(async () => ({ ok: true })),
   removeMember: vi.fn(async () => ({ ok: true })),

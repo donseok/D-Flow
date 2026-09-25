@@ -5,7 +5,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ProjectRoleRow } from '@/app/actions/projectRoles'
+import type { ProjectRoleRow } from '@/app/actions/roster'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -14,11 +14,9 @@ const setProjectRole = vi.fn(async () => ({ ok: true }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }))
-vi.mock('@/app/actions/projectRoles', () => ({
+vi.mock('@/app/actions/roster', () => ({
   setProjectRole: (...args: unknown[]) => setProjectRole(...args as []),
   ensureRosterRow: vi.fn(async () => ({ ok: true, memberId: 'pm-new' })),
-}))
-vi.mock('@/app/actions/members', () => ({
   updateMember: vi.fn(async () => ({ ok: true })),
   removeMember: vi.fn(async () => ({ ok: true })),
 }))
@@ -28,13 +26,13 @@ vi.mock('@/components/app/TeamsProvider', () => ({
 
 import { ProjectRolesManager } from '@/components/settings/ProjectRolesManager'
 
-const base = { orgTeamCode: null, memberId: null, rosterRole: null, title: null, roleLabel: null }
+const base = { memberId: null, title: null, roleLabel: null }
 const ROWS: ProjectRoleRow[] = [
-  { ...base, userId: 'admin1', email: 'admin@example.com', name: '관리자김', teamCode: 'PMO', role: 'admin', isSuperuser: false, memberId: 'pm-1', rosterRole: 'admin', title: 'PM' },
-  { ...base, userId: 'member1', email: 'member@example.com', name: '멤버이', teamCode: 'MES', role: 'member', isSuperuser: false, memberId: 'pm-2', rosterRole: 'contributor' },
+  { ...base, userId: 'admin1', email: 'admin@example.com', name: '관리자김', teamCode: 'PMO', role: 'admin', isSuperuser: false, memberId: 'pm-1', title: 'PM' },
+  { ...base, userId: 'member1', email: 'member@example.com', name: '멤버이', teamCode: 'MES', role: 'member', isSuperuser: false, memberId: 'pm-2' },
   { ...base, userId: 'su1', email: 'su@example.com', name: '슈퍼박', teamCode: 'PMO', role: 'viewer', isSuperuser: true },
   { ...base, userId: 'viewer1', email: 'viewer@example.com', name: '조회최', teamCode: 'ERP', role: 'viewer', isSuperuser: false },
-  { ...base, userId: null, email: null, name: '외부홍', teamCode: 'MES', role: 'viewer', isSuperuser: false, memberId: 'pm-9', rosterRole: 'contributor', title: '협력사' },
+  { ...base, userId: null, email: null, name: '외부홍', teamCode: 'MES', role: 'viewer', isSuperuser: false, memberId: 'pm-9', title: '협력사' },
 ]
 
 describe('ProjectRolesManager 참여자·권한 통합 표', () => {
@@ -138,12 +136,13 @@ describe('ProjectRolesManager 참여자·권한 통합 표', () => {
     expect(labels[0]).toContain('조회최')
   })
 
-  it('리스트 뷰는 셀 인라인 편집 — 연필 없음, 팀·구분 셀렉트와 직함·역할 입력이 있다', async () => {
+  it('리스트 뷰는 셀 인라인 편집 — 연필 없음, 팀 셀렉트와 직함·역할 입력이 있다', async () => {
     await render()
 
     expect(container.querySelector('button[aria-label="관리자김 명단 정보 수정"]')).toBeNull()
     expect(container.querySelector('select[aria-label="관리자김 프로젝트 팀"]')).not.toBeNull()
-    expect(container.querySelector('select[aria-label="관리자김 명단 구분"]')).not.toBeNull()
+    // 명단 구분은 0003 에서 권한(access_role)과 한 컬럼이 됐다 — 입력이 아니라 권한에서 파생된 표시다.
+    expect(container.querySelector('select[aria-label="관리자김 명단 구분"]')).toBeNull()
     expect(container.querySelector('input[aria-label="관리자김 직함"]')).not.toBeNull()
     expect(container.querySelector('input[aria-label="관리자김 역할"]')).not.toBeNull()
   })

@@ -31,7 +31,7 @@ import type { Actor } from '@/lib/domain/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { createAnnouncement, updateAnnouncement, deleteAnnouncement, createAnnouncementFromMeeting } from '@/app/actions/announcements'
 import { recordAttachment, removeAttachment } from '@/app/actions/attachments'
-import { addMember, updateMember, removeMember } from '@/app/actions/members'
+import { addMember, updateMember, removeMember } from '@/app/actions/roster'
 import { addTeam, updateTeam, listTeamsAdmin } from '@/app/actions/teams'
 import { reindexProjectAction } from '@/app/actions/chat'
 import { curateWikiItem, mergeWikiTopics } from '@/app/actions/wiki'
@@ -73,7 +73,7 @@ const ANNOUNCEMENT = {
   title: '제목', body: '본문', category: 'general' as const, isPinned: false,
   publishFrom: '2026-07-30', publishTo: '2026-07-31', milestoneDate: null,
 }
-const MEMBER_INPUT = { name: '홍길동', email: null, teamCode: null, role: 'contributor' as const, title: null, roleLabel: null }
+const MEMBER_INPUT = { name: '홍길동', email: null, teamCode: null, accessRole: null, title: null, roleLabel: null }
 const LLM_INPUT: LlmProfileInput = { name: 'gemini-기본', preset_id: 'gemini', provider: 'gemini', model: 'gemini-3.5-flash' }
 
 beforeEach(() => {

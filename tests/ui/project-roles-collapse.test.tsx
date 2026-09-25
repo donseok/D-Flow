@@ -2,18 +2,16 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ProjectRoleRow } from '@/app/actions/projectRoles'
+import type { ProjectRoleRow } from '@/app/actions/roster'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }))
-vi.mock('@/app/actions/projectRoles', () => ({
+vi.mock('@/app/actions/roster', () => ({
   setProjectRole: vi.fn(async () => ({ ok: true })),
   ensureRosterRow: vi.fn(async () => ({ ok: true, memberId: 'pm-new' })),
-}))
-vi.mock('@/app/actions/members', () => ({
   updateMember: vi.fn(async () => ({ ok: true })),
   removeMember: vi.fn(async () => ({ ok: true })),
 }))
@@ -24,8 +22,8 @@ vi.mock('@/components/app/TeamsProvider', () => ({
 import { ProjectRolesManager } from '@/components/settings/ProjectRolesManager'
 
 const ROWS: ProjectRoleRow[] = [{
-  userId: 'u1', email: 'user@example.com', name: '홍길동', teamCode: 'PMO', orgTeamCode: null,
-  role: 'member', isSuperuser: false, memberId: null, rosterRole: null, title: null, roleLabel: null,
+  userId: 'u1', email: 'user@example.com', name: '홍길동', teamCode: 'PMO',
+  role: 'member', isSuperuser: false, memberId: null, title: null, roleLabel: null,
 }]
 
 describe('ProjectRolesManager 접기/펼치기', () => {
