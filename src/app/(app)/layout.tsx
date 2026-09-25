@@ -1,6 +1,7 @@
 import { getDisplayName } from '@/lib/auth'
 import { getActorViewState } from '@/lib/authz'
 import { isAnyProjectAdmin, isProjectAdmin, hasAnyProjectRole } from '@/lib/domain/authz'
+import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { canViewPortfolio } from '@/lib/authz/portfolioAccess'
 import { listProjectsWithState } from '@/app/actions/project'
@@ -60,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         roleLabel: actor.isSuperuser ? '슈퍼유저'
           : isAnyProjectAdmin(actor) ? '관리자'
             : hasAnyProjectRole(actor) ? '멤버' : '조회',
-        teamCode: actor.teamCode,
+        teamCode: identityTeamCodes(actor)[0] ?? null,
         isSuperuser: actor.isSuperuser,
         showUsage: canViewUsage(actor),
         showPortfolio: canViewPortfolio(actor),
