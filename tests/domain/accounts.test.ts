@@ -68,11 +68,11 @@ describe('parseBulkAccounts', () => {
     expect(r[0].ok).toBe(false)
     expect(r[0].error).toContain('권한')
   })
-  it('옛 권한 값(pmo_admin·team_editor)은 사유를 밝히며 거부한다', () => {
+  // 옛 전역 권한 값도 모르는 값과 같이 거부한다 — 허용 값을 알려준다(옛 값 전용 힌트는 두지 않는다).
+  it('옛 권한 값도 허용 값 안내와 함께 거부한다', () => {
     const r = parseBulkAccounts('a@b.com, team_editor, password1')
     expect(r[0].ok).toBe(false)
-    expect(r[0].error).toContain('team_editor')
-    expect(r[0].error).toContain('옛 권한 값')
+    expect(r[0].error).toBe('알 수 없는 권한: team_editor — admin·member·viewer 중 하나여야 합니다.')
   })
   // 팀 열이 있던 옛 파일을 그대로 붙여넣으면 팀 코드가 권한 자리에 온다 — '알 수 없는 권한: PMO' 대신 형식을 알려준다.
   it('팀 열이 있는 옛 형식은 형식 안내와 함께 거부한다', () => {

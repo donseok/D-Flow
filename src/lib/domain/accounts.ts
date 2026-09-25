@@ -3,7 +3,7 @@
 import { isValidEmail } from '@/lib/domain/validate'
 
 /** 프로젝트 권한 화이트리스트. 'viewer' 는 명단 행 access_role 을 null 로 둔다는 뜻(조회 전용).
- *  옛 전역 권한 값(pmo_admin·team_editor)은 받지 않는다. */
+ *  이 세 값 밖은 전부 거부한다(옛 전역 권한 값도 여기서 걸린다). */
 export const ACCOUNT_ROLES = ['admin', 'member', 'viewer'] as const
 export type AccountRole = (typeof ACCOUNT_ROLES)[number]
 
@@ -58,11 +58,8 @@ export function parseBulkAccounts(text: string): ParsedAccountLine[] {
         out.push({ lineNo, raw: trimmed, ok: false, email, error: '팀 열이 있는 옛 형식입니다. 이메일, 권한, 초기비번[, 이름] 순서로 바꾸세요.' })
         return
       }
-      // 옛 권한 값을 조용히 흘리면 예전 일괄 등록 파일이 그대로 통과해 전원이 잘못된 권한으로 만들어진다.
-      const hint = role === 'pmo_admin' || role === 'team_editor'
-        ? ' — 옛 권한 값입니다. admin·member·viewer 로 바꾸세요.'
-        : ''
-      out.push({ lineNo, raw: trimmed, ok: false, email, error: `알 수 없는 권한: ${role}${hint}` })
+      // 모르는 값을 조용히 흘리면 예전 일괄 등록 파일이 그대로 통과해 전원이 잘못된 권한으로 만들어진다.
+      out.push({ lineNo, raw: trimmed, ok: false, email, error: `알 수 없는 권한: ${role} — admin·member·viewer 중 하나여야 합니다.` })
       return
     }
     if (!isValidPassword(password)) {
