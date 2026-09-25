@@ -35,8 +35,8 @@ export const getProjectRoster = cache(async (
 })
 
 /**
- * 명단 목록(선택기·보고서·AI 문맥용). 실패는 로그 후 빈 배열 — 이 호출부들은 명단이 곁가지라 화면 본체를 막지 않는다.
- * 실패를 화면에 보여야 하는 곳은 getProjectRoster 를 쓴다.
+ * 명단 목록(선택기·AI 문맥용). 실패는 로그 후 빈 배열 — 이 호출부들은 명단이 곁가지라 화면 본체를 막지 않는다.
+ * 실패를 화면에 보여야 하거나 빈 명단이 산출물·삭제로 이어지는 곳(보고서·재색인)은 getProjectRoster 를 쓴다.
  */
 export const getProjectMembers = cache(async (projectId: string): Promise<ProjectMember[]> => {
   const res = await getProjectRoster(projectId)

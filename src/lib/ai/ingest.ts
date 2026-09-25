@@ -1,5 +1,5 @@
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { getProjectName } from './knowledge'
 import { buildDocuments } from './analytics'
 import { embedDocuments } from './embeddings'
@@ -24,13 +24,15 @@ export interface IngestResult {
 export async function ingestProject(projectId: string): Promise<IngestResult> {
   if (!hasEmbeddings()) return { count: 0, skipped: true, reason: 'no_embedding_key' }
 
-  const [{ items, today }, members, name, config] = await Promise.all([
+  const [{ items, today }, roster, name, config] = await Promise.all([
     getComputedWbs(projectId),
-    getProjectMembers(projectId),
+    getProjectRoster(projectId),
     getProjectName(projectId),
     getProjectConfig(projectId),
   ])
-  const docs = buildDocuments(items, name, today, activeTeamCodesSync(), members, config.levelLabels)
+  // 명단을 못 읽었으면 여기서 멈춘다 — 빈 명단으로 진행하면 아래 stale 삭제가 기존 member 임베딩을 지운다(3원칙 ①·②).
+  if (!roster.ok) throw new Error(roster.error)
+  const docs = buildDocuments(items, name, today, activeTeamCodesSync(), roster.rows, config.levelLabels)
   if (docs.length === 0) return { count: 0 }
 
   const vectors = await embedDocuments(

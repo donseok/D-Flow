@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { getAttendanceRecords } from '@/lib/data/attendance'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getAnnouncements } from '@/lib/data/announcements'
@@ -87,10 +87,16 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const [{ items, today }, projects, members, attendance, meetingData, announcements, config] = await Promise.all([
-    getComputedWbs(projectId), listProjects(), getProjectMembers(projectId), getAttendanceRecords(projectId),
+  const [{ items, today }, projects, roster, attendance, meetingData, announcements, config] = await Promise.all([
+    getComputedWbs(projectId), listProjects(), getProjectRoster(projectId), getAttendanceRecords(projectId),
     getProjectMeetingData(projectId), getAnnouncements(projectId), getProjectConfig(projectId),
   ])
+  // 명단을 못 읽었으면 '멤버 없는 보고서' 를 내려보내지 않는다(3원칙 ① — 조회 실패를 데이터 없음으로 위장하지 않는다).
+  if (!roster.ok) {
+    console.error(`[report] 명단 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
+    return NextResponse.json({ error: roster.error }, { status: 503 })
+  }
+  const members = roster.rows
   const project = (projects as { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }[]).find(
     p => p.id === projectId,
   )

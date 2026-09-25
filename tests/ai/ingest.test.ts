@@ -4,7 +4,8 @@ vi.mock('@/lib/ai/provider', () => ({ hasEmbeddings: vi.fn() }))
 vi.mock('@/lib/ai/embeddings', () => ({ embedDocuments: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn() }))
-vi.mock('@/lib/data/members', () => ({ getProjectMembers: vi.fn() }))
+// getProjectMembers 는 실물 계약(실패 = 빈 배열)대로 둔다 — ingest 가 옛 경로로 돌아가면 실패 케이스가 빈 명단으로 진행해 드러난다.
+vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(), getProjectMembers: vi.fn(async () => []) }))
 vi.mock('@/lib/ai/knowledge', () => ({ getProjectName: vi.fn() }))
 vi.mock('@/lib/ai/analytics', () => ({ buildDocuments: vi.fn() }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn() }))
@@ -13,7 +14,7 @@ import { hasEmbeddings } from '@/lib/ai/provider'
 import { embedDocuments } from '@/lib/ai/embeddings'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { getProjectName } from '@/lib/ai/knowledge'
 import { buildDocuments } from '@/lib/ai/analytics'
 import { getProjectConfig } from '@/lib/data/projectConfig'
@@ -35,7 +36,7 @@ function mockAdmin(upsertError: { message: string } | null = null) {
   return { lt, eq, del, upsert }
 }
 const mWbs = vi.mocked(getComputedWbs)
-const mMembers = vi.mocked(getProjectMembers)
+const mRoster = vi.mocked(getProjectRoster)
 const mName = vi.mocked(getProjectName)
 const mDocs = vi.mocked(buildDocuments)
 const mConfig = vi.mocked(getProjectConfig)
@@ -45,7 +46,7 @@ describe('ingestProject — 재색인(전체 교체)', () => {
     vi.clearAllMocks()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mWbs.mockResolvedValue({ items: [], today: '2026-01-01' } as never)
-    mMembers.mockResolvedValue([] as never)
+    mRoster.mockResolvedValue({ ok: true, rows: [] })
     mName.mockResolvedValue('프로젝트 A')
     mConfig.mockResolvedValue({ levelLabels: ['Phase', 'Task', 'Activity'] } as never)
   })
@@ -123,6 +124,30 @@ describe('ingestProject — 재색인(전체 교체)', () => {
     const rows = upsert.mock.calls[0][0]
     expect(rows).toHaveLength(2)
     expect(rows.map(x => x.ref_id)).toEqual([null, 'w2']) // 실패한 w1 은 빠짐
+  })
+
+  it('명단 조회 실패: 문서를 만들기 전에 throw — 임베딩·upsert·stale 삭제 없음(기존 member 임베딩 보존)', async () => {
+    mHasEmb.mockReturnValue(true)
+    mRoster.mockResolvedValue({ ok: false, error: '명단을 불러오지 못했습니다.' })
+    mDocs.mockReturnValue([{ kind: 'wbs_item', refId: 'w1', content: 'doc1' }])
+    mEmbed.mockResolvedValue([[0.1, 0.2]])
+    const { del, upsert } = mockAdmin()
+
+    await expect(ingestProject('p1')).rejects.toThrow('명단을 불러오지 못했습니다.')
+    expect(mDocs).not.toHaveBeenCalled()
+    expect(mEmbed).not.toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('명단 조회 성공: 명단 행을 그대로 문서 생성에 넘긴다', async () => {
+    mHasEmb.mockReturnValue(true)
+    const rows = [{ id: 'm1', name: 'alice' }]
+    mRoster.mockResolvedValue({ ok: true, rows } as never)
+    mDocs.mockReturnValue([])
+
+    expect(await ingestProject('p1')).toEqual({ count: 0 })
+    expect(mDocs.mock.calls[0][4]).toBe(rows)
   })
 
   it('전부 실패: 기존 색인을 지우지 않고 보존(삭제 호출 없음)', async () => {
