@@ -26,7 +26,7 @@ export function validateArea(
   if (!code) return { ok: false, error: '영역 코드를 입력하세요.' }
   const name = input.name.trim()
   if (!name) return { ok: false, error: '영역 이름을 입력하세요.' }
-  if (!Number.isInteger(input.sortOrder)) return { ok: false, error: '순서는 정수여야 합니다.' }
+  if (typeof input.sortOrder !== 'number' || !Number.isInteger(input.sortOrder)) return { ok: false, error: '순서는 정수여야 합니다.' }
   if (existing.some(a => a.kind === input.kind && a.code === code && a.id !== input.id)) {
     return { ok: false, error: `'${code}' 코드가 이미 있습니다.` }
   }

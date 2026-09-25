@@ -23,8 +23,10 @@ describe('validateArea', () => {
     expect(validateArea(base({ name: '' }), [])).toEqual({ ok: false, error: '영역 이름을 입력하세요.' })
   })
 
-  it('순서는 정수', () => {
+  it('순서는 정수(숫자형) — 문자열·NaN 도 거부', () => {
     expect(validateArea(base({ sortOrder: 1.5 }), []).ok).toBe(false)
+    expect(validateArea(base({ sortOrder: NaN }), []).ok).toBe(false)
+    expect(validateArea(base({ sortOrder: '1' as unknown as number }), [])).toEqual({ ok: false, error: '순서는 정수여야 합니다.' })
   })
 
   it('같은 kind 에 같은 code 가 있으면 거부 — 자기 자신(같은 id)은 제외, 다른 kind 는 허용', () => {

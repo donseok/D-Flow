@@ -9,7 +9,8 @@ import { upsertArea, type AreaRow } from '@/app/actions/projectAreas'
 import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
 import { useToast } from '@/components/ui/Toast'
 
-export interface AreaTeamOption { id: string; code: string }
+/** active=false 인 팀은 이미 배정된 영역에서만 보인다(해제할 수 있게) — 새로 고를 수는 없다. */
+export interface AreaTeamOption { id: string; code: string; active: boolean }
 
 const KIND_LABEL: Record<AreaKind, string> = { weekly_section: '주간 구분', issue_area: '이슈 영역' }
 const TEAM_KIND_LABEL: Record<AreaTeamKind, string> = { primary: '주', support: '보조' }
@@ -35,7 +36,12 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const rows = areas[kind]
-  const codeOf = new Map(teamOptions.map(t => [t.id, t.code]))
+  const teamOf = new Map(teamOptions.map(t => [t.id, t]))
+  const teamLabel = (id: string) => {
+    const t = teamOf.get(id)
+    if (!t) return '알 수 없는 팀'
+    return t.active ? t.code : `${t.code}(비활성)`
+  }
 
   function switchKind(k: AreaKind) { setKind(k); setDraft(null); setError(null) }
   function startNew() {
@@ -46,6 +52,8 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
 
   function save() {
     if (!draft) return
+    // 빈 칸을 Number('') = 0 으로 조용히 바꾸지 않는다. 소수·문자는 validateArea 가 거부한다.
+    if (!draft.sortOrder.trim()) { setError('순서를 입력하세요.'); return }
     const sortOrder = Number(draft.sortOrder)
     setError(null)
     startTransition(async () => {
@@ -60,6 +68,9 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
       router.refresh()
     })
   }
+
+  // 폼의 팀: 활성 팀 + 이 영역에 이미 배정된 비활성 팀(해제용).
+  const formTeams = draft ? teamOptions.filter(t => t.active || draft.teams[t.id]) : []
 
   function setTeam(teamId: string, v: AreaTeamKind | '') {
     setDraft(d => {
@@ -114,7 +125,7 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
                       <span className="flex flex-wrap gap-1">
                         {a.teams.length === 0 ? <span className="text-ink-subtle">—</span> : a.teams.map(t => (
                           <span key={t.teamId} className={`chip bg-surface-2 ${t.kind === 'primary' ? 'font-semibold text-ink' : 'text-ink-muted'}`}>
-                            {codeOf.get(t.teamId) ?? '?'} · {TEAM_KIND_LABEL[t.kind]}
+                            {teamLabel(t.teamId)} · {TEAM_KIND_LABEL[t.kind]}
                           </span>
                         ))}
                       </span>
@@ -163,13 +174,13 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
             </div>
             <fieldset className="space-y-2">
               <legend className="text-xs text-ink-muted">담당 팀</legend>
-              {teamOptions.length === 0 ? (
+              {formTeams.length === 0 ? (
                 <p className="text-xs text-ink-subtle">이 프로젝트에 팀이 없습니다.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {teamOptions.map(t => (
-                    <label key={t.id} className="flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-xs text-ink">
-                      {t.code}
+                  {formTeams.map(t => (
+                    <label key={t.id} className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-line px-2 py-1 text-xs ${t.active ? 'text-ink' : 'text-ink-subtle'}`}>
+                      {t.active ? t.code : `${t.code}(비활성)`}
                       <select className="app-input h-7 py-0 text-xs" value={draft.teams[t.id] ?? ''} data-area-team={t.code}
                         aria-label={`${t.code} 담당 구분`}
                         onChange={e => setTeam(t.id, e.target.value as AreaTeamKind | '')} disabled={pending}>

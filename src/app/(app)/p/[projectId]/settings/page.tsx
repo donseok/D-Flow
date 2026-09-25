@@ -132,7 +132,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   ])
   const areasError = !weeklyAreas.ok ? weeklyAreas.error : !issueAreas.ok ? issueAreas.error : null
   if (areasError) console.error('[settings] 담당 영역 조회 실패 — 절만 degrade:', areasError)
-  const areaTeamOptions = teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
+  // 비활성 팀도 넘긴다 — 이미 배정된 비활성 팀이 화면에서 숨은 채 재저장되지 않게(관리 절이 '비활성' 으로 표시).
+  const areaTeamOptions = teamsForProjectSync(projectId).map(x => ({ id: x.id, code: x.code, active: x.active }))
 
   const scheduleLabel =
     project?.start_date || project?.end_date
