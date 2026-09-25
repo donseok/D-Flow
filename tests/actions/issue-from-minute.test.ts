@@ -831,7 +831,7 @@ describe('fetchIssueProjectMembers', () => {
 
     expect(select).toHaveBeenCalledWith(ROSTER_SELECT)
     expect(result.ok).toBe(true)
-    expect(result.members?.map(m => [m.id, m.name, m.accessRole, m.teamCode, m.hasAccount])).toEqual([
+    expect(result.members?.map(m => [m.id, m.name, m.accessRole, m.teams[0]?.code ?? null, m.hasAccount])).toEqual([
       ['m1', '가관리', 'admin', 'ERP', true],
       ['m2', '나외주', null, null, false],
     ])

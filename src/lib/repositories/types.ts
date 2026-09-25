@@ -236,7 +236,8 @@ export interface AttendanceRepositoryRecord {
   projectId: string
   memberId: string
   memberName: string
-  teamCode: TeamCode | null
+  /** 명단 팀 code — 첫 원소가 대표 팀. */
+  teamCodes: TeamCode[]
   date: string
   type: AttendanceType
   /** No note field by design: attendance notes are out of scope for Phase 1. */
@@ -330,7 +331,8 @@ export interface MemberRepositoryRecord {
   id: string
   projectId: string
   name: string
-  teamCode: TeamCode | null
+  /** 명단 팀 code — 첫 원소가 대표 팀. */
+  teamCodes: TeamCode[]
   /** 이 프로젝트 권한(명단 access_role) — null 은 조회 전용. */
   accessRole: 'admin' | 'member' | null
   title: string | null

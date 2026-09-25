@@ -169,8 +169,8 @@ describe('buildWeeklyReportModel — 4단+ 실 계층에서도 리프/평탄화�
 
 describe('buildWeeklyReportModel — 워크로드/근태', () => {
   const members: ProjectMember[] = [
-    makeRosterMember({ id: 'mem1', projectId: 'p', name: '홍길동', email: null, teamCode: '가공', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
-    makeRosterMember({ id: 'mem2', projectId: 'p', name: '김철수', email: null, teamCode: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
+    makeRosterMember({ id: 'mem1', projectId: 'p', name: '홍길동', email: null, team: '가공', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
+    makeRosterMember({ id: 'mem2', projectId: 'p', name: '김철수', email: null, team: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
   ]
   const attendance: AttendanceRecord[] = [
     { id: 'a1', projectId: 'p', memberId: 'mem1', date: '2026-06-30', type: 'annual', note: null },

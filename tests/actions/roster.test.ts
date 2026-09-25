@@ -281,7 +281,8 @@ describe('listRoster — 정본 select(ROSTER_SELECT) + 매퍼', () => {
     expect(q.eq).toHaveBeenCalledWith('project_id', P1)
     expect(q.order).toHaveBeenNthCalledWith(1, 'sort_order')
     expect(q.order).toHaveBeenNthCalledWith(2, 'created_at')
-    expect(res).toMatchObject({ ok: true, rows: [{ id: 'm-1', name: '홍길동', accessRole: 'member', teamCode: 'PMO', hasAccount: true }] })
+    expect(res).toMatchObject({ ok: true, rows: [{ id: 'm-1', name: '홍길동', accessRole: 'member', hasAccount: true }] })
+    expect(res.ok && res.rows[0].teams.map(t => t.code)).toEqual(['PMO'])
   })
 
   it('조회 실패는 오류로 돌려준다', async () => {

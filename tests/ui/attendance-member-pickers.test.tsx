@@ -46,7 +46,7 @@ function member(id: string, name: string, teamCode: string | null): ProjectMembe
     projectId: 'project-1',
     name,
     email: null,
-    teamCode,
+    team: teamCode,
     title: null,
     roleLabel: null,
     hasAccount: true,

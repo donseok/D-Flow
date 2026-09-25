@@ -30,7 +30,7 @@ export function createSupabaseMemberRepository(client: SupabaseServerClient): Me
         id: m.id,
         projectId: m.projectId,
         name: m.name,
-        teamCode: m.teamCode,
+        teamCodes: m.teams.map(t => t.code),
         accessRole: m.accessRole,
         title: m.title,
         hasAccount: m.hasAccount,

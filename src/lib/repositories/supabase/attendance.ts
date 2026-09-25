@@ -67,7 +67,7 @@ export function createSupabaseAttendanceRepository(client: SupabaseServerClient)
           projectId: row.project_id as string,
           memberId: row.member_id as string,
           memberName: member?.name ?? '',
-          teamCode: member?.teamCode ?? null,
+          teamCodes: member?.teams.map(t => t.code) ?? [],
           date: row.date as string,
           type: row.type as AttendanceType,
         }

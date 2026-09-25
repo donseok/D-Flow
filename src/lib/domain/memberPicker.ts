@@ -18,7 +18,7 @@ interface BuildMemberPickerSectionsOptions {
    */
   selectedIds?: readonly string[]
 }
-/** 대표 팀(teams[0]) — teamCode 단수 필드는 deprecated, teams 배열이 정본. */
+/** 대표 팀(teams[0]) — 명단 DTO 의 팀은 teams 배열뿐이다(단수 teamCode 는 SP1 에서 제거). */
 function normalizedCategory(member: ProjectMember): TeamCode | null {
   const category = member.teams[0]?.code?.trim()
   return category || null

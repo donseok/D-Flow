@@ -30,23 +30,23 @@ const context: ToolExecutionContext = {
 
 const memberRows: MemberRepositoryRecord[] = [
   {
-    id: 'member-1', projectId: 'p1', name: '김ERP', teamCode: 'ERP', accessRole: 'admin',
+    id: 'member-1', projectId: 'p1', name: '김ERP', teamCodes: ['ERP'], accessRole: 'admin',
     title: 'ERP 리드', hasAccount: true, createdAt: '2026-07-01T00:00:00Z',
   },
   {
-    id: 'member-2', projectId: 'p1', name: '이ERP', teamCode: 'ERP', accessRole: 'member',
+    id: 'member-2', projectId: 'p1', name: '이ERP', teamCodes: ['ERP'], accessRole: 'member',
     title: null, hasAccount: false, createdAt: '2026-07-02T00:00:00Z',
   },
   {
-    id: 'member-3', projectId: 'p1', name: '박MES', teamCode: 'MES', accessRole: 'member',
+    id: 'member-3', projectId: 'p1', name: '박MES', teamCodes: ['MES'], accessRole: 'member',
     title: null, hasAccount: true, createdAt: '2026-07-03T00:00:00Z',
   },
   {
-    id: 'member-4', projectId: 'p1', name: '최PMO', teamCode: 'PMO', accessRole: 'admin',
+    id: 'member-4', projectId: 'p1', name: '최PMO', teamCodes: ['PMO'], accessRole: 'admin',
     title: 'PM', hasAccount: true, createdAt: '2026-07-04T00:00:00Z',
   },
   {
-    id: 'member-5', projectId: 'p1', name: '신입', teamCode: null, accessRole: 'member',
+    id: 'member-5', projectId: 'p1', name: '신입', teamCodes: [], accessRole: 'member',
     title: null, hasAccount: false, createdAt: '2026-07-05T00:00:00Z',
   },
 ]
@@ -137,6 +137,18 @@ describe('list_members tool', () => {
     const combined = await tool.execute({ projectId: 'p1', team: 'ERP', role: 'member' }, context)
     expect(combined.ok && combined.result.records.map(record => record.name)).toEqual(['이ERP'])
     if (combined.ok) expect(combined.result.facts).toMatchObject({ memberCount: 1, returned: 1 })
+  })
+
+  it('다중 팀 멤버는 어느 소속 팀으로 걸러도 나온다(대표 팀만 보지 않는다)', async () => {
+    const multi: MemberRepositoryRecord = {
+      id: 'member-6', projectId: 'p1', name: '한겸직', teamCodes: ['MES', 'ERP'], accessRole: 'member',
+      title: null, hasAccount: true, createdAt: '2026-07-06T00:00:00Z',
+    }
+    const tool = createListMembersTool(memberRepository([...memberRows, multi]))
+    const byErp = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
+    expect(byErp.ok && byErp.result.records.map(record => record.name)).toEqual(['김ERP', '이ERP', '한겸직'])
+    const byMes = await tool.execute({ projectId: 'p1', team: 'MES' }, context)
+    expect(byMes.ok && byMes.result.records.map(record => record.name)).toEqual(['박MES', '한겸직'])
   })
 
   it('keeps a valid zero-member project as a successful empty result', async () => {
@@ -242,6 +254,21 @@ describe('get_member_workload tool', () => {
     expect(JSON.stringify(result)).not.toMatch(/email|file_path|signed/i)
   })
 
+  it('다중 팀 멤버는 대표 팀 한 곳에만 세어 인원 합계가 겹치지 않는다', async () => {
+    const multi: MemberRepositoryRecord = {
+      id: 'member-6', projectId: 'p1', name: '한겸직', teamCodes: ['MES', 'ERP'], accessRole: 'member',
+      title: null, hasAccount: true, createdAt: '2026-07-06T00:00:00Z',
+    }
+    const tool = createGetMemberWorkloadTool(memberRepository([...memberRows, multi]), wbsRepository(repositoryOk(wbsSnapshot)))
+    const result = await tool.execute({ projectId: 'p1' }, context)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.result.facts).toMatchObject({ memberCount: 6 })
+    const names = Object.fromEntries(result.result.records.map(r => [String(r.teamCode), r.memberNames]))
+    expect(names.MES).toEqual(['박MES', '한겸직'])
+    expect(names.ERP).toEqual(['김ERP', '이ERP'])
+  })
+
   it('filters aggregation to one team while keeping project-wide leaf totals', async () => {
     const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(wbsSnapshot)))
     const result = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
@@ -340,7 +367,7 @@ describe('team scoping (0071) — readTeam은 프로젝트 팀 목록으로 검�
 
   it('list_members는 프로젝트 전용 팀 코드(전역 목록엔 없는 DEV)를 통과시킨다', async () => {
     const rows: MemberRepositoryRecord[] = [{
-      id: 'dev-1', projectId: 'p-scoped', name: '김DEV', teamCode: 'DEV', accessRole: 'admin',
+      id: 'dev-1', projectId: 'p-scoped', name: '김DEV', teamCodes: ['DEV'], accessRole: 'admin',
       title: null, hasAccount: true, createdAt: '2026-08-01T00:00:00Z',
     }]
     const result = await createListMembersTool(memberRepository(rows)).execute(

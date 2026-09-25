@@ -15,12 +15,12 @@ describe('toRosterMember', () => {
   it('people 조인과 팀 배열(대표 팀 우선)을 편다', () => {
     const m = toRosterMember(row())
     expect(m.name).toBe('홍길동'); expect(m.kind).toBe('account'); expect(m.hasAccount).toBe(true)
-    expect(m.teams.map(t => t.code)).toEqual(['ERP', 'MES']); expect(m.teamCode).toBe('ERP')
+    expect(m.teams.map(t => t.code)).toEqual(['ERP', 'MES']); expect(m.teams[0].isPrimary).toBe(true)
     expect(m.accessRole).toBe('member')
   })
-  it('외부 인력은 userId null·kind external·teamCode null', () => {
+  it('외부 인력은 userId null·kind external·팀 없음', () => {
     const m = toRosterMember(row({ access_role: null, people: { display_name: '박외주', email: null, user_id: null, kind: 'external', active: true }, project_member_teams: [] }))
-    expect(m.kind).toBe('external'); expect(m.hasAccount).toBe(false); expect(m.teamCode).toBe(null); expect(m.accessRole).toBe(null)
+    expect(m.kind).toBe('external'); expect(m.hasAccount).toBe(false); expect(m.teams).toEqual([]); expect(m.accessRole).toBe(null)
   })
   it('mapRosterRows 는 가나다순', () => {
     const out = mapRosterRows([row({ id: 'b', people: { display_name: '나', email: null, user_id: null, kind: 'external', active: true } }), row({ id: 'a', people: { display_name: '가', email: null, user_id: null, kind: 'external', active: true } })])

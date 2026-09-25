@@ -9,7 +9,7 @@ import type {
   Meeting,
   ProjectMember,
 } from '@/lib/domain/types'
-import { makeRosterMember } from '../fixtures/rosterMember'
+import { makeRosterMember, type RosterMemberOverrides } from '../fixtures/rosterMember'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -93,9 +93,9 @@ function meeting(overrides: Partial<Meeting> = {}): Meeting {
   }
 }
 
-function member(overrides: Partial<ProjectMember> = {}): ProjectMember {
+function member(overrides: RosterMemberOverrides = {}): ProjectMember {
   return makeRosterMember({
-    id: 'mem-1', projectId: 'p1', name: '김이알피', email: null, teamCode: 'ERP',
+    id: 'mem-1', projectId: 'p1', name: '김이알피', email: null, team: 'ERP',
     title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
     ...overrides,
   })
@@ -203,8 +203,8 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('AttendanceView: ?from&to&team&type 초기 필터를 적용하고 해제할 수 있다', async () => {
     currentSearch = 'from=2026-06-01&to=2026-06-30&team=ERP&type=annual'
     const members = [
-      member({ id: 'mem-erp', name: '김이알피', teamCode: 'ERP' }),
-      member({ id: 'mem-pmo', name: '박피엠오', teamCode: 'PMO' }),
+      member({ id: 'mem-erp', name: '김이알피', team: 'ERP' }),
+      member({ id: 'mem-pmo', name: '박피엠오', team: 'PMO' }),
     ]
     const records = [
       attendance({ id: 'a1', memberId: 'mem-erp', date: '2026-06-10', type: 'annual' }),

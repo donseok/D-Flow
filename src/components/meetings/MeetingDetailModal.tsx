@@ -131,7 +131,7 @@ export function MeetingDetailModal({
               : (
                 <div className="flex flex-wrap gap-1.5">
                   {detail!.attendees.map(a => (
-                    <span key={a.id} className="chip bg-surface-2 text-ink">{a.name}{a.teamCode ? ` · ${a.teamCode}` : ''}</span>
+                    <span key={a.id} className="chip bg-surface-2 text-ink">{a.name}{a.teamCodes.length ? ` · ${a.teamCodes.join(', ')}` : ''}</span>
                   ))}
                 </div>
               )}

@@ -54,7 +54,7 @@ export interface MeetingDetailToolRecord {
   body: string
   createdByName: string | null
   updatedAt: string
-  attendees: Array<{ id: string; name: string; teamCode: TeamCode | null }>
+  attendees: Array<{ id: string; name: string; teamCodes: TeamCode[] }>
 }
 
 export interface MyMeetingOccurrenceToolRecord extends MeetingOccurrenceToolRecord {

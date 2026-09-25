@@ -95,8 +95,8 @@ describe('ProjectInviteManager', () => {
     choose(byLabel<HTMLSelectElement>('초대 권한'), 'admin')
     typeInto(byLabel<HTMLInputElement>('역할 라벨'), 'PL')
     await act(async () => { byLabel<HTMLButtonElement>('초대 팀').click() })
-    await act(async () => { container.querySelector<HTMLInputElement>('[data-team-check="MES"]')!.click() })
-    await act(async () => { container.querySelector<HTMLInputElement>('[data-team-check="ERP"]')!.click() })
+    await act(async () => { document.querySelector<HTMLInputElement>('[data-team-check="MES"]')!.click() })
+    await act(async () => { document.querySelector<HTMLInputElement>('[data-team-check="ERP"]')!.click() })
     await submit()
     expect(createProjectInvite).toHaveBeenCalledWith('p-1', {
       email: 'bob@example.com', accessRole: 'admin', roleLabel: 'PL', teamIds: ['t-mes', 't-erp'], days: 7,

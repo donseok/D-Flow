@@ -102,7 +102,7 @@ const DISPLAY_LABELS: Readonly<Record<string, string>> = {
   projectForecastEnd: '프로젝트 예상 완료일', projectDelayDays: '프로젝트 예상 지연',
   calculationDate: '계산 기준일', bodyTruncated: '본문 일부 표시',
   path: '경로', level: '단계', code: '코드', name: '작업명', title: '제목',
-  status: '상태', team: '담당팀', teamCode: '팀', owners: '담당', kind: '역할', biz: '업무 내용',
+  status: '상태', team: '담당팀', teamCode: '팀', teamCodes: '팀', owners: '담당', kind: '역할', biz: '업무 내용',
   deliverable: '산출물', plannedStart: '계획 시작', plannedEnd: '계획 완료',
   actualPct: '실적률', rolledActualPct: '종합 실적률', section: '구분', module: '모듈',
   thisContent: '금주 업무', thisIssue: '금주 이슈', nextContent: '차주 업무', nextIssue: '차주 이슈',

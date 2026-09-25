@@ -54,15 +54,15 @@ describe('strict Supabase member repository', () => {
       ok: true,
       data: [
         {
-          id: 'member-1', projectId: 'p1', name: '김ERP', teamCode: 'ERP', accessRole: 'admin',
+          id: 'member-1', projectId: 'p1', name: '김ERP', teamCodes: ['ERP'], accessRole: 'admin',
           title: 'ERP 리드', hasAccount: true, createdAt: '2026-07-01T00:00:00Z',
         },
         {
-          id: 'member-2', projectId: 'p1', name: '박PMO', teamCode: 'PMO', accessRole: 'member',
+          id: 'member-2', projectId: 'p1', name: '박PMO', teamCodes: ['PMO'], accessRole: 'member',
           title: null, hasAccount: false, createdAt: '2026-07-02T00:00:00Z',
         },
         {
-          id: 'member-3', projectId: 'p1', name: '신입', teamCode: null, accessRole: null,
+          id: 'member-3', projectId: 'p1', name: '신입', teamCodes: [], accessRole: null,
           title: null, hasAccount: false, createdAt: '2026-07-03T00:00:00Z',
         },
       ],

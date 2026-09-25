@@ -15,7 +15,7 @@ function member(over: Partial<RosterMember> = {}): RosterMember {
       { id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: true },
       { id: 't-mes', code: 'MES', name: 'MES', isPrimary: false },
     ],
-    teamCode: 'ERP', hasAccount: true,
+    hasAccount: true,
     ...over,
   }
 }

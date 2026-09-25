@@ -31,8 +31,6 @@ export interface RosterMember {
   accessRole: 'admin' | 'member' | null; roleLabel: string | null; title: string | null
   active: boolean; sortOrder: number; createdAt: string
   teams: RosterTeam[]              // 대표 팀이 첫 원소
-  /** @deprecated Phase B 에서 제거 — teams[0]?.code */
-  teamCode: string | null
   hasAccount: boolean
 }
 
@@ -81,7 +79,7 @@ export function toRosterMember(r: Record<string, unknown>): RosterMember {
     accessRole: (r.access_role as 'admin' | 'member' | null) ?? null,
     roleLabel: (r.role_label as string | null) ?? null, title: (r.title as string | null) ?? null,
     active: Boolean(r.active), sortOrder: Number(r.sort_order ?? 0), createdAt: r.created_at as string,
-    teams, teamCode: teams[0]?.code ?? null, hasAccount: pe.user_id != null,
+    teams, hasAccount: pe.user_id != null,
   }
 }
 

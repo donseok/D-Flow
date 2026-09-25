@@ -146,7 +146,7 @@ export const getMeetingDetail = cache(async (
     // id tiebreak — `.in()` 결과에는 기준 순서가 없어, 이름만으로 정렬하면 동명이인의 앞뒤가 요청마다 뒤집힌다.
     attendees = ((mem ?? []) as Row[]).map(toRosterMember)
       .sort((x, y) => compareKoreanName(x.name, y.name) || x.id.localeCompare(y.id))
-      .map(m => ({ id: m.id, name: m.name, email: m.email, teamCode: m.teamCode }))
+      .map(m => ({ id: m.id, name: m.name, email: m.email, teamCodes: m.teams.map(t => t.code) }))
   }
   return { meeting: mapMeeting(r as Row, attendeeIds), attendees }
 })

@@ -28,7 +28,7 @@ export interface AttendanceToolRecord {
   projectId: string
   memberId: string
   memberName: string
-  teamCode: TeamCode | null
+  teamCodes: TeamCode[]
   date: string
   type: AttendanceType
 }
@@ -73,7 +73,7 @@ export function createGetAttendanceTool(
         return repositoryScopeViolation()
       }
       const matched = repoResult.data.filter(record => {
-        if (team && record.teamCode !== team) return false
+        if (team && !record.teamCodes.includes(team)) return false
         if (memberId && record.memberId !== memberId) return false
         if (types && !types.includes(record.type)) return false
         return true

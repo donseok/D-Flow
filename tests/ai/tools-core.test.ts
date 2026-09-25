@@ -114,7 +114,7 @@ describe('core read tools', () => {
     const rogueAttendance: AttendanceRepository = {
       listRecords: vi.fn(async () => repositoryOk<AttendanceRepositoryRecord[]>([{
         id: 'a2', projectId: 'p2', memberId: 'member-2', memberName: '다른 사용자',
-        teamCode: 'ERP', date: '2026-07-20', type: 'work',
+        teamCodes: ['ERP'], date: '2026-07-20', type: 'work',
       }])),
     }
 
@@ -253,8 +253,8 @@ describe('core read tools', () => {
   it('returns attendance aggregates without ever exposing note fields', async () => {
     const repository: AttendanceRepository = {
       listRecords: vi.fn(async () => repositoryOk<AttendanceRepositoryRecord[]>([
-          { id: 'a1', projectId: 'p1', memberId: 'member-1', memberName: '김ERP', teamCode: 'ERP', date: '2026-07-20', type: 'annual' },
-          { id: 'a2', projectId: 'p1', memberId: 'member-2', memberName: '박PMO', teamCode: 'PMO', date: '2026-07-20', type: 'trip' },
+          { id: 'a1', projectId: 'p1', memberId: 'member-1', memberName: '김ERP', teamCodes: ['ERP'], date: '2026-07-20', type: 'annual' },
+          { id: 'a2', projectId: 'p1', memberId: 'member-2', memberName: '박PMO', teamCodes: ['PMO'], date: '2026-07-20', type: 'trip' },
       ])),
     }
     const result = await createGetAttendanceTool(repository).execute(

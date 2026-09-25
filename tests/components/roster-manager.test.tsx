@@ -29,13 +29,13 @@ function member(over: Partial<RosterMember> = {}): RosterMember {
     id: 'm-alice', projectId: 'p-1', personId: 'pe-alice',
     name: 'alice', email: 'alice@example.com', userId: 'u-alice', kind: 'account',
     accessRole: 'member', roleLabel: null, title: null, active: true, sortOrder: 0, createdAt: '2026-09-01T00:00:00Z',
-    teams: [{ id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: true }], teamCode: 'ERP', hasAccount: true,
+    teams: [{ id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: true }], hasAccount: true,
     ...over,
   }
 }
 const BOB = member({
   id: 'm-bob', personId: 'pe-bob', name: 'bob', email: null, userId: null, kind: 'external', hasAccount: false,
-  accessRole: null, teams: [], teamCode: null,
+  accessRole: null, teams: [],
 })
 const PROJECT_ADMIN = makeProjectActorView({ userId: 'u-pa', workspaceRole: 'member', projectRole: 'admin' })
 const WS_ADMIN = makeProjectActorView({ userId: 'u-wa', workspaceRole: 'admin' })

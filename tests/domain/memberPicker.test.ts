@@ -11,7 +11,7 @@ function member(id: string, name: string, teamCode: TeamCode | null): ProjectMem
     projectId: 'p1',
     name,
     email: null,
-    teamCode,
+    team: teamCode,
     title: null,
     roleLabel: null,
     hasAccount: true,
@@ -152,7 +152,7 @@ describe('buildMemberPickerSections', () => {
   it('active===false 인 사람은 기본 제외하지만, selectedIds 에 있으면 남긴다', () => {
     const activeMember = member('1', '활성김', 'MES')
     const inactiveMember = makeRosterMember({
-      id: '2', projectId: 'p1', name: '비활성박', email: null, teamCode: 'ERP', title: null,
+      id: '2', projectId: 'p1', name: '비활성박', email: null, team: 'ERP', title: null,
       roleLabel: null, hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z', active: false,
     })
     const members = [activeMember, inactiveMember]
@@ -168,7 +168,7 @@ describe('buildMemberPickerSections', () => {
 describe('memberOptionView', () => {
   it('외부 인력(kind===external)에는 배지를 싣고, 라벨은 이름 · 대표팀코드다', () => {
     const external = makeRosterMember({
-      id: '1', projectId: 'p1', name: '외부이', email: null, teamCode: 'MES', title: null,
+      id: '1', projectId: 'p1', name: '외부이', email: null, team: 'MES', title: null,
       roleLabel: null, hasAccount: false, createdAt: '2026-08-02T00:00:00.000Z',
     })
 
@@ -180,7 +180,7 @@ describe('memberOptionView', () => {
 
   it('팀이 없으면 라벨은 이름만이다', () => {
     const noTeam = makeRosterMember({
-      id: '1', projectId: 'p1', name: '무팀김', email: null, teamCode: null, title: null,
+      id: '1', projectId: 'p1', name: '무팀김', email: null, team: null, title: null,
       roleLabel: null, hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z',
     })
 
@@ -190,7 +190,7 @@ describe('memberOptionView', () => {
 
   it('비활성 선택값은 비활성 배지를 싣는다(외부 인력이면 함께)', () => {
     const inactiveExternal = makeRosterMember({
-      id: '1', projectId: 'p1', name: '비활성외부', email: null, teamCode: null, title: null,
+      id: '1', projectId: 'p1', name: '비활성외부', email: null, team: null, title: null,
       roleLabel: null, hasAccount: false, createdAt: '2026-08-02T00:00:00.000Z', active: false,
     })
 

@@ -189,7 +189,8 @@ export interface MeetingOccurrence {
 export interface MeetingAttendeeInfo {
   id: string                   // project_members.id
   name: string
-  teamCode: TeamCode | null
+  /** 명단 팀 code — 첫 원소가 대표 팀. 팀이 없으면 빈 배열. */
+  teamCodes: TeamCode[]
   email: string | null
 }
 

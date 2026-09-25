@@ -34,7 +34,7 @@ function member(
     projectId: 'project-1',
     name,
     email,
-    teamCode,
+    team: teamCode,
     title: null,
     roleLabel: null,
     hasAccount: true,

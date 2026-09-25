@@ -219,7 +219,7 @@ describe('strict Supabase repositories', () => {
       ok: true,
       data: [{
         id: 'a1', projectId: 'p1', memberId: 'member-p1', memberName: '프로젝트 사용자',
-        teamCode: 'ERP', date: '2026-07-20', type: 'remote',
+        teamCodes: ['ERP'], date: '2026-07-20', type: 'remote',
       }],
     })
     expect(String((attendance.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('project_members')

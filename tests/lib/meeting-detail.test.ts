@@ -20,7 +20,7 @@ const person = (id: string, name: string, email: string | null, teams: unknown[]
 })
 
 describe('getMeetingDetail — 참석자는 명단 정본(ROSTER_SELECT)으로 읽어 편다', () => {
-  it('이름·이메일·대표 팀을 people·팀 배열에서 펴고, 가나다순(동명이인은 id 순)으로 고정한다', async () => {
+  it('이름·이메일·팀(대표 팀 먼저)을 people·팀 배열에서 펴고, 가나다순(동명이인은 id 순)으로 고정한다', async () => {
     const selects: Record<string, string> = {}
     const inArgs: unknown[][] = []
     const sb = {
@@ -52,9 +52,9 @@ describe('getMeetingDetail — 참석자는 명단 정본(ROSTER_SELECT)으로 �
     expect(selects.project_members).toBe(ROSTER_SELECT)
     expect(inArgs[0]).toEqual(['id', ['b', 'a2', 'a1']])
     expect(out?.attendees).toEqual([
-      { id: 'a1', name: '가', email: 'x1@example.com', teamCode: 'ERP' },
-      { id: 'a2', name: '가', email: 'x2@example.com', teamCode: null },
-      { id: 'b', name: '나', email: null, teamCode: null },
+      { id: 'a1', name: '가', email: 'x1@example.com', teamCodes: ['ERP', 'MES'] },
+      { id: 'a2', name: '가', email: 'x2@example.com', teamCodes: [] },
+      { id: 'b', name: '나', email: null, teamCodes: [] },
     ])
   })
 })

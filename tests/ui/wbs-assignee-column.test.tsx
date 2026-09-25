@@ -25,7 +25,7 @@ function item(over: Partial<ComputedItem>): ComputedItem {
     owners: [], isOwnerSplit: false, plannedPct: 0, rolledActualPct: 0, achievement: null, status: 'not_started', children: [], depth: 0, ...over }
 }
 function member(over: Partial<ProjectMember>): ProjectMember {
-  return makeRosterMember({ id: 'm1', projectId: 'p1', name: '홍길동', email: null, teamCode: null,
+  return makeRosterMember({ id: 'm1', projectId: 'p1', name: '홍길동', email: null, team: null,
     title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01T00:00:00Z', ...over })
 }
 

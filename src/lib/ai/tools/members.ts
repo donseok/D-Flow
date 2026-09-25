@@ -98,7 +98,7 @@ export function createListMembersTool(repository: MemberRepository): ReadOnlyBot
       }
 
       const matched = repoResult.data.filter(member => {
-        if (team && member.teamCode !== team) return false
+        if (team && !member.teamCodes.includes(team)) return false
         if (role && member.accessRole !== role) return false
         return true
       })
@@ -202,7 +202,8 @@ export function createGetMemberWorkloadTool(
         return created
       }
       for (const member of membersResult.data) {
-        bucketOf(member.teamCode).memberNames.push(member.name)
+        // 대표 팀 한 곳에만 센다 — 작업도 대표 팀(primaryTeamOf)으로 묶고, 인원 합계(memberCount)가 겹치지 않게.
+        bucketOf(member.teamCodes[0] ?? null).memberNames.push(member.name)
       }
       for (const leaf of leaves) {
         const bucket = bucketOf(primaryTeamOf(leaf))

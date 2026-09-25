@@ -150,7 +150,7 @@ export function createSupabaseMeetingRepository(client: SupabaseServerClient): M
       const attendees: SafeMeetingAttendee[] = ((attendeesResult.data ?? []) as Row[])
         .map(toRosterMember)
         .sort((x, y) => compareKoreanName(x.name, y.name) || x.id.localeCompare(y.id))
-        .map(m => ({ id: m.id, name: m.name, teamCode: m.teamCode }))
+        .map(m => ({ id: m.id, name: m.name, teamCodes: m.teams.map(t => t.code) }))
       const snapshot: MeetingDetailSnapshot = {
         meeting,
         attendees,

@@ -3,7 +3,7 @@ import type { MeetingAttendeeInfo } from '@/lib/domain/types'
 import { classifyRecipients, isValidEmail, parseExtraEmails } from '@/lib/mail/recipients'
 
 function att(name: string, email: string | null): MeetingAttendeeInfo {
-  return { id: `id-${name}`, name, teamCode: null, email }
+  return { id: `id-${name}`, name, teamCodes: [], email }
 }
 
 describe('classifyRecipients', () => {
