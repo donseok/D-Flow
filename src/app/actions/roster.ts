@@ -143,7 +143,7 @@ export async function listRoster(
 }
 
 // ── @deprecated 옛 화면(MembersBoard·ProjectRolesManager·AccountsManager) 어댑터 ─────────────────────────
-// Phase B(Task 12)의 RosterManager 가 대체하면서 지운다. 전부 위 RPC 경로로만 쓴다 — 옛 표(memberships·project_roles)는 없다.
+// Phase B(Task 12)의 RosterManager 가 대체하면서 지운다. 전부 위 RPC 경로로만 쓴다 — 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 
 /** @deprecated Phase B 에서 제거 — RosterInput 을 쓴다. */
 export interface MemberInput {

@@ -1,6 +1,6 @@
 'use server'
 // 계정 관리(슈퍼유저 전용, 2026-08-20 결정). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
-// 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member 로만 쓴다). 옛 memberships·project_roles 는 없다.
+// 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 import { revalidatePath } from 'next/cache'
 import { requireSuperuser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'

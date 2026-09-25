@@ -1,9 +1,9 @@
 // 계정 관련 순수 함수 — 클라이언트/서버 공용, 부수효과 없음.
-// 계정 전역 팀(memberships.team_id)은 0003 에서 폐지됐다 — 팀은 프로젝트 명단 행의 속성이다.
+// 계정 전역 팀은 0003 에서 폐지됐다 — 팀은 프로젝트 명단 행의 속성이다.
 import { isValidEmail } from '@/lib/domain/validate'
 
 /** 프로젝트 권한 화이트리스트. 'viewer' 는 명단 행 access_role 을 null 로 둔다는 뜻(조회 전용).
- *  옛 memberships.role 값(pmo_admin·team_editor)은 받지 않는다. */
+ *  옛 전역 권한 값(pmo_admin·team_editor)은 받지 않는다. */
 export const ACCOUNT_ROLES = ['admin', 'member', 'viewer'] as const
 export type AccountRole = (typeof ACCOUNT_ROLES)[number]
 
