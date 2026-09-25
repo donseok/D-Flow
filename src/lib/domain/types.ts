@@ -243,7 +243,7 @@ export interface MinuteFolder {
   name: string
   parentId: string | null
   sort: number
-  createdBy: string | null           // null = 시드 폴더(pmo_admin 만 관리)
+  createdBy: string | null           // null = 시드 폴더(관리자만 관리)
   projectId: string | null           // 0076 — 귀속 프로젝트. null = 미지정
 }
 
@@ -254,7 +254,7 @@ export interface ExplorerLeaf {
   teamCode: TeamCode
   title: string
   fileCount: number
-  createdBy: string | null           // 이동 버튼 노출 판정(작성자 or pmo_admin)
+  createdBy: string | null           // 이동 버튼 노출 판정(작성자 or 관리자)
   createdByName: string | null
   bodyPreview: string
   meetingCategory: MeetingCategory | null

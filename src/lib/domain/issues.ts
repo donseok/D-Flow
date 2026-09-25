@@ -165,8 +165,9 @@ export function filterIssues(
     && (!f.mineOnly || i.assigneeMemberIds.some(id => f.myMemberIds.has(id))))
 }
 
-/** 전체 편집(제목·내용·심각도·기한·담당자)·삭제 게이트 — 작성자 또는 pmo_admin. UI 노출용(서버 액션이 재검증). */
-export function canEditIssue(issue: Pick<Issue, 'createdBy'>, userId: string | null, role: string | null): boolean {
-  if (role === 'pmo_admin') return true
+/** 전체 편집(제목·내용·심각도·기한·담당자)·삭제 게이트 — 작성자 또는 프로젝트 관리자 이상(canManage).
+ *  UI 노출용(서버 액션이 재검증). */
+export function canEditIssue(issue: Pick<Issue, 'createdBy'>, userId: string | null, canManage: boolean): boolean {
+  if (canManage) return true
   return userId !== null && issue.createdBy !== null && issue.createdBy === userId
 }

@@ -56,14 +56,15 @@ function initState(initial: Meeting | null, todayIso: string): FormState {
 }
 
 export function MeetingFormModal({
-  open, projectId, members, initial, todayIso, role, onClose, onSaved,
+  open, projectId, members, initial, todayIso, canManage, onClose, onSaved,
 }: {
   open: boolean
   projectId: string
   members: ProjectMember[]
   initial: Meeting | null
   todayIso: string
-  role: string | null
+  /** 이 프로젝트 관리자 이상(isProjectAdmin) — 공지 등록 체크박스 노출. */
+  canManage: boolean
   onClose: () => void
   onSaved: () => void
 }) {
@@ -104,8 +105,8 @@ export function MeetingFormModal({
   const extraList = parseExtraEmails(form.extraEmails)
   const canNotify = form.attendeeIds.length > 0 || extraList.length > 0
   const notifyKind: InviteKind = initial ? 'updated' : 'created'
-  // 공지 등록은 생성 전용 + pmo_admin 전용(상세 모달 버튼·서버 액션·RLS 와 같은 삼중 게이트의 UI 층).
-  const canAnnounce = !initial && role === 'pmo_admin'
+  // 공지 등록은 생성 전용 + 관리자 이상 전용(상세 모달 버튼·서버 액션·RLS 와 같은 삼중 게이트의 UI 층).
+  const canAnnounce = !initial && canManage
 
   /**
    * 발송 결과를 어디에 표시할지 고른다.
@@ -352,7 +353,7 @@ export function MeetingFormModal({
             )}
           </div>
 
-          {/* 생성 + pmo_admin 전용 — 저장 직후 첫 회차로 공지 1건을 만든다(상세 모달 '공지로 등록' 버튼과 같은 액션).
+          {/* 생성 + 관리자 이상 전용 — 저장 직후 첫 회차로 공지 1건을 만든다(상세 모달 '공지로 등록' 버튼과 같은 액션).
               메일 블록 밖에 둔다: 메일 수신자 설정이 아니라 별개의 부가 동작이다. */}
           {canAnnounce && (
             <div>

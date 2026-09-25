@@ -33,7 +33,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 }
 
 export function MinutesView({
-  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, role, defaultTeam,
+  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, canManage, canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
   adminProjectIds = [], isSuperuser = false,
 }: {
@@ -44,9 +44,11 @@ export function MinutesView({
   initialView: ViewKey
   projects: { id: string; name: string }[]
   currentUserId: string | null
-  /** 전역 shim — 이 화면은 프로젝트가 섞인 목록이라 **폴더 조작(전역)과 업로드 자격**에만 쓴다.
+  /** 어느 프로젝트든 관리자 이상(isAnyProjectAdmin) — 이 화면은 프로젝트가 섞인 목록이라 **폴더 조작(전역)**에만 쓴다.
    *  회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
-  role: string | null
+  canManage: boolean
+  /** 어느 프로젝트든 멤버 이상(hasAnyProjectRole) — 업로드 자격. */
+  canEdit: boolean
   /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
   adminProjectIds?: string[]
   /** 슈퍼유저 — 프로젝트 미지정 회의록은 작성자 본인 또는 슈퍼유저만 조작 가능. */
@@ -127,7 +129,7 @@ export function MinutesView({
     }
   }
 
-  const canUpload = role !== null
+  const canUpload = canEdit
   const teamOrNull = team === 'ALL' ? null : team
   const isSearch = query.trim().length > 0
   const isTreeExplorer = view === 'tree' && !isSearch
@@ -299,7 +301,7 @@ export function MinutesView({
               <Bot className="h-4 w-4" />{t('min.chat.archive.title')}
             </button>
             {/* 조회 전용에게는 숨긴다 — 서버 createMinute 의 최소 자격이 '어느 프로젝트든 역할 보유'
-                (hasAnyProjectRole)이고, 전역 shim role!==null 이 그와 같은 의미다(스펙 §6.3). */}
+                (hasAnyProjectRole)이고, canEdit 가 그 판정이다(스펙 §6.3). */}
             {canUpload && (
               <button onClick={() => setUploadOpen(true)} className="btn btn-primary">
                 <Plus className="h-4 w-4" />{t('min.upload.short')}
@@ -390,7 +392,7 @@ export function MinutesView({
               onToggleFavorite={id => void toggleFav(id)}
               onRetryFavorites={() => void loadFavorites()}
               layout={exLayout}
-              currentUserId={currentUserId} isFolderAdmin={role === 'pmo_admin'}
+              currentUserId={currentUserId} isFolderAdmin={canManage}
               adminProjectIds={adminProjectIds} isSuperuser={isSuperuser} teamCodes={teamCodes}
               projects={projects} myProjectIds={myProjectIds}
               onChanged={() => { void loadTree(); router.refresh() }}

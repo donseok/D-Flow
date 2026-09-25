@@ -50,7 +50,7 @@ function gridRange(year: number, month0: number): [string, string] {
 }
 
 export function MeetingsView({
-  projectId, meetings, exceptions, members, todayIso, currentUserId, role,
+  projectId, meetings, exceptions, members, todayIso, currentUserId, canManage, canEdit,
 }: {
   projectId: string
   meetings: Meeting[]
@@ -58,16 +58,16 @@ export function MeetingsView({
   members: ProjectMember[]
   todayIso: string
   currentUserId: string | null
-  role: string | null
+  /** 이 프로젝트 관리자 이상(isProjectAdmin) — 남의 회의 수정·취소, 공지 등록. */
+  canManage: boolean
+  /** 이 프로젝트 멤버 이상(isProjectMember) — 회의 등록. */
+  canEdit: boolean
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
   const searchParams = useSearchParams()
-  // 이 화면은 프로젝트 하나에 고정돼 있고 role 도 그 프로젝트 스코프 shim
-  // (effectiveLegacyRole(actor, projectId))이라 그대로 판정에 쓸 수 있다 — 항목마다 프로젝트가
-  // 섞이는 전역 목록(내 회의)과 다르다.
-  const isAdmin = role === 'pmo_admin'
-  const canWrite = role !== null
+  // 이 화면은 프로젝트 하나에 고정돼 있어 두 불리언이 곧 그 프로젝트의 판정이다 — 항목마다 프로젝트가
+  // 섞이는 전역 목록(내 회의)은 adminProjectIds 로 항목별 판정한다.
   // 챗봇 딥링크는 최초 마운트에서 한 번만 소비한다 — 이후 내비게이션은 화면 상태가 소유.
   const [initialFocus] = useState(() => resolveFocusOccurrence(
     meetings, exceptions, searchParams.get('focus'), searchParams.get('date'),
@@ -77,7 +77,7 @@ export function MeetingsView({
   const [initialEdit] = useState<Meeting | null>(() => {
     if (searchParams.get('edit') !== '1' || !initialFocus) return null
     const m = meetings.find(x => x.id === initialFocus.seriesId)
-    return m && canEditMeeting(m, currentUserId, isAdmin) ? m : null
+    return m && canEditMeeting(m, currentUserId, canManage) ? m : null
   })
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initialFocus ? Number(initialFocus.occurrenceDate.slice(0, 4)) : initY)
@@ -132,8 +132,8 @@ export function MeetingsView({
             tabs={[{ key: 'calendar', label: t('meet.view.calendar'), icon: CalendarDays }, { key: 'list', label: t('meet.view.list'), icon: List }]}
             value={view} onChange={setView} size="sm"
           />
-          {/* 조회 전용(role=null)에게는 숨긴다 — 서버 createMeeting 은 requireProjectMember 다(스펙 §6.3). */}
-          {canWrite && (
+          {/* 조회 전용에게는 숨긴다 — 서버 createMeeting 은 requireProjectMember 다(스펙 §6.3). */}
+          {canEdit && (
             <button onClick={() => { setEditing(null); setFormOpen(true) }} className="btn btn-primary"><Plus className="h-4 w-4" />{t('meet.addMeeting')}</button>
           )}
         </div>
@@ -178,9 +178,9 @@ export function MeetingsView({
       )}
 
       <MeetingFormModal open={formOpen} projectId={projectId} members={members} initial={editing} todayIso={todayIso}
-        role={role} onClose={() => { setFormOpen(false); setEditing(null) }} onSaved={onSaved} />
+        canManage={canManage} onClose={() => { setFormOpen(false); setEditing(null) }} onSaved={onSaved} />
       <MeetingDetailModal open={!!detailOcc} occurrence={detailOcc}
-        currentUserId={currentUserId} isAdmin={isAdmin}
+        currentUserId={currentUserId} isAdmin={canManage}
         onClose={() => setDetailOcc(null)} onEditSeries={openEditFromDetail} onChanged={() => router.refresh()} />
     </div>
   )

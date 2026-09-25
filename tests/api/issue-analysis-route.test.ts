@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
+import { makeMemberActor } from '../fixtures/actor'
 import {
   buildIssueAnalysisInputSnapshot,
   buildIssueAnalysisReport,
@@ -89,9 +90,16 @@ function report() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // 작성 팀 = 이 프로젝트 명단의 대표 팀(첫 원소). 다른 프로젝트의 팀은 섞이지 않는다.
   mocks.requireProjectMember.mockResolvedValue({
     ok: true,
-    actor: { userId: 'user-1', teamCode: 'PI' },
+    actor: makeMemberActor('project-1', ['PI', 'ERP'], {
+      userId: 'user-1',
+      rosterTeams: new Map([
+        ['project-1', { teamIds: ['t-pi', 't-erp'], teamCodes: ['PI', 'ERP'] }],
+        ['project-2', { teamIds: ['t-mes'], teamCodes: ['MES'] }],
+      ]),
+    }),
   })
   mocks.getDisplayName.mockResolvedValue('홍길동')
   mocks.loadSavedIssueAnalysisRun.mockResolvedValue({
@@ -148,6 +156,7 @@ describe('GET /api/issue-analysis', () => {
     expect(mocks.renderIssueAnalysisPpt).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
       issueCount: 1,
+      meta: expect.objectContaining({ authorTeam: 'PI', authorName: '홍길동' }),
       slides: expect.arrayContaining([
         expect.objectContaining({ sourceSlide: 8 }),
         expect.objectContaining({ sourceSlide: 10 }),
@@ -157,5 +166,18 @@ describe('GET /api/issue-analysis', () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(
       new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
     )
+  })
+
+  it('이 프로젝트 명단 팀이 없으면 작성 팀은 빈 값 — 다른 프로젝트 팀을 빌려오지 않는다', async () => {
+    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
+    mocks.requireProjectMember.mockResolvedValue({
+      ok: true,
+      actor: makeMemberActor('project-1', [], { rosterTeams: new Map([['project-2', { teamIds: ['t-mes'], teamCodes: ['MES'] }]]) }),
+    })
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(200)
+    expect(mocks.renderIssueAnalysisPpt).toHaveBeenCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ authorTeam: '' }),
+    }))
   })
 })

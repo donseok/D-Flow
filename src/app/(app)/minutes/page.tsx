@@ -4,7 +4,8 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
-import { adminProjectIds, effectiveLegacyRole } from '@/lib/domain/authz'
+import { adminProjectIds, hasAnyProjectRole, isAnyProjectAdmin } from '@/lib/domain/authz'
+import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getUiPrefs } from '@/app/actions/preferences'
 import { listProjects } from '@/app/actions/project'
@@ -65,8 +66,9 @@ export default async function MinutesPage() {
       <MinutesView initialMinutes={minutes} initialTree={user ? tree : null} todayIso={today}
         initialFavorites={user ? favs : null}
         explorerLayout={prefs.minutesExplorerLayout === 'list' ? 'list' : 'grid'}
-        initialView={initialView} projects={projects} defaultTeam={m?.teamCode ?? null}
-        currentUserId={user?.id ?? null} role={effectiveLegacyRole(m)} myProjectIds={myProjectIds}
+        initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m)[0] ?? null}
+        currentUserId={user?.id ?? null} canManage={isAnyProjectAdmin(m)} canEdit={hasAnyProjectRole(m)}
+        myProjectIds={myProjectIds}
         adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
     </ProjectPageShell>
   )

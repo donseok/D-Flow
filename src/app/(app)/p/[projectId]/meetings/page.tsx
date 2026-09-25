@@ -6,7 +6,7 @@ import { getProjectMembers } from '@/lib/data/members'
 import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
-import { effectiveLegacyRole } from '@/lib/domain/authz'
+import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
@@ -56,7 +56,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
       />}
     >
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
-        todayIso={today} currentUserId={user?.id ?? null} role={effectiveLegacyRole(m, projectId)} />
+        todayIso={today} currentUserId={user?.id ?? null}
+        canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} />
     </ProjectPageShell>
   )
 }

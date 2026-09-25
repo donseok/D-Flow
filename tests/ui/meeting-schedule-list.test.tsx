@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MeetingOccurrence } from '@/lib/domain/types'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }))
-vi.mock('@/components/meetings/MeetingDetailModal', () => ({ MeetingDetailModal: () => null }))
+const modal = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }))
+vi.mock('@/components/meetings/MeetingDetailModal', () => ({
+  MeetingDetailModal: (p: Record<string, unknown>) => { modal.props.push(p); return null },
+}))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
   return { useLocale: () => ({ locale: 'ko', setLocale: vi.fn(), t: (k: never) => t('ko', k) }) }
@@ -47,5 +50,18 @@ describe('MeetingScheduleList — 참석자·메모 열', () => {
   it('extras 에 없는 시리즈도 터지지 않고 빈 상태로 그린다', () => {
     const html = renderToStaticMarkup(<MeetingScheduleList rows={[occ('m3')]} today="2026-08-28" extras={{}} />)
     expect(textOf(html)).toContain('회의 m3')
+  })
+})
+
+describe('MeetingScheduleList — 상세 모달 관리자 게이트', () => {
+  it('canManage 가 상세 모달의 관리자 판정(isAdmin)으로 그대로 내려간다', () => {
+    modal.props.length = 0
+    renderToStaticMarkup(<MeetingScheduleList rows={[occ('m4')]} today="2026-08-28" extras={{}} canManage />)
+    expect(modal.props.at(-1)).toMatchObject({ isAdmin: true })
+  })
+  it('기본값은 false — 조회 전용·멤버에게 남의 회의 수정을 열지 않는다(fail-closed)', () => {
+    modal.props.length = 0
+    renderToStaticMarkup(<MeetingScheduleList rows={[occ('m5')]} today="2026-08-28" extras={{}} />)
+    expect(modal.props.at(-1)).toMatchObject({ isAdmin: false })
   })
 })

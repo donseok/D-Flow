@@ -182,7 +182,7 @@ export function IssueDetailModal({
   issue: Issue | null
   members: ProjectMember[]
   memberName: (id: string | null) => string | null
-  /** 이슈 전체 편집·삭제 게이트(작성자 또는 pmo_admin). 이력 등록 권한과는 다른 축이다. */
+  /** 이슈 전체 편집·삭제 게이트(작성자 또는 프로젝트 관리자 이상). 이력 등록 권한과는 다른 축이다. */
   canEdit: boolean
   /** 프로젝트 멤버 이상 — 이력 등록 어포던스 기준. canEdit 을 재사용하면 남이 만든 이슈에
    *  일반 멤버가 경과를 못 쓴다(컴파일 에러가 없어 리뷰 전까지 드러나지 않는다). */

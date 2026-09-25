@@ -127,16 +127,17 @@ describe('filterIssues — 상태·심각도·Mega·내 담당', () => {
 })
 
 describe('canEditIssue — 전체 편집/삭제 게이트(UI 노출용)', () => {
-  it('pmo_admin 은 항상 가능', () => {
-    expect(canEditIssue(issue('a', { createdBy: 'other' }), 'me', 'pmo_admin')).toBe(true)
+  it('관리자 이상(canManage)은 항상 가능 — 작성자 미상이어도', () => {
+    expect(canEditIssue(issue('a', { createdBy: 'other' }), 'me', true)).toBe(true)
+    expect(canEditIssue(issue('a', { createdBy: null }), 'me', true)).toBe(true)
   })
   it('작성자 본인 가능, 타인 불가', () => {
-    expect(canEditIssue(issue('a', { createdBy: 'me' }), 'me', 'team_editor')).toBe(true)
-    expect(canEditIssue(issue('a', { createdBy: 'other' }), 'me', 'team_editor')).toBe(false)
+    expect(canEditIssue(issue('a', { createdBy: 'me' }), 'me', false)).toBe(true)
+    expect(canEditIssue(issue('a', { createdBy: 'other' }), 'me', false)).toBe(false)
   })
   it('비로그인·작성자 미상은 불가', () => {
-    expect(canEditIssue(issue('a', { createdBy: 'me' }), null, null)).toBe(false)
-    expect(canEditIssue(issue('a', { createdBy: null }), 'me', 'team_editor')).toBe(false)
+    expect(canEditIssue(issue('a', { createdBy: 'me' }), null, false)).toBe(false)
+    expect(canEditIssue(issue('a', { createdBy: null }), 'me', false)).toBe(false)
   })
 })
 

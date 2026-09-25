@@ -193,14 +193,18 @@ describe('dueSignal', () => {
 })
 
 describe('lensCards', () => {
+  const leaves = [
+    node('a', { owners: [{ team: 'PMO', kind: 'primary' }] }),
+    node('b', { owners: [{ team: 'ERP', kind: 'support' }] }),
+    node('c', { owners: [{ team: 'MES', kind: 'primary' }, { team: 'ERP', kind: 'support' }] }),
+  ]
   it("myTeam은 내 팀이 담당(primary/support)인 리프만, all은 전체", () => {
-    const leaves = [
-      node('a', { owners: [{ team: 'PMO', kind: 'primary' }] }),
-      node('b', { owners: [{ team: 'ERP', kind: 'support' }] }),
-    ]
-    expect(lensCards(leaves, 'myTeam', 'ERP').map(c => c.id)).toEqual(['b'])
-    expect(lensCards(leaves, 'all', 'ERP').map(c => c.id)).toEqual(['a', 'b'])
-    expect(lensCards(leaves, 'myTeam', null).map(c => c.id)).toEqual(['a', 'b']) // 팀 미상이면 전체
+    expect(lensCards(leaves, 'myTeam', ['ERP']).map(c => c.id)).toEqual(['b', 'c'])
+    expect(lensCards(leaves, 'all', ['ERP']).map(c => c.id)).toEqual(['a', 'b', 'c'])
+    expect(lensCards(leaves, 'myTeam', []).map(c => c.id)).toEqual(['a', 'b', 'c']) // 팀 미상이면 전체
+  })
+  it('여러 팀 소속이면 담당 팀과 내 팀의 교집합이 있는 카드 전부(한 사람 여러 팀 — 0003)', () => {
+    expect(lensCards(leaves, 'myTeam', ['PMO', 'MES']).map(c => c.id)).toEqual(['a', 'c'])
   })
 })
 

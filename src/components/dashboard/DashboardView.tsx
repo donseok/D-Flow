@@ -42,7 +42,7 @@ export async function DashboardView({
   meetingExceptions = [],
   issues = [],
   currentUserId = null,
-  role = null,
+  canManage = false,
   canGenerateBrief = false,
   milestoneKeywords,
 }: {
@@ -60,9 +60,10 @@ export async function DashboardView({
   meetingExceptions?: MeetingException[]
   /** 이슈 현황 카드용 슬라이스(page.tsx 의 getIssuesForDashboard). 실패 시 [] — 카드는 빈 상태를 정직하게 그린다. */
   issues?: DashboardIssue[]
-  /** 회의 카드에서 작성자 본인/pmo_admin 에게 수정·삭제를 열기 위한 식별자. */
+  /** 회의 카드에서 작성자 본인/프로젝트 관리자 이상에게 수정·삭제를 열기 위한 식별자. */
   currentUserId?: string | null
-  role?: string | null
+  /** 이 프로젝트 관리자 이상(isProjectAdmin) — 회의 상세에서 남의 회의 수정·취소. 기본 false = fail-closed. */
+  canManage?: boolean
   /** AI 브리핑(PPT 리포트 ai=1) 생성 권한 = isProjectAdmin(actor, projectId). ensureProjectBriefAction 의
    *  requireProjectAdmin 과 같은 판정. 기본 false = fail-closed. */
   canGenerateBrief?: boolean
@@ -118,7 +119,7 @@ export async function DashboardView({
           맥락이 끊긴다는 사용자 피드백(2026-08-28)으로 이슈 섹션 위로 분리. 실행 큐가 오래 전폭이었듯
           날짜 셀 + 제목 행 목록은 전폭에 어울린다. 회의는 실제 달력이므로 실제 오늘 기준(base_date 금지). */}
       <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
-        currentUserId={currentUserId} role={role} />
+        currentUserId={currentUserId} canManage={canManage} />
 
       {/* E. 이슈 — 좌: 이슈 현황(KPI·상태 분포·Mega별), 우: 등록·해결 추이(차트 + 최근 6주 표).
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).

@@ -20,6 +20,7 @@ vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: 
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: toastFn }) }))
 
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
+import { makeProjectActorView } from '../fixtures/actor'
 
 function n(id: string, over: Partial<ComputedItem> = {}, children: ComputedItem[] = []): ComputedItem {
   return {
@@ -30,7 +31,7 @@ function n(id: string, over: Partial<ComputedItem> = {}, children: ComputedItem[
     plannedPct: 0, rolledActualPct: over.rolledActualPct ?? 0, achievement: null, status: over.status ?? 'in_progress', children, depth: 0,
   }
 }
-const ADMIN = { userId: 'u-admin', teamCode: 'PMO', teamId: 't-pmo', isSuperuser: false, projectRole: 'admin' as const, rosterTeamId: null, rosterTeamCode: null }
+const ADMIN = makeProjectActorView({ userId: 'u-admin', projectRole: 'admin', memberId: 'm-admin', rosterTeamIds: ['t-pmo'], rosterTeamCodes: ['PMO'], primaryTeamCode: 'PMO' })
 
 function tree(): ComputedItem[] {
   return [n('Phase', {}, [
@@ -92,18 +93,58 @@ describe('KanbanBoard — 진행 모드 기본', () => {
     await act(async () => { resolvePending({ ok: true }) })
   })
 
-  it('내 팀 렌즈는 내 팀 담당 카드만 남긴다(team_editor)', async () => {
+  it('내 팀 렌즈는 내 팀 담당 카드만 남긴다(명단 member)', async () => {
     const items = [n('P', {}, [
       n('mine', { rolledActualPct: 50, owners: [{ team: 'ERP', kind: 'primary' }] }),
       n('other', { rolledActualPct: 50, owners: [{ team: 'PMO', kind: 'primary' }] }),
     ])]
-    const EDITOR = { userId: 'u-editor', teamCode: 'ERP', teamId: 't-erp', isSuperuser: false, projectRole: 'member' as const, rosterTeamId: null, rosterTeamCode: null }
+    const EDITOR = makeProjectActorView({ userId: 'u-editor', projectRole: 'member', memberId: 'm-editor', rosterTeamIds: ['t-erp'], rosterTeamCodes: ['ERP'], primaryTeamCode: 'ERP' })
     await act(async () => root.render(
       <KanbanBoard projectId="p1" items={items} actorView={EDITOR} today="2026-07-25" />,
     ))
     // 기본 렌즈=myTeam(ERP) → 'mine'만, 'other' 없음
     expect(container.textContent).toContain('mine')
     expect(container.textContent).not.toContain('other')
+  })
+
+  it('여러 팀 소속이면 내 팀 렌즈가 그 팀들 담당 카드를 전부 보인다(대표 팀만이 아니다)', async () => {
+    const items = [n('P', {}, [
+      n('erp', { rolledActualPct: 50, owners: [{ team: 'ERP', kind: 'primary' }] }),
+      n('mes', { rolledActualPct: 50, owners: [{ team: 'MES', kind: 'support' }] }),
+      n('pmo', { rolledActualPct: 50, owners: [{ team: 'PMO', kind: 'primary' }] }),
+    ])]
+    const MULTI = makeProjectActorView({ projectRole: 'member', rosterTeamIds: ['t-erp', 't-mes'], rosterTeamCodes: ['ERP', 'MES'], primaryTeamCode: 'ERP' })
+    await act(async () => root.render(
+      <KanbanBoard projectId="p1" items={items} actorView={MULTI} today="2026-07-25" />,
+    ))
+    expect(container.textContent).toContain('erp')
+    expect(container.textContent).toContain('mes')
+    expect(container.textContent).not.toContain('pmo')
+  })
+
+  it('명단 팀이 없는 멤버는 전체 렌즈로 시작한다', async () => {
+    const items = [n('P', {}, [
+      n('erp', { rolledActualPct: 50, owners: [{ team: 'ERP', kind: 'primary' }] }),
+      n('pmo', { rolledActualPct: 50, owners: [{ team: 'PMO', kind: 'primary' }] }),
+    ])]
+    const NO_TEAM = makeProjectActorView({ projectRole: 'member' })
+    await act(async () => root.render(
+      <KanbanBoard projectId="p1" items={items} actorView={NO_TEAM} today="2026-07-25" />,
+    ))
+    expect(container.textContent).toContain('erp')
+    expect(container.textContent).toContain('pmo')
+  })
+
+  it('관리자는 팀이 있어도 전체 렌즈로 시작한다', async () => {
+    const items = [n('P', {}, [
+      n('erp', { rolledActualPct: 50, owners: [{ team: 'ERP', kind: 'primary' }] }),
+      n('pmo', { rolledActualPct: 50, owners: [{ team: 'PMO', kind: 'primary' }] }),
+    ])]
+    await act(async () => root.render(
+      <KanbanBoard projectId="p1" items={items} actorView={ADMIN} today="2026-07-25" />,
+    ))
+    expect(container.textContent).toContain('erp')
+    expect(container.textContent).toContain('pmo')
   })
 
   it('최초 방문(로컬 플래그 없음·편집 가능)엔 코치마크가 뜨고, 닫으면 플래그가 저장된다', async () => {

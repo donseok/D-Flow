@@ -28,14 +28,15 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, currentUserId, role, isProjectAdmin, myMemberIds, today,
+  issues, members, projectId, currentUserId, canEdit, isProjectAdmin, myMemberIds, today,
 }: {
   issues: Issue[]
   members: ProjectMember[]
   projectId: string
   currentUserId: string | null
-  role: string | null
-  /** 프로젝트 관리자 이상인가. role 은 legacy shim 이라 관리자 판정에 쓰지 않는다. */
+  /** 이 프로젝트 멤버 이상(isProjectMember) — 등록 어포던스. 조회 전용은 false. */
+  canEdit: boolean
+  /** 프로젝트 관리자 이상(isProjectAdmin) — 남의 이슈 전체 편집·삭제. */
   isProjectAdmin: boolean
   myMemberIds: string[]
   today: string
@@ -146,9 +147,9 @@ export function IssuesView({
     || severityFilter !== 'all'
     || megaFilter !== 'all'
     || mineOnly
-  // 조회 전용(role=null)에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
-  // role 은 이 화면의 프로젝트 스코프 shim 이라 그대로 판정에 쓸 수 있다.
-  const canWrite = role !== null
+  // 조회 전용에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
+  // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
+  const canWrite = canEdit
 
   return (
     <div className="space-y-4">
@@ -398,7 +399,7 @@ export function IssuesView({
         issue={viewing}
         members={members}
         memberName={memberName}
-        canEdit={viewing ? canEditIssue(viewing, currentUserId, role) : false}
+        canEdit={viewing ? canEditIssue(viewing, currentUserId, isProjectAdmin) : false}
         canWrite={canWrite}
         currentUserId={currentUserId}
         isProjectAdmin={isProjectAdmin}

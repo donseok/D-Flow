@@ -125,10 +125,14 @@ export function dueSignal(plannedEnd: string | null, cur: number, today: string)
   return d < 0 ? { kind: 'overdue', days: -d } : { kind: 'due', days: d }
 }
 
-/** 렌즈: 'myTeam'=내 팀이 담당(primary/support)인 리프만, 'all'=전체. myTeam 미상이면 전체. */
-export function lensCards(leaves: ComputedItem[], lens: 'myTeam' | 'all', myTeam: string | null): ComputedItem[] {
-  if (lens === 'all' || !myTeam) return leaves
-  return leaves.filter(leaf => leaf.owners.some(o => o.team === myTeam))
+/**
+ * 렌즈: 'myTeam'=담당 팀(primary/support)이 내 팀 중 하나라도 걸리는 리프만, 'all'=전체.
+ * 내 팀은 이 프로젝트 명단의 팀 전부(한 사람 여러 팀 — 0003). 팀이 없으면 전체.
+ */
+export function lensCards(leaves: ComputedItem[], lens: 'myTeam' | 'all', myTeams: readonly string[]): ComputedItem[] {
+  if (lens === 'all' || myTeams.length === 0) return leaves
+  const mine = new Set(myTeams)
+  return leaves.filter(leaf => leaf.owners.some(o => mine.has(o.team)))
 }
 
 export interface QuickFilters {

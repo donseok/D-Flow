@@ -84,7 +84,7 @@ describe('IssuesView Mega 필터', () => {
         <IssuesView
           projectId="project-1"
           currentUserId="user-1"
-          role="team_editor"
+          canEdit
           isProjectAdmin={false}
           myMemberIds={[]}
           today="2026-07-31"
@@ -111,7 +111,7 @@ describe('IssuesView Mega 필터', () => {
         <IssuesView
           projectId="project-1"
           currentUserId="user-1"
-          role="team_editor"
+          canEdit
           isProjectAdmin={false}
           myMemberIds={[]}
           today="2026-07-31"

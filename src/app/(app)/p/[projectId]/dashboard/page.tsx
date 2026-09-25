@@ -8,7 +8,7 @@ import { getProjectConfig } from '@/lib/data/projectConfig'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
-import { effectiveLegacyRole, isProjectAdmin } from '@/lib/domain/authz'
+import { isProjectAdmin } from '@/lib/domain/authz'
 import { createServerClient } from '@/lib/supabase/server'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -43,6 +43,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
 
   const project = projects.find(p => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'dash.heroProjectFallback')
+  // 관리자 이상 — 회의 상세의 남의 회의 수정·취소와 AI 브리핑 생성이 같은 판정을 쓴다.
+  const canManage = isProjectAdmin(membership, projectId)
 
   return (
     <ProjectPageShell
@@ -63,8 +65,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         meetingExceptions={meetingData.exceptions}
         issues={issues}
         currentUserId={user?.id ?? null}
-        role={effectiveLegacyRole(membership, projectId)}
-        canGenerateBrief={isProjectAdmin(membership, projectId)}
+        canManage={canManage}
+        canGenerateBrief={canManage}
         milestoneKeywords={config.milestoneKeywords}
       />
       {/* 진척률은 집계값이라 행 단위 패치가 정의되지 않는다 — 실시간 신호를 받아 재조회한다(0098). */}

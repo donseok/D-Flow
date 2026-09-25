@@ -519,7 +519,8 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
     .update({ external_id: null, updated_at: new Date().toISOString() })
     .eq('id', id).select('id')
   if (error) { console.error('[resetMinuteExternalId] 실패:', error.message); return { ok: false, error: error.message } }
-  // RLS 가 소유자/pmo_admin 이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
+  // service_role 경로라 RLS 가 없다 — 소유자·관리자 판정은 checkOwner 가 먼저 했고, 0행은 회의록이 사라진 경우다.
+  // 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 회의록이 없습니다.' }
   revalidatePath('/minutes'); revalidatePath(`/minutes/${id}`)
   return { ok: true }
@@ -912,7 +913,7 @@ export async function renameMinuteFolder(
     console.error('[renameMinuteFolder] 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  // RLS 가 소유자/pmo_admin 이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
+  // RLS 가 소유자·관리자(app_role() shim)가 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   revalidatePath('/minutes')
   return { ok: true }
@@ -948,7 +949,9 @@ export async function deleteMinuteFolder(id: string): Promise<{ ok: boolean; err
   if (!parentId) return { ok: false, error: '최상위 폴더는 삭제할 수 없습니다.' }
   // RLS(0040)와 **같은 조건**을 명시 선판정한다 — 승격을 먼저 하기 때문에, 삭제가 나중에
   // 권한으로 막히면 옮겨만 놓고 폴더가 남는 상태가 된다. 같은 조건이면 그 일이 없다.
-  // isAnyProjectAdmin 은 app_role() shim 의 'pmo_admin' 과 같은 의미라 RLS 판정과 갈라지지 않는다.
+  // 주의: RLS 의 관리자 판정은 app_role() shim(0003 — 플랫폼 관리자·활성 명단 admin 행)이고 isAnyProjectAdmin 은
+  // 여기에 워크스페이스 관리자 승계를 더한다. 명단 admin 행이 없는 워크스페이스 관리자는 두 판정이 갈라져
+  // 승격 뒤 삭제가 0행이 될 수 있다 — app_role() 을 걷어내는 SP2 에서 한 판정으로 맞춘다.
   if (target.createdBy !== g.actor.userId && !isAnyProjectAdmin(g.actor)) {
     return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   }
@@ -1037,7 +1040,7 @@ export async function moveMinuteFolder(
     console.error('[moveMinuteFolder] 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  // RLS 가 소유자/pmo_admin 이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
+  // RLS 가 소유자·관리자(app_role() shim)가 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   revalidatePath('/minutes')
   return { ok: true }
@@ -1050,7 +1053,7 @@ export async function moveMinuteFolder(
  * 아니면 "폴더는 MES인데 team_code 는 ERP"인 불일치가 생겨 목록 필터(?team=)와 트리가 서로
  * 다른 답을 준다. 같은 팀 안 이동(대부분)은 종전처럼 raw update — 싸고 위키에 무영향.
  *
- * 권한은 기존 checkOwner(작성자 또는 pmo_admin) 유지 — archived 차단도 checkOwner 가 한다.
+ * 권한은 기존 checkOwner(작성자 또는 그 회의록 프로젝트의 관리자 이상) 유지 — archived 차단도 checkOwner 가 한다.
  */
 export async function moveMinuteToFolder(
   minuteId: string, folderId: string | null,

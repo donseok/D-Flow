@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDisplayName } from '@/lib/auth'
 import { requireProjectMember } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
+import { toProjectActorView } from '@/lib/domain/authz'
 import { jsonError } from '@/lib/api/http'
 import { loadSavedIssueAnalysisRun } from '@/lib/data/issueAnalysis'
 import { buildIssueAnalysisDeckPlan } from '@/lib/report/issues/deckPlan'
@@ -42,7 +43,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const plan = buildIssueAnalysisDeckPlan(saved.report, {
       projectName: saved.projectName,
       authorName,
-      authorTeam: guard.actor.teamCode ?? '',
+      // 작성 팀 = 이 프로젝트 명단의 대표 팀. 계정 전역 팀은 0003 에서 사라졌다.
+      authorTeam: toProjectActorView(guard.actor, projectId)?.primaryTeamCode ?? '',
       generatedAt: saved.report.generatedAt,
     })
     const body = await renderIssueAnalysisPpt(plan)

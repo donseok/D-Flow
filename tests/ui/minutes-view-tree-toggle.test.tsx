@@ -76,10 +76,13 @@ describe('MinutesView 트리 뷰 배선', () => {
   })
   afterEach(() => { act(() => root.unmount()); container.remove() })
 
-  async function mount(initialView: 'list' | 'calendar' | 'tree' = 'calendar') {
+  async function mount(
+    initialView: 'list' | 'calendar' | 'tree' = 'calendar',
+    perms: { canManage: boolean; canEdit: boolean } = { canManage: true, canEdit: true },
+  ) {
     await act(async () => root.render(
       <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
-        projects={[]} currentUserId="u1" role="pmo_admin" />,
+        projects={[]} currentUserId="u1" canManage={perms.canManage} canEdit={perms.canEdit} />,
     ))
   }
   function buttonByText(text: string): HTMLButtonElement {
@@ -91,6 +94,13 @@ describe('MinutesView 트리 뷰 배선', () => {
     return [...container.querySelectorAll<HTMLButtonElement>('button[role="tab"]')]
       .find(b => b.textContent?.trim() === text)
   }
+
+  it('등록 버튼은 어느 프로젝트든 멤버 이상(canEdit)에게만 — 조회 전용은 숨긴다', async () => {
+    await mount('calendar', { canManage: false, canEdit: false })
+    expect([...container.querySelectorAll('button')].some(b => b.textContent?.includes('min.upload.short'))).toBe(false)
+    await mount('calendar', { canManage: false, canEdit: true })
+    expect([...container.querySelectorAll('button')].some(b => b.textContent?.includes('min.upload.short'))).toBe(true)
+  })
 
   it('트리 탭 클릭 → fetchMinutesExplorer 1회 호출 + 트리 렌더 + 월 라벨이 전체 기간으로', async () => {
     await mount('calendar')

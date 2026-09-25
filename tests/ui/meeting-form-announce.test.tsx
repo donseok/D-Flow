@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 회의 등록 폼의 '공지사항으로도 등록' 배선 — 게이트(생성+pmo_admin)와 액션 호출 인자를 고정한다.
+// 회의 등록 폼의 '공지사항으로도 등록' 배선 — 게이트(생성+관리자 이상)와 액션 호출 인자를 고정한다.
 // 실제 LocaleProvider/dict/Modal 로 구동, 서버 액션만 목킹.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
@@ -65,13 +65,13 @@ describe('MeetingFormModal — 공지사항으로도 등록', () => {
     container.remove()
   })
 
-  async function renderForm(role: string | null, initial: Meeting | null = null) {
+  async function renderForm(canManage: boolean, initial: Meeting | null = null) {
     await act(async () => root.render(
       <LocaleProvider>
         <ToastProvider>
           <MeetingFormModal
             open projectId="p1" members={[]} initial={initial} todayIso="2026-07-24"
-            role={role} onClose={() => {}} onSaved={onSaved}
+            canManage={canManage} onClose={() => {}} onSaved={onSaved}
           />
         </ToastProvider>
       </LocaleProvider>,
@@ -90,25 +90,25 @@ describe('MeetingFormModal — 공지사항으로도 등록', () => {
     await act(async () => { (save as HTMLButtonElement).click() })
   }
 
-  it('pmo_admin 의 새 회의 폼에만 체크박스가 보인다', async () => {
-    await renderForm('pmo_admin')
+  it('관리자 이상의 새 회의 폼에만 체크박스가 보인다', async () => {
+    await renderForm(true)
     expect(announceCheckbox()).not.toBeNull()
     expect(document.body.textContent).toContain(LABEL)
     expect(announceCheckbox()!.checked).toBe(false) // 기본 꺼짐(옵트인)
   })
 
-  it('pmo_admin 이 아니면 체크박스가 없다', async () => {
-    await renderForm('team_editor')
+  it('관리자가 아니면(멤버) 체크박스가 없다', async () => {
+    await renderForm(false)
     expect(announceCheckbox()).toBeNull()
   })
 
-  it('수정 폼에는 pmo_admin 이어도 체크박스가 없다 — 공지는 생성 전용', async () => {
-    await renderForm('pmo_admin', MEETING)
+  it('수정 폼에는 관리자여도 체크박스가 없다 — 공지는 생성 전용', async () => {
+    await renderForm(true, MEETING)
     expect(announceCheckbox()).toBeNull()
   })
 
   it('체크하고 저장하면 새 회의 id 와 첫 회차 날짜로 공지 액션을 부른다', async () => {
-    await renderForm('pmo_admin')
+    await renderForm(true)
     await act(async () => { announceCheckbox()!.click() })
     await fillTitleAndSave()
 
@@ -119,14 +119,14 @@ describe('MeetingFormModal — 공지사항으로도 등록', () => {
   })
 
   it('체크하지 않으면 공지 액션을 부르지 않는다', async () => {
-    await renderForm('pmo_admin')
+    await renderForm(true)
     await fillTitleAndSave()
     expect(mocks.createMeeting).toHaveBeenCalledTimes(1)
     expect(mocks.createAnnouncementFromMeeting).not.toHaveBeenCalled()
   })
 
   it('반복 회의로 체크하면 첫 회차만 공지된다는 힌트가 보인다', async () => {
-    await renderForm('pmo_admin')
+    await renderForm(true)
     await act(async () => { announceCheckbox()!.click() })
     expect(document.body.textContent).not.toContain('첫 회차 1건만 공지됩니다')
 
@@ -142,7 +142,7 @@ describe('MeetingFormModal — 공지사항으로도 등록', () => {
 
   it('공지 등록이 실패해도 회의 저장은 정상 종료하고 실패를 토스트로 알린다', async () => {
     mocks.createAnnouncementFromMeeting.mockResolvedValueOnce({ ok: false, error: '권한 없음' } as never)
-    await renderForm('pmo_admin')
+    await renderForm(true)
     await act(async () => { announceCheckbox()!.click() })
     await fillTitleAndSave()
 

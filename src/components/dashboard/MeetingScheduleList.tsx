@@ -11,19 +11,20 @@ import { MeetingDetailModal } from '@/components/meetings/MeetingDetailModal'
 import { DateCell, weekdayKey } from './bits'
 
 /** 대시보드 회의 리스트 — 행 클릭 시 상세 모달을 띄운다.
- *  작성자(또는 pmo_admin)면 상세에서 수정·삭제가 열린다. 수정 폼은 프로젝트 멤버 목록이 필요하므로
+ *  작성자(또는 프로젝트 관리자 이상)면 상세에서 수정·삭제가 열린다. 수정 폼은 프로젝트 멤버 목록이 필요하므로
  *  여기서 띄우지 않고 회의 페이지로 딥링크(?focus=&date=&edit=1)해 폼을 바로 연다. */
 /** 참석자 이름을 이만큼만 보이고 나머지는 '외 N명'으로 접는다 — 한 줄 폭 안에서 끝나게. */
 const MAX_NAMES = 3
 const EMPTY_EXTRA: MeetingRowExtra = { attendees: [], memo: '' }
 
-export function MeetingScheduleList({ rows, extras, today, currentUserId = null, role = null }: {
+export function MeetingScheduleList({ rows, extras, today, currentUserId = null, canManage = false }: {
   rows: MeetingOccurrence[]
   /** 시리즈 id → 참석자 이름·메모 요약. 조회 실패로 비면 빈 상태 문구가 나온다. */
   extras: Record<string, MeetingRowExtra>
   today: string
   currentUserId?: string | null
-  role?: string | null
+  /** 이 프로젝트 관리자 이상(isProjectAdmin). 기본 false = fail-closed. */
+  canManage?: boolean
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -87,9 +88,9 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
           )
         })}
       </ul>
-      {/* 대시보드는 프로젝트 하나에 고정된 화면이라 role 이 이미 그 프로젝트 스코프 shim 이다. */}
+      {/* 대시보드는 프로젝트 하나에 고정된 화면이라 canManage 가 곧 그 프로젝트의 관리자 판정이다. */}
       <MeetingDetailModal open={!!detailOcc} occurrence={detailOcc}
-        currentUserId={currentUserId} isAdmin={role === 'pmo_admin'}
+        currentUserId={currentUserId} isAdmin={canManage}
         onClose={() => setDetailOcc(null)}
         onEditSeries={m => router.push(meetingEditHref(m.projectId, m.id, detailOcc?.occurrenceDate))}
         onChanged={() => router.refresh()} />
