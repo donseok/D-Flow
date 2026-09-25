@@ -99,6 +99,24 @@ describe('roleIn — 기존 계약', () => {
   })
 })
 
+// 승계는 '그 프로젝트의 워크스페이스'에서의 등급만 본다 — 어느 워크스페이스든 admin 이면 승계하는 회귀를 막는다.
+describe('워크스페이스 관리자 승계는 워크스페이스 경계를 넘지 않는다', () => {
+  const two = makeActor({
+    workspaceRoles: new Map([['ws-1', 'admin'], ['ws-2', 'member']]),
+    projectWorkspace: new Map([['p-in-1', 'ws-1'], ['p-in-2', 'ws-2']]),
+  })
+  it('ws-1 admin 은 ws-2 프로젝트에서 admin 이 아니다(viewer)', () => {
+    expect(roleIn(two, 'p-in-2')).toBe('viewer')
+    expect(isProjectAdmin(two, 'p-in-2')).toBe(false)
+    expect(isWorkspaceAdmin(two, 'ws-2')).toBe(false)
+    expect(canSeeProject(two, { id: 'p-in-2', is_private: true })).toBe(false)
+  })
+  it('자기 워크스페이스(ws-1) 프로젝트만 관리 대상', () => {
+    expect(roleIn(two, 'p-in-1')).toBe('admin')
+    expect(adminProjectIds(two)).toEqual(['p-in-1'])
+  })
+})
+
 describe('workspaceRoleIn / isWorkspaceAdmin / isWorkspaceMember — 경계', () => {
   it('비로그인은 null·false', () => {
     expect(workspaceRoleIn(null, W)).toBe(null)

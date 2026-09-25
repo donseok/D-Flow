@@ -23,7 +23,10 @@ let executed: string[] = []
 
 /** buildActor 의 4축(platform_admins·workspace_members·projects·project_members)을 흉내낸다. */
 function stubDb(opts: {
-  platformAdmin?: boolean; wsRows?: { workspace_id: string; role: string }[]
+  platformAdmin?: boolean
+  /** platform_admins.maybeSingle() 응답을 그대로 지정 — 모양이 어긋난 응답([]·{}·남의 행)을 흉내낸다. */
+  platformAdminData?: unknown
+  wsRows?: { workspace_id: string; role: string }[]
   projects?: { id: string; workspace_id: string }[]
   roster?: RosterRow[]
   errorOn?: 'platform_admins' | 'workspace_members' | 'projects' | 'project_members'
@@ -32,15 +35,26 @@ function stubDb(opts: {
   const res = (table: string, data: unknown) => ({ data: opts.errorOn === table ? null : data, error: opts.errorOn === table ? { message: 'boom' } : null })
   mockClient.from.mockImplementation((table: string) => {
     const chain: Record<string, unknown> = {}
+    let selected = ''
     const terminal = async () => {
       executed.push(table)
-      if (table === 'platform_admins') return res(table, opts.platformAdmin ? { user_id: USER.id } : null)
+      if (table === 'platform_admins') {
+        return res(table, 'platformAdminData' in opts ? opts.platformAdminData : opts.platformAdmin ? { user_id: USER.id } : null)
+      }
       if (table === 'workspace_members') return res(table, opts.wsRows ?? [])
       if (table === 'projects') return res(table, opts.projects ?? [])
-      if (table === 'project_members') return res(table, opts.roster ?? [])
+      // PostgREST 에서 people 임베드가 !inner 가 아니면 .eq('people.user_id') 는 임베드만 거르고 행은 전부 돌려준다.
+      // 스텁은 그 반대로 모델링한다 — inner 조인이 사라지면 '내 명단 행'을 못 찾아 명단 기대 테스트가 깨지게.
+      if (table === 'project_members') return res(table, selected.includes('people!inner(') ? opts.roster ?? [] : [])
       throw new Error(`예상치 못한 테이블: ${table}`)
     }
-    for (const m of ['select', 'eq', 'in', 'not', 'is']) chain[m] = (...args: unknown[]) => { calls.push({ table, method: m, args }); return chain }
+    for (const m of ['select', 'eq', 'in', 'not', 'is']) {
+      chain[m] = (...args: unknown[]) => {
+        calls.push({ table, method: m, args })
+        if (m === 'select') selected = String(args[0] ?? '')
+        return chain
+      }
+    }
     chain.maybeSingle = terminal
     ;(chain as { then?: unknown }).then = (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => terminal().then(ok, ko)
     return chain
@@ -94,6 +108,18 @@ describe('getActor — 4축 조립', () => {
     expect(a?.rosterTeams.get('p2')).toBeUndefined()
   })
 
+  // 대표 팀이 없거나 비대표 팀이 여럿이면 PostgREST 임베드 순서(물리 순서)에 기대지 않는다 — primaryTeamCode 가 흔들리면 안 된다.
+  it('(d′) 팀 정렬은 대표 팀 먼저, 나머지는 code 사전순 — 응답 순서와 무관하게 결정적', async () => {
+    stubDb({ ...WS_MEMBER, roster: [
+      row('p1', 'member', [['QA', false], ['MES', true], ['ERP', false]]),
+      row('p2', 'member', [['MES', false], ['ERP', false]]),
+    ] })
+    const a = await getActor()
+    expect(a?.rosterTeams.get('p1')?.teamCodes).toEqual(['MES', 'ERP', 'QA'])
+    expect(a?.rosterTeams.get('p1')?.teamIds).toEqual(['t-MES', 't-ERP', 't-QA'])
+    expect(a?.rosterTeams.get('p2')?.teamCodes).toEqual(['ERP', 'MES'])
+  })
+
   it('팀 코드 임베드가 비면 그 링크는 버린다(배열 모양 임베드도 수용)', async () => {
     const r = row('p1', 'member')
     r.project_member_teams = [
@@ -127,6 +153,29 @@ describe('getActor — 4축 조립', () => {
     expect(pmEq).toContainEqual(['people.user_id', 'u1'])
     expect(pmEq).toContainEqual(['people.active', true])
     expect(pmEq).toContainEqual(['active', true])
+    // .eq('people.user_id') 가 행 필터가 되려면 people 임베드가 !inner 여야 한다 — 빠지면 admin 경로에서 전원의 명단 행이 섞인다.
+    const pmSelect = String(callsOn('project_members', 'select')[0]?.[0])
+    expect(pmSelect).toMatch(/people!inner\(/)
+    expect(pmSelect).toMatch(/project_member_teams\([^)]*teams\(code\)/)
+  })
+
+  // ④ 명단 축은 user_id 만으로 걸러지므로 ② 워크스페이스 축을 기다리지 않는다 — ③ projects 만 2단계.
+  it('명단 축은 첫 묶음에서 나가고 projects 만 워크스페이스 결과를 기다린다', async () => {
+    stubDb({ ...WS_MEMBER })
+    await getActor()
+    expect(executed.indexOf('project_members')).toBeGreaterThanOrEqual(0)
+    expect(executed.indexOf('project_members')).toBeLessThan(executed.indexOf('projects'))
+  })
+
+  // 최고 권한 비트는 응답 모양이 아니라 내용으로 판정한다 — 범용 스텁의 [] 나 남의 행이 슈퍼유저를 만들면 안 된다.
+  it.each([
+    ['빈 배열', []],
+    ['빈 객체', {}],
+    ['다른 사용자의 행', { user_id: 'u-other' }],
+  ])('platform_admins 응답이 %s 이면 슈퍼유저가 아니다', async (_n, data) => {
+    stubDb({ ...WS_MEMBER, platformAdminData: data })
+    const a = await getActor()
+    expect(a?.isSuperuser).toBe(false)
   })
 
   it('플랫폼 관리자는 projects 를 필터 없이 읽는다', async () => {
