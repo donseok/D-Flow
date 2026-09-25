@@ -5,7 +5,7 @@
 -- 롤: 대부분 postgres(= service_role 경로처럼 RLS·실행 권한을 우회)로 돈다. "세션 경로" 절만 set local role authenticated +
 -- JWT sub 로 RLS·컬럼 권한·RPC 실행 권한(service_role 전용)을 실제로 태운다.
 -- uuid 는 16진수만: 워크스페이스 …aaaa/…bbbb, 계정 …0a0N, 인물 …0b0N, 프로젝트 …0c0N, 팀 …0d0N,
--- 회의록·버전 …0e0N, 회의 …0f01, 회의록 폴더 …0f1N, 알림 사건 …1e01.
+-- 회의록·버전 …0e0N, 회의 …0f01, 회의록 폴더 …0f1N, 알림 사건 …1e0N.
 begin;
 
 -- 픽스처 -------------------------------------------------------------------------
@@ -280,7 +280,13 @@ exception when invalid_parameter_value then
   if sqlerrm <> 'ISSUE_ASSIGNEE_PROJECT_MISMATCH' then raise; end if;
 end $$;
 
--- 담당자 FK 승격: meeting_attendees 는 (meeting_id, project_id)·(member_id, project_id) 복합 FK 둘 다 건다
+-- 담당자 FK 승격: meeting_attendees 는 (meeting_id, project_id)·(member_id, project_id) 복합 FK 둘 다 건다.
+-- 한 부모로 가는 FK 는 하나만(같은 쌍 FK 2개 = PostgREST 임베드 PGRST201) — 단일 meeting_id FK 는 지웠고, 알림 수신자의
+-- 사건 일치는 복합 FK 대신 트리거다(Task 3d).
+select (select count(*) from pg_constraint where contype = 'f' and conrelid = 'public.meeting_attendees'::regclass
+          and confrelid = 'public.meetings'::regclass) = 1 as attendees_meetings_one_fk,
+       (select count(*) from pg_constraint where contype = 'f' and conrelid = 'public.notification_recipients'::regclass
+          and confrelid = 'public.notification_events'::regclass) = 1 as recipients_events_one_fk;
 insert into public.meetings (id, project_id, title, meeting_date)
 values ('00000000-0000-0000-0000-000000000f01', '00000000-0000-0000-0000-000000000c01', '정기 회의', current_date);
 with i as (
@@ -322,6 +328,27 @@ with i as (
    where pm.project_id = '00000000-0000-0000-0000-000000000c01' and pm.person_id = '00000000-0000-0000-0000-000000000b03'
   returning 1)
 select count(*) = 1 as recipient_with_project_ok from i;
+-- 사건 일치 트리거: 사건(P1)과 다른 project_id(P2) 수신자 → 23514
+do $$ begin
+  insert into public.notification_recipients (event_id, user_id, project_id)
+  values ('00000000-0000-0000-0000-000000001e01', '00000000-0000-0000-0000-000000000a01', '00000000-0000-0000-0000-000000000c02');
+  raise exception 'expected NOTIFICATION_RECIPIENT_PROJECT_MISMATCH';
+exception when check_violation then
+  if sqlerrm <> 'NOTIFICATION_RECIPIENT_PROJECT_MISMATCH' then raise; end if;
+end $$;
+-- 프로젝트 없는 사건 + project_id null 수신자 → 통과
+insert into public.notification_events (id, type, category)
+values ('00000000-0000-0000-0000-000000001e02', 'test', 'system');
+with i as (
+  insert into public.notification_recipients (event_id, user_id)
+  values ('00000000-0000-0000-0000-000000001e02', '00000000-0000-0000-0000-000000000a01') returning 1)
+select count(*) = 1 as projectless_event_recipient_ok from i;
+-- 프로젝트 사건의 계정 전용 수신자(member_id null)는 project_id null 로 들어온다(src/lib/notify/emit.ts) → 통과
+-- (대신한 복합 FK 의 MATCH SIMPLE 과 같은 의미)
+with i as (
+  insert into public.notification_recipients (event_id, user_id)
+  values ('00000000-0000-0000-0000-000000001e01', '00000000-0000-0000-0000-000000000a03') returning 1)
+select count(*) = 1 as project_event_user_recipient_ok from i;
 
 -- 초대: admin 초대는 발급자가 워크스페이스 관리자여야 한다
 do $$ begin

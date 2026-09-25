@@ -146,7 +146,11 @@ create index project_members_person_idx on public.project_members (person_id);
 -- attendance_records: 단일 FK 와 복합 FK(attendance_member_project_fk)가 병존 → 복합만 남긴다
 alter table public.attendance_records drop constraint attendance_records_member_id_fkey;
 
--- meeting_attendees: project_id 추가 + 복합 FK 2건(issue_assignees 관례)
+-- 같은 표 쌍 사이에 FK 가 둘이면 PostgREST 임베드가 PGRST201(모호)로 거부된다(Task 11 E2E 실측 — 회의 목록·알림함이
+-- 빈 값). 그래서 한 부모로 가는 FK 는 하나만 둔다(tests/rls/schema-invariants.test.ts 가 지킨다).
+
+-- meeting_attendees: project_id 추가 + 복합 FK 2건(issue_assignees 관례). 복합 FK 를 건 뒤 단일 meeting_id FK 를 지운다 —
+-- project_id 가 not null 이라 복합 FK 가 존재 검사와 on delete cascade 를 빠짐없이 대신한다.
 alter table public.meeting_attendees add column project_id uuid;
 alter table public.meeting_attendees alter column project_id set not null;
 create unique index meetings_id_project_uidx on public.meetings (id, project_id);
@@ -156,17 +160,19 @@ alter table public.meeting_attendees
     references public.meetings(id, project_id) on delete cascade,
   add constraint meeting_attendees_member_project_fk foreign key (member_id, project_id)
     references public.project_members(id, project_id) on delete cascade;
+alter table public.meeting_attendees drop constraint meeting_attendees_meeting_id_fkey;
 
--- notification_recipients: project_id(null 허용) + 복합 FK 2건. MATCH SIMPLE 은 한 컬럼이라도 null 이면
--- 검사를 건너뛰므로 (member, null) 조합을 CHECK 로 막는다. 프로젝트 없는 사건의 수신자는 둘 다 null.
+-- notification_recipients: project_id(null 허용) + 명단 복합 FK. MATCH SIMPLE 은 한 컬럼이라도 null 이면 검사를
+-- 건너뛰므로 (member, null) 조합을 CHECK 로 막는다. 프로젝트 없는 사건의 수신자는 둘 다 null.
+-- 사건과의 project 일치는 복합 FK 대신 트리거 notification_recipients_event_project_guard(④) — 단일 event_id FK 가
+-- 존재·cascade 를 맡고(project_id null 인 수신자도 덮는다), 복합 FK 를 더하면 같은 쌍에 FK 가 둘이 된다.
+-- notification_events_id_project_uidx 는 스펙 표대로 둔다(지금은 참조하는 FK 가 없다).
 alter table public.notification_recipients add column project_id uuid;
 create unique index notification_events_id_project_uidx on public.notification_events (id, project_id);
 alter table public.notification_recipients drop constraint notification_recipients_member_id_fkey;
 alter table public.notification_recipients
   add constraint notification_recipients_member_project_fk foreign key (member_id, project_id)
     references public.project_members(id, project_id) on delete cascade,
-  add constraint notification_recipients_event_project_fk foreign key (event_id, project_id)
-    references public.notification_events(id, project_id) on delete cascade,
   add constraint notification_recipients_member_needs_project check (member_id is null or project_id is not null);
 
 -- project_invites — §2.3.3. 평문 token → token_hash, 단일 team_id → team_ids[], 워크스페이스·권한·라벨 추가.
@@ -573,6 +579,25 @@ $$;
 revoke all on function public.project_invites_guard() from public, anon, authenticated;
 create trigger project_invites_guard before insert or update on public.project_invites
   for each row execute function public.project_invites_guard();
+
+-- 알림 수신자의 project_id 는 사건의 project_id 와 같아야 한다 — 복합 FK (event_id, project_id) → notification_events 를
+-- 대신한다(같은 쌍 FK 2개 = PostgREST 임베드 모호). 대신한 FK 와 같은 의미(MATCH SIMPLE)로, 수신자 project_id 가 null 이면
+-- 검사하지 않는다: 프로젝트 사건의 계정 전용 수신자(member_id null)는 project_id null 로 들어온다(src/lib/notify/emit.ts).
+-- member 수신자의 project_id 필수는 CHECK notification_recipients_member_needs_project 가 맡는다.
+create function public.notification_recipients_event_project_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.project_id is not null
+     and new.project_id is distinct from (select e.project_id from public.notification_events e where e.id = new.event_id) then
+    raise exception using errcode = '23514', message = 'NOTIFICATION_RECIPIENT_PROJECT_MISMATCH';
+  end if;
+  return new;
+end
+$$;
+revoke all on function public.notification_recipients_event_project_guard() from public, anon, authenticated;
+create trigger notification_recipients_event_project_guard before insert or update of event_id, project_id
+  on public.notification_recipients
+  for each row execute function public.notification_recipients_event_project_guard();
 
 -- ④ 정책 --------------------------------------------------------------------
 -- 기존 표: su_* 를 워크스페이스 관리자로 내리고, 명단 쓰기를 두 정책으로 가른다. 읽기 정책은 무변경(SP2).

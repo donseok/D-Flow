@@ -38,6 +38,7 @@ drop trigger project_members_no_self_demote on public.project_members;
 drop trigger teams_guard on public.teams;
 drop trigger projects_guard on public.projects;
 drop trigger project_invites_guard on public.project_invites;
+drop trigger notification_recipients_event_project_guard on public.notification_recipients;
 
 -- 4. 기존 표(teams·projects·project_members)를 참조하는 새 표 ---------------------
 drop table public.area_teams;
@@ -46,17 +47,21 @@ drop table public.project_member_teams;
 
 -- 5. 담당자 FK 승격 되돌리기 -----------------------------------------------------
 -- (attendance_records·meeting_attendees·notification_recipients 의 단일 member FK 는 9 에서 project_members 와 함께 복원)
+-- notification_recipients 의 단일 event_id FK 는 0003 이 지우지 않았으므로 그대로다(사건 일치는 트리거였고 3 에서 뗐다).
 alter table public.notification_recipients
   drop constraint notification_recipients_member_needs_project,
-  drop constraint notification_recipients_event_project_fk,
   drop constraint notification_recipients_member_project_fk;
 alter table public.notification_recipients drop column project_id;
 drop index public.notification_events_id_project_uidx;
+-- meeting_attendees: 0003 이 복합 FK 를 건 뒤 단일 meeting_id FK 를 지웠다 → 복합을 떼고 기준선의 단일 FK 를 다시 건다
 alter table public.meeting_attendees
   drop constraint meeting_attendees_member_project_fk,
   drop constraint meeting_attendees_meeting_project_fk;
 alter table public.meeting_attendees drop column project_id;
 drop index public.meetings_id_project_uidx;
+
+ALTER TABLE ONLY public.meeting_attendees
+    ADD CONSTRAINT meeting_attendees_meeting_id_fkey FOREIGN KEY (meeting_id) REFERENCES public.meetings(id) ON DELETE CASCADE;
 
 -- 6. project_invites — 0000 정의로 다시 만든다(정책 0개·service_role 전용) -----------
 drop table public.project_invites;
@@ -647,6 +652,7 @@ drop function public.project_member_teams_guard();
 drop function public.area_teams_guard();
 drop function public.project_areas_guard();
 drop function public.project_invites_guard();
+drop function public.notification_recipients_event_project_guard();
 
 drop function public.is_project_admin_anywhere_in_ws(uuid);
 drop function public.my_team_ids(uuid);
