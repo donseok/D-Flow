@@ -1,7 +1,7 @@
 // 조직 코어(0003_org_core) RLS·트리거·컬럼 권한 케이스 — SP1 done_when 의 "통과/거부" 를 손 실측 대신 테스트로 남긴다.
 // 로컬 DB 필요: npm run db:start 뒤 npm run test:rls. 각 케이스는 begin…rollback 안에서 돈다(harness.ts).
 import { createHash } from 'node:crypto'
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
 
@@ -219,6 +219,43 @@ describe('조직 코어 RLS (0003_org_core)', () => {
       ])
       expect((await c.query('select display_name from public.people where id = $1', [F.people.external])).rows[0])
         .toEqual({ display_name: 'bob k' })
+    })
+  })
+
+  it('⑪ id 분기 개명은 people_update 와 같은 선 — 명단 밖 인물은 명단에만 넣고 이름은 둔다(0004)', async () => {
+    const upsert = 'select public.upsert_project_member($1, $2, $3::jsonb, $4::jsonb, null) as id'
+    const nameOf = async (c: PoolClient, id: string) =>
+      (await c.query<{ display_name: string }>('select display_name from public.people where id = $1', [id])).rows[0]
+        .display_name
+    // B 명단에만 있는 외부 인력 erin — alice 는 B 관리자가 아니다(B 멤버)
+    const ERIN = '00000000-0000-0000-7e57-0000000000b5'
+    const seedErin = async (c: PoolClient) => {
+      await c.query('insert into public.people (id, workspace_id, display_name) values ($1, $2, $3)', [ERIN, F.ws, 'erin'])
+      await c.query('insert into public.project_members (project_id, person_id) values ($1, $2)', [F.projects.b, ERIN])
+    }
+
+    await asService(pool, async (c) => {
+      await seedErin(c)
+      // A 관리자 alice 가 B 전용 인물 id + 새 이름으로 A 에 추가 → A 명단 행은 생기고 이름은 그대로(오류 없음)
+      const added = (await c.query<{ id: string }>(upsert, [
+        F.users.member, F.projects.a, JSON.stringify({ id: ERIN, display_name: 'mallory' }), '{}',
+      ])).rows[0].id
+      expect((await c.query('select project_id, person_id from public.project_members where id = $1', [added])).rows[0])
+        .toEqual({ project_id: F.projects.a, person_id: ERIN })
+      expect(await nameOf(c, ERIN)).toBe('erin')
+
+      // A 명단에 이미 있는 인물(bob) id + 새 이름 → 개명
+      await c.query(upsert, [
+        F.users.member, F.projects.a, JSON.stringify({ id: F.people.external, display_name: 'bob k' }), '{}',
+      ])
+      expect(await nameOf(c, F.people.external)).toBe('bob k')
+    })
+
+    // 워크스페이스 관리자는 명단 밖 인물도 개명한다
+    await asService(pool, async (c) => {
+      await seedErin(c)
+      await c.query(upsert, [F.users.wsAdmin, F.projects.a, JSON.stringify({ id: ERIN, display_name: 'erin k' }), '{}'])
+      expect(await nameOf(c, ERIN)).toBe('erin k')
     })
   })
 })
