@@ -20,7 +20,7 @@ export const membersKo = {
   'members.addMember': '멤버 추가',
   'members.emptyTitle': '아직 등록된 멤버가 없습니다',
   'members.emptyDesc': '멤버를 추가해 역할과 소속이 명확한 팀 보드를 구성하세요.',
-  // 멤버 카드 — 명단상의 구분이지 권한이 아니다(권한은 project_roles).
+  // 멤버 카드 — 명단상의 구분이지 권한이 아니다(권한은 명단의 access_role).
   'members.roleAdmin': '리더',
   'members.roleContributor': '실무',
   'members.noTitle': '직함 미지정',
