@@ -1,15 +1,20 @@
 'use client'
 
-import { useId, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Copy, Send, ShieldAlert } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-import { useTeams } from '@/components/app/TeamsProvider'
+import { TeamMultiSelect, type TeamOption } from '@/components/roster/TeamMultiSelect'
 import {
   createProjectInvite, revokeProjectInvite, type InviteRow,
 } from '@/app/actions/projectInvites'
+import type { ProjectActorView } from '@/lib/domain/authz'
 import { DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, inviteStatusLabel, type InviteStatus } from '@/lib/domain/invites'
+
+type AccessRole = 'admin' | 'member'
+/** 합류 시 권한. null = 조회 전용으로 명단에만 오른다. */
+const ACCESS_LABEL: Record<AccessRole, string> = { admin: '관리자', member: '멤버' }
 
 const STATUS_CLASS: Record<InviteStatus, string> = {
   active: 'bg-done-weak text-done',
@@ -41,7 +46,7 @@ function fmtDateTime(iso: string): string {
 }
 
 /**
- * 프로젝트 초대 발급·취소.
+ * 프로젝트 초대 발급·취소. 폼은 이메일·권한·역할 라벨·팀(여러 개, 첫 팀이 대표 후보)·유효기간.
  *
  * 링크는 서버가 조립해 내려준 url 을 그대로 쓴다 — 여기서 window.location.origin 을 읽으면
  * 서버 프리렌더에서 죽고, 메일에 실린 링크와 화면의 링크가 갈릴 수도 있다.
@@ -49,25 +54,31 @@ function fmtDateTime(iso: string): string {
  * 목록 조회가 실패했으면 loadError 로 받아 그 사실을 드러낸다: '초대 0건'으로 보이면
  * 관리자가 같은 주소로 다시 발급하다 중복 제약에 이유 없이 막힌다.
  */
-export function ProjectInviteManager({ projectId, rows, loadError }: {
+export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView }: {
   projectId: string
   rows: InviteRow[]
   loadError: string | null
+  /** 이 프로젝트에서 고를 수 있는 활성 팀 — 초대는 팀 id 로 저장한다. */
+  teamOptions: readonly TeamOption[]
+  actorView: ProjectActorView | null
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  // /p/[projectId] 레이아웃이 이 프로젝트의 팀(id 포함)을 주입한다 — 초대는 팀 id 로 저장한다.
-  const teamOptions = useTeams()
-  const teamHintId = useId()
+  // 관리자 초대는 SP1 에서 createProjectInvite 가 requireSuperuser 로 막는다 — canGrantAdmin 은 워크스페이스 관리자도
+  // 통과시켜 서버가 늘 거부하는 옵션을 보이게 된다. SP2 에서 가드가 requireWorkspaceAdmin 이 되면 canGrantAdmin 으로 옮긴다.
+  const canInviteAdmin = actorView?.isSuperuser === true
   const [email, setEmail] = useState('')
-  // '' = 팀 없이 초대(명단에는 오르되 팀은 관리자가 나중에 정한다).
-  const [teamId, setTeamId] = useState<string>(teamOptions[0]?.id ?? '')
+  const [accessRole, setAccessRole] = useState<AccessRole | null>('member')
+  const [roleLabel, setRoleLabel] = useState('')
+  // 빈 배열 = 팀 없이 초대(명단에는 오르되 팀은 관리자가 나중에 정한다). 첫 원소가 대표 팀 후보.
+  const [teamIds, setTeamIds] = useState<string[]>([])
   // 발급 직후의 링크 — 한 번만 온다(목록에서는 다시 만들 수 없다). 다음 발급·새로고침 전까지 보여 준다.
   const [issued, setIssued] = useState<InviteRow | null>(null)
   const [days, setDays] = useState(String(DEFAULT_INVITE_DAYS))
   const [formError, setFormError] = useState<string | null>(null)
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState<string | null>(null)
   const [revoking, setRevoking] = useState<InviteRow | null>(null)
   const [pending, startTransition] = useTransition()
   const [revokePending, startRevoke] = useTransition()
@@ -78,12 +89,12 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
     startTransition(async () => {
       try {
         // days 는 폼 문자열이라 빈 값·소수를 그대로 넘긴다 — 판정은 서버 한 곳에서만 한다.
-        // 옛 화면 계약 그대로 멤버 권한으로 초대한다(권한·역할 라벨·여러 팀 선택은 Phase B 초대 UI).
         const res = await createProjectInvite(projectId, {
-          email, accessRole: 'member', teamIds: teamId ? [teamId] : [], days: Number(days),
+          email, accessRole, roleLabel: roleLabel.trim() || null, teamIds, days: Number(days),
         })
         if (!res.ok) { setFormError(res.error); return }
         setIssued(res.row)
+        setCopied(false); setCopyError(null)
         toast(res.mailed
           ? {
               title: '초대 메일을 보냈습니다.',
@@ -97,7 +108,7 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
               description: res.mailError,
               variant: 'info',
             })
-        setEmail('')
+        setEmail(''); setRoleLabel('')
         router.refresh()
       } catch {
         setFormError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
@@ -105,14 +116,14 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
     })
   }
 
-  async function copyLink(row: InviteRow) {
-    if (!row.url) return
+  async function copyIssued() {
+    if (!issued?.url) return
     try {
-      await navigator.clipboard.writeText(row.url)
-      setCopiedId(row.id)
-      setTimeout(() => setCopiedId(id => (id === row.id ? null : id)), COPIED_MS)
+      await navigator.clipboard.writeText(issued.url)
+      setCopied(true); setCopyError(null)
+      setTimeout(() => setCopied(false), COPIED_MS)
     } catch {
-      setRowErrors(prev => ({ ...prev, [row.id]: '링크를 복사하지 못했습니다. 브라우저 권한을 확인해 주세요.' }))
+      setCopyError('링크를 복사하지 못했습니다. 위 칸에서 직접 선택해 복사해 주세요.')
     }
   }
 
@@ -146,8 +157,8 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
         </p>
       </div>
 
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-end">
-        <label className="block">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <label className="block min-w-[14rem] flex-1">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">이메일</span>
           <input
             type="email"
@@ -160,22 +171,37 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">팀</span>
+          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">권한</span>
           <select
-            className="app-input sm:w-32"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-            aria-describedby={teamHintId}
+            className="app-input w-36"
+            aria-label="초대 권한"
+            value={accessRole ?? ''}
+            onChange={(e) => setAccessRole(e.target.value === '' ? null : e.target.value as AccessRole)}
           >
-            <option value="">팀 없음</option>
-            {teamOptions.map(t => <option key={t.id} value={t.id}>{t.code}</option>)}
+            <option value="">없음(조회 전용)</option>
+            <option value="member">{ACCESS_LABEL.member}</option>
+            {canInviteAdmin && <option value="admin">{ACCESS_LABEL.admin}</option>}
           </select>
         </label>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">역할 라벨</span>
+          <input
+            className="app-input w-32"
+            aria-label="역할 라벨"
+            value={roleLabel}
+            onChange={(e) => setRoleLabel(e.target.value)}
+            placeholder="예: PL"
+          />
+        </label>
+        <div className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">팀</span>
+          <TeamMultiSelect options={teamOptions} value={teamIds} onChange={setTeamIds} label="초대 팀" />
+        </div>
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">유효기간(일)</span>
           <input
             type="number"
-            className="app-input sm:w-24"
+            className="app-input w-24"
             value={days}
             min={1}
             max={MAX_INVITE_DAYS}
@@ -185,27 +211,36 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
         <button type="submit" className="btn btn-primary" disabled={pending}>
           <Send className="h-4 w-4" />{pending ? '보내는 중…' : '초대 보내기'}
         </button>
-        {/* 힌트는 select 아래가 아니라 폼 전체 폭의 한 줄로 둔다 — items-end 그리드에서
-            한 칸만 높아지면 입력들의 밑선이 어긋난다. 연결은 aria-describedby 가 한다. */}
-        <p id={teamHintId} className="text-xs leading-5 text-ink-subtle sm:col-span-4">
-          합류하면 이 프로젝트 명단에 선택한 팀으로 오릅니다. 이미 명단에 있는 사람은 기존 팀이 그대로 남고
+        <p className="basis-full text-xs leading-5 text-ink-subtle">
+          합류하면 이 프로젝트 명단에 선택한 팀(첫 팀이 대표)으로 오릅니다. 이미 명단에 있는 사람은 기존 팀이 그대로 남고
           이 팀이 <strong className="font-semibold text-ink-muted">더해집니다</strong>.
         </p>
       </form>
       {formError && <p role="alert" className="text-sm font-medium text-delayed">{formError}</p>}
       {issued?.url && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/50 px-3.5 py-3">
-          <p className="min-w-0 flex-1 text-xs leading-5 text-ink-muted">
-            <strong className="font-semibold text-ink">{issued.email}</strong> 초대 링크 —
-            링크는 발급 시 한 번만 표시됩니다. 메일이 닿지 않았으면 지금 복사해 전달하세요.
+        <div data-issued-invite className="space-y-2 rounded-xl border border-line bg-surface-2/50 px-3.5 py-3">
+          <p className="text-xs leading-5 text-ink-muted">
+            <strong className="font-semibold text-ink">{issued.email}</strong> 초대 링크 —{' '}
+            <strong className="font-semibold text-ink">이 링크는 다시 볼 수 없습니다.</strong>{' '}
+            메일이 닿지 않았으면 지금 복사해 전달하세요. 다시 보내려면 초대를 취소하고 새로 발급합니다.
           </p>
-          <button type="button" className="btn btn-ghost h-8 px-3 text-xs" onClick={() => void copyLink(issued)}>
-            {copiedId === issued.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copiedId === issued.id ? '복사됨' : '링크 복사'}
-          </button>
-          {rowErrors[issued.id] ? (
-            <p role="alert" className="w-full text-xs font-medium text-delayed">{rowErrors[issued.id]}</p>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              className="app-input h-8 min-w-0 flex-1 font-mono text-xs"
+              value={issued.url}
+              aria-label="초대 링크"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <button type="button" className="btn btn-ghost h-8 shrink-0 px-3 text-xs" onClick={() => void copyIssued()}>
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? '복사됨' : '링크 복사'}
+            </button>
+            <button type="button" className="btn btn-ghost h-8 shrink-0 px-3 text-xs" onClick={() => setIssued(null)}>
+              닫기
+            </button>
+          </div>
+          {copyError ? <p role="alert" className="text-xs font-medium text-delayed">{copyError}</p> : null}
         </div>
       )}
 
@@ -219,6 +254,7 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
                 <th className="py-2 pr-3">이메일</th>
+                <th className="py-2 pr-3">권한</th>
                 <th className="py-2 pr-3">팀</th>
                 <th className="py-2 pr-3">상태</th>
                 <th className="py-2 pr-3">만료</th>
@@ -230,6 +266,10 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
               {rows.map(row => (
                 <tr key={row.id} className="border-b border-line/60 align-top">
                   <td className="py-2.5 pr-3 font-medium text-ink">{row.email}</td>
+                  <td className="py-2.5 pr-3 text-ink-muted">
+                    {row.accessRole ? ACCESS_LABEL[row.accessRole] : '조회 전용'}
+                    {row.roleLabel && <span className="ml-1.5 chip bg-surface-2 text-ink-muted">{row.roleLabel}</span>}
+                  </td>
                   <td className="py-2.5 pr-3">
                     {row.teamCodes.length > 0
                       ? <span className="chip bg-surface-2 text-ink-muted">{row.teamCodes.join(', ')}</span>
@@ -246,18 +286,9 @@ export function ProjectInviteManager({ projectId, rows, loadError }: {
                     {canRevoke(row.status) && (
                       <div className="flex flex-wrap items-center gap-2">
                         {/* 목록 행에는 링크가 없다(토큰 해시만 저장) — 발급 직후 위 상자에서만 복사할 수 있다. */}
-                        {row.url ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost h-8 px-3 text-xs"
-                            onClick={() => void copyLink(row)}
-                          >
-                            {copiedId === row.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copiedId === row.id ? '복사됨' : '링크 복사'}
-                          </button>
-                        ) : row.status === 'active' ? (
+                        {row.status === 'active' && (
                           <span className="text-xs text-ink-subtle">링크는 발급 시 한 번만 표시됩니다</span>
-                        ) : null}
+                        )}
                         <button
                           type="button"
                           className="btn btn-ghost h-8 px-3 text-xs text-delayed"

@@ -77,6 +77,8 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
                 projectId={projectId}
                 rows={invites?.ok ? invites.rows : []}
                 loadError={invites && !invites.ok ? invites.error : null}
+                teamOptions={teamOptions}
+                actorView={toProjectActorView(m, projectId)}
               />
             </div>
           )}

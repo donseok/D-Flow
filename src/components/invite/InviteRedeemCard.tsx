@@ -173,6 +173,11 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       {preview.projectDescription && (
         <p className="mt-1 text-sm leading-6 text-ink-muted">{preview.projectDescription}</p>
       )}
+      {preview.teamNames.length > 0 && (
+        <p data-invite-teams className="mt-2 text-sm leading-6 text-ink-muted">
+          합류하면 <span className="font-medium text-ink">{preview.teamNames.join(', ')}</span> 팀으로 명단에 오릅니다.
+        </p>
+      )}
 
       <div className="mt-5 space-y-4">
         {sessionError ? (

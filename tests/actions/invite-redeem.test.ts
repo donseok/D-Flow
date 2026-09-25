@@ -44,13 +44,15 @@ interface Fixtures {
   profileInsert?: { error: unknown }
   inviteUpdate?: { error: unknown }
   createUser?: { data: unknown; error: unknown }
+  /** 미리보기의 팀 이름 조회(teams.in('id', team_ids)). */
+  teams?: { data: unknown; error: unknown }
 }
 
 /** supabase 체인 모킹 + 호출 인자 기록. 예상 밖 테이블·메서드 접근은 즉시 실패시킨다. */
 function makeAdmin(f: Fixtures = {}) {
   const spies = {
     rpc: vi.fn(), inviteEq: vi.fn(), inviteUpdate: vi.fn(), inviteUpdateEq: vi.fn(), existingEq: vi.fn(),
-    profileEq: vi.fn(), profileInsert: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(),
+    profileEq: vi.fn(), profileInsert: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(), teamsIn: vi.fn(),
   }
   spies.rpc.mockResolvedValue(f.consume ?? { data: CONSUMED, error: null })
   spies.inviteUpdate.mockResolvedValue(f.inviteUpdate ?? { error: null })
@@ -95,6 +97,16 @@ function makeAdmin(f: Fixtures = {}) {
             },
           }),
           insert: (row: unknown) => spies.profileInsert(row),
+        }
+      }
+      if (table === 'teams') {
+        return {
+          select: () => ({
+            in: async (col: string, v: unknown) => {
+              spies.teamsIn(col, v)
+              return f.teams ?? { data: [], error: null }
+            },
+          }),
         }
       }
       throw new Error('예상치 못한 테이블 접근: ' + table)
@@ -425,10 +437,34 @@ describe('getInvitePreview', () => {
         maskedEmail: 'mi*******@example.com',
         status: 'active',
         accountExists: false,
+        teamNames: [],
       },
     })
     // 계정 유무는 profiles(email) 단건 — 전 계정 목록을 훑지 않는다.
     expect(spies.profileEq).toHaveBeenCalledWith('email', INVITE.email)
+    // 팀 없는 초대는 팀 조회도 하지 않는다.
+    expect(spies.teamsIn).not.toHaveBeenCalled()
+  })
+
+  it('초대에 담긴 팀을 이름 목록으로 — 초대에 담은 순서(첫 팀이 대표 후보)대로', async () => {
+    const spies = makeAdmin({
+      invite: { data: { ...PREVIEW_ROW, team_ids: ['t-mes', 't-erp'] }, error: null },
+      teams: { data: [{ id: 't-erp', name: 'ERP' }, { id: 't-mes', name: 'MES' }], error: null },
+    })
+    const res = await getInvitePreview(TOKEN)
+    expect(res.ok && res.preview.teamNames).toEqual(['MES', 'ERP'])
+    expect(spies.teamsIn).toHaveBeenCalledWith('id', ['t-mes', 't-erp'])
+  })
+
+  it('팀 이름 조회 실패를 팀 없는 초대로 위장하지 않는다', async () => {
+    makeAdmin({
+      invite: { data: { ...PREVIEW_ROW, team_ids: ['t-erp'] }, error: null },
+      teams: { data: null, error: { message: 'boom' } },
+    })
+    const spy = silenceConsole()
+    const res = await getInvitePreview(TOKEN)
+    spy.mockRestore()
+    expect(res).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
   })
 
   it('같은 이메일의 계정이 있으면 accountExists 로 로그인 폼을 유도한다', async () => {
@@ -444,7 +480,7 @@ describe('getInvitePreview', () => {
       ok: true,
       preview: {
         projectName: '', projectDescription: null, maskedEmail: '',
-        status: 'revoked', accountExists: false,
+        status: 'revoked', accountExists: false, teamNames: [],
       },
     })
     // 최소 preview 라 계정 유무 조회도 하지 않는다.
@@ -459,7 +495,7 @@ describe('getInvitePreview', () => {
       makeAdmin({ invite: { data: { ...PREVIEW_ROW, ...patch }, error: null } })
       const res = await getInvitePreview(TOKEN)
       expect(res.ok && res.preview).toEqual({
-        projectName: '', projectDescription: null, maskedEmail: '', status, accountExists: false,
+        projectName: '', projectDescription: null, maskedEmail: '', status, accountExists: false, teamNames: [],
       })
     }
   })

@@ -156,6 +156,8 @@ export interface InvitePreview {
   status: InviteStatus
   /** 가입 폼 / 로그인 폼 분기용. */
   accountExists: boolean
+  /** 합류하면 오를 팀 이름(초대에 담은 순서 — 첫 팀이 대표 후보). 빈 배열 = 팀 없이 명단에만 오른다. */
+  teamNames: string[]
 }
 
 interface PreviewRowRaw {
@@ -163,6 +165,7 @@ interface PreviewRowRaw {
   expires_at: string
   revoked_at: string | null
   redeemed_at: string | null
+  team_ids: string[] | null
   projects: { name: string; description: string | null } | null
 }
 
@@ -173,7 +176,7 @@ export async function getInvitePreview(
   const admin = createAdminClient()
   // 반환 컬럼 화이트리스트 — projects 는 name/description 만(share 페이지 선례).
   const found = await loadInvite<PreviewRowRaw>(
-    admin, token, 'email, expires_at, revoked_at, redeemed_at, projects(name, description)',
+    admin, token, 'email, expires_at, revoked_at, redeemed_at, team_ids, projects(name, description)',
   )
   if (!found.ok) return found
   const row = found.invite
@@ -187,7 +190,7 @@ export async function getInvitePreview(
     return {
       ok: true,
       preview: {
-        projectName: '', projectDescription: null, maskedEmail: '', status, accountExists: false,
+        projectName: '', projectDescription: null, maskedEmail: '', status, accountExists: false, teamNames: [],
       },
     }
   }
@@ -207,6 +210,20 @@ export async function getInvitePreview(
     return { ok: false, error: E_LOOKUP }
   }
 
+  // team_ids(uuid[])는 임베드할 FK 가 없다 — 이름으로 푼다. 실패를 '팀 없는 초대'로 위장하지 않는다.
+  // 발급 뒤 지워진 팀은 목록에서 빠진다(합류 시 RPC 가 E_INVITE_TEAM_GONE 으로 거부한다).
+  const teamIds = Array.isArray(row.team_ids) ? row.team_ids : []
+  let teamNames: string[] = []
+  if (teamIds.length > 0) {
+    const { data: teams, error: teamsErr } = await admin.from('teams').select('id, name').in('id', teamIds)
+    if (teamsErr || !teams) {
+      console.error('[inviteRedeem] 팀 조회 실패:', teamsErr?.message ?? 'unknown')
+      return { ok: false, error: E_LOOKUP }
+    }
+    const nameBy = new Map((teams as Array<{ id: string; name: string }>).map(t => [t.id, t.name]))
+    teamNames = teamIds.flatMap(id => (nameBy.has(id) ? [nameBy.get(id)!] : []))
+  }
+
   return {
     ok: true,
     preview: {
@@ -215,6 +232,7 @@ export async function getInvitePreview(
       maskedEmail: maskEmail(row.email),
       status,
       accountExists: profile !== null,
+      teamNames,
     },
   }
 }

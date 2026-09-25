@@ -16,7 +16,7 @@ import { isValidEmail } from '@/lib/domain/validate'
 
 const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
 
-/** 워크스페이스 등급 — 계정 전역 팀(0003 폐지) 자리에 둔다. Phase B 계정 화면이 대체한다. */
+/** 워크스페이스 등급 — 계정의 전역 축(옛 계정 팀은 0003 에서 폐지). */
 type WorkspaceRole = 'admin' | 'member'
 const WS_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관리자', member: '멤버' }
 
@@ -47,7 +47,6 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   const [addOpen, setAddOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [resetting, setResetting] = useState<AccountRow | null>(null)
-  const [editing, setEditing] = useState<AccountRow | null>(null)
 
   return (
     <div className="card overflow-hidden">
@@ -62,7 +61,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
               className="app-input h-9 w-auto text-xs"
               value={projectId}
               onChange={(e) => router.push(`/admin/accounts?project=${e.target.value}`)}
-              title="역할 표시·부여 대상 프로젝트"
+              title="권한 표시·부여 대상 프로젝트"
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -91,40 +90,40 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
                   <th className="py-2 pr-3">이메일</th>
                   <th className="py-2 pr-3">이름</th>
-                  <th className="py-2 pr-3">워크스페이스</th>
-                  <th className="py-2 pr-3">역할</th>
-                  <th className="py-2 pr-3">슈퍼유저</th>
+                  <th className="py-2 pr-3">워크스페이스 역할</th>
+                  <th className="py-2 pr-3">이 프로젝트 권한</th>
+                  {canManageAdmins && <th className="py-2 pr-3">플랫폼 관리자</th>}
                   <th className="py-2 pr-3">생성일</th>
                   <th className="py-2 pr-3 text-right">작업</th>
                 </tr>
               </thead>
               <tbody>
                 {accounts.map((a) => (
-                  <tr key={a.id} className="border-b border-line/60">
+                  <tr key={a.id} data-account-row={a.id} className="border-b border-line/60">
                     <td className="py-2.5 pr-3 font-medium text-ink">{a.email}</td>
                     <td className="py-2.5 pr-3 text-ink-muted">{a.name ?? '—'}</td>
                     <td className="py-2.5 pr-3">
-                      {a.workspaceRole ? <span className="chip bg-surface-2 text-ink-muted">{WS_ROLE_LABEL[a.workspaceRole]}</span> : <span className="text-ink-subtle">—</span>}
+                      <WorkspaceRoleCell account={a} workspaceId={workspaceId} />
                     </td>
                     <td className="py-2.5 pr-3">
-                      <span className={`chip ${
+                      {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
+                      <Link href={`/p/${projectId}/members`} title="명단 화면에서 변경" data-access-role className={`chip ${
                         accountRole(a) === 'admin' ? 'bg-brand-weak text-brand'
                           : accountRole(a) === 'member' ? 'bg-progress-weak text-progress'
                             : 'bg-surface-2 text-ink-subtle'
                       }`}>
                         {accountRole(a) === 'admin' ? <UserCog className="h-3 w-3" /> : accountRole(a) === 'member' ? <UserRound className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                         {ROLE_LABEL[accountRole(a)]}
-                      </span>
+                      </Link>
                     </td>
-                    <td className="py-2.5 pr-3">
-                      <SuperuserCell account={a} canManage={canManageAdmins} />
-                    </td>
+                    {canManageAdmins && (
+                      <td className="py-2.5 pr-3">
+                        <PlatformAdminCell account={a} />
+                      </td>
+                    )}
                     <td className="py-2.5 pr-3 text-ink-subtle">{a.createdAt.slice(0, 10)}</td>
                     <td className="py-2.5 pr-3">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setEditing(a)} className="btn btn-ghost btn-sm" title="워크스페이스·역할 수정">
-                          <UserCog className="h-3.5 w-3.5" />권한
-                        </button>
                         <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
                           <KeyRound className="h-3.5 w-3.5" />비번 리셋
                         </button>
@@ -141,32 +140,32 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
       <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} canManageAdmins={canManageAdmins} />
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} />
       <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />
-      <RoleEditModal account={editing} onClose={() => setEditing(null)} projectId={projectId} workspaceId={workspaceId} />
     </div>
   )
 }
 
-/** 슈퍼유저 배지 — 토글은 슈퍼유저에게만 렌더링(어포던스는 편의, 서버 액션이 재검증). */
-function SuperuserCell({ account, canManage }: { account: AccountRow; canManage: boolean }) {
+/**
+ * 워크스페이스 등급 토글(멤버 ↔ 관리자). 소속이 아니면 바꿀 행이 없다(소속 추가는 SP2).
+ * 마지막 관리자 강등은 DB 트리거가 거부한다 — 액션이 돌려준 문구를 그대로 보여 준다.
+ */
+function WorkspaceRoleCell({ account, workspaceId }: { account: AccountRow; workspaceId: string }) {
   const router = useRouter()
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
-
-  if (!canManage) {
-    return account.isPlatformAdmin
-      ? <span className="chip bg-done-weak text-done"><ShieldCheck className="h-3 w-3" />슈퍼유저</span>
-      : <span className="text-ink-subtle">—</span>
-  }
+  const current = account.workspaceRole
+  if (!current) return <span className="text-ink-subtle" title="이 워크스페이스 소속이 아닌 계정입니다.">—</span>
+  const next: WorkspaceRole = current === 'admin' ? 'member' : 'admin'
   return (
     <button
-      className={`chip ${account.isPlatformAdmin ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'} disabled:opacity-50`}
+      data-ws-role-toggle
+      className={`chip ${current === 'admin' ? 'bg-brand-weak text-brand' : 'bg-surface-2 text-ink-muted'} disabled:opacity-50`}
       disabled={pending}
-      title={account.isPlatformAdmin ? '슈퍼유저 해제' : '슈퍼유저 지정'}
+      title={`${WS_ROLE_LABEL[next]}(으)로 변경`}
       onClick={() => startTransition(async () => {
         try {
-          const res = await setPlatformAdmin(account.id, !account.isPlatformAdmin)
+          const res = await setWorkspaceRole(workspaceId, account.id, next)
           if (res.ok) {
-            toast({ title: account.isPlatformAdmin ? '슈퍼유저를 해제했습니다.' : '슈퍼유저로 지정했습니다.', description: account.email, variant: 'success' })
+            toast({ title: `워크스페이스 ${WS_ROLE_LABEL[next]}(으)로 변경했습니다.`, description: account.email, variant: 'success' })
             router.refresh()
           } else {
             toast({ title: '변경 실패', description: res.error, variant: 'error' })
@@ -176,7 +175,38 @@ function SuperuserCell({ account, canManage }: { account: AccountRow; canManage:
         }
       })}
     >
-      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? '슈퍼유저' : '지정'}
+      {current === 'admin' ? <UserCog className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}{WS_ROLE_LABEL[current]}
+    </button>
+  )
+}
+
+/** 플랫폼 관리자(슈퍼유저) 토글 — 열 자체를 슈퍼유저에게만 렌더링한다(어포던스는 편의, 서버 액션이 재검증). */
+function PlatformAdminCell({ account }: { account: AccountRow }) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [pending, startTransition] = useTransition()
+
+  return (
+    <button
+      data-platform-admin-toggle
+      className={`chip ${account.isPlatformAdmin ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'} disabled:opacity-50`}
+      disabled={pending}
+      title={account.isPlatformAdmin ? '플랫폼 관리자 해제' : '플랫폼 관리자 지정'}
+      onClick={() => startTransition(async () => {
+        try {
+          const res = await setPlatformAdmin(account.id, !account.isPlatformAdmin)
+          if (res.ok) {
+            toast({ title: account.isPlatformAdmin ? '플랫폼 관리자를 해제했습니다.' : '플랫폼 관리자로 지정했습니다.', description: account.email, variant: 'success' })
+            router.refresh()
+          } else {
+            toast({ title: '변경 실패', description: res.error, variant: 'error' })
+          }
+        } catch {
+          toast({ title: '변경 실패', description: '요청 처리 중 오류가 발생했습니다.', variant: 'error' })
+        }
+      })}
+    >
+      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? '플랫폼 관리자' : '지정'}
     </button>
   )
 }
@@ -191,14 +221,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** 역할 select(계정 추가) — 관리자 옵션은 canManageAdmins(슈퍼유저)일 때만 고를 수 있다. */
-function RoleSelect({ value, onChange, canManageAdmins, disabled = false }: {
+function RoleSelect({ value, onChange, canManageAdmins }: {
   value: AccountRole
   onChange: (r: AccountRole) => void
   canManageAdmins: boolean
-  disabled?: boolean
 }) {
   return (
-    <select className="app-input" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as AccountRole)}>
+    <select className="app-input" value={value} onChange={(e) => onChange(e.target.value as AccountRole)}>
       {ACCOUNT_ROLES.map((r) => (
         <option key={r} value={r} disabled={r === 'admin' && !canManageAdmins}>
           {ROLE_LABEL[r]}{r === 'admin' && !canManageAdmins ? ' (슈퍼유저 전용)' : ''}
@@ -209,13 +238,12 @@ function RoleSelect({ value, onChange, canManageAdmins, disabled = false }: {
 }
 
 /** 워크스페이스 등급 select — 계정 관리 자체가 슈퍼유저 전용이라 두 값 모두 고를 수 있다. */
-function WorkspaceRoleSelect({ value, onChange, disabled = false }: {
+function WorkspaceRoleSelect({ value, onChange }: {
   value: WorkspaceRole
   onChange: (r: WorkspaceRole) => void
-  disabled?: boolean
 }) {
   return (
-    <select className="app-input" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as WorkspaceRole)}>
+    <select className="app-input" value={value} onChange={(e) => onChange(e.target.value as WorkspaceRole)}>
       {(['member', 'admin'] as const).map((r) => <option key={r} value={r}>{WS_ROLE_LABEL[r]}</option>)}
     </select>
   )
@@ -280,10 +308,10 @@ function AddAccountModal({ open, onClose, projectId, canManageAdmins }: {
           <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="홍길동" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="워크스페이스 권한">
+          <Field label="워크스페이스 역할">
             <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} />
           </Field>
-          <Field label="프로젝트 역할">
+          <Field label="이 프로젝트 권한">
             <RoleSelect value={role} onChange={setRole} canManageAdmins={canManageAdmins} />
           </Field>
         </div>
@@ -340,8 +368,8 @@ function BulkAddModal({ open, onClose, projectId }: { open: boolean; onClose: ()
     >
       <div className="space-y-4">
         <div className="rounded-xl bg-surface-2 px-3.5 py-3 text-xs leading-5 text-ink-muted">
-          한 줄에 하나씩, <b>이메일, 역할, 초기비번</b> 순서(선택: 이름). 콤마 또는 탭 구분.<br />
-          역할: <code>admin · member · viewer</code> — 선택한 프로젝트의 역할입니다. 워크스페이스 권한은 멤버로 만들고, 슈퍼유저는 일괄 등록으로 지정할 수 없습니다.<br />
+          한 줄에 하나씩, <b>이메일, 권한, 초기비번[, 이름]</b> 순서. 콤마 또는 탭 구분.<br />
+          권한: <code>admin · member · viewer</code> — 선택한 프로젝트의 권한입니다(viewer = 명단 없이 조회 전용). 워크스페이스 역할은 멤버로 만들고, 플랫폼 관리자는 일괄 등록으로 지정할 수 없습니다.<br />
           예) <code>hong@company.com, member, password1, 홍길동</code>
         </div>
         <textarea
@@ -452,72 +480,6 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
             {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
           </>
         )}
-      </div>
-    </Modal>
-  )
-}
-
-function RoleEditModal({ account, onClose, projectId, workspaceId }: {
-  account: AccountRow | null; onClose: () => void; projectId: string; workspaceId: string
-}) {
-  const router = useRouter()
-  const { toast } = useToast()
-  const [wsRole, setWsRole] = useState<WorkspaceRole>('member')
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
-
-  useEffect(() => {
-    if (!account) return
-    setWsRole(account.workspaceRole ?? 'member')
-    setError(null)
-  }, [account])
-
-  // 이 워크스페이스 소속이 아닌 계정은 등급을 바꿀 행이 없다(소속 추가는 Phase B).
-  const wsLocked = !account?.workspaceRole
-
-  function submit() {
-    setError(null)
-    if (!account) return
-    startTransition(async () => {
-      try {
-        if (account.workspaceRole && wsRole !== account.workspaceRole) {
-          const wsRes = await setWorkspaceRole(workspaceId, account.id, wsRole)
-          if (!wsRes.ok) { setError(wsRes.error ?? '워크스페이스 권한 변경 실패'); return }
-        }
-        toast({ title: '권한을 변경했습니다.', variant: 'success' })
-        onClose(); router.refresh()
-      } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
-      }
-    })
-  }
-
-  return (
-    <Modal
-      open={!!account} onClose={onClose} eyebrow="Workspace & role" title="워크스페이스·역할 수정"
-      footer={
-        <>
-          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>
-          <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <p className="text-sm text-ink-muted"><b className="text-ink">{account?.email}</b></p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="워크스페이스 권한">
-            <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} disabled={wsLocked} />
-          </Field>
-          <Field label="프로젝트 권한">
-            <p className="app-input flex items-center text-sm text-ink-muted">{account ? ROLE_LABEL[accountRole(account)] : '—'}</p>
-          </Field>
-        </div>
-        {wsLocked && <p className="text-xs text-ink-subtle">이 워크스페이스 소속이 아닌 계정입니다.</p>}
-        {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
-        <p className="text-xs text-ink-subtle">
-          프로젝트 권한은 <Link href={`/p/${projectId}/members`} className="underline">명단 화면</Link>에서 바꿉니다.
-        </p>
-        {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
       </div>
     </Modal>
   )

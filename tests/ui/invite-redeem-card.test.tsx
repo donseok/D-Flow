@@ -53,6 +53,7 @@ const PREVIEW: InvitePreview = {
   maskedEmail: 'ho****@example.com',
   status: 'active',
   accountExists: false,
+  teamNames: [],
 }
 
 function setValue(input: HTMLInputElement, value: string) {
@@ -182,6 +183,21 @@ describe('InviteRedeemCard 세션 분기', () => {
 
     expect(mocks.signOut).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith('/projects')
+  })
+
+  it('초대에 담긴 팀을 이름 목록으로 안내한다(첫 팀이 대표)', async () => {
+    mocks.getInviteSessionState.mockReturnValue(new Promise(() => {}))
+    await render({ ...PREVIEW, teamNames: ['MES', 'ERP'] })
+
+    const teams = container.querySelector('[data-invite-teams]')!
+    expect(teams.textContent).toContain('MES, ERP')
+  })
+
+  it('팀 없는 초대는 팀 안내를 하지 않는다', async () => {
+    mocks.getInviteSessionState.mockReturnValue(new Promise(() => {}))
+    await render()
+
+    expect(container.querySelector('[data-invite-teams]')).toBeNull()
   })
 
   it('비활성 초대에서는 세션을 묻지 않는다', async () => {
