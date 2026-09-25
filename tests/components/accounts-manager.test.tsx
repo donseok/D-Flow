@@ -36,6 +36,7 @@ function account(over: Partial<AccountRow> = {}): AccountRow {
   }
 }
 const BOB = account({ id: 'u-bob', email: 'bob@example.com', name: 'bob', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null })
+const DAVE = account({ id: 'u-dave', email: 'dave@example.com', name: 'dave', isPlatformAdmin: true })
 const CAROL = account({ id: 'u-carol', email: 'carol@example.com', name: 'carol', workspaceRole: null, accessRole: 'admin' })
 
 describe('AccountsManager', () => {
@@ -55,10 +56,10 @@ describe('AccountsManager', () => {
     container.remove()
   })
 
-  function render(rows: AccountRow[] = [account(), BOB, CAROL], canManageAdmins = true) {
+  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], canManageAdmins = true) {
     act(() => {
       root.render(<AccountsManager accounts={rows} projectId="p-1" workspaceId="ws-1"
-        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} />)
+        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} currentUserId="u-bob" />)
     })
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
@@ -109,9 +110,19 @@ describe('AccountsManager', () => {
     await click(row('u-alice').querySelector('[data-platform-admin-toggle]')!)
     expect(setPlatformAdmin).toHaveBeenCalledWith('u-alice', true)
     setPlatformAdmin.mockResolvedValue({ ok: false, error: msg })
-    await click(row('u-bob').querySelector('[data-platform-admin-toggle]')!)
-    expect(setPlatformAdmin).toHaveBeenLastCalledWith('u-bob', false)
+    await click(row('u-dave').querySelector('[data-platform-admin-toggle]')!)
+    expect(setPlatformAdmin).toHaveBeenLastCalledWith('u-dave', false)
     expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ description: msg, variant: 'error' }))
+  })
+
+  it('본인 행의 플랫폼 관리자 토글은 비활성 — 스스로 해제할 수 없다는 안내', async () => {
+    render()
+    const self = row('u-bob').querySelector<HTMLButtonElement>('[data-platform-admin-toggle]')!
+    expect(self.disabled).toBe(true)
+    expect(self.title).toBe('본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.')
+    await click(self)
+    expect(setPlatformAdmin).not.toHaveBeenCalled()
+    expect(row('u-alice').querySelector<HTMLButtonElement>('[data-platform-admin-toggle]')!.disabled).toBe(false)
   })
 
   it('이 프로젝트 권한은 읽기 전용 — 편집은 명단 화면 링크로 보낸다', () => {

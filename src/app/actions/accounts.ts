@@ -57,6 +57,7 @@ const ERR_WS_ROLE = '알 수 없는 워크스페이스 권한'
 const ERR_ACCESS = '알 수 없는 권한'
 const ERR_PERSON_LINKED = '이미 다른 계정에 연결된 사람입니다.'
 const ERR_LIST = '계정 권한 정보를 불러오지 못했습니다.'
+const ERR_SELF_PLATFORM = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
 
 function isWorkspaceRole(v: unknown): v is WorkspaceRole {
   return v === 'admin' || v === 'member'
@@ -276,6 +277,8 @@ export async function resetPassword(userId: string, password: string): Promise<A
 export async function setPlatformAdmin(userId: string, value: boolean): Promise<AccountActionResult> {
   const g = await requireSuperuser()
   if (!g.ok) return { ok: false, error: g.error }
+  // 본인 해제는 다른 슈퍼유저가 한다 — 한 번의 클릭으로 자기 관리 화면에서 잠기는 사고를 막는다(마지막 한 명 검사와 별개).
+  if (!value && userId === g.actor.userId) return { ok: false, error: ERR_SELF_PLATFORM }
   if (typeof value !== 'boolean') return { ok: false, error: '지정 여부가 올바르지 않습니다.' }
   const admin = createAdminClient()
 

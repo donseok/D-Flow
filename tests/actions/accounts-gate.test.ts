@@ -360,7 +360,13 @@ describe('setPlatformAdmin — 마지막 관리자 보호', () => {
     expect(res.error).toContain('확인할 수 없어')
   })
 
-  it('둘 이상이면 해제한다', async () => {
+  it('본인 해제는 거부한다 — 조회·쓰기 없이(다른 슈퍼유저가 해야 한다)', async () => {
+    const res = await setPlatformAdmin('u-su', false)
+    expect(res).toEqual({ ok: false, error: '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.' })
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('다른 사람 해제는 기존대로(둘 이상이면 해제한다)', async () => {
     const list = chain({ data: [{ user_id: 'u1' }, { user_id: 'u2' }], error: null })
     const del = chain({ error: null })
     let n = 0

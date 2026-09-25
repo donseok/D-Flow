@@ -14,6 +14,9 @@ import {
 import { ACCOUNT_ROLES, type AccountRole } from '@/lib/domain/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 
+// accounts.ts 의 ERR_SELF_PLATFORM 원문('use server' 모듈이라 상수를 공유하지 못한다 — 바꾸면 둘 다).
+const SELF_PLATFORM_HINT = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
+
 const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
 
 /** 워크스페이스 등급 — 계정의 전역 축(옛 계정 팀은 0003 에서 폐지). */
@@ -33,7 +36,7 @@ function randomPassword(): string {
   return Array.from(arr, (n) => chars[n % chars.length]).join('')
 }
 
-export function AccountsManager({ accounts, projectId, workspaceId, projects, canManageAdmins }: {
+export function AccountsManager({ accounts, projectId, workspaceId, projects, canManageAdmins, currentUserId }: {
   accounts: AccountRow[]
   /** 역할 열·역할 변경이 대상으로 삼는 프로젝트 */
   projectId: string
@@ -42,6 +45,8 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   projects: { id: string; name: string }[]
   /** 슈퍼유저만 true — 관리자 슬롯·슈퍼유저 토글 조작 가능 여부 */
   canManageAdmins: boolean
+  /** 보는 사람 — 본인 행의 플랫폼 관리자 해제를 막는다(서버 액션도 거부). */
+  currentUserId: string
 }) {
   const router = useRouter()
   const [addOpen, setAddOpen] = useState(false)
@@ -118,7 +123,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                     </td>
                     {canManageAdmins && (
                       <td className="py-2.5 pr-3">
-                        <PlatformAdminCell account={a} />
+                        <PlatformAdminCell account={a} isSelf={a.id === currentUserId} />
                       </td>
                     )}
                     <td className="py-2.5 pr-3 text-ink-subtle">{a.createdAt.slice(0, 10)}</td>
@@ -181,17 +186,18 @@ function WorkspaceRoleCell({ account, workspaceId }: { account: AccountRow; work
 }
 
 /** 플랫폼 관리자(슈퍼유저) 토글 — 열 자체를 슈퍼유저에게만 렌더링한다(어포던스는 편의, 서버 액션이 재검증). */
-function PlatformAdminCell({ account }: { account: AccountRow }) {
+function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: boolean }) {
   const router = useRouter()
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
+  const selfLocked = isSelf && account.isPlatformAdmin
 
   return (
     <button
       data-platform-admin-toggle
       className={`chip ${account.isPlatformAdmin ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'} disabled:opacity-50`}
-      disabled={pending}
-      title={account.isPlatformAdmin ? '플랫폼 관리자 해제' : '플랫폼 관리자 지정'}
+      disabled={pending || selfLocked}
+      title={selfLocked ? SELF_PLATFORM_HINT : account.isPlatformAdmin ? '플랫폼 관리자 해제' : '플랫폼 관리자 지정'}
       onClick={() => startTransition(async () => {
         try {
           const res = await setPlatformAdmin(account.id, !account.isPlatformAdmin)

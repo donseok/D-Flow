@@ -73,6 +73,7 @@ export default async function AccountsAdminPage({
         workspaceId={res.workspaceId}
         projects={managed.map(p => ({ id: p.id, name: p.name }))}
         canManageAdmins={actor.isSuperuser}
+        currentUserId={actor.userId}
       />
     </div>
   )
