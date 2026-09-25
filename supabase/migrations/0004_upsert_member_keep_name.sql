@@ -5,7 +5,9 @@
 -- 프로젝트 A 관리자가 다른 프로젝트 명단의 인물 이메일을 넣는 것만으로 그 인물의 이름을 조용히 바꿀 수 있었다(SP1 Task 12 리뷰).
 --
 -- 바꾼 것: 이메일 분기는 insert … returning 으로 새로 만든 경우에만 입력 이름을 쓰고, 기존 인물이면 가리키기만 한다.
--- 개명은 p_person.id 로 행을 지목한 편집(id 분기)에서만 — 그 동작은 0003 그대로다.
+-- 개명은 p_person.id 로 행을 지목한 편집(id 분기)에서만 하고, 그것도 people_update 정책과 같은 선(워크스페이스 관리자 이상,
+-- 또는 그 인물이 이번 upsert 전부터 호출자가 관리자인 프로젝트 명단에 있음)을 넘을 때만 한다 — 0003 은 id 로 명단 밖 인물을
+-- 지목해도 개명했다. 선을 넘지 못하면 오류 없이 이름만 두고 명단 추가·수정은 진행한다.
 -- 나머지 본문·시그니처·security definer·search_path 는 0003 과 같다. create or replace 는 소유자·권한을 보존하지만
 -- 0003 과 같은 revoke/grant 를 다시 적어 둔다(멱등).
 -- 롤백: supabase/rollbacks/0004_upsert_member_keep_name_rollback.sql(0003 본문 복원).
@@ -62,8 +64,15 @@ begin
     if v_person_ws <> v_ws then
       raise exception using errcode = '23514', message = 'PROJECT_MEMBER_CROSS_WORKSPACE';
     end if;
-    -- 개명은 id 로 행을 지목한 편집에서만(0004)
-    if v_name is not null and v_name is distinct from v_person_name then
+    -- 개명은 id 로 행을 지목한 편집에서만, 그것도 people_update 정책과 같은 선에서만(0004): 워크스페이스 관리자 이상이거나
+    -- 그 인물이 이번 upsert 전부터 호출자가 관리자인 프로젝트의 명단에 있을 때. 아니면 이름은 두고 명단 쓰기만 진행한다.
+    if v_name is not null and v_name is distinct from v_person_name
+       and (v_ws_admin or exists (
+             select 1 from public.project_members pm
+              where pm.person_id = v_person_id
+                and exists (select 1 from public.project_members apm join public.people ape on ape.id = apm.person_id
+                             where apm.project_id = pm.project_id and ape.user_id = p_actor
+                               and apm.active and ape.active and apm.access_role = 'admin'))) then
       update public.people set display_name = v_name, updated_at = now() where id = v_person_id;
     end if;
   else
