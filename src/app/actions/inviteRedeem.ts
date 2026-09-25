@@ -2,22 +2,25 @@
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { listAllAuthUsers } from '@/lib/data/accounts'
+import { personOf } from '@/lib/data/memberSelect'
+import { hashInviteToken } from '@/lib/domain/inviteToken'
 import {
   isAllowedInviteDomain, isInviteToken, inviteStatus, maskEmail, normalizeInviteEmail,
   parseAllowedDomains, validateSignupInput, type InviteStatus, type SignupInput,
 } from '@/lib/domain/invites'
 
 type AdminClient = ReturnType<typeof createAdminClient>
+type AccessRole = 'admin' | 'member'
 
 // 인증 게이트가 없는 공개 경로다(링크를 가진 사람이 곧 호출자). 방어선은 셋뿐이다:
 // ① 토큰 형식 검증 ② 초대 행이 못 박은 이메일 ③ 소비 RPC 의 원자적 판정.
+// 합류의 쓰기(소비·프로필·인물·워크스페이스 소속·명단·팀)는 전부 RPC consume_project_invite 한 트랜잭션이다 —
+// 앱 계층에 흩뿌리면 부분 실패가 "소비된 초대 + 소속 없음" 을 남긴다.
 // 사용자 문구는 계약서 §8 원문. 원시 Postgres/Supabase 메시지는 노출하지 않는다.
 const E_NOT_FOUND = '초대를 찾을 수 없습니다.'
 const E_UNUSABLE = '만료되었거나 사용할 수 없는 초대입니다.'
 const E_LOOKUP = '초대를 확인할 수 없어 중단했습니다.'
-const E_JOIN_FAILED = '합류 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-const E_JOIN_STUCK = '합류 처리에 실패했습니다. 관리자에게 문의해 주세요.'
+const E_PERSON_LINKED = '이 이메일의 인물이 이미 다른 계정에 연결돼 있습니다. 관리자에게 문의해 주세요.'
 const E_SIGNUP_FAILED = '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
 
 /**
@@ -32,32 +35,30 @@ function domainStillAllowed(rawEmail: string): boolean {
 
 interface InviteRowRaw {
   project_id: string
-  team_id: string
   email: string
-  created_by: string | null
+  access_role: AccessRole | null
   expires_at: string
   revoked_at: string | null
   redeemed_at: string | null
 }
-const INVITE_COLS = 'project_id, team_id, email, created_by, expires_at, revoked_at, redeemed_at'
+const INVITE_COLS = 'project_id, email, access_role, expires_at, revoked_at, redeemed_at'
 
-/** consume_project_invite 의 반환 컬럼(0065). */
+/** consume_project_invite 의 반환 행(0003). */
 interface ConsumedInvite {
+  workspace_id: string
   project_id: string
-  team_id: string
-  invite_email: string
-  created_by: string | null
+  member_id: string
 }
 
 /**
- * 토큰으로 초대 1행. 조회 실패(E17)와 미존재(E1)를 구분한다 —
+ * 토큰으로 초대 1행 — DB 에는 해시만 있으므로 해시로 찾는다. 조회 실패(E17)와 미존재(E1)를 구분한다 —
  * 조회 실패를 '없음'으로 위장하면 DB 장애가 곧 '만료된 링크' 안내가 된다.
  */
 async function loadInvite<T>(
   admin: AdminClient, token: string, cols: string = INVITE_COLS,
 ): Promise<{ ok: true; invite: T } | { ok: false; error: string }> {
   const { data, error } = await admin
-    .from('project_invites').select(cols).eq('token', token).maybeSingle()
+    .from('project_invites').select(cols).eq('token_hash', hashInviteToken(token)).maybeSingle()
   if (error) {
     // 토큰은 로그에 남기지 않는다.
     console.error('[inviteRedeem] 초대 조회 실패:', error.message)
@@ -79,15 +80,20 @@ async function currentUser(): Promise<
   }
 }
 
-/** 검증과 소비를 단일 UPDATE 로 처리하는 RPC. 이메일 일치도 DB 가 강제한다(설계 P1). */
+/**
+ * 소비 + 합류 RPC 한 번. 검증(미사용·미취소·미만료·이메일 일치)과 소비가 단일 UPDATE 이고, 이어서 프로필·인물 연결·
+ * 워크스페이스 소속·명단 upsert(권한은 올리기만)·팀 전개가 같은 트랜잭션이다(설계 P1).
+ */
 async function consumeInvite(
   admin: AdminClient, token: string, email: string, userId: string,
 ): Promise<{ ok: true; row: ConsumedInvite } | { ok: false; error: string }> {
   const { data, error } = await admin.rpc('consume_project_invite', {
-    p_token: token, p_email: email, p_user: userId,
+    p_token_hash: hashInviteToken(token), p_email: email, p_user: userId,
   })
   if (error) {
     console.error('[inviteRedeem] 초대 소비 실패:', error.message)
+    // 같은 이메일의 인물이 다른 계정에 이미 연결돼 있다 — 사용자가 고칠 수 없고 관리자가 풀어야 한다.
+    if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: E_PERSON_LINKED }
     return { ok: false, error: E_LOOKUP }
   }
   const rows = (data ?? []) as ConsumedInvite[]
@@ -97,31 +103,12 @@ async function consumeInvite(
 }
 
 /**
- * 합류 역할 부여. **`ignoreDuplicates` 를 빼면 UPDATE 가 되어** 이미 admin 인 사용자가
- * 자기 프로젝트의 초대 링크를 밟는 순간 member 로 강등된다.
- */
-async function grantMemberRole(
-  admin: AdminClient, projectId: string, userId: string, grantedBy: string,
-): Promise<boolean> {
-  const { error } = await admin.from('project_roles').upsert(
-    { project_id: projectId, user_id: userId, role: 'member', granted_by: grantedBy },
-    { onConflict: 'project_id,user_id', ignoreDuplicates: true },
-  )
-  if (error) {
-    console.error('[inviteRedeem] 역할 부여 실패:', error.message)
-    return false
-  }
-  return true
-}
-
-/**
- * 소비를 되돌린다. 1회용 초대라 소비만 되고 역할이 안 붙으면 재시도가 원리적으로 불가능하다 —
- * 되돌려야 같은 링크를 다시 쓸 수 있다. 되돌리기까지 실패하면 링크가 '사용됨'으로 고착되므로
- * 사용자에게는 관리자 문의를 안내한다(E_JOIN_STUCK).
+ * 소비를 되돌린다(가입 경로의 보상 롤백 전용). RPC 는 원자적이라 보통은 되돌릴 것이 없지만, 커밋됐는데 응답만 깨진
+ * 경우 1회용 링크가 아무도 쓰지 못한 채 타 버린다 — 되돌려야 같은 링크로 재시도할 수 있다.
  */
 async function revertRedeem(admin: AdminClient, token: string): Promise<boolean> {
   const { error } = await admin
-    .from('project_invites').update({ redeemed_by: null, redeemed_at: null }).eq('token', token)
+    .from('project_invites').update({ redeemed_by: null, redeemed_at: null }).eq('token_hash', hashInviteToken(token))
   if (error) {
     console.error('[inviteRedeem] 소비 되돌리기 실패 — 초대가 사용됨으로 고착:', error.message)
     return false
@@ -130,14 +117,14 @@ async function revertRedeem(admin: AdminClient, token: string): Promise<boolean>
 }
 
 /**
- * 가입 경로 보상 롤백. 계정을 지우면 memberships·project_roles 는 FK cascade 로 함께 사라진다.
+ * 가입 경로 보상 롤백. 계정을 지우면 profiles·workspace_members 는 FK cascade 로 함께 사라지고,
+ * 인물의 계정 연결은 set null 로 풀린다(연결이 풀리면 트리거가 그 인물의 권한도 내린다).
  *
  * 이미 소비한 초대가 있으면 **계정 삭제보다 먼저** 되돌린다 — 되돌려야 1회용 링크가 활성으로
- * 돌아와 사용자가 같은 메일로 재시도할 수 있다. 순서가 중요한 이유는 그것뿐이다(0065 의
- * redeem 쌍 CHECK 는 한 방향만 금지하므로 (null, timestamp) 를 허용한다 — 삭제가 막히지 않는다).
+ * 돌아와 사용자가 같은 메일로 재시도할 수 있다.
  *
  * 되돌리기가 실패해도 계정 삭제는 그대로 진행한다. 초대는 '사용됨'으로 고착되어 관리자가 다시
- * 발급해야 하지만, 유령 계정을 남기는 쪽이 더 나쁘다 — 그 계정은 전사 읽기 권한을 갖는다.
+ * 발급해야 하지만, 유령 계정을 남기는 쪽이 더 나쁘다 — 그 계정은 워크스페이스 읽기 권한을 갖는다.
  */
 async function rollbackSignup(
   admin: AdminClient, userId: string, consumedToken: string | null,
@@ -152,28 +139,6 @@ async function rollbackSignup(
   if (error) {
     console.error(`[inviteRedeem] 보상 롤백 실패(유령 계정 잔존 user_id=${userId}):`, error.message)
   }
-}
-
-/**
- * 팀 소속 보정. 기존 계정의 소속을 초대가 덮어쓰지 않는 것은 의도다 — 팀은 관리자가 정하는
- * 값이고 초대는 프로젝트 합류를 위한 것이다. 다만 `memberships` 행이 **아예 없는** 계정은
- * 팀이 비어 WBS 담당 판정이 깨지므로, 그 경우에만 초대의 팀으로 채운다.
- *
- * 여기까지 왔으면 초대는 이미 소비됐고 역할도 붙었다 — 실패해도 합류를 되돌리지 않고 흔적만
- * 남긴다. 선행 조회가 깨졌으면 쓰지 않는다(있는 소속을 덮어쓰는 쪽이 더 위험하다).
- */
-async function ensureMembership(admin: AdminClient, userId: string, teamId: string): Promise<void> {
-  const { data, error } = await admin
-    .from('memberships').select('user_id').eq('user_id', userId).maybeSingle()
-  if (error) {
-    console.error('[redeemInvite] 멤버십 확인 실패 — 팀 보정을 생략한다:', error.message)
-    return
-  }
-  if (data) return
-  // memberships.role 은 deprecated(0054)이나 not null — 옛 값 하나를 채운다(accounts.ts 관례).
-  const { error: insErr } = await admin.from('memberships')
-    .insert({ user_id: userId, team_id: teamId, role: 'team_editor' })
-  if (insErr) console.error('[redeemInvite] 멤버십 보정 저장 실패:', insErr.message)
 }
 
 export interface InvitePreview {
@@ -211,7 +176,6 @@ export async function getInvitePreview(
   )
   // 비활성 초대는 **상태만** 돌려준다. 이미 소비·취소·만료된 링크가 유출됐을 때 프로젝트명·
   // 수신자·계정 유무까지 딸려 나갈 이유가 없다. 화면도 이 상태에서는 안내 문구만 쓴다.
-  // 부수 효과로 계정 목록 전량 조회도 건너뛴다 — 의도한 것이다.
   if (status !== 'active') {
     return {
       ok: true,
@@ -229,13 +193,10 @@ export async function getInvitePreview(
 
   // 계정 유무는 폼 분기에만 쓰지만, 조회가 깨졌는데 '계정 없음'으로 폴백하면
   // 기존 사용자에게 가입 폼을 보여 주고 제출 뒤에야 실패한다. 여기서 중단한다.
-  let accountExists: boolean
-  try {
-    const users = await listAllAuthUsers(admin)
-    const target = normalizeInviteEmail(row.email)
-    accountExists = users.some((u) => normalizeInviteEmail(u.email) === target)
-  } catch (e) {
-    console.error('[inviteRedeem] 계정 목록 조회 실패:', e instanceof Error ? e.message : e)
+  const { data: profile, error: profileErr } = await admin
+    .from('profiles').select('user_id').eq('email', normalizeInviteEmail(row.email)).maybeSingle()
+  if (profileErr) {
+    console.error('[inviteRedeem] 계정 유무 조회 실패:', profileErr.message)
     return { ok: false, error: E_LOOKUP }
   }
 
@@ -246,7 +207,7 @@ export async function getInvitePreview(
       projectDescription: project?.description ?? null,
       maskedEmail: maskEmail(row.email),
       status,
-      accountExists,
+      accountExists: profile !== null,
     },
   }
 }
@@ -279,6 +240,11 @@ export async function getInviteSessionState(
   }
 }
 
+/** 권한 서열 — 초대는 기존 권한을 깎지 않는다(RPC 와 같은 admin > member > null). */
+function accessRank(r: AccessRole | null): number {
+  return r === 'admin' ? 2 : r === 'member' ? 1 : 0
+}
+
 /** 로그인 사용자 합류. 세션 이메일이 초대 이메일과 다르면 소비 전에 거부한다. */
 export async function redeemInvite(
   token: string,
@@ -302,31 +268,25 @@ export async function redeemInvite(
     return { ok: false, error: '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.' }
   }
 
-  // 이미 역할이 있으면 초대를 태우지 않는다 — 1회용이라 태워봐야 되돌릴 일만 생긴다.
-  // 선행 조회 실패는 중단(에러 처리 3원칙): 없다고 보고 진행하면 소비만 하고 끝날 수 있다.
-  const { data: existing, error: roleErr } = await admin
-    .from('project_roles').select('user_id')
-    .eq('project_id', invite.project_id).eq('user_id', user.id).maybeSingle()
-  if (roleErr) {
-    console.error('[redeemInvite] 기존 역할 조회 실패:', roleErr.message)
+  // 이미 같거나 높은 권한이 있으면 초대를 태우지 않는다 — 1회용이라 태워도 얻을 것이 없고, 링크만 소모된다.
+  // 초대가 더 높은 권한(관리자)을 담았거나 명단 행이 비활성이면 소비해 올린다(RPC 가 되살리고 올린다).
+  // 선행 조회 실패는 중단(에러 처리 3원칙): 없다고 보고 진행하면 기존 상태를 모른 채 소비한다.
+  const { data: existing, error: existingErr } = await admin
+    .from('project_members').select('access_role, active, people!inner(user_id, active)')
+    .eq('project_id', invite.project_id).eq('people.user_id', user.id)
+    .maybeSingle()
+  if (existingErr) {
+    console.error('[redeemInvite] 기존 권한 조회 실패:', existingErr.message)
     return { ok: false, error: E_LOOKUP }
   }
-  if (existing) return { ok: true, projectId: invite.project_id, alreadyMember: true }
+  const pe = personOf(existing)
+  const current = existing && existing.active && pe?.active ? (existing.access_role as AccessRole | null) : null
+  if (current && accessRank(current) >= accessRank(invite.access_role)) {
+    return { ok: true, projectId: invite.project_id, alreadyMember: true }
+  }
 
   const consumed = await consumeInvite(admin, token, sessionEmail, user.id)
   if (!consumed.ok) return consumed
-
-  // granted_by 는 초대를 만든 관리자 — 사고 추적의 출발점이다(생성자가 삭제됐으면 본인).
-  const granted = await grantMemberRole(
-    admin, consumed.row.project_id, user.id, consumed.row.created_by ?? user.id,
-  )
-  if (!granted) {
-    const reverted = await revertRedeem(admin, token)
-    return { ok: false, error: reverted ? E_JOIN_FAILED : E_JOIN_STUCK }
-  }
-
-  // 초대의 team_id 로 기존 계정의 소속을 덮어쓰지 않는다(의도) — 없을 때만 채운다.
-  await ensureMembership(admin, user.id, consumed.row.team_id)
 
   revalidatePath('/projects')
   return { ok: true, projectId: consumed.row.project_id, alreadyMember: false }
@@ -346,6 +306,7 @@ export async function redeemInviteWithSignup(
 
   const valid = validateSignupInput(input)
   if (!valid.ok) return { ok: false, error: valid.error }
+  const name = input.name.trim()
 
   const admin = createAdminClient()
   const found = await loadInvite<InviteRowRaw>(admin, token)
@@ -366,7 +327,7 @@ export async function redeemInviteWithSignup(
     email,
     password: input.password,
     email_confirm: true, // SMTP 없이 즉시 로그인 가능하도록 확인 처리(accounts.ts 관례)
-    user_metadata: { full_name: input.name.trim() },
+    user_metadata: { full_name: name },
   })
   if (createErr || !created?.user) {
     // 원인을 구분해 주면 '이 주소에 계정이 있는가'를 되묻는 탐침이 된다.
@@ -374,11 +335,11 @@ export async function redeemInviteWithSignup(
   }
   const userId = created.user.id
 
-  // memberships.role 은 deprecated(0054)이나 not null — 옛 값 하나를 채운다(accounts.ts 와 동일).
-  const { error: memErr } = await admin.from('memberships')
-    .insert({ user_id: userId, team_id: invite.team_id, role: 'team_editor' })
-  if (memErr) {
-    console.error('[redeemInviteWithSignup] 멤버십 저장 실패:', memErr.message)
+  // RPC 는 기존 프로필의 표시 이름을 유지하고, 없으면 이메일 로컬 파트로 만든다 — 가입 폼의 이름이 명단(인물)에
+  // 오르려면 프로필을 먼저 넣어야 한다.
+  const { error: profileErr } = await admin.from('profiles').insert({ user_id: userId, email, display_name: name })
+  if (profileErr) {
+    console.error('[redeemInviteWithSignup] 프로필 저장 실패:', profileErr.message)
     await rollbackSignup(admin, userId, null)
     return { ok: false, error: E_SIGNUP_FAILED }
   }
@@ -388,24 +349,11 @@ export async function redeemInviteWithSignup(
     // 소비 실패 = 이 계정이 존재할 근거가 없다. 유령 계정을 남기지 않는다.
     // 토큰을 함께 넘긴다 — RPC 가 실제로는 커밋됐는데 응답만 깨진 경우 행은 소비된 상태라
     // 되돌리지 않으면 1회용 링크가 아무도 쓰지 못한 채 타 버린다. 소비되지 않은 경우엔
-    // where token=? 업데이트가 null 을 다시 null 로 쓸 뿐이라 무해하다(멱등 no-op).
+    // where token_hash=? 업데이트가 null 을 다시 null 로 쓸 뿐이라 무해하다(멱등 no-op).
+    // (그 드문 경우 RPC 가 만든 인물·명단 행은 계정 삭제의 set null 로 외부 인력 행으로 남는다 — 관리자가 정리한다.)
     await rollbackSignup(admin, userId, token)
     return consumed
   }
-
-  const granted = await grantMemberRole(
-    admin, consumed.row.project_id, userId, consumed.row.created_by ?? userId,
-  )
-  if (!granted) {
-    await rollbackSignup(admin, userId, token)
-    return { ok: false, error: E_SIGNUP_FAILED }
-  }
-
-  // 같은 이메일의 프로젝트 멤버 행에 새 계정을 잇는다(accounts.ts 선례).
-  // 이메일이 관리자가 지정한 값이라 로스터를 가로챌 여지는 없다. 실패해도 가입은 성공으로 둔다.
-  const { error: linkErr } = await admin.from('project_members')
-    .update({ user_id: userId }).is('user_id', null).eq('email', email)
-  if (linkErr) console.error('[redeemInviteWithSignup] 멤버 행 연결 실패:', linkErr.message)
 
   revalidatePath('/projects')
   return { ok: true, projectId: consumed.row.project_id, email }

@@ -1,12 +1,11 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { requireProjectAdmin } from '@/lib/authz'
+import { requireProjectAdmin, requireSuperuser } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { listAllAuthUsers } from '@/lib/data/accounts'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
-import { isTeamCode } from '@/lib/domain/accounts'
+import { teamsForProjectSync } from '@/lib/teams/master'
 import { isValidEmail } from '@/lib/domain/validate'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import {
@@ -15,12 +14,15 @@ import {
 } from '@/lib/domain/invites'
 
 type AdminClient = ReturnType<typeof createAdminClient>
+type AccessRole = 'admin' | 'member'
 
 // 사용자에게 나가는 문구는 설계 §8 표의 원문이다. 원시 Postgres/Supabase 메시지를 그대로
 // 올리지 않는다 — 초대 표면은 비로그인 경로와 맞닿아 있어 내부 구조를 흘리면 안 된다.
 const ERR_LOOKUP = '초대를 확인할 수 없어 중단했습니다.'
 const ERR_EMAIL = '이메일 형식을 확인해 주세요.'
-const ERR_TEAM = '알 수 없는 팀 코드'
+const ERR_TEAM = '알 수 없는 팀입니다.'
+const ERR_ACCESS = '알 수 없는 권한입니다.'
+const ERR_ADMIN_INVITE = '관리자 권한 초대는 워크스페이스 관리자만 발급할 수 있습니다.'
 const ERR_DAYS = '유효기간은 1~30일 사이여야 합니다.'
 const ERR_DUP = '이 주소로 발급한 초대가 아직 유효합니다. 취소 후 다시 보내세요.'
 /** 만료분만 남아 부분 유니크를 막고 있는 경우. 관리자가 취소 버튼을 눌러야 길이 열린다. */
@@ -40,28 +42,33 @@ function domainError(domains: string[]): string {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** 초대 행 조회 열 — token 을 포함하므로 이 파일 밖으로 원본을 흘리지 않는다.
- *  token 은 링크 조립에만 쓰고 InviteRow 에는 싣지 않는다(RSC 페이로드로 새어나간다). */
-const INVITE_COLUMNS = 'id, token, email, created_at, expires_at, revoked_at, redeemed_at'
+/** 초대 행 조회 열. DB 에는 토큰 해시만 있고(0003), 그 해시도 싣지 않는다 — 조회 키라 RSC 페이로드로 흘릴 이유가 없다. */
+const INVITE_COLUMNS = 'id, email, access_role, role_label, team_ids, created_at, expires_at, revoked_at, redeemed_at'
 
 export interface InviteRow {
   id: string
   email: string
-  teamCode: string | null
+  /** 합류하면 받을 권한. null = 조회 전용으로 명단에만 오른다. */
+  accessRole: AccessRole | null
+  roleLabel: string | null
+  /** 합류하면 오를 팀 코드(초대에 담은 순서 — 첫 팀이 대표 후보). */
+  teamCodes: string[]
   status: InviteStatus
   expiresAt: string
   createdAt: string
   redeemedAt: string | null
-  /** 서버가 조립한 초대 링크. NEXT_PUBLIC_APP_URL 미설정이면 null —
-   *  UI 가 window.location.origin 을 읽으면 서버 프리렌더에서 죽는다(설계 §7-1).
-   *  status 가 'active' 인 행에만 채운다: 나머지는 눌러도 실패할 링크이고,
-   *  쓸 수 없는 토큰을 브라우저까지 실어 보낼 이유가 없다. */
+  /** 서버가 조립한 초대 링크. **발급 응답에서만** 채운다 — DB 에는 토큰 해시만 있어 목록에서는 링크를 다시
+   *  만들 수 없다(목록은 항상 null, 화면 문구 "링크는 발급 시 한 번만 표시됩니다"). */
   url: string | null
 }
 
 export interface CreateInviteInput {
   email: string
-  teamCode: string
+  /** 합류 시 권한. 'admin' 은 슈퍼유저만 발급한다(SP2 에서 워크스페이스 관리자). */
+  accessRole: AccessRole | null
+  roleLabel?: string | null
+  /** 이 프로젝트의 활성 팀 id — 첫 원소가 대표 팀 후보(합류 시 대표 팀이 아직 없을 때만). 빈 배열 = 팀 없음. */
+  teamIds: string[]
   days?: number
 }
 
@@ -87,10 +94,6 @@ function inviteOrigin(): string | null {
   return raw.replace(/\/+$/, '')
 }
 
-function inviteUrl(origin: string | null, token: string): string | null {
-  return origin ? `${origin}/invite/${token}` : null
-}
-
 /** SMTP 원문 에러에는 계정·호스트 정보가 섞인다(meetingNotify 와 같은 이유). */
 function toMailMessage(e: unknown): string {
   const code = (e as { code?: string } | null)?.code
@@ -101,40 +104,28 @@ function toMailMessage(e: unknown): string {
   return '메일 발송 중 오류가 발생했습니다.'
 }
 
-/** 팀 코드 → teams.id — 프로젝트 행 우선, 전역 폴백(0071 스코프. import RPC 와 같은 규칙). */
-async function resolveTeamId(admin: AdminClient, teamCode: string, projectId: string): Promise<string | null> {
-  const { data, error } = await admin.from('teams')
-    .select('id, project_id')
-    .eq('code', teamCode)
-    .or(`project_id.eq.${projectId},project_id.is.null`)
-  // 쓰기 직전의 조회 — null 이면 호출부가 발급을 중단하므로 이미 fail-closed다.
-  // 다만 '팀이 없음'과 '조회가 깨짐'이 화면에서 같은 문구가 되므로 원인은 로그로 남긴다.
-  if (error) console.error('[projectInvites.resolveTeamId] 조회 실패:', error.message)
-  const rows = (data ?? []) as Array<{ id: string; project_id: string | null }>
-  return (rows.find(r => r.project_id !== null) ?? rows[0])?.id ?? null
-}
-
 type RawInvite = {
-  id: unknown; token: unknown; email: unknown
+  id: unknown; email: unknown; access_role: unknown; role_label: unknown; team_ids: unknown
   created_at: unknown; expires_at: unknown; revoked_at: unknown; redeemed_at: unknown
 }
 
-function toInviteRow(r: RawInvite, teamCode: string | null, origin: string | null, now: Date): InviteRow {
+function toInviteRow(r: RawInvite, teamCodes: string[], url: string | null, now: Date): InviteRow {
   const expiresAt = String(r.expires_at)
   const revokedAt = (r.revoked_at as string | null) ?? null
   const redeemedAt = (r.redeemed_at as string | null) ?? null
   const status = inviteStatus({ expiresAt, revokedAt, redeemedAt }, now)
-  // token 은 여기서만 읽고 지역 변수로 끝낸다 — 반환 객체에 실으면 설정 화면의 RSC
-  // 페이로드에 전 초대의 원본 토큰이 그대로 적재된다.
   return {
     id: String(r.id),
     email: String(r.email),
-    teamCode,
+    accessRole: (r.access_role as AccessRole | null) ?? null,
+    roleLabel: (r.role_label as string | null) ?? null,
+    teamCodes,
     status,
     expiresAt,
     createdAt: String(r.created_at),
     redeemedAt,
-    url: status === 'active' ? inviteUrl(origin, String(r.token)) : null,
+    // 쓸 수 없는 링크는 싣지 않는다(발급 직후엔 active 다).
+    url: status === 'active' ? url : null,
   }
 }
 
@@ -160,19 +151,31 @@ export async function listProjectInvites(
 
   const { data, error } = await admin
     .from('project_invites')
-    .select(`${INVITE_COLUMNS}, teams(code)`)
+    .select(INVITE_COLUMNS)
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
   if (error || !data) {
     console.error('[listProjectInvites] 조회 실패:', error?.message ?? 'unknown')
     return { ok: false, error: ERR_LOOKUP }
   }
+  const invites = data as unknown as RawInvite[]
 
-  const origin = inviteOrigin()
+  // team_ids(uuid[])는 임베드할 FK 가 없다 — 한 번에 모아 코드로 푼다. 실패는 목록 실패다(팀 없는 초대로 위장하지 않는다).
+  const teamIds = [...new Set(invites.flatMap(r => (Array.isArray(r.team_ids) ? (r.team_ids as string[]) : [])))]
+  const codeBy = new Map<string, string>()
+  if (teamIds.length > 0) {
+    const { data: teams, error: teamsErr } = await admin.from('teams').select('id, code').in('id', teamIds)
+    if (teamsErr || !teams) {
+      console.error('[listProjectInvites] 팀 조회 실패:', teamsErr?.message ?? 'unknown')
+      return { ok: false, error: ERR_LOOKUP }
+    }
+    for (const t of teams as Array<{ id: string; code: string }>) codeBy.set(t.id, t.code)
+  }
+
   const now = new Date()
-  const rows = data.map((r) => {
-    const team = (r as { teams?: unknown }).teams as { code?: unknown } | null
-    return toInviteRow(r as RawInvite, (team?.code as string | undefined) ?? null, origin, now)
+  const rows = invites.map(r => {
+    const ids = Array.isArray(r.team_ids) ? (r.team_ids as string[]) : []
+    return toInviteRow(r, ids.flatMap(id => (codeBy.has(id) ? [codeBy.get(id)!] : [])), null, now)
   })
   return { ok: true, rows }
 }
@@ -187,16 +190,27 @@ export async function listProjectInvites(
 export async function createProjectInvite(
   projectId: string, input: CreateInviteInput,
 ): Promise<CreateInviteResult | { ok: false; error: string }> {
-  const g = await requireProjectAdmin(projectId)
+  // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드로 열리면 '관리자가 관리자를 늘린다'.
+  const accessRole = input?.accessRole ?? null
+  const g = accessRole === 'admin' ? await requireSuperuser() : await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
 
   // 입력 검증 → origin 확인까지는 DB 를 건드리지 않는다. 어차피 만들 수 없는 초대라면
-  // 흔적도 남기지 않는 편이 낫다.
-  const email = normalizeInviteEmail(input.email ?? '')
+  // 흔적도 남기지 않는 편이 낫다. 서버 액션 입력은 형상부터 믿지 않는다.
+  if (!input || typeof input !== 'object') return { ok: false, error: ERR_EMAIL }
+  if (accessRole !== null && accessRole !== 'admin' && accessRole !== 'member') return { ok: false, error: ERR_ACCESS }
+  const email = normalizeInviteEmail(typeof input.email === 'string' ? input.email : '')
   if (!isValidEmail(email)) return { ok: false, error: ERR_EMAIL }
   const domains = parseAllowedDomains(process.env.INVITE_ALLOWED_DOMAINS)
   if (!isAllowedInviteDomain(email, domains)) return { ok: false, error: domainError(domains) }
-  if (!isTeamCode(input.teamCode, activeTeamCodesForProjectSync(projectId))) return { ok: false, error: ERR_TEAM }
+  // 팀은 이 프로젝트에서 고를 수 있는 활성 팀만(resolveTeamsForProject 규칙) — 트리거가 워크스페이스 범위를 다시 본다.
+  if (!Array.isArray(input.teamIds)) return { ok: false, error: ERR_TEAM }
+  const selectable = teamsForProjectSync(projectId).filter(t => t.active)
+  const teams = [...new Set(input.teamIds)].map(id => selectable.find(t => t.id === id))
+  if (teams.some(t => !t)) return { ok: false, error: ERR_TEAM }
+  const teamIds = teams.map(t => t!.id)
+  const teamCodes = teams.map(t => t!.code)
+  const roleLabel = typeof input.roleLabel === 'string' && input.roleLabel.trim() ? input.roleLabel.trim() : null
   const days = normalizeInviteDays(input.days ?? DEFAULT_INVITE_DAYS)
   if (days === null) return { ok: false, error: ERR_DAYS }
 
@@ -211,18 +225,14 @@ export async function createProjectInvite(
     return { ok: false, error: ERR_INIT }
   }
 
-  // 메일 제목·본문에 들어갈 프로젝트명. 쓰기 전 선행 조회이므로 실패는 중단이다(3원칙 ②) —
-  // 프로젝트가 없으면 어차피 FK 가 거부한다.
+  // 메일 제목·본문의 프로젝트명과 초대 행의 워크스페이스. 쓰기 전 선행 조회이므로 실패는 중단이다(3원칙 ②).
   const { data: project, error: projectErr } = await admin
-    .from('projects').select('name').eq('id', projectId).maybeSingle()
+    .from('projects').select('name, workspace_id').eq('id', projectId).maybeSingle()
   if (projectErr) {
     console.error('[createProjectInvite] 프로젝트 조회 실패:', projectErr.message)
     return { ok: false, error: ERR_LOOKUP }
   }
   if (!project) return { ok: false, error: '프로젝트를 찾을 수 없습니다.' }
-
-  const teamId = await resolveTeamId(admin, input.teamCode, projectId)
-  if (!teamId) return { ok: false, error: '팀을 찾을 수 없습니다.' }
 
   // 기존 계정이 있으면 링크가 '로그인하고 합류' 경로가 된다 — 발급을 막지는 않고 안내만 한다.
   const alreadyAccount = await hasAccount(admin, email)
@@ -231,30 +241,38 @@ export async function createProjectInvite(
   const dup = await checkBlockingInvites(admin, projectId, email, now)
   if (!dup.ok) return dup
 
+  // 평문 토큰은 링크 조립에만 쓰고 저장하지 않는다 — 여기서 만들어 응답과 메일로만 나간다.
   const token = crypto.randomUUID()
   const expiresAt = new Date(now.getTime() + days * DAY_MS).toISOString()
   const { data: inserted, error: insErr } = await admin
     .from('project_invites')
     .insert({
-      project_id: projectId, token, email, team_id: teamId,
-      created_by: g.actor.userId, expires_at: expiresAt,
+      project_id: projectId, workspace_id: project.workspace_id as string, email,
+      access_role: accessRole, role_label: roleLabel, team_ids: teamIds.length > 0 ? teamIds : null,
+      token_hash: hashInviteToken(token), created_by: g.actor.userId, expires_at: expiresAt,
     })
     .select(INVITE_COLUMNS)
     .single()
   if (insErr || !inserted) {
     // 부분 유니크 위반 = 위 확인과 insert 사이에 다른 관리자가 먼저 발급했다는 뜻이다.
     if ((insErr as { code?: string } | null)?.code === '23505') return { ok: false, error: ERR_DUP }
+    // 트리거(project_invites_guard)의 2차 판정 — 가드와 엇갈리면 DB 판정을 문구로.
+    if (insErr?.message.includes('PROJECT_INVITE_ADMIN_FORBIDDEN')) return { ok: false, error: ERR_ADMIN_INVITE }
+    if (insErr?.message.includes('PROJECT_INVITE_TEAM_SCOPE')) return { ok: false, error: ERR_TEAM }
     // 토큰은 로그에 남기지 않는다 — 로그 열람 권한이 곧 가입 자격이 되어서는 안 된다.
     console.error('[createProjectInvite] 저장 실패:', insErr?.message ?? 'unknown')
     return { ok: false, error: '초대를 저장하지 못했습니다.' }
   }
 
-  const row = toInviteRow(inserted as RawInvite, input.teamCode, origin, now)
   const url = `${origin}/invite/${token}`
+  const row = toInviteRow(inserted as unknown as RawInvite, teamCodes, url, now)
   const mail = await sendInviteMail(admin, {
     to: email, projectName: String(project.name ?? ''), inviterId: g.actor.userId, url, expiresAt,
+    // 팀 이름은 코드와 동기(teams.name = code) — 팀 마스터의 코드를 그대로 싣는다.
+    teamNames: teamCodes,
   })
 
+  revalidatePath(`/p/${projectId}/members`)
   revalidatePath(`/p/${projectId}/settings`)
   return { ok: true, row, url, alreadyAccount, ...mail }
 }
@@ -292,21 +310,20 @@ async function checkBlockingInvites(
   return { ok: false, error: hasActive ? ERR_DUP : ERR_DUP_EXPIRED }
 }
 
-/** 이미 계정이 있는 주소인가. 확인 실패는 null — 발급을 막을 사유가 아니다(표시 = 로깅). */
+/** 이미 계정이 있는 주소인가 — profiles(email) 단건. 확인 실패는 null(발급을 막을 사유가 아니다, 표시 = 로깅). */
 async function hasAccount(admin: AdminClient, email: string): Promise<boolean | null> {
-  try {
-    const users = await listAllAuthUsers(admin)
-    return users.some(u => normalizeInviteEmail(u.email) === email)
-  } catch (e) {
-    console.error('[createProjectInvite] 계정 존재 확인 실패:', e instanceof Error ? e.message : e)
+  const { data, error } = await admin.from('profiles').select('user_id').eq('email', email).maybeSingle()
+  if (error) {
+    console.error('[createProjectInvite] 계정 존재 확인 실패:', error.message)
     return null
   }
+  return data !== null
 }
 
 /** 초대 메일 1통. 실패는 결과에 담아 올린다 — 초대 자체는 이미 유효하다. */
 async function sendInviteMail(
   admin: AdminClient,
-  i: { to: string; projectName: string; inviterId: string; url: string; expiresAt: string },
+  i: { to: string; projectName: string; inviterId: string; url: string; expiresAt: string; teamNames: string[] },
 ): Promise<{ mailed: boolean; mailError?: string }> {
   const transport = getTransport()
   if (!transport.ok) return { mailed: false, mailError: transport.error }
@@ -323,7 +340,7 @@ async function sendInviteMail(
   }
 
   const { subject, html, text } = renderInviteMail({
-    projectName: i.projectName, inviterName, url: i.url, expiresAt: i.expiresAt,
+    projectName: i.projectName, inviterName, url: i.url, expiresAt: i.expiresAt, teamNames: i.teamNames,
   })
   try {
     const { rejected } = await transport.send({
@@ -377,6 +394,7 @@ export async function revokeProjectInvite(
   }
   if (!data || data.length === 0) return { ok: false, error: ERR_REVOKE }
 
+  revalidatePath(`/p/${projectId}/members`)
   revalidatePath(`/p/${projectId}/settings`)
   return { ok: true }
 }

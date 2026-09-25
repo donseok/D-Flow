@@ -2,64 +2,59 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // 공개 redeem 액션은 인증 게이트가 없다 — 세션·초대 행·소비 RPC 세 방어선만 검증하면 되므로
 // DB 는 전부 모킹한다. vi.mock 팩토리는 호이스팅되므로 스파이는 vi.hoisted 로 먼저 만든다.
-const { createAdminClient, getSession, listAllAuthUsers } = vi.hoisted(() => ({
+// 합류의 쓰기(프로필·인물·워크스페이스 소속·명단·팀)는 전부 RPC consume_project_invite 한 트랜잭션이다 —
+// 스텁은 project_members·memberships·project_roles 에 대한 쓰기를 받지 않는다(받으면 즉시 실패).
+const { createAdminClient, getSession } = vi.hoisted(() => ({
   createAdminClient: vi.fn(() => {
     throw new Error('createAdminClient 는 선검증 전에 호출되면 안 된다')
   }),
   getSession: vi.fn(),
-  listAllAuthUsers: vi.fn(),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
-vi.mock('@/lib/data/accounts', () => ({ listAllAuthUsers }))
 
 import {
   getInvitePreview, getInviteSessionState, redeemInvite, redeemInviteWithSignup,
 } from '@/app/actions/inviteRedeem'
+import { hashInviteToken } from '@/lib/domain/inviteToken'
 
 const TOKEN = '11111111-2222-4333-8444-555555555555'
+const HASH = hashInviteToken(TOKEN)
 const PROJECT = 'p-1'
 const USER = { id: 'u-1', email: 'mina.park@example.com' }
-const SIGNUP = { name: '유남규', password: 'password1', passwordConfirmation: 'password1' }
+const SIGNUP = { name: ' 홍길동 ', password: 'password1', passwordConfirmation: 'password1' }
 
 const INVITE = {
   project_id: PROJECT,
-  team_id: 't-1',
   email: 'mina.park@example.com',
-  created_by: 'admin-1',
+  access_role: 'member',
   expires_at: '2999-01-01T00:00:00.000Z',
   revoked_at: null,
   redeemed_at: null,
 }
-const CONSUMED = [{
-  project_id: PROJECT, team_id: 't-1', invite_email: INVITE.email, created_by: 'admin-1',
-}]
+const CONSUMED = [{ workspace_id: 'ws-1', project_id: PROJECT, member_id: 'm-1' }]
 
 interface Fixtures {
   invite?: { data: unknown; error: unknown }
-  existingRole?: { data: unknown; error: unknown }
-  roleUpsert?: { error: unknown }
+  /** 이 프로젝트의 기존 명단 행(세션 사용자 인물) — 기본은 없음. */
+  existing?: { data: unknown; error: unknown }
   consume?: { data: unknown; error: unknown }
-  /** 기존 계정의 memberships 행 유무 — 기본은 '있음'(팀 소속을 초대가 덮어쓰지 않는 경로). */
-  membership?: { data: unknown; error: unknown }
-  membershipInsert?: { error: unknown }
+  profile?: { data: unknown; error: unknown }
+  profileInsert?: { error: unknown }
   inviteUpdate?: { error: unknown }
   createUser?: { data: unknown; error: unknown }
 }
 
-/** supabase 체인 모킹 + 호출 인자 기록. 예상 밖 테이블 접근은 즉시 실패시킨다. */
+/** supabase 체인 모킹 + 호출 인자 기록. 예상 밖 테이블·메서드 접근은 즉시 실패시킨다. */
 function makeAdmin(f: Fixtures = {}) {
-  // 인자 검증은 테스트 본문의 toHaveBeenCalledWith 로 한다 — 여기서는 반환값만 정해 준다.
   const spies = {
-    rpc: vi.fn(), roleUpsert: vi.fn(), inviteUpdate: vi.fn(), membershipInsert: vi.fn(),
-    memberLink: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(),
+    rpc: vi.fn(), inviteEq: vi.fn(), inviteUpdate: vi.fn(), inviteUpdateEq: vi.fn(), existingEq: vi.fn(),
+    profileEq: vi.fn(), profileInsert: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(),
   }
   spies.rpc.mockResolvedValue(f.consume ?? { data: CONSUMED, error: null })
-  spies.roleUpsert.mockResolvedValue(f.roleUpsert ?? { error: null })
   spies.inviteUpdate.mockResolvedValue(f.inviteUpdate ?? { error: null })
-  spies.membershipInsert.mockResolvedValue(f.membershipInsert ?? { error: null })
-  spies.memberLink.mockResolvedValue({ error: null })
+  spies.profileInsert.mockResolvedValue(f.profileInsert ?? { error: null })
   spies.createUser.mockResolvedValue(f.createUser ?? { data: { user: { id: 'u-new' } }, error: null })
   spies.deleteUser.mockResolvedValue({ error: null })
   const client = {
@@ -67,33 +62,34 @@ function makeAdmin(f: Fixtures = {}) {
       if (table === 'project_invites') {
         return {
           select: () => ({
-            eq: () => ({ maybeSingle: async () => f.invite ?? { data: INVITE, error: null } }),
+            eq: (col: string, v: unknown) => {
+              spies.inviteEq(col, v)
+              return { maybeSingle: async () => f.invite ?? { data: INVITE, error: null } }
+            },
           }),
-          update: (patch: unknown) => ({ eq: () => spies.inviteUpdate(patch) }),
-        }
-      }
-      if (table === 'project_roles') {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({ maybeSingle: async () => f.existingRole ?? { data: null, error: null } }),
-            }),
+          update: (patch: unknown) => ({
+            eq: (col: string, v: unknown) => { spies.inviteUpdateEq(col, v); return spies.inviteUpdate(patch) },
           }),
-          upsert: (row: unknown, opts: unknown) => spies.roleUpsert(row, opts),
-        }
-      }
-      if (table === 'memberships') {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => f.membership ?? { data: { user_id: USER.id }, error: null },
-            }),
-          }),
-          insert: (row: unknown) => spies.membershipInsert(row),
         }
       }
       if (table === 'project_members') {
-        return { update: () => ({ is: () => ({ eq: () => spies.memberLink() }) }) }
+        // 선행 조회(읽기)만 허용 — 명단 쓰기는 RPC 몫이다.
+        const q = {
+          eq: (col: string, v: unknown) => { spies.existingEq(col, v); return q },
+          maybeSingle: async () => f.existing ?? { data: null, error: null },
+        }
+        return { select: () => q }
+      }
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: (col: string, v: unknown) => {
+              spies.profileEq(col, v)
+              return { maybeSingle: async () => f.profile ?? { data: null, error: null } }
+            },
+          }),
+          insert: (row: unknown) => spies.profileInsert(row),
+        }
       }
       throw new Error('예상치 못한 테이블 접근: ' + table)
     },
@@ -121,7 +117,6 @@ beforeEach(() => {
     throw new Error('createAdminClient 는 선검증 전에 호출되면 안 된다')
   })
   getSession.mockReset()
-  listAllAuthUsers.mockReset()
   // USER·INVITE 의 도메인(example.com)을 기본으로 허용해 둔다 — 재검사 회귀 테스트만 좁힌다.
   process.env.INVITE_ALLOWED_DOMAINS = 'example.com'
 })
@@ -160,6 +155,15 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     spy.mockRestore()
   })
 
+  // DB 에는 평문 토큰이 없다 — 조회 키는 언제나 해시다.
+  it('초대는 토큰 해시로 찾는다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin()
+    await redeemInvite(TOKEN)
+    expect(spies.inviteEq).toHaveBeenCalledWith('token_hash', HASH)
+    expect(spies.inviteEq).not.toHaveBeenCalledWith('token', expect.anything())
+  })
+
   // 발급 시점엔 허용됐어도 이후 env 를 좁히면(운영자가 허용 도메인을 줄이는 경우) 이미 나간
   // 초대도 즉시 막혀야 한다 — 허용 목록은 issuance 시점 스냅샷이 아니라 매 호출마다 다시 읽는다.
   it('허용 도메인이 좁혀지면 이미 나간 초대도 재확인에서 막는다(fail-closed)', async () => {
@@ -179,20 +183,41 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
       error: '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.',
     })
     expect(spies.rpc).not.toHaveBeenCalled()
-    expect(spies.roleUpsert).not.toHaveBeenCalled()
   })
 
-  it('이미 프로젝트 역할이 있으면 초대를 태우지 않는다', async () => {
+  it('이미 같거나 높은 권한이 있으면 초대를 태우지 않는다', async () => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ existingRole: { data: { user_id: USER.id }, error: null } })
+    const spies = makeAdmin({
+      existing: { data: { access_role: 'admin', active: true, people: { user_id: USER.id, active: true } }, error: null },
+    })
     expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: true })
+    expect(spies.existingEq).toHaveBeenCalledWith('project_id', PROJECT)
+    expect(spies.existingEq).toHaveBeenCalledWith('people.user_id', USER.id)
     expect(spies.rpc).not.toHaveBeenCalled()
-    expect(spies.roleUpsert).not.toHaveBeenCalled()
   })
 
-  it('기존 역할 조회가 실패하면 소비하지 않고 중단한다', async () => {
+  it('관리자 초대면 기존 멤버도 소비해 올린다(초대는 권한을 깎지 않고 올리기만)', async () => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ existingRole: { data: null, error: { message: 'boom' } } })
+    const spies = makeAdmin({
+      invite: { data: { ...INVITE, access_role: 'admin' }, error: null },
+      existing: { data: { access_role: 'member', active: true, people: { user_id: USER.id, active: true } }, error: null },
+    })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(spies.rpc).toHaveBeenCalled()
+  })
+
+  it('비활성 명단 행의 권한은 없는 것으로 본다 — 소비해서 되살린다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin({
+      existing: { data: { access_role: 'member', active: false, people: { user_id: USER.id, active: true } }, error: null },
+    })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(spies.rpc).toHaveBeenCalled()
+  })
+
+  it('기존 권한 조회가 실패하면 소비하지 않고 중단한다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin({ existing: { data: null, error: { message: 'boom' } } })
     const spy = silenceConsole()
     expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
     spy.mockRestore()
@@ -201,63 +226,33 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
 
   it('소비 RPC 가 0행이면 만료·사용됨과 구분하지 않고 거부한다', async () => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ consume: { data: [], error: null } })
+    makeAdmin({ consume: { data: [], error: null } })
     expect(await redeemInvite(TOKEN))
       .toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
-    expect(spies.roleUpsert).not.toHaveBeenCalled()
   })
 
-  it('정상 합류 — 소비 RPC 는 (토큰·이메일·사용자) 3인자, 역할 upsert 는 ignoreDuplicates', async () => {
+  it('정상 합류 — RPC 한 번(토큰 해시·이메일·사용자), 앱은 명단에 직접 쓰지 않는다', async () => {
     getSession.mockResolvedValue(USER)
     const spies = makeAdmin()
     expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(spies.rpc).toHaveBeenCalledTimes(1)
     expect(spies.rpc).toHaveBeenCalledWith('consume_project_invite', {
-      p_token: TOKEN, p_email: INVITE.email, p_user: USER.id,
+      p_token_hash: HASH, p_email: INVITE.email, p_user: USER.id,
     })
-    // ignoreDuplicates 가 빠지면 UPDATE 가 되어 admin 이 member 로 강등된다 — 회귀 방어.
-    expect(spies.roleUpsert).toHaveBeenCalledWith(
-      { project_id: PROJECT, user_id: USER.id, role: 'member', granted_by: 'admin-1' },
-      { onConflict: 'project_id,user_id', ignoreDuplicates: true },
-    )
-    // 이미 소속이 있는 계정의 팀을 초대가 덮어쓰지 않는다.
-    expect(spies.membershipInsert).not.toHaveBeenCalled()
+    // RPC 가 원자적이라 앱이 되돌릴 부분 상태가 없다.
+    expect(spies.inviteUpdate).not.toHaveBeenCalled()
   })
 
-  it('멤버십이 없는 기존 계정이면 초대의 팀으로 채운다 — 팀이 비면 WBS 담당 판정이 깨진다', async () => {
+  it('RPC 오류는 원시 메시지 대신 문구로 — 인물이 다른 계정에 연결된 경우는 따로 안내한다', async () => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ membership: { data: null, error: null } })
-    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
-    expect(spies.membershipInsert)
-      .toHaveBeenCalledWith({ user_id: USER.id, team_id: 't-1', role: 'team_editor' })
-  })
-
-  it('멤버십 확인이 실패하면 보정을 생략한다 — 있는 소속을 덮어쓰지 않는다', async () => {
-    getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ membership: { data: null, error: { message: 'boom' } } })
+    makeAdmin({ consume: { data: null, error: { code: '23505', message: 'PROJECT_INVITE_PERSON_LINKED' } } })
     const spy = silenceConsole()
-    // 합류 자체는 이미 성립했으므로 되돌리지 않는다.
-    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(await redeemInvite(TOKEN)).toEqual({
+      ok: false, error: '이 이메일의 인물이 이미 다른 계정에 연결돼 있습니다. 관리자에게 문의해 주세요.',
+    })
+    makeAdmin({ consume: { data: null, error: { message: 'connection reset' } } })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
     spy.mockRestore()
-    expect(spies.membershipInsert).not.toHaveBeenCalled()
-  })
-
-  it('역할 부여가 실패하면 소비를 되돌려 재시도할 수 있게 한다', async () => {
-    getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ roleUpsert: { error: { message: 'boom' } } })
-    const spy = silenceConsole()
-    const res = await redeemInvite(TOKEN)
-    spy.mockRestore()
-    expect(res).toEqual({ ok: false, error: '합류 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.' })
-    expect(spies.inviteUpdate).toHaveBeenCalledWith({ redeemed_by: null, redeemed_at: null })
-  })
-
-  it('되돌리기까지 실패하면 링크가 고착됐음을 알린다', async () => {
-    getSession.mockResolvedValue(USER)
-    makeAdmin({ roleUpsert: { error: { message: 'boom' } }, inviteUpdate: { error: { message: 'again' } } })
-    const spy = silenceConsole()
-    const res = await redeemInvite(TOKEN)
-    spy.mockRestore()
-    expect(res).toEqual({ ok: false, error: '합류 처리에 실패했습니다. 관리자에게 문의해 주세요.' })
   })
 })
 
@@ -295,7 +290,7 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     expect(spies.createUser).not.toHaveBeenCalled()
   })
 
-  it('계정은 초대 행의 이메일로만 만든다 — 입력이 주소를 정할 수 없다', async () => {
+  it('계정은 초대 행의 이메일로만 — 가입 폼의 이름을 프로필에 먼저 넣고 RPC 로 합류한다', async () => {
     getSession.mockResolvedValue(null)
     const spies = makeAdmin()
     const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
@@ -303,12 +298,12 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     expect(spies.createUser).toHaveBeenCalledWith(expect.objectContaining({
       email: INVITE.email, password: SIGNUP.password, email_confirm: true,
     }))
-    expect(spies.membershipInsert)
-      .toHaveBeenCalledWith({ user_id: 'u-new', team_id: 't-1', role: 'team_editor' })
-    expect(spies.roleUpsert).toHaveBeenCalledWith(
-      { project_id: PROJECT, user_id: 'u-new', role: 'member', granted_by: 'admin-1' },
-      { onConflict: 'project_id,user_id', ignoreDuplicates: true },
-    )
+    // RPC 는 기존 프로필 이름을 유지하므로(없으면 이메일 로컬 파트) 가입 폼의 이름이 명단에 오르려면 먼저 넣어야 한다.
+    expect(spies.profileInsert).toHaveBeenCalledWith({ user_id: 'u-new', email: INVITE.email, display_name: '홍길동' })
+    expect(spies.profileInsert.mock.invocationCallOrder[0]).toBeLessThan(spies.rpc.mock.invocationCallOrder[0])
+    expect(spies.rpc).toHaveBeenCalledWith('consume_project_invite', {
+      p_token_hash: HASH, p_email: INVITE.email, p_user: 'u-new',
+    })
     expect(spies.deleteUser).not.toHaveBeenCalled()
   })
 
@@ -317,16 +312,17 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     const spies = makeAdmin({ createUser: { data: null, error: { message: 'already registered' } } })
     expect(await redeemInviteWithSignup(TOKEN, SIGNUP))
       .toEqual({ ok: false, error: '이미 가입된 계정이거나 입력값을 확인해 주세요.' })
-    expect(spies.membershipInsert).not.toHaveBeenCalled()
+    expect(spies.profileInsert).not.toHaveBeenCalled()
   })
 
-  it('멤버십 저장이 실패하면 계정을 되돌린다', async () => {
+  it('프로필 저장이 실패하면 소비 전에 계정을 되돌린다', async () => {
     getSession.mockResolvedValue(null)
-    const spies = makeAdmin({ membershipInsert: { error: { message: 'boom' } } })
+    const spies = makeAdmin({ profileInsert: { error: { message: 'boom' } } })
     const spy = silenceConsole()
     const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
     spy.mockRestore()
     expect(res).toEqual({ ok: false, error: '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.' })
+    expect(spies.rpc).not.toHaveBeenCalled()
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
   })
 
@@ -336,11 +332,12 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
     expect(res).toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
-    // 소비되지 않은 행에도 되돌리기를 시도하지만 null 을 다시 null 로 쓸 뿐이라 무해하다.
+    // 소비되지 않은 행에도 되돌리기를 시도하지만 null 을 다시 null 로 쓸 뿐이라 무해하다. 대상은 해시로 찾는다.
     expect(spies.inviteUpdate).toHaveBeenCalledWith({ redeemed_by: null, redeemed_at: null })
+    expect(spies.inviteUpdateEq).toHaveBeenCalledWith('token_hash', HASH)
   })
 
-  it('소비 RPC 가 에러로 실패해도 되돌리기를 먼저 한다 — 커밋됐는데 응답만 깨진 경우 삭제가 막힌다', async () => {
+  it('소비 RPC 가 에러로 실패해도 되돌리기를 먼저 한다 — 커밋됐는데 응답만 깨진 경우', async () => {
     getSession.mockResolvedValue(null)
     const spies = makeAdmin({ consume: { data: null, error: { message: 'connection reset' } } })
     const spy = silenceConsole()
@@ -356,33 +353,16 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
   it('되돌리기가 실패해도 계정은 지운다 — 초대 고착보다 유령 계정이 더 나쁘다', async () => {
     getSession.mockResolvedValue(null)
     const spies = makeAdmin({
-      roleUpsert: { error: { message: 'boom' } }, inviteUpdate: { error: { message: 'again' } },
+      consume: { data: null, error: { message: 'connection reset' } }, inviteUpdate: { error: { message: 'again' } },
     })
     const spy = silenceConsole()
-    const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
-    expect(res).toEqual({ ok: false, error: '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.' })
-    // 0065 의 redeem 쌍 CHECK 는 한 방향만 금지하므로 (null, timestamp) 가 허용된다 —
-    // 되돌리기가 실패한 상태에서도 계정 삭제는 성공한다. 남겨 두면 그 계정이 전사 읽기 권한을 갖는다.
+    await redeemInviteWithSignup(TOKEN, SIGNUP)
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
     // 고착된 초대를 찾을 단서는 남기되 토큰 전문은 남기지 않는다.
     const logged = spy.mock.calls.flat().join(' ')
     spy.mockRestore()
     expect(logged).toContain('u-new')
     expect(logged).not.toContain(TOKEN)
-  })
-
-  it('소비 후 역할 부여가 실패하면 소비를 먼저 되돌린 뒤 계정을 지운다', async () => {
-    getSession.mockResolvedValue(null)
-    const spies = makeAdmin({ roleUpsert: { error: { message: 'boom' } } })
-    const spy = silenceConsole()
-    const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
-    spy.mockRestore()
-    expect(res).toEqual({ ok: false, error: '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.' })
-    // redeemed_by 는 on delete set null 이라 되돌리지 않으면 check 제약 때문에 삭제 자체가 막힌다.
-    expect(spies.inviteUpdate).toHaveBeenCalledWith({ redeemed_by: null, redeemed_at: null })
-    expect(spies.inviteUpdate.mock.invocationCallOrder[0])
-      .toBeLessThan(spies.deleteUser.mock.invocationCallOrder[0])
-    expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
   })
 })
 
@@ -401,8 +381,7 @@ describe('getInvitePreview', () => {
   })
 
   it('전체 이메일 대신 마스킹된 주소만 돌려준다', async () => {
-    makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
-    listAllAuthUsers.mockResolvedValue([{ id: 'x', email: 'other@example.com', createdAt: '', fullName: null }])
+    const spies = makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
     const res = await getInvitePreview(TOKEN)
     expect(res).toEqual({
       ok: true,
@@ -414,17 +393,18 @@ describe('getInvitePreview', () => {
         accountExists: false,
       },
     })
+    // 계정 유무는 profiles(email) 단건 — 전 계정 목록을 훑지 않는다.
+    expect(spies.profileEq).toHaveBeenCalledWith('email', INVITE.email)
   })
 
   it('같은 이메일의 계정이 있으면 accountExists 로 로그인 폼을 유도한다', async () => {
-    makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
-    listAllAuthUsers.mockResolvedValue([{ id: 'x', email: 'MINA.PARK@example.com', createdAt: '', fullName: null }])
+    makeAdmin({ invite: { data: PREVIEW_ROW, error: null }, profile: { data: { user_id: 'x' }, error: null } })
     const res = await getInvitePreview(TOKEN)
     expect(res.ok && res.preview.accountExists).toBe(true)
   })
 
   it('취소된 초대는 상태만 돌려준다 — 프로젝트명·수신자·계정 유무를 흘리지 않는다', async () => {
-    makeAdmin({ invite: { data: { ...PREVIEW_ROW, revoked_at: '2026-08-01T00:00:00.000Z' }, error: null } })
+    const spies = makeAdmin({ invite: { data: { ...PREVIEW_ROW, revoked_at: '2026-08-01T00:00:00.000Z' }, error: null } })
     const res = await getInvitePreview(TOKEN)
     expect(res).toEqual({
       ok: true,
@@ -433,8 +413,8 @@ describe('getInvitePreview', () => {
         status: 'revoked', accountExists: false,
       },
     })
-    // 최소 preview 라 계정 목록 전량 조회도 하지 않는다.
-    expect(listAllAuthUsers).not.toHaveBeenCalled()
+    // 최소 preview 라 계정 유무 조회도 하지 않는다.
+    expect(spies.profileEq).not.toHaveBeenCalled()
   })
 
   it('만료·사용됨도 같은 최소 preview 다', async () => {
@@ -450,21 +430,20 @@ describe('getInvitePreview', () => {
     }
   })
 
-  it('계정 목록 조회 실패를 계정 없음으로 위장하지 않는다', async () => {
-    makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
-    listAllAuthUsers.mockRejectedValue(new Error('boom'))
+  it('계정 유무 조회 실패를 계정 없음으로 위장하지 않는다', async () => {
+    makeAdmin({ invite: { data: PREVIEW_ROW, error: null }, profile: { data: null, error: { message: 'boom' } } })
     const spy = silenceConsole()
     const res = await getInvitePreview(TOKEN)
     spy.mockRestore()
     expect(res).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
   })
 
-  it('허용 도메인이 좁혀지면 이미 나간 초대도 재확인에서 막는다 — 계정 목록도 조회하지 않는다', async () => {
-    makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
+  it('허용 도메인이 좁혀지면 이미 나간 초대도 재확인에서 막는다 — 계정 유무도 조회하지 않는다', async () => {
+    const spies = makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
     process.env.INVITE_ALLOWED_DOMAINS = 'other.com'
     const res = await getInvitePreview(TOKEN)
     expect(res).toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
-    expect(listAllAuthUsers).not.toHaveBeenCalled()
+    expect(spies.profileEq).not.toHaveBeenCalled()
   })
 })
 
@@ -491,9 +470,10 @@ describe('getInviteSessionState — 화면 분기용 세션 판정', () => {
 
   it('세션 이메일이 초대 이메일과 같으면 일치로 판정한다(대소문자·공백 무시)', async () => {
     getSession.mockResolvedValue({ id: 'u-1', email: '  MINA.PARK@Example.com ' })
-    makeAdmin()
+    const spies = makeAdmin()
     expect(await getInviteSessionState(TOKEN))
       .toEqual({ ok: true, authed: true, emailMatches: true })
+    expect(spies.inviteEq).toHaveBeenCalledWith('token_hash', HASH)
   })
 
   it('마스킹이 같아도 원문이 다르면 불일치다 — 클라이언트 마스킹 비교 회귀 방어', async () => {

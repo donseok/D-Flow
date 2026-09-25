@@ -7,11 +7,6 @@ import { isValidEmail } from '@/lib/domain/validate'
 export const ACCOUNT_ROLES = ['admin', 'member', 'viewer'] as const
 export type AccountRole = (typeof ACCOUNT_ROLES)[number]
 
-/** @deprecated 초대 경로 재작성 커밋이 지운다 — 계정 전역 팀은 0003 에서 폐지됐다. */
-export function isTeamCode(v: string, codes: readonly string[]): boolean {
-  return codes.includes(v)
-}
-
 export function isAccountRole(v: string): v is AccountRole {
   return (ACCOUNT_ROLES as readonly string[]).includes(v)
 }

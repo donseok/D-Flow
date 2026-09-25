@@ -52,6 +52,8 @@ export interface InviteMailInput {
   url: string
   /** ISO 8601. 표기는 Asia/Seoul 로 고정한다. */
   expiresAt: string
+  /** 합류하면 오를 팀 이름들. 없거나 비면 줄 자체를 만들지 않는다(빈 항목을 나열하지 않는다). */
+  teamNames?: readonly string[]
 }
 
 type Row = { label: string; value: string }
@@ -63,8 +65,11 @@ export function renderInviteMail(i: InviteMailInput): { subject: string; html: s
 
   const subject = oneLine(`[${BRAND.productName}] ${projectName} 프로젝트 초대`)
 
+  const teams = (i.teamNames ?? []).map(n => n.trim()).filter(Boolean)
+
   const rows: Row[] = [{ label: '프로젝트', value: projectName }]
   if (inviter) rows.push({ label: '초대한 사람', value: inviter })
+  if (teams.length > 0) rows.push({ label: '팀', value: teams.join(', ') })
   rows.push({ label: '만료', value: expires })
 
   const text = [

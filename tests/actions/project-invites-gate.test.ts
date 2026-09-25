@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // authz 가드 · admin 클라이언트 · next/cache 3중 모킹(tests/actions/accounts-gate.test.ts 관례).
 // vi.mock 팩토리는 최상단으로 호이스팅되므로 스파이는 vi.hoisted 로 먼저 만든다.
-const { createAdminClient, requireProjectAdmin, getTransport, send, guardThrow } = vi.hoisted(() => {
+const { createAdminClient, requireProjectAdmin, requireSuperuser, getTransport, send, guardThrow } = vi.hoisted(() => {
   const send = vi.fn()
   // 기본 구현은 "여기까지 오면 안 된다"는 함정이다. mockClear 는 구현을 되돌리지 않으므로
   // beforeEach 에서 mockReset 후 이 함정을 다시 깐다 — 안 그러면 앞 테스트의 스텁이 남아
@@ -13,32 +13,37 @@ const { createAdminClient, requireProjectAdmin, getTransport, send, guardThrow }
   return {
     createAdminClient: vi.fn(guardThrow),
     requireProjectAdmin: vi.fn(),
+    requireSuperuser: vi.fn(),
     getTransport: vi.fn(() => ({ ok: true, send })),
     send,
     guardThrow,
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireSuperuser }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/mail/transport', () => ({ getTransport }))
-// 팀 마스터는 모듈 로드 시 DB 를 읽는다(캐시 프라이밍). 여기서는 코드 검증 규칙만 필요하므로
+// 팀 마스터는 모듈 로드 시 DB 를 읽는다(캐시 프라이밍). 여기서는 이 프로젝트의 팀 목록만 필요하므로
 // 실물을 태우지 않는다 — 태우면 TTL 만료 시점에 createAdminClient 호출 단언이 흔들린다.
 vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesForProjectSync: () => ['PMO', 'ERP', 'MES', '가공', 'MDM'],
+  teamsForProjectSync: () => [
+    { id: 'team-1', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: 'p1' },
+    { id: 'team-2', code: 'MES', sortOrder: 1, active: true, progressVisible: true, projectId: 'p1' },
+    { id: 'team-off', code: 'OLD', sortOrder: 2, active: false, progressVisible: true, projectId: 'p1' },
+  ],
 }))
-vi.mock('@/lib/data/accounts', () => ({ listAllAuthUsers: vi.fn(async () => []) }))
 
 import { revalidatePath } from 'next/cache'
 import {
-  listProjectInvites, createProjectInvite, revokeProjectInvite,
+  listProjectInvites, createProjectInvite, revokeProjectInvite, type CreateInviteInput,
 } from '@/app/actions/projectInvites'
-import { makeAdminActor } from '../fixtures/actor'
+import { hashInviteToken } from '@/lib/domain/inviteToken'
+import { makeAdminActor, makeSuperuser } from '../fixtures/actor'
 
 const P1 = 'p1'
 const DENIED = { ok: false as const, error: '권한 없음' }
 const adminActor = makeAdminActor(P1)
-const VALID = { email: 'mina.park@example.com', teamCode: 'PMO' }
+const VALID: CreateInviteInput = { email: 'mina.park@example.com', accessRole: 'member', teamIds: ['team-1'] }
 
 const APP_URL = 'https://dflow.example.com'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -49,6 +54,7 @@ beforeEach(() => {
   createAdminClient.mockReset()
   createAdminClient.mockImplementation(guardThrow)
   requireProjectAdmin.mockReset()
+  requireSuperuser.mockReset()
   getTransport.mockClear()
   send.mockReset()
   vi.mocked(revalidatePath).mockClear()
@@ -103,20 +109,19 @@ const INSERTED_ID = 'inv-1'
 
 /**
  * createProjectInvite 가 훑는 경로 전부를 흉내낸 admin 스텁 —
- * projects 조회 → teams 조회 → 중복 초대 조회 → insert → 초대자 조회.
+ * projects 조회 → profiles(계정 유무) → 중복 초대 조회 → insert → 초대자 조회.
  * insert 는 받은 payload 를 그대로 돌려준다(DB 의 returning 과 같은 형태).
  */
 function createClient(o: {
   blocking?: Record<string, unknown>[]
   blockingError?: { message: string } | null
   insertError?: { code?: string; message: string } | null
-  /** resolveTeamId 의 teams 조회 응답을 덮어쓴다 — 동명 2행(전역+프로젝트) 우선순위 검증용. */
-  teamsRows?: Array<{ id: string; project_id: string | null }>
+  profile?: QueryResult
 } = {}) {
   const insert = vi.fn((payload: Record<string, unknown>) => chainOf({
     data: o.insertError ? null : {
-      id: INSERTED_ID, token: payload.token, email: payload.email,
-      created_at: new Date().toISOString(), expires_at: payload.expires_at,
+      id: INSERTED_ID, email: payload.email, access_role: payload.access_role, role_label: payload.role_label,
+      team_ids: payload.team_ids, created_at: new Date().toISOString(), expires_at: payload.expires_at,
       revoked_at: null, redeemed_at: null,
     },
     error: o.insertError ?? null,
@@ -126,15 +131,15 @@ function createClient(o: {
   const del = vi.fn(() => chainOf({ data: [], error: null }))
 
   const from = vi.fn((table: string) => {
-    if (table === 'projects') return chainOf({ data: { name: 'Acme Project' }, error: null })
-    // resolveTeamId 는 .single() 없이 배열로 받는다(0071 스코프 — 프로젝트 행 우선, 전역 폴백).
-    if (table === 'teams') {
-      return chainOf({ data: o.teamsRows ?? [{ id: 'team-1', project_id: null }], error: null })
+    if (table === 'projects') return chainOf({ data: { name: 'Acme Project', workspace_id: 'ws-1' }, error: null })
+    if (table === 'profiles') return chainOf(o.profile ?? { data: null, error: null })
+    if (table === 'project_invites') {
+      return {
+        ...chainOf({ data: o.blockingError ? null : (o.blocking ?? []), error: o.blockingError ?? null }),
+        insert, update, delete: del,
+      }
     }
-    return {
-      ...chainOf({ data: o.blockingError ? null : (o.blocking ?? []), error: o.blockingError ?? null }),
-      insert, update, delete: del,
-    }
+    throw new Error('예상치 못한 테이블 접근: ' + table)
   })
   const getUserById = vi.fn(async () => ({
     data: { user: { id: 'u1', email: 'pmo@example.com', user_metadata: { full_name: '초대자' } } },
@@ -166,6 +171,15 @@ describe('초대 서버액션 권한 게이트', () => {
     expect(res).toEqual({ ok: false, error: '권한 없음' })
     expect(createAdminClient).not.toHaveBeenCalled()
     expect(getTransport).not.toHaveBeenCalled()
+  })
+
+  // 관리자 초대는 관리자 슬롯을 여는 경로다 — 프로젝트 관리자 가드로 우회되면 '관리자가 관리자를 늘린다'.
+  it('관리자 권한 초대는 슈퍼유저 가드만 쓴다(SP2 에서 워크스페이스 관리자)', async () => {
+    requireSuperuser.mockResolvedValue(DENIED)
+    const res = await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })
+    expect(res).toEqual(DENIED)
+    expect(requireProjectAdmin).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
   })
 
   it('프로젝트 관리자가 아니면 revokeProjectInvite 거부 — admin client 미생성', async () => {
@@ -256,9 +270,18 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('알 수 없는 팀 코드는 거부한다', async () => {
-    const res = await createProjectInvite(P1, { ...VALID, teamCode: '없는팀' })
-    expect(res).toEqual({ ok: false, error: '알 수 없는 팀 코드' })
+  // 팀 id 는 이 프로젝트에서 고를 수 있는 활성 팀만 — 다른 프로젝트·워크스페이스의 팀을 명단에 심을 수 없다.
+  it('이 프로젝트의 활성 팀이 아닌 id 는 거부한다', async () => {
+    for (const teamIds of [['team-other'], ['team-1', 'team-off'], 'team-1' as never]) {
+      const res = await createProjectInvite(P1, { ...VALID, teamIds })
+      expect(res).toEqual({ ok: false, error: '알 수 없는 팀입니다.' })
+    }
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('알 수 없는 권한 값은 거부한다', async () => {
+    const res = await createProjectInvite(P1, { ...VALID, accessRole: 'owner' as never })
+    expect(res).toEqual({ ok: false, error: '알 수 없는 권한입니다.' })
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
@@ -309,57 +332,96 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     send.mockResolvedValue({ rejected: [] })
   })
 
-  it('정상 발급: insert 페이로드·링크·메일 1통', async () => {
+  it('정상 발급: DB 에는 토큰 해시만 — 링크의 토큰을 해시하면 저장된 값과 같다', async () => {
     const { client, insert } = createClient()
     createAdminClient.mockReturnValue(client as never)
 
-    const res = await createProjectInvite(P1, VALID)
+    const res = await createProjectInvite(P1, { ...VALID, roleLabel: '  개발 ', teamIds: ['team-2', 'team-1'] })
     expect(res).toMatchObject({ ok: true, mailed: true })
 
     expect(insert).toHaveBeenCalledTimes(1)
-    expect(insert).toHaveBeenCalledWith({
+    const payload = insertedPayload(insert)
+    expect(payload).toEqual({
       project_id: P1,
-      token: expect.any(String),
+      workspace_id: 'ws-1',
       email: 'mina.park@example.com',
-      team_id: 'team-1',
+      access_role: 'member',
+      role_label: '개발',
+      team_ids: ['team-2', 'team-1'],
+      token_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       created_by: adminActor.userId,
       expires_at: expect.any(String),
     })
-    // 링크는 서버가 조립한다 — UI 가 window.location.origin 을 읽으면 프리렌더에서 죽는다.
-    const token = String(insertedPayload(insert).token)
+    // 평문 토큰은 어디에도 저장하지 않는다 — 링크(응답)에서만 산다.
+    expect(payload).not.toHaveProperty('token')
     if (!res.ok) throw new Error('발급이 실패했다')
-    expect(res.url).toBe(`${APP_URL}/invite/${token}`)
-    expect(res.row.url).toBe(`${APP_URL}/invite/${token}`)
+    const token = res.url.slice(`${APP_URL}/invite/`.length)
+    expect(res.url.startsWith(`${APP_URL}/invite/`)).toBe(true)
+    expect(hashInviteToken(token)).toBe(payload.token_hash)
+    // 발급 응답의 행에만 링크가 있다(링크는 발급 시 한 번만 표시된다).
+    expect(res.row.url).toBe(res.url)
+    expect(res.row.teamCodes).toEqual(['MES', 'PMO'])
     expect(send).toHaveBeenCalledTimes(1)
-    expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/settings`)
+    // 메일에는 팀 코드 대신 팀 이름 목록이 실린다(팀 이름은 코드와 동기).
+    expect(send.mock.calls[0]![0].text).toContain('팀: MES, PMO')
+    expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
   })
 
-  // 0071 회귀: 같은 code 로 전역+프로젝트 행이 동시에 존재해도(복합 유니크가 허용하는 상태)
-  // resolveTeamId 는 프로젝트 행을 고른다 — 이 태스크(스코프 소탕)의 존재 이유 자체를 검증한다.
-  it('같은 팀 code 의 전역·프로젝트 행 2개 중 프로젝트 행을 선택한다', async () => {
-    const { client, insert } = createClient({
-      teamsRows: [
-        { id: 'team-global', project_id: null },
-        { id: 'team-proj', project_id: P1 },
-      ],
-    })
+  it('팀을 고르지 않으면 team_ids 는 null — 합류해도 팀을 건드리지 않는다', async () => {
+    const { client, insert } = createClient()
     createAdminClient.mockReturnValue(client as never)
-    const res = await createProjectInvite(P1, VALID)
+    const res = await createProjectInvite(P1, { ...VALID, teamIds: [] })
     expect(res).toMatchObject({ ok: true })
-    expect(insertedPayload(insert).team_id).toBe('team-proj')
+    expect(insertedPayload(insert).team_ids).toBeNull()
+    expect(send.mock.calls[0]![0].text).not.toContain('팀:')
   })
 
-  // 토큰은 초대 링크 그 자체다. UI 가 읽지도 않는 필드로 전 초대의 원본 토큰이
-  // RSC 페이로드에 실려 브라우저까지 가면, 목록을 볼 수 있는 사람이 곧 전부의 열쇠를 갖는다.
-  it('반환 행에 원본 토큰을 싣지 않는다', async () => {
+  it('슈퍼유저는 관리자 권한 초대를 발급한다', async () => {
+    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    const { client, insert } = createClient()
+    createAdminClient.mockReturnValue(client as never)
+    const res = await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })
+    expect(res).toMatchObject({ ok: true })
+    expect(insertedPayload(insert)).toMatchObject({ access_role: 'admin', created_by: 'u-su' })
+  })
+
+  // 트리거(project_invites_guard)가 발급자의 등급을 다시 본다 — 가드와 DB 가 엇갈리면 DB 판정을 사용자 문구로.
+  it('트리거의 관리자 초대 거부는 사용자 문구로 바꾼다', async () => {
+    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    const { client } = createClient({ insertError: { code: '42501', message: 'PROJECT_INVITE_ADMIN_FORBIDDEN' } })
+    createAdminClient.mockReturnValue(client as never)
+    expect(await createProjectInvite(P1, { ...VALID, accessRole: 'admin' }))
+      .toEqual({ ok: false, error: '관리자 권한 초대는 워크스페이스 관리자만 발급할 수 있습니다.' })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  // 토큰은 초대 링크 그 자체다. UI 가 읽지도 않는 필드로 원본 토큰이 RSC 페이로드에 실려 브라우저까지 가면
+  // 목록을 볼 수 있는 사람이 곧 전부의 열쇠를 갖는다 — 해시도 싣지 않는다(DB 조회 키다).
+  it('반환 행에 토큰·해시를 싣지 않는다', async () => {
     const { client } = createClient()
     createAdminClient.mockReturnValue(client as never)
     const res = await createProjectInvite(P1, VALID)
     if (!res.ok) throw new Error('발급이 실패했다')
-    expect(res.row).not.toHaveProperty('token')
     expect(Object.keys(res.row).sort()).toEqual(
-      ['createdAt', 'email', 'expiresAt', 'id', 'redeemedAt', 'status', 'teamCode', 'url'],
+      ['accessRole', 'createdAt', 'email', 'expiresAt', 'id', 'redeemedAt', 'roleLabel', 'status', 'teamCodes', 'url'],
     )
+  })
+
+  it('이미 계정이 있는 주소면 alreadyAccount — profiles 단건 조회', async () => {
+    const { client, from } = createClient({ profile: { data: { user_id: 'u-9' }, error: null } })
+    createAdminClient.mockReturnValue(client as never)
+    const res = await createProjectInvite(P1, VALID)
+    expect(res).toMatchObject({ ok: true, alreadyAccount: true })
+    expect(from).toHaveBeenCalledWith('profiles')
+  })
+
+  it('계정 유무 확인이 실패하면 null — 발급은 막지 않되 지어내지 않는다', async () => {
+    const { client } = createClient({ profile: { data: null, error: { message: 'boom' } } })
+    createAdminClient.mockReturnValue(client as never)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await createProjectInvite(P1, VALID)
+    spy.mockRestore()
+    expect(res).toMatchObject({ ok: true, alreadyAccount: null })
   })
 
   it('활성 초대가 있으면 insert 에 닿지 않고 거부한다', async () => {
@@ -413,6 +475,53 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
   })
 })
 
+describe('listProjectInvites — 목록에는 링크가 없다(해시만 저장)', () => {
+  beforeEach(() => {
+    requireProjectAdmin.mockResolvedValue({ ok: true, actor: adminActor })
+  })
+
+  function listClient(invites: QueryResult, teams: QueryResult = { data: [], error: null }) {
+    const from = vi.fn((t: string) => {
+      if (t === 'project_invites') return chainOf(invites)
+      if (t === 'teams') return chainOf(teams)
+      throw new Error('예상치 못한 테이블 접근: ' + t)
+    })
+    createAdminClient.mockReturnValue({ from } as never)
+    return from
+  }
+
+  const ROW = {
+    id: 'i1', email: 'mina.park@example.com', access_role: 'member', role_label: 'PM', team_ids: ['team-2', 'team-1'],
+    created_at: '2026-09-20T00:00:00Z', expires_at: '2999-01-01T00:00:00Z', revoked_at: null, redeemed_at: null,
+  }
+
+  it('팀 id 를 코드로 풀고(순서 유지) url 은 항상 null', async () => {
+    listClient({ data: [ROW], error: null }, { data: [{ id: 'team-1', code: 'PMO' }, { id: 'team-2', code: 'MES' }], error: null })
+    const res = await listProjectInvites(P1)
+    expect(res).toEqual({
+      ok: true,
+      rows: [{
+        id: 'i1', email: 'mina.park@example.com', accessRole: 'member', roleLabel: 'PM', teamCodes: ['MES', 'PMO'],
+        status: 'active', expiresAt: '2999-01-01T00:00:00Z', createdAt: '2026-09-20T00:00:00Z', redeemedAt: null, url: null,
+      }],
+    })
+  })
+
+  it('팀 조회가 실패하면 목록 전체를 실패로 — 팀이 빈 초대로 위장하지 않는다', async () => {
+    listClient({ data: [ROW], error: null }, { data: null, error: { message: 'boom' } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await listProjectInvites(P1)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+  })
+
+  it('초대 조회 실패는 빈 목록이 아니다', async () => {
+    listClient({ data: null, error: { message: 'boom' } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await listProjectInvites(P1)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+  })
+})
+
 describe('revokeProjectInvite — 소프트 취소', () => {
   beforeEach(() => {
     requireProjectAdmin.mockResolvedValue({ ok: true, actor: adminActor })
@@ -438,7 +547,7 @@ describe('revokeProjectInvite — 소프트 취소', () => {
     expect(chain.is).toHaveBeenCalledWith('redeemed_at', null)
     expect(chain.is).toHaveBeenCalledWith('revoked_at', null)
     expect(chain.eq).toHaveBeenCalledWith('project_id', P1)
-    expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/settings`)
+    expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
   })
 
   // 만료분이 부분 유니크를 막고 있으므로, 만료 초대를 취소할 수 없으면 같은 주소로 다시 보낼

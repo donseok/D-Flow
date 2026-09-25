@@ -36,30 +36,3 @@ export async function listProfiles(admin: AdminClient): Promise<ProfileRow[]> {
   }
   return out
 }
-
-/**
- * @deprecated 초대 경로(projectInvites·inviteRedeem) 재작성 커밋이 지운다 — 계정 목록은 listProfiles 를 쓴다.
- * auth.users 전체(페이지네이션). 실패는 throw.
- */
-export async function listAllAuthUsers(
-  admin: AdminClient,
-): Promise<Array<{ id: string; email: string; createdAt: string; fullName: string | null }>> {
-  const users: Array<{ id: string; email: string; createdAt: string; fullName: string | null }> = []
-  const perPage = 200
-  for (let page = 1; ; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
-    if (error || !data) {
-      throw new Error(`계정 목록을 불러오지 못했습니다(page=${page}): ${error?.message ?? 'unknown'}`)
-    }
-    for (const u of data.users) {
-      users.push({
-        id: u.id,
-        email: u.email ?? '',
-        createdAt: u.created_at,
-        fullName: (u.user_metadata?.full_name as string | undefined) ?? null,
-      })
-    }
-    if (data.users.length < perPage) break
-  }
-  return users
-}

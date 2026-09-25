@@ -130,6 +130,27 @@ describe('renderInviteMail — 초대한 사람이 없을 때', () => {
   })
 })
 
+// 팀 코드 문구 대신 팀 이름 목록 — 합류하면 이 팀들로 명단에 오른다. 팀이 없으면 줄을 만들지 않는다.
+describe('renderInviteMail — 팀', () => {
+  it('팀 이름 목록을 한 줄로 싣는다', () => {
+    const { html, text } = render({ teamNames: ['PMO', 'MES'] })
+    expect(text).toContain('팀: PMO, MES')
+    expect(html).toContain('PMO, MES')
+  })
+
+  it('팀이 없거나 빈 배열이면 팀 줄이 없다', () => {
+    expect(render().text).not.toContain('팀:')
+    expect(render({ teamNames: [] }).text).not.toContain('팀:')
+    expect(render({ teamNames: ['  '] }).text).not.toContain('팀:')
+  })
+
+  it('팀 이름도 이스케이프한다', () => {
+    const { html } = render({ teamNames: ['<b>개발</b>'] })
+    expect(html).not.toContain('<b>개발</b>')
+    expect(html).toContain('&lt;b&gt;개발&lt;/b&gt;')
+  })
+})
+
 describe('renderInviteMail — 이스케이프', () => {
   it('프로젝트명의 HTML 을 이스케이프한다', () => {
     const { html } = render({ projectName: '<script>alert(1)</script> A & B' })
