@@ -22,6 +22,7 @@ import { InboxPanel } from './InboxPanel'
 import { useProjectNavigation } from './ProjectNavigationContext'
 import { projectMenu, type SidebarProject } from './Sidebar'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
+import { identityTeamLabel } from '@/lib/domain/identityTeams'
 
 const SECTION_LABEL: Record<string, string> = {
   dashboard: '대시보드', wbs: 'WBS · 간트', gantt: '간트 차트', kanban: '칸반 보드', issues: '이슈관리',
@@ -31,7 +32,8 @@ const SECTION_LABEL: Record<string, string> = {
 /** 서버 레이아웃이 Actor 에서 평탄화해 내리는 신원 표시용 스냅샷 — Actor(Map)는 직렬화되지 않는다. */
 export interface HeaderIdentity {
   roleLabel: string
-  teamCode: string | null
+  /** 내 모든 프로젝트의 명단 대표 팀 code(중복 제거·가나다순). null 은 권한 조회 실패로 모름 — 빈 목록('소속 미지정')과 다르다. */
+  teamCodes: string[] | null
   /** 팀 관리·LLM 설정·사용 현황 등 전역 메뉴 노출 */
   isSuperuser: boolean
   showUsage: boolean
@@ -138,8 +140,12 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
 
   const roleLabel = identity?.roleLabel ?? '게스트'
   const displayName = userName?.trim() || null
-  // 프로필 부제: 이름이 있으면 역할·팀을, 없으면 팀만.
-  const roleTeam = identity?.teamCode ? `${roleLabel} · ${identity.teamCode}` : roleLabel
+  const teamCodes = identity?.teamCodes ?? null
+  // 0팀 '소속 미지정', 1팀 그 code, n팀 '첫 팀 외 n-1' — 전체 목록은 팝오버 부제의 title 로.
+  // 모르면(null) '—' — 미지정이라고 주장하지 않는다.
+  const teamLabel = teamCodes ? identityTeamLabel(teamCodes) : '—'
+  // 프로필 부제: 이름이 있으면 역할·팀을(0팀·모름은 역할만), 없으면 팀만.
+  const roleTeam = teamCodes?.length ? `${roleLabel} · ${teamLabel}` : roleLabel
 
   return (
     <>
@@ -210,18 +216,18 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
 
             {/* 프로필 */}
             <div className="relative">
-              <button onClick={() => setOpen(open === 'profile' ? null : 'profile')} className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-2.5 transition hover:border-line-strong sm:pr-3">
+              <button data-profile-trigger onClick={() => setOpen(open === 'profile' ? null : 'profile')} className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-2.5 transition hover:border-line-strong sm:pr-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ backgroundImage: 'var(--gradient-primary)' }}><User className="h-4 w-4" /></span>
                 <span className="hidden leading-tight sm:block">
                   <span className="block text-[11px] font-semibold text-ink">{displayName ?? roleLabel}</span>
-                  <span className="block text-[9px] text-ink-subtle">{displayName ? roleLabel : (identity?.teamCode ?? '—')}</span>
+                  <span className="block text-[9px] text-ink-subtle">{displayName ? roleLabel : teamLabel}</span>
                 </span>
               </button>
               {open === 'profile' && (
                 <Popover onClose={() => setOpen(null)}>
                   <div className="border-b border-line px-4 py-3">
                     <div className="text-sm font-semibold text-ink">{displayName ?? roleLabel}</div>
-                    <div className="mt-0.5 text-xs text-ink-subtle">{displayName ? roleTeam : (identity?.teamCode ? `${identity.teamCode} 팀` : '소속 미지정')}</div>
+                    <div data-profile-subtitle title={teamCodes && teamCodes.length > 1 ? teamCodes.join(', ') : undefined} className="mt-0.5 text-xs text-ink-subtle">{displayName ? roleTeam : teamLabel}</div>
                   </div>
                   <Link href="/account" onClick={() => setOpen(null)} className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-ink-muted transition hover:bg-surface-2 hover:text-ink">
                     <KeyRound className="h-4 w-4" />내 계정
@@ -370,9 +376,9 @@ function MobileMenu({
           )}
         </nav>
         {identity && (
-          <div className="mt-auto rounded-xl border border-sidebar-line bg-sidebar-2 p-3 text-xs text-sidebar-ink-muted">
+          <div data-identity-card className="mt-auto rounded-xl border border-sidebar-line bg-sidebar-2 p-3 text-xs text-sidebar-ink-muted">
             <div className="font-semibold text-sidebar-ink">{displayName ?? roleLabel}</div>
-            <div className="mt-0.5">{identity.teamCode ? (displayName ? `${roleLabel} · ${identity.teamCode} 팀` : `${identity.teamCode} 팀`) : roleLabel}</div>
+            <div className="mt-0.5">{identity.teamCodes?.length ? (displayName ? `${roleLabel} · ${identityTeamLabel(identity.teamCodes)}` : identityTeamLabel(identity.teamCodes)) : roleLabel}</div>
           </div>
         )}
       </div>

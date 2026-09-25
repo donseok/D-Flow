@@ -61,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         roleLabel: actor.isSuperuser ? '슈퍼유저'
           : isAnyProjectAdmin(actor) ? '관리자'
             : hasAnyProjectRole(actor) ? '멤버' : '조회',
-        teamCode: identityTeamCodes(actor)[0] ?? null,
+        teamCodes: identityTeamCodes(actor),
         isSuperuser: actor.isSuperuser,
         showUsage: canViewUsage(actor),
         showPortfolio: canViewPortfolio(actor),
@@ -69,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     : actorState.degraded
       ? {
           roleLabel: '확인 불가',
-          teamCode: null,
+          teamCodes: null,
           isSuperuser: false,
           showUsage: false,
           showPortfolio: false,
