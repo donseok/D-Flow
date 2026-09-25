@@ -53,7 +53,7 @@
 | `platform_admins` | §2.3.1 | 읽기 `user_id = auth.uid() or is_superuser()` / 쓰기 `is_superuser()` |
 | `profiles` | §2.3.1 | `auth.users` 트리거 없음. 계정 생성 액션·초대 RPC·부트스트랩이 insert |
 | `workspace_members` + 트리거 `workspace_members_keep_last_admin` | §2.3.1·2.3.8 | |
-| `people` + 트리거 `people_unlink_revokes_access` | §2.3.2·2.3.8 | `kind` 생성 컬럼. 유니크 3개·인덱스 1개 |
+| `people` + 트리거 `people_unlink_revokes_access` | §2.3.2·2.3.8 | `kind` 생성 컬럼. 유니크 3개·인덱스 1개. **컬럼 권한**(2026-09-25 판정): `revoke update on people from authenticated` 뒤 `grant update (display_name, email, active, updated_at)` 만 — `user_id`·`workspace_id` 는 세션 경로에서 변경 불가. 상위 §2.3.2 의 쓰기 정책만으로는 프로젝트 관리자가 인물을 다른 계정에 재연결해 그 계정이 다른 프로젝트의 `access_role` 을 얻는 경로가 열린다(Task 3 리허설에서 재현). 계정↔인물 연결은 service_role 액션·RPC 만 한다 |
 | `project_member_teams` + 트리거 `project_member_teams_guard` | §2.3.4 | |
 | `project_areas`·`area_teams` + 트리거 2개 | §2.3.5 | SP1 에서는 행을 소비하는 컬럼이 없다 |
 | 헬퍼 `my_workspace_ids`·`is_ws_member`·`is_ws_admin`·`project_ws`·`accessible_project_ids`·`my_member_id`·`my_team_ids`·`is_project_admin_anywhere_in_ws` | §2.4.5 | `accessible_project_ids` 는 SP2 의 읽기 정책이 쓸 함수지만 `buildActor` 와 같은 정의를 DB 에 두기 위해 지금 만든다. SP1 의 어떤 정책도 아직 이 함수를 부르지 않는다 |
@@ -205,7 +205,7 @@ i18n 사전(`src/lib/i18n/dict/*`)의 `pmo_admin`/`team_editor`/`contributor` �
 - `vitest.config.rls.ts` + `npm run test:rls`(단위 스위트와 분리, CI `db` 잡에서 `db reset` 뒤 실행).
 - `tests/rls/harness.ts`: 로컬 DSN(`supabase status` 값, `.env.local` 의 로컬 좌표만 허용 — `targets.mjs` 금지 ref 가드 재사용) 에 `pg` 로 접속, `withSession(userId, fn)` = `begin; set local role authenticated; select set_config('request.jwt.claims', …, true); …; rollback`.
 - `tests/rls/fixture.sql`: 워크스페이스 1개, 계정 3개(플랫폼 관리자·A-admin·A-member), 프로젝트 A·B, 팀 3개, 명단(§6.2 done_when 시나리오), WBS 리프 2개 + `item_owners`, 첨부 메타. `auth.users` 직접 insert(로컬).
-- 케이스: ① A 에서 팀 2개·admin 인 사용자의 WBS 실적 update 통과, B 에서 member·다른 팀 리프는 0행; ② `can_attach` 통과/거부 같은 짝; ③ 워크스페이스 관리자가 명단 행 없이 `is_project_admin` true; ④ 계정 없는 `people` 에 `access_role` 부여 → 23514; ⑤ 본인 `access_role` 회수 → 거부, 워크스페이스 관리자는 통과; ⑥ 마지막 워크스페이스 관리자 강등 거부; ⑦ `consume_project_invite` 가 다섯 쓰기를 한 트랜잭션으로 남기고 재사용 시 0행.
+- 케이스: ① A 에서 팀 2개·admin 인 사용자의 WBS 실적 update 통과, B 에서 member·다른 팀 리프는 0행; ② `can_attach` 통과/거부 같은 짝; ③ 워크스페이스 관리자가 명단 행 없이 `is_project_admin` true; ④ 계정 없는 `people` 에 `access_role` 부여 → 23514; ⑤ 본인 `access_role` 회수 — 세션 경로는 RLS 가 admin 행을 숨겨 0행, RPC `upsert_project_member(p_actor=본인)` 은 42501 `PROJECT_MEMBER_SELF_DEMOTE`, 워크스페이스 관리자는 통과(2026-09-25 정정); ⑥ 마지막 워크스페이스 관리자 강등 거부; ⑦ `consume_project_invite` 가 다섯 쓰기를 한 트랜잭션으로 남기고 재사용 시 0행.
 - 전수 교차 조회(워크스페이스 2개)는 SP2 가 같은 하네스에 추가한다.
 
 ### 7.4 tsc 게이트
