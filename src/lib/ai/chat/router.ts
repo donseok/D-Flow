@@ -543,8 +543,8 @@ function membersCall(input: ChatRequestV2): RoutedToolCall {
       args: { projectId, ...(team ? { team } : {}) },
     }
   }
-  // 명단 구분 = 리더/실무(화면 표기). '관리자·어드민'도 계속 받는다 — 옛 표기이고
-  // 사용자는 화면 문구가 바뀌어도 익숙한 말을 쓴다. 이건 권한(project_roles)이 아니다.
+  // role 인자 = 이 프로젝트 명단 권한(access_role). 옛 화면 표기('리더'·'총괄')도 admin 으로 받는다 —
+  // 사용자는 화면 문구가 바뀌어도 익숙한 말을 쓴다.
   const role = /리더|총괄|관리자|어드민/i.test(input.message) ? 'admin' : undefined
   return {
     id: 'call_members', tool: 'list_members', domain: 'members',

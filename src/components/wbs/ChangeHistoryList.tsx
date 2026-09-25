@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { History } from 'lucide-react'
-import type { ChangeLogEntry } from '@/app/actions/wbs'
+import type { ChangeActorRole, ChangeLogEntry } from '@/app/actions/wbs'
 import type { TeamCode } from '@/lib/domain/types'
 import { formatWeightPct } from '@/lib/domain/format'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -12,7 +12,8 @@ import type { DictKey } from '@/lib/i18n/dict'
 export const HISTORY_COLLAPSED_COUNT = 3
 
 type Tr = (k: DictKey) => string
-const ROLE_KEY: Record<string, DictKey> = { pmo_admin: 'wbs.rolePmoAdmin', team_editor: 'wbs.roleTeamEditor' }
+/** 이 프로젝트 권한(명단 access_role, 권한 없음·명단 밖은 viewer) → 표시 키. */
+const ROLE_KEY: Record<ChangeActorRole, DictKey> = { admin: 'wbs.roleAdmin', member: 'wbs.roleMember', viewer: 'wbs.roleViewer' }
 const FIELD_KEY: Record<string, DictKey> = {
   actual_pct: 'wbs.colActualPct', weight: 'wbs.colWeight', name: 'wbs.fieldName', planned_start: 'wbs.colPlannedStart',
   planned_end: 'wbs.colPlannedEnd', deliverable: 'wbs.colDeliverable', biz: 'wbs.fieldBiz', created: 'wbs.fieldCreated',
@@ -39,8 +40,8 @@ function fmtAt(iso: string): string {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-function actorLabel(team: TeamCode | null, role: string | null, t: Tr): string {
-  const r = role ? (ROLE_KEY[role] ? t(ROLE_KEY[role]) : role) : null
+function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr): string {
+  const r = role ? t(ROLE_KEY[role]) : null
   if (team && r) return `${team} · ${r}`
   return r ?? team ?? t('wbs.unknownActor')
 }

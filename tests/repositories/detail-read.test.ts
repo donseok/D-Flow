@@ -149,11 +149,11 @@ describe('strict supplemental repositories', () => {
 
     const result = await repository.getChangeLog('p1', 'w1', 20)
 
-    // 역할 라벨 문구(관리자/멤버/조회)는 Task 7 이 actorLabel 에서 바꾼다 — 여기서는 팀·조회 축만 고정한다.
+    // 대표 팀(is_primary) + 명단 권한 라벨 — '팀 멤버'.
     expect(result).toMatchObject({
       ok: true,
       data: {
-        entries: [{ field: 'actual_pct', actorLabel: expect.stringContaining('ERP'), actorTeam: 'ERP' }],
+        entries: [{ field: 'actual_pct', actorLabel: 'ERP 멤버', actorTeam: 'ERP', actorRole: 'member' }],
       },
     })
     expect(from.mock.calls.map(c => c[0])).not.toContain('memberships')
@@ -165,6 +165,44 @@ describe('strict supplemental repositories', () => {
     expect(String((pm.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
     expect(String((builders.profiles.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
     expect(JSON.stringify(result)).not.toContain('auth-user-secret')
+  })
+
+  it('labels change-log actors by roster access — admin/member/viewer, and a known account without a roster row is 조회', async () => {
+    const at = '2026-07-19T02:00:00Z'
+    const responses: Record<string, QueryResponse> = {
+      wbs_items: { data: { id: 'w1', project_id: 'p1', code: '1.1', name: '설계', updated_at: 'u1' }, error: null },
+      change_logs: {
+        data: [
+          { id: 4, wbs_item_id: 'w1', field: 'actual_pct', old_value: '0', new_value: '10', at, user_id: 'u-admin' },
+          { id: 3, wbs_item_id: 'w1', field: 'actual_pct', old_value: '10', new_value: '20', at, user_id: 'u-admin-noteam' },
+          { id: 2, wbs_item_id: 'w1', field: 'actual_pct', old_value: '20', new_value: '30', at, user_id: 'u-viewer-row' },
+          { id: 1, wbs_item_id: 'w1', field: 'actual_pct', old_value: '30', new_value: '40', at, user_id: 'u-no-row' },
+        ],
+        error: null,
+      },
+      profiles: {
+        data: ['u-admin', 'u-admin-noteam', 'u-viewer-row', 'u-no-row'].map(user_id => ({ user_id, display_name: user_id })),
+        error: null,
+      },
+      project_members: {
+        data: [
+          { access_role: 'admin', people: { user_id: 'u-admin', active: true }, project_member_teams: [{ is_primary: true, teams: { code: 'PMO' } }] },
+          { access_role: 'admin', people: { user_id: 'u-admin-noteam', active: true }, project_member_teams: [] },
+          // 권한 없는 명단 행(조회 전용) — 팀은 있다
+          { access_role: null, people: { user_id: 'u-viewer-row', active: true }, project_member_teams: [{ is_primary: true, teams: { code: 'MES' } }] },
+        ],
+        error: null,
+      },
+    }
+    const from = vi.fn((table: string) => queryBuilder(responses[table]))
+    const result = await createSupabaseWbsRepository({ from } as never).getChangeLog('p1', 'w1', 20)
+
+    expect(result.ok && result.data?.entries.map(e => [e.actorRole, e.actorTeam, e.actorLabel])).toEqual([
+      ['admin', 'PMO', 'PMO 관리자'],
+      ['admin', null, '관리자'],
+      ['viewer', 'MES', 'MES'],
+      ['viewer', null, '조회'],
+    ])
   })
 
   it('returns only creator/attendee meetings inside the allowlist and validates attendee project links', async () => {

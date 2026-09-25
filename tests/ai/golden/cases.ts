@@ -1056,8 +1056,8 @@ const MEMBER_CASES: GoldenCase[] = [
     },
   },
   {
-    // 옛 표기('관리자')로 물어도 잡혀야 한다 — 화면 문구를 '리더'로 바꿨어도 사용자는 옛 말을 쓴다.
-    name: 'members: 관리자 역할',
+    // 명단 권한 표기('관리자')로 물으면 access_role=admin 으로 거른다.
+    name: 'members: 관리자 권한',
     menu: 'members',
     request: req('관리자 멤버 알려줘', { pageContext: memPage() }),
     expect: {
@@ -1067,8 +1067,8 @@ const MEMBER_CASES: GoldenCase[] = [
     },
   },
   {
-    // 현재 화면 표기('리더')로 물었을 때도 같은 명단 구분에 걸린다.
-    name: 'members: 리더 구분',
+    // 옛 화면 표기('리더')로 물어도 같은 권한 필터에 걸린다 — 사용자는 문구가 바뀌어도 익숙한 말을 쓴다.
+    name: 'members: 리더(옛 표기) → 관리자 권한',
     menu: 'members',
     request: req('리더 멤버 알려줘', { pageContext: memPage() }),
     expect: {

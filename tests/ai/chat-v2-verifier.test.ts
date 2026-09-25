@@ -278,3 +278,32 @@ describe('chat v2 source and answer verifier', () => {
     }], pack).invalid).toHaveLength(1)
   })
 })
+
+describe('deterministic answer — 권한 표시 어휘(0003: 명단 access_role admin|member, 조회 전용 viewer)', () => {
+  const recordPack = (tool: string, records: Record<string, unknown>[]) => buildEvidencePack([{
+    callId: 'c1', tool,
+    result: {
+      status: 'ok' as const, facts: {}, records, sources: [source('local', 'a')],
+      asOf: '2026-07-19T00:00:00.000Z', truncated: false, warnings: [],
+    },
+  }])
+
+  it('명단 레코드의 accessRole 은 "권한: 관리자/멤버" 로 읽힌다 — 옛 리더/실무·PMO 관리자 표기는 없다', () => {
+    const answer = deterministicEvidenceAnswer(recordPack('list_members', [
+      { name: '박관리', accessRole: 'admin', hasAccount: true },
+      { name: '김멤버', accessRole: 'member', hasAccount: true },
+    ]))
+    expect(answer).toContain('박관리 · 권한: 관리자')
+    expect(answer).toContain('김멤버 · 권한: 멤버')
+    expect(answer).not.toMatch(/리더|실무|PMO 관리자|팀 편집자|accessRole/)
+  })
+
+  it('변경 이력의 actorRole 은 관리자/멤버/조회 로 읽힌다', () => {
+    const answer = deterministicEvidenceAnswer(recordPack('get_wbs_change_log', [
+      { itemName: '설계', actorLabel: 'ERP 관리자', actorRole: 'admin' },
+      { itemName: '구현', actorLabel: '조회', actorRole: 'viewer' },
+    ]))
+    expect(answer).toContain('변경자 역할: 관리자')
+    expect(answer).toContain('변경자 역할: 조회')
+  })
+})

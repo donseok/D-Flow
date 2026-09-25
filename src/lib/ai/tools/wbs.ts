@@ -3,6 +3,7 @@ import { computeDependencySchedule } from '@/lib/domain/dependencySchedule'
 import { computeTree } from '@/lib/domain/rollup'
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
 import type {
+  ChangeActorRole,
   WbsChangeField,
   WbsRepository,
   WbsRepositoryItem,
@@ -78,7 +79,7 @@ export interface WbsChangeLogToolRecord {
   changedAt: string
   actorLabel: string | null
   actorTeam: TeamCode | null
-  actorRole: string | null
+  actorRole: ChangeActorRole | null
 }
 
 export interface WbsAttachmentToolRecord {

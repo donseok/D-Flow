@@ -50,7 +50,7 @@ describe('fillDailySeries — 빈 날짜를 0으로 메운다', () => {
 })
 
 const ACC = (id: string, name: string): AccountRecord => ({
-  id, email: `${id}@x.com`, name, teamCode: 'PMO', role: 'team_editor',
+  id, email: `${id}@x.com`, name, teamCode: 'PMO', role: 'member',
   createdAt: '2026-01-01T00:00:00Z', lastSignInAt: null,
 })
 

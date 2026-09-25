@@ -5,6 +5,7 @@ import {
   type RepositoryResult,
   type WbsAttachmentMetadataSnapshot,
   type WbsBotRepository,
+  type ChangeActorRole,
   type WbsChangeField,
   type WbsChangeLogSnapshot,
   type WbsProjectSnapshot,
@@ -77,13 +78,16 @@ function teamCode(value: unknown): TeamCode | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
-function actorRole(value: unknown): string | null {
-  return value === 'pmo_admin' || value === 'team_editor' ? value : null
+/** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role(admin|member), 권한 없는 행·명단 밖 계정은 viewer. */
+function actorRole(value: unknown): ChangeActorRole | null {
+  return value === 'admin' || value === 'member' || value === 'viewer' ? value : null
 }
 
-function actorLabel(team: TeamCode | null, role: string | null): string | null {
-  if (role === 'pmo_admin') return team ? `${team} 관리자` : 'PMO 관리자'
-  if (role === 'team_editor') return team ? `${team} 팀 편집자` : '팀 편집자'
+/** '팀 관리자' / '팀 멤버' / 조회 전용은 팀(없으면 '조회'). 팀이 없는 관리자·멤버는 권한만. */
+function actorLabel(team: TeamCode | null, role: ChangeActorRole | null): string | null {
+  if (role === 'admin') return team ? `${team} 관리자` : '관리자'
+  if (role === 'member') return team ? `${team} 멤버` : '멤버'
+  if (role === 'viewer') return team ?? '조회'
   return team
 }
 
@@ -224,7 +228,7 @@ export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBo
       ))]
       // 작성자 라벨 재료 — profiles(알려진 계정, 명단 행이 없으면 조회 전용 'viewer') + 이 프로젝트의
       // 활성 명단 행(대표 팀 code, access_role). 이메일은 어느 쪽 select 에도 싣지 않는다(챗봇 경계).
-      const actors = new Map<string, { team: TeamCode | null; role: string | null }>()
+      const actors = new Map<string, { team: TeamCode | null; role: ChangeActorRole | null }>()
       if (userIds.length) {
         const [profilesResult, rosterResult] = await Promise.all([
           client

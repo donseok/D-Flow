@@ -1,4 +1,5 @@
 import { round1 } from './format'
+import type { WorkspaceRole } from './authz'
 // 사본 정리 — addDaysIso 정본은 dates.ts. 기존 import 경로가 살아 있도록 re-export 유지(내부 사용도 이 바인딩).
 import { addDaysIso } from './dates'
 export { addDaysIso }
@@ -33,7 +34,8 @@ export interface AccountRecord {
   email: string
   name: string
   teamCode: string | null
-  role: string | null
+  /** 플랫폼 관리자·어느 워크스페이스든 관리자면 admin, 워크스페이스 멤버면 member, 소속 없음은 null. */
+  role: WorkspaceRole | null
   createdAt: string
   /** auth.users.last_sign_in_at — 수집 시작 이전까지 소급되는 유일한 데이터. */
   lastSignInAt: string | null

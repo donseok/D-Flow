@@ -14,6 +14,9 @@ import { businessDaysBetween } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 
+/** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role, 활성 명단 행이 없으면 viewer. */
+export type ChangeActorRole = 'admin' | 'member' | 'viewer'
+
 export interface ChangeLogEntry {
   id: number
   field: string
@@ -21,10 +24,10 @@ export interface ChangeLogEntry {
   newValue: string | null
   at: string
   actorTeam: TeamCode | null
-  actorRole: string | null
+  actorRole: ChangeActorRole | null
 }
 
-type ChangeLogActor = { team: TeamCode | null; role: 'admin' | 'member' | 'viewer' }
+type ChangeLogActor = { team: TeamCode | null; role: ChangeActorRole }
 
 /**
  * 변경 이력 작성자 라벨 재료 — userId → { 대표 팀 code, 프로젝트 역할 }.

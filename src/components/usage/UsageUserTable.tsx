@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import type { UsageUserRow } from '@/lib/domain/usage'
+import { WORKSPACE_ROLE_LABEL } from '@/lib/domain/authz'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
   return new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium' }).format(new Date(iso))
 }
 
-const ROLE_LABEL: Record<string, string> = { pmo_admin: '관리자', team_editor: '팀 편집자' }
 const USER_PAGE_SIZE = 15
 
 /**
@@ -52,7 +52,7 @@ export function UsageUserTable({ rows, days }: { rows: UsageUserRow[]; days: num
                 <td className="py-2 pr-3 font-medium text-ink">{r.name}</td>
                 <td className="py-2 pr-3 text-ink-muted">{r.email}</td>
                 <td className="py-2 pr-3 text-ink-muted">{r.teamCode ?? '—'}</td>
-                <td className="py-2 pr-3 text-ink-muted">{r.role ? (ROLE_LABEL[r.role] ?? r.role) : '—'}</td>
+                <td className="py-2 pr-3 text-ink-muted">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
                 <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.createdAt)}</td>
                 <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastSignInAt)}</td>
                 <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastActivityAt)}</td>

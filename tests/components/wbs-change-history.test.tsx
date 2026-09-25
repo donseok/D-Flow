@@ -16,7 +16,7 @@ import type { ChangeLogEntry } from '@/app/actions/wbs'
 function log(id: number, over: Partial<ChangeLogEntry> = {}): ChangeLogEntry {
   return {
     id, field: 'actual_pct', oldValue: '40', newValue: '100',
-    at: `2026-08-2${id} 09:00:00+09`, actorTeam: 'MES' as ChangeLogEntry['actorTeam'], actorRole: 'pmo_admin',
+    at: `2026-08-2${id} 09:00:00+09`, actorTeam: 'MES' as ChangeLogEntry['actorTeam'], actorRole: 'admin',
     ...over,
   }
 }
@@ -43,6 +43,19 @@ describe('ChangeHistoryList — 한 줄 표시 + 최근 3건', () => {
   }
   const rows = () => container.querySelectorAll('[data-history-row]')
   const more = () => container.querySelector<HTMLButtonElement>('[data-history-more]')
+
+  it('작성자 라벨은 팀 · 이 프로젝트 권한(관리자/멤버/조회) 사전 키로 — 팀이 없으면 권한만', () => {
+    render([
+      log(1, { actorRole: 'admin' }),
+      log(2, { actorRole: 'member', actorTeam: null }),
+      log(3, { actorRole: 'viewer' }),
+    ])
+    const labels = [...rows()].map(r => r.textContent ?? '')
+    expect(labels[0]).toContain('MES · wbs.roleAdmin')
+    expect(labels[1]).toContain('wbs.roleMember')
+    expect(labels[1]).not.toContain('MES')
+    expect(labels[2]).toContain('MES · wbs.roleViewer')
+  })
 
   it('3건 이하는 전부 보이고 더보기 버튼이 없다', () => {
     render([log(1), log(2), log(3)])

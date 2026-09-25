@@ -89,8 +89,8 @@ describe('menu-detail read tools', () => {
         itemId: 'w1', itemCode: '1.1', itemName: 'ERP 설계', itemUpdatedAt: 'u1', truncated: false,
         entries: [{
           id: 1, wbsItemId: 'w1', field: 'actual_pct', oldValue: '10', newValue: '30',
-          changedAt: '2026-07-19T01:00:00Z', actorLabel: 'ERP 팀 편집자',
-          actorTeam: 'ERP', actorRole: 'team_editor',
+          changedAt: '2026-07-19T01:00:00Z', actorLabel: 'ERP 멤버',
+          actorTeam: 'ERP', actorRole: 'member',
         }],
       })),
       listAttachmentMetadata: vi.fn(async () => repositoryOk({
@@ -111,7 +111,7 @@ describe('menu-detail read tools', () => {
 
     expect(history).toMatchObject({
       ok: true,
-      result: { records: [{ field: 'actual_pct', actorLabel: 'ERP 팀 편집자' }] },
+      result: { records: [{ field: 'actual_pct', actorLabel: 'ERP 멤버', actorRole: 'member' }] },
     })
     expect(attachments).toMatchObject({
       ok: true,

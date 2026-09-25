@@ -130,7 +130,7 @@ const DISPLAY_LABELS: Readonly<Record<string, string>> = {
   // 멤버
   totalLeafTasks: '전체 말단 작업', memberNames: '팀 멤버', taskCount: '작업 수',
   doneCount: '완료', delayedCount: '지연', inProgressCount: '진행 중', notStartedCount: '미착수',
-  avgActualPct: '평균 실적률', role: '권한', hasAccount: '계정 연결', position: '직함',
+  avgActualPct: '평균 실적률', accessRole: '권한', hasAccount: '계정 연결', position: '직함',
   // 칸반
   totalCards: '전체 카드', columnKey: '컬럼 키', columnTitle: '컬럼', count: '카드 수', cards: '카드',
   // 대시보드
@@ -153,10 +153,10 @@ const DISPLAY_ENUMS: Readonly<Record<string, string>> = {
   none: '반복 없음', daily: '매일', weekly: '매주', biweekly: '격주', monthly: '매월',
   added: '추가', removed: '삭제', changed: '변경', unchanged: '동일',
   creator: '등록자', attendee: '참석자', creator_and_attendee: '등록자·참석자',
-  primary: '주관', support: '지원', pmo_admin: 'PMO 관리자', team_editor: '팀 편집자',
+  primary: '주관', support: '지원',
   overlap: '기간과 겹침', starts: '기간 내 시작', ends: '기간 내 완료',
-  // 공지 분류 · 멤버 명단 구분(권한 아님 — 권한은 project_roles 이고 봇은 노출하지 않는다)
-  important: '중요', event: '이벤트', admin: '리더', contributor: '실무',
+  // 공지 분류 · 이 프로젝트 권한(명단 access_role — 조회 전용은 viewer; 변경 이력 작성자 역할도 같은 어휘)
+  important: '중요', event: '이벤트', admin: '관리자', member: '멤버', viewer: '조회',
   // 대시보드 신호 · 회의록 인사이트 · 색인 상태
   green: '정상', amber: '주의', red: '위험', neutral: '중립',
   onTrack: '정상 궤도', early: '초기 구간',

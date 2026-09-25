@@ -88,6 +88,9 @@ export type WbsChangeField =
   | 'biz'
   | 'dependency'
 
+/** 변경 이력 작성자의 프로젝트 권한 — 명단 access_role, 권한 없는 행·명단 밖 계정은 viewer(조회 전용). */
+export type ChangeActorRole = 'admin' | 'member' | 'viewer'
+
 /** Raw auth user IDs never cross this contract. */
 export interface WbsChangeLogRecord {
   id: number
@@ -98,7 +101,7 @@ export interface WbsChangeLogRecord {
   changedAt: string
   actorLabel: string | null
   actorTeam: TeamCode | null
-  actorRole: string | null
+  actorRole: ChangeActorRole | null
 }
 
 export interface WbsChangeLogSnapshot {
