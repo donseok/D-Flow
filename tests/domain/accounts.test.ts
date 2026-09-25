@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  ACCOUNT_ROLES, isTeamCode, isAccountRole, isValidPassword, parseBulkAccounts,
+  ACCOUNT_ROLES, isAccountRole, isValidPassword, parseBulkAccounts,
 } from '@/lib/domain/accounts'
 import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
 
@@ -10,12 +10,6 @@ describe('상수/타입가드', () => {
   })
   it('권한은 admin·member·viewer — 3단 프로젝트 역할', () => {
     expect([...ACCOUNT_ROLES]).toEqual(['admin', 'member', 'viewer'])
-  })
-  it('isTeamCode', () => {
-    expect(isTeamCode('PMO', DEFAULT_TEAM_CODES)).toBe(true)
-    expect(isTeamCode('가공', DEFAULT_TEAM_CODES)).toBe(true)
-    expect(isTeamCode('DT', DEFAULT_TEAM_CODES)).toBe(false)
-    expect(isTeamCode('', DEFAULT_TEAM_CODES)).toBe(false)
   })
   it('isAccountRole — 새 3단 값만 허용, 옛 값은 거부', () => {
     expect(isAccountRole('admin')).toBe(true)
@@ -39,53 +33,55 @@ describe('isValidPassword', () => {
   })
 })
 
+// 형식: 이메일, 권한, 초기비번[, 이름] — 계정 전역 팀은 0003 에서 폐지됐다(팀은 명단 행의 속성).
 describe('parseBulkAccounts', () => {
-  it('정상 4열(콤마)', () => {
-    const r = parseBulkAccounts('a@b.com, PMO, member, password1', DEFAULT_TEAM_CODES)
+  it('정상 3열(콤마)', () => {
+    const r = parseBulkAccounts('a@b.com, member, password1')
     expect(r).toHaveLength(1)
-    expect(r[0]).toMatchObject({ lineNo: 1, ok: true, email: 'a@b.com', teamCode: 'PMO', role: 'member', password: 'password1', name: null })
+    expect(r[0]).toEqual({ lineNo: 1, raw: 'a@b.com, member, password1', ok: true, email: 'a@b.com', role: 'member', password: 'password1', name: null })
   })
-  it('정상 5열(이름 포함)', () => {
-    const r = parseBulkAccounts('a@b.com,가공,admin,password1,홍길동', DEFAULT_TEAM_CODES)
-    expect(r[0]).toMatchObject({ ok: true, teamCode: '가공', role: 'admin', name: '홍길동' })
+  it('정상 4열(이름 포함)', () => {
+    const r = parseBulkAccounts('a@b.com,admin,password1,홍길동')
+    expect(r[0]).toMatchObject({ ok: true, role: 'admin', name: '홍길동' })
   })
   it('탭 구분(엑셀 붙여넣기)도 허용', () => {
-    const r = parseBulkAccounts('a@b.com\tMES\tmember\tpassword1', DEFAULT_TEAM_CODES)
-    expect(r[0]).toMatchObject({ ok: true, email: 'a@b.com', teamCode: 'MES' })
+    const r = parseBulkAccounts('a@b.com\tviewer\tpassword1')
+    expect(r[0]).toMatchObject({ ok: true, email: 'a@b.com', role: 'viewer' })
   })
   it('빈 줄은 건너뛰되 lineNo는 파일 행번호 유지', () => {
-    const r = parseBulkAccounts('\n\na@b.com,PMO,member,password1\n', DEFAULT_TEAM_CODES)
+    const r = parseBulkAccounts('\n\na@b.com,member,password1\n')
     expect(r).toHaveLength(1)
     expect(r[0].lineNo).toBe(3)
   })
   it('열 부족은 실패', () => {
-    const r = parseBulkAccounts('a@b.com, PMO, member', DEFAULT_TEAM_CODES)
+    const r = parseBulkAccounts('a@b.com, member')
     expect(r[0].ok).toBe(false)
     expect(r[0].error).toContain('열')
   })
   it('이메일 형식 오류는 실패', () => {
-    const r = parseBulkAccounts('not-an-email, PMO, member, password1', DEFAULT_TEAM_CODES)
+    const r = parseBulkAccounts('not-an-email, member, password1')
     expect(r[0]).toMatchObject({ ok: false })
     expect(r[0].error).toContain('이메일')
   })
-  it('알 수 없는 팀은 실패', () => {
-    const r = parseBulkAccounts('a@b.com, DT, member, password1', DEFAULT_TEAM_CODES)
-    expect(r[0].ok).toBe(false)
-    expect(r[0].error).toContain('팀')
-  })
   it('알 수 없는 권한은 실패', () => {
-    const r = parseBulkAccounts('a@b.com, PMO, superuser, password1', DEFAULT_TEAM_CODES)
+    const r = parseBulkAccounts('a@b.com, superuser, password1')
     expect(r[0].ok).toBe(false)
     expect(r[0].error).toContain('권한')
   })
-  it('옛 포맷(pmo_admin·team_editor)은 사유를 밝히며 거부한다', () => {
-    const r = parseBulkAccounts('a@b.com, PMO, team_editor, password1', DEFAULT_TEAM_CODES)
+  it('옛 권한 값(pmo_admin·team_editor)은 사유를 밝히며 거부한다', () => {
+    const r = parseBulkAccounts('a@b.com, team_editor, password1')
     expect(r[0].ok).toBe(false)
     expect(r[0].error).toContain('team_editor')
     expect(r[0].error).toContain('옛 권한 값')
   })
+  // 팀 열이 있던 옛 파일을 그대로 붙여넣으면 팀 코드가 권한 자리에 온다 — '알 수 없는 권한: PMO' 대신 형식을 알려준다.
+  it('팀 열이 있는 옛 형식은 형식 안내와 함께 거부한다', () => {
+    const r = parseBulkAccounts('a@b.com, PMO, member, password1')
+    expect(r[0].ok).toBe(false)
+    expect(r[0].error).toContain('팀 열')
+  })
   it('짧은 비밀번호는 실패', () => {
-    const r = parseBulkAccounts('a@b.com, PMO, member, short', DEFAULT_TEAM_CODES)
+    const r = parseBulkAccounts('a@b.com, member, short')
     expect(r[0].ok).toBe(false)
     expect(r[0].error).toContain('8자')
   })

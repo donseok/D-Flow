@@ -37,7 +37,7 @@ export default async function AccountsAdminPage({
     return (
       <div className="space-y-6">
         <PageHero eyebrow="ADMIN" badge={<HeroBadge>Accounts</HeroBadge>} title="계정 관리"
-          description="로그인 계정을 만들고 팀·프로젝트 역할을 지정하거나 비밀번호를 리셋합니다." />
+          description="로그인 계정을 만들고 워크스페이스·프로젝트 권한을 지정하거나 비밀번호를 리셋합니다." />
         <div className="card p-6">
           <p className="text-sm font-semibold text-delayed">계정 목록을 불러오지 못했습니다.</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">{res.error}</p>
@@ -47,9 +47,9 @@ export default async function AccountsAdminPage({
   }
   const accounts = res.rows
   const total = accounts.length
-  const superusers = accounts.filter((a) => a.isSuperuser).length
-  const admins = accounts.filter((a) => a.role === 'admin').length
-  const members = accounts.filter((a) => a.role === 'member').length
+  const superusers = accounts.filter((a) => a.isPlatformAdmin).length
+  const admins = accounts.filter((a) => a.accessRole === 'admin').length
+  const members = accounts.filter((a) => a.accessRole === 'member').length
 
   return (
     <div className="space-y-6">
@@ -57,7 +57,7 @@ export default async function AccountsAdminPage({
         eyebrow="ADMIN"
         badge={<HeroBadge>Accounts</HeroBadge>}
         title="계정 관리"
-        description="로그인 계정을 만들고 팀·프로젝트 역할을 지정하거나 비밀번호를 리셋합니다."
+        description="로그인 계정을 만들고 워크스페이스·프로젝트 권한을 지정하거나 비밀번호를 리셋합니다."
         heroKpis={
           <>
             <KpiCard variant="hero" label="ACCOUNTS" value={total} sub="전체 로그인 계정" icon={Users} tone="brand" />
@@ -70,6 +70,7 @@ export default async function AccountsAdminPage({
       <AccountsManager
         accounts={accounts}
         projectId={projectId}
+        workspaceId={res.workspaceId}
         projects={managed.map(p => ({ id: p.id, name: p.name }))}
         canManageAdmins={actor.isSuperuser}
       />

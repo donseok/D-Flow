@@ -1,17 +1,17 @@
-// 계정(auth.users + memberships) 관련 순수 함수 — 클라이언트/서버 공용, 부수효과 없음.
+// 계정 관련 순수 함수 — 클라이언트/서버 공용, 부수효과 없음.
+// 계정 전역 팀(memberships.team_id)은 0003 에서 폐지됐다 — 팀은 프로젝트 명단 행의 속성이다.
 import { isValidEmail } from '@/lib/domain/validate'
-import type { TeamCode } from '@/lib/domain/types'
 
-/** 프로젝트 역할 화이트리스트. 'viewer' 는 project_roles 행을 만들지 않는다는 뜻.
- *  project_members.role(직급 라벨)과 다르다. 옛 memberships.role 값(pmo_admin·team_editor)은
- *  0054 에서 deprecated — 여기서 받지 않는다. */
+/** 프로젝트 권한 화이트리스트. 'viewer' 는 명단 행 access_role 을 null 로 둔다는 뜻(조회 전용).
+ *  옛 memberships.role 값(pmo_admin·team_editor)은 받지 않는다. */
 export const ACCOUNT_ROLES = ['admin', 'member', 'viewer'] as const
 export type AccountRole = (typeof ACCOUNT_ROLES)[number]
 
-/** 팀 코드 검증 — 허용 목록은 호출처가 팀 마스터(활성 팀)에서 주입한다. */
-export function isTeamCode(v: string, codes: readonly string[]): v is TeamCode {
+/** @deprecated 초대 경로 재작성 커밋이 지운다 — 계정 전역 팀은 0003 에서 폐지됐다. */
+export function isTeamCode(v: string, codes: readonly string[]): boolean {
   return codes.includes(v)
 }
+
 export function isAccountRole(v: string): v is AccountRole {
   return (ACCOUNT_ROLES as readonly string[]).includes(v)
 }
@@ -27,7 +27,6 @@ export interface ParsedAccountLine {
   raw: string
   ok: boolean
   email?: string
-  teamCode?: TeamCode
   role?: AccountRole
   password?: string
   name?: string | null
@@ -36,11 +35,11 @@ export interface ParsedAccountLine {
 
 /**
  * 일괄 붙여넣기 텍스트를 행 단위로 파싱·검증한다.
- * 형식: 고정 4열 `이메일, 팀코드, 권한, 초기비번` + 선택 5열 `이름`.
+ * 형식: 고정 3열 `이메일, 권한, 초기비번` + 선택 4열 `이름`. 권한은 대상 프로젝트의 권한(admin·member·viewer).
  * 구분자는 콤마 또는 탭(엑셀 붙여넣기 대응). 빈 줄은 결과에서 제외한다.
  * 주의: 초기비번에는 콤마·탭을 쓸 수 없다(구분자로 해석됨).
  */
-export function parseBulkAccounts(text: string, teamCodes: readonly string[]): ParsedAccountLine[] {
+export function parseBulkAccounts(text: string): ParsedAccountLine[] {
   const out: ParsedAccountLine[] = []
   const lines = text.split(/\r?\n/)
   lines.forEach((raw, i) => {
@@ -48,22 +47,23 @@ export function parseBulkAccounts(text: string, teamCodes: readonly string[]): P
     if (!trimmed) return // 빈 줄 제외
     const lineNo = i + 1
     const cols = trimmed.split(/\s*[,\t]\s*/)
-    const [email, teamCode, role, password, name] = cols
-    if (cols.length < 4) {
-      out.push({ lineNo, raw: trimmed, ok: false, error: '열 부족 — 이메일, 팀, 권한, 초기비번이 필요합니다.' })
+    const [email, role, password, name] = cols
+    if (cols.length < 3) {
+      out.push({ lineNo, raw: trimmed, ok: false, error: '열 부족 — 이메일, 권한, 초기비번이 필요합니다.' })
       return
     }
     if (!isValidEmail(email)) {
       out.push({ lineNo, raw: trimmed, ok: false, email, error: '이메일 형식 오류' })
       return
     }
-    if (!isTeamCode(teamCode, teamCodes)) {
-      out.push({ lineNo, raw: trimmed, ok: false, email, error: `알 수 없는 팀: ${teamCode}` })
-      return
-    }
     if (!isAccountRole(role)) {
-      // 옛 포맷(pmo_admin·team_editor)을 조용히 흘리면 예전 일괄 등록 파일이 그대로 통과해
-      // 전원이 잘못된 권한으로 만들어진다. 사유를 밝혀 거부한다.
+      // 팀 열이 있던 옛 파일(이메일, 팀, 권한, 비번)을 그대로 붙여넣으면 팀 코드가 권한 자리에 온다 —
+      // '알 수 없는 권한: PMO' 로는 무엇을 고칠지 모른다. 형식을 알려준다.
+      if (cols.length >= 4 && isAccountRole(password)) {
+        out.push({ lineNo, raw: trimmed, ok: false, email, error: '팀 열이 있는 옛 형식입니다. 이메일, 권한, 초기비번[, 이름] 순서로 바꾸세요.' })
+        return
+      }
+      // 옛 권한 값을 조용히 흘리면 예전 일괄 등록 파일이 그대로 통과해 전원이 잘못된 권한으로 만들어진다.
       const hint = role === 'pmo_admin' || role === 'team_editor'
         ? ' — 옛 권한 값입니다. admin·member·viewer 로 바꾸세요.'
         : ''
@@ -76,7 +76,7 @@ export function parseBulkAccounts(text: string, teamCodes: readonly string[]): P
     }
     out.push({
       lineNo, raw: trimmed, ok: true,
-      email: email.trim(), teamCode, role, password,
+      email: email.trim(), role, password,
       name: name?.trim() || null,
     })
   })

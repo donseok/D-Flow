@@ -1,22 +1,50 @@
-// auth.users 전량 수집 — 계정 관리·권한 화면 공용. 'use server' 파일이 아니어서
+// 계정 목록(profiles) 전량 수집 — 계정 관리 화면용. 'use server' 파일이 아니어서
 // 클라이언트에서 직접 부를 수 없다(액션이 게이트를 통과한 뒤에만 호출).
+// auth.users(GoTrue listUsers) 대신 앱 소유 표 profiles 를 읽는다(0003) — 이름·이메일의 정본이 여기 있다.
 import type { createAdminClient } from '@/lib/supabase/admin'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export interface RawAuthUser {
-  id: string
+export interface ProfileRow {
+  userId: string
   email: string
+  displayName: string
   createdAt: string
-  fullName: string | null
+}
+
+/** PostgREST 기본 max_rows(1000) 이하로 끊어 읽는다 — 한 번에 읽으면 잘린 목록이 완전한 목록처럼 보인다. */
+const PAGE = 500
+
+/**
+ * profiles 전체(페이지네이션). 실패는 throw — 잘린 목록을 완전한 목록처럼 돌려주면
+ * 누락 계정이 '존재하지 않음'과 구별되지 않는다(권한 화면에서는 그것이 곧 오정보다).
+ */
+export async function listProfiles(admin: AdminClient): Promise<ProfileRow[]> {
+  const out: ProfileRow[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('profiles').select('user_id, email, display_name, created_at')
+      .order('created_at').order('user_id')
+      .range(from, from + PAGE - 1)
+    if (error || !data) {
+      throw new Error(`계정 목록을 불러오지 못했습니다(from=${from}): ${error?.message ?? 'unknown'}`)
+    }
+    for (const r of data as Array<{ user_id: string; email: string; display_name: string; created_at: string }>) {
+      out.push({ userId: r.user_id, email: r.email, displayName: r.display_name, createdAt: r.created_at })
+    }
+    if (data.length < PAGE) break
+  }
+  return out
 }
 
 /**
- * auth.users 전체(페이지네이션). 실패는 throw — 잘린 목록을 완전한 목록처럼 돌려주면
- * 누락 계정이 '존재하지 않음'과 구별되지 않는다(권한 화면에서는 그것이 곧 오정보다).
+ * @deprecated 초대 경로(projectInvites·inviteRedeem) 재작성 커밋이 지운다 — 계정 목록은 listProfiles 를 쓴다.
+ * auth.users 전체(페이지네이션). 실패는 throw.
  */
-export async function listAllAuthUsers(admin: AdminClient): Promise<RawAuthUser[]> {
-  const users: RawAuthUser[] = []
+export async function listAllAuthUsers(
+  admin: AdminClient,
+): Promise<Array<{ id: string; email: string; createdAt: string; fullName: string | null }>> {
+  const users: Array<{ id: string; email: string; createdAt: string; fullName: string | null }> = []
   const perPage = 200
   for (let page = 1; ; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
