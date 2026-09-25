@@ -34,6 +34,7 @@ import {
   type IssueSourceType,
 } from '@/lib/domain/issueAnalysis'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
+import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
 import { minuteSourceHref } from '@/lib/minutes/source'
 import { uploadIssueAttachments } from '@/lib/issues/uploadIssueAttachments'
@@ -236,12 +237,14 @@ export function IssueDetailModal({
   // 표시용 담당자 칩 — 가나다순, 회의 상세 참석자 칩과 같은 표기(이름 · 팀코드).
   // 여러 명이 쉼표 나열로 좁은 그리드 칸에 들어가면 화면이 빡빡해져 전체 폭 칩 줄로 편다.
   // 조인 행은 멤버 삭제 시 cascade 로 사라지므로 이름 미해석('—')은 과도기뿐이다.
+  // 외부 인력(kind==='external')·비활성 담당자는 배지로 드러낸다(선택기와 같은 표기).
   const memberById = new Map(members.map(m => [m.id, m]))
   const assigneeChips = issue
     ? sortByKoreanName(
       issue.assigneeMemberIds.map(id => {
         const m = memberById.get(id)
-        return { id, label: m ? (m.teamCode ? `${m.name} · ${m.teamCode}` : m.name) : (memberName(id) ?? '—') }
+        const view = m ? memberOptionView(m) : null
+        return { id, label: view?.label ?? (memberName(id) ?? '—'), badge: view?.badge ?? null }
       }),
       a => a.label,
     )
@@ -313,7 +316,9 @@ export function IssueDetailModal({
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {assigneeChips.map(a => (
-                  <span key={a.id} className="chip bg-surface-2 text-ink">{a.label}</span>
+                  <span key={a.id} className="chip bg-surface-2 text-ink">
+                    {a.label}{a.badge ? ` · ${a.badge}` : ''}
+                  </span>
                 ))}
               </div>
             )}

@@ -6,6 +6,7 @@ import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
   buildMemberPickerSections,
+  memberOptionView,
   type MemberPickerView,
 } from '@/lib/domain/memberPicker'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
@@ -61,18 +62,26 @@ export function MemberSelectOptions({
   members,
   view,
   categoryOrder,
+  selectedId = null,
 }: {
   members: readonly ProjectMember[]
   view: MemberPickerView
   categoryOrder: readonly TeamCode[]
+  /** 현재 선택값 — 비활성 인물이어도 선택 중이면 목록에 남긴다(네이티브 select 는 없는 옵션을 고를 수 없다). */
+  selectedId?: string | null
 }) {
   const { t } = useLocale()
-  const sections = buildMemberPickerSections(members, { view, categoryOrder })
-  const option = (member: ProjectMember) => (
-    <option key={member.id} value={member.id}>
-      {member.name}{member.teamCode ? ` · ${member.teamCode}` : ''}
-    </option>
-  )
+  const sections = buildMemberPickerSections(members, {
+    view, categoryOrder, selectedIds: selectedId ? [selectedId] : [],
+  })
+  const option = (member: ProjectMember) => {
+    const { label, badge } = memberOptionView(member)
+    return (
+      <option key={member.id} value={member.id}>
+        {badge ? `${label} (${badge})` : label}
+      </option>
+    )
+  }
 
   if (view === 'name') return <>{sections[0]?.members.map(option)}</>
 
@@ -112,8 +121,8 @@ export function ProjectMemberMultiPicker({
   const [view, setView] = useState<MemberPickerView>('name')
   const selectedSet = useMemo(() => new Set(selected), [selected])
   const sections = useMemo(
-    () => buildMemberPickerSections(members, { query, view, categoryOrder }),
-    [members, query, view, categoryOrder],
+    () => buildMemberPickerSections(members, { query, view, categoryOrder, selectedIds: selected }),
+    [members, query, view, categoryOrder, selected],
   )
   const visibleCount = sections.reduce((count, section) => count + section.members.length, 0)
 
@@ -126,6 +135,7 @@ export function ProjectMemberMultiPicker({
 
   const memberRow = (member: ProjectMember) => {
     const checked = selectedSet.has(member.id)
+    const { badge } = memberOptionView(member)
     return (
       <label
         key={member.id}
@@ -139,7 +149,12 @@ export function ProjectMemberMultiPicker({
         />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate text-sm text-ink">{member.name}</span>
-          {member.teamCode && <span className="shrink-0 text-[11px] text-ink-subtle">· {member.teamCode}</span>}
+          {member.teams[0]?.code && <span className="shrink-0 text-[11px] text-ink-subtle">· {member.teams[0].code}</span>}
+          {badge && (
+            <span className="shrink-0 rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-subtle">
+              {badge}
+            </span>
+          )}
         </span>
         {missingEmailWarning && !member.email && (
           <span

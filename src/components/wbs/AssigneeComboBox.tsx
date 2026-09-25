@@ -3,9 +3,15 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
-import { buildMemberPickerSections } from '@/lib/domain/memberPicker'
+import { buildMemberPickerSections, memberOptionView } from '@/lib/domain/memberPicker'
 
 type Option = { id: string; label: string }
+
+/** `이름 · 대표팀코드`에 외부 인력·비활성 배지를 괄호로 덧붙인다 — 네이티브 옵션 텍스트라 JSX 배지 불가. */
+function formatMemberOption(member: ProjectMember): string {
+  const { label, badge } = memberOptionView(member)
+  return badge ? `${label} (${badge})` : label
+}
 
 /**
  * 담당자 검색 콤보박스 — 멤버 52명+ 프로젝트에서 네이티브 select 로는 찾기 어렵다는
@@ -38,19 +44,19 @@ export function AssigneeComboBox({
   const [activeIndex, setActiveIndex] = useState(0)
 
   const selectedMember = value ? members.find(m => m.id === value) ?? null : null
-  const selectedLabel = selectedMember
-    ? `${selectedMember.name}${selectedMember.teamCode ? ` · ${selectedMember.teamCode}` : ''}`
-    : unassignedLabel
+  const selectedLabel = selectedMember ? formatMemberOption(selectedMember) : unassignedLabel
 
   const options: Option[] = useMemo(() => {
-    const sections = buildMemberPickerSections(members, { query, view: 'name', categoryOrder })
+    const sections = buildMemberPickerSections(members, {
+      query, view: 'name', categoryOrder, selectedIds: value ? [value] : [],
+    })
     const memberOptions = (sections[0]?.members ?? []).map(m => ({
-      id: m.id, label: `${m.name}${m.teamCode ? ` · ${m.teamCode}` : ''}`,
+      id: m.id, label: formatMemberOption(m),
     }))
     const q = query.trim().toLocaleLowerCase('ko-KR')
     const showUnassigned = !q || unassignedLabel.toLocaleLowerCase('ko-KR').includes(q)
     return showUnassigned ? [{ id: '', label: unassignedLabel }, ...memberOptions] : memberOptions
-  }, [members, query, categoryOrder, unassignedLabel])
+  }, [members, query, categoryOrder, unassignedLabel, value])
 
   useEffect(() => { setActiveIndex(0) }, [query, open])
 

@@ -20,7 +20,7 @@ import {
   ATTENDANCE_META, ATTENDANCE_TYPES, monthMatrix, recordsByDate,
 } from '@/lib/domain/attendance'
 import { compareKoreanName } from '@/lib/domain/nameSort'
-import type { MemberPickerView } from '@/lib/domain/memberPicker'
+import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberPicker'
 import { krSpecialDayMap } from '@/lib/domain/holidays'
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
@@ -116,7 +116,10 @@ export function AttendanceView({
       if (botFilter.from && r.date < botFilter.from) return false
       if (botFilter.to && r.date > botFilter.to) return false
       if (botFilter.type && r.type !== botFilter.type) return false
-      if (botFilter.team && memberMap.get(r.memberId)?.teamCode !== botFilter.team) return false
+      if (botFilter.team) {
+        const mem = memberMap.get(r.memberId)
+        if (!mem || !memberBelongsToTeam(mem, botFilter.team)) return false
+      }
       return true
     })
   }, [records, memberFilter, botFilter, memberMap])
@@ -258,7 +261,12 @@ export function AttendanceView({
               aria-label={t('att.memberFilter')}
             >
               <option value="all">{t('att.allMembers')}</option>
-              <MemberSelectOptions members={members} view={memberPickerView} categoryOrder={teamCodes} />
+              <MemberSelectOptions
+                members={members}
+                view={memberPickerView}
+                categoryOrder={teamCodes}
+                selectedId={memberFilter === 'all' ? null : memberFilter}
+              />
             </select>
             <SegmentedTabs<ViewKey>
               tabs={[
@@ -393,7 +401,7 @@ export function AttendanceView({
                         <div className="font-medium text-ink">{mem?.name ?? t('att.unknown')}</div>
                         {mem?.title && <div className="text-xs text-ink-subtle">{mem.title}</div>}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{mem?.teamCode ?? '-'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{mem?.teams[0]?.code ?? '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`chip ${meta.chip}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
@@ -444,7 +452,12 @@ export function AttendanceView({
               className="app-input disabled:opacity-60"
             >
               {members.length === 0 && <option value="">{t('att.form.noMembers')}</option>}
-              <MemberSelectOptions members={members} view={memberPickerView} categoryOrder={teamCodes} />
+              <MemberSelectOptions
+                members={members}
+                view={memberPickerView}
+                categoryOrder={teamCodes}
+                selectedId={form.memberId || null}
+              />
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">

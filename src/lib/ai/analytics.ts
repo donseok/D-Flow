@@ -216,7 +216,7 @@ export function answerByTeam(
 ): string {
   const memberByTeam = new Map<string, string[]>()
   for (const m of members) {
-    const key = m.teamCode ?? '미배정'
+    const key = m.teams[0]?.code ?? '미배정'
     const arr = memberByTeam.get(key) ?? []
     arr.push(m.name)
     memberByTeam.set(key, arr)
@@ -382,12 +382,13 @@ export function buildDocuments(
     docs.push({ kind: 'wbs_item', refId: n.id, content: lines.join('\n') })
   }
 
-  // 3) 멤버 문서
+  // 3) 멤버 문서 — 외부 인력(kind==='external')도 명단에 있으니 챗봇이 "계정 미연결"로 구분해 답하게 표시.
   for (const m of members) {
+    const teamCode = m.teams[0]?.code ?? null
     docs.push({
       kind: 'member',
       refId: m.id,
-      content: `[${projectName}] 멤버 ${m.name}${m.teamCode ? ` · 팀 ${m.teamCode}` : ''}${m.title ? ` · ${m.title}` : ''}${m.accessRole ? ` · 권한 ${m.accessRole}` : ''}`,
+      content: `[${projectName}] 멤버 ${m.name}${teamCode ? ` · 팀 ${teamCode}` : ''}${m.title ? ` · ${m.title}` : ''}${m.accessRole ? ` · 권한 ${m.accessRole}` : ''}${m.kind === 'external' ? ' · 계정 미연결(외부 인력)' : ''}`,
     })
   }
 

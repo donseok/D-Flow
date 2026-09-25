@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildMemberPickerSections } from '@/lib/domain/memberPicker'
+import {
+  buildMemberPickerSections, memberBelongsToTeam, memberOptionView, EXTERNAL_BADGE, INACTIVE_BADGE,
+} from '@/lib/domain/memberPicker'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
 import { makeRosterMember } from '../fixtures/rosterMember'
 
@@ -129,5 +131,85 @@ describe('buildMemberPickerSections', () => {
     })
     expect(categories(byTeam)).toEqual(['ERP'])
     expect(byTeam[0].members.map(item => item.id)).toEqual(['2'])
+  })
+
+  it('여러 팀에 속한 사람은 대표 팀이 아닌 팀 코드로 검색해도 걸린다(teams.some)', () => {
+    const multiTeam = makeRosterMember({
+      id: '9', projectId: 'p1', name: '여러팀김', email: null, title: null, roleLabel: null,
+      hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z',
+      teams: [
+        { id: 't-mes', code: 'MES', name: 'MES', isPrimary: true },
+        { id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: false },
+      ],
+    })
+    const members = [member('1', '단일팀박', 'MES'), multiTeam]
+
+    const sections = buildMemberPickerSections(members, { view: 'name', query: 'erp' })
+
+    expect(sections[0].members.map(item => item.id)).toEqual(['9'])
+  })
+
+  it('active===false 인 사람은 기본 제외하지만, selectedIds 에 있으면 남긴다', () => {
+    const activeMember = member('1', '활성김', 'MES')
+    const inactiveMember = makeRosterMember({
+      id: '2', projectId: 'p1', name: '비활성박', email: null, teamCode: 'ERP', title: null,
+      roleLabel: null, hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z', active: false,
+    })
+    const members = [activeMember, inactiveMember]
+
+    const excluded = buildMemberPickerSections(members, { view: 'name' })
+    expect(excluded[0].members.map(item => item.id)).toEqual(['1'])
+
+    const kept = buildMemberPickerSections(members, { view: 'name', selectedIds: ['2'] })
+    expect(kept[0].members.map(item => item.id).sort()).toEqual(['1', '2'])
+  })
+})
+
+describe('memberOptionView', () => {
+  it('외부 인력(kind===external)에는 배지를 싣고, 라벨은 이름 · 대표팀코드다', () => {
+    const external = makeRosterMember({
+      id: '1', projectId: 'p1', name: '외부이', email: null, teamCode: 'MES', title: null,
+      roleLabel: null, hasAccount: false, createdAt: '2026-08-02T00:00:00.000Z',
+    })
+
+    const view = memberOptionView(external)
+
+    expect(view.label).toBe('외부이 · MES')
+    expect(view.badge).toBe(EXTERNAL_BADGE)
+  })
+
+  it('팀이 없으면 라벨은 이름만이다', () => {
+    const noTeam = makeRosterMember({
+      id: '1', projectId: 'p1', name: '무팀김', email: null, teamCode: null, title: null,
+      roleLabel: null, hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z',
+    })
+
+    expect(memberOptionView(noTeam).label).toBe('무팀김')
+    expect(memberOptionView(noTeam).badge).toBeNull()
+  })
+
+  it('비활성 선택값은 비활성 배지를 싣는다(외부 인력이면 함께)', () => {
+    const inactiveExternal = makeRosterMember({
+      id: '1', projectId: 'p1', name: '비활성외부', email: null, teamCode: null, title: null,
+      roleLabel: null, hasAccount: false, createdAt: '2026-08-02T00:00:00.000Z', active: false,
+    })
+
+    expect(memberOptionView(inactiveExternal).badge).toBe(`${EXTERNAL_BADGE} · ${INACTIVE_BADGE}`)
+  })
+})
+
+describe('memberBelongsToTeam', () => {
+  it('teams 배열 어디에 있어도 참이다(대표 팀 아니어도)', () => {
+    const m = makeRosterMember({
+      id: '1', projectId: 'p1', name: '홍길동', email: null, title: null, roleLabel: null,
+      hasAccount: true, createdAt: '2026-08-02T00:00:00.000Z',
+      teams: [
+        { id: 't-mes', code: 'MES', name: 'MES', isPrimary: true },
+        { id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: false },
+      ],
+    })
+
+    expect(memberBelongsToTeam(m, 'ERP')).toBe(true)
+    expect(memberBelongsToTeam(m, 'PMO')).toBe(false)
   })
 })
