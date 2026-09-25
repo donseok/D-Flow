@@ -1,11 +1,27 @@
 // 명단 관리 화면(RosterManager)의 순수 계층 — 행 편집 초안·검증·팀 선택·권한 셀 판정. IO 없음.
 // 검증 문구는 서버 액션(upsertRosterMember)과 같다 — 화면이 먼저 거르고, 액션·RPC 가 다시 본다.
-import type { RosterInput } from '@/app/actions/roster'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import { isWorkspaceAdminRole, type ProjectActorView } from '@/lib/domain/authz'
 import { isValidEmail } from '@/lib/domain/validate'
 
 export type AccessRole = 'admin' | 'member'
+
+/** 명단 쓰기 입력 — upsertRosterMember(서버 액션)의 계약. 액션은 이 타입을 재수출한다. */
+export interface RosterInput {
+  /** 기존 인물 — 주면 그 인물의 명단 행을 upsert 한다. 이때 email 은 인물 매칭에 쓰이지 않는다(인물의 이메일은 바꾸지 않는다). */
+  personId?: string | null
+  name: string
+  /** 새 인물일 때 (워크스페이스, 이메일)로 기존 인물을 먼저 찾는다. null = 외부 인력(이메일 없음). */
+  email: string | null
+  /** 이 프로젝트 권한. null = 조회 전용. 계정 없는 인물에게 주면 DB 가 거부한다. */
+  accessRole: AccessRole | null
+  roleLabel: string | null
+  title: string | null
+  /** 이 명단 행의 팀 전부 — 첫 원소가 대표 팀. 결과 집합이 이 배열과 같아진다(빈 배열 = 팀 없음). */
+  teamIds: string[]
+  /** 비활성 토글. 생략하면 기존 값 유지(새 행은 활성). */
+  active?: boolean
+}
 
 /** 한 행의 입력 상태. 문자열 필드는 input value 그대로(빈 문자열 = 없음). teamIds 첫 원소가 대표 팀. */
 export interface RosterDraft {

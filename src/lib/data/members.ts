@@ -9,8 +9,15 @@ import type { ProjectMember } from '@/lib/domain/types'
  */
 export { ROSTER_SELECT as PROJECT_MEMBER_SELECT, mapRosterRows as mapProjectMemberRows } from '@/lib/data/memberSelect'
 
-// 같은 요청 내 중복 호출 dedupe
-export const getProjectMembers = cache(async (projectId: string): Promise<ProjectMember[]> => {
+export const ERR_ROSTER_LOAD = '명단을 불러오지 못했습니다.'
+
+/**
+ * 명단 조회 — 실패를 결과로 돌려준다. 명단 화면처럼 '0명' 과 '못 읽음' 을 구분해 보여야 하는 호출부용(에러 처리 3원칙 ①).
+ * 세션 클라이언트라 RLS 가 보이는 행만 읽는다. cache — 같은 요청 내 중복 호출 dedupe.
+ */
+export const getProjectRoster = cache(async (
+  projectId: string,
+): Promise<{ ok: true; rows: ProjectMember[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members')
@@ -20,11 +27,20 @@ export const getProjectMembers = cache(async (projectId: string): Promise<Projec
     // 순서를 고정하기 위한 tiebreak.
     // (DB collation 에 이름 정렬을 맡기지 않는다 — 인스턴스 collation 에 따라 가나다순이 깨진다.)
     .order('created_at', { ascending: true })
+  if (error || !data) {
+    console.error('[getProjectRoster] 조회 실패:', error?.message ?? 'unknown')
+    return { ok: false, error: ERR_ROSTER_LOAD }
+  }
+  return { ok: true, rows: mapRosterRows(data) }
+})
 
-  // 실패를 삼키면 '멤버 0명'이 정상 상태와 구별되지 않는다(스키마 드리프트가 조용히 빈 화면이 된다).
-  if (error) console.error('[getProjectMembers] 조회 실패:', error.message)
-
-  return mapRosterRows(data)
+/**
+ * 명단 목록(선택기·보고서·AI 문맥용). 실패는 로그 후 빈 배열 — 이 호출부들은 명단이 곁가지라 화면 본체를 막지 않는다.
+ * 실패를 화면에 보여야 하는 곳은 getProjectRoster 를 쓴다.
+ */
+export const getProjectMembers = cache(async (projectId: string): Promise<ProjectMember[]> => {
+  const res = await getProjectRoster(projectId)
+  return res.ok ? res.rows : []
 })
 
 /**

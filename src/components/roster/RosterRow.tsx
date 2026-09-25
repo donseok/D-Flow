@@ -11,10 +11,13 @@ import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
 
 export const ROSTER_COLUMNS = 8
 
+/** 외부 인력 안내 — 배지 title 과 권한 셀이 같은 문구를 쓴다. */
+export const UNLINKED_HINT = '로그인 계정과 연결되지 않은 사람입니다. 계정이 있어야 권한을 줄 수 있습니다.'
+
 /** 계정이 연결되지 않은 사람(외부 인력) — 권한을 받을 수 없고, 로그인해도 '나'로 이어지지 않는다. */
 function UnlinkedBadge() {
   return (
-    <span className="chip shrink-0 bg-surface-2 text-ink-muted" data-unlinked-badge title="로그인 계정과 연결되지 않은 사람입니다. 권한을 줄 수 없습니다.">
+    <span className="chip shrink-0 bg-surface-2 text-ink-muted" data-unlinked-badge title={UNLINKED_HINT}>
       <Unlink className="h-3 w-3" aria-hidden />계정 미연결
     </span>
   )
@@ -105,6 +108,7 @@ export function RosterEditRow({ projectId, member, teamOptions, canGrantAdmin, h
   }
 
   const who = member.name
+  const unlinked = member.kind === 'external'
   return (
     <>
       <tr
@@ -133,13 +137,16 @@ export function RosterEditRow({ projectId, member, teamOptions, canGrantAdmin, h
         </td>
         <td className="py-2 pr-3">
           <select className="app-input h-8 w-auto text-xs" aria-label={`${who} 권한`} value={draft.accessRole ?? ''}
-            disabled={pending} onChange={e => set('accessRole', (e.target.value || null) as AccessRole | null)}>
+            disabled={pending} title={unlinked ? UNLINKED_HINT : undefined}
+            onChange={e => set('accessRole', (e.target.value || null) as AccessRole | null)}>
             <option value="">{accessRoleLabel(null)}</option>
-            <option value="member">{accessRoleLabel('member')}</option>
-            <option value="admin" disabled={!canGrantAdmin}>
-              {accessRoleLabel('admin')}{canGrantAdmin ? '' : ' (워크스페이스 관리자 전용)'}
+            {/* 외부 인력은 계정이 없어 권한을 받을 수 없다 — 트리거(PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT)가 거부하기 전에 막는다. */}
+            <option value="member" disabled={unlinked}>{accessRoleLabel('member')}</option>
+            <option value="admin" disabled={unlinked || !canGrantAdmin}>
+              {accessRoleLabel('admin')}{!unlinked && !canGrantAdmin ? ' (워크스페이스 관리자 전용)' : ''}
             </option>
           </select>
+          {unlinked && <p className="mt-1 max-w-[12rem] text-[11px] leading-4 text-ink-subtle" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
         </td>
         <td className="py-2 pr-3">
           <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">

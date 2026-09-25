@@ -11,25 +11,11 @@ import { createServerClient } from '@/lib/supabase/server'
 import { isValidEmail, isUuidLike } from '@/lib/domain/validate'
 import { rosterWriteError, ROSTER_WRITE_FAILED, ROSTER_HAS_RECORDS } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT, mapRosterRows, type RosterMember } from '@/lib/data/memberSelect'
+import type { AccessRole, RosterInput } from '@/lib/domain/roster'
 
 type AdminClient = ReturnType<typeof createAdminClient>
-type AccessRole = 'admin' | 'member'
-
-export interface RosterInput {
-  /** 기존 인물 — 주면 그 인물의 명단 행을 upsert 한다. 이때 email 은 인물 매칭에 쓰이지 않는다(인물의 이메일은 바꾸지 않는다). */
-  personId?: string | null
-  name: string
-  /** 새 인물일 때 (워크스페이스, 이메일)로 기존 인물을 먼저 찾는다. null = 외부 인력(이메일 없음). */
-  email: string | null
-  /** 이 프로젝트 권한. null = 조회 전용. 계정 없는 인물에게 주면 DB 가 거부한다. */
-  accessRole: AccessRole | null
-  roleLabel: string | null
-  title: string | null
-  /** 이 명단 행의 팀 전부 — 첫 원소가 대표 팀. 결과 집합이 이 배열과 같아진다(빈 배열 = 팀 없음). */
-  teamIds: string[]
-  /** 비활성 토글. 생략하면 기존 값 유지(새 행은 활성). */
-  active?: boolean
-}
+// 입력 계약은 도메인(순수 계층)이 정본이다 — 화면의 검증(validateDraft)과 이 액션이 같은 타입을 본다.
+export type { RosterInput } from '@/lib/domain/roster'
 
 export type RosterActionResult = { ok: true; memberId: string } | { ok: false; error: string }
 

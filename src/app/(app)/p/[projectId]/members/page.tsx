@@ -1,9 +1,9 @@
 import { Users, UserCog, Unlink, Shield } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { getActorForView } from '@/lib/authz'
-import { isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
+import { isAdminAccessRole, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { listProjects } from '@/app/actions/project'
 import { listRoster } from '@/app/actions/roster'
@@ -23,10 +23,10 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   const projectName = project?.name ?? t(locale, 'members.projectFallback')
   const canEdit = isProjectAdmin(m, projectId)
 
-  // 관리자는 명단 편집 화면(listRoster — 조회 실패를 '0명' 으로 위장하지 않는다), 그 외는 같은 표를 읽기 전용으로.
+  // 관리자는 명단 편집 화면(listRoster), 그 외는 같은 표를 읽기 전용으로(getProjectRoster) — 둘 다 조회 실패를 '0명' 으로 위장하지 않는다.
   // 초대 조회 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
   const [roster, invites] = await Promise.all([
-    canEdit ? listRoster(projectId) : getProjectMembers(projectId).then(rows => ({ ok: true as const, rows })),
+    canEdit ? listRoster(projectId) : getProjectRoster(projectId),
     canEdit ? listProjectInvites(projectId) : null,
   ])
   const rows = roster.ok ? roster.rows : []
@@ -34,7 +34,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   const teamOptions = teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
 
   const active = rows.filter(x => x.active)
-  const admins = active.filter(x => x.accessRole === 'admin').length
+  const admins = active.filter(x => isAdminAccessRole(x.accessRole)).length
   const unlinked = active.filter(x => x.kind === 'external').length
 
   return (

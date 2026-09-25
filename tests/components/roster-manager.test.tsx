@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { readFileSync } from 'node:fs'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import type { ProjectActorView } from '@/lib/domain/authz'
 import { makeProjectActorView } from '../fixtures/actor'
@@ -152,11 +153,48 @@ describe('RosterManager', () => {
     expect(removeRosterMember).toHaveBeenCalledWith('m-alice')
   })
 
+  it('외부 인력 행은 멤버·관리자 옵션을 막고 계정이 있어야 한다는 안내를 단다', () => {
+    render([member(), BOB], WS_ADMIN)
+    const bobOpts = byLabel<HTMLSelectElement>('bob 권한').querySelectorAll<HTMLOptionElement>('option')
+    expect([...bobOpts].map(o => [o.value, o.disabled])).toEqual([['', false], ['member', true], ['admin', true]])
+    expect(row('m-bob').querySelector('[data-unlinked-access-hint]')?.textContent).toContain('계정이 있어야 권한을 줄 수 있습니다')
+    const aliceOpts = byLabel<HTMLSelectElement>('alice 권한').querySelectorAll<HTMLOptionElement>('option')
+    expect([...aliceOpts].map(o => o.disabled)).toEqual([false, false, false])
+    expect(row('m-alice').querySelector('[data-unlinked-access-hint]')).toBeNull()
+  })
+
+  it('추가한 행의 저장된 이름이 입력과 다르면 기존 인물을 추가했다고 알린다', async () => {
+    render([member()])
+    typeInto(byLabel<HTMLInputElement>('추가할 사람 이름'), 'Dave K')
+    typeInto(byLabel<HTMLInputElement>('추가할 사람 이메일(선택)'), 'dave@example.com')
+    await act(async () => button('사람 추가').click())
+    expect(container.textContent).not.toContain('기존 인물')   // 새로고침 전 — 아직 모른다
+    // router.refresh 뒤 서버가 내려준 명단: 이메일이 맞은 기존 인물 'dave' 가 기존 이름으로 올라왔다.
+    render([member(), member({ id: 'm-new', personId: 'pe-dave', name: 'dave', email: 'dave@example.com' })])
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('기존 인물 dave을(를) 추가했습니다.')
+  })
+
+  it('저장된 이름이 입력과 같으면(새 사람) 안내하지 않는다', async () => {
+    render([member()])
+    typeInto(byLabel<HTMLInputElement>('추가할 사람 이름'), 'dave')
+    await act(async () => button('사람 추가').click())
+    render([member(), member({ id: 'm-new', personId: 'pe-dave', name: 'dave', email: null, kind: 'external' })])
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
+
   it('편집 권한이 없으면 입력 없이 읽기 전용 표와 배지만 그린다', () => {
     render([member(), BOB], null, false)
     expect(container.querySelector('select, input')).toBeNull()
     expect(container.querySelector('form')).toBeNull()
     expect(row('m-bob').textContent).toContain('계정 미연결')
     expect(row('m-alice').textContent).toContain('멤버')
+  })
+})
+
+describe('권한 판정은 authz 헬퍼로 — 역할 문자열 직접 비교 없음', () => {
+  it("명단 화면·페이지에 accessRole === 'admin' 비교가 없다", () => {
+    for (const f of ['src/components/roster/RosterManager.tsx', 'src/components/roster/RosterRow.tsx', 'src/app/(app)/p/[projectId]/members/page.tsx']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/accessRole\s*===\s*['"]admin['"]/)
+    }
   })
 })
