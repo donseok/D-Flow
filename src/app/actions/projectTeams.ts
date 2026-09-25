@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams, teamsSync } from '@/lib/teams/master'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
@@ -17,6 +18,11 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   if (!g.ok) return { ok: false, error: g.error }
   const norm = normalizeNewTeamCode(input)
   if (!norm.ok) return norm
+  // requireProjectAdmin 이 통과했으면 roleIn 이 이미 projectWorkspace 에서 이 프로젝트를 찾은 뒤다
+  // (domain/authz.ts roleIn ④) — 여기서 다시 없을 수 없다. projects 테이블을 별도 조회하지 않는다
+  // (이 액션은 teams 테이블만 만진다는 계약, project-teams-actions.test.ts 의 fromCalls 가드).
+  const workspaceId = g.actor.projectWorkspace.get(projectId)
+  if (!workspaceId) return { ok: false, error: '프로젝트의 워크스페이스를 확인할 수 없습니다.' }
   const admin = createAdminClient()
 
   // 중복은 동일 프로젝트 내에서만 거부 — 전역·타 프로젝트 동명은 허용(복합 유니크와 일치).
@@ -31,7 +37,7 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
   const ins = await admin.from('teams')
-    .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, project_id: projectId })
+    .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, project_id: projectId, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
   if (ins.error) return { ok: false, error: `팀 생성 실패: ${ins.error.message}` }
 
   await refreshTeams()
@@ -66,6 +72,9 @@ export async function updateProjectTeam(
 export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  // addProjectTeam 과 같은 근거(roleIn ④) — projects 테이블을 따로 조회하지 않는다.
+  const workspaceId = g.actor.projectWorkspace.get(projectId)
+  if (!workspaceId) return { ok: false, error: '프로젝트의 워크스페이스를 확인할 수 없습니다.' }
   const admin = createAdminClient()
   const existing = await admin.from('teams').select('id').eq('project_id', projectId).limit(1).maybeSingle()
   if (existing.error) return { ok: false, error: `팀 조회 실패: ${existing.error.message}` }
@@ -77,6 +86,7 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
   const ins = await admin.from('teams').insert(globals.map(t => ({
     code: t.code, name: t.code, sort_order: t.sortOrder,
     progress_visible: t.progressVisible, project_id: projectId,
+    workspace_id: workspaceId, color: pickTeamColor(t.sortOrder),
   })))
   if (ins.error) return { ok: false, error: `복사 실패: ${ins.error.message}` }
   await refreshTeams()

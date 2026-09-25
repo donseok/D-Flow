@@ -1,7 +1,9 @@
-// scripts/dev-bootstrap.mjs — 로컬 빈 DB 에 첫 슈퍼유저를 만든다. 로컬 전용.
-// memberships.team_id 가 not null(기준선 그대로, SP1 에서 폐기)이라 중립 전역 팀 1개를 함께 만든다.
-// teams 의 유일 키는 (project_id, code) NULLS NOT DISTINCT 다(code 단독 아님) — 전역 팀은 project_id = null.
-// 순서: 팀(멱등 upsert) → 계정 → 멤버십. 멤버십이 실패하면 만든 계정을 지운다 — 고아 계정이 재실행을 막지 않게.
+// scripts/dev-bootstrap.mjs — 로컬 빈 DB 에 워크스페이스 + 플랫폼 관리자를 만든다. 로컬 전용.
+// 0003(조직 코어) 이후: memberships.team_id 전역 팀 대신 workspaces 한 개를 만들고, 그 관리자로
+// platform_admins·profiles·workspace_members·people 을 함께 채운다. 워크스페이스 선택 UI 는 SP2 몫이라
+// 여기서 만든 워크스페이스 하나가 resolveSoleWorkspaceId(§5.3)가 요구하는 "소속 정확히 1개"의 근거가 된다.
+// 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people.
+// 중간 단계가 실패하면 만든 계정을 지운다 — 고아 계정이 재실행을 막지 않게(워크스페이스는 멱등이라 그대로 둔다).
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { createClient } from '@supabase/supabase-js'
@@ -25,23 +27,56 @@ try { target = localAdminEnv(readFileSync('.env.local', 'utf8')) } catch (e) {
 const rl = createInterface({ input: process.stdin, output: process.stdout })
 const email = (process.env.BOOTSTRAP_EMAIL || await rl.question('슈퍼유저 이메일: ')).trim().toLowerCase()
 const password = process.env.BOOTSTRAP_PASSWORD || await rl.question(`비밀번호(${MIN_PASSWORD}자 이상): `)
-const teamCode = (process.env.BOOTSTRAP_TEAM || '운영').trim()
 rl.close()
 if (password.length < MIN_PASSWORD) fail(`비밀번호는 ${MIN_PASSWORD}자 이상이어야 한다`)
 
+// 워크스페이스 slug·이름은 프롬프트로 묻지 않는다 — env 없으면 로컬 개발 기본값(`default`/`기본 워크스페이스`).
+const slug = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
+const wsName = (process.env.BOOTSTRAP_WORKSPACE_NAME || '기본 워크스페이스').trim()
+if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) fail('워크스페이스 slug 형식: 소문자·숫자·하이픈 2~63자')
+
 const admin = createClient(target.url, target.serviceRoleKey, { auth: { persistSession: false } })
-const { data: team, error: tErr } = await admin.from('teams')
-  .upsert({ project_id: null, code: teamCode, name: teamCode }, { onConflict: 'project_id,code' }).select('id').single()
-if (tErr) fail(`팀 생성 실패: ${tErr.message}`)
+
+const { data: ws, error: wErr } = await admin.from('workspaces')
+  .upsert({ slug, name: wsName }, { onConflict: 'slug' }).select('id').single()
+if (wErr) fail(`워크스페이스 생성 실패: ${wErr.message}`)
 
 const { data: created, error: uErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true })
 if (uErr) fail(`계정 생성 실패: ${uErr.message}`)
+const uid = created.user.id
 
-const { error: mErr } = await admin.from('memberships').insert({ user_id: created.user.id, team_id: team.id, role: 'pmo_admin', is_superuser: true })
-if (mErr) {
-  const { error: dErr } = await admin.auth.admin.deleteUser(created.user.id)
-  fail(`멤버십 생성 실패: ${mErr.message} — ` + (dErr
-    ? `만든 계정(${email})도 지우지 못했다: ${dErr.message}. npm run db:reset 뒤 다시 실행한다`
-    : `만든 계정은 지웠다. 원인을 고친 뒤 다시 실행한다`))
+const rollback = async (name, error) => {
+  const { error: dErr } = await admin.auth.admin.deleteUser(uid)
+  fail(`${name} 저장 실패: ${error.message} — ` + (dErr
+    ? `만든 계정도 지우지 못했다: ${dErr.message}. npm run db:reset 뒤 다시`
+    : '만든 계정은 지웠다. 원인을 고친 뒤 다시 실행한다'))
 }
-console.log(`✓ 슈퍼유저 ${email} (팀 ${teamCode}) — npm run dev 후 로그인`)
+
+const steps = [
+  ['profiles', () => admin.from('profiles').upsert({ user_id: uid, email, display_name: email.split('@')[0] })],
+  ['platform_admins', () => admin.from('platform_admins').upsert({ user_id: uid })],
+  ['workspace_members', () => admin.from('workspace_members').upsert({ workspace_id: ws.id, user_id: uid, role: 'admin' })],
+]
+for (const [name, run] of steps) {
+  const { error } = await run()
+  if (error) await rollback(name, error)
+}
+
+// people(workspace_id, email) 은 부분 유니크 인덱스(email is not null)라 supabase-js upsert 의
+// onConflict 가 못 쓴다(ON CONFLICT 대상이 부분 인덱스와 일치하지 않아 42P10) — select 후 insert/update.
+{
+  const { data: existing, error: selErr } = await admin.from('people')
+    .select('id, user_id').eq('workspace_id', ws.id).eq('email', email).maybeSingle()
+  if (selErr) await rollback('people(조회)', selErr)
+  if (!existing) {
+    const { error } = await admin.from('people')
+      .insert({ workspace_id: ws.id, email, display_name: email.split('@')[0], user_id: uid })
+    if (error) await rollback('people', error)
+  } else if (!existing.user_id) {
+    const { error } = await admin.from('people').update({ user_id: uid }).eq('id', existing.id)
+    if (error) await rollback('people', error)
+  }
+  // existing.user_id 가 이미 있으면(동일 이메일의 외부 인력이 이미 계정과 연결됨) 손대지 않는다 — 덮어쓰면 다른 계정의 연결이 끊긴다.
+}
+
+console.log(`✓ 플랫폼 관리자 ${email} · 워크스페이스 ${slug}(${wsName}) 관리자 — npm run dev 후 로그인`)

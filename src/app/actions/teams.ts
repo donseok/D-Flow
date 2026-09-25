@@ -7,8 +7,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireSuperuser } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
@@ -19,21 +21,29 @@ export async function addTeam(input: string): Promise<TeamActionResult> {
   if (!g.ok) return { ok: false, error: g.error }
   const norm = normalizeNewTeamCode(input)
   if (!norm.ok) return norm
+  // 워크스페이스 선택 UI 는 SP2 몫(스펙 §5.3) — 소속이 정확히 하나일 때만 그 워크스페이스에 만든다.
+  const w = resolveSoleWorkspaceId(g.actor)
+  if (!w.ok) return { ok: false, error: w.error }
   const admin = createAdminClient()
 
   // 0071: 전역·프로젝트 행이 같은 code 를 가질 수 있다. 이 화면은 전역 행만 다루므로
   // project_id is null 로 고정 — 안 고정하면 어느 프로젝트가 같은 code 를 쓰는 순간
   // "이미 존재합니다"로 전역 생성이 오차단된다(임의 행을 잡는 사례).
-  const dup = await admin.from('teams').select('id').eq('code', norm.code).is('project_id', null).maybeSingle()
+  // workspace_id 도 함께 건다(0003) — 다른 워크스페이스의 동명 전역 팀을 오탐하지 않는다.
+  const dup = await admin.from('teams').select('id').eq('code', norm.code).is('project_id', null)
+    .eq('workspace_id', w.workspaceId).maybeSingle()
   if (dup.error) return { ok: false, error: `팀 조회 실패: ${dup.error.message}` }
   if (dup.data) return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }
 
+  // 정렬 순번도 워크스페이스별로 잰다 — 안 그러면 다른 워크스페이스의 순번을 이어받는다.
   const max = await admin.from('teams')
-    .select('sort_order').is('project_id', null).order('sort_order', { ascending: false }).limit(1).maybeSingle()
+    .select('sort_order').is('project_id', null).eq('workspace_id', w.workspaceId)
+    .order('sort_order', { ascending: false }).limit(1).maybeSingle()
   if (max.error) return { ok: false, error: `팀 조회 실패: ${max.error.message}` }
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
-  const ins = await admin.from('teams').insert({ code: norm.code, name: norm.code, sort_order: sortOrder })
+  const ins = await admin.from('teams')
+    .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, workspace_id: w.workspaceId, color: pickTeamColor(sortOrder) })
   if (ins.error) return { ok: false, error: `팀 생성 실패: ${ins.error.message}` }
 
   // 자동 편철 앵커(0043 계약): 팀코드 동명 시드 루트 폴더. 실패해도 팀은 유지하되 관리자에게

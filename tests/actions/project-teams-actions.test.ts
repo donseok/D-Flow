@@ -117,13 +117,16 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(db.inserted.teams).toHaveLength(1)
     })
 
-    it('성공: teams insert(project_id 포함) + refreshTeams, 시드 폴더는 절대 만들지 않는다', async () => {
+    it('성공: teams insert(project_id·workspace_id·color 포함) + refreshTeams, 시드 폴더는 절대 만들지 않는다', async () => {
       asAdmin()
       const r = await addProjectTeam('p1', ' 신팀 ')
       expect(r.ok).toBe(true)
-      expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', project_id: 'p1' })
+      // workspace_id 는 projects 를 다시 조회하지 않고 g.actor.projectWorkspace(fixtures 의 WS='ws-1')에서 얻는다.
+      expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', project_id: 'p1', workspace_id: 'ws-1' })
+      expect(db.inserted.teams[0].color).toMatch(/^#[0-9a-fA-F]{6}$/)
       expect(refreshTeams).toHaveBeenCalled()
       expect(fromCalls).not.toContain('minute_folders')
+      expect(fromCalls).not.toContain('projects')
     })
   })
 
@@ -210,9 +213,10 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(r.ok).toBe(true)
       expect(db.inserted.teams).toHaveLength(2)
       expect(db.inserted.teams).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: 'PMO', project_id: 'p1', progress_visible: true }),
-        expect.objectContaining({ code: 'MDM', project_id: 'p1', progress_visible: false }),
+        expect.objectContaining({ code: 'PMO', project_id: 'p1', progress_visible: true, workspace_id: 'ws-1' }),
+        expect.objectContaining({ code: 'MDM', project_id: 'p1', progress_visible: false, workspace_id: 'ws-1' }),
       ]))
+      expect(db.inserted.teams.every(t => typeof t.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.color as string))).toBe(true)
       expect(db.inserted.teams.some(t => t.code === 'OLD')).toBe(false)
       expect(refreshTeams).toHaveBeenCalled()
     })

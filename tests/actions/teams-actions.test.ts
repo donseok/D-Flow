@@ -92,21 +92,43 @@ describe('팀 관리 서버액션', () => {
     expect(db.inserted.teams).toHaveLength(0)
   })
 
-  it('중복 코드 거부', async () => {
+  it('중복 코드 거부(같은 워크스페이스)', async () => {
     asSuperuser()
-    db.teams = [{ id: 't-pmo', code: 'PMO', sort_order: 0 }]
+    db.teams = [{ id: 't-pmo', code: 'PMO', sort_order: 0, project_id: null, workspace_id: 'ws-1' }]
     const r = await addTeam('PMO')
     expect(r.ok).toBe(false)
     expect(db.inserted.teams).toHaveLength(0)
   })
 
-  it('성공: teams insert + 시드 루트 폴더 insert + refreshTeams', async () => {
+  // workspace_id 필터가 없으면 다른 워크스페이스의 동명 전역 팀을 오탐해 생성이 막힌다(0003 이후 회귀 방지).
+  it('다른 워크스페이스의 동명 전역 팀은 막지 않는다', async () => {
+    asSuperuser()
+    db.teams = [{ id: 't-other-ws', code: 'PMO', sort_order: 0, project_id: null, workspace_id: 'ws-other' }]
+    const r = await addTeam('PMO')
+    expect(r.ok).toBe(true)
+    expect(db.inserted.teams).toHaveLength(1)
+  })
+
+  it('성공: teams insert(workspace_id·color 포함) + 시드 루트 폴더 insert + refreshTeams', async () => {
     asSuperuser()
     const r = await addTeam(' 신팀 ')
     expect(r.ok).toBe(true)
-    expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀' })
+    expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', workspace_id: 'ws-1' })
+    expect((db.inserted.teams[0] as { color: string }).color).toMatch(/^#[0-9a-fA-F]{6}$/)
     expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, created_by: null })
     expect(refreshTeams).toHaveBeenCalled()
+  })
+
+  // 워크스페이스 선택 UI 는 SP2 몫(스펙 §5.3) — SP1 은 소속이 정확히 하나일 때만 생성을 허용한다.
+  it('소속 워크스페이스가 2개 이상이면 거부하고 아무것도 쓰지 않는다', async () => {
+    requireSuperuser.mockResolvedValue({
+      ok: true,
+      actor: makeSuperuser({ workspaceRoles: new Map([['ws-a', 'admin'], ['ws-b', 'member']]) }),
+    })
+    const r = await addTeam('신팀')
+    expect(r.ok).toBe(false)
+    expect(createAdminClient).not.toHaveBeenCalled()
+    expect(db.inserted.teams).toHaveLength(0)
   })
 
   it('동명 시드 폴더가 이미 있으면 폴더 insert 는 생략하고 성공', async () => {

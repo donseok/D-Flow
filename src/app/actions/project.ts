@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getActorViewState, requireProjectAdmin, requireSuperuser } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { canSeeProject } from '@/lib/domain/authz'
 import { isValidDateRange } from '@/lib/domain/validate'
 import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
@@ -65,6 +66,9 @@ export async function createProject(
   // 프로젝트 생성은 전역 관리 — 슈퍼유저만.
   const g = await requireSuperuser()
   if (!g.ok) throw new Error(g.error)
+  // 워크스페이스 선택 UI 는 SP2 몫(스펙 §5.3) — 소속이 정확히 하나일 때만 그 워크스페이스에 만든다.
+  const w = resolveSoleWorkspaceId(g.actor)
+  if (!w.ok) throw new Error(w.error)
   if (!isValidDateRange(start || null, end || null)) throw new Error('종료일은 시작일보다 빠를 수 없습니다.')
   // 호출부 타입을 우회한 값(예: 폼 라이브러리·직렬화 손상)이 들어오면 validateLevelSettings 의
   // .map((l) => l.trim()) 에서 알아보기 힘든 TypeError 로 죽는다 — 여기서 먼저 명확히 거부한다.
@@ -80,7 +84,7 @@ export async function createProject(
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('projects')
-    .insert({ name, start_date: start, end_date: end, description })
+    .insert({ name, start_date: start, end_date: end, description, workspace_id: w.workspaceId })
     .select('id')
     .single()
   if (error) throw new Error(error.message)

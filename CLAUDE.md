@@ -18,8 +18,9 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 - `supabase/config.toml` 에서 analytics 를 껐다(colima 호환 — 로그 수집기가 colima 에서 docker 소켓을 마운트하지 못한다).
   Studio 의 로그 화면만 빠진다.
 - 최초 셋업: `npm run db:start`(로컬 Supabase 기동) → `npm run env:local`(`supabase status` 결과로 `.env.local` 생성) →
-  `npm run dev:bootstrap`(플랫폼 슈퍼유저 계정 등 최소 시드 생성 — 이메일·비밀번호·팀 코드를 프롬프트로 묻고,
-  `BOOTSTRAP_EMAIL`/`BOOTSTRAP_PASSWORD`/`BOOTSTRAP_TEAM`(기본 `운영`) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
+  `npm run dev:bootstrap`(워크스페이스 1개 + 그 관리자인 플랫폼 슈퍼유저 계정 등 최소 시드 생성 — 이메일·비밀번호는
+  프롬프트로 묻고, `BOOTSTRAP_EMAIL`/`BOOTSTRAP_PASSWORD`/`BOOTSTRAP_WORKSPACE_SLUG`(기본 `default`)/
+  `BOOTSTRAP_WORKSPACE_NAME`(기본 `기본 워크스페이스`) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
   → `npm run dev`.
 - 스키마를 바꿨으면 `npm run db:reset`(기준선 + 마이그레이션 + seed 를 빈 Postgres 에 재적용)으로 검증한다 —
   이것이 이 리포의 "스테이징 리허설"이며 아래 G4 트레일러의 근거다. 리셋은 계정까지 지우므로 이어서

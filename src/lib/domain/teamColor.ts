@@ -19,3 +19,13 @@ export function teamStyle(team: TeamCode): TeamSlotStyle {
   for (const ch of team) h = (h * 31 + ch.codePointAt(0)!) >>> 0
   return TEAM_SLOTS[h % TEAM_SLOTS.length]
 }
+
+/** `teams.color`(0003, hex, not null) 배정용 팔레트 — TEAM_SLOTS 의 team-1..5 토큰과 같은 hex 값
+ *  (src/app/globals.css `--color-team-1..5`). SP1 은 화면 틴트는 그대로 두고(teamStyle 유지),
+ *  DB 컬럼만 팀 생성 시 이 팔레트에서 순번으로 배정한다(소비처 교체는 SP3/SP4). */
+export const TEAM_PALETTE = ['#4f46e5', '#0276a8', '#7c3aed', '#a65b00', '#0f766e'] as const
+
+/** 정렬순번으로 팔레트에서 색을 고른다 — 순번이 팔레트 길이를 넘으면 순환. */
+export function pickTeamColor(sortOrder: number): string {
+  return TEAM_PALETTE[((sortOrder % TEAM_PALETTE.length) + TEAM_PALETTE.length) % TEAM_PALETTE.length]
+}

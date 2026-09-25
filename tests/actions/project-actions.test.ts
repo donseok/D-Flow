@@ -64,8 +64,10 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 
 import { createProject } from '@/app/actions/project'
+import { makeSuperuser } from '../fixtures/actor'
 
-const SUPERUSER = { ok: true as const, actor: { userId: 'u-super', isSuperuser: true } }
+// resolveSoleWorkspaceId(g.actor) — 소속 워크스페이스가 정확히 1개(fixtures 기본값 'ws-1')일 때만 통과한다.
+const SUPERUSER = { ok: true as const, actor: makeSuperuser({ userId: 'u-super' }) }
 
 beforeEach(() => {
   db.insertedProject = null
@@ -89,10 +91,27 @@ describe('createProject — 단계 라벨 필수(SP0, 프리셋 없음)', () => 
       start_date: '2026-01-01',
       end_date: '2026-12-31',
       description: '설명',
+      workspace_id: 'ws-1',
     })
     expect(db.insertedSettings).toMatchObject({ project_id: 'proj-1', level_labels: ['단계', '작업'], max_depth: 2, extra_axis_label: null })
     expect(db.insertedSettings).not.toHaveProperty('preset_applied')
     expect((db.insertedSettings as { milestone_keywords: string[] }).milestone_keywords.length).toBeGreaterThan(0)
+  })
+
+  it('소속 워크스페이스가 2개 이상이면 DB 를 건드리기 전에 거부(SP2 가 선택 UI 를 준다)', async () => {
+    requireSuperuser.mockResolvedValue({
+      ok: true,
+      actor: makeSuperuser({ workspaceRoles: new Map([['ws-a', 'admin'], ['ws-b', 'member']]) }),
+    })
+    await expect(createProject('P', null, null, null, ['단계'])).rejects.toThrow('워크스페이스를 지정해야 합니다.')
+    expect(createServerClient).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('소속 워크스페이스가 0개면 DB 를 건드리기 전에 거부', async () => {
+    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ workspaceRoles: new Map() }) })
+    await expect(createProject('P', null, null, null, ['단계'])).rejects.toThrow('워크스페이스에 소속돼 있지 않습니다.')
+    expect(createServerClient).not.toHaveBeenCalled()
   })
 
   it('라벨이 비면 DB 를 건드리기 전에 거부', async () => {
