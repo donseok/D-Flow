@@ -26,11 +26,11 @@ export async function accessibleProjectIds(
  */
 export async function myMemberIdsAcrossProjects(
   admin: AdminClient,
-  args: { userId: string; userEmail: string; projectIds: string[] },
+  args: { userId: string; projectIds: string[] },
 ): Promise<string[]> {
   const out = new Set<string>()
   for (const projectId of args.projectIds) {
-    const ids = await myMemberIds(admin, { userId: args.userId, userEmail: args.userEmail, projectId })
+    const ids = await myMemberIds(admin, { userId: args.userId, projectId })
     for (const id of ids) out.add(id)
   }
   return [...out]

@@ -70,11 +70,16 @@ type Resp = { data?: unknown; error?: { message: string; code?: string } | null 
  * .from(table) 호출 시 큐 선두를 소비 — select/maybeSingle/single/then(암묵 await) 모두 같은 응답을 본다.
  */
 function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: Array<{ id: string; email: string }> = [{ id: 'u-1', email: 'admin@example.com' }]) {
+  /** 명단(project_members) 체인의 select/eq 호출 — 담당자 매핑 조회의 필터 계약을 단언한다. */
+  const rosterCalls: Array<[string, unknown[]]> = []
   const admin = {
+    rosterCalls,
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) b[k] = () => b
+      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) {
+        b[k] = (...args: unknown[]) => { if (table === 'project_members') rosterCalls.push([k, args]); return b }
+      }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
@@ -169,6 +174,13 @@ describe('POST /wbs/import', () => {
     expect(json).toMatchObject({
       ok: true, upserted: 3, skipped: 0, unmatched_assignees: [], non_leaf_skipped: [], orders_created: 2,
     })
+    // 담당자 매핑은 이메일 정본(people.email)으로, 담당자 쓰기이므로 활성 명단 행·활성 인물만.
+    expect(admin.rosterCalls).toEqual([
+      ['select', ['id, people!inner(email, active)']],
+      ['eq', ['project_id', PROJECT_ID]],
+      ['eq', ['active', true]],
+      ['eq', ['people.active', true]],
+    ])
 
     // RPC payload — kind='task' 노드만 dev_workflow:true 로 실린다(v2.1). ensureOrder 가 참조하는
     // dev_workflow 게이트는 이 값이 DB 에 저장된 결과이므로, 위 wbs_items 픽스처가 실제 코드 경로로 도달함을 검증한다.

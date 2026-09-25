@@ -60,12 +60,14 @@ function makeClient(options: ClientOptions = {}) {
   const builder = {
     select: vi.fn(),
     ilike: vi.fn(),
+    eq: vi.fn(),
     in: vi.fn(),
     order: vi.fn(),
     limit,
   }
   builder.select.mockReturnValue(builder)
   builder.ilike.mockReturnValue(builder)
+  builder.eq.mockReturnValue(builder)
   builder.in.mockReturnValue(builder)
   builder.order.mockReturnValue(builder)
 
@@ -119,6 +121,8 @@ describe('searchMemberCandidates — 멤버 이름 자동완성 후보 검색', 
 
     expect(result.ok).toBe(true)
     expect(db.builder.in).toHaveBeenCalledWith('project_id', [PROJECT_ID, 'project-2'])
+    // 빠진 사람(비활성 명단 행·비활성 인물)은 후보가 아니다.
+    expect(db.builder.eq.mock.calls).toEqual([['active', true], ['people.active', true]])
   })
 
   it('슈퍼유저는 프로젝트 필터 없이 전체 로스터를 검색한다', async () => {
@@ -132,6 +136,7 @@ describe('searchMemberCandidates — 멤버 이름 자동완성 후보 검색', 
 
     expect(result.ok).toBe(true)
     expect(db.builder.in).not.toHaveBeenCalled()
+    expect(db.builder.eq.mock.calls).toEqual([['active', true], ['people.active', true]])
   })
 
   it('같은 이메일(대소문자 무시)은 정본 한 명으로 dedupe 하고 정본 이름을 쓴다', async () => {

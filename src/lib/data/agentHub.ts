@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import type { OrderRow, WatcherRow } from '@/lib/domain/seatmap'
-import { DONE_WINDOW_MS, viewerEmail } from '@/lib/data/agentSeatmap'
+import { DONE_WINDOW_MS } from '@/lib/data/agentSeatmap'
 import { personOf } from '@/lib/data/memberSelect'
 import {
   assembleAgentHub, type AgentHub, type AgentHubRows, type HubItemRow, type HubMemberRow, type HubReportRow,
@@ -20,10 +20,10 @@ function must<T>(what: string, r: { data: T | null; error: { message: string } |
   return (r.data ?? []) as T
 }
 
-/** 명단 행(people 임베드) → 허브 조립기가 쓰는 평평한 행. 이름·이메일·계정은 people 이 정본이다. */
+/** 명단 행(people 임베드) → 허브 조립기가 쓰는 평평한 행. 이름·계정은 people 이 정본이고, active 는 명단 행·인물 모두 활성일 때만. */
 function toHubMember(r: Record<string, unknown>): HubMemberRow {
   const pe = personOf(r)
-  return { id: r.id as string, name: pe?.display_name ?? '', email: pe?.email ?? null, user_id: pe?.user_id ?? null }
+  return { id: r.id as string, name: pe?.display_name ?? '', user_id: pe?.user_id ?? null, active: r.active === true && pe?.active === true }
 }
 
 export async function fetchAgentHubRows(admin: AdminClient, projectId: string, nowMs: number): Promise<AgentHubRows> {
@@ -39,7 +39,8 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
       .order('created_at', { ascending: false }).limit(2000).then(r => must<OrderRow[]>('주문', r)),
     admin.from('agent_watchers').select(WATCHER_COLS)
       .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r)),
-    admin.from('project_members').select('id, people!inner(display_name, email, user_id)').eq('project_id', projectId)
+    // 비활성 행도 싣는다 — 담당자 이름 표시는 계속돼야 한다. '나' 판정은 myMemberIdsOf 가 active 로 거른다.
+    admin.from('project_members').select('id, active, people!inner(display_name, user_id, active)').eq('project_id', projectId)
       .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toHubMember)),
     admin.from('projects').select('id, name').eq('id', projectId).then(r => must<Array<{ id: string; name: string }>>('프로젝트', r)),
   ])
@@ -59,6 +60,6 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
 
 export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now()): Promise<AgentHub> {
   const admin = createAdminClient()
-  const [rows, userEmail] = await Promise.all([fetchAgentHubRows(admin, projectId, nowMs), viewerEmail(admin, viewer.userId)])
-  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, userEmail, isAdmin: viewer.isAdmin })
+  const rows = await fetchAgentHubRows(admin, projectId, nowMs)
+  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
 }

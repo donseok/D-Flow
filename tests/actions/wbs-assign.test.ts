@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   ensureOrderForWorkflowLeaf: vi.fn(),
   applyWorkflowEvent: vi.fn(),
   recordProgressSnapshot: vi.fn(async () => {}),
-  viewerEmail: vi.fn(),
   myMemberIds: vi.fn(),
   isSubtreeManager: vi.fn(),
 }))
@@ -21,8 +20,7 @@ vi.mock('@/lib/authz', () => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // setWbsStage 는 requireSubtreeManagerOrAdmin(subtreeManager.ts, 실제 모듈, 트랙 B 2026-09-15)로
-// 관리자 아닌 경로를 판정한다 — 그 내부가 부르는 viewerEmail·myMemberIds·isSubtreeManager 만 목킹한다.
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: mocks.viewerEmail }))
+// 관리자 아닌 경로를 판정한다 — 그 내부가 부르는 myMemberIds·isSubtreeManager 만 목킹한다.
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds, isSubtreeManager: mocks.isSubtreeManager }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: mocks.emitNotification }))
@@ -65,7 +63,8 @@ function admin(queues: Record<string, Resp[]>) {
       calls.push(table)
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'order', 'limit']) b[k] = () => b
+      for (const k of ['order', 'limit']) b[k] = () => b
+      b.select = (cols: string) => { (captured[`${table}.select`] ??= []).push(cols); return b }
       b.eq = (col: string, val: unknown) => {
         (captured[`${table}.eq`] ??= []).push([col, val]); return b
       }
@@ -102,7 +101,6 @@ beforeEach(() => {
   mocks.ensureOrderForWorkflowLeaf.mockResolvedValue({ ok: true, created: true })
   mocks.applyWorkflowEvent.mockResolvedValue(WF_OK)
   // 서브트리 관리자 경로 기본값(트랙 B) — 안전한 쪽("아니다")으로 두고, 개별 테스트가 override.
-  mocks.viewerEmail.mockResolvedValue('member@example.com')
   mocks.myMemberIds.mockResolvedValue([])
   mocks.isSubtreeManager.mockResolvedValue(false)
 })
@@ -119,8 +117,9 @@ describe('setWbsAssignee', () => {
     const r = await setWbsAssignee(W1, M1)
     expect(r.ok).toBe(true)
     expect(captured.wbs_items[0]).toMatchObject({ assignee_member_id: M1 })
-    // 활성 명단 행만 담당자가 될 수 있다.
-    expect(captured['project_members.eq']).toEqual(expect.arrayContaining([['id', M1], ['active', true]]))
+    // 활성 명단 행·활성 인물만 담당자가 될 수 있다.
+    expect(captured['project_members.select']).toEqual(['id, project_id, people!inner(active)'])
+    expect(captured['project_members.eq']).toEqual([['id', M1], ['active', true], ['people.active', true]])
     expect(mocks.emitNotification).toHaveBeenCalledWith(expect.objectContaining({
       type: 'work.assigned',
       recipientMemberIds: [M1],
@@ -296,6 +295,9 @@ describe('setWbsAssigneeCascade', () => {
     expect(idsArg).not.toContain(W1) // 본인은 .in 이 아니라 별도 .eq UPDATE
     expect(idsArg).not.toContain(W5)
     expect(captured['wbs_items.is'][0]).toEqual(['assignee_member_id', null])
+    // 쓰기 선행조회도 활성 명단 행·활성 인물만(setWbsAssignee 와 같은 1차 방어선).
+    expect(captured['project_members.select']).toEqual(['id, project_id, people!inner(active)'])
+    expect(captured['project_members.eq']).toEqual([['id', M1], ['active', true], ['people.active', true]])
   })
 
   it('(b) 요약 알림 1건만 — 항목별 스팸 없음, detail 은 "외 N건" 요약', async () => {

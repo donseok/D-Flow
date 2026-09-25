@@ -4,6 +4,13 @@ export type ProjectRole = 'admin' | 'member'
 export type WorkspaceRole = 'admin' | 'member'
 export type EffectiveRole = 'superuser' | 'admin' | 'member' | 'viewer'
 
+/** workspace_members.role 원시값(행 단위, Actor 없이 읽은 값)이 관리자인가 — 역할 문자열 비교는 이 파일에만 둔다. */
+export function isWorkspaceAdminRole(role: string | null | undefined): boolean {
+  return role === 'admin'
+}
+/** 워크스페이스 역할 표시 라벨. */
+export const WORKSPACE_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관리자', member: '멤버' }
+
 /** 로그인 사용자의 권한 스냅샷. buildActor() 가 4축(플랫폼 관리자·워크스페이스·프로젝트·명단)으로 조립한다. */
 export interface Actor {
   userId: string

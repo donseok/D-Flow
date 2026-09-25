@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), resolveProjectId: vi.fn(),
   createAdminClient: vi.fn(), createServerClient: vi.fn(),
-  myMemberIds: vi.fn(), viewerEmail: vi.fn(),
+  myMemberIds: vi.fn(),
   ensureAgentProject: vi.fn(), backfillProjectOrders: vi.fn(), ensureOrderForWorkflowLeaf: vi.fn(),
   applyWorkflowEvent: vi.fn(), after: vi.fn(), recordProgressSnapshot: vi.fn(),
 }))
@@ -15,7 +15,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: mocks.after }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordProgressSnapshot }))
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds }))
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: mocks.viewerEmail, DONE_WINDOW_MS: 0 }))
+vi.mock('@/lib/data/agentSeatmap', () => ({ DONE_WINDOW_MS: 0 }))
 vi.mock('@/lib/agent/ensureOrder', () => ({ ensureAgentProject: mocks.ensureAgentProject, backfillProjectOrders: mocks.backfillProjectOrders, ensureOrderForWorkflowLeaf: mocks.ensureOrderForWorkflowLeaf }))
 vi.mock('@/lib/agent/workflowEvent', () => ({ applyWorkflowEvent: mocks.applyWorkflowEvent }))
 
@@ -56,7 +56,6 @@ beforeEach(() => {
   mocks.resolveProjectId.mockResolvedValue({ ok: true, projectId: P1 })
   mocks.requireProjectAdmin.mockResolvedValue(DENIED)
   mocks.requireProjectMember.mockResolvedValue(MEMBER)
-  mocks.viewerEmail.mockResolvedValue('yoo@example.com')
   mocks.myMemberIds.mockResolvedValue(['m1'])
   mocks.ensureAgentProject.mockResolvedValue({ ok: true, enabled: true, activated: false, stopped: false })
   mocks.ensureOrderForWorkflowLeaf.mockResolvedValue({ ok: true, created: true })
@@ -76,7 +75,7 @@ describe('requireDelegationRight', () => {
     admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }] })
     const r = await requireDelegationRight(W1)
     expect(r).toEqual({ ok: true, actor: { userId: 'member-1' }, projectId: P1, isAdmin: false })
-    expect(mocks.myMemberIds).toHaveBeenCalledWith(expect.anything(), { userId: 'member-1', userEmail: 'yoo@example.com', projectId: P1 })
+    expect(mocks.myMemberIds).toHaveBeenCalledWith(expect.anything(), { userId: 'member-1', projectId: P1 })
   })
   it('멤버 + 담당자가 남 → 거부(ERR_NOT_ASSIGNEE)', async () => {
     admin({ wbs_items: [{ data: { assignee_member_id: 'm9' } }] })
@@ -96,9 +95,9 @@ describe('requireDelegationRight', () => {
     expect(await requireDelegationRight(W1)).toEqual({ ok: false, error: '대상을 찾을 수 없습니다.' })
     expect(calls).toEqual([])
   })
-  it('뷰어 이메일 조회가 throw 하면 거부(fail-closed)', async () => {
+  it('로스터 판정(myMemberIds)이 throw 하면 거부(fail-closed)', async () => {
     admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }] })
-    mocks.viewerEmail.mockRejectedValue(new Error('auth down'))
+    mocks.myMemberIds.mockRejectedValue(new Error('로스터 조회 실패: db down'))
     const r = await requireDelegationRight(W1)
     expect(r.ok).toBe(false)
   })

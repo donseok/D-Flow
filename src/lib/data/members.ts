@@ -28,7 +28,7 @@ export const getProjectMembers = cache(async (projectId: string): Promise<Projec
 })
 
 /**
- * 로그인한 사람이 명단에 올라 있는(활성 행) 프로젝트 id 목록 — 회의록 프로젝트 자동 선택의 근거.
+ * 로그인한 사람이 명단에 올라 있는(활성 행·활성 인물) 프로젝트 id 목록 — 회의록 프로젝트 자동 선택의 근거.
  *
  * 계정↔사람 연결의 정본은 `people.user_id` 다(0003). 예전의 이메일 폴백 조회는 두지 않는다 —
  * 이메일이 같다는 이유로 연결되지 않은 외부 인력 행을 '나'로 삼으면 안 된다.
@@ -43,9 +43,10 @@ export const getMyProjectIds = cache(async (): Promise<string[] | null> => {
   if (!user) return null
   const { data, error } = await sb
     .from('project_members')
-    .select('project_id, people!inner(user_id)')
+    .select('project_id, people!inner(user_id, active)')
     .eq('people.user_id', user.id)
     .eq('active', true)
+    .eq('people.active', true)
   if (error) {
     console.error('[getMyProjectIds] 조회 실패:', error.message)
     return null

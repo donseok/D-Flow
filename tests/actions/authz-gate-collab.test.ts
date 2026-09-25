@@ -121,11 +121,14 @@ describe('대상 결합 회귀 — 인자 projectId 만으로는 남의 행을 �
     requireProjectMember.mockResolvedValue({ ok: true, actor: MEMBER })
     // project_members 대조가 0행 → 거부, attendance_records 로는 가지 않는다
     const touched: string[] = []
+    const rosterCalls: Array<[string, unknown[]]> = []
     createServerClient.mockResolvedValue({
       from: vi.fn((table: string) => {
         touched.push(table)
         const b: Record<string, unknown> = {}
-        for (const m of ['select', 'eq', 'maybeSingle', 'upsert']) b[m] = vi.fn(() => b)
+        for (const m of ['select', 'eq', 'maybeSingle', 'upsert']) {
+          b[m] = vi.fn((...args: unknown[]) => { if (table === 'project_members') rosterCalls.push([m, args]); return b })
+        }
         ;(b as { then: (r: (v: unknown) => void) => void }).then =
           resolve => resolve({ data: null, error: null })
         return b
@@ -135,6 +138,15 @@ describe('대상 결합 회귀 — 인자 projectId 만으로는 남의 행을 �
     expect(res.ok).toBe(false)
     expect(res.error).toContain('멤버')
     expect(touched).not.toContain('attendance_records')
+    // 대조 축 — 이 프로젝트의 활성 명단 행·활성 인물만(빠진 사람의 근태는 새로 쓰지 않는다).
+    expect(rosterCalls).toEqual([
+      ['select', ['id, people!inner(active)']],
+      ['eq', ['id', 'm-other']],
+      ['eq', ['project_id', 'p1']],
+      ['eq', ['active', true]],
+      ['eq', ['people.active', true]],
+      ['maybeSingle', []],
+    ])
   })
 
   it('upsertAttendance: 로스터 확인 조회가 실패하면 중단한다 — fail-closed', async () => {

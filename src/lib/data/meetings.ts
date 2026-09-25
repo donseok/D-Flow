@@ -152,34 +152,24 @@ export const getMeetingDetail = cache(async (
 })
 
 /**
- * 로그인 계정에 연결된 project_members.id 집합. 크로스 프로젝트 조회이므로
- * `people.user_id`(계정 연결 정본, 0003) 와 `people.email` 매칭의 **합집합**을 낸다 —
- * 계정에 아직 연결되지 않은 같은 이메일의 명단 행도 '나'로 본다(예전 user_id·email 이중 매칭 규칙 유지).
- * 한쪽 조회가 실패해도 다른 쪽 결과로 계속 동작한다.
- * 외부 인력 행은 people.user_id NULL 로 남고 로그인하지 않으므로 user_id 쪽에는 걸리지 않는다.
+ * 로그인 계정에 연결된 활성 명단 행 id 집합(크로스 프로젝트) — '내 담당 이슈'·'내 회의' 판정 재료.
+ * 계정 연결 정본은 `people.user_id` 하나다(SP1: 이메일 폴백 매칭 폐지). 비활성 명단 행·비활성 인물은
+ * buildActor 와 같이 빼서, 빠진 사람의 옛 행이 '나'로 잡히지 않게 한다.
+ * 외부 인력 행은 people.user_id NULL 이라 걸리지 않는다.
  */
 export async function resolveMemberIds(
   sb: ServerClient,
-  user: { id: string; email?: string | null },
+  user: { id: string },
 ): Promise<string[]> {
-  const email = user.email?.trim().toLowerCase() || null
-  const [byUser, byEmail] = await Promise.all([
-    sb.from('project_members').select('id, people!inner(user_id)').eq('people.user_id', user.id),
-    email
-      ? sb.from('project_members').select('id, people!inner(email)').eq('people.email', email)
-      : Promise.resolve({ data: [] as Row[], error: null }),
-  ])
-
-  const ids = new Set<string>()
-  for (const [label, res] of [['user_id', byUser], ['email', byEmail]] as const) {
-    if (res.error) {
-      // 무매칭([])과 조회 실패를 호출부가 구별할 수 없으므로 최소한 로그로는 남긴다.
-      console.error(`[resolveMemberIds] ${label} 조회 실패:`, res.error.message)
-      continue
-    }
-    for (const r of (res.data ?? []) as Row[]) ids.add(r.id as string)
+  const { data, error } = await sb.from('project_members')
+    .select('id, people!inner(user_id, active)')
+    .eq('people.user_id', user.id).eq('active', true).eq('people.active', true)
+  if (error) {
+    // 무매칭([])과 조회 실패를 호출부가 구별할 수 없으므로 최소한 로그로는 남긴다.
+    console.error('[resolveMemberIds] 조회 실패:', error.message)
+    return []
   }
-  return [...ids]
+  return [...new Set(((data ?? []) as Row[]).map(r => r.id as string))]
 }
 
 /**

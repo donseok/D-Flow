@@ -67,7 +67,8 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
     // 3) 수신자 행 — 이벤트가 방금 생겼으므로 충돌 없음(부분 유니크는 안전망).
     const { error: rcErr } = await admin
       .from('notification_recipients')
-      .insert(rows.map(r => ({ event_id: ev.id, member_id: r.member_id, user_id: r.user_id })))
+      // project_id: member 수신자는 필수(CHECK notification_recipients_member_needs_project, 0003) — 이벤트의 프로젝트.
+      .insert(rows.map(r => ({ event_id: ev.id, member_id: r.member_id, user_id: r.user_id, project_id: r.member_id ? input.projectId : null })))
     if (rcErr) {
       console.error('[notify] 수신자 기록 실패', input.type, rcErr.message)
       return { ok: false }

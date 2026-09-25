@@ -20,15 +20,16 @@ function client(result: Result, user: { id: string; email?: string } | null = { 
 beforeEach(() => vi.clearAllMocks())
 
 describe('getMyProjectIds — 계정 연결 정본(people.user_id) 한 조회', () => {
-  it('활성 명단 행의 프로젝트 id 를 중복 없이 — 이메일 폴백 조회는 하지 않는다', async () => {
+  it('활성 명단 행·활성 인물의 프로젝트 id 를 중복 없이 — 이메일 폴백 조회는 하지 않는다', async () => {
     const { from, calls } = client({ data: [{ project_id: 'p1' }, { project_id: 'p2' }, { project_id: 'p1' }], error: null })
 
     expect(await getMyProjectIds()).toEqual(['p1', 'p2'])
     expect(from).toHaveBeenCalledTimes(1)
     expect(calls).toEqual([
-      ['select', ['project_id, people!inner(user_id)']],
+      ['select', ['project_id, people!inner(user_id, active)']],
       ['eq', ['people.user_id', 'u1']],
       ['eq', ['active', true]],
+      ['eq', ['people.active', true]],
     ])
   })
 

@@ -99,13 +99,14 @@ async function replaceAttendees(sb: Awaited<ReturnType<typeof createServerClient
     const { error: clrErr } = await sb.from('meeting_attendees').delete().eq('meeting_id', meetingId)
     return clrErr ? clrErr.message : null
   }
-  // 다른 프로젝트 멤버 혼입 방지 — meeting 의 project_id 에 속한 활성 명단 행만 허용
+  // 다른 프로젝트 멤버 혼입 방지 — meeting 의 project_id 에 속한 활성 명단 행·활성 인물만 허용
   // 유효성 검증을 delete 보다 먼저 수행해, 잘못된 id 목록이 기존 참석자를 먼저 지워버리는 것을 방지한다.
   const { data: valid, error: validErr } = await sb
     .from('project_members')
-    .select('id')
+    .select('id, people!inner(active)')
     .eq('project_id', projectId)
     .eq('active', true)
+    .eq('people.active', true)
     .in('id', unique)
   // 쓰기 선행 검증 조회 — 실패를 '유효 멤버 0명'으로 오인하면 참석자 변경이 통째로 유실되면서
   // 액션은 ok:true 로 성공을 보고한다. 실패는 실패로 올려 호출자가 ok:false 를 내게 한다.
@@ -117,7 +118,8 @@ async function replaceAttendees(sb: Awaited<ReturnType<typeof createServerClient
   if (validIds.length === 0) return null
   const { error: delErr } = await sb.from('meeting_attendees').delete().eq('meeting_id', meetingId)
   if (delErr) return delErr.message // 삭제 실패를 삼키면 이어지는 insert 가 중복 참석자/unique 위반이 된다
-  const { error } = await sb.from('meeting_attendees').insert(validIds.map(id => ({ meeting_id: meetingId, member_id: id })))
+  // project_id 필수(0003) — (meeting_id, project_id)·(member_id, project_id) 복합 FK 가 교차 프로젝트 참석을 DB 에서도 막는다.
+  const { error } = await sb.from('meeting_attendees').insert(validIds.map(id => ({ meeting_id: meetingId, member_id: id, project_id: projectId })))
   return error ? error.message : null
 }
 

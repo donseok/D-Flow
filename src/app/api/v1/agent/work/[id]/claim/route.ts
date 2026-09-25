@@ -42,17 +42,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
       item = itemRow as ItemDetail | null
 
-      // actor 신원 — PAT 는 principal, legacy 는 loadGatedOrder 가 해석한 userId + body email.
+      // actor 신원 — PAT 는 principal, legacy 는 loadGatedOrder 가 해석한 userId. 배정 판정은 people.user_id 하나로 한다.
       const actorUserId = actor.principal.kind === 'pat' ? (actor.userId as string) : loaded.userId
-      const actorEmail = actor.principal.kind === 'pat'
-        ? actor.principal.userEmail
-        : (parseAgentActor(raw) as { userEmail: string }).userEmail
 
       const assignee = item?.assignee_member_id ?? null
       if (assignee) {
-        const mine = await myMemberIds(admin, {
-          userId: actorUserId, userEmail: actorEmail, projectId: loaded.order.project_id,
-        })
+        const mine = await myMemberIds(admin, { userId: actorUserId, projectId: loaded.order.project_id })
         if (!mine.includes(assignee)) {
           return apiFail(403, 'not_assignee', '담당자가 배정된 작업입니다. 담당자만 착수할 수 있습니다.')
         }

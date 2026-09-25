@@ -70,21 +70,29 @@ describe('fetchSeatmapRows', () => {
 })
 
 describe('fetchMyMemberIds', () => {
-  it('내 user_id 또는 이메일(대소문자 무시)과 맞는 로스터 행 id 를 프로젝트 범위 안에서 모은다', async () => {
+  it('people.user_id 한 축·활성 명단 행·활성 인물로 DB 에서 거르고, 프로젝트 범위를 건다(이메일 폴백 없음)', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin({ project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1', email: 'A@x.com' } }, { id: 'm2', people: { user_id: null, email: 'a@X.com' } }, { id: 'm3', people: { user_id: 'u2', email: 'b@x.com' } }] }] }, calls)
-    const ids = await fetchMyMemberIds(a, { userId: 'u1', userEmail: 'a@x.com' }, ['p1'])
+    const a = admin({ project_members: [{ data: [{ id: 'm1' }, { id: 'm2' }] }] }, calls)
+    const ids = await fetchMyMemberIds(a, { userId: 'u1' }, ['p1'])
     expect(ids).toEqual(['m1', 'm2'])
+    expect(calls['project_members.select']?.[0]).toEqual(['id, people!inner(user_id, active)'])
+    expect(calls['project_members.eq']).toEqual([['people.user_id', 'u1'], ['active', true], ['people.active', true]])
     expect(calls['project_members.in']?.[0]).toEqual(['project_id', ['p1']])
   })
-  it('projectIds null(슈퍼유저)이면 프로젝트 필터 없이, 이메일이 없으면 user_id 만으로 맞춘다', async () => {
+  it('projectIds null(슈퍼유저)이면 프로젝트 필터 없이 같은 신원 필터만', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin({ project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1', email: 'a@x.com' } }, { id: 'm2', people: { user_id: null, email: 'a@x.com' } }] }] }, calls)
-    expect(await fetchMyMemberIds(a, { userId: 'u1', userEmail: null }, null)).toEqual(['m1'])
+    const a = admin({ project_members: [{ data: [{ id: 'm1' }] }] }, calls)
+    expect(await fetchMyMemberIds(a, { userId: 'u1' }, null)).toEqual(['m1'])
     expect(calls['project_members.in']).toBeUndefined()
+    expect(calls['project_members.eq']).toEqual([['people.user_id', 'u1'], ['active', true], ['people.active', true]])
+  })
+  it('projectIds 가 빈 배열이면 조회하지 않는다', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    expect(await fetchMyMemberIds(admin({}, calls), { userId: 'u1' }, [])).toEqual([])
+    expect(calls['project_members.select']).toBeUndefined()
   })
   it('조회 실패는 throw', async () => {
-    await expect(fetchMyMemberIds(admin({ project_members: [{ data: null, error: { message: 'roster boom' } }] }), { userId: 'u1', userEmail: null }, ['p1'])).rejects.toThrow(/roster boom/)
+    await expect(fetchMyMemberIds(admin({ project_members: [{ data: null, error: { message: 'roster boom' } }] }), { userId: 'u1' }, ['p1'])).rejects.toThrow(/roster boom/)
   })
 })
 

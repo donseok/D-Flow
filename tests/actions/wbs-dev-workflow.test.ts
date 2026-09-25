@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   applyWorkflowEvent: vi.fn(),
   ensureOrderForWorkflowLeaf: vi.fn(),
-  viewerEmail: vi.fn(),
   myMemberIds: vi.fn(),
   isSubtreeManager: vi.fn(),
 }))
@@ -18,8 +17,7 @@ vi.mock('@/lib/authz', () => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // setWbsDevWorkflow 는 setWbsStage 와 같은 requireSubtreeManagerOrAdmin(실제 모듈)로 판정한다 —
-// 그 내부가 부르는 viewerEmail·myMemberIds·isSubtreeManager 만 목킹한다(wbs-assign.test.ts 와 동일 패턴).
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: mocks.viewerEmail }))
+// 그 내부가 부르는 myMemberIds·isSubtreeManager 만 목킹한다(wbs-assign.test.ts 와 동일 패턴).
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds, isSubtreeManager: mocks.isSubtreeManager }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn() }))
@@ -80,7 +78,6 @@ beforeEach(() => {
   mocks.requireProjectAdmin.mockResolvedValue(ACTOR)
   mocks.requireProjectMember.mockResolvedValue(MEMBER)
   // 서브트리 관리자 경로 기본값 — 안전한 쪽("아니다")으로 두고 개별 테스트가 override 한다.
-  mocks.viewerEmail.mockResolvedValue('member@example.com')
   mocks.myMemberIds.mockResolvedValue([])
   mocks.isSubtreeManager.mockResolvedValue(false)
   mocks.resolveProjectId.mockResolvedValue({ ok: true, projectId: P1 })

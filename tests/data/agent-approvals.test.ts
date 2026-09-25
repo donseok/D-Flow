@@ -11,7 +11,6 @@ const m = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/authz', () => ({ getActorForView: async () => m.actor }))
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: async () => 'me@x.com' }))
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: async () => m.memberIds }))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({

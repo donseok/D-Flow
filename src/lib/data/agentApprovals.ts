@@ -12,7 +12,6 @@ import { isProjectAdmin } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { isSubtreeManagerOf } from '@/lib/domain/seatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
-import { viewerEmail } from '@/lib/data/agentSeatmap'
 
 type ItemRow = { id: string; parent_id: string | null; assignee_member_id: string | null }
 
@@ -41,8 +40,7 @@ export async function getPendingApprovalCount(projectId: string): Promise<number
   const rows = (orders ?? []) as Array<{ wbs_item_id: string | null }>
   if (rows.length === 0) return 0
   if (isProjectAdmin(actor, projectId)) return rows.length
-  const email = await viewerEmail(admin, actor.userId)
-  const memberIds = await myMemberIds(admin, { userId: actor.userId, userEmail: email ?? '', projectId })
+  const memberIds = await myMemberIds(admin, { userId: actor.userId, projectId })
   if (memberIds.length === 0) return 0
   const { data: items, error: itemErr } = await admin.from('wbs_items')
     .select('id, parent_id, assignee_member_id').eq('project_id', projectId)

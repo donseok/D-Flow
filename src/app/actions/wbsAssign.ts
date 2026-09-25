@@ -85,9 +85,10 @@ export async function setWbsAssignee(
   const admin = createAdminClient()
   if (memberId !== null) {
     if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
-    // 쓰기 선행조회 — 활성 로스터 실재 + 프로젝트 일치(복합 FK 가 2차 방어선, 여기가 1차).
+    // 쓰기 선행조회 — 활성 로스터·활성 인물 실재 + 프로젝트 일치(복합 FK 가 2차 방어선, 여기가 1차).
     const { data: mem, error: memErr } = await admin
-      .from('project_members').select('id, project_id').eq('id', memberId).eq('active', true).maybeSingle()
+      .from('project_members').select('id, project_id, people!inner(active)')
+      .eq('id', memberId).eq('active', true).eq('people.active', true).maybeSingle()
     if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
     if (!mem || (mem as { project_id: string }).project_id !== item.project_id) {
       return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
@@ -180,9 +181,10 @@ export async function setWbsAssigneeCascade(
   if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
 
   const admin = createAdminClient()
-  // 쓰기 선행조회 — 활성 로스터 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
+  // 쓰기 선행조회 — 활성 로스터·활성 인물 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
   const { data: mem, error: memErr } = await admin
-    .from('project_members').select('id, project_id').eq('id', memberId).eq('active', true).maybeSingle()
+    .from('project_members').select('id, project_id, people!inner(active)')
+    .eq('id', memberId).eq('active', true).eq('people.active', true).maybeSingle()
   if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
   if (!mem || (mem as { project_id: string }).project_id !== resolved.projectId) {
     return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }

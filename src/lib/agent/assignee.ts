@@ -1,25 +1,21 @@
 import type { AdminClient } from '@/lib/minutes/externalApi'
-import { personOf } from '@/lib/data/memberSelect'
 
 /**
- * 로스터 다리 이중 매칭(§2.5-④) — people.user_id 링크(계정 연결 정본) 또는 people.email 소문자 일치.
- * scope=assigned·claim 배정 제한이 공유하는 "이게 내 배정인지" 판정 재료.
+ * 이 프로젝트에서 '나'인 명단 행 id — 계정 연결 정본(people.user_id)만 본다(SP1: 이메일 폴백 매칭 폐지).
+ * 활성 명단 행·활성 인물만 — 빠진 사람이 담당자로 착수·위임·승인하지 못하게 buildActor 와 같은 축으로 판정한다.
+ * scope=assigned·claim 배정 제한·위임·서브트리 관리자·결재가 공유하는 "이게 내 배정인지" 판정 재료.
  * 조회 실패는 위장하지 않고 throw — 배정 판정은 보안 재료라 "빈 결과"로 삼키면 사칭을 못 잡는다.
  */
 export async function myMemberIds(
   admin: AdminClient,
-  args: { userId: string; userEmail: string; projectId: string },
+  args: { userId: string; projectId: string },
 ): Promise<string[]> {
   const { data, error } = await admin
-    .from('project_members').select('id, people!inner(user_id, email)').eq('project_id', args.projectId)
+    .from('project_members').select('id, people!inner(user_id, active)')
+    .eq('project_id', args.projectId).eq('people.user_id', args.userId)
+    .eq('active', true).eq('people.active', true)
   if (error) throw new Error(`로스터 조회 실패: ${error.message}`)
-  const email = args.userEmail.toLowerCase()
-  const out = new Set<string>()
-  for (const m of (data ?? []) as Array<Record<string, unknown>>) {
-    const pe = personOf(m)
-    if (pe?.user_id === args.userId || (pe?.email && pe.email.toLowerCase() === email)) out.add(m.id as string)
-  }
-  return [...out]
+  return [...new Set(((data ?? []) as Array<{ id: string }>).map(m => m.id))]
 }
 
 type AncestorRow = { id: string; parent_id: string | null; assignee_member_id: string | null }

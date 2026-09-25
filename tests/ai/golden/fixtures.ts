@@ -129,7 +129,7 @@ export const WBS_CHANGE_LOGS: Record<string, WbsChangeLogSnapshot> = {
     itemName: 'TO-BE 설계',
     itemUpdatedAt: '2026-07-17T02:00:00Z',
     entries: [
-      { id: 2, wbsItemId: 'a-s112', field: 'actual_pct', oldValue: '20', newValue: '40', changedAt: '2026-07-17T02:00:00Z', actorLabel: '김이피', actorTeam: 'ERP', actorRole: 'contributor' },
+      { id: 2, wbsItemId: 'a-s112', field: 'actual_pct', oldValue: '20', newValue: '40', changedAt: '2026-07-17T02:00:00Z', actorLabel: '김이피', actorTeam: 'ERP', actorRole: 'member' },
       { id: 1, wbsItemId: 'a-s112', field: 'planned_end', oldValue: '2026-06-25', newValue: '2026-06-30', changedAt: '2026-07-01T05:00:00Z', actorLabel: '박피엠', actorTeam: 'PMO', actorRole: 'admin' },
     ],
     truncated: false,

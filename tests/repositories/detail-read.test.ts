@@ -160,6 +160,7 @@ describe('strict supplemental repositories', () => {
     const pm = builders.project_members
     expect(pm.eq).toHaveBeenCalledWith('project_id', 'p1')
     expect(pm.eq).toHaveBeenCalledWith('active', true)
+    expect(pm.eq).toHaveBeenCalledWith('people.active', true)
     expect(pm.in).toHaveBeenCalledWith('people.user_id', ['auth-user-secret'])
     expect(String((pm.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
     expect(String((builders.profiles.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
@@ -203,9 +204,12 @@ describe('strict supplemental repositories', () => {
       ['creator-p2', 'creator'],
     ])
     const memberSelect = String((members.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
-    expect(memberSelect).toBe('id, project_id, people!inner(user_id)')
+    expect(memberSelect).toBe('id, project_id, people!inner(user_id, active)')
     expect(memberSelect).not.toContain('email')
-    expect(members.eq).toHaveBeenCalledWith('people.user_id', 'user-1')
+    // '나' = people.user_id 하나, 활성 명단 행·활성 인물만.
+    expect((members.eq as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      ['people.user_id', 'user-1'], ['active', true], ['people.active', true],
+    ])
     expect(meetings.in).toHaveBeenCalledWith('project_id', ['p1', 'p2'])
     expect(exceptions.in).toHaveBeenCalledWith('meeting_id', ['meeting-1', 'creator-p2'])
     expect(JSON.stringify(result)).not.toContain('email')

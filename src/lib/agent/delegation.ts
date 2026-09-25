@@ -7,7 +7,6 @@ import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/l
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
-import { viewerEmail } from '@/lib/data/agentSeatmap'
 import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { applyWorkflowEvent } from '@/lib/agent/workflowEvent'
 
@@ -49,8 +48,7 @@ export async function requireDelegationRight(itemId: string): Promise<Delegation
   const assignee = (item as { assignee_member_id: string | null } | null)?.assignee_member_id ?? null
   if (!assignee) return { ok: false, error: ERR_NOT_ASSIGNEE }
   try {
-    const email = await viewerEmail(admin, m.actor.userId)
-    const mine = await myMemberIds(admin, { userId: m.actor.userId, userEmail: email ?? '', projectId })
+    const mine = await myMemberIds(admin, { userId: m.actor.userId, projectId })
     if (!mine.includes(assignee)) return { ok: false, error: ERR_NOT_ASSIGNEE }
   } catch (e) {
     console.error('[delegation] 담당자 판정 실패:', e instanceof Error ? e.message : e)

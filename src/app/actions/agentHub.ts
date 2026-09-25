@@ -6,7 +6,6 @@ import { isUuidLike, resumeHostFromClaimLabel } from '@/lib/domain/agentWork'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { getAgentHub } from '@/lib/data/agentHub'
-import { viewerEmail } from '@/lib/data/agentSeatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
 import { applyDelegation, ERR_NOT_ASSIGNEE } from '@/lib/agent/delegation'
 import { requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
@@ -80,8 +79,7 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   let mine: Set<string> | null = null
   if (!isAdmin) {
     try {
-      const email = await viewerEmail(admin, g.actor.userId)
-      mine = new Set(await myMemberIds(admin, { userId: g.actor.userId, userEmail: email ?? '', projectId }))
+      mine = new Set(await myMemberIds(admin, { userId: g.actor.userId, projectId }))
     } catch (e) {
       console.error('[agentHub] 담당자 판정 실패:', e instanceof Error ? e.message : e)
       return { ok: false, error: '담당자 판정에 실패했습니다.' }

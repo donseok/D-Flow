@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getActor } from '@/lib/authz'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { isWorkspaceAdminRole, type WorkspaceRole } from '@/lib/domain/authz'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
@@ -187,10 +188,12 @@ export async function getUsageDirectory(): Promise<AccountRecord[]> {
   }
   const platformAdmins = new Set((pa.data as Array<{ user_id: string }>).map(r => r.user_id))
   // 역할 표시값은 admin|member(표시 라벨은 화면 몫). 플랫폼 관리자와 어느 워크스페이스의 관리자는 admin.
-  const wsRole = new Map<string, 'admin' | 'member'>()
+  // 여러 워크스페이스에 속하면 가장 높은 역할. 역할 문자열 판정은 domain/authz 한 곳(isWorkspaceAdminRole)에 둔다
+  // — workspace_members.role 은 CHECK 로 admin|member 뿐이라 관리자가 아니면 멤버다.
+  const wsRole = new Map<string, WorkspaceRole>()
   for (const r of ws.data as Array<{ user_id: string; role: string }>) {
-    if (r.role === 'admin') wsRole.set(r.user_id, 'admin')
-    else if (r.role === 'member' && !wsRole.has(r.user_id)) wsRole.set(r.user_id, 'member')
+    if (isWorkspaceAdminRole(r.role)) wsRole.set(r.user_id, 'admin')
+    else if (!wsRole.has(r.user_id)) wsRole.set(r.user_id, 'member')
   }
   const teamsByUser = new Map<string, Set<string>>()
   for (const r of roster.data as Array<Record<string, unknown>>) {

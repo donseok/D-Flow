@@ -35,7 +35,7 @@ export async function getPortfolioInputs(): Promise<{
   const { projects, degraded: listDegraded } = await listProjectsWithState()
   const ids = projects.map(p => p.id)
 
-  // PM(리더) = 명단의 프로젝트 관리자(access_role='admin') — IN 한 방(getProjectsCompletion 선례).
+  // PM(리더) = 명단의 프로젝트 관리자(access_role='admin', 활성 행·활성 인물 — 권한 축과 같다) — IN 한 방(getProjectsCompletion 선례).
   // 이름은 people 이 정본이라 임베드로 읽고, 정렬은 DB collation 대신 가나다순(compareKoreanName)으로 한다.
   // 표시 전용이라 실패해도 throw 하지 않지만, '리더 없음'으로 위장하지 않도록 플래그로 신호한다.
   const sb = await createServerClient()
@@ -44,8 +44,10 @@ export async function getPortfolioInputs(): Promise<{
   if (ids.length) {
     const { data, error } = await sb
       .from('project_members')
-      .select('project_id, people!inner(display_name)')
+      .select('project_id, people!inner(display_name, active)')
       .eq('access_role', 'admin')
+      .eq('active', true)
+      .eq('people.active', true)
       .in('project_id', ids)
     if (error) {
       console.error('[portfolio] 리더 조회 실패:', error.message)

@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(),
   requireProjectMember: vi.fn(),
   requireDelegationRight: vi.fn(),
-  viewerEmail: vi.fn(),
   myMemberIds: vi.fn(),
   isSubtreeManager: vi.fn(),
   recordProgressSnapshot: vi.fn(async () => {}),
@@ -19,8 +18,7 @@ vi.mock('@/lib/authz', () => ({
 vi.mock('@/lib/agent/delegation', () => ({ requireDelegationRight: mocks.requireDelegationRight }))
 // 승인·(반려 계열의 관리자·담당자 본인 실패 시 폴백)은 requireSubtreeManagerOrAdmin(트랙 B, 2026-09-15)
 // 이 관리자 또는 서브트리 관리자로 판정한다. subtreeManager.ts 는 실제 모듈을 쓰고(delegation.ts 와
-// 분리돼 있어 가벼움) 그 내부가 부르는 viewerEmail·myMemberIds·isSubtreeManager 만 목킹한다.
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: mocks.viewerEmail }))
+// 분리돼 있어 가벼움) 그 내부가 부르는 myMemberIds·isSubtreeManager 만 목킹한다.
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds, isSubtreeManager: mocks.isSubtreeManager }))
 // 승인·반려·되감기는 원자 전이 RPC(apply_workflow_event, 0096)로 주문·단계·실적을 한 번에 쓴다 —
 // admin(...) 목의 rpc 가 그 응답을 흉내 낸다. after 는 요청 스코프 밖(vitest)에서 던지므로
@@ -86,7 +84,6 @@ beforeEach(() => {
   mocks.requireDelegationRight.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' }, projectId: P1, isAdmin: true })
   // 서브트리 관리자 경로 기본값 — 개별 테스트가 필요할 때만 override. 기본은 "아니다" 쪽으로
   // 안전하게 둔다(관리자 fast path 가 대부분의 테스트를 그 전에 통과시킨다).
-  mocks.viewerEmail.mockResolvedValue('member@example.com')
   mocks.myMemberIds.mockResolvedValue([])
   mocks.isSubtreeManager.mockResolvedValue(false)
 })

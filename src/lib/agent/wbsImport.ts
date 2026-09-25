@@ -288,9 +288,10 @@ export async function applyAssigneesAndOrders(
 ): Promise<{ unmatched: Array<{ id: string; assignee: string }>; ordersCreated: number; nonLeafSkipped: string[] }> {
   const { projectId, actorUserId, module } = args
   const unmatched: Array<{ id: string; assignee: string }> = []
-  // 로스터 email(people.email — 이메일 정본) → member_id 맵 1회 로드
+  // 로스터 email(people.email — 이메일 정본) → member_id 맵 1회 로드. 담당자 쓰기이므로 활성 명단 행·활성 인물만.
   const { data: members, error } = await admin
-    .from('project_members').select('id, people!inner(email)').eq('project_id', projectId)
+    .from('project_members').select('id, people!inner(email, active)').eq('project_id', projectId)
+    .eq('active', true).eq('people.active', true)
   if (error) throw new Error(`로스터 조회 실패: ${error.message}`)
   const memberByEmail = new Map<string, string>()
   for (const m of (members ?? []) as Array<Record<string, unknown>>) {

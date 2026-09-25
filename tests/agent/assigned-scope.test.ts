@@ -70,26 +70,34 @@ beforeEach(() => {
   mocks.emitNotification.mockResolvedValue({ ok: true })
 })
 
-describe('myMemberIds — 로스터 다리 이중 매칭', () => {
-  it('user_id 링크 행과 email 매칭 행을 합집합·중복 제거로 반환', async () => {
-    useAdmin({
-      project_members: [{ data: [
-        { id: 'm1', people: { user_id: 'u-1', email: null } },
-        { id: 'm2', people: { user_id: null, email: 'DEV@example.com' } },
-        { id: 'm3', people: { user_id: 'u-9', email: 'x@y.z' } },
-      ] }],
-    })
-    const admin = mocks.createAdminClient()
-    const result = await myMemberIds(admin, { userId: 'u-1', userEmail: 'dev@example.com', projectId: P1 })
-    expect(result).toEqual(['m1', 'm2'])
-    expect(result).not.toContain('m3')
+describe('myMemberIds — people.user_id 한 축(이메일 폴백 없음)·활성 명단 행·활성 인물만', () => {
+  /** select/eq 호출을 기록하는 전용 스텁 — DB 필터가 계약이므로 필터 호출 자체를 단언한다. */
+  function rosterStub(resp: Resp) {
+    const calls: Array<[string, unknown[]]> = []
+    const b: Record<string, unknown> = {}
+    for (const k of ['select', 'eq', 'in']) b[k] = (...args: unknown[]) => { calls.push([k, args]); return b }
+    b.then = (r: (v: unknown) => unknown, j: (e: unknown) => unknown) =>
+      Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r, j)
+    return { admin: { from: vi.fn(() => b) } as never, calls }
+  }
+
+  it('DB 필터로 내 활성 행만 읽고 id 를 중복 없이 반환한다', async () => {
+    const { admin, calls } = rosterStub({ data: [{ id: 'm1' }, { id: 'm2' }, { id: 'm1' }] })
+    expect(await myMemberIds(admin, { userId: 'u-1', projectId: P1 })).toEqual(['m1', 'm2'])
+    expect(calls).toEqual([
+      ['select', ['id, people!inner(user_id, active)']],
+      ['eq', ['project_id', P1]],
+      ['eq', ['people.user_id', 'u-1']],
+      ['eq', ['active', true]],
+      ['eq', ['people.active', true]],
+    ])
+    // 이메일은 판정 재료가 아니다 — select 절에도 없다.
+    expect(String(calls[0][1][0])).not.toContain('email')
   })
 
   it('조회 실패는 throw (보안 판정 재료 — 위장 금지)', async () => {
-    useAdmin({ project_members: [{ error: { message: 'db down' } }] })
-    const admin = mocks.createAdminClient()
-    await expect(myMemberIds(admin, { userId: 'u-1', userEmail: 'dev@example.com', projectId: P1 }))
-      .rejects.toThrow()
+    const { admin } = rosterStub({ error: { message: 'db down' } })
+    await expect(myMemberIds(admin, { userId: 'u-1', projectId: P1 })).rejects.toThrow(/db down/)
   })
 })
 
@@ -100,7 +108,7 @@ describe('scope=assigned', () => {
       agent_projects: [{ data: [{ project_id: P1 }] }],
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
-      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-1', email: null } }] }],
+      project_members: [{ data: [{ id: 'm1' }] }],
       wbs_items: [
         { data: [{ id: W1 }] }, // assignee_member_id in (myMemberIds) 항목 조회
         { data: [{ id: W1, code: 'C1', name: '항목1', planned_start: null, planned_end: null }] }, // 컨텍스트
@@ -129,7 +137,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-1', email: null } }] }], // myMemberIds → 내 것
+      project_members: [{ data: [{ id: 'm1' }] }], // myMemberIds → 내 것(DB 가 people.user_id·active 로 거른 결과)
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(200)
@@ -149,7 +157,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-9', email: 'other@example.com' } }] }], // m1 은 다른 사용자
+      project_members: [{ data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(403)
@@ -178,7 +186,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-9', email: 'other@example.com' } }] }], // m1 은 다른 사용자
+      project_members: [{ data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
     }, [{ id: 'u-legacy', email: 'dev@example.com', user_metadata: {} }])
     const res = await claimPOST(
       post(`http://l/api/v1/agent/work/${O1}/claim`, { user_email: 'dev@example.com', agent: 'claude-cli-dev1' }, 'legacy-secret'),

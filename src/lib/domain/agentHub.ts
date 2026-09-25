@@ -12,7 +12,8 @@ export interface HubItemRow {
   /** 선행 매칭 키(0077) — 프로젝트 안 external_ref. depends 는 선행 external_ref 배열. */
   external_ref: string | null; depends: string[] | null
 }
-export interface HubMemberRow { id: string; name: string; email: string | null; user_id: string | null }
+/** 허브 명단 행 — 이름은 담당자 표시용(비활성 행 포함), active 는 명단 행·인물이 모두 활성인지(‘나’ 판정 축). */
+export interface HubMemberRow { id: string; name: string; user_id: string | null; active: boolean }
 export interface HubReportRow {
   work_order_id: string; percent: number; summary: string; links: { label?: string; url: string }[]; agent: string
   review_action: 'approve' | 'reject' | null; review_note: string | null; created_at: string
@@ -70,19 +71,14 @@ export interface AgentHub {
   fetchedAt: string
   viewer: { isAdmin: boolean; memberIds: string[] }
 }
-export interface HubViewer { userId: string; userEmail: string | null; isAdmin: boolean }
+export interface HubViewer { userId: string; isAdmin: boolean }
 
 const LIVE: readonly OrderStatus[] = ['ready', 'claimed', 'reported']
 const WORKING: readonly SeatState[] = ['ACTIVE', 'STALE', 'OFFLINE', 'BLOCKED', 'REJECTED']
 
-/** 로스터 이중 매칭(src/lib/agent/assignee.ts 와 같은 규칙): user_id 링크 또는 이메일 소문자 일치. */
-export function myMemberIdsOf(members: HubMemberRow[], viewer: { userId: string; userEmail: string | null }): string[] {
-  const email = viewer.userEmail?.toLowerCase() ?? null
-  const out: string[] = []
-  for (const m of members) {
-    if (m.user_id === viewer.userId || (email !== null && m.email !== null && m.email.toLowerCase() === email)) out.push(m.id)
-  }
-  return out
+/** '나'인 명단 행 — src/lib/agent/assignee.ts myMemberIds 와 같은 축: people.user_id 일치 + 활성 행·활성 인물만. */
+export function myMemberIdsOf(members: HubMemberRow[], viewer: { userId: string }): string[] {
+  return members.filter(m => m.active && m.user_id === viewer.userId).map(m => m.id)
 }
 
 /**

@@ -17,7 +17,7 @@ const order = (over: Partial<OrderRow>): OrderRow => ({
   updated_at: ago(60_000), last_heartbeat_at: ago(1000), heartbeat_phase: 'build', heartbeat_agent: 'hong/mbp/w1',
   heartbeat_note: null, ...over,
 })
-const VIEWER = { userId: 'u1', userEmail: 'Yoo@Example.com', isAdmin: false }
+const VIEWER = { userId: 'u1', isAdmin: false }
 const rows = (over: Partial<AgentHubRows> = {}): AgentHubRows => ({
   project: { id: P1, name: 'proj-a' }, agentProject: { enabled: true },
   items: [
@@ -32,8 +32,8 @@ const rows = (over: Partial<AgentHubRows> = {}): AgentHubRows => ({
   orders: [order({ wbs_item_id: 'a1' })],
   reports: [], watchers: [], approvedItemIds: [],
   members: [
-    { id: 'm1', name: '홍길동1', email: 'yoo@example.com', user_id: null },
-    { id: 'm9', name: '남', email: 'other@example.com', user_id: 'u9' },
+    { id: 'm1', name: '홍길동1', user_id: 'u1', active: true },
+    { id: 'm9', name: '남', user_id: 'u9', active: true },
   ],
   ...over,
 })
@@ -50,7 +50,7 @@ describe('assembleAgentHub — 트리·행', () => {
     const hub = assembleAgentHub(rows({ items: [item({ id: 'x', code: 'B' }), item({ id: 'y', code: 'A' })] }), NOW, VIEWER)
     expect(hub.rows.map(r => r.code)).toEqual(['A', 'B'])
   })
-  it('canToggle = 리프 && 마일스톤 아님 && (관리자 || 담당자 본인) — 이메일 대소문자 무시', () => {
+  it('canToggle = 리프 && 마일스톤 아님 && (관리자 || 담당자 본인) — 본인은 people.user_id 로 판정', () => {
     const hub = assembleAgentHub(rows(), NOW, VIEWER)
     const by = (c: string) => hub.rows.find(r => r.code === c)!
     expect(by('TSK-A-01').assigneeMine).toBe(true)
@@ -65,9 +65,21 @@ describe('assembleAgentHub — 트리·행', () => {
     expect(admin.viewer.isAdmin).toBe(true)
     expect(hub.viewer.memberIds).toEqual(['m1'])
   })
-  it('user_id 링크로도 본인 판정', () => {
-    const hub = assembleAgentHub(rows(), NOW, { userId: 'u9', userEmail: null, isAdmin: false })
+  it('다른 뷰어는 자기 user_id 의 명단 행만 본인이다', () => {
+    const hub = assembleAgentHub(rows(), NOW, { userId: 'u9', isAdmin: false })
     expect(hub.rows.find(r => r.code === 'TSK-A-02')!.assigneeMine).toBe(true)
+    expect(hub.rows.find(r => r.code === 'TSK-A-01')!.assigneeMine).toBe(false)
+  })
+  it('비활성 명단 행(명단 행·인물 중 하나라도 비활성)은 user_id 가 같아도 본인이 아니다 — 이름은 그대로', () => {
+    const hub = assembleAgentHub(rows({ members: [
+      { id: 'm1', name: '홍길동1', user_id: 'u1', active: false },
+      { id: 'm9', name: '남', user_id: 'u9', active: true },
+    ] }), NOW, VIEWER)
+    const a1 = hub.rows.find(r => r.code === 'TSK-A-01')!
+    expect(a1.assigneeMine).toBe(false)
+    expect(a1.canToggle).toBe(false)
+    expect(a1.assigneeName).toBe('홍길동1')
+    expect(hub.viewer.memberIds).toEqual([])
   })
 })
 
@@ -198,7 +210,7 @@ describe('assembleAgentHub — 착수 대기 사유(waitReason)', () => {
       item({ id: 'a1', parent_id: 'a', code: 'TSK-A-01', name: '리프1', sort_order: 1, dev_workflow: true, tags: ['agent'], assignee_member_id: 'm1' }),
     ],
     orders: [ready()],
-    members: [{ id: 'm1', name: '홍길동1', email: 'yoo@example.com', user_id: 'u1' }],
+    members: [{ id: 'm1', name: '홍길동1', user_id: 'u1', active: true }],
     ...over,
   })
   const watcher = (over: Partial<WatcherRow> = {}): WatcherRow => ({
@@ -270,7 +282,7 @@ describe('assembleAgentHub — 서브트리 관리자(canManage, 트랙 B 2026-0
     expect(by(hub, 'TSK-A-02').canManage).toBe(false)
   })
   it('무관한 멤버(조상 SUB-A 의 담당자와 다른 사람, m9) → canManage:false', () => {
-    const hub = assembleAgentHub(withManager(), NOW, { userId: 'u9', userEmail: null, isAdmin: false })
+    const hub = assembleAgentHub(withManager(), NOW, { userId: 'u9', isAdmin: false })
     expect(by(hub, 'TSK-A-01').canManage).toBe(false)
   })
   it('strict 조상만 본다 — 자기 자신의 담당은 canManage 에 안 잡힌다(비리프 SUB-A 자신의 행)', () => {

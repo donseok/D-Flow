@@ -8,7 +8,6 @@
 // wbs-assign.test.ts 의 stageTransition importOriginal).
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { viewerEmail } from '@/lib/data/agentSeatmap'
 import { myMemberIds, isSubtreeManager } from '@/lib/agent/assignee'
 
 export const ERR_NOT_SUBTREE_MANAGER = '관리자 또는 서브트리 관리자만 할 수 있습니다.'
@@ -36,8 +35,7 @@ export async function requireSubtreeManagerOrAdmin(
   if (!m.ok) return { ok: false, error: m.error }
   const admin = createAdminClient()
   try {
-    const email = await viewerEmail(admin, m.actor.userId)
-    const mine = await myMemberIds(admin, { userId: m.actor.userId, userEmail: email ?? '', projectId })
+    const mine = await myMemberIds(admin, { userId: m.actor.userId, projectId })
     const manager = await isSubtreeManager(admin, { itemId, projectId, myMemberIds: mine })
     if (!manager) return { ok: false, error: ERR_NOT_SUBTREE_MANAGER }
     return { ok: true, actor: { userId: m.actor.userId }, isAdmin: false }

@@ -43,9 +43,10 @@ describe('emitNotification', () => {
     expect(r.ok).toBe(true)
     expect(r.recipients).toBe(2) // 계정 미링크(m2)도 행은 남는다 — 링크 후 대비는 아니고 감사 목적
     const rows = inserted.notification_recipients[0] as { member_id: string | null; user_id: string | null }[]
+    // member 수신자는 project_id 필수(CHECK notification_recipients_member_needs_project, 0003) — 이벤트의 프로젝트.
     expect(rows).toEqual([
-      { event_id: 'ev1', member_id: 'm1', user_id: 'u1' },
-      { event_id: 'ev1', member_id: 'm2', user_id: null },
+      { event_id: 'ev1', member_id: 'm1', user_id: 'u1', project_id: 'p1' },
+      { event_id: 'ev1', member_id: 'm2', user_id: null, project_id: 'p1' },
     ])
   })
   it('행위자 본인이 유일 수신자면 발행하지 않는다 (no-op)', async () => {
@@ -83,13 +84,25 @@ describe('emitNotification', () => {
       notification_events: [{ data: { id: 'ev1' } }],
       notification_recipients: [{ data: null }],
     })
+    // member 수신자는 프로젝트 이벤트에서만 성립한다(0003 CHECK·복합 FK) — 프로젝트 있는 이벤트로 검증한다.
     const r = await emitNotification({
-      type: 'system.pat_expiring', projectId: null,
+      type: 'issue.assigned', projectId: 'p1',
       payload: { title: 'T' }, recipientMemberIds: ['m1'],
     })
     expect(r.ok).toBe(true)
     expect(r.recipients).toBe(1)
     const rows = inserted.notification_recipients[0] as { member_id: string | null; user_id: string | null }[]
-    expect(rows).toEqual([{ event_id: 'ev1', member_id: 'm1', user_id: null }])
+    expect(rows).toEqual([{ event_id: 'ev1', member_id: 'm1', user_id: null, project_id: 'p1' }])
+  })
+  it('user 수신자(member 없음)는 project_id 를 싣지 않는다 — member 가 없으면 CHECK 대상이 아니다', async () => {
+    const { inserted } = admin({
+      notification_events: [{ data: { id: 'ev1' } }],
+      notification_recipients: [{ data: null }],
+    })
+    const r = await emitNotification({
+      type: 'issue.assigned', projectId: 'p1', payload: { title: 'T' }, recipientUserIds: ['u7'],
+    })
+    expect(r.ok).toBe(true)
+    expect(inserted.notification_recipients[0]).toEqual([{ event_id: 'ev1', member_id: null, user_id: 'u7', project_id: null }])
   })
 })

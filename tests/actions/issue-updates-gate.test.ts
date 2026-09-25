@@ -104,15 +104,17 @@ function stubClient(over: {
         }
       }
       if (table === 'project_members') {
-        return {
-          select: () => ({
-            // 멘션 대상 검증 — project_id 다음 active=true(활성 명단 행만).
-            in: () => ({ eq: () => ({ eq: async (col: string, val: unknown) => {
-              expect([col, val]).toEqual(['active', true])
-              return { data: (over.memberIds ?? []).map(id => ({ id })), error: null }
-            } }) }),
-          }),
+        // 멘션 대상 검증 — select 컬럼과 필터(in id → project_id → active → people.active)를 단언한다.
+        const filters: Array<[string, unknown]> = []
+        const q: Record<string, unknown> = {
+          in: () => q,
+          eq: (col: string, val: unknown) => { filters.push([col, val]); return q },
+          then: (resolve: (v: unknown) => unknown, reject: (r: unknown) => unknown) => {
+            expect(filters).toEqual([['project_id', expect.any(String)], ['active', true], ['people.active', true]])
+            return Promise.resolve({ data: (over.memberIds ?? []).map(id => ({ id })), error: null }).then(resolve, reject)
+          },
         }
+        return { select: (cols: string) => { expect(cols).toBe('id, people!inner(active)'); return q } }
       }
       if (table === 'issue_assignees') {
         return {

@@ -27,22 +27,24 @@ const LEAF = '20000000-0000-4000-8000-000000000003'
 const OTHER_LEAF = '20000000-0000-4000-8000-000000000004'
 
 type TreeRow = { id: string; parent_id: string | null; assignee_member_id: string | null }
-type RosterRow = { id: string; people: { user_id?: string | null; email?: string | null } }
+/** 로스터 응답 = DB 가 people.user_id·active 로 이미 거른 '내' 행(스텁은 거르지 않으므로 거른 결과를 준다). */
+type RosterRow = { id: string }
 
 /**
- * 조상 조회(wbs_items)·로스터 조회(project_members)·이메일 조회(auth.admin.getUserById)를
- * 한 번에 흉내 내는 admin 클라이언트 — requireSubtreeManagerOrAdmin 의 멤버 경로 전체
- * (viewerEmail → myMemberIds → isSubtreeManager) 를 실제 구현으로 왕복시킨다.
+ * 조상 조회(wbs_items)·로스터 조회(project_members)를 한 번에 흉내 내는 admin 클라이언트 —
+ * requireSubtreeManagerOrAdmin 의 멤버 경로 전체(myMemberIds → isSubtreeManager)를 실제 구현으로 왕복시킨다.
+ * 로스터 체인의 select/eq 호출을 rosterCalls 에 남긴다. 뷰어 이메일(auth)은 판정 재료가 아니므로 부르면 실패한다.
  */
+const rosterCalls: Array<[string, unknown[]]> = []
 function fakeAdmin(opts: {
   tree?: TreeRow[]; treeError?: { message: string } | null
   roster?: RosterRow[]; rosterError?: { message: string } | null
-  emails?: Record<string, string>; authError?: { message: string } | null
 }) {
+  rosterCalls.length = 0
   const client = {
     from: vi.fn((table: string) => {
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'eq']) b[k] = () => b
+      for (const k of ['select', 'eq']) b[k] = (...args: unknown[]) => { if (table === 'project_members') rosterCalls.push([k, args]); return b }
       b.then = (r: (v: unknown) => unknown) => {
         if (table === 'wbs_items') {
           return Promise.resolve({ data: opts.treeError ? null : (opts.tree ?? []), error: opts.treeError ?? null }).then(r)
@@ -54,14 +56,7 @@ function fakeAdmin(opts: {
       }
       return b
     }),
-    auth: {
-      admin: {
-        getUserById: vi.fn(async (userId: string) => {
-          if (opts.authError) return { data: { user: null }, error: opts.authError }
-          return { data: { user: { id: userId, email: opts.emails?.[userId] ?? null } }, error: null }
-        }),
-      },
-    },
+    auth: { admin: { getUserById: vi.fn(async () => { throw new Error('뷰어 이메일 조회 금지') }) } },
   }
   mocks.createAdminClient.mockReturnValue(client)
   return client as unknown as AdminClient
@@ -157,11 +152,18 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
         { id: MID, parent_id: ROOT, assignee_member_id: 'anc-member' },
         { id: LEAF, parent_id: MID, assignee_member_id: null },
       ],
-      roster: [{ id: 'anc-member', people: { user_id: 'anc-user' } }],
-      emails: { 'anc-user': 'anc@x.com' },
+      roster: [{ id: 'anc-member' }],
     })
     const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
     expect(r).toEqual({ ok: true, actor: { userId: 'anc-user' }, isAdmin: false })
+    // '나' = people.user_id 하나, 활성 명단 행·활성 인물만(이메일 폴백 없음).
+    expect(rosterCalls).toEqual([
+      ['select', ['id, people!inner(user_id, active)']],
+      ['eq', ['project_id', P1]],
+      ['eq', ['people.user_id', 'anc-user']],
+      ['eq', ['active', true]],
+      ['eq', ['people.active', true]],
+    ])
   })
 
   it('무관한 멤버(조상 담당자가 아님) → 거부(ERR_NOT_SUBTREE_MANAGER)', async () => {
@@ -173,8 +175,7 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
         { id: MID, parent_id: ROOT, assignee_member_id: 'm-other' },
         { id: LEAF, parent_id: MID, assignee_member_id: null },
       ],
-      roster: [{ id: 'm-unrelated', people: { user_id: 'user-1' } }],
-      emails: { 'user-1': 'user@x.com' },
+      roster: [{ id: 'm-unrelated' }],
     })
     expect(await requireSubtreeManagerOrAdmin(LEAF, P1)).toEqual({ ok: false, error: ERR_NOT_SUBTREE_MANAGER })
   })
@@ -190,7 +191,7 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
   it('조상 조회(isSubtreeManager)가 throw 하면 fail-closed 거부', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
     mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
-    fakeAdmin({ tree: [], treeError: { message: 'boom' }, roster: [{ id: 'm-1', people: { user_id: 'user-1' } }], emails: { 'user-1': 'user@x.com' } })
+    fakeAdmin({ tree: [], treeError: { message: 'boom' }, roster: [{ id: 'm-1' }] })
     const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
     expect(r.ok).toBe(false)
   })
@@ -198,16 +199,9 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
   it('로스터 조회(myMemberIds)가 throw 해도 fail-closed 거부', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
     mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
-    fakeAdmin({ tree: [], roster: [], rosterError: { message: 'roster down' }, emails: { 'user-1': 'user@x.com' } })
+    fakeAdmin({ tree: [], roster: [], rosterError: { message: 'roster down' } })
     const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
     expect(r.ok).toBe(false)
   })
 
-  it('뷰어 이메일 조회(auth.admin.getUserById)가 실패해도 fail-closed 거부', async () => {
-    mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
-    mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
-    fakeAdmin({ tree: [{ id: LEAF, parent_id: null, assignee_member_id: null }], authError: { message: 'auth down' } })
-    const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
-    expect(r.ok).toBe(false)
-  })
 })

@@ -5,14 +5,13 @@ import { join } from 'node:path'
 
 const mocks = vi.hoisted(() => ({
   requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), createAdminClient: vi.fn(),
-  getAgentHub: vi.fn(), applyDelegation: vi.fn(), viewerEmail: vi.fn(), myMemberIds: vi.fn(),
+  getAgentHub: vi.fn(), applyDelegation: vi.fn(), myMemberIds: vi.fn(),
   isSubtreeManager: vi.fn(),
   approve: vi.fn(), reject: vi.fn(), unapprove: vi.fn(), rework: vi.fn(), setWbsStage: vi.fn(), emitNotification: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ requireProjectMember: mocks.requireProjectMember, requireProjectAdmin: mocks.requireProjectAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: mocks.getAgentHub }))
-vi.mock('@/lib/data/agentSeatmap', () => ({ viewerEmail: mocks.viewerEmail }))
 // isSubtreeManager 는 runHubProcessOp 의 중단 게이트가 requireSubtreeManagerOrAdmin(subtreeManager.ts,
 // 실제 모듈)을 통해 부른다 — myMemberIds 와 같은 자리에서 같이 목킹한다(트랙 B, 2026-09-15).
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds, isSubtreeManager: mocks.isSubtreeManager }))
@@ -139,11 +138,10 @@ describe('applyHubDelegations — 묶음 1건: 가드 1회 → 항목별 applyDe
     expect(mocks.applyDelegation.mock.calls[2][1]).toMatchObject({ itemId: I(3), delegated: false })
     expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true })
     // 관리자는 로스터 판정을 하지 않는다.
-    expect(mocks.viewerEmail).not.toHaveBeenCalled(); expect(mocks.myMemberIds).not.toHaveBeenCalled()
+    expect(mocks.myMemberIds).not.toHaveBeenCalled()
   })
   it('멤버: 로스터 판정은 묶음당 1회, 담당자 본인 항목만 적용하고 남의 항목은 그 항목만 failed', async () => {
     adminClient([{ id: I(1), assignee_member_id: 'm1' }, { id: I(2), assignee_member_id: 'm2' }, { id: I(3), assignee_member_id: null }])
-    mocks.viewerEmail.mockResolvedValue('me@x.com')
     mocks.myMemberIds.mockResolvedValue(['m1'])
     const r = await applyHubDelegations(P1, [{ itemId: I(1), delegated: true }, { itemId: I(2), delegated: true }, { itemId: I(3), delegated: true }])
     expect(r).toEqual({
@@ -155,13 +153,13 @@ describe('applyHubDelegations — 묶음 1건: 가드 1회 → 항목별 applyDe
     })
     expect(mocks.applyDelegation).toHaveBeenCalledTimes(1)
     expect(mocks.applyDelegation.mock.calls[0][1]).toMatchObject({ itemId: I(1), actorUserId: 'member-1', isAdmin: false })
-    expect(mocks.viewerEmail).toHaveBeenCalledTimes(1)
     expect(mocks.myMemberIds).toHaveBeenCalledTimes(1)
-    expect(mocks.myMemberIds).toHaveBeenCalledWith(expect.anything(), { userId: 'member-1', userEmail: 'me@x.com', projectId: P1 })
+    // 신원은 people.user_id 하나 — 뷰어 이메일은 판정 재료가 아니다.
+    expect(mocks.myMemberIds).toHaveBeenCalledWith(expect.anything(), { userId: 'member-1', projectId: P1 })
   })
   it('멤버 로스터 판정 실패 → 묶음 전체 거부(fail-closed), 적용 0', async () => {
     adminClient([{ id: I(1), assignee_member_id: 'm1' }])
-    mocks.viewerEmail.mockRejectedValue(new Error('auth down'))
+    mocks.myMemberIds.mockRejectedValue(new Error('로스터 조회 실패: db down'))
     expect(await applyHubDelegations(P1, [{ itemId: I(1), delegated: true }])).toEqual({ ok: false, error: '담당자 판정에 실패했습니다.' })
     expect(mocks.applyDelegation).not.toHaveBeenCalled()
   })
@@ -400,7 +398,6 @@ describe('runHubProcessOp — 멤버 이상 가드 → 이 프로젝트 것인�
       expect(mocks.isSubtreeManager).not.toHaveBeenCalled()
     })
     it('서브트리 관리자인 멤버의 중단은 허용 — requireSubtreeManagerOrAdmin 을 통해 통과(트랙 B)', async () => {
-      mocks.viewerEmail.mockResolvedValue('anc@x.com')
       mocks.myMemberIds.mockResolvedValue(['anc-member'])
       mocks.isSubtreeManager.mockResolvedValue(true)
       mocks.applyDelegation.mockResolvedValue({ ok: true, cancelledClaimedIds: [O(1)] })

@@ -195,10 +195,11 @@ export async function addIssueUpdate(
   if (input.mentionedMemberIds.length > 0) {
     const { data, error } = await sb
       .from('project_members')
-      .select('id')
+      .select('id, people!inner(active)')
       .in('id', input.mentionedMemberIds)
       .eq('project_id', g.projectId)
       .eq('active', true)
+      .eq('people.active', true)
     if (error) {
       console.error('[addIssueUpdate] 멘션 대상 검증 실패:', error.message)
       return { ok: false, error: ERR_LOOKUP }

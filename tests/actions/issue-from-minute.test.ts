@@ -42,6 +42,7 @@ import {
   prepareMinuteIssueDraft,
 } from '@/app/actions/issues'
 import { makeMemberActor } from '../fixtures/actor'
+import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 
 const USER = { id: 'user-1', email: 'user@example.com', user_metadata: { name: '홍길동' } } as const
 const ACTOR = makeMemberActor('project-1', [], { userId: USER.id })
@@ -799,5 +800,40 @@ describe('fetchIssueProjectMembers', () => {
     expect(result.error).toContain('담당자 목록')
     expect(errorSpy).toHaveBeenCalled()
     errorSpy.mockRestore()
+  })
+
+  it('성공 경로는 명단 정본(ROSTER_SELECT)으로 읽어 매퍼로 편다 — people 임베드·팀 배열·가나다순', async () => {
+    asMember()
+    const select = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        order: vi.fn(async () => ({
+          data: [
+            {
+              id: 'm2', project_id: 'project-1', person_id: 'pe-2', access_role: null, role_label: null, title: null,
+              active: true, sort_order: 0, created_at: '2026-09-01T00:00:00Z',
+              people: { display_name: '나외주', email: null, user_id: null, kind: 'external', active: true },
+              project_member_teams: [],
+            },
+            {
+              id: 'm1', project_id: 'project-1', person_id: 'pe-1', access_role: 'admin', role_label: 'PM', title: null,
+              active: true, sort_order: 0, created_at: '2026-09-02T00:00:00Z',
+              people: { display_name: '가관리', email: 'alice@example.com', user_id: 'u1', kind: 'account', active: true },
+              project_member_teams: [{ team_id: 't1', is_primary: true, teams: { id: 't1', code: 'ERP', name: 'ERP' } }],
+            },
+          ],
+          error: null,
+        })),
+      })),
+    }))
+    state.client = { from: vi.fn(() => ({ select })) }
+
+    const result = await fetchIssueProjectMembers('project-1')
+
+    expect(select).toHaveBeenCalledWith(ROSTER_SELECT)
+    expect(result.ok).toBe(true)
+    expect(result.members?.map(m => [m.id, m.name, m.accessRole, m.teamCode, m.hasAccount])).toEqual([
+      ['m1', '가관리', 'admin', 'ERP', true],
+      ['m2', '나외주', null, null, false],
+    ])
   })
 })

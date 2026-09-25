@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     }
     if (wantAssigned) {
       const memberIds = await myMemberIdsAcrossProjects(admin, {
-        userId: principal.userId, userEmail: principal.userEmail, projectIds,
+        userId: principal.userId, projectIds,
       })
       if (memberIds.length > 0) {
         const { data: assignedItems, error: assignedItemErr } = await admin

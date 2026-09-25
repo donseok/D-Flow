@@ -1285,9 +1285,11 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
     const denied = await POST(post(meetingReq))
     expect(denied.status).toBe(403)
     expect(await denied.json()).toMatchObject({ code: 'not_project_member' })
-    // 명단 축 판정 — 계정 연결 정본(people.user_id) 임베드 필터로 건다(0003 에 project_members.user_id 는 없다).
-    expect(builders.project_members[0].select).toHaveBeenCalledWith('id, people!inner(user_id)')
-    expect(builders.project_members[0].eq).toHaveBeenCalledWith('people.user_id', expect.any(String))
+    // 명단 축 판정 — 계정 연결 정본(people.user_id) 임베드 필터 + 활성 명단 행·활성 인물만(buildActor 와 같은 축).
+    expect(builders.project_members[0].select).toHaveBeenCalledWith('id, people!inner(user_id, active)')
+    expect(builders.project_members[0].eq.mock.calls).toEqual([
+      ['project_id', PROJECT_UUID], ['people.user_id', expect.any(String)], ['active', true], ['people.active', true],
+    ])
     expect(builders.meetings).toBeUndefined()          // 비멤버는 dedup 재사용 우회도 못 탄다
   })
 

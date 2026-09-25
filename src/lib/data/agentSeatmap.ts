@@ -98,31 +98,17 @@ function toSeatMember(r: Record<string, unknown>): MemberRow {
 }
 
 /**
- * 내 로스터 행 id — 접근 가능 프로젝트(null = 전체)의 project_members 중 people.user_id 가 나이거나
- * people.email 이 같은(대소문자 무시) 행. scope=assigned(src/lib/agent/assignee.ts)와 같은 이중 매칭. 실패는 throw.
+ * 내 로스터 행 id — 접근 가능 프로젝트(null = 전체)의 활성 명단 행 중 people.user_id 가 나이고 인물이 활성인 행.
+ * scope=assigned(src/lib/agent/assignee.ts myMemberIds)와 같은 축 — 결재 어포던스가 서버 가드와 어긋나지 않게. 실패는 throw.
  */
 export async function fetchMyMemberIds(
-  admin: AdminClient, who: { userId: string; userEmail: string | null }, projectIds: string[] | null,
+  admin: AdminClient, who: { userId: string }, projectIds: string[] | null,
 ): Promise<string[]> {
   if (projectIds !== null && projectIds.length === 0) return []
-  let q = admin.from('project_members').select('id, people!inner(user_id, email)')
+  let q = admin.from('project_members').select('id, people!inner(user_id, active)')
+    .eq('people.user_id', who.userId).eq('active', true).eq('people.active', true)
   if (projectIds !== null) q = q.in('project_id', projectIds)
-  const rows = must<Array<Record<string, unknown>>>('로스터', await q)
-  const email = who.userEmail?.toLowerCase() ?? null
-  const out: string[] = []
-  for (const m of rows) {
-    const pe = personOf(m)
-    const mEmail = pe?.email ?? null
-    if (pe?.user_id === who.userId || (email !== null && mEmail !== null && mEmail.toLowerCase() === email)) out.push(m.id as string)
-  }
-  return out
-}
-
-/** 뷰어의 이메일 — 로스터 이메일 매칭용. 실패는 throw(내 작업이 조용히 빠지면 안 된다). */
-export async function viewerEmail(admin: AdminClient, userId: string): Promise<string | null> {
-  const { data, error } = await admin.auth.admin.getUserById(userId)
-  if (error) throw new Error(`[seatmap] 뷰어 조회 실패: ${error.message}`)
-  return data.user?.email ?? null
+  return must<Array<{ id: string }>>('로스터', await q).map(m => m.id)
 }
 
 export interface SeatmapOptions { projectId?: string }
@@ -144,7 +130,7 @@ export async function getSeatmap(actor: Actor, nowMs = Date.now(), scope: Seatma
   const rows = await fetchSeatmapRows(admin, projectIds, nowMs)
   // 결재 어포던스 재료는 범위와 무관하게 싣는다 — 전체 보기에서도 버튼 노출은 서버 가드와 같은 축이어야 한다.
   // 로스터 조회가 던지면 그대로 올린다(조회 실패를 권한 없음으로 위장하지 않는다).
-  const memberIds = new Set(await fetchMyMemberIds(admin, { userId: actor.userId, userEmail: await viewerEmail(admin, actor.userId) }, projectIds))
+  const memberIds = new Set(await fetchMyMemberIds(admin, { userId: actor.userId }, projectIds))
   const viewer: SeatmapViewer = {
     userId: actor.userId,
     memberIds,

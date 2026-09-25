@@ -164,11 +164,14 @@ export function createSupabaseMeetingRepository(client: SupabaseServerClient): M
       if (!projectIds.length) return repositoryOk({ meetings: [], exceptions: [] })
 
       // people.user_id is the authoritative account link (0003). Email is deliberately not
-      // selected or used by the chatbot repository.
+      // selected or used by the chatbot repository. Inactive roster rows / inactive people are
+      // not 'me' (same axis as buildActor).
       const memberLinksResult = await client
         .from('project_members')
-        .select('id, project_id, people!inner(user_id)')
+        .select('id, project_id, people!inner(user_id, active)')
         .eq('people.user_id', userId)
+        .eq('active', true)
+        .eq('people.active', true)
         .in('project_id', projectIds)
       if (memberLinksResult.error) {
         return repositoryError(

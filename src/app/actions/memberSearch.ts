@@ -48,10 +48,13 @@ export async function searchMemberCandidates(
 
   const sb = await createServerClient()
   // 이름은 people 이 정본 — !inner 임베드 필터라 이름이 맞지 않는 명단 행은 결과에서 빠진다.
+  // 빠진 사람(비활성 명단 행·비활성 인물)은 후보로 내지 않는다.
   let sel = sb
     .from('project_members')
     .select(ROSTER_SELECT)
     .ilike('people.display_name', `%${escapeIlike(q)}%`)
+    .eq('active', true)
+    .eq('people.active', true)
   if (!g.actor.isSuperuser) {
     sel = sel.in('project_id', [...g.actor.projectRoles.keys()])
   }

@@ -469,12 +469,13 @@ async function replaceAssignees(
     const { error: clrErr } = await sb.from('issue_assignees').delete().eq('issue_id', issueId)
     return clrErr ? clrErr.message : null
   }
-  // 활성 명단 행만 담당자가 될 수 있다(비활성 행은 명단에서 빠진 사람).
+  // 활성 명단 행·활성 인물만 담당자가 될 수 있다(비활성은 명단·조직에서 빠진 사람).
   const { data: valid, error: validErr } = await sb
     .from('project_members')
-    .select('id')
+    .select('id, people!inner(active)')
     .eq('project_id', projectId)
     .eq('active', true)
+    .eq('people.active', true)
     .in('id', unique)
   // 쓰기 선행 검증 조회 실패를 '유효 멤버 0명'으로 오인하면 담당자 변경이 통째로 유실되며
   // 액션은 성공을 보고한다 — 실패는 실패로 올린다(silent-empty 금지).

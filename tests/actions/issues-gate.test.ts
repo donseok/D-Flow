@@ -128,6 +128,24 @@ beforeEach(() => {
   vi.mocked(getSession).mockResolvedValue(USER as never)
 })
 
+
+/**
+ * replaceAssignees 의 명단 대조 스텁 — select 컬럼과 필터 순서(project_id → active → people.active)를
+ * 단언하고 m1·m2 를 유효 멤버로 낸다. 활성 명단 행·활성 인물만 담당자가 될 수 있다.
+ */
+function assigneeRosterStub() {
+  const inFn = vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null }))
+  const filters: Array<[string, unknown]> = []
+  const q: Record<string, unknown> = {
+    eq: vi.fn((col: string, val: unknown) => { filters.push([col, val]); return q }),
+    in: vi.fn((...args: unknown[]) => {
+      expect(filters).toEqual([['project_id', expect.any(String)], ['active', true], ['people.active', true]])
+      return inFn(...(args as []))
+    }),
+  }
+  return { select: vi.fn((cols: string) => { expect(cols).toBe('id, people!inner(active)'); return q }) }
+}
+
 describe('권한 게이트 — 비로그인은 전부 거부 + DB 무접근', () => {
   it.each([
     ['createIssue', () => createIssue('p1', { ...INPUT })],
@@ -675,19 +693,7 @@ describe('updateIssueProgress — 상태 변경 자동 기록', () => {
             insert: vi.fn(async () => ({ error: null })),
           }
         }
-        if (table === 'project_members') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
-                eq: vi.fn((col: string, val: unknown) => {
-                  expect([col, val]).toEqual(['active', true])
-                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
-                }),
-              })),
-            })),
-          }
-        }
+        if (table === 'project_members') return assigneeRosterStub()
         throw new Error(`unexpected table: ${table}`)
       }),
     }
@@ -728,19 +734,7 @@ describe('updateIssueProgress — 상태 변경 자동 기록', () => {
             insert: vi.fn(async () => ({ error: null })),
           }
         }
-        if (table === 'project_members') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
-                eq: vi.fn((col: string, val: unknown) => {
-                  expect([col, val]).toEqual(['active', true])
-                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
-                }),
-              })),
-            })),
-          }
-        }
+        if (table === 'project_members') return assigneeRosterStub()
         throw new Error(`unexpected table: ${table}`)
       }),
     }

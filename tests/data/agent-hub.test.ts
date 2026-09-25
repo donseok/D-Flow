@@ -10,7 +10,7 @@ const P1 = 'p1'
 type Resp = { data?: unknown; error?: { message: string } | null }
 
 /** 테이블별 응답 큐 + 호출 기록(select 컬럼·필터). 체인은 전부 자기 자신, await 시 큐 응답. */
-function admin(queues: Record<string, Resp[]>, userEmail: string | null = 'yoo@example.com') {
+function admin(queues: Record<string, Resp[]>) {
   const calls: Array<{ table: string; select?: string; filters: Array<[string, unknown[]]> }> = []
   const client = {
     from: vi.fn((table: string) => {
@@ -24,7 +24,8 @@ function admin(queues: Record<string, Resp[]>, userEmail: string | null = 'yoo@e
       b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? [], error: resp.error ?? null }).then(r)
       return b
     }),
-    auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: userEmail ? { email: userEmail } : null }, error: null })) } },
+    // 뷰어 이메일은 읽지 않는다(신원 = people.user_id) — auth 조회가 일어나면 실패시킨다.
+    auth: { admin: { getUserById: vi.fn(async () => { throw new Error('auth 조회 금지') }) } },
   }
   mocks.createAdminClient.mockReturnValue(client)
   return { client, calls }
@@ -40,7 +41,12 @@ describe('fetchAgentHubRows', () => {
       agent_work_orders: [{ data: [{ id: 'o1', project_id: P1, wbs_item_id: 'i1', status: 'reported', claimed_by: 'a', claimed_by_user_id: null, claimed_at: null, created_at: 'x', updated_at: 'x', last_heartbeat_at: null, heartbeat_phase: null, heartbeat_agent: null, heartbeat_note: null }] }],
       agent_work_reports: [{ data: [{ work_order_id: 'o1', percent: 100, summary: 's', links: [], agent: 'a', review_action: null, review_note: null, created_at: 'x' }] }],
       agent_watchers: [{ data: [] }],
-      project_members: [{ data: [{ id: 'm1', people: { display_name: '장', email: 'yoo@example.com', user_id: null } }] }],
+      project_members: [{ data: [
+        { id: 'm1', active: true, people: { display_name: '장', user_id: null, active: true } },
+        // 비활성 행·비활성 인물도 이름 표시를 위해 싣되 active=false 로 편다.
+        { id: 'm2', active: false, people: { display_name: '빠진 행', user_id: 'u2', active: true } },
+        { id: 'm3', active: true, people: { display_name: '빠진 인물', user_id: 'u3', active: false } },
+      ] }],
       projects: [{ data: [{ id: P1, name: 'proj-a' }] }],
     })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
@@ -54,8 +60,12 @@ describe('fetchAgentHubRows', () => {
     expect(c('agent_work_orders').filters.find(f => f[0] === 'or')?.[1][0]).toContain('status.in.(ready,claimed,reported)')
     expect(c('agent_work_reports').filters).toEqual(expect.arrayContaining([['in', ['work_order_id', ['o1']]], ['eq', ['kind', 'completion']]]))
     // 이름·이메일·계정은 people 이 정본 — 임베드로 읽어 허브 조립기에는 평평한 행으로 넘긴다.
-    expect(c('project_members').select).toBe('id, people!inner(display_name, email, user_id)')
-    expect(rows.members).toEqual([{ id: 'm1', name: '장', email: 'yoo@example.com', user_id: null }])
+    expect(c('project_members').select).toBe('id, active, people!inner(display_name, user_id, active)')
+    expect(rows.members).toEqual([
+      { id: 'm1', name: '장', user_id: null, active: true },
+      { id: 'm2', name: '빠진 행', user_id: 'u2', active: false },
+      { id: 'm3', name: '빠진 인물', user_id: 'u3', active: false },
+    ])
     expect(calls.map(x => x.table).sort()).toEqual(['agent_projects', 'agent_watchers', 'agent_work_orders', 'agent_work_reports', 'project_members', 'projects', 'wbs_items'])
   })
   it('살아 있는 주문이 없으면 보고 조회를 생략한다(2차 0건)', async () => {
@@ -76,21 +86,27 @@ describe('fetchAgentHubRows', () => {
 })
 
 describe('getAgentHub', () => {
-  it('뷰어 이메일을 auth 로 읽어 본인 판정에 쓴다(로스터 email 매칭)', async () => {
+  const item = { id: 'i1', project_id: P1, parent_id: null, code: 'T', name: 'n', sort_order: 0, milestone: false, dev_workflow: true, tags: [], assignee_member_id: 'm1', agent_prompt: null, actual_pct: 0, stage: null }
+  it('본인 판정은 people.user_id 로만 — 뷰어 이메일을 auth 로 읽지 않는다', async () => {
     const { client } = admin({
-      wbs_items: [{ data: [{ id: 'i1', project_id: P1, parent_id: null, code: 'T', name: 'n', sort_order: 0, milestone: false, dev_workflow: true, tags: [], assignee_member_id: 'm1', agent_prompt: null, actual_pct: 0, stage: null }] }],
-      project_members: [{ data: [{ id: 'm1', people: { display_name: '장', email: 'YOO@example.com', user_id: null } }] }],
+      wbs_items: [{ data: [item] }],
+      project_members: [{ data: [{ id: 'm1', active: true, people: { display_name: '장', user_id: 'u1', active: true } }] }],
       projects: [{ data: [{ id: P1, name: 'x' }] }],
     })
     const hub = await getAgentHub(P1, { userId: 'u1', isAdmin: false }, NOW)
-    expect(client.auth.admin.getUserById).toHaveBeenCalledWith('u1')
+    expect(client.auth.admin.getUserById).not.toHaveBeenCalled()
     expect(hub.rows[0].assigneeMine).toBe(true)
     expect(hub.rows[0].canToggle).toBe(true)
   })
-  it('뷰어 조회 실패는 throw', async () => {
-    const { client } = admin({ projects: [{ data: [{ id: P1, name: 'x' }] }] })
-    client.auth.admin.getUserById.mockResolvedValueOnce({ data: { user: null }, error: { message: 'nope' } } as never)
-    await expect(getAgentHub(P1, { userId: 'u1', isAdmin: false }, NOW)).rejects.toThrow(/뷰어 조회 실패/)
+  it('담당 명단 행이 비활성이면 본인이 아니다(이름은 계속 보인다)', async () => {
+    admin({
+      wbs_items: [{ data: [item] }],
+      project_members: [{ data: [{ id: 'm1', active: false, people: { display_name: '장', user_id: 'u1', active: true } }] }],
+      projects: [{ data: [{ id: P1, name: 'x' }] }],
+    })
+    const hub = await getAgentHub(P1, { userId: 'u1', isAdmin: false }, NOW)
+    expect(hub.rows[0].assigneeMine).toBe(false)
+    expect(hub.rows[0].canToggle).toBe(false)
   })
 })
 
