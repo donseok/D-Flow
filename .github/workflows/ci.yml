@@ -53,3 +53,8 @@ jobs:
         with: { node-version: '22' }
       - run: node scripts/baseline-diff.mjs
       - run: supabase migration up --local
+      # 조직 코어 RLS 케이스(tests/rls) — 위 migration up 으로 최신 스키마가 된 이 DB 에 authenticated 세션을 흉내 내 붙는다.
+      # 하네스는 127.0.0.1/localhost 만 허용한다(CI 에는 .env.local 이 없으므로 DSN 을 env 로 준다).
+      - run: npm ci
+      - run: npm run test:rls
+        env: { RLS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres }

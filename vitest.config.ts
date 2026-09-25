@@ -1,10 +1,13 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import path from 'node:path'
 
 export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.{ts,tsx}'],
+    // tests/rls 는 로컬 Postgres 에 붙는 DB 테스트다 — 단위 테스트(npm run test)는 DB 없이 돌아야 하므로 뺀다.
+    // 그쪽은 vitest.config.rls.ts(npm run test:rls)가 돌린다.
+    exclude: [...configDefaults.exclude, 'tests/rls/**'],
     // CSS 모듈 import(seatmap.module.css)가 프로젝트 postcss.config.mjs(문자열 플러그인 표기,
     // Next 전용 로더가 해석)를 vite 가 그대로 돌리려다 죽는다. jsdom 테스트는 실제 스타일 계산이
     // 필요 없으므로 CSS 처리를 끄고 클래스명 그대로 돌려주는 기본 프록시를 쓴다.
