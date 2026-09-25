@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import {
   INVITEE, LEVEL_LABELS, SP1_TEAMS, TEMPLATE_HEADER, TRACE_WORDS, actionResult, cookieHeader, dispositionFilename,
   e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
   localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
+  ERR_DENIED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
 } from '../../scripts/lib/e2e.mjs'
+import { ERR_DENIED as APP_ERR_DENIED } from '@/lib/authz/errors'
 import { FORBIDDEN_REFS } from '../../scripts/lib/targets.mjs'
 import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
 import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
@@ -260,7 +263,7 @@ describe('pageProblems — 렌더된 HTML 의 오류 표식', () => {
   it('정상 화면은 빈 목록', () => {
     expect(pageProblems('<html><body><main id="main-content"><h1>WBS</h1></main></body></html>')).toEqual([])
   })
-  it('오류 경계·열화 표시·Next 오류 문서를 잡는다', () => {
+  it('열화 표시·오류 경계 문구·Next 오류 문서를 잡는다', () => {
     expect(pageProblems('<h1>화면을 불러오지 못했습니다</h1>')).toEqual(['error-boundary'])
     expect(pageProblems('<p>일부 정보를 불러오지 못했습니다</p>')).toEqual(['degraded'])
     expect(pageProblems('<html id="__next_error__"><body></body></html>')).toEqual(['next-error'])
@@ -270,6 +273,60 @@ describe('pageProblems — 렌더된 HTML 의 오류 표식', () => {
     expect(pageProblems(html, ['E2E 킥오프', 'bob'])).toEqual([])
     expect(pageProblems(html, ['carol', 'bob', '요구사항 정리'])).toEqual(['missing:carol', 'missing:요구사항 정리'])
     expect(pageProblems('<h1>화면을 불러오지 못했습니다</h1>', ['x'])).toEqual(['error-boundary', 'missing:x'])
+  })
+  it('열려야 하는 화면의 notFound 는 문제다', () => {
+    expect(pageProblems('<script>self.__next_f.push([1,"e:{\\"digest\\":\\"NEXT_HTTP_ERROR_FALLBACK;404\\"}"])</script>')).toEqual(['not-found'])
+  })
+  it('스트리밍된 Flight 오류 행·data-dgst 를 digest 로 잡는다(문구 표식 없이도)', () => {
+    expect(pageProblems('<script>self.__next_f.push([1,"31:E{\\"digest\\":\\"123\\",\\"name\\":\\"Error\\"}"])</script>')).toEqual(['error-digest:123'])
+    expect(pageProblems('<div hidden id="S:0"><!--$!--><template data-dgst="456"></template></div>')).toEqual(['error-digest:456'])
+  })
+})
+
+describe('streamedErrorDigests — 실측 화면(2026-09-26 로컬 캡처)', () => {
+  // 로컬 dev 서버에서 PostgREST 컨테이너만 멈추고 관리자로 /p/<A>/wbs 를 받은 HTML(page-streamed-error)과, 되살린 뒤 같은 화면
+  // (page-healthy). getComputedWbs 가 던져도 HTTP 는 200 이고 error.tsx 문구는 HTML 에 없다 — digest 만 남는다.
+  // 캡처 뒤 세션 쿠키 값(base64-…)과 로컬 절대 경로를 가렸다.
+  const fixture = (name: string) => gunzipSync(readFileSync(new URL(`./fixtures/${name}`, import.meta.url))).toString('utf8')
+  it('서버 컴포넌트가 던진 화면: Flight 오류 행과 data-dgst 가 같은 digest, 오류 경계 문구는 없다', () => {
+    const html = fixture('page-streamed-error.html.gz')
+    expect(html).not.toContain('화면을 불러오지 못했습니다')
+    expect(html).toContain('<template data-dgst="2570364813"')
+    expect(streamedErrorDigests(html)).toEqual(['2570364813'])
+    expect(pageProblems(html)).toContain('error-digest:2570364813')
+  })
+  it('정상 화면: 메타데이터 경계의 "digest":"$undefined" 는 오류가 아니다', () => {
+    const html = fixture('page-healthy.html.gz')
+    expect(html).toContain('digest\\":\\"$undefined')
+    expect(streamedErrorDigests(html)).toEqual([])
+    expect(pageProblems(html, ['요구사항 정리'])).toEqual([])
+  })
+  it('notFound digest 는 오류 digest 가 아니다(은닉 판정은 notFoundRendered 몫)', () => {
+    expect(streamedErrorDigests('"digest\\":\\"NEXT_HTTP_ERROR_FALLBACK;404\\"')).toEqual([])
+  })
+})
+
+describe('PAGE_MARKERS·ERR_DENIED — 앱 원본과의 드리프트', () => {
+  it('문구 표식이 원본 컴포넌트에 그대로 있다', () => {
+    const src = {
+      degraded: 'src/components/app/DegradedNotice.tsx',
+      'error-boundary': 'src/app/(app)/error.tsx',
+    } as Record<string, string>
+    for (const [name, marker] of PAGE_MARKERS) {
+      if (name === 'next-error') continue
+      expect(readFileSync(src[name], 'utf8')).toContain(marker)
+    }
+  })
+  it('쓰기 거부 문구가 앱의 ERR_DENIED 와 같다', () => {
+    expect(ERR_DENIED).toBe(APP_ERR_DENIED)
+  })
+})
+
+describe('redactInviteTokens — 실패 메시지에서 초대 토큰 가리기', () => {
+  it('/invite/<uuid> 를 가린다', () => {
+    const t = '0f8b2c1e-1a2b-4c3d-8e9f-001122334455'
+    expect(redactInviteTokens(`[carol] GET /invite/${t} → 500`)).toBe('[carol] GET /invite/<token> → 500')
+    expect(redactInviteTokens('/p/x/wbs')).toBe('/p/x/wbs')
   })
 })
 

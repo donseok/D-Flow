@@ -20,9 +20,10 @@ import { createClient } from '@supabase/supabase-js'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import {
-  INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, SP1_TEAMS, TEMPLATE_HEADER, actionResult, cookieHeader, dispositionFilename,
+  ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, SP1_TEAMS, TEMPLATE_HEADER, actionResult, cookieHeader, dispositionFilename,
   e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
-  localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
+  localClientEnv, meetingInput, notFoundRendered, pageProblems, redactInviteTokens, rosterPlan, rosterView, signupInput,
+  teamIdsByCode, toCell,
 } from './lib/e2e.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
@@ -60,14 +61,21 @@ const ACTIONS = {
   createProjectInvite: { filename: 'src/app/actions/projectInvites.ts', exportedName: 'createProjectInvite', worker: '/p/[projectId]/members/page' },
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
 }
-/** 조회 전용(viewer) 쓰기 거부 문구 — src/lib/authz/errors.ts ERR_DENIED. */
-const ERR_DENIED = '권한 없음'
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
-const step = (name, detail) => {
-  // detail 의 name·at 이 단계 이름·시각을 덮으면 결과 JSON 에서 단계가 사라진다(러너 개발 중 실제로 한 번 겪었다).
-  if ('name' in detail || 'at' in detail) throw new Fail(`단계 ${name} 의 기록에 예약 키(name·at)가 있다`)
-  summary.steps.push({ name, at: new Date().toISOString(), ...detail })
+/**
+ * 단계 기록 — 그 단계의 검사가 끝난 뒤 부른다. failure 를 주면 ✗ 로 기록·출력하고 Fail 을 던진다
+ * (기록을 남긴 채 실패해야 결과 JSON 에 어느 단계에서 무엇이 틀렸는지 남는다).
+ * @param {string} name @param {object} detail @param {string} [failure]
+ */
+const step = (name, detail, failure) => {
+  // detail 의 name·at·ok 가 단계 이름·시각·판정을 덮으면 결과 JSON 이 거짓말을 한다(러너 개발 중 name 으로 실제로 한 번 겪었다).
+  if (['name', 'at', 'ok'].some((k) => k in detail)) throw new Fail(`단계 ${name} 의 기록에 예약 키(name·at·ok)가 있다`)
+  summary.steps.push({ name, at: new Date().toISOString(), ok: !failure, ...detail })
+  if (failure) {
+    log(`${name} ✗`)
+    throw new Fail(failure)
+  }
   log(`${name} ✓`)
 }
 
@@ -325,8 +333,8 @@ async function main() {
     if (!a.hasRoot) throw new Fail(`${a.file} 에 ${root} 가 없다`)
   }
   const traced = summary.artifacts.filter((a) => a.traces.length)
-  step('trace-scan', { entriesScanned: summary.artifacts.reduce((n, a) => n + a.entries, 0), hits: traced.length })
-  if (traced.length) throw new Fail(`흔적 적중: ${JSON.stringify(traced.map((a) => ({ file: a.file, traces: a.traces })))}`)
+  step('trace-scan', { entriesScanned: summary.artifacts.reduce((n, a) => n + a.entries, 0), hits: traced.length },
+    traced.length ? `흔적 적중: ${JSON.stringify(traced.map((a) => ({ file: a.file, traces: a.traces })))}` : undefined)
 
   // ── 10. 초대 발급 — 명단 화면(ProjectInviteManager)의 createProjectInvite. 토큰은 응답 url 에만 있다(DB 는 해시).
   const invite = mustOk('createProjectInvite', (await admin.action(`/p/${A.id}/members`, 'createProjectInvite', [A.id, inviteInput([teamIds.A[0]])])).result)
@@ -371,38 +379,47 @@ async function main() {
   // ── 13. carol 로그인 — A 는 명단 멤버, B 는 같은 워크스페이스라 조회 전용(스펙 2.4.1 '그 외 워크스페이스 멤버 → viewer':
   // 화면은 열리고 쓰기는 거부), C(타 워크스페이스)·미존재 id 는 똑같이 not-found(존재 은닉). 관리자(플랫폼 관리자)는 C 를 본다 —
   // not-found 가 부재가 아니라 은닉이라는 대조. (app)/loading.tsx 스트리밍 때문에 은닉돼도 HTTP 상태는 200 일 수 있어
-  // 판정은 notFound() digest 로 하고 상태 코드는 기록만 한다. 이름 노출(projectNameInHtml)도 기록만 — SP1 은 projects·read_all_*
-  // 읽기 정책이 개방인 상태가 의도다(SP1 스펙 표 258행, SP2 가 닫는다).
+  // 은닉 판정은 실제 HTTP 404 또는 notFound() digest 다(어느 신호였는지 기록). 열려야 하는 화면은 pageProblems 로 본다 —
+  // 스트리밍된 오류 digest·열화 표시가 없고, 그 페이지 세그먼트만 그리는 문구(WBS 히어로 제목, A 는 리프명)가 있어야 한다.
+  // 프로젝트 이름만으로는 안 된다: 레이아웃 사이드바가 모든 화면에 싣는다(은닉된 C 에도 실린다, 4.2).
+  // 이름 노출(projectNameInHtml)은 기록만 — SP1 은 projects·read_all_* 읽기 정책이 개방인 상태가 의도다(SP1 스펙 표 258행, SP2 가 닫는다).
   const carolUser = await carol.login(INVITEE.email, carolPassword)
   const missing = randomUUID()
   const visibility = []
-  const see = async (who, label, pid, name, hidden) => {
+  const see = async (who, label, pid, name, { hidden = false, expectTexts = [] } = {}) => {
     const path = `/p/${pid}/wbs`
     const res = await who.http('GET', path, { expect: hidden ? [200, 404] : 200 })
     const html = await res.text()
+    const digest = notFoundRendered(html)
     const entry = {
-      who: who.label, project: label, path, status: res.status, notFound: notFoundRendered(html),
+      who: who.label, project: label, path, status: res.status,
+      notFound: res.status === 404 || digest, notFoundSignal: res.status === 404 ? 'http-404' : digest ? 'digest' : null,
       projectNameInHtml: name ? html.includes(name) : null,
+      ...(hidden ? {} : { expect: expectTexts, problems: pageProblems(html, expectTexts) }),
     }
     visibility.push(entry)
     if (entry.notFound !== hidden) throw new Fail(`${who.label} ${label} 화면: notFound=${entry.notFound}(기대 ${hidden})`)
+    if (!hidden && entry.problems.length) throw new Fail(`${who.label} ${label} 화면 문제: ${entry.problems.join(', ')}`)
   }
-  await see(carol, 'A(명단 멤버)', A.id, A.name, false)
-  await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, false)
+  const wbsTitle = (name) => `${name} WBS · 간트` // wbs/page.tsx 히어로 — 페이지 세그먼트만 그린다(i18n wbs.heroTitleSuffix)
+  await see(carol, 'A(명단 멤버)', A.id, A.name, { expectTexts: [wbsTitle(A.name), leaf.name] })
+  await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, { expectTexts: [wbsTitle(B.name)] })
   const denied = (await carol.action(`/p/${B.id}/meetings`, 'createMeeting', [B.id, meetingInput({ date: meetingDate, attendeeIds: [] })])).result
   same('carol 의 B 회의 생성', denied, { ok: false, error: ERR_DENIED })
   const bMeetings = rows('B 회의', await admin.sb.from('meetings').select('id').eq('project_id', B.id))
   same('B 회의 수', bMeetings.length, 0)
   visibility.push({ who: 'carol', project: 'B(같은 워크스페이스, 명단 없음)', action: 'createMeeting', result: denied, bMeetings: bMeetings.length })
-  await see(carol, 'C(타 워크스페이스)', C.id, C.name, true)
-  await see(carol, '미존재 id', missing, null, true)
-  await see(admin, 'C(타 워크스페이스)', C.id, C.name, false)
+  await see(carol, 'C(타 워크스페이스)', C.id, C.name, { hidden: true })
+  await see(carol, '미존재 id', missing, null, { hidden: true })
+  await see(admin, 'C(타 워크스페이스)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] })
   step('visibility', { carolUserId: carolUser.id, checks: visibility })
 
-  // ── 14. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 오류 경계·열화 표시·Next 오류 문서가 없고, 흐름에서 만든
-  // 데이터가 화면에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). 마지막 단계라 앞 단계는 전부 돈다.
+  // ── 14. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
+  // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
+  // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
+  // 마지막 단계라 앞 단계는 전부 돈다.
   const pages = [
-    ['/projects', [A.name, B.name]],
+    ['/projects', [`/p/${A.id}/dashboard`, `/p/${B.id}/dashboard`]],
     [`/p/${A.id}/members`, ['bob', INVITEE.name]],
     [`/p/${A.id}/meetings`, [meetingInput({ date: meetingDate, attendeeIds: [] }).title]],
     [`/p/${A.id}/issues`, []],
@@ -415,8 +432,7 @@ async function main() {
     rendered.push({ path, bytes: html.length, expect: expectTexts, problems: pageProblems(html, expectTexts) })
   }
   const broken = rendered.filter((r) => r.problems.length)
-  step('render-pages', { pages: rendered, problems: broken.length })
-  if (broken.length) throw new Fail(`화면 오류 표식: ${JSON.stringify(broken)}`)
+  step('render-pages', { pages: rendered, problems: broken.length }, broken.length ? `화면 오류 표식: ${JSON.stringify(broken)}` : undefined)
 }
 
 try {
@@ -424,8 +440,9 @@ try {
   summary.ok = true
 } catch (e) {
   summary.ok = false
-  summary.error = e?.message ?? String(e)
-  if (!(e instanceof Fail)) console.error(e)
+  // 실패 메시지에 /invite/<토큰> 경로가 들어갈 수 있다(초대 화면 GET·POST 실패) — 출력 전에 가린다.
+  summary.error = redactInviteTokens(e?.message ?? String(e))
+  if (!(e instanceof Fail)) console.error(redactInviteTokens(e?.stack ?? String(e)))
   process.exitCode = 1
 }
 console.log(JSON.stringify(summary, null, 2))

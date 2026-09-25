@@ -328,24 +328,66 @@ export function signupInput(name, password) {
   return { name, password, passwordConfirmation: password }
 }
 
-/** 렌더된 HTML 의 오류 표식 — (app)/error.tsx 경계, DegradedNotice(권한·목록 조회 실패), Next 오류 문서. */
-const PAGE_PROBLEMS = [
-  ['error-boundary', '화면을 불러오지 못했습니다'],
+/** 조회 전용(viewer) 쓰기 거부 문구 — src/lib/authz/errors.ts ERR_DENIED(드리프트는 tests/scripts/e2e.test.ts 가 대조). */
+export const ERR_DENIED = '권한 없음'
+
+/**
+ * 렌더된 HTML 의 문구 표식 — DegradedNotice(권한·목록 조회 실패), (app)/error.tsx 경계, Next 오류 문서.
+ * error.tsx 문구는 보조다: 'use client' 클래스 경계라 서버 렌더가 돌리지 않는다. (app)/loading.tsx 가 셸을 먼저 흘려보낸 뒤
+ * 서버 컴포넌트가 던지면 HTML 에는 digest 만 남고 경계는 브라우저에서 그려진다(streamedErrorDigests 가 주 판정).
+ * 문구가 앱과 어긋나지 않는지는 tests/scripts/e2e.test.ts 가 원본 파일과 대조한다.
+ */
+export const PAGE_MARKERS = [
   ['degraded', '일부 정보를 불러오지 못했습니다'],
+  ['error-boundary', '화면을 불러오지 못했습니다'],
   ['next-error', 'id="__next_error__"'],
 ]
 
+/** 정상 화면에도 있는 digest 값 — 메타데이터 경계의 빈 자리(`"digest":"$undefined"`). */
+const BENIGN_DIGEST = '$undefined'
+/** notFound() 의 digest 접두 — 오류가 아니라 은닉 판정 몫(notFoundRendered). */
+const NOT_FOUND_DIGEST = 'NEXT_HTTP_ERROR_FALLBACK;'
+
 /**
- * 오류 표식 + 있어야 할 데이터가 없는 것('missing:<문구>'). 조회 실패를 로그만 남기고 빈 목록으로 그리는 화면은
- * 오류 표식이 없으므로, 흐름에서 만든 데이터(회의 제목·명단 이름 등)가 HTML(SSR·RSC 페이로드)에 있는지로 잡는다.
+ * 스트리밍으로 흘러간 서버 오류의 digest 들. 서버 컴포넌트가 셸 뒤에 던지면 Next 는 HTTP 200 그대로
+ * (1) RSC 인라인 페이로드에 Flight 오류 행 `<id>:E{"digest":"…"}` 을, (2) HTML 에 클라이언트 렌더 전환
+ * `<template data-dgst="…">` 를 싣는다(2026-09-26 로컬 실측 — tests/scripts/fixtures/page-streamed-error.html.gz).
+ * 인라인 페이로드는 JSON 문자열 안이라 따옴표가 `\"` 로 이스케이프돼 있다. notFound digest 와 `$undefined` 는 뺀다.
+ * @param {string} html
+ * @returns {string[]}
+ */
+export function streamedErrorDigests(html) {
+  const text = String(html)
+  const found = new Set()
+  for (const m of text.matchAll(/"digest\\*":\\*"([^"\\]*)/g)) found.add(m[1])
+  for (const m of text.matchAll(/data-dgst="([^"]*)"/g)) found.add(m[1])
+  return [...found].filter((d) => d !== BENIGN_DIGEST && !d.startsWith(NOT_FOUND_DIGEST)).sort()
+}
+
+/**
+ * 열려야 하는 화면의 문제 목록 — 스트리밍된 서버 오류('error-digest:<d>'), notFound(열려야 하는 화면이 은닉됨),
+ * 문구 표식, 있어야 할 데이터가 없는 것('missing:<문구>'). 조회 실패를 로그만 남기고 빈 목록으로 그리는 화면은
+ * 오류 표식이 없으므로, 흐름에서 만든 데이터가 HTML(SSR·RSC 페이로드)에 있는지로 잡는다. expectTexts 는 레이아웃
+ * (사이드바·헤더의 프로젝트 이름 등)이 아니라 그 페이지 세그먼트만 그리는 문구여야 한다 — 레이아웃 문구는 페이지가
+ * 깨져도 HTML 에 있다.
  * @param {string} html @param {readonly string[]} [expectTexts]
  */
 export function pageProblems(html, expectTexts = []) {
   const text = String(html)
   return [
-    ...PAGE_PROBLEMS.filter(([, marker]) => text.includes(marker)).map(([name]) => name),
+    ...streamedErrorDigests(text).map((d) => `error-digest:${d}`),
+    ...(notFoundRendered(text) ? ['not-found'] : []),
+    ...PAGE_MARKERS.filter(([, marker]) => text.includes(marker)).map(([name]) => name),
     ...expectTexts.filter((t) => !text.includes(t)).map((t) => `missing:${t}`),
   ]
+}
+
+/**
+ * 러너 출력(실패 메시지·스택)에서 초대 토큰을 가린다. 토큰은 미소비 초대의 자격 증명이고 결과 JSON 은 파일로 남는다.
+ * @param {string} text
+ */
+export function redactInviteTokens(text) {
+  return String(text).replace(/\/invite\/[0-9a-f-]{36}/gi, '/invite/<token>')
 }
 
 /**
