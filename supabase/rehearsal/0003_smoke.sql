@@ -1,11 +1,11 @@
 -- 0003_org_core 리허설 스모크 — CLI 가 적용하지 않는 폴더(supabase/rehearsal/). 로컬 DB 에 postgres 로 흘린다:
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0003_smoke.sql
 -- 한 트랜잭션 안에서 돌고 마지막에 rollback 한다(DB 에 흔적 없음). 기대 예외는 DO 블록이 SQLSTATE·메시지로 확인하고,
--- 기대와 다르면 오류로 멈춘다. 결과 줄의 불리언이 전부 t 여야 한다(claims_* 넷은 세션 설정 줄이라 늘 t).
+-- 기대와 다르면 오류로 멈춘다. 결과 줄의 불리언이 전부 t 여야 한다(claims_* 일곱은 세션 설정 줄이라 늘 t).
 -- 롤: 대부분 postgres(= service_role 경로처럼 RLS·실행 권한을 우회)로 돈다. "세션 경로" 절만 set local role authenticated +
 -- JWT sub 로 RLS·컬럼 권한·RPC 실행 권한(service_role 전용)을 실제로 태운다.
 -- uuid 는 16진수만: 워크스페이스 …aaaa/…bbbb, 계정 …0a0N, 인물 …0b0N, 프로젝트 …0c0N, 팀 …0d0N,
--- 회의록·버전 …0e0N, 회의 …0f01, 알림 사건 …1e01.
+-- 회의록·버전 …0e0N, 회의 …0f01, 회의록 폴더 …0f1N, 알림 사건 …1e01.
 begin;
 
 -- 픽스처 -------------------------------------------------------------------------
@@ -220,6 +220,31 @@ select count(*) = 0 as session_self_demote_filtered from u;
 select (select count(*) from public.my_team_ids('00000000-0000-0000-0000-000000000c01')) = 2 as my_team_ids_ok;
 reset role;
 select set_config('request.jwt.claims', '', true) = '' as claims_cleared2;
+
+-- 세션 경로: 워크스페이스 관리자(명단 행 없음) grace 의 app_role() 은 'pmo_admin' — 앱 isAnyProjectAdmin 과 동형(Task 3c).
+-- 회의록 폴더 정책(0000): insert 는 created_by = auth.uid() and app_role() is not null, 남의 폴더 update·delete 는
+-- created_by = auth.uid() or app_role() = 'pmo_admin'.
+insert into public.minute_folders (id, name, created_by)
+values ('00000000-0000-0000-0000-000000000f11', '팀 회의', '00000000-0000-0000-0000-000000000a02');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000a06","role":"authenticated"}', true) is not null as claims_grace;
+select public.app_role() = 'pmo_admin' as wsadmin_app_role_pmo_admin,
+       not exists (select 1 from public.project_members pm join public.people pe on pe.id = pm.person_id
+                    where pe.user_id = auth.uid()) as wsadmin_has_no_roster_row;
+with i as (insert into public.minute_folders (id, name, created_by)
+           values ('00000000-0000-0000-0000-000000000f12', '운영 회의', '00000000-0000-0000-0000-000000000a06') returning 1)
+select count(*) = 1 as wsadmin_inserts_root_folder from i;
+with u as (update public.minute_folders set name = '팀 회의(정리)' where id = '00000000-0000-0000-0000-000000000f11' returning 1)
+select count(*) = 1 as wsadmin_updates_others_folder from u;
+with d as (delete from public.minute_folders where id = '00000000-0000-0000-0000-000000000f11' returning 1)
+select count(*) = 1 as wsadmin_deletes_others_folder from d;
+-- 대조: 명단 member(dave)는 'team_editor' — 남의 폴더는 지울 수 없다(정책 using 에 걸려 0행)
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000a03","role":"authenticated"}', true) is not null as claims_dave;
+select public.app_role() = 'team_editor' as member_app_role_team_editor;
+with d as (delete from public.minute_folders where id = '00000000-0000-0000-0000-000000000f12' returning 1)
+select count(*) = 0 as member_cannot_delete_others_folder from d;
+reset role;
+select set_config('request.jwt.claims', '', true) = '' as claims_cleared3;
 
 -- create_issue_from_minute_block(텍스트 무변경)이 새 명단 위에서 돈다 — 담당자 검증(project_members(id, project_id))과
 -- issue_assignees 복합 FK. 다른 프로젝트의 명단 행을 담당자로 넘기면 ISSUE_ASSIGNEE_PROJECT_MISMATCH.

@@ -321,10 +321,15 @@ revoke all on function public.can_attach(uuid) from public;
 grant execute on function public.can_attach(uuid) to authenticated;
 
 -- app_role() — 본문만 새 표 위로. 반환 문자열은 회의록 정책 8개가 그대로 쓰므로 유지(삭제는 SP2).
+-- 앱 isAnyProjectAdmin(actor) 과 동형: 플랫폼 관리자 → 워크스페이스 관리자(명단 행이 없어도 승계로 관리자) →
+-- 명단 admin → 명단 member('team_editor') → null. 워크스페이스 관리자 분기가 없으면 회의록 폴더 정책이 세션 경로에서
+-- 그를 거부해 폴더 삭제가 0행이 된다(Task 7 우려 1).
 create or replace function public.app_role() returns text
 language sql stable security definer set search_path = '' as $$
   select case
     when public.is_superuser() then 'pmo_admin'
+    when exists (select 1 from public.workspace_members wm
+                  where wm.user_id = auth.uid() and wm.role = 'admin') then 'pmo_admin'
     when exists (select 1 from public.project_members pm join public.people pe on pe.id = pm.person_id
                   where pe.user_id = auth.uid() and pm.active and pe.active and pm.access_role = 'admin') then 'pmo_admin'
     when exists (select 1 from public.project_members pm join public.people pe on pe.id = pm.person_id
