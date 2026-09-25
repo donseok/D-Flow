@@ -3,6 +3,7 @@ import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { emitNotification } from '@/lib/notify/emit'
+import { personOf } from '@/lib/data/memberSelect'
 import { STAGE_CODES } from '@/lib/domain/stageLabels'
 
 /**
@@ -287,13 +288,14 @@ export async function applyAssigneesAndOrders(
 ): Promise<{ unmatched: Array<{ id: string; assignee: string }>; ordersCreated: number; nonLeafSkipped: string[] }> {
   const { projectId, actorUserId, module } = args
   const unmatched: Array<{ id: string; assignee: string }> = []
-  // 로스터 email → member_id 맵 1회 로드
+  // 로스터 email(people.email — 이메일 정본) → member_id 맵 1회 로드
   const { data: members, error } = await admin
-    .from('project_members').select('id, email').eq('project_id', projectId)
+    .from('project_members').select('id, people!inner(email)').eq('project_id', projectId)
   if (error) throw new Error(`로스터 조회 실패: ${error.message}`)
   const memberByEmail = new Map<string, string>()
-  for (const m of (members ?? []) as Array<{ id: string; email: string | null }>) {
-    if (m.email) memberByEmail.set(m.email.toLowerCase(), m.id)
+  for (const m of (members ?? []) as Array<Record<string, unknown>>) {
+    const email = personOf(m)?.email
+    if (email) memberByEmail.set(email.toLowerCase(), m.id as string)
   }
   for (const ref of args.newRefs) {
     const itemId = args.idsByRef[ref]

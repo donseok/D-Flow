@@ -8,7 +8,10 @@ import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { ensureRosterRow, setProjectRole, type ProjectRoleRow } from '@/app/actions/projectRoles'
 import { updateMember, removeMember } from '@/app/actions/members'
 import type { AccountRole } from '@/lib/domain/accounts'
-import type { ProjectMemberRole, TeamCode } from '@/lib/domain/types'
+import type { TeamCode } from '@/lib/domain/types'
+
+/** 옛 명단 구분(리더/실무) — projectRoles 액션의 행 계약을 따른다. Task 6·Phase B 가 이 화면과 함께 바꾼다. */
+type ProjectMemberRole = NonNullable<ProjectRoleRow['rosterRole']>
 
 const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
 

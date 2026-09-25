@@ -65,7 +65,10 @@ function admin(queues: Record<string, Resp[]>) {
       calls.push(table)
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'eq', 'order', 'limit']) b[k] = () => b
+      for (const k of ['select', 'order', 'limit']) b[k] = () => b
+      b.eq = (col: string, val: unknown) => {
+        (captured[`${table}.eq`] ??= []).push([col, val]); return b
+      }
       b.contains = (col: string, val: unknown) => {
         (captured[`${table}.contains`] ??= []).push([col, val]); return b
       }
@@ -116,6 +119,8 @@ describe('setWbsAssignee', () => {
     const r = await setWbsAssignee(W1, M1)
     expect(r.ok).toBe(true)
     expect(captured.wbs_items[0]).toMatchObject({ assignee_member_id: M1 })
+    // 활성 명단 행만 담당자가 될 수 있다.
+    expect(captured['project_members.eq']).toEqual(expect.arrayContaining([['id', M1], ['active', true]]))
     expect(mocks.emitNotification).toHaveBeenCalledWith(expect.objectContaining({
       type: 'work.assigned',
       recipientMemberIds: [M1],

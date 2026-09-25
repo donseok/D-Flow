@@ -36,9 +36,9 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   ])
 
   const teamSize = members.length
-  // 명단상의 구분(리더/실무)을 센다 — 프로젝트 권한(project_roles)과는 무관하다.
-  const leads = members.filter((x) => x.role === 'admin').length
-  const contributors = members.filter((x) => x.role === 'contributor').length
+  // 리더 = 이 프로젝트 관리자(명단 access_role admin), 실무 = 나머지 명단 인원. Phase B 명단 화면이 대체한다.
+  const leads = members.filter((x) => x.accessRole === 'admin').length
+  const contributors = teamSize - leads
 
   return (
     <ProjectPageShell
@@ -119,7 +119,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
                           {mem.teamCode ? <span className="chip bg-surface-2 text-ink-muted">{mem.teamCode}</span> : <span className="text-ink-subtle">—</span>}
                         </td>
                         <td className="py-2.5 pr-3 text-xs text-ink-muted">
-                          {mem.role === 'admin' ? (locale === 'ko' ? '리더' : 'Lead') : (locale === 'ko' ? '실무' : 'Contributor')}
+                          {mem.accessRole === 'admin' ? (locale === 'ko' ? '리더' : 'Lead') : (locale === 'ko' ? '실무' : 'Contributor')}
                         </td>
                         <td className="py-2.5 pr-3 text-xs text-ink-muted">
                           {mem.title ?? '—'}{mem.roleLabel ? ` · ${mem.roleLabel}` : ''}

@@ -1,8 +1,9 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { compareKoreanName } from '@/lib/domain/nameSort'
+import { ROSTER_SELECT, personOf, toRosterMember } from '@/lib/data/memberSelect'
 import type {
-  Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence, TeamCode,
+  Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
 } from '@/lib/domain/types'
 
 type Row = Record<string, unknown>
@@ -136,33 +137,26 @@ export const getMeetingDetail = cache(async (
   if (attendeeIds.length) {
     const { data: mem, error: memErr } = await sb
       .from('project_members')
-      .select('id, name, email, teams(code)')
+      .select(ROSTER_SELECT)
       .in('id', attendeeIds)
     // 참석자 조회 실패 = 참석자가 지정돼 있는데도 '참석자 없음'으로 보인다.
     if (memErr) console.error('[getMeetingDetail] 참석자 조회 실패:', memErr.message)
     // `.in()` 은 순서를 보장하지 않는다 — 정렬하지 않으면 참석자 칩과 안내 메일의 이름 순서가
     // 조회할 때마다 달라진다. 상세 모달·메일 본문·챗봇이 전부 이 배열을 그대로 쓰므로 여기서 가나다순으로 고정.
     // id tiebreak — `.in()` 결과에는 기준 순서가 없어, 이름만으로 정렬하면 동명이인의 앞뒤가 요청마다 뒤집힌다.
-    attendees = [...(mem ?? [])].sort((x: Row, y: Row) =>
-      compareKoreanName(x.name as string, y.name as string)
-      || (x.id as string).localeCompare(y.id as string),
-    ).map((m: Row) => ({
-      id: m.id as string,
-      name: m.name as string,
-      email: (m.email as string | null) ?? null,
-      teamCode: ((m.teams as { code: TeamCode } | null)?.code) ?? null,
-    }))
+    attendees = ((mem ?? []) as Row[]).map(toRosterMember)
+      .sort((x, y) => compareKoreanName(x.name, y.name) || x.id.localeCompare(y.id))
+      .map(m => ({ id: m.id, name: m.name, email: m.email, teamCode: m.teamCode }))
   }
   return { meeting: mapMeeting(r as Row, attendeeIds), attendees }
 })
 
 /**
  * 로그인 계정에 연결된 project_members.id 집합. 크로스 프로젝트 조회이므로
- * user_id(0019 가 도입한 auth.users FK) 와 email 매칭의 **합집합**을 낸다 —
- * 한쪽만 보면 프로젝트마다 연결 방식이 다른 사람을 놓친다.
- * (예: 회사 계정은 email 로, 개인 gmail 계정은 명시적 user_id 로 같은 멤버 행에 이어진다.)
- * 한쪽 조회가 실패해도 다른 쪽 결과로 계속 동작한다 — 마이그레이션 전 배포에 대한 내성.
- * 외부 인력 행은 user_id NULL 로 남고 로그인하지 않으므로 여기 걸리지 않는다.
+ * `people.user_id`(계정 연결 정본, 0003) 와 `people.email` 매칭의 **합집합**을 낸다 —
+ * 계정에 아직 연결되지 않은 같은 이메일의 명단 행도 '나'로 본다(예전 user_id·email 이중 매칭 규칙 유지).
+ * 한쪽 조회가 실패해도 다른 쪽 결과로 계속 동작한다.
+ * 외부 인력 행은 people.user_id NULL 로 남고 로그인하지 않으므로 user_id 쪽에는 걸리지 않는다.
  */
 export async function resolveMemberIds(
   sb: ServerClient,
@@ -170,9 +164,9 @@ export async function resolveMemberIds(
 ): Promise<string[]> {
   const email = user.email?.trim().toLowerCase() || null
   const [byUser, byEmail] = await Promise.all([
-    sb.from('project_members').select('id').eq('user_id', user.id),
+    sb.from('project_members').select('id, people!inner(user_id)').eq('people.user_id', user.id),
     email
-      ? sb.from('project_members').select('id').eq('email', email)
+      ? sb.from('project_members').select('id, people!inner(email)').eq('people.email', email)
       : Promise.resolve({ data: [] as Row[], error: null }),
   ])
 
@@ -256,7 +250,7 @@ export async function getMeetingRowExtras(
   const none = (): RowsResult => ({ data: [], error: null })
   const [b, m] = await Promise.all([
     seriesIds.length ? sb.from('meetings').select('id, body').in('id', seriesIds) as PromiseLike<RowsResult> : none(),
-    memberIds.length ? sb.from('project_members').select('id, name').in('id', memberIds) as PromiseLike<RowsResult> : none(),
+    memberIds.length ? sb.from('project_members').select('id, people!inner(display_name)').in('id', memberIds) as PromiseLike<RowsResult> : none(),
   ])
   if (b.error) console.error('[getMeetingRowExtras] 메모 조회 실패(대시보드 회의 행 메모가 비어 보임):', b.error.message)
   if (m.error) console.error('[getMeetingRowExtras] 참석자 조회 실패(대시보드 회의 행 참석자가 비어 보임):', m.error.message)
@@ -264,6 +258,9 @@ export async function getMeetingRowExtras(
   const bodies: Record<string, string> = {}
   for (const r of b.data ?? []) bodies[r.id as string] = (r.body as string | null) ?? ''
   const memberNames: Record<string, string> = {}
-  for (const r of m.data ?? []) memberNames[r.id as string] = r.name as string
+  for (const r of m.data ?? []) {
+    const name = personOf(r)?.display_name
+    if (name) memberNames[r.id as string] = name
+  }
   return { bodies, memberNames }
 }

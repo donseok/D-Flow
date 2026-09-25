@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { personOf } from '@/lib/data/memberSelect'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 
 export type EmitInput = {
@@ -20,19 +21,20 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
     const admin = createAdminClient()
     const actor = input.actorUserId ?? null
 
-    // 1) 수신자 해석 — member_id → user_id 스냅샷(발행 시점 링크). 미링크(user_id null)도
+    // 1) 수신자 해석 — member_id → people.user_id 스냅샷(발행 시점 링크). 미링크(user_id null)도
     //    행은 남긴다: 멱등 키·감사 근거. 배지·피드는 user_id 기준이라 링크 전에는 보이지 않는다.
     const rows: { member_id: string | null; user_id: string | null }[] = []
     const memberIds = [...new Set(input.recipientMemberIds ?? [])]
     if (memberIds.length > 0) {
       const { data, error } = await admin
-        .from('project_members').select('id, user_id').in('id', memberIds)
+        .from('project_members').select('id, people!inner(user_id)').in('id', memberIds)
       if (error) {
         console.error('[notify] 수신자 해석 실패', input.type, error.message)
         return { ok: false }
       }
-      for (const m of data ?? []) {
-        if (actor === null || m.user_id !== actor) rows.push({ member_id: m.id, user_id: m.user_id ?? null })
+      for (const m of (data ?? []) as Array<Record<string, unknown>>) {
+        const uid = personOf(m)?.user_id ?? null
+        if (actor === null || uid !== actor) rows.push({ member_id: m.id as string, user_id: uid })
       }
     }
     for (const uid of new Set(input.recipientUserIds ?? [])) {

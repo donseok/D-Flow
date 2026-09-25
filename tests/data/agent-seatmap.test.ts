@@ -29,6 +29,7 @@ describe('fetchSeatmapRows', () => {
       agent_work_reports: [{ data: [] }],
       agent_watchers: [{ data: [] }],
       projects: [{ data: [{ id: 'p1', name: 'P' }] }],
+      project_members: [{ data: [{ id: 'm1', project_id: 'p1', people: { display_name: '홍길동', user_id: 'u1' } }] }],
     }, calls)
     const rows = await fetchSeatmapRows(a, ['p1'], NOW)
     expect(rows.orders).toHaveLength(1)
@@ -40,7 +41,9 @@ describe('fetchSeatmapRows', () => {
     expect(String(calls['wbs_items.select']?.[0]?.[0] ?? '')).toContain('depends')
     // 로스터는 층 프로젝트 범위로. 선행은 ready 주문이 없으면 조회하지 않는다.
     expect(calls['project_members.in']?.[0]).toEqual(['project_id', ['p1']])
-    expect(rows.members).toEqual([]); expect(rows.predecessors).toEqual([])
+    // 이름·계정은 people 임베드로 읽고 층 조립기에는 평평한 행으로 넘긴다.
+    expect(String(calls['project_members.select']?.[0]?.[0] ?? '')).toContain('people!inner(')
+    expect(rows.members).toEqual([{ id: 'm1', project_id: 'p1', user_id: 'u1', name: '홍길동' }]); expect(rows.predecessors).toEqual([])
     // 프로젝트 필터가 걸렸다
     expect(calls['agent_work_orders.in']?.[0]).toEqual(['project_id', ['p1']])
     // DONE 은 7일 창 — approved 는 updated_at >= now-7d 만
@@ -69,14 +72,14 @@ describe('fetchSeatmapRows', () => {
 describe('fetchMyMemberIds', () => {
   it('내 user_id 또는 이메일(대소문자 무시)과 맞는 로스터 행 id 를 프로젝트 범위 안에서 모은다', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin({ project_members: [{ data: [{ id: 'm1', user_id: 'u1', email: 'A@x.com' }, { id: 'm2', user_id: null, email: 'a@X.com' }, { id: 'm3', user_id: 'u2', email: 'b@x.com' }] }] }, calls)
+    const a = admin({ project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1', email: 'A@x.com' } }, { id: 'm2', people: { user_id: null, email: 'a@X.com' } }, { id: 'm3', people: { user_id: 'u2', email: 'b@x.com' } }] }] }, calls)
     const ids = await fetchMyMemberIds(a, { userId: 'u1', userEmail: 'a@x.com' }, ['p1'])
     expect(ids).toEqual(['m1', 'm2'])
     expect(calls['project_members.in']?.[0]).toEqual(['project_id', ['p1']])
   })
   it('projectIds null(슈퍼유저)이면 프로젝트 필터 없이, 이메일이 없으면 user_id 만으로 맞춘다', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin({ project_members: [{ data: [{ id: 'm1', user_id: 'u1', email: 'a@x.com' }, { id: 'm2', user_id: null, email: 'a@x.com' }] }] }, calls)
+    const a = admin({ project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1', email: 'a@x.com' } }, { id: 'm2', people: { user_id: null, email: 'a@x.com' } }] }] }, calls)
     expect(await fetchMyMemberIds(a, { userId: 'u1', userEmail: null }, null)).toEqual(['m1'])
     expect(calls['project_members.in']).toBeUndefined()
   })

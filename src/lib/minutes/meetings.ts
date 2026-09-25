@@ -9,10 +9,10 @@ import type { AdminClient, ExternalMeetingInput, ResolvedUser } from '@/lib/minu
  * 멤버십을 dedup 보다 먼저 판정해, 비멤버가 제목·날짜를 맞춰 타 프로젝트의 기존 회의에
  * 회의록을 연결하는 우회를 막는다.
  *
- * 판정 축은 project_members(user_id) — 인력 명단 축이다. 내부 requireProjectMember 는
- * project_roles(권한 축) 기반이라 두 판정이 갈릴 수 있으나(명단·권한은 자동 동기화되지 않는다),
- * 외부 경로는 발주 스펙이 명단 축을 명시했다 — 계정 미연결(user_id NULL) 멤버가 403 을 받는
- * 것도 의도된 동작이다.
+ * 판정 축은 명단 행 존재(project_members ⨝ people.user_id) — 발주 스펙이 명단 축을 명시했다.
+ * 내부 requireProjectMember 는 권한 축(명단 access_role·워크스페이스 관리자 승계)이라 두 판정이 갈릴 수
+ * 있다 — 권한 없는 명단 행은 여기서만, 명단 행 없는 워크스페이스 관리자는 내부 가드에서만 통과한다.
+ * 계정 미연결(people.user_id NULL) 행이 403 을 받는 것은 의도된 동작이다.
  *
  * meetings 테이블은 RLS insert 정책이 created_by = auth.uid() 를 요구해 세션 없는 대리 생성을
  * 막으므로 DB 2차 방어선이 없다 — 이 함수의 애플리케이션 검증이 유일한 관문이다(회의록 계열과
@@ -41,8 +41,8 @@ export async function resolveOrCreateExternalMeeting(
   }
 
   const { data: members, error: memErr } = await admin
-    .from('project_members').select('id')
-    .eq('project_id', m.projectId).eq('user_id', user.id).limit(1)
+    .from('project_members').select('id, people!inner(user_id)')
+    .eq('project_id', m.projectId).eq('people.user_id', user.id).limit(1)
   if (memErr || !members) {
     console.error('[minutes-api] 회의 생성 멤버십 확인 실패(거절):', memErr?.message ?? 'no rows')
     return fail500

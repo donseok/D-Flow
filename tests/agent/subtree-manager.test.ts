@@ -27,7 +27,7 @@ const LEAF = '20000000-0000-4000-8000-000000000003'
 const OTHER_LEAF = '20000000-0000-4000-8000-000000000004'
 
 type TreeRow = { id: string; parent_id: string | null; assignee_member_id: string | null }
-type RosterRow = { id: string; user_id?: string | null; email?: string | null }
+type RosterRow = { id: string; people: { user_id?: string | null; email?: string | null } }
 
 /**
  * 조상 조회(wbs_items)·로스터 조회(project_members)·이메일 조회(auth.admin.getUserById)를
@@ -157,7 +157,7 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
         { id: MID, parent_id: ROOT, assignee_member_id: 'anc-member' },
         { id: LEAF, parent_id: MID, assignee_member_id: null },
       ],
-      roster: [{ id: 'anc-member', user_id: 'anc-user' }],
+      roster: [{ id: 'anc-member', people: { user_id: 'anc-user' } }],
       emails: { 'anc-user': 'anc@x.com' },
     })
     const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
@@ -173,7 +173,7 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
         { id: MID, parent_id: ROOT, assignee_member_id: 'm-other' },
         { id: LEAF, parent_id: MID, assignee_member_id: null },
       ],
-      roster: [{ id: 'm-unrelated', user_id: 'user-1' }],
+      roster: [{ id: 'm-unrelated', people: { user_id: 'user-1' } }],
       emails: { 'user-1': 'user@x.com' },
     })
     expect(await requireSubtreeManagerOrAdmin(LEAF, P1)).toEqual({ ok: false, error: ERR_NOT_SUBTREE_MANAGER })
@@ -190,7 +190,7 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
   it('조상 조회(isSubtreeManager)가 throw 하면 fail-closed 거부', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
     mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
-    fakeAdmin({ tree: [], treeError: { message: 'boom' }, roster: [{ id: 'm-1', user_id: 'user-1' }], emails: { 'user-1': 'user@x.com' } })
+    fakeAdmin({ tree: [], treeError: { message: 'boom' }, roster: [{ id: 'm-1', people: { user_id: 'user-1' } }], emails: { 'user-1': 'user@x.com' } })
     const r = await requireSubtreeManagerOrAdmin(LEAF, P1)
     expect(r.ok).toBe(false)
   })

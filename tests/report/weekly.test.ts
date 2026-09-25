@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildWeeklyReportModel as buildWeeklyReportModelReal } from '@/lib/report/weekly'
 import type { Announcement, AttendanceRecord, ComputedItem, Meeting, ProjectMember, TeamCode } from '@/lib/domain/types'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 /** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — DEFAULT_TEAM_CODES 미러).
  *  buildWeeklyReportModel 은 teams 를 필수로 받으므로, 팀 목록에 무관한 기존 테스트는 이 래퍼로 주입한다. */
@@ -168,8 +169,8 @@ describe('buildWeeklyReportModel — 4단+ 실 계층에서도 리프/평탄화�
 
 describe('buildWeeklyReportModel — 워크로드/근태', () => {
   const members: ProjectMember[] = [
-    { id: 'mem1', projectId: 'p', name: '홍길동', email: null, teamCode: '가공', role: 'contributor', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' },
-    { id: 'mem2', projectId: 'p', name: '김철수', email: null, teamCode: 'PMO', role: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' },
+    makeRosterMember({ id: 'mem1', projectId: 'p', name: '홍길동', email: null, teamCode: '가공', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
+    makeRosterMember({ id: 'mem2', projectId: 'p', name: '김철수', email: null, teamCode: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '2026-01-01' }),
   ]
   const attendance: AttendanceRecord[] = [
     { id: 'a1', projectId: 'p', memberId: 'mem1', date: '2026-06-30', type: 'annual', note: null },

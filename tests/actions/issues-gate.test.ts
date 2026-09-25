@@ -679,7 +679,11 @@ describe('updateIssueProgress — 상태 변경 자동 기록', () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })),
+                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
+                eq: vi.fn((col: string, val: unknown) => {
+                  expect([col, val]).toEqual(['active', true])
+                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
+                }),
               })),
             })),
           }
@@ -728,7 +732,11 @@ describe('updateIssueProgress — 상태 변경 자동 기록', () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })),
+                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
+                eq: vi.fn((col: string, val: unknown) => {
+                  expect([col, val]).toEqual(['active', true])
+                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
+                }),
               })),
             })),
           }

@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import type { DependencyType, OwnerKind, TeamCode } from '@/lib/domain/types'
+import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { subActName } from '@/lib/domain/subact'
 import { businessDaysBetween } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
@@ -23,8 +24,47 @@ export interface ChangeLogEntry {
   actorRole: string | null
 }
 
+type ChangeLogActor = { team: TeamCode | null; role: 'admin' | 'member' | 'viewer' }
+
+/**
+ * 변경 이력 작성자 라벨 재료 — userId → { 대표 팀 code, 프로젝트 역할 }.
+ * 표시 전용이라 실패는 로깅 후 빈 맵(라벨만 비고 이력은 보인다). 역할은 명단 access_role 이고
+ * 활성 명단 행이 없으면 'viewer' — buildActor 의 projectRoles 와 같은 축(활성 행·활성 인물만)이다.
+ */
+async function changeLogActors(
+  sb: Awaited<ReturnType<typeof createServerClient>>, itemId: string, userIds: string[],
+): Promise<Map<string, ChangeLogActor>> {
+  const actorMap = new Map<string, ChangeLogActor>()
+  if (!userIds.length) return actorMap
+  const [prof, item] = await Promise.all([
+    sb.from('profiles').select('user_id, display_name').in('user_id', userIds),
+    sb.from('wbs_items').select('project_id').eq('id', itemId).maybeSingle(),
+  ])
+  if (prof.error) console.error('[getChangeLogs] 작성자 계정 조회 실패:', prof.error.message)
+  for (const p of (prof.data ?? []) as Array<{ user_id: string }>) actorMap.set(p.user_id, { team: null, role: 'viewer' })
+  if (item.error) console.error('[getChangeLogs] 항목 프로젝트 조회 실패:', item.error.message)
+  const projectId = (item.data?.project_id as string | null | undefined) ?? null
+  if (!projectId) return actorMap
+  const { data: roster, error: rosterErr } = await sb
+    .from('project_members')
+    .select('access_role, people!inner(user_id, active), project_member_teams(is_primary, teams(code))')
+    .eq('project_id', projectId).eq('active', true)
+    .in('people.user_id', userIds).eq('people.active', true)
+  if (rosterErr) console.error('[getChangeLogs] 작성자 명단 조회 실패:', rosterErr.message)
+  for (const r of (roster ?? []) as Array<Record<string, unknown>>) {
+    const uid = personOf(r)?.user_id
+    if (!uid) continue
+    actorMap.set(uid, {
+      team: primaryTeamCode(r.project_member_teams),
+      role: (r.access_role as 'admin' | 'member' | null) ?? 'viewer',
+    })
+  }
+  return actorMap
+}
+
 /** 항목의 변경 이력 조회 — 실적%/가중치 편집 시 기록된 change_logs를 최신순으로.
- *  user_id의 표시 이름은 프로필 테이블이 없어 memberships의 팀/역할로 대체한다. */
+ *  작성자 라벨은 저장값이 아니라 조회 시점에 계산한다 — profiles(알려진 계정) + 그 항목 프로젝트의
+ *  활성 명단 행(대표 팀 code, access_role). 명단 행이 없는 계정은 조회 전용('viewer'). */
 export async function getChangeLogs(itemId: string): Promise<ChangeLogEntry[]> {
   // 서버 액션 직접 호출에 대비한 인증 재확인(RLS와 이중 방어). 반환 타입에 에러 채널이 없어
   // listProjects 와 같은 관례로 빈 목록을 돌려주되, 조회 실패와 구분되도록 사유를 로그에 남긴다.
@@ -44,16 +84,7 @@ export async function getChangeLogs(itemId: string): Promise<ChangeLogEntry[]> {
   if (!logs?.length) return []
 
   const userIds = [...new Set(logs.map(l => l.user_id).filter(Boolean) as string[])]
-  const actorMap = new Map<string, { team: TeamCode | null; role: string | null }>()
-  if (userIds.length) {
-    const { data: mems, error: memErr } = await sb.from('memberships').select('user_id, role, teams(code)').in('user_id', userIds)
-    if (memErr) console.error('[getChangeLogs] 작성자 정보 조회 실패:', memErr.message)
-    ;(mems ?? []).forEach((m: Record<string, unknown>) => {
-      const t = m.teams as { code: TeamCode } | { code: TeamCode }[] | null
-      const code = (Array.isArray(t) ? t[0]?.code : t?.code) ?? null
-      actorMap.set(m.user_id as string, { team: code, role: (m.role as string) ?? null })
-    })
-  }
+  const actorMap = await changeLogActors(sb, itemId, userIds)
 
   return logs.map(l => {
     const actor = l.user_id ? actorMap.get(l.user_id as string) : undefined

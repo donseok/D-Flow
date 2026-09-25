@@ -175,7 +175,12 @@ describe('strict Supabase repositories', () => {
       error: null,
     })
     const members = queryBuilder({
-      data: [{ id: 'member-p2', project_id: 'p2', name: '다른 프로젝트 사용자', teams: { code: 'ERP' } }],
+      data: [{
+        id: 'member-p2', project_id: 'p2', person_id: 'pe-1', access_role: null, role_label: null, title: null,
+        active: true, sort_order: 0, created_at: '2026-07-01T00:00:00Z',
+        people: { display_name: '다른 프로젝트 사용자', user_id: null, kind: 'external', active: true },
+        project_member_teams: [{ team_id: 't-erp', is_primary: true, teams: { id: 't-erp', code: 'ERP', name: 'ERP' } }],
+      }],
       error: null,
     })
     const from = vi.fn((table: string) => table === 'attendance_records' ? attendance : members)
@@ -198,7 +203,12 @@ describe('strict Supabase repositories', () => {
       error: null,
     })
     const members = queryBuilder({
-      data: [{ id: 'member-p1', project_id: 'p1', name: '프로젝트 사용자', teams: { code: 'ERP' } }],
+      data: [{
+        id: 'member-p1', project_id: 'p1', person_id: 'pe-1', access_role: null, role_label: null, title: null,
+        active: true, sort_order: 0, created_at: '2026-07-01T00:00:00Z',
+        people: { display_name: '프로젝트 사용자', user_id: null, kind: 'external', active: true },
+        project_member_teams: [{ team_id: 't-erp', is_primary: true, teams: { id: 't-erp', code: 'ERP', name: 'ERP' } }],
+      }],
       error: null,
     })
     const repository = createSupabaseAttendanceRepository({
@@ -214,5 +224,7 @@ describe('strict Supabase repositories', () => {
     })
     expect(String((attendance.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('project_members')
     expect(String((members.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('note')
+    // 챗봇 경계 — 명단 조회는 이메일을 select 절에서부터 뺀다.
+    expect(String((members.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
   })
 })

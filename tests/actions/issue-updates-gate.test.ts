@@ -106,7 +106,11 @@ function stubClient(over: {
       if (table === 'project_members') {
         return {
           select: () => ({
-            in: () => ({ eq: async () => ({ data: (over.memberIds ?? []).map(id => ({ id })), error: null }) }),
+            // 멘션 대상 검증 — project_id 다음 active=true(활성 명단 행만).
+            in: () => ({ eq: () => ({ eq: async (col: string, val: unknown) => {
+              expect([col, val]).toEqual(['active', true])
+              return { data: (over.memberIds ?? []).map(id => ({ id })), error: null }
+            } }) }),
           }),
         }
       }

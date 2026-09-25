@@ -85,9 +85,9 @@ export async function setWbsAssignee(
   const admin = createAdminClient()
   if (memberId !== null) {
     if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
-    // 쓰기 선행조회 — 로스터 실재 + 프로젝트 일치(복합 FK 가 2차 방어선, 여기가 1차).
+    // 쓰기 선행조회 — 활성 로스터 실재 + 프로젝트 일치(복합 FK 가 2차 방어선, 여기가 1차).
     const { data: mem, error: memErr } = await admin
-      .from('project_members').select('id, project_id').eq('id', memberId).maybeSingle()
+      .from('project_members').select('id, project_id').eq('id', memberId).eq('active', true).maybeSingle()
     if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
     if (!mem || (mem as { project_id: string }).project_id !== item.project_id) {
       return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
@@ -180,9 +180,9 @@ export async function setWbsAssigneeCascade(
   if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
 
   const admin = createAdminClient()
-  // 쓰기 선행조회 — 로스터 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
+  // 쓰기 선행조회 — 활성 로스터 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
   const { data: mem, error: memErr } = await admin
-    .from('project_members').select('id, project_id').eq('id', memberId).maybeSingle()
+    .from('project_members').select('id, project_id').eq('id', memberId).eq('active', true).maybeSingle()
   if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
   if (!mem || (mem as { project_id: string }).project_id !== resolved.projectId) {
     return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
@@ -568,7 +568,7 @@ export async function setWbsDevWorkflow(
  * itemId만 받는 액션이라 getSession() 만으로는 "이 프로젝트 멤버인가"를 판정하지 못한다
  * (리뷰 라운드 1 — 로그인만 확인하면 타 프로젝트 멤버도 읽을 수 있었다). resolveProjectId로
  * 소속 프로젝트를 먼저 읽고 requireProjectMember로 재판정한다 — 가드는 이 둘만 쓴다
- * (role === '...' 직접 비교·memberships.role 참조 없음).
+ * (role === '...' 직접 비교 없음).
  *
  * 실패는 null — 3원칙 ①: "조회 안 됨"을 "미배정"으로 위장하면 관리자가 실제 값을 못 본 채
  * 셀렉트를 건드려 조용히 덮어쓸 수 있다. 패널은 null 을 "표시 불가" 상태로 렌더해야 한다.

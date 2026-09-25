@@ -126,29 +126,49 @@ describe('strict supplemental repositories', () => {
         }],
         error: null,
       },
-      memberships: {
-        data: [{ user_id: 'auth-user-secret', role: 'team_editor', teams: { code: 'ERP' } }],
+      // 작성자 라벨 재료 — 알려진 계정(profiles) + 이 프로젝트의 활성 명단 행(대표 팀, access_role).
+      profiles: {
+        data: [{ user_id: 'auth-user-secret', display_name: '앨리스' }],
+        error: null,
+      },
+      project_members: {
+        data: [{
+          access_role: 'member',
+          people: { user_id: 'auth-user-secret', active: true },
+          project_member_teams: [
+            { is_primary: false, teams: { code: 'MES' } },
+            { is_primary: true, teams: { code: 'ERP' } },
+          ],
+        }],
         error: null,
       },
     }
-    const repository = createSupabaseWbsRepository({
-      from: vi.fn((table: string) => queryBuilder(responses[table])),
-    } as never)
+    const builders: Record<string, ReturnType<typeof queryBuilder>> = {}
+    const from = vi.fn((table: string) => (builders[table] = queryBuilder(responses[table])))
+    const repository = createSupabaseWbsRepository({ from } as never)
 
     const result = await repository.getChangeLog('p1', 'w1', 20)
 
+    // 역할 라벨 문구(관리자/멤버/조회)는 Task 7 이 actorLabel 에서 바꾼다 — 여기서는 팀·조회 축만 고정한다.
     expect(result).toMatchObject({
       ok: true,
       data: {
-        entries: [{ field: 'actual_pct', actorLabel: 'ERP 팀 편집자', actorTeam: 'ERP' }],
+        entries: [{ field: 'actual_pct', actorLabel: expect.stringContaining('ERP'), actorTeam: 'ERP' }],
       },
     })
+    expect(from.mock.calls.map(c => c[0])).not.toContain('memberships')
+    const pm = builders.project_members
+    expect(pm.eq).toHaveBeenCalledWith('project_id', 'p1')
+    expect(pm.eq).toHaveBeenCalledWith('active', true)
+    expect(pm.in).toHaveBeenCalledWith('people.user_id', ['auth-user-secret'])
+    expect(String((pm.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
+    expect(String((builders.profiles.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('email')
     expect(JSON.stringify(result)).not.toContain('auth-user-secret')
   })
 
   it('returns only creator/attendee meetings inside the allowlist and validates attendee project links', async () => {
     const members = queryBuilder({
-      data: [{ id: 'member-p1', project_id: 'p1' }],
+      data: [{ id: 'member-p1', project_id: 'p1', people: { user_id: 'user-1' } }],
       error: null,
     })
     const meetings = queryBuilder({
@@ -183,9 +203,9 @@ describe('strict supplemental repositories', () => {
       ['creator-p2', 'creator'],
     ])
     const memberSelect = String((members.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
-    expect(memberSelect).toBe('id, project_id')
+    expect(memberSelect).toBe('id, project_id, people!inner(user_id)')
     expect(memberSelect).not.toContain('email')
-    expect(members.eq).toHaveBeenCalledWith('user_id', 'user-1')
+    expect(members.eq).toHaveBeenCalledWith('people.user_id', 'user-1')
     expect(meetings.in).toHaveBeenCalledWith('project_id', ['p1', 'p2'])
     expect(exceptions.in).toHaveBeenCalledWith('meeting_id', ['meeting-1', 'creator-p2'])
     expect(JSON.stringify(result)).not.toContain('email')

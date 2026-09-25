@@ -20,7 +20,7 @@ export async function upsertAttendance(
   // meetings.replaceAttendees·issues.replaceAssignees 가 이미 쓰는 대조를 여기에도 둔다.
   const { data: member, error: memberErr } = await sb
     .from('project_members').select('id')
-    .eq('id', input.memberId).eq('project_id', projectId).maybeSingle()
+    .eq('id', input.memberId).eq('project_id', projectId).eq('active', true).maybeSingle()
   if (memberErr) {
     console.error('[upsertAttendance] 로스터 확인 실패:', memberErr.message)
     return { ok: false, error: '대상 멤버를 확인할 수 없어 중단했습니다.' }

@@ -4,8 +4,8 @@ import type {
   MeetingCategory,
   MeetingException,
   MeetingRecurrence,
-  TeamCode,
 } from '@/lib/domain/types'
+import { ROSTER_SELECT_NO_EMAIL, toRosterMember } from '@/lib/data/memberSelect'
 import {
   repositoryError,
   repositoryOk,
@@ -121,7 +121,8 @@ export function createSupabaseMeetingRepository(client: SupabaseServerClient): M
         meeting.attendeeIds.length
           ? client
               .from('project_members')
-              .select('id, name, teams(code)')
+              // 이메일은 select 절에서부터 뺀다(챗봇 경계). 이름·팀은 명단 정본 매퍼로 편다.
+              .select(ROSTER_SELECT_NO_EMAIL)
               .eq('project_id', projectId)
               .in('id', meeting.attendeeIds)
           : Promise.resolve({ data: [] as Row[], error: null }),
@@ -146,18 +147,10 @@ export function createSupabaseMeetingRepository(client: SupabaseServerClient): M
 
       // `.in()` 은 순서 보장이 없다 — 챗봇이 읽어주는 참석자 명단도 화면과 같은 가나다순으로 고정한다.
       // id tiebreak — `.in()` 은 기준 순서가 없어 동명이인의 앞뒤가 요청마다 달라진다.
-      const attendeeRows = [...((attendeesResult.data ?? []) as Row[])].sort((x, y) =>
-        compareKoreanName(x.name as string, y.name as string)
-        || (x.id as string).localeCompare(y.id as string),
-      )
-      const attendees: SafeMeetingAttendee[] = attendeeRows.map(row => {
-        const team = nestedOne(row.teams as { code?: unknown } | { code?: unknown }[] | null)
-        return {
-          id: row.id as string,
-          name: row.name as string,
-          teamCode: (team?.code as TeamCode | null) ?? null,
-        }
-      })
+      const attendees: SafeMeetingAttendee[] = ((attendeesResult.data ?? []) as Row[])
+        .map(toRosterMember)
+        .sort((x, y) => compareKoreanName(x.name, y.name) || x.id.localeCompare(y.id))
+        .map(m => ({ id: m.id, name: m.name, teamCode: m.teamCode }))
       const snapshot: MeetingDetailSnapshot = {
         meeting,
         attendees,
@@ -170,12 +163,12 @@ export function createSupabaseMeetingRepository(client: SupabaseServerClient): M
       const projectIds = [...new Set(allowedProjectIds.filter(Boolean))]
       if (!projectIds.length) return repositoryOk({ meetings: [], exceptions: [] })
 
-      // user_id is the authoritative auth.users FK. Email is deliberately not
+      // people.user_id is the authoritative account link (0003). Email is deliberately not
       // selected or used by the chatbot repository.
       const memberLinksResult = await client
         .from('project_members')
-        .select('id, project_id')
-        .eq('user_id', userId)
+        .select('id, project_id, people!inner(user_id)')
+        .eq('people.user_id', userId)
         .in('project_id', projectIds)
       if (memberLinksResult.error) {
         return repositoryError(

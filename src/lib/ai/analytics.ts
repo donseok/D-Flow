@@ -387,7 +387,7 @@ export function buildDocuments(
     docs.push({
       kind: 'member',
       refId: m.id,
-      content: `[${projectName}] 멤버 ${m.name}${m.teamCode ? ` · 팀 ${m.teamCode}` : ''}${m.title ? ` · ${m.title}` : ''}${m.role ? ` · 권한 ${m.role}` : ''}`,
+      content: `[${projectName}] 멤버 ${m.name}${m.teamCode ? ` · 팀 ${m.teamCode}` : ''}${m.title ? ` · ${m.title}` : ''}${m.accessRole ? ` · 권한 ${m.accessRole}` : ''}`,
     })
   }
 

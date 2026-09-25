@@ -142,7 +142,7 @@ describe('POST /wbs/import', () => {
       // memberships·project_roles 는 각 2회 조회된다: isAgentProjectMember(비멤버 404 게이트) → 관리자 판정.
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', email: 'a@b.c' }] }],
+      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(T-A)
         { data: [ // 갭 후보 조회(payload 의 task ref 전체: T-A, T-B) — RPC 가 이미 dev_workflow:true 로 심었다고 가정
@@ -205,7 +205,7 @@ describe('POST /wbs/import', () => {
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-x', email: 'other@example.com' }] }], // 다른 email 만 — 매칭 실패
+      project_members: [{ data: [{ id: 'member-x', people: { email: 'other@example.com' } }] }], // 다른 email 만 — 매칭 실패
       wbs_items: [
         // 미매칭이므로 assignee_member_id update 는 없다 — 첫 항목이 바로 갭 후보 조회.
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -289,7 +289,7 @@ describe('POST /wbs/import', () => {
       agent_projects: [{ data: { enabled: true } }], // 라우트 게이트만 — ensureOrder 는 활성 주문이 있어 호출되지 않는다
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', email: 'a@b.c' }] }],
+      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [{ data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }], // 갭 후보 조회
       agent_work_orders: [{ data: [{ wbs_item_id: 'id-a' }] }], // 이미 활성 주문 존재 — 갭 아님
     }, [{ data: { upserted: 1, skipped: 0, ids: { 'MES/T-A': 'id-a' }, new_refs: [] } }]) // 이미 존재 — 신규 없음
@@ -311,7 +311,7 @@ describe('POST /wbs/import', () => {
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', email: 'a@b.c' }] }],
+      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
         { data: { name: '제목 T-A', priority: 'high', external_ref: 'MES/T-A', assignee_member_id: 'member-1', dev_workflow: true } }, // ensureOrder: 항목 조회
@@ -344,7 +344,7 @@ describe('POST /wbs/import', () => {
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', email: 'a@b.c' }] }],
+      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -374,7 +374,7 @@ describe('POST /wbs/import', () => {
       agent_projects: [{ data: { enabled: true } }],
       project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
       memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', email: 'a@b.c' }] }],
+      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(WP-01, kind 무관하게 assignee 매칭은 이뤄진다)
       ],

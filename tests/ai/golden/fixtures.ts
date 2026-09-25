@@ -294,15 +294,15 @@ export const MINUTE_DETAILS: Record<string, MinuteDetailSnapshot> = {
 // ── 멤버(6명) ── email 필드는 계약에 없다.
 export const MEMBERS: Record<string, MemberRepositoryRecord[]> = {
   [PROJECT_ALPHA]: [
-    { id: 'a-mem-1', projectId: PROJECT_ALPHA, name: '김이피', teamCode: 'ERP', role: 'contributor', title: 'ERP 컨설턴트', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
-    { id: 'a-mem-2', projectId: PROJECT_ALPHA, name: '이엠이', teamCode: 'MES', role: 'contributor', title: 'MES 엔지니어', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
-    { id: 'a-mem-3', projectId: PROJECT_ALPHA, name: '박피엠', teamCode: 'PMO', role: 'admin', title: 'PMO 리드', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
-    { id: 'a-mem-4', projectId: PROJECT_ALPHA, name: '최가공', teamCode: '가공', role: 'contributor', title: '가공 담당', hasAccount: false, createdAt: '2026-05-02T00:00:00Z' },
-    { id: 'a-mem-5', projectId: PROJECT_ALPHA, name: '정영업', teamCode: 'ERP', role: 'contributor', title: '영업 담당', hasAccount: true, createdAt: '2026-05-02T00:00:00Z' },
-    { id: 'a-mem-6', projectId: PROJECT_ALPHA, name: '강품질', teamCode: 'MES', role: 'contributor', title: '품질 담당', hasAccount: false, createdAt: '2026-05-03T00:00:00Z' },
+    { id: 'a-mem-1', projectId: PROJECT_ALPHA, name: '김이피', teamCode: 'ERP', accessRole: 'member', title: 'ERP 컨설턴트', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
+    { id: 'a-mem-2', projectId: PROJECT_ALPHA, name: '이엠이', teamCode: 'MES', accessRole: 'member', title: 'MES 엔지니어', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
+    { id: 'a-mem-3', projectId: PROJECT_ALPHA, name: '박피엠', teamCode: 'PMO', accessRole: 'admin', title: 'PMO 리드', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
+    { id: 'a-mem-4', projectId: PROJECT_ALPHA, name: '최가공', teamCode: '가공', accessRole: 'member', title: '가공 담당', hasAccount: false, createdAt: '2026-05-02T00:00:00Z' },
+    { id: 'a-mem-5', projectId: PROJECT_ALPHA, name: '정영업', teamCode: 'ERP', accessRole: 'member', title: '영업 담당', hasAccount: true, createdAt: '2026-05-02T00:00:00Z' },
+    { id: 'a-mem-6', projectId: PROJECT_ALPHA, name: '강품질', teamCode: 'MES', accessRole: 'member', title: '품질 담당', hasAccount: false, createdAt: '2026-05-03T00:00:00Z' },
   ],
   [PROJECT_BETA]: [
-    { id: 'b-mem-1', projectId: PROJECT_BETA, name: `${BETA_MARKER}멤버`, teamCode: 'ERP', role: 'admin', title: '베타 리드', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
+    { id: 'b-mem-1', projectId: PROJECT_BETA, name: `${BETA_MARKER}멤버`, teamCode: 'ERP', accessRole: 'admin', title: '베타 리드', hasAccount: true, createdAt: '2026-05-01T00:00:00Z' },
   ],
 }
 

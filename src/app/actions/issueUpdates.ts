@@ -198,6 +198,7 @@ export async function addIssueUpdate(
       .select('id')
       .in('id', input.mentionedMemberIds)
       .eq('project_id', g.projectId)
+      .eq('active', true)
     if (error) {
       console.error('[addIssueUpdate] 멘션 대상 검증 실패:', error.message)
       return { ok: false, error: ERR_LOOKUP }

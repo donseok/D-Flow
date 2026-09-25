@@ -2,7 +2,7 @@ import { membersHref } from '@/lib/ai/chat/deep-links'
 import { round1 } from '@/lib/domain/format'
 import { computeTree } from '@/lib/domain/rollup'
 import { collectLeaves } from '@/lib/domain/tree'
-import type { ComputedItem, ProjectMemberRole, TeamCode } from '@/lib/domain/types'
+import type { ComputedItem, TeamCode } from '@/lib/domain/types'
 import type {
   MemberRepository,
   MemberRepositoryRecord,
@@ -25,7 +25,8 @@ import { teamOrderMap } from '@/lib/domain/teams'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 
 const MEMBERS_CAPABILITY = 'members:read' as const
-const MEMBER_ROLES: readonly ProjectMemberRole[] = ['admin', 'contributor']
+/** role 인자 = 명단 권한(access_role). 권한 없는(조회 전용) 명단 인원은 어느 값에도 걸리지 않는다. */
+const MEMBER_ROLES: readonly NonNullable<MemberRepositoryRecord['accessRole']>[] = ['admin', 'member']
 // 설계 §9.1 — 개인 담당 관계를 추론하지 않는다는 사실을 응답에 항상 명시한다.
 const TEAM_AGGREGATION_WARNING = '개인별 담당 데이터가 등록되지 않아 팀 단위로 집계했습니다.'
 
@@ -98,7 +99,7 @@ export function createListMembersTool(repository: MemberRepository): ReadOnlyBot
 
       const matched = repoResult.data.filter(member => {
         if (team && member.teamCode !== team) return false
-        if (role && member.role !== role) return false
+        if (role && member.accessRole !== role) return false
         return true
       })
       const records = matched.slice(0, limit).map(toMemberToolRecord)

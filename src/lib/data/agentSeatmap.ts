@@ -1,6 +1,7 @@
 // 좌석표 조회 — 서버 전용(service_role). 프로젝트 필터는 항상 seatmapProjectIds 로 건다.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 import { createAdminClient } from '@/lib/supabase/admin'
+import { personOf } from '@/lib/data/memberSelect'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { isProjectAdmin, type Actor } from '@/lib/domain/authz'
 import { seatmapProjectIds } from '@/lib/authz/agentsAccess'
@@ -64,7 +65,8 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] 
       .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r)),
     admin.from('projects').select('id, name').in('id', projIds).then(r => must<ProjectRow[]>('프로젝트', r)),
     // 로스터는 담당자 이름·PAT 계정 매칭 재료(착수 대기 사유 §2). 층 프로젝트 범위로만.
-    admin.from('project_members').select('id, project_id, user_id, name').in('project_id', projIds).then(r => must<MemberRow[]>('로스터', r)),
+    admin.from('project_members').select('id, project_id, people!inner(display_name, user_id)').in('project_id', projIds)
+      .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toSeatMember)),
     liveIds.length
       ? admin.from('agent_work_reports').select('work_order_id, kind, summary, created_at')
         .in('work_order_id', liveIds).gte('created_at', new Date(nowMs - REPORT_WINDOW_MS).toISOString())
@@ -89,21 +91,29 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] 
   return { orders, items, parents, reviews, watchers, projects, members, predecessors, reports }
 }
 
+/** 명단 행(people 임베드) → 층 조립기가 쓰는 평평한 행. 이름·계정은 people 이 정본이다. */
+function toSeatMember(r: Record<string, unknown>): MemberRow {
+  const pe = personOf(r)
+  return { id: r.id as string, project_id: r.project_id as string, user_id: pe?.user_id ?? null, name: pe?.display_name ?? '' }
+}
+
 /**
- * 내 로스터 행 id — 접근 가능 프로젝트(null = 전체)의 project_members 중 user_id 가 나이거나 이메일이 같은(대소문자 무시) 행.
- * scope=assigned(src/lib/agent/assignee.ts)와 같은 이중 매칭. 실패는 throw.
+ * 내 로스터 행 id — 접근 가능 프로젝트(null = 전체)의 project_members 중 people.user_id 가 나이거나
+ * people.email 이 같은(대소문자 무시) 행. scope=assigned(src/lib/agent/assignee.ts)와 같은 이중 매칭. 실패는 throw.
  */
 export async function fetchMyMemberIds(
   admin: AdminClient, who: { userId: string; userEmail: string | null }, projectIds: string[] | null,
 ): Promise<string[]> {
   if (projectIds !== null && projectIds.length === 0) return []
-  let q = admin.from('project_members').select('id, user_id, email')
+  let q = admin.from('project_members').select('id, people!inner(user_id, email)')
   if (projectIds !== null) q = q.in('project_id', projectIds)
-  const rows = must<Array<{ id: string; user_id: string | null; email: string | null }>>('로스터', await q)
+  const rows = must<Array<Record<string, unknown>>>('로스터', await q)
   const email = who.userEmail?.toLowerCase() ?? null
   const out: string[] = []
   for (const m of rows) {
-    if (m.user_id === who.userId || (email !== null && m.email !== null && m.email.toLowerCase() === email)) out.push(m.id)
+    const pe = personOf(m)
+    const mEmail = pe?.email ?? null
+    if (pe?.user_id === who.userId || (email !== null && mEmail !== null && mEmail.toLowerCase() === email)) out.push(m.id as string)
   }
   return out
 }

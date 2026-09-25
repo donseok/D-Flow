@@ -11,6 +11,7 @@ import {
   type WbsRepositoryItem,
 } from '@/lib/repositories/types'
 import { isRetryableReadError, nestedOne, type SupabaseServerClient } from './common'
+import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { teamsForProjectSync } from '@/lib/teams/master'
@@ -221,24 +222,40 @@ export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBo
       const userIds = [...new Set(selected.flatMap(row =>
         typeof row.user_id === 'string' ? [row.user_id] : [],
       ))]
+      // 작성자 라벨 재료 — profiles(알려진 계정, 명단 행이 없으면 조회 전용 'viewer') + 이 프로젝트의
+      // 활성 명단 행(대표 팀 code, access_role). 이메일은 어느 쪽 select 에도 싣지 않는다(챗봇 경계).
       const actors = new Map<string, { team: TeamCode | null; role: string | null }>()
       if (userIds.length) {
-        const actorsResult = await client
-          .from('memberships')
-          .select('user_id, role, teams(code)')
-          .in('user_id', userIds)
-        if (actorsResult.error) {
+        const [profilesResult, rosterResult] = await Promise.all([
+          client
+            .from('profiles')
+            .select('user_id, display_name')
+            .in('user_id', userIds),
+          client
+            .from('project_members')
+            .select('access_role, people!inner(user_id, active), project_member_teams(is_primary, teams(code))')
+            .eq('project_id', projectId)
+            .eq('active', true)
+            .in('people.user_id', userIds)
+            .eq('people.active', true),
+        ])
+        const actorsError = profilesResult.error ?? rosterResult.error
+        if (actorsError) {
           return repositoryError(
             'WBS_CHANGE_LOG_ACTORS_READ_FAILED',
-            isRetryableReadError(actorsResult.error),
+            isRetryableReadError(actorsError),
           )
         }
-        for (const raw of (actorsResult.data ?? []) as unknown as Row[]) {
+        for (const raw of (profilesResult.data ?? []) as unknown as Row[]) {
           if (typeof raw.user_id !== 'string') continue
-          const team = nestedOne(raw.teams as { code?: unknown } | { code?: unknown }[] | null)
-          actors.set(raw.user_id, {
-            team: teamCode(team?.code),
-            role: actorRole(raw.role),
+          actors.set(raw.user_id, { team: null, role: actorRole('viewer') })
+        }
+        for (const raw of (rosterResult.data ?? []) as unknown as Row[]) {
+          const userId = personOf(raw)?.user_id
+          if (typeof userId !== 'string') continue
+          actors.set(userId, {
+            team: teamCode(primaryTeamCode(raw.project_member_teams)),
+            role: actorRole((raw.access_role as string | null) ?? 'viewer'),
           })
         }
       }

@@ -74,9 +74,9 @@ describe('myMemberIds — 로스터 다리 이중 매칭', () => {
   it('user_id 링크 행과 email 매칭 행을 합집합·중복 제거로 반환', async () => {
     useAdmin({
       project_members: [{ data: [
-        { id: 'm1', user_id: 'u-1', email: null },
-        { id: 'm2', user_id: null, email: 'DEV@example.com' },
-        { id: 'm3', user_id: 'u-9', email: 'x@y.z' },
+        { id: 'm1', people: { user_id: 'u-1', email: null } },
+        { id: 'm2', people: { user_id: null, email: 'DEV@example.com' } },
+        { id: 'm3', people: { user_id: 'u-9', email: 'x@y.z' } },
       ] }],
     })
     const admin = mocks.createAdminClient()
@@ -100,7 +100,7 @@ describe('scope=assigned', () => {
       agent_projects: [{ data: [{ project_id: P1 }] }],
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
-      project_members: [{ data: [{ id: 'm1', user_id: 'u-1', email: null }] }],
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-1', email: null } }] }],
       wbs_items: [
         { data: [{ id: W1 }] }, // assignee_member_id in (myMemberIds) 항목 조회
         { data: [{ id: W1, code: 'C1', name: '항목1', planned_start: null, planned_end: null }] }, // 컨텍스트
@@ -129,7 +129,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', user_id: 'u-1', email: null }] }], // myMemberIds → 내 것
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-1', email: null } }] }], // myMemberIds → 내 것
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(200)
@@ -149,7 +149,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', user_id: 'u-9', email: 'other@example.com' }] }], // m1 은 다른 사용자
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-9', email: 'other@example.com' } }] }], // m1 은 다른 사용자
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(403)
@@ -178,7 +178,7 @@ describe('claim 배정 제한', () => {
       memberships: [{ data: { is_superuser: false } }],
       project_roles: [{ data: [{ role: 'member' }] }],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ id: 'm1', user_id: 'u-9', email: 'other@example.com' }] }], // m1 은 다른 사용자
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u-9', email: 'other@example.com' } }] }], // m1 은 다른 사용자
     }, [{ id: 'u-legacy', email: 'dev@example.com', user_metadata: {} }])
     const res = await claimPOST(
       post(`http://l/api/v1/agent/work/${O1}/claim`, { user_email: 'dev@example.com', agent: 'claude-cli-dev1' }, 'legacy-secret'),

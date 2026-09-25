@@ -15,24 +15,35 @@ import type { Actor } from '@/lib/domain/authz'
 const PROJECT_ID = 'project-1'
 const LOOKUP_ERROR = '멤버 후보를 조회할 수 없습니다.'
 
-interface CandidateRow {
+type TeamEmbed = { code: string } | { code: string }[] | null
+
+interface CandidateInput {
   id: string
   name: string
-  email: string | null
-  title: string | null
-  role_label: string | null
-  created_at: string
-  teams: { code: string } | { code: string }[] | null
+  personId?: string
+  email?: string | null
+  title?: string | null
+  role_label?: string | null
+  created_at?: string
+  /** 대표 팀 하나 — 안쪽 teams 임베드를 객체/배열 어느 모양으로 줄지 그대로 따른다. */
+  teams?: TeamEmbed
 }
+type CandidateRow = Record<string, unknown>
 
-function row(overrides: Partial<CandidateRow> & { id: string; name: string }): CandidateRow {
+/** ROSTER_SELECT 모양의 명단 행 — 이름·이메일은 people 임베드, 팀은 project_member_teams 배열. */
+function row(o: CandidateInput): CandidateRow {
+  const teamLinks = o.teams == null ? [] : [{
+    team_id: 't1', is_primary: true,
+    teams: Array.isArray(o.teams)
+      ? o.teams.map(t => ({ id: 't1', code: t.code, name: t.code }))
+      : { id: 't1', code: o.teams.code, name: o.teams.code },
+  }]
   return {
-    email: null,
-    title: null,
-    role_label: null,
-    created_at: '2026-01-01T00:00:00Z',
-    teams: null,
-    ...overrides,
+    id: o.id, project_id: PROJECT_ID, person_id: o.personId ?? `pe-${o.id}`,
+    access_role: null, role_label: o.role_label ?? null, title: o.title ?? null,
+    active: true, sort_order: 0, created_at: o.created_at ?? '2026-01-01T00:00:00Z',
+    people: { display_name: o.name, email: o.email ?? null, user_id: null, kind: 'external', active: true },
+    project_member_teams: teamLinks,
   }
 }
 
@@ -141,7 +152,22 @@ describe('searchMemberCandidates — 멤버 이름 자동완성 후보 검색', 
     expect(db.builder.order).toHaveBeenCalledWith('id', { ascending: true })
   })
 
-  it('이메일 없는 행은 dedupe 없이 각각 후보로 남긴다', async () => {
+  it('같은 사람(person_id)이 여러 프로젝트 명단에 있으면 한 번만 — 첫 등장 행의 직함을 쓴다', async () => {
+    makeClient({
+      rows: [
+        row({ id: 'm1', personId: 'pe-1', name: '김외주', email: null, title: '설계' }),
+        row({ id: 'm2', personId: 'pe-1', name: '김외주', email: null, title: '개발' }),
+      ],
+    })
+
+    const result = await searchMemberCandidates(PROJECT_ID, '김외')
+
+    expect(result.candidates).toEqual([
+      { name: '김외주', email: null, teamCode: null, title: '설계', roleLabel: null },
+    ])
+  })
+
+  it('이메일 없는 다른 사람(person_id 다름)은 이름이 같아도 각각 후보로 남긴다', async () => {
     makeClient({
       rows: [
         row({ id: 'm1', name: '김외주', email: null }),
@@ -154,7 +180,7 @@ describe('searchMemberCandidates — 멤버 이름 자동완성 후보 검색', 
     expect(result.candidates).toHaveLength(2)
   })
 
-  it('teams(code) 임베드를 teamCode 로 평탄화한다 (객체·배열 양쪽 모양)', async () => {
+  it('project_member_teams 임베드의 대표 팀을 teamCode 로 편다 (객체·배열 양쪽 모양)', async () => {
     makeClient({
       rows: [
         row({ id: 'm1', name: '김철수', teams: { code: 'DEV' } }),
@@ -175,7 +201,9 @@ describe('searchMemberCandidates — 멤버 이름 자동완성 후보 검색', 
 
     await searchMemberCandidates(PROJECT_ID, '50%_\\')
 
-    expect(db.builder.ilike).toHaveBeenCalledWith('name', '%50\\%\\_\\\\%')
+    // 이름은 people 이 정본 — !inner 임베드 필터로 건다.
+    expect(db.builder.ilike).toHaveBeenCalledWith('people.display_name', '%50\\%\\_\\\\%')
+    expect(String(db.builder.select.mock.calls[0][0])).toContain('people!inner(')
   })
 
   it('조회 실패를 빈 결과로 위장하지 않는다 — 로깅하고 ok:false', async () => {

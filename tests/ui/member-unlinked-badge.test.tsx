@@ -14,11 +14,12 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t:
 vi.mock('@/app/actions/members', () => ({ addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn() }))
 
 import { MembersBoard } from '@/components/members/MembersBoard'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
-const base: ProjectMember = {
+const base: ProjectMember = makeRosterMember({
   id: 'm1', projectId: 'p1', name: '김철수', email: 'chulsoo.kim@example.com',
-  teamCode: 'PMO', role: 'admin', title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
-}
+  teamCode: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
+})
 
 // 실 DB 에서는 37행이 모두 연결되어 배지가 0건이라 눈으로 확인할 수 없다.
 // 드리프트가 실제로 화면에 드러나는지는 여기서만 검증 가능하다.

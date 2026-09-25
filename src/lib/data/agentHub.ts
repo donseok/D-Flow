@@ -5,6 +5,7 @@ import type { AdminClient } from '@/lib/minutes/externalApi'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import type { OrderRow, WatcherRow } from '@/lib/domain/seatmap'
 import { DONE_WINDOW_MS, viewerEmail } from '@/lib/data/agentSeatmap'
+import { personOf } from '@/lib/data/memberSelect'
 import {
   assembleAgentHub, type AgentHub, type AgentHubRows, type HubItemRow, type HubMemberRow, type HubReportRow,
 } from '@/lib/domain/agentHub'
@@ -17,6 +18,12 @@ const WATCHER_COLS = 'id, user_id, project_id, agent, host, slots, busy, until_l
 function must<T>(what: string, r: { data: T | null; error: { message: string } | null }): T {
   if (r.error) throw new Error(`[agent-hub] ${what} 조회 실패: ${r.error.message}`)
   return (r.data ?? []) as T
+}
+
+/** 명단 행(people 임베드) → 허브 조립기가 쓰는 평평한 행. 이름·이메일·계정은 people 이 정본이다. */
+function toHubMember(r: Record<string, unknown>): HubMemberRow {
+  const pe = personOf(r)
+  return { id: r.id as string, name: pe?.display_name ?? '', email: pe?.email ?? null, user_id: pe?.user_id ?? null }
 }
 
 export async function fetchAgentHubRows(admin: AdminClient, projectId: string, nowMs: number): Promise<AgentHubRows> {
@@ -32,7 +39,8 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
       .order('created_at', { ascending: false }).limit(2000).then(r => must<OrderRow[]>('주문', r)),
     admin.from('agent_watchers').select(WATCHER_COLS)
       .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r)),
-    admin.from('project_members').select('id, name, email, user_id').eq('project_id', projectId).then(r => must<HubMemberRow[]>('로스터', r)),
+    admin.from('project_members').select('id, people!inner(display_name, email, user_id)').eq('project_id', projectId)
+      .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toHubMember)),
     admin.from('projects').select('id, name').eq('id', projectId).then(r => must<Array<{ id: string; name: string }>>('프로젝트', r)),
   ])
   // 완료 보고는 주문 id 로만 거를 수 있어 2차로 간다(PostgREST 에 project_id 조인이 없다). 살아 있는 주문이 없으면 생략.

@@ -77,26 +77,11 @@ export interface ComputedItem extends WbsRow {
   depth: number
 }
 
-/* ── 멤버 관리 — 참여 인력 명단(project_members). 권한 체계가 아니다. ── */
-/**
- * 명단상의 구분(화면 표기: 리더 / 실무)이다. **권한이 아니다.**
- * 이 프로젝트에서 무엇을 할 수 있는지는 `project_roles`(admin|member, 행 부재=조회 전용)와
- * `memberships.is_superuser` 가 결정한다 — `@/lib/domain/authz` 를 볼 것.
- * DB 값이 'admin' 인 것은 0003 의 잔재이며 값을 바꾸지 않고 표시만 분리했다.
- */
-export type ProjectMemberRole = 'admin' | 'contributor'
-export interface ProjectMember {
-  id: string
-  projectId: string
-  name: string
-  email: string | null
-  teamCode: TeamCode | null
-  role: ProjectMemberRole
-  title: string | null      // 직함/역할 설명
-  roleLabel: string | null  // 자유 입력 역할(예: PM·개발·QA). role(리더/실무)·title(직함)과 별개 축(0071)
-  hasAccount: boolean       // 로그인 계정(auth.users)과 연결됨. auth uuid 자체는 클라이언트로 보내지 않는다
-  createdAt: string
-}
+/* ── 멤버 관리 — 참여 인력 명단(project_members ⨝ people ⨝ 팀 배열). ──
+ * 정본 형·select·매퍼는 `@/lib/data/memberSelect` 한 곳에 있다(RosterMember). 여기의 ProjectMember 는
+ * 소비처 이름을 한 번에 바꾸지 않기 위한 별칭이다. 권한은 accessRole(admin|member, null=조회 전용)이고
+ * 판정은 `@/lib/domain/authz` 가 한다 — 화면 표기 라벨은 roleLabel/title. */
+export type { RosterMember as ProjectMember } from '@/lib/data/memberSelect'
 
 /* ── 산출물 첨부 ── */
 export interface DeliverableAttachment {

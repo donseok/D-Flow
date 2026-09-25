@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getActor } from '@/lib/authz'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { compareKoreanName } from '@/lib/domain/nameSort'
+import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
 import {
   USAGE_RETAIN_DAYS, addDaysIso,
@@ -121,7 +123,7 @@ export async function getRecentUsageEvents(o: {
 }
 
 /**
- * 계정 디렉터리 — auth.users + memberships/teams.
+ * 계정 디렉터리 — auth.users + profiles(이름) + platform_admins·workspace_members(역할) + 명단 팀.
  *
  * service_role 로 auth.users 를 읽으므로 이 함수 자체가 게이트를 다시 검사한다(fail-closed).
  * 화면의 redirect 는 UX 이고, 실제 방어선은 여기다.
@@ -161,28 +163,57 @@ export async function getUsageDirectory(): Promise<AccountRecord[]> {
     if (data.users.length < perPage) break
   }
 
-  const { data: mems, error: memsErr } = await admin
-    .from('memberships')
-    .select('user_id, role, teams(code)')
-  // 조회 실패를 '멤버십 없음'으로 폴백하면 전원이 '팀 없음/권한 없음'으로 렌더링된다.
-  if (memsErr || !mems) {
-    throw new Error('계정 권한 정보를 불러오지 못했습니다: ' + (memsErr?.message ?? 'unknown'))
-  }
-  const byUser = new Map<string, { role: string; teamCode: string | null }>()
-  for (const row of mems as unknown as Record<string, unknown>[]) {
-    const team = row.teams as { code: string } | null
-    byUser.set(row.user_id as string, { role: row.role as string, teamCode: team?.code ?? null })
+  // 역할·팀·이름 재료 4개를 한 번에. 어느 하나라도 실패하면 던진다 — '역할 없음/팀 없음'으로 폴백하면
+  // 전원이 권한·소속 없는 계정으로 렌더링된다(조회 실패를 데이터 없음으로 위장하지 않는다).
+  const [prof, pa, ws, roster] = await Promise.all([
+    admin.from('profiles').select('user_id, display_name'),
+    admin.from('platform_admins').select('user_id'),
+    admin.from('workspace_members').select('user_id, role'),
+    // 명단 팀 — buildActor 의 rosterTeams 와 같은 축(활성 행·활성 인물). 행마다 대표 팀 하나를 쓴다.
+    admin.from('project_members')
+      .select('people!inner(user_id, active), project_member_teams(is_primary, teams(code))')
+      .eq('active', true)
+      .eq('people.active', true),
+  ])
+  for (const [what, r] of [['계정 이름', prof], ['플랫폼 관리자', pa], ['워크스페이스 역할', ws], ['명단 팀', roster]] as const) {
+    if (r.error || !r.data) {
+      throw new Error(`계정 ${what} 정보를 불러오지 못했습니다: ${r.error?.message ?? 'unknown'}`)
+    }
   }
 
-  return users.map<AccountRecord>(u => ({
-    id: u.id,
-    email: u.email,
-    name: displayNameFrom(u.meta, u.email) ?? u.email,
-    teamCode: byUser.get(u.id)?.teamCode ?? null,
-    role: byUser.get(u.id)?.role ?? null,
-    createdAt: u.created_at,
-    lastSignInAt: u.last_sign_in_at,
-  }))
+  const nameByUser = new Map<string, string>()
+  for (const r of prof.data as Array<{ user_id: string; display_name: string | null }>) {
+    if (r.display_name) nameByUser.set(r.user_id, r.display_name)
+  }
+  const platformAdmins = new Set((pa.data as Array<{ user_id: string }>).map(r => r.user_id))
+  // 역할 표시값은 admin|member(표시 라벨은 화면 몫). 플랫폼 관리자와 어느 워크스페이스의 관리자는 admin.
+  const wsRole = new Map<string, 'admin' | 'member'>()
+  for (const r of ws.data as Array<{ user_id: string; role: string }>) {
+    if (r.role === 'admin') wsRole.set(r.user_id, 'admin')
+    else if (r.role === 'member' && !wsRole.has(r.user_id)) wsRole.set(r.user_id, 'member')
+  }
+  const teamsByUser = new Map<string, Set<string>>()
+  for (const r of roster.data as Array<Record<string, unknown>>) {
+    const uid = personOf(r)?.user_id
+    const code = primaryTeamCode(r.project_member_teams)
+    if (!uid || !code) continue
+    const set = teamsByUser.get(uid) ?? new Set<string>()
+    set.add(code)
+    teamsByUser.set(uid, set)
+  }
+
+  return users.map<AccountRecord>(u => {
+    const teams = [...(teamsByUser.get(u.id) ?? [])].sort(compareKoreanName)
+    return {
+      id: u.id,
+      email: u.email,
+      name: nameByUser.get(u.id) ?? displayNameFrom(u.meta, u.email) ?? u.email,
+      teamCode: teams.length ? teams.join('·') : null,
+      role: platformAdmins.has(u.id) ? 'admin' : wsRole.get(u.id) ?? null,
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at,
+    }
+  })
 }
 
 /**

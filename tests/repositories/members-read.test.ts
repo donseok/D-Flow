@@ -23,16 +23,22 @@ describe('strict Supabase member repository', () => {
     const query = queryBuilder({
       data: [
         {
-          id: 'member-1', project_id: 'p1', name: '김ERP', role: 'admin', title: 'ERP 리드',
-          user_id: 'auth-user-secret-uuid', created_at: '2026-07-01T00:00:00Z', teams: { code: 'ERP' },
+          id: 'member-1', project_id: 'p1', person_id: 'pe-member-1', access_role: 'admin', role_label: null, title: 'ERP 리드',
+          active: true, sort_order: 0, created_at: '2026-07-01T00:00:00Z',
+          people: { display_name: '김ERP', user_id: 'auth-user-secret-uuid', kind: 'account', active: true },
+          project_member_teams: [{ team_id: 't-erp', is_primary: true, teams: { id: 't-erp', code: 'ERP', name: 'ERP' } }],
         },
         {
-          id: 'member-2', project_id: 'p1', name: '박PMO', role: 'contributor', title: null,
-          user_id: null, created_at: '2026-07-02T00:00:00Z', teams: [{ code: 'PMO' }],
+          id: 'member-2', project_id: 'p1', person_id: 'pe-member-2', access_role: 'member', role_label: null, title: null,
+          active: true, sort_order: 0, created_at: '2026-07-02T00:00:00Z',
+          people: { display_name: '박PMO', user_id: null, kind: 'external', active: true },
+          project_member_teams: [{ team_id: 't-pmo', is_primary: true, teams: [{ id: 't-pmo', code: 'PMO', name: 'PMO' }] }],
         },
         {
-          id: 'member-3', project_id: 'p1', name: '신입', role: 'contributor', title: null,
-          user_id: null, created_at: '2026-07-03T00:00:00Z', teams: null,
+          id: 'member-3', project_id: 'p1', person_id: 'pe-member-3', access_role: null, role_label: null, title: null,
+          active: true, sort_order: 0, created_at: '2026-07-03T00:00:00Z',
+          people: { display_name: '신입', user_id: null, kind: 'external', active: true },
+          project_member_teams: [],
         },
       ],
       error: null,
@@ -48,15 +54,15 @@ describe('strict Supabase member repository', () => {
       ok: true,
       data: [
         {
-          id: 'member-1', projectId: 'p1', name: '김ERP', teamCode: 'ERP', role: 'admin',
+          id: 'member-1', projectId: 'p1', name: '김ERP', teamCode: 'ERP', accessRole: 'admin',
           title: 'ERP 리드', hasAccount: true, createdAt: '2026-07-01T00:00:00Z',
         },
         {
-          id: 'member-2', projectId: 'p1', name: '박PMO', teamCode: 'PMO', role: 'contributor',
+          id: 'member-2', projectId: 'p1', name: '박PMO', teamCode: 'PMO', accessRole: 'member',
           title: null, hasAccount: false, createdAt: '2026-07-02T00:00:00Z',
         },
         {
-          id: 'member-3', projectId: 'p1', name: '신입', teamCode: null, role: 'contributor',
+          id: 'member-3', projectId: 'p1', name: '신입', teamCode: null, accessRole: null,
           title: null, hasAccount: false, createdAt: '2026-07-03T00:00:00Z',
         },
       ],

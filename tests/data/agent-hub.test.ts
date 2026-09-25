@@ -40,7 +40,7 @@ describe('fetchAgentHubRows', () => {
       agent_work_orders: [{ data: [{ id: 'o1', project_id: P1, wbs_item_id: 'i1', status: 'reported', claimed_by: 'a', claimed_by_user_id: null, claimed_at: null, created_at: 'x', updated_at: 'x', last_heartbeat_at: null, heartbeat_phase: null, heartbeat_agent: null, heartbeat_note: null }] }],
       agent_work_reports: [{ data: [{ work_order_id: 'o1', percent: 100, summary: 's', links: [], agent: 'a', review_action: null, review_note: null, created_at: 'x' }] }],
       agent_watchers: [{ data: [] }],
-      project_members: [{ data: [{ id: 'm1', name: '장', email: 'yoo@example.com', user_id: null }] }],
+      project_members: [{ data: [{ id: 'm1', people: { display_name: '장', email: 'yoo@example.com', user_id: null } }] }],
       projects: [{ data: [{ id: P1, name: 'proj-a' }] }],
     })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
@@ -53,7 +53,9 @@ describe('fetchAgentHubRows', () => {
     expect(c('agent_work_orders').select).toContain('last_heartbeat_at')
     expect(c('agent_work_orders').filters.find(f => f[0] === 'or')?.[1][0]).toContain('status.in.(ready,claimed,reported)')
     expect(c('agent_work_reports').filters).toEqual(expect.arrayContaining([['in', ['work_order_id', ['o1']]], ['eq', ['kind', 'completion']]]))
-    expect(c('project_members').select).toBe('id, name, email, user_id')
+    // 이름·이메일·계정은 people 이 정본 — 임베드로 읽어 허브 조립기에는 평평한 행으로 넘긴다.
+    expect(c('project_members').select).toBe('id, people!inner(display_name, email, user_id)')
+    expect(rows.members).toEqual([{ id: 'm1', name: '장', email: 'yoo@example.com', user_id: null }])
     expect(calls.map(x => x.table).sort()).toEqual(['agent_projects', 'agent_watchers', 'agent_work_orders', 'agent_work_reports', 'project_members', 'projects', 'wbs_items'])
   })
   it('살아 있는 주문이 없으면 보고 조회를 생략한다(2차 0건)', async () => {
@@ -77,7 +79,7 @@ describe('getAgentHub', () => {
   it('뷰어 이메일을 auth 로 읽어 본인 판정에 쓴다(로스터 email 매칭)', async () => {
     const { client } = admin({
       wbs_items: [{ data: [{ id: 'i1', project_id: P1, parent_id: null, code: 'T', name: 'n', sort_order: 0, milestone: false, dev_workflow: true, tags: [], assignee_member_id: 'm1', agent_prompt: null, actual_pct: 0, stage: null }] }],
-      project_members: [{ data: [{ id: 'm1', name: '장', email: 'YOO@example.com', user_id: null }] }],
+      project_members: [{ data: [{ id: 'm1', people: { display_name: '장', email: 'YOO@example.com', user_id: null } }] }],
       projects: [{ data: [{ id: P1, name: 'x' }] }],
     })
     const hub = await getAgentHub(P1, { userId: 'u1', isAdmin: false }, NOW)

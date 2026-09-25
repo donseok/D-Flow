@@ -9,10 +9,10 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { teamStyle } from '@/components/wbs/shared'
-import { addMember, updateMember, removeMember } from '@/app/actions/members'
+import { addMember, updateMember, removeMember, type MemberInput } from '@/app/actions/members'
 import { searchMemberCandidates, type MemberCandidate } from '@/app/actions/memberSearch'
 import { isValidEmail } from '@/lib/domain/validate'
-import type { ProjectMember, ProjectMemberRole, TeamCode } from '@/lib/domain/types'
+import type { ProjectMember, TeamCode } from '@/lib/domain/types'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 
 // 아바타 그라디언트 팔레트(디자인 토큰 재사용). 멤버 id 해시로 결정적 배정 —
@@ -33,9 +33,9 @@ function avatarGradient(seed: string): string {
   return AVATAR_GRADIENTS[Math.abs(h) % AVATAR_GRADIENTS.length]
 }
 
-/** 명단상의 구분(리더/실무)이다. 권한이 아니므로 방패(ShieldCheck) 계열 아이콘을 쓰지 않는다. */
-function roleMeta(role: ProjectMemberRole) {
-  return role === 'admin'
+/** 명단 카드 칩 — 이 프로젝트 관리자(accessRole admin)면 리더, 아니면 실무. Phase B 명단 화면이 대체한다. */
+function roleMeta(accessRole: ProjectMember['accessRole']) {
+  return accessRole === 'admin'
     ? { labelKey: 'members.roleAdmin' as const, chip: 'bg-brand-weak text-brand', Icon: UserCog }
     : { labelKey: 'members.roleContributor' as const, chip: 'bg-progress-weak text-progress', Icon: UserRound }
 }
@@ -189,7 +189,7 @@ function MemberCard({
   onDelete: () => void
 }) {
   const { t } = useLocale()
-  const role = roleMeta(member.role)
+  const role = roleMeta(member.accessRole)
   const RoleIcon = role.Icon
   const avatar = avatarGradient(member.id)
 
@@ -285,7 +285,7 @@ function MemberFormModal({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [teamCode, setTeamCode] = useState<TeamCode | ''>('')
-  const [role, setRole] = useState<ProjectMemberRole>('contributor')
+  const [role, setRole] = useState<MemberInput['role']>('contributor')
   const [title, setTitle] = useState('')
   const [roleLabel, setRoleLabel] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -310,7 +310,7 @@ function MemberFormModal({
     setName(initial?.name ?? '')
     setEmail(initial?.email ?? '')
     setTeamCode(initial?.teamCode ?? '')
-    setRole(initial?.role ?? 'contributor')
+    setRole(initial?.accessRole === 'admin' ? 'admin' : 'contributor')
     setTitle(initial?.title ?? '')
     setRoleLabel(initial?.roleLabel ?? '')
     setError(null)
@@ -566,7 +566,7 @@ function MemberFormModal({
             <select
               className="app-input"
               value={role}
-              onChange={(e) => setRole(e.target.value as ProjectMemberRole)}
+              onChange={(e) => setRole(e.target.value as MemberInput['role'])}
             >
               <option value="contributor">{t('members.roleContributor')}</option>
               <option value="admin">{t('members.roleAdmin')}</option>

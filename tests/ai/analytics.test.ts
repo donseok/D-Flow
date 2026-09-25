@@ -11,6 +11,7 @@ import {
   buildDocuments as buildDocumentsReal,
 } from '@/lib/ai/analytics'
 import type { ComputedItem, ProjectMember, TeamCode } from '@/lib/domain/types'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 /** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록 자체를 검증하지 않는다. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
@@ -128,7 +129,7 @@ describe('의도별 답변 포매터', () => {
   it('answerByTeam — 팀별 + 멤버 표기', () => {
     const tree = [phase([leaf({ status: 'done', owners: [{ team: 'PMO', kind: 'primary' }] })])]
     const members: ProjectMember[] = [
-      { id: 'm1', projectId: 'P', name: '홍길동', email: null, teamCode: 'PMO', role: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '' },
+      makeRosterMember({ id: 'm1', projectId: 'P', name: '홍길동', email: null, teamCode: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '' }),
     ]
     const out = answerByTeam(analyzeProject(tree, 'P', TODAY, members), members)
     expect(out).toContain('PMO — 작업 1건')
@@ -183,7 +184,7 @@ describe('answerOverview — 전사 합계', () => {
 describe('buildDocuments — 임베딩 문서', () => {
   it('프로젝트 요약 + 작업 + 멤버 문서를 생성', () => {
     const members: ProjectMember[] = [
-      { id: 'm1', projectId: 'P', name: '김담당', email: null, teamCode: '가공', role: 'contributor', title: 'BE', roleLabel: null, hasAccount: false, createdAt: '' },
+      makeRosterMember({ id: 'm1', projectId: 'P', name: '김담당', email: null, teamCode: '가공', title: 'BE', roleLabel: null, hasAccount: false, createdAt: '' }),
     ]
     const tree = [phase([leaf({ name: 'T1', deliverable: '설계서' }), leaf({ name: 'T2' })])]
     const docs = buildDocuments(tree, '계량대', TODAY, members)

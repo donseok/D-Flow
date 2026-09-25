@@ -25,11 +25,12 @@ vi.mock('@/app/actions/members', () => ({ addMember: vi.fn(), updateMember: vi.f
 vi.mock('@/app/actions/memberSearch', () => ({ searchMemberCandidates }))
 
 import { MembersBoard } from '@/components/members/MembersBoard'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
-const EXISTING: ProjectMember = {
+const EXISTING: ProjectMember = makeRosterMember({
   id: 'm1', projectId: 'p1', name: '김철수', email: 'chulsoo@example.com',
-  teamCode: 'PMO', role: 'admin', title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
-}
+  teamCode: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
+})
 
 const CANDIDATES = [
   { name: '홍길동', email: 'gil@example.com', teamCode: 'PMO', title: '수석', roleLabel: 'PM' },

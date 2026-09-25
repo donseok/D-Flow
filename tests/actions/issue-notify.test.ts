@@ -125,7 +125,11 @@ describe('updateIssue — replaceAssignees diff 발행 배선', () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })),
+                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
+                eq: vi.fn((col: string, val: unknown) => {
+                  expect([col, val]).toEqual(['active', true])
+                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
+                }),
               })),
             })),
           }
@@ -179,7 +183,11 @@ describe('updateIssueProgress — 진행/칸반 경로에서도 담당자 diff �
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })),
+                // 활성 명단 행만 담당자가 될 수 있다 — project_id 다음 조건은 active=true.
+                eq: vi.fn((col: string, val: unknown) => {
+                  expect([col, val]).toEqual(['active', true])
+                  return { in: vi.fn(async () => ({ data: [{ id: 'm1' }, { id: 'm2' }], error: null })) }
+                }),
               })),
             })),
           }

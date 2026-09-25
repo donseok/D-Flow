@@ -209,7 +209,7 @@ export const PLANNER_TOOL_CATALOG: Record<CoreBotToolName, PlannerToolSpec> = {
     argKeys: ['projectId', 'team', 'role', 'limit'],
     requiresProjectId: true,
     purpose: '프로젝트 멤버 목록',
-    argHints: 'role은 admin|contributor (명단 구분 — 화면 표기는 리더/실무이며 권한이 아니다)',
+    argHints: 'role은 admin|member (이 프로젝트 명단 권한 — admin=관리자, member=멤버)',
   },
   get_member_workload: {
     domain: 'members',

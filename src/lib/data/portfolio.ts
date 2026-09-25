@@ -10,7 +10,8 @@ import type { PortfolioProjectInput } from '@/lib/domain/portfolio'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { getActor } from '@/lib/authz'
 import { canViewPortfolio } from '@/lib/authz/portfolioAccess'
-import type { ProjectMemberRole } from '@/lib/domain/types'
+import { personOf } from '@/lib/data/memberSelect'
+import { compareKoreanName } from '@/lib/domain/nameSort'
 
 /** 추세 화살표·지연 추세 신호에 충분한 스냅샷 창 — 전량 로드는 성능 예산 밖. */
 const SNAPSHOT_WINDOW_DAYS = 60
@@ -34,7 +35,8 @@ export async function getPortfolioInputs(): Promise<{
   const { projects, degraded: listDegraded } = await listProjectsWithState()
   const ids = projects.map(p => p.id)
 
-  // PM(리더) = project_members.role='admin' — IN 한 방(getProjectsCompletion 선례).
+  // PM(리더) = 명단의 프로젝트 관리자(access_role='admin') — IN 한 방(getProjectsCompletion 선례).
+  // 이름은 people 이 정본이라 임베드로 읽고, 정렬은 DB collation 대신 가나다순(compareKoreanName)으로 한다.
   // 표시 전용이라 실패해도 throw 하지 않지만, '리더 없음'으로 위장하지 않도록 플래그로 신호한다.
   const sb = await createServerClient()
   let leadersDegraded = false
@@ -42,19 +44,21 @@ export async function getPortfolioInputs(): Promise<{
   if (ids.length) {
     const { data, error } = await sb
       .from('project_members')
-      .select('project_id, name')
-      .eq('role', 'admin' satisfies ProjectMemberRole)
+      .select('project_id, people!inner(display_name)')
+      .eq('access_role', 'admin')
       .in('project_id', ids)
-      .order('name')
     if (error) {
       console.error('[portfolio] 리더 조회 실패:', error.message)
       leadersDegraded = true
     }
     for (const r of data ?? []) {
+      const name = personOf(r)?.display_name
+      if (!name) continue
       const arr = leadersByProject.get(r.project_id as string) ?? []
-      arr.push(r.name as string)
+      arr.push(name)
       leadersByProject.set(r.project_id as string, arr)
     }
+    for (const arr of leadersByProject.values()) arr.sort(compareKoreanName)
   }
 
   // 진척 스냅샷(최근 60일) — 프로젝트 IN 한 방. 실패는 로그만: 추세 화살표·지연 추세 신호가

@@ -37,7 +37,7 @@ import {
   MINUTE_SELECTION_MAX_BLOCK_SPAN, MINUTE_SELECTION_MAX_CHARS,
   matchMinuteSelection, minuteSelectionKeyHash,
 } from '@/lib/minutes/selection'
-import { PROJECT_MEMBER_SELECT, mapProjectMemberRows } from '@/lib/data/members'
+import { ROSTER_SELECT, mapRosterRows } from '@/lib/data/memberSelect'
 import type { ProjectMember } from '@/lib/domain/types'
 import { generateAnswer } from '@/lib/ai/llm'
 import { hasLLM } from '@/lib/ai/provider'
@@ -148,7 +148,7 @@ export async function fetchIssueProjectMembers(projectId: string): Promise<Issue
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members')
-    .select(PROJECT_MEMBER_SELECT)
+    .select(ROSTER_SELECT)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
   // 에러 계약은 데이터 헬퍼(getProjectMembers)와 다르다 — 액션은 폼에 실패를 보여야 하므로
@@ -157,7 +157,7 @@ export async function fetchIssueProjectMembers(projectId: string): Promise<Issue
     console.error('[fetchIssueProjectMembers] 조회 실패:', error.message)
     return { ok: false, error: '담당자 목록을 불러오지 못했습니다. 다시 시도하세요.' }
   }
-  return { ok: true, members: mapProjectMemberRows(data) }
+  return { ok: true, members: mapRosterRows(data) }
 }
 
 const TITLE_MAX = 200
@@ -469,10 +469,12 @@ async function replaceAssignees(
     const { error: clrErr } = await sb.from('issue_assignees').delete().eq('issue_id', issueId)
     return clrErr ? clrErr.message : null
   }
+  // 활성 명단 행만 담당자가 될 수 있다(비활성 행은 명단에서 빠진 사람).
   const { data: valid, error: validErr } = await sb
     .from('project_members')
     .select('id')
     .eq('project_id', projectId)
+    .eq('active', true)
     .in('id', unique)
   // 쓰기 선행 검증 조회 실패를 '유효 멤버 0명'으로 오인하면 담당자 변경이 통째로 유실되며
   // 액션은 성공을 보고한다 — 실패는 실패로 올린다(silent-empty 금지).

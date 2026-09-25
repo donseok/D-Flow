@@ -17,6 +17,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -24,8 +25,8 @@ function item(over: Partial<ComputedItem>): ComputedItem {
     owners: [], isOwnerSplit: false, plannedPct: 0, rolledActualPct: 0, achievement: null, status: 'not_started', children: [], depth: 0, ...over }
 }
 function member(over: Partial<ProjectMember>): ProjectMember {
-  return { id: 'm1', projectId: 'p1', name: '홍길동', email: null, teamCode: null, role: 'contributor',
-    title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01T00:00:00Z', ...over }
+  return makeRosterMember({ id: 'm1', projectId: 'p1', name: '홍길동', email: null, teamCode: null,
+    title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01T00:00:00Z', ...over })
 }
 
 describe('WBS 사전 — 담당팀/담당자 라벨', () => {

@@ -15,6 +15,7 @@ import { MeetingAttendeePicker } from '@/components/meetings/MeetingAttendeePick
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import type { Team } from '@/lib/domain/teams'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 const TEAMS: Team[] = [
   { id: 'team-erp', code: 'ERP', sortOrder: 20, active: true, progressVisible: true, projectId: null },
@@ -28,18 +29,17 @@ function member(
   teamCode: TeamCode | null,
   email: string | null = `${id}@example.com`,
 ): ProjectMember {
-  return {
+  return makeRosterMember({
     id,
     projectId: 'project-1',
     name,
     email,
     teamCode,
-    role: 'contributor',
     title: null,
     roleLabel: null,
     hasAccount: true,
     createdAt: '2026-08-02T00:00:00.000Z',
-  }
+  })
 }
 
 // 입력 배열은 의도적으로 이름순·팀순 모두 섞어 둔다.

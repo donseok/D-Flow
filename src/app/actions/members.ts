@@ -5,14 +5,15 @@ import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
 import { revalidatePath } from 'next/cache'
 import { isValidEmail } from '@/lib/domain/validate'
 import { listAllAuthUsers } from '@/lib/data/accounts'
-import type { ProjectMemberRole, TeamCode } from '@/lib/domain/types'
+import type { TeamCode } from '@/lib/domain/types'
 import { BRAND } from '@/lib/branding'
 
 export interface MemberInput {
   name: string
   email: string | null
   teamCode: TeamCode | null
-  role: ProjectMemberRole
+  /** @deprecated 옛 명단 구분(리더/실무) 폼 값 — 0003 이 project_members.role 을 없앴다. Task 6 이 이 액션을 roster.ts 로 옮기며 지운다. */
+  role: 'admin' | 'contributor'
   title: string | null
   roleLabel: string | null
 }

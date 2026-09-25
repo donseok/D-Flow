@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { requireProjectAdmin } from '@/lib/authz'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
+import { ROSTER_SELECT, toRosterMember } from '@/lib/data/memberSelect'
 import type { TeamCode } from '@/lib/domain/types'
 
 export interface MemberCandidate {
@@ -31,7 +32,8 @@ function escapeIlike(q: string): string {
 /**
  * 멤버 추가 다이얼로그의 이름 자동완성 후보 — 기존 로스터(project_members)에서 검색한다.
  *
- * 프라이버시 경계: 일반 관리자는 자기가 역할을 가진 프로젝트들의 로스터만 본다.
+ * 프라이버시 경계: 일반 관리자는 자기가 명단 권한(access_role)을 가진 프로젝트들의 로스터만 본다
+ * (actor.projectRoles 키 — 같은 워크스페이스의 조회 전용 프로젝트는 넣지 않는다, SP1 스펙 4절).
  * 슈퍼유저만 전체 로스터. 응답에는 후보 필드만 싣고 어느 프로젝트 소속인지는 싣지 않는다.
  */
 export async function searchMemberCandidates(
@@ -45,14 +47,15 @@ export async function searchMemberCandidates(
   if (q.length < 2) return { ok: true, candidates: [] }
 
   const sb = await createServerClient()
+  // 이름은 people 이 정본 — !inner 임베드 필터라 이름이 맞지 않는 명단 행은 결과에서 빠진다.
   let sel = sb
     .from('project_members')
-    .select('id, name, email, title, role_label, created_at, teams(code)')
-    .ilike('name', `%${escapeIlike(q)}%`)
+    .select(ROSTER_SELECT)
+    .ilike('people.display_name', `%${escapeIlike(q)}%`)
   if (!g.actor.isSuperuser) {
     sel = sel.in('project_id', [...g.actor.projectRoles.keys()])
   }
-  // created_at ASC, id ASC — 같은 이메일 중 첫 등장 행이 정본(validateMemberIdentity 와 같은 규칙).
+  // created_at ASC, id ASC — 같은 사람(person_id)·같은 이메일 중 첫 등장 행의 직함·라벨을 쓴다.
   const { data, error } = await sel
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
@@ -62,22 +65,25 @@ export async function searchMemberCandidates(
     return { ok: false, error: CANDIDATE_LOOKUP_FAILED }
   }
 
+  // 한 사람이 여러 프로젝트 명단에 오르면 행이 여러 개다 — 사람(person_id) 단위로, 이메일이 같으면 그것도 한 번만.
+  const seenPersons = new Set<string>()
   const seenEmails = new Set<string>()
   const candidates: MemberCandidate[] = []
   for (const r of (data ?? []) as Record<string, unknown>[]) {
-    const email = (r.email as string | null) ?? null
-    if (email) {
-      const key = email.toLowerCase()
+    const m = toRosterMember(r)
+    if (seenPersons.has(m.personId)) continue
+    seenPersons.add(m.personId)
+    if (m.email) {
+      const key = m.email.toLowerCase()
       if (seenEmails.has(key)) continue
       seenEmails.add(key)
     }
-    const team = r.teams as { code: TeamCode } | { code: TeamCode }[] | null
     candidates.push({
-      name: r.name as string,
-      email,
-      teamCode: (Array.isArray(team) ? team[0]?.code : team?.code) ?? null,
-      title: (r.title as string) ?? null,
-      roleLabel: (r.role_label as string) ?? null,
+      name: m.name,
+      email: m.email,
+      teamCode: m.teamCode,
+      title: m.title,
+      roleLabel: m.roleLabel,
     })
   }
 

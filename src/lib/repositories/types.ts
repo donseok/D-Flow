@@ -4,7 +4,6 @@ import type {
   Meeting,
   MeetingAttendeeInfo,
   MeetingException,
-  ProjectMemberRole,
   TaskDependency,
   TeamCode,
   WbsRow,
@@ -329,7 +328,8 @@ export interface MemberRepositoryRecord {
   projectId: string
   name: string
   teamCode: TeamCode | null
-  role: ProjectMemberRole
+  /** 이 프로젝트 권한(명단 access_role) — null 은 조회 전용. */
+  accessRole: 'admin' | 'member' | null
   title: string | null
   hasAccount: boolean
   createdAt: string

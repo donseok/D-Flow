@@ -9,6 +9,7 @@ import type {
   Meeting,
   ProjectMember,
 } from '@/lib/domain/types'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -99,11 +100,11 @@ function meeting(overrides: Partial<Meeting> = {}): Meeting {
 }
 
 function member(overrides: Partial<ProjectMember> = {}): ProjectMember {
-  return {
+  return makeRosterMember({
     id: 'mem-1', projectId: 'p1', name: '김이알피', email: null, teamCode: 'ERP',
-    role: 'contributor', title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
+    title: null, roleLabel: null, hasAccount: true, createdAt: '2026-01-01',
     ...overrides,
-  }
+  })
 }
 
 function attendance(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord {

@@ -30,9 +30,9 @@ function admin(queues: Record<string, Resp[]>) {
 beforeEach(() => vi.clearAllMocks())
 
 describe('emitNotification', () => {
-  it('member 수신자를 user_id 스냅샷으로 해석해 이벤트+수신자 행을 쓴다', async () => {
+  it('member 수신자를 people.user_id 스냅샷으로 해석해 이벤트+수신자 행을 쓴다', async () => {
     const { inserted } = admin({
-      project_members: [{ data: [{ id: 'm1', user_id: 'u1' }, { id: 'm2', user_id: null }] }],
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1' } }, { id: 'm2', people: { user_id: null } }] }],
       notification_events: [{ data: { id: 'ev1' } }],
       notification_recipients: [{ data: null }],
     })
@@ -49,7 +49,7 @@ describe('emitNotification', () => {
     ])
   })
   it('행위자 본인이 유일 수신자면 발행하지 않는다 (no-op)', async () => {
-    admin({ project_members: [{ data: [{ id: 'm1', user_id: 'actor' }] }] })
+    admin({ project_members: [{ data: [{ id: 'm1', people: { user_id: 'actor' } }] }] })
     const r = await emitNotification({
       type: 'issue.assigned', projectId: 'p1', actorUserId: 'actor',
       payload: { title: 'T' }, recipientMemberIds: ['m1'],
@@ -58,7 +58,7 @@ describe('emitNotification', () => {
   })
   it('dedupe_key 충돌(23505)은 성공으로 삼킨다', async () => {
     admin({
-      project_members: [{ data: [{ id: 'm1', user_id: 'u1' }] }],
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1' } }] }],
       notification_events: [{ data: null, error: { code: '23505', message: 'duplicate' } }],
     })
     const r = await emitNotification({
@@ -79,7 +79,7 @@ describe('emitNotification', () => {
   })
   it('actor 미지정 + 미링크 멤버 → recipient row가 유지된다', async () => {
     const { inserted } = admin({
-      project_members: [{ data: [{ id: 'm1', user_id: null }] }],
+      project_members: [{ data: [{ id: 'm1', people: { user_id: null } }] }],
       notification_events: [{ data: { id: 'ev1' } }],
       notification_recipients: [{ data: null }],
     })

@@ -37,13 +37,15 @@ describe('getMeetingRowExtras', () => {
   it('시리즈 id 로 body, 멤버 id 로 이름을 각각 한 번씩 조회해 맵으로 돌려준다', async () => {
     const { calls } = makeSb({
       meetings: OK([{ id: 'm1', body: '안건' }, { id: 'm2', body: null }]),
-      members: OK([{ id: 'a', name: '홍길동' }]),
+      members: OK([{ id: 'a', people: { display_name: '홍길동' } }]),
     })
     const out = await getMeetingRowExtras(['m1', 'm2'], ['a'])
     expect(out).toEqual({ bodies: { m1: '안건', m2: '' }, memberNames: { a: '홍길동' } })
     expect(calls.map(c => c.table).sort()).toEqual(['meetings', 'project_members'])
     expect(calls.find(c => c.table === 'meetings')?.inArgs).toEqual(['m1', 'm2'])
     expect(calls.find(c => c.table === 'project_members')?.inArgs).toEqual(['a'])
+    // 이름은 people 이 정본 — 명단 행의 name 컬럼은 없다(0003).
+    expect(calls.find(c => c.table === 'project_members')?.select).toContain('people!inner(display_name)')
   })
 
   it('빈 id 목록은 왕복 없이 빈 맵', async () => {
@@ -54,7 +56,7 @@ describe('getMeetingRowExtras', () => {
   })
 
   it('한쪽 조회가 실패해도 다른 쪽은 살리고 실패는 로깅한다(표시=로깅)', async () => {
-    makeSb({ meetings: ERR('boom'), members: OK([{ id: 'a', name: '홍길동' }]) })
+    makeSb({ meetings: ERR('boom'), members: OK([{ id: 'a', people: { display_name: '홍길동' } }]) })
     const out = await getMeetingRowExtras(['m1'], ['a'])
     expect(out).toEqual({ bodies: {}, memberNames: { a: '홍길동' } })
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('메모'), 'boom')

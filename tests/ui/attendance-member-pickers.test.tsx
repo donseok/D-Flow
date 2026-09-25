@@ -31,6 +31,7 @@ vi.mock('@/app/actions/attendance', () => ({
 }))
 
 import { AttendanceView } from '@/components/attendance/AttendanceView'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 const MEMBERS: ProjectMember[] = [
   member('member-mes', '나메스', 'MES'),
@@ -40,18 +41,17 @@ const MEMBERS: ProjectMember[] = [
 ]
 
 function member(id: string, name: string, teamCode: string | null): ProjectMember {
-  return {
+  return makeRosterMember({
     id,
     projectId: 'project-1',
     name,
     email: null,
     teamCode,
-    role: 'contributor',
     title: null,
     roleLabel: null,
     hasAccount: true,
     createdAt: '2026-08-01T00:00:00Z',
-  }
+  })
 }
 
 function viewButtons(scope: ParentNode): HTMLButtonElement[] {

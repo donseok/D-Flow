@@ -1,16 +1,16 @@
-import type { AttendanceType, TeamCode } from '@/lib/domain/types'
+import type { AttendanceType } from '@/lib/domain/types'
+import { ROSTER_SELECT_NO_EMAIL, toRosterMember, type RosterMember } from '@/lib/data/memberSelect'
 import {
   repositoryError,
   repositoryOk,
   type AttendanceRepository,
   type AttendanceRepositoryRecord,
 } from '@/lib/repositories/types'
-import { isRetryableReadError, nestedOne, type SupabaseServerClient } from './common'
+import { isRetryableReadError, type SupabaseServerClient } from './common'
 
 type Row = Record<string, unknown>
 
 const ATTENDANCE_COLUMNS = ['id', 'project_id', 'member_id', 'date', 'type'].join(', ')
-const MEMBER_COLUMNS = ['id', 'project_id', 'name', 'teams(code)'].join(', ')
 
 /** note is intentionally not selected: Phase 1 exposes attendance facts, not sensitive notes. */
 export function createSupabaseAttendanceRepository(client: SupabaseServerClient): AttendanceRepository {
@@ -40,9 +40,10 @@ export function createSupabaseAttendanceRepository(client: SupabaseServerClient)
       // composite attendance→member FK alongside the legacy member_id FK, which makes an
       // unqualified embedded relationship ambiguous. The explicit project predicate also keeps
       // a corrupt cross-project member reference fail-closed before its name crosses this boundary.
+      // 이메일은 select 절에서부터 뺀다(챗봇 경계 — ROSTER_SELECT_NO_EMAIL).
       const memberResult = await client
         .from('project_members')
-        .select(MEMBER_COLUMNS)
+        .select(ROSTER_SELECT_NO_EMAIL)
         .eq('project_id', projectId)
         .in('id', memberIds)
       if (memberResult.error) {
@@ -50,9 +51,9 @@ export function createSupabaseAttendanceRepository(client: SupabaseServerClient)
       }
 
       const memberRows = (memberResult.data ?? []) as unknown as Row[]
-      const members = new Map(memberRows.flatMap(member =>
+      const members = new Map<string, RosterMember>(memberRows.flatMap(member =>
         typeof member.id === 'string' && member.project_id === projectId
-          ? [[member.id, member] as const]
+          ? [[member.id, toRosterMember(member)] as const]
           : [],
       ))
       if (memberRows.length !== members.size || memberIds.some(id => !members.has(id))) {
@@ -61,13 +62,12 @@ export function createSupabaseAttendanceRepository(client: SupabaseServerClient)
 
       const records: AttendanceRepositoryRecord[] = rows.map(row => {
         const member = members.get(row.member_id as string)
-        const team = nestedOne(member?.teams as { code?: unknown } | { code?: unknown }[] | null)
         return {
           id: row.id as string,
           projectId: row.project_id as string,
           memberId: row.member_id as string,
-          memberName: (member?.name as string) ?? '',
-          teamCode: (team?.code as TeamCode | null) ?? null,
+          memberName: member?.name ?? '',
+          teamCode: member?.teamCode ?? null,
           date: row.date as string,
           type: row.type as AttendanceType,
         }

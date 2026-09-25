@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { buildMemberPickerSections } from '@/lib/domain/memberPicker'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
+import { makeRosterMember } from '../fixtures/rosterMember'
 
 function member(id: string, name: string, teamCode: TeamCode | null): ProjectMember {
-  return {
+  return makeRosterMember({
     id,
     projectId: 'p1',
     name,
     email: null,
     teamCode,
-    role: 'contributor',
     title: null,
     roleLabel: null,
     hasAccount: true,
     createdAt: '2026-08-02T00:00:00.000Z',
-  }
+  })
 }
 
 function categories(sections: ReturnType<typeof buildMemberPickerSections>) {
