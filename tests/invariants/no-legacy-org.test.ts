@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 const ROOT = join(process.cwd(), 'src')
 const SKIP_DIRS = new Set(['node_modules', '.next'])
@@ -18,7 +18,11 @@ function walk(dir: string): string[] {
 }
 
 const LEGACY_IDENT = /\b(memberships|project_roles|project_member_identities|effectiveLegacyRole|getMembership|current_team|update_project_member_with_identity)\b/
-const LEGACY_ROLE_LITERAL = /'(pmo_admin|team_editor|contributor)'/
+// 단어 경계만 요구 — 따옴표 종류(single/double/backtick)에 무관하게 잡는다. 리뷰
+// conformance-2/strength-1: 옛 역할 값이 JSX 속성처럼 큰따옴표로 다시 등장해도
+// (0e0ceaf 의 <option value="contributor"> 사례) 잡아낸다. 대소문자 구분·\b 경계라
+// roleContributor 같은 camelCase 식별자는(경계가 없어) 걸리지 않는다 — HEAD 에서 확인됨.
+const LEGACY_ROLE_LITERAL = /\b(pmo_admin|team_editor|contributor)\b/
 
 function findHits(files: string[], re: RegExp): string[] {
   const hits: string[] = []
@@ -26,7 +30,7 @@ function findHits(files: string[], re: RegExp): string[] {
     const text = readFileSync(file, 'utf8')
     const lines = text.split('\n')
     lines.forEach((line, i) => {
-      if (re.test(line)) hits.push(`${file}:${i + 1}: ${line.trim()}`)
+      if (re.test(line)) hits.push(`${relative(process.cwd(), file)}:${i + 1}: ${line.trim()}`)
     })
   }
   return hits

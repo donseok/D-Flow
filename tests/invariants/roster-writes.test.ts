@@ -18,8 +18,11 @@ function walk(dir: string): string[] {
   return out
 }
 
+// 따옴표(single/double/backtick)·괄호 안 공백·`as const` 무관 — 리뷰 conformance-1/strength-2:
+// from("project_members")·from(`project_members`)·from( 'project_members' )·
+// from('project_members' as const) 도 전부 잡아낸다.
 function findChainHits(files: string[], verb: 'insert' | 'update' | 'upsert' | 'delete'): string[] {
-  const re = new RegExp(`from\\('project_members'\\)[\\s\\S]{0,200}?\\.${verb}\\(`, 'g')
+  const re = new RegExp(`from\\(\\s*(['"\`])project_members\\1(?:\\s+as\\s+const)?\\s*\\)[\\s\\S]{0,200}?\\.${verb}\\(`, 'g')
   const hits: string[] = []
   for (const file of files) {
     const text = readFileSync(file, 'utf8')
@@ -51,9 +54,9 @@ describe('명단(project_members) 직접 쓰기 0건 — RPC 가 유일한 쓰�
 
   it('옛 조직 테이블(memberships/project_roles/project_member_identities) 참조 0건', () => {
     const patterns: Array<[string, RegExp]> = [
-      ["from('memberships')", /from\('memberships'\)/],
-      ["from('project_roles')", /from\('project_roles'\)/],
-      ["from('project_member_identities')", /from\('project_member_identities'\)/],
+      ["from('memberships')", /from\(\s*(['"`])memberships\1\s*\)/],
+      ["from('project_roles')", /from\(\s*(['"`])project_roles\1\s*\)/],
+      ["from('project_member_identities')", /from\(\s*(['"`])project_member_identities\1\s*\)/],
     ]
     const hits: string[] = []
     for (const file of files) {
