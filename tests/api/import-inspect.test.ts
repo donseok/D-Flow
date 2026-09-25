@@ -18,7 +18,7 @@ import { makeActor } from '../fixtures/actor'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
-const ACTOR = makeActor({ teamCode: 'PMO', teamId: 't1' })
+const ACTOR = makeActor()
 const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
 function req(fields: Record<string, string | Blob>): Parameters<typeof POST>[0] {

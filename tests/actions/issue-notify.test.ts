@@ -44,7 +44,7 @@ import { updateIssue, updateIssueProgress } from '@/app/actions/issues'
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
+const ACTOR = makeMemberActor('p1', [], { userId: 'me' })
 
 const INPUT = {
   title: '테스트 이슈',

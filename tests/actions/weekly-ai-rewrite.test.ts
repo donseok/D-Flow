@@ -25,7 +25,7 @@ vi.mock('@/lib/data/weeklySheet', () => ({
 import { prepareWeeklyCellRewrite, type WeeklyRewriteInput } from '@/app/actions/weekly'
 import { makeMemberActor } from '../fixtures/actor'
 
-const MEMBER = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
+const MEMBER = makeMemberActor('p1', [])
 
 function query(result: { data: unknown; error: null | { message: string } }) {
   const chain: Record<string, unknown> = {}

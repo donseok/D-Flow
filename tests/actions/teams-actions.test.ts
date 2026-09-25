@@ -63,7 +63,7 @@ vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 import { addTeam, updateTeam } from '@/app/actions/teams'
 import { makeSuperuser } from '../fixtures/actor'
 
-const SUPERUSER = makeSuperuser({ userId: 'u-super', teamCode: 'PMO', teamId: 't1' })
+const SUPERUSER = makeSuperuser({ userId: 'u-super' })
 const asSuperuser = () => requireSuperuser.mockResolvedValue({ ok: true, actor: SUPERUSER })
 
 describe('팀 관리 서버액션', () => {

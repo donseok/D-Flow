@@ -12,8 +12,8 @@ vi.mock('@/lib/authz', () => ({
 }))
 
 // 권한 3단 이행 — 역할 픽스처는 Actor 로 표현한다
-const memberActor = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
-const viewerActor = makeActor({ teamCode: 'PMO', teamId: 't1' })
+const memberActor = makeMemberActor('p1', [])
+const viewerActor = makeActor()
 const superuserActor = { ...memberActor, isSuperuser: true }
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: vi.fn() }))

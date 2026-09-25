@@ -38,7 +38,7 @@ const ARGS = {
   itemId: 'item-1',
 } as const
 
-const ADMIN = makeAdminActor('project-1', { userId: 'u-admin', teamCode: 'PMO', teamId: 't0' })
+const ADMIN = makeAdminActor('project-1', { userId: 'u-admin' })
 const asAdmin = () => mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN })
 
 beforeEach(() => {

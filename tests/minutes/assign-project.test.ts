@@ -37,9 +37,9 @@ import { makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/acto
 const P1 = '7a1c6034-a647-4673-ae85-d0b6daa2f6f3'
 
 // 권한 3단 이행 — 일괄 지정 진입 게이트는 '대상 프로젝트 관리자 이상'(스펙 §4.3)
-const adminActor = makeAdminActor(P1, { teamCode: 'PMO', teamId: 't1' })
-const memberActor = makeMemberActor(P1, [], { teamCode: 'PMO', teamId: 't1' })
-const superuserActor = makeSuperuser({ teamCode: 'PMO', teamId: 't1' })
+const adminActor = makeAdminActor(P1)
+const memberActor = makeMemberActor(P1, [])
+const superuserActor = makeSuperuser()
 const M1 = '11111111-1111-4111-8111-111111111111'
 const M2 = '22222222-2222-4222-8222-222222222222'
 const M3 = '33333333-3333-4333-8333-333333333333'

@@ -1,15 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { canEditActual, canEditWeight, canEditDeliverable } from '@/lib/domain/permissions'
 import type { ComputedItem } from '@/lib/domain/types'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const P = 'proj-1'
 
-const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ teamCode: 'PMO', teamId: 't1', ...over })
-const superuser = actor({ isSuperuser: true })
-const admin = actor({ projectRoles: new Map([[P, 'admin' as const]]) })
-const gagongMember = actor({ teamCode: '가공', teamId: 'd', projectRoles: new Map([[P, 'member' as const]]) })
-const viewer = actor({ teamCode: '가공', teamId: 'd' })
+const superuser = makeSuperuser()
+const admin = makeAdminActor(P)
+const gagongMember = makeMemberActor(P, ['가공'])
+// 명단에 팀('가공')은 있지만 access_role 이 없는 사람 — 조회 전용
+const viewer = makeActor({
+  projectWorkspace: new Map([[P, WS]]),
+  memberIds: new Map([[P, 'm-viewer']]),
+  rosterTeams: new Map([[P, { teamIds: ['t-가공'], teamCodes: ['가공'] }]]),
+})
 
 const item = (over: Partial<ComputedItem>): ComputedItem =>
   ({

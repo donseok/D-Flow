@@ -19,7 +19,7 @@ import { createMeeting } from '@/app/actions/meetings'
 import { makeMemberActor } from '../fixtures/actor'
 
 const DENIED = { ok: false, error: '권한 없음' } as const
-const MEMBER = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
+const MEMBER = makeMemberActor('p1', [])
 const ERR_LOOKUP = '권한을 확인할 수 없어 중단했습니다.'
 
 const MEETING_INPUT = {

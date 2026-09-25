@@ -69,7 +69,7 @@ vi.mock('@/lib/teams/master', () => ({ refreshTeams, teamsSync }))
 import { addProjectTeam, updateProjectTeam, copyGlobalTeams } from '@/app/actions/projectTeams'
 import { makeAdminActor } from '../fixtures/actor'
 
-const ADMIN_ACTOR = makeAdminActor('p1', { userId: 'u-admin', teamCode: 'PMO', teamId: 't1' })
+const ADMIN_ACTOR = makeAdminActor('p1', { userId: 'u-admin' })
 const asAdmin = () => requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN_ACTOR })
 
 describe('프로젝트 팀 관리 서버액션', () => {

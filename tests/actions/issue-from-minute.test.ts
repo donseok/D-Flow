@@ -44,7 +44,7 @@ import {
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'user-1', email: 'user@example.com', user_metadata: { name: '홍길동' } } as const
-const ACTOR = makeMemberActor('project-1', [], { userId: USER.id, teamCode: 'PMO', teamId: 't1' })
+const ACTOR = makeMemberActor('project-1', [], { userId: USER.id })
 const BODY = '# 제목\n\n인터페이스 전환 지연 위험을 담당자와 확인한다.'
 const BODY_HASH = fnv1a64(BODY)
 const BLOCK = splitMinuteBlocks(BODY)[1]

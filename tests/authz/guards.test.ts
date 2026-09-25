@@ -5,155 +5,233 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { mockClient } = vi.hoisted(() => ({ mockClient: { auth: { getClaims: vi.fn() }, from: vi.fn() } }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => mockClient) }))
 
-import { getActor, requireSuperuser, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
+import {
+  getActor, actorFromUser, requireSuperuser, requireProjectAdmin, requireProjectMember, resolveProjectId,
+} from '@/lib/authz'
+import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 
 const USER = { id: 'u1', email: 'a@b.com' }
 
-/** memberships 단건 조회·project_roles 목록 조회·project_members(0071 명단 팀) 조회를 순서대로 흉내낸다. */
+type RosterRow = {
+  id: string; project_id: string; access_role: string | null
+  project_member_teams: { team_id: string; is_primary: boolean; teams: { code: string } | null }[]
+}
+
+/** 체인 호출 기록 — '모든 축이 user_id 를 명시 필터로 건다'를 검증한다. executed 는 실제로 await 된(요청이 나간) 표. */
+let calls: { table: string; method: string; args: unknown[] }[] = []
+let executed: string[] = []
+
+/** buildActor 의 4축(platform_admins·workspace_members·projects·project_members)을 흉내낸다. */
 function stubDb(opts: {
-  membership?: { is_superuser: boolean; teams: { code: string; id: string } } | null
-  membershipError?: { message: string } | null
-  roles?: { project_id: string; role: string }[] | null
-  rolesError?: { message: string } | null
-  rosterRows?: { project_id: string; team_id: string; teams: { code: string } | null }[] | null
-  rosterError?: { message: string } | null
+  platformAdmin?: boolean; wsRows?: { workspace_id: string; role: string }[]
+  projects?: { id: string; workspace_id: string }[]
+  roster?: RosterRow[]
+  errorOn?: 'platform_admins' | 'workspace_members' | 'projects' | 'project_members'
 }) {
-  mockClient.auth.getClaims.mockResolvedValue({ data: { claims: { sub: USER.id, email: USER.email } } })
+  mockClient.auth.getClaims.mockResolvedValue({ data: { claims: { sub: USER.id } } })
+  const res = (table: string, data: unknown) => ({ data: opts.errorOn === table ? null : data, error: opts.errorOn === table ? { message: 'boom' } : null })
   mockClient.from.mockImplementation((table: string) => {
-    if (table === 'memberships') {
-      return { select: () => ({ eq: () => ({ maybeSingle: async () => ({
-        data: opts.membership ?? null, error: opts.membershipError ?? null }) }) }) }
+    const chain: Record<string, unknown> = {}
+    const terminal = async () => {
+      executed.push(table)
+      if (table === 'platform_admins') return res(table, opts.platformAdmin ? { user_id: USER.id } : null)
+      if (table === 'workspace_members') return res(table, opts.wsRows ?? [])
+      if (table === 'projects') return res(table, opts.projects ?? [])
+      if (table === 'project_members') return res(table, opts.roster ?? [])
+      throw new Error(`예상치 못한 테이블: ${table}`)
     }
-    if (table === 'project_roles') {
-      return { select: () => ({ eq: async () => ({
-        data: opts.roles ?? null, error: opts.rolesError ?? null }) }) }
-    }
-    if (table === 'project_members') {
-      return { select: () => ({ eq: () => ({ not: async () => ({
-        data: opts.rosterRows ?? [], error: opts.rosterError ?? null }) }) }) }
-    }
-    throw new Error(`예상치 못한 테이블: ${table}`)
+    for (const m of ['select', 'eq', 'in', 'not', 'is']) chain[m] = (...args: unknown[]) => { calls.push({ table, method: m, args }); return chain }
+    chain.maybeSingle = terminal
+    ;(chain as { then?: unknown }).then = (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => terminal().then(ok, ko)
+    return chain
   })
 }
 
-beforeEach(() => { mockClient.from.mockReset(); mockClient.auth.getClaims.mockReset() })
+const callsOn = (table: string, method: string) => calls.filter(c => c.table === table && c.method === method).map(c => c.args)
 
-describe('getActor', () => {
-  it('비로그인은 null', async () => {
+const WS_MEMBER = { wsRows: [{ workspace_id: 'w1', role: 'member' }], projects: [{ id: 'p1', workspace_id: 'w1' }, { id: 'p2', workspace_id: 'w1' }] }
+const WS_ADMIN = { wsRows: [{ workspace_id: 'w1', role: 'admin' }], projects: [{ id: 'p1', workspace_id: 'w1' }, { id: 'p2', workspace_id: 'w1' }] }
+const row = (project_id: string, access_role: string | null, teams: [string, boolean][] = []): RosterRow => ({
+  id: `m-${project_id}`, project_id, access_role,
+  project_member_teams: teams.map(([code, is_primary]) => ({ team_id: `t-${code}`, is_primary, teams: { code } })),
+})
+
+beforeEach(() => { mockClient.from.mockReset(); mockClient.auth.getClaims.mockReset(); calls = []; executed = [] })
+
+describe('getActor — 4축 조립', () => {
+  it('(a) 비로그인은 null', async () => {
     mockClient.auth.getClaims.mockResolvedValue({ data: null })
     expect(await getActor()).toBe(null)
   })
 
-  it('멤버십과 프로젝트 역할을 합쳐 Actor 를 만든다', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't9' } },
-      roles: [{ project_id: 'p1', role: 'admin' }, { project_id: 'p2', role: 'member' }],
-    })
+  it('(b) 플랫폼 관리자 → isSuperuser', async () => {
+    stubDb({ platformAdmin: true })
     const a = await getActor()
     expect(a?.userId).toBe('u1')
-    expect(a?.teamCode).toBe('ERP')
-    expect(a?.isSuperuser).toBe(false)
-    expect(a?.projectRoles.get('p1')).toBe('admin')
-    expect(a?.projectRoles.get('p2')).toBe('member')
+    expect(a?.isSuperuser).toBe(true)
   })
 
-  // 조회 실패를 '역할 없음'으로 폴백하면 가드가 조용히 전원을 거부하거나(운영 마비)
-  // 반대로 실패를 성공처럼 흘려보낸다. 실패는 예외로 드러낸다.
-  it('project_roles 조회가 실패하면 예외를 던진다', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't9' } },
-      roles: null, rolesError: { message: 'boom' },
-    })
-    await expect(getActor()).rejects.toThrow(/권한 정보/)
-  })
-
-  // 0071: project_members 조회 결과가 rosterTeams(projectId → {teamId, teamCode})로 정확히
-  // 조립되는지 — teams(code) 임베드 캐스트 경유라 실값이 아니라 undefined 로 새는 회귀를 잡는다.
-  it('명단 팀 조회 결과를 rosterTeams 로 조립한다', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't9' } },
-      roles: [{ project_id: 'p1', role: 'member' }],
-      rosterRows: [{ project_id: 'p1', team_id: 't-dev', teams: { code: '개발' } }],
-    })
+  it('워크스페이스·프로젝트·명단 축을 Map 으로 조립한다', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin'), row('p2', null)] })
     const a = await getActor()
-    expect(a?.rosterTeams.get('p1')).toEqual({ teamId: 't-dev', teamCode: '개발' })
+    expect(a?.isSuperuser).toBe(false)
+    expect(a?.workspaceRoles.get('w1')).toBe('member')
+    expect(a?.projectWorkspace.get('p1')).toBe('w1')
+    expect(a?.projectWorkspace.get('p2')).toBe('w1')
+    expect(a?.projectRoles.get('p1')).toBe('admin')
+    // access_role null(명단에만 있는 사람) — 역할 없음이지만 memberId 는 있다
+    expect(a?.projectRoles.has('p2')).toBe(false)
+    expect(a?.memberIds.get('p2')).toBe('m-p2')
+  })
+
+  // teams(code) 임베드 캐스트 경유라 실값이 아니라 undefined 로 새는 회귀를 잡는다.
+  it('(d) 명단 팀 2개 → rosterTeams 에 대표 팀이 첫 원소로, memberIds 에 내 명단 행', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'member', [['QA', false], ['개발', true]])] })
+    const a = await getActor()
+    expect(a?.rosterTeams.get('p1')?.teamCodes).toHaveLength(2)
+    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-개발', 't-QA'], teamCodes: ['개발', 'QA'] })
+    expect(a?.memberIds.get('p1')).toBe('m-p1')
     expect(a?.rosterTeams.get('p2')).toBeUndefined()
   })
 
-  // memberships·project_roles 축과 동일 계약: 명단 팀 조회 실패도 '명단 팀 없음'으로 폴백하지
-  // 않고 예외로 드러낸다(fail-closed) — 조용히 좁아진 권한이 아니라 중단이어야 한다.
-  it('project_members 조회가 실패하면 예외를 던진다', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't9' } },
-      roles: [{ project_id: 'p1', role: 'member' }],
-      rosterRows: null, rosterError: { message: 'boom' },
+  it('팀 코드 임베드가 비면 그 링크는 버린다(배열 모양 임베드도 수용)', async () => {
+    const r = row('p1', 'member')
+    r.project_member_teams = [
+      { team_id: 't-x', is_primary: true, teams: null },
+      { team_id: 't-erp', is_primary: false, teams: [{ code: 'ERP' }] as unknown as { code: string } },
+    ]
+    stubDb({ ...WS_MEMBER, roster: [r] })
+    const a = await getActor()
+    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-erp'], teamCodes: ['ERP'] })
+  })
+
+  // 조회 실패를 '역할 없음'으로 폴백하면 가드가 조용히 전원을 거부하거나(운영 마비)
+  // 반대로 실패를 성공처럼 흘려보낸다. 실패는 예외로 드러낸다(fail-closed).
+  it.each(['platform_admins', 'workspace_members', 'projects', 'project_members'] as const)(
+    '(g) %s 조회가 실패하면 예외를 던진다', async (axis) => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      stubDb({ ...WS_MEMBER, errorOn: axis })
+      await expect(getActor()).rejects.toThrow(/권한 정보/)
+      spy.mockRestore()
     })
-    await expect(getActor()).rejects.toThrow(/권한 정보/)
+
+  // 세션·admin 경로가 같은 buildActor 를 쓴다 — admin(RLS 우회) 경로에서 user_id 필터가 빠지면
+  // 전원의 권한이 합쳐진 Actor 가 나온다. 모든 축이 명시 필터를 거는지 본다.
+  it('모든 축이 user_id 를 명시 필터로 건다 — projects 는 내 워크스페이스로 in 필터', async () => {
+    stubDb({ ...WS_MEMBER })
+    await getActor()
+    expect(callsOn('platform_admins', 'eq')).toContainEqual(['user_id', 'u1'])
+    expect(callsOn('workspace_members', 'eq')).toContainEqual(['user_id', 'u1'])
+    expect(callsOn('projects', 'in')).toEqual([['workspace_id', ['w1']]])
+    const pmEq = callsOn('project_members', 'eq')
+    expect(pmEq).toContainEqual(['people.user_id', 'u1'])
+    expect(pmEq).toContainEqual(['people.active', true])
+    expect(pmEq).toContainEqual(['active', true])
+  })
+
+  it('플랫폼 관리자는 projects 를 필터 없이 읽는다', async () => {
+    stubDb({ platformAdmin: true, projects: [{ id: 'p9', workspace_id: 'w9' }] })
+    const a = await getActor()
+    expect(callsOn('projects', 'in')).toEqual([])
+    expect(a?.projectWorkspace.get('p9')).toBe('w9')
+  })
+
+  // 필터 없는 projects 빌더는 만들어지지만 await 되지 않는다(PostgREST 빌더는 then 에서만 요청을 보낸다).
+  it('워크스페이스 소속이 없으면 projects 를 조회하지 않는다 — 필터 없는 전체 조회 금지', async () => {
+    stubDb({ wsRows: [], projects: [{ id: 'p1', workspace_id: 'w1' }] })
+    const a = await getActor()
+    expect(executed).not.toContain('projects')
+    expect(a?.projectWorkspace.size).toBe(0)
+  })
+})
+
+describe('actorFromUser — admin 클라이언트 경로', () => {
+  it('세션 없이 주어진 userId 로 같은 4축을 조립한다', async () => {
+    stubDb({ ...WS_ADMIN, roster: [row('p1', 'member')] })
+    const a = await actorFromUser(mockClient as never, 'u-other')
+    expect(mockClient.auth.getClaims).not.toHaveBeenCalled()
+    expect(a.userId).toBe('u-other')
+    expect(callsOn('platform_admins', 'eq')).toContainEqual(['user_id', 'u-other'])
+    expect(callsOn('workspace_members', 'eq')).toContainEqual(['user_id', 'u-other'])
+    expect(callsOn('project_members', 'eq')).toContainEqual(['people.user_id', 'u-other'])
+    expect(a.workspaceRoles.get('w1')).toBe('admin')
+    expect(a.projectRoles.get('p1')).toBe('member')
   })
 })
 
 describe('requireSuperuser', () => {
-  it('슈퍼유저는 통과', async () => {
-    stubDb({ membership: { is_superuser: true, teams: { code: 'PMO', id: 't1' } }, roles: [] })
-    const r = await requireSuperuser()
-    expect(r.ok).toBe(true)
+  it('플랫폼 관리자는 통과', async () => {
+    stubDb({ platformAdmin: true })
+    expect((await requireSuperuser()).ok).toBe(true)
   })
-  it('관리자는 거부', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'PMO', id: 't1' } },
-      roles: [{ project_id: 'p1', role: 'admin' }],
-    })
-    expect(await requireSuperuser()).toEqual({ ok: false, error: '권한 없음' })
+  it('워크스페이스 관리자·프로젝트 관리자는 거부', async () => {
+    stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
+    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_DENIED })
   })
   it('비로그인은 로그인 필요', async () => {
     mockClient.auth.getClaims.mockResolvedValue({ data: null })
-    expect(await requireSuperuser()).toEqual({ ok: false, error: '로그인 필요' })
+    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_ANON })
   })
 })
 
 describe('requireProjectAdmin / requireProjectMember', () => {
-  it('관리자는 admin·member 가드 모두 통과', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'PMO', id: 't1' } },
-      roles: [{ project_id: 'p1', role: 'admin' }],
-    })
+  it('(c) 워크스페이스 관리자는 명단 행이 없어도 admin·member 가드 모두 통과', async () => {
+    stubDb({ ...WS_ADMIN })
     expect((await requireProjectAdmin('p1')).ok).toBe(true)
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'PMO', id: 't1' } },
-      roles: [{ project_id: 'p1', role: 'admin' }],
-    })
+    stubDb({ ...WS_ADMIN })
+    expect((await requireProjectMember('p1')).ok).toBe(true)
+  })
+
+  it('명단 관리자는 admin·member 가드 모두 통과', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
+    expect((await requireProjectAdmin('p1')).ok).toBe(true)
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
     expect((await requireProjectMember('p1')).ok).toBe(true)
   })
 
   it('멤버는 admin 가드에서 거부, member 가드는 통과', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't2' } },
-      roles: [{ project_id: 'p1', role: 'member' }],
-    })
-    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: '권한 없음' })
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't2' } },
-      roles: [{ project_id: 'p1', role: 'member' }],
-    })
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'member')] })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED })
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'member')] })
     expect((await requireProjectMember('p1')).ok).toBe(true)
   })
 
-  it('다른 프로젝트 관리자는 거부 — 프로젝트 스코프', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'PMO', id: 't1' } },
-      roles: [{ project_id: 'p1', role: 'admin' }],
-    })
-    expect(await requireProjectAdmin('p2')).toEqual({ ok: false, error: '권한 없음' })
+  it('(f) 같은 워크스페이스의 조회 전용(viewer)은 권한 없음', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', null)] })
+    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_DENIED })
+    stubDb({ ...WS_MEMBER })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED })
   })
 
-  it('조회 실패는 통과시키지 않고 사유를 구분해 돌려준다', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'PMO', id: 't1' } },
-      roles: null, rolesError: { message: 'boom' },
-    })
-    expect(await requireProjectAdmin('p1')).toEqual({
-      ok: false, error: '권한을 확인할 수 없어 중단했습니다.',
-    })
+  it('다른 프로젝트 관리자는 거부 — 프로젝트 스코프', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
+    expect(await requireProjectAdmin('p2')).toEqual({ ok: false, error: ERR_DENIED })
+  })
+
+  it('(e) 내 워크스페이스에 없는 pid 는 대상 없음(존재 은닉) — admin·member 가드 모두', async () => {
+    stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
+    expect(await requireProjectMember('px')).toEqual({ ok: false, error: ERR_MISSING })
+    stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
+    expect(await requireProjectAdmin('px')).toEqual({ ok: false, error: ERR_MISSING })
+  })
+
+  it('pid null 은 플랫폼 관리자 외 권한 없음(fail-closed) — 존재 은닉이 아니다', async () => {
+    stubDb({ ...WS_ADMIN })
+    expect(await requireProjectAdmin(null)).toEqual({ ok: false, error: ERR_DENIED })
+    stubDb({ platformAdmin: true })
+    expect((await requireProjectAdmin(null)).ok).toBe(true)
+  })
+
+  it('플랫폼 관리자는 미존재 pid 도 통과 — 존재 여부 판정은 호출부 몫', async () => {
+    stubDb({ platformAdmin: true })
+    expect((await requireProjectMember('px')).ok).toBe(true)
+  })
+
+  it('(g) 조회 실패는 통과시키지 않고 사유를 구분해 돌려준다', async () => {
+    stubDb({ ...WS_MEMBER, errorOn: 'project_members' })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_LOOKUP })
+    stubDb({ ...WS_MEMBER, errorOn: 'projects' })
+    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_LOOKUP })
   })
 })
 
@@ -187,10 +265,7 @@ describe('resolveProjectId', () => {
 
 describe('getActorForView — 화면 계층 열화', () => {
   it('권한 조회 실패는 조회 전용(null)으로 열화한다 — 인증 영역 전체 500 방지', async () => {
-    stubDb({
-      membership: { is_superuser: false, teams: { code: 'ERP', id: 't9' } },
-      roles: null, rolesError: { message: 'boom' },
-    })
+    stubDb({ ...WS_MEMBER, errorOn: 'project_members' })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { getActorForView } = await import('@/lib/authz')
     expect(await getActorForView()).toBe(null)

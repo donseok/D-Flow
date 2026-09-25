@@ -17,7 +17,7 @@ import { saveWeeklyCells } from '@/app/actions/weekly'
 import { WEEKLY_CELL_MAX, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
 import { makeMemberActor } from '../fixtures/actor'
 
-const MEMBER = makeMemberActor('p1', [], { teamCode: 'PMO', teamId: 't1' })
+const MEMBER = makeMemberActor('p1', [])
 // 구현 상수의 거울값 — src/app/actions/weekly.ts 의 BATCH_UPDATE_CONCURRENCY/BATCH_MAX 와 함께 바꾼다.
 const CONCURRENCY = 8
 const BATCH_MAX = 500

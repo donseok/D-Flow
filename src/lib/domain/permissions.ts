@@ -1,23 +1,12 @@
 import type { ComputedItem } from './types'
 import { isProjectAdmin, isProjectMember, type Actor } from './authz'
 
-/** '내 팀' 후보 코드 — 계정 전역 팀(memberships) ∪ 그 프로젝트 명단 팀(0071 RLS와 동일 합집합). */
-export function actorTeamCodesFor(actor: Actor, projectId: string): string[] {
-  const out: string[] = []
-  if (actor.teamCode) out.push(actor.teamCode)
-  const roster = actor.rosterTeams.get(projectId)
-  if (roster && roster.teamCode !== actor.teamCode) out.push(roster.teamCode)
-  return out
-}
+/** '내 팀' 후보 코드 — 그 프로젝트 명단의 내 팀 전부(project_member_teams, 대표 팀이 첫 원소).
+ *  계정 전역 팀은 SP1 에서 없어졌다 — 팀은 프로젝트 명단에만 산다. */
+export function actorTeamCodesFor(actor: Actor, projectId: string): string[] { return [...(actor.rosterTeams.get(projectId)?.teamCodes ?? [])] }
 
-/** '내 팀' 후보 id — 서버 액션의 item_owners 재검증용(위와 같은 합집합). */
-export function actorTeamIdsFor(actor: Actor, projectId: string): string[] {
-  const out: string[] = []
-  if (actor.teamId) out.push(actor.teamId)
-  const roster = actor.rosterTeams.get(projectId)
-  if (roster && roster.teamId !== actor.teamId) out.push(roster.teamId)
-  return out
-}
+/** '내 팀' 후보 id — 서버 액션의 item_owners 재검증용(위와 같은 명단 팀). */
+export function actorTeamIdsFor(actor: Actor, projectId: string): string[] { return [...(actor.rosterTeams.get(projectId)?.teamIds ?? [])] }
 
 /**
  * 실적% 편집 권한 (순수). UI 어포던스 게이팅과 서버 재검증이 같은 규칙을 쓰도록 공유한다.

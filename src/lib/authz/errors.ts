@@ -15,11 +15,13 @@ export const ERR_MISSING = '대상을 찾을 수 없습니다.'
 /**
  * 가드 에러 문자열 → HTTP status. 문자열 정본이 이 파일이므로 매핑도 같이 산다
  * (라우트별 사본은 문자열이 바뀌면 조용히 전부 fallback 으로 떨어진다).
- * 비로그인 401 · 권한 없음 403 · 그 외(권한 조회 실패 등)는 호출부가 고른 fallback.
+ * 비로그인 401 · 권한 없음 403 · 대상 없음 404 · 그 외(권한 조회 실패 등)는 호출부가 고른 fallback.
+ * 404 는 타 워크스페이스·미존재 프로젝트의 존재 은닉이다 — 403 으로 답하면 '있다'는 사실이 샌다.
  * wiki/reindex 는 503(판정 불가)을, 나머지 라우트는 500(서버 문제)을 택했다.
  */
 export function denyStatus(error: string, fallback: number = 500): number {
   if (error === ERR_ANON) return 401
   if (error === ERR_DENIED) return 403
+  if (error === ERR_MISSING) return 404
   return fallback
 }

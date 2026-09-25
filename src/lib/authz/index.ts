@@ -1,11 +1,8 @@
 import { cache } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '../supabase/server'
-import {
-  isProjectAdmin as pureIsProjectAdmin,
-  isProjectMember as pureIsProjectMember,
-  type Actor, type ProjectRole,
-} from '../domain/authz'
-import type { TeamCode } from '../domain/types'
+import { roleIn, type Actor, type ProjectRole } from '../domain/authz'
+import { buildActor } from './buildActor'
 // 사유 문자열과 HTTP 매핑(denyStatus)의 정본은 순수 모듈 ./errors 다 — 이 모듈은 테스트
 // 37곳이 통째로 vi.mock 하므로, 라우트가 여기서 denyStatus 를 가져가면 모킹 문맥에서 터진다.
 import { ERR_LOOKUP, ERR_DENIED, ERR_ANON, ERR_MISSING } from './errors'
@@ -26,62 +23,27 @@ export const getActor = cache(async (): Promise<Actor | null> => {
   // getClaims() 는 JWKS(auth-js 전역 캐시)로 로컬 서명·만료 검증만 하고 끝난다. getUser() 는 가드마다 GoTrue /auth/v1/user
   // 왕복(0.1초 안팎)을 강제했고, 서버 액션은 요청 하나가 곧 가드 하나라 그 비용이 클릭마다 그대로 붙었다
   // (2026-09-14 허브 체크 지연 개선). 세션이 없거나 토큰이 무효·만료(갱신 실패)면 claims 가 없다 → 비로그인(null).
-  // 권한 축(멤버십·역할·명단)은 캐시하지 않고 아래서 매번 새로 읽는다 — 멤버에서 빠진 사람이 TTL 동안 남는 일이 없게.
+  // 권한 축(워크스페이스·명단)은 캐시하지 않고 매번 새로 읽는다 — 멤버에서 빠진 사람이 TTL 동안 남는 일이 없게.
   const { data } = await sb.auth.getClaims()
   const userId = data?.claims?.sub
   if (!userId) return null
-
-  // 세 축(멤버십·프로젝트 역할·명단 팀)은 상호 독립 — 병렬로 묶는다. 순차 await 는
-  // 요청 임계경로에 왕복 2단을 공짜로 얹는다(2026-08-18 성능 감사 P0).
+  // 4축(플랫폼 관리자·워크스페이스·프로젝트·명단)은 buildActor 가 병렬로 읽는다 — actorFromUser 와 같은 조립.
   // cache() 래핑: 같은 요청 안에서 레이아웃·페이지·가드가 각자 getActor 를 불러도 1회만 완주한다.
-  const [
-    { data: mem, error: memErr },
-    { data: roles, error: rolesErr },
-    { data: rosterRows, error: rosterErr },
-  ] = await Promise.all([
-    sb.from('memberships').select('is_superuser, teams(code, id)').eq('user_id', userId).maybeSingle(),
-    sb.from('project_roles').select('project_id, role').eq('user_id', userId),
-    // 0071: 프로젝트 명단의 내 팀 — WBS 실적·첨부의 합집합 판정 재료. 조회 실패는 다른 축과
-    // 동일하게 throw(fail-closed) — 명단 팀만 빠진 Actor 는 '권한 없음'으로 조용히 좁아진다.
-    sb.from('project_members').select('project_id, team_id, teams(code)').eq('user_id', userId).not('team_id', 'is', null),
-  ])
-
-  if (memErr) {
-    console.error('[getActor] 멤버십 조회 실패:', memErr.message)
-    throw new Error('권한 정보를 불러오지 못했습니다: ' + memErr.message)
-  }
-  if (rolesErr || !roles) {
-    console.error('[getActor] 프로젝트 역할 조회 실패:', rolesErr?.message)
-    throw new Error('권한 정보를 불러오지 못했습니다: ' + (rolesErr?.message ?? 'unknown'))
-  }
-  if (rosterErr || !rosterRows) {
-    console.error('[getActor] 명단 팀 조회 실패:', rosterErr?.message)
-    throw new Error('권한 정보를 불러오지 못했습니다: ' + (rosterErr?.message ?? 'unknown'))
-  }
-  const rosterTeams = new Map<string, { teamId: string; teamCode: TeamCode }>()
-  for (const r of rosterRows) {
-    const t = (r.teams ?? null) as unknown as { code: TeamCode } | null
-    if (r.team_id && t?.code) rosterTeams.set(r.project_id as string, { teamId: r.team_id as string, teamCode: t.code })
-  }
-
-  const team = (mem?.teams ?? null) as unknown as { code: TeamCode; id: string } | null
-  const map = new Map<string, ProjectRole>()
-  for (const r of roles) map.set(r.project_id as string, r.role as ProjectRole)
-
-  return {
-    userId,
-    teamCode: team?.code ?? null,
-    teamId: team?.id ?? null,
-    isSuperuser: Boolean(mem?.is_superuser),
-    projectRoles: map,
-    rosterTeams,
-  }
+  return buildActor(sb, userId)
 })
+
+/**
+ * 세션 없이 특정 사용자의 Actor 를 조립한다 — 외부 API·배치처럼 service_role 클라이언트로 판정하는 경로(SP7)용.
+ * admin 클라이언트는 RLS 를 우회하므로 user_id 필터가 전부다 — buildActor 가 모든 축에 명시 필터를 건다.
+ */
+export async function actorFromUser(admin: Pick<SupabaseClient, 'from'>, userId: string): Promise<Actor> {
+  return buildActor(admin, userId)
+}
 
 /**
  * 화면 계층용 — getActor 의 throw 를 삼키고 **조회 전용(null)** 으로 열화한다.
  *
- * 레이아웃·페이지에서 getActor() 를 그대로 부르면 project_roles 조회 실패 한 번이
+ * 레이아웃·페이지에서 getActor() 를 그대로 부르면 권한 축 조회 실패 한 번이
  * 인증 영역 전체를 500 으로 만든다(0052 롤백 직후가 가장 현실적인 트리거 —
  * 테이블이 사라져 모든 요청이 PGRST205 로 실패한다). listProjects 가 이미
  * 같은 판단으로 [] 폴백을 택했고, 이 함수는 그 예방책을 권한 축에도 맞춘다.
@@ -147,18 +109,20 @@ export async function requireSuperuser(): Promise<GuardResult> {
   return r.actor.isSuperuser ? r : { ok: false, error: ERR_DENIED }
 }
 
-/** 해당 프로젝트의 관리자 이상. */
+/** 해당 프로젝트의 관리자 이상(워크스페이스 관리자 승계 포함). 타 워크스페이스·미존재는 ERR_MISSING(404). */
 export async function requireProjectAdmin(projectId: string | null): Promise<GuardResult> {
-  const r = await actorOrError()
-  if (!r.ok) return r
-  return pureIsProjectAdmin(r.actor, projectId) ? r : { ok: false, error: ERR_DENIED }
+  const r = await actorOrError(); if (!r.ok) return r
+  const role = roleIn(r.actor, projectId)
+  if (role === null) return { ok: false, error: ERR_MISSING }     // 타 워크스페이스·미존재 — 존재 은닉(404)
+  return role === 'superuser' || role === 'admin' ? r : { ok: false, error: ERR_DENIED }
 }
 
-/** 해당 프로젝트의 멤버 이상. */
+/** 해당 프로젝트의 멤버 이상. 타 워크스페이스·미존재는 ERR_MISSING(404). */
 export async function requireProjectMember(projectId: string | null): Promise<GuardResult> {
-  const r = await actorOrError()
-  if (!r.ok) return r
-  return pureIsProjectMember(r.actor, projectId) ? r : { ok: false, error: ERR_DENIED }
+  const r = await actorOrError(); if (!r.ok) return r
+  const role = roleIn(r.actor, projectId)
+  if (role === null) return { ok: false, error: ERR_MISSING }     // 타 워크스페이스·미존재 — 존재 은닉(404)
+  return role === 'superuser' || role === 'admin' || role === 'member' ? r : { ok: false, error: ERR_DENIED }
 }
 
 /** project_id 컬럼을 직접 가진 테이블 화이트리스트 — 임의 테이블 조회를 막는다. */

@@ -28,11 +28,13 @@ vi.mock('@/lib/supabase/admin', () => ({
 }))
 
 import { countApprovable, getPendingApprovalCount } from '@/lib/data/agentApprovals'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, WS } from '../fixtures/actor'
 
 const P = '11111111-1111-4111-8111-111111111111'
 const actor = (role?: 'admin' | 'member', superuser = false) => makeActor({
   isSuperuser: superuser,
+  // P 는 이 사용자 워크스페이스의 프로젝트 — 없으면 roleIn 이 null(존재 은닉)이라 역할이 무시된다
+  projectWorkspace: new Map([[P, WS]]),
   projectRoles: new Map(role ? [[P, role]] : []),
 })
 // 트리: root(담당 m-boss) ─ wp(담당 없음) ─ leaf1(담당 m-dev), leaf2 · other(담당 m-other) ─ leaf3

@@ -11,20 +11,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
-  memberships: vi.fn(),
-  projectRoles: vi.fn(),
+  platformAdmins: vi.fn(),
+  workspaceMembers: vi.fn(),
   projectMembers: vi.fn(),
   projects: vi.fn(),
   session: vi.fn(),
 }))
 
+// buildActor 의 4축(platform_admins·workspace_members·projects·project_members)만 응답한다.
+// 다른 표를 읽으면 응답이 없어 TypeError 로 열화하는데, 아래 실패 케이스는 로그의 원인 문자열('timeout')까지
+// 확인하므로 '엉뚱한 이유로 degraded' 가 초록으로 통과하지 못한다.
 function table(name: string) {
-  const resp = name === 'memberships' ? mocks.memberships
-    : name === 'project_roles' ? mocks.projectRoles
+  const resp = name === 'platform_admins' ? mocks.platformAdmins
+    : name === 'workspace_members' ? mocks.workspaceMembers
       : name === 'project_members' ? mocks.projectMembers
-        : mocks.projects
+        : name === 'projects' ? mocks.projects
+          : () => undefined
   const q: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'order', 'not']) q[m] = vi.fn(() => q)
+  for (const m of ['select', 'eq', 'in', 'order', 'not']) q[m] = vi.fn(() => q)
   q.maybeSingle = vi.fn(() => resp())
   q.then = (res: (v: unknown) => unknown, rej: (r: unknown) => unknown) =>
     Promise.resolve(resp()).then(res, rej)
@@ -42,39 +46,49 @@ vi.mock('@/lib/auth', () => ({ getSession: mocks.session, getDisplayName: vi.fn(
 import { getActorViewState, getActorForView } from '@/lib/authz'
 
 const USER = { id: 'u1' }
+const FAIL = { data: null, error: { message: 'timeout' } }
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getClaims.mockResolvedValue({ data: { claims: { sub: USER.id } } })
   mocks.session.mockResolvedValue(USER)
-  // 0071 명단 팀 조회 — 이 스위트는 memberships/project_roles 축을 다루므로 기본값은 정상 빈 결과.
+  // 기본값: 워크스페이스 w1 의 member, 프로젝트 p1 하나, 명단 행 없음 — 네 축 모두 정상.
+  mocks.platformAdmins.mockReturnValue({ data: null, error: null })
+  mocks.workspaceMembers.mockReturnValue({ data: [{ workspace_id: 'w1', role: 'member' }], error: null })
+  mocks.projects.mockReturnValue({ data: [{ id: 'p1', workspace_id: 'w1' }], error: null })
   mocks.projectMembers.mockReturnValue({ data: [], error: null })
 })
 
+/** 열화 로그가 이 축의 실패('timeout') 때문인지 — TypeError 같은 엉뚱한 원인이면 false. */
+function degradedBecauseOfTimeout(spy: { mock: { calls: unknown[][] } }): boolean {
+  return spy.mock.calls.some((args: unknown[]) => args.some((a: unknown) => typeof a === 'string' && a.includes('timeout')))
+}
+
 describe('getActorViewState — 조회 실패를 권한 없음으로 위장하지 않는다', () => {
   it('정상 조회: degraded=false, actor 조립', async () => {
-    mocks.memberships.mockReturnValue({ data: { is_superuser: true, teams: null }, error: null })
-    mocks.projectRoles.mockReturnValue({ data: [{ project_id: 'p1', role: 'admin' }], error: null })
+    mocks.platformAdmins.mockReturnValue({ data: { user_id: USER.id }, error: null })
+    mocks.projectMembers.mockReturnValue({
+      data: [{ id: 'm1', project_id: 'p1', access_role: 'admin', project_member_teams: [] }], error: null,
+    })
     const s = await getActorViewState()
     expect(s.degraded).toBe(false)
     expect(s.actor?.isSuperuser).toBe(true)
     expect(s.actor?.projectRoles.get('p1')).toBe('admin')
   })
 
-  it('memberships 조회 실패: actor=null 이면서 degraded=true — 둘을 구분할 수 있어야 한다', async () => {
-    mocks.memberships.mockReturnValue({ data: null, error: { message: 'timeout' } })
-    mocks.projectRoles.mockReturnValue({ data: [], error: null })
+  it.each([
+    ['platform_admins', () => mocks.platformAdmins.mockReturnValue(FAIL)],
+    ['workspace_members', () => mocks.workspaceMembers.mockReturnValue(FAIL)],
+    ['projects', () => mocks.projects.mockReturnValue(FAIL)],
+    ['project_members', () => mocks.projectMembers.mockReturnValue(FAIL)],
+  ])('%s 조회 실패: actor=null 이면서 degraded=true — 둘을 구분할 수 있어야 한다', async (_axis, breakAxis) => {
+    breakAxis()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const s = await getActorViewState()
     expect(s.actor).toBeNull()
     expect(s.degraded).toBe(true)
-  })
-
-  it('project_roles 조회 실패도 degraded=true', async () => {
-    mocks.memberships.mockReturnValue({ data: { is_superuser: false, teams: null }, error: null })
-    mocks.projectRoles.mockReturnValue({ data: null, error: { message: 'timeout' } })
-    const s = await getActorViewState()
-    expect(s.actor).toBeNull()
-    expect(s.degraded).toBe(true)
+    expect(degradedBecauseOfTimeout(spy)).toBe(true)
+    spy.mockRestore()
   })
 
   it('비로그인은 degraded 가 아니다 — 정상 흐름에 경고를 붙이면 안 된다', async () => {
@@ -85,12 +99,12 @@ describe('getActorViewState — 조회 실패를 권한 없음으로 위장하�
   })
 
   it('getActorForView 는 기존 계약(Actor|null) 그대로 — 호출부 24곳이 안 깨진다', async () => {
-    mocks.memberships.mockReturnValue({ data: null, error: { message: 'timeout' } })
-    mocks.projectRoles.mockReturnValue({ data: [], error: null })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.platformAdmins.mockReturnValue(FAIL)
     expect(await getActorForView()).toBeNull()
+    spy.mockRestore()
 
-    mocks.memberships.mockReturnValue({ data: { is_superuser: true, teams: null }, error: null })
-    mocks.projectRoles.mockReturnValue({ data: [], error: null })
+    mocks.platformAdmins.mockReturnValue({ data: { user_id: USER.id }, error: null })
     expect((await getActorForView())?.isSuperuser).toBe(true)
   })
 })

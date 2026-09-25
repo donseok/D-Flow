@@ -1,29 +1,83 @@
 import { describe, it, expect } from 'vitest'
 import {
-  roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole,
-  toProjectActorView, actorFromView, canSeeProject,
+  roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
+  toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
 } from '@/lib/domain/authz'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
-const P = 'proj-1'
-const Q = 'proj-2'
-
-const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ teamCode: 'PMO', teamId: 't1', ...over })
-
-const superuser = actor({ isSuperuser: true })
-const admin = actor({ projectRoles: new Map([[P, 'admin' as const]]) })
-const member = actor({ projectRoles: new Map([[P, 'member' as const]]) })
-const viewer = actor({})
+const W = 'ws-1', P = 'proj-1', Q = 'proj-2', X = 'proj-other-ws'
+const inWs = { projectWorkspace: new Map([[P, W], [Q, W]]) }
 
 describe('roleIn', () => {
-  it('비로그인은 null', () => {
-    expect(roleIn(null, P)).toBe(null)
+  it('비로그인은 null', () => { expect(roleIn(null, P)).toBe(null) })
+  it('플랫폼 관리자는 pid 가 무엇이든 superuser', () => {
+    expect(roleIn(makeSuperuser(), P)).toBe('superuser'); expect(roleIn(makeSuperuser(), null)).toBe('superuser')
   })
+  it('pid null 은 superuser 외 viewer(fail-closed)', () => { expect(roleIn(makeAdminActor(P), null)).toBe('viewer') })
+  it('타 워크스페이스·미존재 프로젝트는 null(존재 은닉)', () => {
+    expect(roleIn(makeAdminActor(P, inWs), X)).toBe(null)
+  })
+  it('워크스페이스 관리자는 명단 행 없이도 admin — 명단에 member 로 있어도 admin', () => {
+    const wsAdmin = makeActor({ ...inWs, workspaceRoles: new Map([[W, 'admin']]) })
+    expect(roleIn(wsAdmin, P)).toBe('admin')
+    const demotedOnRoster = makeMemberActor(P, [], { ...inWs, workspaceRoles: new Map([[W, 'admin']]) })
+    expect(roleIn(demotedOnRoster, P)).toBe('admin')
+  })
+  it('명단 행의 access_role, 없으면 viewer', () => {
+    expect(roleIn(makeAdminActor(P, inWs), P)).toBe('admin')
+    expect(roleIn(makeMemberActor(P, [], inWs), P)).toBe('member')
+    expect(roleIn(makeActor(inWs), Q)).toBe('viewer')
+  })
+})
+describe('workspaceRoleIn / isWorkspaceAdmin', () => {
+  it('소속 없음 null, member, admin, superuser', () => {
+    // fixture 기본값이 WS 의 member 라 '소속 없음'은 빈 Map 을 명시한다.
+    expect(workspaceRoleIn(makeActor({ workspaceRoles: new Map() }), W)).toBe(null)
+    expect(workspaceRoleIn(makeActor({ workspaceRoles: new Map([[W, 'member']]) }), W)).toBe('member')
+    expect(isWorkspaceAdmin(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), W)).toBe(true)
+    expect(workspaceRoleIn(makeSuperuser(), W)).toBe('superuser')
+  })
+})
+describe('canSeeProject', () => {
+  it('비공개는 역할 보유자·워크스페이스 관리자·플랫폼 관리자만', () => {
+    const priv = { id: P, is_private: true }
+    expect(canSeeProject(makeActor(inWs), priv)).toBe(false)
+    expect(canSeeProject(makeMemberActor(P, [], inWs), priv)).toBe(true)
+    expect(canSeeProject(makeActor({ ...inWs, workspaceRoles: new Map([[W, 'admin']]) }), priv)).toBe(true)
+    expect(canSeeProject(makeSuperuser(), priv)).toBe(true)
+  })
+})
+describe('adminProjectIds / isAnyProjectAdmin', () => {
+  it('워크스페이스 관리자는 그 워크스페이스 프로젝트 전부가 관리 대상', () => {
+    const a = makeActor({ ...inWs, workspaceRoles: new Map([[W, 'admin']]) })
+    expect(new Set(adminProjectIds(a))).toEqual(new Set([P, Q]))
+    expect(isAnyProjectAdmin(a)).toBe(true)
+    expect(hasAnyProjectRole(a)).toBe(true)
+  })
+})
+describe('ProjectActorView 왕복', () => {
+  it('팀 배열·대표 팀·memberId 가 보존된다', () => {
+    const a = makeMemberActor(P, ['ERP', 'MES'], { ...inWs, memberIds: new Map([[P, 'm1']]) })
+    const v = toProjectActorView(a, P)!
+    expect(v.rosterTeamCodes).toEqual(['ERP', 'MES']); expect(v.primaryTeamCode).toBe('ERP'); expect(v.memberId).toBe('m1')
+    expect(v.workspaceId).toBe(W)
+    const back = actorFromView(v, P)!
+    expect(roleIn(back, P)).toBe('member'); expect(back.rosterTeams.get(P)?.teamCodes).toEqual(['ERP', 'MES'])
+  })
+})
+
+// ── 기존 케이스(SP0 판정 계약) — 새 Actor 형으로 이식. P·Q 는 같은 워크스페이스(W)의 프로젝트다. ──
+const superuser = makeSuperuser()
+const admin = makeAdminActor(P, inWs)
+const member = makeMemberActor(P, [], inWs)
+const viewer = makeActor(inWs)
+
+describe('roleIn — 기존 계약', () => {
   it('슈퍼유저는 어느 프로젝트에서도 superuser', () => {
     expect(roleIn(superuser, P)).toBe('superuser')
     expect(roleIn(superuser, Q)).toBe('superuser')
   })
-  it('관리자는 지정된 프로젝트에서만 admin, 다른 프로젝트에서는 viewer', () => {
+  it('관리자는 지정된 프로젝트에서만 admin, 같은 워크스페이스의 다른 프로젝트에서는 viewer', () => {
     expect(roleIn(admin, P)).toBe('admin')
     expect(roleIn(admin, Q)).toBe('viewer')
   })
@@ -35,11 +89,33 @@ describe('roleIn', () => {
     expect(roleIn(viewer, P)).toBe('viewer')
   })
   // 프로젝트 미지정 대상(예: project_id 가 null 인 회의록)은 프로젝트로 판정할 수 없다.
-  // 슈퍼유저만 superuser 로 보고 나머지는 viewer — fail-closed.
   it('projectId 가 null 이면 슈퍼유저 외 전원 viewer', () => {
     expect(roleIn(superuser, null)).toBe('superuser')
     expect(roleIn(admin, null)).toBe('viewer')
     expect(roleIn(member, null)).toBe('viewer')
+  })
+  it('워크스페이스 멤버 등급은 승계하지 않는다 — admin 만 승계', () => {
+    expect(roleIn(makeActor({ ...inWs, workspaceRoles: new Map([[W, 'member']]) }), P)).toBe('viewer')
+  })
+})
+
+describe('workspaceRoleIn / isWorkspaceAdmin / isWorkspaceMember — 경계', () => {
+  it('비로그인은 null·false', () => {
+    expect(workspaceRoleIn(null, W)).toBe(null)
+    expect(isWorkspaceAdmin(null, W)).toBe(false)
+    expect(isWorkspaceMember(null, W)).toBe(false)
+  })
+  it('워크스페이스 미지정(null/undefined)은 플랫폼 관리자만 true — fail-closed', () => {
+    expect(isWorkspaceAdmin(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), null)).toBe(false)
+    expect(isWorkspaceMember(makeActor(), undefined)).toBe(false)
+    expect(isWorkspaceAdmin(superuser, null)).toBe(true)
+    expect(isWorkspaceMember(superuser, undefined)).toBe(true)
+  })
+  it('isWorkspaceMember 는 소속 여부, isWorkspaceAdmin 은 admin 만', () => {
+    const m = makeActor({ workspaceRoles: new Map([[W, 'member']]) })
+    expect(isWorkspaceMember(m, W)).toBe(true)
+    expect(isWorkspaceAdmin(m, W)).toBe(false)
+    expect(isWorkspaceMember(m, 'ws-other')).toBe(false)
   })
 })
 
@@ -51,6 +127,9 @@ describe('isProjectAdmin', () => {
     expect(isProjectAdmin(member, P)).toBe(false)
     expect(isProjectAdmin(viewer, P)).toBe(false)
     expect(isProjectAdmin(null, P)).toBe(false)
+  })
+  it('타 워크스페이스 프로젝트는 false', () => {
+    expect(isProjectAdmin(admin, X)).toBe(false)
   })
 })
 
@@ -69,23 +148,10 @@ describe('isAnyProjectAdmin / hasAnyProjectRole — 전역 성격 리소스용',
     expect(hasAnyProjectRole(viewer)).toBe(false)
     expect(hasAnyProjectRole(null)).toBe(false)
   })
-})
-
-describe('effectiveLegacyRole — 옛 컴포넌트 계약용 표시 shim', () => {
-  it('프로젝트 스코프: admin→pmo_admin, member→team_editor, viewer→null', async () => {
-    const { effectiveLegacyRole } = await import('@/lib/domain/authz')
-    expect(effectiveLegacyRole(superuser, P)).toBe('pmo_admin')
-    expect(effectiveLegacyRole(admin, P)).toBe('pmo_admin')
-    expect(effectiveLegacyRole(member, P)).toBe('team_editor')
-    expect(effectiveLegacyRole(viewer, P)).toBe(null)
-    expect(effectiveLegacyRole(null, P)).toBe(null)
-  })
-  it('전역(projectId 생략): 어느 프로젝트든 역할 기준 — DB app_role() 과 같은 의미', async () => {
-    const { effectiveLegacyRole } = await import('@/lib/domain/authz')
-    expect(effectiveLegacyRole(superuser)).toBe('pmo_admin')
-    expect(effectiveLegacyRole(admin)).toBe('pmo_admin')
-    expect(effectiveLegacyRole(member)).toBe('team_editor')
-    expect(effectiveLegacyRole(viewer)).toBe(null)
+  it('adminProjectIds: 명단 admin 행만 — 워크스페이스 관리자가 아니면 워크스페이스 전체로 넓어지지 않는다', () => {
+    expect(adminProjectIds(admin)).toEqual([P])
+    expect(adminProjectIds(member)).toEqual([])
+    expect(adminProjectIds(null)).toEqual([])
   })
 })
 
@@ -98,10 +164,22 @@ describe('toProjectActorView / actorFromView', () => {
       expect(isProjectMember(restored, P)).toBe(isProjectMember(a, P))
     }
   })
+  it('워크스페이스 관리자 승계도 왕복에서 보존된다', () => {
+    const wsAdmin = makeActor({ ...inWs, workspaceRoles: new Map([[W, 'admin']]) })
+    const restored = actorFromView(toProjectActorView(wsAdmin, Q), Q)
+    expect(roleIn(restored, Q)).toBe('admin')
+  })
   it('다른 프로젝트의 역할은 뷰에 실리지 않는다 — 뷰는 한 프로젝트 스코프다', () => {
     const restored = actorFromView(toProjectActorView(admin, Q), Q)
-    expect(roleIn(restored, P)).toBe('viewer')
     expect(roleIn(restored, Q)).toBe('viewer')
+    // 뷰는 Q 의 워크스페이스만 싣는다 — P 는 복원 Actor 에게 '모르는 프로젝트'(존재 은닉)
+    expect(roleIn(restored, P)).toBe(null)
+    expect(isProjectAdmin(restored, P)).toBe(false)
+  })
+  it('명단 팀이 없으면 빈 배열·대표 팀 null', () => {
+    const v = toProjectActorView(viewer, P)!
+    expect(v.rosterTeamCodes).toEqual([]); expect(v.rosterTeamIds).toEqual([]); expect(v.primaryTeamCode).toBe(null)
+    expect(v.memberId).toBe(null); expect(v.projectRole).toBe(null)
   })
   it('null 은 null', () => {
     expect(toProjectActorView(null, P)).toBe(null)

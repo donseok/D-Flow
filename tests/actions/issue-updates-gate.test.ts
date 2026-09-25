@@ -24,7 +24,7 @@ import { getSession } from '@/lib/auth'
 import { addIssueUpdate, archiveIssueUpdate, listIssueUpdates, purgeIssueUpdate, unarchiveIssueUpdate } from '@/app/actions/issueUpdates'
 import { makeMemberActor } from '../fixtures/actor'
 
-const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
+const ACTOR = makeMemberActor('p1', [], { userId: 'me' })
 const USER = { id: 'me', email: 'me@x.com', user_metadata: { full_name: '나' } }
 
 const M1 = '11111111-1111-4111-8111-111111111111'

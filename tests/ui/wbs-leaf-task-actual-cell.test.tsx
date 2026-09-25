@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ProjectActorView } from '@/lib/domain/authz'
+import { makeProjectActorView } from '../fixtures/actor'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -20,8 +21,9 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 
-const pmo: ProjectActorView = { userId: 'u-pmo', teamCode: 'PMO', teamId: 'tp', isSuperuser: false, projectRole: 'admin', rosterTeamId: null, rosterTeamCode: null }
-const dtEditor: ProjectActorView = { userId: 'u-dt', teamCode: '가공', teamId: 'td', isSuperuser: false, projectRole: 'member', rosterTeamId: null, rosterTeamCode: null }
+// SP1: 팀은 프로젝트 명단에만 산다(계정 전역 팀 폐지) — 옛 계정 팀을 명단 팀으로 옮겼다.
+const pmo: ProjectActorView = makeProjectActorView({ userId: 'u-pmo', projectRole: 'admin', memberId: 'm-pmo', rosterTeamIds: ['tp'], rosterTeamCodes: ['PMO'], primaryTeamCode: 'PMO' })
+const dtEditor: ProjectActorView = makeProjectActorView({ userId: 'u-dt', projectRole: 'member', memberId: 'm-dt', rosterTeamIds: ['td'], rosterTeamCodes: ['가공'], primaryTeamCode: '가공' })
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return {

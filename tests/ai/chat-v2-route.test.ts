@@ -4,12 +4,11 @@ import { EMPTY_CHAT_TOOL_REGISTRY } from '@/lib/ai/chat/registry'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  getMembership: vi.fn(),
   createServerClient: vi.fn(),
   createDefaultRegistry: vi.fn(),
 }))
 
-vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession, getMembership: mocks.getMembership }))
+vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/chat/default-registry', () => ({ createDefaultChatToolRegistry: mocks.createDefaultRegistry }))
 
@@ -39,7 +38,6 @@ describe('POST /api/chat/v2/stream composition', () => {
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
     mocks.getSession.mockResolvedValue({ id: 'u1' })
-    mocks.getMembership.mockResolvedValue(null)
     mocks.createServerClient.mockResolvedValue(client(['p1']))
     mocks.createDefaultRegistry.mockReturnValue(EMPTY_CHAT_TOOL_REGISTRY)
   })
@@ -92,7 +90,6 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(response.status).toBe(501)
     expect(await response.json()).toMatchObject({ code: 'CHAT_V2_UNSUPPORTED' })
     expect(mocks.getSession).toHaveBeenCalledOnce()
-    expect(mocks.getMembership).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
     expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
   })

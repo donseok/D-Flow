@@ -28,7 +28,7 @@ import { createIssue, updateIssue, updateIssueProgress, deleteIssue } from '@/ap
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = makeMemberActor('p1', [], { userId: 'me', teamCode: 'PMO', teamId: 't1' })
+const ACTOR = makeMemberActor('p1', [], { userId: 'me' })
 
 /** 이 프로젝트의 멤버지만 관리자는 아니다 — 남의 이슈 전체 편집·삭제는 거부돼야 한다. */
 function asMember() {

@@ -20,8 +20,8 @@ import { makeAdminActor, makeMemberActor } from '../fixtures/actor'
 
 const DENIED = { ok: false as const, error: '권한 없음' }
 const P1 = 'p1'
-const memberActor = makeMemberActor(P1, [], { teamCode: 'PMO', teamId: 't1' })
-const adminActor = makeAdminActor(P1, { teamCode: 'PMO', teamId: 't1' })
+const memberActor = makeMemberActor(P1, [])
+const adminActor = makeAdminActor(P1)
 
 beforeEach(() => {
   createAdminClient.mockClear()

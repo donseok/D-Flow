@@ -28,7 +28,7 @@ vi.mock('next/server', async (importOriginal) => {
 vi.mock('@/lib/authz', () => ({
   requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor: vi.fn(),
 }))
-vi.mock('@/lib/auth', () => ({ getSession, getMembership: vi.fn(), getDisplayName: vi.fn() }))
+vi.mock('@/lib/auth', () => ({ getSession, getDisplayName: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0 })) }))

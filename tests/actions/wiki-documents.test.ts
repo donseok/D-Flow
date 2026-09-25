@@ -29,7 +29,7 @@ import {
 } from '@/app/actions/wiki'
 import { makeMemberActor } from '../fixtures/actor'
 
-const MEMBER = makeMemberActor('project-1', [], { userId: 'member-1', teamCode: 'ERP', teamId: 'team-1' })
+const MEMBER = makeMemberActor('project-1', [], { userId: 'member-1' })
 
 function scopeResult(data: unknown = { id: 'topic-1' }, error: unknown = null) {
   mocks.from.mockImplementation(() => {

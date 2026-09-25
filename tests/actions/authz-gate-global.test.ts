@@ -14,7 +14,7 @@ const { createServerClient, createAdminClient, refreshLlmOverride } = vi.hoisted
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor }))
-vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u-session' })), getMembership: vi.fn() }))
+vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u-session' })) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/data/announcements', () => ({ getTopAnnouncements: vi.fn(async () => []) }))
@@ -40,7 +40,7 @@ import {
   listLlmProfiles, createLlmProfile, updateLlmProfile, deleteLlmProfile,
   getLlmConfig, saveLlmConfig, testLlmConnection, type LlmProfileInput,
 } from '@/app/actions/llmConfig'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, WS } from '../fixtures/actor'
 
 const PID = 'project-1'
 const DENIED = '권한 없음'
@@ -49,13 +49,14 @@ const LOOKUP_FAILED = '권한을 확인할 수 없어 중단했습니다.'
 function actor(over: Partial<Actor> & { role?: 'admin' | 'member' | null }): Actor {
   const { role = null, ...rest } = over
   return makeActor({
-    teamCode: 'ERP', teamId: 't-erp',
+    // PID 는 이 사용자 워크스페이스의 프로젝트 — 없으면 roleIn 이 null(존재 은닉)이라 역할이 무시된다
+    projectWorkspace: new Map([[PID, WS]]),
     projectRoles: new Map(role ? [[PID, role]] : []),
     ...rest,
   })
 }
 const SUPERUSER = actor({ userId: 'u-super', isSuperuser: true })
-const PROJECT_ADMIN = actor({ userId: 'u-admin', teamCode: 'PMO', teamId: 't-pmo', role: 'admin' })
+const PROJECT_ADMIN = actor({ userId: 'u-admin', role: 'admin' })
 const MEMBER = actor({ userId: 'u-mem', role: 'member' })
 const VIEWER = actor({ userId: 'u-view' }) // 프로젝트 역할 행 부재 = 조회 전용
 
