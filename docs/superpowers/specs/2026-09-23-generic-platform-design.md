@@ -1065,7 +1065,7 @@ export async function actorFromCredential(admin: ScopedAdminClient, cred: Resolv
 0058 컬럼식은 폐기한다(모듈이 설정을 더할 때마다 `alter table` 이 필요하고, 실제로 4컬럼이 미판독 상태로 남았다). 키-값 행(키당 1행) 방식도 쓰지 않는다(종합안 rejected — 요청당 N행 수집·트랜잭션 갱신 번거로움). **프로젝트당 1행 `values jsonb`** + **키 단위 이력 테이블** + **워크스페이스 동형 테이블** 이다.
 
 ```sql
--- 0007_settings.sql (SP3, 번호는 6.3 배정표). 0058 컬럼 전부 drop 후 values 로 이관(이관 SQL 은 SP3 마이그레이션 본문).
+-- 0009_settings.sql (SP3, 번호는 6.3 배정표). 0058 컬럼 전부 drop 후 values 로 이관(이관 SQL 은 SP3 마이그레이션 본문).
 create table public.project_settings (
   project_id  uuid primary key references public.projects(id) on delete cascade,
   values      jsonb not null default '{}'::jsonb,
@@ -2771,7 +2771,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | Q1 이슈분석서 As-Is 트리 페이지(5·6) | 제품 고정 슬라이드 유형으로 **유지**(결정 6 의 명시적 예외) | SP6 범위에서 "격리 후 기본 출력 제외" 가 "유지·기본 양식으로 렌더" 로 바뀜. 표·텍스트 페이지만 자리표시 엔진 | SP6 3주 유지(도형 규약 개발이 빠졌으므로 증가 없음) |
 | Q2 워크스페이스 관리자 | 그 워크스페이스 **모든 프로젝트의 관리자로 자동 승계, 비공개 포함** | SP2 의 `roleIn` 판정 순서·`canSeeProject`·`is_project_admin()` 헬퍼·비공개 숨김 로직(`dropHidden`)에 반영, `tests/rls` 케이스 추가 | SP2 3주 유지 |
 | Q3 명단과 권한 | `project_members.access_role` **한 행으로 통합**, 숨김 편집자 없음 | SP1 에서 `project_roles` 를 hidden 행 변환 없이 단순 폐기. 데이터 이관이 없으므로 백필 없음 | SP1 3주 유지 |
-| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격** | SP5 에 마이그레이션 1개(`0011_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
+| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격** | SP5 에 마이그레이션 1개(`0013_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
 | Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** 원본 고객사 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
 | Q6 또박또박 계약 | **헤더 자격증명만 변경, payload 불변** | SP7 에서 `GET /minutes/meta` 의 팀·프로젝트 소비를 또박또박에 요구하지 않음. 팀·프로젝트 해석은 자격증명 행의 기본 프로젝트·팀 매핑으로 우리 쪽이 처리 | **SP7 2~3주 → 2주** |
 
@@ -2894,7 +2894,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | 설정 항목(스키마)은 코드 레지스트리가 고정하고 값은 프로젝트 관리자가 설정 페이지에서 제어하며(결정 5), 모든 모듈이 env 가용 ∩ 워크스페이스 허용 ∩ 프로젝트 활성 세 층으로 켜지고 꺼지고(결정 7), 메뉴·라우트·액션·API·봇·워커가 한 판정 함수에서 파생된다 |
 | 왜 이 순서 | SP4·SP5 가 값을 옮길 자리와 UI 가 먼저 있어야 한다. 메뉴 통합은 `/w/[slug]` 이동(SP2) 뒤여야 한 번에 끝난다 |
 | 의존 | SP2 |
-| 마이그레이션 | `0007_settings.sql` |
+| 마이그레이션 | `0009_settings.sql` |
 | 기간 | 2~3주 |
 
 **범위 포함**
@@ -2926,7 +2926,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | `WEEKLY_SECTIONS` 11구분·`WEEKLY_TEAM_SECTIONS`·`DEFAULT_TEAMS`·`TEAM_COLOR`·`LEGACY_ORIGIN_PROFILE`·`levelLabels` 폴백이 코드에서 사라지고, 주간 시트·이월·점검·내러티브·봇이 `project_areas`/`area_teams`/`teams` 주입으로 동작한다 |
 | 왜 이 순서 | 레지스트리(SP3)가 있어야 값을 옮긴다. 이슈·회의록(SP5)보다 먼저인 이유는 `teams/master.ts` 캐시 폐기가 `minutes.team_id`(SP5) 의 전제이기 때문이다 |
 | 의존 | SP3 |
-| 마이그레이션 | `0008_weekly_areas.sql` |
+| 마이그레이션 | `0010_weekly_areas.sql` |
 | 기간 | 2주 |
 
 **범위 포함**
@@ -2956,14 +2956,14 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | `ISSUE_MEGA_AREAS` 8영역·이슈 코드 접두·회의록 팀 5축 시드·APS 별칭·계정 안내문 등 잔여 원본 고객사 하드코딩을 설정값·마스터로 옮기고, Q4 로 확정된 어휘 넷(근태 유형·회의 카테고리·이슈 심각도/원인 분류/원천·타임존/근무일)을 `project_settings.values` 로 승격해 `src` 런타임에서 원본 고객사 흔적 0 을 만든다 |
 | 왜 이 순서 | 팀 캐시(SP4)가 없어져야 `minutes.team_id` 가 워크스페이스 팀을 본다. 어휘 승격은 SP3 레지스트리의 `parse`·`widget` 위에서만 성립한다 |
 | 의존 | SP4 |
-| 마이그레이션 | `0009_issue_areas.sql` · `0010_minutes_teams.sql` · `0011_vocab_settings.sql`(Q4 추가) |
+| 마이그레이션 | `0011_issue_areas.sql` · `0012_minutes_teams.sql` · `0013_vocab_settings.sql`(Q4 추가) |
 | 기간 | **3주**(종합안 2주 + Q4 1주) |
 
 **범위 포함**
 
 - 이슈 영역(→ 3절 `project_areas kind='issue_area'`·`issues.code_prefix`): `issues.area_id`·`issue_major_processes.area_id` 복합 FK(`mega_code` 삭제), `issue_number_counters (project_id, area_id)`, 체번 advisory lock 재작성, 코드 접두 트리거가 `project_settings.values.issues.code_prefix` 를 읽음(`'PI-I-'` 트리거 하드코딩은 `0055`:240 과 `0062`:246 — 같은 체번 함수의 재정의로 `new.mega_code` 를 참조하는 본문이 교체 대상; `0055`:118 은 기존 행 백필 `update` 문이라 기준선에 흡수되어 무관), `issue_mega_areas` 테이블·`0055` check 삭제; `issueAnalysis.ts` `IssueMegaCode` → `string`·`formatPiIssueCode` → `formatIssueCode(prefix, area.code, seq)`, 소비처 16파일 (미검증).
 - 회의록 팀(→ 3절 `minutes.root_folders`): `minutes.team_code text` → `team_id → teams` FK, `minute_folders` 루트 = `workspace_settings.values.minutes.root_folders` 규칙, `folders.ts` 5축 시드·`domain/minutes.ts` `TEAM_SUB_ALIASES` 삭제, 미지정 회의록은 `workspace_id` 필수; 위키 파이프라인·목록 필터 `?team=` 을 `team_id` 로. Q6 대응으로 "또박또박 `team` 문자열 → `teams.id` 해석 함수" 를 여기서 준비한다(계약은 SP7).
-- **Q4 어휘 승격(`0011_vocab_settings.sql`)** — 근태·회의·심각도·원천은 DB check 제약과 도메인 상수 두 곳에 박혀 있으므로 둘 다 걷어낸다. 원인 분류는 DB check 가 없고 리포트/AI 출력 계층의 상수와 라벨(아래 행)에만 있으므로 그쪽만 교체한다:
+- **Q4 어휘 승격(`0013_vocab_settings.sql`)** — 근태·회의·심각도·원천은 DB check 제약과 도메인 상수 두 곳에 박혀 있으므로 둘 다 걷어낸다. 원인 분류는 DB check 가 없고 리포트/AI 출력 계층의 상수와 라벨(아래 행)에만 있으므로 그쪽만 교체한다:
 
   | 어휘 | 현 위치(실측) | 승격 후 |
   |---|---|---|
@@ -2999,7 +2999,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | 프로젝트 관리자가 고객사 PPT/엑셀 양식을 올리고, 주간보고·WBS 엑셀·이슈분석서 표/텍스트 페이지가 그 양식의 자리표시에 병합되어 나온다(결정 6). Q1 에 따라 이슈분석서 As-Is 프로세스 트리 페이지(5·6)는 **제품 고정 슬라이드 유형으로 유지**한다 |
 | 왜 이 순서 | 데이터 카탈로그(`sections[]`·`issues[]`·`areas`)가 SP4·SP5 의 승격 결과 위에서만 정의된다. SP7→SP8 과 파일이 겹치지 않아 병렬 실행한다 |
 | 의존 | SP4·SP5 |
-| 마이그레이션 | `0013_form_templates.sql`(+ Storage 버킷 `form-templates` 시드·경로 파싱 정책; 번호가 SP7 의 `0009` 뒤인 이유는 6.3) |
+| 마이그레이션 | `0015_form_templates.sql`(+ Storage 버킷 `form-templates` 시드·경로 파싱 정책; 번호가 SP7 의 `0009` 뒤인 이유는 6.3) |
 | 기간 | 3주(1주 스파이크 포함) |
 | **착수 조건(Q5)** | 스파이크 픽스처로 **실제 고객사 양식 3종**(서로 다른 고객사·표 구조) **또는** 미확보 시 **원본 고객사 양식 + 다른 구조의 자체 제작 샘플 2종**. SP5 완료 시점(SP6 직전)에 확보 여부를 재확인하고 스펙 서두에 어느 쪽인지 기록한다. 자체 샘플로 착수한 경우 첫 실제 고객 양식 입수 시 회귀 픽스처에 추가한다 |
 
@@ -3030,7 +3030,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | 또박또박 수신 API 와 에이전트 API 가 워크스페이스별 자격증명·모듈 토글 위에서 동작해 '하나의 패키지 솔루션' 으로 배포되고, 에이전트 스튜디오가 워크스페이스 안에서만 보인다(결정 7). Q6 대로 또박또박 측 변경은 **헤더 자격증명뿐**이며 payload 는 불변이다 |
 | 왜 이 순서 | 모듈 토글(SP3)과 팀 해석 함수(SP5)가 전제다. SP6 과 병렬 |
 | 의존 | SP3·SP5 |
-| 마이그레이션 | `0012_integration_credentials.sql`(병렬 구간의 첫 번호 — 6.3) |
+| 마이그레이션 | `0014_integration_credentials.sql`(병렬 구간의 첫 번호 — 6.3) |
 | 기간 | **2주**(종합안 2~3주 — Q6 로 meta 소비·계약 전면 개정이 빠짐) |
 
 **범위 포함**
@@ -3058,7 +3058,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 목표 | `ai_documents` 'global' 스코프·벡터/lexical 검색 RPC·위키 워커·사용현황·포트폴리오·알림이 워크스페이스 안에서만 동작하고, LLM 부재 폴백과 모듈 토글이 유지된다 |
 | 왜 이 순서 | 자격증명·모듈 토글(SP7)이 있어야 워커가 "활성 워크스페이스/모듈만" 순회한다. SP6 과 병렬 |
 | 의존 | SP7 |
-| 마이그레이션 | `0014_ai_scope.sql` |
+| 마이그레이션 | `0016_ai_scope.sql` |
 | 기간 | 2주 |
 
 **범위 포함**
@@ -3117,13 +3117,13 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | `0001` | `0001_storage_realtime.sql` | SP0 |
 | `0002` | `0002_import_wbs_level_fix.sql`(물려받은 `import_wbs`/`replace_wbs` `level` 결함 수정) | SP0 |
 | `0003`·`0004`·`0005` | `0003_org_core.sql`·`0004_upsert_member_keep_name.sql`·`0005_profiles_email_readonly.sql`(SP1 실측 — 원래 배정 `0002` 에서 밀림) | SP1 |
-| `0006` | `0006_workspace_isolation.sql` | SP2 |
-| `0007` | `0007_settings.sql` | SP3 |
-| `0008` | `0008_weekly_areas.sql` | SP4 |
-| `0009`·`0010`·`0011` | `0009_issue_areas.sql`·`0010_minutes_teams.sql`·`0011_vocab_settings.sql` | SP5 |
-| `0012` | `0012_integration_credentials.sql` | SP7 |
-| `0013` | `0013_form_templates.sql` | SP6 |
-| `0014` | `0014_ai_scope.sql` | SP8 |
+| `0006`·`0007`·`0008` | `0006_workspace_isolation.sql`·`0007_storage_realtime.sql`·`0008_workspace_settings.sql`(SP2 스펙 2026-09-26) | SP2 |
+| `0009` | `0009_settings.sql` | SP3 |
+| `0010` | `0010_weekly_areas.sql` | SP4 |
+| `0011`·`0012`·`0013` | `0011_issue_areas.sql`·`0012_minutes_teams.sql`·`0013_vocab_settings.sql` | SP5 |
+| `0014` | `0014_integration_credentials.sql` | SP7 |
+| `0015` | `0015_form_templates.sql` | SP6 |
+| `0016` | `0016_ai_scope.sql` | SP8 |
 | — | 없음(시드 스크립트만) | SP9 |
 
 ```mermaid
