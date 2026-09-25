@@ -49,11 +49,6 @@ vi.mock('@/app/actions/attendance', () => ({
   upsertAttendance: vi.fn(async () => ({ ok: true })),
   removeAttendance: vi.fn(async () => ({ ok: true })),
 }))
-vi.mock('@/app/actions/roster', () => ({
-  addMember: vi.fn(async () => ({ ok: true })),
-  updateMember: vi.fn(async () => ({ ok: true })),
-  removeMember: vi.fn(async () => ({ ok: true })),
-}))
 vi.mock('@/app/actions/wbs', () => ({
   updateActual: vi.fn(async () => ({ ok: true })),
 }))
@@ -84,7 +79,6 @@ import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { AnnouncementsView } from '@/components/announcements/AnnouncementsView'
-import { MembersBoard } from '@/components/members/MembersBoard'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { IssuesView } from '@/components/issues/IssuesView'
 import type { Issue } from '@/lib/domain/issues'
@@ -262,30 +256,6 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
         ]} />,
     )
     expect(dialog()).toBeNull()
-  })
-
-  it('MembersBoard: ?team= 초기 팀 필터를 적용한다', async () => {
-    currentSearch = 'team=MES'
-    await mount(
-      <MembersBoard projectId="p1" canEdit={false} members={[
-        member({ id: 'mem-erp', name: '김이알피', teamCode: 'ERP' }),
-        member({ id: 'mem-mes', name: '최엠이에스', teamCode: 'MES' }),
-      ]} />,
-    )
-    expect(container.textContent).toContain('최엠이에스')
-    expect(container.textContent).not.toContain('김이알피')
-  })
-
-  it('MembersBoard: 무효 팀 값은 전체 표시를 유지한다', async () => {
-    currentSearch = 'team=QA'
-    await mount(
-      <MembersBoard projectId="p1" canEdit={false} members={[
-        member({ id: 'mem-erp', name: '김이알피', teamCode: 'ERP' }),
-        member({ id: 'mem-mes', name: '최엠이에스', teamCode: 'MES' }),
-      ]} />,
-    )
-    expect(container.textContent).toContain('김이알피')
-    expect(container.textContent).toContain('최엠이에스')
   })
 
   it('KanbanBoard: ?view=&team= 으로 초기 모드와 검색 필터를 적용한다', async () => {

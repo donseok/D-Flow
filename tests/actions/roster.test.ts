@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 가드와 두 클라이언트를 모킹한다(tests/actions/*-gate.test.ts 관례). 스파이는 vi.hoisted 로 먼저 만든다.
 const { guards, admin, server, revalidatePath } = vi.hoisted(() => ({
   guards: {
-    requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), requireSuperuser: vi.fn(), resolveProjectId: vi.fn(),
+    requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), resolveProjectId: vi.fn(),
   },
   admin: { rpc: vi.fn(), from: vi.fn() },
   server: { from: vi.fn() },
@@ -14,22 +14,13 @@ vi.mock('@/lib/authz', () => guards)
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => admin }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: async () => server }))
 vi.mock('next/cache', () => ({ revalidatePath }))
-// 팀 마스터는 모듈 로드 시 DB 를 읽는다 — 옛 어댑터의 팀 코드 해석에 필요한 최소 목록만 준다.
-vi.mock('@/lib/teams/master', () => ({
-  teamsForProjectSync: () => [
-    { id: 't-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: 'p1' },
-    { id: 't-mes', code: 'MES', sortOrder: 1, active: true, progressVisible: true, projectId: 'p1' },
-  ],
-}))
 
 import {
-  upsertRosterMember, removeRosterMember, listRoster,
-  addMember, updateMember, removeMember, setProjectRole, ensureRosterRow, listProjectRoles,
-  type RosterInput,
+  upsertRosterMember, removeRosterMember, listRoster, type RosterInput,
 } from '@/app/actions/roster'
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT } from '@/lib/data/memberSelect'
-import { makeAdminActor, makeSuperuser } from '../fixtures/actor'
+import { makeAdminActor } from '../fixtures/actor'
 
 const P1 = 'p1'
 // 입력의 인물·팀 id 는 uuid 모양이어야 한다(RPC 앞에서 검사).
@@ -299,196 +290,5 @@ describe('listRoster — 정본 select(ROSTER_SELECT) + 매퍼', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await listRoster(P1)).toEqual({ ok: false, error: '명단을 불러오지 못했습니다.' })
     spy.mockRestore()
-  })
-})
-
-describe('@deprecated 옛 화면 어댑터 — 전부 같은 RPC 로 간다', () => {
-  it('addMember 는 팀 코드를 이 프로젝트의 팀 id 로 풀어 upsert 한다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-3', error: null })
-    const res = await addMember(P1, { name: '홍길동', email: null, teamCode: 'MES', accessRole: 'member', title: '수석', roleLabel: null })
-    expect(res).toEqual({ ok: true })
-    expect(admin.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({
-      p_person: { display_name: '홍길동', email: null },
-      p_member: { access_role: 'member', role_label: null, title: '수석' },
-      p_team_ids: ['t-mes'],
-    }))
-  })
-
-  // 같은 이메일의 기존 인물이면 RPC 가 그 행을 갱신한다 — '추가' 가 기존 권한·팀을 지우면 안 된다.
-  it('addMember 는 권한·팀을 안 주면 access_role 키와 팀을 싣지 않는다(기존 값 유지)', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-3', error: null })
-    await addMember(P1, { name: '홍길동', email: 'hong@example.com', teamCode: null, accessRole: null, title: null, roleLabel: null })
-    const args = admin.rpc.mock.calls[0]![1]
-    expect(args.p_member).toEqual({ role_label: null, title: null })
-    expect(args.p_team_ids).toBeNull()
-  })
-
-  it('addMember 는 모르는 팀 코드를 거부한다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    expect(await addMember(P1, { name: '홍길동', email: null, teamCode: '없는팀', accessRole: null, title: null, roleLabel: null }))
-      .toEqual({ ok: false, error: '알 수 없는 팀 코드' })
-    expect(admin.rpc).not.toHaveBeenCalled()
-  })
-
-  /** updateMember 선행 조회: 대상 행의 인물·이메일·현재 팀. */
-  function memberRow(teams: Array<{ id: string; code: string; primary: boolean }>, email: string | null = 'hong@example.com') {
-    return chain({
-      data: {
-        person_id: 'pe-1', people: { email },
-        project_member_teams: teams.map(t => ({ team_id: t.id, is_primary: t.primary, teams: { code: t.code } })),
-      },
-      error: null,
-    })
-  }
-
-  it('updateMember — 권한을 안 주면 access_role 키를 싣지 않고, 팀이 그대로면 팀도 건드리지 않는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.from.mockReturnValue(memberRow([{ id: 't-pmo', code: 'PMO', primary: true }]))
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
-    const res = await updateMember('m-1', { name: '홍길동', email: 'hong@example.com', teamCode: 'PMO', title: '책임', roleLabel: null })
-    expect(res).toEqual({ ok: true })
-    expect(admin.rpc).toHaveBeenCalledWith('upsert_project_member', {
-      p_actor: actor.userId, p_project_id: P1,
-      p_person: { id: 'pe-1', display_name: '홍길동' },
-      p_member: { role_label: null, title: '책임' },
-      p_team_ids: null,
-    })
-  })
-
-  it('updateMember — 대표 팀을 바꾸면 나머지 팀은 남기고 대표만 바꾼다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.from.mockReturnValue(memberRow([
-      { id: 't-pmo', code: 'PMO', primary: true }, { id: 't-x', code: 'X', primary: false },
-    ]))
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
-    await updateMember('m-1', { name: '홍길동', email: 'hong@example.com', teamCode: 'MES', title: null, roleLabel: null })
-    expect(admin.rpc.mock.calls[0]![1].p_team_ids).toEqual(['t-mes', 't-x'])
-  })
-
-  it('updateMember — 이메일은 여기서 바꿀 수 없다(인물의 신원) — 조용히 무시하지 않고 거부한다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.from.mockReturnValue(memberRow([], 'hong@example.com'))
-    const res = await updateMember('m-1', { name: '홍길동', email: 'other@example.com', teamCode: null, title: null, roleLabel: null })
-    expect(res).toEqual({ ok: false, error: '이메일은 명단에서 바꿀 수 없습니다.' })
-    expect(admin.rpc).not.toHaveBeenCalled()
-  })
-
-  it('updateMember — 가드 거부면 선행 조회도 하지 않는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue(DENIED)
-    expect(await updateMember('m-1', { name: '홍길동', email: null, teamCode: null, title: null, roleLabel: null })).toEqual(DENIED)
-    expect(admin.from).not.toHaveBeenCalled()
-  })
-
-  it('removeMember 는 removeRosterMember 와 같다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.from.mockImplementation(() => chain({ data: null, error: null, count: 0 }))
-    server.from.mockReturnValue(chain({ data: [{ id: 'm-1' }], error: null }))
-    expect(await removeMember('m-1')).toEqual({ ok: true })
-  })
-
-  /** 계정 → 이 프로젝트 워크스페이스의 인물 id. */
-  function personLookup(personId: string | null) {
-    admin.from.mockImplementation((t: string) => {
-      if (t === 'projects') return chain({ data: { workspace_id: 'ws-1' }, error: null })
-      if (t === 'people') return chain({ data: personId ? { id: personId } : null, error: null })
-      throw new Error('예상치 못한 admin 테이블 접근: ' + t)
-    })
-  }
-
-  it('setProjectRole(admin) 은 슈퍼유저 가드만 쓴다 — 거부면 DB 미접근', async () => {
-    guards.requireSuperuser.mockResolvedValue(DENIED)
-    expect(await setProjectRole(P1, 'u-2', 'admin')).toEqual(DENIED)
-    expect(guards.requireProjectAdmin).not.toHaveBeenCalled()
-    expect(admin.rpc).not.toHaveBeenCalled()
-  })
-
-  it('setProjectRole(viewer) 는 권한을 null 로 — 명단 행은 남는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    personLookup('pe-2')
-    admin.rpc.mockResolvedValue({ data: 'm-2', error: null })
-    expect(await setProjectRole(P1, 'u-2', 'viewer')).toEqual({ ok: true })
-    expect(admin.rpc).toHaveBeenCalledWith('upsert_project_member', {
-      p_actor: actor.userId, p_project_id: P1, p_person: { id: 'pe-2' }, p_member: { access_role: null }, p_team_ids: null,
-    })
-  })
-
-  it('setProjectRole — 기존 관리자 강등을 RPC 가 거부하면 그 문구를 돌려준다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    personLookup('pe-2')
-    admin.rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'PROJECT_MEMBER_ADMIN_SLOT' } })
-    expect(await setProjectRole(P1, 'u-2', 'member'))
-      .toEqual({ ok: false, error: '관리자 권한은 워크스페이스 관리자만 부여·회수할 수 있습니다.' })
-  })
-
-  it('setProjectRole — 인물 행이 없는 계정이면 지어내지 않고 거부한다', async () => {
-    guards.requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser() })
-    personLookup(null)
-    expect(await setProjectRole(P1, 'u-2', 'admin'))
-      .toEqual({ ok: false, error: '이 계정은 이 워크스페이스의 인물로 등록돼 있지 않습니다.' })
-    expect(admin.rpc).not.toHaveBeenCalled()
-  })
-
-  it('ensureRosterRow 는 명단 필드를 건드리지 않는 빈 p_member 로 행만 보장한다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    personLookup('pe-3')
-    admin.rpc.mockResolvedValue({ data: 'm-3', error: null })
-    expect(await ensureRosterRow(P1, 'u-3')).toEqual({ ok: true, memberId: 'm-3' })
-    expect(admin.rpc.mock.calls[0]![1]).toMatchObject({ p_person: { id: 'pe-3' }, p_member: {}, p_team_ids: null })
-  })
-
-  it('listProjectRoles — 명단 행 + 명단에 없는 워크스페이스 계정(조회 후보)', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    let profilesQ: ReturnType<typeof chain> | null = null
-    admin.from.mockImplementation((t: string) => {
-      if (t === 'projects') return chain({ data: { workspace_id: 'ws-1' }, error: null })
-      if (t === 'project_members') {
-        return chain({
-          data: [{
-            id: 'm-1', project_id: P1, person_id: 'pe-1', access_role: 'admin', role_label: 'PM', title: '수석',
-            active: true, sort_order: 0, created_at: '2026-09-01',
-            people: { display_name: '관리자김', email: 'kim@example.com', user_id: 'u-1', kind: 'account', active: true },
-            project_member_teams: [],
-          }, {
-            id: 'm-2', project_id: P1, person_id: 'pe-2', access_role: null, role_label: null, title: null,
-            active: true, sort_order: 0, created_at: '2026-09-01',
-            people: { display_name: '외부홍', email: null, user_id: null, kind: 'external', active: true },
-            project_member_teams: [],
-          }],
-          error: null,
-        })
-      }
-      if (t === 'workspace_members') return chain({ data: [{ user_id: 'u-1' }, { user_id: 'u-5' }], error: null })
-      if (t === 'profiles') {
-        profilesQ = chain({ data: [{ user_id: 'u-5', email: 'choi@example.com', display_name: '조회최' }], error: null })
-        return profilesQ
-      }
-      if (t === 'platform_admins') return chain({ data: [{ user_id: 'u-5' }], error: null })
-      throw new Error('예상치 못한 admin 테이블 접근: ' + t)
-    })
-    const res = await listProjectRoles(P1)
-    if (!res.ok) throw new Error(res.error)
-    expect(res.rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ userId: 'u-1', memberId: 'm-1', role: 'admin', isSuperuser: false, title: '수석' }),
-      expect.objectContaining({ userId: null, memberId: 'm-2', name: '외부홍', role: 'viewer' }),
-      expect.objectContaining({ userId: 'u-5', memberId: null, name: '조회최', role: 'viewer', isSuperuser: true }),
-    ]))
-    expect(res.rows).toHaveLength(3)
-    // 명단에 이미 있는 계정(u-1)은 후보 프로필 조회에서 뺀다.
-    expect(profilesQ!.in).toHaveBeenCalledWith('user_id', ['u-5'])
-  })
-
-  it('listProjectRoles — 어느 조회든 실패하면 부분 목록으로 위장하지 않는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.from.mockImplementation((t: string) => {
-      if (t === 'projects') return chain({ data: { workspace_id: 'ws-1' }, error: null })
-      if (t === 'platform_admins') return chain({ data: null, error: { message: 'boom' } })
-      return chain({ data: [], error: null })
-    })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await listProjectRoles(P1)
-    spy.mockRestore()
-    expect(res.ok).toBe(false)
   })
 })

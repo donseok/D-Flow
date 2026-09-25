@@ -1,44 +1,41 @@
-import { Users, UserCog, UserRound, Shield } from 'lucide-react'
+import { Users, UserCog, Unlink, Shield } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectMembers } from '@/lib/data/members'
 import { getActorForView } from '@/lib/authz'
-import { isProjectAdmin } from '@/lib/domain/authz'
+import { isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
+import { teamsForProjectSync } from '@/lib/teams/master'
 import { listProjects } from '@/app/actions/project'
-import { listProjectRoles } from '@/app/actions/roster'
+import { listRoster } from '@/app/actions/roster'
 import { listProjectInvites } from '@/app/actions/projectInvites'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { ProjectRolesManager } from '@/components/settings/ProjectRolesManager'
+import { RosterManager } from '@/components/roster/RosterManager'
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
-  const [members, m, projects, locale] = await Promise.all([
-    getProjectMembers(projectId),
-    getActorForView(),
-    listProjects(),
-    getServerLocale(),
-  ])
+  const [m, projects, locale] = await Promise.all([getActorForView(), listProjects(), getServerLocale()])
 
   const project = projects.find((p) => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'members.projectFallback')
   const canEdit = isProjectAdmin(m, projectId)
-  const isSuperuser = m?.isSuperuser === true
 
-  // 권한·초대는 설정에서 이 페이지로 이동(2026-08-20 화면 통합) — 명단·권한을 한 화면에서 본다.
-  // 관리자에게만 필요하고, 이 조회의 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
-  const [roles, invites] = await Promise.all([
-    canEdit ? listProjectRoles(projectId) : null,
+  // 관리자는 명단 편집 화면(listRoster — 조회 실패를 '0명' 으로 위장하지 않는다), 그 외는 같은 표를 읽기 전용으로.
+  // 초대 조회 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
+  const [roster, invites] = await Promise.all([
+    canEdit ? listRoster(projectId) : getProjectMembers(projectId).then(rows => ({ ok: true as const, rows })),
     canEdit ? listProjectInvites(projectId) : null,
   ])
+  const rows = roster.ok ? roster.rows : []
+  // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용).
+  const teamOptions = teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
 
-  const teamSize = members.length
-  // 리더 = 이 프로젝트 관리자(명단 access_role admin), 실무 = 나머지 명단 인원. Phase B 명단 화면이 대체한다.
-  const leads = members.filter((x) => x.accessRole === 'admin').length
-  const contributors = teamSize - leads
+  const active = rows.filter(x => x.active)
+  const admins = active.filter(x => x.accessRole === 'admin').length
+  const unlinked = active.filter(x => x.kind === 'external').length
 
   return (
     <ProjectPageShell
@@ -49,36 +46,32 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
         description={t(locale, 'members.heroDesc')}
         heroKpis={
           <>
-            <KpiCard variant="hero" label="TEAM SIZE" value={teamSize} sub={t(locale, 'members.kpiTeamSizeSub')} icon={Users} tone="brand" />
-            <KpiCard variant="hero" label="LEADS" value={leads} sub={t(locale, 'members.kpiAdminsSub')} icon={UserCog} tone="success" />
-            <KpiCard variant="hero" label="CONTRIBUTORS" value={contributors} sub={t(locale, 'members.kpiContributorsSub')} icon={UserRound} tone="default" />
+            <KpiCard variant="hero" label="TEAM SIZE" value={active.length} sub={t(locale, 'members.kpiTeamSizeSub')} icon={Users} tone="brand" />
+            <KpiCard variant="hero" label="ADMINS" value={admins} sub={t(locale, 'members.kpiAdminsSub')} icon={UserCog} tone="success" />
+            <KpiCard variant="hero" label="NO ACCOUNT" value={unlinked} sub={t(locale, 'members.kpiUnlinkedSub')} icon={Unlink} tone="default" />
           </>
         }
       />}
     >
       <div className="space-y-4">
-        {/* 카드 보드는 2026-08-20 통합에서 은퇴 — 명단 정보(팀·구분·직함)까지 아래 표에서 직접 편집한다. */}
-        {canEdit && (
-          <div id="project-roles-section">
-          <SectionCard
-            eyebrow="TEAM & AUTHORIZATION"
-            title={locale === 'ko' ? '참여자 · 권한' : 'Participants & Roles'}
-            icon={Shield}
-          >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
-              {locale === 'ko'
-                ? '이 프로젝트의 참여자 명단과 로그인 권한을 한 곳에서 관리합니다. 권한을 주면 명단에 자동 등록되고, 프로젝트 팀·명단 구분·직함은 각 행의 연필 버튼으로 수정합니다.'
-                : 'Manage the participant roster and login permissions in one place. Granting a role also registers the person on the roster; edit project team, roster type, and title via the pencil button on each row.'}
-            </p>
-            {roles && (roles.ok ? (
-              <ProjectRolesManager
-                projectId={projectId}
-                rows={roles.rows}
-                canManageAdmins={isSuperuser}
-              />
-            ) : (
-              <p className="text-sm text-delayed">{roles.error}</p>
-            ))}
+        <SectionCard
+          eyebrow={canEdit ? 'TEAM & AUTHORIZATION' : 'TEAM'}
+          title={t(locale, canEdit ? 'members.sectionManage' : 'members.sectionRoster')}
+          icon={canEdit ? Shield : Users}
+        >
+          {canEdit && <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'members.manageHint')}</p>}
+          {roster.ok ? (
+            <RosterManager
+              projectId={projectId}
+              rows={rows}
+              teamOptions={teamOptions}
+              actorView={toProjectActorView(m, projectId)}
+              canEdit={canEdit}
+            />
+          ) : (
+            <p role="alert" className="text-sm text-delayed">{roster.error}</p>
+          )}
+          {canEdit && (
             <div className="mt-6 border-t border-line pt-5">
               <ProjectInviteManager
                 projectId={projectId}
@@ -86,52 +79,8 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
                 loadError={invites && !invites.ok ? invites.error : null}
               />
             </div>
-          </SectionCard>
-          </div>
-        )}
-        {/* 비관리자 — 권한 조회는 관리자 전용이라 읽기 전용 명단만 보여준다(조회 실패 위장 아님, 권한 게이트). */}
-        {!canEdit && (
-          <SectionCard
-            eyebrow="TEAM"
-            title={locale === 'ko' ? '참여자 명단' : 'Participants'}
-            icon={Users}
-          >
-            {members.length === 0 ? (
-              <p className="text-sm text-ink-subtle">{t(locale, 'members.emptyTitle')}</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                      <th className="py-2 pr-3">{locale === 'ko' ? '이름' : 'Name'}</th>
-                      <th className="py-2 pr-3">{locale === 'ko' ? '이메일' : 'Email'}</th>
-                      <th className="py-2 pr-3">{locale === 'ko' ? '프로젝트 팀' : 'Project team'}</th>
-                      <th className="py-2 pr-3">{locale === 'ko' ? '명단 구분' : 'Type'}</th>
-                      <th className="py-2 pr-3">{locale === 'ko' ? '직함 / 역할' : 'Title / Role'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {members.map(mem => (
-                      <tr key={mem.id} className="border-b border-line/60">
-                        <td className="py-2.5 pr-3 font-medium text-ink">{mem.name}</td>
-                        <td className="py-2.5 pr-3 text-ink-muted">{mem.email ?? '—'}</td>
-                        <td className="py-2.5 pr-3">
-                          {mem.teamCode ? <span className="chip bg-surface-2 text-ink-muted">{mem.teamCode}</span> : <span className="text-ink-subtle">—</span>}
-                        </td>
-                        <td className="py-2.5 pr-3 text-xs text-ink-muted">
-                          {mem.accessRole === 'admin' ? (locale === 'ko' ? '리더' : 'Lead') : (locale === 'ko' ? '실무' : 'Contributor')}
-                        </td>
-                        <td className="py-2.5 pr-3 text-xs text-ink-muted">
-                          {mem.title ?? '—'}{mem.roleLabel ? ` · ${mem.roleLabel}` : ''}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </SectionCard>
-        )}
+          )}
+        </SectionCard>
       </div>
     </ProjectPageShell>
   )

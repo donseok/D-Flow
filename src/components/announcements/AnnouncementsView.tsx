@@ -98,7 +98,7 @@ export function AnnouncementsView({
   ]
 
   // 카드가 스크롤 영역을 꽉 채우고(h-full), 헤더는 고정된 채 목록만 내부에서 스크롤된다.
-  // MembersBoard와 동일한 "단일 내부 스크롤 컨테이너" 패턴.
+  // "단일 내부 스크롤 컨테이너" 패턴.
   return (
     <div className="card flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">

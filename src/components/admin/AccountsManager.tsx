@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { UserPlus, Upload, KeyRound, UserCog, ShieldCheck, UserRound, Wand2, Copy, Check, Eye } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -10,7 +11,6 @@ import {
   createAccount, bulkCreateAccounts, resetPassword, setPlatformAdmin, setWorkspaceRole,
   type AccountRow, type BulkResultRow,
 } from '@/app/actions/accounts'
-import { setProjectRole } from '@/app/actions/roster'
 import { ACCOUNT_ROLES, type AccountRole } from '@/lib/domain/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 
@@ -141,7 +141,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
       <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} canManageAdmins={canManageAdmins} />
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} />
       <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />
-      <RoleEditModal account={editing} onClose={() => setEditing(null)} projectId={projectId} workspaceId={workspaceId} canManageAdmins={canManageAdmins} />
+      <RoleEditModal account={editing} onClose={() => setEditing(null)} projectId={projectId} workspaceId={workspaceId} />
     </div>
   )
 }
@@ -190,7 +190,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-/** 역할 select — 관리자 옵션은 슈퍼유저만 고를 수 있다(setProjectRole 규칙과 동일). */
+/** 역할 select(계정 추가) — 관리자 옵션은 canManageAdmins(슈퍼유저)일 때만 고를 수 있다. */
 function RoleSelect({ value, onChange, canManageAdmins, disabled = false }: {
   value: AccountRole
   onChange: (r: AccountRole) => void
@@ -457,25 +457,21 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
   )
 }
 
-function RoleEditModal({ account, onClose, projectId, workspaceId, canManageAdmins }: {
-  account: AccountRow | null; onClose: () => void; projectId: string; workspaceId: string; canManageAdmins: boolean
+function RoleEditModal({ account, onClose, projectId, workspaceId }: {
+  account: AccountRow | null; onClose: () => void; projectId: string; workspaceId: string
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const [wsRole, setWsRole] = useState<WorkspaceRole>('member')
-  const [role, setRole] = useState<AccountRole>('viewer')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
     if (!account) return
     setWsRole(account.workspaceRole ?? 'member')
-    setRole(accountRole(account))
     setError(null)
   }, [account])
 
-  // 현재 관리자인 사람은 슈퍼유저만 만질 수 있다 — setProjectRole 의 규칙을 화면에도 미리 보여준다.
-  const roleLocked = !canManageAdmins && account?.accessRole === 'admin'
   // 이 워크스페이스 소속이 아닌 계정은 등급을 바꿀 행이 없다(소속 추가는 Phase B).
   const wsLocked = !account?.workspaceRole
 
@@ -487,10 +483,6 @@ function RoleEditModal({ account, onClose, projectId, workspaceId, canManageAdmi
         if (account.workspaceRole && wsRole !== account.workspaceRole) {
           const wsRes = await setWorkspaceRole(workspaceId, account.id, wsRole)
           if (!wsRes.ok) { setError(wsRes.error ?? '워크스페이스 권한 변경 실패'); return }
-        }
-        if (role !== accountRole(account)) {
-          const roleRes = await setProjectRole(projectId, account.id, role)
-          if (!roleRes.ok) { setError(roleRes.error ?? '역할 변경 실패'); return }
         }
         toast({ title: '권한을 변경했습니다.', variant: 'success' })
         onClose(); router.refresh()
@@ -516,12 +508,15 @@ function RoleEditModal({ account, onClose, projectId, workspaceId, canManageAdmi
           <Field label="워크스페이스 권한">
             <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} disabled={wsLocked} />
           </Field>
-          <Field label="프로젝트 역할">
-            <RoleSelect value={role} onChange={setRole} canManageAdmins={canManageAdmins} disabled={roleLocked} />
+          <Field label="프로젝트 권한">
+            <p className="app-input flex items-center text-sm text-ink-muted">{account ? ROLE_LABEL[accountRole(account)] : '—'}</p>
           </Field>
         </div>
         {wsLocked && <p className="text-xs text-ink-subtle">이 워크스페이스 소속이 아닌 계정입니다.</p>}
-        {roleLocked && <p className="text-xs text-ink-subtle">관리자의 역할 변경은 슈퍼유저만 할 수 있습니다.</p>}
+        {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
+        <p className="text-xs text-ink-subtle">
+          프로젝트 권한은 <Link href={`/p/${projectId}/members`} className="underline">명단 화면</Link>에서 바꿉니다.
+        </p>
         {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
       </div>
     </Modal>

@@ -31,7 +31,7 @@ import type { Actor } from '@/lib/domain/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { createAnnouncement, updateAnnouncement, deleteAnnouncement, createAnnouncementFromMeeting } from '@/app/actions/announcements'
 import { recordAttachment, removeAttachment } from '@/app/actions/attachments'
-import { addMember, updateMember, removeMember } from '@/app/actions/roster'
+import { upsertRosterMember, removeRosterMember } from '@/app/actions/roster'
 import { addTeam, updateTeam, listTeamsAdmin } from '@/app/actions/teams'
 import { reindexProjectAction } from '@/app/actions/chat'
 import { curateWikiItem, mergeWikiTopics } from '@/app/actions/wiki'
@@ -73,7 +73,7 @@ const ANNOUNCEMENT = {
   title: '제목', body: '본문', category: 'general' as const, isPinned: false,
   publishFrom: '2026-07-30', publishTo: '2026-07-31', milestoneDate: null,
 }
-const MEMBER_INPUT = { name: '홍길동', email: null, teamCode: null, accessRole: null, title: null, roleLabel: null }
+const MEMBER_INPUT = { name: '홍길동', email: null, accessRole: null, title: null, roleLabel: null, teamIds: [] }
 const LLM_INPUT: LlmProfileInput = { name: 'gemini-기본', preset_id: 'gemini', provider: 'gemini', model: 'gemini-3.5-flash' }
 
 beforeEach(() => {
@@ -141,16 +141,16 @@ describe('프로젝트 쓰기는 관리자 전용 — 멤버·조회 전용은 �
     signedInAs(PROJECT_ADMIN)
     resolveProjectId.mockResolvedValue({ ok: false, error: LOOKUP_FAILED })
     expect(await deleteAnnouncement('a1')).toEqual({ ok: false, error: LOOKUP_FAILED })
-    expect(await removeMember('mem-1')).toEqual({ ok: false, error: LOOKUP_FAILED })
+    expect(await removeRosterMember('mem-1')).toEqual({ ok: false, error: LOOKUP_FAILED })
     expect(requireProjectAdmin).not.toHaveBeenCalled()
     expect(createServerClient).not.toHaveBeenCalled()
   })
 
-  it('멤버는 멤버 명부 3액션이 거부된다', async () => {
+  it('멤버는 명단 쓰기 2액션(추가·수정 upsert, 삭제)이 거부된다', async () => {
     signedInAs(MEMBER)
-    expect(await addMember(PID, MEMBER_INPUT)).toEqual({ ok: false, error: DENIED })
-    expect(await updateMember('mem-1', MEMBER_INPUT)).toEqual({ ok: false, error: DENIED })
-    expect(await removeMember('mem-1')).toEqual({ ok: false, error: DENIED })
+    expect(await upsertRosterMember(PID, MEMBER_INPUT)).toEqual({ ok: false, error: DENIED })
+    expect(await upsertRosterMember(PID, { ...MEMBER_INPUT, personId: '00000000-0000-4000-8000-000000000001' })).toEqual({ ok: false, error: DENIED })
+    expect(await removeRosterMember('mem-1')).toEqual({ ok: false, error: DENIED })
     expect(createServerClient).not.toHaveBeenCalled()
   })
 
