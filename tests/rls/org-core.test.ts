@@ -258,4 +258,23 @@ describe('조직 코어 RLS (0003_org_core)', () => {
       expect(await nameOf(c, ERIN)).toBe('erin k')
     })
   })
+
+  it('⑫ 세션은 자기 profiles 의 email·user_id 를 쓰지 못하고 display_name 은 고친다(0005 컬럼 권한)', async () => {
+    await asUser(pool, F.users.member, async (c) => {
+      const denied = { code: '42501', message: expect.stringMatching(/^permission denied for table profiles/) }
+      expect(await pgError(c, 'update public.profiles set email = $1 where user_id = $2', [
+        'rls-newhire@example.com', F.users.member,
+      ])).toMatchObject(denied)
+      expect(await pgError(c, 'update public.profiles set user_id = $1 where user_id = $2', [F.users.platform, F.users.member]))
+        .toMatchObject(denied)
+      // 대조: 같은 세션이 같은 행의 허용 컬럼은 고친다 — 위 거부가 RLS 가 아니라 컬럼 권한 때문이다
+      expect((await c.query('update public.profiles set display_name = $1, updated_at = now() where user_id = $2', [
+        'alice k', F.users.member,
+      ])).rowCount).toBe(1)
+      const { rows } = await c.query<{ email: string; display_name: string }>(
+        'select email, display_name from public.profiles where user_id = $1', [F.users.member],
+      )
+      expect(rows[0]).toEqual({ email: 'rls-alice@example.com', display_name: 'alice k' })
+    })
+  })
 })
