@@ -1,0 +1,123 @@
+import { describe, it, expect } from 'vitest'
+import {
+  draftFromMember, emptyDraft, validateDraft, canGrantAdmin, accessRoleLabel,
+  toggleTeam, setPrimaryTeam, findRosterByEmail, isDraftDirty, ERR_ACCESS_NEEDS_EMAIL, ERR_DUPLICATE_EMAIL,
+} from '@/lib/domain/roster'
+import type { RosterMember } from '@/lib/data/memberSelect'
+import { makeProjectActorView } from '../fixtures/actor'
+
+function member(over: Partial<RosterMember> = {}): RosterMember {
+  return {
+    id: 'm-1', projectId: 'p-1', personId: 'pe-1',
+    name: 'alice', email: 'alice@example.com', userId: 'u-alice', kind: 'account',
+    accessRole: 'member', roleLabel: '개발', title: '책임', active: true, sortOrder: 0, createdAt: '2026-09-01T00:00:00Z',
+    teams: [
+      { id: 't-erp', code: 'ERP', name: 'ERP', isPrimary: true },
+      { id: 't-mes', code: 'MES', name: 'MES', isPrimary: false },
+    ],
+    teamCode: 'ERP', hasAccount: true,
+    ...over,
+  }
+}
+
+describe('draftFromMember', () => {
+  it('명단 행을 편집 초안으로 편다 — 팀은 대표 팀이 첫 원소', () => {
+    expect(draftFromMember(member())).toEqual({
+      personId: 'pe-1', name: 'alice', email: 'alice@example.com', accessRole: 'member',
+      roleLabel: '개발', title: '책임', teamIds: ['t-erp', 't-mes'], active: true,
+    })
+  })
+  it('null 필드는 빈 문자열 입력값이 된다', () => {
+    const d = draftFromMember(member({ email: null, roleLabel: null, title: null, teams: [], accessRole: null }))
+    expect(d).toMatchObject({ email: '', roleLabel: '', title: '', teamIds: [], accessRole: null })
+  })
+})
+
+describe('validateDraft', () => {
+  const base = { ...emptyDraft(), name: 'bob' }
+
+  it('이름이 공백이면 거부', () => {
+    expect(validateDraft({ ...base, name: '   ' })).toEqual({ ok: false, error: '이름을 입력하세요.' })
+  })
+  it('이메일 형식이 틀리면 거부', () => {
+    expect(validateDraft({ ...base, email: 'not-an-email' })).toEqual({ ok: false, error: '올바른 이메일 형식이 아닙니다.' })
+  })
+  it('권한이 있는데 이메일이 없으면 거부', () => {
+    expect(validateDraft({ ...base, accessRole: 'member', email: ' ' })).toEqual({ ok: false, error: ERR_ACCESS_NEEDS_EMAIL })
+    expect(ERR_ACCESS_NEEDS_EMAIL).toBe('권한을 주려면 이메일(계정)이 필요합니다.')
+  })
+  it('외부 인력 — 이름만으로 통과하고 빈 입력은 null 로 정규화한다', () => {
+    expect(validateDraft({ ...base, name: '  bob ' })).toEqual({
+      ok: true,
+      input: { personId: null, name: 'bob', email: null, accessRole: null, roleLabel: null, title: null, teamIds: [], active: true },
+    })
+  })
+  it('이메일은 소문자·trim, 라벨·직함은 trim', () => {
+    const r = validateDraft({ ...base, email: ' Alice@Example.COM ', roleLabel: ' 개발 ', title: ' 책임 ', accessRole: 'admin' })
+    expect(r).toMatchObject({ ok: true, input: { email: 'alice@example.com', roleLabel: '개발', title: '책임', accessRole: 'admin' } })
+  })
+  it('대표 팀 = teamIds[0] — 순서를 보존하고 중복을 뺀다', () => {
+    const r = validateDraft({ ...base, teamIds: ['t-mes', 't-erp', 't-mes'] })
+    expect(r.ok && r.input.teamIds).toEqual(['t-mes', 't-erp'])
+  })
+  it('기존 인물은 personId 와 활성 여부를 그대로 싣는다', () => {
+    const r = validateDraft({ ...draftFromMember(member()), active: false })
+    expect(r).toMatchObject({ ok: true, input: { personId: 'pe-1', active: false } })
+  })
+})
+
+describe('canGrantAdmin', () => {
+  it('슈퍼유저는 가능', () => {
+    expect(canGrantAdmin(makeProjectActorView({ isSuperuser: true, workspaceRole: null }))).toBe(true)
+  })
+  it('워크스페이스 관리자는 가능', () => {
+    expect(canGrantAdmin(makeProjectActorView({ workspaceRole: 'admin' }))).toBe(true)
+  })
+  it('프로젝트 관리자(워크스페이스 멤버)·비로그인은 불가', () => {
+    expect(canGrantAdmin(makeProjectActorView({ workspaceRole: 'member', projectRole: 'admin' }))).toBe(false)
+    expect(canGrantAdmin(null)).toBe(false)
+  })
+})
+
+describe('accessRoleLabel', () => {
+  it('관리자 / 멤버 / 없음(조회 전용)', () => {
+    expect(accessRoleLabel('admin')).toBe('관리자')
+    expect(accessRoleLabel('member')).toBe('멤버')
+    expect(accessRoleLabel(null)).toBe('없음(조회 전용)')
+  })
+})
+
+describe('팀 선택', () => {
+  it('toggleTeam — 없으면 뒤에 붙이고 있으면 뺀다(대표를 빼면 다음 팀이 대표)', () => {
+    expect(toggleTeam([], 'a')).toEqual(['a'])
+    expect(toggleTeam(['a'], 'b')).toEqual(['a', 'b'])
+    expect(toggleTeam(['a', 'b'], 'a')).toEqual(['b'])
+  })
+  it('setPrimaryTeam — 그 팀을 맨 앞으로(없던 팀이면 추가하며 대표)', () => {
+    expect(setPrimaryTeam(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b'])
+    expect(setPrimaryTeam(['a'], 'z')).toEqual(['z', 'a'])
+  })
+})
+
+describe('findRosterByEmail', () => {
+  const rows = [member(), member({ id: 'm-2', personId: 'pe-2', name: 'bob', email: null })]
+  it('같은 이메일(대소문자·공백 무시)의 명단 행을 찾는다', () => {
+    expect(findRosterByEmail(rows, ' ALICE@example.com ')?.id).toBe('m-1')
+  })
+  it('빈 이메일은 찾지 않는다(외부 인력끼리는 겹치지 않는다)', () => {
+    expect(findRosterByEmail(rows, '')).toBeNull()
+  })
+  it('중복 안내 문구', () => {
+    expect(ERR_DUPLICATE_EMAIL).toBe('같은 이메일의 사람이 이미 있습니다. 목록에서 선택하세요.')
+  })
+})
+
+describe('isDraftDirty', () => {
+  it('원본과 같으면 false, 한 필드라도 다르면 true', () => {
+    const m = member()
+    expect(isDraftDirty(draftFromMember(m), m)).toBe(false)
+    expect(isDraftDirty({ ...draftFromMember(m), title: '수석' }, m)).toBe(true)
+    expect(isDraftDirty({ ...draftFromMember(m), teamIds: ['t-mes', 't-erp'] }, m)).toBe(true)
+    expect(isDraftDirty({ ...draftFromMember(m), active: false }, m)).toBe(true)
+  })
+})
