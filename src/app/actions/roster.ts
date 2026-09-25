@@ -69,16 +69,15 @@ function isTeamIdList(v: unknown): v is string[] {
 }
 
 /**
- * project_members 를 참조하는 FK 전수(0003, pg_constraint 로 확인) — 명단 행과 함께 사라지는 게 맞는 project_member_teams 는 뺀다.
- * 전부 ON DELETE CASCADE(근태·이슈 담당·회의 참석·알림 수신) 또는 SET NULL(이슈·WBS 담당자·위키 담당)이라,
- * 그대로 지우면 기록이 조용히 사라지거나 담당자가 비워진다. 삭제 전에 센다.
+ * project_members 를 참조하는 FK(0003, pg_constraint 로 확인) 중 업무 기록인 것 — ON DELETE CASCADE(근태·이슈 담당·회의 참석)
+ * 또는 SET NULL(이슈·WBS 담당자·위키 담당)이라, 그대로 지우면 기록이 조용히 사라지거나 담당자가 비워진다. 삭제 전에 센다.
+ * 명단 행과 함께 사라지는 게 맞는 project_member_teams(팀 소속)·notification_recipients(알림 수신)는 뺀다(컨트롤러 판정).
  */
 const MEMBER_DEPENDANTS: ReadonlyArray<readonly [table: string, column: string]> = [
   ['attendance_records', 'member_id'],
   ['issue_assignees', 'member_id'],
   ['issues', 'assignee_member_id'],
   ['meeting_attendees', 'member_id'],
-  ['notification_recipients', 'member_id'],
   ['wbs_items', 'assignee_member_id'],
   ['wiki_items', 'owner_member_id'],
 ]
@@ -137,7 +136,7 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
 }
 
 /**
- * 명단 행 삭제. active=false 가 아니라 행을 지운다 — 근태·이슈 담당·회의 참석·알림·WBS/위키 담당 기록이 하나라도 있는
+ * 명단 행 삭제. active=false 가 아니라 행을 지운다 — 근태·이슈 담당·회의 참석·WBS/위키 담당 기록이 하나라도 있는
  * 사람은 지우지 않고 "비활성으로 바꾸세요" 로 거부한다. 참조 FK 가 CASCADE·SET NULL 이라 DB 는 막아 주지 않는다
  * (MEMBER_DEPENDANTS). 검사와 삭제 사이의 경합은 남는다 — 그 창에서 생긴 기록은 FK 규칙대로 지워지거나 비워진다.
  */

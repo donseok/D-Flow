@@ -191,11 +191,11 @@ describe('removeRosterMember — 행 삭제(세션 경로, RLS 가 관리자 행
     expect(server.from).not.toHaveBeenCalled()
   })
 
-  /** 삭제 전 종속 행 검사 — 표별 결과를 준다(기본 0건). project_members 를 참조하는 FK 전수(project_member_teams 제외). */
+  /** 삭제 전 종속 행 검사 — 표별 결과를 준다(기본 0건). project_members 를 참조하는 업무 기록 FK 6표
+   *  (팀 소속 project_member_teams·알림 수신 notification_recipients 는 행과 함께 사라지는 게 맞아 제외). */
   const DEPENDANTS: Array<[string, string]> = [
     ['attendance_records', 'member_id'], ['issue_assignees', 'member_id'], ['issues', 'assignee_member_id'],
-    ['meeting_attendees', 'member_id'], ['notification_recipients', 'member_id'], ['wbs_items', 'assignee_member_id'],
-    ['wiki_items', 'owner_member_id'],
+    ['meeting_attendees', 'member_id'], ['wbs_items', 'assignee_member_id'], ['wiki_items', 'owner_member_id'],
   ]
   function dependants(over: Record<string, Result> = {}) {
     const qs: Record<string, ReturnType<typeof chain>> = {}
@@ -213,11 +213,13 @@ describe('removeRosterMember — 행 삭제(세션 경로, RLS 가 관리자 행
     const q = chain({ data: [{ id: 'm-1' }], error: null })
     server.from.mockReturnValue(q)
     expect(await removeRosterMember('m-1')).toEqual({ ok: true })
-    // 참조 FK 7개 표를 전부 센다(서비스 롤 — RLS 에 가려 0건으로 보이면 안 된다).
+    // 업무 기록 6표를 전부 센다(서비스 롤 — RLS 에 가려 0건으로 보이면 안 된다). 알림·팀 소속은 세지 않는다.
     for (const [table, col] of DEPENDANTS) {
       expect(qs[table]!.select).toHaveBeenCalledWith(col, { count: 'exact', head: true })
       expect(qs[table]!.eq).toHaveBeenCalledWith(col, 'm-1')
     }
+    expect(Object.keys(qs).sort()).toEqual(DEPENDANTS.map(([t]) => t).sort())
+    expect(admin.from).not.toHaveBeenCalledWith('notification_recipients')
     expect(server.from).toHaveBeenCalledWith('project_members')
     expect(q.delete).toHaveBeenCalled()
     expect(q.eq).toHaveBeenCalledWith('id', 'm-1')
