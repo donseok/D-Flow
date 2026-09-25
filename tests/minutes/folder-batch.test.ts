@@ -15,6 +15,7 @@ vi.mock('@/lib/teams/master', () => ({
 }))
 
 import { DELETE, GET, POST } from '@/app/api/v1/minutes/folder/route'
+import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
 
 const SECRET = 'test-minutes-secret'
 const USER = { id: 'u-1', email: 'lead@example.com', user_metadata: { full_name: '팀장' } }
@@ -22,34 +23,43 @@ const EID = (n: number) => `ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b${String(n)
 
 type QueryResponse = { data?: unknown; error?: { message?: string; code?: string } | null }
 
-function queryBuilder(response: QueryResponse) {
+function queryBuilder(response: QueryResponse | (() => QueryResponse)) {
   const b: Record<string, ReturnType<typeof vi.fn>> & {
     then?: (r: (v: unknown) => unknown, j: (r: unknown) => unknown) => Promise<unknown>
   } = {}
   for (const m of ['select', 'insert', 'update', 'eq', 'is', 'in', 'limit', 'maybeSingle', 'single']) {
     b[m] = vi.fn(() => b)
   }
-  b.then = (resolve, reject) =>
-    Promise.resolve({ data: response.data ?? null, error: response.error ?? null }).then(resolve, reject)
+  b.then = (resolve, reject) => {
+    const r = typeof response === 'function' ? response() : response
+    return Promise.resolve({ data: r.data ?? null, error: r.error ?? null }).then(resolve, reject)
+  }
   return b
 }
 
 /** 테이블별 응답 큐 — from(table) 호출 순서대로 소비. */
-function useAdmin(tables: Record<string, QueryResponse[]> = {}, users = [USER]) {
+function useAdmin(tables: Record<string, QueryResponse[]> = {}, users: FakeAccount[] = [USER]) {
   const builders: Record<string, ReturnType<typeof queryBuilder>[]> = {}
-  // 배치는 관리자 이상 전용(결정 §2-H). 판정 축이 memberships.role → is_superuser +
-  // project_roles 로 바뀌었으므로(0052/0054) 기본값도 새 축으로 깐다 — 명시하지 않으면 슈퍼유저.
-  const roleQueue = tables.memberships ?? [{ data: { is_superuser: true } }]
+  // 배치는 관리자 이상 전용(결정 §2-H). 판정 축은 platform_admins + 활성 명단 행 access_role='admin'(0003)
+  // — 명시하지 않으면 플랫폼 관리자로 깐다.
+  const paQueue = tables.platform_admins ?? [{ data: { user_id: USER.id } }]
   const admin = {
     from: vi.fn((table: string) => {
-      const queued = table === 'memberships'
-        ? (roleQueue.shift() ?? { data: { is_superuser: true } })
-        : ((tables[table] ?? []).shift() ?? { data: null, error: null })
-      const b = queryBuilder(queued)
+      let b: ReturnType<typeof queryBuilder>
+      if (table === 'profiles' && !tables.profiles) {
+        // resolveUserByEmail — eq('email', 정규화 값)으로 계정 fixture 에서 찾는다.
+        let email: unknown
+        b = queryBuilder(() => ({ data: profileRowFor(users, email) }))
+        b.eq = vi.fn((col: string, val: unknown) => { if (col === 'email') email = val; return b })
+      } else {
+        const queued = table === 'platform_admins'
+          ? (paQueue.shift() ?? { data: { user_id: USER.id } })
+          : ((tables[table] ?? []).shift() ?? { data: null, error: null })
+        b = queryBuilder(queued)
+      }
       ;(builders[table] ??= []).push(b)
       return b
     }),
-    auth: { admin: { listUsers: vi.fn(async () => ({ data: { users }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return { admin, builders }
@@ -157,45 +167,58 @@ describe('ACTOR_EMAIL 프로브 (요건 9 · 게이트 순서)', () => {
       summary: { total: 0, moved: 0, already_correct: 0, skipped: 0, not_found: 0, failed: 0 },
       results: [],
     })
-    // 권한 게이트(memberships) 외에는 아무것도 건드리지 않는다 — 폴더·회의록 조회 0
-    // 슈퍼유저면 project_roles 까지 갈 필요가 없다(단축 판정).
+    // 계정 매칭(profiles)·권한 게이트(platform_admins) 외에는 아무것도 건드리지 않는다 — 폴더·회의록 조회 0.
+    // 플랫폼 관리자면 명단까지 갈 필요가 없다(단축 판정).
     const touched = admin.from.mock.calls.map(c => c[0])
-    expect(touched).toEqual(['memberships'])
+    expect(touched).toEqual(['profiles', 'platform_admins'])
   })
 
   it('관리자가 아니면 403 forbidden_role — ACTOR_EMAIL 오타를 첫 프로브에서 잡는다(§2-H)', async () => {
-    // 슈퍼유저 아님 + 어느 프로젝트에도 admin 역할 없음
-    useAdmin({ memberships: [{ data: { is_superuser: false } }], project_roles: [{ data: [] }] })
+    // 플랫폼 관리자 아님 + 어느 프로젝트에도 명단 admin 권한 없음
+    useAdmin({ platform_admins: [{ data: null }], project_members: [{ data: [] }] })
     const res = await POST(post(body({ dry_run: true, items: [] })))
     expect(res.status).toBe(403)
     expect((await res.json()).code).toBe('forbidden_role')
   })
 
   it('권한 조회 실패는 fail-closed(403) — 보안 가드는 통과시키지 않는다', async () => {
-    useAdmin({ memberships: [{ data: null, error: { message: 'down' } }] })
+    useAdmin({ platform_admins: [{ data: null, error: { message: 'down' } }] })
     expect((await POST(post(body({ items: [] })))).status).toBe(403)
   })
 
-  it('프로젝트 역할 조회 실패도 fail-closed(403)', async () => {
+  it('명단 권한 조회 실패도 fail-closed(403)', async () => {
     useAdmin({
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: null, error: { message: 'down' } }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: null, error: { message: 'down' } }],
     })
     expect((await POST(post(body({ items: [] })))).status).toBe(403)
   })
 
-  it('어느 프로젝트든 관리자면 통과한다 — 슈퍼유저가 아니어도', async () => {
-    useAdmin({
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ project_id: 'p1' }] }],
+  it('어느 프로젝트든 명단 관리자면 통과한다 — 플랫폼 관리자가 아니어도', async () => {
+    const { builders } = useAdmin({
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'admin', people: { user_id: USER.id, active: true } }] }],
     })
     expect((await POST(post(body({ dry_run: true, items: [] })))).status).toBe(200)
+    // 활성 행·활성 인물·계정 연결(people.user_id)·admin 권한으로 거른다 — !inner 가 아니면 필터가 임베드만 거른다.
+    const pm = builders.project_members[0]
+    expect(String(pm.select.mock.calls[0][0])).toContain('people!inner(user_id, active)')
+    expect(pm.eq).toHaveBeenCalledWith('access_role', 'admin')
+    expect(pm.eq).toHaveBeenCalledWith('active', true)
+    expect(pm.eq).toHaveBeenCalledWith('people.user_id', USER.id)
+    expect(pm.eq).toHaveBeenCalledWith('people.active', true)
+    expect(builders.platform_admins[0].eq).toHaveBeenCalledWith('user_id', USER.id)
+  })
+
+  it('남의 platform_admins 행은 관리자가 아니다(내용으로 판정)', async () => {
+    useAdmin({ platform_admins: [{ data: { user_id: 'someone-else' } }], project_members: [{ data: [] }] })
+    expect((await POST(post(body({ dry_run: true, items: [] })))).status).toBe(403)
   })
 
   it('권한 게이트는 실제 이동 요청도 막는다 — 폴더·회의록 조회 이전에', async () => {
     const { admin } = useAdmin({
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [] }],
       minute_folders: [{ data: TREE }],
       minutes: [{ data: [minute(1)] }],
     })
@@ -203,7 +226,7 @@ describe('ACTOR_EMAIL 프로브 (요건 9 · 게이트 순서)', () => {
       dry_run: false, items: [{ external_id: EID(1), folder_path: ['MES', '품질'] }],
     })))
     expect(res.status).toBe(403)
-    expect(admin.from.mock.calls.map(c => c[0])).toEqual(['memberships', 'project_roles'])
+    expect(admin.from.mock.calls.map(c => c[0])).toEqual(['profiles', 'platform_admins', 'project_members'])
   })
 
   it("등록되지 않은 user_email + items: [] 는 403 — 계정 게이트가 페이로드 검증보다 먼저", async () => {

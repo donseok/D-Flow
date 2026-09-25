@@ -7,8 +7,6 @@ import type { ReadOnlyBotTool, ToolResult } from '@/lib/ai/tools/types'
 
 const CONTEXT: ChatToolExecutionContext = {
   userId: 'u1',
-  role: null,
-  teamId: null,
   capabilities: ['wbs:read', 'meetings:read', 'attendance:read'],
   allowedProjectIds: ['p1'],
   pageContext: null,

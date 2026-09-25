@@ -14,8 +14,6 @@ import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 function context(overrides: Partial<ToolExecutionContext> = {}): ToolExecutionContext {
   return {
     userId: TEST_USER_ID,
-    role: 'pm',
-    teamId: 'team-erp',
     capabilities: ['wiki:read'],
     allowedProjectIds: [...ALLOWED_PROJECT_IDS],
     pageContext: null,

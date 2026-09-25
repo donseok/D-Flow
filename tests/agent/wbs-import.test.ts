@@ -70,15 +70,17 @@ type Resp = { data?: unknown; error?: { message: string; code?: string } | null 
  * .from(table) 호출 시 큐 선두를 소비 — select/maybeSingle/single/then(암묵 await) 모두 같은 응답을 본다.
  */
 function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: Array<{ id: string; email: string }> = [{ id: 'u-1', email: 'admin@example.com' }]) {
-  /** 명단(project_members) 체인의 select/eq 호출 — 담당자 매핑 조회의 필터 계약을 단언한다. */
-  const rosterCalls: Array<[string, unknown[]]> = []
+  /** 명단(project_members) 체인별 select/eq 호출 — 권한 판정(멤버·관리자)과 담당자 매핑 조회의 필터 계약을 단언한다. */
+  const rosterChains: Array<Array<[string, unknown[]]>> = []
   const admin = {
-    rosterCalls,
+    rosterChains,
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
+      const chain: Array<[string, unknown[]]> = []
+      if (table === 'project_members') rosterChains.push(chain)
       for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) {
-        b[k] = (...args: unknown[]) => { if (table === 'project_members') rosterCalls.push([k, args]); return b }
+        b[k] = (...args: unknown[]) => { chain.push([k, args]); return b }
       }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
@@ -144,10 +146,9 @@ describe('POST /wbs/import', () => {
     const admin = useAdmin({
       agent_runners: [{ data: row }, { data: null }], // 리졸버 select, last_seen_at 갱신
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트 + ensureOrder 게이트 x2(T-A, T-B)
-      // memberships·project_roles 는 각 2회 조회된다: isAgentProjectMember(비멤버 404 게이트) → 관리자 판정.
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
+      // platform_admins·명단 권한은 각 2회 조회된다: isAgentProjectMember(비멤버 404 게이트) → 관리자 판정.
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(T-A)
         { data: [ // 갭 후보 조회(payload 의 task ref 전체: T-A, T-B) — RPC 가 이미 dev_workflow:true 로 심었다고 가정
@@ -174,8 +175,16 @@ describe('POST /wbs/import', () => {
     expect(json).toMatchObject({
       ok: true, upserted: 3, skipped: 0, unmatched_assignees: [], non_leaf_skipped: [], orders_created: 2,
     })
+    // 명단 체인 3개 — 멤버 게이트·관리자 판정(권한: 활성 행·활성 인물·계정 연결) 뒤 담당자 매핑.
+    expect(admin.rosterChains).toHaveLength(3)
+    for (const gate of admin.rosterChains.slice(0, 2)) {
+      expect(gate).toEqual(expect.arrayContaining([
+        ['select', ['access_role, people!inner(user_id, active)']],
+        ['eq', ['people.user_id', 'u-1']], ['eq', ['active', true]], ['eq', ['people.active', true]],
+      ]))
+    }
     // 담당자 매핑은 이메일 정본(people.email)으로, 담당자 쓰기이므로 활성 명단 행·활성 인물만.
-    expect(admin.rosterCalls).toEqual([
+    expect(admin.rosterChains[2]).toEqual([
       ['select', ['id, people!inner(email, active)']],
       ['eq', ['project_id', PROJECT_ID]],
       ['eq', ['active', true]],
@@ -215,9 +224,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-x', people: { email: 'other@example.com' } }] }], // 다른 email 만 — 매칭 실패
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-x', people: { email: 'other@example.com' } }] }], // 다른 email 만 — 매칭 실패
       wbs_items: [
         // 미매칭이므로 assignee_member_id update 는 없다 — 첫 항목이 바로 갭 후보 조회.
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -246,9 +254,9 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
-      // memberships·project_roles 2회: isAgentProjectMember(멤버 확인, role 존재→통과) → 관리자 판정(role≠admin→403).
-      project_roles: [{ data: [{ role: 'member' }] }, { data: [{ role: 'member' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
+      // platform_admins·명단 권한 2회: isAgentProjectMember(멤버 확인, 권한 있음→통과) → 관리자 판정(admin 아님→403).
+      project_members: [{ data: [{ access_role: 'member' }] }, { data: [{ access_role: 'member' }] }],
+      platform_admins: [{ data: null }, { data: null }],
     })
     const res = await importPOST(post(body, token))
     expect(res.status).toBe(403)
@@ -262,8 +270,8 @@ describe('POST /wbs/import', () => {
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
       // isAgentProjectMember 에서만 소비 — role 행이 없으므로 여기서 404, 관리자 판정 코드까지 가지 않는다.
-      project_roles: [{ data: [] }],
-      memberships: [{ data: { is_superuser: false } }],
+      project_members: [{ data: [] }],
+      platform_admins: [{ data: null }],
     })
     const res = await importPOST(post(body, token))
     expect(res.status).toBe(404)
@@ -299,9 +307,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }], // 라우트 게이트만 — ensureOrder 는 활성 주문이 있어 호출되지 않는다
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [{ data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }], // 갭 후보 조회
       agent_work_orders: [{ data: [{ wbs_item_id: 'id-a' }] }], // 이미 활성 주문 존재 — 갭 아님
     }, [{ data: { upserted: 1, skipped: 0, ids: { 'MES/T-A': 'id-a' }, new_refs: [] } }]) // 이미 존재 — 신규 없음
@@ -321,9 +328,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
         { data: { name: '제목 T-A', priority: 'high', external_ref: 'MES/T-A', assignee_member_id: 'member-1', dev_workflow: true } }, // ensureOrder: 항목 조회
@@ -354,9 +360,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -384,9 +389,8 @@ describe('POST /wbs/import', () => {
       // taskRefs(payload 의 kind='task' ref 집합)가 비어 ensureOrdersForPayload 가 즉시 반환한다 —
       // wbs_items·agent_work_orders 큐가 전혀 소비되지 않으므로 agent_projects 도 라우트 게이트 1회뿐.
       agent_projects: [{ data: { enabled: true } }],
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(WP-01, kind 무관하게 assignee 매칭은 이뤄진다)
       ],
@@ -406,9 +410,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [] }], // 매칭 대상 없음 — 그래도 로스터는 로드된다
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [] }], // 매칭 대상 없음 — 그래도 로스터는 로드된다
       wbs_items: [
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
         { data: { name: '제목 T-A', priority: 'high', external_ref: 'MES/T-A', assignee_member_id: null, dev_workflow: true } }, // ensureOrder: 항목 조회
@@ -437,9 +440,8 @@ describe('POST /wbs/import', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트 + ensureOrder 게이트(T-A 만)
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_members: [{ data: [] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }, { data: [] }],
       wbs_items: [
         { data: [ // 갭 후보 조회 — T-B 는 dev_workflow:false(다른 트리거가 그 사이 껐다고 가정)
           { id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true },

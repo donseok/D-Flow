@@ -48,8 +48,6 @@ export type CoreBotToolName =
 
 export interface ToolExecutionContext {
   userId: string
-  role: string | null
-  teamId: string | null
   capabilities: readonly string[]
   allowedProjectIds: readonly string[]
   pageContext: PageContextV1 | null

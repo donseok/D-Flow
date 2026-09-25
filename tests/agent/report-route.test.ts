@@ -8,8 +8,10 @@ const WBS_ITEM_ID = 'abcdef00-1111-2222-3333-444455556666'
 const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(async () => {}),
+  emitNotification: vi.fn(async () => ({ ok: true })),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+vi.mock('@/lib/notify/emit', () => ({ emitNotification: mocks.emitNotification }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordProgressSnapshot }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', async (orig) => {
@@ -18,6 +20,7 @@ vi.mock('next/server', async (orig) => {
 })
 
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
+import { profileEq } from '../fixtures/profiles'
 
 const SECRET = 'test-agent-secret'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
@@ -26,11 +29,18 @@ type Resp = { data?: unknown; error?: { message: string } | null }
 const RPC_OK = { ok: true, order_status: 'reported', stage: 'im', actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
 
 function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
+  /** from(table) 마다 체인 호출(select·eq…)을 남긴다 — 알림 수신자 조회의 필터 계약을 단언한다. */
+  const chains: Array<{ table: string; ops: Array<[string, unknown[]]> }> = []
   const admin = {
+    chains,
     from: vi.fn((table: string) => {
-      const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
+      const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) b[k] = () => b
+      const rec = { table, ops: [] as Array<[string, unknown[]]> }
+      chains.push(rec)
+      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) b[k] = (...a: unknown[]) => { rec.ops.push([k, a]); return b }
+      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
+      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
@@ -40,7 +50,6 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const resp = (queues.rpc ?? []).shift() ?? { data: RPC_OK }
       return { data: resp.data ?? null, error: resp.error ?? null }
     }),
-    auth: { admin: { listUsers: vi.fn(async () => ({ data: { users }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return admin
@@ -56,8 +65,8 @@ const BASE = { user_email: 'dev@example.com', agent: 'cli-1', summary: '요약',
 const ctx = { params: Promise.resolve({ id: ORDER_ID }) }
 const member = () => ({
   agent_projects: [{ data: { project_id: PROJECT_ID, enabled: true } }],
-  memberships: [{ data: { is_superuser: false } }],
-  project_roles: [{ data: [{ role: 'member' }] }],
+  platform_admins: [{ data: null }],
+  project_members: [{ data: [{ access_role: 'member' }] }],
 })
 
 beforeEach(() => {
@@ -79,6 +88,33 @@ describe('POST report', () => {
     expect(admin.rpc).not.toHaveBeenCalled()
     expect(admin.from.mock.calls.map(c => c[0])).not.toContain('wbs_items')
     expect(mocks.recordProgressSnapshot).not.toHaveBeenCalled()
+  })
+  it('completion 알림 수신자 = 이 프로젝트 활성 명단의 admin 권한 · 활성 인물 · 계정 연결(people.user_id)', async () => {
+    const admin = useAdmin({
+      agent_work_orders: [{ data: CLAIMED }],
+      agent_work_reports: [{ data: [{ id: 'r1' }] }],
+      ...member(),
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // 보고자 멤버 게이트
+        { data: [ // 관리자 수신자 — 계정 없는 인물(user_id null)은 받을 수 없다
+          { people: { user_id: 'admin-1', active: true } },
+          { people: [{ user_id: 'admin-2', active: true }] },
+          { people: { user_id: null, active: true } },
+        ] },
+      ],
+    })
+    const res = await reportPOST(post({ ...BASE, kind: 'completion', percent: 100 }), ctx)
+    expect(res.status).toBe(200)
+    expect(mocks.emitNotification).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'work.reported', projectId: PROJECT_ID, recipientUserIds: ['admin-1', 'admin-2'],
+    }))
+    const recipients = admin.chains.filter(c => c.table === 'project_members')[1].ops
+    expect(String(recipients.find(([k]) => k === 'select')?.[1][0])).toContain('people!inner(user_id, active)')
+    expect(recipients).toEqual(expect.arrayContaining([
+      ['eq', ['project_id', PROJECT_ID]], ['eq', ['access_role', 'admin']],
+      ['eq', ['active', true]], ['eq', ['people.active', true]],
+    ]))
+    expect(admin.chains.map(c => c.table)).not.toContain('project_roles')
   })
   it('progress 100 은 400 — 완료는 승인 경로로', async () => {
     const admin = useAdmin({ agent_work_orders: [{ data: CLAIMED }], ...member() })

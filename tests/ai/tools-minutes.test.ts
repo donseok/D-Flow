@@ -15,8 +15,6 @@ import {
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
-  role: 'team_editor',
-  teamId: 'team-erp',
   capabilities: ['minutes:read'],
   allowedProjectIds: ['p1', 'p2'],
   pageContext: null,

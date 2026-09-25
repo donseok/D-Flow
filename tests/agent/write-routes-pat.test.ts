@@ -17,12 +17,15 @@ vi.mock('next/server', async (orig) => {
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { POST as releasePOST } from '@/app/api/v1/agent/work/[id]/release/route'
+import { profileEq } from '../fixtures/profiles'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
 const P2 = '99999999-9999-4999-8999-999999999999'
 type Resp = { data?: unknown; error?: { message: string } | null }
+/** 레거시 경로의 user_email 계정 — resolveUserByEmail 이 profiles 에서 찾는다. */
+const USERS = [{ id: 'u-1', email: 'dev@example.com', user_metadata: {} }]
 /** 전이 RPC 기본 응답 — 항목 없는 주문의 성공(단계·실적 건너뜀), 부수효과 없음. 케이스마다 queues.rpc 로 덮는다. */
 const RPC_OK = { ok: true, order_status: 'claimed', stage: null, actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: 'no_item' }
 
@@ -45,9 +48,11 @@ function useAdmin(queues: Record<string, Resp[]>) {
   const rpcCalls: Array<Record<string, unknown>> = []
   const admin = {
     from: vi.fn((table: string) => {
-      const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
+      const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'insert', 'delete', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
+      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, USERS)
       b.update = (p: unknown) => { captured.push(p); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
@@ -62,7 +67,6 @@ function useAdmin(queues: Record<string, Resp[]>) {
     auth: {
       admin: {
         getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'dev@example.com' } }, error: null })),
-        listUsers: vi.fn(async () => ({ data: { users: [{ id: 'u-1', email: 'dev@example.com', user_metadata: {} }] }, error: null })),
       },
     },
   }
@@ -87,8 +91,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: CLAIM_SCOPES }, { data: null }], // 조회, last_seen
       agent_work_orders: [{ data: ORDER }], // 로드(점유는 전이 RPC 가 한다)
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       wbs_items: [{ data: null }], // 배정 확인(무배정) — Task 15 이후에도 이 큐가 유효
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'claude-pc1', claimed_by_user_id: 'attacker' }, PAT.token), ctx)
@@ -109,8 +113,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: REPORT_SCOPES }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'legacy-cli', claimed_by_user_id: null } }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
     expect(res.status).toBe(403)
@@ -133,8 +137,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: { ...RUNNER, scopes: ['work:read', 'work:report'] } }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'ready' } }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).not.toBe(403)
@@ -144,8 +148,8 @@ describe('PAT 쓰기 루프', () => {
     useAdmin({
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'x', claimed_by_user_id: 'u-1' } }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', user_email: 'dev@example.com', kind: 'progress', percent: 10, summary: 's' }, 'legacy-secret'), ctx)
     expect(res.status).toBe(403)
@@ -160,8 +164,8 @@ describe('PAT 쓰기 루프', () => {
         { data: [{ id: O1 }] }, // updated_at 갱신(progress)
       ],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_reports: [{ data: [{ id: 'r-1' }] }], // 보고 insert
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
@@ -184,8 +188,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: CLAIM_SCOPES }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'x', claimed_by_user_id: 'u-2' } }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     void admin1
     const res1 = await releasePOST(post(`http://l/api/v1/agent/work/${O1}/release`, { agent: 'a' }, PAT.token), ctx)
@@ -198,8 +202,8 @@ describe('PAT 쓰기 루프', () => {
         { data: { ...ORDER, status: 'claimed', claimed_by: 'pat-r1', claimed_by_user_id: 'u-1' } },
       ],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     const res2 = await releasePOST(post(`http://l/api/v1/agent/work/${O1}/release`, { agent: 'a' }, PAT.token), ctx)
     expect(res2.status).toBe(200)
@@ -207,14 +211,14 @@ describe('PAT 쓰기 루프', () => {
   })
 
   it('C1: 프로젝트 한정(P2) PAT 로 "멤버인" 타 프로젝트(P1) 주문 claim → 404(존재 은닉)', async () => {
-    // 멤버십 큐(agent_projects/memberships/project_roles)를 채워둔다 — patProjectAllowed 가 없다면
+    // 멤버십 큐(agent_projects/platform_admins/project_members)를 채워둔다 — patProjectAllowed 가 없다면
     // 이 멤버십 판정까지 통과해 200이 나온다(회귀 시 이 테스트가 실패로 그것을 잡는다).
     useAdmin({
       agent_runners: [{ data: CLAIM_SCOPES_P2 }, { data: null }], // 조회, last_seen
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }], // 로드(P1), CAS
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       wbs_items: [{ data: null }], // 배정 확인(무배정)
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
@@ -229,8 +233,8 @@ describe('PAT 쓰기 루프', () => {
         { data: [{ id: O1 }] }, // updated_at 갱신(progress)
       ],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
     expect(res.status).toBe(404)

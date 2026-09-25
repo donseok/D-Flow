@@ -21,8 +21,6 @@ vi.mock('@/lib/teams/master', () => ({
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
-  role: 'team_editor',
-  teamId: 'team-1',
   capabilities: ['members:read', 'wbs:read'],
   allowedProjectIds: ['p1'],
   pageContext: null,

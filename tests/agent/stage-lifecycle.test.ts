@@ -31,6 +31,7 @@ vi.mock('next/server', async (orig) => {
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { approveAgentCompletion, rejectAgentCompletion } from '@/app/actions/agentWork'
+import { profileEq } from '../fixtures/profiles'
 
 const SECRET = 'test-agent-secret'
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -49,9 +50,11 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
   const captured: Record<string, Captured[]> = {}
   const admin = {
     from: vi.fn((table: string) => {
-      const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
+      const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'delete', 'eq', 'in', 'order', 'limit', 'contains']) b[k] = () => b
+      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
+      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.update = (payload: unknown) => { (captured[table] ??= []).push({ op: 'update', payload }); return b }
       b.insert = (payload: unknown) => { (captured[table] ??= []).push({ op: 'insert', payload }); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
@@ -64,7 +67,6 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const resp = (queues.rpc ?? []).shift() ?? { data: RPC_OK }
       return { data: resp.data ?? null, error: resp.error ?? null }
     }),
-    auth: { admin: { listUsers: vi.fn(async () => ({ data: { users }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return { admin, captured }
@@ -78,8 +80,8 @@ const post = (url: string, body: unknown) => new NextRequest(url, {
 const ctx = { params: Promise.resolve({ id: O1 }) }
 const member = () => ({
   agent_projects: [{ data: { enabled: true } }],
-  memberships: [{ data: { is_superuser: false } }],
-  project_roles: [{ data: [{ role: 'member' }] }],
+  platform_admins: [{ data: null }],
+  project_members: [{ data: [{ access_role: 'member' }] }],
 })
 
 const ITEM_ROW = (overrides: Record<string, unknown> = {}) => ({

@@ -51,32 +51,54 @@ export async function requireAgentProject(admin: AdminClient, projectId: string)
   return !!data && (data as { enabled: boolean }).enabled === true
 }
 
+/*
+ * 판정 축(0003) — 플랫폼 관리자(platform_admins) + 이 프로젝트의 활성 명단 행 권한(project_members.access_role,
+ * 활성 인물의 people.user_id 로 연결). 세션 경로의 buildActor 와 같은 필터(활성 행·활성 인물·계정 연결)다.
+ *
+ * 워크스페이스 관리자 승계(roleIn ⑤)는 여기서 하지 않는다 — 외부 API 판정은 SP7 에서 actorFromCredential 로
+ * 세션 경로와 하나로 합친다(스펙 3.5). 그 전까지 워크스페이스 관리자도 에이전트 API 를 쓰려면 명단 권한이 필요하다.
+ */
+
+/** platform_admins 행 존재. 조회 실패 = null. 응답 모양이 아니라 내용으로 판정한다(남의 행·빈 객체는 아님). */
+async function platformAdmin(admin: AdminClient, userId: string): Promise<boolean | null> {
+  const { data, error } = await admin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
+  if (error) { console.error('[agent-api] 등급 조회 실패(거절):', error.message); return null }
+  return (data as { user_id?: unknown } | null)?.user_id === userId
+}
+
 /**
- * user_email 계정이 해당 프로젝트 멤버 이상인지 — 기존 3단 권한 축 그대로(스펙 §3.1).
- * 보안 가드이므로 조회 실패는 false(fail-closed). memberships.role 은 deprecated(0054) — 읽지 않는다.
+ * 이 프로젝트 활성 명단 행의 권한 — 'admin'|'member', 행이 없거나 권한 없는 행(조회 전용)은 null, 조회 실패는 undefined.
+ * people 임베드는 반드시 !inner — 아니면 people.* 필터가 임베드만 거르고 명단 행은 전부 돌아온다(service_role 경로라 RLS 도 없다).
+ */
+async function rosterAccessRole(
+  admin: AdminClient, userId: string, projectId: string,
+): Promise<'admin' | 'member' | null | undefined> {
+  const { data, error } = await admin.from('project_members')
+    .select('access_role, people!inner(user_id, active)')
+    .eq('project_id', projectId).eq('active', true)
+    .eq('people.user_id', userId).eq('people.active', true)
+    .limit(1)
+  if (error || !data) { console.error('[agent-api] 명단 권한 조회 실패(거절):', error?.message); return undefined }
+  const role = (data as Array<{ access_role: string | null }>)[0]?.access_role
+  return role === 'admin' || role === 'member' ? role : null
+}
+
+/**
+ * user_email 계정이 해당 프로젝트 멤버 이상인지(스펙 §3.1).
+ * 보안 가드이므로 조회 실패는 false(fail-closed).
  */
 export async function isAgentProjectMember(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
-  const { data: mem, error: memErr } = await admin
-    .from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle()
-  if (memErr) {
-    console.error('[agent-api] 등급 조회 실패(거절):', memErr.message)
-    return false
-  }
-  if ((mem as { is_superuser?: boolean } | null)?.is_superuser) return true
-  const { data: roles, error: roleErr } = await admin
-    .from('project_roles').select('role').eq('user_id', userId).eq('project_id', projectId).limit(1)
-  if (roleErr || !roles) {
-    console.error('[agent-api] 프로젝트 역할 조회 실패(거절):', roleErr?.message)
-    return false
-  }
-  return roles.length > 0
+  const pa = await platformAdmin(admin, userId)
+  if (pa === null) return false
+  if (pa) return true
+  return (await rosterAccessRole(admin, userId, projectId)) != null
 }
 
 /**
- * user_email 계정이 해당 프로젝트 관리자 이상(슈퍼유저 포함)인지 — import·발행 같은
- * 구조 쓰기 엔드포인트의 관문(계약 §2.8). memberships.role 은 deprecated(0054) — 읽지 않는다.
+ * user_email 계정이 해당 프로젝트 관리자 이상(플랫폼 관리자 포함)인지 — import·발행 같은
+ * 구조 쓰기 엔드포인트의 관문(계약 §2.8).
  * 조회 실패는 throw — 호출 라우트의 try/catch 가 500 으로 답한다. false 로 위장하면
  * 조회 장애가 forbidden_role(403)로 둔갑해 "권한이 없다"는 거짓 진단을 남기기 때문이다.
  * 어느 경로로도 통과로 새지 않으므로 fail-closed 는 유지된다.
@@ -84,38 +106,25 @@ export async function isAgentProjectMember(
 export async function isAgentProjectAdmin(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
-  const { data: roleRow, error: roleErr } = await admin
-    .from('project_roles').select('role').eq('user_id', userId).eq('project_id', projectId).limit(1)
-  const { data: mem, error: memErr } = await admin
-    .from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle()
-  if (roleErr || memErr) throw new Error(`관리자 판정 조회 실패: ${(roleErr ?? memErr)!.message}`)
-  const isSuper = !!(mem as { is_superuser?: boolean } | null)?.is_superuser
-  const isAdmin = ((roleRow ?? []) as Array<{ role: string }>).some(r => r.role === 'admin')
-  return isSuper || isAdmin
+  const [pa, role] = await Promise.all([
+    platformAdmin(admin, userId),
+    rosterAccessRole(admin, userId, projectId),
+  ])
+  if (pa === null || role === undefined) throw new Error('관리자 판정 조회 실패')
+  return pa || role === 'admin'
 }
 
 /**
  * 프로젝트별 사용자 역할 조회 — 'superuser'|'admin'|'member'|null.
- * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다.
+ * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다(각 조회 헬퍼가 남긴다).
  */
 export async function agentMemberRole(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<'superuser' | 'admin' | 'member' | null> {
-  const { data: mem, error: memErr } = await admin
-    .from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle()
-  if (memErr) {
-    console.error('[agent-api] memberships 조회 실패(거절):', memErr.message)
-    return null
-  }
-  if ((mem as { is_superuser?: boolean } | null)?.is_superuser) return 'superuser'
-  const { data: roles, error: roleErr } = await admin
-    .from('project_roles').select('role').eq('user_id', userId).eq('project_id', projectId).limit(1)
-  if (roleErr) {
-    console.error('[agent-api] project_roles 조회 실패(거절):', roleErr.message)
-    return null
-  }
-  if (!roles || roles.length === 0) return null
-  return (roles[0] as { role: string }).role as 'admin' | 'member'
+  const pa = await platformAdmin(admin, userId)
+  if (pa === null) return null
+  if (pa) return 'superuser'
+  return (await rosterAccessRole(admin, userId, projectId)) ?? null
 }
 
 export const AGENT_CONTRACT_VERSION = '2.4'

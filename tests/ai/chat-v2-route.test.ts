@@ -20,16 +20,25 @@ function request(body: unknown): NextRequest {
   })
 }
 
-// accessScope 는 projects(비공개 플래그 포함)·project_roles·memberships 세 테이블을 읽는다(0070).
-// 여기서는 전 프로젝트 공개·역할 없음·비슈퍼유저로 고정 — 비공개 스코프 제외는 accessScope 전용 테스트가 검증한다.
+// accessScope 는 buildActor 4축(platform_admins·workspace_members·project_members·projects)과 projects 의 비공개 플래그를 읽는다.
+// 여기서는 워크스페이스 ws-1 의 멤버·명단 역할 없음·전 프로젝트 공개로 고정 — 워크스페이스 경계와 비공개 스코프 제외는
+// accessScope 전용 테스트가 검증한다. @/lib/authz 는 모킹하지 않는다(실제 조립 경로를 탄다).
 function client(projects: string[], error: { message: string } | null = null) {
-  return {
-    from: (table: string) => {
-      if (table === 'project_roles') return { select: () => ({ eq: async () => ({ data: [], error: null }) }) }
-      if (table === 'memberships') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { is_superuser: false }, error: null }) }) }) }
-      return { select: async () => ({ data: error ? null : projects.map(id => ({ id, is_private: false })), error }) }
-    },
+  const tables: Record<string, { data: unknown; error: { message: string } | null }> = {
+    platform_admins: { data: null, error: null },
+    workspace_members: { data: [{ workspace_id: 'ws-1', role: 'member' }], error: null },
+    project_members: { data: [], error: null },
+    projects: { data: error ? null : projects.map(id => ({ id, workspace_id: 'ws-1', is_private: false })), error },
   }
+  const from = vi.fn((table: string) => {
+    const r = tables[table] ?? { data: null, error: { message: `unexpected table ${table}` } }
+    const b: Record<string, unknown> = {}
+    for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+    b.maybeSingle = async () => r
+    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(r).then(res, rej)
+    return b
+  })
+  return { from }
 }
 
 describe('POST /api/chat/v2/stream composition', () => {
@@ -58,6 +67,25 @@ describe('POST /api/chat/v2/stream composition', () => {
     const response = await POST(request({ projectId: 'p1', message: 'WBS 현황', history: [] }))
     expect(response.status).toBe(503)
     expect(await response.json()).toMatchObject({ code: 'ACCESS_SCOPE_UNAVAILABLE' })
+  })
+
+  it('fails closed with 503 when a permission axis lookup fails — no silent "no role" fallback', async () => {
+    const broken = client(['p1'])
+    const base = broken.from.getMockImplementation()!
+    broken.from.mockImplementation((table: string) => {
+      if (table !== 'workspace_members') return base(table)
+      const r = { data: null, error: { message: 'axis down' } }
+      const b: Record<string, unknown> = {}
+      for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+      b.then = (res: (v: unknown) => unknown) => Promise.resolve(r).then(res)
+      return b
+    })
+    mocks.createServerClient.mockResolvedValue(broken)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = await POST(request({ projectId: 'p1', message: 'WBS 현황', history: [] }))
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: 'ACCESS_SCOPE_UNAVAILABLE' })
+    err.mockRestore()
   })
 
   it('returns 403 for a project outside the server-resolved scope', async () => {

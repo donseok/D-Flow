@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { UUID_RE } from '@/lib/domain/validate'
-import { displayNameFrom } from '@/lib/domain/display-name'
 import { MEETING_CATEGORIES } from '@/lib/domain/meetings'
 import { MINUTE_FOLDER_NAME_MAX, normalizeFolderName, validateMinuteInput } from '@/lib/domain/minutes'
 import { activeTeamCodesSync } from '@/lib/teams/master'
@@ -58,30 +57,34 @@ export function folderPathEnabled(): boolean {
  * 관리자 전용 경로(배치)에서 **ACTOR_EMAIL 이 가리키는 사람이 관리자 이상인지** 판정한다.
  * service_role 로 직접 읽는다 — 세션 기반 getActor 는 서버 간 호출 경로에서 쓸 수 없다.
  *
- * `memberships.role` 을 읽지 않는다. 그 컬럼은 0054 에서 deprecated 로 박제됐고 갱신되지
- * 않으므로, 계속 읽으면 신규 관리자는 배치를 못 돌리고(동결값 'team_editor') 강등된 옛
- * pmo_admin 은 계속 돌 수 있는 판정 드리프트가 시간이 갈수록 벌어진다.
- * 판정 기준은 새 축 하나뿐이다 — `is_superuser` 또는 `project_roles.role='admin'`
- * (앱의 isAnyProjectAdmin·DB app_role() shim 과 같은 의미).
+ * 판정 축(0003)은 플랫폼 관리자(platform_admins) 또는 어느 프로젝트든 활성 명단 행의 access_role='admin'
+ * (활성 인물의 people.user_id 로 연결 — buildActor 와 같은 필터). 앱의 isAnyProjectAdmin 에서
+ * 워크스페이스 관리자 승계만 뺀 의미다 — 외부 API 판정은 SP7 에서 actorFromCredential 로 세션 경로와 합친다.
  *
  * 보안 가드이므로 조회 실패는 fail-closed(false → 거절).
  */
 export async function isBatchAuthorized(admin: AdminClient, userId: string): Promise<boolean> {
-  const { data: mem, error: memErr } = await admin
-    .from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle()
-  if (memErr) {
-    console.error('[minutes-api] 등급 조회 실패(거절):', memErr.message)
+  const { data: pa, error: paErr } = await admin
+    .from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
+  if (paErr) {
+    console.error('[minutes-api] 등급 조회 실패(거절):', paErr.message)
     return false
   }
-  if (mem?.is_superuser) return true
+  // 응답 모양이 아니라 내용으로 판정한다 — 남의 행·빈 객체는 플랫폼 관리자가 아니다.
+  if ((pa as { user_id?: unknown } | null)?.user_id === userId) return true
 
-  const { data: roles, error: roleErr } = await admin
-    .from('project_roles').select('project_id').eq('user_id', userId).eq('role', 'admin').limit(1)
-  if (roleErr || !roles) {
-    console.error('[minutes-api] 프로젝트 역할 조회 실패(거절):', roleErr?.message)
+  // people 임베드는 반드시 !inner — 아니면 people.* 필터가 임베드만 거르고 명단 행은 전부 돌아온다.
+  const { data: rows, error: rowErr } = await admin
+    .from('project_members')
+    .select('project_id, people!inner(user_id, active)')
+    .eq('access_role', 'admin').eq('active', true)
+    .eq('people.user_id', userId).eq('people.active', true)
+    .limit(1)
+  if (rowErr || !rows) {
+    console.error('[minutes-api] 명단 권한 조회 실패(거절):', rowErr?.message)
     return false
   }
-  return roles.length > 0
+  return rows.length > 0
 }
 
 /** 시크릿 비교는 길이 노출·타이밍 채널을 피하기 위해 해시 후 상수시간으로 비교한다. */
@@ -125,28 +128,20 @@ export interface ResolvedUser {
 }
 
 /**
- * user_email → D-Flow 계정 매칭 — 계약 §3.3. lower(trim()) 정규화(0019 관례),
- * deleted_at 계정 제외, listUsers 페이지 순회(actions/accounts.ts 관례).
+ * user_email → D-Flow 계정 매칭 — 계약 §3.3. lower(trim()) 정규화(0019 관례).
+ * 계정 표는 profiles(0003) — email 은 lower(btrim()) CHECK + unique 라 한 건 조회로 끝나고,
+ * 삭제된 계정은 auth.users cascade 로 행이 없다. 이름은 profiles.display_name 이 정본이다.
  * 조회 실패는 '사용자 없음(403)'과 구별해야 하므로 throw(fail-loud) — 호출부가 500으로 변환.
  */
 export async function resolveUserByEmail(admin: AdminClient, email: string): Promise<ResolvedUser | null> {
   const normalized = email.trim().toLowerCase()
   if (!normalized) return null
-  const perPage = 200
-  for (let page = 1; ; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
-    if (error || !data) {
-      throw new Error(`사용자 목록 조회 실패(page=${page}): ${error?.message ?? 'unknown'}`)
-    }
-    for (const u of data.users) {
-      const deletedAt = (u as { deleted_at?: string | null }).deleted_at
-      if (deletedAt) continue
-      if ((u.email ?? '').toLowerCase() === normalized) {
-        return { id: u.id, name: displayNameFrom(u.user_metadata, u.email) }
-      }
-    }
-    if (data.users.length < perPage) return null
-  }
+  const { data, error } = await admin
+    .from('profiles').select('user_id, display_name').eq('email', normalized).maybeSingle()
+  if (error) throw new Error(`계정 조회 실패: ${error.message}`)
+  if (!data) return null
+  const row = data as { user_id: string; display_name: string | null }
+  return { id: row.user_id, name: row.display_name ?? null }
 }
 
 /** 바디에서 user_email만 선추출 — 계약 §9.3 흐름(사용자 매칭 403이 필드 검증 400보다 먼저). */

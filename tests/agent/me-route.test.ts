@@ -47,8 +47,8 @@ describe('GET /agent/me', () => {
       // enabled 프로젝트 2건 중 멤버는 P1 만
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
       projects: [{ data: [{ id: P1, name: '테스트' }, { id: P2, name: '남의것' }] }],
-      memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'admin' }] }, { data: [] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [] }],
     })
     const res = await meGET(get(PAT.token))
     expect(res.status).toBe(200)

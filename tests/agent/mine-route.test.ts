@@ -50,8 +50,8 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }] }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_orders: [{ data: [
         { id: 'o-1', project_id: P1, status: 'ready', priority: 5, instructions: '', claimed_at: null, wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' },
       ] }],
@@ -69,8 +69,8 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }] }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_orders: [{ data: [
         { id: 'o-2', project_id: P1, status: 'claimed', priority: 0, instructions: '', claimed_at: '2026-08-01T00:00:00Z', wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' },
       ] }],
@@ -88,13 +88,12 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }] }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
       agent_work_orders: [
         { data: [{ id: 'o-2', project_id: P1, status: 'claimed', priority: 0, instructions: '', claimed_at: null, wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' }] },
         { data: [{ id: 'o-1', project_id: P1, status: 'ready', priority: 5, instructions: '', claimed_at: null, wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' }] },
       ],
-      project_members: [{ data: [] }], // myMemberIdsAcrossProjects — 배정 없음
+      project_members: [{ data: [{ access_role: 'member' }] }, { data: [] }], // myMemberIdsAcrossProjects — 배정 없음
       wbs_items: [{ data: [] }],
     })
     const res = await mineGET(get('http://l/api/v1/agent/work/mine?scope=all', PAT.token))
@@ -130,12 +129,12 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1 멤버십 체크
-        { data: { is_superuser: false } }, // P2 멤버십 체크
+      platform_admins: [
+        { data: null }, // P1 멤버십 체크
+        { data: null }, // P2 멤버십 체크
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
         { data: [] }, // P2: 비멤버 → accessibleProjectIds 루프에서 배제됨
       ],
       agent_work_orders: [{ data: [
@@ -156,11 +155,11 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER_P1 }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1 멤버십 체크만 필요 (P2는 patProjectAllowed 에서 배제)
+      platform_admins: [
+        { data: null }, // P1 멤버십 체크만 필요 (P2는 patProjectAllowed 에서 배제)
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
       ],
       agent_work_orders: [{ data: [
         { id: 'o-1', project_id: P1, status: 'ready', priority: 5, instructions: '', claimed_at: null, wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' },
@@ -178,12 +177,12 @@ describe('GET /agent/work/mine', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1 멤버십 체크: 성공
+      platform_admins: [
+        { data: null }, // P1 멤버십 체크: 성공
         { error: { message: 'DB error' } }, // P2 멤버십 체크: 실패 → fail-closed 로 배제
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
       ],
       agent_work_orders: [{ data: [
         { id: 'o-1', project_id: P1, status: 'ready', priority: 5, instructions: '', claimed_at: null, wbs_item_id: null, created_at: '2026-08-01T00:00:00Z' },
@@ -208,12 +207,12 @@ describe('accessibleProjectIds — 직접 단위 테스트', () => {
   it('(a) enabled 프로젝트 P1·P2, PAT 소유자 P1만 멤버 → ["P1"] (P2 부재 직접 단언)', async () => {
     useAdmin({
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1 체크
-        { data: { is_superuser: false } }, // P2 체크
+      platform_admins: [
+        { data: null }, // P1 체크
+        { data: null }, // P2 체크
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
         { data: [] }, // P2: 비멤버
       ],
     })
@@ -227,11 +226,11 @@ describe('accessibleProjectIds — 직접 단위 테스트', () => {
     const patP1Scoped = { ...patPrincipal, projectId: P1 }
     useAdmin({
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1 체크만 필요 (P2는 patProjectAllowed 에서 스킵)
+      platform_admins: [
+        { data: null }, // P1 체크만 필요 (P2는 patProjectAllowed 에서 스킵)
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
       ],
     })
     const admin = mocks.createAdminClient()
@@ -243,12 +242,12 @@ describe('accessibleProjectIds — 직접 단위 테스트', () => {
   it('(c) P2 멤버십 조회 실패 → ["P1"] (fail-closed 로 P2 배제)', async () => {
     useAdmin({
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
-      memberships: [
-        { data: { is_superuser: false } }, // P1: 성공
+      platform_admins: [
+        { data: null }, // P1: 성공
         { error: { message: 'DB error' } }, // P2: 실패
       ],
-      project_roles: [
-        { data: [{ role: 'member' }] }, // P1: 멤버
+      project_members: [
+        { data: [{ access_role: 'member' }] }, // P1: 멤버
       ],
     })
     const admin = mocks.createAdminClient()

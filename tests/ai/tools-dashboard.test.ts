@@ -13,8 +13,6 @@ import {
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
-  role: 'team_editor',
-  teamId: 'team-erp',
   capabilities: ['dashboard:read'],
   allowedProjectIds: ['p1'],
   pageContext: null,

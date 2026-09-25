@@ -14,8 +14,6 @@ import { repositoryError, repositoryOk } from '@/lib/repositories/types'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
-  role: 'team_editor',
-  teamId: 'team-1',
   capabilities: ['kanban:read'],
   allowedProjectIds: ['p1'],
   pageContext: null,

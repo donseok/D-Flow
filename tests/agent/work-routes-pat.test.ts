@@ -56,8 +56,8 @@ describe('GET /agent/work — PAT 멤버십 게이트', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }], // 조회, last_seen update
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_orders: [{ data: [] }],
     })
     const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, PAT.token))
@@ -67,8 +67,8 @@ describe('GET /agent/work — PAT 멤버십 게이트', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [] }],
     })
     const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, PAT.token))
     expect(res.status).toBe(404)
@@ -111,8 +111,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_reports: [{ data: [] }],
     })
     const res = await detail(PAT.token)
@@ -128,8 +128,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [] }],
     })
     const res = await detail(PAT.token)
     expect(res.status).toBe(404)
@@ -171,8 +171,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_reports: [{ data: [] }],
     })
     const res = await detail(PAT.token)
@@ -195,8 +195,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: orderRow }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_reports: [{ data: [] }],
     })
     const body = await (await detail(PAT.token)).json()
@@ -235,8 +235,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         { data: null }, // loadDependsInfo — 선행의 approved 주문 없음
       ],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [{ role: 'member' }] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [{ access_role: 'member' }] }],
       agent_work_reports: [{ data: [] }],
       wbs_items: [
         { data: [ITEM] }, // ITEM_DETAIL_COLUMNS 로드(.in('id', [wbs_item_id]))
@@ -286,8 +286,8 @@ describe('GET /agent/work/[id] — reports[].evidence', () => {
     agent_runners: [{ data: RUNNER }, { data: null }],
     agent_work_orders: [ORDER_ROW],
     agent_projects: [{ data: { enabled: true } }],
-    memberships: [{ data: { is_superuser: false } }],
-    project_roles: [{ data: [{ role: 'member' }] }],
+    platform_admins: [{ data: null }],
+    project_members: [{ data: [{ access_role: 'member' }] }],
     agent_work_reports: [{ data: [] }],
   })
 

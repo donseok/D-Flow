@@ -7,8 +7,6 @@ import {
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
-  role: 'team_editor',
-  teamId: 'team-1',
   capabilities: ['weekly:read'],
   allowedProjectIds: ['p1'],
   pageContext: null,

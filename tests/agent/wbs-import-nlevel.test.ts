@@ -184,12 +184,12 @@ function post(body: unknown, bearer: string) {
   })
 }
 
-/** 관리자 통과 공통 큐 — agent_runners·agent_projects·project_roles·memberships */
+/** 관리자 통과 공통 큐 — agent_runners·agent_projects·platform_admins·project_members(명단 권한: 멤버 게이트 → 관리자 판정 2회) */
 const authzQueues = () => ({
   agent_runners: [{ data: undefined as unknown }, { data: null }],
   agent_projects: [{ data: { enabled: true } }],
-  project_roles: [{ data: [{ role: 'admin' }] }, { data: [{ role: 'admin' }] }],
-  memberships: [{ data: { is_superuser: false } }, { data: { is_superuser: false } }],
+  project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }],
+  platform_admins: [{ data: null }, { data: null }],
 })
 
 const SERVER_LABELS = LEVELS.map(l => l.name)
@@ -208,7 +208,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const { admin } = useAdmin({
       ...q,
       project_settings: [{ data: { level_labels: SERVER_LABELS } }],
-      project_members: [{ data: [] }],
+      project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
       wbs_items: [
         { data: { id: 'attach-1' } }, // attach_ref → 노드 해석
         { data: [{ id: 'id-t', external_ref: 'acme-op/TSK-OP-EV-PR-01', dev_workflow: true }] }, // 갭 후보
@@ -290,7 +290,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const { admin, upserts } = useAdmin({
       ...q,
       wbs_items: [{ data: [] }], // 트리 depth 조회 — 빈 트리
-      project_members: [{ data: [] }],
+      project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
     }, [{ data: { upserted: 1, skipped: 0, ids: { 'acme-skel/PH-01': 'id-p' }, new_refs: [] } }])
 
     const res = await importPOST(post({
@@ -311,7 +311,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const q = authzQueues(); q.agent_runners[0].data = row
     const { admin } = useAdmin({
       ...q,
-      project_members: [{ data: [] }],
+      project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
       wbs_items: [{ data: [{ id: 'id-t', external_ref: 'MES/T1', dev_workflow: true }] }],
       agent_work_orders: [{ data: [{ wbs_item_id: 'id-t' }] }],
     }, [{ data: { upserted: 1, skipped: 0, ids: { 'MES/T1': 'id-t' }, new_refs: [] } }])

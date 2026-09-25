@@ -17,7 +17,7 @@ const RUNNER = {
 }
 const ORDER = { id: O1, project_id: P1, status: 'claimed', claimed_by: 'pat-r-1', claimed_by_user_id: 'u-1', wbs_item_id: null }
 
-/** 큐 순서(work-routes-pat.test.ts 상세 조회와 같다): agent_runners(조회, last_seen) → 주문 → agent_projects → memberships → project_roles → 주문 update */
+/** 큐 순서(work-routes-pat.test.ts 상세 조회와 같다): agent_runners(조회, last_seen) → 주문 → agent_projects → platform_admins → project_members(명단 권한) → 주문 update */
 function useAdmin(queues: Record<string, Resp[]>, calls: Record<string, unknown[]> = {}) {
   const admin = {
     from: vi.fn((table: string) => {
@@ -44,8 +44,8 @@ const okQueues = (order = ORDER) => ({
   agent_runners: [{ data: RUNNER }, { data: null }],
   agent_work_orders: [{ data: order }, { data: [{ id: O1 }] }],
   agent_projects: [{ data: { enabled: true } }],
-  memberships: [{ data: { is_superuser: false } }],
-  project_roles: [{ data: [{ role: 'member' }] }],
+  platform_admins: [{ data: null }],
+  project_members: [{ data: [{ access_role: 'member' }] }],
 })
 
 beforeEach(() => {

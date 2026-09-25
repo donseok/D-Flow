@@ -47,6 +47,7 @@ vi.mock('next/server', async (importOriginal) => {
 import { GET, POST } from '@/app/api/v1/minutes/route'
 import { POST as LINK } from '@/app/api/v1/minutes/link/route'
 import { GET as META } from '@/app/api/v1/minutes/meta/route'
+import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
 
 const SECRET = 'test-minutes-secret'
 const EXTERNAL_ID = 'ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b77'
@@ -82,7 +83,7 @@ function queryBuilder(response: QueryResponse | (() => QueryResponse)) {
   return builder
 }
 
-type FakeUser = { id: string; email: string; user_metadata?: Record<string, unknown>; deleted_at?: string }
+type FakeUser = FakeAccount
 
 /** 테이블별 응답 큐 — from(table) 호출 순서대로 소비. builders에 호출된 빌더를 남겨 인자 단언에 쓴다. */
 function fakeAdmin(
@@ -93,8 +94,18 @@ function fakeAdmin(
   const builders: Record<string, ReturnType<typeof queryBuilder>[]> = {}
   const admin = {
     from: vi.fn((table: string) => {
-      const queued = (tables[table] ?? []).shift()
-      const b = queryBuilder(queued ?? { data: null, error: null })
+      let b: ReturnType<typeof queryBuilder>
+      if (table === 'profiles' && !tables.profiles) {
+        // resolveUserByEmail — eq('email', 정규화 값)으로 계정 fixture 에서 찾는다(0003 profiles).
+        let email: unknown
+        b = queryBuilder(() => opts.usersError
+          ? { error: { message: 'profiles unavailable' } }
+          : { data: profileRowFor(users, email) })
+        b.eq = vi.fn((col: string, val: unknown) => { if (col === 'email') email = val; return b })
+      } else {
+        const queued = (tables[table] ?? []).shift()
+        b = queryBuilder(queued ?? { data: null, error: null })
+      }
       ;(builders[table] ??= []).push(b)
       return b
     }),
@@ -130,15 +141,6 @@ function fakeAdmin(
       }
       return queryBuilder({ data: null, error: { message: `unexpected rpc: ${fn}` } })
     }),
-    auth: {
-      admin: {
-        listUsers: vi.fn(async () =>
-          opts.usersError
-            ? { data: null, error: { message: 'auth unavailable' } }
-            : { data: { users }, error: null },
-        ),
-      },
-    },
   }
   return { admin, builders }
 }
@@ -260,7 +262,7 @@ describe('POST /api/v1/minutes 검증 (§3.4, §6, §9.6 ③④)', () => {
     expect(builders.minutes).toBeUndefined()
   })
 
-  it('삭제된 계정(deleted_at)은 매칭에서 제외되어 403', async () => {
+  it('삭제된 계정은 profiles 에서 사라져(cascade) 매칭되지 않아 403', async () => {
     useAdmin({}, [{ ...USER, deleted_at: '2026-01-01T00:00:00Z' }])
     const res = await POST(post(payload))
     expect(res.status).toBe(403)
@@ -273,6 +275,8 @@ describe('POST /api/v1/minutes 검증 (§3.4, §6, §9.6 ③④)', () => {
     const res = await POST(post({ ...payload, user_email: '  Lead@Example.COM ' }))
     expect(res.status).toBe(201)
     expect(builders.minutes).toHaveLength(1)
+    // 계정 매칭은 profiles 한 건 조회 — 정규화된 이메일로 찾는다(전체 사용자 목록 순회 없음).
+    expect(builders.profiles[0].eq).toHaveBeenCalledWith('email', 'lead@example.com')
     expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.any(Object))
   })
 
@@ -324,7 +328,7 @@ describe('POST /api/v1/minutes 검증 (§3.4, §6, §9.6 ③④)', () => {
     expect(builders.meetings).toBeUndefined()
   })
 
-  it('listUsers 실패는 403이 아니라 500 — 장애를 사용자 없음으로 오귀속 금지', async () => {
+  it('계정(profiles) 조회 실패는 403이 아니라 500 — 장애를 사용자 없음으로 오귀속 금지', async () => {
     useAdmin({}, [USER], { usersError: true })
     const res = await POST(post(payload))
     expect(res.status).toBe(500)
@@ -1585,7 +1589,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
     expect((await LINK(link(linkPayload))).status).toBe(403)
   })
 
-  it('listUsers 실패는 403이 아니라 500', async () => {
+  it('계정(profiles) 조회 실패는 403이 아니라 500', async () => {
     useAdmin({}, [USER], { usersError: true })
     const res = await LINK(link(linkPayload))
     expect(res.status).toBe(500)

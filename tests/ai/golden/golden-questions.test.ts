@@ -83,8 +83,6 @@ const NOW_DATE = new Date(NOW)
 function contextFor(pageContext: ChatToolExecutionContext['pageContext']): ChatToolExecutionContext {
   return {
     userId: 'user-alpha-1',
-    role: 'pmo_admin',
-    teamId: 'a-team',
     capabilities: [...BOT_READ_CAPABILITIES],
     allowedProjectIds: [...ALLOWED_PROJECT_IDS],
     pageContext: pageContext ?? null,

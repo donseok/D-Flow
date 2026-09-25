@@ -8,6 +8,7 @@ import {
 import { apiBadRequest, apiFail, apiInternalError, apiNotFound } from '@/lib/agent/externalApi'
 import { loadGatedOrder, loadGatedOrderForUser, parseAgentActor, resolveWriteActor } from '@/lib/agent/routeShared'
 import { emitNotification } from '@/lib/notify/emit'
+import { personOf } from '@/lib/data/memberSelect'
 import { applyWorkflowEvent, notifyOnReached } from '@/lib/agent/workflowEvent'
 
 export const dynamic = 'force-dynamic'
@@ -122,9 +123,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         after(() => recordProgressSnapshot(order.project_id, admin as never))
       }
       // 알림 발행 — completion→reported 전이 성공 직후. progress 보고에는 발행하지 않는다(fire-and-forget).
+      // 수신자 = 이 프로젝트 활성 명단의 admin 권한 · 활성 인물 중 계정이 연결된 사람(people.user_id).
+      // people 임베드는 !inner — 아니면 people.active 필터가 임베드만 거르고 비활성 인물 행도 돌아온다.
       const { data: admins, error: adminsErr } = await admin
-        .from('project_roles').select('user_id').eq('project_id', order.project_id).eq('role', 'admin')
+        .from('project_members').select('people!inner(user_id, active)')
+        .eq('project_id', order.project_id).eq('access_role', 'admin')
+        .eq('active', true).eq('people.active', true)
       if (adminsErr) console.error('[agent-api] 관리자 조회 실패(알림 생략):', adminsErr.message)
+      const adminUserIds = ((admins ?? []) as unknown[])
+        .map(r => personOf(r)?.user_id)
+        .filter((u): u is string => typeof u === 'string' && u !== '')
       let itemName = '작업'
       if (order.wbs_item_id) {
         const { data: itemRow, error: itemNameErr } = await admin
@@ -136,7 +144,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         type: 'work.reported', projectId: order.project_id, actorUserId: loaded.userId ?? null,
         entityType: 'agent_order', entityId: id,
         payload: { title: itemName, detail: '완료 보고 — 승인 대기', href: `/p/${order.project_id}/wbs` },
-        recipientUserIds: ((admins ?? []) as Array<{ user_id: string }>).map(a => a.user_id),
+        recipientUserIds: adminUserIds,
       }).catch(() => {
         // 알림 실패는 로깅만 하고 본 로직에 영향을 주지 않는다.
       })

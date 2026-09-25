@@ -6,6 +6,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as releasePOST } from '@/app/api/v1/agent/work/[id]/release/route'
+import { profileEq } from '../fixtures/profiles'
 
 const SECRET = 'test-agent-secret'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
@@ -19,9 +20,11 @@ const RPC_OK = { ok: true, order_status: 'claimed', stage: null, actual_pct: nul
 function useAdmin(queues: Record<string, Resp[]>, users = [USER], calls: Record<string, unknown[]> = {}) {
   const admin = {
     from: vi.fn((table: string) => {
-      const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
+      const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
+      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.update = (payload: unknown) => { (calls[`${table}:update`] ??= []).push(payload); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
@@ -32,7 +35,6 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER], calls: Record<
       const resp = (queues.rpc ?? []).shift() ?? { data: RPC_OK }
       return { data: resp.data ?? null, error: resp.error ?? null }
     }),
-    auth: { admin: { listUsers: vi.fn(async () => ({ data: { users }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return admin
@@ -47,8 +49,8 @@ const BODY = { user_email: 'dev@example.com', agent: 'claude-cli-dev1' }
 const ctx = { params: Promise.resolve({ id: O1 }) }
 const member = () => ({
   agent_projects: [{ data: { project_id: P1, enabled: true } }],
-  memberships: [{ data: { is_superuser: false } }],
-  project_roles: [{ data: [{ role: 'member' }] }],
+  platform_admins: [{ data: null }],
+  project_members: [{ data: [{ access_role: 'member' }] }],
 })
 
 beforeEach(() => {
@@ -87,8 +89,8 @@ describe('POST claim', () => {
     useAdmin({
       agent_work_orders: [{ data: ORDER }],
       agent_projects: [{ data: { project_id: P1, enabled: true } }],
-      memberships: [{ data: { is_superuser: false } }],
-      project_roles: [{ data: [] }],
+      platform_admins: [{ data: null }],
+      project_members: [{ data: [] }],
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, BODY), ctx)
     expect(res.status).toBe(403)
@@ -141,7 +143,7 @@ describe('claim — 새 점유자에게 옛 재개 요청을 물려주지 않는
     useAdmin({
       agent_work_orders: [{ data: ORDER }],
       agent_projects: [{ data: { enabled: true } }],
-      memberships: [{ data: { is_superuser: true } }],
+      platform_admins: [{ data: { user_id: 'u-1' } }],
     }, [USER], calls)
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, BODY), { params: Promise.resolve({ id: O1 }) })
     expect(res.status).toBe(200)

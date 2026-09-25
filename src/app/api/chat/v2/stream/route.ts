@@ -1,8 +1,6 @@
 import { NextRequest } from 'next/server'
 import { jsonError } from '@/lib/api/http'
 import { getSession } from '@/lib/auth'
-import { getActorForView } from '@/lib/authz'
-import { effectiveLegacyRole } from '@/lib/domain/authz'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
@@ -64,14 +62,10 @@ export async function POST(req: NextRequest) {
     return jsonError('기본 답변 경로로 전환합니다.', 501, 'CHAT_V2_UNSUPPORTED')
   }
 
-  // 챗 컨텍스트의 신원 — 판정이 아니라 표시·필터용이다(실제 권한은 아래 capabilities +
-  // allowedProjectIds 가 결정하며, 봇은 읽기 전용이다). memberships.role 은 0054 에서
-  // 박제됐으므로 role 은 새 축에서 파생한다 — 그 컬럼을 읽으면 시간이 갈수록 드리프트가 쌓인다.
-  // 권한 조회 실패는 신원 없음(null)으로 열화한다 — 읽기 전용 경로를 500 으로 만들 이유가 없다.
-  const [actor, sb] = await Promise.all([
-    getActorForView(),
-    createServerClient(),
-  ])
+  // 봇은 읽기 전용이고 실제 권한은 아래 capabilities + allowedProjectIds 가 결정한다. 그 스코프는
+  // accessScope 가 buildActor 4축(플랫폼 관리자·워크스페이스·명단·프로젝트)으로 조립한다 — 권한 조회가
+  // 실패하면 역할 없음으로 폴백하지 않고 503 으로 닫는다(fail-closed).
+  const sb = await createServerClient()
   const scopeResolution = await createSupabaseAccessScopeResolver(sb).resolve(user.id)
   if (!scopeResolution.ok) {
     console.error('[chat-v2] 프로젝트 접근 범위 조회 실패:', scopeResolution.detail ?? scopeResolution.code)
@@ -105,8 +99,6 @@ export async function POST(req: NextRequest) {
     ...(plan ? { plan } : {}),
     context: {
       userId: user.id,
-      role: effectiveLegacyRole(actor),
-      teamId: actor?.teamId ?? null,
       capabilities,
       allowedProjectIds,
       pageContext: request.pageContext ?? null,

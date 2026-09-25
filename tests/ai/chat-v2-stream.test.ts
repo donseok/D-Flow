@@ -86,7 +86,7 @@ describe('chat v2 orchestrator', () => {
           registry: createChatToolRegistry([tool]),
           now: new Date('2026-07-19T00:00:00.000Z'),
           context: {
-            userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+            userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
             pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
           },
           synthesize,
@@ -120,7 +120,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null, capabilities: ['attendance:read'], allowedProjectIds: ['p1'],
+          userId: 'u1', capabilities: ['attendance:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
       },
@@ -154,7 +154,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry([attendance]),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null,
+          userId: 'u1',
           capabilities: ['attendance:read', 'meetings:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
@@ -208,7 +208,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+          userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
         synthesize: () => new Promise(() => undefined),
@@ -249,7 +249,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+          userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
         synthesize: async input => {
@@ -333,7 +333,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry(tools),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+          userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
         route: {
@@ -391,7 +391,7 @@ describe('chat v2 orchestrator', () => {
           registry: createChatToolRegistry([tool]),
           now: new Date('2026-07-19T00:00:00.000Z'),
           context: {
-            userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+            userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
             pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
           },
           route: {
@@ -443,7 +443,7 @@ describe('chat v2 orchestrator', () => {
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
         context: {
-          userId: 'u1', role: null, teamId: null, capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
+          userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
         },
         route: {

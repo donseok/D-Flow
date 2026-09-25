@@ -1,5 +1,7 @@
 import { BOT_READ_CAPABILITIES, type BotReadCapability } from '@/lib/ai/tools/types'
 import type { SupabaseServerClient } from '@/lib/repositories/supabase/common'
+import { canSeeProject } from '@/lib/domain/authz'
+import { buildActor } from './buildActor'
 
 /**
  * 세션 사용자의 접근 범위 확정 — 설계 §19의 공유 authz 경계.
@@ -20,17 +22,31 @@ export interface AccessScopeResolver {
   resolve(userId: string): Promise<AccessScopeResolution>
 }
 
-/** Supabase/RLS adapter. A healthy zero-row result stays distinct from a failed scope lookup. */
+/**
+ * Supabase/RLS adapter. A healthy zero-row result stays distinct from a failed scope lookup.
+ *
+ * 스코프 = 내 워크스페이스의 프로젝트(buildActor 의 projectWorkspace — 플랫폼 관리자는 전부) 중
+ * canSeeProject 를 통과한 것. 비공개 프로젝트(0070)는 명단 역할 보유자·워크스페이스 관리자·플랫폼 관리자에게만 —
+ * 목록에선 숨겼는데 챗봇이 답하면 숨김이 무색해진다.
+ */
 export function createSupabaseAccessScopeResolver(
   client: SupabaseServerClient,
 ): AccessScopeResolver {
   return {
     async resolve(userId) {
-      const [projRes, rolesRes, memRes] = await Promise.all([
+      // 권한 4축과 비공개 플래그는 서로 독립 — 한 왕복으로 겹친다. buildActor 는 실패 시 throw 하므로
+      // 결과로 감싸 Promise.all 이 다른 쪽을 기다리게 한다.
+      const [actorRes, projRes] = await Promise.all([
+        buildActor(client, userId).then(
+          actor => ({ ok: true as const, actor }),
+          (e: unknown) => ({ ok: false as const, detail: e instanceof Error ? e.message : String(e) }),
+        ),
         client.from('projects').select('id, is_private'),
-        client.from('project_roles').select('project_id').eq('user_id', userId),
-        client.from('memberships').select('is_superuser').eq('user_id', userId).maybeSingle(),
       ])
+      // 권한 축을 못 읽으면 스코프 전체를 내지 않는다 — '역할 없음'으로 폴백하면 비공개 판정이 조용히 틀어진다.
+      if (!actorRes.ok) {
+        return { ok: false, code: 'ACCESS_SCOPE_UNAVAILABLE', retryable: true, detail: actorRes.detail }
+      }
       if (projRes.error || !projRes.data) {
         return {
           ok: false,
@@ -39,18 +55,16 @@ export function createSupabaseAccessScopeResolver(
           ...(projRes.error?.message ? { detail: projRes.error.message } : {}),
         }
       }
-      // 비공개 프로젝트(0070)는 역할 보유자·슈퍼유저에게만 스코프에 넣는다 — 목록에선
-      // 숨겼는데 챗봇이 답하면 숨김이 무색해진다. 역할·슈퍼유저 조회가 실패하면 비공개만
-      // 제외하고 진행한다(fail-closed) — 스코프 전체를 죽이면 공개 프로젝트 질문까지 막힌다.
-      if (rolesRes.error) console.error('[accessScope] 프로젝트 역할 조회 실패 — 비공개 제외로 진행:', rolesRes.error.message)
-      if (memRes.error) console.error('[accessScope] 멤버십 조회 실패 — 비공개 제외로 진행:', memRes.error.message)
-      const isSuperuser = Boolean(memRes.data?.is_superuser)
-      const roleProjectIds = new Set((rolesRes.data ?? []).map(r => r.project_id as string))
-      const allowedProjectIds = [...new Set(projRes.data.flatMap(project =>
-        typeof project.id === 'string' && project.id.length > 0
-          && (!project.is_private || isSuperuser || roleProjectIds.has(project.id))
-          ? [project.id] : [],
-      ))]
+      const { actor } = actorRes
+      const projects = new Map<string, { id: string; is_private?: boolean | null }>()
+      for (const p of projRes.data as Array<{ id: unknown; is_private?: boolean | null }>) {
+        if (typeof p.id === 'string' && p.id.length > 0) projects.set(p.id, { id: p.id, is_private: p.is_private })
+      }
+      // 비공개 플래그를 확인하지 못한 프로젝트(두 조회 사이 생성 등)는 넣지 않는다 — fail-closed.
+      const allowedProjectIds = [...actor.projectWorkspace.keys()].filter(pid => {
+        const project = projects.get(pid)
+        return project ? canSeeProject(actor, project) : false
+      })
       return {
         ok: true,
         scope: { allowedProjectIds, capabilities: [...BOT_READ_CAPABILITIES] },
