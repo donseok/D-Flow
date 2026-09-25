@@ -1,14 +1,19 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { setPrimaryTeam, toggleTeam } from '@/lib/domain/roster'
 
 export interface TeamOption { id: string; code: string }
 
+/** 목록 최대 높이(max-h-56 = 14rem) + 여백 — 아래 공간이 이보다 작으면 위로 연다. */
+const POPOVER_MAX_H = 240
+
 /**
  * 명단 한 행의 팀 — 체크 목록(여러 팀) + 대표 팀 라디오. value 첫 원소가 대표 팀(RPC p_team_ids 규칙).
  * 닫힌 상태는 칩 요약(대표 팀 굵게)이라 표 폭을 적게 쓴다. 바깥 클릭·Esc 로 닫힌다.
+ * 목록은 body 포털 + fixed 로 띄운다 — 명단 표의 overflow-x-auto 가 absolute 팝오버를 잘랐다(행 1개일 때 목록이 안 보임).
  */
 export function TeamMultiSelect({ options, value, onChange, label, disabled = false }: {
   options: readonly TeamOption[]
@@ -19,16 +24,37 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<CSSProperties | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const codeOf = new Map(options.map(o => [o.id, o.code]))
 
   useEffect(() => {
     if (!open) return
     function onDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (rootRef.current?.contains(t) || popRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  // 버튼 아래(공간이 모자라면 위)에 붙인다. 스크롤·리사이즈마다 다시 잰다(fixed 라 따라가지 않는다).
+  useLayoutEffect(() => {
+    if (!open) return
+    function place() {
+      const r = rootRef.current?.getBoundingClientRect()
+      if (!r) return
+      const below = window.innerHeight - r.bottom
+      setPos(below < POPOVER_MAX_H && r.top > below
+        ? { position: 'fixed', left: r.left, bottom: window.innerHeight - r.top + 4 }
+        : { position: 'fixed', left: r.left, top: r.bottom + 4 })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place) }
   }, [open])
 
   return (
@@ -51,8 +77,10 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
         </span>
         <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
       </button>
-      {open && (
-        <div role="group" aria-label={label} className="absolute z-20 mt-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
+      {open && pos && createPortal(
+        // Esc 는 포털이어도 React 트리로 버블링돼 바깥 div 의 onKeyDown 이 받는다.
+        <div ref={popRef} role="group" aria-label={label} style={pos}
+          className="z-50 w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
           {options.length === 0 ? (
             <p className="px-1 py-1 text-xs text-ink-subtle">이 프로젝트에 팀이 없습니다.</p>
           ) : (
@@ -77,7 +105,8 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
               })}
             </ul>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

@@ -97,14 +97,29 @@ describe('RosterManager', () => {
     typeInto(byLabel<HTMLInputElement>('alice 직함'), ' 책임 ')
     choose(byLabel<HTMLSelectElement>('alice 권한'), 'admin')
     act(() => byLabel<HTMLButtonElement>('alice 팀').click())
-    act(() => container.querySelector<HTMLInputElement>('input[data-team-check="MES"]')!.click())
-    act(() => container.querySelector<HTMLInputElement>('input[data-team-primary="MES"]')!.click())
+    // 팀 팝오버는 표 overflow 에 잘리지 않게 body 포털로 뜬다 — container 밖에서 찾는다.
+    act(() => document.querySelector<HTMLInputElement>('input[data-team-check="MES"]')!.click())
+    act(() => document.querySelector<HTMLInputElement>('input[data-team-primary="MES"]')!.click())
     await act(async () => button('저장').click())
     expect(upsertRosterMember).toHaveBeenCalledWith('p-1', {
       personId: 'pe-alice', name: 'alice', email: 'alice@example.com', accessRole: 'admin',
       roleLabel: null, title: '책임', teamIds: ['t-mes', 't-erp'], active: true,
     })
     expect(refresh).toHaveBeenCalled()
+  })
+
+  it('팀 팝오버는 표의 overflow 컨테이너 밖(body 포털)에 뜨고, 바깥 클릭으로 닫힌다', () => {
+    render([member()])
+    act(() => byLabel<HTMLButtonElement>('alice 팀').click())
+    const pop = document.querySelector<HTMLElement>('[role="group"][aria-label="alice 팀"]')!
+    expect(pop).not.toBeNull()
+    expect(container.contains(pop)).toBe(false)
+    expect(pop.style.position).toBe('fixed')
+    // 팝오버 안 클릭은 닫지 않는다(포털이라 root.contains 로는 판정이 안 된다).
+    act(() => { pop.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+    expect(document.querySelector('[role="group"][aria-label="alice 팀"]')).not.toBeNull()
+    act(() => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+    expect(document.querySelector('[role="group"][aria-label="alice 팀"]')).toBeNull()
   })
 
   it('비활성 토글은 active=false 로 저장한다', async () => {
