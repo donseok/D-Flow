@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  LEVEL_LABELS, TEMPLATE_HEADER, TRACE_WORDS, cookieHeader, dispositionFilename, e2eRows, findActionId, findTraces,
-  localAppUrl, localClientEnv, toCell,
+  INVITEE, LEVEL_LABELS, SP1_TEAMS, TEMPLATE_HEADER, TRACE_WORDS, actionResult, cookieHeader, dispositionFilename,
+  e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
+  localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
 } from '../../scripts/lib/e2e.mjs'
 import { FORBIDDEN_REFS } from '../../scripts/lib/targets.mjs'
 import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
+import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { isInviteToken, validateSignupInput } from '@/lib/domain/invites'
+import { normalizeNewTeamCode } from '@/lib/domain/teams'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
 
@@ -110,5 +114,173 @@ describe('findTraces', () => {
   it('이 검사기 자신(러너·순수 조각·이 테스트)의 원문에 흔적이 없다', () => {
     const files = ['scripts/lib/e2e.mjs', 'scripts/e2e-local.mjs', 'tests/scripts/e2e.test.ts']
     expect(findTraces(files.map((name) => ({ name, text: readFileSync(name, 'utf8') })))).toEqual([])
+  })
+})
+
+// ── SP1 흐름(다중 팀·외부 인력·초대 수락·존재 은닉)의 입력 조립·응답 해석 ─────────────────────────
+
+describe('encodeActionArgs — React encodeReply 의 평문 규칙', () => {
+  it('JSON 배열로 싣고 $ 로 시작하는 문자열은 $$ 로 한 번 더 감싼다', () => {
+    expect(encodeActionArgs(['p1', { name: 'bob', email: null, teamIds: [] }]))
+      .toBe('["p1",{"name":"bob","email":null,"teamIds":[]}]')
+    expect(encodeActionArgs(['$x', { a: '$$', b: 'a$' }, [true, 1.5]])).toBe('["$$x",{"a":"$$$","b":"a$"},[true,1.5]]')
+  })
+  it('undefined·Date·함수·NaN 처럼 서버가 다르게 읽을 값은 거절한다', () => {
+    expect(() => encodeActionArgs([{ a: undefined }])).toThrow(/직렬화/)
+    expect(() => encodeActionArgs([undefined])).toThrow(/직렬화/)
+    expect(() => encodeActionArgs([new Date(0)])).toThrow(/직렬화/)
+    expect(() => encodeActionArgs([() => 1])).toThrow(/직렬화/)
+    expect(() => encodeActionArgs([Number.NaN])).toThrow(/직렬화/)
+    expect(() => encodeActionArgs('x' as unknown as unknown[])).toThrow(/배열/)
+  })
+})
+
+describe('actionResult — 서버 액션 Flight 응답에서 결과 값', () => {
+  const root = (ref = '$@1') => `0:{"a":"${ref}","f":"","b":"development"}\n`
+  it('루트 a 가 가리키는 행을 JSON 으로 돌려준다', () => {
+    expect(actionResult(`${root()}1:{"ok":true,"memberId":"m1"}\n`)).toEqual({ ok: true, memberId: 'm1' })
+    expect(actionResult(Buffer.from(`${root()}1:{"ok":false,"error":"권한 없음"}\n`))).toEqual({ ok: false, error: '권한 없음' })
+  })
+  it('반환 없음($undefined)·$$·$D·중첩 참조를 풀고 모르는 표기는 거절한다', () => {
+    expect(actionResult(`${root()}1:"$undefined"\n`)).toBeUndefined()
+    expect(actionResult(`${root()}1:{"a":"$$5","b":"$undefined","c":"$D2026-09-25T00:00:00.000Z","d":"$2"}\n2:[1,"x"]\n`))
+      .toEqual({ a: '$5', b: undefined, c: '2026-09-25T00:00:00.000Z', d: [1, 'x'] })
+    expect(() => actionResult(`${root()}1:{"a":"$Q2"}\n`)).toThrow(/Flight/)
+    expect(() => actionResult(`${root()}1:{"a":"$9"}\n`)).toThrow(/행 9/)
+  })
+  it('T 행은 바이트 길이로 건너뛴다 — 본문 안의 줄바꿈·가짜 행에 속지 않는다', () => {
+    const text = '한글\n1:{"ok":false}'
+    const len = Buffer.byteLength(text).toString(16)
+    const body = `0:{"a":"$@1","f":"$3","b":"x"}\n3:T${len},${text}:HL["/a.css","style"]\n2:I["x",[],"y"]\n1:{"ok":true}\n`
+    expect(actionResult(body)).toEqual({ ok: true })
+  })
+  it('액션이 던진 오류(E 행)는 그 메시지로 throw', () => {
+    expect(() => actionResult(`${root()}1:E{"digest":"1","message":"단계 입력이 올바르지 않습니다."}\n`)).toThrow(/단계 입력/)
+  })
+  it('서버 액션 응답이 아니면 throw', () => {
+    expect(() => actionResult('')).toThrow(/서버 액션 응답/)
+    expect(() => actionResult('0:{"b":"x","f":""}\n')).toThrow(/서버 액션 응답/)
+    expect(() => actionResult('<!DOCTYPE html><html></html>')).toThrow(/Flight/)
+    expect(() => actionResult(`${root()}`)).toThrow(/행 1/)
+  })
+})
+
+describe('inviteTokenFromUrl — 초대 링크(발급 응답이 유일한 출처)에서 토큰', () => {
+  const token = '0f8fad5b-d9cb-469f-a165-70867728950e'
+  it('앱 주소와 같은 origin 의 /invite/<uuid> 만', () => {
+    expect(inviteTokenFromUrl(`http://localhost:3000/invite/${token}`, 'http://localhost:3000')).toBe(token)
+    expect(isInviteToken(inviteTokenFromUrl(`http://localhost:3000/invite/${token}`, 'http://localhost:3000'))).toBe(true)
+  })
+  it('다른 origin·다른 경로·토큰 모양이 아니면 throw', () => {
+    expect(() => inviteTokenFromUrl(`https://example.com/invite/${token}`, 'http://localhost:3000')).toThrow(/origin/)
+    expect(() => inviteTokenFromUrl(`http://localhost:3000/p/${token}`, 'http://localhost:3000')).toThrow(/초대 링크/)
+    expect(() => inviteTokenFromUrl('http://localhost:3000/invite/abc', 'http://localhost:3000')).toThrow(/초대 링크/)
+    expect(() => inviteTokenFromUrl(null, 'http://localhost:3000')).toThrow(/초대 링크/)
+  })
+})
+
+describe('SP1 팀', () => {
+  it('A 는 두 팀(다중 팀 명단), B 는 한 팀이고 전부 새 팀 코드 규칙을 통과한다', () => {
+    expect(SP1_TEAMS.A).toHaveLength(2)
+    expect(SP1_TEAMS.B).toHaveLength(1)
+    for (const code of [...SP1_TEAMS.A, ...SP1_TEAMS.B]) expect(normalizeNewTeamCode(code)).toEqual({ ok: true, code })
+  })
+  it('teamIdsByCode — 그 프로젝트 행에서 코드 순서대로 id, 없거나 겹치면 throw', () => {
+    const rows = [
+      { id: 't1', code: 'ERP', project_id: 'A' }, { id: 't2', code: 'MES', project_id: 'A' },
+      { id: 't3', code: 'ERP', project_id: 'B' }, { id: 't4', code: 'QA', project_id: 'B' },
+    ]
+    expect(teamIdsByCode(rows, 'A', ['MES', 'ERP'])).toEqual(['t2', 't1'])
+    expect(teamIdsByCode(rows, 'B', ['QA'])).toEqual(['t4'])
+    expect(() => teamIdsByCode(rows, 'A', ['QA'])).toThrow(/QA/)
+    expect(() => teamIdsByCode([...rows, { id: 't5', code: 'ERP', project_id: 'A' }], 'A', ['ERP'])).toThrow(/2건/)
+  })
+})
+
+describe('rosterPlan — upsertRosterMember 입력 셋', () => {
+  const plan = rosterPlan({ selfName: 'admin', selfEmail: ' Admin@Example.com ', teamIds: { A: ['erp', 'mes'], B: ['qa'] } })
+  it('본인@A 는 관리자·[ERP, MES](첫 팀이 대표), 본인@B 는 멤버·[QA]', () => {
+    expect(plan.selfA).toMatchObject({ name: 'admin', email: 'admin@example.com', accessRole: 'admin', teamIds: ['erp', 'mes'] })
+    expect(plan.selfB).toMatchObject({ name: 'admin', email: 'admin@example.com', accessRole: 'member', teamIds: ['qa'] })
+  })
+  it('외부 인력 bob 은 이메일·권한·팀 없이 명단에만 오른다', () => {
+    expect(plan.bob).toEqual({ name: 'bob', email: null, accessRole: null, roleLabel: '외부 개발', title: null, teamIds: [] })
+  })
+  it('서버 액션 인자로 그대로 실린다(undefined 없음)', () => {
+    for (const input of Object.values(plan)) expect(() => encodeActionArgs(['pid', input])).not.toThrow()
+  })
+})
+
+describe('rosterView — 명단 조회 행 정규화', () => {
+  it('인물·팀 임베드를 펴고 대표 팀을 앞에, 이름순으로', () => {
+    const rows = [
+      {
+        id: 'm2', access_role: 'admin', people: { display_name: 'admin', email: 'admin@example.com', user_id: 'u1' },
+        project_member_teams: [{ is_primary: false, teams: { code: 'MES' } }, { is_primary: true, teams: [{ code: 'ERP' }] }],
+      },
+      { id: 'm1', access_role: null, people: [{ display_name: 'bob', email: null, user_id: null }], project_member_teams: [] },
+    ]
+    expect(rosterView(rows)).toEqual([
+      { memberId: 'm2', name: 'admin', email: 'admin@example.com', accessRole: 'admin', linked: true, teams: ['ERP', 'MES'] },
+      { memberId: 'm1', name: 'bob', email: null, accessRole: null, linked: false, teams: [] },
+    ])
+  })
+  it('인물 임베드가 없으면 throw — 명단 행이 인물 없이 보이면 조회가 틀렸다', () => {
+    expect(() => rosterView([{ id: 'm1', access_role: null, people: null, project_member_teams: [] }])).toThrow(/m1/)
+  })
+})
+
+describe('leafCodes', () => {
+  it('자식이 없는 코드만 — 담당은 리프에', () => {
+    expect(leafCodes(e2eRows('ERP'))).toEqual(['1.1.1', '1.2.1'])
+  })
+})
+
+describe('meetingInput·inviteInput·signupInput — 앱 검증 규칙과 드리프트 감지', () => {
+  it('회의: 단발 킥오프, 참석자 그대로, 카테고리·반복은 앱 목록 안', () => {
+    const m = meetingInput({ date: '2026-09-28', attendeeIds: ['bob'] })
+    expect(m).toMatchObject({ meetingDate: '2026-09-28', recurrence: 'none', recurrenceUntil: null, attendeeIds: ['bob'] })
+    expect(MEETING_CATEGORIES).toContain(m.category)
+    expect(RECURRENCE_ORDER).toContain(m.recurrence)
+    expect(m.startTime! < m.endTime!).toBe(true)
+    expect(() => meetingInput({ date: '2026-9-28', attendeeIds: [] })).toThrow(/날짜/)
+  })
+  it('초대: carol@example.com 멤버, 팀은 받은 순서(첫 팀이 대표 후보)', () => {
+    expect(inviteInput(['erp'])).toEqual({ email: INVITEE.email, accessRole: 'member', teamIds: ['erp'] })
+    expect(INVITEE.email.endsWith('@example.com')).toBe(true)
+  })
+  it('가입: 이름·비밀번호·확인이 앱 가입 검증을 통과한다', () => {
+    const s = signupInput(INVITEE.name, 'Carol-E2E-9f3a')
+    expect(s).toEqual({ name: 'carol', password: 'Carol-E2E-9f3a', passwordConfirmation: 'Carol-E2E-9f3a' })
+    expect(validateSignupInput(s)).toEqual({ ok: true })
+  })
+})
+
+describe('pageProblems — 렌더된 HTML 의 오류 표식', () => {
+  it('정상 화면은 빈 목록', () => {
+    expect(pageProblems('<html><body><main id="main-content"><h1>WBS</h1></main></body></html>')).toEqual([])
+  })
+  it('오류 경계·열화 표시·Next 오류 문서를 잡는다', () => {
+    expect(pageProblems('<h1>화면을 불러오지 못했습니다</h1>')).toEqual(['error-boundary'])
+    expect(pageProblems('<p>일부 정보를 불러오지 못했습니다</p>')).toEqual(['degraded'])
+    expect(pageProblems('<html id="__next_error__"><body></body></html>')).toEqual(['next-error'])
+  })
+  it('있어야 할 데이터가 없으면 missing — 조회 실패를 빈 목록으로 삼키는 화면을 잡는다', () => {
+    const html = '<main>E2E 킥오프 · bob</main>'
+    expect(pageProblems(html, ['E2E 킥오프', 'bob'])).toEqual([])
+    expect(pageProblems(html, ['carol', 'bob', '요구사항 정리'])).toEqual(['missing:carol', 'missing:요구사항 정리'])
+    expect(pageProblems('<h1>화면을 불러오지 못했습니다</h1>', ['x'])).toEqual(['error-boundary', 'missing:x'])
+  })
+})
+
+describe('notFoundRendered — 스트리밍 뒤 notFound() 판정', () => {
+  // (app)/loading.tsx 가 셸을 먼저 흘려보내 상태 코드는 이미 200 이다 — 레이아웃의 notFound() 는 RSC 페이로드의
+  // digest 로만 남고 클라이언트가 not-found 화면을 그린다(2026-09-25 로컬 실측).
+  it('404 폴백 digest 가 있으면 true', () => {
+    expect(notFoundRendered('<script>self.__next_f.push([1,"e:{\\"digest\\":\\"NEXT_HTTP_ERROR_FALLBACK;404\\"}"])</script>')).toBe(true)
+    expect(notFoundRendered('<html><main>WBS</main></html>')).toBe(false)
+  })
+  it('403·다른 폴백은 404 가 아니다', () => {
+    expect(notFoundRendered('NEXT_HTTP_ERROR_FALLBACK;403')).toBe(false)
   })
 })
