@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { walk } from './_walk'
 
 const ROOT = join(process.cwd(), 'src')
+const SKILLS = join(process.cwd(), '.claude/skills')
 
 const LEGACY_IDENT = /\b(memberships|project_roles|project_member_identities|effectiveLegacyRole|getMembership|current_team|update_project_member_with_identity|app_role)\b/
 // 단어 경계만 요구 — 따옴표 종류(single/double/backtick)에 무관하게 잡는다. 리뷰
@@ -36,5 +37,18 @@ describe('옛 조직 모델 0건(결정 8) — src 전체(주석·i18n 사전 �
   it("옛 역할 문자열('pmo_admin'/'team_editor'/'contributor') 0건", () => {
     const hits = findHits(files, LEGACY_ROLE_LITERAL)
     expect(hits, `옛 역할 문자열 잔존:\n${hits.join('\n')}`).toEqual([])
+  })
+})
+
+describe('옛 조직 모델 0건 — 스킬 문서', () => {
+  // 에이전트가 스킬 문서를 계약으로 읽는다 — 폐기된 표(0003 의 project_roles 등)를 근거로 적으면 그대로 따라 한다.
+  // walk() 는 .ts/.tsx 만 모으므로 .md 는 따로 고른다.
+  it('스킬 문서(.claude/skills/**/*.md)에도 레거시 식별자 0건', () => {
+    const files = (readdirSync(SKILLS, { recursive: true }) as string[])
+      .filter((p) => p.endsWith('.md'))
+      .map((p) => join(SKILLS, p))
+    expect(files.length).toBeGreaterThan(0)
+    const hits = findHits(files, LEGACY_IDENT)
+    expect(hits, `스킬 문서의 레거시 식별자 잔존:\n${hits.join('\n')}`).toEqual([])
   })
 })
