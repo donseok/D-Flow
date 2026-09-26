@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  AGENT_CONTRACT_VERSION, agentMemberRole, apiFail, apiInternalError, apiNotFound,
+  AGENT_CONTRACT_VERSION, agentRoleFromActor, apiFail, apiInternalError, apiNotFound,
   patProjectAllowed, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
@@ -50,8 +50,8 @@ export async function GET(req: NextRequest) {
 
     const projects: Array<{ id: string; name: string; role: string }> = []
     for (const pid of candidateIds) {
-      // 프로젝트별 멤버십 판정 — enabled 프로젝트 수는 소수라 순회 비용 무시 가능.
-      const role = await agentMemberRole(admin, principal.userId, pid)
+      // 프로젝트별 역할 — 위 스냅샷 하나로 판정한다(프로젝트마다 다시 조립하지 않는다). 조회 전용은 싣지 않는다.
+      const role = agentRoleFromActor(actor, pid)
       if (role) {
         projects.push({ id: pid, name: nameById.get(pid) ?? '', role })
       }

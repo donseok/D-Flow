@@ -4,7 +4,7 @@ import type { AdminClient } from '@/lib/minutes/externalApi'
 import { parsePatPrefix, tokenUsable } from '@/lib/domain/agentToken'
 import { hashMatches } from '@/lib/agent/token'
 import { buildActor } from '@/lib/authz/buildActor'
-import { roleIn, type EffectiveRole } from '@/lib/domain/authz'
+import { roleIn, type Actor, type EffectiveRole } from '@/lib/domain/authz'
 
 /**
  * 에이전트 작업 루프 외부 API 공용 헬퍼 — 스펙 §3.1.
@@ -104,12 +104,17 @@ export async function agentMemberRole(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<'superuser' | 'admin' | 'member' | null> {
   try {
-    const r = await roleForAgent(admin, userId, projectId)
-    return r === 'viewer' ? null : r
+    return agentRoleFromActor(await buildActor(admin, userId), projectId)
   } catch (e) {
     console.error('[agent-api] 역할 조회 실패(거절):', e instanceof Error ? e.message : e)
     return null
   }
+}
+
+/** agentMemberRole 의 순수판 — 라우트가 이미 스냅샷을 가졌을 때 프로젝트마다 다시 조립하지 않는다(me 의 N+1). */
+export function agentRoleFromActor(actor: Actor, projectId: string): 'superuser' | 'admin' | 'member' | null {
+  const r = roleIn(actor, projectId)
+  return r === 'viewer' ? null : r
 }
 
 export const AGENT_CONTRACT_VERSION = '2.4'

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // PAT 소유자의 권한 스냅샷은 fixture 로 준다 — 실구현(buildActor)은 테이블 큐를 소비해 버린다.
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
-// 프로젝트별 역할(agentMemberRole)도 같은 스냅샷에서 판정한다(SP2 결정 8 — actorFromUser 의 구현 buildActor + roleIn).
+// 프로젝트별 역할은 라우트의 스냅샷으로 판정한다 — buildActor 를 다시 부르지 않는지 단언하려고 mock 한다.
 vi.mock('@/lib/authz/buildActor', () => ({ buildActor: mocks.buildActor }))
 
 import { GET as meGET } from '@/app/api/v1/agent/me/route'
@@ -46,7 +46,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   // 기본: 소유자는 WS 의 두 프로젝트를 볼 수 있다(P1·P2 둘 다 내 워크스페이스).
   mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]) }))
-  mocks.buildActor.mockImplementation((db: unknown, uid: string) => mocks.actorFromUser(db, uid))
 })
 
 describe('GET /agent/me', () => {
@@ -70,6 +69,9 @@ describe('GET /agent/me', () => {
     expect(body.contract_version).toBe('2.4')
     expect(body.projects).toHaveLength(1)
     expect(body.projects[0]).toMatchObject({ id: P1, role: 'admin' })
+    // 스냅샷은 한 번만 조립한다 — 프로젝트마다 다시 만들지 않는다(N+1 제거).
+    expect(mocks.actorFromUser).toHaveBeenCalledTimes(1)
+    expect(mocks.buildActor).not.toHaveBeenCalled()
   })
   it('소유자의 워크스페이스 밖 프로젝트는 enabled·명단이 있어도 싣지 않는다 — 조회를 내 프로젝트 id 로 좁힌다', async () => {
     // P2 명단 admin 행이 있어도 스냅샷(내 워크스페이스)에 없는 프로젝트다.

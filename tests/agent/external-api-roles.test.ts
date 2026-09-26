@@ -54,3 +54,15 @@ describe('외부 API 역할 판정 — actorFromUser + roleIn(SP2 결정 8)', ()
     err.mockRestore()
   })
 })
+
+describe('agentRoleFromActor — 스냅샷을 이미 가진 라우트용 순수판', () => {
+  it('agentMemberRole 과 같은 판정(조회 전용은 null)이고 스냅샷을 조립하지 않는다', async () => {
+    const { agentRoleFromActor } = await import('@/lib/agent/externalApi')
+    expect(agentRoleFromActor(makeActor({ workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P, WS]]) }), P)).toBe('admin')
+    expect(agentRoleFromActor(makeMemberActor(P), P)).toBe('member')
+    expect(agentRoleFromActor(makeActor({ projectWorkspace: new Map([[P, WS]]) }), P)).toBeNull()
+    expect(agentRoleFromActor(makeAdminActor(P), OTHER_WS_P)).toBeNull()
+    expect(agentRoleFromActor(makeSuperuser(), OTHER_WS_P)).toBe('superuser')
+    expect(mocks.buildActor).not.toHaveBeenCalled()
+  })
+})
