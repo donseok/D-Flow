@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { streamAnswer, sanitizeHistory } from '@/lib/ai/answer'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,9 @@ export async function POST(req: NextRequest) {
 
   const projectId = typeof body.projectId === 'string' && body.projectId ? body.projectId : null
   const history = sanitizeHistory(body.history)
+  // 볼 수 없는 프로젝트면 파이프라인(service_role 팀 캐시·자가 치유 색인)에 들이지 않는다.
+  const gate = await legacyChatProjectGate(projectId)
+  if (gate) return gate
 
   try {
     const stream = await streamAnswer({ projectId, message, history })

@@ -23,10 +23,17 @@ import { extractSearchKeywords, type ChatIntent } from './intent'
 import type { ProjectMember } from '@/lib/domain/types'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 
+/**
+ * 프로젝트 이름 — 동시에 RLS 관문이다. 세션으로 프로젝트 행을 읽어 없으면(다른 워크스페이스·없는 프로젝트) throw 한다.
+ * 호출부는 service_role 로 읽는 것(팀 캐시·admin upsert)보다 먼저 부른다 — 라우트 관문을 우회해 들어와도 여기서 멈춘다
+ * (projectFacts 의 loadProjectFacts 와 같은 순서). 조회 실패도 throw — '프로젝트' 기본 이름으로 위장하지 않는다.
+ */
 export const getProjectName = cache(async (projectId: string): Promise<string> => {
   const sb = await createServerClient()
-  const { data } = await sb.from('projects').select('name').eq('id', projectId).maybeSingle()
-  return (data as { name?: string } | null)?.name ?? '프로젝트'
+  const { data, error } = await sb.from('projects').select('name').eq('id', projectId).maybeSingle()
+  if (error) throw new Error(`프로젝트 조회 실패: ${error.message}`)
+  if (!data) throw new Error('프로젝트를 찾을 수 없습니다.')
+  return (data as { name?: string | null }).name ?? '프로젝트'
 })
 
 export interface LoadedProject {
@@ -38,10 +45,10 @@ export interface LoadedProject {
 }
 
 export const loadProjectAnalysis = cache(async (projectId: string): Promise<LoadedProject> => {
-  const [{ items, today }, roster, name] = await Promise.all([
+  const name = await getProjectName(projectId)   // RLS 관문 — 볼 수 없는 프로젝트면 여기서 throw(아래 팀 캐시를 읽지 않는다)
+  const [{ items, today }, roster] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
-    getProjectName(projectId),
   ])
   if (!roster.ok) console.error(`[assistant] 명단 조회 실패(project=${projectId}) — 담당자 정보 없이 답하고 근거에 그 사실을 밝힌다`)
   const members = roster.ok ? roster.rows : []

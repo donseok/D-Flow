@@ -24,10 +24,12 @@ export interface IngestResult {
 export async function ingestProject(projectId: string): Promise<IngestResult> {
   if (!hasEmbeddings()) return { count: 0, skipped: true, reason: 'no_embedding_key' }
 
-  const [{ items, today }, roster, name, config] = await Promise.all([
+  // RLS 관문 — 호출자가 볼 수 없는 프로젝트(다른 워크스페이스·없는 pid)면 throw. 아래 service_role 팀 캐시 읽기와 admin upsert 는
+  // 이 뒤에만 간다(자가 치유 색인이 다른 워크스페이스의 wbs_embeddings 에 쓰던 경로 — SP2 최종 리뷰 ISO-1).
+  const name = await getProjectName(projectId)
+  const [{ items, today }, roster, config] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
-    getProjectName(projectId),
     getProjectConfig(projectId),
   ])
   // 명단을 못 읽었으면 여기서 멈춘다 — 빈 명단으로 진행하면 아래 stale 삭제가 기존 member 임베딩을 지운다(3원칙 ①·②).
