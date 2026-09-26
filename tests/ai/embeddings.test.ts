@@ -12,7 +12,6 @@ describe('embedTexts — 차원 검증 (Gemini)', () => {
   beforeEach(() => {
     vi.stubEnv('AI_PROVIDER', '')
     vi.stubEnv('GOOGLE_API_KEY', '')
-    vi.stubEnv('EMBED_DIM', '')
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
   afterEach(() => {
@@ -52,12 +51,14 @@ describe('embedTexts — 차원 검증 (Gemini)', () => {
     expect(logged).toMatch(/차원 불일치/)
   })
 
-  it('EMBED_DIM 오버라이드 차원도 검증한다', async () => {
+  it('EMBED_DIM env 를 바꿔도 768 로 요청·검증한다 — DB 는 vector(768) 고정', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'k')
     vi.stubEnv('EMBED_DIM', '4')
-    vi.stubGlobal('fetch', vi.fn(async () => geminiOk([0.1, 0.2, 0.3, 0.4])))
+    const fetchMock = vi.fn(async () => geminiOk([0.1, 0.2, 0.3, 0.4]))
+    vi.stubGlobal('fetch', fetchMock)
     const out = await embedTexts(['hello'], 'RETRIEVAL_QUERY')
-    expect(out![0]).toHaveLength(4)
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body)).outputDimensionality).toBe(768)
+    expect(out).toBeNull()
   })
 })
 
@@ -65,7 +66,6 @@ describe('embedDocuments — 항목 단위 실패 격리 (재색인)', () => {
   beforeEach(() => {
     vi.stubEnv('AI_PROVIDER', '')
     vi.stubEnv('GOOGLE_API_KEY', '')
-    vi.stubEnv('EMBED_DIM', '')
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
   afterEach(() => {

@@ -10,6 +10,7 @@
 
 import { llmOverrideSync } from './llm-override'
 import { DEFAULT_GEMINI_BASE_URL, DEFAULT_OPENAI_BASE_URL } from './endpoints'
+import { KNOWLEDGE_EMBEDDING_DIMENSIONS } from '@/lib/ai/index/types'
 
 export type AiProvider = 'gemini' | 'openai'
 
@@ -66,6 +67,10 @@ export function llmConfig(): LlmConfig {
   return envLlmConfig()
 }
 
+/** 임베딩 차원 — 768 고정. vector(768)(wbs_embeddings·minute_embeddings·ai_documents)과 ai_documents 의 embedding_dimensions CHECK,
+ *  pgvector HNSW 2000차원 상한에 묶여 있다. 바꾸려면 마이그레이션과 전체 재색인이 필요하다(스펙 §5.4.5) — env 로 바꾸지 않는다. */
+export const EMBED_DIM = KNOWLEDGE_EMBEDDING_DIMENSIONS
+
 export interface EmbedConfig extends LlmConfig {
   dim: number
 }
@@ -78,8 +83,7 @@ export function embedConfig(): EmbedConfig {
       baseUrl: process.env.LLM_BASE_URL || DEFAULT_OPENAI_BASE_URL,
       model: process.env.EMBED_MODEL || 'text-embedding-3-small',
       // 마이그레이션 vector(768)에 맞추기 위해 768로 고정(text-embedding-3-* 는 dimensions 파라미터로 축소 지원).
-      // EMBED_DIM 으로 오버라이드 가능하나, 변경 시 마이그레이션 차원도 함께 맞출 것.
-      dim: Number(process.env.EMBED_DIM) || 768,
+      dim: EMBED_DIM,
     }
   }
   return {
@@ -89,7 +93,7 @@ export function embedConfig(): EmbedConfig {
     // gemini-embedding-001 = 현행 GA 임베딩 모델(text-embedding-004 후속). 기본 3072차원 →
     // outputDimensionality 로 768 로 축소(마이그레이션 vector(768) 및 pgvector HNSW 2000차원 한계에 맞춤).
     model: process.env.GEMINI_EMBED_MODEL || 'gemini-embedding-001',
-    dim: Number(process.env.EMBED_DIM) || 768,
+    dim: EMBED_DIM,
   }
 }
 

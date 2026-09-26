@@ -28,7 +28,7 @@ const snapshot: ProjectSettingsSnapshot = {
 function settingsRepository(
   result: Awaited<ReturnType<ProjectSettingsRepository['getSafeSettings']>>,
 ) {
-  return { getSafeSettings: vi.fn(async () => result) } satisfies ProjectSettingsRepository
+  return { getSafeSettings: vi.fn(async () => result), getProjectConfig: vi.fn() } satisfies ProjectSettingsRepository
 }
 
 describe('get_safe_project_settings tool', () => {

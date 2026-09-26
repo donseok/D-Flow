@@ -57,18 +57,11 @@ export function scheduleModel(input: {
   return { ...base, projectedEnd, slipDays, signal, label: 'onTrack' }
 }
 
-/**
- * @deprecated 주입 전환(스펙 §7.4) — 설정 미로딩 호출처의 임시 주입원.
- * 신규 코드는 ProjectConfig.milestoneKeywords 를 주입할 것(src/lib/data/projectConfig.ts).
- * 마일스톤 키워드(소문자, WBS 도메인 데이터 기준). 이름에 부분문자열(대소문자 무시) 매칭.
- */
-export const LEGACY_MILESTONE_KEYWORDS: readonly string[] =
-  ['착수보고', '중간보고', '보고회', '마스터 플랜', 'bmt', '최종 선정', '승인', '준공', 'kick-off', '킥오프']
-
 export interface MilestoneModel {
   name: string | null; date: string | null; dday: number | null; overdue: boolean; signal: Signal
 }
 
+/** keywords 는 소문자로 받는다(ProjectConfig.milestoneKeywords — 로더 data/projectConfig 가 정규화). 이름에 부분문자열(대소문자 무시) 매칭. */
 function isMilestoneLeaf(l: ComputedItem, keywords: readonly string[]): boolean {
   const name = l.name.toLowerCase()
   const kw = keywords.some(k => name.includes(k))

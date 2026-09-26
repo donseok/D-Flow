@@ -59,7 +59,7 @@ export function createDefaultChatToolRegistry(client: SupabaseServerClient): Cha
     createSearchWikiTool(repositories.wiki),
     createGetWikiTopicTool(repositories.wiki),
     createGetKanbanViewTool(repositories.wbs),
-    createGetProjectDashboardTool(repositories.wbs, repositories.meetings),
+    createGetProjectDashboardTool(repositories.wbs, repositories.meetings, repositories.settings),
     createListMembersTool(repositories.members),
     createGetMemberWorkloadTool(repositories.members, repositories.wbs),
     createGetSafeProjectSettingsTool(repositories.settings, safeIndexStatusProbe),

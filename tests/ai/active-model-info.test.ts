@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.stubEnv('GEMINI_MODEL', '')
   vi.stubEnv('GEMINI_EMBED_MODEL', '')
   vi.stubEnv('GEMINI_FALLBACK_MODELS', '')
-  vi.stubEnv('EMBED_DIM', '')
+  vi.stubEnv('EMBED_DIM', '1536')
 })
 afterEach(() => vi.unstubAllEnvs())
 

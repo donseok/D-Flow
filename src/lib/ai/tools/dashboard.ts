@@ -2,7 +2,6 @@ import { dashboardHref, wbsItemHref } from '@/lib/ai/chat/deep-links'
 import {
   addDaysCal,
   detectMilestones,
-  LEGACY_MILESTONE_KEYWORDS,
   progressSignal,
   scheduleModel,
 } from '@/lib/domain/dashboard'
@@ -15,6 +14,7 @@ import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 import type { Status } from '@/lib/domain/types'
 import type {
   MeetingBotRepository,
+  ProjectSettingsRepository,
   WbsBotRepository,
   WbsProjectSnapshot,
 } from '@/lib/repositories/types'
@@ -51,6 +51,7 @@ function meetingRowsStayInScope(
 export function createGetProjectDashboardTool(
   wbs: WbsBotRepository,
   meetings: MeetingBotRepository,
+  settings: Pick<ProjectSettingsRepository, 'getProjectConfig'>,
 ): ReadOnlyBotTool<never> {
   return {
     name: 'get_project_dashboard',
@@ -74,6 +75,10 @@ export function createGetProjectDashboardTool(
         }
       }
       if (!isScopedWbsSnapshot(wbsResult.data, projectId)) return repositoryScopeViolation()
+      // 마일스톤 키워드는 화면(대시보드·WBS·브리핑)과 같은 프로젝트 설정에서 읽는다. 못 읽으면 실패로 올린다 —
+      // 기본 키워드로 대신하면 화면과 다른 마일스톤을 조용히 답한다(3원칙). 프로젝트 접근·스코프 판정 뒤에 읽는다.
+      const configResult = await settings.getProjectConfig(projectId)
+      if (!configResult.ok) return repositoryFailure(configResult)
 
       const snapshot = wbsResult.data
       // WBS 신호는 기준일(base_date 우선), 회의 신호는 실제 오늘 — 대시보드 화면의 이중 시계 관례.
@@ -98,10 +103,7 @@ export function createGetProjectDashboardTool(
         startDate, endDate, today: calculationDate,
         overallActual: actual, overallPlanned: planned,
       })
-      // @deprecated 주입원 — 봇 도구는 WbsBotRepository 스냅샷만 받아 프로젝트 설정(project_settings)
-      // 로딩 체인이 없다(스펙 §7.4). 값은 0058 시드와 동일하므로 회귀 0. 추적은 LEGACY_MILESTONE_KEYWORDS
-      // 참조 검색으로 한다(설정 로더가 봇 리포지토리 경로까지 확장되면 이 자리를 교체할 것).
-      const milestone = detectMilestones(roots, calculationDate, LEGACY_MILESTONE_KEYWORDS)
+      const milestone = detectMilestones(roots, calculationDate, configResult.data.milestoneKeywords)
 
       const sources: BotSource[] = [{
         id: `dashboard:${projectId}`,

@@ -10,10 +10,15 @@ import {
   repositoryOk,
   type MeetingBotRepository,
   type ProjectMeetingSnapshot,
+  type ProjectSettingsRepository,
   type RepositoryResult,
   type WbsBotRepository,
   type WbsProjectSnapshot,
 } from '@/lib/repositories/types'
+import type { ProjectConfig } from '@/lib/data/projectConfig'
+import { detectMilestones } from '@/lib/domain/dashboard'
+import { computeTree } from '@/lib/domain/rollup'
+import { FIXTURE_MILESTONE_KEYWORDS } from '../fixtures/milestoneKeywords'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -85,10 +90,53 @@ function meetingRepository(result: RepositoryResult<ProjectMeetingSnapshot>): Me
   }
 }
 
+const config = (milestoneKeywords: readonly string[]): ProjectConfig => ({
+  levelLabels: ['Phase', 'Task', 'Activity'], maxDepth: null, extraAxisLabel: null,
+  milestoneKeywords: [...milestoneKeywords], excelProfile: {}, stageCredits: null,
+})
+function settingsRepository(keywords: readonly string[] | 'fail'): Pick<ProjectSettingsRepository, 'getProjectConfig'> {
+  return {
+    getProjectConfig: vi.fn(async () => keywords === 'fail'
+      ? repositoryError<ProjectConfig>('PROJECT_SETTINGS_READ_FAILED', true)
+      : repositoryOk(config(keywords))),
+  }
+}
+// 여러 날에 걸치고 산출물이 없는 리프 하나 — single-day 규칙에 걸리지 않아 키워드만으로 판정된다.
+const oneLeaf = (name: string): WbsProjectSnapshot => ({
+  ...wbsSnapshot,
+  items: [wbsSnapshot.items[0], {
+    id: 'leaf-x', projectId: 'p1', parentId: 'phase-1', code: '1.9', sortOrder: 9, name, biz: null, deliverable: null,
+    plannedStart: '2026-07-22', plannedEnd: '2026-07-29', weight: null, actualPct: 0, owners: [], isOwnerSplit: false, updatedAt: null,
+  }],
+})
+
+describe('get_project_dashboard — 마일스톤 키워드는 프로젝트 설정(project_settings)에서', () => {
+  it("키워드 ['논문 제출'] 이면 그 리프가 마일스톤이고, 화면과 같은 detectMilestones 결과다", async () => {
+    const snap = oneLeaf('논문 제출')
+    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(snap)), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository(['논문 제출']))
+    const result = await tool.execute({ projectId: 'p1' }, context)
+    if (!result.ok) throw new Error('도구가 실패했다')
+    const screen = detectMilestones(computeTree(snap.items, '2026-07-20', new Set(), { subActTeamOrder: new Map() }), '2026-07-20', ['논문 제출'])
+    expect(result.result.facts).toMatchObject({ milestoneName: '논문 제출', milestoneDate: screen.date, milestoneDday: screen.dday })
+  })
+  it("createProject 기본 키워드에서 '승인' 리프는 마일스톤이 아니다 — 옛 원본 키워드 목록을 쓰지 않는다", async () => {
+    const defaults = ['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고'] // src/app/actions/project.ts:58
+    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(oneLeaf('승인'))), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository(defaults))
+    const result = await tool.execute({ projectId: 'p1' }, context)
+    if (!result.ok) throw new Error('도구가 실패했다')
+    expect(result.result.facts).toMatchObject({ milestoneName: null })
+  })
+  it('설정을 못 읽으면 DATA_SOURCE_ERROR — 기본 키워드로 대신 답하지 않는다', async () => {
+    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(wbsSnapshot)), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository('fail'))
+    const result = await tool.execute({ projectId: 'p1' }, context)
+    expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR', repositoryErrorCode: 'PROJECT_SETTINGS_READ_FAILED' } })
+  })
+})
+
 describe('get_project_dashboard', () => {
   it('returns progress, schedule, milestone, and meeting signals with dashboard/milestone sources', async () => {
     const meetings = meetingRepository(repositoryOk(meetingSnapshot))
-    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(wbsSnapshot)), meetings)
+    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(wbsSnapshot)), meetings, settingsRepository(FIXTURE_MILESTONE_KEYWORDS))
 
     const result = await tool.execute({ projectId: 'p1' }, context)
     expect(result.ok).toBe(true)
@@ -140,6 +188,7 @@ describe('get_project_dashboard', () => {
     const meetings = meetingRepository(repositoryOk({ meetings: [], exceptions: [] }))
     const tool = createGetProjectDashboardTool(
       wbsRepository(repositoryOk({ ...wbsSnapshot, baseDate: '2026-07-13' })), meetings,
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     )
 
     const result = await tool.execute({ projectId: 'p1' }, context)
@@ -160,6 +209,7 @@ describe('get_project_dashboard', () => {
     const tool = createGetProjectDashboardTool(
       wbsRepository(repositoryOk(snapshot)),
       meetingRepository(repositoryOk({ meetings: [], exceptions: [] })),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     )
 
     const result = await tool.execute({ projectId: 'p1' }, context)
@@ -185,6 +235,7 @@ describe('get_project_dashboard', () => {
     const tool = createGetProjectDashboardTool(
       wbsRepository(repositoryOk(snapshot)),
       meetingRepository(repositoryOk({ meetings: [], exceptions: [] })),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     )
 
     const result = await tool.execute({ projectId: 'p1' }, context)
@@ -206,7 +257,7 @@ describe('get_project_dashboard', () => {
   it('keeps a missing project distinct from a WBS query failure', async () => {
     const meetings = meetingRepository(repositoryOk(meetingSnapshot))
     const empty = await createGetProjectDashboardTool(
-      wbsRepository(repositoryOk(null)), meetings,
+      wbsRepository(repositoryOk(null)), meetings, settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     ).execute({ projectId: 'p1' }, context)
     expect(empty).toMatchObject({
       ok: true,
@@ -215,7 +266,7 @@ describe('get_project_dashboard', () => {
     expect(meetings.listProjectMeetings).not.toHaveBeenCalled()
 
     const failed = await createGetProjectDashboardTool(
-      wbsRepository(repositoryError('WBS_ITEMS_READ_FAILED', true)), meetings,
+      wbsRepository(repositoryError('WBS_ITEMS_READ_FAILED', true)), meetings, settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     ).execute({ projectId: 'p1' }, context)
     expect(failed).toMatchObject({
       ok: false,
@@ -227,6 +278,7 @@ describe('get_project_dashboard', () => {
     const tool = createGetProjectDashboardTool(
       wbsRepository(repositoryOk(wbsSnapshot)),
       meetingRepository(repositoryError('MEETINGS_READ_FAILED', true)),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     )
 
     const result = await tool.execute({ projectId: 'p1' }, context)
@@ -241,7 +293,7 @@ describe('get_project_dashboard', () => {
 
   it('rejects invalid arguments before touching any repository', async () => {
     const wbs = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createGetProjectDashboardTool(wbs, meetingRepository(repositoryOk(meetingSnapshot)))
+    const tool = createGetProjectDashboardTool(wbs, meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository(FIXTURE_MILESTONE_KEYWORDS))
 
     const results = await Promise.all([
       tool.execute('p1', context),
@@ -256,7 +308,8 @@ describe('get_project_dashboard', () => {
 
   it('fails closed on project scope or missing capability', async () => {
     const wbs = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createGetProjectDashboardTool(wbs, meetingRepository(repositoryOk(meetingSnapshot)))
+    const settings = settingsRepository(FIXTURE_MILESTONE_KEYWORDS)
+    const tool = createGetProjectDashboardTool(wbs, meetingRepository(repositoryOk(meetingSnapshot)), settings)
 
     const outOfScope = await tool.execute(
       { projectId: 'p1' }, { ...context, allowedProjectIds: [] },
@@ -267,12 +320,14 @@ describe('get_project_dashboard', () => {
     expect(outOfScope).toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
     expect(noCapability).toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
     expect(wbs.getProjectSnapshot).not.toHaveBeenCalled()
+    expect(settings.getProjectConfig).not.toHaveBeenCalled()
   })
 
   it('treats scope-widening WBS or meeting rows as a data-source failure', async () => {
     const rogueWbs = await createGetProjectDashboardTool(
       wbsRepository(repositoryOk({ ...wbsSnapshot, projectId: 'p2' })),
       meetingRepository(repositoryOk(meetingSnapshot)),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     ).execute({ projectId: 'p1' }, context)
     expect(rogueWbs).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
 
@@ -282,6 +337,7 @@ describe('get_project_dashboard', () => {
         meetings: [{ ...meetingSnapshot.meetings[0], projectId: 'p2' }],
         exceptions: [],
       })),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     ).execute({ projectId: 'p1' }, context)
     expect(rogueMeetings).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
   })
@@ -290,6 +346,7 @@ describe('get_project_dashboard', () => {
     const tool = createGetProjectDashboardTool(
       wbsRepository(repositoryOk(wbsSnapshot)),
       meetingRepository(repositoryOk(meetingSnapshot)),
+      settingsRepository(FIXTURE_MILESTONE_KEYWORDS),
     )
 
     const result = await tool.execute({ projectId: 'p1' }, context)

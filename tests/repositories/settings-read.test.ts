@@ -165,3 +165,40 @@ describe('strict Supabase project settings repository', () => {
     expect(JSON.stringify(result)).not.toContain('다른 프로젝트')
   })
 })
+
+describe('project config read (getProjectConfig) — 봇 대시보드 도구의 마일스톤 키워드 출처', () => {
+  const settingsRow = {
+    level_labels: ['Phase', 'Task', 'Activity'], max_depth: null, extra_axis_label: null,
+    milestone_keywords: ['Kick-off', '논문 제출'], excel_profile: {}, stage_credits: null,
+  }
+
+  it('maps the project_settings row with lowercased milestone keywords', async () => {
+    const { from, builders } = healthyBuilders({ project_settings: { data: settingsRow, error: null } })
+    const repository = createSupabaseProjectSettingsRepository({ from } as never)
+
+    await expect(repository.getProjectConfig('p1')).resolves.toEqual({
+      ok: true,
+      data: {
+        levelLabels: ['Phase', 'Task', 'Activity'], maxDepth: null, extraAxisLabel: null,
+        milestoneKeywords: ['kick-off', '논문 제출'], excelProfile: {}, stageCredits: null,
+      },
+    })
+    expect(builders.project_settings.eq).toHaveBeenCalledWith('project_id', 'p1')
+    for (const method of ['insert', 'upsert', 'update', 'delete']) {
+      expect(builders.project_settings[method]).not.toHaveBeenCalled()
+    }
+  })
+
+  it('surfaces a project_settings query failure as retryable PROJECT_SETTINGS_READ_FAILED, not default keywords', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { from } = healthyBuilders({ project_settings: { data: null, error: { code: '08006', message: 'db down' } } })
+    const repository = createSupabaseProjectSettingsRepository({ from } as never)
+
+    await expect(repository.getProjectConfig('p1')).resolves.toEqual({
+      ok: false,
+      errorCode: 'PROJECT_SETTINGS_READ_FAILED',
+      retryable: true,
+    })
+    vi.restoreAllMocks()
+  })
+})

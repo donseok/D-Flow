@@ -9,6 +9,7 @@ import type {
   WbsRow,
 } from '@/lib/domain/types'
 import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { ProjectConfig } from '@/lib/data/projectConfig'
 
 /**
  * Repository callers must be able to distinguish a valid empty result from a
@@ -360,6 +361,8 @@ export interface ProjectSettingsSnapshot {
 export interface ProjectSettingsRepository {
   /** null은 프로젝트 자체가 안 보임/없음. 부속 카운트 실패는 별도 에러 코드로 구분한다. */
   getSafeSettings(projectId: string): Promise<RepositoryResult<ProjectSettingsSnapshot | null>>
+  /** 화면과 같은 설정 로더(data/projectConfig) — 행 없음은 기본 설정, 조회 실패는 PROJECT_SETTINGS_READ_FAILED. */
+  getProjectConfig(projectId: string): Promise<RepositoryResult<ProjectConfig>>
 }
 
 

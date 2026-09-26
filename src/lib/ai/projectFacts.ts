@@ -34,7 +34,7 @@ export interface ProjectFactsSource {
   minuteSignals: MinuteSignal[]
   meetings: Meeting[]
   meetingExceptions: MeetingException[]
-  /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — 0058 시드 덕에 현행 상수와 동일(회귀 0). */
+  /** 프로젝트 설정(project_settings)의 마일스톤 키워드. */
   milestoneKeywords: string[]
   /** 그 프로젝트의 활성 팀 코드(전용 팀, 없으면 그 워크스페이스의 공용 팀). */
   teams: TeamCode[]

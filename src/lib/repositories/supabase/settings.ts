@@ -4,6 +4,7 @@ import {
   type ProjectSettingsRepository,
   type ProjectSettingsSnapshot,
 } from '@/lib/repositories/types'
+import { getProjectConfig as loadProjectConfig } from '@/lib/data/projectConfig'
 import { isRetryableReadError, type SupabaseServerClient } from './common'
 
 type Row = Record<string, unknown>
@@ -62,6 +63,16 @@ export function createSupabaseProjectSettingsRepository(
         updatedAt: (project.updated_at as string | null) ?? null,
       }
       return repositoryOk(snapshot)
+    },
+
+    async getProjectConfig(projectId) {
+      try {
+        return repositoryOk(await loadProjectConfig(projectId, client))
+      } catch (e) {
+        // 조회 실패를 기본 설정으로 위장하지 않는다 — 봇이 화면과 다른 마일스톤을 답하게 된다(3원칙).
+        console.error('[settings-repo] 프로젝트 설정 조회 실패:', e instanceof Error ? e.message : e)
+        return repositoryError('PROJECT_SETTINGS_READ_FAILED', true)
+      }
     },
   }
 }

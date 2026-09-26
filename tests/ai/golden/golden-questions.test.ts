@@ -64,7 +64,7 @@ function buildRegistry(options: FakeRepositoryOptions) {
     createSearchMinutesTool(repos.minutes),
     createGetMinuteDetailTool(repos.minutes),
     createGetKanbanViewTool(repos.wbs),
-    createGetProjectDashboardTool(repos.wbs, repos.meetings),
+    createGetProjectDashboardTool(repos.wbs, repos.meetings, repos.settings),
     createListMembersTool(repos.members),
     createGetMemberWorkloadTool(repos.members, repos.wbs),
     createGetSafeProjectSettingsTool(repos.settings),
