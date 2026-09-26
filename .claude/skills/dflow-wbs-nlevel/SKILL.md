@@ -1,6 +1,6 @@
 ---
 name: dflow-wbs-nlevel
-description: N단(5~8단) 대형 프로젝트의 wbs.md 를 levels 계약(frontmatter 단계 선언·접두어 판정·진도 역할·업로드 범위)으로 생성·검증할 때 사용. PMO 골격(--skeleton)과 PL 모듈 파일 두 모드. 트리거 - "/dflow-wbs-nlevel", "N단 WBS", "8단 WBS", "골격 WBS", "PL WBS", "levels frontmatter". 3~4단 기존 흐름은 dflow-wbs(동결)를 쓴다. 사용법 - /dflow-wbs-nlevel [--skeleton 시스템목록 | 모듈경로] [--programs 경로]
+description: N단(5~8단) 대형 프로젝트의 wbs.md 를 levels 계약(frontmatter 단계 선언·접두어 판정·진도 역할·업로드 범위)으로 생성·검증할 때 사용. 골격(--skeleton)과 PL 모듈 파일 두 모드. 트리거 - "/dflow-wbs-nlevel", "N단 WBS", "8단 WBS", "골격 WBS", "PL WBS", "levels frontmatter". 3~4단 기존 흐름은 dflow-wbs(동결)를 쓴다. 사용법 - /dflow-wbs-nlevel [--skeleton 시스템목록 | 모듈경로] [--programs 경로]
 ---
 
 # /dflow-wbs-nlevel — N단 WBS 생성 (levels 계약)
@@ -17,7 +17,7 @@ description: N단(5~8단) 대형 프로젝트의 wbs.md 를 levels 계약(frontm
 | 모드 | 인자 | 산출물 | 소유 |
 |---|---|---|---|
 | **골격** | `--skeleton {시스템목록}` | Phase·System 골격 wbs.md + 시스템 키 목록 + levels 정본 + PL 파일 템플릿(배포 킷) | PMO/PM |
-| **PL** (기본) | `{모듈 디렉토리}` (예: `docs/acme/생산운영`) `[--programs 경로]` | 그 모듈의 wbs.md (Subsystem 이하) | 담당 PL |
+| **PL** (기본) | `{모듈 디렉토리}` (예: `docs/acme/주문처리`) `[--programs 경로]` | 그 모듈의 wbs.md (Subsystem 이하) | 담당 PL |
 
 PL 모드의 **levels·시스템 키 조회 사슬** (2026-08-22 확정 — 위가 이김):
 
@@ -27,7 +27,7 @@ PL 모드의 **levels·시스템 키 조회 사슬** (2026-08-22 확정 — 위�
 3. 둘 다 없으면 **에러 후 중단**(골격 선행 원칙). levels 를 임의로 새로 쓰지 않는다.
 
 **코드는 이름으로 고른다** — PL 에게 시스템 코드를 묻지 않는다: 조회 결과의 시스템 목록을
-이름으로 제시(①공통 ②품질 …)하고, 선택하면 attach·module 을 정본에서 자동 기입한다.
+이름으로 제시(①공통 ②주문처리 …)하고, 선택하면 attach·module 을 정본에서 자동 기입한다.
 골격에 없는 업무를 답하면 코드를 만들어주지 않고 "PMO 에 skeleton.yaml 추가 요청"으로 중단
 (fail-closed — 시스템 신설은 조직 결정). SUB 이하 약어만 스킬이 제안한다(§programs.*).
 예외 — 사용자가 골격 부재를 알고도 초안을 명시 요구하면: 스펙 정본 샘플의 levels 를 "임시 사본"으로
@@ -72,7 +72,7 @@ credits:
 - 마크다운 헤딩 6단 한계는 **리스트 들여쓰기가 흡수**한다 — Task 이하를 `- [ ]` 리스트로 쓰면
   헤딩 캡·중복 깊이가 생기지 않는다. 같은 헤딩 깊이에 두 단계를 겹쳐 쓰지 않는다.
 - ID = external_ref 매칭 키. 재번호매김 금지, 사라진 ID 재사용 금지 (dflow-wbs 와 동일 규칙).
-- **ID 채번 관례** (2026-08-21 확정): `{접두}-{SYS약어}-{경로꼬리}-{순번}` — 예: 생산운영>입고>화면>1번
+- **ID 채번 관례** (2026-08-21 확정): `{접두}-{SYS약어}-{경로꼬리}-{순번}` — 예: 주문처리>접수>화면>1번
   = `TSK-OP-IN-UI-01`, 그 SubTask = `STK-OP-IN-UI-01-1`. PL 파일의 SUB·WP 도 시스템 약어 포함
   (`SUB-OP-IN`, `WP-OP-IN-UI`). 골격(전사 항목)은 시스템이 없으니 `TSK-AN-RQ-01` 형.
   경로 조각은 **생성 시점의 소속 힌트**일 뿐 — 단계·부모 판정은 접두어+구조가 정본이고, 노드를
@@ -84,11 +84,11 @@ credits:
 
 ```markdown
 ## PH-03: 구축                       ← 헤딩: 상위 층
-##### WP-IN-PR: 프로세스
-###### ACT-IN-PR-1: 실적 관리
-- [ ] TSK-IN-001: 입고 실적 수집 @홍길동 w:5 ~2026-10-17 credit:default
-  - [ ] STK-IN-001-1: 중복 수신 방어   ← checklist (fold)
-- [M] TSK-AN-IF-90: 분석 완료 보고회 ~2026-09-30   ← 마일스톤 — ID 필수(external_ref)
+##### WP-OP-IN-PR: 프로세스
+###### ACT-OP-IN-PR-1: 접수 처리
+- [ ] TSK-OP-IN-PR-01: 주문 접수 처리 @alice w:5 ~2026-10-17 credit:default
+  - [ ] STK-OP-IN-PR-01-1: 중복 접수 방어   ← checklist (fold)
+- [M] TSK-AN-RQ-90: 분석 완료 보고회 ~2026-09-30   ← 마일스톤 — ID 필수(external_ref)
 ```
 
 `@담당` `w:가중치(MD, 생략=1)` `~종료일` 또는 `시작~종료일` `credit:크레딧표키` `if-id:I/F대장ID`.
@@ -101,13 +101,13 @@ credits:
 prd-ref·entry-point·requirements·acceptance·spec·note)를 여기에 싣는다:
 
 ```markdown
-- [ ] TSK-IN-001: 입고 실적 수집 프로세스 @홍길동 w:5 ~2026-11-14
+- [ ] TSK-OP-IN-PR-01: 주문 접수 처리 프로세스 @alice w:5 ~2026-11-14
   - category: dev
   - domain: backend
-  - depends: TSK-L2-221
-  - requirements: L2 인입 통보 수신 시 입고 실적 생성·재고 반영, 불일치는 예외 큐
-  - acceptance: 수신→실적→재고 단일 트랜잭션 / 중복 전문 멱등 처리
-  - [ ] STK-IN-001-1: 중복 수신 방어 로직
+  - depends: TSK-OP-IF-PG-01
+  - requirements: 결제 승인 통보를 받으면 주문을 확정하고 접수 알림을 보낸다, 금액 불일치는 예외 큐
+  - acceptance: 승인→확정→알림 단일 트랜잭션 / 중복 통보 멱등 처리
+  - [ ] STK-OP-IN-PR-01-1: 중복 통보 방어 로직
 ```
 
 상세 블록은 **선택**이다 — 골격·초안 단계는 한 줄로 두되, **개발 착수 전 input 층 Task 는
@@ -125,7 +125,7 @@ requirements·acceptance 필수**(검증기 경고 대상). 명세의 재료는 
 
 ### 5. 분리 업로드 전제
 
-- 골격 먼저, PL 파일들은 무순서. module = 디렉토리 세그먼트(`docs/acme/생산운영` → 생산운영 매핑표 or 영문 코드).
+- 골격 먼저, PL 파일들은 무순서. module = 디렉토리 세그먼트(`docs/acme/주문처리` → 주문처리 매핑표 or 영문 코드).
 - PL 파일 최상위 노드는 attach 가 가리키는 골격 노드의 자식으로 들어간다 — 골격 층(PH·SYS)을
   PL 파일 본문에 쓰면 에러.
 - module 1개 = 파일 1개. ID 는 모듈 안에서만 유일하면 된다.
@@ -140,7 +140,9 @@ phases:                     # 생략 시 methodology 프리셋. 명시하면 그
   - { key: PH-03, name: 구축, build: true }   # build: true = 시스템 트리가 붙는 Phase
 levels: default             # 'default' = 스펙 정본 7층. 커스텀이면 배열. scrum 은 Phase 층 제거판
 systems:
-  - { key: SYS-OP, name: 생산운영, module: acme-op, pl: PL-A }
+  - { key: SYS-OP, name: 주문처리, module: acme-op, pl: PL-A }
+interfaces:                 # 선택 — 연동하는 상대 시스템. 선언한 것만 I/F WP 를 만든다(없으면 만들지 않는다)
+  - { key: PG, name: 외부 결제 시스템 }   # key = ID 조각(영문 약어) — 연동 테스트 WP 가 WP-IT-{key}
 ```
 
 ### methodology 3종 — 단계 프리셋 + 생성 규칙
@@ -151,30 +153,37 @@ systems:
 | `waterfall` | 분석·설계·개발(build)·단위테스트·통합테스트·이행 | 정본 7층 | 애자일 반복 없음 — 프로그램 Task 일렬, 계약 Task 는 설계 단계 소속, `credit:doc` 게이트 중심 |
 | `scrum` | **없음** — Phase 층 자체를 levels 에서 제거, System 이 최상위 | Phase 제거 6층 | 선행·후행 공정 없음 — 백로그형. 통테는 횡단 시스템으로 두거나 생략 |
 
-- **파일이 있으면 무질문 생성.** 파일이 없으면 대화로 수집한다 — 질문은 넷뿐:
+- **파일이 있으면 무질문 생성.** 파일이 없으면 대화로 수집한다 — 질문은 다섯뿐:
   ① 프로젝트명 ② **방법론(wsf/waterfall/scrum — 기본 wsf)** ③ 단계(방법론 프리셋을 제시하고 수정 여부;
-  scrum 이면 생략) ④ 시스템 목록(이름을 받아 키·module 을 제안 → 사용자 확정).
+  scrum 이면 생략) ④ 시스템 목록(이름을 받아 키·module 을 제안 → 사용자 확정)
+  ⑤ 연동할 상대 시스템(**선택** — `interfaces`. 이름을 받아 key 를 제안 → 사용자 확정. "없음"이면 키를 두지 않는다).
   답으로 **skeleton.yaml 을 생성하고 멈춘다** — "파일 검토 후 재실행" 안내.
   즉석 골격 생성 금지: 시스템 키는 external_ref 라 불변이며, 리뷰 없이 확정하지 않는다.
 - 시스템 목록을 스킬이 지어내지 않는다 — 입력(파일 또는 답변)에 없는 시스템은 만들지 않는다.
+  인터페이스도 같다 — `interfaces` 에 없는 상대 시스템의 I/F WP·Task 를 만들지 않는다.
 - 필수 누락(project 없음, systems 0개)은 중단. 선택 누락(pl 미정)은 기본값 + 리포트.
+  `interfaces` 가 없으면 I/F WP 없이 생성한다(정상 — 리포트에 "인터페이스 선언 없음" 한 줄).
 
-### wsf 골격 표준 구성 (2026-08-21 확정 — 실물 예시: `.claude/skills/dflow-wbs-nlevel/references/skeleton-sample.md`)
+### wsf 골격 구성 (예시: `.claude/skills/dflow-wbs-nlevel/references/skeleton-sample.md` — 인터페이스 선언 없는 골격)
 
 구축(build Phase)은 System 자리만 두고, 나머지 4 Phase 는 아래 WP 구성을 템플릿으로 생성한다
 (시스템 횡단이라 System·Subsystem 층 건너뜀 — 얕은 비대칭 트리):
 
 | Phase | WP 구성 |
 |---|---|
-| 분석 | 현행(AS-IS) 분석 · **요건 정의(시스템별 Task ×N)** · I/F 요건 정의 + 보고회 [M] |
-| 설계 | 아키텍처 설계 · 데이터 설계(ERD·마스터·코드) · **시스템별 상세설계(ACT ×N, 깊은 시스템은 Subsystem 별 Task)** · I/F 상세설계 + 보고회 [M] |
-| 통합테스트 | 계획·환경·데이터 · 시스템 내 통합 · L2 연동(credit:if) · ERP 연동(credit:if) · 결함 관리·회귀 + 완료 [M] |
+| 분석 | 현행(AS-IS) 분석 · **요건 정의(시스템별 Task ×N)** · I/F 요건 정의(**인터페이스를 선언했을 때만** — 인터페이스별 Task) + 보고회 [M] |
+| 설계 | 아키텍처 설계 · 데이터 설계(ERD·마스터·코드) · **시스템별 상세설계(ACT ×N, 깊은 시스템은 Subsystem 별 Task)** · I/F 상세설계(**인터페이스를 선언했을 때만** — 인터페이스별 Task) + 보고회 [M] |
+| 통합테스트 | 계획·환경·데이터 · 시스템 내 통합 · **선언된 인터페이스마다 연동 테스트(credit:if)** · 결함 관리·회귀 + 완료 [M] |
 | 적용 | 데이터 이행 · 사용자 교육·매뉴얼 · 컷오버·오픈 + 가동 [M] · 안정화 |
 
-- 산출물 Task 는 `credit:doc`, 연동 Task 는 `credit:if`. 시스템별 항목은 skeleton.yaml 의 systems 로 전개.
-- 시스템별 요건정의·상세설계 Task 는 골격(PMO 파일) 소속이다 — **attach 는 단일 노드로 확정**(b안,
+- 산출물 Task 는 `credit:doc`, 연동 Task 는 `credit:if`. 시스템별 항목은 skeleton.yaml 의 systems 로,
+  인터페이스별 항목은 `interfaces` 로 전개한다 — 연동 테스트는 인터페이스마다 WP 하나(`WP-IT-{key}`)에
+  `credit:if` Task 하나.
+- 보고회·완료 [M] 은 그 Phase 마지막 WP 의 꼬리에 둔다. 설계 Phase 에 I/F 상세설계 WP 가 없으면
+  마지막 WP(시스템별 상세설계)가 ACT 로 나뉘어 WP 직속 줄을 쓸 수 없으니, 마일스톤만 담는 `설계 검토` WP 를 둔다.
+- 시스템별 요건정의·상세설계 Task 는 골격 파일 소속이다 — **attach 는 단일 노드로 확정**(b안,
   2026-08-22): 모듈 통테 준비·시나리오도 "모듈 검증까지가 구축"으로 build Phase 소속이며, 선행·후행
-  Phase 는 PMO 골격 전유. 담당 PL 확정 시 @담당으로 배정해 소유를 넘긴다.
+  Phase 는 골격 전유. 담당 PL 확정 시 @담당으로 배정해 소유를 넘긴다.
 
 ## 실행 플로우
 
@@ -193,21 +202,25 @@ systems:
 ### PL 입력 파일 (`programs.*`) — dflow-wbs 어댑터 준용 + N단 확장
 
 공통 스키마·한글 헤더 별칭·포맷별 읽기는 dflow-wbs SKILL.md §프로그램 리스트 입력 어댑터를
-준용하고, N단 배치를 위해 두 키를 추가한다:
+준용하고, N단 배치를 위해 아래 키를 추가한다:
 
 | 키 | 필수 | 역할 |
 |---|---|---|
-| `subsystem` | ✅ | SUB 배치 — `입고` → `SUB-{SYS}-IN`. 없으면 에러(N단 필수) |
-| `target` | I/F 만 | 인터페이스 축 판정 — 공정명(`LINE-A`)→L2IF 공정 WP, `ERP`→ERPIF(`group` 이 WP) |
+| `subsystem` | ✅ | SUB 배치 — `접수` → `SUB-{SYS}-IN`. 없으면 에러(N단 필수) |
+| `target` | I/F 만 | 상대 시스템 — 인터페이스 Task 는 I/F Subsystem(`SUB-{SYS}-IF`) 아래, WP 는 `target` 하나당 하나(`WP-{SYS}-IF-{약어}`), `group`(선택)은 그 아래 ACT |
+| `weight` / `md` | — | 가중치(MD) — 있으면 `w:` 에 그대로 쓴다 |
 
-- `type` → WP 판정: 프로세스/배치→`-PR`, 화면/리포트→`-UI`, 인터페이스→`target` 축.
+- `type` → WP 판정: 프로세스/배치→`-PR`, 화면/리포트→`-UI`, 인터페이스→I/F Subsystem 아래 `target` WP.
+  PL 모드는 skeleton.yaml 을 읽지 못한다 — 인터페이스 배치는 `target`/`group` 만으로 정하고, 상대 시스템 종류에 따른 분기는 두지 않는다.
 - `id` 는 Task 의 `prd-ref: program:{id}` 로 보존 — 재생성 시 기존 Task ID 복원 키.
-- difficulty→`w:` 환산(하 2 / 중 3 / 상 5), 인터페이스 Task 는 `credit:if` 자동.
-- subsystem 값→SUB 약어 매핑은 최초 등장 시 제안·programs 파일 머리에 주석으로 고정(재실행 안정).
+- 가중치 `w:` — `weight`/`md` 열이 있으면 그 값, 없으면 difficulty 기본 환산(하 2 / 중 3 / 상 5).
+  다른 환산이 필요하면 programs 파일 머리에 주석으로 고정한다(아래 SUB 약어와 같은 관례). 생성 리포트에
+  `w:` 출처(열 / 기본 환산 / 머리 주석)를 적는다. 인터페이스 Task 는 `credit:if` 자동.
+- subsystem 값→SUB 약어 매핑과 target 값→WP 약어 매핑은 최초 등장 시 제안·programs 파일 머리에 주석으로 고정(재실행 안정).
 5. **검증 게이트** — 파서 스크립트가 정본(수동 체크리스트 대체, 2026-08-22):
    ```bash
    python3 .claude/skills/dflow-wbs-nlevel/scripts/wbs-nlevel-parse.py validate \
-     --wbs docs/acme/생산운영/wbs.md --role pl        # 골격은 --role skeleton
+     --wbs docs/acme/주문처리/wbs.md --role pl        # 골격은 --role skeleton
    ```
    errors 0 이어야 통과. warnings 는 리포트에 전량 나열(생략 금지) — 얕은 비대칭 골격의
    "필수층 건너뜀"과 분리 업로드 과도기의 "rollup leaf" 는 정상 경고다.
@@ -218,7 +231,7 @@ systems:
 ```bash
 # 1) export — 검증 게이트 내장(에러 시 payload 안 나옴). attach_ref 는 골격 module 로 자동 조립.
 python3 .claude/skills/dflow-wbs-nlevel/scripts/wbs-nlevel-parse.py export \
-  --wbs docs/acme/생산운영/wbs.md --skeleton docs/acme/skel/wbs.md > "$SCRATCHPAD/nlevel-op.json"   # 골격 경로는 프로젝트마다 다름
+  --wbs docs/acme/주문처리/wbs.md --skeleton docs/acme/skel/wbs.md > "$SCRATCHPAD/nlevel-op.json"   # 골격 경로는 프로젝트마다 다름
 
 # 2) 봉투 완성(project_id) 후 전송 — PAT 규칙·바인딩은 dflow-export SKILL.md 준용(값 비출력)
 python3 - <<EOF

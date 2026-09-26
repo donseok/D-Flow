@@ -1,6 +1,6 @@
 ---
 project: Acme
-module: acme-skel                # PMO 골격 — 시스템 키·levels 의 정본
+module: acme-skel                # 골격 — 시스템 키·levels 의 정본
 start_date: 2026-09-01
 
 # levels 정본 — PL 파일은 이 블록을 복사한다(불일치 = 업로드 거부).
@@ -19,9 +19,10 @@ credits:
   doc:     { 미착수: 0, 작성중: 30, 제출: 50, 검수완료: 100 }
 ---
 
-# WBS — Acme 골격 (PMO 소유)
+# WBS — Acme 골격 (예시)
 
-<!-- 선행(PH-01·02)·후행(PH-04·05)은 시스템 횡단이라 System·Subsystem 층을 건너뛰고
+<!-- 예시 골격이다 — skeleton.yaml 에 interfaces 선언이 없는 경우라 I/F WP 가 없다(파일 끝 주석이 선언했을 때의 차이).
+     선행(PH-01·02)·후행(PH-04·05)은 시스템 횡단이라 System·Subsystem 층을 건너뛰고
      Phase 바로 밑 WP 로 간다(계약 스펙 "얕은 비대칭 트리" 조항 — 검증기 경고는 의도된 것).
      구축(PH-03)의 System 아래는 각 PL 파일이 attach 로 채운다 — 이 파일에 쓰지 않는다.
      시스템별 요건정의·상세설계는 이 파일(PH-01·02) 소속이다 — attach 가 단일(PH-03)이라
@@ -35,14 +36,10 @@ credits:
 
 ### WP-AN-RQ: 요건 정의
 - [ ] TSK-AN-RQ-01: 공통 요건정의서       w:3  ~2026-09-26  credit:doc
-- [ ] TSK-AN-RQ-02: 품질 요건정의서       w:5  ~2026-09-26  credit:doc
-- [ ] TSK-AN-RQ-03: 생산계획 요건정의서   w:5  ~2026-09-26  credit:doc
-- [ ] TSK-AN-RQ-04: 생산운영 요건정의서   w:5  ~2026-09-26  credit:doc
-- [ ] TSK-AN-RQ-05: 물류 요건정의서       w:5  ~2026-09-26  credit:doc
-
-### WP-AN-IF: I/F 요건 정의
-- [ ] TSK-AN-IF-01: 대외 I/F 요건 목록 (ERP·L2·계측)   w:5  ~2026-09-26  credit:doc
-- [M] TSK-AN-IF-90: 분석 완료 보고회   ~2026-09-30
+- [ ] TSK-AN-RQ-02: 회원 요건정의서       w:5  ~2026-09-26  credit:doc
+- [ ] TSK-AN-RQ-03: 주문처리 요건정의서   w:5  ~2026-09-26  credit:doc
+- [ ] TSK-AN-RQ-04: 정산 요건정의서       w:5  ~2026-09-26  credit:doc
+- [M] TSK-AN-RQ-90: 분석 완료 보고회   ~2026-09-30
 
 ## PH-02: 설계
 
@@ -56,40 +53,32 @@ credits:
 
 #### ACT-DD-CM: 공통
 - [ ] TSK-DD-CM-01: 공통 상세설계서   w:5  ~2026-10-31  credit:doc
-#### ACT-DD-QA: 품질
-- [ ] TSK-DD-QA-01: 품질 상세설계서   w:8  ~2026-10-31  credit:doc
-#### ACT-DD-PP: 생산계획
-- [ ] TSK-DD-PP-01: 생산계획 상세설계서   w:8  ~2026-10-31  credit:doc
-#### ACT-DD-OP: 생산운영
-- [ ] TSK-DD-OP-01: 생산이벤트 상세설계서   w:3  ~2026-10-31  credit:doc
-- [ ] TSK-DD-OP-02: 입고 상세설계서         w:3  ~2026-10-31  credit:doc
-- [ ] TSK-DD-OP-03: 출고 상세설계서         w:3  ~2026-10-31  credit:doc
-- [ ] TSK-DD-OP-04: 재작업품 상세설계서     w:3  ~2026-10-31  credit:doc
-- [ ] TSK-DD-OP-05: L2 I/F 상세설계서       w:5  ~2026-10-31  credit:doc
-- [ ] TSK-DD-OP-06: ERP I/F 상세설계서      w:3  ~2026-10-31  credit:doc
-#### ACT-DD-LG: 물류
-- [ ] TSK-DD-LG-01: 물류 상세설계서   w:8  ~2026-10-31  credit:doc
+#### ACT-DD-MB: 회원
+- [ ] TSK-DD-MB-01: 회원 상세설계서   w:5  ~2026-10-31  credit:doc
+#### ACT-DD-OP: 주문처리
+- [ ] TSK-DD-OP-01: 접수 상세설계서         w:3  ~2026-10-31  credit:doc
+- [ ] TSK-DD-OP-02: 변경·취소 상세설계서    w:3  ~2026-10-31  credit:doc
+- [ ] TSK-DD-OP-03: 반품 상세설계서         w:3  ~2026-10-31  credit:doc
+#### ACT-DD-ST: 정산
+- [ ] TSK-DD-ST-01: 정산 상세설계서   w:5  ~2026-10-31  credit:doc
 
-### WP-DS-IF: I/F 상세설계
-- [ ] TSK-DS-IF-01: 전문 정의서·매핑 (I/F 대장 확정판)   w:8  ~2026-10-31  credit:doc
-- [M] TSK-DS-IF-90: 설계 완료 보고회   ~2026-10-31
+### WP-DS-RV: 설계 검토
+<!-- 인터페이스를 선언하면 이 자리 앞에 WP-DS-IF(I/F 상세설계)가 오고 보고회는 그 WP 꼬리로 간다. -->
+- [M] TSK-DS-RV-90: 설계 완료 보고회   ~2026-10-31
 
 ## PH-03: 구축
 
 ### SYS-CM: 공통
 <!-- PL 파일 attach: PH-03/SYS-CM (module: acme-cm) — 프레임워크·인증·공통코드·배치 WP -->
 
-### SYS-QA: 품질
-<!-- PL 파일 attach: PH-03/SYS-QA (module: acme-qa) -->
+### SYS-MB: 회원
+<!-- PL 파일 attach: PH-03/SYS-MB (module: acme-mb) -->
 
-### SYS-PP: 생산계획
-<!-- PL 파일 attach: PH-03/SYS-PP (module: acme-pp) -->
-
-### SYS-OP: 생산운영
+### SYS-OP: 주문처리
 <!-- PL 파일 attach: PH-03/SYS-OP (module: acme-op) -->
 
-### SYS-LG: 물류
-<!-- PL 파일 attach: PH-03/SYS-LG (module: acme-lg) -->
+### SYS-ST: 정산
+<!-- PL 파일 attach: PH-03/SYS-ST (module: acme-st) -->
 
 ## PH-04: 통합테스트
 
@@ -97,13 +86,7 @@ credits:
 - [ ] TSK-IT-PL-01: 통테 계획·환경 구성·데이터 준비   w:8  ~2027-02-06  credit:doc
 
 ### WP-IT-IN: 시스템 내 통합
-- [ ] TSK-IT-IN-01: 품질↔생산운영↔물류 통합 시나리오 수행   w:8  ~2027-02-13
-
-### WP-IT-L2: L2 연동 테스트
-- [ ] TSK-IT-L2-01: 공정별 실통신 검증 (L2 전 공정)   w:10  ~2027-02-20  credit:if
-
-### WP-IT-ERP: ERP 연동 테스트
-- [ ] TSK-IT-ERP-01: ERP 연동 시나리오 — 전사 통테는 PMO 소유, 우리 시스템 측 참여·결함조치   w:8  ~2027-02-20  credit:if
+- [ ] TSK-IT-IN-01: 회원↔주문처리↔정산 통합 시나리오 수행   w:8  ~2027-02-13
 
 ### WP-IT-RG: 결함 관리·회귀
 - [ ] TSK-IT-RG-01: 결함 관리·회귀 테스트 운영   w:5  ~2027-02-27
@@ -112,7 +95,7 @@ credits:
 ## PH-05: 적용
 
 ### WP-GO-MG: 데이터 이행
-- [ ] TSK-GO-MG-01: 초기 마스터·기초재고 이행   w:8  ~2027-03-07
+- [ ] TSK-GO-MG-01: 초기 마스터·기초 데이터 이행   w:8  ~2027-03-07
 
 ### WP-GO-ED: 사용자 교육·매뉴얼
 - [ ] TSK-GO-ED-01: 사용자 교육·매뉴얼 작성   w:5  ~2027-03-07  credit:doc
@@ -123,3 +106,16 @@ credits:
 
 ### WP-GO-ST: 안정화
 - [ ] TSK-GO-ST-01: 하이퍼케어 운영   w:10  ~2027-03-31
+
+<!-- 두 번째 예시 — skeleton.yaml 에 interfaces: [{ key: PG, name: 외부 결제 시스템 }] 를 선언했을 때 더해지는 것
+     (위 골격은 그대로, 인터페이스마다 아래 셋이 붙는다. 선언이 없으면 하나도 만들지 않는다):
+
+     ### WP-AN-IF: I/F 요건 정의                      (PH-01 — 분석 보고회 [M] 은 이 WP 꼬리로 옮긴다)
+     - [ ] TSK-AN-IF-01: 외부 결제 시스템 I/F 요건 목록   w:3  ~2026-09-26  credit:doc
+
+     ### WP-DS-IF: I/F 상세설계                        (PH-02 — WP-DS-RV 대신 설계 보고회 [M] 을 이 WP 꼬리에)
+     - [ ] TSK-DS-IF-01: 외부 결제 시스템 전문 정의서·매핑 (I/F 대장 확정판)   w:5  ~2026-10-31  credit:doc
+
+     ### WP-IT-PG: 외부 결제 시스템 연동 테스트          (PH-04 — 인터페이스마다 WP 하나, credit:if Task 하나)
+     - [ ] TSK-IT-PG-01: 외부 결제 시스템 연동 시나리오 수행   w:5  ~2027-02-20  credit:if
+-->

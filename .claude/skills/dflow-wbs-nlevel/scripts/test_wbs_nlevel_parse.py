@@ -35,7 +35,7 @@ credits:
   if:      { 대기: 0, 구현중: 30, 구현완료: 50, 연동검증: 100 }
 ---
 
-# WBS — Acme 생산운영
+# WBS — Acme 주문처리
 
 ## SUB-OP-IN: 입고
 
@@ -47,7 +47,7 @@ credits:
   - tags: op, entry
   - depends: TSK-OP-IN-PR-02
   - prd-ref: OP-PRD §4.2
-  - requirements: L2 인입 통보 시 실적 생성.
+  - requirements: 상대 시스템 통보 수신 시 입고 기록 생성.
   - acceptance: 단일 트랜잭션 / 중복 수신 멱등
   - [ ] STK-OP-IN-PR-01-1: 계량기 연계 확인
   - [x] STK-OP-IN-PR-01-2: 중복 수신 방어 로직

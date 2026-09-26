@@ -7,9 +7,9 @@
 - rollup 층 leaf 는 파일 단위 경고(분리 업로드 과도기 정상 — 합본 검증은 서버·후속 도구 몫).
 
 사용:
-  python3 wbs-nlevel-parse.py validate --wbs docs/acme/생산운영/wbs.md --role pl
-  python3 wbs-nlevel-parse.py export --wbs docs/acme/생산운영/wbs.md --attach-ref acme-skel/SYS-OP
-  python3 wbs-nlevel-parse.py export --wbs docs/acme/생산운영/wbs.md --skeleton docs/acme/skel/wbs.md
+  python3 wbs-nlevel-parse.py validate --wbs docs/acme/주문처리/wbs.md --role pl
+  python3 wbs-nlevel-parse.py export --wbs docs/acme/주문처리/wbs.md --attach-ref acme-skel/SYS-OP
+  python3 wbs-nlevel-parse.py export --wbs docs/acme/주문처리/wbs.md --skeleton docs/acme/skel/wbs.md
 """
 from __future__ import annotations
 
