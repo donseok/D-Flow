@@ -41,7 +41,7 @@ import {
   fetchIssueProjectMembers,
   prepareMinuteIssueDraft,
 } from '@/app/actions/issues'
-import { makeMemberActor } from '../fixtures/actor'
+import { makeMemberActor, WS } from '../fixtures/actor'
 import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 
 const USER = { id: 'user-1', email: 'user@example.com', user_metadata: { name: '홍길동' } } as const
@@ -111,6 +111,7 @@ function aiResponseForAction(title: string): string {
 
 function clientsWithVersion({
   currentProjectId = 'project-1',
+  currentWorkspaceId = WS,
   versionProjectId = 'project-1',
   archivedAt = null,
   body = BODY,
@@ -125,6 +126,8 @@ function clientsWithVersion({
   ],
 }: {
   currentProjectId?: string | null
+  /** 회의록의 워크스페이스 — 프로젝트 없는 회의록은 이것으로만 스코프된다 */
+  currentWorkspaceId?: string
   versionProjectId?: string | null
   archivedAt?: string | null
   body?: string
@@ -174,6 +177,7 @@ function clientsWithVersion({
                 data: {
                   project_id: currentProjectId,
                   archived_at: archivedAt,
+                  workspace_id: currentWorkspaceId,
                 },
                 error: null,
               })),
@@ -535,6 +539,43 @@ describe('createIssueFromMinuteBlock', () => {
 
     expect(result.ok).toBe(false)
     expect(fixture.admin.rpc).not.toHaveBeenCalled()
+  })
+
+  // 프로젝트 없는 회의록은 워크스페이스로만 스코프된다 — 두 워크스페이스 사용자가 A 의 회의록 발췌를 B 프로젝트 이슈로 옮기면
+  // B 에만 속한 사람도 그 발췌를 읽는다(SP2 최종 리뷰 ISO-6·AUTHZ-3, 0009 issue_links 트리거가 DB 에서도 막는다).
+  it('프로젝트 없는 회의록이 다른 워크스페이스 것이면 생성하지 않는다(RPC 호출 전)', async () => {
+    asMember()
+    const fixture = clientsWithVersion({ currentProjectId: null, currentWorkspaceId: 'ws-other' })
+    state.client = fixture.client
+    state.admin = fixture.admin
+
+    const result = await createIssueFromMinuteBlock('project-1', INPUT, SOURCE)
+
+    expect(result).toEqual({ ok: false, error: '다른 워크스페이스의 회의록으로는 이 프로젝트의 이슈를 만들 수 없습니다.' })
+    expect(fixture.admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('프로젝트 없는 회의록이 같은 워크스페이스 것이면 만든다', async () => {
+    asMember()
+    const fixture = clientsWithVersion({ currentProjectId: null, currentWorkspaceId: WS })
+    state.client = fixture.client
+    state.admin = fixture.admin
+
+    const result = await createIssueFromMinuteBlock('project-1', INPUT, SOURCE)
+
+    expect(result.ok).toBe(true)
+    expect(fixture.admin.rpc).toHaveBeenCalledOnce()
+  })
+
+  it('초안 생성도 같은 판정 — 다른 워크스페이스의 프로젝트 없는 회의록 발췌를 AI 에 보내지 않는다', async () => {
+    asMember()
+    const fixture = clientsWithVersion({ currentProjectId: null, currentWorkspaceId: 'ws-other' })
+    state.client = fixture.client
+
+    const result = await prepareMinuteIssueDraft('project-1', SOURCE)
+
+    expect(result.ok).toBe(false)
+    expect(ai.generateAnswer).not.toHaveBeenCalled()
   })
 
   it('긴 원문 근거는 생략부호 없이 전체 원문 링크 안내를 붙여 저장한다', async () => {

@@ -344,9 +344,13 @@ export async function addSubAct(
     return { ok: false, error: 'SUB-ACT가 아닌 하위 항목이 있는 곳에는 추가할 수 없습니다' }
   }
 
-  // 팀 코드 → teams.id — 프로젝트 행 우선, 전역 폴백(0071 스코프. import RPC 와 같은 규칙).
+  // 팀 코드 → teams.id — 프로젝트 행 우선, 그 프로젝트 워크스페이스의 공용 팀 폴백(0071 스코프. import RPC 와 같은 규칙).
+  // 공용 팀 코드는 워크스페이스마다 따로라, 여러 워크스페이스를 보는 호출자(플랫폼 관리자·두 워크스페이스 사용자)에게 RLS 가
+  // 다른 워크스페이스의 같은 코드 팀까지 보여 준다 — 워크스페이스로 좁힌다(0009 item_owners_guard 가 DB 에서도 막는다).
+  const projectWs = g.actor.projectWorkspace.get(act.project_id as string)
+  if (!projectWs) return { ok: false, error: '항목의 워크스페이스를 확인하지 못했습니다.' }
   const { data: teamRows, error: teamErr } = await sb.from('teams')
-    .select('id, project_id').eq('code', team)
+    .select('id, project_id').eq('code', team).eq('workspace_id', projectWs)
     .or(`project_id.eq.${act.project_id},project_id.is.null`)
   if (teamErr) return { ok: false, error: `담당 팀 조회 실패: ${teamErr.message}` } // 실패를 '팀 없음'으로 위장 금지
   const teamRow = (teamRows ?? []).find(r => r.project_id !== null) ?? (teamRows ?? [])[0]

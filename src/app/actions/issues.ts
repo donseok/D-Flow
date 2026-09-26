@@ -263,9 +263,11 @@ function validMinuteIssueSource(source: MinuteIssueSourceInput): boolean {
 /**
  * 회의록 기반 초안 생성과 최종 저장이 같은 불변 원문 검증을 공유한다.
  * 클라이언트는 버전/블록 앵커만 제시하며, 실제 AI 입력·저장 스냅샷은 여기서 찾은 블록만 사용한다.
+ * projectWorkspaceId 는 대상 프로젝트의 워크스페이스(가드를 통과한 actor 의 스냅샷) — 프로젝트 없는 회의록은 이것과 같아야 한다.
  */
 async function verifyMinuteIssueBlock(
   projectId: string,
+  projectWorkspaceId: string | undefined,
   source: MinuteIssueSourceInput,
   logLabel: string,
   includeInsight = false,
@@ -298,7 +300,7 @@ async function verifyMinuteIssueBlock(
       .maybeSingle(),
     sb
       .from('minutes')
-      .select('project_id, archived_at')
+      .select('project_id, archived_at, workspace_id')
       .eq('id', source.minuteId)
       .maybeSingle(),
   ])
@@ -321,6 +323,11 @@ async function verifyMinuteIssueBlock(
   const currentProjectId = (minuteRes.data.project_id as string | null) ?? null
   if (currentProjectId !== null && currentProjectId !== projectId) {
     return { ok: false, error: '회의록과 이슈의 프로젝트가 일치하지 않습니다.' }
+  }
+  // 프로젝트 없는 회의록은 워크스페이스로만 스코프된다 — 다른 워크스페이스 프로젝트의 이슈로 옮기면 그 워크스페이스에만 속한
+  // 사람도 발췌·제목을 읽는다(0009 issue_links 트리거가 DB 에서도 막는다). 워크스페이스를 모르면 거부(fail-closed).
+  if (currentProjectId === null && (!projectWorkspaceId || minuteRes.data.workspace_id !== projectWorkspaceId)) {
+    return { ok: false, error: '다른 워크스페이스의 회의록으로는 이 프로젝트의 이슈를 만들 수 없습니다.' }
   }
 
   const bodyMd = version.body_md as string
@@ -776,7 +783,8 @@ export async function prepareMinuteIssueDraft(
   const gate = await requireProjectMember(projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
 
-  const verified = await verifyMinuteIssueBlock(projectId, source, 'prepareMinuteIssueDraft', true)
+  const verified = await verifyMinuteIssueBlock(
+    projectId, gate.actor.projectWorkspace.get(projectId), source, 'prepareMinuteIssueDraft', true)
   if (!verified.ok) return verified
   const { block, insightLabel, draftContextText, selectionExcerpt } = verified.value
   if (!source.selection && block.headingDepth) {
@@ -837,7 +845,8 @@ export async function createIssueFromMinuteBlock(
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
 
-  const verified = await verifyMinuteIssueBlock(projectId, source, 'createIssueFromMinuteBlock')
+  const verified = await verifyMinuteIssueBlock(
+    projectId, g.actor.projectWorkspace.get(projectId), source, 'createIssueFromMinuteBlock')
   if (!verified.ok) return verified
   const { storedBodyHash, block, selectionExcerpt } = verified.value
   const excerpt = minuteIssueSourceExcerpt(selectionExcerpt ?? minuteBlockDraftText(block))

@@ -121,8 +121,10 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 
 import { addSubAct, addWbsItem } from '@/app/actions/wbs'
+import { makeAdminActor, WS } from '../fixtures/actor'
 
-const ADMIN = { ok: true as const, actor: { userId: 'u-admin' } }
+// p1 은 워크스페이스 WS 의 프로젝트 — 담당 팀 해석은 그 워크스페이스의 팀만 본다(SP2 최종 리뷰 F9)
+const ADMIN = { ok: true as const, actor: makeAdminActor('p1', { userId: 'u-admin' }) }
 
 beforeEach(() => {
   resetDb()
@@ -152,7 +154,7 @@ describe('addSubAct 가드 ① — 대상은 리프여야 한다', () => {
         planned_start: '2026-01-01', planned_end: '2026-01-10', is_owner_split: false },
       { id: 'sub-1', parent_id: 'act-2', sort_order: 1, is_owner_split: true },
     ]
-    db.teams = [{ id: 'team-erp', code: 'ERP' }]
+    db.teams = [{ id: 'team-erp', code: 'ERP', workspace_id: WS }]
     const r = await addSubAct('act-2', 'ERP', 'primary')
     expect(r.ok).toBe(true)
   })
@@ -167,13 +169,42 @@ describe('addSubAct — 0071 회귀: 동명 2행(전역+프로젝트) 우선순�
         planned_start: null, planned_end: null, is_owner_split: false },
     ]
     db.teams = [
-      { id: 't-global', code: 'ERP', project_id: null },
-      { id: 't-proj', code: 'ERP', project_id: 'p1' },
+      { id: 't-global', code: 'ERP', project_id: null, workspace_id: WS },
+      { id: 't-proj', code: 'ERP', project_id: 'p1', workspace_id: WS },
     ]
     const r = await addSubAct('act-5', 'ERP', 'primary')
     expect(r.ok).toBe(true)
     const owner = db.inserted.item_owners?.find(row => row.wbs_item_id === r.id)
     expect(owner).toMatchObject({ team_id: 't-proj' })
+  })
+})
+
+describe('addSubAct — 같은 코드의 공용 팀이 두 워크스페이스에 있을 때(SP2 최종 리뷰 F9)', () => {
+  // 공용 팀 코드는 워크스페이스마다 따로다(teams_ws_project_code_key). 여러 워크스페이스를 보는 호출자에게는 RLS 가 둘 다 보여 준다.
+  it('대상 프로젝트 워크스페이스의 팀을 담당으로 — 다른 워크스페이스의 같은 코드 팀이 먼저 와도', async () => {
+    db.wbs_items = [
+      { id: 'act-6', project_id: 'p1', code: '6', name: '두 워크스페이스 작업', biz: null, deliverable: null,
+        planned_start: null, planned_end: null, is_owner_split: false },
+    ]
+    db.teams = [
+      { id: 't-other-ws', code: 'ERP', project_id: null, workspace_id: 'ws-other' },
+      { id: 't-my-ws', code: 'ERP', project_id: null, workspace_id: WS },
+    ]
+    const r = await addSubAct('act-6', 'ERP', 'primary')
+    expect(r.ok).toBe(true)
+    expect(db.inserted.item_owners?.find(row => row.wbs_item_id === r.id)).toMatchObject({ team_id: 't-my-ws' })
+  })
+
+  it('프로젝트의 워크스페이스를 모르면(스냅샷에 없음) 쓰기 전에 거부 — 아무 팀이나 고르지 않는다', async () => {
+    requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeAdminActor('p-other', { userId: 'u-admin' }) })
+    db.wbs_items = [
+      { id: 'act-7', project_id: 'p1', code: '7', name: '작업', biz: null, deliverable: null,
+        planned_start: null, planned_end: null, is_owner_split: false },
+    ]
+    db.teams = [{ id: 't-my-ws', code: 'ERP', project_id: null, workspace_id: WS }]
+    const r = await addSubAct('act-7', 'ERP', 'primary')
+    expect(r.ok).toBe(false)
+    expect(db.inserted.wbs_items).toEqual([])
   })
 })
 
@@ -196,7 +227,7 @@ describe('addSubAct 가드 ③ — insert 페이로드', () => {
         planned_start: '2026-02-01', planned_end: '2026-02-10', is_owner_split: false },
       { id: 'sub-4a', parent_id: 'act-4', sort_order: 1, is_owner_split: true },
     ]
-    db.teams = [{ id: 'team-mes', code: 'MES' }]
+    db.teams = [{ id: 'team-mes', code: 'MES', workspace_id: WS }]
     const r = await addSubAct('act-4', 'MES', 'support')
     expect(r.ok).toBe(true)
     const inserted = db.inserted.wbs_items?.find(row => row.parent_id === 'act-4')
