@@ -36,6 +36,25 @@ describe('workspace_settings RLS (0008)', () => {
       expect((await c.query('update public.workspace_settings set allowed_domains = $2 where workspace_id = $1', [F.ws, ['x.test']])).rowCount)
         .toBe(0)
       expect((await c.query('delete from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
+      // 자기 워크스페이스(A) 행도 멤버는 쓰지 못한다 — 기존 행 upsert 는 update 경로의 using 에서 42501
+      expect(await pgError(c, `insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)
+        on conflict (workspace_id) do update set allowed_domains = excluded.allowed_domains`, [F.ws, ['x.test']]))
+        .toMatchObject({ code: '42501' })
+      // 행이 없을 때의 새 insert 도 with check 에서 42501(행은 service 로 지우고 세션으로 돌아온다)
+      await c.query('reset role')
+      await c.query('delete from public.workspace_settings where workspace_id = $1', [F.ws])
+      await c.query('set local role authenticated')
+      expect(await pgError(c, 'insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)', [F.ws, ['x.test']]))
+        .toMatchObject({ code: '42501' })
+      await c.query('reset role')
+      expect((await c.query('select 1 from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
+    })
+    // 멤버의 자기 워크스페이스 update 가 0행이면 값도 그대로여야 한다 — 같은 트랜잭션에서 service 로 읽어 확인한다
+    await asUser(pool, F.users.aLoose, async (c) => {
+      await c.query('update public.workspace_settings set allowed_domains = $2 where workspace_id = $1', [F.ws, ['x.test']])
+      await c.query('reset role')
+      const { rows } = await c.query('select allowed_domains from public.workspace_settings where workspace_id = $1', [F.ws])
+      expect(rows).toEqual([{ allowed_domains: ['example.com'] }])
     })
     await asUser(pool, F.users.wsAdmin, async (c) => {
       const r = await c.query<{ allowed_domains: string[] }>(
@@ -131,6 +150,22 @@ describe('project_invites_guard — created_by 불변(0008)', () => {
       expect(await pgError(c, 'delete from auth.users where id = $1', [CAROL.id])).toBeNull()
       const { rows: [r] } = await c.query('select created_by from public.project_invites where token_hash = $1', [carolHash])
       expect(r).toEqual({ created_by: null })
+    })
+  })
+})
+
+describe('createAccount 보상 롤백의 전제 — 계정 삭제가 이은 인물의 연결을 푼다', () => {
+  // createAccount 는 기존 인물(외부 인력)에 새 계정을 이은 뒤 명단 행 검사 등에서 실패하면 계정만 지운다(src/app/actions/accounts.ts).
+  // 그 인물의 user_id 를 되돌리는 것은 people.user_id 의 FK(on delete set null)다 — 이 전제가 깨지면 인물이 지워진 계정 id 를
+  // 붙든 채 남는다. 트리거(people_unlink_revokes_access)도 이 경로에서 막지 않는지 함께 본다.
+  it('⑨ 외부 인력에 이은 계정을 지우면 people.user_id 가 null 로 돌아온다', async () => {
+    await asService(pool, async (c) => {
+      await c.query(INSERT_AUTH_USER, [CAROL.id, CAROL.email])
+      expect((await c.query('update public.people set user_id = $1 where id = $2 and user_id is null', [CAROL.id, F.people.external])).rowCount)
+        .toBe(1)
+      expect(await pgError(c, 'delete from auth.users where id = $1', [CAROL.id])).toBeNull()
+      const { rows } = await c.query('select user_id, active from public.people where id = $1', [F.people.external])
+      expect(rows).toEqual([{ user_id: null, active: true }])
     })
   })
 })
