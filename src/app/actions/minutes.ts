@@ -249,7 +249,8 @@ export async function createMinute(
     p_workspace_id: workspaceId,
   }).single()
   if (createError || !createdRaw) {
-    return { ok: false, error: createError?.message ?? '회의록 생성에 실패했습니다.' }
+    // RPC 영문 상수(0006 MINUTE_FOLDER_WORKSPACE_MISMATCH 등)는 사용자 문구로, 그 밖은 종전처럼 원문 그대로.
+    return { ok: false, error: rpcErrorMessage(createError?.message, createError?.message ?? '회의록 생성에 실패했습니다.') }
   }
   const created = createdRaw as unknown as {
     minute_id: string
@@ -303,7 +304,18 @@ export async function updateMinuteMeta(
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
   let effectiveTeam = patch.teamCode
   if (folderId) {
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null)
+    // 프로젝트 없는 회의록은 워크스페이스가 폴더 경계다(0006) — 회의록의 워크스페이스는 바뀌지 않으므로
+    // 그 워크스페이스 폴더만 허용한다. 메타 RPC·minutes 트리거는 이 불일치를 잡지 않는다.
+    let minuteWs: string | undefined
+    if (!resolvedProject.projectId) {
+      const { data: wsRow, error: wsErr } = await sb.from('minutes').select('workspace_id').eq('id', id).maybeSingle()
+      if (wsErr || !(wsRow as { workspace_id?: string } | null)?.workspace_id) {
+        console.error('[updateMinuteMeta] 워크스페이스 조회 실패:', wsErr?.message ?? 'no row')
+        return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
+      }
+      minuteWs = (wsRow as { workspace_id: string }).workspace_id
+    }
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, minuteWs)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
@@ -1017,6 +1029,7 @@ const RPC_ERROR_MESSAGES: ReadonlyArray<[string, string]> = [
   ['MINUTE_NOT_FOUND', '회의록을 찾을 수 없습니다.'],
   ['MINUTE_ARCHIVED', '보관된 회의록은 변경할 수 없습니다.'],
   ['MINUTE_TEAM_INVALID', '비활성 팀의 폴더로는 이동할 수 없습니다.'],
+  ['MINUTE_FOLDER_WORKSPACE_MISMATCH', '다른 워크스페이스 폴더로는 이동할 수 없습니다.'],
   ['MINUTE_METADATA_REQUIRED', '회의록 필수 항목이 비어 있습니다.'],
   ['MINUTE_METADATA_KEY_NOT_ALLOWED', '허용되지 않은 항목이 포함됐습니다.'],
 ]
@@ -1085,8 +1098,8 @@ export async function moveMinuteToFolder(
   // 미분류(null)로 빼내는 것은 탐색기 D&D 가 제공하는 조작이라 허용한다. 팀 파생은 대상
   // 폴더가 있을 때만 다시 하고, 미분류면 현재 team_code 를 그대로 둔다(추측 금지).
   const sb = await createServerClient()
-  let folders: MinuteFolder[] | null = null
-  let targetFolder: MinuteFolder | undefined
+  let folders: FolderRow[] | null = null
+  let targetFolder: FolderRow | undefined
   if (folderId) {
     folders = await loadFolders(sb)
     if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
@@ -1098,7 +1111,7 @@ export async function moveMinuteToFolder(
 
   // 현재 팀·프로젝트 — 쓰기 선행조회 실패는 판정 불가이므로 중단(추측 금지)
   const { data: cur, error: curErr } = await sb.from('minutes')
-    .select('team_code, project_id').eq('id', minuteId).maybeSingle()
+    .select('team_code, project_id, workspace_id').eq('id', minuteId).maybeSingle()
   if (curErr) {
     console.error('[moveMinuteToFolder] 현재 담당 조회 실패:', curErr.message)
     return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
@@ -1111,6 +1124,10 @@ export async function moveMinuteToFolder(
   // (미분류 폴더로의 이동은 targetFolder 가 없으므로 이 검사를 건너뛴다).
   if (targetFolder && (targetFolder.projectId ?? null) !== minuteProjectId) {
     return { ok: false, error: '다른 프로젝트 폴더로는 이동할 수 없습니다.' }
+  }
+  // 프로젝트 없는 폴더끼리는 워크스페이스가 경계다(0006) — raw update·메타 RPC 모두 이 불일치를 잡지 않는다.
+  if (targetFolder && targetFolder.workspaceId !== (cur as { workspace_id: string }).workspace_id) {
+    return { ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
 
   // 대상 폴더에서 팀 파생. 시드 체인 밖(§6.3 불변식 위반)이면 추측하지 않고 거절한다.

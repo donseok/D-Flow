@@ -416,7 +416,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
       { id: 'c-log', name: '물류', parent_id: 'r-erp', sort: 1, created_by: 'u1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
-      minutes: { data: { created_by: 'u1' }, error: null },
+      minutes: { data: { created_by: 'u1', workspace_id: 'ws-1' }, error: null },
       minute_folders: { data: tree, error: null },
     })
     const { client: admin, rpc } = fakeMetadataAdmin()
@@ -437,7 +437,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
   it('시드 체인 밖 폴더는 거절 — 팀을 추측하지 않는다(§6.3 서버 강제)', async () => {
     const tree = [{ id: 'orphan', name: '떠돌이', parent_id: null, sort: 100, created_by: 'u1', workspace_id: 'ws-1' }]
     const { client, calls } = fakeClient({
-      minutes: { data: { created_by: 'u1' }, error: null },
+      minutes: { data: { created_by: 'u1', workspace_id: 'ws-1' }, error: null },
       minute_folders: { data: tree, error: null },
     })
     createServerClient.mockResolvedValue(client)
@@ -458,7 +458,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
   })
   it('전달된 폴더 미존재는 거부 — 갱신 미도달', async () => {
     const { client, calls } = fakeClient({
-      minutes: { data: { created_by: 'u1' }, error: null },
+      minutes: { data: { created_by: 'u1', workspace_id: 'ws-1' }, error: null },
       minute_folders: { data: null, error: null },
     })
     createServerClient.mockResolvedValue(client)
@@ -953,5 +953,82 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
     }).client)
     // 마지막 delete 는 세션 클라이언트 — W2_TREE 가 곧 1행 이상 응답이라 성공으로 판정된다
     expect((await deleteMinuteFolder('w2-sub')).ok).toBe(true)
+  })
+})
+
+describe('프로젝트 없는 회의록의 폴더 이동 — 워크스페이스 경계(0006)', () => {
+  // 메타 RPC·raw update·minutes 트리거는 폴더 워크스페이스를 보지 않는다 — 액션 가드가 유일한 관문이다.
+  const W2_TREE = [
+    { id: 'w2-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, project_id: null, workspace_id: 'ws-2' },
+    { id: 'w2-sub', name: '물류', parent_id: 'w2-root', sort: 1, created_by: 'u1', project_id: null, workspace_id: 'ws-2' },
+  ]
+  const patch = { minuteDate: '2026-09-26', teamCode: 'ERP' as const, title: '제목', meetingId: null }
+
+  it('updateMinuteMeta: W1 회의록을 W2 폴더로 옮기려 하면 거부 — RPC 미도달', async () => {
+    createServerClient.mockResolvedValue(fakeClient({
+      minutes: { data: { created_by: 'u1', archived_at: null, project_id: null, workspace_id: 'ws-1' }, error: null },
+      minute_folders: { data: W2_TREE, error: null },
+    }).client)
+    const r = await updateMinuteMeta('m1', patch, 'w2-sub')
+    expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
+    expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('updateMinuteMeta: 같은 워크스페이스 폴더면 통과', async () => {
+    createServerClient.mockResolvedValue(fakeClient({
+      minutes: { data: { created_by: 'u1', archived_at: null, project_id: null, workspace_id: 'ws-2' }, error: null },
+      minute_folders: { data: W2_TREE, error: null },
+    }).client)
+    const { client: admin, rpc } = fakeMetadataAdmin()
+    adminMocks.createAdminClient.mockReturnValue(admin)
+    const r = await updateMinuteMeta('m1', patch, 'w2-sub')
+    expect(r.ok).toBe(true)
+    expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction',
+      expect.objectContaining({ p_metadata: expect.objectContaining({ folder_id: 'w2-sub' }) }))
+  })
+
+  it('updateMinuteMeta: 회의록 워크스페이스를 못 읽으면 중단(fail-closed) — RPC 미도달', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeClient({
+      minutes: { data: { created_by: 'u1', archived_at: null, project_id: null }, error: null },
+      minute_folders: { data: W2_TREE, error: null },
+    }).client)
+    const r = await updateMinuteMeta('m1', patch, 'w2-sub')
+    expect(r).toMatchObject({ ok: false, error: '회의록 정보를 불러오지 못했습니다.' })
+    expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('createMinute: RPC 의 MINUTE_FOLDER_WORKSPACE_MISMATCH(0006:606)는 사용자 문구로 매핑 — 영문 상수 노출 금지', async () => {
+    createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: { id: 'ws1-pmo' }, error: null } }).client)
+    const rpc = vi.fn(() => ({
+      single: () => Promise.resolve({ data: null, error: { message: 'MINUTE_FOLDER_WORKSPACE_MISMATCH' } }),
+    }))
+    adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
+    const r = await createMinute({
+      minuteDate: '2026-09-26', teamCode: 'PMO', title: '제목', bodyMd: '본문', meetingId: null, projectId: null,
+    } as never)
+    expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
+  })
+
+  it('moveMinuteToFolder: W1 회의록을 W2 폴더로 옮기려 하면 거부 — update·RPC 미도달', async () => {
+    const { client, calls } = fakeClient({
+      minute_folders: { data: W2_TREE, error: null },
+      minutes: { data: { id: 'm1', created_by: 'u1', team_code: 'ERP', project_id: null, workspace_id: 'ws-1' }, error: null },
+    })
+    createServerClient.mockResolvedValue(client)
+    const r = await moveMinuteToFolder('m1', 'w2-sub')
+    expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
+    expect(calls['minutes']!.some(c => c.method === 'update')).toBe(false)
+    expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('moveMinuteToFolder: 같은 워크스페이스 폴더면 통과', async () => {
+    createServerClient.mockResolvedValue(fakeClient({
+      minute_folders: { data: W2_TREE, error: null },
+      minutes: { data: { id: 'm1', created_by: 'u1', team_code: 'ERP', project_id: null, workspace_id: 'ws-2' }, error: null },
+    }).client)
+    adminMocks.createAdminClient.mockReturnValue(fakeClient({ minutes: { data: [{ id: 'm1' }], error: null } }).client)
+    expect((await moveMinuteToFolder('m1', 'w2-sub')).ok).toBe(true)
   })
 })
