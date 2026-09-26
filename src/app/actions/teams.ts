@@ -115,17 +115,18 @@ export async function updateTeam(
   return { ok: true }
 }
 
-/** 관리 화면 목록(비활성 포함) — 페이지 서버 컴포넌트 전용. 그 워크스페이스의 공용 팀만. */
+/** 관리 화면 목록(비활성 포함) — 페이지 서버 컴포넌트 전용. 그 워크스페이스의 공용 팀만.
+ *  거부·조회 실패는 빈 목록이 아니라 오류다 — 빈 목록이면 화면이 'TEAMS 0' 을 사실처럼 그린다(표시 = 로깅). */
 export async function listTeamsAdmin(workspaceId: string): Promise<
-  Array<{ id: string; code: string; sortOrder: number; active: boolean; progressVisible: boolean }>
+  | { ok: true; rows: Array<{ id: string; code: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
+  | { ok: false; error: string }
 > {
   const g = typeof workspaceId === 'string' && workspaceId
     ? await requireWorkspaceAdmin(workspaceId)
     : { ok: false as const, error: ERR_WORKSPACE_REQUIRED }
-  // 반환 타입에 에러 채널이 없어 빈 목록으로 폴백하되, 사유는 로그에 남긴다(표시 = 로깅).
   if (!g.ok) {
     console.error('[teams] 관리 목록 거부:', g.error)
-    return []
+    return { ok: false, error: g.error }
   }
   // 스코프를 정한 service_role 클라이언트 — 아래 필터가 쓰는 workspaceId 가 가드가 판정한 그 값이다.
   const { admin } = adminFor({ workspaceId })
@@ -138,13 +139,16 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
     .order('sort_order').order('code')
   if (error) {
     console.error('[teams] 관리 목록 조회 실패:', error.message)
-    return []
+    return { ok: false, error: `팀 목록을 불러오지 못했습니다: ${error.message}` }
   }
-  return (data ?? []).map((r: Record<string, unknown>) => ({
-    id: String(r.id),
-    code: String(r.code),
-    sortOrder: Number(r.sort_order ?? 0),
-    active: r.active !== false,
-    progressVisible: r.progress_visible !== false,
-  }))
+  return {
+    ok: true,
+    rows: (data ?? []).map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      code: String(r.code),
+      sortOrder: Number(r.sort_order ?? 0),
+      active: r.active !== false,
+      progressVisible: r.progress_visible !== false,
+    })),
+  }
 }

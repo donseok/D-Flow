@@ -97,10 +97,10 @@ describe('워크스페이스 기준정보는 워크스페이스 관리자 — �
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('listTeamsAdmin 은 에러 채널이 없어 빈 목록으로 강등하되 사유를 로그에 남긴다', async () => {
+  it('listTeamsAdmin 은 거부를 빈 목록이 아니라 오류로 돌려주고 사유를 로그에 남긴다', async () => {
     signedInAs(PROJECT_ADMIN)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await listTeamsAdmin(WS)).toEqual([])
+    expect((await listTeamsAdmin(WS)).ok).toBe(false)
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
     expect(createAdminClient).not.toHaveBeenCalled()

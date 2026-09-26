@@ -176,15 +176,38 @@ describe('팀 관리 서버액션', () => {
         return q
       },
     }) as never)
-    expect(await listTeamsAdmin(WID)).toHaveLength(1)
+    const res = await listTeamsAdmin(WID)
+    expect(res.ok && res.rows).toHaveLength(1)
     expect(filters).toContainEqual(['workspace_id', WID])
     expect(filters).toContainEqual(['project_id', null])
   })
 
-  it('listTeamsAdmin: 다른 워크스페이스 관리자는 빈 목록(사유는 로그) — DB 를 건드리지 않는다', async () => {
+  // 조회 실패를 빈 목록으로 돌려주면 화면이 'TEAMS 0' 을 사실처럼 그린다 — 관리자가 '없는' 팀을 다시 추가하다 중복 오류를 만난다
+  // (SP2 최종 리뷰 ERR-7, 에러 3원칙 ①). 거부·조회 실패는 오류로 돌려준다.
+  it('listTeamsAdmin: select 가 실패하면 빈 목록이 아니라 오류 — 로그도 남긴다', async () => {
+    const WID = '0d000000-0000-4000-8000-00000000000d'
+    signedInAs(makeActor({ userId: 'u-wsadmin', workspaceRoles: new Map([[WID, 'admin']]) }))
+    createAdminClient.mockImplementationOnce(() => ({
+      from: () => {
+        const q: Record<string, unknown> = {}
+        Object.assign(q, {
+          select: () => q, is: () => q, eq: () => q, order: () => q,
+          then: (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'boom' } }),
+        })
+        return q
+      },
+    }) as never)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await listTeamsAdmin(WID)).toEqual({ ok: false, error: '팀 목록을 불러오지 못했습니다: boom' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('listTeamsAdmin: 다른 워크스페이스 관리자는 거부(사유를 돌려주고 로그) — DB 를 건드리지 않는다', async () => {
     signedInAs(OTHER_WS_ADMIN)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await listTeamsAdmin(WS)).toEqual([])
+    const res = await listTeamsAdmin(WS)
+    expect(res.ok).toBe(false)
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
     expect(createAdminClient).not.toHaveBeenCalled()
