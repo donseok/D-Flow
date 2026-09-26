@@ -37,17 +37,19 @@ export function MinuteInsightCard({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [healState, setHealState] = useState<'idle' | 'running' | 'failed'>('idle')
+  // 서버가 조회 실패 사유를 실어 보내면 일반 문구 대신 그것을 보인다(권한 없음·생성 실패와 구별).
+  const [healError, setHealError] = useState<string | null>(null)
   const cardState = insightCardState(insights, bodyHash)
   const items = visibleInsights(insights, blocks, bodyHash)
   const attention = topHighlightedBlocks(highlights, blocks)
   const healRan = useRef(false)
 
   const runHeal = useCallback(() => {
-    setHealState('running')
-    ensureMinuteInsightsAction(minuteId).then(({ status }) => {
+    setHealState('running'); setHealError(null)
+    ensureMinuteInsightsAction(minuteId).then(({ status, error }) => {
       // 'ready'도 refresh — runHeal은 pending(props가 낡음)에서만 불리므로 DB가 신선하면 재수화 필요(경합 고착 방지)
       if (status === 'generated' || status === 'ready') { setHealState('idle'); router.refresh() }
-      else setHealState('failed')
+      else { setHealError(error ?? null); setHealState('failed') }
     }).catch(() => setHealState('failed'))
   }, [minuteId, router])
 
@@ -98,7 +100,7 @@ export function MinuteInsightCard({
             )}
             {cardState === 'pending' && healState === 'failed' && (
               <p className="text-sm text-ink-muted">
-                {t('min.insight.unavailable')}
+                {healError ?? t('min.insight.unavailable')}
                 <button onClick={runHeal} className="ml-2 text-brand underline underline-offset-2">
                   {t('min.insight.retry')}
                 </button>

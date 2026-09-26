@@ -69,8 +69,8 @@ vi.mock('@/lib/teams/master', () => {
 })
 
 import {
-  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, moveMinuteFolder, moveMinuteToFolder,
-  renameMinuteFolder, setMinuteShare, toggleMinuteHighlight, updateMinuteMeta,
+  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, moveMinuteFolder,
+  moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight, updateMinuteMeta,
 } from '@/app/actions/minutes'
 import { makeActor } from '../fixtures/actor'
 import type { Actor, ProjectRole } from '@/lib/domain/authz'
@@ -311,5 +311,80 @@ describe('교차 워크스페이스 이동 — 트리거까지 가지 않고 쓰
     expect(await moveMinuteFolder('wa-free', 'wb-sub'))
       .toEqual({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
     expect(db.calls.minute_folders).not.toContain('update')
+  })
+})
+
+describe('팀 목록 조회 실패 — 폴더 루트 예약어 판정도 빈 목록이 아니라 오류로 멈춘다', () => {
+  const TEAMS_DOWN = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+  beforeEach(() => {
+    mocks.workspaceTeams.mockImplementation(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+  })
+
+  it('renameMinuteFolder(루트): update 미도달', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb()
+    getActor.mockResolvedValue(inA)
+    expect(await renameMinuteFolder('wa-legacy', 'PMO')).toEqual({ ok: false, error: TEAMS_DOWN })
+    expect(db.calls.minute_folders).not.toContain('update')
+    spy.mockRestore()
+  })
+
+  it('moveMinuteFolder(루트로): update 미도달', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb()
+    getActor.mockResolvedValue(inA)
+    expect(await moveMinuteFolder('wa-free', null)).toEqual({ ok: false, error: TEAMS_DOWN })
+    expect(db.calls.minute_folders).not.toContain('update')
+    spy.mockRestore()
+  })
+})
+
+describe('조회 실패를 없음으로 위장하지 않는다(3원칙 ①) — 첨부·요약 self-heal', () => {
+  const FILE_DOWN = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+
+  it('removeMinuteFile: 첨부 조회 실패는 "파일 없음"이 아니라 조회 실패 — 삭제 미도달', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb({ minute_files: { data: null, error: { message: 'db down' } } })
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: FILE_DOWN })
+    expect(db.calls.minute_files).not.toContain('delete')
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('getMinuteFileUrl: 첨부 조회 실패는 "파일 없음"이 아니라 조회 실패', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb({ minute_files: { data: null, error: { message: 'db down' } } })
+    expect(await getMinuteFileUrl('file-1')).toEqual({ ok: false, error: FILE_DOWN })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('ensureMinuteInsightsAction: 범위 조회 실패는 사유를 싣는다 — 자격 없음(사유 없음)과 구별', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb({ minutes: { data: null, error: { message: 'db down' } } })
+    getActor.mockResolvedValue(inA)
+    expect(await ensureMinuteInsightsAction(M)).toEqual({ status: 'unavailable', error: ERR_LOOKUP })
+    seedDb()
+    getActor.mockResolvedValue(onlyInB)
+    expect(await ensureMinuteInsightsAction(M)).toEqual({ status: 'unavailable' })
+    expect(mocks.ensureMinuteInsights).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('ensureMinuteInsightsAction: 본문 조회 실패도 사유를 싣는다 — self-heal 미실행', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // 첫 minutes 조회(범위)는 성공, 두 번째(본문)는 실패 — 표별 응답 큐.
+    const queue: TableResult[] = [{ data: minuteRow(), error: null }, { data: null, error: { message: 'db down' } }]
+    const b: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'maybeSingle']) b[m] = vi.fn(() => b)
+    ;(b as { then: (r: (v: TableResult) => void) => void }).then = resolve => resolve(queue.shift()!)
+    createServerClient.mockResolvedValue({ from: vi.fn(() => b) })
+    getActor.mockResolvedValue(inA)
+    expect(await ensureMinuteInsightsAction(M))
+      .toEqual({ status: 'unavailable', error: '회의록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(mocks.ensureMinuteInsights).not.toHaveBeenCalled()
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

@@ -8,7 +8,7 @@ import {
   canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
 } from '@/lib/domain/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
@@ -76,7 +76,7 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
   try {
     actor = await getActor()
   } catch {
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
   if (!actor) return { ok: false, error: '로그인 필요' }
   return { ok: true, actor }
@@ -86,16 +86,21 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
  *  WORKSPACE_SCOPE_MISMATCH 가 막는다). 트리거까지 가지 않도록 쓰기 전에 같은 판정을 한다. */
 const CROSS_WORKSPACE_MOVE_MSG = '다른 워크스페이스의 프로젝트·폴더로는 옮길 수 없습니다.'
 const TEAMS_UNAVAILABLE_MSG = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+const FILE_LOOKUP_FAILED_MSG = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
-/** 회의록 범위의 활성 팀 코드 — 팀 캐시를 한 번도 못 채웠으면 오류 문구로 돌려준다(빈 목록으로 위장하지 않는다). */
-function activeTeamsOr(scope: MinuteScope): { codes: TeamCode[] } | { error: string } {
+/** 팀 목록 조회를 결과로 감싼다 — 팀 캐시를 한 번도 못 채운 throw 는 오류 문구로(빈 목록으로 위장하지 않는다). */
+function teamsResult(read: () => TeamCode[]): { codes: TeamCode[] } | { error: string } {
   try {
-    return { codes: activeTeamCodesForMinuteScope(scope) }
+    return { codes: read() }
   } catch (e) {
     console.error('[minutes] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
     return { error: TEAMS_UNAVAILABLE_MSG }
   }
 }
+/** 회의록 범위의 활성 팀 코드 — 담당 팀 검증·재편철용. */
+const activeTeamsOr = (scope: MinuteScope) => teamsResult(() => activeTeamCodesForMinuteScope(scope))
+/** 회의록 범위의 등록 팀 코드(비활성 포함) — 폴더 루트의 팀 기본 폴더명 예약어 판정용. */
+const teamCodesOr = (scope: MinuteScope) => teamsResult(() => teamCodesForMinuteScope(scope))
 
 /**
  * 회의록 id 를 받는 액션의 범위 관문 — resolveScope 로 대상 행의 워크스페이스·프로젝트를 확정하고(클라이언트 입력 불신)
@@ -786,8 +791,13 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
-  const { data: f } = await sb.from('minute_files')
+  const { data: f, error: fErr } = await sb.from('minute_files')
     .select('id, minute_id, role, file_path').eq('id', fileId).maybeSingle()
+  // 조회 실패를 '파일 없음'으로 위장하지 않는다(3원칙 ①) — 어느 회의록의 첨부인지 모르면 판정도 못 한다.
+  if (fErr) {
+    console.error('[removeMinuteFile] 첨부 조회 실패:', fErr.message)
+    return { ok: false, error: FILE_LOOKUP_FAILED_MSG }
+  }
   if (!f) return { ok: false, error: '파일 없음' }
   if ((f.role as string) === 'body') return { ok: false, error: '본문 파일은 교체로만 변경할 수 있습니다.' }
   const own = await checkOwner(sb, f.minute_id as string, g.actor)
@@ -844,12 +854,18 @@ export async function getMinuteFileUrl(fileId: string): Promise<{ ok: boolean; u
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
   const sb = await createServerClient()
-  const { data: f } = await sb.from('minute_files').select('file_path, file_name').eq('id', fileId).maybeSingle()
+  const { data: f, error: fErr } = await sb.from('minute_files').select('file_path, file_name').eq('id', fileId).maybeSingle()
+  // 조회 실패를 '파일 없음'으로 위장하지 않는다(3원칙 ①).
+  if (fErr) {
+    console.error('[getMinuteFileUrl] 첨부 조회 실패:', fErr.message)
+    return { ok: false, error: FILE_LOOKUP_FAILED_MSG }
+  }
   if (!f) return { ok: false, error: '파일 없음' }
   // download 지정 → Content-Disposition: attachment. 인라인 렌더 시 charset 미지정으로
   // 한글이 깨져 보이는 문제를 피하고, 원본 파일명으로 바로 내려받게 한다.
-  const { data: signed } = await sb.storage.from(BUCKET)
+  const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
     .createSignedUrl(f.file_path as string, 3600, { download: (f.file_name as string) || true })
+  if (signErr) console.error('[getMinuteFileUrl] 서명 URL 발급 실패:', signErr.message)
   if (!signed?.signedUrl) return { ok: false, error: 'URL 발급 실패' }
   return { ok: true, url: signed.signedUrl }
 }
@@ -996,15 +1012,10 @@ export async function renameMinuteFolder(
   // 루트에서 팀코드 동명으로의 개명도 차단(앵커 사칭 방지) — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의
   // 등록 팀(비활성 포함)으로 본다. 다른 워크스페이스 팀 이름은 이 트리의 앵커가 아니다.
   if (target.parentId === null) {
-    let teamNames: string[]
-    try {
-      teamNames = teamCodesForMinuteScope({ projectId: target.projectId, workspaceId: target.workspaceId })
-    } catch (e) {
-      console.error('[renameMinuteFolder] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
-      return { ok: false, error: TEAMS_UNAVAILABLE_MSG }
-    }
-    if (isTeamRootName(name, teamNames))
-      return { ok: false, error: `팀 기본 폴더명(${teamNames.join('·')})은 루트에 사용할 수 없습니다.` }
+    const teams = teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
+    if ('error' in teams) return { ok: false, error: teams.error }
+    if (isTeamRootName(name, teams.codes))
+      return { ok: false, error: `팀 기본 폴더명(${teams.codes.join('·')})은 루트에 사용할 수 없습니다.` }
   }
   const { data, error } = await sb.from('minute_folders')
     .update({ name: normalizeFolderName(name), updated_at: new Date().toISOString() })
@@ -1134,12 +1145,9 @@ export async function moveMinuteFolder(
   // 루트 예약어(앵커 사칭)는 루트로 옮길 때만 본다 — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 등록 팀으로.
   let teamCodes: string[] = []
   if (newParentId === null) {
-    try {
-      teamCodes = teamCodesForMinuteScope({ projectId: target.projectId, workspaceId: target.workspaceId })
-    } catch (e) {
-      console.error('[moveMinuteFolder] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
-      return { ok: false, error: TEAMS_UNAVAILABLE_MSG }
-    }
+    const teams = teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
+    if ('error' in teams) return { ok: false, error: teams.error }
+    teamCodes = teams.codes
   }
   const verdict = resolveFolderDrop(target, newParentId, folders, teamCodes)
   if (verdict.kind === 'noop') return { ok: true }        // 제자리 — 쓰기 없이 성공
@@ -1345,17 +1353,24 @@ export async function toggleMinuteHighlight(
 /** 요약 카드 self-heal 트리거 — 스펙 §4.3. 멤버십 게이트(무료 쿼터 보호). */
 export async function ensureMinuteInsightsAction(
   minuteId: string,
-): Promise<{ status: 'ready' | 'generated' | 'unavailable' }> {
+): Promise<{ status: 'ready' | 'generated' | 'unavailable'; error?: string }> {
   // 멤버십 게이트(무료 쿼터 보호) — 그 회의록 범위의 멤버 이상만. 조회 전용·다른 워크스페이스는 self-heal 을 트리거하지 못한다.
+  // 조회 실패는 '자격 없음'과 같은 unavailable 이되 error 문구를 싣는다 — 화면이 원인을 보인다(3원칙 ①).
+  const refused = (error: string) =>
+    error === ERR_LOOKUP ? { status: 'unavailable' as const, error } : { status: 'unavailable' as const }
   const g = await requireActor()
-  if (!g.ok) return { status: 'unavailable' }
+  if (!g.ok) return refused(g.error)
   const m = await requireMinuteMember(g.actor, minuteId)
-  if (!m.ok) return { status: 'unavailable' }
+  if (!m.ok) return refused(m.error)
   const sb = await createServerClient()
-  const { data: minute } = await sb.from('minutes')
+  const { data: minute, error: minuteErr } = await sb.from('minutes')
     .select('body_md, archived_at')
     .eq('id', minuteId)
     .maybeSingle()
+  if (minuteErr) {
+    console.error('[ensureMinuteInsightsAction] 회의록 조회 실패:', minuteErr.message)
+    return { status: 'unavailable', error: '회의록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' }
+  }
   if (!minute) return { status: 'unavailable' }
   if (minute.archived_at) return { status: 'ready' }
   const bodyMd = minute.body_md as string
