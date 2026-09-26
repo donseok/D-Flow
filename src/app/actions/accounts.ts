@@ -191,12 +191,22 @@ function isWorkspaceIdInput(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0
 }
 
+/**
+ * 권한을 줄 프로젝트가 그 워크스페이스의 것인가(액터 스냅샷 — 슈퍼유저는 전 프로젝트, 그 외는 내 워크스페이스 프로젝트).
+ * 쓰기 전에 끊는다: 안 그러면 다른 워크스페이스 프로젝트가 createUser·소속·인물까지 간 뒤 RPC 에서야 거부돼 계정이
+ * 생겼다 지워지고, RPC 의 '없음'/'거부' 차이로 다른 워크스페이스 프로젝트의 존재가 샌다. 모르는 id 도 같은 ERR_MISSING.
+ */
+function projectInWorkspace(actor: { projectWorkspace: ReadonlyMap<string, string> }, projectId: string, workspaceId: string): boolean {
+  return actor.projectWorkspace.get(projectId) === workspaceId
+}
+
 export async function createAccount(input: AccountInput & { workspaceId: string }): Promise<AccountActionResult> {
   const workspaceId = input?.workspaceId
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
   // 계정 생성은 그 워크스페이스의 관리자(SP2 §4.1 — SP1 까지는 슈퍼유저 전용).
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (input.projectId && !projectInWorkspace(g.actor, input.projectId, workspaceId)) return { ok: false, error: ERR_MISSING }
   const res = await createOne(createAdminClient(), workspaceId, input, g.actor.userId)
   if (res.ok) {
     revalidatePath('/admin/accounts')
@@ -212,6 +222,7 @@ export async function bulkCreateAccounts(
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED, results: [] }
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error, results: [] }
+  if (projectId && !projectInWorkspace(g.actor, projectId, workspaceId)) return { ok: false, error: ERR_MISSING, results: [] }
   const lines = parseBulkAccounts(typeof text === 'string' ? text : '')
   if (lines.length === 0) return { ok: false, error: '처리할 행이 없습니다.', results: [] }
 

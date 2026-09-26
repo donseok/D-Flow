@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // next/cache · authz 가드 · admin 클라이언트 · 팀 마스터 캐시를 모킹해 게이트·검증·시드 폴더 생성만 본다.
 // 공용 팀은 워크스페이스 기준정보라 그 워크스페이스의 관리자가 손댄다(SP2 §4.1) — 가드 모킹은 순수 판정에 위임한다.
-const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin } = vi.hoisted(() => {
+const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin, getActor } = vi.hoisted(() => {
   const db = {
     teams: [] as Array<Record<string, unknown>>,
     folders: [] as Array<Record<string, unknown>>,
@@ -54,16 +54,16 @@ const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin } = vi.hoiste
   }
   const createAdminClient = vi.fn(() => ({ from: (n: 'teams' | 'minute_folders') => table(n) }))
   const refreshTeams = vi.fn(async () => true)
-  return { db, createAdminClient, refreshTeams, requireWorkspaceAdmin: vi.fn() }
+  return { db, createAdminClient, refreshTeams, requireWorkspaceAdmin: vi.fn(), getActor: vi.fn() }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin }))
+vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin, getActor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 
 import { addTeam, updateTeam, listTeamsAdmin } from '@/app/actions/teams'
 import { workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
-import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const WS_B = 'ws-b'
@@ -72,6 +72,7 @@ const OTHER_WS_ADMIN = makeActor({ userId: 'u-other', workspaceRoles: new Map([[
 const WS_MEMBER = makeActor({ userId: 'u-mem' })
 
 function signedInAs(a: Actor) {
+  getActor.mockResolvedValue(a)
   requireWorkspaceAdmin.mockImplementation(async (wid: string | null) => {
     const v = workspaceAdminVerdict(a, wid)
     return v === 'ok' ? { ok: true, actor: a } : { ok: false, error: v === 'missing' ? ERR_MISSING : ERR_DENIED }
@@ -90,6 +91,7 @@ describe('팀 관리 서버액션', () => {
     createAdminClient.mockClear()
     refreshTeams.mockClear()
     requireWorkspaceAdmin.mockReset()
+    getActor.mockReset()
   })
 
   it('addTeam: 워크스페이스 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉 — DB 를 건드리지 않는다', async () => {
@@ -139,6 +141,18 @@ describe('팀 관리 서버액션', () => {
     expect(await updateTeam('t-proj', { active: false })).toEqual({ ok: false, error: ERR_MISSING })
     expect(await updateTeam('no-such-id', { active: false })).toEqual({ ok: false, error: ERR_MISSING })
     expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(db.updated).toHaveLength(0)
+  })
+
+  // 행 조회보다 인증이 먼저 — 아니면 비로그인 호출자가 ERR_MISSING(없는 id)과 ERR_ANON(있는 id)으로 팀 id 존재를 가려낸다.
+  it('updateTeam: 비로그인은 행 조회 없이 ERR_ANON — 있는 id·없는 id 가 같은 응답, 권한 조회 실패는 ERR_LOOKUP', async () => {
+    db.teams = [{ id: 't1', code: 'PMO', project_id: null, workspace_id: WS }]
+    getActor.mockResolvedValue(null)
+    expect(await updateTeam('t1', { active: false })).toEqual({ ok: false, error: ERR_ANON })
+    expect(await updateTeam('no-such-id', { active: false })).toEqual({ ok: false, error: ERR_ANON })
+    getActor.mockRejectedValue(new Error('boom'))
+    expect(await updateTeam('t1', { active: false })).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(createAdminClient).not.toHaveBeenCalled()
     expect(db.updated).toHaveLength(0)
   })
 

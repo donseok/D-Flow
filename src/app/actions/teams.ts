@@ -6,8 +6,8 @@
 // 쓰기 후 refreshTeams()로 인메모리 캐시를 즉시 갱신한다(LLM 설정 액션과 동일 관례).
 
 import { revalidatePath } from 'next/cache'
-import { requireWorkspaceAdmin } from '@/lib/authz'
-import { ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
+import { getActor, requireWorkspaceAdmin } from '@/lib/authz'
+import { ERR_ANON, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
@@ -76,6 +76,14 @@ export async function updateTeam(
   id: string,
   patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number },
 ): Promise<TeamActionResult> {
+  // 인증을 행 조회보다 먼저 — 비로그인 호출자가 ERR_MISSING(없는 id)과 ERR_ANON(있는 id)으로 팀 id 존재를 가려내지 못하게.
+  let actor
+  try {
+    actor = await getActor()
+  } catch {
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  if (!actor) return { ok: false, error: ERR_ANON }
   // 판정 대상 워크스페이스는 행에서 읽는다(id 만 받는 액션). 쓰기 전 선행 조회라 실패는 중단(3원칙 ②),
   // 없거나 프로젝트 팀(0071 — 프로젝트 관리 화면 몫)이면 이 화면의 대상이 아니다(존재 은닉).
   const admin = createAdminClient()

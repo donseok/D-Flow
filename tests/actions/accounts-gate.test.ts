@@ -135,6 +135,21 @@ describe('계정 서버액션 권한 게이트', () => {
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
+  // 다른 워크스페이스의 프로젝트를 넣으면 createUser 까지 가서 RPC 가 거부하기 전에 계정이 생겼다 지워지고,
+  // RPC 의 PROJECT_NOT_FOUND / 거부 차이로 다른 워크스페이스 프로젝트의 존재가 샌다 — 쓰기 전에 ERR_MISSING 으로 끊는다.
+  it('다른 워크스페이스의 프로젝트를 넣으면 계정을 만들기 전에 ERR_MISSING(단건·일괄)', async () => {
+    const actor = makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS], ['p-b', WS_B]]) })
+    for (const a of [actor, makeSuperuser({ workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS], ['p-b', WS_B]]) })]) {
+      signedInAs(a)
+      const c = accountClient()
+      expect(await createAccount({ ...INPUT, projectId: 'p-b' })).toEqual({ ok: false, error: ERR_MISSING })
+      expect(await createAccount({ ...INPUT, projectId: 'p-unknown' })).toEqual({ ok: false, error: ERR_MISSING })
+      expect(await bulkCreateAccounts(WS, 'a@example.com, member, password1', 'p-b')).toEqual({ ok: false, error: ERR_MISSING, results: [] })
+      expect(c.createUser).not.toHaveBeenCalled()
+      expect(c.from).not.toHaveBeenCalled()
+    }
+  })
+
   it('워크스페이스가 비면 가드 전에 거부한다 — 슈퍼유저도(null 이면 가드가 통과시키므로)', async () => {
     signedInAs(SU)
     for (const wid of [null, undefined, '']) {
