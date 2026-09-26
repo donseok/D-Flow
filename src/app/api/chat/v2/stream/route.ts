@@ -21,6 +21,9 @@ export const dynamic = 'force-dynamic'
 
 const MAX_REQUEST_BYTES = 262_144
 
+/** 재라우팅 중 팀 캐시 조회 실패 표지 — 이것만 503 TEAMS_UNAVAILABLE 로 바꾼다(라우터 결함을 '팀 정보 없음'으로 가리지 않게). */
+class TeamCodesUnavailableError extends Error {}
+
 function requestId(): string {
   return `req_${crypto.randomUUID().replace(/-/g, '')}`
 }
@@ -83,14 +86,20 @@ export async function POST(req: NextRequest) {
   if (plannedRoute.kind === 'tools') {
     const allowed = new Set(allowedProjectIds)
     const teamCodesFor = (pid: string | null): readonly string[] => {
-      if (pid === null) return activeTeamCodesVisibleToSync(teamViewOfScope({ isSuperuser, workspaceIds, allowedProjectIds }))
-      return allowed.has(pid) ? activeTeamCodesForProjectSync(pid) : []
+      try {
+        if (pid === null) return activeTeamCodesVisibleToSync(teamViewOfScope({ isSuperuser, workspaceIds, allowedProjectIds }))
+        return allowed.has(pid) ? activeTeamCodesForProjectSync(pid) : []
+      } catch (e) {
+        throw new TeamCodesUnavailableError(e instanceof Error ? e.message : String(e))
+      }
     }
     try {
       route = routeChatRequest(request, now, { teamCodesFor })
     } catch (e) {
+      // 라우터 자체 결함은 그대로 올린다 — 팀 조회 실패만 아래 503 이다.
+      if (!(e instanceof TeamCodesUnavailableError)) throw e
       // 팀 마스터 cold(최초 로드 실패) — 빈 목록으로 폴백하면 팀 질문이 필터 없이 조용히 답해진다(3원칙).
-      console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
+      console.error('[chat-v2] 팀 목록 조회 실패:', e.message)
       return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
     }
   }

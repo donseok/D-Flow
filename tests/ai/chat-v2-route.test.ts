@@ -27,6 +27,15 @@ vi.mock('@/lib/teams/master', async () => ({
   ...(await import('../helpers/teams-master-mock')).teamsMasterMock(),
   ...teams,
 }))
+// 재라우팅의 503 범위(팀 조회 실패만)를 보려고 라우터를 감싼다 — 기본은 실제 라우터를 그대로 부른다(beforeEach).
+const router = vi.hoisted(() => ({
+  routeChatRequest: vi.fn<typeof import('@/lib/ai/chat/router').routeChatRequest>(),
+}))
+vi.mock('@/lib/ai/chat/router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/chat/router')>()),
+  routeChatRequest: router.routeChatRequest,
+}))
+const actualRouter = () => vi.importActual<typeof import('@/lib/ai/chat/router')>('@/lib/ai/chat/router')
 
 import { POST } from '@/app/api/chat/v2/stream/route'
 
@@ -59,8 +68,9 @@ function client(projects: string[], error: { message: string } | null = null) {
 }
 
 describe('POST /api/chat/v2/stream composition', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    router.routeChatRequest.mockImplementation((await actualRouter()).routeChatRequest)
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
     mocks.getSession.mockResolvedValue({ id: 'u1' })
@@ -168,6 +178,23 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(await response.json()).toMatchObject({ code: 'TEAMS_UNAVAILABLE' })
     expect(teams.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
     expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
+    expect(err).toHaveBeenCalledWith('[chat-v2] 팀 목록 조회 실패:', '팀 마스터를 아직 불러오지 못했습니다.')
+    err.mockRestore()
+  })
+
+  it('팀 조회가 아닌 재라우팅 결함은 TEAMS_UNAVAILABLE 로 덮지 않고 그대로 올린다', async () => {
+    const { routeChatRequest } = await actualRouter()
+    router.routeChatRequest.mockImplementation((input, now, opts) => {
+      if (opts) throw new Error('라우터 결함')
+      return routeChatRequest(input, now)
+    })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(POST(request({
+      projectId: 'p1', message: 'ERP 작업 현황 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul' },
+    }))).rejects.toThrow('라우터 결함')
+    expect(router.routeChatRequest).toHaveBeenCalledTimes(2)
+    expect(err).not.toHaveBeenCalled()
     err.mockRestore()
   })
 

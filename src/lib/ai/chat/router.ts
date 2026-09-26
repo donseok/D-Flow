@@ -208,23 +208,34 @@ function wbsStatusFrom(message: string, context: PageContextV1 | undefined): str
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** 메시지에서 등록된 팀 코드 하나를 뽑는다. 경계는 공백·문자열 끝이고 소비하지 않는다 — 'ERP MES' 에서 둘 다 찾아
- *  모호로 판정하기 위해서다(소비하는 경계면 MES 를 놓친다). 긴 코드부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저 잡힌다.
- *  대소문자는 무시해 찾되 저장된 정규 코드를 돌려준다. 서로 다른 코드가 둘 이상이거나, 대소문자만 다른 코드가 함께 등록돼
- *  어느 쪽인지 모르면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다 필터 없음이 정직하다. */
+/** 메시지에서 등록된 팀 코드 하나를 뽑는다. 뽑는 기준(엄격)은 양쪽 경계가 공백·문자열 끝이고 소비하지 않는다 — 'ERP MES' 에서
+ *  둘 다 찾아 모호로 판정하기 위해서다(소비하는 경계면 MES 를 놓친다). 긴 코드부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저
+ *  잡힌다. 대소문자는 무시해 찾되 저장된 정규 코드를 돌려준다. 서로 다른 코드가 둘 이상이거나, 대소문자만 다른 코드가 함께
+ *  등록돼 어느 쪽인지 모르면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다 필터 없음이 정직하다.
+ *  모호성은 오른쪽 경계 없이(느슨) 한 번 더 센다 — 엄격 경계만 보면 조사·구두점이 붙은 언급('ERP와 MES', 'ERP, MES',
+ *  'ERP 운영팀')을 못 보고 남은 하나로 엉뚱한 부분집합을 거른다. 느슨한 판정도 긴 코드부터라 같은 자리에서 엄격 일치보다 짧은
+ *  코드를 잡지 않는다('ERP 운영 현황' 은 양쪽 다 'ERP 운영'). 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8 몫이다. */
 export function teamFromCodes(message: string, codes: readonly string[]): string | undefined {
   const uniq = [...new Set(codes.map(c => c.trim()).filter(Boolean))]
   if (!uniq.length) return undefined
   const byLower = new Map<string, string[]>()
   for (const c of uniq) byLower.set(c.toLowerCase(), [...(byLower.get(c.toLowerCase()) ?? []), c])
   const alt = [...uniq].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
-  const found = new Set<string>()
-  for (const m of message.matchAll(new RegExp(`(?<=^|\\s)(?:${alt})(?=\\s|$)`, 'giu'))) {
-    const owners = byLower.get(m[0].toLowerCase()) ?? []
-    if (owners.length !== 1) return undefined
-    found.add(owners[0])
+  /** 경계에 걸린 코드의 정규 코드 집합. 대소문자만 다른 중복에 걸리면 null(모호). */
+  const ownersOf = (rightBoundary: string): Set<string> | null => {
+    const found = new Set<string>()
+    for (const m of message.matchAll(new RegExp(`(?<=^|\\s)(?:${alt})${rightBoundary}`, 'giu'))) {
+      const owners = byLower.get(m[0].toLowerCase()) ?? []
+      if (owners.length !== 1) return null
+      found.add(owners[0])
+    }
+    return found
   }
-  return found.size === 1 ? [...found][0] : undefined
+  const strict = ownersOf('(?=\\s|$)')
+  if (strict?.size !== 1) return undefined
+  const [team] = strict
+  const loose = ownersOf('')
+  return loose && [...loose].every(owner => owner === team) ? team : undefined
 }
 
 function teamFrom(message: string, context: PageContextV1 | undefined, teams: readonly string[]): string | undefined {

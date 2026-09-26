@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { routeChatRequest, type RouteChatOptions } from '@/lib/ai/chat/router'
+import { routeChatRequest, teamFromCodes, type RouteChatOptions } from '@/lib/ai/chat/router'
 import type { ChatRequestV2, PageContextV1 } from '@/lib/ai/chat/protocol'
 
 const NOW = new Date('2026-07-19T00:00:00.000Z')
@@ -493,10 +493,36 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     [['팀A'], 'ERP 작업 현황 알려줘'], // 미등록 — 도구 실패(TOOL_FAILED) 대신 필터 없음
     [['ops', 'OPS'], 'OPS 작업 현황 알려줘'], // 대소문자만 다른 중복 — 모호
     [[], 'ERP 작업 현황 알려줘'], // 목록이 비면 추출 0
+    [['ERP', 'MES'], 'ERP와 MES 작업 현황 알려줘'], // 조사가 붙은 코드도 모호성에는 센다
+    [['ERP', 'MES'], 'ERP, MES 작업 알려줘'], // 구두점이 붙은 코드도
+    [['ERP', 'ERP 운영'], 'ERP 운영팀 작업 현황 알려줘'], // 'ERP' 만 엄격 일치하지만 더 긴 'ERP 운영' 이 걸쳐 있다
   ])('%j 에서 "%s" 는 팀을 뽑지 않는다', (codes, message) => {
     const route = routeChatRequest(request(message, context('wbs')), NOW, withTeams(codes))
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls[0].args).not.toHaveProperty('team')
+  })
+
+  // 오른쪽 경계가 공백·끝뿐이면 조사·구두점이 붙은 코드를 못 보고, 남은 하나로 엉뚱한 부분집합을 거른다 — 모호성 판정은
+  // 오른쪽 경계 없이 한 번 더 센다. 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8(이름·별칭 인식) 몫이다.
+  it.each([
+    [['ERP', 'MES'], 'ERP와 MES 작업 현황'],
+    [['ERP', 'MES'], 'ERP, MES 작업'],
+    [['Research', 'R&D'], 'Research와 R&D'],
+    [['ERP', 'ERP 운영'], 'ERP 운영팀 현황'],
+    [['ERP 운영', 'ERP'], 'ERP 운영팀 현황'], // 입력 순서와 무관
+  ])('teamFromCodes: %j 에서 "%s" 는 모호하다', (codes, message) => {
+    expect(teamFromCodes(message, codes)).toBeUndefined()
+  })
+
+  it.each([
+    [['ERP', 'MES'], 'ERP 현황', 'ERP'],
+    [['ERP', 'ERP 운영'], 'ERP 운영 현황', 'ERP 운영'], // 느슨한 판정도 같은 자리에서 긴 코드를 먼저 잡는다
+    [['ERP 운영', 'ERP'], 'ERP 운영 현황', 'ERP 운영'],
+    [['ERP', 'ERP 운영'], 'ERP 현황', 'ERP'],
+    [['ERP', 'MES'], 'ERP 지연 작업과 ERP의 산출물', 'ERP'], // 같은 코드가 조사와 함께 또 나와도 하나다
+    [['R&D'], 'r&d 현황', 'R&D'],
+  ])('teamFromCodes: %j 에서 "%s" → %s', (codes, message, team) => {
+    expect(teamFromCodes(message, codes)).toBe(team)
   })
 
   it('옵션이 없으면 팀을 뽑지 않는다 — 원본 5팀을 기본값으로 되살리지 않는다', () => {
