@@ -12,6 +12,7 @@ export const dashboardKo = {
   // 빈 상태
   'dash.emptyTitle': '분석할 WBS 데이터가 없습니다',
   'dash.emptyDesc': '설정에서 WBS 엑셀을 가져오면 진행률·팀별 현황·지연 작업을 자동으로 분석합니다.',
+  'dash.wbsEmpty': 'WBS 가 아직 없습니다 — WBS 화면에서 추가하거나 가져오세요.',
   // 프로젝트 일정
   'dash.actualLabel': '실적',
   'dash.plannedLabel': '계획',
@@ -37,6 +38,7 @@ export const dashboardKo = {
   'dash.trend.title': '진척현황',
   'dash.trend.empty': '일정 정보가 없어 트렌드를 그릴 수 없습니다. 프로젝트 기간 또는 WBS 일정을 설정하세요.',
   'dash.trend.noHistory': '실적 이력은 지금부터 기록됩니다 — WBS 수정·대시보드 조회 시 자동 축적',
+  'dash.trend.historyFailed': '진척 이력을 불러오지 못해 추세선을 그리지 않았습니다.',
   'dash.spi.title': '속도 지표',
   'dash.spi.current': '현재 SPI',
   'dash.spi.velocity': '주간 증분',

@@ -9,9 +9,10 @@ import { MiniEmpty } from './bits'
 
 const W = 640, H = 240, PL = 34, PR = 12, PT = 12, PB = 26
 
-/** S-Curve — 계획 누적곡선(점선) vs 실적선(실선, 도메인이 항상 2점 이상 보장) + 오늘 마커. 자체 SVG(의존성 0). */
-export async function TrendChart({ model, today }: {
-  model: TrendModel; today: string
+/** S-Curve — 계획 누적곡선(점선) vs 실적선(실선, 도메인이 항상 2점 이상 보장) + 오늘 마커. 자체 SVG(의존성 0).
+ *  historyFailed = 진척 이력 조회 실패. 그때 model.actualSeries 는 이력 0건으로 합성된 선이라 그리지 않고 사유를 보인다. */
+export async function TrendChart({ model, today, historyFailed = false }: {
+  model: TrendModel; today: string; historyFailed?: boolean
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
@@ -29,7 +30,8 @@ export async function TrendChart({ model, today }: {
   const y = (pct: number) => PT + (1 - pct / 100) * (H - PT - PB)
   const pts = (s: TrendPoint[]) => s.map(p => `${x(p.date).toFixed(1)},${y(p.pct).toFixed(1)}`).join(' ')
   const todayIn = today >= model.axisStart && today <= model.axisEnd
-  const lastActual = model.actualSeries[model.actualSeries.length - 1]
+  const actualSeries = historyFailed ? [] : model.actualSeries
+  const lastActual = actualSeries[actualSeries.length - 1]
 
   const legend = (
     <div className="flex items-center gap-3 text-[10px] text-ink-subtle">
@@ -52,14 +54,16 @@ export async function TrendChart({ model, today }: {
             <line x1={x(today)} x2={x(today)} y1={PT} y2={H - PB} className="stroke-delayed" strokeWidth={1} strokeDasharray="2 3" />
           )}
           <polyline points={pts(model.plannedSeries)} fill="none" className="stroke-ink-muted" strokeWidth={1.5} strokeDasharray="4 4" />
-          {model.actualSeries.length > 1 && (
-            <polyline points={pts(model.actualSeries)} fill="none" className="stroke-brand" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          {actualSeries.length > 1 && (
+            <polyline points={pts(actualSeries)} fill="none" className="stroke-brand" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
           )}
           {lastActual && <circle cx={x(lastActual.date)} cy={y(lastActual.pct)} r={4} className="fill-brand" />}
           <text x={PL} y={H - 8} fontSize={9} className="fill-ink-subtle">{fmtDate(model.axisStart)}</text>
           <text x={W - PR} y={H - 8} textAnchor="end" fontSize={9} className="fill-ink-subtle">{fmtDate(model.axisEnd)}</text>
         </svg>
-        {!model.hasHistory && <div className="text-[11px] text-ink-subtle">{tr('dash.trend.noHistory')}</div>}
+        {historyFailed
+          ? <p role="alert" className="text-[11px] text-delayed">{tr('dash.trend.historyFailed')}</p>
+          : !model.hasHistory && <div className="text-[11px] text-ink-subtle">{tr('dash.trend.noHistory')}</div>}
       </div>
     </SectionCard>
   )

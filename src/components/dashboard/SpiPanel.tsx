@@ -23,8 +23,11 @@ const gy = (a: number, r: number) => +(CY - r * Math.sin(a)).toFixed(1)
 const arcPath = (from: number, to: number) =>
   `M ${gx(angleOf(from), R)} ${gy(angleOf(from), R)} A ${R} ${R} 0 0 1 ${gx(angleOf(to), R)} ${gy(angleOf(to), R)}`
 
-/** SPI 반원 게이지 + 스파크라인 + 현재 SPI · 주간 증분 · 현재 편차 스탯. */
-export async function SpiPanel({ model, variance }: { model: TrendModel; variance: number }) {
+/** SPI 반원 게이지 + 스파크라인 + 현재 SPI · 주간 증분 · 현재 편차 스탯.
+ *  historyFailed = 진척 이력 조회 실패 — 이력으로 그리는 추세 줄(스파크라인) 대신 사유를 보인다. 현재 편차는 계획·실적으로 계산하므로 유지. */
+export async function SpiPanel({ model, variance, historyFailed = false }: {
+  model: TrendModel; variance: number; historyFailed?: boolean
+}) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
   const fmtPp = (n: number) => `${formatPp1(n)}%p`
@@ -64,7 +67,9 @@ export async function SpiPanel({ model, variance }: { model: TrendModel; varianc
 
   // 스파크라인 — SPI 0.5~1.5 클램프, 1.0 기준선
   const s = model.spiSeries
-  const spark = s.length >= 2 ? (() => {
+  const spark = historyFailed ? (
+    <p role="alert" className="text-[11px] text-delayed">{tr('dash.trend.historyFailed')}</p>
+  ) : s.length >= 2 ? (() => {
     const sx = (i: number) => 4 + (i / (s.length - 1)) * 192
     const sy = (val: number) => 4 + (1 - (Math.min(1.5, Math.max(0.5, val)) - 0.5)) * 40
     return (

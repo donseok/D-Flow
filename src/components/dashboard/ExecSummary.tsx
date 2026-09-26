@@ -1,9 +1,6 @@
-import Link from 'next/link'
-import { Pin } from 'lucide-react'
-import type { Announcement, ComputedItem } from '@/lib/domain/types'
+import type { ComputedItem } from '@/lib/domain/types'
 import { buildExecSummary, type Signal } from '@/lib/domain/dashboard'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
-import { sortAnnouncements, isPublishedNow, ANNOUNCEMENT_META } from '@/lib/domain/announcements'
 import { getServerLocale } from '@/lib/i18n/server'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { fmtDate } from '@/components/wbs/shared'
@@ -20,7 +17,7 @@ const statusWord = (sig: Signal, tr: (k: DictKey) => string): string =>
   sig === 'neutral' ? tr('dash.exec.early') : tr(VERDICT_KEY[sig])
 
 export async function ExecSummary({
-  items, projectId, projectName, projectDescription, startDate, endDate, today, announcements,
+  items, projectId, projectName, projectDescription, startDate, endDate, today,
   milestoneKeywords,
   canGenerateBrief = false,
 }: {
@@ -31,7 +28,6 @@ export async function ExecSummary({
   startDate: string | null
   endDate: string | null
   today: string
-  announcements: Announcement[]
   /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — page.tsx 가 getProjectConfig 로 주입. */
   milestoneKeywords: readonly string[]
   /** 보고서 모달의 AI 브리핑 인라인 생성 권한(프로젝트 관리자 이상). 기본 false = fail-closed. */
@@ -66,8 +62,6 @@ export async function ExecSummary({
     ? `${s.milestone.name}${s.milestone.date ? ` · ${fmtDate(s.milestone.date)}` : ''}`
     : null
 
-  const notice = sortAnnouncements(announcements.filter(a => isPublishedNow(a, today)))[0] ?? null
-
   return (
     <section className="card p-5 sm:p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -100,16 +94,6 @@ export async function ExecSummary({
             signal={s.milestone.signal} statusText={statusWord(s.milestone.signal, tr)} />
         </div>
       </div>
-
-      {notice && (
-        <Link href={`/p/${projectId}/announcements`}
-          className="mt-4 flex items-center gap-2.5 rounded-xl border border-line bg-surface-2/40 px-3.5 py-2.5 transition hover:bg-surface-2">
-          <span className={`chip shrink-0 ${ANNOUNCEMENT_META[notice.category].chip}`}>{tr(ANNOUNCEMENT_META[notice.category].labelKey)}</span>
-          {notice.isPinned && <Pin className="h-3.5 w-3.5 shrink-0 text-accent-warning" />}
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink" title={notice.title}>{notice.title}</span>
-          <span className="shrink-0 text-[11px] text-ink-subtle">{tr('common.viewAll')}</span>
-        </Link>
-      )}
     </section>
   )
 }

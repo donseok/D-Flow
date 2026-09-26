@@ -8,8 +8,12 @@ import { teamsForProjectSync } from '@/lib/teams/master'
 
 type Sb = Awaited<ReturnType<typeof createServerClient>>
 
+export const ERR_SNAPSHOTS_LOAD = '진척 이력을 불러오지 못했습니다.'
+
 /** 진척 스냅샷 조회(날짜 오름차순). numeric 컬럼은 문자열로 올 수 있어 Number 변환. */
-export async function getSnapshots(projectId: string): Promise<SnapshotPoint[]> {
+export async function getSnapshots(
+  projectId: string,
+): Promise<{ ok: true; rows: SnapshotPoint[] } | { ok: false; error: string }> {
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('wbs_progress_snapshots')
@@ -17,17 +21,22 @@ export async function getSnapshots(projectId: string): Promise<SnapshotPoint[]> 
     .eq('project_id', projectId)
     .order('snap_date', { ascending: true })
 
-  // 조회 실패를 '이력 0건'으로 위장하면 buildTrend가 (축 시작,0)→(오늘,실적) 추세선을 **합성**해
-  // 정상 차트처럼 보인다 — 임원 의사결정에 쓰이는 화면이라 조용한 거짓 차트는 허용 불가.
-  // 다만 throw 하면 대시보드 전체가 죽으므로(같은 페이지의 다른 카드까지 동반 사망) 폴백은 유지하고
-  // 원인은 로그로 남긴다 — recordProgressSnapshot의 '로그만 남기고 계속' 관례와 동일.
-  if (error) console.error('[getSnapshots] 진척 스냅샷 조회 실패(추세선이 합성됨):', error.message)
+  // 실패를 결과로 돌려준다 — 추세선을 합성하지 않게 화면이 이력 실패를 안다.
+  // ('이력 0건'으로 위장하면 buildTrend 가 (축 시작,0)→(오늘,실적) 선을 합성해 정상 차트처럼 보인다.
+  //  throw 하지 않는 이유: 같은 페이지의 다른 카드까지 동반 사망한다.)
+  if (error) {
+    console.error('[getSnapshots] 진척 스냅샷 조회 실패:', error.message)
+    return { ok: false, error: ERR_SNAPSHOTS_LOAD }
+  }
 
-  return (data ?? []).map((r: Record<string, unknown>) => ({
-    date: r.snap_date as string,
-    actual: Number(r.actual_pct),
-    planned: Number(r.planned_pct),
-  }))
+  return {
+    ok: true,
+    rows: (data ?? []).map((r: Record<string, unknown>) => ({
+      date: r.snap_date as string,
+      actual: Number(r.actual_pct),
+      planned: Number(r.planned_pct),
+    })),
+  }
 }
 
 /** 오늘(KST)의 전체 실적/계획%를 upsert. 본 작업을 실패시키지 않도록 오류는 삼키고 로그만 남긴다.

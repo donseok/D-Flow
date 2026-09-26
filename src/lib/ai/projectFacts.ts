@@ -43,7 +43,7 @@ export interface ProjectFactsSource {
 /** 대시보드와 동일 소스 1회 병렬 로드. 프로젝트 행이 없으면(비멤버 RLS 포함) null. */
 export async function loadProjectFacts(projectId: string): Promise<ProjectFactsSource | null> {
   const sb = await createServerClient()
-  const [{ items, holidays, today }, snapshots, meetingData, minuteSignals, project, config] = await Promise.all([
+  const [{ items, holidays, today }, snapRes, meetingData, minuteSignals, project, config] = await Promise.all([
     getComputedWbs(projectId),
     getSnapshots(projectId),
     getProjectMeetingData(projectId),
@@ -53,6 +53,8 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
   ])
   if (project.error) throw new Error(`[projectFacts] 프로젝트 조회 실패: ${project.error.message}`)
   if (!project.data) return null
+  // 진척 이력 실패를 '이력 0건'으로 브리핑하지 않는다 — 호출측이 'unavailable' 로 강등한다.
+  if (!snapRes.ok) throw new Error('[projectFacts] ' + snapRes.error)
   // 팀 캐시는 service_role 이라 프로젝트 행을 RLS 로 확인한 뒤에 읽는다. 캐시 미로드는 throw — 호출측이 'unavailable' 로 강등한다.
   const teams = activeTeamCodesForProjectSync(projectId)
   return {
@@ -64,7 +66,7 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     holidays,
     todayWbs: today,
     realToday: seoulToday(),
-    snapshots,
+    snapshots: snapRes.rows,
     minuteSignals,
     meetings: meetingData.meetings,
     meetingExceptions: meetingData.exceptions,

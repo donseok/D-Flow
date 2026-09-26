@@ -48,6 +48,7 @@ export const commonKo = {
   'common.close': '닫기',
   'common.done': '완료',
   'common.confirm': '확인',
+  'common.retry': '다시 시도',
   'common.loading': '불러오는 중…',
   'common.none': '없음',
   // 작업 상태 라벨 — 표시 계층 전용. src/lib/domain의 한국어 상수(로직 키)는 절대 바꾸지 말 것.

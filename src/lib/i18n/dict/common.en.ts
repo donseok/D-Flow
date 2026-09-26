@@ -48,6 +48,7 @@ export const commonEn: Record<keyof typeof commonKo, string> = {
   'common.close': 'Close',
   'common.done': 'Done',
   'common.confirm': 'Confirm',
+  'common.retry': 'Retry',
   'common.loading': 'Loading…',
   'common.none': 'None',
   'status.not_started': 'Not started',

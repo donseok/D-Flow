@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   project: { data: { name: 'Acme', start_date: null, end_date: null } as Record<string, unknown> | null, error: null },
   activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : ['B팀'])),
+  getSnapshots: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
-vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: vi.fn(async () => []) }))
+vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn(async () => ({ meetings: [], exceptions: [] })) }))
 vi.mock('@/lib/data/minutes', () => ({ getProjectMinuteSignals: vi.fn(async () => []) }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
@@ -41,5 +42,12 @@ describe('loadProjectFacts — 팀 축은 대상 프로젝트의 팀', () => {
   it('팀 캐시 미로드는 throw 로 올린다 — 빈 팀으로 브리핑을 만들지 않는다(호출측이 unavailable 로 강등)', async () => {
     mocks.activeTeamCodesForProjectSync.mockImplementationOnce(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
     await expect(loadProjectFacts('p1')).rejects.toThrow(/팀 마스터/)
+  })
+})
+
+describe('loadProjectFacts — 조회 실패는 빈 데이터로 브리핑하지 않는다', () => {
+  it('진척 이력 조회 실패는 throw 로 올린다(호출측이 unavailable 로 강등)', async () => {
+    mocks.getSnapshots.mockResolvedValueOnce({ ok: false, error: '진척 이력을 불러오지 못했습니다.' })
+    await expect(loadProjectFacts('p1')).rejects.toThrow('[projectFacts] 진척 이력을 불러오지 못했습니다.')
   })
 })

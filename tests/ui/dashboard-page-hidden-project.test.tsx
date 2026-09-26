@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   DashboardView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
   after: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
+  getSnapshots: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
+  getIssuesForDashboard: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
 }))
 vi.mock('@/lib/authz', () => ({
   getActorViewState: vi.fn(async () => mocks.state),
@@ -19,10 +21,10 @@ vi.mock('@/lib/authz', () => ({
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
 vi.mock('next/server', () => ({ after: mocks.after }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
-vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: vi.fn(async () => []), recordProgressSnapshot: vi.fn() }))
+vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots, recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: vi.fn(async () => []) }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn(async () => ({ meetings: [], exceptions: [] })) }))
-vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: vi.fn(async () => []) }))
+vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: mocks.getIssuesForDashboard }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
@@ -58,5 +60,16 @@ describe('dashboard 페이지 — 숨은 프로젝트', () => {
     expect(mocks.notFound).not.toHaveBeenCalled()
     expect(mocks.DashboardView).toHaveBeenCalled()
     expect(mocks.after).toHaveBeenCalled()
+    expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({ issues: [], snapshots: [], historyFailed: false })
+  })
+})
+
+describe('dashboard 페이지 — 조회 실패를 뷰에 구분해 넘긴다', () => {
+  it('이슈 실패는 issues=null, 진척 이력 실패는 historyFailed=true(빈 이력)', async () => {
+    mocks.state = { actor: makeMemberActor('p1'), degraded: false }
+    mocks.getIssuesForDashboard.mockResolvedValueOnce({ ok: false, error: '이슈를 불러오지 못했습니다.' })
+    mocks.getSnapshots.mockResolvedValueOnce({ ok: false, error: '진척 이력을 불러오지 못했습니다.' })
+    await render()
+    expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({ issues: null, snapshots: [], historyFailed: true })
   })
 })
