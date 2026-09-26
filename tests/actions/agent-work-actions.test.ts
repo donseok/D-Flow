@@ -45,6 +45,8 @@ import { emitNotification } from '@/lib/notify/emit'
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
+/** 화면이 본 최신 completion 보고 — 승인·반려는 이 id 를 서버의 최신과 대조한다(H1 Task 11). */
+const R9 = '99999999-9999-4999-8999-999999999999'
 
 type Resp = { data?: unknown; error?: { message: string } | null }
 /** 전이 RPC 기본 응답 — 부수효과(스냅샷·도달 알림) 없는 성공. 케이스마다 queues.rpc 로 덮는다. */
@@ -88,12 +90,12 @@ beforeEach(() => {
   mocks.isSubtreeManager.mockResolvedValue(false)
 })
 
-const REPORTS = () => [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }] // 최신 completion, review 기록
+const REPORTS = () => [{ data: { id: R9 } }, { data: [{ id: R9 }] }] // 최신 completion, review 기록
 
 describe('approveAgentCompletion', () => {
   const ORDER = { id: O1, project_id: P1, status: 'reported', wbs_item_id: W1 }
   it('orderId 형식 검증 — 비형식 거부', async () => {
-    const r = await approveAgentCompletion('invalid-id')
+    const r = await approveAgentCompletion('invalid-id', R9)
     expect(r.ok).toBe(false)
     expect(r.error).toBe('잘못된 요청입니다.')
   })
@@ -103,7 +105,7 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', stage: 'xx', actual_pct: 100, stage_changed: true, actual_changed: true } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r).toEqual({ ok: true })
     expect(rpcCalls).toEqual([expect.objectContaining({ p_event: 'approve', p_order_id: O1, p_actor: 'admin-1' })])
     expect(captured.agent_work_reports?.[0]).toMatchObject({ review_action: 'approve', reviewed_by: 'admin-1' })
@@ -117,26 +119,27 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', stage: 'xx', actual_pct: 100, stage_changed: true, actual_changed: false } }],
     })
-    expect((await approveAgentCompletion(O1)).ok).toBe(true)
+    expect((await approveAgentCompletion(O1, R9)).ok).toBe(true)
     expect(mocks.recordProgressSnapshot).not.toHaveBeenCalled()
   })
   it('경합(RPC conflict) → 재시도 문구, review 기록·알림 없음 — CAS 가 지면 아무것도 쓰이지 않는다', async () => {
     const { captured } = admin({
       agent_work_orders: [{ data: ORDER }],
+      agent_work_reports: REPORTS(),
       rpc: [{ data: { ok: false, conflict: true, order_status: 'claimed' } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r).toEqual({ ok: false, error: '상태가 바뀌어 승인하지 못했습니다. 다시 시도하세요.' })
     expect(captured.agent_work_reports).toBeUndefined()
     expect(emitNotification).not.toHaveBeenCalled()
   })
   it('RPC 오류 → 그 사유를 그대로 알린다', async () => {
-    admin({ agent_work_orders: [{ data: ORDER }], rpc: [{ error: { message: 'db down' } }] })
-    expect(await approveAgentCompletion(O1)).toEqual({ ok: false, error: '전이 실패: db down' })
+    admin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: REPORTS(), rpc: [{ error: { message: 'db down' } }] })
+    expect(await approveAgentCompletion(O1, R9)).toEqual({ ok: false, error: '전이 실패: db down' })
   })
   it('wbs_item 삭제된 주문은 승인 불가 — 사람이 취소로 정리', async () => {
     const { rpcCalls } = admin({ agent_work_orders: [{ data: { ...ORDER, wbs_item_id: null } }] })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(false)
     expect(rpcCalls).toHaveLength(0)
   })
@@ -146,7 +149,7 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       wbs_items: [{ data: { name: '로그인', assignee_member_id: 'm-1' } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(emitNotification).toHaveBeenCalledWith(expect.objectContaining({
       type: 'work.approved', projectId: P1, actorUserId: 'admin-1',
@@ -160,7 +163,7 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       wbs_items: [{ data: { name: '로그인', assignee_member_id: null } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(emitNotification).not.toHaveBeenCalled()
   })
@@ -172,7 +175,7 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', skipped: 'parent' } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(r.warning).toContain('하위 항목')
   })
@@ -182,7 +185,7 @@ describe('approveAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', skipped: 'something_new' } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(r.warning).toContain('something_new')
   })
@@ -192,7 +195,7 @@ describe('approveAgentCompletion', () => {
     mocks.myMemberIds.mockResolvedValue(['anc-member'])
     mocks.isSubtreeManager.mockResolvedValue(true)
     const { rpcCalls } = admin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: REPORTS() })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(mocks.isSubtreeManager).toHaveBeenCalledWith(
       expect.anything(), { itemId: W1, projectId: P1, myMemberIds: ['anc-member'] },
@@ -207,7 +210,7 @@ describe('approveAgentCompletion', () => {
     mocks.myMemberIds.mockResolvedValue(['anc-member'])
     mocks.isSubtreeManager.mockRejectedValue(new Error('조상 조회 실패: boom'))
     const { rpcCalls } = admin({ agent_work_orders: [{ data: ORDER }] })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(false)
     expect(rpcCalls).toHaveLength(0)
   })
@@ -218,7 +221,7 @@ describe('approveAgentCompletion', () => {
       wbs_items: [{ data: { name: '로그인', assignee_member_id: 'm-1' } }], // 알림용 항목 조회
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', stage: 'xx', stage_changed: true, reached_first: false } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(true)
     expect(emitNotification).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'work.unblocked' }))
     expect(emitNotification).toHaveBeenCalledWith(expect.objectContaining({ type: 'work.approved' }))
@@ -228,24 +231,24 @@ describe('approveAgentCompletion', () => {
 describe('rejectAgentCompletion', () => {
   const ORDER = { id: O1, project_id: P1, status: 'reported', wbs_item_id: W1 }
   it('orderId 형식 검증 — 비형식 거부', async () => {
-    const r = await rejectAgentCompletion('invalid-id', '사유')
+    const r = await rejectAgentCompletion('invalid-id', '사유', R9)
     expect(r.ok).toBe(false)
     expect(r.error).toBe('잘못된 요청입니다.')
   })
   it('사유 없으면 거부', async () => {
-    const r = await rejectAgentCompletion(O1, '   ')
+    const r = await rejectAgentCompletion(O1, '   ', R9)
     expect(r.ok).toBe(false)
   })
   it('성공 시 전이 RPC(reject 사건 — 단계 ip·실적 표.rw) + review 기록(사유 보존)', async () => {
     const { captured, rpcCalls } = admin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: REPORTS() })
-    const r = await rejectAgentCompletion(O1, '거절 사유')
+    const r = await rejectAgentCompletion(O1, '거절 사유', R9)
     expect(r.ok).toBe(true)
     expect(rpcCalls).toEqual([expect.objectContaining({ p_event: 'reject', p_order_id: O1 })])
     expect(captured.agent_work_reports?.[0]).toMatchObject({ review_action: 'reject', review_note: '거절 사유' })
   })
   it('경합(RPC conflict) → 반려 실패 문구, review 기록 없음', async () => {
-    const { captured } = admin({ agent_work_orders: [{ data: ORDER }], rpc: [{ data: { ok: false, conflict: true, order_status: 'approved' } }] })
-    expect(await rejectAgentCompletion(O1, '사유')).toEqual({ ok: false, error: '상태가 바뀌어 반려하지 못했습니다.' })
+    const { captured } = admin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: REPORTS(), rpc: [{ data: { ok: false, conflict: true, order_status: 'approved' } }] })
+    expect(await rejectAgentCompletion(O1, '사유', R9)).toEqual({ ok: false, error: '상태가 바뀌어 반려하지 못했습니다.' })
     expect(captured.agent_work_reports).toBeUndefined()
   })
   it('배정자에게 work.rejected 발행', async () => {
@@ -254,7 +257,7 @@ describe('rejectAgentCompletion', () => {
       agent_work_reports: REPORTS(),
       wbs_items: [{ data: { name: '로그인', assignee_member_id: 'm-1' } }],
     })
-    const r = await rejectAgentCompletion(O1, '거절 사유')
+    const r = await rejectAgentCompletion(O1, '거절 사유', R9)
     expect(r.ok).toBe(true)
     expect(emitNotification).toHaveBeenCalledWith(expect.objectContaining({
       type: 'work.rejected', projectId: P1, actorUserId: 'admin-1',
@@ -516,10 +519,10 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     asMember()
     admin({
       agent_work_orders: [{ data: REPORTED }, { data: [{ id: O1 }] }],
-      agent_work_reports: [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }],
+      agent_work_reports: [{ data: { id: R9 } }, { data: [{ id: R9 }] }],
       wbs_items: [{ data: { name: '로그인', assignee_member_id: 'm-1', stage: null, external_ref: null } }],
     })
-    const r = await rejectAgentCompletion(O1, '내가 다시 볼게요')
+    const r = await rejectAgentCompletion(O1, '내가 다시 볼게요', R9)
     expect(r.ok).toBe(true)
     expect(mocks.requireDelegationRight).toHaveBeenCalledWith(W1)
     expect(mocks.requireProjectAdmin).not.toHaveBeenCalled()
@@ -529,7 +532,7 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
     mocks.requireProjectMember.mockResolvedValue({ ok: false, error: '멤버 아님' })
     const { captured } = admin({ agent_work_orders: [{ data: REPORTED }] })
-    expect(await rejectAgentCompletion(O1, '사유')).toEqual(DENY)
+    expect(await rejectAgentCompletion(O1, '사유', R9)).toEqual(DENY)
     expect(captured.agent_work_orders).toBeUndefined()
   })
   it('반려: requireDelegationRight 가 거부해도 서브트리 관리자면 허용(트랙 B)', async () => {
@@ -540,16 +543,16 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     mocks.isSubtreeManager.mockResolvedValue(true)
     admin({
       agent_work_orders: [{ data: REPORTED }, { data: [{ id: O1 }] }],
-      agent_work_reports: [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }],
+      agent_work_reports: [{ data: { id: R9 } }, { data: [{ id: R9 }] }],
     })
-    const r = await rejectAgentCompletion(O1, '사유')
+    const r = await rejectAgentCompletion(O1, '사유', R9)
     expect(r.ok).toBe(true)
   })
   it('승인 취소: 담당자 본인도 가능(requireDelegationRight), 관리자 가드 미사용', async () => {
     asMember()
     admin({
       agent_work_orders: [{ data: APPROVED }, { data: [{ id: O1 }] }],
-      agent_work_reports: [{ data: { id: 'r9', reviewed_at: null } }, { data: [{ id: 'r9' }] }],
+      agent_work_reports: [{ data: { id: R9, reviewed_at: null } }, { data: [{ id: R9 }] }],
       wbs_items: [{ data: { name: '로그인', assignee_member_id: 'm-1', stage: 'xx', external_ref: null, dev_workflow: true } }],
     })
     const r = await unapproveAgentCompletion(O1)
@@ -592,8 +595,8 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     expect(rpcCalls).toEqual([expect.objectContaining({ p_event: 'rework', p_actor: 'anc-1' })])
   })
   it('WBS 항목이 삭제된 주문(wbs_item_id 없음)은 담당자를 특정 못 해 관리자만 — requireDelegationRight 대신 requireProjectAdmin', async () => {
-    admin({ agent_work_orders: [{ data: { ...REPORTED, wbs_item_id: null } }, { data: [{ id: O1 }] }], agent_work_reports: [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }] })
-    const r = await rejectAgentCompletion(O1, '사유')
+    admin({ agent_work_orders: [{ data: { ...REPORTED, wbs_item_id: null } }, { data: [{ id: O1 }] }], agent_work_reports: [{ data: { id: R9 } }, { data: [{ id: R9 }] }] })
+    const r = await rejectAgentCompletion(O1, '사유', R9)
     expect(mocks.requireProjectAdmin).toHaveBeenCalledWith(P1)
     expect(mocks.requireDelegationRight).not.toHaveBeenCalled()
     expect(r.ok).toBe(true)
@@ -602,7 +605,7 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 필요' })
     mocks.requireProjectMember.mockResolvedValue({ ok: false, error: '관리자 필요' })
     admin({ agent_work_orders: [{ data: REPORTED }] })
-    expect(await approveAgentCompletion(O1)).toEqual({ ok: false, error: '관리자 필요' })
+    expect(await approveAgentCompletion(O1, R9)).toEqual({ ok: false, error: '관리자 필요' })
     expect(mocks.requireDelegationRight).not.toHaveBeenCalled()
   })
   it('승인: 리프 본인 담당자(멤버)여도 거부 — isSubtreeManager 는 조상만 보고 리프 자신은 안 본다(분리 원칙)', async () => {
@@ -611,7 +614,7 @@ describe('검토 계열 자격(2026-09-14 "담당자 본인도 허용") — 반�
     mocks.myMemberIds.mockResolvedValue(['leaf-member']) // 리프 자신의 담당자 id — 조상 담당자가 아니다
     mocks.isSubtreeManager.mockResolvedValue(false)
     admin({ agent_work_orders: [{ data: REPORTED }] })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r.ok).toBe(false)
     expect(mocks.requireDelegationRight).not.toHaveBeenCalled()
   })

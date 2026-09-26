@@ -40,6 +40,12 @@ export const AGENT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 export const AGENT_LINKS_MAX = 20
 export { UUID_RE, isUuidLike } from './validate'
 
+/**
+ * 승인·반려가 본 보고보다 새 완료 보고가 있을 때의 거부 문구(H1 Task 11). 액션 모듈('use server')은 async 함수만
+ * 내보낼 수 있어 여기 둔다 — 화면·테스트가 같은 문자열을 본다.
+ */
+export const ERR_REPORT_STALE = '보고가 갱신되었습니다 — 새 내용을 확인한 뒤 다시 처리하세요.'
+
 const TRANSITIONS: Record<AgentOrderStatus, readonly AgentOrderStatus[]> = {
   ready: ['claimed', 'cancelled'],
   claimed: ['ready', 'reported', 'cancelled'],

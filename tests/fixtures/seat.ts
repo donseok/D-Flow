@@ -9,7 +9,7 @@ export function makeSeat(overrides: Partial<Seat> = {}): Seat {
     state: 'READY', phase: 'design', anim: 'typing', character: 'cat',
     agent: null, progress: 0,
     lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null,
-    note: null, rejected: false, reviewNote: null,
+    note: null, rejected: false, reviewNote: null, reportId: null,
     resumeRequestedAt: null, resumeRequestedHost: null,
     waitReason: null,
     canManage: false, assigneeMine: false,

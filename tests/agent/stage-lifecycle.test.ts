@@ -40,6 +40,7 @@ const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
 const DEP_ID = '44444444-4444-4444-8444-444444444444'
 const DEP_REF = 'MES/TSK-01-00'
+const R9 = '99999999-9999-4999-8999-999999999999' // 화면이 본 최신 completion 보고
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
@@ -216,11 +217,11 @@ describe('승인·반려 액션 → 전이 RPC(approve·reject 사건)', () => {
   it('승인 → approve 사건 한 번(단계 xx·실적 100 은 DB 가 함께 쓴다), 항목을 직접 쓰지 않는다', async () => {
     const { admin, captured } = useAdmin({
       agent_work_orders: [{ data: ORDER }],                                   // loadOrderForAdmin 조회
-      agent_work_reports: [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }], // 최신 completion, review 기록
+      agent_work_reports: [{ data: { id: R9 } }, { data: [{ id: R9 }] }],   // 최신 completion 대조, review 기록
       wbs_items: [{ data: { name: '항목1', assignee_member_id: null } }],      // 알림용 조회(배정자 없음)
       rpc: [{ data: { ...RPC_OK, order_status: 'approved', stage: 'xx', actual_pct: 100, stage_changed: true, actual_changed: true } }],
     })
-    const r = await approveAgentCompletion(O1)
+    const r = await approveAgentCompletion(O1, R9)
     expect(r).toEqual({ ok: true })
     expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({ p_event: 'approve', p_order_id: O1, p_actor: 'admin-1' }))
     expect((captured.wbs_items ?? []).filter((c) => c.op === 'update')).toHaveLength(0)
@@ -230,18 +231,19 @@ describe('승인·반려 액션 → 전이 RPC(approve·reject 사건)', () => {
   it('반려 → reject 사건 한 번(단계 ip·실적 표.rw)', async () => {
     const { admin } = useAdmin({
       agent_work_orders: [{ data: ORDER }],
-      agent_work_reports: [{ data: { id: 'r9' } }, { data: [{ id: 'r9' }] }],
+      agent_work_reports: [{ data: { id: R9 } }, { data: [{ id: R9 }] }],
       wbs_items: [{ data: { name: '항목1', assignee_member_id: null } }],
     })
-    const r = await rejectAgentCompletion(O1, '보완 필요')
+    const r = await rejectAgentCompletion(O1, '보완 필요', R9)
     expect(r.ok).toBe(true)
     expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({ p_event: 'reject', p_order_id: O1 }))
   })
 
   it('전이 RPC 가 오류면 승인 실패로 알린다 — 주문·단계·실적이 한 트랜잭션이라 반쪽 상태가 없다', async () => {
-    const { admin } = useAdmin({ agent_work_orders: [{ data: ORDER }], rpc: [{ error: { message: 'db down' } }] })
-    const r = await approveAgentCompletion(O1)
+    const { captured } = useAdmin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: [{ data: { id: R9 } }], rpc: [{ error: { message: 'db down' } }] })
+    const r = await approveAgentCompletion(O1, R9)
     expect(r).toEqual({ ok: false, error: '전이 실패: db down' })
-    expect(admin.from.mock.calls.map((c) => c[0])).not.toContain('agent_work_reports')
+    // 보고는 전이 전에 대조만 했다(읽기) — 검토 기록(쓰기)은 전이가 확정된 뒤에만 간다.
+    expect(captured.agent_work_reports).toBeUndefined()
   })
 })

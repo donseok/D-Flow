@@ -8,7 +8,7 @@ import type { AdminClient } from '@/lib/minutes/externalApi'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
-import { isUuidLike } from '@/lib/domain/agentWork'
+import { ERR_REPORT_STALE, isUuidLike } from '@/lib/domain/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
 import { applyWorkflowEvent, notifyOnReached, SKIPPED_WARN, type WorkflowEventOk, type WorkflowSkipped } from '@/lib/agent/workflowEvent'
 import { requireDelegationRight } from '@/lib/agent/delegation'
@@ -24,7 +24,7 @@ import { requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
  * 조회(getAgentOrderForItem)만 세션 클라이언트로 해 RLS 조회 정책을 2차 방어선으로 쓴다.
  */
 
-type ActionResult = { ok: boolean; error?: string; warning?: string }
+type ActionResult = { ok: boolean; error?: string; warning?: string; stale?: true }
 
 /**
  * 에이전트 중지/재개(2026-08-24 — 킬스위치). "루프 등록"은 사라졌다: 위임 체크·dev_workflow ON·
@@ -187,7 +187,31 @@ async function afterTransition(
   if (args.transition.reachedFirst && args.itemId) await notifyOnReached(admin, args.itemId, args.actorUserId)
 }
 
-/** 최신 completion 보고의 review 필드를 갱신한다 — 전이 뒤 부수 기록이라 실패는 로깅만(전이 자체는 확정됐다). */
+/** 주문의 최신 완료 보고 id(없으면 null). 조회 실패는 결과로 — 호출부가 쓰기 전에 중단한다(3원칙 ②). */
+async function latestCompletionReportId(
+  admin: AdminClient, orderId: string,
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
+  const { data, error } = await admin
+    .from('agent_work_reports').select('id').eq('work_order_id', orderId).eq('kind', 'completion')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (error) return { ok: false, error: `보고 조회 실패: ${error.message}` }
+  return { ok: true, id: (data as { id: string } | null)?.id ?? null }
+}
+
+/** 사람이 본 보고가 지금도 최신인가 — 반려 뒤 재보고된 주문을 옛 카드로 승인·반려하지 못하게 한다. */
+async function checkReportFresh(
+  admin: AdminClient, orderId: string, expectedReportId: unknown,
+): Promise<{ ok: true; reportId: string | null } | { ok: false; error: string; stale?: true }> {
+  if (expectedReportId !== null && (typeof expectedReportId !== 'string' || !isUuidLike(expectedReportId))) {
+    return { ok: false, error: '잘못된 요청입니다.' }
+  }
+  const latest = await latestCompletionReportId(admin, orderId)
+  if (!latest.ok) return latest
+  if (latest.id !== expectedReportId) return { ok: false, stale: true, error: ERR_REPORT_STALE }
+  return { ok: true, reportId: latest.id }
+}
+
+/** 최신 completion 보고의 review 필드를 갱신한다 — 되감기(승인 취소·재작업) 전용. 전이 뒤 부수 기록이라 실패는 로깅만(전이 자체는 확정됐다). */
 async function recordReview(admin: AdminClient, orderId: string, patch: Record<string, unknown>, label: string): Promise<void> {
   const { data: latest, error: latestErr } = await admin
     .from('agent_work_reports').select('id').eq('work_order_id', orderId).eq('kind', 'completion')
@@ -202,6 +226,16 @@ async function recordReview(admin: AdminClient, orderId: string, patch: Record<s
 }
 
 /**
+ * 승인·반려의 검토 기록 — checkReportFresh 가 대조한 그 보고 행에 직접 쓴다. 전이 뒤 "최신"을 다시 찾으면
+ * 그 사이 들어온 새 보고에 찍힌다. reportId 가 null 이면 기록할 보고가 없으니 건너뛴다. 실패는 로깅만.
+ */
+async function recordReviewOn(admin: AdminClient, reportId: string | null, patch: Record<string, unknown>, label: string): Promise<void> {
+  if (reportId === null) return
+  const { error } = await admin.from('agent_work_reports').update(patch).eq('id', reportId).select('id')
+  if (error) console.error(`[agentWork] ${label} 기록 실패:`, error.message)
+}
+
+/**
  * 승인 — 원자 전이(스펙 2026-09-15 §4). reported→approved CAS + 단계 xx + 실적 100 + change_logs 가 한 트랜잭션이다.
  * 종전에는 실적 100 을 먼저 쓰고 CAS 에서 밀리면 "실적만 100" 인 반쪽 상태가 남았고, 단계 전이는 그 뒤에 따로
  * 실행돼 뒤처지곤 했다(리허설에서 3회 재현). 이제 CAS 가 지면 아무것도 쓰이지 않는다.
@@ -209,7 +243,7 @@ async function recordReview(admin: AdminClient, orderId: string, patch: Record<s
  * 실적 쓰기가 담당 팀 게이트(updateActual)를 거치지 않는 이유는 종전과 같다 — 승인 자격(관리자·서브트리 관리자)은
  * loadOrderForAdmin 이 이미 확정했고, 실적은 사람이 치는 값이 아니라 승인 사건의 크레딧이다.
  */
-export async function approveAgentCompletion(orderId: string): Promise<ActionResult> {
+export async function approveAgentCompletion(orderId: string, expectedReportId: string | null): Promise<ActionResult> {
   const loaded = await loadOrderForAdmin(orderId)
   if (!loaded.ok) return loaded
   const { order, actor } = loaded
@@ -217,11 +251,13 @@ export async function approveAgentCompletion(orderId: string): Promise<ActionRes
   if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
 
   const admin = createAdminClient()
+  const fresh = await checkReportFresh(admin, orderId, expectedReportId)
+  if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId })
   if (!transition.ok) {
     return { ok: false, error: transition.conflict ? '상태가 바뀌어 승인하지 못했습니다. 다시 시도하세요.' : transition.error }
   }
-  await recordReview(admin, orderId, { review_action: 'approve', reviewed_by: actor.userId, reviewed_at: new Date().toISOString() }, '승인')
+  await recordReviewOn(admin, fresh.reportId, { review_action: 'approve', reviewed_by: actor.userId, reviewed_at: new Date().toISOString() }, '승인')
   await notifyReviewResult(admin, order, 'work.approved', actor.userId)
   await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
   const warning = skippedWarning(transition.skipped)
@@ -229,7 +265,7 @@ export async function approveAgentCompletion(orderId: string): Promise<ActionRes
 }
 
 /** 반려 — 원자 전이. reported→claimed CAS + 단계 ip + 실적 표.rw(반려·재작업 크레딧 — 작업은 했으므로 claim 보다 높다, 스펙 D4). */
-export async function rejectAgentCompletion(orderId: string, note: string): Promise<ActionResult> {
+export async function rejectAgentCompletion(orderId: string, note: string, expectedReportId: string | null): Promise<ActionResult> {
   const trimmed = note.trim()
   if (!trimmed) return { ok: false, error: '반려 사유가 필요합니다.' }
   const loaded = await loadOrderForReview(orderId)
@@ -239,11 +275,13 @@ export async function rejectAgentCompletion(orderId: string, note: string): Prom
     return { ok: false, error: `반려 가능한 상태가 아닙니다(${order.status}).` }
   }
   const admin = createAdminClient()
+  const fresh = await checkReportFresh(admin, orderId, expectedReportId)
+  if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'reject', actorUserId: actor.userId, orderId })
   if (!transition.ok) {
     return { ok: false, error: transition.conflict ? '상태가 바뀌어 반려하지 못했습니다.' : transition.error }
   }
-  await recordReview(admin, orderId, { review_action: 'reject', reviewed_by: actor.userId, reviewed_at: new Date().toISOString(), review_note: trimmed }, '반려')
+  await recordReviewOn(admin, fresh.reportId, { review_action: 'reject', reviewed_by: actor.userId, reviewed_at: new Date().toISOString(), review_note: trimmed }, '반려')
   await notifyReviewResult(admin, order, 'work.rejected', actor.userId)
   await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
   const warning = skippedWarning(transition.skipped)

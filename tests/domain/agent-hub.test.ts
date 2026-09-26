@@ -103,7 +103,7 @@ describe('assembleAgentHub — 주문 상태', () => {
     expect(mk({ status: 'approved' })?.state).toBe('DONE')
   })
   it('마지막 completion 보고가 reject 면 claimed 는 REJECTED', () => {
-    const hub = assembleAgentHub(rows({ reports: [{ work_order_id: '11111111-aaaa-4aaa-8aaa-000000000001', percent: 40, summary: '1차', links: [], agent: 'hong/mbp/w1', review_action: 'reject', review_note: '다시', created_at: ago(30_000) }] }), NOW, VIEWER)
+    const hub = assembleAgentHub(rows({ reports: [{ id: 'rep-1', work_order_id: '11111111-aaaa-4aaa-8aaa-000000000001', percent: 40, summary: '1차', links: [], agent: 'hong/mbp/w1', review_action: 'reject', review_note: '다시', created_at: ago(30_000) }] }), NOW, VIEWER)
     expect(by(hub, 'TSK-A-01').order?.state).toBe('REJECTED')
   })
   it('살아 있는 주문이 둘이면 updated_at 최신, 주문 없는 리프는 order null', () => {
@@ -129,13 +129,20 @@ describe('assembleAgentHub — 카운터·큐·상태', () => {
     const hub = assembleAgentHub(rows({
       orders: [order({ id: o1, wbs_item_id: 'a1', status: 'reported', updated_at: ago(1000) }), order({ id: o2, wbs_item_id: 'a2', status: 'reported', updated_at: ago(5000) })],
       reports: [
-        { work_order_id: o1, percent: 90, summary: '옛', links: [], agent: 'x', review_action: null, review_note: null, created_at: ago(9000) },
-        { work_order_id: o1, percent: 100, summary: '최신', links: [{ url: 'https://x' }], agent: 'x', review_action: null, review_note: null, created_at: ago(2000) },
+        { id: 'rep-old', work_order_id: o1, percent: 90, summary: '옛', links: [], agent: 'x', review_action: null, review_note: null, created_at: ago(9000) },
+        { id: 'rep-new', work_order_id: o1, percent: 100, summary: '최신', links: [{ url: 'https://x' }], agent: 'x', review_action: null, review_note: null, created_at: ago(2000) },
       ],
     }), NOW, VIEWER)
     expect(hub.queue.map(q => q.orderId)).toEqual([o2, o1])
     expect(hub.queue[1]).toMatchObject({ code: 'TSK-A-01', summary: '최신', percent: 100, agent: 'x', reportedAt: ago(2000) })
     expect(hub.queue[0]).toMatchObject({ code: 'TSK-A-02', summary: '', percent: 0 })
+    // 카드가 보여 준 보고 id — 승인·반려가 expectedReportId 로 싣는다. 보고가 없으면 null(H1 Task 11).
+    expect(hub.queue[1].reportId).toBe('rep-new')
+    expect(hub.queue[0].reportId).toBeNull()
+    // 표의 행 주문도 같은 보고를 가리킨다 — 표에서 누른 승인·반려도 같은 대조를 받는다.
+    const row = (c: string) => hub.rows.find(r => r.code === c)!
+    expect(row('TSK-A-01').order?.reportId).toBe('rep-new')
+    expect(row('TSK-A-02').order?.reportId).toBeNull()
     // assigneeMine — a1 담당(m1)이 뷰어(이메일 일치)라 true, a2 담당(m9)은 남이라 false. 카드의 반려 버튼 노출 축(§11).
     expect(hub.queue[1].assigneeMine).toBe(true)
     expect(hub.queue[0].assigneeMine).toBe(false)

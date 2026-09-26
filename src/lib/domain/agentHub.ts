@@ -15,7 +15,7 @@ export interface HubItemRow {
 /** 허브 명단 행 — 이름은 담당자 표시용(비활성 행 포함), active 는 명단 행·인물이 모두 활성인지(‘나’ 판정 축). */
 export interface HubMemberRow { id: string; name: string; user_id: string | null; active: boolean }
 export interface HubReportRow {
-  work_order_id: string; percent: number; summary: string; links: { label?: string; url: string }[]; agent: string
+  id: string; work_order_id: string; percent: number; summary: string; links: { label?: string; url: string }[]; agent: string
   review_action: 'approve' | 'reject' | null; review_note: string | null; created_at: string
 }
 export interface AgentHubRows {
@@ -39,7 +39,9 @@ export interface HubRow {
   stage: string | null
   /** 사람의 단계 지정 잠금(스펙 2026-09-15 §3.5) = 위임됨 ∨ 주문 claimed·reported. 서버가 계산하고 화면은 이 값만 읽는다(8상태에서 재파생 금지). */
   stageLocked: boolean
-  order: { id: string; status: OrderStatus; state: HubOrderState; agent: string | null; lastSignalAt: string | null } | null
+  /** reportId — 그 주문의 최신 completion 보고 id(없으면 null). 승인·반려가 "본 보고"로 서버에 보낸다(H1 Task 11).
+   *  보고는 살아 있는 주문(ready·claimed·reported) 것만 읽으므로 승인된 주문은 null 이다 — 승인·반려 대상이 아니다. */
+  order: { id: string; status: OrderStatus; state: HubOrderState; agent: string | null; lastSignalAt: string | null; reportId: string | null } | null
   prompt: string | null
   /** 리프 && 마일스톤 아님 && (관리자 || 담당자 본인) — 화면의 체크 활성 판정. 서버 가드(requireDelegationRight)와 같은 규칙. */
   canToggle: boolean
@@ -51,6 +53,8 @@ export interface HubRow {
 export interface HubQueueEntry {
   orderId: string; itemId: string | null; code: string; name: string; agent: string; percent: number; summary: string
   links: { label?: string; url: string }[]; reportedAt: string
+  /** 카드가 보여 주는 보고(최신 completion)의 id — 승인·반려에 expectedReportId 로 싣는다. 보고가 없으면 null. */
+  reportId: string | null
   /** 이 보고 항목의 담당자가 보는 사람 자신인가 — 카드의 반려 버튼 노출 판정(승인은 관리자만, 반려는 담당자도, §11). */
   assigneeMine: boolean
   /** 서브트리 관리자(트랙 B) — 큐 항목은 항상 리프의 reported 주문이므로 그 리프의 strict 조상
@@ -171,6 +175,7 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
         id: picked.id, status: picked.status, state,
         agent: picked.heartbeat_agent ?? picked.claimed_by,
         lastSignalAt: sig > 0 ? new Date(sig).toISOString() : null,
+        reportId: latestReport.get(picked.id)?.id ?? null,
       }
       if (state === 'READY') counters.ready++
       else if (state === 'WAIT') counters.waiting++
@@ -209,7 +214,7 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       return {
         orderId: o.id, itemId: o.wbs_item_id, code: it?.code ?? '', name: it?.name ?? '',
         agent: rep?.agent ?? o.heartbeat_agent ?? o.claimed_by ?? '', percent: rep?.percent ?? 0, summary: rep?.summary ?? '',
-        links: rep?.links ?? [], reportedAt: rep?.created_at ?? o.updated_at,
+        links: rep?.links ?? [], reportedAt: rep?.created_at ?? o.updated_at, reportId: rep?.id ?? null,
         assigneeMine: it?.assignee_member_id != null && mine.has(it.assignee_member_id),
         canManage: it ? isSubtreeManagerOf(it.id, itemById, mine) : false,
       }

@@ -281,12 +281,16 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
     } finally { setBusy(s2 => setWith(s2, r.itemId, false)) }
   }
 
-  /** 조정 1건 — 요청 1건, 응답의 허브로 교체. 실패·경고는 그 행 아래에. */
+  /** 조정 1건 — 요청 1건, 응답의 허브로 교체. 실패·경고는 그 행 아래에. stale(그 사이 재보고)이면 다시 읽는다. */
   const runOp = async (r: HubRow, op: HubProcessOp) => {
     setBusy(s2 => setWith(s2, r.itemId, true)); setRowErr(m => mapWith(m, r.itemId, null)); setRowWarn(m => mapWith(m, r.itemId, null))
     try {
       const res = await runHubProcessOp(projectId, op)
-      if (!res.ok) { setRowErr(m => mapWith(m, r.itemId, res.error)); return }
+      if (!res.ok) {
+        setRowErr(m => mapWith(m, r.itemId, res.error))
+        if (res.stale) await onChanged()
+        return
+      }
       if (res.warning) setRowWarn(m => mapWith(m, r.itemId, res.warning ?? null))
       if (noteOp?.itemId === r.itemId) { setNoteOp(null); setNoteDraft('') }
       if (confirmOp?.itemId === r.itemId) setConfirmOp(null)
@@ -480,7 +484,10 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                               if (!orderId) return
                               if (b.confirm && b.kind === 'stop') { setConfirmOp(confirmOpen ? null : { itemId: r.itemId, orderId, kind: b.kind }); setNoteOp(null); return }
                               if (b.note) { setNoteOp(noteOpen?.kind === b.note ? null : { itemId: r.itemId, orderId, kind: b.note }); setNoteDraft(''); setConfirmOp(null); return }
-                              void runOp(r, { kind: b.kind, orderId } as HubProcessOp)
+                              // 승인은 이 행이 본 최신 완료 보고를 싣는다 — 그 사이 재보고됐으면 서버가 stale 로 거부한다.
+                              void runOp(r, b.kind === 'approve'
+                                ? { kind: 'approve', orderId, expectedReportId: r.order?.reportId ?? null }
+                                : { kind: b.kind, orderId } as HubProcessOp)
                             }}
                             className={`btn h-6 shrink-0 whitespace-nowrap px-2 text-[11px] ${b.kind === 'approve' ? 'btn-primary' : 'btn-ghost'}`}>{OP_LABEL[b.kind]}</button>
                         ))}
@@ -509,7 +516,12 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                           <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} className="app-input w-full text-xs" placeholder={NOTE_PLACEHOLDER[noteOpen.kind]} />
                           <div className="flex gap-2">
                             <button type="button" data-hub-note-confirm disabled={isBusy || noteDraft.trim() === ''}
-                              onClick={() => { void runOp(r, { kind: noteOpen.kind, orderId: noteOpen.orderId, note: noteDraft.trim() }) }}
+                              onClick={() => {
+                                const note = noteDraft.trim()
+                                void runOp(r, noteOpen.kind === 'reject'
+                                  ? { kind: 'reject', orderId: noteOpen.orderId, note, expectedReportId: r.order?.reportId ?? null }
+                                  : { kind: noteOpen.kind, orderId: noteOpen.orderId, note })
+                              }}
                               className="btn btn-primary h-7 px-2 text-xs">{OP_LABEL[noteOpen.kind]} 확정</button>
                             <button type="button" onClick={() => { setNoteOp(null); setNoteDraft('') }} className="btn btn-ghost h-7 px-2 text-xs">취소</button>
                           </div>

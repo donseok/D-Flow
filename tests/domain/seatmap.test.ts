@@ -66,12 +66,14 @@ describe('assembleSeatmap — 층·구역·책상', () => {
   it('마지막 completion 보고가 reject 면 rejected 와 reviewNote 가 붙고 상태는 REJECTED', () => {
     const m = assembleSeatmap(rows({
       reviews: [
-        { work_order_id: order({}).id, review_action: 'approve', review_note: null, created_at: ago(9000_000) },
-        { work_order_id: order({}).id, review_action: 'reject', review_note: '테스트 누락', created_at: ago(600_000) },
+        { id: 'rv-old', work_order_id: order({}).id, review_action: 'approve', review_note: null, created_at: ago(9000_000) },
+        { id: 'rv-new', work_order_id: order({}).id, review_action: 'reject', review_note: '테스트 누락', created_at: ago(600_000) },
       ],
     }), NOW)
     const s = m.floors[0].zones[0].seats[0]
     expect(s.state).toBe('REJECTED'); expect(s.rejected).toBe(true); expect(s.reviewNote).toBe('테스트 누락')
+    // 좌석의 승인·반려가 "본 보고"로 보내는 id — 마지막 completion 보고(H1 Task 11).
+    expect(s.reportId).toBe('rv-new')
   })
   it('DONE(approved) 은 doneCount 로 세고 카운터에는 들어가지 않는다', () => {
     const m = assembleSeatmap(rows({ orders: [order({ status: 'approved' })] }), NOW)

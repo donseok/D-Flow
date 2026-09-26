@@ -116,13 +116,20 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }
   const runOp = useCallback(async (seat: Seat, kind: SeatOpKind, text: string) => {
     setBusyOrderId(seat.orderId)
     setOpError(null)
-    const op: HubProcessOp = (kind === 'reject' || kind === 'rework')
-      ? { kind, orderId: seat.orderId, note: text }
+    // 승인·반려는 좌석이 본 최신 완료 보고를 싣는다 — 그 사이 재보고됐으면 서버가 stale 로 거부한다(H1 Task 11).
+    const op: HubProcessOp = kind === 'approve' ? { kind, orderId: seat.orderId, expectedReportId: seat.reportId }
+      : kind === 'reject' ? { kind, orderId: seat.orderId, note: text, expectedReportId: seat.reportId }
+      : kind === 'rework' ? { kind, orderId: seat.orderId, note: text }
       : { kind, orderId: seat.orderId }
     try {
       const r = await runHubProcessOp(seat.projectId, op)
       // 실패는 상세 패널에만 자리가 있다 — 좌석에서 바로 누른 op 였다면 그 좌석을 열어 보여 준다.
-      if (!r.ok) { setOpError(r.error); setSelected(seat.orderId); return }
+      // stale 이면 좌석표를 다시 읽어 새 보고를 보여 준다(쓰던 사유는 그대로 둔다).
+      if (!r.ok) {
+        setOpError(r.error); setSelected(seat.orderId)
+        if (r.stale) await refresh(undefined, true)
+        return
+      }
       setNote(null)
       // 처리는 허브를 돌려주지만 스튜디오가 쥔 것은 좌석표다 — 한 번 더 읽어야 화면이 맞는다.
       if (r.hubError) { setOpError(r.hubError); setSelected(seat.orderId) }

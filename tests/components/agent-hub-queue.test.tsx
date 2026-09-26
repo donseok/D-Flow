@@ -16,7 +16,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t:
 import { ApprovalQueue } from '@/components/agent-hub/ApprovalQueue'
 import { HubStatusBar } from '@/components/agent-hub/HubStatusBar'
 
-const Q: HubQueueEntry[] = [{ orderId: 'o1', itemId: 'i1', code: 'TSK-1', name: '화면', agent: 'hong/mbp', percent: 100, summary: '끝', links: [{ url: 'https://x/pr/1', label: 'PR' }], reportedAt: '2026-09-14T08:00:00Z', assigneeMine: false, canManage: false }]
+const Q: HubQueueEntry[] = [{ orderId: 'o1', itemId: 'i1', code: 'TSK-1', name: '화면', agent: 'hong/mbp', percent: 100, summary: '끝', links: [{ url: 'https://x/pr/1', label: 'PR' }], reportedAt: '2026-09-14T08:00:00Z', reportId: 'rep-1', assigneeMine: false, canManage: false }]
 const QMINE: HubQueueEntry[] = [{ ...Q[0], assigneeMine: true }]
 /** 서브트리 관리자(트랙 B, 2026-09-15) — 리프 본인 담당자는 아니지만 조상 담당자가 나인 경우. */
 const QMANAGE: HubQueueEntry[] = [{ ...Q[0], canManage: true }]
@@ -46,7 +46,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     expect(host.textContent).toContain('TSK-1'); expect(host.textContent).toContain('hong/mbp'); expect(host.textContent).toContain('끝')
     expect((host.querySelector('a[href="https://x/pr/1"]') as HTMLAnchorElement).textContent).toContain('PR')
     await act(async () => { (host.querySelector('[data-queue-approve]') as HTMLButtonElement).click() })
-    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o1' })
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o1', expectedReportId: 'rep-1' })
     expect(onHub).toHaveBeenCalledWith(HUB)
     expect(onChanged).not.toHaveBeenCalled()
   })
@@ -59,7 +59,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     await act(async () => { setValue(host.querySelector('textarea') as HTMLTextAreaElement, '다시') })
     expect(btn.disabled).toBe(false)
     await act(async () => { btn.click() })
-    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '다시' })
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '다시', expectedReportId: 'rep-1' })
   })
   it('실패는 카드 안 오류 문구, warning 은 카드 안 경고 문구', async () => {
     runOp.mockResolvedValueOnce({ ok: false, error: '상태 아님' })
@@ -78,6 +78,19 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     expect((host.querySelector('[data-queue-error]') as HTMLElement).textContent).toContain('재조회에 실패')
     expect(onHub).not.toHaveBeenCalled(); expect(onChanged).toHaveBeenCalledTimes(1)
   })
+  it('stale(보고가 갱신됨) → 카드에 문구를 두고 onChanged 로 허브를 다시 읽는다 — 새 보고를 보게', async () => {
+    runOp.mockResolvedValueOnce({ ok: false, stale: true, error: '보고가 갱신되었습니다 — 새 내용을 확인한 뒤 다시 처리하세요.' })
+    const { onHub, onChanged } = render()
+    await act(async () => { (host.querySelector('[data-queue-approve]') as HTMLButtonElement).click() })
+    expect((host.querySelector('[data-queue-error]') as HTMLElement).textContent).toContain('보고가 갱신되었습니다')
+    expect(onChanged).toHaveBeenCalledTimes(1); expect(onHub).not.toHaveBeenCalled()
+  })
+  it('stale 이 아닌 실패는 재조회하지 않는다', async () => {
+    runOp.mockResolvedValueOnce({ ok: false, error: '상태 아님' })
+    const { onChanged } = render()
+    await act(async () => { (host.querySelector('[data-queue-approve]') as HTMLButtonElement).click() })
+    expect(onChanged).not.toHaveBeenCalled()
+  })
   it('내 담당 아닌 멤버에게는 버튼 대신 안내', () => {
     render({ isAdmin: false })
     expect(host.querySelector('[data-queue-approve]')).toBeNull()
@@ -93,7 +106,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     await act(async () => { (host.querySelector('[data-queue-reject-open]') as HTMLButtonElement).click() })
     await act(async () => { setValue(host.querySelector('textarea') as HTMLTextAreaElement, '내가 다시 볼게요') })
     await act(async () => { (host.querySelector('[data-queue-reject]') as HTMLButtonElement).click() })
-    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '내가 다시 볼게요' })
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '내가 다시 볼게요', expectedReportId: 'rep-1' })
   })
   it('서브트리 관리자(canManage, 트랙 B): 리프 본인 담당자가 아니어도 approve+reject 가 보이고 안내문은 없다', async () => {
     runOp.mockResolvedValueOnce({ ok: true, hub: HUB })
@@ -102,7 +115,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     expect(host.querySelector('[data-queue-reject-open]')).not.toBeNull()
     expect(host.textContent).not.toContain('담당자는 반려로')
     await act(async () => { (host.querySelector('[data-queue-approve]') as HTMLButtonElement).click() })
-    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o1' })
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o1', expectedReportId: 'rep-1' })
   })
   it('관리자(대조군): 전부 보인다 — approve·reject 둘 다', () => {
     render({ isAdmin: true, queue: Q })

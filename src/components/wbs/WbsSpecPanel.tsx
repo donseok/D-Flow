@@ -418,14 +418,20 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
   if (!order || (order.status === 'cancelled' && priorOrders.length === 0)) return null
 
   const lastReport = order.reports.at(-1)
+  // 승인·반려가 "본 보고"로 싣는 id — 진행 보고가 뒤에 붙어도 완료 보고 기준이다(H1 Task 11).
+  const lastCompletionId = order.reports.filter(r => r.kind === 'completion').at(-1)?.id ?? null
 
   // warning: 본 동작은 성공했지만 실적·단계 같은 후속이 남았다는 신호. 조용히 삼키면 사람이
   // 반쪽 상태를 못 보고, 에러 자리에 넣으면 성공한 동작이 실패로 읽힌다 — 자리를 나눈다.
-  async function run(action: () => Promise<{ ok: boolean; error?: string; warning?: string }>) {
+  async function run(action: () => Promise<{ ok: boolean; error?: string; warning?: string; stale?: true }>) {
     setBusy(true); setErr(null); setWarn(null)
     try {
       const r = await action()
-      if (!r.ok) { setErr(r.error ?? t('wbs.agentOrderActionFailed')); return }
+      if (!r.ok) {
+        setErr(r.error ?? t('wbs.agentOrderActionFailed'))
+        if (r.stale) reload() // 그 사이 재보고됐다 — 새 보고를 보여 준다.
+        return
+      }
       setWarn(r.warning ?? null)
       setRejecting(false); setRejectNote('')
       setReworking(false); setReworkNote('')
@@ -492,13 +498,13 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
       {editable && order.status === 'reported' && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <button type="button" className="btn btn-primary h-7 px-2.5 text-xs" disabled={busy}
-            onClick={() => void run(() => approveAgentCompletion(order.id))}>{t('wbs.agentOrderApprove')}</button>
+            onClick={() => void run(() => approveAgentCompletion(order.id, lastCompletionId))}>{t('wbs.agentOrderApprove')}</button>
           {rejecting ? (
             <>
               <input className="app-input h-7 w-40 text-xs" aria-label={t('wbs.agentOrderRejectNote')}
                 placeholder={t('wbs.agentOrderRejectNote')} value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
               <button type="button" className="btn h-7 px-2.5 text-xs" disabled={busy || !rejectNote.trim()}
-                onClick={() => void run(() => rejectAgentCompletion(order.id, rejectNote))}>{t('wbs.agentOrderReject')}</button>
+                onClick={() => void run(() => rejectAgentCompletion(order.id, rejectNote, lastCompletionId))}>{t('wbs.agentOrderReject')}</button>
             </>
           ) : (
             <button type="button" className="btn btn-ghost h-7 px-2.5 text-xs" disabled={busy}

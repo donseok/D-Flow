@@ -26,7 +26,7 @@ export interface ItemRow {
 }
 /** 에이전트 위임 태그 — src/app/actions/wbsSpec.ts AGENT_TAG·dflow-poll 자동 착수 계약과 같은 값. 좌석표는 이 태그가 붙은 항목의 주문만 대상으로 한다. */
 export const AGENT_TAG = 'agent'
-export interface ReviewRow { work_order_id: string; review_action: 'approve' | 'reject' | null; review_note: string | null; created_at: string }
+export interface ReviewRow { id: string; work_order_id: string; review_action: 'approve' | 'reject' | null; review_note: string | null; created_at: string }
 /** 에이전트 보기의 보고 말풍선 재료 — 점유·보고 중 주문의 최근 보고 행(progress · completion). */
 export interface ReportRow { work_order_id: string; kind: 'progress' | 'completion'; summary: string; created_at: string }
 export interface WatcherRow {
@@ -51,6 +51,8 @@ export interface Seat {
   agent: string | null; progress: number
   lastSignalAt: string | null; heartbeatAt: string | null; heartbeatPhase: string | null
   note: string | null; rejected: boolean; reviewNote: string | null
+  /** 이 주문의 최신 completion 보고 id(없으면 null) — 좌석에서 승인·반려할 때 "본 보고"로 서버에 보낸다(H1 Task 11). */
+  reportId: string | null
   /** 재개 요청이 걸린 시각. null 이면 아직 아무도 누르지 않았다(0099). */
   resumeRequestedAt: string | null
   /** 그 요청을 이어받아야 하는 PC. 그 워크트리가 있는 PC 만 실제로 복구할 수 있다. */
@@ -192,6 +194,7 @@ function toSeat(o: OrderRow, item: ItemRow | undefined, review: ReviewRow | unde
     resumeRequestedAt: o.status === 'claimed' ? (o.resume_requested_at ?? null) : null,
     resumeRequestedHost: o.status === 'claimed' ? (o.resume_requested_host ?? null) : null,
     rejected: isRejected(input), reviewNote: review?.review_action === 'reject' ? review.review_note : null,
+    reportId: review?.id ?? null,
     waitReason: null,
     canManage: rights.canManage, assigneeMine: rights.assigneeMine,
     ...pickModel(o, item),

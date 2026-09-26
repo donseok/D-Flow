@@ -2,6 +2,8 @@
 // 승인 대기 큐 — 완료 보고(reported)가 올라온 주문을 카드로. 승인은 관리자 또는 서브트리 관리자
 // (대상 리프의 strict 조상 중 담당자가 나, HubQueueEntry.canManage — 트랙 B, 2026-09-15).
 // 처리는 runHubProcessOp 1건으로 끝나고 응답의 허브로 화면을 바꾼다(§10·§11) — 재조회 요청 없음.
+// 승인·반려는 카드가 보여 준 보고 id 를 싣는다 — 그 사이 재보고됐으면 서버가 stale 로 거부하고, 카드는 허브를
+// 다시 읽어 새 보고를 보여 준다(H1 Task 11).
 import { useState } from 'react'
 import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
@@ -30,7 +32,11 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEnt
     setBusy(true); setErr(null); setWarn(null)
     try {
       const r = await runHubProcessOp(projectId, op)
-      if (!r.ok) { setErr(r.error); return }
+      if (!r.ok) {
+        setErr(r.error)
+        if (r.stale) await onChanged() // 새 보고를 보여 준다 — 쓰던 반려 사유는 그대로 둔다.
+        return
+      }
       if (r.warning) setWarn(r.warning)
       setRejecting(false); setNote('')
       if (r.hub) onHub(r.hub)
@@ -63,7 +69,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEnt
           <div className="flex gap-2">
             {(isAdmin || q.canManage) && (
               <button type="button" data-queue-approve disabled={busy} title={OP_TITLE.approve}
-                onClick={() => { void run({ kind: 'approve', orderId: q.orderId }) }} className="btn btn-primary h-8 px-3 text-xs">{OP_LABEL.approve}</button>
+                onClick={() => { void run({ kind: 'approve', orderId: q.orderId, expectedReportId: q.reportId }) }} className="btn btn-primary h-8 px-3 text-xs">{OP_LABEL.approve}</button>
             )}
             <button type="button" data-queue-reject-open disabled={busy} aria-expanded={rejecting} title={OP_TITLE.reject}
               onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{OP_LABEL.reject}</button>
@@ -74,7 +80,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEnt
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder={NOTE_PLACEHOLDER.reject} className="app-input w-full text-xs" />
               <div>
                 <button type="button" data-queue-reject disabled={busy || note.trim() === ''}
-                  onClick={() => { void run({ kind: 'reject', orderId: q.orderId, note: note.trim() }) }} className="btn btn-ghost h-8 px-3 text-xs">반려 확정</button>
+                  onClick={() => { void run({ kind: 'reject', orderId: q.orderId, note: note.trim(), expectedReportId: q.reportId }) }} className="btn btn-ghost h-8 px-3 text-xs">반려 확정</button>
               </div>
             </div>
           )}

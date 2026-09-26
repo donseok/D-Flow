@@ -68,7 +68,7 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] 
   const liveIds = orders.filter(o => o.status === 'claimed' || o.status === 'reported').map(o => o.id)
   const [parents, reviews, watchers, members, reports] = await Promise.all([
     parentIds.length ? fetchAncestors(admin, parentIds) : Promise.resolve([] as ItemRow[]),
-    admin.from('agent_work_reports').select('work_order_id, review_action, review_note, created_at')
+    admin.from('agent_work_reports').select('id, work_order_id, review_action, review_note, created_at')
       .in('work_order_id', orderIds).eq('kind', 'completion').then(r => must<ReviewRow[]>('완료 보고', r)),
     floorWorkspaceIds.length
       ? admin.from('agent_watchers').select('id, user_id, project_id, agent, host, slots, busy, until_label, last_seen_at')

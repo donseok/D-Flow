@@ -125,8 +125,9 @@ export type WbsStageCode = StageCode
 const STAGE_CODES: ReadonlySet<string> = new Set(DOMAIN_STAGE_CODES)
 
 export type HubProcessOp =
-  | { kind: 'approve'; orderId: string }
-  | { kind: 'reject'; orderId: string; note: string }
+  /** expectedReportId — 화면이 본 최신 완료 보고(없으면 null). 서버의 최신과 다르면 stale 로 거부한다(H1 Task 11). */
+  | { kind: 'approve'; orderId: string; expectedReportId: string | null }
+  | { kind: 'reject'; orderId: string; note: string; expectedReportId: string | null }
   | { kind: 'unapprove'; orderId: string }
   /** 완료 취소 — 승인된(xx) 작업을 에이전트에게 되돌린다. 사용자 결정(2026-09-14): "완료취소 = 재작업 요청". */
   | { kind: 'rework'; orderId: string; note: string }
@@ -141,16 +142,21 @@ export type HubProcessOp =
 
 export type HubProcessResult =
   | { ok: true; hub: AgentHub | null; hubError?: string; warning?: string }
-  | { ok: false; error: string }
+  /** stale — 본 보고보다 새 보고가 있다. 화면은 다시 읽어 새 보고를 보여 준다. */
+  | { ok: false; error: string; stale?: true }
 
 function isProcessOp(op: unknown): op is HubProcessOp {
   if (op === null || typeof op !== 'object') return false
   const o = op as Record<string, unknown>
   const uuid = (v: unknown) => typeof v === 'string' && isUuidLike(v)
   switch (o.kind) {
-    case 'approve': case 'unapprove': case 'stop': case 'resume':
+    case 'approve':
+      return uuid(o.orderId) && (o.expectedReportId === null || uuid(o.expectedReportId))
+    case 'reject':
+      return uuid(o.orderId) && typeof o.note === 'string' && (o.expectedReportId === null || uuid(o.expectedReportId))
+    case 'unapprove': case 'stop': case 'resume':
       return uuid(o.orderId)
-    case 'reject': case 'rework':
+    case 'rework':
       return uuid(o.orderId) && typeof o.note === 'string'
     case 'stage':
       return uuid(o.itemId) && (o.stage === null || (typeof o.stage === 'string' && STAGE_CODES.has(o.stage)))
@@ -297,17 +303,17 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
     if (!subtree.ok) return { ok: false, error: subtreeOnly }
   }
 
-  let r: { ok: boolean; error?: string; warning?: string }
+  let r: { ok: boolean; error?: string; warning?: string; stale?: true }
   switch (op.kind) {
-    case 'approve': r = await approveAgentCompletion(op.orderId); break
-    case 'reject': r = await rejectAgentCompletion(op.orderId, op.note); break
+    case 'approve': r = await approveAgentCompletion(op.orderId, op.expectedReportId); break
+    case 'reject': r = await rejectAgentCompletion(op.orderId, op.note, op.expectedReportId); break
     case 'unapprove': r = await unapproveAgentCompletion(op.orderId); break
     case 'rework': r = await requestAgentRework(op.orderId, op.note); break
     case 'stop': r = await stopOrderByAdmin(admin, op.orderId, g.actor.userId, projectId, isAdmin); break
     case 'resume': r = await requestResumeOnOrder(admin, op.orderId, g.actor.userId); break
     case 'stage': r = await setWbsStage(op.itemId, op.stage); break
   }
-  if (!r.ok) return { ok: false, error: r.error ?? '처리에 실패했습니다.' }
+  if (!r.ok) return { ok: false, error: r.error ?? '처리에 실패했습니다.', ...(r.stale ? { stale: true as const } : {}) }
   const warning = r.warning ? { warning: r.warning } : {}
   try {
     const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin })

@@ -25,7 +25,7 @@ const row = (over: Partial<HubRow>): HubRow => ({
 })
 const ROWS: HubRow[] = [
   row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
-  row({ itemId: 'a1', code: 'TSK-A-01', name: '리프1', depth: 1, parentId: 'root', assigneeName: '홍길동1', assigneeMine: true, canToggle: true, delegated: true, devWorkflow: true, order: { id: 'o1', status: 'claimed', state: 'ACTIVE', agent: 'hong/mbp/w1', lastSignalAt: new Date(NOW - 42_000).toISOString() } }),
+  row({ itemId: 'a1', code: 'TSK-A-01', name: '리프1', depth: 1, parentId: 'root', assigneeName: '홍길동1', assigneeMine: true, canToggle: true, delegated: true, devWorkflow: true, order: { id: 'o1', status: 'claimed', state: 'ACTIVE', agent: 'hong/mbp/w1', lastSignalAt: new Date(NOW - 42_000).toISOString(), reportId: null } }),
   row({ itemId: 'a2', code: 'TSK-A-02', name: '리프2', depth: 1, parentId: 'root', assigneeName: '남', canToggle: false, devWorkflow: true }),
   row({ itemId: 'ms', code: 'MS-1', name: '마일스톤', depth: 1, parentId: 'root', milestone: true }),
 ]
@@ -235,10 +235,10 @@ describe('DelegationTable — 착수 대기 사유', () => {
 describe('DelegationTable — 개발 프로세스 조정·단계 직접 조정(§11): 관리자만, runHubProcessOp 1건, 응답의 허브로 교체', () => {
   const NOTE_ROWS: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
-    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'd', code: 'TSK-D', name: '승인됨', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'xx', order: { id: 'od', status: 'approved', state: 'DONE', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'c', code: 'TSK-C', name: '작업 중', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'r', code: 'TSK-R', name: '대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'as', order: { id: 'or', status: 'ready', state: 'READY', agent: null, lastSignalAt: null } }),
+    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
+    row({ itemId: 'd', code: 'TSK-D', name: '승인됨', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'xx', order: { id: 'od', status: 'approved', state: 'DONE', agent: 'a', lastSignalAt: null, reportId: null } }),
+    row({ itemId: 'c', code: 'TSK-C', name: '작업 중', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null, reportId: null } }),
+    row({ itemId: 'r', code: 'TSK-R', name: '대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'as', order: { id: 'or', status: 'ready', state: 'READY', agent: null, lastSignalAt: null, reportId: null } }),
     row({ itemId: 'n', code: 'TSK-N', name: '주문 없음', depth: 1, parentId: 'root', canToggle: true, devWorkflow: true }),
     row({ itemId: 'ms', code: 'MS-1', name: '마일스톤', depth: 1, parentId: 'root', milestone: true, stage: 'xx' }),
   ]
@@ -274,13 +274,24 @@ describe('DelegationTable — 개발 프로세스 조정·단계 직접 조정(�
     runHubProcessOp.mockResolvedValue({ ok: true, hub: HUB })
     const { onHub, onChanged } = render({ rows: NOTE_ROWS, isAdmin: true })
     await click(op('w', 'approve'))
-    expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'ow' })
+    // 승인은 이 행이 본 최신 완료 보고를 싣는다(H1 Task 11).
+    expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'ow', expectedReportId: 'rep-ow' })
     expect(onHub).toHaveBeenCalledWith(HUB); expect(onChanged).not.toHaveBeenCalled()
     await click(op('c', 'stop'))
     await click(host.querySelector('[data-hub-row-extra="c"] [data-hub-confirm-go]') as HTMLButtonElement)
     expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'stop', orderId: 'oc' })
     await click(op('d', 'unapprove'))
     expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'unapprove', orderId: 'od' })
+  })
+  it('stale(그 사이 재보고) → 행 아래 문구 + onChanged 로 허브를 다시 읽는다; 다른 실패는 재조회하지 않는다', async () => {
+    runHubProcessOp.mockResolvedValueOnce({ ok: false, stale: true, error: '보고가 갱신되었습니다 — 새 내용을 확인한 뒤 다시 처리하세요.' })
+    const { onHub, onChanged } = render({ rows: NOTE_ROWS, isAdmin: true })
+    await click(op('w', 'approve'))
+    expect(host.querySelector('[data-hub-row-extra="w"] [data-hub-error]')?.textContent).toContain('보고가 갱신되었습니다')
+    expect(onChanged).toHaveBeenCalledTimes(1); expect(onHub).not.toHaveBeenCalled()
+    runHubProcessOp.mockResolvedValueOnce({ ok: false, error: '승인 가능한 상태가 아닙니다(approved).' })
+    await click(op('w', 'approve'))
+    expect(onChanged).toHaveBeenCalledTimes(1)
   })
   it('반려·재작업 요청은 사유 줄을 열고, 비면 확정 비활성, 채우면 note 와 함께 보낸다', async () => {
     runHubProcessOp.mockResolvedValue({ ok: true, hub: HUB })
@@ -333,7 +344,7 @@ describe('DelegationTable — 개발 프로세스 조정·단계 직접 조정(�
     expect(onChanged).toHaveBeenCalledTimes(1)
   })
   it('단계 select: 서버가 계산한 stageLocked 면 잠그고 이유를 title 로 — 8상태에서 다시 추론하지 않는다', () => {
-    render({ rows: [row({ itemId: 'lk', code: 'TSK-LK', name: '위임 작업', isLeaf: true, devWorkflow: true, delegated: true, stageLocked: true, stage: 'ip', order: { id: 'olk', status: 'ready', state: 'READY', agent: null, lastSignalAt: null } }), row({ itemId: 'hm', code: 'TSK-HM', name: '사람 작업', isLeaf: true, devWorkflow: true, stageLocked: false, stage: 'as' })], isAdmin: true })
+    render({ rows: [row({ itemId: 'lk', code: 'TSK-LK', name: '위임 작업', isLeaf: true, devWorkflow: true, delegated: true, stageLocked: true, stage: 'ip', order: { id: 'olk', status: 'ready', state: 'READY', agent: null, lastSignalAt: null, reportId: null } }), row({ itemId: 'hm', code: 'TSK-HM', name: '사람 작업', isLeaf: true, devWorkflow: true, stageLocked: false, stage: 'as' })], isAdmin: true })
     expect(stageSel('lk')!.disabled).toBe(true)
     expect(stageSel('lk')!.title).toContain('위임을 끄세요')
     expect(stageSel('hm')!.disabled).toBe(false)
@@ -364,10 +375,10 @@ describe('DelegationTable — 개발 프로세스 조정·단계 직접 조정(�
 describe('DelegationTable — 담당자 본인도 반려·승인 취소·재작업(승인·중단·단계는 관리자만, 2026-09-14 §11)', () => {
   const MINE: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
-    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'd', code: 'TSK-D', name: '승인됨', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, stage: 'xx', order: { id: 'od', status: 'approved', state: 'DONE', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'c', code: 'TSK-C', name: '작업 중', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null } }),
-    row({ itemId: 'o', code: 'TSK-O', name: '남의 승인 대기', depth: 1, parentId: 'root', assigneeMine: false, delegated: true, stage: 'im', order: { id: 'oo', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
+    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
+    row({ itemId: 'd', code: 'TSK-D', name: '승인됨', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, stage: 'xx', order: { id: 'od', status: 'approved', state: 'DONE', agent: 'a', lastSignalAt: null, reportId: null } }),
+    row({ itemId: 'c', code: 'TSK-C', name: '작업 중', depth: 1, parentId: 'root', assigneeMine: true, canToggle: true, delegated: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null, reportId: null } }),
+    row({ itemId: 'o', code: 'TSK-O', name: '남의 승인 대기', depth: 1, parentId: 'root', assigneeMine: false, delegated: true, stage: 'im', order: { id: 'oo', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-oo' } }),
   ]
   const ops = (id: string) => [...host.querySelectorAll(`[data-hub-row="${id}"] [data-hub-op]`)].map(b => b.getAttribute('data-hub-op'))
   const op = (id: string, kind: string) => host.querySelector(`[data-hub-row="${id}"] [data-hub-op="${kind}"]`) as HTMLButtonElement
@@ -392,7 +403,7 @@ describe('DelegationTable — 담당자 본인도 반려·승인 취소·재작�
     const ta = host.querySelector('[data-hub-row-extra="w"] [data-hub-note="reject"] textarea') as HTMLTextAreaElement
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, '내가 다시'); ta.dispatchEvent(new Event('input', { bubbles: true })) })
     await click(host.querySelector('[data-hub-row-extra="w"] [data-hub-note-confirm]') as HTMLButtonElement)
-    expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'ow', note: '내가 다시' })
+    expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'ow', note: '내가 다시', expectedReportId: 'rep-ow' })
     await click(op('d', 'unapprove'))
     expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'unapprove', orderId: 'od' })
   })
@@ -409,15 +420,15 @@ describe('DelegationTable — 서브트리 관리자(canManage, 트랙 B 2026-09
   const MANAGE: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
     // 서브트리 관리자가 관리하는 리프(조상 담당) — 승인 대기: approve·reject 둘 다 보여야 한다.
-    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
+    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
     // 작업 중 → release 버튼 대상(관리자 전용 who='admin' 이 canManage 로도 열려야 한다).
-    row({ itemId: 'c', code: 'TSK-C', name: '작업 중(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null } }),
+    row({ itemId: 'c', code: 'TSK-C', name: '작업 중(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null, reportId: null } }),
     // 주문 없음 → 단계 select 대상.
     row({ itemId: 'n', code: 'TSK-N', name: '단계 조정 대상', depth: 1, parentId: 'root', canManage: true, devWorkflow: true }),
     // 리프 본인 담당자(조상 아님, canManage:false) — 분리 원칙: approve 는 못 보고 reject 만.
-    row({ itemId: 'lw', code: 'TSK-LW', name: '내 승인 대기', depth: 1, parentId: 'root', assigneeMine: true, canManage: false, canToggle: true, delegated: true, stage: 'im', order: { id: 'olw', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
+    row({ itemId: 'lw', code: 'TSK-LW', name: '내 승인 대기', depth: 1, parentId: 'root', assigneeMine: true, canManage: false, canToggle: true, delegated: true, stage: 'im', order: { id: 'olw', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-olw' } }),
     // 무관 멤버 — 아무 자격 없음.
-    row({ itemId: 'x', code: 'TSK-X', name: '남의 승인 대기', depth: 1, parentId: 'root', assigneeMine: false, canManage: false, delegated: true, stage: 'im', order: { id: 'ox', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null } }),
+    row({ itemId: 'x', code: 'TSK-X', name: '남의 승인 대기', depth: 1, parentId: 'root', assigneeMine: false, canManage: false, delegated: true, stage: 'im', order: { id: 'ox', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ox' } }),
   ]
   const ops = (id: string) => [...host.querySelectorAll(`[data-hub-row="${id}"] [data-hub-op]`)].map(b => b.getAttribute('data-hub-op'))
 
@@ -521,7 +532,7 @@ describe('DelegationTable — 승인 대기만·착수 대기 사유 펼침(2026
   const WAIT_ROWS: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
     row({ itemId: 'w1', code: 'TSK-W-01', name: '보고됨', depth: 1, parentId: 'root', delegated: true, devWorkflow: true, canToggle: true,
-      order: { id: 'o9', status: 'reported', state: 'WAIT', agent: 'hong/mbp', lastSignalAt: null } }),
+      order: { id: 'o9', status: 'reported', state: 'WAIT', agent: 'hong/mbp', lastSignalAt: null, reportId: 'rep-o9' } }),
     row({ itemId: 'w2', code: 'TSK-W-02', name: '그냥', depth: 1, parentId: 'root', delegated: true, devWorkflow: true }),
   ]
   it('「승인 대기만」을 켜면 WAIT 리프와 그 조상만 남는다', async () => {

@@ -173,7 +173,7 @@ describe('SeatmapView — 좌석에서 바로 결재', () => {
     floors: [{
       id: 'p1', name: 'proj-a', seatCount: 1, doneCount: 0, watchers: [],
       zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 0, wait: 1, ready: 0, done: 0 }, seats: [
-        makeSeat({ orderId: 'o9', id8: 'o9', projectId: 'p1', itemId: 'i9', code: 'TSK-04-09', name: '승인 대기 건', state: 'WAIT', phase: 'verify', anim: 'empty', character: 'bot', agent: 'hong/mbp/w1', progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false }),
+        makeSeat({ orderId: 'o9', id8: 'o9', projectId: 'p1', itemId: 'i9', code: 'TSK-04-09', name: '승인 대기 건', state: 'WAIT', phase: 'verify', anim: 'empty', character: 'bot', agent: 'hong/mbp/w1', progress: 100, lastSignalAt: null, heartbeatAt: null, heartbeatPhase: null, note: null, rejected: false, reviewNote: null, reportId: 'rep-o9', waitReason: null, canManage: true, assigneeMine: false }),
       ] }],
     }],
     attention: [],
@@ -186,7 +186,8 @@ describe('SeatmapView — 좌석에서 바로 결재', () => {
     refresh.mockResolvedValue({ ok: true, seatmap: waitSeat() })
     await act(async () => { root.render(<SeatmapView initial={waitSeat()} />) })
     await act(async () => { opButton('approve').click() })
-    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o9' })
+    // 좌석이 본 최신 완료 보고를 싣는다(H1 Task 11).
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o9', expectedReportId: 'rep-o9' })
     // 결재하려고 누른 것이지 상세를 보려고 누른 것이 아니다.
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
@@ -203,7 +204,7 @@ describe('SeatmapView — 좌석에서 바로 결재', () => {
     floors: [{
       id: 'p1', name: 'proj-a', seatCount: 1, doneCount: 0, watchers: [],
       zones: [{ key: 'z1', code: 'WP-04', name: '주문 관리', summary: { work: 1, wait: 0, ready: 0, done: 0 }, seats: [
-        { orderId: 'o7', id8: 'o7', projectId: 'p1', itemId: 'i7', code: 'TSK-04-07', name: '도는 중', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, waitReason: null, canManage: true, assigneeMine: false, resumeRequestedAt: null, resumeRequestedHost: null, agentMine: false, agentOwnerName: null },
+        { orderId: 'o7', id8: 'o7', projectId: 'p1', itemId: 'i7', code: 'TSK-04-07', name: '도는 중', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat', agent: 'hong/mbp/w1', progress: 40, lastSignalAt: new Date(NOW - 5000).toISOString(), heartbeatAt: null, heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, reportId: null, waitReason: null, canManage: true, assigneeMine: false, resumeRequestedAt: null, resumeRequestedHost: null, agentMine: false, agentOwnerName: null },
       ] }],
     }],
     attention: [],
@@ -234,6 +235,16 @@ describe('SeatmapView — 좌석에서 바로 결재', () => {
     await act(async () => { root.render(<SeatmapView initial={waitSeat()} />) })
     await act(async () => { opButton('approve').click() })
     expect(document.querySelector('[data-op-error]')?.textContent).toContain('이미 승인된 주문입니다')
+    expect(refresh).not.toHaveBeenCalled() // stale 이 아닌 실패는 다시 읽지 않는다
+  })
+
+  it('stale(그 사이 재보고)이면 사유를 보여 주고 좌석표를 다시 읽어 새 보고를 보여 준다', async () => {
+    runOp.mockResolvedValue({ ok: false, stale: true, error: '보고가 갱신되었습니다 — 새 내용을 확인한 뒤 다시 처리하세요.' })
+    refresh.mockResolvedValue({ ok: true, seatmap: waitSeat() })
+    await act(async () => { root.render(<SeatmapView initial={waitSeat()} />) })
+    await act(async () => { opButton('approve').click() })
+    expect(document.querySelector('[data-op-error]')?.textContent).toContain('보고가 갱신되었습니다')
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 })
 

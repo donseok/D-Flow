@@ -8,6 +8,8 @@ import { createRoot, type Root } from 'react-dom/client'
 const getAgentOrderForItem = vi.fn()
 const unapproveAgentCompletion = vi.fn()
 const requestAgentRework = vi.fn()
+const approveAgentCompletion = vi.fn()
+const rejectAgentCompletion = vi.fn()
 
 vi.mock('@/app/actions/wbsSpec', () => ({
   getWbsSpec: vi.fn().mockResolvedValue({
@@ -22,8 +24,8 @@ vi.mock('@/app/actions/wbsSpec', () => ({
 }))
 vi.mock('@/app/actions/agentWork', () => ({
   getAgentOrderForItem: (...a: unknown[]) => getAgentOrderForItem(...(a as [])),
-  approveAgentCompletion: vi.fn(),
-  rejectAgentCompletion: vi.fn(),
+  approveAgentCompletion: (...a: unknown[]) => approveAgentCompletion(...(a as [])),
+  rejectAgentCompletion: (...a: unknown[]) => rejectAgentCompletion(...(a as [])),
   unapproveAgentCompletion: (...a: unknown[]) => unapproveAgentCompletion(...(a as [])),
   requestAgentRework: (...a: unknown[]) => requestAgentRework(...(a as [])),
 }))
@@ -140,5 +142,87 @@ describe('WbsSpecPanel 진행 상황 — 승인 되감기 버튼', () => {
     await render(true)
     expect(q('[data-agent-unapprove]')).toBeNull()
     expect(q('[data-agent-rework]')).toBeNull()
+  })
+})
+
+/**
+ * 승인·반려는 이 패널이 보여 준 마지막 완료 보고 id 를 싣는다(H1 Task 11) — 그 사이 재보고됐으면 서버가
+ * stale 로 거부하고, 패널은 주문을 다시 읽어 새 보고를 보여 준다. 진행 보고가 뒤에 붙어도 완료 보고 기준이다.
+ */
+describe('WbsSpecPanel 진행 상황 — 승인·반려는 본 보고 id 와 함께', () => {
+  const RC1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+  const RC2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+  const RP3 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'
+  const report = (id: string, kind: 'progress' | 'completion', at: string) => ({
+    id, kind, percent: kind === 'completion' ? 100 : 50, summary: id, links: [], agent: 'agent-x',
+    review_action: null, review_note: null, created_at: at,
+  })
+  function reportedOrder() {
+    const o = approvedOrder()
+    return { ...o, order: { ...o.order, status: 'reported', reports: [
+      report(RC1, 'completion', '2026-08-26T01:00:00Z'),
+      report(RC2, 'completion', '2026-08-26T02:00:00Z'),
+      report(RP3, 'progress', '2026-08-26T03:00:00Z'),
+    ] } }
+  }
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    getAgentOrderForItem.mockReset(); approveAgentCompletion.mockReset(); rejectAgentCompletion.mockReset()
+    getAgentOrderForItem.mockResolvedValue(reportedOrder())
+    approveAgentCompletion.mockResolvedValue({ ok: true })
+    rejectAgentCompletion.mockResolvedValue({ ok: true })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  async function render() {
+    await act(async () => { root.render(<WbsSpecPanel itemId="item-1" editable />) })
+    await act(async () => {})
+    await act(async () => { container.querySelector<HTMLElement>('[data-spec-body-toggle]')!.click() })
+    // reported 면 진행 상황이 스스로 펼쳐진다(reload) — 토글을 누르면 도로 접힌다.
+  }
+  const button = (label: string) =>
+    [...container.querySelectorAll('button')].filter(b => b.textContent === label).at(-1) as HTMLButtonElement
+
+  it('승인은 마지막 완료 보고 id(뒤의 진행 보고가 아니라)를 싣는다', async () => {
+    await render()
+    await act(async () => { button('wbs.agentOrderApprove').click() })
+    expect(approveAgentCompletion).toHaveBeenCalledWith(ORDER_ID, RC2)
+  })
+
+  it('반려도 같은 id 를 싣는다', async () => {
+    await render()
+    await act(async () => { button('wbs.agentOrderReject').click() })
+    const input = container.querySelector('input[aria-label="wbs.agentOrderRejectNote"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '보완 필요')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => { button('wbs.agentOrderReject').click() })
+    expect(rejectAgentCompletion).toHaveBeenCalledWith(ORDER_ID, '보완 필요', RC2)
+  })
+
+  it('stale 이면 문구를 띄우고 주문을 다시 읽는다 — 새 보고를 보게', async () => {
+    approveAgentCompletion.mockResolvedValue({ ok: false, stale: true, error: '보고가 갱신되었습니다 — 새 내용을 확인한 뒤 다시 처리하세요.' })
+    await render()
+    const before = getAgentOrderForItem.mock.calls.length
+    await act(async () => { button('wbs.agentOrderApprove').click() })
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('보고가 갱신되었습니다')
+    expect(getAgentOrderForItem.mock.calls.length).toBe(before + 1)
+  })
+
+  it('stale 이 아닌 실패는 다시 읽지 않는다', async () => {
+    approveAgentCompletion.mockResolvedValue({ ok: false, error: '승인 가능한 상태가 아닙니다(approved).' })
+    await render()
+    const before = getAgentOrderForItem.mock.calls.length
+    await act(async () => { button('wbs.agentOrderApprove').click() })
+    expect(getAgentOrderForItem.mock.calls.length).toBe(before)
   })
 })
