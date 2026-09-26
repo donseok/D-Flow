@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
 import {
-  isProjectAdmin, isProjectMember, hasAnyProjectRole, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
+  canEditMinute, isProjectAdmin, isProjectMember, hasAnyProjectRole, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
 } from '@/lib/domain/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { ERR_MISSING } from '@/lib/authz/errors'
@@ -98,8 +98,9 @@ async function checkOwner(sb: Sb, minuteId: string, actor: Actor): Promise<strin
   }
   if (!data) return '회의록을 찾을 수 없습니다.'
   if (data.archived_at) return '보관된 회의록은 변경할 수 없습니다.'
-  if ((data.created_by as string | null) !== actor.userId
-      && !isProjectAdmin(actor, (data.project_id as string | null) ?? null)) return '권한 없음'
+  if (!canEditMinute(actor, {
+    created_by: (data.created_by as string | null) ?? null, project_id: (data.project_id as string | null) ?? null,
+  })) return '권한 없음'
   return null
 }
 
@@ -500,7 +501,7 @@ export async function assignMinutesProject(
     if (!row) { skipped.push({ id, reason: '회의록을 찾을 수 없습니다.' }); continue }
     if (row.archived_at) { skipped.push({ id, reason: '보관된 회의록' }); continue }
     // 미지정(project_id null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — 의도된 fail-closed.
-    if (row.created_by !== g.actor.userId && !isProjectAdmin(g.actor, row.project_id)) { skipped.push({ id, reason: '권한 없음' }); continue }
+    if (!canEditMinute(g.actor, row)) { skipped.push({ id, reason: '권한 없음' }); continue }
     if (row.meeting_id) {
       const mp = meetingProject.get(row.meeting_id) ?? null
       if (mp !== projectId) { skipped.push({ id, reason: '연결된 회의의 프로젝트와 다릅니다.' }); continue }
@@ -1318,8 +1319,9 @@ async function readShareRow(sb: Sb, id: string, actor: Actor):
     .select('created_by, share_token, share_enabled, archived_at, project_id').eq('id', id).maybeSingle()
   if (!data) return { error: '회의록을 찾을 수 없습니다.' }
   if (data.archived_at) return { error: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.' }
-  if ((data.created_by as string | null) !== actor.userId
-      && !isProjectAdmin(actor, (data.project_id as string | null) ?? null)) return { error: '권한 없음' }
+  if (!canEditMinute(actor, {
+    created_by: (data.created_by as string | null) ?? null, project_id: (data.project_id as string | null) ?? null,
+  })) return { error: '권한 없음' }
   return { state: { token: (data.share_token as string | null) ?? null, enabled: !!data.share_enabled } }
 }
 

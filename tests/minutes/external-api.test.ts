@@ -55,7 +55,8 @@ import { GET, POST } from '@/app/api/v1/minutes/route'
 import { POST as LINK } from '@/app/api/v1/minutes/link/route'
 import { GET as META } from '@/app/api/v1/minutes/meta/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
-import { makeActor, WS } from '../fixtures/actor'
+import type { ProjectRole } from '@/lib/domain/authz'
+import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const SECRET = 'test-minutes-secret'
 const EXTERNAL_ID = 'ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b77'
@@ -206,7 +207,8 @@ const existingRow = {
   meeting_occurrence_date: null,
   archived_at: null,
   external_id: EXTERNAL_ID,
-  created_by: 'u-original',
+  // 재전송 호출자(USER)가 작성자다 — replace 는 작성자 또는 그 프로젝트 관리자만(SP2 Task 13).
+  created_by: 'u-1',
   created_by_name: '원작성자',
   created_at: '2026-07-01T00:00:00+00:00',
   updated_at: '2026-07-01T00:00:00+00:00',
@@ -226,7 +228,12 @@ beforeEach(() => {
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
   mocks.activeTeamCodesForWorkspace.mockImplementation(() => mocks.activeTeamCodes)
-  mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
+  // 기본 호출자 — WS 멤버이고 PROJECT_UUID·OLD_PROJECT_UUID 의 명단 member(meeting_id 연결 자격, SP2 Task 13).
+  mocks.actorFromUser.mockResolvedValue(makeActor({
+    userId: USER.id,
+    projectWorkspace: new Map([[PROJECT_UUID, WS], [OLD_PROJECT_UUID, WS]]),
+    projectRoles: new Map<string, ProjectRole>([[PROJECT_UUID, 'member'], [OLD_PROJECT_UUID, 'member']]),
+  }))
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
   vi.stubEnv('MINUTES_API_SECRET', SECRET)
   // W25 — folder_path 편철 스위치. 이 스위트는 켠 상태를 기본으로 검증하고,
@@ -242,7 +249,7 @@ describe('인증 게이트 (§3, §9.6 ①②)', () => {
   it('MINUTES_API_ENABLED 미설정이면 전 라우트 404 — 존재 은닉, DB 미접근', async () => {
     vi.stubEnv('MINUTES_API_ENABLED', 'false')
     expect((await POST(post(payload))).status).toBe(404)
-    expect((await GET(get('/api/v1/minutes'))).status).toBe(404)
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(404)
     expect((await META(get('/api/v1/minutes/meta'))).status).toBe(404)
     expect((await LINK(link({ user_email: 'a@b.c', minute_id: 'm-1', external_id: EXTERNAL_ID }))).status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
@@ -258,7 +265,7 @@ describe('인증 게이트 (§3, §9.6 ①②)', () => {
     const wrong = await POST(post(payload, { Authorization: 'Bearer wrong' }))
     expect(wrong.status).toBe(401)
     expect(await wrong.json()).toMatchObject({ code: 'unauthorized' })
-    const missing = await GET(get('/api/v1/minutes', { Authorization: '' }))
+    const missing = await GET(get('/api/v1/minutes?user_email=lead%40example.com', { Authorization: '' }))
     expect(missing.status).toBe(401)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -325,10 +332,10 @@ describe('POST /api/v1/minutes 검증 (§3.4, §6, §9.6 ③④)', () => {
     expect((await POST(post({ ...payload, on_conflict: 'merge' }))).status).toBe(400)
   })
 
-  it('meeting_id가 존재하지 않으면 400', async () => {
+  it('meeting_id가 존재하지 않으면 404 — v2.7 부터 남의 회의와 같은 응답(존재 은닉, 종전 400)', async () => {
     useAdmin({ meetings: [{ data: null }] })
     const res = await POST(post({ ...payload, meeting_id: '00000000-0000-0000-0000-000000000000' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(404)
   })
 
   it('meeting_id가 uuid 형식이 아니면 DB 조회 전에 400 (§6 형식 오류)', async () => {
@@ -1376,7 +1383,7 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
 describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
   it('external_id 정확 일치 조회 + url 포함 응답', async () => {
     const { builders } = useAdmin({ minutes: [{ data: [existingRow], count: 1 }] })
-    const res = await GET(get(`/api/v1/minutes?external_id=${encodeURIComponent(EXTERNAL_ID)}`))
+    const res = await GET(get(`/api/v1/minutes?user_email=lead%40example.com&external_id=${encodeURIComponent(EXTERNAL_ID)}`))
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json).toMatchObject({ total: 1, page: 1, per_page: 20 })
@@ -1392,7 +1399,7 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
 
   it('W24: 기본값은 보관분 제외 — archived_at is null 필터가 걸린다', async () => {
     const { builders } = useAdmin({ minutes: [{ data: [existingRow], count: 1 }] })
-    const res = await GET(get('/api/v1/minutes'))
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com'))
     expect(res.status).toBe(200)
     expect(builders.minutes[0].is).toHaveBeenCalledWith('archived_at', null)
     expect((await res.json()).items[0].archived).toBe(false)
@@ -1403,7 +1410,7 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
       minutes: [{ data: [{ ...existingRow, archived_at: '2026-07-20T00:00:00+00:00' }], count: 1 }],
     })
     const res = await GET(get(
-      `/api/v1/minutes?external_id=${encodeURIComponent(EXTERNAL_ID)}&include_archived=true`,
+      `/api/v1/minutes?user_email=lead%40example.com&external_id=${encodeURIComponent(EXTERNAL_ID)}&include_archived=true`,
     ))
     expect(res.status).toBe(200)
     expect(builders.minutes[0].is).not.toHaveBeenCalledWith('archived_at', null)
@@ -1412,7 +1419,7 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
   })
 
   it('W24: include_archived 는 true/false 만 받는다', async () => {
-    expect((await GET(get('/api/v1/minutes?include_archived=1'))).status).toBe(400)
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&include_archived=1'))).status).toBe(400)
   })
 
   it('W24: 범위 초과 폴백 카운트 쿼리도 include_archived 를 존중한다', async () => {
@@ -1422,7 +1429,7 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
         { count: 7 },
       ],
     })
-    const res = await GET(get('/api/v1/minutes?include_archived=true&page=999'))
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com&include_archived=true&page=999'))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ items: [], total: 7 })
     expect(builders.minutes[1].is).not.toHaveBeenCalledWith('archived_at', null)
@@ -1432,7 +1439,7 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
     const { builders } = useAdmin({
       minutes: [{ data: [{ ...existingRow, body_md: '유출검증본문' }], count: 1 }],
     })
-    const res = await GET(get('/api/v1/minutes'))
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com'))
     expect(JSON.stringify(await res.json())).not.toContain('유출검증본문')
     expect(builders.minutes[0].select).toHaveBeenCalledWith(
       expect.not.stringContaining('body_md'), expect.anything(),
@@ -1446,32 +1453,32 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
         { count: 27 },
       ],
     })
-    const res = await GET(get('/api/v1/minutes?per_page=20&page=3'))
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com&per_page=20&page=3'))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ items: [], total: 27, page: 3, per_page: 20 })
   })
 
   it('linked=false는 external_id 없는 것만 (수동 연결 후보 검색 — §4b)', async () => {
     const { builders } = useAdmin({ minutes: [{ data: [], count: 0 }] })
-    expect((await GET(get('/api/v1/minutes?linked=false'))).status).toBe(200)
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&linked=false'))).status).toBe(200)
     expect(builders.minutes[0].is).toHaveBeenCalledWith('external_id', null)
   })
 
   it('linked=true는 external_id 있는 것만', async () => {
     const { builders } = useAdmin({ minutes: [{ data: [], count: 0 }] })
-    expect((await GET(get('/api/v1/minutes?linked=true'))).status).toBe(200)
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&linked=true'))).status).toBe(200)
     expect(builders.minutes[0].not).toHaveBeenCalledWith('external_id', 'is', null)
   })
 
   it('per_page는 최대 100으로 클램프, 페이지 오프셋 반영', async () => {
     const { builders } = useAdmin({ minutes: [{ data: [], count: 0 }] })
-    const res = await GET(get('/api/v1/minutes?per_page=500&page=2'))
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com&per_page=500&page=2'))
     expect((await res.json()).per_page).toBe(100)
     expect(builders.minutes[0].range).toHaveBeenCalledWith(100, 199)
   })
 
   it('허용 외 team 필터는 400', async () => {
-    expect((await GET(get('/api/v1/minutes?team=QA'))).status).toBe(400)
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=QA'))).status).toBe(400)
   })
 })
 
@@ -1600,10 +1607,12 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
 
 describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
   const linkPayload = { user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }
+  // 호출자가 작성자인 회의록 — 연결은 작성자 또는 그 프로젝트 관리자만(SP2 Task 13).
+  const OWN_MINUTE = { id: MINUTE_UUID, created_by: USER.id, project_id: null, workspace_id: WS, archived_at: null }
 
   it('external_id null 레코드에 부여 → 200 linked (본문·메타 무변경)', async () => {
     const { builders } = useAdmin({
-      minutes: [{ data: { id: MINUTE_UUID, external_id: null } }, { data: [{ id: MINUTE_UUID }] }],
+      minutes: [{ data: { ...OWN_MINUTE, external_id: null } }, { data: [{ id: MINUTE_UUID }] }],
     })
     const res = await LINK(link(linkPayload))
     expect(res.status).toBe(200)
@@ -1614,7 +1623,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
   })
 
   it('이미 같은 값이면 200 — 멱등 재호출 안전', async () => {
-    const { builders } = useAdmin({ minutes: [{ data: { id: MINUTE_UUID, external_id: EXTERNAL_ID } }] })
+    const { builders } = useAdmin({ minutes: [{ data: { ...OWN_MINUTE, external_id: EXTERNAL_ID } }] })
     const res = await LINK(link(linkPayload))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ action: 'linked' })
@@ -1622,7 +1631,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
   })
 
   it('이미 다른 값이면 409 link_conflict — 기존 연결 보호', async () => {
-    useAdmin({ minutes: [{ data: { id: MINUTE_UUID, external_id: 'ddobak:다른값' } }] })
+    useAdmin({ minutes: [{ data: { ...OWN_MINUTE, external_id: 'ddobak:다른값' } }] })
     const res = await LINK(link(linkPayload))
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ code: 'link_conflict' })
@@ -1630,7 +1639,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
 
   it('external_id가 타 레코드에 사용 중(23505)이면 409 link_conflict', async () => {
     useAdmin({
-      minutes: [{ data: { id: MINUTE_UUID, external_id: null } }, { error: { code: '23505', message: 'duplicate' } }],
+      minutes: [{ data: { ...OWN_MINUTE, external_id: null } }, { error: { code: '23505', message: 'duplicate' } }],
     })
     const res = await LINK(link(linkPayload))
     expect(res.status).toBe(409)
@@ -1640,7 +1649,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
   it('link 경합: update 0행 후 재조회가 같은 값이면 200 멱등', async () => {
     useAdmin({
       minutes: [
-        { data: { id: MINUTE_UUID, external_id: null } },
+        { data: { ...OWN_MINUTE, external_id: null } },
         { data: [] },
         { data: { external_id: EXTERNAL_ID } },
       ],
@@ -1653,7 +1662,7 @@ describe('POST /api/v1/minutes/link (§4b, §9.6 ⑩)', () => {
   it('link 경합: update 0행 후 재조회가 다른 값이면 409', async () => {
     useAdmin({
       minutes: [
-        { data: { id: MINUTE_UUID, external_id: null } },
+        { data: { ...OWN_MINUTE, external_id: null } },
         { data: [] },
         { data: { external_id: 'ddobak:다른값' } },
       ],
@@ -1771,7 +1780,8 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
     })
     const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
     expect(res.status).toBe(201)
-    expect(mocks.actorFromUser).not.toHaveBeenCalled()
+    // 스냅샷은 회의 연결 자격 판정에 한 번 쓴다(SP2 Task 13) — 소속으로 워크스페이스를 고르지는 않는다.
+    expect(mocks.actorFromUser).toHaveBeenCalledTimes(1)
     expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
       p_project_id: PROJECT_UUID, p_workspace_id: null,
     }))
@@ -1789,6 +1799,204 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
     expect(res.status).toBe(200)
     const call = admin.rpc.mock.calls.find(c => c[0] === 'commit_minute_body_version')!
     expect((call[1] as { p_metadata: Record<string, unknown> }).p_metadata).toMatchObject({ folder_id: 'w2-q' })
-    expect(mocks.actorFromUser).not.toHaveBeenCalled()   // 기존 회의록은 자기 워크스페이스를 안다
+    // 스냅샷은 편집 자격 판정에만 쓴다 — 기존 회의록은 자기 워크스페이스를 안다(작성자 소속 W1 과 무관).
+    expect(mocks.actorFromUser).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SP2 Task 13 — 외부 회의록 API 를 호출자(user_email) 권한으로 좁힌다', () => {
+  const OTHER_PROJECT = '5d1c9b0e-2f4a-4e6b-8c7d-9a0b1c2d3e4f'   // 다른 워크스페이스 프로젝트(호출자 스냅샷에 없음)
+  const W2 = 'ws-2'
+  const linkPayload = { user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }
+  const errSpy = () => vi.spyOn(console, 'error').mockImplementation(() => {})
+
+  describe('GET /minutes (목록) — user_email 필수, 볼 수 있는 회의록만', () => {
+    it('user_email 이 없으면 400 — 전 워크스페이스 목록으로 되돌아가지 않는다', async () => {
+      const res = await GET(get('/api/v1/minutes'))
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ code: 'validation_failed' })
+      expect(mocks.createAdminClient).not.toHaveBeenCalled()
+    })
+    it('모르는 user_email 은 403 unknown_user — 목록을 조회하지 않는다', async () => {
+      const { builders } = useAdmin({}, [])
+      const res = await GET(get('/api/v1/minutes?user_email=nobody%40example.com'))
+      expect(res.status).toBe(403)
+      expect(await res.json()).toMatchObject({ code: 'unknown_user' })
+      expect(builders.minutes).toBeUndefined()
+    })
+    it('호출자 워크스페이스로 in 을 걸고, 볼 수 없는 비공개 프로젝트의 회의록을 뺀다(무프로젝트 회의록은 남긴다)', async () => {
+      // PROJECT_UUID 는 비공개이고 호출자는 명단이 없다 → 숨김. OLD_PROJECT_UUID 는 명단 member 라 보인다.
+      mocks.actorFromUser.mockResolvedValue(makeActor({
+        userId: USER.id,
+        projectWorkspace: new Map([[PROJECT_UUID, WS], [OLD_PROJECT_UUID, WS]]),
+        projectRoles: new Map<string, ProjectRole>([[OLD_PROJECT_UUID, 'member']]),
+      }))
+      const { builders } = useAdmin({
+        projects: [{ data: [{ id: PROJECT_UUID, is_private: true }, { id: OLD_PROJECT_UUID, is_private: true }] }],
+        minutes: [{ data: [existingRow], count: 1 }],
+      })
+      const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com'))
+      expect(res.status).toBe(200)
+      expect(builders.projects[0].in).toHaveBeenCalledWith('workspace_id', [WS])
+      expect(builders.projects[0].eq).toHaveBeenCalledWith('is_private', true)
+      expect(builders.minutes[0].in).toHaveBeenCalledWith('workspace_id', [WS])
+      expect(builders.minutes[0].or).toHaveBeenCalledWith(`project_id.is.null,project_id.not.in.(${PROJECT_UUID})`)
+    })
+    it('범위 초과 폴백 카운트도 같은 호출자 스코프를 건다', async () => {
+      const { builders } = useAdmin({
+        minutes: [{ error: { code: 'PGRST103', message: 'Requested range not satisfiable' } }, { count: 3 }],
+      })
+      const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com&page=9'))
+      expect(await res.json()).toMatchObject({ items: [], total: 3 })
+      expect(builders.minutes[1].in).toHaveBeenCalledWith('workspace_id', [WS])
+    })
+    it('소속 워크스페이스가 없으면 회의록을 조회하지 않고 빈 목록', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map() }))
+      const { builders } = useAdmin()
+      const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com'))
+      expect(await res.json()).toMatchObject({ items: [], total: 0 })
+      expect(builders.minutes).toBeUndefined()
+    })
+    it('플랫폼 관리자는 워크스페이스 필터 없이 전부', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
+      const { builders } = useAdmin({ minutes: [{ data: [], count: 0 }] })
+      expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(200)
+      expect(builders.minutes[0].in).not.toHaveBeenCalled()
+      expect(builders.minutes[0].or).not.toHaveBeenCalled()
+    })
+    it('권한·프로젝트 조회 실패는 500 — 빈 목록으로 위장하지 않는다', async () => {
+      const spy = errSpy()
+      mocks.actorFromUser.mockRejectedValueOnce(new Error('db down'))
+      expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(500)
+      useAdmin({ projects: [{ error: { message: 'down' } }] })
+      expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(500)
+      spy.mockRestore()
+    })
+  })
+
+  describe('POST /minutes/link — 작성자 또는 그 프로젝트 관리자만, 아니면 404', () => {
+    it('다른 워크스페이스 회의록은 404 not_found — 존재를 드러내지 않고 갱신하지 않는다', async () => {
+      const { builders } = useAdmin({
+        minutes: [{ data: { id: MINUTE_UUID, external_id: null, created_by: 'u-9', project_id: OTHER_PROJECT, workspace_id: W2, archived_at: null } }],
+      })
+      const res = await LINK(link(linkPayload))
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: '회의록을 찾을 수 없습니다.', code: 'not_found' })
+      expect(builders.minutes).toHaveLength(1)
+    })
+    it('같은 워크스페이스라도 작성자가 아닌 명단 member 는 404(보관 여부도 드러내지 않는다)', async () => {
+      const { builders } = useAdmin({
+        minutes: [{ data: { id: MINUTE_UUID, external_id: null, created_by: 'u-9', project_id: PROJECT_UUID, workspace_id: WS, archived_at: '2026-09-01T00:00:00Z' } }],
+      })
+      const res = await LINK(link(linkPayload))
+      expect(res.status).toBe(404)
+      expect(builders.minutes).toHaveLength(1)
+    })
+    it('프로젝트 없는 남의 회의록은 워크스페이스 관리자도 404 — 세션 판정(checkOwner)과 같다', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]) }))
+      useAdmin({ minutes: [{ data: { id: MINUTE_UUID, external_id: null, created_by: 'u-9', project_id: null, workspace_id: WS, archived_at: null } }] })
+      expect((await LINK(link(linkPayload))).status).toBe(404)
+    })
+    it('그 프로젝트의 관리자(워크스페이스 관리자 승계)는 남의 회의록도 연결한다', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeActor({
+        userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[PROJECT_UUID, WS]]),
+      }))
+      useAdmin({
+        minutes: [
+          { data: { id: MINUTE_UUID, external_id: null, created_by: 'u-9', project_id: PROJECT_UUID, workspace_id: WS, archived_at: null } },
+          { data: [{ id: MINUTE_UUID }] },
+        ],
+      })
+      expect((await LINK(link(linkPayload))).status).toBe(200)
+    })
+    it('권한 조회 실패는 500', async () => {
+      const spy = errSpy()
+      mocks.actorFromUser.mockRejectedValueOnce(new Error('db down'))
+      useAdmin({ minutes: [{ data: { id: MINUTE_UUID, external_id: null, created_by: USER.id, project_id: null, workspace_id: WS, archived_at: null } }] })
+      expect((await LINK(link(linkPayload))).status).toBe(500)
+      spy.mockRestore()
+    })
+  })
+
+  describe('POST /minutes — meeting_id 는 그 프로젝트 멤버만, external_id 기존 회의록은 편집 자격이 있어야', () => {
+    it('다른 워크스페이스 회의에 연결하려 하면 404 — 등록하지 않는다', async () => {
+      const { admin } = useAdmin({ meetings: [{ data: { id: MEETING_UUID, project_id: OTHER_PROJECT } }], minutes: [{ data: null }] })
+      const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ code: 'not_found' })
+      expect(admin.rpc).not.toHaveBeenCalled()
+    })
+    it('같은 워크스페이스라도 명단 권한이 없는(조회 전용) 프로젝트의 회의는 404', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, projectWorkspace: new Map([[PROJECT_UUID, WS]]) }))
+      const { admin } = useAdmin({ meetings: [{ data: { id: MEETING_UUID, project_id: PROJECT_UUID } }], minutes: [{ data: null }] })
+      expect((await POST(post({ ...payload, meeting_id: MEETING_UUID }))).status).toBe(404)
+      expect(admin.rpc).not.toHaveBeenCalled()
+    })
+    it('없는 회의도 같은 404 — 남의 회의와 구별되지 않는다', async () => {
+      useAdmin({ meetings: [{ data: null }] })
+      const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ code: 'not_found' })
+    })
+    it('다른 워크스페이스 회의록의 external_id 로 replace 하면 404 — 덮어쓰지 않는다', async () => {
+      const foreign = { ...existingRow, created_by: 'u-9', project_id: OTHER_PROJECT, workspace_id: W2 }
+      const { admin } = useAdmin({ minutes: [{ data: foreign }] })
+      const res = await POST(post(payload))
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ code: 'not_found' })
+      expect(admin.rpc).not.toHaveBeenCalled()
+    })
+    it('skip·error 도 편집 자격이 없으면 404 — 남의 external_id 존재를 409·skipped 로 드러내지 않는다', async () => {
+      const foreign = { ...existingRow, created_by: 'u-9', project_id: OTHER_PROJECT, workspace_id: W2 }
+      useAdmin({ minutes: [{ data: foreign }] })
+      expect((await POST(post({ ...payload, on_conflict: 'skip' }))).status).toBe(404)
+      useAdmin({ minutes: [{ data: foreign }] })
+      expect((await POST(post({ ...payload, on_conflict: 'error' }))).status).toBe(404)
+    })
+    it('같은 프로젝트 명단 member 라도 남의 회의록은 replace 404', async () => {
+      const { admin } = useAdmin({ minutes: [{ data: { ...existingRow, created_by: 'u-9', project_id: PROJECT_UUID } }] })
+      expect((await POST(post(payload))).status).toBe(404)
+      expect(admin.rpc).not.toHaveBeenCalled()
+    })
+    it('그 프로젝트 관리자는 남의 회의록도 replace 한다', async () => {
+      mocks.actorFromUser.mockResolvedValue(makeActor({
+        userId: USER.id, projectWorkspace: new Map([[PROJECT_UUID, WS]]),
+        projectRoles: new Map<string, ProjectRole>([[PROJECT_UUID, 'admin']]),
+      }))
+      const { admin } = useAdmin({
+        minutes: [
+          { data: { ...existingRow, created_by: 'u-9', project_id: PROJECT_UUID } },
+          { data: { id: 'm-1', created_at: existingRow.created_at, updated_at: 't' } },
+        ],
+        minute_folders: [{ data: [] }],
+      })
+      expect((await POST(post(payload))).status).toBe(200)
+      expect(admin.rpc).toHaveBeenCalledWith('commit_minute_body_version', expect.anything())
+    })
+    it('inline meeting 을 만들기 전에 판정한다 — 편집 자격이 없으면 고아 회의를 남기지 않는다', async () => {
+      const foreign = { ...existingRow, created_by: 'u-9', project_id: OTHER_PROJECT, workspace_id: W2 }
+      const { builders } = useAdmin({ minutes: [{ data: foreign }] })
+      const res = await POST(post({ ...payload, meeting: { project_id: PROJECT_UUID, title: '회의', date: '2026-08-06' } }))
+      expect(res.status).toBe(404)
+      expect(builders.meetings).toBeUndefined()
+    })
+    it('동시 전송 경합(23505) 뒤 재조회한 행도 같은 판정을 거친다', async () => {
+      const foreign = { ...existingRow, created_by: 'u-9', project_id: OTHER_PROJECT, workspace_id: W2 }
+      const { admin } = useAdmin({
+        minutes: [{ data: null }, { error: { code: '23505', message: 'duplicate' } }, { data: foreign }],
+        minute_folders: [{ data: [] }],
+      })
+      const res = await POST(post(payload))
+      expect(res.status).toBe(404)
+      expect(admin.rpc).not.toHaveBeenCalledWith('commit_minute_body_version', expect.anything())
+    })
+    it('호출자 권한 조회 실패는 500 — 판정 전에 쓰지 않는다', async () => {
+      const spy = errSpy()
+      mocks.actorFromUser.mockRejectedValueOnce(new Error('db down'))
+      const { admin } = useAdmin({ minutes: [{ data: existingRow }] })
+      expect((await POST(post(payload))).status).toBe(500)
+      expect(admin.rpc).not.toHaveBeenCalled()
+      spy.mockRestore()
+    })
   })
 })

@@ -83,6 +83,15 @@ export function isProjectAdmin(actor: Actor | null, projectId: string | null): b
 export function isProjectMember(actor: Actor | null, projectId: string | null): boolean {
   const r = roleIn(actor, projectId); return r === 'superuser' || r === 'admin' || r === 'member'
 }
+/**
+ * 회의록 변경(본문·메타·연결·공유) 자격 — 작성자 본인 또는 그 프로젝트의 관리자 이상(워크스페이스 관리자 승계 포함).
+ * 프로젝트 미지정(project_id null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — 의도된 fail-closed(SP1 스펙 §3.5).
+ * 세션 액션(checkOwner)과 외부 API(link·POST replace)가 같은 판정을 쓴다.
+ */
+export function canEditMinute(actor: Actor | null, minute: { created_by: string | null; project_id: string | null }): boolean {
+  if (!actor) return false
+  return minute.created_by === actor.userId || isProjectAdmin(actor, minute.project_id)
+}
 /** 비공개 프로젝트 화면 숨김(0070 의미 유지, RLS 경계 아님). 워크스페이스 관리자 승계 포함. */
 export function canSeeProject(actor: Actor | null, project: { id: string; is_private?: boolean | null }): boolean {
   if (!project.is_private) return true

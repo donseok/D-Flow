@@ -16,16 +16,24 @@ import {
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { canEditMinute, canSeeProject, isProjectMember, type Actor } from '@/lib/domain/authz'
 import type { TeamCode } from '@/lib/domain/types'
 
 /**
  * POST /api/v1/minutes — 회의록 생성/갱신(upsert by external_id), GET — 목록/존재 확인.
  * 계약: docs/design/dflow-minutes-upload-api-spec.md §4·§5.1. 또박또박 서버가 호출한다.
+ *
+ * SP2(계약 v2.7) — 시크릿만으로는 호출자가 누구인지 모른다. 두 메서드 모두 user_email 의 권한 스냅샷
+ * (actorFromUser)으로 좁힌다: 목록은 볼 수 있는 회의록만, 쓰기는 연결할 회의의 프로젝트 멤버·기존 회의록의
+ * 편집 자격(canEditMinute)이 있을 때만. 자격이 없으면 없는 자원과 같은 404 다(존재 은닉).
  */
 
 export const dynamic = 'force-dynamic'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** 편집 자격이 없는 기존 회의록 — 없는 것과 구별하지 않는다(다른 워크스페이스 external_id 의 존재 은닉). */
+const minuteNotFound = () => apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
 
 const MINUTE_SELECT = 'id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, folder_id, created_by, created_by_name, created_at, updated_at, workspace_id'
 
@@ -308,6 +316,7 @@ async function insertNew(
   admin: AdminClient,
   p: ExternalMinutePayload,
   user: ResolvedUser,
+  authz: Actor,
   meetingProjectId: string | null,
   meetingCreated?: boolean,
 ): Promise<NextResponse> {
@@ -317,11 +326,7 @@ async function insertNew(
   // 프로젝트 없는 회의록은 워크스페이스를 명시해야 한다(0006) — 전환 UI(SP3) 전까지 소속이 하나인 계정만.
   let workspaceId: string | null = null
   if (!meetingProjectId) {
-    let actor
-    try { actor = await actorFromUser(admin, user.id) } catch (e) {
-      console.error('[minutes-api] 작성자 권한 조회 실패:', e); return apiInternalError()
-    }
-    const w = resolveSoleWorkspaceId(actor)
+    const w = resolveSoleWorkspaceId(authz)
     if (!w.ok) return apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.')
     workspaceId = w.workspaceId
   }
@@ -359,7 +364,11 @@ async function insertNew(
     if (error?.code === '23505') {
       const { data: raced, error: reErr } = await admin.from('minutes')
         .select(MINUTE_SELECT).eq('external_id', p.externalId).maybeSingle()
-      if (!reErr && raced) return handleExisting(req, admin, p, raced as ExistingRow, user, meetingProjectId, meetingCreated)
+      if (!reErr && raced) {
+        // 경합으로 생긴 행도 같은 편집 자격 판정을 거친다 — 남의 external_id 로의 우회 덮어쓰기 차단.
+        if (!canEditMinute(authz, raced as ExistingRow)) return minuteNotFound()
+        return handleExisting(req, admin, p, raced as ExistingRow, user, meetingProjectId, meetingCreated)
+      }
     }
     console.error('[minutes-api] insert 실패:', error?.message ?? 'no row')
     return apiInternalError()
@@ -425,13 +434,21 @@ export async function POST(req: NextRequest) {
     if ('error' in parsed) return apiBadRequest(parsed.error)
     const p = parsed.payload
 
+    // 호출자 권한 스냅샷 — 회의 연결 자격·기존 회의록 편집 자격·무프로젝트 신규의 워크스페이스를 모두 여기서 판정한다.
+    // 조회 실패는 throw → 아래 catch 의 500(권한 없음으로 위장하지 않는다).
+    const authz = await actorFromUser(admin, user.id)
+
     let meetingProjectId: string | null = null
     if (p.meetingId) {
       const { data: mt, error: mtErr } = await admin.from('meetings')
         .select('id, project_id').eq('id', p.meetingId).maybeSingle()
-      // 쓰기 선행조회 실패를 '회의 없음'으로 오인하면 정상 요청이 400으로 거짓 거절된다 — 실패는 실패로.
+      // 쓰기 선행조회 실패를 '회의 없음'으로 오인하면 정상 요청이 거짓 거절된다 — 실패는 실패로.
       if (mtErr) { console.error('[minutes-api] 회의 존재 확인 실패:', mtErr.message); return apiInternalError() }
-      if (!mt) return apiBadRequest('연결할 회의를 찾을 수 없습니다.')
+      // 그 프로젝트의 멤버 이상만 연결한다(v2.7). 없는 회의와 남의 회의를 같은 404 로 — 다른 워크스페이스 회의의
+      // 존재를 드러내지 않는다.
+      if (!mt || !isProjectMember(authz, mt.project_id as string)) {
+        return apiFail(404, 'not_found', '연결할 회의를 찾을 수 없습니다.')
+      }
       meetingProjectId = mt.project_id as string
     }
 
@@ -445,6 +462,9 @@ export async function POST(req: NextRequest) {
     // 응답이라 회의를 만들면 실패·무시 응답 뒤에 고아 회의가 남는다(409 archived 포함).
     if (existing) {
       const ex = existing as ExistingRow
+      // external_id 는 전역 유일이라 조회는 전역이지만, 판정은 호출자 기준이다 — 편집 자격(작성자·그 프로젝트
+      // 관리자)이 없으면 skip·error·보관 분기까지 포함해 404. 회의 확보(inline meeting)보다 먼저라 고아 회의도 없다.
+      if (!canEditMinute(authz, ex)) return minuteNotFound()
       if (ex.archived_at !== null || p.onConflict !== 'replace') {
         return await handleExisting(req, admin, p, ex, user, meetingProjectId)
       }
@@ -465,11 +485,36 @@ export async function POST(req: NextRequest) {
     if (existing) {
       return await handleExisting(req, admin, p, existing as ExistingRow, user, meetingProjectId, meetingCreated)
     }
-    return await insertNew(req, admin, p, user, meetingProjectId, meetingCreated)
+    return await insertNew(req, admin, p, user, authz, meetingProjectId, meetingCreated)
   } catch (e) {
     console.error('[minutes-api] POST 처리 실패:', e instanceof Error ? e.message : e)
     return apiInternalError()
   }
+}
+
+/**
+ * 목록의 호출자 스코프 — 'all'(플랫폼 관리자), 'none'(소속 워크스페이스 없음 — 볼 회의록이 없다),
+ * 또는 소속 워크스페이스들 + 그 안에서 볼 수 없는 비공개 프로젝트(canSeeProject 거짓). 무프로젝트 회의록은
+ * 워크스페이스 멤버에게 보인다. 프로젝트 조회 실패는 'error'(빈 목록으로 위장하지 않는다).
+ */
+async function listScope(
+  admin: AdminClient, actor: Actor,
+): Promise<'all' | 'none' | 'error' | { workspaceIds: string[]; hiddenProjectIds: string[] }> {
+  if (actor.isSuperuser) return 'all'
+  const workspaceIds = [...actor.workspaceRoles.keys()]
+  if (workspaceIds.length === 0) return 'none'
+  // 내 워크스페이스들의 비공개 프로젝트만 읽는다(id 목록을 싣지 않아 URL 이 프로젝트 수에 비례해 늘지 않는다).
+  const { data, error } = await admin.from('projects').select('id, is_private')
+    .in('workspace_id', workspaceIds).eq('is_private', true)
+  if (error) { console.error('[minutes-api] 목록 비공개 프로젝트 조회 실패:', error.message); return 'error' }
+  const hiddenProjectIds = ((data ?? []) as Array<{ id: string; is_private: boolean | null }>)
+    .filter(p => !canSeeProject(actor, p)).map(p => p.id)
+  return { workspaceIds, hiddenProjectIds }
+}
+
+/** 숨길 프로젝트를 빼되 무프로젝트 회의록은 남긴다 — `not.in` 만 걸면 NULL 비교가 거짓이 돼 무프로젝트 행까지 빠진다. */
+function hiddenProjectFilter(ids: string[]): string {
+  return `project_id.is.null,project_id.not.in.(${ids.join(',')})`
 }
 
 function clampInt(v: string | null, min: number, max: number, def: number): number {
@@ -502,13 +547,28 @@ export async function GET(req: NextRequest) {
   const includeArchived = includeArchivedRaw === 'true'
   const page = clampInt(sp.get('page'), 1, Number.MAX_SAFE_INTEGER, 1)
   const perPage = clampInt(sp.get('per_page'), 1, 100, 20)
+  // v2.7 — 호출자 필수. 없으면 전 워크스페이스 목록으로 되돌아가지 않는다(meta 와 같은 규칙).
+  const userEmail = sp.get('user_email')?.trim() ?? ''
+  if (!userEmail) return apiBadRequest('user_email 이 필요합니다.')
 
   try {
     const admin = createAdminClient()
+    // 계정·권한 조회 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
+    const user = await resolveUserByEmail(admin, userEmail)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    const authz = await actorFromUser(admin, user.id)
+    const scope = await listScope(admin, authz)
+    if (scope === 'error') return apiInternalError()
+    if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })
+
     let q = admin.from('minutes').select(
       'id, minute_date, team_code, title, external_id, archived_at, created_by_name, created_at, updated_at',
       { count: 'exact' },
     )
+    if (scope !== 'all') {
+      q = q.in('workspace_id', scope.workspaceIds)
+      if (scope.hiddenProjectIds.length > 0) q = q.or(hiddenProjectFilter(scope.hiddenProjectIds))
+    }
     if (!includeArchived) q = q.is('archived_at', null)
     const externalId = sp.get('external_id')
     if (externalId) q = q.eq('external_id', externalId)
@@ -528,6 +588,10 @@ export async function GET(req: NextRequest) {
       // 같은 필터의 head 카운트로 total 만 채워 빈 페이지로 응답한다(500 아님).
       if (error.code === 'PGRST103') {
         let cq = admin.from('minutes').select('id', { count: 'exact', head: true })
+        if (scope !== 'all') {
+          cq = cq.in('workspace_id', scope.workspaceIds)
+          if (scope.hiddenProjectIds.length > 0) cq = cq.or(hiddenProjectFilter(scope.hiddenProjectIds))
+        }
         if (!includeArchived) cq = cq.is('archived_at', null)
         if (externalId) cq = cq.eq('external_id', externalId)
         if (linked === 'true') cq = cq.not('external_id', 'is', null)
