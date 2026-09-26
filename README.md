@@ -42,8 +42,9 @@ npm run dev                                         # http://localhost:3000
   답변 근거에서 제외한다.
 - **`INVITE_ALLOWED_DOMAINS`** — 프로젝트 초대를 허용할 이메일 도메인(쉼표·공백 구분,
   `*`는 전체 허용). **비우면 초대가 전부 거부된다** — 빈 값이 "제한 없음"이 아니다.
-- **`SMTP_USER` / `SMTP_PASS` / `MAIL_FROM_NAME`** — 회의 안내 메일 발송(Gmail SMTP). 미설정이면
-  발송 액션이 throw하지 않고 `{ ok: false }`를 반환한다(로컬 정상 동작).
+- **`SMTP_HOST`·`SMTP_PORT`·`SMTP_SECURE`·`SMTP_AUTH`·`SMTP_USER`·`SMTP_PASS`·`SMTP_FROM_ADDRESS`·`MAIL_FROM_NAME`**
+  — 회의 안내·초대 메일(공급자 중립 SMTP). `SMTP_HOST` 가 없으면 발송 액션이 throw 하지 않고
+  `{ ok: false }`를 반환한다(로컬 정상 동작). 규칙과 Gmail·로컬 inbucket 예시는 `.env.local.example` 에 있다.
 - 회의록 업로드 외부 연동(`MINUTES_API_ENABLED`, `MINUTES_API_SECRET` 등)은
   `docs/design/dflow-minutes-upload-api-spec.md` 참고. 두 값이 모두 설정돼야 관련 라우트가
   열리고, 미설정이면 전 라우트가 404다.
