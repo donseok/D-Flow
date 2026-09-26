@@ -33,7 +33,7 @@ function stripTrailingDot(s: string): string {
  *  반영하지 않고 버린다 — 그대로 두면 거부 문구가 "이런 도메인도 되는 줄" 오해를 부르고,
  *  '*.example.com' 같은 항목은 와일드카드 서브도메인 허용처럼 보이지만 실제로는 리터럴
  *  비교라 절대 매치되지 않는다(무의미한 설정을 조용히 삼키지 않는다). */
-export function parseAllowedDomains(raw: string | undefined): string[] {
+export function parseAllowedDomains(raw: string | undefined, source = 'INVITE_ALLOWED_DOMAINS'): string[] {
   const out: string[] = []
   for (const part of (raw ?? '').split(/[\s,]+/)) {
     // '@example.com' 처럼 적어도 받아들인다(설정 실수가 잦은 형태).
@@ -41,17 +41,28 @@ export function parseAllowedDomains(raw: string | undefined): string[] {
     if (!trimmed) continue
     if (trimmed === ANY_DOMAIN) return [ANY_DOMAIN]
     if (trimmed.includes(ANY_DOMAIN)) {
-      console.error(`[invites] INVITE_ALLOWED_DOMAINS 항목을 건너뜁니다('*' 는 단독일 때만 전체 허용): ${trimmed}`)
+      console.error(`[invites] ${source} 항목을 건너뜁니다('*' 는 단독일 때만 전체 허용): ${trimmed}`)
       continue
     }
     const d = stripTrailingDot(trimmed)
     if (!HOSTNAME_RE.test(d)) {
-      console.error(`[invites] INVITE_ALLOWED_DOMAINS 항목을 건너뜁니다(호스트명 형태가 아님): ${trimmed}`)
+      console.error(`[invites] ${source} 항목을 건너뜁니다(호스트명 형태가 아님): ${trimmed}`)
       continue
     }
     if (!out.includes(d)) out.push(d)
   }
   return out
+}
+
+/** 초대 허용 도메인 결정(SP2 §4.4). 워크스페이스 설정(workspace_settings.allowed_domains)이 비어 있지 않으면 그것,
+ *  비었거나 행이 없으면(null) env INVITE_ALLOWED_DOMAINS. 워크스페이스 목록도 parseAllowedDomains 규칙으로 거른다 —
+ *  목록이 있는데 항목이 전부 깨졌으면 [](초대 불가)이지 env 로 넓히지 않는다(관리자가 좁히려던 설정을 조용히 무시하지 않는다).
+ *  조회 실패는 여기 오기 전에 호출부가 중단한다(null 은 '행 없음'만 뜻한다). */
+export function resolveInviteDomains(workspaceDomains: string[] | null, envValue: string | undefined): string[] {
+  if (workspaceDomains && workspaceDomains.length > 0) {
+    return parseAllowedDomains(workspaceDomains.join(' '), 'workspace_settings.allowed_domains')
+  }
+  return parseAllowedDomains(envValue)
 }
 
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —

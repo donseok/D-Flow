@@ -342,12 +342,14 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_person: { id: 'pe-old' } }))
   })
 
-  // 헬퍼·buildActor 는 인물이 활성일 때만 권한을 인정한다 — 비활성 인물에 이으면 '권한 부여 성공' 이 실제로는 무효다.
-  // consume_project_invite 의 재활성화와 같은 규칙(service_role 이라 people.active 컬럼 권한을 넘는다).
-  it('비활성 외부 인력에 이을 때는 함께 되살린다', async () => {
+  // 비활성화는 관리자의 결정이라 계정 생성의 부수효과로 되살리지 않는다 — consume_project_invite 의 INVITE_INACTIVE(0008)와
+  // 같은 규칙. 조용히 잇기만 하면(active 그대로) 헬퍼·buildActor 가 권한을 인정하지 않아 '권한 부여 성공' 이 무효가 된다.
+  it('비활성 외부 인력이면 되살리지도 잇지도 않고 거부한 뒤 계정을 되돌린다', async () => {
     const c = accountClient({ existingPerson: { id: 'pe-old', user_id: null, active: false } })
-    expect(await createAccount(INPUT)).toEqual({ ok: true })
-    expect(c.q.peopleLink.update).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'u-new', active: true }))
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: '비활성화된 인원입니다. 관리자에게 명단 재활성화를 요청하세요.' })
+    expect(c.q.peopleLink.update).not.toHaveBeenCalled()
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.deleteUser).toHaveBeenCalledWith('u-new')
   })
 
   it('그 인물이 이미 다른 계정에 연결돼 있으면 거부하고 계정을 되돌린다', async () => {

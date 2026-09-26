@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadInviteDomains } from '@/lib/data/inviteDomains'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { isValidEmail } from '@/lib/domain/validate'
 import { isAdminAccessRole } from '@/lib/domain/authz'
@@ -11,7 +12,7 @@ import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import {
   DEFAULT_INVITE_DAYS, inviteStatus, isAllowedInviteDomain, normalizeInviteDays,
-  normalizeInviteEmail, parseAllowedDomains, type InviteStatus,
+  normalizeInviteEmail, type InviteStatus,
 } from '@/lib/domain/invites'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -208,8 +209,6 @@ export async function createProjectInvite(
   if (accessRole !== null && accessRole !== 'admin' && accessRole !== 'member') return { ok: false, error: ERR_ACCESS }
   const email = normalizeInviteEmail(typeof input.email === 'string' ? input.email : '')
   if (!isValidEmail(email)) return { ok: false, error: ERR_EMAIL }
-  const domains = parseAllowedDomains(process.env.INVITE_ALLOWED_DOMAINS)
-  if (!isAllowedInviteDomain(email, domains)) return { ok: false, error: domainError(domains) }
   // 팀은 이 프로젝트에서 고를 수 있는 활성 팀만(resolveTeamsForProject 규칙) — 트리거가 워크스페이스 범위를 다시 본다.
   if (!Array.isArray(input.teamIds)) return { ok: false, error: ERR_TEAM }
   const selectable = teamsForProjectSync(projectId).filter(t => t.active)
@@ -240,6 +239,12 @@ export async function createProjectInvite(
     return { ok: false, error: ERR_LOOKUP }
   }
   if (!project) return { ok: false, error: '프로젝트를 찾을 수 없습니다.' }
+
+  // 허용 도메인은 그 워크스페이스 설정(비었으면 env) — 설정을 읽어야 하므로 DB 에 닿은 뒤지만, 계정 유무·중복 조회와
+  // insert 보다는 먼저 막는다. 설정 조회 실패는 보안 가드라 발급 중단(fail-closed).
+  const loaded = await loadInviteDomains(admin, project.workspace_id as string)
+  if (!loaded.ok) return { ok: false, error: ERR_LOOKUP }
+  if (!isAllowedInviteDomain(email, loaded.domains)) return { ok: false, error: domainError(loaded.domains) }
 
   // 기존 계정이 있으면 링크가 '로그인하고 합류' 경로가 된다 — 발급을 막지는 않고 안내만 한다.
   const alreadyAccount = await hasAccount(admin, email)

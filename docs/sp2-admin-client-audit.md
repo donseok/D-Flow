@@ -24,12 +24,12 @@
 | src/app/actions/agentTokens.ts | 세션 가드 뒤 id 스코프 | 세션 사용자 = owner_user_id 로만 발급·폐기·목록 처리한다. PAT 의 project_id 는 쓰는 시점에 라우트가 멤버십으로 판정한다 |
 | src/app/actions/agentWork.ts | 세션 가드 뒤 id 스코프 | 주문 행의 project_id 로 requireProjectAdmin 또는 서브트리 관리자를 판정한 뒤, 그 주문·항목 id 로만 쓴다 |
 | src/app/actions/inbox.ts | 세션 가드 뒤 id 스코프 | getSession 사용자의 notification_recipients(user_id 필터)만 읽음 표시한다 |
-| src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
+| src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 워크스페이스(허용 도메인 설정)·프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
 | src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다 |
 | src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | requireActor 와 소유자 확인 뒤, 회의록·폴더 id 로 하이라이트·폴더 이동·공유를 쓴다. 가드를 워크스페이스로 옮기는 일은 Task 16 이 한다 |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid), 설정·비공개는 requireProjectAdmin(pid) 뒤에 그 pid 로 project_settings·projects 를 쓴다 |
 | src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
-| src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로 읽고 쓴다 |
+| src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로, workspace_settings 를 그 프로젝트의 워크스페이스 id 로 읽고 쓴다 |
 | src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 의 원본은 teamsForWorkspaceSync(프로젝트의 wid)다(이번에 고침) |
 | src/app/actions/roster.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin 또는 Member(pid) 뒤에 project_members 를 pid·memberId 로 읽고, upsert RPC 에 pid 를 넘긴다 |
 | src/app/actions/teams.ts | 세션 가드 뒤 id 스코프 | addTeam 은 requireWorkspaceAdmin(wid) 뒤에 wid 로 필터한다. updateTeam 은 행의 workspace_id 로 가드한 뒤 eq(workspace_id) 로 쓴다. listTeamsAdmin 은 adminFor({ workspaceId }) 를 쓴다 |

@@ -25,7 +25,9 @@ const PROJECT = 'p-1'
 const USER = { id: 'u-1', email: 'mina.park@example.com' }
 const SIGNUP = { name: ' 홍길동 ', password: 'password1', passwordConfirmation: 'password1' }
 
+const WS_ID = 'ws-1'
 const INVITE = {
+  workspace_id: WS_ID,
   project_id: PROJECT,
   email: 'mina.park@example.com',
   access_role: 'member',
@@ -33,6 +35,7 @@ const INVITE = {
   revoked_at: null,
   redeemed_at: null,
 }
+const INACTIVE_MSG = '비활성화된 인원입니다. 관리자에게 명단 재활성화를 요청하세요.'
 const CONSUMED = [{ workspace_id: 'ws-1', project_id: PROJECT, member_id: 'm-1' }]
 
 interface Fixtures {
@@ -46,6 +49,8 @@ interface Fixtures {
   createUser?: { data: unknown; error: unknown }
   /** 미리보기의 팀 이름 조회(teams.in('id', team_ids)). */
   teams?: { data: unknown; error: unknown }
+  /** workspace_settings 행(허용 도메인) — 기본은 행 없음(env 폴백). */
+  settings?: { data: unknown; error: unknown }
 }
 
 /** supabase 체인 모킹 + 호출 인자 기록. 예상 밖 테이블·메서드 접근은 즉시 실패시킨다. */
@@ -53,6 +58,7 @@ function makeAdmin(f: Fixtures = {}) {
   const spies = {
     rpc: vi.fn(), inviteEq: vi.fn(), inviteUpdate: vi.fn(), inviteUpdateEq: vi.fn(), existingEq: vi.fn(),
     profileEq: vi.fn(), profileInsert: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(), teamsIn: vi.fn(),
+    settingsEq: vi.fn(),
   }
   spies.rpc.mockResolvedValue(f.consume ?? { data: CONSUMED, error: null })
   spies.inviteUpdate.mockResolvedValue(f.inviteUpdate ?? { error: null })
@@ -97,6 +103,16 @@ function makeAdmin(f: Fixtures = {}) {
             },
           }),
           insert: (row: unknown) => spies.profileInsert(row),
+        }
+      }
+      if (table === 'workspace_settings') {
+        return {
+          select: () => ({
+            eq: (col: string, v: unknown) => {
+              spies.settingsEq(col, v)
+              return { maybeSingle: async () => f.settings ?? { data: null, error: null } }
+            },
+          }),
         }
       }
       if (table === 'teams') {
@@ -192,6 +208,32 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     expect(spies.rpc).not.toHaveBeenCalled()
   })
 
+  // SP2 §4.4 — 초대의 워크스페이스 설정이 비어 있지 않으면 env 보다 우선한다
+  it('초대 워크스페이스의 허용 도메인이 좁혀지면 env 가 허용해도 막는다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
+    expect(spies.settingsEq).toHaveBeenCalledWith('workspace_id', WS_ID)
+    expect(spies.rpc).not.toHaveBeenCalled()
+  })
+
+  it('워크스페이스 허용 도메인이 있으면 env 가 막아도 그것으로 통과한다', async () => {
+    getSession.mockResolvedValue(USER)
+    process.env.INVITE_ALLOWED_DOMAINS = 'other.com'
+    const spies = makeAdmin({ settings: { data: { allowed_domains: ['example.com'] }, error: null } })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(spies.rpc).toHaveBeenCalled()
+  })
+
+  it('워크스페이스 설정 조회가 실패하면 env 로 폴백하지 않고 중단한다(fail-closed)', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin({ settings: { data: null, error: { message: 'boom' } } })
+    const spy = silenceConsole()
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(spies.rpc).not.toHaveBeenCalled()
+  })
+
   it('세션 이메일이 초대 이메일과 다르면 소비 전에 거부한다', async () => {
     getSession.mockResolvedValue({ id: 'u-2', email: 'other@example.com' })
     const spies = makeAdmin()
@@ -224,13 +266,23 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     expect(spies.rpc).toHaveBeenCalled()
   })
 
-  it('비활성 명단 행의 권한은 없는 것으로 본다 — 소비해서 되살린다', async () => {
+  // 0008 — 비활성화는 관리자의 결정이라 링크 하나로 뒤집지 않는다. 명단 행·인물이 비활성이면 소비하지 않고 안내한다.
+  it.each([
+    ['명단 행', { access_role: 'member', active: false, people: { user_id: USER.id, active: true } }],
+    ['인물', { access_role: 'member', active: true, people: { user_id: USER.id, active: false } }],
+  ])('비활성 %s 은 초대로 되살리지 않는다 — 소비하지 않고 재활성화를 안내한다', async (_label, row) => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({
-      existing: { data: { access_role: 'member', active: false, people: { user_id: USER.id, active: true } }, error: null },
-    })
-    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
-    expect(spies.rpc).toHaveBeenCalled()
+    const spies = makeAdmin({ existing: { data: row, error: null } })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: INACTIVE_MSG })
+    expect(spies.rpc).not.toHaveBeenCalled()
+  })
+
+  it('RPC 가 INVITE_INACTIVE 로 거부하면(명단 행 없는 비활성 인물) 같은 문구', async () => {
+    getSession.mockResolvedValue(USER)
+    makeAdmin({ consume: { data: null, error: { code: '23514', message: 'INVITE_INACTIVE' } } })
+    const spy = silenceConsole()
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: INACTIVE_MSG })
+    spy.mockRestore()
   })
 
   it('기존 권한 조회가 실패하면 소비하지 않고 중단한다', async () => {
@@ -394,6 +446,25 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
     expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
   })
 
+  it('비활성 인물의 이메일이면(INVITE_INACTIVE) 재활성화를 안내하고 만든 계정을 지운다', async () => {
+    getSession.mockResolvedValue(null)
+    const spies = makeAdmin({ consume: { data: null, error: { code: '23514', message: 'INVITE_INACTIVE' } } })
+    const spy = silenceConsole()
+    const res = await redeemInviteWithSignup(TOKEN, SIGNUP)
+    spy.mockRestore()
+    expect(res).toEqual({ ok: false, error: INACTIVE_MSG })
+    expect(spies.deleteUser).toHaveBeenCalledWith('u-new')
+  })
+
+  it('워크스페이스 설정 조회가 실패하면 계정을 만들지 않는다(fail-closed)', async () => {
+    getSession.mockResolvedValue(null)
+    const spies = makeAdmin({ settings: { data: null, error: { message: 'boom' } } })
+    const spy = silenceConsole()
+    expect(await redeemInviteWithSignup(TOKEN, SIGNUP)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(spies.createUser).not.toHaveBeenCalled()
+  })
+
   it('되돌리기가 실패해도 계정은 지운다 — 초대 고착보다 유령 계정이 더 나쁘다', async () => {
     getSession.mockResolvedValue(null)
     const spies = makeAdmin({
@@ -414,6 +485,7 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
 
 describe('getInvitePreview', () => {
   const PREVIEW_ROW = {
+    workspace_id: WS_ID,
     email: INVITE.email,
     expires_at: INVITE.expires_at,
     revoked_at: null,
@@ -513,6 +585,16 @@ describe('getInvitePreview', () => {
     process.env.INVITE_ALLOWED_DOMAINS = 'other.com'
     const res = await getInvitePreview(TOKEN)
     expect(res).toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
+    expect(spies.profileEq).not.toHaveBeenCalled()
+  })
+
+  it('워크스페이스 설정 조회가 실패하면 조회 실패 문구 — 프로젝트명·계정 유무로 진행하지 않는다', async () => {
+    const spies = makeAdmin({ invite: { data: PREVIEW_ROW, error: null }, settings: { data: null, error: { message: 'boom' } } })
+    const spy = silenceConsole()
+    const res = await getInvitePreview(TOKEN)
+    spy.mockRestore()
+    expect(res).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    expect(spies.settingsEq).toHaveBeenCalledWith('workspace_id', WS_ID)
     expect(spies.profileEq).not.toHaveBeenCalled()
   })
 })

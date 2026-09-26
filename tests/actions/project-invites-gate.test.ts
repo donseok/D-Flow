@@ -132,6 +132,8 @@ function createClient(o: {
   blockingError?: { message: string } | null
   insertError?: { code?: string; message: string } | null
   profile?: QueryResult
+  /** workspace_settings 행(허용 도메인) — 기본은 행 없음(env 폴백) */
+  settings?: QueryResult
 } = {}) {
   const insert = vi.fn((payload: Record<string, unknown>) => chainOf({
     data: o.insertError ? null : {
@@ -144,10 +146,15 @@ function createClient(o: {
   // 자동 정리를 걷어냈으므로 중복 검사 경로는 project_invites 를 읽기만 해야 한다.
   const update = vi.fn(() => chainOf({ data: [], error: null }))
   const del = vi.fn(() => chainOf({ data: [], error: null }))
+  const settingsEq = vi.fn()
 
   const from = vi.fn((table: string) => {
     if (table === 'projects') return chainOf({ data: { name: 'Acme Project', workspace_id: 'ws-1' }, error: null })
     if (table === 'profiles') return chainOf(o.profile ?? { data: null, error: null })
+    if (table === 'workspace_settings') {
+      const chain = chainOf(o.settings ?? { data: null, error: null })
+      return { ...chain, select: () => ({ ...chain, eq: (...a: unknown[]) => { settingsEq(...a); return chain } }) }
+    }
     if (table === 'project_invites') {
       return {
         ...chainOf({ data: o.blockingError ? null : (o.blocking ?? []), error: o.blockingError ?? null }),
@@ -162,7 +169,7 @@ function createClient(o: {
   }))
   return {
     client: { from, auth: { admin: { getUserById } } },
-    from, insert, update, del,
+    from, insert, update, del, settingsEq,
   }
 }
 
@@ -239,27 +246,72 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     requireProjectAdmin.mockResolvedValue({ ok: true, actor: adminActor })
   })
 
+  /** 도메인 판정은 워크스페이스 설정을 읽은 뒤다 — 거부되면 계정 유무·중복 조회·insert 에 닿지 않는다. */
+  function expectRejectedBeforeWrites(c: ReturnType<typeof createClient>) {
+    expect(c.insert).not.toHaveBeenCalled()
+    expect(c.from).not.toHaveBeenCalledWith('profiles')
+    expect(c.from).not.toHaveBeenCalledWith('project_invites')
+  }
+
   it('사외 도메인은 초대를 만들지 않는다', async () => {
+    const c = createClient()
+    createAdminClient.mockReturnValue(c.client as never)
     const res = await createProjectInvite(P1, { ...VALID, email: 'someone@gmail.com' })
     expect(res).toEqual({ ok: false, error: '허용된 이메일 도메인(@example.com)으로만 초대할 수 있습니다.' })
-    expect(createAdminClient).not.toHaveBeenCalled()
+    expectRejectedBeforeWrites(c)
   })
 
   // 서브도메인 사칭('example.com.evil.io')이 허용 도메인으로 통과하면 화이트리스트가 무의미하다.
   it('허용 도메인을 접두로 가진 사칭 주소도 거부한다', async () => {
+    const c = createClient()
+    createAdminClient.mockReturnValue(c.client as never)
     const res = await createProjectInvite(P1, { ...VALID, email: 'a@example.com.evil.io' })
     expect(res).toMatchObject({ ok: false, error: '허용된 이메일 도메인(@example.com)으로만 초대할 수 있습니다.' })
-    expect(createAdminClient).not.toHaveBeenCalled()
+    expectRejectedBeforeWrites(c)
   })
 
   // 문구를 하드코딩하면 다른 도메인을 설정한 배포에서 관리자가 거짓 안내를 받는다.
   it('거부 문구는 설정된 허용 도메인 목록으로 조립한다', async () => {
     process.env.INVITE_ALLOWED_DOMAINS = 'example.com, corp.co.kr'
+    const c = createClient()
+    createAdminClient.mockReturnValue(c.client as never)
     const res = await createProjectInvite(P1, { ...VALID, email: 'someone@gmail.com' })
     expect(res).toEqual({
       ok: false, error: '허용된 이메일 도메인(@example.com, @corp.co.kr)으로만 초대할 수 있습니다.',
     })
-    expect(createAdminClient).not.toHaveBeenCalled()
+    expectRejectedBeforeWrites(c)
+  })
+
+  // SP2 §4.4 — 워크스페이스 설정이 비어 있지 않으면 env 보다 우선한다(넓히든 좁히든)
+  it('워크스페이스 허용 도메인이 있으면 그것으로 판정하고 env 는 보지 않는다', async () => {
+    const c = createClient({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    createAdminClient.mockReturnValue(c.client as never)
+    expect(await createProjectInvite(P1, VALID)).toEqual({
+      ok: false, error: '허용된 이메일 도메인(@acme.test)으로만 초대할 수 있습니다.',
+    })
+    expect(c.settingsEq).toHaveBeenCalledWith('workspace_id', 'ws-1')
+    expectRejectedBeforeWrites(c)
+
+    const c2 = createClient({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    createAdminClient.mockReturnValue(c2.client as never)
+    send.mockResolvedValue({ rejected: [] })
+    expect(await createProjectInvite(P1, { ...VALID, email: 'mina@acme.test' })).toMatchObject({ ok: true })
+  })
+
+  it('워크스페이스 허용 도메인이 빈 배열이면 env 로 판정한다', async () => {
+    const c = createClient({ settings: { data: { allowed_domains: [] }, error: null } })
+    createAdminClient.mockReturnValue(c.client as never)
+    send.mockResolvedValue({ rejected: [] })
+    expect(await createProjectInvite(P1, VALID)).toMatchObject({ ok: true })
+  })
+
+  it('워크스페이스 설정 조회가 실패하면 env 로 폴백하지 않고 발급을 중단한다(fail-closed)', async () => {
+    const c = createClient({ settings: { data: null, error: { message: 'boom' } } })
+    createAdminClient.mockReturnValue(c.client as never)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await createProjectInvite(P1, VALID)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expectRejectedBeforeWrites(c)
   })
 
   const FAIL_CLOSED_MSG = '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
@@ -270,9 +322,11 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
   ])('환경변수가 %s 이면 어떤 주소도 초대하지 않고 설정을 안내한다(fail-closed)', async (_label, value) => {
     if (value === undefined) delete process.env.INVITE_ALLOWED_DOMAINS
     else process.env.INVITE_ALLOWED_DOMAINS = value
+    const c = createClient()
+    createAdminClient.mockReturnValue(c.client as never)
     const res = await createProjectInvite(P1, { ...VALID, email: 'someone@example.com' })
     expect(res).toEqual({ ok: false, error: FAIL_CLOSED_MSG })
-    expect(createAdminClient).not.toHaveBeenCalled()
+    expectRejectedBeforeWrites(c)
   })
 
   it("환경변수가 '*' 면 임의 도메인을 허용하지만 이메일 형식 검사는 그대로 적용한다", async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
-  isInviteToken, normalizeInviteEmail, parseAllowedDomains, isAllowedInviteDomain,
+  isInviteToken, normalizeInviteEmail, parseAllowedDomains, isAllowedInviteDomain, resolveInviteDomains,
   DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, normalizeInviteDays,
   inviteStatus, inviteStatusLabel, maskEmail, validateSignupInput,
   type InviteStateRow,
@@ -27,6 +27,26 @@ describe('normalizeInviteEmail', () => {
     expect(normalizeInviteEmail('  Mina.PARK@Example.com \n')).toBe('mina.park@example.com')
     expect(normalizeInviteEmail('a@b.com')).toBe('a@b.com')
     expect(normalizeInviteEmail('   ')).toBe('')
+  })
+})
+
+describe('resolveInviteDomains', () => {
+  it('워크스페이스 목록이 비어 있지 않으면 그것 — env 는 보지 않는다', () => {
+    expect(resolveInviteDomains(['Acme.test', '@corp.co.kr'], 'example.com')).toEqual(['acme.test', 'corp.co.kr'])
+    expect(resolveInviteDomains(['acme.test'], '*')).toEqual(['acme.test'])
+  })
+  it('워크스페이스 목록이 빈 배열이거나 행이 없으면(null) env', () => {
+    expect(resolveInviteDomains([], 'example.com, corp.co.kr')).toEqual(['example.com', 'corp.co.kr'])
+    expect(resolveInviteDomains(null, 'example.com')).toEqual(['example.com'])
+  })
+  it('둘 다 없으면 [] — 초대 불가(fail-closed)', () => {
+    expect(resolveInviteDomains(null, undefined)).toEqual([])
+    expect(resolveInviteDomains([], '')).toEqual([])
+  })
+  it('워크스페이스 목록이 있는데 항목이 전부 깨졌으면 [] — env 로 넓히지 않는다', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(resolveInviteDomains(['*.acme.test', 'not a host'], 'example.com')).toEqual([])
+    spy.mockRestore()
   })
 })
 

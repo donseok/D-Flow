@@ -8,6 +8,8 @@ import { ERR_DENIED } from '@/lib/authz/errors'
 export const ROSTER_WRITE_FAILED = '명단을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
 /** 명단 행 삭제 거부 — 사전 검사(removeRosterMember)와 FK 위반(23503) 방어선이 같은 문구를 쓴다. */
 export const ROSTER_HAS_RECORDS = '담당·참석 기록이 있는 사람은 삭제할 수 없습니다. 비활성으로 바꾸세요.'
+/** 비활성 인물·명단 행은 초대 수락·계정 연결로 되살리지 않는다(0008 INVITE_INACTIVE) — 재활성화는 관리자가 명시적으로 한다. */
+export const PERSON_INACTIVE = '비활성화된 인원입니다. 관리자에게 명단 재활성화를 요청하세요.'
 
 const BY_TOKEN: ReadonlyArray<readonly [string, string]> = [
   ['PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT',
@@ -21,6 +23,7 @@ const BY_TOKEN: ReadonlyArray<readonly [string, string]> = [
   ['PERSON_NOT_FOUND', '인물을 찾을 수 없습니다.'],
   ['PERSON_NAME_REQUIRED', '이름을 입력하세요.'],
   ['PROJECT_NOT_FOUND', '프로젝트를 찾을 수 없습니다.'],
+  ['INVITE_INACTIVE', PERSON_INACTIVE],
 ]
 
 /**

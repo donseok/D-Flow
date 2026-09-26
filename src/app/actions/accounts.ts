@@ -11,7 +11,7 @@ import { listProfiles } from '@/lib/data/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
-import { rosterWriteError } from '@/lib/domain/rosterErrors'
+import { PERSON_INACTIVE, rosterWriteError } from '@/lib/domain/rosterErrors'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type WorkspaceRole = 'admin' | 'member'
@@ -69,8 +69,9 @@ function isWorkspaceRole(v: unknown): v is WorkspaceRole {
  * 계정 ↔ 인물 연결. (워크스페이스, 이메일)로 인물을 찾아 미연결이면 잇고, 없으면 만든다.
  * 부분 유니크 people_ws_email_uidx 는 PostgREST upsert(onConflict)의 대상이 될 수 없어(42P10) select-then-write 다.
  * 연결은 user_id 가 아직 null 일 때만 — 조건부 update 가 0행이면 그 사이 다른 계정이 이었다는 뜻이라 덮어쓰지 않는다.
- * 비활성 인물이면 연결하면서 되살린다 — 헬퍼·buildActor 는 인물이 활성일 때만 권한을 인정하므로, 그대로 두면 이어서 준 권한이
- * 무효인데 '생성 성공' 으로 보고된다. consume_project_invite 의 재활성화와 같은 규칙(service_role 이라 people.active 컬럼 권한을 넘는다).
+ * 비활성 인물이면 거부한다(되살리지도, 비활성인 채 잇지도 않는다) — 헬퍼·buildActor 는 인물이 활성일 때만 권한을 인정하므로
+ * 그대로 이으면 준 권한이 무효인데 '생성 성공' 으로 보고되고, 되살리면 관리자의 비활성화를 부수효과로 뒤집는다.
+ * consume_project_invite 의 INVITE_INACTIVE(0008)와 같은 규칙 — 명단에서 재활성화한 뒤 다시 만든다.
  * insert 의 유니크 위반(경합)은 조용히 재시도하지 않고 오류로 돌린다.
  */
 async function linkOrCreatePerson(
@@ -84,10 +85,11 @@ async function linkOrCreatePerson(
   }
   if (found) {
     if (found.user_id !== null) return { ok: false, error: ERR_PERSON_LINKED }
-    const patch: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString() }
-    if (found.active === false) patch.active = true
+    // 비활성 인물은 계정을 이으면서 되살리지 않는다 — consume_project_invite 의 INVITE_INACTIVE(0008)와 같은 규칙.
+    // 비활성화는 관리자의 결정이라 계정 생성의 부수효과로 뒤집히면 안 된다. 명단에서 재활성화한 뒤 다시 만든다.
+    if (found.active === false) return { ok: false, error: PERSON_INACTIVE }
     const { data: linked, error: linkErr } = await admin
-      .from('people').update(patch)
+      .from('people').update({ user_id: userId, updated_at: new Date().toISOString() })
       .eq('id', found.id as string).is('user_id', null)
       .select('id')
     if (linkErr) {

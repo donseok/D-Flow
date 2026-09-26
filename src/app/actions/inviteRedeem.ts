@@ -2,12 +2,13 @@
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadInviteDomains } from '@/lib/data/inviteDomains'
 import { personOf } from '@/lib/data/memberSelect'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
-import { rosterTokenError } from '@/lib/domain/rosterErrors'
+import { PERSON_INACTIVE, rosterTokenError } from '@/lib/domain/rosterErrors'
 import {
   isAllowedInviteDomain, isInviteToken, inviteStatus, maskEmail, normalizeInviteEmail,
-  parseAllowedDomains, validateSignupInput, type InviteStatus, type SignupInput,
+  validateSignupInput, type InviteStatus, type SignupInput,
 } from '@/lib/domain/invites'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -25,18 +26,26 @@ const E_PERSON_LINKED = '이 이메일의 인물이 이미 다른 계정에 연�
 /** 초대의 team_ids 는 FK 가 없다 — 발급 뒤 팀이 지워지면 트리거(PROJECT_MEMBER_TEAM_SCOPE)가 거부한다. 링크로는 고칠 수 없다. */
 const E_INVITE_TEAM_GONE = '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.'
 const E_SIGNUP_FAILED = '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+/** 비활성 인물·명단 행은 초대로 되살리지 않는다(0008 INVITE_INACTIVE) — 비활성화는 관리자의 결정이다. */
+const E_INACTIVE = PERSON_INACTIVE
 
 /**
  * 허용 도메인 재검사. 발급(createProjectInvite)이 통과시켰어도 그것은 발급 시점의 스냅샷일
- * 뿐이다 — 운영자가 이후 INVITE_ALLOWED_DOMAINS 를 좁히면(사고 대응 등) **이미 나간 초대**도
- * 즉시 막혀야 한다. 그래서 소비 경로 셋(preview·redeemInvite·redeemInviteWithSignup) 모두
- * 매 호출마다 현재 env 로 다시 판정한다 — 결과를 어디에도 캐시하지 않는다. */
-function domainStillAllowed(rawEmail: string): boolean {
-  const domains = parseAllowedDomains(process.env.INVITE_ALLOWED_DOMAINS)
-  return isAllowedInviteDomain(normalizeInviteEmail(rawEmail), domains)
+ * 뿐이다 — 워크스페이스 관리자가 허용 도메인을 좁히거나 운영자가 INVITE_ALLOWED_DOMAINS 를 좁히면
+ * (사고 대응 등) **이미 나간 초대**도 즉시 막혀야 한다. 그래서 소비 경로 셋(preview·redeemInvite·
+ * redeemInviteWithSignup) 모두 매 호출마다 초대의 워크스페이스 설정(없으면 env)으로 다시 판정한다 —
+ * 결과를 어디에도 캐시하지 않는다. 설정 조회 실패는 E_LOOKUP 으로 중단한다(fail-closed).
+ */
+async function domainStillAllowed(
+  admin: AdminClient, workspaceId: string, rawEmail: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const loaded = await loadInviteDomains(admin, workspaceId)
+  if (!loaded.ok) return { ok: false, error: E_LOOKUP }
+  return isAllowedInviteDomain(normalizeInviteEmail(rawEmail), loaded.domains) ? { ok: true } : { ok: false, error: E_UNUSABLE }
 }
 
 interface InviteRowRaw {
+  workspace_id: string
   project_id: string
   email: string
   access_role: AccessRole | null
@@ -44,7 +53,7 @@ interface InviteRowRaw {
   revoked_at: string | null
   redeemed_at: string | null
 }
-const INVITE_COLS = 'project_id, email, access_role, expires_at, revoked_at, redeemed_at'
+const INVITE_COLS = 'workspace_id, project_id, email, access_role, expires_at, revoked_at, redeemed_at'
 
 /** consume_project_invite 의 반환 행(0003). */
 interface ConsumedInvite {
@@ -98,7 +107,7 @@ async function consumeInvite(
     // 같은 이메일의 인물이 다른 계정에 이미 연결돼 있다 — 사용자가 고칠 수 없고 관리자가 풀어야 한다.
     if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: E_PERSON_LINKED }
     if (error.message.includes('PROJECT_MEMBER_TEAM_SCOPE')) return { ok: false, error: E_INVITE_TEAM_GONE }
-    // 명단 트리거가 던진 나머지 토큰(워크스페이스 불일치·계정 없는 권한 등)은 명단 문구로. 모르는 오류(연결 등)만 조회 실패 문구.
+    // 명단 트리거가 던진 나머지 토큰(워크스페이스 불일치·계정 없는 권한·비활성 INVITE_INACTIVE 등)은 명단 문구로. 모르는 오류(연결 등)만 조회 실패 문구.
     return { ok: false, error: rosterTokenError(error.message) ?? E_LOOKUP }
   }
   const rows = (data ?? []) as ConsumedInvite[]
@@ -161,6 +170,7 @@ export interface InvitePreview {
 }
 
 interface PreviewRowRaw {
+  workspace_id: string
   email: string
   expires_at: string
   revoked_at: string | null
@@ -176,7 +186,7 @@ export async function getInvitePreview(
   const admin = createAdminClient()
   // 반환 컬럼 화이트리스트 — projects 는 name/description 만(share 페이지 선례).
   const found = await loadInvite<PreviewRowRaw>(
-    admin, token, 'email, expires_at, revoked_at, redeemed_at, team_ids, projects(name, description)',
+    admin, token, 'workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, projects(name, description)',
   )
   if (!found.ok) return found
   const row = found.invite
@@ -194,10 +204,11 @@ export async function getInvitePreview(
       },
     }
   }
-  // 발급 시점엔 허용됐어도 현재 env 기준으로 도메인이 막혔으면 사용 불가로 본다(narrowing env
-  // 는 이미 나간 초대도 즉시 막는다 — fail-closed). 여기서 걸러야 프로젝트명·계정 유무 조회로
+  // 발급 시점엔 허용됐어도 현재 설정 기준으로 도메인이 막혔으면 사용 불가로 본다(좁힌 목록은
+  // 이미 나간 초대도 즉시 막는다 — fail-closed). 여기서 걸러야 프로젝트명·계정 유무 조회로
   // 진행하지 않는다 — 비활성 초대와 같은 이유로 정보를 더 내주지 않는다.
-  if (!domainStillAllowed(row.email)) return { ok: false, error: E_UNUSABLE }
+  const domain = await domainStillAllowed(admin, row.workspace_id, row.email)
+  if (!domain.ok) return domain
 
   const project = row.projects as unknown as { name: string; description: string | null } | null
 
@@ -285,8 +296,9 @@ export async function redeemInvite(
   if (!found.ok) return found
   const invite = found.invite
 
-  // narrowing env 재검사 — domainStillAllowed 주석 참조.
-  if (!domainStillAllowed(invite.email)) return { ok: false, error: E_UNUSABLE }
+  // 허용 도메인 재검사 — domainStillAllowed 주석 참조.
+  const domain = await domainStillAllowed(admin, invite.workspace_id, invite.email)
+  if (!domain.ok) return domain
 
   const sessionEmail = normalizeInviteEmail(user.email ?? '')
   if (!sessionEmail || sessionEmail !== normalizeInviteEmail(invite.email)) {
@@ -294,7 +306,8 @@ export async function redeemInvite(
   }
 
   // 이미 같거나 높은 권한이 있으면 초대를 태우지 않는다 — 1회용이라 태워도 얻을 것이 없고, 링크만 소모된다.
-  // 초대가 더 높은 권한(관리자)을 담았거나 명단 행이 비활성이면 소비해 올린다(RPC 가 되살리고 올린다).
+  // 초대가 더 높은 권한(관리자)을 담았으면 소비해 올린다. 명단 행·인물이 비활성이면 초대로 되살리지 않는다 —
+  // RPC 도 INVITE_INACTIVE 로 거부하지만(명단 행이 없는 비활성 인물은 거기서 걸린다), 알고 있으면 여기서 끊는다.
   // 선행 조회 실패는 중단(에러 처리 3원칙): 없다고 보고 진행하면 기존 상태를 모른 채 소비한다.
   const { data: existing, error: existingErr } = await admin
     .from('project_members').select('access_role, active, people!inner(user_id, active)')
@@ -305,7 +318,8 @@ export async function redeemInvite(
     return { ok: false, error: E_LOOKUP }
   }
   const pe = personOf(existing)
-  const current = existing && existing.active && pe?.active ? (existing.access_role as AccessRole | null) : null
+  if (existing && (!existing.active || !pe?.active)) return { ok: false, error: E_INACTIVE }
+  const current = existing ? (existing.access_role as AccessRole | null) : null
   if (current && accessRank(current) >= accessRank(invite.access_role)) {
     return { ok: true, projectId: invite.project_id, alreadyMember: true }
   }
@@ -344,8 +358,9 @@ export async function redeemInviteWithSignup(
   )
   if (status !== 'active') return { ok: false, error: E_UNUSABLE }
 
-  // narrowing env 재검사 — domainStillAllowed 주석 참조. 계정 생성 전에 막는다.
-  if (!domainStillAllowed(invite.email)) return { ok: false, error: E_UNUSABLE }
+  // 허용 도메인 재검사 — domainStillAllowed 주석 참조. 계정 생성 전에 막는다.
+  const domain = await domainStillAllowed(admin, invite.workspace_id, invite.email)
+  if (!domain.ok) return domain
 
   const email = normalizeInviteEmail(invite.email)
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
