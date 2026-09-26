@@ -58,12 +58,15 @@ type Resp = { data?: unknown; error?: { message: string } | null }
 const RPC_OK = { ok: true, order_status: null, stage: null, actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
 function admin(queues: Record<string, Resp[]>) {
   const captured: Record<string, unknown[]> = {}
+  /** 테이블별 select 열 문자열 — 스텁은 열과 무관하게 응답하므로 열이 빠졌는지는 여기서 본다. */
+  const selects: Record<string, string[]> = {}
   const rpcCalls: Array<Record<string, unknown>> = []
   const client = {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'delete', 'eq', 'gte', 'in', 'order', 'limit', 'contains']) b[k] = () => b
+      for (const k of ['delete', 'eq', 'gte', 'in', 'order', 'limit', 'contains']) b[k] = () => b
+      b.select = (cols: string) => { (selects[table] ??= []).push(cols); return b }
       b.update = (payload: unknown) => { (captured[table] ??= []).push(payload); return b }
       b.insert = (payload: unknown) => { (captured[table] ??= []).push(payload); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
@@ -79,7 +82,7 @@ function admin(queues: Record<string, Resp[]>) {
     }),
   }
   mocks.createAdminClient.mockReturnValue(client)
-  return { client, captured, rpcCalls }
+  return { client, captured, rpcCalls, selects }
 }
 const ACTOR = { ok: true, actor: { userId: 'admin-1' } }
 
@@ -647,12 +650,14 @@ describe('자기 완료 승인 금지(AUTH-07a) — 비관리자는 리프 담�
   })
   it('(h) 주문을 claim 한 계정이 나 → 같은 거부, 전이 없음', async () => {
     asSubtreeManager(null)
-    const { client, rpcCalls } = admin({
+    const { client, rpcCalls, selects } = admin({
       agent_work_orders: [{ data: { ...REPORTED, claimed_by_user_id: 'self-1' } }], agent_work_reports: REPORTS(),
     })
     expect(await approveAgentCompletion(O1, R9)).toEqual({ ok: false, error: ERR_SELF_APPROVAL })
     expect(rpcCalls).toHaveLength(0)
     expect(reportReads(client)).toBe(0)
+    // 스텁은 select 열과 무관하게 claimed_by_user_id 를 돌려준다 — 실제 조회가 그 열을 읽는지는 select 문자열로 본다.
+    expect(selects.agent_work_orders?.[0]).toContain('claimed_by_user_id')
     // 가드에 주문의 claim 계정이 그대로 넘어갔다 — 주문 select 가 claimed_by_user_id 를 싣는다.
     expect(mocks.subtreeStanding).toHaveBeenCalledWith(expect.anything(), { itemId: W1, projectId: P1, myMemberIds: ['m-self'] })
   })

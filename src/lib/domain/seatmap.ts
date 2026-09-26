@@ -143,11 +143,21 @@ export function canApproveCompletion(r: { isAdmin: boolean; subtreeManager: bool
 }
 
 /**
- * 같은 주문의 두 보고 중 a 가 더 늦은가 — created_at, 같으면 id 가 큰 쪽. 서버 latestCompletionReportId
+ * ISO 시각을 µs 정수로 — DB timestamptz 의 해상도. Date.parse 는 ms 에서 잘라 .123456 과 .123999 를 같게 본다.
+ * 초까지는 Date.parse(소수부를 뗀 문자열), 소수부는 6자리로 맞춰 더한다(끝 0 생략·소수부 없음·Z/오프셋 표기 모두).
+ */
+function isoMicros(iso: string): number {
+  const m = /^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$/.exec(iso)
+  if (!m) return Date.parse(iso) * 1000
+  return Date.parse(m[1] + m[3]) * 1000 + Number((m[2] ?? '').padEnd(6, '0').slice(0, 6))
+}
+
+/**
+ * 같은 주문의 두 보고 중 a 가 더 늦은가 — created_at(µs), 같으면 id 가 큰 쪽. 서버 latestCompletionReportId
  * (created_at desc, id desc)와 같은 순서라 화면과 서버가 같은 보고를 "최신"으로 고른다.
  */
 export function isLaterReport(a: { id: string; created_at: string }, b: { id: string; created_at: string }): boolean {
-  const d = Date.parse(a.created_at) - Date.parse(b.created_at)
+  const d = isoMicros(a.created_at) - isoMicros(b.created_at)
   return d !== 0 ? d > 0 : a.id > b.id
 }
 

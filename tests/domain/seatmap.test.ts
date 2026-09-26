@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { animFor, OFFLINE_MS, STALE_MS } from '@/lib/domain/seatState'
-import { ageLabel, assembleSeatmap, canApproveCompletion, seatmapChannelProjectIds, type OrderRow, type SeatmapRows, type WatcherRow } from '@/lib/domain/seatmap'
+import { ageLabel, assembleSeatmap, canApproveCompletion, isLaterReport, seatmapChannelProjectIds, type OrderRow, type SeatmapRows, type WatcherRow } from '@/lib/domain/seatmap'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -442,6 +442,29 @@ describe('assembleSeatmap — 최신 completion 보고의 동률(H1 Task 11 M4)'
     for (const reviews of [[review(R_LO), review(R_HI)], [review(R_HI), review(R_LO)]]) {
       const m = assembleSeatmap(rows({ orders: [order({ status: 'reported' })], reviews }), NOW)
       expect(m.floors[0].zones[0].seats[0].reportId).toBe(R_HI)
+    }
+  })
+})
+
+describe('isLaterReport — µs 정밀도(DB timestamptz 와 같은 해상도)', () => {
+  const R_LO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', R_HI = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+  // 같은 ms(.123) 안에서 µs 순서(R_LO 가 늦다)가 id 순서(R_HI 가 크다)와 반대다 — Date.parse 는 둘을 같게 본다.
+  const later = { id: R_LO, created_at: '2026-09-14T08:59:55.123999+00:00' }
+  const earlier = { id: R_HI, created_at: '2026-09-14T08:59:55.123456+00:00' }
+  it('같은 ms 안에서도 µs 가 늦은 쪽이 최신 — id 보조 정렬보다 먼저 본다', () => {
+    expect(isLaterReport(later, earlier)).toBe(true)
+    expect(isLaterReport(earlier, later)).toBe(false)
+  })
+  it('자릿수가 달라도(끝 0 생략·소수부 없음·Z 표기) µs 로 맞춰 비교한다', () => {
+    expect(isLaterReport({ id: R_LO, created_at: '2026-09-14T08:59:55.1235+00:00' }, { id: R_HI, created_at: '2026-09-14T08:59:55.123456+00:00' })).toBe(true)
+    expect(isLaterReport({ id: R_LO, created_at: '2026-09-14T08:59:55.000001Z' }, { id: R_HI, created_at: '2026-09-14T08:59:55+00:00' })).toBe(true)
+    expect(isLaterReport({ id: R_HI, created_at: '2026-09-14T08:59:55.5Z' }, { id: R_LO, created_at: '2026-09-14T08:59:55.500000+00:00' })).toBe(true) // 정확한 동률 → id
+  })
+  it('좌석은 µs 가 늦은 보고를 "본 보고"로 싣는다 — 서버(created_at desc)와 같은 행', () => {
+    for (const pair of [[later, earlier], [earlier, later]]) {
+      const reviews = pair.map(r => ({ ...r, work_order_id: order({}).id, review_action: null, review_note: null }))
+      const m = assembleSeatmap(rows({ orders: [order({ status: 'reported' })], reviews }), NOW)
+      expect(m.floors[0].zones[0].seats[0].reportId).toBe(R_LO)
     }
   })
 })

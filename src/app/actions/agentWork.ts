@@ -221,7 +221,8 @@ async function checkReportFresh(
 async function recordReview(admin: AdminClient, orderId: string, patch: Record<string, unknown>, label: string): Promise<void> {
   const latest = await latestCompletionReportId(admin, orderId)
   if (!latest.ok || latest.id === null) {
-    console.error(`[agentWork] ${label} 보고 조회 실패:`, latest.ok ? '0행' : latest.error)
+    // latest.error 는 이미 "보고 조회 실패: …" 다 — 접두어를 다시 붙이지 않는다.
+    console.error(`[agentWork] ${label}:`, latest.ok ? '보고 조회 실패: 0행' : latest.error)
     return
   }
   await recordReviewOn(admin, latest.id, patch, label)

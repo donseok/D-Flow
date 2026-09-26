@@ -217,3 +217,19 @@ describe('최신 completion 보고의 순서 — created_at 이 같으면 id 로
     expect(reviews()[0].payload).toMatchObject({ review_action: null, reviewed_by: null })
   })
 })
+
+describe('되감기 검토 기록의 조회 실패 로그', () => {
+  it('보고 조회가 실패하면 그 사유를 한 번만 적는다 — "보고 조회 실패" 접두어가 겹치지 않는다', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { reviews } = fakeAdmin({
+      agent_work_orders: [{ data: { ...REPORTED, status: 'approved' } }],
+      agent_work_reports: [{ error: { message: 'boom' } }],
+    })
+    expect(await unapproveAgentCompletion(O1)).toEqual({ ok: true }) // 전이는 확정 — 부수 기록 실패는 로깅만
+    expect(reviews()).toEqual([])
+    const logged = errSpy.mock.calls.map(c => c.join(' ')).filter(l => l.includes('boom'))
+    expect(logged).toHaveLength(1)
+    expect(logged[0].split('보고 조회 실패').length - 1).toBe(1)
+    errSpy.mockRestore()
+  })
+})
