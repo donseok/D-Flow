@@ -32,7 +32,7 @@ function checkDim(cfg: EmbedConfig, v: number[] | undefined, idx: number): numbe
   if (v && v.length === cfg.dim) return v
   console.error(
     `[assistant] 임베딩 차원 불일치(항목 #${idx} 건너뜀): 모델 '${cfg.model}' 가 ${v?.length ?? 0}차원을 반환(기대 ${cfg.dim}). ` +
-      `모델 '${cfg.model}' 이 ${cfg.dim}차원 축소(outputDimensionality/dimensions)를 지원하는지 확인하세요 — 차원은 vector(${cfg.dim}) 고정입니다.`,
+      `이 모델이 ${cfg.dim}차원 축소(outputDimensionality/dimensions)를 지원하는지 확인하세요 — 차원은 vector(${cfg.dim}) 고정입니다.`,
   )
   return null
 }

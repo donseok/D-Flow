@@ -49,6 +49,7 @@ describe('embedTexts — 차원 검증 (Gemini)', () => {
     expect(out).toBeNull()
     const logged = errSpy.mock.calls.flat().map(String).join(' ')
     expect(logged).toMatch(/차원 불일치/)
+    expect(logged.match(/모델 '/g)).toHaveLength(1)   // 모델명은 한 번만
   })
 
   it('EMBED_DIM env 를 바꿔도 768 로 요청·검증한다 — DB 는 vector(768) 고정', async () => {

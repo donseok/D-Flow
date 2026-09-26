@@ -170,6 +170,16 @@ describe('resolveSmtpSettings', () => {
       })
   })
 
+  it('invalid 사유는 키 이름만 — env 로 받은 포트 값을 사유에 보간하지 않는다', () => {
+    const reason = (port: string) => {
+      const r = resolveSmtpSettings({ SMTP_HOST: 'smtp.example.com', SMTP_USER: 'a@example.com', SMTP_PASS: 'pw', SMTP_PORT: port, SMTP_SECURE: 'true' })
+      if (r.ok) throw new Error('invalid 여야 한다')
+      return r.reason
+    }
+    expect(reason('25')).toBe(reason('587'))
+    expect(reason('25')).toContain('SMTP_PORT')
+  })
+
   it('빈 env 는 unset — 사유에 키 이름을 담는다', () => {
     const r = resolveSmtpSettings({})
     expect(r).toMatchObject({ ok: false, kind: 'unset' })

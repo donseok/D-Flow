@@ -151,7 +151,7 @@ describe('Wiki 상태 표시 안전성', () => {
     }
 
     const html = renderToStaticMarkup(
-      <WikiTopicDetail projectId="project-1" data={data} locale="ko" />,
+      <WikiTopicDetail projectId="project-1" data={data} locale="ko" userId={null} />,
     )
 
     // 분류 체계를 본문보다 앞세우지 않되, 근거 항목은 하나도 유실하지 않는다.
@@ -222,6 +222,7 @@ describe('Wiki 상태 표시 안전성', () => {
         locale="ko"
         canCurate
         canEditDocuments
+        userId={null}
       />,
     )
 
@@ -265,6 +266,7 @@ describe('Wiki 상태 표시 안전성', () => {
         canCurate
         canEditDocuments
         canVerifyDocuments
+        userId={null}
       />,
     )
 
@@ -294,7 +296,7 @@ describe('Wiki 상태 표시 안전성', () => {
       dataTruncated: false,
     }
     const html = renderToStaticMarkup(
-      <WikiTopicDetail projectId="project-1" data={data} locale="ko" />,
+      <WikiTopicDetail projectId="project-1" data={data} locale="ko" userId={null} />,
     )
     const header = html.slice(html.indexOf('<section class="card overflow-hidden">'), html.indexOf('CANONICAL DOCUMENT'))
 
@@ -338,6 +340,7 @@ describe('Wiki 상태 표시 안전성', () => {
         canCurate
         canEditDocuments
         canVerifyDocuments
+        userId={null}
       />,
     )
 
@@ -405,7 +408,7 @@ describe('사람이 닫거나 숨긴 항목', () => {
 
   it.each(['archived', 'resolved'] as const)('%s 항목은 주제 상세 어느 섹션에도 렌더되지 않는다', (state) => {
     const html = renderToStaticMarkup(
-      <WikiTopicDetail projectId="project-1" data={closedData(state)} locale="ko" />,
+      <WikiTopicDetail projectId="project-1" data={closedData(state)} locale="ko" userId={null} />,
     )
     expect(html).toContain('살아있는 사실')
     expect(html).not.toContain('닫힌 사실')

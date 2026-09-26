@@ -42,7 +42,6 @@ export type WikiChangeType = (typeof WIKI_CHANGE_TYPES)[number]
 export const WIKI_PROCESSING_STATUSES = ['pending', 'running', 'done', 'dead_letter'] as const
 export type WikiProcessingStatus = (typeof WIKI_PROCESSING_STATUSES)[number]
 
-/** LLM 비교 결과를 앱의 제한된 change_type으로 매핑하기 위한 입력 어휘. */
 // 사람의 큐레이션 동작·위키 문서 유형 — 액션('use server')이 검증에 쓰고 편집기가 화면에 쓴다. 'use server' 모듈은
 // async 함수만 export 할 수 있어(값은 클라이언트에서 서버 참조가 된다) 여기 둔다(tests/invariants/use-server-exports).
 export const WIKI_CURATE_ACTIONS = [
@@ -55,6 +54,7 @@ export const WIKI_DOCUMENT_KINDS = [
 ] as const
 export type WikiDocumentKind = (typeof WIKI_DOCUMENT_KINDS)[number]
 
+/** LLM 비교 결과를 앱의 제한된 change_type으로 매핑하기 위한 입력 어휘. */
 export const WIKI_SEMANTIC_RELATIONS = [
   'same', 'confirms', 'refines', 'supersedes', 'reverses',
   'contradicts', 'resolves', 'unrelated',

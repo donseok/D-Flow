@@ -48,7 +48,7 @@ export function resolveSmtpSettings(env: Record<string, string | undefined>):
   const secure = secureRaw ? secureRaw === 'true' : portNum === 465
   const port = portNum ?? (secure ? 465 : 587)
   if (port === 465 && !secure) return invalid('SMTP_PORT 465 는 SMTP_SECURE=true')
-  if ((port === 587 || port === 25) && secure) return invalid(`SMTP_PORT ${port} 는 SMTP_SECURE=false(STARTTLS)`)
+  if ((port === 587 || port === 25) && secure) return invalid('SMTP_PORT 587·25 는 SMTP_SECURE=false(STARTTLS)')
   if (authRaw && authRaw !== 'none') return invalid('SMTP_AUTH 는 비우거나 none')
 
   let auth: SmtpSettings['auth'] = null

@@ -202,7 +202,7 @@ export function WikiTopicDetail({
   canCurate = false,
   canEditDocuments = canCurate,
   canVerifyDocuments = canEditDocuments,
-  userId = null,
+  userId,
 }: {
   projectId: string
   data: WikiTopicDetailData
@@ -210,8 +210,8 @@ export function WikiTopicDetail({
   canCurate?: boolean
   canEditDocuments?: boolean
   canVerifyDocuments?: boolean
-  /** 편집기 로컬 초안의 주인. 없으면 초안 기능이 꺼진다. */
-  userId?: string | null
+  /** 편집기 로컬 초안의 주인. null 이면 초안 기능이 꺼진다. 필수 — 빠뜨리면 초안이 조용히 꺼지므로 호출부가 명시한다. */
+  userId: string | null
 }) {
   const data = rawData as MemoryTopicDetailData
   if (!data.topic) {
