@@ -130,7 +130,7 @@ render-pages 단계가 11분 걸린 것은 dev 서버의 첫 컴파일이 메모
 | A 관리자 | `/projects` 에 A 프로젝트 2개(공개 1·비공개 1 — 워크스페이스 관리자는 비공개도 본다), B 프로젝트 없음. `/p/<A>/dashboard`(요약·마일스톤·S-curve)·`/p/<A>/wbs`(표·간트)·`/minutes`(프로젝트 없는 A 회의록 1건) 정상 렌더, 콘솔 오류 0 |
 | B 관리자 | `/projects` 에 Beta 프로젝트 1개뿐. A 프로젝트 URL 직접 입력 `/p/<A 공개>/dashboard`·`/p/<A 비공개>/members` → 404 화면. `/minutes` 는 "회의록이 없습니다"(A 회의록 안 보임) |
 | 브랜드 | `/projects` 헤더·히어로의 새 흐름 아이콘 정상 표시 |
-| presence | Task 9 에서 실 Realtime 서버로 두 세션 상호 가시·타 워크스페이스 CHANNEL_ERROR 확인(스크립트) — 이번 브라우저 확인은 단일 세션이라 재확인하지 않음 |
+| presence(F25, 2026-09-27 01:3x, HEAD `4860a77`·0009) | 브라우저(eye-a, A 관리자) + 실 Realtime 보조 세션(eye-a2, A 멤버·명단 member — `supabase-js` private 채널 join·track). `/p/<A>/wbs`: 브라우저 툴바에 두 아바타(ey·에이), 보조 세션 sync 에 두 이름 → 보조 세션 이탈 뒤 브라우저 아바타 1개로 복귀. `/p/<A>/weekly`(주간 보고 시트): 같은 결과. B 관리자(eye-b) 보조 세션의 같은 두 토픽 join → `CHANNEL_ERROR Unauthorized`, 브라우저에 B 아바타 없음. 부수 발견: 주간 시트 `<colgroup>` 안 공백 텍스트 노드 hydration 경고(`WeeklySheetView.tsx:666` — 원본 리포부터, SP2 무관) → 후속 하드닝 |
 
 ## 4. E2E 단계표
 
