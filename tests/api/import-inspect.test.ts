@@ -15,6 +15,7 @@ vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectC
 
 import { POST } from '@/app/api/import/inspect/route'
 import { makeActor } from '../fixtures/actor'
+import { ERR_MISSING } from '@/lib/authz/errors'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -82,6 +83,14 @@ describe('POST /api/import/inspect', () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     expect(res.status).toBe(500)
+  })
+
+  it('타 워크스페이스·미존재 프로젝트(ERR_MISSING) → 404, 감지 미호출 — 500 이 아니다(존재 은닉, denyStatus 와 같은 매핑)', async () => {
+    mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: ERR_MISSING })
+    const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: ERR_MISSING })
+    expect(mocks.detectWorkbook).not.toHaveBeenCalled()
   })
 
   it('시트 없음 — detectWorkbook 오류를 그대로 400, 설정 조회는 하지 않는다', async () => {

@@ -13,10 +13,6 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 
-/** 가드 실패 사유 → HTTP status. 기존 `/api/import` 의 매핑을 복제한다(원본 파일은 건드리지 않는다).
- *  조회 실패는 거부가 아니라 서버 사정이므로 500(재시도 가능). */
-const AUTHZ_STATUS: Record<string, number> = { '로그인 필요': 401, '권한 없음': 403 }
-
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
  *  holidays 는 replace_wbs 가 delete 하지 않고 upsert 만 한다(갱신되되 잔존 항목이 남을 수 있음). */
@@ -53,7 +49,8 @@ export async function POST(req: NextRequest) {
   }
 
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return NextResponse.json({ error: g.error }, { status: AUTHZ_STATUS[g.error] ?? 500 })
+  // 가드 실패 → 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500(재시도 가능).
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g.error) })
 
   let profileJson: unknown
   try {

@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAdmin } from '@/lib/authz'
+import { denyStatus } from '@/lib/authz/errors'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { getProjectConfig } from '@/lib/data/projectConfig'
 import { isUuidLike } from '@/lib/domain/agentWork'
-
-/** 가드 실패 사유 → HTTP status. 기존 `/api/import` 의 매핑을 복제한다(원본 파일은 건드리지 않는다).
- *  조회 실패는 거부가 아니라 서버 사정이므로 500(재시도 가능). */
-const AUTHZ_STATUS: Record<string, number> = { '로그인 필요': 401, '권한 없음': 403 }
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
@@ -24,7 +21,8 @@ export async function POST(req: NextRequest) {
   }
 
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return NextResponse.json({ error: g.error }, { status: AUTHZ_STATUS[g.error] ?? 500 })
+  // 가드 실패 → 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500(재시도 가능).
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g.error) })
 
   const detected = detectWorkbook(await file.arrayBuffer())
   if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })

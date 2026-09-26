@@ -41,6 +41,7 @@ vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
 
 import { POST } from '@/app/api/import/execute/route'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
+import { ERR_MISSING } from '@/lib/authz/errors'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -174,6 +175,14 @@ describe('POST /api/import/execute — 가드', () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(500)
+  })
+
+  it('타 워크스페이스·미존재 프로젝트(ERR_MISSING) → 404, 파서 미호출 — 500 이 아니다(존재 은닉, denyStatus 와 같은 매핑)', async () => {
+    mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: ERR_MISSING })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: ERR_MISSING })
+    expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
 })
 
