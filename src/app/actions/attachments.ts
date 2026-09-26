@@ -35,34 +35,69 @@ async function requireAttachPermission(itemId: string): Promise<
   return granted
 }
 
-/** 항목의 첨부 목록(서명 URL 포함, 최신순). 로그인만 확인 — 조회는 전 프로젝트 개방(D6). */
-export async function listAttachments(itemId: string): Promise<DeliverableAttachment[]> {
-  // 반환 타입에 에러 채널이 없어 빈 목록으로 폴백하되, 조회 실패와 구분되도록 사유를 로그에 남긴다.
+export type AttachmentDownload = 'allowed' | 'denied' | 'unknown'
+export type AttachmentList =
+  | { ok: true; rows: DeliverableAttachment[]; download: AttachmentDownload }
+  | { ok: false; error: string }
+
+const ERR_LIST = '첨부 목록을 불러오지 못했습니다.'
+
+/**
+ * 항목의 첨부 목록(최신순)과 다운로드 판정. 목록은 그 항목을 읽을 수 있으면 보이고(RLS), 다운로드(서명)는 Storage 읽기 정책과
+ * 같은 can_attach 로 판정한다 — 조회 전용 사용자에게 막힐 링크를 주지 않는다(정본 :860, 개정 스펙 §8.2 ②).
+ * 정책의 술어는 can_attach(storage_entity_id(경로))이고 recordAttachment 가 경로의 엔터티를 이 항목으로 고정하므로 같은 판정이다.
+ * 규약 밖 경로의 행은 서명이 행별로 실패해 linkError 로 드러난다(서명도 사용자 세션으로 정책을 통과한다).
+ * 조회 실패를 빈 목록으로 위장하지 않는다(3원칙 ①). 판정 오류는 unknown 으로 두고 서명하지 않는다(fail-closed).
+ */
+export async function listAttachments(itemId: string): Promise<AttachmentList> {
   if (!(await getSession())) {
-    console.error('[listAttachments] 비로그인 호출 — 빈 목록 반환')
-    return []
+    console.error('[listAttachments] 비로그인 호출')
+    return { ok: false, error: ERR_LIST }
   }
   const sb = await createServerClient()
-  const { data } = await sb
+  const { data, error } = await sb
     .from('deliverable_attachments')
     .select('*')
     .eq('wbs_item_id', itemId)
     .order('created_at', { ascending: false })
-  const out: DeliverableAttachment[] = []
-  for (const r of data ?? []) {
-    const { data: signed } = await sb.storage.from(BUCKET).createSignedUrl(r.file_path as string, 3600)
-    out.push({
-      id: r.id as string,
-      wbsItemId: r.wbs_item_id as string,
-      fileName: r.file_name as string,
-      filePath: r.file_path as string,
-      size: (r.size as number) ?? null,
-      mime: (r.mime as string) ?? null,
-      createdAt: r.created_at as string,
-      url: signed?.signedUrl ?? null,
-    })
+  if (error) {
+    console.error('[listAttachments] 첨부 조회 실패:', error.message)
+    return { ok: false, error: ERR_LIST }
   }
-  return out
+  const { data: can, error: canErr } = await sb.rpc('can_attach', { item: itemId })
+  if (canErr) console.error('[listAttachments] 다운로드 권한 판정 실패 — 서명하지 않는다:', canErr.message)
+  const download: AttachmentDownload = canErr ? 'unknown' : can === true ? 'allowed' : 'denied'
+  const rows = (data ?? []) as Array<Record<string, unknown>>
+  const urlOf = new Map<string, string | null>()
+  let signFailed = false
+  if (download === 'allowed' && rows.length > 0) {
+    const { data: signed, error: signErr } = await sb.storage
+      .from(BUCKET)
+      .createSignedUrls(rows.map(r => r.file_path as string), 3600)
+    if (signErr) {
+      console.error('[listAttachments] 서명 URL 일괄 발급 실패:', signErr.message)
+      signFailed = true
+    }
+    for (const s of signed ?? []) if (s.path) urlOf.set(s.path, s.error ? null : s.signedUrl)
+  }
+  return {
+    ok: true,
+    download,
+    rows: rows.map(r => {
+      const url = download === 'allowed' && !signFailed ? (urlOf.get(r.file_path as string) ?? null) : null
+      return {
+        id: r.id as string,
+        wbsItemId: r.wbs_item_id as string,
+        fileName: r.file_name as string,
+        filePath: r.file_path as string,
+        size: (r.size as number) ?? null,
+        mime: (r.mime as string) ?? null,
+        createdAt: r.created_at as string,
+        url,
+        ...(download === 'allowed' && url === null ? { linkError: true } : {}),
+      }
+    }),
+  }
 }
 
 /** 클라이언트가 Storage 업로드를 끝낸 뒤 메타데이터 기록. */

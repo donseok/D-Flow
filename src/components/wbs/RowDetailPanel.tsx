@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
-import type { ComputedItem, DeliverableAttachment, DependencyType, OwnerKind, ProjectMember, TaskDependency, TeamCode } from '@/lib/domain/types'
+import type { ComputedItem, DependencyType, OwnerKind, ProjectMember, TaskDependency, TeamCode } from '@/lib/domain/types'
 import type { TaskSchedule } from '@/lib/domain/dependencySchedule'
 import { evaluateStartReadiness, type PredecessorState } from '@/lib/domain/dependencyReadiness'
 import {
@@ -11,7 +11,8 @@ import {
 } from '@/app/actions/wbs'
 import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
-import { listAttachments, recordAttachment, removeAttachment } from '@/app/actions/attachments'
+import { listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
+import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import { stampedFileName } from '@/lib/domain/minutes'
@@ -714,20 +715,27 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** 산출물 파일 첨부 — 목록/다운로드(모두) + 업로드/삭제(담당팀·PMO). */
+/** 산출물 파일 첨부 — 목록(항목을 읽을 수 있으면 모두) + 다운로드(서버의 can_attach 판정) + 업로드/삭제(담당팀·PMO).
+ *  canAttach 는 업로드·삭제 어포던스에만 쓴다 — 읽기 전용 보기에서도 false 라 다운로드 가능 여부와 다르다. */
 function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   itemId: string; canAttach: boolean; projectId: string; workspaceId: string | null
 }) {
   const router = useRouter()
   const { t } = useLocale()
-  const [list, setList] = useState<DeliverableAttachment[] | null>(null)
+  // 'threw' = 호출 자체가 던졌다(네트워크 등). 문구는 렌더 때 사전에서 고른다 — t 를 로더 의존성에 넣으면 사전이 바뀔 때마다 다시 부른다.
+  const [loaded, setLoaded] = useState<AttachmentList | 'threw' | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    listAttachments(itemId).then(setList).catch(() => setList([]))
+    listAttachments(itemId).then(setLoaded).catch(e => {
+      console.error('[AttachmentSection] 첨부 목록 호출 실패:', e)
+      setLoaded('threw')
+    })
   }, [itemId])
-  useEffect(() => { setList(null); load() }, [load])
+  useEffect(() => { setLoaded(null); load() }, [load])
+  const retry = () => { setLoaded(null); load() }
+  const list: AttachmentList | null = loaded === 'threw' ? { ok: false, error: t('wbs.attachLoadFail') } : loaded
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -778,19 +786,32 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
       {err && <p className="mb-2 text-xs font-medium text-delayed">{err}</p>}
       {list == null ? (
         <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
-      ) : list.length === 0 ? (
+      ) : !list.ok ? (
+        <LoadErrorNotice message={list.error} onRetry={retry} />
+      ) : list.rows.length === 0 ? (
         <p className="text-sm text-ink-subtle">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>
       ) : (
-        <ul className="space-y-1.5">
-          {list.map(a => (
-            <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
-              <a href={a.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</a>
-              {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
-              {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
-            </li>
-          ))}
-        </ul>
+        <>
+          {list.download === 'denied' && <p className="mb-2 text-xs text-ink-subtle">{t('wbs.attachDownloadDenied')}</p>}
+          {list.download === 'unknown' && (
+            <div className="mb-2"><LoadErrorNotice message={t('wbs.attachDownloadUnknown')} onRetry={retry} /></div>
+          )}
+          <ul className="space-y-1.5">
+            {list.rows.map(a => (
+              <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+                {list.download === 'allowed' && a.url ? (
+                  <a href={a.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</a>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
+                )}
+                {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
+                {a.linkError && <span className="shrink-0 text-[11px] text-delayed">{t('wbs.attachLinkFail')}</span>}
+                {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   )

@@ -16,7 +16,7 @@ vi.mock('@/app/actions/wbs', () => ({
   moveWbsItem: vi.fn(async () => ({ ok: true })),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments: vi.fn(async () => []),
+  listAttachments: vi.fn(async () => ({ ok: true, rows: [], download: 'allowed' })),
   recordAttachment: vi.fn(async () => ({ ok: true })),
   removeAttachment: vi.fn(async () => ({ ok: true })),
 }))

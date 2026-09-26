@@ -210,6 +210,10 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.noAttachmentsAdd': 'No files attached yet. Add one.',
   'wbs.noAttachments': 'No files attached.',
   'wbs.deleteAttachmentAria': 'Delete attachment',
+  'wbs.attachLoadFail': 'Could not load attachments.',
+  'wbs.attachDownloadDenied': 'Only the owning team and admins can download.',
+  'wbs.attachDownloadUnknown': 'Could not check download permission — try again.',
+  'wbs.attachLinkFail': 'Link failed',
   // Assignee/stage panel (§2.5) — personal roster-axis assignee, Task stage editing
   'wbs.assigneeStagePanelTitle': 'Assignee · Stage',
   'wbs.assigneeLabel': 'Assignee',

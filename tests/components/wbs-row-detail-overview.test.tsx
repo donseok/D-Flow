@@ -14,7 +14,7 @@ vi.mock('@/app/actions/wbs', () => ({
   addTaskDependency: vi.fn(), removeTaskDependency: vi.fn(),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments: vi.fn().mockResolvedValue([]), recordAttachment: vi.fn(), removeAttachment: vi.fn(),
+  listAttachments: vi.fn().mockResolvedValue({ ok: true, rows: [], download: 'allowed' }), recordAttachment: vi.fn(), removeAttachment: vi.fn(),
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({

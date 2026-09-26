@@ -223,6 +223,10 @@ export const wbsKo = {
   'wbs.noAttachmentsAdd': '첨부된 파일이 없습니다. 파일을 추가하세요.',
   'wbs.noAttachments': '첨부된 파일이 없습니다.',
   'wbs.deleteAttachmentAria': '첨부 삭제',
+  'wbs.attachLoadFail': '첨부 목록을 불러오지 못했습니다.',
+  'wbs.attachDownloadDenied': '다운로드는 담당 팀과 관리자만 할 수 있습니다.',
+  'wbs.attachDownloadUnknown': '다운로드 권한을 확인하지 못했습니다 — 다시 시도하세요.',
+  'wbs.attachLinkFail': '링크 생성 실패',
   // 담당자·단계 패널(§2.5) — 로스터 축 개인 담당자, Task 단계 편집
   'wbs.assigneeStagePanelTitle': '담당·단계',
   'wbs.assigneeLabel': '담당자',

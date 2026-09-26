@@ -20,7 +20,7 @@ vi.mock('@/app/actions/wbs', () => ({
   addTaskDependency: vi.fn(), removeTaskDependency: vi.fn(),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments: vi.fn().mockResolvedValue([]), recordAttachment, removeAttachment: vi.fn(),
+  listAttachments: vi.fn().mockResolvedValue({ ok: true, rows: [], download: 'allowed' }), recordAttachment, removeAttachment: vi.fn(),
 }))
 vi.mock('@/lib/supabase/client', () => ({
   createBrowserClient: () => ({ storage: { from: () => ({ upload, remove }) } }),

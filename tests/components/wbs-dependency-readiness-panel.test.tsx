@@ -19,7 +19,7 @@ vi.mock('@/app/actions/wbs', () => ({
   removeTaskDependency: vi.fn(),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments: vi.fn().mockResolvedValue([]),
+  listAttachments: vi.fn().mockResolvedValue({ ok: true, rows: [], download: 'allowed' }),
   recordAttachment: vi.fn(),
   removeAttachment: vi.fn(),
 }))
