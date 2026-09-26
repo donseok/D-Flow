@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
-import { makeMemberActor } from '../fixtures/actor'
+import { WS, makeActor, makeAdminActor, makeMemberActor } from '../fixtures/actor'
 
 // 명단이 곁가지인 화면(담당자·참석자 선택, 이름 표시)의 조회 실패 — 빈 명단(0명)으로 그리지 않고
 // 사유를 화면에 띄우고 로그를 남긴다(에러 처리 3원칙 ①). 본문(WBS·이슈·회의 등)은 막지 않는다.
 const ERR = '명단을 불러오지 못했습니다.'
 const ALICE = { id: 'm1', name: 'alice', teams: [] }
 const PID = 'p1'
+// 로더의 ERR_MINUTE_FILES_LOAD — 데이터 모듈은 통째로 목이라 문구를 여기 적는다(페이지는 문구를 그대로 넘길 뿐이다).
+const FILES_ERR = '첨부 목록을 불러오지 못했습니다.'
 
 const mocks = vi.hoisted(() => {
   // 뷰는 받은 props 만 기록하는 스텁 — 페이지가 넘긴 명단·사유를 검사한다.
@@ -15,6 +17,8 @@ const mocks = vi.hoisted(() => {
   return {
     getProjectRoster: vi.fn(),
     getActorForView: vi.fn(),
+    getMinuteDetail: vi.fn(),
+    getSession: vi.fn(),
     WbsGanttSheet: view(),
     AgentHubView: view(),
     AttendanceView: view(),
@@ -44,10 +48,7 @@ vi.mock('@/lib/data/meetings', () => ({
 }))
 vi.mock('@/lib/data/issues', () => ({ getIssues: vi.fn(async () => []), getMinuteLinkedIssues: vi.fn(async () => []) }))
 vi.mock('@/lib/data/minutes', () => ({
-  getMinuteDetail: vi.fn(async () => ({
-    minute: { id: 'min-1', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null },
-    files: [],
-  })),
+  getMinuteDetail: mocks.getMinuteDetail,
   getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),
   getMinuteVersions: vi.fn(async () => []),
   getMinuteWikiImpact: vi.fn(async () => null),
@@ -56,7 +57,7 @@ vi.mock('@/lib/data/minutes', () => ({
 }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
 vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getUiPrefs: vi.fn(async () => ({})) }))
-vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
+vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/components/app/ProjectPageShell', () => ({
@@ -77,6 +78,17 @@ import ProjectAgentsPage from '@/app/(app)/p/[projectId]/agents/page'
 import MinuteDetailPage from '@/app/(app)/minutes/[id]/page'
 
 const params = Promise.resolve({ projectId: PID })
+// 회의록 상세 로더 반환 — projectId 는 회의 폴백이 섞인 값, ownProjectId·workspaceId 가 행의 값이다.
+const minuteDetail = (
+  over: Record<string, unknown> = {},
+  files: { ok: true; rows: unknown[] } | { ok: false; error: string } = { ok: true, rows: [] },
+) => ({
+  minute: {
+    id: 'min-1', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null,
+    workspaceId: WS, ownProjectId: PID, ...over,
+  },
+  files,
+})
 const lastProps = (view: typeof mocks.WbsGanttSheet) => view.mock.calls.at(-1)![0]
 
 // 셸을 쓰는 네 화면 — 사유는 셸의 고정 머리(pinned)에 뜬다(간트처럼 꽉 찬 본문을 밀어내지 않고, 컴팩트에서도 남는다).
@@ -92,6 +104,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   mocks.getActorForView.mockResolvedValue(makeMemberActor(PID))
+  mocks.getMinuteDetail.mockResolvedValue(minuteDetail())
+  mocks.getSession.mockResolvedValue(null)
 })
 afterEach(() => errSpy.mockRestore())
 
@@ -152,5 +166,59 @@ describe('회의록 상세 — 이슈 담당자 명단 조회 실패', () => {
     expect(props.issueMembers).toEqual([ALICE])
     expect(props.issueMembersError).toBeNull()
     expect(errSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('회의록 상세 — 첨부 목록 조회 실패', () => {
+  const render = async () => renderToStaticMarkup((await MinuteDetailPage({
+    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+  })) as ReactElement)
+  beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
+  it('실패는 빈 목록과 사유(filesError)로 넘긴다 — 뷰어가 경고를 띄운다', async () => {
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({}, { ok: false, error: FILES_ERR }))
+    await render()
+    const props = lastProps(mocks.MinuteViewer)
+    expect(props.files).toEqual([])
+    expect(props.filesError).toBe(FILES_ERR)
+  })
+  it('정상은 행을 그대로 넘기고 filesError=null', async () => {
+    const row = { id: 'f1', minuteId: 'min-1', role: 'attachment', fileName: 'a.pdf' }
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({}, { ok: true, rows: [row] }))
+    await render()
+    const props = lastProps(mocks.MinuteViewer)
+    expect(props.files).toEqual([row])
+    expect(props.filesError).toBeNull()
+  })
+})
+
+describe('회의록 상세 — 관리 어포던스(canManage)는 서버 checkOwner 와 같다', () => {
+  const render = async () => renderToStaticMarkup((await MinuteDetailPage({
+    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+  })) as ReactElement)
+  const canManage = async () => { await render(); return lastProps(mocks.MinuteViewer).canManage }
+  beforeEach(() => {
+    mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] })
+    // 세션은 작성자 본인 — 종전 판정(createdBy === user.id)이라면 버튼이 열리는 조건이다.
+    mocks.getSession.mockResolvedValue({ id: 'u1' })
+  })
+  it('명단에서 빠진 작성자(워크스페이스 member, 명단 없음)에게는 열지 않는다', async () => {
+    mocks.getActorForView.mockResolvedValue(makeActor({ userId: 'u1' }))
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({ createdBy: 'u1', ownProjectId: PID }))
+    expect(await canManage()).toBe(false)
+  })
+  it('액터가 없으면(null) 열지 않는다', async () => {
+    mocks.getActorForView.mockResolvedValue(null)
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({ createdBy: 'u1', ownProjectId: PID }))
+    expect(await canManage()).toBe(false)
+  })
+  it('회의 폴백 프로젝트의 관리자에게는 열지 않는다 — 무프로젝트 회의록은 슈퍼유저만(SP1 스펙 §3.5)', async () => {
+    mocks.getActorForView.mockResolvedValue(makeAdminActor(PID))
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({ createdBy: 'u9', ownProjectId: null, projectId: PID }))
+    expect(await canManage()).toBe(false)
+  })
+  it('행의 프로젝트 멤버인 작성자에게는 연다', async () => {
+    mocks.getActorForView.mockResolvedValue(makeMemberActor(PID))
+    mocks.getMinuteDetail.mockResolvedValue(minuteDetail({ createdBy: 'u1', ownProjectId: PID }))
+    expect(await canManage()).toBe(true)
   })
 })

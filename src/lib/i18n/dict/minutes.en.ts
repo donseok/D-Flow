@@ -115,6 +115,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.detail.back': 'Back',
   'min.detail.pathAria': 'Folder path',
   'min.detail.pathUnknown': 'Folder path unavailable',
+  'min.detail.filesLoadFailed': 'Could not load attachments — refresh the page.',
   'min.version.title': 'Source versions',
   'min.version.desc': 'Minutes source files are preserved by version instead of being overwritten.',
   'min.version.current': 'Current',

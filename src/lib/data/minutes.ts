@@ -157,10 +157,14 @@ export const getMinutesExplorer = cache(async (): Promise<ExplorerData | null> =
   return { folders, leaves, total: rows.length, truncated: (mRes.data ?? []).length >= MINUTES_TREE_LIMIT }
 })
 
+export const ERR_MINUTE_FILES_LOAD = '첨부 목록을 불러오지 못했습니다.'
+/** 상세의 파일 목록 결과 — 실패를 빈 목록과 구분한다(members.ts 명단 결과와 같은 관례). */
+export type MinuteFilesResult = { ok: true; rows: MinuteFile[] } | { ok: false; error: string }
+
 /** 뷰어 상세 — body_md + 파일 목록(서명 URL 없이 메타만). 없으면 null. */
 export const getMinuteDetail = cache(async (
   id: string,
-): Promise<{ minute: Minute; files: MinuteFile[] } | null> => {
+): Promise<{ minute: Minute; files: MinuteFilesResult } | null> => {
   const sb = await createServerClient()
   // 본문과 파일 목록은 상호 독립(파일 쿼리는 입력 id 만 사용) — 병렬로 내려 직렬 2단을 1단으로
   // 줄인다. 본문이 실패·부재면 파일 결과는 버린다(기존 반환 계약 유지).
@@ -176,18 +180,26 @@ export const getMinuteDetail = cache(async (
   // 멀쩡히 존재하는 회의록이 삭제된 것처럼 보인다. 실패는 실패로 터뜨린다.
   if (error) throw new Error(`[getMinuteDetail] 조회 실패: ${error.message}`)
   if (!r) return null
-  // 파일 목록은 부가 정보 — 본문까지 못 보게 막을 이유는 없어 로깅 후 빈 목록으로 진행.
-  if (fsErr) console.error('[getMinuteDetail] 파일 목록 조회 실패:', fsErr.message)
-  const files: MinuteFile[] = (fs ?? []).map((f: Row) => ({
-    id: f.id as string,
-    minuteId: f.minute_id as string,
-    role: f.role as 'body' | 'attachment',
-    fileName: f.file_name as string,
-    filePath: f.file_path as string,
-    size: (f.size as number) ?? null,
-    mime: (f.mime as string) ?? null,
-    createdAt: f.created_at as string,
-  }))
+  // 파일 목록은 부가 정보라 본문은 계속 보여 준다. 다만 실패를 빈 목록으로 위장하지 않는다(3원칙 ①) — 뷰어가 경고를 띄운다.
+  let files: MinuteFilesResult
+  if (fsErr) {
+    console.error('[getMinuteDetail] 파일 목록 조회 실패:', fsErr.message)
+    files = { ok: false, error: ERR_MINUTE_FILES_LOAD }
+  } else {
+    files = {
+      ok: true,
+      rows: (fs ?? []).map((f: Row) => ({
+        id: f.id as string,
+        minuteId: f.minute_id as string,
+        role: f.role as 'body' | 'attachment',
+        fileName: f.file_name as string,
+        filePath: f.file_path as string,
+        size: (f.size as number) ?? null,
+        mime: (f.mime as string) ?? null,
+        createdAt: f.created_at as string,
+      })),
+    }
+  }
   const minute = mapMinute(r as Row, (r as Row).body_md as string)
   minute.meetingProjectId = ((r as Row).meetings as { project_id: string } | null)?.project_id
     ?? minute.projectId ?? null

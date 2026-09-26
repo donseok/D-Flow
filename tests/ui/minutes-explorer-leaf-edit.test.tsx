@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ExplorerLeaf, Minute, MinuteFolder } from '@/lib/domain/types'
+import type { MinuteFilesResult } from '@/lib/data/minutes'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -16,7 +17,7 @@ vi.mock('next/link', () => ({
 const toast = vi.fn()
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast }) }))
 
-const fetchMinuteDetail = vi.fn<(id: string) => Promise<{ minute: Minute; files: [] } | null>>()
+const fetchMinuteDetail = vi.fn<(id: string) => Promise<{ minute: Minute; files: MinuteFilesResult } | null>>()
 const deleteMinute = vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>()
 vi.mock('@/app/actions/minutes', () => ({
   createMinuteFolder: vi.fn(async () => ({ ok: true })),
@@ -50,14 +51,14 @@ const leaves: ExplorerLeaf[] = [
     meetingCategory: null, folderId: 'f-plan',
   },
 ]
-const detail = (over: Partial<Minute> = {}): { minute: Minute; files: [] } => ({
+const detail = (over: Partial<Minute> = {}): { minute: Minute; files: MinuteFilesResult } => ({
   minute: {
     id: 'm1', minuteDate: '2026-07-24', teamCode: 'MES', title: '생산계획-기획팀',
     bodyMd: '본문', meetingId: 'mt1', createdBy: 'u1', createdByName: '홍길동',
     createdAt: '2026-07-24T00:00:00Z', updatedAt: '2026-07-24T00:00:00Z',
     folderId: 'f-plan', ...over,
   },
-  files: [],
+  files: { ok: true, rows: [] },
 })
 
 describe('MinutesExplorer — 회의록 카드 메뉴', () => {

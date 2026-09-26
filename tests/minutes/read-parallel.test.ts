@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * 회의록 데이터 계층 직렬 왕복 축소(병렬화) 회귀 테스트.
  *
  * - getMinuteDetail: 본문/파일 목록을 병렬 요청(2단→1단)하되, 본문 실패=throw ·
- *   본문 부재=null(파일 결과 폐기) · 파일 실패=로깅 후 빈 목록이라는 기존 계약을 유지한다.
+ *   본문 부재=null(파일 결과 폐기) 계약을 유지한다. 파일 실패는 빈 목록으로 위장하지 않고
+ *   결과형 { ok: false, error } 로 돌려준다(본문은 그대로 — 뷰어가 경고를 띄운다).
  * - getMinuteWikiImpact: job/변경 이력을 병렬 요청(3단→2단)하되, job 실패=fallback ·
  *   변경 이력 실패=job 파생 status/counts 반환 계약을 유지한다. wiki_items 조회는
  *   changes 결과(itemIds)에 의존하므로 여전히 뒤 단계다.
@@ -22,7 +23,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mocks.createAdminClient,
 }))
 
-import { getMinuteDetail, getMinuteWikiImpact } from '@/lib/data/minutes'
+import { ERR_MINUTE_FILES_LOAD, getMinuteDetail, getMinuteWikiImpact } from '@/lib/data/minutes'
 
 type QueryResult = { data: unknown; error: { message: string } | null }
 
@@ -89,11 +90,11 @@ describe('getMinuteDetail — 본문/파일 병렬화', () => {
     body.resolve({ data: MINUTE_ROW, error: null })
     const result = await pending
     expect(result?.minute).toMatchObject({ id: 'min-1', bodyMd: '# 본문', meetingProjectId: 'p1' })
-    expect(result?.files).toEqual([{
+    expect(result?.files).toEqual({ ok: true, rows: [{
       id: 'f1', minuteId: 'min-1', role: 'attachment', fileName: '자료.pdf',
       filePath: 'minutes/min-1/자료.pdf', size: 1024, mime: 'application/pdf',
       createdAt: '2026-08-01T02:00:00Z',
-    }])
+    }] })
   })
 
   it('본문 조회 실패는 파일 조회가 성공해도 여전히 throw 한다(행 없음으로 위장 금지)', async () => {
@@ -118,7 +119,7 @@ describe('getMinuteDetail — 본문/파일 병렬화', () => {
     expect(consoleError).not.toHaveBeenCalled()
   })
 
-  it('파일 조회 실패는 로깅 후 빈 목록으로 진행한다(본문은 그대로 제공)', async () => {
+  it('파일 조회 실패는 빈 목록으로 위장하지 않고 실패 결과를 돌려준다(본문은 그대로 제공, 로그 1회)', async () => {
     const minuteQ = queryBuilder({ data: MINUTE_ROW, error: null })
     const filesQ = queryBuilder({ data: null, error: { message: 'files down' } })
     mocks.createServerClient.mockResolvedValue({
@@ -126,8 +127,10 @@ describe('getMinuteDetail — 본문/파일 병렬화', () => {
     })
 
     const result = await getMinuteDetail('min-1')
-    expect(result?.minute.id).toBe('min-1')
-    expect(result?.files).toEqual([])
+    expect(result?.minute).toMatchObject({ id: 'min-1', bodyMd: '# 본문' })
+    expect(result?.files).toEqual({ ok: false, error: ERR_MINUTE_FILES_LOAD })
+    expect(ERR_MINUTE_FILES_LOAD).toBe('첨부 목록을 불러오지 못했습니다.')
+    expect(consoleError).toHaveBeenCalledTimes(1)
     expect(consoleError).toHaveBeenCalledWith('[getMinuteDetail] 파일 목록 조회 실패:', 'files down')
   })
 })

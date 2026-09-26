@@ -5,7 +5,7 @@ import {
 } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
-import { isProjectAdmin } from '@/lib/domain/authz'
+import { canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { getUiPrefs } from '@/app/actions/preferences'
 import { MinuteViewer } from '@/components/minutes/MinuteViewer'
@@ -72,14 +72,19 @@ export default async function MinuteDetailPage({
     }
     : detail.minute
   const displayAnnotations = requestedVersion ? { highlights: [], insights: [] } : annotations
-  // 미지정(projectId null) 회의록은 isProjectAdmin(m, null)=슈퍼유저만 — 서버 checkOwner 와 같은 규칙.
-  const canManage = !requestedVersion
-    && !detail.minute.archivedAt
-    && !!user
-    && (detail.minute.createdBy === user.id || isProjectAdmin(m, detail.minute.projectId ?? null))
+  // 서버 checkOwner 와 같은 canEditMinute — 행의 project_id·workspace_id 로 판정한다(회의 폴백 projectId 아님).
+  // 멤버가 아닌 작성자·무프로젝트 회의록의 비슈퍼유저에게는 버튼을 열지 않는다.
+  const canManage = !requestedVersion && !detail.minute.archivedAt
+    && !!detail.minute.workspaceId
+    && canEditMinute(m, {
+      created_by: detail.minute.createdBy ?? null,
+      project_id: detail.minute.ownProjectId ?? null,
+      workspace_id: detail.minute.workspaceId,
+    })
   return (
     <MinuteViewer
-      minute={displayMinute} files={detail.files} canManage={canManage}
+      minute={displayMinute} canManage={canManage}
+      files={detail.files.ok ? detail.files.rows : []} filesError={detail.files.ok ? null : detail.files.error}
       annotations={displayAnnotations} userId={user?.id ?? null} projects={projects}
       sourceAnchor={sourceAnchor} initialFontSize={prefs.minuteFontSize ?? null}
       versions={versions} wikiImpact={wikiImpact}

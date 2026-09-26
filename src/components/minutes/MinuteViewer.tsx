@@ -82,13 +82,15 @@ type IssueOrigin =
     }
 
 export function MinuteViewer({
-  minute, files, canManage, annotations, userId, projects, sourceAnchor = null,
+  minute, files, filesError = null, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], wikiImpact = EMPTY_WIKI_IMPACT,
   historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
   files: MinuteFile[]
+  /** 파일 목록 조회 실패 사유 — 있으면 files 는 [] 이고 머리 영역에 경고를 띄운다(첨부가 없는 회의록으로 보이지 않게). */
+  filesError?: string | null
   canManage: boolean
   annotations: { highlights: MinuteHighlight[]; insights: MinuteInsight[] }
   userId: string | null
@@ -772,6 +774,7 @@ export function MinuteViewer({
           </div>
         </div>
         {err && <p className="text-sm text-delayed">{err}</p>}
+        {filesError && !historicalVersion && <p role="alert" className="text-sm text-delayed">{t('min.detail.filesLoadFailed')}</p>}
       </div>
 
       {historicalVersion && (

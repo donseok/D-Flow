@@ -115,6 +115,7 @@ export const minutesKo = {
   'min.detail.back': '목록',
   'min.detail.pathAria': '편철 경로',
   'min.detail.pathUnknown': '경로를 확인할 수 없습니다',
+  'min.detail.filesLoadFailed': '첨부 목록을 불러오지 못했습니다 — 새로고침하세요.',
   'min.version.title': '원본 버전',
   'min.version.desc': '회의록 원본은 덮어쓰지 않고 버전별로 보관합니다.',
   'min.version.current': '현재 버전',
