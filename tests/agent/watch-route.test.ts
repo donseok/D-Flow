@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
-import { makeActor, WS } from '../fixtures/actor'
+import type { ProjectRole } from '@/lib/domain/authz'
+import { makeActor, makeMemberActor, WS } from '../fixtures/actor'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
@@ -80,11 +81,12 @@ describe('POST /agent/watch', () => {
   })
   it('프로젝트 한정 PAT 는 project_id 를 강제하고, 다른 값이면 403 forbidden_role', async () => {
     const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS]]) }))
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }), calls)
     const ok = await post({ agent: 'a' })
     expect(ok.status).toBe(200)
+    // 프로젝트가 있으면 워크스페이스는 트리거가 채운다(null) — 스냅샷은 프로젝트 판정에만 쓴다.
     expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: P1, workspace_id: null })
-    expect(mocks.actorFromUser).not.toHaveBeenCalled()   // 프로젝트가 있으면 트리거가 채운다
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }))
     expect((await post({ agent: 'a', project_id: P2 })).status).toBe(403)
   })
@@ -150,5 +152,47 @@ describe('POST /agent/watch — 재개 요청 전달(0099)', () => {
     const body = await res.json()
     expect(body.resume_requests).toBeNull()
     expect(body.resume_requests_error).toBe('재개 요청 조회에 실패했습니다.')
+  })
+})
+
+describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 있어야 한다(SP2 Task 13)', () => {
+  it('프로젝트 한정이 아닌 PAT 가 다른 워크스페이스 project_id 를 대면 404 — upsert 하지 않는다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    useAdmin(runnerQueues(), calls)   // 기본 스냅샷은 아는 프로젝트가 없다
+    const res = await post({ agent: 'a', project_id: P2 })
+    expect(res.status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+  })
+  it('프로젝트 한정 PAT 라도 소유자 스냅샷에 없는 프로젝트면 404(발급 때 워크스페이스를 확인하지 않는다)', async () => {
+    const calls: Record<string, unknown[]> = {}
+    useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }), calls)
+    expect((await post({ agent: 'a' })).status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+  })
+  it('같은 워크스페이스 프로젝트(roleIn non-null — 조회 전용 포함)면 upsert 한다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P2, WS]]) }))
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(200)
+    expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: P2 })
+  })
+  it('명단 member 도 당연히 통과한다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P2, [], { userId: 'u-1', projectRoles: new Map<string, ProjectRole>([[P2, 'member']]) }))
+    useAdmin(runnerQueues())
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(200)
+  })
+  it('소유자 권한 조회 실패는 500 — 판정 없이 쓰지 않는다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.actorFromUser.mockRejectedValue(new Error('db down'))
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(500)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+    spy.mockRestore()
+  })
+  it('stop 은 자기 행만 지우므로 프로젝트 판정 없이 처리한다', async () => {
+    useAdmin(runnerQueues())
+    expect((await post({ agent: 'a', project_id: P2, stop: true })).status).toBe(200)
+    expect(mocks.actorFromUser).not.toHaveBeenCalled()
   })
 })
