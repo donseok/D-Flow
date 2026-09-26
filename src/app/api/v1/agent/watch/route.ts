@@ -7,7 +7,7 @@ import {
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { roleIn } from '@/lib/domain/authz'
+import { isProjectMember } from '@/lib/domain/authz'
 
 /**
  * watch — 감시자(팀장 /dflow-team · 단독 /dflow-poll) 존재 신호. 좌석표 v1 스펙 §3-3.
@@ -117,10 +117,10 @@ export async function POST(req: NextRequest) {
 
     // PAT 소유자 권한 스냅샷 — 조회 실패는 throw → 아래 catch 의 500(판정 없이 쓰지 않는다).
     const actor = await actorFromUser(admin, principal.userId)
-    // SP2 — 감시자는 그 프로젝트 허브·좌석표에 "떠 있는 팀장"으로 보인다. 소유자가 볼 수 있는 프로젝트(roleIn 이
-    // null 이 아님 — 내 워크스페이스)가 아니면 없는 프로젝트와 같은 404. 프로젝트 한정 PAT 도 발급 때 워크스페이스를
-    // 확인하지 않으므로 같은 판정을 거친다.
-    if (projectId && roleIn(actor, projectId) === null) return apiNotFound()
+    // SP2 — 감시자는 그 프로젝트 허브·좌석표에 "떠 있는 팀장"으로 보이는 쓰기다. 소유자가 그 프로젝트의 멤버 이상
+    // (명단 권한·워크스페이스 관리자·플랫폼 관리자)이 아니면 없는 프로젝트와 같은 404 — 조회 전용·다른 워크스페이스 모두.
+    // 프로젝트 한정 PAT 도 발급 때 워크스페이스를 확인하지 않으므로 같은 판정을 거친다.
+    if (projectId && !isProjectMember(actor, projectId)) return apiNotFound()
 
     // 프로젝트 없는 감시자는 워크스페이스를 명시해야 한다(0006 not null) — 프로젝트가 있으면 트리거가 채운다.
     let workspaceId: string | null = null

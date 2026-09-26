@@ -81,7 +81,7 @@ describe('POST /agent/watch', () => {
   })
   it('프로젝트 한정 PAT 는 project_id 를 강제하고, 다른 값이면 403 forbidden_role', async () => {
     const calls: Record<string, unknown[]> = {}
-    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS]]) }))
+    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P1, [], { userId: 'u-1' }))
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }), calls)
     const ok = await post({ agent: 'a' })
     expect(ok.status).toBe(200)
@@ -169,17 +169,19 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
     expect((await post({ agent: 'a' })).status).toBe(404)
     expect(calls['agent_watchers:upsert']).toBeUndefined()
   })
-  it('같은 워크스페이스 프로젝트(roleIn non-null — 조회 전용 포함)면 upsert 한다', async () => {
+  it('같은 워크스페이스라도 명단 권한이 없는 조회 전용이면 404 — 감시자는 허브·좌석표에 보이는 쓰기다', async () => {
     const calls: Record<string, unknown[]> = {}
     mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P2, WS]]) }))
     useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+  })
+  it('명단 member 면 upsert 한다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P2, [], { userId: 'u-1', projectRoles: new Map<string, ProjectRole>([[P2, 'member']]) }))
+    useAdmin(runnerQueues(), calls)
     expect((await post({ agent: 'a', project_id: P2 })).status).toBe(200)
     expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: P2 })
-  })
-  it('명단 member 도 당연히 통과한다', async () => {
-    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P2, [], { userId: 'u-1', projectRoles: new Map<string, ProjectRole>([[P2, 'member']]) }))
-    useAdmin(runnerQueues())
-    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(200)
   })
   it('소유자 권한 조회 실패는 500 — 판정 없이 쓰지 않는다', async () => {
     const calls: Record<string, unknown[]> = {}

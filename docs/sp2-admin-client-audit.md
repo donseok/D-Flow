@@ -42,7 +42,7 @@
 | src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 그 pid 로 import 한다. 전역 팀 등록은 requireWorkspaceAdmin(프로젝트의 wid) 뒤에 한다 |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |
 | src/app/api/v1/agent/me/route.ts | 외부 API·서비스 | PAT 소유자의 actorFromUser 스냅샷 키로 agent_projects 를 in(project_id) 로 조회한다(이번에 고침) |
-| src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 roleIn(감시 project_id) 이 null 이 아닌지 본다 — 아니면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 7일 GC 는 내용을 읽지 않는 전역 정리 |
+| src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 isProjectMember(감시 project_id)를 본다 — 조회 전용·다른 워크스페이스면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 7일 GC 는 내용을 읽지 않는 전역 정리 |
 | src/app/api/v1/agent/work/[id]/claim/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
 | src/app/api/v1/agent/work/[id]/heartbeat/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
 | src/app/api/v1/agent/work/[id]/release/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
@@ -106,7 +106,7 @@
 
 1. ~~**`GET /api/v1/minutes`(목록)**~~ — **닫힘(Task 13)**: 종전엔 공유 시크릿만 확인해 전 워크스페이스의 회의록 목록(제목·external_id·작성자명)을 돌려줬다. 이제 `user_email` 이 필수다(없으면 400, 모르는 계정이면 403 `unknown_user`). 호출자 워크스페이스로 `in('workspace_id')` 를 걸고, 그 안에서 볼 수 없는 비공개 프로젝트(canSeeProject 거짓)의 회의록을 뺀다. 무프로젝트 회의록은 워크스페이스 멤버에게 보인다. 플랫폼 관리자는 전부다. 권한·프로젝트 조회 실패는 500 이다.
 2. ~~**`POST /api/v1/minutes/link`**~~ — **닫힘(Task 13)**: minute_id 로 찾은 회의록에 `canEditMinute`(작성자 또는 그 프로젝트 관리자 — 세션 `checkOwner` 와 같은 판정으로 옮겼다)를 요구한다. 자격이 없으면 없는 회의록과 같은 404 `not_found` 라 다른 워크스페이스 회의록의 존재·보관 여부가 드러나지 않는다.
-3. ~~**`POST /api/v1/agent/watch`**~~ — **닫힘(Task 13)**: upsert 전에 PAT 소유자 스냅샷으로 `roleIn(감시 project_id)` 가 null 이 아닌지 본다(내 워크스페이스 프로젝트). 아니면 404 다. 프로젝트 한정 PAT 도 같은 판정을 거친다 — 아래 7 의 "쓸 수 없는 토큰" 이 watch 에서도 404 가 된다. stop 은 자기 행만 지우므로 판정하지 않는다.
+3. ~~**`POST /api/v1/agent/watch`**~~ — **닫힘(Task 13)**: upsert 전에 PAT 소유자 스냅샷으로 그 프로젝트의 멤버 이상(`isProjectMember` — 명단 권한·워크스페이스 관리자·플랫폼 관리자)인지 본다. 감시자는 허브·좌석표에 보이는 쓰기라 조회 전용도 막는다. 아니면 404 다. 프로젝트 한정 PAT 도 같은 판정을 거친다 — 아래 7 의 "쓸 수 없는 토큰" 이 watch 에서도 404 가 된다. stop 은 자기 행만 지우므로 판정하지 않는다.
 4. ~~**`POST /api/v1/minutes`**~~ — **닫힘(Task 13)**: `meeting_id` 는 그 회의 프로젝트의 멤버 이상(`isProjectMember`)만 연결한다. 없는 회의와 남의 회의를 같은 404 로 답한다(종전 없는 회의는 400). external_id 는 전역 유일이라 조회는 전역이지만, 찾은 행(동시 전송 경합의 재조회 포함)에 `canEditMinute` 를 요구하고 아니면 404 다 — replace 뿐 아니라 skip·error·보관 분기도 같은 404 라 남의 external_id 존재를 드러내지 않는다. 판정은 inline `meeting` 확보보다 먼저라 고아 회의가 생기지 않는다. `actorFromUser` 는 모든 POST 에서 한 번 돈다.
 5. **`teamsForProjectSync` 의 전역 폴백**: 프로젝트 팀이 없으면 `resolveTeamsForProject` 가 전 워크스페이스의 공용 팀을 섞어서 돌려준다. 이렇게 되는 이유는 캐시가 프로젝트→워크스페이스를 모르기 때문이다. 캐시 구조를 바꾸는 일이라 SP4 R10 몫이다.
 6. **`teamsSync()`·`activeTeamCodesSync()` 호출처**(회의록 액션·AI 도구 등): 전 워크스페이스 공용 팀으로 검증한다. 회의록 계열은 Task 16 이 워크스페이스판으로 옮긴다.
