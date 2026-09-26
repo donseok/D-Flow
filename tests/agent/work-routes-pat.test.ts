@@ -45,6 +45,13 @@ function useAdmin(queues: Record<string, Resp[]>, selects?: Record<string, strin
 }
 const get = (url: string, bearer: string) =>
   new NextRequest(url, { headers: { Authorization: `Bearer ${bearer}` } })
+/** 레거시 시크릿 읽기는 user_email 필수(SP2 최종 리뷰 F8) — 신원(profiles) + P1 명단 member. 응답 셰이프는 v1 그대로다. */
+const LEGACY_EMAIL = 'dev@example.com'
+const legacyMember = () => ({
+  profiles: [{ data: { user_id: 'u-1', display_name: 'dev' } }],
+  ...axes([P1]),
+  project_members: [roster(rosterRow(P1, 'member'))],
+})
 
 beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
@@ -88,18 +95,20 @@ describe('GET /agent/work — PAT 멤버십 게이트', () => {
     const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, PAT.token))
     expect(res.status).toBe(403)
   })
-  it('레거시 시크릿 → 멤버십 검사 없이 v1 동작(회귀 기준선)', async () => {
+  it('레거시 시크릿 + 멤버 user_email → v1 동작(회귀 기준선 — 신원만 새로 요구한다)', async () => {
     useAdmin({
+      ...legacyMember(),
       agent_projects: [{ data: { enabled: true } }],
       agent_work_orders: [{ data: [] }],
     })
-    const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, 'legacy-secret'))
+    const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}&user_email=${LEGACY_EMAIL}`, 'legacy-secret'))
     expect(res.status).toBe(200)
   })
 })
 
 const detail = (bearer: string) =>
-  detailGET(get(`http://l/api/v1/agent/work/${O1}`, bearer), { params: Promise.resolve({ id: O1 }) })
+  detailGET(get(`http://l/api/v1/agent/work/${O1}${bearer === 'legacy-secret' ? `?user_email=${LEGACY_EMAIL}` : ''}`, bearer),
+    { params: Promise.resolve({ id: O1 }) })
 
 describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
   it('PAT + 멤버 → 200 (agent_runners → last_seen → 주문 → 멤버십 검사)', async () => {
@@ -148,8 +157,9 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
     const res = await detail(PAT.token)
     expect(res.status).toBe(404)
   })
-  it('레거시 시크릿 → 멤버십 검사 없이 v1 동작(회귀 기준선)', async () => {
+  it('레거시 시크릿 + 멤버 user_email → v1 동작(회귀 기준선 — 신원만 새로 요구한다)', async () => {
     useAdmin({
+      ...legacyMember(),
       agent_work_orders: [{
         data: {
           id: O1, project_id: P1, status: 'reported', priority: 0, instructions: '',
@@ -205,6 +215,7 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
     expect(body.order).toMatchObject(seatSignals)
 
     useAdmin({
+      ...legacyMember(),
       agent_work_orders: [{ data: orderRow }],
       agent_projects: [{ data: { enabled: true } }],
       agent_work_reports: [{ data: [] }],
@@ -255,6 +266,7 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
     const W1 = '33333333-3333-4333-8333-333333333333'
     const LEGACY_ITEM = { id: W1, code: 'C1', name: '항목1', biz: null, deliverable: null, planned_start: null, planned_end: null }
     useAdmin({
+      ...legacyMember(),
       agent_work_orders: [{
         data: {
           id: O1, project_id: P1, status: 'reported', priority: 0, instructions: '',
@@ -303,6 +315,7 @@ describe('GET /agent/work/[id] — reports[].evidence', () => {
   it('레거시 시크릿 응답은 evidence 를 요구하지 않는다(v1 회귀 기준선)', async () => {
     const selects: Record<string, string[]> = {}
     useAdmin({
+      ...legacyMember(),
       agent_work_orders: [ORDER_ROW],
       agent_projects: [{ data: { enabled: true } }],
       agent_work_reports: [{ data: [] }],

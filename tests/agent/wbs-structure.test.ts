@@ -10,6 +10,11 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { profileEq } from '../fixtures/profiles'
+
+const LEGACY_SECRET = 'legacy-secret'
+const PL = { id: 'u-1', email: 'pl@example.com', user_metadata: {} }
+const OUTSIDER = { id: 'u-9', email: 'outsider@example.com', user_metadata: {} }
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
@@ -19,6 +24,8 @@ function useAdmin(queues: Record<string, Resp[]>) {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'update', 'eq', 'in', 'order', 'limit', 'range']) b[k] = () => b
+      // 레거시 신원 — resolveUserByEmail 은 profiles 를 eq('email') 로 한 건 읽는다
+      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, [PL, OUTSIDER])
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
@@ -125,5 +132,36 @@ describe('GET /wbs/structure', () => {
     const { token } = patRow()
     const res = await structureGET(get('', token))
     expect(res.status).toBe(400)
+  })
+})
+
+// 레거시(AGENT_API_SECRET) 읽기는 ?user_email= 필수(SP2 최종 리뷰 F8) — 시크릿은 배포 전역이라 워크스페이스 경계가 없다.
+describe('GET /wbs/structure — 레거시 시크릿 호출의 신원', () => {
+  beforeEach(() => { process.env.AGENT_API_SECRET = LEGACY_SECRET })
+
+  it('user_email 없이 시크릿만 → 400 identity_required(WBS 트리를 읽기 전에)', async () => {
+    const admin = useAdmin({ agent_projects: [{ data: { enabled: true } }], wbs_items: [{ data: TREE }] })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, LEGACY_SECRET))
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('identity_required')
+    expect(admin.from).not.toHaveBeenCalledWith('wbs_items')
+  })
+
+  it('비멤버 user_email → 404 — 다른 워크스페이스 프로젝트의 트리를 주지 않는다', async () => {
+    useAdmin({ agent_projects: [{ data: { enabled: true } }], ...axes([]), project_members: [roster()], wbs_items: [{ data: TREE }] })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${OUTSIDER.email}`, LEGACY_SECRET))
+    expect(res.status).toBe(404)
+    expect(await res.text()).not.toContain('생산운영')
+  })
+
+  it('멤버 user_email → 200', async () => {
+    useAdmin({
+      agent_projects: [{ data: { enabled: true } }],
+      ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      project_settings: [{ data: { level_labels: ['Phase', 'System'], max_depth: 2 } }],
+      wbs_items: [{ data: TREE }],
+    })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
+    expect(res.status).toBe(200)
   })
 })

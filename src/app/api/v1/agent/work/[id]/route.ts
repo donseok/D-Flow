@@ -5,6 +5,7 @@ import {
   apiBadRequest, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
+import { resolveReader } from '@/lib/agent/routeShared'
 import { ITEM_DETAIL_COLUMNS, loadDependsInfo, type DependInfo } from '@/lib/agent/depends'
 
 const LEGACY_ITEM_COLUMNS = 'id, code, name, biz, deliverable, planned_start, planned_end' // v1 회귀 기준선 — 확장 금지
@@ -23,6 +24,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       const scopeErr = requireScope(principal, 'work:read')
       if (scopeErr) return scopeErr
     }
+    // 레거시도 신원(user_email)을 받는다 — 주문을 읽기 전에(시크릿만으로는 워크스페이스 경계가 없다).
+    const reader = await resolveReader(req, admin, principal)
+    if (!reader.ok) return reader.res
 
     const { data: order, error } = await admin
       .from('agent_work_orders')
@@ -37,7 +41,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (principal.kind === 'pat' && !patProjectAllowed(principal, row.project_id)) return apiNotFound()
     // 미등록 프로젝트의 주문은 존재 자체를 숨긴다 — 게이트 순서상 등록 해제 뒤에도 새지 않게.
     if (!(await requireAgentProject(admin, row.project_id))) return apiNotFound()
-    if (principal.kind === 'pat' && !(await isAgentProjectMember(admin, principal.userId, row.project_id))) {
+    if (!(await isAgentProjectMember(admin, reader.userId, row.project_id))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 

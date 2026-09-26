@@ -5,11 +5,12 @@ import {
   apiBadRequest, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
+import { resolveReader } from '@/lib/agent/routeShared'
 
 /**
  * GET /api/v1/wbs/structure?project_id=&max_depth= — 프로젝트 levels 정본 + 얕은 노드 조회.
  * PL 스킬(dflow-wbs-nlevel)의 서버 직조회 원천 — 시스템 키·attach 부착점을 이름으로 고르게
- * 한다(스펙 §import 계약 v2.2). 읽기 전용이라 멤버면 통과(비멤버 404 존재 은닉).
+ * 한다(스펙 §import 계약 v2.2). 읽기 전용이라 멤버면 통과(비멤버 404 존재 은닉). 레거시 시크릿은 user_email 로 신원을 준다.
  * max_depth 는 0-base 트리 깊이 상한(기본 1 = Phase·System 두 층).
  */
 export const dynamic = 'force-dynamic'
@@ -33,8 +34,11 @@ export async function GET(req: NextRequest) {
       if (scopeErr) return scopeErr
       if (!patProjectAllowed(principal, projectId)) return apiNotFound()
     }
+    // 레거시도 신원(user_email)을 받아 PAT 와 같은 멤버십 판정을 한다 — 시크릿만으로는 워크스페이스 경계가 없다.
+    const reader = await resolveReader(req, admin, principal)
+    if (!reader.ok) return reader.res
     if (!(await requireAgentProject(admin, projectId))) return apiNotFound()
-    if (principal.kind === 'pat' && !(await isAgentProjectMember(admin, principal.userId, projectId))) {
+    if (!(await isAgentProjectMember(admin, reader.userId, projectId))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 

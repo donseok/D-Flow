@@ -86,6 +86,24 @@ export async function loadGatedOrderForUser(
 }
 
 /**
+ * 읽기 라우트(작업 목록·상세·WBS 구조)의 신원 — PAT 는 토큰 소유자. 레거시(AGENT_API_SECRET)는 `?user_email=` 이 필수다(SP2,
+ * v1 계약 변경): 시크릿은 배포 전역이라 워크스페이스 경계가 없어, 신원 없이 받으면 어느 워크스페이스의 주문 지시·보고·WBS 트리든
+ * 읽힌다(회의록 GET 목록을 user_email 로 닫은 T12 우려3 과 같은 결정). 없으면 400 identity_required, 모르는 이메일은 403 unknown_user
+ * (쓰기 라우트와 같다). 멤버십은 호출부가 이 userId 로 PAT 와 같은 404(존재 은닉)로 판정한다. 계정 조회 실패는 throw → 라우트 500.
+ */
+export async function resolveReader(req: Request, admin: AdminClient, principal: AgentPrincipal): Promise<
+  | { ok: true; userId: string }
+  | { ok: false; res: NextResponse }
+> {
+  if (principal.kind === 'pat') return { ok: true, userId: principal.userId }
+  const email = new URL(req.url).searchParams.get('user_email')?.trim() ?? ''
+  if (!email) return { ok: false, res: apiFail(400, 'identity_required', '레거시 시크릿 호출은 user_email 쿼리가 필요합니다.') }
+  const user = await resolveUserByEmail(admin, email)
+  if (!user) return { ok: false, res: apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`) }
+  return { ok: true, userId: user.id }
+}
+
+/**
  * 쓰기 라우트 공통 신원 해석 — 계약 v2.0.
  * legacy: body user_email 을 resolveUserByEmail 로 해석(v1 그대로).
  * pat: principal 이 신원. body user_email 이 있는데 다르면 400 identity_mismatch(사칭 신호 — 조용히 무시 금지).
