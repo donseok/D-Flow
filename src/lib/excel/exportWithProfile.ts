@@ -106,6 +106,14 @@ export function buildAoaWithProfile(
   }
 
   const hierCols = profile.hierarchy.kind === 'columns' ? profile.hierarchy.columns : null
+  // 계층 열보다 깊은 항목(sub-act 제외)은 접기에서 이름이 사라지고(아래 데이터 행의 hierColsOut 분기), 펼침에서는 '세부업무' 열로 잘못 들어간다.
+  // 단계 추가(LevelSettingsManager)나 더 깊은 파일의 append 임포트 뒤에 생긴다 — 조용한 손상 대신 거부한다.
+  if (hierCols) {
+    const tooDeep = flattenWithDepth(items, false).some(({ item, depth }) => !item.isOwnerSplit && depth >= hierCols.length)
+    if (tooDeep) {
+      return { ok: false, error: `저장된 엑셀 양식의 계층 열(${hierCols.length}개)보다 WBS가 깊습니다 — 임포트 마법사에서 양식을 다시 저장하세요` }
+    }
+  }
   const outlineCol = profile.hierarchy.kind === 'outline' ? profile.hierarchy.column : null
   // 삽입 지점 — columns 계층 + 펼침일 때만 존재. 계층 열은 전부 insertAt 미만이라 시프트되지 않는다.
   const insertAt = expandSubActs && hierCols ? hierCols[hierCols.length - 1] + 1 : null
@@ -166,10 +174,7 @@ export function buildAoaWithProfile(
   if (deliverableCol != null) header2[deliverableCol] = '산출물'
   if (startCol != null) header2[startCol] = '계획'
 
-  // ── 헤더 3행(rows 의 3번째 행=index 2로 항상 고정 출력 — profile.headerRow 값 자체는 읽지 않는다.
-  // parseWithProfile 이 실제 라벨 행으로 읽는 건 dataStart=profile.headerRow+1 이므로, 이 고정 3행
-  // 출력은 profile.headerRow=2 일 때만 그 위치와 일치한다. headerRow≠2 프로파일로 내보내면 어긋나
-  // 재임포트가 틀어진다 — buildWorkbookWithProfile 의 ⚠️ 참고, 이 라운드에서 고치지 않는다). ──
+  // ── 헤더 3행(라벨 행) ──
   // trailing 라벨은 3개뿐이다(계획%/계획대비%/진척) — 데이터 행의 4개(+성과율)와 폭이 다른 기존
   // buildWbsAoa 의 결함을 그대로 재현한다(무접촉 원칙 + 바이트 불변 회귀 기준 때문에 여기서 고치지
   // 않는다 — 계약 (a) 참조).
@@ -190,7 +195,8 @@ export function buildAoaWithProfile(
   header3[maxCol + 2] = '계획대비%'
   header3[maxCol + 3] = '진척'
 
-  const rows: unknown[][] = [header1, header2, header3]
+  // 라벨 행(header3)은 profile.headerRow 위치에 둔다 — parseWithProfile 이 headerRow+1 부터 데이터를 읽는다.
+  const rows: unknown[][] = [...headerRowsBeforeLabel(profile.headerRow, header1, header2, projectName), header3]
 
   for (const { item, depth } of flattenWithDepth(items, expandSubActs)) {
     const row = new Array(maxCol + 5).fill('')
@@ -243,17 +249,23 @@ export function buildAoaWithProfile(
   return { ok: true, aoa: rows }
 }
 
+/** 라벨 행 앞에 올 행 headerRow 개. detect·parse 는 blankrows:false 로 읽어 빈 행을 세지 않으므로 전부 비어 있지 않아야 한다.
+ *  0 → 없음, 1 → [제목], 2 → [제목, 병합 타이틀](레거시 3행 헤더 — 바이트 불변), 3 이상 → 제목과 병합 타이틀 사이에 제목 반복 행.
+ *  병합 타이틀이 비면(아웃라인 + 팀·산출물·일정 열 없음) 제목으로 채운다 — 비어 있으면 행이 사라져 라벨 위치가 한 칸 당겨진다. */
+function headerRowsBeforeLabel(headerRow: number, header1: unknown[], header2: unknown[], projectName: string): unknown[][] {
+  if (headerRow === 0) return []
+  if (headerRow === 1) return [header1]
+  const title2 = header2.some(c => c !== '') ? header2 : [projectName]
+  const fillers = Array.from({ length: headerRow - 2 }, () => [projectName])
+  return [header1, ...fillers, title2]
+}
+
 /** WBS + Holiday 시트를 가진 xlsx ArrayBuffer 생성 — buildWbsWorkbook(export.ts)의 프로파일 버전.
  *  시트명은 profile.sheetName/profile.holidaySheetName 을 그대로 쓴다(재임포트 시 프로파일이 찾는
  *  이름과 일치해야 하므로). holidaySheetName 이 null 이면 Holiday 시트를 만들지 않는다.
- *  buildAoaWithProfile 이 실패(outline+펼침)하면 그대로 전파한다.
+ *  buildAoaWithProfile 이 실패(outline+펼침, 계층 열보다 깊은 WBS)하면 그대로 전파한다.
  *
- *  ⚠️ 현재 headerRow=2(3행 헤더) 프로파일만 왕복 보장 — 그 외는 재임포트 불가. buildAoaWithProfile
- *  이 항상 정확히 3행(header1/header2/header3)을 쓰고 profile.headerRow 값 자체는 읽지 않기 때문에,
- *  headerRow가 2가 아닌 프로파일(예: 감지된 헤더가 1행·2행뿐인 양식)로 내보내면 실제 헤더 행 수와
- *  프로파일이 선언한 headerRow가 어긋나 재임포트 시 parseWithProfile의 dataStart(=headerRow+1)가
- *  틀린 행부터 데이터를 읽는다 — 무증상 오파싱. 펼침 익스포트는 저장 프로파일이 headerRow≠2 면
- *  명시 거부 대상이다(후속 — 이 라운드에서는 코드 동작을 바꾸지 않고 한계만 문서화한다). */
+ *  headerRow 는 라벨 행 위치로 존중한다(headerRowsBeforeLabel). 계층 열보다 깊은 WBS 는 거부한다. */
 export function buildWorkbookWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,

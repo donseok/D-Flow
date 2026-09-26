@@ -38,6 +38,7 @@ vi.mock('@/components/settings/ProjectInfoEditButton', () => ({ ProjectInfoEditB
 vi.mock('@/components/settings/ProjectPrivacyToggle', () => ({ ProjectPrivacyToggle: () => null }))
 vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () => null }))
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => null }))
+vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 

@@ -40,6 +40,8 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.exportDesc': 'Download the current WBS, schedule, owners, and actuals as Excel. The same format can be re-imported.',
   'settings.exportAria': 'Export WBS as an Excel file',
   'settings.exportExcel': 'Export Excel',
+  'settings.exportFailed': 'Export failed',
+  'settings.exporting': 'Exporting…',
   // AI Assistant index section
   'settings.assistantTitle': 'AI Assistant semantic search index',
   'settings.assistantDesc1':

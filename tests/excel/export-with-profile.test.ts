@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import * as XLSX from 'xlsx'
 import { buildAoaWithProfile, buildWorkbookWithProfile } from '@/lib/excel/exportWithProfile'
 import { buildWbsAoa } from '@/lib/excel/export'
 import { LEGACY_EXCEL_PROFILE_V1, type ExcelProfile } from '@/lib/excel/profile'
@@ -299,5 +300,61 @@ describe('buildAoaWithProfile — outline 계층 + 펼침은 명시적으로 거
   it('outline + 접기는 회귀 없이 그대로 동작한다', () => {
     const built = buildAoaWithProfile(items, OUTLINE_PROFILE, { expandSubActs: false })
     expect(built.ok).toBe(true)
+  })
+})
+
+/* ── (d) headerRow 존중 — 라벨 행이 profile.headerRow 위치에 오고, 같은 프로파일로 되읽힌다 ── */
+describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', () => {
+  const SRC: WbsRow[] = [
+    row({ id: 'P', parentId: null, code: '1', sortOrder: 0, name: '준비', plannedStart: '2026-07-01', plannedEnd: '2026-07-10' }),
+    row({ id: 'T', parentId: 'P', code: '1.1', sortOrder: 1, name: '착수', plannedStart: '2026-07-01', plannedEnd: '2026-07-03',
+      owners: [{ team: '팀A', kind: 'primary' }] }),
+  ]
+  const items = computeTree(SRC, '2026-07-02', new Set(), { subActTeamOrder: teamOrderMap(['팀A']) })
+  const COLUMNS = (headerRow: number): ExcelProfile => ({
+    version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow,
+    hierarchy: { kind: 'columns', columns: [0, 1] },
+    logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 },
+    teamColumns: [[6, '팀A']], ownerMarks: { '●': 'primary', '△': 'support' },
+  })
+  const OUTLINE = (headerRow: number): ExcelProfile => ({
+    version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow,
+    hierarchy: { kind: 'outline', column: 0 },
+    logical: { extraAxis: null, code: null, name: 1, deliverable: null, start: 2, end: 3, weight: null, actualPct: null },
+    teamColumns: [], ownerMarks: { '●': 'primary', '△': 'support' },
+  })
+  const readBack = (profile: ExcelProfile) => {
+    const built = buildWorkbookWithProfile(items, profile, [], { expandSubActs: false }, 'Acme')
+    if (!built.ok) throw new Error(built.error)
+    // detect·parse 와 같은 읽기 규칙(blankrows:false) — 빈 행은 세지 않는다
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(
+      XLSX.read(built.buffer, { type: 'array' }).Sheets.WBS, { header: 1, blankrows: false })
+    const parsed = parseWithProfile(built.buffer, profile)
+    if (!parsed.ok) throw new Error(parsed.error)
+    return { aoa, rows: parsed.rows.map(r => [r.depth, r.name, r.plannedStart]) }
+  }
+
+  it.each([0, 1, 2, 3])('columns headerRow=%i', (h) => {
+    const { aoa, rows } = readBack(COLUMNS(h))
+    expect(aoa[h]).toContain('시작')
+    expect(rows).toEqual([[0, '준비', '2026-07-01'], [1, '착수', '2026-07-01']])
+  })
+  it.each([0, 1, 2, 3])('outline headerRow=%i', (h) => {
+    const { aoa, rows } = readBack(OUTLINE(h))
+    expect(aoa[h]).toContain('코드')
+    expect(rows).toEqual([[0, '준비', '2026-07-01'], [1, '착수', '2026-07-01']])
+  })
+
+  it('계층 열보다 깊은 WBS 는 접기·펼침 모두 ok:false — 이름이 사라진 파일을 만들지 않는다', () => {
+    const deep = computeTree([
+      row({ id: 'A', parentId: null, code: '1', sortOrder: 0, name: 'A' }),
+      row({ id: 'B', parentId: 'A', code: '1.1', sortOrder: 1, name: 'B' }),
+      row({ id: 'C', parentId: 'B', code: '1.1.1', sortOrder: 2, name: 'C' }),
+    ], '2026-07-02', new Set(), OPTS)
+    for (const expandSubActs of [false, true]) {
+      const r = buildAoaWithProfile(deep, COLUMNS(2), { expandSubActs })
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toContain('계층 열(2개)')
+    }
   })
 })

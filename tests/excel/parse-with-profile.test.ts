@@ -337,3 +337,25 @@ describe('parseWithProfile — 시트 없음 명시 에러', () => {
     expect(res.error).toContain('WBS')
   })
 })
+
+describe('parseWithProfile — 양식 가이드 4번의 YYYY-MM-DD 텍스트 날짜', () => {
+  const P: ExcelProfile = {
+    version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0,
+    hierarchy: { kind: 'columns', columns: [0, 1] },
+    logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: null },
+    teamColumns: [], ownerMarks: { '●': 'primary', '△': 'support' },
+  }
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['L1', 'L2', '산출물', '시작', '종료'],
+    ['준비', '', '', '2026-09-01', '2026-09-12'],
+    ['', '착수', '', ' 2026-09-01 ', '2026-02-30'],
+  ]), 'WBS')
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+  it('텍스트 ISO 날짜를 읽는다 — 달력에 없는 날짜는 비운다', () => {
+    const r = parseWithProfile(buf, P)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.rows.map(x => [x.plannedStart, x.plannedEnd])).toEqual([['2026-09-01', '2026-09-12'], ['2026-09-01', null]])
+  })
+})

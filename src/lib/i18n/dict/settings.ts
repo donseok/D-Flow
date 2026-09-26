@@ -38,6 +38,8 @@ export const settingsKo = {
   'settings.exportDesc': '현재 WBS·일정·담당·실적을 Excel로 내려받습니다. 같은 형식으로 다시 가져올 수 있어요.',
   'settings.exportAria': 'WBS를 Excel 파일로 내보내기',
   'settings.exportExcel': 'Excel 내보내기',
+  'settings.exportFailed': '내보내기에 실패했습니다',
+  'settings.exporting': '내보내는 중…',
   // AI 어시스턴트 색인 섹션
   'settings.assistantTitle': 'AI 어시스턴트 의미검색 색인',
   'settings.assistantDesc1':

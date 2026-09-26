@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, Download, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList } from 'lucide-react'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
@@ -22,6 +22,7 @@ import { ProjectInfoEditButton } from '@/components/settings/ProjectInfoEditButt
 import { ProjectPrivacyToggle } from '@/components/settings/ProjectPrivacyToggle'
 import { ScheduleManager } from '@/components/settings/ScheduleManager'
 import { ReindexButton } from '@/components/settings/ReindexButton'
+import { ExportExcelButton } from '@/components/settings/ExportExcelButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
 import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -233,13 +234,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.exportDesc')}</p>
-          <a
-            href={`/api/export?projectId=${projectId}`}
-            className="btn btn-ghost shrink-0"
-            aria-label={t(locale, 'settings.exportAria')}
-          >
-            <Download className="h-4 w-4" /> {t(locale, 'settings.exportExcel')}
-          </a>
+          <ExportExcelButton projectId={projectId} />
         </div>
         </SectionCard>
 

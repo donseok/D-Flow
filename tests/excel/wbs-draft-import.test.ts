@@ -4,8 +4,9 @@
  * 왜 이 테스트가 있는가:
  *   초안 생성기는 detect.ts 의 감지 규칙에 맞춰 열을 배치한다. 그 규칙이 바뀌면 생성기는
  *   조용히 어긋나고, 결과물은 "임포트는 성공했는데 값이 비어 있는" 최악의 형태가 된다.
- *   특히 날짜 — parseWithProfile.toIso 는 number|Date 만 받으므로 문자열로 쓰면 전부 null 이
- *   되는데 임포트 자체는 성공한다. 그래서 '생성 → 감지 → 파싱 → 링킹'을 한 번에 태운다.
+ *   특히 날짜 — parseWithProfile.toIso 는 number|Date 와 'YYYY-MM-DD' 텍스트만 읽는다. 그 밖의 문자열은
+ *   조용히 null 이 되어 일정이 사라진 채 임포트가 성공하므로, 생성기는 로컬 정오 Date 셀로 쓴다.
+ *   그래서 '생성 → 감지 → 파싱 → 링킹'을 한 번에 태운다.
  */
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'

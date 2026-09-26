@@ -112,6 +112,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.exportProfileButton': 'Export with profile (expanded)',
   'importWizard.exportProfileBusy': 'Exporting…',
   'importWizard.exportProfileFailedHttp': 'Export failed',
+  'importWizard.exportProfileNeedsSaved': 'The layout was not saved in this import, so expanded export is unavailable. Turn on "Save this layout as the project default" and import again.',
 
   'importWizard.linkFromOldForm': 'New import wizard (auto layout detection) →',
 }

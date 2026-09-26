@@ -110,6 +110,7 @@ export const importWizardKo = {
   'importWizard.exportProfileButton': '프로파일로 내보내기(펼침)',
   'importWizard.exportProfileBusy': '내보내는 중…',
   'importWizard.exportProfileFailedHttp': '내보내기에 실패했습니다',
+  'importWizard.exportProfileNeedsSaved': '이번 가져오기에서 양식을 저장하지 않아 펼침 내보내기를 쓸 수 없습니다 — "이 양식을 프로젝트 기본값으로 저장"을 켜고 다시 가져오세요.',
 
   'importWizard.linkFromOldForm': '새 임포트 마법사(양식 자동 감지) →',
 } as const

@@ -23,6 +23,8 @@ export interface ParsedRowN {
 /** parse.ts 와 동일, 구 경로 제거(Plan C) 때 통합.
  *  엑셀 날짜는 시리얼(정수)로 저장됨. SSF.parse_date_code 로 타임존 무관하게 {y,m,d} 도출
  *  (cellDates 로컬 변환에 의존하면 Asia/Seoul 1899 LMT 오프셋 때문에 -1일 밀린다). */
+const ISO_DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/
+
 function toIso(v: unknown): string | null {
   if (typeof v === 'number' && Number.isFinite(v)) {
     const d = XLSX.SSF.parse_date_code(v)
@@ -32,6 +34,14 @@ function toIso(v: unknown): string | null {
   }
   if (v instanceof Date) {
     return new Date(Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate())).toISOString().slice(0, 10)
+  }
+  // 양식 가이드 4번이 허용한 'YYYY-MM-DD' 텍스트 — 달력에 있는 날짜만(2026-02-30 은 null). 그 밖의 문자열은 종전대로 null.
+  if (typeof v === 'string') {
+    const m = ISO_DATE_TEXT.exec(v.trim())
+    if (!m) return null
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3])
+    const dt = new Date(Date.UTC(y, mo - 1, d))
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? m[0] : null
   }
   return null
 }

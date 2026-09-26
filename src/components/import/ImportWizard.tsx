@@ -9,6 +9,7 @@ import {
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
+import { downloadWbsExport } from '@/components/import/downloadWbsExport'
 import type { DictKey } from '@/lib/i18n/dict'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
@@ -60,11 +61,6 @@ function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedA
   URL.revokeObjectURL(url)
 }
 
-/** 프로파일 익스포트(§6.5, 리뷰 Important #1) — `/api/export?expand=1` 를 fetch→blob 로 받아
- *  내려받는다. WeeklySheetView.downloadPpt 와 동일한 관례(fetch→Content-Disposition 파일명 파싱)를
- *  재사용한다 — export.ts 를 건드리지 않고 이미 있는 라우트를 그대로 소비만 한다.
- *  outline+펼침처럼 라우트가 400 으로 거부하는 조합은 그 에러 메시지를 그대로 토스트로 보여준다
- *  (무증상 실패 금지 — 3원칙). */
 /** wbs.xlsx 양식 — 프로젝트 무관 정적 파일(/api/import/template). 빈손인 사용자가 마법사가 100% 잡는 형식으로 시작하게. */
 async function downloadTemplate(toast: ReturnType<typeof useToast>['toast'], failedTitle: string) {
   const res = await fetch('/api/import/template')
@@ -78,30 +74,6 @@ async function downloadTemplate(toast: ReturnType<typeof useToast>['toast'], fai
   const a = document.createElement('a')
   a.href = url
   a.download = 'wbs-양식.xlsx'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
-async function downloadProfileExport(
-  projectId: string,
-  toast: ReturnType<typeof useToast>['toast'],
-  failedTitle: string,
-) {
-  const res = await fetch(`/api/export?projectId=${encodeURIComponent(projectId)}&expand=1`)
-  if (!res.ok) {
-    const err = (await res.json().catch(() => null)) as { error?: string } | null
-    toast({ title: failedTitle, description: err?.error, variant: 'error' })
-    return
-  }
-  const blob = await res.blob()
-  const cd = res.headers.get('Content-Disposition') ?? ''
-  const name = decodeURIComponent(cd.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? `wbs_export_${projectId}.xlsx`)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -196,7 +168,8 @@ export function ImportWizard({
   async function runExportProfile() {
     setExportBusy(true)
     try {
-      await downloadProfileExport(projectId, toast, t('importWizard.exportProfileFailedHttp'))
+      const r = await downloadWbsExport(projectId, { expand: true })
+      if (!r.ok) toast({ title: t('importWizard.exportProfileFailedHttp'), description: r.error ?? undefined, variant: 'error' })
     } finally {
       setExportBusy(false)
     }
@@ -646,23 +619,29 @@ export function ImportWizard({
           )}
 
           {/* 리뷰 Important #1 — §6.5 프로파일 익스포트(펼침)가 UI 에서 도달 불가했다. 완료 화면이
-              이 프로파일로 다시 내보낼 수 있는 유일하고 자연스러운 지점(방금 쓴 프로파일이 최신 상태). */}
-          <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-sm font-semibold text-ink">{t('importWizard.exportProfileTitle')}</p>
-              <p className="mt-0.5 text-xs leading-5 text-ink-muted">{t('importWizard.exportProfileDesc')}</p>
+              이 프로파일로 다시 내보낼 수 있는 유일하고 자연스러운 지점(방금 쓴 프로파일이 최신 상태).
+              라우트는 저장 양식으로 만든다 — 이번에 저장했을 때만 "이 양식 그대로"(exportProfileDesc)가 참이다.
+              저장하지 않았으면 옛 저장 양식을 내보내거나 409 가 나므로 버튼 대신 안내만 둔다. */}
+          {state.result.profileSaved ? (
+            <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="text-sm font-semibold text-ink">{t('importWizard.exportProfileTitle')}</p>
+                <p className="mt-0.5 text-xs leading-5 text-ink-muted">{t('importWizard.exportProfileDesc')}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost shrink-0"
+                disabled={exportBusy}
+                onClick={runExportProfile}
+                aria-label={t('importWizard.exportProfileButton')}
+              >
+                <Download className="h-4 w-4" />
+                {exportBusy ? t('importWizard.exportProfileBusy') : t('importWizard.exportProfileButton')}
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-ghost shrink-0"
-              disabled={exportBusy}
-              onClick={runExportProfile}
-              aria-label={t('importWizard.exportProfileButton')}
-            >
-              <Download className="h-4 w-4" />
-              {exportBusy ? t('importWizard.exportProfileBusy') : t('importWizard.exportProfileButton')}
-            </button>
-          </div>
+          ) : (
+            <p className="text-xs leading-5 text-ink-muted">{t('importWizard.exportProfileNeedsSaved')}</p>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Link href={`/p/${projectId}/wbs`} className="btn btn-primary">
