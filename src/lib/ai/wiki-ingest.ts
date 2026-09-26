@@ -149,7 +149,7 @@ const EXTRACTION_SYSTEM = [
   '12. topic은 회의를 넘어 지속되는 "대상"이다 — 시스템·프로세스·인터페이스·데이터·정책·용어.',
   '    그날 안건지의 목차("향후 추진 계획", "기타 사항", "논의 사항", "진행 상황", "후속 조치",',
   '    "결정 사항", "안건", "주요 내용")를 topic으로 쓰지 마라. 그런 문단 아래의 내용이라도',
-  '    그 문장이 실제로 다루는 대상(예: "MES 경량화", "자산 관리 시스템", "통관 확인 절차")을',
+  '    그 문장이 실제로 다루는 대상(예: "자산 관리 시스템", "통관 확인 절차")을',
   '    topic으로 삼는다. 목차를 topic으로 쓰면 서로 무관한 지식이 한 주제에 쌓여 쓸모가 없어진다.',
   '13. [기존 프로젝트 지식]의 문장을 이번 회의록에서 나온 것처럼 출력하지 마라. 그 목록은',
   '    topic/knowledgeKey를 맞추라고 주는 참고자료일 뿐이며, statement와 evidence는 반드시',
@@ -158,14 +158,14 @@ const EXTRACTION_SYSTEM = [
   '    - 그 주제의 "기존대상" 목록에 있는 kind/knowledgeKey 조합이면 그 topic과',
   '      knowledgeKey를 그대로 쓴다(kind까지 그대로). 같은 대상의 이력을 끊지 않기 위해서다.',
   '    - 목록에 없는 새 대상이면 그 topic을 쓰지 말고, 이 회의록이 실제로 다루는 대상으로',
-  '      새 topic을 지어라. 예: "데이터 관리"가 아니라 "MES 메뉴 열람 권한", "원가 산출 항목".',
+  '      새 topic을 지어라. 예: "데이터 관리"가 아니라 "회의실 예약 권한", "비용 산출 항목".',
   '    - 새 topic도 규칙 12를 따른다 — 그날 안건지의 목차는 topic이 될 수 없다.',
   '',
   '출력 형식:',
   '{"items":[{"kind":"decision","topic":"인터페이스 연계","topicType":"interface",',
-  '"statement":"ERP와 MES 연계는 REST API를 사용하기로 확정했다.",',
-  '"knowledgeKey":"ERP-MES 연계 방식","certainty":"explicit","decisionState":"confirmed",',
-  '"relation":"supports","semanticRelation":null,"evidence":[12],"ownerTeam":"ERP","ownerName":null,',
+  '"statement":"결재 시스템과 문서 저장소 연계는 REST API 를 쓰기로 확정했다.",',
+  '"knowledgeKey":"결재-문서 연계 방식","certainty":"explicit","decisionState":"confirmed",',
+  '"relation":"supports","semanticRelation":null,"evidence":[12],"ownerTeam":null,"ownerName":null,',
   '"dueDate":null,"effectiveDate":null}]}',
 ].join('\n')
 
@@ -750,7 +750,7 @@ async function extractItems(
     .join('\n')
   const raw = await generateAnswer(EXTRACTION_SYSTEM, [{
     role: 'user',
-    content: `회의록 제목: ${title}\n회의일: ${minuteDate}\n${catalog}\n[이번 회의록 원문]\n${source}`,
+    content: `회의록 제목: ${title}\n회의일: ${minuteDate}\n[등록 팀] ${teamCodes.length ? teamCodes.join(', ') : '(없음)'}\n${catalog}\n[이번 회의록 원문]\n${source}`,
   }])
   if (raw === null) throw new Error('LLM_GENERATION_FAILED')
   const items = parseExtractedWikiItems(raw, blocks, teamCodes)

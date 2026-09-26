@@ -254,7 +254,7 @@ export function delayAging(leaves: ComputedItem[], today: string, limit = 8): Ag
   }
 }
 
-/* ── 데이터 위생 — 계획 데이터 품질(PMO 거버넌스) ── */
+/* ── 데이터 위생 — 계획 데이터 품질(계획 데이터 거버넌스) ── */
 export interface HygieneModel { noOwner: number; noDates: number; mixedWeight: number; clean: boolean }
 
 /** mixedWeight: 형제 그룹에서 weight가 일부만 null이면 카운트.

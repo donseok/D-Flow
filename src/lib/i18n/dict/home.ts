@@ -17,7 +17,6 @@ export const homeKo = {
   'home.kpiActiveSub': '현재 운영 중',
   'home.kpiDoneSub': '종료된 프로젝트',
   'home.kpiRatioSub': '진행중 비율',
-  'home.recentProjects': '최근 프로젝트',
   'home.projectLibrary': '프로젝트 라이브러리',
   // "{n}개 · 최근 생성 순" — JSX에서 {n}{t('home.countUnit')} · {t('home.sortRecent')}로 조합
   'home.countUnit': '개',
@@ -28,7 +27,7 @@ export const homeKo = {
   // 새 프로젝트 모달
   'home.newProjectDesc': '기본 정보를 입력해 새 프로젝트를 시작하세요. 생성 후 설정에서 WBS 엑셀을 가져올 수 있습니다.',
   'home.fieldName': '프로젝트명',
-  'home.phName': '예: ERP 고도화 프로젝트',
+  'home.phName': '예: 신규 서비스 구축 프로젝트',
   'home.fieldLevels': 'WBS 단계',
   'home.phLevels': '예: 단계, 작업, 활동',
   'home.hintLevels': '위에서부터 쉼표로 구분 — 개수가 곧 WBS 깊이입니다. 나중에 설정에서 바꿀 수 있습니다.',

@@ -74,7 +74,7 @@ export const issuesKo = {
   'issue.analysis.ownerDepartment': '주관 부서',
   'issue.analysis.ownerDepartmentPh': '예: 영업관리팀',
   'issue.analysis.relatedSystems': '관련 시스템',
-  'issue.analysis.relatedSystemsPh': '예: SAP, MES, WMS',
+  'issue.analysis.relatedSystemsPh': '예: 결재 시스템, 문서 저장소',
   'issue.analysis.relatedSystemsHint': '쉼표로 구분해 입력하세요. 최대 20개까지 입력할 수 있습니다.',
   'issue.analysis.sourceType': '이슈 원천',
   'issue.analysis.sourceTypePlaceholder': '이슈 원천 선택',

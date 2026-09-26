@@ -30,7 +30,7 @@ export const wikiKo = {
   'wiki.ask.eyebrow': 'PROJECT MEMORY',
   'wiki.ask.title': '이 프로젝트에 대해 무엇이 궁금하세요?',
   'wiki.ask.desc': '현재 유효한 지식과 근거 회의록을 함께 찾아 답합니다. 근거가 없으면 질문으로 남겨 담당자가 채울 수 있습니다.',
-  'wiki.ask.placeholder': '예: MES 권한은 어떻게 신청하기로 했지?',
+  'wiki.ask.placeholder': '예: 회의실 예약 권한은 어떻게 신청하기로 했지?',
   'wiki.ask.submit': '질문하기',
   'wiki.ask.working': '프로젝트 Wiki를 확인하는 중…',
   'wiki.ask.suggestions': '추천 질문',
@@ -66,7 +66,7 @@ export const wikiKo = {
   'wiki.search.dropToken': '\'{token}\' 빼고 검색',
   'wiki.search.fallbackCount': '{n}건',
 
-  'wiki.search2.placeholder': '무엇을 찾으세요? 예: MES 권한은 어떻게 신청하지?',
+  'wiki.search2.placeholder': '무엇을 찾으세요? 예: 회의실 예약 권한은 어떻게 신청하기로 했지?',
   'wiki.search2.count': '결과 {n}건',
   'wiki.search2.empty': '결과가 없습니다. 다른 표현으로 찾아보세요.',
   'wiki.search2.error': '검색 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',

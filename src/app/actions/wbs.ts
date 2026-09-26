@@ -173,7 +173,7 @@ export async function updateActual(
     .eq('id', itemId)
     .select('id')
   if (upErr) return { ok: false, error: upErr.message }
-  if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·PMO만 입력 가능)' }
+  if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)' }
 
   // 본 저장은 이미 성공했다 — 이력 기록 실패로 되돌리지는 않되, 조용히 삼키지도 않는다(감사 추적 유실 원인 기록).
   const { error: logInsErr } = await sb.from('change_logs').insert({
@@ -307,7 +307,7 @@ export async function addWbsItem(
   return { ok: true, id: data.id as string }
 }
 
-/** ACT(자식 있는/없는 활동) 하위에 담당 팀별 SUB-ACT(활동 자식) 1개 추가 — PMO 전용.
+/** ACT(자식 있는/없는 활동) 하위에 담당 팀별 SUB-ACT(활동 자식) 1개 추가 — 프로젝트 관리자 전용.
  *  임포트 분리(splitLeafOwners)와 같은 모양을 손으로 재현한다:
  *   - is_owner_split=true, 이름 "{ACT명} ({팀} 주관/지원)", 코드·계획일정·biz·산출물 상속, 가중치 균등, 실적 0(=null).
  *   - 담당 1팀(item_owners) 필수 — 없으면 팀 배지가 없고 정렬 맨 뒤, 팀 편집자가 실적% 입력 불가.
@@ -671,7 +671,7 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
   const { data: movedA, error: swapAErr } = await sb
     .from('wbs_items').update({ sort_order: b.sort_order }).eq('id', a.id).select('id')
   if (swapAErr || !movedA?.length) {
-    return { ok: false, error: `순서 변경 실패: ${swapAErr?.message ?? '저장 권한이 없습니다(PMO만 가능)'}` }
+    return { ok: false, error: `순서 변경 실패: ${swapAErr?.message ?? '저장 권한이 없습니다(관리자만 가능)'}` }
   }
   const { data: movedB, error: swapBErr } = await sb
     .from('wbs_items').update({ sort_order: a.sort_order }).eq('id', b.id).select('id')
@@ -686,7 +686,7 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
         rollbackErr?.message ?? '0행(RLS 차단 추정)',
       )
     }
-    return { ok: false, error: `순서 변경 실패: ${swapBErr?.message ?? '저장 권한이 없습니다(PMO만 가능)'}` }
+    return { ok: false, error: `순서 변경 실패: ${swapBErr?.message ?? '저장 권한이 없습니다(관리자만 가능)'}` }
   }
   revalidatePath(`/p/${item.project_id as string}`, 'layout')
   return { ok: true }

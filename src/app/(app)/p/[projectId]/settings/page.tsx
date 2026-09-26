@@ -146,7 +146,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     <ProjectPageShell
       hero={<PageHero
         eyebrow="SETTINGS"
-        badge={<HeroBadge>Smart Utility</HeroBadge>}
+        badge={<HeroBadge>Settings</HeroBadge>}
         title={`${project?.name ?? t(locale, 'settings.projectFallback')} ${t(locale, 'settings.heroTitleSuffix')}`}
         description={t(locale, 'settings.heroDesc')}
         heroKpis={
@@ -210,28 +210,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         eyebrow="DATA"
         title={t(locale, 'settings.importExportTitle')}
         icon={Upload}
-        actions={!canMutate ? <span className="badge bg-pending-weak px-2 py-1 text-pending">{t(locale, 'settings.pmoOnlyBadge')}</span> : undefined}
       >
         <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
           {t(locale, 'settings.importDesc')}
         </p>
-        {canMutate ? (
-          <Link href={`/p/${projectId}/import`} className="btn btn-primary">
-            <Upload className="h-4 w-4" />
-            {t(locale, 'settings.openImportWizard')}
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
-        ) : (
-          <div className="panel-soft flex items-center gap-4 p-5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pending-weak text-pending">
-              <Shield className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-ink">{t(locale, 'settings.noImportPermission')}</p>
-              <p className="mt-1 text-xs leading-5 text-ink-muted">{t(locale, 'settings.noImportPermissionDesc')}</p>
-            </div>
-          </div>
-        )}
+        <Link href={`/p/${projectId}/import`} className="btn btn-primary">
+          <Upload className="h-4 w-4" />
+          {t(locale, 'settings.openImportWizard')}
+          <ArrowUpRight className="h-4 w-4" />
+        </Link>
 
         <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.exportDesc')}</p>
@@ -278,11 +265,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         actions={
           <div className="flex items-center gap-2">
             <span className={`badge px-2 py-1 ${assistantBadge(assistantIndex, locale).cls}`}>{assistantBadge(assistantIndex, locale).label}</span>
-            {isSuperuser ? (
-              <ReindexButton projectId={projectId} />
-            ) : (
-              <span className="badge bg-pending-weak px-2 py-1 text-pending">{t(locale, 'settings.pmoOnlyBadge')}</span>
-            )}
+            {/* 서버 가드(reindexProjectAction·/api/chat/reindex)가 requireProjectAdmin 이라 이 화면에 온 관리자에게 그대로 준다. */}
+            <ReindexButton projectId={projectId} />
           </div>
         }
       >
@@ -423,7 +407,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         eyebrow="CALENDAR"
         title={t(locale, 'settings.calendarTitle')}
         icon={CalendarDays}
-        actions={!canMutate ? <span className="badge bg-pending-weak px-2 py-1 text-pending">{t(locale, 'settings.pmoOnlyBadge')}</span> : undefined}
       >
         {wbs ? (
           <ScheduleManager

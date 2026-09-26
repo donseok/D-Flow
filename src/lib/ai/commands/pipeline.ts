@@ -18,7 +18,7 @@ export async function runCommandPipeline(
   if (!cmd) {
     return {
       kind: 'error',
-      message: '명령을 이해하지 못했어요. 예: "ERP 인터페이스 설계 실적 80으로 올려줘"',
+      message: '명령을 이해하지 못했어요. 예: "<작업명> 실적 80으로 올려줘"',
     }
   }
   const all = collectCandidates(items)

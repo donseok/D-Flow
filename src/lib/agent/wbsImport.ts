@@ -29,7 +29,7 @@ export type ImportNode = {
   weight?: number | null     // 롤업 가중(양수). 생략 = null(형제 균등)
   milestone?: boolean        // [M] — progress none, 발행 제외
   credit?: string | null     // 크레딧 표 키 → credit_key
-  if_id?: string | null      // PMO I/F 대장 참조
+  if_id?: string | null      // I/F 대장 참조
 }
 
 /** v2.2 — frontmatter levels 선언(층별). 서버는 구조 검증 + 발행 판정에만 쓴다. */

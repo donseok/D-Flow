@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import { reindexProjectAction } from '@/app/actions/chat'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
-/** AI 어시스턴트 의미검색 색인을 수동 재생성하는 버튼(PMO 관리자). */
+/** AI 어시스턴트 의미검색 색인을 수동 재생성하는 버튼(프로젝트 관리자). */
 export function ReindexButton({ projectId }: { projectId: string }) {
   const { toast } = useToast()
   const { t } = useLocale()

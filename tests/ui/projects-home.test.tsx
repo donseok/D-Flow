@@ -196,3 +196,19 @@ describe('프로젝트 홈 — 생성 버튼은 대상 워크스페이스의 관
     expect(markup).toContain('워크스페이스를 지정해야 합니다.')
   })
 })
+
+describe("프로젝트 홈 — '최근 프로젝트' 섹션 없음(D6-§2)", () => {
+  // 옛 섹션은 방문 기록이 아니라 목록 앞 3개(최근 생성순)를 다시 그렸다 — 아래 라이브러리와 같은 카드가 두 번 나왔다.
+  it('프로젝트가 4개 이상이어도 카드는 한 번씩만 나오고 recent-title 섹션이 없다', async () => {
+    const many = [
+      ...visibleProjects,
+      { id: 'p4', name: 'Delta', description: null, ...ENDED },
+      { id: 'p5', name: 'Epsilon', description: null, ...ENDED },
+    ]
+    mocks.listProjects.mockResolvedValue(many)
+    const markup = await renderPage()
+    expect(markup).not.toContain('recent-title')
+    // 이름은 카드 제목(h3) 텍스트로 센다 — 같은 카드의 title 속성은 세지 않는다.
+    for (const p of many) expect(count(markup, `>${p.name}</h3>`), p.name).toBe(1)
+  })
+})

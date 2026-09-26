@@ -30,7 +30,7 @@ import { IssueTrendCard } from './IssueTrendCard'
 import { IssueQueueCard } from './IssueQueueCard'
 import { seoulToday } from '@/lib/domain/dates'
 
-/** 경영진/PMO 대시보드 — 읽기 순서(2026-08-28 재배치): 어디까지 왔나(요약·마일스톤·S-Curve·팀별)
+/** 경영진·관리자 대시보드 — 읽기 순서(2026-08-28 재배치): 어디까지 왔나(요약·마일스톤·S-Curve·팀별)
  *  → 앞으로 뭐가 있나(회의) → 이슈가 어떤 상태인가(현황·추이) → 맨 아래 조치 큐(WBS 큐·이슈 큐, 사용자 요청).
  *  모든 집계는 도메인 함수가 담당하고 여기서는 조립만 한다.
  *  WBS 가 비어도 회의·이슈·공지는 그린다 — WBS 카드(요약·S-Curve·팀별·실행 큐)만 빠지고 그 자리에 안내 카드를 둔다.

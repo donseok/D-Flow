@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Calendar, FolderPlus, LayoutGrid, ArrowDown, History, ArrowRight } from 'lucide-react'
+import { Calendar, FolderPlus, LayoutGrid, ArrowDown, ArrowRight } from 'lucide-react'
 import { listProjects } from '@/app/actions/project'
 import { getActorForView } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
@@ -167,7 +167,6 @@ export default async function ProjectsHome() {
     ),
   }))
   const total = withStatus.length
-  const recent = withStatus.slice(0, 3)
   // 프로젝트 생성은 대상 워크스페이스의 관리자(SP2 §4.1) — createProject 액션이 재검증한다.
   // 워크스페이스 선택 UI 는 SP3 몫이라 유일 소속일 때만 그 워크스페이스로 만든다. 관리자인데 소속이 여럿·없으면 사유를 보인다.
   const soleWs = actor ? resolveSoleWorkspaceId(actor) : null
@@ -226,24 +225,6 @@ export default async function ProjectsHome() {
           </a>
         </div>
       </section>
-
-      {/* ── 최근 프로젝트 (QUICK ACCESS) ── */}
-      {total > 3 && (
-        <section aria-labelledby="recent-title">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-weak text-brand"><History className="h-4 w-4" /></span>
-            <div>
-              <div className="eyebrow">Quick access</div>
-              <h2 id="recent-title" className="text-sm font-semibold text-ink">{t(locale, 'home.recentProjects')}</h2>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {recent.map(({ project, status }) => (
-              <ProjectCard key={project.id} project={project} status={status} locale={locale} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* ── 프로젝트 라이브러리 ── */}
       <section id="project-library" aria-labelledby="library-title" className="scroll-mt-24">

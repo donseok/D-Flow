@@ -1285,7 +1285,7 @@ export function WbsGanttSheet({
       </div>
       )}
 
-      {/* 새 Phase 입력 (PMO) */}
+      {/* 새 Phase 입력 (관리자) */}
       {addPhase != null && (
         <div className="card mb-3 flex shrink-0 items-center gap-2 p-2.5">
           <input

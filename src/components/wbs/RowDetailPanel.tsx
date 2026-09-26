@@ -29,7 +29,7 @@ const EMPTY_MEMBERS: ProjectMember[] = []
 const EMPTY_REFS: string[] = []
 
 /** WBS 행 상세 패널 — 읽기(개요/담당/일정/진척/산출물 + 변경 이력)
- *  + PMO 편집(이름·일정·산출물 수정, 하위 추가, 순서 이동, 삭제). */
+ *  + 관리자 편집(이름·일정·산출물 수정, 하위 추가, 순서 이동, 삭제). */
 export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels = DEFAULT_LEVEL_LABELS, maxDepth = null,
@@ -42,7 +42,7 @@ export function RowDetailPanel({
   onClose: () => void
   editable?: boolean
   canAttach?: boolean
-  /** 산출물 텍스트 인라인 편집 권한 — PMO 또는 담당팀(첨부와 동일). editable(PMO 전체 폼)과 별개. */
+  /** 산출물 텍스트 인라인 편집 권한 — 관리자 또는 담당팀(첨부와 동일). editable(관리자 전체 폼)과 별개. */
   canEditDeliverable?: boolean
   projectId: string
   /** 프로젝트의 워크스페이스(서버의 toProjectActorView) — 산출물 첨부 저장 경로 scope. null 이면 업로드하지 않는다. */
@@ -615,7 +615,7 @@ export function RowDetailPanel({
             </section>
           )}
 
-          {/* PMO 구조 편집 */}
+          {/* 관리자 구조 편집 */}
           {editable && !editing && (
             <section className="rounded-xl border border-line bg-surface-2/50 p-3">
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{t('wbs.structureEdit')}</div>
@@ -715,7 +715,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** 산출물 파일 첨부 — 목록(항목을 읽을 수 있으면 모두) + 다운로드(서버의 can_attach 판정) + 업로드/삭제(담당팀·PMO).
+/** 산출물 파일 첨부 — 목록(항목을 읽을 수 있으면 모두) + 다운로드(서버의 can_attach 판정) + 업로드/삭제(관리자 또는 담당팀).
  *  canAttach 는 업로드·삭제 어포던스에만 쓴다 — 읽기 전용 보기에서도 false 라 다운로드 가능 여부와 다르다. */
 function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   itemId: string; canAttach: boolean; projectId: string; workspaceId: string | null

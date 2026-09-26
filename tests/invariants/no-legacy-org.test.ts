@@ -13,6 +13,9 @@ const LEGACY_IDENT = /\b(memberships|project_roles|project_member_identities|eff
 // roleContributor 같은 camelCase 식별자는(경계가 없어) 걸리지 않는다 — HEAD 에서 확인됨.
 // app_role 은 0006 에서 폐기된 옛 전역 역할 함수(스코프 없는 "어느 프로젝트든 역할" 판정) — SP2 스펙 결정 8.
 const LEGACY_ROLE_LITERAL = /\b(pmo_admin|team_editor|contributor)\b/
+// 역할 표현만 막는다 — 'PMO' 단어 자체(팀 코드·주간 구분명·테스트 픽스처)는 정당한 데이터라 금지하지 않는다.
+// 권한 주체는 프로젝트 관리자·워크스페이스 관리자인데 'PMO 관리자 전용'·'(PMO)' 같은 문구가 원본 조직을 전제했다(DC-09).
+const PMO_ROLE_PHRASE = /PMO ?(관리자|admins?\b|만|전용)|담당 ?팀·PMO|\(PMO\)/
 
 function findHits(files: string[], re: RegExp): string[] {
   const hits: string[] = []
@@ -37,6 +40,11 @@ describe('옛 조직 모델 0건(결정 8) — src 전체(주석·i18n 사전 �
   it("옛 역할 문자열('pmo_admin'/'team_editor'/'contributor') 0건", () => {
     const hits = findHits(files, LEGACY_ROLE_LITERAL)
     expect(hits, `옛 역할 문자열 잔존:\n${hits.join('\n')}`).toEqual([])
+  })
+
+  it("역할 표현 'PMO 관리자/만/전용'·'(PMO)' 0건 — 권한은 프로젝트 관리자·워크스페이스 관리자다", () => {
+    const hits = findHits(files, PMO_ROLE_PHRASE)
+    expect(hits, `PMO 역할 표현 잔존:\n${hits.join('\n')}`).toEqual([])
   })
 })
 

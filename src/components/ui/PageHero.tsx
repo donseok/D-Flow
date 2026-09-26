@@ -34,7 +34,7 @@ export function PageHero({
   )
 }
 
-/** 히어로 상단의 작은 카테고리 pill (예: "Smart Utility") */
+/** 히어로 상단의 작은 카테고리 pill (예: "Settings") */
 export function HeroBadge({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.08] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-hero-ink">

@@ -51,7 +51,7 @@ async function ensureStandardRows(reportId: string, rows: WeeklySheetRow[]): Pro
 
 /** 해당 주차 문서+행. 없으면 null(문서는 자동 생성하지 않음 — 스펙 §3).
  *  문서가 있으면 표준 구분 중 빠진 행만 빈 값으로 백필해(ensureStandardRows) WEEKLY_SECTIONS와
- *  정합을 맞춘다 — 새 구분(PMO)이 과거 시트에서도 그리드에 나타나게 한다. */
+ *  정합을 맞춘다 — 새 구분(첫 구분)이 과거 시트에서도 그리드에 나타나게 한다. */
 export async function getWeeklySheet(
   projectId: string, weekStartIso: string,
 ): Promise<{ report: WeeklyReportDoc; rows: WeeklySheetRow[] } | null> {

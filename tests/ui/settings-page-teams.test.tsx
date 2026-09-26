@@ -8,6 +8,7 @@ import { makeAdminActor } from '../fixtures/actor'
 const mocks = vi.hoisted(() => ({
   workspaceTeamsForProjectSync: vi.fn(),
   ProjectTeamsManager: vi.fn<(props: Record<string, unknown>) => null>(() => null),
+  ReindexButton: vi.fn<(props: Record<string, unknown>) => null>(() => null),
 }))
 vi.mock('@/lib/teams/master', () => ({
   projectTeamRowsSync: vi.fn(() => []),
@@ -27,7 +28,10 @@ vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }
 vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
-vi.mock('@/components/ui/SectionCard', () => ({ SectionCard: ({ children }: { children: ReactNode }) => children }))
+// actions 도 그린다 — 재색인 버튼·권한 배지가 카드 머리(actions)에 있다.
+vi.mock('@/components/ui/SectionCard', () => ({
+  SectionCard: ({ children, actions }: { children: ReactNode; actions?: ReactNode }) => <>{actions}{children}</>,
+}))
 vi.mock('@/components/ui/PageHero', () => ({ PageHero: () => null, HeroBadge: () => null }))
 vi.mock('@/components/ui/KpiCard', () => ({ KpiCard: () => null }))
 vi.mock('@/components/settings/ProjectTeamsManager', () => ({ ProjectTeamsManager: mocks.ProjectTeamsManager }))
@@ -37,7 +41,7 @@ vi.mock('@/components/settings/StageCreditSlider', () => ({ StageCreditSlider: (
 vi.mock('@/components/settings/ProjectInfoEditButton', () => ({ ProjectInfoEditButton: () => null }))
 vi.mock('@/components/settings/ProjectPrivacyToggle', () => ({ ProjectPrivacyToggle: () => null }))
 vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () => null }))
-vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => null }))
+vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: mocks.ReindexButton }))
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
 
@@ -61,5 +65,17 @@ describe('설정 화면 — hasGlobalTeams 는 그 프로젝트 워크스페이�
     mocks.workspaceTeamsForProjectSync.mockReturnValue([team('휴면', false)])
     await render()
     expect(mocks.ProjectTeamsManager.mock.calls.at(-1)![0]).toMatchObject({ hasGlobalTeams: false })
+  })
+})
+
+// 재색인 서버 가드는 requireProjectAdmin 이다(actions/chat.ts, api/chat/reindex/route.ts) — 버튼도 같은 등급에게 보인다.
+// 옛 화면은 슈퍼유저에게만 버튼을 주고 프로젝트 관리자에게는 'PMO 관리자 전용' 배지를 그렸다(후보 4·DC-09).
+describe('설정 화면 — 재색인 버튼은 프로젝트 관리자에게(서버 가드와 같은 등급)', () => {
+  it('슈퍼유저가 아닌 프로젝트 관리자에게 재색인 버튼을 그리고, PMO 역할 문구가 없다', async () => {
+    mocks.workspaceTeamsForProjectSync.mockReturnValue([])
+    const html = await render()
+    expect(mocks.ReindexButton).toHaveBeenCalled()
+    expect(mocks.ReindexButton.mock.calls.at(-1)![0]).toMatchObject({ projectId: 'p1' })
+    expect(html).not.toContain('PMO')
   })
 })

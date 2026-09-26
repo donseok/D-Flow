@@ -75,7 +75,7 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.analysis.ownerDepartment': 'Owning department',
   'issue.analysis.ownerDepartmentPh': 'e.g. Sales Operations',
   'issue.analysis.relatedSystems': 'Related systems',
-  'issue.analysis.relatedSystemsPh': 'e.g. SAP, MES, WMS',
+  'issue.analysis.relatedSystemsPh': 'e.g. approval system, document store',
   'issue.analysis.relatedSystemsHint': 'Separate entries with commas. You can enter up to 20 systems.',
   'issue.analysis.sourceType': 'Issue source',
   'issue.analysis.sourceTypePlaceholder': 'Select an issue source',

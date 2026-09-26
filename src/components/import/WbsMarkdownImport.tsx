@@ -74,7 +74,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
       {preview?.ok && (
         <div data-md-preview className="space-y-3 rounded-xl border border-line bg-surface-2 p-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
-            <Info label="종류" value={preview.mode === 'skeleton' ? '골격(PMO)' : 'PL 모듈'} />
+            <Info label="종류" value={preview.mode === 'skeleton' ? '골격' : 'PL 모듈'} />
             <Info label="module" value={preview.module ?? '—'} />
             <Info
               label="부착점"

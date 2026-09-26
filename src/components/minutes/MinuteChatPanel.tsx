@@ -153,7 +153,7 @@ export function MinuteChatPanel({ minuteId, projects = [] }: {
   const subFolders = scope === 'archive' && team !== 'ALL' && Array.isArray(folders)
     ? teamChildFoldersOf(folders, team) : []
   // teamChildFoldersOf(→teamRootFolderIdOf)는 이름이 일치하는 팀 루트 중 첫 번째 것만 본다 —
-  // 0076 이후 같은 팀 이름의 루트가 프로젝트마다 있을 수 있어(각 프로젝트의 PMO 등), 어느
+  // 0076 이후 같은 팀 이름의 루트가 프로젝트마다 있을 수 있어(각 프로젝트의 같은 이름 팀 등), 어느
   // 프로젝트 것이 뽑혔는지 화면에서 알 길이 없었다. 동명 루트가 하나뿐일 때(지금의 보통 상태)는
   // 종전과 똑같이 보이고, 여럿일 때만 지금 뽑힌 루트의 프로젝트 이름을 칩에 붙인다.
   const ambiguousTeamRoot = Array.isArray(folders)

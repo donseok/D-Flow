@@ -31,7 +31,7 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
   'wiki.ask.eyebrow': 'PROJECT MEMORY',
   'wiki.ask.title': 'What do you want to know about this project?',
   'wiki.ask.desc': 'Get an answer from current knowledge with links to its meeting evidence. If no evidence exists, leave a question for an owner to answer.',
-  'wiki.ask.placeholder': 'For example: How do we request MES access?',
+  'wiki.ask.placeholder': 'For example: How do we request meeting room access?',
   'wiki.ask.submit': 'Ask',
   'wiki.ask.working': 'Checking the project Wiki…',
   'wiki.ask.suggestions': 'Suggested questions',
@@ -65,7 +65,7 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
   'wiki.search.dropToken': 'Drop \'{token}\'',
   'wiki.search.fallbackCount': '{n}',
 
-  'wiki.search2.placeholder': 'What are you looking for? E.g., How do I request MES access?',
+  'wiki.search2.placeholder': 'What are you looking for? For example: How do we request meeting room access?',
   'wiki.search2.count': '{n} results',
   'wiki.search2.empty': 'No results. Try different wording.',
   'wiki.search2.error': 'Could not load search results. Please try again shortly.',
