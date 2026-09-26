@@ -2,8 +2,8 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getActorViewState, requireProjectAdmin, requireSuperuser } from '@/lib/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { getActorViewState, requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { canSeeProject } from '@/lib/domain/authz'
 import { isValidDateRange } from '@/lib/domain/validate'
 import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
@@ -57,18 +57,18 @@ const fetchProjects = cache(async () => {
 const DEFAULT_MILESTONE_KEYWORDS = ['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
 
 export async function createProject(
+  workspaceId: string,
   name: string,
   start: string | null,
   end: string | null,
   description: string | null,
   levelLabels: string[],
 ) {
-  // 프로젝트 생성은 전역 관리 — 슈퍼유저만.
-  const g = await requireSuperuser()
+  // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시키므로 여기서 막지 않으면 무소속 insert 로 간다.
+  if (typeof workspaceId !== 'string' || !workspaceId) throw new Error(ERR_WORKSPACE_REQUIRED)
+  // 프로젝트 생성은 그 워크스페이스의 관리자(SP2 §4.1). 비소속 워크스페이스는 존재 은닉(ERR_MISSING).
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) throw new Error(g.error)
-  // 워크스페이스 선택 UI 는 SP2 몫(스펙 §5.3) — 소속이 정확히 하나일 때만 그 워크스페이스에 만든다.
-  const w = resolveSoleWorkspaceId(g.actor)
-  if (!w.ok) throw new Error(w.error)
   if (!isValidDateRange(start || null, end || null)) throw new Error('종료일은 시작일보다 빠를 수 없습니다.')
   // 호출부 타입을 우회한 값(예: 폼 라이브러리·직렬화 손상)이 들어오면 validateLevelSettings 의
   // .map((l) => l.trim()) 에서 알아보기 힘든 TypeError 로 죽는다 — 여기서 먼저 명확히 거부한다.
@@ -84,7 +84,7 @@ export async function createProject(
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('projects')
-    .insert({ name, start_date: start, end_date: end, description, workspace_id: w.workspaceId })
+    .insert({ name, start_date: start, end_date: end, description, workspace_id: workspaceId })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
@@ -204,15 +204,15 @@ export async function updateStageCredits(projectId: string, credits: unknown): P
 }
 
 /**
- * 비공개 전환(0070) — 슈퍼유저 전용. 프로젝트 관리자에게 열지 않는 이유:
- * 관리자가 자기 프로젝트를 잠그면 다른 화면(홈 집계·회의록 탐색기)에서 조용히 사라져
- * 조직 차원의 가시성 정책이 프로젝트 단위에서 뒤집힌다. 전역 정책은 전역 등급이 쥔다.
+ * 비공개 전환(0070) — 프로젝트 관리자(워크스페이스 관리자 승계 포함, SP2 §4.1).
+ * SP1 까지는 슈퍼유저 전용이었다(가시성은 전역 정책이라는 이유). SP2 에서 비공개가 가리는 범위가 그 워크스페이스 안으로
+ * 좁혀졌고, 비공개 프로젝트도 워크스페이스 관리자에게는 보이므로(canSeeProject) 관리자가 잠가도 조직 차원에서 사라지지 않는다.
  */
 export async function setProjectPrivacy(projectId: string, isPrivate: boolean): Promise<{ ok: boolean; error?: string }> {
-  const g = await requireSuperuser()
+  const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  // projects 의 RLS update 정책과 무관하게 동작해야 하는 전역 관리 쓰기 — admin client 로 쓰고
-  // 가드(requireSuperuser)가 유일한 관문임을 명시한다(fail-closed).
+  // projects 의 RLS update 정책과 무관하게 동작해야 하는 관리 쓰기 — admin client 로 쓰고
+  // 가드(프로젝트 관리자)가 유일한 관문임을 명시한다(fail-closed). id 는 가드가 판정한 그 프로젝트다.
   const admin = createAdminClient()
   const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
   if (error) return { ok: false, error: error.message }

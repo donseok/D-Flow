@@ -40,7 +40,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   accounts: AccountRow[]
   /** 역할 열·역할 변경이 대상으로 삼는 프로젝트 */
   projectId: string
-  /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경의 대상 */
+  /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경과 새 계정(단건·일괄) 소속의 대상 */
   workspaceId: string
   projects: { id: string; name: string }[]
   /** 슈퍼유저만 true — 관리자 슬롯·슈퍼유저 토글 조작 가능 여부 */
@@ -142,8 +142,8 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
         )}
       </div>
 
-      <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} canManageAdmins={canManageAdmins} />
-      <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} />
+      <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} workspaceId={workspaceId} canManageAdmins={canManageAdmins} />
+      <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} workspaceId={workspaceId} />
       <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />
     </div>
   )
@@ -255,8 +255,8 @@ function WorkspaceRoleSelect({ value, onChange }: {
   )
 }
 
-function AddAccountModal({ open, onClose, projectId, canManageAdmins }: {
-  open: boolean; onClose: () => void; projectId: string; canManageAdmins: boolean
+function AddAccountModal({ open, onClose, projectId, workspaceId, canManageAdmins }: {
+  open: boolean; onClose: () => void; projectId: string; workspaceId: string; canManageAdmins: boolean
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -282,7 +282,7 @@ function AddAccountModal({ open, onClose, projectId, canManageAdmins }: {
       try {
         const res = await createAccount({
           email: email.trim(), password, name: name.trim() || null, workspaceRole: wsRole,
-          projectId, accessRole: role === 'viewer' ? null : role,
+          projectId, accessRole: role === 'viewer' ? null : role, workspaceId,
         })
         if (res.ok) {
           toast({ title: '계정을 만들었습니다.', description: email.trim(), variant: 'success' })
@@ -333,7 +333,9 @@ function AddAccountModal({ open, onClose, projectId, canManageAdmins }: {
   )
 }
 
-function BulkAddModal({ open, onClose, projectId }: { open: boolean; onClose: () => void; projectId: string }) {
+function BulkAddModal({ open, onClose, projectId, workspaceId }: {
+  open: boolean; onClose: () => void; projectId: string; workspaceId: string
+}) {
   const router = useRouter()
   const [text, setText] = useState('')
   const [results, setResults] = useState<BulkResultRow[] | null>(null)
@@ -349,7 +351,7 @@ function BulkAddModal({ open, onClose, projectId }: { open: boolean; onClose: ()
     setError(null); setResults(null)
     startTransition(async () => {
       try {
-        const res = await bulkCreateAccounts(text, projectId)
+        const res = await bulkCreateAccounts(workspaceId, text, projectId)
         if (!res.ok) { setError(res.error ?? '처리 실패'); return }
         setResults(res.results)
         router.refresh() // 성공분을 목록에 반영

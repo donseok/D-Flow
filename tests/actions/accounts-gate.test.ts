@@ -2,30 +2,51 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 
 // next/cache · authz 가드 · admin 클라이언트를 모킹해 게이트와 쓰기 순서를 검증한다.
 // vi.mock 팩토리는 파일 최상단으로 호이스팅되므로, 스파이는 vi.hoisted 로 먼저 만든다.
-const { createAdminClient, requireProjectAdmin, requireSuperuser, getActor } = vi.hoisted(() => ({
+const { createAdminClient, requireProjectAdmin, requireProjectMember, requireSuperuser, requireWorkspaceAdmin, getActor } = vi.hoisted(() => ({
   createAdminClient: vi.fn(() => {
     throw new Error('createAdminClient 는 게이트 통과 전에 호출되면 안 된다')
   }),
   requireProjectAdmin: vi.fn(),
+  requireProjectMember: vi.fn(),
   requireSuperuser: vi.fn(),
+  requireWorkspaceAdmin: vi.fn(),
   getActor: vi.fn(),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireSuperuser, getActor }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireProjectMember, requireSuperuser, requireWorkspaceAdmin, getActor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 
 import {
   createAccount, bulkCreateAccounts, resetPassword, listAccounts, setPlatformAdmin, setWorkspaceRole,
   type AccountInput,
 } from '@/app/actions/accounts'
+import { isProjectMember, roleIn, workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const DENIED = { ok: false as const, error: '권한 없음' }
 const P1 = 'p1'
-const SU = makeSuperuser({ userId: 'u-su', workspaceRoles: new Map([[WS, 'admin']]) })
-const INPUT: AccountInput = {
+const WS_B = 'ws-b'
+const SU = makeSuperuser({ userId: 'u-su', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS]]) })
+const WS_ADMIN = makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS]]) })
+const OTHER_WS_ADMIN = makeActor({ userId: 'u-other', workspaceRoles: new Map([[WS_B, 'admin']]) })
+// 워크스페이스 멤버이면서 그 프로젝트의 관리자 — 프로젝트 가드는 넘지만 워크스페이스 가드에서 막혀야 한다.
+const WS_MEMBER = makeActor({ userId: 'u-mem', projectWorkspace: new Map([[P1, WS]]), projectRoles: new Map([[P1, 'admin']]) })
+const INPUT: AccountInput & { workspaceId: string } = {
   email: ' Mina.Park@Example.com ', password: 'password1', name: '박민아', workspaceRole: 'member',
-  projectId: P1, accessRole: 'member',
+  projectId: P1, accessRole: 'member', workspaceId: WS,
+}
+
+/** 워크스페이스·프로젝트 가드를 이 액터의 순수 판정에 위임한다 — 실제 가드와 같은 404/403 구분. */
+function signedInAs(a: Actor) {
+  requireWorkspaceAdmin.mockImplementation(async (wid: string | null) => {
+    const v = workspaceAdminVerdict(a, wid)
+    return v === 'ok' ? { ok: true, actor: a } : { ok: false, error: v === 'missing' ? ERR_MISSING : ERR_DENIED }
+  })
+  requireProjectMember.mockImplementation(async (pid: string | null) => {
+    if (roleIn(a, pid) === null) return { ok: false, error: ERR_MISSING }
+    return isProjectMember(a, pid) ? { ok: true, actor: a } : { ok: false, error: ERR_DENIED }
+  })
 }
 
 beforeEach(() => {
@@ -34,7 +55,9 @@ beforeEach(() => {
     throw new Error('createAdminClient 는 게이트 통과 전에 호출되면 안 된다')
   })
   requireProjectAdmin.mockReset()
+  requireProjectMember.mockReset()
   requireSuperuser.mockReset()
+  requireWorkspaceAdmin.mockReset()
   getActor.mockReset()
 })
 
@@ -95,17 +118,30 @@ function accountClient(o: {
 // 계정 관리는 슈퍼유저 전용(2026-08-20 결정). assertCanTouchAccount 의 비슈퍼유저 분기는 현 게이트에선 도달 불가지만
 // SP2 에서 게이트가 느슨해지는 순간 살아나는 보안 코드라, 아래에서 가드가 비슈퍼유저 액터를 돌려주는 경우로 직접 고정한다.
 describe('계정 서버액션 권한 게이트', () => {
-  it('슈퍼유저가 아니면 createAccount 거부 — admin client 미생성', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
-    expect(await createAccount(INPUT)).toEqual(DENIED)
-    expect(requireProjectAdmin).not.toHaveBeenCalled()
+  it('createAccount: 워크스페이스 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉 — admin client 미생성', async () => {
+    signedInAs(WS_MEMBER)
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: ERR_DENIED })
+    signedInAs(OTHER_WS_ADMIN)
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: ERR_MISSING })
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('슈퍼유저가 아니면 bulkCreateAccounts 거부', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
-    const res = await bulkCreateAccounts('a@b.com,member,password1', P1)
-    expect(res).toMatchObject({ ok: false, error: '권한 없음' })
+  it('bulkCreateAccounts: 워크스페이스 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
+    signedInAs(WS_MEMBER)
+    expect(await bulkCreateAccounts(WS, 'a@b.com,member,password1', P1)).toMatchObject({ ok: false, error: ERR_DENIED })
+    signedInAs(OTHER_WS_ADMIN)
+    expect(await bulkCreateAccounts(WS, 'a@b.com,member,password1', P1)).toMatchObject({ ok: false, error: ERR_MISSING })
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('워크스페이스가 비면 가드 전에 거부한다 — 슈퍼유저도(null 이면 가드가 통과시키므로)', async () => {
+    signedInAs(SU)
+    for (const wid of [null, undefined, '']) {
+      expect((await createAccount({ ...INPUT, workspaceId: wid as never })).ok).toBe(false)
+      expect((await bulkCreateAccounts(wid as never, 'a@b.com,member,password1', P1)).ok).toBe(false)
+    }
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
@@ -182,12 +218,14 @@ describe('계정 서버액션 권한 게이트', () => {
     expect(updateUserById).toHaveBeenCalledWith('u-superuser', { password: 'password1' })
   })
 
-  it('listAccounts 는 권한 거부를 빈 배열로 위장하지 않는다', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
+  it('listAccounts 는 권한 거부를 빈 배열로 위장하지 않는다 — 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await listAccounts(P1)
+    signedInAs(WS_MEMBER)
+    expect(await listAccounts(P1)).toEqual({ ok: false, error: ERR_DENIED })
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
+    signedInAs(OTHER_WS_ADMIN)
+    expect(await listAccounts(P1)).toEqual({ ok: false, error: ERR_MISSING })
     spy.mockRestore()
-    expect(res).toEqual(DENIED)
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
@@ -198,21 +236,50 @@ describe('계정 서버액션 권한 게이트', () => {
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('setPlatformAdmin·setWorkspaceRole 은 슈퍼유저 전용', async () => {
+  it('setPlatformAdmin 은 슈퍼유저 전용', async () => {
     requireSuperuser.mockResolvedValue(DENIED)
     expect(await setPlatformAdmin('u2', true)).toEqual(DENIED)
-    expect(await setWorkspaceRole(WS, 'u2', 'admin')).toEqual(DENIED)
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('setWorkspaceRole: 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
+    signedInAs(WS_MEMBER)
+    expect(await setWorkspaceRole(WS, 'u2', 'admin')).toEqual({ ok: false, error: ERR_DENIED })
+    signedInAs(OTHER_WS_ADMIN)
+    expect(await setWorkspaceRole(WS, 'u2', 'admin')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 })
 
 describe('createAccount — 계정·프로필·워크스페이스·인물·명단을 차례로, 실패하면 계정을 되돌린다', () => {
-  beforeEach(() => { requireSuperuser.mockResolvedValue({ ok: true, actor: SU }) })
+  beforeEach(() => { signedInAs(SU) })
 
-  it('워크스페이스를 하나로 정할 수 없으면 계정을 만들지 않는다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ workspaceRoles: new Map() }) })
-    expect(await createAccount(INPUT)).toEqual({ ok: false, error: '워크스페이스에 소속돼 있지 않습니다.' })
-    expect(createAdminClient).not.toHaveBeenCalled()
+  it('그 워크스페이스의 관리자는 입력 워크스페이스에 만든다(p_actor·invited_by = 본인)', async () => {
+    signedInAs(WS_ADMIN)
+    const c = accountClient()
+    expect(await createAccount(INPUT)).toEqual({ ok: true })
+    expect(c.q.workspace_members.insert)
+      .toHaveBeenCalledWith({ workspace_id: WS, user_id: 'u-new', role: 'member', invited_by: 'u-wsa' })
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_actor: 'u-wsa' }))
+  })
+
+  // 이미 있는 계정(이메일)은 createUser 가 거부한다 — 기존 계정의 비밀번호·표시 이름을 덮는 분기가 없다.
+  // 워크스페이스 관리자에게 이 액션이 열려도 다른 워크스페이스 소속 계정을 탈취하는 길이 되지 않음을 고정한다.
+  it('이미 있는 이메일이면 기존 계정을 건드리지 않고 거부한다(비밀번호 무변경)', async () => {
+    signedInAs(WS_ADMIN)
+    const c = accountClient()
+    c.createUser.mockResolvedValueOnce({
+      data: { user: null }, error: { message: 'A user with this email address has already been registered' },
+    } as never)
+    const updateUserById = vi.fn()
+    const client = { from: c.from, rpc: c.rpc, auth: { admin: { createUser: c.createUser, deleteUser: c.deleteUser, updateUserById } } }
+    createAdminClient.mockReturnValue(client as never)
+    const res = await createAccount(INPUT)
+    expect(res.ok).toBe(false)
+    expect(updateUserById).not.toHaveBeenCalled()
+    expect(c.from).not.toHaveBeenCalled()
+    expect(c.deleteUser).not.toHaveBeenCalled()
   })
 
   it('정상 — 새 인물을 만들고 명단 권한은 RPC(p_actor = 슈퍼유저)로 준다', async () => {
@@ -326,9 +393,9 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
 
 describe('bulkCreateAccounts — 이메일, 권한, 초기비번[, 이름]', () => {
   it('행마다 만들고, viewer 는 명단 권한 없이 만든다(워크스페이스 멤버)', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
+    signedInAs(SU)
     const c = accountClient()
-    const res = await bulkCreateAccounts('a@example.com, viewer, password1\nbroken, member, password1', P1)
+    const res = await bulkCreateAccounts(WS, 'a@example.com, viewer, password1\nbroken, member, password1', P1)
     expect(res.ok).toBe(true)
     expect(res.results).toEqual([
       { lineNo: 1, email: 'a@example.com', ok: true, error: undefined },
@@ -385,7 +452,7 @@ describe('setPlatformAdmin — 마지막 관리자 보호', () => {
 })
 
 describe('setWorkspaceRole', () => {
-  beforeEach(() => { requireSuperuser.mockResolvedValue({ ok: true, actor: SU }) })
+  beforeEach(() => { signedInAs(WS_ADMIN) })
 
   it('마지막 관리자 강등은 트리거가 거부한다 — 사용자 문구로', async () => {
     createAdminClient.mockReturnValue({
@@ -417,10 +484,9 @@ describe('setWorkspaceRole', () => {
 
 describe('listAccounts — profiles + platform_admins + workspace_members + 그 프로젝트 명단 권한', () => {
   it('각 축을 한 행으로 합친다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
+    signedInAs(SU)
     createAdminClient.mockReturnValue({
       from: vi.fn((t: string) => {
-        if (t === 'projects') return chain({ data: { workspace_id: WS }, error: null })
         if (t === 'profiles') {
           return chain({
             data: [
@@ -450,10 +516,9 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
   })
 
   it('어느 축이든 조회가 실패하면 오류 — 부분 목록은 곧 잘못된 권한 정보다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
+    signedInAs(SU)
     createAdminClient.mockReturnValue({
       from: vi.fn((t: string) => {
-        if (t === 'projects') return chain({ data: { workspace_id: WS }, error: null })
         if (t === 'workspace_members') return chain({ data: null, error: { message: 'boom' } })
         return chain({ data: [], error: null })
       }),
@@ -462,5 +527,29 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
     const res = await listAccounts(P1)
     spy.mockRestore()
     expect(res).toEqual({ ok: false, error: '계정 권한 정보를 불러오지 못했습니다.' })
+  })
+
+  it('워크스페이스 관리자에게는 그 워크스페이스 소속·명단 계정만 보인다 — 다른 워크스페이스 계정 누설 금지', async () => {
+    signedInAs(WS_ADMIN)
+    createAdminClient.mockReturnValue({
+      from: vi.fn((t: string) => {
+        if (t === 'profiles') {
+          return chain({
+            data: [
+              { user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' },
+              { user_id: 'u-b', email: 'bob@example.com', display_name: '밥', created_at: '2026-09-03T00:00:00Z' },
+            ],
+            error: null,
+          })
+        }
+        if (t === 'platform_admins') return chain({ data: [], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'project_members') return chain({ data: [], error: null })
+        throw new Error('예상치 못한 테이블 접근: ' + t)
+      }),
+    } as never)
+    const res = await listAccounts(P1)
+    expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1'])
+    expect(res.ok && res.workspaceId).toBe(WS)
   })
 })

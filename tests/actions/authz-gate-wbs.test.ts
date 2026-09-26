@@ -14,8 +14,8 @@ const { createServerClient } = vi.hoisted(() => ({
     return state.client
   }),
 }))
-const { requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId } = vi.hoisted(() => ({
-  requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), requireSuperuser: vi.fn(), resolveProjectId: vi.fn(),
+const { requireProjectMember, requireProjectAdmin, requireWorkspaceAdmin, resolveProjectId } = vi.hoisted(() => ({
+  requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), requireWorkspaceAdmin: vi.fn(), resolveProjectId: vi.fn(),
 }))
 const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
 
@@ -26,7 +26,7 @@ vi.mock('next/server', async (importOriginal) => {
   return { ...actual, after: vi.fn() }
 })
 vi.mock('@/lib/authz', () => ({
-  requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor: vi.fn(),
+  requireProjectMember, requireProjectAdmin, requireWorkspaceAdmin, resolveProjectId, getActor: vi.fn(),
 }))
 vi.mock('@/lib/auth', () => ({ getSession, getDisplayName: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
@@ -51,7 +51,7 @@ beforeEach(() => {
   resolveProjectId.mockReset()
   requireProjectMember.mockReset()
   requireProjectAdmin.mockReset()
-  requireSuperuser.mockReset()
+  requireWorkspaceAdmin.mockReset()
   getSession.mockReset()
   // 기본값: 대상 행은 p1 프로젝트에 있다. 가드 결과는 각 테스트가 정한다.
   resolveProjectId.mockResolvedValue({ ok: true, projectId: 'p1' })
@@ -139,9 +139,10 @@ describe('resolveProjectId 실패 — 판정 불가는 쓰기 중단(가드도 �
 })
 
 describe('프로젝트 액션', () => {
-  it('createProject: 슈퍼유저 아니면 throw + DB 무접근', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
-    await expect(createProject('신규', null, null, null, ['단계'])).rejects.toThrow('권한 없음')
+  it('createProject: 워크스페이스 관리자가 아니면 throw + DB 무접근', async () => {
+    requireWorkspaceAdmin.mockResolvedValue(DENIED)
+    await expect(createProject('ws-1', '신규', null, null, null, ['단계'])).rejects.toThrow('권한 없음')
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith('ws-1')
     expect(createServerClient).not.toHaveBeenCalled()
   })
 

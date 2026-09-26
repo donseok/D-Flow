@@ -10,6 +10,7 @@ import {
   createProjectInvite, revokeProjectInvite, type InviteRow,
 } from '@/app/actions/projectInvites'
 import type { ProjectActorView } from '@/lib/domain/authz'
+import { canGrantAdmin } from '@/lib/domain/roster'
 import { DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, inviteStatusLabel, type InviteStatus } from '@/lib/domain/invites'
 
 type AccessRole = 'admin' | 'member'
@@ -64,9 +65,8 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  // 관리자 초대는 SP1 에서 createProjectInvite 가 requireSuperuser 로 막는다 — canGrantAdmin 은 워크스페이스 관리자도
-  // 통과시켜 서버가 늘 거부하는 옵션을 보이게 된다. SP2 에서 가드가 requireWorkspaceAdmin 이 되면 canGrantAdmin 으로 옮긴다.
-  const canInviteAdmin = actorView?.isSuperuser === true
+  // 관리자 초대는 그 프로젝트 워크스페이스의 관리자만 — createProjectInvite 의 워크스페이스 관리자 가드(SP2)와 같은 판정.
+  const canInviteAdmin = canGrantAdmin(actorView)
   const [email, setEmail] = useState('')
   const [accessRole, setAccessRole] = useState<AccessRole | null>('member')
   const [roleLabel, setRoleLabel] = useState('')

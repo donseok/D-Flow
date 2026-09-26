@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import { setProjectPrivacy } from '@/app/actions/project'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
-/** 공개 범위 토글 — 렌더 자체가 슈퍼유저 전용(페이지에서 게이팅), 액션도 requireSuperuser 로 재검증. */
+/** 공개 범위 토글 — 렌더는 페이지가 게이팅(현재 슈퍼유저), 액션은 프로젝트 관리자 가드로 재검증(SP2). */
 export function ProjectPrivacyToggle({ projectId, isPrivate }: { projectId: string; isPrivate: boolean }) {
   const router = useRouter()
   const { toast } = useToast()

@@ -6,7 +6,7 @@ import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
 // validateProfile 은 실물(mock 아님) — 프로파일 검증 배선까지 통합적으로 확인(Task5 관례 계승).
 const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(),
-  requireSuperuser: vi.fn(),
+  requireWorkspaceAdmin: vi.fn(),
   parseWithProfile: vi.fn(),
   linkByDepth: vi.fn(),
   resolveLegacyLevelLabels: vi.fn(),
@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   ingestProject: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({
-  requireProjectAdmin: mocks.requireProjectAdmin, requireSuperuser: mocks.requireSuperuser,
+  requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: mocks.requireWorkspaceAdmin,
 }))
 vi.mock('@/lib/excel/parseWithProfile', () => ({
   parseWithProfile: mocks.parseWithProfile,
@@ -40,12 +40,13 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordPro
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
 
 import { POST } from '@/app/api/import/execute/route'
-import { makeActor, makeSuperuser } from '../fixtures/actor'
+import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
-const ACTOR = makeActor()
-const SUPER_ACTOR = makeSuperuser({ userId: 'su1' })
+// 라우트 진입 가드(requireProjectAdmin)를 통과한 액터 — 이 프로젝트는 워크스페이스 WS 소속이다.
+const ACTOR = makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) })
+const SUPER_ACTOR = makeSuperuser({ userId: 'su1', projectWorkspace: new Map([[PROJECT_ID, WS]]) })
 const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 const KNOWN_TEAMS = [{ code: 'PMO' }, { code: 'ERP' }, { code: 'MES' }, { code: '가공' }, { code: 'MDM' }]
 
@@ -114,7 +115,7 @@ function makeAdminClient(opts: { upsertError?: { message: string } | null } = {}
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
-  mocks.requireSuperuser.mockResolvedValue({ ok: false, error: '권한 없음' })
+  mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
   mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_PMO], holidays: [] })
   mocks.resolveLegacyLevelLabels.mockReturnValue(true)
   mocks.linkByDepth.mockReturnValue({ ok: true, items: [LINKED_ITEM] })
@@ -214,7 +215,7 @@ describe('POST /api/import/execute — 검증 오류 400', () => {
     expect(await res.json()).toEqual({ errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
     expect(mocks.projectTeamRowsSync).not.toHaveBeenCalled()
     expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
-    expect(mocks.requireSuperuser).not.toHaveBeenCalled()
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(mocks.addTeam).not.toHaveBeenCalled()
     expect(mocks.addProjectTeam).not.toHaveBeenCalled()
   })
@@ -226,25 +227,34 @@ describe('POST /api/import/execute — 팀 부트스트랩(§10.3, 전역 상속
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ needsTeams: ['NEWTEAM'], scope: 'global' })
-    expect(mocks.requireSuperuser).not.toHaveBeenCalled()
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 
-  it('미등록 팀 + registerTeams=true + 비슈퍼유저 → 403, addTeam·addProjectTeam 미호출', async () => {
+  it('미등록 팀 + registerTeams=true + 워크스페이스 관리자 아님 → 403, 대상 프로젝트의 워크스페이스로 판정, addTeam·addProjectTeam 미호출', async () => {
     mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireSuperuser.mockResolvedValue({ ok: false, error: '권한 없음' })
+    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: '팀 등록은 슈퍼유저 권한' })
+    expect(await res.json()).toEqual({ error: '팀 등록은 워크스페이스 관리자 권한' })
+    expect(mocks.requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
     expect(mocks.addTeam).not.toHaveBeenCalled()
     expect(mocks.addProjectTeam).not.toHaveBeenCalled()
   })
 
-  it('미등록 팀 + registerTeams=true + 슈퍼유저 → addTeam(전역) 호출 후 임포트 성공, addProjectTeam 미호출', async () => {
+  it('미등록 팀 + registerTeams=true + 워크스페이스 가드가 존재 은닉(404) → 404, addTeam 미호출', async () => {
     mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireSuperuser.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
+    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '대상을 찾을 수 없습니다.' })
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(mocks.addTeam).toHaveBeenCalledWith('NEWTEAM')
+    expect(res.status).toBe(404)
+    expect(mocks.addTeam).not.toHaveBeenCalled()
+  })
+
+  it('미등록 팀 + registerTeams=true + 워크스페이스 관리자 → addTeam(그 워크스페이스) 호출 후 임포트 성공, addProjectTeam 미호출', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
+    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
+    const res = await POST(req(baseFields({ registerTeams: 'true' })))
+    expect(mocks.addTeam).toHaveBeenCalledWith(WS, 'NEWTEAM')
     expect(mocks.addProjectTeam).not.toHaveBeenCalled()
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -254,7 +264,7 @@ describe('POST /api/import/execute — 팀 부트스트랩(§10.3, 전역 상속
 
   it('addTeam 실패 → 500, 그 사유를 위장하지 않고 그대로 전달, RPC 미호출', async () => {
     mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireSuperuser.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
+    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
     mocks.addTeam.mockResolvedValue({ ok: false, error: '팀 생성 실패: db down' })
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
     expect(res.status).toBe(500)
@@ -265,25 +275,25 @@ describe('POST /api/import/execute — 팀 부트스트랩(§10.3, 전역 상속
 describe('POST /api/import/execute — 팀 부트스트랩(0071, 프로젝트 스코프 — projectTeamRowsSync 비어있지 않음)', () => {
   const PROJECT_TEAM_ROWS = [{ code: 'PMO', projectId: PROJECT_ID }]
 
-  it('팀 정의 프로젝트 + 미등록 팀 + registerTeams=false → 409 needsTeams scope:project, 슈퍼유저 가드 미호출', async () => {
+  it('팀 정의 프로젝트 + 미등록 팀 + registerTeams=false → 409 needsTeams scope:project, 워크스페이스 가드 미호출', async () => {
     mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
     mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ needsTeams: ['NEWTEAM'], scope: 'project' })
-    expect(mocks.requireSuperuser).not.toHaveBeenCalled()
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 
-  it('팀 정의 프로젝트 + registerTeams=true(비슈퍼유저 관리자로 충분) → addProjectTeam 경유, 전역 addTeam·requireSuperuser 미호출', async () => {
+  it('팀 정의 프로젝트 + registerTeams=true(프로젝트 관리자로 충분) → addProjectTeam 경유, 전역 addTeam·requireWorkspaceAdmin 미호출', async () => {
     mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
     mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    // requireSuperuser 기본 mock 은 ok:false 지만(beforeEach), 프로젝트 스코프 분기는 이를 아예 호출하지 않는다 —
+    // requireWorkspaceAdmin 기본 mock 은 ok:false 지만(beforeEach), 프로젝트 스코프 분기는 이를 아예 호출하지 않는다 —
     // 상단 requireProjectAdmin(라우트 진입 가드)만으로 충분하다는 것이 이 테스트의 핵심 단언.
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
     expect(mocks.addProjectTeam).toHaveBeenCalledWith(PROJECT_ID, 'NEWTEAM')
     expect(mocks.addTeam).not.toHaveBeenCalled()
-    expect(mocks.requireSuperuser).not.toHaveBeenCalled()
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.ok).toBe(true)

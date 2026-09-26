@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // authz 가드 · admin 클라이언트 · next/cache 3중 모킹(tests/actions/accounts-gate.test.ts 관례).
 // vi.mock 팩토리는 최상단으로 호이스팅되므로 스파이는 vi.hoisted 로 먼저 만든다.
-const { createAdminClient, requireProjectAdmin, requireSuperuser, getTransport, send, guardThrow } = vi.hoisted(() => {
+const { createAdminClient, requireProjectAdmin, requireWorkspaceAdmin, getTransport, send, guardThrow } = vi.hoisted(() => {
   const send = vi.fn()
   // 기본 구현은 "여기까지 오면 안 된다"는 함정이다. mockClear 는 구현을 되돌리지 않으므로
   // beforeEach 에서 mockReset 후 이 함정을 다시 깐다 — 안 그러면 앞 테스트의 스텁이 남아
@@ -13,14 +13,14 @@ const { createAdminClient, requireProjectAdmin, requireSuperuser, getTransport, 
   return {
     createAdminClient: vi.fn(guardThrow),
     requireProjectAdmin: vi.fn(),
-    requireSuperuser: vi.fn(),
+    requireWorkspaceAdmin: vi.fn(),
     getTransport: vi.fn(() => ({ ok: true, send })),
     send,
     guardThrow,
   }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireSuperuser }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireWorkspaceAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/mail/transport', () => ({ getTransport }))
 // 팀 마스터는 모듈 로드 시 DB 를 읽는다(캐시 프라이밍). 여기서는 이 프로젝트의 팀 목록만 필요하므로
@@ -38,11 +38,26 @@ import {
   listProjectInvites, createProjectInvite, revokeProjectInvite, type CreateInviteInput,
 } from '@/app/actions/projectInvites'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
-import { makeAdminActor, makeSuperuser } from '../fixtures/actor'
+import { roleIn, workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
+import { makeActor, makeAdminActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const P1 = 'p1'
 const DENIED = { ok: false as const, error: '권한 없음' }
 const adminActor = makeAdminActor(P1)
+
+/** 두 가드를 이 액터의 순수 판정(roleIn·workspaceAdminVerdict)에 위임한다 — 실제 가드와 같은 404/403 구분. */
+function signedInAs(a: Actor) {
+  requireProjectAdmin.mockImplementation(async (pid: string | null) => {
+    const r = roleIn(a, pid)
+    if (r === null) return { ok: false, error: ERR_MISSING }
+    return r === 'superuser' || r === 'admin' ? { ok: true, actor: a } : { ok: false, error: ERR_DENIED }
+  })
+  requireWorkspaceAdmin.mockImplementation(async (wid: string | null) => {
+    const v = workspaceAdminVerdict(a, wid)
+    return v === 'ok' ? { ok: true, actor: a } : { ok: false, error: v === 'missing' ? ERR_MISSING : ERR_DENIED }
+  })
+}
 const VALID: CreateInviteInput = { email: 'mina.park@example.com', accessRole: 'member', teamIds: ['team-1'] }
 
 const APP_URL = 'https://dflow.example.com'
@@ -54,7 +69,7 @@ beforeEach(() => {
   createAdminClient.mockReset()
   createAdminClient.mockImplementation(guardThrow)
   requireProjectAdmin.mockReset()
-  requireSuperuser.mockReset()
+  requireWorkspaceAdmin.mockReset()
   getTransport.mockClear()
   send.mockReset()
   vi.mocked(revalidatePath).mockClear()
@@ -173,13 +188,34 @@ describe('초대 서버액션 권한 게이트', () => {
     expect(getTransport).not.toHaveBeenCalled()
   })
 
-  // 관리자 초대는 관리자 슬롯을 여는 경로다 — 프로젝트 관리자 가드로 우회되면 '관리자가 관리자를 늘린다'.
-  it('관리자 권한 초대는 슈퍼유저 가드만 쓴다(SP2 에서 워크스페이스 관리자)', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
+  // 관리자 초대는 관리자 슬롯을 여는 경로다 — 프로젝트 관리자 가드만으로 열리면 '관리자가 관리자를 늘린다'.
+  // 그래서 프로젝트 관리자 가드를 먼저(존재 은닉) 통과한 뒤, 그 프로젝트의 워크스페이스 관리자 가드를 한 번 더 건다.
+  it('관리자 권한 초대: 워크스페이스 관리자가 아닌 프로젝트 관리자는 거부 — admin client 미도달', async () => {
+    signedInAs(adminActor)
     const res = await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })
-    expect(res).toEqual(DENIED)
-    expect(requireProjectAdmin).not.toHaveBeenCalled()
+    expect(res).toEqual({ ok: false, error: ERR_DENIED })
+    expect(requireProjectAdmin).toHaveBeenCalledWith(P1)
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
     expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('관리자 권한 초대: 다른 워크스페이스의 관리자는 프로젝트 가드에서 존재 은닉 — 워크스페이스 가드까지 가지 않는다', async () => {
+    signedInAs(makeActor({ workspaceRoles: new Map([['ws-b', 'admin']]) }))
+    expect(await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })).toEqual({ ok: false, error: ERR_MISSING })
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('관리자 권한 초대: 워크스페이스 멤버(명단 없음)는 프로젝트 가드에서 거부', async () => {
+    signedInAs(makeActor({ projectWorkspace: new Map([[P1, WS]]) }))
+    expect(await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })).toEqual({ ok: false, error: ERR_DENIED })
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
+  })
+
+  it('멤버 권한 초대는 워크스페이스 가드를 부르지 않는다', async () => {
+    requireProjectAdmin.mockResolvedValue(DENIED)
+    await createProjectInvite(P1, VALID)
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
   })
 
   it('프로젝트 관리자가 아니면 revokeProjectInvite 거부 — admin client 미생성', async () => {
@@ -376,8 +412,17 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     expect(send.mock.calls[0]![0].text).not.toContain('팀:')
   })
 
+  it('그 워크스페이스의 관리자는 관리자 권한 초대를 발급한다', async () => {
+    signedInAs(makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS]]) }))
+    const { client, insert } = createClient()
+    createAdminClient.mockReturnValue(client as never)
+    const res = await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })
+    expect(res).toMatchObject({ ok: true })
+    expect(insertedPayload(insert)).toMatchObject({ access_role: 'admin', created_by: 'u-wsa' })
+  })
+
   it('슈퍼유저는 관리자 권한 초대를 발급한다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    signedInAs(makeSuperuser({ userId: 'u-su', projectWorkspace: new Map([[P1, WS]]) }))
     const { client, insert } = createClient()
     createAdminClient.mockReturnValue(client as never)
     const res = await createProjectInvite(P1, { ...VALID, accessRole: 'admin' })
@@ -387,7 +432,7 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
 
   // 트리거(project_invites_guard)가 발급자의 등급을 다시 본다 — 가드와 DB 가 엇갈리면 DB 판정을 사용자 문구로.
   it('트리거의 관리자 초대 거부는 사용자 문구로 바꾼다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    signedInAs(makeSuperuser({ userId: 'u-su', projectWorkspace: new Map([[P1, WS]]) }))
     const { client } = createClient({ insertError: { code: '42501', message: 'PROJECT_INVITE_ADMIN_FORBIDDEN' } })
     createAdminClient.mockReturnValue(client as never)
     expect(await createProjectInvite(P1, { ...VALID, accessRole: 'admin' }))

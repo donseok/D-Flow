@@ -15,9 +15,12 @@ import { useLocale } from '@/components/providers/LocaleProvider'
  * 데모 모드에서는 createProject가 no-op이지만 닫기/새로고침은 정상 동작한다.
  */
 export function NewProjectModal({
+  workspaceId,
   label,
   className = 'inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20',
 }: {
+  /** 만들 워크스페이스 — SP3 전까지 서버 컴포넌트가 유일 소속(resolveSoleWorkspaceId)으로 정해 넘긴다. */
+  workspaceId: string
   label?: string
   className?: string
 }) {
@@ -67,7 +70,7 @@ export function NewProjectModal({
     setBusy(true)
     setError(null)
     try {
-      await createProject(trimmed, start || null, end || null, description.trim() || null, lv.labels)
+      await createProject(workspaceId, trimmed, start || null, end || null, description.trim() || null, lv.labels)
       router.refresh()
       setOpen(false)
       reset()

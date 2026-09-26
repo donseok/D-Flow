@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireProjectAdmin, requireSuperuser } from '@/lib/authz'
+import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
+import { denyStatus, ERR_MISSING } from '@/lib/authz/errors'
 import { validateProfile } from '@/lib/excel/profile'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { splitLeafOwners } from '@/lib/excel/validate'
@@ -92,11 +93,17 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      // 전역 상속 프로젝트(레거시)는 현행 유지 — 전역 마스터 등록은 슈퍼유저만.
-      const su = await requireSuperuser()
-      if (!su.ok) return NextResponse.json({ error: '팀 등록은 슈퍼유저 권한' }, { status: 403 })
+      // 공용 팀 상속 프로젝트 — 공용 팀 등록은 그 프로젝트가 속한 워크스페이스의 관리자만(SP2 §4.1).
+      // 상단 가드를 통과한 비슈퍼유저라면 projectWorkspace 에 키가 있다. 슈퍼유저는 미존재 pid 도 통과하므로 없으면 404.
+      const workspaceId = g.actor.projectWorkspace.get(projectId) ?? null
+      const wa = await requireWorkspaceAdmin(workspaceId)
+      if (!wa.ok) {
+        const status = denyStatus(wa.error)
+        return NextResponse.json({ error: status === 403 ? '팀 등록은 워크스페이스 관리자 권한' : wa.error }, { status })
+      }
+      if (!workspaceId) return NextResponse.json({ error: ERR_MISSING }, { status: 404 })
       for (const team of unknownTeams) {
-        const added = await addTeam(team)
+        const added = await addTeam(workspaceId, team)
         if (!added.ok) {
           return NextResponse.json({ error: `팀 등록 실패: ${team} — ${added.error}` }, { status: 500 })
         }

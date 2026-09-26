@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // 프로젝트 초대 발급 폼·목록의 계약(Task 14). 토큰은 해시만 저장되므로(0003) 링크는 발급 응답에서 한 번만 온다 —
-// 목록 행에는 링크 복사가 없고, 관리자 초대는 SP1 에서 플랫폼 관리자만 발급한다(createProjectInvite 의 requireSuperuser).
+// 목록 행에는 링크 복사가 없고, 관리자 초대는 워크스페이스 관리자 이상만 발급한다(createProjectInvite 의 워크스페이스 관리자 가드, SP2).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -36,6 +36,8 @@ function invite(over: Partial<InviteRow> = {}): InviteRow {
 }
 const WS_ADMIN = makeProjectActorView({ userId: 'u-wa', workspaceRole: 'admin' })
 const SUPERUSER = makeProjectActorView({ userId: 'u-su', isSuperuser: true })
+// 워크스페이스 멤버이면서 이 프로젝트의 관리자 — 초대는 발급하지만 관리자 슬롯은 열지 못한다.
+const PROJECT_ADMIN = makeProjectActorView({ userId: 'u-pa', workspaceRole: 'member', projectRole: 'admin' })
 
 describe('ProjectInviteManager', () => {
   let container: HTMLDivElement
@@ -81,9 +83,12 @@ describe('ProjectInviteManager', () => {
   }
   const accessOptions = () => Array.from(byLabel<HTMLSelectElement>('초대 권한').options).map(o => o.value)
 
-  it('권한은 없음·멤버 — 관리자 옵션은 플랫폼 관리자에게만(워크스페이스 관리자에게는 서버가 거부한다)', () => {
-    render([], WS_ADMIN)
+  it('권한은 없음·멤버 — 관리자 옵션은 워크스페이스 관리자 이상에게만(프로젝트 관리자에게는 서버가 거부한다)', () => {
+    render([], PROJECT_ADMIN)
     expect(accessOptions()).toEqual(['', 'member'])
+    act(() => root.unmount()); root = createRoot(container)
+    render([], WS_ADMIN)
+    expect(accessOptions()).toEqual(['', 'member', 'admin'])
     act(() => root.unmount()); root = createRoot(container)
     render([], SUPERUSER)
     expect(accessOptions()).toEqual(['', 'member', 'admin'])

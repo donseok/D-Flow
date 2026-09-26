@@ -48,7 +48,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
 
   function openModal() {
     root = createRoot(container)
-    act(() => root.render(<NewProjectModal />))
+    act(() => root.render(<NewProjectModal workspaceId="ws-1" />))
     const trigger = container.querySelector('button')!
     act(() => trigger.click())
   }
@@ -84,7 +84,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
       await Promise.resolve()
     })
 
-    expect(mocks.createProject).toHaveBeenCalledWith('신규 프로젝트', null, null, null, ['단계', '작업'])
+    expect(mocks.createProject).toHaveBeenCalledWith('ws-1', '신규 프로젝트', null, null, null, ['단계', '작업'])
   })
 
   it('라벨 입력에 aria-describedby 로 힌트가 연결되고 aria-required 가 켜져 있다', () => {

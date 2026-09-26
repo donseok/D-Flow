@@ -1,9 +1,11 @@
 'use server'
-// 계정 관리(슈퍼유저 전용, 2026-08-20 결정). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
+// 계정 관리 — 생성·워크스페이스 등급·목록은 그 워크스페이스의 관리자, 비밀번호 초기화·플랫폼 관리자 지정은 슈퍼유저 전용
+// (SP2 §4.1·D1 — 계정 비밀번호는 여러 워크스페이스에 걸친 전역 자원). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
 // 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 import { revalidatePath } from 'next/cache'
-import { requireSuperuser } from '@/lib/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { requireProjectMember, requireSuperuser, requireWorkspaceAdmin } from '@/lib/authz'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listProfiles } from '@/lib/data/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
@@ -32,7 +34,7 @@ export interface AccountInput {
   email: string
   password: string
   name: string | null
-  /** 새 계정의 워크스페이스 등급. 워크스페이스는 액터의 유일 소속(resolveSoleWorkspaceId) — 입력으로 받지 않는다(SP2). */
+  /** 새 계정의 워크스페이스 등급. 워크스페이스는 createAccount 의 workspaceId 입력(그 워크스페이스의 관리자 가드). */
   workspaceRole: WorkspaceRole
   /** 권한을 줄 프로젝트. accessRole 과 짝 — 둘 다 있어야 명단 행을 만든다. */
   projectId?: string | null
@@ -120,7 +122,11 @@ async function rollbackAccount(admin: AdminClient, userId: string, createdPerson
   if (error) console.error(`[createAccount] 보상 롤백 실패(유령 계정 잔존 user_id=${userId}):`, error.message)
 }
 
-/** 게이트/클라이언트 생성 이후 단건 생성 — bulk 에서 재사용(게이트 재검사 없음). */
+/**
+ * 게이트/클라이언트 생성 이후 단건 생성 — bulk 에서 재사용(게이트 재검사 없음).
+ * 이미 있는 이메일은 createUser 가 거부한다 — 기존 계정의 비밀번호·표시 이름을 덮는 분기가 없다. 그래서 워크스페이스
+ * 관리자에게 열려도 다른 워크스페이스 소속 계정을 가로채는 길이 되지 않는다(기존 계정의 합류는 초대 경로).
+ */
 async function createOne(
   admin: AdminClient, workspaceId: string, input: AccountInput, grantedBy: string,
 ): Promise<AccountActionResult> {
@@ -180,13 +186,18 @@ async function createOne(
   return { ok: true }
 }
 
-export async function createAccount(input: AccountInput): Promise<AccountActionResult> {
-  // 계정 관리는 슈퍼유저 전용(2026-08-20 결정 — 종전 설계 D7 '관리자도 생성 가능'을 대체).
-  const g = await requireSuperuser()
+/** 워크스페이스 입력 확인 — 가드는 null 을 슈퍼유저에게 통과시키므로 가드 전에 거부한다. */
+function isWorkspaceIdInput(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0
+}
+
+export async function createAccount(input: AccountInput & { workspaceId: string }): Promise<AccountActionResult> {
+  const workspaceId = input?.workspaceId
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  // 계정 생성은 그 워크스페이스의 관리자(SP2 §4.1 — SP1 까지는 슈퍼유저 전용).
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
-  const ws = resolveSoleWorkspaceId(g.actor)
-  if (!ws.ok) return { ok: false, error: ws.error }
-  const res = await createOne(createAdminClient(), ws.workspaceId, input, g.actor.userId)
+  const res = await createOne(createAdminClient(), workspaceId, input, g.actor.userId)
   if (res.ok) {
     revalidatePath('/admin/accounts')
     if (input.projectId) revalidatePath(`/p/${input.projectId}/members`)
@@ -196,12 +207,11 @@ export async function createAccount(input: AccountInput): Promise<AccountActionR
 
 /** 한 줄 = 계정 하나. 워크스페이스 등급은 member, 행의 권한은 projectId 프로젝트의 권한('viewer' = 명단 없이 조회 전용). */
 export async function bulkCreateAccounts(
-  text: string, projectId: string,
+  workspaceId: string, text: string, projectId: string,
 ): Promise<{ ok: boolean; error?: string; results: BulkResultRow[] }> {
-  const g = await requireSuperuser()
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED, results: [] }
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error, results: [] }
-  const ws = resolveSoleWorkspaceId(g.actor)
-  if (!ws.ok) return { ok: false, error: ws.error, results: [] }
   const lines = parseBulkAccounts(typeof text === 'string' ? text : '')
   if (lines.length === 0) return { ok: false, error: '처리할 행이 없습니다.', results: [] }
 
@@ -212,7 +222,7 @@ export async function bulkCreateAccounts(
       results.push({ lineNo: line.lineNo, email: line.email ?? line.raw, ok: false, error: line.error })
       continue
     }
-    const res = await createOne(admin, ws.workspaceId, {
+    const res = await createOne(admin, workspaceId, {
       email: line.email!, password: line.password!, name: line.name ?? null, workspaceRole: 'member',
       projectId, accessRole: line.role === 'viewer' ? null : line.role!,
     }, g.actor.userId)
@@ -311,13 +321,14 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
 }
 
 /**
- * 워크스페이스 등급 변경. 슈퍼유저 전용(SP2 에서 requireWorkspaceAdmin). 마지막 관리자의 강등은
+ * 워크스페이스 등급 변경. 그 워크스페이스의 관리자(SP2 §4.1). 마지막 관리자의 강등은
  * 트리거(workspace_members_keep_last_admin)가 거부한다 — 앱이 먼저 세지 않는다(경합에 안전한 쪽이 DB).
  */
 export async function setWorkspaceRole(
   workspaceId: string, userId: string, role: WorkspaceRole,
 ): Promise<AccountActionResult> {
-  const g = await requireSuperuser()
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!isWorkspaceRole(role)) return { ok: false, error: ERR_WS_ROLE }
   const { data, error } = await createAdminClient()
@@ -341,26 +352,28 @@ export async function setWorkspaceRole(
  * 계정 목록. **권한 거부·조회 실패를 빈 배열로 돌려주지 않는다** — 이 화면은 그 자체가 권한 정보라
  * '계정 0개'·'관리자 0명'이 곧 오정보가 되고, 관리자가 그걸 근거로 권한을 다시 부여하는 쓰기까지 유발한다.
  * workspaceId 는 조회 대상 프로젝트의 워크스페이스 — 화면의 워크스페이스 등급 변경(setWorkspaceRole)이 쓴다.
+ * 판정은 그 워크스페이스의 관리자. 프로젝트 가드를 먼저 걸어 타 워크스페이스·미존재 프로젝트를 404 로 숨긴 뒤,
+ * 그 프로젝트의 워크스페이스(액터 스냅샷)로 워크스페이스 가드를 건다 — DB 조회는 두 가드를 넘은 뒤에만.
  */
 export async function listAccounts(
   projectId: string,
 ): Promise<{ ok: true; rows: AccountRow[]; workspaceId: string } | { ok: false; error: string }> {
-  const g = await requireSuperuser()
-  if (!g.ok) {
-    console.error('[listAccounts] 게이트 거부:', g.error, 'projectId=', projectId)
-    return { ok: false, error: g.error }
+  const deny = (error: string) => {
+    console.error('[listAccounts] 게이트 거부:', error, 'projectId=', projectId)
+    return { ok: false as const, error }
   }
+  const pg = await requireProjectMember(projectId)
+  if (!pg.ok) return deny(pg.error)
+  // 슈퍼유저는 roleIn 이 프로젝트 존재 전에 통과시킨다 — 스냅샷에 없으면(미존재) 여기서 404.
+  const workspaceId = pg.actor.projectWorkspace.get(projectId)
+  if (!workspaceId) return deny(ERR_MISSING)
+  const g = await requireWorkspaceAdmin(workspaceId)
+  if (!g.ok) return deny(g.error)
   const admin = createAdminClient()
   const fail = (what: string, message: string | undefined) => {
     console.error(`[listAccounts] ${what} 조회 실패:`, message ?? 'unknown')
     return { ok: false as const, error: ERR_LIST }
   }
-
-  const { data: project, error: projectErr } = await admin
-    .from('projects').select('workspace_id').eq('id', projectId).maybeSingle()
-  if (projectErr) return fail('프로젝트', projectErr.message)
-  if (!project) return { ok: false, error: '프로젝트를 찾을 수 없습니다.' }
-  const workspaceId = project.workspace_id as string
 
   let profiles
   try {
@@ -389,7 +402,12 @@ export async function listAccounts(
     if (pe?.user_id && r.access_role && r.active && pe.active) accessBy.set(pe.user_id, r.access_role)
   }
 
-  const rows = profiles
+  // profiles 는 플랫폼 전체다. 워크스페이스 관리자에게는 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 —
+  // 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리). 슈퍼유저는 전역 관리자라 전부 본다.
+  const visible = g.actor.isSuperuser
+    ? profiles
+    : profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
+  const rows = visible
     .map<AccountRow>(p => ({
       id: p.userId,
       email: p.email,

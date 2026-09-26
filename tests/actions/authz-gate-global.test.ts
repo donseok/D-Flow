@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 전역 설정·프로젝트 쓰기 액션의 새 authz 가드 검증.
 // 가드(@/lib/authz)는 모킹하되 판정은 순수 계층(@/lib/domain/authz)의 실제 규칙에 위임한다 —
 // 그래야 "프로젝트 관리자는 슈퍼유저가 아니다" 같은 새 체계의 의미가 테스트에 박힌다.
-const { requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor } = vi.hoisted(() => ({
-  requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), requireSuperuser: vi.fn(), resolveProjectId: vi.fn(), getActor: vi.fn(),
+const { requireProjectMember, requireProjectAdmin, requireSuperuser, requireWorkspaceAdmin, resolveProjectId, getActor } = vi.hoisted(() => ({
+  requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), requireSuperuser: vi.fn(), requireWorkspaceAdmin: vi.fn(),
+  resolveProjectId: vi.fn(), getActor: vi.fn(),
 }))
 const { createServerClient, createAdminClient, refreshLlmOverride } = vi.hoisted(() => ({
   // 게이트가 첫 관문이어야 한다 — 통과 전 DB 클라이언트를 만들면 여기서 터진다.
@@ -13,7 +14,7 @@ const { createServerClient, createAdminClient, refreshLlmOverride } = vi.hoisted
   refreshLlmOverride: vi.fn(async () => true),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor }))
+vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requireSuperuser, requireWorkspaceAdmin, resolveProjectId, getActor }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u-session' })) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
@@ -28,11 +29,12 @@ vi.mock('@/lib/ai/brief', () => ({
 vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: vi.fn(async () => null) }))
 
 import type { Actor } from '@/lib/domain/authz'
-import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
+import { isProjectAdmin, isProjectMember, workspaceAdminVerdict } from '@/lib/domain/authz'
+import { ERR_MISSING } from '@/lib/authz/errors'
 import { createAnnouncement, updateAnnouncement, deleteAnnouncement, createAnnouncementFromMeeting } from '@/app/actions/announcements'
 import { recordAttachment, removeAttachment } from '@/app/actions/attachments'
 import { upsertRosterMember, removeRosterMember } from '@/app/actions/roster'
-import { addTeam, updateTeam, listTeamsAdmin } from '@/app/actions/teams'
+import { addTeam, listTeamsAdmin } from '@/app/actions/teams'
 import { reindexProjectAction } from '@/app/actions/chat'
 import { curateWikiItem, mergeWikiTopics } from '@/app/actions/wiki'
 import { ensureProjectBriefAction } from '@/app/actions/brief'
@@ -66,6 +68,10 @@ function signedInAs(a: Actor) {
   requireSuperuser.mockImplementation(async () => (a.isSuperuser ? { ok: true, actor: a } : deny))
   requireProjectAdmin.mockImplementation(async (pid: string | null) => (isProjectAdmin(a, pid) ? { ok: true, actor: a } : deny))
   requireProjectMember.mockImplementation(async (pid: string | null) => (isProjectMember(a, pid) ? { ok: true, actor: a } : deny))
+  requireWorkspaceAdmin.mockImplementation(async (wid: string | null) => {
+    const v = workspaceAdminVerdict(a, wid)
+    return v === 'ok' ? { ok: true, actor: a } : v === 'missing' ? { ok: false, error: ERR_MISSING } : deny
+  })
   getActor.mockResolvedValue(a)
 }
 
@@ -84,27 +90,42 @@ beforeEach(() => {
   refreshLlmOverride.mockResolvedValue(true)
 })
 
-describe('전역 설정은 슈퍼유저 전용 — 프로젝트 관리자도 못 넘는다', () => {
-  it('팀 기준정보(addTeam·updateTeam)는 프로젝트 관리자를 거부한다', async () => {
+describe('워크스페이스 기준정보는 워크스페이스 관리자 — 프로젝트 관리자는 못 넘는다(SP2)', () => {
+  it('공용 팀 추가(addTeam)는 워크스페이스 멤버인 프로젝트 관리자를 거부한다', async () => {
     signedInAs(PROJECT_ADMIN)
-    expect(await addTeam('신팀')).toEqual({ ok: false, error: DENIED })
-    expect(await updateTeam('t1', { active: false })).toEqual({ ok: false, error: DENIED })
+    expect(await addTeam(WS, '신팀')).toEqual({ ok: false, error: DENIED })
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
   it('listTeamsAdmin 은 에러 채널이 없어 빈 목록으로 강등하되 사유를 로그에 남긴다', async () => {
     signedInAs(PROJECT_ADMIN)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await listTeamsAdmin()).toEqual([])
+    expect(await listTeamsAdmin(WS)).toEqual([])
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
     expect(createAdminClient).not.toHaveBeenCalled()
   })
+})
 
-  it('봇 재색인은 프로젝트 관리자를 거부한다(전역 인덱스)', async () => {
-    signedInAs(PROJECT_ADMIN)
+describe('봇 재색인은 프로젝트 관리자(SP2 — 프로젝트 단위 색인)', () => {
+  it('멤버는 거부된다', async () => {
+    signedInAs(MEMBER)
     expect(await reindexProjectAction(PID)).toEqual({ ok: false, error: DENIED })
   })
+
+  it('그 프로젝트의 관리자는 통과한다', async () => {
+    signedInAs(PROJECT_ADMIN)
+    expect(await reindexProjectAction(PID)).toEqual(expect.objectContaining({ ok: true }))
+    expect(requireProjectAdmin).toHaveBeenCalledWith(PID)
+  })
+
+  it('다른 워크스페이스의 프로젝트는 존재 은닉 — 관리자여도 통과하지 못한다', async () => {
+    signedInAs(PROJECT_ADMIN)
+    expect((await reindexProjectAction('p-other')).ok).toBe(false)
+  })
+})
+
+describe('전역 설정은 슈퍼유저 전용 — 프로젝트 관리자도 못 넘는다', () => {
 
   it('LLM 설정 7액션 전부 슈퍼유저가 아니면 거부하고 DB에 손대지 않는다', async () => {
     signedInAs(PROJECT_ADMIN)

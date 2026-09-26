@@ -33,6 +33,10 @@ vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({ from: () => ({ select: mocks.select }) }),
 }))
+// 생성 버튼은 워크스페이스 id 만 확인한다 — 실물은 라우터·로케일 컨텍스트가 필요하다.
+vi.mock('@/components/home/NewProjectModal', () => ({
+  NewProjectModal: ({ workspaceId }: { workspaceId: string }) => <button data-new-project={workspaceId}>new</button>,
+}))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={String(href)} {...rest}>{children}</a>
@@ -40,6 +44,7 @@ vi.mock('next/link', () => ({
 }))
 
 import ProjectsHome from '@/app/(app)/projects/page'
+import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 // ── 픽스처 ──────────────────────────────────────────────────────────────────
 // P1: 전 리프 완료(루트 1 + 리프 2) / P2: 미완 리프 2(50, 99.5 — 원시값 done 판정 확인)
@@ -120,7 +125,7 @@ const count = (markup: string, needle: string) => markup.split(needle).length - 
 
 beforeEach(() => {
   mocks.listProjects.mockResolvedValue(visibleProjects)
-  mocks.getActorForView.mockResolvedValue({ isSuperuser: false })
+  mocks.getActorForView.mockResolvedValue(makeActor())
   mocks.getProjectsCompletion.mockResolvedValue(realCompletionMap())
   mocks.select.mockResolvedValue({ data: dbRows, error: null })
 })
@@ -168,5 +173,26 @@ describe('프로젝트 홈 — 트리 재로드 제거 후 표시 동등성', ()
     // 배지는 getProjectsCompletion 경로라 영향 없음
     expect(count(markup, 'bg-done-weak')).toBe(2)
     expect(errSpy).toHaveBeenCalled()
+  })
+})
+
+describe('프로젝트 홈 — 생성 버튼은 대상 워크스페이스의 관리자(SP2)', () => {
+  it('유일 소속 워크스페이스의 관리자에게 그 워크스페이스로 생성 버튼을 준다', async () => {
+    mocks.getActorForView.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WS, 'admin']]) }))
+    const markup = await renderPage()
+    expect(markup).toContain(`data-new-project="${WS}"`)
+  })
+
+  it('워크스페이스 멤버에게는 버튼도 사유도 없다', async () => {
+    const markup = await renderPage()
+    expect(markup).not.toContain('data-new-project')
+    expect(markup).not.toContain('role="status"')
+  })
+
+  it('관리자인데 소속이 여럿이면 버튼 대신 사유를 보인다(선택 UI 는 SP3)', async () => {
+    mocks.getActorForView.mockResolvedValue(makeSuperuser({ workspaceRoles: new Map([[WS, 'admin'], ['ws-b', 'member']]) }))
+    const markup = await renderPage()
+    expect(markup).not.toContain('data-new-project')
+    expect(markup).toContain('워크스페이스를 지정해야 합니다.')
   })
 })

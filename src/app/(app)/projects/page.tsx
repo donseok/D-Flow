@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { Calendar, FolderPlus, LayoutGrid, ArrowDown, History, ArrowRight } from 'lucide-react'
 import { listProjects } from '@/app/actions/project'
 import { getActorForView } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { isWorkspaceAdmin } from '@/lib/domain/authz'
 import { getProjectsCompletion } from '@/lib/data/wbs'
 import { createServerClient } from '@/lib/supabase/server'
 import { projectLifecycleStatus, type ProjectLifecycleStatus } from '@/lib/domain/project-status'
@@ -165,8 +167,13 @@ export default async function ProjectsHome() {
   }))
   const total = withStatus.length
   const recent = withStatus.slice(0, 3)
-  // 프로젝트 생성은 슈퍼유저 전용(스펙 §5) — createProject 액션이 재검증한다
-  const canCreate = actor?.isSuperuser === true
+  // 프로젝트 생성은 대상 워크스페이스의 관리자(SP2 §4.1) — createProject 액션이 재검증한다.
+  // 워크스페이스 선택 UI 는 SP3 몫이라 유일 소속일 때만 그 워크스페이스로 만든다. 관리자인데 소속이 여럿·없으면 사유를 보인다.
+  const soleWs = actor ? resolveSoleWorkspaceId(actor) : null
+  const createWorkspaceId = soleWs?.ok && isWorkspaceAdmin(actor, soleWs.workspaceId) ? soleWs.workspaceId : null
+  const createBlockedReason = actor && soleWs && !soleWs.ok
+    && (actor.isSuperuser || [...actor.workspaceRoles.keys()].some(w => isWorkspaceAdmin(actor, w)))
+    ? soleWs.error : null
 
   const heroStats = [
     { label: 'Tasks', value: taskStats ? taskStats.tasks : '–' },
@@ -201,7 +208,10 @@ export default async function ProjectsHome() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {canCreate && <NewProjectModal />}
+          {createWorkspaceId && <NewProjectModal workspaceId={createWorkspaceId} />}
+          {createBlockedReason && (
+            <span role="status" className="text-xs font-medium text-hero-ink-muted">{createBlockedReason}</span>
+          )}
           <a
             href="#project-library"
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20"
@@ -249,7 +259,9 @@ export default async function ProjectsHome() {
             icon={FolderPlus}
             title={t(locale, 'home.emptyTitle')}
             description={t(locale, 'home.emptyDesc')}
-            action={canCreate ? <NewProjectModal label={t(locale, 'home.newProjectStart')} className="btn btn-primary" /> : undefined}
+            action={createWorkspaceId
+              ? <NewProjectModal workspaceId={createWorkspaceId} label={t(locale, 'home.newProjectStart')} className="btn btn-primary" />
+              : undefined}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

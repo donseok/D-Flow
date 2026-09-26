@@ -1,8 +1,8 @@
 'use server'
-import { requireSuperuser } from '@/lib/authz'
+import { requireProjectAdmin } from '@/lib/authz'
 import { ingestProject } from '@/lib/ai/ingest'
 
-/** AI 어시스턴트 의미검색 색인 재생성(슈퍼유저 전용 — 전역 봇 인덱스). 설정 화면/임포트 후 호출. */
+/** AI 어시스턴트 의미검색 색인 재생성(그 프로젝트의 관리자 — 색인은 프로젝트 단위다, SP2 §4.1). 설정 화면/임포트 후 호출. */
 export async function reindexProjectAction(projectId: string): Promise<{
   ok: boolean
   error?: string
@@ -11,7 +11,7 @@ export async function reindexProjectAction(projectId: string): Promise<{
   reason?: string
   skippedItems?: number
 }> {
-  const g = await requireSuperuser()
+  const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   try {
     const r = await ingestProject(projectId)

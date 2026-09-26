@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { requireProjectAdmin, requireSuperuser } from '@/lib/authz'
+import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { isValidEmail } from '@/lib/domain/validate'
@@ -191,10 +191,16 @@ export async function listProjectInvites(
 export async function createProjectInvite(
   projectId: string, input: CreateInviteInput,
 ): Promise<CreateInviteResult | { ok: false; error: string }> {
-  // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드로 열리면 '관리자가 관리자를 늘린다'.
+  // 모든 초대는 프로젝트 관리자 가드를 먼저 — 타 워크스페이스·미존재 프로젝트의 존재 은닉(404)이 여기서 끝난다.
   const accessRole = input?.accessRole ?? null
-  const g = isAdminAccessRole(accessRole) ? await requireSuperuser() : await requireProjectAdmin(projectId)
+  const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드만으로 열리면 '관리자가 관리자를 늘린다'.
+  // 그 프로젝트가 속한 워크스페이스의 관리자만 발급한다(위 가드를 통과했으니 projectWorkspace 에 키가 있다).
+  if (isAdminAccessRole(accessRole)) {
+    const w = await requireWorkspaceAdmin(g.actor.projectWorkspace.get(projectId) ?? null)
+    if (!w.ok) return { ok: false, error: w.error }
+  }
 
   // 입력 검증 → origin 확인까지는 DB 를 건드리지 않는다. 어차피 만들 수 없는 초대라면
   // 흔적도 남기지 않는 편이 낫다. 서버 액션 입력은 형상부터 믿지 않는다.

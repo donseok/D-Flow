@@ -16,7 +16,11 @@ export interface AdminTeamRow {
   progressVisible: boolean
 }
 
-export function TeamsManager({ teams }: { teams: AdminTeamRow[] }) {
+export function TeamsManager({ teams, workspaceId }: {
+  teams: AdminTeamRow[]
+  /** 공용 팀을 추가할 워크스페이스 — SP3 전까지 페이지가 유일 소속으로 정해 넘긴다. */
+  workspaceId: string
+}) {
   const router = useRouter()
   const { toast } = useToast()
   const [newCode, setNewCode] = useState('')
@@ -36,7 +40,7 @@ export function TeamsManager({ teams }: { teams: AdminTeamRow[] }) {
     const code = newCode.trim()
     if (!code) { setError('팀 이름을 입력하세요.'); return }
     run(async () => {
-      const r = await addTeam(code)
+      const r = await addTeam(workspaceId, code)
       if (r.ok) { setNewCode(''); toast({ title: `'${code}' 팀을 추가했습니다.`, variant: 'success' }) }
       return r
     })
