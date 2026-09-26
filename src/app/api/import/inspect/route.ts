@@ -5,6 +5,7 @@ import { detectWorkbook } from '@/lib/excel/detect'
 import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { getProjectConfig } from '@/lib/data/projectConfig'
 import { isUuidLike } from '@/lib/domain/agentWork'
+import { compareProfiles } from '@/lib/domain/importWizard'
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
@@ -52,5 +53,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, detection, savedProfile })
+  // 저장 양식과 이 파일의 구조가 다르면 알린다(Task 1b) — 저장 양식으로 읽으면 열이 밀려 틀린 값이 쓰인다.
+  // 마법사는 같은 판정(compareProfiles)으로 감지 결과를 기본 선택으로 둔다. 저장 양식이 없거나 손상이면 null.
+  const profileMismatch = savedProfile ? compareProfiles(savedProfile, detection.profile) : null
+
+  return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch })
 }

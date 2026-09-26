@@ -42,6 +42,14 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.exportExcel': 'Export Excel',
   'settings.exportFailed': 'Export failed',
   'settings.exporting': 'Exporting…',
+  'settings.clearExcelProfileDesc': 'A saved Excel layout exists — the import wizard and Excel export use it. If export is blocked because the layout is damaged or no longer matches the WBS levels, clear it.',
+  'settings.clearExcelProfileButton': 'Clear saved layout',
+  'settings.clearExcelProfileConfirmTitle': 'Clear the saved Excel layout?',
+  'settings.clearExcelProfileConfirmBody': 'The next import will start from the structure detected in the file, and Excel export will use the project default layout. WBS data is not changed.',
+  'settings.clearExcelProfileConfirm': 'Clear',
+  'settings.clearing': 'Clearing…',
+  'settings.clearExcelProfileDone': 'Saved layout cleared',
+  'settings.clearExcelProfileFailed': 'Could not clear the layout',
   // AI Assistant index section
   'settings.assistantTitle': 'AI Assistant semantic search index',
   'settings.assistantDesc1':

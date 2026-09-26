@@ -129,6 +129,8 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
     const res = await get('p-mine', true)
     expect(res.status).toBe(500)
     expect(mocks.getProjectConfig).toHaveBeenCalledTimes(1)
+    expect(mocks.getComputedWbs).not.toHaveBeenCalled()
+    expect(mocks.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
     err.mockRestore()
   })
 })

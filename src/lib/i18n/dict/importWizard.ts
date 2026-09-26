@@ -68,6 +68,18 @@ export const importWizardKo = {
 
   'importWizard.resetToDetectedButton': '감지 결과 사용',
   'importWizard.resetToDetectedDesc': '업로드한 파일에서 감지한 설정으로 되돌립니다.',
+  'importWizard.mismatchTitle': '저장된 양식과 이 파일의 열 구조가 다릅니다',
+  'importWizard.mismatchUsingDetected': '파일에서 감지한 구조로 읽습니다. 저장된 양식으로 읽으면 값이 다른 열에서 읽혀 틀린 값이 들어갑니다.',
+  'importWizard.mismatchUsingSaved': '저장된 양식으로 읽도록 직접 골랐습니다. 아래 미리보기에서 값이 제 열에 있는지 확인하세요.',
+  'importWizard.mismatchFieldsPrefix': '위치가 다른 항목: ',
+  'importWizard.mismatchExtraTeamsPrefix': '저장된 양식에 없는 팀(저장된 양식으로 읽으면 담당이 빠집니다): ',
+  'importWizard.mismatchMissingTeamsPrefix': '파일에 없는 저장된 양식의 팀: ',
+  'importWizard.mismatchFieldSheet': '시트',
+  'importWizard.mismatchFieldHeaderRow': '헤더 행',
+  'importWizard.mismatchFieldHolidaySheet': '휴일 시트',
+  'importWizard.mismatchFieldHierarchy': '계층 열',
+  'importWizard.mismatchFieldTeamColumns': '팀 열 위치',
+  'importWizard.useSavedProfileButton': '저장된 양식 사용',
 
   'importWizard.previewTitle': '미리보기(상위 10행)',
   'importWizard.previewHint': '계층 방식·논리 열을 바꾸면 아래 표가 즉시 갱신됩니다 — 실행 전 마지막 확인 지점입니다.',
@@ -106,7 +118,7 @@ export const importWizardKo = {
   'importWizard.importAnother': '다른 파일 가져오기',
 
   'importWizard.exportProfileTitle': '프로파일로 내보내기(펼침)',
-  'importWizard.exportProfileDesc': '세부업무(sub-act)를 별도 행으로 펼쳐서 이 양식 그대로 엑셀을 내려받습니다.',
+  'importWizard.exportProfileDesc': '저장한 양식에 세부업무(sub-act) 열을 끼워 별도 행으로 펼친 엑셀을 내려받습니다. 열이 밀리므로 다시 가져오면 마법사가 파일에서 감지한 구조로 읽습니다.',
   'importWizard.exportProfileButton': '프로파일로 내보내기(펼침)',
   'importWizard.exportProfileBusy': '내보내는 중…',
   'importWizard.exportProfileFailedHttp': '내보내기에 실패했습니다',

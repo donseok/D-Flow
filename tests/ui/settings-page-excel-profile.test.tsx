@@ -3,16 +3,16 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 import { makeAdminActor } from '../fixtures/actor'
 
-// SP2 Task 16b — 설정 화면 팀 관리 절의 "상속할 공용 팀이 있는가"(hasGlobalTeams)는 그 프로젝트 워크스페이스의 공용 팀으로 본다.
-// 옛 판정(teamsSync)은 전 워크스페이스의 공용 팀이라, 내 워크스페이스에 공용 팀이 없어도 남의 팀 때문에 '공용 팀 복사'가 켜졌다.
+// Task 1b — "저장된 양식 비우기"는 저장된 엑셀 양식이 있을 때만(손상 양식 포함 — 그게 풀어야 할 교착이다) 보인다.
+// 설정 조회가 실패하면 있는지 모르는 양식을 비우라고 권하지 않는다.
 const mocks = vi.hoisted(() => ({
-  workspaceTeamsForProjectSync: vi.fn(),
-  ProjectTeamsManager: vi.fn<(props: Record<string, unknown>) => null>(() => null),
+  getProjectConfig: vi.fn(),
+  ClearExcelProfileButton: vi.fn<(props: { projectId: string }) => null>(() => null),
 }))
 vi.mock('@/lib/teams/master', () => ({
   projectTeamRowsSync: vi.fn(() => []),
   teamsForProjectSync: vi.fn(() => []),
-  workspaceTeamsForProjectSync: mocks.workspaceTeamsForProjectSync,
+  workspaceTeamsForProjectSync: vi.fn(() => []),
 }))
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
@@ -20,7 +20,7 @@ vi.mock('@/app/actions/project', () => ({
   listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]),
 }))
 vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ error: 'x' })) }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => null) }))
+vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/app/actions/projectAreas', () => ({ listAreas: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
@@ -30,7 +30,7 @@ vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ child
 vi.mock('@/components/ui/SectionCard', () => ({ SectionCard: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/ui/PageHero', () => ({ PageHero: () => null, HeroBadge: () => null }))
 vi.mock('@/components/ui/KpiCard', () => ({ KpiCard: () => null }))
-vi.mock('@/components/settings/ProjectTeamsManager', () => ({ ProjectTeamsManager: mocks.ProjectTeamsManager }))
+vi.mock('@/components/settings/ProjectTeamsManager', () => ({ ProjectTeamsManager: () => null }))
 vi.mock('@/components/settings/ProjectAreasManager', () => ({ ProjectAreasManager: () => null }))
 vi.mock('@/components/settings/LevelSettingsManager', () => ({ LevelSettingsManager: () => null }))
 vi.mock('@/components/settings/StageCreditSlider', () => ({ StageCreditSlider: () => null }))
@@ -39,27 +39,40 @@ vi.mock('@/components/settings/ProjectPrivacyToggle', () => ({ ProjectPrivacyTog
 vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () => null }))
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => null }))
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
-vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
+vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: mocks.ClearExcelProfileButton }))
 
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 
 const render = async () =>
   renderToStaticMarkup((await SettingsPage({ params: Promise.resolve({ projectId: 'p1' }) })) as ReactElement)
-const team = (code: string, active: boolean) =>
-  ({ id: `t-${code}`, code, sortOrder: 0, active, progressVisible: true, projectId: null, workspaceId: 'ws-1' })
+const config = (excelProfile: Record<string, unknown>) =>
+  ({ levelLabels: ['단계'], maxDepth: 1, extraAxisLabel: null, milestoneKeywords: [], excelProfile, stageCredits: null })
 
 beforeEach(() => { vi.clearAllMocks() })
 
-describe('설정 화면 — hasGlobalTeams 는 그 프로젝트 워크스페이스의 공용 팀', () => {
-  it('그 워크스페이스에 활성 공용 팀이 있으면 true', async () => {
-    mocks.workspaceTeamsForProjectSync.mockReturnValue([team('PMO', true)])
-    await render()
-    expect(mocks.workspaceTeamsForProjectSync).toHaveBeenCalledWith('p1')
-    expect(mocks.ProjectTeamsManager.mock.calls.at(-1)![0]).toMatchObject({ hasGlobalTeams: true, inherited: true })
+describe('설정 화면 — 저장된 엑셀 양식 비우기', () => {
+  it.each([
+    ['유효한 저장 양식', { version: 1, sheetName: 'WBS' }],
+    ['손상된 저장 양식', { version: 2 }],
+  ])('%s 이 있으면 버튼을 그 프로젝트로 그린다', async (_name, excelProfile) => {
+    mocks.getProjectConfig.mockResolvedValue(config(excelProfile))
+    const html = await render()
+    expect(mocks.ClearExcelProfileButton.mock.calls.at(-1)![0]).toEqual({ projectId: 'p1' })
+    expect(html).toContain('저장된 엑셀 양식이 있습니다')
   })
-  it('그 워크스페이스의 공용 팀이 비활성뿐이면 false — 다른 워크스페이스의 팀은 판정에 들어오지 않는다', async () => {
-    mocks.workspaceTeamsForProjectSync.mockReturnValue([team('휴면', false)])
+
+  it("저장 양식이 없으면('{}') 그리지 않는다", async () => {
+    mocks.getProjectConfig.mockResolvedValue(config({}))
+    const html = await render()
+    expect(mocks.ClearExcelProfileButton).not.toHaveBeenCalled()
+    expect(html).not.toContain('저장된 엑셀 양식이 있습니다')
+  })
+
+  it('설정 조회가 실패하면 그리지 않는다', async () => {
+    mocks.getProjectConfig.mockRejectedValue(new Error('db down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     await render()
-    expect(mocks.ProjectTeamsManager.mock.calls.at(-1)![0]).toMatchObject({ hasGlobalTeams: false })
+    expect(mocks.ClearExcelProfileButton).not.toHaveBeenCalled()
+    err.mockRestore()
   })
 })

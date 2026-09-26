@@ -133,6 +133,35 @@ describe('POST /api/import/inspect', () => {
     expect(body.detection.warnings).toContain('저장된 프로파일이 손상됨')
   })
 
+  it('저장 양식과 감지 양식의 구조가 다르면 profileMismatch 를 싣는다(Task 1b) — savedProfile 은 그대로 돌려준다', async () => {
+    const SAVED = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, start: 13, end: 14 } }
+    mocks.getProjectConfig.mockResolvedValue({
+      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
+      excelProfile: SAVED as unknown as Record<string, unknown>,
+    })
+    const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.savedProfile).toEqual(SAVED)
+    expect(body.profileMismatch).toEqual({ fields: ['start', 'end'], extraTeams: [], missingTeams: [] })
+  })
+
+  it('구조가 같거나 저장 양식이 없으면(손상 포함) profileMismatch 는 null', async () => {
+    const same = await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()
+    expect(same.profileMismatch).toBeNull()
+
+    mocks.getProjectConfig.mockResolvedValue({
+      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
+      excelProfile: LEGACY_EXCEL_PROFILE_V1 as unknown as Record<string, unknown>,
+    })
+    expect((await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()).profileMismatch).toBeNull()
+
+    mocks.getProjectConfig.mockResolvedValue({
+      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [], excelProfile: { version: 2 },
+    })
+    expect((await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()).profileMismatch).toBeNull()
+  })
+
   it('설정 조회 실패 → 500, 원래 에러 메시지를 위장하지 않고 그대로 전달', async () => {
     mocks.getProjectConfig.mockRejectedValue(new Error('프로젝트 설정 조회 실패: db down'))
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))

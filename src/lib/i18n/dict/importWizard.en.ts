@@ -70,6 +70,18 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
 
   'importWizard.resetToDetectedButton': 'Use detected settings',
   'importWizard.resetToDetectedDesc': 'Reverts to the settings detected from the file you uploaded.',
+  'importWizard.mismatchTitle': "This file's columns differ from the saved layout",
+  'importWizard.mismatchUsingDetected': 'Reading with the structure detected in the file. Reading with the saved layout would take values from the wrong columns.',
+  'importWizard.mismatchUsingSaved': 'You chose to read with the saved layout. Check in the preview below that each value is in the right column.',
+  'importWizard.mismatchFieldsPrefix': 'Items in different positions: ',
+  'importWizard.mismatchExtraTeamsPrefix': 'Teams not in the saved layout (their assignments are dropped when reading with it): ',
+  'importWizard.mismatchMissingTeamsPrefix': 'Saved-layout teams missing from the file: ',
+  'importWizard.mismatchFieldSheet': 'Sheet',
+  'importWizard.mismatchFieldHeaderRow': 'Header row',
+  'importWizard.mismatchFieldHolidaySheet': 'Holiday sheet',
+  'importWizard.mismatchFieldHierarchy': 'Hierarchy columns',
+  'importWizard.mismatchFieldTeamColumns': 'Team column positions',
+  'importWizard.useSavedProfileButton': 'Use saved layout',
 
   'importWizard.previewTitle': 'Preview (first 10 rows)',
   'importWizard.previewHint': 'This table updates instantly when you change the hierarchy method or logical columns — your last check before running.',
@@ -108,7 +120,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.importAnother': 'Import another file',
 
   'importWizard.exportProfileTitle': 'Export with profile (expanded)',
-  'importWizard.exportProfileDesc': 'Downloads an Excel file in this layout, with sub-acts expanded into separate rows.',
+  'importWizard.exportProfileDesc': 'Downloads the saved layout with a sub-act column inserted, so sub-acts appear as separate rows. The columns shift, so on re-import the wizard reads the structure detected in the file.',
   'importWizard.exportProfileButton': 'Export with profile (expanded)',
   'importWizard.exportProfileBusy': 'Exporting…',
   'importWizard.exportProfileFailedHttp': 'Export failed',

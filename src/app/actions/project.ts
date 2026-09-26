@@ -208,6 +208,27 @@ export async function updateStageCredits(projectId: string, credits: unknown): P
 }
 
 /**
+ * 저장된 엑셀 양식 비우기(Task 1b) — 관리자 전용. 손상된 양식(내보내기 422)이나 WBS 보다 얕은 양식(깊이 400)으로
+ * 내보내기가 막힌 프로젝트를 푼다. 비우면 가져오기는 감지 결과로, 내보내기는 프로젝트 기본 레이아웃으로 돌아간다.
+ * '{}' 가 "저장된 양식 없음"의 정본 값이다(0058 기본값·getProjectConfig 폴백과 같다). WBS 데이터는 건드리지 않는다.
+ * project_settings 는 쓰기 정책이 없어(0058 — service_role 전용 관문) admin 클라이언트로 쓴다.
+ */
+export async function clearExcelProfile(projectId: string): Promise<{ ok: boolean; error?: string }> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  const admin = createAdminClient()
+  const { error } = await admin.from('project_settings').upsert({
+    project_id: projectId,
+    excel_profile: {},
+    updated_at: new Date().toISOString(),
+    updated_by: g.actor.userId,
+  })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true }
+}
+
+/**
  * 비공개 전환(0070) — 프로젝트 관리자(워크스페이스 관리자 승계 포함, SP2 §4.1).
  * SP1 까지는 슈퍼유저 전용이었다(가시성은 전역 정책이라는 이유). SP2 에서 비공개가 가리는 범위가 그 워크스페이스 안으로
  * 좁혀졌고, 비공개 프로젝트도 워크스페이스 관리자에게는 보이므로(canSeeProject) 관리자가 잠가도 조직 차원에서 사라지지 않는다.

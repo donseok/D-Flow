@@ -23,6 +23,7 @@ import { ProjectPrivacyToggle } from '@/components/settings/ProjectPrivacyToggle
 import { ScheduleManager } from '@/components/settings/ScheduleManager'
 import { ReindexButton } from '@/components/settings/ReindexButton'
 import { ExportExcelButton } from '@/components/settings/ExportExcelButton'
+import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
 import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -236,6 +237,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.exportDesc')}</p>
           <ExportExcelButton projectId={projectId} />
         </div>
+        {/* 저장된 엑셀 양식이 있을 때만 — 손상·깊이 부족으로 내보내기가 막힌 교착을 관리자가 푼다(Task 1b).
+            설정 조회 실패(levelConfig null)면 그리지 않는다 — 있는지 모르는 양식을 비우라고 권하지 않는다. */}
+        {levelConfig && Object.keys(levelConfig.excelProfile).length > 0 && (
+          <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.clearExcelProfileDesc')}</p>
+            <ClearExcelProfileButton projectId={projectId} />
+          </div>
+        )}
         </SectionCard>
 
       {/* ── 에이전트 (킬스위치) ── */}

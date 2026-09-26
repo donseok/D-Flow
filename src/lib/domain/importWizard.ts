@@ -19,10 +19,74 @@ export interface ExecuteResult {
 
 export type WizardStep = 'select' | 'review' | 'done'
 
+/** 좌표가 다를 수 있는 프로파일 항목 — 논리 열 키 + 시트·헤더 행·휴일 시트·계층 열·팀 열 위치. */
+export type ProfileMismatchField =
+  | 'sheetName' | 'headerRow' | 'holidaySheetName' | 'hierarchy' | keyof ExcelProfile['logical'] | 'teamColumns'
+
+/** 저장 양식과 업로드 파일이 감지한 양식의 구조 차이(Task 1b). 저장 양식으로 읽으면 값이 다른 열에서 읽히고(fields)
+ *  양식 밖 팀의 담당이 사라진다(extraTeams) — 파싱은 오류 없이 끝나 틀린 값이 그대로 쓰인다(에러 3원칙 ①). */
+export interface ProfileMismatch {
+  fields: ProfileMismatchField[]
+  /** 파일에는 있는데 저장 양식에 없는 팀 — 저장 양식으로 읽으면 그 담당이 빠진다. */
+  extraTeams: string[]
+  /** 저장 양식에는 있는데 파일에 없는 팀. */
+  missingTeams: string[]
+}
+
+const LOGICAL_KEYS: readonly (keyof ExcelProfile['logical'])[] =
+  ['extraAxis', 'code', 'name', 'deliverable', 'start', 'end', 'weight', 'actualPct']
+
+function sameHierarchy(a: ExcelProfile['hierarchy'], b: ExcelProfile['hierarchy']): boolean {
+  if (a.kind === 'outline' || b.kind === 'outline') {
+    return a.kind === 'outline' && b.kind === 'outline' && a.column === b.column
+  }
+  return a.columns.length === b.columns.length && a.columns.every((c, i) => c === b.columns[i])
+}
+
+/** 저장 양식(saved)과 감지 양식(detected)의 좌표·팀 열 비교. null = 같은 구조(마크 사전은 열을 옮기지 않아 비교하지 않는다).
+ *  팀은 코드 기준 집합으로 보고, 양쪽에 있는 팀의 열이 다르면 'teamColumns' 다. 팀명 직접 방식('*')은 팀이 아니라
+ *  열 하나라 열 위치(있음·없음 포함)만 본다. inspect(알림)·execute(최종 관문)·마법사(기본 선택)가 같은 판정을 쓴다. */
+export function compareProfiles(saved: ExcelProfile, detected: ExcelProfile): ProfileMismatch | null {
+  const fields: ProfileMismatchField[] = []
+  if (saved.sheetName !== detected.sheetName) fields.push('sheetName')
+  if (saved.headerRow !== detected.headerRow) fields.push('headerRow')
+  if (saved.holidaySheetName !== detected.holidaySheetName) fields.push('holidaySheetName')
+  if (!sameHierarchy(saved.hierarchy, detected.hierarchy)) fields.push('hierarchy')
+  for (const k of LOGICAL_KEYS) if (saved.logical[k] !== detected.logical[k]) fields.push(k)
+
+  const teamCols = (p: ExcelProfile) => new Map(p.teamColumns.filter(([, t]) => t !== '*').map(([c, t]) => [t, c]))
+  const starCol = (p: ExcelProfile) => p.teamColumns.find(([, t]) => t === '*')?.[0] ?? null
+  const savedTeams = teamCols(saved)
+  const detectedTeams = teamCols(detected)
+  const moved = [...savedTeams].some(([t, c]) => detectedTeams.has(t) && detectedTeams.get(t) !== c)
+  if (moved || starCol(saved) !== starCol(detected)) fields.push('teamColumns')
+  const extraTeams = [...detectedTeams.keys()].filter(t => !savedTeams.has(t))
+  const missingTeams = [...savedTeams.keys()].filter(t => !detectedTeams.has(t))
+
+  return fields.length || extraTeams.length || missingTeams.length ? { fields, extraTeams, missingTeams } : null
+}
+
+/** 2단계의 출발 프로파일 — 저장 양식이 파일 구조와 같을 때만 저장 양식, 아니면 감지 결과. reducer 와 컴포넌트(마크 행 초기화)가
+ *  같이 쓴다. */
+export function initialProfileChoice(detection: DetectionResult, savedProfile: ExcelProfile | null): {
+  profile: ExcelProfile; profileSource: 'saved' | 'detected'; profileMismatch: ProfileMismatch | null
+} {
+  const profileMismatch = savedProfile ? compareProfiles(savedProfile, detection.profile) : null
+  return savedProfile && !profileMismatch
+    ? { profile: savedProfile, profileSource: 'saved', profileMismatch }
+    : { profile: detection.profile, profileSource: 'detected', profileMismatch }
+}
+
 export interface WizardState {
   step: WizardStep
   fileName: string | null
   detection: DetectionResult | null
+  /** inspect 가 돌려준 저장 양식(없거나 손상이면 null) — "저장된 양식 사용" 버튼이 되돌아갈 원본. */
+  savedProfile: ExcelProfile | null
+  /** 저장 양식과 파일 구조의 차이(compareProfiles). 있으면 감지 결과로 시작하고 저장 양식은 명시 선택으로만 쓴다. */
+  profileMismatch: ProfileMismatch | null
+  /** 지금 편집 중인 profile 의 출발점 — execute 에 useSavedProfile·confirmProfileMismatch 로 실린다. */
+  profileSource: 'saved' | 'detected'
   profile: ExcelProfile | null
   mode: ImportMode
   saveProfile: boolean
@@ -40,6 +104,9 @@ export const initialWizardState: WizardState = {
   step: 'select',
   fileName: null,
   detection: null,
+  savedProfile: null,
+  profileMismatch: null,
+  profileSource: 'detected',
   profile: null,
   mode: 'append',
   saveProfile: true,
@@ -65,10 +132,13 @@ export type WizardAction =
   | { type: 'executeFailure'; error: string }
   | { type: 'executeValidationFailure'; errors: ImportError[] }
   | { type: 'executeSuccess'; result: ExecuteResult }
+  | { type: 'executeProfileMismatch'; error: string; profileMismatch: ProfileMismatch | null }
   | { type: 'reset' }
   | { type: 'resetToDetected' }
+  | { type: 'useSavedProfile' }
 
-/** 2단계 진입 기본값 계약(§6.2): savedProfile ?? detection.profile. */
+/** 2단계 진입 기본값 계약(§6.2): 저장 양식이 파일 구조와 같을 때만 savedProfile, 아니면 detection.profile(Task 1b —
+ *  다른 구조의 파일을 저장 양식으로 읽으면 오류 없이 틀린 값이 쓰인다). 저장 양식은 useSavedProfile 로만 고른다. */
 export function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case 'fileSelected':
@@ -82,7 +152,8 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         busy: false,
         step: 'review',
         detection: action.detection,
-        profile: action.savedProfile ?? action.detection.profile,
+        savedProfile: action.savedProfile,
+        ...initialProfileChoice(action.detection, action.savedProfile),
         error: null,
       }
     case 'inspectFailure':
@@ -103,6 +174,8 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, busy: false, error: action.error, needsTeams: null, needsTeamsScope: null }
     case 'executeValidationFailure':
       return { ...state, busy: false, errors: action.errors, needsTeams: null, needsTeamsScope: null }
+    case 'executeProfileMismatch':
+      return { ...state, busy: false, error: action.error, profileMismatch: action.profileMismatch ?? state.profileMismatch }
     case 'executeSuccess':
       return { ...state, busy: false, step: 'done', result: action.result, error: null, errors: null, needsTeams: null, needsTeamsScope: null }
     case 'reset':
@@ -111,7 +184,10 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
     // 되돌릴 길이 있어야 한다(레거시 프로젝트가 새 양식 파일을 저장된 옛 프로파일로 잘못 해석해
     // 임포트를 막아버리는 사고 방지). detection 이 없으면(있을 수 없는 상태지만) 무변화.
     case 'resetToDetected':
-      return state.detection ? { ...state, profile: state.detection.profile } : state
+      return state.detection ? { ...state, profile: state.detection.profile, profileSource: 'detected' } : state
+    // 불일치 경고를 본 사용자가 저장 양식을 직접 고른다 — execute 에 확인 플래그가 실린다(서버가 최종 관문).
+    case 'useSavedProfile':
+      return state.savedProfile ? { ...state, profile: state.savedProfile, profileSource: 'saved' } : state
     default:
       return state
   }

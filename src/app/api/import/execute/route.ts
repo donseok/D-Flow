@@ -12,6 +12,9 @@ import { addProjectTeam } from '@/app/actions/projectTeams'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
+import { compareProfiles } from '@/lib/domain/importWizard'
+import { detectWorkbook } from '@/lib/excel/detect'
+import { getProjectConfig } from '@/lib/data/projectConfig'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
@@ -22,6 +25,12 @@ const REPLACE_WARNINGS = [
 ]
 
 type ImportMode = 'append' | 'replace'
+
+const ERR_PROFILE_MISMATCH =
+  '저장된 엑셀 양식과 이 파일의 열 구조가 다릅니다 — 저장 양식으로 읽으면 값이 다른 열에서 읽힙니다. ' +
+  '감지 결과로 가져오거나, 마법사에서 "저장된 양식 사용"을 직접 고른 뒤 실행하세요.'
+const errProfileUnverifiable = (detail: string) =>
+  `파일 구조를 감지하지 못해 저장된 엑셀 양식과 대조할 수 없습니다: ${detail} — 저장 양식으로 읽으려면 확인 후 다시 실행하세요.`
 
 /**
  * 임포트 마법사 2단계 — 실제 쓰기(§6.6). append 는 기존 import_wbs 와 동일하게 삽입만,
@@ -61,8 +70,38 @@ export async function POST(req: NextRequest) {
   const validated = validateProfile(profileJson)
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 })
   const profile = validated.profile
+  const buf = await file.arrayBuffer()
 
-  const parsed = parseWithProfile(await file.arrayBuffer(), profile)
+  // 저장 양식 대조(Task 1b) — 서버가 최종 관문이다(fail-closed). 저장 양식으로 읽는데(명시 플래그, 또는 좌표가 저장 양식과
+  // 같은 프로파일) 파일 구조가 다르면 열이 밀려 오류 없이 틀린 값이 쓰인다. 마법사가 불일치를 보여 주고 사용자가 저장 양식을
+  // 직접 고른 확인 플래그가 없으면 409 로 거부한다. 조회 실패는 대조 불가라 중단한다(에러 3원칙 ②).
+  let config: Awaited<ReturnType<typeof getProjectConfig>>
+  try {
+    config = await getProjectConfig(projectId)
+  } catch (e) {
+    console.error('[import/execute] 프로젝트 설정 조회 실패 — 저장 양식 대조 불가, 중단:', e)
+    const message = e instanceof Error ? e.message : '프로젝트 설정을 확인할 수 없습니다'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+  // 손상된 저장 양식은 inspect 가 null 로 돌려줘 클라이언트가 쓸 수 없다 — 대조 대상이 아니다(손상 경고는 inspect 가 싣는다).
+  const saved = Object.keys(config.excelProfile).length > 0 ? validateProfile(config.excelProfile) : null
+  if (saved?.ok) {
+    const usingSaved = form.get('useSavedProfile') === 'true' || compareProfiles(saved.profile, profile) === null
+    const confirmed = form.get('confirmProfileMismatch') === 'true'
+    if (usingSaved && !confirmed) {
+      const detected = detectWorkbook(buf)
+      if (!detected.ok) {
+        return NextResponse.json(
+          { code: 'PROFILE_MISMATCH', profileMismatch: null, error: errProfileUnverifiable(detected.error) }, { status: 409 })
+      }
+      const profileMismatch = compareProfiles(saved.profile, detected.result.profile)
+      if (profileMismatch) {
+        return NextResponse.json({ code: 'PROFILE_MISMATCH', profileMismatch, error: ERR_PROFILE_MISMATCH }, { status: 409 })
+      }
+    }
+  }
+
+  const parsed = parseWithProfile(buf, profile)
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
   // 구조 검증(linkByDepth) 을 팀 부트스트랩보다 먼저 통과시킨다(리뷰 Minor). 원래 순서는 팀 등록이

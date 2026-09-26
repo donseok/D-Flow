@@ -3,7 +3,7 @@ import { LEGACY_EXCEL_PROFILE_V1, type ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import {
   initialWizardState, reducer, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
-  recordToRows, rowsToRecord, deriveMappedPreview, type MarkRow,
+  recordToRows, rowsToRecord, deriveMappedPreview, compareProfiles, type MarkRow,
 } from '@/lib/domain/importWizard'
 
 const DETECTION: DetectionResult = {
@@ -21,15 +21,17 @@ describe('importWizard reducer — 상태 전이(§6.2)', () => {
     expect(next).toEqual({ ...initialWizardState, fileName: 'a.xlsx' })
   })
 
-  it('inspectSuccess — 기본 프로파일은 savedProfile ?? detection.profile(§6.2 계약)', () => {
-    const withSaved = reducer(initialWizardState, {
-      type: 'inspectSuccess', detection: DETECTION, savedProfile: { ...LEGACY_EXCEL_PROFILE_V1, sheetName: 'SAVED' },
-    })
+  it('inspectSuccess — 저장 양식이 파일 구조와 같으면 저장 양식, 없으면 감지 결과(§6.2 계약)', () => {
+    // 좌표·팀 열이 같고 마크 사전만 다른 저장 양식 — 구조가 같으므로 저장 양식을 그대로 쓴다.
+    const SAVED_SAME = { ...LEGACY_EXCEL_PROFILE_V1, ownerMarks: { '●': 'primary' as const } }
+    const withSaved = reducer(initialWizardState, { type: 'inspectSuccess', detection: DETECTION, savedProfile: SAVED_SAME })
     expect(withSaved.step).toBe('review')
-    expect(withSaved.profile?.sheetName).toBe('SAVED')
+    expect(withSaved.profile).toBe(SAVED_SAME)
+    expect(withSaved).toMatchObject({ profileSource: 'saved', profileMismatch: null, savedProfile: SAVED_SAME })
 
     const withoutSaved = reducer(initialWizardState, { type: 'inspectSuccess', detection: DETECTION, savedProfile: null })
     expect(withoutSaved.profile).toBe(DETECTION.profile)
+    expect(withoutSaved).toMatchObject({ profileSource: 'detected', profileMismatch: null, savedProfile: null })
   })
 
   it('inspectFailure — 1단계에 머물며 에러만 싣는다', () => {
@@ -74,19 +76,106 @@ describe('importWizard reducer — 상태 전이(§6.2)', () => {
   })
 
   it('resetToDetected — savedProfile 로 시작했어도 detection.profile 로 되돌린다(리뷰 Important #2, 레거시 프로젝트+새 양식 파일 차단 해소)', () => {
-    const withSaved = reducer(initialWizardState, {
+    // 저장 양식이 파일과 다르면 감지 결과로 시작하므로(Task 1b), 저장 양식을 직접 고른 뒤 되돌린다.
+    const inspected = reducer(initialWizardState, {
       type: 'inspectSuccess', detection: DETECTION, savedProfile: { ...LEGACY_EXCEL_PROFILE_V1, sheetName: 'SAVED' },
     })
+    const withSaved = reducer(inspected, { type: 'useSavedProfile' })
     expect(withSaved.profile?.sheetName).toBe('SAVED')
     // 편집도 반영한 뒤 되돌려도 detection.profile 로 정확히 복원돼야 한다(savedProfile 이 아니라).
     const edited = reducer(withSaved, { type: 'profileChanged', profile: { ...withSaved.profile!, sheetName: 'EDITED' } })
     const reverted = reducer(edited, { type: 'resetToDetected' })
     expect(reverted.profile).toBe(DETECTION.profile)
     expect(reverted.profile?.sheetName).not.toBe('SAVED')
+    expect(reverted.profileSource).toBe('detected')
   })
 
   it('resetToDetected — detection 이 없으면(1단계) 무변화', () => {
     expect(reducer(initialWizardState, { type: 'resetToDetected' })).toBe(initialWizardState)
+  })
+})
+
+/* ── Task 1b — 저장 양식과 파일 구조가 다르면 조용히 저장 양식으로 읽지 않는다 ── */
+const COLS: ExcelProfile = {
+  version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 2,
+  hierarchy: { kind: 'columns', columns: [0, 1] },
+  logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 },
+  teamColumns: [[6, '팀A']], ownerMarks: { '●': 'primary', '△': 'support' },
+}
+/** 펼침 내보내기가 만드는 모양 — 계층 다음에 '세부업무' 열이 끼어 논리·팀 열이 +1 밀리고, 양식 밖 팀(팀B)이 끝에 붙는다. */
+const SHIFTED: ExcelProfile = {
+  ...COLS,
+  logical: { ...COLS.logical, deliverable: 3, start: 4, end: 5, actualPct: 6 },
+  teamColumns: [[7, '팀A'], [8, '팀B']],
+  ownerMarks: { '●': 'primary', '△': 'support', '◎': 'primary' },
+}
+
+describe('compareProfiles — 저장 양식 대 감지 양식', () => {
+  it('좌표·팀 열이 같으면 null — 마크 사전 차이는 열을 옮기지 않으므로 세지 않는다', () => {
+    expect(compareProfiles(COLS, { ...COLS, ownerMarks: { O: 'primary' } })).toBeNull()
+  })
+
+  it('열 밀림 — 밀린 논리 열·같은 팀의 열 이동·양식 밖 팀을 모두 알린다', () => {
+    expect(compareProfiles(COLS, SHIFTED)).toEqual({
+      fields: ['deliverable', 'start', 'end', 'actualPct', 'teamColumns'],
+      extraTeams: ['팀B'],
+      missingTeams: [],
+    })
+  })
+
+  it('팀 초과(접기 내보내기의 양식 밖 팀)·팀 누락만 달라도 불일치다', () => {
+    expect(compareProfiles(COLS, { ...COLS, teamColumns: [[6, '팀A'], [7, '팀B']] }))
+      .toEqual({ fields: [], extraTeams: ['팀B'], missingTeams: [] })
+    expect(compareProfiles(COLS, { ...COLS, teamColumns: [] }))
+      .toEqual({ fields: [], extraTeams: [], missingTeams: ['팀A'] })
+  })
+
+  it('시트·헤더 행·휴일 시트·계층 열도 좌표다', () => {
+    const other: ExcelProfile = {
+      ...COLS, sheetName: 'Sheet1', headerRow: 0, holidaySheetName: 'Holiday', hierarchy: { kind: 'outline', column: 0 },
+    }
+    expect(compareProfiles(COLS, other)?.fields).toEqual(['sheetName', 'headerRow', 'holidaySheetName', 'hierarchy'])
+    expect(compareProfiles(COLS, { ...COLS, hierarchy: { kind: 'columns', columns: [0, 1, 2] } })?.fields).toEqual(['hierarchy'])
+  })
+
+  it("팀명 직접 방식('*') 열은 팀 이름이 아니라 열 위치로 비교한다", () => {
+    const star: ExcelProfile = { ...COLS, teamColumns: [[6, '*']] }
+    expect(compareProfiles(star, star)).toBeNull()
+    expect(compareProfiles(star, { ...COLS, teamColumns: [[7, '*']] }))
+      .toEqual({ fields: ['teamColumns'], extraTeams: [], missingTeams: [] })
+    expect(compareProfiles(COLS, star)).toEqual({ fields: ['teamColumns'], extraTeams: [], missingTeams: ['팀A'] })
+  })
+})
+
+describe('importWizard reducer — 불일치면 감지 결과가 기본, 저장 양식은 명시 선택으로만(Task 1b)', () => {
+  const DET_SHIFTED: DetectionResult = { ...DETECTION, profile: SHIFTED }
+
+  it('inspectSuccess — 불일치를 싣고 감지 결과로 시작한다', () => {
+    const next = reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: COLS })
+    expect(next.profile).toBe(SHIFTED)
+    expect(next.profileSource).toBe('detected')
+    expect(next.profileMismatch).toEqual(compareProfiles(COLS, SHIFTED))
+    expect(next.savedProfile).toBe(COLS)
+  })
+
+  it('useSavedProfile — 사용자가 고르면 저장 양식으로 바꾸고 출처를 saved 로 둔다(불일치 표시는 남긴다)', () => {
+    const inspected = reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: COLS })
+    const chosen = reducer(inspected, { type: 'useSavedProfile' })
+    expect(chosen.profile).toBe(COLS)
+    expect(chosen.profileSource).toBe('saved')
+    expect(chosen.profileMismatch).toEqual(inspected.profileMismatch)
+    expect(reducer(chosen, { type: 'resetToDetected' })).toMatchObject({ profile: SHIFTED, profileSource: 'detected' })
+  })
+
+  it('useSavedProfile — 저장 양식이 없으면 무변화', () => {
+    const inspected = reducer(initialWizardState, { type: 'inspectSuccess', detection: DETECTION, savedProfile: null })
+    expect(reducer(inspected, { type: 'useSavedProfile' })).toBe(inspected)
+  })
+
+  it('executeProfileMismatch — 서버 409 사유와 불일치를 싣고 busy 를 푼다', () => {
+    const mm = { fields: ['start' as const], extraTeams: [], missingTeams: [] }
+    const next = reducer({ ...initialWizardState, busy: true }, { type: 'executeProfileMismatch', error: 'E', profileMismatch: mm })
+    expect(next).toMatchObject({ busy: false, error: 'E', profileMismatch: mm })
   })
 })
 

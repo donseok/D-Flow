@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(),
   ingestProject: vi.fn(),
+  detectWorkbook: vi.fn(),
+  getProjectConfig: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({
   requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: mocks.requireWorkspaceAdmin,
@@ -38,6 +40,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServer
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordProgressSnapshot }))
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
+vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: mocks.detectWorkbook }))
+vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 
 import { POST } from '@/app/api/import/execute/route'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
@@ -130,6 +134,9 @@ beforeEach(() => {
   mocks.ingestProject.mockResolvedValue({ count: 3 })
   mocks.createServerClient.mockImplementation(async () => makeSbClient())
   mocks.createAdminClient.mockImplementation(() => makeAdminClient())
+  // 기본: 저장 양식 없음 — 구조 대조(Task 1b)를 건너뛰는 종전 경로.
+  mocks.getProjectConfig.mockResolvedValue({ levelLabels: [], excelProfile: {} })
+  mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: LEGACY_EXCEL_PROFILE_V1, warnings: [] } })
 })
 
 describe('POST /api/import/execute — 입력 검증(가드 이전)', () => {
@@ -448,5 +455,89 @@ describe('POST /api/import/execute — 후처리(스냅샷·색인)', () => {
     const body = await res.json()
     expect(body.ok).toBe(true)
     expect(body.reindexed).toBe(0)
+  })
+})
+
+/* ── Task 1b — 저장 양식으로 읽는데 파일 구조가 다르면 서버가 최종 관문으로 거부한다(fail-closed) ── */
+describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', () => {
+  // 저장 양식 = LEGACY, 업로드 파일의 감지 결과 = 시작·종료 열이 한 칸씩 밀린 모양.
+  const SHIFTED = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, start: 13, end: 14 } }
+  const savedIs = (excelProfile: unknown) => mocks.getProjectConfig.mockResolvedValue({ levelLabels: [], excelProfile })
+  const detectedIs = (profile: unknown) => mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile, warnings: [] } })
+
+  it('저장 양식(내용이 같다)으로 실행 + 확인 없음 → 409 PROFILE_MISMATCH, 파싱·팀·RPC 미호출', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    detectedIs(SHIFTED)
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.code).toBe('PROFILE_MISMATCH')
+    expect(body.profileMismatch).toEqual({ fields: ['start', 'end'], extraTeams: [], missingTeams: [] })
+    expect(body.error).toMatch(/저장된 엑셀 양식/)
+    expect(mocks.parseWithProfile).not.toHaveBeenCalled()
+    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('useSavedProfile=true 를 보내면 내용이 조금 달라도 저장 양식 사용으로 본다 — 확인 없으면 409', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    detectedIs(SHIFTED)
+    const edited = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, weight: null } }
+    const res = await POST(req(baseFields({ profile: JSON.stringify(edited), useSavedProfile: 'true' })))
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('PROFILE_MISMATCH')
+  })
+
+  it('명시 확인(confirmProfileMismatch=true)이 있으면 저장 양식으로 진행한다', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    detectedIs(SHIFTED)
+    const res = await POST(req(baseFields({ useSavedProfile: 'true', confirmProfileMismatch: 'true' })))
+    expect(res.status).toBe(200)
+    expect(mocks.parseWithProfile).toHaveBeenCalledWith(expect.any(ArrayBuffer), LEGACY_EXCEL_PROFILE_V1)
+  })
+
+  it('감지 결과로 실행(저장 양식과 다른 프로파일)하면 확인 없이 진행한다', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    detectedIs(SHIFTED)
+    const res = await POST(req(baseFields({ profile: JSON.stringify(SHIFTED) })))
+    expect(res.status).toBe(200)
+    expect(mocks.parseWithProfile).toHaveBeenCalledWith(expect.any(ArrayBuffer), SHIFTED)
+  })
+
+  it('저장 양식과 파일 구조가 같으면 확인 없이 진행한다', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    const res = await POST(req(baseFields({ useSavedProfile: 'true' })))
+    expect(res.status).toBe(200)
+  })
+
+  it('저장 양식으로 읽는데 파일 구조를 감지하지 못하면 대조할 수 없으니 409(fail-closed)', async () => {
+    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    mocks.detectWorkbook.mockReturnValue({ ok: false, error: '시트가 없습니다' })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body).toMatchObject({ code: 'PROFILE_MISMATCH', profileMismatch: null })
+    expect(body.error).toContain('시트가 없습니다')
+    expect(mocks.parseWithProfile).not.toHaveBeenCalled()
+  })
+
+  it('저장 양식이 없거나 손상이면 대조하지 않는다(감지 미호출)', async () => {
+    for (const excelProfile of [{}, { version: 2 }]) {
+      savedIs(excelProfile)
+      const res = await POST(req(baseFields()))
+      expect(res.status).toBe(200)
+    }
+    expect(mocks.detectWorkbook).not.toHaveBeenCalled()
+  })
+
+  it('설정 조회 실패 → 500, 파싱·RPC 미호출(대조 불가를 통과로 위장하지 않는다)', async () => {
+    mocks.getProjectConfig.mockRejectedValue(new Error('프로젝트 설정 조회 실패: db down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: '프로젝트 설정 조회 실패: db down' })
+    expect(mocks.parseWithProfile).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    err.mockRestore()
   })
 })

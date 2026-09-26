@@ -16,8 +16,8 @@ import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
-  recordToRows, rowsToRecord, deriveMappedPreview, type MarkRow, type ExecuteResult,
-  type PreviewColumnRole,
+  recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, type MarkRow, type ExecuteResult,
+  type PreviewColumnRole, type ProfileMismatch, type ProfileMismatchField,
 } from '@/lib/domain/importWizard'
 
 /** 논리 열(§B4 ExcelProfile.logical) 8종의 라벨 키 — 셀렉트 목록(name 제외)과 미리보기 배지(name 포함)
@@ -31,6 +31,16 @@ const LOGICAL_FIELD_LABEL_KEYS: Record<keyof ExcelProfile['logical'], DictKey> =
   end: 'importWizard.fieldEnd',
   weight: 'importWizard.fieldWeight',
   actualPct: 'importWizard.fieldActualPct',
+}
+
+/** 저장 양식·파일 구조 불일치(Task 1b) 경고의 항목 라벨 — 논리 열은 위 라벨을 그대로 쓴다. */
+const MISMATCH_FIELD_LABEL_KEYS: Record<ProfileMismatchField, DictKey> = {
+  ...LOGICAL_FIELD_LABEL_KEYS,
+  sheetName: 'importWizard.mismatchFieldSheet',
+  headerRow: 'importWizard.mismatchFieldHeaderRow',
+  holidaySheetName: 'importWizard.mismatchFieldHolidaySheet',
+  hierarchy: 'importWizard.mismatchFieldHierarchy',
+  teamColumns: 'importWizard.mismatchFieldTeamColumns',
 }
 
 /** name 은 outline 전용이라 계층 섹션에서 따로 렌더한다 — 논리 열 셀렉트 목록에서는 제외. */
@@ -165,6 +175,15 @@ export function ImportWizard({
     markIdRef.current = rows.length
   }
 
+  /** Task 1b — 불일치 경고를 본 사용자가 저장 양식을 직접 고른다. 마크 행도 저장 양식 사전으로 맞춘다(resetToDetected 와 같은 패턴). */
+  function chooseSavedProfile() {
+    if (!state.savedProfile) return
+    dispatch({ type: 'useSavedProfile' })
+    const rows = recordToRows(state.savedProfile.ownerMarks)
+    setMarkRows(rows)
+    markIdRef.current = rows.length
+  }
+
   async function runExportProfile() {
     setExportBusy(true)
     try {
@@ -189,8 +208,10 @@ export function ImportWizard({
         const detection = data.detection as DetectionResult
         const savedProfile = (data.savedProfile ?? null) as ExcelProfile | null
         dispatch({ type: 'inspectSuccess', detection, savedProfile })
-        setMarkRows(recordToRows((savedProfile ?? detection.profile).ownerMarks))
-        markIdRef.current = recordToRows((savedProfile ?? detection.profile).ownerMarks).length
+        // 마크 행은 reducer 가 고른 출발 프로파일의 사전으로 — 불일치면 감지 결과다(Task 1b).
+        const rows = recordToRows(initialProfileChoice(detection, savedProfile).profile.ownerMarks)
+        setMarkRows(rows)
+        markIdRef.current = rows.length
       } else {
         const msg = typeof data.error === 'string' ? data.error : t('importWizard.inspectFailedHttp')
         dispatch({ type: 'inspectFailure', error: msg })
@@ -215,8 +236,18 @@ export function ImportWizard({
       fd.append('mode', state.mode)
       fd.append('saveProfile', String(state.saveProfile))
       fd.append('registerTeams', String(registerTeams))
+      // 저장 양식으로 읽는지와, 불일치를 보고 직접 골랐는지 — 서버가 같은 대조를 다시 해 확인 없는 저장 양식 실행을 409 로 막는다.
+      fd.append('useSavedProfile', String(state.profileSource === 'saved'))
+      fd.append('confirmProfileMismatch', String(state.profileSource === 'saved' && state.profileMismatch !== null))
       const res = await fetch('/api/import/execute', { method: 'POST', body: fd })
       const data: Record<string, unknown> = await res.json().catch(() => ({}))
+
+      if (res.status === 409 && data.code === 'PROFILE_MISMATCH') {
+        const msg = typeof data.error === 'string' ? data.error : t('importWizard.executeFailedHttp')
+        dispatch({ type: 'executeProfileMismatch', error: msg, profileMismatch: (data.profileMismatch ?? null) as ProfileMismatch | null })
+        toast({ title: msg, variant: 'error' })
+        return
+      }
 
       if (res.status === 409 && Array.isArray(data.needsTeams)) {
         const scope = data.scope === 'project' ? 'project' : 'global'
@@ -295,6 +326,34 @@ export function ImportWizard({
 
       {state.step === 'review' && state.detection && profile && (
         <div className="space-y-5">
+          {/* Task 1b — 저장 양식으로 읽으면 열이 밀려 오류 없이 틀린 값이 쓰인다. 감지 결과로 시작하고, 저장 양식은 여기서
+              직접 골라야만 쓴다(서버도 확인 플래그 없이는 409). */}
+          {state.profileMismatch && (
+            <div role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak/40 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-delayed">
+                <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.mismatchTitle')}
+              </p>
+              <p className="mt-1.5 text-xs leading-5 text-ink-muted">
+                {state.profileSource === 'saved' ? t('importWizard.mismatchUsingSaved') : t('importWizard.mismatchUsingDetected')}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-ink-muted">
+                {state.profileMismatch.fields.length > 0 && (
+                  <li>{t('importWizard.mismatchFieldsPrefix')}{state.profileMismatch.fields.map(f => t(MISMATCH_FIELD_LABEL_KEYS[f])).join(', ')}</li>
+                )}
+                {state.profileMismatch.extraTeams.length > 0 && (
+                  <li>{t('importWizard.mismatchExtraTeamsPrefix')}{state.profileMismatch.extraTeams.join(', ')}</li>
+                )}
+                {state.profileMismatch.missingTeams.length > 0 && (
+                  <li>{t('importWizard.mismatchMissingTeamsPrefix')}{state.profileMismatch.missingTeams.join(', ')}</li>
+                )}
+              </ul>
+              {state.profileSource === 'detected' && state.savedProfile && (
+                <button type="button" className="btn btn-ghost mt-3" disabled={state.busy} onClick={chooseSavedProfile}>
+                  {t('importWizard.useSavedProfileButton')}
+                </button>
+              )}
+            </div>
+          )}
           {state.detection.warnings.length > 0 && (
             <div role="alert" className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
