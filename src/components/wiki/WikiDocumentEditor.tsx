@@ -4,13 +4,8 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { BadgeCheck, FilePlus2, Pencil, RotateCcw, Save, X } from 'lucide-react'
-import {
-  createWikiDocument,
-  updateWikiDocument,
-  verifyWikiDocument,
-  WIKI_DOCUMENT_KINDS,
-  type WikiDocumentKind,
-} from '@/app/actions/wiki'
+import { createWikiDocument, updateWikiDocument, verifyWikiDocument } from '@/app/actions/wiki'
+import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, wikiDraftKey } from '@/lib/drafts/wikiDrafts'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'

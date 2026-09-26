@@ -10,7 +10,6 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('next/dynamic', () => ({ default: () => () => null }))
 const { updateWikiDocument } = vi.hoisted(() => ({ updateWikiDocument: vi.fn() }))
 vi.mock('@/app/actions/wiki', () => ({
-  WIKI_DOCUMENT_KINDS: ['overview', 'decision', 'how_to', 'runbook', 'faq', 'glossary', 'reference'],
   createWikiDocument: vi.fn(),
   updateWikiDocument,
   verifyWikiDocument: vi.fn(),

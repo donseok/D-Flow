@@ -6,21 +6,17 @@
 import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
-
-export const WIKI_CURATE_ACTIONS = [
-  'resolve', 'reopen', 'archive', 'restore', 'lock', 'unlock', 'confirm',
-] as const
-export type WikiCurateAction = (typeof WIKI_CURATE_ACTIONS)[number]
+import {
+  WIKI_CURATE_ACTIONS,
+  WIKI_DOCUMENT_KINDS,
+  type WikiCurateAction,
+  type WikiDocumentKind,
+} from '@/lib/domain/wiki'
 
 export interface WikiActionResult {
   ok: boolean
   error?: string
 }
-
-export const WIKI_DOCUMENT_KINDS = [
-  'overview', 'decision', 'how_to', 'runbook', 'faq', 'glossary', 'reference',
-] as const
-export type WikiDocumentKind = (typeof WIKI_DOCUMENT_KINDS)[number]
 
 export interface WikiDocumentActionResult extends WikiActionResult {
   topicId?: string

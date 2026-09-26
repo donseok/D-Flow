@@ -10,7 +10,8 @@ import {
 import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
-import { curateWikiItem, type WikiCurateAction } from '@/app/actions/wiki'
+import { curateWikiItem } from '@/app/actions/wiki'
+import type { WikiCurateAction } from '@/lib/domain/wiki'
 import {
   isArchivedWikiItem,
   isConflictedWikiItem,
