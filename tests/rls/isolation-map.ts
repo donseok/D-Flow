@@ -72,9 +72,11 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   { table: 'minute_favorites', sql: `insert into public.minute_favorites (user_id, minute_id) values ($1, '${F.rows.minute}')` },
   { table: 'announcement_seen', sql: `insert into public.announcement_seen (user_id, project_id) values ($1, '${F.projects.a}')` },
   { table: 'user_wbs_state', sql: `insert into public.user_wbs_state (user_id, project_id) values ($1, '${F.projects.a}')` },
+  // 복사 insert 는 major_seq 를 들고 가서 assign_issue_major_seq 트리거가 RLS 전에 막는다 — seq 없이 넣어 RLS 가 판정하게 한다
+  { table: 'issue_major_processes', sql: `insert into public.issue_major_processes (project_id, mega_code, name) values ('${F.projects.a}', '99', 'RLS 침입')` },
 ]
 
-/** 0005 까지 열려 있던 개방 읽기(D2 예외 제외 39) + audience='global' 알림 */
+/** 0005 까지 열려 있던 개방 읽기 40(D2 예외 제외 39 + audience='global' 알림 notification_events) */
 const READ_LEAKS_0005 = [
   'ai_documents', 'announcements', 'attendance_records', 'change_logs', 'deliverable_attachments', 'holidays',
   'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_updates', 'issues', 'item_owners',

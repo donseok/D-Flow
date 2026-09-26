@@ -2,6 +2,8 @@
 // 표 목록은 카탈로그에서 읽는다(pg_class.relrowsecurity) — 새 표는 isolation-map 에 판별식이 없으면 실패한다.
 // 읽기: A 행의 PK 튜플 집합 ∩ B 세션이 보는 PK 튜플 집합 = ∅. 쓰기: A 행 한 개를 복사 insert·자기 자신으로 update·delete.
 // 쓰기 판정: 오류가 RLS(42501)·트리거 거부면 막힌 것, 23505·23503·23502·23P01·CHECK 위반(제약 이름 있음)이면 RLS 를 통과한 것.
+// 복사 insert 를 트리거가 RLS 보다 먼저 거부한 표는 RLS 가 판정하지 않았으므로 OWN_INSERT_PROBES 로 따로 덮여 있어야 한다.
+// update·delete 는 RLS 가 행을 걸러 내면 0행·무오류다 — 42501 밖의 오류는 행이 정책을 통과했다는 뜻이라 누설로 센다.
 import { DatabaseError, type Pool, type PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { F, asService, asUser, loadFixture, openPool } from './harness'
@@ -57,7 +59,7 @@ async function readKeys(c: PoolClient, t: Tbl): Promise<string[] | null> {
 
 async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRows: Map<string, { keys: string[]; json: unknown }>) {
   const leaks: string[] = []
-  const notes: string[] = []   // RLS 보다 트리거가 먼저 거부한 insert — 보고서용(단언 아님)
+  const triggerBlocked: string[] = []   // 복사 insert 를 RLS 보다 먼저 거부한 표 — OWN_INSERT_PROBES 로 덮여야 한다
   await asUser(pool, userId, async (c) => {
     for (const t of tables) {
       const a = aRows.get(t.name)!
@@ -68,19 +70,18 @@ async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRo
       const ins = await probe(c,
         `insert into public.${q(t.name)} (${cols}) select ${cols} from json_populate_record(null::public.${q(t.name)}, $1::json)`, [a.json])
       if (!ins.err || passedRls(ins.err)) leaks.push(`${t.name}:insert`)
-      else if (ins.err.code !== '42501') notes.push(`${t.name}: ${ins.err.code} ${ins.err.message}`)
+      else if (ins.err.code !== '42501') triggerBlocked.push(t.name)
       const upd = await probe(c, `update public.${q(t.name)} t set ${q(t.pk[0])} = t.${q(t.pk[0])} where ${keyOf(t)} = $1`, [a.keys[0]])
-      if (!upd.err && upd.rowCount > 0) leaks.push(`${t.name}:update`)
+      if (upd.err ? upd.err.code !== '42501' : upd.rowCount > 0) leaks.push(`${t.name}:update`)
       const del = await probe(c, `delete from public.${q(t.name)} t where ${keyOf(t)} = $1`, [a.keys[0]])
-      if (!del.err && del.rowCount > 0) leaks.push(`${t.name}:delete`)
+      if (del.err ? del.err.code !== '42501' : del.rowCount > 0) leaks.push(`${t.name}:delete`)
     }
     for (const p of OWN_INSERT_PROBES) {
       const r = await probe(c, p.sql, [userId])
       if (!r.err || passedRls(r.err)) leaks.push(`${p.table}:insert-own`)
     }
   })
-  if (notes.length) console.info(`[${label}] 트리거가 먼저 거부한 insert:\n  ${notes.join('\n  ')}`)
-  return { label, leaks: leaks.sort() }
+  return { label, leaks: leaks.sort(), triggerBlocked }
 }
 
 describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
@@ -109,7 +110,12 @@ describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
       await scanUser('bea', F.users.bAdmin, tables, aRows),
       await scanUser('ben', F.users.bMember, tables, aRows),
     ]
-    for (const r of results) expect(r.leaks, `${r.label} 의 누설`).toEqual([...KNOWN_LEAKS[r.label]].sort())
+    const probeTables = new Set(OWN_INSERT_PROBES.map((p) => p.table))
+    for (const r of results) {
+      expect(r.leaks, `${r.label} 의 누설`).toEqual([...KNOWN_LEAKS[r.label]].sort())
+      expect(r.triggerBlocked.filter((t) => !probeTables.has(t)), `${r.label}: 트리거가 복사 insert 를 먼저 막았는데 자기 이름 insert 탐침이 없는 표`)
+        .toEqual([])
+    }
   })
 
   it('대조: B 계정은 자기 워크스페이스 프로젝트를 본다 — 위 0행이 세션 흉내 실패가 아니다', async () => {
