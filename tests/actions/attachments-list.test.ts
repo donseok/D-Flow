@@ -10,6 +10,7 @@ vi.mock('@/lib/authz', () => ({ requireProjectMember: vi.fn(), resolveProjectId:
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 
 import { listAttachments } from '@/app/actions/attachments'
+import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 
 const WS = 'aaaaaaaa-1111-4111-8111-111111111111'
 const PID = 'bbbbbbbb-2222-4222-8222-222222222222'
@@ -115,7 +116,7 @@ describe('listAttachments — 결과형과 다운로드 판정', () => {
     const res = await listAttachments(ITEM)
     expect(f.storageFrom).toHaveBeenCalledWith('deliverables')
     expect(f.createSignedUrls).toHaveBeenCalledTimes(1)
-    expect(f.createSignedUrls).toHaveBeenCalledWith([PATH_A, PATH_B], 3600)
+    expect(f.createSignedUrls).toHaveBeenCalledWith([PATH_A, PATH_B], LIST_SIGNED_URL_TTL_SEC)
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.download).toBe('allowed')

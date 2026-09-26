@@ -1,16 +1,18 @@
 import type { ExplorerLeaf, FolderNode, MinuteFolder, TeamCode } from './types'
 import { DEFAULT_TEAM_CODES } from './teams'
 import { isStoragePathFor } from './storagePath'
+import { SIGNED_URL_TTL_SEC } from './signedUrl'
 
 export const MINUTE_TITLE_MAX = 200
 export const MINUTE_BODY_MAX = 100_000          // body_md 실효 한도(자)
 export const MINUTE_BODY_FILE_MAX = 1_048_576   // 원시 .md 파일 안전망(1MB)
 export const MINUTE_ATTACHMENT_MAX = 20_971_520 // 첨부 개당 20MB(버킷 file_size_limit와 일치)
 export const MINUTE_ATTACHMENTS_MAX_COUNT = 10
-/** 회의록 파일 서명 URL 의 유효 시간(초). 발급할 때마다 RLS("minutes bucket read")를 다시 검사한다 — 권한을 회수하면
- *  새 URL 은 즉시 막히지만 이미 발급한 URL 은 이 시간까지 유효하다(회수 창). 보관(archived) 상태는 발급을 막지 않는다 —
- *  보관은 편집 잠금이지 열람 잠금이 아니다. actions/minutes.ts 는 'use server' 라 상수를 여기 둔다. */
-export const MINUTE_FILE_URL_TTL_SEC = 60
+/** 회의록 파일 서명 URL 의 유효 시간(초) — 공용 SIGNED_URL_TTL_SEC 와 같은 값(클릭 때 발급). 발급할 때마다
+ *  RLS("minutes bucket read")를 다시 검사한다 — 권한을 회수하면 새 URL 은 즉시 막히지만 이미 발급한 URL 은 이 시간까지
+ *  유효하다(회수 창). 보관(archived) 상태는 발급을 막지 않는다 — 보관은 편집 잠금이지 열람 잠금이 아니다.
+ *  actions/minutes.ts 는 'use server' 라 상수를 여기 둔다. */
+export const MINUTE_FILE_URL_TTL_SEC = SIGNED_URL_TTL_SEC
 
 /** @deprecated 기본 5팀 폴백 — 런타임 기준은 팀 마스터. 호출처에서 활성 팀 목록을 주입할 것. */
 export const TEAM_CODES: readonly TeamCode[] = DEFAULT_TEAM_CODES

@@ -5,6 +5,7 @@ import { requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { actorTeamIdsFor } from '@/lib/domain/permissions'
 import { isDeliverablePathValid } from '@/lib/domain/deliverables'
+import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { revalidatePath } from 'next/cache'
 import type { DeliverableAttachment } from '@/lib/domain/types'
 
@@ -73,7 +74,7 @@ export async function listAttachments(itemId: string): Promise<AttachmentList> {
   if (download === 'allowed' && rows.length > 0) {
     const { data: signed, error: signErr } = await sb.storage
       .from(BUCKET)
-      .createSignedUrls(rows.map(r => r.file_path as string), 3600)
+      .createSignedUrls(rows.map(r => r.file_path as string), LIST_SIGNED_URL_TTL_SEC)
     if (signErr) {
       console.error('[listAttachments] 서명 URL 일괄 발급 실패:', signErr.message)
       signFailed = true

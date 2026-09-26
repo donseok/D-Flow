@@ -10,6 +10,7 @@ import {
   remainingIssueAttachmentSlots,
   type IssueAttachment,
 } from '@/lib/domain/issueAttachments'
+import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { createServerClient } from '@/lib/supabase/server'
 
 const BUCKET = 'issue-attachments'
@@ -90,7 +91,7 @@ export async function listIssueAttachments(issueId: string): Promise<IssueAttach
     // 빈 파일명이면 true 로 폴백해 Content-Disposition 자체는 붙게 한다(minutes.ts:715 와 같은 처리).
     const { data: signed, error: signErr } = await sb.storage
       .from(BUCKET)
-      .createSignedUrl(filePath, 3600, { download: fileName || true })
+      .createSignedUrl(filePath, LIST_SIGNED_URL_TTL_SEC, { download: fileName || true })
     if (signErr) {
       // 서명 실패를 조용히 null 로 넘기면 화면에서 '링크 없음'으로 위장된다(에러 3원칙 ①).
       console.error('[listIssueAttachments] 서명 URL 생성 실패:', filePath, signErr.message)

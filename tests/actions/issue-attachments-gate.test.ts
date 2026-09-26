@@ -23,6 +23,7 @@ import {
   removeIssueAttachment,
 } from '@/app/actions/issueAttachments'
 import { ISSUE_ATTACHMENT_MAX_BYTES } from '@/lib/domain/issueAttachments'
+import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
@@ -404,6 +405,6 @@ describe('listIssueAttachments', () => {
     })
     state.client = m.client
     await listIssueAttachments(ISSUE)
-    expect(m.createSignedUrl).toHaveBeenCalledWith(`${ISSUE}/1-x.pdf`, 3600, { download: '보고서.pdf' })
+    expect(m.createSignedUrl).toHaveBeenCalledWith(`${ISSUE}/1-x.pdf`, LIST_SIGNED_URL_TTL_SEC, { download: '보고서.pdf' })
   })
 })
