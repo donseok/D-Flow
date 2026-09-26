@@ -121,6 +121,7 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
   SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
+- 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 11곳(`tests/invariants/platform-guards.test.ts`)뿐이다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
 
 ## 에러 처리 3원칙
 
