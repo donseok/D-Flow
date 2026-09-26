@@ -24,7 +24,7 @@ async function api(path, init = {}) {
 }
 const actor = { user_email: AGENT_EMAIL, agent: AGENT_NAME }
 
-const { orders } = await api(`/agent/work?project_id=${AGENT_PROJECT}`)
+const { orders } = await api(`/agent/work?project_id=${AGENT_PROJECT}&user_email=${encodeURIComponent(AGENT_EMAIL)}`)
 if (orders.length === 0) { console.log('ready 작업 없음'); process.exit(0) }
 const order = orders[0]
 console.log(`claim: ${order.item?.code} ${order.item?.name}`)
