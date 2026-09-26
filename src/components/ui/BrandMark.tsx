@@ -1,19 +1,40 @@
 'use client'
 
+import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { BRAND } from '@/lib/branding'
 
 /**
  * 제품 브랜드 마크.
  *
- * - `BrandGlyph` : 제품명 첫 글자 모노그램을 라운드 스퀘어로 렌더 — 헤더·로그인 페이지가 공용.
+ * - `BrandGlyph` : 기본 모노그램 또는 새 flow 벡터 아이콘.
  * - `BrandMark`  : 로고 글리프 + 선택적 워드마크(BRAND.productName) + 선택적 태그라인.
  *
- * 이미지 에셋 대신 BRAND 에서 그려 제품명을 바꾸면 로고도 함께 바뀐다.
+ * 새 아이콘은 /projects 포털에서 먼저 적용하며 BRAND.portalIcon 으로 선택한다.
+ * 다른 화면은 기존 제품명 모노그램을 유지한다.
  */
 
-/** 제품명 모노그램 라운드 스퀘어 마크. 헤더/컴팩트 자리와 로그인 페이지에서 사용. */
-export function BrandGlyph({ size = 40, className = '' }: { size?: number; className?: string }) {
+/** 장식용 브랜드 아이콘. 접근 가능한 제품명은 호출부의 텍스트/링크 레이블이 제공한다. */
+export function BrandGlyph({ size = 40, className = '', variant = 'monogram' }: {
+  size?: number
+  className?: string
+  variant?: 'monogram' | 'flow'
+}) {
+  if (variant === 'flow') {
+    return (
+      <Image
+        src="/brand/dflow-flow.svg"
+        alt=""
+        aria-hidden="true"
+        width={size}
+        height={size}
+        unoptimized
+        className={`inline-block shrink-0 ${className}`}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
   return (
     <span
       className={`relative inline-flex shrink-0 overflow-hidden ${className}`}
@@ -43,11 +64,13 @@ export function BrandMark({
   className?: string
 }) {
   const { t, locale } = useLocale()
-  if (!withWordmark) return <BrandGlyph size={size} className={className} />
+  const pathname = usePathname()
+  const variant = pathname === '/projects' ? BRAND.portalIcon : 'monogram'
+  if (!withWordmark) return <BrandGlyph size={size} className={className} variant={variant} />
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <BrandGlyph size={size} />
+      <BrandGlyph size={size} variant={variant} />
       <span className="leading-tight">
         <span className="block font-bold tracking-tight text-ink" style={{ fontSize: Math.round(size * 0.4) }}>
           {BRAND.productName}

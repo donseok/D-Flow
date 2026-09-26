@@ -5,6 +5,8 @@ const pick = (v: string | undefined, fallback: string) => (v && v.trim() ? v.tri
 
 export const BRAND = {
   productName: pick(process.env.NEXT_PUBLIC_BRAND_NAME, 'D-Flow'),
+  /** 포털 아이콘 선적용. monogram 으로 기존 첫 글자 마크를 선택할 수 있다. */
+  portalIcon: process.env.NEXT_PUBLIC_BRAND_PORTAL_ICON === 'monogram' ? 'monogram' : 'flow',
   /** 한국어 태그라인. env 한 줄은 한 언어뿐이라 en 화면은 i18n `brand.tagline` 을 쓴다(BrandMark). */
   tagline: pick(process.env.NEXT_PUBLIC_BRAND_TAGLINE, '일하는 방식이 바뀌다'),
   /** 비면 로그인 화면에 저작권 줄을 그리지 않는다. */
