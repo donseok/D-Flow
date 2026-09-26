@@ -62,6 +62,7 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.toastWeightMin': 'Weight must be 0 or greater',
   'wbs.toastSaved': 'Saved',
   'wbs.toastConflict': 'Someone else updated this item first',
+  'wbs.toastYourValue': 'Your value',
   'wbs.toastSaveFail': 'Save failed',
   'wbs.toastPhaseAdded': 'Phase added',
   'wbs.toastAddFail': 'Failed to add',

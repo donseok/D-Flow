@@ -65,6 +65,7 @@ export const wbsKo = {
   'wbs.toastWeightMin': '가중치는 0 이상이어야 합니다',
   'wbs.toastSaved': '저장되었습니다',
   'wbs.toastConflict': '다른 사용자가 먼저 수정했습니다',
+  'wbs.toastYourValue': '입력한 값',
   'wbs.toastSaveFail': '저장 실패',
   'wbs.toastPhaseAdded': 'Phase가 추가되었습니다',
   'wbs.toastAddFail': '추가 실패',

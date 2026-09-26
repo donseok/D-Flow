@@ -202,6 +202,7 @@ export function WikiTopicDetail({
   canCurate = false,
   canEditDocuments = canCurate,
   canVerifyDocuments = canEditDocuments,
+  userId = null,
 }: {
   projectId: string
   data: WikiTopicDetailData
@@ -209,6 +210,8 @@ export function WikiTopicDetail({
   canCurate?: boolean
   canEditDocuments?: boolean
   canVerifyDocuments?: boolean
+  /** 편집기 로컬 초안의 주인. 없으면 초안 기능이 꺼진다. */
+  userId?: string | null
 }) {
   const data = rawData as MemoryTopicDetailData
   if (!data.topic) {
@@ -290,6 +293,7 @@ export function WikiTopicDetail({
               key={topic.bodyUpdatedAt ?? 'empty-document'}
               projectId={projectId}
               locale={locale}
+              userId={userId}
               topic={{
                 id: topic.id,
                 title: topic.title,

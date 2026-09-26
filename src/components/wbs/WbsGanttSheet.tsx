@@ -355,6 +355,10 @@ export function WbsGanttSheet({
   const [draft, setDraft] = useState('')
   const [editOriginal, setEditOriginal] = useState('') // 편집 시작 시 값(낙관적 잠금용)
   const [busy, setBusy] = useState(false)
+  const [invalid, setInvalid] = useState(false)
+  // 같은 잘못된 초안을 blur 로 다시 알리지 않기 위한 기억(Enter 는 매번 알린다).
+  const lastRejected = useRef<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
   useBotPageContext({
     domain: 'wbs',
@@ -908,58 +912,62 @@ export function WbsGanttSheet({
     setEdit({ id, field })
     setDraft(current)
     setEditOriginal(original)
+    setInvalid(false)
+    lastRejected.current = null
   }
   const cancel = () => {
     setEdit(null)
     setDraft('')
+    setInvalid(false)
+    lastRejected.current = null
   }
-  const commit = async () => {
+  // 검증은 서버 호출(busy) 전에 한다 — 실패하면 편집기와 초안을 그대로 두고 알린다(입력 보존).
+  // 저장 실패(!ok, 충돌 아님)도 편집기를 유지한다. 충돌은 현행대로 닫고 새로고침한다 — 편집 원본을 몰래 바꾸면
+  // 사용자가 못 본 값을 덮어쓴다(COM-2 계약 소관).
+  const commit = async (via: 'enter' | 'blur') => {
     if (!edit || busy) return
     const { id, field } = edit
+    const reject = (msg: string) => {
+      setInvalid(true)
+      if (via === 'enter' || lastRejected.current !== draft) setToast({ kind: 'err', msg })
+      lastRejected.current = draft
+      if (via === 'enter') inputRef.current?.focus()
+    }
+    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean }>
+    if (field === 'actual') {
+      if (draft.trim() === '') return reject(t('wbs.toastEmpty'))
+      const pct = Number(draft)
+      if (Number.isNaN(pct)) return reject(t('wbs.toastNumbersOnly'))
+      if (pct < 0 || pct > 100) return reject(t('wbs.toastRange'))
+      run = () => updateActual(id, pct, Number(editOriginal))
+    } else {
+      // 입력은 % 기준, 저장·충돌 비교는 1기준 원본(editOriginal). 무변경 커밋은
+      // %↔분수 왕복 반올림값이 재저장되지 않게 서버 호출 없이 닫는다.
+      const origPct = editOriginal.trim() === '' ? '' : String(weightToPct(Number(editOriginal)))
+      if (draft.trim() === origPct) return cancel()
+      const pv = draft.trim() === '' ? null : Number(draft)
+      if (pv != null && (!Number.isFinite(pv) || pv < 0)) return reject(t('wbs.toastWeightMin'))
+      run = () => updateWeight(id, pv == null ? null : pv / 100, editOriginal.trim() === '' ? null : Number(editOriginal))
+    }
+    setInvalid(false)
     setBusy(true)
     try {
-      let res: { ok: boolean; error?: string; conflict?: boolean }
-      if (field === 'actual') {
-        if (draft.trim() === '') {
-          setToast({ kind: 'err', msg: t('wbs.toastEmpty') })
-          return cancel()
-        }
-        const pct = Number(draft)
-        if (Number.isNaN(pct)) {
-          setToast({ kind: 'err', msg: t('wbs.toastNumbersOnly') })
-          return cancel()
-        }
-        if (pct < 0 || pct > 100) {
-          setToast({ kind: 'err', msg: t('wbs.toastRange') })
-          return cancel()
-        }
-        res = await updateActual(id, pct, Number(editOriginal))
-      } else {
-        // 입력은 % 기준, 저장·충돌 비교는 1기준 원본(editOriginal). 무변경 커밋은
-        // %↔분수 왕복 반올림값이 재저장되지 않게 서버 호출 없이 종료.
-        const origPct = editOriginal.trim() === '' ? '' : String(weightToPct(Number(editOriginal)))
-        if (draft.trim() === origPct) return cancel()
-        const pv = draft.trim() === '' ? null : Number(draft)
-        if (pv != null && (!Number.isFinite(pv) || pv < 0)) {
-          setToast({ kind: 'err', msg: t('wbs.toastWeightMin') })
-          return cancel()
-        }
-        res = await updateWeight(id, pv == null ? null : pv / 100, editOriginal.trim() === '' ? null : Number(editOriginal))
-      }
+      const res = await run()
       if (res.ok) {
         setToast({ kind: 'ok', msg: t('wbs.toastSaved') })
         router.refresh()
+        cancel()
       } else if (res.conflict) {
-        // 충돌: 최신 값으로 새로고침하고 안내.
-        setToast({ kind: 'err', msg: res.error ?? t('wbs.toastConflict') })
+        // 충돌: 최신 값으로 새로고침하고 안내. 닫히는 입력은 안내에 남겨 다시 칠 수 있게 한다.
+        setToast({ kind: 'err', msg: `${res.error ?? t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` })
         router.refresh()
+        cancel()
       } else {
         setToast({ kind: 'err', msg: res.error ?? t('wbs.toastSaveFail') })
+        if (via === 'enter') inputRef.current?.focus()
       }
     } finally {
       setBusy(false)
-      setEdit(null)
-      setDraft('')
     }
   }
   async function submitAddPhase() {
@@ -973,15 +981,22 @@ export function WbsGanttSheet({
 
   const editInput = (current: string, field: 'weight' | 'actual') => (
     <input
+      ref={inputRef}
       autoFocus
       type="number"
       value={draft}
-      disabled={busy}
+      // disabled 는 포커스를 빼앗아 저장 실패 뒤 이어 고칠 수 없게 한다 — 읽기 전용으로만 잠근다.
+      readOnly={busy}
+      aria-busy={busy}
+      aria-invalid={invalid || undefined}
       aria-label={field === 'weight' ? t('wbs.ariaEditWeight') : t('wbs.ariaEditActual')}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={commit}
+      onChange={e => {
+        setDraft(e.target.value)
+        setInvalid(false)
+      }}
+      onBlur={() => void commit('blur')}
       onKeyDown={e => {
-        if (e.key === 'Enter') commit()
+        if (e.key === 'Enter') void commit('enter')
         else if (e.key === 'Escape') cancel()
       }}
       placeholder={current}

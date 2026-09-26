@@ -36,6 +36,7 @@ export default async function WikiTopicPage({
         canCurate={isProjectAdmin(membership, projectId)}
         canEditDocuments={canEditDocuments}
         canVerifyDocuments={canEditDocuments}
+        userId={membership?.userId ?? null}
       />
     </ProjectPageShell>
   )

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { BadgeCheck, FilePlus2, Pencil, RotateCcw, Save, X } from 'lucide-react'
 import {
   createWikiDocument,
@@ -11,9 +11,9 @@ import {
   WIKI_DOCUMENT_KINDS,
   type WikiDocumentKind,
 } from '@/app/actions/wiki'
+import { clearLegacyWikiDrafts, wikiDraftKey } from '@/lib/drafts/wikiDrafts'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
-import { Modal } from '@/components/ui/Modal'
 import { formatWikiDate } from './WikiShared'
 import { trackWikiEvent } from './wikiAnalytics'
 
@@ -78,15 +78,13 @@ function documentKind(value: string | null | undefined): WikiDocumentKind {
 }
 
 /**
- * 작성 중 본문 보호. 새 문서는 Modal 안에서 쓰는데 Modal 은 Escape·백드롭 클릭에서
- * 확인 없이 onClose 하고(components/ui/Modal.tsx), Modal 은 앱 전역이 쓰는 파일이라
- * 여기 사정으로 닫기 의미를 바꿀 수 없다. 그래서 "닫기를 막는" 대신 "닫혀도 잃지 않게"
- * 한다 — 초안을 로컬에 남겨 두고 다음에 열 때 되돌려준다. 확인 모달이 없으니 화면도
- * 그만큼 조용하다.
+ * 작성 중 본문 보호. "닫기를 막는" 대신 "닫혀도 잃지 않게" 한다 — 탭 닫기·새로고침·저장
+ * 충돌에서 초안을 로컬에 남겨 두고 다음에 열 때 되돌려준다. 확인 모달이 없으니 화면도
+ * 그만큼 조용하다. (처음 이유였던 새 문서 Modal 버튼은 호출자가 없어 지웠다.)
  *
  * 로컬 저장이라 다른 PC 로는 따라가지 않는다. 서버 draft 는 별도 스펙이다.
+ * 키는 사용자별이다(lib/drafts/wikiDrafts) — 사용자를 모르면(key null) 초안을 읽지도 쓰지도 않는다.
  */
-const DRAFT_PREFIX = 'wiki-draft'
 const DRAFT_DEBOUNCE_MS = 600
 
 interface WikiDraft {
@@ -96,11 +94,8 @@ interface WikiDraft {
   savedAt: string
 }
 
-function draftKey(projectId: string, topicId: string | null): string {
-  return `${DRAFT_PREFIX}:${projectId}:${topicId ?? 'new'}`
-}
-
-function readDraft(key: string): WikiDraft | null {
+function readDraft(key: string | null): WikiDraft | null {
+  if (!key) return null
   try {
     const raw = window.localStorage.getItem(key)
     if (!raw) return null
@@ -118,17 +113,20 @@ function readDraft(key: string): WikiDraft | null {
   }
 }
 
-function writeDraft(key: string, draft: WikiDraft): void {
+function writeDraft(key: string | null, draft: WikiDraft): void {
+  if (!key) return
   try { window.localStorage.setItem(key, JSON.stringify(draft)) } catch { /* 저장 실패는 편집을 막지 않는다 */ }
 }
 
-function clearDraft(key: string): void {
+function clearDraft(key: string | null): void {
+  if (!key) return
   try { window.localStorage.removeItem(key) } catch { /* 위와 같다 */ }
 }
 
 export function WikiDocumentEditor({
   projectId,
   locale,
+  userId,
   topic = null,
   canEdit = false,
   canVerify = false,
@@ -136,6 +134,8 @@ export function WikiDocumentEditor({
 }: {
   projectId: string
   locale: Locale
+  /** 초안 키의 주인. null 이면 초안 기능을 끈다(저장·복구 모두 안 함). */
+  userId: string | null
   topic?: EditableTopic | null
   canEdit?: boolean
   canVerify?: boolean
@@ -165,7 +165,7 @@ export function WikiDocumentEditor({
     ? `/p/${projectId}/wiki/topics/${topic.id}`
     : `/p/${projectId}/wiki`
 
-  const storageKey = draftKey(projectId, topic?.id ?? null)
+  const storageKey = userId ? wikiDraftKey(userId, projectId, topic?.id ?? null) : null
   // 손대지 않은 템플릿은 "쓴 것"이 아니다. 이걸 구분하지 않으면 새 문서를 열자마자
   // 초안이 쌓이고, 유형을 바꿔도 템플릿이 갈리지 않는다.
   const untouchedTemplate = !topic
@@ -173,11 +173,32 @@ export function WikiDocumentEditor({
     && WIKI_DOCUMENT_KINDS.some((value) => bodyMd === TEMPLATE[value][locale])
   const dirty = !untouchedTemplate
     && (title.trim() !== snapshot.title.trim() || bodyMd !== snapshot.bodyMd)
+  // 남은 초안을 사람이 처리(복구·폐기·저장·새로 쓰기)하기 전에는 !dirty 여도 지우지 않는다 — 지우면
+  // 충돌 안내("이어서 쓰기로 되살리세요", wiki.document.conflictHint)가 거짓이 된다.
+  const draftSettled = useRef(true)
+
+  // 사용자 없는 옛 키(wiki-draft:<pid>:<tid>)는 누구 것인지 몰라 복구에 쓸 수 없다 — 보이는 대로 치운다.
+  useEffect(() => {
+    try { clearLegacyWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
+  }, [])
+
+  // 열 때 남아 있는 초안을 찾아 복구 배너로 제시한다. 몰래 덮어쓰지 않는 이유는
+  // 서버 본문이 그 사이 남의 편집으로 바뀌었을 수 있기 때문이다 — 선택은 사람이 한다.
+  // 아래 저장 effect 보다 먼저 선언한다 — 같은 커밋에서 선언 순서대로 돌고, setDraft 는 다음 effect 에
+  // 보이지 않지만 draftSettled(ref)는 바로 보인다.
+  useEffect(() => {
+    if (!editing || !storageKey) { setDraft(null); return }
+    const found = readDraft(storageKey)
+    const pending = found && found.bodyMd !== snapshot.bodyMd ? found : null
+    draftSettled.current = pending === null
+    setDraft(pending)
+  }, [editing, storageKey, snapshot.bodyMd])
 
   // 초안 저장 — 타이핑마다 쓰지 않도록 debounce 한다.
   useEffect(() => {
-    if (!editing) return
-    if (!dirty) { clearDraft(storageKey); return }
+    if (!editing || !storageKey) return
+    if (!dirty) { if (draftSettled.current) clearDraft(storageKey); return }
+    draftSettled.current = true // 새로 쓰기 시작했다 — 이제 이 세션의 입력이 초안의 정본이다
     const timer = window.setTimeout(() => {
       writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
     }, DRAFT_DEBOUNCE_MS)
@@ -186,7 +207,7 @@ export function WikiDocumentEditor({
 
   // 탭을 닫거나 새로고침하는 경우엔 debounce 를 기다릴 수 없다.
   useEffect(() => {
-    if (!editing || !dirty) return
+    if (!editing || !dirty || !storageKey) return
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
       event.preventDefault()
@@ -194,14 +215,6 @@ export function WikiDocumentEditor({
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [editing, dirty, storageKey, title, bodyMd, kind])
-
-  // 열 때 남아 있는 초안을 찾아 복구 배너로 제시한다. 몰래 덮어쓰지 않는 이유는
-  // 서버 본문이 그 사이 남의 편집으로 바뀌었을 수 있기 때문이다 — 선택은 사람이 한다.
-  useEffect(() => {
-    if (!editing) { setDraft(null); return }
-    const found = readDraft(storageKey)
-    setDraft(found && found.bodyMd !== snapshot.bodyMd ? found : null)
-  }, [editing, storageKey, snapshot.bodyMd])
 
   function changeKind(next: WikiDocumentKind) {
     setKind(next)
@@ -221,6 +234,7 @@ export function WikiDocumentEditor({
 
   function restoreDraft() {
     if (!draft) return
+    draftSettled.current = true
     setTitle(draft.title)
     setBodyMd(draft.bodyMd)
     setKind(draft.kind)
@@ -228,12 +242,14 @@ export function WikiDocumentEditor({
   }
 
   function discardDraft() {
+    draftSettled.current = true
     clearDraft(storageKey)
     setDraft(null)
   }
 
   function cancel() {
     // 취소는 명시적 폐기다 — 초안을 남기면 다음에 열 때 방금 버린 내용이 되살아난다.
+    draftSettled.current = true
     clearDraft(storageKey)
     setDraft(null)
     if (!topic) { onDone?.(); return }
@@ -278,6 +294,7 @@ export function WikiDocumentEditor({
       return
     }
 
+    draftSettled.current = true
     clearDraft(storageKey)
     setDraft(null)
     trackWikiEvent(topic ? 'wiki_document_saved' : 'wiki_document_created', path, { document_kind: kind })
@@ -429,20 +446,5 @@ export function WikiDocumentEditor({
         </div>
       )}
     </div>
-  )
-}
-
-export function WikiCreateDocumentButton({ projectId, locale }: { projectId: string; locale: Locale }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} className="btn btn-primary">
-        <FilePlus2 className="h-4 w-4" aria-hidden />
-        {t(locale, 'wiki.document.create')}
-      </button>
-      <Modal open={open} onClose={() => setOpen(false)} title={t(locale, 'wiki.document.create')} size="lg">
-        <WikiDocumentEditor projectId={projectId} locale={locale} canEdit onDone={() => setOpen(false)} />
-      </Modal>
-    </>
   )
 }
