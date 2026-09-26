@@ -122,6 +122,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.version.previous': 'Previous versions',
   'min.version.total': '{n} total',
   'min.version.download': 'Source file',
+  'min.version.downloadAria': 'Download original file',
   'min.version.noFile': 'This version was created from text without an uploaded source file.',
   'min.version.viewing': 'Viewing',
   'min.version.viewingBanner': 'Viewing source version v{n}. Historical source is read-only.',

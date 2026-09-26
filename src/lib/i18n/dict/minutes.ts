@@ -122,6 +122,7 @@ export const minutesKo = {
   'min.version.previous': '이전 버전',
   'min.version.total': '총 {n}개',
   'min.version.download': '원본 파일',
+  'min.version.downloadAria': '원본 파일 받기',
   'min.version.noFile': '업로드된 원본 파일 없이 본문으로 생성된 버전입니다.',
   'min.version.viewing': '열람 중',
   'min.version.viewingBanner': '이전 원본 v{n}을 열람 중입니다. 이 화면에서는 원문을 변경하지 않습니다.',

@@ -67,8 +67,9 @@ vi.mock('@/lib/teams/master', () => {
 })
 
 import {
-  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, moveMinuteFolder,
-  moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight, updateMinuteMeta,
+  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, getMinuteVersionFileUrl,
+  moveMinuteFolder, moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight,
+  updateMinuteMeta,
 } from '@/app/actions/minutes'
 import { makeActor } from '../fixtures/actor'
 import type { Actor, ProjectRole } from '@/lib/domain/authz'
@@ -94,19 +95,43 @@ const soloA = makeActor({
 })
 
 type TableResult = { data?: unknown; error: { message: string } | null }
-/** 테이블별 결과를 주입하는 thenable 가짜 빌더 — 같은 표의 조회는 모두 같은 결과. 호출을 기록한다. */
-function fakeClient(results: Record<string, TableResult>) {
+type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult }
+type StorageCall = { bucket: string; op: 'createSignedUrl' | 'remove'; args: unknown[] }
+/** 테이블별 결과를 주입하는 thenable 가짜 빌더 — 결과가 배열이면 같은 표를 부를 때마다 순서대로 꺼내고 마지막 값을
+ *  유지한다(단일 결과는 모든 조회가 같은 결과). storage 는 createSignedUrl·remove 를 storageCalls 에 기록하고 주입한
+ *  결과를 돌려준다. 호출을 기록한다. */
+function fakeClient(results: Record<string, TableResult | TableResult[]>, storage: StorageResults = {}) {
   const calls: Record<string, string[]> = {}
+  const served: Record<string, number> = {}
+  const next = (table: string): TableResult => {
+    const r = results[table]
+    if (!Array.isArray(r)) return r ?? { data: [], error: null }
+    const i = Math.min(served[table] ?? 0, r.length - 1)
+    served[table] = i + 1
+    return r[i]
+  }
   const from = vi.fn((table: string) => {
     const log = (calls[table] ??= [])
+    const result = next(table)
     const b: Record<string, unknown> = {}
     for (const m of ['select', 'insert', 'update', 'delete', 'eq', 'in', 'is', 'order', 'maybeSingle', 'single']) {
       b[m] = vi.fn(() => { log.push(m); return b })
     }
-    ;(b as { then: (r: (v: TableResult) => void) => void }).then = resolve => resolve(results[table] ?? { data: [], error: null })
+    ;(b as { then: (r: (v: TableResult) => void) => void }).then = resolve => resolve(result)
     return b
   })
-  return { client: { from }, calls }
+  const storageCalls: StorageCall[] = []
+  const bucketOf = (bucket: string) => ({
+    createSignedUrl: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ bucket, op: 'createSignedUrl', args })
+      return storage.createSignedUrl ?? { data: { signedUrl: 'https://signed.example.com/x' }, error: null }
+    }),
+    remove: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ bucket, op: 'remove', args })
+      return storage.remove ?? { data: [], error: null }
+    }),
+  })
+  return { client: { from, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls }
 }
 /** WA 의 무프로젝트 회의록 — 작성자는 u1(각 액터의 userId). */
 const minuteRow = (over: Record<string, unknown> = {}) => ({
@@ -122,10 +147,10 @@ const FOLDERS = [
   { id: 'wb-erp', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: WB },
   { id: 'wb-sub', name: '물류', parent_id: 'wb-erp', sort: 0, created_by: 'u1', project_id: null, workspace_id: WB },
 ]
-const seedDb = (results: Record<string, TableResult> = {}) => {
+const seedDb = (results: Record<string, TableResult | TableResult[]> = {}, storage: StorageResults = {}) => {
   const db = fakeClient({
     minutes: { data: minuteRow(), error: null }, minute_folders: { data: FOLDERS, error: null }, ...results,
-  })
+  }, storage)
   createServerClient.mockResolvedValue(db.client)
   return db
 }
@@ -384,5 +409,105 @@ describe('조회 실패를 없음으로 위장하지 않는다(3원칙 ①) — 
     expect(mocks.ensureMinuteInsights).not.toHaveBeenCalled()
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
+  })
+})
+
+describe('회의록 파일 서명 URL — 60초, 버전 원본은 클릭 때 발급(P8-H1-4)', () => {
+  const FILE_DOWN = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+  const NO_SOURCE = '원본 파일이 없습니다.'
+
+  it('getMinuteFileUrl: 첨부를 60초 TTL·원본 파일명 download 로 서명한다', async () => {
+    const db = seedDb({ minute_files: { data: { file_path: `${M}/a.pdf`, file_name: 'a.pdf' }, error: null } })
+    expect(await getMinuteFileUrl('file-1')).toEqual({ ok: true, url: 'https://signed.example.com/x' })
+    expect(db.storageCalls).toEqual([
+      { bucket: 'minutes', op: 'createSignedUrl', args: [`${M}/a.pdf`, 60, { download: 'a.pdf' }] },
+    ])
+  })
+
+  it('getMinuteVersionFileUrl: 그 회의록의 버전 행 file_path·file_name 으로 같은 TTL·download 서명', async () => {
+    const db = seedDb({ minute_versions: { data: { file_path: `${M}/v1.md`, file_name: '회의록.md' }, error: null } })
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: true, url: 'https://signed.example.com/x' })
+    // minute_id·id 두 조건으로 한 행만 읽는다 — 다른 회의록의 버전 id 를 넘겨도 그 회의록 밖을 서명하지 않는다.
+    expect(db.calls.minute_versions).toEqual(['select', 'eq', 'eq', 'maybeSingle'])
+    expect(db.storageCalls).toEqual([
+      { bucket: 'minutes', op: 'createSignedUrl', args: [`${M}/v1.md`, 60, { download: '회의록.md' }] },
+    ])
+  })
+
+  it('getMinuteVersionFileUrl: file_path 가 없거나 행이 없으면 원본 없음 — 서명 미호출', async () => {
+    let db = seedDb({ minute_versions: { data: { file_path: null, file_name: null }, error: null } })
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: NO_SOURCE })
+    expect(db.storageCalls).toEqual([])
+    db = seedDb({ minute_versions: { data: null, error: null } })
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: NO_SOURCE })
+    expect(db.storageCalls).toEqual([])
+  })
+
+  it('getMinuteVersionFileUrl: 조회 실패는 원본 없음이 아니라 조회 실패(로그) — 서명 미호출', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb({ minute_versions: { data: null, error: { message: 'db down' } } })
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: FILE_DOWN })
+    expect(db.storageCalls).toEqual([])
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('getMinuteVersionFileUrl: 서명 실패는 URL 발급 실패(로그), 비로그인은 조회 전에 거절', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb(
+      { minute_versions: { data: { file_path: `${M}/v1.md`, file_name: '회의록.md' }, error: null } },
+      { createSignedUrl: { data: null, error: { message: 'Object not found' } } },
+    )
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: 'URL 발급 실패' })
+    expect(spy).toHaveBeenCalled()
+    getSession.mockResolvedValue(null)
+    const db = seedDb()
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: '로그인 필요' })
+    expect(db.calls.minute_versions).toBeUndefined()
+    spy.mockRestore()
+  })
+})
+
+describe('removeMinuteFile — Storage 객체가 실제로 지워졌을 때만 행을 지운다(P8-H1-1 최소)', () => {
+  const PATH = `${M}/첨부.pdf`
+  const FILE_ROW = { id: 'file-1', minute_id: M, role: 'attachment', file_path: PATH }
+  const RM_FAILED = '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.'
+  const ROW_FAILED = '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.'
+
+  it.each([
+    ['RLS 에 막혀 빈 배열(오류 없음)', { data: [], error: null }],
+    ['Storage 오류', { data: null, error: { message: 'storage down' } }],
+  ])('remove 가 1건이 아니면(%s) 실패로 답하고 행을 남긴다', async (_name, removed) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb({ minute_files: { data: FILE_ROW, error: null } }, { remove: removed })
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: RM_FAILED })
+    expect(db.storageCalls).toEqual([{ bucket: 'minutes', op: 'remove', args: [[PATH]] }])
+    expect(db.calls.minute_files).not.toContain('delete')
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('객체는 지웠는데 행 삭제가 0건이면 기록 삭제 실패로 답한다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = seedDb(
+      { minute_files: [{ data: FILE_ROW, error: null }, { data: [], error: null }] },
+      { remove: { data: [{ name: PATH }], error: null } },
+    )
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: ROW_FAILED })
+    expect(db.calls.minute_files).toContain('delete')
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('객체 1건·행 1건이 지워져야 성공', async () => {
+    const db = seedDb(
+      { minute_files: [{ data: FILE_ROW, error: null }, { data: [{ id: 'file-1' }], error: null }] },
+      { remove: { data: [{ name: PATH }], error: null } },
+    )
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
+    expect(db.calls.minute_files).toContain('delete')
   })
 })

@@ -13,7 +13,7 @@ import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
   isTeamRootName, isTeamRootFolder, teamSubOfFolder, normalizeFolderName,
-  MINUTES_PROJECT_BULK_MAX,
+  MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC,
   type MinuteInput,
 } from '@/lib/domain/minutes'
 import { resolveFolderDrop, type MinuteDropReject } from '@/lib/domain/minutes-drop'
@@ -802,11 +802,19 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   if ((f.role as string) === 'body') return { ok: false, error: '본문 파일은 교체로만 변경할 수 있습니다.' }
   const own = await checkOwner(sb, f.minute_id as string, g.actor)
   if (!own.ok) return { ok: false, error: own.error }
-  // Storage 삭제 실패는 고아 파일만 남기므로 로그 후 진행(메타 행 삭제는 계속한다).
-  const { error: rmErr } = await sb.storage.from(BUCKET).remove([f.file_path as string])
-  if (rmErr) console.error('[removeMinuteFile] Storage 삭제 실패(고아 파일 잔존):', rmErr.message)
-  const { error } = await sb.from('minute_files').delete().eq('id', fileId)
+  // remove 는 RLS 가 막아도 오류 없이 빈 배열을 돌려준다 — 0건을 성공으로 읽고 행을 지우면 고아 객체가 남는다(P8-H1-1).
+  // 권한 불일치(버킷 삭제 = 소유자·ws 관리자, 행 삭제 = can_manage_minute)의 근본 수정은 H2-g 다. 여기서는 실패를 드러낸다.
+  const { data: removed, error: rmErr } = await sb.storage.from(BUCKET).remove([f.file_path as string])
+  if (rmErr || (removed ?? []).length !== 1) {
+    console.error('[removeMinuteFile] Storage 삭제 실패 — 행을 남긴다:', rmErr?.message ?? `${(removed ?? []).length}건 삭제`)
+    return { ok: false, error: '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.' }
+  }
+  const { data: gone, error } = await sb.from('minute_files').delete().eq('id', fileId).select('id')
   if (error) return { ok: false, error: error.message }
+  if ((gone ?? []).length === 0) {
+    console.error('[removeMinuteFile] 행 삭제 0건(객체는 지워짐):', fileId)
+    return { ok: false, error: '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.' }
+  }
   revalidatePath(`/minutes/${f.minute_id as string}`)
   return { ok: true }
 }
@@ -849,7 +857,7 @@ export async function fetchMinuteDetail(id: string) {
   return getMinuteDetail(id)
 }
 
-/** 다운로드 클릭 시 서명 URL 발급(3600초). */
+/** 다운로드 클릭 시 서명 URL 발급(MINUTE_FILE_URL_TTL_SEC — 발급 때 RLS 재검사, 회수 창 = TTL). */
 export async function getMinuteFileUrl(fileId: string): Promise<{ ok: boolean; url?: string; error?: string }> {
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
@@ -864,8 +872,31 @@ export async function getMinuteFileUrl(fileId: string): Promise<{ ok: boolean; u
   // download 지정 → Content-Disposition: attachment. 인라인 렌더 시 charset 미지정으로
   // 한글이 깨져 보이는 문제를 피하고, 원본 파일명으로 바로 내려받게 한다.
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
-    .createSignedUrl(f.file_path as string, 3600, { download: (f.file_name as string) || true })
+    .createSignedUrl(f.file_path as string, MINUTE_FILE_URL_TTL_SEC, { download: (f.file_name as string) || true })
   if (signErr) console.error('[getMinuteFileUrl] 서명 URL 발급 실패:', signErr.message)
+  if (!signed?.signedUrl) return { ok: false, error: 'URL 발급 실패' }
+  return { ok: true, url: signed.signedUrl }
+}
+
+/** 버전 원본 클릭 시 서명 URL 발급 — getMinuteFileUrl 과 같은 TTL·download 이름. 버전 목록은 서명하지 않는다(P8-H1-4).
+ *  minute_id·id 두 조건으로 읽어 그 회의록의 버전만 서명한다. 열람 권한은 세션 클라이언트의 RLS 가 판정한다. */
+export async function getMinuteVersionFileUrl(
+  minuteId: string, versionId: string,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const user = await getSession()
+  if (!user) return { ok: false, error: '로그인 필요' }
+  const sb = await createServerClient()
+  const { data: v, error: vErr } = await sb.from('minute_versions')
+    .select('file_path, file_name').eq('minute_id', minuteId).eq('id', versionId).maybeSingle()
+  // 조회 실패를 '원본 없음'으로 위장하지 않는다(3원칙 ①).
+  if (vErr) {
+    console.error('[getMinuteVersionFileUrl] 버전 조회 실패:', vErr.message)
+    return { ok: false, error: FILE_LOOKUP_FAILED_MSG }
+  }
+  if (!v?.file_path) return { ok: false, error: '원본 파일이 없습니다.' }
+  const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
+    .createSignedUrl(v.file_path as string, MINUTE_FILE_URL_TTL_SEC, { download: (v.file_name as string | null) || true })
+  if (signErr) console.error('[getMinuteVersionFileUrl] 서명 URL 발급 실패:', signErr.message)
   if (!signed?.signedUrl) return { ok: false, error: 'URL 발급 실패' }
   return { ok: true, url: signed.signedUrl }
 }

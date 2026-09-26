@@ -258,7 +258,7 @@ export const getMinuteAnnotations = cache(async (
   }
 })
 
-/** 불변 원본 버전 목록. 파일이 있으면 한 시간 유효한 다운로드 URL을 함께 발급한다. */
+/** 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC). */
 export const getMinuteVersions = cache(async (
   id: string,
 ): Promise<MinuteVersionListItem[]> => {
@@ -272,29 +272,16 @@ export const getMinuteVersions = cache(async (
     console.error('[getMinuteVersions] 조회 실패:', error.message)
     return []
   }
-  return await Promise.all(((data ?? []) as Row[]).map(async row => {
-    const filePath = (row.file_path as string | null) ?? null
-    let downloadHref: string | null = null
-    if (filePath) {
-      const { data: signed, error: signedError } = await sb.storage.from('minutes').createSignedUrl(
-        filePath,
-        3600,
-        { download: ((row.file_name as string | null) ?? true) as string | true },
-      )
-      if (signedError) console.error('[getMinuteVersions] 서명 URL 발급 실패:', signedError.message)
-      downloadHref = signed?.signedUrl ?? null
-    }
-    return {
-      id: row.id as string,
-      versionNo: row.version_no as number,
-      title: (row.title as string | null) ?? null,
-      minuteDate: (row.minute_date as string | null) ?? null,
-      createdAt: row.created_at as string,
-      createdByName: (row.created_by_name as string | null) ?? null,
-      fileName: (row.file_name as string | null) ?? null,
-      downloadHref,
-      viewHref: `/minutes/${id}?version=${encodeURIComponent(row.id as string)}`,
-    }
+  return ((data ?? []) as Row[]).map(row => ({
+    id: row.id as string,
+    versionNo: row.version_no as number,
+    title: (row.title as string | null) ?? null,
+    minuteDate: (row.minute_date as string | null) ?? null,
+    createdAt: row.created_at as string,
+    createdByName: (row.created_by_name as string | null) ?? null,
+    fileName: (row.file_name as string | null) ?? null,
+    hasFile: Boolean(row.file_path),
+    viewHref: `/minutes/${id}?version=${encodeURIComponent(row.id as string)}`,
   }))
 })
 

@@ -14,7 +14,7 @@ import {
 } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import {
-  getMinuteFileUrl, replaceMinuteBody, deleteMinute, toggleMinuteHighlight,
+  getMinuteFileUrl, getMinuteVersionFileUrl, replaceMinuteBody, deleteMinute, toggleMinuteHighlight,
 } from '@/app/actions/minutes'
 import {
   createIssueFromMinuteBlock, fetchIssueProjectMembers, prepareMinuteIssueDraft,
@@ -806,6 +806,7 @@ export function MinuteViewer({
                 versions={versions}
                 currentVersionNo={versions[0]?.versionNo ?? null}
                 embedded
+                onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
               />
               <MinuteWikiImpactCard {...wikiImpact} embedded />
             </>
@@ -819,6 +820,7 @@ export function MinuteViewer({
           versions={versions}
           currentVersionNo={versions[0]?.versionNo ?? null}
           selectedVersionNo={historicalVersion?.versionNo ?? null}
+          onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
         />
       )}
 

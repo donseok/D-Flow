@@ -14,7 +14,8 @@ export type MinuteVersionListItem = {
   createdAt: string
   createdByName?: string | null
   fileName?: string | null
-  downloadHref?: string | null
+  /** 업로드된 원본 파일이 있다. URL 은 목록에 싣지 않는다 — 누를 때 onDownload 로 발급한다(서명 TTL 이 짧다). */
+  hasFile?: boolean
   viewHref?: string | null
 }
 
@@ -23,6 +24,8 @@ export type MinuteVersionPanelProps = {
   currentVersionNo?: number | null
   selectedVersionNo?: number | null
   embedded?: boolean
+  /** 원본 파일 서명 URL 발급(getMinuteVersionFileUrl). 없으면 받기 버튼을 두지 않는다. */
+  onDownload?: (versionId: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>
 }
 
 function versionDate(value: string, locale: 'ko' | 'en') {
@@ -42,8 +45,12 @@ export function MinuteVersionPanel({
   currentVersionNo,
   selectedVersionNo,
   embedded = false,
+  onDownload,
 }: MinuteVersionPanelProps) {
   const { locale, t } = useLocale()
+  // 발급 중에는 받기 버튼을 모두 잠근다 — 한 번의 클릭에 URL 하나. 실패 사유는 그 버전 항목 아래에 둔다.
+  const [downloading, setDownloading] = useState(false)
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({})
   // 독립 카드(과거 버전 열람 화면)에서만 접는다 — embedded 는 핵심 요약 카드의 접힘 영역
   // 안이라 이중 접기가 되고, 그 화면은 이미 기본 접힘이다.
   // 기본값을 접힘으로 두는 이유: 이 카드가 화면 위쪽을 다 먹어 정작 회의록 본문이 밀려났다.
@@ -58,6 +65,26 @@ export function MinuteVersionPanel({
     : []
 
   if (!current) return null
+
+  async function download(versionId: string) {
+    if (!onDownload || downloading) return
+    setDownloading(true)
+    setDownloadErrors(prev => {
+      const next = { ...prev }
+      delete next[versionId]
+      return next
+    })
+    let error: string | null = null
+    try {
+      const res = await onDownload(versionId)
+      if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
+      else error = res.error
+    } catch {
+      error = t('min.err.download')
+    }
+    setDownloading(false)
+    if (error) setDownloadErrors(prev => ({ ...prev, [versionId]: error }))
+  }
 
   const renderVersion = (version: MinuteVersionListItem, isCurrent: boolean) => {
     const isSelected = selectedVersionNo === version.versionNo
@@ -95,21 +122,25 @@ export function MinuteVersionPanel({
         {version.createdByName && (
           <span className="text-xs text-ink-muted">{version.createdByName}</span>
         )}
-        {version.downloadHref && (
-          <a
-            href={version.downloadHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto inline-flex max-w-full items-center gap-1 text-xs text-brand hover:text-brand-hover"
+        {version.hasFile && onDownload && (
+          <button
+            type="button"
+            onClick={() => download(version.id)}
+            disabled={downloading}
+            aria-label={`${t('min.version.downloadAria')}: ${version.fileName || t('min.version.download')}`}
+            className="ml-auto inline-flex max-w-full items-center gap-1 text-xs text-brand hover:text-brand-hover disabled:opacity-60"
           >
             <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="max-w-48 truncate">
               {version.fileName || t('min.version.download')}
             </span>
-          </a>
+          </button>
         )}
       </div>
-      {!version.downloadHref && (
+      {downloadErrors[version.id] && (
+        <p role="alert" className="mt-1 text-xs text-delayed">{downloadErrors[version.id]}</p>
+      )}
+      {!version.hasFile && (
         <p className="mt-1 text-xs text-ink-subtle">{t('min.version.noFile')}</p>
       )}
     </li>
