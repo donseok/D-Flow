@@ -122,7 +122,7 @@ export const SP1_TEAMS = Object.freeze({ A: Object.freeze(['ERP', 'MES']), B: Ob
 /** 초대받는 사람 — 예시 도메인(INVITE_ALLOWED_DOMAINS=example.com 이어야 발급된다). */
 export const INVITEE = Object.freeze({ email: 'carol@example.com', name: 'carol' })
 
-/** 존재 은닉 대조용 타 워크스페이스(워크스페이스 생성 화면·액션은 SP2 — 그전까지는 service_role 픽스처). */
+/** 존재 은닉 대조용 타 워크스페이스 = SP2 흐름의 워크스페이스 B(워크스페이스 생성 화면은 SP3 — 그전까지는 service_role 픽스처). */
 export const OTHER_WORKSPACE = Object.freeze({ slug: 'e2e-other', name: 'E2E 타 워크스페이스' })
 
 /** @param {unknown} v @param {string} at */
@@ -318,9 +318,12 @@ export function meetingInput({ date, attendeeIds }) {
   }
 }
 
-/** createProjectInvite 입력 — carol 멤버, 팀은 받은 순서(첫 팀이 대표 후보). @param {string[]} teamIds */
-export function inviteInput(teamIds) {
-  return { email: INVITEE.email, accessRole: 'member', teamIds: [...teamIds] }
+/**
+ * createProjectInvite 입력 — 멤버, 팀은 받은 순서(첫 팀이 대표 후보, 빈 배열 = 팀 없음). 받는 사람은 기본 carol.
+ * @param {string[]} teamIds @param {string} [email]
+ */
+export function inviteInput(teamIds, email = INVITEE.email) {
+  return { email, accessRole: 'member', teamIds: [...teamIds] }
 }
 
 /** redeemInviteWithSignup 입력 — 이메일은 싣지 않는다(서버가 초대 행의 이메일로만 계정을 만든다). @param {string} name @param {string} password */
@@ -398,4 +401,92 @@ export function redactInviteTokens(text) {
  */
 export function notFoundRendered(html) {
   return String(html).includes('NEXT_HTTP_ERROR_FALLBACK;404')
+}
+
+// ── SP2 흐름(2-워크스페이스 격리) ─────────────────────────────────────────────────────────────────
+// 워크스페이스 A = 부트스트랩 워크스페이스, 워크스페이스 B = OTHER_WORKSPACE(생성 화면은 SP3 라 행만 service_role 로 만든다).
+
+/**
+ * 워크스페이스 A 의 관리자 — 플랫폼 관리자가 아니다. 부트스트랩 계정은 플랫폼 관리자라 모든 가드가 워크스페이스와 무관하게
+ * 통과하고 외부 API 도 전 워크스페이스를 본다 — 그 계정으로 재면 워크스페이스 경계 시험이 비어 버린다.
+ */
+export const A_ADMIN = Object.freeze({ email: 'e2e-ana@example.com', name: 'ana' })
+/** 워크스페이스 B 의 관리자(플랫폼 관리자 아님). 비밀번호는 env E2E_B_PASSWORD(러너가 출력하지 않는다). */
+export const B_ADMIN = Object.freeze({ email: 'e2e-bea@example.com', name: 'bea' })
+/** A 관리자가 새 프로젝트(E2E A2)에 멤버로 초대하는 외부 이메일 — 합류 뒤 워크스페이스 소속은 A 하나여야 한다. */
+export const OUTSIDER = Object.freeze({ email: 'e2e-outsider@example.com', name: 'outsider' })
+/** 워크스페이스 A 의 공용 팀 — 프로젝트 없는 회의록의 담당(프로젝트 팀은 그 프로젝트의 회의록에만 쓸 수 있다). */
+export const WS_TEAM = 'OPS'
+
+/**
+ * createAccount 입력 — 그 워크스페이스의 관리자로, 프로젝트 권한 없이(명단 행 없음). 서버 액션 인자라 undefined 를 싣지 않는다.
+ * @param {{ workspaceId: string, email: string, name: string, password: string }} p
+ */
+export function workspaceAdminAccountInput({ workspaceId, email, name, password }) {
+  return { workspaceId, email, password, name, workspaceRole: 'admin', projectId: null, accessRole: null }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * 회의록 본문 파일의 Storage 키 — src/lib/domain/storagePath.ts makeStoragePath(entity 'minutes')와 같은 규약·같은 거부
+ * (드리프트는 tests/scripts/e2e.test.ts 가 앱 함수와 대조). 프로젝트가 없으면 세그먼트는 '_'.
+ * @param {{ workspaceId: string, projectId: string | null, minuteId: string, fileName: string }} p
+ */
+export function minuteBodyPath({ workspaceId, projectId, minuteId, fileName }) {
+  const nameOk = typeof fileName === 'string' && fileName.length > 0 && fileName.length <= 200 && !fileName.includes('/')
+    && fileName !== '.' && fileName !== '..' && !/[\s\p{Cc}]/u.test(fileName.replace(/ /g, ''))
+  if (!UUID_RE.test(workspaceId) || (projectId !== null && !UUID_RE.test(projectId)) || !UUID_RE.test(minuteId) || !nameOk) {
+    throw new Error('저장 경로 입력이 올바르지 않습니다.')
+  }
+  return `ws/${workspaceId}/p/${projectId ?? '_'}/minutes/${minuteId}/${fileName}`
+}
+
+/**
+ * Storage 객체 이름이 그 워크스페이스의 규약 경로(ws/<wid>/p/<pid|_>/<entity>/<id>/<file>, 7 세그먼트)인가.
+ * 접두만 보지 않는다 — 'ws/<wid>/p/../..' 같은 이름은 규약 경로가 아니다(스토리지 RLS 의 storage_ws 와 같은 모양 판정).
+ * @param {string} name @param {string} workspaceId
+ */
+export function inWorkspaceStorage(name, workspaceId) {
+  const s = String(name ?? '').split('/')
+  if (s.length !== 7 || s[0] !== 'ws' || s[2] !== 'p') return false
+  const [, ws, , pid, entity, id, file] = s
+  return ws.toLowerCase() === String(workspaceId).toLowerCase() && (pid === '_' || UUID_RE.test(pid))
+    && ['minutes', 'minute-files', 'deliverables', 'issue-attachments'].includes(entity) && UUID_RE.test(id)
+    && file.length > 0 && file.length <= 200
+}
+
+/**
+ * createMinute 입력(MinuteInput) — 회의 미연결, 프로젝트 지정(projectId) 또는 미지정(null).
+ * @param {{ date: string, teamCode: string, title: string, bodyMd: string, projectId: string | null }} p
+ */
+export function minuteInput({ date, teamCode, title, bodyMd, projectId }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`회의록 날짜 형식이 아니다: ${date}`)
+  return { minuteDate: date, teamCode, title, bodyMd, meetingId: null, projectId, meetingOccurrenceDate: null }
+}
+
+/**
+ * createMinute 의 셋째 인자(MinuteCreateSource) — 화면(MinuteUploadModal)처럼 선발급한 회의록 id 와 이미 올린 본문 파일 메타.
+ * @param {{ minuteId: string, fileName: string, filePath: string, size: number }} p
+ */
+export function minuteSource({ minuteId, fileName, filePath, size }) {
+  return { minuteId, file: { fileName, filePath, size, mime: 'text/markdown' } }
+}
+
+/**
+ * 보여선 안 되는 것 중 보인 것 — 교차 워크스페이스 누설 판정(순서는 seen 첫 등장 순, 중복 제거).
+ * @param {Iterable<string>} seen @param {Iterable<string>} forbidden
+ */
+export function leakedIds(seen, forbidden) {
+  const f = new Set(forbidden)
+  return [...new Set(seen)].filter((x) => f.has(x))
+}
+
+/**
+ * HTML(SSR·RSC 페이로드)에 들어 있는 문구 — 없어야 할 이름·제목이 실렸는지 본다(pageProblems 의 missing 의 반대).
+ * @param {string} html @param {readonly string[]} texts
+ */
+export function presentTexts(html, texts) {
+  const text = String(html)
+  return texts.filter((t) => text.includes(t))
 }

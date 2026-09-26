@@ -6,7 +6,12 @@ import {
   e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
   localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   ERR_DENIED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
+  A_ADMIN, B_ADMIN, OUTSIDER, WS_TEAM, OTHER_WORKSPACE, inWorkspaceStorage, leakedIds, minuteBodyPath, minuteInput, minuteSource,
+  presentTexts, workspaceAdminAccountInput,
 } from '../../scripts/lib/e2e.mjs'
+import { makeStoragePath, parseStoragePath } from '@/lib/domain/storagePath'
+import { isMinuteFilePathValid, validateMinuteFields } from '@/lib/domain/minutes'
+import { isValidEmail } from '@/lib/domain/validate'
 import { ERR_DENIED as APP_ERR_DENIED } from '@/lib/authz/errors'
 import { FORBIDDEN_REFS } from '../../scripts/lib/targets.mjs'
 import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
@@ -252,6 +257,9 @@ describe('meetingInput·inviteInput·signupInput — 앱 검증 규칙과 드리
     expect(inviteInput(['erp'])).toEqual({ email: INVITEE.email, accessRole: 'member', teamIds: ['erp'] })
     expect(INVITEE.email.endsWith('@example.com')).toBe(true)
   })
+  it('초대: 받는 사람을 바꿀 수 있고 팀 없음(빈 배열)도 그대로 싣는다', () => {
+    expect(inviteInput([], OUTSIDER.email)).toEqual({ email: OUTSIDER.email, accessRole: 'member', teamIds: [] })
+  })
   it('가입: 이름·비밀번호·확인이 앱 가입 검증을 통과한다', () => {
     const s = signupInput(INVITEE.name, 'Carol-E2E-9f3a')
     expect(s).toEqual({ name: 'carol', password: 'Carol-E2E-9f3a', passwordConfirmation: 'Carol-E2E-9f3a' })
@@ -339,5 +347,126 @@ describe('notFoundRendered — 스트리밍 뒤 notFound() 판정', () => {
   })
   it('403·다른 폴백은 404 가 아니다', () => {
     expect(notFoundRendered('NEXT_HTTP_ERROR_FALLBACK;403')).toBe(false)
+  })
+})
+
+// ── SP2 흐름(2-워크스페이스 격리)의 입력 조립·경로 판정 ─────────────────────────────────────────────
+
+describe('SP2 계정·팀 픽스처', () => {
+  it('세 계정은 서로 다르고 carol 과도 다르며, 예시 도메인(INVITE_ALLOWED_DOMAINS=example.com)의 올바른 이메일이다', () => {
+    const emails = [A_ADMIN.email, B_ADMIN.email, OUTSIDER.email, INVITEE.email]
+    expect(new Set(emails).size).toBe(emails.length)
+    for (const e of emails) {
+      expect(isValidEmail(e)).toBe(true)
+      expect(e.endsWith('@example.com')).toBe(true)
+    }
+  })
+  it('워크스페이스 공용 팀은 새 팀 코드 규칙을 통과하고 프로젝트 팀과 겹치지 않는다(담당 판정이 범위로만 갈린다)', () => {
+    expect(normalizeNewTeamCode(WS_TEAM)).toEqual({ ok: true, code: WS_TEAM })
+    expect([...SP1_TEAMS.A, ...SP1_TEAMS.B]).not.toContain(WS_TEAM)
+  })
+  it('워크스페이스 B 는 부트스트랩 기본 슬러그가 아니다', () => {
+    expect(OTHER_WORKSPACE.slug).not.toBe('default')
+  })
+})
+
+describe('workspaceAdminAccountInput — createAccount 입력', () => {
+  const input = workspaceAdminAccountInput({ workspaceId: 'w1', email: B_ADMIN.email, name: B_ADMIN.name, password: 'pw-12345678' })
+  it('그 워크스페이스의 관리자, 프로젝트 권한 없음(명단 행 없음)', () => {
+    expect(input).toEqual({
+      workspaceId: 'w1', email: B_ADMIN.email, password: 'pw-12345678', name: 'bea',
+      workspaceRole: 'admin', projectId: null, accessRole: null,
+    })
+  })
+  it('서버 액션 인자로 그대로 실린다(undefined 없음)', () => {
+    expect(() => encodeActionArgs([input])).not.toThrow()
+  })
+})
+
+describe('minuteBodyPath — 앱의 makeStoragePath 와 같은 규약(드리프트 감지)', () => {
+  const ws = '11111111-1111-4111-8111-111111111111'
+  const pid = '22222222-2222-4222-8222-222222222222'
+  const mid = '33333333-3333-4333-8333-333333333333'
+  it('프로젝트 지정·미지정 모두 makeStoragePath(entity minutes)와 같은 문자열', () => {
+    for (const projectId of [pid, null]) {
+      const ours = minuteBodyPath({ workspaceId: ws, projectId, minuteId: mid, fileName: 'e2e-project.md' })
+      expect(ours).toBe(makeStoragePath({ workspaceId: ws, projectId, entity: 'minutes', entityId: mid, fileName: 'e2e-project.md' }))
+      expect(ours.startsWith(`ws/${ws}/p/${projectId ?? '_'}/minutes/${mid}/`)).toBe(true)
+    }
+  })
+  it('createMinute 가 쓰는 경로 판정(isMinuteFilePathValid)을 통과한다 — 다른 범위로는 통과하지 않는다', () => {
+    const path = minuteBodyPath({ workspaceId: ws, projectId: null, minuteId: mid, fileName: 'e2e-noproject.md' })
+    expect(isMinuteFilePathValid({ workspaceId: ws, projectId: null }, mid, path, 'minutes')).toBe(true)
+    expect(isMinuteFilePathValid({ workspaceId: ws, projectId: pid }, mid, path, 'minutes')).toBe(false)
+    expect(isMinuteFilePathValid({ workspaceId: pid, projectId: null }, mid, path, 'minutes')).toBe(false)
+  })
+  it('앱이 거부하는 입력은 똑같이 거부한다', () => {
+    const bad = [
+      { workspaceId: 'not-a-uuid', projectId: null, minuteId: mid, fileName: 'a.md' },
+      { workspaceId: ws, projectId: 'zz', minuteId: mid, fileName: 'a.md' },
+      { workspaceId: ws, projectId: null, minuteId: 'x', fileName: 'a.md' },
+      { workspaceId: ws, projectId: null, minuteId: mid, fileName: 'a/b.md' },
+      { workspaceId: ws, projectId: null, minuteId: mid, fileName: '' },
+      { workspaceId: ws, projectId: null, minuteId: mid, fileName: '..' },
+      { workspaceId: ws, projectId: null, minuteId: mid, fileName: `${'a'.repeat(198)}.md` },
+    ]
+    for (const p of bad) {
+      expect(() => minuteBodyPath(p), JSON.stringify(p)).toThrow(/저장 경로/)
+      expect(() => makeStoragePath({ ...p, entity: 'minutes', entityId: p.minuteId }), JSON.stringify(p)).toThrow()
+    }
+  })
+})
+
+describe('inWorkspaceStorage — 객체 이름이 그 워크스페이스의 규약 경로인가(앱 parseStoragePath 와 대조)', () => {
+  const ws = '11111111-1111-4111-8111-111111111111'
+  const other = '44444444-4444-4444-8444-444444444444'
+  const mid = '33333333-3333-4333-8333-333333333333'
+  const ok = `ws/${ws}/p/_/minutes/${mid}/e2e.md`
+  it('규약 경로면 그 워크스페이스에서만 참', () => {
+    expect(inWorkspaceStorage(ok, ws)).toBe(true)
+    expect(inWorkspaceStorage(ok, ws.toUpperCase())).toBe(true)
+    expect(inWorkspaceStorage(ok, other)).toBe(false)
+    expect(parseStoragePath(ok)?.workspaceId).toBe(ws)
+  })
+  it('접두만 맞는 이름·옛 형식은 거짓 — 앱 파서도 null', () => {
+    const names = [
+      `ws/${ws}/p/_/minutes/${mid}`, `ws/${ws}/p/../minutes/${mid}/e2e.md`, `ws/${ws}/p/_/wiki/${mid}/e2e.md`,
+      `ws/${ws}/x/_/minutes/${mid}/e2e.md`, `${mid}/e2e.md`, `ws/${ws}/p/_/minutes/not-uuid/e2e.md`, '',
+    ]
+    for (const n of names) {
+      expect(inWorkspaceStorage(n, ws), n).toBe(false)
+      expect(parseStoragePath(n), n).toBeNull()
+    }
+  })
+})
+
+describe('minuteInput·minuteSource — createMinute 인자', () => {
+  it('회의 미연결, 프로젝트 지정·미지정 그대로, 앱 필드 검증 통과', () => {
+    for (const projectId of ['p1', null]) {
+      const input = minuteInput({ date: '2026-09-26', teamCode: WS_TEAM, title: 'E2E-MIN', bodyMd: '# E2E', projectId })
+      expect(input).toEqual({
+        minuteDate: '2026-09-26', teamCode: WS_TEAM, title: 'E2E-MIN', bodyMd: '# E2E', meetingId: null, projectId, meetingOccurrenceDate: null,
+      })
+      expect(validateMinuteFields(input)).toBeNull()
+      expect(() => encodeActionArgs([input, null, minuteSource({ minuteId: 'm', fileName: 'a.md', filePath: 'x', size: 3 })])).not.toThrow()
+    }
+    expect(() => minuteInput({ date: '2026-9-26', teamCode: WS_TEAM, title: 't', bodyMd: '', projectId: null })).toThrow(/날짜/)
+  })
+  it('source 는 선발급 id 와 본문 파일 메타(.md, text/markdown)', () => {
+    expect(minuteSource({ minuteId: 'm1', fileName: 'e2e.md', filePath: 'ws/…/e2e.md', size: 12 }))
+      .toEqual({ minuteId: 'm1', file: { fileName: 'e2e.md', filePath: 'ws/…/e2e.md', size: 12, mime: 'text/markdown' } })
+  })
+})
+
+describe('leakedIds·presentTexts — 교차 워크스페이스 누설 판정', () => {
+  it('leakedIds: 보인 것 중 금지된 것만, 첫 등장 순·중복 제거', () => {
+    expect(leakedIds(['a', 'c', 'b', 'c'], ['c', 'b', 'z'])).toEqual(['c', 'b'])
+    expect(leakedIds([], ['a'])).toEqual([])
+    expect(leakedIds(['a'], [])).toEqual([])
+  })
+  it('presentTexts: HTML 에 들어 있는 문구만(pageProblems 의 missing 과 반대)', () => {
+    const html = '<main>E2E-MIN-PROJECT · E2E A 202609261700</main>'
+    expect(presentTexts(html, ['E2E-MIN-PROJECT', 'E2E-MIN-NOPROJECT', 'E2E A 202609261700'])).toEqual(['E2E-MIN-PROJECT', 'E2E A 202609261700'])
+    expect(presentTexts(html, [])).toEqual([])
   })
 })

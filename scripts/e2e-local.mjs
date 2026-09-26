@@ -5,11 +5,17 @@
 //        → A 임포트(팀명 담당) → 외부 인력 bob 을 A 리프 담당으로 → 회의(참석자 bob) → 초대 발급(carol, 멤버, A 첫 팀)
 //        → 새 세션으로 가입+합류 → carol 로그인: A 멤버, B 조회 전용(같은 워크스페이스 — 스펙 2.4.1), 타 워크스페이스·미존재는
 //        not-found(존재 은닉 — 상태 코드가 아니라 notFound() digest 로 판정) → 관리자 세션으로 주요 화면 렌더(오류 표식·흐름 데이터).
+//   SP2: 워크스페이스 A(부트스트랩)·B(service_role 로 행만 — 생성 화면은 SP3). B 의 프로젝트 C 와 B 관리자 bea 는 플랫폼 관리자가
+//        createProject(B, …)·createAccount({ workspaceId: B, … }) 로 → A 관리자 ana(플랫폼 관리자 아님)가 createProject(A, …) 로
+//        E2E A2 → 외부 이메일 초대·가입 → 그 계정의 워크스페이스 소속은 A 하나 → ana 가 회의록 업로드(프로젝트 지정·미지정 —
+//        Storage 키 ws/<A>/p/…) → bea 로그인: A 프로젝트 URL 은 not-found, 회의록·프로젝트 목록에 A 흔적 없음, A 경로 Storage 쓰기·
+//        읽기 거부 → 외부 회의록 API(meta·목록)가 user_email 의 워크스페이스로만 좁혀진다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
-// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3000
-//   으로 띄운 npm run dev 가 떠 있는 상태에서
-//   BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] [E2E_BASE_URL=http://localhost:3000] \
-//   [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
+// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 러너와 같은 앱 주소·시크릿으로 띄운 npm run dev 가 떠 있는 상태에서
+//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=<앱 주소> MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> npm run dev
+//   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
+//   [E2E_BASE_URL=http://localhost:3000] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
+// 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -20,10 +26,11 @@ import { createClient } from '@supabase/supabase-js'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import {
-  ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, SP1_TEAMS, TEMPLATE_HEADER, actionResult, cookieHeader, dispositionFilename,
-  e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
-  localClientEnv, meetingInput, notFoundRendered, pageProblems, redactInviteTokens, rosterPlan, rosterView, signupInput,
-  teamIdsByCode, toCell,
+  A_ADMIN, B_ADMIN, ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
+  cookieHeader, dispositionFilename, e2eRows, encodeActionArgs, findActionId, findTraces, inWorkspaceStorage, inviteInput,
+  inviteTokenFromUrl, leafCodes, leakedIds, localAppUrl, localClientEnv, meetingInput, minuteBodyPath, minuteInput, minuteSource,
+  notFoundRendered, pageProblems, presentTexts, redactInviteTokens, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
+  workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
@@ -50,10 +57,19 @@ const email = (process.env.BOOTSTRAP_EMAIL || 'admin@example.com').trim().toLowe
 const password = process.env.BOOTSTRAP_PASSWORD
 const outDir = process.env.E2E_OUT_DIR || join(tmpdir(), 'd-flow-e2e')
 if (!password) { console.error('✗ BOOTSTRAP_PASSWORD 가 없다 — dev:bootstrap 때 쓴 값을 env 로 넘긴다'); process.exit(1) }
+// B 관리자 비밀번호 — 기본값을 두지 않는다(리포에 적힌 값이 로컬 계정 비밀번호가 되지 않게). 8자 미만은 createAccount 가 거부한다.
+const bPassword = process.env.E2E_B_PASSWORD
+if (!bPassword || bPassword.length < 8) { console.error('✗ E2E_B_PASSWORD 가 없거나 8자 미만이다'); process.exit(1) }
+// 외부 회의록 API 시크릿 — dev 서버를 띄울 때 준 MINUTES_API_SECRET 과 같은 값(MINUTES_API_ENABLED=true 도 필요, 없으면 라우트가 404).
+const minutesApiSecret = process.env.MINUTES_API_SECRET
+if (!minutesApiSecret) { console.error('✗ MINUTES_API_SECRET 가 없다 — dev 서버에 준 값과 같은 값을 넘긴다'); process.exit(1) }
 
 const MANIFEST = '.next/server/server-reference-manifest.json'
 const ACTIONS = {
   createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/projects/page' },
+  createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/admin/accounts/page' },
+  addTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'addTeam', worker: '/admin/teams/page' },
+  createMinute: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinute', worker: '/minutes/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
   upsertRosterMember: { filename: 'src/app/actions/roster.ts', exportedName: 'upsertRosterMember', worker: '/p/[projectId]/members/page' },
   setWbsAssignee: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsAssignee', worker: '/p/[projectId]/wbs/page' },
@@ -160,29 +176,43 @@ const ROSTER_SELECT = 'id, access_role, people!inner(display_name, email, user_i
 async function main() {
   mkdirSync(outDir, { recursive: true })
   const admin = session('admin')
-  // service_role — 세션 경로에 grant 가 없는 표(project_invites)의 확인과 타 워크스페이스 픽스처에만 쓴다(로컬 전용, localAdminEnv).
+  // service_role — 세션 경로에 grant 가 없는 표(project_invites)·남의 소속·Storage 목록의 확인과 워크스페이스 B 행에만 쓴다(로컬 전용, localAdminEnv).
   const svc = createClient(adminEnv.url, adminEnv.serviceRoleKey, { auth: { persistSession: false } })
+  /** 계정의 워크스페이스 소속·플랫폼 관리자 여부 — 남의 소속은 세션으로 읽을 수 없어 service_role 로 본다. */
+  const membershipOf = async (addr) => {
+    const prof = rows(`프로필(${addr})`, await svc.from('profiles').select('user_id').eq('email', addr))
+    if (prof.length !== 1) throw new Fail(`${addr} 프로필이 ${prof.length}건`)
+    const userId = prof[0].user_id
+    const memberships = rows('워크스페이스 소속', await svc.from('workspace_members').select('workspace_id,role').eq('user_id', userId).order('workspace_id'))
+    const platform = rows('플랫폼 관리자', await svc.from('platform_admins').select('user_id').eq('user_id', userId))
+    return { userId, memberships, platformAdmin: platform.length > 0 }
+  }
 
-  // ── 1. 로그인 — 미들웨어가 /login 으로 돌려보내지 않아야 한다(302/307 이면 실패).
+  // ── 1. 로그인 — 미들웨어가 /login 으로 돌려보내지 않아야 한다(302/307 이면 실패). 부트스트랩 계정의 워크스페이스(= A)는
+  // 정확히 하나·관리자여야 한다 — 화면(/projects)도 유일 소속일 때만 그 워크스페이스로 프로젝트를 만든다.
   const me = await admin.login(email, password)
   await admin.http('GET', '/projects')
-  step('login', { userId: me.id, cookieNames: [...admin.jar.keys()] })
+  const myWs = rows('워크스페이스 소속', await admin.sb.from('workspace_members').select('workspace_id,role').eq('user_id', me.id))
+  if (myWs.length !== 1 || myWs[0].role !== 'admin') throw new Fail(`부트스트랩 계정의 워크스페이스 소속이 ${JSON.stringify(myWs)}(관리자 1건이어야 한다)`)
+  const wsA = myWs[0].workspace_id
+  step('login', { userId: me.id, workspaceId: wsA, cookieNames: [...admin.jar.keys()] })
 
-  // ── 2. 프로젝트 A·B — 화면(NewProjectModal)이 부르는 createProject. 결과는 DB 에서 확인한다(같은 이름 1건 + 라벨 그대로).
+  // ── 2. 프로젝트 A·B — 화면(NewProjectModal)이 부르는 createProject(workspaceId, …). 결과는 그 세션으로 DB 에서 확인한다
+  // (같은 이름 1건 + 지정한 워크스페이스 + 라벨 그대로).
   const stamp = new Date().toISOString().slice(0, 16).replace(/\D/g, '')
-  const createProject = async (label) => {
+  const createProject = async (who, workspaceId, label) => {
     const name = `E2E ${label} ${stamp}`
-    const { actionId } = await admin.action('/projects', 'createProject', [name, null, null, null, LEVEL_LABELS])
-    const found = rows('프로젝트', await admin.sb.from('projects').select('id,name,workspace_id').eq('name', name))
+    const { actionId } = await who.action('/projects', 'createProject', [workspaceId, name, null, null, null, LEVEL_LABELS])
+    const found = rows('프로젝트', await who.sb.from('projects').select('id,name,workspace_id').eq('name', name))
     if (found.length !== 1) throw new Fail(`생성된 프로젝트 ${name} 가 ${found.length}건`)
-    const { data: settings, error } = await admin.sb.from('project_settings').select('level_labels,max_depth').eq('project_id', found[0].id).single()
+    if (found[0].workspace_id !== workspaceId) throw new Fail(`${name} 가 워크스페이스 ${found[0].workspace_id} 에 생겼다(기대 ${workspaceId})`)
+    const { data: settings, error } = await who.sb.from('project_settings').select('level_labels,max_depth').eq('project_id', found[0].id).single()
     if (error) throw new Fail(`프로젝트 설정 조회 실패: ${error.message}`)
     same(`${name} 단계 라벨`, settings.level_labels, LEVEL_LABELS)
     return { id: found[0].id, name, workspaceId: found[0].workspace_id, settings, actionId }
   }
-  const A = await createProject('A')
-  const B = await createProject('B')
-  if (A.workspaceId !== B.workspaceId) throw new Fail('A·B 가 다른 워크스페이스에 생겼다(부트스트랩 워크스페이스 하나여야 한다)')
+  const A = await createProject(admin, wsA, 'A')
+  const B = await createProject(admin, wsA, 'B')
   step('create-projects', {
     path: `server action createProject(${A.actionId.slice(0, 12)}…) via POST /projects`,
     projects: [A, B].map(({ id, name, settings }) => ({ id, name, settings })), workspaceId: A.workspaceId, rows: 2,
@@ -366,28 +396,41 @@ async function main() {
   if (!consumed[0]?.redeemed_at) throw new Fail('합류했는데 초대가 소비되지 않았다')
   step('invite-redeem', { projectId: redeemed.projectId, memberId: carolMemberId, teams: carolView.teams, redeemedAt: consumed[0].redeemed_at, rows: rosterA2.length })
 
-  // ── 12. 존재 은닉 대조군 — 타 워크스페이스의 프로젝트 C. 워크스페이스를 만드는 화면·액션이 SP2 몫이라 service_role 로 직접 만든다(로컬 전용).
+  // ── 12. 워크스페이스 B — 존재 은닉 대조군이자 2-워크스페이스 흐름의 상대편. 워크스페이스를 만드는 화면은 SP3 몫이라 행만
+  // service_role 로 만든다(로컬 전용). 그 안의 프로젝트 C 와 B 관리자 bea 는 앱 경로로 — 플랫폼 관리자는 소속 없는 워크스페이스에도
+  // createProject·createAccount 를 쓸 수 있다(워크스페이스 관리 가드가 플랫폼 관리자를 통과시킨다). 손으로 행을 넣으면 계정의
+  // profiles·people·workspace_members 가 앱 불변식과 어긋날 수 있다.
   const { data: otherWs, error: owErr } = await svc.from('workspaces')
     .upsert({ slug: OTHER_WORKSPACE.slug, name: OTHER_WORKSPACE.name }, { onConflict: 'slug' }).select('id').single()
   if (owErr) throw new Fail(`타 워크스페이스 픽스처 실패: ${owErr.message}`)
-  const { data: C, error: cErr } = await svc.from('projects').insert({ name: `E2E C ${stamp}`, workspace_id: otherWs.id }).select('id,name').single()
-  if (cErr) throw new Fail(`타 워크스페이스 프로젝트 픽스처 실패: ${cErr.message}`)
-  const { error: csErr } = await svc.from('project_settings').insert({ project_id: C.id, level_labels: LEVEL_LABELS, max_depth: LEVEL_LABELS.length })
-  if (csErr) throw new Fail(`타 워크스페이스 프로젝트 설정 픽스처 실패: ${csErr.message}`)
-  step('other-workspace-fixture', { via: 'service_role(로컬 전용 — 워크스페이스 생성 경로는 SP2)', workspace: OTHER_WORKSPACE.slug, projectId: C.id, projectName: C.name })
+  const wsB = otherWs.id
+  const C = await createProject(admin, wsB, 'C')
+  await admin.http('GET', '/admin/accounts')
+  const createWorkspaceAdmin = async (workspaceId, who, pass) => {
+    mustOk(`createAccount(${who.name})`, (await admin.action('/admin/accounts', 'createAccount',
+      [workspaceAdminAccountInput({ workspaceId, email: who.email, name: who.name, password: pass })])).result)
+    return membershipOf(who.email)
+  }
+  const beaWs = await createWorkspaceAdmin(wsB, B_ADMIN, bPassword)
+  same('bea 의 워크스페이스 소속', beaWs.memberships, [{ workspace_id: wsB, role: 'admin' }])
+  if (beaWs.platformAdmin) throw new Fail('bea 가 플랫폼 관리자다 — 워크스페이스 경계 시험이 비어 버린다')
+  step('other-workspace-fixture', {
+    via: 'workspaces 행만 service_role(로컬 전용 — 생성 화면은 SP3), 프로젝트는 createProject(B, …), 관리자는 createAccount({ workspaceId: B })',
+    workspace: OTHER_WORKSPACE.slug, workspaceId: wsB, projectId: C.id, projectName: C.name,
+    bAdmin: { email: B_ADMIN.email, userId: beaWs.userId, memberships: beaWs.memberships, platformAdmin: beaWs.platformAdmin },
+  })
 
   // ── 13. carol 로그인 — A 는 명단 멤버, B 는 같은 워크스페이스라 조회 전용(스펙 2.4.1 '그 외 워크스페이스 멤버 → viewer':
   // 화면은 열리고 쓰기는 거부), C(타 워크스페이스)·미존재 id 는 똑같이 not-found(존재 은닉). 관리자(플랫폼 관리자)는 C 를 본다 —
   // not-found 가 부재가 아니라 은닉이라는 대조. (app)/loading.tsx 스트리밍 때문에 은닉돼도 HTTP 상태는 200 일 수 있어
   // 은닉 판정은 실제 HTTP 404 또는 notFound() digest 다(어느 신호였는지 기록). 열려야 하는 화면은 pageProblems 로 본다 —
   // 스트리밍된 오류 digest·열화 표시가 없고, 그 페이지 세그먼트만 그리는 문구(WBS 히어로 제목, A 는 리프명)가 있어야 한다.
-  // 프로젝트 이름만으로는 안 된다: 레이아웃 사이드바가 모든 화면에 싣는다(은닉된 C 에도 실린다, 4.2).
-  // 이름 노출(projectNameInHtml)은 기록만 — SP1 은 projects·read_all_* 읽기 정책이 개방인 상태가 의도다(SP1 스펙 표 258행, SP2 가 닫는다).
+  // 프로젝트 이름만으로는 안 된다: 레이아웃 사이드바가 볼 수 있는 프로젝트를 모든 화면에 싣는다.
+  // 은닉된 화면에 그 프로젝트 이름이 실리면 실패다 — SP1 은 projects·read_all_* 읽기 정책이 개방이라 기록만 했고, SP2(0006)가 닫았다.
   const carolUser = await carol.login(INVITEE.email, carolPassword)
   const missing = randomUUID()
-  const visibility = []
-  const see = async (who, label, pid, name, { hidden = false, expectTexts = [] } = {}) => {
-    const path = `/p/${pid}/wbs`
+  const see = async (who, label, pid, name, { hidden = false, expectTexts = [], page = 'wbs' } = {}) => {
+    const path = `/p/${pid}/${page}`
     const res = await who.http('GET', path, { expect: hidden ? [200, 404] : 200 })
     const html = await res.text()
     const digest = notFoundRendered(html)
@@ -397,34 +440,216 @@ async function main() {
       projectNameInHtml: name ? html.includes(name) : null,
       ...(hidden ? {} : { expect: expectTexts, problems: pageProblems(html, expectTexts) }),
     }
-    visibility.push(entry)
     if (entry.notFound !== hidden) throw new Fail(`${who.label} ${label} 화면: notFound=${entry.notFound}(기대 ${hidden})`)
+    if (hidden && entry.projectNameInHtml) throw new Fail(`${who.label} ${label} 화면: 은닉된 프로젝트 이름이 HTML 에 실렸다`)
     if (!hidden && entry.problems.length) throw new Fail(`${who.label} ${label} 화면 문제: ${entry.problems.join(', ')}`)
+    return entry
   }
   const wbsTitle = (name) => `${name} WBS · 간트` // wbs/page.tsx 히어로 — 페이지 세그먼트만 그린다(i18n wbs.heroTitleSuffix)
-  await see(carol, 'A(명단 멤버)', A.id, A.name, { expectTexts: [wbsTitle(A.name), leaf.name] })
-  await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, { expectTexts: [wbsTitle(B.name)] })
+  const visibility = []
+  visibility.push(await see(carol, 'A(명단 멤버)', A.id, A.name, { expectTexts: [wbsTitle(A.name), leaf.name] }))
+  visibility.push(await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, { expectTexts: [wbsTitle(B.name)] }))
   const denied = (await carol.action(`/p/${B.id}/meetings`, 'createMeeting', [B.id, meetingInput({ date: meetingDate, attendeeIds: [] })])).result
   same('carol 의 B 회의 생성', denied, { ok: false, error: ERR_DENIED })
   const bMeetings = rows('B 회의', await admin.sb.from('meetings').select('id').eq('project_id', B.id))
   same('B 회의 수', bMeetings.length, 0)
   visibility.push({ who: 'carol', project: 'B(같은 워크스페이스, 명단 없음)', action: 'createMeeting', result: denied, bMeetings: bMeetings.length })
-  await see(carol, 'C(타 워크스페이스)', C.id, C.name, { hidden: true })
-  await see(carol, '미존재 id', missing, null, { hidden: true })
-  await see(admin, 'C(타 워크스페이스)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] })
+  visibility.push(await see(carol, 'C(워크스페이스 B)', C.id, C.name, { hidden: true }))
+  visibility.push(await see(carol, '미존재 id', missing, null, { hidden: true }))
+  visibility.push(await see(admin, 'C(워크스페이스 B)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] }))
   step('visibility', { carolUserId: carolUser.id, checks: visibility })
 
-  // ── 14. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
+  // ── 14. A 관리자 ana(플랫폼 관리자 아님) — 부트스트랩 계정이 createAccount({ workspaceId: A }) 로 만든다. ana 가 createProject(A, …)
+  // 로 E2E A2 를 만든다: 워크스페이스 관리 가드(requireWorkspaceAdmin)를 플랫폼 관리자 우회 없이 통과하는 경로다.
+  const anaPassword = `E2E-${randomUUID()}`
+  const anaWs = await createWorkspaceAdmin(wsA, A_ADMIN, anaPassword)
+  same('ana 의 워크스페이스 소속', anaWs.memberships, [{ workspace_id: wsA, role: 'admin' }])
+  if (anaWs.platformAdmin) throw new Fail('ana 가 플랫폼 관리자다 — 워크스페이스 관리 가드를 우회한다')
+  const ana = session('ana')
+  await ana.login(A_ADMIN.email, anaPassword)
+  await ana.http('GET', '/projects')
+  const A2 = await createProject(ana, wsA, 'A2')
+  step('workspace-admin-project', {
+    aAdmin: { email: A_ADMIN.email, userId: anaWs.userId, memberships: anaWs.memberships, platformAdmin: anaWs.platformAdmin },
+    path: `server action createProject(${A2.actionId.slice(0, 12)}…) via POST /projects as ana`,
+    projectId: A2.id, projectName: A2.name, workspaceId: A2.workspaceId,
+  })
+
+  // ── 15. ana 가 A2 에 외부 이메일을 멤버로 초대 → 새 세션으로 가입·합류 → 그 계정의 워크스페이스 소속은 A 하나뿐(service_role 로 확인).
+  // 합류한 계정으로 A2 는 열리고 워크스페이스 B 의 C 는 not-found.
+  await ana.http('GET', `/p/${A2.id}/members`)
+  const oInvite = mustOk('createProjectInvite(outsider)',
+    (await ana.action(`/p/${A2.id}/members`, 'createProjectInvite', [A2.id, inviteInput([], OUTSIDER.email)])).result)
+  if (oInvite.alreadyAccount !== false) throw new Fail(`${OUTSIDER.email} 계정 존재 여부가 ${oInvite.alreadyAccount} — 깨끗한 DB 에서 돌린다`)
+  const oToken = inviteTokenFromUrl(oInvite.url, base)
+  const outsider = session('outsider')
+  await outsider.http('GET', `/invite/${oToken}`)
+  const outsiderPassword = `E2E-${randomUUID()}`
+  const oRedeemed = mustOk('redeemInviteWithSignup(outsider)',
+    (await outsider.action(`/invite/${oToken}`, 'redeemInviteWithSignup', [oToken, signupInput(OUTSIDER.name, outsiderPassword)])).result)
+  same('outsider 합류 결과', { projectId: oRedeemed.projectId, email: oRedeemed.email }, { projectId: A2.id, email: OUTSIDER.email })
+  const outsiderWs = await membershipOf(OUTSIDER.email)
+  same('outsider 의 워크스페이스 소속', outsiderWs.memberships, [{ workspace_id: wsA, role: 'member' }])
+  const outsiderRow = (await roster(A2.id)).find((r) => r.email === OUTSIDER.email)
+  if (!outsiderRow) throw new Fail(`합류했는데 A2 명단에 ${OUTSIDER.email} 가 없다`)
+  same('outsider@A2 권한', { accessRole: outsiderRow.accessRole, linked: outsiderRow.linked }, { accessRole: 'member', linked: true })
+  await outsider.login(OUTSIDER.email, outsiderPassword)
+  const outsiderChecks = [
+    await see(outsider, 'A2(초대받은 프로젝트)', A2.id, A2.name, { expectTexts: [wbsTitle(A2.name)] }),
+    await see(outsider, 'C(워크스페이스 B)', C.id, C.name, { hidden: true }),
+  ]
+  step('outsider-invite', {
+    inviteId: oInvite.row.id, email: OUTSIDER.email, userId: outsiderWs.userId, projectId: oRedeemed.projectId,
+    memberships: outsiderWs.memberships, platformAdmin: outsiderWs.platformAdmin, checks: outsiderChecks, rows: outsiderWs.memberships.length,
+  })
+
+  // ── 16. 회의록 업로드(프로젝트 지정·미지정 각 1건) — 화면(MinuteUploadModal)과 같은 순서: 회의록 id 선발급 → 본문 .md 를 세션으로
+  // Storage 에 올림(스토리지 RLS 가 판정) → createMinute(입력, 폴더 null, source). 올린 사람은 ana(플랫폼 관리자 아님).
+  // 미지정 회의록의 담당은 그 워크스페이스의 공용 팀이어야 한다 — 부트스트랩은 팀을 만들지 않으므로 공용 팀 하나를 addTeam(A, …) 으로
+  // 만든다(팀 관리 화면은 아직 플랫폼 관리자 전용 — ws 관리자 화면은 SP3). Storage 객체 이름이 전부 ws/<A>/p/… 여야 한다.
+  await admin.http('GET', '/admin/teams')
+  mustOk(`addTeam(${WS_TEAM})`, (await admin.action('/admin/teams', 'addTeam', [wsA, WS_TEAM])).result)
+  await ana.http('GET', '/minutes')
+  const upload = async (label, projectId, teamCode) => {
+    const minuteId = randomUUID()
+    const title = `E2E-MIN-${label}-${stamp}`
+    const bodyMd = `# ${title}\n\n- E2E 회의록 본문(${label})\n`
+    const fileName = `e2e-${label.toLowerCase()}.md`
+    const filePath = minuteBodyPath({ workspaceId: wsA, projectId, minuteId, fileName })
+    const body = Buffer.from(bodyMd, 'utf8')
+    const up = await ana.sb.storage.from('minutes').upload(filePath, body, { contentType: 'text/markdown', upsert: false })
+    if (up.error) throw new Fail(`회의록 본문 업로드 실패(${label}): ${up.error.message}`)
+    const created = mustOk(`createMinute(${label})`, (await ana.action('/minutes', 'createMinute', [
+      minuteInput({ date: meetingDate, teamCode, title, bodyMd, projectId }), null, minuteSource({ minuteId, fileName, filePath, size: body.length }),
+    ])).result)
+    same(`createMinute(${label}) id`, created.id, minuteId)
+    return { label, minuteId, title, projectId, teamCode, filePath, fileName }
+  }
+  const minutes = [await upload('PROJECT', A.id, SP1_TEAMS.A[0]), await upload('NOPROJECT', null, WS_TEAM)]
+  const minuteIds = minutes.map((m) => m.minuteId)
+  const minuteRows = rows('회의록', await svc.from('minutes').select('id,workspace_id,project_id,team_code').in('id', minuteIds))
+  const fileRows = rows('회의록 파일', await svc.from('minute_files').select('minute_id,role,file_path').in('minute_id', minuteIds))
+  const storageChecks = []
+  for (const m of minutes) {
+    const row = minuteRows.find((r) => r.id === m.minuteId)
+    same(`회의록 ${m.label} 범위`, row && { workspace_id: row.workspace_id, project_id: row.project_id, team_code: row.team_code },
+      { workspace_id: wsA, project_id: m.projectId, team_code: m.teamCode })
+    const files = fileRows.filter((f) => f.minute_id === m.minuteId)
+    same(`회의록 ${m.label} 파일`, files.map((f) => ({ role: f.role, file_path: f.file_path })), [{ role: 'body', file_path: m.filePath }])
+    const dir = m.filePath.slice(0, m.filePath.lastIndexOf('/'))
+    const { data: listed, error: lErr } = await svc.storage.from('minutes').list(dir)
+    if (lErr) throw new Fail(`Storage 목록 조회 실패(${m.label}): ${lErr.message}`)
+    const objectNames = (listed ?? []).map((o) => `${dir}/${o.name}`)
+    same(`회의록 ${m.label} Storage 객체`, objectNames, [m.filePath])
+    if (!objectNames.every((n) => inWorkspaceStorage(n, wsA))) throw new Fail(`회의록 ${m.label} 객체가 ws/<A>/p/… 규약 경로가 아니다: ${objectNames}`)
+    storageChecks.push({ label: m.label, minuteId: m.minuteId, projectId: m.projectId, objects: objectNames, prefix: `ws/${wsA}/p/${m.projectId ?? '_'}/` })
+  }
+  // 버킷 최상위는 'ws' 하나 — 옛 형식(<minuteId>/… 등) 객체가 없다.
+  const { data: top, error: topErr } = await svc.storage.from('minutes').list('')
+  if (topErr) throw new Fail(`Storage 최상위 목록 조회 실패: ${topErr.message}`)
+  same('minutes 버킷 최상위', (top ?? []).map((o) => o.name), ['ws'])
+  step('minutes-upload', { uploader: 'ana', workspaceTeam: WS_TEAM, minutes: storageChecks, bucketTop: ['ws'], rows: minutes.length })
+
+  // ── 17. bea(워크스페이스 B 관리자) 로그인 — A 의 프로젝트 URL 은 not-found(존재 은닉), 자기 워크스페이스의 C 는 열린다.
+  // 회의록 목록·프로젝트 목록 HTML(SSR·RSC 페이로드)에 A 의 회의록 제목·프로젝트 이름이 없다(대조: ana 의 회의록 목록에는 있다).
+  // A 경로로의 Storage 쓰기·A 객체 읽기는 스토리지 RLS 가 거부한다.
+  const bea = session('bea')
+  await bea.login(B_ADMIN.email, bPassword)
+  const beaChecks = [
+    await see(bea, 'A2(워크스페이스 A)', A2.id, A2.name, { hidden: true }),
+    await see(bea, 'A(워크스페이스 A) 대시보드', A.id, A.name, { hidden: true, page: 'dashboard' }),
+    await see(bea, 'C(자기 워크스페이스)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] }),
+  ]
+  const titles = minutes.map((m) => m.title)
+  const aNames = [A.name, B.name, A2.name]
+  const beaMinutesHtml = await (await bea.http('GET', '/minutes')).text()
+  const anaMinutesHtml = await (await ana.http('GET', '/minutes')).text()
+  const beaProjectsHtml = await (await bea.http('GET', '/projects')).text()
+  const lists = {
+    beaMinutes: { problems: pageProblems(beaMinutesHtml), aTitles: presentTexts(beaMinutesHtml, titles), aProjectNames: presentTexts(beaMinutesHtml, aNames) },
+    anaMinutes: { problems: pageProblems(anaMinutesHtml), aTitles: presentTexts(anaMinutesHtml, titles) },
+    beaProjects: { problems: pageProblems(beaProjectsHtml, [`/p/${C.id}/dashboard`]), aProjectNames: presentTexts(beaProjectsHtml, aNames) },
+  }
+  if (lists.beaMinutes.problems.length || lists.anaMinutes.problems.length || lists.beaProjects.problems.length) {
+    throw new Fail(`목록 화면 문제: ${JSON.stringify(lists)}`)
+  }
+  same('bea 회의록 목록의 A 회의록 제목', lists.beaMinutes.aTitles, [])
+  same('bea 회의록 목록의 A 프로젝트 이름', lists.beaMinutes.aProjectNames, [])
+  same('ana 회의록 목록의 A 회의록 제목(대조)', lists.anaMinutes.aTitles, titles)
+  same('bea 프로젝트 목록의 A 프로젝트 이름', lists.beaProjects.aProjectNames, [])
+  // Storage — A 워크스페이스 경로로 쓰기(무프로젝트 자리, 새 회의록 id)와 A 의 실제 객체 읽기.
+  const probePath = minuteBodyPath({ workspaceId: wsA, projectId: null, minuteId: randomUUID(), fileName: 'e2e-bea-probe.md' })
+  const beaUp = await bea.sb.storage.from('minutes').upload(probePath, Buffer.from('# probe\n'), { contentType: 'text/markdown', upsert: false })
+  const beaDown = await bea.sb.storage.from('minutes').download(minutes[0].filePath)
+  const storage = { upload: beaUp.error ? `거부: ${beaUp.error.message}` : 'ok', download: beaDown.error ? `거부: ${beaDown.error.message || beaDown.error.name}` : 'ok' }
+  if (!beaUp.error) throw new Fail('bea 가 워크스페이스 A 경로에 Storage 객체를 올렸다')
+  if (!beaDown.error) throw new Fail('bea 가 워크스페이스 A 의 회의록 본문 파일을 내려받았다')
+  const { data: probeListed, error: probeErr } = await svc.storage.from('minutes').list(probePath.slice(0, probePath.lastIndexOf('/')))
+  if (probeErr) throw new Fail(`Storage 목록 조회 실패(probe): ${probeErr.message}`)
+  same('거부된 업로드의 객체', (probeListed ?? []).length, 0)
+  step('workspace-b-isolation', { bea: beaChecks, lists, storage })
+
+  // ── 18. 외부 회의록 API(시크릿 + user_email) — meta 의 projects·목록의 items 가 그 사람의 워크스페이스로만 좁혀진다.
+  // A 관리자(ana)·A 에 초대된 외부 계정은 C 를 못 보고, B 관리자(bea)는 C 만 본다. 플랫폼 관리자는 전부 본다(대조 — 음성 판정이
+  // 비어 있지 않다는 근거). 모르는 이메일은 403 unknown_user, 볼 수 없는 프로젝트의 회의 목록은 404.
+  const api = async (path, expect = 200) => {
+    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${minutesApiSecret}` }, redirect: 'manual' })
+    const body = await res.json().catch(() => null)
+    if (res.status !== expect) throw new Fail(`GET ${path} → ${res.status}(기대 ${expect}): ${JSON.stringify(body)?.slice(0, 300)}`)
+    return body
+  }
+  const meta = async (who) => {
+    const body = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(who)}`)
+    if (!Array.isArray(body?.projects) || !Array.isArray(body?.teams)) throw new Fail(`meta(${who}) 응답 형식: ${JSON.stringify(body)?.slice(0, 300)}`)
+    return { projectIds: body.projects.map((p) => p.id), teams: body.teams }
+  }
+  const listTitles = async (who) => {
+    const body = await api(`/api/v1/minutes?user_email=${encodeURIComponent(who)}&per_page=100`)
+    if (!Array.isArray(body?.items)) throw new Fail(`목록(${who}) 응답 형식: ${JSON.stringify(body)?.slice(0, 300)}`)
+    return body.items.map((i) => i.title)
+  }
+  const aIds = [A.id, B.id, A2.id]
+  const metas = { ana: await meta(A_ADMIN.email), outsider: await meta(OUTSIDER.email), bea: await meta(B_ADMIN.email), platformAdmin: await meta(email) }
+  const api18 = {
+    meta: {
+      ana: { projectIds: metas.ana.projectIds, leaked: leakedIds(metas.ana.projectIds, [C.id]), teams: metas.ana.teams },
+      outsider: { projectIds: metas.outsider.projectIds, leaked: leakedIds(metas.outsider.projectIds, [C.id]) },
+      bea: { projectIds: metas.bea.projectIds, leaked: leakedIds(metas.bea.projectIds, aIds), teams: metas.bea.teams },
+      platformAdmin: { sees: leakedIds(metas.platformAdmin.projectIds, [...aIds, C.id]).sort() },
+    },
+    list: { ana: presentTexts((await listTitles(A_ADMIN.email)).join('\n'), titles), bea: presentTexts((await listTitles(B_ADMIN.email)).join('\n'), titles) },
+  }
+  same('ana meta 의 B 프로젝트', api18.meta.ana.leaked, [])
+  same('outsider meta 의 B 프로젝트', api18.meta.outsider.leaked, [])
+  same('bea meta 의 A 프로젝트', api18.meta.bea.leaked, [])
+  same('bea meta 프로젝트', metas.bea.projectIds, [C.id])
+  if (leakedIds(metas.ana.projectIds, aIds).length !== aIds.length) throw new Fail(`ana meta 에 A 프로젝트가 빠졌다: ${metas.ana.projectIds}`)
+  if (!metas.outsider.projectIds.includes(A2.id)) throw new Fail('outsider meta 에 초대받은 A2 가 없다')
+  if (!metas.ana.teams.includes(WS_TEAM)) throw new Fail(`ana meta 팀에 A 공용 팀 ${WS_TEAM} 이 없다: ${metas.ana.teams}`)
+  if (metas.bea.teams.includes(WS_TEAM)) throw new Fail(`bea meta 팀에 A 공용 팀 ${WS_TEAM} 이 실렸다`)
+  same('플랫폼 관리자 meta(대조 — 전 워크스페이스)', api18.meta.platformAdmin.sees, [...aIds, C.id].sort())
+  same('ana 목록의 A 회의록(대조)', api18.list.ana, titles)
+  same('bea 목록의 A 회의록', api18.list.bea, [])
+  const unknown = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent('e2e-nobody@example.com')}`, 403)
+  same('모르는 이메일', unknown?.code, 'unknown_user')
+  const hiddenMeetings = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}&project_id=${A2.id}`, 404)
+  step('minutes-api-scope', { ...api18, unknownUser: { status: 403, code: unknown.code }, beaMeetingsOfA2: { status: 404, body: hiddenMeetings } })
+
+  // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
   // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
   // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
   // 마지막 단계라 앞 단계는 전부 돈다.
   const pages = [
     ['/projects', [`/p/${A.id}/dashboard`, `/p/${B.id}/dashboard`]],
+    [`/p/${A.id}/dashboard`, []],
     [`/p/${A.id}/members`, ['bob', INVITEE.name]],
     [`/p/${A.id}/meetings`, [meetingInput({ date: meetingDate, attendeeIds: [] }).title]],
     [`/p/${A.id}/issues`, []],
+    [`/p/${A.id}/announcements`, []],
+    [`/p/${A.id}/weekly`, []],
     [`/p/${A.id}/wbs`, [leaf.name]],
     [`/p/${A.id}/attendance`, []],
+    ['/minutes', titles],
   ]
   const rendered = []
   for (const [path, expectTexts] of pages) {
