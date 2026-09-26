@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { walk } from './_walk'
+import { codeLines, walk } from './_walk'
 
 const ROOT = join(process.cwd(), 'src')
 const EXPECTED = [
@@ -13,29 +13,6 @@ const EXPECTED = [
   'src/app/actions/llmConfig.ts#updateLlmProfile',
   'src/app/api/chat/health/route.ts#GET', 'src/app/api/wiki/reindex/route.ts#POST',
 ]
-
-/** 주석을 걷어낸 코드 줄들 — 설명문 속 가드 이름은 호출이 아니다([a38]). 문자열 속 '//' 는 이 검사에서 무시해도 된다. */
-function codeLines(text: string): string[] {
-  let inBlock = false
-  return text.split('\n').map((raw) => {
-    let line = raw
-    let out = ''
-    while (line.length) {
-      if (inBlock) {
-        const end = line.indexOf('*/')
-        if (end < 0) { line = ''; break }
-        line = line.slice(end + 2); inBlock = false
-        continue
-      }
-      const block = line.indexOf('/*')
-      const slash = line.indexOf('//')
-      if (slash >= 0 && (block < 0 || slash < block)) { out += line.slice(0, slash); break }
-      if (block >= 0) { out += line.slice(0, block); line = line.slice(block + 2); inBlock = true; continue }
-      out += line; break
-    }
-    return out
-  })
-}
 
 describe('플랫폼 가드 11곳(D1)', () => {
   it('requireSuperuser( 호출 = EXPECTED', () => {

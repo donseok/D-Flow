@@ -1,4 +1,4 @@
-// tests/invariants/_walk.ts — 소스 트리 재귀 파일 목록(.ts/.tsx)의 단일 출처. 불변식 테스트마다 따로
+// tests/invariants/_walk.ts — 소스 트리 재귀 파일 목록(.ts/.tsx)과 주석 걷기(codeLines)의 단일 출처. 불변식 테스트마다 따로
 // 베끼지 않는다(리뷰 D3 — walk() 가 no-legacy-org·domain-layering·roster-writes 세 곳에 중복돼 있었다).
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -16,4 +16,27 @@ export function walk(dir: string, skipDirs: Set<string> = DEFAULT_SKIP_DIRS): st
     else if (/\.(ts|tsx)$/.test(name)) out.push(p)
   }
   return out
+}
+
+/** 주석을 걷어낸 코드 줄들 — 설명문 속 가드 이름은 호출이 아니다([a38]). 문자열 속 '//' 는 이 검사에서 무시해도 된다. */
+export function codeLines(text: string): string[] {
+  let inBlock = false
+  return text.split('\n').map((raw) => {
+    let line = raw
+    let out = ''
+    while (line.length) {
+      if (inBlock) {
+        const end = line.indexOf('*/')
+        if (end < 0) { line = ''; break }
+        line = line.slice(end + 2); inBlock = false
+        continue
+      }
+      const block = line.indexOf('/*')
+      const slash = line.indexOf('//')
+      if (slash >= 0 && (block < 0 || slash < block)) { out += line.slice(0, slash); break }
+      if (block >= 0) { out += line.slice(0, block); line = line.slice(block + 2); inBlock = true; continue }
+      out += line; break
+    }
+    return out
+  })
 }
