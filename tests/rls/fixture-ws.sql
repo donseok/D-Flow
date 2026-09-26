@@ -203,3 +203,6 @@ insert into public.minute_folders (id, project_id, workspace_id, name, created_b
 insert into public.minutes (id, project_id, workspace_id, minute_date, team_code, title, body_md, created_by) values
   ('00000000-0000-0000-7e57-00000000112b', null, '00000000-0000-0000-7e57-00000000aa01', '2026-09-02', 'ERP', 'RLS 전역 회의록', '# RLS', '00000000-0000-0000-7e57-0000000000a3')
   on conflict do nothing;
+
+-- 워크스페이스 설정(0008) — A 행 하나. 전수 교차 테스트의 A 행이자 workspace-settings.test.ts ① 의 읽기 대상
+insert into public.workspace_settings (workspace_id, allowed_domains) values ('00000000-0000-0000-7e57-00000000aa01', array['example.com']) on conflict do nothing;

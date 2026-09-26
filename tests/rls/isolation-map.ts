@@ -54,6 +54,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   wiki_items: inAP, wiki_processing_jobs: inAP, wiki_project_rebuild_jobs: inAP, wiki_questions: inAP,
   wiki_topic_revisions: inAP, wiki_topics: inAP,
   workspace_members: `t.workspace_id = ${A}`,
+  workspace_settings: `t.workspace_id = ${A}`,
   workspaces: `t.id = ${A}`,
 }
 
