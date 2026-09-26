@@ -34,7 +34,9 @@ describe('fetchAllPages — max_rows 를 넘는 표를 끝까지, 잘리면 thro
   })
 
   it('다 읽은 행 수가 count 와 다르면 잘린 것 — throw(빈 목록·부분 목록으로 위장하지 않는다)', async () => {
-    await expect(fetchAllPages('projects', table(range(3), { count: 4 }).page)).rejects.toThrow('projects 가 잘려 왔습니다(3/4)')
+    const p = fetchAllPages('projects', table(range(3), { count: 4 }).page)
+    await expect(p).rejects.toThrow('projects 목록을 끝까지 읽지 못했습니다(3/4건)')
+    await expect(p).rejects.toThrow('잠시 후 다시 시도하세요')   // 이 문구를 그대로 보이는 화면·API 가 할 일을 알린다
   })
 
   it('count 가 없으면 잘림을 확인할 수 없다 — throw', async () => {

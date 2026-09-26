@@ -35,6 +35,6 @@ export async function fetchAllPages<T>(
     if (rows.length === 0 || out.length >= total) break
     from += rows.length   // 서버 상한이 pageSize 보다 작아도 받은 만큼 전진한다
   }
-  if (out.length !== total) throw new Error(`${label} 가 잘려 왔습니다(${out.length}/${total})`)
+  if (out.length !== total) throw new Error(`${label} 목록을 끝까지 읽지 못했습니다(${out.length}/${total}건) — 읽는 중에 행이 바뀌었거나 응답이 잘렸습니다. 잠시 후 다시 시도하세요.`)
   return out
 }
