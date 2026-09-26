@@ -354,3 +354,54 @@ describe('assembleAgentHub — 단계 잠금(stageLocked, 스펙 2026-09-15 §3.
     expect(locked('TSK-N')).toBe(false)
   })
 })
+
+describe('assembleAgentHub — 승인 어포던스(canApprove, AUTH-07a)', () => {
+  // root → a(SUB-A, 담당 m1 = VIEWER) → a1(리프, 담당 leafAssignee). 주문은 a1 의 reported 1건.
+  const OID = '11111111-aaaa-4aaa-8aaa-00000000000a'
+  const managed = (leafAssignee: string | null, claimedBy: string | null) => rows({
+    items: [
+      item({ id: 'root', code: 'SYS-OP', name: '조업', sort_order: 1 }),
+      item({ id: 'a', parent_id: 'root', code: 'SUB-A', name: '첫째', sort_order: 1, assignee_member_id: 'm1' }),
+      item({ id: 'a1', parent_id: 'a', code: 'TSK-A-01', name: '리프1', sort_order: 1, dev_workflow: true, tags: ['agent'], assignee_member_id: leafAssignee }),
+    ],
+    orders: [order({ id: OID, wbs_item_id: 'a1', status: 'reported', claimed_by_user_id: claimedBy })],
+  })
+  const leaf = (hub: ReturnType<typeof assembleAgentHub>) => hub.rows.find(r => r.code === 'TSK-A-01')!
+
+  it('서브트리 관리자가 리프 담당자이기도 하면 행·큐 모두 canManage:true, canApprove:false', () => {
+    const hub = assembleAgentHub(managed('m1', 'u9'), NOW, VIEWER)
+    expect(leaf(hub)).toMatchObject({ canManage: true, assigneeMine: true, canApprove: false })
+    expect(hub.queue[0]).toMatchObject({ canManage: true, assigneeMine: true, canApprove: false })
+  })
+  it('주문 claimed_by_user_id 가 뷰어 userId 면 canApprove:false', () => {
+    const hub = assembleAgentHub(managed(null, 'u1'), NOW, VIEWER)
+    expect(leaf(hub)).toMatchObject({ canManage: true, canApprove: false })
+    expect(hub.queue[0].canApprove).toBe(false)
+  })
+  it('남이 claim 한 미배정 리프는 canApprove:true', () => {
+    const hub = assembleAgentHub(managed(null, 'u9'), NOW, VIEWER)
+    expect(leaf(hub).canApprove).toBe(true)
+    expect(hub.queue[0].canApprove).toBe(true)
+  })
+  it('관리자는 자기 담당·자기 착수여도 canApprove:true, 서브트리 관리자가 아닌 멤버는 false', () => {
+    const admin = assembleAgentHub(managed('m1', 'u1'), NOW, { userId: 'u1', isAdmin: true })
+    expect(leaf(admin).canApprove).toBe(true)
+    expect(admin.queue[0].canApprove).toBe(true)
+    const other = assembleAgentHub(managed(null, 'u1'), NOW, { userId: 'u9', isAdmin: false })
+    expect(leaf(other).canApprove).toBe(false)
+    expect(other.queue[0].canApprove).toBe(false)
+  })
+})
+
+describe('assembleAgentHub — 최신 completion 보고의 동률(H1 Task 11 M4)', () => {
+  const OID = '11111111-aaaa-4aaa-8aaa-00000000000b'
+  const R_LO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', R_HI = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+  const rep = (id: string, summary: string) => ({ id, work_order_id: OID, percent: 100, summary, links: [], agent: 'x', review_action: null, review_note: null, created_at: ago(3000) })
+  it('created_at 이 같으면 id 가 큰 쪽 — 큐 카드와 표의 행이 입력 순서와 무관하게 서버와 같은 보고를 본다', () => {
+    for (const reports of [[rep(R_LO, '작은 id'), rep(R_HI, '큰 id')], [rep(R_HI, '큰 id'), rep(R_LO, '작은 id')]]) {
+      const hub = assembleAgentHub(rows({ orders: [order({ id: OID, wbs_item_id: 'a1', status: 'reported' })], reports }), NOW, VIEWER)
+      expect(hub.queue[0]).toMatchObject({ reportId: R_HI, summary: '큰 id' })
+      expect(hub.rows.find(r => r.code === 'TSK-A-01')!.order?.reportId).toBe(R_HI)
+    }
+  })
+})

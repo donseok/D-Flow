@@ -18,7 +18,7 @@ const seat = (over: Partial<Seat> = {}): Seat => ({
   code: 'TSK-04-02', name: '주문 상세', state: 'ACTIVE', phase: 'build', anim: 'typing', character: 'cat',
   agent: 'hong/mbp/w1', progress: 60, lastSignalAt: new Date(NOW - 42_000).toISOString(),
   heartbeatAt: new Date(NOW - 42_000).toISOString(), heartbeatPhase: 'build', note: null, rejected: false, reviewNote: null, reportId: null,
-  waitReason: null, resumeRequestedAt: null, resumeRequestedHost: null, canManage: false, assigneeMine: false, agentMine: false, agentOwnerName: null, ...over,
+  waitReason: null, resumeRequestedAt: null, resumeRequestedHost: null, canManage: false, assigneeMine: false, canApprove: false, agentMine: false, agentOwnerName: null, ...over,
 })
 const watcher = (agent: string, over: Partial<Watcher> = {}): Watcher =>
   ({ agent, host: null, slots: 1, busy: 1, untilLabel: null, lastSeenAt: new Date(NOW - 5000).toISOString(), projectId: null, ...over })

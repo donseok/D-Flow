@@ -12,7 +12,7 @@ import { ERR_REPORT_STALE, isUuidLike } from '@/lib/domain/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
 import { applyWorkflowEvent, notifyOnReached, SKIPPED_WARN, type WorkflowEventOk, type WorkflowSkipped } from '@/lib/agent/workflowEvent'
 import { requireDelegationRight } from '@/lib/agent/delegation'
-import { requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
+import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
 
 /**
  * 에이전트 작업 루프 UI 서버 액션 — 스펙 §5. 2026-08-24: 전용 관제 화면(/agent-ops)을 없애고
@@ -73,27 +73,27 @@ export async function getAgentProjectState(projectId: string): Promise<{ registe
 
 /**
  * 승인 자격 로더 — 관리자 또는 서브트리 관리자(트랙 B, 2026-09-15). 완료를 확정하는 결정이라
- * 리프 담당자 본인에게는 주지 않는다(분리 원칙: 자기 완료를 자기가 승인 못 함) — isSubtreeManager
- * 는 strict 조상만 보므로 리프 자신의 담당자는 애초에 이 판정에 걸리지 않는다(assignee.ts 계약).
+ * 리프 담당자 본인·그 주문을 claim 한 계정은 제외 — requireCompletionApprover 가 시행한다(분리 원칙:
+ * 자기 완료를 자기가 승인 못 함, 제7부 AUTH-07a).
  * WBS 항목이 삭제된 주문(wbs_item_id 없음)은 조상을 특정할 수 없어 관리자만.
  */
 async function loadOrderForAdmin(orderId: string): Promise<
-  | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null }; actor: { userId: string } }
+  | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }; actor: { userId: string } }
   | { ok: false; error: string }
 > {
   if (!isUuidLike(orderId)) return { ok: false, error: '잘못된 요청입니다.' }
   const admin = createAdminClient()
   const { data: order, error } = await admin
-    .from('agent_work_orders').select('id, project_id, status, wbs_item_id').eq('id', orderId).maybeSingle()
+    .from('agent_work_orders').select('id, project_id, status, wbs_item_id, claimed_by_user_id').eq('id', orderId).maybeSingle()
   if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
   if (!order) return { ok: false, error: '주문 없음' }
-  const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null }
+  const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
     if (!g.ok) return { ok: false, error: g.error }
     return { ok: true, order: row, actor: { userId: g.actor.userId } }
   }
-  const right = await requireSubtreeManagerOrAdmin(row.wbs_item_id, row.project_id)
+  const right = await requireCompletionApprover(row.wbs_item_id, row.project_id, { claimedByUserId: row.claimed_by_user_id })
   if (!right.ok) return { ok: false, error: right.error }
   return { ok: true, order: row, actor: right.actor }
 }
@@ -101,7 +101,7 @@ async function loadOrderForAdmin(orderId: string): Promise<
 /**
  * 검토 계열(반려·승인 취소·재작업 요청)의 자격 로더(2026-09-14, 사용자 결정 "담당자 본인도 허용";
  * 2026-09-15 트랙 B — 서브트리 관리자 추가). 승인(approve)은 완료를 확정하는 결정이라 별도로
- * loadOrderForAdmin(관리자 또는 서브트리 관리자, 리프 담당자 본인은 제외)을 쓴다. 이쪽은
+ * loadOrderForAdmin(관리자 또는 서브트리 관리자, 리프 담당자 본인·claim 계정은 제외)을 쓴다. 이쪽은
  * "되돌리는" 결정이라 더 넓다 — 관리자, 그 항목의 담당자 본인(requireDelegationRight), 그
  * 항목의 서브트리 관리자(requireSubtreeManagerOrAdmin) 중 하나면 된다.
  * 담당자 본인 판정(관리자 포함)을 먼저 보고 실패할 때만 서브트리 관리자를 추가로 본다 — 흔한
@@ -187,24 +187,30 @@ async function afterTransition(
   if (args.transition.reachedFirst && args.itemId) await notifyOnReached(admin, args.itemId, args.actorUserId)
 }
 
-/** 주문의 최신 완료 보고 id(없으면 null). 조회 실패는 결과로 — 호출부가 쓰기 전에 중단한다(3원칙 ②). */
+/**
+ * 주문의 최신 완료 보고 id(없으면 null). 조회 실패는 결과로 — 호출부가 쓰기 전에 중단한다(3원칙 ②).
+ * created_at 이 같으면 id 가 큰 쪽이 최신이다 — 화면(seatmap.ts isLaterReport, getAgentOrderForItem 의 보고 순서)도
+ * 같은 순서라 두 쪽이 같은 보고를 "최신"으로 고른다.
+ */
 async function latestCompletionReportId(
   admin: AdminClient, orderId: string,
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
   const { data, error } = await admin
     .from('agent_work_reports').select('id').eq('work_order_id', orderId).eq('kind', 'completion')
-    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()
   if (error) return { ok: false, error: `보고 조회 실패: ${error.message}` }
   return { ok: true, id: (data as { id: string } | null)?.id ?? null }
 }
 
+/** 화면이 보낸 "본 보고" id 의 모양 — uuid 또는 null(보고 없음). 서버 액션은 직접 호출될 수 있어 런타임에 본다. */
+function isExpectedReportId(v: unknown): v is string | null {
+  return v === null || (typeof v === 'string' && isUuidLike(v))
+}
+
 /** 사람이 본 보고가 지금도 최신인가 — 반려 뒤 재보고된 주문을 옛 카드로 승인·반려하지 못하게 한다. */
 async function checkReportFresh(
-  admin: AdminClient, orderId: string, expectedReportId: unknown,
+  admin: AdminClient, orderId: string, expectedReportId: string | null,
 ): Promise<{ ok: true; reportId: string | null } | { ok: false; error: string; stale?: true }> {
-  if (expectedReportId !== null && (typeof expectedReportId !== 'string' || !isUuidLike(expectedReportId))) {
-    return { ok: false, error: '잘못된 요청입니다.' }
-  }
   const latest = await latestCompletionReportId(admin, orderId)
   if (!latest.ok) return latest
   if (latest.id !== expectedReportId) return { ok: false, stale: true, error: ERR_REPORT_STALE }
@@ -213,16 +219,12 @@ async function checkReportFresh(
 
 /** 최신 completion 보고의 review 필드를 갱신한다 — 되감기(승인 취소·재작업) 전용. 전이 뒤 부수 기록이라 실패는 로깅만(전이 자체는 확정됐다). */
 async function recordReview(admin: AdminClient, orderId: string, patch: Record<string, unknown>, label: string): Promise<void> {
-  const { data: latest, error: latestErr } = await admin
-    .from('agent_work_reports').select('id').eq('work_order_id', orderId).eq('kind', 'completion')
-    .order('created_at', { ascending: false }).limit(1).maybeSingle()
-  if (latestErr || !latest) {
-    console.error(`[agentWork] ${label} 보고 조회 실패:`, latestErr?.message ?? '0행')
+  const latest = await latestCompletionReportId(admin, orderId)
+  if (!latest.ok || latest.id === null) {
+    console.error(`[agentWork] ${label} 보고 조회 실패:`, latest.ok ? '0행' : latest.error)
     return
   }
-  const { error: revErr } = await admin.from('agent_work_reports')
-    .update(patch).eq('id', (latest as { id: string }).id).select('id')
-  if (revErr) console.error(`[agentWork] ${label} 기록 실패:`, revErr.message)
+  await recordReviewOn(admin, latest.id, patch, label)
 }
 
 /**
@@ -244,6 +246,7 @@ async function recordReviewOn(admin: AdminClient, reportId: string | null, patch
  * loadOrderForAdmin 이 이미 확정했고, 실적은 사람이 치는 값이 아니라 승인 사건의 크레딧이다.
  */
 export async function approveAgentCompletion(orderId: string, expectedReportId: string | null): Promise<ActionResult> {
+  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: '잘못된 요청입니다.' }
   const loaded = await loadOrderForAdmin(orderId)
   if (!loaded.ok) return loaded
   const { order, actor } = loaded
@@ -251,6 +254,7 @@ export async function approveAgentCompletion(orderId: string, expectedReportId: 
   if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
 
   const admin = createAdminClient()
+  // 잔여 창: 이 대조와 전이 RPC 의 상태 CAS 사이(ms)에 재보고가 끼어들 수 있다 — H2 에서 RPC 가 p_expected_report_id 로 닫는다.
   const fresh = await checkReportFresh(admin, orderId, expectedReportId)
   if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId })
@@ -266,6 +270,7 @@ export async function approveAgentCompletion(orderId: string, expectedReportId: 
 
 /** 반려 — 원자 전이. reported→claimed CAS + 단계 ip + 실적 표.rw(반려·재작업 크레딧 — 작업은 했으므로 claim 보다 높다, 스펙 D4). */
 export async function rejectAgentCompletion(orderId: string, note: string, expectedReportId: string | null): Promise<ActionResult> {
+  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: '잘못된 요청입니다.' }
   const trimmed = note.trim()
   if (!trimmed) return { ok: false, error: '반려 사유가 필요합니다.' }
   const loaded = await loadOrderForReview(orderId)
@@ -275,6 +280,7 @@ export async function rejectAgentCompletion(orderId: string, note: string, expec
     return { ok: false, error: `반려 가능한 상태가 아닙니다(${order.status}).` }
   }
   const admin = createAdminClient()
+  // 잔여 창: 이 대조와 전이 RPC 의 상태 CAS 사이(ms)에 재보고가 끼어들 수 있다 — H2 에서 RPC 가 p_expected_report_id 로 닫는다.
   const fresh = await checkReportFresh(admin, orderId, expectedReportId)
   if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'reject', actorUserId: actor.userId, orderId })
@@ -392,7 +398,8 @@ export async function getAgentOrderForItem(itemId: string): Promise<
     .from('agent_work_reports')
     .select('id, kind, percent, summary, links, agent, review_action, review_note, created_at')
     .eq('work_order_id', row.id)
-    .order('created_at', { ascending: true })
+    // created_at 이 같으면 id 순 — 명세 패널이 고르는 마지막 completion 이 서버의 최신(latestCompletionReportId)과 같다.
+    .order('created_at', { ascending: true }).order('id', { ascending: true })
   if (repErr) return { ok: false, error: `보고 조회 실패: ${repErr.message}` }
   return { ok: true, order: { ...row, reports: (reports ?? []) as AgentOrderReport[] }, priorOrders, projectId }
 }

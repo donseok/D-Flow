@@ -28,7 +28,7 @@ vi.mock('next/server', async (orig) => {
   return { ...m, after: (fn: () => unknown) => { void fn() } }
 })
 
-import { approveAgentCompletion, rejectAgentCompletion } from '@/app/actions/agentWork'
+import { approveAgentCompletion, rejectAgentCompletion, unapproveAgentCompletion } from '@/app/actions/agentWork'
 import { ERR_REPORT_STALE } from '@/lib/domain/agentWork'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -43,12 +43,17 @@ const RPC_OK = { ok: true, order_status: null, stage: null, actual_pct: null, st
 
 function fakeAdmin(queues: Record<string, Resp[]>) {
   const updates: Update[] = []
+  /** 보고 조회의 정렬 호출 — 조회 1건마다 한 줄(서버가 고르는 "최신"의 순서를 본다). */
+  const reportOrders: Array<Array<[string, unknown]>> = []
   const admin = {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const eq: Array<[string, unknown]> = []
+      const order: Array<[string, unknown]> = []
+      if (table === 'agent_work_reports') reportOrders.push(order)
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'in', 'order', 'limit']) b[k] = () => b
+      for (const k of ['select', 'in', 'limit']) b[k] = () => b
+      b.order = (col: string, opts: unknown) => { order.push([col, opts]); return b }
       b.eq = (col: string, v: unknown) => { eq.push([col, v]); return b }
       b.update = (payload: Record<string, unknown>) => { updates.push({ table, payload, eq }); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
@@ -62,7 +67,7 @@ function fakeAdmin(queues: Record<string, Resp[]>) {
   }
   mocks.createAdminClient.mockReturnValue(admin)
   const reviews = () => updates.filter(u => u.table === 'agent_work_reports')
-  return { admin, updates, reviews }
+  return { admin, updates, reviews, reportOrders }
 }
 
 const REPORTED = { id: O1, project_id: P1, status: 'reported', wbs_item_id: W1 }
@@ -173,5 +178,42 @@ describe('반려 — 승인과 같은 대조', () => {
       expect(await rejectAgentCompletion(O1, '사유', bad as never)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
       expect(admin.rpc).not.toHaveBeenCalled()
     }
+  })
+})
+
+describe('expectedReportId 모양 검사는 맨 앞 — 주문을 읽기 전에 거부한다(Task 11 M3)', () => {
+  it('승인: uuid 가 아니면 주문 조회·권한 판정 없이 잘못된 요청 — 이미 승인된 주문이어도 상태 문구가 아니다', async () => {
+    for (const bad of [undefined, 'r1', 42, '']) {
+      const { admin } = fakeAdmin({ agent_work_orders: [{ data: { ...REPORTED, status: 'approved' } }] })
+      expect(await approveAgentCompletion(O1, bad as never)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
+      expect(admin.from).not.toHaveBeenCalled()
+      expect(mocks.requireProjectAdmin).not.toHaveBeenCalled()
+    }
+  })
+  it('반려: 같은 검사가 사유·주문 조회보다 먼저다', async () => {
+    const { admin } = fakeAdmin({ agent_work_orders: [{ data: REPORTED }] })
+    expect(await rejectAgentCompletion(O1, '사유', 'r1' as never)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
+    expect(await rejectAgentCompletion(O1, '', 'r1' as never)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
+    expect(admin.from).not.toHaveBeenCalled()
+  })
+})
+
+describe('최신 completion 보고의 순서 — created_at 이 같으면 id 로 가른다(Task 11 M4)', () => {
+  const NEWEST_FIRST = [['created_at', { ascending: false }], ['id', { ascending: false }]]
+  it('승인 대조는 created_at 내림차순 다음 id 내림차순으로 최신 1건을 고른다', async () => {
+    const { reportOrders } = fakeAdmin({ agent_work_orders: [{ data: REPORTED }], agent_work_reports: [latest(R2), updated(R2)] })
+    expect(await approveAgentCompletion(O1, R2)).toEqual({ ok: true })
+    expect(reportOrders[0]).toEqual(NEWEST_FIRST)
+  })
+  it('되감기(승인 취소)의 검토 기록도 같은 판정으로 최신을 찾는다 — 같은 조회를 두 번 적지 않는다(M2)', async () => {
+    const { reviews, reportOrders } = fakeAdmin({
+      agent_work_orders: [{ data: { ...REPORTED, status: 'approved' } }],
+      agent_work_reports: [latest(R2), updated(R2)],
+    })
+    expect(await unapproveAgentCompletion(O1)).toEqual({ ok: true })
+    expect(reportOrders[0]).toEqual(NEWEST_FIRST)
+    expect(reviews()).toHaveLength(1)
+    expect(reviews()[0].eq).toEqual([['id', R2]])
+    expect(reviews()[0].payload).toMatchObject({ review_action: null, reviewed_by: null })
   })
 })

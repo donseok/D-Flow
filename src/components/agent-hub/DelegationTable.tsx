@@ -3,8 +3,9 @@
 // 부모 행 체크 = 하위 리프 일괄(관리자). 체크는 즉시 표시되고 잠기지 않는다. 1.5초 모아 applyHubDelegations 1건으로
 // 보내고 응답의 허브로 표를 갱신한다(2026-09-14 체크 지연 개선 — 종전 체크 1개 = 액션 2건 직렬 + 0.8~1.0초 잠김).
 // 조정(승인·반려·승인 취소·재작업 요청·중단)과 단계 직접 조정은 관리자 또는 서브트리 관리자
-// (대상 리프의 strict 조상 중 담당자가 나, HubRow.canManage — 트랙 B, 2026-09-15), runHubProcessOp
-// 1건으로 끝나고 응답의 허브로 교체한다(스펙 §11). 페이지 전체 refresh 금지(스펙 §7).
+// (대상 리프의 strict 조상 중 담당자가 나, HubRow.canManage — 트랙 B, 2026-09-15) — 승인만은 자기 담당·자기 착수를
+// 뺀 HubRow.canApprove(AUTH-07a) — runHubProcessOp 1건으로 끝나고 응답의 허브로 교체한다(스펙 §11).
+// 페이지 전체 refresh 금지(스펙 §7).
 //
 // 표 서식(2026-09-17 개편):
 // 열 10개를 7개 + 여유 열로 줄이고 table-layout: fixed + <colgroup> 으로 폭을 사용자가 끌어 바꾼다.
@@ -47,10 +48,11 @@ type NoteKind = 'reject' | 'rework'
 /**
  * 주문 상태별 조정 버튼(§11). note 가 있는 것은 사유 입력 줄을, confirm 인 것(중단 — 되돌리기 어렵다)은
  * 같은 자리에 확인 줄을 먼저 연다(브라우저 confirm() 금지).
- * who='admin' 은 관리자 또는 서브트리 관리자(승인·중단), 'review' 는 관리자·담당자 본인·서브트리
+ * who='admin' 은 관리자 또는 서브트리 관리자(중단), 'review' 는 관리자·담당자 본인·서브트리
  * 관리자(반려·승인 취소·재작업 요청, 2026-09-14 "담당자 본인도 허용" + 2026-09-15 트랙 B). 서버 자격
  * (loadOrderForAdmin·loadOrderForReview·requireSubtreeManagerOrAdmin, runHubProcessOp)과 같은 경계다.
- * 리프 본인 담당자는 canManage 가 조상만 보므로 who='admin' 버튼(승인)에는 여전히 안 뜬다(분리 원칙).
+ * 승인은 who 대신 r.canApprove 만 본다 — 서브트리 관리자라도 그 리프의 담당자 본인이거나 그 주문을 claim 한
+ * 계정이면 안 뜬다(분리 원칙, requireCompletionApprover — AUTH-07a).
  */
 type OpButton = { kind: keyof typeof OP_LABEL; who: 'admin' | 'review'; note?: NoteKind; confirm?: true }
 const OPS_BY_STATUS: Readonly<Record<string, readonly OpButton[]>> = {
@@ -395,7 +397,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
               const canStage = (isAdmin || r.canManage) && r.isLeaf && !r.milestone && r.devWorkflow
               const canReviewRow = (isAdmin || r.assigneeMine || r.canManage) && r.isLeaf && !r.milestone
               const ops = canReviewRow && r.order
-                ? (OPS_BY_STATUS[r.order.status] ?? []).filter(b => b.who === 'admin' ? (isAdmin || r.canManage) : (isAdmin || r.assigneeMine || r.canManage))
+                ? (OPS_BY_STATUS[r.order.status] ?? []).filter(b => b.kind === 'approve' ? r.canApprove : b.who === 'admin' ? (isAdmin || r.canManage) : (isAdmin || r.assigneeMine || r.canManage))
                 : []
               const noteOpen = noteOp?.itemId === r.itemId ? noteOp : null
               const confirmOpen = confirmOp?.itemId === r.itemId ? confirmOp : null

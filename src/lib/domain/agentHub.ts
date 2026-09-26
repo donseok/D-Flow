@@ -1,7 +1,7 @@
 // 에이전트 허브 조립 — 순수 함수. 트리 순서·행 상태·카운터·승인 큐·감시자를 한 번에 만든다. DB·세션을 모른다.
 // 좌석 층은 여기서 만들지 않는다 — /agents/office 가 좌석표 로더로 그린다(2026-09-14 스튜디오 분리 스펙 §4-2).
 import { deriveSeatState, isWatcherAlive, lastSignalMs, type OrderStatus, type SeatState } from './seatState'
-import { AGENT_TAG, isSubtreeManagerOf, type OrderRow, type Watcher, type WatcherRow } from './seatmap'
+import { AGENT_TAG, canApproveCompletion, isLaterReport, isSubtreeManagerOf, type OrderRow, type Watcher, type WatcherRow } from './seatmap'
 import { deriveWaitReason, type WaitReason } from './waitReason'
 import { stageLockedForHuman } from './agentWork'
 
@@ -34,6 +34,9 @@ export interface HubRow {
    *  담당자가 나면 true. 허브 UI 의 mine 필터·조정 버튼 노출을 서버 가드
    *  (requireSubtreeManagerOrAdmin, agent/subtreeManager.ts)와 같은 축으로 맞춘다. */
   canManage: boolean
+  /** 완료 승인 어포던스 — 관리자, 또는 서브트리 관리자이면서 이 리프의 담당자·표시 주문의 claim 계정이 아님.
+   *  서버 requireCompletionApprover 와 같은 축(canApproveCompletion, AUTH-07a). */
+  canApprove: boolean
   delegated: boolean; devWorkflow: boolean
   /** WBS 단계(as/ip/im/xx, 미지정 null). 허브의 단계 직접 조정(§11)이 보이는 값이자 select 의 현재값. */
   stage: string | null
@@ -60,6 +63,8 @@ export interface HubQueueEntry {
   /** 서브트리 관리자(트랙 B) — 큐 항목은 항상 리프의 reported 주문이므로 그 리프의 strict 조상
    *  중 담당자가 나면 true. HubRow.canManage 와 같은 규칙. */
   canManage: boolean
+  /** 승인 버튼 노출 — HubRow.canApprove 와 같은 식을 이 주문으로(자기 담당·자기 착수 제외, AUTH-07a). */
+  canApprove: boolean
 }
 export interface AgentHub {
   projectId: string; projectName: string
@@ -142,7 +147,7 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
   const latestReport = new Map<string, HubReportRow>()
   for (const r of rows.reports) {
     const cur = latestReport.get(r.work_order_id)
-    if (!cur || Date.parse(r.created_at) > Date.parse(cur.created_at)) latestReport.set(r.work_order_id, r)
+    if (!cur || isLaterReport(r, cur)) latestReport.set(r.work_order_id, r)
   }
 
   const hasChildren = new Set(rows.items.map(i => i.parent_id).filter((x): x is string => x !== null))
@@ -198,6 +203,7 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       itemId: item.id, code: item.code, name: item.name, depth, parentId: item.parent_id,
       isLeaf, milestone: item.milestone,
       assigneeName: item.assignee_member_id ? (memberName.get(item.assignee_member_id) ?? null) : null, assigneeMine, canManage,
+      canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: picked?.claimed_by_user_id === viewer.userId }),
       delegated, devWorkflow: item.dev_workflow, stage: item.stage,
       stageLocked: stageLockedForHuman({ delegated, orderStatus: picked?.status ?? null }),
       order, prompt: item.agent_prompt,
@@ -211,12 +217,14 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
     .map(o => {
       const it = o.wbs_item_id ? itemById.get(o.wbs_item_id) : undefined
       const rep = latestReport.get(o.id)
+      const assigneeMine = it?.assignee_member_id != null && mine.has(it.assignee_member_id)
+      const canManage = it ? isSubtreeManagerOf(it.id, itemById, mine) : false
       return {
         orderId: o.id, itemId: o.wbs_item_id, code: it?.code ?? '', name: it?.name ?? '',
         agent: rep?.agent ?? o.heartbeat_agent ?? o.claimed_by ?? '', percent: rep?.percent ?? 0, summary: rep?.summary ?? '',
         links: rep?.links ?? [], reportedAt: rep?.created_at ?? o.updated_at, reportId: rep?.id ?? null,
-        assigneeMine: it?.assignee_member_id != null && mine.has(it.assignee_member_id),
-        canManage: it ? isSubtreeManagerOf(it.id, itemById, mine) : false,
+        assigneeMine, canManage,
+        canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: o.claimed_by_user_id === viewer.userId }),
       }
     })
     .sort((a, b) => Date.parse(a.reportedAt) - Date.parse(b.reportedAt))

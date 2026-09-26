@@ -59,9 +59,11 @@ export interface Seat {
   resumeRequestedHost: string | null
   /** READY(빈자리)만 값 — 왜 아직 안 집어갔는지(스펙 2026-09-14 착수 대기 사유 §1). 나머지 상태는 null. */
   waitReason: WaitReason | null
-  /** 관리자이거나 이 항목의 서브트리 관리자 — 승인·중단 어포던스. 서버 가드
+  /** 관리자이거나 이 항목의 서브트리 관리자 — 중단·재개 어포던스(승인은 canApprove). 서버 가드
    *  requireSubtreeManagerOrAdmin(agent/subtreeManager.ts)과 같은 축이다. 재료가 없으면 false(fail-closed). */
   canManage: boolean
+  /** 완료 승인 어포던스 — 서버 requireCompletionApprover 와 같은 축(canApproveCompletion). 재료가 없으면 false. */
+  canApprove: boolean
   /** 이 항목의 담당자가 나 — 반려·승인 취소·재작업은 담당자 본인도 할 수 있다(허브 §11 과 같은 규칙). */
   assigneeMine: boolean
   /** 명찰 모델 — 실행 모델(heartbeat)이 있으면 그것, 없으면 항목에 지정된 모델. 둘 다 없으면 null. */
@@ -132,6 +134,23 @@ export function isSubtreeManagerOf(
   return false
 }
 
+/**
+ * 완료 승인 자격 — 관리자, 또는 서브트리 관리자이면서 그 리프의 담당자 본인도 그 주문을 claim 한 계정도 아닌 사람
+ * (제7부 AUTH-07a). 서버 가드 requireCompletionApprover(agent/subtreeManager.ts)와 같은 축이며 허브·좌석·배지가 같이 쓴다.
+ */
+export function canApproveCompletion(r: { isAdmin: boolean; subtreeManager: boolean; assigneeMine: boolean; claimedByMe: boolean }): boolean {
+  return r.isAdmin || (r.subtreeManager && !r.assigneeMine && !r.claimedByMe)
+}
+
+/**
+ * 같은 주문의 두 보고 중 a 가 더 늦은가 — created_at, 같으면 id 가 큰 쪽. 서버 latestCompletionReportId
+ * (created_at desc, id desc)와 같은 순서라 화면과 서버가 같은 보고를 "최신"으로 고른다.
+ */
+export function isLaterReport(a: { id: string; created_at: string }, b: { id: string; created_at: string }): boolean {
+  const d = Date.parse(a.created_at) - Date.parse(b.created_at)
+  return d !== 0 ? d > 0 : a.id > b.id
+}
+
 const WORK_STATES: readonly SeatState[] = ['ACTIVE', 'STALE', 'REJECTED', 'BLOCKED']
 const ATTENTION_ORDER: readonly SeatState[] = ['BLOCKED', 'STALE', 'OFFLINE', 'REJECTED']
 
@@ -153,12 +172,12 @@ function latestReportByOrder(reports: ReportRow[]): Map<string, ReportRow> {
   return out
 }
 
-/** 주문별 마지막 completion 보고(가장 늦은 created_at). */
+/** 주문별 마지막 completion 보고(가장 늦은 created_at, 같으면 큰 id — isLaterReport). */
 function latestReviewByOrder(reviews: ReviewRow[]): Map<string, ReviewRow> {
   const out = new Map<string, ReviewRow>()
   for (const r of reviews) {
     const cur = out.get(r.work_order_id)
-    if (!cur || Date.parse(r.created_at) > Date.parse(cur.created_at)) out.set(r.work_order_id, r)
+    if (!cur || isLaterReport(r, cur)) out.set(r.work_order_id, r)
   }
   return out
 }
@@ -170,7 +189,7 @@ function ownerOf(accountId: string | null, viewerId: string | undefined, nameOf:
   return { mine, name: mine ? null : nameOf(accountId) }
 }
 
-function toSeat(o: OrderRow, item: ItemRow | undefined, review: ReviewRow | undefined, nowMs: number, rights: { canManage: boolean; assigneeMine: boolean }, report: ReportRow | undefined, owner: { mine: boolean; name: string | null }): Seat {
+function toSeat(o: OrderRow, item: ItemRow | undefined, review: ReviewRow | undefined, nowMs: number, rights: { canManage: boolean; assigneeMine: boolean; canApprove: boolean }, report: ReportRow | undefined, owner: { mine: boolean; name: string | null }): Seat {
   const input = {
     status: o.status, lastHeartbeatAt: o.last_heartbeat_at, heartbeatPhase: o.heartbeat_phase,
     updatedAt: o.updated_at, lastReview: review?.review_action ?? null, actualPct: item?.actual_pct ?? null,
@@ -196,7 +215,7 @@ function toSeat(o: OrderRow, item: ItemRow | undefined, review: ReviewRow | unde
     rejected: isRejected(input), reviewNote: review?.review_action === 'reject' ? review.review_note : null,
     reportId: review?.id ?? null,
     waitReason: null,
-    canManage: rights.canManage, assigneeMine: rights.assigneeMine,
+    canManage: rights.canManage, assigneeMine: rights.assigneeMine, canApprove: rights.canApprove,
     ...pickModel(o, item),
     // 점유·보고 중인 주문만 — 승인·중단으로 떠난 주문의 옛 보고를 말풍선으로 되살리지 않는다.
     lastReport: report && (o.status === 'claimed' || o.status === 'reported') && report.summary.trim()
@@ -244,7 +263,7 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
   const projectName = new Map(rows.projects.map(p => [p.id, p.name]))
 
   // 결재 어포던스 재료 — 조상 사슬은 items + parents 합집합이다(데이터층이 parents 를 조상 전체로 싣는다).
-  // 재료가 없으면 빈 집합 → canManage·assigneeMine 이 전부 false 로 잠긴다(fail-closed).
+  // 재료가 없으면 빈 집합 → canManage·assigneeMine·canApprove 가 전부 false 로 잠긴다(fail-closed).
   const ancestorById = new Map<string, AncestorLike>()
   for (const it of [...rows.items, ...rows.parents]) ancestorById.set(it.id, it)
   const myMemberIds: ReadonlySet<string> = opts.viewer?.memberIds ?? mine?.memberIds ?? new Set<string>()
@@ -273,10 +292,12 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
   const done = new Map<string, number>()
   for (const o of rows.orders) {
     const item = o.wbs_item_id ? itemById.get(o.wbs_item_id) : undefined
+    const isAdminP = adminProjectIds.has(o.project_id)
+    const subtree = item !== undefined && isSubtreeManagerOf(item.id, ancestorById, myMemberIds)
+    const assigneeMine = item?.assignee_member_id != null && myMemberIds.has(item.assignee_member_id)
     const rights = {
-      canManage: adminProjectIds.has(o.project_id)
-        || (item !== undefined && isSubtreeManagerOf(item.id, ancestorById, myMemberIds)),
-      assigneeMine: item?.assignee_member_id != null && myMemberIds.has(item.assignee_member_id),
+      canManage: isAdminP || subtree, assigneeMine,
+      canApprove: canApproveCompletion({ isAdmin: isAdminP, subtreeManager: subtree, assigneeMine, claimedByMe: viewerId !== undefined && o.claimed_by_user_id === viewerId }),
     }
     const seat = toSeat(o, item, reviewByOrder.get(o.id), nowMs, rights, reportByOrder.get(o.id),
       ownerOf(o.claimed_by_user_id, viewerId, ownerName(o.project_id)))

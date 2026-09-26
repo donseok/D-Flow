@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { animFor, OFFLINE_MS, STALE_MS } from '@/lib/domain/seatState'
-import { ageLabel, assembleSeatmap, seatmapChannelProjectIds, type OrderRow, type SeatmapRows, type WatcherRow } from '@/lib/domain/seatmap'
+import { ageLabel, assembleSeatmap, canApproveCompletion, seatmapChannelProjectIds, type OrderRow, type SeatmapRows, type WatcherRow } from '@/lib/domain/seatmap'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -385,5 +385,63 @@ describe('assembleSeatmap — 내 에이전트·다른 계정 구분(2026-09-19)
     expect(byAgent['me/mbp/lead']).toMatchObject({ mine: true, ownerName: null })
     expect(byAgent['hong/win/lead']).toMatchObject({ mine: false, ownerName: '홍길동' })
     expect(byAgent['kim/lx/lead']).toMatchObject({ mine: false, ownerName: null })
+  })
+})
+
+describe('canApproveCompletion — 완료 승인 자격(서버 requireCompletionApprover 와 같은 축)', () => {
+  const base = { isAdmin: false, subtreeManager: true, assigneeMine: false, claimedByMe: false }
+  it('관리자는 늘 true — 자기 담당·자기 착수여도(관리자 자기 승인 금지는 비목표)', () => {
+    for (const subtreeManager of [true, false]) for (const assigneeMine of [true, false]) for (const claimedByMe of [true, false]) {
+      expect(canApproveCompletion({ isAdmin: true, subtreeManager, assigneeMine, claimedByMe })).toBe(true)
+    }
+  })
+  it('비관리자는 서브트리 관리자 ∧ ¬담당 ∧ ¬claim 일 때만 true', () => {
+    expect(canApproveCompletion(base)).toBe(true)
+    expect(canApproveCompletion({ ...base, subtreeManager: false })).toBe(false)
+    expect(canApproveCompletion({ ...base, assigneeMine: true })).toBe(false)
+    expect(canApproveCompletion({ ...base, claimedByMe: true })).toBe(false)
+    expect(canApproveCompletion({ ...base, assigneeMine: true, claimedByMe: true })).toBe(false)
+  })
+})
+
+describe('assembleSeatmap — 승인 어포던스(canApprove, AUTH-07a)', () => {
+  const seatOf = (m: ReturnType<typeof assembleSeatmap>) => m.floors[0].zones[0].seats[0]
+  const viewer = (over: { adminProjectIds?: string[] } = {}) => ({
+    userId: 'u1', memberIds: new Set(['m1']), adminProjectIds: new Set(over.adminProjectIds ?? []),
+  })
+  /** 구역 부모 z1 의 담당자가 m1(= 보는 사람) → 보는 사람은 i1 의 서브트리 관리자다. */
+  const managed = (leafAssignee: string | null, claimedBy: string | null): SeatmapRows => rows({
+    orders: [order({ status: 'reported', claimed_by_user_id: claimedBy })],
+    items: [{ id: 'i1', project_id: P1, code: 'TSK-04-02', name: '주문 상세', parent_id: 'z1', actual_pct: 100, assignee_member_id: leafAssignee, tags: ['agent'] }],
+    parents: [{ id: 'z1', project_id: P1, code: 'WP-04', name: '주문 관리', parent_id: null, actual_pct: null, assignee_member_id: 'm1', tags: null }],
+  })
+
+  it('부모·리프 담당자가 같은 뷰어면 canManage 는 true 지만 canApprove 는 false', () => {
+    const s = seatOf(assembleSeatmap(managed('m1', 'u2'), NOW, { viewer: viewer() }))
+    expect(s).toMatchObject({ canManage: true, assigneeMine: true, canApprove: false })
+  })
+  it('뷰어 계정이 claim 한 주문도 canApprove:false', () => {
+    const s = seatOf(assembleSeatmap(managed(null, 'u1'), NOW, { viewer: viewer() }))
+    expect(s).toMatchObject({ canManage: true, assigneeMine: false, canApprove: false })
+  })
+  it('남이 claim 한 미배정 리프는 서브트리 관리자가 승인할 수 있다', () => {
+    expect(seatOf(assembleSeatmap(managed(null, 'u2'), NOW, { viewer: viewer() })).canApprove).toBe(true)
+  })
+  it('관리자 좌석은 자기 담당·자기 착수여도 canApprove:true', () => {
+    expect(seatOf(assembleSeatmap(managed('m1', 'u1'), NOW, { viewer: viewer({ adminProjectIds: [P1] }) })).canApprove).toBe(true)
+  })
+  it('보는 사람 재료가 없으면 false(fail-closed)', () => {
+    expect(seatOf(assembleSeatmap(managed(null, 'u2'), NOW)).canApprove).toBe(false)
+  })
+})
+
+describe('assembleSeatmap — 최신 completion 보고의 동률(H1 Task 11 M4)', () => {
+  const R_LO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', R_HI = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+  const review = (id: string) => ({ id, work_order_id: order({}).id, review_action: null, review_note: null, created_at: ago(5000) })
+  it('created_at 이 같으면 id 가 큰 쪽이 최신이다 — 입력 순서와 무관하게 서버(created_at desc, id desc)와 같은 보고', () => {
+    for (const reviews of [[review(R_LO), review(R_HI)], [review(R_HI), review(R_LO)]]) {
+      const m = assembleSeatmap(rows({ orders: [order({ status: 'reported' })], reviews }), NOW)
+      expect(m.floors[0].zones[0].seats[0].reportId).toBe(R_HI)
+    }
   })
 })

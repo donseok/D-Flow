@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   actor: null as unknown,
-  orders: [] as Array<{ wbs_item_id: string | null }>,
+  orders: [] as Array<{ wbs_item_id: string | null; claimed_by_user_id: string | null }>,
   ordersError: null as { message: string } | null,
   items: [] as Array<{ id: string; parent_id: string | null; assignee_member_id: string | null }>,
   memberIds: [] as string[],
@@ -45,18 +45,33 @@ const ITEMS = [
   { id: 'other', parent_id: null, assignee_member_id: 'm-other' },
   { id: 'leaf3', parent_id: 'other', assignee_member_id: null },
 ]
-const ORDERS = [{ wbs_item_id: 'leaf1' }, { wbs_item_id: 'leaf2' }, { wbs_item_id: 'leaf3' }, { wbs_item_id: null }]
+const ORDERS = [
+  { wbs_item_id: 'leaf1', claimed_by_user_id: null }, { wbs_item_id: 'leaf2', claimed_by_user_id: null },
+  { wbs_item_id: 'leaf3', claimed_by_user_id: null }, { wbs_item_id: null, claimed_by_user_id: null },
+]
+const viewer = (isAdmin: boolean, memberIds: string[], userId = 'u-viewer') => ({ isAdmin, memberIds, userId })
 
 describe('countApprovable', () => {
   it('관리자는 결재 대기 전부', () => {
-    expect(countApprovable(ORDERS, ITEMS, { isAdmin: true, memberIds: [] })).toBe(4)
+    expect(countApprovable(ORDERS, ITEMS, viewer(true, []))).toBe(4)
   })
   it('서브트리 관리자는 자기 하위만', () => {
-    expect(countApprovable(ORDERS, ITEMS, { isAdmin: false, memberIds: ['m-boss'] })).toBe(2)
-    expect(countApprovable(ORDERS, ITEMS, { isAdmin: false, memberIds: ['m-other'] })).toBe(1)
+    expect(countApprovable(ORDERS, ITEMS, viewer(false, ['m-boss']))).toBe(2)
+    expect(countApprovable(ORDERS, ITEMS, viewer(false, ['m-other']))).toBe(1)
   })
   it('리프 담당자 본인은 승인할 수 없으니 세지 않는다', () => {
-    expect(countApprovable(ORDERS, ITEMS, { isAdmin: false, memberIds: ['m-dev'] })).toBe(0)
+    expect(countApprovable(ORDERS, ITEMS, viewer(false, ['m-dev']))).toBe(0)
+  })
+  it('서브트리 관리자라도 자기 담당 리프·자기 claim 주문·트리에 없는 리프는 빠진다(AUTH-07a) — 관리자 수는 그대로', () => {
+    const items = [...ITEMS, { id: 'leaf4', parent_id: 'wp', assignee_member_id: 'm-boss' }] // 상위 담당자가 리프도 맡음
+    const orders = [
+      { wbs_item_id: 'leaf1', claimed_by_user_id: 'u-dev' },  // 남이 claim — 센다
+      { wbs_item_id: 'leaf2', claimed_by_user_id: 'u-boss' }, // 내가 claim — 뺀다
+      { wbs_item_id: 'leaf4', claimed_by_user_id: null },     // 내 담당 리프 — 뺀다
+      { wbs_item_id: 'ghost', claimed_by_user_id: null },     // 트리에 없는 리프 — 서버도 거부한다
+    ]
+    expect(countApprovable(orders, items, viewer(false, ['m-boss'], 'u-boss'))).toBe(1)
+    expect(countApprovable(orders, items, viewer(true, ['m-boss'], 'u-boss'))).toBe(4)
   })
 })
 
@@ -85,6 +100,11 @@ describe('getPendingApprovalCount', () => {
   it('멤버는 서브트리 관리자로서 승인할 수 있는 것만', async () => {
     m.actor = actor('member'); m.memberIds = ['m-boss']
     expect(await getPendingApprovalCount(P)).toBe(2)
+  })
+  it('멤버 배지에서 내 계정(actor.userId)이 claim 한 주문은 빠진다', async () => {
+    m.actor = actor('member'); m.memberIds = ['m-boss']
+    m.orders = ORDERS.map(o => (o.wbs_item_id === 'leaf2' ? { ...o, claimed_by_user_id: 'u1' } : o))
+    expect(await getPendingApprovalCount(P)).toBe(1)
   })
   it('결재 대기가 없으면 0', async () => {
     m.orders = []

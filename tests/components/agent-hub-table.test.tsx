@@ -20,7 +20,7 @@ import { HUB_SAVE_DEBOUNCE_MS } from '@/components/agent-hub/usePendingDelegatio
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const row = (over: Partial<HubRow>): HubRow => ({
   itemId: 'x', code: 'X', name: 'x', depth: 0, parentId: null, isLeaf: true, milestone: false, assigneeName: null, assigneeMine: false,
-  canManage: false,
+  canManage: false, canApprove: false,
   delegated: false, devWorkflow: false, stage: null, stageLocked: false, order: null, prompt: null, canToggle: false, waitReason: null, ...over,
 })
 const ROWS: HubRow[] = [
@@ -233,9 +233,10 @@ describe('DelegationTable — 착수 대기 사유', () => {
 })
 
 describe('DelegationTable — 개발 프로세스 조정·단계 직접 조정(§11): 관리자만, runHubProcessOp 1건, 응답의 허브로 교체', () => {
+  // 관리자 뷰의 행 — 관리자 허브는 모든 행이 canApprove 다(assembleAgentHub).
   const NOTE_ROWS: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
-    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
+    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기', depth: 1, parentId: 'root', canToggle: true, canApprove: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
     row({ itemId: 'd', code: 'TSK-D', name: '승인됨', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'xx', order: { id: 'od', status: 'approved', state: 'DONE', agent: 'a', lastSignalAt: null, reportId: null } }),
     row({ itemId: 'c', code: 'TSK-C', name: '작업 중', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null, reportId: null } }),
     row({ itemId: 'r', code: 'TSK-R', name: '대기', depth: 1, parentId: 'root', canToggle: true, delegated: true, devWorkflow: true, stage: 'as', order: { id: 'or', status: 'ready', state: 'READY', agent: null, lastSignalAt: null, reportId: null } }),
@@ -408,7 +409,8 @@ describe('DelegationTable — 담당자 본인도 반려·승인 취소·재작�
     expect(runHubProcessOp).toHaveBeenCalledWith('p1', { kind: 'unapprove', orderId: 'od' })
   })
   it('관리자는 중단·단계까지 모두 보인다(대조군)', () => {
-    render({ rows: MINE, isAdmin: true })
+    // 관리자 허브는 모든 행이 canApprove 다(assembleAgentHub) — 자기 담당이어도(관리자 자기 승인 금지는 비목표).
+    render({ rows: MINE.map(r => ({ ...r, canApprove: true })), isAdmin: true })
     expect(ops('w')).toEqual(['approve', 'reject'])
     expect(ops('c')).toEqual(['stop'])
     expect(host.querySelector('[data-hub-row="w"] select[data-hub-stage]')).not.toBeNull()
@@ -420,7 +422,9 @@ describe('DelegationTable — 서브트리 관리자(canManage, 트랙 B 2026-09
   const MANAGE: HubRow[] = [
     row({ itemId: 'root', code: 'SYS-OP', name: '조업', isLeaf: false }),
     // 서브트리 관리자가 관리하는 리프(조상 담당) — 승인 대기: approve·reject 둘 다 보여야 한다.
-    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
+    row({ itemId: 'w', code: 'TSK-W', name: '승인 대기(관리 대상)', depth: 1, parentId: 'root', canManage: true, canApprove: true, delegated: true, stage: 'im', order: { id: 'ow', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-ow' } }),
+    // 서브트리 관리자가 리프도 맡았다(또는 자기 에이전트로 착수) — 자기 완료라 approve 는 안 뜨고 reject 만(AUTH-07a).
+    row({ itemId: 'sw', code: 'TSK-SW', name: '내가 맡은 관리 대상', depth: 1, parentId: 'root', assigneeMine: true, canManage: true, canApprove: false, canToggle: true, delegated: true, stage: 'im', order: { id: 'osw', status: 'reported', state: 'WAIT', agent: 'a', lastSignalAt: null, reportId: 'rep-osw' } }),
     // 작업 중 → release 버튼 대상(관리자 전용 who='admin' 이 canManage 로도 열려야 한다).
     row({ itemId: 'c', code: 'TSK-C', name: '작업 중(관리 대상)', depth: 1, parentId: 'root', canManage: true, delegated: true, stage: 'im', order: { id: 'oc', status: 'claimed', state: 'STALE', agent: 'a', lastSignalAt: null, reportId: null } }),
     // 주문 없음 → 단계 select 대상.
@@ -442,6 +446,10 @@ describe('DelegationTable — 서브트리 관리자(canManage, 트랙 B 2026-09
     expect(ops('w')).toEqual(['approve', 'reject'])
     expect(ops('c')).toEqual(['stop'])
     expect(host.querySelector('[data-hub-row="n"] select[data-hub-stage]')).not.toBeNull()
+  })
+  it('서브트리 관리자라도 자기 담당·자기 착수 리프(canApprove 아님)는 approve 없이 reject 만', () => {
+    render({ rows: MANAGE, isAdmin: false })
+    expect(ops('sw')).toEqual(['reject'])
   })
   it('리프 본인 담당자(canManage 아님): review 만 — approve 는 안 뜨고 단계 select 도 없다(분리 원칙)', () => {
     render({ rows: MANAGE, isAdmin: false })

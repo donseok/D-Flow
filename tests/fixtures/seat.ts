@@ -4,6 +4,7 @@
 import type { Seat } from '@/lib/domain/seatmap'
 
 export function makeSeat(overrides: Partial<Seat> = {}): Seat {
+  const canManage = overrides.canManage ?? false, assigneeMine = overrides.assigneeMine ?? false
   return {
     orderId: 'o1', id8: 'o1', projectId: 'p1', itemId: 'i1', code: 'TSK-01-01', name: '시트',
     state: 'READY', phase: 'design', anim: 'typing', character: 'cat',
@@ -12,7 +13,8 @@ export function makeSeat(overrides: Partial<Seat> = {}): Seat {
     note: null, rejected: false, reviewNote: null, reportId: null,
     resumeRequestedAt: null, resumeRequestedHost: null,
     waitReason: null,
-    canManage: false, assigneeMine: false,
+    // 승인 어포던스는 따로 주지 않으면 자기 착수 없는 canApproveCompletion 과 같게 둔다(관리 자격 ∧ 내 담당 아님).
+    canManage, assigneeMine, canApprove: canManage && !assigneeMine,
     agentMine: false, agentOwnerName: null,
     ...overrides,
   }

@@ -1,12 +1,14 @@
 // tests/components/agents-seat-ops.test.ts
 // 좌석 결재 표 — 어느 상태에서 어떤 op 가 뜨고 누가 누를 수 있는지. 자격은 서버 로더와 같은 축이어야 한다:
-//   approve · stop → 관리자 또는 서브트리 관리자(loadOrderForAdmin, stop 분기)
+//   approve → canApprove(관리자, 또는 서브트리 관리자이면서 리프 담당자·claim 계정 아님 — requireCompletionApprover)
+//   stop → 관리자 또는 서브트리 관리자(stop 분기)
 //   reject · unapprove · rework → +리프 담당자 본인(loadOrderForReview)
 import { describe, it, expect } from 'vitest'
 import type { SeatState } from '@/lib/domain/seatState'
-import { mayRun, opSpec, opsFor, ERR_NO_RIGHT, ERR_NO_RIGHT_REVIEW, RESUME_PENDING } from '@/components/agents/seatOps'
+import { mayRun, opSpec, opsFor, ERR_NO_RIGHT, ERR_NO_RIGHT_REVIEW, ERR_SELF_APPROVAL_HINT, RESUME_PENDING } from '@/components/agents/seatOps'
 
-const who = (canManage: boolean, assigneeMine: boolean) => ({ canManage, assigneeMine })
+/** canApprove 기본값 = 자기 착수가 없을 때의 canApproveCompletion(관리자 여부는 canManage 에 녹아 있다). */
+const who = (canManage: boolean, assigneeMine: boolean, canApprove = canManage && !assigneeMine) => ({ canManage, assigneeMine, canApprove })
 const kinds = (state: SeatState, canManage = true, assigneeMine = false) =>
   opsFor({ state, ...who(canManage, assigneeMine) }).map(o => o.spec.kind)
 
@@ -49,6 +51,19 @@ describe('자격 — 서버 가드와 같은 축', () => {
     expect(wait.every(o => !o.allowed)).toBe(true)
     expect(wait.find(o => o.spec.kind === 'approve')!.why).toBe(ERR_NO_RIGHT)
     expect(wait.find(o => o.spec.kind === 'reject')!.why).toBe(ERR_NO_RIGHT_REVIEW)
+  })
+  it('자기 담당·자기 착수 좌석(canManage 지만 canApprove 아님): 승인만 잠기고 자기 승인 안내, 반려는 열린다', () => {
+    const wait = opsFor({ state: 'WAIT', canManage: true, canApprove: false, assigneeMine: false })
+    const approve = wait.find(o => o.spec.kind === 'approve')!
+    expect(approve.allowed).toBe(false)
+    expect(approve.why).toBe(ERR_SELF_APPROVAL_HINT)
+    expect(wait.find(o => o.spec.kind === 'reject')!.allowed).toBe(true)
+    // 중단·재개는 canManage 그대로다 — 자기 승인 금지는 승인에만 걸린다.
+    expect(opsFor({ state: 'ACTIVE', ...who(true, true, false) })[0].allowed).toBe(true)
+  })
+  it('승인은 canApprove 만 본다 — canManage 가 없어도 canApprove 면 열린다(관리자 좌석)', () => {
+    expect(mayRun(who(false, false, true), opSpec('approve'))).toBe(true)
+    expect(mayRun(who(true, false, false), opSpec('approve'))).toBe(false)
   })
   it('mayRun 은 자격 판정의 정본이다', () => {
     expect(mayRun(who(false, true), opSpec('approve'))).toBe(false)

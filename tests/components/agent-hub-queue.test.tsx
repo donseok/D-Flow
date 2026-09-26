@@ -16,10 +16,13 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t:
 import { ApprovalQueue } from '@/components/agent-hub/ApprovalQueue'
 import { HubStatusBar } from '@/components/agent-hub/HubStatusBar'
 
-const Q: HubQueueEntry[] = [{ orderId: 'o1', itemId: 'i1', code: 'TSK-1', name: '화면', agent: 'hong/mbp', percent: 100, summary: '끝', links: [{ url: 'https://x/pr/1', label: 'PR' }], reportedAt: '2026-09-14T08:00:00Z', reportId: 'rep-1', assigneeMine: false, canManage: false }]
-const QMINE: HubQueueEntry[] = [{ ...Q[0], assigneeMine: true }]
+/** 기본 카드는 관리자가 보는 모양이다 — 관리자 허브는 모든 카드가 canApprove(assembleAgentHub). */
+const Q: HubQueueEntry[] = [{ orderId: 'o1', itemId: 'i1', code: 'TSK-1', name: '화면', agent: 'hong/mbp', percent: 100, summary: '끝', links: [{ url: 'https://x/pr/1', label: 'PR' }], reportedAt: '2026-09-14T08:00:00Z', reportId: 'rep-1', assigneeMine: false, canManage: false, canApprove: true }]
+const QMINE: HubQueueEntry[] = [{ ...Q[0], assigneeMine: true, canApprove: false }]
 /** 서브트리 관리자(트랙 B, 2026-09-15) — 리프 본인 담당자는 아니지만 조상 담당자가 나인 경우. */
 const QMANAGE: HubQueueEntry[] = [{ ...Q[0], canManage: true }]
+/** 서브트리 관리자이지만 자기 담당(또는 자기 착수) 리프 — 승인은 다른 사람이 한다(AUTH-07a). */
+const QSELF: HubQueueEntry[] = [{ ...Q[0], canManage: true, assigneeMine: true, canApprove: false }]
 const HUB = { projectId: 'p1', queue: [] } as unknown as AgentHub
 
 let host: HTMLDivElement, root: Root
@@ -92,7 +95,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     expect(onChanged).not.toHaveBeenCalled()
   })
   it('내 담당 아닌 멤버에게는 버튼 대신 안내', () => {
-    render({ isAdmin: false })
+    render({ isAdmin: false, queue: [{ ...Q[0], canApprove: false }] })
     expect(host.querySelector('[data-queue-approve]')).toBeNull()
     expect(host.querySelector('[data-queue-reject-open]')).toBeNull()
     expect(host.textContent).toContain('승인은 관리자가 합니다')
@@ -116,6 +119,17 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     expect(host.textContent).not.toContain('담당자는 반려로')
     await act(async () => { (host.querySelector('[data-queue-approve]') as HTMLButtonElement).click() })
     expect(runOp).toHaveBeenCalledWith('p1', { kind: 'approve', orderId: 'o1', expectedReportId: 'rep-1' })
+  })
+  it('서브트리 관리자라도 자기 담당·자기 착수 카드는 승인 버튼이 없고 반려는 있다 — 다른 사람이 승인한다고 알린다', async () => {
+    runOp.mockResolvedValueOnce({ ok: true, hub: HUB })
+    render({ isAdmin: false, queue: QSELF })
+    expect(host.querySelector('[data-queue-approve]')).toBeNull()
+    expect(host.querySelector('[data-queue-reject-open]')).not.toBeNull()
+    expect(host.textContent).toContain('다른 관리자나 상위 담당자가 승인합니다')
+    await act(async () => { (host.querySelector('[data-queue-reject-open]') as HTMLButtonElement).click() })
+    await act(async () => { setValue(host.querySelector('textarea') as HTMLTextAreaElement, '다시') })
+    await act(async () => { (host.querySelector('[data-queue-reject]') as HTMLButtonElement).click() })
+    expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '다시', expectedReportId: 'rep-1' })
   })
   it('관리자(대조군): 전부 보인다 — approve·reject 둘 다', () => {
     render({ isAdmin: true, queue: Q })

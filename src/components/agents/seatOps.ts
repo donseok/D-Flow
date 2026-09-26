@@ -1,7 +1,8 @@
 // src/components/agents/seatOps.ts
 // 좌석에서 바로 하는 결재 — 어떤 상태에서 어떤 op 가 뜨고 누가 누를 수 있는지. IO 없는 순수 표.
 // 자격은 서버 로더와 같은 축이다(src/app/actions/agentWork.ts):
-//   · approve · stop → loadOrderForAdmin / stop 분기 = 관리자 또는 서브트리 관리자
+//   · approve → loadOrderForAdmin = 관리자 또는 (서브트리 관리자 ∧ 리프 담당자·claim 계정 아님) — requireCompletionApprover
+//   · stop → stop 분기 = 관리자 또는 서브트리 관리자
 //   · reject · unapprove · rework → loadOrderForReview = 관리자 · 리프 담당자 본인 · 서브트리 관리자
 //   · resume → stop 과 같은 분기(관리자 또는 서브트리 관리자) — 남의 PC 러너를 되살리는 관리 행위다.
 // 여기서 막는 것은 어포던스일 뿐이고 최종 판정은 서버가 한다(fail-closed는 서버 쪽).
@@ -67,13 +68,17 @@ const BY_STATE: Record<SeatState, readonly SeatOpKind[]> = {
 
 export const ERR_NO_RIGHT = '권한이 없습니다 — 관리자 또는 서브트리 관리자만 할 수 있습니다.'
 export const ERR_NO_RIGHT_REVIEW = '권한이 없습니다 — 관리자 · 담당자 본인 · 서브트리 관리자만 할 수 있습니다.'
+/** 서브트리 관리자인데 자기 담당·자기 착수라 승인이 막힌 좌석의 안내. */
+export const ERR_SELF_APPROVAL_HINT = '자기 담당·자기 착수 항목의 완료는 다른 관리자나 상위 담당자가 승인합니다.'
 
-export function mayRun(seat: Pick<Seat, 'canManage' | 'assigneeMine'>, spec: SeatOpSpec): boolean {
+/** 승인은 seat.canApprove 만 본다(자기 승인 금지가 들어 있다). 나머지는 관리 자격 또는 담당자 본인. */
+export function mayRun(seat: Pick<Seat, 'canManage' | 'assigneeMine' | 'canApprove'>, spec: SeatOpSpec): boolean {
+  if (spec.kind === 'approve') return seat.canApprove
   return seat.canManage || (spec.assigneeMayDo && seat.assigneeMine)
 }
 
 /** 좌석 어포던스가 보는 최소 모양 — 재개 요청 표식까지 읽는다. */
-export type SeatOpsInput = Pick<Seat, 'state' | 'canManage' | 'assigneeMine'> & { resumeRequestedAt?: string | null }
+export type SeatOpsInput = Pick<Seat, 'state' | 'canManage' | 'assigneeMine' | 'canApprove'> & { resumeRequestedAt?: string | null }
 
 /** 이 좌석에 그릴 결재 버튼 — 자격이 없는 것도 이유를 달아 비활성으로 남긴다(왜 못 누르는지 보여야 한다). */
 export function opsFor(seat: SeatOpsInput): Array<{ spec: SeatOpSpec; allowed: boolean; why: string }> {
@@ -83,7 +88,9 @@ export function opsFor(seat: SeatOpsInput): Array<{ spec: SeatOpSpec; allowed: b
     // 요청이 이미 걸린 좌석의 재개 버튼은 자격이 있어도 잠근다 — 눌러 봐야 같은 값을 덮어쓸 뿐이다.
     if (kind === 'resume' && pending) return { spec, allowed: false, why: RESUME_PENDING }
     const allowed = mayRun(seat, spec)
-    return { spec, allowed, why: allowed ? spec.title : (spec.assigneeMayDo ? ERR_NO_RIGHT_REVIEW : ERR_NO_RIGHT) }
+    if (allowed) return { spec, allowed, why: spec.title }
+    if (kind === 'approve' && seat.canManage) return { spec, allowed, why: ERR_SELF_APPROVAL_HINT }
+    return { spec, allowed, why: spec.assigneeMayDo ? ERR_NO_RIGHT_REVIEW : ERR_NO_RIGHT }
   })
 }
 

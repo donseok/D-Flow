@@ -16,8 +16,10 @@ vi.mock('@/lib/authz', () => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 
-import { isSubtreeManager } from '@/lib/agent/assignee'
-import { requireSubtreeManagerOrAdmin, ERR_NOT_SUBTREE_MANAGER } from '@/lib/agent/subtreeManager'
+import { isSubtreeManager, subtreeStanding } from '@/lib/agent/assignee'
+import {
+  requireSubtreeManagerOrAdmin, requireCompletionApprover, ERR_NOT_SUBTREE_MANAGER, ERR_SELF_APPROVAL,
+} from '@/lib/agent/subtreeManager'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -204,4 +206,109 @@ describe('requireSubtreeManagerOrAdmin — 관리자 또는 서브트리 관리�
     expect(r.ok).toBe(false)
   })
 
+})
+
+describe('subtreeStanding — 조상 판정과 리프 담당자를 한 번의 조회로', () => {
+  it('서브트리 관리자 여부·리프 행 존재·리프 담당자를 함께 돌려준다(wbs_items 1회)', async () => {
+    const admin = fakeAdmin({ tree: [
+      { id: ROOT, parent_id: null, assignee_member_id: null },
+      { id: MID, parent_id: ROOT, assignee_member_id: 'm-mine' },
+      { id: LEAF, parent_id: MID, assignee_member_id: 'm-leaf' },
+    ] })
+    expect(await subtreeStanding(admin, { itemId: LEAF, projectId: P1, myMemberIds: ['m-mine'] }))
+      .toEqual({ manager: true, leafFound: true, leafAssigneeMemberId: 'm-leaf' })
+    expect(admin.from).toHaveBeenCalledTimes(1)
+    expect(admin.from).toHaveBeenCalledWith('wbs_items')
+  })
+
+  it('리프 행이 조회 결과에 없으면 leafFound:false — 담당자도 조상도 모른다', async () => {
+    const admin = fakeAdmin({ tree: [
+      { id: ROOT, parent_id: null, assignee_member_id: 'm-mine' },
+      { id: MID, parent_id: ROOT, assignee_member_id: 'm-mine' },
+    ] })
+    expect(await subtreeStanding(admin, { itemId: LEAF, projectId: P1, myMemberIds: ['m-mine'] }))
+      .toEqual({ manager: false, leafFound: false, leafAssigneeMemberId: null })
+  })
+})
+
+describe('requireCompletionApprover — 완료 승인 자격(자기 승인 금지)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 아님' })
+    mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
+  })
+  /** ROOT ─ MID(담당 m-mine) ─ LEAF(담당 leafAssignee). 액터 user-1 의 로스터 행은 m-mine. */
+  const tree = (leafAssignee: string | null): TreeRow[] => [
+    { id: ROOT, parent_id: null, assignee_member_id: null },
+    { id: MID, parent_id: ROOT, assignee_member_id: 'm-mine' },
+    { id: LEAF, parent_id: MID, assignee_member_id: leafAssignee },
+  ]
+
+  it('(a) 부모와 리프의 담당자가 모두 나 → 자기 완료라 거부(ERR_SELF_APPROVAL)', async () => {
+    fakeAdmin({ tree: tree('m-mine'), roster: [{ id: 'm-mine' }] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: null }))
+      .toEqual({ ok: false, error: ERR_SELF_APPROVAL })
+  })
+
+  it('(b) 미배정 리프를 내 계정이 claim 했다 → 자기 착수라 거부(ERR_SELF_APPROVAL)', async () => {
+    fakeAdmin({ tree: tree(null), roster: [{ id: 'm-mine' }] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: 'user-1' }))
+      .toEqual({ ok: false, error: ERR_SELF_APPROVAL })
+  })
+
+  it('(c) 같은 트리, 남의 계정이 claim → 서브트리 관리자로 통과', async () => {
+    fakeAdmin({ tree: tree(null), roster: [{ id: 'm-mine' }] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: 'user-2' }))
+      .toEqual({ ok: true, actor: { userId: 'user-1' }, isAdmin: false })
+  })
+
+  it('(d) 관리자는 자기 담당·자기 착수여도 통과 — 멤버 판정·조회 없음(관리자 자기 승인 금지는 비목표)', async () => {
+    mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'user-1' } })
+    const admin = fakeAdmin({ tree: tree('m-mine'), roster: [{ id: 'm-mine' }] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: 'user-1' }))
+      .toEqual({ ok: true, actor: { userId: 'user-1' }, isAdmin: true })
+    expect(mocks.requireProjectMember).not.toHaveBeenCalled()
+    expect(admin.from).not.toHaveBeenCalled()
+  })
+
+  it('(e) 리프 행이 트리에 없으면 담당자를 확인할 수 없어 거부(ERR_NOT_SUBTREE_MANAGER)', async () => {
+    fakeAdmin({ tree: tree('m-mine').filter(r => r.id !== LEAF), roster: [{ id: 'm-mine' }] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: null }))
+      .toEqual({ ok: false, error: ERR_NOT_SUBTREE_MANAGER })
+  })
+
+  it('(f) 조상 조회 오류 → fail-closed 거부', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeAdmin({ tree: [], treeError: { message: 'boom' }, roster: [{ id: 'm-mine' }] })
+    const r = await requireCompletionApprover(LEAF, P1, { claimedByUserId: null })
+    expect(r.ok).toBe(false)
+    errSpy.mockRestore()
+  })
+
+  it('(f) 로스터 0행 → ERR_NOT_SUBTREE_MANAGER, 조상 조회(wbs_items) 없음', async () => {
+    const admin = fakeAdmin({ tree: tree(null), roster: [] })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: null }))
+      .toEqual({ ok: false, error: ERR_NOT_SUBTREE_MANAGER })
+    expect(vi.mocked(admin.from).mock.calls.map(c => c[0])).toEqual(['project_members'])
+  })
+
+  it('리프 담당자이지만 서브트리 관리자가 아니면 종전대로 ERR_NOT_SUBTREE_MANAGER', async () => {
+    fakeAdmin({
+      tree: [
+        { id: ROOT, parent_id: null, assignee_member_id: null },
+        { id: MID, parent_id: ROOT, assignee_member_id: 'm-other' },
+        { id: LEAF, parent_id: MID, assignee_member_id: 'm-mine' },
+      ],
+      roster: [{ id: 'm-mine' }],
+    })
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: null }))
+      .toEqual({ ok: false, error: ERR_NOT_SUBTREE_MANAGER })
+  })
+
+  it('멤버도 아니면 그 가드 오류 그대로, 조회 없음', async () => {
+    mocks.requireProjectMember.mockResolvedValue({ ok: false, error: '멤버 아님' })
+    const admin = fakeAdmin({})
+    expect(await requireCompletionApprover(LEAF, P1, { claimedByUserId: null })).toEqual({ ok: false, error: '멤버 아님' })
+    expect(admin.from).not.toHaveBeenCalled()
+  })
 })
