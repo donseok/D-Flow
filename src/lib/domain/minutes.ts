@@ -1,5 +1,6 @@
 import type { ExplorerLeaf, FolderNode, MinuteFolder, TeamCode } from './types'
 import { DEFAULT_TEAM_CODES } from './teams'
+import { isStoragePathFor } from './storagePath'
 
 export const MINUTE_TITLE_MAX = 200
 export const MINUTE_BODY_MAX = 100_000          // body_md 실효 한도(자)
@@ -196,9 +197,19 @@ function truncateFileName(name: string, maxLen: number, maxExt: number): string 
   return base + ext
 }
 
-/** Storage 경로가 해당 회의록 전용 접두({minuteId}/)인지 — 타 객체를 가리키는 메타 기록 차단. */
-export function isMinuteFilePathValid(minuteId: string, path: string): boolean {
-  return path.startsWith(`${minuteId}/`) && !path.includes('..')
+/** 업로드 객체의 파일 세그먼트 — `${now}-` 접두를 붙이고도 200자 상한 안으로(확장자 보존). 이미 안전한 이름이라 바깥 sanitize 는
+ *  길이만 자른다. 업로드 5곳(회의록 본문·첨부, 산출물, 이슈 첨부)이 같이 쓴다. */
+export function stampedFileName(name: string, now: number): string {
+  return sanitizeFileName(`${now}-${sanitizeFileName(name)}`)
+}
+
+/** Storage 경로가 그 회의록 스코프(ws/<wid>/p/<pid|_>/<entity>/<minuteId>/…)인지 — 타 객체를 가리키는 메타 기록 차단.
+ *  scope 는 클라이언트 입력이 아니라 DB 에서 읽은 회의록 행(생성은 확정된 워크스페이스·프로젝트)에서 얻는다. */
+export function isMinuteFilePathValid(
+  scope: { workspaceId: string; projectId: string | null }, minuteId: string, path: string,
+  entity: 'minutes' | 'minute-files',
+): boolean {
+  return isStoragePathFor(path, { workspaceId: scope.workspaceId, projectId: scope.projectId, entity, entityId: minuteId })
 }
 
 /** PostgREST or() 필터에 안전하게 삽입할 ILIKE 패턴(큰따옴표 인용 포함).

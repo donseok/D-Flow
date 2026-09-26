@@ -49,6 +49,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
         issues={issues}
         members={members}
         projectId={projectId}
+        workspaceId={m?.projectWorkspace.get(projectId) ?? null}
         currentUserId={user?.id ?? null}
         canEdit={isProjectMember(m, projectId)}
         isProjectAdmin={isProjectAdmin(m, projectId)}

@@ -26,9 +26,15 @@ import { ISSUE_ATTACHMENT_MAX_BYTES } from '@/lib/domain/issueAttachments'
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
-const ACTOR = makeMemberActor('p1', [], { userId: 'me' })
-const ISSUE = 'i1'
-const FILE = { fileName: '보고서.pdf', filePath: `${ISSUE}/1700000000000-_.pdf`, size: 1234, mime: 'application/pdf' }
+const PID = 'bbbbbbbb-2222-4222-8222-222222222222'
+const WS = 'aaaaaaaa-1111-4111-8111-111111111111'
+const OTHER_WS = 'dddddddd-4444-4444-8444-444444444444'
+const ACTOR = makeMemberActor(PID, [], { userId: 'me' })
+const ISSUE = 'cccccccc-3333-4333-8333-333333333333'
+const FILE = {
+  fileName: '보고서.pdf', filePath: `ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/1700000000000-_.pdf`,
+  size: 1234, mime: 'application/pdf',
+}
 
 function asOwner() {
   requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
@@ -65,6 +71,8 @@ function makeClient(opts: {
   /** 메타 delete 가 0행을 지웠을 때를 흉내낸다. */
   deleteResult?: { data: { id: string } | null; error: { message: string } | null }
   signed?: { data: { signedUrl: string } | null; error: { message: string } | null }
+  /** 이슈 프로젝트의 워크스페이스 조회(경로 검증 scope). */
+  project?: { data: { workspace_id: string } | null; error: { message: string } | null }
 }) {
   const calls = opts.calls ?? []
   const insert = vi.fn(async (row: unknown) => { calls.push('meta.insert'); void row; return { error: opts.insertError ?? null } })
@@ -73,6 +81,9 @@ function makeClient(opts: {
 
   const issuesTable = {
     select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => opts.issue ?? { data: { created_by: 'me' }, error: null }) })) })),
+  }
+  const projectsTable = {
+    select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => opts.project ?? { data: { workspace_id: WS }, error: null }) })) })),
   }
   // 실제 PostgrestFilterBuilder 는 thenable 이다 — .eq(...) 를 그대로 await 하면 쿼리가 돈다.
   // 개수 조회가 그 경로를 쓰므로 mock 도 thenable 이어야 한다.
@@ -102,7 +113,7 @@ function makeClient(opts: {
     remove,
     createSignedUrl,
     client: {
-      from: vi.fn((t: string) => (t === 'issues' ? issuesTable : attachTable)),
+      from: vi.fn((t: string) => (t === 'issues' ? issuesTable : t === 'projects' ? projectsTable : attachTable)),
       storage: { from: vi.fn(() => ({ createSignedUrl, remove })) },
     },
   }
@@ -114,7 +125,7 @@ beforeEach(() => {
   requireProjectAdmin.mockReset()
   resolveProjectId.mockReset()
   getActor.mockReset()
-  resolveProjectId.mockResolvedValue({ ok: true, projectId: 'p1' })
+  resolveProjectId.mockResolvedValue({ ok: true, projectId: PID })
   vi.mocked(getSession).mockReset()
   vi.mocked(getSession).mockResolvedValue(USER as never)
 })
@@ -185,12 +196,41 @@ describe('권한 게이트', () => {
 })
 
 describe('recordIssueAttachment 검증', () => {
-  it('다른 이슈 접두의 경로는 거부한다 — 편집 권한 하나로 남의 객체를 꽂지 못하게', async () => {
+  it('다른 이슈의 경로는 거부한다 — 편집 권한 하나로 남의 객체를 꽂지 못하게', async () => {
     asOwner()
     const m = makeClient({})
     state.client = m.client
-    const res = await recordIssueAttachment(ISSUE, { ...FILE, filePath: 'other-issue/1-x.pdf' })
+    const other = FILE.filePath.replace(ISSUE, '99999999-8888-4777-8666-555555555555')
+    const res = await recordIssueAttachment(ISSUE, { ...FILE, filePath: other })
     expect(res.ok).toBe(false)
+    expect(m.insert).not.toHaveBeenCalled()
+  })
+
+  it('옛 형식 <이슈>/<파일> 경로는 거부한다', async () => {
+    asOwner()
+    const m = makeClient({})
+    state.client = m.client
+    const res = await recordIssueAttachment(ISSUE, { ...FILE, filePath: `${ISSUE}/1-x.pdf` })
+    expect(res).toEqual({ ok: false, error: '첨부 경로가 올바르지 않습니다.' })
+    expect(m.insert).not.toHaveBeenCalled()
+  })
+
+  it('scope 는 DB 의 이슈 프로젝트 워크스페이스다 — 다른 워크스페이스 경로는 거부한다', async () => {
+    asOwner()
+    const m = makeClient({ project: { data: { workspace_id: OTHER_WS }, error: null } })
+    state.client = m.client
+    const res = await recordIssueAttachment(ISSUE, FILE)
+    expect(res).toEqual({ ok: false, error: '첨부 경로가 올바르지 않습니다.' })
+    expect(m.insert).not.toHaveBeenCalled()
+  })
+
+  it('프로젝트 워크스페이스 조회가 실패하면 쓰기를 중단한다', async () => {
+    asOwner()
+    const m = makeClient({ project: { data: null, error: { message: 'boom' } } })
+    state.client = m.client
+    const res = await recordIssueAttachment(ISSUE, FILE)
+    expect(res.ok).toBe(false)
+    expect(res.error).not.toBe('첨부 경로가 올바르지 않습니다.')
     expect(m.insert).not.toHaveBeenCalled()
   })
 
@@ -227,7 +267,7 @@ describe('recordIssueAttachment 검증', () => {
     const m = makeClient({})
     state.client = m.client
     await recordIssueAttachment(ISSUE, FILE)
-    expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({ issue_id: ISSUE, project_id: 'p1' }))
+    expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({ issue_id: ISSUE, project_id: PID }))
   })
 })
 

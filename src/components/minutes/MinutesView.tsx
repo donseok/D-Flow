@@ -35,7 +35,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 export function MinutesView({
   initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, canManage, canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
-  adminProjectIds = [], isSuperuser = false,
+  adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null,
 }: {
   initialMinutes: Minute[]
   /** 서버에서 미리 실어 보낸 트리. null 이면(조회 실패 포함) 마운트 후 클라이언트가 직접 가져온다. */
@@ -59,6 +59,10 @@ export function MinutesView({
   explorerLayout?: ExplorerLayout
   /** 내가 멤버로 등록된 프로젝트 id — 업로드·수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
+  /** 업로드 저장 경로 scope — 프로젝트 → 워크스페이스(actor.projectWorkspace). */
+  projectWorkspaces?: Record<string, string>
+  /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(resolveSoleWorkspaceId). */
+  noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -415,6 +419,7 @@ export function MinutesView({
             router.refresh()
           }}
           todayIso={todayIso} projects={projects} defaultTeam={defaultTeam} myProjectIds={myProjectIds}
+          projectWorkspaces={projectWorkspaces} noProjectWorkspace={noProjectWorkspace}
           folders={explorerFolders} defaultFolderId={uploadFolderRef.current} />
       )}
       {/* 트리 뷰는 화면이 전 기간이므로 챗 범위도 전 기간으로 일치시킨다(월 라벨 '전체 기간'과 정합) */}

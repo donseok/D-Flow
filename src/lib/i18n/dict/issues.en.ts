@@ -177,6 +177,7 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.err.attachTooLarge': '{name} — files must be {mb}MB or smaller.',
   'issue.err.attachTooMany': 'Up to {n} attachments per issue.',
   'issue.err.attachUploadFailed': 'Failed to upload {name}.',
+  'issue.err.attachNoScope': 'Cannot upload attachments: the workspace could not be determined. Refresh and try again.',
   'issue.err.attachPartial': 'The issue was created but {n} attachment(s) failed. Please retry.',
   'issue.err.attachRemoveFailed': 'Failed to remove the attachment.',
   'issue.err.attachLoadFailed': 'Could not load attachments. The files have not been deleted.',

@@ -13,6 +13,8 @@ import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
 import { listAttachments, recordAttachment, removeAttachment } from '@/app/actions/attachments'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { makeStoragePath } from '@/lib/domain/storagePath'
+import { stampedFileName } from '@/lib/domain/minutes'
 import { formatWeightPct, formatPct1, fmtSize } from '@/lib/domain/format'
 import { DependencyEgoGraph, type EgoNode } from './DependencyEgoGraph'
 import { DEFAULT_LEVEL_LABELS, LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate, teamStyle } from './shared'
@@ -29,7 +31,7 @@ const EMPTY_REFS: string[] = []
  *  + PMO 편집(이름·일정·산출물 수정, 하위 추가, 순서 이동, 삭제). */
 export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
-  canEditDeliverable = false, projectId, levelLabels = DEFAULT_LEVEL_LABELS, maxDepth = null,
+  canEditDeliverable = false, projectId, workspaceId = null, levelLabels = DEFAULT_LEVEL_LABELS, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS,
 }: {
   item: ComputedItem
@@ -42,6 +44,8 @@ export function RowDetailPanel({
   /** 산출물 텍스트 인라인 편집 권한 — PMO 또는 담당팀(첨부와 동일). editable(PMO 전체 폼)과 별개. */
   canEditDeliverable?: boolean
   projectId: string
+  /** 프로젝트의 워크스페이스(서버의 toProjectActorView) — 산출물 첨부 저장 경로 scope. null 이면 업로드하지 않는다. */
+  workspaceId?: string | null
   /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 상위(WbsGanttSheet)가 서버 페이지에서 받아 전파. */
   levelLabels?: string[]
   /** 프로젝트별 최대 깊이(§7.3 ProjectConfig, null=무제한) — 자식 추가 어포던스 판정(canAddChild)에 사용. */
@@ -691,7 +695,7 @@ export function RowDetailPanel({
           )}
 
           {/* 산출물 첨부 */}
-          <AttachmentSection itemId={item.id} canAttach={canAttach} />
+          <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />
 
           {/* 변경 이력 */}
           <ChangeHistoryList logs={logs} />
@@ -711,7 +715,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /** 산출물 파일 첨부 — 목록/다운로드(모두) + 업로드/삭제(담당팀·PMO). */
-function AttachmentSection({ itemId, canAttach }: { itemId: string; canAttach: boolean }) {
+function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
+  itemId: string; canAttach: boolean; projectId: string; workspaceId: string | null
+}) {
   const router = useRouter()
   const { t } = useLocale()
   const [list, setList] = useState<DeliverableAttachment[] | null>(null)
@@ -727,10 +733,13 @@ function AttachmentSection({ itemId, canAttach }: { itemId: string; canAttach: b
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    // 저장 경로 scope — 서버(recordAttachment)가 항목 행의 프로젝트·워크스페이스로 다시 대조한다.
+    if (!workspaceId) { setErr(t('wbs.attachNoWorkspace')); return }
     setBusy(true); setErr(null)
     try {
-      const safe = file.name.replace(/[^\w.\-가-힣]+/g, '_')
-      const path = `${itemId}/${new Date().getTime()}-${safe}`
+      const path = makeStoragePath({
+        workspaceId, projectId, entity: 'deliverables', entityId: itemId, fileName: stampedFileName(file.name, Date.now()),
+      })
       const sb = createBrowserClient()
       const up = await sb.storage.from('deliverables').upload(path, file, { upsert: false })
       if (up.error) { setErr(t('wbs.uploadFail') + ': ' + up.error.message); return }

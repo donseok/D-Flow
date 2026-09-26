@@ -215,6 +215,7 @@ export const wbsKo = {
   'wbs.processing': '처리 중…',
   'wbs.addFile': '파일 추가',
   'wbs.uploadFail': '업로드 실패',
+  'wbs.attachNoWorkspace': '워크스페이스를 확인할 수 없어 업로드할 수 없습니다.',
   'wbs.attachRecordFail': '첨부 기록에 실패했습니다.',
   'wbs.uploadError': '업로드 중 오류가 발생했습니다.',
   'wbs.deleteFail': '삭제에 실패했습니다.',

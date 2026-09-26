@@ -235,6 +235,10 @@ export interface Minute {
   folderId?: string | null  // 소속 폴더(0040, 목록 조회 전용 — null=미분류)
   /** 외부 연동 멱등 키(또박또박 `ddobak:<uuid>`, opaque — 파싱 금지). 상세 조회 전용 — null=연동 없음. */
   externalId?: string | null
+  /** 소속 워크스페이스(minutes.workspace_id). 상세 조회 전용 — 업로드 경로 scope. */
+  workspaceId?: string | null
+  /** minutes.project_id 그대로(projectId 와 달리 회의 프로젝트 폴백 없음). 상세 조회 전용 — 업로드 경로 scope. */
+  ownProjectId?: string | null
 }
 
 /* ── 탐색기 v2: 실제 폴더 디렉토리 (스펙 2026-07-23-minutes-folders-design.md) ── */

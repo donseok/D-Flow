@@ -4,6 +4,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { adminProjectIds, hasAnyProjectRole, isAnyProjectAdmin } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
@@ -69,6 +70,8 @@ export default async function MinutesPage() {
         initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m)[0] ?? null}
         currentUserId={user?.id ?? null} canManage={isAnyProjectAdmin(m)} canEdit={hasAnyProjectRole(m)}
         myProjectIds={myProjectIds}
+        projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
+        noProjectWorkspace={m ? resolveSoleWorkspaceId(m) : null}
         adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
     </ProjectPageShell>
   )

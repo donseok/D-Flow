@@ -120,16 +120,24 @@ export async function recordIssueAttachment(
   const g = await requireIssueEditable(issueId)
   if (!g.ok) return { ok: false, error: g.error }
 
+  const sb = await createServerClient()
+  // 경로 검증의 scope 는 클라이언트 입력이 아니라 DB — 게이트가 이슈 행에서 확정한 프로젝트의 워크스페이스다.
+  // 모르면 검증할 수 없으므로 중단한다(쓰기 전 선행 조회 실패는 중단).
+  const { data: proj, error: projErr } = await sb
+    .from('projects').select('workspace_id').eq('id', g.projectId).maybeSingle()
+  const workspaceId = (proj as { workspace_id?: string } | null)?.workspace_id
+  if (projErr || !workspaceId) {
+    console.error('[recordIssueAttachment] 프로젝트 워크스페이스 조회 실패:', projErr?.message ?? 'no row')
+    return { ok: false, error: ERR_LOOKUP }
+  }
   // 이게 없으면 편집 권한이 있는 이슈 하나로 임의 경로의 객체를 메타에 꽂을 수 있다.
-  // 기존 recordAttachment 에는 없는 검증이다 — 선례를 따르는 게 아니라 선례의 구멍을 메운다.
-  if (!isIssueAttachmentPathValid(issueId, file.filePath)) {
+  if (!isIssueAttachmentPathValid({ workspaceId, projectId: g.projectId }, issueId, file.filePath)) {
     return { ok: false, error: '첨부 경로가 올바르지 않습니다.' }
   }
   if (!isIssueAttachmentSizeAllowed(file.size)) {
     return { ok: false, error: '파일 크기가 상한을 넘었습니다.' }
   }
 
-  const sb = await createServerClient()
   const { data: existing, error: countErr } = await sb
     .from('issue_attachments').select('id').eq('issue_id', issueId)
   if (countErr || !existing) {

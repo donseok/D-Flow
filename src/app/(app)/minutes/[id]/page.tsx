@@ -80,6 +80,7 @@ export default async function MinuteDetailPage({
       historicalVersion={historicalVersion}
       issueMembers={issueMembers} linkedIssues={linkedIssues}
       folderPath={folderPath} myProjectIds={myProjectIds}
+      projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
     />
   )
 }

@@ -97,6 +97,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.err.attachMax': 'Each attachment must be 20MB or less.',
   'min.err.attachCount': 'Up to 10 attachments.',
   'min.err.upload': 'File upload failed.',
+  'min.err.noWorkspace': 'Cannot upload: the workspace could not be determined.',
   'min.err.download': 'Failed to issue a download link.',
   'min.err.record': 'Failed to record file.',
   'min.detail.download': 'Original .md',

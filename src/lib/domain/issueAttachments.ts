@@ -2,7 +2,8 @@
 //
 // 상한·경로 규칙의 단일 정본이다. UI(고른 즉시 거르기)와 서버 액션(재검증)이 같은 함수를 쓴다.
 // 파일명 sanitize 는 회의록 첨부와 같은 규칙을 쓴다 — 보안에 걸린 로직을 두 벌로 두지 않는다.
-import { sanitizeFileName } from './minutes'
+import { stampedFileName } from './minutes'
+import { isStoragePathFor, makeStoragePath } from './storagePath'
 
 /**
  * 파일당 상한. Supabase 프로젝트 전역 업로드 상한과 같은 값이라
@@ -26,19 +27,24 @@ export interface IssueAttachment {
 }
 
 /**
- * Storage 객체 키. 첫 세그먼트가 이슈 id 라는 규약을 스토리지 RLS 정책이 그대로 쓴다
- * (`split_part(name, '/', 1)::uuid`). 원본 파일명은 file_name 컬럼이 보관하고
- * 다운로드 때 복원하므로, 키에는 ASCII 안전명만 넣는다.
+ * Storage 객체 키 — ws/<wid>/p/<pid>/issue-attachments/<이슈>/<시각-안전명>(storagePath.ts 규약). 스토리지 RLS(0007)가
+ * 워크스페이스·프로젝트 세그먼트를 읽는다. 원본 파일명은 file_name 컬럼이 보관하고 다운로드 때 복원하므로, 키에는 ASCII 안전명만 넣는다.
  */
-export function makeIssueAttachmentPath(issueId: string, fileName: string, now: number): string {
-  return `${issueId}/${now}-${sanitizeFileName(fileName)}`
+export function makeIssueAttachmentPath(
+  scope: { workspaceId: string; projectId: string }, issueId: string, fileName: string, now: number,
+): string {
+  return makeStoragePath({
+    workspaceId: scope.workspaceId, projectId: scope.projectId, entity: 'issue-attachments', entityId: issueId,
+    fileName: stampedFileName(fileName, now),
+  })
 }
 
-/** 경로가 해당 이슈 전용 접두({issueId}/)인지 — 타 이슈의 객체를 메타에 꽂는 것을 막는다. */
-export function isIssueAttachmentPathValid(issueId: string, path: string): boolean {
+/** 경로가 그 이슈 스코프인지 — 타 이슈·타 프로젝트의 객체를 메타에 꽂는 것을 막는다. scope 는 DB 의 이슈 행에서 얻는다. */
+export function isIssueAttachmentPathValid(
+  scope: { workspaceId: string; projectId: string }, issueId: string, path: string,
+): boolean {
   if (!issueId) return false
-  const prefix = `${issueId}/`
-  return path.startsWith(prefix) && path.length > prefix.length && !path.includes('..')
+  return isStoragePathFor(path, { workspaceId: scope.workspaceId, projectId: scope.projectId, entity: 'issue-attachments', entityId: issueId })
 }
 
 /** 파일 하나가 상한 안인지. 크기를 알 수 없으면(NaN·Infinity) 통과시키지 않는다. */

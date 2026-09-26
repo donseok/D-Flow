@@ -7,8 +7,13 @@ import {
   makeIssueAttachmentPath,
   remainingIssueAttachmentSlots,
 } from '@/lib/domain/issueAttachments'
+import { sanitizeFileName } from '@/lib/domain/minutes'
 
 const ISSUE = '11111111-2222-3333-4444-555555555555'
+const WS = 'aaaaaaaa-1111-4111-8111-111111111111'
+const PID = 'bbbbbbbb-2222-4222-8222-222222222222'
+const OTHER = '99999999-8888-4777-8666-555555555555'
+const SCOPE = { workspaceId: WS, projectId: PID }
 
 describe('ISSUE_ATTACHMENT 상한', () => {
   it('파일당 상한은 Supabase 전역 상한과 같은 52,428,800 바이트다', () => {
@@ -22,62 +27,68 @@ describe('ISSUE_ATTACHMENT 상한', () => {
 })
 
 describe('makeIssueAttachmentPath', () => {
-  it('이슈 id 를 첫 세그먼트로 두고 시각과 안전한 이름을 잇는다', () => {
-    expect(makeIssueAttachmentPath(ISSUE, 'report.pdf', 1_700_000_000_000))
-      .toBe(`${ISSUE}/1700000000000-report.pdf`)
+  it('ws/<wid>/p/<pid>/issue-attachments/<이슈>/ 아래에 시각과 안전한 이름을 잇는다', () => {
+    expect(makeIssueAttachmentPath(SCOPE, ISSUE, 'report.pdf', 1_700_000_000_000))
+      .toBe(`ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/1700000000000-report.pdf`)
   })
 
-  it('한글·공백 파일명을 ASCII 객체 키로 바꾼다', () => {
-    // Storage 객체 키에는 원본 이름을 쓰지 않는다. 원본은 file_name 컬럼이 보관한다.
-    const path = makeIssueAttachmentPath(ISSUE, '회의 자료 최종.xlsx', 1_700_000_000_000)
-    expect(path.startsWith(`${ISSUE}/1700000000000-`)).toBe(true)
+  it('파일 세그먼트는 sanitizeFileName 결과에 시각 접두를 붙인 것이다', () => {
+    const path = makeIssueAttachmentPath(SCOPE, ISSUE, '회의 자료 최종.xlsx', 1_700_000_000_000)
+    expect(path.split('/')[6]).toBe(`1700000000000-${sanitizeFileName('회의 자료 최종.xlsx')}`)
     expect(/^[\x20-\x7e]+$/.test(path)).toBe(true)
   })
 
   it('같은 파일명이라도 시각이 다르면 다른 경로가 된다', () => {
-    const a = makeIssueAttachmentPath(ISSUE, 'a.png', 1_700_000_000_000)
-    const b = makeIssueAttachmentPath(ISSUE, 'a.png', 1_700_000_000_001)
+    const a = makeIssueAttachmentPath(SCOPE, ISSUE, 'a.png', 1_700_000_000_000)
+    const b = makeIssueAttachmentPath(SCOPE, ISSUE, 'a.png', 1_700_000_000_001)
     expect(a).not.toBe(b)
   })
 
   it('경로 구분자가 든 파일명이 상위 디렉터리로 새 나가지 않는다', () => {
-    const path = makeIssueAttachmentPath(ISSUE, '../../etc/passwd', 1_700_000_000_000)
-    expect(path.split('/')).toHaveLength(2)
-    expect(isIssueAttachmentPathValid(ISSUE, path)).toBe(true)
+    const path = makeIssueAttachmentPath(SCOPE, ISSUE, '../../etc/passwd', 1_700_000_000_000)
+    expect(path.split('/')).toHaveLength(7)
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, path)).toBe(true)
   })
 
-  it('만들어 낸 경로는 언제나 자기 이슈의 유효 경로다', () => {
-    for (const name of ['a.txt', '표.hwp', '.hidden', '...', 'x'.repeat(300)]) {
-      expect(isIssueAttachmentPathValid(ISSUE, makeIssueAttachmentPath(ISSUE, name, 1))).toBe(true)
+  it('만들어 낸 경로는 언제나 자기 이슈의 유효 경로다 — 긴 이름도 시각 접두까지 200자 안에 든다', () => {
+    for (const name of ['a.txt', '표.hwp', '.hidden', '...', 'x'.repeat(300), `${'y'.repeat(250)}.pdf`]) {
+      const path = makeIssueAttachmentPath(SCOPE, ISSUE, name, 1_700_000_000_000)
+      expect(isIssueAttachmentPathValid(SCOPE, ISSUE, path)).toBe(true)
+      expect(path.split('/')[6].length).toBeLessThanOrEqual(200)
     }
+    expect(makeIssueAttachmentPath(SCOPE, ISSUE, `${'y'.repeat(250)}.pdf`, 1).endsWith('.pdf')).toBe(true)
   })
 })
 
 describe('isIssueAttachmentPathValid', () => {
-  it('자기 이슈 접두로 시작하는 경로만 받는다', () => {
-    expect(isIssueAttachmentPathValid(ISSUE, `${ISSUE}/1-a.pdf`)).toBe(true)
+  const ok = `ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/1-a.pdf`
+
+  it('자기 워크스페이스·프로젝트·이슈 경로만 받는다', () => {
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, ok)).toBe(true)
   })
 
-  it('다른 이슈의 객체를 자기 메타에 꽂는 경로를 거부한다', () => {
-    const other = '99999999-8888-7777-6666-555555555555'
-    expect(isIssueAttachmentPathValid(ISSUE, `${other}/1-a.pdf`)).toBe(false)
+  it('다른 워크스페이스·다른 프로젝트·다른 이슈의 경로를 거부한다', () => {
+    expect(isIssueAttachmentPathValid({ ...SCOPE, workspaceId: OTHER }, ISSUE, ok)).toBe(false)
+    expect(isIssueAttachmentPathValid({ ...SCOPE, projectId: OTHER }, ISSUE, ok)).toBe(false)
+    expect(isIssueAttachmentPathValid(SCOPE, OTHER, ok)).toBe(false)
   })
 
-  it('접두가 부분만 겹치는 경로를 거부한다', () => {
-    // 'abc' 가 'abcd/...' 를 통과시키면 안 된다 — 구분자까지 포함해 비교한다.
-    expect(isIssueAttachmentPathValid('abc', 'abcd/1-a.pdf')).toBe(false)
+  it('다른 entity 세그먼트를 거부한다', () => {
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, ok.replace('/issue-attachments/', '/deliverables/'))).toBe(false)
   })
 
-  it('상위 디렉터리 탈출을 거부한다', () => {
-    expect(isIssueAttachmentPathValid(ISSUE, `${ISSUE}/../other/1-a.pdf`)).toBe(false)
+  it('옛 형식 <이슈>/<파일> 을 거부한다', () => {
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, `${ISSUE}/1-a.pdf`)).toBe(false)
   })
 
-  it('접두만 있고 파일이 없는 경로를 거부한다', () => {
-    expect(isIssueAttachmentPathValid(ISSUE, `${ISSUE}/`)).toBe(false)
+  it('상위 디렉터리 탈출·빈 파일 세그먼트를 거부한다', () => {
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, `ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/..`)).toBe(false)
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, `ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/../x/1-a.pdf`)).toBe(false)
+    expect(isIssueAttachmentPathValid(SCOPE, ISSUE, `ws/${WS}/p/${PID}/issue-attachments/${ISSUE}/`)).toBe(false)
   })
 
   it('빈 이슈 id 로는 어떤 경로도 통과하지 않는다', () => {
-    expect(isIssueAttachmentPathValid('', '/1-a.pdf')).toBe(false)
+    expect(isIssueAttachmentPathValid(SCOPE, '', ok)).toBe(false)
   })
 })
 

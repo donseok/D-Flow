@@ -202,6 +202,7 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.processing': 'Working…',
   'wbs.addFile': 'Add file',
   'wbs.uploadFail': 'Upload failed',
+  'wbs.attachNoWorkspace': 'Cannot upload: the workspace could not be determined.',
   'wbs.attachRecordFail': 'Failed to record the attachment.',
   'wbs.uploadError': 'An error occurred during upload.',
   'wbs.deleteFail': 'Delete failed.',

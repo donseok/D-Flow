@@ -117,6 +117,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={onClose}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{
@@ -205,6 +206,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{
@@ -237,6 +239,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={onClose}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ ...analysisDraft, title: '중복 생성 방지' }}
@@ -275,6 +278,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ ...analysisDraft, title: '수기 등록 이슈' }}
@@ -319,6 +323,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ ...analysisDraft, title: 'Major 자동완성' }}
@@ -348,6 +353,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ title: '분석 정보 누락' }}
@@ -372,6 +378,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ ...analysisDraft, title: 'Major 누락', majorName: '   ', subProcess: '' }}
@@ -397,6 +404,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={null}
           members={[]}
           draft={{ ...analysisDraft, title: 'Major 길이 초과', majorName: '가'.repeat(101) }}
@@ -421,6 +429,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={current}
           members={[]}
         />,
@@ -470,6 +479,7 @@ describe('IssueFormModal 회의록 초안', () => {
           open
           onClose={() => undefined}
           projectId="project-1"
+          workspaceId={null}
           initial={issue({
             megaCode: null,
             megaSeq: null,

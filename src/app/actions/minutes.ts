@@ -103,6 +103,11 @@ async function checkOwner(sb: Sb, minuteId: string, actor: Actor): Promise<strin
   return null
 }
 
+/** 회의록 행 → 저장 경로 scope. workspace_id 는 0006 부터 not null 이지만 비면 어떤 경로와도 맞지 않게 '' 로 둔다(fail-closed). */
+function minuteScopeOf(row: { workspace_id?: unknown; project_id?: unknown }): { workspaceId: string; projectId: string | null } {
+  return { workspaceId: (row.workspace_id as string | null) ?? '', projectId: (row.project_id as string | null) ?? null }
+}
+
 /** 본문 교체 후 하이라이트 재배정 — 실패는 로그만(표시 규칙이 오표시를 차단). service_role. */
 async function rematchMinuteHighlights(minuteId: string, newBodyMd: string): Promise<void> {
   try {
@@ -175,7 +180,8 @@ export async function createMinute(
   const err = validateMinuteInput(input, activeTeamCodesSync())
   if (err) return { ok: false, error: err }
   if (source) {
-    if (!UUID_RE.test(source.minuteId) || !isMinuteFilePathValid(source.minuteId, source.file.filePath)) {
+    // 경로 스코프 검증은 워크스페이스·프로젝트가 확정된 뒤(아래 targetWs) — 여기서는 형식만 본다.
+    if (!UUID_RE.test(source.minuteId)) {
       return { ok: false, error: '잘못된 원본 파일 경로입니다.' }
     }
     if (!/\.(md|markdown)$/i.test(source.file.fileName)) {
@@ -204,6 +210,12 @@ export async function createMinute(
   const targetWs = workspaceId
     ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
   if (!targetWs) return { ok: false, error: ERR_MISSING }
+  // 원본 파일 경로 — 생성이라 읽을 행이 없으므로 scope 는 방금 확정한 워크스페이스·프로젝트다(RPC 의 minute_body_path_ok 와 같은 판정).
+  if (source && !isMinuteFilePathValid(
+    { workspaceId: targetWs, projectId: resolvedProject.projectId ?? null }, source.minuteId, source.file.filePath, 'minutes',
+  )) {
+    return { ok: false, error: '잘못된 원본 파일 경로입니다.' }
+  }
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
   let effectiveTeam = input.teamCode
   if (folderId) {
@@ -581,20 +593,23 @@ export async function replaceMinuteBody(
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
   if (bodyMd.length > 100_000) return { ok: false, error: '본문은 100,000자 이하여야 합니다.' }
-  if (!isMinuteFilePathValid(id, file.filePath)) return { ok: false, error: '잘못된 파일 경로입니다.' }
   if (!/\.(md|markdown)$/i.test(file.fileName)) return { ok: false, error: '.md 파일만 가능합니다.' }
   const sb = await createServerClient()
   const own = await checkOwner(sb, id, g.actor)
   if (own) return { ok: false, error: own }
+  const { data: minute, error: minuteErr } = await sb.from('minutes')
+    .select('project_id, workspace_id')
+    .eq('id', id)
+    .single()
+  if (minuteErr || !minute) return { ok: false, error: minuteErr?.message ?? '회의록을 찾을 수 없습니다.' }
+  // 경로 scope 는 DB 의 회의록 행(워크스페이스·현재 프로젝트) — 클라이언트 입력을 믿지 않는다.
+  if (!isMinuteFilePathValid(minuteScopeOf(minute), id, file.filePath, 'minutes')) {
+    return { ok: false, error: '잘못된 파일 경로입니다.' }
+  }
   // 녹취툴 산출물이면 시간 줄 +9h(UTC→KST) 보정 — DB·재매칭·재인제스트 전부 보정본 사용
   const fix = correctMinuteBodyTime(bodyMd)
   if (fix.corrected) console.info(`[minutes] 본문 교체 시간 보정 적용: ${fix.from} → ${fix.to} (id=${id})`)
   const body = fix.body
-  const { data: minute, error: minuteErr } = await sb.from('minutes')
-    .select('project_id')
-    .eq('id', id)
-    .single()
-  if (minuteErr || !minute) return { ok: false, error: minuteErr?.message ?? '회의록을 찾을 수 없습니다.' }
 
   const adm = adminOr('버전 저장 설정을 확인하세요.')
   if ('error' in adm) return { ok: false, error: adm.error }
@@ -644,7 +659,7 @@ export async function replaceMinuteBody(
   return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to! } : undefined }
 }
 
-/** 클라이언트 Storage 업로드 후 메타 기록. file_path 는 {minuteId}/ 접두 강제. */
+/** 클라이언트 Storage 업로드 후 메타 기록. file_path 는 그 회의록 스코프(본문 minutes·첨부 minute-files) 강제. */
 export async function recordMinuteFile(
   minuteId: string,
   file: { role: 'body' | 'attachment'; fileName: string; filePath: string; size: number; mime: string },
@@ -653,12 +668,22 @@ export async function recordMinuteFile(
   if (!g.ok) return { ok: false, error: g.error }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
-  if (!isMinuteFilePathValid(minuteId, file.filePath)) return { ok: false, error: '잘못된 파일 경로입니다.' }
   if (file.role === 'body' && !/\.(md|markdown)$/i.test(file.fileName))
     return { ok: false, error: '.md 파일만 가능합니다.' }
   const sb = await createServerClient()
   const own = await checkOwner(sb, minuteId, g.actor)
   if (own) return { ok: false, error: own }
+  // 경로 scope 는 DB 의 회의록 행 — 조회 실패는 쓰기 중단(3원칙 ②).
+  const { data: scopeRow, error: scopeErr } = await sb.from('minutes')
+    .select('project_id, workspace_id').eq('id', minuteId).maybeSingle()
+  if (scopeErr || !scopeRow) {
+    console.error('[recordMinuteFile] 회의록 스코프 조회 실패:', scopeErr?.message ?? 'no row')
+    return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
+  }
+  if (!isMinuteFilePathValid(minuteScopeOf(scopeRow), minuteId, file.filePath,
+    file.role === 'body' ? 'minutes' : 'minute-files')) {
+    return { ok: false, error: '잘못된 파일 경로입니다.' }
+  }
   if (file.role === 'body') {
     const { data: minute, error: minuteError } = await sb.from('minutes')
       .select('body_md, project_id')

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { actorTeamIdsFor } from '@/lib/domain/permissions'
+import { isDeliverablePathValid } from '@/lib/domain/deliverables'
 import { revalidatePath } from 'next/cache'
 import type { DeliverableAttachment } from '@/lib/domain/types'
 
@@ -72,6 +73,23 @@ export async function recordAttachment(
   const g = await requireAttachPermission(itemId)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
+  // 경로 검증 — scope 는 클라이언트 입력이 아니라 DB 의 항목 행(→ 프로젝트 → 워크스페이스)에서 얻는다.
+  // 이게 없으면 첨부 권한이 있는 항목 하나로 임의 경로(타 프로젝트·타 워크스페이스)의 객체를 메타에 꽂을 수 있다.
+  // 워크스페이스를 모르면 검증할 수 없으므로 중단한다(쓰기 전 선행 조회 실패는 중단).
+  if (!g.projectId) {
+    console.error('[recordAttachment] 항목의 프로젝트를 확정하지 못했습니다:', itemId)
+    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+  }
+  const { data: proj, error: projErr } = await sb
+    .from('projects').select('workspace_id').eq('id', g.projectId).maybeSingle()
+  const workspaceId = (proj as { workspace_id?: string } | null)?.workspace_id
+  if (projErr || !workspaceId) {
+    console.error('[recordAttachment] 프로젝트 워크스페이스 조회 실패:', projErr?.message ?? 'no row')
+    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+  }
+  if (!isDeliverablePathValid({ workspaceId, projectId: g.projectId }, itemId, file.filePath)) {
+    return { ok: false, error: '잘못된 파일 경로입니다.' }
+  }
   const { error } = await sb.from('deliverable_attachments').insert({
     wbs_item_id: itemId, file_name: file.fileName, file_path: file.filePath,
     size: file.size, mime: file.mime, uploaded_by: g.userId,

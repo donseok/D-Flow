@@ -2079,6 +2079,7 @@ export function WbsGanttSheet({
           canAttach={!readOnly && canAttachDeliverable(selectedItem, actor, projectId)}
           canEditDeliverable={!readOnly && canEditDeliverable(selectedItem, actor, projectId)}
           projectId={projectId}
+          workspaceId={actorView?.workspaceId ?? null}
           levelLabels={levelLabels}
           maxDepth={maxDepth}
           members={members}

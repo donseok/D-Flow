@@ -97,6 +97,7 @@ export const minutesKo = {
   'min.err.attachMax': '첨부는 개당 20MB 이하여야 합니다.',
   'min.err.attachCount': '첨부는 최대 10개까지입니다.',
   'min.err.upload': '파일 업로드에 실패했습니다.',
+  'min.err.noWorkspace': '워크스페이스를 확인할 수 없어 업로드할 수 없습니다.',
   'min.err.download': '다운로드 링크 발급에 실패했습니다.',
   'min.err.record': '파일 기록에 실패했습니다.',
   'min.detail.download': '원본 .md',

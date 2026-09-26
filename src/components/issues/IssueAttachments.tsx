@@ -36,9 +36,11 @@ export interface IssueAttachmentsProps {
   onPendingChange?: (files: File[]) => void
   /** 부모가 저장·업로드 중일 때 잠근다 — 그때 고른 파일은 이미 캡처된 배열에 못 들어간다. */
   disabled?: boolean
+  /** 수정 폼의 즉시 업로드가 쓰는 저장 경로 scope. 없으면(워크스페이스 미확정) 업로드하지 않고 사유를 보인다. */
+  scope?: { workspaceId: string; projectId: string } | null
 }
 
-export function IssueAttachments({ issueId, editable, pending, onPendingChange, disabled }: IssueAttachmentsProps) {
+export function IssueAttachments({ issueId, editable, pending, onPendingChange, disabled, scope = null }: IssueAttachmentsProps) {
   const router = useRouter()
   const { t } = useLocale()
   const [list, setList] = useState<IssueAttachment[] | null>(issueId ? null : [])
@@ -91,9 +93,14 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
     // 저장 전 이슈 — 담아만 둔다. 실제 업로드는 저장 성공 후 IssueFormModal 이 한다.
     if (!issueId) { onPendingChange?.([...pendingFiles, ...picked]); return }
 
+    if (!scope) {
+      console.error('[IssueAttachments] 저장 경로의 워크스페이스를 확정하지 못해 업로드하지 않는다:', issueId)
+      setErr(t('issue.err.attachNoScope'))
+      return
+    }
     setBusy(true)
     try {
-      const res = await uploadIssueAttachments(issueId, picked)
+      const res = await uploadIssueAttachments(scope, issueId, picked)
       if (!res.ok) {
         // 서버가 준 사유를 버리지 않는다 — 권한 없음·상한 초과·세션 만료가 전부 같은 문구가 되면
         // 사용자는 재시도해도 소용없는 경우를 구분할 수 없다(표시 = 로깅).

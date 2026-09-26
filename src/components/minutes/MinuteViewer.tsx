@@ -10,8 +10,9 @@ import type {
   InsightKind, Minute, MinuteFile, MinuteHighlight, MinuteInsight, ProjectMember,
 } from '@/lib/domain/types'
 import {
-  MINUTE_BODY_FILE_MAX, MINUTE_BODY_MAX, sanitizeFileName,
+  MINUTE_BODY_FILE_MAX, MINUTE_BODY_MAX, stampedFileName,
 } from '@/lib/domain/minutes'
+import { makeStoragePath } from '@/lib/domain/storagePath'
 import {
   getMinuteFileUrl, replaceMinuteBody, deleteMinute, toggleMinuteHighlight,
 } from '@/app/actions/minutes'
@@ -64,6 +65,7 @@ const EMPTY_WIKI_IMPACT: MinuteWikiImpactCardProps = {
  * 본문 전체가 재파싱된다(스펙 §3 성능 계약, tests/ui/minute-font-size.test.tsx 가 가드).
  */
 const EMPTY_LINKED_ISSUES: MinuteLinkedIssue[] = []
+const EMPTY_PROJECT_WORKSPACES: Record<string, string> = {}
 
 /** 이슈 등록의 원천 — 블록 팝오버(블록 전체)와 드래그 선택(부분 발췌)이 같은 상태 기계를 공유한다. */
 type IssueOrigin =
@@ -83,7 +85,7 @@ export function MinuteViewer({
   minute, files, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], wikiImpact = EMPTY_WIKI_IMPACT,
   historicalVersion = null, issueMembers = [], linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
-  myProjectIds = null,
+  myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
   files: MinuteFile[]
@@ -102,6 +104,8 @@ export function MinuteViewer({
   folderPath?: string[] | null
   /** 내가 멤버로 등록된 프로젝트 id — 수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
+  /** 프로젝트 → 워크스페이스(서버의 actor.projectWorkspace) — 블록에서 만드는 이슈의 첨부 경로 scope. */
+  projectWorkspaces?: Record<string, string>
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -612,10 +616,15 @@ export function MinuteViewer({
     if (f.size > MINUTE_BODY_FILE_MAX) { setErr(t('min.err.bodyFileMax')); return }
     const text = await f.text()
     if (text.length > MINUTE_BODY_MAX) { setErr(t('min.err.bodyMax')); return }
+    // 저장 경로 scope 는 회의록 행의 워크스페이스·프로젝트(DTO) — 서버(replaceMinuteBody·RPC)가 같은 행 값으로 대조한다.
+    if (!minute.workspaceId) { setErr(t('min.err.noWorkspace')); return }
     setBusy(true)
     try {
       const sb = createBrowserClient()
-      const path = `${minute.id}/${Date.now()}-${sanitizeFileName(f.name)}`
+      const path = makeStoragePath({
+        workspaceId: minute.workspaceId, projectId: minute.ownProjectId ?? null, entity: 'minutes', entityId: minute.id,
+        fileName: stampedFileName(f.name, Date.now()),
+      })
       const up = await sb.storage.from('minutes').upload(path, f, { upsert: false })
       if (up.error) { setErr(`${t('min.err.upload')}: ${up.error.message}`); return }
       const res = await replaceMinuteBody(minute.id, text, {
@@ -899,6 +908,7 @@ export function MinuteViewer({
           open={issueFormOpen}
           onClose={closeIssueForm}
           projectId={issueProjectId}
+          workspaceId={projectWorkspaces[issueProjectId] ?? null}
           initial={null}
           members={issueMemberOptions}
           draft={issueDraft}

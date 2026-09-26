@@ -43,6 +43,8 @@ export interface UploadOptions {
  * 동시 업로드는 같은 경로를 만들 여지가 생긴다(선례 MinuteUploadModal 도 순차다).
  */
 export async function uploadIssueAttachments(
+  /** 저장 경로의 워크스페이스·프로젝트(서버 컴포넌트가 계산해 내린 값). 서버 액션이 이슈 행에서 다시 대조한다. */
+  scope: { workspaceId: string; projectId: string },
   issueId: string,
   files: readonly File[],
   opts: UploadOptions = {},
@@ -57,7 +59,7 @@ export async function uploadIssueAttachments(
       return { ok: false, doneCount: done, fileName: f.name, reason: 'too-large', error: '' }
     }
 
-    const path = makeIssueAttachmentPath(issueId, f.name, nowFn())
+    const path = makeIssueAttachmentPath(scope, issueId, f.name, nowFn())
 
     // 업로드도 서버 액션도 결과 객체가 아니라 reject 로 실패할 수 있다(네트워크 단절·배포 교체).
     // 예외를 그대로 흘리면 호출부가 아무 표시 없이 끝나고 저장 버튼이 잠긴 채 남는다.

@@ -165,7 +165,7 @@ export const getMinuteDetail = cache(async (
   // 줄인다. 본문이 실패·부재면 파일 결과는 버린다(기존 반환 계약 유지).
   const [{ data: r, error }, { data: fs, error: fsErr }] = await Promise.all([
     sb.from('minutes')
-      .select('id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, created_by, created_by_name, created_at, updated_at, folder_id, meetings(project_id), projects(name)')
+      .select('id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, created_by, created_by_name, created_at, updated_at, folder_id, workspace_id, meetings(project_id), projects(name)')
       .eq('id', id).maybeSingle(),
     sb.from('minute_files')
       .select('id, minute_id, role, file_name, file_path, size, mime, created_at')
@@ -190,6 +190,9 @@ export const getMinuteDetail = cache(async (
   const minute = mapMinute(r as Row, (r as Row).body_md as string)
   minute.meetingProjectId = ((r as Row).meetings as { project_id: string } | null)?.project_id
     ?? minute.projectId ?? null
+  // 업로드 경로 scope(ws/<wid>/p/<pid|_>/…) — 서버 검증기가 대조하는 행 값 그대로. projectId 는 회의 폴백이 섞이므로 따로 싣는다.
+  minute.workspaceId = ((r as Row).workspace_id as string | null) ?? null
+  minute.ownProjectId = ((r as Row).project_id as string | null) ?? null
   return { minute, files }
 })
 

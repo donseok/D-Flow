@@ -10,9 +10,10 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
+const M = 'cccccccc-3333-4333-8333-333333333333'
 // 인자 시그니처를 제네릭으로 명시 — 인자 없는 vi.fn 은 mock.calls 가 빈 튜플로 추론돼 tsc(TS2493)가 깨진다
 const createMinute = vi.fn<(input: unknown, folderId: string | null) => Promise<{ ok: boolean; id: string }>>(
-  async () => ({ ok: true, id: 'm-new' }))
+  async () => ({ ok: true, id: M }))
 const recordMinuteFile = vi.fn<(...a: unknown[]) => Promise<{ ok: boolean }>>(async () => ({ ok: true }))
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => tree)
 vi.mock('@/app/actions/minutes', () => ({
@@ -27,6 +28,11 @@ vi.mock('@/lib/supabase/client', () => ({
 }))
 
 import { MinuteUploadModal } from '@/components/minutes/MinuteUploadModal'
+
+const WS = 'aaaaaaaa-1111-4111-8111-111111111111'
+const P1 = 'bbbbbbbb-1111-4111-8111-111111111111'
+const P2 = 'bbbbbbbb-2222-4222-8222-222222222222'
+const P3 = 'bbbbbbbb-3333-4333-8333-333333333333'
 
 const F = (
   id: string, name: string, parentId: string | null = null,
@@ -56,7 +62,8 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
   async function mount(over: Partial<Parameters<typeof MinuteUploadModal>[0]> = {}) {
     await act(async () => root.render(
       <MinuteUploadModal open onClose={() => {}} onSaved={onSaved} todayIso="2026-07-24"
-        projects={[]} folders={tree} defaultFolderId={null} {...over} />,
+        projects={[]} folders={tree} defaultFolderId={null}
+        projectWorkspaces={{ [P1]: WS, [P2]: WS, [P3]: WS }} noProjectWorkspace={{ ok: true, workspaceId: WS }} {...over} />,
     ))
   }
   const dialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')]
@@ -137,26 +144,26 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
   })
 
   it('프로젝트가 하나뿐이면 기본 선택 — 고르지 않아 미연결로 쌓이는 것을 막는다', async () => {
-    await mount({ projects: [{ id: 'p1', name: 'Acme 프로젝트' }] })
+    await mount({ projects: [{ id: P1, name: 'Acme 프로젝트' }] })
     await attachBodyFile()
     await clickSave()
-    expect(createMinute.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
+    expect(createMinute.mock.calls[0][0]).toMatchObject({ projectId: P1 })
   })
 
   it('여러 프로젝트 중 내가 멤버인 것이 하나면 그것으로 자동 선택', async () => {
     await mount({
-      projects: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
-      myProjectIds: ['p2'],
+      projects: [{ id: P1, name: 'A' }, { id: P2, name: 'B' }],
+      myProjectIds: [P2],
     })
     await attachBodyFile()
     await clickSave()
-    expect(createMinute.mock.calls[0][0]).toMatchObject({ projectId: 'p2' })
+    expect(createMinute.mock.calls[0][0]).toMatchObject({ projectId: P2 })
   })
 
   it('내가 여러 프로젝트 멤버면 자동 선택하지 않는다 — 사람이 고른다', async () => {
     await mount({
-      projects: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
-      myProjectIds: ['p1', 'p2'],
+      projects: [{ id: P1, name: 'A' }, { id: P2, name: 'B' }],
+      myProjectIds: [P1, P2],
     })
     await attachBodyFile()
     await clickSave()
@@ -165,16 +172,16 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
 
   it('내 프로젝트가 셀렉트 앞쪽에 온다 — 여럿일 때 고르는 비용을 줄인다', async () => {
     await mount({
-      projects: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }, { id: 'p3', name: 'C' }],
-      myProjectIds: ['p3', 'p2'],
+      projects: [{ id: P1, name: 'A' }, { id: P2, name: 'B' }, { id: P3, name: 'C' }],
+      myProjectIds: [P3, P2],
     })
     // 내 것이 앞으로 오되 그룹 안에서는 원래 목록 순서를 지킨다(sortMyProjectsFirst 계약)
     const opts = [...mainDialog().querySelectorAll('option')].map(o => o.value).filter(Boolean)
-    expect(opts).toEqual(['p2', 'p3', 'p1'])
+    expect(opts).toEqual([P2, P3, P1])
   })
 
   it('프로젝트가 둘 이상이고 소속 정보가 없으면 기본 선택하지 않는다', async () => {
-    await mount({ projects: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }] })
+    await mount({ projects: [{ id: P1, name: 'A' }, { id: P2, name: 'B' }] })
     await attachBodyFile()
     await clickSave()
     expect(createMinute.mock.calls[0][0]).toMatchObject({ projectId: null })
@@ -253,5 +260,44 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
       projects: [{ id: 'pA', name: 'A' }, { id: 'pB', name: 'B' }],
     })
     expect(folderFieldBtn().textContent).toContain('min.fold.unfiled')
+  })
+  /* ── 저장 경로 규약(SP2 B1) — ws/<wid>/p/<pid|_>/<entity>/<id>/<파일> ── */
+
+  const attachFiles = async (files: File[]) => {
+    const input = mainDialog().querySelector<HTMLInputElement>('input[type="file"]')!
+    Object.defineProperty(input, 'files', { value: files, configurable: true })
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })) })
+  }
+  const uploadedPaths = () => (upload.mock.calls as unknown as [string][]).map(c => c[0])
+
+  it('무프로젝트: 본문은 p/_/minutes/<후보 id>, 첨부는 p/_/minute-files/<회의록 id> — 후보 id 가 createMinute 로 간다', async () => {
+    await mount()
+    await attachFiles([new File(['# 본문'], 'a.md', { type: 'text/markdown' }), new File(['x'], '첨부 파일.pdf')])
+    await clickSave()
+    const [bodyPath, attPath] = uploadedPaths()
+    const cand = (createMinute.mock.calls[0] as unknown as [unknown, unknown, { minuteId: string; file: { filePath: string } }])[2]
+    expect(bodyPath).toMatch(new RegExp(`^ws/${WS}/p/_/minutes/${cand.minuteId}/\\d+-a\\.md$`))
+    expect(cand.file.filePath).toBe(bodyPath)
+    expect(attPath).toMatch(new RegExp(`^ws/${WS}/p/_/minute-files/${M}/\\d+-`))
+    expect(recordMinuteFile).toHaveBeenCalledWith(M, expect.objectContaining({ role: 'attachment', filePath: attPath }))
+  })
+
+  it('프로젝트 회의록: 경로의 워크스페이스·프로젝트는 그 프로젝트의 것', async () => {
+    const W2 = 'dddddddd-4444-4444-8444-444444444444'
+    await mount({ projects: [{ id: P1, name: 'A' }], projectWorkspaces: { [P1]: W2 } })
+    await attachBodyFile()
+    await clickSave()
+    expect(uploadedPaths()[0]).toMatch(new RegExp(`^ws/${W2}/p/${P1}/minutes/`))
+  })
+
+  it('무프로젝트 워크스페이스를 못 정하면 저장을 막고 사유를 보인다', async () => {
+    await mount({ noProjectWorkspace: { ok: false, error: '워크스페이스를 지정해야 합니다.' } })
+    await attachBodyFile()
+    expect(mainDialog().textContent).toContain('워크스페이스를 지정해야 합니다.')
+    const saveBtn = [...mainDialog().querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'min.form.save')!
+    expect(saveBtn.disabled).toBe(true)
+    await clickSave()
+    expect(upload).not.toHaveBeenCalled()
+    expect(createMinute).not.toHaveBeenCalled()
   })
 })

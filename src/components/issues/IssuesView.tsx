@@ -28,11 +28,13 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, currentUserId, canEdit, isProjectAdmin, myMemberIds, today,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today,
 }: {
   issues: Issue[]
   members: ProjectMember[]
   projectId: string
+  /** 이 프로젝트의 워크스페이스(서버의 actor.projectWorkspace) — 첨부 저장 경로 scope. null 이면 첨부 업로드를 막는다. */
+  workspaceId?: string | null
   currentUserId: string | null
   /** 이 프로젝트 멤버 이상(isProjectMember) — 등록 어포던스. 조회 전용은 false. */
   canEdit: boolean
@@ -421,7 +423,7 @@ export function IssuesView({
           setViewingId(null)
         }}
       />
-      <IssueFormModal open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} initial={editing} members={members} />
+      <IssueFormModal open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
       <IssueAnalysisModal
         open={analysisOpen}

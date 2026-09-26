@@ -4,8 +4,9 @@ import { Folder } from 'lucide-react'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import {
   MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_ATTACHMENT_MAX, MINUTE_BODY_FILE_MAX,
-  MINUTE_BODY_MAX, sanitizeFileName, teamSubOfFolder,
+  MINUTE_BODY_MAX, stampedFileName, teamSubOfFolder,
 } from '@/lib/domain/minutes'
+import { makeStoragePath } from '@/lib/domain/storagePath'
 import { pickDefaultProjectId, sortMyProjectsFirst } from '@/lib/domain/projectPick'
 import {
   createMinute, fetchMinuteFoldersLite, fetchProjectMeetingsLite, recordMinuteFile,
@@ -21,7 +22,7 @@ const BUCKET = 'minutes'
 
 export function MinuteUploadModal({
   open, onClose, onSaved, todayIso, projects, defaultTeam, folders, defaultFolderId,
-  myProjectIds = null,
+  myProjectIds = null, projectWorkspaces = {}, noProjectWorkspace = null,
 }: {
   open: boolean
   onClose: () => void
@@ -33,6 +34,10 @@ export function MinuteUploadModal({
   defaultFolderId: string | null
   /** 내가 멤버로 등록된 프로젝트 id — 기본 선택의 근거. null = 조회 실패(소속 없음과 같은 폴백). */
   myProjectIds?: string[] | null
+  /** 프로젝트 → 워크스페이스(서버의 actor.projectWorkspace) — 프로젝트 회의록의 저장 경로 scope. */
+  projectWorkspaces?: Record<string, string>
+  /** 프로젝트 미지정 회의록의 워크스페이스(서버의 resolveSoleWorkspaceId). 실패면 사유를 보이고 저장을 막는다. */
+  noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -101,8 +106,15 @@ export function MinuteUploadModal({
   )
   const folderName = (folderId && liveFolders.find(f => f.id === folderId)?.name) || t('min.fold.unfiled')
   const [err, setErr] = useState<string | null>(null)
-  // 부분 실패 후 재시도 시 회의록 재생성·파일 중복 기록 방지 (모달은 열 때마다 리마운트되므로 세션 단위)
-  const progressRef = useRef<{ id: string; done: number } | null>(null)
+  // 부분 실패 후 재시도 시 회의록 재생성·파일 중복 기록 방지 (모달은 열 때마다 리마운트되므로 세션 단위).
+  // scope 는 생성 시점의 저장 경로 scope — 재시도 사이에 프로젝트 셀렉트를 바꿔도 첨부 경로가 회의록 행과 어긋나지 않게 고정한다.
+  const progressRef = useRef<{ id: string; done: number; scope: { workspaceId: string; projectId: string | null } } | null>(null)
+  // 저장 경로의 워크스페이스 — 프로젝트면 그 프로젝트의 것, 미지정이면 유일 소속. 못 정하면 저장을 막고 사유를 보인다.
+  const targetWs: { ok: true; workspaceId: string } | { ok: false; error: string } = projectId
+    ? (projectWorkspaces[projectId]
+      ? { ok: true, workspaceId: projectWorkspaces[projectId] }
+      : { ok: false, error: t('min.err.noWorkspace') })
+    : (noProjectWorkspace ?? { ok: false, error: t('min.err.noWorkspace') })
 
   /** 파일 일괄 선택(단일 입력 UX) — 본문이 비어 있으면 첫 .md가 본문, 나머지는 전부 첨부로 자동 분류.
    *  검증을 모두 통과한 뒤에만 상태를 반영해 부분 적용을 막는다. */
@@ -140,14 +152,21 @@ export function MinuteUploadModal({
   async function save() {
     if (!bodyFile) { setErr(t('min.err.bodyRequired')); return }
     if (!team) { setErr('먼저 팀을 등록하세요.'); return }
+    if (!progressRef.current && !targetWs.ok) { setErr(targetWs.error); return }
     setBusy(true); setErr(null)
     try {
       let minuteId = progressRef.current?.id ?? null
+      let scope = progressRef.current?.scope ?? null
       if (!minuteId) {
+        if (!targetWs.ok) return
         // 원본 .md를 먼저 Storage에 올리고, 그 경로와 client-generated UUID를 본체 생성과 함께
         // 전달한다. v1은 처음부터 파일 메타를 가진 불변 행으로 INSERT되며 사후 UPDATE하지 않는다.
+        // 경로 scope = 확정할 워크스페이스·프로젝트 — 서버(createMinute·RPC)가 같은 값으로 대조한다.
         const candidateId = crypto.randomUUID()
-        const bodyPath = `${candidateId}/${Date.now()}-${sanitizeFileName(bodyFile.name)}`
+        scope = { workspaceId: targetWs.workspaceId, projectId: projectId || null }
+        const bodyPath = makeStoragePath({
+          ...scope, entity: 'minutes', entityId: candidateId, fileName: stampedFileName(bodyFile.name, Date.now()),
+        })
         const sb = createBrowserClient()
         const bodyUpload = await sb.storage.from(BUCKET).upload(bodyPath, bodyFile, { upsert: false })
         if (bodyUpload.error) { setErr(`${t('min.err.upload')}: ${bodyUpload.error.message}`); return }
@@ -172,7 +191,7 @@ export function MinuteUploadModal({
         }
         minuteId = res.id
         // body는 createMinute가 메타와 v1까지 함께 기록했으므로 첨부 루프에서는 건너뛴다.
-        progressRef.current = { id: minuteId, done: 1 }
+        progressRef.current = { id: minuteId, done: 1, scope }
         if (res.timeFix) {
           toast({
             title: t('min.timeFix.title'),
@@ -188,9 +207,14 @@ export function MinuteUploadModal({
       ]
       // 파일 업로드 실패 시에도 회의록은 유지한다(body_md 가 원천 — 스펙 §7).
       // body 파일 실패면 뷰어가 '재업로드 유도' 상태를 안내하고, replaceMinuteBody 로 복구 가능.
+      if (!scope) return
       for (let i = progressRef.current?.done ?? 0; i < files.length; i++) {
         const { role, f } = files[i]
-        const path = `${minuteId}/${Date.now()}-${sanitizeFileName(f.name)}`
+        // 본문은 minutes, 첨부는 minute-files — recordMinuteFile 이 role 로 같은 entity 를 요구한다.
+        const path = makeStoragePath({
+          ...scope, entity: role === 'body' ? 'minutes' : 'minute-files', entityId: minuteId,
+          fileName: stampedFileName(f.name, Date.now()),
+        })
         const up = await sb.storage.from(BUCKET).upload(path, f, { upsert: false })
         if (up.error) { setErr(`${t('min.err.upload')}: ${up.error.message}`); return }
         const rec = await recordMinuteFile(minuteId, {
@@ -202,7 +226,7 @@ export function MinuteUploadModal({
           await sb.storage.from(BUCKET).remove([path])
           setErr(rec.error ?? t('min.err.record')); return
         }
-        progressRef.current = { id: minuteId, done: i + 1 }
+        progressRef.current = { id: minuteId, done: i + 1, scope }
       }
       onSaved()
     } finally { setBusy(false) }
@@ -212,7 +236,7 @@ export function MinuteUploadModal({
     <Modal open={open} onClose={onClose} title={t('min.upload')} size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <button onClick={save} disabled={busy || !bodyFile || !team} className="btn btn-primary">
+          <button onClick={save} disabled={busy || !bodyFile || !team || !targetWs.ok} className="btn btn-primary">
             {busy ? t('min.form.saving') : t('min.form.save')}
           </button>
         </div>
@@ -279,6 +303,7 @@ export function MinuteUploadModal({
           </label>
         </div>
         {!team && <p role="alert" className="text-sm text-delayed">먼저 팀을 등록하세요.</p>}
+        {!targetWs.ok && <p role="alert" className="text-sm text-delayed">{targetWs.error}</p>}
         {err && <p className="text-sm text-delayed">{err}</p>}
       </div>
       <FolderPickModal open={folderPickOpen} folders={liveFolders} scopeProjectId={projectId || null}

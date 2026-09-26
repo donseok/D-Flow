@@ -176,6 +176,7 @@ export const issuesKo = {
   'issue.err.attachTooLarge': '{name} — 파일당 {mb}MB 를 넘을 수 없습니다.',
   'issue.err.attachTooMany': '첨부는 이슈당 {n}개까지입니다.',
   'issue.err.attachUploadFailed': '{name} 업로드에 실패했습니다.',
+  'issue.err.attachNoScope': '워크스페이스를 확인할 수 없어 첨부를 올릴 수 없습니다. 새로고침 후 다시 시도하세요.',
   'issue.err.attachPartial': '이슈는 등록됐지만 첨부 {n}건이 실패했습니다. 다시 시도하세요.',
   'issue.err.attachRemoveFailed': '첨부 삭제에 실패했습니다.',
   'issue.err.attachLoadFailed': '첨부 목록을 불러오지 못했습니다. 파일이 지워진 것은 아닙니다.',

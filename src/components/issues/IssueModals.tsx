@@ -473,11 +473,13 @@ function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
 }
 
 export function IssueFormModal({
-  open, onClose, projectId, initial, members, draft, sourcePreview, onCreate, onCreated,
+  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated,
 }: {
   open: boolean
   onClose: () => void
   projectId: string
+  /** 첨부 저장 경로의 워크스페이스(서버 컴포넌트가 actor.projectWorkspace 에서 계산). null 이면 첨부를 올리지 않는다. */
+  workspaceId: string | null
   initial: Issue | null
   members: ProjectMember[]
   /** 신규 등록에만 적용된다. 편집 모드에서는 initial 이 항상 우선한다. */
@@ -517,6 +519,7 @@ export function IssueFormModal({
   const [sourceDetail, setSourceDetail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const isEdit = initial !== null
+  const attachScope = workspaceId ? { workspaceId, projectId } : null
   const minuteSourceLocked = (!isEdit && sourcePreview !== undefined)
     || (isEdit && (initial?.sourceType === 'minutes' || Boolean(initial?.minuteSources.length)))
   const megaLocked = isEdit && Boolean(initial?.piIssueCode)
@@ -717,7 +720,9 @@ export function IssueFormModal({
           // 모달을 닫아 파일 state 가 사라진 뒤 업로드가 돈다. 그동안 pending 이 유지되어
           // 닫기 버튼이 막히는데, 업로드 중 창이 닫히지 않는 편이 낫다.
           if (pendingFiles.length > 0) {
-            const up = await uploadIssueAttachments(res.id, pendingFiles)
+            const up = attachScope
+              ? await uploadIssueAttachments(attachScope, res.id, pendingFiles)
+              : { ok: false as const, doneCount: 0, fileName: pendingFiles[0]!.name, reason: 'upload' as const, error: t('issue.err.attachNoScope') }
             if (!up.ok) {
               // 이슈는 이미 만들어졌다. 되돌리면 사용자가 입력을 통째로 잃으므로 되돌리지 않고,
               // 모달을 닫지 않아 재시도하게 한다. 성공 경로는 이 ref 를 해제하지 않으므로 직접 푼다.
@@ -976,6 +981,7 @@ export function IssueFormModal({
           pending={isEdit ? undefined : pendingFiles}
           onPendingChange={setPendingFiles}
           disabled={pending}
+          scope={attachScope}
         />
         {error && <ErrorBox message={error} />}
       </div>

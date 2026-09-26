@@ -162,6 +162,7 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
             canAttach={canAttachDeliverable(selectedItem, actor, hub.projectId)}
             canEditDeliverable={canEditDeliverable(selectedItem, actor, hub.projectId)}
             projectId={hub.projectId}
+            workspaceId={wbs.actorView?.workspaceId ?? null}
             levelLabels={wbs.levelLabels}
             maxDepth={wbs.maxDepth}
             members={wbs.members}
