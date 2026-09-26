@@ -49,11 +49,11 @@ export async function POST(req: NextRequest) {
     const actor = await actorFromUser(admin, user.id)
 
     const { data: target, error: selErr } = await admin.from('minutes')
-      .select('id, external_id, archived_at, created_by, project_id').eq('id', minuteId).maybeSingle()
+      .select('id, external_id, archived_at, created_by, project_id, workspace_id').eq('id', minuteId).maybeSingle()
     if (selErr) { console.error('[minutes-api] link 대상 조회 실패:', selErr.message); return apiInternalError() }
-    // SP2 — 연결은 회의록 변경이다. 작성자 또는 그 프로젝트 관리자만(세션 checkOwner 와 같은 canEditMinute).
+    // SP2 — 연결은 회의록 변경이다. 그 범위의 멤버 이상이면서 작성자 또는 그 프로젝트 관리자만(세션 checkOwner 와 같은 canEditMinute).
     // 자격이 없으면 없는 회의록과 같은 404 — 다른 워크스페이스 회의록의 존재·보관 여부를 드러내지 않는다.
-    const row = target as { created_by: string | null; project_id: string | null } | null
+    const row = target as { created_by: string | null; project_id: string | null; workspace_id: string } | null
     if (!row || !canEditMinute(actor, row)) return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
     if ((target as { archived_at: string | null }).archived_at) {
       return apiFail(409, 'archived', '보관된 회의록은 연결할 수 없습니다.')

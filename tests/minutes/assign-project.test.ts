@@ -7,8 +7,9 @@ const afterMock = vi.hoisted(() => ({ after: vi.fn() }))
 vi.mock('@/lib/auth', () => ({
   getSession: (...a: unknown[]) => getSession(...(a as [])),
 }))
-vi.mock('@/lib/authz', () => ({
+vi.mock('@/lib/authz', async () => ({
   getActor: (...a: unknown[]) => getActor(...(a as [])),
+  resolveScope: (await import('../helpers/resolve-scope-mock')).resolveScopeVia(() => createServerClient()),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: (fn: () => Promise<void>) => afterMock.after(fn) }))
@@ -24,6 +25,8 @@ const rebuild = vi.hoisted(() => ({ fn: vi.fn(async () => {}) }))
 vi.mock('@/lib/ai/wiki-ingest', () => ({
   rebuildProjectWikiFromActiveMinutes: (...a: unknown[]) => rebuild.fn(...(a as [])),
 }))
+// 재편철 팀 목록(옮겨 간 범위의 팀) — 실 캐시는 콜드스타트에 DB 가 필요하다.
+vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
 
 const createServerClient = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({
@@ -32,7 +35,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { assignMinutesProject } from '@/app/actions/minutes'
 import { MINUTES_PROJECT_BULK_MAX } from '@/lib/domain/minutes'
-import { makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
+import { makeAdminActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const P1 = '7a1c6034-a647-4673-ae85-d0b6daa2f6f3'
 
@@ -83,7 +86,7 @@ function fakeAdmin(reply: (args: Row) => Row | null) {
 }
 
 const minuteRow = (id: string, over: Row = {}): Row => ({
-  id, created_by: 'u1', archived_at: null, project_id: null, meeting_id: null, ...over,
+  id, created_by: 'u1', archived_at: null, project_id: null, workspace_id: WS, meeting_id: null, ...over,
 })
 
 beforeEach(() => {
@@ -132,7 +135,7 @@ describe('assignMinutesProject', () => {
 
   it('정상 지정 — 메타 RPC 로 project_id 만 patch 하고 위키를 프로젝트당 1회 재적재', async () => {
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: [minuteRow(M1), minuteRow(M2)], error: null },
     }))
     const { client, rpc } = fakeAdmin(() => ({
@@ -151,7 +154,7 @@ describe('assignMinutesProject', () => {
 
   it('이미 그 프로젝트면 쓰지 않고 unchanged 로 센다', async () => {
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: [minuteRow(M1, { project_id: P1 })], error: null },
     }))
     const { client, rpc } = fakeAdmin(() => ({ old_project_id: null, new_project_id: P1, wiki_rebuild_required: false }))
@@ -163,7 +166,7 @@ describe('assignMinutesProject', () => {
 
   it('보관본·타인 회의록은 건너뛰고 사유를 돌려준다 — 조용히 빠뜨리지 않는다', async () => {
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: {
         data: [minuteRow(M1, { archived_at: '2026-07-01' }), minuteRow(M2, { created_by: 'other' })],
         error: null,
@@ -180,7 +183,7 @@ describe('assignMinutesProject', () => {
   it('슈퍼유저는 남의 미지정 회의록도 지정할 수 있다 — 미지정은 프로젝트 판정 불가라 관리자로는 부족', async () => {
     getActor.mockResolvedValue(superuserActor)
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: [minuteRow(M1, { created_by: 'other' })], error: null },
     }))
     adminMocks.createAdminClient.mockReturnValue(fakeAdmin(() => ({
@@ -192,7 +195,7 @@ describe('assignMinutesProject', () => {
   it('회의에 연결된 회의록은 회의의 프로젝트와 다르면 거절 — 회의와 어긋난 상태를 만들지 않는다', async () => {
     const MT = 'aaaaaaaa-1111-4111-8111-111111111111'
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: [minuteRow(M1, { meeting_id: MT })], error: null },
       meetings: { data: [{ id: MT, project_id: 'other-project' }], error: null },
     }))
@@ -206,7 +209,7 @@ describe('assignMinutesProject', () => {
 
   it('대상 조회 실패는 중단 — 일부만 바꾸고 성공으로 보고하지 않는다(쓰기 선행조회 원칙)', async () => {
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: null, error: { message: 'boom' } },
     }))
     const r = await assignMinutesProject([M1], P1)
@@ -216,7 +219,7 @@ describe('assignMinutesProject', () => {
 
   it('RPC 실패는 그 건만 skipped 로 남기고 나머지는 계속 진행한다', async () => {
     createServerClient.mockResolvedValue(fakeDb({
-      projects: { data: { id: P1 }, error: null },
+      projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: [minuteRow(M1), minuteRow(M3)], error: null },
     }))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

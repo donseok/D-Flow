@@ -98,12 +98,23 @@ export function isProjectMember(actor: Actor | null, projectId: string | null): 
   const r = roleIn(actor, projectId); return r === 'superuser' || r === 'admin' || r === 'member'
 }
 /**
- * 회의록 변경(본문·메타·연결·공유) 자격 — 작성자 본인 또는 그 프로젝트의 관리자 이상(워크스페이스 관리자 승계 포함).
+ * 회의록 범위의 멤버 이상 — 프로젝트가 있으면 그 프로젝트의 멤버 이상, 없으면 그 워크스페이스에 역할(hasProjectRoleInWorkspace).
+ * 범위는 회의록 행의 것이다(클라이언트 입력 아님). 다른 워크스페이스에만 역할이 있으면 거짓 — 하이라이트·요약처럼 남에게도
+ * 보이는 쓰기의 최소 자격이고, canEditMinute 의 전제다.
+ */
+export function isMinuteMember(actor: Actor | null, minute: { project_id: string | null; workspace_id: string }): boolean {
+  return minute.project_id ? isProjectMember(actor, minute.project_id) : hasProjectRoleInWorkspace(actor, minute.workspace_id)
+}
+/**
+ * 회의록 변경(본문·메타·연결·공유) 자격 — 그 회의록 범위의 멤버 이상(isMinuteMember)이면서 작성자 본인 또는 그 프로젝트의
+ * 관리자 이상(워크스페이스 관리자 승계 포함). 작성자라도 조회 전용이 됐거나 그 워크스페이스를 떠났으면 고칠 수 없다.
  * 프로젝트 미지정(project_id null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — 의도된 fail-closed(SP1 스펙 §3.5).
  * 세션 액션(checkOwner)과 외부 API(link·POST replace)가 같은 판정을 쓴다.
  */
-export function canEditMinute(actor: Actor | null, minute: { created_by: string | null; project_id: string | null }): boolean {
-  if (!actor) return false
+export function canEditMinute(
+  actor: Actor | null, minute: { created_by: string | null; project_id: string | null; workspace_id: string },
+): boolean {
+  if (!actor || !isMinuteMember(actor, minute)) return false
   return minute.created_by === actor.userId || isProjectAdmin(actor, minute.project_id)
 }
 /** 비공개 프로젝트 화면 숨김(0070 의미 유지, RLS 경계 아님). 워크스페이스 관리자 승계 포함. */
@@ -161,6 +172,17 @@ export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: stri
   if (!workspaceId) return false
   if (actor.workspaceRoles.get(workspaceId) === 'admin') return true
   for (const pid of actor.projectRoles.keys()) if (actor.projectWorkspace.get(pid) === workspaceId) return true
+  return false
+}
+/**
+ * 소속 워크스페이스 중 하나라도 역할이 있는가 — 워크스페이스 축 없는 화면(회의록 목록)의 업로드 어포던스.
+ * createMinute 의 판정(프로젝트면 그 멤버 이상, 미지정이면 그 워크스페이스에 역할)을 소속 워크스페이스 단위로 미러한다.
+ * hasAnyProjectRole 과 달리 소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다.
+ */
+export function hasProjectRoleInAnyWorkspace(actor: Actor | null): boolean {
+  if (!actor) return false
+  if (actor.isSuperuser) return true
+  for (const wid of actor.workspaceRoles.keys()) if (hasProjectRoleInWorkspace(actor, wid)) return true
   return false
 }
 

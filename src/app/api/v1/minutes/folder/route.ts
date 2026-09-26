@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
 import { isAnyProjectAdmin, isWorkspaceMember } from '@/lib/domain/authz'
-import { activeTeamCodesForProjectSync, activeTeamCodesSync } from '@/lib/teams/master'
+import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
+import type { TeamCode } from '@/lib/domain/types'
 import {
   ancestorIdsOf, folderPathOfSnapshot, loadFolderSnapshot, resolveFolderPath, type FolderSnapshot,
 } from '@/lib/minutes/folders'
@@ -155,6 +156,8 @@ async function processItem(
   snap: FolderSnapshot,
   batch: ParsedBatch,
   actorId: string,
+  /** 이 회의록 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀 — 라우트가 쓰기 전에 확보해 넘긴다. */
+  activeTeamCodes: TeamCode[],
 ): Promise<ItemResult> {
   const key = item.externalId
   if (!row) return { external_id: key, status: 'not_found' }
@@ -177,7 +180,6 @@ async function processItem(
   // 스냅샷은 배치 전체가 공유해도 안전하다 — seedRoots 키가 (프로젝트, 팀코드)라 프로젝트별
   // 루트가 서로 다른 항목으로 공존한다.
   const projectId = row.project_id
-  const activeTeamCodes = projectId ? activeTeamCodesForProjectSync(projectId) : activeTeamCodesSync()
 
   // ⚠️ 판정 단계에서는 **절대 폴더를 만들지 않는다**(create: false). APPLY 라고 여기서 만들면
   // 뒤이어 skipped(manual_placement) 로 건너뛸 건의 목표 트리까지 실제로 생성돼, 아무 회의록도
@@ -331,15 +333,22 @@ export async function POST(req: NextRequest) {
     if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
       return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
     }
+    // 건별 편철의 팀 목록 — 그 회의록의 범위(프로젝트, 미지정이면 워크스페이스)의 것. 전 워크스페이스 공용 목록이면 다른
+    // 워크스페이스의 팀 루트가 활성으로 보인다. 첫 이동 전에 전부 확보한다 — 팀 캐시를 한 번도 못 채웠으면 throw → 아래
+    // catch 의 500 이고, 몇 건을 옮긴 뒤에 터져 결과 보고 없이 끝나는 일이 없다.
+    const teamCodesByMinute = new Map<string, TeamCode[]>()
+    for (const r of byExternalId.values()) {
+      teamCodesByMinute.set(r.id, activeTeamCodesForMinuteScope({ projectId: r.project_id, workspaceId: r.workspace_id }))
+    }
 
     const results: ItemResult[] = []
     for (const item of batch.items) {
+      const row = byExternalId.get(item.externalId)
       const res = await processItem(
-        admin, item, byExternalId.get(item.externalId), snap, batch, user.id,
+        admin, item, row, snap, batch, user.id, row ? teamCodesByMinute.get(row.id)! : [],
       )
       // 같은 external_id 가 한 요청에 두 번 오면 두 번째는 갱신된 위치를 봐야 한다 —
       // 안 그러면 이미 옮긴 건이 다시 moved 로 집계된다(멱등 위반).
-      const row = byExternalId.get(item.externalId)
       if (row && res.status === 'moved' && !batch.dryRun && res.folder_id) row.folder_id = res.folder_id
       results.push(res)
     }

@@ -57,6 +57,13 @@ const childKey = (parentId: string, name: string) => `${parentId} ${name}`
 const rootKey = (projectId: string | null, workspaceId: string | null, name: string) =>
   projectId ? `p:${projectId} ${name}` : `w:${workspaceId ?? '-'} ${name}`
 
+/** 한 범위(프로젝트, 미지정이면 워크스페이스)의 팀 시드 루트 id — 없으면 null. 키 형식은 이 모듈만 안다. */
+export function seedRootIdOf(
+  snap: FolderSnapshot, scope: { projectId: string | null; workspaceId: string }, teamCode: string,
+): string | null {
+  return snap.seedRoots.get(rootKey(scope.projectId, scope.workspaceId, teamCode)) ?? null
+}
+
 export function buildFolderSnapshot(rows: readonly FolderRow[]): FolderSnapshot {
   const snap: FolderSnapshot = { byId: new Map(), byParentName: new Map(), seedRoots: new Map() }
   for (const r of rows) addToFolderSnapshot(snap, r)

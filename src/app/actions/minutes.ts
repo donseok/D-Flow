@@ -3,15 +3,15 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
-import { getActor } from '@/lib/authz'
+import { getActor, resolveScope } from '@/lib/authz'
 import {
-  canEditMinute, isProjectAdmin, isProjectMember, hasAnyProjectRole, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
+  canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
 } from '@/lib/domain/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
-  validateMinuteInput, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
+  validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
   isTeamRootName, isTeamRootFolder, teamSubOfFolder, normalizeFolderName,
   MINUTES_PROJECT_BULK_MAX,
   type MinuteInput,
@@ -32,7 +32,7 @@ import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { correctMinuteBodyTime } from '@/lib/minutes/timeFix'
 import { resolveTeamRootFolderId, refileMinuteAfterProjectChange, loadFolderSnapshot } from '@/lib/minutes/folders'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
-import { activeTeamCodesSync, activeTeamCodesForProjectSync, teamsSync } from '@/lib/teams/master'
+import { activeTeamCodesForMinuteScope, teamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
 import { resolveMinuteProject } from '@/lib/minutes/project'
 import {
   type MinuteVersionFile,
@@ -82,31 +82,62 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
   return { ok: true, actor }
 }
 
-/** 소유권 사전 확인 — RLS 0행 침묵 실패 방지. 반환: 에러 메시지 또는 null.
- *  프로젝트 미지정(project_id null) 회의록은 프로젝트로 판정할 수 없으므로
- *  isProjectAdmin(actor, null)=슈퍼유저만 통과 — '작성자 본인 또는 슈퍼유저'로
- *  좁아지는 것은 의도된 fail-closed 다(스펙 §3.5). */
-async function checkOwner(sb: Sb, minuteId: string, actor: Actor): Promise<string | null> {
+/** 회의록을 다른 워크스페이스로 보내는 이동의 거부 문구 — 회의록의 워크스페이스는 바뀌지 않는다(0006 트리거
+ *  WORKSPACE_SCOPE_MISMATCH 가 막는다). 트리거까지 가지 않도록 쓰기 전에 같은 판정을 한다. */
+const CROSS_WORKSPACE_MOVE_MSG = '다른 워크스페이스의 프로젝트·폴더로는 옮길 수 없습니다.'
+const TEAMS_UNAVAILABLE_MSG = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+
+/** 회의록 범위의 활성 팀 코드 — 팀 캐시를 한 번도 못 채웠으면 오류 문구로 돌려준다(빈 목록으로 위장하지 않는다). */
+function activeTeamsOr(scope: MinuteScope): { codes: TeamCode[] } | { error: string } {
+  try {
+    return { codes: activeTeamCodesForMinuteScope(scope) }
+  } catch (e) {
+    console.error('[minutes] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
+    return { error: TEAMS_UNAVAILABLE_MSG }
+  }
+}
+
+/**
+ * 회의록 id 를 받는 액션의 범위 관문 — resolveScope 로 대상 행의 워크스페이스·프로젝트를 확정하고(클라이언트 입력 불신)
+ * 그 범위의 멤버 이상(isMinuteMember)인지 본다. 다른 워크스페이스에만 역할이 있으면 거부.
+ * 조회 실패는 ERR_LOOKUP(중단), 없거나 RLS 가 가리면 ERR_MISSING.
+ */
+async function requireMinuteMember(
+  actor: Actor, minuteId: string,
+): Promise<{ ok: true; scope: MinuteScope } | { ok: false; error: string }> {
+  const s = await resolveScope('minutes', minuteId)
+  if (!s.ok) return s
+  if (!isMinuteMember(actor, { project_id: s.projectId, workspace_id: s.workspaceId })) return { ok: false, error: ERR_DENIED }
+  return { ok: true, scope: { projectId: s.projectId, workspaceId: s.workspaceId } }
+}
+
+/** 소유권 사전 확인 — RLS 0행 침묵 실패 방지. 범위는 resolveScope 가 대상 행에서 확정하고(조회 실패 ERR_LOOKUP·없음
+ *  ERR_MISSING), 판정은 그 범위의 canEditMinute(범위의 멤버 이상 ∧ (작성자 ∨ 그 프로젝트 관리자 이상))다 — 다른
+ *  워크스페이스에만 역할이 있는 작성자는 거부된다. 프로젝트 미지정(project_id null) 회의록은 isProjectAdmin(actor, null)=
+ *  슈퍼유저만 통과 — '작성자 본인 또는 슈퍼유저'로 좁아지는 것은 의도된 fail-closed 다(스펙 §3.5).
+ *  extra 는 같은 왕복에 실을 열 — 호출부가 같은 행을 다시 읽지 않게 한다. */
+async function checkOwner(
+  sb: Sb, minuteId: string, actor: Actor,
+  opts: { extra?: string; archivedError?: string } = {},
+): Promise<{ ok: true; scope: MinuteScope; row: Record<string, unknown> } | { ok: false; error: string }> {
+  const s = await resolveScope('minutes', minuteId)
+  if (!s.ok) return s
   const { data, error } = await sb.from('minutes')
-    .select('created_by, archived_at, project_id')
+    .select(opts.extra ? `created_by, archived_at, ${opts.extra}` : 'created_by, archived_at')
     .eq('id', minuteId)
     .maybeSingle()
   // 보안 가드 조회 — 실패 시 소유자 판정 자체가 불가능하므로 거부(fail-closed).
   if (error) {
     console.error('[checkOwner] 소유권 조회 실패:', error.message)
-    return '권한 확인에 실패했습니다. 잠시 후 다시 시도하세요.'
+    return { ok: false, error: '권한 확인에 실패했습니다. 잠시 후 다시 시도하세요.' }
   }
-  if (!data) return '회의록을 찾을 수 없습니다.'
-  if (data.archived_at) return '보관된 회의록은 변경할 수 없습니다.'
+  if (!data) return { ok: false, error: '회의록을 찾을 수 없습니다.' }
+  const row = data as unknown as Record<string, unknown>
+  if (row.archived_at) return { ok: false, error: opts.archivedError ?? '보관된 회의록은 변경할 수 없습니다.' }
   if (!canEditMinute(actor, {
-    created_by: (data.created_by as string | null) ?? null, project_id: (data.project_id as string | null) ?? null,
-  })) return '권한 없음'
-  return null
-}
-
-/** 회의록 행 → 저장 경로 scope. workspace_id 는 0006 부터 not null 이지만 비면 어떤 경로와도 맞지 않게 '' 로 둔다(fail-closed). */
-function minuteScopeOf(row: { workspace_id?: unknown; project_id?: unknown }): { workspaceId: string; projectId: string | null } {
-  return { workspaceId: (row.workspace_id as string | null) ?? '', projectId: (row.project_id as string | null) ?? null }
+    created_by: (row.created_by as string | null) ?? null, project_id: s.projectId, workspace_id: s.workspaceId,
+  })) return { ok: false, error: ERR_DENIED }
+  return { ok: true, scope: { projectId: s.projectId, workspaceId: s.workspaceId }, row }
 }
 
 /** 본문 교체 후 하이라이트 재배정 — 실패는 로그만(표시 규칙이 오표시를 차단). service_role. */
@@ -151,9 +182,10 @@ function adminOr(fallback: string): { admin: ReturnType<typeof createAdminClient
  *  "폴더는 MES 인데 team_code 는 ERP" 인 데이터를 서버가 직접 만든다). 자식=부모 프로젝트 불변식도
  *  여기서 함께 검사한다 — moveMinuteToFolder 와 동일하게 회의록이 속할 프로젝트와 명시 지정된
  *  폴더의 프로젝트가 다르면 거절(무스코프면 다른 프로젝트 폴더에 새로 꽂힌다). 파생 불가 폴더
- *  (시드 체인 밖)는 추측하지 않고 거절한다. createMinute·updateMinuteMeta 공용. */
+ *  (시드 체인 밖)는 추측하지 않고 거절한다. createMinute·updateMinuteMeta 공용.
+ *  workspaceId 는 회의록의 워크스페이스(생성이면 확정한 쓰기 대상) — 회의록의 워크스페이스는 바뀌지 않는다. */
 async function deriveTeamFromFolder(
-  sb: Sb, folderId: string, projectId: string | null, workspaceId?: string,
+  sb: Sb, folderId: string, projectId: string | null, workspaceId: string,
 ): Promise<{ team: TeamCode } | { error: string }> {
   const folders = await loadFolders(sb)
   if (!folders) return { error: '폴더 목록을 불러오지 못했습니다.' }
@@ -163,7 +195,7 @@ async function deriveTeamFromFolder(
     return { error: '다른 프로젝트 폴더로는 이동할 수 없습니다.' }
   }
   // 프로젝트 없는 폴더끼리는 워크스페이스가 경계다(0006) — RPC 의 MINUTE_FOLDER_WORKSPACE_MISMATCH 를 미리 거른다.
-  if (workspaceId && targetFolder.workspaceId !== workspaceId) {
+  if (targetFolder.workspaceId !== workspaceId) {
     return { error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
   const derived = teamSubOfFolder(folders, folderId)
@@ -178,7 +210,8 @@ export async function createMinute(
   if (!g.ok) return { ok: false, error: g.error }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
-  const err = validateMinuteInput(input, activeTeamCodesSync())
+  // 담당 팀은 쓰기 대상 범위가 정해진 뒤(아래 targetWs) 그 범위의 팀으로 본다.
+  const err = validateMinuteFields(input)
   if (err) return { ok: false, error: err }
   if (source) {
     // 경로 스코프 검증은 워크스페이스·프로젝트가 확정된 뒤(아래 targetWs) — 여기서는 형식만 본다.
@@ -211,6 +244,11 @@ export async function createMinute(
   const targetWs = workspaceId
     ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
   if (!targetWs) return { ok: false, error: ERR_MISSING }
+  // 담당 팀은 그 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀이어야 한다 — 다른 워크스페이스의 팀 코드는 거부.
+  const teams = activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs })
+  if ('error' in teams) return { ok: false, error: teams.error }
+  const teamErr = validateMinuteTeam(input.teamCode, teams.codes)
+  if (teamErr) return { ok: false, error: teamErr }
   // 원본 파일 경로 — 생성이라 읽을 행이 없으므로 scope 는 방금 확정한 워크스페이스·프로젝트다(RPC 의 minute_body_path_ok 와 같은 판정).
   if (source && !isMinuteFilePathValid(
     { workspaceId: targetWs, projectId: resolvedProject.projectId ?? null }, source.minuteId, source.file.filePath, 'minutes',
@@ -220,7 +258,7 @@ export async function createMinute(
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
   let effectiveTeam = input.teamCode
   if (folderId) {
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, workspaceId ?? undefined)
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, targetWs)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
@@ -297,11 +335,14 @@ export async function updateMinuteMeta(
 ): Promise<MinuteActionResult> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  const err = validateMinuteInput({ ...patch, bodyMd: '' }, activeTeamCodesSync())
+  const err = validateMinuteFields({ ...patch, bodyMd: '' })
   if (err) return { ok: false, error: err }
   const sb = await createServerClient()
-  const own = await checkOwner(sb, id, g.actor)
-  if (own) return { ok: false, error: own }
+  // 프로젝트 이동 시 자동 재편철(아래)의 old 값(folder_id)을 소유권 조회에 싣는다 — RPC 뒤에 읽으면 왕복이 하나 늘고
+  // 그 사이 다른 갱신이 끼어들 여지가 생긴다. folderId 가 명시되면(사용자가 폴더를 직접 골랐다) 그 선택이 우선이라
+  // 재편철 자체를 돌리지 않으므로 싣지 않는다.
+  const own = await checkOwner(sb, id, g.actor, folderId === undefined ? { extra: 'folder_id' } : {})
+  if (!own.ok) return { ok: false, error: own.error }
   const resolvedProject = await resolveMinuteProject(sb, {
     meetingId: patch.meetingId,
     projectId: patch.projectId,
@@ -314,21 +355,23 @@ export async function updateMinuteMeta(
   if (resolvedProject.projectId && !isProjectMember(g.actor, resolvedProject.projectId)) {
     return { ok: false, error: '그 프로젝트에 회의록을 넣을 권한이 없습니다.' }
   }
+  // 회의록의 워크스페이스는 바뀌지 않는다 — 다른 워크스페이스 프로젝트(회의)로 옮기면 트리거가 WORKSPACE_SCOPE_MISMATCH 로
+  // 막는다. 쓰기 전에 같은 판정을 한다(멤버 판정을 통과했으니 그 프로젝트는 스냅샷에 있다).
+  if (resolvedProject.projectId
+    && g.actor.projectWorkspace.get(resolvedProject.projectId) !== own.scope.workspaceId) {
+    return { ok: false, error: CROSS_WORKSPACE_MOVE_MSG }
+  }
+  // 담당 팀은 옮겨 갈 범위(새 프로젝트, 미지정이면 회의록의 워크스페이스)의 활성 팀이어야 한다.
+  const teams = activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: own.scope.workspaceId })
+  if ('error' in teams) return { ok: false, error: teams.error }
+  const teamErr = validateMinuteTeam(patch.teamCode, teams.codes)
+  if (teamErr) return { ok: false, error: teamErr }
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
+  // 프로젝트 없는 회의록은 워크스페이스가 폴더 경계다(0006) — 회의록의 워크스페이스 폴더만 허용한다.
+  // 메타 RPC·minutes 트리거는 이 불일치를 잡지 않는다.
   let effectiveTeam = patch.teamCode
   if (folderId) {
-    // 프로젝트 없는 회의록은 워크스페이스가 폴더 경계다(0006) — 회의록의 워크스페이스는 바뀌지 않으므로
-    // 그 워크스페이스 폴더만 허용한다. 메타 RPC·minutes 트리거는 이 불일치를 잡지 않는다.
-    let minuteWs: string | undefined
-    if (!resolvedProject.projectId) {
-      const { data: wsRow, error: wsErr } = await sb.from('minutes').select('workspace_id').eq('id', id).maybeSingle()
-      if (wsErr || !(wsRow as { workspace_id?: string } | null)?.workspace_id) {
-        console.error('[updateMinuteMeta] 워크스페이스 조회 실패:', wsErr?.message ?? 'no row')
-        return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
-      }
-      minuteWs = (wsRow as { workspace_id: string }).workspace_id
-    }
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, minuteWs)
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, own.scope.workspaceId)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
@@ -344,15 +387,7 @@ export async function updateMinuteMeta(
       : null,
   }
   if (folderId !== undefined) upd.folder_id = folderId
-  // 프로젝트 이동 시 자동 재편철(아래)의 old 값 — RPC 뒤에 읽으면 왕복이 하나 늘고 그 사이
-  // 다른 갱신이 끼어들 여지가 생기므로 쓰기 전에 미리 확보한다. folderId 가 명시되면(사용자가
-  // 폴더를 직접 골랐다) 그 선택이 우선이라 재편철 자체를 돌리지 않으므로 조회도 건너뛴다.
-  let curFolderId: string | null = null
-  if (folderId === undefined) {
-    const { data: cur, error: curErr } = await sb.from('minutes').select('folder_id').eq('id', id).maybeSingle()
-    if (curErr) console.error('[updateMinuteMeta] 재편철 사전 조회 실패(재편철 생략):', curErr.message)
-    else curFolderId = (cur?.folder_id as string | null) ?? null
-  }
+  const curFolderId = (own.row.folder_id as string | null | undefined) ?? null
   const adm = adminOr('회의록 수정 설정을 확인하세요.')
   if ('error' in adm) return { ok: false, error: adm.error }
   const { admin } = adm
@@ -360,7 +395,10 @@ export async function updateMinuteMeta(
     p_minute_id: id,
     p_metadata: upd,
   }).single()
-  if (error || !updateRaw) return { ok: false, error: error?.message ?? '회의록 수정에 실패했습니다.' }
+  // RPC 영문 상수(WORKSPACE_SCOPE_MISMATCH 등)는 사용자 문구로, 그 밖은 종전처럼 원문 그대로.
+  if (error || !updateRaw) {
+    return { ok: false, error: rpcErrorMessage(error?.message, error?.message ?? '회의록 수정에 실패했습니다.') }
+  }
   const updateResult = updateRaw as unknown as {
     old_project_id: string | null
     new_project_id: string | null
@@ -378,12 +416,11 @@ export async function updateMinuteMeta(
   // 프로젝트 이동 시 폴더 자동 추종 — 사용자가 폴더를 직접 고르지 않았을 때만(folderId===undefined).
   // 위키 재적재보다 먼저·동기로 끝내 재적재가 새 folder_id 반영 이후 상태를 본다.
   if (projectChanged && folderId === undefined) {
+    // 팀 목록은 위에서 확보한 옮겨 간 범위의 것 — RPC 의 new_project_id 는 보낸 project_id 그대로다.
     await refileMinuteAfterProjectChange(admin, {
       minuteId: id, teamCode: effectiveTeam, oldFolderId: curFolderId,
       newProjectId: updateResult.new_project_id, actorId: g.actor.userId,
-      activeTeamCodes: updateResult.new_project_id
-        ? activeTeamCodesForProjectSync(updateResult.new_project_id)
-        : activeTeamCodesSync(),
+      activeTeamCodes: teams.codes,
     })
   }
   if (
@@ -443,18 +480,22 @@ export async function assignMinutesProject(
     return { ok: false, error: `한 번에 ${MINUTES_PROJECT_BULK_MAX}건까지 지정할 수 있습니다.`, ...empty }
   }
   const sb = await createServerClient()
-  // 대상 프로젝트 실재 확인 — 없는 id 로 200건을 돌리고 전건 실패하는 것을 막는다
+  // 대상 프로젝트 실재 확인 — 없는 id 로 200건을 돌리고 전건 실패하는 것을 막는다.
+  // 그 워크스페이스도 함께 읽는다 — 회의록의 워크스페이스는 바뀌지 않으므로 다른 워크스페이스 회의록은 건별로 거절한다.
+  let targetWs: string | null = null
   if (projectId) {
-    const { data: p, error: pErr } = await sb.from('projects').select('id').eq('id', projectId).maybeSingle()
+    const { data: p, error: pErr } = await sb.from('projects').select('id, workspace_id').eq('id', projectId).maybeSingle()
     if (pErr) {
       console.error('[assignMinutesProject] 프로젝트 조회 실패:', pErr.message)
       return { ok: false, error: '프로젝트를 확인하지 못했습니다.', ...empty }
     }
     if (!p) return { ok: false, error: '프로젝트를 찾을 수 없습니다.', ...empty }
+    targetWs = (p as { workspace_id: string }).workspace_id
   }
-  // 가드 선행조회 — 실패하면 소유권·보관 판정이 불가능하므로 중단(fail-closed, 건별 N회 왕복 회피)
+  // 가드 선행조회 — 실패하면 소유권·보관 판정이 불가능하므로 중단(fail-closed, 건별 N회 왕복 회피).
+  // workspace_id 는 건별 범위 판정(canEditMinute)과 교차 워크스페이스 거절의 근거다(resolveScope 의 일괄판).
   const { data: rows, error: rowsErr } = await sb.from('minutes')
-    .select('id, created_by, archived_at, project_id, meeting_id, team_code, folder_id')
+    .select('id, created_by, archived_at, project_id, workspace_id, meeting_id, team_code, folder_id')
     .in('id', targets)
   if (rowsErr) {
     console.error('[assignMinutesProject] 대상 조회 실패:', rowsErr.message)
@@ -462,10 +503,19 @@ export async function assignMinutesProject(
   }
   type MinuteRow = {
     id: string; created_by: string | null; archived_at: string | null
-    project_id: string | null; meeting_id: string | null
+    project_id: string | null; workspace_id: string; meeting_id: string | null
     team_code: TeamCode; folder_id: string | null
   }
   const byId = new Map((rows ?? []).map(r => [(r as MinuteRow).id, r as MinuteRow]))
+  // 재편철 팀 목록 — 옮겨 간 범위(대상 프로젝트, 해제면 각 회의록의 워크스페이스)의 것. 쓰기 전에 전부 확보한다 —
+  // 팀 캐시 실패가 몇 건을 쓴 뒤에 터지면 일부만 바뀐 채 결과를 돌려주지 못한다.
+  const refileTeams = new Map<string, TeamCode[]>()
+  for (const r of byId.values()) {
+    if (refileTeams.has(r.workspace_id)) continue
+    const teams = activeTeamsOr({ projectId, workspaceId: r.workspace_id })
+    if ('error' in teams) return { ok: false, error: teams.error, ...empty }
+    refileTeams.set(r.workspace_id, teams.codes)
+  }
 
   // 연결된 회의의 프로젝트 — 회의별 1회만 읽는다
   const meetingIds = [...new Set([...byId.values()].map(r => r.meeting_id).filter((v): v is string => !!v))]
@@ -507,6 +557,8 @@ export async function assignMinutesProject(
       if (mp !== projectId) { skipped.push({ id, reason: '연결된 회의의 프로젝트와 다릅니다.' }); continue }
     }
     if (row.project_id === projectId) { unchanged += 1; continue }
+    // 회의록의 워크스페이스는 바뀌지 않는다 — 트리거(WORKSPACE_SCOPE_MISMATCH)까지 가지 않고 쓰기 전에 거절한다.
+    if (targetWs && row.workspace_id !== targetWs) { skipped.push({ id, reason: CROSS_WORKSPACE_MOVE_MSG }); continue }
 
     const { data: raw, error } = await admin.rpc('update_minute_metadata_with_wiki_retraction', {
       p_minute_id: id,
@@ -525,9 +577,8 @@ export async function assignMinutesProject(
     await refileMinuteAfterProjectChange(admin, {
       minuteId: id, teamCode: row.team_code, oldFolderId: row.folder_id,
       newProjectId: res.new_project_id, actorId: g.actor.userId,
-      activeTeamCodes: res.new_project_id
-        ? activeTeamCodesForProjectSync(res.new_project_id)
-        : activeTeamCodesSync(),
+      // 위에서 이 회의록의 워크스페이스 몫을 채웠다(new_project_id 는 보낸 projectId 그대로다).
+      activeTeamCodes: refileTeams.get(row.workspace_id)!,
       snapshot: folderSnapshot,
     })
     if (res.old_project_id) rebuildProjects.add(res.old_project_id)
@@ -555,7 +606,7 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const own = await checkOwner(sb, id, g.actor)
-  if (own) return { ok: false, error: own }
+  if (!own.ok) return { ok: false, error: own.error }
   const adm = adminOr('연결 초기화 설정을 확인하세요.')
   if ('error' in adm) return { ok: false, error: adm.error }
   const { admin } = adm
@@ -597,14 +648,10 @@ export async function replaceMinuteBody(
   if (!/\.(md|markdown)$/i.test(file.fileName)) return { ok: false, error: '.md 파일만 가능합니다.' }
   const sb = await createServerClient()
   const own = await checkOwner(sb, id, g.actor)
-  if (own) return { ok: false, error: own }
-  const { data: minute, error: minuteErr } = await sb.from('minutes')
-    .select('project_id, workspace_id')
-    .eq('id', id)
-    .single()
-  if (minuteErr || !minute) return { ok: false, error: minuteErr?.message ?? '회의록을 찾을 수 없습니다.' }
-  // 경로 scope 는 DB 의 회의록 행(워크스페이스·현재 프로젝트) — 클라이언트 입력을 믿지 않는다.
-  if (!isMinuteFilePathValid(minuteScopeOf(minute), id, file.filePath, 'minutes')) {
+  if (!own.ok) return { ok: false, error: own.error }
+  const { projectId } = own.scope
+  // 경로 scope 는 DB 의 회의록 행(워크스페이스·현재 프로젝트, resolveScope) — 클라이언트 입력을 믿지 않는다.
+  if (!isMinuteFilePathValid(own.scope, id, file.filePath, 'minutes')) {
     return { ok: false, error: '잘못된 파일 경로입니다.' }
   }
   // 녹취툴 산출물이면 시간 줄 +9h(UTC→KST) 보정 — DB·재매칭·재인제스트 전부 보정본 사용
@@ -639,7 +686,7 @@ export async function replaceMinuteBody(
   const versionId = committed.version_id as string
   const wikiJobId = committed.wiki_rebuild_required
     ? await enqueueMinuteWikiProcessing({
-        projectId: (minute.project_id as string | null) ?? null,
+        projectId,
         minuteId: id,
         minuteVersionId: versionId,
         bodyMd: body,
@@ -652,8 +699,8 @@ export async function replaceMinuteBody(
     await Promise.all([
       ingestMinute(id, body),
       generateMinuteInsights(id, body),
-      committed.wiki_rebuild_required && minute.project_id
-        ? rebuildProjectWikiFromActiveMinutes(minute.project_id as string)
+      committed.wiki_rebuild_required && projectId
+        ? rebuildProjectWikiFromActiveMinutes(projectId)
         : wikiJobId === null ? Promise.resolve(null) : processMinuteWikiJob(wikiJobId),
     ])
   })
@@ -672,33 +719,22 @@ export async function recordMinuteFile(
   if (file.role === 'body' && !/\.(md|markdown)$/i.test(file.fileName))
     return { ok: false, error: '.md 파일만 가능합니다.' }
   const sb = await createServerClient()
-  const own = await checkOwner(sb, minuteId, g.actor)
-  if (own) return { ok: false, error: own }
-  // 경로 scope 는 DB 의 회의록 행 — 조회 실패는 쓰기 중단(3원칙 ②).
-  const { data: scopeRow, error: scopeErr } = await sb.from('minutes')
-    .select('project_id, workspace_id').eq('id', minuteId).maybeSingle()
-  if (scopeErr || !scopeRow) {
-    console.error('[recordMinuteFile] 회의록 스코프 조회 실패:', scopeErr?.message ?? 'no row')
-    return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
-  }
-  if (!isMinuteFilePathValid(minuteScopeOf(scopeRow), minuteId, file.filePath,
+  // 본문 연결이면 현재 본문을 소유권 조회에 싣는다 — 같은 행을 다시 읽지 않는다.
+  const own = await checkOwner(sb, minuteId, g.actor, file.role === 'body' ? { extra: 'body_md' } : {})
+  if (!own.ok) return { ok: false, error: own.error }
+  const { projectId } = own.scope
+  // 경로 scope 는 DB 의 회의록 행(resolveScope) — 클라이언트 입력을 믿지 않는다.
+  if (!isMinuteFilePathValid(own.scope, minuteId, file.filePath,
     file.role === 'body' ? 'minutes' : 'minute-files')) {
     return { ok: false, error: '잘못된 파일 경로입니다.' }
   }
   if (file.role === 'body') {
-    const { data: minute, error: minuteError } = await sb.from('minutes')
-      .select('body_md, project_id')
-      .eq('id', minuteId)
-      .single()
-    if (minuteError || !minute) {
-      return { ok: false, error: minuteError?.message ?? '회의록을 찾을 수 없습니다.' }
-    }
     const adm = adminOr('버전 저장 설정을 확인하세요.')
     if ('error' in adm) return { ok: false, error: adm.error }
     const { admin } = adm
     // 파일 없는 기존 본문에 원본을 연결하는 경우에도 과거 버전을 수정하지 않고,
     // 같은 본문+새 파일의 새 버전을 원자적으로 append한다.
-    const bodyMd = minute.body_md as string
+    const bodyMd = own.row.body_md as string
     const { data: committedRaw, error: commitError } = await admin.rpc('commit_minute_body_version', {
       p_minute_id: minuteId,
       p_body_md: bodyMd,
@@ -719,15 +755,15 @@ export async function recordMinuteFile(
     }
     const wikiJobId = committed.wiki_rebuild_required
       ? await enqueueMinuteWikiProcessing({
-          projectId: (minute.project_id as string | null) ?? null,
+          projectId,
           minuteId,
           minuteVersionId: committed.version_id,
           bodyMd,
         })
       : null
     after(async () => {
-      if (committed.wiki_rebuild_required && minute.project_id) {
-        await rebuildProjectWikiFromActiveMinutes(minute.project_id as string)
+      if (committed.wiki_rebuild_required && projectId) {
+        await rebuildProjectWikiFromActiveMinutes(projectId)
       } else if (wikiJobId !== null) {
         await processMinuteWikiJob(wikiJobId)
       }
@@ -755,7 +791,7 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   if (!f) return { ok: false, error: '파일 없음' }
   if ((f.role as string) === 'body') return { ok: false, error: '본문 파일은 교체로만 변경할 수 있습니다.' }
   const own = await checkOwner(sb, f.minute_id as string, g.actor)
-  if (own) return { ok: false, error: own }
+  if (!own.ok) return { ok: false, error: own.error }
   // Storage 삭제 실패는 고아 파일만 남기므로 로그 후 진행(메타 행 삭제는 계속한다).
   const { error: rmErr } = await sb.storage.from(BUCKET).remove([f.file_path as string])
   if (rmErr) console.error('[removeMinuteFile] Storage 삭제 실패(고아 파일 잔존):', rmErr.message)
@@ -770,14 +806,8 @@ export async function deleteMinute(id: string): Promise<MinuteActionResult> {
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const own = await checkOwner(sb, id, g.actor)
-  if (own) return { ok: false, error: own }
-  const { data: minuteScope, error: scopeError } = await sb.from('minutes')
-    .select('project_id')
-    .eq('id', id)
-    .maybeSingle()
-  if (scopeError || !minuteScope) {
-    return { ok: false, error: scopeError?.message ?? '회의록을 찾을 수 없습니다.' }
-  }
+  if (!own.ok) return { ok: false, error: own.error }
+  const { projectId } = own.scope
   const adm = adminOr('보관 설정을 확인하세요.')
   if ('error' in adm) return { ok: false, error: adm.error }
   const { admin } = adm
@@ -793,10 +823,10 @@ export async function deleteMinute(id: string): Promise<MinuteActionResult> {
   }
   revalidatePath('/minutes')
   revalidatePath(`/minutes/${id}`)
-  if (minuteScope.project_id) {
-    revalidatePath(`/p/${minuteScope.project_id as string}/wiki`)
+  if (projectId) {
+    revalidatePath(`/p/${projectId}/wiki`)
     after(async () => {
-      await rebuildProjectWikiFromActiveMinutes(minuteScope.project_id as string, id)
+      await rebuildProjectWikiFromActiveMinutes(projectId, id)
     })
   }
   return { ok: true }
@@ -963,10 +993,19 @@ export async function renameMinuteFolder(
   if (target.projectId && !isProjectMember(g.actor, target.projectId)) {
     return { ok: false, error: '권한 없음' }
   }
-  // 루트에서 팀코드 동명으로의 개명도 차단(앵커 사칭 방지)
-  const teamNames = teamsSync().map(t => t.code)
-  if (target.parentId === null && isTeamRootName(name, teamNames))
-    return { ok: false, error: `팀 기본 폴더명(${teamNames.join('·')})은 루트에 사용할 수 없습니다.` }
+  // 루트에서 팀코드 동명으로의 개명도 차단(앵커 사칭 방지) — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의
+  // 등록 팀(비활성 포함)으로 본다. 다른 워크스페이스 팀 이름은 이 트리의 앵커가 아니다.
+  if (target.parentId === null) {
+    let teamNames: string[]
+    try {
+      teamNames = teamCodesForMinuteScope({ projectId: target.projectId, workspaceId: target.workspaceId })
+    } catch (e) {
+      console.error('[renameMinuteFolder] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
+      return { ok: false, error: TEAMS_UNAVAILABLE_MSG }
+    }
+    if (isTeamRootName(name, teamNames))
+      return { ok: false, error: `팀 기본 폴더명(${teamNames.join('·')})은 루트에 사용할 수 없습니다.` }
+  }
   const { data, error } = await sb.from('minute_folders')
     .update({ name: normalizeFolderName(name), updated_at: new Date().toISOString() })
     .eq('id', id).select('id')
@@ -1056,6 +1095,8 @@ const RPC_ERROR_MESSAGES: ReadonlyArray<[string, string]> = [
   ['MINUTE_ARCHIVED', '보관된 회의록은 변경할 수 없습니다.'],
   ['MINUTE_TEAM_INVALID', '비활성 팀의 폴더로는 이동할 수 없습니다.'],
   ['MINUTE_FOLDER_WORKSPACE_MISMATCH', '다른 워크스페이스 폴더로는 이동할 수 없습니다.'],
+  // 0006 트리거 — 액션이 쓰기 전에 같은 판정을 하므로 경합에서만 닿는다.
+  ['WORKSPACE_SCOPE_MISMATCH', CROSS_WORKSPACE_MOVE_MSG],
   ['MINUTE_METADATA_REQUIRED', '회의록 필수 항목이 비어 있습니다.'],
   ['MINUTE_METADATA_KEY_NOT_ALLOWED', '허용되지 않은 항목이 포함됐습니다.'],
 ]
@@ -1090,9 +1131,25 @@ export async function moveMinuteFolder(
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const target = folders.find(f => f.id === id)
   if (!target) return { ok: false, error: '폴더가 없습니다.' }
-  const verdict = resolveFolderDrop(target, newParentId, folders, teamsSync().map(t => t.code))
+  // 루트 예약어(앵커 사칭)는 루트로 옮길 때만 본다 — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 등록 팀으로.
+  let teamCodes: string[] = []
+  if (newParentId === null) {
+    try {
+      teamCodes = teamCodesForMinuteScope({ projectId: target.projectId, workspaceId: target.workspaceId })
+    } catch (e) {
+      console.error('[moveMinuteFolder] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
+      return { ok: false, error: TEAMS_UNAVAILABLE_MSG }
+    }
+  }
+  const verdict = resolveFolderDrop(target, newParentId, folders, teamCodes)
   if (verdict.kind === 'noop') return { ok: true }        // 제자리 — 쓰기 없이 성공
   if (verdict.kind === 'reject') return { ok: false, error: FOLDER_MOVE_REJECT_MSG[verdict.reason] }
+  // 새 부모는 같은 워크스페이스여야 한다(0006) — 프로젝트 없는 폴더끼리는 cross-project 판정을 통과하므로 여기서 거른다.
+  // 다르면 트리거가 WORKSPACE_SCOPE_MISMATCH 로 막는다 — 쓰기 전에 같은 판정을 한다.
+  const newParent = newParentId === null ? undefined : folders.find(f => f.id === newParentId)
+  if (newParent && newParent.workspaceId !== target.workspaceId) {
+    return { ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
+  }
   const { data, error } = await sb.from('minute_folders')
     .update({ parent_id: newParentId, updated_at: new Date().toISOString() })
     .eq('id', id).select('id')
@@ -1132,19 +1189,11 @@ export async function moveMinuteToFolder(
     targetFolder = folders.find(f => f.id === folderId)
     if (!targetFolder) return { ok: false, error: '이동할 폴더를 찾을 수 없습니다.' }
   }
-  const own = await checkOwner(sb, minuteId, g.actor)
-  if (own) return { ok: false, error: own }
-
-  // 현재 팀·프로젝트 — 쓰기 선행조회 실패는 판정 불가이므로 중단(추측 금지)
-  const { data: cur, error: curErr } = await sb.from('minutes')
-    .select('team_code, project_id, workspace_id').eq('id', minuteId).maybeSingle()
-  if (curErr) {
-    console.error('[moveMinuteToFolder] 현재 담당 조회 실패:', curErr.message)
-    return { ok: false, error: '회의록 정보를 불러오지 못했습니다.' }
-  }
-  if (!cur) return { ok: false, error: '회의록을 찾을 수 없습니다.' }
-  const currentTeam = (cur as { team_code: string }).team_code
-  const minuteProjectId = (cur as { project_id: string | null }).project_id ?? null
+  // 현재 팀은 소유권 조회에 싣고, 프로젝트·워크스페이스는 resolveScope 가 확정한 범위다 — 쓰기 선행조회 실패는 중단(추측 금지).
+  const own = await checkOwner(sb, minuteId, g.actor, { extra: 'team_code' })
+  if (!own.ok) return { ok: false, error: own.error }
+  const currentTeam = own.row.team_code as string
+  const minuteProjectId = own.scope.projectId
 
   // 자식=부모 프로젝트 불변식 — 대상 폴더의 프로젝트와 회의록의 프로젝트가 다르면 거부한다
   // (미분류 폴더로의 이동은 targetFolder 가 없으므로 이 검사를 건너뛴다).
@@ -1152,7 +1201,7 @@ export async function moveMinuteToFolder(
     return { ok: false, error: '다른 프로젝트 폴더로는 이동할 수 없습니다.' }
   }
   // 프로젝트 없는 폴더끼리는 워크스페이스가 경계다(0006) — raw update·메타 RPC 모두 이 불일치를 잡지 않는다.
-  if (targetFolder && targetFolder.workspaceId !== (cur as { workspace_id: string }).workspace_id) {
+  if (targetFolder && targetFolder.workspaceId !== own.scope.workspaceId) {
     return { ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
 
@@ -1234,15 +1283,21 @@ export async function toggleMinuteHighlight(
 ): Promise<{ ok: boolean; on?: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  // 하이라이트는 다른 사용자에게도 보이는 공유 표식 — 멤버 이상(조회 전용 차단).
-  if (!hasAnyProjectRole(g.actor)) return { ok: false, error: '권한 없음' }
+  // 하이라이트는 다른 사용자에게도 보이는 공유 표식 — 그 회의록 범위의 멤버 이상(조회 전용·다른 워크스페이스 차단).
+  const m = await requireMinuteMember(g.actor, minuteId)
+  if (!m.ok) return { ok: false, error: m.error }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
   const sb = await createServerClient()
-  const { data: minute } = await sb.from('minutes')
+  const { data: minute, error: minuteErr } = await sb.from('minutes')
     .select('body_md, archived_at')
     .eq('id', minuteId)
     .maybeSingle()
+  // 조회 실패를 '없음'으로 위장하지 않는다(3원칙 ①).
+  if (minuteErr) {
+    console.error('[toggleMinuteHighlight] 회의록 조회 실패:', minuteErr.message)
+    return { ok: false, error: '회의록을 불러오지 못했습니다.' }
+  }
   if (!minute) return { ok: false, error: '회의록을 찾을 수 없습니다.' }
   if (minute.archived_at) return { ok: false, error: '보관된 회의록은 변경할 수 없습니다.' }
   const blocks = splitMinuteBlocks(minute.body_md as string)
@@ -1291,10 +1346,11 @@ export async function toggleMinuteHighlight(
 export async function ensureMinuteInsightsAction(
   minuteId: string,
 ): Promise<{ status: 'ready' | 'generated' | 'unavailable' }> {
-  // 멤버십 게이트(무료 쿼터 보호) — 조회 전용은 self-heal 을 트리거하지 못한다.
+  // 멤버십 게이트(무료 쿼터 보호) — 그 회의록 범위의 멤버 이상만. 조회 전용·다른 워크스페이스는 self-heal 을 트리거하지 못한다.
   const g = await requireActor()
   if (!g.ok) return { status: 'unavailable' }
-  if (!hasAnyProjectRole(g.actor)) return { status: 'unavailable' }
+  const m = await requireMinuteMember(g.actor, minuteId)
+  if (!m.ok) return { status: 'unavailable' }
   const sb = await createServerClient()
   const { data: minute } = await sb.from('minutes')
     .select('body_md, archived_at')
@@ -1311,18 +1367,15 @@ export async function ensureMinuteInsightsAction(
 
 export interface MinuteShareResult { ok: boolean; enabled?: boolean; token?: string | null; error?: string }
 
-/** 소유자/관리자 검증 + 공유 컬럼 단일 조회 — get/set 공용(왕복 1회, 소유권 규칙 한 곳).
- *  미지정(project_id null) 회의록은 작성자 본인 또는 슈퍼유저만 — checkOwner 와 같은 fail-closed. */
+/** 소유자/관리자 검증 + 공유 컬럼 조회 — get/set 공용(소유권 규칙 한 곳). 공유 컬럼은 소유권 조회에 싣는다.
+ *  판정은 checkOwner 그대로다(resolveScope 범위의 canEditMinute) — 미지정(project_id null) 회의록은 작성자 본인 또는 슈퍼유저만. */
 async function readShareRow(sb: Sb, id: string, actor: Actor):
   Promise<{ state: ShareState } | { error: string }> {
-  const { data } = await sb.from('minutes')
-    .select('created_by, share_token, share_enabled, archived_at, project_id').eq('id', id).maybeSingle()
-  if (!data) return { error: '회의록을 찾을 수 없습니다.' }
-  if (data.archived_at) return { error: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.' }
-  if (!canEditMinute(actor, {
-    created_by: (data.created_by as string | null) ?? null, project_id: (data.project_id as string | null) ?? null,
-  })) return { error: '권한 없음' }
-  return { state: { token: (data.share_token as string | null) ?? null, enabled: !!data.share_enabled } }
+  const own = await checkOwner(sb, id, actor, {
+    extra: 'share_token, share_enabled', archivedError: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.',
+  })
+  if (!own.ok) return { error: own.error }
+  return { state: { token: (own.row.share_token as string | null) ?? null, enabled: !!own.row.share_enabled } }
 }
 
 /** 공유 상태 조회 — 토큰은 이 액션으로만 클라이언트에 전달(페이지 payload 미포함, 소유자/관리자 한정). */

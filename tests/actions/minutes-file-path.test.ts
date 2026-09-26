@@ -6,7 +6,10 @@ const getSession = vi.fn()
 const getActor = vi.fn()
 const adminMocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession: (...a: unknown[]) => getSession(...(a as [])) }))
-vi.mock('@/lib/authz', () => ({ getActor: (...a: unknown[]) => getActor(...(a as [])) }))
+vi.mock('@/lib/authz', async () => ({
+  getActor: (...a: unknown[]) => getActor(...(a as [])),
+  resolveScope: (await import('../helpers/resolve-scope-mock')).resolveScopeVia(() => createServerClient()),
+}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: adminMocks.createAdminClient }))

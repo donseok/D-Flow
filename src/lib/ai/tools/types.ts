@@ -50,6 +50,9 @@ export interface ToolExecutionContext {
   userId: string
   capabilities: readonly string[]
   allowedProjectIds: readonly string[]
+  /** 호출자의 소속 워크스페이스(accessScope). 프로젝트 축 없는 입력(회의록 담당 팀 등)을 이 범위로 검증한다 —
+   *  없으면 빈 범위로 본다(fail-closed). */
+  workspaceIds?: readonly string[]
   pageContext: PageContextV1 | null
   now: string
   timezone: 'Asia/Seoul'

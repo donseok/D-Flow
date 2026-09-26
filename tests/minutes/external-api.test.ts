@@ -1776,6 +1776,11 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
   })
 
   it('replace: 미지정 회의록의 folder_path 는 그 회의록의 워크스페이스(W2) 트리에서 해석한다', async () => {
+    // 작성자는 W1·W2 양쪽에 역할이 있다(W2 는 워크스페이스 관리자) — 유일 소속으로는 고를 수 없으니 트리는 회의록의
+    // 워크스페이스에서 나와야 한다. W2 에 역할이 없으면 작성자라도 고칠 수 없다(canEditMinute, SP2 Task 16a).
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, workspaceRoles: new Map([[WS, 'member'], [W2, 'admin']]),
+    }))
     const { admin } = useAdmin({
       minutes: [
         { data: { ...existingRow, folder_id: 'w2-pmo', workspace_id: W2 } },
@@ -1787,7 +1792,7 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
     expect(res.status).toBe(200)
     const call = admin.rpc.mock.calls.find(c => c[0] === 'commit_minute_body_version')!
     expect((call[1] as { p_metadata: Record<string, unknown> }).p_metadata).toMatchObject({ folder_id: 'w2-q' })
-    // 스냅샷은 편집 자격 판정에만 쓴다 — 기존 회의록은 자기 워크스페이스를 안다(작성자 소속 W1 과 무관).
+    // 스냅샷은 편집 자격 판정에만 쓴다 — 기존 회의록은 자기 워크스페이스를 안다(작성자의 소속 수와 무관).
     expect(mocks.actorFromUser).toHaveBeenCalledTimes(1)
   })
 })
@@ -2031,5 +2036,96 @@ describe('SP2 Task 13 — 외부 회의록 API 를 호출자(user_email) 권한�
       expect(admin.rpc).not.toHaveBeenCalled()
       spy.mockRestore()
     })
+  })
+})
+
+describe('SP2 Task 16a — 쓰기 대상의 워크스페이스·담당 팀을 쓰기 전에 확정한다', () => {
+  const W2 = 'ws-2'
+  const W2_PROJECT = '6e2d0c1f-3a5b-4f7c-9d8e-0b1c2d3e4f5a'
+  const W2_MEETING = '8a9b0c1d-2e3f-4a5b-8c7d-9e0f1a2b3c4d'
+  const errSpy = () => vi.spyOn(console, 'error').mockImplementation(() => {})
+  // 호출자는 WS·W2 양쪽 프로젝트의 명단 member — 두 프로젝트의 회의 모두 연결 자격이 있다(교차 판정만 남는다).
+  const inBoth = () => makeActor({
+    userId: USER.id, workspaceRoles: new Map([[WS, 'member'], [W2, 'member']]),
+    projectWorkspace: new Map([[PROJECT_UUID, WS], [W2_PROJECT, W2]]),
+    projectRoles: new Map<string, ProjectRole>([[PROJECT_UUID, 'member'], [W2_PROJECT, 'member']]),
+  })
+  // 워크스페이스마다 공용 팀이 다르다 — WS 는 PMO, W2 는 ERP(옛 전역 접근자는 둘 다 통과시켰다).
+  const splitTeams = () => {
+    mocks.activeTeamCodesForWorkspace.mockImplementation((wid: string) => (wid === WS ? ['PMO'] : ['ERP']))
+    mocks.activeTeamCodesForProject.mockImplementation((pid: string) => (pid === W2_PROJECT ? ['ERP'] : ['PMO']))
+  }
+
+  it('replace: WS 회의록을 W2 회의에 연결하면 400 — 상대 트리에 폴더를 만들거나 RPC 에 닿지 않는다', async () => {
+    mocks.actorFromUser.mockResolvedValue(inBoth())
+    const { admin, builders } = useAdmin({
+      meetings: [{ data: { id: W2_MEETING, project_id: W2_PROJECT } }],
+      minutes: [{ data: existingRow }],
+      minute_folders: [{ data: [] }],
+    })
+    const res = await POST(post({ ...payload, team: 'ERP', meeting_id: W2_MEETING, folder_path: ['ERP', '품질'] }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'validation_failed', error: expect.stringContaining('다른 워크스페이스') })
+    expect(admin.rpc).not.toHaveBeenCalled()
+    expect(builders.minute_folders).toBeUndefined()
+  })
+
+  it('replace: inline meeting 으로 W2 프로젝트에 연결해도 400 — 회의를 만들지 않는다', async () => {
+    mocks.actorFromUser.mockResolvedValue(inBoth())
+    const { admin, builders } = useAdmin({ minutes: [{ data: existingRow }], meetings: [{ data: null }, { data: { id: W2_MEETING } }] })
+    const res = await POST(post({
+      ...payload, team: 'ERP', meeting: { project_id: W2_PROJECT, title: '정례', date: '2026-09-26' },
+    }))
+    expect(res.status).toBe(400)
+    expect(builders.meetings).toBeUndefined()
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('replace: 판정 뒤 경합으로 커밋이 WORKSPACE_SCOPE_MISMATCH 를 내면 500 이 아니라 400', async () => {
+    const spy = errSpy()
+    useAdmin({ minutes: [{ data: existingRow }, { error: { message: 'WORKSPACE_SCOPE_MISMATCH' } }] })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'validation_failed', error: expect.stringContaining('다른 워크스페이스') })
+    spy.mockRestore()
+  })
+
+  it('무프로젝트 신규(WS)에 W2 의 팀 코드는 400 — WS 의 팀은 통과', async () => {
+    splitTeams()
+    const denied = useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post({ ...payload, team: 'ERP' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'validation_failed', error: '잘못된 담당입니다.' })
+    expect(denied.admin.rpc).not.toHaveBeenCalled()
+    useAdmin({
+      minutes: [{ data: null }, { data: { id: 'm-1', created_at: '2026-09-26T01:00:00+00:00', updated_at: '2026-09-26T01:00:00+00:00' } }],
+      minute_folders: [{ data: [] }],
+    })
+    expect((await POST(post({ ...payload, team: 'PMO' }))).status).toBe(201)
+  })
+
+  it('replace: 기존 회의록의 워크스페이스 팀으로 본다 — 행의 범위가 기준', async () => {
+    splitTeams()
+    const { admin } = useAdmin({ minutes: [{ data: existingRow }] })   // existingRow 는 WS 의 무프로젝트 회의록
+    const res = await POST(post({ ...payload, team: 'ERP' }))
+    expect(res.status).toBe(400)
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('팀 캐시를 못 채웠으면 500 — 빈 목록(전건 400)으로 위장하지 않는다', async () => {
+    const spy = errSpy()
+    mocks.activeTeamCodesForWorkspace.mockImplementation(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+    const { admin } = useAdmin({ minutes: [{ data: null }] })
+    expect((await POST(post(payload))).status).toBe(500)
+    expect(admin.rpc).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('GET 목록의 team 필터는 호출자 워크스페이스의 팀만 — 다른 워크스페이스 팀 코드는 400', async () => {
+    splitTeams()
+    useAdmin({ minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=ERP'))).status).toBe(400)
+    useAdmin({ minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=PMO'))).status).toBe(200)
   })
 })

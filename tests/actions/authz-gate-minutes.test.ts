@@ -6,7 +6,10 @@ const getSession = vi.fn()
 const getActor = vi.fn()
 const adminMocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession: (...a: unknown[]) => getSession(...(a as [])) }))
-vi.mock('@/lib/authz', () => ({ getActor: (...a: unknown[]) => getActor(...(a as [])) }))
+vi.mock('@/lib/authz', async () => ({
+  getActor: (...a: unknown[]) => getActor(...(a as [])),
+  resolveScope: (await import('../helpers/resolve-scope-mock')).resolveScopeVia(() => createServerClient()),
+}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: adminMocks.createAdminClient }))
@@ -37,7 +40,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import { createMinute, deleteMinute, setMinuteShare } from '@/app/actions/minutes'
-import { makeActor, makeAdminActor, makeMemberActor } from '../fixtures/actor'
+import { makeActor, makeAdminActor, makeMemberActor, WS } from '../fixtures/actor'
 
 const P1 = 'p1'
 const viewer = makeActor()
@@ -94,7 +97,7 @@ describe('회의록 액션 권한 게이트 — RLS 2차 방어선이 없는 경
   it('deleteMinute: 작성자도 그 프로젝트 관리자도 아니면 거부', async () => {
     getActor.mockResolvedValue(memberOfP1)
     createServerClient.mockResolvedValue(fakeMinutes({
-      data: { created_by: 'other', archived_at: null, project_id: P1 },
+      data: { created_by: 'other', archived_at: null, project_id: P1, workspace_id: WS },
     }))
     const res = await deleteMinute('m1')
     expect(res).toMatchObject({ ok: false, error: '권한 없음' })
@@ -104,7 +107,7 @@ describe('회의록 액션 권한 게이트 — RLS 2차 방어선이 없는 경
   it('setMinuteShare: 프로젝트 미지정 회의록은 작성자 아니면 프로젝트 관리자여도 거부 — fail-closed(스펙 §3.5)', async () => {
     getActor.mockResolvedValue(adminOfP1)
     createServerClient.mockResolvedValue(fakeMinutes({
-      data: { created_by: 'other', archived_at: null, project_id: null, share_token: null, share_enabled: false },
+      data: { created_by: 'other', archived_at: null, project_id: null, workspace_id: WS, share_token: null, share_enabled: false },
     }))
     const res = await setMinuteShare('m1', 'enable' as never)
     expect(res).toMatchObject({ ok: false, error: '권한 없음' })
@@ -116,7 +119,7 @@ describe('updateMinuteMeta — 대상 프로젝트 권한도 본다', () => {
   it('작성자여도 멤버가 아닌 프로젝트로는 옮길 수 없다 — 일괄 지정 규칙을 단건으로 우회 못 한다', async () => {
     getActor.mockResolvedValue(memberOfP1)   // p1 의 멤버일 뿐
     createServerClient.mockResolvedValue(fakeMinutes({
-      data: { created_by: 'u1', archived_at: null, project_id: P1 },   // 작성자 본인
+      data: { created_by: 'u1', archived_at: null, project_id: P1, workspace_id: WS },   // 작성자 본인
     }))
     const { updateMinuteMeta } = await import('@/app/actions/minutes')
     const res = await updateMinuteMeta('m1', {

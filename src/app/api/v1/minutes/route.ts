@@ -7,7 +7,10 @@ import {
   enqueueMinuteWikiProcessing,
   rebuildProjectWikiFromActiveMinutes,
 } from '@/lib/ai/wiki-ingest'
-import { activeTeamCodesForProjectSync, activeTeamCodesSync } from '@/lib/teams/master'
+import {
+  activeTeamCodesForMinuteScope, activeTeamCodesForWorkspacesSync, type MinuteScope,
+} from '@/lib/minutes/teamScope'
+import { validateMinuteTeam } from '@/lib/domain/minutes'
 import {
   apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi,
   parseMinutePayload, parseUserEmail, resolveUserByEmail, runMinutePostProcessing,
@@ -90,9 +93,51 @@ function respondMinute(req: NextRequest, status: number, args: {
   }, { status })
 }
 
-/** 프로젝트 스코프 활성 팀 목록 — 프로젝트가 있으면 그 프로젝트의, 없으면 전역(0076). */
-function activeTeamCodesFor(projectId: string | null): TeamCode[] {
-  return projectId ? activeTeamCodesForProjectSync(projectId) : activeTeamCodesSync()
+/** 이 요청이 쓰게 될 회의록의 범위와 그 범위의 활성 팀 — 담당 팀 검증·폴더 해석·재편철이 모두 이 값을 쓴다. */
+interface WriteTarget {
+  scope: MinuteScope
+  activeTeamCodes: TeamCode[]
+}
+
+/** 회의록의 워크스페이스는 바뀌지 않는다 — 다른 워크스페이스 프로젝트의 회의로 옮기는 요청의 400 문구. */
+const CROSS_WORKSPACE_MSG = '다른 워크스페이스의 프로젝트(회의)로는 회의록을 옮길 수 없습니다.'
+
+/**
+ * 쓰기 대상 확정 — 쓰기(inline 회의 생성·폴더 생성·RPC) 전에 부른다.
+ * 프로젝트는 새로 연결할 회의(inline meeting·meeting_id)가 정하고, 없으면 기존 행의 것. 워크스페이스는 기존 행이면 그 행의
+ * 것이다 — 다른 워크스페이스 프로젝트로의 연결은 400(예전에는 상대 워크스페이스 트리에 폴더를 만든 뒤 0006 트리거
+ * WORKSPACE_SCOPE_MISMATCH 로 500 이었다). 새 회의록이면 프로젝트의 것, 없으면 호출자의 유일 워크스페이스(전환 UI 는 SP3).
+ * 담당 팀은 그 범위의 활성 팀이어야 한다 — 전 워크스페이스 공용 목록이면 다른 워크스페이스의 팀 코드가 통과한다. 목록은 팀
+ * 마스터에서 읽는다(W1-b). 팀 캐시를 한 번도 못 채웠으면 throw → 라우트 catch 의 500(빈 목록으로 위장하지 않는다).
+ */
+function resolveWriteTarget(
+  p: ExternalMinutePayload, ex: ExistingRow | null, meetingProjectId: string | null, authz: Actor,
+): { ok: true; target: WriteTarget } | { ok: false; response: NextResponse } {
+  let scope: MinuteScope
+  const linkProjectId = p.meeting ? p.meeting.projectId : p.meetingId ? meetingProjectId : null
+  if (linkProjectId) {
+    // 스냅샷은 호출자 워크스페이스의 프로젝트 전부다(플랫폼 관리자는 전부). meeting_id 의 프로젝트는 멤버 판정을 통과했으니
+    // 있다 — 없으면 inline meeting 의 남의·없는 프로젝트라 resolveOrCreateExternalMeeting 과 같은 404(존재 은닉).
+    const linkWs = authz.projectWorkspace.get(linkProjectId)
+    if (!linkWs) return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
+    if (ex && linkWs !== ex.workspace_id) return { ok: false, response: apiBadRequest(CROSS_WORKSPACE_MSG) }
+    scope = { projectId: linkProjectId, workspaceId: linkWs }
+  } else if (ex) {
+    scope = { projectId: ex.project_id, workspaceId: ex.workspace_id }
+  } else {
+    const w = resolveSoleWorkspaceId(authz)
+    if (!w.ok) {
+      return {
+        ok: false,
+        response: apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.'),
+      }
+    }
+    scope = { projectId: null, workspaceId: w.workspaceId }
+  }
+  const activeTeamCodes = activeTeamCodesForMinuteScope(scope)
+  const teamErr = validateMinuteTeam(p.teamCode, activeTeamCodes)
+  if (teamErr) return { ok: false, response: apiBadRequest(teamErr) }
+  return { ok: true, target: { scope, activeTeamCodes } }
 }
 
 /**
@@ -103,10 +148,11 @@ function activeTeamCodesFor(projectId: string | null): TeamCode[] {
  * 팀에서는 시드가 없다. 여기서 생성하지 않으면 그 경로가 전부 미분류로 떨어진다.
  */
 async function resolveTeamRootWithLazyCreate(
-  admin: AdminClient, teamCode: TeamCode, projectId: string | null, workspaceId: string | null, actorId: string,
+  admin: AdminClient, teamCode: TeamCode, target: WriteTarget, actorId: string,
 ): Promise<string | null> {
   const res = await resolveFolderPath(admin, teamCode, [], {
-    actorId, activeTeamCodes: activeTeamCodesFor(projectId), projectId, workspaceId,
+    actorId, activeTeamCodes: target.activeTeamCodes,
+    projectId: target.scope.projectId, workspaceId: target.scope.workspaceId,
   })
   return res.ok ? res.folderId : null
 }
@@ -117,9 +163,9 @@ async function resolveTeamRootWithLazyCreate(
  * validation 실패만 400 이고, 시드 루트 부재(no_team_root)는 **등록을 막지 않는다**(§3.2-5).
  */
 async function resolvePayloadFolder(
-  admin: AdminClient, p: ExternalMinutePayload, actorId: string, projectId: string | null,
-  /** 0006 — 미지정 트리(projectId null)를 고르는 워크스페이스. */
-  workspaceId: string | null,
+  admin: AdminClient, p: ExternalMinutePayload, actorId: string,
+  /** 0076·0006 — 회의록이 속할 프로젝트 트리, 미지정이면 그 워크스페이스의 미지정 트리에서 해석한다. */
+  target: WriteTarget,
 ): Promise<
   | { ok: true; provided: false }
   | {
@@ -131,9 +177,9 @@ async function resolvePayloadFolder(
   if (!p.folderPathProvided || p.folderPath === null) return { ok: true, provided: false }
   const res = await resolveFolderPath(admin, p.teamCode, p.folderPath, {
     actorId,
-    activeTeamCodes: activeTeamCodesFor(projectId),
-    projectId,   // 0076 — 회의록이 속한 프로젝트 트리에서 해석한다.
-    workspaceId, // 0006 — 미지정이면 그 워크스페이스의 미지정 트리.
+    activeTeamCodes: target.activeTeamCodes,
+    projectId: target.scope.projectId,
+    workspaceId: target.scope.workspaceId,
   })
   if (!res.ok) {
     if (res.kind === 'validation_failed') return { ok: false, error: res.error }
@@ -159,7 +205,8 @@ async function handleExisting(
   p: ExternalMinutePayload,
   existing: ExistingRow,
   actor: ResolvedUser,
-  meetingProjectId: string | null,
+  /** resolveWriteTarget 이 확정한 범위 — 워크스페이스는 기존 행의 것, 프로젝트는 연결할 회의 또는 기존 행의 것. */
+  target: WriteTarget,
   meetingCreated?: boolean,
 ): Promise<NextResponse> {
   if (existing.archived_at) {
@@ -179,15 +226,14 @@ async function handleExisting(
   // meeting_id 는 필드가 전송된 경우에만 갱신(부재=유지, null=해제 — v2.2) — 또박또박 v1은
   // 미전송이 기본이라 무조건 갱신하면 수동 연결분(E4)의 프로젝트 연관이 소리 없이 끊긴다.
   const nowIso = new Date().toISOString()
-  const targetProjectId = p.meetingIdProvided && p.meetingId
-    ? meetingProjectId
-    : existing.project_id
+  const targetProjectId = target.scope.projectId
   // §3.1 D1=B: 재전송마다 또박또박이 폴더 위치의 SSOT다. 단 3값 — 키 부재면 metadata 에
   // folder_id 키를 **넣지 않아야** 기존 위치가 유지된다(RPC 는 키가 있으면 null 도 적용해
   // 미분류로 강등한다). 시드 루트 부재(folderId null)도 같은 이유로 키를 넣지 않는다 —
   // 되돌릴 위치가 없다고 회의록을 미분류로 빼내면 안 된다.
-  // 미지정 트리는 이 회의록의 워크스페이스에서 고른다(0006 — 회의록 워크스페이스는 바뀌지 않는다).
-  const folder = await resolvePayloadFolder(admin, p, actor.id, targetProjectId, existing.workspace_id)
+  // 미지정 트리는 이 회의록의 워크스페이스에서 고른다(0006 — 회의록 워크스페이스는 바뀌지 않는다). 다른 워크스페이스
+  // 프로젝트로의 연결은 resolveWriteTarget 이 이미 거절했으므로 상대 트리에 폴더를 만들 일이 없다.
+  const folder = await resolvePayloadFolder(admin, p, actor.id, target)
   if (!folder.ok) return apiBadRequest(folder.error)
   // ⚠️ 부분 편철(중간 폴더 생성 실패)이면 폴더를 **건드리지 않는다**. 신규 등록은 원래 자리가
   // 없으니 조상에 넣는 편이 미분류보다 낫지만, replace 는 이미 자리가 있는 회의록을 목표의
@@ -203,9 +249,7 @@ async function handleExisting(
   // 에서 금지한 상태를 외부 API 가 정상 경로로 만드는 셈). 새 팀 루트로 옮긴다.
   // 400 거절은 구버전 클라이언트의 정상 조작(담당 정정)을 막으므로 채택하지 않는다.
   if (!folderUpdated && p.teamCode !== existing.team_code) {
-    teamMovedFolderId = await resolveTeamRootWithLazyCreate(
-      admin, p.teamCode, targetProjectId, existing.workspace_id, actor.id,
-    )
+    teamMovedFolderId = await resolveTeamRootWithLazyCreate(admin, p.teamCode, target, actor.id)
     if (teamMovedFolderId) folderUpdated = true
     else console.error(`[minutes-api] 담당 변경(${existing.team_code}→${p.teamCode}) 팀 루트 부재 — 폴더 유지`)
   }
@@ -241,6 +285,8 @@ async function handleExisting(
     if (error?.message?.includes('MINUTE_TEAM_INVALID')) {
       return apiFail(400, 'team_inactive', `비활성 팀(${p.teamCode})입니다. ${BRAND.productName}에서 팀을 활성화한 뒤 다시 시도하세요.`)
     }
+    // 0006 트리거 — resolveWriteTarget 이 쓰기 전에 같은 판정을 하므로 경합(판정과 커밋 사이 회의 이동)에서만 닿는다.
+    if (error?.message?.includes('WORKSPACE_SCOPE_MISMATCH')) return apiBadRequest(CROSS_WORKSPACE_MSG)
     return apiInternalError()
   }
   const committed = committedRaw as unknown as {
@@ -258,7 +304,7 @@ async function handleExisting(
     await refileMinuteAfterProjectChange(admin, {
       minuteId: existing.id, teamCode: p.teamCode, oldFolderId: existing.folder_id,
       newProjectId: targetProjectId, actorId: actor.id,
-      activeTeamCodes: activeTeamCodesFor(targetProjectId),
+      activeTeamCodes: target.activeTeamCodes,
     })
   }
   const wikiJobId = committed.wiki_rebuild_required || projectChanged
@@ -317,24 +363,19 @@ async function insertNew(
   p: ExternalMinutePayload,
   user: ResolvedUser,
   authz: Actor,
-  meetingProjectId: string | null,
+  /** resolveWriteTarget 이 확정한 범위 — 프로젝트는 연결할 회의의 것(없으면 null), 워크스페이스는 그 프로젝트의 것 또는 유일 소속. */
+  target: WriteTarget,
   meetingCreated?: boolean,
 ): Promise<NextResponse> {
+  const meetingProjectId = target.scope.projectId
   // folder_path 를 받았으면 팀 루트 아래에 같은 폴더 트리를 만들어 편철하고(§3.2), 키가 아예
   // 없으면(구버전 또박또박) 기존대로 담당 팀 루트로 편철한다(0043). 부재·실패는 미분류(null)
   // 폴백 — 편철 실패가 등록 자체를 막으면 안 된다.
-  // 프로젝트 없는 회의록은 워크스페이스를 명시해야 한다(0006) — 전환 UI(SP3) 전까지 소속이 하나인 계정만.
-  let workspaceId: string | null = null
-  if (!meetingProjectId) {
-    const w = resolveSoleWorkspaceId(authz)
-    if (!w.ok) return apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.')
-    workspaceId = w.workspaceId
-  }
-  const folder = await resolvePayloadFolder(admin, p, user.id, meetingProjectId, workspaceId)
+  const folder = await resolvePayloadFolder(admin, p, user.id, target)
   if (!folder.ok) return apiBadRequest(folder.error)
   const folderId = folder.provided
     ? folder.folderId
-    : await resolveTeamRootWithLazyCreate(admin, p.teamCode, meetingProjectId, workspaceId, user.id)
+    : await resolveTeamRootWithLazyCreate(admin, p.teamCode, target, user.id)
   const folderPath = folder.provided
     ? folder.folderPath
     : (folderId ? [p.teamCode] : null)
@@ -357,7 +398,7 @@ async function insertNew(
     p_file_size: null,
     p_file_mime: null,
     // 프로젝트가 있으면 null — RPC 가 프로젝트에서 얻는다(0006).
-    p_workspace_id: workspaceId,
+    p_workspace_id: meetingProjectId ? null : target.scope.workspaceId,
   }).single()
   if (error || !createdRaw) {
     // 동시 전송 경합: 부분 unique 인덱스 위반(23505)이면 그 사이 생긴 레코드 기준으로 재분기.
@@ -365,9 +406,13 @@ async function insertNew(
       const { data: raced, error: reErr } = await admin.from('minutes')
         .select(MINUTE_SELECT).eq('external_id', p.externalId).maybeSingle()
       if (!reErr && raced) {
+        const racedRow = raced as ExistingRow
         // 경합으로 생긴 행도 같은 편집 자격 판정을 거친다 — 남의 external_id 로의 우회 덮어쓰기 차단.
-        if (!canEditMinute(authz, raced as ExistingRow)) return minuteNotFound()
-        return handleExisting(req, admin, p, raced as ExistingRow, user, meetingProjectId, meetingCreated)
+        if (!canEditMinute(authz, racedRow)) return minuteNotFound()
+        // 범위도 그 행 기준으로 다시 정한다(워크스페이스는 그 행의 것).
+        const racedTarget = resolveWriteTarget(p, racedRow, meetingProjectId, authz)
+        if (!racedTarget.ok) return racedTarget.response
+        return handleExisting(req, admin, p, racedRow, user, racedTarget.target, meetingCreated)
       }
     }
     console.error('[minutes-api] insert 실패:', error?.message ?? 'no row')
@@ -458,16 +503,21 @@ export async function POST(req: NextRequest) {
       .select(MINUTE_SELECT).eq('external_id', p.externalId).maybeSingle()
     if (selErr) { console.error('[minutes-api] 기존 레코드 조회 실패:', selErr.message); return apiInternalError() }
 
+    // external_id 는 전역 유일이라 조회는 전역이지만, 판정은 호출자 기준이다 — 편집 자격(그 범위의 멤버 이상이면서
+    // 작성자·그 프로젝트 관리자)이 없으면 skip·error·보관 분기까지 포함해 404. 회의 확보(inline meeting)보다 먼저라 고아 회의도 없다.
+    const ex = existing as ExistingRow | null
+    if (ex && !canEditMinute(authz, ex)) return minuteNotFound()
+
+    // 쓰기 대상(범위·담당 팀) 확정 — 회의 확보·폴더 생성·RPC 어느 것보다 먼저다. 다른 워크스페이스 프로젝트로의 연결과
+    // 그 범위에 없는 담당 팀은 여기서 400 이라 상대 워크스페이스에 회의·폴더가 생기지 않는다.
+    const resolved = resolveWriteTarget(p, ex, meetingProjectId, authz)
+    if (!resolved.ok) return resolved.response
+    const { target } = resolved
+
     // v2.5 — skip/error/보관 분기가 회의 확보보다 먼저다. 이 분기들은 회의록을 갱신하지 않는
     // 응답이라 회의를 만들면 실패·무시 응답 뒤에 고아 회의가 남는다(409 archived 포함).
-    if (existing) {
-      const ex = existing as ExistingRow
-      // external_id 는 전역 유일이라 조회는 전역이지만, 판정은 호출자 기준이다 — 편집 자격(작성자·그 프로젝트
-      // 관리자)이 없으면 skip·error·보관 분기까지 포함해 404. 회의 확보(inline meeting)보다 먼저라 고아 회의도 없다.
-      if (!canEditMinute(authz, ex)) return minuteNotFound()
-      if (ex.archived_at !== null || p.onConflict !== 'replace') {
-        return await handleExisting(req, admin, p, ex, user, meetingProjectId)
-      }
+    if (ex && (ex.archived_at !== null || p.onConflict !== 'replace')) {
+      return await handleExisting(req, admin, p, ex, user, target)
     }
 
     // created 또는 replace 진입 확정 후에만 회의를 확보(생성/dedup 재사용)한다. 확보되면
@@ -476,16 +526,14 @@ export async function POST(req: NextRequest) {
     if (p.meeting) {
       const got = await resolveOrCreateExternalMeeting(admin, p.meeting, user, authz)
       if (!got.ok) return apiFail(got.status, got.code, got.error)
+      // 프로젝트는 resolveWriteTarget 이 meeting.project_id 로 이미 확정했다(got.projectId 와 같다).
       p.meetingId = got.meetingId
       p.meetingIdProvided = true
-      meetingProjectId = got.projectId
       meetingCreated = got.created
     }
 
-    if (existing) {
-      return await handleExisting(req, admin, p, existing as ExistingRow, user, meetingProjectId, meetingCreated)
-    }
-    return await insertNew(req, admin, p, user, authz, meetingProjectId, meetingCreated)
+    if (ex) return await handleExisting(req, admin, p, ex, user, target, meetingCreated)
+    return await insertNew(req, admin, p, user, authz, target, meetingCreated)
   } catch (e) {
     console.error('[minutes-api] POST 처리 실패:', e instanceof Error ? e.message : e)
     return apiInternalError()
@@ -529,7 +577,6 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams
   const team = sp.get('team')
-  if (team && !activeTeamCodesSync().includes(team)) return apiBadRequest('잘못된 담당입니다.')
   const dateFrom = sp.get('date_from')
   const dateTo = sp.get('date_to')
   if ((dateFrom && !DATE_RE.test(dateFrom)) || (dateTo && !DATE_RE.test(dateTo))) {
@@ -557,6 +604,11 @@ export async function GET(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
     const authz = await actorFromUser(admin, user.id)
+    // 담당 필터는 호출자 워크스페이스들의 활성 공용 팀으로 본다(meta 의 teams 와 같은 집합) — 전 워크스페이스 목록이면
+    // 다른 워크스페이스의 팀 코드가 통과한다. 팀 캐시를 한 번도 못 채웠으면 throw → 아래 catch 의 500.
+    if (team && !activeTeamCodesForWorkspacesSync(authz.workspaceRoles.keys()).includes(team)) {
+      return apiBadRequest('잘못된 담당입니다.')
+    }
     const scope = await listScope(admin, authz)
     if (scope === 'error') return apiInternalError()
     if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })

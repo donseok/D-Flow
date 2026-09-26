@@ -47,7 +47,7 @@ export function MinutesView({
   /** 관리자인 워크스페이스 id — **폴더 조작**(개명·이동·삭제)의 폴더별 판정 근거(서버: 작성자 ∨ 그 폴더
    *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
   adminWorkspaceIds?: string[]
-  /** 어느 프로젝트든 멤버 이상(hasAnyProjectRole) — 업로드 자격. */
+  /** 소속 워크스페이스 중 하나라도 역할이 있음(hasProjectRoleInAnyWorkspace) — 업로드 자격. */
   canEdit: boolean
   /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
   adminProjectIds?: string[]
@@ -304,8 +304,8 @@ export function MinutesView({
             <button onClick={() => setChatOpen(true)} className="btn">
               <Bot className="h-4 w-4" />{t('min.chat.archive.title')}
             </button>
-            {/* 조회 전용에게는 숨긴다 — 서버 createMinute 의 최소 자격이 '어느 프로젝트든 역할 보유'
-                (hasAnyProjectRole)이고, canEdit 가 그 판정이다(스펙 §6.3). */}
+            {/* 조회 전용에게는 숨긴다 — 서버 createMinute 의 최소 자격이 '그 프로젝트의 멤버 이상, 미지정이면 그
+                워크스페이스에 역할'이고, canEdit 가 그것을 소속 워크스페이스 단위로 미러한다(hasProjectRoleInAnyWorkspace). */}
             {canUpload && (
               <button onClick={() => setUploadOpen(true)} className="btn btn-primary">
                 <Plus className="h-4 w-4" />{t('min.upload.short')}

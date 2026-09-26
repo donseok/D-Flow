@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  validateMinuteInput, sanitizeFileName, stampedFileName, isMinuteFilePathValid, ilikeOrPattern,
+  validateMinuteInput, validateMinuteFields, validateMinuteTeam, sanitizeFileName, stampedFileName, isMinuteFilePathValid, ilikeOrPattern,
   MINUTE_BODY_MAX, type MinuteInput,
 } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
@@ -22,6 +22,18 @@ describe('validateMinuteInput', () => {
   it('본문 캡 초과', () =>
     expect(validateMinuteInput({ ...base, bodyMd: 'a'.repeat(MINUTE_BODY_MAX + 1) })).toMatch(/100,000/))
   it('빈 본문 허용', () => expect(validateMinuteInput({ ...base, bodyMd: '' })).toBeNull())
+})
+
+describe('validateMinuteFields / validateMinuteTeam — 담당 팀은 범위가 정해진 뒤 따로 본다', () => {
+  it('필드 검증은 담당 팀을 보지 않는다', () => {
+    expect(validateMinuteFields({ ...base, teamCode: 'QA' as never })).toBeNull()
+    expect(validateMinuteFields({ ...base, title: '  ' })).toMatch(/제목/)
+  })
+  it('담당 팀은 넘긴 범위의 팀 목록으로만 판정한다', () => {
+    expect(validateMinuteTeam('ERP', ['ERP'])).toBeNull()
+    expect(validateMinuteTeam('ERP', ['PMO'])).toBe('잘못된 담당입니다.')
+    expect(validateMinuteTeam('ERP', [])).toBe('잘못된 담당입니다.')
+  })
 })
 
 describe('sanitizeFileName', () => {

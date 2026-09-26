@@ -3,7 +3,7 @@ import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
-  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE,
+  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute, hasProjectRoleInAnyWorkspace,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -79,6 +79,55 @@ describe('hasProjectRoleInWorkspace', () => {
     expect(hasProjectRoleInWorkspace(makeMemberActor(P, [], inWs), null)).toBe(false)
     expect(hasProjectRoleInWorkspace(null, W)).toBe(false)
     expect(hasProjectRoleInWorkspace(makeSuperuser(), W)).toBe(true)
+  })
+})
+describe('isMinuteMember / canEditMinute — 회의록 범위(SP2 Task 16a)', () => {
+  const W2 = 'ws-2', R = 'proj-in-w2'
+  // W·W2 양쪽 워크스페이스 멤버, 명단 권한은 W2 의 프로젝트에만.
+  const onlyW2 = makeMemberActor(R, [], {
+    workspaceRoles: new Map([[W, 'member'], [W2, 'member']]), projectWorkspace: new Map([[P, W], [R, W2]]),
+  })
+  const noProject = (over: Partial<{ created_by: string | null; workspace_id: string }> = {}) =>
+    ({ created_by: 'u1', project_id: null, workspace_id: W, ...over })
+  it('무프로젝트 회의록은 그 워크스페이스에 역할이 있어야 멤버다 — 다른 워크스페이스 역할은 세지 않는다', () => {
+    expect(isMinuteMember(makeMemberActor(P, [], inWs), noProject())).toBe(true)
+    expect(isMinuteMember(onlyW2, noProject())).toBe(false)
+    expect(isMinuteMember(onlyW2, noProject({ workspace_id: W2 }))).toBe(true)
+    expect(isMinuteMember(makeActor(), noProject())).toBe(false)          // 소속만 있고 역할 없음(조회 전용)
+  })
+  it('프로젝트 회의록은 그 프로젝트의 멤버 이상', () => {
+    expect(isMinuteMember(makeMemberActor(P, [], inWs), { project_id: P, workspace_id: W })).toBe(true)
+    expect(isMinuteMember(makeActor(inWs), { project_id: P, workspace_id: W })).toBe(false)
+  })
+  it('작성자라도 그 범위의 멤버가 아니면 고칠 수 없다', () => {
+    expect(canEditMinute(onlyW2, noProject())).toBe(false)
+    expect(canEditMinute(makeMemberActor(P, [], inWs), noProject())).toBe(true)
+    // 조회 전용이 된 작성자(명단 역할 없음)
+    expect(canEditMinute(makeActor(inWs), { created_by: 'u1', project_id: P, workspace_id: W })).toBe(false)
+  })
+  it('무프로젝트 남의 회의록은 슈퍼유저만 — 워크스페이스 관리자도 아니다(SP1 §3.5 유지)', () => {
+    expect(canEditMinute(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), noProject({ created_by: 'u9' }))).toBe(false)
+    expect(canEditMinute(makeSuperuser(), noProject({ created_by: 'u9' }))).toBe(true)
+  })
+})
+describe('hasProjectRoleInAnyWorkspace — 회의록 목록의 업로드 어포던스', () => {
+  const W2 = 'ws-2', R = 'proj-in-w2'
+  it('소속 워크스페이스 중 하나라도 역할이 있으면 true — 둘 이상 소속이어도', () => {
+    const two = makeMemberActor(R, [], {
+      workspaceRoles: new Map([[W, 'member'], [W2, 'member']]), projectWorkspace: new Map([[R, W2]]),
+    })
+    expect(hasProjectRoleInAnyWorkspace(two)).toBe(true)
+    expect(hasProjectRoleInAnyWorkspace(makeActor({ workspaceRoles: new Map([[W2, 'admin']]) }))).toBe(true)
+  })
+  it('소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다(hasAnyProjectRole 과 다른 점)', () => {
+    const stray = makeMemberActor(R, [], { projectWorkspace: new Map() })   // R 의 워크스페이스에 소속 없음
+    expect(hasAnyProjectRole(stray)).toBe(true)
+    expect(hasProjectRoleInAnyWorkspace(stray)).toBe(false)
+  })
+  it('조회 전용·비로그인은 false, 플랫폼 관리자는 true', () => {
+    expect(hasProjectRoleInAnyWorkspace(makeActor())).toBe(false)
+    expect(hasProjectRoleInAnyWorkspace(null)).toBe(false)
+    expect(hasProjectRoleInAnyWorkspace(makeSuperuser({ workspaceRoles: new Map() }))).toBe(true)
   })
 })
 describe('ProjectActorView 왕복', () => {

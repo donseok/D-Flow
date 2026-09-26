@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { getActor } from '@/lib/authz'
 import { sanitizeHistory } from '@/lib/ai/answer'
 import { streamDocAnswer, streamArchiveAnswer } from '@/lib/ai/minutes-answer'
 import { folderSubtreeIds } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
-import { ancestorIdsOf, loadFolderSnapshot } from '@/lib/minutes/folders'
+import { ancestorIdsOf, loadFolderSnapshot, seedRootIdOf } from '@/lib/minutes/folders'
+import { activeTeamCodesForWorkspacesSync } from '@/lib/minutes/teamScope'
 import { createServerClient } from '@/lib/supabase/server'
-import { activeTeamCodesSync } from '@/lib/teams/master'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
     }
     if (body.mode === 'archive') {
       const f = body.filters ?? {}
-      const team = typeof f.team === 'string' && activeTeamCodesSync().includes(f.team)
+      // 담당 필터는 호출자 워크스페이스들의 활성 공용 팀으로 본다 — 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가
+      // 통과한다. 권한 조회·팀 캐시 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
+      const actor = await getActor()
+      if (!actor) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+      const team = typeof f.team === 'string' && activeTeamCodesForWorkspacesSync(actor.workspaceRoles.keys()).includes(f.team)
         ? (f.team as TeamCode) : null
       const from = typeof f.from === 'string' && DATE_RE.test(f.from) ? f.from : null
       const to = typeof f.to === 'string' && DATE_RE.test(f.to) ? f.to : null
@@ -64,8 +69,11 @@ export async function POST(req: NextRequest) {
         if (!snap) {
           return NextResponse.json({ error: '폴더 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.' }, { status: 500 })
         }
-        const rootId = snap.seedRoots.get(team) ?? null
-        if (!rootId || !snap.byId.has(folderIdRaw) || !ancestorIdsOf(snap, folderIdRaw).has(rootId)) {
+        // 담당 루트는 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 팀 시드 루트다 — 시드 루트 키가 범위를 품으므로
+        // 팀 코드만으로는 찾을 수 없다.
+        const folder = snap.byId.get(folderIdRaw)
+        const rootId = folder ? seedRootIdOf(snap, folder, team) : null
+        if (!folder || !rootId || !ancestorIdsOf(snap, folderIdRaw).has(rootId)) {
           return NextResponse.json({ error: '선택한 폴더가 담당 범위에 없습니다. 폴더를 다시 선택해 주세요.' }, { status: 400 })
         }
         folderIds = folderSubtreeIds([...snap.byId.values()], folderIdRaw)

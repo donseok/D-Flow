@@ -4,8 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { UUID_RE } from '@/lib/domain/validate'
 import { MEETING_CATEGORIES } from '@/lib/domain/meetings'
-import { MINUTE_FOLDER_NAME_MAX, normalizeFolderName, validateMinuteInput } from '@/lib/domain/minutes'
-import { activeTeamCodesSync } from '@/lib/teams/master'
+import { MINUTE_FOLDER_NAME_MAX, normalizeFolderName, validateMinuteFields } from '@/lib/domain/minutes'
 import { splitMinuteBlocks } from '@/lib/minutes/blocks'
 import { rematchHighlights, type HighlightRow } from '@/lib/minutes/rematch'
 import { ingestMinute } from '@/lib/ai/minutes-ingest'
@@ -230,7 +229,9 @@ export function parseFolderPathValue(raw: unknown): FolderPathParse {
 }
 
 /**
- * POST /minutes 페이로드 검증 — 수동 타입가드(레포 관례) + validateMinuteInput 재사용.
+ * POST /minutes 페이로드 검증 — 수동 타입가드(레포 관례) + validateMinuteFields 재사용.
+ * 담당 팀(team)은 여기서 보지 않는다 — 회의록이 속할 범위(연결할 회의의 프로젝트·기존 행·호출자 워크스페이스)가
+ * 정해져야 그 범위의 팀으로 판정할 수 있어서, 라우트가 범위를 확정한 뒤 validateMinuteTeam 으로 본다(같은 400).
  * §0 D4: 이 경로는 correctMinuteBodyTime(+9h)을 적용하지 않는다 — 또박또박이 이미 KST를
  * 보내므로 기존 UI 경로의 보정을 재사용하면 이중 보정으로 시간이 밀린다(§1.4).
  */
@@ -307,11 +308,9 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
     folderPath = parsedPath.path
   }
 
-  // W1-b: 활성 팀 목록 주입 — 기본값 TEAM_CODES 는 @deprecated 하드코딩 5팀이라, 관리자가
-  // addTeam 으로 6번째 팀을 등록하면 meta 는 노출하는데 POST 만 400 으로 전건 거절한다.
-  const err = validateMinuteInput({
+  const err = validateMinuteFields({
     minuteDate: b.date, teamCode: b.team as TeamCode, title: b.title, bodyMd: b.body_markdown, meetingId,
-  }, activeTeamCodesSync())
+  })
   if (err) return { error: err }
 
   return {

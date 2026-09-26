@@ -20,7 +20,8 @@ import {
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionResult } from './types'
-import { activeTeamCodesSync } from '@/lib/teams/master'
+import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { activeTeamCodesForWorkspacesSync } from '@/lib/minutes/teamScope'
 
 const MINUTES_CAPABILITY = 'minutes:read' as const
 /** query·기간이 모두 없을 때 전 기간 무제한 조회를 막는 기본 조회 기간(일). */
@@ -114,7 +115,6 @@ export function createSearchMinutesTool(
         query === null || team === null || projectId === null
         || from === null || to === null || limit === null
       ) return invalidArgument()
-      if (team && !activeTeamCodesSync().includes(team)) return invalidArgument('알 수 없는 담당팀입니다.')
       if ((from === undefined) !== (to === undefined)) {
         return invalidArgument('회의록 조회 기간은 from·to를 함께 지정해야 합니다.')
       }
@@ -128,6 +128,15 @@ export function createSearchMinutesTool(
       } else if (!context.userId || !context.capabilities.includes(MINUTES_CAPABILITY)) {
         // 전역 검색은 현행 보관함과 동일하게 프로젝트 스코프 없이 허용하되 capability는 항상 요구한다.
         return accessDenied('회의록을 조회할 권한이 없습니다.')
+      }
+      // 담당팀은 조회 범위의 팀이어야 한다 — 프로젝트를 주면 그 프로젝트의 팀, 아니면 호출자 워크스페이스들의 공용 팀.
+      // 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과한다. 접근 판정 뒤에 봐야 남의 프로젝트 팀 구성이
+      // 검증 결과로 새지 않는다. 팀 캐시를 한 번도 못 채웠으면 throw — 오케스트레이터가 도구 실패로 올린다.
+      if (team) {
+        const teamCodes = projectId
+          ? activeTeamCodesForProjectSync(projectId)
+          : activeTeamCodesForWorkspacesSync(context.workspaceIds ?? [])
+        if (!teamCodes.includes(team)) return invalidArgument('알 수 없는 담당팀입니다.')
       }
 
       const defaultRangeApplied = !query && from === undefined

@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     console.error('[chat-v2] 프로젝트 접근 범위 조회 실패:', scopeResolution.detail ?? scopeResolution.code)
     return jsonError('프로젝트 접근 범위를 확인하지 못했습니다.', 503, 'ACCESS_SCOPE_UNAVAILABLE')
   }
-  const { allowedProjectIds, capabilities } = scopeResolution.scope
+  const { allowedProjectIds, workspaceIds, capabilities } = scopeResolution.scope
   const scope = validateChatProjectScope(request, allowedProjectIds)
   if (!scope.ok) return jsonError(scope.message, scope.status, scope.code)
 
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       capabilities,
       allowedProjectIds,
+      workspaceIds,
       pageContext: request.pageContext ?? null,
       now: now.toISOString(),
       timezone: 'Asia/Seoul',

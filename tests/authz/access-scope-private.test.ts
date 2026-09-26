@@ -68,6 +68,10 @@ describe('accessScope — 워크스페이스 경계와 비공개 프로젝트 �
     const res = await resolve({ platform_admins: { data: { user_id: 'u1' }, error: null }, workspace_members: { data: [], error: null } })
     expect(res.ok && [...res.scope.allowedProjectIds].sort()).toEqual(['p-other', 'p-priv', 'p-pub'])
   })
+  it('소속 워크스페이스를 함께 싣는다 — 프로젝트 축 없는 입력(회의록 담당 팀)을 호출자 범위로 좁히는 근거', async () => {
+    const res = await resolve({ workspace_members: { data: [{ workspace_id: 'ws-1', role: 'member' }, { workspace_id: 'ws-2', role: 'admin' }], error: null } })
+    expect(res.ok && [...res.scope.workspaceIds].sort()).toEqual(['ws-1', 'ws-2'])
+  })
   it('소속 워크스페이스가 없으면 스코프는 비어 있다(정상 0건 — 실패와 구별)', async () => {
     const res = await resolve({ workspace_members: { data: [], error: null } })
     expect(res.ok && res.scope.allowedProjectIds).toEqual([])

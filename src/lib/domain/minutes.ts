@@ -150,20 +150,30 @@ export interface MinuteInput {
   meetingOccurrenceDate?: string | null
 }
 
-/** 회의록 입력 검증 — 에러 메시지 또는 null. create/updateMeta/replaceBody 가 공유. */
+/** 회의록 입력 검증 — 에러 메시지 또는 null. 담당 팀까지 한 번에 본다(팀 목록을 이미 아는 호출부용). */
 export function validateMinuteInput(
   input: MinuteInput,
   teamCodes: readonly TeamCode[] = TEAM_CODES,
 ): string | null {
+  return validateMinuteFields(input) ?? validateMinuteTeam(input.teamCode, teamCodes)
+}
+
+/** 담당 팀을 뺀 입력 검증. 담당 팀은 회의록이 속할 범위(프로젝트·워크스페이스)의 팀이어야 해서 그 범위가
+ *  정해진 뒤 validateMinuteTeam 으로 따로 본다 — create/updateMeta·외부 API 는 입력을 먼저 거르고 범위를 나중에 안다. */
+export function validateMinuteFields(input: MinuteInput): string | null {
   const title = input.title.trim()
   if (!title) return '제목을 입력하세요.'
   if (title.length > MINUTE_TITLE_MAX) return `제목은 ${MINUTE_TITLE_MAX}자 이하여야 합니다.`
   if (!DATE_RE.test(input.minuteDate)) return '날짜 형식이 올바르지 않습니다.'
   if (input.meetingOccurrenceDate && !DATE_RE.test(input.meetingOccurrenceDate))
     return '회의 개최일 형식이 올바르지 않습니다.'
-  if (!teamCodes.includes(input.teamCode)) return '잘못된 담당입니다.'
   if (input.bodyMd.length > MINUTE_BODY_MAX) return '본문은 100,000자 이하여야 합니다.'
   return null
+}
+
+/** 담당 팀 검증 — teamCodes 는 회의록이 속할 범위의 활성 팀(activeTeamCodesForMinuteScope). */
+export function validateMinuteTeam(teamCode: TeamCode, teamCodes: readonly TeamCode[]): string | null {
+  return teamCodes.includes(teamCode) ? null : '잘못된 담당입니다.'
 }
 
 /** Storage 키 길이 상한(`storagePath.ts` 의 `fileNameOk`·Task 7 SQL 과 같은 값) — sanitize 뒤 이 안으로 잘라낸다. */

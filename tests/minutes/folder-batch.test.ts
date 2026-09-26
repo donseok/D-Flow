@@ -7,14 +7,16 @@ const mocks = vi.hoisted(() => ({
   // Task 6 — 프로젝트 스코프 활성 팀 목록. 기본 구현은 beforeEach 에서 건다(초기화 시점에
   // mocks.activeTeamCodes 를 참조하면 자기 참조로 TS 순환 추론 에러가 난다).
   activeTeamCodesForProject: vi.fn<(projectId: string) => string[]>(),
+  // SP2 Task 16a — 무프로젝트 회의록의 편철 팀은 그 워크스페이스의 공용 팀이다.
+  activeTeamCodesForWorkspace: vi.fn<(workspaceId: string) => string[]>(),
   // SP2 결정 8 — 배치 판정은 actorFromUser 스냅샷 + roleIn. 스냅샷은 fixture 로 준다.
   actorFromUser: vi.fn(),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesSync: () => mocks.activeTeamCodes,
   activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
+  activeTeamCodesForWorkspaceSync: (workspaceId: string) => mocks.activeTeamCodesForWorkspace(workspaceId),
 }))
 
 import { DELETE, GET, POST } from '@/app/api/v1/minutes/folder/route'
@@ -105,6 +107,7 @@ beforeEach(() => {
   // clearAllMocks 는 mockImplementation 을 지우지 않는다 — 개별 테스트의 override 가 다음
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
+  mocks.activeTeamCodesForWorkspace.mockImplementation(() => mocks.activeTeamCodes)
   // 배치는 관리자 이상 전용(결정 §2-H) — 명시하지 않으면 플랫폼 관리자로 깐다.
   mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
@@ -667,6 +670,27 @@ describe('비활성 팀 시나리오 (§3.2 ① 단독 조건)', () => {
     })))
     // ①이 캐시를 봤다면 ②로 떨어져 ["MDM","MDM","품질"]가 된다
     expect((await r.json()).results[0].to).toEqual(['MDM', '품질'])
+  })
+})
+
+describe('편철 팀 목록 — 무프로젝트 회의록은 그 워크스페이스의 팀 (SP2 Task 16a)', () => {
+  it('다른 워크스페이스의 팀 이름은 이 회의록 트리의 팀 루트가 아니다 — 한 칸 내림(②)으로 편철한다', async () => {
+    // ERP 는 ws-2 의 팀일 뿐이다. 전 워크스페이스 목록으로 보면 ③(다른 팀 루트)으로 거절됐다.
+    mocks.activeTeamCodesForWorkspace.mockImplementation((wid: string) => (wid === 'ws-1' ? ['PMO', 'MES'] : ['ERP']))
+    useBatch([minute(1)])
+    const r = await POST(post(body({ items: [{ external_id: EID(1), folder_path: ['ERP', '품질'] }] })))
+    expect((await r.json()).results[0]).toMatchObject({ status: 'moved', to: ['MES', 'ERP', '품질'] })
+    expect(mocks.activeTeamCodesForWorkspace).toHaveBeenCalledWith('ws-1')
+  })
+
+  it('팀 캐시를 못 채웠으면 500 — 한 건도 옮기기 전에 멈춘다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.activeTeamCodesForWorkspace.mockImplementation(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+    const { builders } = useBatch([minute(1)])
+    const r = await POST(post(body({ dry_run: false, items: [{ external_id: EID(1), folder_path: ['MES', '품질'] }] })))
+    expect(r.status).toBe(500)
+    expect(builders.minutes).toHaveLength(1)   // 대상 조회뿐 — update 없음
+    spy.mockRestore()
   })
 })
 
