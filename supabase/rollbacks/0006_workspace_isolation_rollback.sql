@@ -1,12 +1,32 @@
 -- 0006_workspace_isolation 롤백 — 0005 적용 직후로 정확히 돌아간다(카탈로그 0 mismatch: compare-catalog.mjs diff).
 -- 새 컬럼의 값은 버린다(데이터 보존 절차 없음 — 원격이 생기기 전). 되돌린 상태는 0005 의 결함 그대로다: 개방 읽기 39,
 -- app_role()(아무 워크스페이스의 관리자), anon 쓰기 권한, 명단 행 인물·프로젝트 변경, 명단 삭제 시 기록 연쇄 삭제.
--- 롤백 전 중복 정리 필요: 같은 사용자의 user_preferences 가 워크스페이스별로 여러 행이면 PK (user_id) 복원이 23505 로
--- 실패한다 — `delete from public.user_preferences` 로 사용자당 1행만 남긴 뒤 돌린다.
+-- 롤백 전 중복 정리 두 가지 — 아래 ⓪ 이 먼저 검사해 ROLLBACK_PRECONDITION 으로 멈춘다(중간에 23505 로 깨지기 전에 무엇을 고칠지 보여 준다):
+--  (가) 같은 사용자의 user_preferences 가 워크스페이스별로 여러 행이면 PK (user_id) 복원이 23505 로 실패한다
+--       — `delete from public.user_preferences` 로 사용자당 1행만 남긴 뒤 돌린다.
+--  (나) 프로젝트 없는 루트 폴더 이름은 0006 뒤로 워크스페이스마다 유일하다 — 같은 팀 코드의 시드 루트가 두 워크스페이스에 있으면(정상 상태)
+--       전역 유일 인덱스(name) 복원이 23505 로 실패한다. 찾기: `select name from public.minute_folders where parent_id is null and
+--       project_id is null group by name having count(*) > 1`. 겹친 루트는 한 워크스페이스 것만 남기고 이름을 바꾼 뒤 돌린다(하위 폴더·회의록은
+--       루트 id 를 따라가므로 그대로다).
 -- 함수 본문·정책 본문·ACL 은 0005 카탈로그 캡처(pg_get_functiondef·pg_policies·proacl·relacl)에서 글자 그대로 옮겼다.
 -- 순서는 마이그레이션의 역순(⑦ → ①): 새 컬럼을 읽는 정책·함수를 먼저 되돌린 뒤 컬럼을 지운다.
 
 begin;
+
+-- ⓪ 전제 확인(헤더 (가)·(나)) — 복원할 전역 유일 제약을 어길 행이 있으면 아무것도 바꾸기 전에 멈춘다 ----------------------------
+do $$
+declare v_prefs text; v_roots text;
+begin
+  select string_agg(format('%s(%s행)', user_id, n), ', ' order by user_id) into v_prefs
+    from (select user_id, count(*) as n from public.user_preferences group by user_id having count(*) > 1) d;
+  select string_agg(format('%s(%s개)', name, n), ', ' order by name) into v_roots
+    from (select name, count(*) as n from public.minute_folders
+           where parent_id is null and project_id is null group by name having count(*) > 1) d;
+  if v_prefs is not null or v_roots is not null then
+    raise exception 'ROLLBACK_PRECONDITION: 전역 유일 제약을 되살리기 전에 정리할 행이 있다 — user_preferences 사용자당 여러 행: %; 프로젝트 없는 루트 폴더 이름 중복: %',
+      coalesce(v_prefs, '없음'), coalesce(v_roots, '없음');
+  end if;
+end $$;
 
 -- ⑦ 실행·쓰기 권한 복원 -------------------------------------------------------------------------------------------
 -- anon 쓰기는 0005 에 그 권한이 있던 41개 관계에만(all tables 로 주면 0003 신설 표에 없던 권한이 생긴다)
