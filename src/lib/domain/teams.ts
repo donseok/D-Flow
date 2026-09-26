@@ -1,4 +1,5 @@
 // 팀 기준정보 순수 도메인 — I/O 없음. 런타임 소스는 lib/teams/master.ts(서버 캐시).
+import type { TeamView } from './authz'
 import type { TeamCode } from './types'
 
 export interface Team {
@@ -87,13 +88,8 @@ export function activeTeamsForWorkspaces(all: readonly Team[], workspaceIds: Ite
     })
 }
 
-/** 조회자에게 보이는 팀의 범위 — 플랫폼 관리자(all)는 전 워크스페이스, 아니면 소속 워크스페이스들의 공용 팀과
- *  볼 수 있는 프로젝트들의 전용 팀. Actor 에서 만드는 규칙은 domain/authz 의 teamViewOf. */
-export type TeamView =
-  | { all: true }
-  | { all: false; workspaceIds: Iterable<string>; projectIds: Iterable<string> }
-
 /** 조회자가 볼 수 있는 활성 팀 코드(activeCodes 순, 중복 없음) — 회의록 담당 필터·검증(채팅·외부 GET·봇)의 단일 판정.
+ *  view 는 domain/authz 의 teamViewOf·teamViewOfScope 만 만든다(전부를 여는 뷰는 플랫폼 관리자 판정과 한 곳에).
  *  프로젝트에 연결된 회의록의 담당은 그 프로젝트 팀이라, 소속 워크스페이스의 공용 팀만으로는 전용 팀 코드가 빠진다. */
 export function teamCodesVisibleTo(all: readonly Team[], view: TeamView): TeamCode[] {
   if (view.all) return [...new Set(activeCodes(all))]

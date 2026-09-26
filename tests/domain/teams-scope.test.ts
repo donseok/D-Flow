@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, type Team } from '@/lib/domain/teams'
-import { teamViewOf } from '@/lib/domain/authz'
+import { teamViewOf, teamViewOfScope } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 const team = (code: string, projectId: string | null, active = true, workspaceId = 'ws-1', sortOrder = 0): Team =>
@@ -91,5 +91,22 @@ describe('teamViewOf — Actor 의 팀 가시 범위', () => {
   })
   it('플랫폼 관리자는 멤버십과 무관하게 전부 — 멤버십 없는 관리자가 빈 집합이 되지 않는다', () => {
     expect(teamViewOf(makeSuperuser({ workspaceRoles: new Map() }), [])).toEqual({ all: true })
+  })
+})
+
+describe('teamViewOfScope — 봇 접근 범위(accessScope → 도구 컨텍스트)의 팀 가시 범위', () => {
+  it('플랫폼 관리자만 전부', () => {
+    expect(teamViewOfScope({ isSuperuser: true, workspaceIds: [], allowedProjectIds: [] })).toEqual({ all: true })
+  })
+  it('아니면 소속 워크스페이스 + 스코프 프로젝트(비공개 판정 끝난 allowedProjectIds)', () => {
+    expect(teamViewOfScope({ isSuperuser: false, workspaceIds: ['ws-a'], allowedProjectIds: ['pa'] }))
+      .toEqual({ all: false, workspaceIds: ['ws-a'], projectIds: ['pa'] })
+  })
+  it('플래그·워크스페이스가 없으면 거짓·빈 범위(fail-closed)', () => {
+    expect(teamViewOfScope({ allowedProjectIds: ['pa'] })).toEqual({ all: false, workspaceIds: [], projectIds: ['pa'] })
+  })
+  it('teamViewOf(actor) 는 같은 규칙 — 숨긴 비공개 프로젝트를 뺀 스코프로 위임한다', () => {
+    const actor = makeActor({ workspaceRoles: new Map([['ws-a', 'member']]), projectWorkspace: new Map([['pa', 'ws-a'], ['pp', 'ws-a']]) })
+    expect(teamViewOf(actor, ['pp'])).toEqual(teamViewOfScope({ isSuperuser: false, workspaceIds: ['ws-a'], allowedProjectIds: ['pa'] }))
   })
 })

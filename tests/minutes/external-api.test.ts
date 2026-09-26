@@ -54,11 +54,11 @@ vi.mock('next/server', async (importOriginal) => {
 })
 
 import { GET, POST } from '@/app/api/v1/minutes/route'
-import { teamCodesVisibleTo, type Team, type TeamView } from '@/lib/domain/teams'
+import { teamCodesVisibleTo, type Team } from '@/lib/domain/teams'
 import { POST as LINK } from '@/app/api/v1/minutes/link/route'
 import { GET as META } from '@/app/api/v1/minutes/meta/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
-import type { ProjectRole } from '@/lib/domain/authz'
+import type { ProjectRole, TeamView } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const SECRET = 'test-minutes-secret'

@@ -8,6 +8,9 @@ import { codeLines, walk } from './_walk'
 
 const CWD = process.cwd()
 const MASTER = join(CWD, 'src/lib/teams/master.ts')
+/** 전 워크스페이스 팀 가시 범위({ all: true })를 만들 수 있는 유일한 파일 — 플랫폼 관리자 판정(teamViewOfScope)이 여기 있다. */
+const ALL_VIEW_OWNER = 'src/lib/domain/authz.ts'
+const ALL_VIEW = /\ball\s*:\s*true\b/
 const REMOVED = ['teamsSync', 'activeTeamCodesSync', 'isRegisteredTeamCode', 'isActiveTeamCode'] as const
 
 /** 옛 이름을 부르는 줄 — 이름 앞은 단어 경계라 teamsForWorkspaceSync·isRegisteredTeamCodeForProject 는 걸리지 않는다. */
@@ -34,6 +37,16 @@ describe('팀 캐시 — 워크스페이스를 가리지 않는 전역 접근자
     expect(REMOVED.filter(name => exportsName(code, name))).toEqual([])
   })
 
+  it(`전 워크스페이스 가시 범위({ all: true })는 ${ALL_VIEW_OWNER} 에서만 만든다 — 역할 판정 없이 전부를 여는 뷰를 호출부가 짓지 않게`, () => {
+    const hits = walk(join(CWD, 'src')).filter(f => relative(CWD, f) !== ALL_VIEW_OWNER).flatMap(f => {
+      const lines = codeLines(readFileSync(f, 'utf8'))
+      return lines.flatMap((line, i) => (ALL_VIEW.test(line) ? [`${relative(CWD, f)}:${i + 1}: ${line.trim()}`] : []))
+    })
+    expect(hits, hits.join('\n')).toEqual([])
+    // 소유 파일에는 실제로 있어야 한다 — 없으면 규칙이 낡았다(이름을 옮겼으면 ALL_VIEW_OWNER 를 고친다).
+    expect(codeLines(readFileSync(join(CWD, ALL_VIEW_OWNER), 'utf8')).some(line => ALL_VIEW.test(line))).toBe(true)
+  })
+
   it('판정기 — 주석 속 이름과 비슷한 새 이름은 세지 않고, 호출·export 는 센다', () => {
     const src = (body: string) => codeLines(body)
     expect(callHits(src('// teamsSync() 는 지웠다\n/* activeTeamCodesSync() */'))).toEqual([])
@@ -45,5 +58,9 @@ describe('팀 캐시 — 워크스페이스를 가리지 않는 전역 접근자
     expect(exportsName('export { teamsForWorkspaceSync, activeTeamCodesSync }', 'activeTeamCodesSync')).toBe(true)
     expect(exportsName('export { internal as isRegisteredTeamCode }', 'isRegisteredTeamCode')).toBe(true)
     expect(exportsName('export function teamsForWorkspaceSync(w: string) {', 'teamsSync')).toBe(false)
+    expect(ALL_VIEW.test('view = isSuperuser ? { all: true } : x')).toBe(true)
+    expect(ALL_VIEW.test('| { all: true }')).toBe(true)
+    expect(ALL_VIEW.test('{ all: false, workspaceIds }')).toBe(false)
+    expect(ALL_VIEW.test('{ overall: trueish }')).toBe(false)
   })
 })

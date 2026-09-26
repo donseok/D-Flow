@@ -8,8 +8,9 @@ import 'server-only'
 // 몫이다(SP2 §4.2). 워크스페이스를 가리지 않는 접근자는 두지 않는다 — 워크스페이스는 대상 행이나 actor 에서 온다.
 // ============================================================================
 
+import type { TeamView } from '@/lib/domain/authz'
 import {
-  activeCodes, activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, type Team, type TeamView,
+  activeCodes, activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, type Team,
 } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -154,7 +155,8 @@ export function activeTeamsForWorkspacesSync(workspaceIds: Iterable<string>): Te
   return activeTeamsForWorkspaces(snapshotSync().teams, workspaceIds)
 }
 
-/** 조회자가 볼 수 있는 활성 팀 코드 — 회의록 담당 필터·검증(채팅·외부 GET·봇). view 는 teamViewOf(actor, …) 등으로 만든다. */
+/** 조회자가 볼 수 있는 활성 팀 코드 — 회의록 담당 필터·검증(채팅·외부 GET·봇). view 는 domain/authz 의
+ *  teamViewOf(actor, …)·teamViewOfScope(accessScope) 로만 만든다 — 호출부가 { all: true } 를 짓지 않는다. */
 export function activeTeamCodesVisibleToSync(view: TeamView): TeamCode[] {
   return teamCodesVisibleTo(snapshotSync().teams, view)
 }
