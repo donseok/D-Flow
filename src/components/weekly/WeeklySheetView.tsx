@@ -662,13 +662,15 @@ export function WeeklySheetView({
             }}
           />
           {/* 구분 1단(업무영역 11개) + 내용 4열. 모듈 열과 행 구조 편집은 없다 — 구분당 1행 고정. */}
+          {/* 열 폭: 구분 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
+              두지 않는다 — 공백 텍스트 노드가 colgroup 의 자식이 되면 hydration 오류가 난다. */}
           <table className="w-full table-fixed border-collapse bg-white text-[13px] text-black">
             <colgroup>
-              <col className="w-[10%]" />    {/* 구분 */}
-              <col className="w-[27%]" />    {/* 금주 내용 */}
-              <col className="w-[19%]" />    {/* 금주 이슈 */}
-              <col className="w-[26%]" />    {/* 차주 내용 */}
-              <col className="w-[18%]" />    {/* 차주 이슈 */}
+              <col className="w-[10%]" />
+              <col className="w-[27%]" />
+              <col className="w-[19%]" />
+              <col className="w-[26%]" />
+              <col className="w-[18%]" />
             </colgroup>
             <thead>
               <tr>
