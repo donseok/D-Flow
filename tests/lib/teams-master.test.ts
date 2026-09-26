@@ -73,7 +73,7 @@ describe('teams/master', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const m = await importMaster()
     expect(() => m.activeTeamCodesForWorkspaceSync(WA)).toThrow(/팀 마스터/)
-    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), 'down')
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), 'teams 조회 실패: down')
     err.mockRestore()
   })
 
@@ -82,7 +82,7 @@ describe('teams/master', () => {
     db.projects = { rows: null, error: { message: 'projects down' } }
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const m = await importMaster()
-    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), 'projects down')
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), 'projects 조회 실패: projects down')
     expect(() => m.teamsForProjectSync('p-a')).toThrow(/팀 마스터/)
     err.mockRestore()
   })
@@ -93,6 +93,25 @@ describe('teams/master', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const m = await importMaster()
     expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining('projects'))
+    expect(() => m.teamsForProjectSync('p-a')).toThrow(/팀 마스터/)
+    err.mockRestore()
+  })
+
+  it('teams 가 잘려 오면(max_rows) 로드 실패 — 빠진 팀이 조용히 사라지지 않는다', async () => {
+    db.teams = { rows: ROWS, error: null, count: ROWS.length + 1 }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const m = await importMaster()
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining('teams'))
+    expect(() => m.teamsForWorkspaceSync(WA)).toThrow(/팀 마스터/)
+    err.mockRestore()
+  })
+
+  it.each(['teams', 'projects'] as const)('%s 의 count 가 없으면(null) 잘림을 확인할 수 없으므로 로드 실패', async (table) => {
+    db.teams.rows = ROWS
+    db[table] = { ...db[table], count: null }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const m = await importMaster()
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining(table))
     expect(() => m.teamsForProjectSync('p-a')).toThrow(/팀 마스터/)
     err.mockRestore()
   })
