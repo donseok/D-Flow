@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { listProjects } from '@/app/actions/project'
+import { listProjectsWithState } from '@/app/actions/project'
 import { buildWbsWorkbook } from '@/lib/excel/export'
 import { buildWorkbookWithProfile } from '@/lib/excel/exportWithProfile'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
@@ -16,9 +16,17 @@ export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get('projectId')
   if (!projectId) return NextResponse.json({ error: '프로젝트 누락' }, { status: 400 })
 
-  const [{ items, holidays }, projects] = await Promise.all([getComputedWbs(projectId), listProjects()])
+  // 대상은 호출자가 볼 수 있는 프로젝트여야 한다(RLS + canSeeProject 목록). 다른 워크스페이스 pid 는 RLS 로 WBS 가 빈 결과
+  // (오류 없음)라 그대로 가면 xlsx 헤더에 service_role 팀 캐시의 그 프로젝트 팀이 실린다 — 팀 캐시를 읽는 WBS 계산
+  // (getComputedWbs 의 정렬)과 팀 헤더보다 먼저 판정한다. 목록 조회 실패는 '없는 프로젝트'가 아니다(500).
+  const { projects, degraded } = await listProjectsWithState()
   const project = (projects as { id: string; name: string }[]).find(p => p.id === projectId)
-  const name = project?.name ?? 'WBS'
+  if (!project) {
+    if (degraded) return NextResponse.json({ error: '프로젝트 목록을 확인할 수 없습니다.' }, { status: 500 })
+    return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 })
+  }
+  const name = project.name
+  const { items, holidays } = await getComputedWbs(projectId)
 
   // 기본 경로는 바이트 불변(레거시 v1 회귀 기준) — 절대 건드리지 않는다. `?expand=1` 일 때만 프로파일
   // 기반 신 경로(Task 7, §6.5)로 분기한다. 스펙 §6.5의 "기본값을 펼침으로"는 마법사(Task 8) 다운로드
