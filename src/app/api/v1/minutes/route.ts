@@ -116,10 +116,14 @@ function resolveWriteTarget(
   let scope: MinuteScope
   const linkProjectId = p.meeting ? p.meeting.projectId : p.meetingId ? meetingProjectId : null
   if (linkProjectId) {
-    // 스냅샷은 호출자 워크스페이스의 프로젝트 전부다(플랫폼 관리자는 전부). meeting_id 의 프로젝트는 멤버 판정을 통과했으니
-    // 있다 — 없으면 inline meeting 의 남의·없는 프로젝트라 resolveOrCreateExternalMeeting 과 같은 404(존재 은닉).
+    // 연결 자격(그 프로젝트의 멤버 이상)이 팀·워크스페이스 판정보다 먼저다 — 뒤에 두면 같은 워크스페이스의 비멤버가
+    // 400(팀 불일치)과 404 를 갈라 비공개 프로젝트의 팀 구성을 떠볼 수 있다. meeting_id 는 호출부가 이미 같은 판정을
+    // 했고, inline meeting 은 resolveOrCreateExternalMeeting 과 같은 404 다(남의·없는 프로젝트를 구별하지 않는다).
+    // 스냅샷은 호출자 워크스페이스의 프로젝트 전부다(플랫폼 관리자는 전부) — 멤버면 워크스페이스가 있다.
     const linkWs = authz.projectWorkspace.get(linkProjectId)
-    if (!linkWs) return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
+    if (!linkWs || !isProjectMember(authz, linkProjectId)) {
+      return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
+    }
     if (ex && linkWs !== ex.workspace_id) return { ok: false, response: apiBadRequest(CROSS_WORKSPACE_MSG) }
     scope = { projectId: linkProjectId, workspaceId: linkWs }
   } else if (ex) {

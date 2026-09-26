@@ -2121,6 +2121,32 @@ describe('SP2 Task 16a — 쓰기 대상의 워크스페이스·담당 팀을 �
     spy.mockRestore()
   })
 
+  it('inline meeting: 같은 워크스페이스라도 비멤버 프로젝트는 팀 판정 전에 404 — 400/404 차이로 팀 구성을 떠볼 수 없다', async () => {
+    // 호출자 워크스페이스(WS)의 프로젝트지만 명단 역할이 없다(비공개 프로젝트 가정). 그 프로젝트의 팀은 ERP 뿐이다.
+    const PRIVATE_PROJECT = '4c3b2a19-0f8e-4d7c-b6a5-9e8d7c6b5a49'
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, projectWorkspace: new Map([[PROJECT_UUID, WS], [PRIVATE_PROJECT, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[PROJECT_UUID, 'member']]),
+    }))
+    mocks.activeTeamCodesForProject.mockImplementation((pid: string) => (pid === PRIVATE_PROJECT ? ['ERP'] : ['PMO']))
+    const meeting = { project_id: PRIVATE_PROJECT, title: '정례', date: '2026-09-26' }
+    // 팀이 틀리든(PMO) 맞든(ERP) 같은 404 — 응답이 갈리면 그 차이로 팀 구성이 샌다.
+    const wrong = useAdmin({ minutes: [{ data: null }] })
+    const resWrong = await POST(post({ ...payload, team: 'PMO', meeting }))
+    const right = useAdmin({ minutes: [{ data: null }] })
+    const resRight = await POST(post({ ...payload, team: 'ERP', meeting }))
+    for (const [res, fake] of [[resWrong, wrong], [resRight, right]] as const) {
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: '프로젝트를 찾을 수 없습니다.', code: 'not_found' })
+      expect(fake.builders.meetings).toBeUndefined()
+      expect(fake.admin.rpc).not.toHaveBeenCalled()
+    }
+    // 기존 회의록의 skip 도 같다 — 연결 자격 없는 inline 프로젝트는 skip 응답(200)으로 흘리지 않는다.
+    useAdmin({ minutes: [{ data: existingRow }] })
+    const skip = await POST(post({ ...payload, on_conflict: 'skip', meeting }))
+    expect(skip.status).toBe(404)
+  })
+
   it('GET 목록의 team 필터는 호출자 워크스페이스의 팀만 — 다른 워크스페이스 팀 코드는 400', async () => {
     splitTeams()
     useAdmin({ minutes: [{ data: [], count: 0 }] })
