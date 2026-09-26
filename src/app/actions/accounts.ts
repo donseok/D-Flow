@@ -11,7 +11,7 @@ import { listProfiles } from '@/lib/data/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
-import { PERSON_INACTIVE, rosterWriteError } from '@/lib/domain/rosterErrors'
+import { rosterWriteError } from '@/lib/domain/rosterErrors'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type WorkspaceRole = 'admin' | 'member'
@@ -58,6 +58,8 @@ const ERR_LOOKUP = '권한을 확인할 수 없어 중단했습니다.'
 const ERR_WS_ROLE = '알 수 없는 워크스페이스 권한'
 const ERR_ACCESS = '알 수 없는 권한'
 const ERR_PERSON_LINKED = '이미 다른 계정에 연결된 사람입니다.'
+/** 비활성 인물·명단 행은 계정 생성으로 되살리지 않는다(0008 INVITE_INACTIVE 와 같은 규칙) — 호출자는 워크스페이스 관리자라 조치를 안내한다. */
+const ERR_INACTIVE = '이 인원(또는 명단 행)이 비활성 상태입니다. 명단에서 재활성화한 뒤 다시 시도하세요.'
 const ERR_LIST = '계정 권한 정보를 불러오지 못했습니다.'
 const ERR_SELF_PLATFORM = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
 
@@ -87,7 +89,7 @@ async function linkOrCreatePerson(
     if (found.user_id !== null) return { ok: false, error: ERR_PERSON_LINKED }
     // 비활성 인물은 계정을 이으면서 되살리지 않는다 — consume_project_invite 의 INVITE_INACTIVE(0008)와 같은 규칙.
     // 비활성화는 관리자의 결정이라 계정 생성의 부수효과로 뒤집히면 안 된다. 명단에서 재활성화한 뒤 다시 만든다.
-    if (found.active === false) return { ok: false, error: PERSON_INACTIVE }
+    if (found.active === false) return { ok: false, error: ERR_INACTIVE }
     const { data: linked, error: linkErr } = await admin
       .from('people').update({ user_id: userId, updated_at: new Date().toISOString() })
       .eq('id', found.id as string).is('user_id', null)
@@ -178,6 +180,20 @@ async function createOne(
   if (person.created) createdPersonId = person.personId
 
   if (input.projectId && accessRole) {
+    // 이은 기존 인물에 그 프로젝트의 비활성 명단 행이 있으면 RPC 는 권한 칸만 쓰고 active=false 를 유지한다(active 키를 보내지
+    // 않는다) — 무효인 권한을 '생성 성공' 으로 보고하게 된다. 되살리지도 않는다(0008 INVITE_INACTIVE 와 같은 규칙).
+    // 새로 만든 인물은 명단 행이 있을 수 없어 조회하지 않는다. 선행 조회 실패는 중단(3원칙 ②).
+    // fail() 의 계정 삭제가 FK(on delete set null)로 이 호출의 인물 연결도 푼다.
+    if (!person.created) {
+      const { data: row, error: rowErr } = await admin
+        .from('project_members').select('active')
+        .eq('project_id', input.projectId).eq('person_id', person.personId).maybeSingle()
+      if (rowErr) {
+        console.error('[createAccount] 명단 행 조회 실패:', rowErr.message)
+        return fail('명단 정보를 확인할 수 없어 중단했습니다.')
+      }
+      if (row && (row as { active: boolean }).active === false) return fail(ERR_INACTIVE)
+    }
     // 권한 없는 계정을 '만들어졌다'고 보고하면 관리자는 권한이 있다고 믿는다 — 실패하면 전체를 되돌린다.
     const { error: rpcErr } = await admin.rpc('upsert_project_member', {
       p_actor: grantedBy, p_project_id: input.projectId, p_person: { id: person.personId },

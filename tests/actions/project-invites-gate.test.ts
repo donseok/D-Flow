@@ -298,6 +298,20 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(await createProjectInvite(P1, { ...VALID, email: 'mina@acme.test' })).toMatchObject({ ok: true })
   })
 
+  // 워크스페이스 목록이 판정을 쥐었는데 쓸 항목이 없으면(전부 형식 오류) env 로 넓히지 않는다 — 안내도 env 가 아니라 설정을 가리킨다.
+  it('워크스페이스 허용 도메인이 전부 깨졌으면 워크스페이스 설정을 안내한다(env 문구 아님)', async () => {
+    const c = createClient({ settings: { data: { allowed_domains: ['*.acme.test', 'nohost'] }, error: null } })
+    createAdminClient.mockReturnValue(c.client as never)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await createProjectInvite(P1, VALID)
+    spy.mockRestore()
+    expect(res).toEqual({
+      ok: false,
+      error: '워크스페이스 초대 허용 도메인 설정에 쓸 수 있는 항목이 없어 초대할 수 없습니다. 워크스페이스 관리자에게 설정 확인을 요청하세요.',
+    })
+    expectRejectedBeforeWrites(c)
+  })
+
   it('워크스페이스 허용 도메인이 빈 배열이면 env 로 판정한다', async () => {
     const c = createClient({ settings: { data: { allowed_domains: [] }, error: null } })
     createAdminClient.mockReturnValue(c.client as never)

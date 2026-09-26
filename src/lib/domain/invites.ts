@@ -54,13 +54,20 @@ export function parseAllowedDomains(raw: string | undefined, source = 'INVITE_AL
   return out
 }
 
+export type InviteDomainSource = 'workspace' | 'env'
+
+/** 허용 도메인 목록을 어느 쪽이 정하는가 — resolveInviteDomains 의 분기 그 자체. 거부 문구가 고칠 곳(워크스페이스 설정 / env)을 가리키는 데 쓴다. */
+export function inviteDomainSource(workspaceDomains: string[] | null): InviteDomainSource {
+  return workspaceDomains && workspaceDomains.length > 0 ? 'workspace' : 'env'
+}
+
 /** 초대 허용 도메인 결정(SP2 §4.4). 워크스페이스 설정(workspace_settings.allowed_domains)이 비어 있지 않으면 그것,
  *  비었거나 행이 없으면(null) env INVITE_ALLOWED_DOMAINS. 워크스페이스 목록도 parseAllowedDomains 규칙으로 거른다 —
  *  목록이 있는데 항목이 전부 깨졌으면 [](초대 불가)이지 env 로 넓히지 않는다(관리자가 좁히려던 설정을 조용히 무시하지 않는다).
  *  조회 실패는 여기 오기 전에 호출부가 중단한다(null 은 '행 없음'만 뜻한다). */
 export function resolveInviteDomains(workspaceDomains: string[] | null, envValue: string | undefined): string[] {
-  if (workspaceDomains && workspaceDomains.length > 0) {
-    return parseAllowedDomains(workspaceDomains.join(' '), 'workspace_settings.allowed_domains')
+  if (inviteDomainSource(workspaceDomains) === 'workspace') {
+    return parseAllowedDomains((workspaceDomains ?? []).join(' '), 'workspace_settings.allowed_domains')
   }
   return parseAllowedDomains(envValue)
 }

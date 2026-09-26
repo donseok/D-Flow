@@ -12,7 +12,7 @@ import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import {
   DEFAULT_INVITE_DAYS, inviteStatus, isAllowedInviteDomain, normalizeInviteDays,
-  normalizeInviteEmail, type InviteStatus,
+  normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
 } from '@/lib/domain/invites'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -35,9 +35,13 @@ const ERR_INIT = '연결 초기화 설정을 확인하세요.'
 
 /** 도메인 거부 문구는 실제 판정에 쓰인 목록으로 조립한다 — 하드코딩하면 다른 도메인을
  *  설정한 배포에서 관리자가 "무엇을 넣어야 하는지" 거짓 안내를 받는다.
- *  목록이 비어 있으면(미설정) 어떤 주소도 통과할 수 없으므로 설정 자체를 안내한다(fail-closed).
+ *  목록이 비어 있으면 어떤 주소도 통과할 수 없으므로 고칠 곳을 안내한다(fail-closed) — 워크스페이스 설정이 판정을 쥐었는데
+ *  쓸 항목이 없으면(전부 형식 오류) 그 설정을, 아니면 env 를 가리킨다.
  *  ('*' 이면 도메인 검사를 통과하므로 이 문구에 '@*' 가 나올 일은 없다.) */
-function domainError(domains: string[]): string {
+function domainError(domains: string[], source: InviteDomainSource): string {
+  if (domains.length === 0 && source === 'workspace') {
+    return '워크스페이스 초대 허용 도메인 설정에 쓸 수 있는 항목이 없어 초대할 수 없습니다. 워크스페이스 관리자에게 설정 확인을 요청하세요.'
+  }
   if (domains.length === 0) return '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
   return `허용된 이메일 도메인(${domains.map((d) => `@${d}`).join(', ')})으로만 초대할 수 있습니다.`
 }
@@ -244,7 +248,7 @@ export async function createProjectInvite(
   // insert 보다는 먼저 막는다. 설정 조회 실패는 보안 가드라 발급 중단(fail-closed).
   const loaded = await loadInviteDomains(admin, project.workspace_id as string)
   if (!loaded.ok) return { ok: false, error: ERR_LOOKUP }
-  if (!isAllowedInviteDomain(email, loaded.domains)) return { ok: false, error: domainError(loaded.domains) }
+  if (!isAllowedInviteDomain(email, loaded.domains)) return { ok: false, error: domainError(loaded.domains, loaded.source) }
 
   // 기존 계정이 있으면 링크가 '로그인하고 합류' 경로가 된다 — 발급을 막지는 않고 안내만 한다.
   const alreadyAccount = await hasAccount(admin, email)

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
-  isInviteToken, normalizeInviteEmail, parseAllowedDomains, isAllowedInviteDomain, resolveInviteDomains,
+  isInviteToken, normalizeInviteEmail, parseAllowedDomains, isAllowedInviteDomain, resolveInviteDomains, inviteDomainSource,
   DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, normalizeInviteDays,
   inviteStatus, inviteStatusLabel, maskEmail, validateSignupInput,
   type InviteStateRow,
@@ -27,6 +27,15 @@ describe('normalizeInviteEmail', () => {
     expect(normalizeInviteEmail('  Mina.PARK@Example.com \n')).toBe('mina.park@example.com')
     expect(normalizeInviteEmail('a@b.com')).toBe('a@b.com')
     expect(normalizeInviteEmail('   ')).toBe('')
+  })
+})
+
+describe('inviteDomainSource', () => {
+  it('워크스페이스 목록이 비어 있지 않으면 workspace, 비었거나 null 이면 env — resolveInviteDomains 와 같은 분기', () => {
+    expect(inviteDomainSource(['acme.test'])).toBe('workspace')
+    expect(inviteDomainSource(['*.broken'])).toBe('workspace')
+    expect(inviteDomainSource([])).toBe('env')
+    expect(inviteDomainSource(null)).toBe('env')
   })
 })
 

@@ -35,7 +35,7 @@ const INVITE = {
   revoked_at: null,
   redeemed_at: null,
 }
-const INACTIVE_MSG = '비활성화된 인원입니다. 관리자에게 명단 재활성화를 요청하세요.'
+const INACTIVE_MSG = '비활성화된 인원입니다. 관리자에게 문의하세요.'
 const CONSUMED = [{ workspace_id: 'ws-1', project_id: PROJECT, member_id: 'm-1' }]
 
 interface Fixtures {

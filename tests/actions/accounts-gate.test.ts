@@ -32,6 +32,7 @@ const WS_ADMIN = makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'adm
 const OTHER_WS_ADMIN = makeActor({ userId: 'u-other', workspaceRoles: new Map([[WS_B, 'admin']]) })
 // 워크스페이스 멤버이면서 그 프로젝트의 관리자 — 프로젝트 가드는 넘지만 워크스페이스 가드에서 막혀야 한다.
 const WS_MEMBER = makeActor({ userId: 'u-mem', projectWorkspace: new Map([[P1, WS]]), projectRoles: new Map([[P1, 'admin']]) })
+const ERR_INACTIVE_ADMIN = '이 인원(또는 명단 행)이 비활성 상태입니다. 명단에서 재활성화한 뒤 다시 시도하세요.'
 const INPUT: AccountInput & { workspaceId: string } = {
   email: ' Mina.Park@Example.com ', password: 'password1', name: '박민아', workspaceRole: 'member',
   projectId: P1, accessRole: 'member', workspaceId: WS,
@@ -84,6 +85,8 @@ function accountClient(o: {
   existingPerson?: { id: string; user_id: string | null; active?: boolean } | null
   linkRows?: unknown[]
   personInsert?: Result
+  /** 기존 인물의 그 프로젝트 명단 행(active) 선행 조회 — 기본은 행 없음 */
+  rosterRow?: Result
   rpc?: Result
 } = {}) {
   const q = {
@@ -93,10 +96,12 @@ function accountClient(o: {
     peopleLink: chain({ data: o.linkRows ?? [{ id: 'pe-old' }], error: null }),
     peopleInsert: chain(o.personInsert ?? { data: { id: 'pe-new' }, error: null }),
     peopleDelete: chain({ error: null }),
+    project_members: chain(o.rosterRow ?? { data: null, error: null }),
   }
   const from = vi.fn((t: string) => {
     if (t === 'profiles') return q.profiles
     if (t === 'workspace_members') return q.workspace_members
+    if (t === 'project_members') return q.project_members
     if (t === 'people') {
       // people 은 용도별로 다른 빌더를 준다 — 첫 메서드로 가른다.
       return {
@@ -346,10 +351,52 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
   // 같은 규칙. 조용히 잇기만 하면(active 그대로) 헬퍼·buildActor 가 권한을 인정하지 않아 '권한 부여 성공' 이 무효가 된다.
   it('비활성 외부 인력이면 되살리지도 잇지도 않고 거부한 뒤 계정을 되돌린다', async () => {
     const c = accountClient({ existingPerson: { id: 'pe-old', user_id: null, active: false } })
-    expect(await createAccount(INPUT)).toEqual({ ok: false, error: '비활성화된 인원입니다. 관리자에게 명단 재활성화를 요청하세요.' })
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: ERR_INACTIVE_ADMIN })
     expect(c.q.peopleLink.update).not.toHaveBeenCalled()
     expect(c.rpc).not.toHaveBeenCalled()
     expect(c.deleteUser).toHaveBeenCalledWith('u-new')
+  })
+
+  // 기존 인물의 그 프로젝트 명단 행이 비활성이면 RPC 는 권한 칸만 쓰고 active=false 를 유지한다(active 키를 보내지 않는다) —
+  // 헬퍼·buildActor 가 인정하지 않는 권한인데 '생성 성공' 으로 보고된다. RPC 전에 끊고 계정을 되돌린다.
+  // (이 호출이 이은 기존 인물의 연결은 계정 삭제의 FK on delete set null 이 푼다 — tests/rls/workspace-settings.test.ts ⑨)
+  it('기존 인물의 명단 행이 비활성이면 RPC 전에 거부하고 계정을 되돌린다(단건·일괄)', async () => {
+    const c = accountClient({
+      existingPerson: { id: 'pe-old', user_id: null, active: true }, rosterRow: { data: { active: false }, error: null },
+    })
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: ERR_INACTIVE_ADMIN })
+    expect(c.q.project_members.select).toHaveBeenCalledWith('active')
+    expect(c.q.project_members.eq).toHaveBeenCalledWith('project_id', P1)
+    expect(c.q.project_members.eq).toHaveBeenCalledWith('person_id', 'pe-old')
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.deleteUser).toHaveBeenCalledWith('u-new')
+
+    const b = accountClient({
+      existingPerson: { id: 'pe-old', user_id: null, active: true }, rosterRow: { data: { active: false }, error: null },
+    })
+    const res = await bulkCreateAccounts(WS, 'mina.park@example.com, member, password1', P1)
+    expect(res.results).toEqual([{ lineNo: 1, email: 'mina.park@example.com', ok: false, error: ERR_INACTIVE_ADMIN }])
+    expect(b.rpc).not.toHaveBeenCalled()
+    expect(b.deleteUser).toHaveBeenCalledWith('u-new')
+  })
+
+  it('명단 행 선행 조회가 실패하면 RPC 없이 중단하고 계정을 되돌린다', async () => {
+    const c = accountClient({
+      existingPerson: { id: 'pe-old', user_id: null, active: true }, rosterRow: { data: null, error: { message: 'boom' } },
+    })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await createAccount(INPUT)).toEqual({ ok: false, error: '명단 정보를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.deleteUser).toHaveBeenCalledWith('u-new')
+  })
+
+  it('기존 인물의 명단 행이 활성이거나 없으면 그대로 RPC 로 권한을 준다', async () => {
+    const c = accountClient({
+      existingPerson: { id: 'pe-old', user_id: null, active: true }, rosterRow: { data: { active: true }, error: null },
+    })
+    expect(await createAccount(INPUT)).toEqual({ ok: true })
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_person: { id: 'pe-old' } }))
   })
 
   it('그 인물이 이미 다른 계정에 연결돼 있으면 거부하고 계정을 되돌린다', async () => {
