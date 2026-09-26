@@ -78,11 +78,11 @@ describe('MinutesView 트리 뷰 배선', () => {
 
   async function mount(
     initialView: 'list' | 'calendar' | 'tree' = 'calendar',
-    perms: { canManage: boolean; canEdit: boolean } = { canManage: true, canEdit: true },
+    perms: { canEdit: boolean } = { canEdit: true },
   ) {
     await act(async () => root.render(
       <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
-        projects={[]} currentUserId="u1" canManage={perms.canManage} canEdit={perms.canEdit} />,
+        projects={[]} currentUserId="u1" canEdit={perms.canEdit} />,
     ))
   }
   function buttonByText(text: string): HTMLButtonElement {
@@ -96,9 +96,9 @@ describe('MinutesView 트리 뷰 배선', () => {
   }
 
   it('등록 버튼은 어느 프로젝트든 멤버 이상(canEdit)에게만 — 조회 전용은 숨긴다', async () => {
-    await mount('calendar', { canManage: false, canEdit: false })
+    await mount('calendar', { canEdit: false })
     expect([...container.querySelectorAll('button')].some(b => b.textContent?.includes('min.upload.short'))).toBe(false)
-    await mount('calendar', { canManage: false, canEdit: true })
+    await mount('calendar', { canEdit: true })
     expect([...container.querySelectorAll('button')].some(b => b.textContent?.includes('min.upload.short'))).toBe(true)
   })
 

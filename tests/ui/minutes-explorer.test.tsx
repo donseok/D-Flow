@@ -63,7 +63,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
       <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set(['m1'])}
         onToggleFavorite={onToggle} onRetryFavorites={onRetry}
         layout="grid"
-        currentUserId="u1" isFolderAdmin={false} onChanged={onChanged} onFolderSelect={onFolderSelect}
+        currentUserId="u1" onChanged={onChanged} onFolderSelect={onFolderSelect}
         teamCodes={['PMO', 'MES', 'ERP']}
         {...over} />,
     ))
@@ -163,7 +163,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   })
 
   it('팀 기본 폴더(PMO)는 관리자 메뉴에서도 개명·삭제 숨김 — 하위 폴더 추가만(0043)', async () => {
-    await mount({ isFolderAdmin: true })
+    await mount({ isSuperuser: true })
     const menuBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
       .find(b => b.closest('li')?.textContent?.includes('PMO'))!
     await act(async () => menuBtn.click())
@@ -180,7 +180,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
 
   it('시드 하위 구분(품질)은 개명·삭제 노출 — 하위 구분이 실폴더 동적 유도로 바뀌어 앵커 보호 해제', async () => {
     const fs = [folder('f-mes', 'MES', null, 2), folder('f-q', '품질', 'f-mes', 0)]
-    await mount({ isFolderAdmin: true, folders: fs, leaves: [] })
+    await mount({ isSuperuser: true, folders: fs, leaves: [] })
     // 품질 자신의 행 li(중첩 안쪽)만 매칭 — MES 행 li 는 하위 li 를 포함하므로 'MES' 부재로 가른다
     const qBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
       .find(b => b.closest('li')?.textContent?.includes('품질') && !b.closest('li')?.textContent?.includes('MES'))!
@@ -196,8 +196,23 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     // 시드(createdBy null) PMO 행: 메뉴 없음 / 본인 소유 생산계획·APS 회의: 메뉴 있음
     const menuBtns = [...container.querySelectorAll('button[aria-label="min.fold.menuAria"]')]
     expect(menuBtns.length).toBe(2)
-    await mount({ isFolderAdmin: true })
+    await mount({ isSuperuser: true })
     expect([...container.querySelectorAll('button[aria-label="min.fold.menuAria"]')].length).toBe(3)
+  })
+
+  it('폴더 관리는 작성자 ∨ 그 폴더 워크스페이스 관리자(0006) — 프로젝트 관리자만으로는 열리지 않는다', async () => {
+    const fs = [
+      { ...folder('f-pmo', 'PMO', null, 0), workspaceId: 'w1' },
+      { ...folder('f-x', '남의 폴더', 'f-pmo', 5, 'u2'), workspaceId: 'w1' },
+    ]
+    const menus = () => container.querySelectorAll('button[aria-label="min.fold.menuAria"]').length
+    await mount({ folders: fs, leaves: [], adminProjectIds: ['p1'] })       // 프로젝트 관리자 — 서버가 거부하므로 숨김
+    expect(menus()).toBe(0)
+    await mount({ folders: fs, leaves: [], adminWorkspaceIds: ['w2'] })     // 다른 워크스페이스 관리자
+    expect(menus()).toBe(0)
+    await mount({ folders: fs, leaves: [], adminWorkspaceIds: ['w1'] })     // 그 워크스페이스 관리자
+    expect(menus()).toBe(2)
+    expect(dropTarget('f-x').getAttribute('draggable')).toBe('true')
   })
 
   it('새 폴더 버튼 → 생성 모달 열림, 이동 버튼 → 픽커 열림 후 moveMinuteToFolder 호출·onChanged', async () => {
@@ -309,12 +324,12 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
 
   it('폴더를 다른 폴더에 드롭하면 moveMinuteFolder + 새 부모를 펼쳐 옮긴 폴더가 보인다', async () => {
     // f-pmo 는 처음에 자식이 없어 expanded 에 없다 — 펼치지 않으면 옮긴 폴더가 사라져 보인다
-    await mount({ isFolderAdmin: true })
+    await mount({ isSuperuser: true })
     await dragTo(dropTarget('f-aps'), dropTarget('f-pmo'))
     expect(moveMinuteFolder).toHaveBeenCalledWith('f-aps', 'f-pmo')
     // 재조회 결과(부모가 바뀐 트리)로 다시 렌더 — expanded 상태는 유지된다
     await mount({
-      isFolderAdmin: true,
+      isSuperuser: true,
       folders: [folders[0], folders[1], { ...folders[2], parentId: 'f-pmo' }],
     })
     // 레일의 f-aps 행 자체를 확인한다 — 'APS 회의' 텍스트는 카드의 폴더 칩에도 나오므로
@@ -347,7 +362,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   })
 
   it('팀 시드 루트 폴더는 관리자에게도 draggable=false (편철 앵커 보호)', async () => {
-    await mount({ isFolderAdmin: true })
+    await mount({ isSuperuser: true })
     expect(dropTarget('f-pmo').getAttribute('draggable')).not.toBe('true')
     expect(dropTarget('f-plan').getAttribute('draggable')).toBe('true')
   })

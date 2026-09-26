@@ -33,7 +33,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 }
 
 export function MinutesView({
-  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, canManage, canEdit, defaultTeam,
+  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
   adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null,
 }: {
@@ -44,9 +44,9 @@ export function MinutesView({
   initialView: ViewKey
   projects: { id: string; name: string }[]
   currentUserId: string | null
-  /** 어느 프로젝트든 관리자 이상(isAnyProjectAdmin) — 이 화면은 프로젝트가 섞인 목록이라 **폴더 조작(전역)**에만 쓴다.
-   *  회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
-  canManage: boolean
+  /** 관리자인 워크스페이스 id — **폴더 조작**(개명·이동·삭제)의 폴더별 판정 근거(서버: 작성자 ∨ 그 폴더
+   *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
+  adminWorkspaceIds?: string[]
   /** 어느 프로젝트든 멤버 이상(hasAnyProjectRole) — 업로드 자격. */
   canEdit: boolean
   /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
@@ -396,7 +396,7 @@ export function MinutesView({
               onToggleFavorite={id => void toggleFav(id)}
               onRetryFavorites={() => void loadFavorites()}
               layout={exLayout}
-              currentUserId={currentUserId} isFolderAdmin={canManage}
+              currentUserId={currentUserId} adminWorkspaceIds={adminWorkspaceIds}
               adminProjectIds={adminProjectIds} isSuperuser={isSuperuser} teamCodes={teamCodes}
               projects={projects} myProjectIds={myProjectIds}
               onChanged={() => { void loadTree(); router.refresh() }}

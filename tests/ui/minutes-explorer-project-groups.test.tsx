@@ -62,7 +62,7 @@ describe('MinutesExplorer — 프로젝트 그룹 헤더', () => {
     await act(async () => root.render(
       <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set()}
         onToggleFavorite={vi.fn()} onRetryFavorites={vi.fn()} layout="grid"
-        currentUserId="u1" isFolderAdmin={false} onChanged={vi.fn()}
+        currentUserId="u1" onChanged={vi.fn()}
         projects={projects} myProjectIds={['p1-not-a-real-id']} {...over} />,
     ))
   }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
-  isAdminAccessRole, hasProjectRoleInWorkspace,
+  isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -54,6 +54,13 @@ describe('adminProjectIds / isAnyProjectAdmin', () => {
     expect(new Set(adminProjectIds(a))).toEqual(new Set([P, Q]))
     expect(isAnyProjectAdmin(a)).toBe(true)
     expect(hasAnyProjectRole(a)).toBe(true)
+  })
+})
+describe('adminWorkspaceIdList — 회의록 폴더 관리 판정의 클라이언트 미러', () => {
+  it('관리자인 워크스페이스만 — 프로젝트 명단 관리자는 들어가지 않는다(0006)', () => {
+    expect(adminWorkspaceIdList(makeActor({ workspaceRoles: new Map([[W, 'admin'], ['ws-2', 'member']]) }))).toEqual([W])
+    expect(adminWorkspaceIdList(makeAdminActor(P, inWs))).toEqual([])
+    expect(adminWorkspaceIdList(null)).toEqual([])
   })
 })
 describe('hasProjectRoleInWorkspace', () => {

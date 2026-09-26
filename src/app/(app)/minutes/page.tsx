@@ -5,7 +5,7 @@ import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/da
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { adminProjectIds, hasAnyProjectRole, isAnyProjectAdmin } from '@/lib/domain/authz'
+import { adminProjectIds, adminWorkspaceIdList, hasAnyProjectRole } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getUiPrefs } from '@/app/actions/preferences'
@@ -68,7 +68,7 @@ export default async function MinutesPage() {
         initialFavorites={user ? favs : null}
         explorerLayout={prefs.minutesExplorerLayout === 'list' ? 'list' : 'grid'}
         initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m)[0] ?? null}
-        currentUserId={user?.id ?? null} canManage={isAnyProjectAdmin(m)} canEdit={hasAnyProjectRole(m)}
+        currentUserId={user?.id ?? null} adminWorkspaceIds={adminWorkspaceIdList(m)} canEdit={hasAnyProjectRole(m)}
         myProjectIds={myProjectIds}
         projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
         noProjectWorkspace={m ? resolveSoleWorkspaceId(m) : null}

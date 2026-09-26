@@ -59,7 +59,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await act(async () => root.render(
       <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set()}
         onToggleFavorite={vi.fn()} onRetryFavorites={vi.fn()} layout="grid"
-        currentUserId="u1" isFolderAdmin={false} onChanged={onChanged} projects={projects} {...over} />,
+        currentUserId="u1" onChanged={onChanged} projects={projects} {...over} />,
     ))
   }
   const byText = (text: string) =>

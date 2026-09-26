@@ -85,7 +85,8 @@ function adminWorkspaceIds(actor: Actor): Set<string> {
   for (const [wid, r] of actor.workspaceRoles) if (r === 'admin') s.add(wid)
   return s
 }
-/** 전역 성격 리소스(회의록 폴더 등 프로젝트에 속하지 않는 것)용 — 어느 프로젝트든 관리자면 통과. */
+/** 어느 프로젝트든 관리자면 true — 헤더 등급 표시용. 회의록 폴더 가드는 0006 부터 워크스페이스 판정이라
+ *  이걸 쓰지 않는다(adminWorkspaceIdList). */
 export function isAnyProjectAdmin(actor: Actor | null): boolean {
   if (!actor) return false
   if (actor.isSuperuser) return true
@@ -107,6 +108,14 @@ export function adminProjectIds(actor: Actor | null): string[] {
   const ws = adminWorkspaceIds(actor)
   for (const [pid, wid] of actor.projectWorkspace) if (ws.has(wid)) out.add(pid)
   return [...out]
+}
+/**
+ * 관리자인 워크스페이스 id 목록 — RSC 경계로 내리는 직렬화 가능 형태. 회의록 폴더 관리(개명·이동·삭제)의
+ * 서버 판정(작성자 ∨ isWorkspaceAdmin(actor, 폴더의 워크스페이스), 0006)을 클라이언트가 폴더별로 미러한다.
+ * 슈퍼유저는 목록으로 표현되지 않는다 — 호출부가 isSuperuser 와 OR 로 결합한다(adminProjectIds 와 같은 관례).
+ */
+export function adminWorkspaceIdList(actor: Actor | null): string[] {
+  return actor ? [...adminWorkspaceIds(actor)] : []
 }
 /** 어느 프로젝트든 역할이 있으면 true — 조회 전용 계정 차단용. */
 export function hasAnyProjectRole(actor: Actor | null): boolean {

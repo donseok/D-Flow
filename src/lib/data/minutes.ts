@@ -126,7 +126,7 @@ export const getMinutesExplorer = cache(async (): Promise<ExplorerData | null> =
       .is('archived_at', null)
       .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
       .limit(MINUTES_TREE_LIMIT),
-    sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id')
+    sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id')
       .order('sort').order('name'),
     getHiddenProjectIds(),
   ])
@@ -148,6 +148,7 @@ export const getMinutesExplorer = cache(async (): Promise<ExplorerData | null> =
     parentId: (f.parent_id as string | null) ?? null,
     sort: f.sort as number, createdBy: (f.created_by as string | null) ?? null,
     projectId: (f.project_id as string | null) ?? null,
+    workspaceId: (f.workspace_id as string | null) ?? null,
   }))
   // 숨김 프로젝트의 폴더 제거 — 리프는 dropHidden 이 이미 걸렀다. 폴더까지 걸러야
   // 비공개 프로젝트 이름이 폴더 트리(이름만으로도)로 노출되지 않는다.

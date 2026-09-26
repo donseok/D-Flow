@@ -82,7 +82,7 @@ const rowCls = (active: boolean) =>
  *  leaves 는 팀 탭 필터가 이미 적용된 것 — 카운트·스코프가 필터와 정합. folders 는 항상 전부. */
 export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
-  layout, currentUserId, isFolderAdmin, adminProjectIds = [], isSuperuser = false,
+  layout, currentUserId, adminWorkspaceIds = [], adminProjectIds = [], isSuperuser = false,
   onChanged, onFolderSelect, teamCodes = [], projects = [],
   myProjectIds = null,
 }: {
@@ -93,8 +93,9 @@ export function MinutesExplorer({
   onRetryFavorites: () => void
   layout: ExplorerLayout
   currentUserId: string | null
-  /** 폴더는 프로젝트에 속하지 않는 전역 리소스 — 서버 가드도 isAnyProjectAdmin 이라 전역 불리언 하나로 맞는다. */
-  isFolderAdmin: boolean
+  /** 관리자인 워크스페이스 id — 폴더 개명·이동·삭제의 폴더별 판정 근거. 서버 가드(작성자 ∨ 그 폴더
+   *  워크스페이스의 관리자, 0006)를 미러한다. 프로젝트 관리자라는 사실만으로는 열리지 않는다. */
+  adminWorkspaceIds?: string[]
   /** 회의록 개별 건은 **그 회의록 프로젝트의** 관리자 기준(서버 checkOwner). 관리자인 프로젝트 id 목록. */
   adminProjectIds?: string[]
   /** 프로젝트 미지정(projectId null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — fail-closed. */
@@ -203,7 +204,10 @@ export function MinutesExplorer({
       return next
     })
   }
-  const canManageFolder = (f: MinuteFolder) => isFolderAdmin || (f.createdBy !== null && f.createdBy === currentUserId)
+  // 서버 deleteMinuteFolder·RLS(0006) 와 같은 식: 작성자 본인 또는 **그 폴더 워크스페이스의** 관리자(슈퍼유저 포함).
+  const canManageFolder = (f: MinuteFolder) =>
+    (f.createdBy !== null && f.createdBy === currentUserId)
+    || isSuperuser || (f.workspaceId != null && adminWorkspaceIds.includes(f.workspaceId))
   /** isProjectAdmin(actor, projectId) 의 클라이언트 등가식 — 슈퍼유저는 모든 프로젝트의 관리자다. */
   const isAdminOf = (projectId: string | null | undefined) =>
     isSuperuser || (projectId != null && adminProjectIds.includes(projectId))

@@ -250,6 +250,8 @@ export interface MinuteFolder {
   sort: number
   createdBy: string | null           // null = 시드 폴더(관리자만 관리)
   projectId: string | null           // 0076 — 귀속 프로젝트. null = 미지정
+  /** 0006 — 소속 워크스페이스. 폴더 관리 판정(작성자 ∨ 그 워크스페이스 관리자)의 근거. 없으면 작성자만(fail-closed). */
+  workspaceId?: string | null
 }
 
 /** 탐색기 리프 — 목록 조회 shape 에 폴더 소속 부착. */
