@@ -95,7 +95,7 @@ export async function recordAttachment(
     size: file.size, mime: file.mime, uploaded_by: g.userId,
   })
   if (error) return { ok: false, error: error.message }
-  if (g.projectId) revalidatePath(`/p/${g.projectId}`, 'layout')
+  revalidatePath(`/p/${g.projectId}`, 'layout')
   return { ok: true }
 }
 

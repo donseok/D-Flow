@@ -290,6 +290,20 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     expect(uploadedPaths()[0]).toMatch(new RegExp(`^ws/${W2}/p/${P1}/minutes/`))
   })
 
+  it('저장 경로를 만들 수 없으면(워크스페이스 id 불량) 조용히 멈추지 않고 사유를 보인다 — 업로드·생성 미도달', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await mount({ noProjectWorkspace: { ok: true, workspaceId: 'not-a-uuid' } })
+    await attachBodyFile()
+    await clickSave()
+    expect(mainDialog().textContent).toContain('저장 경로 입력이 올바르지 않습니다.')
+    expect(upload).not.toHaveBeenCalled()
+    expect(createMinute).not.toHaveBeenCalled()
+    // 저장 중 표시가 풀려 다시 시도할 수 있다
+    const saveBtn = [...mainDialog().querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'min.form.save')
+    expect(saveBtn).toBeDefined()
+    spy.mockRestore()
+  })
+
   it('무프로젝트 워크스페이스를 못 정하면 저장을 막고 사유를 보인다', async () => {
     await mount({ noProjectWorkspace: { ok: false, error: '워크스페이스를 지정해야 합니다.' } })
     await attachBodyFile()

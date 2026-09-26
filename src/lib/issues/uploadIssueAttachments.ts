@@ -59,10 +59,16 @@ export async function uploadIssueAttachments(
       return { ok: false, doneCount: done, fileName: f.name, reason: 'too-large', error: '' }
     }
 
-    const path = makeIssueAttachmentPath(scope, issueId, f.name, nowFn())
-
     // 업로드도 서버 액션도 결과 객체가 아니라 reject 로 실패할 수 있다(네트워크 단절·배포 교체).
     // 예외를 그대로 흘리면 호출부가 아무 표시 없이 끝나고 저장 버튼이 잠긴 채 남는다.
+    // 경로 조립도 마찬가지다 — makeStoragePath 는 scope·이슈 id 가 uuid 가 아니면 throw 한다.
+    let path: string
+    try {
+      path = makeIssueAttachmentPath(scope, issueId, f.name, nowFn())
+    } catch (cause) {
+      return { ok: false, doneCount: done, fileName: f.name, reason: 'upload', error: errMsg(cause) }
+    }
+
     let uploadErr: string | null = null
     try {
       // upsert:false — 같은 경로가 이미 있으면 덮어쓰지 않고 실패한다.

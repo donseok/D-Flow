@@ -648,6 +648,10 @@ export function MinuteViewer({
         })
       }
       router.refresh()
+    } catch (e) {
+      // makeStoragePath 의 입력 거부·네트워크 reject 가 표시 없이 새지 않게 한다.
+      console.error('[MinuteViewer] 본문 교체 실패:', e)
+      setErr(`${t('min.err.upload')}: ${e instanceof Error ? e.message : String(e)}`)
     } finally { setBusy(false) }
   }
 

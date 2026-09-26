@@ -52,6 +52,12 @@ describe('uploadIssueAttachments', () => {
     )
   })
 
+  it('저장 경로를 만들 수 없으면(scope 불량) 예외로 새지 않고 upload 실패로 보고한다', async () => {
+    const res = await uploadIssueAttachments({ workspaceId: 'not-a-uuid', projectId: PID }, ISSUE, FILES, { now })
+    expect(res).toMatchObject({ ok: false, doneCount: 0, fileName: 'a.txt', reason: 'upload', error: '저장 경로 입력이 올바르지 않습니다.' })
+    expect(upload).not.toHaveBeenCalled()
+  })
+
   it('중간에 실패하면 어디까지 됐는지 알려준다', async () => {
     upload.mockResolvedValueOnce({ error: null })
     upload.mockResolvedValueOnce({ error: { message: '네트워크' } })

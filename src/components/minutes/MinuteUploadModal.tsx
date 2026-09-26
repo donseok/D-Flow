@@ -20,6 +20,9 @@ import { FolderPickModal } from './FolderPickModal'
 
 const BUCKET = 'minutes'
 
+/** 부분 실패 후 재시도의 재개 지점 — 만든 회의록 id, 끝낸 파일 수(본문 포함), 생성 시점의 저장 경로 scope. */
+type UploadProgress = { id: string; done: number; scope: { workspaceId: string; projectId: string | null } }
+
 export function MinuteUploadModal({
   open, onClose, onSaved, todayIso, projects, defaultTeam, folders, defaultFolderId,
   myProjectIds = null, projectWorkspaces = {}, noProjectWorkspace = null,
@@ -108,7 +111,7 @@ export function MinuteUploadModal({
   const [err, setErr] = useState<string | null>(null)
   // 부분 실패 후 재시도 시 회의록 재생성·파일 중복 기록 방지 (모달은 열 때마다 리마운트되므로 세션 단위).
   // scope 는 생성 시점의 저장 경로 scope — 재시도 사이에 프로젝트 셀렉트를 바꿔도 첨부 경로가 회의록 행과 어긋나지 않게 고정한다.
-  const progressRef = useRef<{ id: string; done: number; scope: { workspaceId: string; projectId: string | null } } | null>(null)
+  const progressRef = useRef<UploadProgress | null>(null)
   // 저장 경로의 워크스페이스 — 프로젝트면 그 프로젝트의 것, 미지정이면 유일 소속. 못 정하면 저장을 막고 사유를 보인다.
   const targetWs: { ok: true; workspaceId: string } | { ok: false; error: string } = projectId
     ? (projectWorkspaces[projectId]
@@ -149,57 +152,62 @@ export function MinuteUploadModal({
     if (pid) setMeetings(await fetchProjectMeetingsLite(pid))
   }
 
+  /** 원본 .md 를 올리고 회의록을 만든다 — 실패는 사유를 보이고 null. */
+  async function createWithBody(body: File): Promise<UploadProgress | null> {
+    if (!targetWs.ok) { setErr(targetWs.error); return null }
+    // 원본 .md를 먼저 Storage에 올리고, 그 경로와 client-generated UUID를 본체 생성과 함께
+    // 전달한다. v1은 처음부터 파일 메타를 가진 불변 행으로 INSERT되며 사후 UPDATE하지 않는다.
+    // 경로 scope = 확정할 워크스페이스·프로젝트 — 서버(createMinute·RPC)가 같은 값으로 대조한다.
+    const candidateId = crypto.randomUUID()
+    const scope = { workspaceId: targetWs.workspaceId, projectId: projectId || null }
+    const bodyPath = makeStoragePath({
+      ...scope, entity: 'minutes', entityId: candidateId, fileName: stampedFileName(body.name, Date.now()),
+    })
+    const sb = createBrowserClient()
+    const bodyUpload = await sb.storage.from(BUCKET).upload(bodyPath, body, { upsert: false })
+    if (bodyUpload.error) { setErr(`${t('min.err.upload')}: ${bodyUpload.error.message}`); return null }
+    // 편철 폴더 = 사용자가 고른 폴더 그대로. 미분류(null)면 서버가 팀 루트로 자동 편철
+    const res = await createMinute({
+      minuteDate: date, teamCode: team, title: title.trim() || body.name,
+      bodyMd: bodyText, meetingId: meetingId || null, projectId: projectId || null,
+      meetingOccurrenceDate: meetingId ? date : null,
+    }, folderId, {
+      minuteId: candidateId,
+      file: {
+        fileName: body.name,
+        filePath: bodyPath,
+        size: body.size,
+        mime: body.type || 'text/markdown',
+      },
+    })
+    if (!res.ok || !res.id) {
+      await sb.storage.from(BUCKET).remove([bodyPath])
+      setErr(res.error ?? t('min.err.upload'))
+      return null
+    }
+    // body는 createMinute가 메타와 v1까지 함께 기록했으므로 첨부 루프에서는 건너뛴다.
+    const progress = { id: res.id, done: 1, scope }
+    progressRef.current = progress
+    if (res.timeFix) {
+      toast({
+        title: t('min.timeFix.title'),
+        description: `${t('min.timeFix.desc')}: ${res.timeFix.from} → ${res.timeFix.to}`,
+        variant: 'info',
+      })
+    }
+    return progress
+  }
+
   async function save() {
     if (!bodyFile) { setErr(t('min.err.bodyRequired')); return }
     if (!team) { setErr('먼저 팀을 등록하세요.'); return }
+    // 새로 만들 때만 경로 워크스페이스가 필요하다 — 재시도는 생성 시점 scope 를 쓴다.
     if (!progressRef.current && !targetWs.ok) { setErr(targetWs.error); return }
     setBusy(true); setErr(null)
     try {
-      let minuteId = progressRef.current?.id ?? null
-      let scope = progressRef.current?.scope ?? null
-      if (!minuteId) {
-        if (!targetWs.ok) return
-        // 원본 .md를 먼저 Storage에 올리고, 그 경로와 client-generated UUID를 본체 생성과 함께
-        // 전달한다. v1은 처음부터 파일 메타를 가진 불변 행으로 INSERT되며 사후 UPDATE하지 않는다.
-        // 경로 scope = 확정할 워크스페이스·프로젝트 — 서버(createMinute·RPC)가 같은 값으로 대조한다.
-        const candidateId = crypto.randomUUID()
-        scope = { workspaceId: targetWs.workspaceId, projectId: projectId || null }
-        const bodyPath = makeStoragePath({
-          ...scope, entity: 'minutes', entityId: candidateId, fileName: stampedFileName(bodyFile.name, Date.now()),
-        })
-        const sb = createBrowserClient()
-        const bodyUpload = await sb.storage.from(BUCKET).upload(bodyPath, bodyFile, { upsert: false })
-        if (bodyUpload.error) { setErr(`${t('min.err.upload')}: ${bodyUpload.error.message}`); return }
-        // 편철 폴더 = 사용자가 고른 폴더 그대로. 미분류(null)면 서버가 팀 루트로 자동 편철
-        const res = await createMinute({
-          minuteDate: date, teamCode: team, title: title.trim() || bodyFile.name,
-          bodyMd: bodyText, meetingId: meetingId || null, projectId: projectId || null,
-          meetingOccurrenceDate: meetingId ? date : null,
-        }, folderId, {
-          minuteId: candidateId,
-          file: {
-            fileName: bodyFile.name,
-            filePath: bodyPath,
-            size: bodyFile.size,
-            mime: bodyFile.type || 'text/markdown',
-          },
-        })
-        if (!res.ok || !res.id) {
-          await sb.storage.from(BUCKET).remove([bodyPath])
-          setErr(res.error ?? t('min.err.upload'))
-          return
-        }
-        minuteId = res.id
-        // body는 createMinute가 메타와 v1까지 함께 기록했으므로 첨부 루프에서는 건너뛴다.
-        progressRef.current = { id: minuteId, done: 1, scope }
-        if (res.timeFix) {
-          toast({
-            title: t('min.timeFix.title'),
-            description: `${t('min.timeFix.desc')}: ${res.timeFix.from} → ${res.timeFix.to}`,
-            variant: 'info',
-          })
-        }
-      }
+      const progress = progressRef.current ?? await createWithBody(bodyFile)
+      if (!progress) return   // createWithBody 가 사유를 이미 보였다
+      const { id: minuteId, scope } = progress
       const sb = createBrowserClient()
       const files: { role: 'body' | 'attachment'; f: File }[] = [
         { role: 'body', f: bodyFile },
@@ -207,8 +215,7 @@ export function MinuteUploadModal({
       ]
       // 파일 업로드 실패 시에도 회의록은 유지한다(body_md 가 원천 — 스펙 §7).
       // body 파일 실패면 뷰어가 '재업로드 유도' 상태를 안내하고, replaceMinuteBody 로 복구 가능.
-      if (!scope) return
-      for (let i = progressRef.current?.done ?? 0; i < files.length; i++) {
+      for (let i = progress.done; i < files.length; i++) {
         const { role, f } = files[i]
         // 본문은 minutes, 첨부는 minute-files — recordMinuteFile 이 role 로 같은 entity 를 요구한다.
         const path = makeStoragePath({
@@ -229,6 +236,10 @@ export function MinuteUploadModal({
         progressRef.current = { id: minuteId, done: i + 1, scope }
       }
       onSaved()
+    } catch (e) {
+      // makeStoragePath 의 입력 거부(워크스페이스·회의록 id 가 uuid 가 아님 등)·네트워크 reject 가 표시 없이 새지 않게 한다.
+      console.error('[MinuteUploadModal] 저장 실패:', e)
+      setErr(`${t('min.err.upload')}: ${e instanceof Error ? e.message : String(e)}`)
     } finally { setBusy(false) }
   }
 
