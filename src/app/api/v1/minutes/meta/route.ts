@@ -6,6 +6,7 @@ import {
 import { activeTeamCodesForWorkspaceSync } from '@/lib/teams/master'
 import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
+import { fetchAllPages } from '@/lib/data/paging'
 import { BRAND } from '@/lib/branding'
 import {
   apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
@@ -39,14 +40,24 @@ export async function GET(req: NextRequest) {
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
     const actor = await actorFromUser(admin, user.id)
 
-    // 후보 = 스냅샷의 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부). 응답 행도 그 키로 한 번 더
-    // 거른다 — in() 필터가 빠지는 회귀가 생겨도 남의 워크스페이스 프로젝트가 실리지 않게.
-    const candidateIds = [...actor.projectWorkspace.keys()]
+    // 후보 = 스냅샷의 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부). 프로젝트 id 목록을 .in() 으로 싣지 않는다 —
+    // URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다(GET 목록 listScope 와 같은 이유). 워크스페이스로
+    // 좁혀 max_rows 이하 페이지로 끝까지 읽고, 응답 행은 스냅샷 키와 canSeeProject 로 한 번 더 거른다 — 필터가 빠지는 회귀가 생겨도
+    // 남의 워크스페이스 프로젝트가 실리지 않게.
     let projects: Array<{ id: string; name: string }> = []
-    if (candidateIds.length > 0) {
-      const { data, error } = await admin.from('projects').select('id, name, is_private').in('id', candidateIds).order('name')
-      if (error) { console.error('[minutes-api] 프로젝트 목록 조회 실패:', error.message); return apiInternalError() }
-      projects = ((data ?? []) as Array<{ id: string; name: string; is_private: boolean | null }>)
+    if (actor.projectWorkspace.size > 0) {
+      const workspaceIds = [...actor.workspaceRoles.keys()]
+      let rows: Array<{ id: string; name: string; is_private: boolean | null }>
+      try {
+        rows = await fetchAllPages('projects', (from, to) => {
+          const q = admin.from('projects').select('id, name, is_private', { count: 'exact' })
+          return (actor.isSuperuser ? q : q.in('workspace_id', workspaceIds)).order('name').order('id').range(from, to)
+        })
+      } catch (e) {
+        console.error('[minutes-api] 프로젝트 목록 조회 실패:', e instanceof Error ? e.message : e)
+        return apiInternalError()
+      }
+      projects = rows
         .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p))
         .map(p => ({ id: p.id, name: p.name }))
     }

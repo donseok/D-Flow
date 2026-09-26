@@ -5,6 +5,9 @@ import {
   patProjectAllowed, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
+import { fetchAllPages } from '@/lib/data/paging'
+
+type Registration = { project_id: string; projects: { name: string } | Array<{ name: string }> | null }
 
 /** GET /api/v1/agent/me — whoami. 404 존재 은닉 아래의 유일한 진단 창구(계약 v2.0). PAT 전용. */
 export const dynamic = 'force-dynamic'
@@ -21,40 +24,32 @@ export async function GET(req: NextRequest) {
     // SP2 §4.2 — 후보를 PAT 소유자가 볼 수 있는 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부)로 좁힌다.
     // 종전엔 전 워크스페이스의 enabled 프로젝트를 훑었다. 권한 조회 실패는 throw → catch 의 500.
     const actor = await actorFromUser(admin, principal.userId)
-    const visibleIds = [...actor.projectWorkspace.keys()]
-    let regs: Array<{ project_id: string }> = []
-    if (visibleIds.length > 0) {
-      const { data, error: regErr } = await admin
-        .from('agent_projects').select('project_id').eq('enabled', true).in('project_id', visibleIds)
-      if (regErr) {
-        console.error('[agent-api] enabled 프로젝트 조회 실패:', regErr.message)
+    // 프로젝트 id 목록을 .in() 으로 싣지 않는다 — URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다.
+    // 등록 행을 projects 임베드(!inner)의 워크스페이스로 좁혀 이름까지 한 번에 읽는다(페이지로 끝까지). 플랫폼 관리자는 필터 없음.
+    let regs: Array<{ projectId: string; name: string }> = []
+    if (actor.projectWorkspace.size > 0) {
+      const workspaceIds = [...actor.workspaceRoles.keys()]
+      try {
+        const rows = await fetchAllPages<Registration>('agent_projects', (from, to) => {
+          const q = admin.from('agent_projects').select('project_id, projects!inner(name)', { count: 'exact' }).eq('enabled', true)
+          return (actor.isSuperuser ? q : q.in('projects.workspace_id', workspaceIds)).order('project_id').range(from, to)
+        })
+        regs = rows.map(r => ({
+          projectId: r.project_id, name: (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name) ?? '',
+        }))
+      } catch (e) {
+        console.error('[agent-api] enabled 프로젝트 조회 실패:', e instanceof Error ? e.message : e)
         return apiInternalError()
       }
-      regs = (data ?? []) as Array<{ project_id: string }>
-    }
-    // 응답 행도 스냅샷 키로 한 번 더 거른다 — in() 필터가 빠지는 회귀가 생겨도 남의 워크스페이스 프로젝트가 실리지 않게.
-    const candidateIds = regs
-      .map(r => r.project_id)
-      .filter(pid => actor.projectWorkspace.has(pid) && patProjectAllowed(principal, pid))
-
-    const nameById = new Map<string, string>()
-    if (candidateIds.length > 0) {
-      const { data: projs, error: projErr } = await admin
-        .from('projects').select('id, name').in('id', candidateIds)
-      if (projErr) {
-        console.error('[agent-api] 프로젝트 이름 조회 실패:', projErr.message)
-        return apiInternalError()
-      }
-      for (const p of (projs ?? []) as Array<{ id: string; name: string }>) nameById.set(p.id, p.name)
     }
 
     const projects: Array<{ id: string; name: string; role: string }> = []
-    for (const pid of candidateIds) {
+    // 응답 행도 스냅샷 키로 한 번 더 거른다 — 워크스페이스 필터가 빠지는 회귀가 생겨도 남의 워크스페이스 프로젝트가 실리지 않게.
+    for (const { projectId, name } of regs) {
+      if (!actor.projectWorkspace.has(projectId) || !patProjectAllowed(principal, projectId)) continue
       // 프로젝트별 역할 — 위 스냅샷 하나로 판정한다(프로젝트마다 다시 조립하지 않는다). 조회 전용은 싣지 않는다.
-      const role = agentRoleFromActor(actor, pid)
-      if (role) {
-        projects.push({ id: pid, name: nameById.get(pid) ?? '', role })
-      }
+      const role = agentRoleFromActor(actor, projectId)
+      if (role) projects.push({ id: projectId, name, role })
     }
     return NextResponse.json({
       ok: true, user_email: principal.userEmail,

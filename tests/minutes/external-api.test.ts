@@ -1496,7 +1496,7 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
   })
 
   it('teams·projects·limits 반환, project_id 없으면 meetings 없음', async () => {
-    useAdmin({ projects: [{ data: [{ id: PA, name: 'Acme', is_private: false }] }] })
+    useAdmin({ projects: [{ data: [{ id: PA, name: 'Acme', is_private: false, workspace_id: WS }], count: 1 }] })
     const res = await META(get(q()))
     expect(res.status).toBe(200)
     const json = await res.json()
@@ -1508,24 +1508,48 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
     expect(json).not.toHaveProperty('meetings')
   })
 
-  it('다른 워크스페이스 프로젝트는 응답에 없다 — 조회를 내 프로젝트 id 로 좁히고, 비공개는 명단이 있어야 보인다', async () => {
+  it('다른 워크스페이스 프로젝트는 응답에 없다 — 조회를 내 워크스페이스로 좁히고, 비공개는 명단이 있어야 보인다', async () => {
     const { builders } = useAdmin({
       // DB 필터가 새도(PB 행이 섞여 와도) 응답에 싣지 않는다 — 스냅샷 키로 한 번 더 거른다.
       projects: [{ data: [
-        { id: PA, name: 'A', is_private: false },
-        { id: PPRIV, name: '비공개', is_private: true },
-        { id: PB, name: '남의것', is_private: false },
-      ] }],
+        { id: PA, name: 'A', is_private: false, workspace_id: WS },
+        { id: PPRIV, name: '비공개', is_private: true, workspace_id: WS },
+        { id: PB, name: '남의것', is_private: false, workspace_id: WS2 },
+      ], count: 3 }],
     })
     const json = await (await META(get(q()))).json()
     expect(json.projects).toEqual([{ id: PA, name: 'A' }])
-    expect(builders.projects[0].select).toHaveBeenCalledWith('id, name, is_private')
-    expect(builders.projects[0].in).toHaveBeenCalledWith('id', [PA, PPRIV])
+    expect(builders.projects[0].select).toHaveBeenCalledWith('id, name, is_private', { count: 'exact' })
+    expect(builders.projects[0].in).toHaveBeenCalledWith('workspace_id', [WS, WS2])
     expect(mocks.actorFromUser).toHaveBeenCalledWith(expect.anything(), USER.id)
   })
 
+  // 프로젝트 id 목록을 .in() 으로 URL 에 실으면 약 205개부터 게이트웨이가 414 로 거절해 meta 가 늘 500 이 된다(SP2 최종 리뷰 ERR-4).
+  it('프로젝트 300개인 호출자 — id 목록 필터 없이 워크스페이스로 좁히고 메모리에서 거른다', async () => {
+    const pids = Array.from({ length: 300 }, (_, i) => `0d000000-0000-4000-8000-${String(i).padStart(12, '0')}`)
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, workspaceRoles: new Map([[WS, 'member']]), projectWorkspace: new Map(pids.map(pid => [pid, WS])),
+    }))
+    const rows = pids.map((id, i) => ({ id, name: `P${String(i).padStart(3, '0')}`, is_private: false, workspace_id: WS }))
+    const { builders } = useAdmin({ projects: [{ data: rows, count: rows.length }] })
+    const res = await META(get(q()))
+    expect(res.status).toBe(200)
+    expect((await res.json()).projects).toHaveLength(300)
+    expect(builders.projects[0].in.mock.calls.map(c => c[0])).toEqual(['workspace_id'])
+  })
+
+  it('플랫폼 관리자는 워크스페이스 필터 없이 전부 — 역시 id 목록을 싣지 않는다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id, projectWorkspace: new Map([[PA, WS], [PB, WS2]]) }))
+    const { builders } = useAdmin({ projects: [{ data: [
+      { id: PA, name: 'A', is_private: false, workspace_id: WS }, { id: PB, name: 'B', is_private: false, workspace_id: WS2 },
+    ], count: 2 }] })
+    const json = await (await META(get(q()))).json()
+    expect(json.projects).toEqual([{ id: PA, name: 'A' }, { id: PB, name: 'B' }])
+    expect(builders.projects[0].in).not.toHaveBeenCalled()
+  })
+
   it('teams 는 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(중복 제거) — 다른 워크스페이스 팀은 없다', async () => {
-    useAdmin({ projects: [{ data: [] }] })
+    useAdmin({ projects: [{ data: [], count: 0 }] })
     const json = await (await META(get(q()))).json()
     expect(json.teams).toEqual(['PMO', 'ERP', 'QA'])
     expect(mocks.activeTeamCodesForWorkspace.mock.calls.map(c => c[0]).sort()).toEqual([WS, WS2])
@@ -1566,7 +1590,7 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
 
   it('project_id 지정 시 해당 프로젝트 meetings 포함 — v2.5: category·recurrence 동봉', async () => {
     const { builders } = useAdmin({
-      projects: [{ data: [{ id: PA, name: 'A', is_private: false }] }],
+      projects: [{ data: [{ id: PA, name: 'A', is_private: false, workspace_id: WS }], count: 1 }],
       meetings: [{
         data: [{
           id: 'mt-1', title: '주간 정례', meeting_date: '2026-07-14',
@@ -1586,7 +1610,9 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
   it.each([['다른 워크스페이스', PB], ['비공개(명단 없음)', PPRIV]])(
     '볼 수 없는 project_id(%s)는 404 — 회의 목록을 조회하지 않는다', async (_label, pid) => {
       const { builders } = useAdmin({
-        projects: [{ data: [{ id: PA, name: 'A', is_private: false }, { id: PPRIV, name: '비공개', is_private: true }] }],
+        projects: [{ data: [
+          { id: PA, name: 'A', is_private: false, workspace_id: WS }, { id: PPRIV, name: '비공개', is_private: true, workspace_id: WS },
+        ], count: 2 }],
       })
       const res = await META(get(q(`&project_id=${pid}`)))
       expect(res.status).toBe(404)
