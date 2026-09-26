@@ -1,33 +1,69 @@
-// SP2 done_when 본체: B 워크스페이스 계정이 A 의 전 RLS 표를 0행 읽고, 쓰기가 전부 거부되는가.
-// 표 목록은 카탈로그에서 읽는다(pg_class.relrowsecurity) — 새 표는 isolation-map 에 판별식이 없으면 실패한다.
+// SP2 done_when 본체: B 워크스페이스 계정이 A 의 전 public 표를 0행 읽고, 쓰기가 전부 거부되는가.
+// 표 목록은 카탈로그에서 읽는다(pg_class relkind r·p — RLS 를 켰는지와 무관하게 전부). 새 표는 isolation-map 에 판별식이 없으면 실패하고,
+// RLS 를 켜지 않았으면 아래 관계 검사가 실패한다(뷰는 security_invoker, 구체화 뷰·외부 표는 허용 목록).
 // 읽기: A 행의 PK 튜플 집합 ∩ B 세션이 보는 PK 튜플 집합 = ∅. 쓰기: A 행 한 개를 복사 insert·자기 자신으로 update·delete.
-// 쓰기 판정: 오류가 RLS(42501)·트리거 거부면 막힌 것, 23505·23503·23502·23P01·CHECK 위반(제약 이름 있음)이면 RLS 를 통과한 것.
-// 복사 insert 를 트리거가 RLS 보다 먼저 거부한 표는 RLS 가 판정하지 않았으므로 OWN_INSERT_PROBES 로 따로 덮여 있어야 한다.
-// update·delete 는 RLS 가 행을 걸러 내면 0행·무오류다 — 42501 밖의 오류는 행이 정책을 통과했다는 뜻이라 누설로 센다.
+// 복사 insert 는 authenticated 가 INSERT 할 수 있는 컬럼만 싣는다 — 권한 없는 컬럼이 끼면 권한 오류(42501 permission denied)가
+// RLS 보다 먼저 나서 정책이 평가되지 않는다. 42501 은 문구로 가른다: 'row-level security' = RLS 가 막음, 'permission denied' = 권한이 막음.
+// 쓰기 판정: RLS 거부·트리거 거부면 막힌 것, 23505·23503·23502·23P01·CHECK 위반(제약 이름 있음)이면 RLS 를 통과한 것.
+// 복사 insert 를 트리거·권한이 RLS 보다 먼저 거부한 표, 그리고 INSERT·ALL 정책의 WITH CHECK 가 자기 컬럼을 auth.uid() 와 비교하는 표는
+// OWN_INSERT_PROBES 로 따로 덮여 있어야 한다. update·delete 는 RLS 가 행을 걸러 내면 0행·무오류다 — 42501 밖의 오류는 행이 정책을 통과했다는 뜻이라 누설로 센다.
 import { DatabaseError, type Pool, type PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { F, asService, asUser, loadFixture, openPool } from './harness'
-import { A_ROW_FILTER, KNOWN_LEAKS, OPEN_BY_DESIGN, OWN_INSERT_PROBES, UNFILLED } from './isolation-map'
+import { A_ROW_FILTER, KNOWN_LEAKS, OPEN_BY_DESIGN, OWN_INSERT_PROBES, RLS_EXEMPT, UNFILLED } from './isolation-map'
 
 let pool: Pool
 beforeAll(async () => { pool = openPool(); await loadFixture(pool) })
 afterAll(async () => { await pool?.end() })
 
-const RLS_TABLES_SQL = `
+const TABLES_SQL = `
   select c.relname::text as name,
          array(select a.attname::text from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
                 where i.indrelid = c.oid and i.indisprimary order by array_position(i.indkey::int2[], a.attnum)) as pk,
          array(select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
-                and a.attgenerated = '' order by a.attnum) as cols
-    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') and c.relrowsecurity order by 1`
+                and a.attgenerated = '' and has_column_privilege('authenticated', c.oid, a.attname, 'INSERT')
+                order by a.attnum) as cols
+    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') order by 1`
+
+/** public 의 표·뷰·구체화 뷰·외부 표 — RLS·security_invoker 여부와 함께 */
+const RELATIONS_SQL = `
+  select c.relname::text as name, c.relkind::text as kind, c.relrowsecurity as rls,
+         exists (select 1 from pg_options_to_table(c.reloptions) o
+                  where o.option_name = 'security_invoker' and o.option_value in ('true', 'on', '1', 'yes')) as invoker
+    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f') order by 1`
+
+/**
+ * INSERT·ALL 정책의 WITH CHECK 가 자기 컬럼을 auth.uid() 와 비교하는 표(`created_by = auth.uid()` 처럼 한정자 없는 컬럼) — 복사 행의
+ * 소유자(A 사용자·null)에서 비교가 먼저 떨어져 뒤의 스코프 판정이 평가되지 않는다. 부모 행의 소유자 비교(`m.created_by = auth.uid()`,
+ * 서브쿼리 안)는 부모를 RLS 로 읽으므로 해당하지 않는다.
+ */
+const OWNER_CHECK_TABLES_SQL = `
+  select distinct tablename::text as name from pg_policies
+   where schemaname = 'public' and cmd in ('INSERT', 'ALL')
+     and with_check ~ '(^|[^.[:alnum:]_])[[:alnum:]_]+ = auth\\.uid\\(\\)' order by 1`
 
 type Tbl = { name: string; pk: string[]; cols: string[] }
+type Rel = { name: string; kind: string; rls: boolean; invoker: boolean }
 const q = (id: string) => `"${id}"`
 const keyOf = (t: Tbl) => `row(${t.pk.map((c) => `t.${q(c)}`).join(', ')})::text`
 
 /** RLS 를 통과한 뒤에야 나는 오류(=쓰기가 정책에서 막히지 않았다) */
 function passedRls(e: DatabaseError): boolean {
   return ['23505', '23503', '23502', '23P01'].includes(e.code ?? '') || (e.code === '23514' && Boolean(e.constraint))
+}
+/** RLS 가 막았다 — 같은 42501 이라도 'permission denied'(권한)는 정책이 평가되지 않은 것이다 */
+const isRlsDenial = (e: DatabaseError) => e.code === '42501' && e.message.includes('row-level security')
+
+/** 관계 검사 — 표는 RLS, 뷰는 security_invoker, 구체화 뷰·외부 표는 허용 목록에만. 어긋난 관계를 '이름: 사유' 로. */
+function rlsGaps(rels: Rel[]): string[] {
+  const gaps: string[] = []
+  for (const r of rels) {
+    if (r.name in RLS_EXEMPT) continue
+    if ((r.kind === 'r' || r.kind === 'p') && !r.rls) gaps.push(`${r.name}: RLS 꺼짐`)
+    else if (r.kind === 'v' && !r.invoker) gaps.push(`${r.name}: 뷰가 security_invoker 가 아님`)
+    else if (r.kind === 'm' || r.kind === 'f') gaps.push(`${r.name}: RLS 를 걸 수 없는 관계(${r.kind})`)
+  }
+  return gaps
 }
 
 async function probe(c: PoolClient, sql: string, params: unknown[]): Promise<{ err: DatabaseError | null; rowCount: number }> {
@@ -59,18 +95,22 @@ async function readKeys(c: PoolClient, t: Tbl): Promise<string[] | null> {
 
 async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRows: Map<string, { keys: string[]; json: unknown }>) {
   const leaks: string[] = []
-  const triggerBlocked: string[] = []   // 복사 insert 를 RLS 보다 먼저 거부한 표 — OWN_INSERT_PROBES 로 덮여야 한다
+  const masked: string[] = []      // 복사 insert 를 트리거·권한이 RLS 보다 먼저 거부한 표 — OWN_INSERT_PROBES 로 덮여야 한다
+  const badProbes: string[] = []   // RLS 거부가 아닌 오류로 끝난 탐침 — 정책까지 가지 못했다
   await asUser(pool, userId, async (c) => {
     for (const t of tables) {
       const a = aRows.get(t.name)!
       const seen = await readKeys(c, t)
       if (seen && !OPEN_BY_DESIGN.has(t.name) && a.keys.some((k) => seen.includes(k))) leaks.push(`${t.name}:read`)
       if (a.keys.length === 0) continue
-      const cols = t.cols.map(q).join(', ')
-      const ins = await probe(c,
-        `insert into public.${q(t.name)} (${cols}) select ${cols} from json_populate_record(null::public.${q(t.name)}, $1::json)`, [a.json])
-      if (!ins.err || passedRls(ins.err)) leaks.push(`${t.name}:insert`)
-      else if (ins.err.code !== '42501') triggerBlocked.push(t.name)
+      // INSERT 할 수 있는 컬럼이 하나도 없으면 권한이 온전한 벽이다 — 복사 insert 를 만들 수 없다
+      if (t.cols.length > 0) {
+        const cols = t.cols.map(q).join(', ')
+        const ins = await probe(c,
+          `insert into public.${q(t.name)} (${cols}) select ${cols} from json_populate_record(null::public.${q(t.name)}, $1::json)`, [a.json])
+        if (!ins.err || passedRls(ins.err)) leaks.push(`${t.name}:insert`)
+        else if (!isRlsDenial(ins.err)) masked.push(t.name)
+      }
       const upd = await probe(c, `update public.${q(t.name)} t set ${q(t.pk[0])} = t.${q(t.pk[0])} where ${keyOf(t)} = $1`, [a.keys[0]])
       if (upd.err ? upd.err.code !== '42501' : upd.rowCount > 0) leaks.push(`${t.name}:update`)
       const del = await probe(c, `delete from public.${q(t.name)} t where ${keyOf(t)} = $1`, [a.keys[0]])
@@ -79,20 +119,44 @@ async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRo
     for (const p of OWN_INSERT_PROBES) {
       const r = await probe(c, p.sql, [userId])
       if (!r.err || passedRls(r.err)) leaks.push(`${p.table}:insert-own`)
+      else if (!isRlsDenial(r.err)) badProbes.push(`${p.table}: ${r.err.code} ${r.err.message}`)
     }
   })
-  return { label, leaks: leaks.sort(), triggerBlocked }
+  return { label, leaks: leaks.sort(), masked, badProbes }
 }
 
 describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
-  it('카탈로그의 RLS 표 = 판별 맵의 표(새 표는 스코프를 정해야 한다)', async () => {
-    const names = await asService(pool, async (c) => (await c.query<Tbl>(RLS_TABLES_SQL)).rows.map((t) => t.name))
-    expect(names.filter((n) => !(n in A_ROW_FILTER)), '판별식 없는 새 RLS 표').toEqual([])
+  it('public 의 표는 전부 RLS, 뷰는 security_invoker — 허용 목록(RLS_EXEMPT) 밖 0건', async () => {
+    const rels = await asService(pool, async (c) => (await c.query<Rel>(RELATIONS_SQL)).rows)
+    expect(rlsGaps(rels), 'RLS 가 걸리지 않은 관계').toEqual([])
+    expect(Object.keys(RLS_EXEMPT).filter((n) => !rels.some((r) => r.name === n)), '죽은 예외').toEqual([])
+    for (const [name, reason] of Object.entries(RLS_EXEMPT)) expect(reason.length, name).toBeGreaterThan(10)
+  })
+
+  it('민감도 — RLS 를 끈 표·security_invoker 없는 뷰를 만들면 관계 검사가 잡고, 그 표는 스캔 목록에도 들어간다', async () => {
+    await asService(pool, async (c) => {
+      await c.query('create table public.rls_probe_open (id int primary key)')
+      await c.query('create view public.rls_probe_view as select 1 as x')
+      expect(rlsGaps((await c.query<Rel>(RELATIONS_SQL)).rows))
+        .toEqual(['rls_probe_open: RLS 꺼짐', 'rls_probe_view: 뷰가 security_invoker 가 아님'])
+      expect((await c.query<Tbl>(TABLES_SQL)).rows.map((t) => t.name)).toContain('rls_probe_open')
+    })
+  })
+
+  it('카탈로그의 표 = 판별 맵의 표(새 표는 스코프를 정해야 한다)', async () => {
+    const names = await asService(pool, async (c) => (await c.query<Tbl>(TABLES_SQL)).rows.map((t) => t.name))
+    expect(names.filter((n) => !(n in A_ROW_FILTER)), '판별식 없는 새 표').toEqual([])
     expect(Object.keys(A_ROW_FILTER).filter((n) => !names.includes(n)), '사라진 표(맵에서 뺀다)').toEqual([])
   })
 
+  it('INSERT·ALL 정책의 WITH CHECK 가 자기 컬럼을 auth.uid() 와 비교하는 표는 자기 이름 insert 탐침이 있다(소유자 비교가 스코프 판정을 가린다)', async () => {
+    const owned = await asService(pool, async (c) => (await c.query<{ name: string }>(OWNER_CHECK_TABLES_SQL)).rows.map((r) => r.name))
+    const probeTables = new Set(OWN_INSERT_PROBES.map((p) => p.table))
+    expect(owned.filter((t) => !probeTables.has(t)), '탐침 없음').toEqual([])
+  })
+
   it('B 계정(bea·ben)이 A 의 행을 읽거나 쓰는 경로 = KNOWN_LEAKS(0006 뒤에는 없음)', async () => {
-    const tables = await asService(pool, async (c) => (await c.query<Tbl>(RLS_TABLES_SQL)).rows)
+    const tables = await asService(pool, async (c) => (await c.query<Tbl>(TABLES_SQL)).rows)
     const aRows = new Map<string, { keys: string[]; json: unknown }>()
     await asService(pool, async (c) => {
       for (const t of tables) {
@@ -113,8 +177,8 @@ describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
     const probeTables = new Set(OWN_INSERT_PROBES.map((p) => p.table))
     for (const r of results) {
       expect(r.leaks, `${r.label} 의 누설`).toEqual([...KNOWN_LEAKS[r.label]].sort())
-      expect(r.triggerBlocked.filter((t) => !probeTables.has(t)), `${r.label}: 트리거가 복사 insert 를 먼저 막았는데 자기 이름 insert 탐침이 없는 표`)
-        .toEqual([])
+      expect(r.badProbes, `${r.label}: RLS 거부로 끝나지 않은 탐침(정책까지 가지 못했다)`).toEqual([])
+      expect(r.masked.filter((t) => !probeTables.has(t)), `${r.label}: 트리거·권한이 복사 insert 를 먼저 막았는데 탐침 없음`).toEqual([])
     }
   })
 

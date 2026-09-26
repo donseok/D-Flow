@@ -8,10 +8,14 @@
 //
 // service_role 원천 = 코드에 createAdminClient·adminFor( 가 있는 모듈과, 그 모듈에 (값 import 로) 닿는 src 모듈 전부.
 // 탐색은 'use client'(렌더 중 실행되지 않는다)와 'use server'(서버 액션 — 각자 require* 가드를 건다, 감사표) 경계에서 멈춘다.
-// 게이트 = `if (…isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require*(…)…) notFound()|redirect(…)` 한 줄,
-// 또는 그 판정을 담은 변수(const hidden = isHiddenProject(…))로 같은 모양을 쓴 줄. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
+// 탐색 간선은 값 import 와 re-export(`export { x } from`·`export * from`) 둘 다다 — 배럴을 거쳐도 원천에 닿는다.
+// 게이트 = `if (…) notFound()|redirect(…)` 한 줄 중 조건이 거부형·은닉형인 것만: `!isProjectMember(`·`!isProjectAdmin(`·`!roleIn(`,
+// `isHiddenProject(`(부정 없이), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
+// require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
+// 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { codeLines, walk } from './_walk'
 
@@ -26,10 +30,22 @@ const SAFE_LOADERS: Record<string, string> = {
 /** `<page>#<symbol>` — 로더가 자기 가드를 가져 페이지 게이트가 필요 없는 경우. 한 줄 근거 필수. 지금은 없다. */
 const ALLOWLIST: Record<string, string> = {}
 
-const GATE_FN = /\b(?:isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
-const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(?:isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
+/** 조건에 직접 쓴 거부형·은닉형 판정 — 허용 판정은 부정으로, 은닉 판정은 부정 없이. */
+const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isHiddenProject\(/
+const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
 const IMPORT_RE = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/gm
+/** re-export — `export { a, type B } from '…'`·`export * from '…'`·`export * as ns from '…'`. `export type { … } from` 은 값이 아니다. */
+const REEXPORT_RE = /^\s*export\s+(type\s+)?(\{[\s\S]*?\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/gm
+
+type GateVarKind = 'hidden' | 'allow' | 'guard'
+const gateVarKind = (fn: string): GateVarKind => (fn === 'isHiddenProject' ? 'hidden' : fn.startsWith('require') ? 'guard' : 'allow')
+/** 판정 변수를 게이트 방향으로 썼는가 — 은닉은 그대로(`hidden`), 허용은 부정(`!isAdmin`), 가드 결과는 `!g.ok`. */
+function usesGateVar(cond: string, name: string, kind: GateVarKind): boolean {
+  if (kind === 'guard') return new RegExp(`!\\s*${name}\\.ok\\b`).test(cond)
+  if (kind === 'allow') return new RegExp(`!\\s*${name}\\b(?!\\s*\\.)`).test(cond)
+  return new RegExp(`(?<![!\\w.])${name}\\b(?!\\s*\\.)`).test(cond)
+}
 
 const rel = (abs: string) => relative(CWD, abs)
 const code = (abs: string) => codeLines(readFileSync(abs, 'utf8'))
@@ -67,6 +83,18 @@ function valueImports(lines: string[], from: string): Array<{ names: string[]; m
   return out
 }
 
+/** re-export 가 가리키는 모듈들 — 값을 내보내는 것만(`export type { … } from` 과 전부 `type` 인 중괄호는 뺀다). */
+function reExportModules(lines: string[], from: string): Array<string | null> {
+  const out: Array<string | null> = []
+  for (const m of lines.join('\n').matchAll(REEXPORT_RE)) {
+    if (m[1]) continue
+    const braces = m[2].match(/^\{([\s\S]*)\}$/)
+    if (braces && braces[1].split(',').map((p) => p.trim()).filter(Boolean).every((p) => p.startsWith('type '))) continue
+    out.push(resolveModule(from, m[3]))
+  }
+  return out
+}
+
 function directive(lines: string[]): 'client' | 'server' | null {
   const first = lines.find((l) => l.trim() !== '')?.trim() ?? ''
   const m = first.match(/^['"]use (client|server)['"]/)
@@ -85,19 +113,20 @@ function reachesServiceRole(abs: string, useSafe = true): boolean {
   if (useSafe && rel(abs) in SAFE_LOADERS) hit = false
   else if (directive(lines)) hit = false
   else if (isRoot(lines)) hit = true
-  else hit = valueImports(lines, abs).some((i) => i.module !== null && reachesServiceRole(i.module, useSafe))
+  else hit = [...valueImports(lines, abs).map((i) => i.module), ...reExportModules(lines, abs)]
+    .some((m) => m !== null && reachesServiceRole(m, useSafe))
   memo.set(key, hit)
   return hit
 }
 
-/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. */
+/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. 조건이 거부형·은닉형일 때만 게이트로 센다. */
 function firstGateLine(lines: string[], bodyStart = 0): number {
-  const vars: string[] = []
+  const vars: Array<{ name: string; kind: GateVarKind }> = []
   for (let i = bodyStart; i < lines.length; i++) {
     const v = lines[i].match(GATE_VAR)
-    if (v) vars.push(v[1])
+    if (v) vars.push({ name: v[1], kind: gateVarKind(v[2]) })
     const g = lines[i].match(GATE_IF)
-    if (g && (GATE_FN.test(g[1]) || vars.some((name) => new RegExp(`\\b${name}\\b`).test(g[1])))) return i
+    if (g && (GATE_DENY.test(g[1]) || vars.some((x) => usesGateVar(g[1], x.name, x.kind)))) return i
   }
   return -1
 }
@@ -172,5 +201,34 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     // 게이트가 아닌 판정 — 결과를 어포던스에만 쓰면 흐름을 끊지 않는다.
     expect(firstGateLine(src('const canManage = isProjectAdmin(actor, pid)\nreturn <V canManage={canManage} />'))).toBe(-1)
     expect(firstUseLine(src('const a = 1\n<DashboardView x />'), ['DashboardView'])).toBe(1)
+  })
+
+  it('판정기 — 역전된 조건(권한 있는 사람을 돌려보낸다)은 게이트가 아니고, 거부형·은닉형만 센다', () => {
+    const src = (body: string) => codeLines(body)
+    for (const inverted of [
+      'if (isProjectAdmin(actor, pid)) redirect(`/p/${pid}/settings`)',
+      'if (isProjectMember(actor, pid)) notFound()',
+      'if (!isHiddenProject(actor, pid)) notFound()',
+      'const ok = isProjectMember(actor, pid)\nif (ok) notFound()',
+      'const hidden = isHiddenProject(actor, pid)\nif (!hidden) notFound()',
+      'const g = await requireProjectMember(pid)\nif (g.ok) redirect(`/p/${pid}`)',
+    ]) expect(firstGateLine(src(inverted)), inverted).toBe(-1)
+    expect(firstGateLine(src('const g = await requireProjectMember(pid)\nif (!g.ok) redirect(`/p/${pid}`)'))).toBe(1)
+    expect(firstGateLine(src('const isAdmin = isProjectAdmin(actor, pid)\nif (!isAdmin) redirect(`/p/${pid}`)'))).toBe(1)
+    expect(firstGateLine(src('if (!degraded && isHiddenProject(m, pid)) notFound()'))).toBe(0)
+  })
+
+  it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'page-gates-'))
+    try {
+      const master = relative(dir, join(CWD, 'src/lib/teams/master'))
+      const write = (name: string, body: string) => { writeFileSync(join(dir, name), body); return join(dir, name) }
+      expect(reachesServiceRole(write('named.ts', `export { teamsForProjectSync } from '${master}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('star.ts', `export * from '${master}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('nested.ts', `export * from './named'\n`))).toBe(true)
+      expect(reachesServiceRole(write('types.ts', `export type { TeamCode } from '${master}'\nexport { type Team } from '${master}'\n`))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -1,6 +1,6 @@
 -- tests/rls 2-워크스페이스 픽스처(SP2) — fixture.sql 뒤에 loadFixture 가 같은 트랜잭션으로 흘린다(postgres 롤, 멱등).
 -- A = rls-acme(…aa01), B = rls-other(…aa02). A 의 모든 스코프 표에 행 1개 이상을 둔다 — 전수 교차 테스트가 "빈 표라 0행" 으로
--- 통과하지 않게. 새 id: 계정 …a6~a9 · 인물 …b6~ba · 프로젝트 …c3~c4 · 팀 …d5 · 명단 …e4~e7 · 리프 …f4~f6 · A 엔터티 …11NN.
+-- 통과하지 않게. 새 id: 계정 …a6~a9 · 인물 …b6~ba · 프로젝트 …c3~c4 · 팀 …d0·d5 · 명단 …e4~e7 · 리프 …f4~f6 · A 엔터티 …11NN.
 -- bigint identity 표는 7057001 을 명시 id 로 쓴다(시퀀스를 건드리지 않는다).
 
 insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, aud, role, instance_id, created_at, updated_at)
@@ -47,6 +47,12 @@ insert into public.project_settings (project_id, level_labels) values
 on conflict do nothing;
 insert into public.teams (id, workspace_id, project_id, code, name) values
   ('00000000-0000-0000-7e57-0000000000d5', '00000000-0000-0000-7e57-00000000aa02', '00000000-0000-0000-7e57-0000000000c4', 'OPS', 'OPS')
+on conflict do nothing;
+-- A 워크스페이스 공용 팀(project_id null). 전수 교차는 PK 순 첫 행을 복사하므로 가장 작은 id(…d0)로 둬 teams 의
+-- wsadmin_insert_teams·wsadmin_update_teams 분기를 태운다(프로젝트 팀 분기는 OWN_INSERT_PROBES 가 덮는다).
+-- 코드 SHR 은 workspace-isolation-cases ⓚ 가 B 에 같은 코드의 공용 팀을 만들어 임포트의 팀 해석을 본다.
+insert into public.teams (id, workspace_id, project_id, code, name) values
+  ('00000000-0000-0000-7e57-0000000000d0', '00000000-0000-0000-7e57-00000000aa01', null, 'SHR', 'SHR')
 on conflict do nothing;
 insert into public.project_members (id, project_id, person_id, access_role) values
   ('00000000-0000-0000-7e57-0000000000e4', '00000000-0000-0000-7e57-0000000000c4', '00000000-0000-0000-7e57-0000000000b7', 'member'),

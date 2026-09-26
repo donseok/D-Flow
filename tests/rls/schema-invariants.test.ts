@@ -146,6 +146,46 @@ describe('스키마 불변식', () => {
       .map((r) => `${r.fn}: public=${r.has_public} grantees=${r.named_grantees.join(',')}`)
     expect(bad, `정책 헬퍼 EXECUTE 위반:\n  ${bad.join('\n  ')}`).toEqual([])
   })
+  // SECURITY DEFINER 함수는 RLS 를 건너뛴다 — authenticated 가 PostgREST(rpc/…)로 직접 부를 수 있는 것은 이 목록으로 고정하고 항목마다
+  // 사유를 단다(F20). 기본 권한(pg_default_acl)이 새 함수에 authenticated EXECUTE 를 주므로, 목록 밖 함수가 생기거나 서비스 RPC 를
+  // drop + create 해 권한이 되살아나면 여기서 빨개진다. 트리거 함수는 실행 권한과 무관하게 돈다 — 대상이 아니다.
+  const HELPER = '정책 헬퍼 — RLS 정책(또는 정책이 부르는 헬퍼)이 부르므로 조회자에게 실행 권한이 있어야 한다. 호출자 자신의 권한만 답한다'
+  const WIKI_RPC = '위키 쓰기 RPC — 위키 표에는 RLS 쓰기 정책이 없어 본문의 is_project_member·is_project_admin 판정이 유일한 관문이다(CLAUDE.md 권한)'
+  const DEFINER_EXECUTABLE: Record<string, string> = {
+    'accessible_project_ids()': HELPER, 'my_workspace_ids()': HELPER, 'is_superuser()': HELPER,
+    'is_ws_member(uuid)': HELPER, 'is_ws_admin(uuid)': HELPER, 'can_read_project(uuid)': HELPER,
+    'is_project_admin(uuid)': HELPER, 'is_project_member(uuid)': HELPER, 'is_project_admin_anywhere_in_ws(uuid)': HELPER,
+    'can_attach(uuid)': HELPER, 'can_edit_issue(uuid)': HELPER, 'can_manage_minute(uuid)': HELPER,
+    'item_owned_by_my_team(uuid, uuid)': HELPER,
+    'my_member_id(uuid)': '호출자 자신의 명단 행 id — 워크스페이스 멤버일 때만(0009). 정책 헬퍼 목록(HELPER_FNS)과 같은 규칙',
+    'my_team_ids(uuid)': '호출자 자신의 팀 — 워크스페이스 멤버일 때만(0009). can_attach·item_owned_by_my_team 이 부른다',
+    'wbs_is_leaf(uuid)': 'member_update_actual 정책이 직접 부른다(회수하면 멤버 실적 입력이 42501). 남의 항목에 답하는 1비트는 post-SP2 hardening',
+    'answer_wiki_question(uuid, text, uuid)': WIKI_RPC, 'create_wiki_document(uuid, text, text, text, uuid)': WIKI_RPC,
+    'create_wiki_question(uuid, uuid, text)': WIKI_RPC, 'curate_wiki_item(uuid, text, text)': WIKI_RPC,
+    'merge_wiki_topics(uuid, uuid)': WIKI_RPC, 'move_wiki_document(uuid, uuid, integer, integer)': WIKI_RPC,
+    'restore_wiki_document_revision(uuid, uuid, timestamp with time zone)': WIKI_RPC, 'review_wiki_item(uuid, text)': WIKI_RPC,
+    'save_wiki_document(uuid, text, text, text, timestamp with time zone)': WIKI_RPC, 'submit_wiki_feedback(uuid, text, text)': WIKI_RPC,
+    'verify_wiki_document(uuid, integer, timestamp with time zone)': WIKI_RPC,
+  }
+  it('authenticated 가 실행하는 비트리거 SECURITY DEFINER 함수 = 허용 목록(항목마다 사유) — 목록 밖 0건, 죽은 항목 0건', async () => {
+    const got = await asService(pool, async (c) => (await c.query<{ fn: string }>(`
+      select format('%s(%s)', p.proname, oidvectortypes(p.proargtypes)) as fn from pg_proc p
+       where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.prorettype <> 'trigger'::regtype
+         and has_function_privilege('authenticated', p.oid, 'EXECUTE') order by 1`)).rows.map((r) => r.fn))
+    expect(got.filter((f) => !(f in DEFINER_EXECUTABLE)), 'authenticated 가 실행하는 SECURITY DEFINER 함수(허용 목록 밖)').toEqual([])
+    expect(Object.keys(DEFINER_EXECUTABLE).filter((f) => !got.includes(f)), '죽은 허용 목록 항목').toEqual([])
+  })
+  it('p_actor* 인자를 받는 public 함수는 authenticated·anon 이 실행할 수 없다(호출자가 준 행위자를 믿는 서비스 RPC)', async () => {
+    const rows = await asService(pool, async (c) => (await c.query<{ fn: string; auth: boolean; anon: boolean }>(`
+      select format('%s(%s)', p.proname, oidvectortypes(p.proargtypes)) as fn,
+             has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth, has_function_privilege('anon', p.oid, 'EXECUTE') as anon
+        from pg_proc p
+       where p.pronamespace = 'public'::regnamespace and exists (select 1 from unnest(p.proargnames) a where a like 'p\\_actor%')
+       order by 1`)).rows)
+    expect(rows.length, 'p_actor 서비스 RPC 가 하나도 안 잡히면 판정이 빗나간 것').toBeGreaterThanOrEqual(3)
+    expect(rows.filter((r) => r.auth || r.anon).map((r) => `${r.fn}: authenticated=${r.auth} anon=${r.anon}`)).toEqual([])
+  })
+
   // project_ws 는 예외(R3 분기 A) — authenticated 는 없어야 하고, 나머지도 같은 허용 목록에서 authenticated 만 뺀 것.
   const ALLOWED_PROJECT_WS_GRANTEES = ALLOWED_HELPER_GRANTEES.filter((g) => g !== 'authenticated')
   it('project_ws EXECUTE 는 service_role·postgres 뿐(R3 분기 A) — authenticated·anon·PUBLIC 없음', async () => {

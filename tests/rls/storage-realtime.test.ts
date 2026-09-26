@@ -18,9 +18,12 @@ const minuteA = makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, en
 const minuteNull = makeStoragePath({ workspaceId: F.ws, projectId: null, entity: 'minutes', entityId: F.rows.nullMinute, fileName: 'm.md' })
 const issueA = makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, entity: 'issue-attachments', entityId: F.rows.issue, fileName: 'a.pdf' })
 const delivA = makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, entity: 'deliverables', entityId: F.leaf.aErp, fileName: 'd.pdf' })
+/** 세션이 보는 A 의 회의록 객체 수 — 프로젝트 경로(minuteA)와 프로젝트 없는('_') 경로(minuteNull) 따로 */
+const bSeesMinuteObjects = async (c: PoolClient) =>
+  ({ project: await visible(c, 'minutes', minuteA), noProject: await visible(c, 'minutes', minuteNull) })
 
 describe('Storage 3버킷(0007)', () => {
-  it('① minutes: A 멤버는 프로젝트·무프로젝트 객체를 보고 쓰며, B 는 0행·쓰기 거부, 교차 프로젝트·옛 형식 경로 거부', async () => {
+  it('① minutes: A 멤버는 프로젝트·무프로젝트 객체를 보고 쓰며, B 는 두 경로 모두 0행·쓰기·삭제 거부, 교차 프로젝트·옛 형식 경로 거부', async () => {
     // 픽스처 행은 트랜잭션마다 service 로 넣는다(롤백으로 사라진다)
     await asUser(pool, F.users.member, async (c) => {
       await c.query('reset role'); await put(c, 'minutes', minuteA, F.users.member); await put(c, 'minutes', minuteNull, F.users.member)
@@ -36,13 +39,27 @@ describe('Storage 3버킷(0007)', () => {
         .toMatchObject({ code: '42501' })
     })
     await asUser(pool, F.users.bAdmin, async (c) => {
-      await c.query('reset role'); await put(c, 'minutes', minuteA, F.users.member)
+      await c.query('reset role'); await put(c, 'minutes', minuteA, F.users.member); await put(c, 'minutes', minuteNull, F.users.member)
       await c.query('set local role authenticated')
-      expect(await visible(c, 'minutes', minuteA)).toBe(0)
-      expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', ['minutes', minuteA.replace('m.md', 'b.md'), F.users.bAdmin]))
-        .toMatchObject({ code: '42501' })
+      expect(await bSeesMinuteObjects(c)).toEqual({ project: 0, noProject: 0 })
+      // 프로젝트 없는('_') 경로는 is_ws_member 가 유일한 워크스페이스 경계다 — 프로젝트 경로만 보면 can_read_project 가 대신 막아 준다
+      for (const name of [minuteA.replace('m.md', 'b.md'), minuteNull.replace('m.md', 'b.md')]) {
+        expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', ['minutes', name, F.users.bAdmin]), name)
+          .toMatchObject({ code: '42501' })
+      }
       await c.query(`select set_config('storage.allow_delete_query', 'true', true)`)
-      expect((await c.query('delete from storage.objects where bucket_id = $1 and name = $2', ['minutes', minuteA])).rowCount).toBe(0)
+      expect((await c.query('delete from storage.objects where bucket_id = $1 and name = any($2::text[])', ['minutes', [minuteA, minuteNull]])).rowCount).toBe(0)
+    })
+  })
+  it('①′ 민감도 — minutes bucket read 에서 is_ws_member 를 빼면 B 가 A 의 무프로젝트 객체를 본다(① 이 빨개진다)', async () => {
+    await asUser(pool, F.users.bAdmin, async (c) => {
+      await c.query('reset role'); await put(c, 'minutes', minuteA, F.users.member); await put(c, 'minutes', minuteNull, F.users.member)
+      await c.query('drop policy "minutes bucket read" on storage.objects')
+      await c.query(`create policy "minutes bucket read" on storage.objects for select to authenticated using (
+        bucket_id = 'minutes' and public.storage_ws(name) is not null
+        and (public.storage_project(name) is null or public.can_read_project(public.storage_project(name))))`)
+      await c.query('set local role authenticated')
+      expect(await bSeesMinuteObjects(c)).toEqual({ project: 0, noProject: 1 })
     })
   })
   const insertObj = 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)'
