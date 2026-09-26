@@ -224,3 +224,22 @@ describe('minute_files 첨부 정책(0007 — can_manage_minute 한 곳)', () =>
     })
   })
 })
+
+describe('Storage 쓰기 — 명단 권한 분기(0007)', () => {
+  it('⑫ 명단 권한 없는 A 워크스페이스 멤버(cy)는 프로젝트 a 경로에 세 버킷 모두 쓰지 못한다(42501)', async () => {
+    const paths: Array<[string, string]> = [
+      ['minutes', makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, entity: 'minutes', entityId: F.rows.minute, fileName: 'cy.md' })],
+      ['minutes', makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, entity: 'minute-files', entityId: F.rows.minute, fileName: 'cy.txt' })],
+      ['issue-attachments', issueA.replace(/[^/]+$/, 'cy.pdf')],
+      ['deliverables', delivA.replace(/[^/]+$/, 'cy.pdf')],
+    ]
+    await asUser(pool, F.users.aLoose, async (c) => {
+      for (const [bucket, name] of paths) {
+        expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', [bucket, name, F.users.aLoose]), name)
+          .toMatchObject({ code: '42501' })
+      }
+      // 양성 대조: 같은 사람이 무프로젝트('_') 경로에는 쓸 수 있다 — 거부가 워크스페이스 판정이 아니라 명단 분기에서 온다
+      expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', ['minutes', minuteNull.replace(/[^/]+$/, 'cy.md'), F.users.aLoose])).toBeNull()
+    })
+  })
+})
