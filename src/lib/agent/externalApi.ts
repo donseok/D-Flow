@@ -4,7 +4,7 @@ import type { AdminClient } from '@/lib/minutes/externalApi'
 import { parsePatPrefix, tokenUsable } from '@/lib/domain/agentToken'
 import { hashMatches } from '@/lib/agent/token'
 import { buildActor } from '@/lib/authz/buildActor'
-import { roleIn, type Actor, type EffectiveRole } from '@/lib/domain/authz'
+import { isProjectAdmin, isProjectMember, roleIn, type Actor } from '@/lib/domain/authz'
 
 /**
  * 에이전트 작업 루프 외부 API 공용 헬퍼 — 스펙 §3.1.
@@ -61,11 +61,6 @@ export async function requireAgentProject(admin: AdminClient, projectId: string)
  * 직접 부른다(actorFromUser 는 buildActor 에 그대로 위임한다 — 판정은 같다).
  */
 
-/** actorFromUser 와 같은 조립(buildActor) + roleIn — 세션 경로와 한 판정(SP2 결정 8). 조회 실패는 throw. */
-async function roleForAgent(admin: AdminClient, userId: string, projectId: string): Promise<EffectiveRole | null> {
-  return roleIn(await buildActor(admin, userId), projectId)
-}
-
 /**
  * user_email 계정이 해당 프로젝트 멤버 이상인지(스펙 §3.1).
  * 보안 가드이므로 조회 실패는 false(fail-closed).
@@ -74,8 +69,7 @@ export async function isAgentProjectMember(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
   try {
-    const r = await roleForAgent(admin, userId, projectId)
-    return r === 'superuser' || r === 'admin' || r === 'member'
+    return isProjectMember(await buildActor(admin, userId), projectId)
   } catch (e) {
     console.error('[agent-api] 멤버 판정 조회 실패(거절):', e instanceof Error ? e.message : e)
     return false
@@ -92,8 +86,7 @@ export async function isAgentProjectMember(
 export async function isAgentProjectAdmin(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
-  const r = await roleForAgent(admin, userId, projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
-  return r === 'superuser' || r === 'admin'
+  return isProjectAdmin(await buildActor(admin, userId), projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
 }
 
 /**

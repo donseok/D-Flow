@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
-import { isAnyProjectAdmin } from '@/lib/domain/authz'
+import { isAnyProjectAdmin, isWorkspaceMember } from '@/lib/domain/authz'
 import { activeTeamCodesForProjectSync, activeTeamCodesSync } from '@/lib/teams/master'
 import {
   ancestorIdsOf, folderPathOfSnapshot, loadFolderSnapshot, resolveFolderPath, type FolderSnapshot,
@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
     // 호출자 워크스페이스 밖 회의록은 없는 것으로 친다(not_found) — external_id 는 전역 유일이라 조회는 전역이다.
     const byExternalId = new Map<string, MinuteRow>()
     for (const r of (rowsRaw ?? []) as MinuteRow[]) {
-      if (authz.isSuperuser || authz.workspaceRoles.has(r.workspace_id)) byExternalId.set(r.external_id, r)
+      if (isWorkspaceMember(authz, r.workspace_id)) byExternalId.set(r.external_id, r)
     }
     // 대상 회의록마다 관리자 이상이어야 한다 — 하나라도 아니면 요청 전체를 거절한다(부분 이동 없음).
     if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
