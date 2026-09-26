@@ -113,7 +113,7 @@ export function hasAnyProjectRole(actor: Actor | null): boolean {
   if (!actor) return false
   return actor.isSuperuser || actor.projectRoles.size > 0 || adminWorkspaceIds(actor).size > 0
 }
-/** 그 워크스페이스에 역할이 있는가 — 워크스페이스 관리자이거나, 그 워크스페이스 프로젝트 중 하나에 명단 권한. (옛 app_role() is not null 의 워크스페이스판) */
+/** 그 워크스페이스에 역할이 있는가 — 워크스페이스 관리자이거나, 그 워크스페이스 프로젝트 중 하나에 명단 권한. (0006 에서 폐기된 옛 전역 역할 판정의 워크스페이스판) */
 export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: string | null | undefined): boolean {
   if (!actor) return false
   if (actor.isSuperuser) return true

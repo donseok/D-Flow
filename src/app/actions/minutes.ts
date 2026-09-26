@@ -189,7 +189,7 @@ export async function createMinute(
   })
   if (resolvedProject.error) return { ok: false, error: resolvedProject.error }
   // 회의록 생성은 멤버 이상(스펙 D8). 프로젝트가 정해지면 그 프로젝트의 멤버여야 하고,
-  // 미지정이면 쓰기 대상 워크스페이스에 역할이 있어야 한다(옛 app_role() is not null 의 워크스페이스판).
+  // 미지정이면 쓰기 대상 워크스페이스에 역할이 있어야 한다(0006 에서 폐기된 옛 전역 역할 판정의 워크스페이스판).
   let workspaceId: string | null = null
   if (!resolvedProject.projectId) {
     const w = resolveSoleWorkspaceId(g.actor)
