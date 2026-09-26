@@ -502,14 +502,20 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     expect(route.calls[0].args).not.toHaveProperty('team')
   })
 
-  // 오른쪽 경계가 공백·끝뿐이면 조사·구두점이 붙은 코드를 못 보고, 남은 하나로 엉뚱한 부분집합을 거른다 — 모호성 판정은
-  // 오른쪽 경계 없이 한 번 더 센다. 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8(이름·별칭 인식) 몫이다.
+  // 경계가 공백·끝뿐이면 조사·구두점이 붙은 코드를 못 보고, 남은 하나로 엉뚱한 부분집합을 거른다 — 모호성 판정은 느슨한
+  // 경계(왼쪽은 글자·숫자만 아니면, 오른쪽은 영숫자만 아니면)로 한 번 더 센다. 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은
+  // SP8(이름·별칭 인식) 몫이다.
   it.each([
     [['ERP', 'MES'], 'ERP와 MES 작업 현황'],
     [['ERP', 'MES'], 'ERP, MES 작업'],
     [['Research', 'R&D'], 'Research와 R&D'],
     [['ERP', 'ERP 운영'], 'ERP 운영팀 현황'],
     [['ERP 운영', 'ERP'], 'ERP 운영팀 현황'], // 입력 순서와 무관
+    // 왼쪽에 구두점이 붙은 언급도 센다
+    [['ERP', 'MES'], '[MES]와 ERP 작업'],
+    [['ERP', 'MES'], '"MES"와 ERP 작업 현황'],
+    [['ERP', 'MES'], 'ERP 작업, (MES 포함)'],
+    [['ERP', 'MES'], 'ERP 작업 현황/MES'],
   ])('teamFromCodes: %j 에서 "%s" 는 모호하다', (codes, message) => {
     expect(teamFromCodes(message, codes)).toBeUndefined()
   })
@@ -521,6 +527,8 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     [['ERP', 'ERP 운영'], 'ERP 현황', 'ERP'],
     [['ERP', 'MES'], 'ERP 지연 작업과 ERP의 산출물', 'ERP'], // 같은 코드가 조사와 함께 또 나와도 하나다
     [['R&D'], 'r&d 현황', 'R&D'],
+    [['ERP', '가공'], 'ERP 추가공정 작업', 'ERP'], // 낱말 속 '가공'(추가공정)은 언급이 아니다
+    [['ERP', 'MES'], 'ERP 작업 MESSAGE', 'ERP'], // 영단어 앞머리 'MES'(MESSAGE)도 언급이 아니다
   ])('teamFromCodes: %j 에서 "%s" → %s', (codes, message, team) => {
     expect(teamFromCodes(message, codes)).toBe(team)
   })

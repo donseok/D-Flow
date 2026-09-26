@@ -212,9 +212,11 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *  둘 다 찾아 모호로 판정하기 위해서다(소비하는 경계면 MES 를 놓친다). 긴 코드부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저
  *  잡힌다. 대소문자는 무시해 찾되 저장된 정규 코드를 돌려준다. 서로 다른 코드가 둘 이상이거나, 대소문자만 다른 코드가 함께
  *  등록돼 어느 쪽인지 모르면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다 필터 없음이 정직하다.
- *  모호성은 오른쪽 경계 없이(느슨) 한 번 더 센다 — 엄격 경계만 보면 조사·구두점이 붙은 언급('ERP와 MES', 'ERP, MES',
- *  'ERP 운영팀')을 못 보고 남은 하나로 엉뚱한 부분집합을 거른다. 느슨한 판정도 긴 코드부터라 같은 자리에서 엄격 일치보다 짧은
- *  코드를 잡지 않는다('ERP 운영 현황' 은 양쪽 다 'ERP 운영'). 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8 몫이다. */
+ *  모호성은 느슨한 경계로 한 번 더 센다 — 엄격 경계만 보면 조사·구두점이 붙은 언급('ERP와 MES', 'ERP, MES', 'ERP 운영팀',
+ *  '[MES]와 ERP', 'ERP 현황/MES')을 못 보고 남은 하나로 엉뚱한 부분집합을 거른다. 느슨한 경계의 왼쪽은 글자·숫자만 아니면
+ *  (낱말 속 '추가공정' 의 '가공' 은 언급이 아니다), 오른쪽은 영숫자만 아니면(한글 조사는 붙어도 세고, 'MESSAGE' 의 'MES' 는
+ *  세지 않는다) 된다. 느슨한 판정도 긴 코드부터라 같은 자리에서 엄격 일치보다 짧은 코드를 잡지 않는다('ERP 운영 현황' 은
+ *  양쪽 다 'ERP 운영'). 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8 몫이다. */
 export function teamFromCodes(message: string, codes: readonly string[]): string | undefined {
   const uniq = [...new Set(codes.map(c => c.trim()).filter(Boolean))]
   if (!uniq.length) return undefined
@@ -222,19 +224,19 @@ export function teamFromCodes(message: string, codes: readonly string[]): string
   for (const c of uniq) byLower.set(c.toLowerCase(), [...(byLower.get(c.toLowerCase()) ?? []), c])
   const alt = [...uniq].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
   /** 경계에 걸린 코드의 정규 코드 집합. 대소문자만 다른 중복에 걸리면 null(모호). */
-  const ownersOf = (rightBoundary: string): Set<string> | null => {
+  const ownersOf = (leftBoundary: string, rightBoundary: string): Set<string> | null => {
     const found = new Set<string>()
-    for (const m of message.matchAll(new RegExp(`(?<=^|\\s)(?:${alt})${rightBoundary}`, 'giu'))) {
+    for (const m of message.matchAll(new RegExp(`${leftBoundary}(?:${alt})${rightBoundary}`, 'giu'))) {
       const owners = byLower.get(m[0].toLowerCase()) ?? []
       if (owners.length !== 1) return null
       found.add(owners[0])
     }
     return found
   }
-  const strict = ownersOf('(?=\\s|$)')
+  const strict = ownersOf('(?<=^|\\s)', '(?=\\s|$)')
   if (strict?.size !== 1) return undefined
   const [team] = strict
-  const loose = ownersOf('')
+  const loose = ownersOf('(?<![\\p{L}\\p{N}])', '(?![A-Za-z0-9])')
   return loose && [...loose].every(owner => owner === team) ? team : undefined
 }
 
