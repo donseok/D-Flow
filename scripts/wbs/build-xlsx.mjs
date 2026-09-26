@@ -22,9 +22,10 @@
  *   하루 밀리는 것을 피하기 위함).
  *
  * 입력 JSON 형태:
- *   { areas: [ { key, l1, l2, l2Deliverable, children: [ L3 ] } ] }
+ *   { areas: [ { key, l1, l2, l2Deliverable, children: [ L3 ] } ], holidays?: [ { date, name } ] }
  *   L3 = { name, deliverable, start, end, weight, children: [ L4 ] }
  *   L4 = { name, deliverable, start, end, weight }
+ *   holidays — 회사 휴일(date 는 'YYYY-MM-DD', name 은 생략 가능). 기본으로 넣는 휴일은 없다.
  *
  * 사용:
  *   node scripts/wbs/build-xlsx.mjs <areas.json> <out.xlsx>
@@ -33,13 +34,7 @@ import * as XLSX from 'xlsx'
 
 export const HEADER = ['코드', '업무명', '업무영역', '산출물', '시작일', '종료일', '가중치', '실적%', '담당']
 
-/** 음력 기반 공휴일(설·추석·부처님오신날)은 넣지 않는다 — 틀린 날짜를 넣으면 계획%가 조용히 어긋난다. */
-export const FIXED_HOLIDAYS_2026 = [
-  ['2026-08-15', '광복절'],
-  ['2026-10-03', '개천절'],
-  ['2026-10-09', '한글날'],
-  ['2026-12-25', '성탄절'],
-]
+/* 휴일은 입력이 준 것만 싣는다 — 틀린 날짜를 지어 넣으면 계획%가 조용히 어긋난다. */
 
 /** 로컬 정오 Date. 위 ⚠️ 참조. */
 export function toCell(iso) {
@@ -117,7 +112,7 @@ export function buildRows(areas) {
 }
 
 /** 워크북 조립. 날짜 셀에 표시 서식만 입힌다(값은 시리얼 그대로). */
-export function buildWorkbook(areas, holidays = FIXED_HOLIDAYS_2026) {
+export function buildWorkbook(areas, holidays = []) {
   const { rows, problems } = buildRows(areas)
 
   const ws = XLSX.utils.aoa_to_sheet(rows, { cellDates: true })
@@ -127,7 +122,7 @@ export function buildWorkbook(areas, holidays = FIXED_HOLIDAYS_2026) {
     if (!ref.startsWith('!') && ws[ref].t === 'd') ws[ref].z = 'yyyy-mm-dd'
   }
 
-  const hs = XLSX.utils.aoa_to_sheet(holidays.map(([iso, name]) => [toCell(iso), name]), { cellDates: true })
+  const hs = XLSX.utils.aoa_to_sheet([['날짜', '이름'], ...holidays.map(([iso, name]) => [toCell(iso), name])], { cellDates: true })
   hs['!cols'] = [{ wch: 12 }, { wch: 16 }]
   for (const ref of Object.keys(hs)) {
     if (!ref.startsWith('!') && hs[ref].t === 'd') hs[ref].z = 'yyyy-mm-dd'
@@ -148,8 +143,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   const fs = await import('node:fs')
 
-  const { areas } = JSON.parse(fs.readFileSync(src, 'utf8'))
-  const { wb, rows, problems } = buildWorkbook(areas)
+  const { areas, holidays = [] } = JSON.parse(fs.readFileSync(src, 'utf8'))
+  // 한 모양만 받는다. date 가 빠지면 toCell 이 null 을 돌려 그 휴일이 조용히 빠지므로 여기서 거른다.
+  if (!Array.isArray(holidays) || holidays.some(h => typeof h?.date !== 'string' || h.date === '')) {
+    console.error('holidays 는 [{ date: "YYYY-MM-DD", name }] 배열이어야 합니다.')
+    process.exit(1)
+  }
+  // 날짜 형식 오류는 toCell 이 던진다.
+  const { wb, rows, problems } = buildWorkbook(areas, holidays.map(h => [h.date, h.name ?? '']))
   // XLSX.writeFile 은 쓰지 않는다 — 네임스페이스 임포트에서는 set_fs 가 노출되지 않아
   // "cannot save file" 로 죽는다. 버퍼로 받아 node:fs 로 직접 쓴다.
   fs.writeFileSync(out, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
@@ -162,6 +163,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`저장: ${out}`)
   console.log(`행 ${rows.length - 1} — ` +
     Object.keys(depth).sort().map(d => `${d}단 ${depth[d]}`).join(' · '))
+  console.log(`휴일 ${holidays.length}건`)
   if (problems.length) {
     console.log(`\n경고 ${problems.length}건:`)
     problems.slice(0, 40).forEach(p => console.log('  · ' + p))

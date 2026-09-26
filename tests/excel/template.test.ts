@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
 import { detectWorkbook } from '@/lib/excel/detect'
+import { parseWithProfile } from '@/lib/excel/parseWithProfile'
 import { buildWbsTemplateWorkbook, TEMPLATE_HEADER, TEMPLATE_ROWS } from '@/lib/excel/template'
 
 /** 양식 ↔ 감지기 정합 — 양식을 그대로 올리면 마법사가 손대지 않고 100% 잡아야 한다. 감지기가 바뀌면 여기가 깨진다. */
@@ -36,5 +37,15 @@ describe('wbs.xlsx 양식', () => {
       byParent.set(parent, (byParent.get(parent) ?? 0) + Number(row[6]))
     }
     for (const [parent, sum] of byParent) expect(sum, parent || 'root').toBeCloseTo(parent === '' ? 2 : 1, 6)
+  })
+
+  it('양식의 Holiday 시트는 헤더만 — 파싱 휴일 0건(공휴일을 기본으로 넣지 않는다)', () => {
+    const wb = XLSX.read(buf, { type: 'array' })
+    expect(XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets.Holiday, { header: 1 })).toEqual([['날짜', '이름']])
+    const r = detectWorkbook(buf)
+    if (!r.ok) throw new Error(r.error)
+    const parsed = parseWithProfile(buf, r.result.profile)
+    if (!parsed.ok) throw new Error(parsed.error)
+    expect(parsed.holidays).toEqual([])
   })
 })

@@ -66,7 +66,7 @@ describe('rowLabel', () => {
     expect(rowLabel(row({ section: '설비 및 Level2', module: '' }))).toBe('설비 및 Level2')
   })
   it('레거시 행 — 구분 · 모듈 병기', () => {
-    expect(rowLabel(row({ section: 'ERP', module: 'SD/LE' }))).toBe('ERP · SD/LE')
+    expect(rowLabel(row({ section: 'ERP', module: '모듈A' }))).toBe('ERP · 모듈A')
     expect(rowLabel(row({ section: '공통', module: '공통' }))).toBe('공통') // 같으면 중복 표기 안 함
   })
   it('구분 없는 행 — 모듈 폴백, 둘 다 없으면 기타', () => {
@@ -124,12 +124,12 @@ describe('buildSheetSections', () => {
   })
   it('비표준 구분(레거시·자유 입력)은 표준 11구분 뒤에, 서로는 sortOrder 순', () => {
     const built = buildSheetSections([
-      row({ id: 'x', sortOrder: 1, section: 'ERP', module: 'SD/LE', thisContent: '레거시B' }),
+      row({ id: 'x', sortOrder: 1, section: 'ERP', module: '모듈A', thisContent: '레거시B' }),
       row({ id: 'z', sortOrder: 0, section: '기타', module: '', thisContent: '레거시A' }),
     ])
     expect(built.slice(0, WEEKLY_SECTIONS.length).map(s => s.section)).toEqual([...WEEKLY_SECTIONS])
-    expect(built.slice(WEEKLY_SECTIONS.length).map(s => s.section)).toEqual(['기타', 'ERP · SD/LE'])
-    expect(built.find(s => s.section === 'ERP · SD/LE')!.thisContent).toEqual(['레거시B'])
+    expect(built.slice(WEEKLY_SECTIONS.length).map(s => s.section)).toEqual(['기타', 'ERP · 모듈A'])
+    expect(built.find(s => s.section === 'ERP · 모듈A')!.thisContent).toEqual(['레거시B'])
   })
   it('이관 전 조업및표준화 행은 표준 구분 뒤에 자기 페이지로 남는다 — 조업/표준화와 섞지 않는다', () => {
     // 데이터 이관을 놓친 주차를 내보내도 PPT가 조용히 내용을 합치거나 버리지 않아야 한다.

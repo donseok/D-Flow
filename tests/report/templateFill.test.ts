@@ -87,10 +87,10 @@ describe('paginateGroups', () => {
   })
 
   it('시트 포매터(sheetLineText) 주입 시에도 분할 규칙이 동일하게 적용된다', () => {
-    const pages = paginateGroups([g('[ERP] SD/LE', 20)], 15, sheetLineText)
+    const pages = paginateGroups([g('[ERP] 모듈A', 20)], 15, sheetLineText)
     expect(pages).toHaveLength(2)
     expect(pages[0][0].items).toHaveLength(14)
-    expect(pages[1][0].phase).toBe('[ERP] SD/LE (계속)')
+    expect(pages[1][0].phase).toBe('[ERP] 모듈A (계속)')
     expect(pages[1][0].items).toHaveLength(6)
     const all = pages.flat().flatMap(x => x.items)
     expect(all).toHaveLength(20)
@@ -249,9 +249,9 @@ describe('fillWeeklyTemplate (통합)', () => {
 
 describe('fillWeeklyTemplate 옵션 (시트 경로)', () => {
   const narr = {
-    prev: [{ phase: '[ERP] SD/LE', num: 1, items: ['1. 실적', '- 상세'] }],
-    curr: [{ phase: '[ERP] SD/LE', num: 1, items: ['1. 계획'] }],
-    issues: ['[SD/LE] 지연 위험'], events: ['특이 이슈 없음'],
+    prev: [{ phase: '[ERP] 모듈A', num: 1, items: ['1. 실적', '- 상세'] }],
+    curr: [{ phase: '[ERP] 모듈A', num: 1, items: ['1. 계획'] }],
+    issues: ['[모듈A] 지연 위험'], events: ['특이 이슈 없음'],
   }
   const meta = { meta: { prevWeekRange: '7/6~7/10', weekRange: '7/13~7/17' } }
   const sheetFmt = (s: string) => (s.trimStart().startsWith('-') ? `        ${s.trimStart()}` : `    ${s.trimStart()}`)

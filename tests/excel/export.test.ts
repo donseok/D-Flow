@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildWbsWorkbook } from '@/lib/excel/export'
-import { parseWbsWorkbook } from '@/lib/excel/parse'
-import { validateAndLink } from '@/lib/excel/validate'
+import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
+import { validateAndLink } from '../fixtures/excel/legacyParse'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
 import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
@@ -114,7 +114,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
 })
 
 /* ── 동적 팀 열(팀 마스터 대응) ── */
-import { buildWbsColumnMap } from '@/lib/excel/parse'
+import { buildWbsColumnMap } from '../fixtures/excel/legacyParse'
 import { buildWbsAoa } from '@/lib/excel/export'
 
 describe('buildWbsAoa: 계층 열은 depth로 배치, levelLabels로 헤더 커스터마이즈', () => {

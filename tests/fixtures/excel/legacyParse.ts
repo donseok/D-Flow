@@ -1,5 +1,9 @@
+/** 구 3행 헤더 파서 — 라운드트립 테스트 오라클. 런타임 임포터는 parseWithProfile 이다.
+ *  parse-with-profile.test.ts 가 마법사 파서의 등가성을, export.test.ts 가 익스포트 라운드트립을
+ *  이 파서(parseWbsWorkbook+validateAndLink) 기준으로 검증한다. src 는 이 파일을 import 하지 않는다. */
 import * as XLSX from 'xlsx'
 import type { Level, TeamCode, OwnerKind } from '@/lib/domain/types'
+import type { ImportItem, ImportError } from '@/lib/excel/validate'
 
 export interface ParsedRow {
   level: Level; code: string; name: string; biz: string | null; deliverable: string | null
@@ -16,7 +20,7 @@ export interface WbsColumnMap {
 }
 
 /** 헤더 탐색 실패 시 폴백 — 2026-07 이전 5팀 고정 양식(G..K + L,M,N,O,Q). */
-const LEGACY_COLUMN_MAP: WbsColumnMap = {
+export const LEGACY_COLUMN_MAP: WbsColumnMap = {
   teams: [[6, 'PMO'], [7, 'ERP'], [8, 'MES'], [9, '가공'], [10, 'MDM']],
   deliverable: 11, start: 12, end: 13, weight: 14, actualPct: 16,
 }
@@ -75,14 +79,7 @@ function owners(row: unknown[], teamCols: readonly [number, TeamCode][]): Parsed
   return out
 }
 
-/**
- * 정본(5팀 고정 양식) 워크북 파서.
- *
- * ⚠️ 프로덕션 임포트는 마법사(`parseWithProfile`)가 담당한다 — 구 `/api/import` 라우트를
- * 제거하면서(§11 단계 6) 이 함수의 런타임 호출자는 사라졌다. 이제 이 파서는 **테스트 전용
- * 오라클**이다: `parse-with-profile.test.ts`가 마법사 파서의 등가성을, `export.test.ts`가
- * 익스포트 라운드트립을 이 함수 기준으로 검증한다. 삭제하면 그 등가성 증명이 함께 사라진다.
- */
+/** 3행 헤더(5팀 고정 양식 폴백) 워크북 파서. 삭제하면 위 등가성 증명이 함께 사라진다. */
 export function parseWbsWorkbook(buf: ArrayBuffer): ParsedWbs {
   // cellDates:false — 날짜를 시리얼(정수)로 유지해 toIso 에서 타임존 무관 변환(위 참조).
   const wb = XLSX.read(buf, { type: 'array', cellDates: false })
@@ -129,4 +126,40 @@ export function parseWbsWorkbook(buf: ArrayBuffer): ParsedWbs {
     }
   }
   return { rows, holidays }
+}
+
+/** 3단(phase/task/activity) 링커 — 직전 phase·task 를 부모로 잇는다. */
+export function validateAndLink(
+  parsed: ParsedWbs,
+): { ok: true; items: ImportItem[] } | { ok: false; errors: ImportError[] } {
+  const errors: ImportError[] = []
+  const items: ImportItem[] = []
+  let lastPhase: string | null = null
+  let lastTask: string | null = null
+  let order = 0
+
+  parsed.rows.forEach((r, i) => {
+    const { plannedStart: s, plannedEnd: e } = r
+    if ((s && !e) || (!s && e)) errors.push({ excelRow: r.excelRow, message: '시작/종료일 중 하나만 입력됨' })
+    if (s && e && s > e) errors.push({ excelRow: r.excelRow, message: '시작일이 종료일보다 늦음' })
+
+    const tempId = `t${i}`
+    let parentTempId: string | null = null
+    if (r.level === 'phase') { lastPhase = tempId; lastTask = null }
+    else if (r.level === 'task') {
+      if (!lastPhase) errors.push({ excelRow: r.excelRow, message: 'Task의 상위 Phase 없음' })
+      parentTempId = lastPhase; lastTask = tempId
+    } else {
+      if (!lastTask) errors.push({ excelRow: r.excelRow, message: 'Activity의 상위 Task 없음' })
+      parentTempId = lastTask
+    }
+    items.push({
+      tempId, parentTempId, level: r.level, code: r.code, sortOrder: order++,
+      name: r.name, biz: r.biz, deliverable: r.deliverable, plannedStart: s, plannedEnd: e,
+      weight: r.weight, actualPct: r.actualPct, owners: r.owners, isOwnerSplit: false,
+    })
+  })
+
+  if (errors.length) return { ok: false, errors }
+  return { ok: true, items }
 }

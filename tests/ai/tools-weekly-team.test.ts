@@ -116,8 +116,8 @@ describe('매핑 없는 프로젝트 전용 팀은 동명 구분으로 조회된
 
 describe('MES 팀 필터가 조업·표준화를 모두 잡는다', () => {
   // 매칭은 문자열 완전일치라, 구분을 쪼개고 팀 매핑을 안 고치면 오류가 아니라 '조회 건수 감소'로
-  // 나타난다 — 사람이 알아채기 가장 어려운 실패다. 폐지된 통합 구분도 계속 잡혀야 한다.
-  it('조업·표준화·조업및표준화 셋 다 MES 로 조회된다', async () => {
+  // 나타난다 — 사람이 알아채기 가장 어려운 실패다. 매핑 집합에 없는 구분(폐지된 통합 구분)은 잡지 않는다.
+  it('조업·표준화는 MES 로 조회되고, 매핑에 없는 조업및표준화는 빠진다', async () => {
     const sheet = snapshot(['PMO', '영업', '조업', '표준화', '조업및표준화', '물류'])
     const repo: WeeklyRepository = { getSheet: vi.fn(async () => repositoryOk(sheet)) }
 
@@ -126,6 +126,6 @@ describe('MES 팀 필터가 조업·표준화를 모두 잡는다', () => {
     )
 
     expect(mes.ok && mes.result.records.map((r: { section: string }) => r.section))
-      .toEqual(['조업', '표준화', '조업및표준화', '물류'])
+      .toEqual(['조업', '표준화', '물류'])
   })
 })

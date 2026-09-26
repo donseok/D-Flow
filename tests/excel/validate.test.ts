@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { validateAndLink } from '@/lib/excel/validate'
-import type { ParsedWbs } from '@/lib/excel/parse'
+import { validateAndLink } from '../fixtures/excel/legacyParse'
+import type { ParsedWbs } from '../fixtures/excel/legacyParse'
 
 const base = (over: Partial<ParsedWbs['rows'][0]>): ParsedWbs['rows'][0] => ({
   level: 'activity' as const, code: 'x', name: 'n', biz: null, deliverable: null,

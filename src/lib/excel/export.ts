@@ -3,8 +3,9 @@ import type { ComputedItem, TeamCode } from '@/lib/domain/types'
 import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
 
 /**
- * WBS 익스포트 (순수). parse.ts(buildWbsColumnMap)가 읽는 3행 헤더 규약으로 써서
- * 다시 임포트하면 라운드트립된다. 팀 열은 가변(팀 마스터): Activity(3) 뒤 6..base-1,
+ * WBS 익스포트 (순수). 3행 헤더 규약으로 써서 다시 임포트하면 라운드트립된다 — 라운드트립은
+ * 테스트 오라클(tests/fixtures/excel/legacyParse)로 증명하고, 런타임 임포터는 parseWithProfile 이다.
+ * 팀 열은 가변(팀 마스터): Activity(3) 뒤 6..base-1,
  * 이후 산출물·시작·종료·가중치·(빈칸)·실적%·계산 컬럼 순으로 밀린다.
  */
 const STATUS_LABEL: Record<ComputedItem['status'], string> = {
@@ -78,7 +79,7 @@ export function buildWbsAoa(
     const row: unknown[] = new Array(base + 9).fill('')
     row[0] = it.biz ?? ''
     // 이름은 자기 depth 의 계층 열에 — 라벨 수를 넘는 깊이는 마지막 계층 열로 접는다
-    // (종전 3열 고정 시절의 접기 규칙을 L 열로 일반화. 3라벨이면 동작 동일 — parse.ts 호환 유지).
+    // (종전 3열 고정 시절의 접기 규칙을 L 열로 일반화. 3라벨이면 동작 동일 — 구 3행 헤더 파서 호환 유지).
     row[1 + Math.min(it.depth, L - 1)] = it.name
     for (const o of it.owners) row[teamCol.get(o.team)!] = o.kind === 'primary' ? '●' : '△'
     row[base] = it.deliverable ?? ''

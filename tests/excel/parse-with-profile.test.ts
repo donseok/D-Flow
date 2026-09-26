@@ -3,8 +3,8 @@ import * as XLSX from 'xlsx'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
 import type { ExcelProfile } from '@/lib/excel/profile'
-import { parseWbsWorkbook } from '@/lib/excel/parse'
-import { validateAndLink } from '@/lib/excel/validate'
+import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
+import { validateAndLink } from '../fixtures/excel/legacyParse'
 import type { ImportItem } from '@/lib/excel/validate'
 
 function makeBook(sheets: { name: string; aoa: unknown[][] }[]): ArrayBuffer {

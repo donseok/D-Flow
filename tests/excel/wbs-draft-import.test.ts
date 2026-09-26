@@ -47,13 +47,16 @@ const AREAS = [
   },
 ]
 
+/** 휴일은 기본으로 들어 있지 않다 — 넘긴 것만 Holiday 시트에 실리는지 보려고 파일 안 픽스처를 쓴다. */
+const FIXTURE_HOLIDAYS: [string, string][] = [['2026-09-01', '창립기념일'], ['2026-12-31', '연말 휴무']]
+
 function toBuffer(wb: XLSX.WorkBook): ArrayBuffer {
   const b = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
   return b
 }
 
 describe('WBS 초안 생성기 — 앱 임포트 경로 왕복', () => {
-  const { wb, rows, problems } = buildWorkbook(AREAS)
+  const { wb, rows, problems } = buildWorkbook(AREAS, FIXTURE_HOLIDAYS)
   const buf = toBuffer(wb)
 
   it('생성 단계에서 날짜 결손·역전을 보고하지 않는다', () => {
@@ -94,8 +97,10 @@ describe('WBS 초안 생성기 — 앱 임포트 경로 왕복', () => {
       expect(r.weight, `${r.name} 가중치 유실`).not.toBeNull()
     }
     expect(parsed.rows[0].plannedStart).toBe('2026-08-03')
-    expect(parsed.holidays.length).toBe(4)
-    expect(parsed.holidays[0].date).toBe('2026-08-15')
+    expect(parsed.holidays).toEqual([
+      { date: '2026-09-01', name: '창립기념일' },
+      { date: '2026-12-31', name: '연말 휴무' },
+    ])
   })
 
   it('링킹: 깊이 건너뜀·코드 중복 없이 트리가 선다', () => {
@@ -131,5 +136,21 @@ describe('WBS 초안 생성기 — 앱 임포트 경로 왕복', () => {
       const sum = ws.reduce((s, w) => s + w, 0)
       expect(Math.abs(sum - 1), `${parent} 형제 합 ${sum}`).toBeLessThan(0.005)
     }
+  })
+})
+
+describe('WBS 초안 생성기 — 휴일을 넘기지 않으면', () => {
+  const buf = toBuffer(buildWorkbook(AREAS).wb)
+
+  it('Holiday 시트는 헤더만 있고 파싱 휴일은 0건이다 — 공휴일을 기본으로 넣지 않는다', () => {
+    const det = detectWorkbook(buf)
+    if (!det.ok) throw new Error(det.error)
+    expect(det.result.profile.holidaySheetName).toBe('Holiday')
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(XLSX.read(buf, { type: 'array' }).Sheets.Holiday, { header: 1 })
+    expect(aoa).toEqual([['날짜', '이름']])
+
+    const parsed = parseWithProfile(buf, det.result.profile)
+    if (!parsed.ok) throw new Error(parsed.error)
+    expect(parsed.holidays).toEqual([])
   })
 })

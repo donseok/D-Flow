@@ -687,7 +687,7 @@ export function WeeklySheetView({
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                // 레거시 시트(구 공통/ERP/MES × 모듈)의 모듈명을 잃지 않게 구분 칸에 병기한다.
+                // 모듈이 적힌 행(구분 · 모듈)의 모듈명을 잃지 않게 구분 칸에 병기한다.
                 // 병기 여부는 rowSectionLabel이 정한 이름에서 되읽는다 — 규칙을 두 벌 두면
                 // 점검 패널 머리글(sectionKeyOf)과 이 칸의 표기가 조용히 갈라진다.
                 const rowName = rowSectionLabel(r)

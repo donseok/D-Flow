@@ -27,7 +27,7 @@ export function cellLines(text: string): string[] {
 }
 
 /** 행 라벨 — 구분 헤더로 쓴다. 규칙은 도메인(rowSectionLabel)이 단일 출처다:
- *  신규 시트는 구분명 단독('영업'), 레거시 행은 '구분 · 모듈'('ERP · SD/LE')로 병기,
+ *  신규 시트는 구분명 단독('영업'), 모듈이 적힌 행은 '구분 · 모듈'로 병기,
  *  구분이 없으면 모듈로 폴백하고 둘 다 없으면 '기타'('[] '가 노출되지 않게). */
 export const rowLabel = (r: WeeklySheetRow): string => rowSectionLabel(r)
 

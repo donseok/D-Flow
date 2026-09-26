@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { parseWbsWorkbook } from '@/lib/excel/parse'
-import { validateAndLink } from '@/lib/excel/validate'
-import type { ParsedWbs } from '@/lib/excel/parse'
+import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
+import { validateAndLink } from '../fixtures/excel/legacyParse'
+import type { ParsedWbs } from '../fixtures/excel/legacyParse'
 
 // 4단+ 깊이 회귀 케이스는 여기 없음 — validateAndLink 는 level 이 phase/task 가 아니면 무조건
 // lastTask 에 매달리는 3분기 구조라(3열 고정 양식, Plan B 전) 4단 입력 자체를 표현할 수 없다.

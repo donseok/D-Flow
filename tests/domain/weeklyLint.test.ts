@@ -144,8 +144,8 @@ describe('lintDuplicates', () => {
 
   it('옛 시트: section이 같아도 모듈이 다르면 다른 구분이라 견주지 않는다', () => {
     const rows = [
-      mkRow('r1', 'ERP', 1, { module: 'SD/LE', thisContent: '주간 회의 참석' }),
-      mkRow('r2', 'ERP', 2, { module: 'MM', thisContent: '주간 회의 참석' }),
+      mkRow('r1', 'ERP', 1, { module: '모듈A', thisContent: '주간 회의 참석' }),
+      mkRow('r2', 'ERP', 2, { module: '모듈B', thisContent: '주간 회의 참석' }),
     ]
     expect(lintDuplicates(rows)).toEqual([])
   })

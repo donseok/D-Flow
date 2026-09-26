@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { parseWbsWorkbook } from '@/lib/excel/parse'
+import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
 
 // 4단+ 깊이 회귀 케이스는 여기 없음 — Phase/Task/Activity 3열 고정 양식이라 파서 입력 자체로 4단을
 // 표현할 방법이 없다(Plan B 임포트 마법사 전). 도메인 통과 지점(buildTree→computeTree)의 4단 케이스는
@@ -95,7 +95,7 @@ describe('parseWbsWorkbook', () => {
 })
 
 /* ── 헤더 이름 기반 열 맵(팀 마스터 대응) ── */
-import { buildWbsColumnMap } from '@/lib/excel/parse'
+import { buildWbsColumnMap } from '../fixtures/excel/legacyParse'
 
 const H3 = ['Biz', 'Phase', 'Task', 'Activity', '', '', 'PMO', 'ERP', 'MES', '가공', 'MDM',
   '산출물', '시작', '종료', '가중치', '', '실적%', '계획%', '계획대비%', '진척']

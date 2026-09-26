@@ -1,8 +1,8 @@
 /** 프로파일 주입형 N단 파서 + 링커(Plan B §6.4, Task 4).
  *  `ExcelProfile` 을 받아 임의 양식을 파싱한다. 레거시 프로파일 v1(`LEGACY_EXCEL_PROFILE_V1`)을
- *  주입하면 기존 `parseWbsWorkbook`+`validateAndLink` 와 동등한 결과를 낸다(라운드트립 계약,
- *  tests/excel/parse-with-profile.test.ts 케이스 (a)). 구 경로(`parse.ts`/`validate.ts` 의 기존
- *  export)는 무접촉 — Plan C 에서 통합할 때까지 두 경로가 병행한다. */
+ *  주입하면 구 3행 헤더 파서와 동등한 결과를 낸다(라운드트립 계약,
+ *  tests/excel/parse-with-profile.test.ts 케이스 (a)). 구 파서는 tests/fixtures/excel/legacyParse.ts 의
+ *  테스트 오라클로만 남았다 — 런타임 임포터는 이 파일이다. */
 
 import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
@@ -20,8 +20,7 @@ export interface ParsedRowN {
   excelRow: number
 }
 
-/** parse.ts 와 동일, 구 경로 제거(Plan C) 때 통합.
- *  엑셀 날짜는 시리얼(정수)로 저장됨. SSF.parse_date_code 로 타임존 무관하게 {y,m,d} 도출
+/** 엑셀 날짜는 시리얼(정수)로 저장됨. SSF.parse_date_code 로 타임존 무관하게 {y,m,d} 도출
  *  (cellDates 로컬 변환에 의존하면 Asia/Seoul 1899 LMT 오프셋 때문에 -1일 밀린다). */
 const ISO_DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -45,7 +44,7 @@ function toIso(v: unknown): string | null {
   }
   return null
 }
-/** parse.ts 와 동일, 구 경로 제거(Plan C) 때 통합. */
+/** 숫자 또는 숫자 문자열 → number. 빈 칸·그 밖의 값은 null. */
 function toNum(v: unknown): number | null {
   const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN)
   return Number.isFinite(n) ? n : null
@@ -184,8 +183,8 @@ export function resolveLegacyLevelLabels(profile: ExcelProfile): boolean {
 const LEGACY_LEVELS = ['phase', 'task', 'activity'] as const
 
 /** N단 스택 링킹 + 코드 채번(코드 열 값 있으면 그대로, 없으면 형제 순번 경로 '1'·'1.1'·'1.1.2')
- *  → ImportItem[](validate.ts 의 기존 타입 재사용). `lastAtDepth[d]` 배열은 validate.ts 의
- *  `lastPhase`/`lastTask` 2단 스택을 N단으로 일반화한 것이다(설계 §4.4). */
+ *  → ImportItem[](validate.ts 의 타입 재사용). `lastAtDepth[d]` 배열은 깊이마다 직전 항목을 기억하는
+ *  스택이다 — 각 행의 부모는 한 단계 얕은 깊이의 직전 항목이다(설계 §4.4). */
 export function linkByDepth(
   rows: ParsedRowN[],
   opts?: { legacyLevelLabels?: boolean },
