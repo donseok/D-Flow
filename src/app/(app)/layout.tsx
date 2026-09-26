@@ -15,7 +15,8 @@ import { PrefsSync } from '@/components/app/PrefsSync'
 import { ShellStateProvider } from '@/components/app/ShellStateProvider'
 import { UsageTracker } from '@/components/app/UsageTracker'
 import { TeamsProvider } from '@/components/app/TeamsProvider'
-import { teamsSync } from '@/lib/teams/master'
+import { activeTeamsForWorkspacesSync } from '@/lib/teams/master'
+import type { Team } from '@/lib/domain/teams'
 import { projectLifecycleStatus } from '@/lib/domain/project-status'
 import { getProjectsCompletion } from '@/lib/data/wbs'
 import { getUiPrefs } from '@/app/actions/preferences'
@@ -51,8 +52,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     baseDate: (p as { base_date?: string | null }).base_date ?? null,
   }))
 
-  // 활성 팀만 클라이언트로 — 비활성 팀은 탭·필터에서 숨긴다(전체 목록이 필요한 화면은 서버에서 별도 주입).
-  const activeTeams = teamsSync().filter(t => t.active)
+  // 활성 공용 팀만 클라이언트로 — 비활성 팀은 탭·필터에서 숨긴다(전체 목록이 필요한 화면은 서버에서 별도 주입).
+  // actor 가 속한 워크스페이스들의 팀만 싣는다 — 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 모든 로그인
+  // 사용자의 탭·필터로 흐른다(SP2 §4.2). 플랫폼 관리자도 자기 소속으로 한정한다(표시 목적 — 남의 팀으로 탭을 채우지 않는다).
+  // degraded(actor null)면 빈 목록. 팀 캐시를 한 번도 못 채웠으면 접근자가 throw 하는데, 루트 레이아웃이 throw 하면 설정·임포트
+  // 같은 복구 경로까지 앱 전 화면이 에러가 되므로 여기서만 로그를 남기고 팀 없이 그린다(getProjectsCompletion 과 같은 결).
+  let activeTeams: Team[] = []
+  if (actor) {
+    try {
+      activeTeams = activeTeamsForWorkspacesSync(actor.workspaceRoles.keys())
+    } catch (e) {
+      console.error('[layout] 팀 마스터 조회 실패 — 팀 탭·필터 없이 그린다:', e instanceof Error ? e.message : e)
+    }
+  }
 
   // Actor(Map)는 직렬화되지 않는다 — 헤더·사이드바가 쓸 표시용 스냅샷만 평탄화해 내린다.
   // degraded 면 등급을 **주장하지 않는다**. 여기서 '게스트'로 떨어뜨리면 화면이 거짓말을 한다.
