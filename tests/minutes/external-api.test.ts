@@ -1761,7 +1761,11 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
   })
 
   it('작성자가 W2 소속이면 folder_path 도 W2 트리에서 해석한다', async () => {
-    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[W2, 'member']]) }))
+    const PW2 = '0e000000-0000-4000-8000-00000000000e'   // W2 의 프로젝트 — 작성자는 그 명단 member(W2 에 역할이 있다)
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, workspaceRoles: new Map([[W2, 'member']]),
+      projectWorkspace: new Map([[PW2, W2]]), projectRoles: new Map<string, ProjectRole>([[PW2, 'member']]),
+    }))
     const { admin } = useAdmin({
       minutes: [{ data: null }, { data: created }],
       minute_folders: [{ data: [W1_PMO, W2_PMO, W2_Q] }],
@@ -1772,6 +1776,25 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
     expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
       p_workspace_id: W2, p_folder_id: 'w2-q',
     }))
+  })
+
+  // 세션 createMinute 은 프로젝트 없는 회의록에 그 워크스페이스의 역할(명단 권한·워크스페이스 관리자)을 요구한다 — 외부 POST 도 같다
+  // (SP2 최종 리뷰 AUTHZ-7). 조회 전용이 만든 회의록은 본인도 다시 보낼 수 없었다(canEditMinute 가 404).
+  it('프로젝트 없는 신규 등록 — 그 워크스페이스에 역할이 없는 멤버(조회 전용)는 404, RPC 미도달', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))   // WS member, 명단 권한 없음
+    const { admin } = useAdmin({ minutes: [{ data: null }, { data: created }], minute_folders: [{ data: [W1_PMO] }] })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ code: 'not_found' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('프로젝트 없는 신규 등록 — 워크스페이스 관리자는 명단 없이도 201', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]) }))
+    const { admin } = useAdmin({ minutes: [{ data: null }, { data: created }], minute_folders: [{ data: [W1_PMO] }] })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(201)
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_project_id: null, p_workspace_id: WS }))
   })
 
   it('작성자 소속이 둘이면 400 — 추측해 한쪽에 넣지 않는다(RPC 미도달)', async () => {

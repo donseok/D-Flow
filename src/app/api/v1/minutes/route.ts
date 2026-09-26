@@ -18,7 +18,7 @@ import {
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { canEditMinute, canSeeProject, isProjectMember, teamViewOf, type Actor } from '@/lib/domain/authz'
+import { canEditMinute, canSeeProject, hasProjectRoleInWorkspace, isProjectMember, teamViewOf, type Actor } from '@/lib/domain/authz'
 import type { TeamCode } from '@/lib/domain/types'
 
 /**
@@ -134,6 +134,11 @@ function resolveWriteTarget(
         ok: false,
         response: apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.'),
       }
+    }
+    // 세션 createMinute 과 같은 자격 — 그 워크스페이스에 역할(명단 권한 또는 워크스페이스 관리자)이 있어야 한다. 조회 전용은 프로젝트
+    // 분기와 같은 404(조회 전용이 만든 회의록은 canEditMinute 로 본인도 다시 보낼 수 없었다).
+    if (!hasProjectRoleInWorkspace(authz, w.workspaceId)) {
+      return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
     }
     scope = { projectId: null, workspaceId: w.workspaceId }
   }

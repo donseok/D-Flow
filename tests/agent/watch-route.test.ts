@@ -50,7 +50,8 @@ beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
   process.env.AGENT_API_SECRET = 'legacy-secret'
   vi.clearAllMocks()
-  mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1' }))
+  // 기본: WS 한 곳 소속 + P1(WS) 명단 member — 프로젝트 없는 감시자도 그 워크스페이스에 역할이 있어야 한다(T13-2·F13)
+  mocks.actorFromUser.mockResolvedValue(makeMemberActor(P1, [], { userId: 'u-1' }))
 })
 
 describe('POST /agent/watch', () => {
@@ -89,6 +90,23 @@ describe('POST /agent/watch', () => {
     expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: P1, workspace_id: null })
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }))
     expect((await post({ agent: 'a', project_id: P2 })).status).toBe(403)
+  })
+  // 감시자는 그 워크스페이스의 모든 허브·좌석표에 '떠 있는 팀장'으로 보이는 쓰기다 — 조회 전용에게 주지 않는다(판정 T13-2).
+  // 프로젝트 분기만 isProjectMember 를 보고, 프로젝트 없는 분기는 역할을 보지 않았다(SP2 최종 리뷰 AUTHZ-6).
+  it('프로젝트 없는 감시자 — 그 워크스페이스에 역할이 없는 멤버(조회 전용)는 404, upsert 하지 않는다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1' }))   // WS member, 명단 권한 없음
+    useAdmin(runnerQueues(), calls)
+    const res = await post({ agent: 'hong/mbp/lead' })
+    expect(res.status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+  })
+  it('프로젝트 없는 감시자 — 워크스페이스 관리자는 명단 없이도 200', async () => {
+    const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', workspaceRoles: new Map([[WS, 'admin']]) }))
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'hong/mbp/lead' })).status).toBe(200)
+    expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: null, workspace_id: WS })
   })
   it('프로젝트 없는 감시자인데 소속 워크스페이스가 하나가 아니면 400 project_required — upsert 하지 않는다', async () => {
     const calls: Record<string, unknown[]> = {}
@@ -165,6 +183,7 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
   })
   it('프로젝트 한정 PAT 라도 소유자 스냅샷에 없는 프로젝트면 404(발급 때 워크스페이스를 확인하지 않는다)', async () => {
     const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1' }))   // P1 을 모른다
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }), calls)
     expect((await post({ agent: 'a' })).status).toBe(404)
     expect(calls['agent_watchers:upsert']).toBeUndefined()

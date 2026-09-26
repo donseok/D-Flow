@@ -7,7 +7,7 @@ import {
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { isProjectMember } from '@/lib/domain/authz'
+import { hasProjectRoleInWorkspace, isProjectMember } from '@/lib/domain/authz'
 
 /**
  * watch — 감시자(팀장 /dflow-team · 단독 /dflow-poll) 존재 신호. 좌석표 v1 스펙 §3-3.
@@ -123,10 +123,13 @@ export async function POST(req: NextRequest) {
     if (projectId && !isProjectMember(actor, projectId)) return apiNotFound()
 
     // 프로젝트 없는 감시자는 워크스페이스를 명시해야 한다(0006 not null) — 프로젝트가 있으면 트리거가 채운다.
+    // 그 워크스페이스의 모든 허브·좌석표에 보이므로 그 워크스페이스에 역할(명단 권한 또는 워크스페이스 관리자)이 있어야 한다 —
+    // 조회 전용은 프로젝트 분기와 같은 404(판정 T13-2).
     let workspaceId: string | null = null
     if (!projectId) {
       const w = resolveSoleWorkspaceId(actor)
       if (!w.ok) return apiFail(400, 'project_required', '워크스페이스가 하나가 아니면 project_id 를 지정하세요.')
+      if (!hasProjectRoleInWorkspace(actor, w.workspaceId)) return apiNotFound()
       workspaceId = w.workspaceId
     }
 
