@@ -10,13 +10,14 @@ type DbClient = Awaited<ReturnType<typeof createServerClient>> | ReturnType<type
  *  created_by null(시드) 고정 — 동명 사용자 폴더(스쿼팅)가 전사 편철 대상이 되면 안 됨.
  *  조회 실패·폴더 부재는 null(미분류 폴백)로 로그만 남긴다 — 편철이 등록 자체를 막으면 안 됨.
  *  folder_path 미전송(구버전 또박또박) 경로의 폴백으로 존치한다.
- *  projectId(0076) — null 은 미지정(전역) 트리, uuid 는 그 프로젝트 전용 트리의 루트다. */
+ *  projectId(0076) — null 은 미지정 트리, uuid 는 그 프로젝트 전용 트리의 루트다.
+ *  workspaceId(0006) — 미지정 트리는 워크스페이스마다 따로 있다(루트 유일성이 (workspace_id, name)). */
 export async function resolveTeamRootFolderId(
-  sb: DbClient, teamCode: TeamCode, projectId: string | null,
+  sb: DbClient, teamCode: TeamCode, projectId: string | null, workspaceId: string,
 ): Promise<string | null> {
   let q = sb.from('minute_folders')
     .select('id').is('parent_id', null).is('created_by', null).eq('name', teamCode)
-  q = projectId ? q.eq('project_id', projectId) : q.is('project_id', null)
+  q = projectId ? q.eq('project_id', projectId) : q.is('project_id', null).eq('workspace_id', workspaceId)
   const { data, error } = await q.maybeSingle()
   if (error) {
     console.error('[minutes] 팀 루트 폴더 조회 실패(미분류 폴백):', error.message)
@@ -37,21 +38,24 @@ export interface FolderRow {
   parentId: string | null
   createdBy: string | null
   projectId: string | null   // 0076: null = 미지정 영역
+  workspaceId: string        // 0006: 미지정 영역은 워크스페이스마다 따로다
 }
 
 export interface FolderSnapshot {
   byId: Map<string, FolderRow>
   /** `${parentId} ${name}` → id. parentId 는 uuid(공백 없음)라 구분자 충돌이 없다. */
   byParentName: Map<string, string>
-  /** 시드 루트(parent_id null · created_by null) `rootKey(projectId, name)` → id.
-   *  (프로젝트, 팀코드) 로 분리돼 동명 루트가 프로젝트별로 공존한다(0076). */
+  /** 시드 루트(parent_id null · created_by null) `rootKey(projectId, workspaceId, name)` → id.
+   *  (프로젝트, 팀코드) 로 분리돼 동명 루트가 프로젝트별로 공존한다(0076). 미지정 루트는
+   *  (워크스페이스, 팀코드) 로 분리된다(0006). */
   seedRoots: Map<string, string>
 }
 
 const childKey = (parentId: string, name: string) => `${parentId} ${name}`
 
-/** seedRoots 키 — projectId 는 uuid(공백 없음), 미지정은 '-'. */
-const rootKey = (projectId: string | null, name: string) => `${projectId ?? '-'} ${name}`
+/** seedRoots 키 — 프로젝트 루트는 프로젝트로, 미지정 루트는 워크스페이스로 가른다(id 는 uuid 라 공백 없음). */
+const rootKey = (projectId: string | null, workspaceId: string | null, name: string) =>
+  projectId ? `p:${projectId} ${name}` : `w:${workspaceId ?? '-'} ${name}`
 
 export function buildFolderSnapshot(rows: readonly FolderRow[]): FolderSnapshot {
   const snap: FolderSnapshot = { byId: new Map(), byParentName: new Map(), seedRoots: new Map() }
@@ -62,7 +66,7 @@ export function buildFolderSnapshot(rows: readonly FolderRow[]): FolderSnapshot 
 export function addToFolderSnapshot(snap: FolderSnapshot, row: FolderRow): void {
   snap.byId.set(row.id, row)
   if (row.parentId === null) {
-    if (row.createdBy === null) snap.seedRoots.set(rootKey(row.projectId, row.name), row.id)
+    if (row.createdBy === null) snap.seedRoots.set(rootKey(row.projectId, row.workspaceId, row.name), row.id)
   } else {
     snap.byParentName.set(childKey(row.parentId, row.name), row.id)
   }
@@ -71,7 +75,7 @@ export function addToFolderSnapshot(snap: FolderSnapshot, row: FolderRow): void 
 /** 전량 로드. 실패는 null(fail-loud 로그) — 호출부가 '폴더 없음'과 구분해 처리한다. */
 export async function loadFolderSnapshot(sb: DbClient): Promise<FolderSnapshot | null> {
   const { data, error } = await sb.from('minute_folders')
-    .select('id, name, parent_id, created_by, project_id')
+    .select('id, name, parent_id, created_by, project_id, workspace_id')
   if (error) {
     console.error('[minutes] 폴더 스냅샷 로드 실패:', error.message)
     return null
@@ -82,6 +86,7 @@ export async function loadFolderSnapshot(sb: DbClient): Promise<FolderSnapshot |
     parentId: (r.parent_id as string | null) ?? null,
     createdBy: (r.created_by as string | null) ?? null,
     projectId: (r.project_id as string | null) ?? null,
+    workspaceId: r.workspace_id as string,
   }))
   return buildFolderSnapshot(rows)
 }
@@ -234,19 +239,24 @@ async function createChildFolder(
 
 /** 프로젝트 팀 루트 지연 보장 — 시드(created_by null) 삽입이라 **admin 클라이언트 필수**
  *  (0040 RLS insert 정책은 created_by = auth.uid() 를 요구한다). 23505 는 동시 생성 경합 —
- *  createChildFolder 와 같은 재조회 우회. 실패는 null(호출부 미분류 폴백). */
+ *  createChildFolder 와 같은 재조회 우회. 실패는 null(호출부 미분류 폴백).
+ *  workspace_id 는 트리거가 프로젝트에서 채운다(0006) — 스냅샷 반영용으로 되읽는다. */
 export async function ensureProjectTeamRoot(
   sb: DbClient, projectId: string, teamCode: TeamCode,
-): Promise<string | null> {
+): Promise<{ id: string; workspaceId: string } | null> {
+  const toRoot = (r: unknown) => {
+    const row = r as { id: string; workspace_id: string }
+    return { id: row.id, workspaceId: row.workspace_id }
+  }
   const { data, error } = await sb.from('minute_folders')
     .insert({ name: teamCode, parent_id: null, created_by: null, project_id: projectId })
-    .select('id').single()
-  if (!error && data) return (data as { id: string }).id
+    .select('id, workspace_id').single()
+  if (!error && data) return toRoot(data)
   if (error?.code === '23505') {
     const { data: raced, error: reErr } = await sb.from('minute_folders')
-      .select('id').is('parent_id', null).is('created_by', null)
+      .select('id, workspace_id').is('parent_id', null).is('created_by', null)
       .eq('name', teamCode).eq('project_id', projectId).maybeSingle()
-    if (!reErr && raced) return (raced as { id: string }).id
+    if (!reErr && raced) return toRoot(raced)
   }
   console.error(`[minutes] 프로젝트 팀 루트 생성 실패(${teamCode}):`, error?.message ?? 'no row')
   return null
@@ -273,9 +283,13 @@ export async function resolveFolderPath(
     snapshot?: FolderSnapshot
     /** false = 폴더를 만들지 않는다(dry run). 없는 경로는 complete:false·failed:false 로 보고. */
     create?: boolean
-    /** 0076 — null 은 미지정(전역) 트리, uuid 는 그 프로젝트 전용 트리. 필수라 전 호출부가
+    /** 0076 — null 은 미지정 트리, uuid 는 그 프로젝트 전용 트리. 필수라 전 호출부가
      *  스코프를 명시하게 강제한다. */
     projectId: string | null
+    /** 0006 — 미지정 트리(projectId null)는 워크스페이스마다 따로다. projectId 가 null 이면 필수이고,
+     *  없으면 루트를 고르지 않는다(no_team_root — 다른 워크스페이스 루트에 편철하지 않는다).
+     *  projectId 가 있으면 쓰지 않는다. */
+    workspaceId: string | null
   },
 ): Promise<ResolveFolderPathResult> {
   const parsed = parseFolderPathValue(path)
@@ -284,17 +298,22 @@ export async function resolveFolderPath(
   if (!norm.ok) return { ok: false, kind: 'validation_failed', error: norm.error, reason: norm.reason }
 
   const snap = opts.snapshot ?? await loadFolderSnapshot(sb)
-  const rootId0 = snap?.seedRoots.get(rootKey(opts.projectId, teamCode)) ?? null
+  if (!opts.projectId && !opts.workspaceId) console.error('[minutes] 미지정 트리 해석에 workspaceId 가 없다 — 루트를 고르지 않는다')
+  const rootId0 = opts.projectId || opts.workspaceId
+    ? snap?.seedRoots.get(rootKey(opts.projectId, opts.workspaceId, teamCode)) ?? null
+    : null
   let rootId = rootId0
   // snap 을 앞세운다 — loadFolderSnapshot 실패(null)면 조회 자체가 실패한 것이라 지연 생성도
   // 하지 않는다(쓰기 전 선행 조회 실패는 중단). snap 이 있어야만 아래 addToFolderSnapshot(snap, …)
   // 의 "rootId 가 있으면 snap 도 있다" 불변식이 성립한다.
   if (snap && !rootId && opts.projectId && opts.create !== false
     && opts.activeTeamCodes.includes(teamCode)) {
-    rootId = await ensureProjectTeamRoot(sb, opts.projectId, teamCode)
-    if (rootId) {
+    const root = await ensureProjectTeamRoot(sb, opts.projectId, teamCode)
+    if (root) {
+      rootId = root.id
       addToFolderSnapshot(snap, {
-        id: rootId, name: teamCode, parentId: null, createdBy: null, projectId: opts.projectId,
+        id: root.id, name: teamCode, parentId: null, createdBy: null, projectId: opts.projectId,
+        workspaceId: root.workspaceId,
       })
     }
   }
@@ -322,6 +341,7 @@ export async function resolveFolderPath(
     if (!created) return { ok: true, ...base, folderId: cur, resolvedPath, complete: false, failed: true }
     addToFolderSnapshot(snap!, {
       id: created, name, parentId: cur, createdBy: opts.actorId, projectId: opts.projectId,
+      workspaceId: snap!.byId.get(cur)!.workspaceId,   // 트리거가 부모에서 채운 값과 같다
     })
     cur = created
     resolvedPath.push(name)
@@ -351,9 +371,12 @@ export async function refileMinuteAfterProjectChange(
   if (!snap) return                                    // 실패 로그는 loadFolderSnapshot 이 남김
   const oldPath = folderPathOfSnapshot(snap, args.oldFolderId)
   if (!oldPath) return                                 // 끊긴 체인 — 건드리지 않는다
+  // 회의록의 워크스페이스 = 옛 폴더의 워크스페이스(RPC 가 폴더·회의록 워크스페이스 일치를 강제한다, 0006).
+  // 미지정으로 옮길 때 그 워크스페이스의 미지정 트리에서 해석한다.
   const res = await resolveFolderPath(admin, args.teamCode, oldPath, {
     actorId: args.actorId, activeTeamCodes: args.activeTeamCodes,
     snapshot: snap, projectId: args.newProjectId,
+    workspaceId: snap.byId.get(args.oldFolderId)!.workspaceId,
   })
   const folderId = res.ok ? res.folderId : null        // no_team_root → 미분류 강등
   // updated_at 무접촉 — 편철 정리가 외부 연동 GET 에 '방금 수정됨'으로 비치면 안 된다(0043 규칙)

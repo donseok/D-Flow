@@ -61,7 +61,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 
 import { addTeam, updateTeam } from '@/app/actions/teams'
-import { makeSuperuser } from '../fixtures/actor'
+import { makeSuperuser, WS } from '../fixtures/actor'
 
 const SUPERUSER = makeSuperuser({ userId: 'u-super' })
 const asSuperuser = () => requireSuperuser.mockResolvedValue({ ok: true, actor: SUPERUSER })
@@ -133,10 +133,21 @@ describe('팀 관리 서버액션', () => {
 
   it('동명 시드 폴더가 이미 있으면 폴더 insert 는 생략하고 성공', async () => {
     asSuperuser()
-    db.folders = [{ id: 'f1', code: undefined, name: '신팀', parent_id: null, created_by: null }]
+    db.folders = [{ id: 'f1', code: undefined, name: '신팀', parent_id: null, created_by: null, workspace_id: WS }]
     const r = await addTeam('신팀')
     expect(r.ok).toBe(true)
     expect(db.inserted.minute_folders).toHaveLength(0)
+  })
+
+  // 0006 — 미지정 루트는 워크스페이스별이다. 다른 워크스페이스의 동명 루트를 "이미 있다"로 오인하지 않고,
+  // 새 루트에는 부모·프로젝트가 없어 트리거가 못 채우므로 workspace_id 를 명시한다.
+  it('동명 시드 폴더가 다른 워크스페이스 것이면 이 워크스페이스에 workspace_id 를 명시해 만든다', async () => {
+    asSuperuser()
+    db.folders = [{ id: 'f2', name: '신팀', parent_id: null, created_by: null, workspace_id: 'ws-other' }]
+    const r = await addTeam('신팀')
+    expect(r.ok).toBe(true)
+    expect(db.inserted.minute_folders).toHaveLength(1)
+    expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, project_id: null, workspace_id: WS })
   })
 
   // 0071 이후 project_id 로도 스코프해야 한다 — 프로젝트 루트 폴더가 같은 이름을 먼저 선점해도

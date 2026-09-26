@@ -75,16 +75,16 @@ function post(body: unknown, headers: Record<string, string> = {}): NextRequest 
 
 /* ── fixtures ─────────────────────────────────────────────────────────────── */
 
-const SEED_MES = { id: 'f-mes', name: 'MES', parent_id: null, created_by: null }
-const SEED_ERP = { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null }
-const F_QUALITY = { id: 'f-q', name: '품질', parent_id: 'f-mes', created_by: 'u-9' }
-const F_WEEKLY = { id: 'f-w', name: '주간정례', parent_id: 'f-q', created_by: 'u-9' }
+const SEED_MES = { id: 'f-mes', name: 'MES', parent_id: null, created_by: null, workspace_id: 'ws-1' }
+const SEED_ERP = { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: 'ws-1' }
+const F_QUALITY = { id: 'f-q', name: '품질', parent_id: 'f-mes', created_by: 'u-9', workspace_id: 'ws-1' }
+const F_WEEKLY = { id: 'f-w', name: '주간정례', parent_id: 'f-q', created_by: 'u-9', workspace_id: 'ws-1' }
 const TREE = [SEED_MES, SEED_ERP, F_QUALITY, F_WEEKLY]
 
 /** minutes 행 — 배치가 조회하는 컬럼만. project_id 기본 null(전역 트리, 기존 동작). */
 const minute = (n: number, over: Partial<Record<string, unknown>> = {}) => ({
   id: `m-${n}`, external_id: EID(n), team_code: 'MES', project_id: null,
-  folder_id: 'f-mes', archived_at: null, ...over,
+  folder_id: 'f-mes', archived_at: null, workspace_id: 'ws-1', ...over,
 })
 
 /** 폴더 스냅샷 + 대상 회의록 조회 응답을 세팅한다(배치의 고정 선두 2질의). */
@@ -514,7 +514,7 @@ describe('조상 규칙 (§4c.5 · 결정 §2-J)', () => {
   })
 
   it('다른 가지로 옮겨 둔 건은 계속 보호된다', async () => {
-    const tree = [...TREE, { id: 'f-etc', name: '기타', parent_id: 'f-mes', created_by: 'u-9' }]
+    const tree = [...TREE, { id: 'f-etc', name: '기타', parent_id: 'f-mes', created_by: 'u-9', workspace_id: 'ws-1' }]
     useAdmin({
       minute_folders: [{ data: tree }],
       minutes: [{ data: [minute(1, { folder_id: 'f-etc' })] }],
@@ -567,7 +567,7 @@ describe('폴더 생성 시점 — 판정 전에 만들지 않는다(리뷰 지�
   it('APPLY 에서 skip 될 건의 목표 트리를 미리 만들지 않는다 — 빈 고아 폴더 방지', async () => {
     // 현재 MES/기타(다른 가지) → 목표 MES/품질/신규. 조상이 아니라 skip 되어야 하고,
     // 그 과정에서 '신규' 폴더가 만들어지면 아무도 안 쓰는 ACTOR 명의 폴더가 트리에 남는다.
-    const tree = [...TREE, { id: 'f-etc', name: '기타', parent_id: 'f-mes', created_by: 'u-9' }]
+    const tree = [...TREE, { id: 'f-etc', name: '기타', parent_id: 'f-mes', created_by: 'u-9', workspace_id: 'ws-1' }]
     const { builders } = useAdmin({
       minute_folders: [{ data: tree }],
       minutes: [{ data: [minute(1, { folder_id: 'f-etc' })] }],
@@ -670,7 +670,7 @@ describe('비활성 팀 시나리오 (§3.2 ① 단독 조건)', () => {
   it('team_code 가 비활성이어도 루트 세그먼트가 중복되지 않는다', async () => {
     mocks.activeTeamCodes = ['PMO', 'ERP', 'MES', '가공']        // MDM 비활성
     useAdmin({
-      minute_folders: [{ data: [...TREE, { id: 'f-mdm', name: 'MDM', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [...TREE, { id: 'f-mdm', name: 'MDM', parent_id: null, created_by: null, workspace_id: 'ws-1' }] }],
       minutes: [{ data: [minute(1, { team_code: 'MDM', folder_id: 'f-mdm' })] }],
     })
     const r = await POST(post(body({
@@ -685,7 +685,7 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
   const PROJECT_UUID = '90b95d7d-8d5c-4f8c-9915-4a07b876af27'
   // 같은 이름 'MES' 루트가 전역(f-mes)과 프로젝트(f-mes-p)에 각각 존재 — 스코프를 안 가리면
   // 전역 루트와 뒤섞인다.
-  const SEED_MES_PROJECT = { id: 'f-mes-p', name: 'MES', parent_id: null, created_by: null, project_id: PROJECT_UUID }
+  const SEED_MES_PROJECT = { id: 'f-mes-p', name: 'MES', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: 'ws-1' }
   const TREE_WITH_PROJECT = [...TREE, SEED_MES_PROJECT]
 
   it('회의록의 project_id 스코프 루트를 기준으로 판정한다 — 전역 루트와 혼동하지 않는다', async () => {

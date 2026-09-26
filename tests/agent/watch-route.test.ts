@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
+import { makeActor, WS } from '../fixtures/actor'
 
-const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
+const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// 프로젝트 없는 감시자의 워크스페이스 해석(0006) — 소속은 fixture 로 준다.
+vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 
 import { POST } from '@/app/api/v1/agent/watch/route'
 
@@ -46,6 +49,7 @@ beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
   process.env.AGENT_API_SECRET = 'legacy-secret'
   vi.clearAllMocks()
+  mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1' }))
 })
 
 describe('POST /agent/watch', () => {
@@ -56,7 +60,7 @@ describe('POST /agent/watch', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     const [payload, opts] = calls['agent_watchers:upsert'][0] as [Record<string, unknown>, Record<string, unknown>]
-    expect(payload).toMatchObject({ user_id: 'u-1', agent: 'hong/mbp/lead', host: 'mbp', slots: 3, busy: 1, until_label: '18:00', project_id: null })
+    expect(payload).toMatchObject({ user_id: 'u-1', agent: 'hong/mbp/lead', host: 'mbp', slots: 3, busy: 1, until_label: '18:00', project_id: null, workspace_id: WS })
     expect(opts).toEqual({ onConflict: 'user_id,agent' })
     expect(Date.parse(body.expires_at) - Date.parse(payload.last_seen_at as string)).toBe(WATCHER_TTL_MS)
   })
@@ -79,9 +83,19 @@ describe('POST /agent/watch', () => {
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }), calls)
     const ok = await post({ agent: 'a' })
     expect(ok.status).toBe(200)
-    expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0].project_id).toBe(P1)
+    expect((calls['agent_watchers:upsert'][0] as [Record<string, unknown>])[0]).toMatchObject({ project_id: P1, workspace_id: null })
+    expect(mocks.actorFromUser).not.toHaveBeenCalled()   // 프로젝트가 있으면 트리거가 채운다
     useAdmin(runnerQueues({ ...RUNNER, project_id: P1 }))
     expect((await post({ agent: 'a', project_id: P2 })).status).toBe(403)
+  })
+  it('프로젝트 없는 감시자인데 소속 워크스페이스가 하나가 아니면 400 project_required — upsert 하지 않는다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', workspaceRoles: new Map([[WS, 'member'], ['ws-2', 'member']]) }))
+    useAdmin(runnerQueues(), calls)
+    const res = await post({ agent: 'a' })
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('project_required')
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
   })
   it('400 — agent 없음 / project_id 형식 오류 / slots 음수', async () => {
     useAdmin(runnerQueues()); expect((await post({})).status).toBe(400)

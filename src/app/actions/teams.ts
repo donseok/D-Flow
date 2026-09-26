@@ -50,12 +50,15 @@ export async function addTeam(input: string): Promise<TeamActionResult> {
   // 표시한다(편철은 미분류 폴백이라 치명적이진 않지만 조용히 넘기지 않는다 — 에러 3원칙).
   // 0071 이후 project_id 로도 스코프해야 한다 — 안 하면 어느 프로젝트가 같은 이름의 프로젝트
   // 루트 폴더를 먼저 만들었을 때 그 행을 "이미 있다"로 오인해 전역 루트 시드 생성이 스킵된다.
+  // workspace_id 도 건다(0006) — 다른 워크스페이스의 동명 루트를 "이미 있다"로 오인하지 않는다.
   const seed = await admin.from('minute_folders')
-    .select('id').is('parent_id', null).is('created_by', null).is('project_id', null).eq('name', norm.code).maybeSingle()
+    .select('id').is('parent_id', null).is('created_by', null).is('project_id', null).eq('name', norm.code)
+    .eq('workspace_id', w.workspaceId).maybeSingle()
   let seedError: string | null = seed.error ? seed.error.message : null
   if (!seed.error && !seed.data) {
+    // 미지정 루트는 워크스페이스별이다(0006) — 트리거가 채울 부모·프로젝트가 없으니 명시한다.
     const folder = await admin.from('minute_folders')
-      .insert({ name: norm.code, parent_id: null, created_by: null, project_id: null, sort: 100 + sortOrder })
+      .insert({ name: norm.code, parent_id: null, created_by: null, project_id: null, workspace_id: w.workspaceId, sort: 100 + sortOrder })
     if (folder.error) seedError = folder.error.message
   }
 

@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { collectLeaves } from '@/components/wbs/shared'
 import type { ComputedItem, UiPrefs } from '@/lib/domain/types'
+import { prefsWorkspaceId } from '@/lib/prefs/prefsWorkspace'
 
 export type NotificationItem = {
   id: string
@@ -55,9 +56,19 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
     }))
 
   // 읽음 상태 병합 — '모두 읽음' 시점의 id 목록(prefs.notifRead[projectId])과 대조.
+  // 부차 데이터 — 키 워크스페이스·조회 실패는 로깅 후 '전부 안 읽음'으로 열화한다.
   const sb = await createServerClient()
-  const { data: prefRow } = await sb
-    .from('user_preferences').select('prefs').eq('user_id', user.id).maybeSingle()
+  let prefRow: { prefs: unknown } | null = null
+  try {
+    const ws = await prefsWorkspaceId(sb, user.id)
+    if (!ws) console.error('[notifications] 소속 워크스페이스 없음 — 읽음 상태 생략')
+    else {
+      const { data, error } = await sb
+        .from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', ws).maybeSingle()
+      if (error) console.error('[notifications] 읽음 상태 조회 실패:', error.message)
+      prefRow = data
+    }
+  } catch (e) { console.error('[notifications]', e instanceof Error ? e.message : e) }
   const readIds = new Set((prefRow?.prefs as UiPrefs | null)?.notifRead?.[projectId] ?? [])
 
   const items_ = [...delayed, ...dueSoon].slice(0, 15).map(n => ({ ...n, read: readIds.has(n.id) }))
@@ -73,13 +84,20 @@ export async function markAllNotificationsRead(projectId: string, ids: string[])
     return { ok: false }
   }
   const sb = await createServerClient()
-  const { data: existing } = await sb
-    .from('user_preferences').select('prefs').eq('user_id', user.id).maybeSingle()
+  let ws: string | null
+  try { ws = await prefsWorkspaceId(sb, user.id) } catch (e) {
+    console.error('[markAllNotificationsRead]', e instanceof Error ? e.message : e); return { ok: false }
+  }
+  if (!ws) return { ok: false }
+  const { data: existing, error: readErr } = await sb
+    .from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', ws).maybeSingle()
+  // 병합 선행 조회 실패를 '설정 없음'으로 보면 다른 설정을 덮어쓴다 — 중단.
+  if (readErr) { console.error('[markAllNotificationsRead] 기존 설정 조회 실패:', readErr.message); return { ok: false } }
   const prefs = (existing?.prefs as UiPrefs | null) ?? {}
   const notifRead = { ...(prefs.notifRead ?? {}), [projectId]: ids }
   const { error } = await sb.from('user_preferences').upsert(
-    { user_id: user.id, prefs: { ...prefs, notifRead }, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id' },
+    { user_id: user.id, workspace_id: ws, prefs: { ...prefs, notifRead }, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,workspace_id' },
   )
   return { ok: !error }
 }

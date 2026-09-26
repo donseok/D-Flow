@@ -113,6 +113,15 @@ export function hasAnyProjectRole(actor: Actor | null): boolean {
   if (!actor) return false
   return actor.isSuperuser || actor.projectRoles.size > 0 || adminWorkspaceIds(actor).size > 0
 }
+/** 그 워크스페이스에 역할이 있는가 — 워크스페이스 관리자이거나, 그 워크스페이스 프로젝트 중 하나에 명단 권한. (옛 app_role() is not null 의 워크스페이스판) */
+export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: string | null | undefined): boolean {
+  if (!actor) return false
+  if (actor.isSuperuser) return true
+  if (!workspaceId) return false
+  if (actor.workspaceRoles.get(workspaceId) === 'admin') return true
+  for (const pid of actor.projectRoles.keys()) if (actor.projectWorkspace.get(pid) === workspaceId) return true
+  return false
+}
 
 /**
  * RSC 경계로 내릴 수 있는 직렬화 가능한 스냅샷 — Actor 의 Map 은 클라이언트 props 로

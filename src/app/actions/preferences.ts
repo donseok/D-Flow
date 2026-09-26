@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import type { UiPrefs } from '@/lib/domain/types'
+import { prefsWorkspaceId } from '@/lib/prefs/prefsWorkspace'
 
 /** 현재 사용자의 전역 UI 설정(없으면 빈 객체). 미로그인 시 {}. */
 export async function getUiPrefs(): Promise<UiPrefs> {
@@ -9,8 +10,14 @@ export async function getUiPrefs(): Promise<UiPrefs> {
   const u = await getSession()
   if (!u) return {}
   const sb = await createServerClient()
+  // 선호값은 워크스페이스별 행이다(0006) — 키 워크스페이스를 못 정하면 표시용이라 기본값으로 열화한다.
+  let ws: string | null
+  try { ws = await prefsWorkspaceId(sb, u.id) } catch (e) {
+    console.error('[getUiPrefs]', e instanceof Error ? e.message : e); return {}
+  }
+  if (!ws) { console.error('[getUiPrefs] 소속 워크스페이스 없음 — 기본값'); return {} }
   const { data, error } = await sb
-    .from('user_preferences').select('prefs').eq('user_id', u.id).maybeSingle()
+    .from('user_preferences').select('prefs').eq('user_id', u.id).eq('workspace_id', ws).maybeSingle()
   if (error) console.error('[getUiPrefs] 조회 실패:', error.message)
   return (data?.prefs as UiPrefs) ?? {}
 }
@@ -20,8 +27,14 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>): Promise<void> {
   const sb = await createServerClient()
   const { data: u } = await sb.auth.getUser()
   if (!u.user) return
+  // 키 워크스페이스를 못 정하면 어느 행에 쓸지 모른다 — 저장 중단(쓰기 전 선행 조회 실패).
+  let ws: string | null
+  try { ws = await prefsWorkspaceId(sb, u.user.id) } catch (e) {
+    console.error('[saveUiPrefs] 저장 중단:', e instanceof Error ? e.message : e); return
+  }
+  if (!ws) { console.error('[saveUiPrefs] 소속 워크스페이스 없음 — 저장 중단'); return }
   const { data: existing, error: readErr } = await sb
-    .from('user_preferences').select('prefs').eq('user_id', u.user.id).maybeSingle()
+    .from('user_preferences').select('prefs').eq('user_id', u.user.id).eq('workspace_id', ws).maybeSingle()
   // 병합 선행 조회 — 실패를 '설정 없음'으로 오인하면 patch 가 전체를 덮어써
   // 테마·언어·사이드바 등 이번에 안 건드린 설정이 소실된다. 읽기 실패 시 저장을 중단한다.
   if (readErr) {
@@ -30,8 +43,8 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>): Promise<void> {
   }
   const merged = { ...((existing?.prefs as UiPrefs) ?? {}), ...patch }
   const { error } = await sb.from('user_preferences').upsert(
-    { user_id: u.user.id, prefs: merged, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id' },
+    { user_id: u.user.id, workspace_id: ws, prefs: merged, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,workspace_id' },
   )
   if (error) console.error('[saveUiPrefs] 저장 실패:', error.message)
 }

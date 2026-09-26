@@ -14,6 +14,8 @@ import {
   type AdminClient, type ExternalMinutePayload, type ResolvedUser,
 } from '@/lib/minutes/externalApi'
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
+import { actorFromUser } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import type { TeamCode } from '@/lib/domain/types'
 
 /**
@@ -25,7 +27,7 @@ export const dynamic = 'force-dynamic'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
-const MINUTE_SELECT = 'id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, folder_id, created_by, created_by_name, created_at, updated_at'
+const MINUTE_SELECT = 'id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, folder_id, created_by, created_by_name, created_at, updated_at, workspace_id'
 
 interface ExistingRow {
   id: string
@@ -43,6 +45,7 @@ interface ExistingRow {
   created_by_name: string | null
   created_at: string
   updated_at: string
+  workspace_id: string
 }
 
 /**
@@ -92,10 +95,10 @@ function activeTeamCodesFor(projectId: string | null): TeamCode[] {
  * 팀에서는 시드가 없다. 여기서 생성하지 않으면 그 경로가 전부 미분류로 떨어진다.
  */
 async function resolveTeamRootWithLazyCreate(
-  admin: AdminClient, teamCode: TeamCode, projectId: string | null, actorId: string,
+  admin: AdminClient, teamCode: TeamCode, projectId: string | null, workspaceId: string | null, actorId: string,
 ): Promise<string | null> {
   const res = await resolveFolderPath(admin, teamCode, [], {
-    actorId, activeTeamCodes: activeTeamCodesFor(projectId), projectId,
+    actorId, activeTeamCodes: activeTeamCodesFor(projectId), projectId, workspaceId,
   })
   return res.ok ? res.folderId : null
 }
@@ -107,6 +110,8 @@ async function resolveTeamRootWithLazyCreate(
  */
 async function resolvePayloadFolder(
   admin: AdminClient, p: ExternalMinutePayload, actorId: string, projectId: string | null,
+  /** 0006 — 미지정 트리(projectId null)를 고르는 워크스페이스. */
+  workspaceId: string | null,
 ): Promise<
   | { ok: true; provided: false }
   | {
@@ -120,6 +125,7 @@ async function resolvePayloadFolder(
     actorId,
     activeTeamCodes: activeTeamCodesFor(projectId),
     projectId,   // 0076 — 회의록이 속한 프로젝트 트리에서 해석한다.
+    workspaceId, // 0006 — 미지정이면 그 워크스페이스의 미지정 트리.
   })
   if (!res.ok) {
     if (res.kind === 'validation_failed') return { ok: false, error: res.error }
@@ -172,7 +178,8 @@ async function handleExisting(
   // folder_id 키를 **넣지 않아야** 기존 위치가 유지된다(RPC 는 키가 있으면 null 도 적용해
   // 미분류로 강등한다). 시드 루트 부재(folderId null)도 같은 이유로 키를 넣지 않는다 —
   // 되돌릴 위치가 없다고 회의록을 미분류로 빼내면 안 된다.
-  const folder = await resolvePayloadFolder(admin, p, actor.id, targetProjectId)
+  // 미지정 트리는 이 회의록의 워크스페이스에서 고른다(0006 — 회의록 워크스페이스는 바뀌지 않는다).
+  const folder = await resolvePayloadFolder(admin, p, actor.id, targetProjectId, existing.workspace_id)
   if (!folder.ok) return apiBadRequest(folder.error)
   // ⚠️ 부분 편철(중간 폴더 생성 실패)이면 폴더를 **건드리지 않는다**. 신규 등록은 원래 자리가
   // 없으니 조상에 넣는 편이 미분류보다 낫지만, replace 는 이미 자리가 있는 회의록을 목표의
@@ -188,7 +195,9 @@ async function handleExisting(
   // 에서 금지한 상태를 외부 API 가 정상 경로로 만드는 셈). 새 팀 루트로 옮긴다.
   // 400 거절은 구버전 클라이언트의 정상 조작(담당 정정)을 막으므로 채택하지 않는다.
   if (!folderUpdated && p.teamCode !== existing.team_code) {
-    teamMovedFolderId = await resolveTeamRootWithLazyCreate(admin, p.teamCode, targetProjectId, actor.id)
+    teamMovedFolderId = await resolveTeamRootWithLazyCreate(
+      admin, p.teamCode, targetProjectId, existing.workspace_id, actor.id,
+    )
     if (teamMovedFolderId) folderUpdated = true
     else console.error(`[minutes-api] 담당 변경(${existing.team_code}→${p.teamCode}) 팀 루트 부재 — 폴더 유지`)
   }
@@ -305,11 +314,22 @@ async function insertNew(
   // folder_path 를 받았으면 팀 루트 아래에 같은 폴더 트리를 만들어 편철하고(§3.2), 키가 아예
   // 없으면(구버전 또박또박) 기존대로 담당 팀 루트로 편철한다(0043). 부재·실패는 미분류(null)
   // 폴백 — 편철 실패가 등록 자체를 막으면 안 된다.
-  const folder = await resolvePayloadFolder(admin, p, user.id, meetingProjectId)
+  // 프로젝트 없는 회의록은 워크스페이스를 명시해야 한다(0006) — 전환 UI(SP3) 전까지 소속이 하나인 계정만.
+  let workspaceId: string | null = null
+  if (!meetingProjectId) {
+    let actor
+    try { actor = await actorFromUser(admin, user.id) } catch (e) {
+      console.error('[minutes-api] 작성자 권한 조회 실패:', e); return apiInternalError()
+    }
+    const w = resolveSoleWorkspaceId(actor)
+    if (!w.ok) return apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.')
+    workspaceId = w.workspaceId
+  }
+  const folder = await resolvePayloadFolder(admin, p, user.id, meetingProjectId, workspaceId)
   if (!folder.ok) return apiBadRequest(folder.error)
   const folderId = folder.provided
     ? folder.folderId
-    : await resolveTeamRootWithLazyCreate(admin, p.teamCode, meetingProjectId, user.id)
+    : await resolveTeamRootWithLazyCreate(admin, p.teamCode, meetingProjectId, workspaceId, user.id)
   const folderPath = folder.provided
     ? folder.folderPath
     : (folderId ? [p.teamCode] : null)
@@ -331,6 +351,8 @@ async function insertNew(
     p_file_path: null,
     p_file_size: null,
     p_file_mime: null,
+    // 프로젝트가 있으면 null — RPC 가 프로젝트에서 얻는다(0006).
+    p_workspace_id: workspaceId,
   }).single()
   if (error || !createdRaw) {
     // 동시 전송 경합: 부분 unique 인덱스 위반(23505)이면 그 사이 생긴 레코드 기준으로 재분기.

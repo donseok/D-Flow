@@ -37,9 +37,9 @@ describe('refileMinuteAfterProjectChange', () => {
   it('기존 경로를 새 프로젝트 트리에 만들어 folder_id 를 옮긴다', async () => {
     // 스냅샷: 전역 PMO/주간회의 + P1 PMO 루트(주간회의 하위는 아직 없음). old = 전역 주간회의.
     const snapshot = buildFolderSnapshot([
-      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null },
-      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null },
-      { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1 },
+      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null, workspaceId: 'ws-1' },
+      { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1, workspaceId: 'ws-1' },
     ])
     const { db, builders } = fakeDb([
       { data: { id: 'p1-weekly' } },      // insert 주간회의 under p1-pmo
@@ -70,8 +70,8 @@ describe('refileMinuteAfterProjectChange', () => {
   it('경로 확보 실패(no_team_root — 비활성 팀 등)면 미분류로 강등하고 로그만 남긴다', async () => {
     // P1 트리에 PMO 루트가 없고, activeTeamCodes 에도 PMO 가 없어 지연 생성도 하지 않는다.
     const snapshot = buildFolderSnapshot([
-      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null },
-      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null },
+      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null, workspaceId: 'ws-1' },
     ])
     const { db, builders } = fakeDb([{ data: [{ id: 'm1' }] }])   // minutes.update 만, CAS 매치
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -87,10 +87,10 @@ describe('refileMinuteAfterProjectChange', () => {
     // 재편철 계산의 근거였던 oldFolderId('g-weekly')가 그 사이 바뀌어 .eq('folder_id', ...) 가
     // 0행에 매치 — DB 에러가 아니므로 이 경로가 없으면 "성공했지만 틀린" 쓰기가 조용히 일어난다.
     const snapshot = buildFolderSnapshot([
-      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null },
-      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null },
-      { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1 },
-      { id: 'p1-weekly', name: '주간회의', parentId: 'p1-pmo', createdBy: 'u1', projectId: P1 },
+      { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'g-weekly', name: '주간회의', parentId: 'g-pmo', createdBy: 'u9', projectId: null, workspaceId: 'ws-1' },
+      { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1, workspaceId: 'ws-1' },
+      { id: 'p1-weekly', name: '주간회의', parentId: 'p1-pmo', createdBy: 'u1', projectId: P1, workspaceId: 'ws-1' },
     ])
     const { db, builders } = fakeDb([{ data: [] }])   // update — CAS 불일치(0행)
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -104,5 +104,21 @@ describe('refileMinuteAfterProjectChange', () => {
     expect(errSpy).not.toHaveBeenCalled()          // DB 에러가 아니다 — 정상 no-op
     expect(infoSpy).toHaveBeenCalledWith('[minutes] 재편철 건너뜀(동시 이동 감지):', 'm1')
     errSpy.mockRestore(); infoSpy.mockRestore()
+  })
+  it('미지정으로 옮기면 회의록(=옛 폴더)의 워크스페이스 미지정 트리를 쓴다 — 동명 루트가 있는 다른 워크스페이스로 새지 않는다', async () => {
+    const snapshot = buildFolderSnapshot([
+      { id: 'w1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'w1-weekly', name: '주간회의', parentId: 'w1-pmo', createdBy: 'u9', projectId: null, workspaceId: 'ws-1' },
+      { id: 'w2-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-2' },
+      { id: 'w2-weekly', name: '주간회의', parentId: 'w2-pmo', createdBy: 'u9', projectId: null, workspaceId: 'ws-2' },
+      { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1, workspaceId: 'ws-2' },
+      { id: 'p1-weekly', name: '주간회의', parentId: 'p1-pmo', createdBy: 'u1', projectId: P1, workspaceId: 'ws-2' },
+    ])
+    const { db, builders } = fakeDb([{ data: [{ id: 'm1' }] }])
+    await refileMinuteAfterProjectChange(db, {
+      minuteId: 'm1', teamCode: 'PMO', oldFolderId: 'p1-weekly', newProjectId: null,
+      actorId: 'u1', activeTeamCodes: ['PMO'], snapshot,
+    })
+    expect(builders[0].update).toHaveBeenCalledWith({ folder_id: 'w2-weekly' })
   })
 })

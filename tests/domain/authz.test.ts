@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
-  isAdminAccessRole,
+  isAdminAccessRole, hasProjectRoleInWorkspace,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -54,6 +54,23 @@ describe('adminProjectIds / isAnyProjectAdmin', () => {
     expect(new Set(adminProjectIds(a))).toEqual(new Set([P, Q]))
     expect(isAnyProjectAdmin(a)).toBe(true)
     expect(hasAnyProjectRole(a)).toBe(true)
+  })
+})
+describe('hasProjectRoleInWorkspace', () => {
+  const W2 = 'ws-2', R = 'proj-in-w2'
+  it('워크스페이스 관리자는 명단 없이 true, 다른 워크스페이스 관리자는 false', () => {
+    expect(hasProjectRoleInWorkspace(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), W)).toBe(true)
+    expect(hasProjectRoleInWorkspace(makeActor({ workspaceRoles: new Map([[W2, 'admin']]) }), W)).toBe(false)
+  })
+  it('그 워크스페이스 프로젝트의 명단 권한이면 true, 다른 워크스페이스 명단 권한은 false', () => {
+    expect(hasProjectRoleInWorkspace(makeMemberActor(P, [], inWs), W)).toBe(true)
+    const other = makeMemberActor(R, [], { projectWorkspace: new Map([[R, W2]]), workspaceRoles: new Map([[W, 'member'], [W2, 'member']]) })
+    expect(hasProjectRoleInWorkspace(other, W)).toBe(false)
+  })
+  it('null 워크스페이스·비로그인은 fail-closed, 플랫폼 관리자는 true', () => {
+    expect(hasProjectRoleInWorkspace(makeMemberActor(P, [], inWs), null)).toBe(false)
+    expect(hasProjectRoleInWorkspace(null, W)).toBe(false)
+    expect(hasProjectRoleInWorkspace(makeSuperuser(), W)).toBe(true)
   })
 })
 describe('ProjectActorView 왕복', () => {

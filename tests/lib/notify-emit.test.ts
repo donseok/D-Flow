@@ -10,11 +10,14 @@ type Resp = { data?: unknown; error?: { code?: string; message: string } | null 
 /** 테이블별 응답 큐 mock — tests/actions/agent-work-actions.test.ts 관례 축소판 */
 function admin(queues: Record<string, Resp[]>) {
   const inserted: Record<string, unknown[]> = {}
+  const calls: Record<string, unknown[][]> = {}
   const client = {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'eq', 'in', 'order', 'limit']) b[k] = () => b
+      for (const k of ['select', 'eq', 'in', 'order', 'limit']) {
+        b[k] = (...args: unknown[]) => { (calls[`${table}.${k}`] ??= []).push(args); return b }
+      }
       b.insert = (rows: unknown) => { (inserted[table] ??= []).push(rows); return b }
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.maybeSingle = b.single
@@ -24,7 +27,7 @@ function admin(queues: Record<string, Resp[]>) {
     }),
   }
   mocks.createAdminClient.mockReturnValue(client)
-  return { client, inserted }
+  return { client, inserted, calls }
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -104,5 +107,45 @@ describe('emitNotification', () => {
     })
     expect(r.ok).toBe(true)
     expect(inserted.notification_recipients[0]).toEqual([{ event_id: 'ev1', member_id: null, user_id: 'u7', project_id: null }])
+  })
+  it('수신자는 활성 명단 행·활성 인물만 — 쿼리가 두 active 필터를 건다', async () => {
+    const { calls } = admin({
+      project_members: [{ data: [{ id: 'm1', people: { user_id: 'u1' } }] }],
+      notification_events: [{ data: { id: 'ev1' } }],
+      notification_recipients: [{ data: null }],
+    })
+    await emitNotification({
+      type: 'issue.assigned', projectId: 'p1', payload: { title: 'T' }, recipientMemberIds: ['m1'],
+    })
+    expect(calls['project_members.select']).toEqual([['id, people!inner(user_id, active)']])
+    expect(calls['project_members.eq']).toEqual([['active', true], ['people.active', true]])
+  })
+  it('프로젝트가 있으면 workspace_id 는 null 로 싣는다(트리거가 채운다)', async () => {
+    const { inserted } = admin({
+      notification_events: [{ data: { id: 'ev1' } }],
+      notification_recipients: [{ data: null }],
+    })
+    await emitNotification({ type: 'issue.assigned', projectId: 'p1', payload: { title: 'T' }, recipientUserIds: ['u1'] })
+    expect(inserted.notification_events[0]).toMatchObject({ project_id: 'p1', workspace_id: null })
+  })
+  it('프로젝트 없는 알림은 workspaceId 를 싣는다', async () => {
+    const { inserted } = admin({
+      notification_events: [{ data: { id: 'ev1' } }],
+      notification_recipients: [{ data: null }],
+    })
+    const r = await emitNotification({
+      type: 'issue.assigned', projectId: null, workspaceId: 'ws-1', payload: { title: 'T' }, recipientUserIds: ['u1'],
+    })
+    expect(r.ok).toBe(true)
+    expect(inserted.notification_events[0]).toMatchObject({ project_id: null, workspace_id: 'ws-1' })
+  })
+  it('프로젝트도 workspaceId 도 없으면 ok:false + 로깅 — 이벤트를 쓰지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { inserted } = admin({})
+    const r = await emitNotification({ type: 'issue.assigned', projectId: null, payload: { title: 'T' }, recipientUserIds: ['u1'] })
+    expect(r).toEqual({ ok: false })
+    expect(inserted.notification_events).toBeUndefined()
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

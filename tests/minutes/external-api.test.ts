@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => ({
   // Task 6 — 프로젝트 스코프 활성 팀 목록. 기본 구현은 beforeEach 에서 건다(초기화 시점에
   // mocks.activeTeamCodes 를 참조하면 자기 참조로 TS 순환 추론 에러가 난다).
   activeTeamCodesForProject: vi.fn<(projectId: string) => string[]>(),
+  // 0006 — 프로젝트 없는 신규 등록의 워크스페이스 해석(actorFromUser → resolveSoleWorkspaceId).
+  actorFromUser: vi.fn(),
 }))
+// 소속은 fixture 로 준다 — 실구현(buildActor)은 이 스위트의 테이블 큐를 소비해 버린다.
+vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 
 vi.mock('@/lib/teams/master', () => ({
   activeTeamCodesSync: () => mocks.activeTeamCodes,
@@ -48,6 +52,7 @@ import { GET, POST } from '@/app/api/v1/minutes/route'
 import { POST as LINK } from '@/app/api/v1/minutes/link/route'
 import { GET as META } from '@/app/api/v1/minutes/meta/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
+import { makeActor, WS } from '../fixtures/actor'
 
 const SECRET = 'test-minutes-secret'
 const EXTERNAL_ID = 'ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b77'
@@ -202,6 +207,7 @@ const existingRow = {
   created_by_name: '원작성자',
   created_at: '2026-07-01T00:00:00+00:00',
   updated_at: '2026-07-01T00:00:00+00:00',
+  workspace_id: WS,
 }
 
 async function runAfterCallbacks() {
@@ -216,6 +222,7 @@ beforeEach(() => {
   // clearAllMocks 는 mockImplementation 을 지우지 않는다 — 개별 테스트의 override 가 다음
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
+  mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
   vi.stubEnv('MINUTES_API_SECRET', SECRET)
   // W25 — folder_path 편철 스위치. 이 스위트는 켠 상태를 기본으로 검증하고,
@@ -383,7 +390,7 @@ describe('POST /api/v1/minutes upsert (§4, §9.6 ⑤⑥⑦⑧⑨)', () => {
       ],
       // Task 6 이후 폴백은 resolveFolderPath(path: []) 공유 구현을 태운다 — 순수 select 가
       // 아니라 스냅샷 전체 로드(loadFolderSnapshot)라 응답이 배열이다.
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     const res = await POST(post(payload))
     expect(res.status).toBe(201)
@@ -417,7 +424,7 @@ describe('POST /api/v1/minutes upsert (§4, §9.6 ⑤⑥⑦⑧⑨)', () => {
         { data: null },
         { data: { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' } },
       ],
-      minute_folders: [{ data: [{ id: 'f-new', name: '신설팀', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-new', name: '신설팀', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, team: '신설팀' }))
     expect(res.status).toBe(201)
@@ -691,7 +698,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
   const insertQueue = [{ data: null }, { data: created }]
   // resolveFolderPath 는 폴더 전량 스냅샷 1회 + 부족분 insert 순으로 질의한다.
-  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null }
+  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }
   const snapshot = (...rs: Array<Record<string, unknown>>) => ({ data: [SEED_PMO, ...rs] })
 
   /** 신규 등록 경로의 minute_folders 응답 큐를 세팅한다. */
@@ -701,7 +708,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
 
   it('경로대로 편철하고 응답에 folder_id·folder_path 를 에코한다', async () => {
     const { admin } = useInsert([
-      snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9' }),
+      snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9', workspace_id: WS }),
       { data: { id: 'f-w' } },                                            // 주간정례 생성
     ])
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질', '주간정례'] }))
@@ -816,7 +823,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
     it('키 부재 → metadata 에 folder_id 키가 없다(기존 위치 유지)', async () => {
       const { admin } = useAdmin({
         minutes: [...replaceQueue],
-        minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] }],  // 에코 역해석
+        minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],  // 에코 역해석
       })
       const res = await POST(post(payload))
       expect(res.status).toBe(200)
@@ -838,7 +845,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
     it('경로 → 그 경로로 이동', async () => {
       const { admin } = useAdmin({
         minutes: [...replaceQueue],
-        minute_folders: [snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9' })],
+        minute_folders: [snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9', workspace_id: WS })],
       })
       const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
       expect(res.status).toBe(200)
@@ -852,7 +859,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
         minute_folders: [
           snapshot(),                                                   // 팀 루트만 존재
           { data: null, error: { code: '42501', message: 'denied' } },  // '품질' 생성 실패
-          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] },  // 에코 역해석
+          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] },  // 에코 역해석
         ],
       })
       const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
@@ -867,7 +874,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
         minutes: [...replaceQueue],
         minute_folders: [
           { data: [] },                                                                 // 시드 루트 없음
-          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] },   // 에코 역해석
+          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] },   // 에코 역해석
         ],
       })
       const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
@@ -879,7 +886,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
     it('folder_id 는 v_index_content_changed 대상이 아니다 — 폴더만 바뀌면 위키 잡 없음', async () => {
       useAdmin({
         minutes: [...replaceQueue],
-        minute_folders: [snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9' })],
+        minute_folders: [snapshot({ id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9', workspace_id: WS })],
       })
       await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
       expect(mocks.enqueueMinuteWikiProcessing).not.toHaveBeenCalled()
@@ -890,7 +897,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
 describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Task 6)', () => {
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
   // 같은 이름 'PMO' 시드 루트가 전역과 프로젝트에 각각 존재 — 스코프를 안 가리면 엉뚱한 쪽으로 편철된다.
-  const SEED_PMO_GLOBAL = { id: 'f-pmo-global', name: 'PMO', parent_id: null, created_by: null, project_id: null }
+  const SEED_PMO_GLOBAL = { id: 'f-pmo-global', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: WS }
   const SEED_PMO_PROJECT = {
     id: 'f-pmo-project', name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID,
   }
@@ -967,11 +974,11 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
       minute_folders: [
         // refileMinuteAfterProjectChange 내부 loadFolderSnapshot — 신·구 프로젝트 루트가 모두 필요
         { data: [
-          { id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID },
-          { id: 'f-new-root', name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID },
+          { id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID, workspace_id: WS },
+          { id: 'f-new-root', name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: WS },
         ] },
         // 응답 에코(folderPathOf)용 — existing.folder_id(로컬 변수, 갱신 전 값) 역해석
-        { data: [{ id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID }] },
+        { data: [{ id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID, workspace_id: WS }] },
       ],
     })
     const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
@@ -991,7 +998,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
     const { admin } = useAdmin({
       minutes: [{ data: null }, { data: created }],
       // 팀 루트 폴백 경로(resolveFolderPath(path: []) 공유 구현) — 스냅샷 배열 응답.
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질', '주간정례'] }))
     expect(res.status).toBe(201)
@@ -1007,7 +1014,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
     // 플래그 없이 W1 만 먼저 내면 이 세 입력이 400 이 되어 오늘 정상 전송되는 회의가 실패한다.
     const queue = () => ({
       minutes: [{ data: null }, { data: created }],
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     useAdmin(queue())
     expect((await POST(post({ ...payload, folder_path: ['PMO', '가'.repeat(61)] }))).status).toBe(201)
@@ -1024,7 +1031,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
         { data: { ...existingRow, folder_id: 'f-old' } },
         { data: { id: 'm-1', created_at: existingRow.created_at, updated_at: '2026-07-27T02:00:00+00:00' } },
       ],
-      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
     expect(res.status).toBe(200)
@@ -1038,14 +1045,14 @@ describe('folder_path_status 에코 (결정 §2-C — POST 응답)', () => {
   // 또박또박 ddobak-W8 배지가 이 값 하나에 걸려 있어(절단·부분편철·미분류가 보이는 유일한 경로)
   // 조용히 잘못된 값이 나가면 사용자에게 "정상 편철"로 보인다.
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
-  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null }
+  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }
   const insertQueue = () => [{ data: null }, { data: created }]
 
   it('정상 편철 → exact', async () => {
     useAdmin({
       minutes: insertQueue(),
       minute_folders: [
-        { data: [SEED_PMO, { id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9' }] },
+        { data: [SEED_PMO, { id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9', workspace_id: WS }] },
       ],
     })
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
@@ -1111,8 +1118,8 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       // 팀 루트 폴백(resolveFolderPath(path: [])) 스냅샷 → f-erp, 그다음 응답은 에코 역해석용 스냅샷
       minute_folders: [
-        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null }] },
-        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null }] },
+        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS }] },
+        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS }] },
       ],
     })
     const res = await POST(post({ ...payload, team: 'ERP' }))
@@ -1125,7 +1132,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
     vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', 'false')
     const { admin } = useAdmin({
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
-      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] }],
+      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
     })
     const res = await POST(post(payload))
     expect(res.status).toBe(200)
@@ -1138,7 +1145,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       minute_folders: [
         { data: null },                                                              // 팀 루트 조회 실패
-        { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null }] }, // 에코는 기존 위치
+        { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }, // 에코는 기존 위치
       ],
     })
     const res = await POST(post({ ...payload, team: 'ERP' }))
@@ -1178,8 +1185,8 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       minute_folders: [
         { data: [
-          { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null },
-          { id: 'f-sales', name: '영업', parent_id: 'f-erp', created_by: 'u-9' },
+          { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS },
+          { id: 'f-sales', name: '영업', parent_id: 'f-erp', created_by: 'u-9', workspace_id: WS },
         ] },
       ],
     })
@@ -1612,5 +1619,90 @@ describe('미정의 메서드 은닉 (§3.4 보강 — 405로 존재가 드러�
         expect(res.status).toBe(404)
       }
     }
+  })
+})
+
+describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페이스)', () => {
+  const W2 = 'ws-2'
+  const created = { id: 'm-1', created_at: '2026-09-26T01:00:00+00:00', updated_at: '2026-09-26T01:00:00+00:00' }
+  // 두 워크스페이스에 동명 'PMO' 미지정 루트가 공존한다 — rootKey 가 워크스페이스를 안 보면 뒤엣것이 이긴다.
+  const W1_PMO = { id: 'w1-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: WS }
+  const W2_PMO = { id: 'w2-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: W2 }
+  const W2_Q = { id: 'w2-q', name: '품질', parent_id: 'w2-pmo', created_by: 'u-9', project_id: null, workspace_id: W2 }
+
+  it('프로젝트 없는 신규 등록은 작성자의 유일 워크스페이스를 p_workspace_id 로 넘기고 그 워크스페이스 루트에 편철한다', async () => {
+    const { admin } = useAdmin({
+      minutes: [{ data: null }, { data: created }],
+      minute_folders: [{ data: [W1_PMO, W2_PMO] }],
+    })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ folder_id: 'w1-pmo', folder_path: ['PMO'] })
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
+      p_project_id: null, p_workspace_id: WS, p_folder_id: 'w1-pmo',
+    }))
+    expect(mocks.actorFromUser).toHaveBeenCalledWith(admin, USER.id)
+  })
+
+  it('작성자가 W2 소속이면 folder_path 도 W2 트리에서 해석한다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[W2, 'member']]) }))
+    const { admin } = useAdmin({
+      minutes: [{ data: null }, { data: created }],
+      minute_folders: [{ data: [W1_PMO, W2_PMO, W2_Q] }],
+    })
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ folder_id: 'w2-q', folder_path: ['PMO', '품질'] })
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
+      p_workspace_id: W2, p_folder_id: 'w2-q',
+    }))
+  })
+
+  it('작성자 소속이 둘이면 400 — 추측해 한쪽에 넣지 않는다(RPC 미도달)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'member'], [W2, 'member']]) }))
+    const { admin } = useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'validation_failed' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('작성자 권한 조회 실패는 500 — 소속 없음으로 위장하지 않는다', async () => {
+    mocks.actorFromUser.mockRejectedValue(new Error('db down'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { admin } = useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(500)
+    expect(admin.rpc).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('프로젝트가 있으면 작성자 소속을 보지 않고 p_workspace_id 는 null — RPC 가 프로젝트에서 얻는다', async () => {
+    const { admin } = useAdmin({
+      meetings: [{ data: { id: MEETING_UUID, project_id: PROJECT_UUID } }],
+      minutes: [{ data: null }, { data: created }],
+      minute_folders: [{ data: [] }],
+    })
+    const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
+    expect(res.status).toBe(201)
+    expect(mocks.actorFromUser).not.toHaveBeenCalled()
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
+      p_project_id: PROJECT_UUID, p_workspace_id: null,
+    }))
+  })
+
+  it('replace: 미지정 회의록의 folder_path 는 그 회의록의 워크스페이스(W2) 트리에서 해석한다', async () => {
+    const { admin } = useAdmin({
+      minutes: [
+        { data: { ...existingRow, folder_id: 'w2-pmo', workspace_id: W2 } },
+        { data: { id: 'm-1', created_at: existingRow.created_at, updated_at: '2026-09-26T02:00:00+00:00' } },
+      ],
+      minute_folders: [{ data: [W1_PMO, W2_PMO, W2_Q] }],
+    })
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
+    expect(res.status).toBe(200)
+    const call = admin.rpc.mock.calls.find(c => c[0] === 'commit_minute_body_version')!
+    expect((call[1] as { p_metadata: Record<string, unknown> }).p_metadata).toMatchObject({ folder_id: 'w2-q' })
+    expect(mocks.actorFromUser).not.toHaveBeenCalled()   // 기존 회의록은 자기 워크스페이스를 안다
   })
 })

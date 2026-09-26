@@ -5,8 +5,10 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
 import {
-  isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, type Actor,
+  isProjectAdmin, isProjectMember, hasAnyProjectRole, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
 } from '@/lib/domain/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { ERR_MISSING } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteInput, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
@@ -145,7 +147,7 @@ function adminOr(fallback: string): { admin: ReturnType<typeof createAdminClient
  *  폴더의 프로젝트가 다르면 거절(무스코프면 다른 프로젝트 폴더에 새로 꽂힌다). 파생 불가 폴더
  *  (시드 체인 밖)는 추측하지 않고 거절한다. createMinute·updateMinuteMeta 공용. */
 async function deriveTeamFromFolder(
-  sb: Sb, folderId: string, projectId: string | null,
+  sb: Sb, folderId: string, projectId: string | null, workspaceId?: string,
 ): Promise<{ team: TeamCode } | { error: string }> {
   const folders = await loadFolders(sb)
   if (!folders) return { error: '폴더 목록을 불러오지 못했습니다.' }
@@ -153,6 +155,10 @@ async function deriveTeamFromFolder(
   if (!targetFolder) return { error: '폴더를 찾을 수 없습니다.' }
   if ((targetFolder.projectId ?? null) !== projectId) {
     return { error: '다른 프로젝트 폴더로는 이동할 수 없습니다.' }
+  }
+  // 프로젝트 없는 폴더끼리는 워크스페이스가 경계다(0006) — RPC 의 MINUTE_FOLDER_WORKSPACE_MISMATCH 를 미리 거른다.
+  if (workspaceId && targetFolder.workspaceId !== workspaceId) {
+    return { error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
   const derived = teamSubOfFolder(folders, folderId)
   if (!derived) return { error: '담당 팀을 판정할 수 없는 폴더입니다.' }
@@ -183,21 +189,32 @@ export async function createMinute(
   })
   if (resolvedProject.error) return { ok: false, error: resolvedProject.error }
   // 회의록 생성은 멤버 이상(스펙 D8). 프로젝트가 정해지면 그 프로젝트의 멤버여야 하고,
-  // 미지정이면 어느 프로젝트든 역할이 있어야 한다(조회 전용 차단 — app_role() is not null 과 같은 의미).
+  // 미지정이면 쓰기 대상 워크스페이스에 역할이 있어야 한다(옛 app_role() is not null 의 워크스페이스판).
+  let workspaceId: string | null = null
+  if (!resolvedProject.projectId) {
+    const w = resolveSoleWorkspaceId(g.actor)
+    if (!w.ok) return { ok: false, error: w.error }
+    workspaceId = w.workspaceId
+  }
   if (resolvedProject.projectId
     ? !isProjectMember(g.actor, resolvedProject.projectId)
-    : !hasAnyProjectRole(g.actor)) return { ok: false, error: '권한 없음' }
+    : !hasProjectRoleInWorkspace(g.actor, workspaceId)) return { ok: false, error: '권한 없음' }
+  // 폴더 해석에 넘길 워크스페이스 — 프로젝트가 있으면 그 프로젝트의 것(가드를 통과했으니 projectWorkspace 에 있다;
+  // 플랫폼 관리자는 buildActor 가 전 프로젝트를 싣는다).
+  const targetWs = workspaceId
+    ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
+  if (!targetWs) return { ok: false, error: ERR_MISSING }
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
   let effectiveTeam = input.teamCode
   if (folderId) {
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null)
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, workspaceId ?? undefined)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
   // 폴더 미지정이면 담당 팀 루트 폴더로 자동 편철(0043) — 부재·실패는 미분류(null) 폴백.
   // sb 는 사용자 세션 클라이언트라(admin 아님) resolveTeamRootFolderId 는 읽기만 한다 —
   // 프로젝트 루트가 아직 없으면(지연 생성 미적용) null → 미분류 폴백으로 등록 자체는 막지 않는다.
-  const effectiveFolderId = folderId ?? await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId)
+  const effectiveFolderId = folderId ?? await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId, targetWs)
   // 녹취툴 산출물이면 시간 줄 +9h(UTC→KST) 보정 — DB·다운스트림 전부 보정본 사용
   const fix = correctMinuteBodyTime(input.bodyMd)
   if (fix.corrected) console.info(`[minutes] 시간 보정 적용: ${fix.from} → ${fix.to} (${input.title.trim()})`)
@@ -228,6 +245,8 @@ export async function createMinute(
     p_file_path: source?.file.filePath ?? null,
     p_file_size: source?.file.size ?? null,
     p_file_mime: source?.file.mime ?? null,
+    // 프로젝트가 있으면 null — RPC 가 프로젝트에서 얻는다(0006).
+    p_workspace_id: workspaceId,
   }).single()
   if (createError || !createdRaw) {
     return { ok: false, error: createError?.message ?? '회의록 생성에 실패했습니다.' }
@@ -823,15 +842,19 @@ export async function fetchMinutesExplorer(): Promise<ExplorerData | null> {
   return getMinutesExplorer()
 }
 
+/** 액션 내부용 폴더 행 — 가드가 RLS 와 같은 워크스페이스 판정을 하도록 workspace_id 를 싣는다(0006). */
+type FolderRow = MinuteFolder & { workspaceId: string }
+
 /** 폴더 전량 로드(액션 내부용) — 깊이 검증에 사용. 실패 시 null. */
-async function loadFolders(sb: Awaited<ReturnType<typeof createServerClient>>): Promise<MinuteFolder[] | null> {
-  const { data, error } = await sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id')
+async function loadFolders(sb: Awaited<ReturnType<typeof createServerClient>>): Promise<FolderRow[] | null> {
+  const { data, error } = await sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id')
   if (error) { console.error('[loadFolders] 조회 실패:', error.message); return null }
   return (data ?? []).map((f: Record<string, unknown>) => ({
     id: f.id as string, name: f.name as string,
     parentId: (f.parent_id as string | null) ?? null,
     sort: f.sort as number, createdBy: (f.created_by as string | null) ?? null,
     projectId: (f.project_id as string | null) ?? null,
+    workspaceId: f.workspace_id as string,
   }))
 }
 
@@ -842,8 +865,6 @@ export async function createMinuteFolder(
 ): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  // 폴더는 프로젝트에 속하지 않는 전역 리소스 — 멤버 이상(조회 전용 차단)이 만든다.
-  if (!hasAnyProjectRole(g.actor)) return { ok: false, error: '권한 없음' }
   const nameErr = validateFolderName(name)
   if (nameErr) return { ok: false, error: nameErr }
   // W18(§6.3) — 루트 폴더 생성 금지. 회의록의 team_code 를 폴더에서 파생하려면 "모든 폴더는
@@ -858,6 +879,9 @@ export async function createMinuteFolder(
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const parent = folders.find(f => f.id === parentId)
   if (!parent) return { ok: false, error: '상위 폴더를 찾을 수 없습니다.' }
+  // 폴더는 부모의 워크스페이스에 생긴다(트리거가 채운다) — 그 워크스페이스에 역할(조회 전용 차단)이 있어야 한다.
+  // RLS insert_own_minute_folders(0006)와 같은 판정.
+  if (!hasProjectRoleInWorkspace(g.actor, parent.workspaceId)) return { ok: false, error: '권한 없음' }
   // 자식=부모 프로젝트 불변식 — 부모가 프로젝트 폴더면 그 프로젝트 멤버만 하위를 만들 수 있다.
   if (parent.projectId && !isProjectMember(g.actor, parent.projectId)) {
     return { ok: false, error: '권한 없음' }
@@ -913,7 +937,7 @@ export async function renameMinuteFolder(
     console.error('[renameMinuteFolder] 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  // RLS 가 소유자·관리자(app_role() shim)가 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
+  // RLS 의 관리자 판정(작성자 ∨ 그 워크스페이스 관리자, 0006)이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   revalidatePath('/minutes')
   return { ok: true }
@@ -949,10 +973,8 @@ export async function deleteMinuteFolder(id: string): Promise<{ ok: boolean; err
   if (!parentId) return { ok: false, error: '최상위 폴더는 삭제할 수 없습니다.' }
   // RLS(0040)와 **같은 조건**을 명시 선판정한다 — 승격을 먼저 하기 때문에, 삭제가 나중에
   // 권한으로 막히면 옮겨만 놓고 폴더가 남는 상태가 된다. 같은 조건이면 그 일이 없다.
-  // 주의: RLS 의 관리자 판정은 app_role() shim(0003 — 플랫폼 관리자·활성 명단 admin 행)이고 isAnyProjectAdmin 은
-  // 여기에 워크스페이스 관리자 승계를 더한다. 명단 admin 행이 없는 워크스페이스 관리자는 두 판정이 갈라져
-  // 승격 뒤 삭제가 0행이 될 수 있다 — app_role() 을 걷어내는 SP2 에서 한 판정으로 맞춘다.
-  if (target.createdBy !== g.actor.userId && !isAnyProjectAdmin(g.actor)) {
+  // RLS 의 관리자 판정(작성자 ∨ 그 워크스페이스 관리자, 0006)과 같다.
+  if (target.createdBy !== g.actor.userId && !isWorkspaceAdmin(g.actor, target.workspaceId)) {
     return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   }
 
@@ -1040,7 +1062,7 @@ export async function moveMinuteFolder(
     console.error('[moveMinuteFolder] 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  // RLS 가 소유자·관리자(app_role() shim)가 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
+  // RLS 의 관리자 판정(작성자 ∨ 그 워크스페이스 관리자, 0006)이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
   revalidatePath('/minutes')
   return { ok: true }

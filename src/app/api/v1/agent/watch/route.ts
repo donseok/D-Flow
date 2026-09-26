@@ -5,6 +5,8 @@ import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import {
   apiBadRequest, apiFail, apiInternalError, apiNotFound, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
+import { actorFromUser } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 
 /**
  * watch — 감시자(팀장 /dflow-team · 단독 /dflow-poll) 존재 신호. 좌석표 v1 스펙 §3-3.
@@ -112,12 +114,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, stopped: true })
     }
 
+    // 프로젝트 없는 감시자는 워크스페이스를 명시해야 한다(0006 not null) — 프로젝트가 있으면 트리거가 채운다.
+    let workspaceId: string | null = null
+    if (!projectId) {
+      const w = resolveSoleWorkspaceId(await actorFromUser(admin, principal.userId))
+      if (!w.ok) return apiFail(400, 'project_required', '워크스페이스가 하나가 아니면 project_id 를 지정하세요.')
+      workspaceId = w.workspaceId
+    }
+
     const now = new Date()
     const { error: upErr } = await admin
       .from('agent_watchers')
       .upsert({
         user_id: principal.userId, project_id: projectId, agent, host, slots, busy,
         until_label: until, last_seen_at: now.toISOString(),
+        // 프로젝트가 있어도 키를 싣는다(null) — insert 트리거가 제안 행을 프로젝트 워크스페이스로 채우고,
+        // 충돌 갱신은 그 값(excluded)을 쓰므로 옛 행의 워크스페이스가 남아 불일치(23514)가 나지 않는다.
+        workspace_id: workspaceId,
       }, { onConflict: 'user_id,agent' })
     if (upErr) { console.error('[agent-api] watch upsert 실패:', upErr.message); return apiInternalError() }
     // 청소를 따로 두지 않는다 — 7일 넘게 조용한 행은 여기서 지운다. 실패는 로깅만.

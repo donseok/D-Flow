@@ -6,6 +6,8 @@ import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 export type EmitInput = {
   type: NotificationType
   projectId: string | null
+  /** projectId 가 null 일 때 필수(0006 not null) — 없으면 { ok: false } + 로그. 프로젝트가 있으면 트리거가 채운다. */
+  workspaceId?: string
   actorUserId?: string | null
   entityType?: string
   entityId?: string
@@ -23,11 +25,13 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
 
     // 1) 수신자 해석 — member_id → people.user_id 스냅샷(발행 시점 링크). 미링크(user_id null)도
     //    행은 남긴다: 멱등 키·감사 근거. 배지·피드는 user_id 기준이라 링크 전에는 보이지 않는다.
+    //    비활성 명단 행·비활성 인물은 받지 않는다.
     const rows: { member_id: string | null; user_id: string | null }[] = []
     const memberIds = [...new Set(input.recipientMemberIds ?? [])]
     if (memberIds.length > 0) {
       const { data, error } = await admin
-        .from('project_members').select('id, people!inner(user_id)').in('id', memberIds)
+        .from('project_members').select('id, people!inner(user_id, active)').in('id', memberIds)
+        .eq('active', true).eq('people.active', true)
       if (error) {
         console.error('[notify] 수신자 해석 실패', input.type, error.message)
         return { ok: false }
@@ -43,6 +47,10 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
     if (rows.length === 0) return { ok: true, recipients: 0 }
 
     // 2) 이벤트 — dedupe_key 유니크 충돌은 "이미 발행됨" = 성공.
+    if (!input.projectId && !input.workspaceId) {
+      console.error('[notify] 프로젝트 없는 알림에 workspaceId 가 없다', input.type)
+      return { ok: false }
+    }
     const { data: ev, error: evErr } = await admin
       .from('notification_events')
       .insert({
@@ -50,6 +58,7 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
         category: NOTIFICATION_CATALOG[input.type].category,
         audience: 'direct',
         project_id: input.projectId,
+        workspace_id: input.workspaceId ?? null,
         actor_user_id: actor,
         entity_type: input.entityType ?? null,
         entity_id: input.entityId ?? null,

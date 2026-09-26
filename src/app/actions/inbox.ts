@@ -7,6 +7,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isTypeEnabled, type NotificationType } from '@/lib/domain/inbox'
 import type { UiPrefs } from '@/lib/domain/types'
+import { prefsWorkspaceId } from '@/lib/prefs/prefsWorkspace'
 
 export type InboxItem = {
   recipientId: string
@@ -45,7 +46,16 @@ export async function getInboxFeed(limit = 30): Promise<{ items: InboxItem[]; un
       .is('archived_at', null)
       .order('created_at', { ascending: false })
       .limit(limit),
-    sb.from('user_preferences').select('prefs').eq('user_id', user.id).maybeSingle(),
+    // 선호값 키 워크스페이스 조회 실패(throw)도 prefError 로 받아 아래 열화 경로로 보낸다.
+    (async () => {
+      try {
+        const ws = await prefsWorkspaceId(sb, user.id)
+        if (!ws) return { data: null, error: { message: '소속 워크스페이스 없음' } }
+        return await sb.from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', ws).maybeSingle()
+      } catch (e) {
+        return { data: null, error: { message: e instanceof Error ? e.message : String(e) } }
+      }
+    })(),
   ])
   if (error) {
     console.error('[inbox] 피드 조회 실패', error.message)

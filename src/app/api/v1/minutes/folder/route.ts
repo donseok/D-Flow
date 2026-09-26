@@ -130,6 +130,7 @@ interface MinuteRow {
   external_id: string
   team_code: string
   project_id: string | null   // 0076 — 편철 기준 트리를 이 회의록의 프로젝트로 스코프한다.
+  workspace_id: string        // 0006 — 미지정 회의록은 그 워크스페이스의 미지정 트리로 스코프한다.
   folder_id: string | null
   archived_at: string | null
 }
@@ -182,7 +183,7 @@ async function processItem(
   // 판정에는 생성이 필요 없다 — 조상 규칙은 **이미 존재하는** 조상 체인만 보면 되기 때문이다.
   const resolved = await resolveFolderPath(admin, teamCode, item.folderPath, {
     actorId, activeTeamCodes, snapshot: snap, create: false,
-    projectId,
+    projectId, workspaceId: row.workspace_id,
   })
   if (!resolved.ok) {
     // no_team_root 는 moved 로 집계하면 안 된다 — 배치는 '등록'이 아니라 '이동'이라
@@ -226,7 +227,7 @@ async function processItem(
   // 이동이 확정된 지금에서야 부족한 폴더를 만든다.
   const applied = await resolveFolderPath(admin, teamCode, item.folderPath, {
     actorId, activeTeamCodes, snapshot: snap, create: true,
-    projectId,
+    projectId, workspaceId: row.workspace_id,
   })
   if (!applied.ok) return { external_id: key, status: 'failed', reason: applied.reason, from }
   // 경로를 끝까지 못 만들었다 = 생성 실패. 조상에 떨구면 리포트(to)와 실제 트리가 어긋난다.
@@ -311,7 +312,7 @@ export async function POST(req: NextRequest) {
     // 대상 회의록을 한 번에 조회 — 건별 왕복을 없앤다.
     const ids = Array.from(new Set(batch.items.map(i => i.externalId)))
     const { data: rowsRaw, error: selErr } = await admin.from('minutes')
-      .select('id, external_id, team_code, project_id, folder_id, archived_at').in('external_id', ids)
+      .select('id, external_id, team_code, project_id, workspace_id, folder_id, archived_at').in('external_id', ids)
     if (selErr) {
       console.error('[minutes-api] 재편철 대상 조회 실패:', selErr.message)
       return apiInternalError()
