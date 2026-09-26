@@ -73,10 +73,15 @@ function makeClient(opts: {
   signed?: { data: { signedUrl: string } | null; error: { message: string } | null }
   /** 이슈 프로젝트의 워크스페이스 조회(경로 검증 scope). */
   project?: { data: { workspace_id: string } | null; error: { message: string } | null }
+  /** Storage remove 결과 — 기본은 객체 1건 삭제. */
+  removed?: { data: unknown[] | null; error: { message: string } | null }
 }) {
   const calls = opts.calls ?? []
   const insert = vi.fn(async (row: unknown) => { calls.push('meta.insert'); void row; return { error: opts.insertError ?? null } })
-  const remove = vi.fn(async (paths: string[]) => { calls.push('storage.remove'); void paths; return { data: [], error: null } })
+  const remove = vi.fn(async (paths: string[]) => {
+    calls.push('storage.remove'); void paths
+    return opts.removed ?? { data: [{ name: paths[0] }], error: null }
+  })
   const createSignedUrl = vi.fn(async () => opts.signed ?? { data: { signedUrl: 'https://signed' }, error: null })
 
   const issuesTable = {
@@ -297,6 +302,34 @@ describe('removeIssueAttachment', () => {
     const res = await removeIssueAttachment('a1')
     expect(res.ok).toBe(true)
     expect(m.calls).toEqual(['storage.remove', 'meta.delete'])
+  })
+
+  // remove 는 RLS 가 막아도 오류 없이 빈 배열을 돌려준다 — 0건을 성공으로 읽고 메타를 지우면 고아 객체가 남는다(T18 리뷰 carry l).
+  it('Storage 가 0건을 지웠으면 메타를 남기고 실패 — 로그를 남긴다', async () => {
+    asOwner()
+    const m = makeClient({
+      attachment: { data: { id: 'a1', file_path: `${ISSUE}/1-x.pdf`, issue_id: ISSUE }, error: null },
+      removed: { data: [], error: null },
+    })
+    state.client = m.client
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await removeIssueAttachment('a1')).ok).toBe(false)
+    expect(m.calls).toEqual(['storage.remove'])
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('Storage 삭제 오류면 메타를 남기고 실패', async () => {
+    asOwner()
+    const m = makeClient({
+      attachment: { data: { id: 'a1', file_path: `${ISSUE}/1-x.pdf`, issue_id: ISSUE }, error: null },
+      removed: { data: null, error: { message: 'storage down' } },
+    })
+    state.client = m.client
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await removeIssueAttachment('a1')).ok).toBe(false)
+    expect(m.calls).toEqual(['storage.remove'])
+    spy.mockRestore()
   })
 
   it('메타가 0행 지워지면 성공으로 둔갑시키지 않는다', async () => {

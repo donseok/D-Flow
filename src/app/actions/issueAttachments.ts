@@ -180,9 +180,13 @@ export async function removeIssueAttachment(id: string): Promise<{ ok: boolean; 
   if (!g.ok) return { ok: false, error: g.error }
 
   // Storage 를 먼저 지운다 — 반대로 하면 메타를 잃은 객체를 다시 찾을 수 없다.
-  // remove() 는 아무것도 지우지 못해도 error 가 null 이라 성공 여부를 판정할 수 없다.
-  // 대신 멱등이라 재실행이 안전하므로, 감지에 기대지 않고 메타 삭제로 진행한다.
-  await sb.storage.from(BUCKET).remove([att.file_path as string])
+  // remove() 는 RLS 가 막아도 error 없이 지운 객체 배열(0건)을 돌려준다 — 0건을 성공으로 읽고 메타를 지우면
+  // 고아 객체가 남는다(회의록 removeMinuteFile 과 같은 규칙). 객체 1건 삭제를 확인한 뒤에만 메타를 지운다.
+  const { data: removed, error: rmErr } = await sb.storage.from(BUCKET).remove([att.file_path as string])
+  if (rmErr || (removed ?? []).length !== 1) {
+    console.error('[removeIssueAttachment] Storage 삭제 실패 — 메타를 남긴다:', rmErr?.message ?? `${(removed ?? []).length}건 삭제`)
+    return { ok: false, error: '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.' }
+  }
   // .select() 로 실제 지워진 행을 확인한다 — supabase-js 는 RLS 거부·경합으로 0행이 지워져도
   // error 를 주지 않는다. 그대로 ok 를 반환하면 객체는 사라졌는데 메타는 남아
   // 목록에 영구히 죽은 링크가 뜨고 사용자에게는 '삭제 완료'로 보인다.
