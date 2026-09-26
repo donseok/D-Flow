@@ -10,6 +10,7 @@
 // 허용 쌍도 FK 이름 목록까지 고정한다 — 같은 쌍에 세 번째 FK 가 붙으면 실패한다.
 import type { Pool, PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { isScopedQual } from '../../scripts/lib/rls-scope.mjs'
 import { asService, openPool } from './harness'
 
 let pool: Pool
@@ -55,17 +56,17 @@ describe('스키마 불변식', () => {
     expect(stale, `허용 목록의 쌍이 더는 FK 2개 이상이 아니다 — 목록에서 뺀다: ${stale.join(', ')}`).toEqual([])
   })
 
-  // 개방 읽기 0(D2 예외 1): SELECT·ALL 정책 중 본문이 true 이거나 스코프 헬퍼·auth.uid() 를 하나도 부르지 않는 것.
+  // 개방 읽기 0(D2 예외 1): SELECT·ALL 정책 중 본문이 true 이거나 스코프 헬퍼·auth.uid() 비교를 하나도 부르지 않는 것.
   // 0006 ⑧ 사후검증(정책 ilike '%app_role%')과 같은 판정을 CI·로컬 어디서든 vitest 로 다시 돈다.
-  const SCOPE_MARKERS = ['accessible_project_ids', 'my_workspace_ids', 'is_ws_member', 'is_ws_admin', 'can_read_project',
-    'is_project_member', 'is_project_admin', 'is_superuser', 'auth.uid()', 'can_attach', 'can_edit_issue']
+  // 판정(isScopedQual) 은 scripts/lib/rls-scope.mjs 순수 모듈 — auth.uid() 단독 존재(`is not null`)는 스코프로
+  // 치지 않는다(리뷰 라운드 1). tests/scripts/rls-scope.test.ts 가 그 경계를 DB 없이 고정한다.
   const OPEN_READ_EXCEPTIONS: Record<string, string> = {
     'issue_mega_areas.read_all_issue_mega_areas': 'D2 — 전역 참조 데이터(테넌트 행 없음). 만료: SP5 에서 표가 프로젝트 영역으로 대체',
   }
   it('개방 읽기 정책 0건(D2 예외 1)', async () => {
     const rows = await asService(pool, async (c) => (await c.query<{ k: string; qual: string | null }>(
       `select tablename || '.' || policyname as k, qual from pg_policies where schemaname = 'public' and cmd in ('SELECT', 'ALL')`)).rows)
-    const open = rows.filter((r) => r.qual === 'true' || !SCOPE_MARKERS.some((m) => (r.qual ?? '').includes(m))).map((r) => r.k)
+    const open = rows.filter((r) => r.qual === 'true' || !isScopedQual(r.qual)).map((r) => r.k)
     expect(open.filter((k) => !(k in OPEN_READ_EXCEPTIONS))).toEqual([])
     expect(Object.keys(OPEN_READ_EXCEPTIONS).filter((k) => !open.includes(k)), '죽은 예외').toEqual([])
   })
@@ -119,17 +120,25 @@ describe('스키마 불변식', () => {
       left join lateral aclexplode(p.proacl) a on true
       group by f.fn`, [fns])).rows
   }
-  it('정책 헬퍼 EXECUTE 는 authenticated 뿐, anon·PUBLIC 없음(item_owned_by_my_team 포함)', async () => {
+  // 허용 목록 밖 그란티는 전부 위반이다 — anon·PUBLIC 뿐 아니라, 실수로 만든 커스텀 롤(예 staging_reader)에
+  // EXECUTE 가 붙어도 잡는다(리뷰 라운드 1 — 이전 판정은 anon·PUBLIC·"authenticated 있는가"만 봐서 그 사이의
+  // 임의 그란티를 놓쳤다). postgres 는 소유자 기본 권한이라 항상 허용.
+  const ALLOWED_HELPER_GRANTEES = ['authenticated', 'service_role', 'postgres']
+  it('정책 헬퍼 EXECUTE 는 허용 목록(authenticated·service_role·postgres) 뿐(item_owned_by_my_team 포함)', async () => {
     const rows = await asService(pool, (c) => executeGrantees(c, HELPER_FNS))
     expect(rows.map((r) => r.fn).sort()).toEqual([...HELPER_FNS].sort())
-    const bad = rows.filter((r) => r.has_public || r.named_grantees.includes('anon') || !r.named_grantees.includes('authenticated'))
+    const bad = rows.filter((r) => r.has_public || !r.named_grantees.includes('authenticated')
+      || r.named_grantees.some((g) => !ALLOWED_HELPER_GRANTEES.includes(g)))
       .map((r) => `${r.fn}: public=${r.has_public} grantees=${r.named_grantees.join(',')}`)
     expect(bad, `정책 헬퍼 EXECUTE 위반:\n  ${bad.join('\n  ')}`).toEqual([])
   })
-  it('project_ws EXECUTE 는 service_role 뿐(R3 분기 A) — authenticated·anon·PUBLIC 없음', async () => {
+  // project_ws 는 예외(R3 분기 A) — authenticated 는 없어야 하고, 나머지도 같은 허용 목록에서 authenticated 만 뺀 것.
+  const ALLOWED_PROJECT_WS_GRANTEES = ALLOWED_HELPER_GRANTEES.filter((g) => g !== 'authenticated')
+  it('project_ws EXECUTE 는 service_role·postgres 뿐(R3 분기 A) — authenticated·anon·PUBLIC 없음', async () => {
     const [row] = await asService(pool, (c) => executeGrantees(c, ['public.project_ws(uuid)']))
     expect(row.has_public).toBe(false)
-    expect(row.named_grantees).not.toContain('anon')
     expect(row.named_grantees).not.toContain('authenticated')
+    const bad = row.named_grantees.filter((g) => !ALLOWED_PROJECT_WS_GRANTEES.includes(g))
+    expect(bad, `project_ws EXECUTE 위반(허용 목록 밖): ${bad.join(',')}`).toEqual([])
   })
 })
