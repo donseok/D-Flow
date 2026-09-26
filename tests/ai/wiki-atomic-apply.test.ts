@@ -6,7 +6,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn() }))
 vi.mock('@/lib/ai/provider', () => ({ hasLLM: vi.fn(() => false) }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesSync: vi.fn(() => ['ERP']) }))
+vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() => ['ERP']) }))
 
 import {
   applyExtractedItem,

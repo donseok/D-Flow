@@ -7,7 +7,7 @@ import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
-import { projectTeamRowsSync, teamsForProjectSync, teamsSync } from '@/lib/teams/master'
+import { projectTeamRowsSync, teamsForProjectSync, workspaceTeamsForProjectSync } from '@/lib/teams/master'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
 import { listAreas } from '@/app/actions/projectAreas'
@@ -367,7 +367,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               projectId={projectId}
               teams={projectTeamRows.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
               inherited={projectTeamRows.length === 0}
-              hasGlobalTeams={teamsSync().some(t => t.active)}
+              hasGlobalTeams={workspaceTeamsForProjectSync(projectId).some(t => t.active)}
             />
           </SectionCard>
         )}

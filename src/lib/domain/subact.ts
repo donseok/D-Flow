@@ -1,7 +1,7 @@
 import type { OwnerKind, TeamCode } from './types'
 import { DEFAULT_TEAM_CODES } from './teams'
 
-/** @deprecated 기본 5팀 폴백 — 호출처는 활성 팀 목록을 주입할 것(useTeamCodes/activeTeamCodesSync). */
+/** @deprecated 기본 5팀 폴백 — 호출처는 활성 팀 목록을 주입할 것(useTeamCodes/activeTeamCodesForProjectSync). */
 export const SUB_ACT_TEAMS: readonly TeamCode[] = DEFAULT_TEAM_CODES
 
 /** SUB-ACT 저장 이름 규칙 — 임포트 분리(splitLeafOwners)와 동일한 "{ACT명} ({팀} 주관/지원)".

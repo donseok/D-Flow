@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+
+// 팀 캐시는 로드 전이면 throw 한다(SP2 16b) — 이 파일은 팀 축을 보지 않으므로 빈 팀 목록을 준다.
+vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: () => [] }))
+
 import { createGetProjectDashboardTool } from '@/lib/ai/tools/dashboard'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import {

@@ -11,6 +11,7 @@ import { validateStageCredits } from '@/lib/domain/stageCredits'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
+import { refreshTeams } from '@/lib/teams/master'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -111,6 +112,9 @@ export async function createProject(
     }
     throw new Error('프로젝트 생성에 실패했습니다. 다시 시도해 주세요.')
   }
+  // 팀 캐시가 새 프로젝트의 워크스페이스를 바로 알게 한다 — 모르면 다음 갱신(최대 TTL)까지 그 프로젝트의 팀이 빈 목록이다
+  // (캐시는 모르는 pid 를 '존재하지 않는 프로젝트'로 본다). refreshTeams 는 throw 하지 않는다 — 실패는 로그, TTL 갱신이 메운다.
+  await refreshTeams()
   revalidatePath('/projects')
 }
 

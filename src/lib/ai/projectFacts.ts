@@ -11,7 +11,8 @@ import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getProjectMinuteSignals } from '@/lib/data/minutes'
 import { getProjectConfig } from '@/lib/data/projectConfig'
 import { createServerClient } from '@/lib/supabase/server'
-import type { ComputedItem, Meeting, MeetingException, MinuteSignal } from '@/lib/domain/types'
+import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ComputedItem, Meeting, MeetingException, MinuteSignal, TeamCode } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { seoulToday } from '@/lib/domain/dates'
 
@@ -35,6 +36,8 @@ export interface ProjectFactsSource {
   meetingExceptions: MeetingException[]
   /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — 0058 시드 덕에 현행 상수와 동일(회귀 0). */
   milestoneKeywords: string[]
+  /** 그 프로젝트의 활성 팀 코드(전용 팀, 없으면 그 워크스페이스의 공용 팀). */
+  teams: TeamCode[]
 }
 
 /** 대시보드와 동일 소스 1회 병렬 로드. 프로젝트 행이 없으면(비멤버 RLS 포함) null. */
@@ -50,6 +53,8 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
   ])
   if (project.error) throw new Error(`[projectFacts] 프로젝트 조회 실패: ${project.error.message}`)
   if (!project.data) return null
+  // 팀 캐시는 service_role 이라 프로젝트 행을 RLS 로 확인한 뒤에 읽는다. 캐시 미로드는 throw — 호출측이 'unavailable' 로 강등한다.
+  const teams = activeTeamCodesForProjectSync(projectId)
   return {
     projectId,
     projectName: (project.data.name as string) ?? '',
@@ -64,5 +69,6 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     meetings: meetingData.meetings,
     meetingExceptions: meetingData.exceptions,
     milestoneKeywords: config.milestoneKeywords,
+    teams,
   }
 }

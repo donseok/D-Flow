@@ -17,25 +17,27 @@ import {
   shortExcerpt,
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
-import { isRegisteredTeamCode } from '@/lib/teams/master'
+import { isRegisteredTeamCodeForProject } from '@/lib/teams/master'
 // 팀 → 구분 매핑은 구분 목록(WEEKLY_SECTIONS)의 소유 파일로 이사했다 — 구분 개명이
 // 도구 쪽 사본과 손동기화되지 않아 과거 주차가 필터에서 새는 사고를 구조적으로 막는다.
 import { WEEKLY_TEAM_SECTIONS } from '@/lib/domain/weeklySheet'
 
 const WEEKLY_CAPABILITY = 'weekly:read' as const
 
-/** 팀 → 주간업무 구분 집합. 매핑에 없는 등록 팀은 동명 구분과 매칭(구분 신설 시 자동 활성).
- *  미등록 팀은 null(알 수 없는 팀). */
-function sectionsForTeam(team: string): ReadonlySet<string> | null {
+/** 팀 → 주간업무 구분 집합. 매핑에 없는 팀은 그 프로젝트의 등록 팀(비활성 포함)이면 동명 구분과 매칭(구분 신설 시 자동
+ *  활성). 미등록 팀은 null(알 수 없는 팀). 등록 판정은 그 프로젝트의 팀으로 한다 — 전 워크스페이스 공용 목록이면 다른
+ *  워크스페이스의 팀 코드가 통과한다. 팀 캐시 미로드는 throw — 오케스트레이터가 도구 실패로 올린다. */
+function sectionsForTeam(team: string, projectId: string): ReadonlySet<string> | null {
   const known = WEEKLY_TEAM_SECTIONS[team]
   if (known) return known
-  return isRegisteredTeamCode(team) ? new Set([team]) : null
+  return isRegisteredTeamCodeForProject(team, projectId) ? new Set([team]) : null
 }
 
-/** team 인자 검증 — 미지 팀과 '매핑 구분 없음'을 구분해 명시 거부(조용한 빈 결과 금지). */
-function validateTeam(team: string | undefined): ReturnType<typeof invalidArgument> | null {
+/** team 인자 검증 — 미지 팀과 '매핑 구분 없음'을 구분해 명시 거부(조용한 빈 결과 금지).
+ *  프로젝트 접근 판정 뒤에 부른다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다. */
+function validateTeam(team: string | undefined, projectId: string): ReturnType<typeof invalidArgument> | null {
   if (!team) return null
-  const sections = sectionsForTeam(team)
+  const sections = sectionsForTeam(team, projectId)
   if (!sections) return invalidArgument('알 수 없는 담당팀입니다.')
   if (sections.size === 0) {
     return invalidArgument(`${team} 팀에 매핑된 주간업무 구분이 아직 없습니다. 주간업무 시트는 업무영역 구분 체계라 ${team} 전용 구분 신설 전까지 팀 필터를 지원하지 않습니다.`)
@@ -94,11 +96,11 @@ function isScopedWeeklySnapshot(
     && snapshot.rows.every(row => row.reportId === snapshot.report.id)
 }
 
-function matchesWeeklyScope(rowSection: string, section?: string, team?: string): boolean {
+function matchesWeeklyScope(rowSection: string, projectId: string, section?: string, team?: string): boolean {
   const normalized = rowSection.trim().toLocaleLowerCase('ko-KR')
   if (section && normalized !== section.trim().toLocaleLowerCase('ko-KR')) return false
   if (!team) return true
-  const mapped = sectionsForTeam(team)
+  const mapped = sectionsForTeam(team, projectId)
   return !!mapped && [...mapped].some(value =>
     value.toLocaleLowerCase('ko-KR') === normalized,
   )
@@ -124,13 +126,13 @@ export function createGetWeeklySheetTool(
       ) {
         return invalidArgument()
       }
-      const teamError = validateTeam(team || undefined)
-      if (teamError) return teamError
       if (new Date(`${weekStart}T00:00:00Z`).getUTCDay() !== 1) {
         return invalidArgument('주간업무 기준일은 월요일이어야 합니다.')
       }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
+      const teamError = validateTeam(team || undefined, projectId)
+      if (teamError) return teamError
 
       const repoResult = await repository.getSheet(projectId, weekStart)
       if (!repoResult.ok) return repositoryFailure(repoResult)
@@ -147,7 +149,7 @@ export function createGetWeeklySheetTool(
 
       const needle = query?.toLocaleLowerCase('ko-KR')
       const matched = repoResult.data.rows.filter(row => {
-        if (!matchesWeeklyScope(row.section, section, team)) return false
+        if (!matchesWeeklyScope(row.section, projectId, section, team)) return false
         if (!needle) return true
         return [row.section, row.module, row.thisContent, row.thisIssue, row.nextContent, row.nextIssue]
           .some(value => value.toLocaleLowerCase('ko-KR').includes(needle))
@@ -304,13 +306,13 @@ export function createCompareWeeklySheetsTool(
         !projectId || !fromWeekStart || !toWeekStart || section === null || team === null
         || query === null || limit === null
       ) return invalidArgument()
-      const teamError = validateTeam(team || undefined)
-      if (teamError) return teamError
       if (!monday(fromWeekStart) || !monday(toWeekStart) || fromWeekStart >= toWeekStart) {
         return invalidArgument('비교할 두 주차는 서로 다른 월요일이며 과거 주차부터 입력해야 합니다.')
       }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
+      const teamError = validateTeam(team || undefined, projectId)
+      if (teamError) return teamError
 
       const [fromResult, toResult] = await Promise.all([
         repository.getSheet(projectId, fromWeekStart),
@@ -332,7 +334,7 @@ export function createCompareWeeklySheetsTool(
         const to = toRows.get(key)
         const representative = to ?? from
         if (!representative) return []
-        if (!matchesWeeklyScope(representative.section, section, team)) return []
+        if (!matchesWeeklyScope(representative.section, projectId, section, team)) return []
         if (needle) {
           const haystack = [
             representative.section, representative.module,

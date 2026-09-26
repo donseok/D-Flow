@@ -17,7 +17,7 @@
 // 수치 재계산 금지 강제 ③ verifyBriefNumbers 가 %/%p/건 토큰을 팩트 화이트리스트와
 // 대조해 불일치 줄을 제거+로깅한다.
 // ============================================================================
-import type { ComputedItem, Meeting, MeetingException } from '@/lib/domain/types'
+import type { ComputedItem, Meeting, MeetingException, TeamCode } from '@/lib/domain/types'
 import type { ExecSummary } from '@/lib/domain/dashboard'
 import { addDaysCal, buildExecSummary, dueSoonLeaves } from '@/lib/domain/dashboard'
 import { buildTrend, type SnapshotPoint } from '@/lib/domain/trend'
@@ -32,7 +32,6 @@ import { createEnsureGate, type EnsureState } from './ensure'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { activeTeamCodesSync } from '@/lib/teams/master'
 import { BRAND } from '@/lib/branding'
 
 /* ── 상한(프롬프트 예산 고정 — maxOutputTokens 4096 + 입력 ~6k자 캡) ── */
@@ -71,15 +70,17 @@ export interface BriefFactsInput {
   meetingExceptions: MeetingException[]
   /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — loadProjectFacts 가 주입원(§7.4). */
   milestoneKeywords: string[]
+  /** 그 프로젝트의 활성 팀 코드(전용 팀, 없으면 그 워크스페이스의 공용 팀) — loadProjectFacts 가 주입원.
+   *  순수 계층이 팀 캐시를 직접 읽지 않는다 — 전 워크스페이스 공용 목록을 쓰면 남의 팀이 팩트에 섞인다. */
+  teams: TeamCode[]
 }
 
 /** 도메인 함수 반환값을 그대로 담는다 — 임계값·수치 재정의 금지(단일 출처 계약). */
 export function buildBriefFacts(input: BriefFactsInput): BriefFacts {
   const {
     projectName, items, startDate, endDate, todayWbs, realToday,
-    holidays, snapshots, minuteSignals, meetings, meetingExceptions, milestoneKeywords,
+    holidays, snapshots, minuteSignals, meetings, meetingExceptions, milestoneKeywords, teams,
   } = input
-  const teams = activeTeamCodesSync()
   const exec = buildExecSummary(items, { startDate, endDate, today: todayWbs }, milestoneKeywords)
   const trendModel = buildTrend({
     items, snapshots, holidays: new Set(holidays), startDate, endDate, today: todayWbs,

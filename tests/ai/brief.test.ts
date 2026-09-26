@@ -19,7 +19,7 @@ const input = (over: Partial<BriefFactsInput> = {}): BriefFactsInput => ({
   projectName: '테스트 프로젝트', items: [], startDate: '2026-01-01', endDate: '2026-12-31',
   todayWbs: TODAY, realToday: '2026-07-19', holidays: [], snapshots: [],
   minuteSignals: [], meetings: [], meetingExceptions: [],
-  milestoneKeywords: [...LEGACY_MILESTONE_KEYWORDS], ...over,
+  milestoneKeywords: [...LEGACY_MILESTONE_KEYWORDS], teams: ['PMO', 'ERP'], ...over,
 })
 
 describe('buildBriefFacts', () => {
@@ -47,6 +47,18 @@ describe('buildBriefFacts', () => {
     expect(f.todayWbs).toBe(TODAY)
     expect(f.todayReal).toBe('2026-07-19')
     expect(f.minuteNotes[0]).toMatchObject({ label: '견적 회신', date: '2026-07-10' })
+  })
+
+  it('팀 축은 주입받은 그 프로젝트의 팀 코드뿐 — 팀 캐시를 직접 읽지 않는다(SP2 16b)', () => {
+    const late = (id: string, team: string) => leaf({
+      id, name: `지연${id}`, plannedEnd: '2026-07-01', plannedPct: 80, rolledActualPct: 10, status: 'delayed',
+      owners: [{ team, kind: 'primary' }],
+    })
+    const items = ['a1', 'a2', 'a3'].map(id => late(id, 'A팀')).concat(['b1', 'b2', 'b3'].map(id => late(id, 'B팀')))
+    const overload = (teams: string[]) => buildBriefFacts(input({ items, teams }))
+      .riskReport.signals.filter(s => s.kind === 'owner_overload').map(s => s.id)
+    expect(overload(['A팀'])).toEqual(['owner_overload:A팀'])
+    expect(overload(['B팀'])).toEqual(['owner_overload:B팀'])
   })
 
   it("kind='none' 인사이트는 노트에서 제외", () => {

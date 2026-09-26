@@ -8,6 +8,8 @@ vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn() }))
 vi.mock('@/lib/ai/knowledge', () => ({ getProjectName: vi.fn() }))
 vi.mock('@/lib/ai/analytics', () => ({ buildDocuments: vi.fn() }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn() }))
+// 팀 축은 그 프로젝트의 팀(SP2 16b) — 전 워크스페이스 공용 목록이 아니다.
+vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : ['B팀'])) }))
 
 import { hasEmbeddings } from '@/lib/ai/provider'
 import { embedDocuments } from '@/lib/ai/embeddings'
@@ -147,6 +149,7 @@ describe('ingestProject — 재색인(전체 교체)', () => {
 
     expect(await ingestProject('p1')).toEqual({ count: 0 })
     expect(mDocs.mock.calls[0][4]).toBe(rows)
+    expect(mDocs.mock.calls[0][3]).toEqual(['A팀'])
   })
 
   it('전부 실패: 기존 색인을 지우지 않고 보존(삭제 호출 없음)', async () => {

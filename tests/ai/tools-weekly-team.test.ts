@@ -1,4 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
+
+// 매핑(WEEKLY_TEAM_SECTIONS)에 없는 팀은 그 프로젝트의 등록 팀이면 동명 구분으로 본다 — 등록 판정은 프로젝트 스코프(SP2 16b).
+// p1 은 워크스페이스 A(공용 5팀), p2 는 전용 팀 'QA' 를 가진 프로젝트, 'B팀' 은 다른 워크스페이스 B 의 공용 팀이다.
+const PROJECT_TEAMS: Record<string, string[]> = {
+  p1: ['PMO', 'ERP', 'MES', '가공', 'MDM'],
+  p2: ['QA'],
+  'p-other-ws': ['B팀'],
+}
+const isRegisteredTeamCodeForProject = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/teams/master', () => ({ isRegisteredTeamCodeForProject }))
+isRegisteredTeamCodeForProject.mockImplementation((code: string, projectId: string) => (PROJECT_TEAMS[projectId] ?? []).includes(code))
+
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import {
@@ -8,7 +20,7 @@ import {
 const context: ToolExecutionContext = {
   userId: 'user-1',
   capabilities: ['weekly:read'],
-  allowedProjectIds: ['p1'],
+  allowedProjectIds: ['p1', 'p2'],
   pageContext: null,
   now: '2026-07-20T09:00:00+09:00',
   timezone: 'Asia/Seoul',
@@ -47,6 +59,25 @@ describe('주간업무 봇 도구 team 필터 검증', () => {
       ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' },
     })
   })
+
+  it('등록 판정은 그 프로젝트의 팀 — 다른 워크스페이스의 팀 코드는 알 수 없는 팀이다(SP2 16b)', async () => {
+    const result = await createGetWeeklySheetTool(repository).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'B팀' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
+    expect(isRegisteredTeamCodeForProject).toHaveBeenCalledWith('B팀', 'p1')
+  })
+
+  it('접근 판정이 먼저다 — 볼 수 없는 프로젝트의 팀 구성은 검증 결과로 새지 않는다', async () => {
+    isRegisteredTeamCodeForProject.mockClear()
+    for (const tool of [createGetWeeklySheetTool(repository), createCompareWeeklySheetsTool(repository)]) {
+      const args = tool.name === 'get_weekly_sheet'
+        ? { projectId: 'p-other-ws', weekStart: '2026-07-20', team: 'B팀' }
+        : { projectId: 'p-other-ws', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'B팀' }
+      await expect(tool.execute(args, context)).resolves.toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
+    }
+    expect(isRegisteredTeamCodeForProject).not.toHaveBeenCalled()
+  })
 })
 
 function snapshot(sections: string[]): WeeklySheetSnapshot {
@@ -62,6 +93,17 @@ function snapshot(sections: string[]): WeeklySheetSnapshot {
     })),
   }
 }
+
+describe('매핑 없는 프로젝트 전용 팀은 동명 구분으로 조회된다', () => {
+  it('p2 의 전용 팀 QA 는 QA 구분만 잡는다', async () => {
+    const sheet = snapshot(['PMO', 'QA'])
+    const repo: WeeklyRepository = {
+      getSheet: vi.fn(async () => repositoryOk({ ...sheet, report: { ...sheet.report, projectId: 'p2' } })),
+    }
+    const res = await createGetWeeklySheetTool(repo).execute({ projectId: 'p2', weekStart: '2026-07-20', team: 'QA' }, context)
+    expect(res.ok && res.result.records.map((r: { section: string }) => r.section)).toEqual(['QA'])
+  })
+})
 
 describe('MES 팀 필터가 조업·표준화를 모두 잡는다', () => {
   // 매칭은 문자열 완전일치라, 구분을 쪼개고 팀 매핑을 안 고치면 오류가 아니라 '조회 건수 감소'로

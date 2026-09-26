@@ -6,7 +6,7 @@ import { buildWikiCatalogText } from '@/lib/ai/wiki-catalog'
 import { loadWikiSaturation, type WikiSaturationSnapshot } from '@/lib/ai/wiki-saturation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
-import { activeTeamCodesSync } from '@/lib/teams/master'
+import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 import {
   fnv1a64, isMarkableBlock, splitMinuteBlocks, type MinuteBlock,
 } from '@/lib/minutes/blocks'
@@ -278,10 +278,12 @@ function salvageExtractedObjects(raw: string): unknown[] {
 /**
  * LLM 응답을 관용적으로 파싱하되, 근거 블록·열거값·길이·날짜를 결정형으로 다시 검증한다.
  * 코드펜스/설명 문구가 붙어도 첫 객체 또는 배열만 해석하고, 응답이 잘렸으면 완결된 항목만 건진다.
+ * teamCodes 는 위키가 속한 프로젝트의 활성 팀 코드다 — ownerTeam 은 그 안의 값만 남긴다(다른 워크스페이스 팀 코드 차단).
  */
 export function parseExtractedWikiItems(
   raw: string,
   blocks: MinuteBlock[],
+  teamCodes: readonly string[],
 ): ExtractedWikiItem[] | null {
   const objectStart = raw.indexOf('{')
   const objectEnd = raw.lastIndexOf('}')
@@ -315,7 +317,7 @@ export function parseExtractedWikiItems(
     candidates = salvaged
   }
 
-  const teams = new Set<string>(activeTeamCodesSync())
+  const teams = new Set<string>(teamCodes)
   const seen = new Set<string>()
   const items: ExtractedWikiItem[] = []
   for (const candidate of candidates) {
@@ -734,6 +736,7 @@ async function extractItems(
   title: string,
   minuteDate: string,
   catalog: string,
+  teamCodes: readonly string[],
 ): Promise<{
   blocks: MinuteBlock[]
   items: ExtractedWikiItem[]
@@ -750,7 +753,7 @@ async function extractItems(
     content: `회의록 제목: ${title}\n회의일: ${minuteDate}\n${catalog}\n[이번 회의록 원문]\n${source}`,
   }])
   if (raw === null) throw new Error('LLM_GENERATION_FAILED')
-  const items = parseExtractedWikiItems(raw, blocks)
+  const items = parseExtractedWikiItems(raw, blocks, teamCodes)
   if (items === null) throw new Error('LLM_OUTPUT_INVALID')
   return { blocks, items }
 }
@@ -1058,11 +1061,14 @@ export async function processMinuteWikiJob(jobId: number): Promise<WikiProcessSu
     )
 
     const saturation = await loadWikiSaturation(admin, job.project_id as string)
+    // 담당 팀 후보는 이 위키 프로젝트의 팀이다. 팀 캐시 미로드는 throw — 아래 catch 가 작업 실패(재시도)로 올린다.
+    const teamCodes = activeTeamCodesForProjectSync(job.project_id as string)
     const { blocks, items } = await extractItems(
       bodyMd,
       title,
       minuteDate,
       loadWikiCatalog(bodyMd, saturation),
+      teamCodes,
     )
     // LLM 호출 중 프로젝트 이동/보관이 발생할 수 있으므로 변경 직전에 scope를 다시 확인한다.
     const { data: scope, error: scopeError } = await admin.from('minutes')

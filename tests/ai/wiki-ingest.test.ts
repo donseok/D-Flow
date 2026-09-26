@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   generateAnswer: vi.fn(),
   hasLLM: vi.fn(() => false),
+  activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(() => ['PMO', 'ERP', 'MES', '가공', 'MDM']),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -12,7 +13,7 @@ vi.mock('@/lib/ai/llm', () => ({ generateAnswer: mocks.generateAnswer }))
 vi.mock('@/lib/ai/provider', () => ({ hasLLM: mocks.hasLLM }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesSync: vi.fn(() => ['PMO', 'ERP', 'MES', '가공', 'MDM']),
+  activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync,
 }))
 
 import {
@@ -92,6 +93,9 @@ afterEach(() => {
   mocks.createAdminClient.mockReset()
 })
 
+/** 위키 프로젝트의 활성 팀 코드 — ownerTeam 은 이 안의 값만 남는다. */
+const TEAMS = ['PMO', 'ERP', 'MES', '가공', 'MDM']
+
 function item(overrides: Record<string, unknown> = {}) {
   return {
     kind: 'decision',
@@ -121,7 +125,7 @@ describe('parseExtractedWikiItems', () => {
       '```',
     ].join('\n')
 
-    const result = parseExtractedWikiItems(raw, blocks)
+    const result = parseExtractedWikiItems(raw, blocks, TEAMS)
 
     expect(result).toHaveLength(1)
     expect(result![0]).toMatchObject({
@@ -146,7 +150,7 @@ describe('parseExtractedWikiItems', () => {
       ],
     })
 
-    expect(parseExtractedWikiItems(raw, blocks)).toEqual([])
+    expect(parseExtractedWikiItems(raw, blocks, TEAMS)).toEqual([])
   })
 
   it('LLM이 explicit/confirmed라 해도 원문이 검토·예정 표현이면 tentative로 낮춘다', () => {
@@ -159,7 +163,7 @@ describe('parseExtractedWikiItems', () => {
       })],
     })
 
-    expect(parseExtractedWikiItems(raw, blocks)).toEqual([
+    expect(parseExtractedWikiItems(raw, blocks, TEAMS)).toEqual([
       expect.objectContaining({
         certainty: 'tentative',
         decisionState: 'tentative',
@@ -187,7 +191,7 @@ describe('parseExtractedWikiItems', () => {
       ],
     })
 
-    const result = parseExtractedWikiItems(raw, blocks)!
+    const result = parseExtractedWikiItems(raw, blocks, TEAMS)!
 
     expect(result).toHaveLength(2)
     expect(result[0].semanticRelation).toBeNull()
@@ -204,7 +208,7 @@ describe('parseExtractedWikiItems', () => {
       })],
     })
 
-    expect(parseExtractedWikiItems(raw, blocks)).toEqual([
+    expect(parseExtractedWikiItems(raw, blocks, TEAMS)).toEqual([
       expect.objectContaining({
         certainty: 'tentative',
         decisionState: 'tentative',
@@ -232,7 +236,7 @@ describe('parseExtractedWikiItems', () => {
       ],
     })
 
-    const result = parseExtractedWikiItems(raw, blocks)!
+    const result = parseExtractedWikiItems(raw, blocks, TEAMS)!
 
     expect(result[0]).toMatchObject({ relation: 'supports', semanticRelation: null })
     expect(result[1]).toMatchObject({ relation: 'resolves', semanticRelation: 'resolves' })
@@ -258,7 +262,7 @@ describe('parseExtractedWikiItems', () => {
       ],
     })
 
-    const result = parseExtractedWikiItems(raw, blocks)
+    const result = parseExtractedWikiItems(raw, blocks, TEAMS)
 
     expect(result).toHaveLength(1)
     expect(result![0]).toMatchObject({
@@ -273,6 +277,12 @@ describe('parseExtractedWikiItems', () => {
       dueDate: null,
       effectiveDate: null,
     })
+  })
+
+  it('담당 팀은 그 위키 프로젝트의 팀 코드만 — 다른 프로젝트·워크스페이스의 팀 코드는 null 로 버린다(SP2 16b)', () => {
+    const raw = JSON.stringify({ items: [item({ ownerTeam: 'MES' }), item({ ownerTeam: 'ERP', statement: 'REST API 명세도 확정했다.' })] })
+    const result = parseExtractedWikiItems(raw, blocks, ['ERP'])!
+    expect(result.map(r => r.ownerTeam)).toEqual([null, 'ERP'])
   })
 
   it('표기 변형에도 동일한 안정 knowledge key를 만들고 명시적 날짜·팀은 보존한다', () => {
@@ -293,7 +303,7 @@ describe('parseExtractedWikiItems', () => {
       ],
     })
 
-    const result = parseExtractedWikiItems(raw, blocks)!
+    const result = parseExtractedWikiItems(raw, blocks, TEAMS)!
 
     expect(result).toHaveLength(2)
     expect(result[0].knowledgeKey).toBe(result[1].knowledgeKey)
@@ -317,7 +327,7 @@ describe('parseExtractedWikiItems', () => {
       })],
     })
 
-    expect(parseExtractedWikiItems(raw, blocks)).toEqual([
+    expect(parseExtractedWikiItems(raw, blocks, TEAMS)).toEqual([
       expect.objectContaining({
         certainty: 'explicit',
         decisionState: 'reversed',
@@ -513,6 +523,8 @@ describe('processMinuteWikiJob 버전 안전성', () => {
       conflicted: 0,
     })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(1)
+    // 담당 팀 후보는 이 job 프로젝트의 팀이다(전 워크스페이스 공용 목록 아님).
+    expect(mocks.activeTeamCodesForProjectSync).toHaveBeenCalledWith('project-1')
     expect(admin.rpc).toHaveBeenCalledWith(
       'finish_wiki_processing_job',
       expect.objectContaining({
@@ -891,7 +903,7 @@ describe('parseExtractedWikiItems — 잘린 응답 구제', () => {
       + '"semanticRelation":null,"evidence":[0],"ownerTeam":null,"ownerName":null,'
       + '"dueDate":null,"effectiveDate":null},{"kind":"decision","topic":"UAT","stat'
 
-    const items = parseExtractedWikiItems(truncated, blocks)
+    const items = parseExtractedWikiItems(truncated, blocks, TEAMS)
 
     expect(items).not.toBeNull()
     expect(items).toHaveLength(1)
@@ -899,8 +911,8 @@ describe('parseExtractedWikiItems — 잘린 응답 구제', () => {
   })
 
   it('건질 항목이 하나도 없으면 여전히 null이다 — 실패를 성공으로 위장하지 않는다', () => {
-    expect(parseExtractedWikiItems('죄송합니다. 요청을 처리할 수 없습니다.', blocks)).toBeNull()
-    expect(parseExtractedWikiItems('{"items":[{"kind":"decisi', blocks)).toBeNull()
+    expect(parseExtractedWikiItems('죄송합니다. 요청을 처리할 수 없습니다.', blocks, TEAMS)).toBeNull()
+    expect(parseExtractedWikiItems('{"items":[{"kind":"decisi', blocks, TEAMS)).toBeNull()
   })
 
   it('정상 응답은 기존대로 엄격 파싱한다', () => {
@@ -912,7 +924,7 @@ describe('parseExtractedWikiItems — 잘린 응답 구제', () => {
         semanticRelation: null, evidence: [0],
       }],
     })
-    expect(parseExtractedWikiItems(valid, blocks)).toHaveLength(1)
+    expect(parseExtractedWikiItems(valid, blocks, TEAMS)).toHaveLength(1)
   })
 })
 

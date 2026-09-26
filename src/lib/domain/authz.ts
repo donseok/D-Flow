@@ -1,5 +1,6 @@
 // 권한 판정의 순수 계층 — IO·부수효과 없음. 정본: generic-platform-design §2.4.2~2.4.3.
 // 서버 액션과 UI 어포던스가 같은 규칙을 쓰도록 공유한다.
+import type { TeamView } from './teams'
 export type ProjectRole = 'admin' | 'member'
 export type WorkspaceRole = 'admin' | 'member'
 export type EffectiveRole = 'superuser' | 'admin' | 'member' | 'viewer'
@@ -122,6 +123,20 @@ export function canSeeProject(actor: Actor | null, project: { id: string; is_pri
   if (!project.is_private) return true
   if (!actor) return false
   return actor.isSuperuser || isWorkspaceAdmin(actor, actor.projectWorkspace.get(project.id)) || actor.projectRoles.has(project.id)
+}
+/**
+ * 이 사용자의 팀 가시 범위 — 회의록 담당 필터·검증(teamCodesVisibleTo)이 쓴다. 플랫폼 관리자는 멤버십과 무관하게 전부
+ * (멤버십 없는 관리자를 빈 범위로 두면 담당 필터가 조용히 무시되거나 항상 거부된다). 아니면 소속 워크스페이스들과
+ * 그 안의 프로젝트 중 hiddenProjectIds(canSeeProject 거짓인 비공개 — 호출부가 읽어 준다)를 뺀 것.
+ */
+export function teamViewOf(actor: Actor, hiddenProjectIds: Iterable<string>): TeamView {
+  if (actor.isSuperuser) return { all: true }
+  const hidden = new Set(hiddenProjectIds)
+  return {
+    all: false,
+    workspaceIds: [...actor.workspaceRoles.keys()],
+    projectIds: [...actor.projectWorkspace.keys()].filter(pid => !hidden.has(pid)),
+  }
 }
 function adminWorkspaceIds(actor: Actor): Set<string> {
   const s = new Set<string>()

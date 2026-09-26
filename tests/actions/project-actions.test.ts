@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 되돌리기용 projects delete 는 쓰기 정책이 없어(0058) admin 클라이언트가 필요하다 — 세 경로를 각각 모의한다.
 // TODO(SP3): 이 보정 삭제 자체가 트랜잭션 RPC 로 대체되면 이 목 구조도 단순해진다.
 // SP2: 생성 가드는 requireWorkspaceAdmin(대상 워크스페이스) — 판정은 순수 계층(workspaceAdminVerdict)에 위임한다.
-const { db, createServerClient, createAdminClient, requireWorkspaceAdmin, requireProjectAdmin } = vi.hoisted(() => {
+const { db, createServerClient, createAdminClient, requireWorkspaceAdmin, requireProjectAdmin, refreshTeams } = vi.hoisted(() => {
   const db = {
     insertedProject: null as Record<string, unknown> | null,
     insertedSettings: null as Record<string, unknown> | null,
@@ -61,7 +61,10 @@ const { db, createServerClient, createAdminClient, requireWorkspaceAdmin, requir
       throw new Error(`예상치 못한 테이블(admin client): ${table}`)
     },
   }))
-  return { db, createServerClient, createAdminClient, requireWorkspaceAdmin: vi.fn(), requireProjectAdmin: vi.fn() }
+  return {
+    db, createServerClient, createAdminClient, requireWorkspaceAdmin: vi.fn(), requireProjectAdmin: vi.fn(),
+    refreshTeams: vi.fn(async () => true),
+  }
 })
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -69,6 +72,7 @@ vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin, requireProjectAdmin }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
+vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 
 import { createProject, setProjectPrivacy } from '@/app/actions/project'
 import { workspaceAdminVerdict, isProjectAdmin, type Actor } from '@/lib/domain/authz'
@@ -101,6 +105,7 @@ beforeEach(() => {
   db.nextId = 1
   createServerClient.mockClear()
   createAdminClient.mockClear()
+  refreshTeams.mockClear()
   requireWorkspaceAdmin.mockReset()
   requireProjectAdmin.mockReset()
   signedInAs(WS_ADMIN)
@@ -124,6 +129,19 @@ describe('createProject — 워크스페이스 관리자 가드(SP2)', () => {
     signedInAs(WS_MEMBER)
     await expect(createProject(WS, 'P', null, null, null, ['단계'])).rejects.toThrow(ERR_DENIED)
     expect(createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('생성 뒤 팀 캐시를 갱신한다 — 캐시가 새 프로젝트의 워크스페이스를 몰라 그 프로젝트의 팀이 빈 목록이 되지 않게(SP2 16b)', async () => {
+    await createProject(WS, 'P', null, null, null, ['단계'])
+    expect(refreshTeams).toHaveBeenCalledOnce()
+  })
+
+  it('생성이 실패하면(설정 저장 실패 → 되돌리기) 팀 캐시를 건드리지 않는다', async () => {
+    db.settingsInsertError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(createProject(WS, 'P', null, null, null, ['단계'])).rejects.toThrow()
+    expect(refreshTeams).not.toHaveBeenCalled()
+    err.mockRestore()
   })
 
   it('워크스페이스가 비면 가드 전에 거부한다 — 슈퍼유저도(null 이면 가드가 통과시키므로)', async () => {

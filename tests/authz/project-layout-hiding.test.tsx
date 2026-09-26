@@ -6,11 +6,13 @@ import { makeActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor
 const mocks = vi.hoisted(() => ({
   getActorViewState: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
+  teamsForProjectSync: vi.fn(() => []),
+  TeamsProvider: vi.fn(({ children }: { children: unknown; teams: unknown }) => children),
 }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
-vi.mock('@/components/app/TeamsProvider', () => ({ TeamsProvider: ({ children }: { children: unknown }) => children }))
+vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: mocks.teamsForProjectSync }))
+vi.mock('@/components/app/TeamsProvider', () => ({ TeamsProvider: mocks.TeamsProvider }))
 
 import ProjectLayout from '@/app/(app)/p/[projectId]/layout'
 
@@ -50,6 +52,17 @@ describe('ProjectLayout — 존재 은닉(notFound)', () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
     await expect(render('p1')).resolves.toBeTruthy()
     expect(mocks.notFound).not.toHaveBeenCalled()
+  })
+  it('degraded 면 가시성을 모르므로 service_role 팀 캐시를 읽지 않고 빈 팀을 내린다(SP2 16b)', async () => {
+    mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
+    const el = await render('p-elsewhere') as { props: { teams: unknown } }
+    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(el.props.teams).toEqual([])
+  })
+  it('볼 수 있는 프로젝트면 그 프로젝트의 활성 팀을 내린다', async () => {
+    mocks.getActorViewState.mockResolvedValue({ actor: makeMemberActor('p1'), degraded: false })
+    await render('p1')
+    expect(mocks.teamsForProjectSync).toHaveBeenCalledWith('p1')
   })
   it('비로그인(actor null, 정상 조회)은 404 — 판정 대상이 없다', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: false })

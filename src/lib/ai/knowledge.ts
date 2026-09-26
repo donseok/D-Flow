@@ -21,7 +21,7 @@ import {
 } from './analytics'
 import { extractSearchKeywords, type ChatIntent } from './intent'
 import type { ProjectMember } from '@/lib/domain/types'
-import { activeTeamCodesSync } from '@/lib/teams/master'
+import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 
 export const getProjectName = cache(async (projectId: string): Promise<string> => {
   const sb = await createServerClient()
@@ -45,8 +45,9 @@ export const loadProjectAnalysis = cache(async (projectId: string): Promise<Load
   ])
   if (!roster.ok) console.error(`[assistant] 명단 조회 실패(project=${projectId}) — 담당자 정보 없이 답하고 근거에 그 사실을 밝힌다`)
   const members = roster.ok ? roster.rows : []
+  // 팀 축은 그 프로젝트의 팀(전용 팀, 없으면 그 워크스페이스의 공용 팀) — 전 워크스페이스 공용 목록이면 남의 팀이 근거에 섞인다.
   return {
-    analysis: analyzeProject(items, name, today, activeTeamCodesSync(), members),
+    analysis: analyzeProject(items, name, today, activeTeamCodesForProjectSync(projectId), members),
     members, rosterError: roster.ok ? null : roster.error, name,
   }
 })
@@ -57,7 +58,7 @@ async function allProjectSummaries(): Promise<{ summaries: ProjectSummary[]; exc
     projects.map(async p => {
       try {
         const { items, today } = await getComputedWbs(p.id)
-        return summarizeProject(analyzeProject(items, p.name, today, activeTeamCodesSync()))
+        return summarizeProject(analyzeProject(items, p.name, today, activeTeamCodesForProjectSync(p.id)))
       } catch (e) {
         console.error(`[assistant] 전사 요약 — 프로젝트 "${p.name}" 분석 실패(제외):`, e instanceof Error ? e.message : e)
         return null
@@ -117,7 +118,7 @@ function projectKnowledge(
     case 'this_week_start':
       return only(answerThisWeekStart(analysis))
     case 'by_team':
-      return only(answerByTeam(analysis, members, activeTeamCodesSync()))
+      return only(answerByTeam(analysis, members, activeTeamCodesForProjectSync(projectId)))
     case 'weekly_summary':
       return only(answerWeeklySummary(analysis))
     case 'project_status':

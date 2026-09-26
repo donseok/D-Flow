@@ -15,7 +15,7 @@ export const TEAM_CODES: readonly TeamCode[] = DEFAULT_TEAM_CODES
 
 /** 루트 레벨에서 예약된 이름인지 — 사용자 루트 폴더의 생성·개명이 이 이름을 점유(스쿼팅)하면
  *  팀 자동 편철이 하이재킹되므로 서버 액션에서 차단한다.
- *  teamCodes 는 **비활성 포함 전체 등록 팀**(teamsSync) — 비활성 팀 앵커도 보호한다. */
+ *  teamCodes 는 그 폴더 범위의 **비활성 포함 전체 등록 팀**(teamCodesForMinuteScope) — 비활성 팀 앵커도 보호한다. */
 export function isTeamRootName(name: string, teamCodes: readonly string[]): boolean {
   return teamCodes.includes(name.trim())
 }

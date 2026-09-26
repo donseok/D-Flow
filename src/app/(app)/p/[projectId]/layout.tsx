@@ -17,7 +17,9 @@ export default async function ProjectLayout({
   // 위장하지 않고 (app)/layout 의 열화 표시를 그대로 둔다(쓰기는 서버 액션 가드가 다시 막는다).
   // getActor 는 요청당 cache() 라 (app)/layout 과 같은 조립을 재사용한다.
   if (!degraded && isHiddenProject(actor, projectId)) notFound()
-  const teams = teamsForProjectSync(projectId).filter(t => t.active)
+  // 여기까지 온 actor null 은 degraded 뿐이다 — 가시성을 모르므로 service_role 팀 캐시를 읽지 않는다(fail-closed,
+  // members 페이지와 같은 결). 읽으면 타 워크스페이스 pid 의 팀이 TeamsProvider 페이로드로 나간다.
+  const teams = actor ? teamsForProjectSync(projectId).filter(t => t.active) : []
   return (
     <TeamsProvider teams={teams}>
       <div className="h-full min-h-0 min-w-0">{children}</div>
