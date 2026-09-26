@@ -11,16 +11,18 @@ export interface Team {
   progressVisible: boolean
   /** null = 전역 팀(회의록·또박또박·계정의 유일한 축). 값 = 그 프로젝트 전용 팀(0071). */
   projectId: string | null
+  /** 소속 워크스페이스(0003 not null). "전역 팀"은 워크스페이스마다 따로다 — 접근자가 이 값으로 좁힌다(SP2 §4.2). */
+  workspaceId: string
 }
 
 /** 미제공 TeamsProvider 기본값 + 테스트 픽스처(2026-07 5팀). 서버 팀 마스터는 폴백하지 않는다
- *  — SP4 에서 fixtures 로 이동. */
+ *  — SP4 에서 fixtures 로 이동. DB 행이 아니라 소속 워크스페이스가 없다(workspaceId '' — 어떤 워크스페이스 접근자에도 걸리지 않는다). */
 export const DEFAULT_TEAMS: readonly Team[] = [
-  { id: 'default-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null },
-  { id: 'default-erp', code: 'ERP', sortOrder: 1, active: true, progressVisible: true, projectId: null },
-  { id: 'default-mes', code: 'MES', sortOrder: 2, active: true, progressVisible: true, projectId: null },
-  { id: 'default-gagong', code: '가공', sortOrder: 3, active: true, progressVisible: true, projectId: null },
-  { id: 'default-mdm', code: 'MDM', sortOrder: 4, active: true, progressVisible: false, projectId: null },
+  { id: 'default-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: '' },
+  { id: 'default-erp', code: 'ERP', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: '' },
+  { id: 'default-mes', code: 'MES', sortOrder: 2, active: true, progressVisible: true, projectId: null, workspaceId: '' },
+  { id: 'default-gagong', code: '가공', sortOrder: 3, active: true, progressVisible: true, projectId: null, workspaceId: '' },
+  { id: 'default-mdm', code: 'MDM', sortOrder: 4, active: true, progressVisible: false, projectId: null, workspaceId: '' },
 ]
 
 export const DEFAULT_TEAM_CODES: readonly TeamCode[] = DEFAULT_TEAMS.map(t => t.code)

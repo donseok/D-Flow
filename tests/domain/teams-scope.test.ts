@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveTeamsForProject, type Team } from '@/lib/domain/teams'
 
 const team = (code: string, projectId: string | null, active = true): Team =>
-  ({ id: `id-${code}-${projectId ?? 'g'}`, code, sortOrder: 0, active, progressVisible: true, projectId })
+  ({ id: `id-${code}-${projectId ?? 'g'}`, code, sortOrder: 0, active, progressVisible: true, projectId, workspaceId: 'ws-1' })
 
 describe('resolveTeamsForProject — 프로젝트 행 있으면 그것만, 없으면 전역 폴백', () => {
   const globals = [team('PMO', null), team('ERP', null)]

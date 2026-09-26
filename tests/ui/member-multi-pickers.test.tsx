@@ -18,9 +18,9 @@ import type { ProjectMember, TeamCode } from '@/lib/domain/types'
 import { makeRosterMember } from '../fixtures/rosterMember'
 
 const TEAMS: Team[] = [
-  { id: 'team-erp', code: 'ERP', sortOrder: 20, active: true, progressVisible: true, projectId: null },
-  { id: 'team-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null },
-  { id: 'team-mes', code: 'MES', sortOrder: 10, active: true, progressVisible: true, projectId: null },
+  { id: 'team-erp', code: 'ERP', sortOrder: 20, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+  { id: 'team-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+  { id: 'team-mes', code: 'MES', sortOrder: 10, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
 ]
 
 function member(

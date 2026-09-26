@@ -51,19 +51,30 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] 
   const orderIds = orders.map(o => o.id)
   const projIds = [...new Set(orders.map(o => o.project_id))]
 
-  const items = itemIds.length
-    ? must<ItemRow[]>('항목', await admin.from('wbs_items').select(ITEM_COLS).in('id', itemIds))
-    : []
+  // 층 프로젝트 행은 항목과 함께 먼저 읽는다 — 감시자를 그 워크스페이스로 좁히려면 workspace_id 가 필요하다.
+  const [items, floorProjects] = await Promise.all([
+    itemIds.length
+      ? admin.from('wbs_items').select(ITEM_COLS).in('id', itemIds).then(r => must<ItemRow[]>('항목', r))
+      : Promise.resolve([] as ItemRow[]),
+    admin.from('projects').select('id, name, workspace_id').in('id', projIds)
+      .then(r => must<Array<ProjectRow & { workspace_id: string }>>('프로젝트', r)),
+  ])
+  const projects: ProjectRow[] = floorProjects.map(p => ({ id: p.id, name: p.name }))
+  // 감시자는 층 프로젝트들의 워크스페이스로 좁힌다 — 프로젝트 없는(project_id null) 감시자는 워크스페이스 단위라,
+  // 필터가 없으면 다른 워크스페이스의 팀장이 모든 층에 떠 보인다(SP2 §4.2). 워크스페이스를 모르면 조회하지 않는다.
+  const floorWorkspaceIds = [...new Set(floorProjects.map(p => p.workspace_id))]
   const parentIds = [...new Set(items.map(i => i.parent_id).filter((x): x is string => !!x))]
   // 보고 말풍선 — 점유·보고 중 주문의 최근 하루치만. 말풍선은 주문마다 마지막 한 줄이면 된다.
   const liveIds = orders.filter(o => o.status === 'claimed' || o.status === 'reported').map(o => o.id)
-  const [parents, reviews, watchers, projects, members, reports] = await Promise.all([
+  const [parents, reviews, watchers, members, reports] = await Promise.all([
     parentIds.length ? fetchAncestors(admin, parentIds) : Promise.resolve([] as ItemRow[]),
     admin.from('agent_work_reports').select('work_order_id, review_action, review_note, created_at')
       .in('work_order_id', orderIds).eq('kind', 'completion').then(r => must<ReviewRow[]>('완료 보고', r)),
-    admin.from('agent_watchers').select('id, user_id, project_id, agent, host, slots, busy, until_label, last_seen_at')
-      .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r)),
-    admin.from('projects').select('id, name').in('id', projIds).then(r => must<ProjectRow[]>('프로젝트', r)),
+    floorWorkspaceIds.length
+      ? admin.from('agent_watchers').select('id, user_id, project_id, agent, host, slots, busy, until_label, last_seen_at')
+        .in('workspace_id', floorWorkspaceIds)
+        .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r))
+      : Promise.resolve([] as WatcherRow[]),
     // 로스터는 담당자 이름·PAT 계정 매칭 재료(착수 대기 사유 §2). 층 프로젝트 범위로만.
     admin.from('project_members').select('id, project_id, people!inner(display_name, user_id)').in('project_id', projIds)
       .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toSeatMember)),

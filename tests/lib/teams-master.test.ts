@@ -21,10 +21,12 @@ const { db, createAdminClient } = vi.hoisted(() => {
 })
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 
+const WA = 'ws-a'
+const WB = 'ws-b'
 const ROWS = [
-  { id: 't1', code: 'PMO', sort_order: 0, active: true, progress_visible: true },
-  { id: 't2', code: '신팀', sort_order: 5, active: true, progress_visible: true },
-  { id: 't3', code: '구팀', sort_order: 6, active: false, progress_visible: true },
+  { id: 't1', code: 'PMO', sort_order: 0, active: true, progress_visible: true, workspace_id: WA },
+  { id: 't2', code: '신팀', sort_order: 5, active: true, progress_visible: true, workspace_id: WA },
+  { id: 't3', code: '구팀', sort_order: 6, active: false, progress_visible: true, workspace_id: WA },
 ]
 
 async function importMaster() {
@@ -77,7 +79,7 @@ describe('teams/master', () => {
   it('refreshTeams는 저장 직후 최신 스냅샷을 반영한다', async () => {
     db.rows = ROWS
     const m = await importMaster()
-    db.rows = [...ROWS, { id: 't4', code: '추가팀', sort_order: 7, active: true, progress_visible: true }]
+    db.rows = [...ROWS, { id: 't4', code: '추가팀', sort_order: 7, active: true, progress_visible: true, workspace_id: WA }]
     await m.refreshTeams()
     expect(m.activeTeamCodesSync()).toContain('추가팀')
   })
@@ -88,7 +90,7 @@ describe('teams/master', () => {
     expect(m.teamsSync().map(t => t.code)).toEqual(['PMO', '신팀', '구팀'])
 
     // 갱신 시점에 전역 행이 전부 사라지고 프로젝트 행만 남는다 — 빈 DB 출발 플랫폼에선 정상 상태.
-    db.rows = [{ id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'p1' }]
+    db.rows = [{ id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'p1', workspace_id: WA }]
     const ok = await m.refreshTeams()
     expect(ok).toBe(true)
     expect(m.teamsSync()).toEqual([]) // 전역 팀 0개 — 정상, 지어내지 않는다
@@ -98,18 +100,72 @@ describe('teams/master', () => {
   it('project_id가 있는 행은 Team.projectId로 매핑되고 teamsSync()는 전역 행만 반환한다(봉쇄)', async () => {
     db.rows = [
       ...ROWS,
-      { id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'proj-1' },
+      { id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'proj-1', workspace_id: WA },
     ]
     const m = await importMaster()
 
     // DB 행 → Team.projectId 매핑이 실값으로 통과한다.
     expect(m.teamsForProjectSync('proj-1').map(t => t.code)).toEqual(['개발'])
     expect(m.projectTeamRowsSync('proj-1')).toEqual([
-      { id: 'tp1', code: '개발', sortOrder: 0, active: true, progressVisible: true, projectId: 'proj-1' },
+      { id: 'tp1', code: '개발', sortOrder: 0, active: true, progressVisible: true, projectId: 'proj-1', workspaceId: WA },
     ])
 
     // 전역 접근자는 프로젝트 행 혼입 없이 여전히 전역 3행만 반환한다(봉쇄).
     expect(m.teamsSync().map(t => t.code)).toEqual(['PMO', '신팀', '구팀'])
     expect(m.teamsSync().some(t => t.projectId !== null)).toBe(false)
+  })
+
+  describe('워크스페이스 접근자(SP2 §4.2) — 캐시는 전 워크스페이스를 담고, 접근자가 한 워크스페이스로 좁힌다', () => {
+    const MIXED = [
+      ...ROWS,
+      { id: 'b1', code: 'B팀', sort_order: 0, active: true, progress_visible: true, workspace_id: WB },
+      { id: 'b2', code: 'B휴면', sort_order: 1, active: false, progress_visible: true, workspace_id: WB },
+      { id: 'ap', code: 'A프로젝트팀', sort_order: 0, active: true, progress_visible: true, workspace_id: WA, project_id: 'p-a' },
+    ]
+
+    it('teamsForWorkspaceSync 는 그 워크스페이스의 공용 팀만(비활성 포함) — 다른 워크스페이스·프로젝트 팀은 없다', async () => {
+      db.rows = MIXED
+      const m = await importMaster()
+      expect(m.teamsForWorkspaceSync(WA).map(t => t.code)).toEqual(['PMO', '신팀', '구팀'])
+      expect(m.teamsForWorkspaceSync(WB).map(t => t.code)).toEqual(['B팀', 'B휴면'])
+      expect(m.teamsForWorkspaceSync(WA).every(t => t.workspaceId === WA && t.projectId === null)).toBe(true)
+      expect(m.teamsForWorkspaceSync('ws-없음')).toEqual([])
+    })
+
+    it('activeTeamCodesForWorkspaceSync 는 그 워크스페이스의 활성 공용 팀 코드만', async () => {
+      db.rows = MIXED
+      const m = await importMaster()
+      expect(m.activeTeamCodesForWorkspaceSync(WA)).toEqual(['PMO', '신팀'])
+      expect(m.activeTeamCodesForWorkspaceSync(WB)).toEqual(['B팀'])
+    })
+
+    it('한 번도 로드하지 못했으면 throw — 조회 실패를 빈 목록으로 위장하지 않는다', async () => {
+      db.error = { message: 'down' }
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const m = await importMaster()
+      expect(() => m.teamsForWorkspaceSync(WA)).toThrow(/팀 마스터/)
+      expect(() => m.activeTeamCodesForWorkspaceSync(WA)).toThrow(/팀 마스터/)
+      err.mockRestore()
+    })
+
+    it('정상 로드 뒤의 갱신 실패는 직전 값을 쓴다(stale ≠ 실패)', async () => {
+      db.rows = MIXED
+      const m = await importMaster()
+      db.rows = null
+      db.error = { message: 'down' }
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await m.refreshTeams()
+      expect(m.activeTeamCodesForWorkspaceSync(WB)).toEqual(['B팀'])
+      err.mockRestore()
+    })
+
+    it('workspace_id 가 없는 행은 로드 실패로 본다 — 워크스페이스를 모르는 팀을 캐시에 넣지 않는다', async () => {
+      db.rows = [{ id: 'x', code: 'X', sort_order: 0, active: true, progress_visible: true }]
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const m = await importMaster()
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining('workspace_id'))
+      expect(() => m.teamsForWorkspaceSync(WA)).toThrow(/팀 마스터/)
+      err.mockRestore()
+    })
   })
 })

@@ -3,14 +3,22 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   MINUTE_ATTACHMENT_MAX, MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_BODY_MAX,
 } from '@/lib/domain/minutes'
-import { activeTeamCodesSync } from '@/lib/teams/master'
+import { activeTeamCodesForWorkspaceSync } from '@/lib/teams/master'
+import { actorFromUser } from '@/lib/authz'
+import { canSeeProject } from '@/lib/domain/authz'
+import { BRAND } from '@/lib/branding'
 import {
-  apiBadRequest, apiInternalError, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
+  apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
+  resolveUserByEmail,
 } from '@/lib/minutes/externalApi'
 
 /**
- * GET /api/v1/minutes/meta — 구분·프로젝트(·회의) 목록 + 제한값. 계약 §5.2.
+ * GET /api/v1/minutes/meta?user_email=… — 구분·프로젝트(·회의) 목록 + 제한값. 계약 §5.2.
  * 또박또박이 teams 를 최상위 폴더명 자동 판정 기준으로 쓰므로(§0 D10) 하드코딩 없이 이 응답을 추종한다.
+ *
+ * SP2 §4.2 — 시크릿만으로는 호출자가 누구인지 모른다. 종전엔 전 워크스페이스의 프로젝트·팀을 내줬다.
+ * user_email(필수)로 호출자를 정하고, 그 사람이 볼 수 있는 프로젝트(내 워크스페이스 ∩ canSeeProject)와
+ * 그 사람 워크스페이스들의 활성 공용 팀만 싣는다. 없거나 모르는 이메일은 4xx — 전체 목록으로 되돌아가지 않는다.
  */
 
 export const dynamic = 'force-dynamic'
@@ -21,15 +29,37 @@ export async function GET(req: NextRequest) {
 
   const projectId = req.nextUrl.searchParams.get('project_id')
   if (projectId && !isUuid(projectId)) return apiBadRequest('project_id 형식이 올바르지 않습니다.')
+  const userEmail = req.nextUrl.searchParams.get('user_email')?.trim() ?? ''
+  if (!userEmail) return apiBadRequest('user_email 이 필요합니다.')
 
   try {
     const admin = createAdminClient()
-    const { data: projects, error } = await admin.from('projects').select('id, name').order('name')
-    if (error) { console.error('[minutes-api] 프로젝트 목록 조회 실패:', error.message); return apiInternalError() }
+    // 계정·권한 조회 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
+    const user = await resolveUserByEmail(admin, userEmail)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    const actor = await actorFromUser(admin, user.id)
+
+    // 후보 = 스냅샷의 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부). 응답 행도 그 키로 한 번 더
+    // 거른다 — in() 필터가 빠지는 회귀가 생겨도 남의 워크스페이스 프로젝트가 실리지 않게.
+    const candidateIds = [...actor.projectWorkspace.keys()]
+    let projects: Array<{ id: string; name: string }> = []
+    if (candidateIds.length > 0) {
+      const { data, error } = await admin.from('projects').select('id, name, is_private').in('id', candidateIds).order('name')
+      if (error) { console.error('[minutes-api] 프로젝트 목록 조회 실패:', error.message); return apiInternalError() }
+      projects = ((data ?? []) as Array<{ id: string; name: string; is_private: boolean | null }>)
+        .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p))
+        .map(p => ({ id: p.id, name: p.name }))
+    }
+    // 회의 목록은 볼 수 있는 프로젝트일 때만 — 다른 워크스페이스·비공개 프로젝트는 존재를 드러내지 않는다(404).
+    if (projectId && !projects.some(p => p.id === projectId)) return apiNotFound()
+
+    // 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(첫 등장 순서 유지). 팀 마스터를 한 번도 못 읽었으면
+    // 접근자가 throw 한다 → 500.
+    const teams = [...new Set([...actor.workspaceRoles.keys()].flatMap(wid => activeTeamCodesForWorkspaceSync(wid)))]
 
     const body: Record<string, unknown> = {
-      teams: activeTeamCodesSync(),
-      projects: projects ?? [],
+      teams,
+      projects,
       limits: {
         max_body_chars: MINUTE_BODY_MAX,
         max_request_bytes: MINUTES_API_MAX_REQUEST_BYTES,

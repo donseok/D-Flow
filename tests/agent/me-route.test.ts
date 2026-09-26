@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 
-const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
+const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// PAT 소유자의 권한 스냅샷은 fixture 로 준다 — 실구현(buildActor)은 테이블 큐를 소비해 버린다.
+vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 
 import { GET as meGET } from '@/app/api/v1/agent/me/route'
+import { makeActor, WS } from '../fixtures/actor'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const P2 = '22222222-2222-4222-8222-222222222222'
@@ -16,12 +19,12 @@ const RUNNER = {
   token_hash: PAT.hash, project_id: null, scopes: ['work:read'], enabled: true,
   revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
 }
-function useAdmin(queues: Record<string, Resp[]>) {
+function useAdmin(queues: Record<string, Resp[]>, calls: Array<[string, string, unknown[]]> = []) {
   const admin = {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order']) b[k] = (...a: unknown[]) => { calls.push([table, k, a]); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
@@ -38,6 +41,8 @@ beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
   process.env.AGENT_API_SECRET = 'legacy-secret'
   vi.clearAllMocks()
+  // 기본: 소유자는 WS 의 두 프로젝트를 볼 수 있다(P1·P2 둘 다 내 워크스페이스).
+  mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]) }))
 })
 
 describe('GET /agent/me', () => {
@@ -60,6 +65,34 @@ describe('GET /agent/me', () => {
     expect(body.contract_version).toBe('2.4')
     expect(body.projects).toHaveLength(1)
     expect(body.projects[0]).toMatchObject({ id: P1, role: 'admin' })
+  })
+  it('소유자의 워크스페이스 밖 프로젝트는 enabled·명단이 있어도 싣지 않는다 — 조회를 내 프로젝트 id 로 좁힌다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS]]) }))
+    const calls: Array<[string, string, unknown[]]> = []
+    useAdmin({
+      agent_runners: [{ data: RUNNER }, { data: null }],
+      // DB 필터가 새도(P2 가 섞여 와도) 스냅샷 키로 한 번 더 거른다.
+      agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
+      projects: [{ data: [{ id: P1, name: '테스트' }] }],
+      platform_admins: [{ data: null }, { data: null }],
+      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }],
+    }, calls)
+    const body = await (await meGET(get(PAT.token))).json()
+    expect(body.projects.map((p: { id: string }) => p.id)).toEqual([P1])
+    expect(calls).toContainEqual(['agent_projects', 'in', ['project_id', [P1]]])
+    expect(mocks.actorFromUser).toHaveBeenCalledWith(expect.anything(), 'u-1')
+  })
+  it('볼 수 있는 프로젝트가 없으면 등록 조회 없이 빈 목록', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1' }))
+    const admin = useAdmin({ agent_runners: [{ data: RUNNER }, { data: null }] })
+    const body = await (await meGET(get(PAT.token))).json()
+    expect(body.projects).toEqual([])
+    expect(admin.from.mock.calls.map(c => c[0])).not.toContain('agent_projects')
+  })
+  it('소유자 권한 조회 실패는 500 — 빈 목록으로 위장하지 않는다', async () => {
+    mocks.actorFromUser.mockRejectedValue(new Error('권한 정보를 불러오지 못했습니다'))
+    useAdmin({ agent_runners: [{ data: RUNNER }, { data: null }] })
+    expect((await meGET(get(PAT.token))).status).toBe(500)
   })
   it('legacy 시크릿 호출 → 400 identity_required', async () => {
     useAdmin({})

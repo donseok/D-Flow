@@ -6,7 +6,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 import { fetchAgentHubRows, getAgentHub } from '@/lib/data/agentHub'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
-const P1 = 'p1'
+const P1 = '0a000000-0000-4000-8000-0000000000a1' // getAgentHub 가 adminFor({ projectId }) 로 스코프를 검사한다 — uuid 여야 한다
+const WA = 'ws-a'
 type Resp = { data?: unknown; error?: { message: string } | null }
 
 /** 테이블별 응답 큐 + 호출 기록(select 컬럼·필터). 체인은 전부 자기 자신, await 시 큐 응답. */
@@ -32,9 +33,10 @@ function admin(queues: Record<string, Resp[]>) {
 }
 
 beforeEach(() => vi.clearAllMocks())
+const c0 = (calls: ReturnType<typeof admin>['calls'], t: string) => calls.find(x => x.table === t)!
 
 describe('fetchAgentHubRows', () => {
-  it('1차 6건(항목·등록·주문·감시자·로스터·프로젝트) 병렬 + 2차 보고 1건, 컬럼·필터가 계약대로', async () => {
+  it('1차 5건(항목·등록·주문·로스터·프로젝트) 병렬 + 2차 감시자·보고, 컬럼·필터가 계약대로', async () => {
     const { client, calls } = admin({
       wbs_items: [{ data: [{ id: 'i1', project_id: P1, parent_id: null, code: 'T', name: 'n', sort_order: 0, milestone: false, dev_workflow: true, tags: ['agent'], assignee_member_id: null, agent_prompt: null, actual_pct: 0, stage: null }] }],
       agent_projects: [{ data: [{ enabled: true }] }],
@@ -47,10 +49,14 @@ describe('fetchAgentHubRows', () => {
         { id: 'm2', active: false, people: { display_name: '빠진 행', user_id: 'u2', active: true } },
         { id: 'm3', active: true, people: { display_name: '빠진 인물', user_id: 'u3', active: false } },
       ] }],
-      projects: [{ data: [{ id: P1, name: 'proj-a' }] }],
+      projects: [{ data: [{ id: P1, name: 'proj-a', workspace_id: WA }] }],
     })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
     expect(rows.project).toEqual({ id: P1, name: 'proj-a' })
+    // 감시자는 이 프로젝트의 워크스페이스로 좁힌다 — 프로젝트 없는(project_id null) 다른 워크스페이스 감시자가
+    // 이 허브에 "떠 있는 팀장"으로 보이지 않게(SP2 §4.2).
+    expect(c0(calls, 'projects').select).toBe('id, name, workspace_id')
+    expect(c0(calls, 'agent_watchers').filters).toContainEqual(['eq', ['workspace_id', WA]])
     expect(rows.agentProject).toEqual({ enabled: true })
     expect(rows.reports).toHaveLength(1)
     const c = (t: string) => calls.find(x => x.table === t)!
@@ -77,6 +83,17 @@ describe('fetchAgentHubRows', () => {
   it('어느 조회든 실패하면 throw — 데이터 없음으로 위장하지 않는다', async () => {
     const { client } = admin({ wbs_items: [{ data: null, error: { message: 'boom' } }] })
     await expect(fetchAgentHubRows(client as never, P1, NOW)).rejects.toThrow(/항목 조회 실패: boom/)
+  })
+  it('프로젝트 행이 없으면 감시자를 조회하지 않는다(워크스페이스를 모르면 전역으로 넓히지 않는다)', async () => {
+    const { client, calls } = admin({ projects: [{ data: [] }] })
+    const rows = await fetchAgentHubRows(client as never, P1, NOW)
+    expect(rows.project).toBeNull()
+    expect(rows.watchers).toEqual([])
+    expect(calls.some(x => x.table === 'agent_watchers')).toBe(false)
+  })
+  it('감시자 조회 실패도 throw', async () => {
+    const { client } = admin({ projects: [{ data: [{ id: P1, name: 'x', workspace_id: WA }] }], agent_watchers: [{ data: null, error: { message: 'wboom' } }] })
+    await expect(fetchAgentHubRows(client as never, P1, NOW)).rejects.toThrow(/감시자 조회 실패: wboom/)
   })
   it('agent_projects 가 없으면 null(미등록)', async () => {
     const { client } = admin({ agent_projects: [{ data: [] }], projects: [{ data: [{ id: P1, name: 'x' }] }] })

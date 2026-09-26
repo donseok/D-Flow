@@ -4,6 +4,7 @@ import {
   AGENT_CONTRACT_VERSION, agentMemberRole, apiFail, apiInternalError, apiNotFound,
   patProjectAllowed, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
+import { actorFromUser } from '@/lib/authz'
 
 /** GET /api/v1/agent/me — whoami. 404 존재 은닉 아래의 유일한 진단 창구(계약 v2.0). PAT 전용. */
 export const dynamic = 'force-dynamic'
@@ -17,15 +18,24 @@ export async function GET(req: NextRequest) {
       return apiFail(400, 'identity_required', '이 엔드포인트는 PAT 전용입니다.')
     }
 
-    const { data: regs, error: regErr } = await admin
-      .from('agent_projects').select('project_id').eq('enabled', true)
-    if (regErr) {
-      console.error('[agent-api] enabled 프로젝트 조회 실패:', regErr.message)
-      return apiInternalError()
+    // SP2 §4.2 — 후보를 PAT 소유자가 볼 수 있는 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부)로 좁힌다.
+    // 종전엔 전 워크스페이스의 enabled 프로젝트를 훑었다. 권한 조회 실패는 throw → catch 의 500.
+    const actor = await actorFromUser(admin, principal.userId)
+    const visibleIds = [...actor.projectWorkspace.keys()]
+    let regs: Array<{ project_id: string }> = []
+    if (visibleIds.length > 0) {
+      const { data, error: regErr } = await admin
+        .from('agent_projects').select('project_id').eq('enabled', true).in('project_id', visibleIds)
+      if (regErr) {
+        console.error('[agent-api] enabled 프로젝트 조회 실패:', regErr.message)
+        return apiInternalError()
+      }
+      regs = (data ?? []) as Array<{ project_id: string }>
     }
-    const candidateIds = ((regs ?? []) as Array<{ project_id: string }>)
+    // 응답 행도 스냅샷 키로 한 번 더 거른다 — in() 필터가 빠지는 회귀가 생겨도 남의 워크스페이스 프로젝트가 실리지 않게.
+    const candidateIds = regs
       .map(r => r.project_id)
-      .filter(pid => patProjectAllowed(principal, pid))
+      .filter(pid => actor.projectWorkspace.has(pid) && patProjectAllowed(principal, pid))
 
     const nameById = new Map<string, string>()
     if (candidateIds.length > 0) {

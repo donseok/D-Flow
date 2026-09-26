@@ -9,7 +9,7 @@ import { requireProjectAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { pickTeamColor } from '@/lib/domain/teamColor'
-import { refreshTeams, teamsSync } from '@/lib/teams/master'
+import { refreshTeams, teamsForWorkspaceSync } from '@/lib/teams/master'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
 
@@ -79,8 +79,17 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
   const existing = await admin.from('teams').select('id').eq('project_id', projectId).limit(1).maybeSingle()
   if (existing.error) return { ok: false, error: `팀 조회 실패: ${existing.error.message}` }
   if (existing.data) return { ok: false, error: '이미 프로젝트 팀이 정의되어 있습니다.' }
-  const globals = teamsSync().filter(t => t.active)
-  // 전역 활성 팀 0개는 빈 DB 출발이든 콜드스타트 로드 실패든 '복사할 것이 없다' — 빈 insert 를
+  // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀뿐이다 — 옛 teamsSync() 는 전 워크스페이스의 공용 팀을
+  // 섞어 돌려줘 다른 워크스페이스의 팀 이름까지 이 프로젝트로 복사했다(SP2 §4.2).
+  // 팀 마스터를 한 번도 읽지 못했으면 접근자가 throw 한다 — '복사할 것이 없다'로 위장하지 않는다.
+  let globals
+  try {
+    globals = teamsForWorkspaceSync(workspaceId).filter(t => t.active)
+  } catch (e) {
+    console.error('[projectTeams] 공용 팀 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: '팀 기준정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.' }
+  }
+  // 공용 활성 팀 0개는 빈 DB 출발이면 '복사할 것이 없다' — 빈 insert 를
   // 성공으로 위장하지 않는다(호출부 토스트가 '복사했습니다'를 잘못 보여주는 사고 방지).
   if (globals.length === 0) return { ok: false, error: '복사할 전역 팀이 없습니다.' }
   const ins = await admin.from('teams').insert(globals.map(t => ({

@@ -1,6 +1,6 @@
 # D-Flow 회의록 업로드 API 스펙 (또박또박 연동용)
 
-- 버전: **v2.5 (2026-08-06)** — **회의 연결·생성 확장: inline `meeting` 객체(회의 생성+연결) · meta 회의 목록 `category`/`recurrence` · 403 `not_project_member` 신설** (하단 'v2.5 변경' 참조). v2.4 (2026-07-27): 결정 정본 반영 개정 — 조상 규칙 · `folder_path_status` · 전환 플래그 · 배치 `pmo_admin` 게이트 (⚠️ 또박또박 최초 송부본). v2.3은 송부 전 내부 개정이라 중간 이력을 만들지 않는다. v2.3 (2026-07-27): `folder_path` 편철 · 일괄 재편철 배치 · 연결 초기화 반영. v2.2 (2026-07-19): D-Flow 측 구현(F1~F6) 완료 반영. v2.1: 레포 코드 직접 조사 후 전면 개정 + 전 미결사항 확정
+- 버전: **v2.6 (2026-09-26)** — **`GET /minutes/meta` 에 `user_email`(필수) 추가 — 호출자가 볼 수 있는 프로젝트·팀만 돌려준다**(하단 'v2.6 변경' 참조, **호환 깨짐**). v2.5 (2026-08-06) — **회의 연결·생성 확장: inline `meeting` 객체(회의 생성+연결) · meta 회의 목록 `category`/`recurrence` · 403 `not_project_member` 신설** (하단 'v2.5 변경' 참조). v2.4 (2026-07-27): 결정 정본 반영 개정 — 조상 규칙 · `folder_path_status` · 전환 플래그 · 배치 `pmo_admin` 게이트 (⚠️ 또박또박 최초 송부본). v2.3은 송부 전 내부 개정이라 중간 이력을 만들지 않는다. v2.3 (2026-07-27): `folder_path` 편철 · 일괄 재편철 배치 · 연결 초기화 반영. v2.2 (2026-07-19): D-Flow 측 구현(F1~F6) 완료 반영. v2.1: 레포 코드 직접 조사 후 전면 개정 + 전 미결사항 확정
 - 작성 목적: 또박또박(로컬 회의 녹음·전사·회의록 앱)이 생성한 회의록 마크다운을 D-Flow 회의록 화면에 **자동 등록**할 수 있도록, 양측이 **동시에 개발해 한 번에 통합**할 수 있는 완결 사양을 정의한다.
 - 대상 독자: D-Flow 개발팀(팀장) + 또박또박 개발측
 - 근거: 레포 코드 전체 조사 기반. "확인"은 코드 인용이 있는 사실, "제안"은 신규 설계 요청.
@@ -39,6 +39,14 @@
 | T6 | export 호환 | 회의/폴더/프로젝트 export·import에 public_uid·매핑 포함 (다른 또박또박 인스턴스로 이동해도 D-Flow 연결 유지) |
 
 **적용**: 양측 동시 개발 → §14 순서로 한 번에 통합 (D-Flow는 env 미설정이면 API 전체 404라 먼저 배포해도 무해).
+
+### v2.6 변경 (meta 호출자 한정 — 워크스페이스 격리, **호환 깨짐**)
+
+| # | 변경 | 내용 | 절 | 또박또박 작업 |
+|---|---|---|---|---|
+| X1 | **`GET /minutes/meta?user_email=` 필수** | 종전 meta 는 시크릿만 보고 **전 워크스페이스의 프로젝트**와 팀을 돌려줬다. 이제 쿼리 `user_email` 로 호출자를 정하고 그 사람이 볼 수 있는 프로젝트(소속 워크스페이스의 프로젝트, 비공개는 명단·관리자만)와 그 사람 워크스페이스들의 활성 팀만 싣는다. 누락 `400`, 미일치 `403 unknown_user`(§3.3 과 같은 매칭), `project_id` 가 볼 수 없는 프로젝트면 `404` | §5.2 · §3.4 | meta 호출에 로그인 사용자 이메일 추가 |
+
+- **배포 순서: 또박또박 먼저(쿼리 추가) → D-Flow.** 구버전 D-Flow 는 모르는 쿼리를 무시하므로 또박또박이 먼저 `user_email` 을 붙여도 무해하다. 역순이면 구버전 또박또박의 meta 호출이 `400` 이 된다.
 
 ### v2.5 변경 (회의 연결·생성 확장 — **또박또박 송부본**)
 
@@ -208,7 +216,7 @@ v2.3까지는 **송부 전 내부 개정**이었다. 결정 정본 §2-E 표의 
 |---|---|---|---|
 | POST | `/minutes` | 회의록 생성/갱신(upsert by `external_id`) | **v1 필수** |
 | GET | `/minutes?external_id=` | 존재/동기화 확인, 연결 후보 검색 | **v1 필수** |
-| GET | `/minutes/meta` | 구분·프로젝트·회의 목록 + 제한값 | **v1 필수** |
+| GET | `/minutes/meta?user_email=` | 구분·프로젝트·회의 목록 + 제한값(★ v2.6: 호출자가 볼 수 있는 것만) | **v1 필수** |
 | POST | `/minutes/link` | 기존 D-Flow 회의록에 `external_id` 부여 (수동 연결) | **v1 필수** |
 | POST | `/minutes/folder` | 이미 등록된 회의록의 **일괄 재편철**(배치·dry-run 기본) | **v1.2 필수** (★ v2.3 신설 — §4c) |
 | GET | `/minutes/{id}` | 단건 조회 | v1.1 |
@@ -857,6 +865,14 @@ v2.2까지 `GET /minutes`는 `archived_at is null` 필터를 **`external_id` 정
 
 `teams`는 또박또박이 최상위 폴더명 자동 판정(§0 D10)의 기준으로 쓰므로, D-Flow에 팀이 추가/변경되면 이 응답만으로 또박또박이 무수정 추종한다.
 
+- ★ **v2.6 — 쿼리 `user_email`(필수)**: `GET /minutes/meta?user_email=<또박또박 로그인 사용자 이메일>`. 매칭 규칙은 §3.3 과 같다(`lower(trim())`).
+  - 누락·빈 값 → `400` `{ "error": "user_email 이 필요합니다.", "code": "validation_failed" }` — **전체 목록으로 되돌아가지 않는다.**
+  - 일치하는 계정 없음 → `403` `{ "code": "unknown_user" }`(목록 없음).
+  - `projects` = 그 사용자가 속한 워크스페이스의 프로젝트 중 볼 수 있는 것(비공개 프로젝트는 명단에 있거나 워크스페이스 관리자일 때만). 플랫폼 관리자는 전부.
+  - `teams` = 그 사용자가 속한 워크스페이스들의 **활성 공용 팀** 합집합(중복 제거).
+  - `project_id` 가 위 `projects` 에 없으면 `404`(존재 은닉) — 회의 목록을 싣지 않는다.
+  - 계정·권한·팀 기준정보 조회 실패는 `500`(빈 목록으로 위장하지 않는다).
+
 - `teams`는 `TEAM_CODES` 상수(`src/lib/domain/minutes.ts:9`) 재사용.
 - `projects`에 `status` 컬럼 없음 (확인).
 - 회의 목록은 프로젝트 종속이므로 별도 파라미터: **`GET /minutes/meta?project_id=<uuid>`** 일 때만 `meetings: [{id, title, date, category, recurrence}]` 포함 (기존 `fetchProjectMeetingsLite`가 projectId 필수 — 확인).
@@ -1143,8 +1159,9 @@ paths:
     get:
       summary: 구분·프로젝트(·회의) 목록 + 제한값
       parameters:
-        - { name: project_id, in: query, schema: { type: string, format: uuid }, description: "지정 시 해당 프로젝트의 meetings 포함" }
-      responses: { "200": { description: "meta — v2.5: meetings[]에 category·recurrence 포함(반복 회의는 시리즈 1행) — §5.2" } }
+        - { name: user_email, in: query, required: true, schema: { type: string, format: email }, description: "v2.6 — 호출자. 그 사람이 볼 수 있는 프로젝트·팀만 반환" }
+        - { name: project_id, in: query, schema: { type: string, format: uuid }, description: "지정 시 해당 프로젝트의 meetings 포함(볼 수 없는 프로젝트면 404)" }
+      responses: { "200": { description: "meta — v2.5: meetings[]에 category·recurrence 포함(반복 회의는 시리즈 1행) — §5.2" }, "400": { description: "user_email 누락" }, "403": { description: "unknown_user" }, "404": { description: "project_id 를 볼 수 없음" } }
   /minutes/link:
     post:
       summary: 기존 회의록에 external_id 부여 (수동 연결)
@@ -1287,8 +1304,8 @@ EMAIL=<D-Flow에 실존하는 계정 이메일>
 # S1. 인증 실패 → 401
 curl -si $BASE/minutes/meta -H "Authorization: Bearer wrong" | head -1
 
-# S2. meta → 200, teams 5종(MDM 포함) + projects + limits
-curl -s $BASE/minutes/meta -H "Authorization: Bearer $SECRET"
+# S2. meta → 200, teams(호출자 워크스페이스의 활성 팀) + projects(볼 수 있는 것) + limits
+curl -s "$BASE/minutes/meta?user_email=$EMAIL" -H "Authorization: Bearer $SECRET"
 
 # S3. 미지 이메일 → 403 {"code":"unknown_user"}, 레코드 미생성
 curl -si -X POST $BASE/minutes -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \

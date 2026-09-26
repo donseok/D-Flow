@@ -4,6 +4,7 @@ import 'server-only'
 // 팀 기준정보 런타임 캐시 — lib/ai/llm-override.ts 와 동일한 검증된 패턴.
 // 동기 소비처(레이아웃·AI 도구·레포 매핑)가 많아 동기 접근자 + TTL 백그라운드 갱신.
 // service_role 로 읽는 이유: 캐시는 프로세스 전역이라 사용자 세션 컨텍스트가 없다(읽기 전용 select).
+// 캐시는 전 워크스페이스의 팀을 담는다 — 한 워크스페이스로 좁히는 것은 접근자의 몫이다(teamsForWorkspaceSync, SP2 §4.2).
 // ============================================================================
 
 import { activeCodes, resolveTeamsForProject, type Team } from '@/lib/domain/teams'
@@ -27,11 +28,16 @@ async function fetchTeams(): Promise<readonly Team[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('teams')
-    .select('id, code, sort_order, active, progress_visible, project_id')
+    .select('id, code, sort_order, active, progress_visible, project_id, workspace_id')
     .order('sort_order')
     .order('code')
   if (error) throw new Error(error.message)
   const rows = (data ?? []) as Array<Record<string, unknown>>
+  // workspace_id 는 not null(0003)이다 — 없으면 select 누락 같은 결함이라 로드 실패로 올린다.
+  // 워크스페이스를 모르는 팀을 캐시에 넣으면 워크스페이스 접근자가 그 팀을 조용히 빠뜨린다.
+  if (rows.some(r => typeof r.workspace_id !== 'string' || r.workspace_id === '')) {
+    throw new Error('teams 행에 workspace_id 가 없습니다')
+  }
   const teams = rows
     .filter(r => typeof r.code === 'string' && (r.code as string).trim() !== '')
     .map(r => ({
@@ -41,6 +47,7 @@ async function fetchTeams(): Promise<readonly Team[]> {
       active: r.active !== false,
       progressVisible: r.progress_visible !== false,
       projectId: (r.project_id as string | null) ?? null,
+      workspaceId: r.workspace_id as string,
     }))
   return teams
 }
@@ -90,7 +97,9 @@ function allTeamsSync(): readonly Team[] {
 }
 
 /** 전역 팀(비활성 포함) — 회의록·또박또박·계정 등 프로젝트 축 없는 화면의 유일한 소스.
- *  프로젝트 팀은 여기 절대 섞이지 않는다(스펙 봉쇄 지점). */
+ *  프로젝트 팀은 여기 절대 섞이지 않는다(스펙 봉쇄 지점).
+ *  ⚠️ 전 워크스페이스의 공용 팀이 섞여 있다 — 검증 전용으로 남긴 옛 접근자다. 새 코드는 teamsForWorkspaceSync 를
+ *  쓴다(남은 호출처는 actions/minutes.ts 등 — Task 16 이 옮긴다, 캐시 구조는 SP4 R10). */
 export function teamsSync(): readonly Team[] {
   return allTeamsSync().filter(t => t.projectId === null)
 }
@@ -108,6 +117,20 @@ export function isRegisteredTeamCode(code: string): boolean {
 /** 활성 팀 여부(전역 전용) — 신규 입력 검증용(비활성 팀으로의 새 등록은 거부). */
 export function isActiveTeamCode(code: string): boolean {
   return teamsSync().some(t => t.active && t.code === code)
+}
+
+/** 한 워크스페이스의 공용 팀(비활성 포함) — teamsSync 의 워크스페이스판. 다른 워크스페이스 팀·프로젝트 팀은 없다.
+ *  캐시를 한 번도 채우지 못했으면 throw 한다 — 조회 실패를 "팀 없음"으로 위장하지 않는다(에러 3원칙).
+ *  정상 로드 뒤의 갱신 실패는 직전 값을 그대로 쓴다(stale ≠ 실패, load 주석 참조). */
+export function teamsForWorkspaceSync(workspaceId: string): readonly Team[] {
+  const all = allTeamsSync()
+  if (!everLoaded) throw new Error('팀 마스터를 아직 불러오지 못했습니다.')
+  return all.filter(t => t.projectId === null && t.workspaceId === workspaceId)
+}
+
+/** 활성 팀 코드(정렬됨) — 한 워크스페이스의 공용 팀만. 실패 의미는 teamsForWorkspaceSync 와 같다. */
+export function activeTeamCodesForWorkspaceSync(workspaceId: string): TeamCode[] {
+  return activeCodes(teamsForWorkspaceSync(workspaceId))
 }
 
 /** 프로젝트 화면용 — 프로젝트 행 있으면 그것만, 없으면 전역 폴백(비활성 포함). */

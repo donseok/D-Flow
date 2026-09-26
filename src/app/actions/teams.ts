@@ -10,6 +10,7 @@ import { getActor, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_ANON, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { adminFor } from '@/lib/supabase/adminFor'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
@@ -126,7 +127,8 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
     console.error('[teams] 관리 목록 거부:', g.error)
     return []
   }
-  const admin = createAdminClient()
+  // 스코프를 정한 service_role 클라이언트 — 아래 필터가 쓰는 workspaceId 가 가드가 판정한 그 값이다.
+  const { admin } = adminFor({ workspaceId })
   // 공용 팀 관리 화면 — project_id is null 로 고정해 프로젝트 팀(0071)이 섞여 들어오지 않게 하고,
   // workspace_id 로 좁혀 다른 워크스페이스의 공용 팀이 보이지 않게 한다(SP2 §4.2 — 종전엔 전 워크스페이스가 섞였다).
   const { data, error } = await admin.from('teams')

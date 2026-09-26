@@ -1,6 +1,6 @@
-// 에이전트 허브 조회 — 서버 전용(service_role). 1차 6건 병렬 + 2차(살아 있는 주문의 완료 보고) 1건.
+// 에이전트 허브 조회 — 서버 전용(service_role). 1차 5건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
-import { createAdminClient } from '@/lib/supabase/admin'
+import { adminFor } from '@/lib/supabase/adminFor'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import type { OrderRow, WatcherRow } from '@/lib/domain/seatmap'
@@ -28,7 +28,7 @@ function toHubMember(r: Record<string, unknown>): HubMemberRow {
 
 export async function fetchAgentHubRows(admin: AdminClient, projectId: string, nowMs: number): Promise<AgentHubRows> {
   const doneSince = new Date(nowMs - DONE_WINDOW_MS).toISOString()
-  const [items, agentProject, orders, watchers, members, projects] = await Promise.all([
+  const [items, agentProject, orders, members, projects] = await Promise.all([
     admin.from('wbs_items').select(HUB_ITEM_COLS).eq('project_id', projectId).then(r => must<HubItemRow[]>('항목', r)),
     admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle().then(r => {
       if (r.error) throw new Error(`[agent-hub] 등록 조회 실패: ${r.error.message}`)
@@ -37,29 +37,40 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
     admin.from('agent_work_orders').select(ORDER_COLS).eq('project_id', projectId)
       .or(`status.in.(ready,claimed,reported),and(status.eq.approved,updated_at.gte.${doneSince})`)
       .order('created_at', { ascending: false }).limit(2000).then(r => must<OrderRow[]>('주문', r)),
-    admin.from('agent_watchers').select(WATCHER_COLS)
-      .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r)),
     // 비활성 행도 싣는다 — 담당자 이름 표시는 계속돼야 한다. '나' 판정은 myMemberIdsOf 가 active 로 거른다.
     admin.from('project_members').select('id, active, people!inner(display_name, user_id, active)').eq('project_id', projectId)
       .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toHubMember)),
-    admin.from('projects').select('id, name').eq('id', projectId).then(r => must<Array<{ id: string; name: string }>>('프로젝트', r)),
+    admin.from('projects').select('id, name, workspace_id').eq('id', projectId)
+      .then(r => must<Array<{ id: string; name: string; workspace_id: string }>>('프로젝트', r)),
   ])
+  const project = projects[0] ?? null
+  // 감시자는 이 프로젝트의 워크스페이스로 좁힌다 — 프로젝트 없는(project_id null) 감시자는 워크스페이스 단위라,
+  // 필터가 없으면 다른 워크스페이스의 팀장이 이 허브에 떠 있는 것으로 보인다(SP2 §4.2). 워크스페이스를 알려면
+  // 프로젝트 행이 필요해 2차로 간다. 프로젝트가 없으면 전역으로 넓히지 않고 조회하지 않는다.
   // 완료 보고는 주문 id 로만 거를 수 있어 2차로 간다(PostgREST 에 project_id 조인이 없다). 살아 있는 주문이 없으면 생략.
   const liveIds = orders.filter(o => o.status === 'ready' || o.status === 'claimed' || o.status === 'reported').map(o => o.id)
-  const reports = liveIds.length
-    ? must<HubReportRow[]>('완료 보고', await admin.from('agent_work_reports').select(REPORT_COLS).in('work_order_id', liveIds).eq('kind', 'completion'))
-    : []
+  const [watchers, reports] = await Promise.all([
+    project
+      ? admin.from('agent_watchers').select(WATCHER_COLS).eq('workspace_id', project.workspace_id)
+        .gte('last_seen_at', new Date(nowMs - WATCHER_TTL_MS).toISOString()).then(r => must<WatcherRow[]>('감시자', r))
+      : Promise.resolve([] as WatcherRow[]),
+    liveIds.length
+      ? admin.from('agent_work_reports').select(REPORT_COLS).in('work_order_id', liveIds).eq('kind', 'completion')
+        .then(r => must<HubReportRow[]>('완료 보고', r))
+      : Promise.resolve([] as HubReportRow[]),
+  ])
   // 선행 승인 여부 — 위임 항목의 depends 가 가리키는 항목 id 로 approved 주문을 1회(주문 조회는 7일 창이라 오래전 승인이 빠진다). 선행이 없으면 생략.
   const refs = new Set(items.filter(i => (i.tags ?? []).includes('agent')).flatMap(i => i.depends ?? []))
   const predIds = items.filter(i => i.external_ref !== null && refs.has(i.external_ref)).map(i => i.id)
   const approvedItemIds = predIds.length
     ? must<Array<{ wbs_item_id: string }>>('선행 승인 주문', await admin.from('agent_work_orders').select('wbs_item_id').in('wbs_item_id', predIds).eq('status', 'approved')).map(r => r.wbs_item_id)
     : []
-  return { project: projects[0] ?? null, agentProject, items, orders, reports, watchers, members, approvedItemIds }
+  return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds }
 }
 
 export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now()): Promise<AgentHub> {
-  const admin = createAdminClient()
+  // 호출부(페이지·허브 액션)가 requireProjectMember(projectId) 를 통과한 뒤다 — 조회는 전부 이 projectId 로 좁힌다.
+  const { admin } = adminFor({ projectId })
   const rows = await fetchAgentHubRows(admin, projectId, nowMs)
   return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
 }

@@ -156,8 +156,10 @@ describe('팀 관리 서버액션', () => {
     expect(db.updated).toHaveLength(0)
   })
 
-  it('listTeamsAdmin: 그 워크스페이스의 공용 팀만 — 다른 워크스페이스 팀이 섞이지 않는다', async () => {
-    asAdmin()
+  it('listTeamsAdmin: 그 워크스페이스의 공용 팀만 — 다른 워크스페이스 팀이 섞이지 않는다(adminFor 스코프)', async () => {
+    // adminFor 는 uuid 스코프만 받는다 — 이 케이스만 실제 형식의 워크스페이스 id 를 쓴다.
+    const WID = '0d000000-0000-4000-8000-00000000000d'
+    signedInAs(makeActor({ userId: 'u-wsadmin', workspaceRoles: new Map([[WID, 'admin']]) }))
     const filters: Array<[string, unknown]> = []
     createAdminClient.mockImplementationOnce(() => ({
       from: () => {
@@ -174,8 +176,8 @@ describe('팀 관리 서버액션', () => {
         return q
       },
     }) as never)
-    expect(await listTeamsAdmin(WS)).toHaveLength(1)
-    expect(filters).toContainEqual(['workspace_id', WS])
+    expect(await listTeamsAdmin(WID)).toHaveLength(1)
+    expect(filters).toContainEqual(['workspace_id', WID])
     expect(filters).toContainEqual(['project_id', null])
   })
 

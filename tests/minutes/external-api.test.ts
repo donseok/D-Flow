@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   // Task 6 — 프로젝트 스코프 활성 팀 목록. 기본 구현은 beforeEach 에서 건다(초기화 시점에
   // mocks.activeTeamCodes 를 참조하면 자기 참조로 TS 순환 추론 에러가 난다).
   activeTeamCodesForProject: vi.fn<(projectId: string) => string[]>(),
+  // SP2 Task 12 — meta 의 teams 는 호출자 워크스페이스들의 합집합.
+  activeTeamCodesForWorkspace: vi.fn<(workspaceId: string) => string[]>(),
   // 0006 — 프로젝트 없는 신규 등록의 워크스페이스 해석(actorFromUser → resolveSoleWorkspaceId).
   actorFromUser: vi.fn(),
 }))
@@ -28,6 +30,7 @@ vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 vi.mock('@/lib/teams/master', () => ({
   activeTeamCodesSync: () => mocks.activeTeamCodes,
   activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
+  activeTeamCodesForWorkspaceSync: (workspaceId: string) => mocks.activeTeamCodesForWorkspace(workspaceId),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
@@ -222,6 +225,7 @@ beforeEach(() => {
   // clearAllMocks 는 mockImplementation 을 지우지 않는다 — 개별 테스트의 override 가 다음
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
+  mocks.activeTeamCodesForWorkspace.mockImplementation(() => mocks.activeTeamCodes)
   mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
   vi.stubEnv('MINUTES_API_SECRET', SECRET)
@@ -1472,13 +1476,29 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
 })
 
 describe('GET /api/v1/minutes/meta (§5.2)', () => {
-  it('teams(MDM 포함)·projects·limits 반환, project_id 없으면 meetings 없음', async () => {
-    useAdmin({ projects: [{ data: [{ id: 'p-1', name: 'Acme' }] }] })
-    const res = await META(get('/api/v1/minutes/meta'))
+  // SP2 — meta 는 호출자 신원이 없어 전 워크스페이스의 프로젝트를 내줬다. user_email(필수)로 호출자를 정하고
+  // 그 사람이 볼 수 있는 프로젝트만, teams 는 그 사람 워크스페이스들의 활성 공용 팀 합집합만 싣는다.
+  const PA = '0a000000-0000-4000-8000-00000000000a'       // 내 워크스페이스(WS)의 공개 프로젝트
+  const PPRIV = '0b000000-0000-4000-8000-00000000000b'    // 내 워크스페이스의 비공개 프로젝트(명단 없음)
+  const PB = '0c000000-0000-4000-8000-00000000000c'       // 다른 워크스페이스의 프로젝트
+  const WS2 = 'ws-2'
+  const q = (extra = '') => `/api/v1/minutes/meta?user_email=${encodeURIComponent(USER.email)}${extra}`
+  beforeEach(() => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id,
+      workspaceRoles: new Map([[WS, 'member'], [WS2, 'member']]),
+      projectWorkspace: new Map([[PA, WS], [PPRIV, WS]]),
+    }))
+    mocks.activeTeamCodesForWorkspace.mockImplementation((wid: string) =>
+      wid === WS ? ['PMO', 'ERP'] : wid === WS2 ? ['ERP', 'QA'] : ['남의팀'])
+  })
+
+  it('teams·projects·limits 반환, project_id 없으면 meetings 없음', async () => {
+    useAdmin({ projects: [{ data: [{ id: PA, name: 'Acme', is_private: false }] }] })
+    const res = await META(get(q()))
     expect(res.status).toBe(200)
     const json = await res.json()
-    expect(json.teams).toEqual(['PMO', 'ERP', 'MES', '가공', 'MDM'])
-    expect(json.projects).toEqual([{ id: 'p-1', name: 'Acme' }])
+    expect(json.projects).toEqual([{ id: PA, name: 'Acme' }])
     expect(json.limits).toMatchObject({
       max_body_chars: 100_000, max_request_bytes: 4_194_304,
       max_attachments: 10, max_attachment_bytes: 20_971_520,
@@ -1486,9 +1506,65 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
     expect(json).not.toHaveProperty('meetings')
   })
 
+  it('다른 워크스페이스 프로젝트는 응답에 없다 — 조회를 내 프로젝트 id 로 좁히고, 비공개는 명단이 있어야 보인다', async () => {
+    const { builders } = useAdmin({
+      // DB 필터가 새도(PB 행이 섞여 와도) 응답에 싣지 않는다 — 스냅샷 키로 한 번 더 거른다.
+      projects: [{ data: [
+        { id: PA, name: 'A', is_private: false },
+        { id: PPRIV, name: '비공개', is_private: true },
+        { id: PB, name: '남의것', is_private: false },
+      ] }],
+    })
+    const json = await (await META(get(q()))).json()
+    expect(json.projects).toEqual([{ id: PA, name: 'A' }])
+    expect(builders.projects[0].select).toHaveBeenCalledWith('id, name, is_private')
+    expect(builders.projects[0].in).toHaveBeenCalledWith('id', [PA, PPRIV])
+    expect(mocks.actorFromUser).toHaveBeenCalledWith(expect.anything(), USER.id)
+  })
+
+  it('teams 는 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(중복 제거) — 다른 워크스페이스 팀은 없다', async () => {
+    useAdmin({ projects: [{ data: [] }] })
+    const json = await (await META(get(q()))).json()
+    expect(json.teams).toEqual(['PMO', 'ERP', 'QA'])
+    expect(mocks.activeTeamCodesForWorkspace.mock.calls.map(c => c[0]).sort()).toEqual([WS, WS2])
+  })
+
+  it('프로젝트가 없는 호출자는 projects 조회 없이 빈 목록', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
+    const { builders } = useAdmin()
+    const json = await (await META(get(q()))).json()
+    expect(json.projects).toEqual([])
+    expect(builders.projects).toBeUndefined()
+  })
+
+  it('user_email 이 없으면 DB 접근 전에 400 — 전 프로젝트 목록으로 되돌아가지 않는다', async () => {
+    const res = await META(get('/api/v1/minutes/meta'))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('user_email 이 필요합니다.')
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('모르는 user_email 은 403 unknown_user — 목록을 싣지 않는다', async () => {
+    const { builders } = useAdmin({}, [])
+    const res = await META(get('/api/v1/minutes/meta?user_email=nobody%40example.com'))
+    expect(res.status).toBe(403)
+    const json = await res.json()
+    expect(json.code).toBe('unknown_user')
+    expect(json).not.toHaveProperty('projects')
+    expect(builders.projects).toBeUndefined()
+  })
+
+  it('계정·권한 조회 실패는 500 — 빈 목록으로 위장하지 않는다', async () => {
+    useAdmin({}, [USER], { usersError: true })
+    expect((await META(get(q()))).status).toBe(500)
+    useAdmin()
+    mocks.actorFromUser.mockRejectedValueOnce(new Error('권한 정보를 불러오지 못했습니다'))
+    expect((await META(get(q()))).status).toBe(500)
+  })
+
   it('project_id 지정 시 해당 프로젝트 meetings 포함 — v2.5: category·recurrence 동봉', async () => {
     const { builders } = useAdmin({
-      projects: [{ data: [] }],
+      projects: [{ data: [{ id: PA, name: 'A', is_private: false }] }],
       meetings: [{
         data: [{
           id: 'mt-1', title: '주간 정례', meeting_date: '2026-07-14',
@@ -1496,17 +1572,27 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
         }],
       }],
     })
-    const res = await META(get(`/api/v1/minutes/meta?project_id=${MINUTE_UUID}`))
+    const res = await META(get(q(`&project_id=${PA}`)))
     const json = await res.json()
     expect(json.meetings).toEqual([{
       id: 'mt-1', title: '주간 정례', date: '2026-07-14', category: 'routine', recurrence: 'weekly',
     }])
     expect(builders.meetings[0].select).toHaveBeenCalledWith('id, title, meeting_date, category, recurrence')
-    expect(builders.meetings[0].eq).toHaveBeenCalledWith('project_id', MINUTE_UUID)
+    expect(builders.meetings[0].eq).toHaveBeenCalledWith('project_id', PA)
   })
 
+  it.each([['다른 워크스페이스', PB], ['비공개(명단 없음)', PPRIV]])(
+    '볼 수 없는 project_id(%s)는 404 — 회의 목록을 조회하지 않는다', async (_label, pid) => {
+      const { builders } = useAdmin({
+        projects: [{ data: [{ id: PA, name: 'A', is_private: false }, { id: PPRIV, name: '비공개', is_private: true }] }],
+      })
+      const res = await META(get(q(`&project_id=${pid}`)))
+      expect(res.status).toBe(404)
+      expect(builders.meetings).toBeUndefined()
+    })
+
   it('project_id가 uuid 형식이 아니면 DB 접근 전에 400', async () => {
-    const res = await META(get('/api/v1/minutes/meta?project_id=abc'))
+    const res = await META(get(q('&project_id=abc')))
     expect(res.status).toBe(400)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })

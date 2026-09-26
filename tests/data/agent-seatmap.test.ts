@@ -28,10 +28,14 @@ describe('fetchSeatmapRows', () => {
       wbs_items: [{ data: [{ id: 'i1', project_id: 'p1', code: 'T', name: 'n', parent_id: 'z1', actual_pct: 25, assignee_member_id: 'm1', tags: ['agent'] }] }, { data: [{ id: 'z1', project_id: 'p1', code: 'Z', name: 'zone', parent_id: null, actual_pct: null, assignee_member_id: null, tags: null }] }],
       agent_work_reports: [{ data: [] }],
       agent_watchers: [{ data: [] }],
-      projects: [{ data: [{ id: 'p1', name: 'P' }] }],
+      projects: [{ data: [{ id: 'p1', name: 'P', workspace_id: 'ws-a' }] }],
       project_members: [{ data: [{ id: 'm1', project_id: 'p1', people: { display_name: '홍길동', user_id: 'u1' } }] }],
     }, calls)
     const rows = await fetchSeatmapRows(a, ['p1'], NOW)
+    // 감시자는 층 프로젝트들의 워크스페이스로 좁힌다 — 다른 워크스페이스의 프로젝트 없는 감시자가 층마다 뜨지 않게(SP2 §4.2).
+    expect(String(calls['projects.select']?.[0]?.[0] ?? '')).toBe('id, name, workspace_id')
+    expect(calls['agent_watchers.in']?.[0]).toEqual(['workspace_id', ['ws-a']])
+    expect(rows.projects).toEqual([{ id: 'p1', name: 'P' }])
     expect(rows.orders).toHaveLength(1)
     expect(rows.items[0].id).toBe('i1'); expect(rows.parents[0].id).toBe('z1')
     expect(rows.projects[0].name).toBe('P')
@@ -57,6 +61,12 @@ describe('fetchSeatmapRows', () => {
     const calls: Record<string, unknown[][]> = {}
     await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [] }] }, calls), null, NOW)
     expect(calls['agent_work_orders.in']).toBeUndefined()
+  })
+  it('층 프로젝트 행이 없으면 감시자를 조회하지 않는다 — 워크스페이스를 모르면 전역으로 넓히지 않는다', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    const rows = await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [O] }], projects: [{ data: [] }] }, calls), null, NOW)
+    expect(rows.watchers).toEqual([])
+    expect(calls['agent_watchers.select']).toBeUndefined()
   })
   it('projectIds 가 빈 배열이면 조회 없이 빈 묶음', async () => {
     const a = admin({})
