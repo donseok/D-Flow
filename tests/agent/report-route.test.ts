@@ -25,7 +25,7 @@ import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const SECRET = 'test-agent-secret'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 /** 전이 RPC 기본 응답 — 부수효과(스냅샷·도달 알림)가 없는 성공. 케이스마다 queues.rpc 로 덮는다. */
 const RPC_OK = { ok: true, order_status: 'reported', stage: 'im', actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
 
@@ -39,12 +39,12 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const b: Record<string, unknown> = {}
       const rec = { table, ops: [] as Array<[string, unknown[]]> }
       chains.push(rec)
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) b[k] = (...a: unknown[]) => { rec.ops.push([k, a]); return b }
+      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) b[k] = (...a: unknown[]) => { rec.ops.push([k, a]); return b }
       // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
       if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => {

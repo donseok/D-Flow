@@ -24,7 +24,7 @@ const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
 const P2 = '99999999-9999-4999-8999-999999999999'
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 /** 레거시 경로의 user_email 계정 — resolveUserByEmail 이 profiles 에서 찾는다. */
 const USERS = [{ id: 'u-1', email: 'dev@example.com', user_metadata: {} }]
 /** 전이 RPC 기본 응답 — 항목 없는 주문의 성공(단계·실적 건너뜀), 부수효과 없음. 케이스마다 queues.rpc 로 덮는다. */
@@ -51,13 +51,13 @@ function useAdmin(queues: Record<string, Resp[]>) {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'insert', 'delete', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['select', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
       if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, USERS)
       b.update = (p: unknown) => { captured.push(p); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async (_fn: string, args: Record<string, unknown>) => {

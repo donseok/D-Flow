@@ -11,17 +11,17 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
 function useAdmin(queues: Record<string, Resp[]>) {
   const admin = {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'eq', 'in', 'order', 'limit']) b[k] = () => b
+      for (const k of ['select', 'update', 'eq', 'in', 'order', 'limit', 'range']) b[k] = () => b
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'pl@example.com' } }, error: null })) } },

@@ -19,7 +19,7 @@ const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
 const DEP_ID = '44444444-4444-4444-8444-444444444444'
 const DEP_REF = 'MES/TSK-01-00'
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
 const PAT = generateAgentToken()
 const RUNNER = {
@@ -40,12 +40,12 @@ function useAdmin(queues: Record<string, Resp[]>, users: FakeAccount[] = []) {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
       if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => ({ data: { ok: true, order_status: 'claimed', stage: null, actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }, error: null })),

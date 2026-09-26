@@ -12,7 +12,7 @@ import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const P2 = '99999999-9999-4999-8999-999999999999'
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
 const PAT = generateAgentToken()
 const RUNNER = {
@@ -32,10 +32,10 @@ function useAdmin(queues: Record<string, Resp[]>, selects?: Record<string, strin
         if (selects && typeof cols === 'string') (selects[table] ??= []).push(cols)
         return b
       }
-      for (const k of ['update', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['update', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'dev@example.com' } }, error: null })) } },

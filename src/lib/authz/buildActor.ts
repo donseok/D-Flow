@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Actor, ProjectRole, WorkspaceRole } from '../domain/authz'
+import { fetchAllPages } from '../data/paging'
 
 type Db = Pick<SupabaseClient, 'from'>
 const fail = (axis: string, msg: string | undefined): never => {
@@ -30,16 +31,23 @@ export async function buildActor(db: Db, userId: string): Promise<Actor> {
   for (const r of ws.data!) workspaceRoles.set(r.workspace_id as string, r.role as WorkspaceRole)
 
   // ③ projects — SP1 에서는 읽기 정책이 개방이라 명시 필터. 플랫폼 관리자는 전부, 소속 워크스페이스가 없으면 조회하지 않는다.
+  // 이 맵은 '존재하는 프로젝트'의 근거다(isHiddenProject·워크스페이스 해석) — PostgREST max_rows 에서 잘리면 빠진 프로젝트가 404·ERR_MISSING
+  // 으로 읽히므로 id 정렬 페이지로 끝까지 읽고 count 총합으로 대조한다(fetchAllPages).
   const wids = [...workspaceRoles.keys()]
-  const pr = isSuperuser
-    ? await db.from('projects').select('id, workspace_id')
-    : wids.length
-      ? await db.from('projects').select('id, workspace_id').in('workspace_id', wids)
-      : { data: [] as Array<{ id: string; workspace_id: string }>, error: null }
-  if (pr.error || !pr.data) fail('projects', pr.error?.message)
+  let projects: Array<{ id: string; workspace_id: string }> = []
+  if (isSuperuser || wids.length) {
+    try {
+      projects = await fetchAllPages<{ id: string; workspace_id: string }>('projects', (from, to) => {
+        const q = db.from('projects').select('id, workspace_id', { count: 'exact' })
+        return (isSuperuser ? q : q.in('workspace_id', wids)).order('id').range(from, to)
+      })
+    } catch (e) {
+      fail('projects', e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const projectWorkspace = new Map<string, string>()
-  for (const p of pr.data!) projectWorkspace.set(p.id as string, p.workspace_id as string)
+  for (const p of projects) projectWorkspace.set(p.id, p.workspace_id)
   const projectRoles = new Map<string, ProjectRole>()
   const memberIds = new Map<string, string>()
   const rosterTeams = new Map<string, { teamIds: string[]; teamCodes: string[] }>()

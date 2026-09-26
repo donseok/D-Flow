@@ -10,7 +10,7 @@ import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 const PAT = generateAgentToken()
 const RUNNER = {
   id: 'r-1', kind: 'user_pat', owner_user_id: 'u-1', token_prefix: PAT.prefix, token_hash: PAT.hash,
@@ -27,9 +27,9 @@ function useAdmin(queues: Record<string, Resp[]>, calls: Record<string, unknown[
       b.select = () => b
       b.update = (payload: unknown) => { (calls[table] ??= []).push(payload); return b }
       b.insert = (payload: unknown) => { (calls[`${table}:insert`] ??= []).push(payload); return b }
-      for (const k of ['eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
-      b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+      b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'dev@example.com' } }, error: null })) } },

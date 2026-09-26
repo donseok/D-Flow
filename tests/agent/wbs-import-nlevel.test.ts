@@ -139,7 +139,7 @@ vi.mock('next/server', async (orig) => {
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
-type Resp = { data?: unknown; error?: { message: string; code?: string } | null }
+type Resp = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
 
 /** wbs-import.test.ts 의 목과 동형 + upsert 기록(골격 levels 시드 검증용). */
 function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
@@ -148,12 +148,12 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) b[k] = () => b
+      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       b.upsert = (v: unknown) => { (upserts[table] ??= []).push(v); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => rpcQueue.shift() ?? { data: null, error: null }),

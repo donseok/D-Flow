@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
     // 이벤트 없음 — 컨텍스트만 본다
   }),
 }))
+const { withCount } = vi.hoisted(() => ({
+  withCount: (r: unknown) => {
+    const x = r as { data?: unknown }
+    return Array.isArray(x.data) ? { ...(r as object), count: x.data.length } : r
+  },
+}))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1' })) }))
 vi.mock('@/lib/ai/chat/default-registry', async () => {
   const { EMPTY_CHAT_TOOL_REGISTRY } = await import('@/lib/ai/chat/registry')
@@ -30,9 +36,10 @@ vi.mock('@/lib/supabase/server', () => ({
       from: (table: string) => {
         const r = tables[table] ?? { data: null, error: { message: `unexpected table ${table}` } }
         const b: Record<string, unknown> = {}
-        for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+        for (const k of ['select', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
         b.maybeSingle = async () => r
-        b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(r).then(res, rej)
+        // buildActor 의 projects 는 페이지 + count 총합 대조(fetchAllPages) — 배열 응답에는 count 를 싣는다
+        b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(withCount(r)).then(res, rej)
         return b
       },
     }

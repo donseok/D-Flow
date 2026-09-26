@@ -18,7 +18,7 @@ import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
 const PAT = generateAgentToken()
 const RUNNER = {
@@ -39,12 +39,12 @@ function useAdmin(queues: Record<string, Resp[]>, users: FakeAccount[] = []) {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order']) b[k] = () => b
+      for (const k of ['select', 'update', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
       if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => ({ data: { ok: true, order_status: 'claimed', stage: null, actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }, error: null })),
@@ -78,9 +78,9 @@ describe('myMemberIds — people.user_id 한 축(이메일 폴백 없음)·활�
   function rosterStub(resp: Resp) {
     const calls: Array<[string, unknown[]]> = []
     const b: Record<string, unknown> = {}
-    for (const k of ['select', 'eq', 'in']) b[k] = (...args: unknown[]) => { calls.push([k, args]); return b }
+    for (const k of ['select', 'eq', 'in', 'order', 'range']) b[k] = (...args: unknown[]) => { calls.push([k, args]); return b }
     b.then = (r: (v: unknown) => unknown, j: (e: unknown) => unknown) =>
-      Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r, j)
+      Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r, j)
     return { admin: { from: vi.fn(() => b) } as never, calls }
   }
 

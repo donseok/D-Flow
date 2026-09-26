@@ -42,7 +42,7 @@ const DEP_ID = '44444444-4444-4444-8444-444444444444'
 const DEP_REF = 'MES/TSK-01-00'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
 
-type Resp = { data?: unknown; error?: { message: string } | null }
+type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 type Captured = { op: 'update' | 'insert'; payload: unknown }
 /** 전이 RPC 기본 응답 — 부수효과(스냅샷·도달 알림)가 없는 성공. 케이스마다 queues.rpc 로 덮는다. */
 const RPC_OK = { ok: true, order_status: 'claimed', stage: 'ip', actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
@@ -53,7 +53,7 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'delete', 'eq', 'in', 'order', 'limit', 'contains']) b[k] = () => b
+      for (const k of ['select', 'delete', 'eq', 'in', 'order', 'limit', 'contains', 'range']) b[k] = () => b
       // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
       if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.update = (payload: unknown) => { (captured[table] ??= []).push({ op: 'update', payload }); return b }
@@ -61,7 +61,7 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = b.maybeSingle
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => {

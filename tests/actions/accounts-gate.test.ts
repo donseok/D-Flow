@@ -62,7 +62,7 @@ beforeEach(() => {
   getActor.mockReset()
 })
 
-type Result = { data?: unknown; error: { code?: string; message: string } | null }
+type Result = { data?: unknown; error: { code?: string; message: string } | null; count?: number | null }
 /** PostgREST 빌더 흉내 — 체이닝은 자신을, await·maybeSingle·single 은 결과를 낸다. */
 function chain(result: Result) {
   const c: Record<string, unknown> = {}
@@ -557,6 +557,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
               { user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' },
               { user_id: 'u2', email: 'lee@example.com', display_name: '이멤버', created_at: '2026-09-02T00:00:00Z' },
             ],
+            count: 2,   // listProfiles 는 페이지 + count 총합 대조(fetchAllPages)
             error: null,
           })
         }
@@ -603,6 +604,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
               { user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' },
               { user_id: 'u-b', email: 'bob@example.com', display_name: '밥', created_at: '2026-09-03T00:00:00Z' },
             ],
+            count: 2,
             error: null,
           })
         }

@@ -22,7 +22,10 @@ type RosterRow = {
 let calls: { table: string; method: string; args: unknown[] }[] = []
 let executed: string[] = []
 
-/** buildActor 의 4축(platform_admins·workspace_members·projects·project_members)을 흉내낸다. */
+/** PostgREST 의 max_rows — 한 응답은 이 수에서 조용히 잘린다(count: 'exact' 면 총합은 따로 온다). */
+const MAX_ROWS = 1000
+
+/** buildActor 의 4축(platform_admins·workspace_members·projects·project_members)을 흉내낸다. projects 는 range·count 를 따른다. */
 function stubDb(opts: {
   platformAdmin?: boolean
   /** platform_admins.maybeSingle() 응답을 그대로 지정 — 모양이 어긋난 응답([]·{}·남의 행)을 흉내낸다. */
@@ -37,22 +40,29 @@ function stubDb(opts: {
   mockClient.from.mockImplementation((table: string) => {
     const chain: Record<string, unknown> = {}
     let selected = ''
+    let range: [number, number] | null = null
     const terminal = async () => {
       executed.push(table)
       if (table === 'platform_admins') {
         return res(table, 'platformAdminData' in opts ? opts.platformAdminData : opts.platformAdmin ? { user_id: USER.id } : null)
       }
       if (table === 'workspace_members') return res(table, opts.wsRows ?? [])
-      if (table === 'projects') return res(table, opts.projects ?? [])
+      if (table === 'projects') {
+        const all = opts.projects ?? []
+        const from = range?.[0] ?? 0
+        const to = Math.min(range ? range[1] + 1 : all.length, from + MAX_ROWS)
+        return { ...res(table, all.slice(from, to)), count: opts.errorOn === table ? null : all.length }
+      }
       // PostgREST 에서 people 임베드가 !inner 가 아니면 .eq('people.user_id') 는 임베드만 거르고 행은 전부 돌려준다.
       // 스텁은 그 반대로 모델링한다 — inner 조인이 사라지면 '내 명단 행'을 못 찾아 명단 기대 테스트가 깨지게.
       if (table === 'project_members') return res(table, selected.includes('people!inner(') ? opts.roster ?? [] : [])
       throw new Error(`예상치 못한 테이블: ${table}`)
     }
-    for (const m of ['select', 'eq', 'in', 'not', 'is']) {
+    for (const m of ['select', 'eq', 'in', 'not', 'is', 'order', 'range']) {
       chain[m] = (...args: unknown[]) => {
         calls.push({ table, method: m, args })
         if (m === 'select') selected = String(args[0] ?? '')
+        if (m === 'range') range = [args[0] as number, args[1] as number]
         return chain
       }
     }
@@ -177,6 +187,16 @@ describe('getActor — 4축 조립', () => {
     stubDb({ ...WS_MEMBER, platformAdminData: data })
     const a = await getActor()
     expect(a?.isSuperuser).toBe(false)
+  })
+
+  // max_rows(1000) 를 넘는 플랫폼 — 잘린 맵은 1001번째 프로젝트를 '존재하지 않음'으로 읽는다(isHiddenProject → 404, SP2 최종 리뷰 ERR-3).
+  it('플랫폼 관리자 — 프로젝트가 max_rows 를 넘어도 전부 싣는다(id 정렬 페이지 + count 총합 대조)', async () => {
+    const projects = Array.from({ length: 1001 }, (_, i) => ({ id: `p${String(i).padStart(4, '0')}`, workspace_id: 'w1' }))
+    stubDb({ platformAdmin: true, projects })
+    const a = await getActor()
+    expect(a?.projectWorkspace.size).toBe(1001)
+    expect(a?.projectWorkspace.get('p1000')).toBe('w1')
+    expect(callsOn('projects', 'order')).toContainEqual(['id'])
   })
 
   it('플랫폼 관리자는 projects 를 필터 없이 읽는다', async () => {

@@ -28,10 +28,13 @@ function table(name: string) {
         : name === 'projects' ? mocks.projects
           : () => undefined
   const q: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'in', 'order', 'not']) q[m] = vi.fn(() => q)
+  for (const m of ['select', 'eq', 'in', 'order', 'not', 'range']) q[m] = vi.fn(() => q)
   q.maybeSingle = vi.fn(() => resp())
-  q.then = (res: (v: unknown) => unknown, rej: (r: unknown) => unknown) =>
-    Promise.resolve(resp()).then(res, rej)
+  // buildActor 의 projects 는 페이지 + count 총합 대조(fetchAllPages) — 배열 응답에는 count 를 싣는다
+  q.then = (res: (v: unknown) => unknown, rej: (r: unknown) => unknown) => {
+    const r = resp() as { data?: unknown } | undefined
+    return Promise.resolve(r && Array.isArray(r.data) ? { ...r, count: r.data.length } : r).then(res, rej)
+  }
   return q
 }
 

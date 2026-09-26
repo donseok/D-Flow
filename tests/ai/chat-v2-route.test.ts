@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
   createDefaultRegistry: vi.fn(),
 }))
 
+const { withCount } = vi.hoisted(() => ({
+  withCount: (r: unknown) => {
+    const x = r as { data?: unknown }
+    return Array.isArray(x.data) ? { ...(r as object), count: x.data.length } : r
+  },
+}))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/chat/default-registry', () => ({ createDefaultChatToolRegistry: mocks.createDefaultRegistry }))
@@ -33,9 +39,10 @@ function client(projects: string[], error: { message: string } | null = null) {
   const from = vi.fn((table: string) => {
     const r = tables[table] ?? { data: null, error: { message: `unexpected table ${table}` } }
     const b: Record<string, unknown> = {}
-    for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+    for (const k of ['select', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
     b.maybeSingle = async () => r
-    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(r).then(res, rej)
+    // buildActor 의 projects 는 페이지 + count 총합 대조(fetchAllPages) — 배열 응답에는 count 를 싣는다
+    b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(withCount(r)).then(res, rej)
     return b
   })
   return { from }
@@ -76,7 +83,7 @@ describe('POST /api/chat/v2/stream composition', () => {
       if (table !== 'workspace_members') return base(table)
       const r = { data: null, error: { message: 'axis down' } }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'eq', 'in', 'limit']) b[k] = () => b
+      for (const k of ['select', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
       b.then = (res: (v: unknown) => unknown) => Promise.resolve(r).then(res)
       return b
     })

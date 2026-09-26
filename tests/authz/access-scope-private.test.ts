@@ -36,10 +36,14 @@ function client(tables: Tables = {}) {
       return { ...r, data: (r.data as Array<Record<string, unknown>>).filter(row => vals.includes(row[col])) }
     }
     const b: Record<string, unknown> = {}
-    for (const k of ['select', 'eq', 'limit']) b[k] = () => b
+    for (const k of ['select', 'eq', 'limit', 'order', 'range']) b[k] = () => b
     b.in = (col: string, vals: unknown[]) => { inFilter = [col, vals]; return b }
     b.maybeSingle = async () => answer()
-    b.then = (res: (v: R) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(answer()).then(res, rej)
+    // buildActor 의 projects 는 페이지 + count 총합 대조(fetchAllPages) — 배열 응답에는 걸러진 행 수를 count 로 싣는다
+    b.then = (res: (v: R) => unknown, rej: (e: unknown) => unknown) => {
+      const a = answer()
+      return Promise.resolve(Array.isArray(a.data) ? { ...a, count: a.data.length } : a).then(res, rej)
+    }
     return b
   })
   return { client: { from } as unknown as SupabaseServerClient, from }

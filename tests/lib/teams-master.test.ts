@@ -10,15 +10,21 @@ const { db, createAdminClient } = vi.hoisted(() => {
     teams: { rows: null, error: null } as Table,
     projects: { rows: [], error: null } as Table,
   }
+  // PostgREST 처럼 한 응답은 max_rows(1000)에서 잘리고, range(from, to) 를 주면 그 구간만 준다. count 는 총합(지정하면 그 값).
+  const MAX_ROWS = 1000
   const createAdminClient = vi.fn(() => ({
     from: (name: 'teams' | 'projects') => {
       const b: Record<string, unknown> = {}
+      let range: [number, number] | null = null
       b.select = () => b
       b.order = () => b
+      b.range = (from: number, to: number) => { range = [from, to]; return b }
       b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
         const t = db[name]
         const count = t.count === undefined ? (t.rows?.length ?? null) : t.count
-        return Promise.resolve({ data: t.rows, error: t.error, count }).then(res, rej)
+        const from = range?.[0] ?? 0
+        const rows = t.rows && t.rows.slice(from, Math.min(range ? range[1] + 1 : t.rows.length, from + MAX_ROWS))
+        return Promise.resolve({ data: rows, error: t.error, count }).then(res, rej)
       }
       return b
     },
@@ -87,7 +93,20 @@ describe('teams/master', () => {
     err.mockRestore()
   })
 
-  it('projects 가 잘려 오면(max_rows) 로드 실패 — 빠진 프로젝트가 조용히 팀 없음이 되지 않는다', async () => {
+  // max_rows(1000) 를 넘어도 페이지로 끝까지 읽는다 — 한 번에 읽으면 1000행에서 잘려 로드가 영영 실패했다(SP2 최종 리뷰 ERR-1).
+  it('projects·teams 가 max_rows 를 넘으면(1500행) 두 페이지로 전부 싣는다', async () => {
+    db.teams.rows = [...ROWS, ...Array.from({ length: 1497 }, (_, i) => (
+      { id: `tp${i}`, code: `P${i}`, sort_order: 10, active: true, progress_visible: true, project_id: `p-${i}`, workspace_id: WB }))]
+    db.projects = { rows: [...PROJECTS, ...Array.from({ length: 1497 }, (_, i) => ({ id: `p-${i}`, workspace_id: WB }))], error: null }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const m = await importMaster()
+    expect(err).not.toHaveBeenCalled()
+    expect(m.teamsForProjectSync('p-1496').map(t => t.code)).toEqual(['P1496'])   // 1500번째 팀·프로젝트(두 번째 페이지)
+    expect(m.teamsForWorkspaceSync(WA).map(t => t.code)).toEqual(['PMO', '신팀', '구팀'])
+    err.mockRestore()
+  })
+
+  it('다 읽은 행 수가 count 와 다르면(잘림·페이지 사이 변경) 로드 실패 — 빠진 프로젝트가 조용히 팀 없음이 되지 않는다', async () => {
     db.teams.rows = ROWS
     db.projects = { rows: PROJECTS, error: null, count: PROJECTS.length + 1 }
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})

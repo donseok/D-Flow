@@ -14,6 +14,7 @@ import {
 } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPages } from '@/lib/data/paging'
 
 const TTL_MS = 60_000
 const LOAD_TIMEOUT_MS = 3_000
@@ -37,18 +38,18 @@ let background: Promise<unknown> | null = null
 /** 팀과 프로젝트→워크스페이스 매핑을 한 로드로 읽는다 — 어느 쪽이 실패해도 로드 실패다(반쪽 스냅샷을 싣지 않는다). */
 async function fetchSnapshot(): Promise<Snapshot> {
   const admin = createAdminClient()
-  // 두 쿼리 모두 count 로 잘림(PostgREST max_rows)을 잡는다 — 빠진 팀은 화면·검증에서 조용히 사라지고, 빠진 프로젝트는
-  // '존재하지 않는 프로젝트'로 읽혀 그 프로젝트의 팀이 빈 목록이 된다.
-  const [teamsRes, projectsRes] = await Promise.all([
-    admin
+  // 두 표 모두 PostgREST max_rows 를 넘을 수 있다(팀은 지우지 않고, 프로젝트마다 공용 팀을 복사한다) — 페이지로 끝까지 읽고 count 총합으로
+  // 잘림을 잡는다. 한 번에 읽으면 1000행에서 잘려 로드가 영영 실패하고, 빠진 프로젝트는 '존재하지 않는 프로젝트'로 읽혀 팀이 빈 목록이 된다.
+  // 팀은 (sort_order, code) 표시 순서를 유지하되 id 로 끝내 페이지 경계가 흔들리지 않게 한다.
+  const [teamRows, projectRows] = await Promise.all([
+    fetchAllPages<Record<string, unknown>>('teams', (from, to) => admin
       .from('teams')
       .select('id, code, sort_order, active, progress_visible, project_id, workspace_id', { count: 'exact' })
-      .order('sort_order')
-      .order('code'),
-    admin.from('projects').select('id, workspace_id', { count: 'exact' }),
+      .order('sort_order').order('code').order('id')
+      .range(from, to)),
+    fetchAllPages<Record<string, unknown>>('projects', (from, to) => admin
+      .from('projects').select('id, workspace_id', { count: 'exact' }).order('id').range(from, to)),
   ])
-  const teamRows = completeRows('teams', teamsRes)
-  const projectRows = completeRows('projects', projectsRes)
   const projectWorkspace = new Map<string, string>()
   for (const r of projectRows) {
     // workspace_id 는 not null(0003)이다 — 없으면 select 누락 같은 결함이라 로드 실패로 올린다.
@@ -58,18 +59,6 @@ async function fetchSnapshot(): Promise<Snapshot> {
     projectWorkspace.set(r.id, r.workspace_id)
   }
   return { teams: toTeams(teamRows), projectWorkspace }
-}
-
-/** 조회 결과의 행 전체 — 오류이거나, count 가 없거나(잘림을 확인할 수 없다), 행 수와 count 가 다르면(잘렸다) throw. */
-function completeRows(
-  table: string,
-  res: { data: unknown[] | null; error: { message: string } | null; count: number | null },
-): Array<Record<string, unknown>> {
-  if (res.error) throw new Error(`${table} 조회 실패: ${res.error.message}`)
-  const rows = (res.data ?? []) as Array<Record<string, unknown>>
-  if (res.count === null) throw new Error(`${table} 행 수(count)를 받지 못해 잘림을 확인할 수 없습니다`)
-  if (res.count !== rows.length) throw new Error(`${table} 가 잘려 왔습니다(${rows.length}/${res.count})`)
-  return rows
 }
 
 function toTeams(rows: Array<Record<string, unknown>>): readonly Team[] {

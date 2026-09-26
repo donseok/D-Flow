@@ -64,7 +64,7 @@ vi.mock('next/server', async (orig) => {
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
-type Resp = { data?: unknown; error?: { message: string; code?: string } | null }
+type Resp = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
 
 /**
  * 테이블별 큐 + rpc 큐를 갖는 admin 목.
@@ -80,13 +80,13 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: 
       const b: Record<string, unknown> = {}
       const chain: Array<[string, unknown[]]> = []
       if (table === 'project_members') rosterChains.push(chain)
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit']) {
+      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) {
         b[k] = (...args: unknown[]) => { chain.push([k, args]); return b }
       }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
-        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
+        Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
     rpc: vi.fn(async () => rpcQueue.shift() ?? { data: null, error: null }),
