@@ -189,7 +189,6 @@ export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTo
     async execute(args, context) {
       const parsed = loadArgs(args)
       if (!parsed) return invalidArgument()
-      const teamCodes = activeTeamCodesForProjectSync(parsed.projectId)
       const query = readOptionalString(parsed.raw.query)
       const team = readOptionalString(parsed.raw.team, 30)
       const limit = readLimit(parsed.raw.limit)
@@ -203,9 +202,6 @@ export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTo
       ) return invalidArgument()
       if (status && !(['not_started', 'in_progress', 'delayed', 'done'] as string[]).includes(status)) {
         return invalidArgument('알 수 없는 WBS 상태입니다.')
-      }
-      if (team && !teamCodes.includes(team)) {
-        return invalidArgument('알 수 없는 담당팀입니다.')
       }
       if ((from === undefined) !== (to === undefined)) {
         return invalidArgument('WBS 일정 조회에는 시작일과 종료일이 모두 필요합니다.')
@@ -221,6 +217,11 @@ export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTo
       }
       const denied = checkProjectAccess(context, parsed.projectId, WBS_CAPABILITY)
       if (denied) return denied
+      // 팀 목록(service_role 팀 캐시)은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
+      const teamCodes = activeTeamCodesForProjectSync(parsed.projectId)
+      if (team && !teamCodes.includes(team)) {
+        return invalidArgument('알 수 없는 담당팀입니다.')
+      }
 
       const repoResult = await repository.getProjectSnapshot(parsed.projectId)
       if (!repoResult.ok) return repositoryFailure(repoResult)

@@ -90,7 +90,6 @@ export function createGetKanbanViewTool(repository: WbsBotRepository): ReadOnlyB
       if (!isRecord(args)) return invalidArgument()
       const projectId = readRequiredString(args.projectId)
       if (!projectId) return invalidArgument()
-      const teamCodes = activeTeamCodesForProjectSync(projectId)
       const view = readOptionalString(args.view, 20)
       const team = readOptionalString(args.team, 30)
       const status = readOptionalString(args.status, 30)
@@ -99,14 +98,16 @@ export function createGetKanbanViewTool(repository: WbsBotRepository): ReadOnlyB
       if (view && !(KANBAN_VIEWS as readonly string[]).includes(view)) {
         return invalidArgument('알 수 없는 칸반 보기입니다.')
       }
-      if (team && !teamCodes.includes(team)) {
-        return invalidArgument('알 수 없는 담당팀입니다.')
-      }
       if (status && !(CARD_STATUSES as readonly string[]).includes(status)) {
         return invalidArgument('알 수 없는 카드 상태입니다.')
       }
       const denied = checkProjectAccess(context, projectId, KANBAN_CAPABILITY)
       if (denied) return denied
+      // 팀 목록(service_role 팀 캐시)은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
+      const teamCodes = activeTeamCodesForProjectSync(projectId)
+      if (team && !teamCodes.includes(team)) {
+        return invalidArgument('알 수 없는 담당팀입니다.')
+      }
 
       const repoResult = await repository.getProjectSnapshot(projectId)
       if (!repoResult.ok) return repositoryFailure(repoResult)

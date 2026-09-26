@@ -51,6 +51,7 @@ export interface MemberWorkloadToolRecord {
   avgActualPct: number | null
 }
 
+/** 담당팀 인자 — 그 프로젝트의 활성 팀이 아니면 null. service_role 팀 캐시를 읽으므로 접근 판정 뒤에만 부른다. */
 function readTeam(value: unknown, projectId: string): TeamCode | null | undefined {
   const team = readOptionalString(value, 30)
   if (team === undefined) return undefined
@@ -80,16 +81,16 @@ export function createListMembersTool(repository: MemberRepository): ReadOnlyBot
       if (!isRecord(args)) return invalidArgument()
       const projectId = readRequiredString(args.projectId)
       if (!projectId) return invalidArgument()
-      const team = readTeam(args.team, projectId)
       const role = readOptionalString(args.role, 30)
       const limit = readLimit(args.limit)
       if (role === null || limit === null) return invalidArgument()
-      if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
       if (role && !(MEMBER_ROLES as readonly string[]).includes(role)) {
         return invalidArgument('알 수 없는 멤버 역할입니다.')
       }
       const denied = checkProjectAccess(context, projectId, MEMBERS_CAPABILITY)
       if (denied) return denied
+      const team = readTeam(args.team, projectId)
+      if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
 
       const repoResult = await repository.listMembers(projectId)
       if (!repoResult.ok) return repositoryFailure(repoResult)
@@ -154,10 +155,10 @@ export function createGetMemberWorkloadTool(
       if (!isRecord(args)) return invalidArgument()
       const projectId = readRequiredString(args.projectId)
       if (!projectId) return invalidArgument()
-      const team = readTeam(args.team, projectId)
-      if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
       const denied = checkProjectAccess(context, projectId, MEMBERS_CAPABILITY)
       if (denied) return denied
+      const team = readTeam(args.team, projectId)
+      if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
 
       // 워크로드는 멤버 명단과 WBS 집계가 둘 다 있어야 의미가 있다 — 부분 성공을 조합하지 않는다.
       const [membersResult, wbsResult] = await Promise.all([

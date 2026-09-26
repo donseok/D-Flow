@@ -61,11 +61,12 @@ export function createGetAttendanceTool(
         return invalidArgument()
       }
       if (!validDateRange(from, to)) return invalidArgument('근태 조회 기간이 올바르지 않습니다.')
+      const denied = checkProjectAccess(context, projectId, ATTENDANCE_CAPABILITY)
+      if (denied) return denied
+      // 담당팀은 접근 판정 뒤에 본다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다(service_role 팀 캐시).
       if (team && !activeTeamCodesForProjectSync(projectId).includes(team)) {
         return invalidArgument('알 수 없는 담당팀입니다.')
       }
-      const denied = checkProjectAccess(context, projectId, ATTENDANCE_CAPABILITY)
-      if (denied) return denied
 
       const repoResult = await repository.listRecords(projectId, from, to)
       if (!repoResult.ok) return repositoryFailure(repoResult)
