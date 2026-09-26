@@ -137,6 +137,7 @@ vi.mock('next/server', async (orig) => {
 })
 
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 type Resp = { data?: unknown; error?: { message: string; code?: string } | null }
 
@@ -188,8 +189,8 @@ function post(body: unknown, bearer: string) {
 const authzQueues = () => ({
   agent_runners: [{ data: undefined as unknown }, { data: null }],
   agent_projects: [{ data: { enabled: true } }],
-  project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }],
-  platform_admins: [{ data: null }, { data: null }],
+  project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin'))],
+  ...axes([PROJECT_ID], 2),
 })
 
 const SERVER_LABELS = LEVELS.map(l => l.name)

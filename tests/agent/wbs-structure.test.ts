@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 type Resp = { data?: unknown; error?: { message: string } | null }
 
@@ -69,8 +70,8 @@ describe('GET /wbs/structure', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
-      platform_admins: [{ data: null }],
+      project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      ...axes([PROJECT_ID]),
       project_settings: [{ data: { level_labels: ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task', 'SubTask'], max_depth: 7 } }],
       wbs_items: [{ data: TREE }],
     })
@@ -89,8 +90,8 @@ describe('GET /wbs/structure', () => {
     useAdmin({
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
-      platform_admins: [{ data: null }],
+      project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      ...axes([PROJECT_ID]),
       project_settings: [{ data: { level_labels: ['A', 'B', 'C'], max_depth: 3 } }],
       wbs_items: [{ data: TREE }],
     })
@@ -106,7 +107,7 @@ describe('GET /wbs/structure', () => {
       agent_runners: [{ data: row }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
       project_members: [{ data: [] }],
-      platform_admins: [{ data: null }],
+      ...axes([PROJECT_ID]),
     })
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(404)

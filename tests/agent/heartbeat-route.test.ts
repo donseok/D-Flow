@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 
 import { POST } from '@/app/api/v1/agent/work/[id]/heartbeat/route'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
@@ -44,8 +45,8 @@ const okQueues = (order = ORDER) => ({
   agent_runners: [{ data: RUNNER }, { data: null }],
   agent_work_orders: [{ data: order }, { data: [{ id: O1 }] }],
   agent_projects: [{ data: { enabled: true } }],
-  platform_admins: [{ data: null }],
-  project_members: [{ data: [{ access_role: 'member' }] }],
+  ...axes([P1]),
+  project_members: [roster(rosterRow(P1, 'member'))],
 })
 
 beforeEach(() => {

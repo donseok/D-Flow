@@ -32,6 +32,7 @@ import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { approveAgentCompletion, rejectAgentCompletion } from '@/app/actions/agentWork'
 import { profileEq } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const SECRET = 'test-agent-secret'
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -80,8 +81,8 @@ const post = (url: string, body: unknown) => new NextRequest(url, {
 const ctx = { params: Promise.resolve({ id: O1 }) }
 const member = () => ({
   agent_projects: [{ data: { enabled: true } }],
-  platform_admins: [{ data: null }],
-  project_members: [{ data: [{ access_role: 'member' }] }],
+  ...axes([P1]),
+  project_members: [roster(rosterRow(P1, 'member'))],
 })
 
 const ITEM_ROW = (overrides: Record<string, unknown> = {}) => ({

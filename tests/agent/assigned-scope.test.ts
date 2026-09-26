@@ -13,6 +13,7 @@ import { myMemberIds } from '@/lib/agent/assignee'
 import { GET as mineGET } from '@/app/api/v1/agent/work/mine/route'
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { profileEq, type FakeAccount } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
@@ -108,8 +109,8 @@ describe('scope=assigned', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: [{ project_id: P1 }] }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }, { data: [{ id: 'm1' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member')), { data: [{ id: 'm1' }] }],
       wbs_items: [
         { data: [{ id: W1 }] }, // assignee_member_id in (myMemberIds) 항목 조회
         { data: [{ id: W1, code: 'C1', name: '항목1', planned_start: null, planned_end: null }] }, // 컨텍스트
@@ -135,9 +136,9 @@ describe('claim 배정 제한', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }], // 로드, CAS
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ access_role: 'member' }] }, { data: [{ id: 'm1' }] }], // myMemberIds → 내 것(DB 가 people.user_id·active 로 거른 결과)
+      project_members: [roster(rosterRow(P1, 'member')), { data: [{ id: 'm1' }] }], // myMemberIds → 내 것(DB 가 people.user_id·active 로 거른 결과)
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(200)
@@ -154,9 +155,9 @@ describe('claim 배정 제한', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }], // 로드만 — CAS 도달 안 함
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ access_role: 'member' }] }, { data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
+      project_members: [roster(rosterRow(P1, 'member')), { data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).toBe(403)
@@ -169,8 +170,8 @@ describe('claim 배정 제한', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }], // 로드, CAS
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: null } }],
       // project_members 큐는 권한 판정 1건뿐 — 무배정이면 myMemberIds 를 호출하지 않는다.
     })
@@ -182,9 +183,9 @@ describe('claim 배정 제한', () => {
     useAdmin({
       agent_work_orders: [{ data: ORDER }], // 로드만 — CAS 도달 안 함
       agent_projects: [{ data: { project_id: P1, enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: 'm1' } }],
-      project_members: [{ data: [{ access_role: 'member' }] }, { data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
+      project_members: [roster(rosterRow(P1, 'member')), { data: [] }], // m1 은 다른 사용자 — people.user_id 필터에 걸리는 내 활성 행이 없다
     }, [{ id: 'u-legacy', email: 'dev@example.com', user_metadata: {} }])
     const res = await claimPOST(
       post(`http://l/api/v1/agent/work/${O1}/claim`, { user_email: 'dev@example.com', agent: 'claude-cli-dev1' }, 'legacy-secret'),
@@ -199,8 +200,8 @@ describe('claim 배정 제한', () => {
     useAdmin({
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }], // 로드, CAS
       agent_projects: [{ data: { project_id: P1, enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: { ...ITEM_COMMON, assignee_member_id: null } }],
     }, [{ id: 'u-legacy', email: 'dev@example.com', user_metadata: {} }])
     const res = await claimPOST(

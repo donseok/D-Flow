@@ -21,6 +21,7 @@ vi.mock('next/server', async (orig) => {
 
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { profileEq } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const SECRET = 'test-agent-secret'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
@@ -65,8 +66,8 @@ const BASE = { user_email: 'dev@example.com', agent: 'cli-1', summary: '요약',
 const ctx = { params: Promise.resolve({ id: ORDER_ID }) }
 const member = () => ({
   agent_projects: [{ data: { project_id: PROJECT_ID, enabled: true } }],
-  platform_admins: [{ data: null }],
-  project_members: [{ data: [{ access_role: 'member' }] }],
+  ...axes([PROJECT_ID]),
+  project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
 })
 
 beforeEach(() => {
@@ -95,7 +96,7 @@ describe('POST report', () => {
       agent_work_reports: [{ data: [{ id: 'r1' }] }],
       ...member(),
       project_members: [
-        { data: [{ access_role: 'member' }] }, // 보고자 멤버 게이트
+        roster(rosterRow(PROJECT_ID, 'member')), // 보고자 멤버 게이트
         { data: [ // 관리자 수신자 — 계정 없는 인물(user_id null)은 받을 수 없다
           { people: { user_id: 'admin-1', active: true } },
           { people: [{ user_id: 'admin-2', active: true }] },

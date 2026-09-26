@@ -7,6 +7,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as releasePOST } from '@/app/api/v1/agent/work/[id]/release/route'
 import { profileEq } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const SECRET = 'test-agent-secret'
 const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
@@ -49,8 +50,8 @@ const BODY = { user_email: 'dev@example.com', agent: 'claude-cli-dev1' }
 const ctx = { params: Promise.resolve({ id: O1 }) }
 const member = () => ({
   agent_projects: [{ data: { project_id: P1, enabled: true } }],
-  platform_admins: [{ data: null }],
-  project_members: [{ data: [{ access_role: 'member' }] }],
+  ...axes([P1]),
+  project_members: [roster(rosterRow(P1, 'member'))],
 })
 
 beforeEach(() => {
@@ -89,7 +90,7 @@ describe('POST claim', () => {
     useAdmin({
       agent_work_orders: [{ data: ORDER }],
       agent_projects: [{ data: { project_id: P1, enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       project_members: [{ data: [] }],
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, BODY), ctx)
@@ -143,7 +144,7 @@ describe('claim — 새 점유자에게 옛 재개 요청을 물려주지 않는
     useAdmin({
       agent_work_orders: [{ data: ORDER }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: { user_id: 'u-1' } }],
+      ...axes([P1], 1, { superuser: true }), project_members: [roster()],
     }, [USER], calls)
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, BODY), { params: Promise.resolve({ id: O1 }) })
     expect(res.status).toBe(200)

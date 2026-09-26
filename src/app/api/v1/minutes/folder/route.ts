@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
+import { actorFromUser } from '@/lib/authz'
+import { isAnyProjectAdmin } from '@/lib/domain/authz'
 import { activeTeamCodesForProjectSync, activeTeamCodesSync } from '@/lib/teams/master'
 import {
   ancestorIdsOf, folderPathOfSnapshot, loadFolderSnapshot, resolveFolderPath, type FolderSnapshot,
@@ -281,8 +283,11 @@ export async function POST(req: NextRequest) {
     // 폴더를 만들고 그 사람이 생성 트리의 유일한 관리자가 되므로, ACTOR_EMAIL 오타가
     // **실재하는 다른 직원**을 가리키면 조용히 성공한다(되돌리려면 DB 직접 수정).
     // items: [] 프로브도 이 게이트를 통과해야 하므로 오설정이 첫 호출에서 드러난다.
-    // 권한 판정은 platform_admins·명단 access_role 로만 한다 — 옛 계정 전역 역할 컬럼은 없다.
-    if (!(await isBatchAuthorized(admin, user.id))) {
+    // SP2 결정 8 — 판정은 세션 경로와 같은 스냅샷(actorFromUser) + roleIn. 조회 실패는 throw → 아래 catch 의
+    // 500(권한 없음 403 으로 위장하지 않는다). 여기서는 "어딘가의 관리자인가"(워크스페이스 관리자 승계 포함)만 본다 —
+    // 대상 회의록마다의 관리자 판정은 대상을 읽은 뒤(isBatchAuthorized) 한다.
+    const authz = await actorFromUser(admin, user.id)
+    if (!isAnyProjectAdmin(authz)) {
       return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
     }
 
@@ -317,8 +322,15 @@ export async function POST(req: NextRequest) {
       console.error('[minutes-api] 재편철 대상 조회 실패:', selErr.message)
       return apiInternalError()
     }
+    // 호출자 워크스페이스 밖 회의록은 없는 것으로 친다(not_found) — external_id 는 전역 유일이라 조회는 전역이다.
     const byExternalId = new Map<string, MinuteRow>()
-    for (const r of (rowsRaw ?? []) as MinuteRow[]) byExternalId.set(r.external_id, r)
+    for (const r of (rowsRaw ?? []) as MinuteRow[]) {
+      if (authz.isSuperuser || authz.workspaceRoles.has(r.workspace_id)) byExternalId.set(r.external_id, r)
+    }
+    // 대상 회의록마다 관리자 이상이어야 한다 — 하나라도 아니면 요청 전체를 거절한다(부분 이동 없음).
+    if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
+      return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
+    }
 
     const results: ItemResult[] = []
     for (const item of batch.items) {

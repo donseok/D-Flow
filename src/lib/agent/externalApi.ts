@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { parsePatPrefix, tokenUsable } from '@/lib/domain/agentToken'
 import { hashMatches } from '@/lib/agent/token'
+import { buildActor } from '@/lib/authz/buildActor'
+import { roleIn, type EffectiveRole } from '@/lib/domain/authz'
 
 /**
  * 에이전트 작업 루프 외부 API 공용 헬퍼 — 스펙 §3.1.
@@ -52,35 +54,16 @@ export async function requireAgentProject(admin: AdminClient, projectId: string)
 }
 
 /*
- * 판정 축(0003) — 플랫폼 관리자(platform_admins) + 이 프로젝트의 활성 명단 행 권한(project_members.access_role,
- * 활성 인물의 people.user_id 로 연결). 세션 경로의 buildActor 와 같은 필터(활성 행·활성 인물·계정 연결)다.
+ * 판정 축 — actorFromUser + roleIn: 세션 경로와 같은 판정(SP2 결정 8). 플랫폼 관리자·워크스페이스 관리자 승계·
+ * 활성 명단 행 권한을 한 스냅샷(buildActor)에서 읽는다. 다른 워크스페이스 프로젝트는 roleIn 이 null 이다(존재 은닉).
  *
- * 워크스페이스 관리자 승계(roleIn ⑤)는 여기서 하지 않는다 — 외부 API 판정은 SP7 에서 actorFromCredential 로
- * 세션 경로와 하나로 합친다(스펙 3.5). 그 전까지 워크스페이스 관리자도 에이전트 API 를 쓰려면 명단 권한이 필요하다.
+ * `@/lib/authz` 는 테스트 다수가 통째로 mock 하는 모듈이라, 여기서는 actorFromUser 대신 그 구현인 buildActor 를
+ * 직접 부른다(actorFromUser 는 buildActor 에 그대로 위임한다 — 판정은 같다).
  */
 
-/** platform_admins 행 존재. 조회 실패 = null. 응답 모양이 아니라 내용으로 판정한다(남의 행·빈 객체는 아님). */
-async function platformAdmin(admin: AdminClient, userId: string): Promise<boolean | null> {
-  const { data, error } = await admin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
-  if (error) { console.error('[agent-api] 등급 조회 실패(거절):', error.message); return null }
-  return (data as { user_id?: unknown } | null)?.user_id === userId
-}
-
-/**
- * 이 프로젝트 활성 명단 행의 권한 — 'admin'|'member', 행이 없거나 권한 없는 행(조회 전용)은 null, 조회 실패는 undefined.
- * people 임베드는 반드시 !inner — 아니면 people.* 필터가 임베드만 거르고 명단 행은 전부 돌아온다(service_role 경로라 RLS 도 없다).
- */
-async function rosterAccessRole(
-  admin: AdminClient, userId: string, projectId: string,
-): Promise<'admin' | 'member' | null | undefined> {
-  const { data, error } = await admin.from('project_members')
-    .select('access_role, people!inner(user_id, active)')
-    .eq('project_id', projectId).eq('active', true)
-    .eq('people.user_id', userId).eq('people.active', true)
-    .limit(1)
-  if (error || !data) { console.error('[agent-api] 명단 권한 조회 실패(거절):', error?.message); return undefined }
-  const role = (data as Array<{ access_role: string | null }>)[0]?.access_role
-  return role === 'admin' || role === 'member' ? role : null
+/** actorFromUser 와 같은 조립(buildActor) + roleIn — 세션 경로와 한 판정(SP2 결정 8). 조회 실패는 throw. */
+async function roleForAgent(admin: AdminClient, userId: string, projectId: string): Promise<EffectiveRole | null> {
+  return roleIn(await buildActor(admin, userId), projectId)
 }
 
 /**
@@ -90,14 +73,17 @@ async function rosterAccessRole(
 export async function isAgentProjectMember(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
-  const pa = await platformAdmin(admin, userId)
-  if (pa === null) return false
-  if (pa) return true
-  return (await rosterAccessRole(admin, userId, projectId)) != null
+  try {
+    const r = await roleForAgent(admin, userId, projectId)
+    return r === 'superuser' || r === 'admin' || r === 'member'
+  } catch (e) {
+    console.error('[agent-api] 멤버 판정 조회 실패(거절):', e instanceof Error ? e.message : e)
+    return false
+  }
 }
 
 /**
- * user_email 계정이 해당 프로젝트 관리자 이상(플랫폼 관리자 포함)인지 — import·발행 같은
+ * user_email 계정이 해당 프로젝트 관리자 이상(플랫폼·워크스페이스 관리자 포함)인지 — import·발행 같은
  * 구조 쓰기 엔드포인트의 관문(계약 §2.8).
  * 조회 실패는 throw — 호출 라우트의 try/catch 가 500 으로 답한다. false 로 위장하면
  * 조회 장애가 forbidden_role(403)로 둔갑해 "권한이 없다"는 거짓 진단을 남기기 때문이다.
@@ -106,25 +92,24 @@ export async function isAgentProjectMember(
 export async function isAgentProjectAdmin(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<boolean> {
-  const [pa, role] = await Promise.all([
-    platformAdmin(admin, userId),
-    rosterAccessRole(admin, userId, projectId),
-  ])
-  if (pa === null || role === undefined) throw new Error('관리자 판정 조회 실패')
-  return pa || role === 'admin'
+  const r = await roleForAgent(admin, userId, projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
+  return r === 'superuser' || r === 'admin'
 }
 
 /**
- * 프로젝트별 사용자 역할 조회 — 'superuser'|'admin'|'member'|null.
- * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다(각 조회 헬퍼가 남긴다).
+ * 프로젝트별 사용자 역할 조회 — 'superuser'|'admin'|'member'|null. 조회 전용(viewer)은 null 이다.
+ * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다.
  */
 export async function agentMemberRole(
   admin: AdminClient, userId: string, projectId: string,
 ): Promise<'superuser' | 'admin' | 'member' | null> {
-  const pa = await platformAdmin(admin, userId)
-  if (pa === null) return null
-  if (pa) return 'superuser'
-  return (await rosterAccessRole(admin, userId, projectId)) ?? null
+  try {
+    const r = await roleForAgent(admin, userId, projectId)
+    return r === 'viewer' ? null : r
+  } catch (e) {
+    console.error('[agent-api] 역할 조회 실패(거절):', e instanceof Error ? e.message : e)
+    return null
+  }
 }
 
 export const AGENT_CONTRACT_VERSION = '2.4'

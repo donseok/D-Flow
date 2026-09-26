@@ -7,6 +7,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 
 import { GET as listGET } from '@/app/api/v1/agent/work/route'
 import { GET as detailGET } from '@/app/api/v1/agent/work/[id]/route'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
@@ -56,8 +57,8 @@ describe('GET /agent/work — PAT 멤버십 게이트', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }], // 조회, last_seen update
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_orders: [{ data: [] }],
     })
     const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, PAT.token))
@@ -67,7 +68,7 @@ describe('GET /agent/work — PAT 멤버십 게이트', () => {
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       project_members: [{ data: [] }],
     })
     const res = await listGET(get(`http://l/api/v1/agent/work?project_id=${P1}`, PAT.token))
@@ -111,8 +112,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_reports: [{ data: [] }],
     })
     const res = await detail(PAT.token)
@@ -128,7 +129,7 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
+      ...axes([P1]),
       project_members: [{ data: [] }],
     })
     const res = await detail(PAT.token)
@@ -171,8 +172,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         },
       }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_reports: [{ data: [] }],
     })
     const res = await detail(PAT.token)
@@ -195,8 +196,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: orderRow }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_reports: [{ data: [] }],
     })
     const body = await (await detail(PAT.token)).json()
@@ -235,8 +236,8 @@ describe('GET /agent/work/[id] — PAT 멤버십 게이트', () => {
         { data: null }, // loadDependsInfo — 선행의 approved 주문 없음
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_reports: [{ data: [] }],
       wbs_items: [
         { data: [ITEM] }, // ITEM_DETAIL_COLUMNS 로드(.in('id', [wbs_item_id]))
@@ -286,8 +287,8 @@ describe('GET /agent/work/[id] — reports[].evidence', () => {
     agent_runners: [{ data: RUNNER }, { data: null }],
     agent_work_orders: [ORDER_ROW],
     agent_projects: [{ data: { enabled: true } }],
-    platform_admins: [{ data: null }],
-    project_members: [{ data: [{ access_role: 'member' }] }],
+    ...axes([P1]),
+    project_members: [roster(rosterRow(P1, 'member'))],
     agent_work_reports: [{ data: [] }],
   })
 

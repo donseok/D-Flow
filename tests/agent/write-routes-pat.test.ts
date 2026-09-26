@@ -18,6 +18,7 @@ import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { POST as releasePOST } from '@/app/api/v1/agent/work/[id]/release/route'
 import { profileEq } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
@@ -91,8 +92,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: CLAIM_SCOPES }, { data: null }], // 조회, last_seen
       agent_work_orders: [{ data: ORDER }], // 로드(점유는 전이 RPC 가 한다)
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: null }], // 배정 확인(무배정) — Task 15 이후에도 이 큐가 유효
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'claude-pc1', claimed_by_user_id: 'attacker' }, PAT.token), ctx)
@@ -113,8 +114,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: REPORT_SCOPES }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'legacy-cli', claimed_by_user_id: null } }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
     expect(res.status).toBe(403)
@@ -137,8 +138,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: { ...RUNNER, scopes: ['work:read', 'work:report'] } }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'ready' } }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
     expect(res.status).not.toBe(403)
@@ -148,8 +149,8 @@ describe('PAT 쓰기 루프', () => {
     useAdmin({
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'x', claimed_by_user_id: 'u-1' } }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', user_email: 'dev@example.com', kind: 'progress', percent: 10, summary: 's' }, 'legacy-secret'), ctx)
     expect(res.status).toBe(403)
@@ -164,8 +165,8 @@ describe('PAT 쓰기 루프', () => {
         { data: [{ id: O1 }] }, // updated_at 갱신(progress)
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       agent_work_reports: [{ data: [{ id: 'r-1' }] }], // 보고 insert
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
@@ -188,8 +189,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: CLAIM_SCOPES }, { data: null }],
       agent_work_orders: [{ data: { ...ORDER, status: 'claimed', claimed_by: 'x', claimed_by_user_id: 'u-2' } }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     void admin1
     const res1 = await releasePOST(post(`http://l/api/v1/agent/work/${O1}/release`, { agent: 'a' }, PAT.token), ctx)
@@ -202,8 +203,8 @@ describe('PAT 쓰기 루프', () => {
         { data: { ...ORDER, status: 'claimed', claimed_by: 'pat-r1', claimed_by_user_id: 'u-1' } },
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     const res2 = await releasePOST(post(`http://l/api/v1/agent/work/${O1}/release`, { agent: 'a' }, PAT.token), ctx)
     expect(res2.status).toBe(200)
@@ -217,8 +218,8 @@ describe('PAT 쓰기 루프', () => {
       agent_runners: [{ data: CLAIM_SCOPES_P2 }, { data: null }], // 조회, last_seen
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }], // 로드(P1), CAS
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: null }], // 배정 확인(무배정)
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
@@ -233,8 +234,8 @@ describe('PAT 쓰기 루프', () => {
         { data: [{ id: O1 }] }, // updated_at 갱신(progress)
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
     })
     const res = await reportPOST(post(`http://l/api/v1/agent/work/${O1}/report`, { agent: 'a', kind: 'progress', percent: 10, summary: 's' }, PAT.token), ctx)
     expect(res.status).toBe(404)

@@ -12,6 +12,7 @@ import { ingestMinute } from '@/lib/ai/minutes-ingest'
 import { generateMinuteInsights } from '@/lib/ai/minutes-insights'
 import { enqueueAndProcessMinuteWiki, processMinuteWikiJob } from '@/lib/ai/wiki-ingest'
 import type { MeetingCategory, TeamCode } from '@/lib/domain/types'
+import { isProjectAdmin, isWorkspaceAdmin, type Actor } from '@/lib/domain/authz'
 
 /**
  * 회의록 외부 업로드 API(/api/v1/minutes*) 공용 유틸 — 또박또박 연동.
@@ -54,37 +55,17 @@ export function folderPathEnabled(): boolean {
 }
 
 /**
- * 관리자 전용 경로(배치)에서 **ACTOR_EMAIL 이 가리키는 사람이 관리자 이상인지** 판정한다.
- * service_role 로 직접 읽는다 — 세션 기반 getActor 는 서버 간 호출 경로에서 쓸 수 없다.
+ * 일괄 재편철(배치)의 대상 판정 — **대상 회의록마다** 관리자 이상이어야 한다(SP2 결정 8, "어느 프로젝트든
+ * 관리자"가 아니다). 프로젝트가 있으면 isProjectAdmin(워크스페이스 관리자 승계 포함), 무프로젝트 회의록은 그
+ * 워크스페이스의 관리자(isWorkspaceAdmin). 빈 대상은 false — 판정할 것이 없으면 통과시키지 않는다.
  *
- * 판정 축(0003)은 플랫폼 관리자(platform_admins) 또는 어느 프로젝트든 활성 명단 행의 access_role='admin'
- * (활성 인물의 people.user_id 로 연결 — buildActor 와 같은 필터). 앱의 isAnyProjectAdmin 에서
- * 워크스페이스 관리자 승계만 뺀 의미다 — 외부 API 판정은 SP7 에서 actorFromCredential 로 세션 경로와 합친다.
- *
- * 보안 가드이므로 조회 실패는 fail-closed(false → 거절).
+ * 스냅샷은 호출 라우트가 actorFromUser 로 한 번 만든다(조회 실패는 라우트의 500). 순수 판정이라 IO 가 없다.
  */
-export async function isBatchAuthorized(admin: AdminClient, userId: string): Promise<boolean> {
-  const { data: pa, error: paErr } = await admin
-    .from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
-  if (paErr) {
-    console.error('[minutes-api] 등급 조회 실패(거절):', paErr.message)
-    return false
-  }
-  // 응답 모양이 아니라 내용으로 판정한다 — 남의 행·빈 객체는 플랫폼 관리자가 아니다.
-  if ((pa as { user_id?: unknown } | null)?.user_id === userId) return true
-
-  // people 임베드는 반드시 !inner — 아니면 people.* 필터가 임베드만 거르고 명단 행은 전부 돌아온다.
-  const { data: rows, error: rowErr } = await admin
-    .from('project_members')
-    .select('project_id, people!inner(user_id, active)')
-    .eq('access_role', 'admin').eq('active', true)
-    .eq('people.user_id', userId).eq('people.active', true)
-    .limit(1)
-  if (rowErr || !rows) {
-    console.error('[minutes-api] 명단 권한 조회 실패(거절):', rowErr?.message)
-    return false
-  }
-  return rows.length > 0
+export function isBatchAuthorized(
+  actor: Actor, targets: ReadonlyArray<{ project_id: string | null; workspace_id: string }>,
+): boolean {
+  if (targets.length === 0) return false
+  return targets.every(t => t.project_id ? isProjectAdmin(actor, t.project_id) : isWorkspaceAdmin(actor, t.workspace_id))
 }
 
 /** 시크릿 비교는 길이 노출·타이밍 채널을 피하기 위해 해시 후 상수시간으로 비교한다. */

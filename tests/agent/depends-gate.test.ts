@@ -12,6 +12,7 @@ vi.mock('@/lib/notify/emit', () => ({ emitNotification: mocks.emitNotification }
 import { loadDependsInfo } from '@/lib/agent/depends'
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { profileEq, type FakeAccount } from '../fixtures/profiles'
+import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
@@ -81,8 +82,8 @@ describe('claim 선행 게이트', () => {
         { data: [{ id: O1 }] }, // CAS 성공
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [
         { data: TARGET_ITEM },
         { data: [{ id: DEP_ID, external_ref: DEP_REF, stage: 'im' }] },
@@ -102,8 +103,8 @@ describe('claim 선행 게이트', () => {
         { data: null },
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [
         { data: TARGET_ITEM },
         { data: [{ id: DEP_ID, external_ref: DEP_REF, stage: 'ip' }] },
@@ -124,8 +125,8 @@ describe('claim 선행 게이트', () => {
         { data: null }, // 선행의 approved 주문 없음
       ],
       agent_projects: [{ data: { project_id: P1, enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [
         { data: TARGET_ITEM },
         { data: [{ id: DEP_ID, external_ref: DEP_REF, stage: 'ip' }] },
@@ -147,8 +148,8 @@ describe('claim 선행 게이트', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }], // depends 조회에서 ref 미발견 → 추가 주문 조회 없음
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [
         { data: TARGET_ITEM },
         { data: [] }, // 프로젝트에 해당 external_ref 없음
@@ -166,8 +167,8 @@ describe('claim 선행 게이트', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: { ...TARGET_ITEM, depends: null } }],
     })
     const res = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
@@ -177,8 +178,8 @@ describe('claim 선행 게이트', () => {
       agent_runners: [{ data: RUNNER }, { data: null }],
       agent_work_orders: [{ data: ORDER }, { data: [{ id: O1 }] }],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [{ data: { ...TARGET_ITEM, depends: [] } }],
     })
     const res2 = await claimPOST(post(`http://l/api/v1/agent/work/${O1}/claim`, { agent: 'a' }, PAT.token), ctx)
@@ -198,8 +199,8 @@ describe('선행 게이트 — approved 주문을 도달로 인정', () => {
         { data: [{ id: O1 }] },             // claim CAS
       ],
       agent_projects: [{ data: { enabled: true } }],
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'member' }] }],
+      ...axes([P1]),
+      project_members: [roster(rosterRow(P1, 'member'))],
       wbs_items: [
         { data: TARGET_ITEM },
         { data: [{ id: DEP_ID, external_ref: DEP_REF, stage: 'ip' }] },

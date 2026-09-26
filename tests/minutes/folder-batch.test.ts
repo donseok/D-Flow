@@ -7,8 +7,11 @@ const mocks = vi.hoisted(() => ({
   // Task 6 — 프로젝트 스코프 활성 팀 목록. 기본 구현은 beforeEach 에서 건다(초기화 시점에
   // mocks.activeTeamCodes 를 참조하면 자기 참조로 TS 순환 추론 에러가 난다).
   activeTeamCodesForProject: vi.fn<(projectId: string) => string[]>(),
+  // SP2 결정 8 — 배치 판정은 actorFromUser 스냅샷 + roleIn. 스냅샷은 fixture 로 준다.
+  actorFromUser: vi.fn(),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 vi.mock('@/lib/teams/master', () => ({
   activeTeamCodesSync: () => mocks.activeTeamCodes,
   activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
@@ -16,6 +19,8 @@ vi.mock('@/lib/teams/master', () => ({
 
 import { DELETE, GET, POST } from '@/app/api/v1/minutes/folder/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
+import type { ProjectRole } from '@/lib/domain/authz'
+import { makeActor, makeAdminActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const SECRET = 'test-minutes-secret'
 const USER = { id: 'u-1', email: 'lead@example.com', user_metadata: { full_name: '팀장' } }
@@ -40,9 +45,6 @@ function queryBuilder(response: QueryResponse | (() => QueryResponse)) {
 /** 테이블별 응답 큐 — from(table) 호출 순서대로 소비. */
 function useAdmin(tables: Record<string, QueryResponse[]> = {}, users: FakeAccount[] = [USER]) {
   const builders: Record<string, ReturnType<typeof queryBuilder>[]> = {}
-  // 배치는 관리자 이상 전용(결정 §2-H). 판정 축은 platform_admins + 활성 명단 행 access_role='admin'(0003)
-  // — 명시하지 않으면 플랫폼 관리자로 깐다.
-  const paQueue = tables.platform_admins ?? [{ data: { user_id: USER.id } }]
   const admin = {
     from: vi.fn((table: string) => {
       let b: ReturnType<typeof queryBuilder>
@@ -52,10 +54,7 @@ function useAdmin(tables: Record<string, QueryResponse[]> = {}, users: FakeAccou
         b = queryBuilder(() => ({ data: profileRowFor(users, email) }))
         b.eq = vi.fn((col: string, val: unknown) => { if (col === 'email') email = val; return b })
       } else {
-        const queued = table === 'platform_admins'
-          ? (paQueue.shift() ?? { data: { user_id: USER.id } })
-          : ((tables[table] ?? []).shift() ?? { data: null, error: null })
-        b = queryBuilder(queued)
+        b = queryBuilder((tables[table] ?? []).shift() ?? { data: null, error: null })
       }
       ;(builders[table] ??= []).push(b)
       return b
@@ -106,6 +105,8 @@ beforeEach(() => {
   // clearAllMocks 는 mockImplementation 을 지우지 않는다 — 개별 테스트의 override 가 다음
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
+  // 배치는 관리자 이상 전용(결정 §2-H) — 명시하지 않으면 플랫폼 관리자로 깐다.
+  mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
   vi.stubEnv('MINUTES_API_SECRET', SECRET)
   useAdmin()
@@ -167,58 +168,46 @@ describe('ACTOR_EMAIL 프로브 (요건 9 · 게이트 순서)', () => {
       summary: { total: 0, moved: 0, already_correct: 0, skipped: 0, not_found: 0, failed: 0 },
       results: [],
     })
-    // 계정 매칭(profiles)·권한 게이트(platform_admins) 외에는 아무것도 건드리지 않는다 — 폴더·회의록 조회 0.
-    // 플랫폼 관리자면 명단까지 갈 필요가 없다(단축 판정).
+    // 계정 매칭(profiles)·권한 스냅샷 외에는 아무것도 건드리지 않는다 — 폴더·회의록 조회 0.
     const touched = admin.from.mock.calls.map(c => c[0])
-    expect(touched).toEqual(['profiles', 'platform_admins'])
+    expect(touched).toEqual(['profiles'])
+    expect(mocks.actorFromUser).toHaveBeenCalledWith(admin, USER.id)
   })
 
   it('관리자가 아니면 403 forbidden_role — ACTOR_EMAIL 오타를 첫 프로브에서 잡는다(§2-H)', async () => {
-    // 플랫폼 관리자 아님 + 어느 프로젝트에도 명단 admin 권한 없음
-    useAdmin({ platform_admins: [{ data: null }], project_members: [{ data: [] }] })
+    // 플랫폼 관리자 아님 + 워크스페이스 멤버 + 어느 프로젝트에도 명단 admin 권한 없음
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
+    useAdmin()
     const res = await POST(post(body({ dry_run: true, items: [] })))
     expect(res.status).toBe(403)
     expect((await res.json()).code).toBe('forbidden_role')
   })
 
-  it('권한 조회 실패는 fail-closed(403) — 보안 가드는 통과시키지 않는다', async () => {
-    useAdmin({ platform_admins: [{ data: null, error: { message: 'down' } }] })
-    expect((await POST(post(body({ items: [] })))).status).toBe(403)
+  it('권한 조회 실패는 500 — 권한 없음(403)으로 위장하지 않는다(SP2, 계약 v2.7)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.actorFromUser.mockRejectedValue(new Error('권한 정보를 불러오지 못했습니다'))
+    useAdmin()
+    const res = await POST(post(body({ items: [] })))
+    expect(res.status).toBe(500)
+    expect((await res.json()).code).toBe('internal_error')
+    spy.mockRestore()
   })
 
-  it('명단 권한 조회 실패도 fail-closed(403)', async () => {
-    useAdmin({
-      platform_admins: [{ data: null }],
-      project_members: [{ data: null, error: { message: 'down' } }],
-    })
-    expect((await POST(post(body({ items: [] })))).status).toBe(403)
-  })
-
-  it('어느 프로젝트든 명단 관리자면 통과한다 — 플랫폼 관리자가 아니어도', async () => {
-    const { builders } = useAdmin({
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [{ access_role: 'admin', people: { user_id: USER.id, active: true } }] }],
-    })
+  it('어느 프로젝트든 명단 관리자면 프로브를 통과한다 — 플랫폼 관리자가 아니어도', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeAdminActor('p-1', { userId: USER.id }))
+    useAdmin()
     expect((await POST(post(body({ dry_run: true, items: [] })))).status).toBe(200)
-    // 활성 행·활성 인물·계정 연결(people.user_id)·admin 권한으로 거른다 — !inner 가 아니면 필터가 임베드만 거른다.
-    const pm = builders.project_members[0]
-    expect(String(pm.select.mock.calls[0][0])).toContain('people!inner(user_id, active)')
-    expect(pm.eq).toHaveBeenCalledWith('access_role', 'admin')
-    expect(pm.eq).toHaveBeenCalledWith('active', true)
-    expect(pm.eq).toHaveBeenCalledWith('people.user_id', USER.id)
-    expect(pm.eq).toHaveBeenCalledWith('people.active', true)
-    expect(builders.platform_admins[0].eq).toHaveBeenCalledWith('user_id', USER.id)
   })
 
-  it('남의 platform_admins 행은 관리자가 아니다(내용으로 판정)', async () => {
-    useAdmin({ platform_admins: [{ data: { user_id: 'someone-else' } }], project_members: [{ data: [] }] })
-    expect((await POST(post(body({ dry_run: true, items: [] })))).status).toBe(403)
+  it('워크스페이스 관리자는 명단 없이 프로브를 통과한다(승계 — SP2 결정 8)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]) }))
+    useAdmin()
+    expect((await POST(post(body({ dry_run: true, items: [] })))).status).toBe(200)
   })
 
   it('권한 게이트는 실제 이동 요청도 막는다 — 폴더·회의록 조회 이전에', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
     const { admin } = useAdmin({
-      platform_admins: [{ data: null }],
-      project_members: [{ data: [] }],
       minute_folders: [{ data: TREE }],
       minutes: [{ data: [minute(1)] }],
     })
@@ -226,7 +215,7 @@ describe('ACTOR_EMAIL 프로브 (요건 9 · 게이트 순서)', () => {
       dry_run: false, items: [{ external_id: EID(1), folder_path: ['MES', '품질'] }],
     })))
     expect(res.status).toBe(403)
-    expect(admin.from.mock.calls.map(c => c[0])).toEqual(['profiles', 'platform_admins', 'project_members'])
+    expect(admin.from.mock.calls.map(c => c[0])).toEqual(['profiles'])
   })
 
   it("등록되지 않은 user_email + items: [] 는 403 — 계정 게이트가 페이로드 검증보다 먼저", async () => {
@@ -736,5 +725,56 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
     // (["신설팀","신설팀","품질"]).
     expect(json.results[0].to).toEqual(['신설팀', '품질'])
     expect(mocks.activeTeamCodesForProject).toHaveBeenCalledWith(PROJECT_UUID)
+  })
+})
+
+describe('대상 회의록마다 관리자 판정 (SP2 결정 8 · Task 13)', () => {
+  const P1 = 'p-1'
+  const P2 = 'p-2'
+  const item = (n: number) => ({ external_id: EID(n), folder_path: ['MES', '품질'] })
+
+  it('대상 둘 중 하나의 프로젝트만 관리자면 403 forbidden_role — 아무것도 옮기지 않는다', async () => {
+    // P1 관리자, P2 는 같은 워크스페이스의 명단 member — "어느 프로젝트든 관리자"로는 통과하던 경우다.
+    mocks.actorFromUser.mockResolvedValue(makeAdminActor(P1, {
+      userId: USER.id, projectWorkspace: new Map([[P1, WS], [P2, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[P1, 'admin'], [P2, 'member']]),
+    }))
+    const { builders } = useBatch([minute(1, { project_id: P1 }), minute(2, { project_id: P2 })])
+    const res = await POST(post(body({ dry_run: false, items: [item(1), item(2)] })))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('forbidden_role')
+    expect(builders.minutes).toHaveLength(1)   // 대상 조회뿐 — update 없음
+  })
+
+  it('대상 프로젝트 모두 관리자면 통과한다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, projectWorkspace: new Map([[P1, WS], [P2, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[P1, 'admin'], [P2, 'admin']]),
+    }))
+    useBatch([minute(1, { project_id: P1 }), minute(2, { project_id: P2 })])
+    const res = await POST(post(body({ items: [item(1), item(2)] })))
+    // 게이트 통과만 본다 — 편철 결과(프로젝트 트리 해석)는 위 describe 들의 몫이다.
+    expect(res.status).toBe(200)
+    expect((await res.json()).summary).toMatchObject({ total: 2, not_found: 0 })
+  })
+
+  it('무프로젝트 회의록은 그 워크스페이스 관리자만 — 프로젝트 관리자만으로는 403', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeAdminActor(P1, { userId: USER.id }))
+    useBatch([minute(1)])
+    expect((await POST(post(body({ items: [item(1)] })))).status).toBe(403)
+
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]) }))
+    useBatch([minute(1)])
+    expect((await POST(post(body({ items: [item(1)] })))).status).toBe(200)
+  })
+
+  it('다른 워크스페이스 회의록은 not_found 로 보고한다 — 존재를 드러내지 않고 옮기지 않는다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]) }))
+    const { builders } = useBatch([minute(1, { workspace_id: 'ws-2', project_id: 'p-foreign' })])
+    const res = await POST(post(body({ dry_run: false, items: [item(1)] })))
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.results[0]).toMatchObject({ external_id: EID(1), status: 'not_found' })
+    expect(builders.minutes).toHaveLength(1)
   })
 })

@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 
-const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn() }))
+const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn(), buildActor: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // PAT 소유자의 권한 스냅샷은 fixture 로 준다 — 실구현(buildActor)은 테이블 큐를 소비해 버린다.
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
+// 프로젝트별 역할(agentMemberRole)도 같은 스냅샷에서 판정한다(SP2 결정 8 — actorFromUser 의 구현 buildActor + roleIn).
+vi.mock('@/lib/authz/buildActor', () => ({ buildActor: mocks.buildActor }))
 
 import { GET as meGET } from '@/app/api/v1/agent/me/route'
+import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor, WS } from '../fixtures/actor'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -43,17 +46,19 @@ beforeEach(() => {
   vi.clearAllMocks()
   // 기본: 소유자는 WS 의 두 프로젝트를 볼 수 있다(P1·P2 둘 다 내 워크스페이스).
   mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]) }))
+  mocks.buildActor.mockImplementation((db: unknown, uid: string) => mocks.actorFromUser(db, uid))
 })
 
 describe('GET /agent/me', () => {
   it('PAT → 소유자·스코프·contract_version + 멤버인 enabled 프로젝트만', async () => {
+    // enabled 프로젝트 2건 중 명단 권한은 P1(admin) 만 — P2 는 같은 워크스페이스의 조회 전용이라 싣지 않는다.
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]), projectRoles: new Map<string, ProjectRole>([[P1, 'admin']]),
+    }))
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
-      // enabled 프로젝트 2건 중 멤버는 P1 만
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
       projects: [{ data: [{ id: P1, name: '테스트' }, { id: P2, name: '남의것' }] }],
-      platform_admins: [{ data: null }, { data: null }],
-      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [] }],
     })
     const res = await meGET(get(PAT.token))
     expect(res.status).toBe(200)
@@ -67,15 +72,17 @@ describe('GET /agent/me', () => {
     expect(body.projects[0]).toMatchObject({ id: P1, role: 'admin' })
   })
   it('소유자의 워크스페이스 밖 프로젝트는 enabled·명단이 있어도 싣지 않는다 — 조회를 내 프로젝트 id 로 좁힌다', async () => {
-    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS]]) }))
+    // P2 명단 admin 행이 있어도 스냅샷(내 워크스페이스)에 없는 프로젝트다.
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: 'u-1', projectWorkspace: new Map([[P1, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[P1, 'admin'], [P2, 'admin']]),
+    }))
     const calls: Array<[string, string, unknown[]]> = []
     useAdmin({
       agent_runners: [{ data: RUNNER }, { data: null }],
       // DB 필터가 새도(P2 가 섞여 와도) 스냅샷 키로 한 번 더 거른다.
       agent_projects: [{ data: [{ project_id: P1 }, { project_id: P2 }] }],
       projects: [{ data: [{ id: P1, name: '테스트' }] }],
-      platform_admins: [{ data: null }, { data: null }],
-      project_members: [{ data: [{ access_role: 'admin' }] }, { data: [{ access_role: 'admin' }] }],
     }, calls)
     const body = await (await meGET(get(PAT.token))).json()
     expect(body.projects.map((p: { id: string }) => p.id)).toEqual([P1])
