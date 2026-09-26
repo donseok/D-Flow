@@ -1,9 +1,10 @@
+import { notFound } from 'next/navigation'
 import { Users, UserCog, Unlink, Shield } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectRoster } from '@/lib/data/members'
-import { getActorForView } from '@/lib/authz'
-import { isAdminAccessRole, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
+import { getActorViewState } from '@/lib/authz'
+import { isAdminAccessRole, isHiddenProject, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { listProjects } from '@/app/actions/project'
 import { listRoster } from '@/app/actions/roster'
@@ -17,7 +18,12 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
-  const [m, projects, locale] = await Promise.all([getActorForView(), listProjects(), getServerLocale()])
+  const [{ actor: m, degraded }, projects, locale] = await Promise.all([getActorViewState(), listProjects(), getServerLocale()])
+  // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지의 조회를 멈추지
+  // 않고, 여기서 만든 RSC 페이로드는 404 digest 옆에 그대로 실린다. 아래 팀 후보는 전 워크스페이스를 담은 service_role
+  // 캐시라, 게이트 없이 읽으면 타 워크스페이스 팀 id·코드와 프로젝트 존재 여부가 샌다. 권한 조회 실패(degraded)는
+  // 레이아웃처럼 404 로 위장하지 않는다(actor 가 null 이라 canEdit 도 거짓 — 캐시를 읽지 않는다).
+  if (!degraded && isHiddenProject(m, projectId)) notFound()
 
   const project = projects.find((p) => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'members.projectFallback')
@@ -30,8 +36,9 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
     canEdit ? listProjectInvites(projectId) : null,
   ])
   const rows = roster.ok ? roster.rows : []
-  // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용).
-  const teamOptions = teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
+  // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용). 편집(명단 행·초대)에만 쓰므로
+  // 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
+  const teamOptions = canEdit ? teamsForProjectSync(projectId).filter(x => x.active).map(x => ({ id: x.id, code: x.code })) : []
 
   const active = rows.filter(x => x.active)
   const admins = active.filter(x => isAdminAccessRole(x.accessRole)).length

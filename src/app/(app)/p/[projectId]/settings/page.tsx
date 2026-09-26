@@ -93,7 +93,7 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 export default async function SettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const locale = await getServerLocale()
-  const [wbs, projects, actor, assistantIndex] = await Promise.all([
+  const [wbs, projects, actor] = await Promise.all([
     // 이 페이지가 트리에서 쓰는 건 표시용 스탯(taskCount)과 공휴일 목록뿐이다.
     // WBS 조회 실패로 페이지 전체가 에러 바운더리로 떨어지면 복구 경로인 엑셀 임포트 UI까지 함께 막힌다 —
     // 정확성 이득 없이 가용성만 잃으므로 이 페이지에서만 degrade 한다.
@@ -104,7 +104,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     }),
     listProjects(),
     getActorForView(),
-    assistantIndexStatus(projectId),
   ])
   const project = (projects as ProjectRow[]).find(p => p.id === projectId)
   const isAdmin = isProjectAdmin(actor, projectId)
@@ -127,8 +126,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   })
 
   // 담당 영역 — 조회 실패면 절을 그리지 않고 안내만 남긴다(빈 목록으로 위장하면 이미 있는 코드를 다시 만들려 든다).
-  const [weeklyAreas, issueAreas] = await Promise.all([
-    listAreas(projectId, 'weekly_section'), listAreas(projectId, 'issue_area'),
+  // 색인 상태는 service_role 카운트라 관리자 판정(위 redirect) 뒤에 읽는다 — 영역 조회와 같은 배치라 직렬 왕복은 늘지 않는다.
+  const [weeklyAreas, issueAreas, assistantIndex] = await Promise.all([
+    listAreas(projectId, 'weekly_section'), listAreas(projectId, 'issue_area'), assistantIndexStatus(projectId),
   ])
   const areasError = !weeklyAreas.ok ? weeklyAreas.error : !issueAreas.ok ? issueAreas.error : null
   if (areasError) console.error('[settings] 담당 영역 조회 실패 — 절만 degrade:', areasError)

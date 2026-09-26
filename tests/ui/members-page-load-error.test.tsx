@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   getProjectRoster: vi.fn(),
   listRoster: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+vi.mock('@/lib/authz', () => ({ getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster, upsertRosterMember: vi.fn(), removeRosterMember: vi.fn() }))
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
