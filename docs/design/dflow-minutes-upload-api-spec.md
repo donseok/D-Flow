@@ -1,6 +1,6 @@
 # D-Flow 회의록 업로드 API 스펙 (또박또박 연동용)
 
-- 버전: **v2.8 (2026-09-26)** — **쓰기 대상의 워크스페이스·담당 팀을 쓰기 전에 확정한다: 기존 회의록을 다른 워크스페이스 회의로 옮기는 재전송은 400 · `team` 은 그 회의록 범위의 팀만 · 재전송·`link` 편집 자격에 범위 역할 추가**(하단 'v2.8 변경' 참조). v2.7 (2026-09-26) — **호출자(`user_email`) 권한으로 전 라우트를 좁힌다: `GET /minutes` 에 `user_email`(필수) · `meeting_id`·`link`·external_id 재전송은 자격이 없으면 404 · 배치는 대상마다 관리자**(하단 'v2.7 변경' 참조, **호환 깨짐**). v2.6 (2026-09-26) — **`GET /minutes/meta` 에 `user_email`(필수) 추가 — 호출자가 볼 수 있는 프로젝트·팀만 돌려준다**(하단 'v2.6 변경' 참조, **호환 깨짐**). v2.5 (2026-08-06) — **회의 연결·생성 확장: inline `meeting` 객체(회의 생성+연결) · meta 회의 목록 `category`/`recurrence` · 403 `not_project_member` 신설** (하단 'v2.5 변경' 참조). v2.4 (2026-07-27): 결정 정본 반영 개정 — 조상 규칙 · `folder_path_status` · 전환 플래그 · 배치 `pmo_admin` 게이트 (⚠️ 또박또박 최초 송부본). v2.3은 송부 전 내부 개정이라 중간 이력을 만들지 않는다. v2.3 (2026-07-27): `folder_path` 편철 · 일괄 재편철 배치 · 연결 초기화 반영. v2.2 (2026-07-19): D-Flow 측 구현(F1~F6) 완료 반영. v2.1: 레포 코드 직접 조사 후 전면 개정 + 전 미결사항 확정
+- 버전: **v2.8 (2026-09-26)** — **쓰기 대상의 워크스페이스·담당 팀을 쓰기 전에 확정한다: 기존 회의록을 다른 워크스페이스 회의로 옮기는 재전송은 400 · `team` 은 그 회의록 범위의 팀만 · 재전송·`link` 편집 자격에 범위 역할 추가 · 연결 자격 없는 inline `meeting` 은 skip·error 에서도 404**(하단 'v2.8 변경' 참조, **호환 깨짐**). v2.7 (2026-09-26) — **호출자(`user_email`) 권한으로 전 라우트를 좁힌다: `GET /minutes` 에 `user_email`(필수) · `meeting_id`·`link`·external_id 재전송은 자격이 없으면 404 · 배치는 대상마다 관리자**(하단 'v2.7 변경' 참조, **호환 깨짐**). v2.6 (2026-09-26) — **`GET /minutes/meta` 에 `user_email`(필수) 추가 — 호출자가 볼 수 있는 프로젝트·팀만 돌려준다**(하단 'v2.6 변경' 참조, **호환 깨짐**). v2.5 (2026-08-06) — **회의 연결·생성 확장: inline `meeting` 객체(회의 생성+연결) · meta 회의 목록 `category`/`recurrence` · 403 `not_project_member` 신설** (하단 'v2.5 변경' 참조). v2.4 (2026-07-27): 결정 정본 반영 개정 — 조상 규칙 · `folder_path_status` · 전환 플래그 · 배치 `pmo_admin` 게이트 (⚠️ 또박또박 최초 송부본). v2.3은 송부 전 내부 개정이라 중간 이력을 만들지 않는다. v2.3 (2026-07-27): `folder_path` 편철 · 일괄 재편철 배치 · 연결 초기화 반영. v2.2 (2026-07-19): D-Flow 측 구현(F1~F6) 완료 반영. v2.1: 레포 코드 직접 조사 후 전면 개정 + 전 미결사항 확정
 - 작성 목적: 또박또박(로컬 회의 녹음·전사·회의록 앱)이 생성한 회의록 마크다운을 D-Flow 회의록 화면에 **자동 등록**할 수 있도록, 양측이 **동시에 개발해 한 번에 통합**할 수 있는 완결 사양을 정의한다.
 - 대상 독자: D-Flow 개발팀(팀장) + 또박또박 개발측
 - 근거: 레포 코드 전체 조사 기반. "확인"은 코드 인용이 있는 사실, "제안"은 신규 설계 요청.
@@ -40,17 +40,20 @@
 
 **적용**: 양측 동시 개발 → §14 순서로 한 번에 통합 (D-Flow는 env 미설정이면 API 전체 404라 먼저 배포해도 무해).
 
-### v2.8 변경 (쓰기 대상의 워크스페이스·담당 팀 — 워크스페이스 격리 3차)
+### v2.8 변경 (쓰기 대상의 워크스페이스·담당 팀 — 워크스페이스 격리 3차, **호환 깨짐**)
+
+**v2.7 에서 성공하던 요청이 실패로 바뀐다** — 다른 워크스페이스 팀 코드(Z2, 200/201 → 400), 역할을 잃은 작성자의 재전송·`link`(Z3, 200 → 404), 연결 자격 없는 inline `meeting` 의 skip·error(Z4, 200 skipped·409 → 404). 또박또박은 아래 '또박또박 작업' 열의 안내를 맞춘다.
 
 회의록의 워크스페이스는 바뀌지 않는다. 종전에는 담당 팀을 **전 워크스페이스 공용 목록**으로 검증해 다른 워크스페이스의 팀 코드가 통과했고, 기존 회의록을 다른 워크스페이스 프로젝트의 회의로 옮기는 재전송은 **상대 워크스페이스 트리에 폴더(inline 이면 회의까지)를 만든 뒤** DB 트리거(`WORKSPACE_SCOPE_MISMATCH`)에 걸려 `500` 이 됐다. 이제 쓰기(회의 확보·폴더 생성·커밋) 전에 대상 범위를 확정한다.
 
 | # | 변경 | 내용 | 절 | 또박또박 작업 |
 |---|---|---|---|---|
 | Z1 | **다른 워크스페이스 회의로의 재전송은 `400`** | 같은 `external_id` 회의록이 있고 `meeting_id`·inline `meeting` 의 프로젝트가 그 회의록과 다른 워크스페이스면 `400 validation_failed`("다른 워크스페이스의 프로젝트(회의)로는 회의록을 옮길 수 없습니다.") — `on_conflict` 와 무관하고, 회의·폴더를 만들지 않는다. 종전 `500 internal_error` | §4.2 · §6 | 400 문구 표시(재시도 무의미) |
-| Z2 | **`team` 은 그 회의록 범위의 팀만** | 허용값 = 회의록이 속할 범위의 활성 팀 — 프로젝트가 있으면 그 프로젝트의 팀, 없으면 그 워크스페이스의 공용 팀(신규는 호출자의 유일 워크스페이스, 재전송은 그 회의록의 워크스페이스). 다른 워크스페이스에만 있는 팀 코드는 `400 validation_failed`. `GET /minutes?team=` 은 호출자 워크스페이스들의 공용 팀(meta `teams` 와 같은 집합) 밖이면 `400`. 배치의 편철 팀 판정(§4.7 ①②③)도 그 회의록 범위의 팀으로 한다 | §4.2 · §5.1 · §4c | 없음(meta `teams` 사용 기존) |
-| Z3 | **편집 자격에 범위 역할** | Y3·Y4 의 "작성자 또는 그 프로젝트 관리자"에 **그 범위의 멤버 이상**이 붙는다 — 작성자라도 그 프로젝트에서 조회 전용이 됐거나(명단 역할 없음), 프로젝트 없는 회의록의 워크스페이스에 역할이 없으면 `404 not_found`. D-Flow 화면의 판정과 같다 | §4.2 · §4b | 없음(404 처리 기존) |
+| Z2 | **`team` 은 그 회의록 범위의 팀만** | 허용값 = 회의록이 속할 범위의 활성 팀 — 프로젝트가 있으면 그 프로젝트의 팀, 없으면 그 워크스페이스의 공용 팀(신규는 호출자의 유일 워크스페이스, 재전송은 그 회의록의 워크스페이스). 다른 워크스페이스에만 있는 팀 코드는 `400 validation_failed`. `GET /minutes?team=` 은 호출자 워크스페이스들의 공용 팀(meta `teams` 와 같은 집합) 밖이면 `400`. 배치의 편철 팀 판정(§4.7 ①②③)도 그 회의록 범위의 팀으로 한다. `on_conflict` 와 무관하다(skip·error·보관 분기보다 먼저 본다) | §4.2 · §5.1 · §4c | `400 validation_failed`("잘못된 담당입니다.")를 사용자에게 그대로 보이고 담당 팀을 고쳐 다시 보내게 한다(자동 재시도 무의미). meta `teams` 는 호출자 워크스페이스들의 합집합이라, 워크스페이스가 둘 이상인 사용자는 목록에 있는 팀으로도 이 400 을 받을 수 있다 |
+| Z3 | **편집 자격에 범위 역할** | Y3·Y4 의 "작성자 또는 그 프로젝트 관리자"에 **그 범위의 멤버 이상**이 붙는다 — 작성자라도 그 프로젝트에서 조회 전용이 됐거나(명단 역할 없음), 프로젝트 없는 회의록의 워크스페이스에 역할이 없으면 `404 not_found`. v2.7 에서 200 이던 **작성자 본인의 재전송·`link`** 가 404 가 된다. D-Flow 화면의 판정과 같다 | §4.2 · §4b | 재전송·`link` 의 404 를 **"이 계정으로 고칠 수 없는 회의록"** 으로 안내한다 — "다른 사용자의 회의록"으로 단정하지 않는다(작성자 본인일 수 있다). 자동 재시도하지 말고, 역할이 바뀌었을 수 있으니 D-Flow 관리자에게 그 프로젝트의 명단 역할(조회 전용 아님)이나 워크스페이스 역할을 확인하도록 안내 |
+| Z4 | **연결 자격 없는 inline `meeting` 은 skip·error 에서도 `404`** | 기존 회의록에 `on_conflict: skip`·`error`(또는 보관 회의록)로 보내면서 inline `meeting.project_id` 가 없거나·호출자 워크스페이스 밖이거나·호출자가 그 프로젝트의 멤버가 아니면 `404 not_found`("프로젝트를 찾을 수 없습니다.")(멤버인데 기존 회의록과 워크스페이스가 다르면 Z1 의 400). 종전에는 회의를 보지 않고 `200 skipped`·`409 conflict`·`409 archived` 로 답했다. 연결 자격은 담당 팀·워크스페이스 판정보다 먼저다 — 팀이 맞든 틀리든 같은 404 라 비멤버가 프로젝트의 팀 구성을 떠볼 수 없다. 판정 순서: 편집 자격(Y3·Z3) → 연결 자격(Y2·Z4) → 워크스페이스(Z1) → 담당 팀(Z2) → `on_conflict` 분기 | §4.2 · §6 | skip·error 요청의 inline `meeting` 404 도 replace 와 같이 "연결할 프로젝트를 찾을 수 없음" 으로 처리 |
 
-- 배포 순서와 무관하다 — 응답 코드만 바뀐다.
+- **배포 순서: 또박또박의 안내 정정(Z2·Z3·Z4) 먼저 → D-Flow.** 새로 생기는 응답은 모두 v2.7 에도 있던 `400 validation_failed`·`404 not_found` 라 구버전 또박또박도 실패로는 처리하지만, Z3 의 404 를 Y3 옛 안내("다른 사용자의 회의록")로 보이면 작성자 본인에게 틀린 안내가 된다.
 
 ### v2.7 변경 (전 라우트 호출자 한정 — 워크스페이스 격리 2차, **호환 깨짐**)
 
@@ -60,12 +63,12 @@ v2.6 이 meta 만 좁혔다. 나머지 라우트도 시크릿만으로는 호출
 |---|---|---|---|---|
 | Y1 | **`GET /minutes?user_email=` 필수** | 종전 목록은 시크릿만 보고 **전 워크스페이스의 회의록**(제목·external_id·작성자명)을 돌려줬다. 이제 호출자가 볼 수 있는 회의록만 — 호출자 워크스페이스의 회의록 중 볼 수 없는 비공개 프로젝트의 것을 뺀다(프로젝트 없는 회의록은 워크스페이스 멤버에게 보인다). 누락 `400`, 미일치 `403 unknown_user` | §5.1 | 목록·존재 확인 호출에 로그인 사용자 이메일 추가 |
 | Y2 | **`meeting_id`·inline `meeting` 은 그 프로젝트 멤버만** | inline `meeting.project_id` 도 같은 판정이다 — v2.5 의 명단 연결 축(권한 없는 명단 행도 통과, 명단 없는 워크스페이스 관리자는 거절)을 버리고, **`403 not_project_member` 와 `400 "프로젝트를 찾을 수 없습니다."` 를 모두 `404 not_found` 하나로** 합친다(다른 워크스페이스 프로젝트의 존재 은닉). `POST /minutes` 의 `meeting_id` 는 호출자가 그 회의 프로젝트의 멤버 이상(명단 member·admin, 워크스페이스 관리자, 플랫폼 관리자)일 때만 연결한다. 아니면 `404 not_found`. **없는 회의도 `404`**(종전 `400 validation_failed`) — 남의 회의와 구별되지 않게 | §4.2 · §6 | 404 를 "회의를 찾을 수 없음"으로 안내 |
-| Y3 | **external_id 기존 회의록은 편집 자격 필요** | 같은 `external_id` 회의록이 있으면 호출자가 그 회의록의 **작성자 또는 그 프로젝트 관리자**여야 한다(D-Flow 화면의 편집 판정과 같다 — 프로젝트 없는 회의록은 작성자·플랫폼 관리자만). 아니면 `on_conflict` 와 무관하게 `404 not_found` — `replace` 뿐 아니라 `skip`·`error`·보관(409) 분기도 먼저 막아 남의 external_id 존재를 드러내지 않는다. 판정은 inline `meeting` 생성보다 먼저다 | §4.2 · §4.5 · §6 | 재전송이 404 면 "다른 사용자의 회의록" 안내(재시도 무의미) |
+| Y3 | **external_id 기존 회의록은 편집 자격 필요** | 같은 `external_id` 회의록이 있으면 호출자가 그 회의록의 **작성자 또는 그 프로젝트 관리자**여야 한다(D-Flow 화면의 편집 판정과 같다 — 프로젝트 없는 회의록은 작성자·플랫폼 관리자만). 아니면 `on_conflict` 와 무관하게 `404 not_found` — `replace` 뿐 아니라 `skip`·`error`·보관(409) 분기도 먼저 막아 남의 external_id 존재를 드러내지 않는다. 판정은 inline `meeting` 생성보다 먼저다 | §4.2 · §4.5 · §6 | 재전송이 404 면 "이 계정으로 고칠 수 없는 회의록" 안내(재시도 무의미) — ★ v2.8 부터 작성자 본인의 회의록도 역할을 잃으면 404 라(Z3) "다른 사용자의 회의록"으로 단정하지 않는다 |
 | Y4 | **`link` 도 편집 자격 필요** | `minute_id` 회의록의 작성자 또는 그 프로젝트 관리자만 연결한다. 아니면 **없는 회의록과 같은 `404 not_found`**(보관 여부도 드러내지 않는다) | §4b | 없음(404 처리 기존) |
 | Y5 | **배치는 대상마다 관리자** | `forbidden_role` 판정이 "어느 프로젝트든 관리자" 에서 **대상 회의록마다 관리자 이상**(프로젝트가 있으면 그 프로젝트 관리자, 없으면 그 워크스페이스 관리자)으로 바뀐다. 하나라도 아니면 요청 전체 `403 forbidden_role`(부분 이동 없음). 호출자 워크스페이스 밖 회의록은 `not_found`. 프로브(`items: []`)는 종전처럼 "어딘가의 관리자"만 본다 — 워크스페이스 관리자도 통과한다. **권한 조회 실패는 `500`**(종전 fail-closed `403`) | §4c · §6 | 403 을 대상별 권한 부족으로 안내 |
 
 - **배포 순서: 또박또박 먼저(Y1 쿼리 추가) → D-Flow.** 구버전 D-Flow 는 모르는 쿼리를 무시한다. 역순이면 구버전 또박또박의 목록·존재 확인이 `400` 이 된다. Y2~Y5 는 응답 코드만 바뀌므로 순서와 무관하다.
-- ⚠️ **존재 확인(`GET /minutes?external_id=`)의 0건 해석이 넓어진다.** v2.7 부터 0건은 "초기화·삭제" 외에 "**이 사용자가 볼 수 없는 회의록**"도 뜻한다(예: 다른 사용자가 비공개 프로젝트로 옮긴 회의록). 그 상태에서 새로 전송하면 같은 `external_id` 가 이미 있으므로 신규 생성이 아니라 `404 not_found`(Y3)가 난다 — 또박또박은 0건 뒤의 404 를 "다른 사용자·권한 밖 회의록"으로 안내하고 자동 재시도하지 않는다.
+- ⚠️ **존재 확인(`GET /minutes?external_id=`)의 0건 해석이 넓어진다.** v2.7 부터 0건은 "초기화·삭제" 외에 "**이 사용자가 볼 수 없는 회의록**"도 뜻한다(예: 다른 사용자가 비공개 프로젝트로 옮긴 회의록). 그 상태에서 새로 전송하면 같은 `external_id` 가 이미 있으므로 신규 생성이 아니라 `404 not_found`(Y3)가 난다 — 또박또박은 0건 뒤의 404 를 "이 계정으로 고칠 수 없는 회의록"(다른 사용자·권한 밖 회의록, ★ v2.8 부터는 역할을 잃은 작성자 본인의 회의록 포함 — Z3)으로 안내하고 자동 재시도하지 않는다.
 
 ### v2.6 변경 (meta 호출자 한정 — 워크스페이스 격리, **호환 깨짐**)
 
@@ -304,12 +307,12 @@ POST 요청 필드 `user_email`에 **또박또박에서 업로드를 실행한 �
 |---|---|---|---|
 | `user_email` | string | ✅ | 업로드 실행 사용자 이메일 (§3.3). 미일치 시 403 |
 | `date` | string `YYYY-MM-DD` | ✅ | → `minute_date` |
-| `team` | string | ✅ | → `team_code`. 허용값 `PMO`·`ERP`·`MES`·`가공`·`MDM` (MDM은 F6/§9.8 선행 추가 후. 클라이언트는 하드코딩 대신 `GET /minutes/meta`의 `teams` 사용). ※ v1 스펙의 `category`에서 개명 — D-Flow `meetings.category`(general/routine/…)와 동명이의 충돌 방지 |
+| `team` | string | ✅ | → `team_code`. 허용값 `PMO`·`ERP`·`MES`·`가공`·`MDM` (MDM은 F6/§9.8 선행 추가 후. 클라이언트는 하드코딩 대신 `GET /minutes/meta`의 `teams` 사용). ★ **v2.8: 그 회의록이 속할 범위의 활성 팀만** — 프로젝트가 있으면 그 프로젝트의 팀, 없으면 그 워크스페이스의 공용 팀. 밖이면 `on_conflict` 와 무관하게 `400 validation_failed`(Z2). ※ v1 스펙의 `category`에서 개명 — D-Flow `meetings.category`(general/routine/…)와 동명이의 충돌 방지 |
 | `title` | string ≤ 200자 | ✅ | 회의록 제목. **v2.3: `folder_path`를 함께 보내면 `<하위폴더명>-` 접두 없이 원제목 그대로**(§0 D10) — 폴더는 `folder_path`가 나르므로 제목으로 흉내낼 이유가 없다. `folder_path`를 보내지 않는 구버전 경로에서만 종전 접두 관례가 유효하다. D-Flow는 어느 쪽도 형식을 강제하지 않고 200자 검증만 한다 |
 | `body_markdown` | string ≤ **100,000자** | ✅ | → `body_md` 원문 저장. 한도는 D-Flow 기존 검증 상수(`MINUTE_BODY_MAX`)와 정합 |
 | `external_id` | string ≤ 128자 | ✅ | **멱등 키**. 또박또박은 `ddobak:<회의 UUIDv7>` — 최초 업로드 시 발급하는 불변 `public_uid` (§10). unique |
 | `meeting_id` | uuid | — | D-Flow 회의 엔티티 연결(선택). uuid 형식 검증(비형식 400 — v2.2 C2). ★ **v2.7: 호출자가 그 회의 프로젝트의 멤버 이상이어야 한다 — 아니면, 그리고 회의가 없어도 `404 not_found`**(종전 불존재 400). replace 시 필드 부재=기존 값 유지, 명시적 null=해제(v2.2 C1). **프로젝트 연결은 이 필드 경유가 유일**(★ v2.5: `meeting` 객체도 회의 확보 후 이 경로에 합류한다 — 아래 행) |
-| `meeting` | object | — | ★ **v2.5 신설.** 회의 **생성+연결**을 한 요청으로: `{ "project_id": "<uuid, 필수>", "title": "<필수, trim 후 1~200자>", "date": "<YYYY-MM-DD, 필수>", "category": "<선택, 기본 general>" }`.<br>· `meeting_id`와 **키 존재 기준 상호배타** — 함께 보내면 400. `meeting_id: null`과의 조합도 거절한다(해제와 신규 연결 의도가 상충)<br>· `category` 허용값 = meta `meetings[].category`와 같은 6종(`routine`·`general`·`kickoff`·`review`·`report`·`external`)<br>· 서버가 회의를 확보한 뒤에는 **`meeting_id`가 전송된 것과 완전히 동일**하게 동작한다 — 프로젝트 연결·`meeting_occurrence_date = date` 파생·replace 갱신 규약 전부<br>· **dedup 멱등**: 같은 `(project_id, date, trim(title))` 회의가 이미 있으면 생성하지 않고 재사용한다(복수 매칭 시 `created_at` 최신 1건) — 재시도(응답 유실 후 재전송)가 회의를 중복 생성하지 않는 안전망<br>· **권한**: ~~`user_email` 계정이 그 프로젝트 명단(project_members)에 연결돼 있어야 한다. 미달 403 `not_project_member`~~ ← ★ **v2.7: `meeting_id` 와 같은 판정 — 그 프로젝트의 멤버 이상(명단 member·admin, 워크스페이스 관리자, 플랫폼 관리자). 권한 없는 명단 행(조회 전용)은 거절. 미달·프로젝트 미존재·다른 워크스페이스 프로젝트는 모두 `404 not_found` "프로젝트를 찾을 수 없습니다."**(Y2) — dedup 재사용 경로에도 먼저 적용<br>· `on_conflict=skip`/`error`로 분기되거나 대상이 보관(409 `archived`)이면 **회의를 만들지 않는다**(§4.5-12)<br>· 생성 회의는 단발(`recurrence 'none'`)·참석자 없음·본문 빈 값·작성자 = `user_email` 계정 |
+| `meeting` | object | — | ★ **v2.5 신설.** 회의 **생성+연결**을 한 요청으로: `{ "project_id": "<uuid, 필수>", "title": "<필수, trim 후 1~200자>", "date": "<YYYY-MM-DD, 필수>", "category": "<선택, 기본 general>" }`.<br>· `meeting_id`와 **키 존재 기준 상호배타** — 함께 보내면 400. `meeting_id: null`과의 조합도 거절한다(해제와 신규 연결 의도가 상충)<br>· `category` 허용값 = meta `meetings[].category`와 같은 6종(`routine`·`general`·`kickoff`·`review`·`report`·`external`)<br>· 서버가 회의를 확보한 뒤에는 **`meeting_id`가 전송된 것과 완전히 동일**하게 동작한다 — 프로젝트 연결·`meeting_occurrence_date = date` 파생·replace 갱신 규약 전부<br>· **dedup 멱등**: 같은 `(project_id, date, trim(title))` 회의가 이미 있으면 생성하지 않고 재사용한다(복수 매칭 시 `created_at` 최신 1건) — 재시도(응답 유실 후 재전송)가 회의를 중복 생성하지 않는 안전망<br>· **권한**: ~~`user_email` 계정이 그 프로젝트 명단(project_members)에 연결돼 있어야 한다. 미달 403 `not_project_member`~~ ← ★ **v2.7: `meeting_id` 와 같은 판정 — 그 프로젝트의 멤버 이상(명단 member·admin, 워크스페이스 관리자, 플랫폼 관리자). 권한 없는 명단 행(조회 전용)은 거절. 미달·프로젝트 미존재·다른 워크스페이스 프로젝트는 모두 `404 not_found` "프로젝트를 찾을 수 없습니다."**(Y2) — dedup 재사용 경로에도 먼저 적용. ★ **v2.8: 기존 회의록의 skip·error·보관 분기에도 먼저 적용**(Z4 — 종전 200 skipped·409). 자격이 있어도 기존 회의록과 다른 워크스페이스 프로젝트면 `400 validation_failed`(Z1)<br>· `on_conflict=skip`/`error`로 분기되거나 대상이 보관(409 `archived`)이면 **회의를 만들지 않는다**(§4.5-12)<br>· 생성 회의는 단발(`recurrence 'none'`)·참석자 없음·본문 빈 값·작성자 = `user_email` 계정 |
 | `folder_path` | **string[]** | — | ★ **v2.3 신설.** 회의가 속한 **폴더 경로**를 **root-first**(최상위 → 말단)로 보낸다. 예: `["MES","품질","주간정례"]`.<br>· ⚠️ **★ v2.4: 서버 플래그 `MINUTES_FOLDER_PATH_ENABLED`가 `false`(기본)면 이 필드는 키 부재와 완전히 동일하게 취급된다** — 편철도 검증도 없다(400조차 나지 않는다). 전환 규약 = **§4.8**<br>· 배열이 아니면 **400** `validation_failed`. 원소는 문자열만<br>· 각 원소는 `btrim` + **NFC 정규화**(★ v2.4 — §0 D20) 후 **1~60자**. 벗어나면 **400 거절 — 절단하지 않는다**(§0 D12)<br>· 정규화(§4.7 ①②③) 후 **깊이 5 초과분은 절단**하고 5단째에 편철<br>· 실제 편철 결과는 응답에 **에코**된다(§4.3) — 절단·한 칸 내림이 반영된 값. **품질 신호는 `folder_path_status`**(★ v2.4)<br>· **키 부재 / `[]` / 비어있지 않은 배열을 3값으로 구분한다** → 아래 「3값 규약」<br>· 편철·자동 생성 규칙 전문 = **§4.7** |
 | `on_conflict` | `replace`\|`skip`\|`error` | — | 기본 `replace` |
 
@@ -321,6 +324,7 @@ v1 스펙에 있던 `project_id`(minutes에 저장 컬럼 없음), `occurred_sta
 - `skip`: 변경 없이 기존 레코드 반환 (`action: "skipped"`)
 - `error`: `409`
 - ★ **v2.7**: 위 세 분기 모두 호출자가 그 회의록의 **작성자 또는 그 프로젝트 관리자**일 때만 탄다. 아니면 `404 not_found`(Y3) — `external_id` 는 전역 유일이라 다른 워크스페이스 회의록과 겹쳐도 존재를 드러내지 않는다.
+- ★ **v2.8**: 그 편집 자격에 **그 회의록 범위의 멤버 이상**이 붙는다(Z3) — 작성자 본인이라도 그 프로젝트에서 조회 전용이 됐거나 프로젝트 없는 회의록의 워크스페이스에 역할이 없으면 `404 not_found`. 그리고 세 분기 모두에 앞서 inline `meeting` 연결 자격(Z4 — 404)·워크스페이스(Z1 — 400)·`team`(Z2 — 400)을 본다 — `skip`·`error` 도 이 판정을 통과해야 `200 skipped`·`409` 가 된다.
 
 **기존 레코드가 없으면** `on_conflict` 값과 무관하게 **항상 신규 생성**(201 `created`)이다 (보장). 또박또박에 uuid가 이미 발급돼 있어도 D-Flow에 해당 `external_id` 레코드가 없는 상황(레코드 삭제됨, DB 초기화, 과거 전송 미도달)에서 전송하면 같은 `external_id`로 새 레코드가 만들어진다 — "이미 발급된 uuid인데 왜 없지"를 이유로 거부하지 말 것.
 
@@ -576,7 +580,7 @@ curl -X POST <앱 URL>/api/v1/minutes \
 
 동작 (원자적으로):
 
-1. `minute_id` 불존재 → **404** `{ "error": "...", "code": "not_found" }`. ★ **v2.7: 호출자가 그 회의록의 작성자 또는 그 프로젝트 관리자가 아니어도 같은 404**(Y4) — 다른 워크스페이스 회의록의 존재·보관 여부를 드러내지 않는다
+1. `minute_id` 불존재 → **404** `{ "error": "...", "code": "not_found" }`. ★ **v2.7: 호출자가 그 회의록의 작성자 또는 그 프로젝트 관리자가 아니어도 같은 404**(Y4) — 다른 워크스페이스 회의록의 존재·보관 여부를 드러내지 않는다. ★ **v2.8: 그 회의록 범위의 멤버 이상이 아니어도 같은 404**(Z3) — 작성자 본인이라도 그 프로젝트에서 조회 전용이 됐거나 프로젝트 없는 회의록의 워크스페이스에 역할이 없으면 연결할 수 없다
 2. 대상의 `external_id`가 이미 **같은 값** → **200** `action: "linked"` (멱등 — 재호출 안전)
 3. 대상의 `external_id`가 이미 **다른 값** → **409** `{ "code": "link_conflict" }` (기존 연결 보호 — **link로는 덮어쓸 수 없다**. 먼저 D-Flow에서 그 회의록의 연결을 초기화해야 한다 — **§4b-1**. ~~해제 API는 제공하지 않음, 필요 시 D-Flow DB에서 수동 처리~~ ← **v2.3에서 철회**)
 4. 해당 `external_id`가 **다른 레코드에 이미 사용 중** → **409** `{ "code": "link_conflict" }`
@@ -843,7 +847,7 @@ v2.3의 "하위 폴더에 있다 = 사람이 옮겼다"는 추론은 **"기존 �
 | `external_id` | 정확 일치 (멱등 확인용 — 핵심) |
 | `linked` | `true`=external_id 있는 것만, `false`=**없는 것만** (수동 연결 후보 검색용 — §4b) |
 | `date_from` / `date_to` | 일자 범위 |
-| `team` | 구분 필터 |
+| `team` | 구분 필터. ★ v2.8: 호출자 워크스페이스들의 공용 팀(meta `teams` 와 같은 집합) 밖이면 `400 validation_failed`(Z2) |
 | `page` / `per_page` | 기본 20, 최대 100 |
 | `include_archived` | ★ **v2.3 신설.** `true`면 **보관(archived)된 회의록도 포함**한다. **기본 `false` = 종전과 동일**(보관분 제외) — 하위호환이므로 기존 클라이언트는 무수정으로 같은 결과를 받는다 |
 
@@ -932,7 +936,7 @@ D-Flow 전 라우트의 기존 관례는 평면 `{ "error": string }` (공용 �
 | 403 | `unknown_user` | `user_email`에 해당하는 {제품명} 사용자 없음 (§3.3 — **요구사항: 반드시 실패**) |
 | 403 | `forbidden_role` | **(★ v2.4 신설)** `POST /minutes/folder` **전용**: `user_email` 계정이 실재하지만 **`pmo_admin`이 아님**(★ v2.7: 또는 **대상 회의록 중 관리자가 아닌 것이 있음** — "대상 회의록 중 관리자 권한이 없는 것이 있습니다." · role 조회 실패는 v2.7 부터 500). "일괄 재편철은 관리자 계정으로만 실행할 수 있습니다." **`items: []` 프로브에서도 난다** — 그것이 이 게이트의 목적이다(§4c 머리말 · §0 D22). `unknown_user`와 구분할 것: 전자는 "계정이 없다", 이것은 "계정은 있는데 권한이 없다" |
 | 403 | ~~`not_project_member`~~ | **★ v2.7 폐지 — inline `meeting` 도 `404 not_found`(Y2). 아래는 v2.5 기록.** **(★ v2.5 신설)** inline `meeting` **전용**: `user_email` 계정이 실재하지만 `meeting.project_id` 프로젝트의 **명단(project_members)에 연결돼 있지 않음**: "해당 프로젝트의 멤버가 아닙니다." 판정 축은 프로젝트 **인력 명단**이다 — 명단 행이 계정과 연결(email 매칭)되지 않은 사용자도 거절된다(의도된 동작). **dedup 재사용 경로에도 먼저 적용**된다 — 비멤버가 제목·날짜를 맞춰 타 프로젝트 회의에 연결하는 우회 차단. ※ ~~기존 `meeting_id` 직접 전송 경로는 종전대로 멤버십을 검증하지 않는다~~ ← ★ **v2.7: `meeting_id` 도 프로젝트 멤버만 — 다만 코드는 `404 not_found`**(Y2, 남의 회의 존재 은닉). 조회 실패는 fail-closed 500 |
-| 404 | `not_found` | env 미설정 (존재 은닉, code 없이 Next 기본 404) / link 대상 `minute_id` 불존재<br>**(★ v2.7 추가)** link 대상을 호출자가 변경할 수 없음(Y4) · `meeting_id` 회의가 없거나 호출자가 그 프로젝트 멤버가 아님(Y2) · inline `meeting.project_id` 프로젝트가 없거나·다른 워크스페이스이거나·호출자가 그 프로젝트 멤버가 아님(Y2, 종전 400·403 `not_project_member`) · `external_id` 기존 회의록을 호출자가 변경할 수 없음(Y3). 셋 다 "없는 것"과 같은 응답이다 — 재시도로 해소되지 않는다 |
+| 404 | `not_found` | env 미설정 (존재 은닉, code 없이 Next 기본 404) / link 대상 `minute_id` 불존재<br>**(★ v2.7 추가)** link 대상을 호출자가 변경할 수 없음(Y4) · `meeting_id` 회의가 없거나 호출자가 그 프로젝트 멤버가 아님(Y2) · inline `meeting.project_id` 프로젝트가 없거나·다른 워크스페이스이거나·호출자가 그 프로젝트 멤버가 아님(Y2, 종전 400·403 `not_project_member`) · `external_id` 기존 회의록을 호출자가 변경할 수 없음(Y3). 셋 다 "없는 것"과 같은 응답이다 — 재시도로 해소되지 않는다<br>**(★ v2.8 추가)** 편집 자격에 범위 역할(Z3 — 역할을 잃은 작성자 본인의 재전송·link 포함) · skip·error·보관 분기의 inline `meeting` 연결 자격 없음(Z4, 종전 200 skipped·409) |
 | 409 | `conflict` | `on_conflict=error` + `external_id` 중복 |
 | 409 | `link_conflict` | link: 대상이 이미 다른 `external_id`를 가짐, 또는 `external_id`가 타 레코드에 사용 중 (§4b). **해소는 D-Flow UI의 연결 초기화 — §4b-1** |
 | 409 | `archived` | **(v2.3 명문화 — 기존 구현에 이미 존재)** `replace` 대상이 **보관된** 회의록: "보관된 회의록입니다. 복원 후 다시 시도하세요." `link`도 archived 대상을 거절한다. ⚠️ 이 상태는 `GET /minutes`에서 **기본적으로 조회되지 않으므로** 클라이언트는 `include_archived=true`로 구분할 것(§5.1) |
@@ -1172,7 +1176,8 @@ paths:
         "201": { description: created, content: { application/json: { schema: { $ref: "#/components/schemas/Minute" } } } }
         "200": { description: replaced/skipped, content: { application/json: { schema: { $ref: "#/components/schemas/Minute" } } } }
         "403": { description: "unknown_user — user_email에 해당하는 D-Flow 계정 없음 (v2.5 not_project_member 는 v2.7 에서 404 로 대체)" }
-        "404": { description: "v2.7 not_found — meeting_id 회의가 없거나 그 프로젝트 멤버가 아님 / inline meeting.project_id 가 없거나 볼 수 없거나 멤버가 아님 / external_id 기존 회의록을 변경할 수 없음(작성자·그 프로젝트 관리자 아님)" }
+        "400": { description: "validation_failed — 형식·필수 누락 등(§6) / v2.8 team 이 그 회의록 범위의 활성 팀이 아님(Z2) / 기존 회의록을 다른 워크스페이스 프로젝트의 회의로 옮김(Z1). on_conflict 와 무관" }
+        "404": { description: "v2.7 not_found — meeting_id 회의가 없거나 그 프로젝트 멤버가 아님 / inline meeting.project_id 가 없거나 볼 수 없거나 멤버가 아님(v2.8: skip·error·보관 분기에도 적용 — Z4) / external_id 기존 회의록을 변경할 수 없음(작성자·그 프로젝트 관리자 아님, v2.8: 그 범위의 멤버 이상이 아님 — 작성자 본인 포함, Z3)" }
         "4XX": { description: error, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     get:
       summary: 존재/동기화 확인
@@ -1186,7 +1191,7 @@ paths:
         - { name: include_archived, in: query, schema: { type: boolean, default: false }, description: "v2.3. true면 보관분 포함. 기본 false = 종전 동작" }
         - { name: page, in: query, schema: { type: integer, default: 1 } }
         - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
-      responses: { "200": { description: "list — items[]에 archived(boolean) 포함 (v2.3)" }, "400": { description: "v2.7 user_email 누락" }, "403": { description: "v2.7 unknown_user" } }
+      responses: { "200": { description: "list — items[]에 archived(boolean) 포함 (v2.3)" }, "400": { description: "v2.7 user_email 누락 / v2.8 team 이 호출자 워크스페이스들의 공용 팀이 아님(Z2)" }, "403": { description: "v2.7 unknown_user" } }
   /minutes/meta:
     get:
       summary: 구분·프로젝트(·회의) 목록 + 제한값
@@ -1209,7 +1214,7 @@ paths:
                 external_id: { type: string, maxLength: 128 }
       responses:
         "200": { description: linked (멱등 — 같은 값 재호출 포함) }
-        "404": { description: "minute_id 불존재, 또는 v2.7 호출자가 그 회의록의 작성자·그 프로젝트 관리자가 아님(같은 응답)" }
+        "404": { description: "minute_id 불존재, 또는 v2.7 호출자가 그 회의록의 작성자·그 프로젝트 관리자가 아님, 또는 v2.8 그 회의록 범위의 멤버 이상이 아님 — 작성자 본인 포함(Z3). 모두 같은 응답" }
         "409": { description: link_conflict — 이미 다른 external_id 보유 또는 값이 타 레코드에 사용 중 }
   /minutes/folder:
     post:
