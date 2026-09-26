@@ -267,6 +267,15 @@ describe('teams/master', () => {
       expect(warm.workspaceTeamsForProjectSync('p-없음')).toEqual([])
     })
 
+    it('프로젝트 회의록의 담당 검증(activeTeamCodesForMinuteScope)도 다른 워크스페이스 공용 팀 코드를 통과시키지 않는다', async () => {
+      db.teams.rows = MIXED
+      await importMaster()
+      // resetModules 뒤의 같은 모듈 그래프 — teamScope 는 방금 로드한 캐시를 쓴다.
+      const { activeTeamCodesForMinuteScope } = await import('@/lib/minutes/teamScope')
+      expect(activeTeamCodesForMinuteScope({ projectId: 'p-a2', workspaceId: WA })).toEqual(['PMO', '신팀'])
+      expect(activeTeamCodesForMinuteScope({ projectId: 'p-a2', workspaceId: WA })).not.toContain('B팀')
+    })
+
     it('workspaceTeamsForProjectSync 는 프로젝트가 속한 워크스페이스의 공용 팀(전용 팀 유무와 무관) — 설정 화면의 상속 판정용', async () => {
       db.teams.rows = MIXED
       const m = await importMaster()

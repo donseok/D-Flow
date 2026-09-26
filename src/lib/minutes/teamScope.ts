@@ -1,7 +1,8 @@
 // 회의록 도메인의 팀 목록 — 회의록이 속한 범위(프로젝트, 없으면 워크스페이스)로 좁힌다(SP2 §4.2).
 // 전 워크스페이스 공용 목록(옛 전역 접근자 — Task 16b 가 지웠다)으로 검증하면 다른 워크스페이스의 팀 코드가 통과한다.
 // 범위는 대상 행이나 호출자의 스코프에서 온다 — 클라이언트 입력으로 정하지 않는다.
-// 워크스페이스 접근자는 팀 캐시를 한 번도 못 채웠으면 throw 한다 — 빈 목록으로 위장하지 않으므로 호출부가 오류로 올린다.
+// 팀 캐시 접근자는 캐시를 한 번도 못 채웠으면 throw 한다 — 빈 목록으로 위장하지 않으므로 호출부가 오류로 올린다.
+// 호출자 쪽 필터(대상 행 없이 호출자 범위로 거르는 담당 필터)는 master 의 activeTeamCodesVisibleToSync(teamViewOf) 를 쓴다.
 import {
   activeTeamCodesForProjectSync, activeTeamCodesForWorkspaceSync, teamsForProjectSync, teamsForWorkspaceSync,
 } from '@/lib/teams/master'
@@ -24,9 +25,4 @@ export function activeTeamCodesForMinuteScope(scope: MinuteScope): TeamCode[] {
 export function teamCodesForMinuteScope(scope: MinuteScope): TeamCode[] {
   return (scope.projectId ? teamsForProjectSync(scope.projectId) : teamsForWorkspaceSync(scope.workspaceId))
     .map(t => t.code)
-}
-
-/** 여러 워크스페이스 공용 팀의 활성 코드 합집합(첫 등장 순) — 대상 행 없이 호출자의 워크스페이스들로 거르는 필터용. */
-export function activeTeamCodesForWorkspacesSync(workspaceIds: Iterable<string>): TeamCode[] {
-  return [...new Set([...workspaceIds].flatMap(wid => activeTeamCodesForWorkspaceSync(wid)))]
 }

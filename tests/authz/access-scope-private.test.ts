@@ -67,6 +67,13 @@ describe('accessScope — 워크스페이스 경계와 비공개 프로젝트 �
   it('플랫폼 관리자는 워크스페이스와 무관하게 전부 들어간다', async () => {
     const res = await resolve({ platform_admins: { data: { user_id: 'u1' }, error: null }, workspace_members: { data: [], error: null } })
     expect(res.ok && [...res.scope.allowedProjectIds].sort()).toEqual(['p-other', 'p-priv', 'p-pub'])
+    // 워크스페이스 축 입력(회의록 담당 팀)을 전 워크스페이스로 보게 플래그를 싣는다 — 멤버십이 없어 workspaceIds 는 비어 있다(16b).
+    expect(res.ok && res.scope.isSuperuser).toBe(true)
+    expect(res.ok && res.scope.workspaceIds).toEqual([])
+  })
+  it('플랫폼 관리자가 아니면 isSuperuser 는 거짓', async () => {
+    const res = await resolve()
+    expect(res.ok && res.scope.isSuperuser).toBe(false)
   })
   it('소속 워크스페이스를 함께 싣는다 — 프로젝트 축 없는 입력(회의록 담당 팀)을 호출자 범위로 좁히는 근거', async () => {
     const res = await resolve({ workspace_members: { data: [{ workspace_id: 'ws-1', role: 'member' }, { workspace_id: 'ws-2', role: 'admin' }], error: null } })

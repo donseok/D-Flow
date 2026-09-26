@@ -7,9 +7,8 @@ import {
   enqueueMinuteWikiProcessing,
   rebuildProjectWikiFromActiveMinutes,
 } from '@/lib/ai/wiki-ingest'
-import {
-  activeTeamCodesForMinuteScope, activeTeamCodesForWorkspacesSync, type MinuteScope,
-} from '@/lib/minutes/teamScope'
+import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
+import { activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 import { validateMinuteTeam } from '@/lib/domain/minutes'
 import {
   apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi,
@@ -19,7 +18,7 @@ import {
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { canEditMinute, canSeeProject, isProjectMember, type Actor } from '@/lib/domain/authz'
+import { canEditMinute, canSeeProject, isProjectMember, teamViewOf, type Actor } from '@/lib/domain/authz'
 import type { TeamCode } from '@/lib/domain/types'
 
 /**
@@ -608,13 +607,15 @@ export async function GET(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
     const authz = await actorFromUser(admin, user.id)
-    // 담당 필터는 호출자 워크스페이스들의 활성 공용 팀으로 본다(meta 의 teams 와 같은 집합) — 전 워크스페이스 목록이면
-    // 다른 워크스페이스의 팀 코드가 통과한다. 팀 캐시를 한 번도 못 채웠으면 throw → 아래 catch 의 500.
-    if (team && !activeTeamCodesForWorkspacesSync(authz.workspaceRoles.keys()).includes(team)) {
-      return apiBadRequest('잘못된 담당입니다.')
-    }
     const scope = await listScope(admin, authz)
     if (scope === 'error') return apiInternalError()
+    // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 목록 범위에서 숨기지 않은 프로젝트의
+    // 전용 팀, 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과하고, 공용 팀만
+    // 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 캐시를 한 번도 못 채웠으면 throw → 아래 catch 의 500.
+    const hiddenProjectIds = typeof scope === 'object' ? scope.hiddenProjectIds : []
+    if (team && !activeTeamCodesVisibleToSync(teamViewOf(authz, hiddenProjectIds)).includes(team)) {
+      return apiBadRequest('잘못된 담당입니다.')
+    }
     if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })
 
     let q = admin.from('minutes').select(

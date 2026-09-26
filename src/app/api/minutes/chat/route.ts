@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { sanitizeHistory } from '@/lib/ai/answer'
 import { streamDocAnswer, streamArchiveAnswer } from '@/lib/ai/minutes-answer'
+import { teamViewOf } from '@/lib/domain/authz'
 import { folderSubtreeIds } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
 import { ancestorIdsOf, loadFolderSnapshot, seedRootIdOf } from '@/lib/minutes/folders'
-import { activeTeamCodesForWorkspacesSync } from '@/lib/minutes/teamScope'
 import { createServerClient } from '@/lib/supabase/server'
+import { activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,11 +49,13 @@ export async function POST(req: NextRequest) {
     }
     if (body.mode === 'archive') {
       const f = body.filters ?? {}
-      // 담당 필터는 호출자 워크스페이스들의 활성 공용 팀으로 본다 — 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가
-      // 통과한다. 권한 조회·팀 캐시 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
+      // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 볼 수 있는 프로젝트의 전용 팀,
+      // 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과한다.
+      // 권한 조회·팀 캐시 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
       const actor = await getActor()
       if (!actor) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
-      const team = typeof f.team === 'string' && activeTeamCodesForWorkspacesSync(actor.workspaceRoles.keys()).includes(f.team)
+      const team = typeof f.team === 'string'
+        && activeTeamCodesVisibleToSync(teamViewOf(actor, await getHiddenProjectIds())).includes(f.team)
         ? (f.team as TeamCode) : null
       const from = typeof f.from === 'string' && DATE_RE.test(f.from) ? f.from : null
       const to = typeof f.to === 'string' && DATE_RE.test(f.to) ? f.to : null

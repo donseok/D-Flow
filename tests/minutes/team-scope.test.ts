@@ -9,9 +9,7 @@ const master = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/teams/master', () => master)
 
-import {
-  activeTeamCodesForMinuteScope, activeTeamCodesForWorkspacesSync, teamCodesForMinuteScope,
-} from '@/lib/minutes/teamScope'
+import { activeTeamCodesForMinuteScope, teamCodesForMinuteScope } from '@/lib/minutes/teamScope'
 
 describe('activeTeamCodesForMinuteScope', () => {
   it('프로젝트가 있으면 그 프로젝트의 팀 — 워크스페이스 목록은 보지 않는다', () => {
@@ -31,13 +29,5 @@ describe('teamCodesForMinuteScope — 등록 팀(비활성 포함)', () => {
   it('앵커 예약어 판정용이라 비활성 팀도 싣는다', () => {
     expect(teamCodesForMinuteScope({ projectId: null, workspaceId: 'ws-a' })).toEqual(['PMO', 'OLD'])
     expect(teamCodesForMinuteScope({ projectId: 'p1', workspaceId: 'ws-a' })).toEqual(['MES'])
-  })
-})
-
-describe('activeTeamCodesForWorkspacesSync — 호출자 워크스페이스들의 합집합', () => {
-  it('중복을 빼고 첫 등장 순서를 지킨다, 소속이 없으면 빈 목록', () => {
-    expect(activeTeamCodesForWorkspacesSync(['ws-a', 'ws-b'])).toEqual(['PMO', 'ERP', 'QA'])
-    expect(activeTeamCodesForWorkspacesSync(new Map([['ws-b', 'member']]).keys())).toEqual(['ERP', 'QA'])
-    expect(activeTeamCodesForWorkspacesSync([])).toEqual([])
   })
 })

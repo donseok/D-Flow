@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   activeTeamCodesForProject: vi.fn<(projectId: string) => string[]>(),
   // SP2 Task 12 — meta 의 teams 는 호출자 워크스페이스들의 합집합.
   activeTeamCodesForWorkspace: vi.fn<(workspaceId: string) => string[]>(),
+  // SP2 Task 16b — GET 목록의 담당 필터는 호출자가 볼 수 있는 팀(teamViewOf). 기본 구현은 beforeEach 에서 건다.
+  activeTeamCodesVisibleTo: vi.fn<(view: TeamView) => string[]>(),
   // 0006 — 프로젝트 없는 신규 등록의 워크스페이스 해석(actorFromUser → resolveSoleWorkspaceId).
   actorFromUser: vi.fn(),
 }))
@@ -28,9 +30,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 
 vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesSync: () => mocks.activeTeamCodes,
   activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
   activeTeamCodesForWorkspaceSync: (workspaceId: string) => mocks.activeTeamCodesForWorkspace(workspaceId),
+  activeTeamCodesVisibleToSync: (view: TeamView) => mocks.activeTeamCodesVisibleTo(view),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
@@ -52,6 +54,7 @@ vi.mock('next/server', async (importOriginal) => {
 })
 
 import { GET, POST } from '@/app/api/v1/minutes/route'
+import { teamCodesVisibleTo, type Team, type TeamView } from '@/lib/domain/teams'
 import { POST as LINK } from '@/app/api/v1/minutes/link/route'
 import { GET as META } from '@/app/api/v1/minutes/meta/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
@@ -228,6 +231,10 @@ beforeEach(() => {
   // 테스트로 새지 않도록 기본 구현을 매번 다시 건다.
   mocks.activeTeamCodesForProject.mockImplementation(() => mocks.activeTeamCodes)
   mocks.activeTeamCodesForWorkspace.mockImplementation(() => mocks.activeTeamCodes)
+  // 가시 팀 기본값 — 플랫폼 관리자는 전부, 아니면 소속 워크스페이스 공용 팀의 합집합(전용 팀은 개별 테스트가 fixture 로 본다).
+  mocks.activeTeamCodesVisibleTo.mockImplementation(view => (view.all
+    ? mocks.activeTeamCodes
+    : [...new Set([...view.workspaceIds].flatMap(w => mocks.activeTeamCodesForWorkspace(w)))]))
   // 기본 호출자 — WS 멤버이고 PROJECT_UUID·OLD_PROJECT_UUID 의 명단 member(meeting_id 연결 자격, SP2 Task 13).
   mocks.actorFromUser.mockResolvedValue(makeActor({
     userId: USER.id,
@@ -2153,5 +2160,31 @@ describe('SP2 Task 16a — 쓰기 대상의 워크스페이스·담당 팀을 �
     expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=ERP'))).status).toBe(400)
     useAdmin({ minutes: [{ data: [], count: 0 }] })
     expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=PMO'))).status).toBe(200)
+  })
+
+  it('GET team 필터는 볼 수 있는 프로젝트의 전용 팀도 받고, 숨은 비공개 프로젝트의 전용 팀은 400(SP2 16b)', async () => {
+    const PRIV = '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a'
+    const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
+      ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+    const teams = [t('PMO', WS), t('ERP', 'ws-2'), t('MES', WS, PROJECT_UUID), t('QA', WS, PRIV)]
+    mocks.activeTeamCodesVisibleTo.mockImplementation(view => teamCodesVisibleTo(teams, view))
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: USER.id, projectWorkspace: new Map([[PROJECT_UUID, WS], [PRIV, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[PROJECT_UUID, 'member']]),
+    }))
+    const privateRows = { data: [{ id: PRIV, is_private: true }] }
+    useAdmin({ projects: [privateRows], minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=MES'))).status).toBe(200)
+    useAdmin({ projects: [privateRows], minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=QA'))).status).toBe(400)
+    useAdmin({ projects: [privateRows], minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=ERP'))).status).toBe(400)
+  })
+
+  it('GET team 필터 — 멤버십 없는 플랫폼 관리자는 전 워크스페이스의 팀으로 본다(항상 400 이 아니다)', async () => {
+    splitTeams()
+    mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id, workspaceRoles: new Map() }))
+    useAdmin({ minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=ERP'))).status).toBe(200)
   })
 })

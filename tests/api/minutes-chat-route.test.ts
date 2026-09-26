@@ -1,29 +1,40 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// 회의록 Q&A(archive) 필터 — SP2 Task 16a. 담당 필터는 호출자 워크스페이스들의 공용 팀으로 보고(옛 전역 접근자는 전
-// 워크스페이스 합집합이었다), 폴더 필터의 담당 루트는 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 팀 시드 루트다.
+// 회의록 Q&A(archive) 필터 — SP2 Task 16a·16b. 담당 필터는 호출자가 볼 수 있는 팀으로 본다(소속 워크스페이스들의 공용 팀 +
+// 볼 수 있는 프로젝트의 전용 팀, 플랫폼 관리자는 전부 — 옛 전역 접근자는 전 워크스페이스 합집합이었다). 폴더 필터의 담당
+// 루트는 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 팀 시드 루트다.
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getActor: vi.fn(),
+  getHiddenProjectIds: vi.fn(),
   createServerClient: vi.fn(),
   streamArchiveAnswer: vi.fn(),
   streamDocAnswer: vi.fn(),
 }))
+const TEAMS = vi.hoisted((): Team[] => {
+  const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
+    ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+  return [t('PMO', 'ws-a'), t('ERP', 'ws-b'), t('MES', 'ws-a', 'pa'), t('QA', 'ws-a', 'pa-priv')]
+})
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/answer', () => ({ sanitizeHistory: () => [] }))
 vi.mock('@/lib/ai/minutes-answer', () => ({
   streamArchiveAnswer: mocks.streamArchiveAnswer, streamDocAnswer: mocks.streamDocAnswer,
 }))
-vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesSync: () => ['PMO', 'ERP'],
-  activeTeamCodesForWorkspaceSync: (wid: string) => (wid === 'ws-a' ? ['PMO'] : wid === 'ws-b' ? ['ERP'] : []),
-}))
+vi.mock('@/lib/teams/master', async () => {
+  const { teamCodesVisibleTo } = await import('@/lib/domain/teams')
+  return {
+    activeTeamCodesVisibleToSync: (view: Parameters<typeof teamCodesVisibleTo>[1]) => teamCodesVisibleTo(TEAMS, view),
+  }
+})
 
 import { POST } from '@/app/api/minutes/chat/route'
-import { makeActor } from '../fixtures/actor'
+import type { Team } from '@/lib/domain/teams'
+import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 // 두 워크스페이스에 동명 'PMO' 미지정 루트가 공존한다 — 시드 루트 키는 범위를 품는다.
 const FOLDERS = [
@@ -49,7 +60,11 @@ const passedFilters = () => (mocks.streamArchiveAnswer.mock.calls[0][0] as { fil
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getSession.mockResolvedValue({ id: 'u1' })
-  mocks.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([['ws-a', 'member']]) }))
+  mocks.getActor.mockResolvedValue(makeActor({
+    workspaceRoles: new Map([['ws-a', 'member']]),
+    projectWorkspace: new Map([['pa', 'ws-a'], ['pa-priv', 'ws-a']]),
+  }))
+  mocks.getHiddenProjectIds.mockResolvedValue(new Set(['pa-priv']))
   mocks.createServerClient.mockResolvedValue(folderClient())
   mocks.streamArchiveAnswer.mockResolvedValue(new ReadableStream({ start: c => c.close() }))
 })
@@ -61,6 +76,25 @@ describe('/api/minutes/chat archive — 담당 필터는 호출자 워크스페�
     mocks.streamArchiveAnswer.mockClear()
     expect((await POST(archive({ team: 'ERP' }))).status).toBe(200)
     expect(passedFilters().team).toBeNull()
+  })
+
+  it('볼 수 있는 프로젝트의 전용 팀 코드는 넘기고, 숨은(비공개) 프로젝트의 전용 팀 코드는 넘기지 않는다', async () => {
+    expect((await POST(archive({ team: 'MES' }))).status).toBe(200)
+    expect(passedFilters().team).toBe('MES')
+    mocks.streamArchiveAnswer.mockClear()
+    expect((await POST(archive({ team: 'QA' }))).status).toBe(200)
+    expect(passedFilters().team).toBeNull()
+  })
+
+  it('멤버십 없는 플랫폼 관리자는 전 워크스페이스의 팀으로 본다 — 필터가 조용히 무시되지 않는다', async () => {
+    mocks.getActor.mockResolvedValue(makeSuperuser({ workspaceRoles: new Map() }))
+    expect((await POST(archive({ team: 'ERP' }))).status).toBe(200)
+    expect(passedFilters().team).toBe('ERP')
+  })
+
+  it('담당 필터가 없으면 비공개 프로젝트 목록을 읽지 않는다', async () => {
+    expect((await POST(archive({}))).status).toBe(200)
+    expect(mocks.getHiddenProjectIds).not.toHaveBeenCalled()
   })
 
   it('권한 조회 실패는 500 — 필터를 조용히 넓혀 답하지 않는다', async () => {

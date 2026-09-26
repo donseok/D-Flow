@@ -53,6 +53,8 @@ export interface ToolExecutionContext {
   /** 호출자의 소속 워크스페이스(accessScope). 프로젝트 축 없는 입력(회의록 담당 팀 등)을 이 범위로 검증한다 —
    *  없으면 빈 범위로 본다(fail-closed). */
   workspaceIds?: readonly string[]
+  /** 플랫폼 관리자(accessScope) — 워크스페이스 축 입력을 전 워크스페이스로 본다. 없으면 거짓(fail-closed). */
+  isSuperuser?: boolean
   pageContext: PageContextV1 | null
   now: string
   timezone: 'Asia/Seoul'

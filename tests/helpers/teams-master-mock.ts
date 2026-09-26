@@ -16,14 +16,15 @@ export function teamsMasterMock() {
   const codes = TEAMS.map(t => t.code)
   return {
     teamsSync: () => TEAMS,
-    activeTeamCodesSync: () => codes,
-    isRegisteredTeamCode: (code: string) => TEAMS.some(t => t.code === code),
-    isActiveTeamCode: (code: string) => TEAMS.some(t => t.active && t.code === code),
     teamsForProjectSync: () => TEAMS,
     activeTeamCodesForProjectSync: () => codes,
-    // 워크스페이스 접근자 — 이 목의 고정 팀은 워크스페이스를 가리지 않는다(워크스페이스 경계 검증은 개별 테스트가 따로 목한다).
+    // 워크스페이스·가시 범위 접근자 — 이 목의 고정 팀은 워크스페이스를 가리지 않는다(워크스페이스 경계 검증은 개별 테스트가
+    // 따로 목한다).
     teamsForWorkspaceSync: () => TEAMS,
     activeTeamCodesForWorkspaceSync: () => codes,
+    activeTeamsForWorkspacesSync: () => TEAMS.filter(t => t.active),
+    activeTeamCodesVisibleToSync: () => codes,
+    workspaceTeamsForProjectSync: () => TEAMS,
     isRegisteredTeamCodeForProject: (code: string) => TEAMS.some(t => t.code === code),
     isActiveTeamCodeForProject: (code: string) => TEAMS.some(t => t.active && t.code === code),
     projectTeamRowsSync: () => [],
