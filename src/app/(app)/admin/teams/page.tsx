@@ -23,8 +23,9 @@ export default async function TeamsAdminPage() {
     return <TeamsLoadError title="팀 목록을 열 워크스페이스를 정할 수 없습니다." detail={ws.error} />
   }
   const list = await listTeamsAdmin(ws.workspaceId)
-  // 조회 실패는 'TEAMS 0' 이 아니다 — 같은 오류 카드로 보여 준다(액션이 로그를 남겼다).
-  if (!list.ok) return <TeamsLoadError title="팀 목록을 불러오지 못했습니다." detail={list.error} />
+  // 조회 실패는 'TEAMS 0' 이 아니다 — 같은 오류 카드로 보여 준다(액션이 로그를 남겼다). 액션 문구가 머리글을 겸하므로
+  // 제목 한 줄만 — 같은 문장을 제목과 본문에 두 번 찍지 않는다. 가드 거부도 그 사유가 제목이 된다.
+  if (!list.ok) return <TeamsLoadError title={list.error} />
   const teams = list.rows
   const active = teams.filter(t => t.active).length
 
@@ -48,15 +49,15 @@ export default async function TeamsAdminPage() {
   )
 }
 
-/** 대상 워크스페이스를 정할 수 없거나 목록을 못 읽었을 때 — 빈 목록 대신 원인을 보여 준다. */
-function TeamsLoadError({ title, detail }: { title: string; detail: string }) {
+/** 대상 워크스페이스를 정할 수 없거나 목록을 못 읽었을 때 — 빈 목록 대신 원인을 보여 준다. detail 은 있을 때만 둘째 줄. */
+function TeamsLoadError({ title, detail }: { title: string; detail?: string }) {
   return (
     <div className="space-y-6">
       <PageHero eyebrow="ADMIN" badge={<HeroBadge>Teams</HeroBadge>} title="팀 관리"
         description="담당 팀 기준정보를 관리합니다 — 탭·필터·검증·엑셀·회의록 편철이 모두 이 목록을 따릅니다." />
       <div className="card p-6" role="alert">
         <p className="text-sm font-semibold text-delayed">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p>
+        {detail && <p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p>}
       </div>
     </div>
   )

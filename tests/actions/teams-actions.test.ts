@@ -184,7 +184,8 @@ describe('팀 관리 서버액션', () => {
 
   // 조회 실패를 빈 목록으로 돌려주면 화면이 'TEAMS 0' 을 사실처럼 그린다 — 관리자가 '없는' 팀을 다시 추가하다 중복 오류를 만난다
   // (SP2 최종 리뷰 ERR-7, 에러 3원칙 ①). 거부·조회 실패는 오류로 돌려준다.
-  it('listTeamsAdmin: select 가 실패하면 빈 목록이 아니라 오류 — 로그도 남긴다', async () => {
+  // PostgREST 원문은 로그에만 — 사용자 문구에는 DB 내부 사정 대신 재시도 안내만 싣는다(SP2 최종 리뷰 minor b).
+  it('listTeamsAdmin: select 가 실패하면 빈 목록이 아니라 오류 — 원문은 로그에만 남긴다', async () => {
     const WID = '0d000000-0000-4000-8000-00000000000d'
     signedInAs(makeActor({ userId: 'u-wsadmin', workspaceRoles: new Map([[WID, 'admin']]) }))
     createAdminClient.mockImplementationOnce(() => ({
@@ -198,8 +199,10 @@ describe('팀 관리 서버액션', () => {
       },
     }) as never)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await listTeamsAdmin(WID)).toEqual({ ok: false, error: '팀 목록을 불러오지 못했습니다: boom' })
-    expect(spy).toHaveBeenCalled()
+    const res = await listTeamsAdmin(WID)
+    expect(res).toEqual({ ok: false, error: '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(res)).not.toContain('boom')
+    expect(spy.mock.calls.flat().join(' ')).toContain('boom')
     spy.mockRestore()
   })
 

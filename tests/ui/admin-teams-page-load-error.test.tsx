@@ -27,9 +27,11 @@ beforeEach(() => {
 
 describe('/admin/teams — 조회 실패 표시', () => {
   it('목록 조회가 실패하면 오류 카드 — TEAMS 0 과 빈 관리자를 그리지 않는다', async () => {
-    mocks.listTeamsAdmin.mockResolvedValue({ ok: false, error: '팀 목록을 불러오지 못했습니다: boom' })
+    mocks.listTeamsAdmin.mockResolvedValue({ ok: false, error: '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
     const out = await render()
-    expect(out).toContain('팀 목록을 불러오지 못했습니다: boom')
+    // 머리글은 한 번만 — 페이지가 같은 문장을 제목과 본문에 두 번 찍지 않는다(SP2 최종 리뷰 minor b).
+    expect(out.split('팀 목록을 불러오지 못했습니다').length - 1).toBe(1)
+    expect(out).toContain('잠시 후 다시 시도하세요.')
     expect(out).toContain('role="alert"')
     expect(mocks.TeamsManager).not.toHaveBeenCalled()   // 빈 관리자(= 팀 0개)를 그리지 않는다
   })

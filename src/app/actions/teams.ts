@@ -17,6 +17,9 @@ import { refreshTeams } from '@/lib/teams/master'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
 
+// 'use server' 모듈이라 export 하지 않는다(비동기 함수만 내보낼 수 있다). PostgREST 원문은 로그에만 남긴다.
+const ERR_TEAMS_LIST = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+
 /** 팀 추가 — teams insert + 자동 편철용 시드 루트 폴더(created_by null) 생성 + 캐시 즉시 갱신. */
 export async function addTeam(workspaceId: string, input: string): Promise<TeamActionResult> {
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
@@ -139,7 +142,7 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
     .order('sort_order').order('code')
   if (error) {
     console.error('[teams] 관리 목록 조회 실패:', error.message)
-    return { ok: false, error: `팀 목록을 불러오지 못했습니다: ${error.message}` }
+    return { ok: false, error: ERR_TEAMS_LIST }
   }
   return {
     ok: true,
