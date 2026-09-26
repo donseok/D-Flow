@@ -371,6 +371,7 @@ create policy attachment_delete_minute_files on public.minute_files for delete t
 drop function public.can_manage_minute(uuid);
 
 -- ③ presence 정책
+drop policy join_project_presence on realtime.messages;
 drop policy read_project_presence on realtime.messages;
 drop policy track_project_presence on realtime.messages;
 

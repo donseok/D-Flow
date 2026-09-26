@@ -1,7 +1,7 @@
 -- 0007_storage_realtime — SP2 Phase B1. 정본: docs/superpowers/specs/2026-09-26-sp2-workspace-isolation-design.md §3.
 -- 경로 규약 ws/<wid>/p/<pid|_>/<entity>/<id>/<file>(src/lib/domain/storagePath.ts 와 짝), presence 토픽(presenceTopics.ts 와 짝).
 -- 직접 ::uuid 캐스트 금지 — 형식이 틀린 객체 이름 하나가 버킷 목록 조회 전체를 22P02 로 실패시킨다(uuid_or_null 경유).
--- 순서: ① 순수 헬퍼 ② Storage 9정책 ③ presence 2정책 ④ minute_files 3정책의 술어를 헬퍼 하나로 ⑤ 회의록 RPC 2 의 경로 검사
+-- 순서: ① 순수 헬퍼 ② Storage 9정책 ③ presence 3정책 ④ minute_files 3정책의 술어를 헬퍼 하나로 ⑤ 회의록 RPC 2 의 경로 검사
 --       ⑥ 실행 권한 ⑦ 사후검증. 롤백: supabase/rollbacks/0007_storage_realtime_rollback.sql. 스모크: supabase/rehearsal/0007_smoke.sql.
 
 -- ① 순수 헬퍼(immutable, 표를 읽지 않는다) ------------------------------------------------------------------------
@@ -98,6 +98,12 @@ create policy "deliverables delete" on storage.objects for delete to authenticat
   bucket_id = 'deliverables' and public.can_attach(public.storage_entity_id(name)));
 
 -- ③ presence(private) — 토픽의 pid 를 읽을 수 있는 사람만 join(SELECT)·track(INSERT). 형식이 틀린 토픽은 pid null → 거부(오류 없음).
+--    Realtime(v2.73)은 private 채널 join 을 extension='broadcast' 의 read 로 판정한다 — presence read 만으로는
+--    같은 워크스페이스 멤버도 CHANNEL_ERROR 였다(2026-09-26 로컬 실서버 확인). presence 토픽에만 broadcast read 를 준다.
+--    broadcast insert 는 주지 않으므로 이 토픽으로 메시지를 보낼 수는 없고, 기존 broadcast 토픽(…-wbs·알림)은 정규식이 달라 넓어지지 않는다.
+create policy join_project_presence on realtime.messages for select to authenticated using (
+  extension = 'broadcast' and public.presence_topic_project(realtime.topic()) is not null
+  and public.can_read_project(public.presence_topic_project(realtime.topic())));
 create policy read_project_presence on realtime.messages for select to authenticated using (
   extension = 'presence' and public.presence_topic_project(realtime.topic()) is not null
   and public.can_read_project(public.presence_topic_project(realtime.topic())));
@@ -488,7 +494,7 @@ begin
    where p.proname in ('create_minute_with_version', 'commit_minute_body_version') and p.prosrc like '%''/\%''%';
   if v is not null then raise exception 'SP2_0007_POSTCHECK: 옛 <minute_id>/ 경로 검사가 남았다: %', v; end if;
   if (select count(*) from pg_policies where schemaname = 'realtime' and tablename = 'messages'
-        and policyname in ('read_project_presence', 'track_project_presence')) <> 2 then
-    raise exception 'SP2_0007_POSTCHECK: presence 정책 2개가 없다';
+        and policyname in ('join_project_presence', 'read_project_presence', 'track_project_presence')) <> 3 then
+    raise exception 'SP2_0007_POSTCHECK: presence 정책 3개가 없다';
   end if;
 end $$;

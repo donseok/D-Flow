@@ -24,7 +24,7 @@ select public.uuid_or_null('garbage') is null as bad_is_null,
        public.presence_topic_project('project-33333333-3333-4333-8333-333333333333-weekly-22222222-2222-4222-8222-222222222222-presence')
          = '33333333-3333-4333-8333-333333333333' as presence_weekly_pid,
        public.presence_topic_project('project-not-a-uuid-presence-wbs') is null as presence_bad_is_null,
-       (select count(*) = 2 from pg_policies where schemaname = 'realtime' and policyname in ('read_project_presence', 'track_project_presence')) as presence_policies,
+       (select count(*) = 3 from pg_policies where schemaname = 'realtime' and policyname in ('join_project_presence', 'read_project_presence', 'track_project_presence')) as presence_policies,
        (select count(*) = 9 from pg_policies where schemaname = 'storage' and tablename = 'objects') as storage_policies,
        not has_function_privilege('anon', 'public.storage_ws(text)', 'EXECUTE') as anon_no_storage_helpers,
        has_function_privilege('authenticated', 'public.presence_topic_project(text)', 'EXECUTE') as authenticated_presence_helper;
