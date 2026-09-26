@@ -56,16 +56,20 @@ describe('스키마 불변식', () => {
     expect(stale, `허용 목록의 쌍이 더는 FK 2개 이상이 아니다 — 목록에서 뺀다: ${stale.join(', ')}`).toEqual([])
   })
 
-  // 개방 읽기 0(D2 예외 1): SELECT·ALL 정책 중 본문이 true 이거나 스코프 헬퍼·auth.uid() 비교를 하나도 부르지 않는 것.
-  // 0006 ⑧ 사후검증(정책 ilike '%app_role%')과 같은 판정을 CI·로컬 어디서든 vitest 로 다시 돈다.
+  // 개방 읽기 0(예외 2): SELECT·ALL 정책 중 본문이 true 이거나 스코프 헬퍼·auth.uid() 비교를 하나도 부르지 않는 것.
+  // 0006 ⑧ 사후검증(정책 ilike '%app_role%')과 같은 판정을 CI·로컬 어디서든 vitest 로 다시 돈다. public 뿐 아니라
+  // storage(버킷 읽기)·realtime(채널 join)도 본다(Task 4 리뷰 이월 — 이 두 스키마 정책도 헬퍼로 스코프를 건다).
   // 판정(isScopedQual) 은 scripts/lib/rls-scope.mjs 순수 모듈 — auth.uid() 단독 존재(`is not null`)는 스코프로
   // 치지 않는다(리뷰 라운드 1). tests/scripts/rls-scope.test.ts 가 그 경계를 DB 없이 고정한다.
   const OPEN_READ_EXCEPTIONS: Record<string, string> = {
-    'issue_mega_areas.read_all_issue_mega_areas': 'D2 — 전역 참조 데이터(테넌트 행 없음). 만료: SP5 에서 표가 프로젝트 영역으로 대체',
+    'public.issue_mega_areas.read_all_issue_mega_areas': 'D2 — 전역 참조 데이터(테넌트 행 없음). 만료: SP5 에서 표가 프로젝트 영역으로 대체',
+    'realtime.messages.receive_own_notification_channel':
+      "SP1 — topic = 'user-' || auth.uid() || '-notifications'(본인 채널만). auth.uid() 가 문자열 조합 안에 있어 판정기의 '= auth.uid()' 비교로 읽히지 않는다",
   }
-  it('개방 읽기 정책 0건(D2 예외 1)', async () => {
+  it('개방 읽기 정책 0건(public·storage·realtime, 예외 2)', async () => {
     const rows = await asService(pool, async (c) => (await c.query<{ k: string; qual: string | null }>(
-      `select tablename || '.' || policyname as k, qual from pg_policies where schemaname = 'public' and cmd in ('SELECT', 'ALL')`)).rows)
+      `select schemaname || '.' || tablename || '.' || policyname as k, qual from pg_policies
+        where schemaname in ('public', 'storage', 'realtime') and cmd in ('SELECT', 'ALL')`)).rows)
     const open = rows.filter((r) => r.qual === 'true' || !isScopedQual(r.qual)).map((r) => r.k)
     expect(open.filter((k) => !(k in OPEN_READ_EXCEPTIONS))).toEqual([])
     expect(Object.keys(OPEN_READ_EXCEPTIONS).filter((k) => !open.includes(k)), '죽은 예외').toEqual([])
@@ -81,34 +85,44 @@ describe('스키마 불변식', () => {
 
   // 정책이 부르는 함수는 전부 SECURITY DEFINER 여야 한다 — INVOKER 면 그 함수 자신의 쿼리가 호출부 세션의 RLS 를
   // 받으므로, 0006 ⑧ 의 표-쌍 순환 검사(정책이 직접 참조하는 표만 본다)가 보지 못하는 순환이 그 함수를 거쳐 생길
-  // 수 있다(Task 2 리뷰 이월). 허용 목록은 지금 비어 있다 — INVOKER 로도 안전하다고 확인된 함수가 생기면 근거와
-  // 함께 여기 추가한다.
-  const POLICY_CALLED_INVOKER_ALLOWLIST: string[] = []
-  it('정책이 부르는 public 함수는 전부 SECURITY DEFINER(허용 목록 밖 INVOKER 0건)', async () => {
-    const rows = await asService(pool, async (c) => (await c.query<{ proname: string; prosecdef: boolean }>(`
+  // 수 있다(Task 2 리뷰 이월). 정책은 public·storage·realtime 셋을 본다(Task 4 리뷰 이월). 허용 목록은 표를 읽지 않는
+  // immutable 순수 함수뿐이다 — 순환이 생길 쿼리가 없다. 아래 테스트가 그 전제(immutable·INVOKER)도 같이 고정한다.
+  const POLICY_CALLED_INVOKER_ALLOWLIST: Record<string, string> = {
+    storage_ws: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
+    storage_project: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
+    storage_entity_id: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
+    presence_topic_project: '0007 — presence 토픽 정규식 파싱, 표 접근 없음',
+  }
+  it('정책(public·storage·realtime)이 부르는 public 함수는 전부 SECURITY DEFINER(허용 목록 밖 INVOKER 0건)', async () => {
+    const rows = await asService(pool, async (c) => (await c.query<{ proname: string; prosecdef: boolean; provolatile: string }>(`
       with pol as (
         select coalesce(qual, '') || ' ' || coalesce(with_check, '') as body
-          from pg_policies where schemaname = 'public'
+          from pg_policies where schemaname in ('public', 'storage', 'realtime')
       ), fn as (
-        select proname, prosecdef from pg_proc where pronamespace = 'public'::regnamespace
+        select proname, prosecdef, provolatile from pg_proc where pronamespace = 'public'::regnamespace
       )
-      select distinct fn.proname, fn.prosecdef from pol join fn
+      select distinct fn.proname, fn.prosecdef, fn.provolatile::text from pol join fn
         on pol.body ~ ('(^|[^A-Za-z0-9_])(public\\.)?' || fn.proname || '\\s*\\(')`)).rows)
-    const invokerNotAllowed = rows.filter((r) => !r.prosecdef && !POLICY_CALLED_INVOKER_ALLOWLIST.includes(r.proname)).map((r) => r.proname)
+    const invokerNotAllowed = rows.filter((r) => !r.prosecdef && !(r.proname in POLICY_CALLED_INVOKER_ALLOWLIST)).map((r) => r.proname)
     expect(invokerNotAllowed, `정책이 부르는 INVOKER 함수(허용 목록 밖):\n  ${invokerNotAllowed.join('\n  ')}`).toEqual([])
-    const stale = POLICY_CALLED_INVOKER_ALLOWLIST.filter((n) => !rows.some((r) => r.proname === n))
+    const stale = Object.keys(POLICY_CALLED_INVOKER_ALLOWLIST).filter((n) => !rows.some((r) => r.proname === n))
     expect(stale, `죽은 허용 목록 항목: ${stale.join(', ')}`).toEqual([])
+    const notPure = rows.filter((r) => r.proname in POLICY_CALLED_INVOKER_ALLOWLIST && (r.prosecdef || r.provolatile !== 'i')).map((r) => r.proname)
+    expect(notPure, `허용 목록 함수가 immutable INVOKER 가 아니다(근거가 바뀌었다): ${notPure.join(', ')}`).toEqual([])
   })
 
   // 정책 헬퍼(SECURITY DEFINER) 의 EXECUTE — PostgREST 로 익명(anon)이 직접 부를 수 있으면 그 판정을 RLS 밖에서
   // 오라클처럼 굴려 정보를 캘 수 있다(0006 ⑦). anon·PUBLIC 은 항상 없어야 하고, 나머지는 authenticated 뿐이어야
   // 한다 — item_owned_by_my_team 은 Task 2 에서 새로 생긴 헬퍼(회귀 42P17 을 끊으려 추가)라 여기 목록에 이월됐다.
+  // 0007 이 만든 헬퍼 일곱(Storage 경로 파싱 넷·회의록 본문 경로·presence 토픽·minute_files 술어)도 같은 규칙이다.
   const HELPER_FNS = [
     'public.is_superuser()', 'public.my_workspace_ids()', 'public.is_ws_member(uuid)', 'public.is_ws_admin(uuid)',
     'public.accessible_project_ids()', 'public.can_read_project(uuid)', 'public.is_project_admin(uuid)',
     'public.is_project_member(uuid)', 'public.is_project_admin_anywhere_in_ws(uuid)', 'public.my_member_id(uuid)',
     'public.my_team_ids(uuid)', 'public.can_attach(uuid)', 'public.can_edit_issue(uuid)', 'public.wbs_is_leaf(uuid)',
     'public.item_owned_by_my_team(uuid, uuid)',
+    'public.uuid_or_null(text)', 'public.storage_ws(text)', 'public.storage_project(text)', 'public.storage_entity_id(text)',
+    'public.minute_body_path_ok(text, uuid, uuid, uuid)', 'public.presence_topic_project(text)', 'public.can_manage_minute(uuid)',
   ]
   async function executeGrantees(c: PoolClient, fns: string[]) {
     return (await c.query<{ fn: string; named_grantees: string[]; has_public: boolean }>(`
@@ -124,7 +138,7 @@ describe('스키마 불변식', () => {
   // EXECUTE 가 붙어도 잡는다(리뷰 라운드 1 — 이전 판정은 anon·PUBLIC·"authenticated 있는가"만 봐서 그 사이의
   // 임의 그란티를 놓쳤다). postgres 는 소유자 기본 권한이라 항상 허용.
   const ALLOWED_HELPER_GRANTEES = ['authenticated', 'service_role', 'postgres']
-  it('정책 헬퍼 EXECUTE 는 허용 목록(authenticated·service_role·postgres) 뿐(item_owned_by_my_team 포함)', async () => {
+  it('정책 헬퍼 EXECUTE 는 허용 목록(authenticated·service_role·postgres) 뿐(item_owned_by_my_team·0007 헬퍼 포함)', async () => {
     const rows = await asService(pool, (c) => executeGrantees(c, HELPER_FNS))
     expect(rows.map((r) => r.fn).sort()).toEqual([...HELPER_FNS].sort())
     const bad = rows.filter((r) => r.has_public || !r.named_grantees.includes('authenticated')
