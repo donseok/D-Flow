@@ -365,7 +365,7 @@ export function WbsGanttSheet({
   })
   // 접속자 프레즌스 — 같은 프로젝트 WBS 메뉴에 머무는 사용자(주간 시트 접속자 아바타와 동일 UX).
   // 본인은 presence 동기화 전에도 즉시 보이게 로컬로 선두 고정(주간 시트와 동일한 사용자 결정).
-  const presencePeers = usePagePresence({ channelKey: `wbs-${projectId}`, me, enabled: !!me })
+  const presencePeers = usePagePresence({ projectId, pageKey: 'wbs', me, enabled: !!me })
   const online = useMemo(() => {
     const others = presencePeers.filter(o => o.userId !== me?.id)
     return me ? [{ userId: me.id, name: me.name }, ...others] : others

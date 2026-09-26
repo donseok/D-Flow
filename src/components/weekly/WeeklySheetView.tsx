@@ -565,7 +565,7 @@ export function WeeklySheetView({
   // 프레즌스 — 같은 주차 문서를 보는 다른 사용자의 위치/편집 상태(구글시트의 색상 커서 대응).
   // 훅 규칙: 아래 EmptyState 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
   const presencePeers = usePresence({
-    reportId, me,
+    projectId, reportId, me,
     active: rows.length ? grid.sel.active : null,
     editing: grid.sel.editing,
     enabled: !!report && !!me,

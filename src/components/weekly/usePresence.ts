@@ -5,6 +5,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import type { CellAddr } from '@/lib/domain/sheetSelection'
 import type { WeeklyCellKey } from '@/lib/domain/weeklySheet'
 import type { PresencePeer } from '@/lib/domain/sheetPresence'
+import { weeklyPresenceTopic } from '@/lib/domain/presenceTopics'
 
 /** 선택 이동이 잦아 재track을 짧게 묶는다 — 방향키 연타가 이벤트 폭주가 되지 않게. */
 const TRACK_DEBOUNCE_MS = 150
@@ -19,10 +20,12 @@ interface TrackPayload {
   ts: number // track 시각(ms) — 같은 사용자의 다중 연결 중 최신 위치 판별(buildPresenceMap)
 }
 
-/** 주간 시트 프레즌스 — reportId별 Realtime presence 채널에 자기 위치(활성 셀)를 track하고,
+/** 주간 시트 프레즌스 — reportId별 Realtime presence private 채널(weeklyPresenceTopic — 0007 정책이
+ *  pid 를 읽을 수 있는 사람만 허용)에 자기 위치(활성 셀)를 track하고,
  *  같은 문서를 보는 모든 연결의 상태를 돌려준다(자기 제외는 소비자가 도메인 fn으로).
  *  행 동기화 채널(weekly-rows-*)과 분리 — 검증된 데이터 동기화 경로에 리스크를 얹지 않는다. */
-export function usePresence({ reportId, me, active, editing, enabled }: {
+export function usePresence({ projectId, reportId, me, active, editing, enabled }: {
+  projectId: string
   reportId: string | null
   me: { id: string; name: string } | null
   active: CellAddr | null
@@ -50,35 +53,55 @@ export function usePresence({ reportId, me, active, editing, enabled }: {
   // 채널 수명 — reportId/사용자 단위. 주차 전환 시 leave/join으로 잔상 제거.
   useEffect(() => {
     if (!enabled || !reportId || !me) { setPeers([]); return }
-    const sb = createBrowserClient()
-    const channel = sb.channel(`weekly-presence-${reportId}`, {
-      config: { presence: { key: connKeyRef.current! } },
-    })
+    type Sb = ReturnType<typeof createBrowserClient>
+    let sb: Sb | null = null
+    let channel: ReturnType<Sb['channel']> | null = null
+    let alive = true
     let subscribed = false
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<TrackPayload>()
-        const flat: PresencePeer[] = []
-        for (const [connKey, metas] of Object.entries(state)) {
-          for (const m of metas) {
-            if (!m.userId) continue // 페이로드 없는 유령 메타 방어
-            flat.push({ connKey, userId: m.userId, name: m.name, rowId: m.rowId, col: m.col, editing: !!m.editing, ts: m.ts ?? 0 })
-          }
-        }
-        setPeers(flat)
-      })
-      .subscribe(st => {
-        if (st !== 'SUBSCRIBED') return
-        subscribed = true
-        if (payloadRef.current) void channel.track({ ...payloadRef.current, ts: Date.now() })
-      })
-    trackerRef.current = { track: p => { if (subscribed) void channel.track({ ...p, ts: Date.now() }) } }
+
+    // 향상 계층 — 클라이언트 생성·토픽 검증·구독 어디서 던져도 시트는 산다(useWbsRealtime 과 같은 순서).
+    ;(async () => {
+      try {
+        const topic = weeklyPresenceTopic(projectId, reportId)
+        sb = createBrowserClient()
+        const { data } = await sb.auth.getSession()
+        if (!alive || !data.session) return
+        sb.realtime.setAuth() // private 채널 인가 토큰 갱신
+        const ch = sb.channel(topic, {
+          config: { private: true, presence: { key: connKeyRef.current! } },
+        })
+        channel = ch
+        ch
+          .on('presence', { event: 'sync' }, () => {
+            if (!alive) return
+            const state = ch.presenceState<TrackPayload>()
+            const flat: PresencePeer[] = []
+            for (const [connKey, metas] of Object.entries(state)) {
+              for (const m of metas) {
+                if (!m.userId) continue // 페이로드 없는 유령 메타 방어
+                flat.push({ connKey, userId: m.userId, name: m.name, rowId: m.rowId, col: m.col, editing: !!m.editing, ts: m.ts ?? 0 })
+              }
+            }
+            setPeers(flat)
+          })
+          .subscribe(st => {
+            if (st !== 'SUBSCRIBED') return
+            subscribed = true
+            if (payloadRef.current) void ch.track({ ...payloadRef.current, ts: Date.now() })
+          })
+        trackerRef.current = { track: p => { if (subscribed) void ch.track({ ...p, ts: Date.now() }) } }
+      } catch {
+        // 삼킨다 — presence 가 죽어도 시트는 산다.
+      }
+    })()
+
     return () => {
+      alive = false
       trackerRef.current = null
-      void sb.removeChannel(channel) // untrack(leave) 포함 — 타 세션에서 즉시 사라짐
+      if (sb && channel) void sb.removeChannel(channel) // untrack(leave) 포함 — 타 세션에서 즉시 사라짐
       setPeers([])
     }
-  }, [reportId, me?.id, me?.name, enabled]) // eslint-disable-line react-hooks/exhaustive-deps -- me는 원시값으로 구독(객체 참조는 렌더마다 새것)
+  }, [projectId, reportId, me?.id, me?.name, enabled]) // eslint-disable-line react-hooks/exhaustive-deps -- me는 원시값으로 구독(객체 참조는 렌더마다 새것)
 
   // 위치/편집 상태 변경 → 디바운스 재track. 채널 재구독 없이 페이로드만 갱신.
   useEffect(() => {
