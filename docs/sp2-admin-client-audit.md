@@ -25,8 +25,8 @@
 | src/app/actions/agentWork.ts | 세션 가드 뒤 id 스코프 | 주문 행의 project_id 로 requireProjectAdmin 또는 서브트리 관리자를 판정한 뒤, 그 주문·항목 id 로만 쓴다 |
 | src/app/actions/inbox.ts | 세션 가드 뒤 id 스코프 | getSession 사용자의 notification_recipients(user_id 필터)만 읽음 표시한다 |
 | src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 워크스페이스(허용 도메인 설정)·프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
-| src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다 |
-| src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | requireActor 와 소유자 확인 뒤, 회의록·폴더 id 로 하이라이트·폴더 이동·공유를 쓴다. 가드를 워크스페이스로 옮기는 일은 Task 16 이 한다 |
+| src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다. 회의록 블록 이슈의 원문은 그 회의록의 프로젝트가 pid 이거나, 프로젝트가 없으면 그 워크스페이스가 pid 의 워크스페이스일 때만 받는다(최종 리뷰 F10 — 0009 issue_links 트리거가 DB 에서도 막는다) |
+| src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유를 쓴다 |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid), 설정·비공개는 requireProjectAdmin(pid) 뒤에 그 pid 로 project_settings·projects 를 쓴다 |
 | src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
 | src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로, workspace_settings 를 그 프로젝트의 워크스페이스 id 로 읽고 쓴다 |
@@ -41,21 +41,21 @@
 | src/app/api/cron/inbox-retention/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 읽은 알림 90일 정리 RPC(전역)다 |
 | src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 그 pid 로 import 한다. 전역 팀 등록은 requireWorkspaceAdmin(프로젝트의 wid) 뒤에 한다 |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |
-| src/app/api/v1/agent/me/route.ts | 외부 API·서비스 | PAT 소유자의 actorFromUser 스냅샷 키로 agent_projects 를 in(project_id) 로 조회한다(이번에 고침) |
-| src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 isProjectMember(감시 project_id)를 본다 — 조회 전용·다른 워크스페이스면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 7일 GC 는 내용을 읽지 않는 전역 정리 |
+| src/app/api/v1/agent/me/route.ts | 외부 API·서비스 | PAT 소유자의 actorFromUser 스냅샷의 워크스페이스로 agent_projects 를 projects!inner 임베드에서 좁혀(플랫폼 관리자는 전부) 이름까지 한 번에 읽고, 응답 행은 스냅샷 키로 다시 거른다 — 프로젝트 id 목록을 URL 에 싣지 않는다(최종 리뷰 F12, 414 방지) |
+| src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 isProjectMember(감시 project_id)를 본다 — 조회 전용·다른 워크스페이스면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 프로젝트 없는 감시자는 그 유일 워크스페이스에 역할(hasProjectRoleInWorkspace)이 있어야 하고 아니면 404(최종 리뷰 F13). 7일 GC 는 내용을 읽지 않는 전역 정리 |
 | src/app/api/v1/agent/work/[id]/claim/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
 | src/app/api/v1/agent/work/[id]/heartbeat/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
 | src/app/api/v1/agent/work/[id]/release/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 쓴다 |
 | src/app/api/v1/agent/work/[id]/report/route.ts | 외부 API·서비스 | PAT 또는 레거시 신원을 확인하고, loadGatedOrder(ForUser) 로 주문의 pid 에 대한 멤버 판정을 마친 뒤 그 주문 id 로 보고한다 |
-| src/app/api/v1/agent/work/[id]/route.ts | 외부 API·서비스 | patProjectAllowed·requireAgentProject·isAgentProjectMember(주문의 pid) 를 통과한 뒤 주문 id 로 조회한다 |
+| src/app/api/v1/agent/work/[id]/route.ts | 외부 API·서비스 | 먼저 신원을 정한다(resolveReader — PAT 소유자, 레거시 시크릿은 user_email 필수: 없으면 400 identity_required, 모르면 403). 그 신원으로 patProjectAllowed·requireAgentProject·isAgentProjectMember(주문의 pid)를 통과한 뒤 주문 id 로 조회하고, 비멤버는 404 다(최종 리뷰 F8 — 종전 레거시는 멤버십 판정을 건너뛰었다) |
 | src/app/api/v1/agent/work/mine/route.ts | 외부 API·서비스 | PAT 이다. accessibleProjectIds(principal) 를 in(project_id) 로 모든 조회에 건다 |
-| src/app/api/v1/agent/work/route.ts | 외부 API·서비스 | patProjectAllowed·requireAgentProject·isAgentProjectMember(pid) 를 통과한 뒤 그 pid 로 조회한다 |
+| src/app/api/v1/agent/work/route.ts | 외부 API·서비스 | resolveReader 로 신원(PAT 소유자, 레거시는 user_email 필수)을 정한 뒤 patProjectAllowed·requireAgentProject·isAgentProjectMember(pid)를 통과해야 그 pid 로 조회한다. 레거시도 비멤버는 404(최종 리뷰 F8) |
 | src/app/api/v1/minutes/folder/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email 로 actorFromUser 스냅샷을 만들고 isAnyProjectAdmin 으로 프로브를 거른다. external_id 들로 조회한 뒤 호출자 워크스페이스 밖 행은 not_found 로 빼고, 남은 대상마다 isBatchAuthorized(프로젝트 관리자·무프로젝트는 워크스페이스 관리자)를 요구한다(Task 13) |
-| src/app/api/v1/minutes/link/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email 로 actorFromUser 스냅샷을 만들고, minute_id 로 찾은 회의록에 canEditMinute(작성자 또는 그 프로젝트 관리자 — 세션 checkOwner 와 같은 판정)를 요구한다. 아니면 없는 회의록과 같은 404 다(Task 13) |
-| src/app/api/v1/minutes/meta/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email(필수)로 actorFromUser 를 만들고, 스냅샷 키 ∩ canSeeProject 로 프로젝트를, 소속 워크스페이스로 팀을 좁힌다(이번에 고침) |
-| src/app/api/v1/minutes/route.ts | 외부 API·서비스 | 두 메서드 모두 user_email 의 actorFromUser 스냅샷으로 좁힌다(Task 13). POST: meeting_id 의 프로젝트에 isProjectMember, external_id 로 찾은 기존 회의록(경합 재조회 포함)에 canEditMinute — 아니면 404. GET 목록: user_email 필수, 호출자 워크스페이스로 in 을 걸고 볼 수 없는 비공개 프로젝트(canSeeProject 거짓)의 회의록을 뺀다(플랫폼 관리자는 전부) |
+| src/app/api/v1/minutes/link/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email 로 actorFromUser 스냅샷을 만들고, minute_id 로 찾은 회의록에 canEditMinute(그 회의록 범위의 멤버 이상이면서 작성자 또는 그 프로젝트 관리자 — 세션 checkOwner 와 같은 판정, v2.8 Z3)를 요구한다. 아니면 없는 회의록과 같은 404 다(Task 13·16a) |
+| src/app/api/v1/minutes/meta/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email(필수)로 actorFromUser 를 만든다. 프로젝트는 호출자 워크스페이스로 in(workspace_id)(플랫폼 관리자는 전부)을 걸어 페이지로 읽고 스냅샷 키 ∩ canSeeProject 로 거른다 — id 목록을 URL 에 싣지 않는다(최종 리뷰 F12). 팀은 소속 워크스페이스로 좁힌다 |
+| src/app/api/v1/minutes/route.ts | 외부 API·서비스 | 두 메서드 모두 user_email 의 actorFromUser 스냅샷으로 좁힌다(Task 13). POST: meeting_id 의 프로젝트에 isProjectMember, external_id 로 찾은 기존 회의록(경합 재조회 포함)에 canEditMinute — 아니면 404. 프로젝트 없는 신규 등록은 그 유일 워크스페이스에 역할(hasProjectRoleInWorkspace — 세션 createMinute 과 같다)이 있어야 하고 아니면 404(최종 리뷰 F14). GET 목록: user_email 필수, 호출자 워크스페이스로 in 을 걸고 볼 수 없는 비공개 프로젝트(canSeeProject 거짓)의 회의록을 뺀다(플랫폼 관리자는 전부) |
 | src/app/api/v1/wbs/import/route.ts | 외부 API·서비스 | PAT 이다. patProjectAllowed·requireAgentProject·멤버·관리자(pid) 판정 뒤 그 pid 로 import 한다 |
-| src/app/api/v1/wbs/structure/route.ts | 외부 API·서비스 | PAT 이다. patProjectAllowed·requireAgentProject·isAgentProjectMember(pid) 판정 뒤 그 pid 로 조회한다 |
+| src/app/api/v1/wbs/structure/route.ts | 외부 API·서비스 | PAT 또는 레거시 시크릿이다 — 레거시는 user_email 필수(resolveReader, 최종 리뷰 F8). 그 신원으로 patProjectAllowed·requireAgentProject·isAgentProjectMember(pid) 판정 뒤 그 pid 로 조회하고, 비멤버는 404 다 |
 | src/app/api/wiki/reindex/route.ts | 플랫폼 | requireSuperuser(플랫폼 11곳)다. 전역 색인 큐·문서 수 통계를 다룬다 |
 | src/app/api/wiki/search/route.ts | 세션 가드 뒤 id 스코프 | getActorViewState 뒤 accessScope(내 워크스페이스 프로젝트 ∩ 비공개 판정)의 projectIds 로 in 을 건다 |
 | src/app/api/wiki/summarize/route.ts | 세션 가드 뒤 id 스코프 | getActorViewState 뒤 accessScope 판정(decideSearchAccess)을 통과한 projectId 로만 조회한다 |
@@ -63,16 +63,16 @@
 | src/lib/agent/delegation.ts | 세션 가드 뒤 id 스코프 | requireProjectMember 또는 Admin(항목의 pid) 뒤에 그 항목 id 로 위임 여부를 읽고 쓴다 |
 | src/lib/agent/subtreeManager.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 myMemberIds·isSubtreeManager 를 pid·itemId 로 판정한다 |
 | src/lib/ai/brief.ts | 세션 가드 뒤 id 스코프 | 호출부(프로젝트 화면·가드된 액션)의 projectId 로 project_ai_briefs 를 읽고 쓴다. RLS 쓰기 정책이 없어 가드가 유일한 관문이다 |
-| src/lib/ai/ensure-index.ts | 세션 가드 뒤 id 스코프 | 호출부가 가드한 projectId 로 wbs_embeddings 수를 세고 색인한다 |
+| src/lib/ai/ensure-index.ts | 세션 가드 뒤 id 스코프 | 호출부(레거시 챗 /api/chat·/api/chat/stream — legacyChatProjectGate 가 볼 수 있는 프로젝트만 통과시킨다, 최종 리뷰 F7)가 가드한 projectId 로 wbs_embeddings 수를 세고 색인한다. 색인 자체는 ingestProject 의 RLS 관문 뒤에만 쓴다 |
 | src/lib/ai/health.ts | 플랫폼 | assistantHealth 는 전역 스키마·RPC 프로빙이라 행을 노출하지 않는다. assistantIndexStatus 는 projectId 로 카운트만 한다 |
-| src/lib/ai/ingest.ts | 세션 가드 뒤 id 스코프 | 호출부가 가드한 projectId 로 wbs_embeddings 를 upsert 하고 stale 을 삭제한다 |
+| src/lib/ai/ingest.ts | 세션 가드 뒤 id 스코프 | 호출부(reindex·import/execute·reindexProjectAction 은 requireProjectAdmin, 자가 치유는 레거시 챗 관문)가 가드한 projectId 로 쓴다. 쓰기 전에 RLS 로 프로젝트 행을 확인한다(getProjectName — 볼 수 없으면 throw, 최종 리뷰 F7 심층 방어). 그 뒤에만 팀 캐시를 읽고 wbs_embeddings 를 upsert·stale 삭제한다 |
 | src/lib/ai/issue-analysis.ts | 세션 가드 뒤 id 스코프 | 호출부가 가드한 projectId 로 issue_analysis_runs 를 읽고 쓴다 |
 | src/lib/ai/llm-override.ts | 플랫폼 | 플랫폼 LLM 설정(llm_profiles·llm_config, 전역 표)의 읽기 전용 캐시다 |
 | src/lib/ai/minutes-ingest.ts | 플랫폼 | ingestMinute 는 회의록 id 1건의 임베딩을 교체한다. self-heal 은 전 회의록 배치이고 응답 행이 없다 |
 | src/lib/ai/minutes-insights.ts | 세션 가드 뒤 id 스코프 | 회의록 액션의 가드 뒤, 그 minuteId 로 minute_insights 를 교체한다 |
 | src/lib/ai/wiki-ingest.ts | 세션 가드 뒤 id 스코프 | 회의록 후처리 또는 색인 작업의 projectId·jobId 로 위키 행을 읽고 쓴다 |
 | src/lib/ai/wiki-saturation.ts | 세션 가드 뒤 id 스코프 | 형(type)만 import 한다. 넘겨받은 admin 으로 projectId 의 위키 토픽을 읽는다 |
-| src/lib/data/accounts.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. listProfiles 는 전 profiles 를 읽고, 호출부 listAccounts(requireWorkspaceAdmin)가 명단으로 거른다 |
+| src/lib/data/accounts.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. listProfiles 는 전 profiles 를 페이지로 읽고(fetchAllPages — count 총합 대조, 최종 리뷰 F11), 호출부 listAccounts(requireWorkspaceAdmin)가 명단으로 거른다 |
 | src/lib/data/agentApprovals.ts | 세션 가드 뒤 id 스코프 | getActorForView 뒤에 projectId 의 reported 주문 수를 센다. 판정은 isProjectAdmin·서브트리다 |
 | src/lib/data/agentSeatmap.ts | 세션 가드 뒤 id 스코프 | seatmapFloorIds(actor) 로 project_id 에 in 을 건다. 감시자는 층 프로젝트의 workspace_id 로 in 을 건다(이번에 고침) |
 | src/lib/data/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 상세 화면의 가드 뒤, minuteId·projectId 로 위키 영향 카드를 조회한다 |
@@ -111,3 +111,15 @@
 5. ~~**`teamsForProjectSync` 의 전역 폴백**~~ — **닫힘(Task 16b)**: 캐시가 같은 로드에서 `projects(id, workspace_id)` 를 싣고, 전용 팀이 없는 프로젝트는 그 프로젝트 워크스페이스의 공용 팀으로만 폴백한다. 캐시를 한 번도 못 채웠으면 프로젝트 접근자도 throw 하고, 로드 뒤 모르는 pid 는 빈 목록이다(새 프로젝트는 `createProject` 가 캐시를 갱신한다).
 6. ~~**`teamsSync()`·`activeTeamCodesSync()` 호출처**~~ — **닫힘(Task 16a·16b)**: 회의록 계열은 16a 가, 앱 레이아웃·AI 컨텍스트(knowledge·ingest·브리핑·위키)·주간 도구·설정 화면은 16b 가 워크스페이스·프로젝트 범위로 옮겼고, 전역 접근자 네 개(`teamsSync`·`activeTeamCodesSync`·`isRegisteredTeamCode`·`isActiveTeamCode`)를 export 에서 지웠다. 호출자 쪽 담당 필터(채팅·외부 GET·봇)는 `teamCodesVisibleTo`(소속 워크스페이스 공용 팀 + 볼 수 있는 프로젝트의 전용 팀, 플랫폼 관리자는 전부) 하나를 쓴다.
 7. **`agentTokens.createAgentToken`**: `project_id` 가 발급자의 워크스페이스에 속하는지 검사하지 않는다. 쓰는 시점에 라우트가 판정하므로 데이터가 새지는 않는다(watch 도 Task 13 부터 판정한다 — 위 3). 다만 쓸 수 없는 토큰이 만들어질 수 있다.
+
+## 최종 리뷰 fix wave(2026-09-26) — 이 표의 근거가 틀렸던 행
+
+최종 리뷰가 표를 표본 대조해 근거가 코드와 다른 행을 찾았다. 코드를 고쳐 근거를 사실로 만들었다(위 표에 반영).
+- `ensure-index.ts`·`ingest.ts` 의 "호출부가 가드한 projectId" 는 레거시 챗 라우트(`/api/chat`·`/api/chat/stream`)에서 거짓이었다 —
+  세션만 확인해 B 사용자가 A 의 pid 로 자가 치유 색인(service_role upsert)을 일으켰다. 세 레거시 챗 라우트에 `legacyChatProjectGate`
+  (볼 수 없으면 404, 목록 실패면 500)를 두고, `ingestProject`·`loadProjectAnalysis` 가 RLS 로 프로젝트 행을 먼저 확인한다(F7).
+- `agent/work`·`agent/work/[id]`·`wbs/structure` 의 멤버십 판정은 PAT 에만 걸려 있었다 — 레거시 시크릿은 신원 없이 모든 워크스페이스를
+  읽었다. 레거시 읽기에 `user_email` 을 요구하고 같은 판정을 건다(F8, 레거시 v1 계약 변경 — `docs/design/dflow-agent-work-api-spec.md`·
+  `.claude/skills/dflow-work/references/api-contract.md` 반영. PAT 계약 버전 2.4 는 그대로다).
+- `minutes/meta`·`agent/me` 의 `.in('id', …)` 은 프로젝트 약 205개부터 414 로 거절됐다 — 워크스페이스로 좁히고 메모리에서 거른다(F12).
+- `agent/watch`·`minutes` POST 의 프로젝트 없는 분기는 워크스페이스 역할을 보지 않았다(F13·F14).

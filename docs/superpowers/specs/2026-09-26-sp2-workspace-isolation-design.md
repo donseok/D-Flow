@@ -136,7 +136,9 @@
 
 - `requireWorkspaceAdmin(wid)` 신설(`src/lib/authz/index.ts`, 판정은 `domain/authz.ts` 의 순수 함수). 가드 시그니처 불변식(`tests/invariants/guard-signatures`)에 추가.
 - `resolveScope(table, id) → { projectId, workspaceId }` — `resolveProjectId` 를 대체(화이트리스트 9테이블 유지, 호출 0인 `minutes`·`weekly_reports` 는 제거하지 않고 회의록 액션이 쓰도록). `resolveProjectId` 는 `resolveScope` 의 얇은 래퍼로 남긴다(호출 25곳 일괄 교체는 하지 않는다).
-- `src/lib/agent/delegation.ts:37` 이 서비스 경로에서 세션 전제 `resolveProjectId` 를 쓰는 것 — admin 클라이언트용 `resolveScopeAdmin` 으로 교체.
+- ~~`src/lib/agent/delegation.ts:37` 이 서비스 경로에서 세션 전제 `resolveProjectId` 를 쓰는 것 — admin 클라이언트용 `resolveScopeAdmin` 으로 교체.~~
+  **정정(Task 10, 2026-09-26)**: 전제가 틀렸다 — `delegation.ts` 의 호출 3곳은 모두 세션 액션이라 세션 `resolveProjectId` 가 맞다. 교체하지 않았다
+  (`resolveScopeAdmin` 은 외부 API 같은 세션 없는 경로용으로만 쓴다).
 - `requireSuperuser` 24곳 분류:
 
 | 등급 | 위치 |

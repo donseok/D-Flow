@@ -113,8 +113,9 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 
 - 판정은 `src/lib/domain/authz.ts`(순수) + `src/lib/authz/**`(가드·`*Access.ts`) 두 곳에서만 한다.
   액션에 `role === '...'` 을 직접 적지 않는다.
-- 가드는 셋뿐이다: `requireSuperuser()` · `requireProjectAdmin(pid)` · `requireProjectMember(pid)`.
-  `projectId` 를 인자로 받지 않는 액션은 `resolveProjectId(table, id)` 로 먼저 읽는다.
+- 가드는 넷뿐이다: `requireSuperuser()` · `requireWorkspaceAdmin(wid)` · `requireProjectAdmin(pid)` · `requireProjectMember(pid)`
+  (시그니처는 `tests/authz/guard-signatures.test.ts` 가 고정한다).
+  `projectId` 를 인자로 받지 않는 액션은 `resolveProjectId(table, id)`(워크스페이스까지 필요하면 `resolveScope`)로 먼저 읽는다.
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.

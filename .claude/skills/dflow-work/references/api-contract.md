@@ -71,6 +71,8 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
 - PAT 검사 순서: enabled → revoked_at → expires_at → hash(상수시간).
 - PAT 요청 body의 `user_email`: 없으면 무시, 있는데 소유자와 다르면 400 `identity_mismatch`.
 - 스코프: `work:read`(조회) · `work:claim`(claim/release/report/import). 부족 시 403 `insufficient_scope`. legacy는 스코프 개념 없음(v1 동작).
+- legacy 읽기(GET `work`·`work/{id}`·`wbs/structure`)는 쿼리 `?user_email=` 필수(2026-09-26, 호환 깨짐) — 시크릿은 배포 전역이라
+  신원 없이는 모든 워크스페이스가 읽혔다. 누락 400 `identity_required`, 미일치 403 `unknown_user`, 비멤버 404(PAT 와 같은 판정).
   `work:report` 는 폐지됐다(2026-08-25) — claim 할 수 있으면 그 결과도 적을 수 있어야 하고, claim 이 무제한이라 보고만 막는 건 방어선이 아니었다(본인 claim 건만 쓸 수 있다는 강제는 report 라우트가 한다). 신규 발급에는 없고, **옛 토큰의 `work:report` 는 `work:claim` 과 동등하게 수용**한다.
 - PAT는 `project_id` 지정 시 그 프로젝트만. 멤버십: PAT principal은 모든 조회·쓰기에서 `is_superuser` 또는 `project_roles` 보유 필요, 아니면 404.
 
@@ -78,8 +80,8 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
 
 | 메서드·경로 | 신원 | 요지 |
 |---|---|---|
-| GET `/api/v1/agent/work?project_id=[&status=]` | legacy·pat | v1 계약 + `status` 필터(v2.2). PAT는 멤버십·스코프 강제 |
-| GET `/api/v1/agent/work/{id}` | legacy·pat | v1 + PAT 호출 시 `mine:boolean`·`claimed_by_user_email` 추가 |
+| GET `/api/v1/agent/work?project_id=[&status=]` | legacy·pat | v1 계약 + `status` 필터(v2.2). PAT는 멤버십·스코프 강제. legacy 는 `&user_email=` 필수 + 같은 멤버십(2026-09-26) |
+| GET `/api/v1/agent/work/{id}` | legacy·pat | v1 + PAT 호출 시 `mine:boolean`·`claimed_by_user_email` 추가. legacy 는 `?user_email=` 필수 + 같은 멤버십(2026-09-26) |
 | POST `/api/v1/agent/work/{id}/claim` | legacy·pat | PAT: `claimed_by_user_id` 서버 유도 기록. 배정 항목은 담당자만(403 `not_assignee`) |
 | POST `/api/v1/agent/work/{id}/release` | legacy·pat | 소유 판정: PAT=claimed_by_user_id, legacy=claimed_by 라벨. 교차 403 `not_claim_owner` |
 | POST `/api/v1/agent/work/{id}/report` | legacy·pat | 위와 같음 + PAT는 `evidence` 객체 허용 |
@@ -212,9 +214,10 @@ UI 라벨 정본(`src/lib/domain/stageLabels.ts`): `as`=할당됨 · `ip`=작업
 |---|---|---|
 | 400 | `validation_failed` | 형식 오류(v1 관례) |
 | 400 | `identity_mismatch` | PAT 소유자 ≠ body user_email |
-| 400 | `identity_required` | PAT 전용 엔드포인트에 legacy 호출 |
+| 400 | `identity_required` | PAT 전용 엔드포인트에 legacy 호출, 또는 legacy 읽기(GET work·work/{id}·wbs/structure)에 `user_email` 쿼리 없음 |
 | 400 | `unsupported_scope` | mine의 미지원 scope |
 | 401 | `unauthorized` | 시크릿·PAT 불일치/만료/폐기 |
+| 403 | `unknown_user` | legacy 의 `user_email` 이 D-Flow 계정 아님(쓰기 바디·읽기 쿼리) |
 | 403 | `forbidden_role` | 멤버 아님(쓰기 경로 v1 관례) |
 | 403 | `not_claim_owner` | 점유 소유자 아님(교차 소유 포함) |
 | 403 | `insufficient_scope` | PAT 스코프 부족 |

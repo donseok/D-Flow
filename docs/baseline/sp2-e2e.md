@@ -134,7 +134,7 @@ render-pages 단계가 11분 걸린 것은 dev 서버의 첫 컴파일이 메모
 
 ## 4. E2E 단계표
 
-22단계 전부 `ok: true`, exit 0. 1~11·13·19 는 SP1 흐름(Phase A 와 같은 러너)이고, **굵은 이름**이 SP2 에서 새로 넣거나 바꾼 단계다.
+22단계 전부 `ok: true`, exit 0. 3~14 는 SP1 흐름(Phase A 와 같은 러너)이고, **굵은 이름**(1·2·15~22)이 SP2 에서 새로 넣거나 바꾼 단계다.
 워크스페이스 A = 부트스트랩 워크스페이스(`default`), B = `e2e-other`. 프로젝트 A·B·A2 는 워크스페이스 A, C 는 워크스페이스 B.
 
 | # | 단계 | 판정 |
@@ -208,3 +208,20 @@ weekly presence 무세션 케이스 없음.
 `vdb1`)가 쓰기 실패로 저널을 중단하고 읽기 전용으로 다시 붙었다(`Remounting filesystem read-only`) — Supabase 컨테이너가 쓰지 못하는
 상태였다. 컨트롤러가 워크트리를 치웠고, colima 가 다시 뜬 뒤(21:21~21:22, 쓰기 가능 확인) 위 결과를 **처음부터 다시** 쟀다(깨끗한 `db:reset` 부터).
 이 절의 모든 수치는 복구 뒤의 것이다. 재발 방지로 이후에는 워크트리를 하나만 두고 node_modules 를 링크했다.
+
+## 9. 최종 리뷰 fix wave 재실행(2026-09-27)
+
+0009(F1~F6)와 코드 수정(F7~F15) 뒤 같은 러너로 다시 돌렸다. HEAD `7f5e991`, 스크래치 워크트리(detached, node_modules 링크)의
+`next dev -p 3171`(`NEXT_PUBLIC_APP_URL`·`E2E_BASE_URL` 모두 3171, 사용자의 :3000 은 건드리지 않음), 러너는 cwd = 워크트리
+(서버 액션 id 를 그 워크트리의 `.next` 매니페스트에서 찾는다). `db:reset`(0009) → `dev:bootstrap`(생성 비밀번호, 출력하지 않음) 직후.
+
+- **결과: exit 0, 22/22 `ok: true`**(01:07:25 → 01:08:46). 단계별 판정은 4절과 같다 — workspace-b-isolation(bea 의 A 화면 not-found·이름 없음,
+  A 경로 Storage 쓰기·읽기 거부), minutes-api-scope(meta: ana 3·outsider 3·bea 1(팀 없음)·플랫폼 관리자 4, 목록 ana 2·bea 0,
+  모르는 이메일 403 `unknown_user`, bea 의 `meta?project_id=<A2>` 404) 모두 같은 값.
+- 앞선 시도들이 실패한 이유(코드 결함이 아니라 환경): 메모리 압박(스왑 7~9 GB, 한 라우트 컴파일 150~190 초) 속에서 ① `render-pages` 가
+  처음 컴파일하는 `/issues` 의 팀 캐시 첫 로드가 3 초 한도(LOAD_TIMEOUT_MS)를 넘어 레이아웃이 오류 digest 를 냈다(같은 서버에서 다시 받으면
+  깨끗 — 일시적), ② dev 서버가 "approaching the used memory threshold" 로 스스로 재시작해 진행 중 요청이 `fetch failed` 가 됐다,
+  ③ 라우트를 미리 데워 두면 임포트 라우트의 팀 캐시가 뒤에 만든 팀을 못 봤다(러너가 안내하는 모듈 인스턴스별 캐시 — 첫 배포 SP 이월 항목),
+  ④ `next start` 로는 같은 이유(라우트 번들마다 캐시)로 import 가 409 였다. 부하가 내려간 뒤 워크트리를 HEAD 그대로 둔 새 dev 서버로
+  처음부터 다시 돌려 통과했다.
+

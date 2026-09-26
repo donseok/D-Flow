@@ -1,5 +1,11 @@
 # D-Flow 에이전트 작업 API 계약 v1.0
 
+> **2026-09-26 변경(호환 깨짐 — SP2 최종 리뷰 F8)**: 읽기 엔드포인트(§3.1 목록·§3.5 상세, 그리고 `GET /api/v1/wbs/structure`)도
+> 쿼리 `user_email` 이 **필수**다. 시크릿(`AGENT_API_SECRET`)은 배포 전역이라 워크스페이스 경계가 없어, 신원 없이는 어느 워크스페이스의
+> 주문 지시·보고·WBS 트리든 읽혔다. 없으면 `400 identity_required`, 계정이 아니면 `403 unknown_user`, 그 프로젝트의 멤버 이상이 아니면
+> `404`(존재 은닉 — PAT 와 같다). 응답 셰이프는 v1 그대로다. PAT(계약 v2.x) 호출은 바뀌지 않는다. 이 변경 시점에 레거시 시크릿을 설정한
+> 배포는 없다.
+
 ## 1. 개요
 
 ### 아키텍처
@@ -37,6 +43,8 @@
   - 미설정 시 모든 엔드포인트 404 (존재 은닉)
 - **요청 헤더**: `Authorization: Bearer <AGENT_API_SECRET>`
   - 상수시간 비교. 실패 시 401
+- **읽기 엔드포인트의 신원** (2026-09-26~): `GET` 목록·상세는 쿼리 `?user_email=<D-Flow 계정 이메일>` 필수 — 쓰기의 `user_email` 과 같은
+  매칭·같은 멤버십 판정. 누락 `400 identity_required`, 미일치 `403 unknown_user`, 비멤버 `404`
 - **요청 바디 공통 필드** (쓰기 엔드포인트)
   ```json
   {
@@ -70,6 +78,7 @@ ready 상태 작업 목록 조회.
 | 이름 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | `project_id` | UUID string | ✓ | 프로젝트 ID |
+| `user_email` | string | ✓(2026-09-26~) | 호출자 D-Flow 계정 이메일 — 그 프로젝트의 멤버 이상이어야 한다 |
 
 **응답 200 OK**
 ```json
@@ -102,8 +111,10 @@ ready 상태 작업 목록 조회.
 | 코드 | 상태 | 원인 |
 |---|---|---|
 | `validation_failed` | 400 | project_id 누락 또는 형식 오류 |
+| `identity_required` | 400 | `user_email` 쿼리 누락(2026-09-26~) |
 | `unauthorized` | 401 | Bearer 토큰 누락/불일치 |
-| (프로젝트 미등록) | 404 | — |
+| `unknown_user` | 403 | `user_email` 이 D-Flow 계정 아님 |
+| (프로젝트 미등록·비멤버) | 404 | 미등록 또는 `user_email` 계정이 그 프로젝트의 멤버 아님(존재 은닉) |
 | (내부 오류) | 500 | DB 조회 실패 |
 
 ---
@@ -283,6 +294,8 @@ ready 상태 작업 목록 조회.
 
 작업 상태 폴링. 승인/반려 여부, 반려 사유, 보고 이력 조회.
 
+**쿼리 파라미터**: `user_email`(필수, 2026-09-26~) — 호출자 D-Flow 계정 이메일. 주문 프로젝트의 멤버 이상이어야 한다.
+
 **응답 200 OK**
 ```json
 {
@@ -348,8 +361,10 @@ ready 상태 작업 목록 조회.
 | 코드 | 상태 | 원인 |
 |---|---|---|
 | `validation_failed` | 400 | 경로 id 형식 오류 |
+| `identity_required` | 400 | `user_email` 쿼리 누락(2026-09-26~) — 주문을 읽기 전에 판정 |
 | `unauthorized` | 401 | Bearer 토큰 오류 |
-| (작업 미등록) | 404 | 작업 ID 없음 또는 프로젝트 미등록 |
+| `unknown_user` | 403 | `user_email` 이 D-Flow 계정 아님 |
+| (작업 미등록·비멤버) | 404 | 작업 ID 없음, 프로젝트 미등록, 또는 `user_email` 계정이 그 프로젝트의 멤버 아님 |
 | (내부 오류) | 500 | 조회 실패 |
 
 ---
@@ -361,8 +376,9 @@ ready 상태 작업 목록 조회.
 | 에러 코드 | HTTP | 엔드포인트 | 원인 |
 |---|---|---|---|
 | `validation_failed` | 400 | 전수 | 요청 형식/검증 오류 (경로 id, 바디 필드, 범위 등) |
+| `identity_required` | 400 | 목록, 상세 | 읽기 호출에 `user_email` 쿼리 누락(2026-09-26~) |
 | `unauthorized` | 401 | 전수 | Bearer 토큰 누락/불일치 (게이트) |
-| `unknown_user` | 403 | claim, report, release | `user_email` 이 {제품명} 계정 아님 |
+| `unknown_user` | 403 | 전수 | `user_email` 이 {제품명} 계정 아님 |
 | `forbidden_role` | 403 | claim, report, release | 해당 프로젝트의 멤버 아님 |
 | `conflict` | 409 | claim, report, release | 상태 전이 불가 (CAS 실패, 이미 다른 상태 등) |
 | `not_claim_owner` | 403 | report, release | 본인이 claim 하지 않은 작업 (claimed_by 불일치) |
