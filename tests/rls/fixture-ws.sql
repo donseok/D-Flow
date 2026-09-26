@@ -190,8 +190,16 @@ insert into public.meeting_exceptions (meeting_id, occurrence_date) values ('000
 insert into public.minute_favorites (user_id, minute_id) values
   ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-000000001103'),
   ('00000000-0000-0000-7e57-0000000000a9', '00000000-0000-0000-7e57-000000001103') on conflict do nothing;
-insert into public.user_preferences (user_id, prefs) values ('00000000-0000-0000-7e57-0000000000a3', '{}') on conflict do nothing;
+insert into public.user_preferences (user_id, workspace_id, prefs) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-00000000aa01', '{}') on conflict do nothing;
 insert into public.user_wbs_state (user_id, project_id) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.wbs_progress_snapshots (project_id, snap_date, actual_pct, planned_pct) values ('00000000-0000-0000-7e57-0000000000c1', '2026-09-01', 10, 20) on conflict do nothing;
 insert into public.wiki_project_rebuild_jobs (project_id) values ('00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.area_teams (area_id, team_id, kind) values ('00000000-0000-0000-7e57-00000000110c', '00000000-0000-0000-7e57-0000000000d1', 'primary') on conflict do nothing;
+
+-- 프로젝트 없는 회의록·폴더(Review Focus 3) — workspace_id 로만 스코프된다
+insert into public.minute_folders (id, project_id, workspace_id, name, created_by) values
+  ('00000000-0000-0000-7e57-00000000112c', null, '00000000-0000-0000-7e57-00000000aa01', 'RLS 전역 폴더', '00000000-0000-0000-7e57-0000000000a3')
+  on conflict do nothing;
+insert into public.minutes (id, project_id, workspace_id, minute_date, team_code, title, body_md, created_by) values
+  ('00000000-0000-0000-7e57-00000000112b', null, '00000000-0000-0000-7e57-00000000aa01', '2026-09-02', 'ERP', 'RLS 전역 회의록', '# RLS', '00000000-0000-0000-7e57-0000000000a3')
+  on conflict do nothing;

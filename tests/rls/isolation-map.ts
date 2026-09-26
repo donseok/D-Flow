@@ -76,25 +76,8 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   { table: 'issue_major_processes', sql: `insert into public.issue_major_processes (project_id, mega_code, name) values ('${F.projects.a}', '99', 'RLS 침입')` },
 ]
 
-/** 0005 까지 열려 있던 개방 읽기 40(D2 예외 제외 39 + audience='global' 알림 notification_events) */
-const READ_LEAKS_0005 = [
-  'ai_documents', 'announcements', 'attendance_records', 'change_logs', 'deliverable_attachments', 'holidays',
-  'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_updates', 'issues', 'item_owners',
-  'meeting_attendees', 'meeting_exceptions', 'meetings', 'minute_embeddings', 'minute_files', 'minute_folders',
-  'minute_highlights', 'minute_insights', 'minute_versions', 'minutes', 'notification_events', 'project_ai_briefs',
-  'project_members', 'project_settings', 'projects', 'task_dependencies', 'teams', 'wbs_embeddings', 'wbs_items',
-  'wbs_progress_snapshots', 'weekly_report_rows', 'weekly_reports', 'wiki_change_events', 'wiki_item_relations',
-  'wiki_item_sources', 'wiki_items', 'wiki_topics',
-].map((t) => `${t}:read`)
-const OWN_INSERT_LEAKS_0005 = ['change_logs', 'minute_highlights', 'minute_folders', 'minute_favorites', 'announcement_seen', 'user_wbs_state']
-  .map((t) => `${t}:insert-own`)
-
 /**
- * 0005 실측 누설(Task 1 에서 기록, Task 2 에서 [] 로 비운다). bea 는 B 워크스페이스 관리자라 옛 app_role() 이
- * 'pmo_admin' 을 돌려준다(M4 — 아무 워크스페이스의 관리자) → A 회의록 폴더·하이라이트·첨부를 고치고 지운다.
+ * 0006 뒤 B 계정의 누설 목록 — 비어 있어야 한다. 0005 실측(개방 읽기 40 + 자기 이름 insert 6, bea 는 옛 app_role() 의
+ * 'pmo_admin' 으로 A 회의록 폴더·하이라이트·첨부 쓰기 6 추가)은 커밋 7a0ae42·45a7c7d 의 이 파일 참조.
  */
-export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = {
-  bea: [...READ_LEAKS_0005, ...OWN_INSERT_LEAKS_0005, 'minute_files:insert-own',
-    'minute_folders:update', 'minute_folders:delete', 'minute_highlights:delete', 'minute_files:update', 'minute_files:delete'],
-  ben: [...READ_LEAKS_0005, ...OWN_INSERT_LEAKS_0005],
-}
+export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
