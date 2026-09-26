@@ -109,8 +109,13 @@ export function MinuteMetaModal({
       if (!f || (f.projectId ?? null) !== (pid || null)) setFolderId(null)
     }
     if (!pid) return
-    const res = await fetchProjectMeetingsLite(pid)
-    setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+    try {
+      const res = await fetchProjectMeetingsLite(pid)
+      setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+    } catch (e) {
+      console.error('[MinuteMetaModal] 회의 목록 조회 실패:', e)
+      setMeetingsFailed(true)
+    }
   }
 
   async function save() {

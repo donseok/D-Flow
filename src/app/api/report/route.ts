@@ -138,7 +138,14 @@ export async function GET(req: NextRequest) {
   // loadProjectFacts 가 WBS 를 한 번 더 읽지만 온디맨드 다운로드 경로라 수용(코드 단일화 우선).
   let extra: ExtraNarrativeSlide | undefined
   if (format === 'pptx' && req.nextUrl.searchParams.get('ai') === '1') {
-    const src = await loadProjectFacts(projectId)
+    let src: Awaited<ReturnType<typeof loadProjectFacts>>
+    try {
+      src = await loadProjectFacts(projectId)
+    } catch (e) {
+      // 근거 로더는 조회 실패(진척 이력·회의)와 팀 캐시 미로드를 throw 로 올린다 — 명단·공지·회의처럼 503 으로 사유를 돌려준다.
+      console.error('[report] AI 브리핑 근거 조회 실패:', { projectId }, e)
+      return NextResponse.json({ error: 'AI 브리핑 근거를 불러오지 못했습니다.' }, { status: 503 })
+    }
     const facts = src ? buildBriefFacts(src) : null
     const row = facts ? await getAiBrief(projectId, 'weekly', facts.todayWbs) : null
     const fresh = !!row && !!facts && row.status === 'ready' && row.inputHash === briefFactsHash(facts)

@@ -118,20 +118,23 @@ describe('DashboardView — WBS 가 비어도 회의·이슈·공지는 그린�
 })
 
 describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다', () => {
-  it('(d) issues=null → 이슈 카드 셋 대신 LoadErrorNotice(ERR_ISSUES_LOAD)', async () => {
+  it('(d) issues=null → 이슈 카드 셋 대신 LoadErrorNotice(ERR_ISSUES_LOAD) — 이슈 섹션과 실행 큐 옆 두 자리', async () => {
     const tree = await view({ issues: null })
     const types = typesIn(tree)
     for (const t of [IssueStatusCard, IssueTrendCard, IssueQueueCard]) expect(types.has(t)).toBe(false)
-    const notices = elsOf(tree, LoadErrorNotice)
-    expect(notices.length).toBeGreaterThan(0)
-    for (const n of notices) expect(n.props.message).toBe(ERR_ISSUES_LOAD)
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ISSUES_LOAD, ERR_ISSUES_LOAD])
+    // 조치 행(F)에서는 WBS 실행 큐 옆 자리를 채운다 — 한 줄 스캔 문법 유지
+    const direct = (el: ReactElement<Record<string, unknown>>) =>
+      new Set([el.props.children].flat(Infinity).filter(isValidElement).map(c => c.type))
+    const row = elsOf(tree, 'div').find(d => direct(d).has(RiskWorklist))!
+    expect(direct(row).has(LoadErrorNotice)).toBe(true)
   })
 
-  it('(d) issues=null 이면 WBS 가 비어도 빈 상태로 빠지지 않는다 — 실패한 데이터셋은 빈 것이 아니다', async () => {
+  it('(d) issues=null 이면 WBS 가 비어도 빈 상태로 빠지지 않는다 — 사유는 한 번만(재시도 버튼·스크린리더 알림 중복 없음)', async () => {
     const tree = await view({ items: [], issues: null, announcements: [], meetings: [] })
     const types = typesIn(tree)
     expect(types.has(EmptyState)).toBe(false)
-    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toContain(ERR_ISSUES_LOAD)
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ISSUES_LOAD])
   })
 
   it('공지=null → 공지 스트립 대신 LoadErrorNotice(ERR_ANNOUNCEMENTS_LOAD), 타임라인은 공지 마일스톤 없이 그린다', async () => {

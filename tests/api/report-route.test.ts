@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   getAnnouncements: vi.fn(),
   listProjectsWithState: vi.fn(),
   getWeeklySheet: vi.fn(),
+  loadProjectFacts: vi.fn(),
+  fillWeeklyTemplate: vi.fn(),
   getProjectConfig: vi.fn(),
   buildWeeklyReportModel: vi.fn(),
   buildReportWorkbook: vi.fn(),
@@ -31,9 +33,9 @@ vi.mock('@/lib/report/weekly', async (importOriginal) => ({
 }))
 vi.mock('@/lib/report/excel', () => ({ buildReportWorkbook: mocks.buildReportWorkbook }))
 vi.mock('@/lib/report/narrative', () => ({ buildWeeklyNarrative: vi.fn() }))
-vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: vi.fn(), fillSheetTemplate: vi.fn() }))
+vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: mocks.fillWeeklyTemplate, fillSheetTemplate: vi.fn() }))
 vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: mocks.getWeeklySheet }))
-vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: vi.fn() }))
+vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: mocks.loadProjectFacts }))
 vi.mock('@/lib/ai/brief', () => ({ briefFactsHash: vi.fn(), buildBriefFacts: vi.fn() }))
 vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: vi.fn() }))
 vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() => []) }))
@@ -152,5 +154,20 @@ describe('GET /api/report — 공지·회의 조회 실패', () => {
     const res = await GET(req())
     expect(res.status).toBe(200)
     expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ announcements: rows, meetings, meetingExceptions: [] })
+  })
+})
+
+describe('GET /api/report — AI 코멘트 슬라이드(ai=1) 근거 조회 실패', () => {
+  const aiReq = () => new NextRequest(`http://localhost/api/report?projectId=${PROJECT_ID}&format=pptx&ai=1`)
+
+  it('근거 로더가 던지면(이력·회의 조회 실패, 팀 캐시 미로드) 로그 후 503 + 사유 — 맨 500 으로 새지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const boom = new Error('[projectFacts] 진척 이력을 불러오지 못했습니다.')
+    mocks.loadProjectFacts.mockRejectedValue(boom)
+    const res = await GET(aiReq())
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'AI 브리핑 근거를 불러오지 못했습니다.' })
+    expect(err).toHaveBeenCalledWith('[report] AI 브리핑 근거 조회 실패:', { projectId: PROJECT_ID }, boom)
+    expect(mocks.fillWeeklyTemplate).not.toHaveBeenCalled()
   })
 })

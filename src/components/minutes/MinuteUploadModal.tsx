@@ -158,8 +158,13 @@ export function MinuteUploadModal({
       if (!f || (f.projectId ?? null) !== (pid || null)) setFolderId(null)
     }
     if (!pid) return
-    const res = await fetchProjectMeetingsLite(pid)
-    setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+    try {
+      const res = await fetchProjectMeetingsLite(pid)
+      setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+    } catch (e) {
+      console.error('[MinuteUploadModal] 회의 목록 조회 실패:', e)
+      setMeetingsFailed(true)
+    }
   }
 
   /** 원본 .md 를 올리고 회의록을 만든다 — 실패는 사유를 보이고 null. */

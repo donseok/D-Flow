@@ -332,4 +332,20 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     expect(fetchProjectMeetingsLite).toHaveBeenCalledWith(P1)
     expect(meetingsAlert()).toBeUndefined()
   })
+
+  it('프로젝트를 바꿀 때 회의 목록 액션이 던져도 사유로 알린다 — 처리되지 않은 rejection 으로 새지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await mount({ projects: [{ id: P1, name: 'A' }, { id: P2, name: 'B' }], myProjectIds: [P1] })
+    expect(meetingsAlert()).toBeUndefined()
+    fetchProjectMeetingsLite.mockRejectedValueOnce(new Error('network'))
+    const projectSelect = mainDialog().querySelector<HTMLSelectElement>('select')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!.call(projectSelect, P2)
+      projectSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(fetchProjectMeetingsLite).toHaveBeenLastCalledWith(P2)
+    expect(meetingsAlert()).toBeDefined()
+    expect(spy).toHaveBeenCalledWith('[MinuteUploadModal] 회의 목록 조회 실패:', expect.any(Error))
+    spy.mockRestore()
+  })
 })

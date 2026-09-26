@@ -180,12 +180,15 @@ export async function DashboardView({
       {/* F. 조치(맨 아래, 사용자 요청 2026-08-28) — '지금 챙길 것'을 한 줄에: 좌 WBS 실행 큐(지연·임박·뒤처짐), 우 지연·임박 이슈.
           두 카드는 같은 문법(틴트 행 + 딥링크)이라 나란히 두면 한 번의 시선으로 스캔된다.
           시계가 다르다 — WBS 는 today(base_date 우선, 진척 산정과 동일), 이슈는 실제 오늘(달력 기한).
-          WBS 가 없으면 이슈 큐가 전체 폭이다. */}
-      <div className={wbs ? 'grid gap-5 lg:grid-cols-2' : undefined}>
-        {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
-        {issues === null ? issuesError
-          : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} />}
-      </div>
+          WBS 가 없으면 이슈 큐가 전체 폭이다. 이슈 조회 실패 사유는 실행 큐 옆 자리를 채울 때만 여기 둔다 —
+          WBS 가 없으면 바로 위 이슈 섹션(E)의 사유와 나란히 겹쳐 재시도 버튼·스크린리더 알림이 두 번이 된다. */}
+      {(wbs || issues !== null) && (
+        <div className={wbs ? 'grid gap-5 lg:grid-cols-2' : undefined}>
+          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
+          {issues === null ? issuesError
+            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} />}
+        </div>
+      )}
 
     </div>
   )

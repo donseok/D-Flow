@@ -224,4 +224,15 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
     await chooseProject('pB')
     expect(meetingsAlert()).toBeUndefined()
   })
+
+  it('프로젝트를 바꿀 때 회의 목록 액션이 던져도 사유로 알린다 — 처리되지 않은 rejection 으로 새지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await mount({ ...baseMinute, projectId: 'pA' }, [{ id: 'pA', name: 'A' }, { id: 'pB', name: 'B' }])
+    expect(meetingsAlert()).toBeUndefined()
+    fetchProjectMeetingsLite.mockRejectedValueOnce(new Error('network'))
+    await chooseProject('pB')
+    expect(meetingsAlert()).toBeDefined()
+    expect(spy).toHaveBeenCalledWith('[MinuteMetaModal] 회의 목록 조회 실패:', expect.any(Error))
+    spy.mockRestore()
+  })
 })
