@@ -81,7 +81,7 @@
 | src/lib/minutes/folders.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. 호출부가 넘긴 클라이언트로 teamCode·projectId·workspaceId 필터를 건다 |
 | src/lib/notify/emit.ts | 세션 가드 뒤 id 스코프 | 발행 액션(가드 뒤)이 넘긴 recipientMemberIds·UserIds 로만 수신자 행을 만든다 |
 | src/lib/supabase/adminFor.ts | adminFor 정의 | uuid 스코프(workspaceId 또는 projectId)를 검사한 뒤 createAdminClient 로 service_role 클라이언트를 돌려준다 |
-| src/lib/teams/master.ts | 플랫폼 | 전 워크스페이스 팀의 읽기 전용 캐시다. 워크스페이스 접근자(teamsForWorkspaceSync)가 좁히고, 옛 전역 접근자는 검증 전용이다 |
+| src/lib/teams/master.ts | 플랫폼 | 전 워크스페이스 팀과 프로젝트→워크스페이스 매핑의 읽기 전용 캐시다. 워크스페이스·프로젝트·가시 범위 접근자만 있고(워크스페이스를 가리지 않는 전역 접근자는 Task 16b 가 지웠다 — tests/invariants/teams-scope.test.ts), 프로젝트 폴백은 그 프로젝트 워크스페이스의 공용 팀뿐이다 |
 <!-- audit:end -->
 
 ## 수정한 파일(경계 넘음 → 고침)
@@ -102,12 +102,12 @@
 
 ## 남은 경계(이 태스크 범위 밖 — 후속)
 
-1~4 는 외부 API 판정을 actorFromUser + roleIn 으로 통합한 **Task 13** 이 닫았다(외부 계약은 회의록 API v2.7). 5~7 은 남아 있다.
+1~4 는 외부 API 판정을 actorFromUser + roleIn 으로 통합한 **Task 13** 이 닫았다(외부 계약은 회의록 API v2.7). 5·6 은 Task 16a·16b 가 닫았다. 7 은 남아 있다.
 
 1. ~~**`GET /api/v1/minutes`(목록)**~~ — **닫힘(Task 13)**: 종전엔 공유 시크릿만 확인해 전 워크스페이스의 회의록 목록(제목·external_id·작성자명)을 돌려줬다. 이제 `user_email` 이 필수다(없으면 400, 모르는 계정이면 403 `unknown_user`). 호출자 워크스페이스로 `in('workspace_id')` 를 걸고, 그 안에서 볼 수 없는 비공개 프로젝트(canSeeProject 거짓)의 회의록을 뺀다. 무프로젝트 회의록은 워크스페이스 멤버에게 보인다. 플랫폼 관리자는 전부다. 권한·프로젝트 조회 실패는 500 이다.
 2. ~~**`POST /api/v1/minutes/link`**~~ — **닫힘(Task 13)**: minute_id 로 찾은 회의록에 `canEditMinute`(작성자 또는 그 프로젝트 관리자 — 세션 `checkOwner` 와 같은 판정으로 옮겼다)를 요구한다. 자격이 없으면 없는 회의록과 같은 404 `not_found` 라 다른 워크스페이스 회의록의 존재·보관 여부가 드러나지 않는다.
 3. ~~**`POST /api/v1/agent/watch`**~~ — **닫힘(Task 13)**: upsert 전에 PAT 소유자 스냅샷으로 그 프로젝트의 멤버 이상(`isProjectMember` — 명단 권한·워크스페이스 관리자·플랫폼 관리자)인지 본다. 감시자는 허브·좌석표에 보이는 쓰기라 조회 전용도 막는다. 아니면 404 다. 프로젝트 한정 PAT 도 같은 판정을 거친다 — 아래 7 의 "쓸 수 없는 토큰" 이 watch 에서도 404 가 된다. stop 은 자기 행만 지우므로 판정하지 않는다.
 4. ~~**`POST /api/v1/minutes`**~~ — **닫힘(Task 13)**: `meeting_id` 는 그 회의 프로젝트의 멤버 이상(`isProjectMember`)만 연결한다. 없는 회의와 남의 회의를 같은 404 로 답한다(종전 없는 회의는 400). external_id 는 전역 유일이라 조회는 전역이지만, 찾은 행(동시 전송 경합의 재조회 포함)에 `canEditMinute` 를 요구하고 아니면 404 다 — replace 뿐 아니라 skip·error·보관 분기도 같은 404 라 남의 external_id 존재를 드러내지 않는다. 판정은 inline `meeting` 확보보다 먼저라 고아 회의가 생기지 않는다. `actorFromUser` 는 모든 POST 에서 한 번 돈다.
-5. **`teamsForProjectSync` 의 전역 폴백**: 프로젝트 팀이 없으면 `resolveTeamsForProject` 가 전 워크스페이스의 공용 팀을 섞어서 돌려준다. 이렇게 되는 이유는 캐시가 프로젝트→워크스페이스를 모르기 때문이다. 캐시 구조를 바꾸는 일이라 SP4 R10 몫이다.
-6. **`teamsSync()`·`activeTeamCodesSync()` 호출처**(회의록 액션·AI 도구 등): 전 워크스페이스 공용 팀으로 검증한다. 회의록 계열은 Task 16 이 워크스페이스판으로 옮긴다.
+5. ~~**`teamsForProjectSync` 의 전역 폴백**~~ — **닫힘(Task 16b)**: 캐시가 같은 로드에서 `projects(id, workspace_id)` 를 싣고, 전용 팀이 없는 프로젝트는 그 프로젝트 워크스페이스의 공용 팀으로만 폴백한다. 캐시를 한 번도 못 채웠으면 프로젝트 접근자도 throw 하고, 로드 뒤 모르는 pid 는 빈 목록이다(새 프로젝트는 `createProject` 가 캐시를 갱신한다).
+6. ~~**`teamsSync()`·`activeTeamCodesSync()` 호출처**~~ — **닫힘(Task 16a·16b)**: 회의록 계열은 16a 가, 앱 레이아웃·AI 컨텍스트(knowledge·ingest·브리핑·위키)·주간 도구·설정 화면은 16b 가 워크스페이스·프로젝트 범위로 옮겼고, 전역 접근자 네 개(`teamsSync`·`activeTeamCodesSync`·`isRegisteredTeamCode`·`isActiveTeamCode`)를 export 에서 지웠다. 호출자 쪽 담당 필터(채팅·외부 GET·봇)는 `teamCodesVisibleTo`(소속 워크스페이스 공용 팀 + 볼 수 있는 프로젝트의 전용 팀, 플랫폼 관리자는 전부) 하나를 쓴다.
 7. **`agentTokens.createAgentToken`**: `project_id` 가 발급자의 워크스페이스에 속하는지 검사하지 않는다. 쓰는 시점에 라우트가 판정하므로 데이터가 새지는 않는다(watch 도 Task 13 부터 판정한다 — 위 3). 다만 쓸 수 없는 토큰이 만들어질 수 있다.

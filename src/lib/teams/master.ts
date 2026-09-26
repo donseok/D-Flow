@@ -130,16 +130,6 @@ function snapshotSync(): Snapshot {
   return cache
 }
 
-/** ⚠️ 전 워크스페이스의 공용 팀 — 워크스페이스를 가리지 않는 옛 접근자. 앱 레이아웃이 옮겨 가면 지운다(SP2 Task 16b).
- *  한 번도 로드하지 못했으면 빈 목록(옛 의미 그대로 — 새 코드는 쓰지 않는다). */
-export function teamsSync(): readonly Team[] {
-  try {
-    return snapshotSync().teams.filter(t => t.projectId === null)
-  } catch {
-    return []
-  }
-}
-
 /** 한 워크스페이스의 공용 팀(비활성 포함). 다른 워크스페이스 팀·프로젝트 팀은 없다. 로드 전이면 throw(snapshotSync). */
 export function teamsForWorkspaceSync(workspaceId: string): readonly Team[] {
   return snapshotSync().teams.filter(t => t.projectId === null && t.workspaceId === workspaceId)

@@ -59,8 +59,6 @@ vi.mock('@/lib/teams/master', () => {
     ({ id: `t-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
   const byProject: Record<string, string> = { [PA]: WA, [PB]: WB }
   return {
-    teamsSync: () => [team('PMO', WA), team('ERP', WB)],
-    activeTeamCodesSync: () => ['PMO', 'ERP'],
     teamsForWorkspaceSync: (w: string) => mocks.workspaceTeams(w).map(c => team(c, w)),
     activeTeamCodesForWorkspaceSync: (w: string) => mocks.workspaceTeams(w),
     teamsForProjectSync: (p: string) => mocks.workspaceTeams(byProject[p]).map(c => team(c, byProject[p])),

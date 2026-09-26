@@ -15,7 +15,6 @@ export function teamsMasterMock() {
   const TEAMS = DEFAULT_TEAMS
   const codes = TEAMS.map(t => t.code)
   return {
-    teamsSync: () => TEAMS,
     teamsForProjectSync: () => TEAMS,
     activeTeamCodesForProjectSync: () => codes,
     // 워크스페이스·가시 범위 접근자 — 이 목의 고정 팀은 워크스페이스를 가리지 않는다(워크스페이스 경계 검증은 개별 테스트가
