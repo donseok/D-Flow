@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import type { DeterministicRoute } from '@/lib/ai/chat/router'
 
 // SP2 Task 16b — 봇 도구 컨텍스트는 accessScope 의 isSuperuser 를 그대로 싣는다. 이게 빠지면 멤버십 없는 플랫폼 관리자의
 // 회의록 담당 필터가 빈 워크스페이스 범위로 거부된다(search_minutes).
@@ -19,6 +20,16 @@ vi.mock('@/lib/ai/chat/default-registry', async () => {
   const { EMPTY_CHAT_TOOL_REGISTRY } = await import('@/lib/ai/chat/registry')
   return { createDefaultChatToolRegistry: () => EMPTY_CHAT_TOOL_REGISTRY }
 })
+// 라우트는 스코프 확인 뒤 등록된 팀 코드로 다시 라우팅한다 — master 를 그대로 import 하면 최상위 await refreshTeams() 가 DB 를
+// 부른다. 공유 목에 두 접근자만 vi.fn 으로 덮어 어떤 범위로 읽었는지 본다.
+const teams = vi.hoisted(() => ({
+  activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(),
+  activeTeamCodesVisibleToSync: vi.fn<(view: unknown) => string[]>(),
+}))
+vi.mock('@/lib/teams/master', async () => ({
+  ...(await import('../helpers/teams-master-mock')).teamsMasterMock(),
+  ...teams,
+}))
 vi.mock('@/lib/ai/chat/orchestrator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/chat/orchestrator')>()),
   orchestrateChatV2: mocks.orchestrateChatV2,
@@ -48,7 +59,19 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { POST } from '@/app/api/chat/v2/stream/route'
 
+function post(body: unknown) {
+  return POST(new NextRequest('http://localhost/api/chat/v2/stream', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }))
+}
+
 describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    teams.activeTeamCodesForProjectSync.mockImplementation(() => ['Acme'])
+    teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['Acme'])
+  })
+
   it('플랫폼 관리자 플래그를 컨텍스트에 싣는다', async () => {
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
     const res = await POST(new NextRequest('http://localhost/api/chat/v2/stream', {
@@ -62,6 +85,36 @@ describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
     await res.text()
     const deps = mocks.orchestrateChatV2.mock.calls[0][1] as { context: { isSuperuser?: boolean; workspaceIds?: string[] } }
     expect(deps.context).toMatchObject({ isSuperuser: true, workspaceIds: [] })
+    vi.unstubAllEnvs()
+  })
+
+  it('프로젝트 질문은 그 프로젝트의 등록 팀으로 다시 라우팅해 팀 인자를 싣는다', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
+    const res = await post({
+      projectId: 'p1', message: 'Acme 작업 현황 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul' },
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+    expect(teams.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
+    const { route } = mocks.orchestrateChatV2.mock.calls[0][1] as { route: DeterministicRoute }
+    expect(route.kind).toBe('tools')
+    expect(route.calls[0]).toMatchObject({ tool: 'find_wbs_items', args: { projectId: 'p1', team: 'Acme' } })
+    vi.unstubAllEnvs()
+  })
+
+  it('전역 회의록 질문은 조회자의 팀 가시 범위(플랫폼 관리자는 전부)로 팀을 뽑는다', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
+    const res = await post({
+      projectId: null, message: 'Acme 회의록 찾아줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/minutes', domain: 'minutes', projectId: null, timezone: 'Asia/Seoul' },
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+    expect(teams.activeTeamCodesVisibleToSync).toHaveBeenCalledWith({ all: true })
+    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    const { route } = mocks.orchestrateChatV2.mock.calls[0][1] as { route: DeterministicRoute }
+    expect(route.kind === 'tools' && route.calls[0]).toMatchObject({ tool: 'search_minutes', args: { team: 'Acme' } })
     vi.unstubAllEnvs()
   })
 })

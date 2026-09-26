@@ -17,6 +17,16 @@ const { withCount } = vi.hoisted(() => ({
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/chat/default-registry', () => ({ createDefaultChatToolRegistry: mocks.createDefaultRegistry }))
+// 라우트는 스코프 확인 뒤 등록된 팀 코드로 다시 라우팅한다 — master 를 그대로 import 하면 최상위 await refreshTeams() 가 DB 를
+// 부른다. 공유 목에 두 접근자만 vi.fn 으로 덮어 '던짐'·'호출 없음'을 개별 테스트에서 본다.
+const teams = vi.hoisted(() => ({
+  activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(),
+  activeTeamCodesVisibleToSync: vi.fn<(view: unknown) => string[]>(),
+}))
+vi.mock('@/lib/teams/master', async () => ({
+  ...(await import('../helpers/teams-master-mock')).teamsMasterMock(),
+  ...teams,
+}))
 
 import { POST } from '@/app/api/chat/v2/stream/route'
 
@@ -56,6 +66,8 @@ describe('POST /api/chat/v2/stream composition', () => {
     mocks.getSession.mockResolvedValue({ id: 'u1' })
     mocks.createServerClient.mockResolvedValue(client(['p1']))
     mocks.createDefaultRegistry.mockReturnValue(EMPTY_CHAT_TOOL_REGISTRY)
+    teams.activeTeamCodesForProjectSync.mockImplementation(() => ['ERP'])
+    teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['ERP'])
   })
 
   it('returns 400 before streaming for mismatched page and legacy project context', async () => {
@@ -99,6 +111,8 @@ describe('POST /api/chat/v2/stream composition', () => {
     const response = await POST(request({ projectId: 'p2', message: 'WBS 현황', history: [] }))
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ code: 'PROJECT_ACCESS_DENIED' })
+    // 스코프 검증이 재라우팅보다 먼저다 — 허용 밖 프로젝트의 팀 구성을 읽지 않는다.
+    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
   })
 
   it('uses NDJSON for a valid stream and ends in one terminal event', async () => {
@@ -140,6 +154,46 @@ describe('POST /api/chat/v2/stream composition', () => {
     }))
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ code: 'PROJECT_ACCESS_DENIED' })
+  })
+
+  it('팀 캐시가 cold 면 빈 목록으로 폴백하지 않고 503 TEAMS_UNAVAILABLE 로 닫는다 — 스트림 없음', async () => {
+    teams.activeTeamCodesForProjectSync.mockImplementationOnce(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = await POST(request({
+      projectId: 'p1', message: 'ERP 작업 현황 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul' },
+    }))
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).not.toContain('ndjson')
+    expect(await response.json()).toMatchObject({ code: 'TEAMS_UNAVAILABLE' })
+    expect(teams.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
+    expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+
+  it('대화 상태의 옛 엔터티가 허용 밖 프로젝트를 가리키면 그 pid 로 팀 캐시를 읽지 않는다', async () => {
+    const response = await POST(request({
+      projectId: null, message: 'ERP 작업 현황 알려줘', history: [],
+      conversationState: {
+        version: 1, lastDomains: ['wbs'],
+        lastEntities: [{ type: 'wbs_item', id: 'item-9', ref: 'S1', projectId: 'p2', title: '설계' }],
+      },
+    }))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    expect(teams.activeTeamCodesVisibleToSync).not.toHaveBeenCalled()
+  })
+
+  it('1차 라우트가 legacy(501)면 팀 캐시를 읽지 않는다 — 스코프 조회 전 게이트 유지', async () => {
+    const response = await POST(request({
+      projectId: null, message: '도와줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul' },
+    }))
+    expect(response.status).toBe(501)
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    expect(teams.activeTeamCodesVisibleToSync).not.toHaveBeenCalled()
   })
 
   it('returns 501 when the explicit v2 kill switch is off', async () => {

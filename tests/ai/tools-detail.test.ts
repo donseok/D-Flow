@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+// 주간 도구의 팀 필터는 매핑 유무와 무관하게 그 프로젝트의 등록 여부부터 본다 — teams/master 는 콜드스타트 시 실 DB 접근이
+// 필요하므로 공유 목(과거 DEFAULT_TEAMS 와 동일한 고정값)으로 대체한다.
+vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
 import {
   createGetWbsChangeLogTool,
   createListWbsAttachmentsTool,

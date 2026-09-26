@@ -14,6 +14,8 @@ import {
 } from '@/lib/ai/chat/planner'
 import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
 import { planningSignals, routeChatRequest } from '@/lib/ai/chat/router'
+import { teamViewOfScope } from '@/lib/domain/authz'
+import { activeTeamCodesForProjectSync, activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +77,24 @@ export async function POST(req: NextRequest) {
   const scope = validateChatProjectScope(request, allowedProjectIds)
   if (!scope.ok) return jsonError(scope.message, scope.status, scope.code)
 
+  // 1차 라우팅(위)은 I/O 없는 게이트다 — 팀 코드는 스코프를 안 뒤에만 알 수 있다. 도구 경로일 때만 다시 라우팅해 등록된
+  // 팀으로 팀 인자를 뽑는다. 허용 밖 프로젝트(대화 상태의 옛 엔터티)는 팀 캐시를 읽지 않는다.
+  let route = plannedRoute
+  if (plannedRoute.kind === 'tools') {
+    const allowed = new Set(allowedProjectIds)
+    const teamCodesFor = (pid: string | null): readonly string[] => {
+      if (pid === null) return activeTeamCodesVisibleToSync(teamViewOfScope({ isSuperuser, workspaceIds, allowedProjectIds }))
+      return allowed.has(pid) ? activeTeamCodesForProjectSync(pid) : []
+    }
+    try {
+      route = routeChatRequest(request, now, { teamCodesFor })
+    } catch (e) {
+      // 팀 마스터 cold(최초 로드 실패) — 빈 목록으로 폴백하면 팀 질문이 필터 없이 조용히 답해진다(3원칙).
+      console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
+      return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
+    }
+  }
+
   const id = requestId()
   const registry = createDefaultChatToolRegistry(sb)
 
@@ -95,7 +115,7 @@ export async function POST(req: NextRequest) {
     requestId: id,
     registry,
     now,
-    route: plannedRoute,
+    route,
     ...(plan ? { plan } : {}),
     context: {
       userId: user.id,

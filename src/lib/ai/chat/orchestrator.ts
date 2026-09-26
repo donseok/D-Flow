@@ -19,6 +19,7 @@ import {
 import {
   routeChatRequest,
   type DeterministicRoute,
+  type RouteChatOptions,
   type RoutedToolCall,
 } from './router'
 import type { ChatToolExecutionContext, ChatToolRegistry } from './registry'
@@ -47,6 +48,8 @@ export interface ChatOrchestratorDependencies {
   context: ChatToolExecutionContext
   now?: Date
   route?: DeterministicRoute
+  /** route 가 없을 때 결정형 라우팅에 넘기는 옵션(등록된 팀 코드) — 그대로 통과시킨다. */
+  routeOptions?: RouteChatOptions
   /** 검증을 통과한 제한된 도구 계획(설계 §7.3). 지정되면 결정형 라우트 대신 실행한다. */
   plan?: ToolPlan
   synthesize?: ChatSynthesizer
@@ -598,7 +601,7 @@ export async function* orchestrateChatV2(
     return
   }
 
-  const route = deps.route ?? routeChatRequest(request, now)
+  const route = deps.route ?? routeChatRequest(request, now, deps.routeOptions)
   if (route.kind === 'command' || route.kind === 'clarify' || route.kind === 'legacy') {
     yield event(requestId, { type: 'delta', text: route.message })
     const prior = request.conversationState ?? { version: 1 as const, lastEntities: [], lastDomains: [] }

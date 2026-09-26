@@ -13,7 +13,7 @@ import {
   orchestrateChatV2,
   type ChatOrchestratorDependencies,
 } from '@/lib/ai/chat/orchestrator'
-import { routeChatRequest } from '@/lib/ai/chat/router'
+import { routeChatRequest, type RouteChatOptions } from '@/lib/ai/chat/router'
 import { createChatToolRegistry, type ChatTool, type ChatToolExecutionContext } from '@/lib/ai/chat/registry'
 import type { ChatStreamEvent } from '@/lib/ai/chat/protocol'
 import { BOT_READ_CAPABILITIES } from '@/lib/ai/tools/types'
@@ -79,6 +79,8 @@ async function collect(events: AsyncIterable<ChatStreamEvent>): Promise<ChatStre
 }
 
 const NOW_DATE = new Date(NOW)
+/** 팀을 단정하는 골든 케이스('ERP'·'MES'·'가공')를 지키는 픽스처 — 라우터는 등록된 팀 코드로만 팀을 뽑는다. */
+const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => ['PMO', 'ERP', 'MES', '가공', 'MDM'] }
 
 function contextFor(pageContext: ChatToolExecutionContext['pageContext']): ChatToolExecutionContext {
   return {
@@ -104,7 +106,7 @@ describe('golden question set', () => {
 
   it.each(GOLDEN_CASES)('$menu · $name', async testCase => {
     const registry = buildRegistry({ fail: testCase.inject?.failRepository })
-    const route = routeChatRequest(testCase.request, NOW_DATE)
+    const route = routeChatRequest(testCase.request, NOW_DATE, LEGACY_TEAMS)
     expect(route.kind, 'routeKind').toBe(testCase.expect.routeKind)
 
     const deps: ChatOrchestratorDependencies = {

@@ -18,6 +18,11 @@ export interface RoutedToolCall {
   args: Record<string, unknown>
 }
 
+export type RouteChatOptions = {
+  /** 프로젝트(전역 회의·회의록이면 null)의 팀 코드. 호출부가 권한 범위로 좁혀 준다. 던지면 그대로 전파한다. */
+  teamCodesFor?: (projectId: string | null) => readonly string[]
+}
+
 export type DeterministicRoute =
   | {
       kind: 'command'
@@ -201,10 +206,31 @@ function wbsStatusFrom(message: string, context: PageContextV1 | undefined): str
   return undefined
 }
 
-function teamFrom(message: string, context: PageContextV1 | undefined): string | undefined {
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** 메시지에서 등록된 팀 코드 하나를 뽑는다. 경계는 공백·문자열 끝이고 소비하지 않는다 — 'ERP MES' 에서 둘 다 찾아
+ *  모호로 판정하기 위해서다(소비하는 경계면 MES 를 놓친다). 긴 코드부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저 잡힌다.
+ *  대소문자는 무시해 찾되 저장된 정규 코드를 돌려준다. 서로 다른 코드가 둘 이상이거나, 대소문자만 다른 코드가 함께 등록돼
+ *  어느 쪽인지 모르면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다 필터 없음이 정직하다. */
+export function teamFromCodes(message: string, codes: readonly string[]): string | undefined {
+  const uniq = [...new Set(codes.map(c => c.trim()).filter(Boolean))]
+  if (!uniq.length) return undefined
+  const byLower = new Map<string, string[]>()
+  for (const c of uniq) byLower.set(c.toLowerCase(), [...(byLower.get(c.toLowerCase()) ?? []), c])
+  const alt = [...uniq].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
+  const found = new Set<string>()
+  for (const m of message.matchAll(new RegExp(`(?<=^|\\s)(?:${alt})(?=\\s|$)`, 'giu'))) {
+    const owners = byLower.get(m[0].toLowerCase()) ?? []
+    if (owners.length !== 1) return undefined
+    found.add(owners[0])
+  }
+  return found.size === 1 ? [...found][0] : undefined
+}
+
+function teamFrom(message: string, context: PageContextV1 | undefined, teams: readonly string[]): string | undefined {
   const filtered = stringFilter(context, 'team')
   if (filtered) return filtered
-  return message.match(/(?:^|\s)(PMO|ERP|MES|가공|MDM)(?:\s|$)/i)?.[1]?.toUpperCase()
+  return teamFromCodes(message, teams)
 }
 
 function attendanceTypesFrom(message: string): string[] | undefined {
@@ -326,7 +352,7 @@ function referencedEntity(input: ChatRequestV2, types: BotEntityRef['type'][]): 
   return prior ?? null
 }
 
-function wbsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function wbsCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
   const message = input.message
   const projectId = projectHint(input)
   const entity = referencedEntity(input, ['wbs_item'])
@@ -355,14 +381,14 @@ function wbsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
       ...common,
       ...(explicitSearchQuery(input) ? { query: explicitSearchQuery(input) } : {}),
       limit: 50,
-      ...(teamFrom(message, input.pageContext) ? { team: teamFrom(message, input.pageContext) } : {}),
+      ...(teamFrom(message, input.pageContext, teams) ? { team: teamFrom(message, input.pageContext, teams) } : {}),
       ...(status ? { status } : {}),
       ...(range ? { ...range, dateMode: wbsDateMode(message) } : {}),
     },
   }
 }
 
-function weeklyCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
   const today = seoulYmd(now)
   const currentWeekStart = mondayOf(today)
   const explicitWeekStarts = explicitDates(input.message, today).map(mondayOf)
@@ -374,7 +400,7 @@ function weeklyCall(input: ChatRequestV2, now: Date): RoutedToolCall {
     ? addDaysIso(currentWeekStart, -7)
     : mentionsCurrentWeek ? currentWeekStart : contextualWeekStart)
   const filters = {
-    ...(teamFrom(input.message, input.pageContext) ? { team: teamFrom(input.message, input.pageContext) } : {}),
+    ...(teamFrom(input.message, input.pageContext, teams) ? { team: teamFrom(input.message, input.pageContext, teams) } : {}),
     ...(stringFilter(input.pageContext, 'section') ? { section: stringFilter(input.pageContext, 'section') } : {}),
     ...(explicitSearchQuery(input) ? { query: explicitSearchQuery(input) } : {}),
     limit: 50,
@@ -455,7 +481,7 @@ function meetingsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function attendanceCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function attendanceCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
   const range = requestedRange(input.message, input.pageContext, now)
   const types = attendanceTypesFrom(input.message)
   return {
@@ -465,7 +491,7 @@ function attendanceCall(input: ChatRequestV2, now: Date): RoutedToolCall {
     args: {
       projectId: projectHint(input),
       ...range,
-      ...(teamFrom(input.message, input.pageContext) ? { team: teamFrom(input.message, input.pageContext) } : {}),
+      ...(teamFrom(input.message, input.pageContext, teams) ? { team: teamFrom(input.message, input.pageContext, teams) } : {}),
       ...(stringFilter(input.pageContext, 'memberId') ? { memberId: stringFilter(input.pageContext, 'memberId') } : {}),
       ...(types ? { types } : {}),
       limit: 50,
@@ -507,7 +533,7 @@ function announcementsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function minutesCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function minutesCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
   const entity = referencedEntity(input, ['minute', 'minute_block'])
   if (entity && /상세|자세히|세부|내용|본문|결정|액션|위험|요약/.test(input.message)) {
     return {
@@ -516,7 +542,7 @@ function minutesCall(input: ChatRequestV2, now: Date): RoutedToolCall {
     }
   }
   const projectId = projectHint(input)
-  const team = teamFrom(input.message, input.pageContext)
+  const team = teamFrom(input.message, input.pageContext, teams)
   const range = hasRequestedRangeCue(input.message, now)
     ? requestedRange(input.message, input.pageContext, now)
     : null
@@ -533,9 +559,9 @@ function minutesCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function membersCall(input: ChatRequestV2): RoutedToolCall {
+function membersCall(input: ChatRequestV2, teams: readonly string[]): RoutedToolCall {
   const projectId = projectHint(input)
-  const team = teamFrom(input.message, input.pageContext)
+  const team = teamFrom(input.message, input.pageContext, teams)
   // '멤버별/담당자별 업무'는 개인 담당 스키마가 없어 팀 단위 워크로드로 정직하게 답한다(설계 §9.1).
   if (/워크로드|업무량|(?:팀|멤버|담당자?|인원|사람)별\s*(?:업무|작업)|누가\s*(?:무슨|뭐|어떤)/.test(input.message)) {
     return {
@@ -554,7 +580,7 @@ function membersCall(input: ChatRequestV2): RoutedToolCall {
 
 const KANBAN_VIEWS = new Set(['phase', 'owner', 'status'])
 
-function kanbanCall(input: ChatRequestV2): RoutedToolCall {
+function kanbanCall(input: ChatRequestV2, teams: readonly string[]): RoutedToolCall {
   const projectId = projectHint(input)
   const pageView = input.pageContext?.view
   const view = typeof pageView === 'string' && KANBAN_VIEWS.has(pageView)
@@ -563,7 +589,7 @@ function kanbanCall(input: ChatRequestV2): RoutedToolCall {
       : /단계|페이즈|phase/i.test(input.message) ? 'phase'
         : 'status'
   const status = wbsStatusFrom(input.message, input.pageContext)
-  const team = teamFrom(input.message, input.pageContext)
+  const team = teamFrom(input.message, input.pageContext, teams)
   return {
     id: 'call_kanban', tool: 'get_kanban_view', domain: 'kanban',
     args: { projectId, view, ...(team ? { team } : {}), ...(status ? { status } : {}) },
@@ -621,7 +647,7 @@ function statusFor(domains: BotDomain[]): string {
  * Phase 1 routing is deliberately deterministic: explicit domain nouns win over generic words such as
  * "현황" or "이번 주", then the current page is used only as a tie-breaker.
  */
-export function routeChatRequest(input: ChatRequestV2, now = new Date()): DeterministicRoute {
+export function routeChatRequest(input: ChatRequestV2, now = new Date(), opts: RouteChatOptions = {}): DeterministicRoute {
   if (isCommandUtterance(input.message)) {
     return {
       kind: 'command', domains: [], calls: [], reason: 'write_command',
@@ -727,16 +753,18 @@ export function routeChatRequest(input: ChatRequestV2, now = new Date()): Determ
     }
   }
 
+  // 팀 코드는 도구 인자에만 쓴다 — 조기 반환(command·legacy·clarify)을 모두 지난 뒤 한 번만 읽는다.
+  const teams = opts.teamCodesFor?.(projectHint(input)) ?? []
   const calls = domains.map(domain => {
-    if (domain === 'wbs') return wbsCall(input, now)
-    if (domain === 'weekly') return weeklyCall(input, now)
+    if (domain === 'wbs') return wbsCall(input, now, teams)
+    if (domain === 'weekly') return weeklyCall(input, now, teams)
     if (domain === 'meetings') return meetingsCall(input, now)
-    if (domain === 'attendance') return attendanceCall(input, now)
+    if (domain === 'attendance') return attendanceCall(input, now, teams)
     if (domain === 'announcements') return announcementsCall(input, now)
-    if (domain === 'minutes') return minutesCall(input, now)
+    if (domain === 'minutes') return minutesCall(input, now, teams)
     if (domain === 'wiki') return wikiCall(input)
-    if (domain === 'members') return membersCall(input)
-    if (domain === 'kanban') return kanbanCall(input)
+    if (domain === 'members') return membersCall(input, teams)
+    if (domain === 'kanban') return kanbanCall(input, teams)
     if (domain === 'dashboard') return dashboardCall(input)
     return settingsCall(input)
   })

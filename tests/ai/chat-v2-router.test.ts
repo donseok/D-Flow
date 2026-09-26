@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { routeChatRequest } from '@/lib/ai/chat/router'
+import { describe, expect, it, vi } from 'vitest'
+import { routeChatRequest, type RouteChatOptions } from '@/lib/ai/chat/router'
 import type { ChatRequestV2, PageContextV1 } from '@/lib/ai/chat/protocol'
 
 const NOW = new Date('2026-07-19T00:00:00.000Z')
+/** 팀 인자 기대값('ERP')을 지키는 픽스처 — 라우터는 등록된 팀 코드로만 팀을 뽑는다. */
+const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => ['PMO', 'ERP', 'MES', '가공', 'MDM'] }
 
 function context(domain: PageContextV1['domain'], extra: Partial<PageContextV1> = {}): PageContextV1 {
   return {
@@ -29,7 +31,7 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('routes ERP weekly issues without using the whole question as a search needle', () => {
-    const route = routeChatRequest(request('ERP 금주 이슈 정리해줘', context('weekly')), NOW)
+    const route = routeChatRequest(request('ERP 금주 이슈 정리해줘', context('weekly')), NOW, LEGACY_TEAMS)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
@@ -411,7 +413,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('routes ERP 팀 멤버 to list_members with the team filter', () => {
-    const route = routeChatRequest(request('ERP 팀 구성원 알려줘', context('members')), NOW)
+    const route = routeChatRequest(request('ERP 팀 구성원 알려줘', context('members')), NOW, LEGACY_TEAMS)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'list_members', args: { projectId: 'p1', team: 'ERP' } })
@@ -469,5 +471,92 @@ describe('chat v2 router — Wiki 도메인 회귀 방지', () => {
     expect(route.domains).not.toContain('wiki')
     // 예전처럼 회의록 전역 검색으로 답해야 한다 — 프로젝트 선택 요구로 막히면 회귀다.
     expect(route.kind).not.toBe('clarify')
+  })
+})
+
+describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
+  const withTeams = (codes: string[]) => ({ teamCodesFor: vi.fn<(projectId: string | null) => readonly string[]>(() => codes) })
+
+  it.each([
+    [['Research', 'R&D', 'C++'], 'R&D 작업 현황 알려줘', 'R&D'],
+    [['Research', 'R&D', 'C++'], 'C++ 작업 현황 알려줘', 'C++'],
+    [['Research'], 'research 작업 현황 알려줘', 'Research'], // 대소문자 무시, 저장된 코드로 돌려준다
+    [['ERP', 'ERP 운영'], 'ERP 운영 작업 현황 알려줘', 'ERP 운영'], // 최장 일치
+  ])('%j 에서 %s → team=%s', (codes, message, team) => {
+    const route = routeChatRequest(request(message, context('wbs')), NOW, withTeams(codes))
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(route.calls[0].args).toMatchObject({ team })
+  })
+
+  it.each([
+    [['ERP', 'MES'], 'ERP MES 작업 현황 알려줘'], // 서로 다른 둘 — 모호
+    [['팀A'], 'ERP 작업 현황 알려줘'], // 미등록 — 도구 실패(TOOL_FAILED) 대신 필터 없음
+    [['ops', 'OPS'], 'OPS 작업 현황 알려줘'], // 대소문자만 다른 중복 — 모호
+    [[], 'ERP 작업 현황 알려줘'], // 목록이 비면 추출 0
+  ])('%j 에서 "%s" 는 팀을 뽑지 않는다', (codes, message) => {
+    const route = routeChatRequest(request(message, context('wbs')), NOW, withTeams(codes))
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(route.calls[0].args).not.toHaveProperty('team')
+  })
+
+  it('옵션이 없으면 팀을 뽑지 않는다 — 원본 5팀을 기본값으로 되살리지 않는다', () => {
+    const route = routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW)
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(route.calls[0].args).not.toHaveProperty('team')
+  })
+
+  it('페이지 필터가 메시지보다 우선이다(현행)', () => {
+    const route = routeChatRequest(
+      request('ERP 작업 현황 알려줘', context('wbs', { filters: { team: 'ZULU' } })), NOW, withTeams(['ERP']),
+    )
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(route.calls[0].args).toMatchObject({ team: 'ZULU' })
+  })
+
+  it.each([
+    ['weekly', 'Acme 금주 이슈 정리해줘', 'get_weekly_sheet'],
+    ['attendance', 'Acme 오늘 연차인 사람', 'get_attendance'],
+    ['minutes', 'Acme 회의록 찾아줘', 'search_minutes'],
+    ['members', 'Acme 팀 구성원 알려줘', 'list_members'],
+    ['members', 'Acme 워크로드 알려줘', 'get_member_workload'],
+    ['kanban', 'Acme 칸반 보여줘', 'get_kanban_view'],
+  ] as const)('%s 화면 "%s" 도 등록된 팀으로 뽑는다(%s)', (domain, message, tool) => {
+    const route = routeChatRequest(request(message, context(domain)), NOW, withTeams(['Acme']))
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(route.calls.find(call => call.tool === tool)?.args).toMatchObject({ team: 'Acme' })
+  })
+
+  it('teamCodesFor 는 프로젝트 힌트로 부른다 — 프로젝트 화면은 그 pid, 전역 회의록은 null', () => {
+    const project = withTeams(['팀A'])
+    routeChatRequest(request('팀A 작업 현황 알려줘', context('wbs')), NOW, project)
+    expect(project.teamCodesFor).toHaveBeenCalledTimes(1)
+    expect(project.teamCodesFor).toHaveBeenCalledWith('p1')
+
+    const global = withTeams(['팀A'])
+    const route = routeChatRequest({
+      projectId: null, message: '팀A 회의록 찾아줘', history: [],
+      pageContext: { ...context('minutes'), projectId: null, pathname: '/minutes' },
+    }, NOW, global)
+    if (route.kind !== 'tools') throw new Error(route.kind)
+    expect(global.teamCodesFor).toHaveBeenCalledTimes(1)
+    expect(global.teamCodesFor).toHaveBeenCalledWith(null)
+    expect(route.calls[0]).toMatchObject({ tool: 'search_minutes', args: { team: '팀A' } })
+  })
+
+  it('command·legacy·clarify 경로에서는 teamCodesFor 를 부르지 않는다', () => {
+    const opts = withTeams(['ERP'])
+    const command = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW, opts)
+    const legacy = routeChatRequest(
+      request('도와줘', context('projects', { projectId: null, pathname: '/projects' })), NOW, opts,
+    )
+    const clarify = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW, opts)
+    expect([command.kind, legacy.kind, clarify.kind]).toEqual(['command', 'legacy', 'clarify'])
+    expect(opts.teamCodesFor).not.toHaveBeenCalled()
+  })
+
+  it('팀 목록 조회가 던지면 그대로 전파한다 — 빈 목록으로 삼키지 않는다', () => {
+    const opts: RouteChatOptions = { teamCodesFor: () => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') } }
+    expect(() => routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW, opts))
+      .toThrow('팀 마스터를 아직 불러오지 못했습니다.')
   })
 })

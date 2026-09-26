@@ -60,6 +60,15 @@ describe('주간업무 봇 도구 team 필터 검증', () => {
     })
   })
 
+  it('원본 구분 매핑이 있는 팀 코드라도 그 프로젝트에 미등록이면 알 수 없는 팀이다 — 매핑으로 거르지 않는다', async () => {
+    const result = await createGetWeeklySheetTool(repository).execute(
+      { projectId: 'p2', weekStart: '2026-07-20', team: 'ERP' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
+    expect(isRegisteredTeamCodeForProject).toHaveBeenCalledWith('ERP', 'p2')
+    expect(repository.getSheet).not.toHaveBeenCalled()
+  })
+
   it('등록 판정은 그 프로젝트의 팀 — 다른 워크스페이스의 팀 코드는 알 수 없는 팀이다(SP2 16b)', async () => {
     const result = await createGetWeeklySheetTool(repository).execute(
       { projectId: 'p1', weekStart: '2026-07-20', team: 'B팀' }, context,

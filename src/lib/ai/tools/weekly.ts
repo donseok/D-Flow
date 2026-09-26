@@ -24,13 +24,13 @@ import { WEEKLY_TEAM_SECTIONS } from '@/lib/domain/weeklySheet'
 
 const WEEKLY_CAPABILITY = 'weekly:read' as const
 
-/** 팀 → 주간업무 구분 집합. 매핑에 없는 팀은 그 프로젝트의 등록 팀(비활성 포함)이면 동명 구분과 매칭(구분 신설 시 자동
- *  활성). 미등록 팀은 null(알 수 없는 팀). 등록 판정은 그 프로젝트의 팀으로 한다 — 전 워크스페이스 공용 목록이면 다른
- *  워크스페이스의 팀 코드가 통과한다. 팀 캐시 미로드는 throw — 오케스트레이터가 도구 실패로 올린다. */
+/** 팀 → 주간업무 구분 집합. 그 프로젝트에 등록된 팀(비활성 포함)만 — 등록 팀이면 매핑이 있을 때 그 구분들, 없으면 동명
+ *  구분(구분 신설 시 자동 활성). 미등록 팀은 매핑이 있어도 null(알 수 없는 팀) — 원본 구분 매핑의 팀 코드('ERP' 등)가
+ *  등록 여부와 무관하게 필터로 통과하지 않게 한다. 등록 판정은 그 프로젝트의 팀으로 한다 — 전 워크스페이스 공용 목록이면
+ *  다른 워크스페이스의 팀 코드가 통과한다. 팀 캐시 미로드는 throw — 오케스트레이터가 도구 실패로 올린다. */
 function sectionsForTeam(team: string, projectId: string): ReadonlySet<string> | null {
-  const known = WEEKLY_TEAM_SECTIONS[team]
-  if (known) return known
-  return isRegisteredTeamCodeForProject(team, projectId) ? new Set([team]) : null
+  if (!isRegisteredTeamCodeForProject(team, projectId)) return null
+  return WEEKLY_TEAM_SECTIONS[team] ?? new Set([team])
 }
 
 /** team 인자 검증 — 미지 팀과 '매핑 구분 없음'을 구분해 명시 거부(조용한 빈 결과 금지).
