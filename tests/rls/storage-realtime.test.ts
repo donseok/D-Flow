@@ -142,6 +142,39 @@ describe('Realtime presence(0007)', () => {
       })
     }
   })
+  it('⑦b presence 토픽 join(broadcast read, join_project_presence): A 멤버 허용·B 계정 0행·형식 틀린 토픽은 오류 없이 0행', async () => {
+    // Realtime 은 private join 을 extension='broadcast' read 로 판정한다 — presence read 만으로는 멤버도 CHANNEL_ERROR 였다
+    const bad = [`project-not-a-uuid-presence-wbs`, `project-${F.projects.a}-presence-WBS`, `project-${F.projects.a}-presence-`]
+    const joinB = async (c: PoolClient, topic: string) => {
+      await asTopic(c, topic)
+      return (await c.query(`select 1 from realtime.messages where topic = $1 and extension = 'broadcast'`, [topic])).rowCount
+    }
+    for (const [uid, expected] of [[F.users.member, 1], [F.users.dual, 1], [F.users.bAdmin, 0]] as const) {
+      await asUser(pool, uid, async (c) => {
+        await c.query('reset role')
+        for (const t of [pageA, weeklyA, ...bad]) await c.query(`insert into realtime.messages (topic, extension, event, payload, private) values ($1, 'broadcast', 'presence', '{}', true)`, [t])
+        await c.query('set local role authenticated')
+        for (const t of [pageA, weeklyA]) expect(await joinB(c, t), `${uid} ${t}`).toBe(expected)
+        for (const t of bad) expect(await joinB(c, t), `${uid} ${t}`).toBe(0)
+      })
+    }
+  })
+  it('⑦c join_project_presence 는 presence 토픽에만 — WBS·알림 broadcast 토픽을 넓히지 않고 broadcast 송신(insert)도 주지 않는다', async () => {
+    const wbsB = `project-${F.projects.bWs}-wbs`
+    const notifB = `user-${F.users.bAdmin}-notifications`
+    await asUser(pool, F.users.member, async (c) => {
+      await c.query('reset role')
+      for (const t of [wbsB, notifB]) await c.query(`insert into realtime.messages (topic, extension, event, payload, private) values ($1, 'broadcast', 'x', '{}', true)`, [t])
+      await c.query('set local role authenticated')
+      for (const t of [wbsB, notifB]) {
+        await asTopic(c, t)
+        expect((await c.query(`select 1 from realtime.messages where topic = $1 and extension = 'broadcast'`, [t])).rowCount, t).toBe(0)
+      }
+      await asTopic(c, pageA)
+      expect(await pgError(c, `insert into realtime.messages (topic, extension, event, payload, private) values ($1, 'broadcast', 'x', '{}', true)`, [pageA]))
+        .toMatchObject({ code: '42501' })
+    })
+  })
   it('⑧ SQL presence_topic_project 와 TS PRESENCE_TOPIC_RE 가 같은 정규식이고 같은 토픽에 같은 pid 를 낸다', async () => {
     const samples = [
       pageA, weeklyA, pagePresenceTopic(F.projects.bWs, 'a-b-9'), `project-${F.projects.a}-presence-${'x'.repeat(40)}`,
