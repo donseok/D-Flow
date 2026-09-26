@@ -14,6 +14,7 @@ import { refreshAgentHub } from '@/app/actions/agentHub'
 import { useWbsRealtimeBurst } from '@/lib/hooks/useWbsRealtimeBurst'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
+import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { HubStatusBar } from './HubStatusBar'
 import { AgentFrame, type HeroTile } from './AgentFrame'
 import { DelegationTable, type HubFilter } from './DelegationTable'
@@ -32,6 +33,8 @@ export type HubWbsBundle = {
   levelLabels: string[]
   maxDepth: number | null
   members: ProjectMember[]
+  /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있고 표 위에 사유를 띄운다(0명으로 위장하지 않는다). */
+  membersError: string | null
   actorView: ProjectActorView | null
 }
 
@@ -146,6 +149,7 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
   return (
     <AgentFrame projectId={hub.projectId} projectName={hub.projectName} title="위임·승인" lede={lede} tiles={tiles} tools={tools}>
       <div className="space-y-4">
+        {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
         <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} />

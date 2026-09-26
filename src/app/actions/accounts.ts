@@ -12,6 +12,7 @@ import { isValidEmail } from '@/lib/domain/validate'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
+import { ACCESS_ROLE, WORKSPACE_ROLE } from '@/lib/domain/authz'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type WorkspaceRole = 'admin' | 'member'
@@ -64,7 +65,7 @@ const ERR_LIST = '계정 권한 정보를 불러오지 못했습니다.'
 const ERR_SELF_PLATFORM = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
 
 function isWorkspaceRole(v: unknown): v is WorkspaceRole {
-  return v === 'admin' || v === 'member'
+  return v === WORKSPACE_ROLE.admin || v === WORKSPACE_ROLE.member
 }
 
 /**
@@ -138,7 +139,7 @@ async function createOne(
   if (!isValidPassword(input.password)) return { ok: false, error: '비밀번호는 8자 이상이어야 합니다.' }
   if (!isWorkspaceRole(input.workspaceRole)) return { ok: false, error: ERR_WS_ROLE }
   const accessRole = input.accessRole ?? null
-  if (accessRole !== null && accessRole !== 'admin' && accessRole !== 'member') return { ok: false, error: ERR_ACCESS }
+  if (accessRole !== null && accessRole !== ACCESS_ROLE.admin && accessRole !== ACCESS_ROLE.member) return { ok: false, error: ERR_ACCESS }
   if (accessRole && !input.projectId) return { ok: false, error: '권한을 줄 프로젝트를 지정하세요.' }
 
   const email = input.email.trim().toLowerCase()   // profiles·people 의 check(email = lower(btrim(email)))
@@ -252,7 +253,7 @@ export async function bulkCreateAccounts(
       continue
     }
     const res = await createOne(admin, workspaceId, {
-      email: line.email!, password: line.password!, name: line.name ?? null, workspaceRole: 'member',
+      email: line.email!, password: line.password!, name: line.name ?? null, workspaceRole: WORKSPACE_ROLE.member,
       projectId, accessRole: line.role === 'viewer' ? null : line.role!,
     }, g.actor.userId)
     results.push({ lineNo: line.lineNo, email: line.email!, ok: res.ok, error: res.error })
@@ -278,9 +279,9 @@ async function assertCanTouchAccount(
 
   const [platform, wsAdmin, projectAdmin] = await Promise.all([
     admin.from('platform_admins').select('user_id').eq('user_id', targetUserId).maybeSingle(),
-    admin.from('workspace_members').select('workspace_id').eq('user_id', targetUserId).eq('role', 'admin').limit(1),
+    admin.from('workspace_members').select('workspace_id').eq('user_id', targetUserId).eq('role', WORKSPACE_ROLE.admin).limit(1),
     admin.from('project_members').select('id, people!inner(user_id)')
-      .eq('people.user_id', targetUserId).eq('access_role', 'admin').limit(1),
+      .eq('people.user_id', targetUserId).eq('access_role', ACCESS_ROLE.admin).limit(1),
   ])
   if (platform.error || wsAdmin.error || projectAdmin.error || !wsAdmin.data || !projectAdmin.data) {
     console.error('[assertCanTouchAccount] 대상 등급 조회 실패:',

@@ -3,6 +3,10 @@
 export type ProjectRole = 'admin' | 'member'
 export type WorkspaceRole = 'admin' | 'member'
 export type EffectiveRole = 'superuser' | 'admin' | 'member' | 'viewer'
+/** project_members.access_role 값 — 호출부는 역할 문자열을 직접 적지 않고 이 상수로 비교한다. */
+export const ACCESS_ROLE = { admin: 'admin', member: 'member' } as const
+/** workspace_members.role 값. */
+export const WORKSPACE_ROLE = { admin: 'admin', member: 'member' } as const
 
 /** workspace_members.role 원시값(행 단위, Actor 없이 읽은 값)이 관리자인가 — 역할 문자열 비교는 이 파일에만 둔다. */
 export function isWorkspaceAdminRole(role: string | null | undefined): boolean {
@@ -51,6 +55,16 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
   if (!wid) return null                                          // ④ 타 워크스페이스·미존재 — 존재 은닉
   if (actor.workspaceRoles.get(wid) === 'admin') return 'admin'  // ⑤ 워크스페이스 관리자 승계(Q2) — 명단 행보다 먼저
   return actor.projectRoles.get(projectId) ?? 'viewer'           // ⑥ 명단 행
+}
+/**
+ * 레이아웃 404 판정 — 타 워크스페이스·미존재(roleIn null) 또는 플랫폼 관리자가 없는 pid 로 들어온 경우.
+ * roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 그것만으로는 미존재를 가리지 못한다.
+ * buildActor 는 플랫폼 관리자에게 전 프로젝트를 싣으므로 projectWorkspace 에 없으면 미존재다.
+ */
+export function isHiddenProject(actor: Actor | null, projectId: string): boolean {
+  if (!actor) return true
+  if (actor.isSuperuser) return !actor.projectWorkspace.has(projectId)
+  return roleIn(actor, projectId) === null
 }
 export function workspaceRoleIn(actor: Actor | null, workspaceId: string): 'superuser' | WorkspaceRole | null {
   if (!actor) return null

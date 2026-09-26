@@ -151,7 +151,7 @@ export async function fetchIssueProjectMembers(projectId: string): Promise<Issue
     .select(ROSTER_SELECT)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
-  // 에러 계약은 데이터 헬퍼(getProjectMembers)와 다르다 — 액션은 폼에 실패를 보여야 하므로
+  // 에러 계약은 데이터 헬퍼(getProjectRoster)와 같다 — 폼에 실패를 보여야 하므로
   // 빈 배열로 위장하지 않고 { ok: false } 를 돌려준다. 행 매핑만 공유한다.
   if (error) {
     console.error('[fetchIssueProjectMembers] 조회 실패:', error.message)

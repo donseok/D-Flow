@@ -84,7 +84,7 @@ type IssueOrigin =
 export function MinuteViewer({
   minute, files, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], wikiImpact = EMPTY_WIKI_IMPACT,
-  historicalVersion = null, issueMembers = [], linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
+  historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
@@ -99,6 +99,8 @@ export function MinuteViewer({
   wikiImpact?: MinuteWikiImpactCardProps
   historicalVersion?: { id: string; versionNo: number } | null
   issueMembers?: ProjectMember[]
+  /** 고정 프로젝트(issueMembers)의 명단 조회 실패 사유 — 있으면 빈 담당자 목록으로 이슈 폼을 열지 않는다. */
+  issueMembersError?: string | null
   linkedIssues?: MinuteLinkedIssue[]
   /** 소속 폴더의 root-first 경로명. null = 미분류이거나 경로 해석 실패(둘은 렌더에서 구분). */
   folderPath?: string[] | null
@@ -407,6 +409,13 @@ export function MinuteViewer({
     setIssueProjectError(null)
     const fixedProjectId = minute.projectId ?? minute.meetingProjectId ?? ''
     if (fixedProjectId) {
+      // 담당자 명단을 못 읽었으면 폼을 열지 않는다 — 프로젝트를 고르는 흐름(continueWithProject)의 membersFailed 와 같은 규칙.
+      if (issueMembersError) {
+        toast({ title: t('min.issue.membersFailed'), description: issueMembersError, variant: 'error' })
+        setIssueOrigin(null)
+        setPopover(null)
+        return
+      }
       setIssueProjectId(fixedProjectId)
       setIssueMemberOptions(issueMembers)
       setIssueBusy(true)

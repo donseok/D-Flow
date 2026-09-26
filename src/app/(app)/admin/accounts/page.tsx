@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { ShieldCheck, Users, UserCog, Eye } from 'lucide-react'
 import { getActorForView } from '@/lib/authz'
-import { isProjectAdmin } from '@/lib/domain/authz'
+import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
 import { listAccounts } from '@/app/actions/accounts'
 import { listProjects } from '@/app/actions/project'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
@@ -48,8 +48,8 @@ export default async function AccountsAdminPage({
   const accounts = res.rows
   const total = accounts.length
   const superusers = accounts.filter((a) => a.isPlatformAdmin).length
-  const admins = accounts.filter((a) => a.accessRole === 'admin').length
-  const members = accounts.filter((a) => a.accessRole === 'member').length
+  const admins = accounts.filter((a) => a.accessRole === ACCESS_ROLE.admin).length
+  const members = accounts.filter((a) => a.accessRole === ACCESS_ROLE.member).length
 
   return (
     <div className="space-y-6">

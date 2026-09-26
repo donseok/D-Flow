@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 
-import { getProjectMembers, getProjectRoster, ERR_ROSTER_LOAD } from '@/lib/data/members'
+import * as members from '@/lib/data/members'
+import { getProjectRoster, ERR_ROSTER_LOAD } from '@/lib/data/members'
 import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 
 type Result = { data: unknown; error: { message: string } | null }
@@ -39,11 +40,7 @@ describe('getProjectRoster — 조회 실패를 빈 명단으로 위장하지 �
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
   })
-  it('getProjectMembers 는 기존 계약(실패 = 로그 후 빈 배열)을 유지한다 — 곁가지 소비처용', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    client({ data: null, error: { message: 'boom' } })
-    expect(await getProjectMembers('p2')).toEqual([])
-    expect(spy).toHaveBeenCalled()
-    spy.mockRestore()
+  it('실패를 빈 배열로 바꿔 주던 getProjectMembers 는 없다 — 호출부는 getProjectRoster 의 실패를 직접 표시한다', () => {
+    expect('getProjectMembers' in members).toBe(false)
   })
 })

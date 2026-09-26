@@ -4,7 +4,7 @@ import { isProjectAdmin, isProjectMember, toProjectActorView } from '@/lib/domai
 import { getAgentHub } from '@/lib/data/agentHub'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectConfig } from '@/lib/data/projectConfig'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
 
 export const dynamic = 'force-dynamic' // 위임·주문 상태는 항상 최신이어야 한다
@@ -19,12 +19,14 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   const actor = await getActorForView()
   if (!actor || !isProjectMember(actor, projectId)) redirect(`/p/${projectId}/dashboard`)
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 허브로 위장하지 않는다.
-  const [hub, wbsData, projectConfig, members] = await Promise.all([
+  const [hub, wbsData, projectConfig, roster] = await Promise.all([
     getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }),
     getComputedWbs(projectId),
     getProjectConfig(projectId),
-    getProjectMembers(projectId),
+    getProjectRoster(projectId),
   ])
+  // 명단은 상세 패널의 담당자 선택용 곁가지 — 실패해도 허브는 그리고, 사유는 허브가 표 위에 띄운다.
+  if (!roster.ok) console.error(`[agents] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
   const wbs = {
     items: wbsData.items,
     dependencies: wbsData.dependencies,
@@ -33,7 +35,8 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     today: wbsData.today,
     levelLabels: projectConfig.levelLabels,
     maxDepth: projectConfig.maxDepth,
-    members,
+    members: roster.ok ? roster.rows : [],
+    membersError: roster.ok ? null : roster.error,
     actorView: toProjectActorView(actor, projectId),
   }
   // 공통 헤더(탭·요약·타일)는 뷰가 그린다 — 타일이 뷰의 최신 허브 상태를 따라가야 한다(AgentFrame).

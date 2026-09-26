@@ -12,7 +12,9 @@ export { ROSTER_SELECT as PROJECT_MEMBER_SELECT, mapRosterRows as mapProjectMemb
 export const ERR_ROSTER_LOAD = '명단을 불러오지 못했습니다.'
 
 /**
- * 명단 조회 — 실패를 결과로 돌려준다. 명단 화면처럼 '0명' 과 '못 읽음' 을 구분해 보여야 하는 호출부용(에러 처리 3원칙 ①).
+ * 명단 조회 — 실패를 결과로 돌려준다. 호출부는 '0명' 과 '못 읽음' 을 구분해 보인다(에러 처리 3원칙 ①):
+ * 명단 화면은 표 대신 사유를, 명단이 곁가지인 화면(담당자·참석자 선택)은 본문 위에 RosterLoadError 를, 보고서·재색인은 중단을.
+ * 실패를 빈 배열로 바꿔 주는 래퍼는 두지 않는다 — 그 편의가 곧 은폐였다(SP2 T15).
  * 세션 클라이언트라 RLS 가 보이는 행만 읽는다. cache — 같은 요청 내 중복 호출 dedupe.
  */
 export const getProjectRoster = cache(async (
@@ -32,15 +34,6 @@ export const getProjectRoster = cache(async (
     return { ok: false, error: ERR_ROSTER_LOAD }
   }
   return { ok: true, rows: mapRosterRows(data) }
-})
-
-/**
- * 명단 목록(선택기·AI 문맥용). 실패는 로그 후 빈 배열 — 이 호출부들은 명단이 곁가지라 화면 본체를 막지 않는다.
- * 실패를 화면에 보여야 하거나 빈 명단이 산출물·삭제로 이어지는 곳(보고서·재색인)은 getProjectRoster 를 쓴다.
- */
-export const getProjectMembers = cache(async (projectId: string): Promise<ProjectMember[]> => {
-  const res = await getProjectRoster(projectId)
-  return res.ok ? res.rows : []
 })
 
 /**

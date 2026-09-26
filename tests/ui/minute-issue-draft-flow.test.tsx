@@ -177,7 +177,7 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
     container.remove()
   })
 
-  async function mountAndOpenPopover(minuteValue: Minute = minute) {
+  async function mountAndOpenPopover(minuteValue: Minute = minute, issueMembersError: string | null = null) {
     await act(async () => {
       root.render(
         <MinuteViewer
@@ -188,6 +188,7 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
           userId="user-1"
           projects={[]}
           versions={versions}
+          issueMembersError={issueMembersError}
         />,
       )
     })
@@ -258,6 +259,22 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
       title: 'min.issue.created',
       description: 'min.issue.createdCode',
       variant: 'success',
+    })
+  })
+
+  it('고정 프로젝트의 담당자 명단 조회가 실패했으면 초안을 요청하지 않고 사유를 알린다 — 빈 담당자 목록으로 폼을 열지 않는다', async () => {
+    await mountAndOpenPopover(minute, '명단을 불러오지 못했습니다.')
+
+    clickCreate()
+    await act(async () => { await Promise.resolve() })
+
+    expect(mocks.prepareMinuteIssueDraft).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="minute-issue-form"]')).toBeNull()
+    expect(mocks.issueFormProps.some(props => props.open === true)).toBe(false)
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'min.issue.membersFailed',
+      description: '명단을 불러오지 못했습니다.',
+      variant: 'error',
     })
   })
 

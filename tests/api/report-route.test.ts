@@ -17,8 +17,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
-// getProjectMembers 는 실물 계약(실패 = 빈 배열)대로 둔다 — 라우트가 옛 경로로 돌아가면 실패 케이스가 200 으로 드러난다.
-vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster, getProjectMembers: vi.fn(async () => []) }))
+vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: mocks.getAttendanceRecords }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))

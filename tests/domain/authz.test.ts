@@ -3,6 +3,7 @@ import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
+  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -295,5 +296,33 @@ describe('Q2 — 두 워크스페이스·비공개(Review Focus 2)', () => {
   })
   it('B 에 속하지 않은 A 관리자에게 B 프로젝트는 null', () => {
     expect(roleIn(makeActor({ workspaceRoles: new Map([[W, 'admin']]), projectWorkspace: new Map([[P, W]]) }), B)).toBe(null)
+  })
+})
+
+// 레이아웃 404 판정(T11 C3) — roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 미존재 pid 가 빈 화면으로 샜다.
+describe('isHiddenProject', () => {
+  it('타 워크스페이스·미존재 프로젝트는 숨긴다', () => {
+    expect(isHiddenProject(makeAdminActor(P, inWs), X)).toBe(true)
+  })
+  it('같은 워크스페이스의 조회 전용(viewer)은 숨기지 않는다', () => {
+    expect(isHiddenProject(makeActor(inWs), Q)).toBe(false)
+  })
+  it('플랫폼 관리자라도 projectWorkspace 에 없는 pid 는 숨긴다 — buildActor 가 전 프로젝트를 싣으므로 없으면 미존재', () => {
+    expect(isHiddenProject(makeSuperuser(), P)).toBe(true)
+    expect(isHiddenProject(makeSuperuser(inWs), X)).toBe(true)
+  })
+  it('플랫폼 관리자 + 있는 pid 는 숨기지 않는다(워크스페이스 소속과 무관)', () => {
+    expect(isHiddenProject(makeSuperuser({ workspaceRoles: new Map(), ...inWs }), P)).toBe(false)
+  })
+  it('actor=null 은 숨긴다 — 판정 대상이 없다', () => {
+    expect(isHiddenProject(null, P)).toBe(true)
+  })
+})
+
+// 역할 문자열의 정본 — 호출부는 'admin'·'member' 를 직접 적지 않고 이 상수로 비교한다(M5).
+describe('ACCESS_ROLE / WORKSPACE_ROLE', () => {
+  it('DB 값(project_members.access_role · workspace_members.role)과 같은 문자열이다', () => {
+    expect(ACCESS_ROLE).toEqual({ admin: 'admin', member: 'member' })
+    expect(WORKSPACE_ROLE).toEqual({ admin: 'admin', member: 'member' })
   })
 })

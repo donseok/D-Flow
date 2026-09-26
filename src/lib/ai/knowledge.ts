@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { listProjects } from '@/app/actions/project'
 import {
   analyzeProject,
@@ -32,16 +32,23 @@ export const getProjectName = cache(async (projectId: string): Promise<string> =
 export interface LoadedProject {
   analysis: ProjectAnalysis
   members: ProjectMember[]
+  /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있지만 '0명' 이 아니다(gatherKnowledge 가 근거에 밝힌다). */
+  rosterError: string | null
   name: string
 }
 
 export const loadProjectAnalysis = cache(async (projectId: string): Promise<LoadedProject> => {
-  const [{ items, today }, members, name] = await Promise.all([
+  const [{ items, today }, roster, name] = await Promise.all([
     getComputedWbs(projectId),
-    getProjectMembers(projectId),
+    getProjectRoster(projectId),
     getProjectName(projectId),
   ])
-  return { analysis: analyzeProject(items, name, today, activeTeamCodesSync(), members), members, name }
+  if (!roster.ok) console.error(`[assistant] 명단 조회 실패(project=${projectId}) — 담당자 정보 없이 답하고 근거에 그 사실을 밝힌다`)
+  const members = roster.ok ? roster.rows : []
+  return {
+    analysis: analyzeProject(items, name, today, activeTeamCodesSync(), members),
+    members, rosterError: roster.ok ? null : roster.error, name,
+  }
 })
 
 async function allProjectSummaries(): Promise<{ summaries: ProjectSummary[]; excludedCount: number }> {
@@ -75,6 +82,12 @@ export interface Knowledge {
   keywordHits?: { keywords: string[]; total: number; lines: string[] }
 }
 
+/** 명단을 못 읽은 채 만든 근거·답변에 붙이는 고지 — LLM 이 담당자가 없다고 단정하지 않게 근거 블록에도 싣는다. */
+const ROSTER_FAILED_NOTE = '※ 명단 조회 실패 — 이 답변에는 담당자·팀 구성원 정보가 빠져 있습니다. 명단이 비어 있다는 뜻이 아닙니다.'
+function withRosterFailure(k: Knowledge): Knowledge {
+  return { ...k, text: `${k.text}\n\n${ROSTER_FAILED_NOTE}`, facts: `${ROSTER_FAILED_NOTE}\n\n${k.facts}` }
+}
+
 /** 의도 + 프로젝트 컨텍스트 → 구조화 사실/답변 문장(LLM 근거 또는 결정형 답변).
  *  message 는 freeform 키워드 검색 감지에만 쓰인다(생략 시 감지 안 함). */
 export async function gatherKnowledge(intent: ChatIntent, projectId: string | null, message = ''): Promise<Knowledge> {
@@ -85,7 +98,14 @@ export async function gatherKnowledge(intent: ChatIntent, projectId: string | nu
     return { text, facts: text, scopeProjectId: null }
   }
 
-  const { analysis, members } = await loadProjectAnalysis(projectId)
+  const { analysis, members, rosterError } = await loadProjectAnalysis(projectId)
+  const k = projectKnowledge(intent, projectId, analysis, members, message)
+  return rosterError ? withRosterFailure(k) : k
+}
+
+function projectKnowledge(
+  intent: ChatIntent, projectId: string, analysis: ProjectAnalysis, members: ProjectMember[], message: string,
+): Knowledge {
   const only = (text: string): Knowledge => ({ text, facts: text, scopeProjectId: projectId })
   switch (intent) {
     case 'delayed':

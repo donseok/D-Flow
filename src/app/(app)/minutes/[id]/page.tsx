@@ -11,7 +11,7 @@ import { getUiPrefs } from '@/app/actions/preferences'
 import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
-import { getProjectMembers, getMyProjectIds } from '@/lib/data/members'
+import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 
 export default async function MinuteDetailPage({
   params, searchParams,
@@ -38,16 +38,22 @@ export default async function MinuteDetailPage({
   const issueProjectId = detail.minute.projectId ?? detail.minute.meetingProjectId ?? null
   // folderPath 는 folderId 를 알아야 풀 수 있어 이 2단 묶음에 합류시킨다 — 위 Promise.all 로
   // 끌어올릴 수 없고, 단독으로 await 하면 직렬 왕복이 한 단 더 붙는다.
-  const [wikiImpact, issueMembers, folderPath, myProjectIds] = await Promise.all([
+  const [wikiImpact, issueRoster, folderPath, myProjectIds] = await Promise.all([
     getMinuteWikiImpact(
       id,
       detail.minute.projectId ?? null,
       detail.minute.projectName ?? null,
     ),
-    issueProjectId ? getProjectMembers(issueProjectId) : Promise.resolve([]),
+    issueProjectId ? getProjectRoster(issueProjectId) : Promise.resolve(null),
     getMinuteFolderPath(detail.minute.folderId ?? null),
     getMyProjectIds(),
   ])
+  // 이슈 담당자 명단 실패는 뷰어가 이슈 폼을 열 때 사유로 보인다 — 빈 담당자 목록으로 열지 않는다.
+  if (issueRoster && !issueRoster.ok) {
+    console.error(`[minutes] 명단 조회 실패(project=${issueProjectId}) — 회의록 ${id} 에서 이슈 등록을 막고 사유를 알린다`)
+  }
+  const issueMembers = issueRoster?.ok ? issueRoster.rows : []
+  const issueMembersError = issueRoster && !issueRoster.ok ? issueRoster.error : null
   const historicalVersion = requestedVersion
     ? { id: requestedVersion.id, versionNo: requestedVersion.versionNo }
     : null
@@ -78,7 +84,7 @@ export default async function MinuteDetailPage({
       sourceAnchor={sourceAnchor} initialFontSize={prefs.minuteFontSize ?? null}
       versions={versions} wikiImpact={wikiImpact}
       historicalVersion={historicalVersion}
-      issueMembers={issueMembers} linkedIssues={linkedIssues}
+      issueMembers={issueMembers} issueMembersError={issueMembersError} linkedIssues={linkedIssues}
       folderPath={folderPath} myProjectIds={myProjectIds}
       projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
     />

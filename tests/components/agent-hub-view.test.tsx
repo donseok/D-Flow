@@ -55,7 +55,7 @@ const hub = (over: Partial<AgentHub> = {}): AgentHub => ({
 const citem = (over: Partial<ComputedItem> = {}): ComputedItem =>
   ({ id: 'a1', name: '리프1', children: [], plannedStart: null, plannedEnd: null, rolledActualPct: 0, ...over }) as unknown as ComputedItem
 const wbs = (over: Partial<HubWbsBundle> = {}): HubWbsBundle =>
-  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-14', levelLabels: [], maxDepth: null, members: [], actorView: null, ...over })
+  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-14', levelLabels: [], maxDepth: null, members: [], membersError: null, actorView: null, ...over })
 
 let host: HTMLDivElement, root: Root
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); refresh.mockReset(); apply.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
@@ -100,6 +100,14 @@ describe('AgentHubView', () => {
     await act(async () => { (host.querySelector('[data-hub-refresh]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-hub-row="a1"]')).toBeNull()
     expect(refresh).toHaveBeenCalledWith('p1')
+  })
+  it('명단 조회 실패는 표 위에 사유를 띄운다 — 상세 패널의 담당자 목록이 비어도 0명으로 읽히지 않게(3원칙 ①)', () => {
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs({ membersError: '명단을 불러오지 못했습니다.' })} />))
+    const alert = host.querySelector('[role="alert"][data-roster-load-error]')
+    expect(alert?.textContent).toContain('명단을 불러오지 못했습니다.')
+    expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    expect(host.querySelector('[data-roster-load-error]')).toBeNull()
   })
   it('좌석 층 섹션이 없다 — 층은 /agents/office 가 그린다(스튜디오 분리 스펙 §6-2)', () => {
     act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))

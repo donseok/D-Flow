@@ -2,7 +2,7 @@ import { CalendarClock, CalendarCheck, CalendarPlus } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectMeetingData } from '@/lib/data/meetings'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
@@ -11,6 +11,7 @@ import { listProjects } from '@/app/actions/project'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { seoulToday } from '@/lib/domain/dates'
 
@@ -25,14 +26,17 @@ function monthGrid(todayIso: string): [string, string] {
 export default async function MeetingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const today = seoulToday()
-  const [{ meetings, exceptions }, members, m, user, projects, locale] = await Promise.all([
+  const [{ meetings, exceptions }, roster, m, user, projects, locale] = await Promise.all([
     getProjectMeetingData(projectId),
-    getProjectMembers(projectId),
+    getProjectRoster(projectId),
     getActorForView(),
     getSession(),
     listProjects(),
     getServerLocale(),
   ])
+  // 명단은 참석자 선택·이름 표시용 곁가지 — 실패해도 일정은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
+  if (!roster.ok) console.error(`[meetings] 명단 조회 실패(project=${projectId}) — 참석자 목록 없이 그리고 경고를 띄운다`)
+  const members = roster.ok ? roster.rows : []
   const project = projects.find(p => p.id === projectId)
   const projectName = project?.name ?? ''
   const [gs, ge] = monthGrid(today)
@@ -41,6 +45,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
 
   return (
     <ProjectPageShell
+      pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
       hero={<PageHero
         eyebrow="MEETINGS"
         badge={<HeroBadge>Meetings</HeroBadge>}

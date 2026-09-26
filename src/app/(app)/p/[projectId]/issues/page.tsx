@@ -1,5 +1,5 @@
 import { getIssues } from '@/lib/data/issues'
-import { getProjectMembers } from '@/lib/data/members'
+import { getProjectRoster } from '@/lib/data/members'
 import { resolveMemberIds } from '@/lib/data/meetings'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
@@ -10,14 +10,15 @@ import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { IssuesView } from '@/components/issues/IssuesView'
 import { seoulToday } from '@/lib/domain/dates'
 
 export default async function IssuesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
-  const [issues, members, m, projects, locale, { user, myMemberIds }] = await Promise.all([
+  const [issues, roster, m, projects, locale, { user, myMemberIds }] = await Promise.all([
     getIssues(projectId),
-    getProjectMembers(projectId),
+    getProjectRoster(projectId),
     getActorForView(),
     listProjects(),
     getServerLocale(),
@@ -30,12 +31,16 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
       return { user, myMemberIds }
     })(),
   ])
+  // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
+  if (!roster.ok) console.error(`[issues] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
+  const members = roster.ok ? roster.rows : []
 
   const project = projects.find(p => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'issue.projectFallback')
 
   return (
     <ProjectPageShell
+      pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
       hero={
         <PageHero
           eyebrow="ISSUES"

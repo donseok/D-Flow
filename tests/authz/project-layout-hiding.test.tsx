@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor'
 
-// 스펙 §3.2 — /p/[projectId] 레이아웃은 roleIn(actor, projectId) === null(타 워크스페이스·미존재)이면 404.
+// 스펙 §3.2 — /p/[projectId] 레이아웃은 isHiddenProject(타 워크스페이스·미존재, 플랫폼 관리자의 미존재 pid 포함)면 404.
 // 권한 조회 실패(degraded)는 404 가 아니다 — 장애를 '없는 프로젝트'로 위장하지 않고 기존 열화 표시를 유지한다.
 const mocks = vi.hoisted(() => ({
   getActorViewState: vi.fn(),
@@ -34,10 +34,17 @@ describe('ProjectLayout — 존재 은닉(notFound)', () => {
     await expect(render('p-elsewhere')).rejects.toThrow('NEXT_NOT_FOUND')
     expect(mocks.notFound).toHaveBeenCalledOnce()
   })
-  it('플랫폼 관리자는 어느 프로젝트든 통과한다', async () => {
-    mocks.getActorViewState.mockResolvedValue({ actor: makeSuperuser(), degraded: false })
+  it('플랫폼 관리자는 워크스페이스 소속 없이도 있는 프로젝트를 통과한다', async () => {
+    mocks.getActorViewState.mockResolvedValue({
+      actor: makeSuperuser({ workspaceRoles: new Map(), projectWorkspace: new Map([['p-any', 'ws-other']]) }), degraded: false,
+    })
     await expect(render('p-any')).resolves.toBeTruthy()
     expect(mocks.notFound).not.toHaveBeenCalled()
+  })
+  it('플랫폼 관리자라도 없는 프로젝트는 404 — 빈 화면이 아니다(T11 C3)', async () => {
+    mocks.getActorViewState.mockResolvedValue({ actor: makeSuperuser({ projectWorkspace: new Map([['p1', WS]]) }), degraded: false })
+    await expect(render('00000000-0000-0000-0000-000000000000')).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.notFound).toHaveBeenCalledOnce()
   })
   it('권한 조회 실패(degraded)는 404 가 아니라 열화 표시를 유지한다', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
