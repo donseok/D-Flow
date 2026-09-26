@@ -165,7 +165,16 @@ export function validateMinuteInput(
   return null
 }
 
-/** 원본 표시명과 별개로 Supabase Storage 객체 키에 사용할 ASCII 파일명. */
+/** Storage 키 길이 상한(`storagePath.ts` 의 `fileNameOk`·Task 7 SQL 과 같은 값) — sanitize 뒤 이 안으로 잘라낸다. */
+const SANITIZED_NAME_MAX = 200
+/** 확장자 보존 길이 상한(점 제외) — 원본 파일명이 아주 길어도 확장자가 통째로 잘리지 않게 한다. */
+const SANITIZED_EXT_MAX = 16
+
+/**
+ * 원본 표시명과 별개로 Supabase Storage 객체 키에 사용할 ASCII 파일명.
+ * `SANITIZED_NAME_MAX` 자를 넘기면 확장자를 보존하며 잘라낸다 — `makeStoragePath`(storagePath.ts)의
+ * 200자 상한과 같은 값이라, sanitize 출력은 항상 그 상한을 통과한다.
+ */
 export function sanitizeFileName(name: string): string {
   const safe = name
     .normalize('NFKD')
@@ -174,7 +183,17 @@ export function sanitizeFileName(name: string): string {
     .replace(/_+/g, '_')
     .replace(/\.{2,}/g, '.')
 
-  return safe && !/^[._-]+$/.test(safe) ? safe : 'file'
+  return truncateFileName(safe && !/^[._-]+$/.test(safe) ? safe : 'file', SANITIZED_NAME_MAX, SANITIZED_EXT_MAX)
+}
+
+/** `SANITIZED_NAME_MAX` 를 넘는 이름을 확장자를 보존하며 잘라낸다. 이미 상한 이내면 그대로 반환. */
+function truncateFileName(name: string, maxLen: number, maxExt: number): string {
+  if (name.length <= maxLen) return name
+  const dot = name.lastIndexOf('.')
+  let ext = dot > 0 ? name.slice(dot) : ''
+  if (ext.length - 1 > maxExt) ext = ext.slice(0, maxExt + 1)
+  const base = name.slice(0, Math.max(0, maxLen - ext.length))
+  return base + ext
 }
 
 /** Storage 경로가 해당 회의록 전용 접두({minuteId}/)인지 — 타 객체를 가리키는 메타 기록 차단. */

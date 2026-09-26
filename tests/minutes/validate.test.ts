@@ -3,6 +3,7 @@ import {
   validateMinuteInput, sanitizeFileName, isMinuteFilePathValid, ilikeOrPattern,
   MINUTE_BODY_MAX, type MinuteInput,
 } from '@/lib/domain/minutes'
+import { makeStoragePath } from '@/lib/domain/storagePath'
 
 const base: MinuteInput = {
   minuteDate: '2026-07-09', teamCode: 'ERP', title: '주간 정례회의',
@@ -37,6 +38,26 @@ describe('sanitizeFileName', () => {
 
   it('구분자만 남는 파일명은 안전한 기본값 사용', () =>
     expect(sanitizeFileName('한글파일')).toBe('file'))
+
+  it('200자 초과 원본은 잘라내되 확장자는 보존한다(Storage 키 200자 상한과 호환)', () => {
+    const safe = sanitizeFileName('a'.repeat(250) + '.pdf')
+    expect(safe.length).toBeLessThanOrEqual(200)
+    expect(safe.endsWith('.pdf')).toBe(true)
+  })
+
+  it('잘라낸 결과를 makeStoragePath 가 그대로 받아들인다', () => {
+    const W = '11111111-1111-4111-8111-111111111111'
+    const E = '33333333-3333-4333-8333-333333333333'
+    const fileName = sanitizeFileName('a'.repeat(250) + '.pdf')
+    expect(() => makeStoragePath({ workspaceId: W, projectId: null, entity: 'minutes', entityId: E, fileName }))
+      .not.toThrow()
+  })
+
+  it('점·슬래시만 있는 긴 파일명도 안전한 기본값으로 수렴한다', () => {
+    const safe = sanitizeFileName('.'.repeat(300) + '/'.repeat(50))
+    expect(safe).toBe('file')
+    expect(safe.length).toBeLessThanOrEqual(200)
+  })
 })
 
 describe('isMinuteFilePathValid', () => {
