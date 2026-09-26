@@ -83,7 +83,7 @@ type IssueOrigin =
 
 export function MinuteViewer({
   minute, files, filesError = null, canManage, annotations, userId, projects, sourceAnchor = null,
-  initialFontSize = null, versions = [], wikiImpact = EMPTY_WIKI_IMPACT,
+  initialFontSize = null, versions = [], versionsError = null, wikiImpact = EMPTY_WIKI_IMPACT,
   historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
@@ -98,6 +98,8 @@ export function MinuteViewer({
   sourceAnchor?: MinuteSourceAnchor | null
   initialFontSize?: number | null
   versions?: MinuteVersionListItem[]
+  /** 버전 목록 조회 실패 사유 — 있으면 versions 는 [] 이고 버전 패널이 사유와 재시도를 띄운다('버전 없음'으로 보이지 않게). */
+  versionsError?: string | null
   wikiImpact?: MinuteWikiImpactCardProps
   historicalVersion?: { id: string; versionNo: number } | null
   issueMembers?: ProjectMember[]
@@ -807,6 +809,7 @@ export function MinuteViewer({
                 currentVersionNo={versions[0]?.versionNo ?? null}
                 embedded
                 onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
+                loadError={versionsError ? t('min.version.loadFailed') : null}
               />
               <MinuteWikiImpactCard {...wikiImpact} embedded />
             </>
@@ -821,6 +824,7 @@ export function MinuteViewer({
           currentVersionNo={versions[0]?.versionNo ?? null}
           selectedVersionNo={historicalVersion?.versionNo ?? null}
           onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
+          loadError={versionsError ? t('min.version.loadFailed') : null}
         />
       )}
 

@@ -87,7 +87,8 @@ export default async function MinuteDetailPage({
       files={detail.files.ok ? detail.files.rows : []} filesError={detail.files.ok ? null : detail.files.error}
       annotations={displayAnnotations} userId={user?.id ?? null} projects={projects}
       sourceAnchor={sourceAnchor} initialFontSize={prefs.minuteFontSize ?? null}
-      versions={versions} wikiImpact={wikiImpact}
+      versions={versions.ok ? versions.rows : []} versionsError={versions.ok ? null : versions.error}
+      wikiImpact={wikiImpact}
       historicalVersion={historicalVersion}
       issueMembers={issueMembers} issueMembersError={issueMembersError} linkedIssues={linkedIssues}
       folderPath={folderPath} myProjectIds={myProjectIds}

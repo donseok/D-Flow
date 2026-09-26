@@ -129,6 +129,7 @@ export const minutesKo = {
   'min.version.backCurrent': '최신 버전으로 돌아가기',
   'min.version.expand': '펼치기',
   'min.version.collapse': '접기',
+  'min.version.loadFailed': '버전 목록을 불러오지 못했습니다.',
   'min.wiki.title': 'Wiki 반영 결과',
   'min.wiki.open': '프로젝트 Wiki 열기',
   'min.wiki.status.unlinked': '프로젝트 미연결',

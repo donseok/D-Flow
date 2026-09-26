@@ -129,6 +129,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.version.backCurrent': 'Back to current',
   'min.version.expand': 'Expand',
   'min.version.collapse': 'Collapse',
+  'min.version.loadFailed': 'Could not load the version list.',
   'min.wiki.title': 'Wiki impact',
   'min.wiki.open': 'Open project Wiki',
   'min.wiki.status.unlinked': 'No project',

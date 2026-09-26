@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 
 export type MinuteVersionListItem = {
   id: string
@@ -26,6 +27,8 @@ export type MinuteVersionPanelProps = {
   embedded?: boolean
   /** 원본 파일 서명 URL 발급(getMinuteVersionFileUrl). 없으면 받기 버튼을 두지 않는다. */
   onDownload?: (versionId: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+  /** 버전 목록 조회 실패 문구(화면 언어로) — 있으면 목록 대신 사유와 재시도를 보인다. 접힘과 무관하게 보인다. */
+  loadError?: string | null
 }
 
 function versionDate(value: string, locale: 'ko' | 'en') {
@@ -46,6 +49,7 @@ export function MinuteVersionPanel({
   selectedVersionNo,
   embedded = false,
   onDownload,
+  loadError = null,
 }: MinuteVersionPanelProps) {
   const { locale, t } = useLocale()
   // 발급 중에는 받기 버튼을 모두 잠근다 — 한 번의 클릭에 URL 하나. 실패 사유는 그 버전 항목 아래에 둔다.
@@ -64,6 +68,18 @@ export function MinuteVersionPanel({
     ? ordered.filter(version => version.id !== current.id)
     : []
 
+  // 조회 실패는 '버전 없음'(패널 없음)이 아니다 — 제목을 남기고 사유를 보인다(에러 처리 3원칙 ①).
+  if (loadError) {
+    return (
+      <section className={embedded ? 'min-w-0' : 'card shrink-0 px-4 py-2'} aria-labelledby="minute-version-title">
+        <div className="flex items-center gap-2">
+          <History className="h-4 w-4 text-brand" aria-hidden />
+          <h2 id="minute-version-title" className="text-sm font-bold text-ink">{t('min.version.title')}</h2>
+        </div>
+        <div className="mt-2"><LoadErrorNotice message={loadError} /></div>
+      </section>
+    )
+  }
   if (!current) return null
 
   async function download(versionId: string) {

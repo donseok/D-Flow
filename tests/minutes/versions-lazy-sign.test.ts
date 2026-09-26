@@ -17,7 +17,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: vi.fn(),
 }))
 
-import { getMinuteVersions } from '@/lib/data/minutes'
+import { ERR_MINUTE_VERSIONS_LOAD, getMinuteVersions } from '@/lib/data/minutes'
 
 type QueryResult = { data: unknown; error: { message: string } | null }
 
@@ -62,7 +62,9 @@ describe('getMinuteVersions — 서명하지 않는다', () => {
     const from = vi.fn(() => queryBuilder({ data: VERSION_ROWS, error: null }))
     mocks.createServerClient.mockResolvedValue({ from })
 
-    const versions = await getMinuteVersions('min-1')
+    const res = await getMinuteVersions('min-1')
+    if (!res.ok) throw new Error('성공해야 한다')
+    const versions = res.rows
 
     expect(from).toHaveBeenCalledTimes(1)
     expect(from).toHaveBeenCalledWith('minute_versions')
@@ -73,5 +75,19 @@ describe('getMinuteVersions — 서명하지 않는다', () => {
     for (const v of versions) expect(v).not.toHaveProperty('downloadHref')
     expect(versions[0].viewHref).toBe('/minutes/min-1?version=v-2')
     expect(consoleError).not.toHaveBeenCalled()
+  })
+})
+
+// 조회 실패를 빈 목록으로 삼키면 '버전 없음'(패널이 사라짐)으로 보인다 — 실패는 실패로 돌려준다(T18 리뷰 carry k, 3원칙 ①).
+describe('getMinuteVersions — 조회 실패', () => {
+  it('실패는 [] 가 아니라 { ok:false, error } — 원문은 로그에만', async () => {
+    const from = vi.fn(() => queryBuilder({ data: null, error: { message: 'relation does not exist' } }))
+    mocks.createServerClient.mockResolvedValue({ from })
+
+    const res = await getMinuteVersions('min-1')
+
+    expect(res).toEqual({ ok: false, error: ERR_MINUTE_VERSIONS_LOAD })
+    expect(JSON.stringify(res)).not.toContain('relation does not exist')
+    expect(consoleError.mock.calls.flat().join(' ')).toContain('relation does not exist')
   })
 })

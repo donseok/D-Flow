@@ -258,21 +258,25 @@ export const getMinuteAnnotations = cache(async (
   }
 })
 
+export const ERR_MINUTE_VERSIONS_LOAD = '버전 목록을 불러오지 못했습니다.'
+/** 버전 목록 결과 — 실패를 빈 목록('버전 없음')과 구분한다(MinuteFilesResult 와 같은 관례). */
+export type MinuteVersionsResult = { ok: true; rows: MinuteVersionListItem[] } | { ok: false; error: string }
+
 /** 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC). */
 export const getMinuteVersions = cache(async (
   id: string,
-): Promise<MinuteVersionListItem[]> => {
+): Promise<MinuteVersionsResult> => {
   const sb = await createServerClient()
   const { data, error } = await sb.from('minute_versions')
     .select('id, version_no, title, minute_date, file_name, file_path, created_by_name, created_at')
     .eq('minute_id', id)
     .order('version_no', { ascending: false })
   if (error) {
-    // 0045 미적용 환경에서는 상세 본문 자체는 계속 볼 수 있게 버전 카드만 숨긴다.
+    // 본문은 계속 보이되 실패를 '버전 없음'으로 위장하지 않는다(3원칙 ①) — 버전 패널이 사유와 재시도를 띄운다.
     console.error('[getMinuteVersions] 조회 실패:', error.message)
-    return []
+    return { ok: false, error: ERR_MINUTE_VERSIONS_LOAD }
   }
-  return ((data ?? []) as Row[]).map(row => ({
+  const rows = ((data ?? []) as Row[]).map(row => ({
     id: row.id as string,
     versionNo: row.version_no as number,
     title: (row.title as string | null) ?? null,
@@ -283,6 +287,7 @@ export const getMinuteVersions = cache(async (
     hasFile: Boolean(row.file_path),
     viewHref: `/minutes/${id}?version=${encodeURIComponent(row.id as string)}`,
   }))
+  return { ok: true, rows }
 })
 
 export interface MinuteVersionBody {

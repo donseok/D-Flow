@@ -414,6 +414,7 @@ describe('조회 실패를 없음으로 위장하지 않는다(3원칙 ①) — 
 
 describe('회의록 파일 서명 URL — 60초, 버전 원본은 클릭 때 발급(P8-H1-4)', () => {
   const FILE_DOWN = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+  const VERSION_DOWN = '버전 원본 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
   const NO_SOURCE = '원본 파일이 없습니다.'
 
   it('getMinuteFileUrl: 첨부를 60초 TTL·원본 파일명 download 로 서명한다', async () => {
@@ -443,10 +444,11 @@ describe('회의록 파일 서명 URL — 60초, 버전 원본은 클릭 때 발
     expect(db.storageCalls).toEqual([])
   })
 
-  it('getMinuteVersionFileUrl: 조회 실패는 원본 없음이 아니라 조회 실패(로그) — 서명 미호출', async () => {
+  // 버전 행 조회 실패에 '첨부' 문구를 쓰면 무엇을 못 읽었는지 틀리게 알린다 — 버전 원본 문구로(T18 리뷰 carry m).
+  it('getMinuteVersionFileUrl: 조회 실패는 원본 없음이 아니라 버전 원본 조회 실패(로그) — 서명 미호출', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const db = seedDb({ minute_versions: { data: null, error: { message: 'db down' } } })
-    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: FILE_DOWN })
+    expect(await getMinuteVersionFileUrl(M, 'v-1')).toEqual({ ok: false, error: VERSION_DOWN })
     expect(db.storageCalls).toEqual([])
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()

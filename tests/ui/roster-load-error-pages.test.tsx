@@ -10,6 +10,7 @@ const ALICE = { id: 'm1', name: 'alice', teams: [] }
 const PID = 'p1'
 // 로더의 ERR_MINUTE_FILES_LOAD — 데이터 모듈은 통째로 목이라 문구를 여기 적는다(페이지는 문구를 그대로 넘길 뿐이다).
 const FILES_ERR = '첨부 목록을 불러오지 못했습니다.'
+const VERSIONS_ERR = '버전 목록을 불러오지 못했습니다.'
 
 const mocks = vi.hoisted(() => {
   // 뷰는 받은 props 만 기록하는 스텁 — 페이지가 넘긴 명단·사유를 검사한다.
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => {
     getProjectRoster: vi.fn(),
     getActorForView: vi.fn(),
     getMinuteDetail: vi.fn(),
+    getMinuteVersions: vi.fn(),
     getSession: vi.fn(),
     WbsGanttSheet: view(),
     AgentHubView: view(),
@@ -50,7 +52,7 @@ vi.mock('@/lib/data/issues', () => ({ getIssues: vi.fn(async () => []), getMinut
 vi.mock('@/lib/data/minutes', () => ({
   getMinuteDetail: mocks.getMinuteDetail,
   getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),
-  getMinuteVersions: vi.fn(async () => []),
+  getMinuteVersions: mocks.getMinuteVersions,
   getMinuteWikiImpact: vi.fn(async () => null),
   getMinuteVersionBody: vi.fn(async () => null),
   getMinuteFolderPath: vi.fn(async () => null),
@@ -105,6 +107,7 @@ beforeEach(() => {
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   mocks.getActorForView.mockResolvedValue(makeMemberActor(PID))
   mocks.getMinuteDetail.mockResolvedValue(minuteDetail())
+  mocks.getMinuteVersions.mockResolvedValue({ ok: true, rows: [] })
   mocks.getSession.mockResolvedValue(null)
 })
 afterEach(() => errSpy.mockRestore())
@@ -188,6 +191,28 @@ describe('회의록 상세 — 첨부 목록 조회 실패', () => {
     const props = lastProps(mocks.MinuteViewer)
     expect(props.files).toEqual([row])
     expect(props.filesError).toBeNull()
+  })
+})
+
+describe('회의록 상세 — 버전 목록 조회 실패', () => {
+  const render = async () => renderToStaticMarkup((await MinuteDetailPage({
+    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+  })) as ReactElement)
+  beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
+  it('실패는 빈 목록과 사유(versionsError)로 넘긴다 — 버전 패널이 LoadErrorNotice 를 띄운다', async () => {
+    mocks.getMinuteVersions.mockResolvedValue({ ok: false, error: VERSIONS_ERR })
+    await render()
+    const props = lastProps(mocks.MinuteViewer)
+    expect(props.versions).toEqual([])
+    expect(props.versionsError).toBe(VERSIONS_ERR)
+  })
+  it('정상은 행을 그대로 넘기고 versionsError=null', async () => {
+    const row = { id: 'v1', versionNo: 1, createdAt: '2026-09-01T00:00:00Z', hasFile: false }
+    mocks.getMinuteVersions.mockResolvedValue({ ok: true, rows: [row] })
+    await render()
+    const props = lastProps(mocks.MinuteViewer)
+    expect(props.versions).toEqual([row])
+    expect(props.versionsError).toBeNull()
   })
 })
 

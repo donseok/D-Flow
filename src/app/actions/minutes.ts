@@ -87,6 +87,7 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
 const CROSS_WORKSPACE_MOVE_MSG = '다른 워크스페이스의 프로젝트·폴더로는 옮길 수 없습니다.'
 const TEAMS_UNAVAILABLE_MSG = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const FILE_LOOKUP_FAILED_MSG = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+const VERSION_LOOKUP_FAILED_MSG = '버전 원본 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
 /** 팀 목록 조회를 결과로 감싼다 — 팀 캐시를 한 번도 못 채운 throw 는 오류 문구로(빈 목록으로 위장하지 않는다). */
 function teamsResult(read: () => TeamCode[]): { codes: TeamCode[] } | { error: string } {
@@ -891,7 +892,7 @@ export async function getMinuteVersionFileUrl(
   // 조회 실패를 '원본 없음'으로 위장하지 않는다(3원칙 ①).
   if (vErr) {
     console.error('[getMinuteVersionFileUrl] 버전 조회 실패:', vErr.message)
-    return { ok: false, error: FILE_LOOKUP_FAILED_MSG }
+    return { ok: false, error: VERSION_LOOKUP_FAILED_MSG }
   }
   if (!v?.file_path) return { ok: false, error: '원본 파일이 없습니다.' }
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
