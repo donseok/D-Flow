@@ -22,6 +22,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn(async () => undefined) }))
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0 })) }))
 
+import { createAdminClient } from '@/lib/supabase/admin'
 import { POST as inspect } from '@/app/api/import/inspect/route'
 import { POST as execute } from '@/app/api/import/execute/route'
 import { buildWorkbookWithProfile } from '@/lib/excel/exportWithProfile'
@@ -102,5 +103,14 @@ describe('펼침 내보내기 → 저장 양식이 있는 프로젝트로 재임
     expect(new Set(sent.flatMap(i => i.owners.map(o => o.team)))).toEqual(new Set(['팀A', '팀B']))
     expect(sent.every(i => i.actualPct == null || i.actualPct <= 100)).toBe(true)
     expect(sent.some(i => i.actualPct === 40)).toBe(true)
+  })
+
+  it('마법사 기본값으로 실행하면 감지 양식이 저장 양식을 덮어쓰지 않는다(불일치 → 양식 저장 기본 꺼짐)', async () => {
+    const body = await (await inspect(req({ file: FILE, projectId: PROJECT_ID }))).json()
+    const state = reducer(initialWizardState, { type: 'inspectSuccess', detection: body.detection, savedProfile: body.savedProfile })
+    const res = await executeWith(state.profile!, { saveProfile: String(state.saveProfile) })
+    expect(res.status).toBe(200)
+    expect((await res.json()).profileSaved).toBe(false)
+    expect(createAdminClient).not.toHaveBeenCalled()   // project_settings upsert 의 유일한 경로
   })
 })

@@ -89,6 +89,7 @@ export interface WizardState {
   profileSource: 'saved' | 'detected'
   profile: ExcelProfile | null
   mode: ImportMode
+  /** execute 의 saveProfile — 기본 켜짐, 저장 양식과 불일치면 inspectSuccess 가 끈다. */
   saveProfile: boolean
   busy: boolean
   error: string | null
@@ -146,16 +147,20 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...initialWizardState, fileName: action.fileName }
     case 'inspectStart':
       return { ...state, busy: true, error: null }
-    case 'inspectSuccess':
+    case 'inspectSuccess': {
+      const choice = initialProfileChoice(action.detection, action.savedProfile)
       return {
         ...state,
         busy: false,
         step: 'review',
         detection: action.detection,
         savedProfile: action.savedProfile,
-        ...initialProfileChoice(action.detection, action.savedProfile),
+        ...choice,
+        // 불일치면 양식 저장은 기본 꺼짐 — 켜 둔 채 실행하면 감지 양식이 저장 양식을 조용히 덮어쓴다. 사용자가 켜면 저장한다.
+        saveProfile: choice.profileMismatch === null,
         error: null,
       }
+    }
     case 'inspectFailure':
       return { ...state, busy: false, error: action.error }
     case 'profileChanged':

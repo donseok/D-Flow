@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a> }))
 
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
+import { ensureEnLoaded } from '@/lib/i18n/dict'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ImportWizard } from '@/components/import/ImportWizard'
 
@@ -60,6 +61,7 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     return {
       profile: JSON.parse(String(fd.get('profile'))) as ExcelProfile,
       useSavedProfile: fd.get('useSavedProfile'), confirmProfileMismatch: fd.get('confirmProfileMismatch'),
+      saveProfile: fd.get('saveProfile'),
     }
   }
 
@@ -103,6 +105,24 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     expect(lastForm()).toMatchObject({ useSavedProfile: 'false', confirmProfileMismatch: 'false' })
   })
 
+  const saveBox = () =>
+    container.querySelector<HTMLInputElement>('input[type=checkbox][aria-label="이 양식을 프로젝트 기본값으로 저장"]')!
+
+  it('불일치면 "기본값으로 저장"이 꺼진 채로 시작해 감지 양식이 저장 양식을 덮어쓰지 않는다', async () => {
+    await inspectFile()
+    expect(saveBox().checked).toBe(false)
+    await click(button('가져오기 실행')!)
+    expect(lastForm().saveProfile).toBe('false')
+  })
+
+  it('불일치여도 사용자가 켜면 저장한다', async () => {
+    await inspectFile()
+    await click(saveBox())
+    expect(saveBox().checked).toBe(true)
+    await click(button('가져오기 실행')!)
+    expect(lastForm().saveProfile).toBe('true')
+  })
+
   it('"저장된 양식 사용"을 누른 뒤에만 저장 양식을 확인 플래그와 함께 보낸다', async () => {
     await inspectFile()
     await click(button('저장된 양식 사용')!)
@@ -112,14 +132,49 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     expect(lastForm()).toMatchObject({ useSavedProfile: 'true', confirmProfileMismatch: 'true' })
   })
 
-  it('서버가 409 PROFILE_MISMATCH 로 막으면 2단계에 머물며 그 사유를 보인다', async () => {
+  // 서버 문구는 한국어 고정(로그·API 용) — 화면은 코드로 i18n 문구를 고른다(T1b 리뷰 carry g).
+  it('서버가 409 PROFILE_MISMATCH 로 막으면 2단계에 머물며 코드에 맞는 i18n 사유를 보인다(서버 문구가 아니라)', async () => {
     executeResponse = () => new Response(
       JSON.stringify({ code: 'PROFILE_MISMATCH', error: '저장된 엑셀 양식과 파일 구조가 다릅니다(서버)', profileMismatch: MISMATCH }),
       { status: 409 },
     )
     await inspectFile()
     await click(button('가져오기 실행')!)
-    expect(container.textContent).toContain('저장된 엑셀 양식과 파일 구조가 다릅니다(서버)')
+    expect(document.body.textContent).not.toContain('(서버)')
+    expect(container.textContent).toContain('저장된 양식으로 읽으면 값이 다른 열에서 읽힙니다')
     expect(button('가져오기 실행')).toBeDefined()
+  })
+
+  it('409 PROFILE_MISMATCH 의 불일치가 없으면(대조 불가) 대조 불가 문구를 보인다', async () => {
+    executeResponse = () => new Response(
+      JSON.stringify({ code: 'PROFILE_MISMATCH', error: '파일 구조를 감지하지 못해(서버)', profileMismatch: null }),
+      { status: 409 },
+    )
+    await inspectFile()
+    await click(button('가져오기 실행')!)
+    expect(document.body.textContent).not.toContain('(서버)')
+    expect(container.textContent).toContain('저장된 양식과 대조할 수 없습니다')
+  })
+
+  it('영어 화면에서는 409 PROFILE_MISMATCH 사유를 영어로 보인다', async () => {
+    await ensureEnLoaded()   // EN 사전은 지연 청크다
+    act(() => root.unmount())
+    root = createRoot(container)
+    await act(async () => root.render(
+      <LocaleProvider initialLocale="en"><ToastProvider>
+        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" isSuperuser={false} currentItemCount={0} />
+      </ToastProvider></LocaleProvider>,
+    ))
+    executeResponse = () => new Response(
+      JSON.stringify({ code: 'PROFILE_MISMATCH', error: '저장된 엑셀 양식과 파일 구조가 다릅니다(서버)', profileMismatch: MISMATCH }),
+      { status: 409 },
+    )
+    const input = container.querySelector<HTMLInputElement>('input[type=file]')!
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'wbs.xlsx')], configurable: true })
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve() })
+    await click(button('Analyze layout')!)
+    await click(button('Run import')!)
+    expect(document.body.textContent).not.toContain('(서버)')
+    expect(container.textContent).toContain('would take values from the wrong columns')
   })
 })

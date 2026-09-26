@@ -167,6 +167,18 @@ describe('importWizard reducer — 불일치면 감지 결과가 기본, 저장 
     expect(reducer(chosen, { type: 'resetToDetected' })).toMatchObject({ profile: SHIFTED, profileSource: 'detected' })
   })
 
+  // 불일치 파일의 감지 양식을 기본으로 저장하면 프로젝트의 저장 양식이 조용히 덮어써진다 — 저장은 사용자가 켤 때만(T1b 리뷰 carry f).
+  it('inspectSuccess — 불일치면 양식 저장 기본값이 꺼진다. 저장 양식이 없거나 같으면 켜진 채다', () => {
+    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: COLS }).saveProfile).toBe(false)
+    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: null }).saveProfile).toBe(true)
+    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: SHIFTED }).saveProfile).toBe(true)
+  })
+
+  it('saveProfileChanged — 불일치여도 사용자가 켜면 저장한다', () => {
+    const inspected = reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: COLS })
+    expect(reducer(inspected, { type: 'saveProfileChanged', saveProfile: true }).saveProfile).toBe(true)
+  })
+
   it('useSavedProfile — 저장 양식이 없으면 무변화', () => {
     const inspected = reducer(initialWizardState, { type: 'inspectSuccess', detection: DETECTION, savedProfile: null })
     expect(reducer(inspected, { type: 'useSavedProfile' })).toBe(inspected)

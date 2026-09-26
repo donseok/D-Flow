@@ -100,6 +100,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.executing': 'Running…',
   'importWizard.executeFailedHttp': 'Import failed',
   'importWizard.executeSuccessToast': 'Import completed',
+  'importWizard.executeProfileMismatch': "This file's columns differ from the saved layout — reading with it would take values from the wrong columns. Import with the detected structure, or choose “Use saved layout” yourself and run again.",
+  'importWizard.executeProfileUnverifiable': 'The file structure could not be detected, so it cannot be checked against the saved layout. Check the file or import with the detected structure.',
 
   'importWizard.needsTeamsTitle': 'Some teams are not registered',
   'importWizard.needsTeamsDesc': 'Register these teams and continue the import?',

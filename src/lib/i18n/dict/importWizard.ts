@@ -98,6 +98,8 @@ export const importWizardKo = {
   'importWizard.executing': '실행 중…',
   'importWizard.executeFailedHttp': '실행에 실패했습니다',
   'importWizard.executeSuccessToast': '임포트가 완료됐습니다',
+  'importWizard.executeProfileMismatch': '저장된 양식과 이 파일의 열 구조가 다릅니다 — 저장된 양식으로 읽으면 값이 다른 열에서 읽힙니다. 감지 결과로 가져오거나, "저장된 양식 사용"을 직접 고른 뒤 실행하세요.',
+  'importWizard.executeProfileUnverifiable': '파일 구조를 감지하지 못해 저장된 양식과 대조할 수 없습니다. 파일을 확인하거나 감지 결과로 가져오세요.',
 
   'importWizard.needsTeamsTitle': '등록되지 않은 팀이 있습니다',
   'importWizard.needsTeamsDesc': '이 팀들을 등록하시겠습니까? 등록 후 가져오기를 계속 진행합니다.',

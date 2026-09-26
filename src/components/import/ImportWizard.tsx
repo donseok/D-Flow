@@ -243,8 +243,10 @@ export function ImportWizard({
       const data: Record<string, unknown> = await res.json().catch(() => ({}))
 
       if (res.status === 409 && data.code === 'PROFILE_MISMATCH') {
-        const msg = typeof data.error === 'string' ? data.error : t('importWizard.executeFailedHttp')
-        dispatch({ type: 'executeProfileMismatch', error: msg, profileMismatch: (data.profileMismatch ?? null) as ProfileMismatch | null })
+        // 서버 문구는 한국어 고정(로그·API 용)이라 화면은 코드로 문구를 고른다. 불일치가 없으면 파일 구조를 감지하지 못해 대조할 수 없는 경우다.
+        const mismatch = (data.profileMismatch ?? null) as ProfileMismatch | null
+        const msg = t(mismatch ? 'importWizard.executeProfileMismatch' : 'importWizard.executeProfileUnverifiable')
+        dispatch({ type: 'executeProfileMismatch', error: msg, profileMismatch: mismatch })
         toast({ title: msg, variant: 'error' })
         return
       }
