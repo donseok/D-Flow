@@ -474,7 +474,7 @@ export async function POST(req: NextRequest) {
     // meeting_id 가 전송된 것과 완전히 같게 동작하도록 파싱 결과에 주입한다(v2.5 §4.2).
     let meetingCreated: boolean | undefined
     if (p.meeting) {
-      const got = await resolveOrCreateExternalMeeting(admin, p.meeting, user)
+      const got = await resolveOrCreateExternalMeeting(admin, p.meeting, user, authz)
       if (!got.ok) return apiFail(got.status, got.code, got.error)
       p.meetingId = got.meetingId
       p.meetingIdProvided = true

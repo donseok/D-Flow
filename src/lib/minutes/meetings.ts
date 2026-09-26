@@ -1,19 +1,19 @@
 import { revalidatePath } from 'next/cache'
 import type { AdminClient, ExternalMeetingInput, ResolvedUser } from '@/lib/minutes/externalApi'
+import { isProjectMember, type Actor } from '@/lib/domain/authz'
 
 /**
  * 외부 회의록 API 의 inline `meeting` 처리 — 회의 확보(신규 생성 또는 dedup 재사용).
- * 계약: docs/design/dflow-minutes-upload-api-spec.md v2.5 §4.2 / 발주 스펙 §1.2·§2.2.
+ * 계약: docs/design/dflow-minutes-upload-api-spec.md v2.5 §4.2 · v2.7 Y2 / 발주 스펙 §1.2·§2.2.
  *
- * 순서가 계약이다: 프로젝트 실존 → 멤버십 → dedup → insert.
- * 멤버십을 dedup 보다 먼저 판정해, 비멤버가 제목·날짜를 맞춰 타 프로젝트의 기존 회의에
+ * 순서가 계약이다: 자격(프로젝트 멤버 이상) → dedup → insert.
+ * 자격을 dedup 보다 먼저 판정해, 비멤버가 제목·날짜를 맞춰 타 프로젝트의 기존 회의에
  * 회의록을 연결하는 우회를 막는다.
  *
- * 판정 축은 활성 명단 행 존재(project_members.active ⨝ people.user_id·people.active) — 발주 스펙이 명단 축을 명시했다.
- * 비활성 명단 행·비활성 인물은 빠진 사람이므로 buildActor 와 같이 거절한다.
- * 내부 requireProjectMember 는 권한 축(명단 access_role·워크스페이스 관리자 승계)이라 두 판정이 갈릴 수
- * 있다 — 권한 없는 명단 행은 여기서만, 명단 행 없는 워크스페이스 관리자는 내부 가드에서만 통과한다.
- * 계정 미연결(people.user_id NULL) 행이 403 을 받는 것은 의도된 동작이다.
+ * 판정은 meeting_id 경로와 같은 isProjectMember(호출자 스냅샷) — SP2 결정 8(v2.7). 명단 access_role·워크스페이스
+ * 관리자 승계·플랫폼 관리자가 통과하고, 권한 없는 명단 행(조회 전용)은 거절한다. 스냅샷에 없는 프로젝트(다른
+ * 워크스페이스·미존재 — 플랫폼 관리자의 스냅샷은 전 프로젝트)는 둘을 구별하지 않고 404 다(존재 은닉). 프로젝트 존재는
+ * 스냅샷이 이미 알므로 따로 조회하지 않는다.
  *
  * meetings 테이블은 RLS insert 정책이 created_by = auth.uid() 를 요구해 세션 없는 대리 생성을
  * 막으므로 DB 2차 방어선이 없다 — 이 함수의 애플리케이션 검증이 유일한 관문이다(회의록 계열과
@@ -23,34 +23,17 @@ export async function resolveOrCreateExternalMeeting(
   admin: AdminClient,
   m: ExternalMeetingInput,
   user: ResolvedUser,
+  authz: Actor,
 ): Promise<
   | { ok: true; meetingId: string; projectId: string; created: boolean }
-  | { ok: false; status: 400 | 403 | 500; code: string; error: string }
+  | { ok: false; status: 404 | 500; code: string; error: string }
 > {
   const fail500 = {
     ok: false as const, status: 500 as const, code: 'internal_error', error: '서버 오류가 발생했습니다.',
   }
 
-  const { data: proj, error: projErr } = await admin
-    .from('projects').select('id').eq('id', m.projectId).maybeSingle()
-  if (projErr) {
-    console.error('[minutes-api] 회의 생성 프로젝트 확인 실패:', projErr.message)
-    return fail500
-  }
-  if (!proj) {
-    return { ok: false, status: 400, code: 'validation_failed', error: '프로젝트를 찾을 수 없습니다.' }
-  }
-
-  const { data: members, error: memErr } = await admin
-    .from('project_members').select('id, people!inner(user_id, active)')
-    .eq('project_id', m.projectId).eq('people.user_id', user.id)
-    .eq('active', true).eq('people.active', true).limit(1)
-  if (memErr || !members) {
-    console.error('[minutes-api] 회의 생성 멤버십 확인 실패(거절):', memErr?.message ?? 'no rows')
-    return fail500
-  }
-  if (members.length === 0) {
-    return { ok: false, status: 403, code: 'not_project_member', error: '해당 프로젝트의 멤버가 아닙니다.' }
+  if (!authz.projectWorkspace.has(m.projectId) || !isProjectMember(authz, m.projectId)) {
+    return { ok: false, status: 404, code: 'not_found', error: '프로젝트를 찾을 수 없습니다.' }
   }
 
   // dedup 멱등 — 같은 (project_id, meeting_date, trim 된 title) 회의는 재사용한다. 또박또박이

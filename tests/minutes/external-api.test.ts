@@ -1217,12 +1217,10 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
     id: 'm-1', created_at: '2026-08-06T01:00:00+00:00', updated_at: '2026-08-06T01:00:00+00:00',
   }
 
-  /** 회의 확보 성공 경로 큐 — projects 실존 → 멤버십 1행 → meetings dedup miss → insert. */
+  /** 회의 확보 성공 경로 큐 — (자격은 호출자 스냅샷: 기본 PROJECT_UUID 명단 member) → meetings dedup miss → insert. */
   function useMeetingAdmin(over: Record<string, QueryResponse[]> = {}) {
     return useAdmin({
       minutes: [{ data: null }, { data: createdMinute }],
-      projects: [{ data: { id: PROJECT_UUID } }],
-      project_members: [{ data: [{ id: 'pm-1' }] }],
       meetings: [{ data: null }, { data: { id: MEETING_UUID } }],
       ...over,
     })
@@ -1297,22 +1295,16 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
     }
   })
 
-  it('프로젝트 미존재는 400, 비멤버는 403 not_project_member — dedup 조회 이전 차단', async () => {
-    useMeetingAdmin({ projects: [{ data: null }] })
-    const notFound = await POST(post(meetingReq))
-    expect(notFound.status).toBe(400)
-    expect((await notFound.json()).error).toBe('프로젝트를 찾을 수 없습니다.')
-
-    const { builders } = useMeetingAdmin({ project_members: [{ data: [] }] })
-    const denied = await POST(post(meetingReq))
-    expect(denied.status).toBe(403)
-    expect(await denied.json()).toMatchObject({ code: 'not_project_member' })
-    // 명단 축 판정 — 계정 연결 정본(people.user_id) 임베드 필터 + 활성 명단 행·활성 인물만(buildActor 와 같은 축).
-    expect(builders.project_members[0].select).toHaveBeenCalledWith('id, people!inner(user_id, active)')
-    expect(builders.project_members[0].eq.mock.calls).toEqual([
-      ['project_id', PROJECT_UUID], ['people.user_id', expect.any(String)], ['active', true], ['people.active', true],
-    ])
-    expect(builders.meetings).toBeUndefined()          // 비멤버는 dedup 재사용 우회도 못 탄다
+  it('볼 수 없는 프로젝트(미존재·다른 워크스페이스)와 권한 없는 호출자는 404 not_found — dedup 조회 이전 차단(v2.7)', async () => {
+    const outsider = { ...meetingReq, meeting: { ...meetingReq.meeting, project_id: '00000000-0000-4000-8000-000000000000' } }
+    const { builders } = useMeetingAdmin()
+    const res = await POST(post(outsider))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ code: 'not_found', error: '프로젝트를 찾을 수 없습니다.' })
+    // 판정은 호출자 스냅샷으로 끝난다 — 프로젝트·명단을 따로 읽지 않고, 비멤버는 dedup 재사용 우회도 못 탄다.
+    expect(builders.projects).toBeUndefined()
+    expect(builders.project_members).toBeUndefined()
+    expect(builders.meetings).toBeUndefined()
   })
 
   it('기존 external_id + on_conflict=skip 은 회의를 만들지 않는다 — skipped 응답에 meeting_created 없음', async () => {
@@ -1369,10 +1361,6 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
   })
 
   it('회의 확보 경로의 조회·insert 실패는 500 — 실패를 없음으로 위장하지 않는다(fail-closed)', async () => {
-    useMeetingAdmin({ projects: [{ error: { message: 'down' } }] })
-    expect((await POST(post(meetingReq))).status).toBe(500)
-    useMeetingAdmin({ project_members: [{ error: { message: 'down' } }] })
-    expect((await POST(post(meetingReq))).status).toBe(500)
     useMeetingAdmin({ meetings: [{ error: { message: 'down' } }] })
     expect((await POST(post(meetingReq))).status).toBe(500)
     useMeetingAdmin({ meetings: [{ data: null }, { error: { message: 'down' } }] })
@@ -1990,6 +1978,51 @@ describe('SP2 Task 13 — 외부 회의록 API 를 호출자(user_email) 권한�
       expect(res.status).toBe(404)
       expect(admin.rpc).not.toHaveBeenCalledWith('commit_minute_body_version', expect.anything())
     })
+    describe('inline meeting — meeting_id 와 같은 판정(isProjectMember), 없음·못 봄은 같은 404', () => {
+      const meetingReq = { ...payload, meeting: { project_id: PROJECT_UUID, title: '회의', date: '2026-08-06' } }
+      const created = { id: 'm-1', created_at: 't', updated_at: 't' }
+
+      it('권한 없는 명단 행(조회 전용)은 회의를 만들지도 재사용하지도 못한다 — 404', async () => {
+        mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, projectWorkspace: new Map([[PROJECT_UUID, WS]]) }))
+        const { builders, admin } = useAdmin({
+          minutes: [{ data: null }, { data: created }],
+          projects: [{ data: { id: PROJECT_UUID } }],
+          project_members: [{ data: [{ id: 'pm-1' }] }],   // 활성 명단 행은 있다(access_role null)
+          meetings: [{ data: { id: MEETING_UUID } }],
+        })
+        const res = await POST(post(meetingReq))
+        expect(res.status).toBe(404)
+        expect(await res.json()).toMatchObject({ code: 'not_found' })
+        expect(builders.meetings).toBeUndefined()
+        expect(admin.rpc).not.toHaveBeenCalled()
+      })
+      it('명단 행 없는 워크스페이스 관리자는 회의를 만든다(승계)', async () => {
+        mocks.actorFromUser.mockResolvedValue(makeActor({
+          userId: USER.id, workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[PROJECT_UUID, WS]]),
+        }))
+        useAdmin({
+          minutes: [{ data: null }, { data: created }],
+          projects: [{ data: { id: PROJECT_UUID } }],
+          project_members: [{ data: [] }],
+          meetings: [{ data: null }, { data: { id: MEETING_UUID } }],
+          minute_folders: [{ data: [] }],
+        })
+        const res = await POST(post(meetingReq))
+        expect(res.status).toBe(201)
+        expect(await res.json()).toMatchObject({ meeting_id: MEETING_UUID, meeting_created: true })
+      })
+      it('다른 워크스페이스 프로젝트와 없는 프로젝트는 같은 404 — 존재를 드러내지 않는다', async () => {
+        const foreign = { ...meetingReq, meeting: { ...meetingReq.meeting, project_id: OTHER_PROJECT } }
+        useAdmin({ minutes: [{ data: null }], projects: [{ data: { id: OTHER_PROJECT } }], project_members: [{ data: [] }] })
+        const a = await POST(post(foreign))
+        useAdmin({ minutes: [{ data: null }], projects: [{ data: null }] })
+        const b = await POST(post({ ...meetingReq, meeting: { ...meetingReq.meeting, project_id: '00000000-0000-4000-8000-000000000000' } }))
+        expect(a.status).toBe(404)
+        expect(b.status).toBe(404)
+        expect(await a.json()).toEqual(await b.json())
+      })
+    })
+
     it('호출자 권한 조회 실패는 500 — 판정 전에 쓰지 않는다', async () => {
       const spy = errSpy()
       mocks.actorFromUser.mockRejectedValueOnce(new Error('db down'))
