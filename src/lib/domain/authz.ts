@@ -21,7 +21,7 @@ export const WORKSPACE_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관
 /** 로그인 사용자의 권한 스냅샷. buildActor() 가 4축(플랫폼 관리자·워크스페이스·프로젝트·명단)으로 조립한다. */
 export interface Actor {
   userId: string
-  /** platform_admins 행 존재. 이름은 requireSuperuser() 와 짝이라 유지. */
+  /** platform_admins 행 존재. 이름은 플랫폼 관리자 가드와 SQL is_superuser() 의 짝이라 유지. */
   isSuperuser: boolean
   /** workspaceId → role. 없는 키 = 소속 아님. */
   workspaceRoles: ReadonlyMap<string, WorkspaceRole>
@@ -61,6 +61,15 @@ export function isWorkspaceAdmin(actor: Actor | null, workspaceId: string | null
   if (!workspaceId) return Boolean(actor?.isSuperuser)
   const r = workspaceRoleIn(actor, workspaceId)
   return r === 'superuser' || r === 'admin'
+}
+export type WorkspaceGuardVerdict = 'ok' | 'missing' | 'denied'
+/** 워크스페이스 관리 가드의 순수 판정. 소속이 없거나 id 가 없으면 'missing'(존재 은닉 — 404), 멤버면 'denied'(403). */
+export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null): WorkspaceGuardVerdict {
+  if (actor.isSuperuser) return 'ok'
+  if (!workspaceId) return 'missing'
+  const r = actor.workspaceRoles.get(workspaceId)
+  if (r === undefined) return 'missing'
+  return r === 'admin' ? 'ok' : 'denied'
 }
 export function isWorkspaceMember(actor: Actor | null, workspaceId: string | null | undefined): boolean {
   if (!workspaceId) return Boolean(actor?.isSuperuser)

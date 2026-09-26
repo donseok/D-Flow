@@ -6,7 +6,8 @@ const { mockClient } = vi.hoisted(() => ({ mockClient: { auth: { getClaims: vi.f
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => mockClient) }))
 
 import {
-  getActor, actorFromUser, requireSuperuser, requireProjectAdmin, requireProjectMember, resolveProjectId,
+  getActor, actorFromUser, requireSuperuser, requireProjectAdmin, requireProjectMember, requireWorkspaceAdmin,
+  resolveProjectId, resolveScope,
 } from '@/lib/authz'
 import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 
@@ -284,31 +285,68 @@ describe('requireProjectAdmin / requireProjectMember', () => {
   })
 })
 
-describe('resolveProjectId', () => {
-  it('행의 project_id 를 돌려준다', async () => {
-    mockClient.from.mockImplementation(() => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { project_id: 'p1' }, error: null }) }) }),
-    }))
+describe('requireWorkspaceAdmin', () => {
+  it('비로그인은 로그인 필요', async () => {
+    mockClient.auth.getClaims.mockResolvedValue({ data: null })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_ANON })
+  })
+  it('비소속 워크스페이스·null 은 대상 없음(존재 은닉)', async () => {
+    stubDb({ ...WS_ADMIN })
+    expect(await requireWorkspaceAdmin('w9')).toEqual({ ok: false, error: ERR_MISSING })
+    stubDb({ ...WS_ADMIN })
+    expect(await requireWorkspaceAdmin(null)).toEqual({ ok: false, error: ERR_MISSING })
+  })
+  it('워크스페이스 멤버는 권한 없음 — 명단 관리자여도', async () => {
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_DENIED })
+  })
+  it('워크스페이스 관리자는 통과', async () => {
+    stubDb({ ...WS_ADMIN })
+    const r = await requireWorkspaceAdmin('w1')
+    expect(r.ok && r.actor.userId).toBe('u1')
+  })
+  it('플랫폼 관리자는 소속 없이도 통과', async () => {
+    stubDb({ platformAdmin: true })
+    expect((await requireWorkspaceAdmin('w9')).ok).toBe(true)
+  })
+  it('권한 조회 실패는 ERR_LOOKUP', async () => {
+    stubDb({ ...WS_ADMIN, errorOn: 'workspace_members' })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_LOOKUP })
+  })
+})
+
+/** 세션 클라이언트의 from(table).select(cols).eq().maybeSingle() 을 한 응답으로 고정한다. */
+const stubRow = (res: { data: unknown; error: { message: string } | null }) =>
+  mockClient.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ maybeSingle: async () => res }) }) }))
+
+describe('resolveScope / resolveProjectId', () => {
+  it('행의 프로젝트·워크스페이스를 돌려준다 — resolveProjectId 는 프로젝트만', async () => {
+    stubRow({ data: { project_id: 'p1', projects: { workspace_id: 'w1' } }, error: null })
+    expect(await resolveScope('meetings', 'm1')).toEqual({ ok: true, projectId: 'p1', workspaceId: 'w1' })
     expect(await resolveProjectId('meetings', 'm1')).toEqual({ ok: true, projectId: 'p1' })
   })
 
+  it('무프로젝트 회의록은 projectId null 로 ok', async () => {
+    stubRow({ data: { project_id: null, workspace_id: 'w1' }, error: null })
+    expect(await resolveProjectId('minutes', 'mn1')).toEqual({ ok: true, projectId: null })
+  })
+
   it('행이 없으면 대상을 찾을 수 없음', async () => {
-    mockClient.from.mockImplementation(() => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-    }))
+    stubRow({ data: null, error: null })
     expect(await resolveProjectId('meetings', 'm1')).toEqual({
       ok: false, error: '대상을 찾을 수 없습니다.',
     })
   })
 
-  // 3원칙 ②: 쓰기 전 선행 조회가 실패하면 중단한다.
-  it('조회가 실패하면 중단한다', async () => {
-    mockClient.from.mockImplementation(() => ({
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'boom' } }) }) }),
-    }))
+  // 3원칙 ①②: 조회 실패는 '대상 없음'(404)이 아니라 판정 불가로 중단한다.
+  it('조회가 실패하면 중단한다 — ERR_MISSING 과 구분', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    stubRow({ data: null, error: { message: 'boom' } })
     expect(await resolveProjectId('meetings', 'm1')).toEqual({
       ok: false, error: '권한을 확인할 수 없어 중단했습니다.',
     })
+    expect(ERR_LOOKUP).not.toBe(ERR_MISSING)
+    spy.mockRestore()
   })
 })
 

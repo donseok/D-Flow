@@ -11,6 +11,8 @@ describe('가드 시그니처 동결(결정 8)', () => {
     ['requireSuperuser', 'export async function requireSuperuser(): Promise<GuardResult>'],
     ['requireProjectAdmin', 'export async function requireProjectAdmin(projectId: string | null): Promise<GuardResult>'],
     ['requireProjectMember', 'export async function requireProjectMember(projectId: string | null): Promise<GuardResult>'],
+    ['requireWorkspaceAdmin', 'export async function requireWorkspaceAdmin(workspaceId: string | null): Promise<GuardResult>'],
+    ['resolveScope', 'export async function resolveScope(table: ProjectScopedTable, id: string): Promise<ScopeResult>'],
   ])('%s', (name, expected) => { expect(sig(guards, name)).toBe(expected) })
   it('roleIn', () => {
     expect(sig(pure, 'roleIn')).toBe('export function roleIn(actor: Actor | null, projectId: string | null): EffectiveRole | null')

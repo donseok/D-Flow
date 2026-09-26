@@ -1,13 +1,14 @@
 import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '../supabase/server'
-import { roleIn, type Actor, type ProjectRole } from '../domain/authz'
+import { roleIn, workspaceAdminVerdict, type Actor, type ProjectRole } from '../domain/authz'
 import { buildActor } from './buildActor'
+import { readScope, type ProjectScopedTable, type ScopeResult } from './scope'
 // 사유 문자열과 HTTP 매핑(denyStatus)의 정본은 순수 모듈 ./errors 다 — 이 모듈은 테스트
 // 37곳이 통째로 vi.mock 하므로, 라우트가 여기서 denyStatus 를 가져가면 모킹 문맥에서 터진다.
 import { ERR_LOOKUP, ERR_DENIED, ERR_ANON, ERR_MISSING } from './errors'
 
-export type { Actor, ProjectRole }
+export type { Actor, ProjectRole, ProjectScopedTable, ScopeResult }
 
 export type GuardResult = { ok: true; actor: Actor } | { ok: false; error: string }
 
@@ -125,25 +126,27 @@ export async function requireProjectMember(projectId: string | null): Promise<Gu
   return role === 'superuser' || role === 'admin' || role === 'member' ? r : { ok: false, error: ERR_DENIED }
 }
 
-/** project_id 컬럼을 직접 가진 테이블 화이트리스트 — 임의 테이블 조회를 막는다. */
-export type ProjectScopedTable =
-  | 'wbs_items' | 'meetings' | 'issues' | 'minutes' | 'attendance_records'
-  | 'announcements' | 'weekly_reports' | 'project_members' | 'task_dependencies'
+/** 워크스페이스 관리(프로젝트 생성·공용 팀·계정·워크스페이스 역할). 비소속은 ERR_MISSING(404), 멤버는 ERR_DENIED. */
+export async function requireWorkspaceAdmin(workspaceId: string | null): Promise<GuardResult> {
+  const r = await actorOrError(); if (!r.ok) return r
+  const v = workspaceAdminVerdict(r.actor, workspaceId)
+  if (v === 'missing') return { ok: false, error: ERR_MISSING }  // 비소속 워크스페이스 — 존재 은닉(404)
+  return v === 'ok' ? r : { ok: false, error: ERR_DENIED }
+}
 
 /**
- * 대상 행에서 project_id 를 읽어 온다. projectId 를 인자로 받지 않는 액션이 판정 전에 쓴다.
- * 조회 실패는 쓰기 중단 사유다(3원칙 ②). minutes.project_id 는 nullable 이므로
- * ok:true 이면서 projectId 가 null 일 수 있다 — 호출부가 그 분기를 명시적으로 처리해야 한다.
+ * 대상 행의 프로젝트·워크스페이스를 세션 클라이언트로 읽는다. projectId 를 인자로 받지 않는 액션이 판정 전에 쓴다.
+ * 조회 실패는 ERR_LOOKUP(판정 불가 — 호출부 fallback 500), 행이 없거나 RLS 가 가리면 ERR_MISSING(404)이다.
+ * minutes.project_id 는 nullable 이므로 ok:true 이면서 projectId 가 null 일 수 있다 — 호출부가 그 분기를 명시적으로 처리해야 한다.
  */
+export async function resolveScope(table: ProjectScopedTable, id: string): Promise<ScopeResult> {
+  return readScope(await createServerClient(), table, id, 'resolveScope')
+}
+
+/** 기존 호출부 호환용 — resolveScope 의 프로젝트만. 실패 사유(ERR_LOOKUP·ERR_MISSING)는 그대로 넘긴다. */
 export async function resolveProjectId(
   table: ProjectScopedTable, id: string,
 ): Promise<{ ok: true; projectId: string | null } | { ok: false; error: string }> {
-  const sb = await createServerClient()
-  const { data, error } = await sb.from(table).select('project_id').eq('id', id).maybeSingle()
-  if (error) {
-    console.error(`[resolveProjectId] ${table} 조회 실패:`, error.message)
-    return { ok: false, error: ERR_LOOKUP }
-  }
-  if (!data) return { ok: false, error: ERR_MISSING }
-  return { ok: true, projectId: (data.project_id as string | null) ?? null }
+  const r = await resolveScope(table, id)
+  return r.ok ? { ok: true, projectId: r.projectId } : r
 }

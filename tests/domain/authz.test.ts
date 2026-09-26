@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
-  isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList,
+  isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -275,5 +275,25 @@ describe('isAdminAccessRole', () => {
   it("'admin' 만 참 — 서버 액션 입력이라 모양을 믿지 않는다", () => {
     expect(isAdminAccessRole('admin')).toBe(true)
     for (const v of ['member', 'viewer', null, undefined, 'ADMIN', ' admin', 1, {}]) expect(isAdminAccessRole(v)).toBe(false)
+  })
+})
+describe('workspaceAdminVerdict', () => {
+  it('플랫폼 관리자 ok, 관리자 ok, 멤버 denied, 비소속·null missing(존재 은닉)', () => {
+    expect(workspaceAdminVerdict(makeSuperuser(), 'ws-x')).toBe('ok')
+    expect(workspaceAdminVerdict(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), W)).toBe('ok')
+    expect(workspaceAdminVerdict(makeActor(), W)).toBe('denied')
+    expect(workspaceAdminVerdict(makeActor(), 'ws-other')).toBe('missing')
+    expect(workspaceAdminVerdict(makeActor(), null)).toBe('missing')
+  })
+})
+describe('Q2 — 두 워크스페이스·비공개(Review Focus 2)', () => {
+  const W2 = 'ws-2', B = 'proj-b'
+  const dual = makeActor({ workspaceRoles: new Map([[W, 'admin'], [W2, 'member']]), projectWorkspace: new Map([[P, W], [B, W2]]) })
+  it('A 관리자는 A 비공개 프로젝트의 admin 이고 B 프로젝트는 명단대로(viewer)', () => {
+    expect(roleIn(dual, P)).toBe('admin'); expect(canSeeProject(dual, { id: P, is_private: true })).toBe(true)
+    expect(roleIn(dual, B)).toBe('viewer')
+  })
+  it('B 에 속하지 않은 A 관리자에게 B 프로젝트는 null', () => {
+    expect(roleIn(makeActor({ workspaceRoles: new Map([[W, 'admin']]), projectWorkspace: new Map([[P, W]]) }), B)).toBe(null)
   })
 })
