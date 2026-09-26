@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { createServerClient } from '@/lib/supabase/server'
-import { getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
+import { ERR_MEETINGS_LOAD, getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
 
 type Reply = { data: unknown[] | null; error: { message: string } | null }
 const OK = (rows: unknown[]): Reply => ({ data: rows, error: null })
@@ -66,6 +66,13 @@ const exRow = (meetingId: string, date: string) =>
 beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}) })
 afterEach(() => { vi.restoreAllMocks() })
 
+/** 성공 결과만 — 실패면 사유로 던져 테스트를 깬다. */
+async function projectMeetings(projectId: string) {
+  const res = await getProjectMeetingData(projectId)
+  if (!res.ok) throw new Error(res.error)
+  return res
+}
+
 describe('getProjectMeetingData — 예외 FK 임베드', () => {
   it('임베드가 성공하면 별도 meeting_exceptions 왕복 없이 예외를 평탄화한다', async () => {
     const { tables } = makeSb({
@@ -74,7 +81,7 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
         meetingRow('m2', { meeting_exceptions: [] }),
       ]),
     })
-    const res = await getProjectMeetingData('embed-ok')
+    const res = await projectMeetings('embed-ok')
     expect(res.meetings.map(m => m.id)).toEqual(['m1', 'm2'])
     expect(res.exceptions).toEqual([
       { meetingId: 'm1', occurrenceDate: '2026-07-27', kind: 'cancelled' },
@@ -90,7 +97,7 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
         : OK([meetingRow('m1')]),
       exceptions: OK([exRow('m1', '2026-07-27')]),
     })
-    const res = await getProjectMeetingData('embed-fail')
+    const res = await projectMeetings('embed-fail')
     expect(res.meetings.map(m => m.id)).toEqual(['m1'])
     expect(res.exceptions).toEqual([
       { meetingId: 'm1', occurrenceDate: '2026-07-27', kind: 'cancelled' },
@@ -100,11 +107,14 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
     expect(console.error).toHaveBeenCalled() // 조용히 넘어가지 않는다
   })
 
-  it('재시도까지 실패하면 빈 목록이지만 로그를 남긴다 — 조용한 빈 화면 금지', async () => {
-    makeSb({ meetings: () => EMBED_ERR })
+  it('재시도까지 실패하면 실패를 결과로 돌려주고 로그를 남긴다 — 회의 0건으로 위장하지 않는다', async () => {
+    const { tables } = makeSb({ meetings: () => EMBED_ERR })
     const res = await getProjectMeetingData('embed-fail-twice')
-    expect(res).toEqual({ meetings: [], exceptions: [] })
+    expect(ERR_MEETINGS_LOAD).toBe('회의 일정을 불러오지 못했습니다.')
+    expect(res).toEqual({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
     expect(console.error).toHaveBeenCalledTimes(2)
+    // 회의를 못 읽었으면 예외 폴백 조회도 하지 않는다
+    expect(tables).not.toContain('meeting_exceptions')
   })
 })
 

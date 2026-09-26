@@ -21,7 +21,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const locale = await getServerLocale()
-  const [{ items, holidays, today }, projects, announcements, snapRes, meetingData, issuesRes, sb, user, { actor: membership, degraded }, config] = await Promise.all([
+  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, config] = await Promise.all([
     getComputedWbs(projectId),
     listProjects(),
     getAnnouncements(projectId),
@@ -41,7 +41,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   // (뷰는 RLS 로 읽은 WBS 항목이 있을 때만 팀 캐시를 읽지만, 그 조건에 기대지 않는다). 스냅샷 기록도 걸지 않는다.
   // 권한 조회 실패(degraded)는 레이아웃처럼 404 로 위장하지 않는다 — 그때 팀 캐시는 RLS 로 읽힌 항목이 있을 때만 쓰인다.
   // WBS 가 비어도 회의·이슈·공지는 그린다 — 팀 캐시(teamsForProjectSync)는 WBS 가 있을 때만 읽는다(DashboardView).
-  // 이슈·진척 이력 조회 실패는 결과로 받아 뷰에 넘긴다 — 뷰가 '0건'·합성 추세선 대신 사유를 보인다.
+  // 이슈·공지·회의·진척 이력 조회 실패는 결과로 받아 뷰에 넘긴다 — 뷰가 '0건'·합성 추세선 대신 사유를 보인다.
   if (!degraded && isHiddenProject(membership, projectId)) notFound()
   // 보험 스냅샷 — 응답 전송 후 실행. 페이지의 after() 안에서는 cookies() 호출이 불가하므로
   // supabase 클라이언트를 미리 만들어 넘긴다(서버 액션 훅과 달리 이 경로만 client 인자 사용).
@@ -69,9 +69,9 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         holidays={holidays}
         snapshots={snapRes.ok ? snapRes.rows : []}
         historyFailed={!snapRes.ok}
-        announcements={announcements}
-        meetings={meetingData.meetings}
-        meetingExceptions={meetingData.exceptions}
+        announcements={annRes.ok ? annRes.rows : null}
+        meetings={meetRes.ok ? meetRes.meetings : null}
+        meetingExceptions={meetRes.ok ? meetRes.exceptions : []}
         issues={issuesRes.ok ? issuesRes.rows : null}
         currentUserId={user?.id ?? null}
         canManage={canManage}

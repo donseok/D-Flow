@@ -5,7 +5,7 @@ import { getProjectRoster } from '@/lib/data/members'
 import { getAttendanceRecords } from '@/lib/data/attendance'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getAnnouncements } from '@/lib/data/announcements'
-import { listProjects } from '@/app/actions/project'
+import { listProjectsWithState } from '@/app/actions/project'
 import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { buildReportWorkbook } from '@/lib/report/excel'
 import { buildWeeklyNarrative } from '@/lib/report/narrative'
@@ -38,6 +38,20 @@ const FORMATS = {
   },
 } as const
 
+type ReportProject = { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }
+
+/**
+ * 대상은 호출자가 볼 수 있는 프로젝트여야 한다(RLS + canSeeProject 목록) — /api/export 와 같은 순서·문구로 다른 조회보다 먼저
+ * 판정한다(판정 전에 데이터 조회를 시작하지 않는다). 목록 조회 실패는 '없는 프로젝트'가 아니다(500).
+ */
+async function resolveReportProject(projectId: string): Promise<{ ok: true; project: ReportProject } | { ok: false; res: NextResponse }> {
+  const { projects, degraded } = await listProjectsWithState()
+  const project = (projects as ReportProject[]).find(p => p.id === projectId)
+  if (project) return { ok: true, project }
+  if (degraded) return { ok: false, res: NextResponse.json({ error: '프로젝트 목록을 확인할 수 없습니다.' }, { status: 500 }) }
+  return { ok: false, res: NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 }) }
+}
+
 /**
  * 현황 보고서를 Excel/PPT로 내보낸다(읽기 전용 — /api/export와 동일, 로그인 사용자 누구나).
  * 데이터 페치는 RLS가 적용돼 권한이 자동 반영된다. 화면 모달과 동일한 buildReportModel 사용.
@@ -61,9 +75,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'week(YYYY-MM-DD)가 필요합니다' }, { status: 400 })
     }
     const weekStart = mondayIso(week) // 임의 날짜 → 월요일 정규화(스펙 §7)
-    const [projects, sheet] = await Promise.all([listProjects(), getWeeklySheet(projectId, weekStart)])
-    const project = (projects as { id: string; name: string }[]).find(p => p.id === projectId)
-    if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다' }, { status: 404 })
+    const target = await resolveReportProject(projectId)
+    if (!target.ok) return target.res
+    const { project } = target
+    const sheet = await getWeeklySheet(projectId, weekStart)
     const hasContent = sheet?.rows.some(r =>
       (r.thisContent + r.thisIssue + r.nextContent + r.nextIssue).trim() !== '')
     if (!sheet || !hasContent) {
@@ -87,24 +102,32 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const [{ items, today }, projects, roster, attendance, meetingData, announcements, config] = await Promise.all([
-    getComputedWbs(projectId), listProjects(), getProjectRoster(projectId), getAttendanceRecords(projectId),
+  const target = await resolveReportProject(projectId)
+  if (!target.ok) return target.res
+  const { project } = target
+
+  const [{ items, today }, roster, attendance, meetRes, annRes, config] = await Promise.all([
+    getComputedWbs(projectId), getProjectRoster(projectId), getAttendanceRecords(projectId),
     getProjectMeetingData(projectId), getAnnouncements(projectId), getProjectConfig(projectId),
   ])
-  // 명단을 못 읽었으면 '멤버 없는 보고서' 를 내려보내지 않는다(3원칙 ① — 조회 실패를 데이터 없음으로 위장하지 않는다).
+  // 명단·회의·공지를 못 읽었으면 '멤버·회의·공지 없는 보고서' 를 내려보내지 않는다(3원칙 ① — 조회 실패를 데이터 없음으로 위장하지 않는다).
   if (!roster.ok) {
     console.error(`[report] 명단 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
     return NextResponse.json({ error: roster.error }, { status: 503 })
   }
+  if (!meetRes.ok) {
+    console.error(`[report] 회의 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
+    return NextResponse.json({ error: meetRes.error }, { status: 503 })
+  }
+  if (!annRes.ok) {
+    console.error(`[report] 공지 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
+    return NextResponse.json({ error: annRes.error }, { status: 503 })
+  }
   const members = roster.rows
-  const project = (projects as { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }[]).find(
-    p => p.id === projectId,
-  )
-  if (!project) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다' }, { status: 404 })
 
   const model = buildWeeklyReportModel(items, project, today, {
     members, attendance, generatedAt: seoulNow(),
-    meetings: meetingData.meetings, meetingExceptions: meetingData.exceptions, announcements,
+    meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
     teams: activeTeamCodesForProjectSync(projectId), levelLabels: config.levelLabels,
   })
   const meta = FORMATS[format]

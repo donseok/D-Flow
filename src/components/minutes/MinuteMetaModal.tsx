@@ -41,6 +41,8 @@ export function MinuteMetaModal({
   )
   const [meetingId, setMeetingId] = useState(minute.meetingId ?? '')
   const [meetings, setMeetings] = useState<{ id: string; title: string; meetingDate: string }[]>([])
+  // 회의 목록 조회 실패 — 빈 드롭다운이 '연결할 회의 없음'으로 읽히지 않게 사유를 띄운다.
+  const [meetingsFailed, setMeetingsFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -55,7 +57,16 @@ export function MinuteMetaModal({
   useEffect(() => {
     if (!open || !initialProjectId) return
     let alive = true
-    void fetchProjectMeetingsLite(initialProjectId).then(list => { if (alive) setMeetings(list) })
+    void fetchProjectMeetingsLite(initialProjectId)
+      .then(res => {
+        if (!alive) return
+        setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+      })
+      .catch((e: unknown) => {
+        if (!alive) return
+        console.error('[MinuteMetaModal] 회의 목록 조회 실패:', e)
+        setMeetingsFailed(true)
+      })
     return () => { alive = false }
   }, [open, initialProjectId])
 
@@ -89,7 +100,7 @@ export function MinuteMetaModal({
     : folders.find(f => f.id === folderId)?.name ?? '…'
 
   async function onProject(pid: string) {
-    setProjectId(pid); setMeetingId(''); setMeetings([])
+    setProjectId(pid); setMeetingId(''); setMeetings([]); setMeetingsFailed(false)
     // 사용자가 프로젝트를 바꾸면 고른 폴더가 새 스코프 밖일 수 있다 — 해제(미분류)한다.
     // 초기값(minute.folderId)은 여기서 건드리지 않는다 — 커스텀 편철 존중은 이 모달의 핵심 계약
     // (위 save() 참조). folders 가 아직 비어 있으면(재조회 경합) 판정 불가이므로 손대지 않는다.
@@ -97,7 +108,9 @@ export function MinuteMetaModal({
       const f = folders.find(x => x.id === folderId)
       if (!f || (f.projectId ?? null) !== (pid || null)) setFolderId(null)
     }
-    if (pid) setMeetings(await fetchProjectMeetingsLite(pid))
+    if (!pid) return
+    const res = await fetchProjectMeetingsLite(pid)
+    setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
   }
 
   async function save() {
@@ -159,6 +172,7 @@ export function MinuteMetaModal({
             </select>
           </label>
         </div>
+        {meetingsFailed && <p role="alert" className="text-xs text-delayed">{t('min.meetingsLoadFailed')}</p>}
         {err && <p className="text-sm text-delayed">{err}</p>}
         <div className="space-y-1.5 rounded-xl border border-line p-2.5 text-sm">
           <span className="block font-medium">{t('min.ext.title')}</span>

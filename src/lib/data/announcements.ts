@@ -3,8 +3,13 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { Announcement, AnnouncementCategory, AnnouncementSummary } from '@/lib/domain/types'
 import { seoulToday } from '@/lib/domain/dates'
 
-/** 프로젝트 공지 목록 — 고정 우선 → 최신순. 실패 시 [] (읽기 계층 관례). */
-export const getAnnouncements = cache(async (projectId: string): Promise<Announcement[]> => {
+export const ERR_ANNOUNCEMENTS_LOAD = '공지를 불러오지 못했습니다.'
+
+/** 프로젝트 공지 목록 — 고정 우선 → 최신순. 실패는 로그 후 결과로 돌려준다(members.ts 의 getProjectRoster 관례) —
+ *  호출부가 '공지 없음'과 '못 읽음'을 구분해 보인다(에러 처리 3원칙 ①). */
+export const getAnnouncements = cache(async (
+  projectId: string,
+): Promise<{ ok: true; rows: Announcement[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('announcements')
@@ -13,9 +18,12 @@ export const getAnnouncements = cache(async (projectId: string): Promise<Announc
     .order('is_pinned', { ascending: false })
     .order('created_at', { ascending: false })
 
-  if (error) console.error('[getAnnouncements] 조회 실패:', error.message)
+  if (error) {
+    console.error('[getAnnouncements] 조회 실패:', error.message)
+    return { ok: false, error: ERR_ANNOUNCEMENTS_LOAD }
+  }
 
-  return (data ?? []).map((r: Record<string, unknown>) => ({
+  return { ok: true, rows: (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string,
     projectId: r.project_id as string,
     title: r.title as string,
@@ -27,14 +35,17 @@ export const getAnnouncements = cache(async (projectId: string): Promise<Announc
     milestoneDate: (r.milestone_date as string | null) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
-  }))
+  })) }
 })
 
 /**
  * 헤더 티커용 상위 공지 — 고정 우선 → 최신순 limit건, 표시 컬럼만(body 제외).
- * getAnnouncements와 정렬 기준이 같고 DB에서 limit까지 끝낸다. 실패 시 [].
+ * getAnnouncements와 정렬 기준이 같고 DB에서 limit까지 끝낸다. 실패는 결과로 돌려준다(getAnnouncements 와 같다).
  */
-export const getTopAnnouncements = cache(async (projectId: string, limit = 5): Promise<AnnouncementSummary[]> => {
+export const getTopAnnouncements = cache(async (
+  projectId: string,
+  limit = 5,
+): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
   const today = seoulToday()
   // 게시중만: (from is null 또는 from<=today) AND (to is null 또는 to>=today).
@@ -49,14 +60,17 @@ export const getTopAnnouncements = cache(async (projectId: string, limit = 5): P
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error) console.error('[getTopAnnouncements] 조회 실패:', error.message)
+  if (error) {
+    console.error('[getTopAnnouncements] 조회 실패:', error.message)
+    return { ok: false, error: ERR_ANNOUNCEMENTS_LOAD }
+  }
 
-  return (data ?? []).map((r: Record<string, unknown>) => ({
+  return { ok: true, rows: (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string,
     title: r.title as string,
     category: r.category as AnnouncementCategory,
     isPinned: (r.is_pinned as boolean) ?? false,
-  }))
+  })) }
 })
 
 /** 현재 사용자의 읽음 워터마크(마지막으로 공지 목록을 본 시각). 없으면 null. */

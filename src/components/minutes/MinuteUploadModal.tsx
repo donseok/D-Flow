@@ -77,6 +77,8 @@ export function MinuteUploadModal({
   )
   const [meetingId, setMeetingId] = useState('')
   const [meetings, setMeetings] = useState<{ id: string; title: string; meetingDate: string }[]>([])
+  // 회의 목록 조회 실패 — 빈 드롭다운이 '연결할 회의 없음'으로 읽히지 않게 사유를 띄운다.
+  const [meetingsFailed, setMeetingsFailed] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -97,8 +99,14 @@ export function MinuteUploadModal({
     if (!defaultProjectId) return
     let alive = true
     void fetchProjectMeetingsLite(defaultProjectId)
-      .then(list => { if (alive) setMeetings(list) })
-      .catch(err => console.error('[MinuteUploadModal] 회의 목록 조회 실패:', err))
+      .then(res => {
+        if (!alive) return
+        setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
+      })
+      .catch(err => {
+        console.error('[MinuteUploadModal] 회의 목록 조회 실패:', err)
+        if (alive) setMeetingsFailed(true)
+      })
     return () => { alive = false }
   }, [defaultProjectId])
 
@@ -142,14 +150,16 @@ export function MinuteUploadModal({
   }
 
   async function onProject(pid: string) {
-    setProjectId(pid); setMeetingId(''); setMeetings([])
+    setProjectId(pid); setMeetingId(''); setMeetings([]); setMeetingsFailed(false)
     // 고른 폴더가 새 프로젝트 스코프 밖이면 해제한다(미분류로) — 교차 프로젝트 폴더는 서버도
     // 거부한다. liveFolders 가 아직 비어 있으면(재조회 경합) 판정 불가이므로 손대지 않는다.
     if (folderId !== null && liveFolders.length > 0) {
       const f = liveFolders.find(x => x.id === folderId)
       if (!f || (f.projectId ?? null) !== (pid || null)) setFolderId(null)
     }
-    if (pid) setMeetings(await fetchProjectMeetingsLite(pid))
+    if (!pid) return
+    const res = await fetchProjectMeetingsLite(pid)
+    setMeetings(res.ok ? res.meetings : []); setMeetingsFailed(!res.ok)
   }
 
   /** 원본 .md 를 올리고 회의록을 만든다 — 실패는 사유를 보이고 null. */
@@ -313,6 +323,7 @@ export function MinuteUploadModal({
             </select>
           </label>
         </div>
+        {meetingsFailed && <p role="alert" className="text-xs text-delayed">{t('min.meetingsLoadFailed')}</p>}
         {!team && <p role="alert" className="text-sm text-delayed">먼저 팀을 등록하세요.</p>}
         {!targetWs.ok && <p role="alert" className="text-sm text-delayed">{targetWs.error}</p>}
         {err && <p className="text-sm text-delayed">{err}</p>}

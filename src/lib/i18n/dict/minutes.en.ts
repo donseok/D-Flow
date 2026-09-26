@@ -86,6 +86,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.form.roleAttach': 'Attach',
   'min.form.meeting': 'Link meeting (optional)',
   'min.form.meetingNone': 'No link',
+  'min.meetingsLoadFailed': 'Could not load meetings — refresh the page.',
   'min.form.project': 'Project',
   'min.form.projectNone': 'No project',
   'min.form.save': 'Upload',

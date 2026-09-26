@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
   getSnapshots: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
   getIssuesForDashboard: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
+  getAnnouncements: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
+  getProjectMeetingData: vi.fn(async (): Promise<{ ok: true; meetings: unknown[]; exceptions: unknown[] } | { ok: false; error: string }> =>
+    ({ ok: true, meetings: [], exceptions: [] })),
 }))
 vi.mock('@/lib/authz', () => ({
   getActorViewState: vi.fn(async () => mocks.state),
@@ -22,8 +25,8 @@ vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
 vi.mock('next/server', () => ({ after: mocks.after }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots, recordProgressSnapshot: vi.fn() }))
-vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: vi.fn(async () => []) }))
-vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn(async () => ({ meetings: [], exceptions: [] })) }))
+vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))
+vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: mocks.getIssuesForDashboard }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
@@ -60,7 +63,9 @@ describe('dashboard 페이지 — 숨은 프로젝트', () => {
     expect(mocks.notFound).not.toHaveBeenCalled()
     expect(mocks.DashboardView).toHaveBeenCalled()
     expect(mocks.after).toHaveBeenCalled()
-    expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({ issues: [], snapshots: [], historyFailed: false })
+    expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({
+      issues: [], snapshots: [], historyFailed: false, announcements: [], meetings: [], meetingExceptions: [],
+    })
   })
 })
 
@@ -71,5 +76,12 @@ describe('dashboard 페이지 — 조회 실패를 뷰에 구분해 넘긴다', 
     mocks.getSnapshots.mockResolvedValueOnce({ ok: false, error: '진척 이력을 불러오지 못했습니다.' })
     await render()
     expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({ issues: null, snapshots: [], historyFailed: true })
+  })
+  it('공지·회의 실패는 announcements=null, meetings=null(예외는 빈 목록)', async () => {
+    mocks.state = { actor: makeMemberActor('p1'), degraded: false }
+    mocks.getAnnouncements.mockResolvedValueOnce({ ok: false, error: '공지를 불러오지 못했습니다.' })
+    mocks.getProjectMeetingData.mockResolvedValueOnce({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
+    await render()
+    expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({ announcements: null, meetings: null, meetingExceptions: [] })
   })
 })

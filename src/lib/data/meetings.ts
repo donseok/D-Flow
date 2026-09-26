@@ -71,11 +71,14 @@ async function fetchExceptionsByIds(
 
 type RowsResult = { data: Row[] | null; error: { message: string } | null }
 
+export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.'
+
 /**
  * 예외 임베드를 태워 회의를 조회하고, 임베드가 원인일 수 있는 실패면 임베드 없이 1회 재시도한다.
  * 임베드는 관계 미탐지 시 **부모 쿼리 전체를 에러로 만들기** 때문에, 재시도가 없으면
  * 회의가 하나도 없는 것처럼 보인다(정상 상태와 구별 불가).
- * `embedded=false` 로 돌아오면 호출부가 예외를 별도 조회해야 한다.
+ * `embedded=false` 로 돌아오면 호출부가 예외를 별도 조회해야 한다. 재시도까지 실패하면 `failed=true`(rows 는 빈 배열) —
+ * 호출부가 '회의 0건'과 구분해 처리한다.
  *
  * build 가 select 문자열을 받는 콜백인 이유: 임베드 유무로 PostgREST 의 추론 행 타입이 갈려
  * 같은 변수에 재대입할 수 없다. 호출부마다 필터가 달라 빌더 자체를 넘겨받는다.
@@ -85,36 +88,42 @@ async function selectMeetings(
   cols: string,
   tag: string,
   consequence: string,
-): Promise<{ rows: Row[]; embedded: boolean }> {
+): Promise<{ rows: Row[]; embedded: boolean; failed: boolean }> {
   const first = await build(`${cols}, ${EXCEPTION_EMBED}`) as RowsResult
-  if (!first.error) return { rows: (first.data ?? []) as Row[], embedded: true }
+  if (!first.error) return { rows: (first.data ?? []) as Row[], embedded: true, failed: false }
 
   console.error(`[${tag}] 예외 임베드 조회 실패, 임베드 없이 재시도:`, first.error.message)
   const retry = await build(cols) as RowsResult
-  if (retry.error) console.error(`[${tag}] meetings 조회 실패 — ${consequence}:`, retry.error.message)
-  return { rows: (retry.data ?? []) as Row[], embedded: false }
+  if (retry.error) {
+    console.error(`[${tag}] meetings 조회 실패 — ${consequence}:`, retry.error.message)
+    return { rows: [], embedded: false, failed: true }
+  }
+  return { rows: (retry.data ?? []) as Row[], embedded: false, failed: false }
 }
 
-/** 프로젝트 전체 회의 시리즈 + 예외. body 제외(상세 모달에서 로드). 실패 시 빈 구조. */
+/** 프로젝트 전체 회의 시리즈 + 예외. body 제외(상세 모달에서 로드).
+ *  회의 조회 실패는 결과로 돌려준다(members.ts 의 getProjectRoster 관례) — 달력·대시보드·보고서·회의록의 '회의 연결'
+ *  드롭다운이 '회의 없음'과 '못 읽음'을 구분해 보인다(에러 처리 3원칙 ①). */
 export const getProjectMeetingData = cache(async (
   projectId: string,
-): Promise<{ meetings: Meeting[]; exceptions: MeetingException[] }> => {
+): Promise<{ ok: true; meetings: Meeting[]; exceptions: MeetingException[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, location, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id)'
 
   // 예외를 임베드해 왕복 2회 → 1회.
-  const { rows, embedded } = await selectMeetings(
+  const { rows, embedded, failed } = await selectMeetings(
     select => sb.from('meetings').select(select)
       .eq('project_id', projectId).order('meeting_date', { ascending: true }),
     COLS, 'getProjectMeetingData',
-    "캘린더와 회의록의 '회의 연결' 드롭다운이 '회의 없음'으로 위장됨",
+    '호출부가 회의 일정 대신 사유를 보인다',
   )
+  if (failed) return { ok: false, error: ERR_MEETINGS_LOAD }
 
   const meetings = rows.map((r: Row) => mapMeeting(r, attendeeIdsFrom(r)))
   const exceptions = embedded
     ? exceptionsFrom(rows)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), 'getProjectMeetingData')
-  return { meetings, exceptions }
+  return { ok: true, meetings, exceptions }
 })
 
 /** 상세 모달 — body + 참석자 표시 정보. 없으면 null. */

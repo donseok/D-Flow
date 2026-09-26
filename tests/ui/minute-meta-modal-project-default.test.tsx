@@ -17,7 +17,7 @@ vi.mock('@/app/actions/minutes', () => ({
   updateMinuteMeta: (...a: unknown[]) =>
     updateMinuteMeta(...(a as [string, Record<string, unknown>, string | null | undefined])),
   fetchMinuteFoldersLite: vi.fn(async () => []),
-  fetchProjectMeetingsLite: vi.fn(async () => []),
+  fetchProjectMeetingsLite: vi.fn(async () => ({ ok: true, meetings: [] })),
   resetMinuteExternalId: vi.fn(async () => ({ ok: true })),
 }))
 

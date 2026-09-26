@@ -86,6 +86,7 @@ export const minutesKo = {
   'min.form.roleAttach': '첨부',
   'min.form.meeting': '회의 연결 (선택)',
   'min.form.meetingNone': '연결 안 함',
+  'min.meetingsLoadFailed': '회의 목록을 불러오지 못했습니다 — 새로고침하세요.',
   'min.form.project': '프로젝트',
   'min.form.projectNone': '프로젝트 없음',
   'min.form.save': '업로드',

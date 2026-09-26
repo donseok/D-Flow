@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
   project: { data: { name: 'Acme', start_date: null, end_date: null } as Record<string, unknown> | null, error: null },
   activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : ['B팀'])),
   getSnapshots: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
+  getProjectMeetingData: vi.fn(async (): Promise<{ ok: true; meetings: unknown[]; exceptions: unknown[] } | { ok: false; error: string }> =>
+    ({ ok: true, meetings: [], exceptions: [] })),
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots }))
-vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn(async () => ({ meetings: [], exceptions: [] })) }))
+vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/minutes', () => ({ getProjectMinuteSignals: vi.fn(async () => []) }))
 vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
 vi.mock('@/lib/supabase/server', () => ({
@@ -49,5 +51,9 @@ describe('loadProjectFacts — 조회 실패는 빈 데이터로 브리핑하지
   it('진척 이력 조회 실패는 throw 로 올린다(호출측이 unavailable 로 강등)', async () => {
     mocks.getSnapshots.mockResolvedValueOnce({ ok: false, error: '진척 이력을 불러오지 못했습니다.' })
     await expect(loadProjectFacts('p1')).rejects.toThrow('[projectFacts] 진척 이력을 불러오지 못했습니다.')
+  })
+  it('회의 조회 실패는 throw 로 올린다(호출측이 unavailable 로 강등)', async () => {
+    mocks.getProjectMeetingData.mockResolvedValueOnce({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
+    await expect(loadProjectFacts('p1')).rejects.toThrow('[projectFacts] 회의 일정을 불러오지 못했습니다.')
   })
 })

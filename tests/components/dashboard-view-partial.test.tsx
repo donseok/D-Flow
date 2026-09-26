@@ -30,6 +30,8 @@ import { IssueStatusCard } from '@/components/dashboard/IssueStatusCard'
 import { IssueTrendCard } from '@/components/dashboard/IssueTrendCard'
 import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
 import { ERR_ISSUES_LOAD } from '@/lib/data/issues'
+import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
+import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 
 const typesIn = (node: ReactNode, out = new Set<unknown>()): Set<unknown> => {
   if (Array.isArray(node)) node.forEach(n => typesIn(n, out))
@@ -130,6 +132,34 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const types = typesIn(tree)
     expect(types.has(EmptyState)).toBe(false)
     expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toContain(ERR_ISSUES_LOAD)
+  })
+
+  it('공지=null → 공지 스트립 대신 LoadErrorNotice(ERR_ANNOUNCEMENTS_LOAD), 타임라인은 공지 마일스톤 없이 그린다', async () => {
+    const withMs = { ...ANN, milestoneDate: '2026-10-15' }
+    const ok = await view({ announcements: [withMs] })
+    const okPoints = elsOf(ok, MilestoneTimeline)[0].props.points as unknown[]
+
+    const tree = await view({ announcements: null })
+    const types = typesIn(tree)
+    expect(types.has(AnnouncementStrip)).toBe(false)
+    expect(types.has(MilestoneTimeline)).toBe(true)
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ANNOUNCEMENTS_LOAD])
+    expect((elsOf(tree, MilestoneTimeline)[0].props.points as unknown[]).length).toBe(okPoints.length - 1)
+  })
+
+  it('회의=null → 회의 일정 대신 LoadErrorNotice(ERR_MEETINGS_LOAD)', async () => {
+    const tree = await view({ meetings: null })
+    const types = typesIn(tree)
+    expect(types.has(MeetingSchedule)).toBe(false)
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_MEETINGS_LOAD])
+  })
+
+  it('공지·회의 실패도 빈 것으로 치지 않는다 — WBS·이슈가 비어도 빈 상태로 빠지지 않는다', async () => {
+    for (const over of [{ announcements: null }, { meetings: null }] as Partial<Props>[]) {
+      const tree = await view({ items: [], issues: [], announcements: [], meetings: [], ...over })
+      expect(typesIn(tree).has(EmptyState)).toBe(false)
+      expect(elsOf(tree, LoadErrorNotice)).toHaveLength(1)
+    }
   })
 
   it('(d) historyFailed=true → TrendChart·SpiPanel 에 historyFailed 가 전달된다', async () => {

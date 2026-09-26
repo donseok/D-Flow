@@ -20,12 +20,16 @@ export async function GET(req: NextRequest) {
   const route = req.nextUrl.searchParams.get('route') || null
   const menu = req.nextUrl.searchParams.get('menu') || null
 
-  const [inbox, notifications, unreadAnnouncements, headerAnnouncements, pendingApprovals] = await Promise.all([
+  const [inbox, notifications, unreadAnnouncements, header, pendingApprovals] = await Promise.all([
     getInboxFeed(),
     // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(기존 HeaderChrome catch(() => {}) 시맨틱).
     route ? getNotifications(route).catch(() => null) : Promise.resolve(null),
     menu ? getUnreadAnnouncementCount(menu).catch(() => 0) : Promise.resolve(0),
-    route ? getHeaderAnnouncements(route).catch(() => [] as Awaited<ReturnType<typeof getHeaderAnnouncements>>) : Promise.resolve([]),
+    // 헤더 티커 — 실패를 '공지 0건'으로 위장하지 않고 headerAnnouncementsFailed 로 알린다(표시는 ShellStateProvider·티커).
+    route ? getHeaderAnnouncements(route).catch((e: unknown) => {
+      console.error('[shell] 헤더 공지 조회 실패:', e instanceof Error ? e.message : e)
+      return { ok: false as const, error: '' }
+    }) : Promise.resolve({ ok: true as const, rows: [] }),
     // 에이전트 메뉴의 결재 대기 배지 — 공지 배지처럼 메뉴 문맥 기준. 배지 하나 때문에 셸 전체를 죽이지 않되 로그는 남긴다.
     menu ? getPendingApprovalCount(menu).catch((e: unknown) => {
       console.error('[shell] 결재 대기 수 조회 실패:', e instanceof Error ? e.message : e)
@@ -34,7 +38,11 @@ export async function GET(req: NextRequest) {
   ])
 
   return NextResponse.json(
-    { inbox, notifications, unreadAnnouncements, headerAnnouncements, pendingApprovals },
+    {
+      inbox, notifications, unreadAnnouncements, pendingApprovals,
+      headerAnnouncements: header.ok ? header.rows : [],
+      headerAnnouncementsFailed: !header.ok,
+    },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }

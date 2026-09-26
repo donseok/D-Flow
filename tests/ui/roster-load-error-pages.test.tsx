@@ -39,7 +39,7 @@ vi.mock('@/lib/data/projectConfig', () => ({
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: vi.fn(async () => ({})) }))
 vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: vi.fn(async () => []) }))
 vi.mock('@/lib/data/meetings', () => ({
-  getProjectMeetingData: vi.fn(async () => ({ meetings: [], exceptions: [] })),
+  getProjectMeetingData: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
   resolveMemberIds: vi.fn(async () => []),
 }))
 vi.mock('@/lib/data/issues', () => ({ getIssues: vi.fn(async () => []), getMinuteLinkedIssues: vi.fn(async () => []) }))

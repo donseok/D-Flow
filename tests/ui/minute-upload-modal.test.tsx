@@ -16,10 +16,12 @@ const createMinute = vi.fn<(input: unknown, folderId: string | null) => Promise<
   async () => ({ ok: true, id: M }))
 const recordMinuteFile = vi.fn<(...a: unknown[]) => Promise<{ ok: boolean }>>(async () => ({ ok: true }))
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => tree)
+type MeetingsLite = { ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }
+const fetchProjectMeetingsLite = vi.fn<(pid: string) => Promise<MeetingsLite>>(async () => ({ ok: true, meetings: [] }))
 vi.mock('@/app/actions/minutes', () => ({
   createMinute: (...a: unknown[]) => createMinute(...(a as [unknown, string | null])),
   recordMinuteFile: (...a: unknown[]) => recordMinuteFile(...a),
-  fetchProjectMeetingsLite: vi.fn(async () => []),
+  fetchProjectMeetingsLite: (pid: string) => fetchProjectMeetingsLite(pid),
   fetchMinuteFoldersLite: () => fetchMinuteFoldersLite(),
 }))
 const upload = vi.fn(async () => ({ error: null }))
@@ -54,7 +56,7 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
   beforeEach(() => {
     container = document.createElement('div'); document.body.appendChild(container)
     root = createRoot(container)
-    createMinute.mockClear(); recordMinuteFile.mockClear(); upload.mockClear(); onSaved.mockClear()
+    createMinute.mockClear(); recordMinuteFile.mockClear(); upload.mockClear(); onSaved.mockClear(); fetchProjectMeetingsLite.mockClear()
     fetchMinuteFoldersLite.mockImplementation(async () => tree)
   })
   afterEach(() => { act(() => root.unmount()); container.remove() })
@@ -313,5 +315,21 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     await clickSave()
     expect(upload).not.toHaveBeenCalled()
     expect(createMinute).not.toHaveBeenCalled()
+  })
+
+  const meetingsAlert = () =>
+    [...mainDialog().querySelectorAll('[role="alert"]')].find(e => e.textContent === 'min.meetingsLoadFailed')
+
+  it('기본 프로젝트의 회의 목록 조회 실패는 드롭다운 아래 사유로 알린다 — 연결할 회의가 없는 것처럼 보이지 않게', async () => {
+    fetchProjectMeetingsLite.mockResolvedValueOnce({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
+    await mount({ projects: [{ id: P1, name: 'A' }], myProjectIds: [P1] })
+    expect(fetchProjectMeetingsLite).toHaveBeenCalledWith(P1)
+    expect(meetingsAlert()).toBeDefined()
+  })
+
+  it('회의 목록 정상 조회면 사유가 없다', async () => {
+    await mount({ projects: [{ id: P1, name: 'A' }], myProjectIds: [P1] })
+    expect(fetchProjectMeetingsLite).toHaveBeenCalledWith(P1)
+    expect(meetingsAlert()).toBeUndefined()
   })
 })

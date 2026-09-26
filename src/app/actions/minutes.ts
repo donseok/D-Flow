@@ -870,14 +870,16 @@ export async function getMinuteFileUrl(fileId: string): Promise<{ ok: boolean; u
   return { ok: true, url: signed.signedUrl }
 }
 
-/** 업로드 모달의 회의 연결 드롭다운용 — 프로젝트 회의 목록(가벼운 필드만). */
+/** 업로드 모달의 회의 연결 드롭다운용 — 프로젝트 회의 목록(가벼운 필드만).
+ *  조회 실패는 결과로 돌려준다 — 드롭다운이 '연결할 회의 없음'으로 보이지 않게 모달이 사유를 띄운다. */
 export async function fetchProjectMeetingsLite(
   projectId: string,
-): Promise<{ id: string; title: string; meetingDate: string }[]> {
+): Promise<{ ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }> {
   const user = await getSession()
-  if (!user) return []
-  const { meetings } = await getProjectMeetingData(projectId)
-  return meetings.map(mt => ({ id: mt.id, title: mt.title, meetingDate: mt.meetingDate }))
+  if (!user) return { ok: true, meetings: [] }
+  const res = await getProjectMeetingData(projectId)
+  if (!res.ok) return res
+  return { ok: true, meetings: res.meetings.map(mt => ({ id: mt.id, title: mt.title, meetingDate: mt.meetingDate })) }
 }
 
 /** 회의 상세 모달의 '연결된 회의록' 바로가기용 — 역방향 조회(회의 → 회의록). */

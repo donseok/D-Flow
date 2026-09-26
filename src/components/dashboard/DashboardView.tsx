@@ -11,6 +11,8 @@ import { announcementMilestones, mergeMilestonePoints } from '@/lib/domain/annou
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { ERR_ISSUES_LOAD } from '@/lib/data/issues'
+import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
+import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
@@ -44,9 +46,9 @@ export async function DashboardView({
   holidays = [],
   snapshots,
   historyFailed,
-  announcements = [],
-  meetings = [],
-  meetingExceptions = [],
+  announcements,
+  meetings,
+  meetingExceptions,
   issues,
   currentUserId = null,
   canManage = false,
@@ -64,9 +66,11 @@ export async function DashboardView({
   snapshots: SnapshotPoint[]
   /** 진척 이력(getSnapshots) 조회 실패 — S-Curve 가 이력 0건으로 추세선을 합성하지 않게 한다. */
   historyFailed: boolean
-  announcements?: Announcement[]
-  meetings?: Meeting[]
-  meetingExceptions?: MeetingException[]
+  /** null = 조회 실패 — 공지 스트립 자리에 사유, 타임라인은 공지 마일스톤 없이. */
+  announcements: Announcement[] | null
+  /** null = 조회 실패 — 회의 일정 자리에 사유. */
+  meetings: Meeting[] | null
+  meetingExceptions: MeetingException[]
   /** 이슈 현황 카드용 슬라이스(page.tsx 의 getIssuesForDashboard). null = 조회 실패 — 카드 대신 사유를 보인다. */
   issues: DashboardIssue[] | null
   /** 회의 카드에서 작성자 본인/프로젝트 관리자 이상에게 수정·삭제를 열기 위한 식별자. */
@@ -84,7 +88,10 @@ export async function DashboardView({
 
   const hasWbs = items.length > 0
   // 전부 비었을 때만 화면 전체 빈 상태 — 실패한 데이터셋(null)은 '빈 것'이 아니다(그 자리에 오류가 보여야 한다).
-  if (!hasWbs && issues !== null && issues.length === 0 && announcements.length === 0 && meetings.length === 0) {
+  if (
+    !hasWbs && issues !== null && announcements !== null && meetings !== null
+    && issues.length === 0 && announcements.length === 0 && meetings.length === 0
+  ) {
     return <EmptyState icon={BarChart3} title={tr('dash.emptyTitle')} description={tr('dash.emptyDesc')} />
   }
 
@@ -100,10 +107,10 @@ export async function DashboardView({
   })() : null
   // 마일스톤 = WBS 리프 + 마일스톤 일자를 체크한 공지(0091). 공지도 타임라인의 시계(today = base_date 우선)를
   // 쓴다 — 한 카드에서 오늘 선과 D-day 가 두 시계로 갈리지 않게. 경영진 요약의 '다음 마일스톤' 타일은 WBS 만(현행 유지).
-  // WBS 가 없으면 공지 마일스톤만.
+  // WBS 가 없으면 공지 마일스톤만, 공지를 못 읽었으면 WBS 마일스톤만(공지 자리에 사유가 뜬다).
   const milestones = mergeMilestonePoints(
     hasWbs ? milestoneTimeline(items, today, milestoneKeywords) : [],
-    announcementMilestones(announcements, today),
+    announcements ? announcementMilestones(announcements, today) : [],
   )
   // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(섹션 D~F 주석).
   const realToday = seoulToday()
@@ -112,7 +119,9 @@ export async function DashboardView({
   return (
     <div className="space-y-5">
       {/* 게시중 공지 1건 — WBS 없이도 보인다(경영진 요약에서 분리). */}
-      <AnnouncementStrip projectId={projectId} announcements={announcements} today={today} />
+      {announcements === null
+        ? <LoadErrorNotice message={ERR_ANNOUNCEMENTS_LOAD} />
+        : <AnnouncementStrip projectId={projectId} announcements={announcements} today={today} />}
 
       {/* A. 경영진 요약 — 게이지 + 신호등 3 + 리포트. WBS 가 없으면 그 자리에 WBS 화면 안내. */}
       {wbs ? (
@@ -151,8 +160,10 @@ export async function DashboardView({
       {/* D. 회의 일정(전폭) — 진척 다음에 '이번 주 무슨 회의가 있나'. 이슈 카드 사이에 끼우면
           맥락이 끊긴다는 사용자 피드백(2026-08-28)으로 이슈 섹션 위로 분리. 실행 큐가 오래 전폭이었듯
           날짜 셀 + 제목 행 목록은 전폭에 어울린다. 회의는 실제 달력이므로 실제 오늘 기준(base_date 금지). */}
-      <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
-        currentUserId={currentUserId} canManage={canManage} />
+      {meetings === null ? <LoadErrorNotice message={ERR_MEETINGS_LOAD} /> : (
+        <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
+          currentUserId={currentUserId} canManage={canManage} />
+      )}
 
       {/* E. 이슈 — 좌: 이슈 현황(KPI·상태 분포·Mega별), 우: 등록·해결 추이(차트 + 최근 6주 표).
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).

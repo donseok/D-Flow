@@ -15,11 +15,13 @@ const updateMinuteMeta = vi.fn<(id: string, patch: unknown, folderId?: string | 
 const resetMinuteExternalId = vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(
   async () => ({ ok: true }))
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => tree)
+type MeetingsLite = { ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }
+const fetchProjectMeetingsLite = vi.fn<(pid: string) => Promise<MeetingsLite>>(async () => ({ ok: true, meetings: [] }))
 vi.mock('@/app/actions/minutes', () => ({
   updateMinuteMeta: (...a: unknown[]) => updateMinuteMeta(...(a as [string, unknown, string?])),
   resetMinuteExternalId: (...a: unknown[]) => resetMinuteExternalId(...(a as [string])),
   fetchMinuteFoldersLite: () => fetchMinuteFoldersLite(),
-  fetchProjectMeetingsLite: vi.fn(async () => []),
+  fetchProjectMeetingsLite: (pid: string) => fetchProjectMeetingsLite(pid),
 }))
 
 import { MinuteMetaModal } from '@/components/minutes/MinuteMetaModal'
@@ -51,7 +53,7 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
   beforeEach(() => {
     container = document.createElement('div'); document.body.appendChild(container)
     root = createRoot(container)
-    updateMinuteMeta.mockClear(); resetMinuteExternalId.mockClear(); onSaved.mockClear()
+    updateMinuteMeta.mockClear(); resetMinuteExternalId.mockClear(); onSaved.mockClear(); fetchProjectMeetingsLite.mockClear()
     fetchMinuteFoldersLite.mockImplementation(async () => tree)
   })
   afterEach(() => { act(() => root.unmount()); container.remove() })
@@ -209,5 +211,17 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
     await save()
     // 명시적으로 미분류로 바꿨으므로 null 그대로 전달(무접촉 undefined와 구분)
     expect(updateMinuteMeta.mock.calls[0][2]).toBeNull()
+  })
+
+  const meetingsAlert = () =>
+    [...mainDialog().querySelectorAll('[role="alert"]')].find(e => e.textContent === 'min.meetingsLoadFailed')
+
+  it('회의 목록 조회 실패는 드롭다운 아래 사유로 알린다 — 연결할 회의가 없는 것처럼 보이지 않게, 다른 프로젝트 정상 조회면 사라진다', async () => {
+    fetchProjectMeetingsLite.mockResolvedValueOnce({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
+    await mount({ ...baseMinute, projectId: 'pA' }, [{ id: 'pA', name: 'A' }, { id: 'pB', name: 'B' }])
+    expect(fetchProjectMeetingsLite).toHaveBeenCalledWith('pA')
+    expect(meetingsAlert()).toBeDefined()
+    await chooseProject('pB')
+    expect(meetingsAlert()).toBeUndefined()
   })
 })
