@@ -73,6 +73,13 @@ async function projectMeetings(projectId: string) {
   return res
 }
 
+/** 내 회의의 성공 결과만 — 실패면 테스트를 깬다. */
+async function myMeetings(gridStartIso: string, gridEndIso: string) {
+  const res = await getMyMeetings(gridStartIso, gridEndIso)
+  if (!res.ok) throw new Error('ok 여야 한다')
+  return res
+}
+
 describe('getProjectMeetingData — 예외 FK 임베드', () => {
   it('임베드가 성공하면 별도 meeting_exceptions 왕복 없이 예외를 평탄화한다', async () => {
     const { tables } = makeSb({
@@ -122,7 +129,7 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
   it('비로그인이면 조회 없이 빈 결과', async () => {
     const { tables } = makeSb({ user: null, meetings: () => OK([]) })
     expect(await getMyMeetings('2026-07-01', '2026-07-31'))
-      .toEqual({ meetings: [], exceptions: [] })
+      .toEqual({ ok: true, meetings: [], exceptions: [] })
     expect(tables).not.toContain('meetings')
   })
 
@@ -154,7 +161,7 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
         meetingRow('not-mine', { meeting_attendees: [{ member_id: 'member-z' }] }),
       ]),
     })
-    const res = await getMyMeetings('2026-07-01', '2026-07-31')
+    const res = await myMeetings('2026-07-01', '2026-07-31')
     expect(res.meetings.map(m => [m.id, m.isMine])).toEqual([
       ['mine-by-author', true], ['mine-by-attendee', true], ['not-mine', false],
     ])
@@ -167,11 +174,51 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
         meetingRow('m1', { meeting_exceptions: [exRow('m1', '2026-07-27'), exRow('m1', '2026-08-03')] }),
       ]),
     })
-    const res = await getMyMeetings('2026-07-01', '2026-07-31')
+    const res = await myMeetings('2026-07-01', '2026-07-31')
     expect(res.exceptions).toEqual([
       { meetingId: 'm1', occurrenceDate: '2026-07-27', kind: 'cancelled' },
       { meetingId: 'm1', occurrenceDate: '2026-08-03', kind: 'cancelled' },
     ])
     expect(tables).not.toContain('meeting_exceptions')
+  })
+})
+
+describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
+  /** console.error 에 찍힌 첫 인자들 — 표시한 실패는 로그에도 남아야 한다(표시 = 로깅). */
+  const logged = () => (console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]))
+
+  it('getProjectMeetingData: 임베드 실패 뒤 예외 별도 조회까지 실패하면 ok:false', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
+    expect(await getProjectMeetingData('p1')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(logged().some(m => m.includes('[getProjectMeetingData] meeting_exceptions'))).toBe(true)
+  })
+  it('getMyMeetings: 회의 조회가 재시도까지 실패하면 ok:false — 빈 달력이 아니다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
+    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(logged().some(m => m.includes('[getMyMeetings] meetings'))).toBe(true)
+    // 회의를 못 읽었으면 예외 폴백 조회도 하지 않는다
+    expect(tables).not.toContain('meeting_exceptions')
+  })
+  it('getMyMeetings: 임베드 실패 뒤 예외 별도 조회까지 실패하면 ok:false', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    makeSb({
+      user: { id: 'u1', email: null },
+      meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])),
+      exceptions: ERR('boom'),
+    })
+    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(logged().some(m => m.includes('[getMyMeetings] meeting_exceptions'))).toBe(true)
+  })
+  it('임베드만 실패하고 예외 별도 조회가 0건이면 종전대로 ok:true — 0건과 실패를 가른다', async () => {
+    makeSb({
+      user: { id: 'u1', email: null },
+      meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])),
+      exceptions: OK([]),
+    })
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map(m => m.id)).toEqual(['m1'])
+    expect(res.exceptions).toEqual([])
   })
 })

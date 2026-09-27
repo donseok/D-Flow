@@ -127,7 +127,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
 
     // 8월로 이동 — 서버가 돌려주는 새 달 데이터엔 p1 프로젝트만 있다(p2 없음).
     const augMeeting = meeting({ id: 'm-aug', projectId: 'p1', projectName: '프로젝트 하나', title: '8월 회의', meetingDate: '2026-08-10' })
-    mocks.fetchMyMeetings.mockResolvedValue({ meetings: [augMeeting], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [augMeeting], exceptions: [] })
 
     const nextBtn = [...container.querySelectorAll<HTMLButtonElement>('button')]
       .find(b => b.getAttribute('aria-label') === 'meet.nextMonth')

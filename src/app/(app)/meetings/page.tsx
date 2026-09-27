@@ -23,14 +23,19 @@ function monthGrid(todayIso: string): [string, string] {
 export default async function MyMeetingsPage() {
   const today = seoulToday()
   const [gs, ge] = monthGrid(today)
-  const [{ meetings, exceptions }, m, user, locale] = await Promise.all([
+  const [res, m, user, locale] = await Promise.all([
     getMyMeetings(gs, ge),
     getActorForView(),
     getSession(),
     getServerLocale(),
   ])
+  // 회의를 못 읽었으면 달력은 빈 채로 넘기되 뷰가 사유와 재시도를 띄우고(initialFailed), KPI 는 0 이 아니라 '—'(모름)다.
+  // 실패 로그는 로더(getMyMeetings)가 남긴다.
+  const meetings = res.ok ? res.meetings : []
+  const exceptions = res.ok ? res.exceptions : []
   const mineOcc = expandMeetings(meetings.filter(x => x.isMine), exceptions, gs, ge)
   const { today: todayN, upcoming7d, total } = summarizeMeetings(mineOcc, today)
+  const kpi = (n: number) => (res.ok ? n : '—')
 
   return (
     <ProjectPageShell
@@ -41,16 +46,16 @@ export default async function MyMeetingsPage() {
         description={t(locale, 'meet.myHeroDesc')}
         heroKpis={
           <>
-            <KpiCard variant="hero" label="TODAY" value={todayN} sub={t(locale, 'meet.kpi.todaySub')} icon={CalendarCheck} tone="brand" />
-            <KpiCard variant="hero" label="NEXT 7 DAYS" value={upcoming7d} sub={t(locale, 'meet.kpi.upcomingSub')} icon={CalendarClock} tone="warning" />
-            <KpiCard variant="hero" label="THIS MONTH" value={total} sub={t(locale, 'meet.kpi.totalSub')} icon={CalendarRange} tone="success" />
+            <KpiCard variant="hero" label="TODAY" value={kpi(todayN)} sub={t(locale, 'meet.kpi.todaySub')} icon={CalendarCheck} tone="brand" />
+            <KpiCard variant="hero" label="NEXT 7 DAYS" value={kpi(upcoming7d)} sub={t(locale, 'meet.kpi.upcomingSub')} icon={CalendarClock} tone="warning" />
+            <KpiCard variant="hero" label="THIS MONTH" value={kpi(total)} sub={t(locale, 'meet.kpi.totalSub')} icon={CalendarRange} tone="success" />
           </>
         }
       />}
     >
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
-      <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions}
+      <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}
         todayIso={today} currentUserId={user?.id ?? null}
         adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
     </ProjectPageShell>

@@ -8,6 +8,7 @@ import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { fmtDate } from '@/components/wbs/shared'
 import { expandMeetings, sortOccurrences, MEETING_META, meetingEditHref } from '@/lib/domain/meetings'
 import { projectColorClass } from '@/lib/domain/projectColors'
@@ -17,6 +18,7 @@ import { fetchMyMeetings } from '@/app/actions/meetings'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 
 type ViewKey = 'calendar' | 'list'
+type MyMeetingsFetch = Awaited<ReturnType<typeof fetchMyMeetings>>
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function gridRange(year: number, month0: number): [string, string] {
@@ -27,11 +29,13 @@ function gridRange(year: number, month0: number): [string, string] {
 }
 
 export function MyMeetingsView({
-  initialMeetings, initialExceptions, todayIso, currentUserId,
+  initialMeetings, initialExceptions, initialFailed = false, todayIso, currentUserId,
   adminProjectIds = [], isSuperuser = false,
 }: {
   initialMeetings: Meeting[]
   initialExceptions: MeetingException[]
+  /** 서버 첫 조회 실패 — 빈 달력 대신 경고와 재시도(M5) */
+  initialFailed?: boolean
   todayIso: string
   currentUserId: string | null
   /**
@@ -66,6 +70,8 @@ export function MyMeetingsView({
   const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; range: string }>(
     { meetings: initialMeetings, exceptions: initialExceptions, range: initialRange },
   )
+  // 지금 보이는 달의 조회가 실패했는가 — 빈 달('회의 없음')과 '못 읽음'을 가른다(에러 처리 3원칙 ①).
+  const [failed, setFailed] = useState(initialFailed)
   const [reloadKey, setReloadKey] = useState(0)
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(null)
   const [pending, startTransition] = useTransition()
@@ -100,11 +106,38 @@ export function MyMeetingsView({
     if (skipFirstFetch.current) { skipFirstFetch.current = false; return }
     let alive = true
     startTransition(async () => {
-      const res = await fetchMyMeetings(gridStart, gridEnd)
-      if (alive) setData({ ...res, range: `${gridStart}|${gridEnd}` })
+      // 호출 자체가 던진 것(네트워크 등)도 같은 실패다 — 화면 문구는 사전의 한 문구, 원인은 로그로.
+      const res = await fetchMyMeetings(gridStart, gridEnd).catch((e: unknown): MyMeetingsFetch => {
+        console.error('[MyMeetingsView] 내 회의 호출 실패:', e)
+        return { ok: false, error: 'threw' }
+      })
+      if (!alive) return
+      const range = `${gridStart}|${gridEnd}`
+      if (res.ok) { setFailed(false); setData({ meetings: res.meetings, exceptions: res.exceptions, range }) }
+      // 실패한 달에는 앞 달의 회의를 남기지 않는다 — 비우되 '회의 없음'이 아니라 경고로 보인다.
+      else { setFailed(true); setData({ meetings: [], exceptions: [], range }) }
     })
     return () => { alive = false }
   }, [gridStart, gridEnd, reloadKey])
+
+  // 서버 첫 조회가 실패한 화면은 히어로 KPI 도 '—' 다 — 클라이언트 조회가 성공하면 서버 렌더도 다시 읽혀 숫자로 돌린다.
+  // 다시 읽은 서버 조회가 성공하면 initialFailed 가 false 로 내려와 멈춘다(또 실패하면 값이 그대로라 다시 돌지 않는다).
+  useEffect(() => {
+    if (initialFailed && !failed) router.refresh()
+  }, [initialFailed, failed, router])
+
+  // 재시도가 성공해 경고(와 그 안의 버튼)가 사라졌으면 포커스를 달 표시로 옮긴다 — body 로 떨어지지 않게.
+  const refocus = useRef(false)
+  const monthLabelRef = useRef<HTMLDivElement>(null)
+  function retry() {
+    refocus.current = true
+    setReloadKey(k => k + 1)
+  }
+  useEffect(() => {
+    if (pending || !refocus.current) return
+    refocus.current = false
+    if (!document.activeElement || document.activeElement === document.body) monthLabelRef.current?.focus()
+  }, [pending, failed])
 
   // 그리드 범위가 바뀌었는데 그 범위 데이터가 아직 도착하지 않았으면(stale) 회차를 비워
   // 이전 달 데이터가 새 달 그리드에 잘못 겹쳐 보이는 깜빡임을 막는다.
@@ -115,7 +148,8 @@ export function MyMeetingsView({
   const pendingDeepLink = useRef(deepLink)
   useEffect(() => {
     const target = pendingDeepLink.current
-    if (!target || isStale) return
+    // 조회 실패는 '그 회의가 없다'가 아니다 — 대상을 소비하지 않고 재조회 성공을 기다린다.
+    if (!target || isStale || failed) return
     pendingDeepLink.current = null
     const meeting = data.meetings.find(m => m.id === target.focus)
     if (!meeting) return
@@ -126,7 +160,7 @@ export function MyMeetingsView({
       ?? expandMeetings([meeting], data.exceptions, gridStart, gridEnd)
         .find(o => o.seriesId === target.focus)
     if (occurrence) setDetailOcc(occurrence)
-  }, [isStale, data, gridStart, gridEnd])
+  }, [isStale, failed, data, gridStart, gridEnd])
   // 로드된 회의에서 (projectId, projectName) 유니크 목록 — 칩 행 + 색상 인덱스 기준.
   const projectOptions = useMemo(() => {
     const byId = new Map<string, string>()
@@ -168,7 +202,7 @@ export function MyMeetingsView({
       <div className="sticky top-0 z-20 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
-          <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
+          <div ref={monthLabelRef} tabIndex={-1} className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
             {new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: locale === 'ko' ? 'numeric' : 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
           </div>
           <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('meet.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
@@ -186,6 +220,8 @@ export function MyMeetingsView({
           />
         </div>
       </div>
+
+      {failed && <LoadErrorNotice message={t('common.loadFailed.meetings')} onRetry={retry} busy={pending} />}
 
       {showProjectChips && (
         <div className="-mt-1 overflow-x-auto">
@@ -215,7 +251,8 @@ export function MyMeetingsView({
       {view === 'calendar' ? (
         <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} />
       ) : listRows.length === 0 ? (
-        <EmptyState icon={CalendarX2}
+        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다.
+        failed ? null : <EmptyState icon={CalendarX2}
           title={onlyMine ? t('meet.empty.mineTitle') : t('meet.empty.title')}
           description={onlyMine ? t('meet.empty.mineDesc') : t('meet.empty.desc')} />
       ) : (

@@ -55,23 +55,31 @@ function exceptionsFrom(rows: Row[]): MeetingException[] {
   return rows.flatMap(r => ((r.meeting_exceptions as Row[] | null) ?? []).map(toException))
 }
 
-/** 임베드가 불가했을 때만 쓰는 폴백 — 예외를 별도 왕복으로 읽는다. */
+/** 임베드가 불가했을 때만 쓰는 폴백 — 예외를 별도 왕복으로 읽는다. 실패면 null — 취소 회차가 되살아나 보이지 않게
+ *  호출부가 회의 일정 전체를 실패로 보인다(에러 처리 3원칙 ①). */
 async function fetchExceptionsByIds(
   sb: ServerClient, ids: string[], tag: string,
-): Promise<MeetingException[]> {
+): Promise<MeetingException[] | null> {
   if (!ids.length) return []
   const { data, error } = await sb
     .from('meeting_exceptions')
     .select('meeting_id, occurrence_date, kind')
     .in('meeting_id', ids)
-  // 예외 조회 실패 = 취소된 회차가 되살아나 보인다(취소 표시가 사라짐).
-  if (error) console.error(`[${tag}] meeting_exceptions 조회 실패(취소 회차가 표시됨):`, error.message)
+  if (error) {
+    console.error(`[${tag}] meeting_exceptions 조회 실패 — 회의 일정을 실패로 보인다:`, error.message)
+    return null
+  }
   return (data ?? []).map((e: Row) => toException(e))
 }
 
 type RowsResult = { data: Row[] | null; error: { message: string } | null }
 
 export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.'
+
+/** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다. */
+export type MyMeetingsResult =
+  | { ok: true; meetings: Meeting[]; exceptions: MeetingException[] }
+  | { ok: false; error: string }
 
 /**
  * 예외 임베드를 태워 회의를 조회하고, 임베드가 원인일 수 있는 실패면 임베드 없이 1회 재시도한다.
@@ -103,7 +111,8 @@ async function selectMeetings(
 
 /** 프로젝트 전체 회의 시리즈 + 예외. body 제외(상세 모달에서 로드).
  *  회의 조회 실패는 결과로 돌려준다(members.ts 의 getProjectRoster 관례) — 달력·대시보드·보고서·회의록의 '회의 연결'
- *  드롭다운이 '회의 없음'과 '못 읽음'을 구분해 보인다(에러 처리 3원칙 ①). */
+ *  드롭다운이 '회의 없음'과 '못 읽음'을 구분해 보인다(에러 처리 3원칙 ①).
+ *  예외(취소 회차) 폴백 조회의 실패도 같은 실패다 — 예외 없이 회의만 돌려주면 취소된 회차가 살아 있는 일정으로 보인다. */
 export const getProjectMeetingData = cache(async (
   projectId: string,
 ): Promise<{ ok: true; meetings: Meeting[]; exceptions: MeetingException[] } | { ok: false; error: string }> => {
@@ -123,6 +132,7 @@ export const getProjectMeetingData = cache(async (
   const exceptions = embedded
     ? exceptionsFrom(rows)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), 'getProjectMeetingData')
+  if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   return { ok: true, meetings, exceptions }
 })
 
@@ -185,16 +195,18 @@ export async function resolveMemberIds(
  * 크로스 프로젝트 '내 회의' 범위 조회. body/location 제외(캘린더 필드만),
  * isMine(작성자==나 or 참석자에 내 member 포함) + projectName 세팅.
  * fetch 조건: 비반복은 [start,end], 반복은 meeting_date<=end AND (until IS NULL OR until>=start).
+ * 비로그인은 빈 성공 결과(세션은 호출부가 따로 본다). 회의 조회 실패·예외 폴백 실패는 ok:false —
+ * 호출부가 '이번 달 회의 없음'·KPI 0 대신 사유를 보인다(에러 처리 3원칙 ①).
  */
 export const getMyMeetings = cache(async (
   gridStartIso: string,
   gridEndIso: string,
-): Promise<{ meetings: Meeting[]; exceptions: MeetingException[] }> => {
+): Promise<MyMeetingsResult> => {
   const sb = await createServerClient()
   const { data: u } = await sb.auth.getUser()
   const user = u.user
   const uid = user?.id ?? null
-  if (!user || !uid) return { meetings: [], exceptions: [] }
+  if (!user || !uid) return { ok: true, meetings: [], exceptions: [] }
 
   const orClause =
     `and(recurrence.eq.none,meeting_date.gte.${gridStartIso},meeting_date.lte.${gridEndIso}),` +
@@ -207,14 +219,15 @@ export const getMyMeetings = cache(async (
   // resolveMemberIds 를 직접 부른다: 예전의 getMyMemberIds() 래퍼는 자체 클라이언트로 getUser 를
   // 한 번 더 했다. 인자화한 cache() 로 바꾸면 안 된다 — React cache 는 인자의 참조 동일성으로
   // 키를 만드는데 user 객체가 호출마다 새로 만들어져 영구 미스가 된다.
-  const [myMemberIdList, { rows, embedded }] = await Promise.all([
+  const [myMemberIdList, { rows, embedded, failed }] = await Promise.all([
     resolveMemberIds(sb, user),
     selectMeetings(
       select => sb.from('meetings').select(select).or(orClause).order('meeting_date', { ascending: true }),
       COLS, 'getMyMeetings',
-      "'내 회의' 캘린더가 '이번 달 회의 없음'으로 위장돼 사용자가 회의를 놓침",
+      '호출부가 내 회의 달력 대신 사유를 보인다',
     ),
   ])
+  if (failed) return { ok: false, error: ERR_MEETINGS_LOAD }
   const myMemberIds = new Set(myMemberIdList)
 
   const meetings = rows.map((r: Row) => {
@@ -231,7 +244,8 @@ export const getMyMeetings = cache(async (
   const exceptions = embedded
     ? exceptionsFrom(rows)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), 'getMyMeetings')
-  return { meetings, exceptions }
+  if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
+  return { ok: true, meetings, exceptions }
 })
 
 /**

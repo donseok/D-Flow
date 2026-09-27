@@ -31,7 +31,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
 // 이 테스트는 뷰만 단독 마운트해 ToastProvider 가 없으므로 훅 자체를 대체한다.
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/app/actions/meetings', () => ({
-  fetchMyMeetings: vi.fn(async () => ({ meetings: [], exceptions: [] })),
+  fetchMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
   fetchMeetingDetail: vi.fn(async () => null),
   cancelOccurrence: vi.fn(async () => ({ ok: true })),
   deleteMeeting: vi.fn(async () => ({ ok: true })),

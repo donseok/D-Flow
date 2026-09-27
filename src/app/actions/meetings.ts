@@ -4,10 +4,10 @@ import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { revalidatePath } from 'next/cache'
-import { getMyMeetings, getMeetingDetail } from '@/lib/data/meetings'
+import { getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
 import { expandMeetings, MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { displayNameFrom } from '@/lib/domain/display-name'
-import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence } from '@/lib/domain/types'
+import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 
 export interface MeetingInput {
   title: string
@@ -281,13 +281,14 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
   return { ok: true, sb, projectId: r.project_id as string }
 }
 
-/** 클라이언트(내 회의 뷰)에서 월 이동 시 호출하는 얇은 래퍼. */
+/** 클라이언트(내 회의 뷰)에서 월 이동 시 호출하는 얇은 래퍼. 로더의 실패(ok:false)는 그대로 넘긴다 —
+ *  뷰가 빈 달 대신 사유와 재시도를 보인다(에러 처리 3원칙 ①). */
 export async function fetchMyMeetings(
   gridStartIso: string,
   gridEndIso: string,
-): Promise<{ meetings: Meeting[]; exceptions: MeetingException[] }> {
+): Promise<MyMeetingsResult> {
   const user = await getSession()
-  if (!user) return { meetings: [], exceptions: [] }
+  if (!user) return { ok: true, meetings: [], exceptions: [] }
   return getMyMeetings(gridStartIso, gridEndIso)
 }
 
