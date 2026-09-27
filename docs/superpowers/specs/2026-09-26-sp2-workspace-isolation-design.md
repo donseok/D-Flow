@@ -16,7 +16,7 @@
 | # | 결정 | 귀결 |
 |---|---|---|
 | U1 | 범용성 검토 문서(`docs/2026-09-26-configurability-review-and-implementation.md`)는 **SP2 뒤, SP3 착수 전에** 정본 설계 개정으로 반영한다 | SP2 범위는 격리에 한정한다. 설정·워크플로·IA 는 건드리지 않는다 |
-| U2 | `/w/[slug]` 경로 이동·워크스페이스 전환 UI·`/projects` 워크스페이스 필터는 **SP3 로 이관**(제5부 IA·셸 재설계와 한 번에) | SP2 는 UI 위험 파일 중 `usePagePresence.ts` 하나만 만진다. 사이드바·헤더·내비게이션 컨텍스트는 그대로 |
+| U2 | `/w/[slug]` 경로 이동·워크스페이스 전환 UI·`/projects` 워크스페이스 필터는 **SP3b 로 이관**(제5부 IA·셸 재설계와 한 번에. 2026-09-27 정본 개정으로 SP3 이 SP3a·SP3b 로 나뉘었다 — `2026-09-27-platform-revision-configurability-design.md` §6.2) | SP2 는 UI 위험 파일 중 `usePagePresence.ts` 하나만 만진다. 사이드바·헤더·내비게이션 컨텍스트는 그대로 |
 | U3 | SP2 는 2단계: **Phase A(DB 격리) → main 체크포인트 → Phase B(B1 Storage·Realtime ∥ B2 가드·service_role)** | Phase A 끝에서 main 이 배포 가능 상태(전체 스위트·tsc·CI 초록) |
 | U4 | (승계) 로컬 우선 — 원격 스테이징·Vercel 없음 | done_when 의 "스테이징 스모크"는 로컬 2-워크스페이스 브라우저 확인으로 정의. UI 위험 파일은 `Preview-checked: local …` |
 
