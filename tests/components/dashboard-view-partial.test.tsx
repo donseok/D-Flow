@@ -198,3 +198,20 @@ describe('TrendChart — 이력 조회 실패', () => {
     expect(out).toContain('실적 이력은 지금부터 기록됩니다')
   })
 })
+
+describe('이력 조회 실패 — TrendChart·SpiPanel 이 나란히 있어도 경고는 한 번만 읽힌다', () => {
+  const model: TrendModel = {
+    empty: false, axisStart: '2026-09-01', axisEnd: '2026-12-31',
+    plannedSeries: [{ date: '2026-09-01', pct: 0 }, { date: '2026-12-31', pct: 100 }],
+    actualSeries: [{ date: '2026-09-01', pct: 0 }, { date: TODAY, pct: 30 }],
+    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false,
+  }
+  it('role="alert" 는 TrendChart 에만, SpiPanel 은 aria-live="off" 인 status', async () => {
+    const trend = renderToStaticMarkup((await TrendChart({ model, today: TODAY, historyFailed: true })) as ReactElement)
+    const spi = renderToStaticMarkup((await SpiPanel({ model, variance: 0, historyFailed: true })) as ReactElement)
+    const alerts = (html: string) => html.match(/role="alert"/g)?.length ?? 0
+    expect(alerts(trend) + alerts(spi)).toBe(1)
+    expect(alerts(trend)).toBe(1)
+    expect(spi).toMatch(/role="status" aria-live="off"[^>]*>.*진척 이력을 불러오지 못해/)
+  })
+})

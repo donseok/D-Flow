@@ -24,6 +24,7 @@ const PAIRS: [string, string][] = [
   ['pending', 'pending-weak'], ['pending', 'canvas'], ['pending', 'surface'],
   ['sidebar-ink-subtle', 'sidebar'], ['sidebar-ink-subtle', 'sidebar-2'], ['sidebar-ink-subtle', 'sidebar-3'],
   ['ink', 'surface-2'], // 헤더 티커 실패 칩 글자
+  ['ink', 'delayed-weak'], ['ink', 'surface'], // 조회 실패 알림(LoadErrorNotice)·줄 단위 실패 문구 글자
 ]
 describe('라이트 토큰 대비 — 본문 텍스트 4.5:1', () => {
   it.each(PAIRS)('%s on %s', (fg, bg) => { expect(ratio(token(fg), token(bg))).toBeGreaterThanOrEqual(4.5) })

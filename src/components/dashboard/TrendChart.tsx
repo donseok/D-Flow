@@ -1,4 +1,4 @@
-import { TrendingUp } from 'lucide-react'
+import { AlertTriangle, TrendingUp } from 'lucide-react'
 import type { TrendModel, TrendPoint } from '@/lib/domain/trend'
 import { diffDaysCal } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -62,7 +62,7 @@ export async function TrendChart({ model, today, historyFailed = false }: {
           <text x={W - PR} y={H - 8} textAnchor="end" fontSize={9} className="fill-ink-subtle">{fmtDate(model.axisEnd)}</text>
         </svg>
         {historyFailed
-          ? <p role="alert" className="text-[11px] text-delayed">{tr('dash.trend.historyFailed')}</p>
+          ? <p role="alert" className="flex items-center gap-1.5 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{tr('dash.trend.historyFailed')}</p>
           : !model.hasHistory && <div className="text-[11px] text-ink-subtle">{tr('dash.trend.noHistory')}</div>}
       </div>
     </SectionCard>

@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
+import { AlertTriangle, X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
 import type { ComputedItem, DependencyType, OwnerKind, ProjectMember, TaskDependency, TeamCode } from '@/lib/domain/types'
 import type { TaskSchedule } from '@/lib/domain/dependencySchedule'
 import { evaluateStartReadiness, type PredecessorState } from '@/lib/domain/dependencyReadiness'
@@ -806,7 +806,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
                   <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
                 )}
                 {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
-                {a.linkError && <span className="shrink-0 text-[11px] text-delayed">{t('wbs.attachLinkFail')}</span>}
+                {a.linkError && <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
                 {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
               </li>
             ))}

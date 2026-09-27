@@ -1,4 +1,4 @@
-import { Gauge } from 'lucide-react'
+import { AlertTriangle, Gauge } from 'lucide-react'
 import type { TrendModel } from '@/lib/domain/trend'
 import { progressSignal, SPI_DONE_FLOOR, SPI_WARN_FLOOR, type Signal } from '@/lib/domain/dashboard'
 import { formatPp1 } from '@/lib/domain/format'
@@ -67,8 +67,9 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
 
   // 스파크라인 — SPI 0.5~1.5 클램프, 1.0 기준선
   const s = model.spiSeries
+  // 같은 사유를 옆 TrendChart 가 role="alert" 로 알린다 — 여기서는 보이기만 하고 다시 읽히지 않게 한다.
   const spark = historyFailed ? (
-    <p role="alert" className="text-[11px] text-delayed">{tr('dash.trend.historyFailed')}</p>
+    <p role="status" aria-live="off" className="flex items-center gap-1.5 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{tr('dash.trend.historyFailed')}</p>
   ) : s.length >= 2 ? (() => {
     const sx = (i: number) => 4 + (i / (s.length - 1)) * 192
     const sy = (val: number) => 4 + (1 - (Math.min(1.5, Math.max(0.5, val)) - 0.5)) * 40

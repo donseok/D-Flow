@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Folder } from 'lucide-react'
+import { AlertTriangle, Folder } from 'lucide-react'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import {
   MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_ATTACHMENT_MAX, MINUTE_BODY_FILE_MAX,
@@ -328,7 +328,7 @@ export function MinuteUploadModal({
             </select>
           </label>
         </div>
-        {meetingsFailed && <p role="alert" className="text-xs text-delayed">{t('min.meetingsLoadFailed')}</p>}
+        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{t('min.meetingsLoadFailed')}</p>}
         {!team && <p role="alert" className="text-sm text-delayed">먼저 팀을 등록하세요.</p>}
         {!targetWs.ok && <p role="alert" className="text-sm text-delayed">{targetWs.error}</p>}
         {err && <p className="text-sm text-delayed">{err}</p>}

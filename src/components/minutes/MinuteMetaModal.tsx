@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Folder } from 'lucide-react'
+import { AlertTriangle, Folder } from 'lucide-react'
 import type { Minute, MinuteFolder, TeamCode } from '@/lib/domain/types'
 import { teamSubOfFolder } from '@/lib/domain/minutes'
 import { pickDefaultProjectId, sortMyProjectsFirst } from '@/lib/domain/projectPick'
@@ -177,7 +177,7 @@ export function MinuteMetaModal({
             </select>
           </label>
         </div>
-        {meetingsFailed && <p role="alert" className="text-xs text-delayed">{t('min.meetingsLoadFailed')}</p>}
+        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{t('min.meetingsLoadFailed')}</p>}
         {err && <p className="text-sm text-delayed">{err}</p>}
         <div className="space-y-1.5 rounded-xl border border-line p-2.5 text-sm">
           <span className="block font-medium">{t('min.ext.title')}</span>

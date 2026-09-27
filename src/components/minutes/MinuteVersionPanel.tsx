@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 
@@ -154,7 +154,7 @@ export function MinuteVersionPanel({
         )}
       </div>
       {downloadErrors[version.id] && (
-        <p role="alert" className="mt-1 text-xs text-delayed">{downloadErrors[version.id]}</p>
+        <p role="alert" className="mt-1 flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{downloadErrors[version.id]}</p>
       )}
       {!version.hasFile && (
         <p className="mt-1 text-xs text-ink-subtle">{t('min.version.noFile')}</p>
