@@ -181,6 +181,28 @@ describe('반려 — 승인과 같은 대조', () => {
   })
 })
 
+describe('RPC 가 주문 잠금 아래에서 다시 대조한다(0011 H2-i)', () => {
+  it('앱 대조는 통과했는데 RPC 가 report_stale 이면 stale 로 답하고 검토 기록·알림이 없다', async () => {
+    const { admin, reviews } = fakeAdmin({
+      agent_work_orders: [{ data: REPORTED }], agent_work_reports: [latest(R1)],
+      rpc: [{ data: { ok: false, reason: 'report_stale', stale: true, order_status: 'reported' } }],
+    })
+    expect(await approveAgentCompletion(O1, R1)).toEqual({ ok: false, stale: true, error: ERR_REPORT_STALE })
+    expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({ p_event: 'approve', p_expected_report_id: R1 }))
+    expect(reviews()).toEqual([])
+    expect(mocks.emitNotification).not.toHaveBeenCalled()
+  })
+  it('반려도 같다', async () => {
+    const { admin, reviews } = fakeAdmin({
+      agent_work_orders: [{ data: REPORTED }], agent_work_reports: [latest(R1)],
+      rpc: [{ data: { ok: false, reason: 'report_stale', stale: true, order_status: 'reported' } }],
+    })
+    expect(await rejectAgentCompletion(O1, '사유', R1)).toEqual({ ok: false, stale: true, error: ERR_REPORT_STALE })
+    expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({ p_event: 'reject', p_expected_report_id: R1 }))
+    expect(reviews()).toEqual([])
+  })
+})
+
 describe('expectedReportId 모양 검사는 맨 앞 — 주문을 읽기 전에 거부한다(Task 11 M3)', () => {
   it('승인: uuid 가 아니면 주문 조회·권한 판정 없이 잘못된 요청 — 이미 승인된 주문이어도 상태 문구가 아니다', async () => {
     for (const bad of [undefined, 'r1', 42, '']) {

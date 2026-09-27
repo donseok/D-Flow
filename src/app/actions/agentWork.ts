@@ -255,11 +255,12 @@ export async function approveAgentCompletion(orderId: string, expectedReportId: 
   if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
 
   const admin = createAdminClient()
-  // 잔여 창: 이 대조와 전이 RPC 의 상태 CAS 사이(ms)에 재보고가 끼어들 수 있다 — H2 에서 RPC 가 p_expected_report_id 로 닫는다.
+  // RPC 가 주문 행 잠금 아래에서 같은 보고 id 를 다시 대조한다(0011 H2-i) — 이 대조와 전이 사이의 재보고도 stale 로 막힌다.
   const fresh = await checkReportFresh(admin, orderId, expectedReportId)
   if (!fresh.ok) return fresh
-  const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId })
+  const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId, expectedReportId })
   if (!transition.ok) {
+    if (transition.stale) return { ok: false, stale: true, error: ERR_REPORT_STALE }
     return { ok: false, error: transition.conflict ? '상태가 바뀌어 승인하지 못했습니다. 다시 시도하세요.' : transition.error }
   }
   await recordReviewOn(admin, fresh.reportId, { review_action: 'approve', reviewed_by: actor.userId, reviewed_at: new Date().toISOString() }, '승인')
@@ -281,11 +282,12 @@ export async function rejectAgentCompletion(orderId: string, note: string, expec
     return { ok: false, error: `반려 가능한 상태가 아닙니다(${order.status}).` }
   }
   const admin = createAdminClient()
-  // 잔여 창: 이 대조와 전이 RPC 의 상태 CAS 사이(ms)에 재보고가 끼어들 수 있다 — H2 에서 RPC 가 p_expected_report_id 로 닫는다.
+  // RPC 가 주문 행 잠금 아래에서 같은 보고 id 를 다시 대조한다(0011 H2-i) — 이 대조와 전이 사이의 재보고도 stale 로 막힌다.
   const fresh = await checkReportFresh(admin, orderId, expectedReportId)
   if (!fresh.ok) return fresh
-  const transition = await applyWorkflowEvent(admin, { event: 'reject', actorUserId: actor.userId, orderId })
+  const transition = await applyWorkflowEvent(admin, { event: 'reject', actorUserId: actor.userId, orderId, expectedReportId })
   if (!transition.ok) {
+    if (transition.stale) return { ok: false, stale: true, error: ERR_REPORT_STALE }
     return { ok: false, error: transition.conflict ? '상태가 바뀌어 반려하지 못했습니다.' : transition.error }
   }
   await recordReviewOn(admin, fresh.reportId, { review_action: 'reject', reviewed_by: actor.userId, reviewed_at: new Date().toISOString(), review_note: trimmed }, '반려')

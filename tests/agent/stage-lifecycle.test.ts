@@ -31,6 +31,7 @@ vi.mock('next/server', async (orig) => {
 import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { approveAgentCompletion, rejectAgentCompletion } from '@/app/actions/agentWork'
+import { ERR_TRANSITION_RPC } from '@/lib/agent/workflowEvent'
 import { profileEq } from '../fixtures/profiles'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 
@@ -242,7 +243,7 @@ describe('승인·반려 액션 → 전이 RPC(approve·reject 사건)', () => {
   it('전이 RPC 가 오류면 승인 실패로 알린다 — 주문·단계·실적이 한 트랜잭션이라 반쪽 상태가 없다', async () => {
     const { captured } = useAdmin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: [{ data: { id: R9 } }], rpc: [{ error: { message: 'db down' } }] })
     const r = await approveAgentCompletion(O1, R9)
-    expect(r).toEqual({ ok: false, error: '전이 실패: db down' })
+    expect(r).toEqual({ ok: false, error: ERR_TRANSITION_RPC }) // DB 문구는 로그에만(workflow-event.test.ts)
     // 보고는 전이 전에 대조만 했다(읽기) — 검토 기록(쓰기)은 전이가 확정된 뒤에만 간다.
     expect(captured.agent_work_reports).toBeUndefined()
   })

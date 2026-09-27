@@ -45,6 +45,7 @@ import {
 } from '@/app/actions/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
 import { ERR_SELF_APPROVAL } from '@/lib/agent/subtreeManager'
+import { ERR_TRANSITION_RPC } from '@/lib/agent/workflowEvent'
 
 // UUID 형식 테스트 픽스처
 const P1 = '11111111-1111-4111-8111-111111111111'
@@ -142,9 +143,9 @@ describe('approveAgentCompletion', () => {
     expect(captured.agent_work_reports).toBeUndefined()
     expect(emitNotification).not.toHaveBeenCalled()
   })
-  it('RPC 오류 → 그 사유를 그대로 알린다', async () => {
+  it('RPC 오류 → 고정 문구로 알린다 — DB 문구는 화면에 싣지 않고 로그에만 남긴다', async () => {
     admin({ agent_work_orders: [{ data: ORDER }], agent_work_reports: REPORTS(), rpc: [{ error: { message: 'db down' } }] })
-    expect(await approveAgentCompletion(O1, R9)).toEqual({ ok: false, error: '전이 실패: db down' })
+    expect(await approveAgentCompletion(O1, R9)).toEqual({ ok: false, error: ERR_TRANSITION_RPC })
   })
   it('wbs_item 삭제된 주문은 승인 불가 — 사람이 취소로 정리', async () => {
     const { rpcCalls } = admin({ agent_work_orders: [{ data: { ...ORDER, wbs_item_id: null } }] })
