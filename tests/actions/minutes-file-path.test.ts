@@ -50,10 +50,14 @@ const INPUT = { minuteDate: '2026-07-30', teamCode: 'PMO', title: '제목', body
 const src = (filePath: string) => ({ minuteId: M, file: { fileName: 'a.md', filePath, size: 1, mime: 'text/markdown' } })
 const ADMIN_REACHED = 'ADMIN_REACHED'
 
-/** minutes 단건 조회·insert 를 흉내내는 최소 빌더 — 모든 조회가 같은 행을 돌려준다(checkOwner·스코프 조회 공용). */
-function fakeDb(result: { data?: unknown; error?: { message: string } | null }) {
+/** minutes 단건 조회·insert 를 흉내내는 최소 빌더 — 모든 조회가 같은 행을 돌려준다(checkOwner·스코프 조회 공용).
+ *  insert 결과는 따로 받는다(기본 성공) — 첨부 확정 가드(0011)의 거부 사유를 흉내낸다. */
+function fakeDb(result: { data?: unknown; error?: { message: string } | null },
+  insertResult: { error: { message: string } | null } = { error: null }) {
   const b: Record<string, unknown> = {}
-  const insert = vi.fn(() => b)
+  const insert = vi.fn(() => ({
+    then: (r: (v: unknown) => void) => r({ data: null, error: insertResult.error }),
+  }))
   for (const m of ['select', 'eq', 'maybeSingle', 'single']) b[m] = vi.fn(() => b)
   b.insert = insert
   ;(b as { then: (r: (v: unknown) => void) => void }).then =
@@ -132,6 +136,26 @@ describe('recordMinuteFile — scope 는 DB 의 회의록 행', () => {
     createServerClient.mockResolvedValue(db.client)
     expect(await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).toMatchObject({ ok: false })
     expect(await recordMinuteFile(M, att(`ws/${W}/p/_/minute-files/${M}/1-x.pdf`))).toEqual({ ok: true })
+  })
+
+  it.each([
+    ['MINUTE_ATTACHMENT_LIMIT', '첨부는 회의록당 10개까지입니다.'],
+    ['MINUTE_ATTACHMENT_DUPLICATE', '같은 파일이 이미 첨부돼 있습니다.'],
+    ['MINUTE_ATTACHMENT_ARCHIVED', '보관된 회의록에는 첨부할 수 없습니다.'],
+    ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],
+    ['MINUTE_ATTACHMENT_OBJECT', '업로드한 파일을 확인하지 못했습니다 — 다시 올려 주세요.'],
+  ])('DB 가드 사유 %s 는 사용자 문구로', async (code, text) => {
+    const db = fakeDb({ data: row() }, { error: { message: code } })
+    createServerClient.mockResolvedValue(db.client)
+    expect(await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).toEqual({ ok: false, error: text })
+  })
+  it('모르는 DB 오류는 원문을 싣지 않는다 — 로그만', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = fakeDb({ data: row() }, { error: { message: 'db boom' } })
+    createServerClient.mockResolvedValue(db.client)
+    expect(await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).toEqual({ ok: false, error: '첨부 기록에 실패했습니다.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('본문 파일은 minutes entity 경로여야 한다 — 거부는 admin client 이전', async () => {

@@ -103,6 +103,10 @@ export async function getChangeLogs(itemId: string): Promise<ChangeLogEntry[]> {
   })
 }
 
+/** 에이전트 관할 작업의 수기 실적 100 잠금 문구 — 앱 판정과 DB 가드(0011 WORKFLOW_ACTUAL_LOCKED)가 같은 문구를 쓴다.
+ *  'use server' 파일이라 export 하지 않는다. */
+const ACTUAL_LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.'
+
 /** 실적% 입력 — 말단(자식 없는) 항목만. level 은 보지 않는다: 롤업(computeNode)이 자식 유무로
  *  말단을 판정하므로, 자식 없는 Task/Phase 도 자기 actual_pct 가 그대로 상위로 올라간다.
  *  UI 게이트 canEditActual 과 동일 불변식. */
@@ -155,7 +159,7 @@ export async function updateActual(
       heldStatus = (held as { status: string } | null)?.status ?? null
     }
     if (stageLockedForHuman({ delegated, orderStatus: heldStatus })) {
-      return { ok: false, error: '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.' }
+      return { ok: false, error: ACTUAL_LOCKED_MSG }
     }
   }
 
@@ -172,7 +176,11 @@ export async function updateActual(
     .update({ actual_pct: newPct, updated_at: new Date().toISOString() })
     .eq('id', itemId)
     .select('id')
-  if (upErr) return { ok: false, error: upErr.message }
+  if (upErr) {
+    // 앱 잠금 판정과 이 쓰기 사이에 주문이 claim 되면 DB 가드(0011 guard_workflow_actual)가 막는다 — 같은 문구로.
+    if (upErr.message.includes('WORKFLOW_ACTUAL_LOCKED')) return { ok: false, error: ACTUAL_LOCKED_MSG }
+    return { ok: false, error: upErr.message }
+  }
   if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)' }
 
   // 본 저장은 이미 성공했다 — 이력 기록 실패로 되돌리지는 않되, 조용히 삼키지도 않는다(감사 추적 유실 원인 기록).

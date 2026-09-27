@@ -13,7 +13,7 @@ import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
   isTeamRootName, isTeamRootFolder, teamSubOfFolder, normalizeFolderName,
-  MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC,
+  MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC, MINUTE_ATTACHMENTS_MAX_COUNT,
   type MinuteInput,
 } from '@/lib/domain/minutes'
 import { resolveFolderDrop, type MinuteDropReject } from '@/lib/domain/minutes-drop'
@@ -714,6 +714,15 @@ export async function replaceMinuteBody(
   return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to! } : undefined }
 }
 
+/** 첨부 확정 가드(0011 minute_files_attachment_guard)의 거부 사유 → 사용자 문구. 모르는 사유는 원문을 싣지 않는다. */
+const ATTACHMENT_GUARD_TEXT: ReadonlyArray<readonly [string, string]> = [
+  ['MINUTE_ATTACHMENT_LIMIT', `첨부는 회의록당 ${MINUTE_ATTACHMENTS_MAX_COUNT}개까지입니다.`],
+  ['MINUTE_ATTACHMENT_DUPLICATE', '같은 파일이 이미 첨부돼 있습니다.'],
+  ['MINUTE_ATTACHMENT_ARCHIVED', '보관된 회의록에는 첨부할 수 없습니다.'],
+  ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],
+  ['MINUTE_ATTACHMENT_OBJECT', '업로드한 파일을 확인하지 못했습니다 — 다시 올려 주세요.'],
+]
+
 /** 클라이언트 Storage 업로드 후 메타 기록. file_path 는 그 회의록 스코프(본문 minutes·첨부 minute-files) 강제. */
 export async function recordMinuteFile(
   minuteId: string,
@@ -783,7 +792,11 @@ export async function recordMinuteFile(
     minute_id: minuteId, role: file.role, file_name: file.fileName, file_path: file.filePath,
     size: file.size, mime: file.mime, uploaded_by: user.id,
   })
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    const known = ATTACHMENT_GUARD_TEXT.find(([code]) => error.message.includes(code))?.[1]
+    if (!known) console.error('[recordMinuteFile] 첨부 기록 실패:', error.message)
+    return { ok: false, error: known ?? '첨부 기록에 실패했습니다.' }
+  }
   revalidatePath(`/minutes/${minuteId}`)
   return { ok: true }
 }

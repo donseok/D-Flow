@@ -95,4 +95,26 @@ describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => 
     expect(await updateActual(W1, 100, 40)).toEqual({ ok: false, error: '에이전트 주문 확인 실패: boom' })
     expect(writes).toHaveLength(0)
   })
+  it('앱 판정 뒤 쓰기 사이에 주문이 claim 되면 DB 잠금(WORKFLOW_ACTUAL_LOCKED)이 막는다 — 같은 잠금 문구로', async () => {
+    server({
+      wbs_items: [item(), { data: null }, { data: null, error: { message: 'WORKFLOW_ACTUAL_LOCKED' } }],
+      agent_work_orders: [{ data: null }],
+    })
+    expect(await updateActual(W1, 100)).toEqual({ ok: false, error: LOCKED_MSG })
+  })
+
+  // 경계 패리티의 TS 쪽 — tests/rls/workflow-parity.test.ts 의 ACTUAL_BOUNDARY 와 같은 세 값이다(과제 15). 한쪽을 바꾸면 다른 쪽도 바꾼다.
+  it.each([[99, true], [99.5, false], [100, false]] as const)('위임된 항목의 수기 실적 %s → 허용 %s(99 초과는 잠금)', async (pct, allowed) => {
+    const { writes } = server({
+      wbs_items: [item({ tags: ['agent'] }), { data: null }, { data: [{ id: W1 }] }],
+    })
+    const res = await updateActual(W1, pct)
+    if (allowed) {
+      expect(res).toEqual({ ok: true })
+      expect(writes.some((w) => w.table === 'wbs_items')).toBe(true)
+    } else {
+      expect(res).toEqual({ ok: false, error: LOCKED_MSG })
+      expect(writes.some((w) => w.table === 'wbs_items')).toBe(false)
+    }
+  })
 })
