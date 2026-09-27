@@ -15,12 +15,15 @@ const mocks = vi.hoisted(() => ({
   redeemInviteWithSignup: vi.fn(),
   signInWithPassword: vi.fn(),
   signOut: vi.fn(),
-  push: vi.fn(),
+  // 라우터 호출 순서 — 성공 이동 뒤 refresh(라우터 캐시의 직전 사용자 RSC 페이로드 무효화)를 본다.
+  nav: [] as string[],
+  push: vi.fn((href: string) => { mocks.nav.push(`push:${href}`) }),
+  refresh: vi.fn(() => { mocks.nav.push('refresh') }),
   toast: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mocks.push, refresh: vi.fn() }),
+  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
 }))
 vi.mock('next/link', () => ({
   default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => (
@@ -68,6 +71,7 @@ describe('InviteRedeemCard 세션 분기', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.nav.length = 0
     mocks.signInWithPassword.mockResolvedValue({ error: null })
     mocks.signOut.mockResolvedValue({ error: null })
     container = document.createElement('div')
@@ -117,6 +121,7 @@ describe('InviteRedeemCard 세션 분기', () => {
     await act(async () => button.click())
     expect(mocks.redeemInvite).toHaveBeenCalledWith(TOKEN)
     expect(mocks.push).toHaveBeenCalledWith('/projects')
+    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
     // 일치 경로에서는 세션을 건드리지 않는다.
     expect(mocks.signOut).not.toHaveBeenCalled()
   })
@@ -163,6 +168,7 @@ describe('InviteRedeemCard 세션 분기', () => {
     // 초대와 무관한 계정으로 로그인만 되어 있는 상태를 남기지 않는다.
     expect(mocks.signOut).toHaveBeenCalledTimes(1)
     expect(mocks.push).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
     expect(container.textContent).toContain('초대받은 계정으로 로그인해 주세요')
   })
 
@@ -183,6 +189,63 @@ describe('InviteRedeemCard 세션 분기', () => {
 
     expect(mocks.signOut).not.toHaveBeenCalled()
     expect(mocks.push).toHaveBeenCalledWith('/projects')
+    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
+  })
+
+  it('로그인 폼에서 비밀번호가 틀리면 이동·refresh 없이 오류만 보인다', async () => {
+    mocks.getInviteSessionState.mockResolvedValue({ ok: true, authed: false, emailMatches: false })
+    mocks.signInWithPassword.mockResolvedValue({ error: { message: 'Invalid login credentials' } })
+    await render({ ...PREVIEW, accountExists: true })
+
+    await act(async () => {
+      setValue(container.querySelector<HTMLInputElement>('#invite-email')!, 'hong.gd@example.com')
+      setValue(container.querySelector<HTMLInputElement>('#invite-password')!, 'wrong')
+    })
+    await act(async () => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mocks.redeemInvite).not.toHaveBeenCalled()
+    expect(mocks.nav).toEqual([])
+    expect(container.textContent).toContain('이메일 또는 비밀번호가 올바르지 않습니다.')
+  })
+
+  async function submitSignup() {
+    mocks.getInviteSessionState.mockResolvedValue({ ok: true, authed: false, emailMatches: false })
+    await render()
+    await act(async () => {
+      setValue(container.querySelector<HTMLInputElement>('#invite-name')!, 'alice')
+      setValue(container.querySelector<HTMLInputElement>('#invite-new-password')!, 'password123')
+      setValue(container.querySelector<HTMLInputElement>('#invite-password-confirm')!, 'password123')
+    })
+    await act(async () => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+  }
+
+  it('가입·합류 뒤 자동 로그인이 성공하면 /projects 로 이동한 뒤 refresh 한다', async () => {
+    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, email: 'hong.gd@example.com' })
+    await submitSignup()
+
+    expect(mocks.signInWithPassword).toHaveBeenCalledWith({ email: 'hong.gd@example.com', password: 'password123' })
+    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
+  })
+
+  it('가입 뒤 자동 로그인만 실패하면 /login 으로 보내고 refresh 하지 않는다', async () => {
+    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, email: 'hong.gd@example.com' })
+    mocks.signInWithPassword.mockResolvedValue({ error: { message: 'boom' } })
+    await submitSignup()
+
+    expect(mocks.nav).toEqual(['push:/login'])
+  })
+
+  it('가입이 실패하면 이동·refresh 없이 사유를 보인다', async () => {
+    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: false, error: '가입을 처리하지 못했습니다.' })
+    await submitSignup()
+
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled()
+    expect(mocks.nav).toEqual([])
+    expect(container.textContent).toContain('가입을 처리하지 못했습니다.')
   })
 
   it('초대에 담긴 팀을 이름 목록으로 안내한다(첫 팀이 대표)', async () => {

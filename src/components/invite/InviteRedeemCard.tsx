@@ -102,6 +102,8 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       variant: 'success',
     })
     router.push('/projects')
+    // 클라이언트 라우터 캐시(staleTimes.dynamic 30초)에 같은 브라우저 직전 사용자의 RSC 페이로드가 남아 있을 수 있다(로그인 화면과 같다).
+    router.refresh()
   }
 
   function submitSignup(event: React.FormEvent) {
@@ -123,6 +125,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       }
       toast({ title: '프로젝트에 합류했습니다.', variant: 'success' })
       router.push('/projects')
+      router.refresh()
     })
   }
 
