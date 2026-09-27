@@ -591,25 +591,43 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('service_role 조회가 실패하거나 0행이면 공유 상태를 모른다 — 거부하고 로그를 남긴다', async () => {
+  const SHARE_LOOKUP_FAILED = '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
+  const READ_FAILURES = [
+    ['조회 오류', { data: null, error: { message: 'db down' } }, 'db down'],
+    ['0행', { data: null, error: null }, '0행'],
+  ] as const
+
+  it.each(READ_FAILURES)('service_role 조회가 %s 면 공유 상태를 모른다 — 거부하고 어느 회의록인지 로그에 남긴다', async (_name, res, cause) => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    for (const res of [{ data: null, error: { message: 'db down' } }, { data: null, error: null }]) {
-      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
-      mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: res }).client)
-      getActor.mockResolvedValue(inA)
-      expect(await getMinuteShare(M)).toEqual({ ok: false, error: '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.' })
-    }
-    expect(spy).toHaveBeenCalled()
+    createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+    mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: res }).client)
+    getActor.mockResolvedValue(inA)
+    expect(await getMinuteShare(M)).toMatchObject({ ok: false, error: SHARE_LOOKUP_FAILED })
+    expect(spy.mock.calls).toEqual([[`[readShareRow minute=${M}] 공유 상태 조회 실패:`, cause]])
     spy.mockRestore()
   })
 
-  it('setMinuteShare: 저장 실패의 DB 문구를 응답에 싣지 않는다', async () => {
+  // 쓰기 전 선행 조회가 실패하면 중단한다(3원칙 ②) — 모르는 상태 위에 토큰을 새로 쓰면 살아 있던 링크가 바뀐다.
+  it.each(READ_FAILURES)('setMinuteShare: service_role 조회가 %s 면 쓰지 않는다', async (_name, res) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+    const adm = fakeClient({ minutes: res })
+    mocks.createAdminClient.mockReturnValue(adm.client)
+    getActor.mockResolvedValue(inA)
+    expect(await setMinuteShare(M, 'enable')).toMatchObject({ ok: false, error: SHARE_LOOKUP_FAILED })
+    expect(adm.calls.minutes).toEqual(['select', 'eq', 'maybeSingle'])
+    expect(adm.queries).toHaveLength(1)
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
+  })
+
+  it('setMinuteShare: 저장 실패의 DB 문구를 응답에 싣지 않는다 — 로그에는 어느 회의록인지와 함께 남긴다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
     mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: [shareRow, { data: null, error: { message: 'db boom' } }] }).client)
     getActor.mockResolvedValue(inA)
-    expect(await setMinuteShare(M, 'enable' as never)).toEqual({ ok: false, error: '공유 설정을 저장하지 못했습니다.' })
-    expect(spy).toHaveBeenCalled()
+    expect(await setMinuteShare(M, 'enable' as never)).toMatchObject({ ok: false, error: '공유 설정을 저장하지 못했습니다.' })
+    expect(spy.mock.calls).toEqual([[`[setMinuteShare minute=${M}] 공유 설정 저장 실패:`, 'db boom']])
     spy.mockRestore()
   })
 })

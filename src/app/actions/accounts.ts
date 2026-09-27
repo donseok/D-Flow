@@ -8,7 +8,7 @@ import { ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listProfiles } from '@/lib/data/accounts'
-import { isValidEmail } from '@/lib/domain/validate'
+import { isValidEmail, UUID_RE } from '@/lib/domain/validate'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
@@ -321,6 +321,8 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   if (!value && userId === g.actor.userId) return { ok: false, error: ERR_SELF_PLATFORM }
   if (typeof value !== 'boolean') return { ok: false, error: '지정 여부가 올바르지 않습니다.' }
   const admin = createAdminClient()
+  // 실패 로그의 머리 — 어느 계정의 실패인지. userId 는 액션 인자라 형식이 보장되지 않는다: UUID 꼴일 때만 찍는다.
+  const head = `[setPlatformAdmin user=${UUID_RE.test(userId) ? userId : '(id 아님)'}]`
 
   if (!value) {
     const { data, error: delErr } = await admin.from('platform_admins').delete().eq('user_id', userId).select('user_id')
@@ -328,7 +330,7 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
       if (delErr.message.includes('PLATFORM_LAST_ADMIN')) {
         return { ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' }
       }
-      console.error('[setPlatformAdmin] 해제 실패:', delErr.message)
+      console.error(`${head} 해제 실패:`, delErr.message)
       return { ok: false, error: '슈퍼유저를 해제하지 못했습니다.' }
     }
     // 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다.
@@ -338,7 +340,7 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
       { user_id: userId, granted_by: g.actor.userId }, { onConflict: 'user_id', ignoreDuplicates: true },
     )
     if (insErr) {
-      console.error('[setPlatformAdmin] 지정 실패:', insErr.message)
+      console.error(`${head} 지정 실패:`, insErr.message)
       return { ok: false, error: '슈퍼유저로 지정하지 못했습니다.' }
     }
   }

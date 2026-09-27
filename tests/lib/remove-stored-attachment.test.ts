@@ -67,6 +67,22 @@ describe('removeStoredAttachment', () => {
     const res = await removeStoredAttachment(f.db, IN)
     expect(res).toEqual({ ok: false, error: ERR_ROW_REMOVE })
   })
+  // 같은 시각에 두 삭제가 실패하면 로그 두 줄이 같은 글자였다 — 어느 첨부인지(종류·행 id)를 머리에 싣는다.
+  // 파일 경로는 싣지 않는다: 끝이 사용자가 올린 파일 이름이고, 행 id 로 찾을 수 있다.
+  it.each([
+    ['Storage 오류', { removed: { data: null, error: { message: 'storage down' } } }],
+    ['존재 확인 RPC 오류', { removed: { data: [], error: null }, exists: { data: null, error: { message: 'ATTACHMENT_FORBIDDEN' } } }],
+    ['객체가 남아 있음', { removed: { data: [], error: null }, exists: { data: true, error: null } }],
+    ['행 삭제 오류', { deleted: { data: null, error: { message: 'row boom' } } }],
+    ['행 삭제 0건', { deleted: { data: [], error: null } }],
+  ])('실패 로그(%s)의 머리에 종류와 첨부 id 를 싣고 파일 경로는 싣지 않는다', async (_l, o) => {
+    const f = fakeDb(o)
+    expect((await removeStoredAttachment(f.db, IN)).ok).toBe(false)
+    expect(spy).toHaveBeenCalledTimes(1)
+    const args = spy.mock.calls[0].map(String)
+    expect(args[0].startsWith('[test minute=a1] ')).toBe(true)
+    expect(args.join(' ')).not.toContain(IN.filePath)
+  })
   it.each([
     ['deliverable', 'deliverables', 'deliverable_attachments'],
     ['issue', 'issue-attachments', 'issue_attachments'],

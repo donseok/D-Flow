@@ -722,6 +722,9 @@ const ATTACHMENT_GUARD_TEXT: ReadonlyArray<readonly [string, string]> = [
   ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],
   ['MINUTE_ATTACHMENT_OBJECT', '업로드한 파일을 확인하지 못했습니다 — 다시 올려 주세요.'],
 ]
+/** 로그에도 남기는 사유 — 앱의 경로 검사를 통과한 뒤에 DB 가 거부한 것. 화면 흐름(업로드 뒤 기록)에서는 앱과 DB 의 경로 검사가
+ *  어긋났거나 Storage 가 객체 메타(size)를 남기지 않게 됐다는 신호다. 나머지(개수·중복·보관)는 사용자 몫의 거부라 남기지 않는다. */
+const ATTACHMENT_GUARD_LOGGED: ReadonlySet<string> = new Set(['MINUTE_ATTACHMENT_PATH', 'MINUTE_ATTACHMENT_OBJECT'])
 
 /** 클라이언트 Storage 업로드 후 메타 기록. file_path 는 그 회의록 스코프(본문 minutes·첨부 minute-files) 강제. */
 export async function recordMinuteFile(
@@ -793,9 +796,12 @@ export async function recordMinuteFile(
     size: file.size, mime: file.mime, uploaded_by: user.id,
   })
   if (error) {
-    const known = ATTACHMENT_GUARD_TEXT.find(([code]) => error.message.includes(code))?.[1]
-    if (!known) console.error('[recordMinuteFile] 첨부 기록 실패:', error.message)
-    return { ok: false, error: known ?? '첨부 기록에 실패했습니다.' }
+    // minuteId 는 checkOwner 가 행으로 확인한 값이다. 파일 경로는 싣지 않는다(끝이 사용자 파일 이름).
+    const head = `[recordMinuteFile minute=${minuteId}]`
+    const known = ATTACHMENT_GUARD_TEXT.find(([code]) => error.message.includes(code))
+    if (!known) console.error(`${head} 첨부 기록 실패:`, error.message)
+    else if (ATTACHMENT_GUARD_LOGGED.has(known[0])) console.error(`${head} 첨부 확정 가드 거부: ${known[0]}`)
+    return { ok: false, error: known?.[1] ?? '첨부 기록에 실패했습니다.' }
   }
   revalidatePath(`/minutes/${minuteId}`)
   return { ok: true }
@@ -1436,7 +1442,7 @@ async function readShareRow(sb: Sb, id: string, actor: Actor):
   if ('error' in adm) return { error: adm.error }
   const { data, error } = await adm.admin.from('minutes').select('share_token, share_enabled').eq('id', id).maybeSingle()
   if (error || !data) {
-    console.error('[readShareRow] 공유 상태 조회 실패:', error?.message ?? '0행')
+    console.error(`[readShareRow minute=${id}] 공유 상태 조회 실패:`, error?.message ?? '0행')
     return { error: ERR_SHARE_LOOKUP }
   }
   const row = data as { share_token: string | null; share_enabled: boolean | null }
@@ -1464,7 +1470,7 @@ export async function setMinuteShare(id: string, op: ShareOp): Promise<MinuteSha
   const { error } = await row.admin.from('minutes')
     .update({ share_token: next.token, share_enabled: next.enabled }).eq('id', id)
   if (error) {
-    console.error('[setMinuteShare] 공유 설정 저장 실패:', error.message)
+    console.error(`[setMinuteShare minute=${id}] 공유 설정 저장 실패:`, error.message)
     return { ok: false, error: ERR_SHARE_SAVE }
   }
   return { ok: true, enabled: next.enabled, token: next.token }

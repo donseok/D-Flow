@@ -5,8 +5,9 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 import { createServerClient } from '@/lib/supabase/server'
 import { ERR_MEETINGS_LOAD, getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
 
-type Reply = { data: unknown[] | null; error: { message: string } | null }
-const OK = (rows: unknown[]): Reply => ({ data: rows, error: null })
+type Reply = { data: unknown[] | null; error: { message: string } | null; count?: number | null }
+// count 는 예외 폴백(fetchAllPages)이 잘림을 확인할 때 본다 — PostgREST 의 count: 'exact' 응답.
+const OK = (rows: unknown[]): Reply => ({ data: rows, error: null, count: rows.length })
 const ERR = (message: string): Reply => ({ data: null, error: { message } })
 
 const EMBED_ERR = ERR("Could not find a relationship between 'meetings' and 'meeting_exceptions'")
@@ -18,17 +19,23 @@ const EMBED_ERR = ERR("Could not find a relationship between 'meetings' and 'mee
 function makeSb(opts: {
   user?: { id: string; email?: string | null } | null
   meetings: (select: string) => Reply | Promise<Reply>
-  exceptions?: Reply
+  /** 예외 폴백 조회의 응답 — 함수면 요청한 범위(range)를 받아 그 페이지를 돌려준다. */
+  exceptions?: Reply | ((from: number, to: number) => Reply)
   members?: Reply | Promise<Reply>
 }) {
   const selects: string[] = []
   const tables: string[] = []
-  const chain = (resolve: () => Reply | Promise<Reply>) => {
+  /** 예외 폴백 조회가 건 것 — select 옵션·정렬·범위 */
+  const exceptionQueries: Array<{ options: unknown; orders: string[]; range: [number, number] | null }> = []
+  const chain = (resolve: (q: { range: [number, number] | null }) => Reply | Promise<Reply>, options?: unknown) => {
+    const q = { options, orders: [] as string[], range: null as [number, number] | null }
     const o: Record<string, unknown> = {}
-    for (const k of ['eq', 'or', 'order', 'in', 'limit', 'maybeSingle']) o[k] = () => o
+    for (const k of ['eq', 'or', 'in', 'limit', 'maybeSingle']) o[k] = () => o
+    o.order = (col: string) => { q.orders.push(col); return o }
+    o.range = (from: number, to: number) => { q.range = [from, to]; return o }
     o.then = (res: unknown, rej: unknown) =>
-      Promise.resolve(resolve()).then(res as never, rej as never)
-    return o
+      Promise.resolve(resolve(q)).then(res as never, rej as never)
+    return { o, q }
   }
   const sb = {
     auth: {
@@ -39,22 +46,31 @@ function makeSb(opts: {
     from: (table: string) => {
       tables.push(table)
       return {
-        select: (sel: string) => {
-          if (table === 'meetings') { selects.push(sel); return chain(() => opts.meetings(sel)) }
-          if (table === 'meeting_exceptions') return chain(() => opts.exceptions ?? OK([]))
-          if (table === 'project_members') return chain(() => opts.members ?? OK([]))
-          return chain(() => OK([]))
+        select: (sel: string, options?: unknown) => {
+          if (table === 'meetings') { selects.push(sel); return chain(() => opts.meetings(sel)).o }
+          if (table === 'meeting_exceptions') {
+            const c = chain(({ range }) => {
+              const ex = opts.exceptions ?? OK([])
+              return typeof ex === 'function' ? ex(range?.[0] ?? 0, range?.[1] ?? Infinity) : ex
+            }, options)
+            exceptionQueries.push(c.q)
+            return c.o
+          }
+          if (table === 'project_members') return chain(() => opts.members ?? OK([])).o
+          return chain(() => OK([])).o
         },
       }
     },
   }
   ;(createServerClient as unknown as { mockResolvedValue: (v: unknown) => void })
     .mockResolvedValue(sb)
-  return { selects, tables }
+  return { selects, tables, exceptionQueries }
 }
 
+// 프로젝트 id 는 UUID 꼴이어야 조회가 나간다(getProjectMeetingData)
+const PID = '00000000-0000-4000-8000-0000000000b1'
 const meetingRow = (id: string, extra: Record<string, unknown> = {}) => ({
-  id, project_id: 'p1', title: `회의 ${id}`, meeting_date: '2026-07-20',
+  id, project_id: PID, title: `회의 ${id}`, meeting_date: '2026-07-20',
   start_time: null, end_time: null, location: null, category: 'weekly',
   recurrence: 'none', recurrence_until: null, created_by: null, created_by_name: null,
   created_at: '2026-07-20T00:00:00Z', updated_at: '2026-07-20T00:00:00Z',
@@ -88,7 +104,7 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
         meetingRow('m2', { meeting_exceptions: [] }),
       ]),
     })
-    const res = await projectMeetings('embed-ok')
+    const res = await projectMeetings(PID)
     expect(res.meetings.map(m => m.id)).toEqual(['m1', 'm2'])
     expect(res.exceptions).toEqual([
       { meetingId: 'm1', occurrenceDate: '2026-07-27', kind: 'cancelled' },
@@ -104,7 +120,7 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
         : OK([meetingRow('m1')]),
       exceptions: OK([exRow('m1', '2026-07-27')]),
     })
-    const res = await projectMeetings('embed-fail')
+    const res = await projectMeetings(PID)
     expect(res.meetings.map(m => m.id)).toEqual(['m1'])
     expect(res.exceptions).toEqual([
       { meetingId: 'm1', occurrenceDate: '2026-07-27', kind: 'cancelled' },
@@ -116,7 +132,7 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
 
   it('재시도까지 실패하면 실패를 결과로 돌려주고 로그를 남긴다 — 회의 0건으로 위장하지 않는다', async () => {
     const { tables } = makeSb({ meetings: () => EMBED_ERR })
-    const res = await getProjectMeetingData('embed-fail-twice')
+    const res = await getProjectMeetingData(PID)
     expect(ERR_MEETINGS_LOAD).toBe('회의 일정을 불러오지 못했습니다.')
     expect(res).toEqual({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
     expect(console.error).toHaveBeenCalledTimes(2)
@@ -190,7 +206,7 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
   it('getProjectMeetingData: 임베드 실패 뒤 예외 별도 조회까지 실패하면 ok:false', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
-    expect(await getProjectMeetingData('p1')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(await getProjectMeetingData(PID)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(logged().some(m => m.includes('getProjectMeetingData') && m.includes('meeting_exceptions'))).toBe(true)
   })
   it('getMyMeetings: 회의 조회가 재시도까지 실패하면 ok:false — 빈 달력이 아니다', async () => {
@@ -271,24 +287,22 @@ describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣�
     expect(logged().some(m => m.includes(`[getProjectMeetingData project=${P_LOG_2}] meeting_exceptions`))).toBe(true)
   })
 
-  it('getProjectMeetingData: UUID 꼴이 아닌 프로젝트 id 는 로그에 그대로 찍지 않는다 — URL 조각·액션 인자라 형식이 보장되지 않는다', async () => {
-    const MASKED = '[getProjectMeetingData project=(id 아님)]'
-    // 줄바꿈을 실어 둘째 로그 줄을 지어내려는 값, 그리고 UUID 뒤에 덧붙인 값(앞부분만 맞는 것은 맞는 것이 아니다)
-    for (const forged of ['abc\n[auth] login ok user=admin', `${P_LOG_1}\n[auth] login ok user=admin`]) {
-      vi.mocked(console.error).mockClear()
-      makeSb({ meetings: () => ERR('down') })
-      await getProjectMeetingData(forged)
-      expect(logged()).toHaveLength(2)
-      expect(logged().some(m => m.includes('login ok') || m.includes('\n'))).toBe(false)
-      expect(logged().every(m => m.startsWith(MASKED))).toBe(true)
-    }
-
-    // 예외 폴백 실패 로그도 같은 tag 를 쓴다
-    vi.mocked(console.error).mockClear()
-    makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
-    await getProjectMeetingData('abc\n[forged] line')
-    expect(logged().some(m => m.includes('forged') || m.includes('\n'))).toBe(false)
-    expect(logged().some(m => m.startsWith(`${MASKED} meeting_exceptions`))).toBe(true)
+  // projectId 는 URL 조각·서버 액션 인자라 형식이 보장되지 않는다. tag 만 가리면 부족하다 — 조회가 나가면 Postgres 가 22P02 문구에
+  // 입력을 그대로 인용하고, 그 문구가 console.error 의 둘째 인자로 실려 줄바꿈 뒤의 글자가 새 로그 줄이 된다.
+  it.each([
+    ['줄바꿈으로 둘째 로그 줄을 지어내려는 값', 'abc\n[auth] login ok user=admin'],
+    ['UUID 뒤에 덧붙인 값(앞부분만 맞는 것은 맞는 것이 아니다)', `${P_LOG_1}\n[auth] login ok user=admin`],
+    ['CR 만 실은 값', 'abc\r[auth] login ok user=admin'],
+    ['빈 값', ''],
+  ])('getProjectMeetingData: UUID 꼴이 아닌 프로젝트 id 는 조회하지 않고 ok:false — %s', async (_name, forged) => {
+    const { tables } = makeSb({ meetings: () => ERR(`invalid input syntax for type uuid: "${forged}"`) })
+    expect(await getProjectMeetingData(forged)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(tables).toEqual([])
+    const calls = vi.mocked(console.error).mock.calls
+    expect(calls).toHaveLength(1)
+    expect(String(calls[0][0])).toBe('[getProjectMeetingData project=(id 아님)] UUID 꼴이 아닌 프로젝트 id — 조회하지 않는다')
+    // 첫 인자만이 아니라 모든 인자를 본다
+    expect(calls.flat().some(a => /[\r\n]/.test(String(a)) || String(a).includes('login ok'))).toBe(false)
   })
 
   it('getMyMeetings: 회의 조회 실패·예외 폴백 실패 로그에 달력 범위', async () => {
@@ -327,5 +341,54 @@ describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣�
     expect(logged()[0]).toContain('getMyMeetings')
     expect(logged()[0]).toContain('날짜 꼴이 아닌 인자')
     expect(logged().some(m => m.includes('ilike') || m.includes('not.is.null'))).toBe(false)
+  })
+})
+
+describe('예외 폴백은 끝까지 읽는다 — 한 응답은 max_rows(1000)에서 오류 없이 잘린다', () => {
+  const embedFails = (sel: string) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1'), meetingRow('m2')]))
+  const ALL = [exRow('m1', '2026-07-06'), exRow('m1', '2026-07-13'), exRow('m2', '2026-07-20')]
+
+  it('count 를 받고 유일 키(meeting_id, occurrence_date) 순으로 범위를 걸어 읽는다', async () => {
+    const { exceptionQueries } = makeSb({ meetings: embedFails, exceptions: OK(ALL) })
+    const res = await projectMeetings(PID)
+    expect(res.exceptions).toHaveLength(3)
+    expect(exceptionQueries).toEqual([
+      { options: { count: 'exact' }, orders: ['meeting_id', 'occurrence_date'], range: [0, 999] },
+    ])
+  })
+
+  it('응답이 잘려 오면(받은 행 < count) 받은 만큼 전진해 이어 읽는다 — 잘린 회차가 살아 있는 일정으로 보이지 않게', async () => {
+    // 서버 상한 2행을 흉내낸다
+    const { exceptionQueries } = makeSb({
+      meetings: embedFails,
+      exceptions: (from) => ({ data: ALL.slice(from, from + 2), error: null, count: ALL.length }),
+    })
+    const res = await projectMeetings(PID)
+    expect(res.exceptions).toEqual([
+      { meetingId: 'm1', occurrenceDate: '2026-07-06', kind: 'cancelled' },
+      { meetingId: 'm1', occurrenceDate: '2026-07-13', kind: 'cancelled' },
+      { meetingId: 'm2', occurrenceDate: '2026-07-20', kind: 'cancelled' },
+    ])
+    expect(exceptionQueries.map(q => q.range)).toEqual([[0, 999], [2, 1001]])
+  })
+
+  it.each([
+    ['count 가 없다(잘림을 확인할 수 없다)', (): Reply => ({ data: ALL, error: null })],
+    ['끝까지 읽지 못했다(받은 행 < count)', (from: number): Reply => ({ data: from === 0 ? ALL.slice(0, 2) : [], error: null, count: 5 })],
+  ])('%s — 회의 일정을 실패로 돌려주고 로그를 남긴다', async (_name, exceptions) => {
+    makeSb({ meetings: embedFails, exceptions })
+    expect(await getProjectMeetingData(PID)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    const lines = vi.mocked(console.error).mock.calls.map(c => String(c[0]))
+    expect(lines.some(m => m.startsWith(`[getProjectMeetingData project=${PID}] meeting_exceptions`))).toBe(true)
+  })
+
+  it('getMyMeetings 의 폴백도 같은 조회를 쓴다', async () => {
+    const { exceptionQueries } = makeSb({
+      user: { id: 'u1', email: null }, meetings: embedFails,
+      exceptions: (from) => ({ data: ALL.slice(from, from + 2), error: null, count: ALL.length }),
+    })
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.exceptions).toHaveLength(3)
+    expect(exceptionQueries.map(q => q.range)).toEqual([[0, 999], [2, 1001]])
   })
 })

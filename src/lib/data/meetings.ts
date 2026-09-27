@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { UUID_RE } from '@/lib/domain/validate'
 import { ROSTER_SELECT, personOf, toRosterMember } from '@/lib/data/memberSelect'
+import { fetchAllPages } from '@/lib/data/paging'
 import type {
   Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
 } from '@/lib/domain/types'
@@ -58,20 +59,26 @@ function exceptionsFrom(rows: Row[]): MeetingException[] {
 
 /** 임베드가 불가했을 때만 쓰는 폴백 — 예외를 별도 왕복으로 읽는다. 실패면 null — 취소 회차가 되살아나 보이지 않게
  *  호출부가 회의 일정 전체를 실패로 보인다(에러 처리 3원칙 ①).
+ *  끝까지 읽는다(fetchAllPages): 한 응답은 max_rows(1000)에서 오류 없이 잘리고, 임베드는 회의마다 따로 세지만 이 폴백은
+ *  결과에 든 회의 전체의 합이라 먼저 닿는다. 잘린 채 돌려주면 잘려 나간 취소 회차가 살아 있는 일정으로 보인다.
+ *  정렬은 유일 키(PK: meeting_id, occurrence_date). 잘림을 확인할 수 없거나(count 없음) 끝까지 못 읽은 것도 실패다.
  *  tag 는 로그 머리 — 로더 이름과 함께 어느 프로젝트·어느 범위의 조회였는지를 싣는다(selectMeetings 도 같다). */
 async function fetchExceptionsByIds(
   sb: ServerClient, ids: string[], tag: string,
 ): Promise<MeetingException[] | null> {
   if (!ids.length) return []
-  const { data, error } = await sb
-    .from('meeting_exceptions')
-    .select('meeting_id, occurrence_date, kind')
-    .in('meeting_id', ids)
-  if (error) {
-    console.error(`[${tag}] meeting_exceptions 조회 실패 — 회의 일정을 실패로 보인다:`, error.message)
+  try {
+    const rows = await fetchAllPages<Row>('meeting_exceptions', (from, to) => sb
+      .from('meeting_exceptions')
+      .select('meeting_id, occurrence_date, kind', { count: 'exact' })
+      .in('meeting_id', ids)
+      .order('meeting_id').order('occurrence_date')
+      .range(from, to))
+    return rows.map(toException)
+  } catch (e) {
+    console.error(`[${tag}] meeting_exceptions 조회 실패 — 회의 일정을 실패로 보인다:`, e instanceof Error ? e.message : e)
     return null
   }
-  return (data ?? []).map((e: Row) => toException(e))
 }
 
 type RowsResult = { data: Row[] | null; error: { message: string } | null }
@@ -120,13 +127,21 @@ async function selectMeetings(
 export const getProjectMeetingData = cache(async (
   projectId: string,
 ): Promise<{ ok: true; meetings: Meeting[]; exceptions: MeetingException[] } | { ok: false; error: string }> => {
+  // 이 로더를 쓰는 화면(대시보드·프로젝트 회의)은 회의 조회 실패를 따로 로그로 남기지 않는다 — 어느 프로젝트의 실패인지는 여기서 싣는다.
+  // projectId 는 URL 조각(/p/[projectId]/…)이나 서버 액션 인자로 와 형식이 보장되지 않는다: UUID 꼴이 아니면 그대로 찍지 않는다
+  // (getMyMeetings 의 range 와 같다 — 줄바꿈으로 로그 줄을 지어낼 수 없게).
+  const isUuid = UUID_RE.test(projectId)
+  const tag = `getProjectMeetingData project=${isUuid ? projectId : '(id 아님)'}`
+
+  // tag 만 가려서는 부족하다 — 조회가 나가면 Postgres 가 22P02 문구에 입력을 그대로 인용하고, 그 문구가 아래 실패 로그의
+  // 둘째 인자로 실린다. UUID 꼴이 아니면 어차피 실패할 조회이므로 보내지 않는다(getMyMeetings 가 날짜 인자를 거르는 것과 같다).
+  if (!isUuid) {
+    console.error(`[${tag}] UUID 꼴이 아닌 프로젝트 id — 조회하지 않는다`)
+    return { ok: false, error: ERR_MEETINGS_LOAD }
+  }
+
   const sb = await createServerClient()
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, location, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id)'
-
-  // 이 로더를 쓰는 화면(대시보드·프로젝트 회의)은 회의 조회 실패를 따로 로그로 남기지 않는다 — 어느 프로젝트의 실패인지는 여기서 싣는다.
-  // projectId 는 URL 조각(/p/[projectId]/…)이나 서버 액션 인자로 와 형식이 보장되지 않고, UUID 가 아니면 조회가 실패해
-  // 바로 이 로그를 탄다: UUID 꼴이 아니면 그대로 찍지 않는다(getMyMeetings 의 range 와 같다 — 줄바꿈으로 로그 줄을 지어낼 수 없게).
-  const tag = `getProjectMeetingData project=${UUID_RE.test(projectId) ? projectId : '(id 아님)'}`
 
   // 예외를 임베드해 왕복 2회 → 1회.
   const { rows, embedded, failed } = await selectMeetings(

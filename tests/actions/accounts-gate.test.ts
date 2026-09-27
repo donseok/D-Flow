@@ -493,6 +493,24 @@ describe('setPlatformAdmin — 마지막 관리자 보호(DB 트리거 platform_
     spy.mockRestore()
   })
 
+  // 같은 시각의 실패 두 줄을 가를 수 있게 대상 계정을 싣는다. userId 는 액션 인자라 형식이 보장되지 않는다 —
+  // UUID 꼴일 때만 찍는다(줄바꿈으로 로그 줄을 지어낼 수 없게, 회의 로더의 tag 와 같은 규칙).
+  it.each([
+    ['해제', false, '해제 실패'],
+    ['지정', true, '지정 실패'],
+  ] as const)('%s 실패 로그에 대상 계정 id 를 싣는다 — UUID 꼴이 아니면 가린다', async (_name, value, what) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const TARGET = '00000000-0000-4000-8000-0000000000c1'
+    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: null, error: { message: 'boom' } })) } as never)
+    expect((await setPlatformAdmin(TARGET, value)).ok).toBe(false)
+    expect((await setPlatformAdmin('u1\n[auth] login ok user=admin', value)).ok).toBe(false)
+    expect(spy.mock.calls).toEqual([
+      [`[setPlatformAdmin user=${TARGET}] ${what}:`, 'boom'],
+      [`[setPlatformAdmin user=(id 아님)] ${what}:`, 'boom'],
+    ])
+    spy.mockRestore()
+  })
+
   it('0행(이미 슈퍼유저가 아님)은 성공으로 위장하지 않는다', async () => {
     createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: [], error: null })) } as never)
     expect(await setPlatformAdmin('u9', false)).toEqual({ ok: false, error: '슈퍼유저가 아닌 계정입니다.' })

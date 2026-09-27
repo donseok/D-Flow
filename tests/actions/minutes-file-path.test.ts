@@ -145,16 +145,35 @@ describe('recordMinuteFile — scope 는 DB 의 회의록 행', () => {
     ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],
     ['MINUTE_ATTACHMENT_OBJECT', '업로드한 파일을 확인하지 못했습니다 — 다시 올려 주세요.'],
   ])('DB 가드 사유 %s 는 사용자 문구로', async (code, text) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const db = fakeDb({ data: row() }, { error: { message: code } })
     createServerClient.mockResolvedValue(db.client)
     expect(await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).toEqual({ ok: false, error: text })
+    spy.mockRestore()
   })
-  it('모르는 DB 오류는 원문을 싣지 않는다 — 로그만', async () => {
+  // PATH·OBJECT 는 앱의 경로 검사를 통과한 뒤에 DB 가 거부한 것이다 — 화면 흐름에서는 앱과 DB 의 경로 검사가 어긋났거나
+  // Storage 가 객체 메타(size)를 남기지 않게 됐다는 신호라, 사용자 문구만 띄우고 서버 로그가 비면 장애를 알 길이 없다.
+  it.each(['MINUTE_ATTACHMENT_PATH', 'MINUTE_ATTACHMENT_OBJECT'])('DB 가드 사유 %s 는 로그에도 남긴다 — 사유 코드와 회의록 id, 파일 경로는 싣지 않는다', async (code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const path = `ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }, { error: { message: `${code} (${path})` } }).client)
+    expect((await recordMinuteFile(M, att(path))).ok).toBe(false)
+    expect(spy.mock.calls).toEqual([[`[recordMinuteFile minute=${M}] 첨부 확정 가드 거부: ${code}`]])
+    spy.mockRestore()
+  })
+  it.each(['MINUTE_ATTACHMENT_LIMIT', 'MINUTE_ATTACHMENT_DUPLICATE', 'MINUTE_ATTACHMENT_ARCHIVED'])('사용자 몫의 거부 %s 는 로그에 남기지 않는다', async (code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }, { error: { message: code } }).client)
+    expect((await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).ok).toBe(false)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('모르는 DB 오류는 원문을 싣지 않는다 — 로그만, 어느 회의록인지와 함께', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const db = fakeDb({ data: row() }, { error: { message: 'db boom' } })
     createServerClient.mockResolvedValue(db.client)
     expect(await recordMinuteFile(M, att(`ws/${W}/p/${P}/minute-files/${M}/1-x.pdf`))).toEqual({ ok: false, error: '첨부 기록에 실패했습니다.' })
-    expect(spy).toHaveBeenCalled()
+    expect(spy.mock.calls).toEqual([[`[recordMinuteFile minute=${M}] 첨부 기록 실패:`, 'db boom']])
     spy.mockRestore()
   })
 
