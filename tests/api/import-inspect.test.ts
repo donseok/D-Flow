@@ -162,10 +162,16 @@ describe('POST /api/import/inspect', () => {
     expect((await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()).profileMismatch).toBeNull()
   })
 
-  it('설정 조회 실패 → 500, 원래 에러 메시지를 위장하지 않고 그대로 전달', async () => {
-    mocks.getProjectConfig.mockRejectedValue(new Error('프로젝트 설정 조회 실패: db down'))
+  it('설정 조회 실패 → 500, 기본값으로 위장하지 않는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
+    const boom = new Error('프로젝트 설정 조회 실패: db down')
+    mocks.getProjectConfig.mockRejectedValue(boom)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: '프로젝트 설정 조회 실패: db down' })
+    const body = await res.text()
+    expect(body).not.toContain('db down')
+    expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(err.mock.calls.some(c => c.includes(boom))).toBe(true)
+    err.mockRestore()
   })
 })

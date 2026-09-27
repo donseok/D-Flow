@@ -223,7 +223,11 @@ export async function clearExcelProfile(projectId: string): Promise<{ ok: boolea
     updated_at: new Date().toISOString(),
     updated_by: g.actor.userId,
   })
-  if (error) return { ok: false, error: error.message }
+  // 돌려주는 문구는 고정 — PostgREST 사유는 서버 로그에만(팀 목록 오류와 같은 처리).
+  if (error) {
+    console.error('[clearExcelProfile] 저장된 양식 비우기 실패:', error.message)
+    return { ok: false, error: '저장된 양식을 비우지 못했습니다.' }
+  }
   revalidatePath(`/p/${projectId}`, 'layout')
   return { ok: true }
 }

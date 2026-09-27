@@ -5,13 +5,16 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem, DeliverableAttachment } from '@/lib/domain/types'
 import type { AttachmentList } from '@/app/actions/attachments'
-import { t as realT } from '@/lib/i18n/dict'
+import { t as realT, registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listAttachments } = vi.hoisted(() => ({
+const { listAttachments, L } = vi.hoisted(() => ({
   listAttachments: vi.fn<(itemId: string) => Promise<AttachmentList>>(),
+  L: { locale: 'ko' as 'ko' | 'en' },
 }))
+registerEn(EN)
 vi.mock('@/app/actions/wbs', () => ({
   getChangeLogs: vi.fn().mockResolvedValue([]),
   updateWbsFields: vi.fn(), updateDeliverable: vi.fn(), addWbsItem: vi.fn(),
@@ -23,7 +26,7 @@ vi.mock('@/app/actions/attachments', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => realT('ko', k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ locale: L.locale, t: (k: string) => realT(L.locale, k as Parameters<typeof realT>[1]) }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => [] }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
@@ -51,6 +54,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    L.locale = 'ko'
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -68,7 +72,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
   }
   /** 첨부 섹션 — 머리글 문구를 가진 section. 패널의 다른 영역(링크·알림)과 섞지 않는다. */
   function section(): HTMLElement {
-    const head = [...container.querySelectorAll('section')].find(s => s.textContent?.includes(ko('wbs.attachments')))
+    const head = [...container.querySelectorAll('section')].find(s => s.textContent?.includes(realT(L.locale, 'wbs.attachments')))
     expect(head).toBeTruthy()
     return head as HTMLElement
   }
@@ -102,6 +106,15 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     expect(listAttachments).toHaveBeenCalledTimes(2)
     expect(section().querySelector('[role="alert"]')).toBeNull()
     expect(fileNode('plan.xlsx')).toBeTruthy()
+  })
+
+  it('ok:false 의 서버 문구(한국어)를 그대로 보이지 않는다 — 영어 화면은 영어 사전 문구', async () => {
+    L.locale = 'en'
+    listAttachments.mockResolvedValueOnce({ ok: false, error: '첨부 목록을 불러오지 못했습니다.' })
+    await render()
+    const alert = section().querySelector('[role="alert"]')!
+    expect(alert.textContent).toContain(realT('en', 'wbs.attachLoadFail'))
+    expect(alert.textContent).not.toMatch(/[가-힣]/)
   })
 
   it('unknown — 권한 확인 실패 경고와 재시도, 링크 없음', async () => {

@@ -39,9 +39,14 @@ describe('clearExcelProfile', () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/p/${P1}`, 'layout')
   })
 
-  it('저장 오류는 그 문구 그대로 — 성공으로 위장하지 않는다', async () => {
-    mocks.createAdminClient.mockReturnValue({ from: () => ({ upsert: async () => ({ error: { message: 'db down' } }) }) })
-    expect(await clearExcelProfile(P1)).toEqual({ ok: false, error: 'db down' })
+  it('저장 오류는 실패로 — 성공으로 위장하지 않는다. 돌려주는 문구는 고정, DB 사유는 서버 로그에만', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.createAdminClient.mockReturnValue({ from: () => ({ upsert: async () => ({ error: { message: 'relation "project_settings" db down' } }) }) })
+    const r = await clearExcelProfile(P1)
+    expect(r).toEqual({ ok: false, error: '저장된 양식을 비우지 못했습니다.' })
+    expect(JSON.stringify(r)).not.toContain('db down')
+    expect(err.mock.calls.some(c => c.some(a => String(a).includes('db down')))).toBe(true)
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    err.mockRestore()
   })
 })

@@ -10,9 +10,6 @@ import type { DashboardIssue } from '@/lib/domain/issueDashboard'
 import { announcementMilestones, mergeMilestonePoints } from '@/lib/domain/announcements'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
-import { ERR_ISSUES_LOAD } from '@/lib/data/issues'
-import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
-import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
@@ -114,13 +111,14 @@ export async function DashboardView({
   )
   // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(섹션 D~F 주석).
   const realToday = seoulToday()
-  const issuesError = <LoadErrorNotice message={ERR_ISSUES_LOAD} />
+  // 사유는 사전 문구 — 로더의 ERR_* 한국어 상수는 로그용이라 영어 화면에 그대로 싣지 않는다.
+  const issuesError = <LoadErrorNotice message={tr('common.loadFailed.issues')} />
 
   return (
     <div className="space-y-5">
       {/* 게시중 공지 1건 — WBS 없이도 보인다(경영진 요약에서 분리). */}
       {announcements === null
-        ? <LoadErrorNotice message={ERR_ANNOUNCEMENTS_LOAD} />
+        ? <LoadErrorNotice message={tr('common.loadFailed.announcements')} />
         : <AnnouncementStrip projectId={projectId} announcements={announcements} today={today} />}
 
       {/* A. 경영진 요약 — 게이지 + 신호등 3 + 리포트. WBS 가 없으면 그 자리에 WBS 화면 안내. */}
@@ -160,7 +158,7 @@ export async function DashboardView({
       {/* D. 회의 일정(전폭) — 진척 다음에 '이번 주 무슨 회의가 있나'. 이슈 카드 사이에 끼우면
           맥락이 끊긴다는 사용자 피드백(2026-08-28)으로 이슈 섹션 위로 분리. 실행 큐가 오래 전폭이었듯
           날짜 셀 + 제목 행 목록은 전폭에 어울린다. 회의는 실제 달력이므로 실제 오늘 기준(base_date 금지). */}
-      {meetings === null ? <LoadErrorNotice message={ERR_MEETINGS_LOAD} /> : (
+      {meetings === null ? <LoadErrorNotice message={tr('common.loadFailed.meetings')} /> : (
         <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
           currentUserId={currentUserId} canManage={canManage} />
       )}

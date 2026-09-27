@@ -9,7 +9,7 @@ import {
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
-import { downloadWbsExport } from '@/components/import/downloadWbsExport'
+import { downloadWbsExport, exportFailureKey } from '@/components/import/downloadWbsExport'
 import type { DictKey } from '@/lib/i18n/dict'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
@@ -188,7 +188,10 @@ export function ImportWizard({
     setExportBusy(true)
     try {
       const r = await downloadWbsExport(projectId, { expand: true })
-      if (!r.ok) toast({ title: t('importWizard.exportProfileFailedHttp'), description: r.error ?? undefined, variant: 'error' })
+      if (!r.ok) {
+        const key = exportFailureKey(r.status, true)
+        toast({ title: t('importWizard.exportProfileFailedHttp'), description: key ? t(key) : undefined, variant: 'error' })
+      }
     } finally {
       setExportBusy(false)
     }

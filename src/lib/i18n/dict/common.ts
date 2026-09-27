@@ -51,6 +51,19 @@ export const commonKo = {
   'common.retry': '다시 시도',
   'common.loading': '불러오는 중…',
   'common.none': '없음',
+  // 조회 실패 알림(LoadErrorNotice) — 로더의 ERR_* 한국어 상수는 로그·시험용이고 화면에는 이 문구를 쓴다.
+  'common.loadFailed.issues': '이슈를 불러오지 못했습니다.',
+  'common.loadFailed.announcements': '공지를 불러오지 못했습니다.',
+  'common.loadFailed.meetings': '회의 일정을 불러오지 못했습니다.',
+  // 액션 실패 토스트 — 가드 문구(lib/authz/errors)는 그리는 자리에서 이 문구로 바꾸고, 모르는 사유는 tryAgain.
+  'common.err.denied': '권한이 없습니다.',
+  'common.err.signIn': '로그인이 필요합니다.',
+  'common.err.lookup': '권한을 확인할 수 없어 중단했습니다. 잠시 후 다시 시도하세요.',
+  'common.err.tryAgain': '잠시 후 다시 시도하세요.',
+  // 에이전트 결재 안내 — 에이전트 화면의 나머지 문구는 아직 한국어 하드코딩이다(사전 이관은 별도).
+  'agent.queue.selfApprovalHint': '자기 담당·자기 착수 항목은 다른 관리자나 상위 담당자가 승인합니다. 반려로 보고를 물릴 수는 있습니다.',
+  'agent.queue.adminApprovesHint': '승인은 관리자가 합니다. 담당자는 반려로 자기 보고를 물릴 수 있습니다.',
+  'agent.seat.selfApprovalHint': '자기 담당·자기 착수 항목의 완료는 다른 관리자나 상위 담당자가 승인합니다.',
   // 작업 상태 라벨 — 표시 계층 전용. src/lib/domain의 한국어 상수(로직 키)는 절대 바꾸지 말 것.
   'status.not_started': '시작전',
   'status.in_progress': '진행중',

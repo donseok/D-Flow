@@ -531,11 +531,16 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
   })
 
   it('설정 조회 실패 → 500, 파싱·RPC 미호출(대조 불가를 통과로 위장하지 않는다)', async () => {
-    mocks.getProjectConfig.mockRejectedValue(new Error('프로젝트 설정 조회 실패: db down'))
+    const boom = new Error('프로젝트 설정 조회 실패: db down')
+    mocks.getProjectConfig.mockRejectedValue(boom)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: '프로젝트 설정 조회 실패: db down' })
+    // 본문은 고정 문구 — PostgREST 사유는 서버 로그에만 남긴다.
+    const body = await res.text()
+    expect(body).not.toContain('db down')
+    expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(err.mock.calls.some(c => c.includes(boom))).toBe(true)
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
     err.mockRestore()

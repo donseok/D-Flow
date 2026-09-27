@@ -111,7 +111,7 @@ export function buildAoaWithProfile(
   if (hierCols) {
     const tooDeep = flattenWithDepth(items, false).some(({ item, depth }) => !item.isOwnerSplit && depth >= hierCols.length)
     if (tooDeep) {
-      return { ok: false, error: `저장된 엑셀 양식의 계층 열(${hierCols.length}개)보다 WBS가 깊습니다 — 임포트 마법사에서 양식을 다시 저장하세요` }
+      return { ok: false, error: `저장된 엑셀 양식의 계층 열(${hierCols.length}개)보다 WBS가 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요` }
     }
   }
   const outlineCol = profile.hierarchy.kind === 'outline' ? profile.hierarchy.column : null

@@ -1,7 +1,7 @@
 import { CalendarClock, CalendarCheck, CalendarPlus } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { ERR_MEETINGS_LOAD, getProjectMeetingData } from '@/lib/data/meetings'
+import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getProjectRoster } from '@/lib/data/members'
 import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
@@ -52,7 +52,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     <ProjectPageShell
       pinned={meetRes.ok && roster.ok ? undefined : (
         <div className="space-y-2">
-          {!meetRes.ok && <LoadErrorNotice message={ERR_MEETINGS_LOAD} />}
+          {!meetRes.ok && <LoadErrorNotice message={t(locale, 'common.loadFailed.meetings')} />}
           {!roster.ok && <RosterLoadError error={roster.error} />}
         </div>
       )}

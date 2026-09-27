@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { NOTE_PLACEHOLDER, OP_LABEL, OP_TITLE } from './labels'
 
 type Props = {
@@ -23,6 +24,7 @@ type Props = {
 const when = (iso: string) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })
 
 function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
+  const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
@@ -76,9 +78,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEnt
               onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{OP_LABEL.reject}</button>
           </div>
           {!q.canApprove && (
-            <p className="text-[10px] text-ink-subtle">{q.canManage
-              ? '자기 담당·자기 착수 항목은 다른 관리자나 상위 담당자가 승인합니다. 반려로 보고를 물릴 수는 있습니다.'
-              : '승인은 관리자가 합니다. 담당자는 반려로 자기 보고를 물릴 수 있습니다.'}</p>
+            <p className="text-[10px] text-ink-subtle">{t(q.canManage ? 'agent.queue.selfApprovalHint' : 'agent.queue.adminApprovesHint')}</p>
           )}
           {rejecting && (
             <div className="flex flex-col gap-1">

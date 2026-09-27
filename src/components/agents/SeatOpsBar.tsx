@@ -1,7 +1,8 @@
 // src/components/agents/SeatOpsBar.tsx
 'use client'
 import type { Seat } from '@/lib/domain/seatmap'
-import { opsFor, type SeatOpKind } from './seatOps'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { opsFor, whyText, type SeatOpKind } from './seatOps'
 import { IconApprove, IconReject, IconResume, IconRework, IconStop, IconUnapprove } from './icons'
 import css from './seatmap.module.css'
 
@@ -20,6 +21,7 @@ export interface SeatOpHandler {
  * op 가 없는 좌석(빈자리)에는 아예 그리지 않는다.
  */
 export function SeatOpsBar({ seat, busy, onOp }: { seat: Seat; busy: boolean; onOp: SeatOpHandler }) {
+  const { t } = useLocale()
   const ops = opsFor(seat)
   if (ops.length === 0) return null
   return (
@@ -28,7 +30,7 @@ export function SeatOpsBar({ seat, busy, onOp }: { seat: Seat; busy: boolean; on
         const Icon = OP_ICON[spec.kind]
         return (
           <button key={spec.kind} type="button" className={css.opMini} data-op={spec.kind} data-seat-op={spec.kind}
-            disabled={!allowed || busy} title={busy ? '처리 중입니다' : why}
+            disabled={!allowed || busy} title={busy ? '처리 중입니다' : whyText(why, t)}
             aria-label={`${seat.code} ${spec.label}`}
             onClick={() => onOp(seat, spec.kind)}>
             <Icon />{spec.label}

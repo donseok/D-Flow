@@ -13,6 +13,8 @@ vi.mock('@/app/actions/project', () => ({ clearExcelProfile: mocks.clearExcelPro
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
+import { ERR_DENIED } from '@/lib/authz/errors'
+import { t } from '@/lib/i18n/dict'
 
 const PID = '11111111-1111-4111-8111-111111111111'
 
@@ -44,12 +46,20 @@ describe('ClearExcelProfileButton', () => {
     expect(document.body.textContent).toContain('저장된 양식을 비웠습니다')
   })
 
-  it('실패하면 그 사유를 토스트로 보이고 새로 그리지 않는다', async () => {
-    mocks.clearExcelProfile.mockResolvedValue({ ok: false, error: '권한 없음' })
+  it('실패하면 사유를 사전 문구 토스트로 보이고 새로 그리지 않는다 — 가드 문구는 그에 맞는 문구로', async () => {
+    mocks.clearExcelProfile.mockResolvedValue({ ok: false, error: ERR_DENIED })
     await click(button('저장된 양식 비우기')!)
     await click(button('비우기')!)
     expect(document.body.textContent).toContain('양식을 비우지 못했습니다')
-    expect(document.body.textContent).toContain('권한 없음')
+    expect(document.body.textContent).toContain(t('ko', 'common.err.denied'))
     expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+
+  it('모르는 사유(DB 문구 등)는 날것으로 싣지 않고 일반 문구', async () => {
+    mocks.clearExcelProfile.mockResolvedValue({ ok: false, error: 'relation "project_settings" boom' })
+    await click(button('저장된 양식 비우기')!)
+    await click(button('비우기')!)
+    expect(document.body.textContent).toContain(t('ko', 'common.err.tryAgain'))
+    expect(document.body.textContent).not.toContain('boom')
   })
 })

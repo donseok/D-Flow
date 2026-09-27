@@ -10,7 +10,8 @@ import { getProjectConfig } from '@/lib/data/projectConfig'
 import { validateProfile } from '@/lib/excel/profile'
 
 const ERR_PROFILE_MISSING = '저장된 엑셀 양식이 없습니다 — 임포트 마법사에서 "이 양식을 프로젝트 기본값으로 저장"을 켜고 다시 가져오세요.'
-const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 임포트 마법사에서 양식을 다시 저장하세요.`
+// 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
+const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.`
 
 // 현재 WBS를 xlsx로 내보낸다(읽기 전용 — 로그인 사용자 누구나). 임포트 포맷과 라운드트립.
 export async function GET(req: NextRequest) {
@@ -34,9 +35,9 @@ export async function GET(req: NextRequest) {
     config = await getProjectConfig(projectId)
   } catch (e) {
     // 3원칙 — 조회 실패를 '양식 없음'이나 기본 라벨로 위장하지 않는다(import/inspect 라우트와 같은 관례).
+    // 본문은 고정 문구 — PostgREST 사유(e.message)는 서버 로그에만 남긴다.
     console.error('[export] 프로젝트 설정 조회 실패:', e)
-    const message = e instanceof Error ? e.message : '프로젝트 설정을 확인할 수 없습니다'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 500 })
   }
 
   // 저장 양식이 있으면 접기·펼침 모두 그 양식으로 낸다 — 재임포트가 저장 양식을 먼저 고르므로(domain/importWizard.ts:85) 두 버튼이

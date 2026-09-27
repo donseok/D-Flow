@@ -3,7 +3,8 @@ import Link from 'next/link'
 import type { Seat } from '@/lib/domain/seatmap'
 import { ageLabel } from '@/lib/domain/seatmap'
 import { STATE_LABEL } from './Seat'
-import { opsFor, opSpec, type SeatOpKind } from './seatOps'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { opsFor, opSpec, whyText, type SeatOpKind } from './seatOps'
 import { IconApprove, IconReject, IconResume, IconRework, IconStop, IconUnapprove } from './icons'
 import css from './seatmap.module.css'
 
@@ -44,6 +45,7 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
   /** 있으면 카드 오른쪽 위에 닫기 버튼을 그린다. */
   onClose?: () => void
 }) {
+  const { t } = useLocale()
   if (!seat) return null
   const now = ladderPhase(seat)
   const idx = LADDER.findIndex(l => l.phase === now)
@@ -104,7 +106,7 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
             const Icon = OP_ICON[spec.kind]
             return (
               <button key={spec.kind} type="button" className={css.act} data-op={spec.kind} data-panel-op={spec.kind}
-                disabled={!allowed || busy} title={busy ? '처리 중입니다' : why}
+                disabled={!allowed || busy} title={busy ? '처리 중입니다' : whyText(why, t)}
                 onClick={() => onOp(seat, spec.kind)}>
                 <Icon />{spec.label}
               </button>

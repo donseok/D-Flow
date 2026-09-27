@@ -355,7 +355,11 @@ describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', ()
     for (const expandSubActs of [false, true]) {
       const r = buildAoaWithProfile(deep, COLUMNS(2), { expandSubActs })
       expect(r.ok).toBe(false)
-      if (!r.ok) expect(r.error).toContain('계층 열(2개)')
+      if (!r.ok) {
+        expect(r.error).toContain('계층 열(2개)')
+        expect(r.error).toContain('설정 화면의 "저장된 양식 비우기"')
+        expect(r.error).not.toContain('임포트 마법사')
+      }
     }
   })
 })

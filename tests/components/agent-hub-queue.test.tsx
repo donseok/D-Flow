@@ -12,9 +12,17 @@ vi.mock('@/app/actions/agentHub', () => ({ runHubProcessOp: (...a: unknown[]) =>
 vi.mock('@/app/actions/agentWork', () => ({ setAgentProjectEnabled: (...a: unknown[]) => setEnabled(...(a as [])) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
+const L = vi.hoisted(() => ({ locale: 'ko' as 'ko' | 'en' }))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  return { useLocale: () => ({ locale: L.locale, t: (k: string) => t(L.locale, k as Parameters<typeof t>[1]) }) }
+})
 import { ApprovalQueue } from '@/components/agent-hub/ApprovalQueue'
 import { HubStatusBar } from '@/components/agent-hub/HubStatusBar'
+import { registerEn, t } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+
+registerEn(EN)
 
 /** 기본 카드는 관리자가 보는 모양이다 — 관리자 허브는 모든 카드가 canApprove(assembleAgentHub). */
 const Q: HubQueueEntry[] = [{ orderId: 'o1', itemId: 'i1', code: 'TSK-1', name: '화면', agent: 'hong/mbp', percent: 100, summary: '끝', links: [{ url: 'https://x/pr/1', label: 'PR' }], reportedAt: '2026-09-14T08:00:00Z', reportId: 'rep-1', assigneeMine: false, canManage: false, canApprove: true }]
@@ -26,7 +34,7 @@ const QSELF: HubQueueEntry[] = [{ ...Q[0], canManage: true, assigneeMine: true, 
 const HUB = { projectId: 'p1', queue: [] } as unknown as AgentHub
 
 let host: HTMLDivElement, root: Root
-beforeEach(() => { runOp.mockReset(); setEnabled.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
+beforeEach(() => { L.locale = 'ko'; runOp.mockReset(); setEnabled.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
 afterEach(() => { act(() => root.unmount()); host.remove() })
 
 const setValue = (el: HTMLTextAreaElement, v: string) => {
@@ -130,6 +138,15 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     await act(async () => { setValue(host.querySelector('textarea') as HTMLTextAreaElement, '다시') })
     await act(async () => { (host.querySelector('[data-queue-reject]') as HTMLButtonElement).click() })
     expect(runOp).toHaveBeenCalledWith('p1', { kind: 'reject', orderId: 'o1', note: '다시', expectedReportId: 'rep-1' })
+  })
+  it('영어 화면이면 승인 안내 두 가지가 영어 사전 문구 — 한국어 하드코딩이 새지 않는다', () => {
+    L.locale = 'en'
+    render({ isAdmin: false, queue: QSELF })
+    expect(host.textContent).toContain(t('en', 'agent.queue.selfApprovalHint'))
+    act(() => root.render(<ApprovalQueue queue={QMINE} projectId="p1" isAdmin={false} onHub={vi.fn()} onChanged={vi.fn()} />))
+    expect(host.textContent).toContain(t('en', 'agent.queue.adminApprovesHint'))
+    expect(host.textContent).not.toContain('승인은 관리자가 합니다')
+    expect(host.textContent).not.toContain('다른 관리자나 상위 담당자가 승인합니다')
   })
   it('관리자(대조군): 전부 보인다 — approve·reject 둘 다', () => {
     render({ isAdmin: true, queue: Q })

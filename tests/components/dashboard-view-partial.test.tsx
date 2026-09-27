@@ -10,9 +10,9 @@ import type { TrendModel } from '@/lib/domain/trend'
 // 대시보드 부분 표시 — WBS 가 비어도 회의·이슈·공지는 그리고, 조회 실패한 위젯은 '0건'·'데이터 없음' 대신 사유를 둔다.
 // DashboardView 는 async 서버 컴포넌트라 renderToStaticMarkup 을 바로 쓸 수 없다 — 돌려준 요소 트리를 순회해
 // 자식 컴포넌트의 타입(함수 참조)을 모은다. 자식은 실행되지 않는다(팀 캐시 호출 여부는 뷰 자신의 것만 잡힌다).
-const mocks = vi.hoisted(() => ({ teamsForProjectSync: vi.fn(() => []) }))
+const mocks = vi.hoisted(() => ({ teamsForProjectSync: vi.fn(() => []), getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
 vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: mocks.teamsForProjectSync }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
+vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { DashboardView } from '@/components/dashboard/DashboardView'
@@ -32,6 +32,13 @@ import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
 import { ERR_ISSUES_LOAD } from '@/lib/data/issues'
 import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
 import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
+import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+
+// 사유는 사전 문구(ko·en)로 보인다 — 로더의 ERR_* 한국어 상수는 로그·시험용(최종 리뷰 UI M-1).
+registerEn(EN)
+const ko = (k: DictKey) => t('ko', k)
+const ISSUES_FAILED = ko('common.loadFailed.issues')
 
 const typesIn = (node: ReactNode, out = new Set<unknown>()): Set<unknown> => {
   if (Array.isArray(node)) node.forEach(n => typesIn(n, out))
@@ -122,7 +129,7 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const tree = await view({ issues: null })
     const types = typesIn(tree)
     for (const t of [IssueStatusCard, IssueTrendCard, IssueQueueCard]) expect(types.has(t)).toBe(false)
-    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ISSUES_LOAD, ERR_ISSUES_LOAD])
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ISSUES_FAILED, ISSUES_FAILED])
     // 조치 행(F)에서는 WBS 실행 큐 옆 자리를 채운다 — 한 줄 스캔 문법 유지
     const direct = (el: ReactElement<Record<string, unknown>>) =>
       new Set([el.props.children].flat(Infinity).filter(isValidElement).map(c => c.type))
@@ -134,7 +141,7 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const tree = await view({ items: [], issues: null, announcements: [], meetings: [] })
     const types = typesIn(tree)
     expect(types.has(EmptyState)).toBe(false)
-    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ISSUES_LOAD])
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ISSUES_FAILED])
   })
 
   it('공지=null → 공지 스트립 대신 LoadErrorNotice(ERR_ANNOUNCEMENTS_LOAD), 타임라인은 공지 마일스톤 없이 그린다', async () => {
@@ -146,7 +153,7 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const types = typesIn(tree)
     expect(types.has(AnnouncementStrip)).toBe(false)
     expect(types.has(MilestoneTimeline)).toBe(true)
-    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_ANNOUNCEMENTS_LOAD])
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ko('common.loadFailed.announcements')])
     expect((elsOf(tree, MilestoneTimeline)[0].props.points as unknown[]).length).toBe(okPoints.length - 1)
   })
 
@@ -154,7 +161,19 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const tree = await view({ meetings: null })
     const types = typesIn(tree)
     expect(types.has(MeetingSchedule)).toBe(false)
-    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ERR_MEETINGS_LOAD])
+    expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ko('common.loadFailed.meetings')])
+  })
+
+  it('영어 화면이면 세 사유 모두 영어 사전 문구 — 로더의 한국어 ERR_* 가 그대로 새지 않는다', async () => {
+    mocks.getServerLocale.mockResolvedValueOnce('en')
+    const tree = await view({ issues: null, announcements: null, meetings: null })
+    const messages = elsOf(tree, LoadErrorNotice).map(n => n.props.message)
+    expect(messages).toEqual([
+      t('en', 'common.loadFailed.announcements'), t('en', 'common.loadFailed.meetings'),
+      t('en', 'common.loadFailed.issues'), t('en', 'common.loadFailed.issues'),
+    ])
+    for (const raw of [ERR_ISSUES_LOAD, ERR_ANNOUNCEMENTS_LOAD, ERR_MEETINGS_LOAD]) expect(messages).not.toContain(raw)
+    for (const m of messages) expect(m).not.toMatch(/[가-힣]/)
   })
 
   it('공지·회의 실패도 빈 것으로 치지 않는다 — WBS·이슈가 비어도 빈 상태로 빠지지 않는다', async () => {

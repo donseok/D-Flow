@@ -59,13 +59,13 @@ describe('MinuteVersionPanel 원본 받기 — 클릭 때 발급', () => {
     expect(container.querySelector('[role="alert"]')).toBeNull()
   })
 
-  it('발급에 실패하면 액션의 사유를 그 항목 아래 알림으로 — 창은 열지 않는다', async () => {
+  it('발급에 실패하면 그 항목 아래 알림으로 — 창은 열지 않는다. 액션의 한국어 사유 대신 사전 문구(영어 화면에 날것 금지)', async () => {
     const onDownload = vi.fn<OnDownload>(async () => ({ ok: false, error: 'URL 발급 실패' }))
     render([WITH_FILE], onDownload)
     await act(async () => { downloadButton()!.click() })
     expect(open).not.toHaveBeenCalled()
     const alert = container.querySelector('li [role="alert"]')!
-    expect(alert.textContent).toBe('URL 발급 실패')
+    expect(alert.textContent).toBe('min.err.download')
   })
 
   it('액션이 던지면 일반 발급 실패 문구 — 버튼은 다시 풀린다', async () => {

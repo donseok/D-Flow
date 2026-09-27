@@ -7,6 +7,12 @@ import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { clearExcelProfile } from '@/app/actions/project'
+import { ERR_ANON, ERR_DENIED, ERR_LOOKUP } from '@/lib/authz/errors'
+import type { DictKey } from '@/lib/i18n/dict'
+
+/** 액션 사유 → 토스트 설명 사전 키. 가드 문구만 알아보고 나머지(저장 실패 등)는 일반 문구 — 액션의 한국어를 날것으로 싣지 않는다. */
+const GUARD_KEY: Record<string, DictKey> = { [ERR_DENIED]: 'common.err.denied', [ERR_ANON]: 'common.err.signIn', [ERR_LOOKUP]: 'common.err.lookup' }
+const failureKey = (error: string | undefined): DictKey => (error && Object.hasOwn(GUARD_KEY, error) ? GUARD_KEY[error] : 'common.err.tryAgain')
 
 /** 저장된 엑셀 양식 비우기(Task 1b) — 손상된 양식(내보내기 422)·WBS 보다 얕은 양식(400)으로 막힌 내보내기를 푼다.
  *  되돌리려면 마법사에서 다시 저장해야 하므로 확인 모달을 거친다. 실패 사유는 토스트로. */
@@ -23,14 +29,15 @@ export function ClearExcelProfileButton({ projectId }: { projectId: string }) {
     try {
       const r = await clearExcelProfile(projectId)
       if (!r.ok) {
-        toast({ title: t('settings.clearExcelProfileFailed'), description: r.error, variant: 'error' })
+        toast({ title: t('settings.clearExcelProfileFailed'), description: t(failureKey(r.error)), variant: 'error' })
         return
       }
       setOpen(false)
       toast({ title: t('settings.clearExcelProfileDone'), variant: 'success' })
       router.refresh()
     } catch (e) {
-      toast({ title: t('settings.clearExcelProfileFailed'), description: e instanceof Error ? e.message : undefined, variant: 'error' })
+      console.error('[ClearExcelProfileButton] 호출 실패:', e)
+      toast({ title: t('settings.clearExcelProfileFailed'), description: t('common.err.tryAgain'), variant: 'error' })
     } finally {
       setBusy(false)
     }

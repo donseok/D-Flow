@@ -79,9 +79,9 @@ export async function POST(req: NextRequest) {
   try {
     config = await getProjectConfig(projectId)
   } catch (e) {
+    // 본문은 고정 문구 — PostgREST 사유(e.message)는 서버 로그에만 남긴다.
     console.error('[import/execute] 프로젝트 설정 조회 실패 — 저장 양식 대조 불가, 중단:', e)
-    const message = e instanceof Error ? e.message : '프로젝트 설정을 확인할 수 없습니다'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 500 })
   }
   // 손상된 저장 양식은 inspect 가 null 로 돌려줘 클라이언트가 쓸 수 없다 — 대조 대상이 아니다(손상 경고는 inspect 가 싣는다).
   const saved = Object.keys(config.excelProfile).length > 0 ? validateProfile(config.excelProfile) : null

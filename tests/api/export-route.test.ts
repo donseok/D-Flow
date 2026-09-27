@@ -92,7 +92,8 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
     for (const expand of [false, true]) {
       const res = await get('p-mine', expand)
       expect(res.status).toBe(422)
-      expect((await res.json()).error).toMatch(/손상.*임포트 마법사/)
+      // 안내는 설정 화면의 '저장된 양식 비우기' — 마법사 재저장은 가져오기를 다시 해야 해서 막힌 사용자에게 위험하다.
+      expect((await res.json()).error).toMatch(/손상.*설정 화면의 "저장된 양식 비우기"/)
     }
     expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
     expect(mocks.buildWbsWorkbook).not.toHaveBeenCalled()
@@ -123,11 +124,17 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
     expect(await res.json()).toEqual({ error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' })
   })
 
-  it('설정 조회 실패는 500 이고 설정은 한 번만 읽는다', async () => {
-    mocks.getProjectConfig.mockRejectedValueOnce(new Error('프로젝트 설정 조회 실패: boom'))
+  it('설정 조회 실패는 500 이고 설정은 한 번만 읽는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
+    const boom = new Error('프로젝트 설정 조회 실패: relation "project_settings" boom')
+    mocks.getProjectConfig.mockRejectedValueOnce(boom)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await get('p-mine', true)
     expect(res.status).toBe(500)
+    const body = await res.text()
+    expect(body).not.toContain('boom')
+    expect(body).not.toContain('project_settings')
+    expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(err.mock.calls.some(c => c.includes(boom))).toBe(true)
     expect(mocks.getProjectConfig).toHaveBeenCalledTimes(1)
     expect(mocks.getComputedWbs).not.toHaveBeenCalled()
     expect(mocks.activeTeamCodesForProjectSync).not.toHaveBeenCalled()

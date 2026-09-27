@@ -8,6 +8,7 @@
 // 여기서 막는 것은 어포던스일 뿐이고 최종 판정은 서버가 한다(fail-closed는 서버 쪽).
 import type { Seat } from '@/lib/domain/seatmap'
 import type { SeatState } from '@/lib/domain/seatState'
+import type { DictKey } from '@/lib/i18n/dict'
 
 export type SeatOpKind = 'approve' | 'reject' | 'unapprove' | 'rework' | 'stop' | 'resume'
 
@@ -70,6 +71,11 @@ export const ERR_NO_RIGHT = '권한이 없습니다 — 관리자 또는 서브�
 export const ERR_NO_RIGHT_REVIEW = '권한이 없습니다 — 관리자 · 담당자 본인 · 서브트리 관리자만 할 수 있습니다.'
 /** 서브트리 관리자인데 자기 담당·자기 착수라 승인이 막힌 좌석의 안내. */
 export const ERR_SELF_APPROVAL_HINT = '자기 담당·자기 착수 항목의 완료는 다른 관리자나 상위 담당자가 승인합니다.'
+
+/** 그리는 자리의 why 문구 — 사전 문구가 있는 상수는 바꾸고 나머지는 그대로(좌석 화면의 다른 문구는 아직 한국어 하드코딩). */
+export function whyText(why: string, t: (k: DictKey) => string): string {
+  return why === ERR_SELF_APPROVAL_HINT ? t('agent.seat.selfApprovalHint') : why
+}
 
 /** 승인은 seat.canApprove 만 본다(자기 승인 금지가 들어 있다). 나머지는 관리 자격 또는 담당자 본인. */
 export function mayRun(seat: Pick<Seat, 'canManage' | 'assigneeMine' | 'canApprove'>, spec: SeatOpSpec): boolean {

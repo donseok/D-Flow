@@ -735,7 +735,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   }, [itemId])
   useEffect(() => { setLoaded(null); load() }, [load])
   const retry = () => { setLoaded(null); load() }
-  const list: AttachmentList | null = loaded === 'threw' ? { ok: false, error: t('wbs.attachLoadFail') } : loaded
+  const list: AttachmentList | null = loaded === 'threw' ? { ok: false, error: 'threw' } : loaded
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -787,7 +787,8 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
       {list == null ? (
         <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
       ) : !list.ok ? (
-        <LoadErrorNotice message={list.error} onRetry={retry} />
+        // 던졌든 ok:false 든 화면 문구는 사전의 한 문구 — 액션의 한국어 사유(list.error)를 영어 화면에 싣지 않는다.
+        <LoadErrorNotice message={t('wbs.attachLoadFail')} onRetry={retry} />
       ) : list.rows.length === 0 ? (
         <p className="text-sm text-ink-subtle">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>
       ) : (

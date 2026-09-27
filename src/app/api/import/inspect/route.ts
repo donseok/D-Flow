@@ -32,10 +32,9 @@ export async function POST(req: NextRequest) {
   try {
     config = await getProjectConfig(projectId)
   } catch (e) {
-    // 3원칙 — 조회 실패를 기본값(savedProfile:null)으로 위장하지 않는다. 실제 사유를 그대로 알린다.
+    // 3원칙 — 조회 실패를 기본값(savedProfile:null)으로 위장하지 않는다. 본문은 고정 문구, PostgREST 사유는 서버 로그에만.
     console.error('[import/inspect] 프로젝트 설정 조회 실패:', e)
-    const message = e instanceof Error ? e.message : '프로젝트 설정을 확인할 수 없습니다'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 500 })
   }
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.

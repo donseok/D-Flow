@@ -93,8 +93,9 @@ export function MinuteVersionPanel({
     let error: string | null = null
     try {
       const res = await onDownload(versionId)
+      // 액션의 사유(한국어 고정 문구)는 서버 로그 몫 — 화면은 사전 문구 하나로(영어 화면에 날것 금지).
       if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
-      else error = res.error
+      else error = t('min.err.download')
     } catch {
       error = t('min.err.download')
     }

@@ -1,7 +1,7 @@
 import { Megaphone, Pin, Sparkles } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { ERR_ANNOUNCEMENTS_LOAD, getAnnouncements, getAnnouncementSeenAt } from '@/lib/data/announcements'
+import { getAnnouncements, getAnnouncementSeenAt } from '@/lib/data/announcements'
 import { summarizeAnnouncements } from '@/lib/domain/announcements'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
@@ -52,7 +52,7 @@ export default async function AnnouncementsPage({ params }: { params: Promise<{ 
           canEdit={canEdit}
           projectId={projectId}
         />
-      ) : <LoadErrorNotice message={ERR_ANNOUNCEMENTS_LOAD} />}
+      ) : <LoadErrorNotice message={t(locale, 'common.loadFailed.announcements')} />}
     </ProjectPageShell>
   )
 }
