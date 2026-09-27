@@ -1496,7 +1496,7 @@ SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PM
 
 ## 4. 양식 병합 엔진
 
-결정 6 의 구현 절이다. 행(구분)은 설정값, 열(필드)은 제품 고정, 출력물은 고객사 PPT/엑셀 양식을 올려 자리표시(placeholder)에 병합하고, 어떤 데이터를 어느 자리에 넣을지는 설정값으로 잇는다. 조직·권한은 → 2절, 설정 레지스트리·모듈 매니페스트·`project_areas` 는 → 3절, 로드맵상 위치(SP6)와 검증 기준은 → 6절을 참조한다.
+결정 6′ 의 구현 절이다. 행(구분)은 설정값, 열(필드)은 제품 고정 핵심 필드 + 프로젝트 사용자 정의 필드(카탈로그 경로 `custom.<key>` — 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §3.6.8), 출력물은 고객사 PPT/엑셀 양식을 올려 자리표시(placeholder)에 병합하고, 어떤 데이터를 어느 자리에 넣을지는 설정값으로 잇는다. 조직·권한은 → 2절, 설정 레지스트리·모듈 매니페스트·`project_areas` 는 → 3절, 로드맵상 위치(SP6)와 검증 기준은 → 6절을 참조한다.
 
 ### 4.1 출발점 — 현행 렌더 경로 실측
 
@@ -1537,7 +1537,7 @@ SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PM
 1. **일반화의 방향.** "고정 자산 + 좌표 하드코딩" 을 "업로드 자산 + 이름 있는 자리표시 + 매핑 설정" 으로 바꾼다. 새 의존을 들이지 않고 현행 JSZip OOXML 조작(`xml.ts`·`templateFill.ts`·`slideXml.ts`)과 exceljs 위에 세운다.
 2. **양식(form)은 파일이다.** 프로젝트 관리자가 올린 `.pptx`/`.xlsx` 한 벌이 출력물의 디자인·페이지 구성·표 구조를 전부 결정한다. 코드는 자리표시를 채우고, 반복하고, 넘치면 잇는다.
 3. **제품 기본 양식도 파일이다.** 리포에 동봉된 중립 디자인 템플릿 4개(`form_kind` 마다 1개)를 같은 엔진으로 렌더한다. 코드 그리기 폴백은 없다. 활성 양식이 없는 프로젝트는 기본 양식으로 렌더하고 화면에 "기본 양식 사용 중" 을 표시한다.
-4. **행은 설정값, 열은 제품 고정.** 주간보고 구분(`project_areas kind='weekly_section'`)·이슈 영역(`kind='issue_area'`)이 반복의 축이고, 각 항목의 필드(카탈로그 경로)는 제품이 고정한다. 고객 양식은 필드 중 무엇을 어디에 놓을지만 정한다.
+4. **행은 설정값, 열은 제품 고정 핵심 필드 + 사용자 정의 필드(결정 6′).** 주간보고 구분(`project_areas kind='weekly_section'`)·이슈 영역(`kind='issue_area'`)이 반복의 축이고, 각 항목의 핵심 필드(카탈로그 경로)는 제품이 고정한다. 프로젝트가 정의한 사용자 필드는 경로 `custom.<key>` 로 허용한다 — 프로젝트 안에서는 고정된 경로다(→ 개정 문서 §3.6.8). 고객 양식은 필드 중 무엇을 어디에 놓을지만 정한다.
 5. **Q1 반영.** 이슈분석서 As-Is 프로세스 트리·정의 페이지(원본 5·6)는 자리표시로 표현되지 않으므로 **제품 고정 슬라이드 유형** 으로 격리한다(결정 6 의 명시적 예외). `processSlideRenderer.ts`·`processPages.ts` 는 유지한다. 나머지 페이지(표지·목차·접근·종합·원인·개선기회)는 자리표시 엔진으로 옮긴다.
 6. **개선기회 페이지는 엔진 대상이다.** 도형 복제로 그려지지만 데이터는 표형(번호·제목·설명·연결 이슈)이라 `{{#rows opportunities}}` 로 표현된다. 커넥터 다이어그램 표현은 포기하고 한계에 적는다(4.12).
 7. **WBS 엑셀은 두 경로다.** 임포트 파서와의 라운드트립(`/api/export`, `wbs.excel_profile`, SheetJS)은 임포트 계약이라 WBS 모듈에 남는다(→ 3절 `wbs.excel_profile`). 엔진으로 옮기는 것은 **양식 출력**(`form_kind='wbs_export_xlsx'`)뿐이다.
@@ -1619,7 +1619,7 @@ export interface ScanIssue {
 
 export class FormRenderError extends Error {
   constructor(
-    readonly code: ScanIssueCode | 'MISSING_PATH' | 'TEMPLATE_DRIFT' | 'FIXED_SLIDE_LIMIT' | 'OPC_REWIRE',
+    readonly code: ScanIssueCode | 'MISSING_PATH' | 'TEMPLATE_DRIFT' | 'OPC_REWIRE',   // FIXED_SLIDE_LIMIT 는 삭제(2026-09-27, 4.9 영역 수)
     readonly location: PlaceholderLocation | undefined,
     readonly token: string | undefined,
     message: string,
@@ -1832,9 +1832,12 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | 경로 | 타입 | 출처 | 비고 |
 |---|---|---|---|
 | `report.project_name` | text | `WeeklyMeta.projectName` | |
-| `report.week_label` | text | `.weekLabel` | `'2026년 7월 1주차 (6/29~7/5)'` |
+| `report.week_label` | text | `.weekLabel` | 주 키 + 3일 규칙의 라벨(개정 문서 §4.2.5). `'2026년 7월 1주차 (6/29~7/3)'` — 범위는 표시 요일 |
 | `report.week_tag` | text | `.weekTag` | 파일명용 `'7월1주차'` |
-| `report.week_range` / `report.prev_week_range` / `report.next_week_range` | text | `.weekRange` / `.prevWeekRange` / `.nextWeekRange` | `'6/29~7/5'`. 세 범위와 `kpi.*`·`wbs_groups`·`meetings`·`announcements`·`attendance` 는 전부 **기준일 `report.today`** 에서 파생된다(`weekly.ts:302` `mondayOf(today)`). 기준일 규칙(`week` 파라미터)은 4.5.4 |
+| `report.week_year` / `report.week_month` / `report.week_ordinal` | int | 주차 라벨 함수 | 양식이 자기 언어로 라벨을 조립하는 원자 토큰(2026-09-27 신설, 개정 문서 §4.5.2·§4.5.3) |
+| `report.week_end` | date | 주 기간 | 기간 끝(포함)(2026-09-27 신설) |
+| `report.week_days[]` | list<record> `{date, dow}` | 표시 요일 | `dow` 는 ISO 1~7, 기간 안 근무일(2026-09-27 신설) |
+| `report.week_range` / `report.prev_week_range` / `report.next_week_range` | text | `.weekRange` / `.prevWeekRange` / `.nextWeekRange` | 표시 요일의 첫~끝(예 `'6/29~7/3'`), 이웃 주는 이웃 키(개정 문서 §4.5.2). 세 범위와 `kpi.*`·`wbs_groups`·`meetings`·`announcements`·`attendance` 는 전부 **기준일 `report.today`** 에서 파생된다(현행 `weekly.ts:302` `mondayOf(today)` 는 주 키 함수로 바뀐다). 기준일 규칙(`week` 파라미터)은 4.5.4 |
 | `report.week_start` / `report.today` | date | `.weekStart` / `.today` | |
 | `report.generated_at` | text | `.generatedAt` | |
 | `report.description` | text | `.description` | |
@@ -1845,6 +1848,7 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `sections[]` | list<record> | `buildSheetSections(rows, areas)`(SP4 시그니처) + `project_areas kind='weekly_section'` | 활성 구분 전부(내용 없는 구분 포함, `sort_order` 순). SP4 이후 `weekly_report_rows.area_id` 는 `not null` FK 이고 `section`·`module` 텍스트가 없으므로(→ 3절) 현 `buildSheetSections` 의 비표준(자유 문자열) 행은 존재하지 않는다. 비활성 구분에 내용 있는 행이 남아 있으면 그 구분을 활성 구분 뒤에 `sort_order` 순으로 붙인다(내용 유실 금지) |
 | `sections[].code` / `.name` | text | `project_areas.code` / `.name` | |
 | `sections[].this_content` / `.next_content` / `.this_issue` / `.next_issue` | list<text> | `SheetSectionCells` 4필드 | 줄 배열, 작성 원문의 마커·들여쓰기 유지(`sheetLineText` 적용) |
+| `sections[].custom.<key>` | list<text> | `weekly_report_rows.custom` + 필드 정의 | 사용자 정의 필드(결정 6′) — 그 구분 안 행 순서대로(개정 문서 §3.6.8) |
 | `wbs_groups.prev[]` / `wbs_groups.curr[]` | list<record> | `NarrativeModel.prev` / `.curr` | 그룹형 |
 | `wbs_groups.*[].title` / `.num` / `.lines` | text / int / list<text> | `NarrativeGroup.phase` / `.num` / `.items` | `lines` 는 `subLineText` 적용 후 |
 | `issues[]` | list<text> | `NarrativeModel.issues` | `NO_ISSUE_TEXT` 제외·중복 병합 후 |
@@ -1853,10 +1857,10 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `meetings.this_week[]` / `meetings.next_week[]` | list<record> `{date, date_iso, time, title, location, attendee_count}` | `WeeklyMeetings` | |
 | `meetings.total` | int | `.total` | |
 | `announcements.prev_week[]` / `announcements.this_week[]` | list<record> `{date, title}` | `WeeklyAnnouncements` | |
-| `attendance.this_week[]` / `attendance.next_week[]` | list<record> `{member_name, per_day[], count}` | `WeeklyAttendance` | `per_day` 는 월~금 5칸 |
+| `attendance.this_week[]` / `attendance.next_week[]` | list<record> `{member_name, per_day[], count}` | `WeeklyAttendance` | `per_day` 길이 = `report.week_days` 길이(옛 "월~금 5칸" 폐기) |
 | `phases[]` | list<record> `{name, weight_pct, planned_pct, actual_pct, gap, done_count, total_count, delayed_count, status, status_label}` | `WeeklyPhase` | 엑셀 공정 진도 표 |
 | `plan_actual[]` | list<record> `{phase_name, planned_pct, actual_pct, prev_week[], this_week[], next_week[]}` | `PhasePlanActual` | 하위 목록은 `{name, owner_text, status_label, actual_pct}` |
-| `workload[]` | list<record> `{name, per_day[], total, note}` | `WorkloadRow` | 팀별 |
+| `workload[]` | list<record> `{name, per_day[], total, note}` | `WorkloadRow` | 팀별. `per_day` 길이 = `report.week_days` 길이 |
 | `wbs_rows[]` | list<record> `{no, level_label, depth, name, deliverable, owner_text, weight_pct, planned_start, planned_end, planned_pct, actual_pct, gap, delay_days, status, status_label}` | `WbsFlatRow` | 엑셀 WBS 시트. `weight_pct` = `weightToPct(weight)`(`domain/format.ts`), `weight` 가 `null`(`weekly.ts:146`)이면 `empty_text` |
 | `ai_comment[]` | list<record> `{left_title, right_title, left[], right[]}` | `briefToExtraSlide` | **0 또는 1 항목.** `ai=1` 이고 브리핑이 신선할 때만 1건. `{{#slide ai_comment}}` 로 쓰면 없을 때 슬라이드가 빠진다. `left[]`/`right[]` 는 그룹형 |
 
@@ -1876,12 +1880,13 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `areas[]` | list<record> | `IssueAnalysisReportArea[]` + `project_areas kind='issue_area'` | 이슈가 있는 영역만, `sort_order` 순 |
 | `areas[].code` / `.name` | text | `megaCode` / `megaName` → `project_areas.code` / `.name` | 영문명은 없다 — `project_areas` 행은 `{code, name, sort_order, active}`(→ 3절)이고, 현 `megaNameEn` 은 `model.ts` 밖 어디에서도 읽지 않는다(`deckPlan`·`processPages`·`processSlideRenderer`·`jszipRenderer` grep 0건) |
 | `areas[].summary.total_count` | int | `IssueAnalysisAreaSummary.totalCount` | |
-| `areas[].summary.status.open` / `.in_progress` / `.resolved` / `.on_hold` | int | `.statusCounts` | 이슈 상태 4종(`ISSUE_STATUSES`)은 제품 고정(Q4)이라 고정 키다 |
+| `areas[].summary.status.open` / `.in_progress` / `.resolved` / `.on_hold` | int | `.statusCounts` | 이슈 상태 **범주** 4종(`ISSUE_STATUSES`)은 제품 고정(Q4′)이라 고정 키다. 표시 상태는 범주로 모아 센다 |
 | `areas[].summary.severity_counts[]` | list<record> `{code, label, count}` | `.severityCounts` × 3절 `issues.severities[]` | 심각도는 설정값(Q4)이라 고정 키가 없다. 설정의 활성 심각도 전부를 `rank` 순으로(3.3.3), 이슈 0건인 심각도도 `count 0` 으로 싣는다 |
 | `areas[].summary.owner_departments` / `.related_systems` | list<text> | 동명 | |
 | `areas[].issues[]` | list<record> | `IssueAnalysisReportIssue[]` | |
-| `areas[].issues[].code` / `.title` / `.body` / `.sub_process` / `.owner_department` | text | `piIssueCode`·`title`·`body`·`subProcess`·`ownerDepartment` | `body` 는 `[현황]`·`[문제/영향]`·`[필요 조치]` 구조 원문(개행 포함) |
-| `areas[].issues[].status` / `.status_label` | text | `status` / i18n `issue.status.<status>` 라벨(`domain/issues.ts:86` `labelKey`) | 제품 고정(Q4) |
+| `areas[].issues[].code` / `.title` / `.body` / `.sub_process` / `.owner_department` | text | 이슈 코드(`issues.id_policy` 채번 — 개정 문서 §4.4.3)·`title`·`body`·`subProcess`·`ownerDepartment` | `body` 는 `[현황]`·`[문제/영향]`·`[필요 조치]` 구조 원문(개행 포함) |
+| `areas[].issues[].status` / `.status_code` / `.status_label` | text | `status`(범주) / `status_code`(표시 상태) / 해석된 표시 상태 라벨(label null 인 기본 4개는 i18n `issue.status.<status>`) | `status` 는 범주라 고정 키(Q4′), `status_code`·`status_label` 은 설정값 `workflow.issue_statuses`(개정 문서 §3.2.5) |
+| `areas[].issues[].custom.<key>` | text / list<text> | `issues.custom` + 필드 정의 | 사용자 정의 필드(결정 6′, 개정 문서 §3.6.8). 평탄화 `issues[]` 에도 같은 경로 |
 | `areas[].issues[].severity` / `.severity_label` | text | `severity` / 3절 `issues.severities[]` 에서 `code` 가 같은 행의 `label` | 설정값(Q4). 조회는 활성·비활성을 가리지 않는다(비활성 심각도는 새 이슈에 못 쓸 뿐 기존 이슈에 남는다). 설정에 없는 코드는 로더가 throw 한다(에러 처리 3원칙) |
 | `areas[].issues[].related_systems` / `.source_lines` | list<text> | `relatedSystems` / `issueSourceLines` | `source_lines` 의 원천 유형 줄은 3절 `issues.sources[]` 의 `label` 로 만든다(현 `deckPlan.ts:199` `SOURCE_TYPE_LABELS` 하드코딩 교체). 회의록 원천 줄(`'회의록 · <일자> <제목>'`)은 제품 고정 |
 | `areas[].issues[].causes[]` | list<record> `{category, category_label, direct_cause, root_cause}` | `causeAnalyses[].causes` | `category` 는 3절 `issues.cause_categories[]` 의 `code`, `category_label` 은 그 행의 `label`(현 `deckPlan.ts:630` `CAUSE_CATEGORY_LABELS` `'S · 전략/규정'` 등과 `model.ts:13` `ISSUE_ANALYSIS_CAUSE_CATEGORIES` 4값 교체). `root_cause` 가 `null` 이면 `'추가 확인 필요'`(현 README 규칙) |
@@ -1889,7 +1894,7 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `issues[]` | list<record> | 전 영역 이슈 평탄화 | `areas[].issues[]` 의 필드 + `area_code`·`area_name`. 한 표에 전량을 싣는 양식용 |
 | `opportunities[]` | list<record> | 전 영역 개선기회 평탄화 | + `area_code`·`area_name` |
 
-심각도·원인 분류·원천의 **값과 라벨은 설정값이다(Q4)** — 3절 설정 레지스트리 `issues.severities[]`·`issues.cause_categories[]`·`issues.sources[]` 에서 온다. 이 절이 읽는 열은 `code`(불변)·`label`·순서(`severities` 는 `rank`, 나머지는 `sort`)·`active` 이고(행 정의는 → 3절), 레지스트리 기본값은 현 상수(`ISSUE_SEVERITIES` `high/medium/low`·`ISSUE_ANALYSIS_CAUSE_CATEGORIES` `strategy_policy/process/organization/it`·`ISSUE_SOURCE_TYPES` 6값)와 그 라벨(`CAUSE_CATEGORY_LABELS`·`SOURCE_TYPE_LABELS`·i18n `issue.severity.*`)이다. 카탈로그는 코드 값을 `code`·`severity`·`category` 로, 라벨을 `*_label` 로 노출할 뿐 값 집합을 고정하지 않는다. 제품 고정으로 남는 것은 이슈 상태 4종(`ISSUE_STATUSES`)뿐이며 `status.*` 카운트 키가 그것이다. 평탄화 목록 `issues[]` 도 같은 필드다.
+심각도·원인 분류·원천의 **값과 라벨은 설정값이다(Q4)** — 3절 설정 레지스트리 `issues.severities[]`·`issues.cause_categories[]`·`issues.sources[]` 에서 온다. 이 절이 읽는 열은 `code`(불변)·`label`·순서(`severities` 는 `rank`, 나머지는 `sort`)·`active` 이고(행 정의는 → 3절), 레지스트리 기본값은 현 상수(`ISSUE_SEVERITIES` `high/medium/low`·`ISSUE_ANALYSIS_CAUSE_CATEGORIES` `strategy_policy/process/organization/it`·`ISSUE_SOURCE_TYPES` 6값)와 그 라벨(`CAUSE_CATEGORY_LABELS`·`SOURCE_TYPE_LABELS`·i18n `issue.severity.*`)이다. 카탈로그는 코드 값을 `code`·`severity`·`category` 로, 라벨을 `*_label` 로 노출할 뿐 값 집합을 고정하지 않는다. 제품 고정으로 남는 것은 이슈 상태 범주 4종(`ISSUE_STATUSES`)뿐이며 `status.*` 카운트 키가 그것이다(표시 상태는 `workflow.issue_statuses` 설정값). 평탄화 목록 `issues[]` 도 같은 필드다.
 
 현 덱의 페이지들은 이 카탈로그로 이렇게 표현된다: 영역별 이슈 종합 = `{{#slide areas}}` 슬라이드 + `{{#rows .issues}}` 표(넘침은 `max_rows_per_slide`·`max_lines_per_cell`), 원인 분석 = `{{#slide issues}}` 슬라이드 + `{{#rows .causes}}` 표, 개선기회 = `{{#rows opportunities}}` 표(셀 안 `{{#items .issues}}{{.code}} {{.title}}{{/items}}`). As-Is 트리·정의는 4.9.
 
@@ -1906,11 +1911,12 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `wbs_items[].planned_start` / `.planned_end` | date | | |
 | `wbs_items[].delay_days` | int | | |
 | `wbs_items[].status` / `.status_label` | text | `Status`(`not_started`·`in_progress`·`delayed`·`done`, 제품 고정) | |
+| `wbs_items[].custom.<key>` | text(다중선택은 list<text>) | `wbs_items.custom` + 필드 정의 | 사용자 정의 필드(결정 6′, 개정 문서 §3.6.8) |
 | `teams[]` | list<record> `{code, name, color}` | `resolveTeamsForProject` | |
 | `holidays[]` | list<record> `{date, name}` | `getComputedWbs().holidays` | |
 | `kpi.*` | | 4.5.1 과 동일 정의 | |
 
-팀별 담당 마크 열(현 `●`/`△`)은 `wbs_items[].owners[]` 로 표현된다. 열 하나에 특정 팀의 마크를 찍는 형태(`{{.owner_mark.ERP}}` 같은 동적 필드)는 지원하지 않는다 — 열이 팀 수에 따라 변하는 표는 제품 고정 열 원칙(결정 6)에 어긋난다. 그런 라운드트립 양식은 `/api/export`(프로파일 경로)가 계속 만든다.
+팀별 담당 마크 열(현 `●`/`△`)은 `wbs_items[].owners[]` 로 표현된다. 열 하나에 특정 팀의 마크를 찍는 형태(`{{.owner_mark.ERP}}` 같은 동적 필드)는 지원하지 않는다 — 열이 팀 수에 따라 변하는 표는 제품 고정 열 원칙(결정 6)에 어긋난다. 그런 라운드트립 양식은 `/api/export`(프로파일 경로)가 계속 만든다. 사용자 정의 필드 `wbs_items[].custom.<key>` 는 허용한다 — 프로젝트 안에서 고정된 경로이고 팀 수에 따라 열이 변하지 않는다(결정 6′, 개정 문서 §3.6.8).
 
 #### 4.5.4 로더와 카탈로그 객체
 
@@ -1923,10 +1929,11 @@ pptx 에서만 동작한다(xlsx 는 아래로 자란다).
 | `ai_comment` | `loadProjectFacts`·`getAiBrief` 신선도 검사 |
 | `summary`·`areas`·`issues`·`opportunities`(issue_analysis) | `loadSavedIssueAnalysisRun(pid, runId)` |
 | `project`·`wbs_items`·`teams`·`holidays` | `getComputedWbs`·`getProjectConfig` |
+| `custom` 경로(`sections[]`·`areas[].issues[]`·`issues[]`·`wbs_items[]` 의 `.custom.<key>`) | 필드 정의 로더(`fields.<entity>`) — 루트가 `custom` 경로를 참조할 때만 읽는다(개정 문서 §3.6.8) |
 
 로더 실패는 throw 다(에러 처리 3원칙). `sections` 가 0건(구분 미등록)이면 렌더를 거부하고 "설정 필요" 를 안내한다(→ 3절 배너).
 
-**기준일(weekly).** `week`(YYYY-MM-DD) 파라미터가 있으면 `weekStart = mondayIso(week)` 이고, 기준일 `today` 는 `getComputedWbs().today`(`projects.base_date ?? 오늘`)를 **`[weekStart, weekStart+4일]` 로 클램프한 날**이다 — 지난 주면 그 주 금요일, 이번 주면 오늘, 미래 주면 그 주 월요일. 없으면 기준일은 `getComputedWbs().today` 그대로이고 `weekStart = mondayOf(today)` 다. 이 기준일을 `buildWeeklyReportModel(items, project, today, …)` 의 `today` 인자에 넣으므로 `report.*`·`kpi.*`·`wbs_groups`·`meetings`·`announcements`·`attendance` 와 `sections`(`getWeeklySheet(pid, weekStart)`)가 **같은 주** 를 본다. 바꾸지 않는 것: `getComputedWbs` 의 트리 계산(`computeTree(rows, today)` 의 `today` 는 `base_date ?? 오늘`, `data/wbs.ts:129`) — 항목별 계획·실적 값은 현행대로이고 `week` 는 주 범위와 회의·공지·근태 창만 옮긴다. 현 `/api/report` 는 시트 경로(`week` 기준 `sheetWeekMeta`)와 기본 경로(`today` 기준 `WeeklyMeta`)가 따로여서 한 양식이 `sections` 와 `report.*`·`kpi.*` 를 함께 쓰면 두 주차가 섞였다 — `source` 파라미터를 없애면서 이 규칙으로 통일한다.
+**기준일(weekly).** `week`(YYYY-MM-DD) 파라미터가 있으면 `weekStart = weekKeyOf(week)`(주 키 함수 — 개정 문서 §4.2.3) 이고, 기준일 `today` 는 `getComputedWbs().today`(`projects.base_date ?? 오늘`)를 **`[표시 요일 첫날, 끝날]` 로 클램프한 날**이다(근무일이 0이면 기간 전체) — 지난 주면 그 주 표시 요일 끝날, 이번 주면 오늘, 미래 주면 그 주 표시 요일 첫날. 없으면 기준일은 `getComputedWbs().today` 그대로이고 `weekStart = weekKeyOf(today)` 다. 옛 `mondayIso`·"weekStart+4일" 규칙은 폐기했다(2026-09-27, 개정 문서 §4.5.2). 이 기준일을 `buildWeeklyReportModel(items, project, today, …)` 의 `today` 인자에 넣으므로 `report.*`·`kpi.*`·`wbs_groups`·`meetings`·`announcements`·`attendance` 와 `sections`(`getWeeklySheet(pid, weekStart)`)가 **같은 주** 를 본다. 바꾸지 않는 것: `getComputedWbs` 의 트리 계산(`computeTree(rows, today)` 의 `today` 는 `base_date ?? 오늘`, `data/wbs.ts:129`) — 항목별 계획·실적 값은 현행대로이고 `week` 는 주 범위와 회의·공지·근태 창만 옮긴다. 현 `/api/report` 는 시트 경로(`week` 기준 `sheetWeekMeta`)와 기본 경로(`today` 기준 `WeeklyMeta`)가 따로여서 한 양식이 `sections` 와 `report.*`·`kpi.*` 를 함께 쓰면 두 주차가 섞였다 — `source` 파라미터를 없애면서 이 규칙으로 통일한다.
 
 ### 4.6 저장 — 테이블·Storage·설정
 
@@ -2095,7 +2102,7 @@ create policy "form-templates insert" on storage.objects for insert to authentic
 
 - **원본은 제품 자산이다.** `src/lib/report/assets/fixed/issue-analysis-process.pptx` 에 현 템플릿의 5·6 번 슬라이드(와 그 레이아웃·마스터·테마)만 담는다. shape ID(`'146'`·`'145'`·`'100'`·`'124'`·`'108'`·`'107'`·`'101'`·16 커넥터·24 Sub 박스·8 Major·8 체브론·정의 페이지의 `'52'`·`'49'`·이름 4·본문 4·커넥터 4)는 이 파일에 묶인다. 고객 양식의 slide ID 와 무관하다.
 - **계획·렌더 함수는 유지한다.** `buildIssueAnalysisProcessSlides(area)`(열 8·Sub 6·정의 행 4 용량)와 `renderProcessTreeSlide`·`renderProcessDefinitionSlide`. `ISSUE_MEGA_AREAS` 직접 참조는 `areas: {code, name}[]` 인자로 바꾼다(SP5).
-- **영역 수 제약.** 체브론 슬롯이 8개(`TREE_CHEVRON_IDS`)라 활성 `issue_area` 가 8개를 넘으면 `FIXED_SLIDE_LIMIT` 로 렌더를 거부한다. 슬롯을 늘리는 것은 새 원본 도형 작업이며 SP6 범위 밖이다.
+- **영역 수 — 체브론 8칸 창.** 체브론 슬롯은 8개(`TREE_CHEVRON_IDS`)지만 영역 수는 제한하지 않는다. 출력 대상 영역을 8칸 창으로 나눠 현재 영역이 속한 창을 그리고, 8개를 넘으면 제목에 창 표기를 붙인다(개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §4.5.1). 옛 `FIXED_SLIDE_LIMIT` 렌더 거부는 삭제했다(2026-09-27).
 - **삽입 방식은 스파이크 항목이다(게이트 5항목 밖).** 후보는 둘이다. (A) 고객 양식의 `{{#slide areas}}` 슬라이드 안에 값 토큰 `{{fixed.process_pages}}` 를 두면 그 슬라이드 **뒤에** 그 영역의 고정 슬라이드들을 끼운다(토큰은 지워짐, 카탈로그의 `fixed.*` 네임스페이스는 이 용도로만). (B) 양식과 무관하게 옵션 `forms.issue_analysis_pptx.options.append_process_pages` 로 덱 끝에 붙인다. A 는 위치를 양식이 정하고 B 는 양식을 건드릴 필요가 없다. 단 A 의 `{{fixed.process_pages}}` 는 값 토큰 꼴이지만 값이 없고 슬라이드를 삽입하는 마커라 4.4 의 6종 어디에도 속하지 않는다 — A 를 택하면 4.4.1 문법에 `marker := '{{' 'fixed.' ident '}}'` 를 추가하고 `PlaceholderKind` 에 `'marker'` 를 더해 규약을 **7종으로 개정**한다(`fixed.*` 는 카탈로그 경로가 아니라 매핑 대상이 아니고 `issue_analysis_pptx` 에서만 유효, 다른 `form_kind` 에 있으면 `UNKNOWN_TOKEN`). B 를 택하면 규약은 6종 그대로다. 스파이크에서 둘 다 만들어 보고 하나만 남긴다.
 - **테마 색 상속은 스파이크 항목이다.** 고정 슬라이드는 자기 레이아웃·마스터·테마 파트를 갖고 온다. 고객 덱에 끼울 때 (1) 파트를 함께 복사해 원본 색을 유지하거나, (2) 고객 덱의 마스터에 붙여 고객 테마 색(`schemeClr`)을 입히는 두 결과가 가능하다. (2) 는 도형의 `schemeClr` 참조가 고객 테마에서 어떻게 보이는지 실측 없이는 결정할 수 없다. 스파이크가 3종 양식에서 둘을 비교하고 기록한다.
 - **기본 출력에서의 위치.** 제품 기본 양식 `issue_analysis_pptx.pptx` 는 (A)/(B) 결정에 따라 고정 슬라이드를 포함한다. 사용자가 원치 않으면 옵션으로 끈다.
@@ -2154,7 +2161,8 @@ SP6 는 다음이 갖춰지기 전에 시작하지 않는다. SP6 직전(SP5 완
 - xlsx 행 삽입 뒤 수식 참조 조정은 exceljs 동작에 따른다(미검증). 반복 표 아래에 수식을 두지 않는다.
 - DRM 양식·매크로 양식·10MB 초과는 거부한다. 서버리스 메모리·시간 안에서만 렌더한다.
 - PDF 변환이 없다(서버리스에 soffice 없음).
-- 제품 고정 슬라이드 유형은 영역 8개까지다. 고객 덱에 끼울 때의 테마 색은 스파이크 결과에 따른다.
+- 제품 고정 슬라이드 유형의 체브론은 한 창 8칸이다. 영역이 9개 이상이면 창을 나눠 전부 출력한다(4.9). 고객 덱에 끼울 때의 테마 색은 스파이크 결과에 따른다.
+- 보고서 서식 라벨(`*_label`·주차 라벨·요일 약칭·상태 라벨)은 한국어 고정이다(지원 제한). 양식은 원자 토큰(`report.week_year`·`week_month`·`week_ordinal`·`week_days[].date`·상태 code)으로 자기 언어의 라벨을 조립한다(개정 문서 §4.5.3).
 - 개선기회의 이슈–기회 커넥터 다이어그램은 표로 대체된다.
 - 팀 수에 따라 열이 변하는 표(담당 마크 열)는 양식 출력으로 만들 수 없다. 라운드트립 경로가 담당한다.
 - 슬라이드 마스터·레이아웃·노트·머리글/바닥글의 토큰은 스캔하지 않는다.
