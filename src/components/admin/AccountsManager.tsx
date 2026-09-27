@@ -206,6 +206,9 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
             router.refresh()
           } else {
             toast({ title: '변경 실패', description: res.error, variant: 'error' })
+            // 거부는 이 표가 낡았다는 신호다(다른 슈퍼유저가 먼저 해제했거나 마지막 한 명이 됐다) — 다시 읽지 않으면
+            // 칩은 그대로이고 누를 때마다 같은 거부가 돌아온다. 액션은 실패 때 revalidatePath 를 하지 않는다.
+            router.refresh()
           }
         } catch {
           toast({ title: '변경 실패', description: '요청 처리 중 오류가 발생했습니다.', variant: 'error' })

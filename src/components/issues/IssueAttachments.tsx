@@ -24,6 +24,7 @@ import {
 } from '@/lib/domain/issueAttachments'
 import { uploadIssueAttachments } from '@/lib/issues/uploadIssueAttachments'
 import { fmtSize } from '@/lib/domain/format'
+import { removeErrorKey } from '@/lib/attachments/removeErrors'
 
 const MAX_MB = Math.round(ISSUE_ATTACHMENT_MAX_BYTES / 1024 / 1024)
 
@@ -123,7 +124,12 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
     setBusy(true); setErr(null)
     const res = await removeIssueAttachment(id)
     setBusy(false)
-    if (!res.ok) { setErr(res.error ?? t('issue.err.attachRemoveFailed')); return }
+    if (!res.ok) {
+      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+      const key = removeErrorKey(res.error)
+      setErr(key ? t(key) : (res.error ?? t('issue.err.attachRemoveFailed')))
+      return
+    }
     load(); router.refresh()
   }
 

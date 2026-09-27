@@ -194,7 +194,10 @@ export function KanbanBoard({
         setOverride(o => { const n = { ...o }; delete n[card.id]; return n }) // 롤백
         toast({
           title: t('kanban.saveFailedTitle'),
-          description: res.conflict ? t('kanban.conflict') : (res.error ?? t('kanban.errChange')),
+          // 잠금 거부는 사유 코드로 사전 문구를 고른다 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+          description: res.conflict ? t('kanban.conflict')
+            : res.code === 'actual_locked' ? t('wbs.actualLocked')
+              : (res.error ?? t('kanban.errChange')),
           variant: 'error',
         })
         if (res.conflict) router.refresh()

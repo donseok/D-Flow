@@ -67,6 +67,8 @@ export const wbsKo = {
   'wbs.toastConflict': '다른 사용자가 먼저 수정했습니다',
   'wbs.toastYourValue': '입력한 값',
   'wbs.toastSaveFail': '저장 실패',
+  // updateActual 의 사유 코드 actual_locked — 액션의 한국어 문구와 같다. WBS 와 칸반의 실적 저장 토스트가 함께 쓴다.
+  'wbs.actualLocked': '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.',
   'wbs.toastPhaseAdded': 'Phase가 추가되었습니다',
   'wbs.toastAddFail': '추가 실패',
   'wbs.focusNotFound': '이동하려는 작업을 찾을 수 없습니다 (삭제되었거나 목록이 바뀌었습니다)',

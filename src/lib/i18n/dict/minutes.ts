@@ -232,4 +232,7 @@ export const minutesKo = {
   'min.share.regen': '재발급',
   'min.share.regenConfirm': '기존 링크가 즉시 무효화됩니다. 재발급할까요?',
   'min.share.failed': '공유 설정 처리에 실패했습니다.',
+  // 액션(getMinuteShare·setMinuteShare)의 사유 코드 share_lookup·share_save — 액션의 한국어 문구와 같다.
+  'min.share.lookupFailed': '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.',
+  'min.share.saveFailed': '공유 설정을 저장하지 못했습니다.',
 }

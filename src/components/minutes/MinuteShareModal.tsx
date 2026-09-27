@@ -4,8 +4,21 @@ import { Copy, RefreshCw } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { getMinuteShare, setMinuteShare } from '@/app/actions/minutes'
+import { getMinuteShare, setMinuteShare, type MinuteShareCode, type MinuteShareResult } from '@/app/actions/minutes'
 import type { ShareOp } from '@/lib/minutes/share'
+import type { DictKey } from '@/lib/i18n/dict'
+
+/** 액션의 사유 코드 → 사전 키. 액션의 한국어 문구를 그대로 그리면 영어 화면에 한국어 한 줄이 뜬다. */
+const CODE_KEY: Record<MinuteShareCode, DictKey> = {
+  share_lookup: 'min.share.lookupFailed',
+  share_save: 'min.share.saveFailed',
+}
+
+/** 실패 문구 — 사유 코드가 있으면 사전 문구, 없으면(판정의 거부: 권한·보관) 받은 문구, 그것도 없으면 일반 문구. */
+function failText(res: MinuteShareResult, t: (key: DictKey) => string): string {
+  const key = res.code && Object.hasOwn(CODE_KEY, res.code) ? CODE_KEY[res.code] : null
+  return key ? t(key) : (res.error ?? t('min.share.failed'))
+}
 
 /** 구글식 공유 모달 — 토글 ON/OFF·링크 복사·재발급. 낙관적 갱신 없음(성공 응답으로만 상태 반영 → 롤백 불요). */
 export function MinuteShareModal({ open, onClose, minuteId }: {
@@ -28,7 +41,7 @@ export function MinuteShareModal({ open, onClose, minuteId }: {
       .then(res => {
         if (stale) return
         if (res.ok) { setEnabled(!!res.enabled); setToken(res.token ?? null) }
-        else setErr(res.error ?? t('min.share.failed'))
+        else setErr(failText(res, t))
       })
       .catch(() => { if (!stale) setErr(t('min.share.failed')) })
       .finally(() => { if (!stale) setLoading(false) })
@@ -40,7 +53,7 @@ export function MinuteShareModal({ open, onClose, minuteId }: {
     try {
       const res = await setMinuteShare(minuteId, op)
       if (res.ok) { setEnabled(!!res.enabled); setToken(res.token ?? null); setConfirmRegen(false) }
-      else setErr(res.error ?? t('min.share.failed'))
+      else setErr(failText(res, t))
     } catch {
       setErr(t('min.share.failed'))
     } finally { setBusy(false) }

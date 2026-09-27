@@ -584,7 +584,7 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     ])
   })
 
-  it('판정에서 막히면 service_role 을 만들지 않는다', async () => {
+  it('판정에서 막히면 service_role 을 만들지 않는다 — 판정의 거부에는 code 가 없다', async () => {
     createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
     getActor.mockResolvedValue(onlyInB)
     expect(await getMinuteShare(M)).toEqual({ ok: false, error: '권한 없음' })
@@ -602,7 +602,8 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
     mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: res }).client)
     getActor.mockResolvedValue(inA)
-    expect(await getMinuteShare(M)).toMatchObject({ ok: false, error: SHARE_LOOKUP_FAILED })
+    // code 는 화면이 사전 문구를 고르는 사유다 — 액션의 한국어 문구를 영어 화면에 그대로 싣지 않게.
+    expect(await getMinuteShare(M)).toEqual({ ok: false, error: SHARE_LOOKUP_FAILED, code: 'share_lookup' })
     expect(spy.mock.calls).toEqual([[`[readShareRow minute=${M}] 공유 상태 조회 실패:`, cause]])
     spy.mockRestore()
   })
@@ -614,7 +615,7 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     const adm = fakeClient({ minutes: res })
     mocks.createAdminClient.mockReturnValue(adm.client)
     getActor.mockResolvedValue(inA)
-    expect(await setMinuteShare(M, 'enable')).toMatchObject({ ok: false, error: SHARE_LOOKUP_FAILED })
+    expect(await setMinuteShare(M, 'enable')).toEqual({ ok: false, error: SHARE_LOOKUP_FAILED, code: 'share_lookup' })
     expect(adm.calls.minutes).toEqual(['select', 'eq', 'maybeSingle'])
     expect(adm.queries).toHaveLength(1)
     expect(spy).toHaveBeenCalledTimes(1)
@@ -626,7 +627,7 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
     mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: [shareRow, { data: null, error: { message: 'db boom' } }] }).client)
     getActor.mockResolvedValue(inA)
-    expect(await setMinuteShare(M, 'enable' as never)).toMatchObject({ ok: false, error: '공유 설정을 저장하지 못했습니다.' })
+    expect(await setMinuteShare(M, 'enable' as never)).toEqual({ ok: false, error: '공유 설정을 저장하지 못했습니다.', code: 'share_save' })
     expect(spy.mock.calls).toEqual([[`[setMinuteShare minute=${M}] 공유 설정 저장 실패:`, 'db boom']])
     spy.mockRestore()
   })

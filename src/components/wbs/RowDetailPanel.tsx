@@ -13,6 +13,7 @@ import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
 import { listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
+import { removeErrorKey } from '@/lib/attachments/removeErrors'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import { stampedFileName } from '@/lib/domain/minutes'
@@ -782,7 +783,12 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
     setBusy(true); setErr(null)
     const res = await removeAttachment(id)
     setBusy(false)
-    if (!res.ok) { setErr(res.error ?? t('wbs.deleteFail')); return }
+    if (!res.ok) {
+      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+      const key = removeErrorKey(res.error)
+      setErr(key ? t(key) : (res.error ?? t('wbs.deleteFail')))
+      return
+    }
     load(); router.refresh()
   }
 

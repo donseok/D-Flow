@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE } from './removeErrors'
 
 /** 첨부 세 종류 — RPC attachment_object_exists(p_kind) 의 값과 같다(0011 H2-g). */
 export type AttachmentKind = 'deliverable' | 'issue' | 'minute'
@@ -9,8 +10,8 @@ const TARGET: Record<AttachmentKind, { bucket: string; table: string }> = {
   minute: { bucket: 'minutes', table: 'minute_files' },
 }
 
-export const ERR_OBJECT_REMOVE = '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.'
-export const ERR_ROW_REMOVE = '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.'
+// 문구는 화면이 사전 키를 고를 때도 쓴다 — 서버 코드와 떨어진 모듈(removeErrors)에 둔다.
+export { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE }
 
 type Db = Pick<SupabaseClient, 'from' | 'rpc' | 'storage'>
 

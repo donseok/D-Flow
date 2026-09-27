@@ -232,4 +232,6 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.share.regen': 'Regenerate',
   'min.share.regenConfirm': 'The current link stops working immediately. Regenerate?',
   'min.share.failed': 'Failed to update sharing settings.',
+  'min.share.lookupFailed': 'Could not check the sharing status. Please try again shortly.',
+  'min.share.saveFailed': 'Could not save the sharing settings.',
 }

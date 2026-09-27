@@ -106,6 +106,9 @@ export async function getChangeLogs(itemId: string): Promise<ChangeLogEntry[]> {
 /** 에이전트 관할 작업의 수기 실적 100 잠금 문구 — 앱 판정과 DB 가드(0011 WORKFLOW_ACTUAL_LOCKED)가 같은 문구를 쓴다.
  *  'use server' 파일이라 export 하지 않는다. */
 const ACTUAL_LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.'
+/** 잠금 거부 — 두 자리(앱 판정·DB 가드)가 같은 결과를 낸다. code 는 화면이 사전 문구(wbs.actualLocked)를 고르는 사유다:
+ *  문구를 그대로 그리면 영어 화면에 한국어 토스트가 뜬다. 문구는 챗봇 등 code 를 모르는 호출부를 위해 그대로 싣는다. */
+const ACTUAL_LOCKED = { ok: false, error: ACTUAL_LOCKED_MSG, code: 'actual_locked' } as const
 
 /** 실적% 입력 — 말단(자식 없는) 항목만. level 은 보지 않는다: 롤업(computeNode)이 자식 유무로
  *  말단을 판정하므로, 자식 없는 Task/Phase 도 자기 actual_pct 가 그대로 상위로 올라간다.
@@ -114,7 +117,7 @@ export async function updateActual(
   itemId: string,
   newPct: number,
   expectedCurrent?: number | null,
-): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }> {
   if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: '0~100 범위' }
   // projectId 를 인자로 받지 않으므로 판정 전에 대상 행에서 읽는다 — 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('wbs_items', itemId)
@@ -158,9 +161,7 @@ export async function updateActual(
       if (heldErr) return { ok: false, error: `에이전트 주문 확인 실패: ${heldErr.message}` }
       heldStatus = (held as { status: string } | null)?.status ?? null
     }
-    if (stageLockedForHuman({ delegated, orderStatus: heldStatus })) {
-      return { ok: false, error: ACTUAL_LOCKED_MSG }
-    }
+    if (stageLockedForHuman({ delegated, orderStatus: heldStatus })) return ACTUAL_LOCKED
   }
 
   const old = item.actual_pct
@@ -178,7 +179,7 @@ export async function updateActual(
     .select('id')
   if (upErr) {
     // 앱 잠금 판정과 이 쓰기 사이에 주문이 claim 되면 DB 가드(0011 guard_workflow_actual)가 막는다 — 같은 문구로.
-    if (upErr.message.includes('WORKFLOW_ACTUAL_LOCKED')) return { ok: false, error: ACTUAL_LOCKED_MSG }
+    if (upErr.message.includes('WORKFLOW_ACTUAL_LOCKED')) return ACTUAL_LOCKED
     return { ok: false, error: upErr.message }
   }
   if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)' }

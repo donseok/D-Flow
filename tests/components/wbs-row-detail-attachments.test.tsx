@@ -10,8 +10,9 @@ import { EN } from '@/lib/i18n/dict/en'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listAttachments, L } = vi.hoisted(() => ({
+const { listAttachments, removeAttachment, L } = vi.hoisted(() => ({
   listAttachments: vi.fn<(itemId: string) => Promise<AttachmentList>>(),
+  removeAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
   L: { locale: 'ko' as 'ko' | 'en' },
 }))
 registerEn(EN)
@@ -22,7 +23,7 @@ vi.mock('@/app/actions/wbs', () => ({
   addTaskDependency: vi.fn(), removeTaskDependency: vi.fn(),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments, recordAttachment: vi.fn(), removeAttachment: vi.fn(),
+  listAttachments, recordAttachment: vi.fn(), removeAttachment,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
@@ -32,6 +33,7 @@ vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => [] }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
 
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
+import { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE } from '@/lib/attachments/removeStoredAttachment'
 
 const ko = (k: Parameters<typeof realT>[1]) => realT('ko', k)
 
@@ -64,9 +66,9 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     container.remove()
   })
 
-  async function render() {
+  async function render(canAttach = false) {
     await act(async () => {
-      root.render(<RowDetailPanel item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} />)
+      root.render(<RowDetailPanel item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} canAttach={canAttach} />)
     })
     await act(async () => {})
   }
@@ -115,6 +117,38 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     const alert = section().querySelector('[role="alert"]')!
     expect(alert.textContent).toContain(realT('en', 'wbs.attachLoadFail'))
     expect(alert.textContent).not.toMatch(/[가-힣]/)
+  })
+
+  // 삭제 실패 — 같은 섹션의 목록 실패는 사전 문구인데 삭제 실패만 도우미의 한국어 문구가 그대로 떴다.
+  it.each([
+    ['객체 삭제 실패', ERR_OBJECT_REMOVE, 'common.attach.objectRemoveFailed'],
+    ['기록 삭제 실패', ERR_ROW_REMOVE, 'common.attach.rowRemoveFailed'],
+  ] as const)('삭제 실패(%s)의 서버 문구(한국어)를 그대로 보이지 않는다 — 영어 화면은 영어 사전 문구', async (_name, error, key) => {
+    L.locale = 'en'
+    listAttachments.mockResolvedValue({ ok: true, rows: [att()], download: 'allowed' })
+    removeAttachment.mockResolvedValue({ ok: false, error })
+    await render(true)
+    const del = section().querySelector(`button[aria-label="${realT('en', 'wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
+    await act(async () => { del.click() })
+    expect(removeAttachment).toHaveBeenCalledWith('att-1')
+    const line = [...section().querySelectorAll('p')].find(p => p.className.includes('text-delayed'))!
+    expect(line.textContent).toBe(realT('en', key))
+    expect(line.textContent).not.toMatch(/[가-힣]/)
+    // 한국어 화면은 종전 문구 그대로다
+    expect(realT('ko', key)).toBe(error)
+  })
+
+  it('삭제 실패 — 도우미의 두 문구가 아닌 사유는 받은 문구를 그대로, 사유가 없으면 일반 문구', async () => {
+    listAttachments.mockResolvedValue({ ok: true, rows: [att()], download: 'allowed' })
+    await render(true)
+    const del = () => section().querySelector(`button[aria-label="${ko('wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
+    const line = () => [...section().querySelectorAll('p')].find(p => p.className.includes('text-delayed'))!.textContent
+    removeAttachment.mockResolvedValue({ ok: false, error: '권한 없음' })
+    await act(async () => { del().click() })
+    expect(line()).toBe('권한 없음')
+    removeAttachment.mockResolvedValue({ ok: false })
+    await act(async () => { del().click() })
+    expect(line()).toBe(ko('wbs.deleteFail'))
   })
 
   it('unknown — 권한 확인 실패 경고와 재시도, 링크 없음', async () => {

@@ -115,6 +115,20 @@ describe('AccountsManager', () => {
     expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ description: msg, variant: 'error' }))
   })
 
+  // 해제가 거부됐다는 것은 이 표가 낡았다는 뜻이다(다른 슈퍼유저가 먼저 해제했거나 마지막 한 명이 됐다) —
+  // 다시 읽지 않으면 칩은 계속 '플랫폼 관리자'이고 누를 때마다 같은 거부가 돌아온다.
+  it.each([
+    '슈퍼유저가 아닌 계정입니다.',
+    '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.',
+    '슈퍼유저를 해제하지 못했습니다.',
+  ])('플랫폼 관리자 변경이 거부되면(%s) 문구를 보이고 표를 다시 읽는다', async (msg) => {
+    setPlatformAdmin.mockResolvedValue({ ok: false, error: msg })
+    render()
+    await click(row('u-dave').querySelector('[data-platform-admin-toggle]')!)
+    expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ description: msg, variant: 'error' }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
   it('본인 행의 플랫폼 관리자 토글은 비활성 — 스스로 해제할 수 없다는 안내', async () => {
     render()
     const self = row('u-bob').querySelector<HTMLButtonElement>('[data-platform-admin-toggle]')!

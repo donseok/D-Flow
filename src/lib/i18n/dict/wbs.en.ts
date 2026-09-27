@@ -64,6 +64,7 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.toastConflict': 'Someone else updated this item first',
   'wbs.toastYourValue': 'Your value',
   'wbs.toastSaveFail': 'Save failed',
+  'wbs.actualLocked': 'Completion goes through the Approve button — work handled by an agent (delegated, in progress or awaiting review) can be set to 99% at most. To complete it yourself, turn delegation off.',
   'wbs.toastPhaseAdded': 'Phase added',
   'wbs.toastAddFail': 'Failed to add',
   'wbs.focusNotFound': 'Could not find the linked task (it may have been deleted or replaced)',

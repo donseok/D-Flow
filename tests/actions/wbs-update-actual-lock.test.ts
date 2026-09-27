@@ -24,11 +24,14 @@ vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0
 
 import { updateActual } from '@/app/actions/wbs'
 import { makeAdminActor } from '../fixtures/actor'
+import { t as realT } from '@/lib/i18n/dict'
 
 const W1 = '33333333-3333-4333-8333-333333333333'
 type Resp = { data?: unknown; error?: { message: string } | null }
 const ADMIN = { ok: true, actor: makeAdminActor('p1') }
 const LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.'
+/** 앱 판정과 DB 가드 두 자리가 같은 결과를 낸다 — code 는 칸반·WBS 토스트가 사전 문구(wbs.actualLocked)를 고르는 사유다. */
+const LOCKED = { ok: false, error: LOCKED_MSG, code: 'actual_locked' }
 
 /** 세션 클라이언트 흉내 — 테이블별 순차 응답, update·insert payload 와 호출 테이블을 기록한다. */
 function server(queues: Record<string, Resp[]>) {
@@ -62,13 +65,13 @@ beforeEach(() => {
 describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => {
   it('위임된 dev_workflow 항목은 100 거부 — 주문 조회 없이, 쓰기 없음', async () => {
     const { calls, writes } = server({ wbs_items: [item({ tags: ['agent'] }), { data: null }] })
-    expect(await updateActual(W1, 100, 40)).toEqual({ ok: false, error: LOCKED_MSG })
+    expect(await updateActual(W1, 100, 40)).toEqual(LOCKED)
     expect(calls).not.toContain('agent_work_orders')
     expect(writes).toHaveLength(0)
   })
   it('위임은 꺼졌지만 reported 주문이 남아 있으면 100 거부', async () => {
     const { writes } = server({ wbs_items: [item(), { data: null }], agent_work_orders: [{ data: { status: 'reported' } }] })
-    expect(await updateActual(W1, 100, 40)).toEqual({ ok: false, error: LOCKED_MSG })
+    expect(await updateActual(W1, 100, 40)).toEqual(LOCKED)
     expect(writes).toHaveLength(0)
   })
   it('사람이 하는 dev_workflow 항목(ready 주문만 상주)은 100 저장', async () => {
@@ -100,7 +103,11 @@ describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => 
       wbs_items: [item(), { data: null }, { data: null, error: { message: 'WORKFLOW_ACTUAL_LOCKED' } }],
       agent_work_orders: [{ data: null }],
     })
-    expect(await updateActual(W1, 100)).toEqual({ ok: false, error: LOCKED_MSG })
+    expect(await updateActual(W1, 100)).toEqual(LOCKED)
+  })
+
+  it('잠금 문구는 사전의 한국어 문구와 같다 — 한국어 화면은 code 로 골라도 종전 문구 그대로', () => {
+    expect(realT('ko', 'wbs.actualLocked')).toBe(LOCKED_MSG)
   })
 
   // 경계 패리티의 TS 쪽 — tests/rls/workflow-parity.test.ts 의 ACTUAL_BOUNDARY 와 같은 세 값이다(과제 15). 한쪽을 바꾸면 다른 쪽도 바꾼다.
@@ -113,7 +120,7 @@ describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => 
       expect(res).toEqual({ ok: true })
       expect(writes.some((w) => w.table === 'wbs_items')).toBe(true)
     } else {
-      expect(res).toEqual({ ok: false, error: LOCKED_MSG })
+      expect(res).toEqual(LOCKED)
       expect(writes.some((w) => w.table === 'wbs_items')).toBe(false)
     }
   })

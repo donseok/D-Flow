@@ -8,7 +8,7 @@ import { makeProjectActorView } from '../fixtures/actor'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-type SaveResult = { ok: boolean; error?: string; conflict?: boolean }
+type SaveResult = { ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }
 const updateActual = vi.fn(async (): Promise<SaveResult> => ({ ok: true }))
 const updateWeight = vi.fn(async (): Promise<SaveResult> => ({ ok: true }))
 vi.mock('@/app/actions/wbs', () => ({
@@ -189,6 +189,18 @@ describe('WbsGanttSheet — 검증·저장 실패에서 입력 보존', () => {
     expect(actualInput()).not.toBeNull()
     expect(actualInput()!.value).toBe('60')
     expect(alerts()).toContain('99%까지')
+  })
+
+  // 잠금 거부는 액션의 한국어 문구가 아니라 사전 문구로 — 영어 화면에 한국어 안내가 뜨지 않게(사유는 code 로 고른다).
+  it('잠금 거부(code=actual_locked)의 안내는 사전 문구다 — 입력창과 값은 남는다', async () => {
+    updateActual.mockResolvedValueOnce({ ok: false, error: '완료는 승인 버튼으로 처리합니다', code: 'actual_locked' })
+    await mount()
+    await open('wbs.editActualTitle')
+    await type(actualInput()!, '100')
+    await enter(actualInput()!)
+
+    expect(alerts()).toEqual(['wbs.actualLocked'])
+    expect(actualInput()!.value).toBe('100')
   })
 
   it('충돌이면 현행대로 닫고, 안내에 입력한 값을 남긴다', async () => {

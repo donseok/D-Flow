@@ -1425,7 +1425,9 @@ export async function ensureMinuteInsightsAction(
   return { status }
 }
 
-export interface MinuteShareResult { ok: boolean; enabled?: boolean; token?: string | null; error?: string }
+/** 공유 상태를 못 읽었거나(share_lookup) 못 썼다(share_save) — 모달이 사전 문구를 고르는 사유. 판정의 거부(권한·보관)에는 없다. */
+export type MinuteShareCode = 'share_lookup' | 'share_save'
+export interface MinuteShareResult { ok: boolean; enabled?: boolean; token?: string | null; error?: string; code?: MinuteShareCode }
 
 const ERR_SHARE_LOOKUP = '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_SHARE_SAVE = '공유 설정을 저장하지 못했습니다.'
@@ -1435,7 +1437,7 @@ const ERR_SHARE_SAVE = '공유 설정을 저장하지 못했습니다.'
  *  share_token 은 세션이 읽지 못한다(0011 H2-c — minutes 는 share_token 을 뺀 열 단위 SELECT). 판정을 통과한 뒤 service_role 로
  *  그 회의록 id 한 행만 읽는다. 조회 실패·0행은 공유 상태를 모른다는 뜻이라 거부한다(fail-closed). */
 async function readShareRow(sb: Sb, id: string, actor: Actor):
-  Promise<{ state: ShareState; admin: ReturnType<typeof createAdminClient> } | { error: string }> {
+  Promise<{ state: ShareState; admin: ReturnType<typeof createAdminClient> } | { error: string; code?: MinuteShareCode }> {
   const own = await checkOwner(sb, id, actor, { archivedError: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.' })
   if (!own.ok) return { error: own.error }
   const adm = adminOr('공유 설정을 확인하세요.')
@@ -1443,11 +1445,15 @@ async function readShareRow(sb: Sb, id: string, actor: Actor):
   const { data, error } = await adm.admin.from('minutes').select('share_token, share_enabled').eq('id', id).maybeSingle()
   if (error || !data) {
     console.error(`[readShareRow minute=${id}] 공유 상태 조회 실패:`, error?.message ?? '0행')
-    return { error: ERR_SHARE_LOOKUP }
+    return { error: ERR_SHARE_LOOKUP, code: 'share_lookup' }
   }
   const row = data as { share_token: string | null; share_enabled: boolean | null }
   return { state: { token: row.share_token ?? null, enabled: !!row.share_enabled }, admin: adm.admin }
 }
+
+/** readShareRow 의 거부를 응답으로 — code 는 있을 때만 싣는다(판정의 거부에는 없다). */
+const refusedShare = (r: { error: string; code?: MinuteShareCode }): MinuteShareResult =>
+  (r.code ? { ok: false, error: r.error, code: r.code } : { ok: false, error: r.error })
 
 /** 공유 상태 조회 — 토큰은 이 액션으로만 클라이언트에 전달(페이지 payload 미포함, 소유자/관리자 한정). */
 export async function getMinuteShare(id: string): Promise<MinuteShareResult> {
@@ -1455,7 +1461,7 @@ export async function getMinuteShare(id: string): Promise<MinuteShareResult> {
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const row = await readShareRow(sb, id, g.actor)
-  if ('error' in row) return { ok: false, error: row.error }
+  if ('error' in row) return refusedShare(row)
   return { ok: true, enabled: row.state.enabled, token: row.state.token }
 }
 
@@ -1465,13 +1471,13 @@ export async function setMinuteShare(id: string, op: ShareOp): Promise<MinuteSha
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const row = await readShareRow(sb, id, g.actor)
-  if ('error' in row) return { ok: false, error: row.error }
+  if ('error' in row) return refusedShare(row)
   const next = nextShareState(row.state, op, crypto.randomUUID())
   const { error } = await row.admin.from('minutes')
     .update({ share_token: next.token, share_enabled: next.enabled }).eq('id', id)
   if (error) {
     console.error(`[setMinuteShare minute=${id}] 공유 설정 저장 실패:`, error.message)
-    return { ok: false, error: ERR_SHARE_SAVE }
+    return { ok: false, error: ERR_SHARE_SAVE, code: 'share_save' }
   }
   return { ok: true, enabled: next.enabled, token: next.token }
 }
