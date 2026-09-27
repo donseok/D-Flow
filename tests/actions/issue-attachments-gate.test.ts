@@ -76,6 +76,8 @@ function makeClient(opts: {
   project?: { data: { workspace_id: string } | null; error: { message: string } | null }
   /** Storage remove 결과 — 기본은 객체 1건 삭제. */
   removed?: { data: unknown[] | null; error: { message: string } | null }
+  /** 존재 확인 RPC(attachment_object_exists) 결과 — 기본은 객체가 남아 있음(true). */
+  exists?: { data: unknown; error: { message: string } | null }
 }) {
   const calls = opts.calls ?? []
   const insert = vi.fn(async (row: unknown) => { calls.push('meta.insert'); void row; return { error: opts.insertError ?? null } })
@@ -105,10 +107,11 @@ function makeClient(opts: {
     delete: vi.fn(() => ({
       eq: vi.fn(() => ({
         select: vi.fn(() => ({
-          maybeSingle: vi.fn(async () => {
+          then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => {
             calls.push('meta.delete')
-            return opts.deleteResult ?? { data: { id: 'a1' }, error: opts.deleteError ?? null }
-          }),
+            const r = opts.deleteResult ?? { data: { id: 'a1' }, error: opts.deleteError ?? null }
+            return Promise.resolve({ data: r.data ? [r.data] : [], error: r.error }).then(res, rej)
+          },
         })),
       })),
     })),
@@ -121,6 +124,7 @@ function makeClient(opts: {
     client: {
       from: vi.fn((t: string) => (t === 'issues' ? issuesTable : t === 'projects' ? projectsTable : attachTable)),
       storage: { from: vi.fn(() => ({ createSignedUrl, remove })) },
+      rpc: vi.fn(async () => { calls.push('rpc.exists'); return opts.exists ?? { data: true, error: null } }),
     },
   }
 }
@@ -315,9 +319,21 @@ describe('removeIssueAttachment', () => {
     state.client = m.client
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect((await removeIssueAttachment('a1')).ok).toBe(false)
-    expect(m.calls).toEqual(['storage.remove'])
+    expect(m.calls).toEqual(['storage.remove', 'rpc.exists'])
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
+  })
+
+  it('Storage 0건인데 객체가 이미 없으면(존재 확인 RPC false) 메타만 지우고 성공', async () => {
+    asOwner()
+    const m = makeClient({
+      attachment: { data: { id: 'a1', file_path: `${ISSUE}/1-x.pdf`, issue_id: ISSUE }, error: null },
+      removed: { data: [], error: null },
+      exists: { data: false, error: null },
+    })
+    state.client = m.client
+    expect(await removeIssueAttachment('a1')).toEqual({ ok: true })
+    expect(m.calls).toEqual(['storage.remove', 'rpc.exists', 'meta.delete'])
   })
 
   it('Storage 삭제 오류면 메타를 남기고 실패', async () => {

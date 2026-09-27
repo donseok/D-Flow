@@ -28,6 +28,7 @@ import { ensureMinuteInsights, generateMinuteInsights } from '@/lib/ai/minutes-i
 import { rematchHighlights, type HighlightRow } from '@/lib/minutes/rematch'
 import { nextShareState, type ShareOp, type ShareState } from '@/lib/minutes/share'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { correctMinuteBodyTime } from '@/lib/minutes/timeFix'
 import { resolveTeamRootFolderId, refileMinuteAfterProjectChange, loadFolderSnapshot } from '@/lib/minutes/folders'
@@ -803,19 +804,10 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   if ((f.role as string) === 'body') return { ok: false, error: '본문 파일은 교체로만 변경할 수 있습니다.' }
   const own = await checkOwner(sb, f.minute_id as string, g.actor)
   if (!own.ok) return { ok: false, error: own.error }
-  // remove 는 RLS 가 막아도 오류 없이 빈 배열을 돌려준다 — 0건을 성공으로 읽고 행을 지우면 고아 객체가 남는다(P8-H1-1).
-  // 권한 불일치(버킷 삭제 = 소유자·ws 관리자, 행 삭제 = can_manage_minute)의 근본 수정은 H2-g 다. 여기서는 실패를 드러낸다.
-  const { data: removed, error: rmErr } = await sb.storage.from(BUCKET).remove([f.file_path as string])
-  if (rmErr || (removed ?? []).length !== 1) {
-    console.error('[removeMinuteFile] Storage 삭제 실패 — 행을 남긴다:', rmErr?.message ?? `${(removed ?? []).length}건 삭제`)
-    return { ok: false, error: '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.' }
-  }
-  const { data: gone, error } = await sb.from('minute_files').delete().eq('id', fileId).select('id')
-  if (error) return { ok: false, error: error.message }
-  if ((gone ?? []).length === 0) {
-    console.error('[removeMinuteFile] 행 삭제 0건(객체는 지워짐):', fileId)
-    return { ok: false, error: '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.' }
-  }
+  // 객체 삭제 → 행 삭제. 버킷 정책(minute-files 삭제 = 관리 권한 ∨ ws 관리자 ∨ 소유자∧미참조, 0011 H2-g)이 행 삭제
+  // (can_manage_minute)와 같은 선이 됐다. 객체가 이미 없으면 행만 지운다(존재 확인 RPC).
+  const r = await removeStoredAttachment(sb, { kind: 'minute', id: fileId, filePath: f.file_path as string, tag: 'removeMinuteFile' })
+  if (!r.ok) return r
   revalidatePath(`/minutes/${f.minute_id as string}`)
   return { ok: true }
 }

@@ -96,7 +96,7 @@ const soloA = makeActor({
 })
 
 type TableResult = { data?: unknown; error: { message: string } | null }
-type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult }
+type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult; exists?: TableResult }
 type StorageCall = { bucket: string; op: 'createSignedUrl' | 'remove'; args: unknown[] }
 /** 테이블별 결과를 주입하는 thenable 가짜 빌더 — 결과가 배열이면 같은 표를 부를 때마다 순서대로 꺼내고 마지막 값을
  *  유지한다(단일 결과는 모든 조회가 같은 결과). storage 는 createSignedUrl·remove 를 storageCalls 에 기록하고 주입한
@@ -137,7 +137,9 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
       return storage.remove ?? { data: [], error: null }
     }),
   })
-  return { client: { from, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls, selects }
+  // rpc 는 첨부 존재 확인(attachment_object_exists) — 기본은 객체가 남아 있음(true).
+  const rpc = vi.fn(async () => storage.exists ?? { data: true, error: null })
+  return { client: { from, rpc, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls, selects }
 }
 /** WA 의 무프로젝트 회의록 — 작성자는 u1(각 액터의 userId). */
 const minuteRow = (over: Record<string, unknown> = {}) => ({
@@ -506,6 +508,16 @@ describe('removeMinuteFile — Storage 객체가 실제로 지워졌을 때만 �
     expect(db.calls.minute_files).toContain('delete')
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
+  })
+
+  it('remove 0건이어도 객체가 이미 없으면(RPC false) 행을 지우고 성공', async () => {
+    const db = seedDb(
+      { minute_files: [{ data: FILE_ROW, error: null }, { data: [{ id: 'file-1' }], error: null }] },
+      { remove: { data: [], error: null }, exists: { data: false, error: null } },
+    )
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
+    expect(db.calls.minute_files).toContain('delete')
   })
 
   it('객체 1건·행 1건이 지워져야 성공', async () => {

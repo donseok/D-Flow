@@ -11,6 +11,7 @@ import {
   type IssueAttachment,
 } from '@/lib/domain/issueAttachments'
 import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
+import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { createServerClient } from '@/lib/supabase/server'
 
 const BUCKET = 'issue-attachments'
@@ -180,24 +181,10 @@ export async function removeIssueAttachment(id: string): Promise<{ ok: boolean; 
   const g = await requireIssueEditable(att.issue_id as string)
   if (!g.ok) return { ok: false, error: g.error }
 
-  // Storage 를 먼저 지운다 — 반대로 하면 메타를 잃은 객체를 다시 찾을 수 없다.
-  // remove() 는 RLS 가 막아도 error 없이 지운 객체 배열(0건)을 돌려준다 — 0건을 성공으로 읽고 메타를 지우면
-  // 고아 객체가 남는다(회의록 removeMinuteFile 과 같은 규칙). 객체 1건 삭제를 확인한 뒤에만 메타를 지운다.
-  const { data: removed, error: rmErr } = await sb.storage.from(BUCKET).remove([att.file_path as string])
-  if (rmErr || (removed ?? []).length !== 1) {
-    console.error('[removeIssueAttachment] Storage 삭제 실패 — 메타를 남긴다:', rmErr?.message ?? `${(removed ?? []).length}건 삭제`)
-    return { ok: false, error: '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.' }
-  }
-  // .select() 로 실제 지워진 행을 확인한다 — supabase-js 는 RLS 거부·경합으로 0행이 지워져도
-  // error 를 주지 않는다. 그대로 ok 를 반환하면 객체는 사라졌는데 메타는 남아
-  // 목록에 영구히 죽은 링크가 뜨고 사용자에게는 '삭제 완료'로 보인다.
-  const { data: gone, error } = await sb
-    .from('issue_attachments').delete().eq('id', id).select('id').maybeSingle()
-  if (error) return { ok: false, error: error.message }
-  if (!gone) {
-    console.error('[removeIssueAttachment] 메타 행이 지워지지 않았습니다:', id)
-    return { ok: false, error: '첨부 삭제에 실패했습니다.' }
-  }
+  // Storage 를 먼저 지운다 — 반대로 하면 메타를 잃은 객체를 다시 찾을 수 없다. 객체가 이미 없으면 메타만 지우고,
+  // 남아 있으면(삭제 권한 불일치) 메타를 남긴다(0011 H2-g 존재 확인 RPC).
+  const r = await removeStoredAttachment(sb, { kind: 'issue', id, filePath: att.file_path as string, tag: 'removeIssueAttachment' })
+  if (!r.ok) return r
   revalidatePath(`/p/${g.projectId}/issues`)
   return { ok: true }
 }

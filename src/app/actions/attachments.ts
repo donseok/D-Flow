@@ -6,6 +6,7 @@ import { isProjectAdmin } from '@/lib/domain/authz'
 import { actorTeamIdsFor } from '@/lib/domain/permissions'
 import { isDeliverablePathValid } from '@/lib/domain/deliverables'
 import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
+import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { revalidatePath } from 'next/cache'
 import type { DeliverableAttachment } from '@/lib/domain/types'
 
@@ -148,19 +149,6 @@ export async function removeAttachment(id: string): Promise<{ ok: boolean; error
   if (!att) return { ok: false, error: '첨부 없음' }
   const g = await requireAttachPermission(att.wbs_item_id as string)
   if (!g.ok) return { ok: false, error: g.error }
-  // remove 는 RLS 가 막아도 오류 없이 빈 배열을 돌려준다 — 0건을 성공으로 읽고 행을 지우면 고아 객체가 남는다
-  // (회의록 removeMinuteFile 과 같은 규칙). 객체 1건 삭제를 확인한 뒤에만 행을 지운다.
-  const { data: removed, error: rmErr } = await sb.storage.from(BUCKET).remove([att.file_path as string])
-  if (rmErr || (removed ?? []).length !== 1) {
-    console.error('[removeAttachment] Storage 삭제 실패 — 행을 남긴다:', rmErr?.message ?? `${(removed ?? []).length}건 삭제`)
-    return { ok: false, error: '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.' }
-  }
-  // 행 삭제도 0건(RLS 거부·경합)이면 error 없이 끝난다 — 지워진 행을 돌려받아 확인한다.
-  const { data: gone, error } = await sb.from('deliverable_attachments').delete().eq('id', id).select('id')
-  if (error) return { ok: false, error: error.message }
-  if ((gone ?? []).length === 0) {
-    console.error('[removeAttachment] 행 삭제 0건(객체는 지워짐):', id)
-    return { ok: false, error: '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.' }
-  }
-  return { ok: true }
+  // 객체 삭제 → 행 삭제. 객체가 이미 없으면 행만 지우고, 남아 있으면(삭제 권한 불일치) 행을 남긴다(0011 H2-g 존재 확인 RPC).
+  return removeStoredAttachment(sb, { kind: 'deliverable', id, filePath: att.file_path as string, tag: 'removeAttachment' })
 }

@@ -34,7 +34,9 @@ function sb(opts: {
     select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: 'att-1', file_path: PATH, wbs_item_id: 'i1' }, error: null }) }) }),
     delete: () => ({ eq: () => ({ select: deleteSelect }) }),
   }
-  createServerClient.mockResolvedValue({ from: () => table, storage: { from: () => ({ remove }) } } as never)
+  createServerClient.mockResolvedValue({
+    from: () => table, storage: { from: () => ({ remove }) }, rpc: vi.fn(async () => ({ data: true, error: null })),
+  } as never)
   return { calls, remove, deleteSelect }
 }
 
