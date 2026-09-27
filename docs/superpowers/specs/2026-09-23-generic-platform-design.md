@@ -1215,7 +1215,7 @@ if (!m.ok) return { ok: false, error: m.error }
 |---|---|---|
 | 1 자격증명 검사 전 | env 킬스위치(`AGENT_API_ENABLED`·`MINUTES_API_ENABLED`) 꺼짐 | 404(현행 유지 — 라우트 존재 은닉) |
 | 2 자격증명 | 없음·불일치·만료·타 워크스페이스 자원 | 401 / 404(5절·SP7 done_when "타 워크스페이스 자격증명은 404/403") |
-| 3 자격증명 통과 후 모듈 | `requireModule({ workspaceId }, 'minutes_integration' \| 'agents')` 실패(`modules.allowed` 에서 빠짐·`closeRequires` 로 탈락), 또는 대상 프로젝트 층(`agents` 의 `modules.enabled`·`agents.stage_workflow.enabled`) 실패 | 또박또박 API **409 `module_disabled`**(종합안 SP7 "모듈 꺼짐 409 — 조용한 미분류 저장 금지"); 에이전트 API 는 현행 `requireAgentProject` 관례대로 **404**(5.3.2 — `dflow-*` 스킬 계약이 404 존재 은닉을 동결, 5.3.4) |
+| 3 자격증명 통과 후 모듈 | `requireModule({ workspaceId }, 'minutes_integration' \| 'agents')` 실패(`modules.allowed` 에서 빠짐·`closeRequires` 로 탈락), 또는 대상 프로젝트 층(`modules.enabled ∋ 'agents'` — 은퇴한 `agents.stage_workflow` 대신, 승인은 `workflow.approval_steps`, 개정 문서 §2.8.6) 실패 | 또박또박 API **409 `module_disabled`**(종합안 SP7 "모듈 꺼짐 409 — 조용한 미분류 저장 금지"); 에이전트 API 는 현행 `requireAgentProject` 관례대로 **404**(5.3.2 — `dflow-*` 스킬 계약이 404 존재 은닉을 동결, 5.3.4) |
 
 종합안 SP7 에는 "모듈 꺼짐 409" 와 "`requireModule` 로 비활성 시 API 404" 두 문장이 함께 있다. 이 절은 그 둘을 위 표의 1단계(404)·3단계로 **분해했다** — 또박또박은 자격증명을 가진 상대에게 은닉할 존재가 없고 404 는 "엔드포인트 없음" 으로 읽혀 재시도·경보 로직을 바꾸므로(Q6: 계약 변경은 헤더뿐) 409 이고, 에이전트 API 는 `dflow-*` 스킬 8종이 404 존재 은닉을 전제로 동결돼 있어(5.3.4) 현행 404 를 유지한다. 이 분해는 이 절이 종합안을 고쳐 적은 것이며 5절 계약 본문이 코드·본문 형식을 확정한다.
 
@@ -1279,7 +1279,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 
 | env 플래그 | 현 판독 위치 | 통합 후 `envAvailable` 소속 | 상시 토글 역할의 DB 대체 |
 |---|---|---|---|
-| `AGENT_API_ENABLED` | `src/lib/agent/externalApi.ts:13-15`(`agentApiEnabled`), `:37-44`(`gateAgentApi`) | **`agents` 모듈의 API 라우트 킬스위치 — 모듈 가용(`envAvailable`)과 별개.** `requireModule` 뒤에 현행 `gateAgentApi`(플래그+시크릿)를 그대로 둔다. 현 코드에서도 이 플래그는 외부 API 와 토큰 발급 액션(`src/app/actions/agentTokens.ts`)만 막고 스튜디오·위임/승인 화면(`/p/[id]/agents/*`, `/agents`)은 읽지 않는다(`grep -rln "agentApiEnabled\|AGENT_API_ENABLED" src/app src/components src/lib/data` → `agentTokens.ts` 1건). 통합 후에도 같다 — 플래그를 꺼도 스튜디오·결재 UI·`core.stage_credits` 편집은 남고 `/api/v1/agent/*`·`/api/v1/wbs/*` 만 닫힌다(결정 7 "에이전트 스튜디오 핵심") | `modules.allowed`/`modules.enabled` 'agents' + `agents.stage_workflow` |
+| `AGENT_API_ENABLED` | `src/lib/agent/externalApi.ts:13-15`(`agentApiEnabled`), `:37-44`(`gateAgentApi`) | **`agents` 모듈의 API 라우트 킬스위치 — 모듈 가용(`envAvailable`)과 별개.** `requireModule` 뒤에 현행 `gateAgentApi`(플래그+시크릿)를 그대로 둔다. 현 코드에서도 이 플래그는 외부 API 와 토큰 발급 액션(`src/app/actions/agentTokens.ts`)만 막고 스튜디오·위임/승인 화면(`/p/[id]/agents/*`, `/agents`)은 읽지 않는다(`grep -rln "agentApiEnabled\|AGENT_API_ENABLED" src/app src/components src/lib/data` → `agentTokens.ts` 1건). 통합 후에도 같다 — 플래그를 꺼도 스튜디오·결재 UI·`workflow.stage_credits` 편집은 남고 `/api/v1/agent/*`·`/api/v1/wbs/*` 만 닫힌다(결정 7 "에이전트 스튜디오 핵심") | `modules.allowed`/`modules.enabled` 'agents' + `workflow.approval_steps`(은퇴한 `agents.stage_workflow` 대체 — 개정 문서 §2.8.6) |
 | `MINUTES_API_ENABLED` | `src/lib/minutes/externalApi.ts:38`(`minutesApiEnabled`), `:116-120`(`gateMinutesApi`) | `minutes_integration`(이 모듈은 API 표면뿐이라 모듈 가용 = 킬스위치. `gateMinutesApi` 의 시크릿 조건은 SP7 에서 `integration_credentials` 행으로 이동) | `modules.allowed` 'minutes_integration' |
 | `MINUTES_FOLDER_PATH_ENABLED` | `src/lib/minutes/externalApi.ts:54` | (env 폐지) | `minutes.auto_file_by_path`(프로젝트) |
 | `WIKI_SERVICE_ENABLED` | `src/lib/ai/wiki-ingest.ts:43`, `src/lib/wiki/serviceState.ts:17` | `wiki` | `ai.enabled`(워크스페이스) ∧ `modules.enabled` 'wiki' |
@@ -1309,7 +1309,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 | `project_areas kind='weekly_section'` + `area_teams`(테이블 행) | weekly | `WEEKLY_SECTIONS` 11(`weeklySheet.ts:21-24`, importer 6)·`WEEKLY_TEAM_SECTIONS`(`:30-41`)·`LEGACY_SECTION_MAP`(`:53-69`)·`FALLBACK_SECTION`(`:44`)·`weekly_report_rows.section/module` 자유 텍스트(0023:21-22)·`ensureStandardRows`(`data/weeklySheet.ts:27-49`) | 행 `{ code(불변), name, sort_order, active }` + `area_teams { area_id, team_id, kind primary\|support }` | 코드 불변·데이터 달린 영역은 `active=false` 만 | `defaultWeeklyRows(areas)`·`carryOverRows(prev, areas)`·`sortWeeklyRows`·`sectionKeyOf`·`sheetNarrative`·`weeklyLint`·봇 `weekly:read` 팀 필터·PPT 페이지 합성 |
 | `project_areas kind='issue_area'`(테이블 행) | issues | `ISSUE_MEGA_AREAS` 8(`issueAnalysis.ts:4-13`, 관련 식별자 소비처 16파일)·전역 `issue_mega_areas`·0055 check·`deckPlan` Mega 순서 | 행 `{ code(불변, 이슈 ID 에 쓰임), name, sort_order, active }` | 코드 `[A-Z0-9]{1,8}` 불변 | 이슈 등록 폼·목록 필터·분석서 표·체번 트리거 |
 | `issues.id_policy`(정본의 `issues.code_prefix` 대체) | issues | `'PI-I'`(`issueAnalysis.ts:170` `formatPiIssueCode`, DB 트리거 0055:240·0062:246 — 0055:118 은 기존 행 백필 `update` 라 기준선에 흡수) | `{ prefix; pattern; counter_scope; reset }`, 기본 `ISS-{seq:3}` 프로젝트 카운터 | 형식·토큰 규칙(→ 개정 문서 §4.4.3). 변경은 신규 이슈에만(트리거가 발번 시점 값 사용) | 체번 트리거·이슈 코드 렌더 |
-| `wbs.excel_profile` | wbs | `LEGACY_ORIGIN_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백 | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사·내보내기. 라우트는 하드닝 1 선반영(저장 양식은 접기·펼침 두 내보내기 모두에 쓰고, 손상 422, 양식 없음+펼침 409, LEGACY 폴백 삭제. 가져오기는 저장 양식과 파일 구조가 다르면 감지 결과가 기본이고 서버가 409 — 하드닝 1b). SP4 = 비어 있으면 표준 레이아웃(명시 표기), 손상은 422, LEGACY 는 fixture. 저장소 이전의 SP 배정은 개정 문서 §4.6. 사용자 필드 `customColumns`(SP5c)(→ 개정 문서 §4.1·§4.6) |
+| `wbs.excel_profile` | wbs | `LEGACY_ORIGIN_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백 | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사·내보내기. 라우트는 하드닝 1 선반영(저장 양식은 접기·펼침 두 내보내기 모두에 쓰고, 손상 422, 양식 없음+펼침 409, LEGACY 폴백 삭제. 가져오기는 저장 양식과 파일 구조가 다르면 감지 결과가 기본이고 서버가 409 — 하드닝 1b). SP3a = 읽기 원천을 이 키로, SP4 = 비어 있으면 표준 레이아웃(명시 표기), 손상은 422, LEGACY 는 fixture(개정 문서 §4.6). 사용자 필드 `customColumns`(SP5c)(→ 개정 문서 §4.1·§4.6) |
 | `modules.enabled` | settings(core) | `Sidebar.projectMenu` 등 11벌(3.2.5)·`agent_projects.enabled`(0057)·`AgentProjectToggle.tsx`·`requireAgentProject`(`agent/externalApi.ts:47-53`) | `ModuleId[]` — `PROJECT_TOGGLABLE`(scope ∈ {project, both} ∧ !core) 의 부분집합만. workspace 스코프 모듈은 이 키에 없다(3.2.3) | ⊆ `PROJECT_TOGGLABLE ∩ modules.allowed`, `closeRequires(enabled ∪ (allowed ∩ workspace) ∪ core)` 가 `enabled` 를 보존(3.1.5) | `effectiveModules` |
 | `forms.<form_kind>` | weekly / issues / wbs | `templateFill.ts` 좌표·`CELL_BUDGET`·`ISSUE_BUDGET`·`ISSUE_CAP`·`EVENT_CAP`·자산 경로·`excel.ts` 코드 그리기 | 4절 정의 `{ template_id, mapping, options }` | 4절(미매핑 토큰 0) | 4절 엔진 |
 | `minutes.auto_file_by_path` | minutes | `MINUTES_FOLDER_PATH_ENABLED` env | `boolean`, default `true`(새 플랫폼엔 접두 시절 데이터가 없다 — 5.1.4) | — | `/api/v1/minutes` folder_path 편철 분기(`externalApi.ts:53-55` 자리) |
@@ -1394,7 +1394,7 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | `src/components/admin/AccountsManager.tsx` | 210,219,444,451 | 4 | `teamOptions[0] ?? 'PMO'` 폴백 | 삭제 — 계정 생성에서 팀 필수 제거(명단 `project_member_teams` 로 이동) | SP1 |
 | 〃 | 322 | 1 | 안내문 "팀코드: PMO · 가공 · ERP · MES · MDM / 역할: admin · member · viewer" | 삭제 — 일괄 등록 열에서 팀 제거, 역할은 `access_role` 어휘로 | SP1 |
 | 〃 | 329 | 1 | `placeholder` 속성 `'…, PMO, member, …'` | 삭제(위와 동일) | SP1 |
-| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_ORIGIN_PROFILE` import·초기값 | 라우트는 하드닝 1 선반영(LEGACY 폴백 삭제, 저장 양식 없음 `'{}'`+펼침 409). 비어 있으면 표준 레이아웃은 SP4. 저장소 이전의 SP 배정은 개정 문서 §4.6 | 하드닝 1(폴백 삭제·'{}'+펼침 409) / SP4(표준 레이아웃) |
+| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_ORIGIN_PROFILE` import·초기값 | 라우트는 하드닝 1 선반영(LEGACY 폴백 삭제, 저장 양식 없음 `'{}'`+펼침 409). SP3a = 읽기 원천을 `wbs.excel_profile` 로, SP4 = 비어 있으면 표준 레이아웃(개정 문서 §4.6) | 하드닝 1(폴백 삭제·'{}'+펼침 409) / SP3a(읽기 원천) / SP4(표준 레이아웃) |
 | 〃 | 23,40,46,50 | 4 | "원본 고객사 회귀 기준"·폴백 주석·계층 헤더 주석 | 삭제(주석) + 식별자 개명 | SP0 |
 | `src/components/wbs/shared.tsx` | 5,9 | 2 | `TEAM` PMO/MDM CSS 토큰 | 승격 → `teams.color` inline style | SP4 |
 | 〃 | 24 | 1 | `DEFAULT_LEVEL_LABELS` 주석(원본 고객사) | 삭제 — `core.level_labels` 필수, 폴백 상수 제거 | SP4 |
@@ -2410,7 +2410,7 @@ export async function actorFromCredential(admin: ScopedAdminClient, cred: Resolv
 
   | 파일 | 읽는 지점 | 대체 |
   |---|---|---|
-  | `src/lib/agent/externalApi.ts:47-52` | `requireAgentProject` | `effectiveModules(pid).has('agents')` ∧ `agents.stage_workflow.enabled`(5.3.2) |
+  | `src/lib/agent/externalApi.ts:47-52` | `requireAgentProject` | `effectiveModules(pid).has('agents')`(= `modules.enabled ∋ 'agents'`. 은퇴한 `agents.stage_workflow` 는 쓰지 않고 승인은 `workflow.approval_steps`, 개정 문서 §2.8.6)(5.3.2) |
   | `src/app/api/v1/agent/me/route.ts:21` | `enabled=true` 전량 → 프로젝트 목록 | `cred.workspaceId` 안에서 `effectiveModules('agents')` 인 프로젝트(5.3.2 표) |
   | `src/lib/agent/mineShared.ts:13` | PAT 접근 가능 프로젝트 = enabled ∩ 멤버 | 위와 동일 집합 |
   | `src/lib/agent/delegation.ts:84` | 위임 시 `enabled` 확인 | `requireAgentProject` |
@@ -2434,7 +2434,7 @@ export type AgentPrincipal = {
 export async function resolveAgentPrincipal(req, admin): Promise<AgentPrincipal | NextResponse>  // 시그니처 유지, 내부는 resolveCredential(kind='agent_runner')
 export function patProjectAllowed(p: AgentPrincipal, projectId: string): boolean  // credentialAllows 위임(2.4.8)
 export async function requireAgentProject(admin, projectId): Promise<boolean>
-  // := effectiveModules(pid).has('agents') ∧ project_settings.values.agents.stage_workflow.enabled — 조회 실패는 throw(현행 유지)
+  // := effectiveModules(pid).has('agents') — 조회 실패는 throw(현행 유지). 은퇴한 agents.stage_workflow 는 modules.enabled ∋ 'agents' + workflow.approval_steps 로 대체(개정 문서 §2.8.6)
 ```
 
 | 규칙 | 내용 |
@@ -2503,7 +2503,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | WBS(3) | `import_wbs`·`import_wbs_upsert`·`replace_wbs` | `import_wbs` 0006/0071, `import_wbs_upsert` 0077/0096, `replace_wbs` 0061/0071 | `p_project_id` | 무변경 — 팀 해석만 `(workspace, project)` 스코프(→ 3절 SP4) | `import_wbs`·`replace_wbs`: `src/app/api/import/execute/route.ts:131`·`:125`(임포트 마법사 실행 — `wbsImport.ts` 는 부르지 않는다). `import_wbs_upsert`: `src/lib/agent/wbsImport.ts:254` |
 | 사용현황(5) | `usage_summary`·`usage_daily_actives`·`usage_menu_ranking`·`usage_user_rollup`·`usage_sessions` | 0051/0079 | `usage_summary(p_from date, p_to date, p_today date)`, `usage_sessions(p_from, p_to, p_gap_minutes int default 30)`, 나머지 3종 `(p_from date, p_to date)` | **`p_workspace_id not null`** 추가(`usage_events.workspace_id`; `/w/[slug]/usage` 는 플랫폼 관리자 전용 유지 — `p_workspace_id` 는 워크스페이스 필터, 워크스페이스 관리자에게 열지는 2.7 열린 항목) | `src/lib/data/usage.ts:27`·`:41`·`:52`·`:63`·`:80` |
 | 조직(2) | `consume_project_invite`·`update_project_member_with_identity` | 0065/0065, 0070/0071 | — | → 2절 SP1: `consume_project_invite` 재작성(2.3.3), `update_project_member_with_identity` 폐기 → `upsert_project_member(p_actor, …)`(2.4.5) | `src/app/actions/inviteRedeem.ts:76`, `src/app/actions/members.ts:163` |
-| 에이전트(1) | `apply_workflow_event` | 0096/0097 | 주문 id | 워크스페이스 인자 무변경(주문 → 프로젝트 → 워크스페이스); 본문의 `stage_credits` 조회는 SP3 에서 `values->'core.stage_credits'` 로(3.3.1) | `src/lib/agent/workflowEvent.ts:55` |
+| 에이전트(1) | `apply_workflow_event` | 0096/0097 | 주문 id | 워크스페이스 인자 무변경(주문 → 프로젝트 → 워크스페이스); 본문의 `stage_credits` 조회는 SP3a 에서 `values->'workflow.stage_credits'` 로(3.3.1 — 개정 문서 §2.8.6 개명) | `src/lib/agent/workflowEvent.ts:55` |
 | 이슈(1) | `create_issue_from_minute_block` | 0049/0062(0055 중간 재정의) | `minute_id` 등 | 무변경(회의록·프로젝트 경유). 코드 접두 트리거는 → 3절 `issues.code_prefix` | `src/app/actions/issues.ts:858` |
 | 알림(1) | `purge_read_notifications` | 0074/0074 | `retention_days` | 무변경(전 워크스페이스 일괄 정리가 의도) | `src/app/api/cron/inbox-retention/route.ts:24` |
 
@@ -2649,13 +2649,15 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 | Q1 이슈분석서 As-Is 트리 페이지(5·6) | 제품 고정 슬라이드 유형으로 **유지**(결정 6 의 명시적 예외) | SP6 범위에서 "격리 후 기본 출력 제외" 가 "유지·기본 양식으로 렌더" 로 바뀜. 표·텍스트 페이지만 자리표시 엔진 | SP6 3주 유지(도형 규약 개발이 빠졌으므로 증가 없음) |
 | Q2 워크스페이스 관리자 | 그 워크스페이스 **모든 프로젝트의 관리자로 자동 승계, 비공개 포함** | SP2 의 `roleIn` 판정 순서·`canSeeProject`·`is_project_admin()` 헬퍼·비공개 숨김 로직(`dropHidden`)에 반영, `tests/rls` 케이스 추가 | SP2 3주 유지 |
 | Q3 명단과 권한 | `project_members.access_role` **한 행으로 통합**, 숨김 편집자 없음 | SP1 에서 `project_roles` 를 hidden 행 변환 없이 단순 폐기. 데이터 이관이 없으므로 백필 없음 | SP1 3주 유지 |
-| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격**. 이슈 상태·WBS 단계는 범주 고정, 표시·흐름은 SP5b(Q4′, 2026-09-27 — 1.10) | SP5 에 마이그레이션 1개(`0013_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
+| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격**. 이슈 상태·WBS 단계는 범주 고정, 표시·흐름은 SP5b(Q4′, 2026-09-27 — 1.10) | SP5 에 마이그레이션 1개(`0018_vocab_settings` — 개정 문서 §6.3 번호표)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
 | Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** 원본 고객사 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
 | Q6 또박또박 계약 | **헤더 자격증명만 변경, payload 불변** | SP7 에서 `GET /minutes/meta` 의 팀·프로젝트 소비를 또박또박에 요구하지 않음. 팀·프로젝트 해석은 자격증명 행의 기본 프로젝트·팀 매핑으로 우리 쪽이 처리 | **SP7 2~3주 → 2주** |
 
 **추가 원칙(2026-09-27).** 위 원칙은 유지하고 여섯 가지를 더한다: SP 당 노력 상한 3주와 Phase 분할, 행위 테스트가 완료 근거(RLS 건너뜀은 통과 아님), 설정 항목 done 의 네 연결(`SettingDef`·카탈로그 / 편집 UI·API / 소비처 전부 / 테스트), 화면 소유 규칙, 레인 병렬과 파일 소유, 원격 배포 전 규칙(로컬 검증·`sp<id>-done` 로컬 태그·`Preview-checked: local` 트레일러). 정본은 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §6.1 이다.
 
 ### 6.2 서브 프로젝트 상세
+
+**SP3 분할(2026-09-27).** SP3 은 SP3a(설정 엔진)와 SP3b(워크스페이스 셸·정보 구조)로 나뉘었다. 어느 항목이 어느 쪽인지는 개정 문서 §6.2 가 정본이고, 이 문서의 옛 문장에 한정어 없이 남은 "SP3" 은 둘을 함께 가리킨다.
 
 각 SP 는 같은 서식(목표 / 왜 이 순서 / 의존 / 범위 포함 / 범위 제외 / 마이그레이션 / 완료 조건 / 기간)으로 적는다. 테이블·컬럼·설정 키·함수명은 2~5절과 같은 명칭이다.
 
@@ -2893,7 +2895,7 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 |---|---|
 | `git add -A` 금지, 파일명 명시 | 유지 |
 | 마이그레이션과 코드를 같은 커밋에 담지 않음(G1) | 유지 — `.githooks/pre-push` 그대로, `prepare` 스크립트(`git config core.hooksPath .githooks`)로 자동 설치 |
-| UI 위험 파일은 `ui/` 브랜치 + `Preview-checked:` 트레일러(G2) | 유지 — 눈확인 정본은 스테이징 URL(6.5.4) |
+| UI 위험 파일은 `ui/` 브랜치 + `Preview-checked:` 트레일러(G2) | 유지 — 원격 Preview 가 생기기 전에는 로컬 눈확인 + 트레일러 `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>`(개정 문서 §6.5.4), 원격 Preview 가 생기면 원래 규칙으로 돌아간다 |
 | 반응형 안전망 desync 검사(G3) | 유지 — `tests/css/breakpoint-safety-net.test.ts` 동반 |
 | 마이그레이션의 스테이징 리허설 + `Staging-verified:` 트레일러(G4) | 유지 — 컷오프를 `0072` 에서 `0001` 로(훅 100·109행) |
 | `staging` 브랜치 상시 스테이징, `origin/main` back-merge, force push 금지 | 유지 — Vercel 프로젝트 2개(prod·staging) + Supabase 프로젝트 2개, `vercel-ignore-build.sh` 의 프로젝트명 env 화 |
@@ -2970,6 +2972,6 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 | 15 | 저장·공유 보기와 가져오기 fingerprint·매핑 복원을 출시 후로 미루는 것(5-D14) | 트리아지가 로드맵에 넣은 항목을 새 스키마·레인 B 용량 이유로 뺀 범위 축소다 | 출시 후. 대안은 SPU2·SPU3 편입(+0.5주씩) | 개정 문서 §8.1 #20 |
 | 16 | 다크 토글의 위치 | 사용자 결정 6 이 연 것은 숨긴 다크 토글의 재노출이고, 계정 팝오버·`/account` 로 옮긴 배치는 에이전트 설계 판단이다 | 계정 팝오버의 3단 선택 + `/account`. UI-1 착수 전 확인 | 개정 문서 §8.1 #21 |
 
-#2(한국 공휴일 오버레이의 표시 조건)는 사용자 결정 5(2026-09-26)로 **닫혔다** — 오버레이를 삭제한다(1.10). 번호는 다른 문서의 `§7 #n`·`§8 #n` 참조를 지키려고 다시 매기지 않는다. #7~#16 은 2026-09-27 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §8.1 의 '사용자' 판단 행을 옮긴 것이다. 개정 문서 §8.1 의 나머지 '사용자' 행 — 그 표의 #6(사용 현황 노출)·#14(Q5)·#15(또박또박 v3) — 은 이 표의 #1·#3·#5 가 그대로 담당한다.
+#2(한국 공휴일 오버레이의 표시 조건)는 사용자 결정 5(2026-09-26)로 **닫혔다** — 오버레이를 삭제한다(1.10). 번호는 다른 문서의 `§7 #n`·`§8 #n` 참조를 지키려고 다시 매기지 않는다. #7~#16 은 2026-09-27 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §8.1 의 '사용자' 판단 행을 옮긴 것이다. 개정 문서 §8.1 의 나머지 '사용자' 행 — 그 표의 #6(사용 현황 노출)·#14(Q5)·#15(또박또박 v3) — 은 이 표의 #1·#3·#5 가 그대로 담당한다. #7·#8·#15·#16 은 사용자가 아직 따로 답하지 않았다 — 답이 올 때까지 작업은 각 행의 권고 기본값으로 진행한다.
 
 **다음 산출물: SP0 스펙**(`docs/superpowers/specs/` 첫 문서 — 포크 부트스트랩·스키마 기준선·탈-브랜드, 6절 SP0 의 범위·done_when 을 정본으로).
