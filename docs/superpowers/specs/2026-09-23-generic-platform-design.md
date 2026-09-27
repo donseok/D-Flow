@@ -68,7 +68,7 @@ wbs-web 을 포크해 **어떤 고객사·프로젝트든 쓰는 범용 프로�
 | 3 | 멀티 워크스페이스, 사용자 다중 소속 | `workspaces`·`workspace_members`(→ 2절) |
 | 4 | (a)다중 팀 (b)프로젝트별 역할·팀 (c)계정 없는 담당자 (d)담당 영역 축 | `people`·`project_member_teams`·`project_areas`(→ 2절) |
 | 5 | 프리셋 없음. 스키마 고정·값은 관리자. 빈 값 또는 복사 | `settings/registry.ts` + `project_settings.values`(→ 3절) |
-| 6′ | 행=설정값, 열=제품 고정 핵심 필드 + 프로젝트 사용자 정의 필드(대상 `wbs_item`·`issue`·`weekly_row`, 선언형 타입), 출력=고객 양식+자리표시(2026-09-27 개정, §1.10) | `form_templates` + FormEngine(→ 4절), `fields.<entity>` 설정 키 + `custom jsonb`(→ 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §3.6) |
+| 6′ | 행=설정값, 열=제품 고정 핵심 필드 + 프로젝트 사용자 정의 필드(대상 `wbs_item`·`issue`·`weekly_row`, 선언형 타입), 출력=고객 양식+자리표시(2026-09-26 사용자 결정, 2026-09-27 반영 — §1.10) | `form_templates` + FormEngine(→ 4절), `fields.<entity>` 설정 키 + `custom jsonb`(→ 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §3.6) |
 | 7 | 모듈 전부 유지, 설정으로 토글. 또박또박·에이전트 핵심 | 유효 모듈=env 가용∩`modules.allowed`∩`modules.enabled`(3층, → 3.2.3), `integration_credentials`(→ 5절) |
 | 8 | 판정 두 곳·가드 3종·`roleIn(actor, pid)` 불변 | 포크 성립 조건(→ 1.6) |
 | 9 | 바꿀 수 있는 모든 것을 고려 | 행이 FK 로 참조하는 목록(팀·담당 영역)은 FK 테이블. 어휘·표시 상태·필드 정의는 `values` + 트리거(§3.5 열린 항목 3 종결) |
@@ -80,13 +80,13 @@ wbs-web 을 포크해 **어떤 고객사·프로젝트든 쓰는 범용 프로�
 | Q1 As-Is 트리(5·6) | 제품 고정 슬라이드 유형 유지(결정 6 예외). 표·텍스트 페이지만 엔진(→ 4절) |
 | Q2 워크스페이스 관리자 | 모든 프로젝트 관리자 자동 승계, 비공개 포함(→ 1.8) |
 | Q3 명단·권한 | `project_members.access_role` 한 행. 숨김 편집자 없음(→ 2절) |
-| Q4′ 승격 어휘(2026-09-27 개정, §1.10) | 근태 유형(현 9종)·회의 카테고리(6)·이슈 심각도(3)/원인(4=S/P/O/I)/원천(6)·타임존·근무일 승격(유지) + 주 시작 요일 승격. 시스템 의미 범주(이슈 4·WBS 단계 4 `as/ip/im/xx`(`fp` 는 0096 폐지)·주문 5)와 에이전트 프로토콜은 고정, 표시 상태·라벨·승인 단계·선행 기준·크레딧 정책은 프로젝트 설정(→ 개정 문서 §3). 스크립팅 없음 |
+| Q4′ 승격 어휘(2026-09-26 사용자 결정, 2026-09-27 반영 — §1.10) | 근태 유형(현 9종)·회의 카테고리(6)·이슈 심각도(3)/원인(4=S/P/O/I)/원천(6)·타임존·근무일 승격(유지) + 주 시작 요일 승격. 시스템 의미 범주(이슈 4·WBS 단계 4 `as/ip/im/xx`(`fp` 는 0096 폐지)·주문 5)와 에이전트 프로토콜은 고정, 표시 상태·라벨·승인 단계·선행 기준·크레딧 정책은 프로젝트 설정(→ 개정 문서 §3). 스크립팅 없음 |
 | Q5 고객 양식 3종 | 미확보. SP6 착수 조건 = 실제 3종 또는 원본 고객사 양식+자체 샘플 2종, SP6 직전 재확인(→ 6절) |
 | Q6 또박또박 | 헤더 자격증명만 변경, payload 불변. 팀·프로젝트는 토큰의 기본 매핑(→ 5절) |
 
 ### 1.5 비목표
 
-기각 11건(코드로 확인된 이유)과 2026-09-27 개정이 더한 7건(12~18, 사용자 결정 근거 — §1.10):
+기각 11건(코드로 확인된 이유)과 2026-09-27 개정이 더한 7건(12~18 — 12~17 은 사용자 결정 근거(§1.10), 18 은 개정 문서 §4.9):
 
 | # | 기각 | 이유 |
 |---|---|---|
@@ -172,7 +172,7 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
 | 2026-09-26 | Q4 → Q4′ | 이슈 상태(4)·WBS 단계 `as/ip/im/xx` 제품 고정 | 시스템 의미 범주·에이전트 프로토콜만 고정, 표시 상태·라벨·승인 단계·선행 기준·크레딧 정책은 프로젝트 설정, 스크립팅 없음(1.4) | 사용자 결정 U-1, 개정 문서 §1.3 C2·C3·C4 |
 | 2026-09-26 | 결정 6 → 6′ | 열=제품 고정 | 열=제품 고정 핵심 필드 + 프로젝트 사용자 정의 필드(3엔티티, 선언형 타입)(1.3) | 사용자 결정 U-2, 개정 문서 §1.3 C5 |
 | 2026-09-26 | 사용자 결정 3(집계·위험·완료 정책) — 현행 확인 | 롤업·판정 고정 | 고정 유지(재개방 아님). 진척 롤업 null 가중치만 null=1 로 정합 수정(SP4) | 사용자 결정 U-3, 개정 문서 §1.3 C6 |
-| 2026-09-26 | §3.3.4 주 시작 요일 | 주 시작=월요일, `calendar.week_start` 는 YAGNI | `calendar.week_start` 신설, 기본 일요일(`'monday'` 허용), 다음 주부터 적용 | 사용자 결정 U-4, 개정 문서 §1.3 C7 |
+| 2026-09-26 | §3.3.4 주 시작 요일 | 주 시작=월요일, `calendar.week_start` 는 YAGNI | `calendar.week_start` 신설, 기본 일요일(`'monday'` 허용), 주차 문서가 있는 기존 프로젝트는 다음 주부터 적용. 그 밖의 프로젝트(주차 문서 0건)는 키 없음(= 기본값 `sunday`)이라 이관 시점부터 즉시 일요일이다(과거 주차 키 불변) | 사용자 결정 U-4, 개정 문서 §1.3 C7 |
 | 2026-09-26 | §3.5·§8 #2(옛 §7 #2) 한국 공휴일 오버레이 | 표시 전용 제품 고정(표시 조건 열린 항목) | 삭제. 제품은 기본 공휴일을 두지 않는다 | 사용자 결정 U-5, 개정 문서 §1.3 C8 |
 | 2026-09-26 | 물려받은 코드 결정 3건(전역 브리지 메뉴·다크 토글 숨김·크림·틸 팔레트) | 원본 리포에서 물려받은 결정(정본에 없음) | 번복 — 워크스페이스 전체 범위, 다크 모드 재노출, 중립·코발트(→ 7절) | 사용자 결정 U-6, 개정 문서 §1.3 C9·C10·C11 |
 
@@ -1122,7 +1122,7 @@ export function moduleDef(id: ModuleId): ModuleDef
 
 #### 3.2.2 모듈 목록
 
-| id | core | scope | nav.segment | routePrefixes(요지) | apiPrefixes | requires | envAvailable | botDomains |
+| id | core | scope | nav(project 세그먼트) | routePrefixes(요지) | apiPrefixes | requires | envAvailable | botDomains |
 |---|---|---|---|---|---|---|---|---|
 | `dashboard` | ✓ | project | `dashboard` | `/p/[id]/dashboard` | — | — | `true` | `dashboard` |
 | `wbs` | ✓ | project | `wbs` | `/p/[id]/wbs`, `/p/[id]/gantt`, `/p/[id]/import` | `/api/export`, `/api/import/*` | — | `true` | `wbs` |
@@ -1231,19 +1231,19 @@ if (!m.ok) return { ok: false, error: m.error }
 | 2 | `src/components/app/HeaderChrome.tsx:298-301` 모바일 메뉴 | 이미 `projectMenu` 를 재사용(2026-09-19) | 1 과 동일 함수 |
 | 3 | `src/components/app/HeaderChrome.tsx:25-28` `SECTION_LABEL` | 세그먼트→한국어 라벨 12항목(i18n 미사용) | `navFor` 라벨(브레드크럼) |
 | 4 | `src/components/app/ProjectTabs.tsx:9-13` `TABS` | wbs·dashboard·settings 3항목 | **삭제**(importer 0) |
-| 5 | `src/lib/domain/usageMenu.ts:18-42` `USAGE_MENUS` | 22항목(내린 화면도 보존 — 사용 이벤트 사전) | **통합하지 않는다.** 과거 이벤트 키를 읽는 사전이라 레지스트리와 별개로 남기되, `tests/domain/usage-menu.test.ts` 에 "현재 `MODULES.nav.segment` 전부가 이 사전에 있다" 단언을 추가 |
-| 6 | `src/lib/domain/usageMenu.ts:45-48` `PROJECT_SEGMENT_KEYS` | 12세그먼트 Set | `MODULES.map(m => m.nav?.segment)` 파생 |
+| 5 | `src/lib/domain/usageMenu.ts:18-42` `USAGE_MENUS` | 22항목(내린 화면도 보존 — 사용 이벤트 사전) | **통합하지 않는다.** 과거 이벤트 키를 읽는 사전이라 레지스트리와 별개로 남기되, `tests/domain/usage-menu.test.ts` 에 "현재 `MODULES.nav.project.segment` 전부가 이 사전에 있다" 단언을 추가 |
+| 6 | `src/lib/domain/usageMenu.ts:45-48` `PROJECT_SEGMENT_KEYS` | 12세그먼트 Set | `MODULES.map(m => m.nav?.project?.segment)` 파생 |
 | 7 | `src/lib/ai/chat/protocol.ts:11-26` `BOT_DOMAINS` | 14도메인 리터럴(`unknown` 포함) | 리터럴 유지(프로토콜 타입) + `tests/modules/registry.test.ts` 가 `MODULES.flatMap(botDomains) ∪ {projects, unknown} === BOT_DOMAINS` 단언 |
 | 8 | `src/lib/ai/chat/verifier.ts:27-42` `DOMAIN_PATH` | 도메인→허용 경로 접두 | `moduleForDomain(d).routePrefixes` 파생(`/p/[id]/gantt` 별칭 포함). `navFor` 소비처 목록에 든다(개정 문서 §5.3.5) |
 | 9 | `src/components/chat/BotPageContextProvider.tsx:49-66` `inferDomain` | 경로 세그먼트 switch 10항목 | `moduleBySegment(seg)?.botDomains[0]` |
-| 10 | `src/lib/ai/chat/deep-links.ts:24-104` `projectMenuPath(projectId, menu)` 호출 11곳·세그먼트 10종(wbs·weekly·meetings·attendance·announcements·members·kanban·wiki×2·dashboard·settings) | 세그먼트 문자열 리터럴 | `ModuleDef.nav.segment` 상수 참조(문자열 리터럴 금지 — 타입 `ModuleId` 로) |
+| 10 | `src/lib/ai/chat/deep-links.ts:24-104` `projectMenuPath(projectId, menu)` 호출 11곳·세그먼트 10종(wbs·weekly·meetings·attendance·announcements·members·kanban·wiki×2·dashboard·settings) | 세그먼트 문자열 리터럴 | `ModuleDef.nav.project.segment` 상수 참조(문자열 리터럴 금지 — 타입 `ModuleId` 로) |
 | 11 | `src/lib/i18n/dict/common.ts:8~` `nav.*` 키 | 라벨 사전 | 유지(레지스트리가 키를 참조) |
 | 12 | ⌘K '이동' 그룹(신설) | — | `navFor` 파생 |
 | 13 | `src/lib/domain/usageMenu.ts:59-65` `resolveMenuKey` | 경로 → 사용 현황 키 | `navFor` 의 `segment` 파생(`/w/[slug]/minutes` 와 옛 `/minutes` 가 같은 키) |
 
 12·13 행은 2026-09-27 개정이 더한 `navFor` 소비처다(개정 문서 §5.3.5). 워크스페이스·프로젝트 내비 분리와 그룹 구조는 7절.
 
-이 통합은 `src/components/app/*` 를 건드리므로 UI 위험 파일 규칙(`ui/` 브랜치 + 스테이징 눈확인, `Preview-checked:`/`Staging-verified:` 트레일러)을 따른다(6절 SP3 done_when). 모듈이 꺼지면 메뉴에서 사라지고, 직접 URL 은 `src/app/(app)/p/[projectId]/layout.tsx` 가 요청 경로의 첫 세그먼트를 `routePrefixes` 와 대조해 `notFound()` 한다. 이 레이아웃은 현재 `teamsForProjectSync(projectId)` 로 프로젝트 팀을 읽어 `TeamsProvider` 에 주입한다(`layout.tsx:1-2,11-15`) — 3.1.3 에서 폐기하기로 한 `teams/master.ts` sync 접근자의 importer 32파일 중 하나다. SP3 은 그 주입을 그대로 둔 채 그 위에 `notFound()` 판정을 얹고, SP4 에서 주입을 `getProjectConfig(projectId).teams` 로 교체한다(두 SP 가 같은 파일을 만지므로 SP3 변경은 판정 블록 추가로만 한정). 세그먼트가 어느 모듈에도 없으면 역시 `notFound()`(fail-closed).
+이 통합은 `src/components/app/*` 를 건드리므로 UI 위험 파일 규칙(`ui/` 브랜치 + 눈확인과 `Preview-checked:` 트레일러 — 원격 Preview 전에는 로컬, 6.5.4)을 따른다(개정 문서 §6.2 SP3b). `Staging-verified:` 는 마이그레이션(G4) 트레일러이고 UI 커밋에는 쓰지 않는다. 모듈이 꺼지면 메뉴에서 사라지고, 직접 URL 은 `src/app/(app)/p/[projectId]/layout.tsx` 가 요청 경로의 첫 세그먼트를 `routePrefixes` 와 대조해 `notFound()` 한다. 이 레이아웃은 현재 `teamsForProjectSync(projectId)` 로 프로젝트 팀을 읽어 `TeamsProvider` 에 주입한다(`layout.tsx:1-2,11-15`) — 3.1.3 에서 폐기하기로 한 `teams/master.ts` sync 접근자의 importer 32파일 중 하나다. SP3 은 그 주입을 그대로 둔 채 그 위에 `notFound()` 판정을 얹고, SP4 에서 주입을 `getProjectConfig(projectId).teams` 로 교체한다(두 SP 가 같은 파일을 만지므로 SP3 변경은 판정 블록 추가로만 한정). 세그먼트가 어느 모듈에도 없으면 역시 `notFound()`(fail-closed).
 
 #### 3.2.6 서버 액션·API 라우트 전수 열거 게이트 테스트
 
@@ -1344,6 +1344,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 | `portal.widgets` | — | `{ id; enabled }[]` | 위젯 레지스트리 id | 워크스페이스 홈 포털 |
 | `security.local_drafts` | — | `{ allowed; retention_days }` | retention 1~30 | 로컬 초안 정책(개정 문서 §5.8.5) |
 | `notify.policy` | — | 알림 유형별 `{ enabled }` | 등록된 유형만, 필수 유형 끄기 거부 | 관리자 알림 정책 — SP8 스트레치(레지스트리 등록 전까지 planned) |
+| `minutes.attachments`(워크스페이스 키 + 같은 형태의 프로젝트 키 — G0-7 채택) | — (운영 상한 `MINUTES_ATTACHMENT_MAX_BYTES` 이하로만 좁히는 정책 키) | → 개정 문서 §2.8.1·§2.8.2 | → 개정 문서 §2.8.1 | 회의록 첨부 업로드·첨부 가드 — SP5 Phase B MIN-ATT |
 
 #### 3.3.3 Q4 승격 어휘 4종 (사용자 확정)
 
@@ -1467,7 +1468,7 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | `src/app/globals.css` | 103-107 | `--color-team-{pmo,dt,erp,mes,mdm}` + `-weak` 10개(라이트) | 삭제 — 소비처 3벌이 `teams.color` inline style 로 바뀌면 죽은 정의 | SP4 |
 | 〃 | 174-176 | `--color-team-{pmo,dt,erp,mes,mdm}-weak` 5개(다크 재정의) | 삭제(위와 동일) | SP4 |
 
-`globals.css` 는 UI 위험 파일이므로(CLAUDE.md) 이 삭제는 `ui/` 브랜치 + 스테이징 눈확인을 거친다. SP4 done_when 에 `grep -nE 'team-(pmo|dt|erp|mes|mdm)' src/app/globals.css` **0건** 을 추가한다(6절). 이 15개 선언은 3.4.3 의 114건 집계에 포함하지 않는다(별도 패턴).
+`globals.css` 는 UI 위험 파일이므로(CLAUDE.md) 이 삭제는 `ui/` 브랜치 + 눈확인(6.5.4)을 거친다. SP4 done_when 에 `grep -nE 'team-(pmo|dt|erp|mes|mdm)' src/app/globals.css` **0건** 을 추가한다(6절). 이 15개 선언은 3.4.3 의 114건 집계에 포함하지 않는다(별도 패턴).
 
 #### 3.4.3 SP별 집계와 판정 종류
 
@@ -1492,7 +1493,7 @@ SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PM
 | 항목 | 이유 | 담당 |
 |---|---|---|
 | ~~한국 공휴일 테이블(`src/lib/domain/holidays.ts`)의 표시 조건~~ | **닫힘**(사용자 결정 5, 2026-09-26 — §1.10). 오버레이를 삭제한다. 제품은 기본 공휴일을 두지 않고, 쉬는 날은 프로젝트 달력(근무 요일 + `holidays` 날짜 예외)에서만 온다(개정 문서 §4.2.7) | — |
-| `usageMenu.USAGE_MENUS` 의 과거 메뉴 키 보존 | 사용 현황 사전은 레지스트리로 파생하면 내린 화면(`admin-accounts`·`wiki` 등)의 지난 기록이 이름을 잃는다. 이 절은 "파생하지 않고 포함 단언만" 으로 정했다 — 새 리포에는 과거 이벤트가 없으므로(결정 1) 파생으로 바꿔도 되나, `usage_events` 스키마 이관 여부와 함께 8절(SP8)에서 확정 | 6절/SP8 |
+| `usageMenu.USAGE_MENUS` 의 과거 메뉴 키 보존 | 사용 현황 사전은 레지스트리로 파생하면 내린 화면(`admin-accounts`·`wiki` 등)의 지난 기록이 이름을 잃는다. 이 절은 "파생하지 않고 포함 단언만" 으로 정했다 — 새 리포에는 과거 이벤트가 없으므로(결정 1) 파생으로 바꿔도 되나, `usage_events` 스키마 이관 여부와 함께 6절 SP8(개정 문서 §6.2 SP8)에서 확정 | 6절/SP8 |
 | ~~어휘 승격 4종의 DB 트리거 vs FK 테이블~~ | **닫힘**(2026-09-27) — "`values` + 트리거"로 정했다. 표시 상태·필드 정의도 같은 모양이고 잠금 규약을 더했다(1.3 결정 9 귀결, 개정 문서 §2.4.1) | — |
 | ~~`agents.stage_workflow.require_approval` 의 기본값~~ | **닫힘**(2026-09-27) — 키를 은퇴시키고 승인 단계 `workflow.approval_steps` 로 일반화했다. 기본 1단계 = 현행, 자동 승인(0단계) 없음(개정 문서 §3.3.1) | — |
 
@@ -2504,7 +2505,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | 사용현황(5) | `usage_summary`·`usage_daily_actives`·`usage_menu_ranking`·`usage_user_rollup`·`usage_sessions` | 0051/0079 | `usage_summary(p_from date, p_to date, p_today date)`, `usage_sessions(p_from, p_to, p_gap_minutes int default 30)`, 나머지 3종 `(p_from date, p_to date)` | **`p_workspace_id not null`** 추가(`usage_events.workspace_id`; `/w/[slug]/usage` 는 플랫폼 관리자 전용 유지 — `p_workspace_id` 는 워크스페이스 필터, 워크스페이스 관리자에게 열지는 2.7 열린 항목) | `src/lib/data/usage.ts:27`·`:41`·`:52`·`:63`·`:80` |
 | 조직(2) | `consume_project_invite`·`update_project_member_with_identity` | 0065/0065, 0070/0071 | — | → 2절 SP1: `consume_project_invite` 재작성(2.3.3), `update_project_member_with_identity` 폐기 → `upsert_project_member(p_actor, …)`(2.4.5) | `src/app/actions/inviteRedeem.ts:76`, `src/app/actions/members.ts:163` |
 | 에이전트(1) | `apply_workflow_event` | 0096/0097 | 주문 id | 워크스페이스 인자 무변경(주문 → 프로젝트 → 워크스페이스); 본문의 `stage_credits` 조회는 SP3a 에서 `values->'workflow.stage_credits'` 로(3.3.1 — 개정 문서 §2.8.6 개명) | `src/lib/agent/workflowEvent.ts:55` |
-| 이슈(1) | `create_issue_from_minute_block` | 0049/0062(0055 중간 재정의) | `minute_id` 등 | 무변경(회의록·프로젝트 경유). 코드 접두 트리거는 → 3절 `issues.code_prefix` | `src/app/actions/issues.ts:858` |
+| 이슈(1) | `create_issue_from_minute_block` | 0049/0062(0055 중간 재정의) | `minute_id` 등 | 무변경(회의록·프로젝트 경유). 코드 접두 트리거는 → 3절 `issues.id_policy`(개정 문서 §4.4.3) | `src/app/actions/issues.ts:858` |
 | 알림(1) | `purge_read_notifications` | 0074/0074 | `retention_days` | 무변경(전 워크스페이스 일괄 정리가 의도) | `src/app/api/cron/inbox-retention/route.ts:24` |
 
 `p_workspace_id` 필수 인자를 넣는 RPC 는 호출부 열의 **모든** 지점을 같은 커밋에서 고친다 — 특히 라이브러리 밖의 직접 호출인 `health.ts:120`·`api/wiki/search/route.ts:94`·`api/import/execute/route.ts:125`·`:131` 은 인자 누락이 타입 검사에 걸리지 않고(supabase-js `rpc` 인자는 느슨한 객체) 런타임 42883 으로만 드러난다.
@@ -2649,7 +2650,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 | Q1 이슈분석서 As-Is 트리 페이지(5·6) | 제품 고정 슬라이드 유형으로 **유지**(결정 6 의 명시적 예외) | SP6 범위에서 "격리 후 기본 출력 제외" 가 "유지·기본 양식으로 렌더" 로 바뀜. 표·텍스트 페이지만 자리표시 엔진 | SP6 3주 유지(도형 규약 개발이 빠졌으므로 증가 없음) |
 | Q2 워크스페이스 관리자 | 그 워크스페이스 **모든 프로젝트의 관리자로 자동 승계, 비공개 포함** | SP2 의 `roleIn` 판정 순서·`canSeeProject`·`is_project_admin()` 헬퍼·비공개 숨김 로직(`dropHidden`)에 반영, `tests/rls` 케이스 추가 | SP2 3주 유지 |
 | Q3 명단과 권한 | `project_members.access_role` **한 행으로 통합**, 숨김 편집자 없음 | SP1 에서 `project_roles` 를 hidden 행 변환 없이 단순 폐기. 데이터 이관이 없으므로 백필 없음 | SP1 3주 유지 |
-| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격**. 이슈 상태·WBS 단계는 범주 고정, 표시·흐름은 SP5b(Q4′, 2026-09-27 — 1.10) | SP5 에 마이그레이션 1개(`0018_vocab_settings` — 개정 문서 §6.3 번호표)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
+| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격**. 이슈 상태·WBS 단계는 범주 고정, 표시·흐름은 SP5b(Q4′, 2026-09-27 — 1.10) | SP5 에 어휘 마이그레이션(당시 `0013_vocab_settings`, 현 번호표 `0018_vocab_settings`)과 `Asia/Seoul` 25파일 + SQL 시간대 함수 교체(현 `0015_calendar` — 개정 문서 §6.3 번호표·§6.2 SP5)가 추가 | **SP5 2주 → 3주** |
 | Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** 원본 고객사 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
 | Q6 또박또박 계약 | **헤더 자격증명만 변경, payload 불변** | SP7 에서 `GET /minutes/meta` 의 팀·프로젝트 소비를 또박또박에 요구하지 않음. 팀·프로젝트 해석은 자격증명 행의 기본 프로젝트·팀 매핑으로 우리 쪽이 처리 | **SP7 2~3주 → 2주** |
 
@@ -2676,7 +2677,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 - 기준선: 운영(스테이징 아님) 스키마를 `pg_dump 17` 로 뜬다. `scripts/staging-sync.mjs` 가 이미 `pg_dump --version` ≥ 17 을 검사하고 같은 경로를 쓴다. 현 체인은 재생이 불가하다 — 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)와 중복 1개(`0070` 두 파일)가 실측되고, 종합안이 확인한 `0052` 검증 블록·이메일 하드코딩·`0058` 시드가 있다. `pg_dump --schema=public` 은 `storage`·`realtime` 정책을 담지 않으므로 그 두 스키마는 수기 SQL 이다. 기준선의 정책·함수·트리거 수를 운영 `pg_policies`·`pg_proc`·`pg_trigger` 와 대조하는 스크립트(`scripts/baseline-diff.mjs`)를 함께 만든다 — 이 스크립트의 출력이 SP2 스펙의 "라이브 정책 목록" 입력이 된다.
 - 마이그레이션 정리: `supabase/migrations/0001~0100`(정방향 97파일 + 롤백 70파일)과 `tests/migrations/` 41파일(개별 SQL 텍스트 단언, 예: `0094-agent-heartbeat.test.ts` 가 `add column if not exists` 문자열을 검사) 삭제. `migration_ledger`(`0050`)는 기준선에 포함되므로 표는 유지하고 행만 초기화. `.githooks/pre-push` 의 G4 컷오프(100행·109행의 `substr($0,21,4) + 0 >= 72`)를 `>= 1` 로. `scripts/db-apply.mjs` 는 현재 Management API(`api.supabase.com/v1/projects/{ref}/database/query`) 단일 드라이버다 — `--driver mgmt|psql` 로 분리해 SP9 자체호스트 리허설과 CI(`supabase start` 의 로컬 DSN)에서 같은 스크립트를 쓴다.
 - 좌표 env 화: `scripts/lib/staging.config.mjs` 의 `PROD_REF`·`STAGING_REF`·`POOLER_HOST` 리터럴, `scripts/smoke-prod.mjs`:24·`scripts/mark-good.mjs`:27 의 `https://wbs-web.vercel.app` 기본값(실측 2곳 — `scripts/agent-harness-example.mjs` 는 `AGENT_BASE` 를 필수 env 로 검사하고 기본값이 없으므로 4행 사용법 주석의 예시 URL 만 교체), `scripts/vercel-ignore-build.sh` 의 `dflow-staging*` 프로젝트명, `.github/workflows/warm.yml` 의 ping URL 을 전부 env(`SMOKE_URL`·`PROD_REF`·`STAGING_REF`·`STAGING_PROJECT_PREFIX`)로. 키체인 항목명(`"DFlow Staging DB"`·`"DFlow Prod Reader"`·`"Supabase CLI"`)도 스크립트 리터럴이므로 새 이름으로 교체.
-- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4). `src/lib/report/brand.ts`:33 `TEAM_COLOR` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다(해소). 포털 아이콘 `NEXT_PUBLIC_BRAND_PORTAL_ICON` 은 명시값 `flow`·`monogram` 이 우선이고, 비면 제품명이 기본값일 때만 `flow`, 아니면 제품명 첫 글자 `monogram` 이다(하드닝 7). 고정 D 파비콘·apple-icon 과 이 env 는 SP3a `branding.logo` 가 흡수한다(→ 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §5.11.2).
+- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3a 에서 `branding.*` 2단 키(개정 문서 §2.8.1)로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4). `src/lib/report/brand.ts`:33 `TEAM_COLOR` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다(해소). 포털 아이콘 `NEXT_PUBLIC_BRAND_PORTAL_ICON` 은 명시값 `flow`·`monogram` 이 우선이고, 비면 제품명이 기본값일 때만 `flow`, 아니면 제품명 첫 글자 `monogram` 이다(하드닝 7). 고정 D 파비콘·apple-icon 과 이 env 는 SP3a `branding.logo` 가 흡수한다(→ 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §5.11.2).
 - 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만으로 계획했다 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). 이 분류는 틀렸었다(`TeamsProvider` 가 `DEFAULT_TEAMS` 를 import 했다) — 하드닝 8 이 런타임 소비처를 걷고 옮겼다. 구 파서 fixture 이동도 SP0 에서 밀려 하드닝 6 이 했다(3.4.2). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_ORIGIN_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_ORIGIN_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
 - CI 신설: `.github/workflows/` 는 현재 `warm.yml`(콜드 스타트 핑) 하나뿐이다. `ci.yml`(vitest + `next build` + eslint; `tsconfig.json` `include: ['**/*.ts', …]` 라 `next build` 가 `tests/` 까지 타입체크하므로 빌드 잡이 테스트 타입 회귀도 잡는다)을 만들고, `package.json` 에 `engines.node`(현재 없음; 메모리 백로그 Node ≥ 22.4)를 명시.
   **정정(Task 8 리뷰·8b, 2026-09-24)**: 위 괄호 두 개는 실측과 다르다 — `next build` 는 `tests/` 를
@@ -2744,7 +2745,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 
 **범위 포함**
 
-- 헬퍼·읽기 정책(→ 2절): `is_ws_member`/`is_ws_admin`/`project_ws`/`accessible_project_ids` 신설, `can_read_project` 본문 교체. 리터럴 `using (true)` 읽기 정책은 마이그레이션 파일 기준 57문/32파일(2026-09-23 grep, 롤백 제외; 종합안 55문/30파일과 근사) — 라이브 정책 수는 SP0 `baseline-diff` 출력으로 확정한다. `can_read_project` 를 참조하는 마이그레이션은 `0052`(정의)·`0079`(위키) 둘뿐이므로 헬퍼 교체만으로는 격리가 생기지 않는다. `0053` 식 사전검증 `do` 블록(교체할 옛 정책 이름이 전부 존재하는지 확인, 일부만 없으면 중단)과 함께 `project_id in (select accessible_project_ids())` 로 전수 교체. `project_id` 로 직접 술어를 걸 수 없는 자식 테이블은 부모 조인 정책(2.4.6 표 — 16개 중 `meeting_attendees`·`weekly_report_rows` 는 컬럼이 생겨 직접 술어). `app_role()` 을 쓰는 마이그레이션은 26파일이며 라이브 잔존 정책은 종합안 기준 9개 (미검증 — `baseline-diff` 로 확정) 교체 후 shim drop. `minutes`·`minute_folders`·`notification_events`·`user_preferences`·`agent_watchers` 에 `workspace_id`(다섯 컬럼의 소유는 이 마이그레이션 `0003`, 2.3.7 — SP8 은 `notification_events` 에 인덱스만 더하고, `ai_documents`·`ai_index_jobs`·`usage_events` 의 `workspace_id` 는 SP8 `0011` 소유).
+- 헬퍼·읽기 정책(→ 2절): `is_ws_member`/`is_ws_admin`/`project_ws`/`accessible_project_ids` 신설, `can_read_project` 본문 교체. 리터럴 `using (true)` 읽기 정책은 마이그레이션 파일 기준 57문/32파일(2026-09-23 grep, 롤백 제외; 종합안 55문/30파일과 근사) — 라이브 정책 수는 SP0 `baseline-diff` 출력으로 확정한다. `can_read_project` 를 참조하는 마이그레이션은 `0052`(정의)·`0079`(위키) 둘뿐이므로 헬퍼 교체만으로는 격리가 생기지 않는다. `0053` 식 사전검증 `do` 블록(교체할 옛 정책 이름이 전부 존재하는지 확인, 일부만 없으면 중단)과 함께 `project_id in (select accessible_project_ids())` 로 전수 교체. `project_id` 로 직접 술어를 걸 수 없는 자식 테이블은 부모 조인 정책(2.4.6 표 — 16개 중 `meeting_attendees`·`weekly_report_rows` 는 컬럼이 생겨 직접 술어). `app_role()` 을 쓰는 마이그레이션은 26파일이며 라이브 잔존 정책은 종합안 기준 9개 (미검증 — `baseline-diff` 로 확정) 교체 후 shim drop. `minutes`·`minute_folders`·`notification_events`·`user_preferences`·`agent_watchers` 에 `workspace_id`(다섯 컬럼의 소유는 이 마이그레이션 `0006_workspace_isolation`, 2.3.7 — SP8 은 `notification_events` 에 인덱스만 더하고, `ai_documents`·`ai_index_jobs`·`usage_events` 의 `workspace_id` 는 SP8 `0022_ai_scope` 소유(개정 문서 §6.3 번호표)).
 - Q2 반영: `roleIn` 은 `workspaceRoles.get(wid) === 'admin'` 을 `projectRoles` 보다 먼저 본다. `canSeeProject` 는 비공개 프로젝트를 워크스페이스 관리자에게 보인다. DB 헬퍼 `is_project_admin(pid) := is_superuser() ∨ is_ws_admin(project_ws(pid)) ∨ …` 도 같은 순서. 비공개 숨김(`dropHidden`, 현 사용자 결정 '화면 숨김')은 워크스페이스 관리자를 예외로 둔다. 이 세 지점을 `tests/domain/authz` 와 `tests/rls` 양쪽에서 검사한다.
 - Storage: 경로 규약 `ws/<wid>/p/<pid>/<entity>/…` 로 통일(브라우저 직접 업로드 5곳 (미검증) 경로 변경). `storage.objects` 정책 3버킷 재작성 — 읽기 정책이 `bucket_id = '<bucket>'` 만 검사하는 버킷은 `minutes`(`0021`:61~62 `"minutes bucket read"`)·`issue-attachments`(`0068`:111~112) 둘이고, `deliverables` 는 이미 `bucket_id = 'deliverables' and can_attach(split_part(name, '/', 1)::uuid)` 를 검사한다(`0036`:24~25). 따라서 앞 두 버킷은 2.4.6 의 골격(`storage_ws`·`storage_project` 헬퍼 — `uuid_or_null` 경유, 직접 `::uuid` 캐스트 금지) + `can_read_project(storage_project(name))` 로 새로 쓰고, `deliverables` 는 `can_attach` 의 인자를 `split_part(name,'/',1)` 에서 `storage_entity(name)`(6번째 세그먼트) 로 바꾼다(`0036`:24~25). 쓰기는 2.4.6 버킷 표(`deliverables` 는 `can_attach` 유지).
 - Realtime: 현재 `private: true` 인 채널은 `useWbsRealtime.ts`(`project-<uuid>-wbs`, `0098`)·`useInboxRealtime.ts`(`user-<uuid>-notifications`, `0075`) 둘뿐이고, `src/components/app/usePagePresence.ts`(`page-presence-*`)·`src/components/weekly/usePresence.ts`(`weekly-presence-*`)·`WeeklySheetView.tsx`(`weekly-rows-*`) 는 public 채널이다. presence 둘은 토픽을 `project-<pid>-presence-<pageKey>`·`project-<pid>-weekly-<reportId>-presence` 로 바꾸고 `private: true` + `realtime.messages` 정책 2건(2.4.6 — `0098` 의 정규식 `substring` + `is not null` 패턴 재사용, 판정은 `can_read_project`)으로; `weekly-rows-*` 는 `postgres_changes` 구독이라 `weekly_report_rows` 읽기 정책이 구독자별로 적용된다(미검증 — 2.7·6.7). `usePagePresence.ts` 는 `src/components/app/` 아래라 **UI 위험 파일**(G2) — `ui/` 브랜치 + 스테이징 눈확인.
@@ -2793,7 +2794,7 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 | R8 | 포크 이중 유지보수 | 원본은 최근 30일 전 브랜치 468커밋(마이그레이션 14커밋; `origin/main` 만 202커밋) 으로 움직이며 구 브랜드명 운영 계속. 회의록 API 계약(v2.5)·에이전트 스킬 8개가 두 리포에서 갈라짐 | 컷오프 커밋 고정, 보안 픽스만 cherry-pick, 공유 패키지 없음(→ 6.6) | SP0 (정책), 전 SP (준수) — 상태: 유지 |
 | R9 | `requireModule` 누락 = fail-open | 서버 액션 173개·API 라우트 41개에 수작업 삽입 | export 전수 열거 게이트 테스트(→ 6.5.3)를 SP3 에서 함께 도입 — 매니페스트에 없는 export 는 테스트 실패 | SP3 — 상태: 유지·확장(SP5b·SP5c·SPU 새 액션) |
 | R10 | `teams/master.ts` 프로세스 전역 캐시 | service_role 로 전 팀 로드, 초기값 `DEFAULT_TEAMS`, TTL 60초, importer 32파일(상대 경로 포함 33) — 멀티 워크스페이스에서 교차 팀 목록 노출·무효화 문제의 진원지 | SP4 에서 요청 스코프 로더로 폐기; sync 접근자 호출부를 `tsc` 로 전수 노출 | SP4 — 상태: 완화 중(SP2 스코프 필터·하드닝 4 뒤 SP4 에서 폐기) |
-| R11 | 메뉴 통합·워크스페이스 화면 이동이 UI 위험 파일을 건드림 | `Sidebar.tsx`·`HeaderChrome.tsx`·`usePagePresence.ts` 모두 `src/components/app/`(`ProjectTabs.tsx` 는 importer 0 이라 삭제 — 3.2.5 #4); 빌드·테스트로 깨짐이 안 잡힘(2026-07-27 사고) | `ui/` 브랜치 + 스테이징 눈확인을 SP2·SP3 done_when 에 명시; G2 유지 | SP2·SP3 — 상태: 확대 — SP3b 가 UI 위험 파일 전부를 소유하고 6.5.4 의 세 브랜치로 쪼갠다 |
+| R11 | 메뉴 통합·워크스페이스 화면 이동이 UI 위험 파일을 건드림 | `Sidebar.tsx`·`HeaderChrome.tsx`·`usePagePresence.ts` 모두 `src/components/app/`(`ProjectTabs.tsx` 는 importer 0 이라 삭제 — 3.2.5 #4); 빌드·테스트로 깨짐이 안 잡힘(2026-07-27 사고) | `ui/` 브랜치 + 눈확인(6.5.4)을 SP2·SP3 done_when 에 명시; G2 유지 | SP2·SP3 — 상태: 확대 — SP3b 가 UI 위험 파일 전부를 소유하고 6.5.4 의 세 브랜치로 쪼갠다 |
 | R12 | '제품 고정' 으로 남는 숨은 원본 고객사 결정이 계속 새어 들어옴 | 셀 줄 예산 15/12·이슈 캡 5·소수 1자리 롤업 등 | **Q4 로 어휘 넷은 승격** 확정. 고정 목록은 SP3a 가 레지스트리에서 생성하는 카탈로그(`docs/settings-catalog.md`)의 제품 고정·지원 제한 절이 정본이고, 이후 요청은 그 절 개정으로만 받는다(3.3.4) | SP3a — 상태: 재정의(Q4′·결정 6′ 으로 업무 흐름·열 고정이 풀림) |
 
 ### 6.5 검증 전략
@@ -2897,7 +2898,7 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 | 마이그레이션과 코드를 같은 커밋에 담지 않음(G1) | 유지 — `.githooks/pre-push` 그대로, `prepare` 스크립트(`git config core.hooksPath .githooks`)로 자동 설치 |
 | UI 위험 파일은 `ui/` 브랜치 + `Preview-checked:` 트레일러(G2) | 유지 — 원격 Preview 가 생기기 전에는 로컬 눈확인 + 트레일러 `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>`(개정 문서 §6.5.4), 원격 Preview 가 생기면 원래 규칙으로 돌아간다 |
 | 반응형 안전망 desync 검사(G3) | 유지 — `tests/css/breakpoint-safety-net.test.ts` 동반 |
-| 마이그레이션의 스테이징 리허설 + `Staging-verified:` 트레일러(G4) | 유지 — 컷오프를 `0072` 에서 `0001` 로(훅 100·109행) |
+| 마이그레이션의 스테이징 리허설 + `Staging-verified:` 트레일러(G4) | 유지 — 컷오프를 `0072` 에서 `0001` 로(훅 100·109행). 원격 스테이징 전에는 로컬 `npm run db:reset` 리허설 + `Staging-verified: local db reset <일시>`(CLAUDE.md, 개정 문서 §6.1) |
 | `staging` 브랜치 상시 스테이징, `origin/main` back-merge, force push 금지 | 유지 — Vercel 프로젝트 2개(prod·staging) + Supabase 프로젝트 2개, `vercel-ignore-build.sh` 의 프로젝트명 env 화 |
 | `npm run db:apply --target staging|prod`, `supabase db push` 금지, `_rollback.sql` 동반 | 유지 — 드라이버 `mgmt|psql` 추가 |
 | 배포 후 `smoke:prod` → `mark:good` | 유지 — 각 SP done_when |
@@ -2935,7 +2936,7 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 | 5-D3 | 전역 브리지를 폐기한다. 공용 화면은 '워크스페이스 전체' 범위로 그리고 최근 프로젝트의 메뉴를 유지하지 않는다 |
 | 5-D4 | 다크 모드를 다시 노출한다. 테마 값은 `system \| light \| dark` 다 |
 | 5-D5 | 토큰은 3층(원색 → 의미 → 컴포넌트)이고 화면 코드는 의미·컴포넌트 토큰만 참조한다 |
-| 5-D6 | 셸 치수는 명시적으로 바꾼다 — 사이드바 232/64, 전역 바 48px, 인스펙터 기본 400px, 우측 레일은 한 번에 하나 |
+| 5-D6 | 셸 치수는 명시적으로 바꾼다 — 사이드바 232/64, 전역 바 48px 유지, 인스펙터 기본 400px, 우측 레일은 한 번에 하나 |
 | 5-D7 | 워크스페이스 내비와 프로젝트 내비를 분리한다. 노출 = `effectiveModules ∩ 권한 ∩ 표시 설정`, 숨김은 권한 회수가 아니다 |
 | 5-D8 | 워크스페이스 화면은 `/w/[slug]/*` 이고(SP2 U2 로 SP3b 이관) `/projects` 도 `/w/[slug]/projects` 로 옮긴다. 옛 경로는 리디렉션 스텁 |
 | 5-D9 | 표·간트·보드는 '작업 계획' 한 화면의 보기 전환이다(`?view=sheet\|timeline\|board`) |
@@ -2952,7 +2953,7 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 
 ## 8. 열린 항목
 
-결정은 사용자 명시 결정으로만 개정한다(§1.10). 아래는 각 절이 "(미검증)" 또는 열린 항목으로 남긴 것 중 **사용자 판단이 필요한 것**만 모은 것이다. 실측·시점만 남은 항목(라이브 정책 수, `realtime.topic()` 흉내 가능성, SP1 분할 여부, 스테이징 요금제 등)은 2.7·3.5·4.14·5.6·6.7 의 각 표에 담당 SP 와 닫히는 시점이 적혀 있으며 여기 반복하지 않는다.
+결정은 사용자 명시 결정으로만 개정한다(§1.10). 아래는 각 절이 "(미검증)" 또는 열린 항목으로 남긴 것 중 **사용자 판단이 필요한 것**만 모은 것이다. 실측·시점만 남은 항목(accent·인스펙터 임계값, 달력 보정 비율, 체브론 라벨 길이 등)은 2.7·3.5·4.14·5.6·6.7 의 각 표에 담당 SP 와 닫히는 시점이 적혀 있으며 여기 반복하지 않는다.
 
 | # | 항목 | 왜 사용자 판단인가 | 현재 문서의 기본값 | 출처 |
 |---|---|---|---|---|
