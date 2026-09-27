@@ -151,6 +151,53 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     expect(s.querySelector('[role="alert"]')).toBeNull()
   })
 
+  // 재시도(최종 리뷰 UI m-2) — 재시도 중에 알림·목록을 걷어 내면 재시도 버튼이 사라져 키보드 포커스가 body 로 떨어지고,
+  // 이미 읽은 목록(권한 unknown)도 '불러오는 중'으로 가려진다.
+  const deferred = () => {
+    let resolve!: (v: AttachmentList) => void
+    const promise = new Promise<AttachmentList>(r => { resolve = r })
+    return { promise, resolve }
+  }
+
+  it('재시도 중에도 재시도 버튼은 남아 포커스를 쥐고(aria-busy), 성공해 알림이 사라지면 포커스는 섹션 머리로', async () => {
+    listAttachments.mockResolvedValueOnce({ ok: false, error: '첨부 목록을 불러오지 못했습니다.' })
+    await render()
+    const retry = section().querySelector('[role="alert"] button') as HTMLButtonElement
+    retry.focus()
+    const next = deferred()
+    listAttachments.mockReturnValueOnce(next.promise)
+    await act(async () => { retry.click() })
+    expect(retry.isConnected).toBe(true)
+    expect(document.activeElement).toBe(retry)
+    expect(retry.getAttribute('aria-busy')).toBe('true')
+    expect(retry.getAttribute('aria-disabled')).toBe('true')
+    await act(async () => { retry.click() }) // 도는 중에는 다시 부르지 않는다
+    expect(listAttachments).toHaveBeenCalledTimes(2)
+
+    await act(async () => { next.resolve({ ok: true, rows: [att()], download: 'denied' }) })
+    expect(section().querySelector('[role="alert"]')).toBeNull()
+    expect(document.activeElement).not.toBe(document.body)
+    expect(document.activeElement).toBe(section().querySelector('[data-attach-heading]'))
+  })
+
+  it('권한 unknown 재시도는 이미 읽은 목록을 가리지 않는다 — 재시도 중에도 파일이 보이고 버튼에 포커스가 남는다', async () => {
+    listAttachments.mockResolvedValueOnce({ ok: true, rows: [att()], download: 'unknown' })
+    await render()
+    const retry = section().querySelector('[role="alert"] button') as HTMLButtonElement
+    retry.focus()
+    const next = deferred()
+    listAttachments.mockReturnValueOnce(next.promise)
+    await act(async () => { retry.click() })
+    expect(fileNode('plan.xlsx')).toBeTruthy()
+    expect(section().textContent).not.toContain(ko('common.loading'))
+    expect(document.activeElement).toBe(retry)
+
+    await act(async () => { next.resolve({ ok: true, rows: [att()], download: 'unknown' }) })
+    expect(fileNode('plan.xlsx')).toBeTruthy()
+    expect(document.activeElement).toBe(section().querySelector('[role="alert"] button'))
+    expect(retry.getAttribute('aria-busy')).not.toBe('true')
+  })
+
   it('listAttachments 가 던지면 오류 상태다 — 빈 목록 문구가 아니다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     listAttachments.mockRejectedValue(new Error('network'))

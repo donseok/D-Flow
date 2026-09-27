@@ -37,4 +37,15 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     expect(document.body.textContent).not.toContain(RAW)
     expect(document.body.textContent).not.toMatch(/[가-힣]/)
   })
+
+  it('fetch 가 던져도(오프라인) 실패 토스트를 띄우고 버튼은 다시 풀린다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    const button = document.body.querySelector('button') as HTMLButtonElement
+    await act(async () => { button.click() })
+    await act(async () => {})
+    expect(document.body.textContent).toContain(t('en', 'settings.exportFailed'))
+    expect(button.disabled).toBe(false)
+    err.mockRestore()
+  })
 })

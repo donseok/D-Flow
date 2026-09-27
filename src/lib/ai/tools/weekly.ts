@@ -30,7 +30,8 @@ const WEEKLY_CAPABILITY = 'weekly:read' as const
  *  다른 워크스페이스의 팀 코드가 통과한다. 팀 캐시 미로드는 throw — 오케스트레이터가 도구 실패로 올린다. */
 function sectionsForTeam(team: string, projectId: string): ReadonlySet<string> | null {
   if (!isRegisteredTeamCodeForProject(team, projectId)) return null
-  return WEEKLY_TEAM_SECTIONS[team] ?? new Set([team])
+  // 팀 코드는 자유 문자열이라 'constructor'·'__proto__' 같은 프로토타입 키가 올 수 있다 — 자기 키만 매핑으로 본다.
+  return Object.hasOwn(WEEKLY_TEAM_SECTIONS, team) ? WEEKLY_TEAM_SECTIONS[team] : new Set([team])
 }
 
 /** team 인자 검증 — 미지 팀과 '매핑 구분 없음'을 구분해 명시 거부(조용한 빈 결과 금지).

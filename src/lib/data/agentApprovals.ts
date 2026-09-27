@@ -9,7 +9,7 @@
 // 임의의 menu=<uuid> 가 들어올 수 있으니, 관리자가 아니면 로스터에 내가 없을 때 0 이다(남의 프로젝트 수를 흘리지 않는다).
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getActorForView } from '@/lib/authz'
-import { isProjectAdmin } from '@/lib/domain/authz'
+import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { canApproveCompletion, isSubtreeManagerOf } from '@/lib/domain/seatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
@@ -53,6 +53,9 @@ export async function getPendingApprovalCount(projectId: string): Promise<number
   const rows = (orders ?? []) as Array<{ wbs_item_id: string | null; claimed_by_user_id: string | null }>
   if (rows.length === 0) return 0
   if (isProjectAdmin(actor, projectId)) return rows.length
+  // 조회 전용 명단(access_role null)은 부모 항목 담당자여도 승인할 수 없다 — 서버 requireCompletionApprover 가
+  // requireProjectMember 부터 본다. 배지를 서버와 같은 축에 두고 service_role 조회 둘도 건너뛴다.
+  if (!isProjectMember(actor, projectId)) return 0
   const memberIds = await myMemberIds(admin, { userId: actor.userId, projectId })
   if (memberIds.length === 0) return 0
   const { data: items, error: itemErr } = await admin.from('wbs_items')

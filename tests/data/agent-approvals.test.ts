@@ -97,6 +97,11 @@ describe('getPendingApprovalCount', () => {
     expect(await getPendingApprovalCount(P)).toBe(0)
     expect(m.itemReads).toBe(0)
   })
+  it('조회 전용 명단(access_role null)은 부모 항목 담당자여도 0 — 서버 가드(requireProjectMember)와 같은 축, 트리도 읽지 않는다', async () => {
+    m.actor = actor(); m.memberIds = ['m-boss'] // 명단 행은 있으나 역할이 없다 — roleIn 은 view
+    expect(await getPendingApprovalCount(P)).toBe(0)
+    expect(m.itemReads).toBe(0)
+  })
   it('멤버는 서브트리 관리자로서 승인할 수 있는 것만', async () => {
     m.actor = actor('member'); m.memberIds = ['m-boss']
     expect(await getPendingApprovalCount(P)).toBe(2)

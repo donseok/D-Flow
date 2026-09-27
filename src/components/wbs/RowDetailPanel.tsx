@@ -727,14 +727,28 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const load = useCallback(() => {
-    listAttachments(itemId).then(setLoaded).catch(e => {
-      console.error('[AttachmentSection] 첨부 목록 호출 실패:', e)
-      setLoaded('threw')
-    })
-  }, [itemId])
-  useEffect(() => { setLoaded(null); load() }, [load])
-  const retry = () => { setLoaded(null); load() }
+  const load = useCallback(() => listAttachments(itemId).then(setLoaded).catch(e => {
+    console.error('[AttachmentSection] 첨부 목록 호출 실패:', e)
+    setLoaded('threw')
+  }), [itemId])
+  useEffect(() => { setLoaded(null); void load() }, [load])
+  // 재시도는 읽어 둔 목록·알림을 걷지 않는다 — 걷으면 재시도 버튼이 사라져 키보드 포커스가 body 로 떨어지고,
+  // 권한 unknown 재시도는 이미 보이던 목록까지 '불러오는 중'으로 가린다. 버튼은 남기고 aria-busy 로 도는 중을 알린다.
+  const [retrying, setRetrying] = useState(false)
+  const refocus = useRef(false)
+  const headingRef = useRef<HTMLDivElement>(null)
+  const retry = () => {
+    if (retrying) return
+    refocus.current = true
+    setRetrying(true)
+    void load().finally(() => setRetrying(false))
+  }
+  // 재시도가 성공해 알림(과 그 안의 버튼)이 사라졌으면 포커스를 섹션 머리로 옮긴다.
+  useEffect(() => {
+    if (retrying || !refocus.current) return
+    refocus.current = false
+    if (!document.activeElement || document.activeElement === document.body) headingRef.current?.focus()
+  }, [retrying, loaded])
   const list: AttachmentList | null = loaded === 'threw' ? { ok: false, error: 'threw' } : loaded
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
@@ -775,7 +789,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle"><Paperclip className="h-3.5 w-3.5" /> {t('wbs.attachments')}</div>
+        <div ref={headingRef} tabIndex={-1} data-attach-heading className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle"><Paperclip className="h-3.5 w-3.5" /> {t('wbs.attachments')}</div>
         {canAttach && (
           <label className="btn btn-ghost h-7 cursor-pointer px-2.5 text-xs">
             <Upload className="h-3.5 w-3.5" /> {busy ? t('wbs.processing') : t('wbs.addFile')}
@@ -788,14 +802,14 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
         <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
       ) : !list.ok ? (
         // 던졌든 ok:false 든 화면 문구는 사전의 한 문구 — 액션의 한국어 사유(list.error)를 영어 화면에 싣지 않는다.
-        <LoadErrorNotice message={t('wbs.attachLoadFail')} onRetry={retry} />
+        <LoadErrorNotice message={t('wbs.attachLoadFail')} onRetry={retry} busy={retrying} />
       ) : list.rows.length === 0 ? (
         <p className="text-sm text-ink-subtle">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>
       ) : (
         <>
           {list.download === 'denied' && <p className="mb-2 text-xs text-ink-subtle">{t('wbs.attachDownloadDenied')}</p>}
           {list.download === 'unknown' && (
-            <div className="mb-2"><LoadErrorNotice message={t('wbs.attachDownloadUnknown')} onRetry={retry} /></div>
+            <div className="mb-2"><LoadErrorNotice message={t('wbs.attachDownloadUnknown')} onRetry={retry} busy={retrying} /></div>
           )}
           <ul className="space-y-1.5">
             {list.rows.map(a => (

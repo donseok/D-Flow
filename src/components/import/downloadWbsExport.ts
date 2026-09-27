@@ -7,7 +7,14 @@ export async function downloadWbsExport(
   opts: { expand: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string | null; status: number | null }> {
   const qs = `projectId=${encodeURIComponent(projectId)}${opts.expand ? '&expand=1' : ''}`
-  const res = await fetch(`/api/export?${qs}`)
+  let res: Response
+  try {
+    res = await fetch(`/api/export?${qs}`)
+  } catch (e) {
+    // 네트워크 실패(오프라인 등)도 같은 실패 모양으로 — 던지면 호출부의 try/finally 를 지나 토스트 없이 끝난다.
+    console.error('[downloadWbsExport] 내보내기 요청 실패:', e)
+    return { ok: false, error: null, status: null }
+  }
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: string } | null
     return { ok: false, error: err?.error ?? null, status: res.status }

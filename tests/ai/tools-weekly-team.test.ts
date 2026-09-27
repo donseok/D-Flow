@@ -6,6 +6,8 @@ const PROJECT_TEAMS: Record<string, string[]> = {
   p1: ['PMO', 'ERP', 'MES', '가공', 'MDM'],
   p2: ['QA'],
   'p-other-ws': ['B팀'],
+  // 팀 코드는 20자 자유 문자열이라 객체 프로토타입 키와 겹칠 수 있다(최종 리뷰 data m6).
+  'p-proto': ['constructor', '__proto__', 'toString'],
 }
 const isRegisteredTeamCodeForProject = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/teams/master', () => ({ isRegisteredTeamCodeForProject }))
@@ -20,7 +22,7 @@ import {
 const context: ToolExecutionContext = {
   userId: 'user-1',
   capabilities: ['weekly:read'],
-  allowedProjectIds: ['p1', 'p2'],
+  allowedProjectIds: ['p1', 'p2', 'p-proto'],
   pageContext: null,
   now: '2026-07-20T09:00:00+09:00',
   timezone: 'Asia/Seoul',
@@ -127,5 +129,17 @@ describe('MES 팀 필터가 조업·표준화를 모두 잡는다', () => {
 
     expect(mes.ok && mes.result.records.map((r: { section: string }) => r.section))
       .toEqual(['조업', '표준화', '물류'])
+  })
+})
+
+describe('프로토타입 키와 같은 팀 코드 — 매핑 없는 등록 팀(동명 구분)으로 본다', () => {
+  it.each(['constructor', '__proto__', 'toString'])('%s 팀은 던지지 않고 동명 구분만 잡는다', async (team) => {
+    const sheet = snapshot(['PMO', 'constructor', '__proto__', 'toString'])
+    const repo: WeeklyRepository = {
+      getSheet: vi.fn(async () => repositoryOk({ ...sheet, report: { ...sheet.report, projectId: 'p-proto' } })),
+    }
+    const res = await createGetWeeklySheetTool(repo).execute({ projectId: 'p-proto', weekStart: '2026-07-20', team }, context)
+    expect(res.ok).toBe(true)
+    expect(res.ok && res.result.records.map((r: { section: string }) => r.section)).toEqual([team])
   })
 })

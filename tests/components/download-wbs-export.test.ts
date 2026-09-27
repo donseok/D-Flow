@@ -61,3 +61,12 @@ it('exportFailureKey — 409·422·400 은 사전 키, 400 은 호출부(접기�
   expect(exportFailureKey(400, true)).toBe('importWizard.exportProfileUnsupported')
   for (const s of [401, 403, 404, 500, null]) expect(exportFailureKey(s, false)).toBeNull()
 })
+
+// 오프라인 등으로 fetch 가 던지면(최종 리뷰 UI m-4) 거부가 호출부 밖으로 새어 토스트 없이 끝났다 — 같은 실패 모양으로 돌려준다.
+it('fetch 가 던지면 ok:false(error·status null) — 던지지 않고 파일도 만들지 않는다', async () => {
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+  await expect(downloadWbsExport('p1', { expand: false })).resolves.toEqual({ ok: false, error: null, status: null })
+  expect(URL.createObjectURL).not.toHaveBeenCalled()
+  expect(err).toHaveBeenCalled()
+})
