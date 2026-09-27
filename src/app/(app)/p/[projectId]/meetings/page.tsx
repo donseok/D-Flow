@@ -71,7 +71,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
       />}
     >
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
-        todayIso={today} currentUserId={user?.id ?? null}
+        loadFailed={!meetRes.ok} todayIso={today} currentUserId={user?.id ?? null}
         canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} />
     </ProjectPageShell>
   )

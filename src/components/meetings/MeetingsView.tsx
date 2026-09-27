@@ -50,12 +50,14 @@ function gridRange(year: number, month0: number): [string, string] {
 }
 
 export function MeetingsView({
-  projectId, meetings, exceptions, members, todayIso, currentUserId, canManage, canEdit,
+  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit,
 }: {
   projectId: string
   meetings: Meeting[]
   exceptions: MeetingException[]
   members: ProjectMember[]
+  /** 회의 조회 실패 — 사유는 페이지가 고정 머리에 띄운다. 목록이 비어도 '등록된 회의가 없습니다'로 그리지 않는다(에러 처리 3원칙 ①). */
+  loadFailed?: boolean
   todayIso: string
   currentUserId: string | null
   /** 이 프로젝트 관리자 이상(isProjectAdmin) — 남의 회의 수정·취소, 공지 등록. */
@@ -142,7 +144,7 @@ export function MeetingsView({
       {view === 'calendar' ? (
         <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} />
       ) : listRows.length === 0 ? (
-        <EmptyState icon={CalendarX2} title={t('meet.empty.title')} description={t('meet.empty.desc')} />
+        loadFailed ? null : <EmptyState icon={CalendarX2} title={t('meet.empty.title')} description={t('meet.empty.desc')} />
       ) : (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">

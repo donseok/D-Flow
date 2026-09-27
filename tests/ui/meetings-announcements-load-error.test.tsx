@@ -63,7 +63,7 @@ describe('회의 화면 — 회의 조회 실패', () => {
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
     expect(html).toContain('role="alert"')
     expect(html).toContain(ERR_MEETINGS_LOAD)
-    expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ meetings: [], exceptions: [] })
+    expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ meetings: [], exceptions: [], loadFailed: true })
     expect(kpiValues()).toEqual(['—', '—', '—'])
   })
 
@@ -71,6 +71,7 @@ describe('회의 화면 — 회의 조회 실패', () => {
     mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
     expect(html).not.toContain('role="alert"')
+    expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ loadFailed: false })
     expect(kpiValues()).toEqual([0, 0, 0])
   })
 })
