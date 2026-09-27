@@ -53,6 +53,10 @@ export async function buildActor(db: Db, userId: string): Promise<Actor> {
   const rosterTeams = new Map<string, { teamIds: string[]; teamCodes: string[] }>()
   for (const row of pm.data! as Array<Record<string, unknown>>) {
     const pid = row.project_id as string
+    // 소속 워크스페이스 밖 프로젝트의 명단 행은 버린다 — 소속을 잃은 뒤 남은 행이 projectRoles 로 들어가면 isAnyProjectAdmin·
+    // adminProjectIds·hasAnyProjectRole 이 그 역할을 센다(AUTH-01b). SQL 헬퍼는 is_ws_member 로 같은 선을 긋는다(0009 F1).
+    // 플랫폼 관리자는 projectWorkspace 에 전 프로젝트가 있어 버리는 행이 없다.
+    if (!projectWorkspace.has(pid)) continue
     memberIds.set(pid, row.id as string)
     if (row.access_role) projectRoles.set(pid, row.access_role as ProjectRole)
     // 대표 팀 먼저, 나머지는 code 사전순 — 임베드 응답 순서(물리 순서)에 기대지 않아 primaryTeamCode 가 결정적이다.

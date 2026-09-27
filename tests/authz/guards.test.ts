@@ -10,6 +10,7 @@ import {
   resolveProjectId, resolveScope,
 } from '@/lib/authz'
 import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
+import { adminProjectIds, isAnyProjectAdmin } from '@/lib/domain/authz'
 
 const USER = { id: 'u1', email: 'a@b.com' }
 
@@ -129,6 +130,24 @@ describe('getActor — 4축 조립', () => {
     expect(a?.rosterTeams.get('p1')?.teamCodes).toEqual(['MES', 'ERP', 'QA'])
     expect(a?.rosterTeams.get('p1')?.teamIds).toEqual(['t-MES', 't-ERP', 't-QA'])
     expect(a?.rosterTeams.get('p2')?.teamCodes).toEqual(['ERP', 'MES'])
+  })
+
+  it('(h) 소속 워크스페이스 밖 프로젝트의 명단 행은 버린다 — 남은 admin 행이 어느 축에도 새지 않는다(AUTH-01b)', async () => {
+    // p1 은 w1(소속), pX 는 소속이 없는 워크스페이스의 프로젝트 — projects 조회(in w1)에 나오지 않는다
+    stubDb({ ...WS_MEMBER, roster: [row('p1', 'member', [['QA', true]]), row('pX', 'admin', [['ERP', true]])] })
+    const a = await getActor()
+    expect(a?.projectRoles.get('p1')).toBe('member')
+    expect(a?.projectRoles.has('pX')).toBe(false)
+    expect(a?.memberIds.has('pX')).toBe(false)
+    expect(a?.rosterTeams.has('pX')).toBe(false)
+    expect(isAnyProjectAdmin(a)).toBe(false)
+    expect(adminProjectIds(a)).toEqual([])
+  })
+
+  it('(h′) 플랫폼 관리자는 모든 프로젝트가 projectWorkspace 에 있으므로 명단 행을 버리지 않는다', async () => {
+    stubDb({ platformAdmin: true, projects: [{ id: 'p1', workspace_id: 'w1' }, { id: 'pX', workspace_id: 'w9' }], roster: [row('pX', 'admin')] })
+    const a = await getActor()
+    expect(a?.projectRoles.get('pX')).toBe('admin')
   })
 
   it('팀 코드 임베드가 비면 그 링크는 버린다(배열 모양 임베드도 수용)', async () => {
