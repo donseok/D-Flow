@@ -152,6 +152,20 @@ describe('HeaderAnnouncementTicker', () => {
     expect(container.querySelector('a')).toBeNull()
   })
 
+  it('실패 칩의 글자는 본문 대비(text-ink)이고 위험색은 아이콘에만 쓴다', async () => {
+    failedRoutes.add('p1')
+    await mount('p1')
+    const status = container.querySelector<HTMLElement>('[role="status"]')!
+    // 글자 대비 — delayed 는 surface-2 위 3.80:1 로 본문 AA(4.5) 미만, 아이콘(비텍스트 3:1)은 충족
+    expect(status.classList.contains('text-delayed')).toBe(false)
+    expect(status.classList.contains('text-ink')).toBe(true)
+    expect(status.querySelector('svg')!.classList.contains('text-delayed')).toBe(true)
+    // 래퍼 display 는 컨테이너 쿼리만 — 반응형 display 와 섞지 않는다(CLAUDE.md CSS 규칙)
+    expect(status.className).toContain('hidden')
+    expect(status.className).toContain('@[15rem]:flex')
+    expect(status.className).not.toMatch(/(^|\s)(sm|md|lg|xl|2xl):(flex|hidden|block)/)
+  })
+
   it('실패 표시는 프로젝트를 벗어나면 사라지고, 다음 프로젝트 응답이 성공이면 공지를 그린다', async () => {
     failedRoutes.add('p1')
     await mount('p1')

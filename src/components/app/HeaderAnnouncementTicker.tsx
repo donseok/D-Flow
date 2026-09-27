@@ -52,10 +52,11 @@ export function HeaderAnnouncementTicker({ projectId }: { projectId: string | nu
 
   // 조회 실패를 '공지 없음'(아무것도 안 그림)으로 위장하지 않는다 — 링크 대신 상태 칩(에러 처리 3원칙 ①).
   // 래퍼는 링크와 같은 컨테이너 쿼리 display 만 쓴다(반응형 display 와 섞지 않는다 — CLAUDE.md CSS 규칙).
+  // 글자는 text-ink — delayed 는 surface-2 위 3.80:1 로 본문 AA 미만이라 비텍스트 기준(3:1)인 아이콘에만 쓴다.
   if (projectId && wide && headerAnnouncementsFailed) {
     return (
-      <span role="status" className="hidden min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-xl border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] text-delayed @[15rem]:flex">
-        <Megaphone className="h-3.5 w-3.5 shrink-0" />{t('ann.tickerFailed')}
+      <span role="status" className="hidden min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-xl border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] text-ink @[15rem]:flex">
+        <Megaphone className="h-3.5 w-3.5 shrink-0 text-delayed" />{t('ann.tickerFailed')}
       </span>
     )
   }
