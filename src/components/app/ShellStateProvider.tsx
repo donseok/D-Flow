@@ -7,6 +7,7 @@
 //  - 내비게이션(pathname 변경)마다 재조회 — 공지 페이지를 다녀오면 배지가 꺼지는 기존 동작 유지
 //  - 파생 알림·티커는 URL 프로젝트(route) 기준, 공지 배지는 메뉴 문맥(menu) 기준
 //  - 실패 시 알림함만 failed 로 표시하고 나머지는 직전 값을 유지(기존 catch 시맨틱)
+//  - 헤더 공지 조회만 실패하면 서버가 headerAnnouncementsFailed 로 알린다 — 티커가 '공지 없음'과 구분해 그린다
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { NotificationItem } from '@/app/actions/notifications'
@@ -22,6 +23,8 @@ type ShellPayload = {
   /** 메뉴 문맥 프로젝트에서 내가 승인할 수 있는 에이전트 결재 대기 수. 옛 응답(필드 없음)은 0. */
   pendingApprovals?: number
   headerAnnouncements: AnnouncementSummary[]
+  /** 헤더 공지 조회 실패 — '공지 0건'과 구분한다. 옛 응답(필드 없음)은 false. */
+  headerAnnouncementsFailed?: boolean
 }
 
 type ShellState = {
@@ -37,6 +40,8 @@ type ShellState = {
   /** 메뉴 문맥 프로젝트의 에이전트 결재 대기 수(내가 승인할 수 있는 것만) — 사이드바 「에이전트」 배지. */
   menuPendingApprovals: number
   headerAnnouncements: AnnouncementSummary[]
+  /** URL 프로젝트의 헤더 공지 조회 실패 — 티커가 실패 상태를 그린다(프로젝트 밖에서는 false). */
+  headerAnnouncementsFailed: boolean
   refresh: () => void
 }
 
@@ -53,6 +58,7 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
   const [menuUnreadAnnouncements, setMenuUnreadAnnouncements] = useState(0)
   const [menuPendingApprovals, setMenuPendingApprovals] = useState(0)
   const [headerAnnouncements, setHeaderAnnouncements] = useState<AnnouncementSummary[]>([])
+  const [headerAnnouncementsFailed, setHeaderAnnouncementsFailed] = useState(false)
   // 내비게이션 연타 시 늦게 도착한 이전 응답이 최신 상태를 덮지 않도록 시퀀스로 가드.
   const seq = useRef(0)
 
@@ -67,6 +73,7 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
       setNotifs([])
       setNotifLoading(false)
       setHeaderAnnouncements([])
+      setHeaderAnnouncementsFailed(false)
     }
     if (!menuProjectId) { setMenuUnreadAnnouncements(0); setMenuPendingApprovals(0) }
     try {
@@ -83,6 +90,7 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
         // notifications null = 서버측 파생 알림 실패 — 직전 값 유지(기존 catch(() => {}) 시맨틱)
         if (data.notifications) setNotifs(data.notifications.items)
         setHeaderAnnouncements(data.headerAnnouncements)
+        setHeaderAnnouncementsFailed(data.headerAnnouncementsFailed === true)
       }
       if (menuProjectId) {
         setMenuUnreadAnnouncements(data.unreadAnnouncements)
@@ -110,7 +118,7 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
       value={{
         inbox, setInbox, inboxLoading, inboxFailed,
         notifs, setNotifs, notifLoading,
-        menuUnreadAnnouncements, menuPendingApprovals, headerAnnouncements, refresh,
+        menuUnreadAnnouncements, menuPendingApprovals, headerAnnouncements, headerAnnouncementsFailed, refresh,
       }}
     >
       {children}

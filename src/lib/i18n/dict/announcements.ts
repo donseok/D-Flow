@@ -51,4 +51,5 @@ export const announcementsKo = {
   'ann.err.deleteFailed': '삭제에 실패했습니다.',
   'ann.dash.title': '공지사항',
   'ann.dash.empty': '등록된 공지가 없습니다.',
+  'ann.tickerFailed': '공지를 불러오지 못했습니다',
 } as const

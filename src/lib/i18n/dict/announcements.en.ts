@@ -53,4 +53,5 @@ export const announcementsEn: Record<keyof typeof announcementsKo, string> = {
   'ann.err.deleteFailed': 'Failed to delete.',
   'ann.dash.title': 'Announcements',
   'ann.dash.empty': 'No announcements yet.',
+  'ann.tickerFailed': 'Could not load announcements',
 }

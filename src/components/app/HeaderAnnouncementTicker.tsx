@@ -36,7 +36,7 @@ export function HeaderAnnouncementTicker({ projectId }: { projectId: string | nu
   const wide = useMediaQuery(MD_QUERY)
   const reduceMotion = useMediaQuery(REDUCE_QUERY)
   // 상위 공지는 ShellStateProvider 가 내비게이션당 통합 1왕복으로 내려준다(별도 조회 없음).
-  const { headerAnnouncements } = useShellState()
+  const { headerAnnouncements, headerAnnouncementsFailed } = useShellState()
   const items = projectId && wide ? headerAnnouncements : []
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -50,6 +50,15 @@ export function HeaderAnnouncementTicker({ projectId }: { projectId: string | nu
     return () => window.clearInterval(id)
   }, [items.length, paused, reduceMotion])
 
+  // 조회 실패를 '공지 없음'(아무것도 안 그림)으로 위장하지 않는다 — 링크 대신 상태 칩(에러 처리 3원칙 ①).
+  // 래퍼는 링크와 같은 컨테이너 쿼리 display 만 쓴다(반응형 display 와 섞지 않는다 — CLAUDE.md CSS 규칙).
+  if (projectId && wide && headerAnnouncementsFailed) {
+    return (
+      <span role="status" className="hidden min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-xl border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] text-delayed @[15rem]:flex">
+        <Megaphone className="h-3.5 w-3.5 shrink-0" />{t('ann.tickerFailed')}
+      </span>
+    )
+  }
   if (!projectId || items.length === 0) return null
   const current = items[index % items.length]
 

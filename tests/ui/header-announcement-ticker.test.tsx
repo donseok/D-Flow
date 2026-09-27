@@ -53,11 +53,14 @@ describe('HeaderAnnouncementTicker', () => {
   let root: Root
   /** 프로젝트별 상위 공지 — fetch 스텁이 route 파라미터로 골라 payload 에 싣는다. */
   let announcements: Record<string, ReturnType<typeof ha>[]>
+  /** 헤더 공지 조회가 실패한 프로젝트 — 셸 응답의 headerAnnouncementsFailed 로 싣는다. */
+  let failedRoutes: Set<string>
   let fetchMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     vi.useFakeTimers()
     announcements = {}
+    failedRoutes = new Set()
     fetchMock = vi.fn(async (input: unknown) => {
       const url = new URL(String(input), 'https://dflow.local')
       const route = url.searchParams.get('route')
@@ -68,6 +71,7 @@ describe('HeaderAnnouncementTicker', () => {
           notifications: { items: [], count: 0 },
           unreadAnnouncements: 0,
           headerAnnouncements: (route && announcements[route]) || [],
+          headerAnnouncementsFailed: route ? failedRoutes.has(route) : false,
         }),
       }
     })
@@ -135,6 +139,34 @@ describe('HeaderAnnouncementTicker', () => {
 
   it('공지가 없으면 아무것도 렌더하지 않는다', async () => {
     announcements.p1 = []
+    await mount('p1')
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('헤더 공지 조회가 실패하면 \'공지 없음\'으로 숨기지 않고 상태 칩을 보인다(링크 없음)', async () => {
+    failedRoutes.add('p1')
+    await mount('p1')
+    const status = container.querySelector<HTMLElement>('[role="status"]')
+    expect(status).not.toBeNull()
+    expect(status!.textContent).toContain('ann.tickerFailed')
+    expect(container.querySelector('a')).toBeNull()
+  })
+
+  it('실패 표시는 프로젝트를 벗어나면 사라지고, 다음 프로젝트 응답이 성공이면 공지를 그린다', async () => {
+    failedRoutes.add('p1')
+    await mount('p1')
+    expect(container.querySelector('[role="status"]')).not.toBeNull()
+    await mount(null)
+    expect(container.innerHTML).toBe('')
+    announcements.p2 = [ha('x', 'P2 공지 X')]
+    await mount('p2')
+    expect(container.querySelector('[role="status"]')).toBeNull()
+    expect(container.textContent).toContain('P2 공지 X')
+  })
+
+  it('실패여도 md 미만 뷰포트에서는 렌더하지 않는다', async () => {
+    stubMatchMedia({ wide: false })
+    failedRoutes.add('p1')
     await mount('p1')
     expect(container.innerHTML).toBe('')
   })
