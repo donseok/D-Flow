@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactElement, ReactNode } from 'react'
 import { makeMemberActor } from '../fixtures/actor'
 
-// 내 회의 화면(서버) — 회의 조회 실패를 '회의 0건'·KPI 0 으로 그리지 않는다(M5, 에러 처리 3원칙 ①).
-// 사유·재시도는 MyMeetingsView 가 그린다(initialFailed) — 여기서는 페이지가 실패를 넘기고 KPI 를 '—' 로 두는지만 본다.
+// 내 회의 화면(서버) — 회의 조회 실패를 '회의 0건'으로 넘기지 않는다(M5, 에러 처리 3원칙 ①).
+// 사유·재시도는 MyMeetingsView 가 그린다(initialFailed) — 여기서는 페이지가 실패를 넘기는지와, 히어로에 넘기는 KPI 값을 본다.
+// 히어로 KPI 자리는 지금 그려지지 않는다(PageHero 는 heroKpis 를 받기만 한다) — 화면이 아니라 넘긴 값(props)의 검사다.
 const mocks = vi.hoisted(() => ({
   getMyMeetings: vi.fn(),
   getActorForView: vi.fn(),
@@ -59,21 +60,21 @@ beforeEach(() => {
 })
 
 describe('내 회의 화면 — 회의 조회 실패', () => {
-  it('실패를 뷰에 넘기고(initialFailed) 일정은 빈 목록, KPI 는 0 이 아니라 —', async () => {
+  it('실패를 뷰에 넘기고(initialFailed) 일정은 빈 목록 — 히어로에 넘기는 KPI 값은 0 이 아니라 —(지금은 그려지지 않는 자리)', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
     const { kpis, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialMeetings: [], initialExceptions: [], initialFailed: true })
     expect(kpis).toEqual(['—', '—', '—'])
   })
 
-  it('정상 + 회의 0건은 실패가 아니다 — KPI 는 숫자 0', async () => {
+  it('정상 + 회의 0건은 실패가 아니다 — 넘기는 KPI 값은 숫자 0', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     const { kpis, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialFailed: false })
     expect(kpis).toEqual([0, 0, 0])
   })
 
-  it('정상은 읽은 회의를 그대로 넘기고 KPI 를 센다', async () => {
+  it('정상은 읽은 회의를 그대로 넘기고 넘기는 KPI 값을 센다', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [todayMeeting], exceptions: [] })
     const { kpis, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialMeetings: [todayMeeting], initialFailed: false })

@@ -29,8 +29,9 @@ export default async function MyMeetingsPage() {
     getSession(),
     getServerLocale(),
   ])
-  // 회의를 못 읽었으면 달력은 빈 채로 넘기되 뷰가 사유와 재시도를 띄우고(initialFailed), KPI 는 0 이 아니라 '—'(모름)다.
-  // 실패 로그는 로더(getMyMeetings)가 남긴다.
+  // 회의를 못 읽었으면 달력은 빈 채로 넘기되 뷰가 사유와 재시도를 띄운다(initialFailed) — 화면에서 실패를 알리는 것은 뷰다.
+  // 히어로 KPI 자리는 지금 그려지지 않는다(PageHero 는 heroKpis 를 받기만 한다). 넘기는 값은 그 자리가 다시 그려질 때
+  // 실패가 0 으로 보이지 않게 '—'(모름)로 맞춰 둔다. 실패 로그는 로더(getMyMeetings)가 남긴다.
   const meetings = res.ok ? res.meetings : []
   const exceptions = res.ok ? res.exceptions : []
   const mineOcc = expandMeetings(meetings.filter(x => x.isMine), exceptions, gs, ge)
