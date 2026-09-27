@@ -2459,6 +2459,7 @@ export async function requireAgentProject(admin, projectId): Promise<boolean>
 | 토큰 발급 안내 | `README.md` 「1단계」의 `/account` 경로 유지, 워크스페이스·프로젝트 다중 선택 문장 추가 | `.claude/skills/dflow-work/README.md:10-20` |
 | `references/api-contract.md` | v2.5 절 추가(워크스페이스 제한·`workspace` 키·레거시 시크릿 폐지) | 현 v2.4 |
 | 오류 코드 | `insufficient_scope`·`forbidden_role`·`dependency_not_met`·404 존재 은닉 불변 | `insufficient_scope`: `agent/externalApi.ts:199-206`(`requireScope`). `forbidden_role`: `agent/routeShared.ts:58`·`:82`, `wbs/import/route.ts:52`, `agent/watch/route.ts:104`. `dependency_not_met`: `agent/work/[id]/claim/route.ts:71`. 404 존재 은닉: `wbs/import/route.ts:44-48` |
+| `depends_evidence[].reached` | 값 = 프로젝트 선행 기준(`workflow.predecessor_gate`) 판정. 필드·타입 불변(2026-09-27) | 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §3.4 |
 
 포크 이중 유지보수(→ 6절 리스크) 상 스킬 디렉터리는 원본 리포에서 그대로 복사하고, 새 리포의 `tests/skills` 16파일(`.test.ts` 16개 + `_preserve.ts` + `fixtures/`)이 동결을 검증한다.
 
@@ -2510,6 +2511,8 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 `src/lib/ai/chat/router.ts:205-208` 의 `teamFrom` 이 `/(PMO|ERP|MES|가공|MDM)/i` 정규식으로 팀을 뽑는다 — 다른 워크스페이스의 팀은 절대 인식되지 않는다. `routeChatRequest(request, now)` 에 `teams: {id, code, name}[]`(`getProjectConfig` 또는 워크스페이스 공용 팀)를 인자로 넣고 코드·이름 완전 일치로 바꾼다. 같은 함수의 `attendanceTypesFrom`(`router.ts:210-215`)이 쓰는 한국어 키워드는 Q4 로 근태 유형이 설정값이 되면 설정 행의 라벨에서 파생한다(→ 3절). 정규식 라우터 자체를 LLM 플래너로 바꾸지는 않는다(비목표). `planner`·`verifier`·`default-registry` 의 도메인 목록은 3절 모듈 레지스트리 `botDomains` 에서 파생한다.
 
+SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영했고, 원천을 `config.teams` 로 바꾸고 이름 매칭을 더하는 것은 SP4 다. 팀 별칭은 두지 않는다. SP8 은 플래너·verifier 의 도메인 파생을 맡는다(개정 문서 §4.8).
+
 #### 5.4.4 워커 순회
 
 세 라우트(`cron/ai-index`·`chat/index/worker`·`wiki/reindex`)가 같은 방식으로 스코프를 조립한다 — `projects.select('id').limit(100)` 전량 + `allowGlobal: true`(`cron/ai-index/route.ts:52-63`, `chat/index/worker/route.ts:107-113`, `wiki/reindex/route.ts:36-44`). 위키 워커 `runWikiWorkerOnce` 는 `wiki_processing_jobs` 전역 큐를 그대로 claim 한다(`src/lib/ai/wiki-ingest.ts:1207-1247`). `limit(100)` 은 프로젝트가 101개를 넘는 순간 뒤 프로젝트의 색인이 소리 없이 빠지는 잠복 결함이기도 하다.
@@ -2528,7 +2531,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 - **유효 판정 = `hasLLM() ∧ workspace_settings.ai.enabled ∧ effectiveModules(pid|wid).has('chatbot' | 'wiki')`.** `hasLLM()`(`src/lib/ai/provider.ts:97-102`) 은 키 유무와 `llm_config.mode='none'` 만 본다 — 이것이 "배포 가용" 이고, 워크스페이스 토글과 프로젝트 모듈이 그 위에 얹힌다. `hasLLM` 을 부르는 비테스트 파일은 12개다(실측 `grep -rln hasLLM src | grep -v test`). 그중 **`provider.ts`(정의처)와 `health.ts`(`/api/chat/health` 의 배포 가용 진단 — 워크스페이스 문맥이 없고 키를 노출하지 않는 `activeModelInfo`, `health.ts:68`)는 예외**로 `hasLLM()` 을 직접 쓴다. 나머지 **10파일**(`actions/issues.ts`·`actions/weekly.ts`·`ai/answer.ts`·`ai/brief.ts`·`ai/issue-analysis.ts`·`ai/llm-override.ts`·`ai/minute-issue-draft.ts`·`ai/minutes-answer.ts`·`ai/minutes-insights.ts`·`ai/wiki-ingest.ts`)은 `hasLLM()` 을 직접 부르지 않고 `aiAvailable({ workspaceId, projectId? })` 한 함수를 거친다. `tests/ai/ai-available.test.ts` 가 "예외 2파일 외 `hasLLM(` 호출 0건" 을 단언한다. 결정형 폴백(`generateAnswer` 가 `null` 을 돌려주면 호출측이 결정형 경로, `llm.ts:33-46`)은 그대로다.
 - `CHAT_V2_ENABLED`(`chat/v2/stream/route.ts:31`, 501 `CHAT_V2_DISABLED`)·`WIKI_SERVICE_ENABLED`(`wiki-ingest.ts:43` 의 `wikiServiceEnabled()` + `src/lib/wiki/serviceState.ts:11-21` 의 `wikiAutomationState` — 후자는 `WIKI_SERVICE_ENABLED ∧ WIKI_WORKER_ENABLED` 를 합성해 화면 상태 `active|paused` 를 만들므로 그 합성은 `aiAvailable ∧ 잡 레지스트리 wiki-worker.envAvailable` 로 옮긴다)·`CHAT_V2_LLM_SYNTHESIS_ENABLED`(`orchestrator.ts:478`)는 상시 토글 역할을 3절 `ai.enabled` 와 모듈 토글로 옮기고, env 자체는 `envAvailable` 킬스위치 의미로만 남긴다(3.2.7 표 — 종합안 rejected "env 플래그 완전 폐지"). `CHAT_V2_PLANNER_ENABLED` 도 같다(실험 플래그). `CHAT_V2_INDEX_ENQUEUE_ENABLED` 만 **지운다** — 현 기본값이 완전 no-op(`src/lib/ai/index/enqueue.ts:14`, `!== 'true'` 면 반환)이고 `enqueueIndexMutationBestEffort` 는 아직 어떤 쓰기 경로에도 배선돼 있지 않다(실측 호출부 0건, 주석 "별도 승인 후 연결"). 새 플랫폼에서 챗봇 모듈을 켠 프로젝트의 색인이 쓰기 뒤 갱신되지 않는 상태를 기본값으로 둘 수 없으므로, 증분 enqueue 활성 = `effectiveModules(pid).has('chatbot') ∧ ai.enabled` 로 묶고 쓰기 경로 배선은 SP8 범위에 넣는다. 누락분은 종전대로 `ai-index` 의 `consistency` 모드(5.5.2 ①)가 보완한다.
 - **`llm_config`(id=1)·`llm_profiles` 는 플랫폼 전역**(`0038_llm_config.sql`)이고 `/admin/llm-config` 는 플랫폼 관리자(`requireSuperuser`, 이름 유지) 전용이다. 워크스페이스 설정 화면에 `activeModelInfo`(`src/lib/ai/health.ts`, 키 비노출 계약)로 「공유 LLM: provider/model」과 「임베딩 768차원 고정 — 모델 교체 = 전량 재색인」을 읽기 전용으로 보인다. 워크스페이스별 키는 비목표.
-- **임베딩 차원은 768 로 고정한다.** `vector(768)` 이 `wbs_embeddings`(0010)·`minute_embeddings`(0021)·`ai_documents`(0031, `embedding_dimensions = 768` check 포함) 세 곳에 박혀 있고 pgvector HNSW 상한(2000)과 Gemini `outputDimensionality`·OpenAI `dimensions` 축소가 모두 768 을 전제한다(`provider.ts:80-92`, `embeddings.ts:30-38`). `EMBED_DIM` env 는 삭제하고 `EMBED_DIM = 768` 상수로 둔다 — env 로 바꿀 수 있는 척하면서 마이그레이션이 따라오지 않는 상태가 가장 나쁜 조합이다.
+- **임베딩 차원은 768 로 고정한다.** `vector(768)` 이 `wbs_embeddings`(0010)·`minute_embeddings`(0021)·`ai_documents`(0031, `embedding_dimensions = 768` check 포함) 세 곳에 박혀 있고 pgvector HNSW 상한(2000)과 Gemini `outputDimensionality`·OpenAI `dimensions` 축소가 모두 768 을 전제한다(`provider.ts:80-92`, `embeddings.ts:30-38`). `EMBED_DIM` env 는 삭제하고 `EMBED_DIM = 768` 상수로 둔다 — env 로 바꿀 수 있는 척하면서 마이그레이션이 따라오지 않는 상태가 가장 나쁜 조합이다. **하드닝 3 완료** — `EMBED_DIM = KNOWLEDGE_EMBEDDING_DIMENSIONS`(768).
 
 ### 5.5 폐쇄망 대비 선 (결정 2)
 
@@ -2544,7 +2547,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | `VERCEL_PROJECT_PRODUCTION_URL` | `src/app/actions/meetingNotify.ts:18`(`NEXT_PUBLIC_APP_URL` 폴백), `scripts/vercel-ignore-build.sh:19` | 메일 링크 호스트 소실 | 5.5.2 ② |
 | `req.nextUrl.origin` | `src/app/api/v1/minutes/route.ts:76`·`534` | 리버스 프록시 뒤에서 내부 호스트가 노출될 수 있음 | 5.5.2 ② |
 | Gemini 기본 엔드포인트 | `src/lib/ai/endpoints.ts:5`, `provider.ts:38-53` | 외부 인터넷 | `AI_PROVIDER=openai` + `LLM_BASE_URL` 경로가 이미 있고 `llm_profiles.preset_id` 가 `ollama`/`lmstudio` 를 안다(`0038` 주석) → 5.5.2 ④ |
-| `smtp.gmail.com:465` | `src/lib/mail/transport.ts:32-34` | 외부 SMTP 고정 | 5.5.2 ⑥ |
+| `smtp.gmail.com:465` | `src/lib/mail/transport.ts:32-34` | 외부 SMTP 고정 | 해소(하드닝 5, 5.5.2 ⑥) |
 | `auth.admin.listUsers` 3곳·`getUserById` 6곳 | `minutes/externalApi.ts:137`, `data/usage.ts:146`, `data/accounts.ts:22` / `actions/projectInvites.ts:314`, `actions/projectRoles.ts:130`·`189`, `api/v1/agent/work/[id]/route.ts:92`, `agent/externalApi.ts:170`, `data/agentSeatmap.ts:113` | GoTrue Admin API 의존·전수 순회 | 5.5.2 ⑤ |
 | `getClaims()` 비대칭 JWKS 검증 | `src/middleware.ts:25-35` | 자체호스트 GoTrue 가 HS256 이면 내부적으로 `getUser()` 폴백(동작하되 요청당 왕복 1회) | 5.5.4 리허설 |
 | Storage 3버킷·Realtime presence 2채널 | → 2절 SP2 | 자체호스트 스택에 포함 | 5.5.4 리허설 |
@@ -2564,7 +2567,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 | ③ | **standalone 빌드 CI** | `next.config.ts` 에 `output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined`. CI(SP0 신설, 현재 `warm.yml` 뿐)에 `NEXT_OUTPUT=standalone next build` 잡 + `node .next/standalone/server.js` 기동 후 `/login` 200 스모크 | CI 초록 |
 | ④ | **OpenAI 호환 provider 유지** | `AI_PROVIDER=openai`·`LLM_BASE_URL`·`EMBED_MODEL` 경로(`provider.ts:29-37`·`74-84`, `embeddings.ts` `openaiEmbed` 의 `dimensions: 768`)를 삭제·우회하지 않는다. `/admin/llm-config` 프로필의 `ollama`/`lmstudio` 프리셋 유지 | `tests/ai/provider-openai-compat.test.ts`(요청 빌더 단위) + 5.5.4 리허설 |
 | ⑤ | **`auth.admin.listUsers`/`getUserById` → `profiles`** | 9곳 전부 `profiles(user_id, email, display_name)` 조회로. 계정 생성·초대 수락이 `profiles` 를 insert(2절, 트리거 없음). GoTrue Admin API 호출은 계정 생성·삭제·비밀번호 리셋 3종만 남긴다 | `grep 'auth.admin.listUsers\|auth.admin.getUserById' src` 0건 테스트 |
-| ⑥ | **SMTP 설정화** | `SMTP_HOST`·`SMTP_PORT`·`SMTP_SECURE` env, 발신명은 `workspace_settings.branding.mail_from_name`(→ 3절) | 미설정 시 현 `ok:false` 관례 유지 |
+| ⑥ | **SMTP 설정화** | **하드닝 5 완료** — env 7종(`SMTP_HOST`·`SMTP_PORT`·`SMTP_SECURE`·`SMTP_AUTH`·`SMTP_USER`·`SMTP_PASS`·`SMTP_FROM_ADDRESS`; `SMTP_FROM_ADDRESS`·`SMTP_AUTH=none` 추가), `SMTP_HOST` 필수, Gmail 기본값 없음, 인증을 쓰는 비TLS 연결은 `requireTLS`(평문으로 조용히 내려가지 않는다). 발신명은 `branding.mail_from_name`(SP3a, → 3절) | 미설정 시 현 `ok:false` 관례 유지 |
 | ⑦ | **`VERCEL_ENV` 제거** | `APP_ENV`(`production|staging|preview|development`)로 통일. Vercel 에서는 빌드 env 로 매핑 | `usageTracking.ts`·`next.config.ts` 에서 `VERCEL_ENV` 0건 |
 | ⑧ | **Supabase 고유 API 경계** | `createAdminClient` 는 `adminFor(scope)` 래퍼(→ 2절) 뒤로만. Edge Config·KV·Blob·Vercel AI SDK 등 새 의존 금지(`package.json` 의존 추가는 리뷰 항목) | `tests/airgap/no-vercel-sdk.test.ts`(`@vercel/*` import 0건) |
 | ⑨ | **DB 적용 드라이버 2종** | `db-apply.mjs` 를 `--driver mgmt|psql` 로 분리(→ 6절 SP0) | 스테이징에 psql 드라이버로 1회 적용 |
@@ -2617,7 +2620,7 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 
 ### 5.7 비목표
 
-워크스페이스별 LLM 키·과금 귀속 / 사용자 OAuth·OIDC 기반 외부 API 인증(PAT 외) / rate limit 429 / outbound webhook / 또박또박 payload 개정·multipart 첨부·`GET /minutes/{id}` / 에이전트 API 경로·응답 형식 변경 / 임베딩 차원 변경·모델별 다중 인덱스 / 런타임 플러그인·모듈 동적 로딩 / 실제 폐쇄망 고객 배포와 그 운영 절차(2단계) / 타입 프리셋·이미지/차트 자리표시·출력물 보관(→ 3·4절 비목표와 동일).
+워크스페이스별 LLM 키·과금 귀속 / 사용자 OAuth·OIDC 기반 외부 API 인증(PAT 외) / rate limit 429 / outbound webhook / 또박또박 payload 개정·multipart 첨부·`GET /minutes/{id}` / 에이전트 API 경로·응답 형식 변경 / 임베딩 차원 변경·모델별 다중 인덱스 / 런타임 플러그인·모듈 동적 로딩 / 실제 폐쇄망 고객 배포와 그 운영 절차(2단계) / 타입 프리셋·이미지/차트 자리표시·출력물 보관(→ 3·4절 비목표와 동일) / 워크스페이스별 SMTP·Reply-To·발신 주소(2026-09-27 추가 — 워크스페이스는 발신 표시명 `branding.mail_from_name` 만 정한다, 1.5 #18).
 
 ---
 
