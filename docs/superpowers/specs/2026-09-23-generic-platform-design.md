@@ -49,7 +49,7 @@ grep -rlE '원본 고객사|ORIGIN|PMO|MDM|APS' src | wc -l     # 48
 | # | 급소 | 정본 |
 |---|---|---|
 | ① | 주간보고 11구분·팀 매핑·PMO 폴백 | `WEEKLY_SECTIONS` `src/lib/domain/weeklySheet.ts:21` |
-| ② | 5팀 폴백·색상표 | `DEFAULT_TEAMS` `src/lib/domain/teams.ts:17`, `TEAM_COLOR` `src/lib/report/brand.ts:33`, `TEAM` `src/components/wbs/shared.tsx:4` |
+| ② | 5팀 폴백·색상표 | `DEFAULT_TEAMS` `src/lib/domain/teams.ts:17`, `TEAM_COLOR` `src/lib/report/brand.ts:33`(해소 — importer 0 인 죽은 모듈, 하드닝 6 이 삭제), `TEAM` `src/components/wbs/shared.tsx:4` |
 | ③ | 이슈 8영역·코드 접두 트리거 | `ISSUE_MEGA_AREAS` `src/lib/domain/issueAnalysis.ts:4`, 0055/0062 |
 | ④ | 엑셀 3행 헤더·팀 열 폴백 | `LEGACY_ORIGIN_PROFILE` `src/lib/excel/profile.ts:142`, `src/app/api/export/route.ts:30` |
 | ⑤ | WBS 라벨 폴백·프리셋 | `DEFAULT_LEVEL_LABELS` `src/components/wbs/shared.tsx:27`(축약표 `LEGACY_LABEL_ABBR` `:39`), `src/lib/domain/projectPresets.ts` |
@@ -422,7 +422,7 @@ RLS: 정책 0개 + `revoke all … from public, anon, authenticated` + `grant al
 | `project_id` | uuid | null, → `projects(id)` on delete cascade |
 | `code` | text | not null, `check (code = btrim(code) and code <> '')` — 현 `check (code in ('PMO','DT','ERP','MES'))`(0001:5) 는 이미 0044 에서 풀렸고(`TeamCode = string`, `src/lib/domain/types.ts:4` 실측) 값 제약을 두지 않는다 |
 | `name` | text | not null |
-| `color` | text | not null, `check (color ~ '^#[0-9a-fA-F]{6}$')` — `TEAM_COLOR`·`shared.tsx` TEAM 토큰 대체(→ 3절 설정 카탈로그) |
+| `color` | text | not null, `check (color ~ '^#[0-9a-fA-F]{6}$')` — `shared.tsx` TEAM 토큰 대체(→ 3절 설정 카탈로그) |
 | `sort_order` | int | not null default 0 |
 | `active` | boolean | not null default true |
 | `progress_visible` | boolean | not null default true |
@@ -1082,161 +1082,9 @@ export async function actorFromCredential(admin: ScopedAdminClient, cred: Resolv
 
 ### 3.1 설정 엔진
 
-#### 3.1.1 저장소 — 테이블 3개
+이 절(옛 3.1.1~3.1.6)은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §2.0~§2.7 로 **대체됐다**(2026-09-27). 요지: 스코프는 플랫폼·워크스페이스·프로젝트·개인 4층이고 런타임 상속 없이 생성 시 복사하며, 설정 표에 `revision`·`schema_version`·키 단위 이력을 두고, 쓰기는 SECURITY DEFINER RPC 로만 한다(`anon`·`authenticated` 쓰기 회수, service_role 유지, 0008 `workspace_settings_write` 정책 삭제, 설정 행 존재 트리거, `expectedRevision`·`commandId`·409). 미등록 키는 거부하고, 읽을 때 parse 실패는 키 단위 `invalid`, 참조 검사는 같은 트랜잭션의 잠금(`settings_ref_check` 디스패처)으로 하며, `SettingDef` 는 10필드 + 선택 4(`impact` 목록), 오류 코드는 `CONFIG_*` 이고 모듈 검증 모순(core 누락 거부·닫힘 순서)을 해소했다.
 
-0058 컬럼식은 폐기한다(모듈이 설정을 더할 때마다 `alter table` 이 필요하고, 실제로 4컬럼이 미판독 상태로 남았다). 키-값 행(키당 1행) 방식도 쓰지 않는다(종합안 rejected — 요청당 N행 수집·트랜잭션 갱신 번거로움). **프로젝트당 1행 `values jsonb`** + **키 단위 이력 테이블** + **워크스페이스 동형 테이블** 이다.
-
-```sql
--- 0009_settings.sql (SP3, 번호는 6.3 배정표). 0058 컬럼 전부 drop 후 values 로 이관(이관 SQL 은 SP3 마이그레이션 본문).
-create table public.project_settings (
-  project_id  uuid primary key references public.projects(id) on delete cascade,
-  values      jsonb not null default '{}'::jsonb,
-  updated_at  timestamptz not null default now(),
-  updated_by  uuid references auth.users(id)
-);
--- 읽기: 종합안 정책 템플릿(project_id in (select public.accessible_project_ids())) — 2절.
--- 쓰기 정책 없음: requireProjectAdmin 서버 관문 + service_role(현행 0058 관례 유지).
-
-create table public.project_settings_history (
-  id          bigint generated always as identity primary key,
-  project_id  uuid not null references public.projects(id) on delete cascade,
-  key         text not null,               -- 레지스트리 키 ('core.level_labels' …)
-  old_value   jsonb,                       -- null = 미설정(레지스트리 default 적용 중)이었음
-  new_value   jsonb,                       -- null = 키 삭제(default 로 복귀)
-  changed_by  uuid references auth.users(id),
-  changed_at  timestamptz not null default now()
-);
-create index on public.project_settings_history (project_id, key, changed_at desc);
--- 되돌리기 UI 없음(종합안 grafts). 읽기 정책은 project_settings 와 동일, 쓰기 정책 없음.
-
-create table public.workspace_settings (
-  workspace_id uuid primary key references public.workspaces(id) on delete cascade,
-  values       jsonb not null default '{}'::jsonb,
-  updated_at   timestamptz not null default now(),
-  updated_by   uuid references auth.users(id)
-);
--- 읽기: is_ws_member(workspace_id). 쓰기 정책 없음(requireWorkspaceAdmin 관문).
--- SP2 에서 invites.allowed_domains 하나만 담고 골격을 먼저 만든다(6절 SP2). 이력 테이블은
--- workspace_settings_history 동형 — 컬럼은 project_id 대신 workspace_id.
-```
-
-값의 **스키마는 DB 에 없다.** 키 이름·타입·기본값·검증은 전부 코드 레지스트리(3.1.2)가 고정하고, DB 는 그 결과만 저장한다(결정 5 "설정 항목은 제품 고정, 값은 관리자"). 행이 참조하는 목록형 설정(주간 구분·이슈 영역·팀)은 `values` 에 넣지 않고 FK 테이블(`project_areas`·`area_teams`·`teams`)에 둔다 — 개명이 `UPDATE` 하나로 끝나야 하기 때문이다(종합안 핵심 자산 3). 단, Q4 로 승격되는 어휘 4종(근태 유형·회의 카테고리·이슈 심각도/원인/원천)은 `values` 안의 `{code, label, …}[]` 로 둔다 — 행은 불변 `code` 만 저장하므로 개명은 `label` 갱신으로 끝나고, FK 테이블을 kind 마다 늘리지 않는다(3.3.3).
-
-#### 3.1.2 코드 레지스트리 `SettingDef`
-
-```ts
-// src/lib/settings/registry.ts  (SP3)
-import type { ModuleId } from '@/lib/modules/registry'
-
-export type SettingScope = 'project' | 'workspace'
-
-/** 설정 페이지가 렌더할 편집기 — 레지스트리 자동 폼은 이 6종만 안다. 그 외(팀·담당 영역·양식·모듈 토글)는
- *  전용 편집기 컴포넌트가 담당하고 여기서는 `custom` 으로 선언만 한다. */
-export type SettingWidget =
-  | { kind: 'text'; maxLength: number }
-  | { kind: 'text_list'; maxItems: number }               // string[]
-  | { kind: 'boolean' }
-  | { kind: 'select'; options: readonly { value: string; labelKey: string }[] }
-  | { kind: 'vocab'; fixedCodes?: readonly string[] }      // {code,label,…}[] — code 불변·label 개명·active
-  | { kind: 'custom'; component: string }                  // 'LevelSettingsManager' | 'StageCreditSlider' | 'FormsManager' …
-
-export interface SettingDef<T = unknown> {
-  key: string                    // 'core.level_labels' — 점 구분 2단, values 의 최상위 키
-  scope: SettingScope
-  module: ModuleId               // 이 키를 소유한 모듈. 모듈이 effective 에 없으면 폼에서 숨기고 저장을 거부한다
-  default: T                     // 미설정일 때의 값. "설정 필요" 배너 대상은 default 가 [] 인 목록형뿐
-  parse: (raw: unknown) => { ok: true; value: T } | { ok: false; error: string }   // 순수·throw 금지
-  widget: SettingWidget
-}
-
-export const PROJECT_SETTINGS: readonly SettingDef[] = [ /* 3.3.1 표 */ ]
-export const WORKSPACE_SETTINGS: readonly SettingDef[] = [ /* 3.3.2 표 */ ]
-
-/** 키 → 정의. 미등록 키는 undefined — 저장 시 strip, 읽기 시 무시. */
-export function settingDef(scope: SettingScope, key: string): SettingDef | undefined
-```
-
-필드는 6종(`key`·`scope`·`module`·`default`·`parse`·`widget`)뿐이다. 라벨·설명은 i18n 키 `settings.<key>.label` / `.desc` 규약으로 사전에서 찾고 레지스트리에 문자열을 넣지 않는다(현 `src/lib/i18n/dict/settings.ts` 관례). `parse` 는 기존 검증기를 그대로 감싼다 — `core.level_labels` 는 `validateLevelSettings`(`src/lib/domain/levelSettings.ts:41-59`) 의 라벨 규칙(1~10개·공백 금지·중복 금지)을, `core.stage_credits` 는 `stageCredits.ts` 의 공개 검증기 `validateStageCredits(raw)`(`:56`, `{ default }` 전체 검증 — 내부 `validateTable` 은 export 되지 않는다) 의 규칙(정수·0~100·`CREDIT_STEP`=5 단위·`xx === 100`·`as<ip<rw<im<xx` 간격 `CREDIT_GAP` 이상·`CREDIT_KEYS` 밖 키 거부, `:30-53`)을, `wbs.excel_profile` 은 `validateProfile`(`src/lib/excel/profile.ts`) 을 쓴다. 트리 깊이처럼 **DB 상태가 필요한 검증은 `parse` 가 아니라 3.1.5 `validateConfig`** 의 몫이다.
-
-#### 3.1.3 `getProjectConfig` 합성
-
-```ts
-// src/lib/settings/projectConfig.ts  (SP3 — 현 src/lib/data/projectConfig.ts 를 대체)
-import { cache } from 'react'
-
-export interface ProjectConfig {
-  projectId: string
-  workspaceId: string
-  values: ResolvedProjectValues          // 레지스트리 키 전부가 채워진 타입(default 병합 후)
-  areas: { weekly_section: Area[]; issue_area: Area[] }   // project_areas(active 포함) + area_teams
-  teams: Team[]                          // resolveTeamsForProject 규칙 유지: 전용 팀 있으면 그것만, 없으면 워크스페이스 공용
-  // 모듈 집합은 싣지 않는다 — effectiveModules(3.2.3) 가 이 함수를 읽어 계산하므로(단방향 의존),
-  // 소비처는 effectiveModules({ workspaceId, projectId }) 를 따로 부른다. 둘 다 react.cache 라 왕복은 늘지 않는다.
-}
-
-/** 요청당 1회. 네 조회(Promise.all: project_settings·workspace_settings·project_areas⨝area_teams·teams)
- *  중 하나라도 실패하면 throw — 기본값으로 위장하지 않는다(에러 처리 3원칙 ①). 행 부재만 default. */
-export const getProjectConfig = cache(async (projectId: string): Promise<ProjectConfig> => { /* … */ })
-
-export const getWorkspaceConfig = cache(async (workspaceId: string): Promise<WorkspaceConfig> => { /* … */ })
-```
-
-합성 규칙:
-
-| 규칙 | 내용 | 현행과의 차이 |
-|---|---|---|
-| 요청당 cache | `react.cache` 로 감싼다. 서버 액션·페이지·레이아웃이 같은 요청에서 여러 번 불러도 4왕복 1회 | 현 `getProjectConfig` 는 cache 없음(호출부가 인자로 넘김) |
-| 실패 = throw | 4조회 중 하나라도 `error` 면 throw. `project_settings` **행 부재**만 `{}` 로 보고 default 병합 | 현 로더도 throw. 유지 |
-| default 병합 | `values` 에 없는 키·`parse` 실패 키는 default 로 채우고 `console.error` 에 키를 남긴다(저장 시 검증하므로 실패는 레지스트리 변경 후의 구 데이터뿐) | 현재는 컬럼 not null default |
-| 인자 주입 | 순수 함수(`weeklySheet.ts`·`rollup`·`dashboard.ts`·봇 도구)는 `ProjectConfig` 나 그 일부를 **인자로만** 받는다. 전역·프로세스 캐시 금지 — `src/lib/teams/master.ts` 의 sync 접근자 32 importer 는 SP4 에서 `config.teams` 주입으로 바뀐다 | master.ts 폐기 |
-| 워크스페이스 층 | 프로젝트 화면이 아닌 `/w/[slug]/*` 는 `getWorkspaceConfig(wid)` 만 쓴다. 프로젝트 config 는 워크스페이스 config 를 포함하지 않는다 — 브랜딩·초대 도메인은 레이아웃이 따로 읽는다 | 신규 |
-| 클라이언트 전달 | `ProjectConfig` 는 서버 전용. 클라이언트 컴포넌트에는 필요한 조각만 props 로(현 `WbsGanttSheet` 의 `levelLabels` prop 관례) | 유지 |
-| 모듈과의 의존 방향 | `getProjectConfig` → (읽힘) → `effectiveModules`. `getProjectConfig` 는 `values`·`areas`·`teams` 만 합성하고 모듈 판정을 하지 않는다. 역방향 호출 금지 — `tests/modules/registry.test.ts` 가 `src/lib/settings/projectConfig.ts` 에 `@/lib/modules` import 가 없음을 단언 | 신규 |
-
-`DEFAULT_PROJECT_CONFIG` 와 `shared.tsx` 의 `DEFAULT_LEVEL_LABELS`(importer 4파일: `shared.tsx`·`RowDetailPanel`·`WbsGanttSheet`·`WbsProgressLens`) 는 삭제한다. `core.level_labels` 는 생성 폼 필수 입력이라 default 가 없다 — default 없는 키는 레지스트리에서 `default: undefined` 대신 **생성 시 필수** 로 선언하고(`createProject` 인자), 행 부재 프로젝트는 존재할 수 없다(`createProject` 가 `projects` insert 와 `project_settings` insert 를 한 RPC 로 묶는다 — 현행처럼 시드 실패를 로그만 남기지 않는다).
-
-#### 3.1.4 저장 경로
-
-```ts
-// src/app/actions/settings.ts  (SP3)
-export async function updateProjectSettings(
-  projectId: string, patch: Record<string, unknown>,
-): Promise<{ ok: true } | { ok: false; error: string }>
-// 1 requireProjectAdmin(projectId)  — 가드 3종 중 하나. 이름·시그니처 불변(결정 8)
-// 2 effectiveModules 로 patch 의 각 key 가 속한 module 이 켜져 있는지 확인 — 꺼진 모듈 키는 거부(strip 아님)
-// 3 미등록 키 strip: settingDef('project', key) 가 없으면 버리고 결과에 `stripped: string[]` 로 알린다(조용히 삼키지 않음)
-// 4 parse: 키마다 def.parse → 하나라도 실패면 전체 거부(부분 저장 없음)
-// 5 validateConfig(교차 불변식, 3.1.5) — DB 조회 필요 항목
-// 6 RPC update_project_settings(p_project_id, p_patch jsonb, p_actor) —
-//    한 트랜잭션에서 values = values || p_patch, 키마다 history insert(old/new), updated_at/by 갱신
-// 7 revalidatePath('/p/[id]', 'layout')
-```
-
-`updateWorkspaceSettings(workspaceId, patch)` 는 `requireWorkspaceAdmin(wid)` 로 시작하는 동형이다. 단 `modules.allowed` 키는 워크스페이스 관리자가 아니라 **플랫폼 관리자(`requireSuperuser()`)** 만 쓴다(상품 패키지 계약 — 종합안 settings_catalog). 레지스트리는 이를 `SettingDef.scope: 'workspace'` 에 `adminOnly: true` 를 더하지 않고, `WORKSPACE_SETTINGS` 와 별도 상수 `PLATFORM_MANAGED_KEYS = ['modules.allowed']` 로 둔다(필드 추가 없이 예외 하나만 명시).
-
-이력은 **키 단위**다. 한 번의 저장에 키 3개가 바뀌면 `project_settings_history` 3행. `old_value` 는 저장 직전 `values->key`(없으면 null), `new_value` 는 patch 값. 이력은 설정 페이지 하단에 "최근 변경 20건" 으로만 노출하고 되돌리기는 없다.
-
-#### 3.1.5 교차 불변식 `validateConfig`
-
-`parse` 는 값 하나만 본다. 값끼리·값과 DB 상태 사이의 제약은 `validateConfig(projectId, nextValues, deps)` 가 저장 직전에 한 번 검사한다. `deps` 는 액션이 조회해 주입한다(순수 함수 유지).
-
-| 불변식 | 검사 | 실패 메시지(현 코드 재사용) |
-|---|---|---|
-| `core.level_labels` 길이 ≥ 기존 트리 깊이+1 | `treeMaxDepth(wbs_items(id,parent_id))`(`levelSettings.ts:19-38`) 를 액션이 조회해 넘김 → `validateLevelSettings({labels, currentTreeMaxDepth})` | "기존 WBS 에 깊이 N단 항목이 있어 M단으로 줄일 수 없습니다." (`levelSettings.ts:53-56` 그대로) |
-| `modules.enabled` ⊆ `PROJECT_TOGGLABLE ∩ workspace.modules.allowed` | `PROJECT_TOGGLABLE` = `scope ∈ {project, both}` ∧ `!core` 인 id(3.2.3). `scope: 'workspace'` 모듈(`minutes`·`minutes_integration`·`portfolio`·`usage`)은 이 키에 들어올 수 없다(들어오면 거부). 닫힘 검사는 `closeRequires(enabled ∪ (allowed ∩ workspace 스코프) ∪ core)` 가 `enabled` 를 전부 포함해야 통과(빠진 `requires` 가 있으면 거부, 자동 추가하지 않음) — `wiki→minutes` 처럼 workspace 모듈에 기대는 requires 는 워크스페이스 `allowed` 로 충족된다 | "칸반은 WBS 모듈이 필요합니다" 류 — `ModuleDef.nav.labelKey` 로 생성 |
-| `core` 모듈은 `modules.enabled` 에서 뺄 수 없음 | `core: true` 인 id 가 빠져 있으면 거부 | — |
-| `forms.<kind>.template_id` 가 가리키는 `form_templates` 행이 같은 프로젝트·활성·미매핑 토큰 0 | 4절 스캔 결과(`form_templates.placeholders`)와 `mapping` 대조 | 4절 |
-| `issues.code_prefix` 변경은 신규 이슈에만 | 검사 없음 — 기존 `issues.code` 불변은 DB 트리거가 보장(2절·SP5). 설정 UI 에 "기존 ID 는 바뀌지 않습니다" 고지 | — |
-| 어휘(`attendance.types` 등) `code` 삭제 금지·`active=false` 만 | 삭제된 code 가 `attendance_records.type` 등에 존재하면 거부(액션이 `count(*)` 조회 주입). 기존 사용 0건이면 삭제 허용 | "사용 중인 유형은 삭제할 수 없습니다. 비활성으로 두세요." |
-| 어휘의 예약 code | `issues.sources` 의 `'minutes'` 는 삭제·비활성 불가(회의록 드래그 이슈 등록 경로 `allowMinutesSource` 가 고정 참조, `issueAnalysis.ts:143`) | — |
-| `calendar.working_days` 비어 있지 않음 | 길이 ≥1, 값 1..7 정수 유일 | — |
-| `core.milestone_keywords` 소문자 | `parse` 에서 `toLowerCase()` 정규화(현 로더가 하던 일을 저장 시점으로) — 빈 배열은 허용(마커 0건이 정답, 배너 없음) | — |
-
-트리 깊이 검사는 **축소 거부**만이다. 라벨 수를 늘리는 것은 언제나 허용된다(현행 `LEVEL_LABELS_MAX = 10`).
-
-#### 3.1.6 프로젝트 생성 — 빈 값 또는 복사
-
-`createProject({ workspaceId, name, startDate, endDate, description, levelLabels, copyFromProjectId? })` — `requireWorkspaceAdmin(workspaceId)`(현행 `requireSuperuser` 에서 하향, 2절). 프리셋(`src/lib/domain/projectPresets.ts` `PRESETS.pi|swdev|blank`, `preset_applied`)은 삭제한다(결정 5). `levelLabels` 는 폼 필수 입력이고, 그 외 키는 전부 레지스트리 default(빈 값)로 시작한다. `copyFromProjectId` 가 있으면 RPC `copy_project_config(src, dst)` 가 한 트랜잭션에서 `project_settings.values`(단 `modules.enabled` 는 대상 워크스페이스 `modules.allowed` 로 다시 교집합)·`project_areas`·`area_teams`(팀은 대상 프로젝트 전용 팀으로 복제된 것끼리 다시 잇는다)·프로젝트 전용 `teams`·`form_templates` 행을 복사한다(Storage 객체 바이트는 RPC 앞에서 서버 액션이 복사 — 4.6.3). 멤버·WBS·회의록·이슈는 복사하지 않는다. 원본이 다른 워크스페이스면 거부(RPC 안에서 `project_ws(src) = project_ws(dst)` 검사). 복사본의 `project_settings_history` 에는 키마다 `old_value null → new_value` 1행씩 남겨 "어디서 왔는지" 가 이력에 보이게 한다.
+옛 절 번호의 행방: 3.1.1 저장소 → 개정 문서 §2.2, 3.1.2 `SettingDef` → §2.6, 3.1.3 `getProjectConfig` 합성 → §2.5, 3.1.4 저장 경로 → §2.3, 3.1.5 `validateConfig` → §2.3.1·§2.7.2, 3.1.6 생성·복사 → §2.3.3.
 
 ### 3.2 모듈 레지스트리
 
@@ -1246,14 +1094,14 @@ export async function updateProjectSettings(
 // src/lib/modules/registry.ts  (SP3) — 정적 매니페스트. 이벤트 버스·DI 컨테이너·동적 import 금지.
 export type ModuleId =
   | 'dashboard' | 'wbs' | 'members' | 'settings'                    // core
-  | 'kanban' | 'meetings' | 'weekly' | 'issues' | 'wiki' | 'announcements' | 'attendance' | 'agents'
+  | 'kanban' | 'meetings' | 'weekly' | 'issues' | 'issue_analysis' | 'wiki' | 'announcements' | 'attendance' | 'agents'
   | 'minutes' | 'minutes_integration' | 'chatbot' | 'portfolio' | 'usage'
 
 export interface ModuleDef {
   id: ModuleId
   core: boolean                              // true = 항상 effective 에 포함. allowed/enabled 로 끌 수 없다
   scope: 'project' | 'workspace' | 'both'    // 화면·설정이 붙는 층. both = /p/[id]/… 와 /w/[slug]/… 둘 다
-  nav: { labelKey: DictKey; icon: string; segment: string; order: number } | null   // null = 메뉴 없음
+  nav: { project?: NavEntry; workspace?: NavEntry } | null   // null = 메뉴 없음. NavEntry 에 id·group(개정 문서 §5.3.5 — 2026-09-27 개정, 필드 수 10 유지)
   routePrefixes: readonly string[]           // '/p/[projectId]/kanban' 처럼 세그먼트 패턴. layout 가 notFound 판정에 씀
   apiPrefixes: readonly string[]             // '/api/v1/minutes' 처럼 라우트 파일 경로 접두. 게이트 테스트가 전수 대조
   requires: readonly ModuleId[]              // 닫힘 규칙(3.2.3). 순환 금지 — 레지스트리 로드 시 검사
@@ -1279,7 +1127,8 @@ export function moduleDef(id: ModuleId): ModuleDef
 | `kanban` | | project | `kanban` | `/p/[id]/kanban` | — | `wbs` | `true` | `kanban` |
 | `meetings` | | both | `meetings` | `/p/[id]/meetings`, `/w/[slug]/meetings`(내 회의) | — | — | `true` | `meetings` |
 | `weekly` | | project | `weekly` | `/p/[id]/weekly` | `/api/report` | — | `true` | `weekly` |
-| `issues` | | project | `issues` | `/p/[id]/issues` | `/api/issue-analysis` | — | `true` | `issues` |
+| `issues` | | project | `issues` | `/p/[id]/issues` | — | — | `true` | `issues` |
+| `issue_analysis` | | project | — (이슈 화면 안 분석 기능) | — | `/api/issue-analysis` | `issues` | `true` | — |
 | `announcements` | | project | `announcements` | `/p/[id]/announcements` | — | — | `true` | `announcements` |
 | `attendance` | | project | `attendance` | `/p/[id]/attendance` | — | — | `true` | `attendance` |
 | `agents` | | both | `agents`(기본 화면 `/agents/office`, 현행) | `/p/[id]/agents/*`, `/w/[slug]/agents` | `/api/v1/agent/*`, `/api/v1/wbs/*` | `wbs` | `true`(UI 는 배포 가용 조건 없음. `AGENT_API_ENABLED` 는 API 표면 킬스위치 — 3.2.7) | — |
@@ -1290,7 +1139,7 @@ export function moduleDef(id: ModuleId): ModuleDef
 | `portfolio` | | workspace | `portfolio` | `/w/[slug]/portfolio` | — | — | `true` | — |
 | `usage` | | workspace | `usage`(플랫폼 관리자만 노출 — 2.7) | `/w/[slug]/usage` | `/api/track` | — | `true` | — |
 
-`requires` 닫힘 4건(`kanban→wbs`, `wiki→minutes`, `minutes_integration→minutes`, `agents→wbs`)은 종합안 그대로다. `attendance`·`meetings` 가 명단을 쓰지만 `members` 는 core 라 선언하지 않는다. `wiki→minutes` 는 위키 파이프라인이 회의록을 원천으로 하기 때문이며(`src/lib/ai/wiki-ingest.ts`), 회의록 없이 위키만 켜는 구성은 없다.
+`requires` 닫힘 4건(`kanban→wbs`, `wiki→minutes`, `minutes_integration→minutes`, `agents→wbs`)은 종합안 그대로다. 2026-09-27 개정이 선택 모듈 `issue_analysis`(`requires: issues`)를 더했다 — 새 프로젝트는 꺼짐(`OFF_ON_CREATE`), 기존 워크스페이스 `modules.allowed`·기존 프로젝트 `modules.enabled` 에는 편입한다(개정 문서 §4.4.2, §2.6.2 R6). `attendance`·`meetings` 가 명단을 쓰지만 `members` 는 core 라 선언하지 않는다. `wiki→minutes` 는 위키 파이프라인이 회의록을 원천으로 하기 때문이며(`src/lib/ai/wiki-ingest.ts`), 회의록 없이 위키만 켜는 구성은 없다.
 
 `/api/v1/wbs/import`·`/api/v1/wbs/structure` 는 `wbs` 가 아니라 `agents` 의 apiPrefixes 다 — 두 라우트는 `resolveAgentPrincipal`·`requireAgentProject`·`requireScope` 로 게이트되는 외부 자격증명 라우트라(`src/app/api/v1/wbs/structure/route.ts:6,29`, `import/route.ts:5`) PAT/시크릿 없이는 열리지 않고, `agents` 를 끄면 닫혀야 한다. `src/app/api/v1/**` 15개 라우트 파일은 전부 `agents`(9+2) 또는 `minutes_integration`(4) 소속이다.
 
@@ -1312,27 +1161,13 @@ export const PROJECT_TOGGLABLE: ReadonlySet<ModuleId> =
 /** 워크스페이스 `ai.enabled`(3.3.2) 가 false 면 빠지는 모듈 */
 const AI_MODULES: readonly ModuleId[] = ['wiki', 'chatbot']
 
-/** env 가용 ∩ workspace.modules.allowed ∩ (PROJECT_TOGGLABLE 에 한해) project.modules.enabled → closeRequires → ∪ core */
-export const effectiveModules = cache(async (
-  scope: { workspaceId: string; projectId?: string },
-): Promise<ReadonlySet<ModuleId>> => {
-  const env = new Set(MODULES.filter(m => m.envAvailable()).map(m => m.id))
-  const ws = await getWorkspaceConfig(scope.workspaceId)          // 실패 throw
-  let ids = intersect(env, new Set(ws.values['modules.allowed']))
-  if (ws.values['ai.enabled'] === false) for (const id of AI_MODULES) ids.delete(id)   // LLM 키·프로필 존재는 hasLLM() 이 호출 시점에 본다
-  if (scope.projectId) {
-    const pc = await getProjectConfig(scope.projectId)            // 실패 throw. 3.1.3 — 역방향 의존 없음
-    const enabled = new Set(pc.values['modules.enabled'])
-    ids = new Set([...ids].filter(id => !PROJECT_TOGGLABLE.has(id) || enabled.has(id)))   // workspace 모듈은 그대로 통과
-  }
-  ids = closeRequires(ids)
-  for (const m of MODULES) if (m.core && m.envAvailable()) ids.add(m.id)
-  return ids
-})
+// effectiveModules 본문은 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §2.7.1 이 대체한다(2026-09-27).
+// 요지: env 가용 ∩ modules.allowed(∖ ai.enabled=false 면 AI_MODULES) ∩ (PROJECT_TOGGLABLE 에 한해) modules.enabled 로 선택 모듈을 고른 뒤,
+// core 를 **먼저 합치고** closeRequires 로 닫는다(kanban·agents→wbs 가 살아남는다). core 의 requires·envAvailable 은 레지스트리 적재 시 단언한다.
 ```
 
 - `modules.allowed`(워크스페이스) 는 상품 패키지 계약이다 — 또박또박 연동 포함 여부(`minutes_integration`)·에이전트 포함 여부(`agents`) 등. 플랫폼 관리자가 쓴다.
-- `modules.enabled`(프로젝트) 는 프로젝트 관리자가 설정 페이지에서 토글한다. 토글 목록은 `PROJECT_TOGGLABLE`(`kanban`·`meetings`·`weekly`·`issues`·`announcements`·`attendance`·`agents`·`wiki`·`chatbot`)뿐이다 — `scope: 'workspace'` 모듈(`minutes`·`minutes_integration`·`portfolio`·`usage`)은 프로젝트 화면·설정이 없으므로 목록에 없고, 워크스페이스 층(`env ∩ allowed`)의 결과가 그대로 프로젝트 컨텍스트로 통과한다(그래서 `wiki→minutes` 는 프로젝트 관리자가 손댈 것 없이 충족된다; 봇 `minutes` 도메인 도구도 같은 규칙). 워크스페이스가 허용하지 않은 모듈은 회색으로 표시되고 켤 수 없다(저장 시 `validateConfig` 가 거부).
+- `modules.enabled`(프로젝트) 는 프로젝트 관리자가 설정 페이지에서 토글한다. 토글 목록은 `PROJECT_TOGGLABLE`(`kanban`·`meetings`·`weekly`·`issues`·`issue_analysis`·`announcements`·`attendance`·`agents`·`wiki`·`chatbot`)뿐이다 — `scope: 'workspace'` 모듈(`minutes`·`minutes_integration`·`portfolio`·`usage`)은 프로젝트 화면·설정이 없으므로 목록에 없고, 워크스페이스 층(`env ∩ allowed`)의 결과가 그대로 프로젝트 컨텍스트로 통과한다(그래서 `wiki→minutes` 는 프로젝트 관리자가 손댈 것 없이 충족된다; 봇 `minutes` 도메인 도구도 같은 규칙). 워크스페이스가 허용하지 않은 모듈은 회색으로 표시되고 켤 수 없다(저장 시 `validateConfig` 가 거부).
 - env 가 꺼진 모듈은 두 층이 켜져 있어도 빠진다. 화면에는 "이 배포에서는 사용할 수 없는 모듈" 로 표시한다(배너 문구는 `envAvailable` 이 false 인 이유를 말하지 않는다 — 시크릿 존재 여부를 노출하지 않기 위해).
 - `closeRequires` 는 **뺄 뿐 더하지 않는다.** 저장 시점에 `validateConfig` 가 같은 함수로 검사해 거부하므로 정상 데이터에서는 no-op 이고, 워크스페이스 `allowed` 가 나중에 좁혀졌을 때만 실제로 작동한다.
 - 워크스페이스 층만 있는 호출(`projectId` 없음)은 `/w/[slug]/*` 화면·워커 순회가 쓴다.
@@ -1388,17 +1223,21 @@ if (!m.ok) return { ok: false, error: m.error }
 
 | # | 정의 위치 | 형태 | 통합 후 |
 |---|---|---|---|
-| 1 | `src/components/app/Sidebar.tsx:48-73` `projectMenu(base, showUsage, showPortfolio, isAdmin)` | 정적 11항목 + 조건부 3 | `navFor(effective, base, actor)` 가 `ModuleDef.nav` 를 `order` 로 정렬해 반환. 관리자 조건(settings)·워크스페이스 항목(portfolio·usage)은 `scope`·`core` 로 판정 |
+| 1 | `src/components/app/Sidebar.tsx:48-73` `projectMenu(base, showUsage, showPortfolio, isAdmin)` | 정적 11항목 + 조건부 3 | `navFor({ scope, base, effective, caps, menu })` — 권한은 caps 로 주입받고 `navigation.menu` 로 그룹 안 순서·라벨을 덮는다(개정 문서 §5.3.5 시그니처) |
 | 2 | `src/components/app/HeaderChrome.tsx:298-301` 모바일 메뉴 | 이미 `projectMenu` 를 재사용(2026-09-19) | 1 과 동일 함수 |
-| 3 | `src/components/app/HeaderChrome.tsx:25-28` `SECTION_LABEL` | 세그먼트→한국어 라벨 12항목(i18n 미사용) | `moduleBySegment(seg)?.nav.labelKey` → `t()` |
-| 4 | `src/components/app/ProjectTabs.tsx:9-13` `TABS` | wbs·dashboard·settings 3항목 | `navFor(...).filter(core)` |
+| 3 | `src/components/app/HeaderChrome.tsx:25-28` `SECTION_LABEL` | 세그먼트→한국어 라벨 12항목(i18n 미사용) | `navFor` 라벨(브레드크럼) |
+| 4 | `src/components/app/ProjectTabs.tsx:9-13` `TABS` | wbs·dashboard·settings 3항목 | **삭제**(importer 0) |
 | 5 | `src/lib/domain/usageMenu.ts:18-42` `USAGE_MENUS` | 22항목(내린 화면도 보존 — 사용 이벤트 사전) | **통합하지 않는다.** 과거 이벤트 키를 읽는 사전이라 레지스트리와 별개로 남기되, `tests/domain/usage-menu.test.ts` 에 "현재 `MODULES.nav.segment` 전부가 이 사전에 있다" 단언을 추가 |
 | 6 | `src/lib/domain/usageMenu.ts:45-48` `PROJECT_SEGMENT_KEYS` | 12세그먼트 Set | `MODULES.map(m => m.nav?.segment)` 파생 |
 | 7 | `src/lib/ai/chat/protocol.ts:11-26` `BOT_DOMAINS` | 14도메인 리터럴(`unknown` 포함) | 리터럴 유지(프로토콜 타입) + `tests/modules/registry.test.ts` 가 `MODULES.flatMap(botDomains) ∪ {projects, unknown} === BOT_DOMAINS` 단언 |
-| 8 | `src/lib/ai/chat/verifier.ts:27-42` `DOMAIN_PATH` | 도메인→허용 경로 접두 | `moduleForDomain(d).routePrefixes` 파생(`/p/[id]/gantt` 별칭 포함) |
+| 8 | `src/lib/ai/chat/verifier.ts:27-42` `DOMAIN_PATH` | 도메인→허용 경로 접두 | `moduleForDomain(d).routePrefixes` 파생(`/p/[id]/gantt` 별칭 포함). `navFor` 소비처 목록에 든다(개정 문서 §5.3.5) |
 | 9 | `src/components/chat/BotPageContextProvider.tsx:49-66` `inferDomain` | 경로 세그먼트 switch 10항목 | `moduleBySegment(seg)?.botDomains[0]` |
 | 10 | `src/lib/ai/chat/deep-links.ts:24-104` `projectMenuPath(projectId, menu)` 호출 11곳·세그먼트 10종(wbs·weekly·meetings·attendance·announcements·members·kanban·wiki×2·dashboard·settings) | 세그먼트 문자열 리터럴 | `ModuleDef.nav.segment` 상수 참조(문자열 리터럴 금지 — 타입 `ModuleId` 로) |
 | 11 | `src/lib/i18n/dict/common.ts:8~` `nav.*` 키 | 라벨 사전 | 유지(레지스트리가 키를 참조) |
+| 12 | ⌘K '이동' 그룹(신설) | — | `navFor` 파생 |
+| 13 | `src/lib/domain/usageMenu.ts:59-65` `resolveMenuKey` | 경로 → 사용 현황 키 | `navFor` 의 `segment` 파생(`/w/[slug]/minutes` 와 옛 `/minutes` 가 같은 키) |
+
+12·13 행은 2026-09-27 개정이 더한 `navFor` 소비처다(개정 문서 §5.3.5). 워크스페이스·프로젝트 내비 분리와 그룹 구조는 7절.
 
 이 통합은 `src/components/app/*` 를 건드리므로 UI 위험 파일 규칙(`ui/` 브랜치 + 스테이징 눈확인, `Preview-checked:`/`Staging-verified:` 트레일러)을 따른다(6절 SP3 done_when). 모듈이 꺼지면 메뉴에서 사라지고, 직접 URL 은 `src/app/(app)/p/[projectId]/layout.tsx` 가 요청 경로의 첫 세그먼트를 `routePrefixes` 와 대조해 `notFound()` 한다. 이 레이아웃은 현재 `teamsForProjectSync(projectId)` 로 프로젝트 팀을 읽어 `TeamsProvider` 에 주입한다(`layout.tsx:1-2,11-15`) — 3.1.3 에서 폐기하기로 한 `teams/master.ts` sync 접근자의 importer 32파일 중 하나다. SP3 은 그 주입을 그대로 둔 채 그 위에 `notFound()` 판정을 얹고, SP4 에서 주입을 `getProjectConfig(projectId).teams` 로 교체한다(두 SP 가 같은 파일을 만지므로 SP3 변경은 판정 블록 추가로만 한정). 세그먼트가 어느 모듈에도 없으면 역시 `notFound()`(fail-closed).
 
@@ -1451,7 +1290,7 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 
 ### 3.3 설정 카탈로그
 
-열 정의: **키** = `values` 최상위 키, **스코프** = project/workspace, **대체 대상** = 현 코드에서 삭제되는 상수·컬럼·env, **값 형태** = `parse` 가 받는 타입, **검증** = `parse` + `validateConfig`, **소비처** = 주입받는 함수·화면.
+키 카탈로그의 정본은 개정 문서 §2.8(키 이름·편집 주체·값 형태·기본값·적용·영향·SQL·SP 전수)이고, `docs/settings-catalog.md` 는 SP3a 가 레지스트리에서 생성한다(개정 문서 §2.10). 아래 표는 키별 **대체 대상(현 코드)** 과 소비처의 기록으로 남기며, 2026-09-27 개정의 키 개명·신설·은퇴를 행 단위로 반영했다.
 
 #### 3.3.1 프로젝트 스코프
 
@@ -1460,20 +1299,28 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 | `core.level_labels` | wbs | `DEFAULT_LEVEL_LABELS`(`shared.tsx:27`, importer 4)·`DEFAULT_PROJECT_CONFIG.levelLabels`(`projectConfig.ts:22`)·`projectPresets.ts` 3종·`shared.tsx:39` `LEGACY_LABEL_ABBR`·0058 `level_labels`/`max_depth`·0058 시드 | `string[]` 길이 1~10 = 깊이. 생성 필수 | `validateLevelSettings`; 축소는 `treeMaxDepth` 대조 | `levelBadgeText`·간트 헤더·엑셀 계층 열 헤더(`/api/export`)·임포트 마법사·`wbsAffordance` |
 | `core.extra_axis_label` | wbs | 0058 `extra_axis_label`·시드 `'Biz'` | `string \| null` | 1~20자 | 엑셀 프로파일 `logical.extraAxis`·간트 열 |
 | `core.milestone_keywords` | wbs | 0058 `milestone_keywords`·시드 10개·`PRESETS.*.milestoneKeywords` | `string[]` (빈 배열 허용 = 마커 0건) | 소문자 정규화, 항목 1~40자 | `isMilestoneLeaf`·대시보드 마일스톤 카드·간트 기준선 |
-| `core.stage_credits` | wbs(`core.` 접두 = core 모듈 소유. 크레딧 표는 `apply_workflow_event` 가 `wbs_items.actual_pct` 에 쓰는 WBS 진척값이다 — 0097:183 조회 → `:203` 갱신. `agents` 가 꺼진 프로젝트에서도 편집은 되지만 워크플로 이벤트가 없어 효과가 없으므로 슬라이더 위에 "에이전트 모듈이 꺼져 있습니다" 안내) | 0096 `stage_credits jsonb`·`DEFAULT_STAGE_CREDITS` 폴백 | `{ default: { as, ip, rw, im, xx } }` | `validateStageCredits`(정수·0~100·5단위·`xx=100`·단조증가 간격≥`CREDIT_GAP`·`CREDIT_KEYS` 밖 키 거부, `stageCredits.ts:30-56`) | RPC `apply_workflow_event`(`values->'core.stage_credits'` 를 읽도록 0097:183 경로 수정)·`StageCreditSlider` |
-| `teams`(테이블 행, 참조) | members | `DEFAULT_TEAMS`(`domain/teams.ts:17-23`)·`master.ts` 폴백·`TEAM_COLOR`(`brand.ts:33-39`)·`shared.tsx:4-10` `TEAM`·`kanban.ts:22-24` `TEAM_DOT`·`MembersBoard.tsx:18-24` `TEAM_META`·`seed.sql:1-2` 4팀·`AccountsManager.tsx:322` 안내문 | 행 `{ code(불변), name, color hex, sort_order, active, progress_visible }` — 2절 정의 | `normalizeNewTeamCode`(20자; 예약어는 상수 `RESERVED_TEAM_NAMES`(`teams.ts:41`, 엑셀 헤더 낱말 'Biz'·'Phase'·'Task'·'Activity' 등) 대신 `wbs.excel_profile` 헤더·`core.level_labels`·`core.extra_axis_label` 에서 파생 — SP4) | `config.teams` 주입 전부(간트·칸반·대시보드 팀별·주간 봇 필터·엑셀 팀 열) |
+| `workflow.stage_credits`(정본의 `core.stage_credits` 에서 개명 — 개정 문서 §2.8.6) | wbs(크레딧 표는 `apply_workflow_event` 가 `wbs_items.actual_pct` 에 쓰는 WBS 진척값이다 — 0097:183 조회 → `:203` 갱신. `agents` 가 꺼진 프로젝트에서도 편집은 되지만 워크플로 이벤트가 없어 효과가 없으므로 슬라이더 위에 "에이전트 모듈이 꺼져 있습니다" 안내) | 0096 `stage_credits jsonb`·`DEFAULT_STAGE_CREDITS` 폴백 | `{ default: { as, ip, rw, im, xx } }` | `validateStageCredits`(불변식 정수·0~100·`xx=100`·엄격 증가는 고정, 단위·간격은 `workflow.credit_policy` 주입, `CREDIT_KEYS` 밖 키 거부, `stageCredits.ts:30-56`) | RPC `apply_workflow_event`(`values->'workflow.stage_credits'` 를 읽도록 0097:183 경로 수정)·`StageCreditSlider` |
+| `workflow.credit_policy` | → 개정 문서 §2.8.2 | `CREDIT_STEP=5`·`CREDIT_GAP=10`(`stageCredits.ts:18-19`) | `{ step: 1 \| 5, min_gap: 1~10 }`, 기본 `{ step: 5, min_gap: 10 }`(현행) | 정수. 현 `workflow.stage_credits` 가 새 정책을 만족해야 함(교차) | `validateStageCredits`·`StageCreditSlider`(→ 개정 문서 §3.3.4) |
+| `teams`(테이블 행, 참조) | members | `DEFAULT_TEAMS`(`domain/teams.ts:17-23`)·`master.ts` 폴백·`shared.tsx:4-10` `TEAM`·`kanban.ts:22-24` `TEAM_DOT`·`MembersBoard.tsx:18-24` `TEAM_META`·`seed.sql:1-2` 4팀·`AccountsManager.tsx:322` 안내문 | 행 `{ code(불변), name, color hex, sort_order, active, progress_visible }` — 2절 정의 | `normalizeNewTeamCode`(20자; 예약어는 상수 `RESERVED_TEAM_NAMES`(`teams.ts:41`, 엑셀 헤더 낱말 'Biz'·'Phase'·'Task'·'Activity' 등) 대신 `wbs.excel_profile` 헤더·`core.level_labels`·`core.extra_axis_label` 에서 파생 — SP4) | `config.teams` 주입 전부(간트·칸반·대시보드 팀별·주간 봇 필터·엑셀 팀 열) |
 | `project_areas kind='weekly_section'` + `area_teams`(테이블 행) | weekly | `WEEKLY_SECTIONS` 11(`weeklySheet.ts:21-24`, importer 6)·`WEEKLY_TEAM_SECTIONS`(`:30-41`)·`LEGACY_SECTION_MAP`(`:53-69`)·`FALLBACK_SECTION`(`:44`)·`weekly_report_rows.section/module` 자유 텍스트(0023:21-22)·`ensureStandardRows`(`data/weeklySheet.ts:27-49`) | 행 `{ code(불변), name, sort_order, active }` + `area_teams { area_id, team_id, kind primary\|support }` | 코드 불변·데이터 달린 영역은 `active=false` 만 | `defaultWeeklyRows(areas)`·`carryOverRows(prev, areas)`·`sortWeeklyRows`·`sectionKeyOf`·`sheetNarrative`·`weeklyLint`·봇 `weekly:read` 팀 필터·PPT 페이지 합성 |
 | `project_areas kind='issue_area'`(테이블 행) | issues | `ISSUE_MEGA_AREAS` 8(`issueAnalysis.ts:4-13`, 관련 식별자 소비처 16파일)·전역 `issue_mega_areas`·0055 check·`deckPlan` Mega 순서 | 행 `{ code(불변, 이슈 ID 에 쓰임), name, sort_order, active }` | 코드 `[A-Z0-9]{1,8}` 불변 | 이슈 등록 폼·목록 필터·분석서 표·체번 트리거 |
-| `issues.code_prefix` | issues | `'PI-I'`(`issueAnalysis.ts:170` `formatPiIssueCode`, DB 트리거 0055:240·0062:246 — 0055:118 은 기존 행 백필 `update` 라 기준선에 흡수) | `string` 1~8자 `[A-Z0-9-]` | 형식만. 변경은 신규 이슈에만(트리거가 발번 시점 값 사용) | 체번 트리거·`formatIssueCode(prefix, area.code, seq)` |
-| `wbs.excel_profile` | wbs | `LEGACY_ORIGIN_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백·`parse.ts:20` `LEGACY_COLUMN_MAP` | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사(없으면 자동감지 후 저장 요구)·내보내기(없으면 "프로파일 필요" 안내, 폴백 없음) |
+| `issues.id_policy`(정본의 `issues.code_prefix` 대체) | issues | `'PI-I'`(`issueAnalysis.ts:170` `formatPiIssueCode`, DB 트리거 0055:240·0062:246 — 0055:118 은 기존 행 백필 `update` 라 기준선에 흡수) | `{ prefix; pattern; counter_scope; reset }`, 기본 `ISS-{seq:3}` 프로젝트 카운터 | 형식·토큰 규칙(→ 개정 문서 §4.4.3). 변경은 신규 이슈에만(트리거가 발번 시점 값 사용) | 체번 트리거·이슈 코드 렌더 |
+| `wbs.excel_profile` | wbs | `LEGACY_ORIGIN_PROFILE`(`profile.ts:142-152`, importer 4)·`/api/export` `'{}'`→LEGACY 폴백(`route.ts:30-46`)·`parseWithProfile`/`exportWithProfile` 폴백 | `ExcelProfile v1` jsonb | `validateProfile`; `teamColumns` 의 팀명이 `config.teams` 에 있어야 함(교차) | 임포트 마법사·내보내기. 라우트는 하드닝 1 선반영(저장 양식은 접기·펼침 두 내보내기 모두에 쓰고, 손상 422, 양식 없음+펼침 409, LEGACY 폴백 삭제. 가져오기는 저장 양식과 파일 구조가 다르면 감지 결과가 기본이고 서버가 409 — 하드닝 1b). SP4 = 비어 있으면 표준 레이아웃(명시 표기), 손상은 422, LEGACY 는 fixture. 저장소 이전의 SP 배정은 개정 문서 §4.6. 사용자 필드 `customColumns`(SP5c)(→ 개정 문서 §4.1·§4.6) |
 | `modules.enabled` | settings(core) | `Sidebar.projectMenu` 등 11벌(3.2.5)·`agent_projects.enabled`(0057)·`AgentProjectToggle.tsx`·`requireAgentProject`(`agent/externalApi.ts:47-53`) | `ModuleId[]` — `PROJECT_TOGGLABLE`(scope ∈ {project, both} ∧ !core) 의 부분집합만. workspace 스코프 모듈은 이 키에 없다(3.2.3) | ⊆ `PROJECT_TOGGLABLE ∩ modules.allowed`, `closeRequires(enabled ∪ (allowed ∩ workspace) ∪ core)` 가 `enabled` 를 보존(3.1.5) | `effectiveModules` |
-| `agents.stage_workflow` | agents | `wbs_items.dev_workflow` 플래그 기본값(0082:20)·`agent_projects` 행 | `{ enabled: boolean, require_approval: boolean }` | — | `requireAgentProject` → `effectiveModules('agents') ∧ enabled`; 허브 결재 대기 배지 |
 | `forms.<form_kind>` | weekly / issues / wbs | `templateFill.ts` 좌표·`CELL_BUDGET`·`ISSUE_BUDGET`·`ISSUE_CAP`·`EVENT_CAP`·자산 경로·`excel.ts` 코드 그리기 | 4절 정의 `{ template_id, mapping, options }` | 4절(미매핑 토큰 0) | 4절 엔진 |
 | `minutes.auto_file_by_path` | minutes | `MINUTES_FOLDER_PATH_ENABLED` env | `boolean`, default `true`(새 플랫폼엔 접두 시절 데이터가 없다 — 5.1.4) | — | `/api/v1/minutes` folder_path 편철 분기(`externalApi.ts:53-55` 자리) |
 | `attendance.types` | attendance | `AttendanceType` 유니온·`ATTENDANCE_META`·check 제약·봇 정규식 — 상세 → 3.3.3(project) | `{ code, label, short, color, counts_as, selectable, sort }[]` | code `[a-z_]{1,20}` 유일·사용 중 삭제 금지 | 근태 셀렉트·범례·월 집계·주간보고 근태 표·봇 정규식 |
 | `meetings.categories` | meetings | `MeetingCategory` 유니온·`MEETING_META`·check 제약 — 상세 → 3.3.3(project) | `{ code, label, color, sort, announce_default }[]` | code 유일·사용 중 삭제 금지 | 회의 폼·달력 칩·회의→공지 |
 | `issues.severities` / `issues.cause_categories` / `issues.sources` | issues | `ISSUE_SEVERITIES`·`ISSUE_ANALYSIS_CAUSE_CATEGORIES`·`ISSUE_SOURCE_TYPES` 와 각 `_META`·check — 상세 → 3.3.3(project) | 각각 `{ code, label, rank, color }[]` / `{ code, label, sort }[]` / `{ code, label, sort }[]` | code 유일(`sources` 의 `'minutes'` 예약) | 이슈 목록·대시보드·분석서·LLM 프롬프트 검증 |
 | `calendar.timezone` / `calendar.working_days` | settings(core) | `'Asia/Seoul'` 리터럴·`isWeekendDow` — 상세 → 3.3.3(project; `timezone` 의 default 는 3.3.2 워크스페이스 값) | IANA 문자열 / `number[]`(1~7) | `Intl.supportedValuesOf('timeZone')` 포함 / 길이≥1·유일 | `todayIn(tz)`·`stampIn(tz)` / 간트 영업일·근무일 집계 |
+| `calendar.week_start` | settings(core) | 주 시작=월요일 고정 — 상세 → 3.3.3(project) | 규칙 목록 `{ day: 'sunday'\|'monday'; from }[]`(편집 입력은 요일 하나) | 개정 문서 §4.2.4 | 주 키·주 보기(개정 문서 §4.2.8) |
+| `workflow.issue_statuses` | → 개정 문서 §2.8.2 | `ISSUE_STATUSES` 4종의 표시(`issues.ts:8`) | `{ code, label, color, category, sort, active }[]` — `category` 는 고정 범주 4종 | `open`·`resolved` 범주에 활성 1개 이상, 사용 중 code 삭제 금지 | 이슈 목록·보드·트리거 `enforce_issue_workflow`(→ 개정 문서 §3.2) |
+| `workflow.wbs_stage_labels` | → 개정 문서 §2.8.2 | `STAGE_LABEL_KO`·`STAGE_NONE_LABEL_KO`(`stageLabels.ts:9-12`) | 단계 코드(미착수 포함 5칸)별 라벨 | 1~20자 | 단계 배지·필터(→ 개정 문서 §3.3.1) |
+| `workflow.approval_steps` / `workflow.approval_distinct_approvers` | → 개정 문서 §2.8.2 | 승인 1단 고정(`reported → approved`) | `{ code, label, approver }[]` 1~3단, 기본 1단 = 현행 / `boolean` 기본 `true` | 0단(자동 승인) 없음, 승인자는 기존 가드를 좁히기만 | 승인 원장 `wbs_stage_approvals`·`apply_workflow_event`(→ 개정 문서 §3.3.2) |
+| `workflow.predecessor_gate` | → 개정 문서 §2.8.2 | `predecessorReached`(`agentWork.ts:19-23`) | `'reached' \| 'final'`, 기본 `'reached'`(현행) | enum | 선행 충족 판정 TS·SQL(→ 개정 문서 §3.3.3) |
+| `issues.analysis` | issue_analysis | — | `'optional' \| 'required'`, 기본 `'optional'` | enum. 사용 여부는 모듈 토글 | 이슈 등록·분석(→ 개정 문서 §4.4.2) |
+| `fields.wbs_item` / `fields.issue` / `fields.weekly_row` | → 개정 문서 §2.8.2 | — | `FieldDef[]`, 기본 `[]` | 개정 문서 §3.6.2~§3.6.4 | 엔티티 `custom jsonb`·트리거 `enforce_custom_fields`·출력 `custom.<key>`(→ 개정 문서 §3.6) |
+| `views.default` | → 개정 문서 §2.8.2 | — | `{ wbs: 'sheet'\|'timeline'\|'board'; density }` | `board` 는 `kanban` 모듈이 유효할 때만 | 작업 계획 보기 전환(→ 개정 문서 §5.11.2) |
 
 `wbs.hide_done` 같은 **계정별 UI 설정은 `user_preferences`** 이지 여기가 아니다. `holidays`(프로젝트 수동 공휴일, `ScheduleManager`·`removeHoliday`)는 이미 별도 테이블/액션으로 존재하며 이 절의 키가 아니다(그대로 유지).
 
@@ -1481,16 +1328,22 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 
 | 키 | 대체 대상 | 값 형태 | 검증 | 소비처 |
 |---|---|---|---|---|
-| `branding` | `"구 브랜드명"` 문자열 `src` **24파일**(실측; 종합안 28 은 과대)·`public/logo.png`·`src/app/login/page.tsx:152` "© 2026 원본 고객사시스템즈"·`MAIL_FROM_NAME`/`DEFAULT_FROM_NAME '원본 고객사 회의알림'`(`transport.ts:18`)·`projectInvite.ts:63` "[원본 고객사]"·`dkbrand.ts` 색 | `{ product_name, logo_storage_path \| null, mail_from_name, accent_color \| null }` | `product_name` 1~40자, hex 형식 | `(app)/layout` 헤더·메일 발신명·PPT/엑셀 기본 양식 파일의 `{{branding.product_name}}`. 로그인 페이지(워크스페이스 미확정)는 env `BRAND_*` 기본값(SP0 `src/lib/branding.ts`) |
+| `branding.product_name`·`branding.logo`·`branding.accent`·`branding.mail_from_name`(2단 키 — 개정 문서 §2.8.1) | `"구 브랜드명"` 문자열 `src` **24파일**(실측; 종합안 28 은 과대)·`public/logo.png`·`src/app/login/page.tsx:152` "© 2026 원본 고객사시스템즈"·`MAIL_FROM_NAME`/`DEFAULT_FROM_NAME '원본 고객사 회의알림'`(`transport.ts:18`)·`projectInvite.ts:63` "[원본 고객사]"·`dkbrand.ts` 색 | 키별: `string` 1~40 / `{ full; full_dark; mark }`(Storage 경로) / `{ base: hex; light; dark } \| null`(서버 파생 세트) / `string` 1~40 | 길이, 로고 형식·크기, accent 대비 검사(개정 문서 §2.8.1) | `(app)/layout` 헤더·메일 발신명·PPT/엑셀 기본 양식 파일의 `{{branding.product_name}}`. 로그인 페이지(워크스페이스 미확정)는 env `BRAND_*` 기본값(SP0 `src/lib/branding.ts`) |
 | `invites.allowed_domains` | `INVITE_ALLOWED_DOMAINS` env·`DEFAULT_ALLOWED_DOMAINS ['example-corp.com']`(`invites.ts:17`)·`ProjectInviteManager.tsx:149` `placeholder` 속성 | `string[]`; `[]` = 초대 불가(fail-closed 유지), `['*']` = 제한 없음(명시) | 호스트 형식, 서브도메인 불허 규칙 유지(`isAllowedInviteDomain`) | 초대 발급 액션·초대 폼 `placeholder` 속성(첫 항목) |
 | `modules.allowed` | env 플래그의 상시 토글 역할(3.2.7) | `ModuleId[]` | 레지스트리 ⊆; **플랫폼 관리자만 쓰기** | `effectiveModules` |
-| `minutes.root_folders` | `folders.ts:9-26` 팀 루트 시드(created_by null 5축)·`domain/minutes.ts:86` `TEAM_SUB_ALIASES`·0021 `minutes.team_code` check | `{ mode: 'teams' } \| { mode: 'custom', names: string[] }` | names 1~30자 유일 | 회의록 트리 루트 생성·또박또박 folder_path 정규화(2절 팀 해석) |
+| `minutes.root_folders` | `folders.ts:9-26` 팀 루트 시드(created_by null 5축)·`domain/minutes.ts:86` `TEAM_SUB_ALIASES`·0021 `minutes.team_code` check | `{ mode: 'teams' } \| { mode: 'custom', names: string[] }` | names 1~30자 유일 | 회의록 트리 루트 생성·또박또박 folder_path 정규화(2절 팀 해석). 레지스트리 등록은 SP5 |
 | `ai.enabled` | `WIKI_SERVICE_ENABLED`·`CHAT_V2_ENABLED`·`CHAT_V2_LLM_SYNTHESIS_ENABLED` 를 "LLM 켜짐" 으로 쓰던 관행 | `boolean`, default `true` | — | `effectiveModules` 가 false 면 `AI_MODULES`(`wiki`·`chatbot`)를 뺀다(3.2.3 코드). 세 층이 겹친다 — 배포: `envAvailable`(플래그) / 워크스페이스: `ai.enabled` / 플랫폼·호출 시점: `hasLLM()`(오버라이드 `mode !== 'none'` ∧ 키 또는 프로필, 3.2.7). 앞 둘이 모듈 집합을 정하고 마지막은 호출부가 `aiAvailable`(5.4.5) 로 합성해 결정형 폴백을 고르는 데 쓴다 |
-| `calendar.timezone` | → 3.3.3(workspace 기본값) — 워크스페이스 화면(`/w/[slug]/minutes`·내 회의)의 '오늘'과 새 프로젝트 `calendar.timezone` 의 초기값 | IANA 문자열, default `'UTC'` | 3.3.3 과 동일(`Intl.supportedValuesOf`) | 워크스페이스 층 화면·`createProject` 초기값 복사 |
+| `calendar.timezone` | → 3.3.3(workspace 기본값) — 워크스페이스 화면(`/w/[slug]/minutes`·내 회의)의 '오늘'과 새 프로젝트 `calendar.timezone` 의 초기값 | IANA 문자열, default `'UTC'` | 3.3.3 과 동일(`Intl.supportedValuesOf`) | 워크스페이스 층 화면·`createProject` 초기값 복사. 레지스트리 등록은 SP5 |
+| `calendar.working_days` | → 3.3.3(workspace 기본값) | `number[]`(ISO 1~7), default `[1,2,3,4,5]` | 3.3.3 과 동일 | 워크스페이스 달력·새 프로젝트 초기값 복사. 레지스트리 등록은 SP5 |
+| `calendar.week_start` | 주 시작=월요일 고정(3.3.3) | `'sunday' \| 'monday'`, default `'sunday'` | enum | 워크스페이스 화면의 주 보기·새 프로젝트 초기값 복사. 레지스트리 등록은 SP5 |
+| `navigation.menu` | 메뉴 11벌(3.2.5)의 순서·라벨 | `{ order; labels }` — 그룹 안 순서·라벨만, 숨김 키 없음 | 개정 문서 §2.8.1 | `navFor`(개정 문서 §5.3.5) |
+| `portal.widgets` | — | `{ id; enabled }[]` | 위젯 레지스트리 id | 워크스페이스 홈 포털 |
+| `security.local_drafts` | — | `{ allowed; retention_days }` | retention 1~30 | 로컬 초안 정책(개정 문서 §5.8.5) |
+| `notify.policy` | — | 알림 유형별 `{ enabled }` | 등록된 유형만, 필수 유형 끄기 거부 | 관리자 알림 정책 — SP8 스트레치(레지스트리 등록 전까지 planned) |
 
 #### 3.3.3 Q4 승격 어휘 4종 (사용자 확정)
 
-네 어휘는 현재 TypeScript 유니온 + `*_META` 상수 + DB `check` 제약 + i18n 라벨 + 봇 라벨/정규식으로 다섯 겹에 박혀 있다. 승격 후에는 **행이 `code`(불변 문자열)를 저장하고 라벨·색·순서는 설정값**이다. DB `check` 제약은 삭제하고, 트리거 함수 `enforce_project_vocab(kind)` 하나가 `project_settings.values->kind` 의 활성 code 집합에 있는지 검사한다(0062 가 `project_settings` 를 읽는 트리거 관례를 그대로 쓴다; RLS 쓰기 정책이 있는 `attendance_records`·`meetings`·`issues` 는 PostgREST 직접 쓰기가 가능하므로 서버 검증만으로는 부족하다). 설정 행이 없거나 code 가 비활성이면 거부(fail-closed).
+네 어휘는 현재 TypeScript 유니온 + `*_META` 상수 + DB `check` 제약 + i18n 라벨 + 봇 라벨/정규식으로 다섯 겹에 박혀 있다. 승격 후에는 **행이 `code`(불변 문자열)를 저장하고 라벨·색·순서는 설정값**이다. DB `check` 제약은 삭제하고, 트리거 함수 `enforce_project_vocab(kind)` 하나가 `project_settings.values->kind` 의 활성 code 집합에 있는지 검사한다(0062 가 `project_settings` 를 읽는 트리거 관례를 그대로 쓴다; RLS 쓰기 정책이 있는 `attendance_records`·`meetings`·`issues` 는 PostgREST 직접 쓰기가 가능하므로 서버 검증만으로는 부족하다). 설정 행이 없거나 code 가 비활성이면 거부(fail-closed). 잠금 규약: 참조 쓰기 트리거는 설정 행을 `FOR SHARE` 로 잡고, 설정 RPC 는 설정 행을 `FOR UPDATE` 로 잡은 뒤 참조 수를 센다. 사용 중 code 의 이관은 명시 명령 `migrate_setting_code` 로만 한다(→ 개정 문서 §2.4).
 
 | 키 | 스코프 | 대체 대상(현 코드) | 값 형태 | 검증 | 소비처 |
 |---|---|---|---|---|---|
@@ -1500,28 +1353,14 @@ env 플래그 10종(`src` 실측) 중 폐지되는 2종(`MINUTES_FOLDER_PATH_ENA
 | `issues.cause_categories` | project | `ISSUE_ANALYSIS_CAUSE_CATEGORIES` 4종 `strategy_policy/process/organization/it`(`report/issues/model.ts:13-18`)·`deckPlan.ts:630` `CAUSE_CATEGORY_LABELS`·`ai/issue-analysis.ts:387,445` LLM 출력 검증·정렬·`storedRun.ts:362` | `{ code, label, sort }[]` | code 유일; LLM 프롬프트가 이 목록을 열거하고 출력은 목록 밖 값 거부(현 검증 유지) | 분석서 원인 표·LLM 프롬프트·저장 JSON 검증 |
 | `issues.sources` | project | `ISSUE_SOURCE_TYPES` 6종(`issueAnalysis.ts:20-27`)·`ISSUE_SOURCE_META`·i18n `issue.source.type.*` | `{ code, label, sort }[]` | code 유일; **`'minutes'` 는 예약 code — 삭제·비활성 불가**(`allowMinutesSource` 경로 고정 참조) | 이슈 원천 셀렉트·회의록 드래그 등록 |
 | `calendar.timezone` | project(default = 3.3.2 workspace 값) | `'Asia/Seoul'` 리터럴 **25파일**(`dates.ts:21,35` `seoulYmd`/`seoulStamp`, `api/chat/v2/stream/route.ts:114`, `ProjectInviteManager.tsx:40` 등) | IANA 문자열, default 는 워크스페이스 값(생성 시 복사) | `Intl.supportedValuesOf('timeZone')` 포함 여부 — Node ≥18 지원(로컬 v22.18.0 에서 418개 반환 확인; Vercel 런타임 Node 버전은 `package.json` `engines`·`.nvmrc` 가 없어 (미검증)). `parse` 는 목록에 없으면 폴백 없이 거부(`'Asia/Seoul'` 로 조용히 대체하지 않음) | `todayIn(tz)`·`stampIn(tz)` 로 `seoulToday`/`seoulYmd`/`seoulStamp` 를 대체(이름에서 seoul 제거)·근태 '오늘'·주차 계산·보고서 파일명·메일 시각·대시보드 today |
-| `calendar.working_days` | project | `isWeekendDow`(`dates.ts:10-12`, 토·일 고정 — 소비처는 `isBusinessDay`(`:50-52`)·`ganttScale.ts:40`, 그 뒤로 `dependencySchedule.ts`·`trend.ts` 의 영업일 계산)·0058 `working_days int[]`(미판독) | `number[]` ISO 요일 1(월)~7(일), default `[1,2,3,4,5]` | 길이 ≥1, 1..7 정수 유일 | 간트 영업일·근무일 수 집계·주간 범위 계산. 한국 공휴일 테이블(`domain/holidays.ts`)은 달력 **표시 전용**으로 제품 고정 유지(3.5) |
+| `calendar.working_days` | project(default = 3.3.2 workspace 값) | `isWeekendDow`(`dates.ts:10-12`, 토·일 고정 — 소비처는 `isBusinessDay`(`:50-52`)·`ganttScale.ts:40`, 그 뒤로 `dependencySchedule.ts`·`trend.ts` 의 영업일 계산)·0058 `working_days int[]`(미판독) | `number[]` ISO 요일 1(월)~7(일), default `[1,2,3,4,5]` | 길이 ≥1, 1..7 정수 유일 | 개정 문서 §4.2.8 표 |
+| `calendar.week_start` | project(default = 3.3.2 workspace 값, 생성 시 복사) | 주 시작=월요일 고정(`issueDashboard.ts:111-114` `issueTrend` 의 `(dow + 6) % 7`, 주간보고 `week` 키) | 프로젝트: 규칙 목록 `{ day: 'sunday'\|'monday'; from }[]`(편집 입력은 요일 하나), 워크스페이스: `'sunday'\|'monday'`, 기본 `'sunday'` | 개정 문서 §4.2.2·§4.2.4 | 개정 문서 §4.2.8 표 |
+
+`holidays`(프로젝트 날짜 예외 표, 키 아님)에 `kind 'off'|'work'`(기본 `'off'`)를 더한다(SP5 Phase A). 제품은 어떤 공휴일도 기본으로 넣지 않는다(사용자 결정 5, 2026-09-26). WBS 빌더 CLI·Excel 템플릿의 기본 공휴일은 빈 목록이다(하드닝 6 선반영), 검증 CLI 는 SP5 Phase A(→ 개정 문서 §1.4.5·§4.2.7).
 
 #### 3.3.4 제품 고정 어휘(승격하지 않음)
 
-이 표는 SP5 에서 `docs/settings-catalog.md` 「고정 어휘」 절로 배포되고, 이후 승격 요청은 그 절 개정으로만 받는다(→ 6절 R12).
-
-| 어휘 | 정의 | 고정 이유 |
-|---|---|---|
-| 이슈 상태 `open/in_progress/resolved/on_hold` | `ISSUE_STATUSES`(`issues.ts:8`), 0041:33 check | 상태 전이·대시보드 집계·이슈 이력(`issue_updates`)이 의미에 묶임(Q4) |
-| WBS 단계 코드 `as/ip/im/xx` (+크레딧 키 `rw`) | `STAGE_CODES`(`stageLabels.ts:6`), `CREDIT_KEYS`(`stageCredits.ts:6`) — `fp` 는 0096 에서 `ip` 로 이관돼 어휘에 없음 | 에이전트 워크플로 RPC·크레딧 계산·`dflow-*` 스킬 계약(Q4). 라벨은 i18n |
-| WBS 상태 `not_started/in_progress/delayed/done` | `Status`(`types.ts`), `STATUS`(`shared.tsx:17-22`) | 롤업·판정 로직 |
-| 주간 시트 열 4종 `this_content/this_issue/next_content/next_issue` | `WEEKLY_CELL_KEYS`(`weeklySheet.ts:131`) | 결정 6 "열(필드)=제품 고정" |
-| 담당 종류 `primary/support` | `ownerMarks` 값, `area_teams.kind` | 엑셀 마크·PPT 배지 |
-| 공지 카테고리 `general/important/event` | 0012:20 check | 요청 없음(YAGNI) |
-| 위키 항목 유형 7종 | 0045:274 check | 요청 없음 |
-| 회의 반복 `none/daily/weekly/biweekly/monthly` | `RECURRENCE_ORDER`(`meetings.ts:25`) | 전개 로직 |
-| 근태 `counts_as` 5분류 | 3.3.3 | 집계 의미 |
-| 주 시작 요일 = 월요일 | `issueDashboard.ts:111-114` `issueTrend` 의 `(dow + 6) % 7`, 주간보고 `week` 키 | `calendar.week_start` 는 요구에 없다(YAGNI). `calendar.working_days` 와는 별개 — 근무일이 아니라 주차 경계 |
-| 담당 영역 `kind` `weekly_section/issue_area` | `project_areas.kind` check | 모듈 매니페스트가 선언 |
-| 양식 종류 `form_kind` 4종 | `form_templates.form_kind` check | 4절 |
-| 셀 줄 예산·이슈 캡 등 숫자 | `forms.<kind>.options` 로 이동(설정값) — 고정 아님 | 4절 |
-| 소수 1자리 롤업 규약 | `round1` | 표시 규약 |
+이 절은 개정 문서 §2.9.1(제품 고정)·§2.9.2(지원 제한)로 **대체됐다**(2026-09-27). 요지: 이슈는 범주 4종과 범주 간 전이가 고정이고 표시 상태는 설정, WBS 는 단계 코드 `as/ip/im/xx` 가 고정이고 라벨·승인 단계·선행 기준은 설정, 주간 시트는 핵심 4열 고정 + 사용자 정의 필드이며, 주 시작 요일 행은 삭제됐다(`calendar.week_start`). 주문 상태 5종·사건→크레딧 키·크레딧 불변식·에이전트 우선순위와 좌석 TTL·진척 집계(null 가중치=1)·위험 임계값·생애 판정을 고정 목록에 더했고, 이 목록은 SP3a 가 레지스트리에서 생성하는 `docs/settings-catalog.md` 의 제품 고정·지원 제한 절로 배포된다(→ 6절 R12).
 
 ### 3.4 유연화 인벤토리
 
@@ -1538,7 +1377,7 @@ $ grep -rn "원본 고객사\|ORIGIN\|PMO\|MDM\|APS\|origincorp\|원본 고객�
 - SP 배정 합계: SP0 36 · SP1 27 · SP2 2 · SP4 34 · SP5 4 · SP8 1 = 104.
 
 판정 어휘: **승격** = 설정 키/테이블 행으로 이동(키 명시) · **고정** = 제품 고정 문구/라벨로 교체 · **삭제** = 코드·주석 제거 · **fixture** = `tests/fixtures/` 로 이동(테스트 오라클) · **오탐**.
-SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객사"·"origincorp" 텍스트는 주석이라도 SP0 에서 지운다(6절 SP0 done_when: `grep 'origincorp|원본 고객사|ORIGIN|원본 고객사' src+public 0건`). 식별자 `LEGACY_ORIGIN_PROFILE` 은 런타임 폴백이 SP4 까지 남으므로 SP0 에서 `LEGACY_EXCEL_PROFILE_V1` 로 개명해 grep 조건을 만족시키고, 폴백 삭제·fixture 이동은 SP4 다. `PMO`·`MDM`·`APS` 리터럴이 든 상수(`WEEKLY_SECTIONS`·`DEFAULT_TEAMS` 등)는 SP4/5 에서 런타임 import 가 사라질 때 fixture 로 옮긴다 — 그 전까지는 SP3 `no-runtime-constants` 테스트의 허용 목록에 둔다.
+SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객사"·"origincorp" 텍스트는 주석이라도 SP0 에서 지운다(6절 SP0 done_when: `grep 'origincorp|원본 고객사|ORIGIN|원본 고객사' src+public 0건`). 식별자 `LEGACY_ORIGIN_PROFILE` 은 SP0 에서 `LEGACY_EXCEL_PROFILE_V1` 로 개명해 grep 조건을 만족시켰다. 런타임 폴백 삭제는 하드닝 1 이 선반영했고, fixture 이동은 SP4 다. `PMO`·`MDM`·`APS` 리터럴이 든 상수(`WEEKLY_SECTIONS` 등)는 SP4/5 에서 런타임 import 가 사라질 때 fixture 로 옮긴다 — 그 전까지는 SP3 `no-runtime-constants` 테스트의 허용 목록에 둔다. `DEFAULT_TEAMS` 는 하드닝 8 이 런타임 소비처(`TeamsProvider` 가 import 했다)를 걷고 fixture 로 옮겼다(3.4.2).
 
 #### 3.4.2 전수 표
 
@@ -1547,11 +1386,11 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | `src/lib/domain/weeklySheet.ts` | 17,18,22 | 3 | `WEEKLY_SECTIONS` 11구분 정의·주석 | 승격 → `project_areas kind='weekly_section'`; `defaultWeeklyRows(areas)` | SP4 |
 | 〃 | 36,38,40 | 3 | `WEEKLY_TEAM_SECTIONS` PMO/MDM 매핑 | 승격 → `area_teams` | SP4 |
 | 〃 | 51,63,74 | 3 | `FALLBACK_SECTION`(PMO 폴백)·sort_order 주석 | 삭제 — 매핑 불가 행은 폴백 없이 배너("구분 없음 N행") | SP4 |
-| 〃 | 56 | 1 | `LEGACY_SECTION_MAP` `'APS': '생산계획'` | 삭제 — 새 리포엔 레거시 행이 없다(결정 1) | SP4 |
+| 〃 | 56 | 1 | `LEGACY_SECTION_MAP` `'APS': '생산계획'` | 삭제 — 새 리포엔 레거시 행이 없다(결정 1) | 하드닝 6 선반영 |
 | `src/components/admin/AccountsManager.tsx` | 210,219,444,451 | 4 | `teamOptions[0] ?? 'PMO'` 폴백 | 삭제 — 계정 생성에서 팀 필수 제거(명단 `project_member_teams` 로 이동) | SP1 |
 | 〃 | 322 | 1 | 안내문 "팀코드: PMO · 가공 · ERP · MES · MDM / 역할: admin · member · viewer" | 삭제 — 일괄 등록 열에서 팀 제거, 역할은 `access_role` 어휘로 | SP1 |
 | 〃 | 329 | 1 | `placeholder` 속성 `'…, PMO, member, …'` | 삭제(위와 동일) | SP1 |
-| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_ORIGIN_PROFILE` import·초기값 | 승격 → `wbs.excel_profile`; 프로파일 없으면 "프로파일 필요" 응답(폴백 삭제) | SP4 |
+| `src/app/api/export/route.ts` | 10,30 | 2 | `LEGACY_ORIGIN_PROFILE` import·초기값 | 라우트는 하드닝 1 선반영(LEGACY 폴백 삭제, 저장 양식 없음 `'{}'`+펼침 409). 비어 있으면 표준 레이아웃은 SP4. 저장소 이전의 SP 배정은 개정 문서 §4.6 | 하드닝 1(폴백 삭제·'{}'+펼침 409) / SP4(표준 레이아웃) |
 | 〃 | 23,40,46,50 | 4 | "원본 고객사 회귀 기준"·폴백 주석·계층 헤더 주석 | 삭제(주석) + 식별자 개명 | SP0 |
 | `src/components/wbs/shared.tsx` | 5,9 | 2 | `TEAM` PMO/MDM CSS 토큰 | 승격 → `teams.color` inline style | SP4 |
 | 〃 | 24 | 1 | `DEFAULT_LEVEL_LABELS` 주석(원본 고객사) | 삭제 — `core.level_labels` 필수, 폴백 상수 제거 | SP4 |
@@ -1564,14 +1403,14 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | `src/components/wbs/DependencyEgoGraph.tsx` | 22,75,76,145 | 4 | `COLLAPSE_AT` | 오탐 | — |
 | `src/app/actions/wbs.ts` | 142,636,651 | 3 | 오류 문구 "담당 팀·PMO만 입력 가능"·"PMO만 가능" | 고정 → "담당 팀·관리자만" | SP1 |
 | 〃 | 276 | 1 | 주석 "SUB-ACT 추가 — PMO 전용" | 고정 → "관리자 전용" | SP1 |
-| `src/lib/report/brand.ts` | 34,38 | 2 | `TEAM_COLOR` PMO/MDM hex | 승격 → `teams.color` | SP4 |
-| 〃 | 55 | 1 | 주석 "'● PMO  △ 가공' 형태" | 삭제(주석) | SP4 |
+| `src/lib/report/brand.ts` | 34,38 | 2 | `TEAM_COLOR` PMO/MDM hex | 해소 — `brand.ts` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 파일째 삭제됐다 | 하드닝 6 |
+| 〃 | 55 | 1 | 주석 "'● PMO  △ 가공' 형태" | 해소(위와 같이 파일 삭제) | 하드닝 6 |
 | `src/lib/i18n/dict/settings.ts` | 30,31,37 | 3 | `settings.pmoOnlyNotice/Badge/noImportPermissionDesc` "PMO 관리자" | 고정 → "프로젝트 관리자" | SP1 |
 | `src/lib/i18n/dict/settings.en.ts` | 32,33,39 | 3 | 〃 영문 | 고정 → "project admin" | SP1 |
 | `src/lib/excel/profile.ts` | 141,142,150 | 3 | `LEGACY_ORIGIN_PROFILE` 정의(5팀 열) | fixture → `tests/fixtures/excel/legacy-3row-profile.ts`(라운드트립 테스트 기준). 식별자 개명은 SP0 | SP4 |
 | `src/lib/domain/teams.ts` | 10 | 1 | 주석 "기존 MDM 제외 규칙의 데이터화" | 삭제(주석) | SP0 |
-| 〃 | 18,22 | 2 | `DEFAULT_TEAMS` PMO·MDM 행 | fixture → `tests/fixtures/teams.ts`; `master.ts` 폴백 제거·`TeamsProvider` 기본값 `[]` | SP0 |
-| `src/lib/data/weeklySheet.ts` | 21,30,54 | 3 | `ensureStandardRows` 주석(PMO 백필) | 승격 → `project_areas` 기준 백필(`ensureAreaRows(areas)`) | SP4 |
+| 〃 | 18,22 | 2 | `DEFAULT_TEAMS` PMO·MDM 행 | fixture → `tests/fixtures/teams.ts`; `master.ts` 폴백 제거·`TeamsProvider` 기본값 `[]`. 하드닝 8 이 런타임 소비처를 걷고 옮겼다 — `DEFAULT_TEAMS` 와 파생 상수(`DEFAULT_TEAM_CODES`·`SUB_ACT_TEAMS`·회의록 `TEAM_CODES`)·`validateMinuteInput` 을 `src` 에서 지웠고, `TeamsProvider` 문맥 기본값은 `[]`, 5팀은 fixture `tests/fixtures/teams.ts`, 가드는 `tests/invariants/no-default-teams.test.ts` 다. SP4 grep 은 회귀 가드로 남긴다 | 하드닝 8(SP3a 전) |
+| `src/lib/data/weeklySheet.ts` | 21,30,54 | 3 | `ensureStandardRows` 주석(PMO 백필) | 삭제 — 읽기 경로 쓰기 금지. 영역 추가·재활성 RPC 가 현재·이후 주차에 행 생성(→ 개정 문서 §4.3.2) | SP4 |
 | `src/components/wbs/WbsGanttSheet.tsx` | 239,376 | 2 | 주석 "없으면 원본 고객사 기본값"·"위임 없는 프로젝트(원본 고객사)" | 삭제 — `levelLabels` prop 필수 | SP4 |
 | 〃 | 1273 | 1 | 주석 "새 Phase 입력 (PMO)" | 고정 → "(관리자)" | SP1 |
 | `src/components/wbs/ChangeHistoryList.tsx` | 12,59,60 | 3 | `HISTORY_COLLAPSED_COUNT` | 오탐 | — |
@@ -1593,17 +1432,17 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | `src/lib/i18n/dict/wbs.ts` | 182 | 1 | `wbs.rolePmoAdmin: 'PMO 관리자'` | 삭제(shim 제거와 함께) | SP1 |
 | `src/lib/i18n/dict/wbs.en.ts` | 170 | 1 | `wbs.rolePmoAdmin: 'PMO admin'` | 삭제 | SP1 |
 | `src/lib/excel/parseWithProfile.ts` | 2 | 1 | 주석 "레거시 원본 고객사 프로파일" | 삭제(주석) | SP0 |
-| `src/lib/excel/parse.ts` | 20 | 1 | `LEGACY_COLUMN_MAP` 5팀 열(구 파서; `src` importer 0, tests 5) | fixture → 파일째 `tests/fixtures/excel/legacyParse.ts` | SP0 |
+| `src/lib/excel/parse.ts` | 20 | 1 | `LEGACY_COLUMN_MAP` 5팀 열(구 파서; `src` importer 0, tests 5) | fixture → 파일째 `tests/fixtures/excel/legacyParse.ts`. 런타임 5팀 사본은 `profile.ts:150`(SP4 fixture)만 남는다 | 하드닝 6 선반영(SP0 에서 밀림) |
 | `src/lib/excel/export.ts` | 64 | 1 | 주석 "원본 고객사 회귀 기준" | 삭제(주석) | SP0 |
 | `src/lib/domain/weeklyLint.ts` | 4 | 1 | 주석 "PMO의 줄과 영업의 줄" | 삭제(주석) → 일반 예시 | SP0 |
 | `src/lib/domain/wbsAffordance.ts` | 4 | 1 | 주석 "원본 고객사(maxDepth=3)" 예시 | 삭제(주석) | SP0 |
 | `src/lib/domain/kanban.ts` | 23 | 1 | `TEAM_DOT` PMO/MDM 토큰 | 승격 → `teams.color` | SP4 |
 | `src/lib/ai/wiki-ingest.ts` | 1020 | 1 | `JOB_PROJECT_SNAPSHOT_MISMATCH` | 오탐 | — |
-| `src/lib/ai/chat/router.ts` | 207 | 1 | 정규식 `(PMO\|ERP\|MES\|가공\|MDM)` | 승격 → `config.teams` 코드로 정규식 생성(플래너 주입) | SP8 |
+| `src/lib/ai/chat/router.ts` | 207 | 1 | 정규식 `(PMO\|ERP\|MES\|가공\|MDM)` | 코드 추출은 하드닝 4 선반영. SP4 = 원천을 `config.teams` 로 + 이름 매칭, 별칭 없음. SP8 = 플래너·verifier 도메인(→ 개정 문서 §4.8) | 하드닝 4 / SP4 / SP8 |
 | `src/lib/ai/chat/orchestrator.ts` | 155 | 1 | 라벨 `pmo_admin: 'PMO 관리자'` | 삭제(shim 제거) | SP1 |
 | `src/lib/ai/analytics.ts` | 351 | 1 | 주석 "원본 고객사 현행과 동일해 … 바이트 불변" | 삭제(주석) | SP0 |
 | `src/lib/agent/wbsImport.ts` | 31 | 1 | 주석 `if_id // PMO I/F 대장 참조` | 삭제(주석; 필드는 계약 v2.1 유지) | SP0 |
-| `src/components/weekly/WeeklySheetView.tsx` | 603 | 1 | 빈 시트 안내 "(PMO·영업·… 업무영역 N개 구분)" | 승격 → 구분 0개면 "설정 필요" 배너, 있으면 `areas.map(name)` | SP4 |
+| `src/components/weekly/WeeklySheetView.tsx` | 603 | 1 | 빈 시트 안내 "(PMO·영업·… 업무영역 N개 구분)" | 승격 → 구분 0개면 "설정 필요" 배너, 있으면 `areas.map(name)`. 같은 파일 `:664` 주석 "업무영역 11개"도 함께 고친다(패턴 밖) | SP4 |
 | `src/components/settings/ReindexButton.tsx` | 9 | 1 | 주석 "(PMO 관리자)" | 고정 → "(프로젝트 관리자)" | SP1 |
 | `src/components/minutes/MinuteUploadModal.tsx` | 40 | 1 | `teamCodes[0] ?? 'PMO'` | 삭제 — 팀 0개면 업로드 폼에 "팀을 등록하세요" 배너 | SP5 |
 | `src/components/minutes/MinuteChatPanel.tsx` | 156 | 1 | 주석 "각 프로젝트의 PMO 등" | 삭제(주석) | SP5 |
@@ -1633,12 +1472,14 @@ SP 는 그 줄이 실제로 바뀌는 SP 다. "원본 고객사"·"원본 고객
 | SP0 | 36 | 23 | 브랜드 문자열(원본 고객사·원본 고객사·origincorp) 주석·메일·로그인·초대 기본 도메인 `[]`, `DEFAULT_TEAMS`/`parse.ts` fixture, `projectPresets` 삭제, `TEAM_SUB_ALIASES` 삭제, `LEGACY_ORIGIN_PROFILE` 식별자 개명 |
 | SP1 | 27 | 12 | `pmo_admin`/'PMO 관리자' 문구·i18n·shim, 계정·초대 폼의 `'PMO'` 팀 폴백 |
 | SP2 | 2 | 1 | 초대 화면 워크스페이스 문구·도메인 `placeholder` 속성 |
-| SP4 | 34 | 12 | `WEEKLY_SECTIONS` 계열 → `project_areas`, 팀 색 토큰 4벌 → `teams.color`, `LEGACY_ORIGIN_PROFILE` 폴백 제거·fixture, `DEFAULT_LEVEL_LABELS`·`LEGACY_LABEL_ABBR` 삭제 |
+| SP4 | 34 | 12 | `WEEKLY_SECTIONS` 계열 → `project_areas`, 팀 색 토큰 4벌 → `teams.color`, `LEGACY_ORIGIN_PROFILE` fixture(런타임 폴백 삭제는 하드닝 1 선반영, 표준 레이아웃은 SP4), `DEFAULT_LEVEL_LABELS`·`LEGACY_LABEL_ABBR` 삭제 |
 | SP5 | 4 | 3 | 회의록 업로드 팀 폴백·폴더 루트 주석 |
 | SP8 | 1 | 1 | 봇 라우터 팀명 정규식 |
 | 오탐 | 10 | 4 | — |
 
 판정 종류별: 승격 26 · 고정(문구) 18 · 삭제(코드·주석) 54 · fixture 6 · 오탐 10 = 114.
+
+SP2 뒤·SP3a 전 하드닝 H1 이 일부 행을 앞당겨 끝냈다(하드닝 1·4·6·8 — 3.4.2 SP 열에 표기). 위 두 집계는 원 배정 기준으로 두고 다시 세지 않는다.
 
 SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PMO|MDM|APS|origincorp|원본 고객사" src` **런타임 0건**이며, 오탐 4파일은 식별자를 바꾸지 않고 grep 패턴에 단어 경계(`\b(APS)\b`)를 쓰는 것으로 제외한다.
 
@@ -1646,10 +1487,10 @@ SP5 done_when 의 최종 판정 명령은 `grep -rnE "원본 고객사|ORIGIN|PM
 
 | 항목 | 이유 | 담당 |
 |---|---|---|
-| 한국 공휴일 테이블(`src/lib/domain/holidays.ts`)의 표시 조건 | `calendar.timezone` 승격 후에도 달력의 공휴일 오버레이는 한국 고정이다. 워크스페이스별 공휴일 달력은 요구에 없어 비목표로 두되, 타임존이 `Asia/Seoul` 이 아닌 프로젝트에서 한국 공휴일이 표시되는 것이 맞는지는 사용자 확인이 필요하다(제안: 표시 유지, 프로젝트 수동 공휴일이 정본) | 사용자 |
+| ~~한국 공휴일 테이블(`src/lib/domain/holidays.ts`)의 표시 조건~~ | **닫힘**(사용자 결정 5, 2026-09-26 — §1.10). 오버레이를 삭제한다. 제품은 기본 공휴일을 두지 않고, 쉬는 날은 프로젝트 달력(근무 요일 + `holidays` 날짜 예외)에서만 온다(개정 문서 §4.2.7) | — |
 | `usageMenu.USAGE_MENUS` 의 과거 메뉴 키 보존 | 사용 현황 사전은 레지스트리로 파생하면 내린 화면(`admin-accounts`·`wiki` 등)의 지난 기록이 이름을 잃는다. 이 절은 "파생하지 않고 포함 단언만" 으로 정했다 — 새 리포에는 과거 이벤트가 없으므로(결정 1) 파생으로 바꿔도 되나, `usage_events` 스키마 이관 여부와 함께 8절(SP8)에서 확정 | 6절/SP8 |
-| 어휘 승격 4종의 DB 트리거 vs FK 테이블 | 이 절은 `values` jsonb + `enforce_project_vocab` 트리거로 정했다(kind 마다 FK 테이블을 늘리지 않기 위해). 종합안의 "행이 참조하는 목록형 설정은 FK 테이블" 원칙과의 예외이므로 2절 데이터 모델 작성자가 반대하면 `project_vocab(project_id, kind, code, …)` 단일 테이블 + 복합 FK 로 바꾼다. 어느 쪽이든 3.3.3 의 값 형태·검증·소비처는 같다 | 2절 |
-| `agents.stage_workflow.require_approval` 의 기본값 | 현행은 승인 게이트가 항상 켜져 있다 — 근거는 상태 전이표의 `reported → approved` 전이(`src/lib/domain/agentWork.ts:45-49`, `AgentOrderStatus`)와 결재 대기 수 `getPendingApprovalCount(projectId)`(`src/lib/data/agentApprovals.ts:33`, `status = 'reported'` 집계)다. 기본값 `true` 로 두되, 끄는 경로의 UI 문구·허브 배지 동작은 SP7 구현 시 결정 | SP7 |
+| ~~어휘 승격 4종의 DB 트리거 vs FK 테이블~~ | **닫힘**(2026-09-27) — "`values` + 트리거"로 정했다. 표시 상태·필드 정의도 같은 모양이고 잠금 규약을 더했다(1.3 결정 9 귀결, 개정 문서 §2.4.1) | — |
+| ~~`agents.stage_workflow.require_approval` 의 기본값~~ | **닫힘**(2026-09-27) — 키를 은퇴시키고 승인 단계 `workflow.approval_steps` 로 일반화했다. 기본 1단계 = 현행, 자동 승인(0단계) 없음(개정 문서 §3.3.1) | — |
 
 ---
 
@@ -2816,8 +2657,8 @@ alter table public.ai_index_jobs add column workspace_id uuid not null reference
 - 기준선: 운영(스테이징 아님) 스키마를 `pg_dump 17` 로 뜬다. `scripts/staging-sync.mjs` 가 이미 `pg_dump --version` ≥ 17 을 검사하고 같은 경로를 쓴다. 현 체인은 재생이 불가하다 — 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)와 중복 1개(`0070` 두 파일)가 실측되고, 종합안이 확인한 `0052` 검증 블록·이메일 하드코딩·`0058` 시드가 있다. `pg_dump --schema=public` 은 `storage`·`realtime` 정책을 담지 않으므로 그 두 스키마는 수기 SQL 이다. 기준선의 정책·함수·트리거 수를 운영 `pg_policies`·`pg_proc`·`pg_trigger` 와 대조하는 스크립트(`scripts/baseline-diff.mjs`)를 함께 만든다 — 이 스크립트의 출력이 SP2 스펙의 "라이브 정책 목록" 입력이 된다.
 - 마이그레이션 정리: `supabase/migrations/0001~0100`(정방향 97파일 + 롤백 70파일)과 `tests/migrations/` 41파일(개별 SQL 텍스트 단언, 예: `0094-agent-heartbeat.test.ts` 가 `add column if not exists` 문자열을 검사) 삭제. `migration_ledger`(`0050`)는 기준선에 포함되므로 표는 유지하고 행만 초기화. `.githooks/pre-push` 의 G4 컷오프(100행·109행의 `substr($0,21,4) + 0 >= 72`)를 `>= 1` 로. `scripts/db-apply.mjs` 는 현재 Management API(`api.supabase.com/v1/projects/{ref}/database/query`) 단일 드라이버다 — `--driver mgmt|psql` 로 분리해 SP9 자체호스트 리허설과 CI(`supabase start` 의 로컬 DSN)에서 같은 스크립트를 쓴다.
 - 좌표 env 화: `scripts/lib/staging.config.mjs` 의 `PROD_REF`·`STAGING_REF`·`POOLER_HOST` 리터럴, `scripts/smoke-prod.mjs`:24·`scripts/mark-good.mjs`:27 의 `https://wbs-web.vercel.app` 기본값(실측 2곳 — `scripts/agent-harness-example.mjs` 는 `AGENT_BASE` 를 필수 env 로 검사하고 기본값이 없으므로 4행 사용법 주석의 예시 URL 만 교체), `scripts/vercel-ignore-build.sh` 의 `dflow-staging*` 프로젝트명, `.github/workflows/warm.yml` 의 ping URL 을 전부 env(`SMOKE_URL`·`PROD_REF`·`STAGING_REF`·`STAGING_PROJECT_PREFIX`)로. 키체인 항목명(`"DFlow Staging DB"`·`"DFlow Prod Reader"`·`"Supabase CLI"`)도 스크립트 리터럴이므로 새 이름으로 교체.
-- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/lib/report/brand.ts`:33 `TEAM_COLOR`·`src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4).
-- 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_ORIGIN_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_ORIGIN_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
+- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4). `src/lib/report/brand.ts`:33 `TEAM_COLOR` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다(해소).
+- 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만으로 계획했다 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). 이 분류는 틀렸었다(`TeamsProvider` 가 `DEFAULT_TEAMS` 를 import 했다) — 하드닝 8 이 런타임 소비처를 걷고 옮겼다. 구 파서 fixture 이동도 SP0 에서 밀려 하드닝 6 이 했다(3.4.2). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_ORIGIN_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_ORIGIN_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
 - CI 신설: `.github/workflows/` 는 현재 `warm.yml`(콜드 스타트 핑) 하나뿐이다. `ci.yml`(vitest + `next build` + eslint; `tsconfig.json` `include: ['**/*.ts', …]` 라 `next build` 가 `tests/` 까지 타입체크하므로 빌드 잡이 테스트 타입 회귀도 잡는다)을 만들고, `package.json` 에 `engines.node`(현재 없음; 메모리 백로그 Node ≥ 22.4)를 명시.
   **정정(Task 8 리뷰·8b, 2026-09-24)**: 위 괄호 두 개는 실측과 다르다 — `next build` 는 `tests/` 를
   타입체크하지 **않고**(Next 가 `*.test.*`·`__tests__` 진단을 버린다), Node 하한은 개발 툴체인 실측상
