@@ -67,7 +67,8 @@ vi.mock('@/lib/teams/master', () => {
 })
 
 import {
-  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, getMinuteVersionFileUrl,
+  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, getMinuteShare,
+  getMinuteVersionFileUrl,
   moveMinuteFolder, moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight,
   updateMinuteMeta,
 } from '@/app/actions/minutes'
@@ -110,12 +111,17 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
     served[table] = i + 1
     return r[i]
   }
+  const selects: Record<string, string[]> = {}
   const from = vi.fn((table: string) => {
     const log = (calls[table] ??= [])
     const result = next(table)
     const b: Record<string, unknown> = {}
     for (const m of ['select', 'insert', 'update', 'delete', 'eq', 'in', 'is', 'order', 'maybeSingle', 'single']) {
-      b[m] = vi.fn(() => { log.push(m); return b })
+      b[m] = vi.fn((...args: unknown[]) => {
+        log.push(m)
+        if (m === 'select') (selects[table] ??= []).push(String(args[0] ?? ''))
+        return b
+      })
     }
     ;(b as { then: (r: (v: TableResult) => void) => void }).then = resolve => resolve(result)
     return b
@@ -131,7 +137,7 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
       return storage.remove ?? { data: [], error: null }
     }),
   })
-  return { client: { from, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls }
+  return { client: { from, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls, selects }
 }
 /** WA 의 무프로젝트 회의록 — 작성자는 u1(각 액터의 userId). */
 const minuteRow = (over: Record<string, unknown> = {}) => ({
@@ -510,5 +516,50 @@ describe('removeMinuteFile — Storage 객체가 실제로 지워졌을 때만 �
     getActor.mockResolvedValue(inA)
     expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
     expect(db.calls.minute_files).toContain('delete')
+  })
+})
+
+describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c 앱 호환, 0011 이 열 권한을 걷는다)', () => {
+  const TOKEN = '11111111-2222-4333-8444-555555555555'
+  const shareRow = { data: { share_token: TOKEN, share_enabled: true }, error: null }
+
+  it('getMinuteShare: 세션 조회에는 share_token 이 없고, 판정을 통과한 뒤 service_role 로 그 행만 읽는다', async () => {
+    const db = fakeClient({ minutes: { data: minuteRow(), error: null } })
+    createServerClient.mockResolvedValue(db.client)
+    const adm = fakeClient({ minutes: shareRow })
+    mocks.createAdminClient.mockReturnValue(adm.client)
+    getActor.mockResolvedValue(inA)
+    expect(await getMinuteShare(M)).toEqual({ ok: true, enabled: true, token: TOKEN })
+    expect((db.selects.minutes ?? []).join(' | ')).not.toContain('share_token')
+    expect(adm.selects.minutes).toEqual(['share_token, share_enabled'])
+  })
+
+  it('판정에서 막히면 service_role 을 만들지 않는다', async () => {
+    createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+    getActor.mockResolvedValue(onlyInB)
+    expect(await getMinuteShare(M)).toEqual({ ok: false, error: '권한 없음' })
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('service_role 조회가 실패하거나 0행이면 공유 상태를 모른다 — 거부하고 로그를 남긴다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const res of [{ data: null, error: { message: 'db down' } }, { data: null, error: null }]) {
+      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+      mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: res }).client)
+      getActor.mockResolvedValue(inA)
+      expect(await getMinuteShare(M)).toEqual({ ok: false, error: '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.' })
+    }
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('setMinuteShare: 저장 실패의 DB 문구를 응답에 싣지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+    mocks.createAdminClient.mockReturnValue(fakeClient({ minutes: [shareRow, { data: null, error: { message: 'db boom' } }] }).client)
+    getActor.mockResolvedValue(inA)
+    expect(await setMinuteShare(M, 'enable' as never)).toEqual({ ok: false, error: '공유 설정을 저장하지 못했습니다.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

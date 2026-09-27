@@ -1416,15 +1416,26 @@ export async function ensureMinuteInsightsAction(
 
 export interface MinuteShareResult { ok: boolean; enabled?: boolean; token?: string | null; error?: string }
 
-/** 소유자/관리자 검증 + 공유 컬럼 조회 — get/set 공용(소유권 규칙 한 곳). 공유 컬럼은 소유권 조회에 싣는다.
- *  판정은 checkOwner 그대로다(resolveScope 범위의 canEditMinute) — 미지정(project_id null) 회의록은 작성자 본인 또는 슈퍼유저만. */
+const ERR_SHARE_LOOKUP = '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_SHARE_SAVE = '공유 설정을 저장하지 못했습니다.'
+
+/** 소유자/관리자 검증 + 공유 컬럼 조회 — get/set 공용(소유권 규칙 한 곳). 판정은 checkOwner 그대로다(resolveScope 범위의
+ *  canEditMinute) — 미지정(project_id null) 회의록은 작성자 본인 또는 슈퍼유저만.
+ *  share_token 은 세션이 읽지 못한다(0011 H2-c — minutes 는 share_token 을 뺀 열 단위 SELECT). 판정을 통과한 뒤 service_role 로
+ *  그 회의록 id 한 행만 읽는다. 조회 실패·0행은 공유 상태를 모른다는 뜻이라 거부한다(fail-closed). */
 async function readShareRow(sb: Sb, id: string, actor: Actor):
-  Promise<{ state: ShareState } | { error: string }> {
-  const own = await checkOwner(sb, id, actor, {
-    extra: 'share_token, share_enabled', archivedError: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.',
-  })
+  Promise<{ state: ShareState; admin: ReturnType<typeof createAdminClient> } | { error: string }> {
+  const own = await checkOwner(sb, id, actor, { archivedError: '보관된 회의록은 공유 설정을 바꿀 수 없습니다.' })
   if (!own.ok) return { error: own.error }
-  return { state: { token: (own.row.share_token as string | null) ?? null, enabled: !!own.row.share_enabled } }
+  const adm = adminOr('공유 설정을 확인하세요.')
+  if ('error' in adm) return { error: adm.error }
+  const { data, error } = await adm.admin.from('minutes').select('share_token, share_enabled').eq('id', id).maybeSingle()
+  if (error || !data) {
+    console.error('[readShareRow] 공유 상태 조회 실패:', error?.message ?? '0행')
+    return { error: ERR_SHARE_LOOKUP }
+  }
+  const row = data as { share_token: string | null; share_enabled: boolean | null }
+  return { state: { token: row.share_token ?? null, enabled: !!row.share_enabled }, admin: adm.admin }
 }
 
 /** 공유 상태 조회 — 토큰은 이 액션으로만 클라이언트에 전달(페이지 payload 미포함, 소유자/관리자 한정). */
@@ -1445,11 +1456,11 @@ export async function setMinuteShare(id: string, op: ShareOp): Promise<MinuteSha
   const row = await readShareRow(sb, id, g.actor)
   if ('error' in row) return { ok: false, error: row.error }
   const next = nextShareState(row.state, op, crypto.randomUUID())
-  const adm = adminOr('공유 설정을 확인하세요.')
-  if ('error' in adm) return { ok: false, error: adm.error }
-  const { admin } = adm
-  const { error } = await admin.from('minutes')
+  const { error } = await row.admin.from('minutes')
     .update({ share_token: next.token, share_enabled: next.enabled }).eq('id', id)
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    console.error('[setMinuteShare] 공유 설정 저장 실패:', error.message)
+    return { ok: false, error: ERR_SHARE_SAVE }
+  }
   return { ok: true, enabled: next.enabled, token: next.token }
 }

@@ -26,7 +26,7 @@
 | src/app/actions/inbox.ts | 세션 가드 뒤 id 스코프 | getSession 사용자의 notification_recipients(user_id 필터)만 읽음 표시한다 |
 | src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 워크스페이스(허용 도메인 설정)·프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
 | src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다. 회의록 블록 이슈의 원문은 그 회의록의 프로젝트가 pid 이거나, 프로젝트가 없으면 그 워크스페이스가 pid 의 워크스페이스일 때만 받는다(최종 리뷰 F10 — 0009 issue_links 트리거가 DB 에서도 막는다) |
-| src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유를 쓴다 |
+| src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유 토큰을 읽고 쓴다(0011 뒤 세션은 share_token 열을 읽지 못한다) |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid), 설정·비공개는 requireProjectAdmin(pid) 뒤에 그 pid 로 project_settings·projects 를 쓴다 |
 | src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
 | src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로, workspace_settings 를 그 프로젝트의 워크스페이스 id 로 읽고 쓴다 |
