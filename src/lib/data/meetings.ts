@@ -217,16 +217,23 @@ export const getMyMeetings = cache(async (
   const uid = user?.id ?? null
   if (!user || !uid) return { ok: true, meetings: [], exceptions: [] }
 
+  // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
+  // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.
+  const logDay = (s: string) => (ISO_DAY_RE.test(s) ? s : '(날짜 아님)')
+  const tag = `getMyMeetings range=${logDay(gridStartIso)}..${logDay(gridEndIso)}`
+
+  // 두 인자는 아래 or() 필터 문자열에 그대로 끼워진다. 날짜 꼴이 아니면 필터를 만들기 전에 거부한다 —
+  // RLS 가 읽을 수 있는 범위를 막아 주지만, 호출자가 필터 조건을 덧붙이게 두지는 않는다.
+  if (!ISO_DAY_RE.test(gridStartIso) || !ISO_DAY_RE.test(gridEndIso)) {
+    console.error(`[${tag}] 날짜 꼴이 아닌 인자 — 조회하지 않는다`)
+    return { ok: false, error: ERR_MEETINGS_LOAD }
+  }
+
   const orClause =
     `and(recurrence.eq.none,meeting_date.gte.${gridStartIso},meeting_date.lte.${gridEndIso}),` +
     `and(recurrence.neq.none,meeting_date.lte.${gridEndIso},or(recurrence_until.is.null,recurrence_until.gte.${gridStartIso}))`
 
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id), projects(name)'
-
-  // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
-  // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.
-  const logDay = (s: string) => (ISO_DAY_RE.test(s) ? s : '(날짜 아님)')
-  const tag = `getMyMeetings range=${logDay(gridStartIso)}..${logDay(gridEndIso)}`
 
   // 멤버 ID 조회와 회의 조회는 서로 무관하다(멤버 ID 는 isMine 계산에만 쓰임) — 병렬로 묶고
   // 예외는 임베드로 같은 왕복에 태워 직렬 4단(getUser→멤버→회의→예외)을 2단으로 줄인다.

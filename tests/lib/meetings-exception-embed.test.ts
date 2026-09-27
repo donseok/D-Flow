@@ -313,4 +313,19 @@ describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣�
     expect(logged().some(m => m.includes('forged') || m.includes('\n'))).toBe(false)
     expect(logged().every(m => m.includes('..2026-07-31]'))).toBe(true)
   })
+
+  // 두 인자는 PostgREST or() 필터 문자열에 그대로 끼워진다 — 날짜 꼴이 아니면 필터를 만들기 전에 거부한다.
+  it.each([
+    ['시작', '2026-07-01,project_id.not.is.null', '2026-07-31'],
+    ['끝', '2026-07-01', '2026-07-31),or(title.ilike.*'],
+    ['빈 값', '', '2026-07-31'],
+  ])('getMyMeetings: 날짜 꼴이 아닌 %s 인자는 조회하지 않고 ok:false', async (_name, start, end) => {
+    const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => OK([meetingRow('m1')]) })
+    expect(await getMyMeetings(start, end)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(tables).toEqual([])
+    expect(logged()).toHaveLength(1)
+    expect(logged()[0]).toContain('getMyMeetings')
+    expect(logged()[0]).toContain('날짜 꼴이 아닌 인자')
+    expect(logged().some(m => m.includes('ilike') || m.includes('not.is.null'))).toBe(false)
+  })
 })
