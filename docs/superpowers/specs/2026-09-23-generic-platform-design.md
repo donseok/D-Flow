@@ -2645,9 +2645,11 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 | Q1 이슈분석서 As-Is 트리 페이지(5·6) | 제품 고정 슬라이드 유형으로 **유지**(결정 6 의 명시적 예외) | SP6 범위에서 "격리 후 기본 출력 제외" 가 "유지·기본 양식으로 렌더" 로 바뀜. 표·텍스트 페이지만 자리표시 엔진 | SP6 3주 유지(도형 규약 개발이 빠졌으므로 증가 없음) |
 | Q2 워크스페이스 관리자 | 그 워크스페이스 **모든 프로젝트의 관리자로 자동 승계, 비공개 포함** | SP2 의 `roleIn` 판정 순서·`canSeeProject`·`is_project_admin()` 헬퍼·비공개 숨김 로직(`dropHidden`)에 반영, `tests/rls` 케이스 추가 | SP2 3주 유지 |
 | Q3 명단과 권한 | `project_members.access_role` **한 행으로 통합**, 숨김 편집자 없음 | SP1 에서 `project_roles` 를 hidden 행 변환 없이 단순 폐기. 데이터 이관이 없으므로 백필 없음 | SP1 3주 유지 |
-| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격** | SP5 에 마이그레이션 1개(`0013_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
+| Q4 설정 승격 어휘 | 근태 유형·회의 카테고리·이슈 심각도/원인/원천·타임존·근무일 **넷 다 승격**. 이슈 상태·WBS 단계는 범주 고정, 표시·흐름은 SP5b(Q4′, 2026-09-27 — 1.10) | SP5 에 마이그레이션 1개(`0013_vocab_settings`)와 `Asia/Seoul` 25파일 + SQL 함수 4개 교체가 추가 | **SP5 2주 → 3주** |
 | Q5 고객 양식 3종 | 지금은 미확보 | SP6 착수 조건을 "실제 고객 양식 3종 **또는** 원본 고객사 양식 + 다른 구조의 자체 샘플 2종" 으로 명시, SP6 직전 재확인 | SP6 착수가 막히지 않음 |
 | Q6 또박또박 계약 | **헤더 자격증명만 변경, payload 불변** | SP7 에서 `GET /minutes/meta` 의 팀·프로젝트 소비를 또박또박에 요구하지 않음. 팀·프로젝트 해석은 자격증명 행의 기본 프로젝트·팀 매핑으로 우리 쪽이 처리 | **SP7 2~3주 → 2주** |
+
+**추가 원칙(2026-09-27).** 위 원칙은 유지하고 여섯 가지를 더한다: SP 당 노력 상한 3주와 Phase 분할, 행위 테스트가 완료 근거(RLS 건너뜀은 통과 아님), 설정 항목 done 의 네 연결(`SettingDef`·카탈로그 / 편집 UI·API / 소비처 전부 / 테스트), 화면 소유 규칙, 레인 병렬과 파일 소유, 원격 배포 전 규칙(로컬 검증·`sp<id>-done` 로컬 태그·`Preview-checked: local` 트레일러). 정본은 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §6.1 이다.
 
 ### 6.2 서브 프로젝트 상세
 
@@ -2742,7 +2744,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 - Realtime: 현재 `private: true` 인 채널은 `useWbsRealtime.ts`(`project-<uuid>-wbs`, `0098`)·`useInboxRealtime.ts`(`user-<uuid>-notifications`, `0075`) 둘뿐이고, `src/components/app/usePagePresence.ts`(`page-presence-*`)·`src/components/weekly/usePresence.ts`(`weekly-presence-*`)·`WeeklySheetView.tsx`(`weekly-rows-*`) 는 public 채널이다. presence 둘은 토픽을 `project-<pid>-presence-<pageKey>`·`project-<pid>-weekly-<reportId>-presence` 로 바꾸고 `private: true` + `realtime.messages` 정책 2건(2.4.6 — `0098` 의 정규식 `substring` + `is not null` 패턴 재사용, 판정은 `can_read_project`)으로; `weekly-rows-*` 는 `postgres_changes` 구독이라 `weekly_report_rows` 읽기 정책이 구독자별로 적용된다(미검증 — 2.7·6.7). `usePagePresence.ts` 는 `src/components/app/` 아래라 **UI 위험 파일**(G2) — `ui/` 브랜치 + 스테이징 눈확인.
 - 가드: `requireWorkspaceAdmin(wid)`·`requireSuperuser()`(= 플랫폼 관리자, 이름 유지)·`resolveScope(table, id)`(현 `resolveProjectId` 의 `ProjectScopedTable` 화이트리스트 9테이블 유지 + `workspaceId` 반환). `requireSuperuser(` 호출 24곳/10파일(실측; 정의 `src/lib/authz/index.ts`:144 별도)을 플랫폼/워크스페이스로 분류하는 표를 스펙에 싣는다. 초대 수락 시 `workspace_members` 자동 추가, `workspace_settings` 테이블 신설(`invites.allowed_domains` 만 — 레지스트리는 SP3).
 - service_role: `createAdminClient` importer 65파일(실측) 감사표 + `adminFor({ workspaceId | projectId })` 래퍼 도입, 스코프 없는 admin 쿼리를 잡는 정적 테스트(→ 6.5.2). 외부 API 판정부(`src/lib/agent/externalApi.ts`·`src/lib/minutes/externalApi.ts`·`src/lib/authz/accessScope.ts` 존재 확인)를 admin 클라이언트로 Actor 를 조립해 `roleIn` 을 재사용하도록 통합(결정 8 복구 — `actorFromUser`, 2.4.8; 자격증명 행·`narrowActor` 는 SP7).
-- UI: 워크스페이스 전환(쿠키 + `user_preferences`, `count > 1` 일 때만 노출), `/w/[slug]/{minutes,meetings,agents,portfolio,usage,admin}` 이동(href·`revalidatePath`·`redirect` 정리 건수는 종합안 28·122·13 (미검증)), `/projects` 워크스페이스 필터, 미들웨어 matcher 갱신.
+- UI: **SP3b 로 이관(SP2 스펙 U2).** 워크스페이스 전환(쿠키 + `user_preferences`, `count > 1` 일 때만 노출), `/w/[slug]/{minutes,meetings,agents,portfolio,usage,admin}` 이동(href·`revalidatePath`·`redirect` 정리 건수는 종합안 28·122·13 (미검증)), `/projects` 는 필터가 아니라 `/w/[slug]/projects` 로 이동(옛 경로는 리디렉션 — 7절 5-D8, 개정 문서 §5.3.2), 미들웨어 matcher 갱신.
 - `tests/rls/` 신설(→ 6.5.1) + '개방 읽기 정책 0건' 정적 불변식 + 성능 기준선(`scripts/perf-baseline.mjs`: `smoke-prod.mjs` 의 `get()` 재사용, 대시보드·WBS 셸 p95 를 SP1 태그와 비교).
 
 **범위 제외**
@@ -2761,295 +2763,32 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 - 워크스페이스 관리자가 프로젝트를 만들고 초대한 외부 계정이 그 워크스페이스에만 속함
 - 대시보드·WBS 셸 p95 가 SP1 태그 대비 +20% 이내(측정 기록)
 
-#### SP3 — 설정 엔진 + 모듈 레지스트리·3층 토글 + 프로젝트 생성(빈 값/복사)
+#### SP3~SP9 — 개정 문서로 대체
 
-| 항목 | 내용 |
-|---|---|
-| 목표 | 설정 항목(스키마)은 코드 레지스트리가 고정하고 값은 프로젝트 관리자가 설정 페이지에서 제어하며(결정 5), 모든 모듈이 env 가용 ∩ 워크스페이스 허용 ∩ 프로젝트 활성 세 층으로 켜지고 꺼지고(결정 7), 메뉴·라우트·액션·API·봇·워커가 한 판정 함수에서 파생된다 |
-| 왜 이 순서 | SP4·SP5 가 값을 옮길 자리와 UI 가 먼저 있어야 한다. 메뉴 통합은 `/w/[slug]` 이동(SP2) 뒤여야 한 번에 끝난다 |
-| 의존 | SP2 |
-| 마이그레이션 | `0009_settings.sql` |
-| 기간 | 2~3주 |
-
-**범위 포함**
-
-- 스키마(→ 3절): `project_settings` → `(project_id, values jsonb, updated_at, updated_by)` + `project_settings_history`·`workspace_settings_history`(3.1.1); `workspace_settings.values` 확장. `0058` 의 컬럼식(`level_labels`·`max_depth`·`extra_axis_label`·`milestone_keywords`·`excel_profile`·`enabled_modules`·`weekly_sections`·`working_days`·`timezone`·`preset_applied` — `0058`:7~17 실측 10컬럼) 폐기. `excel_profile jsonb`(11행)는 임포트 마법사 저장 프로파일(`src/lib/excel/profile.ts`·`parseWithProfile.ts`·`exportWithProfile.ts` 가 소비)이므로 이 SP 에서 `values` 키 `wbs.excel_profile`(3절 정본)로 옮기고 소비처 3파일의 읽기 경로를 바꾼다 — SP4 의 "프로파일 없으면 마법사 저장 요구" 는 이 키를 가리킨다. `working_days`·`timezone` 컬럼은 Q4 에 따라 SP5 에서 `values` 키로 부활하므로 여기서는 컬럼만 지운다.
-- `src/lib/settings/registry.ts`(`SettingDef`: `key`·`scope`·`module`·`default`·`parse`·`widget`, 교차 불변식 `validateConfig`) + `getProjectConfig` 재작성(요청당 `cache()`, 실패 throw, 인자 주입 원칙) + `updateProjectSettings`/`updateWorkspaceSettings` 액션(`requireProjectAdmin`/`requireWorkspaceAdmin` → `parse` → history). `branding`·`invites.allowed_domains`·`ai.enabled`·`minutes.root_folders`·`calendar.timezone` 을 워크스페이스 레지스트리에(3.3.2).
-- `src/lib/modules/registry.ts`(`ModuleDef` 10필드 상한, 이벤트 버스·DI·동적 로딩 금지) + `effectiveModules({ workspaceId, projectId? })`(요청당 `cache`, Actor 무관 — 3.2.3) + `requireModule`(`GuardResult`, fail-closed). `p/[projectId]/layout.tsx` 경로 세그먼트 → 모듈 `notFound`; API 프리픽스 게이트. **서버 액션 173개(`src/app/actions/*.ts` 35파일의 `export async function` 실측)·API 라우트 41개(`src/app/api/**/route.ts` 실측) export 전수 열거 게이트 테스트**(→ 6.5.3). 워커(위키·인덱스·`inbox-retention`)가 활성 워크스페이스/모듈만 순회. env 플래그는 `envAvailable` 로만 — `process.env` 직접 참조 실측 10종(`AGENT_API_ENABLED`·`MINUTES_API_ENABLED`·`MINUTES_FOLDER_PATH_ENABLED`·`WIKI_SERVICE_ENABLED`·`WIKI_WORKER_ENABLED`·`CHAT_V2_ENABLED`·`CHAT_V2_PLANNER_ENABLED`·`CHAT_V2_LLM_SYNTHESIS_ENABLED`·`CHAT_V2_INDEX_ENQUEUE_ENABLED`·`CHAT_V2_INDEX_WORKER_ENABLED`; `MINUTES_FOLDER_DND_ENABLED` 는 `src` 참조 0건 — `.env.local.example`:76 주석과 `docs/design/folder-path-*.md` 에만 남은 죽은 이름이라 `envAvailable` 이관 목록에 넣지 않고 SP0 에서 예시 파일에서 삭제한다).
-- 메뉴 통합: `src/components/app/Sidebar.tsx`(`projectMenu`)·`HeaderChrome.tsx`·`ProjectTabs.tsx` 실측 + `SECTION_LABEL`·챗 v2 의 verifier 화이트리스트·라우터·플래너 도메인(`src/lib/ai/chat/verifier.ts`·`router.ts`·`planner.ts`)을 레지스트리 `nav` 파생으로. 세 파일 모두 **UI 위험 파일** — `ui/` 브랜치 + 스테이징 눈확인 필수. `agent_projects.enabled`·`AgentProjectToggle` 을 `modules.enabled` 의 `agents` 로 흡수.
-- 설정 페이지 `/p/[id]/settings`(레지스트리 자동 폼 + 전용 편집기: 팀·담당 영역 kind 탭·순서·개명·활성·`area_teams`, 명단/역할, 모듈 토글; 양식 자리는 SP6) + '설정 필요' 배너 컴포넌트; `/w/[slug]/settings`(브랜딩·초대 도메인·공용 팀; 모듈 계약 `modules.allowed` 는 플랫폼 관리자 전용 섹션).
-- `createProject({ workspaceId, name, levelLabels, copyFromProjectId? })` + `copy_project_config` RPC(타 워크스페이스 거부). `tests/settings/no-runtime-constants.test.ts` 도입(허용 목록으로 시작 — → 6.5.2).
-
-**범위 제외**
-
-- 개별 상수의 실제 승격(SP4 WBS·주간, SP5 이슈·회의록·어휘)
-- 양식 업로드·매핑 UI(SP6)
-- 또박또박·에이전트 자격증명(SP7)
-
-**완료 조건(done_when)**
-
-- 프로젝트 관리자가 설정 페이지에서 모듈을 끄면 메뉴·URL(404)·서버 액션(거부)·API(404)·봇 도메인·워커가 모두 막힘 — 열거 게이트 테스트 + 스테이징 눈확인; 메뉴 통합 커밋은 `Preview-checked: <스테이징 URL·일시>` 트레일러(6.5.4)
-- 워크스페이스에서 허용하지 않은 모듈은 프로젝트에서 회색으로 켤 수 없음
-- 새 프로젝트를 빈 값/복사로 생성해 라벨·팀·영역이 복사됨; 설정 변경이 `project_settings_history` 에 남음
-- `no-runtime-constants` 테스트가 허용 목록과 함께 CI 에 있음
-
-#### SP4 — WBS·주간보고 설정값 승격 + 팀 캐시 폐기
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | `WEEKLY_SECTIONS` 11구분·`WEEKLY_TEAM_SECTIONS`·`DEFAULT_TEAMS`·`TEAM_COLOR`·`LEGACY_ORIGIN_PROFILE`·`levelLabels` 폴백이 코드에서 사라지고, 주간 시트·이월·점검·내러티브·봇이 `project_areas`/`area_teams`/`teams` 주입으로 동작한다 |
-| 왜 이 순서 | 레지스트리(SP3)가 있어야 값을 옮긴다. 이슈·회의록(SP5)보다 먼저인 이유는 `teams/master.ts` 캐시 폐기가 `minutes.team_id`(SP5) 의 전제이기 때문이다 |
-| 의존 | SP3 |
-| 마이그레이션 | `0010_weekly_areas.sql` |
-| 기간 | 2주 |
-
-**범위 포함**
-
-- 스키마: `weekly_report_rows.project_id` + `area_id`, FK `(area_id, project_id) → project_areas(id, project_id)`, `section`·`module` text 삭제, 인덱스.
-- `weeklySheet.ts` 순수 함수에 `areas` 주입(`defaultWeeklyRows(areas)`·`carryOverRows(prev, areas)`·`sortWeeklyRows`·`sectionKeyOf` → `areaId` 키), `LEGACY_SECTION_MAP`·`WEEKLY_TEAM_SECTIONS`·`FALLBACK_SECTION` 삭제; `data/weeklySheet.ts` `ensureStandardRows`·`report/sheetNarrative.ts`·`weeklyLint.ts`·양식 통일·멀티셀 편집/프레즌스(`rowId` 키 확인)·봇 `weekly:read`(팀 필터 → `area_teams`) 재배선; 구분 0개면 배너.
-- 팀: `DEFAULT_TEAMS`·`RESERVED_TEAM_NAMES`·`TEAM_COLOR`·`shared.tsx` TEAM CSS 토큰 → `teams.color` inline style. `src/lib/teams/master.ts`(프로세스 전역 sync 캐시, TTL 60초, `createAdminClient` 로 전 팀 로드, importer 32파일 실측 — `@/lib/teams/master`; 상대 경로 import 포함 33) 폐기 → 요청 스코프 로더(`(app)/layout` `TeamsProvider` 는 워크스페이스 팀 주입). 대시보드 팀별 진척·간트·칸반 색상.
-- WBS: `LEGACY_ORIGIN_PROFILE`·`/api/export` `'{}'`→LEGACY 폴백·`parseWithProfile`/`exportWithProfile` 폴백 삭제(`wbs.excel_profile` 키가 비어 있으면 마법사 저장 요구 — SP3 에서 옮긴 키), `DEFAULT_PROJECT_CONFIG.levelLabels`·`LEGACY_LABEL_ABBR` 삭제, `import_wbs`/`replace_wbs` 팀 해석을 `(workspace, project)` 스코프로.
-- 테스트: 팀 코드 리터럴 테스트(종합안 175파일 (미검증)) 중 WBS·주간 계열의 fixture 공용화, `WbsRow.owners` 계약 불변 확인.
-
-**범위 제외**
-
-- PPT/엑셀 출력 엔진(SP6 — 여기서는 SP0 중립 기본 양식으로 현행 렌더 유지)
-- 이슈·회의록·어휘 상수(SP5)
-
-**완료 조건(done_when)**
-
-- 새 프로젝트에 구분 0개면 주간 시트가 배너를 보이고, 구분 등록 후 스켈레톤·이월·점검·PPT 내러티브·봇 `weekly:read` 가 같은 `area_id` 로 동작(테스트 + 스테이징)
-- `grep -rE 'WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|LEGACY_SECTION_MAP|DEFAULT_TEAMS|TEAM_COLOR|LEGACY_ORIGIN_PROFILE|LEGACY_LABEL_ABBR' src` 런타임 0건(`no-runtime-constants` 허용 목록에서 제거)
-- `grep -nE 'team-(pmo|dt|erp|mes|mdm)' src/app/globals.css` 0건(3.4.2a — UI 위험 파일, `ui/` 브랜치 + 스테이징 눈확인)
-- `src/lib/teams/master.ts` 삭제; `tsc`·`vitest` 초록
-
-#### SP5 — 이슈·회의록·근태·회의·공지 설정값 승격 (Q4 어휘 포함)
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | `ISSUE_MEGA_AREAS` 8영역·이슈 코드 접두·회의록 팀 5축 시드·APS 별칭·계정 안내문 등 잔여 원본 고객사 하드코딩을 설정값·마스터로 옮기고, Q4 로 확정된 어휘 넷(근태 유형·회의 카테고리·이슈 심각도/원인 분류/원천·타임존/근무일)을 `project_settings.values` 로 승격해 `src` 런타임에서 원본 고객사 흔적 0 을 만든다 |
-| 왜 이 순서 | 팀 캐시(SP4)가 없어져야 `minutes.team_id` 가 워크스페이스 팀을 본다. 어휘 승격은 SP3 레지스트리의 `parse`·`widget` 위에서만 성립한다 |
-| 의존 | SP4 |
-| 마이그레이션 | `0011_issue_areas.sql` · `0012_minutes_teams.sql` · `0013_vocab_settings.sql`(Q4 추가) |
-| 기간 | **3주**(종합안 2주 + Q4 1주) |
-
-**범위 포함**
-
-- 이슈 영역(→ 3절 `project_areas kind='issue_area'`·`issues.code_prefix`): `issues.area_id`·`issue_major_processes.area_id` 복합 FK(`mega_code` 삭제), `issue_number_counters (project_id, area_id)`, 체번 advisory lock 재작성, 코드 접두 트리거가 `project_settings.values.issues.code_prefix` 를 읽음(`'PI-I-'` 트리거 하드코딩은 `0055`:240 과 `0062`:246 — 같은 체번 함수의 재정의로 `new.mega_code` 를 참조하는 본문이 교체 대상; `0055`:118 은 기존 행 백필 `update` 문이라 기준선에 흡수되어 무관), `issue_mega_areas` 테이블·`0055` check 삭제; `issueAnalysis.ts` `IssueMegaCode` → `string`·`formatPiIssueCode` → `formatIssueCode(prefix, area.code, seq)`, 소비처 16파일 (미검증).
-- 회의록 팀(→ 3절 `minutes.root_folders`): `minutes.team_code text` → `team_id → teams` FK, `minute_folders` 루트 = `workspace_settings.values.minutes.root_folders` 규칙, `folders.ts` 5축 시드·`domain/minutes.ts` `TEAM_SUB_ALIASES` 삭제, 미지정 회의록은 `workspace_id` 필수; 위키 파이프라인·목록 필터 `?team=` 을 `team_id` 로. Q6 대응으로 "또박또박 `team` 문자열 → `teams.id` 해석 함수" 를 여기서 준비한다(계약은 SP7).
-- **Q4 어휘 승격(`0013_vocab_settings.sql`)** — 근태·회의·심각도·원천은 DB check 제약과 도메인 상수 두 곳에 박혀 있으므로 둘 다 걷어낸다. 원인 분류는 DB check 가 없고 리포트/AI 출력 계층의 상수와 라벨(아래 행)에만 있으므로 그쪽만 교체한다:
-
-  | 어휘 | 현 위치(실측) | 승격 후 |
-  |---|---|---|
-  | 근태 유형 9종 | `0015` `check (type in ('work',…,'absent'))` + `src/lib/domain/attendance.ts` `ATTENDANCE_TYPES` + `src/lib/ai/tools/attendance.ts` | `project_settings.values.attendance.types`(코드·라벨·순서), check 삭제, 저장 시 레지스트리 `parse` 가 검증 |
-  | 회의 카테고리 6종 | `0013` `check (category in ('general',…,'external'))` + `src/lib/domain/meetings.ts` `MEETING_CATEGORIES` | `values.meetings.categories`, check 삭제 |
-  | 이슈 심각도 3종 | `0041` `check (severity in ('high','medium','low'))` + `src/lib/domain/issues.ts` `ISSUE_SEVERITIES`·`ISSUE_SEVERITY_META` | `values.issues.severities`, check 삭제 |
-  | 이슈 원인 분류 4종(S/P/O/I = `strategy_policy`·`process`·`organization`·`it`) | DB check 없음(원인은 분석 실행 JSON 에 저장). `src/lib/report/issues/model.ts`:13 `ISSUE_ANALYSIS_CAUSE_CATEGORIES` + `deckPlan.ts`:630 `CAUSE_CATEGORY_LABELS`(→ `IssueAnalysisDeckCauseRow.categoryLabel`, `jszipRenderer.ts`:308 `causeCategoryText`) + `src/lib/ai/issue-analysis.ts` 프롬프트(58행)·검증(387행); 소비처 4파일(`model.ts`·`deckPlan.ts`·`storedRun.ts`·`ai/issue-analysis.ts`) | `values.issues.cause_categories`(코드·라벨·순서) — 프롬프트·검증·라벨이 같은 값을 주입받음 |
-  | 이슈 원천 6종 | `0055`:136 `source_type in (…)` check + `src/lib/domain/issueAnalysis.ts`:20 `ISSUE_SOURCE_TYPES`(`minutes`·`interview`·`deliverable`·`as_is_analysis`·`data_analysis`·`other`) | `values.issues.sources`, check 삭제 |
-  | 타임존 | `Asia/Seoul` 리터럴 `src` 25파일(실측; `lib/domain/dates.ts`·`lib/excel/parse.ts`·`app/api/report/route.ts` 등) + **SQL 함수 4개 마이그레이션**(`0005_base_date`·`0016_announcement_schedule`·`0051_usage_events`·`0079_wiki_memory` — 기준선 `0000` 에 그대로 들어가므로 이 SP 에서 함수를 재정의) | `values.calendar.timezone`(IANA 문자열; 프로젝트 기본값 = 워크스페이스 값, 워크스페이스 기본값 `'UTC'` — 3.3.2·3.3.3), 순수 함수는 인자 주입, SQL 함수는 `p_timezone` 인자 또는 `project_settings` 조회 |
-  | 근무일 | `0058` `working_days int[]` 컬럼(SP3 에서 폐기)·`src` 소비처 0건(실측 — 현재는 `holidays` 표만 영업일 계산에 쓰임) | `values.calendar.working_days`(ISO 요일 배열, 기본 `[1,2,3,4,5]` — 3.3.3), `lib/domain/dates.ts` 영업일 계산이 `holidays` 와 함께 소비 |
-
-  이슈 상태(`ISSUE_STATUSES` `open`/`in_progress`/`resolved`/`on_hold` 실측)와 WBS 단계 코드(`as`/`ip`/`im`/`xx` — `fp` 는 0096 에서 `ip` 로 이관돼 어휘에 없다, `stageLabels.ts:6` 실측)는 제품 고정으로 남긴다 — 상태 전이(`canTransition`)·에이전트 stage 워크플로가 코드에 의존하기 때문이다. 제품 고정 어휘 목록을 `docs/settings-catalog.md` "고정 어휘" 절에 못 박는다(3절 참조).
-- 근태·회의·공지: `attendance_records`·`meeting_attendees` 는 SP1 의 `project_members(person)` 축 유지 확인, 회의 초대 메일 수신자 `people.email`; `AccountsManager` 안내문·`src/lib/report/weekly.ts` 의 원본 고객사 문자열 등 잔여 문자열 제거; 이슈분석서 `deckPlan` 의 Mega 순서·라벨을 `areas` 주입(렌더러 자체는 SP6).
-
-**범위 제외**
-
-- 또박또박 계약 변경(SP7)
-- 양식 엔진(SP6)
-- 이슈 상태·WBS 단계 코드의 설정화(제품 고정 — Q4)
-
-**완료 조건(done_when)**
-
-- `grep -rE '원본 고객사|ORIGIN|PMO|MDM|APS|origincorp|원본 고객사|Asia/Seoul' src` 런타임 0건(`tests/fixtures`·`branding.ts` 기본값 제외; `no-runtime-constants` 허용 목록 비움)
-- 이슈 ID 가 프로젝트별 접두·영역 코드로 발번되고 영역 개명 후에도 기존 ID 불변(테스트)
-- 근태 유형·회의 카테고리·이슈 심각도를 설정에서 바꾼 뒤 각 화면의 선택지·검증·PPT 라벨이 따라옴(스테이징); 레지스트리 밖 값은 저장 시 거부
-- 타임존을 `America/New_York` 으로 바꾼 테스트 프로젝트에서 기준일·주간 범위·공지 예약·사용현황 일자가 그 타임존으로 계산됨(순수 함수 테스트 + SQL 함수 `tests/rls` 케이스)
-- 회의록 트리가 워크스페이스 공용 팀에서 루트를 생성하고 팀 비활성화 시 루트가 읽기 전용으로 남음; 위키 재인덱싱 대상(`title`·`team_id`·`minute_date`) 계약 테스트
-
-#### SP6 — 양식 병합 엔진: 템플릿 업로드·자리표시·매핑
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | 프로젝트 관리자가 고객사 PPT/엑셀 양식을 올리고, 주간보고·WBS 엑셀·이슈분석서 표/텍스트 페이지가 그 양식의 자리표시에 병합되어 나온다(결정 6). Q1 에 따라 이슈분석서 As-Is 프로세스 트리 페이지(5·6)는 **제품 고정 슬라이드 유형으로 유지**한다 |
-| 왜 이 순서 | 데이터 카탈로그(`sections[]`·`issues[]`·`areas`)가 SP4·SP5 의 승격 결과 위에서만 정의된다. SP7→SP8 과 파일이 겹치지 않아 병렬 실행한다 |
-| 의존 | SP4·SP5 |
-| 마이그레이션 | `0015_form_templates.sql`(+ Storage 버킷 `form-templates` 시드·경로 파싱 정책; 번호가 SP7 의 `0009` 뒤인 이유는 6.3) |
-| 기간 | 3주(1주 스파이크 포함) |
-| **착수 조건(Q5)** | 스파이크 픽스처로 **실제 고객사 양식 3종**(서로 다른 고객사·표 구조) **또는** 미확보 시 **원본 고객사 양식 + 다른 구조의 자체 제작 샘플 2종**. SP5 완료 시점(SP6 직전)에 확보 여부를 재확인하고 스펙 서두에 어느 쪽인지 기록한다. 자체 샘플로 착수한 경우 첫 실제 고객 양식 입수 시 회귀 픽스처에 추가한다 |
-
-**범위 포함**
-
-- 1주차 스파이크(결정 게이트, → 4절 라이브러리 결정): 픽스처 3종으로 런 분할 빈도·표 행 복제·슬라이드 반복·`exceljs` 왕복 손실·Vercel 메모리를 실측하고 JSZip 유지 vs docxtemplater 하이브리드 전환을 기록. 의존은 현재 `jszip ^3.10.1`·`exceljs ^4.4.0`·`xlsx ^0.18.5`(`package.json` 실측) — `xlsx` 는 WBS 임포트 파싱뿐 아니라 **WBS 엑셀 내보내기의 작성기**다(`src/lib/excel/exportWithProfile.ts`:267 `XLSX.utils.book_new()`·:277 `XLSX.write(...)`, `src/lib/excel/export.ts`:110·118 동일). 따라서 `exceljs` 왕복 손실 실측 범위에 WBS 엑셀 양식 출력도 포함한다.
-- 저장·정책(→ 4.6 `form_templates`): Storage 버킷 `form-templates`(읽기·insert 모두 `is_project_admin`, 브라우저는 `incoming/` 에만 insert, delete 정책 없음, 경로 파싱은 2.4.6 헬퍼), 업로드/스캔/활성화 서버 액션(매직바이트·DRM·10MB·토큰 스캔 캐시·미매핑 시 활성화 거부), `incoming/` 고아 정리 잡 `form-templates-gc`(4.7.1, 5.5.2 레지스트리).
-- 엔진 `src/lib/report/engine/`(`tokens.ts`·`pptx.ts`·`xlsx.ts`·`catalog.ts`; 규약은 4절), 설정 페이지 '양식' 섹션, `forms.<form_kind>` 매핑 저장.
-- 이관: `/api/report`·`/api/issue-analysis`·WBS 엑셀 **양식 출력**(`GET /api/export?form=1`, `form_kind='wbs_export_xlsx'`)을 엔진으로. WBS 엑셀은 두 경로다 — 임포트 파서와의 라운드트립 `GET /api/export`(`exportWithProfile.ts`·`excel/export.ts`, SheetJS, `wbs.excel_profile`)는 WBS 모듈에 그대로 남고 엔진 대상이 아니다(4.2 결정 7·4.8·4.10.1); `templateFill.ts`·`excel.ts`(주간)·`jszipRenderer` 의 표/텍스트 페이지·`deckPlan` `sourceSlide` 좌표·`CELL_BUDGET`/`ISSUE_BUDGET`/`ISSUE_CAP`/`EVENT_CAP` 삭제(4.8 표). 제품 기본 양식 = 리포 동봉 템플릿 파일(`next.config.ts` `outputFileTracingIncludes` 는 기본 양식만), 화면에 '기본 양식 사용 중' 명시, `docs/forms-placeholders.md`.
-- **Q1 반영 — 제품 고정 슬라이드 유형**: `processSlideRenderer`·`processPages`(As-Is 트리·정의, 원본 5·6)는 삭제하지 않고 엔진 옆에 "고정 슬라이드 유형" 으로 둔다(4.9). 도형 소스는 제품 자산 `assets/fixed/issue-analysis-process.pptx` 이며, 고객 덱에 끼우는 방식은 스파이크가 (A) 마커 `{{fixed.process_pages}}`(양식이 위치 지정, 규약 7종으로 개정) 또는 (B) 옵션 `forms.issue_analysis_pptx.options.append_process_pages`(덱 끝) 중 하나만 남긴다(4.9). 영역 라벨·순서는 SP5 의 `project_areas` 주입, 활성 영역 8개 초과는 `FIXED_SLIDE_LIMIT`. 개선기회(원본 12)는 고정 유형이 아니라 표(`{{#rows opportunities}}`)로 이관한다(4.2 결정 6·4.14).
-
-**범위 제외**
-
-- 이미지·차트·SmartArt 자리표시, 출력물 보관, PDF 변환(비목표)
-- 도형 반복 규약(`{{#tree}}`) 개발 — Q1 로 불필요
-
-**완료 조건(done_when)**
-
-- 픽스처 3종 각각에서 주간보고 PPT/엑셀·WBS 엑셀·이슈분석서 표 페이지가 자리표시 병합으로 생성되고 PowerPoint/Excel 에서 복구 대화상자 없이 열림(픽스처 회귀 테스트 + 스테이징 실측 기록)
-- 고정 슬라이드 유형(As-Is 트리·정의)이 스파이크가 남긴 방식대로 — (A) 마커 있는 양식에서만, (B) 옵션이 켜진 프로젝트에서만 — 삽입되고 그 외에는 빠짐(테스트)
-- 미매핑 토큰이 있으면 활성화가 거부되고 렌더 실패는 슬라이드·토큰을 명시
-- `grep -rE 'CELL_BUDGET|ISSUE_BUDGET|ISSUE_CAP|EVENT_CAP|weekly-template\.pptx|issue-analysis-template\.pptx' src` 0건(4.11); `exceljs` 손실 항목이 업로드 경고로 노출
-
-#### SP7 — 외부 연동 패키지화: 또박또박·에이전트 자격증명과 스코프
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | 또박또박 수신 API 와 에이전트 API 가 워크스페이스별 자격증명·모듈 토글 위에서 동작해 '하나의 패키지 솔루션' 으로 배포되고, 에이전트 스튜디오가 워크스페이스 안에서만 보인다(결정 7). Q6 대로 또박또박 측 변경은 **헤더 자격증명뿐**이며 payload 는 불변이다 |
-| 왜 이 순서 | 모듈 토글(SP3)과 팀 해석 함수(SP5)가 전제다. SP6 과 병렬 |
-| 의존 | SP3·SP5 |
-| 마이그레이션 | `0014_integration_credentials.sql`(병렬 구간의 첫 번호 — 6.3) |
-| 기간 | **2주**(종합안 2~3주 — Q6 로 meta 소비·계약 전면 개정이 빠짐) |
-
-**범위 포함**
-
-- `integration_credentials`(→ 2·5절: workspace 스코프, `kind minutes_api|agent_runner`, `token_prefix`+`token_hash` 상수시간 비교, `scopes`, `project_ids[]`, `default_project_id`, `default_team_id`, `team_map`, `enabled`, `revoked_at`, `expires_at`)로 `MINUTES_API_SECRET`(실측 2곳)·`AGENT_API_SECRET`(3곳)·`agent_runners`(`0078`) 흡수. env 는 `envAvailable` 킬스위치. 발급·회수 UI(워크스페이스 관리자; PAT 는 본인).
-- **Q6 반영 — 또박또박 최소 변경**: `/api/v1/minutes*` 는 헤더 자격증명 → 워크스페이스 판정만 바뀐다. payload 의 `team` 문자열·`folder_path`·`user_email` 은 v2.5 그대로 받고, 해석은 우리 쪽 — `team` → 자격증명 행의 `team_map`(5절 정본)으로 `teams.id`; 프로젝트 → payload 의 `meeting_id`(→ `meetings.project_id`) 또는 inline `meeting.project_id`(v2.5 W2)가 있으면 그것, 신규 생성에서 둘 다 없으면 자격증명 행의 `default_project_id`(그것도 null 이면 워크스페이스 미지정 회의록 — 5절 5.2.2), `on_conflict=replace` 는 v2.2 C1 대로 기존 `project_id` 유지. **payload 에 최상위 `project_id` 키는 없고 새로 만들지도 않는다**(v2.5 §4.2 필드는 `user_email`·`date`·`team`·`title`·`body_markdown`·`external_id`·`meeting_id`·`meeting{project_id,…}`·`folder_path`·`on_conflict` 뿐; 현 `src/app/api/v1/minutes/route.ts`:167~169·406~412 도 `meeting_id`/`meeting` 경로로만 `targetProjectId` 를 정한다). `user_email` → `people`/`profiles`(`auth.admin.listUsers` 순회 제거). 모듈 꺼짐은 409(조용한 미분류 저장 금지). `GET /minutes/meta` 는 유지하되 또박또박에 소비를 요구하지 않는다. 계약 문서는 현 `docs/design/dflow-minutes-upload-api-spec.md` v2.5 위에 **v3 = "인증 절 교체" 만** 얹는다(payload 절 diff 0). 공동 온보딩 체크리스트(워크스페이스 생성 시 자격증명 발급·전달·팀 매핑 초기값).
-- 에이전트: PAT 허용 프로젝트를 워크스페이스 내로 제한(`project_ids null` = 워크스페이스 전체), `resolveAgentPrincipal` 이 `workspace_id` 를 principal 에 실음, `requireAgentProject` = `effectiveModules('agents')`, 스튜디오/좌석표/`agent_runners`/heartbeat/작업 목록 워크스페이스 필터(`/w/[slug]/agents`). `.claude/skills/dflow-*` 8개(실측: `dflow-dev`·`dflow-export`·`dflow-merge`·`dflow-poll`·`dflow-team`·`dflow-wbs`·`dflow-wbs-nlevel`·`dflow-work`)는 이미 `DFLOW_API_BASE` env(20곳)·`DFLOW_PAT` 로 대상을 고르므로 **스킬이 호출하는 API 경로 전량(`.claude/skills` grep 실측: `api/v1/agent/work/*`(`mine` 포함)·`api/v1/agent/me`·`api/v1/agent/watch`(`dflow-work/scripts/dflow.sh`)·`api/v1/wbs/import`·`api/v1/wbs/structure`(`dflow-wbs-nlevel`))·응답 형식을 동결**하고 토큰 발급 경로 문서만 갱신한다. SP7 done_when 의 `dflow-work` 동작 보증은 `agent/watch` 동결에 의존한다.
-- 모듈 게이트 응답: `envAvailable=false` 는 404(존재 은닉), 자격증명 통과 후 워크스페이스/프로젝트 모듈 꺼짐은 또박또박 409 `module_disabled`·에이전트 404(현 `requireAgentProject` 관례·스킬 계약 동결 — 3.2.4 표·5.2.2·5.3.2); 알림·메일 발신명 `branding` 적용.
-
-**범위 제외**
-
-- 또박또박(Rails) 리포 자체 변경 — 상대 팀 작업(계약 v3 인증 절만 요청)
-- 위키·RAG 스코프(SP8)
-
-**완료 조건(done_when)**
-
-- 또박또박 스테이징 → 새 플랫폼 스테이징 E2E(업로드·`on_conflict replace`·`folder_path` 재편철·`meta`)가 2워크스페이스에서 각각 성공하고 타 워크스페이스 자격증명은 404/403; **v2.5 payload 를 바이트 수준으로 그대로 보낸 요청이 통과**(계약 회귀 테스트)
-- 에이전트 `claim → progress → done` 이 워크스페이스 밖 프로젝트에서 거부됨(`tests/rls` + API 테스트); `dflow-work` 스킬이 `DFLOW_API_BASE` 만 바꿔 새 플랫폼에서 동작
-- 계약 v3 문서에 양측 합의 기록(변경 = 헤더 절만); env 시크릿을 제거해도 자격증명 행으로 동작하고 킬스위치도 확인
-
-#### SP8 — AI·위키·챗봇·사용현황·포트폴리오 워크스페이스 스코프
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | `ai_documents` 'global' 스코프·벡터/lexical 검색 RPC·위키 워커·사용현황·포트폴리오·알림이 워크스페이스 안에서만 동작하고, LLM 부재 폴백과 모듈 토글이 유지된다 |
-| 왜 이 순서 | 자격증명·모듈 토글(SP7)이 있어야 워커가 "활성 워크스페이스/모듈만" 순회한다. SP6 과 병렬 |
-| 의존 | SP7 |
-| 마이그레이션 | `0016_ai_scope.sql` |
-| 기간 | 2주 |
-
-**범위 포함**
-
-- 스키마: `ai_documents.workspace_id not null`(`project_scope 'global'` 폐지), `ai_index_jobs`·`wiki_*`·`usage_events` 워크스페이스 스코프·인덱스. `notification_events.workspace_id` 컬럼은 SP2(`0003`) 소유이므로 여기서는 그 컬럼의 인덱스 추가만.
-- 검색 RPC 4종(`match_wbs_documents`·`match_minute_documents`·`match_ai_documents`·`match_ai_documents_lexical` — `answer_wiki_question` 은 검색이 아니라 쓰기 RPC, 5.4.2)과 `create_minute_with_version`·`replace_ai_document_chunks`·사용현황 5종에 `p_workspace_id not null`, `p_include_global` 제거, `p_team text` → `p_team_id uuid`, `claim_ai_index_jobs` 에 `p_workspace_ids`(5.4.2 표 — `src` `.rpc()` 42종 전수); `tests/rls/rpc-args.test.ts` 가 표를 `pg_proc` 와 대조.
-- 봇 v2 라우터·플래너·verifier 가 레지스트리 도메인·`areas`·`teams` 주입(정규식 라우터의 팀명 하드코딩 제거, 5.4.3), `ensureProjectIndexed` 는 키 변경 없이 호출부의 워크스페이스 상류 검사만(5.4.4), 워커·cron 이 활성 워크스페이스/모듈만 순회(5.4.4) + 잡 레지스트리 `src/lib/jobs/registry.ts`(5.5.2 ① — `vercel.json` crons 를 레지스트리에서 생성해 현재 미등록인 `ai-index` 를 등록하고, `chat/index/worker` 는 `ai-index` `POST` 로 흡수, `WIKI_WORKER_SECRET`·`CHAT_V2_INDEX_CRON_SECRET` 삭제; 실측 현 잡 라우트 4파일: `api/chat/index/worker`·`api/wiki/worker`·`api/cron/ai-index`·`api/cron/inbox-retention`, `vercel.json` 등록은 `inbox-retention` 1건).
-- `/w/[slug]/portfolio` 워크스페이스 관리자 스코프; `/w/[slug]/usage` 는 플랫폼 관리자 전용 유지(워크스페이스 필터만 — 2.7 열린 항목) — `src/lib/domain/usageTracking.ts`:12 의 `env.VERCEL_ENV === 'production'` 의존을 `APP_ENV` 로(5.5.2 ⑦). `llm_config` 는 플랫폼 전역 유지 + 워크스페이스 설정 화면에 '공유 LLM·임베딩 768 고정' 표시.
-
-**범위 제외**
-
-- 워크스페이스별 LLM 키·과금 귀속(비목표)
-- 임베딩 차원 변경
-
-**완료 조건(done_when)**
-
-- `tests/rls` 에서 워크스페이스 B 의 회의록·위키·WBS 청크가 A 의 챗 답변·검색·브리핑에 0건(RPC 별 테스트); 필터 인자 표 테스트 통과
-- 위키 재구축이 워크스페이스 단위로 완주(`count(*) - count(embedding) = 0` 판정)
-- LLM 키를 비운 배포에서 챗/위키가 배너로 비활성(에러 없음)
-
-#### SP9 — 온보딩·패키징·폐쇄망 리허설
-
-| 항목 | 내용 |
-|---|---|
-| 목표 | 두 번째 고객사를 받을 수 있는 워크스페이스 생성·초대·시드·문서를 갖추고, 2단계 폐쇄망을 위한 1회 실측(자체호스트 Supabase·OpenAI 호환 LLM·standalone 빌드)을 남긴다(결정 2 의 선을 지켰는지 검증) |
-| 왜 이 순서 | 모든 모듈이 워크스페이스 위에서 동작한 뒤여야 "문서만 보고 제3자가 배포" 를 검증할 수 있다 |
-| 의존 | SP6·SP8 |
-| 마이그레이션 | 없음(시드 스크립트만) |
-| 기간 | 1~2주 |
-
-**범위 포함**
-
-- 워크스페이스 생성 플로우(플랫폼 관리자)·모듈 계약·자격증명 발급 안내, 단일 워크스페이스 시드 스크립트(워크스페이스 1행 + 관리자 1명 + 플랫폼 관리자 1명), 계정 프로비저닝 문서.
-- 문서 정본: 자리표시 규약·모듈 추가 가이드·설정 항목 사전·권한 4단·`runbook-staging`/`rollback` 개정·또박또박 공동 배포 체크리스트·포크 정책(6.6).
-- CI standalone 빌드 잡(`next.config.ts` `output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined` — 현재 `output` 미설정, 5.5.2 ③), 원격 폰트/이미지 최적화 등 런타임 인터넷 의존 점검. 자체호스트 도커 1회 리허설: `psql` 드라이버로 `0000` + 마이그레이션 적용(SP0 의 `db-apply --driver psql`), GoTrue HS256 에서 `getClaims` → `getUser` 폴백 동작(`src/middleware.ts`:25~35 주석대로 현 운영은 ES256 이라 로컬 검증만 하며, 대칭 키에서는 `getUser` 왕복이 붙는다 — 그 비용을 실측), Realtime private 채널, Storage 서명 URL, OpenAI 호환 로컬 LLM 으로 챗/임베딩. `VERCEL_PROJECT_PRODUCTION_URL`(실측 1곳) 폴백 제거(`NEXT_PUBLIC_APP_URL` 정본, 실측 2곳).
-- `smoke:prod`·`mark:good` 을 워크스페이스 2개 기준으로 개정(로그인 후 `/w/<slug>` 셸 응답까지 검사).
-
-**범위 제외**
-
-- 실제 폐쇄망 고객 배포(2단계)
-- Supabase 자체호스트 운영 절차(2단계)
-
-**완료 조건(done_when)**
-
-- 문서만 보고 제3자가 새 Vercel + Supabase 에 배포해 워크스페이스 생성 → 초대 → 프로젝트 생성(빈 값/복사) → 양식 업로드 → 주간보고 출력 → 또박또박 연동 → 에이전트 claim 까지 완주(기록)
-- 자체호스트 리허설 결과(성공/미검증 항목)가 `docs/` 에 기록; standalone 빌드 CI 초록
-- `mark:good` 태그
+SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §6.2 로 **대체됐다**(2026-09-27). 요지: SP3a 앞에 착수 게이트 G0·하드닝 H1(`0010`)·권한 하드닝 H2(`0011_authz_hardening`)를 두고(§6.2.0), SP3 을 SP3a(설정 엔진·모듈 레지스트리·저장 계약·설정 화면, `0012_settings.sql` 부터)와 SP3b(워크스페이스 셸·IA·디자인 기반 — SP2 U2 이관분 포함)로 나누며, SP5(Phase A 달력·주 시작 → Phase B 이슈·회의록·어휘)·SP5b(업무 흐름 설정화)·SP5c(사용자 정의 필드)·SPU1~3(UI 트랙)을 두고, SP4·SP6~SP9 는 번호의 정체성을 유지한 채 추가·변경분만 더했다. 각 SP 의 목표·의존·마이그레이션·범위·done_when 은 개정 문서 §6.2 의 해당 블록이 정본이다.
 
 ### 6.3 의존 그래프·병렬 구간·총 기간
 
-**마이그레이션 번호 배정표**(파일 단위 유일 — 6.1)
-
-| 번호 | 파일 | SP |
-|---|---|---|
-| `0000` | `0000_baseline.sql`(운영 `pg_dump --schema-only`; 롤백 쌍 없는 유일한 예외 — 6.5.2) | SP0 |
-| `0001` | `0001_storage_realtime.sql` | SP0 |
-| `0002` | `0002_import_wbs_level_fix.sql`(물려받은 `import_wbs`/`replace_wbs` `level` 결함 수정) | SP0 |
-| `0003`·`0004`·`0005` | `0003_org_core.sql`·`0004_upsert_member_keep_name.sql`·`0005_profiles_email_readonly.sql`(SP1 실측 — 원래 배정 `0002` 에서 밀림) | SP1 |
-| `0006`·`0007`·`0008` | `0006_workspace_isolation.sql`·`0007_storage_realtime.sql`·`0008_workspace_settings.sql`(SP2 스펙 2026-09-26) | SP2 |
-| `0009` | `0009_settings.sql` | SP3 |
-| `0010` | `0010_weekly_areas.sql` | SP4 |
-| `0011`·`0012`·`0013` | `0011_issue_areas.sql`·`0012_minutes_teams.sql`·`0013_vocab_settings.sql` | SP5 |
-| `0014` | `0014_integration_credentials.sql` | SP7 |
-| `0015` | `0015_form_templates.sql` | SP6 |
-| `0016` | `0016_ai_scope.sql` | SP8 |
-| — | 없음(시드 스크립트만) | SP9 |
-
-```mermaid
-graph LR
-  SP0[SP0 부트스트랩·기준선<br/>1~2주] --> SP1[SP1 조직 코어<br/>3주]
-  SP1 --> SP2[SP2 워크스페이스 격리<br/>3주]
-  SP2 --> SP3[SP3 설정 엔진·모듈<br/>2~3주]
-  SP3 --> SP4[SP4 WBS·주간 승격<br/>2주]
-  SP4 --> SP5[SP5 이슈·회의록·어휘 승격<br/>3주]
-  SP5 --> SP6[SP6 양식 엔진<br/>3주]
-  SP3 --> SP7[SP7 연동 패키지화<br/>2주]
-  SP5 --> SP7
-  SP7 --> SP8[SP8 AI·위키 스코프<br/>2주]
-  SP6 --> SP9[SP9 온보딩·패키징<br/>1~2주]
-  SP8 --> SP9
-```
-
-| 구간 | 실행 방식 | 근거 |
-|---|---|---|
-| SP0 → SP1 → SP2 → SP3 → SP4 → SP5 | **직렬** | 각 SP 가 앞 SP 의 스키마·가드·레지스트리 위에 선다. SP4·SP5 도 `teams/master.ts` 폐기 → `minutes.team_id` 순서라 직렬 |
-| SP6 ∥ (SP7 → SP8) | **병렬 가능** | SP6 은 `src/lib/report/**`·`form_templates`·설정 '양식' 섹션, SP7·SP8 은 `src/app/api/v1/**`·`integration_credentials`·`src/lib/ai/**`·`/w/[slug]/agents` — 파일 집합이 겹치지 않는다. 마이그레이션 번호는 **스테이징 리허설 준비 순서**로 선점 예약한다: `0009`(SP7 `integration_credentials` — 1주차, done_when 의 또박또박 E2E 가 이 행 위에서 성립하므로 DB 가 먼저 필요) → `0010`(SP6 `form_templates` — 1주 스파이크 뒤 2주차) → `0011`(SP8 `ai_scope` — SP7 종료 후 3주차). 번호 순서 = 준비 순서이므로 "번호 순서대로만 적용" 규칙 아래에서도 **마이그레이션 대기가 0** 이다. 준비 순서가 어긋나면 스테이징 적용 전에 파일명을 맞바꾼다(적용 전 rename 은 `migration_ledger` 에 흔적이 없으므로 비용 0). 이 규칙은 도구 제약이 아니라 자체 규칙이다 — `scripts/db-apply.mjs`:19 는 SQL 파일 1개 단위로 적용하며 순서·공백을 검사하지 않는다 |
-| SP9 | 직렬(수렴) | SP6·SP8 완료 후 |
-
-**총 기간**
-
-| 산정 | 계산 | 결과 |
-|---|---|---|
-| 직렬 최소 | 1+3+3+2+2+3+3+2+2+1 | 22주 |
-| 직렬 최대 | 2+3+3+3+2+3+3+2+2+2 | 25주 |
-| 병렬(SP6 ∥ SP7→SP8) 최소 | (1+3+3+2+2+3) + max(3, 2+2) + 1 | **19주** |
-| 병렬 최대 | (2+3+3+3+2+3) + max(3, 2+2) + 2 | **22주** |
-
-임계 경로는 SP0→SP5(14~16주)와 SP7→SP8(4주)·SP9 다. `max(3, 2+2)` 에 마이그레이션 대기가 들어 있지 않은 근거는 위 표의 번호 배정(`0009` SP7 → `0010` SP6 → `0011` SP8 이 준비 순서와 같다)이다. 병렬 구간에서 실제로 시간이 줄려면 세션 2개(worktree 2개)를 동시에 굴려야 하며, 현 리포가 이미 그렇게 운영된다(CLAUDE.md "여러 PC·여러 세션"). 병렬을 쓰지 않으면 22~25주다. 또박또박 릴리스 창(SP7)은 상대 팀 일정이므로 여기 산정에 없다 — Q6 로 변경이 헤더 절뿐이라 SP7 의 우리 쪽 작업은 상대 팀 배포 전에도 완료·검증(모의 클라이언트)할 수 있다.
+이 절(번호 배정표·의존 그래프·병렬 구간·총 기간)은 개정 문서 §6.3 으로 **대체됐다**(2026-09-27). 요지: 번호표는 `0009`~`0024` 이고 `0009` 는 SP2 최종 fix wave(`0009_sp2_isolation_fixes`), `0010` 은 하드닝 H1(`0010_issue_code_seq_width`), `0011` 은 권한 하드닝 H2(`0011_authz_hardening`)이며 SP3a 는 `0012`(`0012_settings.sql`)부터다. 번호는 레인 A(도메인·임계)·B(UI·연동) 일정의 main 머지 순서로 매기고 원격 생성 뒤에는 앞 번호를 끼워 넣지 않으며, 총 기간은 노력 22.5주 기준에 제7·8부 보정을 더한 약 25~26.5주와 달력 보정, 범위 조정 레버로 산정한다.
 
 ### 6.4 리스크 12건
 
-종합안 `top_risks` 12건을 근거(2026-09-23 실측 포함)·대응·담당 SP 로 정리한다.
+종합안 `top_risks` 12건을 근거(2026-09-23 실측 포함)·대응·담당 SP 로 정리한다. 담당 SP 열 끝의 **상태** 는 2026-09-27 갱신이다. 신규 리스크 R13~R26(범위 증가, 업무 흐름·사용자 정의 필드·주 시작 전환, 재스킨 회귀, 저장 계약, 제7부 AUTH 판정, 사람 게이트, 다크 품질, 경로 이동 등)과 각 상태의 근거는 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §6.4 가 정본이다.
 
 | # | 리스크 | 근거 | 대응 | 담당 SP |
 |---|---|---|---|---|
-| R1 | 읽기 격리의 전면성 — 하나라도 남으면 오류가 아니라 **조용한 크로스테넌트 노출** | 마이그레이션 기준 `using (true)` 57문/32파일, `can_read_project` 참조는 `0052`·`0079` 뿐, storage 읽기 정책이 `bucket_id` 만 검사하는 버킷 2개(`minutes` `0021`:61~62·`issue-attachments` `0068`:111~112; `deliverables` 는 `can_attach` 검사 있음 `0036`:24~25), presence 3채널 public, `createAdminClient` 65파일, `app_role()` 26파일, 검색 RPC 다수 | SP2 완료를 `tests/rls` 교차 조회 0건 + '개방 읽기 0건' 불변식으로 정의; `adminFor(scope)` 로 스코프 없는 admin 쿼리를 기계적으로 거부; 라이브 정책 목록은 SP0 `baseline-diff` 출력으로 고정 | SP2 (RPC 는 SP8) |
-| R2 | SP1 폭발 반경 | `teamCode:` 리터럴 테스트 82파일, `memberships` 직접 조회 11파일 22곳, `effectiveLegacyRole` 소비처 6파일(+정의 1), `vi.mock('@/lib/authz')` 50파일, `tsconfig` `include '**/*.ts'` 라 `next build` 가 `tests/` 까지 타입체크 | 가드 3종·`roleIn` 시그니처 불변, 공용 Actor fixture 선행 도입; 3주 상한 초과 시 "스키마+`getActor`" 와 "화면" 두 SP 로 분할(분할 결정은 2주차 말 체크포인트에서) | SP1 |
-| R3 | RLS 성능 회귀 | `can_read_project` 가 `select true`(플래너가 상수로 접음)에서 조인 헬퍼로 바뀌면 행마다 호출; Micro 컴퓨트(2 vCPU 공유·1GB)에서 2026-08-05 풀 고갈 이력 | `project_id in (select accessible_project_ids())` initplan 패턴을 정책 템플릿으로; SP2 done_when 에 p95 +20% 이내; 측정 스크립트 `scripts/perf-baseline.mjs` | SP2 |
-| R4 | 양식 엔진 미검증 항목 | 런 분할 빈도·표 행 복제·`exceljs` 왕복 손실·docxtemplater 상용 모듈 라이선스 전부 미실측 | 착수 조건(Q5: 고객 양식 3종 또는 원본 고객사 + 자체 샘플 2종), 1주 스파이크를 결정 게이트로, 손실은 업로드 경고로 노출, 전환 경로(docxtemplater 하이브리드) 사전 명시 | SP6 |
-| R5 | 이슈분석서 도형 페이지가 자리표시로 표현 불가 | `processSlideRenderer` 가 shape ID·좌표 재계산으로 그림 | **Q1 로 해소** — 제품 고정 슬라이드 유형으로 유지, 마커로 삽입 위치만 지정. 잔여 리스크는 "고객 양식의 슬라이드 크기·테마가 고정 슬라이드와 다를 때의 외관" 이며 스파이크 항목에 추가 | SP6 |
-| R6 | 또박또박 계약 동기화 | 자격증명 경로 변경이 또박또박 서버와 같은 릴리스 창에 있어야 함; 상대 팀 일정 | **Q6 로 축소** — 변경은 헤더 절뿐, payload v2.5 불변. v3 초안(인증 절)을 SP1 착수 시점에 송부해 상대 개발 병행; 우리 쪽은 모의 클라이언트로 먼저 완료 | SP7 |
-| R7 | 기준선 드리프트 | 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)·중복 1개(`0070`), `app_role` vs `current_role` 이력, `pg_dump --schema=public` 이 storage·realtime 을 담지 않음 | 운영에서 `pg_dump 17`, 시스템 스키마 정책은 수기 SQL(`storage.objects` 라이브 정책 9개 + `realtime.messages` 2개 — create 기준, drop 문 제외), `baseline-diff.mjs` 를 SP0 done_when 에 | SP0 |
-| R8 | 포크 이중 유지보수 | 원본은 최근 30일 전 브랜치 468커밋(마이그레이션 14커밋; `origin/main` 만 202커밋) 으로 움직이며 구 브랜드명 운영 계속. 회의록 API 계약(v2.5)·에이전트 스킬 8개가 두 리포에서 갈라짐 | 컷오프 커밋 고정, 보안 픽스만 cherry-pick, 공유 패키지 없음(→ 6.6) | SP0 (정책), 전 SP (준수) |
-| R9 | `requireModule` 누락 = fail-open | 서버 액션 173개·API 라우트 41개에 수작업 삽입 | export 전수 열거 게이트 테스트(→ 6.5.3)를 SP3 에서 함께 도입 — 매니페스트에 없는 export 는 테스트 실패 | SP3 |
-| R10 | `teams/master.ts` 프로세스 전역 캐시 | service_role 로 전 팀 로드, 초기값 `DEFAULT_TEAMS`, TTL 60초, importer 32파일(상대 경로 포함 33) — 멀티 워크스페이스에서 교차 팀 목록 노출·무효화 문제의 진원지 | SP4 에서 요청 스코프 로더로 폐기; sync 접근자 호출부를 `tsc` 로 전수 노출 | SP4 |
-| R11 | 메뉴 통합·워크스페이스 화면 이동이 UI 위험 파일을 건드림 | `Sidebar.tsx`·`HeaderChrome.tsx`·`ProjectTabs.tsx`·`usePagePresence.ts` 모두 `src/components/app/`; 빌드·테스트로 깨짐이 안 잡힘(2026-07-27 사고) | `ui/` 브랜치 + 스테이징 눈확인을 SP2·SP3 done_when 에 명시; G2 유지 | SP2·SP3 |
-| R12 | '제품 고정' 으로 남는 숨은 원본 고객사 결정이 계속 새어 들어옴 | 셀 줄 예산 15/12·이슈 캡 5·소수 1자리 롤업 등 | **Q4 로 어휘 넷은 승격** 확정. 남는 고정 어휘(이슈 상태·WBS 단계 코드·롤업 정밀도)는 SP5 에서 `docs/settings-catalog.md` "고정 어휘" 절로 못 박고, 이후 요청은 그 절 개정으로만 받는다 | SP5 |
+| R1 | 읽기 격리의 전면성 — 하나라도 남으면 오류가 아니라 **조용한 크로스테넌트 노출** | 마이그레이션 기준 `using (true)` 57문/32파일, `can_read_project` 참조는 `0052`·`0079` 뿐, storage 읽기 정책이 `bucket_id` 만 검사하는 버킷 2개(`minutes` `0021`:61~62·`issue-attachments` `0068`:111~112; `deliverables` 는 `can_attach` 검사 있음 `0036`:24~25), presence 3채널 public, `createAdminClient` 65파일, `app_role()` 26파일, 검색 RPC 다수 | SP2 완료를 `tests/rls` 교차 조회 0건 + '개방 읽기 0건' 불변식으로 정의; `adminFor(scope)` 로 스코프 없는 admin 쿼리를 기계적으로 거부; 라이브 정책 목록은 SP0 `baseline-diff` 출력으로 고정 | SP2 (RPC 는 SP8) — 상태: SP2 에서 대부분 해소, 남은 AUTH-08 은 SP7 |
+| R2 | SP1 폭발 반경 | `teamCode:` 리터럴 테스트 82파일, `memberships` 직접 조회 11파일 22곳, `effectiveLegacyRole` 소비처 6파일(+정의 1), `vi.mock('@/lib/authz')` 50파일, `tsconfig` `include '**/*.ts'` 라 `next build` 가 `tests/` 까지 타입체크 | 가드 3종·`roleIn` 시그니처 불변, 공용 Actor fixture 선행 도입; 3주 상한 초과 시 "스키마+`getActor`" 와 "화면" 두 SP 로 분할(분할 결정은 2주차 말 체크포인트에서) | SP1 — 상태: 종료(`sp1-done`) |
+| R3 | RLS 성능 회귀 | `can_read_project` 가 `select true`(플래너가 상수로 접음)에서 조인 헬퍼로 바뀌면 행마다 호출; Micro 컴퓨트(2 vCPU 공유·1GB)에서 2026-08-05 풀 고갈 이력 | `project_id in (select accessible_project_ids())` initplan 패턴을 정책 템플릿으로; SP2 done_when 에 p95 +20% 이내; 측정 스크립트 `scripts/perf-baseline.mjs` | SP2 — 상태: 유지·확장(SP5b·SP5c 설정 행 잠금) |
+| R4 | 양식 엔진 미검증 항목 | 런 분할 빈도·표 행 복제·`exceljs` 왕복 손실·docxtemplater 상용 모듈 라이선스 전부 미실측 | 착수 조건(Q5: 고객 양식 3종 또는 원본 고객사 + 자체 샘플 2종), 1주 스파이크를 결정 게이트로, 손실은 업로드 경고로 노출, 전환 경로(docxtemplater 하이브리드) 사전 명시 | SP6 — 상태: 유지(스파이크 픽스처에 필드 열) |
+| R5 | 이슈분석서 도형 페이지가 자리표시로 표현 불가 | `processSlideRenderer` 가 shape ID·좌표 재계산으로 그림 | **Q1 로 해소** — 제품 고정 슬라이드 유형으로 유지, 마커로 삽입 위치만 지정. 잔여 리스크는 "고객 양식의 슬라이드 크기·테마가 고정 슬라이드와 다를 때의 외관" 이며 스파이크 항목에 추가 | SP6 — 상태: Q1 로 해소, 영역 9개 이상 페이지 분할 외관은 스파이크 항목 |
+| R6 | 또박또박 계약 동기화 | 자격증명 경로 변경이 또박또박 서버와 같은 릴리스 창에 있어야 함; 상대 팀 일정 | **Q6 로 축소** — 변경은 헤더 절뿐, payload v2.5 불변. v3 초안(인증 절)을 SP1 착수 시점에 송부해 상대 개발 병행; 우리 쪽은 모의 클라이언트로 먼저 완료 | SP7 — 상태: 유지 |
+| R7 | 기준선 드리프트 | 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)·중복 1개(`0070`), `app_role` vs `current_role` 이력, `pg_dump --schema=public` 이 storage·realtime 을 담지 않음 | 운영에서 `pg_dump 17`, 시스템 스키마 정책은 수기 SQL(`storage.objects` 라이브 정책 9개 + `realtime.messages` 2개 — create 기준, drop 문 제외), `baseline-diff.mjs` 를 SP0 done_when 에 | SP0 — 상태: 종료 |
+| R8 | 포크 이중 유지보수 | 원본은 최근 30일 전 브랜치 468커밋(마이그레이션 14커밋; `origin/main` 만 202커밋) 으로 움직이며 구 브랜드명 운영 계속. 회의록 API 계약(v2.5)·에이전트 스킬 8개가 두 리포에서 갈라짐 | 컷오프 커밋 고정, 보안 픽스만 cherry-pick, 공유 패키지 없음(→ 6.6) | SP0 (정책), 전 SP (준수) — 상태: 유지 |
+| R9 | `requireModule` 누락 = fail-open | 서버 액션 173개·API 라우트 41개에 수작업 삽입 | export 전수 열거 게이트 테스트(→ 6.5.3)를 SP3 에서 함께 도입 — 매니페스트에 없는 export 는 테스트 실패 | SP3 — 상태: 유지·확장(SP5b·SP5c·SPU 새 액션) |
+| R10 | `teams/master.ts` 프로세스 전역 캐시 | service_role 로 전 팀 로드, 초기값 `DEFAULT_TEAMS`, TTL 60초, importer 32파일(상대 경로 포함 33) — 멀티 워크스페이스에서 교차 팀 목록 노출·무효화 문제의 진원지 | SP4 에서 요청 스코프 로더로 폐기; sync 접근자 호출부를 `tsc` 로 전수 노출 | SP4 — 상태: 완화 중(SP2 스코프 필터·하드닝 4 뒤 SP4 에서 폐기) |
+| R11 | 메뉴 통합·워크스페이스 화면 이동이 UI 위험 파일을 건드림 | `Sidebar.tsx`·`HeaderChrome.tsx`·`usePagePresence.ts` 모두 `src/components/app/`(`ProjectTabs.tsx` 는 importer 0 이라 삭제 — 3.2.5 #4); 빌드·테스트로 깨짐이 안 잡힘(2026-07-27 사고) | `ui/` 브랜치 + 스테이징 눈확인을 SP2·SP3 done_when 에 명시; G2 유지 | SP2·SP3 — 상태: 확대 — SP3b 가 UI 위험 파일 전부를 소유하고 6.5.4 의 세 브랜치로 쪼갠다 |
+| R12 | '제품 고정' 으로 남는 숨은 원본 고객사 결정이 계속 새어 들어옴 | 셀 줄 예산 15/12·이슈 캡 5·소수 1자리 롤업 등 | **Q4 로 어휘 넷은 승격** 확정. 고정 목록은 SP3a 가 레지스트리에서 생성하는 카탈로그(`docs/settings-catalog.md`)의 제품 고정·지원 제한 절이 정본이고, 이후 요청은 그 절 개정으로만 받는다(3.3.4) | SP3a — 상태: 재정의(Q4′·결정 6′ 으로 업무 흐름·열 고정이 풀림) |
 
 ### 6.5 검증 전략
 
@@ -3077,7 +2816,7 @@ graph LR
 |---|---|---|
 | **개방 읽기 정책 0건** `tests/invariants/no-open-read-policy.test.ts` | `supabase/migrations/*.sql`(롤백 제외)을 파싱해 `create policy … for select` 또는 `for all` 의 `using` 절이 `true` 리터럴이면 실패. 기준선 `0000` 도 대상 — SP2 가 끝나면 0건, 그 전에는 허용 목록으로 시작해 SP2 done_when 에서 비운다 | SP2 |
 | **스코프 없는 admin 쿼리 0건** `tests/invariants/admin-scope.test.ts` | `src/**` 에서 `createAdminClient` 를 import 하는 파일이 `src/lib/supabase/admin.ts`·`adminFor` 래퍼·허용 목록(플랫폼 전역: `llm_config`·`platform_admins`·cron 인증) 밖이면 실패. 현재 65파일이 출발점 | SP2 |
-| **no-runtime-constants** `tests/settings/no-runtime-constants.test.ts` | `src/**`(tests/fixtures 제외)에서 `DEFAULT_TEAMS|WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|ISSUE_MEGA_AREAS|LEGACY_ORIGIN_PROFILE|LEGACY_LABEL_ABBR|ATTENDANCE_TYPES|MEETING_CATEGORIES|ISSUE_SEVERITIES|Asia/Seoul` import·리터럴을 grep. 허용 목록 파일을 두고 SP3 에서 시작, SP4·SP5 가 항목을 지우며 SP5 done_when 에서 빈다 | SP3 |
+| **no-runtime-constants** `tests/settings/no-runtime-constants.test.ts` | `src/**`(tests/fixtures 제외)에서 `DEFAULT_TEAMS|WEEKLY_SECTIONS|WEEKLY_TEAM_SECTIONS|ISSUE_MEGA_AREAS|LEGACY_ORIGIN_PROFILE|LEGACY_LABEL_ABBR|ATTENDANCE_TYPES|MEETING_CATEGORIES|ISSUE_SEVERITIES|Asia/Seoul` import·리터럴과 고정 오프셋 패턴 `\+09:00`·`9 \* 3600_000`(2026-09-27 추가 — 개정 문서 §4.2.1)을 grep. 허용 목록 파일을 두고 SP3 에서 시작, SP4·SP5 가 항목을 지우며 SP5 done_when 에서 빈다 | SP3 |
 | **마이그레이션 쌍·번호 유일** `tests/invariants/migration-files.test.ts` | 4자리 번호가 **파일 단위로** 중복 0건(현 리포 `0070_private_projects`·`0070_project_member_email_identity` 중복 재발 방지 — `.githooks/pre-push`:100·109 는 `substr($0,21,4)` 로 번호만 읽어 같은 번호의 두 파일을 구분하지 못하므로 이 테스트가 유일한 검사다). 정방향 파일마다 `_rollback.sql` 존재 — 단 `0000_baseline.sql` 은 **허용 목록의 유일한 예외**다: `pg_dump` 기준선에는 되돌아갈 이전 상태가 없고 롤백은 "빈 DB 재생성" 이라 SQL 로 표현할 대상이 아니다(`0001_storage_realtime.sql` 부터는 쌍 필수). 현 `tests/migrations/migration-ledger.test.ts` 류의 개별 SQL 텍스트 단언은 만들지 않는다 | SP0 |
 | **G3 반응형 안전망** `tests/css/breakpoint-safety-net.test.ts` | 그대로 가져간다(pre-push G3 가 실행) | SP0 |
 | **가드 시그니처 동결** `tests/authz/guard-signatures.test.ts` | `src/lib/authz/index.ts`·`src/lib/domain/authz.ts` 의 export 목록과 `requireSuperuser`·`requireProjectAdmin`·`requireProjectMember`·`roleIn` 의 타입 시그니처 문자열을 스냅샷 — 결정 8 의 기계적 보증 | SP1 |
@@ -3093,36 +2832,27 @@ graph LR
 
 #### 6.5.4 UI 위험 파일 규칙
 
-`.githooks/pre-push` 의 `UI_RE='^(src/app/globals\.css|src/app/layout\.tsx|src/app/\(app\)/layout\.tsx|src/components/app/)'` 를 그대로 가져간다. 로드맵에서 이 규칙에 걸리는 작업은 다음과 같다.
-
-| SP | 파일 | 절차 |
-|---|---|---|
-| SP0 | `globals.css`(브랜드 색 토큰)·`layout.tsx`(제목·로고) | `ui/sp0-debrand` 브랜치 → 스테이징 눈확인 → `Preview-checked: <스테이징 URL·일시>` 트레일러 |
-| SP2 | `src/components/app/usePagePresence.ts`(private 채널), `Sidebar.tsx`(워크스페이스 전환) | `ui/sp2-workspace` |
-| SP3 | `Sidebar.tsx`·`HeaderChrome.tsx`·`ProjectTabs.tsx`(메뉴 통합) | `ui/sp3-menu` |
-
-새 리포의 스테이징은 처음부터 로그인이 되는 환경으로 만든다(현 리포는 2026-08-11 스테이징 도입 전까지 Preview 에서 로그인 뒤 화면을 볼 수 없었다). 따라서 눈확인의 정본은 Vercel Preview 가 아니라 **스테이징 URL** 이며, G2 는 "브랜치를 거쳤는가" 만 본다는 한계를 문서에 유지한다. 트레일러는 한 가지다 — UI 눈확인 기록은 `Preview-checked: <스테이징 URL·일시>` 로 적는다(G2 가 읽는 키는 `.githooks/pre-push`:211·230 의 `Preview-checked` 뿐이며, 값에 스테이징 URL 을 적는 것으로 "정본은 스테이징" 을 표현한다). `Staging-verified:` 는 G4(116~118행)가 읽는 마이그레이션 전용 키이므로 UI 커밋에 쓰지 않는다.
+이 절은 개정 문서 §6.5.4 로 **대체됐다**(2026-09-27). 요지: `UI_RE` 를 유지하되 SP3b 에서 `/w/[slug]`·`/p/[projectId]` 레이아웃을 더하고, 원격 Preview 가 생기기 전에는 눈확인을 로컬에서 하고 트레일러 `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>` 을 남긴다. SP3b 는 `ui/sp3-tokens` → `ui/sp3-menu` → `ui/sp3-screens` 세 브랜치로 쪼개고, `ProjectTabs.tsx` 는 레지스트리 파생이 아니라 삭제다.
 
 #### 6.5.5 `mark:good` 과 스모크
 
-- `scripts/mark-good.mjs`(`vercel inspect` 로 배포 Ready·시각 검증 → `smoke-prod.mjs` → `good-YYYYMMDD-HHMM` 태그 push)와 `scripts/smoke-prod.mjs`(CSS 바이트·규칙 수 하한, 중괄호 균형, 레이아웃 급소 규칙; exit 0/1/2)를 그대로 가져가되 URL 기본값을 env 로 뺀다(SP0).
-- SP2 부터 스모크에 "로그인 후 `/w/<slug>` 셸 응답 + 타 워크스페이스 슬러그 404" 를 추가한다(스테이징 계정은 env, 운영 스모크는 읽기 전용 계정).
-- **각 SP 의 done_when 에 `mark:good` 태그가 있다.** 태그가 없는 SP 는 끝나지 않은 것이다. 롤백 좌표는 `docs/runbook-rollback.md` 3번 절차 그대로.
+이 절은 개정 문서 §6.5.5 로 **대체됐다**(2026-09-27). 요지: 원격이 생기기 전에는 각 SP done_when 의 `mark:good` 을 `sp<id>-done` 로컬 태그와 로컬 E2E 기록(`docs/baseline/<sp>-e2e.md`)으로 대신하고, 원격이 생기면 원래 규칙(`scripts/mark-good.mjs`·`smoke-prod.mjs`, 롤백 좌표는 `docs/runbook-rollback.md`)으로 돌아간다.
 
 #### 6.5.6 SP 별 검증 체크리스트
 
-| SP | 단위·정적 | 실행형 | 스테이징 실측 | 태그 |
-|---|---|---|---|---|
-| SP0 | vitest 초록, grep 브랜드 0건, 마이그레이션 쌍 | `baseline-diff` 일치, CI 초록 | 빈 DB 완주 | ✓ |
-| SP1 | 가드 시그니처 스냅샷, grep `memberships` 0건 | — | 다중 팀·외부 인력 케이스 | ✓ |
-| SP2 | 개방 읽기 0건, admin 스코프 0건 | `tests/rls` 교차 0건, p95 | 2워크스페이스 404, UI 눈확인 | ✓ |
-| SP3 | 열거 게이트, no-runtime-constants(허용 목록) | — | 모듈 끄기 전 경로 차단, 메뉴 눈확인 | ✓ |
-| SP4 | grep 상수 0건 | — | 구분 0개 배너 → 등록 → 동작 | ✓ |
-| SP5 | grep 원본 고객사·`Asia/Seoul` 0건, 허용 목록 비움 | `tests/rls` 타임존 함수 | 어휘 변경 반영 | ✓ |
-| SP6 | 픽스처 3종 회귀 | — | PowerPoint/Excel 열림 | ✓ |
-| SP7 | payload v2.5 회귀 | `tests/rls` 에이전트 스코프 | 또박또박 E2E 2워크스페이스 | ✓ |
-| SP8 | RPC 인자 표 | `tests/rls` RPC 격리 | 위키 완주 판정 | ✓ |
-| SP9 | standalone 빌드 | 자체호스트 리허설 | 제3자 배포 완주 | ✓ |
+이 절은 개정 문서 §6.5.6 으로 **대체됐다**(2026-09-27). 요지: H1·H2·SP3a·SP3b·SP4·SP5·SP5b·SP5c·SP6·SP7·SP8·SPU1~3·SP9 마다 단위·정적 / 실행형(`test:rls`·E2E) / 로컬 실측 / 합성 게이트(6.5.8) / 태그(`sp<id>-done`) 열로 검증 항목을 둔다.
+
+#### 6.5.7 원칙 — 설정 조합 계약·TS/SQL 패리티·경합
+
+2026-09-27 신설. 설정을 읽는 함수·RPC 의 계약 테스트를 여러 설정 조합으로 반복하고, 같은 판정이 TS·SQL 양쪽에 있으면 골든 행렬 하나를 함께 읽으며, 경합은 독립 연결로 검사한다. 정본은 개정 문서 §6.5.7 이다.
+
+#### 6.5.8 합성 2프로젝트 설정화 수용 게이트
+
+2026-09-27 신설. 설정이 서로 다른 합성 프로젝트 둘로 설정화가 끝났음을 수용하는 게이트(S1~S10)다. 정본은 개정 문서 §6.5.8 이다.
+
+#### 6.5.9 디자인·UX 출시 수용
+
+2026-09-27 신설. 디자인·UX 출시 수용 기준(Q01~Q14·J1~J3)이다. 정본은 개정 문서 §6.5.9 이다.
 
 ### 6.6 포크 정책
 
@@ -3171,16 +2901,18 @@ graph LR
 
 ### 6.7 열린 항목
 
-결정이 필요한 것은 위 결정 1~9·Q1~Q6 로 확정됐다. 아래는 결정이 아니라 **실측·시점** 이 남은 항목이다.
+결정은 결정 1~9·Q1~Q6 과 그 개정(1.10)으로 정해지고, 사용자 명시 결정으로만 개정한다. 아래는 결정이 아니라 **실측·시점** 이 남은 항목이다. 2026-09-27 개정으로 닫힌 항목은 취소선으로 두고, 남은 항목은 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §8.1 의 번호로 가리킨다(사용자 판단 항목은 8절).
 
 | 항목 | 왜 열려 있는가 | 닫히는 시점 |
 |---|---|---|
-| 라이브 정책 수(`using (true)` 읽기 정책·`app_role()` 잔존 9개 등 종합안의 라이브 수치) | 마이그레이션 파일 grep(57문/32파일·26파일)과 라이브 상태는 다르다. 운영 `pg_policies` 대조 없이는 확정 불가 | SP0 `baseline-diff.mjs` 출력 — SP2 스펙의 입력 |
-| `realtime.topic()` 을 세션 설정으로 흉내 낼 수 있는가 | Supabase 구현 세부 (미검증) | SP2 스파이크 첫날 실측; 불가하면 Realtime 격리는 브라우저 E2E(스테이징)로만 검증하고 그 사실을 done_when 에 적는다 |
-| SP1 분할 여부 | 3주 상한을 넘길지는 착수 후에만 안다 | SP1 2주차 말 체크포인트 |
-| SP6 착수 시 양식 확보 상태(Q5) | 지금은 미확보 | SP5 완료 시점 재확인 — 실제 3종이면 그것, 아니면 원본 고객사 + 자체 샘플 2종 |
-| 또박또박 v3(인증 절) 배포 시점 | 상대 팀 일정 | SP1 착수 시 초안 송부, SP7 done_when 의 E2E 는 상대 배포 후 — 그 전까지는 모의 클라이언트로 완료 처리하고 실 E2E 를 후속 검증으로 기록 |
-| 새 스테이징 Supabase 요금제 | 현 `staging-sync.mjs` 는 무료 티어 400MB 가드를 전제. 새 리포 스테이징은 빈 데이터로 시작해 당장 무관 | SP9 에서 2고객사 시드 후 재검토 |
+| ~~라이브 정책 수(`using (true)` 읽기 정책·`app_role()` 잔존 9개 등 종합안의 라이브 수치)~~ | **닫힘** — SP0·SP2 실측 | — |
+| ~~`realtime.topic()` 을 세션 설정으로 흉내 낼 수 있는가~~ | **닫힘** — SP2 실측 | — |
+| ~~SP1 분할 여부~~ | **닫힘** — SP1 종료(`sp1-done`) | — |
+| accent 거부 임계값(hue 20°·C 0.08) | 실제 고객 색 표본으로 검증하지 않았다 | UI-1(개정 문서 §8.1 #8) |
+| 인스펙터 병치 임계값(작업 영역 720px) | 실측 없이 정한 값이다 | UI-3(개정 문서 §8.1 #9) |
+| 달력 보정 비율 | SP0~SP2 실측 비율이 UI·사람 게이트 비중이 큰 SP 에도 맞는지 모른다 | SP3a 종료 재산정(개정 문서 §8.1 #16) |
+| 체브론 라벨 길이 한도 | 자산 도형 폭과 글꼴 실측이 필요하다 | SP6 1주차(개정 문서 §8.1 #17) |
+| SP6 착수 시 양식 확보 상태(Q5)·또박또박 v3 배포 시점·첫 원격 배포(스테이징 요금제 포함) | 사용자 판단 항목으로 옮겼다 | 8절 #3·#5, 개정 문서 §8.1 #10·#14·#15 |
 
 ---
 
