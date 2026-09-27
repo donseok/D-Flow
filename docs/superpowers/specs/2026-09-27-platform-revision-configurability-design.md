@@ -1080,7 +1080,7 @@ SP3a 에서 만든다(S16). 표 구역은 `scripts/settings-catalog.mjs` 가 레
 | SP5 | `fixture-ws.sql:97` 의 `weekly_reports.week_start='2026-08-31'`(월요일)이 기본 일요일 규칙에서 `WEEK_KEY_INVALID` 다. `issue_mega_areas` 삭제로 `isolation-map.ts:25`·`:62` `OPEN_BY_DESIGN`, `schema-invariants.test.ts:64-65` `OPEN_READ_EXCEPTIONS` 가 죽은 예외가 된다(`:75` 가 실패시킨다). `OWN_INSERT_PROBES`(`isolation-map.ts:79-`)의 `issue_major_processes(mega_code)` 가 `area_id` 로 바뀐다 | 픽스처의 주차 날짜를 일요일로 바꾸거나 그 프로젝트에 `calendar.week_start` 월요일 규칙을 먼저 기록한다. 세 예외 목록에서 `issue_mega_areas` 를 지우고 탐침을 `area_id` 로 고친다 |
 | SP5b | 새 표 `wbs_stage_approvals` | `isolation-map.ts` 등록(§3.7) |
 | SP5c | 3표의 `custom` 열 | 픽스처 무변경(기본 `'{}'`). 격리 테스트에 다른 프로젝트 같은 key 케이스(§3.8 SP5c #2) |
-| H2 | (실측) `fixture-ws.sql:133-135` 의 첨부 `minute_files` insert 는 걸리지 않는다 — 픽스처는 `postgres` 롤(세션 사용자 없음)로 들어가 가드 검사 1(`can_manage_minute` 거짓 → RLS 에 넘김)이 통과시킨다. 같은 이유로 `fixture.sql` 의 `platform_admins` insert 도 revoke 에 걸리지 않는다. `storage-realtime.test.ts:255-276`(⑪)의 세션 첨부 insert 는 가드에 걸린다 | 픽스처는 바뀌지 않았다. ⑪ 은 Storage 객체를 먼저 올리고(owner = 그 세션 사용자, 메타데이터 포함) 그 경로로 행을 넣는다. `isolation-map.ts:83` 의 42501 기대는 유지한다(가드가 비관리 세션은 RLS 에 넘긴다) |
+| H2 | (실측) `fixture-ws.sql:133-135` 의 첨부 `minute_files` insert 는 걸리지 않는다 — 픽스처는 `postgres` 롤(세션 사용자 없음)로 들어가 가드 검사 1(`can_manage_minute` 거짓 → RLS 에 넘김)이 통과시킨다. 같은 이유로 `fixture.sql` 의 `platform_admins` insert 도 revoke 에 걸리지 않는다. `storage-realtime.test.ts:256-283`(⑪)의 세션 첨부 insert 는 가드에 걸린다 | 픽스처는 바뀌지 않았다. ⑪ 은 Storage 객체를 먼저 올리고(owner = 그 세션 사용자, 메타데이터 포함) 그 경로로 행을 넣는다. `isolation-map.ts:83` 의 42501 기대는 유지한다(가드가 비관리 세션은 RLS 에 넘긴다) |
 
 ### 2.12 이 절이 다룬 검토·트리아지 id
 
@@ -3403,14 +3403,14 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - 트리거 `platform_admins_keep_last`(BEFORE UPDATE OR DELETE)가 마지막 1명을 없애는 변경을 `PLATFORM_LAST_ADMIN` 으로 거부한다. `user_id` 가 같은 UPDATE 는 통과한다(`granted_by` 의 SET NULL 캐스케이드가 UPDATE 로 들어온다).
   - DELETE 는 `pg_advisory_xact_lock` 으로 직렬화한다. 남은 행을 `for update` 로 잠그면 두 연결이 서로를 해제할 때 40P01 교착이 난다(`0008:213` 패턴).
   - (구현) 잠금 뒤 격리 수준이 read committed 가 아니면 `25001 PLATFORM_ADMIN_ISOLATION` 으로 거부한다(아래 H2 구현 결과의 공통 규칙). 캐스케이드 면제의 반환은 이 검사보다 앞이다.
-  - **`auth.users` 캐스케이드 삭제는 면제한다**(§8.2 ④). 가드는 `platform_admins` 에 직접 내린 DELETE·UPDATE(세션·service_role 모두)만 막는다. `dev-bootstrap.mjs:48-58` 의 실패 롤백(방금 만든 계정 삭제)이 이 캐스케이드라, 막으면 부트스트랩이 슈퍼유저 행만 남은 반쪽 상태로 끝난다. 앱에는 계정 삭제 화면이 없고 `deleteUser` 는 생성 보상 롤백(`accounts.ts:121-127`·`inviteRedeem.ts:145-158`)뿐이므로, 면제가 여는 경로는 운영자의 SQL 직접 조작이다. 캐스케이드 판별은 `workspace_members_keep_last_admin` 과 같이 `auth.users` 행 부재로 한다(`0008:206-209` 선례 — 캐스케이드 시점에는 부모 행이 이미 지워져 있다).
-  - `accounts.ts:325-334` 의 사전 count 를 없애고(경합에 안전한 쪽이 DB — `setWorkspaceRole` 의 `WORKSPACE_LAST_ADMIN` 관례) `PLATFORM_LAST_ADMIN` 을 사용자 문구로 매핑한다.
+  - **`auth.users` 캐스케이드 삭제는 면제한다**(§8.2 ④). 가드는 `platform_admins` 에 직접 내린 DELETE·UPDATE(세션·service_role 모두)만 막는다. `dev-bootstrap.mjs:48-53` 의 실패 롤백(방금 만든 계정 삭제 — 단계 `:55-63` 가 실패하면 부른다)이 이 캐스케이드라, 막으면 부트스트랩이 슈퍼유저 행만 남은 반쪽 상태로 끝난다. 앱에는 계정 삭제 화면이 없고 `deleteUser` 는 생성 보상 롤백(`rollbackAccount` `accounts.ts:121-128`·`rollbackSignup` `inviteRedeem.ts:145-158`)뿐이므로, 면제가 여는 경로는 운영자의 SQL 직접 조작이다. 캐스케이드 판별은 `workspace_members_keep_last_admin` 과 같이 `auth.users` 행 부재로 한다(`0008:206-208` 선례 — 캐스케이드 시점에는 부모 행이 이미 지워져 있다).
+  - `setPlatformAdmin`(`accounts.ts:317-349`)의 사전 count(H2 전 `bdbcfac` 의 `:325-334`)를 없애고(경합에 안전한 쪽이 DB — `setWorkspaceRole` 의 `WORKSPACE_LAST_ADMIN` 관례) `PLATFORM_LAST_ADMIN` 을 사용자 문구로 매핑한다(`:330-332`).
 - **b. AUTH-12 — 쓰지 않는 표 권한 회수**
   - `anon`·`authenticated` 의 truncate/trigger/references/maintain 을 public 전 테이블에서 revoke 하고 `postgres` default ACL(`arwdDxtm`)에서도 뺀다. 실측: 이 권한을 가진 public 테이블이 authenticated 40개, anon 41개다(anon 의 하나 더는 `people` — psql). `0003:643-645`(`platform_admins`)를 비롯해 `0003` 에 여덟 번 있는 명시적 grant all 도 대상이다(`0003:633-635` 는 `workspaces` 의 것). `supabase_admin` 의 기본 권한 항목은 따로 있고 `postgres` 가 그 롤의 멤버가 아니라 바꿀 수 없다 — 범위 밖이며, 마이그레이션이 만드는 표는 `postgres` 기본 권한을 탄다.
   - 권한은 있는데 그 명령의 정책이 없는 DML 이 있는 13개 표는 **명령 단위로** revoke 한다(정책이 하나도 없는 표는 8개이고, 13 은 그 수가 아니다). 쓰이는 명령(`change_logs` INSERT, `issue_assignees` INSERT/DELETE 등)은 남긴다.
   - 사후 검사(`do $$ … raise exception $$`)로 남은 권한 0 을 확인한다. 직접 부여(aclexplode)가 아니라 실효 권한(`has_table_privilege`·`has_column_privilege` — PUBLIC·롤 상속 포함)으로 보고, 기본 권한은 스키마 없는 전역 항목까지 본다(`0011` ②·⑪). 롤백은 명시한 테이블 목록으로 되돌린다. 함수의 PUBLIC EXECUTE 기본값은 범위 밖으로 기록한다(`0006:723` 은 효과가 없다).
 - **c. AUTH-10a — 공유 토큰 열 숨김**
-  - 코드 먼저: `readShareRow`(`actions/minutes.ts:1387-1394`)는 `checkOwner` 통과 뒤 adminOr(service_role)로 토큰을 읽는다. `minutes_ws_read` 가 행 전체를 열어 멤버가 `share_token` 을 읽을 수 있었다(`has_column_privilege(authenticated, minutes.share_token, SELECT)` = t) — 편집자 전용 공개 게이트(`actions/minutes.ts:1396`)를 우회한다.
+  - 코드 먼저: `readShareRow`(`actions/minutes.ts:1439-1452`)는 `checkOwner` 통과 뒤 adminOr(service_role)로 토큰을 읽는다. `minutes_ws_read` 가 행 전체를 열어 멤버가 `share_token` 을 읽을 수 있었다(`has_column_privilege(authenticated, minutes.share_token, SELECT)` = t) — 편집자 전용 공개 게이트(`setMinuteShare` `actions/minutes.ts:1469-1483`)를 우회한다.
   - 그다음 `minutes` 의 table SELECT 를 revoke 하고 `share_token` 을 뺀 열에만 grant 한다.
   - 불변식 테스트: "`share_token` 외 모든 열은 grant 돼 있다". SP5 가 열을 더할 때 grant 누락을 잡는다.
 - **d. AUTH-01b — 소속 회수가 권한 소멸이 되게**
@@ -3419,7 +3419,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - `project_members_no_self_demote` 에 `is_ws_member` 조건을 더한다. 빼면 `workspace-isolation-cases.test.ts:49,73` 이 깨진다.
   - 컬럼 권한은 `grant update(role)` 만 남긴다.
   - `upsert_project_member`(`0004_upsert_member_keep_name.sql:48`) ①과 이름 변경 분기에 소속 조건을 더한다. 재초대가 max(옛, 새)를 유지해 남은 admin 이 되살아나던 경로(`0008:96-110`)를 닫는다.
-  - 코드: `buildActor.ts:54-57` 은 `projectWorkspace` 에 없는 pid 의 역할을 건너뛴다(`authz.ts:168-174` 로 새지 않게).
+  - 코드: `buildActor.ts:54-61`(건너뛰기 `:59`)은 `projectWorkspace` 에 없는 pid 의 역할을 건너뛴다(`authz.ts` 의 `isAnyProjectAdmin` `:174-180`·`adminProjectIds` `:188-194`·`hasAnyProjectRole` `:205-208` 로 새지 않게).
 - **e. AUTH-09a(선택 동승)**
   - `access_granted_*` 열의 UPDATE 권한(`0006:506-508`)을 revoke 하고 INSERT 는 열 목록으로 다시 grant 한다. `0008` ③ 이 `created_by` 를 불변으로 만든 목적을 지킨다.
   - 세션에서 역할이 바뀔 때만 `auth.uid()` 를 찍는다. FK SET NULL 경로는 고정하지 않는다.
@@ -3427,7 +3427,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - `invited_by` 는 SP3a 로 넘긴다(권한 이력 `authz_events` 와 함께).
 - **f. P8-H2-3 — `can_manage_minute` 를 앱 판정과 맞춘다**
   - 프로젝트가 있으면: 관리자 ∨ (작성자 ∧ 그 프로젝트 멤버). 프로젝트가 없으면: 슈퍼유저 ∨ (작성자 ∧ `has_project_role_in_ws`) ∨ `is_ws_admin`.
-  - 새 도우미 `has_project_role_in_ws` 는 `authz.ts:204-211`(`hasProjectRoleInWorkspace`)과 같은 판정이다.
+  - 새 도우미 `has_project_role_in_ws` 는 `authz.ts:210-217`(`hasProjectRoleInWorkspace`)과 같은 판정이다.
   - 마지막 `is_ws_admin` 칸은 **AUTH-11 차이로 유지하고 문서화한다**(§8.2 ③): 무프로젝트 회의록을 SQL 은 워크스페이스 관리자에게 열고(`0007:116-123`), 앱 `canEditMinute` 는 슈퍼유저만 연다(`authz.ts:111,114-119`, SP1 스펙 §3.5 의 의도된 fail-closed). 앱이 더 좁으므로 권한 확대는 없다.
 - **g. P8-H2-2 — 회의록 버킷 정책을 entity 별로**
   - `minutes` 버킷의 insert/delete 정책을 entity(`split_part(name,'/',5)`)별로 나눈다.
@@ -3446,7 +3446,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
     6. 이미 10개면 거부한다(운영 상한, 2.9.2). SP5 `0017` 이 이 가드를 `create or replace` 로 `minutes.attachments` 설정을 읽게 바꾼다(2.8.1).
   - `unique (file_path) where role = 'attachment'` 부분 인덱스를 둔다.
   - `attachment_update_minute_files` 정책을 drop 하고 UPDATE 권한을 revoke 한다(첨부는 추가·삭제만 한다).
-  - `tests/rls/storage-realtime.test.ts:255-276`(⑪)을 새 규칙에 맞춰 다시 만든다 — Storage 객체를 먼저 올리고 행을 넣는다. 픽스처 `tests/rls/fixture-ws.sql:133-135` 는 `postgres` 롤(세션 사용자 없음)로 들어가 검사 1 이 통과시키므로 바뀌지 않았다(실측 — §2.11 H2 행).
+  - `tests/rls/storage-realtime.test.ts:256-283`(⑪)을 새 규칙에 맞춰 다시 만든다 — Storage 객체를 먼저 올리고 행을 넣는다. 픽스처 `tests/rls/fixture-ws.sql:133-135` 는 `postgres` 롤(세션 사용자 없음)로 들어가 검사 1 이 통과시키므로 바뀌지 않았다(실측 — §2.11 H2 행).
 - **i. (H1 이월 — 과제 11) 승인 보고 id 대조의 원자화**
   - 지금은 앱의 보고 id 대조(`checkReportFresh`)와 전이 RPC `apply_workflow_event` 의 주문 상태 CAS 가 따로 돈다. 그 사이(ms)에 재보고가 끼면 사람이 보지 않은 보고가 승인·반려될 수 있다(`agentWork.ts` 의 '잔여 창' 주석).
   - RPC 에 `p_expected_report_id` 를 더하고 주문 행 잠금 아래에서 최신 completion 보고 id 와 비교해 다르면 거부한다. 승인·반려 두 사건이 쓴다. 같은 `0011_authz_hardening` 에 넣는다(번호표 불변). SP5b 의 `0020` 재작성(§3.3.2)은 이 인자를 잇는다.
@@ -3468,12 +3468,12 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
 
 | # | 항목 | 스펙 | 구현 | 근거 |
 |---|---|---|---|---|
-| A1 | 커밋 | 셋 | 넷 — i 의 앱 코드는 마이그레이션 뒤 네 번째 커밋(PostgREST 가 새 인자 RPC 를 `0011` 전에 찾지 못한다) | 판정 C4 |
+| A1 | 커밋 | 셋 | 넷 — i 의 앱 코드는 마이그레이션 뒤 네 번째 커밋 `49c4530`(PostgREST 가 새 인자 RPC 를 `0011` 전에 찾지 못한다) | 판정 C4 |
 | A2 | g `minute-files` 삭제 | 소유자 ∧ 미참조 | 소유자 ∧ 경로의 워크스페이스 멤버 ∧ 미참조 | 판정 C6 |
 | A3 | g 존재 확인 RPC | 모양 미정 | `attachment_object_exists(p_kind, p_id)` — 행 id 로만, 삭제 권한 ∧ 경로가 행의 범위일 때만 답한다. 그 밖은 `42501 ATTACHMENT_FORBIDDEN` | 판정 C1, 리뷰 I1 |
 | A4 | i 대조 | `p_expected_report_id` 를 더한다 | 늘 대조(생략 = null = 보고 없음), `report_stale` 결과, drop + create 후 EXECUTE 는 service_role 만 | 판정 C3, D3 |
 | A5 | a 격리 수준 | 없음 | read committed 가 아니면 `25001 PLATFORM_ADMIN_ISOLATION`(캐스케이드는 그 전에 반환) | 리뷰 M1 |
-| A6 | **공통 규칙** — 격리 수준 | 없음 | 잠금을 잡은 뒤(또는 행 잠금 아래에서) 다른 행을 읽어 판정하는 가드는 read committed 가 아닌 격리 수준을 `25001 <AREA>_ISOLATION` 으로 거부한다 — `PLATFORM_ADMIN_`·`MINUTE_ATTACHMENT_`·`WORKFLOW_EVENT_`·`WORKFLOW_ACTUAL_` 네 가드(`0011` ⑪ 이 확인). serializable 도 상대가 read committed 면 SSI 가 충돌을 보지 못한다. 앱·PostgREST 는 read committed 라 닿지 않고, 앱은 이 코드를 사용자 문구로 옮기지 않는다 | 판정 [isolation 일관성] |
+| A6 | **공통 규칙** — 격리 수준 | 없음 | 잠금을 잡은 뒤(또는 행 잠금 아래에서) 다른 행을 읽어 판정하는 가드는 read committed 가 아닌 격리 수준을 `25001 <AREA>_ISOLATION` 으로 거부한다 — `PLATFORM_ADMIN_`·`MINUTE_ATTACHMENT_`·`WORKFLOW_EVENT_`·`WORKFLOW_ACTUAL_` 네 가드(`0011` ⑪ 이 확인). serializable 도 상대가 read committed 면 SSI 가 충돌을 보지 못한다. 앱·PostgREST 는 read committed 라 닿지 않고, 앱은 이 코드를 사용자 문구로 옮기지 않는다. 네 가드 함수 가운데 하나를 다시 쓰는 뒤 마이그레이션(첨부 가드는 SP5 `0017`, 워크플로 함수는 SP5b `0020`)은 이 검사를 잇는다. `0011` ⑪ 은 `0011` 을 적용할 때만 돌므로, 상시 보호는 `25001` 을 기대하는 `tests/rls` 의 네 케이스다(`h2-platform-admins`·`h2-attachment-guard`·`h2-report-stale`·`workflow-parity` 의 격리 수준 케이스) | 판정 [isolation 일관성] |
 | A7 | h 권한 재검사 | 없음 | 잠금 뒤 `can_manage_minute` 재검사 → `42501 MINUTE_ATTACHMENT_FORBIDDEN` | 리뷰 m-b |
 | A8 | e 부여자 기록 | 세션에서 역할이 바뀔 때 | + 세션 사용자가 `auth.users` 에 있을 때만. `ACCESS_REQUIRES_ACCOUNT` 는 INSERT·역할 변경·인물 변경에만 | 리뷰 m1, 최종 리뷰 3 |
 | A9 | b·⑪ 사후검증 | 남은 권한 0 | 실효 권한(`has_*_privilege` — PUBLIC·상속, 스키마 없는 기본 권한 포함)으로 본다 | 리뷰 M2, m5 |
@@ -3630,7 +3630,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
 | SP5-2 메타 표시 | 파일명(말줄임 + 전체 이름 확인)·형식·크기·등록자·등록일(`types.ts:291-301` 의 `MinuteFile` 에 등록자를 더하고 `data/minutes.ts:172` select 를 넓힌다) |
 | SP5-3 과거 버전 | 과거 본문 버전 화면(`MinuteViewer.tsx:122-123`)은 첨부를 비우는 대신 "첨부파일은 현재 회의록에서 확인" 링크를 둔다(`:777-785` 배너 옆). 당시 첨부가 있었던 것처럼 보이지 않는다 |
 | SP5-4 미리보기 | png·jpg·gif·webp 는 이미지로, PDF 는 sandbox iframe 으로 미리본다. svg·html 은 미리보지 않는다(스크립트 실행 경로). 그 밖의 형식은 다운로드만 한다. 다운로드 서명은 `download` 강제를 유지하고(`actions/minutes.ts:864-867`), 미리보기용 서명은 안전 형식에만 `download` 없이 발급한다. TTL 은 H1 과제 18 의 `MINUTE_FILE_URL_TTL_SEC` 다. `minutes.attachments.previewEnabled=false` 면 미리보기를 끈다 |
-| SP5-5 정책 키 | `minutes.attachments`(W·P, 2.8.1·2.8.2). 파일 선택기 안내·서버 액션·H2-h 가드(`0017` 이 `create or replace` 로 설정 읽기)가 같은 유효 정책을 쓴다. 운영 상한 `MINUTES_ATTACHMENT_MAX_BYTES`(2.8.4)를 넘는 값은 저장에서 거부한다. 제8부 제안 중 `allowedMimeTypes`(mime 은 선언값) 와 `externalDownloadEnabled`(공개 공유는 첨부를 포함하지 않는다 — 2.9.1, P8-NG-1)는 두지 않는다 |
+| SP5-5 정책 키 | `minutes.attachments`(W·P, 2.8.1·2.8.2). 파일 선택기 안내·서버 액션·H2-h 가드(`0017` 이 `create or replace` 로 설정 읽기)가 같은 유효 정책을 쓴다. 가드를 다시 쓰는 `0017` 은 격리 수준 검사(`25001 MINUTE_ATTACHMENT_ISOLATION`)를 잇는다 — `0011` ⑪ 은 `0011` 적용 때만 돌므로 상시 보호는 `25001` 을 기대하는 `tests/rls` 케이스다(§6.2.0 H2 구현 결과 A6). 운영 상한 `MINUTES_ATTACHMENT_MAX_BYTES`(2.8.4)를 넘는 값은 저장에서 거부한다. 제8부 제안 중 `allowedMimeTypes`(mime 은 선언값) 와 `externalDownloadEnabled`(공개 공유는 첨부를 포함하지 않는다 — 2.9.1, P8-NG-1)는 두지 않는다 |
 | SP5-6 고아 청소 | 업로드 실패·취소·확정 실패로 남은 `minute-files` 객체(어떤 `minute_files` 행도 참조하지 않는 객체)를 지우는 service_role 잡과 dry-run 모드를 둔다. 현재는 청소 작업이 어디에도 없다(`MinuteUploadModal.tsx:161-167,184,233` 의 즉시 정리 시도만 있다). 업로드 예약 표(P8-RJ-1)는 두지 않는다 — 커밋 시점 가드(H2-h)와 이 청소가 같은 수용 기준을 더 단순하게 충족한다 |
 | SP5-7 삭제 톰스톤 | `minute_files.deleted_at`·`deleted_by`·`purged_at`. 삭제는 먼저 톰스톤을 찍어 목록·다운로드에서 막고, Storage 객체 삭제가 끝나면 `purged_at` 을 찍는다. 객체 삭제 실패는 청소 잡이 재시도한다. 현행 하드 삭제(`actions/minutes.ts:806-808`)를 대체하는 최소 감사 기록이다 |
 
@@ -3659,7 +3659,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 | 목표 | 시스템 의미 범주와 에이전트 프로토콜은 고정한다. 프로젝트마다 표시 상태·라벨, 선택형 승인 단계, 선행 충족 기준, 크레딧 step/gap 정책을 선언형으로 설정한다. UI·서버·DB·에이전트가 같은 정의를 쓰고 DB 가 최종 판정한다. 스크립팅은 하지 않는다. 설계는 §3.1~§3.5 가 정본이다 |
 | 왜 이 순서 | 이슈 표시 상태는 SP5 의 어휘 트리거 잠금 규약과 `migrate_setting_code` 를 재사용한다. WBS 흐름은 `apply_workflow_event`(`0000_baseline.sql:731`)를 다시 써야 하므로 SP3a revision 계약 위에서 한다. SP6 카탈로그·SP8 봇·보드가 해석된 상태 정의를 소비하므로 그보다 먼저다 |
 | 의존 | SP5, H1 과제 11·15 |
-| 마이그레이션 | `0020_workflow_policy.sql`(`apply_workflow_event` 재작성, `set_dependency_waiver` 삭제, `wbs_stage_approvals`, `guard_workflow_columns`, `guard_workflow_actual`)·`0021_issue_status_vocab.sql`(`issues.status_code` + `enforce_issue_workflow`. `issues_status_check` 는 범주 CHECK 로 남는다) |
+| 마이그레이션 | `0020_workflow_policy.sql`(`apply_workflow_event` 재작성, `set_dependency_waiver` 삭제, `wbs_stage_approvals`, `guard_workflow_columns`, `guard_workflow_actual`. 다시 쓰는 `apply_workflow_event`·`guard_workflow_actual` 은 격리 수준 검사(`25001 WORKFLOW_EVENT_ISOLATION`·`WORKFLOW_ACTUAL_ISOLATION`)를 잇는다 — `0011` ⑪ 은 `0011` 적용 때만 돌므로 상시 보호는 `25001` 을 기대하는 `tests/rls` 케이스다(§6.2.0 H2 구현 결과 A6))·`0021_issue_status_vocab.sql`(`issues.status_code` + `enforce_issue_workflow`. `issues_status_check` 는 범주 CHECK 로 남는다) |
 | 노력 | 2.5주(2~3) |
 | 소유 파일 | `src/lib/domain/{agentWork,stageCredits,stageLabels,issues,issueWorkflow}.ts`·`src/lib/agent/{workflowEvent,stageTransition,depends}.ts`·`src/app/actions/agentWork.ts`·`src/components/ui/StatusPill.tsx`·`src/components/settings/WorkflowSettings.tsx`·칸반 열 파생부. `api/v1/agent/work/*` 의 **승인 판정부**(인증부는 SP7) |
 
@@ -4354,5 +4354,5 @@ H1(§6.2.0)이 정본 문장을 앞서 구현했거나 정본의 옛 서술이 �
 | 원장 신규 ① | 회의록 첨부 정책 키 채택 여부 | **채택**(권고 기본값). `minutes.attachments` W·P 키(§2.8.1·§2.8.2), 운영 상한 `MINUTES_ATTACHMENT_MAX_BYTES`(§2.8.4), 슬롯 SP5 MIN-ATT. 컨트롤러 판정 — 사용자 일괄 승인(2026-09-27) |
 | 원장 신규 ② | 조회 전용 사용자의 산출물 다운로드 | **현행 `can_attach` 유지**(권고 기본값, `정본:860` — 읽기도 `can_attach`). 조회 전용 사용자는 목록은 보되 다운로드 판정이 `denied` 다(H1 과제 16). 컨트롤러 판정 — 사용자 일괄 승인(2026-09-27) |
 | 원장 신규 ③ | AUTH-11 — 무프로젝트 회의록의 워크스페이스 관리자 칸 | **SQL 유지, 앱과의 차이를 문서화**(권고 기본값). `can_manage_minute` 는 워크스페이스 관리자에게 열고(`0007:116-123`) 앱 `canEditMinute` 는 슈퍼유저만 연다(SP1 스펙 §3.5). 앱이 더 좁아 권한 확대가 없다. H2-f 패리티 표의 명시적 예외 1칸, §2.9.1 첨부 권한 행. 컨트롤러 판정 — 사용자 일괄 승인(2026-09-27) |
-| 원장 신규 ④ | 마지막 슈퍼유저 가드의 `auth.users` 캐스케이드 삭제 | **면제**(권고 기본값). `platform_admins_keep_last` 는 `platform_admins` 에 직접 내린 DELETE·UPDATE 만 막고, `auth.users` 삭제의 캐스케이드는 통과시킨다 — `dev-bootstrap.mjs:48-58` 의 실패 롤백 경로를 보존한다(H2-a). 컨트롤러 판정 — 사용자 일괄 승인(2026-09-27) |
+| 원장 신규 ④ | 마지막 슈퍼유저 가드의 `auth.users` 캐스케이드 삭제 | **면제**(권고 기본값). `platform_admins_keep_last` 는 `platform_admins` 에 직접 내린 DELETE·UPDATE 만 막고, `auth.users` 삭제의 캐스케이드는 통과시킨다 — `dev-bootstrap.mjs:48-53` 의 실패 롤백 경로를 보존한다(H2-a). 컨트롤러 판정 — 사용자 일괄 승인(2026-09-27) |
 | 개정 §8.1 옛 #4 | WF-GAP-1·WF-GAP-2 를 SP3a 전 하드닝으로 당길지 | **당겼다**(H2, 2026-09-27). 잠금 절은 `0011_authz_hardening` ⑩(`guard_workflow_actual` — 경계는 앱과 같은 99 초과, §3.3.5), 크레딧 기본값·잠금·선행 도달의 현행 TS↔SQL 패리티는 `tests/rls/workflow-parity.test.ts`. 단계 ≥2 절은 SP5b 그대로다 |
