@@ -210,7 +210,6 @@ export const wikiKo = {
 
   'wiki.document.eyebrow': 'CANONICAL DOCUMENT',
   'wiki.document.canonicalTitle': '현재 기준 문서',
-  'wiki.document.create': '새 문서',
   'wiki.document.edit': '편집',
   'wiki.document.write': '이 주제로 문서 쓰기',
   'wiki.document.verify': '현재 내용 검증',

@@ -61,7 +61,7 @@ export function buildWbsAoa(
 ): unknown[][] {
   const teams = resolveTeamColumns(items, teamCodes)
   // 계층 열 수 = levelLabels.length(N단 프로젝트 대응). 3라벨이면 종전 레이아웃과 바이트 동일 —
-  // 레거시 v1 회귀 기준(api/export/route.ts)이 이 불변에 걸려 있다.
+  // tests/excel/export.test.ts 의 무인자 호출 회귀가 이 불변에 걸려 있다.
   const L = levelLabels.length
   const teamsStart = 1 + L + 2 // Biz + 계층 L열 + 스페이서 2
   const base = teamsStart + teams.length // 팀 열 다음 첫 열(산출물) — 3라벨·5팀이면 11(L), 기존 양식과 동일

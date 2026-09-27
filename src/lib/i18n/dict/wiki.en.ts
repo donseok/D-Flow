@@ -207,7 +207,6 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
 
   'wiki.document.eyebrow': 'CANONICAL DOCUMENT',
   'wiki.document.canonicalTitle': 'Current document',
-  'wiki.document.create': 'New document',
   'wiki.document.edit': 'Edit',
   'wiki.document.write': 'Write a document for this topic',
   'wiki.document.verify': 'Verify current content',

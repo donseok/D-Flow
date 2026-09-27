@@ -71,10 +71,15 @@ describe("'use server' 모듈의 export", () => {
   })
 
   it('src 의 모든 use server 모듈은 async 함수와 타입만 export 한다', () => {
+    // 글자로 먼저 거른다 — 지시문은 이 글자를 반드시 담는다. src 전체를 TypeScript 로 파싱하면 부하 때 5초 한도를 넘는다
+    // (최종 리뷰 integ F1). 판정은 여전히 isUseServerModule(AST)이 한다.
     const files = walk(ROOT)
-      .map(f => ({ rel: relative(process.cwd(), f), sf: parse(f, readFileSync(f, 'utf8')) }))
+      .map(f => ({ f, text: readFileSync(f, 'utf8') }))
+      .filter(({ text }) => text.includes('use server'))
+      .map(({ f, text }) => ({ rel: relative(process.cwd(), f), sf: parse(f, text) }))
       .filter(({ sf }) => isUseServerModule(sf))
     // 파일을 하나도 못 찾으면 검사가 공허하게 통과한다.
+    expect(files.length).toBeGreaterThan(0)
     expect(files.map(f => f.rel)).toContain('src/app/actions/wiki.ts')
     const hits = files.flatMap(({ rel, sf }) => valueExports(sf).map(v => `${rel}:${v}`))
     expect(hits, hits.join('\n')).toEqual([])
