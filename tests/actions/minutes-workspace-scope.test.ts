@@ -98,11 +98,14 @@ const soloA = makeActor({
 type TableResult = { data?: unknown; error: { message: string } | null }
 type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult; exists?: TableResult }
 type StorageCall = { bucket: string; op: 'createSignedUrl' | 'remove'; args: unknown[] }
+/** from() 한 번 = 쿼리 하나. ops 는 그 체인의 [메서드, ...인자] — 어느 행을 읽고 무엇을 썼는지(필터·payload)를 단언한다. */
+type Query = { table: string; ops: unknown[][] }
 /** 테이블별 결과를 주입하는 thenable 가짜 빌더 — 결과가 배열이면 같은 표를 부를 때마다 순서대로 꺼내고 마지막 값을
  *  유지한다(단일 결과는 모든 조회가 같은 결과). storage 는 createSignedUrl·remove 를 storageCalls 에 기록하고 주입한
- *  결과를 돌려준다. 호출을 기록한다. */
+ *  결과를 돌려준다. 호출을 기록한다 — calls 는 메서드 이름만, queries 는 인자까지, rpcCalls 는 rpc 인자. */
 function fakeClient(results: Record<string, TableResult | TableResult[]>, storage: StorageResults = {}) {
   const calls: Record<string, string[]> = {}
+  const queries: Query[] = []
   const served: Record<string, number> = {}
   const next = (table: string): TableResult => {
     const r = results[table]
@@ -115,10 +118,13 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
   const from = vi.fn((table: string) => {
     const log = (calls[table] ??= [])
     const result = next(table)
+    const query: Query = { table, ops: [] }
+    queries.push(query)
     const b: Record<string, unknown> = {}
     for (const m of ['select', 'insert', 'update', 'delete', 'eq', 'in', 'is', 'order', 'maybeSingle', 'single']) {
       b[m] = vi.fn((...args: unknown[]) => {
         log.push(m)
+        query.ops.push([m, ...args])
         if (m === 'select') (selects[table] ??= []).push(String(args[0] ?? ''))
         return b
       })
@@ -138,8 +144,12 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
     }),
   })
   // rpc 는 첨부 존재 확인(attachment_object_exists) — 기본은 객체가 남아 있음(true).
-  const rpc = vi.fn(async () => storage.exists ?? { data: true, error: null })
-  return { client: { from, rpc, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls, selects }
+  const rpcCalls: unknown[][] = []
+  const rpc = vi.fn(async (...args: unknown[]) => {
+    rpcCalls.push(args)
+    return storage.exists ?? { data: true, error: null }
+  })
+  return { client: { from, rpc, storage: { from: vi.fn(bucketOf) } }, calls, storageCalls, selects, queries, rpcCalls }
 }
 /** WA 의 무프로젝트 회의록 — 작성자는 u1(각 액터의 userId). */
 const minuteRow = (over: Record<string, unknown> = {}) => ({
@@ -518,6 +528,12 @@ describe('removeMinuteFile — Storage 객체가 실제로 지워졌을 때만 �
     getActor.mockResolvedValue(inA)
     expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
     expect(db.calls.minute_files).toContain('delete')
+    // 도우미에 넘기는 값 — 회의록 버킷·그 행의 file_path, 존재 확인과 행 삭제는 첨부 id(회의록 id 가 아니다)로.
+    expect(db.storageCalls).toEqual([{ bucket: 'minutes', op: 'remove', args: [[PATH]] }])
+    expect(db.rpcCalls).toEqual([['attachment_object_exists', { p_kind: 'minute', p_id: 'file-1' }]])
+    expect(db.queries.filter(q => q.ops.some(o => o[0] === 'delete'))).toEqual([
+      { table: 'minute_files', ops: [['delete'], ['eq', 'id', 'file-1'], ['select', 'id']] },
+    ])
   })
 
   it('객체 1건·행 1건이 지워져야 성공', async () => {
@@ -544,6 +560,28 @@ describe('공유 상태 — share_token 은 세션으로 읽지 않는다(H2-c �
     expect(await getMinuteShare(M)).toEqual({ ok: true, enabled: true, token: TOKEN })
     expect((db.selects.minutes ?? []).join(' | ')).not.toContain('share_token')
     expect(adm.selects.minutes).toEqual(['share_token, share_enabled'])
+    // service_role 은 RLS 를 타지 않는다 — 이 필터가 유일한 범위다.
+    expect(adm.queries).toEqual([
+      { table: 'minutes', ops: [['select', 'share_token, share_enabled'], ['eq', 'id', M], ['maybeSingle']] },
+    ])
+  })
+
+  // minutes 에는 RLS 쓰기 정책이 없고 service_role 은 RLS 를 타지 않는다 — .eq('id', …) 가 빠지거나 바뀌면 남의 회의록 공유가 바뀐다.
+  it.each([
+    ['enable(토큰 없음) — 새 토큰을 쓴다', 'enable', { share_token: null, share_enabled: false }, true],
+    ['disable — 토큰은 그대로 두고 끈다', 'disable', { share_token: TOKEN, share_enabled: true }, false],
+  ] as const)('setMinuteShare %s: 그 회의록 한 행에 공유 두 열만 쓰고, 쓴 값을 돌려준다', async (_name, op, before, enabled) => {
+    createServerClient.mockResolvedValue(fakeClient({ minutes: { data: minuteRow(), error: null } }).client)
+    const adm = fakeClient({ minutes: [{ data: before, error: null }, { data: null, error: null }] })
+    mocks.createAdminClient.mockReturnValue(adm.client)
+    getActor.mockResolvedValue(inA)
+    const res = await setMinuteShare(M, op)
+    expect(res).toEqual({ ok: true, enabled, token: expect.stringMatching(/^[0-9a-f-]{36}$/) })
+    if (before.share_token) expect(res.token).toBe(before.share_token)
+    expect(adm.queries).toStrictEqual([
+      { table: 'minutes', ops: [['select', 'share_token, share_enabled'], ['eq', 'id', M], ['maybeSingle']] },
+      { table: 'minutes', ops: [['update', { share_token: res.token, share_enabled: enabled }], ['eq', 'id', M]] },
+    ])
   })
 
   it('판정에서 막히면 service_role 을 만들지 않는다', async () => {

@@ -20,24 +20,33 @@ const PATH = 'ws/w/p/p1/deliverables/i1/1-a.pdf'
 function sb(opts: {
   removed?: { data: unknown[] | null; error: { message: string } | null }
   deleted?: { data: { id: string }[] | null; error: { message: string } | null }
+  /** 존재 확인 RPC(attachment_object_exists) 결과 — 기본은 객체가 남아 있음(true). */
+  exists?: { data: unknown; error: { message: string } | null }
 }) {
   const calls: string[] = []
-  const remove = vi.fn(async (paths: string[]) => {
-    calls.push('storage.remove'); void paths
+  /** 도우미(removeStoredAttachment)에 닿은 값 — 어느 버킷의 어느 경로를 지우고, 어느 행을 묻고 지웠는지. */
+  const seen = {
+    removed: [] as Array<{ bucket: string; paths: string[] }>,
+    rpc: [] as unknown[][],
+    deleted: [] as Array<{ table: string; eq: unknown[] }>,
+  }
+  const remove = (bucket: string) => vi.fn(async (paths: string[]) => {
+    calls.push('storage.remove'); seen.removed.push({ bucket, paths })
     return opts.removed ?? { data: [{ name: PATH }], error: null }
   })
   const deleteSelect = vi.fn(async (cols: string) => {
     calls.push(`meta.delete.select(${cols})`)
     return opts.deleted ?? { data: [{ id: 'att-1' }], error: null }
   })
-  const table = {
+  const table = (name: string) => ({
     select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: 'att-1', file_path: PATH, wbs_item_id: 'i1' }, error: null }) }) }),
-    delete: () => ({ eq: () => ({ select: deleteSelect }) }),
-  }
+    delete: () => ({ eq: (...eq: unknown[]) => { seen.deleted.push({ table: name, eq }); return { select: deleteSelect } } }),
+  })
   createServerClient.mockResolvedValue({
-    from: () => table, storage: { from: () => ({ remove }) }, rpc: vi.fn(async () => ({ data: true, error: null })),
+    from: table, storage: { from: (bucket: string) => ({ remove: remove(bucket) }) },
+    rpc: vi.fn(async (...args: unknown[]) => { seen.rpc.push(args); return opts.exists ?? { data: true, error: null } }),
   } as never)
-  return { calls, remove, deleteSelect }
+  return { calls, seen, deleteSelect }
 }
 
 let errSpy: ReturnType<typeof vi.spyOn>
@@ -69,6 +78,17 @@ describe('removeAttachment — Storage·행 삭제 결과 확인', () => {
     expect((await removeAttachment('att-1')).ok).toBe(false)
     expect(f.deleteSelect).not.toHaveBeenCalled()
     expect(errSpy).toHaveBeenCalled()
+  })
+
+  // 호출부가 종류·id·경로를 잘못 넘기면 다른 버킷에서 지우고 다른 행을 묻고 지운다 — 가짜가 아무 값이나 받으면 드러나지 않는다.
+  it('도우미에 넘기는 값 — 산출물 버킷·표, 그 행의 file_path, 존재 확인과 행 삭제는 첨부 id(항목 id 가 아니다)로', async () => {
+    const f = sb({ removed: { data: [], error: null }, exists: { data: false, error: null } })
+    expect(await removeAttachment('att-1')).toEqual({ ok: true })
+    expect(f.seen).toEqual({
+      removed: [{ bucket: 'deliverables', paths: [PATH] }],
+      rpc: [['attachment_object_exists', { p_kind: 'deliverable', p_id: 'att-1' }]],
+      deleted: [{ table: 'deliverable_attachments', eq: ['id', 'att-1'] }],
+    })
   })
 
   it('행 삭제가 0건이면(RLS·경합) 성공으로 둔갑시키지 않는다', async () => {

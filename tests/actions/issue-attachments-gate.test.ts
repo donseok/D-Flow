@@ -80,9 +80,16 @@ function makeClient(opts: {
   exists?: { data: unknown; error: { message: string } | null }
 }) {
   const calls = opts.calls ?? []
+  /** 삭제 도우미(removeStoredAttachment)에 닿은 값 — 어느 버킷의 어느 경로를 지우고, 어느 행을 묻고 지웠는지. */
+  const seen = {
+    removed: [] as Array<{ bucket: string; paths: string[] }>,
+    rpc: [] as unknown[][],
+    deleted: [] as Array<{ table: string; eq: unknown[] }>,
+  }
+  let bucket = ''
   const insert = vi.fn(async (row: unknown) => { calls.push('meta.insert'); void row; return { error: opts.insertError ?? null } })
   const remove = vi.fn(async (paths: string[]) => {
-    calls.push('storage.remove'); void paths
+    calls.push('storage.remove'); seen.removed.push({ bucket, paths })
     return opts.removed ?? { data: [{ name: paths[0] }], error: null }
   })
   const createSignedUrl = vi.fn(async () => opts.signed ?? { data: { signedUrl: 'https://signed' }, error: null })
@@ -101,30 +108,34 @@ function makeClient(opts: {
     then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
       Promise.resolve(opts.countRows ?? { data: [], error: null }).then(res, rej),
   })
-  const attachTable = {
+  const attachTable = (table: string) => ({
     select: vi.fn(() => ({ eq: vi.fn(attachChain) })),
     insert,
     delete: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        select: vi.fn(() => ({
-          then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => {
-            calls.push('meta.delete')
-            const r = opts.deleteResult ?? { data: { id: 'a1' }, error: opts.deleteError ?? null }
-            return Promise.resolve({ data: r.data ? [r.data] : [], error: r.error }).then(res, rej)
-          },
-        })),
-      })),
+      eq: vi.fn((...eq: unknown[]) => {
+        seen.deleted.push({ table, eq })
+        return {
+          select: vi.fn(() => ({
+            then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => {
+              calls.push('meta.delete')
+              const r = opts.deleteResult ?? { data: { id: 'a1' }, error: opts.deleteError ?? null }
+              return Promise.resolve({ data: r.data ? [r.data] : [], error: r.error }).then(res, rej)
+            },
+          })),
+        }
+      }),
     })),
-  }
+  })
   return {
     calls,
+    seen,
     insert,
     remove,
     createSignedUrl,
     client: {
-      from: vi.fn((t: string) => (t === 'issues' ? issuesTable : t === 'projects' ? projectsTable : attachTable)),
-      storage: { from: vi.fn(() => ({ createSignedUrl, remove })) },
-      rpc: vi.fn(async () => { calls.push('rpc.exists'); return opts.exists ?? { data: true, error: null } }),
+      from: vi.fn((t: string) => (t === 'issues' ? issuesTable : t === 'projects' ? projectsTable : attachTable(t))),
+      storage: { from: vi.fn((b: string) => { bucket = b; return { createSignedUrl, remove } }) },
+      rpc: vi.fn(async (...args: unknown[]) => { calls.push('rpc.exists'); seen.rpc.push(args); return opts.exists ?? { data: true, error: null } }),
     },
   }
 }
@@ -334,6 +345,12 @@ describe('removeIssueAttachment', () => {
     state.client = m.client
     expect(await removeIssueAttachment('a1')).toEqual({ ok: true })
     expect(m.calls).toEqual(['storage.remove', 'rpc.exists', 'meta.delete'])
+    // 도우미에 넘기는 값 — 이슈 첨부 버킷·표, 그 행의 file_path, 존재 확인과 행 삭제는 첨부 id(이슈 id 가 아니다)로.
+    expect(m.seen).toEqual({
+      removed: [{ bucket: 'issue-attachments', paths: [`${ISSUE}/1-x.pdf`] }],
+      rpc: [['attachment_object_exists', { p_kind: 'issue', p_id: 'a1' }]],
+      deleted: [{ table: 'issue_attachments', eq: ['id', 'a1'] }],
+    })
   })
 
   it('Storage 삭제 오류면 메타를 남기고 실패', async () => {
