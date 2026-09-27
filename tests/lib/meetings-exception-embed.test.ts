@@ -191,13 +191,13 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
     expect(await getProjectMeetingData('p1')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
-    expect(logged().some(m => m.includes('[getProjectMeetingData] meeting_exceptions'))).toBe(true)
+    expect(logged().some(m => m.includes('getProjectMeetingData') && m.includes('meeting_exceptions'))).toBe(true)
   })
   it('getMyMeetings: 회의 조회가 재시도까지 실패하면 ok:false — 빈 달력이 아니다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
     expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
-    expect(logged().some(m => m.includes('[getMyMeetings] meetings'))).toBe(true)
+    expect(logged().some(m => m.includes('getMyMeetings') && m.includes('meetings 조회 실패'))).toBe(true)
     // 회의를 못 읽었으면 예외 폴백 조회도 하지 않는다
     expect(tables).not.toContain('meeting_exceptions')
   })
@@ -209,7 +209,7 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
       exceptions: ERR('boom'),
     })
     expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
-    expect(logged().some(m => m.includes('[getMyMeetings] meeting_exceptions'))).toBe(true)
+    expect(logged().some(m => m.includes('getMyMeetings') && m.includes('meeting_exceptions'))).toBe(true)
   })
   it('임베드만 실패하고 예외 별도 조회가 0건이면 종전대로 ok:true — 0건과 실패를 가른다', async () => {
     makeSb({
@@ -220,5 +220,70 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
     const res = await myMeetings('2026-07-01', '2026-07-31')
     expect(res.meetings.map(m => m.id)).toEqual(['m1'])
     expect(res.exceptions).toEqual([])
+  })
+})
+
+describe('내 명단 행 조회 실패를 \'내 회의 없음\'으로 위장하지 않는다', () => {
+  it('getMyMeetings: 회의는 읽었어도 내 명단 행 조회가 실패하면 ok:false — 참석자로만 든 회의가 남의 회의로 빠지지 않는다', async () => {
+    const { tables } = makeSb({
+      user: { id: 'u1', email: null },
+      members: ERR('down'),
+      meetings: () => OK([meetingRow('m1', { meeting_attendees: [{ member_id: 'member-a' }] })]),
+    })
+    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('resolveMemberIds'), 'down')
+    // 실패로 돌려줄 것이면 예외 폴백 조회도 하지 않는다
+    expect(tables).not.toContain('meeting_exceptions')
+  })
+
+  it('getMyMeetings: 내 명단 행이 0건(무매칭)인 것은 실패가 아니다 — 작성자 기준 isMine 은 그대로', async () => {
+    makeSb({
+      user: { id: 'u1', email: null },
+      members: OK([]),
+      meetings: () => OK([meetingRow('mine-by-author', { created_by: 'u1' }), meetingRow('not-mine')]),
+    })
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map(m => [m.id, m.isMine])).toEqual([['mine-by-author', true], ['not-mine', false]])
+    expect(console.error).not.toHaveBeenCalled()
+  })
+})
+
+describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣는다', () => {
+  const logged = () => (console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]))
+
+  it('getProjectMeetingData: 회의 조회 실패·임베드 재시도 로그에 프로젝트 id', async () => {
+    makeSb({ meetings: () => ERR('down') })
+    await getProjectMeetingData('p-log-1')
+    expect(logged()).toHaveLength(2)
+    expect(logged().every(m => m.includes('[getProjectMeetingData project=p-log-1]'))).toBe(true)
+  })
+
+  it('getProjectMeetingData: 예외 폴백 실패 로그에 프로젝트 id', async () => {
+    makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
+    await getProjectMeetingData('p-log-2')
+    expect(logged().some(m => m.includes('[getProjectMeetingData project=p-log-2] meeting_exceptions'))).toBe(true)
+  })
+
+  it('getMyMeetings: 회의 조회 실패·예외 폴백 실패 로그에 달력 범위', async () => {
+    makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
+    await getMyMeetings('2026-08-30', '2026-10-10')
+    expect(logged()).toHaveLength(2)
+    expect(logged().every(m => m.includes('[getMyMeetings range=2026-08-30..2026-10-10]'))).toBe(true)
+
+    makeSb({
+      user: { id: 'u1', email: null },
+      meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])),
+      exceptions: ERR('boom'),
+    })
+    await getMyMeetings('2026-09-27', '2026-11-07')
+    expect(logged().some(m => m.includes('[getMyMeetings range=2026-09-27..2026-11-07] meeting_exceptions'))).toBe(true)
+  })
+
+  it('getMyMeetings: 날짜 꼴이 아닌 인자는 로그에 그대로 찍지 않는다 — 액션 인자라 형식이 보장되지 않는다', async () => {
+    makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
+    await getMyMeetings('2026-07-01\n[forged] line', '2026-07-31')
+    expect(logged().length).toBeGreaterThan(0)
+    expect(logged().some(m => m.includes('forged') || m.includes('\n'))).toBe(false)
+    expect(logged().every(m => m.includes('..2026-07-31]'))).toBe(true)
   })
 })

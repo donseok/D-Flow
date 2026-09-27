@@ -56,7 +56,8 @@ function exceptionsFrom(rows: Row[]): MeetingException[] {
 }
 
 /** 임베드가 불가했을 때만 쓰는 폴백 — 예외를 별도 왕복으로 읽는다. 실패면 null — 취소 회차가 되살아나 보이지 않게
- *  호출부가 회의 일정 전체를 실패로 보인다(에러 처리 3원칙 ①). */
+ *  호출부가 회의 일정 전체를 실패로 보인다(에러 처리 3원칙 ①).
+ *  tag 는 로그 머리 — 로더 이름과 함께 어느 프로젝트·어느 범위의 조회였는지를 싣는다(selectMeetings 도 같다). */
 async function fetchExceptionsByIds(
   sb: ServerClient, ids: string[], tag: string,
 ): Promise<MeetingException[] | null> {
@@ -74,9 +75,11 @@ async function fetchExceptionsByIds(
 
 type RowsResult = { data: Row[] | null; error: { message: string } | null }
 
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
 export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.'
 
-/** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다. */
+/** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다. */
 export type MyMeetingsResult =
   | { ok: true; meetings: Meeting[]; exceptions: MeetingException[] }
   | { ok: false; error: string }
@@ -119,11 +122,14 @@ export const getProjectMeetingData = cache(async (
   const sb = await createServerClient()
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, location, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id)'
 
+  // 이 로더를 쓰는 화면(대시보드·프로젝트 회의)은 회의 조회 실패를 따로 로그로 남기지 않는다 — 어느 프로젝트의 실패인지는 여기서 싣는다.
+  const tag = `getProjectMeetingData project=${projectId}`
+
   // 예외를 임베드해 왕복 2회 → 1회.
   const { rows, embedded, failed } = await selectMeetings(
     select => sb.from('meetings').select(select)
       .eq('project_id', projectId).order('meeting_date', { ascending: true }),
-    COLS, 'getProjectMeetingData',
+    COLS, tag,
     '호출부가 회의 일정 대신 사유를 보인다',
   )
   if (failed) return { ok: false, error: ERR_MEETINGS_LOAD }
@@ -131,7 +137,7 @@ export const getProjectMeetingData = cache(async (
   const meetings = rows.map((r: Row) => mapMeeting(r, attendeeIdsFrom(r)))
   const exceptions = embedded
     ? exceptionsFrom(rows)
-    : await fetchExceptionsByIds(sb, meetings.map(m => m.id), 'getProjectMeetingData')
+    : await fetchExceptionsByIds(sb, meetings.map(m => m.id), tag)
   if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   return { ok: true, meetings, exceptions }
 })
@@ -175,18 +181,18 @@ export const getMeetingDetail = cache(async (
  * 계정 연결 정본은 `people.user_id` 하나다(SP1: 이메일 폴백 매칭 폐지). 비활성 명단 행·비활성 인물은
  * buildActor 와 같이 빼서, 빠진 사람의 옛 행이 '나'로 잡히지 않게 한다.
  * 외부 인력 행은 people.user_id NULL 이라 걸리지 않는다.
+ * 조회 실패는 null — 무매칭([])과 갈라, 호출부가 '내 것 없음'으로 그릴지 실패로 보일지 정한다(에러 처리 3원칙 ①).
  */
 export async function resolveMemberIds(
   sb: ServerClient,
   user: { id: string },
-): Promise<string[]> {
+): Promise<string[] | null> {
   const { data, error } = await sb.from('project_members')
     .select('id, people!inner(user_id, active)')
     .eq('people.user_id', user.id).eq('active', true).eq('people.active', true)
   if (error) {
-    // 무매칭([])과 조회 실패를 호출부가 구별할 수 없으므로 최소한 로그로는 남긴다.
     console.error('[resolveMemberIds] 조회 실패:', error.message)
-    return []
+    return null
   }
   return [...new Set(((data ?? []) as Row[]).map(r => r.id as string))]
 }
@@ -195,7 +201,7 @@ export async function resolveMemberIds(
  * 크로스 프로젝트 '내 회의' 범위 조회. body/location 제외(캘린더 필드만),
  * isMine(작성자==나 or 참석자에 내 member 포함) + projectName 세팅.
  * fetch 조건: 비반복은 [start,end], 반복은 meeting_date<=end AND (until IS NULL OR until>=start).
- * 비로그인은 빈 성공 결과(세션은 호출부가 따로 본다). 회의 조회 실패·예외 폴백 실패는 ok:false —
+ * 비로그인은 빈 성공 결과(세션은 호출부가 따로 본다). 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false —
  * 호출부가 '이번 달 회의 없음'·KPI 0 대신 사유를 보인다(에러 처리 3원칙 ①).
  */
 export const getMyMeetings = cache(async (
@@ -214,6 +220,11 @@ export const getMyMeetings = cache(async (
 
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id), projects(name)'
 
+  // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
+  // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.
+  const logDay = (s: string) => (ISO_DAY_RE.test(s) ? s : '(날짜 아님)')
+  const tag = `getMyMeetings range=${logDay(gridStartIso)}..${logDay(gridEndIso)}`
+
   // 멤버 ID 조회와 회의 조회는 서로 무관하다(멤버 ID 는 isMine 계산에만 쓰임) — 병렬로 묶고
   // 예외는 임베드로 같은 왕복에 태워 직렬 4단(getUser→멤버→회의→예외)을 2단으로 줄인다.
   // resolveMemberIds 를 직접 부른다: 예전의 getMyMemberIds() 래퍼는 자체 클라이언트로 getUser 를
@@ -223,11 +234,13 @@ export const getMyMeetings = cache(async (
     resolveMemberIds(sb, user),
     selectMeetings(
       select => sb.from('meetings').select(select).or(orClause).order('meeting_date', { ascending: true }),
-      COLS, 'getMyMeetings',
+      COLS, tag,
       '호출부가 내 회의 달력 대신 사유를 보인다',
     ),
   ])
-  if (failed) return { ok: false, error: ERR_MEETINGS_LOAD }
+  // 내 명단 행을 못 읽으면 참석자로만 든 회의가 전부 isMine=false 가 된다 — 회의는 읽었어도 '내 회의 없음'·KPI 0 으로
+  // 그려지므로 같은 실패로 돌려준다(로그는 resolveMemberIds 가 남긴다).
+  if (failed || myMemberIdList === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   const myMemberIds = new Set(myMemberIdList)
 
   const meetings = rows.map((r: Row) => {
@@ -243,7 +256,7 @@ export const getMyMeetings = cache(async (
 
   const exceptions = embedded
     ? exceptionsFrom(rows)
-    : await fetchExceptionsByIds(sb, meetings.map(m => m.id), 'getMyMeetings')
+    : await fetchExceptionsByIds(sb, meetings.map(m => m.id), tag)
   if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   return { ok: true, meetings, exceptions }
 })

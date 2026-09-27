@@ -39,9 +39,9 @@ describe('resolveMemberIds — 로그인 계정 ↔ project_members 연결', () 
     expect(await resolveMemberIds(sb, { id: 'u1' })).toEqual(['m1'])
   })
 
-  it('조회 실패는 빈 배열 + 로그 — 무매칭과 조용히 섞이지 않는다', async () => {
+  it('조회 실패는 null + 로그 — 무매칭([])과 섞이지 않아 호출부가 가른다', async () => {
     const { sb } = stub({ data: null, error: { message: 'boom' } })
-    expect(await resolveMemberIds(sb, { id: 'u1' })).toEqual([])
+    expect(await resolveMemberIds(sb, { id: 'u1' })).toBeNull()
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('resolveMemberIds'), 'boom')
   })
 

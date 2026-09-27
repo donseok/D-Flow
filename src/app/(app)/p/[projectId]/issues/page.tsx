@@ -25,9 +25,10 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
     // '내 담당' 필터용 — 계정 연결(people.user_id)로 찾은 내 활성 명단 행. 비로그인은 빈 배열.
     // resolveMemberIds 는 getSession 의 user 인자가 필요한 진짜 의존이라 체인은 유지하되,
     // 체인 전체를 Promise.all 의 한 항목으로 태워 다른 독립 조회와 왕복을 겹친다(직렬 2단 → 1단).
+    // 조회 실패(null)는 종전대로 빈 배열로 받는다 — 이슈 목록은 그대로 그리고 '내 담당' 필터만 비어 보인다(로그는 로더가 남긴다).
     (async () => {
       const user = await getSession()
-      const myMemberIds = user ? await resolveMemberIds(await createServerClient(), user) : []
+      const myMemberIds = user ? (await resolveMemberIds(await createServerClient(), user)) ?? [] : []
       return { user, myMemberIds }
     })(),
   ])
