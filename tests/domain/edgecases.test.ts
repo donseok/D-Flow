@@ -3,10 +3,11 @@ import { plannedPct, achievementOf, statusOf } from '@/lib/domain/progress'
 import { buildTree, collectLeaves, type BuildTreeOpts } from '@/lib/domain/tree'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const H = new Set<string>()
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,

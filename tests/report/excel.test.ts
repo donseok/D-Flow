@@ -4,7 +4,7 @@ import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { buildReportWorkbook } from '@/lib/report/excel'
 import type { ComputedItem, TeamCode } from '@/lib/domain/types'
 
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러). */
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(FIXTURE_TEAM_CODES 미러). */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 
 const node = (over: Partial<ComputedItem>): ComputedItem =>

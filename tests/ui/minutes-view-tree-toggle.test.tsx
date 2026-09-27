@@ -62,6 +62,7 @@ vi.mock('@/app/actions/minutes', () => ({
 }))
 
 import { MinutesView } from '@/components/minutes/MinutesView'
+import { withTeams } from '../fixtures/teams'
 
 describe('MinutesView 트리 뷰 배선', () => {
   let container: HTMLDivElement, root: Root
@@ -80,10 +81,10 @@ describe('MinutesView 트리 뷰 배선', () => {
     initialView: 'list' | 'calendar' | 'tree' = 'calendar',
     perms: { canEdit: boolean } = { canEdit: true },
   ) {
-    await act(async () => root.render(
+    await act(async () => root.render(withTeams(
       <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
         projects={[]} currentUserId="u1" canEdit={perms.canEdit} />,
-    ))
+    )))
   }
   function buttonByText(text: string): HTMLButtonElement {
     const found = [...container.querySelectorAll('button')].find(b => b.textContent?.includes(text))

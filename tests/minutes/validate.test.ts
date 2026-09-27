@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  validateMinuteInput, validateMinuteFields, validateMinuteTeam, sanitizeFileName, stampedFileName, isMinuteFilePathValid, ilikeOrPattern,
+  validateMinuteFields, validateMinuteTeam, sanitizeFileName, stampedFileName, isMinuteFilePathValid, ilikeOrPattern,
   MINUTE_BODY_MAX, type MinuteInput,
 } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
@@ -10,18 +10,17 @@ const base: MinuteInput = {
   bodyMd: '# 안건\n- 진행 현황', meetingId: null,
 }
 
-describe('validateMinuteInput', () => {
-  it('정상 입력은 null', () => expect(validateMinuteInput(base)).toBeNull())
-  it('제목 없음', () => expect(validateMinuteInput({ ...base, title: '  ' })).toMatch(/제목/))
+// validateMinuteInput(호출자 0, 삭제)이 보던 필드 사례 — 운영 경로의 validateMinuteFields 로 옮겼다. 담당 팀 사례는 아래 validateMinuteTeam.
+describe('validateMinuteFields', () => {
+  it('정상 입력은 null', () => expect(validateMinuteFields(base)).toBeNull())
+  it('제목 없음', () => expect(validateMinuteFields({ ...base, title: '  ' })).toMatch(/제목/))
   it('제목 200자 초과', () =>
-    expect(validateMinuteInput({ ...base, title: 'a'.repeat(201) })).toMatch(/200/))
+    expect(validateMinuteFields({ ...base, title: 'a'.repeat(201) })).toMatch(/200/))
   it('날짜 형식 오류', () =>
-    expect(validateMinuteInput({ ...base, minuteDate: '2026/07/09' })).toMatch(/날짜/))
-  it('잘못된 담당', () =>
-    expect(validateMinuteInput({ ...base, teamCode: 'QA' as never })).toMatch(/담당/))
+    expect(validateMinuteFields({ ...base, minuteDate: '2026/07/09' })).toMatch(/날짜/))
   it('본문 캡 초과', () =>
-    expect(validateMinuteInput({ ...base, bodyMd: 'a'.repeat(MINUTE_BODY_MAX + 1) })).toMatch(/100,000/))
-  it('빈 본문 허용', () => expect(validateMinuteInput({ ...base, bodyMd: '' })).toBeNull())
+    expect(validateMinuteFields({ ...base, bodyMd: 'a'.repeat(MINUTE_BODY_MAX + 1) })).toMatch(/100,000/))
+  it('빈 본문 허용', () => expect(validateMinuteFields({ ...base, bodyMd: '' })).toBeNull())
 })
 
 describe('validateMinuteFields / validateMinuteTeam — 담당 팀은 범위가 정해진 뒤 따로 본다', () => {

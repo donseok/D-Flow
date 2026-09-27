@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 // teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 목하지 않는다).
-// 팀 검증만 공유 목(과거 DEFAULT_TEAMS 와 동일한 고정값)으로 대체해 실 DB 무관하게 만든다.
+// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
 vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
 import { createListMeetingsTool } from '@/lib/ai/tools/meetings'

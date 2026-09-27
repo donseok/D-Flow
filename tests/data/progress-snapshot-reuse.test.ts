@@ -6,7 +6,8 @@ import { computeTree } from '@/lib/domain/rollup'
 import { seoulToday } from '@/lib/domain/dates'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
 
@@ -34,7 +35,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: async () => client
 
 const { recordProgressSnapshot } = await import('@/lib/data/snapshots')
 
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const dbRow = (id: string, parent: string | null, actual: number | null) => ({
   id, parent_id: parent, code: id, sort_order: 1, name: id,
   planned_start: null, planned_end: null, weight: null, actual_pct: actual, is_owner_split: false,

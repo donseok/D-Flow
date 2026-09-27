@@ -10,6 +10,7 @@ import type {
   ProjectMember,
 } from '@/lib/domain/types'
 import { makeRosterMember, type RosterMemberOverrides } from '../fixtures/rosterMember'
+import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -159,7 +160,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
 
   async function mount(node: React.ReactElement) {
     await act(async () => {
-      root.render(node)
+      root.render(withTeams(node))
       await Promise.resolve()
     })
   }

@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { computeTree } from '@/lib/domain/rollup'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
 import { buildTrend, plannedAt, plannedCurve, flattenRows, type SnapshotPoint } from '@/lib/domain/trend'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: over.id ?? Math.random().toString(36).slice(2), parentId: null, code: 'x', sortOrder: 0,
@@ -11,7 +12,7 @@ const row = (over: Partial<WbsRow>): WbsRow => ({
   weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over,
 })
 const TODAY = '2026-02-20'
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const items = (rows: WbsRow[]) => computeTree(rows, TODAY, new Set(), OPTS)
 const snap = (date: string, actual: number, planned: number): SnapshotPoint => ({ date, actual, planned })
 

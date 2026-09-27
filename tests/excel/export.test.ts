@@ -4,14 +4,14 @@ import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
 import { validateAndLink } from '../fixtures/excel/legacyParse'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
 
 // 4단+ 깊이 회귀 케이스는 여기 없음 — buildWbsAoa의 flatten()이 'activity' 레벨에서 의도적으로 접기를
 // 멈추는 3열 고정 양식이라(Plan B 전, export.ts:19 주석 참조) 실 4단 입력을 라운드트립시키는 케이스를
 // 만들면 알려진 손실을 재확인할 뿐이다. computeTree 자체의 4단 롤업 정확성은
 // tests/domain/edgecases.test.ts 'computeTree 4단+ 롤업' 참조.
 
-const OPTS = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
@@ -35,7 +35,7 @@ const SRC: WbsRow[] = [
 
 describe('buildWbsWorkbook round-trip', () => {
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
-  const buf = buildWbsWorkbook(items, [{ date: '2026-07-17', name: '제헌절' }], '테스트 프로젝트')
+  const buf = buildWbsWorkbook(items, [{ date: '2026-07-17', name: '제헌절' }], '테스트 프로젝트', FIXTURE_TEAM_CODES)
   const parsed = parseWbsWorkbook(buf)
 
   it('레벨 구조가 보존된다', () => {
@@ -88,7 +88,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
       row({ id: 'SA', parentId: 'A', code: 'a-1', name: 'sub-act', isOwnerSplit: true }),
     ]
     const items = computeTree(srcRows, '2026-09-15', new Set(), OPTS)
-    const aoa = buildWbsAoa(items)
+    const aoa = buildWbsAoa(items, 'WBS', FIXTURE_TEAM_CODES)
     // header 3줄 + data rows
     const dataRows = aoa.slice(3)
     expect(dataRows.length).toBe(3) // Phase, Task, Activity만 (sub-act는 접힘)
@@ -106,7 +106,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
       row({ id: 'SS', parentId: 'S', code: 'a-1-1', name: 'SubSubActivity', isOwnerSplit: false }),
     ]
     const items = computeTree(srcRows, '2026-09-15', new Set(), OPTS)
-    const aoa = buildWbsAoa(items)
+    const aoa = buildWbsAoa(items, 'WBS', FIXTURE_TEAM_CODES)
     const dataRows = aoa.slice(3)
     expect(dataRows.length).toBe(5) // 모든 5개 행 출력
     expect(dataRows.map(r => r[1] || r[2] || r[3])).toEqual(['Phase', 'Task', 'Activity', 'SubActivity', 'SubSubActivity'])
@@ -116,6 +116,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
 /* ── 동적 팀 열(팀 마스터 대응) ── */
 import { buildWbsColumnMap } from '../fixtures/excel/legacyParse'
 import { buildWbsAoa } from '@/lib/excel/export'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 describe('buildWbsAoa: 계층 열은 depth로 배치, levelLabels로 헤더 커스터마이즈', () => {
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
@@ -158,8 +159,25 @@ describe('buildWbsAoa 동적 팀 열', () => {
     expect(m.actualPct).toBe(13)
   })
 
+  it('팀이 0개면 header2 에 담당 칸이 없고 산출물·계획이 header3 의 산출물·시작 위에 온다', () => {
+    const aoa = buildWbsAoa([], 'WBS', [])
+    const h2 = aoa[1] as string[]
+    const h3 = aoa[2] as string[]
+    expect(h2).not.toContain('담당')
+    expect(h3[6]).toBe('산출물')
+    expect(h2[6]).toBe('산출물')
+    expect(h2[7]).toBe('계획')
+    expect(h3[7]).toBe('시작')
+  })
+
+  it('팀이 있으면 담당은 첫 팀 열 위, 산출물은 header3 의 산출물 위(5팀 기존 양식)', () => {
+    const aoa = buildWbsAoa([], 'WBS', FIXTURE_TEAM_CODES)
+    const h2 = aoa[1] as string[]
+    expect(h2).toEqual(['', 'Phase', 'Task', 'Activity', '', '', '담당', '', '', '', '', '산출물', '계획', ''])
+  })
+
   it('기본(5팀) 헤더는 기존 양식과 동일(하위 호환)', () => {
-    const aoa = buildWbsAoa([])
+    const aoa = buildWbsAoa([], 'WBS', FIXTURE_TEAM_CODES)
     expect(aoa[2]).toEqual(['Biz', 'Phase', 'Task', 'Activity', '', '', 'PMO', 'ERP', 'MES', '가공', 'MDM',
       '산출물', '시작', '종료', '가중치', '', '실적%', '계획%', '계획대비%', '진척'])
   })

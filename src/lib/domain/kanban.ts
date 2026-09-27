@@ -1,5 +1,4 @@
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
 import { teamStyle } from '@/lib/domain/teamColor'
 
 /** 칸반 컬럼 — leaf(말단) 작업 카드 묶음. */
@@ -39,7 +38,7 @@ export function groupByPhase(items: ComputedItem[]): KanbanColumn[] {
 
 /** 담당자별 — 활성 팀 컬럼 + 미배정. leaf는 primary 담당팀마다 들어가고,
  *  primary가 없거나 전부 컬럼 밖 팀(비활성 등)이면 미배정으로 흡수한다(카드 유실 금지). */
-export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[] = DEFAULT_TEAM_CODES): KanbanColumn[] {
+export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[]): KanbanColumn[] {
   const leaves = leavesOf(items)
   const buckets: Record<string, ComputedItem[]> = { 미배정: [] }
   for (const team of teams) buckets[team] = []

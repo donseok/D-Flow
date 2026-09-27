@@ -1,5 +1,4 @@
 import type { ExplorerLeaf, FolderNode, MinuteFolder, TeamCode } from './types'
-import { DEFAULT_TEAM_CODES } from './teams'
 import { isStoragePathFor } from './storagePath'
 import { SIGNED_URL_TTL_SEC } from './signedUrl'
 
@@ -13,9 +12,6 @@ export const MINUTE_ATTACHMENTS_MAX_COUNT = 10
  *  유효하다(회수 창). 보관(archived) 상태는 발급을 막지 않는다 — 보관은 편집 잠금이지 열람 잠금이 아니다.
  *  actions/minutes.ts 는 'use server' 라 상수를 여기 둔다. */
 export const MINUTE_FILE_URL_TTL_SEC = SIGNED_URL_TTL_SEC
-
-/** @deprecated 기본 5팀 폴백 — 런타임 기준은 팀 마스터. 호출처에서 활성 팀 목록을 주입할 것. */
-export const TEAM_CODES: readonly TeamCode[] = DEFAULT_TEAM_CODES
 
 /* ── 팀 기본 폴더(0043): 루트의 팀코드 동명 시드 폴더는 자동 편철 앵커 ── */
 
@@ -156,14 +152,6 @@ export interface MinuteInput {
   meetingOccurrenceDate?: string | null
 }
 
-/** 회의록 입력 검증 — 에러 메시지 또는 null. 담당 팀까지 한 번에 본다(팀 목록을 이미 아는 호출부용). */
-export function validateMinuteInput(
-  input: MinuteInput,
-  teamCodes: readonly TeamCode[] = TEAM_CODES,
-): string | null {
-  return validateMinuteFields(input) ?? validateMinuteTeam(input.teamCode, teamCodes)
-}
-
 /** 담당 팀을 뺀 입력 검증. 담당 팀은 회의록이 속할 범위(프로젝트·워크스페이스)의 팀이어야 해서 그 범위가
  *  정해진 뒤 validateMinuteTeam 으로 따로 본다 — create/updateMeta·외부 API 는 입력을 먼저 거르고 범위를 나중에 안다. */
 export function validateMinuteFields(input: MinuteInput): string | null {
@@ -279,7 +267,7 @@ export function normalizeFolderName(name: string): string {
   return name.trim().normalize('NFC')
 }
 
-/** 폴더 이름 검증 — 에러 메시지 또는 null (validateMinuteInput 관례).
+/** 폴더 이름 검증 — 에러 메시지 또는 null (validateMinuteFields 관례).
  *
  *  ⚠️ 반드시 `normalizeFolderName` 을 거친 값으로 재야 한다. 저장은 NFC 인데 검증만 원문
  *  길이를 재면 경계가 어긋난다 — macOS 에서 만든 한글 이름은 NFD 라 자모가 분해돼 길이가

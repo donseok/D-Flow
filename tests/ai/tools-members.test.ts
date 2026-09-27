@@ -10,7 +10,7 @@ import type {
 import { repositoryError, repositoryOk } from '@/lib/repositories/types'
 
 // 다른 봇 도구 테스트와 동일하게 실 DB 접근 없이 팀 마스터를 목(mock)한다 — 서버 팀 마스터는
-// 더 이상 폴백하지 않으므로(콜드스타트 실패 시 빈 목록) 고정 팀 목록(과거 DEFAULT_TEAMS)을 직접
+// 더 이상 폴백하지 않으므로(콜드스타트 실패 시 빈 목록) 고정 팀 목록(FIXTURE_TEAMS)을 직접
 // 공급해야 한다. '0071 팀 스코프' describe만 프로젝트 전용 팀 목록으로 재정의한다.
 const mocks = vi.hoisted(() => ({
   activeTeamCodesForProjectSync: vi.fn((_projectId: string): string[] => ['PMO', 'ERP', 'MES', '가공', 'MDM']),

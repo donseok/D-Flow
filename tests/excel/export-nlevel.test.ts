@@ -4,12 +4,13 @@ import { buildAoaWithProfile } from '@/lib/excel/exportWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 // N단 프로젝트의 엑셀 export — 계층 열 수 = levelLabels.length.
 // 3라벨 호출의 바이트 불변(레거시 3단 회귀 기준)은 tests/excel/export.test.ts 가 잠근다.
 
-const OPTS = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,

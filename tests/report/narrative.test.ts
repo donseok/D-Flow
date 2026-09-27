@@ -3,7 +3,7 @@ import { buildWeeklyReportModel as buildWeeklyReportModelReal, NO_ISSUE_TEXT } f
 import { buildWeeklyNarrative, mergeDuplicateLines } from '@/lib/report/narrative'
 import type { Announcement, ComputedItem, Meeting, TeamCode } from '@/lib/domain/types'
 
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록 자체를 검증하지 않는다. */
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(FIXTURE_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록 자체를 검증하지 않는다. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 function buildWeeklyReportModel(
   items: Parameters<typeof buildWeeklyReportModelReal>[0],

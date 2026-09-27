@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildTree, type BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const row = (over: Partial<WbsRow> & { id: string }): WbsRow => ({
   parentId: null, code: over.id, sortOrder: 0, name: over.id,
@@ -9,7 +10,7 @@ const row = (over: Partial<WbsRow> & { id: string }): WbsRow => ({
   actualPct: null, owners: [], isOwnerSplit: false, ...over,
 })
 
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 
 describe('buildTree', () => {
   it('parentId로 중첩하고 sortOrder로 정렬', () => {

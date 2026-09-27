@@ -3,7 +3,7 @@ import { buildWeeklyReportModel as buildWeeklyReportModelReal } from '@/lib/repo
 import type { Announcement, AttendanceRecord, ComputedItem, Meeting, ProjectMember, TeamCode } from '@/lib/domain/types'
 import { makeRosterMember } from '../fixtures/rosterMember'
 
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — DEFAULT_TEAM_CODES 미러).
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — FIXTURE_TEAM_CODES 미러).
  *  buildWeeklyReportModel 은 teams 를 필수로 받으므로, 팀 목록에 무관한 기존 테스트는 이 래퍼로 주입한다. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 function buildWeeklyReportModel(

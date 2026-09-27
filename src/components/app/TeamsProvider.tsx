@@ -1,11 +1,11 @@
 'use client'
 
-// 활성 팀 목록 컨텍스트 — (app)/layout 서버에서 1회 주입. 미제공 시 DEFAULT_TEAMS(테스트 픽스처 호환).
+// 활성 팀 목록 컨텍스트 — 미제공 시 빈 목록. 팀은 (app)/layout 이 서버에서 1회 주입한다.
 import { createContext, useContext, useMemo } from 'react'
-import { activeCodes, DEFAULT_TEAMS, type Team } from '@/lib/domain/teams'
+import { activeCodes, type Team } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
 
-const TeamsContext = createContext<readonly Team[]>(DEFAULT_TEAMS)
+const TeamsContext = createContext<readonly Team[]>([])
 
 export function TeamsProvider({ teams, children }: { teams: readonly Team[]; children: React.ReactNode }) {
   return <TeamsContext.Provider value={teams}>{children}</TeamsContext.Provider>

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { MinuteFolder } from '@/lib/domain/types'
+import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,11 +63,11 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
   afterEach(() => { act(() => root.unmount()); container.remove() })
 
   async function mount(over: Partial<Parameters<typeof MinuteUploadModal>[0]> = {}) {
-    await act(async () => root.render(
+    await act(async () => root.render(withTeams(
       <MinuteUploadModal open onClose={() => {}} onSaved={onSaved} todayIso="2026-07-24"
         projects={[]} folders={tree} defaultFolderId={null}
         projectWorkspaces={{ [P1]: WS, [P2]: WS, [P3]: WS }} noProjectWorkspace={{ ok: true, workspaceId: WS }} {...over} />,
-    ))
+    )))
   }
   const dialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')]
   const mainDialog = () => dialogs()[0]

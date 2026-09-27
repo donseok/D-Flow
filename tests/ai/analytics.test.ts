@@ -13,7 +13,7 @@ import {
 import type { ComputedItem, ProjectMember, TeamCode } from '@/lib/domain/types'
 import { makeRosterMember } from '../fixtures/rosterMember'
 
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록 자체를 검증하지 않는다. */
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(FIXTURE_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록 자체를 검증하지 않는다. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 function analyzeProject(
   items: Parameters<typeof analyzeProjectReal>[0],
@@ -131,7 +131,7 @@ describe('의도별 답변 포매터', () => {
     const members: ProjectMember[] = [
       makeRosterMember({ id: 'm1', projectId: 'P', name: '홍길동', email: null, team: 'PMO', accessRole: 'admin', title: null, roleLabel: null, hasAccount: false, createdAt: '' }),
     ]
-    const out = answerByTeam(analyzeProject(tree, 'P', TODAY, members), members)
+    const out = answerByTeam(analyzeProject(tree, 'P', TODAY, members), members, TEST_TEAMS)
     expect(out).toContain('PMO — 작업 1건')
     expect(out).toContain('홍길동')
   })

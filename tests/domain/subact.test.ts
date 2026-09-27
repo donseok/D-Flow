@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  SUB_ACT_TEAMS, subActName, subActTeamsInUse, availableSubActTeams, willDiscardActual,
+  subActName, subActTeamsInUse, availableSubActTeams, willDiscardActual,
 } from '@/lib/domain/subact'
 import type { TeamCode } from '@/lib/domain/types'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const sub = (team: TeamCode) => ({ owners: [{ team }] })
 
@@ -17,16 +18,16 @@ describe('subActTeamsInUse / availableSubActTeams', () => {
   it('이미 SUB-ACT 로 쓰인 팀을 제외하고 표준 순서(PMO→ERP→MES→가공→MDM)로 남긴다', () => {
     const children = [sub('가공'), sub('ERP')]
     expect([...subActTeamsInUse(children)].sort()).toEqual(['ERP', '가공'].sort())
-    expect(availableSubActTeams(children)).toEqual(['PMO', 'MES', 'MDM'])
+    expect(availableSubActTeams(children, FIXTURE_TEAM_CODES)).toEqual(['PMO', 'MES', 'MDM'])
   })
 
   it('자식이 없으면 5개 팀 모두 배정 가능', () => {
-    expect(availableSubActTeams([])).toEqual([...SUB_ACT_TEAMS])
+    expect(availableSubActTeams([], FIXTURE_TEAM_CODES)).toEqual([...FIXTURE_TEAM_CODES])
   })
 
   it('모든 팀이 점유되면 빈 배열', () => {
-    const children = SUB_ACT_TEAMS.map(t => sub(t))
-    expect(availableSubActTeams(children)).toEqual([])
+    const children = FIXTURE_TEAM_CODES.map(t => sub(t))
+    expect(availableSubActTeams(children, FIXTURE_TEAM_CODES)).toEqual([])
   })
 })
 

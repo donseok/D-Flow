@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_TEAMS, DEFAULT_TEAM_CODES, activeCodes, normalizeNewTeamCode, teamOrderMap,
+  activeCodes, normalizeNewTeamCode, teamOrderMap,
   type Team,
 } from '@/lib/domain/teams'
+import { FIXTURE_TEAMS, FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 describe('domain/teams', () => {
-  it('DEFAULT_TEAM_CODES는 현행 5팀 순서', () => {
-    expect(DEFAULT_TEAM_CODES).toEqual(['PMO', 'ERP', 'MES', '가공', 'MDM'])
-    expect(DEFAULT_TEAMS.find(t => t.code === 'MDM')?.progressVisible).toBe(false)
+  it('FIXTURE_TEAM_CODES 는 옛 기본 5팀 순서 — 픽스처 값 보존', () => {
+    expect(FIXTURE_TEAM_CODES).toEqual(['PMO', 'ERP', 'MES', '가공', 'MDM'])
+    expect(FIXTURE_TEAMS.find(t => t.code === 'MDM')?.progressVisible).toBe(false)
   })
 
   it('activeCodes는 active만 sortOrder→code 순 정렬', () => {

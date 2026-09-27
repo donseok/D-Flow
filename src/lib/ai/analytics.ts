@@ -8,7 +8,6 @@ import { buildWeeklyReportModel, type WeeklyReportModel } from '@/lib/report/wee
 import { addDaysIso } from '@/lib/domain/dates'
 import { overallProgress } from '@/lib/domain/rollup'
 import type { ComputedItem, ProjectMember, Status, TeamCode } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
 
 const STATUS_KO: Record<Status, string> = {
   not_started: '시작 전',
@@ -212,7 +211,7 @@ export function answerThisWeek(a: ProjectAnalysis): string {
 export function answerByTeam(
   a: ProjectAnalysis,
   members: ProjectMember[],
-  teams: readonly TeamCode[] = DEFAULT_TEAM_CODES,
+  teams: readonly TeamCode[],
 ): string {
   const memberByTeam = new Map<string, string[]>()
   for (const m of members) {

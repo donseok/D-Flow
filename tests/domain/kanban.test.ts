@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ComputedItem, OwnerKind, Status, TeamCode } from '@/lib/domain/types'
 import { groupByPhase, groupByOwner, groupByStatus, groupByProgress, bucketOf, leafPaths, dueSignal, lensCards, applyQuickFilters, sortCards } from '@/lib/domain/kanban'
 import { teamStyle } from '@/lib/domain/teamColor'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 type Owner = { team: TeamCode; kind: OwnerKind }
 
@@ -87,12 +88,12 @@ describe('groupByPhase', () => {
 
 describe('groupByOwner', () => {
   it('PMO/가공/ERP/MES/MDM + 미배정 6개 컬럼을 순서대로 만든다', () => {
-    const cols = groupByOwner(fixture())
+    const cols = groupByOwner(fixture(), FIXTURE_TEAM_CODES)
     expect(cols.map(c => c.key)).toEqual(['PMO', 'ERP', 'MES', '가공', 'MDM', '미배정'])
   })
 
   it('leaf는 primary 담당팀 컬럼마다 들어가고 support는 무시한다', () => {
-    const cols = groupByOwner(fixture())
+    const cols = groupByOwner(fixture(), FIXTURE_TEAM_CODES)
     const by = (k: string) => cols.find(c => c.key === k)!
     expect(by('PMO').cards.map(c => c.id).sort()).toEqual(['A1a', 'A2'])
     expect(by('가공').cards.map(c => c.id)).toEqual(['A1b'])
@@ -101,7 +102,7 @@ describe('groupByOwner', () => {
   })
 
   it('primary 담당이 없는 leaf는 미배정으로 간다', () => {
-    const cols = groupByOwner(fixture())
+    const cols = groupByOwner(fixture(), FIXTURE_TEAM_CODES)
     const unassigned = cols.find(c => c.key === '미배정')!
     expect(unassigned.cards.map(c => c.id)).toEqual(['B1'])
   })

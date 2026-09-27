@@ -7,9 +7,10 @@ import { detectWorkbook } from '@/lib/excel/detect'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
-const OPTS = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
@@ -39,7 +40,7 @@ describe('buildAoaWithProfile — (a) LEGACY_EXCEL_PROFILE_V1 접기는 기존 b
   ]
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
 
-  const legacyAoa = buildWbsAoa(items, '테스트 프로젝트')
+  const legacyAoa = buildWbsAoa(items, '테스트 프로젝트', FIXTURE_TEAM_CODES)
   const profileAoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false }, '테스트 프로젝트'))
 
   it('행 개수가 같다', () => {

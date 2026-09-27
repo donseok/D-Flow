@@ -14,7 +14,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: adminMocks.createAdminClient }))
 // teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 세부 목하지 않는다).
-// 팀 검증만 공유 목(과거 DEFAULT_TEAMS 와 동일한 고정값)으로 대체해 실 DB 무관하게 만든다.
+// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
 vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
 vi.mock('@/lib/ai/minutes-ingest', () => ({ ingestMinute: vi.fn() }))
 vi.mock('@/lib/ai/minutes-insights', () => ({ ensureMinuteInsights: vi.fn(), generateMinuteInsights: vi.fn() }))

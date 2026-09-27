@@ -3,7 +3,7 @@ import { extractSearchKeywords, classifyIntent } from '@/lib/ai/intent'
 import { keywordMatchLines, analyzeProject as analyzeProjectReal } from '@/lib/ai/analytics'
 import type { ComputedItem, TeamCode } from '@/lib/domain/types'
 
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록을 검증하지 않는다. */
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(FIXTURE_TEAM_CODES 미러) — 이 파일 테스트는 팀 목록을 검증하지 않는다. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 function analyzeProject(
   items: Parameters<typeof analyzeProjectReal>[0],

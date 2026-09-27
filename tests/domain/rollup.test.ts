@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { computeTree } from '@/lib/domain/rollup'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 
 const leaf = (id: string, parentId: string, actual: number, weight: number | null = null): WbsRow => ({
   id, parentId, code: id, sortOrder: 1, name: id,

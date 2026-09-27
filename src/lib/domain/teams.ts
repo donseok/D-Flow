@@ -16,18 +16,6 @@ export interface Team {
   workspaceId: string
 }
 
-/** 미제공 TeamsProvider 기본값 + 테스트 픽스처(2026-07 5팀). 서버 팀 마스터는 폴백하지 않는다
- *  — SP4 에서 fixtures 로 이동. DB 행이 아니라 소속 워크스페이스가 없다(workspaceId '' — 어떤 워크스페이스 접근자에도 걸리지 않는다). */
-export const DEFAULT_TEAMS: readonly Team[] = [
-  { id: 'default-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: '' },
-  { id: 'default-erp', code: 'ERP', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: '' },
-  { id: 'default-mes', code: 'MES', sortOrder: 2, active: true, progressVisible: true, projectId: null, workspaceId: '' },
-  { id: 'default-gagong', code: '가공', sortOrder: 3, active: true, progressVisible: true, projectId: null, workspaceId: '' },
-  { id: 'default-mdm', code: 'MDM', sortOrder: 4, active: true, progressVisible: false, projectId: null, workspaceId: '' },
-]
-
-export const DEFAULT_TEAM_CODES: readonly TeamCode[] = DEFAULT_TEAMS.map(t => t.code)
-
 /** 활성 팀 코드 — sortOrder, 동률이면 code 순. 탭·필터·셀렉트 공용 순서. */
 export function activeCodes(teams: readonly Team[]): TeamCode[] {
   return [...teams]

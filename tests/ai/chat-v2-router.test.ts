@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { routeChatRequest, teamFromCodes, type RouteChatOptions } from '@/lib/ai/chat/router'
 import type { ChatRequestV2, PageContextV1 } from '@/lib/ai/chat/protocol'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const NOW = new Date('2026-07-19T00:00:00.000Z')
 /** 팀 인자 기대값('ERP')을 지키는 픽스처 — 라우터는 등록된 팀 코드로만 팀을 뽑는다. */
-const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => ['PMO', 'ERP', 'MES', '가공', 'MDM'] }
+const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => FIXTURE_TEAM_CODES }
 
 function context(domain: PageContextV1['domain'], extra: Partial<PageContextV1> = {}): PageContextV1 {
   return {

@@ -32,6 +32,7 @@ vi.mock('@/app/actions/attendance', () => ({
 
 import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { makeRosterMember } from '../fixtures/rosterMember'
+import { withTeams } from '../fixtures/teams'
 
 const MEMBERS: ProjectMember[] = [
   member('member-mes', '나메스', 'MES'),
@@ -92,7 +93,7 @@ describe('AttendanceView 멤버 선택 보기 방식', () => {
 
   async function renderAttendance() {
     await act(async () => {
-      root.render(
+      root.render(withTeams(
         <AttendanceView
           projectId="project-1"
           records={[]}
@@ -100,7 +101,7 @@ describe('AttendanceView 멤버 선택 보기 방식', () => {
           initialDate="2026-08-02"
           canEdit
         />,
-      )
+      ))
     })
   }
 

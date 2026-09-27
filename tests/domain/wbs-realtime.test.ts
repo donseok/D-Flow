@@ -3,9 +3,10 @@ import { computeTree } from '@/lib/domain/rollup'
 import { parseWbsPayload, applyWbsChange, wbsChannelTopic } from '@/lib/domain/wbsRealtime'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
-const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) }
+const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const TODAY = '2026-09-17'
 const HOLIDAYS = new Set<string>()
 

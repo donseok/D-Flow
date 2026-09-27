@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { MinuteFolder } from '@/lib/domain/types'
+import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('@/components/providers/LocaleProvider', () => ({
@@ -61,7 +62,7 @@ describe('MinuteChatPanel 범위 전환', () => {
     return JSON.parse(call[1].body) as Record<string, unknown>
   }
   async function mountPanel(projects: { id: string; name: string }[] = []) {
-    await act(async () => root.render(<MinuteChatPanel minuteId="m-1" projects={projects} />))
+    await act(async () => root.render(withTeams(<MinuteChatPanel minuteId="m-1" projects={projects} />)))
   }
   async function openArchiveTeam(teamLabel: string) {
     await act(async () => { tab('min.chat.scope.all').click() })

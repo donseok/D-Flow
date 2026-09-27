@@ -1,6 +1,5 @@
 import * as XLSX from 'xlsx'
 import type { ComputedItem, TeamCode } from '@/lib/domain/types'
-import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
 
 /**
  * WBS 익스포트 (순수). 3행 헤더 규약으로 써서 다시 임포트하면 라운드트립된다 — 라운드트립은
@@ -56,8 +55,8 @@ function resolveTeamColumns(items: ComputedItem[], teamCodes: readonly TeamCode[
 /** WBS 시트의 AOA(행 배열) 생성 — 테스트·검증용으로 분리 노출. */
 export function buildWbsAoa(
   items: ComputedItem[],
-  projectName = 'WBS',
-  teamCodes: readonly TeamCode[] = DEFAULT_TEAM_CODES,
+  projectName: string,
+  teamCodes: readonly TeamCode[],
   levelLabels: readonly string[] = ['Phase', 'Task', 'Activity'],
 ): unknown[][] {
   const teams = resolveTeamColumns(items, teamCodes)
@@ -69,8 +68,9 @@ export function buildWbsAoa(
   const teamCol = new Map(teams.map((c, i) => [c, teamsStart + i]))
 
   const header1 = [projectName]
-  const header2 = ['', ...levelLabels, '', '', '담당',
-    ...Array<string>(Math.max(0, teams.length - 1)).fill(''), '산출물', '계획', '']
+  // '담당'은 첫 팀 열 위 — 팀 열이 없으면 칸도 없다(있으면 산출물·계획이 한 칸씩 밀린다).
+  const header2 = ['', ...levelLabels, '', '',
+    ...(teams.length > 0 ? ['담당', ...Array<string>(teams.length - 1).fill('')] : []), '산출물', '계획', '']
   const header3 = ['Biz', ...levelLabels, '', '', ...teams,
     '산출물', '시작', '종료', '가중치', '', '실적%', '계획%', '계획대비%', '진척']
 
@@ -103,9 +103,9 @@ export function buildWbsAoa(
 /** WBS + Holiday 시트를 가진 xlsx ArrayBuffer 생성. */
 export function buildWbsWorkbook(
   items: ComputedItem[],
-  holidays: { date: string; name: string }[] = [],
-  projectName = 'WBS',
-  teamCodes: readonly TeamCode[] = DEFAULT_TEAM_CODES,
+  holidays: { date: string; name: string }[],
+  projectName: string,
+  teamCodes: readonly TeamCode[],
   levelLabels: readonly string[] = ['Phase', 'Task', 'Activity'],
 ): ArrayBuffer {
   const wb = XLSX.utils.book_new()

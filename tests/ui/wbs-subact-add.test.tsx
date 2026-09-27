@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem, OwnerKind, TeamCode } from '@/lib/domain/types'
+import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -56,9 +57,9 @@ describe('RowDetailPanel — SUB-ACT 추가 어포던스', () => {
 
   async function mount(node: ComputedItem, opts: { editable?: boolean } = {}) {
     await act(async () =>
-      root.render(
+      root.render(withTeams(
         <RowDetailPanel item={node} onClose={() => {}} projectId="p1" editable={opts.editable ?? true} />,
-      ),
+      )),
     )
   }
   const buttons = () => [...container.querySelectorAll<HTMLButtonElement>('button')]

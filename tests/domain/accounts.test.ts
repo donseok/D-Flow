@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   ACCOUNT_ROLES, isAccountRole, isValidPassword, parseBulkAccounts,
 } from '@/lib/domain/accounts'
-import { DEFAULT_TEAM_CODES } from '@/lib/domain/teams'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 describe('상수/타입가드', () => {
-  it('기본 팀 코드는 PMO·가공·ERP·MES·MDM', () => {
-    expect([...DEFAULT_TEAM_CODES].sort()).toEqual(['ERP', 'MES', 'PMO', '가공', 'MDM'].sort())
+  it('픽스처 팀 코드는 PMO·가공·ERP·MES·MDM', () => {
+    expect([...FIXTURE_TEAM_CODES].sort()).toEqual(['ERP', 'MES', 'PMO', '가공', 'MDM'].sort())
   })
   it('권한은 admin·member·viewer — 3단 프로젝트 역할', () => {
     expect([...ACCOUNT_ROLES]).toEqual(['admin', 'member', 'viewer'])

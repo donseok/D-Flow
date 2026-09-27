@@ -42,8 +42,9 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import { computeTree } from '@/lib/domain/rollup'
-import { DEFAULT_TEAM_CODES, teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap } from '@/lib/domain/teams'
 import type { WbsRow } from '@/lib/domain/types'
+import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const TODAY = '2026-09-17'
 const row = (id: string, parentId: string | null, actualPct: number | null, updatedAt?: string): WbsRow => ({
@@ -58,7 +59,7 @@ const tree = () => computeTree(
     row('a', 'P', 0, '2026-09-17T01:00:00.000Z'),
     row('b', 'P', 0, '2026-09-17T01:00:00.000Z'),
   ],
-  TODAY, new Set(), { subActTeamOrder: teamOrderMap(DEFAULT_TEAM_CODES) },
+  TODAY, new Set(), { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) },
 )
 
 let host: HTMLDivElement

@@ -12,8 +12,9 @@ function Progress() {
 }
 
 describe('TeamsProvider', () => {
-  it('provider 없이는 DEFAULT 5팀(테스트 픽스처 호환)', () => {
-    expect(renderToStaticMarkup(<Codes />)).toContain('PMO,ERP,MES,가공,MDM')
+  it('provider 가 없으면 팀 없음 — 원본 5팀으로 폴백하지 않는다', () => {
+    expect(renderToStaticMarkup(<Codes />)).toBe('<span></span>')
+    expect(renderToStaticMarkup(<Progress />)).toBe('<span></span>')
   })
 
   it('주입된 팀 목록을 정렬·활성 필터해 반환', () => {

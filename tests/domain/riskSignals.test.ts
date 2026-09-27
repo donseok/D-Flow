@@ -22,7 +22,7 @@ const msig = (over: Partial<MinuteActionSignal> = {}): MinuteActionSignal => ({
 })
 
 const TODAY = '2026-07-15'
-/** 팀 마스터 대신 쓰는 테스트 지역 상수(DEFAULT_TEAM_CODES 미러) — owner_overload 픽스처가 'ERP' 등을 전제. */
+/** 팀 마스터 대신 쓰는 테스트 지역 상수(FIXTURE_TEAM_CODES 미러) — owner_overload 픽스처가 'ERP' 등을 전제. */
 const TEST_TEAMS: readonly TeamCode[] = ['PMO', 'ERP', 'MES', '가공', 'MDM']
 const input = (over: Partial<RiskSignalInput> = {}): RiskSignalInput => ({
   items: [], today: TODAY, realToday: TODAY, snapshots: [],
