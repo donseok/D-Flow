@@ -67,17 +67,22 @@ export function MyMeetingsView({
   // 프로젝트 필터 — 저장 안 함(스펙 §5), 세션 로컬 상태.
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const initialRange = useMemo(() => gridRange(initY, (initM || 1) - 1).join('|'), [initY, initM])
-  const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; range: string }>(
-    { meetings: initialMeetings, exceptions: initialExceptions, range: initialRange },
+  // failed 는 range 와 한 덩어리다 — '그 범위의 조회가 실패했다'. 따로 두면 다른 달을 읽는 동안 앞 달의 실패가 남는다.
+  const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; range: string; failed: boolean }>(
+    { meetings: initialMeetings, exceptions: initialExceptions, range: initialRange, failed: initialFailed },
   )
-  // 지금 보이는 달의 조회가 실패했는가 — 빈 달('회의 없음')과 '못 읽음'을 가른다(에러 처리 3원칙 ①).
-  const [failed, setFailed] = useState(initialFailed)
   const [reloadKey, setReloadKey] = useState(0)
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(null)
   const [pending, startTransition] = useTransition()
 
   const [gridStart, gridEnd] = useMemo(() => gridRange(year, month0), [year, month0])
   const currentRange = `${gridStart}|${gridEnd}`
+  // 그리드 범위가 바뀌었는데 그 범위 데이터가 아직 도착하지 않았으면(stale) 회차를 비워
+  // 이전 달 데이터가 새 달 그리드에 잘못 겹쳐 보이는 깜빡임을 막는다.
+  const isStale = data.range !== currentRange
+  // 지금 보이는 달의 조회가 실패했는가 — 빈 달('회의 없음')과 '못 읽음'을 가른다(에러 처리 3원칙 ①).
+  // 읽는 중인 달(stale)은 아직 실패한 것이 아니다. 같은 달의 재시도는 범위가 그대로라 도는 동안에도 참이다.
+  const failed = data.failed && !isStale
   // 딥링크 date가 서버 렌더 달과 다르면 첫 그리드도 재조회해야 한다(ref 초기값은 첫 렌더 기준).
   const skipFirstFetch = useRef(currentRange === initialRange)
   useBotPageContext({
@@ -113,18 +118,22 @@ export function MyMeetingsView({
       })
       if (!alive) return
       const range = `${gridStart}|${gridEnd}`
-      if (res.ok) { setFailed(false); setData({ meetings: res.meetings, exceptions: res.exceptions, range }) }
+      if (res.ok) setData({ meetings: res.meetings, exceptions: res.exceptions, range, failed: false })
       // 실패한 달에는 앞 달의 회의를 남기지 않는다 — 비우되 '회의 없음'이 아니라 경고로 보인다.
-      else { setFailed(true); setData({ meetings: [], exceptions: [], range }) }
+      else setData({ meetings: [], exceptions: [], range, failed: true })
     })
     return () => { alive = false }
   }, [gridStart, gridEnd, reloadKey])
 
-  // 서버 첫 조회가 실패한 화면은 히어로 KPI 도 '—' 다 — 클라이언트 조회가 성공하면 서버 렌더도 다시 읽혀 숫자로 돌린다.
+  // 서버 조회는 실패했는데 클라이언트 조회가 성공했으면 서버 렌더를 한 번 다시 읽힌다. 화면을 바꾸려는 것이 아니다 —
+  // 이 뷰는 initial* 를 첫 상태로만 쓰고, 히어로 KPI('—')는 PageHero 가 heroKpis 를 그리지 않아 화면에 없다.
+  // 목적은 라우터 캐시다: 실패한 서버 결과(initialFailed·빈 목록)가 30초(next.config 의 staleTimes.dynamic) 동안
+  // 재방문·뒤로가기에 다시 쓰여, 이미 회복된 화면이 경고로 다시 뜨는 것을 막는다.
+  // data.failed 는 조회가 끝났을 때만 바뀐다 — 읽는 중(stale)을 성공으로 치지 않는다.
   // 다시 읽은 서버 조회가 성공하면 initialFailed 가 false 로 내려와 멈춘다(또 실패하면 값이 그대로라 다시 돌지 않는다).
   useEffect(() => {
-    if (initialFailed && !failed) router.refresh()
-  }, [initialFailed, failed, router])
+    if (initialFailed && !data.failed) router.refresh()
+  }, [initialFailed, data.failed, router])
 
   // 재시도가 성공해 경고(와 그 안의 버튼)가 사라졌으면 포커스를 달 표시로 옮긴다 — body 로 떨어지지 않게.
   const refocus = useRef(false)
@@ -138,10 +147,6 @@ export function MyMeetingsView({
     refocus.current = false
     if (!document.activeElement || document.activeElement === document.body) monthLabelRef.current?.focus()
   }, [pending, failed])
-
-  // 그리드 범위가 바뀌었는데 그 범위 데이터가 아직 도착하지 않았으면(stale) 회차를 비워
-  // 이전 달 데이터가 새 달 그리드에 잘못 겹쳐 보이는 깜빡임을 막는다.
-  const isStale = data.range !== currentRange
 
   // 딥링크 대상 회의는 현재 그리드 데이터가 준비된 뒤 한 번만 상세로 연다.
   // 대상 날짜에 회차가 없으면(취소 등) 시리즈 기준일 → 현재 그리드 첫 회차 순으로 폴백.
@@ -221,6 +226,8 @@ export function MyMeetingsView({
         </div>
       </div>
 
+      {/* 달을 옮기면 읽는 동안 경고가 내려갔다가(stale) 그 달도 실패하면 새로 붙는다 — 보조기술이 두 번째 실패를 다시 알린다.
+          같은 달의 재시도는 경고가 붙은 채라 버튼의 포커스를 지킨다. */}
       {failed && <LoadErrorNotice message={t('common.loadFailed.meetings')} onRetry={retry} busy={pending} />}
 
       {showProjectChips && (
@@ -249,10 +256,12 @@ export function MyMeetingsView({
       )}
 
       {view === 'calendar' ? (
-        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} />
+        // 못 읽은 달은 빈 달력으로도 그리지 않는다 — 격자를 걷으면 내용이 툴바와 경고로 줄어 스크롤이 맨 위로 돌아오므로,
+        // 아래로 내려 보던 화면에서 실패해도 경고가 고정 툴바 뒤에 가려지지 않는다.
+        failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} />
       ) : listRows.length === 0 ? (
-        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다.
-        failed ? null : <EmptyState icon={CalendarX2}
+        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다.
+        failed || isStale ? null : <EmptyState icon={CalendarX2}
           title={onlyMine ? t('meet.empty.mineTitle') : t('meet.empty.title')}
           description={onlyMine ? t('meet.empty.mineDesc') : t('meet.empty.desc')} />
       ) : (

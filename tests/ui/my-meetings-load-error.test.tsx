@@ -61,6 +61,16 @@ describe('MyMeetingsView — 조회 실패', () => {
   const alertEl = () => container.querySelector('[role="alert"]')
   const retryBtn = () => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('common.retry'))
   const flush = async () => { await Promise.resolve(); await Promise.resolve() }
+  const FAIL = { ok: false, error: '회의 일정을 불러오지 못했습니다.' }
+  const monthBtn = (dir: 'prev' | 'next') => container.querySelector<HTMLButtonElement>(`button[aria-label="meet.${dir}Month"]`)!
+  // 달력 격자가 그려졌는가 — 요일 머리글로 본다(목 t 는 키를 그대로 돌려준다).
+  const hasGrid = () => container.textContent!.includes('att.weekday.sun')
+  /** 풀어 줄 때까지 끝나지 않는 조회 — 읽는 중의 화면을 붙잡아 본다. */
+  function holdFetch() {
+    let release: (v: unknown) => void = () => {}
+    mocks.fetchMyMeetings.mockReturnValueOnce(new Promise(r => { release = r }))
+    return (v: unknown) => act(async () => { release(v); await flush() })
+  }
   async function mount(props: Partial<Parameters<typeof MyMeetingsView>[0]> = {}) {
     await act(async () => {
       root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
@@ -155,14 +165,16 @@ describe('MyMeetingsView — 조회 실패', () => {
     expect(alertEl()).toBeNull()
   })
 
-  it('서버 첫 조회가 실패했던 화면의 재시도는 서버 렌더(KPI —)도 다시 읽힌다', async () => {
+  // 아래 셋: 서버 렌더를 다시 읽히는 목적은 화면 갱신이 아니다(PageHero 는 heroKpis 를 그리지 않는다) —
+  // 실패한 서버 결과가 라우터 캐시(staleTimes.dynamic 30초)에 남아 재방문·뒤로가기 때 경고째 다시 쓰이지 않게 한다.
+  it('서버 첫 조회가 실패했던 화면은 재시도가 성공하면 서버 렌더도 다시 읽힌다 — 실패한 서버 결과를 캐시에 남기지 않는다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     await mount({ initialFailed: true })
     await act(async () => { retryBtn()!.click(); await flush() })
     expect(mocks.routerRefresh).toHaveBeenCalledTimes(1)
   })
 
-  it('서버 첫 조회가 실패했어도 달을 옮겨 읽기에 성공하면 서버 렌더를 다시 읽힌다 — KPI 가 — 로 남지 않는다', async () => {
+  it('서버 첫 조회가 실패했어도 달을 옮겨 읽기에 성공하면 서버 렌더를 다시 읽힌다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     await mount({ initialFailed: true })
     const next = container.querySelector<HTMLButtonElement>('button[aria-label="meet.nextMonth"]')
@@ -228,5 +240,124 @@ describe('MyMeetingsView — 조회 실패', () => {
     expect(alertEl()).toBeNull()
     expect(document.activeElement).not.toBe(document.body)
     expect(container.contains(document.activeElement)).toBe(true)
+  })
+
+  describe('경고는 실패한 그 달의 것이다', () => {
+    it('실패한 달에서 달을 옮기면, 새 달을 읽는 동안에는 앞 달의 경고를 보이지 않는다', async () => {
+      await mount({ initialFailed: true })
+      expect(alertEl()).not.toBeNull()
+      const release = holdFetch()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('2026-07-26', '2026-09-05')
+      // 8월은 아직 실패하지 않았다 — 읽는 중이다.
+      expect(alertEl()).toBeNull()
+      expect(hasGrid()).toBe(true)
+      // 읽는 중에는 아직 성공한 것이 아니다 — 서버 렌더를 다시 읽히지 않는다.
+      expect(mocks.routerRefresh).not.toHaveBeenCalled()
+      await release(FAIL)
+      expect(alertEl()?.textContent).toContain('common.loadFailed.meetings')
+      expect(mocks.routerRefresh).not.toHaveBeenCalled()
+    })
+
+    it('읽는 중인 달은 목록 탭에 빈 상태(회의 없음)를 그리지 않는다 — 실패 뒤든 정상 뒤든', async () => {
+      await mount({ initialFailed: true })
+      await openListTab()
+      const release = holdFetch()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(alertEl()).toBeNull()
+      expect(container.textContent).not.toContain('meet.empty.mineTitle')
+      await release({ ok: true, meetings: [], exceptions: [] })
+      // 다 읽었고 0건이면 그때 빈 상태다.
+      expect(container.textContent).toContain('meet.empty.mineTitle')
+
+      const release2 = holdFetch()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(container.textContent).not.toContain('meet.empty.mineTitle')
+      await release2({ ok: true, meetings: [], exceptions: [] })
+      expect(container.textContent).toContain('meet.empty.mineTitle')
+    })
+
+    it('서버 첫 조회(이번 달)가 실패했어도 딥링크가 다른 달이면, 그 달을 읽는 동안 경고를 보이지 않는다', async () => {
+      currentSearch = 'focus=m1&date=2026-09-10'
+      const release = holdFetch()
+      await mount({ initialFailed: true })
+      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('2026-08-30', '2026-10-10')
+      // 실패한 것은 서버가 읽은 7월이지 지금 보이는 9월이 아니다.
+      expect(alertEl()).toBeNull()
+      await release({ ok: true, meetings: [meeting({ meetingDate: '2026-09-10' })], exceptions: [] })
+      expect(alertEl()).toBeNull()
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('주간 회의')
+    })
+
+    it('실패한 달로 돌아오면 그 달의 경고가 다시 보인다 — 다시 읽는 동안 버튼은 aria-busy', async () => {
+      await mount({ initialFailed: true })
+      holdFetch()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(alertEl()).toBeNull()
+      const release = holdFetch()
+      await act(async () => { monthBtn('prev').click(); await flush() })
+      expect(alertEl()?.textContent).toContain('common.loadFailed.meetings')
+      expect(retryBtn()?.getAttribute('aria-busy')).toBe('true')
+      await release({ ok: true, meetings: [], exceptions: [] })
+      expect(alertEl()).toBeNull()
+    })
+
+    it('다른 달이 이어서 실패하면 경고는 새로 붙는다 — 같은 노드에 같은 글자로 남으면 보조기술이 두 번째 실패를 알리지 못한다', async () => {
+      mocks.fetchMyMeetings.mockResolvedValueOnce(FAIL)
+      await mount()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      const august = alertEl()
+      expect(august).not.toBeNull()
+
+      const release = holdFetch()
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(alertEl()).toBeNull()
+      await release(FAIL)
+      const september = alertEl()
+      expect(september?.textContent).toContain('common.loadFailed.meetings')
+      expect(september).not.toBe(august)
+      expect(august!.isConnected).toBe(false)
+    })
+
+    it('같은 달의 재시도가 또 실패하면 경고는 같은 노드로 남는다 — 버튼의 포커스를 잃지 않는다', async () => {
+      mocks.fetchMyMeetings.mockResolvedValue(FAIL)
+      await mount({ initialFailed: true })
+      const before = alertEl()
+      retryBtn()!.focus()
+      await act(async () => { retryBtn()!.click(); await flush() })
+      expect(alertEl()).toBe(before)
+      expect(document.activeElement).toBe(retryBtn())
+    })
+  })
+
+  describe('못 읽은 달은 빈 달력으로 그리지 않는다', () => {
+    it('initialFailed 면 달력 탭에 격자 없이 경고만, 재시도가 성공하면 격자가 돌아온다', async () => {
+      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting()], exceptions: [] })
+      await mount({ initialFailed: true })
+      expect(alertEl()).not.toBeNull()
+      expect(hasGrid()).toBe(false)
+      await act(async () => { retryBtn()!.click(); await flush() })
+      expect(alertEl()).toBeNull()
+      expect(hasGrid()).toBe(true)
+      expect(container.textContent).toContain('주간 회의')
+    })
+
+    it('달을 옮겨 읽다가 실패하면 격자를 걷고 경고만 남긴다', async () => {
+      mocks.fetchMyMeetings.mockResolvedValue(FAIL)
+      await mount({ initialMeetings: [meeting()] })
+      expect(hasGrid()).toBe(true)
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(alertEl()).not.toBeNull()
+      expect(hasGrid()).toBe(false)
+    })
+
+    it('조회 성공 + 회의 0건은 빈 달력을 그대로 그린다 — 실패가 아니다', async () => {
+      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+      await mount()
+      expect(hasGrid()).toBe(true)
+      await act(async () => { monthBtn('next').click(); await flush() })
+      expect(alertEl()).toBeNull()
+      expect(hasGrid()).toBe(true)
+    })
   })
 })
