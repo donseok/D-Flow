@@ -173,7 +173,7 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
 | 2026-09-26 | 결정 6 → 6′ | 열=제품 고정 | 열=제품 고정 핵심 필드 + 프로젝트 사용자 정의 필드(3엔티티, 선언형 타입)(1.3) | 사용자 결정 U-2, 개정 문서 §1.3 C5 |
 | 2026-09-26 | 사용자 결정 3(집계·위험·완료 정책) — 현행 확인 | 롤업·판정 고정 | 고정 유지(재개방 아님). 진척 롤업 null 가중치만 null=1 로 정합 수정(SP4) | 사용자 결정 U-3, 개정 문서 §1.3 C6 |
 | 2026-09-26 | §3.3.4 주 시작 요일 | 주 시작=월요일, `calendar.week_start` 는 YAGNI | `calendar.week_start` 신설, 기본 일요일(`'monday'` 허용), 다음 주부터 적용 | 사용자 결정 U-4, 개정 문서 §1.3 C7 |
-| 2026-09-26 | §3.5·§7 #2 한국 공휴일 오버레이 | 표시 전용 제품 고정(표시 조건 열린 항목) | 삭제. 제품은 기본 공휴일을 두지 않는다 | 사용자 결정 U-5, 개정 문서 §1.3 C8 |
+| 2026-09-26 | §3.5·§8 #2(옛 §7 #2) 한국 공휴일 오버레이 | 표시 전용 제품 고정(표시 조건 열린 항목) | 삭제. 제품은 기본 공휴일을 두지 않는다 | 사용자 결정 U-5, 개정 문서 §1.3 C8 |
 | 2026-09-26 | 물려받은 코드 결정 3건(전역 브리지 메뉴·다크 토글 숨김·크림·틸 팔레트) | 원본 리포에서 물려받은 결정(정본에 없음) | 번복 — 워크스페이스 전체 범위, 다크 모드 재노출, 중립·코발트(→ 7절) | 사용자 결정 U-6, 개정 문서 §1.3 C9·C10·C11 |
 
 ---
@@ -883,6 +883,10 @@ create policy "deliverables insert" on storage.objects for insert to authenticat
 | `minutes` | 골격 | 골격 + (`storage_project is null` 이면 `is_ws_member`, 아니면 `is_project_member`) | `owner = auth.uid() or is_project_admin(...) or (project null and is_ws_admin(...))` + 0045:255-262 의 `minute_versions` WORM 가드 유지 |
 | `issue-attachments` | 골격 | 골격 + `can_edit_issue(storage_entity(name))`(0068:113-115 현행) | 동일 |
 | `form-templates` | → 4절 | → 4절 | → 4절 |
+
+산출물 첨부의 다운로드는 서버 목록 액션도 Storage 읽기 정책과 같은 `can_attach` 로 판정한다(RPC 1회, 오류면 막는다 — 하드닝 16). 조회 전용 사용자는 목록만 보고 다운로드하지 못한다(현행 유지, 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §8.2 ②). 산출물·이슈 첨부 삭제는 Storage 삭제 1건을 확인한 뒤에만 행을 지운다(하드닝 19). 두 첨부의 목록 서명 링크 TTL 은 3600초(`LIST_SIGNED_URL_TTL_SEC`), 클릭 발급 전환은 후속이다(개정 문서 §8.1 #23).
+
+`minutes` 행 비고: 회의록 파일 서명 URL 은 클릭할 때 발급하고 TTL 60초(`MINUTE_FILE_URL_TTL_SEC`)다 — 발급 때 RLS 재검사, 회수 창 = TTL, 보관은 발급을 막지 않는다. 버전 원본도 클릭 때 발급한다. 첨부 삭제는 Storage 삭제 1건을 확인한 뒤에만 행을 지운다(하드닝 18). 버킷·행 삭제 권한 불일치의 근본 수정은 H2-g(→ 개정 문서 §6.2.0 H1 표 18 행·H2-g).
 
 `storage.js` 의 `remove()` 가 delete 와 select 를 함께 요구하므로(0068:105-107) 읽기를 쓰기보다 좁히지 않는다. 브라우저 직접 업로드 경로 변경 지점(5곳)은 → 6절 SP2.
 
@@ -2600,7 +2604,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 |---|---|---|---|
 | R1 | 스키마 적용 | 로컬 `supabase start`(docker·CLI) 또는 자체호스트 Postgres 17 에 `psql` 드라이버로 `0000_baseline` + 0001~ 전량 | 정책·함수·트리거 수가 운영 대조 스크립트와 일치(→ 6절 SP0) |
 | R2 | Auth | 자체호스트 GoTrue 기본(HS256)에서 로그인·미들웨어 통과 | `getClaims()` 폴백 동작, 클릭당 지연 증가량 기록 |
-| R3 | Storage | 3버킷 생성·정책 적용·서명 URL 발급·업로드/다운로드 | 회의록 첨부 1건 왕복 |
+| R3 | Storage | 3버킷 생성·정책 적용·서명 URL 발급(회의록 파일은 클릭 때 60초)·업로드/다운로드 | 회의록 첨부 1건 왕복 |
 | R4 | Realtime | presence private 채널 2종(`project-<pid>-presence-<pageKey>`·`project-<pid>-weekly-<reportId>-presence`, 2.4.6) 구독 | 두 브라우저 프레즌스 표시 |
 | R5 | LLM/임베딩 | OpenAI 호환 로컬 서버(ollama 등)로 `AI_PROVIDER=openai` 챗 답변 1건·임베딩 768차원 1건 | `activeModelInfo` 가 로컬 모델을 보이고 `checkDim` 불일치 로그 0건 |
 | R6 | 잡 | systemd timer 또는 `pg_cron` 으로 레지스트리 4잡 호출 | 각 200, `inbox-retention` 결과 행 |
@@ -2670,7 +2674,7 @@ SP 배정(2026-09-27): 주입된 팀 코드 추출은 하드닝 4 가 선반영�
 - 기준선: 운영(스테이징 아님) 스키마를 `pg_dump 17` 로 뜬다. `scripts/staging-sync.mjs` 가 이미 `pg_dump --version` ≥ 17 을 검사하고 같은 경로를 쓴다. 현 체인은 재생이 불가하다 — 번호 공백 4개(`0018`·`0027`·`0069`·`0081`)와 중복 1개(`0070` 두 파일)가 실측되고, 종합안이 확인한 `0052` 검증 블록·이메일 하드코딩·`0058` 시드가 있다. `pg_dump --schema=public` 은 `storage`·`realtime` 정책을 담지 않으므로 그 두 스키마는 수기 SQL 이다. 기준선의 정책·함수·트리거 수를 운영 `pg_policies`·`pg_proc`·`pg_trigger` 와 대조하는 스크립트(`scripts/baseline-diff.mjs`)를 함께 만든다 — 이 스크립트의 출력이 SP2 스펙의 "라이브 정책 목록" 입력이 된다.
 - 마이그레이션 정리: `supabase/migrations/0001~0100`(정방향 97파일 + 롤백 70파일)과 `tests/migrations/` 41파일(개별 SQL 텍스트 단언, 예: `0094-agent-heartbeat.test.ts` 가 `add column if not exists` 문자열을 검사) 삭제. `migration_ledger`(`0050`)는 기준선에 포함되므로 표는 유지하고 행만 초기화. `.githooks/pre-push` 의 G4 컷오프(100행·109행의 `substr($0,21,4) + 0 >= 72`)를 `>= 1` 로. `scripts/db-apply.mjs` 는 현재 Management API(`api.supabase.com/v1/projects/{ref}/database/query`) 단일 드라이버다 — `--driver mgmt|psql` 로 분리해 SP9 자체호스트 리허설과 CI(`supabase start` 의 로컬 DSN)에서 같은 스크립트를 쓴다.
 - 좌표 env 화: `scripts/lib/staging.config.mjs` 의 `PROD_REF`·`STAGING_REF`·`POOLER_HOST` 리터럴, `scripts/smoke-prod.mjs`:24·`scripts/mark-good.mjs`:27 의 `https://wbs-web.vercel.app` 기본값(실측 2곳 — `scripts/agent-harness-example.mjs` 는 `AGENT_BASE` 를 필수 env 로 검사하고 기본값이 없으므로 4행 사용법 주석의 예시 URL 만 교체), `scripts/vercel-ignore-build.sh` 의 `dflow-staging*` 프로젝트명, `.github/workflows/warm.yml` 의 ping URL 을 전부 env(`SMOKE_URL`·`PROD_REF`·`STAGING_REF`·`STAGING_PROJECT_PREFIX`)로. 키체인 항목명(`"DFlow Staging DB"`·`"DFlow Prod Reader"`·`"Supabase CLI"`)도 스크립트 리터럴이므로 새 이름으로 교체.
-- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4). `src/lib/report/brand.ts`:33 `TEAM_COLOR` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다(해소).
+- 브랜드: `src/lib/branding.ts` 단일 출처(env `BRAND_*` 기본값; SP3 에서 `workspace_settings.values.branding` 으로 승격). `"구 브랜드명"` 문자열은 `src`+`public` 24파일(grep 실측; 종합안의 28파일은 다른 범위 기준으로 추정), `origincorp|원본 고객사|ORIGIN|원본 고객사` 21파일, `README.md` 첫 문단, `MAIL_FROM_NAME` env, `public/logo.png`, 로그인 문구. `src/lib/report/assets/weekly-template.pptx`·`issue-analysis-template.pptx` 를 중립 디자인 "제품 기본 양식 파일" 로 교체(같은 경로·같은 `next.config.ts` `outputFileTracingIncludes` 유지 — 엔진은 SP6). `src/components/wbs/shared.tsx`:4 `TEAM` CSS 토큰은 팀 순번 팔레트로 임시 교체(컬럼화는 SP4). `src/lib/report/brand.ts`:33 `TEAM_COLOR` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다(해소). 포털 아이콘 `NEXT_PUBLIC_BRAND_PORTAL_ICON` 은 명시값 `flow`·`monogram` 이 우선이고, 비면 제품명이 기본값일 때만 `flow`, 아니면 제품명 첫 글자 `monogram` 이다(하드닝 7). 고정 D 파비콘·apple-icon 과 이 env 는 SP3a `branding.logo` 가 흡수한다(→ 개정 문서 `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §5.11.2).
 - 폴백 제거: `src/lib/teams/master.ts` 의 `let cache = DEFAULT_TEAMS` 초기값과 "전역 행 0이면 throw" 폴백 제거(공용 팀 0개 = 정상). `tests/fixtures/` 이동은 런타임 importer 가 없는 것만으로 계획했다 — `DEFAULT_TEAMS`(→ `tests/fixtures/teams.ts`; `master.ts` 폴백·`TeamsProvider` 기본값 `[]`)·`excel/parse.ts` `LEGACY_COLUMN_MAP`(→ `tests/fixtures/excel/legacyParse.ts`). 이 분류는 틀렸었다(`TeamsProvider` 가 `DEFAULT_TEAMS` 를 import 했다) — 하드닝 8 이 런타임 소비처를 걷고 옮겼다. 구 파서 fixture 이동도 SP0 에서 밀려 하드닝 6 이 했다(3.4.2). `WEEKLY_SECTIONS`(importer 6)·`ISSUE_MEGA_AREAS`(10)·`LEGACY_ORIGIN_PROFILE`(4) 은 런타임 import 가 SP4·SP5 까지 남아 그때 이동하고, 그 전까지 SP3 `no-runtime-constants` 허용 목록으로 추적한다(3.4.1). `LEGACY_ORIGIN_PROFILE` 은 SP0 done_when 의 grep 을 위해 `LEGACY_EXCEL_PROFILE_V1` 로 개명만 한다. `TEAM_SUB_ALIASES`(`domain/minutes.ts:86`, 프로덕션 사용처 0)는 SP0 에서 삭제. `supabase/seed.sql` 4팀 시드 교체, `projectPresets.ts`·`preset_applied` 삭제, `createProject` 의 `level_labels` 필수화.
 - CI 신설: `.github/workflows/` 는 현재 `warm.yml`(콜드 스타트 핑) 하나뿐이다. `ci.yml`(vitest + `next build` + eslint; `tsconfig.json` `include: ['**/*.ts', …]` 라 `next build` 가 `tests/` 까지 타입체크하므로 빌드 잡이 테스트 타입 회귀도 잡는다)을 만들고, `package.json` 에 `engines.node`(현재 없음; 메모리 백로그 Node ≥ 22.4)를 명시.
   **정정(Task 8 리뷰·8b, 2026-09-24)**: 위 괄호 두 개는 실측과 다르다 — `next build` 는 `tests/` 를
@@ -2916,17 +2920,56 @@ SP3~SP9 블록은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revi
 
 ---
 
-## 7. 열린 항목
+## 7. 디자인 시스템·정보 구조
 
-결정 1~9·Q1~Q6 으로 설계상 결정은 닫혔다. 아래는 각 절이 "(미검증)" 또는 열린 항목으로 남긴 것 중 **사용자 판단이 필요한 것**만 모은 것이다. 실측·시점만 남은 항목(라이브 정책 수, `realtime.topic()` 흉내 가능성, SP1 분할 여부, 스테이징 요금제 등)은 2.7·3.5·4.14·5.6·6.7 의 각 표에 담당 SP 와 닫히는 시점이 적혀 있으며 여기 반복하지 않는다.
+2026-09-27 신설(사용자 결정 6 — 1.10). 이 절의 정본은 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §5 이고, 여기에는 결정 요약과 절 포인터만 둔다. 디자인 역할 에이전트의 설계이며, 방향의 최종 확인은 UI-3 대표 3화면의 사용자 눈확인 게이트로 한다.
+
+**결정 요약(개정 문서 §5.0 의 5-D1~5-D13)**
+
+| # | 결정 |
+|---|---|
+| 5-D1 | 제품 인상은 차분하고 정밀한 업무 도구다. 밝은 중립 셸에 코발트 강조를 제한적으로 쓰고, 콘텐츠 유형별 패턴(업무=행 목록, 계획=그리드/타임라인, 문서=읽기 영역, 설정=편집 폼)을 쓰며, 화면당 주 동작은 1개다 |
+| 5-D2 | 팔레트는 물려받은 크림·틸에서 중립·코발트로 바꾼다(사용자 결정 6). 주 동작 코발트는 흐름 아이콘과 같은 계열이다 |
+| 5-D3 | 전역 브리지를 폐기한다. 공용 화면은 '워크스페이스 전체' 범위로 그리고 최근 프로젝트의 메뉴를 유지하지 않는다 |
+| 5-D4 | 다크 모드를 다시 노출한다. 테마 값은 `system \| light \| dark` 다 |
+| 5-D5 | 토큰은 3층(원색 → 의미 → 컴포넌트)이고 화면 코드는 의미·컴포넌트 토큰만 참조한다 |
+| 5-D6 | 셸 치수는 명시적으로 바꾼다 — 사이드바 232/64, 전역 바 48px, 인스펙터 기본 400px, 우측 레일은 한 번에 하나 |
+| 5-D7 | 워크스페이스 내비와 프로젝트 내비를 분리한다. 노출 = `effectiveModules ∩ 권한 ∩ 표시 설정`, 숨김은 권한 회수가 아니다 |
+| 5-D8 | 워크스페이스 화면은 `/w/[slug]/*` 이고(SP2 U2 로 SP3b 이관) `/projects` 도 `/w/[slug]/projects` 로 옮긴다. 옛 경로는 리디렉션 스텁 |
+| 5-D9 | 표·간트·보드는 '작업 계획' 한 화면의 보기 전환이다(`?view=sheet\|timeline\|board`) |
+| 5-D10 | 편집 상태 머신과 명령 응답의 UI 계약은 SP3a 설정 저장보다 먼저 정하고, 되돌리기 의미를 하나로 통일한다 |
+| 5-D11 | 디자인 설정은 `branding.*` 2단 키를 확장해 쓰고 `appearance.*` 는 만들지 않는다. 신규 키는 `navigation.menu`·`portal.widgets`·`security.local_drafts`·`views.default` 넷, 임의 CSS·HTML·JS 는 받지 않는다 |
+| 5-D12 | UI-0~6·COM-0~6 트랙을 로드맵에 넣고, UI-2(셸·내비)는 SP3b `ui/sp3-menu` 의 `navFor()` 구현과 같은 작업으로 한다 |
+| 5-D13 | 사용자 결정 3·5 반영 — 설정 화면에 '지표·위험' 범주를 두지 않고, 간트·달력의 쉬는 날은 프로젝트 달력에서만 그린다 |
+
+5-D14(저장·공유 보기와 가져오기 fingerprint 를 출시 후로 미루는 범위 축소)는 사용자 확인 대기다(8절 #15).
+
+**절 포인터(개정 문서)**: 방향 §5.2 · 정보 구조(IA) §5.3 · 셸 골격과 치수 §5.4 · 시각 토큰 §5.5 · 다크 모드 §5.6 · 컴포넌트 상태 계약 §5.7 · 저장·충돌·복구 상태 머신 §5.8 · 대표 화면 §5.9 · 반응형·접근성·문구 §5.10 · 디자인 설정 가능 범위 §5.11 · 롤아웃(UI-0~6·COM-0~6 × SP) §5.12.
+
+---
+
+## 8. 열린 항목
+
+결정은 사용자 명시 결정으로만 개정한다(§1.10). 아래는 각 절이 "(미검증)" 또는 열린 항목으로 남긴 것 중 **사용자 판단이 필요한 것**만 모은 것이다. 실측·시점만 남은 항목(라이브 정책 수, `realtime.topic()` 흉내 가능성, SP1 분할 여부, 스테이징 요금제 등)은 2.7·3.5·4.14·5.6·6.7 의 각 표에 담당 SP 와 닫히는 시점이 적혀 있으며 여기 반복하지 않는다.
 
 | # | 항목 | 왜 사용자 판단인가 | 현재 문서의 기본값 | 출처 |
 |---|---|---|---|---|
 | 1 | 사용 현황(`/w/[slug]/usage`)을 워크스페이스 관리자에게 열지 | "슈퍼유저 전용" 은 2026-07-30 사용자 결정(전 직원 행동 데이터)이고 결정 1~9·Q1~Q6 에 완화 근거가 없다. 멀티 워크스페이스에서 고객사 관리자가 자기 워크스페이스의 접속·사용량을 보려는 요구가 생기면 `canViewUsage` 와 `read_usage_events` 정책을 쌍으로 `is_ws_admin(workspace_id)` 로 내리는 변경이다 | 플랫폼 관리자 전용 유지, `usage_events.workspace_id` 는 워크스페이스 필터(2.3.7·2.4.4·3.2.2·5.4.2·6절 SP8) | 2.7 |
-| 2 | 한국 공휴일 오버레이(`src/lib/domain/holidays.ts`)의 표시 조건 | `calendar.timezone` 이 `Asia/Seoul` 이 아닌 프로젝트에서 한국 공휴일이 달력에 표시되는 것이 맞는지. 워크스페이스별 공휴일 달력은 요구에 없어 비목표다 | 표시 유지, 프로젝트 수동 공휴일(`holidays` 표)이 정본 | 3.5 |
 | 3 | SP6 착수 시 고객 양식 확보 상태(Q5) | 실제 고객사 양식 3종의 확보 여부·시점은 사용자만 안다. 미확보면 원본 고객사 양식(현 자산 2개) + 다른 구조의 자체 샘플 2종으로 착수하고, 첫 실제 양식 입수 시 회귀 픽스처에 추가한다. 고객사 자료를 리포에 넣으려면 사용 허락이 필요하다 | SP5 완료 시점(SP6 직전)에 재확인, 스펙 서두에 어느 쪽인지 기록 | 4.10.3·6절 SP6 |
 | 4 | 개선기회 페이지(이슈분석서 원본 12)의 이슈–기회 커넥터 다이어그램 | Q1 은 As-Is 트리·정의(5·6)만 제품 고정 슬라이드 유형으로 정했다. 개선기회는 도형 복제 페이지지만 데이터가 표형이라 이 문서는 표(`{{#rows opportunities}}`)로 이관하고 다이어그램은 포기한다. 다이어그램이 필요하면 원본 12 를 고정 슬라이드 유형에 추가하는 별도 결정이 필요하다 | 표로 이관, `renderOpportunitySlide` 코드는 fixed 자산과 함께 보존 | 4.2 결정 6·4.14 |
 | 5 | 또박또박 측 v3(인증 절) 배포 시점과 미지 `code` 처리 | 상대 팀 릴리스 창은 사용자 경유로만 확인된다. 또 현 또박또박 구현이 §6 표에 없는 `code`(409 `module_disabled`·403 `project_not_allowed`)를 받았을 때 `error` 문구를 표시하는지 조용히 버리는지 이 리포에서 확인할 수 없다 — 버린다면 "선택 작업" 이 "필수 문구 2건" 으로 바뀐다 | SP1 착수 시 초안 송부 + 확인 항목 동봉; SP7 done_when 의 실 E2E 는 상대 배포 후, 그 전엔 모의 클라이언트 | 5.6·6.7 |
 | 6 | 새 Vercel 프로젝트의 플랜(cron 최소 주기) | `warm.yml` 주석대로 개인 플랜은 분 단위 cron 이 없다. 잡 레지스트리 스케줄이 플랜 제약을 넘으면 GitHub Actions 로 대체해야 하며, 플랜 선택은 사용자 몫이다 | SP0 Vercel 프로젝트 생성 시 확정 | 5.6 |
+| 7 | 주차 라벨 규칙 | 기준일 = 주 키 + 3일, 그 달의 몇 번째 주로 통일하면 보고서의 `ceil(오늘/7)` 과 시트의 "N번째 월요일" 규칙이 모두 바뀐다 | 주 키 + 3일 규칙 채택, SP5 착수 전 확인 | 개정 문서 §8.1 #2 |
+| 8 | 기존 프로젝트의 주 시작 전환 | 사용자 결정 4 를 따라 기존 프로젝트도 다음 주부터 일요일로 바꾼다. 월요일 유지안도 있었다 | 전환(과거 키 불변, 전환 주 6일) | 개정 문서 §8.1 #3 |
+| 9 | WF-GAP-1·WF-GAP-2 를 SP3a 전 하드닝으로 당길지 | 위임·점유 항목에 PostgREST 직접 PATCH 로 실적 100 을 쓸 수 있고, 크레딧·잠금·선행 판정의 TS↔SQL 대조 테스트가 없다 | 당긴다 — 잠금 절과 현행 고정 패리티 테스트만 H2 `0011_authz_hardening` 에(번호표 불변). H2 착수 전 확인 | 개정 문서 §8.1 #4 |
+| 10 | 전역 바 공지 티커 제거 수용 | 현 티커는 과거 사용자 요청일 수 있다 | 제거하고 포털·개요 공지 띠 + 알림 배지로 대체. UI-3 눈확인 게이트에서 확인 | 개정 문서 §8.1 #7 |
+| 11 | 첫 원격 배포(스테이징·운영 Supabase·Vercel) 시점 | `mark:good`·원격 Preview 규칙 복귀가 이것에 달렸다. #6(Vercel 플랜)과 묶인다 | SP5c 뒤 스테이징, SP9 에서 운영 | 개정 문서 §8.1 #10 |
+| 12 | J1~J3 사용성 평가의 출시 조건 | 1인 운영에서 역할별 형성평가 인원을 출시 전에 확보하기 어렵다 | 출시 전에는 사용자 1인이 3역할 워크스루를 기록, 정식 평가는 출시 후. SP9 착수 전 확인 | 개정 문서 §8.1 #11 |
+| 13 | 관리자 알림 정책(`notify.policy`) 포함 여부 | 사용자 결정 목록에 없고 L 규모다 | SP8 스트레치(이벤트별 켜기/끄기만), 넘치면 출시 후 | 개정 문서 §8.1 #12 |
+| 14 | 사용자 필드 `person`(명단 참조) 타입 | 명단 FK·외부 인력·RLS 설계가 따로 필요하다 | SP5c 제외, 요구가 생기면 후속 슬롯 | 개정 문서 §8.1 #19 |
+| 15 | 저장·공유 보기와 가져오기 fingerprint·매핑 복원을 출시 후로 미루는 것(5-D14) | 트리아지가 로드맵에 넣은 항목을 새 스키마·레인 B 용량 이유로 뺀 범위 축소다 | 출시 후. 대안은 SPU2·SPU3 편입(+0.5주씩) | 개정 문서 §8.1 #20 |
+| 16 | 다크 토글의 위치 | 사용자 결정 6 이 연 것은 숨긴 다크 토글의 재노출이고, 계정 팝오버·`/account` 로 옮긴 배치는 에이전트 설계 판단이다 | 계정 팝오버의 3단 선택 + `/account`. UI-1 착수 전 확인 | 개정 문서 §8.1 #21 |
+
+#2(한국 공휴일 오버레이의 표시 조건)는 사용자 결정 5(2026-09-26)로 **닫혔다** — 오버레이를 삭제한다(1.10). 번호는 다른 문서의 `§7 #n`·`§8 #n` 참조를 지키려고 다시 매기지 않는다. #7~#16 은 2026-09-27 개정 문서(`docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md`) §8.1 의 '사용자' 판단 행을 옮긴 것이다. 개정 문서 §8.1 의 나머지 '사용자' 행 — 그 표의 #6(사용 현황 노출)·#14(Q5)·#15(또박또박 v3) — 은 이 표의 #1·#3·#5 가 그대로 담당한다.
 
 **다음 산출물: SP0 스펙**(`docs/superpowers/specs/` 첫 문서 — 포크 부트스트랩·스키마 기준선·탈-브랜드, 6절 SP0 의 범위·done_when 을 정본으로).
