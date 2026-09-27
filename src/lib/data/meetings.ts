@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { compareKoreanName } from '@/lib/domain/nameSort'
+import { UUID_RE } from '@/lib/domain/validate'
 import { ROSTER_SELECT, personOf, toRosterMember } from '@/lib/data/memberSelect'
 import type {
   Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
@@ -123,7 +124,9 @@ export const getProjectMeetingData = cache(async (
   const COLS = 'id, project_id, title, meeting_date, start_time, end_time, location, category, recurrence, recurrence_until, created_by, created_by_name, created_at, updated_at, meeting_attendees(member_id)'
 
   // 이 로더를 쓰는 화면(대시보드·프로젝트 회의)은 회의 조회 실패를 따로 로그로 남기지 않는다 — 어느 프로젝트의 실패인지는 여기서 싣는다.
-  const tag = `getProjectMeetingData project=${projectId}`
+  // projectId 는 URL 조각(/p/[projectId]/…)이나 서버 액션 인자로 와 형식이 보장되지 않고, UUID 가 아니면 조회가 실패해
+  // 바로 이 로그를 탄다: UUID 꼴이 아니면 그대로 찍지 않는다(getMyMeetings 의 range 와 같다 — 줄바꿈으로 로그 줄을 지어낼 수 없게).
+  const tag = `getProjectMeetingData project=${UUID_RE.test(projectId) ? projectId : '(id 아님)'}`
 
   // 예외를 임베드해 왕복 2회 → 1회.
   const { rows, embedded, failed } = await selectMeetings(
@@ -239,7 +242,11 @@ export const getMyMeetings = cache(async (
     ),
   ])
   // 내 명단 행을 못 읽으면 참석자로만 든 회의가 전부 isMine=false 가 된다 — 회의는 읽었어도 '내 회의 없음'·KPI 0 으로
-  // 그려지므로 같은 실패로 돌려준다(로그는 resolveMemberIds 가 남긴다).
+  // 그려지므로 같은 실패로 돌려준다. 원인은 resolveMemberIds 가 남기지만 그 로그에는 로더 이름도 범위도 없고
+  // 호출부가 둘이라(이슈 화면) 이 화면의 실패로 짚을 수 없다 — 같은 tag 로 한 줄 더 남긴다.
+  if (myMemberIdList === null) {
+    console.error(`[${tag}] 내 명단 행 조회 실패 — 호출부가 내 회의 달력 대신 사유를 보인다(원인은 [resolveMemberIds] 로그)`)
+  }
   if (failed || myMemberIdList === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   const myMemberIds = new Set(myMemberIdList)
 

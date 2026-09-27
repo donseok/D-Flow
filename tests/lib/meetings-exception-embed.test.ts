@@ -232,6 +232,10 @@ describe('내 명단 행 조회 실패를 \'내 회의 없음\'으로 위장하�
     })
     expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('resolveMemberIds'), 'down')
+    // resolveMemberIds 의 로그에는 로더 이름도 범위도 없고 호출부가 둘이다(이슈 화면) — 화면에 띄운 '내 회의' 실패를
+    // 로그에서 짚을 수 있게 getMyMeetings 의 tag 로도 한 줄 남긴다.
+    const lines = (console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]))
+    expect(lines.filter(m => m.startsWith('[getMyMeetings range=2026-07-01..2026-07-31]') && m.includes('명단'))).toHaveLength(1)
     // 실패로 돌려줄 것이면 예외 폴백 조회도 하지 않는다
     expect(tables).not.toContain('meeting_exceptions')
   })
@@ -250,18 +254,41 @@ describe('내 명단 행 조회 실패를 \'내 회의 없음\'으로 위장하�
 
 describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣는다', () => {
   const logged = () => (console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]))
+  // 프로젝트 id 는 UUID 꼴일 때만 로그에 실린다
+  const P_LOG_1 = '00000000-0000-4000-8000-0000000000a1'
+  const P_LOG_2 = '00000000-0000-4000-8000-0000000000a2'
 
   it('getProjectMeetingData: 회의 조회 실패·임베드 재시도 로그에 프로젝트 id', async () => {
     makeSb({ meetings: () => ERR('down') })
-    await getProjectMeetingData('p-log-1')
+    await getProjectMeetingData(P_LOG_1)
     expect(logged()).toHaveLength(2)
-    expect(logged().every(m => m.includes('[getProjectMeetingData project=p-log-1]'))).toBe(true)
+    expect(logged().every(m => m.includes(`[getProjectMeetingData project=${P_LOG_1}]`))).toBe(true)
   })
 
   it('getProjectMeetingData: 예외 폴백 실패 로그에 프로젝트 id', async () => {
     makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
-    await getProjectMeetingData('p-log-2')
-    expect(logged().some(m => m.includes('[getProjectMeetingData project=p-log-2] meeting_exceptions'))).toBe(true)
+    await getProjectMeetingData(P_LOG_2)
+    expect(logged().some(m => m.includes(`[getProjectMeetingData project=${P_LOG_2}] meeting_exceptions`))).toBe(true)
+  })
+
+  it('getProjectMeetingData: UUID 꼴이 아닌 프로젝트 id 는 로그에 그대로 찍지 않는다 — URL 조각·액션 인자라 형식이 보장되지 않는다', async () => {
+    const MASKED = '[getProjectMeetingData project=(id 아님)]'
+    // 줄바꿈을 실어 둘째 로그 줄을 지어내려는 값, 그리고 UUID 뒤에 덧붙인 값(앞부분만 맞는 것은 맞는 것이 아니다)
+    for (const forged of ['abc\n[auth] login ok user=admin', `${P_LOG_1}\n[auth] login ok user=admin`]) {
+      vi.mocked(console.error).mockClear()
+      makeSb({ meetings: () => ERR('down') })
+      await getProjectMeetingData(forged)
+      expect(logged()).toHaveLength(2)
+      expect(logged().some(m => m.includes('login ok') || m.includes('\n'))).toBe(false)
+      expect(logged().every(m => m.startsWith(MASKED))).toBe(true)
+    }
+
+    // 예외 폴백 실패 로그도 같은 tag 를 쓴다
+    vi.mocked(console.error).mockClear()
+    makeSb({ meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])), exceptions: ERR('boom') })
+    await getProjectMeetingData('abc\n[forged] line')
+    expect(logged().some(m => m.includes('forged') || m.includes('\n'))).toBe(false)
+    expect(logged().some(m => m.startsWith(`${MASKED} meeting_exceptions`))).toBe(true)
   })
 
   it('getMyMeetings: 회의 조회 실패·예외 폴백 실패 로그에 달력 범위', async () => {
