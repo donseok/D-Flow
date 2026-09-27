@@ -72,7 +72,11 @@ export function projectMenu(base: string, showUsage: boolean, showPortfolio: boo
   return items
 }
 
-export function Sidebar({ projects, showUsage = false, showPortfolio = false }: { projects: SidebarProject[]; showUsage?: boolean; showPortfolio?: boolean }) {
+export function Sidebar({ projects, showUsage = false, showPortfolio = false, canCreateProject = false }: {
+  projects: SidebarProject[]; showUsage?: boolean; showPortfolio?: boolean
+  /** '+ 새 프로젝트' 노출 — 워크스페이스 관리자·플랫폼 관리자(isAnyWorkspaceAdmin). 미지정·degraded = false(fail-closed). */
+  canCreateProject?: boolean
+}) {
   const router = useRouter()
   const pathname = usePathname()
   const { t } = useLocale()
@@ -222,11 +226,13 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false }: 
                 {isGlobalBridge && menuProject ? `${menuProject.name} 메뉴` : '메뉴'}
               </span>
             )}
-            <Tooltip label={t('common.newProject')} side="right">
-              <Link href="/projects" className={`flex h-6 w-6 items-center justify-center rounded-lg border border-sidebar-line text-sidebar-ink-muted transition hover:bg-sidebar-3 hover:text-sidebar-ink ${collapsed ? 'mx-auto' : ''}`} aria-label={t('common.newProject')}>
-                <Plus className="h-3.5 w-3.5" />
-              </Link>
-            </Tooltip>
+            {canCreateProject && (
+              <Tooltip label={t('common.newProject')} side="right">
+                <Link href="/projects" className={`flex h-6 w-6 items-center justify-center rounded-lg border border-sidebar-line text-sidebar-ink-muted transition hover:bg-sidebar-3 hover:text-sidebar-ink ${collapsed ? 'mx-auto' : ''}`} aria-label={t('common.newProject')}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Link>
+              </Tooltip>
+            )}
           </div>
           <div className="space-y-1">
             {menuProjectId ? (
@@ -264,13 +270,9 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false }: 
             ) : (
               <>
                 <Tooltip label={t('nav.home')} side="right" disabled={!collapsed}>
-                  <Link href="/projects" className={`side-link ${pathname === '/projects' ? 'side-link-active' : ''} ${collapsed ? 'justify-center px-0' : ''}`}>
+                  <Link href="/projects" aria-current={pathname === '/projects' ? 'page' : undefined}
+                    className={`side-link ${pathname === '/projects' ? 'side-link-active' : ''} ${collapsed ? 'justify-center px-0' : ''}`}>
                     <LayoutGrid className="h-[18px] w-[18px] shrink-0" />{!collapsed && <span className="flex-1">{t('nav.home')}</span>}
-                  </Link>
-                </Tooltip>
-                <Tooltip label={t('nav.allProjects')} side="right" disabled={!collapsed}>
-                  <Link href="/projects" className={`side-link ${collapsed ? 'justify-center px-0' : ''}`}>
-                    <FolderOpen className="h-[18px] w-[18px] shrink-0" />{!collapsed && <span className="flex-1">{t('nav.allProjects')}</span>}
                   </Link>
                 </Tooltip>
                 {/* 프로젝트를 고르지 않은 상태에서도 포트폴리오에 닿을 수 있어야 한다 — 슈퍼유저 전용 */}

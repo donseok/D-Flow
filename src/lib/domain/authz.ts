@@ -163,6 +163,12 @@ function adminWorkspaceIds(actor: Actor): Set<string> {
   for (const [wid, r] of actor.workspaceRoles) if (r === 'admin') s.add(wid)
   return s
 }
+/** 어느 워크스페이스든 관리자인가 — 프로젝트 생성 어포던스(사이드바 '+'·포털 버튼). 서버 가드는 대상 워크스페이스의
+ *  requireWorkspaceAdmin(actions/project.ts)이다. 명단 admin 은 생성 권한이 아니다. */
+export function isAnyWorkspaceAdmin(actor: Actor | null): boolean {
+  if (!actor) return false
+  return actor.isSuperuser || adminWorkspaceIds(actor).size > 0
+}
 /** 어느 프로젝트든 관리자면 true — 헤더 등급 표시용. 회의록 폴더 가드는 0006 부터 워크스페이스 판정이라
  *  이걸 쓰지 않는다(adminWorkspaceIdList). */
 export function isAnyProjectAdmin(actor: Actor | null): boolean {

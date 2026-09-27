@@ -3,7 +3,7 @@ import { Calendar, FolderPlus, LayoutGrid, ArrowDown, ArrowRight } from 'lucide-
 import { listProjects } from '@/app/actions/project'
 import { getActorForView } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { isWorkspaceAdmin } from '@/lib/domain/authz'
+import { isAnyWorkspaceAdmin, isWorkspaceAdmin } from '@/lib/domain/authz'
 import { getProjectsCompletion } from '@/lib/data/wbs'
 import { createServerClient } from '@/lib/supabase/server'
 import { projectLifecycleStatus, type ProjectLifecycleStatus } from '@/lib/domain/project-status'
@@ -171,9 +171,7 @@ export default async function ProjectsHome() {
   // 워크스페이스 선택 UI 는 SP3 몫이라 유일 소속일 때만 그 워크스페이스로 만든다. 관리자인데 소속이 여럿·없으면 사유를 보인다.
   const soleWs = actor ? resolveSoleWorkspaceId(actor) : null
   const createWorkspaceId = soleWs?.ok && isWorkspaceAdmin(actor, soleWs.workspaceId) ? soleWs.workspaceId : null
-  const createBlockedReason = actor && soleWs && !soleWs.ok
-    && (actor.isSuperuser || [...actor.workspaceRoles.keys()].some(w => isWorkspaceAdmin(actor, w)))
-    ? soleWs.error : null
+  const createBlockedReason = actor && soleWs && !soleWs.ok && isAnyWorkspaceAdmin(actor) ? soleWs.error : null
 
   const heroStats = [
     { label: 'Tasks', value: taskStats ? taskStats.tasks : '–' },

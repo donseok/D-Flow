@@ -23,10 +23,13 @@ import { useProjectNavigation } from './ProjectNavigationContext'
 import { projectMenu, type SidebarProject } from './Sidebar'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
+import { clearAllWikiDrafts } from '@/lib/drafts/wikiDrafts'
 
 const SECTION_LABEL: Record<string, string> = {
   dashboard: '대시보드', wbs: 'WBS · 간트', gantt: '간트 차트', kanban: '칸반 보드', issues: '이슈관리',
   members: '멤버', attendance: '근태현황', announcements: '공지사항', meetings: '회의', weekly: '주간업무', wiki: '프로젝트 Wiki', settings: '설정',
+  // = nav.projectAgents·importWizard.heroTitleSuffix — t() 전환은 SP3 레지스트리 파생 때(라벨이 바뀌어 기존 mock 이 깨진다).
+  agents: '에이전트', import: '임포트 마법사',
 }
 
 /** 서버 레이아웃이 Actor 에서 평탄화해 내리는 신원 표시용 스냅샷 — Actor(Map)는 직렬화되지 않는다. */
@@ -38,6 +41,8 @@ export interface HeaderIdentity {
   isSuperuser: boolean
   showUsage: boolean
   showPortfolio: boolean
+  /** 새 프로젝트 생성 어포던스(isAnyWorkspaceAdmin). degraded 는 false. */
+  canCreateProject?: boolean
 }
 
 export function HeaderChrome({ identity, projects, userName }: { identity: HeaderIdentity | null; projects: SidebarProject[]; userName?: string | null }) {
@@ -83,6 +88,9 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
   }, [pathname, projects, routeProjectId, t])
 
   const signOut = async () => {
+    // 공용 PC 에서 다음 사용자에게 위키 초안이 남지 않게 — 세션을 끊기 전에 지운다.
+    // 세션 만료·/login 진입에서는 지우지 않는다(주인의 초안을 부순다).
+    try { clearAllWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
     await createBrowserClient().auth.signOut()
     router.replace('/login')
     router.refresh()

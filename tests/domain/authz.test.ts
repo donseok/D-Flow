@@ -4,6 +4,7 @@ import {
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
   isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute, hasProjectRoleInAnyWorkspace,
+  isAnyWorkspaceAdmin,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
@@ -55,6 +56,21 @@ describe('adminProjectIds / isAnyProjectAdmin', () => {
     expect(new Set(adminProjectIds(a))).toEqual(new Set([P, Q]))
     expect(isAnyProjectAdmin(a)).toBe(true)
     expect(hasAnyProjectRole(a)).toBe(true)
+  })
+})
+describe('isAnyWorkspaceAdmin — 프로젝트 생성 어포던스(사이드바 \'+\'·포털 버튼)', () => {
+  it('어느 워크스페이스든 관리자면 true', () => {
+    expect(isAnyWorkspaceAdmin(makeActor({ workspaceRoles: new Map([['ws-2', 'member'], [W, 'admin']]) }))).toBe(true)
+  })
+  it('워크스페이스 멤버뿐이면 false', () => {
+    expect(isAnyWorkspaceAdmin(makeActor({ workspaceRoles: new Map([[W, 'member']]) }))).toBe(false)
+  })
+  it('프로젝트 명단 admin 이라도 워크스페이스 멤버면 false — 생성 권한은 워크스페이스 관리자', () => {
+    expect(isAnyWorkspaceAdmin(makeAdminActor(P, inWs))).toBe(false)
+  })
+  it('플랫폼 관리자는 소속이 없어도 true, 비로그인은 false', () => {
+    expect(isAnyWorkspaceAdmin(makeSuperuser({ workspaceRoles: new Map() }))).toBe(true)
+    expect(isAnyWorkspaceAdmin(null)).toBe(false)
   })
 })
 describe('adminWorkspaceIdList — 회의록 폴더 관리 판정의 클라이언트 미러', () => {

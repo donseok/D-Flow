@@ -1,6 +1,6 @@
 import { getDisplayName } from '@/lib/auth'
 import { getActorViewState } from '@/lib/authz'
-import { isAnyProjectAdmin, isProjectAdmin, hasAnyProjectRole } from '@/lib/domain/authz'
+import { isAnyProjectAdmin, isAnyWorkspaceAdmin, isProjectAdmin, hasAnyProjectRole } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { canViewPortfolio } from '@/lib/authz/portfolioAccess'
@@ -77,6 +77,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isSuperuser: actor.isSuperuser,
         showUsage: canViewUsage(actor),
         showPortfolio: canViewPortfolio(actor),
+        // 사이드바 '+ 새 프로젝트' — createProject 가드(requireWorkspaceAdmin)와 같은 축.
+        canCreateProject: isAnyWorkspaceAdmin(actor),
       }
     : actorState.degraded
       ? {
@@ -85,6 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           isSuperuser: false,
           showUsage: false,
           showPortfolio: false,
+          canCreateProject: false,
         }
       : null
 
@@ -105,7 +108,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
             )}
             <a href="#main-content" className="fixed left-4 top-3 z-[200] -translate-y-20 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition focus:translate-y-0">본문 바로가기</a>
-            <Sidebar projects={projectLinks} showUsage={identity?.showUsage ?? false} showPortfolio={identity?.showPortfolio ?? false} />
+            <Sidebar projects={projectLinks} showUsage={identity?.showUsage ?? false} showPortfolio={identity?.showPortfolio ?? false} canCreateProject={identity?.canCreateProject ?? false} />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <HeaderChrome identity={identity} projects={projectLinks} userName={userName} />
               {/* 모바일 여백 축소(2026-08-21) — 좁은 화면에서 표 영역을 한 뼘이라도 넓힌다 */}

@@ -157,6 +157,17 @@ describe('HeaderChrome 브레드크럼', () => {
     expect(globalBreadcrumb!.textContent).toContain(label)
   })
 
+  it.each([
+    ['/p/p1/agents', '에이전트'],
+    ['/p/p1/agents/office', '에이전트'],
+    ['/p/p1/import', '임포트 마법사'],
+  ])('%s 에서 브레드크럼에 화면 단계(%s)가 빠지지 않는다', async (pathname, label) => {
+    const breadcrumb = await renderAt(pathname)
+    expect(breadcrumb).not.toBeNull()
+    expect(breadcrumb!.textContent).toContain('Acme 프로젝트')
+    expect(breadcrumb!.textContent).toContain(label)
+  })
+
   it('모바일 회의록 메뉴에서도 최근 프로젝트 하위 메뉴를 유지한다', async () => {
     await renderAt('/minutes')
 
