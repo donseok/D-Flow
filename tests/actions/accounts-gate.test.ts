@@ -470,25 +470,32 @@ describe('bulkCreateAccounts — 이메일, 권한, 초기비번[, 이름]', () 
   })
 })
 
-describe('setPlatformAdmin — 마지막 관리자 보호', () => {
+describe('setPlatformAdmin — 마지막 관리자 보호(DB 트리거 platform_admins_keep_last, 0011)', () => {
   beforeEach(() => { requireSuperuser.mockResolvedValue({ ok: true, actor: SU }) })
 
-  it('마지막 슈퍼유저 해제는 거부한다 — 전역 관리 잠금 방지', async () => {
-    const q = chain({ data: [{ user_id: 'u1' }], error: null })
+  it('마지막 슈퍼유저 해제는 트리거가 거부한다 — 사용자 문구로, 앱은 미리 세지 않는다', async () => {
+    const q = chain({ data: null, error: { code: '23514', message: 'PLATFORM_LAST_ADMIN' } })
     createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
-    const res = await setPlatformAdmin('u1', false)
-    expect(res.ok).toBe(false)
-    expect(res.error).toContain('마지막 슈퍼유저')
-    expect(q.delete).not.toHaveBeenCalled()
+    expect(await setPlatformAdmin('u1', false))
+      .toEqual({ ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' })
+    expect(q.delete).toHaveBeenCalledTimes(1)
+    expect(q.eq).toHaveBeenCalledWith('user_id', 'u1')
+    // 사전 목록 조회(select 만 하고 delete 없는 체인)가 없다
+    expect(q.select).toHaveBeenCalledWith('user_id')
+    expect(q.select).toHaveBeenCalledTimes(1)
   })
 
-  it('목록 조회 실패는 해제를 중단한다 — 0명 폴백 금지(fail-closed)', async () => {
-    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: null, error: { message: 'boom' } })) } as never)
+  it('그 밖의 삭제 오류는 원문을 싣지 않는다 — 로그만', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await setPlatformAdmin('u1', false)
+    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: null, error: { message: 'boom' } })) } as never)
+    expect(await setPlatformAdmin('u1', false)).toEqual({ ok: false, error: '슈퍼유저를 해제하지 못했습니다.' })
+    expect(spy).toHaveBeenCalled()
     spy.mockRestore()
-    expect(res.ok).toBe(false)
-    expect(res.error).toContain('확인할 수 없어')
+  })
+
+  it('0행(이미 슈퍼유저가 아님)은 성공으로 위장하지 않는다', async () => {
+    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: [], error: null })) } as never)
+    expect(await setPlatformAdmin('u9', false)).toEqual({ ok: false, error: '슈퍼유저가 아닌 계정입니다.' })
   })
 
   it('본인 해제는 거부한다 — 조회·쓰기 없이(다른 슈퍼유저가 해야 한다)', async () => {
@@ -497,14 +504,11 @@ describe('setPlatformAdmin — 마지막 관리자 보호', () => {
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('다른 사람 해제는 기존대로(둘 이상이면 해제한다)', async () => {
-    const list = chain({ data: [{ user_id: 'u1' }, { user_id: 'u2' }], error: null })
-    const del = chain({ error: null })
-    let n = 0
-    createAdminClient.mockReturnValue({ from: vi.fn(() => (n++ === 0 ? list : del)) } as never)
+  it('다른 사람 해제 — 지워진 행을 돌려받으면 성공', async () => {
+    const q = chain({ data: [{ user_id: 'u1' }], error: null })
+    createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
     expect(await setPlatformAdmin('u1', false)).toEqual({ ok: true })
-    expect(del.delete).toHaveBeenCalled()
-    expect(del.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(q.delete).toHaveBeenCalled()
   })
 
   it('지정은 발급자를 남기고 이미 있으면 그대로 둔다', async () => {

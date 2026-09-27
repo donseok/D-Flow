@@ -311,8 +311,8 @@ export async function resetPassword(userId: string, password: string): Promise<A
 }
 
 /**
- * 플랫폼 관리자(슈퍼유저) 지정·해제. 마지막 한 명은 해제하지 못한다 — 전원이 전역 관리에서 잠기면
- * 복구 경로가 DB 직접 수정뿐이다. 조회 실패를 '0명'으로 폴백하면 가드가 무력화되므로 실패는 곧 거부(fail-closed).
+ * 플랫폼 관리자(슈퍼유저) 지정·해제. 마지막 한 명은 해제하지 못한다 — 판정은 DB 트리거(platform_admins_keep_last, 0011)가
+ * advisory 잠금 아래에서 한다. 앱이 먼저 세면 두 슈퍼유저가 서로를 동시에 해제할 때 둘 다 통과한다(setWorkspaceRole 관례).
  */
 export async function setPlatformAdmin(userId: string, value: boolean): Promise<AccountActionResult> {
   const g = await requireSuperuser()
@@ -323,20 +323,16 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   const admin = createAdminClient()
 
   if (!value) {
-    const { data, error } = await admin.from('platform_admins').select('user_id')
-    if (error || !data) {
-      console.error('[setPlatformAdmin] 플랫폼 관리자 목록 조회 실패:', error?.message ?? 'unknown')
-      return { ok: false, error: '슈퍼유저 목록을 확인할 수 없어 변경을 중단했습니다. 잠시 후 다시 시도하세요.' }
-    }
-    const ids = (data as Array<{ user_id: string }>).map(r => r.user_id)
-    if (ids.includes(userId) && ids.length <= 1) {
-      return { ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' }
-    }
-    const { error: delErr } = await admin.from('platform_admins').delete().eq('user_id', userId)
+    const { data, error: delErr } = await admin.from('platform_admins').delete().eq('user_id', userId).select('user_id')
     if (delErr) {
+      if (delErr.message.includes('PLATFORM_LAST_ADMIN')) {
+        return { ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' }
+      }
       console.error('[setPlatformAdmin] 해제 실패:', delErr.message)
       return { ok: false, error: '슈퍼유저를 해제하지 못했습니다.' }
     }
+    // 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다.
+    if (!data || data.length === 0) return { ok: false, error: '슈퍼유저가 아닌 계정입니다.' }
   } else {
     const { error: insErr } = await admin.from('platform_admins').upsert(
       { user_id: userId, granted_by: g.actor.userId }, { onConflict: 'user_id', ignoreDuplicates: true },
