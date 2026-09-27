@@ -123,6 +123,9 @@ describe('스키마 불변식', () => {
     'public.item_owned_by_my_team(uuid, uuid)',
     'public.uuid_or_null(text)', 'public.storage_ws(text)', 'public.storage_project(text)', 'public.storage_entity_id(text)',
     'public.minute_body_path_ok(text, uuid, uuid, uuid)', 'public.presence_topic_project(text)', 'public.can_manage_minute(uuid)',
+    'public.has_project_role_in_ws(uuid)',
+    // 정책 헬퍼는 아니지만 같은 관례(authenticated·service_role 만, 0011 ⑦)다 — anon·PUBLIC·그 밖의 롤에 열리면 여기서 빨개진다
+    'public.attachment_object_exists(text, uuid)',
   ]
   async function executeGrantees(c: PoolClient, fns: string[]) {
     return (await c.query<{ fn: string; named_grantees: string[]; has_public: boolean }>(`
@@ -147,8 +150,10 @@ describe('스키마 불변식', () => {
     expect(bad, `정책 헬퍼 EXECUTE 위반:\n  ${bad.join('\n  ')}`).toEqual([])
   })
   // SECURITY DEFINER 함수는 RLS 를 건너뛴다 — authenticated 가 PostgREST(rpc/…)로 직접 부를 수 있는 것은 이 목록으로 고정하고 항목마다
-  // 사유를 단다(F20). 기본 권한(pg_default_acl)이 새 함수에 authenticated EXECUTE 를 주므로, 목록 밖 함수가 생기거나 서비스 RPC 를
-  // drop + create 해 권한이 되살아나면 여기서 빨개진다. 트리거 함수는 실행 권한과 무관하게 돈다 — 대상이 아니다.
+  // 사유를 단다(F20). 새 함수는 PUBLIC(내장 기본값 — 따라서 anon)과 authenticated·service_role(기본 권한 pg_default_acl)의 EXECUTE 를
+  // 받고 생기므로, 목록 밖 함수가 생기거나 서비스 RPC 를 drop + create 해 권한이 되살아나면 여기서 빨개진다. 회수는
+  // `revoke all … from public, anon, authenticated` 꼴이다 — authenticated 만 회수하면 PUBLIC 으로 anon·authenticated 가 그대로 실행한다
+  // (anon·PUBLIC 쪽은 아래 'anon·PUBLIC 이 실행하는 …' 케이스가 본다). 트리거 함수는 실행 권한과 무관하게 돈다 — 대상이 아니다.
   const HELPER = '정책 헬퍼 — RLS 정책(또는 정책이 부르는 헬퍼)이 부르므로 조회자에게 실행 권한이 있어야 한다. 호출자 자신의 권한만 답한다'
   const WIKI_RPC = '위키 쓰기 RPC — 위키 표에는 RLS 쓰기 정책이 없어 본문의 is_project_member·is_project_admin 판정이 유일한 관문이다(CLAUDE.md 권한)'
   const DEFINER_EXECUTABLE: Record<string, string> = {
@@ -157,6 +162,8 @@ describe('스키마 불변식', () => {
     'is_project_admin(uuid)': HELPER, 'is_project_member(uuid)': HELPER, 'is_project_admin_anywhere_in_ws(uuid)': HELPER,
     'can_attach(uuid)': HELPER, 'can_edit_issue(uuid)': HELPER, 'can_manage_minute(uuid)': HELPER,
     'item_owned_by_my_team(uuid, uuid)': HELPER,
+    'has_project_role_in_ws(uuid)': HELPER,
+    'attachment_object_exists(text, uuid)': '첨부 삭제 도우미(src/lib/attachments/removeStoredAttachment.ts)가 Storage 삭제 0건일 때 부른다 — 그 첨부의 삭제 권한이 있는 호출자에게만 답하고(없으면 42501) 경로를 받지 않는다(첨부 행 id 로만)',
     'my_member_id(uuid)': '호출자 자신의 명단 행 id — 워크스페이스 멤버일 때만(0009). 정책 헬퍼 목록(HELPER_FNS)과 같은 규칙',
     'my_team_ids(uuid)': '호출자 자신의 팀 — 워크스페이스 멤버일 때만(0009). can_attach·item_owned_by_my_team 이 부른다',
     'wbs_is_leaf(uuid)': 'member_update_actual 정책이 직접 부른다(회수하면 멤버 실적 입력이 42501). 남의 항목에 답하는 1비트는 post-SP2 hardening',
@@ -174,6 +181,32 @@ describe('스키마 불변식', () => {
          and has_function_privilege('authenticated', p.oid, 'EXECUTE') order by 1`)).rows.map((r) => r.fn))
     expect(got.filter((f) => !(f in DEFINER_EXECUTABLE)), 'authenticated 가 실행하는 SECURITY DEFINER 함수(허용 목록 밖)').toEqual([])
     expect(Object.keys(DEFINER_EXECUTABLE).filter((f) => !got.includes(f)), '죽은 허용 목록 항목').toEqual([])
+  })
+  // 위 케이스는 authenticated 만 묻는다 — 허용 목록 안의 함수(예 attachment_object_exists)가 anon·PUBLIC 에 열려도 목록은 그대로라 초록이다.
+  // anon 은 PUBLIC 으로도 실행하므로 실효 권한(has_function_privilege)과 PUBLIC 항목(grantee 0)을 둘 다 본다. 0011 ⑪ 사후검증은 0011 을
+  // 적용하는 순간 한 번뿐이라, 뒤 마이그레이션의 grant·drop + create(revoke 누락)는 이 케이스가 잡는다.
+  const ANON_OR_PUBLIC_DEFINER = `
+    select format('%s(%s)', p.proname, oidvectortypes(p.proargtypes)) as fn from pg_proc p
+     where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.prorettype <> 'trigger'::regtype
+       and (has_function_privilege('anon', p.oid, 'EXECUTE')
+            or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0 and a.privilege_type = 'EXECUTE'))
+     order by 1`
+  it('anon·PUBLIC 이 실행하는 비트리거 SECURITY DEFINER 함수 0건(실효 권한 + PUBLIC 항목)', async () => {
+    const got = await asService(pool, async (c) => (await c.query<{ fn: string }>(ANON_OR_PUBLIC_DEFINER)).rows.map((r) => r.fn))
+    expect(got, 'anon 또는 PUBLIC 이 실행하는 SECURITY DEFINER 함수').toEqual([])
+  })
+  it('민감도 — anon·PUBLIC grant 와 revoke 없이 만든 새 DEFINER 함수를 잡는다(authenticated 허용 목록 케이스는 못 본다)', async () => {
+    const FN = 'attachment_object_exists(text, uuid)'
+    for (const grantee of ['anon', 'public']) {
+      await asService(pool, async (c) => {
+        await c.query(`grant execute on function public.${FN} to ${grantee}`)
+        expect((await c.query<{ fn: string }>(ANON_OR_PUBLIC_DEFINER)).rows.map((r) => r.fn), grantee).toEqual([FN])
+      })
+    }
+    await asService(pool, async (c) => {
+      await c.query(`create function public.rls_h2_probe_fn() returns int language sql security definer set search_path = '' as 'select 1'`)
+      expect((await c.query<{ fn: string }>(ANON_OR_PUBLIC_DEFINER)).rows.map((r) => r.fn)).toEqual(['rls_h2_probe_fn()'])
+    })
   })
   it('p_actor* 인자를 받는 public 함수는 authenticated·anon 이 실행할 수 없다(호출자가 준 행위자를 믿는 서비스 RPC)', async () => {
     const rows = await asService(pool, async (c) => (await c.query<{ fn: string; auth: boolean; anon: boolean }>(`

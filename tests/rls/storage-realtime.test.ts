@@ -11,7 +11,8 @@ beforeAll(async () => { pool = openPool(); await loadFixture(pool) })
 afterAll(async () => { await pool?.end() })
 
 const put = (c: PoolClient, bucket: string, name: string, owner: string | null) =>
-  c.query('insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', [bucket, name, owner])
+  c.query(`insert into storage.objects (bucket_id, name, owner, metadata) values ($1, $2, $3, '{"size": 1, "mimetype": "text/plain"}'::jsonb)`,
+    [bucket, name, owner])
 const visible = async (c: PoolClient, bucket: string, name: string) =>
   (await c.query('select 1 from storage.objects where bucket_id = $1 and name = $2', [bucket, name])).rowCount
 const minuteA = makeStoragePath({ workspaceId: F.ws, projectId: F.projects.a, entity: 'minutes', entityId: F.rows.minute, fileName: 'm.md' })
@@ -252,14 +253,18 @@ describe('회의록 RPC 파일 경로(0007 — ws/ 규약)', () => {
   })
 })
 
-describe('minute_files 첨부 정책(0007 — can_manage_minute 한 곳)', () => {
+describe('minute_files 첨부 정책(0007 can_manage_minute · 0011 가드 — 객체를 먼저 올린다)', () => {
   const insertAttachment = `insert into public.minute_files (minute_id, role, file_name, file_path, size, mime, uploaded_by)
-    values ($1, 'attachment', 'x.txt', 'rls/x.txt', 1, 'text/plain', $2)`
-  it('⑪ 작성자·A 워크스페이스 관리자는 첨부를 넣고 지우며, 명단 없는 A 멤버·B 관리자·보관된 회의록은 거부(0006 판정 그대로)', async () => {
+    values ($1, 'attachment', 'x.txt', $2, 1, 'text/plain', $3)`
+  const pathFor = (minuteId: string, projectId: string | null, uid: string) =>
+    makeStoragePath({ workspaceId: F.ws, projectId, entity: 'minute-files', entityId: minuteId, fileName: `rls-${uid.slice(-2)}.txt` })
+  it('⑪ 작성자·A 워크스페이스 관리자는 첨부를 넣고 지우며, 명단 없는 A 멤버·B 관리자·보관된 회의록은 거부', async () => {
     for (const [uid, allowed] of [[F.users.member, true], [F.users.wsAdmin, true], [F.users.aLoose, false], [F.users.bAdmin, false]] as const) {
       await asUser(pool, uid, async (c) => {
-        for (const minuteId of [F.rows.minute, F.rows.nullMinute]) {
-          const err = await pgError(c, insertAttachment, [minuteId, uid])
+        for (const [minuteId, projectId] of [[F.rows.minute, F.projects.a], [F.rows.nullMinute, null]] as const) {
+          const path = pathFor(minuteId, projectId, uid)
+          await c.query('reset role'); await put(c, 'minutes', path, uid); await c.query('set local role authenticated')
+          const err = await pgError(c, insertAttachment, [minuteId, path, uid])
           if (allowed) expect(err, `${uid} ${minuteId}`).toBeNull()
           else expect(err, `${uid} ${minuteId}`).toMatchObject({ code: '42501' })
         }
@@ -268,9 +273,11 @@ describe('minute_files 첨부 정책(0007 — can_manage_minute 한 곳)', () =>
       })
     }
     await asUser(pool, F.users.member, async (c) => {
-      await c.query('reset role'); await c.query('update public.minutes set archived_at = now() where id = $1', [F.rows.minute])
+      const path = pathFor(F.rows.minute, F.projects.a, 'archived')
+      await c.query('reset role'); await put(c, 'minutes', path, F.users.member)
+      await c.query('update public.minutes set archived_at = now() where id = $1', [F.rows.minute])
       await c.query('set local role authenticated')
-      expect(await pgError(c, insertAttachment, [F.rows.minute, F.users.member])).toMatchObject({ code: '42501' })
+      expect(await pgError(c, insertAttachment, [F.rows.minute, path, F.users.member])).toMatchObject({ code: '42501' })
     })
   })
 })
