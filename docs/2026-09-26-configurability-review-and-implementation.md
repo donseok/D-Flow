@@ -1261,7 +1261,7 @@ COM-2의 서버 계약과 COM-3의 shell/검색 스코프를 먼저 정한 후 �
 - 디자인: 기울어진 민트 리본과 열린 흰색 D 곡선을 결합한 흐름 모노그램. 코발트 블루의 얕은 그라데이션, 둥근 사각 실루엣. 외부 폰트·이미지 서비스 없이 확대 가능한64×64 SVG.
 - 원본: `public/brand/dflow-flow.svg`. 색상은 브랜드 자산 내부에만 위치하며 고객 업무 규칙과 무관하다.
 - 적용: `src/components/ui/BrandMark.tsx`가 `/projects`에서 새 아이콘을 선택한다. `src/app/(app)/projects/page.tsx` 상단에도 같은 아이콘을 배치해 작은 화면에서 기존 헤더 로고가 숨겨져도 확인할 수 있게 했다. 워드마크·제품명·포털 업무 동작은 변경하지 않았다.
-- 설정: `src/lib/branding.ts`의 `BRAND.portalIcon`, 환경변수 `NEXT_PUBLIC_BRAND_PORTAL_ICON=flow|monogram`. 기본은 flow, monogram 선택 시 기존 제품명 첫 글자 마크. `.env.local.example`에 명시했으며 빌드 시 적용되는 설정이다. 워크스페이스 런타임 설정 화면 구현을 의미하지 않는다.
+- 설정: `src/lib/branding.ts`의 `BRAND.portalIcon`, 환경변수 `NEXT_PUBLIC_BRAND_PORTAL_ICON=flow|monogram`. 명시값 flow·monogram 이 우선이고, 비어 있으면 제품명이 기본값(D-Flow)일 때만 flow, 아니면 제품명 첫 글자 monogram 으로 자동 결정한다. `.env.local.example`에 명시했으며 빌드 시 적용되는 설정이다. 워크스페이스 런타임 설정 화면 구현을 의미하지 않는다.
 - 범위: 로그인·초대·외부 공유·프로젝트 상세·파비콘에는 확장하지 않았다. 전체 브랜드 변경은 이번 포털 선적용을 확인한 후 별도 수행한다.
 - 검증: SVG 래스터 렌더로 실루엣·색·여백 확인, 변경 소스 ESLint 및 TypeScript 검사 통과, 기존 브랜드/반응형 안전망 테스트2파일13건 통과. 브라우저의 로컬 포털 접근은 보안 정책에서 거부되어 실제 페이지 눈확인은 미완료다. 접근을 우회하지 않았다.
 - 작업 제약: `.git` 쓰기 제한으로 새 UI 브랜치 생성이 실패했다. 별도 브랜치를 요구하는 `src/components/app/*`·전역 CSS·layout은 수정하지 않고 기존 브랜치의 위 파일에 미커밋 변경으로 남겼다. 병렬 작업의 마이그레이션·RLS 테스트 파일은 건드리지 않았다.

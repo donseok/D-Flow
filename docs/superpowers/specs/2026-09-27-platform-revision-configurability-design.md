@@ -1773,7 +1773,7 @@ SP 배정·마이그레이션 번호·기간은 §6 이 정본이다. 이 절의
 | 4 | P1-9b/H-router/DC-05b | 라우터가 주입된 팀 코드로 추출한다(비소비 경계·정규 코드·모호하면 추출 안 함). 캐시 cold → 503 `TEAMS_UNAVAILABLE` | 4.8 — SP4 원천 교체·이름 매칭 |
 | 5 | P1-9a/H-SMTP | `SMTP_HOST`(필수)·`SMTP_PORT`·`SMTP_SECURE`·`SMTP_AUTH=none`·`SMTP_FROM_ADDRESS`. Gmail 암묵 기본값 삭제 | 4.9 |
 | 6 | P1-2b, P4-§3-parse, P4-§3-brand-comment, DC-07 | `LEGACY_SECTION_MAP` 삭제, 구 파서 fixture 이동, `report/brand.ts` 삭제, WBS 빌더 CLI·템플릿 휴일 기본값 `[]` | 4.2.7, 4.3, 4.12 |
-| 8 | DC-01a | `DEFAULT_TEAMS` 런타임 제거, `TeamsProvider` 기본값 `[]` | 4.12 |
+| 8 | DC-01a | `DEFAULT_TEAMS` 런타임 제거(파생 `DEFAULT_TEAM_CODES`·`SUB_ACT_TEAMS`·회의록 `TEAM_CODES`·`validateMinuteInput` 포함), `TeamsProvider` 기본값 `[]`, 5팀 fixture `tests/fixtures/teams.ts`, 가드 `tests/invariants/no-default-teams.test.ts`. 팀이 0개면 `buildWbsAoa` 둘째 헤더 행에 '담당' 칸을 더하지 않는다 — 4.6 SP4 동등성 테스트의 기준 | 4.12 |
 | 13 | DC-06 | 배포 WBS 생성 스킬 중립화(규칙 문장) | P4-§4 부정 테스트 5 의 지금 부분. 스킬이 프로젝트 설정을 읽어 생성하는 부분은 SP7(§6.2 SP7 ③) |
 
 `0009` 는 SP2 최종 fix wave(`0009_sp2_isolation_fixes`), `0010` 은 과제 2, `0011` 은 권한 하드닝 H2(`0011_authz_hardening`)가 쓰므로 SP3a 는 `0012` 부터다. 이 절의 파일명은 §6.3 배정표를 따른다(`0013_weekly_areas`·`0015_calendar`·`0016_issue_areas`·`0017_minutes_teams`).
@@ -2416,9 +2416,9 @@ P1-2, P1-2b, P1-3, P1-3b, P1-5, P1-7, P1-9a, P1-9b, P1-AC2, P1-AC3, COV-03, COV-
 
 | 과제 | 이 절이 기대하는 결과 | 이어받는 곳 |
 |---|---|---|
-| 12 대비(D5-§5-contrast-now·D6-§5-contrast-current) | `--color-ink-subtle`·`--color-pending` = `#6f645d`(canvas 5.02·surface-2 4.89·sheet-head 4.68·pending-weak 4.68), 로그인 하드코딩 6곳 치환 | UI-1 이행표가 두 토큰을 `fg-muted`(`#606E82`)로 옮긴다. 대비가 떨어지지 않는다(5.5.3) |
+| 12 대비(D5-§5-contrast-now·D6-§5-contrast-current) | `--color-ink-subtle`·`--color-pending` = `#6f645d`(canvas 5.02·surface-2 4.89·sheet-head 4.68·pending-weak 4.68), 로그인 하드코딩 6곳 치환. 사이드바 보조 글자 `--color-sidebar-ink-subtle` = `#9a8f85`. 간트 주말·휴일 날짜 라벨은 `text-ink-subtle font-semibold` 이고 구분은 배경 밴드가 맡는다. 공지 티커 실패 칩은 글자 `text-ink`, 위험색은 아이콘에만 | UI-1 이행표가 두 토큰을 `fg-muted`(`#606E82`)로 옮긴다. 대비가 떨어지지 않는다(5.5.3) |
 | 12 브레드크럼·사이드바(D5-§3-breadcrumb·D5-§3/§8-sidebar-affordances) | `/agents`·`/import` 라벨, '+ 새 프로젝트'를 `isAnyWorkspaceAdmin` 으로 제한, 홈 `aria-current`, 중복 링크 삭제 | UI-2 가 `SECTION_LABEL` 리터럴을 레지스트리 파생으로 바꾸며 흡수 |
-| 12·10 로컬 초안(D6-§7-localdraft) | 위키 초안 키에 userId, 로그아웃 시 정리 | 5.8.5 초안 정책의 첫 구현체 |
+| 12·10 로컬 초안(D6-§7-localdraft) | 위키 초안 키에 userId, 로그아웃 시 정리. 로그인·초대 합류 뒤 `router.refresh()` 로 이전 사용자의 라우터 캐시를 버린다 | 5.8.5 초안 정책의 첫 구현체 |
 | 10 입력 보존(D6-§2-wbscommit) | 검증·저장 실패 시 WBS 셀 초안 유지. 충돌은 닫기+토스트(내 값 표시) | COM-2 가 충돌 비교·재적용으로 확장(5.8) |
 | 11 승인 경합(D6-§8-approval) | `approve/rejectAgentCompletion(orderId, expectedReportId)` 로 stale 거부 | 5.9 검토 화면이 revision 기반 검토로 확장 |
 | 9 대시보드(D5-§1-Dashboard·D5-§8-partial-error) | WBS 없음이 화면 전체를 막지 않음, 위젯 조회 실패는 0건이 아니라 오류 카드 | 5.7.2 표준 상태의 '부분 오류' 기준 구현 |
@@ -3375,7 +3375,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
 | 3·4 | 봇 마일스톤 키워드를 설정에서 읽는다. 라우터는 **코드** 기반으로 팀을 추출한다 | 이름 매칭은 SP4, 별칭은 두지 않는다(§4.8) |
 | 5 | SMTP env 중립화 | 운영 설정 목록(§2.8.4) |
 | 6·8 | `LEGACY_SECTION_MAP`·`DEFAULT_TEAMS` 런타임 삭제, CLI·템플릿 공휴일 기본값 `[]`(DC-07) | 과제 6 은 U-5 의 선반영이다(§4.2.7). SP4·SP5 범위에서 그만큼 빠진다 |
-| 7 | 포털 아이콘 white-label 기본값 정리 | SP3a `branding.logo` 가 env 와 파비콘을 흡수한다(트리아지 설계 개정 12, §5.11.2) |
+| 7 | 포털 아이콘 white-label 기본값 정리. `NEXT_PUBLIC_BRAND_PORTAL_ICON` 은 명시값 `flow`·`monogram` 이 우선이고, 비면 제품명이 기본값일 때만 `flow`, 아니면 `monogram` 이다. 파비콘은 그대로 둔다 | SP3a `branding.logo` 가 env 와 파비콘을 흡수한다(트리아지 설계 개정 12, §5.11.2). 위키 추출 `prompt_version` 은 `'wiki-v1'` 그대로다 — 올리려면 마이그레이션이 필요하다(SP8 블록 ⑦) |
 | 9 | 대시보드 부분 실패 표시(`{ok,rows}\|{ok:false}` 패턴) | SP3b `StatusMessage` 가 이 계약을 쓴다(§5.7.2) |
 | 10·11 | WBS 셀 입력 보존(Q04 선행), 승인 `expectedReportId`(Q09 선행) | 과제 11 은 SP5b 승인 단계의 전제다(보고 id 검사를 RPC 로 내림, §3.3.2). SPU1·SPU2 가 일반화한다 |
 | 12 | 브레드크럼·사이드바 어포던스·`ink-subtle` 대비(`#6f645d`) | 대비 보정값은 UI-1 이 `fg-muted #606E82` 로 대체하고, 대비 테스트는 회귀 가드로 남긴다(§5.1.2) |
@@ -3394,7 +3394,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
 | 마이그레이션 | `0011_authz_hardening.sql` 과 `supabase/rollbacks/0011_authz_hardening_rollback.sql` 하나. §8.1 #4(WF-GAP-1 잠금 절)를 당기기로 하면 새 번호를 만들지 않고 이 파일에 넣는다 — 넣을지는 #4 와 함께 정한다(권고: 넣는다. 번호표는 그대로다) |
 | 커밋 | 셋으로 나눈다. ① 앱 호환 코드(마이그레이션 전후 모두 초록 — `readShareRow`·`accounts.ts`·`buildActor.ts`) → ② 마이그레이션(G1 분리, `Staging-verified: local db reset …` — G4) → ③ RLS 테스트 |
 | 노력 | 1~1.5주 |
-| 소유 파일 | `supabase/migrations/0011_authz_hardening.sql`·롤백, `src/app/actions/accounts.ts`(`setPlatformAdmin`), `src/app/actions/minutes.ts`(`readShareRow`), `src/lib/authz/buildActor.ts`, `tests/rls/fixture-ws.sql`, `tests/rls/storage-realtime.test.ts`, `tests/rls/**` 의 H2 케이스 |
+| 소유 파일 | `supabase/migrations/0011_authz_hardening.sql`·롤백, `src/app/actions/accounts.ts`(`setPlatformAdmin`), `src/app/actions/minutes.ts`(`readShareRow`), `src/lib/authz/buildActor.ts`, `tests/rls/fixture-ws.sql`, `tests/rls/storage-realtime.test.ts`, `tests/rls/**` 의 H2 케이스. H1 이월(g 보강·i): `src/app/actions/attachments.ts`·`issueAttachments.ts`·`minutes.ts`(`removeMinuteFile`)의 삭제 경로, `src/app/actions/agentWork.ts`·`src/lib/agent/workflowEvent.ts` |
 
 범위(항목별):
 
@@ -3432,6 +3432,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - `minute-files` 삽입: `can_manage_minute(그 회의록)` 과 경로의 워크스페이스·프로젝트가 회의록 행과 일치.
   - `minute-files` 삭제: (관리 권한 ∧ 워크스페이스 일치) ∨ `is_ws_admin` ∨ (소유자 ∧ 어떤 `minute_files` 행도 참조하지 않음). 프로젝트 세그먼트는 요구하지 않는다 — 회의록을 다른 프로젝트로 옮겨도 파일 경로는 그대로이기 때문이다. `정본:861` 의 "프로젝트 관리자도 삭제" 가 이것으로 성립한다.
   - `minutes`(본문) entity 의 정책과 `minute_versions` WORM 가드는 그대로 둔다.
+  - **(H1 이월 — 과제 18·19) 이미 없는 객체의 행 삭제.** 첨부 삭제는 Storage 삭제가 정확히 1건일 때만 행을 지우므로, 객체가 이미 없으면 그 행을 영영 지우지 못한다. 세션의 `exists()` 는 '없음'과 '읽을 수 없음'을 가르지 못한다(회의록을 다른 프로젝트로 옮기면 옛 경로를 읽지 못한다 — 오판하면 과제 18 이 닫은 고아 객체가 다시 생긴다). SECURITY DEFINER 존재 확인 RPC 를 두고, 산출물 첨부(`actions/attachments.ts`)·이슈 첨부(`actions/issueAttachments.ts`)·회의록 파일(`actions/minutes.ts` `removeMinuteFile`)의 세 삭제 경로를 공용 삭제 도우미 하나로 합친다. 확인이 실패하면 행을 남기고 오류다(fail-closed).
 - **h. P8-H2-1 — 첨부 insert 가드(PostgREST 직접 쓰기 차단, WF-GAP-1 선례)**
   - `minute_files_attachment_guard` BEFORE INSERT WHEN `role = 'attachment'`. 검사 순서:
     1. 그 회의록을 관리할 수 없는 세션(`not can_manage_minute`)은 `return new` 해서 RLS insert 정책이 42501 을 내게 한다 — 가드가 먼저 다른 오류를 내면 격리 테스트의 기대(`tests/rls/isolation-map.ts:83`)가 깨진다.
@@ -3443,6 +3444,9 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - `unique (file_path) where role = 'attachment'` 부분 인덱스를 둔다.
   - `attachment_update_minute_files` 정책을 drop 하고 UPDATE 권한을 revoke 한다(첨부는 추가·삭제만 한다).
   - 픽스처 `tests/rls/fixture-ws.sql:133-135` 와 `tests/rls/storage-realtime.test.ts:255-276` 을 새 규칙에 맞춰 다시 만든다.
+- **i. (H1 이월 — 과제 11) 승인 보고 id 대조의 원자화**
+  - 지금은 앱의 보고 id 대조(`checkReportFresh`)와 전이 RPC `apply_workflow_event` 의 주문 상태 CAS 가 따로 돈다. 그 사이(ms)에 재보고가 끼면 사람이 보지 않은 보고가 승인·반려될 수 있다(`agentWork.ts` 의 '잔여 창' 주석).
+  - RPC 에 `p_expected_report_id` 를 더하고 주문 행 잠금 아래에서 최신 completion 보고 id 와 비교해 다르면 거부한다. 승인·반려 두 사건이 쓴다. 같은 `0011_authz_hardening` 에 넣는다(번호표 불변). SP5b 의 `0020` 재작성(§3.3.2)은 이 인자를 잇는다.
 
 **H2 완료 조건(done_when)** — 제7부 P7-8 이 요구한 행 가운데 없는 것만 더한다(회수·작성자 예외는 이미 테스트가 있다).
 
@@ -3452,6 +3456,8 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
 - 멤버가 `minutes.share_token` 을 SELECT 하면 42501 이다. 편집자의 공개 설정은 서버 경로로 그대로 된다.
 - 제8부 탐침 P1~P4(첨부 직접 insert 개수·중복·보관 회의록·크기/mime 위조)가 모두 거부된다.
 - TS `canEditMinute` 와 SQL `can_manage_minute` 의 패리티 표가 같은 결과를 낸다. 예외는 AUTH-11 칸(무프로젝트 회의록 × 워크스페이스 관리자) 하나뿐이고 테스트에 명시한다.
+- (H1 이월) Storage 객체가 이미 없는 첨부·회의록 파일 행을 권한 있는 사용자가 지울 수 있고, 읽을 수 없을 뿐인 객체의 행은 지워지지 않는다(g 보강).
+- (H1 이월) 보고 id 대조와 상태 CAS 사이에 재보고가 들어오면 승인·반려가 stale 로 거부된다(i).
 - `npm run db:reset` → `dev:bootstrap` → `npm run test:rls` 초록(건너뜀 0).
 
 #### SP3a — 설정 엔진·모듈 레지스트리·저장 계약·설정 화면
@@ -3550,6 +3556,7 @@ QA 항목의 SP 배정은 §6.5.9 가 정본이다(트리아지 §6 "블록 단�
   - `import/execute`(`route.ts:135` `rpc('import_wbs')`)가 `command_id` 를 받는다. 같은 id 로 다시 요청하면 저장된 결과를 돌려준다. 결과 화면은 실행 ID(`command_id` 앞 8자)와 영수증 조회 링크를 보인다(UX-09 의 실행 ID 부분, 5-D14).
   - 제6부 §7 공통 응답(`commandId`·결과 종류·revision·필드 오류·retryable)의 타입은 SP3a 에서, 이 표는 여기서 도입한다.
 - 빈 시트 문구(D6-§4-weekly, `WeeklySheetView.tsx:603`): 영역이 있으면 `areas.map(name)`, 없으면 "설정 필요" `StatusMessage` 를 보인다.
+- (H1 이월) 두 잔여를 이 SP 가 닫는다. ① 테스트 픽스처 곳곳에 원본 5팀 구성의 옛 구분 이름이 남아 있다(과제 6 잔여) — 영역 이관 때 합성 이름으로 바꾼다. ② 임포트 템플릿의 담당 표시 열이 팀 열로 감지된다(과제 1 잔여) — Excel 표준 레이아웃·임포트 UX(§4.6)와 함께 고친다.
 
 **완료 조건(done_when)** — 정본(`정본:2947-2950`)을 유지하고, §4.3.6(주간 영역·이월·부정 테스트 1·2)·§4.6(Excel 표준 레이아웃)·§4.8(봇 이름 매칭)·§1.4.3(null 가중치)의 done_when 을 더한다. 로드맵 고유 추가분은 다음과 같다.
 
@@ -3693,7 +3700,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 | 의존 | SP7(레인 B) |
 | 마이그레이션 | `0022_ai_scope.sql`(구 `0016`) |
 | 노력 | 2.5주(2~3) |
-| 범위 추가 | ① 봇 플래너·verifier 도메인을 레지스트리 `botDomains` 에서 파생한다(`정본:3068`). 팀 추출은 H1 과제 4(코드)와 SP4(이름 매칭)가 끝냈고 별칭은 두지 않는다(§4.8). ② 봇 도구가 해석된 상태(SP5b)·영역·주 키(SP5)를 쓴다. 사용자 정의 필드 근거는 SP8 범위가 아니다 — SP8 머지 뒤 SP5c 가 넣는다(§3.6.9, 소유 파일도 SP5c). ③ 부정 테스트 1·2 의 봇 부분(P4-§4). ④ 잡 레지스트리를 cron 정본으로 삼는다(K 의 스케줄 부분). ⑤ `issue_no` 노출 제거에 따른 재색인(§4.4.3). ⑥ 관리자 알림 정책 `notify.policy`(COV-04·K, §4.10 — 이벤트별 켜기/끄기만)는 **스트레치**다. 범위 조정 레버 L1(6.3)이며 출시 후로 넘길 수 있다 |
+| 범위 추가 | ① 봇 플래너·verifier 도메인을 레지스트리 `botDomains` 에서 파생한다(`정본:3068`). 팀 추출은 H1 과제 4(코드)와 SP4(이름 매칭)가 끝냈고 별칭은 두지 않는다(§4.8). ② 봇 도구가 해석된 상태(SP5b)·영역·주 키(SP5)를 쓴다. 사용자 정의 필드 근거는 SP8 범위가 아니다 — SP8 머지 뒤 SP5c 가 넣는다(§3.6.9, 소유 파일도 SP5c). ③ 부정 테스트 1·2 의 봇 부분(P4-§4). ④ 잡 레지스트리를 cron 정본으로 삼는다(K 의 스케줄 부분). ⑤ `issue_no` 노출 제거에 따른 재색인(§4.4.3). ⑥ 관리자 알림 정책 `notify.policy`(COV-04·K, §4.10 — 이벤트별 켜기/끄기만)는 **스트레치**다. 범위 조정 레버 L1(6.3)이며 출시 후로 넘길 수 있다. ⑦ (H1 이월 — 과제 7) 위키 추출 프롬프트는 과제 7 에서 문구가 바뀌었지만 `prompt_version` 은 `'wiki-v1'` 그대로다. 이 값은 기준선 재생성 RPC(`0000_baseline.sql`)와 `src/lib/ai/wiki-ingest.ts` 두 곳에 박혀 있어 올리려면 마이그레이션이 필요하다. 위키 수집을 다음에 만지는 SP 가 그 마이그레이션에서 함께 올린다 — 현 로드맵에서는 이 SP(`0022_ai_scope`)다. ⑧ (H1 이월 — 과제 4) 챗 팀 추출이 아직 뽑지 않는 두 경우: 팀 코드 뒤에 한국어 접미가 붙은 언급(예: 코드 + '팀')과, 팀 코드로 시작할 뿐인 다른 단어다. 지금은 추출하지 않는 쪽(fail-safe)이다. 별칭은 두지 않는다는 결정(§4.8) 안에서 처리 방식을 SP8 스펙이 정한다 |
 
 #### SPU1 — 저장 신뢰성·상태 표현(UI 트랙 1)
 
@@ -3761,7 +3768,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 | `0000`~`0008` | 기존 | SP0~SP2 | 불변 |
 | `0009` | `0009_sp2_isolation_fixes.sql`(SP2 최종 리뷰 fix wave F1~F6) | SP2 | 신설(SP2 최종 리뷰). 구 `0009_settings` 자리 |
 | `0010` | `0010_issue_code_seq_width.sql` | H1 과제 2(W2) | 신설 |
-| `0011` | `0011_authz_hardening.sql`(H2 — `platform_admins` 마지막 1명 가드·쓰지 않는 표 권한 회수·`minutes.share_token` 열 권한·소속 회수 트리거·`can_manage_minute` 개정·회의록 버킷 entity 별 정책·첨부 insert 가드, §6.2.0) | H2(G0-5 뒤, SP3a 전) | 신설(제7·8부 원장) |
+| `0011` | `0011_authz_hardening.sql`(H2 — `platform_admins` 마지막 1명 가드·쓰지 않는 표 권한 회수·`minutes.share_token` 열 권한·소속 회수 트리거·`can_manage_minute` 개정·회의록 버킷 entity 별 정책·첨부 insert 가드, H1 이월의 Storage 객체 존재 확인 RPC·승인 RPC 보고 id 비교, §6.2.0) | H2(G0-5 뒤, SP3a 전) | 신설(제7·8부 원장) |
 | `0012` | `0012_settings.sql`(설정 표 ALTER·이행·행 생성 트리거·`apply_*_settings`·`settings_ref_check` 골격·권한 이력 `authz_events`) | SP3a(W5) | `0009` |
 | (조건부) | `profiles.ui_prefs`(§8 #5 권고 기본값을 채택할 때만) | SP3b(W6) | 신설. 채택하면 SP3b 머지 순서(SP3a 뒤·SP4 앞)에 맞춰 `0013` 을 받고 이하를 한 칸씩 민다(아래 재배정 규칙) |
 | `0013` | `0013_weekly_areas.sql`(+ 기준선 단일 FK drop) | SP4(W7.5) | `0010` |
@@ -4145,21 +4152,21 @@ P2-§5-accept 의 인수 시나리오 6종은 이렇게 처리한다. ① 다른
 | E14 | §3.3 머리 `정본:1430-1432` | 카탈로그 열 정의 | **대체** → 개정 문서 §2.8(키 카탈로그 전수)·§2.10(`docs/settings-catalog.md` 는 SP3a 에서 레지스트리로 생성) | S16 |
 | E15 | §3.3.1 `core.stage_credits` 행 `정본:1441` | 5단위·간격≥`CREDIT_GAP` | `workflow.stage_credits`(개명) + `workflow.credit_policy {step: 1\|5, min_gap: 1~10}`, 기본 `{5,10}`. 불변식(정수·0~100·`xx=100`·엄격 증가) 고정 | C3, §2.8.6 |
 | E16 | §3.3.1 `issues.code_prefix` 행 `정본:1445` | 접두 1~8자 | `issues.id_policy { prefix; pattern; counter_scope; reset }`, 기본 `ISS-{seq:3}` 프로젝트 카운터(→ 개정 문서 §4.4.3) | R4-10 |
-| E17 | §3.3.1 `wbs.excel_profile` 행 `정본:1446` | 없으면 "프로파일 필요", 폴백 없음 | "라우트는 하드닝 1 선반영. SP3a = 읽기 원천을 이 키로. SP4 = 비어 있으면 표준 레이아웃(명시 표기), 손상은 422, LEGACY 는 fixture. 사용자 필드 `customColumns`(SP5c)"(→ 개정 문서 §4.6) | R4-14 |
+| E17 | §3.3.1 `wbs.excel_profile` 행 `정본:1446` | 없으면 "프로파일 필요", 폴백 없음 | "라우트는 하드닝 1 선반영(저장 양식은 접기·펼침 두 내보내기 모두에 쓰고, 손상 422, 양식 없음+펼침 409, LEGACY 폴백 삭제. 가져오기는 저장 양식과 파일 구조가 다르면 감지 결과가 기본이고 서버가 409 — 하드닝 1b). SP3a = 읽기 원천을 이 키로. SP4 = 비어 있으면 표준 레이아웃(명시 표기), 손상은 422, LEGACY 는 fixture. 사용자 필드 `customColumns`(SP5c)"(→ 개정 문서 §4.1·§4.6). 원천 열의 `parse.ts:20` `LEGACY_COLUMN_MAP` 언급은 지운다 — 구 파서는 하드닝 6 이 fixture 로 옮겼다(E27) | R4-14 |
 | E18 | §3.3.1 `agents.stage_workflow` 행 `정본:1448` | `{ enabled, require_approval }` | 행 삭제(은퇴). `modules.enabled ∋ 'agents'` + `workflow.approval_steps`(1~3, 자동 승인 없음) | C4, §2.8.6 |
 | E19 | §3.3.1 신규 행 | — | `workflow.issue_statuses`·`workflow.wbs_stage_labels`·`workflow.approval_steps`·`workflow.approval_distinct_approvers`·`workflow.predecessor_gate`·`workflow.credit_policy`, `issues.analysis`, `fields.wbs_item`·`fields.issue`·`fields.weekly_row`, `views.default`, `calendar.week_start`(프로젝트, 규칙 목록). 값 형태는 개정 문서 §2.8.2 | §2.8.2 |
 | E20 | §3.3.2 워크스페이스 스코프 `정본:1458-1468` | `branding` 단일 객체, `minutes.root_folders`·`calendar.timezone` 은 SP3 등록 | `branding.product_name`·`.logo`·`.accent`·`.mail_from_name`(2단 키), 신규 `navigation.menu`·`portal.widgets`·`security.local_drafts`·`calendar.working_days`·`calendar.week_start`·`notify.policy`(SP8 planned). 달력 키와 `minutes.root_folders` 는 SP5 등록(→ 개정 문서 §2.8.1) | §2.8.1, R4-7 |
 | E21 | §3.3.3 머리 `정본:1471` | `enforce_project_vocab` 가 활성 code 집합 검사 | 잠금 규약 추가: 참조 쓰기 트리거는 설정 행 `FOR SHARE`, 설정 RPC 는 `FOR UPDATE` 후 참조 수를 센다. 명시 이관 명령 `migrate_setting_code`(→ 개정 문서 §2.4) | S9 |
-| E22 | §3.3.3 `calendar.working_days` 행 `정본:1481` | 소비처 "주간 범위 계산", 한국 공휴일 테이블은 표시 전용 제품 고정 유지 | 소비처는 개정 문서 §4.2.8 표. 한국 공휴일 문장 **삭제**. 표에 `calendar.week_start` 행 추가(→ §4.2.2). 워크스페이스 기본값에 `working_days`·`week_start` 추가. `holidays.kind 'off'\|'work'` | C7, C8, R4-6 |
+| E22 | §3.3.3 `calendar.working_days` 행 `정본:1481` | 소비처 "주간 범위 계산", 한국 공휴일 테이블은 표시 전용 제품 고정 유지 | 소비처는 개정 문서 §4.2.8 표. 한국 공휴일 문장 **삭제**. 표에 `calendar.week_start` 행 추가(→ §4.2.2). 워크스페이스 기본값에 `working_days`·`week_start` 추가. `holidays.kind 'off'\|'work'`. 한 줄 추가: "제품은 어떤 공휴일도 기본으로 넣지 않는다(사용자 결정 5, 2026-09-26). WBS 빌더 CLI·Excel 템플릿의 기본 공휴일은 빈 목록이다(하드닝 6 선반영), 검증 CLI 는 SP5 Phase A"(→ 개정 문서 §1.4.5·§4.2.7) | C7, C8, R4-6 |
 | E23 | §3.3.4 전부 `정본:1483-1503` | 이슈 상태·WBS 단계 코드·주간 4열 고정, 주 시작=월요일(`:1498`), SP5 에서 카탈로그 배포 | **대체** → 개정 문서 §2.9.1(제품 고정)·§2.9.2(지원 제한). 요지: 이슈 → "범주 4종·범주 전이 고정, 표시 상태는 설정", WBS → "코드 고정, 라벨·승인 단계·선행 기준은 설정", 주간 → "핵심 4열 고정 + 사용자 필드", 주 시작 행 삭제. 추가 행: 주문 상태 5종, 사건→크레딧 키, 크레딧 불변식, 에이전트 우선순위·좌석 TTL, 진척 집계(null 가중치=1)·위험 임계값·생애 판정 | C2, C6, C7 |
-| E24 | §3.4.2 전수 표 — `정본:1519` 대 `:1551` | `DEFAULT_TEAMS` 를 SP0 fixture(`:1551`) / SP4 까지 런타임(`:1519`) — 모순 | `:1551` SP 열 → "하드닝 8(SP3a 전)". SP4 grep(`:2948`)은 회귀 가드로 남긴다 | 트리아지 21, DC-01a |
+| E24 | §3.4.2 전수 표 — `정본:1519` 대 `:1551` | `DEFAULT_TEAMS` 를 SP0 fixture(`:1551`) / SP4 까지 런타임(`:1519`) — 모순 | `:1551` SP 열 → "하드닝 8(SP3a 전)". SP4 grep(`:2948`)은 회귀 가드로 남긴다. 하드닝 8 로 확인된 사실을 함께 적는다: `DEFAULT_TEAMS` 와 파생 상수(`DEFAULT_TEAM_CODES`·`SUB_ACT_TEAMS`·회의록 `TEAM_CODES`)·`validateMinuteInput` 을 `src` 에서 지웠고, `TeamsProvider` 문맥 기본값은 `[]`, 5팀은 fixture `tests/fixtures/teams.ts`, 가드는 `tests/invariants/no-default-teams.test.ts` 다. `:1519` 의 "`DEFAULT_TEAMS` 등은 SP4/5 에서 fixture 로"와 `:2798` 의 "런타임 importer 가 없는 것만 — `DEFAULT_TEAMS`"는 틀렸었다(`TeamsProvider` 가 import 했다) — "하드닝 8 이 런타임 소비처를 걷고 옮겼다"로 고친다. `:1519` 의 LEGACY 폴백 삭제도 SP4 가 아니라 하드닝 1 이다(fixture 이동은 SP4 그대로, E17) | 트리아지 21, DC-01a |
 | E25 | §3.4.2 `정본:1528` | `LEGACY_SECTION_MAP` 삭제 — SP4 | "하드닝 6 선반영" | P1-2b |
 | E26 | §3.4.2 `정본:1552` | `ensureStandardRows` → `ensureAreaRows(areas)` 승격(읽기 시 백필) | "삭제 — 읽기 경로 쓰기 금지. 영역 추가·재활성 RPC 가 현재·이후 주차에 행 생성"(→ 개정 문서 §4.3.2) | R4-8 |
 | E27 | §3.4.2 `정본:1574` | `parse.ts` fixture — SP0 | "하드닝 6 선반영(SP0 에서 밀림)". 런타임 5팀 사본은 `profile.ts:150`(SP4 fixture)만 남는다 | P4-§3-parse |
 | E28 | §3.4.2 `정본:1580` | 라우터 팀 정규식 — SP8 | "코드 추출은 하드닝 4 선반영. SP4 = 원천을 `config.teams` 로 + 이름 매칭. 별칭 없음. SP8 = 플래너·verifier 도메인"(→ 개정 문서 §4.8) | P1-9b |
 | E29 | §3.4.2 `정본:1584` | `WeeklySheetView.tsx:603` — SP4 | 유지. `:664` 주석(업무영역 11개)을 함께 고친다 | D6-§4-weekly |
 | E30 | §3.4.2 `TEAM_COLOR` 관련 `정본:50`·`:403`·`:1442`·`:1545-1546`·`:2797` | `TEAM_COLOR`(`report/brand.ts`) 승격 | `brand.ts` 는 importer 0 인 죽은 모듈이었고 하드닝 6 으로 삭제됐다. 해당 행은 "해소", `:403` 비고는 "`shared.tsx` TEAM 토큰 대체"만 남긴다 | P4-§3-brand-comment |
-| E31 | §3.4.3 SP별 집계 `정본:1614` | SP4 에 `LEGACY_ORIGIN_PROFILE` 폴백 제거 | E17 과 같게: 라우트는 하드닝 1, 표준 레이아웃은 SP4 | G, DC-02 |
+| E31 | §3.4.3 SP별 집계 `정본:1614`, §3.4.2 `src/app/api/export/route.ts` 행 `정본:1532` | SP4 에 `LEGACY_ORIGIN_PROFILE` 폴백 제거 | E17 과 같게: 라우트는 하드닝 1, 표준 레이아웃은 SP4. `:1532` 행의 SP 열은 "하드닝 1(폴백 삭제·'{}'+펼침 409) / SP4(읽기 원천·표준 레이아웃)" | G, DC-02 |
 | E32 | §3.5 열린 항목 `정본:1623-1633` | 4건 | #1 한국 공휴일 → **닫힘**(결정 5, 오버레이 삭제). #3 트리거 vs FK → **닫힘**("`values` + 트리거"). #4 `require_approval` 기본값 → **닫힘**(기본 1단계 = 현행, 자동 승인 없음). #2 `usageMenu` 과거 키는 유지 | §2.4.1, §3.3.1 W5, C8 |
 
 ### 7.3 §4 양식 병합 엔진
@@ -4181,7 +4188,7 @@ P2-§5-accept 의 인수 시나리오 6종은 이렇게 처리한다. ① 다른
 | E40 | §5.3.4 `정본:2577-2592` | 경로·응답 동결 | 한 행 추가: "`depends_evidence[].reached` 값 = 프로젝트 선행 기준(`workflow.predecessor_gate`) 판정. 필드·타입 불변"(→ 개정 문서 §3.4) | §3.4 |
 | E41 | §5.4.3 `정본:2638-2641` | 라우터 팀명 하드코딩 제거 — SP8 | "코드 추출은 하드닝 4 선반영, 이름 매칭은 SP4, 별칭 없음. SP8 은 도메인 파생"(→ §4.8) | P1-9b |
 | E42 | §5.4.5 `정본:2660` | `EMBED_DIM` env 삭제 계획 | "하드닝 3 완료 — `EMBED_DIM = KNOWLEDGE_EMBEDDING_DIMENSIONS`(768)" | COV-07 |
-| E43 | §5.5.1 표 `정본:2676`, §5.5.2 ⑥ `정본:2696` | `smtp.gmail.com:465`, SMTP env 3종 | 5.5.1 행 "해소". ⑥ → "하드닝 5 완료 — 7종(`SMTP_FROM_ADDRESS`·`SMTP_AUTH=none` 추가), Gmail 기본값 없음, 발신명은 `branding.mail_from_name`" | P1-9a |
+| E43 | §5.5.1 표 `정본:2676`, §5.5.2 ⑥ `정본:2696` | `smtp.gmail.com:465`, SMTP env 3종 | 5.5.1 행 "해소". ⑥ → "하드닝 5 완료 — 7종(`SMTP_FROM_ADDRESS`·`SMTP_AUTH=none` 추가), `SMTP_HOST` 필수, Gmail 기본값 없음, 인증을 쓰는 비TLS 연결은 `requireTLS`(평문으로 조용히 내려가지 않는다), 발신명은 `branding.mail_from_name`(SP3a)" | P1-9a |
 | E44 | §5.7 비목표 `정본:2747-2752` | — | "워크스페이스별 SMTP·Reply-To·발신 주소" 추가 | R4-16 |
 
 ### 7.5 §6 로드맵·리스크·검증
@@ -4190,7 +4197,7 @@ P2-§5-accept 의 인수 시나리오 6종은 이렇게 처리한다. ① 다른
 |---|---|---|---|---|
 | E45 | §6.1 원칙 `정본:2757-2776` | 운영 원칙 | 유지하고 원칙 6개 추가(SP 3주 상한과 Phase, 행위 테스트, 설정 done 네 연결, 화면 소유, 레인 병렬, 원격 배포 전 규칙 — 개정 문서 §6.1). Q4 행(`:2774`)의 "이슈 상태·WBS 단계 고정"은 "범주 고정, 표시·흐름은 SP5b" 로 | C2 |
 | E46 | §6.2 SP2 UI 행 `정본:2871` | 워크스페이스 전환·`/w/[slug]` 이동·`/projects` 필터 | "SP3b 로 이관(SP2 U2)" 표기. `/projects` 는 필터가 아니라 `/w/[slug]/projects` 이동(→ 개정 문서 §5.3.2 5-D8) | §5 |
-| E47 | §6.2 SP3~SP9 `정본:2890-3108` | SP3~SP9 블록 | **대체** → 개정 문서 §6.2(G0·H1·H2·SP3a·SP3b·SP4·SP5·SP5b·SP5c·SP6~SP8·SPU1~3·SP9). 정본 블록 안에서 따로 고칠 문구: SP3 `:2903`(워크스페이스 `calendar.timezone`·`minutes.root_folders` 등록 → SP5), SP4 `:2935`(`LEGACY_SECTION_MAP` 선반영, `WEEKLY_TEAM_SECTIONS`·`FALLBACK_SECTION` 만 남김)·`:2937`(E17)·`:2798`(E24), SP5 `:2964`(`issues.code_prefix` → `id_policy`, "SQL·TS 모두 최소 2자리, 절단 금지")·`:2975`("SQL 함수 4개" → 사용현황 RPC 5종 + 의존성 트리거 2종)·`:2978`·`:2985`(이슈 상태·WBS 단계 설정화 범위 제외 행 삭제)·`:2989`(grep 에 `\+09:00`·`9 \* 3600_000` 추가), SP6 `:3011-3012`(E38) | §6.2, R4-20, C2 |
+| E47 | §6.2 SP3~SP9 `정본:2890-3108` | SP3~SP9 블록 | **대체** → 개정 문서 §6.2(G0·H1·H2·SP3a·SP3b·SP4·SP5·SP5b·SP5c·SP6~SP8·SPU1~3·SP9). 정본 블록 안에서 따로 고칠 문구: SP3 `:2903`(워크스페이스 `calendar.timezone`·`minutes.root_folders` 등록 → SP5), SP4 `:2935`(`LEGACY_SECTION_MAP` 선반영, `WEEKLY_TEAM_SECTIONS`·`FALLBACK_SECTION` 만 남김)·`:2937`(E17)·`:2798`(E24), SP5 `:2964`(`issues.code_prefix` → `id_policy`, "SQL·TS 모두 최소 2자리, 절단 금지")·`:2975`("SQL 함수 4개" → 사용현황 RPC 5종 + 의존성 트리거 2종. `Asia/Seoul` 파일 예시에서 `lib/excel/parse.ts` 를 뺀다 — 하드닝 6 이 fixture 로 옮겼다)·`:2978`·`:2985`(이슈 상태·WBS 단계 설정화 범위 제외 행 삭제)·`:2989`(grep 에 `\+09:00`·`9 \* 3600_000` 추가), SP6 `:3011-3012`(E38) | §6.2, R4-20, C2 |
 | E48 | §6.3 `정본:3110-3160` | 번호표 `0009_settings`…, 그래프, 기간, `:3147`·`:3159` 의 옛 순서 서술 | **대체** → 개정 문서 §6.3(번호표 `0009`~`0024` — `0009` SP2 fix wave, `0010` 하드닝 H1, `0011` 권한 하드닝 H2(`0011_authz_hardening`), SP3a `0012` 부터, 레인 머지 순서, 원격 생성 뒤 재배정 규칙, 레인 A·B 그래프, 노력 22.5주 기준과 제7·8부 보정(약 25~26.5주), 달력 보정, 범위 조정 레버). `0009_settings` 참조(`:1068`·`:2897`·`:2929`·`:2959`·`:3002`)를 새 번호(`0012_settings` 등)로 고친다. 하드닝 계획 과제 14(`docs/superpowers/plans/2026-09-27-post-sp2-hardening.md` 과제 14 표 과제 2 행 — "H2 가 0011, SP3a 는 0012 부터")가 기대하는 번호와 같다 | C12 |
 | E49 | §6.4 `정본:3161-3179` | 리스크 12건 | R1~R12 상태 갱신 + R13~R26 추가(→ 개정 문서 §6.4). R11(`:3177`)의 `ProjectTabs` 는 "삭제", R12(`:3178`)는 "고정 목록은 SP3a 가 생성하는 카탈로그의 제품 고정·지원 제한 절이 정본" 으로 | §6.4 |
 | E50 | §6.5.2 `no-runtime-constants` `정본:3206` | 패턴에 `Asia/Seoul` | `\+09:00`·`9 \* 3600_000` 오프셋 패턴 추가 | §4.2.1 |
@@ -4222,6 +4229,16 @@ P2-§5-accept 의 인수 시나리오 6종은 이렇게 처리한다. ① 다른
 | `docs/settings-catalog.md` | 신설(레지스트리 생성) | SP3a |
 | SP2 스펙 U2 행 | SP3 → SP3b 로 표기 | G0-6 과 같은 docs 커밋 가능 |
 
+### 7.8 H1 하드닝 선반영·정정(과제 14)
+
+H1(§6.2.0)이 정본 문장을 앞서 구현했거나 정본의 옛 서술이 틀렸음을 확인한 것 가운데 7.1~7.6 에 자리가 없던 것이다. 이미 있던 행은 그 행에 사실을 더했다(E17·E22·E24·E31·E43·E47). 정본 편집이므로 G0-6 에서 7.1~7.6 과 함께 적용한다(7.7 과 달리 정본 안). 줄 번호는 §7 머리의 기준(`31878b1`)이고, 앵커 문구로 찾는다.
+
+| # | 정본 위치 | 현 문구(요지) | 개정 | 근거 |
+|---|---|---|---|---|
+| E59 | §6.2 SP0 브랜드 항목 `정본:2797`(앵커 "브랜드: `src/lib/branding.ts` 단일 출처") | 브랜드 env 기본값, SP3 에서 `branding` 으로 승격 | 한 문장 추가: "포털 아이콘 `NEXT_PUBLIC_BRAND_PORTAL_ICON` 은 명시값 `flow`·`monogram` 이 우선이고, 비면 제품명이 기본값일 때만 `flow`, 아니면 제품명 첫 글자 `monogram` 이다(하드닝 7). 고정 D 파비콘·apple-icon 과 이 env 는 SP3a `branding.logo` 가 흡수한다"(→ 개정 문서 §5.11.2) | H1 과제 7 |
+| E60 | §2.4.6 Storage 정책 표 `deliverables` 행 `정본:860`, `issue-attachments` 행 `정본:862`(앵커 "`storage.js` 의 `remove()`" 바로 위 표) | 읽기·insert·delete 판정만 | 표 아래 한 줄 추가: "산출물 첨부의 다운로드는 서버 목록 액션도 Storage 읽기 정책과 같은 `can_attach` 로 판정한다(RPC 1회, 오류면 막는다 — 하드닝 16). 조회 전용 사용자는 목록만 보고 다운로드하지 못한다(현행 유지, 개정 문서 §8.2 ②). 산출물·이슈 첨부 삭제는 Storage 삭제 1건을 확인한 뒤에만 행을 지운다(하드닝 19). 두 첨부의 목록 서명 링크 TTL 은 3600초(`LIST_SIGNED_URL_TTL_SEC`), 클릭 발급 전환은 후속이다(개정 문서 §8.1 #23)" | H1 과제 16·19 |
+| E61 | §2.4.6 Storage 정책 표 `minutes` 행 `정본:861`, §5.5.4 R3 행 `정본:2729`(앵커 "3버킷 생성·정책 적용·서명 URL 발급") | 버킷 판정만. R3 합격 기준 "회의록 첨부 1건 왕복" | `minutes` 행 비고: "회의록 파일 서명 URL 은 클릭할 때 발급하고 TTL 60초(`MINUTE_FILE_URL_TTL_SEC`)다 — 발급 때 RLS 재검사, 회수 창 = TTL, 보관은 발급을 막지 않는다. 버전 원본도 클릭 때 발급한다. 첨부 삭제는 Storage 삭제 1건을 확인한 뒤에만 행을 지운다(하드닝 18). 버킷·행 삭제 권한 불일치의 근본 수정은 H2-g"(→ 개정 문서 §6.2.0 H1 표 18 행·H2-g). R3 절차의 "서명 URL 발급" 뒤에 "(회의록 파일은 클릭 때 60초)" 를 붙인다 | H1 과제 18 |
+
 ---
 
 ## 8. 열린 항목
@@ -4252,6 +4269,8 @@ P2-§5-accept 의 인수 시나리오 6종은 이렇게 처리한다. ① 다른
 | 19 | 사용자 필드 `person`(명단 참조) 타입 | 명단 FK·외부 인력(people)·RLS 설계가 따로 필요하다 | SP5c 제외, 요구가 생기면 후속 슬롯 | 요구 발생 시 | 사용자 |
 | 20 | 저장·공유 보기(D6-§3-UX-07)와 가져오기 파일 fingerprint·매핑 복원(D6-§3-UX-09·D6-§2-import 의 그 부분)을 출시 후로 미루는 것 | 트리아지 §3 은 둘을 COM-3·COM-5(로드맵 편입)에 넣었다. 이 문서는 새 스키마·저장소가 필요하고 레인 B 용량(§6.3)을 넘는다는 이유로 출시 후 백로그로 뺐다(5-D14). 범위 축소이므로 사용자가 확인한다. 같은 항목의 나머지(멱등·실행 ID·결과 링크, 오류 문구, 도움말·동의어)는 슬롯이 있다(§6.8 분할 배정) | 출시 후. 대안: UX-07 을 SPU2 에 넣고(개인 보기 `user_preferences` + 공유 보기 `views.*` 프로젝트 키, +0.5주), fingerprint·매핑 복원을 SPU3 에 넣는다(+0.5주) — 레인 B 가 SP9 착수를 0.5~1주 늦춘다 | G0-2(이 문서 승인 때 함께) | 사용자 |
 | 21 | 다크 토글의 위치 | 사용자 결정 6 이 연 것은 "숨긴 다크 토글(`HeaderChrome.tsx:186-194`)의 재노출"이다. 이 문서는 값에 `system` 을 더하면서 토글을 전역 바에서 계정 팝오버·`/account` 로 옮겼다(§5.6). 배치는 에이전트 설계 판단이라 사용자 확인이 필요하다(C1 — 결정 해석을 에이전트가 대신 바꾸지 않는다) | 계정 팝오버의 3단 선택 + `/account`. 대안: 숨겼던 전역 바 자리에 라이트↔다크 아이콘 토글을 되살리고 `system` 은 `/account` 에서만 고른다 | UI-1 착수 전(G0-2 와 함께) | 사용자 |
+| 22 | 회의 예외 이중 조회 실패의 빈 결과(H1 이월, 낮은 우선순위) | `fetchExceptionsByIds`(`src/lib/data/meetings.ts`)는 임베드 조회가 실패한 뒤의 별도 조회까지 실패하면 로그만 남기고 빈 목록을 돌려준다. 그러면 취소된 회차가 살아 있는 것처럼 보인다(에러 처리 원칙 ①, 기존 결함 — H1 과제 9 범위 밖) | 결과형으로 바꿔 호출부(`getProjectMeetingData`·`getMyMeetings`)가 실패를 표시한다 | 회의 화면을 만지는 SP(미배정) | 설계 |
+| 23 | 산출물·이슈 첨부 서명 링크의 클릭 발급 전환(H1 이월) | 두 첨부는 목록을 불러올 때 서명해 `<a href>` 로 그리므로 TTL 이 3600초(`LIST_SIGNED_URL_TTL_SEC`)다. 60초(`SIGNED_URL_TTL_SEC`)로 줄이면 패널을 열어 둔 뒤 누른 링크가 죽는다. 회수 창을 회의록처럼 60초로 맞추려면 클릭할 때 발급해야 한다(과제 19 판정) | 회의록 파일(과제 18)과 같은 클릭 발급 | H2 또는 SP5(첨부 경로를 만질 때) | 설계 |
 
 옛 #1(검토 문서 제7부 AUTH-01~12 트리아지)은 G0-7 원장 판정으로 닫혀 8.2 로 옮겼다. 번호는 다른 절의 참조(§8 #4·#5·#10·#15·#21 등)를 지키려고 다시 매기지 않는다. 원장이 새로 올린 네 항목(첨부 정책 키, 조회 전용 산출물 다운로드, AUTH-11, 마지막 슈퍼유저 캐스케이드)은 권고 기본값으로 판정돼 8.2 에 있다.
 

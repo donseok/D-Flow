@@ -34,7 +34,7 @@
 | 3.3 diff 가 운영에 다시 접속 | 덤프 시 카탈로그를 `docs/baseline/prod-catalog.json` 으로 저장, diff 는 JSON↔로컬 | 운영 접속 1회로 줄인다 |
 | 2절 `staging-sync.mjs` 자연 차단 | **삭제** | 운영 데이터를 복제하는 스크립트다 — 결정 1(원본 고객사 데이터 이관 없음)과 정면 충돌 |
 | 5절 env `INVITE_EMAIL_DOMAINS` | 기존 이름 `INVITE_ALLOWED_DOMAINS` 유지 | 소비처(`src/app/actions/projectInvites.ts:194`)·테스트가 이미 이 이름 |
-| 6절 `DEFAULT_TEAMS`·`LEGACY_COLUMN_MAP` → fixtures, `TeamsProvider` 기본값 `[]` | **이동하지 않음**(SP4 로) | 실측: `DEFAULT_TEAM_CODES`(=`DEFAULT_TEAMS` 파생)가 런타임 5파일(`excel/export.ts`·`ai/analytics.ts`·`domain/kanban.ts`·`domain/subact.ts`·`domain/minutes.ts`)에서 쓰이고, `LEGACY_COLUMN_MAP` 은 `parse.ts:31,34` 의 런타임 폴백이다 — 상위 스펙의 "런타임 importer 없는 것만 이동" 규칙에 걸린다. `TeamsProvider` 는 레이아웃이 항상 값을 주입해 기본값은 테스트에서만 쓰인다 |
+| 6절 `DEFAULT_TEAMS`·`LEGACY_COLUMN_MAP` → fixtures, `TeamsProvider` 기본값 `[]` | **이동하지 않음**(SP4 로) | 실측: `DEFAULT_TEAM_CODES`(=`DEFAULT_TEAMS` 파생)가 런타임 5파일(`excel/export.ts`·`ai/analytics.ts`·`domain/kanban.ts`·`domain/subact.ts`·`domain/minutes.ts`)에서 쓰이고, `LEGACY_COLUMN_MAP` 은 `parse.ts:31,34` 의 런타임 폴백이다 — 상위 스펙의 "런타임 importer 없는 것만 이동" 규칙에 걸린다. `TeamsProvider` 는 레이아웃이 항상 값을 주입해 기본값은 테스트에서만 쓰인다. **정정(2026-09-27, 포스트-SP2 하드닝 H1):** `LEGACY_COLUMN_MAP` 판단은 틀렸다 — 그 폴백은 `src` importer 가 0 인 구 파서 `parse.ts` 안에만 있어 런타임 경로가 아니었다. H1 과제 6 이 파일째 `tests/fixtures/excel/legacyParse.ts` 로 옮겼다. `DEFAULT_TEAMS` 는 런타임 사용이 맞았고(`TeamsProvider` 도 import 했다), H1 과제 8 이 소비처를 걷어내고 `tests/fixtures/teams.ts` 로 옮기며 `TeamsProvider` 기본값을 `[]` 로 했다 |
 | 5절 `TEAM_COLOR` 순번 팔레트 | `TEAM_COLOR` **삭제** | 실측 소비처 0 |
 
 ## Review Focus
