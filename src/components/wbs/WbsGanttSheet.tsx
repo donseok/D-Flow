@@ -1468,7 +1468,7 @@ export function WbsGanttSheet({
                   <div
                     key={d}
                     className={`absolute box-border overflow-hidden border-r border-grid text-center leading-[18px] ${
-                      holSet.has(d) || isWeekend(d) ? 'text-delayed/70' : 'text-ink-subtle'
+                      holSet.has(d) || isWeekend(d) ? 'font-semibold text-ink-subtle' : 'text-ink-subtle'
                     }`}
                     style={{
                       top: 39,

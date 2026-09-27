@@ -51,7 +51,7 @@
   --color-line-strong: #d6c9b6;
   --color-ink: #17181d;
   --color-ink-muted: #4a4440;
-  --color-ink-subtle: #7a6f68;
+  --color-ink-subtle: #6f645d;
 
   /* 브랜드 (teal) */
   --color-brand: #0f766e;
@@ -72,7 +72,7 @@
   --color-progress-weak: #e6eff7;
   --color-delayed: #cb4b5f;
   --color-delayed-weak: #f8e6e9;
-  --color-pending: #7a6f68;
+  --color-pending: #6f645d;
   --color-pending-weak: #efe7db;
 
   /* 스프레드시트 룩 (warm) */
@@ -89,7 +89,7 @@
   --color-sidebar-line: #2a2f3a;
   --color-sidebar-ink: #f5efe7;
   --color-sidebar-ink-muted: #b6aa9e;
-  --color-sidebar-ink-subtle: #877d73;
+  --color-sidebar-ink-subtle: #9a8f85;
 
   /* 다크 히어로 그라데이션 */
   --color-hero-from: #1c2028;

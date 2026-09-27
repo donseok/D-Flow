@@ -47,7 +47,7 @@ const FEATURES = [
 ] as const
 
 const inputBase =
-  'w-full rounded-[18px] border border-[rgba(49,37,22,0.18)] bg-[#ffffffd6] py-[0.95rem] text-[16px] text-[#17181d] shadow-[inset_0_1px_rgba(255,255,255,0.55)] outline-none transition-[border-color,box-shadow,background,transform] duration-200 placeholder:text-[#7a6f68] focus:-translate-y-px focus:border-[rgba(15,118,110,0.42)] focus:shadow-[0_0_0_4px_rgba(15,118,110,0.12),inset_0_1px_rgba(255,255,255,0.55)]'
+  'w-full rounded-[18px] border border-[rgba(49,37,22,0.18)] bg-[#ffffffd6] py-[0.95rem] text-[16px] text-[#17181d] shadow-[inset_0_1px_rgba(255,255,255,0.55)] outline-none transition-[border-color,box-shadow,background,transform] duration-200 placeholder:text-[#6f645d] focus:-translate-y-px focus:border-[rgba(15,118,110,0.42)] focus:shadow-[0_0_0_4px_rgba(15,118,110,0.12),inset_0_1px_rgba(255,255,255,0.55)]'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -164,7 +164,7 @@ export default function Login() {
             <BrandGlyph size={56} />
             <div className="text-center">
               <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#17181d]">{BRAND.productName}</h1>
-              <p className="mt-1 text-sm text-[#7a6f68]">{BRAND.tagline}</p>
+              <p className="mt-1 text-sm text-[#6f645d]">{BRAND.tagline}</p>
             </div>
           </div>
 
@@ -180,7 +180,7 @@ export default function Login() {
               <div>
                 <label htmlFor="email" className="mb-[0.6rem] block text-[0.8rem] font-bold text-[#4a4440]">이메일</label>
                 <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a6f68]" />
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6f645d]" />
                   <input
                     id="email"
                     type="email"
@@ -198,7 +198,7 @@ export default function Login() {
               <div>
                 <label htmlFor="password" className="mb-[0.6rem] block text-[0.8rem] font-bold text-[#4a4440]">비밀번호</label>
                 <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a6f68]" />
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6f645d]" />
                   <input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
@@ -214,7 +214,7 @@ export default function Login() {
                     type="button"
                     onClick={() => setShowPassword(previous => !previous)}
                     aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#7a6f68] transition hover:text-[#4a4440]"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#6f645d] transition hover:text-[#4a4440]"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -234,7 +234,7 @@ export default function Login() {
                 {loading ? '로그인 중…' : '로그인'}
               </button>
 
-              <p className="pt-1 text-center text-[13px] leading-5 text-[#7a6f68]">
+              <p className="pt-1 text-center text-[13px] leading-5 text-[#6f645d]">
                 아이디(이메일) 또는 비밀번호를 잊으셨다면 관리자에게 문의하세요.
               </p>
             </form>
