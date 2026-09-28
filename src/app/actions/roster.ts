@@ -100,16 +100,20 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
   if (!g.ok) return { ok: false, error: g.error }
   const name = normalizeName(input?.name)
   if (!name) return { ok: false, error: ERR_NAME }
-  const email = normalizeEmail(input.email)
-  if (!email.ok) return { ok: false, error: ERR_EMAIL }
-  if (!isAccessRoleOrNull(input.accessRole)) return { ok: false, error: ERR_ACCESS }
-  if (!isTeamIdList(input.teamIds)) return { ok: false, error: ERR_BAD_REQUEST }
   const personId = input.personId ?? null
   if (personId !== null && (typeof personId !== 'string' || !isUuidLike(personId))) return { ok: false, error: ERR_BAD_REQUEST }
+  // 편집(personId 있음)은 이메일을 검증하지도 보내지도 않는다 — id 분기의 RPC 는 email 을 쓰지 않고, 정규형이 안 되는 기존 행
+  // (x@acme.123 등)의 이름·권한·팀 편집이 막히면 안 된다(R2). 새 인물만 정규형으로 검증해 보낸다(P-1).
+  let person: Record<string, unknown> = { id: personId, display_name: name }
+  if (!personId) {
+    const email = normalizeEmail(input.email)
+    if (!email.ok) return { ok: false, error: ERR_EMAIL }
+    person = { display_name: name, email: email.email }
+  }
+  if (!isAccessRoleOrNull(input.accessRole)) return { ok: false, error: ERR_ACCESS }
+  if (!isTeamIdList(input.teamIds)) return { ok: false, error: ERR_BAD_REQUEST }
   if (input.active !== undefined && typeof input.active !== 'boolean') return { ok: false, error: '활성 여부가 올바르지 않습니다.' }
 
-  const person: Record<string, unknown> = { display_name: name, email: email.email }
-  if (personId) person.id = personId
   const member: Record<string, unknown> = {
     access_role: input.accessRole, role_label: trimOrNull(input.roleLabel), title: trimOrNull(input.title),
   }

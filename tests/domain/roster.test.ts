@@ -66,6 +66,31 @@ describe('validateDraft', () => {
   })
 })
 
+describe('명단 편집은 이메일을 다시 검증하지 않는다(R2)', () => {
+  // 이메일 칸은 편집에서 읽기 전용이고 id 분기의 RPC 는 email 을 쓰지 않는다 — 정규형이 안 되는 기존 행도 이름·권한·팀을 고칠 수 있어야 한다
+  it.each(['x@acme.123', 'x@corp_intra.com', 'admin@10.0.0.5'])('기존 이메일 %s 인 행을 편집하면 ok', (email) => {
+    const r = validateDraft({ ...draftFromMember(member({ email })), name: '새 이름', title: '수석' })
+    expect(r.ok).toBe(true)
+  })
+  it('새 인물 추가(personId 없음)는 여전히 검증한다', () => {
+    expect(validateDraft({ ...emptyDraft(), name: 'x', email: 'x@acme.123' })).toEqual({ ok: false, error: '올바른 이메일 형식이 아닙니다.' })
+  })
+  it('편집이어도 권한을 주려면 이메일이 있어야 한다', () => {
+    expect(validateDraft({ ...draftFromMember(member({ email: null })), accessRole: 'member' })).toEqual({ ok: false, error: ERR_ACCESS_NEEDS_EMAIL })
+  })
+})
+
+describe('명단 이메일 계약(R3)', () => {
+  it('findRosterByEmail 은 행 쪽도 정규화한다 — 유니코드로 저장된 옛 행을 퓨니코드 입력으로 찾는다(MP10)', () => {
+    const row = member({ email: 'kim@한글.kr' })
+    expect(findRosterByEmail([row], 'kim@xn--bj0bj06e.kr')).toBe(row)
+  })
+  it('validateDraft 는 한글 로컬 파트를 받는다 — 명단 로컬 파트는 초대보다 넓다(MP7·MP8)', () => {
+    const r = validateDraft({ ...emptyDraft(), name: '홍길동', email: '홍길동@acme.test' })
+    expect(r.ok && r.input.email).toBe('홍길동@acme.test')
+  })
+})
+
 describe('인물 이메일 정규형(P-1)', () => {
   const base = emptyDraft()
   it('validateDraft 는 호스트를 퓨니코드·끝 점 제거로 정규화한다', () => {

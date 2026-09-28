@@ -210,6 +210,22 @@ describe('canonicalInviteEmail(M-3) — 행·판정·발송·계정 이메일이
     expect(canonicalInviteEmail(`${'a'.repeat(60)}@${host}`)).toBe(`${'a'.repeat(60)}@${host}`)   // 254자
     expect(isAllowedInviteDomain(`${'a'.repeat(65)}@acme.test`, ['*'])).toBe(false)
   })
+  it('전체 길이는 정규형(퓨니코드 호스트) 기준이다 — 원문 254자 이하여도 정규형이 넘으면 null(R4)', () => {
+    const raw = `${'a'.repeat(64)}@${'가나다라마바사아자차카타파하.'.repeat(4)}kr`
+    const host = normalizeEmailHost(raw.slice(raw.indexOf('@') + 1))!
+    expect(raw.length).toBeLessThanOrEqual(254)
+    expect(64 + 1 + host.length).toBeGreaterThan(254)
+    expect(canonicalInviteEmail(raw)).toBeNull()
+  })
+  it('254자는 통과, 255자는 거부(ML1)', () => {
+    const host = `${'b'.repeat(62)}.${'c'.repeat(62)}.${'d'.repeat(62)}.test`   // 193자
+    const at254 = `${'a'.repeat(60)}@${host}`
+    const at255 = `${'a'.repeat(61)}@${host}`
+    expect(at254).toHaveLength(254)
+    expect(at255).toHaveLength(255)
+    expect(canonicalInviteEmail(at254)).toBe(at254)
+    expect(canonicalInviteEmail(at255)).toBeNull()
+  })
   it('괄호 없는 IPv4 호스트는 거부(L-2)', () => {
     expect(canonicalInviteEmail('alice@127.0.0.1')).toBeNull()
     expect(isAllowedInviteDomain('alice@127.0.0.1', ['*'])).toBe(false)

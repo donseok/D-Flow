@@ -64,6 +64,15 @@ describe('classifyRecipients', () => {
     expect(res.skipped).toEqual([])
   })
 
+  // R1 과 같은 뿌리 — 명단(참석자)은 정규형(퓨니코드) 주소다. 추가 입력의 유니코드·끝 점 표기도 같은 사람이면 한 번만 받는다.
+  it.each([
+    ['kim@xn--bj0bj06e.kr', 'kim@한글.kr'],
+    ['alice@acme.test', 'Alice@Acme.Test.'],
+  ])('참석자 %s 와 추가 입력 %s 는 같은 수신자라 한 번만 남긴다', (attendee, extra) => {
+    const res = classifyRecipients([att('김', attendee)], [extra])
+    expect(res.valid).toEqual([{ name: '김', email: attendee }])
+  })
+
   it('섞여 있어도 순서를 보존하며 분류한다', () => {
     const res = classifyRecipients([att('A', 'a@example.com'), att('B', null), att('C', 'c@example.com')])
     expect(res.valid.map(v => v.name)).toEqual(['A', 'C'])

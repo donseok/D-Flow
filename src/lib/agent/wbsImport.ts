@@ -3,6 +3,7 @@ import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { emailKey } from '@/lib/domain/email'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { emitNotification } from '@/lib/notify/emit'
@@ -305,14 +306,14 @@ export async function applyAssigneesAndOrders(
   const memberByEmail = new Map<string, string>()
   for (const m of (members ?? []) as Array<Record<string, unknown>>) {
     const email = personOf(m)?.email
-    if (email) memberByEmail.set(email.toLowerCase(), m.id as string)
+    if (email) memberByEmail.set(emailKey(email), m.id as string)   // 명단은 정규형 — 담당자도 같은 키(R1)
   }
   for (const ref of args.newRefs) {
     const itemId = args.idsByRef[ref]
     if (!itemId) continue
     const email = args.assigneeByRef[ref]
     if (!email) continue
-    const memberId = memberByEmail.get(email)
+    const memberId = memberByEmail.get(emailKey(email))
     if (!memberId) {
       // 계약(api-contract.md §2.6): 클라이언트는 bare id만 안다 — external_ref 조합은 서버 책임이므로
       // 응답도 bare id로 되돌린다(module 프리픽스 + "/" 제거).

@@ -379,6 +379,26 @@ describe('POST /wbs/import', () => {
     expect(json).toMatchObject({ ok: true, non_leaf_skipped: ['T-A'], orders_created: 0 })
   })
 
+  // R1 — 명단 이메일은 정규형(local@ASCII 호스트)이다. 담당자도 같은 규칙으로 키를 만들어야 IDN·끝 점 담당자가 빠지지 않는다.
+  it.each([
+    ['kim@한글.kr', 'kim@xn--bj0bj06e.kr'],
+    ['alice@acme.test.', 'alice@acme.test'],
+    ['Kim@XN--BJ0BJ06E.KR', 'kim@xn--bj0bj06e.kr'],
+  ])('담당자 %s 는 명단 %s 와 매칭된다 — unmatched 없음, work.assigned 발행(R1)', async (assignee, stored) => {
+    const { token, row } = patRow()
+    const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'WP-01', kind: 'wp', assignee })] }
+    useAdmin({
+      agent_runners: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }],
+      ...axes([PROJECT_ID], 2),
+      project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: stored } }] }],
+      wbs_items: [{ data: null }], // assignee_member_id update
+    }, [{ data: { upserted: 1, skipped: 0, ids: { 'MES/WP-01': 'id-wp' }, new_refs: ['MES/WP-01'] } }])
+    const json = await (await importPOST(post(body, token))).json()
+    expect(json).toMatchObject({ ok: true, unmatched_assignees: [] })
+    expect(mocks.emitNotification).toHaveBeenCalledWith(expect.objectContaining({ type: 'work.assigned', recipientMemberIds: ['member-1'] }))
+  })
+
   it('wp 노드는 dev_workflow 대상이 아니므로 갭 조회 자체가 스킵된다(taskRefs 가 구조적으로 빈다)', async () => {
     const { token, row } = patRow()
     const body = {

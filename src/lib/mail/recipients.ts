@@ -1,4 +1,5 @@
 import type { MeetingAttendeeInfo } from '@/lib/domain/types'
+import { emailKey } from '@/lib/domain/email'
 
 /** 발송 전 제외 사유. 'rejected' 는 전송 후 SMTP 응답으로만 붙는다(여기서는 나오지 않는다). */
 export type SkipReason = 'no_email' | 'invalid_email' | 'rejected'
@@ -37,7 +38,8 @@ export function parseExtraEmails(raw: string): string[] {
 
 /**
  * 참석자와 추가 수신 이메일을 발송 가능/제외로 가른다.
- * 이메일은 소문자·trim 으로 정규화하고, 같은 주소가 중복되면 처음 것만 남긴다
+ * 이메일은 소문자·trim 으로 정규화하고, 같은 주소가 중복되면 처음 것만 남긴다 — 중복 판정은 emailKey(명단 정규형:
+ * 퓨니코드 호스트·끝 점)로 해서 참석자 kim@xn--… 와 추가 입력 kim@한글.kr 이 두 번 받지 않는다
  * (같은 사람이 두 멤버 행으로 들어와 메일을 두 번 받는 일을 막는다 — 참석자로도 있고
  * 추가 입력으로도 적힌 주소가 두 번 받는 일도 같은 세트가 막는다).
  * 추가 이메일에는 사람 이름이 없다 — 결과 보고의 name 자리에는 주소 자체를 쓴다.
@@ -55,8 +57,8 @@ export function classifyRecipients(
     if (!raw) { skipped.push({ name: a.name, reason: 'no_email' }); continue }
     const email = raw.toLowerCase()
     if (!isValidEmail(email)) { skipped.push({ name: a.name, reason: 'invalid_email' }); continue }
-    if (seen.has(email)) continue
-    seen.add(email)
+    if (seen.has(emailKey(email))) continue
+    seen.add(emailKey(email))
     valid.push({ name: a.name, email })
   }
 
@@ -64,8 +66,8 @@ export function classifyRecipients(
     const email = raw.trim().toLowerCase()
     if (!email) continue // 빈 토큰은 보고할 이름조차 없다 — 조용히 버린다
     if (!isValidEmail(email)) { skipped.push({ name: email, reason: 'invalid_email' }); continue }
-    if (seen.has(email)) continue
-    seen.add(email)
+    if (seen.has(emailKey(email))) continue
+    seen.add(emailKey(email))
     valid.push({ name: email, email })
   }
   return { valid, skipped }

@@ -7,6 +7,8 @@ const { db, requireProjectAdmin, runWbsImport } = vi.hoisted(() => {
   const db = {
     // 테이블별 응답 큐 — agent 라우트 테스트와 동형
     queues: {} as Record<string, Array<{ data?: unknown; error?: { message: string } | null }>>,
+    // runWbsImport 실물을 돌리는 케이스(R1)만 쓰는 RPC 응답 큐
+    rpcQueue: [] as Array<{ data?: unknown; error?: { message: string } | null }>,
   }
   return {
     db,
@@ -22,7 +24,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => {
       const resp = (db.queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'eq', 'in', 'like', 'limit']) b[k] = () => b
+      for (const k of ['select', 'eq', 'in', 'like', 'limit', 'is', 'update']) b[k] = () => b
       // ensureAgentProject(applyWbsUpload 의 자동 활성 경로, 2026-08-24)의 insert — 결과를 안 쓰는
       // fire-and-forget 형 호출이라 성공만 흉내낸다. 활성 여부는 agent_projects 큐로 제어한다.
       b.insert = () => Promise.resolve({ data: null, error: null })
@@ -31,8 +33,12 @@ vi.mock('@/lib/supabase/admin', () => ({
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
       return b
     },
+    rpc: async () => db.rpcQueue.shift() ?? { data: null, error: null },
   }),
 }))
+// runWbsImport 실물 케이스(R1)의 부수효과 — 설정 시드 쓰기·알림은 목
+vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: vi.fn(async () => ({ ok: true, status: 'applied', revision: 2, commandId: 'c' })) }))
+vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn(async () => ({ ok: true })) }))
 // levels 정본은 해석기(R2) — 액션은 설정 표를 직접 읽지 않는다
 const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
@@ -83,6 +89,7 @@ const SERVER_LABELS = ['Phase', 'System', 'Subsystem', 'Task', 'SubTask']
 
 beforeEach(() => {
   db.queues = {}
+  db.rpcQueue = []
   requireProjectAdmin.mockReset()
   requireProjectAdmin.mockResolvedValue(ADMIN)
   runWbsImport.mockReset()
@@ -254,5 +261,27 @@ describe('applyWbsUpload', () => {
     const r = await applyWbsUpload(PID, PL_MD)
     expect(r.ok).toBe(false)
     expect(r.error).toContain('attach')
+  })
+})
+
+// R1 — 명단은 정규형(local@ASCII 호스트)으로 저장된다. 웹 업로드의 담당자(@kim@한글.kr·끝 점)도 같은 규칙으로 매칭돼야 한다.
+// 이 절만 runWbsImport 실물을 돌린다(API 경로와 같은 코어 — tests/agent/wbs-import.test.ts 가 API 입구를 본다).
+describe('applyWbsUpload — 담당자 매칭은 정규형으로(R1)', () => {
+  it.each([
+    ['kim@한글.kr', 'kim@xn--bj0bj06e.kr'],
+    ['alice@acme.test.', 'alice@acme.test'],
+  ])('담당자 %s 는 명단 %s 와 매칭된다', async (assignee, stored) => {
+    const actual = await vi.importActual<typeof import('@/lib/agent/wbsImport')>('@/lib/agent/wbsImport')
+    runWbsImport.mockImplementation(actual.runWbsImport as never)
+    const md = SKEL_MD.replace('TSK-AN-01: 분석서   w:5', `TSK-AN-01: 분석서   @${assignee} w:5`)
+    db.queues = {
+      agent_projects: [{ data: { enabled: true } }],                                  // ensureAgentProject — 이미 활성
+      wbs_items: [{ data: [] }, { data: null }, { data: [] }],                       // 깊이 선행 조회·담당자 반영·주문 대상(없음)
+      project_members: [{ data: [{ id: 'member-1', people: { email: stored, active: true } }] }],
+    }
+    db.rpcQueue = [{ data: { upserted: 1, skipped: 0, ids: { 'acme-skel/TSK-AN-01': 'id-t' }, new_refs: ['acme-skel/TSK-AN-01'] } }]
+    const r = await applyWbsUpload(PID, md)
+    expect(r).toMatchObject({ ok: true, upserted: 1 })
+    expect(r.unmatched).toEqual([])
   })
 })

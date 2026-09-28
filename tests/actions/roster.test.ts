@@ -74,11 +74,11 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
     expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
   })
 
-  it('기존 인물은 id 로 지목하고, 이메일은 소문자·공백 정리 후 넘긴다', async () => {
+  it('기존 인물은 id 로 지목하고 이메일은 보내지 않는다 — id 분기의 RPC 는 email 을 쓰지 않는다(R2)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
     admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
     await upsertRosterMember(P1, { ...INPUT, personId: PE, name: '  홍길동 ', email: ' Hong@Example.COM ', roleLabel: ' PM ' })
-    expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동', email: 'hong@example.com' })
+    expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동' })
     expect(admin.rpc.mock.calls[0]![1].p_member.role_label).toBe('PM')
   })
 
@@ -120,6 +120,20 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
     admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
     await upsertRosterMember(P1, { ...INPUT, email: raw })
     expect(admin.rpc.mock.calls[0]![1].p_person.email).toBe(stored)
+  })
+
+  it('정규형이 안 되는 기존 이메일(x@acme.123)의 인물도 편집은 RPC 까지 간다(R2)', async () => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    expect(await upsertRosterMember(P1, { ...INPUT, personId: PE, email: 'x@acme.123' })).toEqual({ ok: true, memberId: 'm-1' })
+    expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동' })
+  })
+
+  it('한글 로컬 파트(홍길동@example.com)는 명단에 넣을 수 있다 — 초대보다 넓다(R3)', async () => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    await upsertRosterMember(P1, { ...INPUT, email: '홍길동@example.com' })
+    expect(admin.rpc.mock.calls[0]![1].p_person.email).toBe('홍길동@example.com')
   })
 
   it('호스트가 형태가 아니면(URL 구분자 등) RPC 전에 거부한다(P-1)', async () => {

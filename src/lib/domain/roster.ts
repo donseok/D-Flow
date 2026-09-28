@@ -2,7 +2,7 @@
 // 검증 문구는 서버 액션(upsertRosterMember)과 같다 — 화면이 먼저 거르고, 액션·RPC 가 다시 본다.
 import type { RosterMember } from '@/lib/data/memberSelect'
 import { isWorkspaceAdminRole, type ProjectActorView } from '@/lib/domain/authz'
-import { canonicalEmail } from '@/lib/domain/email'
+import { canonicalEmail, emailKey } from '@/lib/domain/email'
 
 export type AccessRole = 'admin' | 'member'
 
@@ -57,8 +57,9 @@ export function validateDraft(d: RosterDraft): { ok: true; input: RosterInput } 
   const name = d.name.trim()
   if (!name) return { ok: false, error: '이름을 입력하세요.' }
   const raw = d.email.trim()
-  // 초대 행과 같은 정규형(local@ASCII 호스트) — 수락 RPC 가 인물을 이메일 정확 일치로 찾는다(P-1)
-  const email = raw ? canonicalEmail(raw) : null
+  // 편집(personId 있음)은 저장된 이메일을 다시 검증하지 않는다 — 이메일 칸은 읽기 전용이고 id 분기의 RPC 는 email 을 쓰지 않는다.
+  // 정규형이 안 되는 기존 행(x@acme.123 등)도 이름·권한·팀을 고칠 수 있어야 한다(R2). 새 인물만 정규형으로 검증한다(P-1).
+  const email = d.personId ? (raw || null) : raw ? canonicalEmail(raw) : null
   if (raw && !email) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
   if (d.accessRole !== null && !email) return { ok: false, error: ERR_ACCESS_NEEDS_EMAIL }
   return {
@@ -94,11 +95,10 @@ export function setPrimaryTeam(ids: readonly string[], id: string): string[] {
 
 /** 이미 명단에 있는 같은 이메일의 행 — '사람 추가' 가 그 사람의 행을 조용히 덮어쓰지 않게 먼저 막는다. */
 export function findRosterByEmail(rows: readonly RosterMember[], email: string): RosterMember | null {
-  // 정규형끼리 비교한다 — 유니코드 호스트로 입력해도 퓨니코드로 저장된 행을 찾는다. 정규형이 없으면(형식 오류) 소문자로.
-  const key = (s: string) => canonicalEmail(s) ?? s.trim().toLowerCase()
-  const k = key(email)
+  // 정규형끼리 비교한다(emailKey) — 유니코드 호스트로 입력해도 퓨니코드로 저장된 행을 찾고, 그 반대도 찾는다.
+  const k = emailKey(email)
   if (!k) return null
-  return rows.find(r => r.email != null && key(r.email) === k) ?? null
+  return rows.find(r => r.email != null && emailKey(r.email) === k) ?? null
 }
 
 /** 저장 버튼 활성 판정 — 초안이 원본 행과 다른가. 팀은 순서까지 본다(대표 팀 변경). */

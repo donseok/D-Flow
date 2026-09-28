@@ -26,3 +26,9 @@ export function canonicalEmail(raw: string): string | null {
   const host = normalizeEmailHost(email.slice(at + 1))
   return host ? `${email.slice(0, at)}@${host}` : null
 }
+
+/** 같은 사람인지 비교할 때 쓰는 키 — 정규형이 있으면 그것, 없으면(형식 밖 옛 값) trim·소문자. 명단 중복 찾기·가져오기 담당자
+ *  매칭·메일 수신자 중복 제거가 같은 규칙을 쓴다(명단은 정규형으로 저장되므로 유니코드·끝 점 입력도 같은 키가 된다). */
+export function emailKey(s: string): string {
+  return canonicalEmail(s) ?? s.trim().toLowerCase()
+}
