@@ -228,6 +228,7 @@ UI 라벨 정본(`src/lib/domain/stageLabels.ts`): `as`=할당됨 · `ip`=작업
 | 409 | `cancelled` | 사람이 중단한 주문(heartbeat·progress·completion). 워커는 재시도하지 말고 멈춘다 — 2026-09-19 |
 | 409 | `apply_failed` | WBS 반영 실패 |
 | 409 | `wbs_item_missing` | 항목 삭제된 주문 |
+| 422 | `config_invalid` | 단계 이름 설정 손상(`GET /wbs/structure`) — 관리자가 설정을 다시 저장 |
 
 ## 로컬 클라이언트 계약
 

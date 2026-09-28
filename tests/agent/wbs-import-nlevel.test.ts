@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
-import { toRpcNode, validateLevels, type LevelDecl } from '@/lib/agent/wbsImport'
+import { ERR_LEVEL_LABELS_INVALID, toRpcNode, validateLevels, type LevelDecl } from '@/lib/agent/wbsImport'
 
 /** 계약 v2.2(nlevel) — .claude/skills/dflow-wbs-nlevel/references/wbs-nlevel-md-contract.md §import 계약 v2.2 */
 
@@ -290,6 +290,23 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     expect(json.code).toBe('validation_failed')
     expect(json.error).toContain('단계 이름 설정이 손상되어 대조할 수 없습니다')
     expect(json.error).not.toContain('정본: 없음')
+    expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
+  })
+
+  it('단계 이름이 미설정(required_missing)이면 손상이 아니라 levels_mismatch·"정본: 없음" 안내(F-3a)', async () => {
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    const { admin } = useAdmin({ ...q })
+    const res = await importPOST(post({
+      project_id: PROJECT_ID, module: 'acme-op', levels: LEVELS, attach_ref: 'acme-skel/SYS-OP',
+      nodes: [{ ...BASE, id: 'SUB-1', level: 2 }],
+    }, token))
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('levels_mismatch')
+    expect(json.error).toContain('정본: 없음')
+    expect(json.error).not.toContain(ERR_LEVEL_LABELS_INVALID)
     expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
   })
 

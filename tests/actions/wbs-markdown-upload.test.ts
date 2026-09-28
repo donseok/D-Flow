@@ -44,6 +44,7 @@ vi.mock('@/lib/agent/wbsImport', async (orig) => ({
 import { previewWbsUpload, applyWbsUpload } from '@/app/actions/wbsMarkdown'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
 
 const PID = 'proj-1'
 const ADMIN = { ok: true as const, actor: { userId: 'u-admin', isSuperuser: false } }
@@ -147,6 +148,17 @@ describe('previewWbsUpload', () => {
     expect(r.errors?.join('\n')).not.toContain('정본: 없음')
   })
 
+  it('단계 이름이 미설정(required_missing)이면 손상 문구가 아니라 "정본: 없음" 안내(F-3a)', async () => {
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
+    db.queues = { wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }, { data: [] }] }
+    const r = await previewWbsUpload(PID, PL_MD)
+    expect(r.ok).toBe(true)
+    expect(r.levelsStatus).toBe('mismatch')
+    expect(r.canApply).toBe(false)
+    expect(r.errors?.some(e => e.includes('정본: 없음'))).toBe(true)
+    expect(r.errors).not.toContain(ERR_LEVEL_LABELS_INVALID)
+  })
+
   it('설정 조회 실패의 DB 원문은 응답에 싣지 않고 로그에만 남긴다(C2-F1)', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     cfg.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: relation "x" does not exist'))
@@ -219,6 +231,18 @@ describe('applyWbsUpload', () => {
     expect(r).toEqual({ ok: false, error: '업로드에 실패했습니다.' })
     expect(JSON.stringify(r)).not.toContain('boom')
     expect(logged).toContain('boom')
+  })
+
+  it('코어가 설정 조회 실패(ConfigUnavailableError)로 throw 하면 ERR_CONFIG_UNAVAILABLE(F-3b)', async () => {
+    db.queues = {
+      wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
+      agent_projects: [{ data: { enabled: true } }],
+    }
+    runWbsImport.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: relation "x" does not exist'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await applyWbsUpload(PID, PL_MD)
+    spy.mockRestore()
+    expect(r).toEqual({ ok: false, error: ERR_CONFIG_UNAVAILABLE })
   })
 
   it('코어 실패는 메시지 그대로 반환', async () => {

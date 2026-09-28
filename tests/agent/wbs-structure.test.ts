@@ -170,15 +170,16 @@ describe('GET /wbs/structure', () => {
     })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 'not-a-list' }))
+    spy.mockClear()   // 픽스처(해석기)가 남긴 '[settings] invalid' 로그를 비운다 — 아래 단언은 라우트 자신의 로그만 본다
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
-    const logged = JSON.stringify(spy.mock.calls)
+    const calls = [...spy.mock.calls]
     spy.mockRestore()
     expect(res.status).toBe(422)
     const json = await res.json()
     expect(json.code).toBe('config_invalid')
     expect(json.error).toBe(ERR_CONFIG_INVALID)
     expect(json.levels).toBeUndefined()
-    expect(logged).toContain('core.level_labels')
+    expect(calls).toContainEqual(['[wbs-structure] 설정 손상:', expect.objectContaining({ projectId: PROJECT_ID, key: 'core.level_labels' })])
   })
 
   it('work:read 스코프 없음 → 403 insufficient_scope', async () => {
