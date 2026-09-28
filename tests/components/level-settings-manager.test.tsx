@@ -5,15 +5,14 @@ import { createRoot, type Root } from 'react-dom/client'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const updateLevelSettings = vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true }))
+const updateProjectSettings = vi.fn()
 const refresh = vi.fn()
 
-vi.mock('@/app/actions/project', () => ({
-  updateLevelSettings: (...a: unknown[]) => updateLevelSettings(...(a as [])),
-}))
+vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
+import { ERR_CONFIG_CONFLICT } from '@/lib/settings/errors'
 
 function labelInputs(container: HTMLElement): HTMLInputElement[] {
   return Array.from(container.querySelectorAll<HTMLInputElement>('input[data-level-label]'))
@@ -24,8 +23,7 @@ describe('LevelSettingsManager', () => {
   let root: Root
 
   beforeEach(() => {
-    updateLevelSettings.mockClear()
-    updateLevelSettings.mockResolvedValue({ ok: true })
+    updateProjectSettings.mockReset().mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 2, rebased: false })
     refresh.mockClear()
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -39,7 +37,7 @@ describe('LevelSettingsManager', () => {
 
   function render(labels: string[] = ['Phase', 'Task', 'Activity']) {
     act(() => {
-      root.render(<LevelSettingsManager projectId="proj-1" levelLabels={labels} />)
+      root.render(<LevelSettingsManager projectId="proj-1" levelLabels={labels} revision={1} />)
     })
   }
 
@@ -74,17 +72,30 @@ describe('LevelSettingsManager', () => {
     })
     const saveBtn = container.querySelector<HTMLButtonElement>('button[data-save-levels]')!
     await act(async () => { saveBtn.click() })
-    expect(updateLevelSettings).toHaveBeenCalledWith('proj-1', ['Phase', 'System'])
+    expect(updateProjectSettings).toHaveBeenCalledWith('proj-1', expect.objectContaining({
+      expectedRevision: 1, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/), set: { 'core.level_labels': ['Phase', 'System'] }, unset: [],
+    }))
     expect(refresh).toHaveBeenCalled()
   })
 
   it('액션 실패면 에러를 보여주고 새로고침하지 않는다', async () => {
-    updateLevelSettings.mockResolvedValue({ ok: false, error: '기존 WBS 에 깊이 4단 항목이 있어 줄일 수 없습니다.' })
+    updateProjectSettings.mockResolvedValue({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID', commandId: 'c', error: '설정 값이 올바르지 않습니다',
+      fieldErrors: [{ key: 'core.level_labels', message: '기존 WBS 에 깊이 4단 항목이 있어 줄일 수 없습니다.' }], retryable: false })
     render(['Phase', 'Task', 'Activity'])
     const saveBtn = container.querySelector<HTMLButtonElement>('button[data-save-levels]')!
     await act(async () => { saveBtn.click() })
     expect(container.textContent).toContain('줄일 수 없습니다')
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('충돌(conflict)이면 충돌 문구를 보이고 최신 값을 다시 읽는다', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
+      latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
+    render(['Phase', 'Task'])
+    const saveBtn = container.querySelector<HTMLButtonElement>('button[data-save-levels]')!
+    await act(async () => { saveBtn.click() })
+    expect(container.textContent).toContain(ERR_CONFIG_CONFLICT)
+    expect(refresh).toHaveBeenCalled()
   })
 
   it('단계가 1개면 삭제 버튼이 없다 — 0단 상태를 만들 수 없다', () => {

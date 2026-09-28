@@ -61,7 +61,7 @@ describe('설정 화면 — 저장된 엑셀 양식 비우기', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})   // 손상 키는 해석기가 로그를 남긴다
     mocks.getProjectConfig.mockResolvedValue(config(excelProfile))
     const html = await render()
-    expect(mocks.ClearExcelProfileButton.mock.calls.at(-1)![0]).toEqual({ projectId: 'p1' })
+    expect(mocks.ClearExcelProfileButton.mock.calls.at(-1)![0]).toEqual({ projectId: 'p1', revision: 1 })   // revision = 설정 문서의 CAS 값
     expect(html).toContain('저장된 엑셀 양식이 있습니다')
   })
 

@@ -1,17 +1,23 @@
 'use client'
 
 // WBS 단계(레벨) 편집 — 라벨 배열이 곧 깊이(labels.length = max_depth).
-// 축소·중복·빈 라벨 검증의 정본은 서버 액션(updateLevelSettings → domain/levelSettings)이며
-// 여기서는 입력 UI 와 결과 표시만 한다. 실패를 조용히 삼키지 않는다(표시 = 로깅 원칙).
+// 축소·중복·빈 라벨 검증의 정본은 설정 엔진(registry parse + validateConfig)이며 여기서는 입력 UI 와 결과 표시만 한다.
+// 실패를 조용히 삼키지 않는다(표시 = 로깅 원칙). 충돌이면 문구를 보이고 최신 값을 다시 읽는다(비교 화면은 Phase C).
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
-import { updateLevelSettings } from '@/app/actions/project'
+import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 
-export function LevelSettingsManager({ projectId, levelLabels }: {
+export function messageOf(r: SettingsCommandResult): string | null {
+  if (r.ok) return null
+  return r.kind === 'invalid' ? (r.fieldErrors[0]?.message ?? r.error) : r.error
+}
+
+export function LevelSettingsManager({ projectId, levelLabels, revision }: {
   projectId: string
   levelLabels: string[]
+  revision: number
 }) {
   const router = useRouter()
   const [labels, setLabels] = useState<string[]>(levelLabels)
@@ -21,8 +27,10 @@ export function LevelSettingsManager({ projectId, levelLabels }: {
   function save() {
     setError(null)
     startTransition(async () => {
-      const r = await updateLevelSettings(projectId, labels)
-      if (!r.ok) { setError(r.error ?? '저장에 실패했습니다.'); return }
+      const r = await updateProjectSettings(projectId, {
+        expectedRevision: revision, commandId: crypto.randomUUID(), set: { 'core.level_labels': labels }, unset: [],
+      })
+      if (!r.ok) { setError(messageOf(r)); if (r.kind === 'conflict') router.refresh(); return }
       router.refresh()
     })
   }

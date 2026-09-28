@@ -4,12 +4,12 @@
 // 표는 프로젝트마다 하나다(2026-09-16). 카테고리별 if·doc 표를 없앴고 항목 credit_key 는 전이 계산에 쓰지 않는다.
 // 값은 핸들 위에서 바로 고치고, XX 는 승인으로만 100 이 되므로 입력 없이 자물쇠로 굳힌다.
 // 아래 미리보기는 지금 값으로 위임 Task 의 사건 흐름을 보여 준다(저장과 무관한 계산기).
-// 순서·간격·5 단위 제약의 정본은 도메인(clampCredit·validateStageCredits)이고 서버 액션(updateStageCredits)이
-// 다시 검사한다. 저장은 소급하지 않는다 — 이미 기록된 실적%는 그대로이고 다음 단계 전이부터 새 값이 쓰인다.
+// 순서·간격·5 단위 제약의 정본은 도메인(clampCredit·validateStageCredits)이고 설정 액션(updateProjectSettings,
+// workflow.stage_credits)이 다시 검사한다. 충돌이면 문구를 보이고 최신 값을 다시 읽는다(비교 화면은 Phase C). 저장은 소급하지 않는다 — 이미 기록된 실적%는 그대로이고 다음 단계 전이부터 새 값이 쓰인다.
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { updateStageCredits } from '@/app/actions/project'
+import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
 import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
 import {
@@ -20,6 +20,12 @@ import {
 type Status = ReturnType<typeof statusOf>
 /** 슬라이더 위 「현재 위치」 — 핸들 값이거나 사람이 직접 넣은 실적%. */
 type Cursor = CreditKey | 'manual'
+
+/** 설정 액션 결과 → 표시 문구(ok 면 null). LevelSettingsManager 와 같은 형태지만 서로 import 하지 않는다. */
+function messageOf(r: SettingsCommandResult): string | null {
+  if (r.ok) return null
+  return r.kind === 'invalid' ? (r.fieldErrors[0]?.message ?? r.error) : r.error
+}
 
 const KEY_LABEL: Record<CreditKey, DictKey> = {
   as: 'settings.creditKey_as', ip: 'settings.creditKey_ip', rw: 'settings.creditKey_rw',
@@ -63,11 +69,13 @@ function LockGlyph({ spin }: { spin: boolean }) {
   )
 }
 
-export function StageCreditSlider({ projectId, initial, editable }: {
+export function StageCreditSlider({ projectId, initial, editable, revision }: {
   projectId: string
-  /** project_settings.stage_credits — null 이면 코드 기본값으로 시작한다. */
+  /** workflow.stage_credits — null 이면 코드 기본값으로 시작한다. */
   initial: StageCredits | null
   editable: boolean
+  /** 설정 문서의 revision — 저장의 expectedRevision(CAS) */
+  revision: number
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -130,8 +138,10 @@ export function StageCreditSlider({ projectId, initial, editable }: {
     if (!v.ok) { setError(v.error); return }
     setError(null)
     startTransition(async () => {
-      const r = await updateStageCredits(projectId, v.credits)
-      if (!r.ok) { setError(r.error ?? t('settings.actionFailed')); return }
+      const r = await updateProjectSettings(projectId, {
+        expectedRevision: revision, commandId: crypto.randomUUID(), set: { 'workflow.stage_credits': v.credits }, unset: [],
+      })
+      if (!r.ok) { setError(messageOf(r) ?? t('settings.actionFailed')); if (r.kind === 'conflict') router.refresh(); return }
       setDirty(false)
       setSaved(true)
       router.refresh()

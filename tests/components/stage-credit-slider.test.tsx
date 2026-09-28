@@ -7,19 +7,20 @@ import { createRoot, type Root } from 'react-dom/client'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const updateStageCredits = vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true }))
+const updateProjectSettings = vi.fn()
 const refresh = vi.fn()
-vi.mock('@/app/actions/project', () => ({ updateStageCredits: (...a: unknown[]) => updateStageCredits(...(a as [])) }))
+vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
 
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
+import { ERR_CONFIG_CONFLICT } from '@/lib/settings/errors'
 
 describe('StageCreditSlider', () => {
   let container: HTMLDivElement
   let root: Root
   beforeEach(() => {
-    updateStageCredits.mockReset().mockResolvedValue({ ok: true })
+    updateProjectSettings.mockReset().mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 2, rebased: false })
     refresh.mockReset()
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
   })
@@ -29,7 +30,7 @@ describe('StageCreditSlider', () => {
   const handle = (key: string) => container.querySelector<HTMLElement>(`[data-credit-handle="${key}"]`)!
   const saveBtn = () => container.querySelector<HTMLButtonElement>('[data-credit-save]')
   async function mount(props: Partial<Parameters<typeof StageCreditSlider>[0]> = {}) {
-    await act(async () => root.render(<StageCreditSlider projectId="p1" initial={null} editable {...props} />))
+    await act(async () => root.render(<StageCreditSlider projectId="p1" initial={null} editable revision={1} {...props} />))
   }
   async function type(el: HTMLInputElement, value: string) {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -85,18 +86,31 @@ describe('StageCreditSlider', () => {
     await mount({ initial: { default: { as: 0, ip: 30, rw: 50, im: 80, xx: 100 } } })
     await type(input('rw'), '60')
     await act(async () => { saveBtn()!.click() })
-    expect(updateStageCredits).toHaveBeenCalledWith('p1', { default: { as: 0, ip: 30, rw: 60, im: 80, xx: 100 } })
+    expect(updateProjectSettings).toHaveBeenCalledWith('p1', expect.objectContaining({
+      expectedRevision: 1, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      set: { 'workflow.stage_credits': { default: { as: 0, ip: 30, rw: 60, im: 80, xx: 100 } } }, unset: [],
+    }))
     expect(container.querySelector('[data-credit-saved]')).not.toBeNull()
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('저장 실패는 서버 문구를 그대로 보인다', async () => {
-    updateStageCredits.mockResolvedValue({ ok: false, error: '권한 없음' })
+    updateProjectSettings.mockResolvedValue({ ok: false, kind: 'denied', code: '권한 없음', commandId: 'c', error: '권한 없음', retryable: false })
     await mount()
     await type(input('rw'), '60')
     await act(async () => { saveBtn()!.click() })
     expect(container.querySelector('[data-credit-error]')?.textContent).toBe('권한 없음')
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('충돌(conflict)이면 충돌 문구를 보이고 최신 값을 다시 읽는다', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
+      latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })
+    await mount()
+    await type(input('rw'), '60')
+    await act(async () => { saveBtn()!.click() })
+    expect(container.querySelector('[data-credit-error]')?.textContent).toBe(ERR_CONFIG_CONFLICT)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('미리보기는 지금 값으로 사건 흐름을 보여 주고, 행을 누르면 현재 위치가 옮겨간다', async () => {

@@ -6,7 +6,7 @@ import { Eraser } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { clearExcelProfile } from '@/app/actions/project'
+import { updateProjectSettings } from '@/app/actions/settings'
 import { ERR_ANON, ERR_DENIED, ERR_LOOKUP } from '@/lib/authz/errors'
 import type { DictKey } from '@/lib/i18n/dict'
 
@@ -15,8 +15,8 @@ const GUARD_KEY: Record<string, DictKey> = { [ERR_DENIED]: 'common.err.denied', 
 const failureKey = (error: string | undefined): DictKey => (error && Object.hasOwn(GUARD_KEY, error) ? GUARD_KEY[error] : 'common.err.tryAgain')
 
 /** 저장된 엑셀 양식 비우기(Task 1b) — 손상된 양식(내보내기 422)·WBS 보다 얕은 양식(400)으로 막힌 내보내기를 푼다.
- *  되돌리려면 마법사에서 다시 저장해야 하므로 확인 모달을 거친다. 실패 사유는 토스트로. */
-export function ClearExcelProfileButton({ projectId }: { projectId: string }) {
+ *  비우기는 설정 액션의 unset 이다. 되돌리려면 마법사에서 다시 저장해야 하므로 확인 모달을 거친다. 실패 사유는 토스트로. */
+export function ClearExcelProfileButton({ projectId, revision }: { projectId: string; revision: number }) {
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useLocale()
@@ -27,9 +27,11 @@ export function ClearExcelProfileButton({ projectId }: { projectId: string }) {
     if (busy) return
     setBusy(true)
     try {
-      const r = await clearExcelProfile(projectId)
+      const r = await updateProjectSettings(projectId, {
+        expectedRevision: revision, commandId: crypto.randomUUID(), set: {}, unset: ['wbs.excel_profile'],
+      })
       if (!r.ok) {
-        toast({ title: t('settings.clearExcelProfileFailed'), description: t(failureKey(r.error)), variant: 'error' })
+        toast({ title: t('settings.clearExcelProfileFailed'), description: t(r.kind === 'denied' ? failureKey(r.code) : 'common.err.tryAgain'), variant: 'error' })
         return
       }
       setOpen(false)

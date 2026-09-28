@@ -130,6 +130,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
   const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
   const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
+  // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
+  const revision = pc.ok ? pc.cfg.revision : -1
 
   // 담당 영역 — 조회 실패면 절을 그리지 않고 안내만 남긴다(빈 목록으로 위장하면 이미 있는 코드를 다시 만들려 든다).
   // 색인 상태는 service_role 카운트라 관리자 판정(위 redirect) 뒤에 읽는다 — 영역 조회와 같은 배치라 직렬 왕복은 늘지 않는다.
@@ -234,7 +236,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {hasProfile && (
           <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.clearExcelProfileDesc')}</p>
-            <ClearExcelProfileButton projectId={projectId} />
+            <ClearExcelProfileButton projectId={projectId} revision={revision} />
           </div>
         )}
         </SectionCard>
@@ -258,7 +260,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             <p className="text-sm font-semibold text-ink">{t(locale, 'settings.creditsTitle')}</p>
             <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.creditsDesc')}</p>
             {credits.ok
-              ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} />
+              ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} revision={revision} />
               : <ConfigLoadError error={credits.error} keyName={credits.key} locale={locale} />}
           </div>
         )}
@@ -406,7 +408,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
             </p>
             {labels.ok
-              ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} />
+              ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
               : <ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} />}
           </SectionCard>
         )}
