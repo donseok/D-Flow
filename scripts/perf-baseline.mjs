@@ -14,7 +14,7 @@
 // 사용:
 //   PERF_MEMBER_PASSWORD=… node scripts/perf-baseline.mjs seed
 //   BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD=… PERF_MEMBER_PASSWORD=… \
-//     node scripts/perf-baseline.mjs measure --base http://localhost:3000 --label sp2-phase-a --n 100
+//     node scripts/perf-baseline.mjs measure --base http://localhost:3101 --label sp2-phase-a --n 100
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServerClient } from '@supabase/ssr'
@@ -23,6 +23,7 @@ import { Pool } from 'pg'
 import { cookieHeader, localAppUrl, localClientEnv } from './lib/e2e.mjs'
 import { LOCAL_DSN, localAdminEnv } from './lib/targets.mjs'
 import { percentile } from './lib/perf.mjs'
+import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
 const PROJECT_NAME = 'PERF'
 const STAGES = 10
@@ -116,14 +117,15 @@ async function seed() {
     if (auErr || !adminUser) fail(`부트스트랩 관리자 조회 실패: ${auErr?.message ?? '행 없음'}`)
     const { data: created, error: insErr } = await admin.rpc('create_project_with_settings', {
       p_workspace_id: ws.id, p_name: PROJECT_NAME, p_start_date: null, p_end_date: null, p_description: null,
-      p_values: { 'core.level_labels': ['Phase', 'Task', 'Activity'], 'modules.enabled': ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'] },
-      p_copy_from: null, p_actor: adminUser.user_id, p_command_id: randomUUID(), p_schema_version: 1,
+      p_values: { 'core.level_labels': ['Phase', 'Task', 'Activity'], 'modules.enabled': [...PROJECT_TOGGLE_IDS] },
+      p_copy_from: null, p_actor: adminUser.user_id, p_command_id: randomUUID(), p_schema_version: SCRIPT_SCHEMA_VERSION,
     })
     if (insErr) fail(`프로젝트 생성 실패: ${insErr.message}`)
     projectId = created.project_id
-    const { error: bdErr } = await admin.from('projects').update({ base_date: '2026-01-05' }).eq('id', projectId)
-    if (bdErr) fail(`base_date 설정 실패: ${bdErr.message}`)
   }
+  // 기준일은 seed 마다 건다(멱등) — 생성 RPC 와 한 문장이 아니라, 생성 뒤 여기서 실패하고 재실행하면 기준일 없는 PERF 를 재사용하게 된다
+  const { error: bdErr } = await admin.from('projects').update({ base_date: '2026-01-05' }).eq('id', projectId)
+  if (bdErr) fail(`base_date 설정 실패: ${bdErr.message}`)
 
   const wbsRows = []
   for (let i = 1; i <= STAGES; i++) {

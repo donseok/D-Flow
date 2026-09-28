@@ -18,7 +18,7 @@ const run = (script: string, files: Record<string, string>, extraEnv: Record<str
   // 부모(vitest)의 NODE_ENV=test 는 Next 로더가 .env.local 을 건너뛰게 한다 — npm run dev 와 같은 조건으로 지운다.
   const env: NodeJS.ProcessEnv = { ...process.env }
   for (const k of ['NODE_ENV', 'NEXT_PUBLIC_SUPABASE_URL', '__NEXT_PROCESSED_ENV', 'PROD_REF', 'STAGING_REF', 'FORCE_PROD_DEV',
-    'BOOTSTRAP_EMAIL', 'BOOTSTRAP_PASSWORD']) delete env[k]
+    'BOOTSTRAP_EMAIL', 'BOOTSTRAP_PASSWORD', 'BOOTSTRAP_MODULES']) delete env[k]
   Object.assign(env, extraEnv)
   const r = spawnSync(process.execPath, [join(ROOT, script)], { cwd: dir, env, input: '', encoding: 'utf8', timeout: 20_000 })
   return { code: r.status, out: `${r.stdout}${r.stderr}` }
@@ -117,6 +117,14 @@ describe('dev-bootstrap.mjs — 접속 전 거절과 원인별 처방', () => {
     const r = boot({ '.env.local': LOCAL }, { BOOTSTRAP_EMAIL: 'a@example.com', BOOTSTRAP_PASSWORD: 'short7!' })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/8자 이상/)
+  })
+  it('BOOTSTRAP_MODULES 에 모르는 id 가 있으면 접속하기 전에(계정을 만들기 전에) 멈춘다', () => {
+    // 닿지 않는 로컬 포트 — 파싱이 접속 뒤로 밀리면 'fetch failed' 로 끝나 아래 문구가 나오지 않는다(실제 로컬 DB 에도 쓰지 않는다)
+    const unreachable = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54399\nSUPABASE_SERVICE_ROLE_KEY=svc\n'
+    const r = boot({ '.env.local': unreachable }, { BOOTSTRAP_EMAIL: 'a@example.com', BOOTSTRAP_PASSWORD: 'long-enough-8', BOOTSTRAP_MODULES: 'nope' })
+    expect(r.code).toBe(1)
+    expect(r.out).toMatch(/모르는 모듈 nope/)
+    expect(r.out).not.toMatch(/fetch failed|실패/)
   })
 })
 

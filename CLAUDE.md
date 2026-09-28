@@ -121,7 +121,7 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
-- **설정 쓰기는 RPC 한 길이다**(`apply_project_settings`·`apply_workspace_settings`·`create_project_with_settings`, 0012). 설정 4표(`project_settings`·`workspace_settings`·두 이력)와 `authz_events` 를 서버 코드가 직접 `from()` 하지 않는다 — 읽기는 `src/lib/settings/{projectConfig,workspaceConfig}.ts`, 쓰기는 `src/app/actions/settings.ts`·`src/lib/settings/write.ts`. `tests/invariants/settings-writes.test.ts` 가 잡는다. 액션 가드가 유일한 관문이다(RPC 는 등급을 보지 않는다).
+- **설정 쓰기는 RPC 한 길이다**(`apply_project_settings`·`apply_workspace_settings`·`create_project_with_settings`, 0012). 설정 4표(`project_settings`·`workspace_settings`·두 이력)와 `authz_events` 의 이름은 허용 파일에만 두고 그 접근은 읽기(select)뿐이다 — 읽기는 `src/lib/settings/{projectConfig,workspaceConfig}.ts`(해석기)·`src/lib/settings/history.ts`(이력), 쓰기는 `src/app/actions/settings.ts`·`src/app/actions/project.ts`(`createProject` 의 `create_project_with_settings`)·`src/lib/settings/write.ts`(가드 없는 내부 쓰기 — 호출자 닫힘). `tests/invariants/settings-writes.test.ts` 가 src·scripts 원문에서 허용 파일 밖의 표 이름(리터럴·조립 조각·scripts 의 SQL·REST), 허용 파일 안의 쓰기, 리터럴이 아닌 RPC 이름, 내부 쓰기 호출자를 잡는다(의도적 난독화는 못 잡는다). 액션 가드가 유일한 관문이다(RPC 는 등급을 보지 않는다).
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
   SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
 - 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 11곳(`tests/invariants/platform-guards.test.ts`)뿐이다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.

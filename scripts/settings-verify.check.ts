@@ -20,8 +20,9 @@ it('settings:verify — 모든 설정 행이 레지스트리 parse 를 통과하
   }
   const workspaces = await pool.query<{ workspace_id: string; values: Record<string, unknown> }>('select workspace_id, "values" from public.workspace_settings')
   for (const r of workspaces.rows) {
-    const { keys } = resolveKeys({ scope: 'workspace', id: r.workspace_id, values: r.values, defs: WORKSPACE_SETTINGS })
+    const { keys, unknownKeys } = resolveKeys({ scope: 'workspace', id: r.workspace_id, values: r.values, defs: WORKSPACE_SETTINGS })
     for (const [k, s] of Object.entries(keys)) if (s.status === 'invalid' || s.status === 'required_missing') problems.push(`workspace ${r.workspace_id} ${k}: ${s.status}${'error' in s ? ` — ${s.error}` : ''}`)
+    if (unknownKeys.length) console.warn(`workspace ${r.workspace_id} 미등록 키(무시됨): ${unknownKeys.join(', ')}`)
   }
   console.log(`settings:verify — 프로젝트 ${projects.rowCount}행, 워크스페이스 ${workspaces.rowCount}행, 문제 ${problems.length}건`)
   expect(problems).toEqual([])

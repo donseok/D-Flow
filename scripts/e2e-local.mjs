@@ -29,12 +29,14 @@ import { createClient } from '@supabase/supabase-js'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import {
-  A_ADMIN, B_ADMIN, ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
+  A_ADMIN, B_ADMIN, COPY_LEVEL_LABELS, ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
   cookieHeader, dispositionFilename, e2eRows, encodeActionArgs, findActionId, findTraces, inWorkspaceStorage, inviteInput,
   e2eBaseUrl, inviteTokenFromUrl, leafCodes, leakedIds, localClientEnv, meetingInput, minuteBodyPath, minuteInput, minuteSource,
   notFoundRendered, pageProblems, presentTexts, redactInviteTokens, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
+import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
+import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
 class Fail extends Error {}
@@ -242,15 +244,20 @@ async function main() {
   same('같은 명령 재전송은 duplicate', dup.result?.kind, 'duplicate')
   step('settings-update', { projectId: A.id, commandId: cmd1, revision: 2, history: hist[0], duplicate: dup.result?.kind })
 
-  // ── 2b. 복사 생성(스펙 §7.3 #2) — A 를 원본으로. 복사본 이력은 source copy 이고 copied_from 이 A 다. 라벨은 입력값.
+  // ── 2b. 복사 생성(스펙 §7.3 #2) — A 를 원본으로. 복사본 이력은 source copy·copied_from A·행위자 본인·revision 1 이다. 라벨은 입력값 —
+  // A 와 다른 라벨(COPY_LEVEL_LABELS)을 넣어 원본에서 복사된 것이 아님을 가른다. 키워드는 원본에서 복사된다.
   const copyName = `E2E A-copy ${stamp}`
   const cp = await admin.action('/projects', 'createProject', [{ workspaceId: wsA, name: copyName, startDate: null, endDate: null, description: null,
-    levelLabels: LEVEL_LABELS, copyFromProjectId: A.id, commandId: randomUUID() }])
+    levelLabels: COPY_LEVEL_LABELS, copyFromProjectId: A.id, commandId: randomUUID() }])
   if (!cp.result?.ok) throw new Fail(`복사 생성 실패: ${JSON.stringify(cp.result)}`)
-  const cpHist = rows('복사 이력', await admin.sb.from('project_settings_history').select('key,source,copied_from').eq('project_id', cp.result.projectId))
-  if (!cpHist.length || cpHist.some((h) => h.source !== 'copy' || h.copied_from !== A.id)) throw new Fail(`복사 이력이 copy/copied_from 이 아니다: ${JSON.stringify(cpHist)}`)
-  same('복사본 키워드', (await admin.sb.from('project_settings').select('values').eq('project_id', cp.result.projectId).single()).data.values['core.milestone_keywords'], ['kick-off', '오픈'])
-  step('create-copy', { projectId: cp.result.projectId, from: A.id, historyKeys: cpHist.map((h) => h.key).sort() })
+  const cpHist = rows('복사 이력', await admin.sb.from('project_settings_history').select('key,source,copied_from,changed_by,revision').eq('project_id', cp.result.projectId))
+  if (!cpHist.length || cpHist.some((h) => h.source !== 'copy' || h.copied_from !== A.id || h.changed_by !== me.id || Number(h.revision) !== 1)) {
+    throw new Fail(`복사 이력이 copy/copied_from A/행위자 본인/revision 1 이 아니다: ${JSON.stringify(cpHist)}`)
+  }
+  const cpSettings = rows('복사본 설정', await admin.sb.from('project_settings').select('values').eq('project_id', cp.result.projectId).single())
+  same('복사본 단계 라벨(입력값)', cpSettings.values['core.level_labels'], COPY_LEVEL_LABELS)
+  same('복사본 키워드(원본에서)', cpSettings.values['core.milestone_keywords'], ['kick-off', '오픈'])
+  step('create-copy', { projectId: cp.result.projectId, from: A.id, levelLabels: cpSettings.values['core.level_labels'], historyKeys: cpHist.map((h) => h.key).sort() })
 
   // ── 3. 프로젝트 팀 — 설정 화면(ProjectTeamsManager)의 addProjectTeam. 부트스트랩은 팀을 만들지 않는다(Task 8).
   for (const p of [A, B]) await admin.http('GET', `/p/${p.id}/settings`)
@@ -443,8 +450,8 @@ async function main() {
     const { data: wsRow, error: wsErr } = await svc.from('workspace_settings').select('revision').eq('workspace_id', wsB).single()
     if (wsErr) throw new Fail(`B 설정 행 조회 실패: ${wsErr.message}`)
     const { error: aErr } = await svc.rpc('apply_workspace_settings', { p_workspace_id: wsB, p_expected_revision: wsRow.revision, p_command_id: randomUUID(),
-      p_set: { 'modules.allowed': ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot', 'minutes', 'minutes_integration', 'portfolio', 'usage'] },
-      p_unset: [], p_actor: me.id, p_schema_version: 1, p_source: 'internal' })
+      p_set: { 'modules.allowed': [...BOOTSTRAP_MODULE_IDS] },   // 비core 13 — 목록은 bootstrap-modules.mjs 한 곳(레지스트리 대조 테스트)
+      p_unset: [], p_actor: me.id, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal' })
     if (aErr) throw new Fail(`B modules.allowed 기록 실패: ${aErr.message}`)
   }
   const C = await createProject(admin, wsB, 'C')

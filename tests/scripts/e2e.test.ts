@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import {
   INVITEE, LEVEL_LABELS, SP1_TEAMS, TEMPLATE_HEADER, TRACE_WORDS, actionResult, cookieHeader, dispositionFilename,
-  e2eBaseUrl, e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
+  COPY_LEVEL_LABELS, e2eBaseUrl, e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
   localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   ERR_DENIED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
   A_ADMIN, B_ADMIN, OUTSIDER, WS_TEAM, OTHER_WORKSPACE, inWorkspaceStorage, leakedIds, minuteBodyPath, minuteInput, minuteSource,
@@ -18,6 +18,7 @@ import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
 import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { isInviteToken, validateSignupInput } from '@/lib/domain/invites'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { settingDef } from '@/lib/settings/registry'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
 
@@ -476,5 +477,13 @@ describe('leakedIds·presentTexts — 교차 워크스페이스 누설 판정', 
     const html = '<main>E2E-MIN-PROJECT · E2E A 202609261700</main>'
     expect(presentTexts(html, ['E2E-MIN-PROJECT', 'E2E-MIN-NOPROJECT', 'E2E A 202609261700'])).toEqual(['E2E-MIN-PROJECT', 'E2E A 202609261700'])
     expect(presentTexts(html, [])).toEqual([])
+  })
+})
+
+describe('복사 생성 라벨(E2E 2b)', () => {
+  it('원본 A 의 라벨과 달라 "입력값을 썼다" 를 가를 수 있고, 레지스트리 parse 를 그대로 통과한다(저장값 = 입력값)', () => {
+    expect(COPY_LEVEL_LABELS).not.toEqual(LEVEL_LABELS)
+    expect(COPY_LEVEL_LABELS).toHaveLength(LEVEL_LABELS.length)
+    expect(settingDef('project', 'core.level_labels')!.parse([...COPY_LEVEL_LABELS])).toEqual({ ok: true, value: [...COPY_LEVEL_LABELS] })
   })
 })

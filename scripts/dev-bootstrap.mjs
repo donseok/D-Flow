@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { createClient } from '@supabase/supabase-js'
-import { parseBootstrapModules } from './lib/bootstrap-modules.mjs'
+import { bootstrapModulesAction, parseBootstrapModules } from './lib/bootstrap-modules.mjs'
+import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
 const MIN_PASSWORD = 8 // 앱 규칙(src/lib/domain/accounts.ts isValidPassword)과 같다
@@ -86,15 +87,21 @@ for (const [name, run] of steps) {
 }
 
 // 허용 모듈 — 계정을 만든 뒤 그 계정을 행위자로 apply_workspace_settings 를 부른다(설정 행은 워크스페이스 트리거가 만들었다).
+// 기존 워크스페이스에 다시 돌릴 때 BOOTSTRAP_MODULES 를 명시하지 않았고 값이 이미 있으면 덮지 않고 알린다(bootstrapModulesAction).
 {
-  const { data: row, error: rErr } = await admin.from('workspace_settings').select('revision').eq('workspace_id', ws.id).maybeSingle()
+  const { data: row, error: rErr } = await admin.from('workspace_settings').select('revision, values').eq('workspace_id', ws.id).maybeSingle()
   if (rErr || !row) await rollback('workspace_settings(조회)', rErr ?? new Error('설정 행이 없다 — 0012 가 적용됐는지 확인'))
-  const { data: applied, error: aErr } = await admin.rpc('apply_workspace_settings', {
-    p_workspace_id: ws.id, p_expected_revision: row.revision, p_command_id: randomUUID(),
-    p_set: { 'modules.allowed': parsed.modules }, p_unset: [], p_actor: uid, p_schema_version: 1, p_source: 'internal',
-  })
-  if (aErr) await rollback('modules.allowed', aErr)
-  console.log(`✓ 허용 모듈 ${parsed.modules.length}개 (revision ${applied.revision})`)
+  if (bootstrapModulesAction({ explicit: process.env.BOOTSTRAP_MODULES !== undefined, existingValues: row.values }) === 'keep') {
+    const cur = row.values['modules.allowed']
+    console.log(`· 허용 모듈은 그대로 둔다 — 워크스페이스 ${slug} 에 이미 ${Array.isArray(cur) ? `${cur.length}개` : '값(형식 이상 — npm run settings:verify 로 확인)'}가 있다. 바꾸려면 BOOTSTRAP_MODULES 를 준다`)
+  } else {
+    const { data: applied, error: aErr } = await admin.rpc('apply_workspace_settings', {
+      p_workspace_id: ws.id, p_expected_revision: row.revision, p_command_id: randomUUID(),
+      p_set: { 'modules.allowed': parsed.modules }, p_unset: [], p_actor: uid, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
+    })
+    if (aErr) await rollback('modules.allowed', aErr)
+    console.log(`✓ 허용 모듈 ${parsed.modules.length}개 (revision ${applied.revision})`)
+  }
 }
 
 console.log(`✓ 플랫폼 관리자 ${email} · 워크스페이스 ${slug}(${wsName}) 관리자 — npm run dev 후 로그인`)

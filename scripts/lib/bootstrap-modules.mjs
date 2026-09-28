@@ -14,3 +14,14 @@ export function parseBootstrapModules(raw) {
   if (unknown.length) return { ok: false, unknown: [...new Set(unknown)], allowed: [...BOOTSTRAP_MODULE_IDS] }
   return { ok: true, modules: [...new Set(parts)] }
 }
+
+/**
+ * 재실행 판단 — BOOTSTRAP_MODULES 를 env 로 명시했으면(빈 문자열 포함) 덮는다. 명시하지 않았고 워크스페이스에 이미 modules.allowed 가
+ * 있으면 그대로 둔다(설정 화면에서 좁힌 값을 기본값으로 되돌리지 않게). db:reset 뒤 첫 실행은 값이 없어 기본값을 기록한다.
+ * @param {{ explicit: boolean, existingValues: Record<string, unknown> | null | undefined }} input
+ * @returns {'write' | 'keep'}
+ */
+export function bootstrapModulesAction({ explicit, existingValues }) {
+  if (explicit) return 'write'
+  return Object.prototype.hasOwnProperty.call(existingValues ?? {}, 'modules.allowed') ? 'keep' : 'write'
+}

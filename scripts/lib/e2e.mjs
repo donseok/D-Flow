@@ -4,6 +4,8 @@ import { classifySupabaseUrl, detectEnvTarget, parseEnvFile } from './targets.mj
 
 /** 새 프로젝트의 단계 라벨(SP0 done_when 1번). 행의 아웃라인 깊이와 같아야 한다. */
 export const LEVEL_LABELS = ['단계', '작업', '활동']
+/** 복사 생성(2b)의 입력 라벨 — 원본 A(LEVEL_LABELS)와 달라야 저장값이 원본이 아니라 입력값임을 가를 수 있다(스펙 §7.5). */
+export const COPY_LEVEL_LABELS = ['국면', '과업', '세부']
 
 /** 양식 헤더 — src/lib/excel/template.ts TEMPLATE_HEADER 와 같아야 한다(테스트가 드리프트를 잡는다). */
 export const TEMPLATE_HEADER = ['코드', '업무명', '업무영역', '산출물', '시작일', '종료일', '가중치', '실적%', '담당']
