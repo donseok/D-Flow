@@ -35,14 +35,15 @@ const ERR_INIT = '연결 초기화 설정을 확인하세요.'
 
 /** 도메인 거부 문구는 실제 판정에 쓰인 목록으로 조립한다 — 하드코딩하면 다른 도메인을
  *  설정한 배포에서 관리자가 "무엇을 넣어야 하는지" 거짓 안내를 받는다.
- *  목록이 비어 있으면 어떤 주소도 통과할 수 없으므로 고칠 곳을 안내한다(fail-closed) — 워크스페이스 설정이 판정을 쥐었는데
- *  쓸 항목이 없으면(전부 형식 오류) 그 설정을, 아니면 env 를 가리킨다.
+ *  목록이 비어 있으면 어떤 주소도 통과할 수 없으므로 고칠 곳을 안내한다(fail-closed) — 워크스페이스 설정이 명시 [] 면 그 설정을,
+ *  env 가 있는데 쓸 항목이 없으면 env 를, 둘 다 없으면(제품 기본값) 둘 다를 가리킨다.
  *  ('*' 이면 도메인 검사를 통과하므로 이 문구에 '@*' 가 나올 일은 없다.) */
 function domainError(domains: string[], source: InviteDomainSource): string {
   if (domains.length === 0 && source === 'workspace') {
     return '워크스페이스 초대 허용 도메인 설정에 쓸 수 있는 항목이 없어 초대할 수 없습니다. 워크스페이스 관리자에게 설정 확인을 요청하세요.'
   }
-  if (domains.length === 0) return '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
+  if (domains.length === 0 && source === 'env') return '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
+  if (domains.length === 0) return '초대 허용 도메인이 없어 초대할 수 없습니다. 워크스페이스 설정에서 허용 도메인을 정하거나 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
   return `허용된 이메일 도메인(${domains.map((d) => `@${d}`).join(', ')})으로만 초대할 수 있습니다.`
 }
 

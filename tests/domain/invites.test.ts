@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
-  isInviteToken, normalizeInviteEmail, parseAllowedDomains, isAllowedInviteDomain, resolveInviteDomains, inviteDomainSource,
+  isInviteToken, normalizeInviteEmail, isAllowedInviteDomain, normalizeEmailHost,
   DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, normalizeInviteDays,
   inviteStatus, inviteStatusLabel, maskEmail, validateSignupInput,
   type InviteStateRow,
@@ -30,76 +30,6 @@ describe('normalizeInviteEmail', () => {
   })
 })
 
-describe('inviteDomainSource', () => {
-  it('워크스페이스 목록이 비어 있지 않으면 workspace, 비었거나 null 이면 env — resolveInviteDomains 와 같은 분기', () => {
-    expect(inviteDomainSource(['acme.test'])).toBe('workspace')
-    expect(inviteDomainSource(['*.broken'])).toBe('workspace')
-    expect(inviteDomainSource([])).toBe('env')
-    expect(inviteDomainSource(null)).toBe('env')
-  })
-})
-
-describe('resolveInviteDomains', () => {
-  it('워크스페이스 목록이 비어 있지 않으면 그것 — env 는 보지 않는다', () => {
-    expect(resolveInviteDomains(['Acme.test', '@corp.co.kr'], 'example.com')).toEqual(['acme.test', 'corp.co.kr'])
-    expect(resolveInviteDomains(['acme.test'], '*')).toEqual(['acme.test'])
-  })
-  it('워크스페이스 목록이 빈 배열이거나 행이 없으면(null) env', () => {
-    expect(resolveInviteDomains([], 'example.com, corp.co.kr')).toEqual(['example.com', 'corp.co.kr'])
-    expect(resolveInviteDomains(null, 'example.com')).toEqual(['example.com'])
-  })
-  it('둘 다 없으면 [] — 초대 불가(fail-closed)', () => {
-    expect(resolveInviteDomains(null, undefined)).toEqual([])
-    expect(resolveInviteDomains([], '')).toEqual([])
-  })
-  it('워크스페이스 목록이 있는데 항목이 전부 깨졌으면 [] — env 로 넓히지 않는다', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(resolveInviteDomains(['*.acme.test', 'not a host'], 'example.com')).toEqual([])
-    spy.mockRestore()
-  })
-})
-
-describe('parseAllowedDomains', () => {
-  it('쉼표·공백 구분, 소문자, 중복 제거', () => {
-    expect(parseAllowedDomains('Example.com, corp.co.kr')).toEqual(['example.com', 'corp.co.kr'])
-    expect(parseAllowedDomains('a.com  b.com\tc.com')).toEqual(['a.com', 'b.com', 'c.com'])
-    expect(parseAllowedDomains('a.com, A.COM')).toEqual(['a.com'])
-  })
-  it("'@' 접두는 떼어낸다", () => { expect(parseAllowedDomains('@example.com')).toEqual(['example.com']) })
-  it('미설정·공백은 빈 목록 — 제한 없음이 아니라 초대 불가(fail-closed)', () => {
-    expect(parseAllowedDomains(undefined)).toEqual([])
-    expect(parseAllowedDomains('')).toEqual([])
-    expect(parseAllowedDomains('  , ,\t')).toEqual([])
-  })
-  it("'*' 는 명시적 전체 허용이며 다른 값과 섞이면 '*' 만 남는다", () => {
-    expect(parseAllowedDomains('*')).toEqual(['*'])
-    expect(parseAllowedDomains('a.com, *')).toEqual(['*'])
-  })
-  it('끝의 점 하나는 벗겨낸다(FQDN 표기 흡수)', () => {
-    expect(parseAllowedDomains('Example.com.')).toEqual(['example.com'])
-    expect(parseAllowedDomains('example.com., corp.co.kr')).toEqual(['example.com', 'corp.co.kr'])
-  })
-  it("'*' 를 부분 포함한 항목(와일드카드 흔적)은 버린다 — '*' 는 단독일 때만 전체 허용", () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(parseAllowedDomains('*.example.com, corp.co.kr')).toEqual(['corp.co.kr'])
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('*.example.com'))
-    spy.mockRestore()
-  })
-  it('호스트명 형태가 아닌 항목은 버린다(점 없음·빈 라벨·허용되지 않는 문자)', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(parseAllowedDomains('nodothost, corp.co.kr')).toEqual(['corp.co.kr'])
-    expect(parseAllowedDomains('exa_mple.com, corp.co.kr')).toEqual(['corp.co.kr'])
-    expect(parseAllowedDomains('a..com, corp.co.kr')).toEqual(['corp.co.kr'])
-    expect(spy).toHaveBeenCalled()
-    spy.mockRestore()
-  })
-  it('전 항목이 깨졌으면 빈 목록 — 초대 불가(fail-closed)', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(parseAllowedDomains('*.evil.io, nodothost')).toEqual([])
-    spy.mockRestore()
-  })
-})
-
 describe('isAllowedInviteDomain', () => {
   it('빈 목록은 모두 거부', () => { expect(isAllowedInviteDomain('a@example.com', [])).toBe(false) })
   it("'*' 는 형식이 맞는 주소만 허용", () => {
@@ -126,6 +56,17 @@ describe('isAllowedInviteDomain', () => {
   it('끝의 점 하나는 이메일 호스트·허용 목록 양쪽에서 정규화한다', () => {
     expect(isAllowedInviteDomain('a@example.com.', ['example.com'])).toBe(true)
     expect(isAllowedInviteDomain('a@example.com', ['example.com.'])).toBe(true)
+  })
+})
+
+describe('isAllowedInviteDomain — 퓨니코드·정규화(D40)', () => {
+  it('메일 호스트를 저장값과 같은 규칙으로 바꿔 비교한다', () => {
+    expect(isAllowedInviteDomain('kim@한글.kr', ['xn--bj0bj06e.kr'])).toBe(true)
+    expect(isAllowedInviteDomain('kim@Example.COM.', ['example.com'])).toBe(true)
+    expect(isAllowedInviteDomain('kim@sub.example.com', ['example.com'])).toBe(false)   // 서브도메인 불허 유지
+    expect(isAllowedInviteDomain('kim@example.com', ['*'])).toBe(true)
+    expect(isAllowedInviteDomain('kim@example.com', [])).toBe(false)
+    expect(normalizeEmailHost('한글.kr')).toBe('xn--bj0bj06e.kr'); expect(normalizeEmailHost('bad host')).toBeNull()
   })
 })
 

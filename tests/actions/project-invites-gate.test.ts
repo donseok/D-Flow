@@ -122,6 +122,9 @@ function chainOf(result: QueryResult): Chain {
 
 const INSERTED_ID = 'inv-1'
 
+/** 워크스페이스 설정 행(0012 values 문서) */
+const wsRow = (values: Record<string, unknown>) => ({ workspace_id: 'ws-1', values, revision: 1, schema_version: 1 })
+
 /**
  * createProjectInvite 가 훑는 경로 전부를 흉내낸 admin 스텁 —
  * projects 조회 → profiles(계정 유무) → 중복 초대 조회 → insert → 초대자 조회.
@@ -132,7 +135,7 @@ function createClient(o: {
   blockingError?: { message: string } | null
   insertError?: { code?: string; message: string } | null
   profile?: QueryResult
-  /** workspace_settings 행(허용 도메인) — 기본은 행 없음(env 폴백) */
+  /** workspace_settings 행(허용 도메인) — 기본은 행 있음·값 없음(배포 기본값 env 로). 새 계약에서 행 0건은 fail-closed 다 */
   settings?: QueryResult
 } = {}) {
   const insert = vi.fn((payload: Record<string, unknown>) => chainOf({
@@ -152,7 +155,7 @@ function createClient(o: {
     if (table === 'projects') return chainOf({ data: { name: 'Acme Project', workspace_id: 'ws-1' }, error: null })
     if (table === 'profiles') return chainOf(o.profile ?? { data: null, error: null })
     if (table === 'workspace_settings') {
-      const chain = chainOf(o.settings ?? { data: null, error: null })
+      const chain = chainOf(o.settings ?? { data: wsRow({}), error: null })
       return { ...chain, select: () => ({ ...chain, eq: (...a: unknown[]) => { settingsEq(...a); return chain } }) }
     }
     if (table === 'project_invites') {
@@ -284,7 +287,7 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
 
   // SP2 §4.4 — 워크스페이스 설정이 비어 있지 않으면 env 보다 우선한다(넓히든 좁히든)
   it('워크스페이스 허용 도메인이 있으면 그것으로 판정하고 env 는 보지 않는다', async () => {
-    const c = createClient({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    const c = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': ['acme.test'] }), error: null } })
     createAdminClient.mockReturnValue(c.client as never)
     expect(await createProjectInvite(P1, VALID)).toEqual({
       ok: false, error: '허용된 이메일 도메인(@acme.test)으로만 초대할 수 있습니다.',
@@ -292,31 +295,48 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(c.settingsEq).toHaveBeenCalledWith('workspace_id', 'ws-1')
     expectRejectedBeforeWrites(c)
 
-    const c2 = createClient({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    const c2 = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': ['acme.test'] }), error: null } })
     createAdminClient.mockReturnValue(c2.client as never)
     send.mockResolvedValue({ rejected: [] })
     expect(await createProjectInvite(P1, { ...VALID, email: 'mina@acme.test' })).toMatchObject({ ok: true })
   })
 
-  // 워크스페이스 목록이 판정을 쥐었는데 쓸 항목이 없으면(전부 형식 오류) env 로 넓히지 않는다 — 안내도 env 가 아니라 설정을 가리킨다.
-  it('워크스페이스 허용 도메인이 전부 깨졌으면 워크스페이스 설정을 안내한다(env 문구 아님)', async () => {
-    const c = createClient({ settings: { data: { allowed_domains: ['*.acme.test', 'nohost'] }, error: null } })
+  // 저장값이 parse 를 못 지나면(invalid) 판정 불가 — env 로 넓히지 않고 중단한다(D40·fail-closed).
+  it('워크스페이스 허용 도메인이 손상되면 env 로 넓히지 않고 중단한다', async () => {
+    const c = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': ['*.acme.test', 'nohost'] }), error: null } })
     createAdminClient.mockReturnValue(c.client as never)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await createProjectInvite(P1, VALID)
     spy.mockRestore()
-    expect(res).toEqual({
+    expect(res).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    expectRejectedBeforeWrites(c)
+  })
+
+  // 명시 [] 는 '초대 불가'다 — 미설정만 배포 기본값(env)으로 간다(D40)
+  it('워크스페이스 허용 도메인이 명시 빈 배열이면 env 가 있어도 초대하지 않고 워크스페이스 설정을 안내한다', async () => {
+    const c = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': [] }), error: null } })
+    createAdminClient.mockReturnValue(c.client as never)
+    expect(await createProjectInvite(P1, VALID)).toEqual({
       ok: false,
       error: '워크스페이스 초대 허용 도메인 설정에 쓸 수 있는 항목이 없어 초대할 수 없습니다. 워크스페이스 관리자에게 설정 확인을 요청하세요.',
     })
     expectRejectedBeforeWrites(c)
   })
 
-  it('워크스페이스 허용 도메인이 빈 배열이면 env 로 판정한다', async () => {
-    const c = createClient({ settings: { data: { allowed_domains: [] }, error: null } })
+  it('워크스페이스 허용 도메인은 퓨니코드로 저장되고 한글 도메인 메일도 통과한다', async () => {
+    const c = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': ['xn--bj0bj06e.kr'] }), error: null } })
     createAdminClient.mockReturnValue(c.client as never)
     send.mockResolvedValue({ rejected: [] })
-    expect(await createProjectInvite(P1, VALID)).toMatchObject({ ok: true })
+    expect(await createProjectInvite(P1, { ...VALID, email: 'kim@한글.kr' })).toMatchObject({ ok: true })
+  })
+
+  it('워크스페이스 설정 행이 없으면(새 계약의 0건) env 로 폴백하지 않고 중단한다', async () => {
+    const c = createClient({ settings: { data: null, error: null } })
+    createAdminClient.mockReturnValue(c.client as never)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await createProjectInvite(P1, VALID)).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expectRejectedBeforeWrites(c)
   })
 
   it('워크스페이스 설정 조회가 실패하면 env 로 폴백하지 않고 발급을 중단한다(fail-closed)', async () => {
@@ -328,18 +348,21 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expectRejectedBeforeWrites(c)
   })
 
-  const FAIL_CLOSED_MSG = '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
+  // 워크스페이스 값도 env 도 없으면 제품 기본값 [] — 고칠 곳 둘을 모두 안내한다
+  const FAIL_CLOSED_MSG = '초대 허용 도메인이 없어 초대할 수 없습니다. 워크스페이스 설정에서 허용 도메인을 정하거나 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
+  // env 가 있는데 쓸 항목이 없으면(공백·쉼표뿐 → 빈 목록) 배포 기본값이 [] 로 잡힌다 — env 를 가리킨다
+  const ENV_EMPTY_MSG = '초대 허용 도메인이 설정되지 않아 초대할 수 없습니다. 운영자에게 INVITE_ALLOWED_DOMAINS 설정을 요청하세요.'
   it.each([
-    ['미설정', undefined],
-    ['빈 문자열', ''],
-    ['공백·쉼표뿐', '  , '],
-  ])('환경변수가 %s 이면 어떤 주소도 초대하지 않고 설정을 안내한다(fail-closed)', async (_label, value) => {
+    ['미설정', undefined, FAIL_CLOSED_MSG],
+    ['빈 문자열', '', FAIL_CLOSED_MSG],
+    ['공백·쉼표뿐', '  , ', ENV_EMPTY_MSG],
+  ])('환경변수가 %s 이면 어떤 주소도 초대하지 않고 설정을 안내한다(fail-closed)', async (_label, value, msg) => {
     if (value === undefined) delete process.env.INVITE_ALLOWED_DOMAINS
     else process.env.INVITE_ALLOWED_DOMAINS = value
     const c = createClient()
     createAdminClient.mockReturnValue(c.client as never)
     const res = await createProjectInvite(P1, { ...VALID, email: 'someone@example.com' })
-    expect(res).toEqual({ ok: false, error: FAIL_CLOSED_MSG })
+    expect(res).toEqual({ ok: false, error: msg })
     expectRejectedBeforeWrites(c)
   })
 

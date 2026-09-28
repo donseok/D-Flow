@@ -28,61 +28,34 @@ function stripTrailingDot(s: string): string {
   return s.length > 1 && s.endsWith('.') && !s.endsWith('..') ? s.slice(0, -1) : s
 }
 
-/** 허용 도메인 목록 파싱(쉼표·공백 구분). 미설정·공백이면 [] — 초대 불가(fail-closed).
- *  '*' 가 하나라도 있으면 ['*']. 형태가 깨진 항목(호스트명 아님·'*' 를 부분 포함)은 조용히
- *  반영하지 않고 버린다 — 그대로 두면 거부 문구가 "이런 도메인도 되는 줄" 오해를 부르고,
- *  '*.example.com' 같은 항목은 와일드카드 서브도메인 허용처럼 보이지만 실제로는 리터럴
- *  비교라 절대 매치되지 않는다(무의미한 설정을 조용히 삼키지 않는다). */
-export function parseAllowedDomains(raw: string | undefined, source = 'INVITE_ALLOWED_DOMAINS'): string[] {
-  const out: string[] = []
-  for (const part of (raw ?? '').split(/[\s,]+/)) {
-    // '@example.com' 처럼 적어도 받아들인다(설정 실수가 잦은 형태).
-    const trimmed = part.trim().toLowerCase().replace(/^@/, '')
-    if (!trimmed) continue
-    if (trimmed === ANY_DOMAIN) return [ANY_DOMAIN]
-    if (trimmed.includes(ANY_DOMAIN)) {
-      console.error(`[invites] ${source} 항목을 건너뜁니다('*' 는 단독일 때만 전체 허용): ${trimmed}`)
-      continue
-    }
-    const d = stripTrailingDot(trimmed)
-    if (!HOSTNAME_RE.test(d)) {
-      console.error(`[invites] ${source} 항목을 건너뜁니다(호스트명 형태가 아님): ${trimmed}`)
-      continue
-    }
-    if (!out.includes(d)) out.push(d)
+/** 허용 도메인의 출처 — 거부 문구가 고칠 곳을 가리키는 데 쓴다. workspace = 저장값, env = 배포 기본값(INVITE_ALLOWED_DOMAINS),
+ *  product = 둘 다 없음(제품 기본값 []). */
+export type InviteDomainSource = 'workspace' | 'env' | 'product'
+
+/** 메일 호스트를 저장값의 규칙(소문자·끝 점 제거·퓨니코드 — settings/defs/workspace.ts normalizeDomain)으로 바꾼다. 형태가 아니면 null */
+export function normalizeEmailHost(host: string): string | null {
+  const v = stripTrailingDot(host.trim().toLowerCase())
+  if (!v) return null
+  try {
+    const h = new URL(`http://${v}`).hostname   // WHATWG URL 파서 — IDN 을 퓨니코드로 바꾼다
+    return HOSTNAME_RE.test(h) ? h : null
+  } catch {
+    return null
   }
-  return out
-}
-
-export type InviteDomainSource = 'workspace' | 'env'
-
-/** 허용 도메인 목록을 어느 쪽이 정하는가 — resolveInviteDomains 의 분기 그 자체. 거부 문구가 고칠 곳(워크스페이스 설정 / env)을 가리키는 데 쓴다. */
-export function inviteDomainSource(workspaceDomains: string[] | null): InviteDomainSource {
-  return workspaceDomains && workspaceDomains.length > 0 ? 'workspace' : 'env'
-}
-
-/** 초대 허용 도메인 결정(SP2 §4.4). 워크스페이스 설정(workspace_settings.allowed_domains)이 비어 있지 않으면 그것,
- *  비었거나 행이 없으면(null) env INVITE_ALLOWED_DOMAINS. 워크스페이스 목록도 parseAllowedDomains 규칙으로 거른다 —
- *  목록이 있는데 항목이 전부 깨졌으면 [](초대 불가)이지 env 로 넓히지 않는다(관리자가 좁히려던 설정을 조용히 무시하지 않는다).
- *  조회 실패는 여기 오기 전에 호출부가 중단한다(null 은 '행 없음'만 뜻한다). */
-export function resolveInviteDomains(workspaceDomains: string[] | null, envValue: string | undefined): string[] {
-  if (inviteDomainSource(workspaceDomains) === 'workspace') {
-    return parseAllowedDomains((workspaceDomains ?? []).join(' '), 'workspace_settings.allowed_domains')
-  }
-  return parseAllowedDomains(envValue)
 }
 
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —
  *  호출부가 isValidEmail 을 먼저 돌렸는지에 기대지 않는다(redeem 재검사 등 새 호출부가 생겨도
  *  안전). 형식이 깨졌거나 '@' 가 둘 이상이면 무조건 거부. 빈 목록은 전부 거부.
  *  '@' 뒤 전체가 목록의 한 항목과 정확히 같아야 한다 — 'a.example.com' 같은 서브도메인은
- *  불허(사칭 차단). */
+ *  불허(사칭 차단). 양쪽을 같은 규칙(normalizeEmailHost — 소문자·끝 점·퓨니코드)으로 바꿔 비교한다(D40). */
 export function isAllowedInviteDomain(email: string, domains: string[]): boolean {
   const at = email.lastIndexOf('@')
   if (!isValidEmail(email) || email.indexOf('@') !== at) return false
   if (domains.includes(ANY_DOMAIN)) return true
-  const host = stripTrailingDot(email.slice(at + 1).toLowerCase())
-  return domains.some((d) => stripTrailingDot(d.trim().toLowerCase().replace(/^@/, '')) === host)
+  const host = normalizeEmailHost(email.slice(at + 1))
+  if (!host) return false
+  return domains.some((d) => normalizeEmailHost(d.replace(/^@/, '')) === host)
 }
 
 export const DEFAULT_INVITE_DAYS = 7

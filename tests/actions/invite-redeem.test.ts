@@ -49,9 +49,12 @@ interface Fixtures {
   createUser?: { data: unknown; error: unknown }
   /** 미리보기의 팀 이름 조회(teams.in('id', team_ids)). */
   teams?: { data: unknown; error: unknown }
-  /** workspace_settings 행(허용 도메인) — 기본은 행 없음(env 폴백). */
+  /** workspace_settings 행(허용 도메인) — 기본은 행 있음·값 없음(배포 기본값 env 로). 새 계약에서 행 0건은 fail-closed 다. */
   settings?: { data: unknown; error: unknown }
 }
+
+/** 워크스페이스 설정 행(0012 values 문서) */
+const wsRow = (values: Record<string, unknown>) => ({ workspace_id: WS_ID, values, revision: 1, schema_version: 1 })
 
 /** supabase 체인 모킹 + 호출 인자 기록. 예상 밖 테이블·메서드 접근은 즉시 실패시킨다. */
 function makeAdmin(f: Fixtures = {}) {
@@ -110,7 +113,7 @@ function makeAdmin(f: Fixtures = {}) {
           select: () => ({
             eq: (col: string, v: unknown) => {
               spies.settingsEq(col, v)
-              return { maybeSingle: async () => f.settings ?? { data: null, error: null } }
+              return { maybeSingle: async () => f.settings ?? { data: wsRow({}), error: null } }
             },
           }),
         }
@@ -211,7 +214,7 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
   // SP2 §4.4 — 초대의 워크스페이스 설정이 비어 있지 않으면 env 보다 우선한다
   it('초대 워크스페이스의 허용 도메인이 좁혀지면 env 가 허용해도 막는다', async () => {
     getSession.mockResolvedValue(USER)
-    const spies = makeAdmin({ settings: { data: { allowed_domains: ['acme.test'] }, error: null } })
+    const spies = makeAdmin({ settings: { data: wsRow({ 'invites.allowed_domains': ['acme.test'] }), error: null } })
     expect(await redeemInvite(TOKEN)).toEqual({ ok: false, error: '만료되었거나 사용할 수 없는 초대입니다.' })
     expect(spies.settingsEq).toHaveBeenCalledWith('workspace_id', WS_ID)
     expect(spies.rpc).not.toHaveBeenCalled()
@@ -220,7 +223,7 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
   it('워크스페이스 허용 도메인이 있으면 env 가 막아도 그것으로 통과한다', async () => {
     getSession.mockResolvedValue(USER)
     process.env.INVITE_ALLOWED_DOMAINS = 'other.com'
-    const spies = makeAdmin({ settings: { data: { allowed_domains: ['example.com'] }, error: null } })
+    const spies = makeAdmin({ settings: { data: wsRow({ 'invites.allowed_domains': ['example.com'] }), error: null } })
     expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
     expect(spies.rpc).toHaveBeenCalled()
   })
