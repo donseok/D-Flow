@@ -4,14 +4,13 @@ import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadInviteDomains } from '@/lib/data/inviteDomains'
 import { teamsForProjectSync } from '@/lib/teams/master'
-import { isValidEmail } from '@/lib/domain/validate'
 import { ACCESS_ROLE, isAdminAccessRole } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import {
-  DEFAULT_INVITE_DAYS, inviteStatus, isAllowedInviteDomain, normalizeInviteDays,
+  DEFAULT_INVITE_DAYS, inviteStatus, isAllowedInviteDomain, isValidInviteEmail, normalizeInviteDays,
   normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
 } from '@/lib/domain/invites'
 
@@ -213,7 +212,8 @@ export async function createProjectInvite(
   if (!input || typeof input !== 'object') return { ok: false, error: ERR_EMAIL }
   if (accessRole !== null && accessRole !== ACCESS_ROLE.admin && accessRole !== ACCESS_ROLE.member) return { ok: false, error: ERR_ACCESS }
   const email = normalizeInviteEmail(typeof input.email === 'string' ? input.email : '')
-  if (!isValidEmail(email)) return { ok: false, error: ERR_EMAIL }
+  // 형식 + 로컬 파트 specials 거부 — 발송기가 다른 수신자로 다시 읽는 주소를 행으로 남기지 않는다
+  if (!isValidInviteEmail(email)) return { ok: false, error: ERR_EMAIL }
   // 팀은 이 프로젝트에서 고를 수 있는 활성 팀만(resolveTeamsForProject 규칙) — 트리거가 워크스페이스 범위를 다시 본다.
   if (!Array.isArray(input.teamIds)) return { ok: false, error: ERR_TEAM }
   const selectable = teamsForProjectSync(projectId).filter(t => t.active)

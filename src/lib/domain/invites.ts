@@ -34,15 +34,28 @@ export function normalizeEmailHost(host: string): string | null {
   return v ? toAsciiHostname(v) : null
 }
 
+/** 로컬 파트에 오면 안 되는 문자 — RFC 5322 specials 와 공백·제어 문자. 메일 발송기가 주소를 다시 해석해 초대 행과 다른
+ *  수신자로 보낸다('bob>,<victim@acme.test' → victim@acme.test). 점·더하기 태그 같은 보통 주소는 통과한다. */
+const LOCAL_PART_FORBIDDEN = /[()<>[\]:;,"\\\s\p{Cc}]/u
+
+/** 초대에 쓸 수 있는 주소 — 형식(isValidEmail) + '@' 하나 + 로컬 파트에 specials·공백·제어 문자 없음.
+ *  발급(createProjectInvite)과 도메인 판정(isAllowedInviteDomain → 소비 재검사)이 같이 쓴다. */
+export function isValidInviteEmail(email: string): boolean {
+  const at = email.lastIndexOf('@')
+  if (!isValidEmail(email) || email.indexOf('@') !== at) return false
+  return !LOCAL_PART_FORBIDDEN.test(email.slice(0, at))
+}
+
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —
  *  호출부가 isValidEmail 을 먼저 돌렸는지에 기대지 않는다(redeem 재검사 등 새 호출부가 생겨도
  *  안전). 형식이 깨졌거나 '@' 가 둘 이상이면 무조건 거부. 빈 목록은 전부 거부.
  *  '@' 뒤 전체가 목록의 한 항목과 정확히 같아야 한다 — 'a.example.com' 같은 서브도메인은
  *  불허(사칭 차단). 양쪽을 같은 규칙(normalizeEmailHost — 소문자·끝 점·퓨니코드)으로 바꿔 비교한다(D40). */
 export function isAllowedInviteDomain(email: string, domains: string[]): boolean {
+  if (!isValidInviteEmail(email)) return false
+  // '*' 는 단독일 때만 제한 없음 — 섞인 목록('*' + 도메인)은 손상이지 전체 허용이 아니다(저장 parse 도 섞이면 거부한다)
+  if (domains.length === 1 && domains[0] === ANY_DOMAIN) return true
   const at = email.lastIndexOf('@')
-  if (!isValidEmail(email) || email.indexOf('@') !== at) return false
-  if (domains.includes(ANY_DOMAIN)) return true
   const host = normalizeEmailHost(email.slice(at + 1))
   if (!host) return false
   return domains.some((d) => normalizeEmailHost(d.replace(/^@/, '')) === host)

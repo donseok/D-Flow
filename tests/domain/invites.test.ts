@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isInviteToken, normalizeInviteEmail, isAllowedInviteDomain, normalizeEmailHost,
+  isInviteToken, normalizeInviteEmail, isAllowedInviteDomain, normalizeEmailHost, isValidInviteEmail,
   DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, normalizeInviteDays,
   inviteStatus, inviteStatusLabel, maskEmail, validateSignupInput,
   type InviteStateRow,
@@ -88,6 +88,49 @@ describe('isAllowedInviteDomain — 퓨니코드·정규화(D40)', () => {
     expect(normalizeEmailHost('acme.test.')).toBe('acme.test')
     expect(isAllowedInviteDomain('alice@acme.test.', ['acme.test'])).toBe(true)
     expect(isAllowedInviteDomain('alice@acme.test..', ['acme.test'])).toBe(false)
+  })
+})
+
+describe('IDN 라벨 왕복 검사(F3A-1) — 바뀐 라벨은 xn-- + punycode(입력) 일 때만', () => {
+  // URL 파서의 UTS46 매핑이 입력과 다른 문자열을 같은 퓨니코드로 만들면 판정 호스트와 발송 호스트가 갈린다
+  it.each([
+    ['전각 섞인 IDN', 'alice@\u0430\uff43\uff4d\uff45.test', ['xn--cme-5cd.test']],
+    ['NFD(u + 결합 분음)', 'alice@bu\u0308cher.test', ['xn--bcher-kva.test']],
+    ['IDN + CGJ', 'alice@\u0430cme\u034f.test', ['xn--cme-5cd.test']],
+    ['체로키 대문자(소문자화가 U+AB70 으로 바꾸고 매핑이 되돌림)', 'alice@\u13a0cme.test', ['xn--cme-t8p.test']],
+  ])('%s 는 거부한다', (_label, email, domains) => {
+    expect(isAllowedInviteDomain(email, domains)).toBe(false)
+  })
+  it.each([
+    ['한글', 'kim@한글.kr', ['xn--bj0bj06e.kr']],
+    ['일본어', 'kim@日本.jp', ['xn--wgv71a.jp']],
+    ['NFC bücher', 'kim@b\u00fccher.test', ['xn--bcher-kva.test']],
+    ['faß(비전이 처리)', 'kim@fa\u00df.test', ['xn--fa-hia.test']],
+    ['키릴 а', 'kim@\u0430cme.test', ['xn--cme-5cd.test']],
+    ['직접 쓴 xn--', 'kim@xn--cme-5cd.test', ['xn--cme-5cd.test']],
+  ])('%s 는 그대로 통과한다', (_label, email, domains) => {
+    expect(isAllowedInviteDomain(email, domains)).toBe(true)
+  })
+})
+
+describe('isValidInviteEmail — 로컬 파트 specials(F3A-2)', () => {
+  // nodemailer 가 주소를 다시 해석해 초대 행과 다른 수신자로 보낸다('bob>,<victim@acme.test' → victim@acme.test)
+  it.each(['bob>,<victim@acme.test', 'a,b@acme.test', 'x<evil.example>y@acme.test', '"a b"@acme.test', 'a;b@acme.test',
+    'a:b@acme.test', 'a(b)@acme.test', 'a[b]@acme.test', 'a\\b@acme.test', 'a\u0007b@acme.test', 'a@b@acme.test'])('%s 는 거부한다', (email) => {
+    expect(isValidInviteEmail(email)).toBe(false)
+    expect(isAllowedInviteDomain(email, ['acme.test'])).toBe(false)
+  })
+  it('보통 주소(점·더하기 태그)는 통과한다', () => {
+    expect(isValidInviteEmail('alice.b+tag@acme.test')).toBe(true)
+    expect(isAllowedInviteDomain('alice.b+tag@acme.test', ['acme.test'])).toBe(true)
+  })
+})
+
+describe("'*' 는 단독일 때만 전체 허용(F3A-3)", () => {
+  it('섞인 목록의 * 는 전체 허용이 아니다', () => {
+    expect(isAllowedInviteDomain('alice@evil.example', ['*', 'acme.test'])).toBe(false)
+    expect(isAllowedInviteDomain('alice@acme.test', ['*', 'acme.test'])).toBe(true)
+    expect(isAllowedInviteDomain('alice@evil.example', ['*'])).toBe(true)
   })
 })
 

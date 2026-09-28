@@ -391,6 +391,13 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(insertedPayload(insert).email).toBe('mina.park@example.com')
   })
 
+  // F3A-2 — 로컬 파트의 specials 는 메일 발송기가 다른 수신자로 다시 읽는다('bob>,<victim@acme.test' → victim)
+  it.each(['bob>,<victim@example.com', 'a,b@example.com', 'x<evil.example>y@example.com'])('로컬 파트에 specials 가 있는 %s 는 DB 전에 거부한다', async (email) => {
+    const res = await createProjectInvite(P1, { ...VALID, email })
+    expect(res).toEqual({ ok: false, error: '이메일 형식을 확인해 주세요.' })
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
   it('이메일 형식이 깨지면 거부한다', async () => {
     const res = await createProjectInvite(P1, { ...VALID, email: 'broken-email' })
     expect(res).toEqual({ ok: false, error: '이메일 형식을 확인해 주세요.' })
