@@ -13,9 +13,11 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { IssuesView } from '@/components/issues/IssuesView'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function IssuesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'issues')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [issues, roster, m, projects, locale, { user, myMemberIds }] = await Promise.all([
     getIssues(projectId),
     getProjectRoster(projectId),

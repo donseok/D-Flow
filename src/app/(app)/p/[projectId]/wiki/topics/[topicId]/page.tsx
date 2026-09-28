@@ -7,6 +7,7 @@ import { WikiTopicDetail } from '@/components/wiki/WikiTopicDetail'
 import { getWikiTopicDetail } from '@/lib/data/wiki'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function WikiTopicPage({
   params,
@@ -14,6 +15,7 @@ export default async function WikiTopicPage({
   params: Promise<{ projectId: string; topicId: string }>
 }) {
   const { projectId, topicId } = await params
+  await requireModulePage({ projectId }, 'wiki')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [data, projects, locale, membership] = await Promise.all([
     getWikiTopicDetail(projectId, topicId),
     listProjects(),

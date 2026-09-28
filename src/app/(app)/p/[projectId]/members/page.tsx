@@ -15,9 +15,11 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { RosterManager } from '@/components/roster/RosterManager'
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'members')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [{ actor: m, degraded }, projects, locale] = await Promise.all([getActorViewState(), listProjects(), getServerLocale()])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지의 조회를 멈추지
   // 않고, 여기서 만든 RSC 페이로드는 404 digest 옆에 그대로 실린다. 아래 팀 후보는 전 워크스페이스를 담은 service_role

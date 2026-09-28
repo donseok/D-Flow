@@ -30,6 +30,7 @@ import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
 import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 type ProjectRow = {
   id: string
@@ -96,6 +97,7 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 
 export default async function SettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
   const [wbs, projects, actor] = await Promise.all([
     // 이 페이지가 트리에서 쓰는 건 표시용 스탯(taskCount)과 공휴일 목록뿐이다.

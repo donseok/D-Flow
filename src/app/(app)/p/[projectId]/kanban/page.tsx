@@ -11,9 +11,11 @@ import { collectLeaves } from '@/components/wbs/shared'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function KanbanPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'kanban')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [{ items, today }, actor, projects, locale] = await Promise.all([
     getComputedWbs(projectId),
     getActorForView(),

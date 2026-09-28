@@ -6,6 +6,7 @@ import { WikiSearch } from '@/components/wiki/WikiSearch'
 import { WikiReindexButton } from '@/components/wiki/WikiReindexButton'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 /**
  * ?q= — 검색어를 URL 에 남기는 이유는 둘이다. 문서를 열었다 뒤로 오면 검색어가
@@ -24,6 +25,7 @@ export default async function ProjectWikiPage({
   searchParams: Promise<{ q?: string | string[] }>
 }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'wiki')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const { q } = await searchParams
   // 독립 조회를 1단으로 묶는다(2026-08-18 성능 감사 — 직렬 3단 → 1단). 프로젝트 목록은
   // 종전 accessScope 의 projects 재조회를 대체한다: listProjectsWithState 의 canSeeProject

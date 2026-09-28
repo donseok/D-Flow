@@ -12,9 +12,11 @@ import { AnnouncementsView } from '@/components/announcements/AnnouncementsView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function AnnouncementsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'announcements')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [annRes, lastSeenAt, m, projects, locale] = await Promise.all([
     getAnnouncements(projectId),
     getAnnouncementSeenAt(projectId),

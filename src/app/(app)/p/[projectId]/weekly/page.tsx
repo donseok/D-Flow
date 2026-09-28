@@ -11,6 +11,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { PageHero } from '@/components/ui/PageHero'
 import { WeeklySheetView } from '@/components/weekly/WeeklySheetView'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function WeeklyPage({
   params, searchParams,
@@ -19,6 +20,7 @@ export default async function WeeklyPage({
   searchParams: Promise<{ week?: string }>
 }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'weekly')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const { week } = await searchParams
   const weekStart = mondayIso(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : seoulToday())
   const wk = sheetWeekMeta(weekStart)

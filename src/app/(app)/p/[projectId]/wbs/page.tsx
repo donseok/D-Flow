@@ -16,6 +16,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 type ProjectRow = { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }
 
@@ -27,6 +28,7 @@ export default async function WbsPage({
   searchParams: Promise<{ view?: string; focus?: string }>
 }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'wbs')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const { view, focus } = await searchParams
   const locale = await getServerLocale()
   const [{ items, dependencies, unresolvedDepends, holidays, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster] = await Promise.all([

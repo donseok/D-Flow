@@ -20,6 +20,7 @@ import {
   getUsageSessions, getUsageSummary, getUserRollup, purgeOldUsageEvents,
 } from '@/lib/data/usage'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
 
@@ -32,6 +33,7 @@ export default async function UsagePage({ searchParams }: {
   // 슈퍼유저 전용 — 판정은 canViewUsage 한 곳에서. 어포던스(사이드바 링크)도 같은 판정을 쓴다.
   const actor = await getActorForView()
   if (!canViewUsage(actor)) redirect('/projects')
+  await requireModulePage(null, 'usage')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13)
 
   const [{ days, user, menu }, locale] = await Promise.all([searchParams, getServerLocale()])
   const period = parsePeriodDays(days)

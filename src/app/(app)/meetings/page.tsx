@@ -11,6 +11,7 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 function monthGrid(todayIso: string): [string, string] {
   const [y, m] = todayIso.split('-').map(Number)
@@ -21,6 +22,7 @@ function monthGrid(todayIso: string): [string, string] {
 }
 
 export default async function MyMeetingsPage() {
+  await requireModulePage(null, 'meetings')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13). 목록의 행 거르기는 로더(getMyMeetings)
   const today = seoulToday()
   const [gs, ge] = monthGrid(today)
   const [res, m, user, locale] = await Promise.all([

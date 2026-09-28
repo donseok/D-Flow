@@ -4,6 +4,7 @@ import { isProjectMember } from '@/lib/domain/authz'
 import { getProjectOffice } from '@/lib/data/agentSeatmap'
 import { UUID_RE } from '@/lib/domain/validate'
 import { SeatmapView } from '@/components/agents/SeatmapView'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 좌석은 항상 최신이어야 한다
 
@@ -15,6 +16,7 @@ export default async function ProjectOfficePage({ params }: { params: Promise<{ 
   const { projectId } = await params
   const actor = await getActorForView()
   if (!actor || !isProjectMember(actor, projectId)) redirect(`/p/${projectId}/dashboard`)
+  await requireModulePage({ projectId }, 'agents')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   // 형식이 아닌 값은 DB 까지 가면 uuid 비교에서 throw 해 500 이 된다 — 슈퍼유저는 멤버 판정을 통과하므로 여기서 404 로 끊는다.
   if (!UUID_RE.test(projectId)) notFound()
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 스튜디오로 위장하지 않는다.

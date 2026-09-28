@@ -10,6 +10,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectRoster } from '@/lib/data/members'
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 위임·주문 상태는 항상 최신이어야 한다
 
@@ -22,6 +23,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   const { projectId } = await params
   const actor = await getActorForView()
   if (!actor || !isProjectMember(actor, projectId)) redirect(`/p/${projectId}/dashboard`)
+  await requireModulePage({ projectId }, 'agents')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 허브로 위장하지 않는다.
   const [hub, wbsData, pc, roster, locale] = await Promise.all([
     getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }),

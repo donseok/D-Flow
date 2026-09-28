@@ -15,6 +15,7 @@ import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 function monthGrid(todayIso: string): [string, string] {
   const [y, m] = todayIso.split('-').map(Number)
@@ -26,6 +27,7 @@ function monthGrid(todayIso: string): [string, string] {
 
 export default async function MeetingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'meetings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const today = seoulToday()
   const [meetRes, roster, m, user, projects, locale] = await Promise.all([
     getProjectMeetingData(projectId),

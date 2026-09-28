@@ -12,6 +12,7 @@ import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
 import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function MinuteDetailPage({
   params, searchParams,
@@ -25,6 +26,10 @@ export default async function MinuteDetailPage({
   }>
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams])
+  // 대상 행의 워크스페이스로 판정(스펙 §4.2 2행). getMinuteDetail 은 react cache — 아래 묶음이 다시 읽지 않는다
+  const head = await getMinuteDetail(id)
+  if (!head?.minute.workspaceId) notFound()
+  await requireModulePage({ workspaceId: head.minute.workspaceId }, 'minutes')
   const sourceAnchor = parseMinuteSourceAnchor(query)
   const requestedVersionId = typeof query.version === 'string' ? query.version : null
   // prefs 는 기존 병렬 묶음에 합류 — 직렬 왕복 단수는 그대로다(스펙 §4.5)

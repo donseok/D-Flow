@@ -19,9 +19,11 @@ import { DashboardView } from '@/components/dashboard/DashboardView'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
   const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc] = await Promise.all([
     getComputedWbs(projectId),

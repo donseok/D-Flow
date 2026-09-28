@@ -12,9 +12,11 @@ import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function AttendancePage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
+  await requireModulePage({ projectId }, 'attendance')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [records, roster, m] = await Promise.all([
     getAttendanceRecords(projectId),
     getProjectRoster(projectId),

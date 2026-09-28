@@ -13,6 +13,7 @@ import { PortfolioMilestoneBoard } from '@/components/portfolio/PortfolioMilesto
 import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import { seoulToday } from '@/lib/domain/dates'
+import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 전사 비교 화면은 항상 최신이어야 한다
 
@@ -20,6 +21,7 @@ export default async function PortfolioPage() {
   // 슈퍼유저 전용 — 판정은 canViewPortfolio 한 곳에서. 사이드바 어포던스도 같은 판정을 쓴다.
   const actor = await getActorForView()
   if (!canViewPortfolio(actor)) redirect('/projects')
+  await requireModulePage(null, 'portfolio')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13)
 
   const [{ inputs, leadersDegraded, listDegraded }, locale] = await Promise.all([
     getPortfolioInputs(), getServerLocale(),
