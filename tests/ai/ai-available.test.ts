@@ -1,5 +1,7 @@
 // aiAvailable(D17, 정본 §5.4.5, 판정 P9) — 세 조건의 조합, 스코프 네 모양, hasLLM 거짓이면 읽지 않음, 실패는 false + 로그.
 // 전역 셋업이 이 모듈을 mock 하므로 진짜는 importActual 로 쓴다.
+import { readFileSync } from 'node:fs'
+import { relative } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ hasLLM: vi.fn(), getWorkspaceConfig: vi.fn(), getProjectConfig: vi.fn(), effectiveModules: vi.fn(), getActor: vi.fn(), createServerClient: vi.fn() }))
 vi.mock('@/lib/ai/provider', () => ({ hasLLM: m.hasLLM }))
@@ -8,6 +10,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectC
 vi.mock('@/lib/modules/effective', () => ({ effectiveModules: m.effectiveModules }))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
+import { codeLines, walk } from '../invariants/_walk'
 import { makeActor } from '../fixtures/actor'
 const { aiAvailable } = await vi.importActual<typeof import('@/lib/modules/aiAvailable')>('@/lib/modules/aiAvailable')
 
@@ -75,5 +78,20 @@ describe('aiAvailable — 스코프 네 모양', () => {
     expect(await aiAvailable(null, { module: 'chatbot' })).toBe(true)
     m.getActor.mockResolvedValueOnce(makeActor({ userId: 'u', workspaceRoles: new Map() }))
     expect(await aiAvailable(null, { module: 'chatbot' })).toBe(false)
+  })
+})
+
+describe('정적 — hasLLM() 직접 호출(D17)', () => {
+  const EXCEPT = ['src/lib/ai/provider.ts', 'src/lib/ai/health.ts', 'src/lib/modules/aiAvailable.ts']
+  it('예외 3파일(정의·배포 진단·판정 함수) 밖에서 hasLLM( 호출이 0건(주석 제외 — codeLines)', () => {
+    const hits = walk('src').flatMap((f) => {
+      const rel = relative(process.cwd(), f)
+      if (EXCEPT.includes(rel)) return []
+      return codeLines(readFileSync(f, 'utf8'), f).flatMap((l, i) => (/\bhasLLM\s*\(/.test(l) ? [`${rel}:${i + 1}: ${l.trim()}`] : []))
+    })
+    expect(hits, 'AI 판정은 aiAvailable 로 — ai.enabled 와 모듈을 함께 본다').toEqual([])
+  })
+  it('예외 파일이 실재한다(낡은 예외 금지)', () => {
+    for (const f of EXCEPT) expect(() => readFileSync(f, 'utf8'), f).not.toThrow()
   })
 })

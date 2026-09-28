@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { generateAnswer } from '@/lib/ai/llm'
-import { hasLLM } from '@/lib/ai/provider'
 import { buildWikiCatalogText } from '@/lib/ai/wiki-catalog'
 import { loadWikiSaturation, type WikiSaturationSnapshot } from '@/lib/ai/wiki-saturation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
@@ -737,11 +737,12 @@ async function extractItems(
   minuteDate: string,
   catalog: string,
   teamCodes: readonly string[],
+  ai: { projectId: string; client: ReturnType<typeof createAdminClient> },
 ): Promise<{
   blocks: MinuteBlock[]
   items: ExtractedWikiItem[]
 }> {
-  if (!hasLLM()) throw new Error('LLM_UNAVAILABLE')
+  if (!(await aiAvailable({ projectId: ai.projectId }, { module: 'wiki', client: ai.client }))) throw new Error('LLM_UNAVAILABLE')
   const blocks = splitMinuteBlocks(bodyMd)
   const markable = blocks.filter(isMarkableBlock)
   if (markable.length === 0) return { blocks, items: [] }
@@ -1069,6 +1070,7 @@ export async function processMinuteWikiJob(jobId: number): Promise<WikiProcessSu
       minuteDate,
       loadWikiCatalog(bodyMd, saturation),
       teamCodes,
+      { projectId: job.project_id as string, client: admin },
     )
     // LLM 호출 중 프로젝트 이동/보관이 발생할 수 있으므로 변경 직전에 scope를 다시 확인한다.
     const { data: scope, error: scopeError } = await admin.from('minutes')

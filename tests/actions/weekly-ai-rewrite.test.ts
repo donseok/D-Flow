@@ -23,6 +23,7 @@ vi.mock('@/lib/data/weeklySheet', () => ({
 }))
 
 import { prepareWeeklyCellRewrite, type WeeklyRewriteInput } from '@/app/actions/weekly'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { makeMemberActor } from '../fixtures/actor'
 
 const MEMBER = makeMemberActor('p1', [])
@@ -175,5 +176,13 @@ describe('prepareWeeklyCellRewrite', () => {
     const limited = await prepareWeeklyCellRewrite('p-rate', [input({ content: 'ERP-21 전환을 80% 점검함' })])
     expect(limited).toEqual({ ok: false, error: 'AI 요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.' })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(1)
+  })
+
+  it('AI 판정은 aiAvailable({ projectId }, { module: weekly }) 이다(D17) — 거짓이면 AI 를 부르지 않는다', async () => {
+    mocks.createServerClient.mockResolvedValue(weeklyClient() as never)
+    mocks.hasLLM.mockReturnValue(false)
+    expect((await prepareWeeklyCellRewrite('p1', [input()])).ok).toBe(false)
+    expect(vi.mocked(aiAvailable)).toHaveBeenCalledWith({ projectId: 'p1' }, { module: 'weekly' })
+    expect(mocks.generateAnswer).not.toHaveBeenCalled()
   })
 })

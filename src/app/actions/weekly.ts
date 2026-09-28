@@ -9,7 +9,7 @@ import {
 } from '@/lib/domain/weeklySheet'
 import { findCarryOverSource, getWeeklySheet } from '@/lib/data/weeklySheet'
 import { generateAnswer } from '@/lib/ai/llm'
-import { hasLLM } from '@/lib/ai/provider'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { errMsg } from '@/lib/domain/format'
 import {
   buildWeeklyRewritePrompt, parseWeeklyRewriteResponse, WEEKLY_REWRITE_MAX_CELLS,
@@ -223,8 +223,8 @@ export async function prepareWeeklyCellRewrite(
   if (!scope.ok) return { ok: false, error: scope.error }
   if (rowIds.some(rowId => !scope.allowed.has(rowId)))
     return { ok: false, error: '선택한 셀을 확인할 수 없습니다.' }
-  if (!hasLLM())
-    return { ok: false, error: 'AI 모델이 설정되어 있지 않습니다. 관리자에게 AI 설정을 요청해 주세요.' }
+  if (!(await aiAvailable({ projectId }, { module: 'weekly' })))
+    return { ok: false, error: 'AI 를 사용할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.' }
 
   const { data: labelRows, error: labelError } = await sb.from('weekly_report_rows')
     .select('id, section, module')

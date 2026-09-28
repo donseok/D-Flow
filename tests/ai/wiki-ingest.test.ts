@@ -27,6 +27,7 @@ import {
 } from '@/lib/ai/wiki-ingest'
 import type { WikiSaturationSnapshot } from '@/lib/ai/wiki-saturation'
 import { fnv1a64 } from '@/lib/minutes/blocks'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 
 const blocks: MinuteBlock[] = [
   {
@@ -533,6 +534,7 @@ describe('processMinuteWikiJob 버전 안전성', () => {
         p_payload: { summary: { created: 0, changed: 0, reaffirmed: 0, conflicted: 0 } },
       }),
     )
+    expect(vi.mocked(aiAvailable)).toHaveBeenCalledWith({ projectId: 'project-1' }, { module: 'wiki', client: admin })   // 위키 워커 — 세션 없음(Review Focus 1)
   })
 
   it('LLM 처리 중 최신 버전이 생겨 RPC가 거부하면 과거 job을 실패 재시도하지 않고 skip 완료한다', async () => {

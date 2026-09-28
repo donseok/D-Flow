@@ -40,7 +40,7 @@ import {
 import { ROSTER_SELECT, mapRosterRows } from '@/lib/data/memberSelect'
 import type { ProjectMember } from '@/lib/domain/types'
 import { generateAnswer } from '@/lib/ai/llm'
-import { hasLLM } from '@/lib/ai/provider'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import {
   MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT,
   buildFallbackMinuteIssueDraft,
@@ -664,11 +664,13 @@ async function summarizeVerifiedMinuteBlock(
   blockText: string,
   insightLabel: string | null,
   prompt: string,
+  llm: boolean,
 ): Promise<MinuteIssueDraft | null> {
   const fallback = buildFallbackMinuteIssueDraft(blockText, insightLabel)
+  // AI 를 쓸 수 없으면(키 없음·워크스페이스 AI 끔·모듈 꺼짐) 캐시를 보기 전에 결정형으로 — 끈 뒤에 옛 AI 초안이 나오지 않게(Review Focus 4)
+  if (!llm) return fallback
   const cached = minuteDraftCache.get(cacheKey)
   if (cached) return cached
-  if (!hasLLM()) return fallback
 
   const existing = minuteDraftInFlight.get(cacheKey)
   if (existing) return existing
@@ -805,7 +807,8 @@ export async function prepareMinuteIssueDraft(
     'minute-issue-draft-v4', projectId, source.minuteVersionId, source.blockIndex, block.hash,
     source.kind, fnv1a64(prompt),
   ].join(':')
-  const draft = await summarizeVerifiedMinuteBlock(cacheKey, blockText, insightLabel, prompt)
+  const llm = await aiAvailable({ projectId }, { module: 'issues' })
+  const draft = await summarizeVerifiedMinuteBlock(cacheKey, blockText, insightLabel, prompt, llm)
   if (!draft) {
     return {
       ok: false,

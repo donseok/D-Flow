@@ -27,7 +27,8 @@ import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import { fnv1a64 } from '@/lib/minutes/blocks'
 import { generateAnswer } from './llm'
-import { hasLLM, llmConfig } from './provider'
+import { llmConfig } from './provider'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { createEnsureGate, type EnsureState } from './ensure'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
@@ -307,7 +308,7 @@ async function generateWeeklyBrief(projectId: string, facts: BriefFacts, hash: s
 export async function ensureWeeklyBrief(
   projectId: string, facts: BriefFacts, opts?: { force?: boolean },
 ): Promise<EnsureState> {
-  if (!hasLLM()) return 'unavailable'
+  if (!(await aiAvailable({ projectId }))) return 'unavailable'
   if (!serviceRoleConfigured()) return 'unavailable'
   const hash = briefFactsHash(facts)
   let forceSpent = !opts?.force

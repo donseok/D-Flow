@@ -1,10 +1,11 @@
 import { generateAnswerStream, type ChatMessage } from './llm'
-import { hasLLM, hasEmbeddings } from './provider'
+import { hasEmbeddings } from './provider'
 import { embedTexts } from './embeddings'
 import { passesSimilarity } from './similarity'
 import { extractSearchKeywords } from './intent'
 import { healMissingMinuteEmbeddings } from './minutes-ingest'
 import { createServerClient } from '@/lib/supabase/server'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { ilikeOrPattern } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
 import { BRAND } from '@/lib/branding'
@@ -50,11 +51,11 @@ function textStream(text: string): ReadableStream<Uint8Array> {
 /** LLM 스트림 + 폴백 + 후미(footer) 부기 — doc/archive 공용. */
 function llmOrFallbackStream(
   system: string, history: ChatMessage[], message: string,
-  fallbackText: string, footer: string,
+  fallbackText: string, footer: string, useLLM: boolean,
 ): Promise<ReadableStream<Uint8Array>> {
   return (async () => {
     const enc = new TextEncoder()
-    if (hasLLM()) {
+    if (useLLM) {
       const iter = await generateAnswerStream(system, [...trimHistory(history), { role: 'user', content: message }])
       if (iter) {
         return new ReadableStream<Uint8Array>({
@@ -99,7 +100,7 @@ export async function streamDocAnswer(input: {
   const fallback = hits.length
     ? `문서에서 일치하는 줄이에요:\n${hits.map(h => `• ${h.trim()}`).join('\n')}`
     : 'AI 응답을 사용할 수 없어요. 본문을 직접 확인해 주세요.'
-  return llmOrFallbackStream(system, input.history, input.message, fallback, '')
+  return llmOrFallbackStream(system, input.history, input.message, fallback, '', await aiAvailable({ minuteId: input.minuteId }, { module: 'minutes' }))
 }
 
 /** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. */
@@ -170,5 +171,5 @@ export async function streamArchiveAnswer(input: {
   const fallback = sourceRows.length
     ? `관련 회의록이에요:\n${[...new Set(sourceRows.map(r => `• ${r.minuteDate} · ${r.teamCode} · ${r.title}`))].join('\n')}`
     : '관련 회의록을 찾지 못했어요. 담당·기간 필터를 넓히거나 다른 표현으로 물어보세요.'
-  return llmOrFallbackStream(system, input.history, input.message, fallback, footer)
+  return llmOrFallbackStream(system, input.history, input.message, fallback, footer, await aiAvailable(null, { module: 'minutes' }))
 }

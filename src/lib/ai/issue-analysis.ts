@@ -2,7 +2,8 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { generateAnswer } from '@/lib/ai/llm'
-import { hasLLM, llmConfig } from '@/lib/ai/provider'
+import { llmConfig } from '@/lib/ai/provider'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { IssueMegaCode } from '@/lib/domain/issueAnalysis'
 import {
@@ -796,7 +797,7 @@ async function ensureIssueAnalysisSnapshot(
     }
   }
 
-  if (!hasLLM()) {
+  if (!(await aiAvailable({ projectId }, { module: 'issues' }))) {
     return {
       state: 'unavailable',
       reason: 'llm_missing',

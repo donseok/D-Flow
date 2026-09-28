@@ -3,7 +3,7 @@ import { gatherKnowledge, type Knowledge } from './knowledge'
 import { retrieveContext, type Match } from './retrieve'
 import { ensureProjectIndexed } from './ensure-index'
 import { generateAnswer, generateAnswerStream, type ChatMessage } from './llm'
-import { hasLLM } from './provider'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { ASSISTANT_NAME, BRAND } from '@/lib/branding'
 
 export interface AnswerInput {
@@ -62,7 +62,7 @@ export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> 
     similarity: Math.round(m.similarity * 100) / 100,
   }))
 
-  const llmConfigured = hasLLM()
+  const llmConfigured = await aiAvailable(input.projectId ? { projectId: input.projectId } : null, { module: 'chatbot' })
   if (llmConfigured) {
     const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const llm = await generateAnswer(system, [...trimHistory(input.history), { role: 'user', content: message }])
@@ -143,7 +143,7 @@ export async function streamAnswer(input: AnswerInput): Promise<ReadableStream<U
   const enc = new TextEncoder()
   const fallback = (degraded = false) => deterministicAnswer(knowledge, matches, intent, degraded)
 
-  if (hasLLM()) {
+  if (await aiAvailable(input.projectId ? { projectId: input.projectId } : null, { module: 'chatbot' })) {
     const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const iter = await generateAnswerStream(system, [...trimHistory(input.history), { role: 'user', content: message }])
     if (iter) {

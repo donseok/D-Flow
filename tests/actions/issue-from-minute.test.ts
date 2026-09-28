@@ -41,6 +41,7 @@ import {
   fetchIssueProjectMembers,
   prepareMinuteIssueDraft,
 } from '@/app/actions/issues'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { makeMemberActor, WS } from '../fixtures/actor'
 import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 
@@ -481,6 +482,22 @@ describe('prepareMinuteIssueDraft', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toContain('제목이 아닌')
     expect(ai.generateAnswer).not.toHaveBeenCalled()
+  })
+
+  it('aiAvailable 이 거짓이면 인스턴스 캐시에 AI 초안이 있어도 결정형 초안이다(Review Focus 4)', async () => {
+    asMember()
+    state.client = clientsWithVersion().client
+    ai.generateAnswer.mockResolvedValue(JSON.stringify({
+      title: '인터페이스 전환 지연 대응', body: '[현황]\n- 가\n\n[문제/영향]\n- 나\n\n[필요 조치]\n- 다',
+      megaCode: '02', majorProcess: '주문관리', subProcess: '주문접수/등록',
+    }))
+    const warm = await prepareMinuteIssueDraft('project-1', SOURCE)
+    expect(warm.draft?.mode).toBe('ai')                                   // 캐시에 AI 초안(앞 케이스가 넣었을 수도 있다)
+    state.client = clientsWithVersion().client
+    ai.hasLLM.mockReturnValue(false)
+    const off = await prepareMinuteIssueDraft('project-1', SOURCE)
+    expect(off.draft?.mode).toBe('fallback')
+    expect(vi.mocked(aiAvailable)).toHaveBeenLastCalledWith({ projectId: 'project-1' }, { module: 'issues' })
   })
 })
 

@@ -1,8 +1,8 @@
 import { generateAnswer } from './llm'
-import { hasLLM } from './provider'
 import { createEnsureGate } from './ensure'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
+import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { splitMinuteBlocks, isMarkableBlock, fnv1a64, type MinuteBlock } from '@/lib/minutes/blocks'
 import type { InsightKind } from '@/lib/domain/types'
 
@@ -57,8 +57,10 @@ export function parseInsightItems(
  */
 export async function generateMinuteInsights(minuteId: string, bodyMd: string): Promise<void> {
   try {
-    if (!hasLLM()) return
     if (!serviceRoleConfigured()) return
+    const admin = createAdminClient()
+    // 세션 없는 호출(after()·외부 회의록 API)도 있다 — 회의록 행의 워크스페이스를 admin 으로 읽는다(Review Focus 1)
+    if (!(await aiAvailable({ minuteId }, { module: 'minutes', client: admin }))) return
     if (!bodyMd.trim()) return
     const blocks = splitMinuteBlocks(bodyMd)
     const markable = blocks.filter(isMarkableBlock)
@@ -77,7 +79,6 @@ export async function generateMinuteInsights(minuteId: string, bodyMd: string): 
         }))
       : [{ minute_id: minuteId, body_hash: bodyHash, kind: 'none', label: '', block_index: -1, block_hash: '' }]
 
-    const admin = createAdminClient()
     const { error: delErr } = await admin.from('minute_insights').delete().eq('minute_id', minuteId)
     if (delErr) { console.error('[minutes] 인사이트 삭제 실패:', delErr.message); return }
     // 동시 재생성 경합은 unique (minute_id, block_index, kind) + ignoreDuplicates 로 중복 차단
@@ -103,11 +104,11 @@ export async function ensureMinuteInsights(
   minuteId: string, bodyMd: string, currentBodyHash: string,
 ): Promise<'ready' | 'generated' | 'unavailable'> {
   try {
-    if (!hasLLM()) return 'unavailable'
     if (!serviceRoleConfigured()) return 'unavailable'
+    const admin = createAdminClient()
+    if (!(await aiAvailable({ minuteId }, { module: 'minutes', client: admin }))) return 'unavailable'
     if (!bodyMd.trim()) return 'ready'
 
-    const admin = createAdminClient()
     const fresh = async (): Promise<boolean> => {
       const { data } = await admin.from('minute_insights')
         .select('body_hash').eq('minute_id', minuteId)
