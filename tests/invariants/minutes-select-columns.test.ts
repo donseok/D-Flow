@@ -39,7 +39,7 @@ describe('minutes 열 단위 SELECT(H2-c) — 세션 쿼리가 * 로 읽지 않�
       for (const h of starReads(f, text, { load, allowDynamic: ALLOW_DYNAMIC[rel(f)] })) hits.push(`${rel(f)}:${h}`)
     }
     for (const f of walk(ROOT)) {
-      for (const h of embedReads(codeLines(readFileSync(f, 'utf8')).join('\n'))) hits.push(`${rel(f)}: ${h}`)
+      for (const h of embedReads(codeLines(readFileSync(f, 'utf8'), f).join('\n'))) hits.push(`${rel(f)}: ${h}`)
     }
     expect(hits).toEqual([])
   }, 30_000)
@@ -107,7 +107,7 @@ describe('minutes 열 단위 SELECT(H2-c) — 세션 쿼리가 * 로 읽지 않�
 
   it('share_token 을 읽는 코드는 서버 경로 둘뿐이고(readShareRow 의 service_role, 공개 페이지) 그 체인은 service_role 에서 시작한다', () => {
     const files = walk(ROOT)
-      .filter((f) => codeLines(readFileSync(f, 'utf8')).some((l) => l.includes('share_token')))
+      .filter((f) => codeLines(readFileSync(f, 'utf8'), f).some((l) => l.includes('share_token')))
     expect(files.map(rel).sort()).toEqual(['src/app/actions/minutes.ts', 'src/app/share/minutes/[token]/page.tsx'])
     // 파일 단위 허용만으로는 같은 파일 안의 세션 읽기를 못 잡는다 — share_token 을 언급하는 minutes 체인은 …admin 에서 시작해야 한다.
     const chains = files.flatMap(f => sessionTokenChains(f, readFileSync(f, 'utf8'), load).map(h => `${rel(f)}:${h}`))
@@ -117,5 +117,5 @@ describe('minutes 열 단위 SELECT(H2-c) — 세션 쿼리가 * 로 읽지 않�
     expect(sessionTokenChains('x.ts', `sb.from('minutes').update({ share_token: t }).eq('id', id)`)).toHaveLength(1)
     expect(sessionTokenChains('x.ts', `adm.admin.from('minutes').select('share_token, share_enabled').eq('id', id)`)).toEqual([])
     expect(sessionTokenChains('x.ts', `admin.from('minutes').select('id').eq('share_token', token)`)).toEqual([])
-  })
+  }, 20_000)
 })

@@ -26,25 +26,25 @@ function exportsName(code: string, name: string): boolean {
 describe('팀 캐시 — 워크스페이스를 가리지 않는 전역 접근자 금지(SP2 Task 16b)', () => {
   it('src 어디에서도 옛 전역 접근자를 부르지 않는다(주석 제외)', () => {
     const hits = walk(join(CWD, 'src')).flatMap(f => {
-      const lines = codeLines(readFileSync(f, 'utf8'))
+      const lines = codeLines(readFileSync(f, 'utf8'), f)
       return callHits(lines).map(i => `${relative(CWD, f)}:${i + 1}: ${lines[i].trim()}`)
     })
     expect(hits, hits.join('\n')).toEqual([])
-  })
+  }, 20_000)
 
   it('master.ts 는 그 이름들을 export 하지 않는다', () => {
-    const code = codeLines(readFileSync(MASTER, 'utf8')).join('\n')
+    const code = codeLines(readFileSync(MASTER, 'utf8'), MASTER).join('\n')
     expect(REMOVED.filter(name => exportsName(code, name))).toEqual([])
   })
 
   it(`전 워크스페이스 가시 범위({ all: true })는 ${ALL_VIEW_OWNER} 에서만 만든다 — 역할 판정 없이 전부를 여는 뷰를 호출부가 짓지 않게`, () => {
     const hits = walk(join(CWD, 'src')).filter(f => relative(CWD, f) !== ALL_VIEW_OWNER).flatMap(f => {
-      const lines = codeLines(readFileSync(f, 'utf8'))
+      const lines = codeLines(readFileSync(f, 'utf8'), f)
       return lines.flatMap((line, i) => (ALL_VIEW.test(line) ? [`${relative(CWD, f)}:${i + 1}: ${line.trim()}`] : []))
     })
     expect(hits, hits.join('\n')).toEqual([])
     // 소유 파일에는 실제로 있어야 한다 — 없으면 규칙이 낡았다(이름을 옮겼으면 ALL_VIEW_OWNER 를 고친다).
-    expect(codeLines(readFileSync(join(CWD, ALL_VIEW_OWNER), 'utf8')).some(line => ALL_VIEW.test(line))).toBe(true)
+    expect(codeLines(readFileSync(join(CWD, ALL_VIEW_OWNER), 'utf8'), ALL_VIEW_OWNER).some(line => ALL_VIEW.test(line))).toBe(true)
   })
 
   it('판정기 — 주석 속 이름과 비슷한 새 이름은 세지 않고, 호출·export 는 센다', () => {

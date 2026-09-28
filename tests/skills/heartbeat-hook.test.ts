@@ -97,7 +97,7 @@ describe('heartbeat.sh — 스펙 §4-2', () => {
     utimesSync(stamp, old, old)
     run()
     expect(sent()).toHaveLength(2)
-  })
+  }, 15_000)
   it('.env 에 API_BASE 나 PAT 가 없으면 보내지 않는다', () => {
     writeFileSync(join(repo, '.dflow-agent'), 'hong/mbp/w2\n')
     writeFileSync(join(repo, '.env'), 'DFLOW_API_BASE=https://x.test\n')

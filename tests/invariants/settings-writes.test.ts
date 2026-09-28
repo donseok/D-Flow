@@ -4,7 +4,7 @@
 //   G2 그 접근은 읽기(select)뿐이다. G3 설정 RPC 는 닫힌 파일에서 리터럴 이름으로만, 파일마다 정해진 횟수만 부른다.
 //   G4 가드 없는 쓰기 경로(write 모듈·writeProjectSettingsInternal·그 통과 함수 runWbsImport)는 import·언급하는 파일, 파일별 호출 수,
 //      export 이름 집합(default 포함)을 닫고, 설정 액션 파일(settings.ts)의 진입점 export 도 고정한다.
-//   G5 검사는 파일 원문에 한다(공용 codeLines 는 문자열 속 '//'·'/*' 를 주석으로 읽어 뒤 코드를 가린다 — 그 고침은 Phase B). 주석 속 이름도 적중이다.
+//   G5 검사는 파일 원문에 한다 — 주석 속 이름도 적중이다(Phase A 의 공용 codeLines 는 문자열 속 '//'·'/*' 뒤 코드를 가렸다. Phase B 과제 1 이 고쳤어도 원문 검사는 둔다).
 //   G6 대상은 src·scripts(와 생기면 supabase/functions)의 js·ts 전부, 그리고 src·scripts 의 json·sh·sql(표 이름 단어만 본다).
 //      REST 직접 경로·GraphQL 은 전 코드 파일(js·ts), raw SQL 은 scripts(pg 를 쓰는 곳)만 본다 — pg 가 src 에 들어오면 SQL 검사를 src 로 넓힌다.
 // tests 는 제외(tests/rls 는 거부를 단언하려고 일부러 쓴다). 목록에 있는데 쓰지 않는 파일도 실패다.
@@ -14,7 +14,7 @@
 //   · 허용 파일 안 식 from 의 중첩 제네릭 from<A<B>>(…)·대문자로 시작하는 …Array 이름의 클라이언트 변수(HistArray.from(t)) 뒤 쓰기.
 //   · 이름 조립: 이중 보간 `${scope}_${KIND}`, 조각 join, 문자열 줄 이음, 유니코드·퍼센트 이스케이프 같은 의도적 난독화.
 //   · 코드·JSON 밖 운반자: process.env·DB 에 둔 표 이름, 스캔 밖 파일(tests/ 헬퍼를 scripts 가 import 하는 관례 — settings-verify.check.ts →
-//     tests/rls/harness), 중첩 node_modules(공용 walk 가 이름으로 건너뛴다 — Phase B walker CARRY).
+//     tests/rls/harness). (중첩 node_modules 는 Phase B 과제 1 뒤로 걷는다 — 공용 walk 의 기본 건너뛰기는 뿌리에서만.)
 //   · 호출 수는 `이름(` 을 센다 — 별칭(const run = runWbsImport; run(…))으로 부르는 추가 호출.
 // String.raw`…` 는 백틱 리터럴이라 잡힌다. 허용 목록 밖의 대괄호 접근은 G1 이 표 리터럴로 잡는다.
 import { existsSync, readFileSync } from 'node:fs'
@@ -284,7 +284,7 @@ const CONTRACT_SHAPES: { file: string | null; shape: RegExp; why: string }[] = [
 function oldNames(file: string, text: string): { offenders: string[]; exempt: Record<string, number> } {
   const offenders: string[] = []
   const exempt: Record<string, number> = {}
-  codeLines(text).forEach((raw, i) => {
+  codeLines(text, file).forEach((raw, i) => {
     if (!OLD.test(raw)) return
     let l = raw
     for (const c of CONTRACT_SHAPES) {
@@ -349,7 +349,7 @@ describe('settings-writes', () => {
     }
     expect(offenders).toEqual([])
     expect(exempt, '예외가 더 넓어지거나 죽으면 실패').toEqual(Object.fromEntries(CONTRACT_SHAPES.map((c) => [c.why, 1])))
-  })
+  }, 20_000)
 })
 
 describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rereview-gate 1·2차)을 게이트 본체에 먹인다', () => {

@@ -48,7 +48,7 @@ function usesGateVar(cond: string, name: string, kind: GateVarKind): boolean {
 }
 
 const rel = (abs: string) => relative(CWD, abs)
-const code = (abs: string) => codeLines(readFileSync(abs, 'utf8'))
+const code = (abs: string) => codeLines(readFileSync(abs, 'utf8'), abs)
 
 function resolveModule(from: string, spec: string): string | null {
   const base = spec.startsWith('@/') ? join(CWD, 'src', spec.slice(2)) : spec.startsWith('.') ? resolve(dirname(from), spec) : null

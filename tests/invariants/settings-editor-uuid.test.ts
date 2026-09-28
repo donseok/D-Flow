@@ -9,7 +9,7 @@ describe('설정 편집기 요청 id', () => {
   const dir = join(process.cwd(), 'src/components/settings')
 
   it('src/components/settings 에 crypto.randomUUID 호출이 없다', () => {
-    const hits = walk(dir).flatMap((f) => codeLines(readFileSync(f, 'utf8'))
+    const hits = walk(dir).flatMap((f) => codeLines(readFileSync(f, 'utf8'), f)
       .map((line, i) => [line, i] as const)
       .filter(([line]) => /\brandomUUID\s*\(/.test(line))
       .map(([line, i]) => `${relative(process.cwd(), f)}:${i + 1}: ${line.trim()}`))
@@ -17,7 +17,7 @@ describe('설정 편집기 요청 id', () => {
   })
 
   it.each(['LevelSettingsManager.tsx', 'StageCreditSlider.tsx', 'ClearExcelProfileButton.tsx'])('%s 는 commandId 를 newUuid() 로 만든다', (name) => {
-    const code = codeLines(readFileSync(join(dir, name), 'utf8')).join('\n')
+    const code = codeLines(readFileSync(join(dir, name), 'utf8'), name).join('\n')
     expect(code).toMatch(/commandId:\s*newUuid\(\)/)
   })
 })

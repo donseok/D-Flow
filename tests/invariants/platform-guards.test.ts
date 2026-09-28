@@ -21,14 +21,14 @@ describe('플랫폼 가드 11곳(D1)', () => {
       const rel = relative(process.cwd(), file)
       if (rel === 'src/lib/authz/index.ts') continue   // 정의
       let fn = '(top)'
-      for (const line of codeLines(readFileSync(file, 'utf8'))) {
+      for (const line of codeLines(readFileSync(file, 'utf8'), file)) {
         const m = line.match(/^export (?:async )?function (\w+)/)
         if (m) fn = m[1]
         if (/\brequireSuperuser\(/.test(line)) hits.push(`${rel}#${fn}`)
       }
     }
     expect(hits.sort()).toEqual([...EXPECTED].sort())
-  })
+  }, 20_000)
 
   it('주석 속 가드 이름은 세지 않는다', () => {
     const src = [

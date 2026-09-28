@@ -6,7 +6,7 @@ import { ALLOW, PATTERNS, type RuntimeConstantPattern } from './no-runtime-const
 
 const files = walk('src').filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/fixtures/'))
 const hitsOf = (file: string): RuntimeConstantPattern[] => {
-  const code = codeLines(readFileSync(file, 'utf8')).join('\n')
+  const code = codeLines(readFileSync(file, 'utf8'), file).join('\n')
   return (Object.keys(PATTERNS) as RuntimeConstantPattern[]).filter((p) => PATTERNS[p].test(code))
 }
 
