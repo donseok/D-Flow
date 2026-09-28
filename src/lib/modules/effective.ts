@@ -16,6 +16,8 @@ import { closeRequires } from './closure'
 async function compute(
   workspaceId: string, projectId: string | undefined, client: ConfigReadClient | undefined, projectConfig: ProjectConfig | undefined,
 ): Promise<ReadonlySet<ModuleId>> {
+  // 프로젝트 없이 받은 프로젝트 설정은 프로그래밍 오류다 — 조용히 무시하면 프로젝트 토글과 CR-5 검사가 둘 다 빠진다(관문은 로그 뒤 닫힘)
+  if (projectConfig && !projectId) throw new Error('[effectiveModules] projectConfig 는 projectId 와 함께')
   const ws = await getWorkspaceConfig(workspaceId, { client })
   const allowed = new Set(valueOf(ws, 'modules.allowed'))          // invalid 면 ConfigKeyError throw(fail-closed)
   let optional = MODULES.filter((m) => !m.core && m.envAvailable() && allowed.has(m.id)).map((m) => m.id)

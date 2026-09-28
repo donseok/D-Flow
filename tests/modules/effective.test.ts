@@ -113,4 +113,9 @@ describe('이미 읽은 프로젝트 설정을 받으면 다시 읽지 않는다
     await expect(effectiveModules({ workspaceId: WID, projectId: PID }, { projectConfig: { ...pCfg(['kanban']), ...over } as never }))
       .rejects.toBeInstanceOf(ConfigUnavailableError)
   })
+  it('projectId 없이 projectConfig 만 넘기면 던진다(F4-1 — 프로젝트 토글과 CR-5 검사를 조용히 건너뛰지 않는다)', async () => {
+    mocks.getWorkspaceConfig.mockResolvedValue(wsCfg(['kanban']))
+    await expect(effectiveModules({ workspaceId: WID }, { projectConfig: pCfg(['kanban']) as never }))
+      .rejects.toThrow('[effectiveModules] projectConfig 는 projectId 와 함께')
+  })
 })

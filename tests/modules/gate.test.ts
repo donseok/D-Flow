@@ -28,10 +28,12 @@ describe('requireModule', () => {
     expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, { client, projectConfig: { projectId: PID, workspaceId: WID } })   // P27 — 읽은 설정을 넘긴다
     expect(m.getProjectConfig).toHaveBeenCalledTimes(1)
   })
-  it('{ workspaceId } 면 프로젝트 해석기를 부르지 않는다', async () => {
+  it('{ workspaceId } 면 프로젝트 해석기를 부르지 않는다. client 는 해석기에 그대로 넘긴다', async () => {
     expect(await requireModule({ workspaceId: WID }, 'minutes')).toEqual({ ok: true })
     expect(m.getProjectConfig).not.toHaveBeenCalled()
     expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID }, { client: undefined })
+    expect(await requireModule({ workspaceId: WID }, 'minutes', { client })).toEqual({ ok: true })
+    expect(m.effectiveModules).toHaveBeenLastCalledWith({ workspaceId: WID }, { client })
   })
   it('꺼짐은 ERR_MODULE_DISABLED — 로그를 남기지 않는다(요청마다 쌓이지 않게)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -57,6 +59,7 @@ describe('requireModule', () => {
     m.effectiveModules.mockRejectedValue(e)
     expect(await requireModule({ projectId: PID }, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
     expect(err.mock.calls[0][0]).toBe('[requireModule]')
+    expect(err.mock.calls[0], '판정 범위를 로그에 싣는다(F2-3)').toContain(JSON.stringify({ projectId: PID }))
   })
   it.each([
     ['동적 사용', { digest: 'DYNAMIC_SERVER_USAGE' }],
@@ -75,9 +78,13 @@ describe('requireModule', () => {
 })
 
 describe('requireSessionModule — 대상 행이 없는 세션 판정(P13)', () => {
-  it('projectId 가 있으면 그 프로젝트로', async () => {
+  it('projectId 가 있으면 그 프로젝트로 — 프로젝트에서 끈 모듈이면 거부한다(관문 우회 회귀를 문다)', async () => {
     expect(await requireSessionModule(PID, 'issues')).toEqual({ ok: true })
     expect(m.getActor).not.toHaveBeenCalled()
+    expect(m.getProjectConfig).toHaveBeenCalledWith(PID, { client: undefined })
+    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, expect.objectContaining({ client: undefined }))
+    m.effectiveModules.mockResolvedValueOnce(eff())
+    expect(await requireSessionModule(PID, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
   })
   it('없으면 행위자의 유일 워크스페이스로', async () => {
     m.getActor.mockResolvedValue(makeActor({ userId: 'u1', workspaceRoles: new Map([[WID, 'member']]) }))
@@ -104,10 +111,20 @@ describe('requireSessionModule — 대상 행이 없는 세션 판정(P13)', () 
   })
 })
 
+describe('requireSessionModule — 신호', () => {
+  it('행위자 조회의 Next 제어 흐름 신호(동적 사용)는 삼키지 않고 다시 던진다(F2-2)', async () => {
+    const signal = Object.assign(new Error('s'), { digest: 'DYNAMIC_SERVER_USAGE' })
+    m.getActor.mockRejectedValueOnce(signal)
+    await expect(requireSessionModule(null, 'minutes')).rejects.toBe(signal)
+  })
+})
+
 describe('moduleState — 워커 3값(P10)', () => {
   it("켜짐 'on', 꺼짐 'off', 설정 없음·손상 'unknown', 그 밖의 예외는 던진다", async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await moduleState({ projectId: PID }, 'issues', { client })).toBe('on')
+    expect(m.getProjectConfig).toHaveBeenCalledWith(PID, { client })
+    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, expect.objectContaining({ client }))
     expect(await moduleState({ projectId: PID }, 'wiki', { client })).toBe('off')
     m.getProjectConfig.mockRejectedValueOnce(new ConfigUnavailableError('none'))
     expect(await moduleState({ projectId: PID }, 'issues', { client })).toBe('unknown')
@@ -115,6 +132,11 @@ describe('moduleState — 워커 3값(P10)', () => {
     expect(await moduleState({ projectId: PID }, 'issues', { client })).toBe('unknown')
     m.effectiveModules.mockRejectedValueOnce(new Error('bug'))
     await expect(moduleState({ projectId: PID }, 'issues', { client })).rejects.toThrow('bug')
+  })
+  it("요청이 전부 core 면 설정을 읽지 않고 'on'(F2-2 — P2 와 같은 단락)", async () => {
+    m.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('down'))
+    expect(await moduleState({ projectId: PID }, 'wbs', { client })).toBe('on')
+    expect(m.getProjectConfig).not.toHaveBeenCalled(); expect(m.effectiveModules).not.toHaveBeenCalled()
   })
 })
 
@@ -128,10 +150,14 @@ describe('목록형(스펙 §4.2 첫 문단)', () => {
     m.effectiveModules.mockImplementation(async (s: { projectId?: string }) => (s.projectId === P2 ? eff() : eff('agents')))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await projectsWithModule([PID, P2, P3, PID], 'agents', { client })).toEqual([PID])
+    // 세션 없는 경로(워커·v1·회의록 API)가 넘긴 client 가 프로젝트마다 해석기까지 간다
+    for (const pid of [PID, P2, P3]) expect(m.getProjectConfig).toHaveBeenCalledWith(pid, { client })
+    for (const pid of [PID, P2]) expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: pid }, expect.objectContaining({ client }))
   })
   it('workspacesWithModule', async () => {
     const W2 = '00000000-0000-0000-7e57-000000001406'
     m.effectiveModules.mockImplementation(async (s: { workspaceId: string }) => (s.workspaceId === W2 ? eff('minutes_integration') : eff()))
     expect(await workspacesWithModule([WID, W2], 'minutes_integration', { client })).toEqual([W2])
+    for (const w of [WID, W2]) expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: w }, { client })
   })
 })

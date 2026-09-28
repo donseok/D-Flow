@@ -41,7 +41,7 @@ export async function requireModule(scope: ModuleScope, moduleId: ModuleId | rea
     return ids.every((id) => eff.has(id)) ? { ok: true } : DENIED
   } catch (e) {
     unstable_rethrow(e)                                                        // cause 안의 신호까지 다시 던진다
-    console.error('[requireModule]', ids.join(','), e instanceof Error ? e.message : e)
+    console.error('[requireModule]', ids.join(','), JSON.stringify(scope), e instanceof Error ? e.message : e)   // 판정 범위까지 — 어느 프로젝트·워크스페이스에서 닫혔는지
     return DENIED
   }
 }
