@@ -27,17 +27,19 @@ it('200 이면 ok 이고 filename* 에서 푼 이름으로 내려받는다', asy
   expect(document.querySelector('a[download]')).toBeNull() // 임시 링크는 치운다
 })
 
-it('409 면 본문의 error 를 돌려주고 파일을 만들지 않는다', async () => {
-  const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => new Response(JSON.stringify({ error: 'X' }), { status: 409 }))
+it('409 면 본문의 error·code 를 돌려주고 파일을 만들지 않는다(옛 서버처럼 code 가 없으면 null)', async () => {
+  const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => new Response(JSON.stringify({ error: 'X', code: 'PROFILE_REQUIRED' }), { status: 409 }))
   vi.stubGlobal('fetch', fetchMock)
-  expect(await downloadWbsExport('p1', { expand: true })).toEqual({ ok: false, error: 'X', status: 409 })
+  expect(await downloadWbsExport('p1', { expand: true })).toEqual({ ok: false, error: 'X', status: 409, code: 'PROFILE_REQUIRED' })
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'X' }), { status: 409 }))
+  expect(await downloadWbsExport('p1', { expand: true })).toEqual({ ok: false, error: 'X', status: 409, code: null })
   expect(fetchMock.mock.calls[0][0]).toBe('/api/export?projectId=p1&expand=1')
   expect(URL.createObjectURL).not.toHaveBeenCalled()
 })
 
 it('JSON 이 아닌 500 이면 error 는 null — 파일을 만들지 않는다', async () => {
   vi.stubGlobal('fetch', vi.fn<(url: string) => Promise<Response>>(async () => new Response('<html>Internal Server Error</html>', { status: 500 })))
-  expect(await downloadWbsExport('p1', { expand: false })).toEqual({ ok: false, error: null, status: 500 })
+  expect(await downloadWbsExport('p1', { expand: false })).toEqual({ ok: false, error: null, status: 500, code: null })
   expect(URL.createObjectURL).not.toHaveBeenCalled()
 })
 
@@ -62,11 +64,24 @@ it('exportFailureKey — 409·422·400 은 사전 키, 400 은 호출부(접기�
   for (const s of [401, 403, 404, 500, null]) expect(exportFailureKey(s, false)).toBeNull()
 })
 
+// 같은 422·409 가 단계 이름 손상·부재(과제 27)와 양식 손상·부재 두 뜻을 갖게 됐다 — 상태 코드만 보면 정상 양식을 비우라는
+// 틀린 처방이 나간다(최종 리뷰 FN-7). 본문의 code 를 먼저 보고, code 가 없으면(옛 서버) 상태 코드로 고른다.
+it('exportFailureKey — code 가 CONFIG_INVALID·CONFIG_REQUIRED 면 단계 이름 안내, PROFILE_* 는 양식 안내, 모르는 code 는 null', () => {
+  expect(exportFailureKey(422, false, 'CONFIG_INVALID')).toBe('settings.exportErrLevelLabels')
+  expect(exportFailureKey(422, false, 'CONFIG_INVALID')).not.toBe('settings.exportErrProfileCorrupt')
+  expect(exportFailureKey(409, true, 'CONFIG_REQUIRED')).toBe('settings.exportErrLevelLabels')
+  expect(exportFailureKey(409, false, 'CONFIG_REQUIRED')).toBe('settings.exportErrLevelLabels')
+  expect(exportFailureKey(422, true, 'PROFILE_CORRUPT')).toBe('settings.exportErrProfileCorrupt')
+  expect(exportFailureKey(409, true, 'PROFILE_REQUIRED')).toBe('importWizard.exportProfileNeedsSaved')
+  expect(exportFailureKey(422, false, 'SOMETHING_NEW')).toBeNull()
+  expect(exportFailureKey(422, false, null)).toBe('settings.exportErrProfileCorrupt')
+})
+
 // 오프라인 등으로 fetch 가 던지면(최종 리뷰 UI m-4) 거부가 호출부 밖으로 새어 토스트 없이 끝났다 — 같은 실패 모양으로 돌려준다.
 it('fetch 가 던지면 ok:false(error·status null) — 던지지 않고 파일도 만들지 않는다', async () => {
   const err = vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
-  await expect(downloadWbsExport('p1', { expand: false })).resolves.toEqual({ ok: false, error: null, status: null })
+  await expect(downloadWbsExport('p1', { expand: false })).resolves.toEqual({ ok: false, error: null, status: null, code: null })
   expect(URL.createObjectURL).not.toHaveBeenCalled()
   expect(err).toHaveBeenCalled()
 })

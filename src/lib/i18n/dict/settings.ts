@@ -45,7 +45,8 @@ export const settingsKo = {
   'settings.clearExcelProfileDone': '저장된 양식을 비웠습니다',
   'settings.clearExcelProfileFailed': '양식을 비우지 못했습니다',
   'settings.configConflict': '다른 사용자가 설정을 먼저 바꿨습니다. 최신 값을 확인한 뒤 다시 저장하세요.',
-  // 내보내기 실패 토스트 설명 — 서버 본문 대신 상태 코드로 고른다(downloadWbsExport.exportFailureKey).
+  // 내보내기 실패 토스트 설명 — 서버 본문 대신 기계 코드(없으면 상태 코드)로 고른다(downloadWbsExport.exportFailureKey).
+  'settings.exportErrLevelLabels': 'WBS 단계 이름 설정이 손상되었거나 없어 내보낼 수 없습니다 — 설정 화면의 WBS 단계 이름을 확인하세요.',
   'settings.exportErrProfileCorrupt': '저장된 엑셀 양식이 손상되었습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.',
   'settings.exportErrProfileTooDeep': 'WBS가 저장된 엑셀 양식의 계층 열보다 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.',
   // AI 어시스턴트 색인 섹션

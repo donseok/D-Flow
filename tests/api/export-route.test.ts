@@ -104,6 +104,28 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
     err.mockRestore()
   })
 
+  it('본문의 기계 코드로 같은 상태의 두 뜻을 가른다 — 단계 이름 손상·부재(CONFIG_*)와 양식 손상·부재(PROFILE_*)(FN-7)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['A', 'A'] }))
+    let res = await get('p-mine')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ code: 'CONFIG_INVALID', key: 'core.level_labels' })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
+    res = await get('p-mine')
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'CONFIG_REQUIRED', key: 'core.level_labels' })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': { version: 2 } }))
+    res = await get('p-mine')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ code: 'PROFILE_CORRUPT' })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'] }))
+    res = await get('p-mine', true)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'PROFILE_REQUIRED' })
+    expect(mocks.getComputedWbs).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+
   it('저장 양식이 없는데 펼침이면 409 — WBS 도 읽지 않는다', async () => {
     const res = await get('p-mine', true)
     expect(res.status).toBe(409)

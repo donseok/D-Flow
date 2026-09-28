@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
     if (e instanceof ConfigUnavailableError) { console.error('[export] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
     throw e
   }
+  // 본문에 기계 코드(code)를 싣는다 — 422·409 가 단계 이름 손상·부재(CONFIG_*)와 양식 손상·부재(PROFILE_*) 두 뜻을 갖는다.
+  // 상태 코드는 스펙 표대로 두고, 클라이언트(exportFailureKey)가 code 로 안내를 고른다.
   let levelLabels: string[]
   try { levelLabels = valueOf(cfg, 'core.level_labels') } catch (e) {
-    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message }, { status: configStatus(e.code) })
+    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message, code: e.code, key: e.key }, { status: configStatus(e.code) })
     throw e
   }
 
@@ -54,10 +56,10 @@ export async function GET(req: NextRequest) {
   const profileState = cfg.keys['wbs.excel_profile']
   if (profileState.status === 'invalid') {
     console.error('[export] 저장된 양식이 손상됨:', profileState.error)
-    return NextResponse.json({ error: errProfileCorrupt(profileState.error) }, { status: 422 })
+    return NextResponse.json({ error: errProfileCorrupt(profileState.error), code: 'PROFILE_CORRUPT' }, { status: 422 })
   }
   const validated = profileState.status === 'set' && profileState.value !== null ? profileState.value : null
-  if (!validated && expand) return NextResponse.json({ error: ERR_PROFILE_MISSING }, { status: 409 })
+  if (!validated && expand) return NextResponse.json({ error: ERR_PROFILE_MISSING, code: 'PROFILE_REQUIRED' }, { status: 409 })
 
   const { items, holidays } = await getComputedWbs(projectId)
   const hol = holidays.map(d => ({ date: d, name: '' }))

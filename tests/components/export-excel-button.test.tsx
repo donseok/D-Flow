@@ -38,6 +38,15 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     expect(document.body.textContent).not.toMatch(/[가-힣]/)
   })
 
+  it('단계 이름 손상(422 + CONFIG_INVALID)이면 양식 비우기가 아니라 단계 이름 안내(FN-7)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: '설정 값이 올바르지 않습니다. (core.level_labels)', code: 'CONFIG_INVALID', key: 'core.level_labels' }), { status: 422 })))
+    await act(async () => { (document.body.querySelector('button') as HTMLButtonElement).click() })
+    await act(async () => {})
+    expect(document.body.textContent).toContain(t('en', 'settings.exportErrLevelLabels'))
+    expect(document.body.textContent).not.toContain(t('en', 'settings.exportErrProfileCorrupt'))
+    expect(document.body.textContent).not.toMatch(/[가-힣]/)
+  })
+
   it('fetch 가 던져도(오프라인) 실패 토스트를 띄우고 버튼은 다시 풀린다', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))

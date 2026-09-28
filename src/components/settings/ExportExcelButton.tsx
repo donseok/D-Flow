@@ -17,7 +17,7 @@ export function ExportExcelButton({ projectId }: { projectId: string }) {
     try {
       const r = await downloadWbsExport(projectId, { expand: false })
       if (!r.ok) {
-        const key = exportFailureKey(r.status, false)
+        const key = exportFailureKey(r.status, false, r.code)
         toast({ title: t('settings.exportFailed'), description: key ? t(key) : undefined, variant: 'error' })
       }
     } finally {

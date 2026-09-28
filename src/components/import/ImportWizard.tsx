@@ -189,7 +189,7 @@ export function ImportWizard({
     try {
       const r = await downloadWbsExport(projectId, { expand: true })
       if (!r.ok) {
-        const key = exportFailureKey(r.status, true)
+        const key = exportFailureKey(r.status, true, r.code)
         toast({ title: t('importWizard.exportProfileFailedHttp'), description: key ? t(key) : undefined, variant: 'error' })
       }
     } finally {
