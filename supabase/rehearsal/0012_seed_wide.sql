@@ -3,6 +3,7 @@
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0012_seed_wide.sql
 --   supabase migration up --local
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0012_smoke.sql
+--   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0012_created_fixture.sql
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rollbacks/0012_settings_rollback.sql
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0012_rollback_check.sql
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -1 -v ON_ERROR_STOP=1 < supabase/migrations/0012_settings.sql

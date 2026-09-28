@@ -1,7 +1,9 @@
--- 0012 롤백의 데이터 복원 확인 — 0012_seed_wide.sql 을 심고 0012 를 적용한 뒤 롤백한 DB 에서 돌린다(절차는 seed 파일 머리).
+-- 0012 롤백의 데이터 복원 확인 — 0012_seed_wide.sql 을 심고 0012 를 적용하고 0012_created_fixture.sql 을 흘린 뒤 롤백한 DB 에서
+-- 돌린다(절차는 seed 파일 머리).
 --   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0012_rollback_check.sql
 -- 전부 t 여야 한다: 값이 넓은 열로 돌아왔고(정규화된 채 — 단계 이름의 앞뒤 공백은 떼고, 키워드·도메인은 소문자),
--- 0012 가 버린 열은 기준선 기본값이며(null, force_bottleneck 은 3·4), ③ 이 백필한 행은 남았다. 읽기만 한다.
+-- 0012 가 버린 열은 기준선 기본값이며(null, force_bottleneck 은 3·4), ③ 이 백필한 행은 남았다. 0012 에서 만든 프로젝트의 미설정
+-- 키워드(생성·unset)는 제품 기본값 6개로, 명시 [] 는 '{}' 로 돌아왔다(FN-9). 읽기만 한다.
 select
   (select s.level_labels = array['Phase', 'Task'] and s.max_depth is null and s.extra_axis_label = 'Track'
       and s.milestone_keywords = array['kick-off', '오픈'] and s.excel_profile = '{"version": 1, "sheet": "WBS", "teamColumns": []}'::jsonb
@@ -30,4 +32,10 @@ select
   (select s.allowed_domains = '{}' from public.workspace_settings s where s.workspace_id = '00000000-0000-0000-0012-00000000aa13') as backfilled_workspace_back,
   (select s.allowed_domains = array['sub.example.com', 'b.test']
      from public.workspace_settings s where s.workspace_id = '00000000-0000-0000-0012-00000000aa14') as trimmed_domains_back,
-  (select count(*) = 3 from public.agent_projects a where a.project_id::text like '00000000-0000-0000-0012-000000000c1_') as agent_rows_back;
+  (select count(*) = 3 from public.agent_projects a where a.project_id::text like '00000000-0000-0000-0012-000000000c1_') as agent_rows_back,
+  (select s.milestone_keywords = array['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고'] and s.level_labels = array['P1', 'P2']
+     from public.project_settings s join public.projects p on p.id = s.project_id where p.name = 'Seed12 생성 기본') as created_unset_keywords_default,
+  (select s.milestone_keywords = '{}' from public.project_settings s join public.projects p on p.id = s.project_id
+    where p.name = 'Seed12 생성 빈 키워드') as created_empty_keywords_kept,
+  (select s.milestone_keywords = array['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
+     from public.project_settings s join public.projects p on p.id = s.project_id where p.name = 'Seed12 생성 후 unset') as unset_keywords_default;

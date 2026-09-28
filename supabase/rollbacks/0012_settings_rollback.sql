@@ -8,6 +8,9 @@
 --     값은 돌아오지 않는다. 열은 기준선 기본값(null, force_bottleneck 은 3·4)으로 다시 생긴다
 --   · 이행이 정규화한 값 — 단계 이름의 앞뒤 공백, 키워드·도메인의 대문자는 정규화된 채 돌아간다
 --   · 명시 invites.allowed_domains = [] — '{}'(env 폴백)로 돌아간다. 0011 에는 "명시적 빈 목록"이 없다
+--   · 미설정 core.milestone_keywords(0012 의 생성은 키워드를 저장하지 않는다 — 복사 원본 미설정·'기본값으로' unset 도 같다) —
+--     제품 기본값 6개로 채운다. 0011 에는 기본값 폴백이 없어 '{}' 로 두면 키워드 마일스톤이 로그 없이 사라진다.
+--     명시 [] 는 '{}' 그대로(빈 값을 미설정으로 되돌리지 않는다), 손상된 비배열도 '{}'(0012 코드에서도 마커 0건이었다)
 --   · status = 'skipped' 잡 — dead_letter 로 돌아간다
 --   · branding 버킷의 파일 바이트 — Storage 에 남는다(객체 행과 버킷 행만 지운다)
 -- 재생성하는 두 표의 0011 모양(2026-09-28 실측): project_settings 는 16열이고 stage_credits 가 updated_by 뒤다. updated_by FK 는
@@ -134,6 +137,9 @@ select k.project_id,
        case when jsonb_typeof(k.v -> 'core.extra_axis_label') = 'string' then k.v ->> 'core.extra_axis_label' end,
        case when jsonb_typeof(k.v -> 'core.milestone_keywords') = 'array'
             then array(select jsonb_array_elements_text(k.v -> 'core.milestone_keywords'))
+            -- 미설정 = 레지스트리 기본값(src/lib/settings/defs/project.ts DEFAULT_MILESTONE_KEYWORDS — 옛 createProject 의 여섯)
+            when not (k.v ? 'core.milestone_keywords')
+            then array['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
             else array[]::text[] end,
        case when jsonb_typeof(k.v -> 'wbs.excel_profile') = 'object' then k.v -> 'wbs.excel_profile' else '{}'::jsonb end,
        k.updated_at, k.updated_by,
