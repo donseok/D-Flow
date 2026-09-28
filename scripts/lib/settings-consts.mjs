@@ -6,3 +6,15 @@ export const SCRIPT_SCHEMA_VERSION = 1
 
 /** 프로젝트 층 토글 9개(성능 시드의 modules.enabled) — src/lib/modules/defaults.ts PROJECT_TOGGLABLE 과 같은 순서 */
 export const PROJECT_TOGGLE_IDS = Object.freeze(['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
+
+/** 모듈 플래그 8개 — src/lib/modules/flags.ts MODULE_FLAG_NAMES 와 같은 순서(tests/modules/bootstrap-ids.test.ts 가 대조) */
+export const MODULE_FLAG_NAMES_SCRIPT = Object.freeze([
+  'AGENT_API_ENABLED', 'MINUTES_API_ENABLED', 'WIKI_SERVICE_ENABLED', 'WIKI_WORKER_ENABLED',
+  'CHAT_V2_ENABLED', 'CHAT_V2_PLANNER_ENABLED', 'CHAT_V2_LLM_SYNTHESIS_ENABLED', 'CHAT_V2_INDEX_WORKER_ENABLED',
+])
+
+/** env:local 이 병합할 모듈 플래그 — 로컬은 모든 모듈이 가용이어야 관문(Phase B) 뒤에도 화면·E2E 가 열린다(스펙 §4.1·§9 #5).
+ *  시크릿(MINUTES_API_SECRET·CRON_SECRET 등)은 넣지 않는다 — 시크릿이 없는 라우트는 지금처럼 404 로 숨는다 */
+export function localModuleFlagEnv() {
+  return Object.fromEntries(MODULE_FLAG_NAMES_SCRIPT.map((n) => [n, 'true']))
+}
