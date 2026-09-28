@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CORE, LEGACY_GLOBAL_PREFIXES, MODULES, assertModules, moduleDef } from '@/lib/modules/registry'
-import { CORE_MODULES, MODULE_IDS, PROJECT_TOGGLABLE, WORKSPACE_SCOPED } from '@/lib/modules/defaults'
+import { CORE_MODULES, MODULE_IDS, NON_CORE_MODULES, PROJECT_TOGGLABLE, WORKSPACE_SCOPED } from '@/lib/modules/defaults'
 import { closeRequires, missingRequires } from '@/lib/modules/closure'
 import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { BOT_DOMAINS } from '@/lib/ai/chat/protocol'
@@ -120,5 +120,25 @@ describe('import 방향(스펙 §3.5 끝·§3.6)', () => {
     const reg = readFileSync('src/lib/modules/registry.ts', 'utf8')
     expect(reg).toMatch(/^import\s+\{[^}]*\}\s+from\s+'@\/lib\/settings\/registry'/m)
     expect(reg).not.toMatch(/from\s+'@\/app\//)
+  })
+})
+
+describe('0012 의 동결 목록 = 레지스트리', () => {
+  const sql = readFileSync('supabase/migrations/0012_settings.sql', 'utf8').split('\n')
+  const arrayAfter = (marker: string) => {
+    const i = sql.findIndex((l) => l.includes(marker))
+    expect(i, marker).toBeGreaterThan(-1)
+    const m = sql[i + 1].match(/array\[([^\]]*)\]/)
+    expect(m, `${marker} 다음 줄에 array[...]`).toBeTruthy()
+    return m![1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''))
+  }
+  it('프로젝트 9 = PROJECT_TOGGLABLE, 워크스페이스 13 = 토글 9 + 워크스페이스 층 4(순서까지) = NON_CORE_MODULES(원소)', () => {
+    expect(arrayAfter('-- 동결 목록(프로젝트 9)')).toEqual([...PROJECT_TOGGLABLE])
+    // 0012 는 워크스페이스 목록을 프로젝트 토글 9 다음에 워크스페이스 층 4 순서로 적었다 — MODULE_IDS 순서(NON_CORE_MODULES)와
+    // 원소는 같고 순서만 다르다(2026-09-28 실측). modules.allowed 는 집합으로 읽히므로(parseModuleList 는 순서를 보지 않는다) 순서는
+    // 이 파일의 구성(토글 + 층)으로 고정하고, 레지스트리와는 원소로 대조한다
+    const ws = arrayAfter('-- 동결 목록(워크스페이스 13)')
+    expect(ws).toEqual([...PROJECT_TOGGLABLE, ...WORKSPACE_SCOPED])
+    expect([...ws].sort()).toEqual([...NON_CORE_MODULES].sort())
   })
 })
