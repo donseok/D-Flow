@@ -1,6 +1,7 @@
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectRoster } from '@/lib/data/members'
-import { loadProjectConfigForPage, pick } from '@/lib/settings/pageConfig'
+import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { pick } from '@/lib/settings/pick'
 import { levelDepthOf } from '@/lib/settings/projectConfig'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'

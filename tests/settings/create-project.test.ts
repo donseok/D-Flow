@@ -13,6 +13,7 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams: h.refreshTeams }))
 import { createProject, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
+import { CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { makeActor } from '../fixtures/actor'
 
 const WID = '00000000-0000-4000-8000-00000000bb01', OTHER = '00000000-0000-4000-8000-00000000bb02'
@@ -86,5 +87,40 @@ describe('createProject', () => {
     db.workspaces.delete(WID)
     expect(await createProject(input())).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
     expect(h.refreshTeams).not.toHaveBeenCalled()
+  })
+})
+
+describe('createProject — DB 원문은 응답에 싣지 않는다(로그로)·존재 오라클 없음·재사용 코드', () => {
+  it('설정 조회 실패(I-1)는 고정 문구 + 서버 로그 — 원문은 응답에 없다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.failTable = 'workspace_settings'
+    const r = await createProject(input())
+    expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE })
+    expect(JSON.stringify(r)).not.toContain('fake failure')
+    expect(err.mock.calls.some((c) => JSON.stringify(c).includes('fake failure'))).toBe(true)
+    expect(db.rpcCalls).toHaveLength(0)
+  })
+  it('없는(또는 보이지 않는) 복사 원본은 다른 워크스페이스 원본과 같은 ERR_DENIED(M-2) — id 존재를 구분할 수 없다', async () => {
+    const MISSING = '00000000-0000-4000-8000-00000000aa99'
+    const missing = await createProject(input({ copyFromProjectId: MISSING }))
+    const foreign = await createProject(input({ copyFromProjectId: FOREIGN }))
+    expect(missing).toEqual({ ok: false, code: ERR_DENIED, error: ERR_DENIED })
+    expect(missing).toEqual(foreign)
+    expect(db.rpcCalls).toHaveLength(0)
+  })
+  it('표에 없는 DB 토큰(M-7)은 throw 하지 않고 로그 + CONFIG_UNAVAILABLE 고정 문구', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = db.client()
+    h.adminFor.mockImplementation((s: Record<string, string>) => ({
+      ...s, admin: { ...client, rpc: vi.fn(async () => ({ data: null, error: { code: 'XX000', message: 'relation "secret_tbl" exploded', details: null } })) },
+    }))
+    const r = await createProject(input())
+    expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE })
+    expect(err.mock.calls.some((c) => JSON.stringify(c).includes('secret_tbl'))).toBe(true)
+    expect(h.refreshTeams).not.toHaveBeenCalled()
+  })
+  it('같은 요청 번호에 다른 내용이면 code COMMAND_REUSED(M-3 — 모달이 새 번호를 발급한다)', async () => {
+    expect(await createProject(input())).toMatchObject({ ok: true })
+    expect(await createProject(input({ name: 'Acme 다른 이름' }))).toMatchObject({ ok: false, code: 'COMMAND_REUSED' })
   })
 })

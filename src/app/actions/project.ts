@@ -75,6 +75,12 @@ export type CreateProjectResult =
 
 const invalidInput = (error: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
   ({ ok: false, code: 'CONFIG_INVALID', error, ...(fieldErrors ? { fieldErrors } : {}) })
+const denied: CreateProjectResult = { ok: false, code: ERR_DENIED, error: ERR_DENIED }
+/** 원인(DB 원문 포함)은 로그로, 사용자에게는 고정 문구만 — 표시 = 로깅(설정 액션의 unavailableLogged 와 같은 태도) */
+function unavailableLogged(what: string, ctx: { workspaceId: string; copyFrom: string | null; commandId: string }, cause: string): CreateProjectResult {
+  console.error(`[createProject] ${what} 실패`, { ...ctx, cause })
+  return { ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+}
 
 /** 생성 시점의 modules.enabled — 후보 ∩ (허용 ∩ env) 에서 requires 가 빠진 것을 뺀다. 자동 추가는 없다 */
 function initialEnabled(candidate: readonly ModuleId[], allowed: readonly ModuleId[]): ModuleId[] {
@@ -105,6 +111,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   if (copyFrom !== null && (typeof copyFrom !== 'string' || !isUuidLike(copyFrom))) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: copyFromProjectId`)
 
   const { admin } = adminFor({ workspaceId })
+  const ctx = { workspaceId, copyFrom, commandId: input.commandId }
   const values: Record<string, unknown> = {}
   let allowed: ModuleId[]
   let candidate: ModuleId[] = settingDef('project', 'modules.enabled')!.default as ModuleId[]
@@ -112,9 +119,13 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
     const ws = await getWorkspaceConfig(workspaceId, { client: admin })
     allowed = allowedAndAvailable(ws)
     if (copyFrom) {
+      // 원본이 없거나 다른 워크스페이스면 똑같이 ERR_DENIED — 프로젝트 id 의 존재를 구분할 수 없게 한다.
+      // RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다. 조회 실패는 '없음'이 아니다(3원칙 ①).
+      const owner = await admin.from('projects').select('workspace_id').eq('id', copyFrom).maybeSingle()
+      if (owner.error) return unavailableLogged('복사 원본 조회', ctx, owner.error.message)
+      if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return denied
       const src = await getProjectConfig(copyFrom, { client: admin })
-      // 다른 워크스페이스의 원본은 RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다
-      if (src.workspaceId !== workspaceId) return { ok: false, code: ERR_DENIED, error: ERR_DENIED }
+      if (src.workspaceId !== workspaceId) return denied
       const broken: { key: string; message: string }[] = []
       for (const def of PROJECT_SETTINGS) {
         const s = src.keys[def.key]
@@ -126,7 +137,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       candidate = srcEnabled.status === 'set' || srcEnabled.status === 'default' ? srcEnabled.value : candidate
     }
   } catch (e) {
-    if (e instanceof ConfigUnavailableError) return { ok: false, code: 'CONFIG_UNAVAILABLE', error: e.message }
+    if (e instanceof ConfigUnavailableError) return unavailableLogged('설정 판독', ctx, e.message)
     throw e
   }
   values['core.level_labels'] = labels.value                        // 복사에서도 라벨은 입력값(§7.5)
@@ -139,7 +150,9 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   })
   if (error) {
     const mapped = mapDbError(error)
-    if (!mapped) throw new Error(`[createProject] 알 수 없는 DB 오류: ${error.message}`)
+    if (!mapped) return unavailableLogged('생성 RPC(표에 없는 DB 오류)', ctx, `${error.code ?? ''} ${error.message}`)
+    // 같은 요청 번호에 다른 내용 — 모달이 새 번호를 발급하도록 코드를 따로 준다(문구는 표의 고정 문구)
+    if (mapped.token === 'COMMAND_REUSED') return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
     return mapped.code === 'CONFIG_INVALID'
       ? invalidInput(mapped.message, mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : undefined)
       : { ok: false, code: mapped.code, error: mapped.message }

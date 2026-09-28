@@ -11,7 +11,7 @@ import { computeTree, overallProgress } from '@/lib/domain/rollup'
 import { collectLeaves } from '@/lib/domain/tree'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
-import { pick } from '@/lib/settings/pageConfig'
+import { pick } from '@/lib/settings/pick'
 import type { Status } from '@/lib/domain/types'
 import type {
   MeetingBotRepository,

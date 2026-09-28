@@ -109,6 +109,41 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
+  async function fillAndSubmit(name: string) {
+    const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!
+    const levelsInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!
+    act(() => setValue(nameInput, name))
+    act(() => setValue(levelsInput, '단계,작업'))
+    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    await act(async () => {
+      createBtn.click()
+      await Promise.resolve()
+    })
+  }
+  const sentIds = () => mocks.createProject.mock.calls.map((c) => (c[0] as { commandId: string }).commandId)
+
+  it('실패 뒤 재시도는 같은 요청 번호를 쓴다(결과 불명 재전송이 중복 생성이 되지 않게)', async () => {
+    mocks.createProject.mockResolvedValue({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '잠시 뒤' })
+    openModal()
+    await fillAndSubmit('신규 프로젝트')
+    await fillAndSubmit('신규 프로젝트')
+    const [a, b] = sentIds()
+    expect(a).toBe(b)
+  })
+
+  it('COMMAND_REUSED 면 새 요청 번호를 발급한다 — 입력을 고쳐 다시 누르면 새 요청으로 나간다(M-3)', async () => {
+    mocks.createProject.mockResolvedValueOnce({ ok: false, code: 'COMMAND_REUSED', error: '같은 요청 번호로 다른 내용' })
+    mocks.createProject.mockResolvedValueOnce({ ok: true, projectId: 'p-new', status: 'applied' })
+    openModal()
+    await fillAndSubmit('신규 프로젝트')
+    expect(document.body.textContent).toContain('같은 요청 번호로 다른 내용')
+    await fillAndSubmit('신규 프로젝트 2')
+    const [a, b] = sentIds()
+    expect(a).toMatch(/^[0-9a-f-]{36}$/)
+    expect(b).toMatch(/^[0-9a-f-]{36}$/)
+    expect(a).not.toBe(b)
+  })
+
   it('라벨 입력에 aria-describedby 로 힌트가 연결되고 aria-required 가 켜져 있다', () => {
     openModal()
     const levelsInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!

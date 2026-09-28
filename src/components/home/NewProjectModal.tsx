@@ -8,6 +8,7 @@ import { createProject } from '@/app/actions/project'
 import { isValidDateRange } from '@/lib/domain/validate'
 import { validateLevelSettings } from '@/lib/domain/levelSettings'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { newUuid } from '@/lib/domain/uuid'
 
 /**
  * 워크스페이스 홈의 "새 프로젝트 시작" 트리거 + 다이얼로그.
@@ -36,7 +37,7 @@ export function NewProjectModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 요청 번호 — 모달이 열릴 때 하나 만들어 재시도에도 같은 값을 쓴다(결과 불명 재전송이 중복 생성이 되지 않게)
-  const [commandId, setCommandId] = useState(() => crypto.randomUUID())
+  const [commandId, setCommandId] = useState(() => newUuid())
 
   function reset() {
     setName('')
@@ -45,7 +46,7 @@ export function NewProjectModal({
     setEnd('')
     setLevels('')
     setError(null)
-    setCommandId(crypto.randomUUID())
+    setCommandId(newUuid())
   }
 
   function close() {
@@ -77,7 +78,12 @@ export function NewProjectModal({
         workspaceId, name: trimmed, startDate: start || null, endDate: end || null,
         description: description.trim() || null, levelLabels: lv.labels, commandId,
       })
-      if (!r.ok) { setError(r.fieldErrors?.[0]?.message ?? r.error); return }
+      if (!r.ok) {
+        // 같은 번호로 다른 내용을 보냈다 — 입력을 고쳐 다시 누르면 새 요청으로 나가게 번호를 바꾼다. 그 밖의 실패는 같은 번호로 재시도한다.
+        if (r.code === 'COMMAND_REUSED') setCommandId(newUuid())
+        setError(r.fieldErrors?.[0]?.message ?? r.error)
+        return
+      }
       router.refresh()
       setOpen(false)
       reset()

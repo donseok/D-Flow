@@ -82,6 +82,7 @@ describe('설정 화면 — 저장된 엑셀 양식 비우기', () => {
     expect(mocks.ClearExcelProfileButton).not.toHaveBeenCalled()
     expect(html).toContain('설정을 불러오지 못해 이 화면을 그릴 수 없습니다')
     expect(html).toContain('data-config-load-error')
+    expect(html).not.toContain('db down')   // 원문은 로그에만(I-2)
     err.mockRestore()
   })
 })

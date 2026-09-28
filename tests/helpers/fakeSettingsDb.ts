@@ -121,6 +121,7 @@ export class FakeSettingsDb {
       case 'project_settings': return [...this.projects.values()].map((p) => ({ project_id: p.id, values: p.values, revision: p.revision, schema_version: p.schemaVersion,
         ...(select.includes('projects') ? { projects: { workspace_id: p.workspaceId } } : {}) }))
       case 'workspace_settings': return [...this.workspaces.values()].map((w) => ({ workspace_id: w.id, values: w.values, revision: w.revision, schema_version: w.schemaVersion }))
+      case 'projects': return [...this.projects.values()].map((p) => ({ id: p.id, workspace_id: p.workspaceId }))
       case 'project_areas': return this.areas
       case 'teams': return this.teams
       case 'wbs_items': return this.wbsItems

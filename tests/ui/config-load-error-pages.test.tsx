@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 import { makeMemberActor } from '../fixtures/actor'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigUnavailableError } from '@/lib/settings/errors'
 
 // 설정을 못 읽은 화면(스펙 §3.5) — 옛 로더처럼 기본값으로 그리지 않고 '설정을 불러오지 못했습니다' 상태를 그린다.
 // 본체 뷰(DashboardView·WbsGanttSheet·AgentHubView)는 부르지 않는다. 단계 이름이 손상이면 문구에 그 키 이름이 든다.
@@ -81,6 +81,9 @@ describe.each(pages)('$name 페이지 — 설정 조회 실패', ({ view, render
     const out = await render()
     expect(out).toContain(LOAD_FAILED)
     expect(out).toContain('data-config-load-error')
+    // DB·해석기 원문은 화면에 그리지 않는다(I-2) — 로그에만
+    expect(out).not.toContain('프로젝트 설정 행이 없습니다')
+    expect(out).toContain(CONFIG_MESSAGES.CONFIG_UNAVAILABLE)
     expect(view).not.toHaveBeenCalled()
   })
   it('정상이면 오류 상태 없이 본체를 그린다', async () => {
