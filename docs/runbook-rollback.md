@@ -144,6 +144,28 @@ git diff --name-only <태그>..origin/main -- supabase/migrations/
 필수다(`CLAUDE.md`). 적용은 원격이 생긴 뒤 Supabase Management API 경유
 (`npm run db:apply -- <파일> --target prod`)로 한다. `supabase db push`는 쓰지 않는다.
 
+### 2.4.1 설정 값이 손상됐을 때 — SQL 로 고친다(설정 표를 직접 update 하지 않는다)
+
+`core.level_labels`(WBS 단계 이름) 같은 설정 값이 손상(invalid)되면 그 키를 쓰는 화면·API 만 멈추고 사유를 띄운다
+(WBS 화면·Excel 내보내기·PL 업로드 대조·에이전트 상세 패널). 화면에서 고치는 경로는 Phase C 다 — 그 전에는 SQL 로 고친다.
+설정 쓰기는 RPC 한 길이다(`project_settings` 를 직접 update 하면 revision·이력·검사가 빠진다). `apply_project_settings` 를
+service_role(로컬은 컨테이너 psql 의 postgres)로 부르고, 명령 id 는 새로 만들고, 행위자는 복구하는 관리자의 계정 id 로 남긴다.
+
+```sql
+-- 1) 지금 상태 — revision 과 손상된 값(서버 로그 '[settings] invalid' 줄에 키·사유가 있다)
+select revision, "values" -> 'core.level_labels' from public.project_settings where project_id = '<프로젝트 id>';
+-- 2) 고칠 값은 앱 규칙을 지킨다: 앞뒤 공백 없음·빈 이름 없음·중복 없음·1~10개·기존 WBS 깊이 이상(모자라면 축소 거부와 같은 사고)
+-- 3) RPC 로 쓴다 — 1) 의 revision 으로 CAS, 결과가 {"status": "applied", "revision": N+1} 인지 본다
+select public.apply_project_settings('<프로젝트 id>', <1) 의 revision>, gen_random_uuid(),
+  '{"core.level_labels": ["Phase", "Task", "Activity"]}'::jsonb, null, '<복구하는 관리자 auth.users id>', 1, 'internal');
+-- 4) 이력 확인 — source internal·changed_by 가 3) 의 행위자
+select revision, key, source, changed_by from public.project_settings_history
+ where project_id = '<프로젝트 id>' order by id desc limit 3;
+```
+
+로컬은 `docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1`, 원격이 생긴 뒤에는 이 SQL 을 파일로 만들어
+`npm run db:apply -- <파일> --target staging|prod` 로 보낸다. `SETTINGS_REVISION_CONFLICT` 면 그 사이 누가 저장한 것이다 — 1) 부터 다시.
+
 ### 2.5 사고 직후 — 두 가지만
 
 ```bash

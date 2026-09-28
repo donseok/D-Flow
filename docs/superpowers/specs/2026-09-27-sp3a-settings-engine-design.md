@@ -327,6 +327,7 @@ const issueStatuses: SettingDef<IssueStatus[]> = { key: 'workflow.issue_statuses
 | `ERR_DENIED` | `denied` | false | `forbidden` |
 | `ERR_MODULE_DISABLED` | `denied` | false | `module_disabled` |
 | `CONFIG_UNAVAILABLE`·`CONFIG_BUSY` | `unavailable` | true | `failed` |
+| `CONFIG_UNAVAILABLE`(저장 뒤 동기화 실패 — RPC 는 applied, 뒤따르는 agent_projects 동기화가 실패) | `unavailable` | false | `failed`(문구 "revision N 으로 저장됐지만 … 동기화에 실패했습니다") — 재시도로는 동기화가 다시 돌지 않는다(Phase A 최종 수정 FN-10, 계획 과제 11 과의 편차) |
 | `CONFIG_SCHEMA_AHEAD`(넘침 포함) | `schema_ahead` | false | `failed` |
 | 표에 없는 오류 | throw | — | 오류 경계 |
 

@@ -29,12 +29,12 @@
 | src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유 토큰을 읽고 쓴다(0011 뒤 세션은 share_token 열을 읽지 못한다) |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid) 뒤 adminFor({ workspaceId }) 로 create_project_with_settings 를 부른다(복사 원본은 그 wid 소속인지 먼저 확인). 비공개는 requireProjectAdmin(pid) 뒤 그 pid 로 projects 를 쓴다. 설정 쓰기는 이 파일에 없다(SP3a — settings.ts·write.ts 로 옮겼다) |
 | src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
-| src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로, workspace_settings 를 그 프로젝트의 워크스페이스 id 로 읽고 쓴다 |
+| src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로 읽고 쓴다. 허용 도메인은 해석기(getWorkspaceConfig)로 그 프로젝트의 워크스페이스 설정을 읽기만 한다(설정 표를 직접 만지지 않는다 — SP3a) |
 | src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 의 원본은 teamsForWorkspaceSync(프로젝트의 wid)다(이번에 고침) |
 | src/app/actions/roster.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin 또는 Member(pid) 뒤에 project_members 를 pid·memberId 로 읽고, upsert RPC 에 pid 를 넘긴다 |
 | src/app/actions/teams.ts | 세션 가드 뒤 id 스코프 | addTeam 은 requireWorkspaceAdmin(wid) 뒤에 wid 로 필터한다. updateTeam 은 행의 workspace_id 로 가드한 뒤 eq(workspace_id) 로 쓴다. listTeamsAdmin 은 adminFor({ workspaceId }) 를 쓴다 |
 | src/app/actions/wbsAssign.ts | 세션 가드 뒤 id 스코프 | resolveItemProjectId 로 항목의 pid 를 구해 가드한 뒤, 항목 id 와 멤버의 project_id 일치를 확인하고 쓴다 |
-| src/app/actions/wbsMarkdown.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 부착점·import 를 pid 로 한다 |
+| src/app/actions/wbsMarkdown.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 부착점·import 를 pid 로 한다. 골격 단계 이름 시드는 가드한 그 pid 로 writeProjectSettingsInternal(runWbsImport 안), PL 대조는 그 pid 로 해석기(getProjectConfig) 판독이다 |
 | src/app/actions/wbsSpec.ts | 세션 가드 뒤 id 스코프 | 항목의 pid 로 requireProjectAdmin 또는 위임 자격을 판정한 뒤, 그 항목 id 로만 update 한다 |
 | src/app/api/chat/index/worker/route.ts | 플랫폼 | cron 시크릿(x-cron-secret)으로만 들어온다. 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다 |
 | src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 전역 색인 큐 배치다 |
