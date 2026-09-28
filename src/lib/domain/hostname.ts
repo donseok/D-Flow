@@ -7,6 +7,7 @@ const HOSTNAME_RE = new RegExp(`^${HOSTNAME_LABEL}(?:\\.${HOSTNAME_LABEL})+$`)
 /** 파싱 전 문자 집합 — 문자·숫자·결합표시·점·하이픈. URL 파서는 / ? # \ : 에서 자르고 %xx·soft hyphen 을 풀어
  *  다른 호스트를 만든다('acme.test/evil.example' → 'acme.test') — 그런 입력은 여기서 막는다. */
 const HOST_CHARS_RE = /^[\p{L}\p{N}\p{M}.-]+$/u
+const MAX_HOSTNAME = 253
 
 // RFC 3492 Punycode 인코더 — 이 파일은 클라이언트 번들에도 들어가(ProjectInviteManager → domain/invites) node:punycode 를 쓰지 않는다.
 const BASE = 36, TMIN = 1, TMAX = 26, SKEW = 38, DAMP = 700, INITIAL_BIAS = 72, INITIAL_N = 0x80
@@ -67,9 +68,12 @@ export function toAsciiHostname(v: string): string | null {
   } catch {
     return null
   }
-  if (!HOSTNAME_RE.test(h)) return null
+  // 호스트 전체 253자(DNS·RFC 5321) — 라벨 63자는 HOSTNAME_RE 가 본다
+  if (h.length > MAX_HOSTNAME || !HOSTNAME_RE.test(h)) return null
   const inLabels = v.split('.')
   const outLabels = h.split('.')
   if (inLabels.length !== outLabels.length) return null
+  // 마지막 라벨이 숫자만이면 도메인이 아니라 IPv4 등 주소다 — '*' 모드 초대·허용 도메인 저장 모두 받지 않는다
+  if (/^\d+$/.test(outLabels[outLabels.length - 1])) return null
   return inLabels.every((l, i) => l === outLabels[i] || outLabels[i] === `xn--${punycodeEncode(l)}`) ? h : null
 }

@@ -151,7 +151,7 @@ describe("'*' 모드에서도 호스트 형태를 요구한다(M-2)", () => {
   })
 })
 
-// 적대 탐색 표 B(invite-attack2.md) — 액션과 같이 normalizeInviteEmail 을 거친 뒤 판정한다. 허용 목록은 저장 parse(normalizeDomain) 결과.
+// 적대 탐색 표 B(invite-attack2.md) — 발급의 실제 관문(canonicalInviteEmail)을 지나 판정한다. 허용 목록은 저장 parse(normalizeDomain) 결과.
 describe('과잉 거부 없음 — 탐색 표 B', () => {
   const stored = (raw: string) => { const n = normalizeDomain(raw); if (!n.ok) throw new Error(n.error); return n.value }
   const B: Array<[string, string, string, boolean]> = [
@@ -178,7 +178,18 @@ describe('과잉 거부 없음 — 탐색 표 B', () => {
     ['n-38', 'alice@\u13a0\u13a1.test', 'xn--7tbj.test', false],
   ]
   it.each(B)('%s %s', (_id, email, allowed, expected) => {
-    expect(isAllowedInviteDomain(normalizeInviteEmail(email), [stored(allowed)])).toBe(expected)
+    const c = canonicalInviteEmail(email)
+    expect(c !== null && isAllowedInviteDomain(c, [stored(allowed)])).toBe(expected)
+  })
+  // 허용 행은 정규형도 고정한다 — 행·판정·발송·계정 이메일이 되는 값
+  it.each([
+    ['n-2', 'first_last+tag@acme.test', 'first_last+tag@acme.test'], ['n-8', 'kim@한글.kr', 'kim@xn--bj0bj06e.kr'],
+    ['n-10', "o'brien@acme.test", "o'brien@acme.test"], ['n-11', 'Alice@ACME.TEST', 'alice@acme.test'],
+    ['n-14', 'alice@acme.한국', 'alice@acme.xn--3e0b707e'], ['n-18', 'x-y_z.w+1@acme.test', 'x-y_z.w+1@acme.test'],
+    ['n-19', "!#$%&'*+-/=?^_`{|}~@acme.test", "!#$%&'*+-/=?^_`{|}~@acme.test"], ['n-24', 'alice@acme.test.', 'alice@acme.test'],
+    ['n-25', '  Alice.Kim@Acme.Test  ', 'alice.kim@acme.test'], ['n-32', 'alice@b\u00fccher.test', 'alice@xn--bcher-kva.test'],
+  ])('%s 정규형 %s → %s', (_id, email, canonical) => {
+    expect(canonicalInviteEmail(email)).toBe(canonical)
   })
 })
 
@@ -189,6 +200,20 @@ describe('canonicalInviteEmail(M-3) — 행·판정·발송·계정 이메일이
     expect(canonicalInviteEmail('  Alice.Kim@Acme.Test  ')).toBe('alice.kim@acme.test')
     expect(canonicalInviteEmail('alice@acme.한국')).toBe('alice@acme.xn--3e0b707e')
     expect(canonicalInviteEmail('kim@xn--bj0bj06e.kr')).toBe('kim@xn--bj0bj06e.kr')   // 이미 정규형이면 그대로(멱등)
+  })
+  it('길이 상한(L-1) — 로컬 파트 64자, 전체 254자', () => {
+    expect(canonicalInviteEmail(`${'a'.repeat(200)}@${'b'.repeat(60)}.test`)).toBeNull()
+    expect(canonicalInviteEmail(`${'a'.repeat(65)}@acme.test`)).toBeNull()
+    expect(canonicalInviteEmail(`${'a'.repeat(64)}@acme.test`)).toBe(`${'a'.repeat(64)}@acme.test`)
+    const host = `${'b'.repeat(62)}.${'c'.repeat(62)}.${'d'.repeat(62)}.test`   // 193자 — 호스트 상한(253) 안
+    expect(canonicalInviteEmail(`${'a'.repeat(64)}@${host}`)).toBeNull()      // 전체 258자
+    expect(canonicalInviteEmail(`${'a'.repeat(60)}@${host}`)).toBe(`${'a'.repeat(60)}@${host}`)   // 254자
+    expect(isAllowedInviteDomain(`${'a'.repeat(65)}@acme.test`, ['*'])).toBe(false)
+  })
+  it('괄호 없는 IPv4 호스트는 거부(L-2)', () => {
+    expect(canonicalInviteEmail('alice@127.0.0.1')).toBeNull()
+    expect(isAllowedInviteDomain('alice@127.0.0.1', ['*'])).toBe(false)
+    expect(isAllowedInviteDomain('alice@169.254.169.254', ['*'])).toBe(false)
   })
   it('초대할 수 없는 주소는 null', () => {
     expect(canonicalInviteEmail('홍길동@acme.test')).toBeNull()

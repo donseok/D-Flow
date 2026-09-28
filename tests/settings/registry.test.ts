@@ -105,6 +105,7 @@ describe('parse — 워크스페이스 키', () => {
       expect(normalizeDomain(raw).ok, raw).toBe(false)
     }
     expect(parseAllowedDomainsSetting(['acme.test/x']).ok).toBe(false)
+    expect(normalizeDomain('10.0.0.5').ok).toBe(false)   // L-2 — IPv4 는 도메인이 아니다
     const dd = settingDef('workspace', 'invites.allowed_domains')!.deployDefault!
     expect(dd.parse('example.com, ACME.test')).toEqual(['example.com', 'acme.test'])
     expect(dd.parse(undefined)).toBeUndefined()

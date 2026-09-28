@@ -36,3 +36,19 @@ describe('toAsciiHostname — 라벨 길이(DNS·GoTrue checkmail 과 같이 63�
     expect(toAsciiHostname(`${'a'.repeat(63)}.test`)).toBe(`${'a'.repeat(63)}.test`)
   })
 })
+
+describe('toAsciiHostname — 전체 길이 253자·IPv4 (L-1·L-2)', () => {
+  it('호스트 전체가 253자를 넘으면 null', () => {
+    const h253 = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(61)}`
+    expect(h253).toHaveLength(253)
+    expect(toAsciiHostname(h253)).toBe(h253)
+    expect(toAsciiHostname(`${h253}e`)).toBeNull()
+  })
+  it('마지막 라벨이 숫자만이면(IPv4 등) null — 숫자 라벨 자체는 된다', () => {
+    expect(toAsciiHostname('127.0.0.1')).toBeNull()
+    expect(toAsciiHostname('10.0.0.5')).toBeNull()
+    expect(toAsciiHostname('acme.123')).toBeNull()
+    expect(toAsciiHostname('123.test')).toBe('123.test')
+    expect(toAsciiHostname('3m.test')).toBe('3m.test')
+  })
+})

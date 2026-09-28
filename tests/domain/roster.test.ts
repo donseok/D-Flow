@@ -66,6 +66,22 @@ describe('validateDraft', () => {
   })
 })
 
+describe('인물 이메일 정규형(P-1)', () => {
+  const base = emptyDraft()
+  it('validateDraft 는 호스트를 퓨니코드·끝 점 제거로 정규화한다', () => {
+    const r = validateDraft({ ...base, name: 'kim', email: ' Kim@한글.KR ' })
+    expect(r.ok && r.input.email).toBe('kim@xn--bj0bj06e.kr')
+    const r2 = validateDraft({ ...base, name: 'alice', email: 'alice@acme.test.' })
+    expect(r2.ok && r2.input.email).toBe('alice@acme.test')
+    expect(validateDraft({ ...base, name: 'x', email: 'x@acme.test/y' })).toEqual({ ok: false, error: '올바른 이메일 형식이 아닙니다.' })
+  })
+  it('findRosterByEmail 은 정규형으로 비교한다 — 유니코드로 입력해도 퓨니코드로 저장된 행을 찾는다', () => {
+    const row = { ...member(), email: 'kim@xn--bj0bj06e.kr' }
+    expect(findRosterByEmail([row], 'kim@한글.kr')).toBe(row)
+    expect(findRosterByEmail([row], 'KIM@xn--bj0bj06e.kr.')).toBe(row)
+  })
+})
+
 describe('canGrantAdmin', () => {
   it('슈퍼유저는 가능', () => {
     expect(canGrantAdmin(makeProjectActorView({ isSuperuser: true, workspaceRole: null }))).toBe(true)

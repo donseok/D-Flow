@@ -322,6 +322,16 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(c.deleteUser).not.toHaveBeenCalled()
   })
 
+  // P-1 — 계정·프로필·인물 이메일도 초대와 같은 정규형. 유니코드 호스트는 GoTrue 가 받지 않고, 인물 매치도 빗나간다
+  it('유니코드 호스트 이메일은 퓨니코드 정규형으로 계정·프로필·인물을 만든다(P-1)', async () => {
+    const c = accountClient()
+    expect(await createAccount({ ...INPUT, email: ' Kim@한글.KR. ' })).toEqual({ ok: true })
+    expect(c.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'kim@xn--bj0bj06e.kr' }))
+    expect(c.q.profiles.insert).toHaveBeenCalledWith(expect.objectContaining({ email: 'kim@xn--bj0bj06e.kr' }))
+    expect(c.q.peopleFind.eq).toHaveBeenCalledWith('email', 'kim@xn--bj0bj06e.kr')
+    expect(c.q.peopleInsert.insert).toHaveBeenCalledWith(expect.objectContaining({ email: 'kim@xn--bj0bj06e.kr' }))
+  })
+
   it('이름이 없으면 표시 이름은 이메일 로컬 파트', async () => {
     const c = accountClient()
     await createAccount({ ...INPUT, name: '  ' })

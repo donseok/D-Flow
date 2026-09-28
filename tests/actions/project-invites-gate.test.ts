@@ -72,6 +72,7 @@ beforeEach(() => {
   requireWorkspaceAdmin.mockReset()
   getTransport.mockClear()
   send.mockReset()
+  eqCalls.length = 0
   vi.mocked(revalidatePath).mockClear()
   process.env.NEXT_PUBLIC_APP_URL = APP_URL
   process.env.INVITE_ALLOWED_DOMAINS = 'example.com'
@@ -110,9 +111,11 @@ interface Chain {
   maybeSingle: () => Promise<QueryResult>
   then: (res: (v: QueryResult) => unknown, rej?: (e: unknown) => unknown) => Promise<unknown>
 }
-function chainOf(result: QueryResult): Chain {
+/** chainOf 가 받은 eq() 인자 — 표별로 쌓인다(T-2: 중복·계정 조회가 정규형 값을 쓰는지 단언). createClient 가 표 이름을 넘긴다. */
+const eqCalls: Array<[table: string, column: unknown, value: unknown]> = []
+function chainOf(result: QueryResult, table = ''): Chain {
   const chain: Chain = {
-    select: () => chain, eq: () => chain, is: () => chain, in: () => chain, or: () => chain, order: () => chain,
+    select: () => chain, eq: (col, val) => { eqCalls.push([table, col, val]); return chain }, is: () => chain, in: () => chain, or: () => chain, order: () => chain,
     single: async () => result,
     maybeSingle: async () => result,
     then: (res, rej) => Promise.resolve(result).then(res, rej),
@@ -153,14 +156,14 @@ function createClient(o: {
 
   const from = vi.fn((table: string) => {
     if (table === 'projects') return chainOf({ data: { name: 'Acme Project', workspace_id: 'ws-1' }, error: null })
-    if (table === 'profiles') return chainOf(o.profile ?? { data: null, error: null })
+    if (table === 'profiles') return chainOf(o.profile ?? { data: null, error: null }, 'profiles')
     if (table === 'workspace_settings') {
       const chain = chainOf(o.settings ?? { data: wsRow({}), error: null })
       return { ...chain, select: () => ({ ...chain, eq: (...a: unknown[]) => { settingsEq(...a); return chain } }) }
     }
     if (table === 'project_invites') {
       return {
-        ...chainOf({ data: o.blockingError ? null : (o.blocking ?? []), error: o.blockingError ?? null }),
+        ...chainOf({ data: o.blockingError ? null : (o.blocking ?? []), error: o.blockingError ?? null }, 'project_invites'),
         insert, update, delete: del,
       }
     }
@@ -331,6 +334,10 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(await createProjectInvite(P1, { ...VALID, email: 'kim@한글.kr' })).toMatchObject({ ok: true, row: { email: 'kim@xn--bj0bj06e.kr' } })
     expect(insertedPayload(c.insert).email).toBe('kim@xn--bj0bj06e.kr')
     expect(send.mock.calls[0]![0].to).toEqual(['kim@xn--bj0bj06e.kr'])
+    // T-2 — 계정 유무(profiles)·중복 초대(project_invites) 조회도 같은 정규형 값으로
+    expect(eqCalls).toContainEqual(['profiles', 'email', 'kim@xn--bj0bj06e.kr'])
+    expect(eqCalls).toContainEqual(['project_invites', 'email', 'kim@xn--bj0bj06e.kr'])
+    expect(eqCalls.filter(([, col]) => col === 'email').every(([, , v]) => v === 'kim@xn--bj0bj06e.kr')).toBe(true)
   })
 
   it('끝 점 하나가 붙은 주소는 정규형(끝 점 없음)으로 저장·발송한다', async () => {

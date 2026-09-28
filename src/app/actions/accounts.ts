@@ -8,7 +8,8 @@ import { ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listProfiles } from '@/lib/data/accounts'
-import { isValidEmail, UUID_RE } from '@/lib/domain/validate'
+import { UUID_RE } from '@/lib/domain/validate'
+import { canonicalEmail } from '@/lib/domain/email'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
@@ -135,14 +136,15 @@ async function rollbackAccount(admin: AdminClient, userId: string, createdPerson
 async function createOne(
   admin: AdminClient, workspaceId: string, input: AccountInput, grantedBy: string,
 ): Promise<AccountActionResult> {
-  if (typeof input.email !== 'string' || !isValidEmail(input.email)) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
+  // 계정·프로필·인물 이메일은 초대와 같은 정규형(local@ASCII 호스트) — GoTrue 는 유니코드 호스트를 받지 않고, 인물 매치도 이 값이다(P-1)
+  const email = typeof input.email === 'string' ? canonicalEmail(input.email) : null
+  if (!email) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
   if (!isValidPassword(input.password)) return { ok: false, error: '비밀번호는 8자 이상이어야 합니다.' }
   if (!isWorkspaceRole(input.workspaceRole)) return { ok: false, error: ERR_WS_ROLE }
   const accessRole = input.accessRole ?? null
   if (accessRole !== null && accessRole !== ACCESS_ROLE.admin && accessRole !== ACCESS_ROLE.member) return { ok: false, error: ERR_ACCESS }
   if (accessRole && !input.projectId) return { ok: false, error: '권한을 줄 프로젝트를 지정하세요.' }
 
-  const email = input.email.trim().toLowerCase()   // profiles·people 의 check(email = lower(btrim(email)))
   const givenName = typeof input.name === 'string' ? input.name.trim() : ''
   const displayName = givenName || email.split('@')[0]
 

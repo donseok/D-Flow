@@ -2,7 +2,7 @@
 // 검증 문구는 서버 액션(upsertRosterMember)과 같다 — 화면이 먼저 거르고, 액션·RPC 가 다시 본다.
 import type { RosterMember } from '@/lib/data/memberSelect'
 import { isWorkspaceAdminRole, type ProjectActorView } from '@/lib/domain/authz'
-import { isValidEmail } from '@/lib/domain/validate'
+import { canonicalEmail } from '@/lib/domain/email'
 
 export type AccessRole = 'admin' | 'member'
 
@@ -56,13 +56,15 @@ const trimOrNull = (v: string): string | null => v.trim() || null
 export function validateDraft(d: RosterDraft): { ok: true; input: RosterInput } | { ok: false; error: string } {
   const name = d.name.trim()
   if (!name) return { ok: false, error: '이름을 입력하세요.' }
-  const email = d.email.trim()
-  if (email && !isValidEmail(email)) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
+  const raw = d.email.trim()
+  // 초대 행과 같은 정규형(local@ASCII 호스트) — 수락 RPC 가 인물을 이메일 정확 일치로 찾는다(P-1)
+  const email = raw ? canonicalEmail(raw) : null
+  if (raw && !email) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
   if (d.accessRole !== null && !email) return { ok: false, error: ERR_ACCESS_NEEDS_EMAIL }
   return {
     ok: true,
     input: {
-      personId: d.personId, name, email: email ? email.toLowerCase() : null, accessRole: d.accessRole,
+      personId: d.personId, name, email, accessRole: d.accessRole,
       roleLabel: trimOrNull(d.roleLabel), title: trimOrNull(d.title), teamIds: [...new Set(d.teamIds)], active: d.active,
     },
   }
@@ -92,9 +94,11 @@ export function setPrimaryTeam(ids: readonly string[], id: string): string[] {
 
 /** 이미 명단에 있는 같은 이메일의 행 — '사람 추가' 가 그 사람의 행을 조용히 덮어쓰지 않게 먼저 막는다. */
 export function findRosterByEmail(rows: readonly RosterMember[], email: string): RosterMember | null {
-  const key = email.trim().toLowerCase()
-  if (!key) return null
-  return rows.find(r => r.email?.toLowerCase() === key) ?? null
+  // 정규형끼리 비교한다 — 유니코드 호스트로 입력해도 퓨니코드로 저장된 행을 찾는다. 정규형이 없으면(형식 오류) 소문자로.
+  const key = (s: string) => canonicalEmail(s) ?? s.trim().toLowerCase()
+  const k = key(email)
+  if (!k) return null
+  return rows.find(r => r.email != null && key(r.email) === k) ?? null
 }
 
 /** 저장 버튼 활성 판정 — 초안이 원본 행과 다른가. 팀은 순서까지 본다(대표 팀 변경). */

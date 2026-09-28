@@ -114,6 +114,21 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
     expect(admin.rpc).not.toHaveBeenCalled()
   })
 
+  // P-1 — 인물 이메일도 초대 행과 같은 정규형(local@ASCII 호스트). 다르면 수락 RPC 의 인물 매치가 빗나가 사람이 둘로 갈린다
+  it.each([['kim@한글.kr', 'kim@xn--bj0bj06e.kr'], ['alice@example.com.', 'alice@example.com']])('명단 이메일 %s 는 %s 로 넘긴다(P-1)', async (raw, stored) => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    await upsertRosterMember(P1, { ...INPUT, email: raw })
+    expect(admin.rpc.mock.calls[0]![1].p_person.email).toBe(stored)
+  })
+
+  it('호스트가 형태가 아니면(URL 구분자 등) RPC 전에 거부한다(P-1)', async () => {
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    expect(await upsertRosterMember(P1, { ...INPUT, email: 'kim@example.com/x' }))
+      .toEqual({ ok: false, error: '올바른 이메일 형식이 아닙니다.' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
   it('(e) 이메일 형식이 틀리면 RPC 전에 거부한다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
     expect(await upsertRosterMember(P1, { ...INPUT, email: 'broken-email' }))

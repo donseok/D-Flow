@@ -2,7 +2,9 @@
 // 부수효과·now() 참조 없음: 시각은 전부 인자로 주입받는다.
 import { isValidPassword } from '@/lib/domain/accounts'
 import { isValidEmail, UUID_RE } from '@/lib/domain/validate'
-import { toAsciiHostname } from '@/lib/domain/hostname'
+import { canonicalEmail, normalizeEmailHost } from '@/lib/domain/email'
+
+export { normalizeEmailHost }
 
 /** 공개 라우트 토큰 형식 검증 — DB 조회 전 비정상 입력 차단. 선례: src/lib/minutes/share.ts isShareToken */
 export function isInviteToken(s: string): boolean {
@@ -17,22 +19,10 @@ export function normalizeInviteEmail(raw: string): string {
 /** 명시적 전체 허용 값. 미설정을 '제한 없음'으로 읽지 않기 위해 전체 허용은 이 값으로만 켠다. */
 export const ANY_DOMAIN = '*'
 
-/** 끝의 '.' 하나만 벗겨낸다(FQDN 표기 'example.com.' 흡수). 두 개 이상 연속이면 그대로 두어
- *  아래 호스트명 형태 검사에서 걸러지게 한다. */
-function stripTrailingDot(s: string): string {
-  return s.length > 1 && s.endsWith('.') && !s.endsWith('..') ? s.slice(0, -1) : s
-}
-
 /** 허용 도메인의 출처 — 거부 문구가 고칠 곳을 가리키는 데 쓴다. workspace = 저장값, env = 배포 기본값(INVITE_ALLOWED_DOMAINS),
  *  product = 둘 다 없음(제품 기본값 []). */
 export type InviteDomainSource = 'workspace' | 'env' | 'product'
 
-/** 메일 호스트를 저장값의 규칙(소문자·끝 점 하나 제거·퓨니코드 — settings/defs/workspace.ts normalizeDomain)으로 바꾼다.
- *  형태가 아니면 null — 판정은 초대 불가다(URL 구분자·%xx 등을 잘라 다른 호스트로 읽지 않는다, domain/hostname). */
-export function normalizeEmailHost(host: string): string | null {
-  const v = stripTrailingDot(host.trim().toLowerCase())
-  return v ? toAsciiHostname(v) : null
-}
 
 /** 로컬 파트 허용 목록 — GoTrue checkmail 과 같은 ASCII atext, 점은 RFC 5322 dot-atom 규칙(앞뒤·연속 점 금지).
  *  금지 목록이 아니라 허용 목록이라 specials(발송기가 다른 수신자로 다시 읽는 , < > 등)·공백·제어 문자와 보이지 않는
@@ -40,13 +30,20 @@ export function normalizeEmailHost(host: string): string | null {
 const ATEXT = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
 const LOCAL_PART_RE = new RegExp(`^${ATEXT}(?:\\.${ATEXT})*$`)
 
-/** 초대에 쓸 수 있는 주소 — 형식(isValidEmail) + '@' 하나 + 로컬 파트 ASCII dot-atom + 호스트 형태(normalizeEmailHost).
- *  호스트 검사는 허용 도메인 모드와 무관하다('*' 여도 'alice@evil.example,victim.test'·IP 리터럴을 받지 않는다).
- *  발급(createProjectInvite)과 도메인 판정(isAllowedInviteDomain → 소비 재검사)이 같이 쓴다. */
+/** RFC 5321 길이 상한 — 로컬 파트 64자, 주소 전체 254자(호스트 253자는 domain/hostname). GoTrue 가 받지 않는 길이를 발급하지 않는다. */
+const MAX_LOCAL_PART = 64
+const MAX_ADDRESS = 254
+
+/** 초대에 쓸 수 있는 주소 — 형식(isValidEmail) + '@' 하나 + 로컬 파트 ASCII dot-atom + 호스트 형태(normalizeEmailHost) + 길이 상한.
+ *  길이는 정규형(퓨니코드 호스트) 기준이다. 호스트 검사는 허용 도메인 모드와 무관하다('*' 여도 'alice@evil.example,victim.test'·
+ *  IP 리터럴을 받지 않는다). 발급(createProjectInvite)과 도메인 판정(isAllowedInviteDomain → 소비 재검사)이 같이 쓴다. */
 export function isValidInviteEmail(email: string): boolean {
   const at = email.lastIndexOf('@')
   if (!isValidEmail(email) || email.indexOf('@') !== at) return false
-  return LOCAL_PART_RE.test(email.slice(0, at)) && normalizeEmailHost(email.slice(at + 1)) !== null
+  const local = email.slice(0, at)
+  if (local.length > MAX_LOCAL_PART || !LOCAL_PART_RE.test(local)) return false
+  const host = normalizeEmailHost(email.slice(at + 1))
+  return host !== null && local.length + 1 + host.length <= MAX_ADDRESS
 }
 
 /** 초대 행·판정·발송·계정 이메일에 쓰는 한 문자열 — trim·소문자(normalizeInviteEmail) 뒤 로컬 파트 + '@' + ASCII 호스트
@@ -54,9 +51,7 @@ export function isValidInviteEmail(email: string): boolean {
  *  이 값으로 성립한다. 초대할 수 없는 주소는 null. 이미 정규형이면 그대로다(멱등). */
 export function canonicalInviteEmail(raw: string): string | null {
   const email = normalizeInviteEmail(raw)
-  if (!isValidInviteEmail(email)) return null
-  const at = email.lastIndexOf('@')
-  return `${email.slice(0, at)}@${normalizeEmailHost(email.slice(at + 1))}`
+  return isValidInviteEmail(email) ? canonicalEmail(email) : null   // 인물 원장과 같은 정규형(domain/email)
 }
 
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —

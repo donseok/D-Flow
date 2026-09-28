@@ -8,7 +8,8 @@ import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/l
 import { ERR_MISSING } from '@/lib/authz/errors'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@/lib/supabase/server'
-import { isValidEmail, isUuidLike } from '@/lib/domain/validate'
+import { isUuidLike } from '@/lib/domain/validate'
+import { canonicalEmail } from '@/lib/domain/email'
 import { rosterWriteError, ROSTER_WRITE_FAILED, ROSTER_HAS_RECORDS } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT, mapRosterRows, type RosterMember } from '@/lib/data/memberSelect'
 import type { AccessRole, RosterInput } from '@/lib/domain/roster'
@@ -37,8 +38,10 @@ function normalizeName(v: unknown): string | null {
 }
 function normalizeEmail(v: unknown): { ok: true; email: string | null } | { ok: false } {
   if (v === null || v === undefined || (typeof v === 'string' && !v.trim())) return { ok: true, email: null }
-  if (typeof v !== 'string' || !isValidEmail(v)) return { ok: false }
-  return { ok: true, email: v.trim().toLowerCase() }   // DB check(email = lower(btrim(email)))와 같은 정규화
+  // 초대 행과 같은 정규형(local@ASCII 호스트, domain/email) — 다르면 수락 RPC 의 인물 매치가 빗나가 사람이 둘로 갈린다(P-1).
+  // trim·소문자도 여기서 한다(DB check email = lower(btrim(email))).
+  const email = typeof v === 'string' ? canonicalEmail(v) : null
+  return email ? { ok: true, email } : { ok: false }
 }
 function isAccessRoleOrNull(v: unknown): v is AccessRole | null {
   return v === null || v === 'admin' || v === 'member'
