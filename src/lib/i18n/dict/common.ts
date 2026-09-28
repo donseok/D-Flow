@@ -23,6 +23,12 @@ export const commonKo = {
   'nav.agents': '전체 스튜디오',
   'nav.projectAgents': '에이전트',
   'nav.portfolio': '포트폴리오',
+  // 셸 메뉴(navFor SHELL_NAV — 스펙 §4.5). 문구 확정·소비는 SP3b UI-2
+  'nav.myWork': '내 업무',
+  'nav.wsMembers': '멤버·초대',
+  'nav.wsTeams': '공용 팀',
+  'nav.llm': 'LLM 설정',
+  'nav.uiStates': '컴포넌트 상태 점검',
   'chrome.manual': '수동',
   'chrome.auto': '자동',
   'chrome.notifications': '알림',
