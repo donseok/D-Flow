@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import {
   INVITEE, LEVEL_LABELS, SP1_TEAMS, TEMPLATE_HEADER, TRACE_WORDS, actionResult, cookieHeader, dispositionFilename,
-  e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
+  e2eBaseUrl, e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
   localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   ERR_DENIED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
   A_ADMIN, B_ADMIN, OUTSIDER, WS_TEAM, OTHER_WORKSPACE, inWorkspaceStorage, leakedIds, minuteBodyPath, minuteInput, minuteSource,
@@ -69,6 +69,14 @@ describe('localAppUrl', () => {
     expect(localAppUrl('http://127.0.0.1:3000')).toBe('http://127.0.0.1:3000')
     expect(() => localAppUrl('https://example.vercel.app')).toThrow(/로컬/)
     expect(() => localAppUrl('')).toThrow(/로컬/)
+  })
+})
+
+describe('e2eBaseUrl', () => {
+  it('기본 3101 을 받고 3000 은 거부한다(스크래치 워크트리 규칙)', () => {
+    expect(e2eBaseUrl('http://localhost:3101')).toBe('http://localhost:3101')
+    expect(() => e2eBaseUrl('http://localhost:3000')).toThrow(/3101/)
+    expect(() => e2eBaseUrl('https://example.vercel.app')).toThrow(/로컬/)
   })
 })
 

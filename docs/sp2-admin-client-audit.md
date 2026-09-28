@@ -27,7 +27,7 @@
 | src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 워크스페이스(허용 도메인 설정)·프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
 | src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다. 회의록 블록 이슈의 원문은 그 회의록의 프로젝트가 pid 이거나, 프로젝트가 없으면 그 워크스페이스가 pid 의 워크스페이스일 때만 받는다(최종 리뷰 F10 — 0009 issue_links 트리거가 DB 에서도 막는다) |
 | src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유 토큰을 읽고 쓴다(0011 뒤 세션은 share_token 열을 읽지 못한다) |
-| src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid), 설정·비공개는 requireProjectAdmin(pid) 뒤에 그 pid 로 project_settings·projects 를 쓴다 |
+| src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid) 뒤 adminFor({ workspaceId }) 로 create_project_with_settings 를 부른다(복사 원본은 그 wid 소속인지 먼저 확인). 비공개는 requireProjectAdmin(pid) 뒤 그 pid 로 projects 를 쓴다. 설정 쓰기는 이 파일에 없다(SP3a — settings.ts·write.ts 로 옮겼다) |
 | src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
 | src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로, workspace_settings 를 그 프로젝트의 워크스페이스 id 로 읽고 쓴다 |
 | src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 의 원본은 teamsForWorkspaceSync(프로젝트의 wid)다(이번에 고침) |
@@ -39,7 +39,7 @@
 | src/app/api/chat/index/worker/route.ts | 플랫폼 | cron 시크릿(x-cron-secret)으로만 들어온다. 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다 |
 | src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 전역 색인 큐 배치다 |
 | src/app/api/cron/inbox-retention/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 읽은 알림 90일 정리 RPC(전역)다 |
-| src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 그 pid 로 import 한다. 전역 팀 등록은 requireWorkspaceAdmin(프로젝트의 wid) 뒤에 한다 |
+| src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 그 pid 로 import 한다. 전역 팀 등록은 requireWorkspaceAdmin(프로젝트의 wid) 뒤에 한다. 양식 저장은 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |
 | src/app/api/v1/agent/me/route.ts | 외부 API·서비스 | PAT 소유자의 actorFromUser 스냅샷의 워크스페이스로 agent_projects 를 projects!inner 임베드에서 좁혀(플랫폼 관리자는 전부) 이름까지 한 번에 읽고, 응답 행은 스냅샷 키로 다시 거른다 — 프로젝트 id 목록을 URL 에 싣지 않는다(최종 리뷰 F12, 414 방지) |
 | src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 isProjectMember(감시 project_id)를 본다 — 조회 전용·다른 워크스페이스면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 프로젝트 없는 감시자는 그 유일 워크스페이스에 역할(hasProjectRoleInWorkspace)이 있어야 하고 아니면 404(최종 리뷰 F13). 7일 GC 는 내용을 읽지 않는 전역 정리 |
@@ -54,7 +54,7 @@
 | src/app/api/v1/minutes/link/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email 로 actorFromUser 스냅샷을 만들고, minute_id 로 찾은 회의록에 canEditMinute(그 회의록 범위의 멤버 이상이면서 작성자 또는 그 프로젝트 관리자 — 세션 checkOwner 와 같은 판정, v2.8 Z3)를 요구한다. 아니면 없는 회의록과 같은 404 다(Task 13·16a) |
 | src/app/api/v1/minutes/meta/route.ts | 외부 API·서비스 | 공유 시크릿과 user_email(필수)로 actorFromUser 를 만든다. 프로젝트는 호출자 워크스페이스로 in(workspace_id)(플랫폼 관리자는 전부)을 걸어 페이지로 읽고 스냅샷 키 ∩ canSeeProject 로 거른다 — id 목록을 URL 에 싣지 않는다(최종 리뷰 F12). 팀은 소속 워크스페이스로 좁힌다 |
 | src/app/api/v1/minutes/route.ts | 외부 API·서비스 | 두 메서드 모두 user_email 의 actorFromUser 스냅샷으로 좁힌다(Task 13). POST: meeting_id 의 프로젝트에 isProjectMember, external_id 로 찾은 기존 회의록(경합 재조회 포함)에 canEditMinute — 아니면 404. 프로젝트 없는 신규 등록은 그 유일 워크스페이스에 역할(hasProjectRoleInWorkspace — 세션 createMinute 과 같다)이 있어야 하고 아니면 404(최종 리뷰 F14). GET 목록: user_email 필수, 호출자 워크스페이스로 in 을 걸고 볼 수 없는 비공개 프로젝트(canSeeProject 거짓)의 회의록을 뺀다(플랫폼 관리자는 전부) |
-| src/app/api/v1/wbs/import/route.ts | 외부 API·서비스 | PAT 이다. patProjectAllowed·requireAgentProject·멤버·관리자(pid) 판정 뒤 그 pid 로 import 한다 |
+| src/app/api/v1/wbs/import/route.ts | 외부 API·서비스 | PAT 이다. patProjectAllowed·requireAgentProject·멤버·관리자(pid) 판정 뒤 그 pid 로 import 한다. 골격의 단계 이름 시드는 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 |
 | src/app/api/v1/wbs/structure/route.ts | 외부 API·서비스 | PAT 또는 레거시 시크릿이다 — 레거시는 user_email 필수(resolveReader, 최종 리뷰 F8). 그 신원으로 patProjectAllowed·requireAgentProject·isAgentProjectMember(pid) 판정 뒤 그 pid 로 조회하고, 비멤버는 404 다 |
 | src/app/api/wiki/reindex/route.ts | 플랫폼 | requireSuperuser(플랫폼 11곳)다. 전역 색인 큐·문서 수 통계를 다룬다 |
 | src/app/api/wiki/search/route.ts | 세션 가드 뒤 id 스코프 | getActorViewState 뒤 accessScope(내 워크스페이스 프로젝트 ∩ 비공개 판정)의 projectIds 로 in 을 건다 |
@@ -83,6 +83,12 @@
 | src/lib/supabase/adminFor.ts | adminFor 정의 | uuid 스코프(workspaceId 또는 projectId)를 검사한 뒤 createAdminClient 로 service_role 클라이언트를 돌려준다 |
 | src/lib/teams/master.ts | 플랫폼 | 전 워크스페이스 팀과 프로젝트→워크스페이스 매핑의 읽기 전용 캐시다. 워크스페이스·프로젝트·가시 범위 접근자만 있고(워크스페이스를 가리지 않는 전역 접근자는 Task 16b 가 지웠다 — tests/invariants/teams-scope.test.ts), 프로젝트 폴백은 그 프로젝트 워크스페이스의 공용 팀뿐이다 |
 <!-- audit:end -->
+
+표 밖의 service_role 설정 쓰기(SP3a): `src/app/actions/settings.ts` 는 requireProjectAdmin(pid)·requireWorkspaceAdmin(wid) 뒤
+`adminFor({ projectId | workspaceId })` 로 apply_project_settings·apply_workspace_settings 를 부르고, `src/lib/settings/write.ts`
+(writeProjectSettingsInternal)는 호출부가 가드한 뒤 넘긴 클라이언트로 revision 을 읽고 RPC 를 부른다. 둘 다 `createAdminClient` 를
+직접 부르지 않아 표에 오르지 않는다(불변식은 그 이름을 언급하는 파일 = 표 행을 요구한다). 설정 표 직접 접근은
+`tests/invariants/settings-writes.test.ts` 가 막는다.
 
 ## 수정한 파일(경계 넘음 → 고침)
 

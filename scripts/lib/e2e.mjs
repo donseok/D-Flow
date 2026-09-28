@@ -56,6 +56,13 @@ export function localAppUrl(value) {
   return url.replace(/\/+$/, '')
 }
 
+/** E2E 앱 주소 — localAppUrl 에 더해 3000(main 체크아웃의 사용자 dev 서버)을 거부한다. 러너는 스크래치 워크트리의 3101 에서 돈다. */
+export function e2eBaseUrl(value) {
+  const url = localAppUrl(value)
+  if (new URL(url).port === '3000') throw new Error('E2E 는 스크래치 워크트리의 3101 에서 돈다 — main 체크아웃의 3000 을 쓰지 않는다')
+  return url
+}
+
 /** [{ name, value }] → Cookie 헤더. 빈 값(삭제 표식)은 뺀다. */
 export function cookieHeader(cookies) {
   return cookies.filter((c) => c.value).map((c) => `${c.name}=${c.value}`).join('; ')

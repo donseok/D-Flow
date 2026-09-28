@@ -2,11 +2,13 @@
 // 0003(조직 코어) 이후: memberships.team_id 전역 팀 대신 workspaces 한 개를 만들고, 그 관리자로
 // platform_admins·profiles·workspace_members·people 을 함께 채운다. 워크스페이스 선택 UI 는 SP2 몫이라
 // 여기서 만든 워크스페이스 하나가 resolveSoleWorkspaceId(§5.3)가 요구하는 "소속 정확히 1개"의 근거가 된다.
-// 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people.
+// 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people → 허용 모듈(apply_workspace_settings).
 // 중간 단계가 실패하면 만든 계정을 지운다 — 고아 계정이 재실행을 막지 않게(워크스페이스는 멱등이라 그대로 둔다).
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { createClient } from '@supabase/supabase-js'
+import { parseBootstrapModules } from './lib/bootstrap-modules.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
 const MIN_PASSWORD = 8 // 앱 규칙(src/lib/domain/accounts.ts isValidPassword)과 같다
@@ -34,6 +36,10 @@ if (password.length < MIN_PASSWORD) fail(`비밀번호는 ${MIN_PASSWORD}자 이
 const slug = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
 const wsName = (process.env.BOOTSTRAP_WORKSPACE_NAME || '기본 워크스페이스').trim()
 if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) fail('워크스페이스 slug 형식: 소문자·숫자·하이픈 2~63자')
+// 허용 모듈(스펙 §3.7)은 BOOTSTRAP_MODULES(쉼표 목록). 없으면 비core 전부, 빈 문자열은 core 만. 목록 밖 id 는 계정을 만들기 전에
+// 여기서 멈춘다(오타로 만든 계정을 지우는 일이 없게) — 파싱은 lib/bootstrap-modules.mjs.
+const parsed = parseBootstrapModules(process.env.BOOTSTRAP_MODULES)
+if (!parsed.ok) fail(`BOOTSTRAP_MODULES 에 모르는 모듈 ${parsed.unknown.join(', ')} — 허용: ${parsed.allowed.join(', ')}`)
 
 const admin = createClient(target.url, target.serviceRoleKey, { auth: { persistSession: false } })
 
@@ -77,6 +83,18 @@ for (const [name, run] of steps) {
     if (error) await rollback('people', error)
   }
   // existing.user_id 가 이미 있으면(동일 이메일의 외부 인력이 이미 계정과 연결됨) 손대지 않는다 — 덮어쓰면 다른 계정의 연결이 끊긴다.
+}
+
+// 허용 모듈 — 계정을 만든 뒤 그 계정을 행위자로 apply_workspace_settings 를 부른다(설정 행은 워크스페이스 트리거가 만들었다).
+{
+  const { data: row, error: rErr } = await admin.from('workspace_settings').select('revision').eq('workspace_id', ws.id).maybeSingle()
+  if (rErr || !row) await rollback('workspace_settings(조회)', rErr ?? new Error('설정 행이 없다 — 0012 가 적용됐는지 확인'))
+  const { data: applied, error: aErr } = await admin.rpc('apply_workspace_settings', {
+    p_workspace_id: ws.id, p_expected_revision: row.revision, p_command_id: randomUUID(),
+    p_set: { 'modules.allowed': parsed.modules }, p_unset: [], p_actor: uid, p_schema_version: 1, p_source: 'internal',
+  })
+  if (aErr) await rollback('modules.allowed', aErr)
+  console.log(`✓ 허용 모듈 ${parsed.modules.length}개 (revision ${applied.revision})`)
 }
 
 console.log(`✓ 플랫폼 관리자 ${email} · 워크스페이스 ${slug}(${wsName}) 관리자 — npm run dev 후 로그인`)

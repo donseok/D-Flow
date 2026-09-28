@@ -1,5 +1,6 @@
 // scripts/perf-baseline.mjs — SP2 성능 기준선(대시보드·WBS p50/p95). 로컬 전용.
-//   seed:    service_role 로 부트스트랩 워크스페이스의 프로젝트 PERF(없으면 생성, 있으면 재사용)에
+//   seed:    service_role 로 부트스트랩 워크스페이스의 프로젝트 PERF(없으면 부트스트랩 관리자를 행위자로
+//            create_project_with_settings 로 생성, 있으면 재사용)에
 //            wbs_items 800행(10 단계 × 80) · announcements 20행 · issues 50행을 결정적 id 로 멱등 upsert.
 //            추가로 슈퍼유저가 아닌 워크스페이스 멤버 1명(PERF_MEMBER_EMAIL, 기본 bob@example.com)을
 //            그 워크스페이스에 'member'로, PERF 프로젝트 명단(project_members)에 'member' 로 넣는다
@@ -14,7 +15,7 @@
 //   PERF_MEMBER_PASSWORD=… node scripts/perf-baseline.mjs seed
 //   BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD=… PERF_MEMBER_PASSWORD=… \
 //     node scripts/perf-baseline.mjs measure --base http://localhost:3000 --label sp2-phase-a --n 100
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
@@ -111,10 +112,17 @@ async function seed() {
   if (selErr) fail(`프로젝트 조회 실패: ${selErr.message}`)
   let projectId = existing?.id
   if (!projectId) {
-    const { data: created, error: insErr } = await admin.from('projects')
-      .insert({ name: PROJECT_NAME, workspace_id: ws.id, base_date: '2026-01-05' }).select('id').single()
+    const { data: adminUser, error: auErr } = await admin.from('profiles').select('user_id').eq('email', (process.env.BOOTSTRAP_EMAIL || 'admin@example.com').trim().toLowerCase()).maybeSingle()
+    if (auErr || !adminUser) fail(`부트스트랩 관리자 조회 실패: ${auErr?.message ?? '행 없음'}`)
+    const { data: created, error: insErr } = await admin.rpc('create_project_with_settings', {
+      p_workspace_id: ws.id, p_name: PROJECT_NAME, p_start_date: null, p_end_date: null, p_description: null,
+      p_values: { 'core.level_labels': ['Phase', 'Task', 'Activity'], 'modules.enabled': ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'] },
+      p_copy_from: null, p_actor: adminUser.user_id, p_command_id: randomUUID(), p_schema_version: 1,
+    })
     if (insErr) fail(`프로젝트 생성 실패: ${insErr.message}`)
-    projectId = created.id
+    projectId = created.project_id
+    const { error: bdErr } = await admin.from('projects').update({ base_date: '2026-01-05' }).eq('id', projectId)
+    if (bdErr) fail(`base_date 설정 실패: ${bdErr.message}`)
   }
 
   const wbsRows = []

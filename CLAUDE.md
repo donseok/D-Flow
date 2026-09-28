@@ -20,7 +20,8 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 - 최초 셋업: `npm run db:start`(로컬 Supabase 기동) → `npm run env:local`(`supabase status` 결과로 `.env.local` 생성) →
   `npm run dev:bootstrap`(워크스페이스 1개 + 그 관리자인 플랫폼 슈퍼유저 계정 등 최소 시드 생성 — 이메일·비밀번호는
   프롬프트로 묻고, `BOOTSTRAP_EMAIL`/`BOOTSTRAP_PASSWORD`/`BOOTSTRAP_WORKSPACE_SLUG`(기본 `default`)/
-  `BOOTSTRAP_WORKSPACE_NAME`(기본 `기본 워크스페이스`) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
+  `BOOTSTRAP_WORKSPACE_NAME`(기본 `기본 워크스페이스`)/`BOOTSTRAP_MODULES`(쉼표 목록 — 워크스페이스의 허용 모듈. 없으면 비core 전부,
+  빈 문자열은 core 만) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
   → `npm run dev`.
 - 스키마를 바꿨으면 `npm run db:reset`(기준선 + 마이그레이션 + seed 를 빈 Postgres 에 재적용)으로 검증한다 —
   이것이 이 리포의 "스테이징 리허설"이며 아래 G4 트레일러의 근거다. 리셋은 계정까지 지우므로 이어서
@@ -120,6 +121,7 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
+- **설정 쓰기는 RPC 한 길이다**(`apply_project_settings`·`apply_workspace_settings`·`create_project_with_settings`, 0012). 설정 4표(`project_settings`·`workspace_settings`·두 이력)와 `authz_events` 를 서버 코드가 직접 `from()` 하지 않는다 — 읽기는 `src/lib/settings/{projectConfig,workspaceConfig}.ts`, 쓰기는 `src/app/actions/settings.ts`·`src/lib/settings/write.ts`. `tests/invariants/settings-writes.test.ts` 가 잡는다. 액션 가드가 유일한 관문이다(RPC 는 등급을 보지 않는다).
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
   SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
 - 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 11곳(`tests/invariants/platform-guards.test.ts`)뿐이다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
@@ -139,6 +141,7 @@ npm run db:start          # 로컬 Supabase 기동(Docker)
 npm run db:reset          # 기준선+마이그레이션+seed 재적용 — 스키마 변경 검증
 npm run env:local         # supabase status 결과로 .env.local 생성
 npm run dev:bootstrap     # 첫 슈퍼유저 생성(db:reset 뒤에도 다시)
+npm run settings:verify   # 로컬 DB 의 설정 값이 레지스트리를 통과하는지(리허설·체크포인트)
 npm run dev
 npm run build
 npm run lint

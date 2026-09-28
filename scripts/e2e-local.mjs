@@ -10,11 +10,14 @@
 //        E2E A2 → 외부 이메일 초대·가입 → 그 계정의 워크스페이스 소속은 A 하나 → ana 가 회의록 업로드(프로젝트 지정·미지정 —
 //        Storage 키 ws/<A>/p/…) → bea 로그인: A 프로젝트 URL 은 not-found, 회의록·프로젝트 목록에 A 흔적 없음, A 경로 Storage 쓰기·
 //        읽기 거부 → 외부 회의록 API(meta·목록)가 user_email 의 워크스페이스로만 좁혀진다.
+//   SP3a: A 의 설정을 updateProjectSettings 로 바꿔 이력(전·후·행위자)과 같은 명령 재전송의 duplicate 를 보고, A 를 원본으로 복사
+//        생성해 이력이 copy/copied_from 인지 본다(2a·2b). 워크스페이스 B 의 modules.allowed 는 만든 직후 비core 13개로 기록한다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
-// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 러너와 같은 앱 주소·시크릿으로 띄운 npm run dev 가 떠 있는 상태에서
-//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=<앱 주소> MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> npm run dev
+// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 npm run dev 가
+// 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
+//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> npm run dev -- -p 3101
 //   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
-//   [E2E_BASE_URL=http://localhost:3000] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
+//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
 import { randomUUID } from 'node:crypto'
@@ -28,7 +31,7 @@ import JSZip from 'jszip'
 import {
   A_ADMIN, B_ADMIN, ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
   cookieHeader, dispositionFilename, e2eRows, encodeActionArgs, findActionId, findTraces, inWorkspaceStorage, inviteInput,
-  inviteTokenFromUrl, leafCodes, leakedIds, localAppUrl, localClientEnv, meetingInput, minuteBodyPath, minuteInput, minuteSource,
+  e2eBaseUrl, inviteTokenFromUrl, leafCodes, leakedIds, localClientEnv, meetingInput, minuteBodyPath, minuteInput, minuteSource,
   notFoundRendered, pageProblems, presentTexts, redactInviteTokens, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
@@ -48,7 +51,7 @@ try {
   process.exit(1)
 }
 const base = (() => {
-  try { return localAppUrl(process.env.E2E_BASE_URL || 'http://localhost:3000') } catch (e) {
+  try { return e2eBaseUrl(process.env.E2E_BASE_URL || 'http://localhost:3101') } catch (e) {
     console.error(`✗ ${e.message}`)
     process.exit(1)
   }
@@ -76,6 +79,7 @@ const ACTIONS = {
   createMeeting: { filename: 'src/app/actions/meetings.ts', exportedName: 'createMeeting', worker: '/p/[projectId]/meetings/page' },
   createProjectInvite: { filename: 'src/app/actions/projectInvites.ts', exportedName: 'createProjectInvite', worker: '/p/[projectId]/members/page' },
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
+  updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -222,6 +226,31 @@ async function main() {
     path: `server action createProject(${A.actionId.slice(0, 12)}…) via POST /projects`,
     projects: [A, B].map(({ id, name, settings }) => ({ id, name, settings })), workspaceId: A.workspaceId, rows: 2,
   })
+
+  // ── 2a. 설정 액션 — 프로젝트 A 의 마일스톤 키워드를 바꾸고 이력에 전·후·행위자가 남는지 본다(스펙 §7.3 #1). 설정 화면을 GET 해 액션을 등록한다.
+  await admin.http('GET', `/p/${A.id}/settings`)
+  const cmd1 = randomUUID()
+  const upd = await admin.action(`/p/${A.id}/settings`, 'updateProjectSettings',
+    [A.id, { expectedRevision: 1, commandId: cmd1, set: { 'core.milestone_keywords': ['Kick-Off', '오픈'] }, unset: [] }])
+  if (!upd.result?.ok || upd.result.kind !== 'applied' || upd.result.revision !== 2) throw new Fail(`updateProjectSettings 결과가 예상과 다르다: ${JSON.stringify(upd.result)}`)
+  const hist = rows('설정 이력', await admin.sb.from('project_settings_history').select('key,old_value,new_value,changed_by,source,revision').eq('project_id', A.id).eq('command_id', cmd1))
+  same('이력 1행', hist.length, 1)
+  same('이력 키·전후·행위자', [hist[0].key, hist[0].old_value, hist[0].new_value, hist[0].changed_by, hist[0].source, hist[0].revision],
+    ['core.milestone_keywords', null, ['kick-off', '오픈'], me.id, 'edit', 2])
+  const dup = await admin.action(`/p/${A.id}/settings`, 'updateProjectSettings',
+    [A.id, { expectedRevision: 1, commandId: cmd1, set: { 'core.milestone_keywords': ['Kick-Off', '오픈'] }, unset: [] }])
+  same('같은 명령 재전송은 duplicate', dup.result?.kind, 'duplicate')
+  step('settings-update', { projectId: A.id, commandId: cmd1, revision: 2, history: hist[0], duplicate: dup.result?.kind })
+
+  // ── 2b. 복사 생성(스펙 §7.3 #2) — A 를 원본으로. 복사본 이력은 source copy 이고 copied_from 이 A 다. 라벨은 입력값.
+  const copyName = `E2E A-copy ${stamp}`
+  const cp = await admin.action('/projects', 'createProject', [{ workspaceId: wsA, name: copyName, startDate: null, endDate: null, description: null,
+    levelLabels: LEVEL_LABELS, copyFromProjectId: A.id, commandId: randomUUID() }])
+  if (!cp.result?.ok) throw new Fail(`복사 생성 실패: ${JSON.stringify(cp.result)}`)
+  const cpHist = rows('복사 이력', await admin.sb.from('project_settings_history').select('key,source,copied_from').eq('project_id', cp.result.projectId))
+  if (!cpHist.length || cpHist.some((h) => h.source !== 'copy' || h.copied_from !== A.id)) throw new Fail(`복사 이력이 copy/copied_from 이 아니다: ${JSON.stringify(cpHist)}`)
+  same('복사본 키워드', (await admin.sb.from('project_settings').select('values').eq('project_id', cp.result.projectId).single()).data.values['core.milestone_keywords'], ['kick-off', '오픈'])
+  step('create-copy', { projectId: cp.result.projectId, from: A.id, historyKeys: cpHist.map((h) => h.key).sort() })
 
   // ── 3. 프로젝트 팀 — 설정 화면(ProjectTeamsManager)의 addProjectTeam. 부트스트랩은 팀을 만들지 않는다(Task 8).
   for (const p of [A, B]) await admin.http('GET', `/p/${p.id}/settings`)
@@ -409,6 +438,15 @@ async function main() {
     .upsert({ slug: OTHER_WORKSPACE.slug, name: OTHER_WORKSPACE.name }, { onConflict: 'slug' }).select('id').single()
   if (owErr) throw new Fail(`타 워크스페이스 픽스처 실패: ${owErr.message}`)
   const wsB = otherWs.id
+  // B 의 허용 모듈 — 생성 화면(Phase C)이 없어 service_role RPC 로 기록한다(Phase C 가 updateWorkspaceSettings 로 바꾼다). 없으면 B 에서 모듈이 전부 닫힌다(Phase B 뒤).
+  {
+    const { data: wsRow, error: wsErr } = await svc.from('workspace_settings').select('revision').eq('workspace_id', wsB).single()
+    if (wsErr) throw new Fail(`B 설정 행 조회 실패: ${wsErr.message}`)
+    const { error: aErr } = await svc.rpc('apply_workspace_settings', { p_workspace_id: wsB, p_expected_revision: wsRow.revision, p_command_id: randomUUID(),
+      p_set: { 'modules.allowed': ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot', 'minutes', 'minutes_integration', 'portfolio', 'usage'] },
+      p_unset: [], p_actor: me.id, p_schema_version: 1, p_source: 'internal' })
+    if (aErr) throw new Fail(`B modules.allowed 기록 실패: ${aErr.message}`)
+  }
   const C = await createProject(admin, wsB, 'C')
   await admin.http('GET', '/admin/accounts')
   const createWorkspaceAdmin = async (workspaceId, who, pass) => {
@@ -420,7 +458,7 @@ async function main() {
   same('bea 의 워크스페이스 소속', beaWs.memberships, [{ workspace_id: wsB, role: 'admin' }])
   if (beaWs.platformAdmin) throw new Fail('bea 가 플랫폼 관리자다 — 워크스페이스 경계 시험이 비어 버린다')
   step('other-workspace-fixture', {
-    via: 'workspaces 행만 service_role(로컬 전용 — 생성 화면은 SP3), 프로젝트는 createProject(B, …), 관리자는 createAccount({ workspaceId: B })',
+    via: 'workspaces 행과 modules.allowed 만 service_role(로컬 전용 — 생성·설정 화면은 SP3), 프로젝트는 createProject(B, …), 관리자는 createAccount({ workspaceId: B })',
     workspace: OTHER_WORKSPACE.slug, workspaceId: wsB, projectId: C.id, projectName: C.name,
     bAdmin: { email: B_ADMIN.email, userId: beaWs.userId, memberships: beaWs.memberships, platformAdmin: beaWs.platformAdmin },
   })
