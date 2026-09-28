@@ -8,7 +8,7 @@ import type { ModuleId } from '@/lib/modules/defaults'
 import { MODULES } from '@/lib/modules/registry'
 import { checkEnabledModules } from '@/lib/modules/saveRule'
 import { parseBrandingPath } from './brandingPath'
-import { ConfigUnavailableError } from './errors'
+import { ConfigKeyError, ConfigUnavailableError } from './errors'
 import type { BrandingLogo } from './defs/workspace'
 import type { ConfigReadClient, ProjectConfig } from './projectConfig'
 import type { ProjectSettingKey, WorkspaceSettingKey } from './registry'
@@ -66,6 +66,12 @@ export function allowedAndAvailable(ws: WorkspaceConfig): ModuleId[] {
   return MODULES.filter((m) => allowed.includes(m.id) && m.envAvailable()).map((m) => m.id)
 }
 
+/** 저장 경로용 — modules.allowed 가 손상(invalid)이면 빈 목록(fail-closed). core 키는 저장 규칙상 늘 'always' 라
+ *  복구 경로(플랫폼 관리자가 modules.allowed 를 다시 쓰기)와 프로젝트의 core 키 저장은 막히지 않는다(Review Focus 6) */
+export function allowedOrNone(ws: WorkspaceConfig): ModuleId[] {
+  try { return allowedAndAvailable(ws) } catch (e) { if (e instanceof ConfigKeyError) return []; throw e }
+}
+
 /** 선행 조회 — SUB-ACT(is_owner_split)·스텁(stub_for) 행은 단계 이름보다 한 단 깊어 0012 ① 과 같은 규칙으로 뺀다 */
 export async function loadProjectValidateDeps(client: ConfigReadClient, cfg: ProjectConfig, ws: WorkspaceConfig): Promise<ProjectValidateDeps> {
   const { data, error } = await client.from('wbs_items').select('id, parent_id')
@@ -75,7 +81,7 @@ export async function loadProjectValidateDeps(client: ConfigReadClient, cfg: Pro
   return {
     treeMaxDepth: treeMaxDepth((data ?? []) as { id: string; parent_id: string | null }[]),
     teamCodes: cfg.teams.filter((t) => t.active).map((t) => t.code),
-    allowed: allowedAndAvailable(ws),
+    allowed: allowedOrNone(ws),
     prevEnabled: enabled.status === 'set' || enabled.status === 'default' ? enabled.value : [],
   }
 }
