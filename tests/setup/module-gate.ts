@@ -12,3 +12,8 @@ vi.mock('@/lib/modules/gate', () => ({
   projectsWithModule: vi.fn(async (ids: readonly string[]) => [...new Set(ids)]),
   workspacesWithModule: vi.fn(async (ids: readonly string[]) => [...new Set(ids)]),
 }))
+
+// aiAvailable(D17) — (mock 된) hasLLM() 을 그대로 돌려준다. hasLLM 을 mock 하던 호출부 테스트가 그대로 돈다(tests/setup/ai-available-default.test.ts).
+vi.mock('@/lib/modules/aiAvailable', () => ({
+  aiAvailable: vi.fn(async () => (await import('@/lib/ai/provider')).hasLLM()),
+}))
