@@ -5,6 +5,7 @@ import { personOf } from '@/lib/data/memberSelect'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { isProjectAdmin, type Actor } from '@/lib/domain/authz'
 import { seatmapProjectIds } from '@/lib/authz/agentsAccess'
+import { projectsWithModule } from '@/lib/modules/gate'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import {
   assembleSeatmap, type ItemRow, type MemberRow, type OrderRow, type PredecessorRow, type ProjectRow, type ReportRow, type ReviewRow, type Seatmap, type SeatmapRows, type SeatmapScope, type SeatmapViewer, type WatcherRow,
@@ -137,8 +138,16 @@ export function seatmapFloorIds(actor: Actor, projectId?: string): string[] | nu
 
 export async function getSeatmap(actor: Actor, nowMs = Date.now(), scope: SeatmapScope = 'mine', opts: SeatmapOptions = {}): Promise<Seatmap> {
   const admin = createAdminClient()
-  const projectIds = seatmapFloorIds(actor, opts.projectId)
-  const rows = await fetchSeatmapRows(admin, projectIds, nowMs)
+  // agents 모듈이 꺼진 프로젝트의 층은 싣지 않는다(스펙 §4.2 — 목록형 응답은 행을 뺀다). 층 목록이 있으면 조회 전에 좁히고,
+  // 전체(플랫폼 관리자, null)면 한 번 읽은 뒤 꺼진 프로젝트가 섞였을 때만 켜진 목록으로 다시 읽는다(모두 켜졌으면 지금과 같은 한 번).
+  const floor = seatmapFloorIds(actor, opts.projectId)
+  let projectIds = floor === null ? null : await projectsWithModule(floor, 'agents', { client: admin })
+  let rows = await fetchSeatmapRows(admin, projectIds, nowMs)
+  if (projectIds === null) {
+    const seen = rows.projects.map((p) => p.id)
+    const on = await projectsWithModule(seen, 'agents', { client: admin })
+    if (on.length < seen.length) { projectIds = on; rows = await fetchSeatmapRows(admin, projectIds, nowMs) }
+  }
   // 결재 어포던스 재료는 범위와 무관하게 싣는다 — 전체 보기에서도 버튼 노출은 서버 가드와 같은 축이어야 한다.
   // 로스터 조회가 던지면 그대로 올린다(조회 실패를 권한 없음으로 위장하지 않는다).
   const memberIds = new Set(await fetchMyMemberIds(admin, { userId: actor.userId }, projectIds))

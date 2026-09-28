@@ -4,6 +4,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { createServerClient } from '@/lib/supabase/server'
 import { ERR_MEETINGS_LOAD, getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 type Reply = { data: unknown[] | null; error: { message: string } | null; count?: number | null }
 // count 는 예외 폴백(fetchAllPages)이 잘림을 확인할 때 본다 — PostgREST 의 count: 'exact' 응답.
@@ -81,6 +82,8 @@ const exRow = (meetingId: string, date: string) =>
 
 beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}) })
 afterEach(() => { vi.restoreAllMocks() })
+// 관문 mock 값을 바꾸는 파일 — 남은 Once 값이 뒤 케이스로 새지 않게 통과 구현으로 되돌린다(공통 규칙 '전역 mock')
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 /** 성공 결과만 — 실패면 사유로 던져 테스트를 깬다. */
 async function projectMeetings(projectId: string) {
@@ -196,6 +199,24 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
       { meetingId: 'm1', occurrenceDate: '2026-08-03', kind: 'cancelled' },
     ])
     expect(tables).not.toContain('meeting_exceptions')
+  })
+})
+
+describe('getMyMeetings — meetings 모듈이 꺼진 프로젝트의 행을 뺀다(스펙 §4.2)', () => {
+  it('꺼진 프로젝트의 회의·예외가 없다', async () => {
+    const P2 = '00000000-0000-4000-8000-0000000000b2'
+    makeSb({
+      user: { id: 'u1' },
+      meetings: () => OK([
+        meetingRow('on', { meeting_exceptions: [exRow('on', '2026-07-27')] }),
+        meetingRow('off', { project_id: P2, meeting_exceptions: [exRow('off', '2026-07-27')] }),
+      ]),
+    })
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([PID])
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map((x) => x.id)).toEqual(['on'])
+    expect(res.exceptions.map((x) => x.meetingId)).toEqual(['on'])
+    expect(projectsWithModule).toHaveBeenCalledWith([PID, P2], 'meetings')
   })
 })
 

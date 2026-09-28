@@ -4,6 +4,7 @@ import { compareKoreanName } from '@/lib/domain/nameSort'
 import { UUID_RE } from '@/lib/domain/validate'
 import { ROSTER_SELECT, personOf, toRosterMember } from '@/lib/data/memberSelect'
 import { fetchAllPages } from '@/lib/data/paging'
+import { projectsWithModule } from '@/lib/modules/gate'
 import type {
   Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
 } from '@/lib/domain/types'
@@ -270,9 +271,12 @@ export const getMyMeetings = cache(async (
     console.error(`[${tag}] 내 명단 행 조회 실패 — 호출부가 내 회의 달력 대신 사유를 보인다(원인은 [resolveMemberIds] 로그)`)
   }
   if (failed || myMemberIdList === null) return { ok: false, error: ERR_MEETINGS_LOAD }
+  // 목록형 응답은 meetings 모듈이 꺼진 프로젝트의 행을 뺀다(스펙 §4.2). 판정 실패도 뺀다(관문이 로그를 남긴다 — fail-closed)
+  const on = new Set(await projectsWithModule([...new Set(rows.map((r: Row) => r.project_id as string))], 'meetings'))
+  const visible = rows.filter((r: Row) => on.has(r.project_id as string))
   const myMemberIds = new Set(myMemberIdList)
 
-  const meetings = rows.map((r: Row) => {
+  const meetings = visible.map((r: Row) => {
     const attendeeIds = attendeeIdsFrom(r)
     const projectName = ((r.projects as { name: string } | null)?.name) ?? null
     const isMine = (r.created_by as string | null) === uid || attendeeIds.some(id => myMemberIds.has(id))
@@ -284,7 +288,7 @@ export const getMyMeetings = cache(async (
   })
 
   const exceptions = embedded
-    ? exceptionsFrom(rows)
+    ? exceptionsFrom(visible)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), tag)
   if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
   return { ok: true, meetings, exceptions }

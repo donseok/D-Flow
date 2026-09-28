@@ -1,10 +1,11 @@
 // tests/data/agent-seatmap-project.test.ts
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 import { getProjectOffice, getSeatmap, seatmapFloorIds } from '@/lib/data/agentSeatmap'
 import { makeActor, makeMemberActor } from '../fixtures/actor'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 type Resp = { data?: unknown; error?: { message: string } | null }
@@ -30,6 +31,8 @@ const SUPER = makeActor({ isSuperuser: true })
 const MEMBER_P1 = makeMemberActor('p1')
 
 beforeEach(() => { vi.clearAllMocks() })
+// 관문 mock 값을 바꾸는 파일 — 남은 Once 값이 뒤 케이스로 새지 않게 통과 구현으로 되돌린다(공통 규칙 '전역 mock')
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('seatmapFloorIds', () => {
   it('projectId 없으면 seatmapProjectIds 그대로(슈퍼유저 null, 멤버는 역할 목록)', () => {
@@ -55,6 +58,30 @@ describe('getSeatmap({ projectId })', () => {
     admin({ agent_work_orders: [{ data: [] }] }, calls)
     await getSeatmap(SUPER, NOW, 'all', { projectId: 'p1' })
     expect(calls['agent_work_orders.in']?.[0]).toEqual(['project_id', ['p1']])
+  })
+})
+
+describe('getSeatmap — agents 모듈이 꺼진 프로젝트의 층을 뺀다(스펙 §4.2)', () => {
+  it('층 목록이 있는 행위자는 조회 전에 좁힌다 — 모두 꺼지면 주문을 읽지 않는다', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    admin({}, calls)
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([])
+    const map = await getSeatmap(MEMBER_P1, NOW, 'all')
+    expect(map.floors).toEqual([])
+    expect(projectsWithModule).toHaveBeenCalledWith(['p1'], 'agents', { client: expect.anything() })
+    expect(calls['agent_work_orders.in']).toBeUndefined()
+  })
+  it('플랫폼 관리자(전체)는 꺼진 프로젝트가 섞였을 때만 켜진 목록으로 다시 읽는다', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    const order = (id: string, p: string) => ({ id, project_id: p, wbs_item_id: null, status: 'approved', updated_at: '2026-09-14T08:00:00Z', created_at: '2026-09-14T08:00:00Z' })
+    admin({
+      agent_work_orders: [{ data: [order('o1', 'p1'), order('o2', 'p2')] }, { data: [order('o1', 'p1')] }],
+      projects: [{ data: [{ id: 'p1', name: 'a', workspace_id: 'w' }, { id: 'p2', name: 'b', workspace_id: 'w' }] }, { data: [{ id: 'p1', name: 'a', workspace_id: 'w' }] }],
+    }, calls)
+    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])
+    await getSeatmap(SUPER, NOW, 'all')
+    expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'agents', { client: expect.anything() })
+    expect(calls['agent_work_orders.in']).toEqual([['project_id', ['p1']]])
   })
 })
 
