@@ -71,7 +71,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
   })
 
   it('유효한 라벨이면 split·trim 된 배열로 createProject 를 부른다', async () => {
-    mocks.createProject.mockResolvedValue(undefined)
+    mocks.createProject.mockResolvedValue({ ok: true, projectId: 'p-new', status: 'applied' })
     openModal()
     const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!
     const levelsInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!
@@ -84,7 +84,29 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
       await Promise.resolve()
     })
 
-    expect(mocks.createProject).toHaveBeenCalledWith('ws-1', '신규 프로젝트', null, null, null, ['단계', '작업'])
+    expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: 'ws-1', name: '신규 프로젝트', startDate: null, endDate: null, description: null, levelLabels: ['단계', '작업'],
+      commandId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    }))
+  })
+
+  it('결과가 실패면 그 문구를 보여주고 모달을 닫지 않는다', async () => {
+    mocks.createProject.mockResolvedValue({ ok: false, code: 'CONFIG_INVALID', error: '실패 문구' })
+    openModal()
+    const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!
+    const levelsInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!
+    act(() => setValue(nameInput, '신규 프로젝트'))
+    act(() => setValue(levelsInput, '단계,작업'))
+
+    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    await act(async () => {
+      createBtn.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain('실패 문구')
+    expect(document.querySelector('input[placeholder="home.phName"]')).not.toBeNull()
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
   it('라벨 입력에 aria-describedby 로 힌트가 연결되고 aria-required 가 켜져 있다', () => {

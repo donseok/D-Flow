@@ -139,9 +139,10 @@ describe('resolveProjectId 실패 — 판정 불가는 쓰기 중단(가드도 �
 })
 
 describe('프로젝트 액션', () => {
-  it('createProject: 워크스페이스 관리자가 아니면 throw + DB 무접근', async () => {
+  it('createProject: 워크스페이스 관리자가 아니면 거부 결과 + DB 무접근', async () => {
     requireWorkspaceAdmin.mockResolvedValue(DENIED)
-    await expect(createProject('ws-1', '신규', null, null, null, ['단계'])).rejects.toThrow('권한 없음')
+    expect(await createProject({ workspaceId: 'ws-1', name: '신규', startDate: null, endDate: null, description: null, levelLabels: ['단계'], commandId: '00000000-0000-4000-8000-000000000001' }))
+      .toEqual({ ok: false, code: '권한 없음', error: '권한 없음' })
     expect(requireWorkspaceAdmin).toHaveBeenCalledWith('ws-1')
     expect(createServerClient).not.toHaveBeenCalled()
   })

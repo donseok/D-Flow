@@ -197,19 +197,24 @@ async function main() {
   const wsA = myWs[0].workspace_id
   step('login', { userId: me.id, workspaceId: wsA, cookieNames: [...admin.jar.keys()] })
 
-  // ── 2. 프로젝트 A·B — 화면(NewProjectModal)이 부르는 createProject(workspaceId, …). 결과는 그 세션으로 DB 에서 확인한다
+  // ── 2. 프로젝트 A·B — 화면(NewProjectModal)이 부르는 createProject({ workspaceId, … }). 결과는 그 세션으로 DB 에서 확인한다
   // (같은 이름 1건 + 지정한 워크스페이스 + 라벨 그대로).
   const stamp = new Date().toISOString().slice(0, 16).replace(/\D/g, '')
   const createProject = async (who, workspaceId, label) => {
     const name = `E2E ${label} ${stamp}`
-    const { actionId } = await who.action('/projects', 'createProject', [workspaceId, name, null, null, null, LEVEL_LABELS])
+    const { actionId, result } = await who.action('/projects', 'createProject', [{
+      workspaceId, name, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+    }])
+    if (!result?.ok) throw new Fail(`createProject(${label}) 실패: ${JSON.stringify(result)}`)
     const found = rows('프로젝트', await who.sb.from('projects').select('id,name,workspace_id').eq('name', name))
     if (found.length !== 1) throw new Fail(`생성된 프로젝트 ${name} 가 ${found.length}건`)
     if (found[0].workspace_id !== workspaceId) throw new Fail(`${name} 가 워크스페이스 ${found[0].workspace_id} 에 생겼다(기대 ${workspaceId})`)
-    const { data: settings, error } = await who.sb.from('project_settings').select('level_labels,max_depth').eq('project_id', found[0].id).single()
+    // 설정 문서는 통째로 읽어 JS 에서 고른다 — 키에 점이 있어 PostgREST 경로 필터를 쓰지 않는다
+    const { data: settings, error } = await who.sb.from('project_settings').select('values,revision').eq('project_id', found[0].id).single()
     if (error) throw new Fail(`프로젝트 설정 조회 실패: ${error.message}`)
-    same(`${name} 단계 라벨`, settings.level_labels, LEVEL_LABELS)
-    return { id: found[0].id, name, workspaceId: found[0].workspace_id, settings, actionId }
+    same(`${name} 단계 라벨`, settings.values['core.level_labels'], LEVEL_LABELS)
+    if (settings.revision !== 1) throw new Fail(`${name} 의 revision 이 ${settings.revision}(기대 1)`)
+    return { id: found[0].id, name, workspaceId: found[0].workspace_id, settings: settings.values, actionId }
   }
   const A = await createProject(admin, wsA, 'A')
   const B = await createProject(admin, wsA, 'B')

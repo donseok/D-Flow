@@ -86,10 +86,34 @@ export class FakeSettingsDb {
       async rpc(name: string, args: Record<string, unknown>) {
         db.rpcCalls.push({ name, args })
         if (db.beforeRpc) { const f = db.beforeRpc; db.beforeRpc = null; f() }
+        if (name === 'create_project_with_settings') return db.createProject(args)
         if (name !== 'apply_project_settings' && name !== 'apply_workspace_settings') return { data: null, error: { message: `fake: unknown rpc ${name}` } }
         return db.apply(name === 'apply_project_settings' ? { projectId: args.p_project_id as string } : { workspaceId: args.p_workspace_id as string }, args)
       },
     }
+  }
+
+  /** create_project_with_settings 의 요지 — 필수 키 검사, 같은 (actor, command) 재전송은 duplicate, 원본 워크스페이스 검사, 이력 source create|copy */
+  createProject(a: Record<string, unknown>) {
+    const err = (code: string, message: string) => ({ data: null, error: { code, message, details: null } })
+    if (!a.p_actor) return err('22023', 'SETTINGS_ACTOR_REQUIRED')
+    if (!a.p_command_id) return err('22023', 'COMMAND_ID_REQUIRED')
+    const values = (a.p_values ?? {}) as Record<string, unknown>
+    const digest = createHash('sha256').update(JSON.stringify({ name: a.p_name, values })).digest('hex')
+    const dup = this.history.find((h) => h.command_id === a.p_command_id && h.changed_by === a.p_actor && (h.source === 'create' || h.source === 'copy'))
+    if (dup) return dup.command_digest === digest ? { data: { status: 'duplicate', project_id: dup.project_id, revision: 1 }, error: null } : err('23505', 'COMMAND_REUSED')
+    for (const k of ['core.level_labels', 'modules.enabled']) if (!(k in values)) return err('22023', `CONFIG_INVALID:${k}`)
+    if (a.p_copy_from) {
+      const src = this.projects.get(a.p_copy_from as string)
+      if (!src || src.workspaceId !== a.p_workspace_id) return err('42501', 'COPY_SOURCE_FORBIDDEN')
+    }
+    const id = `00000000-0000-4000-8000-${String(this.seq++).padStart(12, '0')}`
+    this.projects.set(id, { id, workspaceId: a.p_workspace_id as string, values: { ...values }, revision: 1, schemaVersion: 1 })
+    for (const [k, v] of Object.entries(values)) {
+      this.history.push({ id: this.seq++, project_id: id, revision: 1, key: k, old_value: null, new_value: v, source: a.p_copy_from ? 'copy' : 'create',
+        command_id: a.p_command_id as string, command_digest: digest, changed_by: a.p_actor as string, changed_at: new Date().toISOString(), copied_from: (a.p_copy_from as string | null) ?? null })
+    }
+    return { data: { status: 'applied', project_id: id, revision: 1 }, error: null }
   }
 
   private rowsOf(table: string, select: string): Record<string, unknown>[] {

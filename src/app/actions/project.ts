@@ -2,16 +2,27 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { adminFor } from '@/lib/supabase/adminFor'
 import { getActorViewState, requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
+import { ERR_DENIED } from '@/lib/authz/errors'
 import { canSeeProject } from '@/lib/domain/authz'
-import { isValidDateRange } from '@/lib/domain/validate'
+import { isUuidLike, isValidDateRange } from '@/lib/domain/validate'
 import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import { validateStageCredits } from '@/lib/domain/stageCredits'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { refreshTeams } from '@/lib/teams/master'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
+import { allowedAndAvailable } from '@/lib/settings/validateConfig'
+import { intersectEnabledWithAllowed } from '@/lib/modules/saveRule'
+import { closeRequires } from '@/lib/modules/closure'
+import { CORE, moduleDef } from '@/lib/modules/registry'
+import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
+import { CONFIG_MESSAGES, ConfigUnavailableError, mapDbError } from '@/lib/settings/errors'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -54,68 +65,90 @@ const fetchProjects = cache(async () => {
   return sb.from('projects').select('*').order('created_at', { ascending: false })
 })
 
-/** 마일스톤 카드 키워드 기본값 — 빈 배열이면 카드가 무증상 소실된다(§7.4). 설정 화면에서 편집하는 UI 는 아직 없다(열린 항목). */
-const DEFAULT_MILESTONE_KEYWORDS = ['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
+export interface CreateProjectInput {
+  workspaceId: string; name: string; startDate: string | null; endDate: string | null; description: string | null
+  levelLabels: string[]; copyFromProjectId?: string | null; commandId: string
+}
+export type CreateProjectResult =
+  | { ok: true; projectId: string; status: 'applied' | 'duplicate' }
+  | { ok: false; code: string; error: string; fieldErrors?: { key: string; message: string }[] }
 
-export async function createProject(
-  workspaceId: string,
-  name: string,
-  start: string | null,
-  end: string | null,
-  description: string | null,
-  levelLabels: string[],
-) {
-  // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시키므로 여기서 막지 않으면 무소속 insert 로 간다.
-  if (typeof workspaceId !== 'string' || !workspaceId) throw new Error(ERR_WORKSPACE_REQUIRED)
-  // 프로젝트 생성은 그 워크스페이스의 관리자(SP2 §4.1). 비소속 워크스페이스는 존재 은닉(ERR_MISSING).
+const invalidInput = (error: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
+  ({ ok: false, code: 'CONFIG_INVALID', error, ...(fieldErrors ? { fieldErrors } : {}) })
+
+/** 생성 시점의 modules.enabled — 후보 ∩ (허용 ∩ env) 에서 requires 가 빠진 것을 뺀다. 자동 추가는 없다 */
+function initialEnabled(candidate: readonly ModuleId[], allowed: readonly ModuleId[]): ModuleId[] {
+  const chosen = intersectEnabledWithAllowed(candidate, allowed)
+  const wsLayer = allowed.filter((id) => !PROJECT_TOGGLABLE.has(id))
+  const closed = closeRequires(new Set<ModuleId>([...CORE, ...wsLayer, ...chosen]), (id) => moduleDef(id).requires)
+  return chosen.filter((id) => closed.has(id))
+}
+
+/**
+ * 프로젝트 생성(스펙 §3.3 W1) — 프로젝트 행과 필수 설정을 create_project_with_settings 한 트랜잭션으로 만든다. 보상 삭제가 없다.
+ * 값 복사는 여기서 한다(DB 는 값 스키마를 모른다): 원본을 해석기로 읽어 set 키 전부를 넘기고, invalid 키가 있으면 거부한다(D29).
+ * throw 하지 않는다 — 프로덕션 빌드는 서버 액션의 throw 문구를 클라이언트에 주지 않는다.
+ */
+export async function createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
+  const { workspaceId } = input ?? {}
+  // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
+  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: ERR_WORKSPACE_REQUIRED, error: ERR_WORKSPACE_REQUIRED }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) throw new Error(g.error)
-  if (!isValidDateRange(start || null, end || null)) throw new Error('종료일은 시작일보다 빠를 수 없습니다.')
-  // 호출부 타입을 우회한 값(예: 폼 라이브러리·직렬화 손상)이 들어오면 validateLevelSettings 의
-  // .map((l) => l.trim()) 에서 알아보기 힘든 TypeError 로 죽는다 — 여기서 먼저 명확히 거부한다.
-  if (!Array.isArray(levelLabels) || levelLabels.some((l) => typeof l !== 'string')) {
-    throw new Error('단계 입력이 올바르지 않습니다.')
-  }
-  // 프리셋 없음(결정 5) — 단계 라벨은 생성자가 입력한다. 검증은 설정 화면과 같은 순수 함수.
-  const lv = validateLevelSettings({ labels: levelLabels, currentTreeMaxDepth: null })
-  if (!lv.ok) throw new Error(lv.error)
-  // project_settings 는 쓰기 정책이 없다(0058 — service_role 전용 관문) — admin 클라이언트가 필요하다.
-  // projects insert 보다 먼저 만든다 — service_role env 미설정 같은 구성 오류를 아무것도 쓰기 전에 잡는다.
-  const admin = createAdminClient()
-  const sb = await createServerClient()
-  const { data, error } = await sb
-    .from('projects')
-    .insert({ name, start_date: start, end_date: end, description, workspace_id: workspaceId })
-    .select('id')
-    .single()
-  if (error) throw new Error(error.message)
-  const { error: settingsErr } = await admin.from('project_settings').insert({
-    project_id: data.id,
-    level_labels: lv.labels,
-    max_depth: lv.maxDepth,
-    extra_axis_label: null,
-    milestone_keywords: DEFAULT_MILESTONE_KEYWORDS,
-  })
-  if (settingsErr) {
-    // projects·project_settings insert 가 트랜잭션으로 묶여 있지 않다 — 설정 저장이 실패하면
-    // 설정 없는 반쪽짜리 프로젝트가 남는다(getProjectConfig 가 폴백 라벨로 덮어 사용자 입력이
-    // 조용히 사라진다). 되돌려서 재시도를 안전하게 만든다. TODO(SP3): 두 insert 를 트랜잭션
-    // RPC 로 묶어 이 보정 삭제 자체를 없앤다.
-    console.error('[createProject] project_settings 저장 실패 — 프로젝트 되돌리기 시도:', settingsErr.message, 'project_id:', data.id)
-    const { error: delErr } = await admin.from('projects').delete().eq('id', data.id)
-    if (delErr) {
-      console.error('[createProject] 되돌리기도 실패 — 프로젝트 행이 남았다:', delErr.message, 'project_id:', data.id)
-      throw new Error(
-        `프로젝트 생성에 실패했고(${settingsErr.message}) 되돌리기도 실패했습니다(${delErr.message}). ` +
-          `프로젝트 행(id: ${data.id})이 남아 있으니 관리자에게 문의하세요.`,
-      )
+  if (!g.ok) return { ok: false, code: g.error, error: g.error }
+  if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: 요청 번호`)
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  if (!name) return invalidInput('프로젝트명을 입력하세요.')
+  if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput('종료일은 시작일보다 빠를 수 없습니다.')
+  const labels = settingDef('project', 'core.level_labels')!.parse(input.levelLabels)
+  if (!labels.ok) return invalidInput(CONFIG_MESSAGES.CONFIG_INVALID, [{ key: 'core.level_labels', message: labels.error }])
+  const copyFrom = input.copyFromProjectId ?? null
+  if (copyFrom !== null && (typeof copyFrom !== 'string' || !isUuidLike(copyFrom))) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: copyFromProjectId`)
+
+  const { admin } = adminFor({ workspaceId })
+  const values: Record<string, unknown> = {}
+  let allowed: ModuleId[]
+  let candidate: ModuleId[] = settingDef('project', 'modules.enabled')!.default as ModuleId[]
+  try {
+    const ws = await getWorkspaceConfig(workspaceId, { client: admin })
+    allowed = allowedAndAvailable(ws)
+    if (copyFrom) {
+      const src = await getProjectConfig(copyFrom, { client: admin })
+      // 다른 워크스페이스의 원본은 RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다
+      if (src.workspaceId !== workspaceId) return { ok: false, code: ERR_DENIED, error: ERR_DENIED }
+      const broken: { key: string; message: string }[] = []
+      for (const def of PROJECT_SETTINGS) {
+        const s = src.keys[def.key]
+        if (s.status === 'invalid') broken.push({ key: def.key, message: s.error })
+        else if (s.status === 'set') values[def.key] = s.value
+      }
+      if (broken.length) return invalidInput('원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.', broken)
+      const srcEnabled = src.keys['modules.enabled']
+      candidate = srcEnabled.status === 'set' || srcEnabled.status === 'default' ? srcEnabled.value : candidate
     }
-    throw new Error('프로젝트 생성에 실패했습니다. 다시 시도해 주세요.')
+  } catch (e) {
+    if (e instanceof ConfigUnavailableError) return { ok: false, code: 'CONFIG_UNAVAILABLE', error: e.message }
+    throw e
   }
-  // 팀 캐시가 새 프로젝트의 워크스페이스를 바로 알게 한다 — 모르면 다음 갱신(최대 TTL)까지 그 프로젝트의 팀이 빈 목록이다
-  // (캐시는 모르는 pid 를 '존재하지 않는 프로젝트'로 본다). refreshTeams 는 throw 하지 않는다 — 실패는 로그, TTL 갱신이 메운다.
+  values['core.level_labels'] = labels.value                        // 복사에서도 라벨은 입력값(§7.5)
+  values['modules.enabled'] = initialEnabled(candidate, allowed)    // 생성 때 늘 명시 기록(§3.6)
+
+  const { data, error } = await admin.rpc('create_project_with_settings', {
+    p_workspace_id: workspaceId, p_name: name, p_start_date: input.startDate || null, p_end_date: input.endDate || null,
+    p_description: input.description?.trim() || null, p_values: values, p_copy_from: copyFrom,
+    p_actor: g.actor.userId, p_command_id: input.commandId, p_schema_version: SETTINGS_SCHEMA_VERSION,
+  })
+  if (error) {
+    const mapped = mapDbError(error)
+    if (!mapped) throw new Error(`[createProject] 알 수 없는 DB 오류: ${error.message}`)
+    return mapped.code === 'CONFIG_INVALID'
+      ? invalidInput(mapped.message, mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : undefined)
+      : { ok: false, code: mapped.code, error: mapped.message }
+  }
+  const r = data as { status: 'applied' | 'duplicate'; project_id: string }
+  // 팀 캐시가 새 프로젝트의 워크스페이스를 바로 알게 한다(SP2 16b) — refreshTeams 는 throw 하지 않는다.
   await refreshTeams()
   revalidatePath('/projects')
+  return { ok: true, projectId: r.project_id, status: r.status }
 }
 
 export async function updateProject(

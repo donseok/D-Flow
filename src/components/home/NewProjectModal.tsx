@@ -35,6 +35,8 @@ export function NewProjectModal({
   const [levels, setLevels] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 요청 번호 — 모달이 열릴 때 하나 만들어 재시도에도 같은 값을 쓴다(결과 불명 재전송이 중복 생성이 되지 않게)
+  const [commandId, setCommandId] = useState(() => crypto.randomUUID())
 
   function reset() {
     setName('')
@@ -43,6 +45,7 @@ export function NewProjectModal({
     setEnd('')
     setLevels('')
     setError(null)
+    setCommandId(crypto.randomUUID())
   }
 
   function close() {
@@ -70,7 +73,11 @@ export function NewProjectModal({
     setBusy(true)
     setError(null)
     try {
-      await createProject(workspaceId, trimmed, start || null, end || null, description.trim() || null, lv.labels)
+      const r = await createProject({
+        workspaceId, name: trimmed, startDate: start || null, endDate: end || null,
+        description: description.trim() || null, levelLabels: lv.labels, commandId,
+      })
+      if (!r.ok) { setError(r.fieldErrors?.[0]?.message ?? r.error); return }
       router.refresh()
       setOpen(false)
       reset()
