@@ -129,6 +129,7 @@ payload 확장 — `POST /api/v1/wbs/import` (PAT·관리자, 기존 필드는 v
   external_ref·name·parent_external_ref·depth·level_idx)를 반환.
   스코프 work:read, 멤버면 조회 가능(비멤버 404 존재 은닉). PL 조회 우선순위 사슬:
   ① 서버(structure) → ② 골격 파일 폴백 → ③ 에러(골격 선행).
+  structure 가 422 `config_invalid`(서버의 단계 이름 설정 손상)면 ② 폴백으로 가지 않고 중단한다(SKILL.md 조회 사슬 참조).
 
 ### Water-Scrum-Fall 매핑 (2026-08-21 추가)
 
