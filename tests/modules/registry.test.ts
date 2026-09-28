@@ -73,6 +73,7 @@ describe('목록', () => {
     expect([...byId.minutes_integration.apiPrefixes]).toEqual(['/api/v1/minutes'])
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])
     expect([...byId.usage.apiPrefixes]).toEqual(['/api/track'])
+    expect([...byId.issues.apiPrefixes]).toEqual(['/api/issue-analysis'])   // 스펙 E16 — issue_analysis 모듈은 SP5(과제 4)
     expect(LEGACY_GLOBAL_PREFIXES).toEqual({ '/meetings': 'meetings', '/minutes': 'minutes', '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage' })
   })
   it('botDomains 는 BOT_DOMAINS 의 부분집합이고, projects·unknown 은 어느 모듈에도 없다', () => {

@@ -22,10 +22,11 @@ beforeEach(() => {
 })
 
 describe('requireModule', () => {
-  it('{ projectId } 면 해석기의 workspaceId 로 effectiveModules 를 부르고 client 를 둘 다에 넘긴다(E12)', async () => {
+  it('{ projectId } 면 해석기의 workspaceId 로 effectiveModules 를 부르고 client 를 둘 다에 넘긴다(E12) — 읽은 프로젝트 설정을 넘겨 다시 읽지 않는다(P27)', async () => {
     expect(await requireModule({ projectId: PID }, 'issues', { client })).toEqual({ ok: true })
     expect(m.getProjectConfig).toHaveBeenCalledWith(PID, { client })
-    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, { client })
+    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, { client, projectConfig: { projectId: PID, workspaceId: WID } })   // P27 — 읽은 설정을 넘긴다
+    expect(m.getProjectConfig).toHaveBeenCalledTimes(1)
   })
   it('{ workspaceId } 면 프로젝트 해석기를 부르지 않는다', async () => {
     expect(await requireModule({ workspaceId: WID }, 'minutes')).toEqual({ ok: true })

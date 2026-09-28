@@ -9,6 +9,7 @@ import { defineSetting } from '@/lib/settings/def'
 import { WORKSPACE_SETTINGS, PROJECT_SETTINGS } from '@/lib/settings/registry'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 
 const WID = 'ws-a', PID = 'p-a'
 const wsCfg = (allowed: ModuleId[], ai = true) => ({
@@ -86,5 +87,30 @@ describe('꺼진 모듈의 준비 설정(③-4) — 비core 소유 픽스처 키
     expect(moduleKeyRule({ module: fixture.module, allowed: new Set(['issues']), enabled: new Set() })).toBe('prepared')
     expect(moduleKeyRule({ module: fixture.module, allowed: new Set(['kanban']), enabled: new Set() })).toBe('not_allowed')
     expect(moduleKeyRule({ module: fixture.module, allowed: new Set(['issues']), enabled: new Set(['issues']) })).toBe('always')
+  })
+})
+
+describe('프로젝트의 워크스페이스가 정본이다(Phase A 최종 리뷰 CR-5)', () => {
+  it('넘긴 workspaceId 가 프로젝트 설정의 것과 다르면 ConfigUnavailableError', async () => {
+    mocks.getWorkspaceConfig.mockResolvedValue(wsCfg(['kanban']))
+    mocks.getProjectConfig.mockResolvedValue({ ...pCfg(['kanban']), workspaceId: 'ws-other' })
+    await expect(effectiveModules({ workspaceId: WID, projectId: PID })).rejects.toBeInstanceOf(ConfigUnavailableError)
+  })
+})
+
+describe('이미 읽은 프로젝트 설정을 받으면 다시 읽지 않는다(P27 — 관문 1회 = 2왕복)', () => {
+  it('projectConfig 를 넘기면 getProjectConfig 를 부르지 않고 그 값으로 판정한다', async () => {
+    mocks.getWorkspaceConfig.mockResolvedValue(wsCfg(['kanban', 'issues']))
+    const eff = await effectiveModules({ workspaceId: WID, projectId: PID }, { projectConfig: pCfg(['issues']) as never })
+    expect(eff.has('issues')).toBe(true); expect(eff.has('kanban')).toBe(false)
+    expect(mocks.getProjectConfig).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['다른 워크스페이스', { workspaceId: 'ws-other' }],
+    ['다른 프로젝트', { projectId: 'p-other' }],
+  ])('넘긴 projectConfig 가 scope 와 어긋나면(%s) ConfigUnavailableError — CR-5 가 받은 값에도 선다', async (_n, over) => {
+    mocks.getWorkspaceConfig.mockResolvedValue(wsCfg(['kanban']))
+    await expect(effectiveModules({ workspaceId: WID, projectId: PID }, { projectConfig: { ...pCfg(['kanban']), ...over } as never }))
+      .rejects.toBeInstanceOf(ConfigUnavailableError)
   })
 })

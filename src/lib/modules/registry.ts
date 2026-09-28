@@ -51,7 +51,7 @@ export const MODULES: readonly ModuleDef[] = [
     routePrefixes: ['/p/[projectId]/weekly'], apiPrefixes: ['/api/report'] },
   { id: 'issues', core: false, scope: 'project', requires: [], envAvailable: always, botDomains: ['issues'], settings: settingsOf('issues'),
     nav: { project: { id: 'p.issues', labelKey: 'nav.issues', icon: 'CircleAlert', segment: 'issues', group: 'p.plan', order: 20 } },
-    routePrefixes: ['/p/[projectId]/issues'], apiPrefixes: [] },
+    routePrefixes: ['/p/[projectId]/issues'], apiPrefixes: ['/api/issue-analysis'] },   // 스펙 E16 — SP5 가 issue_analysis 모듈로 옮긴다
   { id: 'wiki', core: false, scope: 'project', requires: ['minutes'], envAvailable: () => wikiServiceEnabled(), botDomains: ['wiki'], settings: settingsOf('wiki'),
     nav: { project: { id: 'p.wiki', labelKey: 'nav.wiki', icon: 'BookOpenText', segment: 'wiki', group: 'p.collab', order: 20 } },
     routePrefixes: ['/p/[projectId]/wiki'], apiPrefixes: ['/api/wiki'] },

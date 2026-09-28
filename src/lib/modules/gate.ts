@@ -27,7 +27,7 @@ const allCore = (ids: readonly ModuleId[]) => ids.every((id) => CORE.has(id))
 async function effectiveFor(scope: ModuleScope, client: ConfigReadClient | undefined): Promise<ReadonlySet<ModuleId>> {
   if ('projectId' in scope) {
     const cfg = await getProjectConfig(scope.projectId, { client })            // E12 — resolveScope 에는 'projects' 가 없다
-    return effectiveModules({ workspaceId: cfg.workspaceId, projectId: scope.projectId }, { client })
+    return effectiveModules({ workspaceId: cfg.workspaceId, projectId: scope.projectId }, { client, projectConfig: cfg })   // P27 — 같은 설정을 두 번 읽지 않는다
   }
   return effectiveModules({ workspaceId: scope.workspaceId }, { client })
 }
