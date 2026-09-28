@@ -34,16 +34,29 @@ export function normalizeEmailHost(host: string): string | null {
   return v ? toAsciiHostname(v) : null
 }
 
-/** 로컬 파트에 오면 안 되는 문자 — RFC 5322 specials 와 공백·제어 문자. 메일 발송기가 주소를 다시 해석해 초대 행과 다른
- *  수신자로 보낸다('bob>,<victim@acme.test' → victim@acme.test). 점·더하기 태그 같은 보통 주소는 통과한다. */
-const LOCAL_PART_FORBIDDEN = /[()<>[\]:;,"\\\s\p{Cc}]/u
+/** 로컬 파트 허용 목록 — GoTrue checkmail 과 같은 ASCII atext, 점은 RFC 5322 dot-atom 규칙(앞뒤·연속 점 금지).
+ *  금지 목록이 아니라 허용 목록이라 specials(발송기가 다른 수신자로 다시 읽는 , < > 등)·공백·제어 문자와 보이지 않는
+ *  서식 문자(ZWSP·RLO·U+3164·U+2800)·비ASCII 가 함께 닫힌다 — 가입(GoTrue)이 받지 않는 주소는 발급하지 않는다. */
+const ATEXT = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
+const LOCAL_PART_RE = new RegExp(`^${ATEXT}(?:\\.${ATEXT})*$`)
 
-/** 초대에 쓸 수 있는 주소 — 형식(isValidEmail) + '@' 하나 + 로컬 파트에 specials·공백·제어 문자 없음.
+/** 초대에 쓸 수 있는 주소 — 형식(isValidEmail) + '@' 하나 + 로컬 파트 ASCII dot-atom + 호스트 형태(normalizeEmailHost).
+ *  호스트 검사는 허용 도메인 모드와 무관하다('*' 여도 'alice@evil.example,victim.test'·IP 리터럴을 받지 않는다).
  *  발급(createProjectInvite)과 도메인 판정(isAllowedInviteDomain → 소비 재검사)이 같이 쓴다. */
 export function isValidInviteEmail(email: string): boolean {
   const at = email.lastIndexOf('@')
   if (!isValidEmail(email) || email.indexOf('@') !== at) return false
-  return !LOCAL_PART_FORBIDDEN.test(email.slice(0, at))
+  return LOCAL_PART_RE.test(email.slice(0, at)) && normalizeEmailHost(email.slice(at + 1)) !== null
+}
+
+/** 초대 행·판정·발송·계정 이메일에 쓰는 한 문자열 — trim·소문자(normalizeInviteEmail) 뒤 로컬 파트 + '@' + ASCII 호스트
+ *  (퓨니코드·끝 점 하나 제거). 'kim@한글.kr' → 'kim@xn--bj0bj06e.kr'. 가입(GoTrue, ASCII 전용)과 수락 RPC 의 문자열 비교가
+ *  이 값으로 성립한다. 초대할 수 없는 주소는 null. 이미 정규형이면 그대로다(멱등). */
+export function canonicalInviteEmail(raw: string): string | null {
+  const email = normalizeInviteEmail(raw)
+  if (!isValidInviteEmail(email)) return null
+  const at = email.lastIndexOf('@')
+  return `${email.slice(0, at)}@${normalizeEmailHost(email.slice(at + 1))}`
 }
 
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —

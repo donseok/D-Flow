@@ -1,8 +1,8 @@
 // 도메인 한 개를 ASCII(퓨니코드) 호스트명으로 — 초대 판정의 메일 호스트(domain/invites normalizeEmailHost)와
 // 허용 도메인 저장값(settings/defs/workspace normalizeDomain)이 같은 규칙을 쓴다. 한쪽만 느슨하면 정확 일치가 뚫린다.
 
-/** 최소한의 호스트명 형태 — 라벨은 영숫자·하이픈(양끝 하이픈 금지), 점으로 구분된 라벨이 2개 이상. */
-const HOSTNAME_LABEL = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?'
+/** 최소한의 호스트명 형태 — 라벨은 영숫자·하이픈(양끝 하이픈 금지)·63자 이하(DNS, GoTrue checkmail 과 같다), 점으로 구분된 라벨이 2개 이상. */
+const HOSTNAME_LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
 const HOSTNAME_RE = new RegExp(`^${HOSTNAME_LABEL}(?:\\.${HOSTNAME_LABEL})+$`)
 /** 파싱 전 문자 집합 — 문자·숫자·결합표시·점·하이픈. URL 파서는 / ? # \ : 에서 자르고 %xx·soft hyphen 을 풀어
  *  다른 호스트를 만든다('acme.test/evil.example' → 'acme.test') — 그런 입력은 여기서 막는다. */

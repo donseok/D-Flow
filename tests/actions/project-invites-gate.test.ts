@@ -323,11 +323,23 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expectRejectedBeforeWrites(c)
   })
 
-  it('워크스페이스 허용 도메인은 퓨니코드로 저장되고 한글 도메인 메일도 통과한다', async () => {
+  // M-3 — 행 이메일은 local@ASCII 호스트다. 가입(GoTrue, ASCII 전용)·수락(consume RPC 의 문자열 비교)이 이 값으로 성립한다.
+  it('한글 도메인 메일은 통과하고, 행·발송 이메일은 퓨니코드 호스트로 저장된다', async () => {
     const c = createClient({ settings: { data: wsRow({ 'invites.allowed_domains': ['xn--bj0bj06e.kr'] }), error: null } })
     createAdminClient.mockReturnValue(c.client as never)
     send.mockResolvedValue({ rejected: [] })
-    expect(await createProjectInvite(P1, { ...VALID, email: 'kim@한글.kr' })).toMatchObject({ ok: true })
+    expect(await createProjectInvite(P1, { ...VALID, email: 'kim@한글.kr' })).toMatchObject({ ok: true, row: { email: 'kim@xn--bj0bj06e.kr' } })
+    expect(insertedPayload(c.insert).email).toBe('kim@xn--bj0bj06e.kr')
+    expect(send.mock.calls[0]![0].to).toEqual(['kim@xn--bj0bj06e.kr'])
+  })
+
+  it('끝 점 하나가 붙은 주소는 정규형(끝 점 없음)으로 저장·발송한다', async () => {
+    const c = createClient()
+    createAdminClient.mockReturnValue(c.client as never)
+    send.mockResolvedValue({ rejected: [] })
+    expect(await createProjectInvite(P1, { ...VALID, email: 'alice@example.com.' })).toMatchObject({ ok: true })
+    expect(insertedPayload(c.insert).email).toBe('alice@example.com')
+    expect(send.mock.calls[0]![0].to).toEqual(['alice@example.com'])
   })
 
   it('워크스페이스 설정 행이 없으면(새 계약의 0건) env 로 폴백하지 않고 중단한다', async () => {

@@ -29,3 +29,10 @@ describe('toAsciiHostname — 바뀐 라벨은 xn-- + punycode(입력) 일 때�
     expect(toAsciiHostname('ꭰcme.test')).toBeNull()                 // 체로키 소문자 → 매핑이 대문자로
   })
 })
+
+describe('toAsciiHostname — 라벨 길이(DNS·GoTrue checkmail 과 같이 63자 이하)', () => {
+  it('64자 라벨은 null, 63자는 통과', () => {
+    expect(toAsciiHostname(`${'a'.repeat(64)}.test`)).toBeNull()
+    expect(toAsciiHostname(`${'a'.repeat(63)}.test`)).toBe(`${'a'.repeat(63)}.test`)
+  })
+})

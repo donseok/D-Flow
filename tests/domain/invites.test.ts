@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isInviteToken, normalizeInviteEmail, isAllowedInviteDomain, normalizeEmailHost, isValidInviteEmail,
+  isInviteToken, normalizeInviteEmail, isAllowedInviteDomain, normalizeEmailHost, isValidInviteEmail, canonicalInviteEmail,
   DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, normalizeInviteDays,
   inviteStatus, inviteStatusLabel, maskEmail, validateSignupInput,
   type InviteStateRow,
 } from '@/lib/domain/invites'
+import { normalizeDomain } from '@/lib/settings/defs/workspace'
 
 const TOKEN = '3f0f5f8e-1b2c-4d5e-8a9b-0c1d2e3f4a5b'
 
@@ -123,6 +124,76 @@ describe('isValidInviteEmail — 로컬 파트 specials(F3A-2)', () => {
   it('보통 주소(점·더하기 태그)는 통과한다', () => {
     expect(isValidInviteEmail('alice.b+tag@acme.test')).toBe(true)
     expect(isAllowedInviteDomain('alice.b+tag@acme.test', ['acme.test'])).toBe(true)
+  })
+})
+
+describe('로컬 파트는 ASCII atext 허용 목록(M-1) — GoTrue checkmail 과 같은 글자', () => {
+  it.each([
+    ['ZWSP', 'ceo\u200b@acme.test'], ['RLO', '\u202etset@acme.test'], ['한글(EAI)', '홍길동@acme.test'],
+    ['한글 채움 U+3164', 'a\u3164b@acme.test'], ['점자 공백 U+2800', 'a\u2800b@acme.test'], ['BOM', '\ufeffalice@acme.test'],
+    ['앞 점', '.alice@acme.test'], ['끝 점', 'alice.@acme.test'], ['연속 점', 'al..ice@acme.test'],
+  ])('%s 는 거부한다', (_label, email) => {
+    expect(isValidInviteEmail(email)).toBe(false)
+  })
+})
+
+describe('specials 한 글자씩(N-1)', () => {
+  it.each(['x<victim@acme.test', 'victim>x@acme.test', '"bob"victim@acme.test', 'a(b@acme.test', 'a)b@acme.test', 'a[b@acme.test',
+    'a]b@acme.test', 'a,b@acme.test', 'a;b@acme.test', 'a:b@acme.test', 'a\\b@acme.test'])('%s 는 거부한다', (email) => {
+    expect(isValidInviteEmail(email)).toBe(false)
+  })
+})
+
+describe("'*' 모드에서도 호스트 형태를 요구한다(M-2)", () => {
+  it.each(['alice@evil.example,victim.test', 'alice@[127.0.0.1]', 'alice@a.b:victim', 'alice@evil.example/x', 'alice@acme.test\u200b'])('%s 는 거부한다', (email) => {
+    expect(isValidInviteEmail(email)).toBe(false)
+    expect(isAllowedInviteDomain(email, ['*'])).toBe(false)
+  })
+})
+
+// 적대 탐색 표 B(invite-attack2.md) — 액션과 같이 normalizeInviteEmail 을 거친 뒤 판정한다. 허용 목록은 저장 parse(normalizeDomain) 결과.
+describe('과잉 거부 없음 — 탐색 표 B', () => {
+  const stored = (raw: string) => { const n = normalizeDomain(raw); if (!n.ok) throw new Error(n.error); return n.value }
+  const B: Array<[string, string, string, boolean]> = [
+    ['n-1', 'first.last@acme.test', 'acme.test', true], ['n-2', 'first_last+tag@acme.test', 'acme.test', true],
+    ['n-3', '123abc@acme.test', 'acme.test', true], ['n-4', '1234567@acme.test', 'acme.test', true],
+    ['n-5', 'alice@my-company.test', 'my-company.test', true], ['n-6', 'alice@eng.acme.test', 'eng.acme.test', true],
+    ['n-7', 'alice@mail.eng.acme.co.kr', 'mail.eng.acme.co.kr', true], ['n-8', 'kim@한글.kr', '한글.kr', true],
+    ['n-9', 'kim@한글회사.한국', '한글회사.한국', true], ['n-10', "o'brien@acme.test", 'acme.test', true],
+    ['n-11', 'Alice@ACME.TEST', 'acme.test', true], ['n-12', 'alice@acme.technology', 'acme.technology', true],
+    ['n-13', 'alice@acme.xn--3e0b707e', 'acme.xn--3e0b707e', true], ['n-14', 'alice@acme.한국', 'acme.xn--3e0b707e', true],
+    ['n-15', 'alice@3m.test', '3m.test', true], ['n-16', 'alice@123.test', '123.test', true],
+    ['n-17', 'a@acme.test', 'acme.test', true], ['n-18', 'x-y_z.w+1@acme.test', 'acme.test', true],
+    ['n-19', "!#$%&'*+-/=?^_`{|}~@acme.test", 'acme.test', true], ['n-20', 'alice@m\u00fcnchen.de', 'MÜNCHEN.DE', true],
+    ['n-21', 'alice@日本.jp', '日本.jp', true], ['n-22', 'alice@xn--wgv71a.jp', '日本.jp', true],
+    ['n-23', 'alice@acme.test', '@acme.test', true], ['n-24', 'alice@acme.test.', 'acme.test', true],
+    ['n-25', '  Alice.Kim@Acme.Test  ', 'acme.test', true], ['n-26', 'alice@acme.test\u200b', 'acme.test', false],
+    ['n-27(M-1 로 거부)', '홍길동@acme.test', 'acme.test', false], ['n-28', 'alice@ab--cd.test', 'ab--cd.test', true],
+    ['n-29', 'alice@acme.co.uk', 'acme.co.uk', true],
+    ['n-30', 'alice@\u0645\u062b\u0627\u0644.\u0625\u062e\u062a\u0628\u0627\u0631', 'مثال.إختبار', true],
+    ['n-31', 'alice@\u0baa\u0bb0\u0bbf\u0b9f\u0bcd\u0b9a\u0bc8.\u0b87\u0ba8\u0bcd\u0ba4\u0bbf\u0baf\u0bbe', 'பரிட்சை.இந்தியா', true],
+    ['n-32', 'alice@b\u00fccher.test', 'BÜCHER.TEST', true], ['n-33', 'alice@\u0444\u0438\u0440\u043c\u0430.\u0440\u0444', 'ФИРМА.РФ', true],
+    ['n-34', 'alice@\u4f8b\u5b50.\u4e2d\u56fd', '例子.中国', true], ['n-35', 'alice@vi\u1ec7t.vn', 'việt.vn', true],
+    ['n-36', 'alice@vie\u0323\u0302t.vn', 'việt.vn', false], ['n-37', 'alice@\u1112\u1161\u11ab\u1100\u1173\u11af.kr', '한글.kr', false],
+    ['n-38', 'alice@\u13a0\u13a1.test', 'xn--7tbj.test', false],
+  ]
+  it.each(B)('%s %s', (_id, email, allowed, expected) => {
+    expect(isAllowedInviteDomain(normalizeInviteEmail(email), [stored(allowed)])).toBe(expected)
+  })
+})
+
+describe('canonicalInviteEmail(M-3) — 행·판정·발송·계정 이메일이 같은 한 문자열', () => {
+  it('로컬 파트 + @ + ASCII 호스트(퓨니코드·끝 점 하나 제거), 소문자·앞뒤 공백 제거', () => {
+    expect(canonicalInviteEmail('kim@한글.kr')).toBe('kim@xn--bj0bj06e.kr')
+    expect(canonicalInviteEmail('alice@acme.test.')).toBe('alice@acme.test')
+    expect(canonicalInviteEmail('  Alice.Kim@Acme.Test  ')).toBe('alice.kim@acme.test')
+    expect(canonicalInviteEmail('alice@acme.한국')).toBe('alice@acme.xn--3e0b707e')
+    expect(canonicalInviteEmail('kim@xn--bj0bj06e.kr')).toBe('kim@xn--bj0bj06e.kr')   // 이미 정규형이면 그대로(멱등)
+  })
+  it('초대할 수 없는 주소는 null', () => {
+    expect(canonicalInviteEmail('홍길동@acme.test')).toBeNull()
+    expect(canonicalInviteEmail('alice@[127.0.0.1]')).toBeNull()
+    expect(canonicalInviteEmail('broken-email')).toBeNull()
   })
 })
 

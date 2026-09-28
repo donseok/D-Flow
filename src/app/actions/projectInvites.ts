@@ -10,7 +10,7 @@ import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import {
-  DEFAULT_INVITE_DAYS, inviteStatus, isAllowedInviteDomain, isValidInviteEmail, normalizeInviteDays,
+  DEFAULT_INVITE_DAYS, inviteStatus, canonicalInviteEmail, isAllowedInviteDomain, normalizeInviteDays,
   normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
 } from '@/lib/domain/invites'
 
@@ -211,9 +211,10 @@ export async function createProjectInvite(
   // 흔적도 남기지 않는 편이 낫다. 서버 액션 입력은 형상부터 믿지 않는다.
   if (!input || typeof input !== 'object') return { ok: false, error: ERR_EMAIL }
   if (accessRole !== null && accessRole !== ACCESS_ROLE.admin && accessRole !== ACCESS_ROLE.member) return { ok: false, error: ERR_ACCESS }
-  const email = normalizeInviteEmail(typeof input.email === 'string' ? input.email : '')
-  // 형식 + 로컬 파트 specials 거부 — 발송기가 다른 수신자로 다시 읽는 주소를 행으로 남기지 않는다
-  if (!isValidInviteEmail(email)) return { ok: false, error: ERR_EMAIL }
+  // 행·판정·발송·계정 이메일에 쓰는 한 문자열(local@ASCII 호스트). 형식·로컬 파트 atext·호스트 형태를 못 지나면 null —
+  // 발송기가 다른 수신자로 다시 읽거나 가입(GoTrue)이 받지 않는 주소를 행으로 남기지 않는다.
+  const email = canonicalInviteEmail(typeof input.email === 'string' ? input.email : '')
+  if (!email) return { ok: false, error: ERR_EMAIL }
   // 팀은 이 프로젝트에서 고를 수 있는 활성 팀만(resolveTeamsForProject 규칙) — 트리거가 워크스페이스 범위를 다시 본다.
   if (!Array.isArray(input.teamIds)) return { ok: false, error: ERR_TEAM }
   const selectable = teamsForProjectSync(projectId).filter(t => t.active)

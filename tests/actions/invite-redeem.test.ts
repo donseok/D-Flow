@@ -316,6 +316,16 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     expect(spies.inviteUpdate).not.toHaveBeenCalled()
   })
 
+  // M-3 — 발급이 행 이메일을 local@ASCII 호스트로 저장하므로, 한글 도메인 초대도 ASCII 계정 이메일과 문자열로 맞는다
+  it('한글 도메인 초대(행 kim@xn--bj0bj06e.kr)는 같은 ASCII 계정 이메일로 합류한다 — RPC 에 그 값 하나', async () => {
+    process.env.INVITE_ALLOWED_DOMAINS = 'xn--bj0bj06e.kr'
+    const user = { id: 'u-2', email: 'kim@xn--bj0bj06e.kr' }
+    getSession.mockResolvedValue(user)
+    const spies = makeAdmin({ invite: { data: { ...INVITE, email: 'kim@xn--bj0bj06e.kr' }, error: null } })
+    expect(await redeemInvite(TOKEN)).toEqual({ ok: true, projectId: PROJECT, alreadyMember: false })
+    expect(spies.rpc).toHaveBeenCalledWith('consume_project_invite', { p_token_hash: HASH, p_email: 'kim@xn--bj0bj06e.kr', p_user: user.id })
+  })
+
   // 트리거가 던지는 명단 토큰은 명단 문구로 — 초대 팀이 사라진 경우는 재발급을 안내한다(팀 id 배열엔 FK 가 없다).
   it.each([
     ['PROJECT_MEMBER_TEAM_SCOPE', '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.'],
