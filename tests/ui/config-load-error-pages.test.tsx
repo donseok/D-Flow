@@ -7,6 +7,7 @@ import { CONFIG_MESSAGES, ConfigUnavailableError } from '@/lib/settings/errors'
 
 // 설정을 못 읽은 화면(스펙 §3.5) — 옛 로더처럼 기본값으로 그리지 않고 '설정을 불러오지 못했습니다' 상태를 그린다.
 // 본체 뷰(DashboardView·WbsGanttSheet·AgentHubView)는 부르지 않는다. 단계 이름이 손상이면 문구에 그 키 이름이 든다.
+// 단, 키 하나의 손상은 그 키를 쓰는 기능만 멈춘다(개정 §2.5) — 에이전트 허브는 단계 이름을 상세 패널에만 쓴다(최종 리뷰 FN-8).
 const PID = 'p1'
 const LOAD_FAILED = '설정을 불러오지 못해 이 화면을 그릴 수 없습니다'
 
@@ -93,13 +94,29 @@ describe.each(pages)('$name 페이지 — 설정 조회 실패', ({ view, render
   })
 })
 
-describe.each(pages.filter((p) => p.name !== 'dashboard'))('$name 페이지 — 단계 이름 손상', ({ view, render }) => {
+describe.each(pages.filter((p) => p.name === 'wbs'))('$name 페이지 — 단계 이름 손상', ({ view, render }) => {
   it('문구에 키 이름이 들고 본체는 그리지 않는다', async () => {
     mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 42 }))
     const out = await render()
     expect(out).toContain(LOAD_FAILED)
     expect(out).toContain('core.level_labels')
     expect(view).not.toHaveBeenCalled()
+  })
+})
+
+describe('agents 페이지 — 단계 이름 손상은 허브를 막지 않는다(FN-8)', () => {
+  it('킬스위치·승인 큐가 있는 허브는 그대로 그리고, 상세 패널만 라벨 없음(null)과 사유를 받는다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 42 }))
+    const out = await pages[2].render()
+    expect(out).not.toContain(LOAD_FAILED)
+    expect(mocks.AgentHubView).toHaveBeenCalled()
+    expect(mocks.AgentHubView.mock.calls.at(-1)![0]).toMatchObject({
+      wbs: { levelLabels: null, maxDepth: null, levelsError: { key: 'core.level_labels', error: expect.stringContaining('core.level_labels') } },
+    })
+  })
+  it('정상이면 라벨·깊이를 넘기고 levelsError 는 null', async () => {
+    await pages[2].render()
+    expect(mocks.AgentHubView.mock.calls.at(-1)![0]).toMatchObject({ wbs: { levelLabels: ['Phase', 'Task'], maxDepth: 2, levelsError: null } })
   })
 })
 

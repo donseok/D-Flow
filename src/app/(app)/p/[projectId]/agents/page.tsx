@@ -30,10 +30,11 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     getProjectRoster(projectId),
     getServerLocale(),
   ])
-  // 상세 패널의 트리 깊이·라벨을 기본값으로 채우지 않는다(스펙 §3.5) — 설정 실패·단계 이름 손상이면 허브 대신 사유를 그린다.
+  // 상세 패널의 트리 깊이·라벨을 기본값으로 채우지 않는다(스펙 §3.5). 설정 전체 조회 실패면 허브 대신 사유를 그린다.
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  // 단계 이름은 상세 패널만 쓴다 — 손상이면 허브(킬스위치·승인 큐·위임)는 그대로 그리고 패널 자리에만 사유를 띄운다
+  // (개정 §2.5 "그 키를 쓰는 기능만 멈춘다"). 허브 전체를 막으면 잘못 도는 에이전트를 UI 로 멈출 길이 없다(최종 리뷰 FN-8).
   const labels = pick(pc.cfg, 'core.level_labels')
-  if (!labels.ok) return <div className="p-6"><ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} /></div>
   // 명단은 상세 패널의 담당자 선택용 곁가지 — 실패해도 허브는 그리고, 사유는 허브가 표 위에 띄운다.
   if (!roster.ok) console.error(`[agents] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
   const wbs = {
@@ -42,8 +43,9 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     unresolvedDepends: wbsData.unresolvedDepends,
     holidays: wbsData.holidays,
     today: wbsData.today,
-    levelLabels: labels.value,
-    maxDepth: levelDepthOf(pc.cfg),
+    levelLabels: labels.ok ? labels.value : null,
+    levelsError: labels.ok ? null : { error: labels.error, key: labels.key },
+    maxDepth: labels.ok ? levelDepthOf(pc.cfg) : null,
     members: roster.ok ? roster.rows : [],
     membersError: roster.ok ? null : roster.error,
     actorView: toProjectActorView(actor, projectId),

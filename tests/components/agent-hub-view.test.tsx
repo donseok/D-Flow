@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase/client', () => ({
   },
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
 // 상세 패널은 WBS 편집 전체 표면(무거운 의존성)이라 스텁으로 대체 — 여기서는 "열림/닫힘·대상 항목"만 검증한다.
 vi.mock('@/components/wbs/RowDetailPanel', () => ({
   RowDetailPanel: ({ item, onClose }: { item: { id: string; name: string; rolledActualPct?: number }; onClose: () => void }) => (
@@ -55,7 +55,7 @@ const hub = (over: Partial<AgentHub> = {}): AgentHub => ({
 const citem = (over: Partial<ComputedItem> = {}): ComputedItem =>
   ({ id: 'a1', name: '리프1', children: [], plannedStart: null, plannedEnd: null, rolledActualPct: 0, ...over }) as unknown as ComputedItem
 const wbs = (over: Partial<HubWbsBundle> = {}): HubWbsBundle =>
-  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-14', levelLabels: [], maxDepth: null, members: [], membersError: null, actorView: null, ...over })
+  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-14', levelLabels: [], levelsError: null, maxDepth: null, members: [], membersError: null, actorView: null, ...over })
 
 let host: HTMLDivElement, root: Root
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); refresh.mockReset(); apply.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
@@ -124,6 +124,19 @@ describe('AgentHubView', () => {
     await act(async () => { (host.querySelector('[data-detail-close]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-detail-panel]')).toBeNull()
     expect(refresh).toHaveBeenCalledWith('p1')
+  })
+  it('단계 이름이 손상(levelLabels null)이면 상태 줄·표·큐는 그리고, 이름을 누르면 패널 자리에 사유만 뜬다(FN-8)', async () => {
+    const levelsError = { error: '설정 값이 올바르지 않습니다. (core.level_labels)', key: 'core.level_labels' }
+    act(() => root.render(<AgentHubView initial={hub({ viewer: { isAdmin: true, memberIds: [] } })} wbs={wbs({ levelLabels: null, levelsError })} />))
+    expect(host.querySelector('section[aria-label="에이전트 상태"]')).not.toBeNull()      // 킬스위치 줄
+    expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
+    expect(host.textContent).toContain('승인 대기 없음')
+    expect(host.querySelector('[data-config-load-error]')).toBeNull()                   // 누르기 전에는 허브만
+    await act(async () => { (host.querySelector('[data-hub-row="a1"] [data-hub-open="a1"]') as HTMLButtonElement).click() })
+    expect(host.querySelector('[data-detail-panel]')).toBeNull()
+    const notice = host.querySelector('[data-hub-detail-unavailable] [data-config-load-error]')
+    expect(notice?.textContent).toContain('core.level_labels')
+    expect(host.querySelector('section[aria-label="에이전트 상태"]')).not.toBeNull()
   })
   it('실시간 신호를 받으면 허브를 재조회한다 — 연속 신호는 1회로 접는다', async () => {
     // 승인 대기 카드는 주문 상태·보고 본문·서브트리 관리자 판정으로 조립된다. 트리거 페이로드

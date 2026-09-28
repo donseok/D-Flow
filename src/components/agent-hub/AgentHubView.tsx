@@ -15,6 +15,8 @@ import { useWbsRealtimeBurst } from '@/lib/hooks/useWbsRealtimeBurst'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { HubStatusBar } from './HubStatusBar'
 import { AgentFrame, type HeroTile } from './AgentFrame'
 import { DelegationTable, type HubFilter } from './DelegationTable'
@@ -30,7 +32,9 @@ export type HubWbsBundle = {
   unresolvedDepends: Record<string, string[]>
   holidays: string[]
   today: string
-  levelLabels: string[]
+  /** 단계 이름 — null 이면 손상·부재다. 상세 패널만 쓰므로 허브는 그리고 패널 자리에 levelsError 를 띄운다(개정 §2.5) */
+  levelLabels: string[] | null
+  levelsError: { error: string; key: string } | null
   maxDepth: number | null
   members: ProjectMember[]
   /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있고 표 위에 사유를 띄운다(0명으로 위장하지 않는다). */
@@ -47,6 +51,7 @@ function flattenComputed(items: ComputedItem[]): ComputedItem[] {
 }
 
 export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsBundle }) {
+  const { locale } = useLocale()
   const [hub, setHub] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   // 관리자는 프로젝트 전체를 관리하니 all, 멤버는 자기 담당부터.
@@ -153,7 +158,12 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
         <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} />
-        {selectedItem && (
+        {selectedItem && wbs.levelLabels === null && (
+          <div data-hub-detail-unavailable>
+            <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} locale={locale} />
+          </div>
+        )}
+        {selectedItem && wbs.levelLabels !== null && (
           <RowDetailPanel
             item={selectedItem}
             allItems={allFlat}
