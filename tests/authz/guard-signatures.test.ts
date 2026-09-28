@@ -17,4 +17,9 @@ describe('가드 시그니처 동결(결정 8)', () => {
   it('roleIn', () => {
     expect(sig(pure, 'roleIn')).toBe('export function roleIn(actor: Actor | null, projectId: string | null): EffectiveRole | null')
   })
+  // D10 — requireModule 은 가드 모듈 밖(src/lib/modules/gate.ts)에 산다. 반환형은 이름 있는 별칭(정규식이 반환형의 '{' 에서 끊긴다).
+  it('requireModule(관문 — 가드가 아니다, E18)', () => {
+    expect(sig(src('src/lib/modules/gate.ts'), 'requireModule'))
+      .toBe('export async function requireModule(scope: ModuleScope, moduleId: ModuleId | readonly ModuleId[], opts?: { client?: ConfigReadClient }): Promise<ModuleGateResult>')
+  })
 })

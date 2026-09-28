@@ -11,11 +11,13 @@ export const ERR_LOOKUP = '권한을 확인할 수 없어 중단했습니다.'
 export const ERR_DENIED = '권한 없음'
 export const ERR_ANON = '로그인 필요'
 export const ERR_MISSING = '대상을 찾을 수 없습니다.'
+/** 모듈 관문(src/lib/modules/gate.ts)의 거부 사유 — 사용자에게 보인다. 설정 조회 실패·손상·꺼짐을 구별하지 않는다(존재 은닉, 원인은 로그) */
+export const ERR_MODULE_DISABLED = '이 기능은 지금 사용할 수 없습니다.'
 
 /**
  * 가드 에러 문자열 → HTTP status. 문자열 정본이 이 파일이므로 매핑도 같이 산다
  * (라우트별 사본은 문자열이 바뀌면 조용히 전부 fallback 으로 떨어진다).
- * 비로그인 401 · 권한 없음 403 · 대상 없음 404 · 그 외(권한 조회 실패 등)는 호출부가 고른 fallback.
+ * 비로그인 401 · 권한 없음 403 · 대상 없음 404 · 모듈 꺼짐 404 · 그 외(권한 조회 실패 등)는 호출부가 고른 fallback.
  * 404 는 타 워크스페이스·미존재 프로젝트의 존재 은닉이다 — 403 으로 답하면 '있다'는 사실이 샌다.
  * wiki/reindex 는 503(판정 불가)을, 나머지 라우트는 500(서버 문제)을 택했다.
  */
@@ -23,5 +25,6 @@ export function denyStatus(error: string, fallback: number = 500): number {
   if (error === ERR_ANON) return 401
   if (error === ERR_DENIED) return 403
   if (error === ERR_MISSING) return 404
+  if (error === ERR_MODULE_DISABLED) return 404          // 꺼진 모듈은 존재를 알리지 않는다(정본 §3.2.4) — fallback 무시
   return fallback
 }
