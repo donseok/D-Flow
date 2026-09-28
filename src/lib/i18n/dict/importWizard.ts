@@ -114,6 +114,8 @@ export const importWizardKo = {
   'importWizard.doneReindexed': 'AI 색인 갱신',
   'importWizard.doneProfileSaved': '프로파일 저장',
   'importWizard.doneWarningsTitle': '확인해야 할 사항',
+  'importWizard.profileSaveFailedTitle': '양식은 저장되지 않았습니다',
+  'importWizard.profileSaveFailedDesc': '가져오기는 끝났지만 저장 양식 기록에 실패했습니다({code}). 설정 화면에서 다시 저장하거나 잠시 뒤 다시 시도하세요.',
   'importWizard.savedYes': '저장됨',
   'importWizard.savedNo': '저장 안 함',
   'importWizard.gotoWbs': 'WBS 화면으로 이동',

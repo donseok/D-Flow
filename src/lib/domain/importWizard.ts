@@ -14,6 +14,8 @@ export interface ExecuteResult {
   reindexed: number
   backup?: { rows: unknown[]; generatedAt: string }
   profileSaved: boolean
+  /** 양식 저장 실패 사유(W5) — 가져오기 자체는 성공. 완료 화면이 경고로 보인다. error 는 코드의 고정 문구다. */
+  profileSave?: { ok: false; code: string; error: string }
   warnings?: string[]
 }
 

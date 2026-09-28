@@ -671,6 +671,16 @@ export function ImportWizard({
             </div>
           </dl>
 
+          {state.result.profileSave && !state.result.profileSave.ok && (
+            <div role="status" className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
+                <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.profileSaveFailedTitle')}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-ink-muted">
+                {t('importWizard.profileSaveFailedDesc').replace('{code}', state.result.profileSave.code)}
+              </p>
+            </div>
+          )}
           {state.result.warnings && state.result.warnings.length > 0 && (
             <div role="status" className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">

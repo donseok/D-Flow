@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   ingestProject: vi.fn(),
   detectWorkbook: vi.fn(),
   getProjectConfig: vi.fn(),
+  writeProjectSettingsInternal: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({
   requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: mocks.requireWorkspaceAdmin,
@@ -42,6 +43,7 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordPro
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
 vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: mocks.detectWorkbook }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: mocks.writeProjectSettingsInternal }))
 
 import { POST } from '@/app/api/import/execute/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -110,13 +112,10 @@ function makeSbClient(opts: {
   return { from, rpc }
 }
 
-function makeAdminClient(opts: { upsertError?: { message: string } | null } = {}) {
-  const upsert = vi.fn(async () => ({ error: opts.upsertError ?? null }))
-  const from = vi.fn((table: string) => {
-    if (table === 'project_settings') return { upsert }
-    throw new Error(`unexpected table: ${table}`)
-  })
-  return { from, upsert }
+/** 라우트는 admin 으로 표를 직접 만지지 않는다 — 프로파일 저장은 writeProjectSettingsInternal(mock)에 넘길 뿐이다. */
+function makeAdminClient() {
+  const from = vi.fn((table: string) => { throw new Error(`unexpected table: ${table}`) })
+  return { from }
 }
 
 beforeEach(() => {
@@ -405,42 +404,42 @@ describe('POST /api/import/execute — replace', () => {
   })
 })
 
-describe('POST /api/import/execute — saveProfile(Q4)', () => {
-  it('saveProfile=true → project_settings.excel_profile upsert 페이로드 확인, profileSaved:true', async () => {
-    const admin = makeAdminClient()
-    mocks.createAdminClient.mockReturnValue(admin)
+describe('POST /api/import/execute — saveProfile(W5)', () => {
+  it('saveProfile=true → writeProjectSettingsInternal(admin, pid, { set: { wbs.excel_profile } }, actor) — profileSaved:true', async () => {
+    mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'c' })
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.profileSaved).toBe(true)
-    // 0058 project_settings 는 updated_at 트리거가 없다(0038 관례) — UPDATE 분기에서 default now() 가
-    // 안 타므로 앱이 두 필드를 직접 채운다(actions/llmConfig.ts:285 선례). 가드가 돌려준 actor 의 id 를 쓴다.
-    expect(admin.upsert).toHaveBeenCalledWith(
-      {
-        project_id: PROJECT_ID, excel_profile: LEGACY_EXCEL_PROFILE_V1,
-        updated_by: ACTOR.userId, updated_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
-      },
-      { onConflict: 'project_id' },
-    )
+    expect(body.profileSaved).toBe(true); expect(body.profileSave).toBeUndefined()
+    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledWith(expect.anything(), PROJECT_ID, { set: { 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 } }, ACTOR.userId)
   })
-
-  it('saveProfile=false → upsert 호출 없음, profileSaved:false', async () => {
-    const admin = makeAdminClient()
-    mocks.createAdminClient.mockReturnValue(admin)
+  it('saveProfile=false → 쓰기 없음, profileSaved:false', async () => {
     const res = await POST(req(baseFields({ saveProfile: 'false' })))
-    const body = await res.json()
-    expect(body.profileSaved).toBe(false)
-    expect(admin.upsert).not.toHaveBeenCalled()
+    expect((await res.json()).profileSaved).toBe(false)
+    expect(mocks.writeProjectSettingsInternal).not.toHaveBeenCalled()
   })
-
-  it('upsert 실패해도 임포트 자체는 성공(무시하고 로깅) — profileSaved:false', async () => {
-    const admin = makeAdminClient({ upsertError: { message: 'db down' } })
-    mocks.createAdminClient.mockReturnValue(admin)
+  it('저장 실패 → 가져오기는 200 이고 profileSaved:false 에 profileSave 사유가 실린다(로그만 남기고 삼키지 않는다)', async () => {
+    mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.ok).toBe(true)
-    expect(body.profileSaved).toBe(false)
+    expect(body.ok).toBe(true); expect(body.profileSaved).toBe(false)
+    expect(body.profileSave).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
+  })
+  it('저장 실패 사유의 DB 원문은 응답에 싣지 않는다 — 코드의 고정 문구만(원문은 로그)', async () => {
+    mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다. (relation "x" boom)' })
+    const res = await POST(req(baseFields({ saveProfile: 'true' })))
+    const body = await res.json()
+    expect(body.profileSave).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
+    expect(JSON.stringify(body)).not.toContain('boom')
+  })
+  it('저장이 throw(표에 없는 DB 오류)해도 가져오기는 200 — CONFIG_UNAVAILABLE 경고로 싣는다', async () => {
+    mocks.writeProjectSettingsInternal.mockRejectedValue(new Error('[settings/write] 알 수 없는 DB 오류: boom'))
+    const res = await POST(req(baseFields({ saveProfile: 'true' })))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.profileSave).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
+    expect(JSON.stringify(body)).not.toContain('boom')
   })
 })
 

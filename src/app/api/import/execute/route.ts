@@ -14,8 +14,9 @@ import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { detectWorkbook } from '@/lib/excel/detect'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
+import { writeProjectSettingsInternal } from '@/lib/settings/write'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
@@ -178,20 +179,20 @@ export async function POST(req: NextRequest) {
     count = typeof data === 'number' ? data : items.length
   }
 
-  // 프로파일 저장(Q4) — project_settings 는 쓰기 정책이 없다(0058 service_role 전용 관문, createProject 시드와 동일 경로).
+  // 프로파일 저장(W5) — 서버 내부 쓰기 한 함수(parse·revision CAS·이력). 실패해도 가져오기는 성공이지만 사유를 응답에 싣는다
+  // (로그만 남기고 삼키지 않는다 — 3원칙 ①). 응답에는 코드의 고정 문구만 — 원인(DB 원문 포함)은 로그에만.
   let profileSaved = false
+  let profileSave: { ok: false; code: string; error: string } | undefined
   if (saveProfile) {
     const admin = createAdminClient()
-    // 0058 project_settings 는 updated_at 트리거가 없다(0038 주석 관례 계승) — UPDATE 분기에서는
-    // 컬럼 default now() 가 타지 않으므로 앱이 두 필드를 직접 채운다(actions/llmConfig.ts:285 선례).
-    const { error: upsertErr } = await admin
-      .from('project_settings')
-      .upsert(
-        { project_id: projectId, excel_profile: profile, updated_by: g.actor.userId, updated_at: new Date().toISOString() },
-        { onConflict: 'project_id' },
-      )
-    if (upsertErr) console.error('[import/execute] 프로파일 저장 실패(무시):', upsertErr.message)
-    else profileSaved = true
+    // 표에 없는 DB 오류는 throw 한다 — 가져오기는 이미 끝났으므로 500 으로 바꾸지 않고 같은 경고로 싣는다.
+    const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'wbs.excel_profile': profile } }, g.actor.userId)
+      .catch((e: unknown) => ({ ok: false as const, code: 'CONFIG_UNAVAILABLE' as const, error: e instanceof Error ? e.message : String(e) }))
+    if (w.ok) profileSaved = true
+    else {
+      console.error('[import/execute] 프로파일 저장 실패:', w.code, w.error)
+      profileSave = { ok: false, code: w.code, error: Object.hasOwn(CONFIG_MESSAGES, w.code) ? CONFIG_MESSAGES[w.code as ConfigCode] : ERR_CONFIG_UNAVAILABLE }
+    }
   }
 
   // 임포트는 실적·계획 전면 교체(또는 신규 반영) — 즉시 스냅샷 기록(라우트라 await로 충분).
@@ -212,6 +213,7 @@ export async function POST(req: NextRequest) {
     reindexed,
     ...(backup ? { backup } : {}),
     profileSaved,
+    ...(profileSave ? { profileSave } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   })
 }

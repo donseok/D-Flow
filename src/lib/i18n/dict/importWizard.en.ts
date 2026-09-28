@@ -116,6 +116,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.doneReindexed': 'AI index refreshed',
   'importWizard.doneProfileSaved': 'Profile saved',
   'importWizard.doneWarningsTitle': 'Things to note',
+  'importWizard.profileSaveFailedTitle': 'The layout was not saved',
+  'importWizard.profileSaveFailedDesc': 'The import finished, but saving the layout failed ({code}). Save it again from the settings page or retry shortly.',
   'importWizard.savedYes': 'Saved',
   'importWizard.savedNo': 'Not saved',
   'importWizard.gotoWbs': 'Go to WBS',
