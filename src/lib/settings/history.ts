@@ -1,4 +1,5 @@
-// 설정 이력 읽기(D24 — 세션 클라이언트로 읽는다. RLS read 정책이 스코프를 좁힌다). 두 이력 표는 여기서만 읽는다(settings-writes 허용 목록).
+// 설정 이력 읽기(D24). 받은 클라이언트로 읽는다 — 화면은 세션(RLS read 정책이 스코프를 좁힌다), 설정 액션의 재기준 판독(changedKeysSince)은
+// service_role(가드 뒤, RLS 없음)이다. 두 이력 표 이름은 이 파일에만 있고 접근은 from(table).select 뿐이다(settings-writes 허용 목록 G1·읽기 전용 G2).
 import type { ConfigReadClient } from './projectConfig'
 
 export type HistoryScope = { projectId: string } | { workspaceId: string }

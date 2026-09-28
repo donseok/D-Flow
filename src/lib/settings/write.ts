@@ -2,7 +2,7 @@
  * 서버 내부 쓰기(스펙 §3.3) — 세션 액션이 아닌 경로(가져오기 프로파일 저장 W5, 에이전트 레벨 시드 W6, Phase B 의 옛 에이전트 토글)의
  * 유일한 쓰기 함수. 서버가 계산한 저장 형태를 parse 만 거쳐 RPC 에 넘긴다(개정 §2.3.1 4단계 끝). 방금 읽은 revision 으로 CAS 하고
  * 충돌이면 한 번 다시 읽어 같은 명령 id 로 재시도한다. 교차 불변식(validateConfig)은 여기서 돌리지 않는다 — 호출부가 필요하면 먼저 돈다.
- * `from('project_settings')` 는 revision 판독뿐이다(tests/invariants/settings-writes.test.ts 허용 목록).
+ * `project_settings` 는 revision 판독(select)뿐이다 — tests/invariants/settings-writes.test.ts 의 허용 목록(G1)과 읽기 전용 검사(G2)가 지킨다.
  */
 import { randomUUID } from 'node:crypto'
 import type { AdminClient } from '@/lib/supabase/adminFor'
