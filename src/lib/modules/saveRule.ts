@@ -7,7 +7,7 @@ import { moduleDef } from './registry'
 export type ModuleKeyRule = 'always' | 'prepared' | 'not_allowed'
 
 /** 키 소유 모듈의 상태 → 저장 허용. enabled 가 null 이면 워크스페이스 층(프로젝트 토글 없음).
- *  env 가용은 호출자가 allowed 를 만들 때 이미 걸러 넘긴다(허용 ∧ env 가용 = allowed). */
+ *  env 가용은 호출자가 allowed 를 만들 때 이미 걸러 넘긴다(허용 ∧ env 가용 = allowed — validateConfig 의 availableOf). */
 export function moduleKeyRule(input: { module: ModuleId; allowed: ReadonlySet<ModuleId>; enabled: ReadonlySet<ModuleId> | null }): ModuleKeyRule {
   const { module, allowed, enabled } = input
   if (CORE_MODULES.includes(module)) return 'always'
@@ -22,7 +22,8 @@ export function intersectEnabledWithAllowed(enabled: readonly ModuleId[], allowe
 }
 
 /**
- * modules.enabled 의 세 검사 — 원소는 PROJECT_TOGGLABLE·유일, 새로 추가된 id(next − prev)는 allowed 에 속함, requires 닫힘은
+ * modules.enabled 의 세 검사 — 원소는 PROJECT_TOGGLABLE·유일, 새로 추가된 id(next − prev)는 allowed 에 속함(allowed 는 워크스페이스
+ * 허용 그대로 — env 무관, 스펙 §4.1), requires 닫힘은
  * CORE ∪ (allowed 의 워크스페이스 층) ∪ (next ∩ allowed) 안에서 본다. prev 가 null 이면 생성(전부 새 id). 자동 추가는 하지 않는다.
  */
 export function checkEnabledModules(input: { next: readonly ModuleId[]; prev: readonly ModuleId[] | null; allowed: readonly ModuleId[] }): Parsed<ModuleId[]> {

@@ -14,13 +14,13 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { agentsNewlyEnabled, syncAgentsModule } from '@/lib/modules/agentsSync'
 import { moduleKeyRule } from '@/lib/modules/saveRule'
-import { REQUIRED_ON_CREATE, type EditCtx, type SettingDef } from '@/lib/settings/def'
+import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
-import { CONFIG_MESSAGES, ConfigUnavailableError, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
 import { changedKeysSince, findCommandOutcome, listHistory, type SettingsHistoryRow } from '@/lib/settings/history'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef, type SettingKey, type SettingScope } from '@/lib/settings/registry'
-import { allowedOrNone, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
+import { availableOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
 import { getWorkspaceConfig, type WorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { commandDigestInput } from '@/lib/settings/write'
 import type { KeyState } from '@/lib/settings/resolve'
@@ -142,7 +142,8 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   if (unknown.length) return invalid(commandId, 'CONFIG_UNKNOWN_KEY', unknown)
   const overlap = unset.filter((k) => Object.prototype.hasOwnProperty.call(patch.set, k))
   if (overlap.length) return invalid(commandId, 'CONFIG_INVALID', overlap.map((key) => ({ key, message: 'set 과 unset 에 같이 있습니다.' })))
-  for (const key of unset) if (defs.get(key)!.default === REQUIRED_ON_CREATE) return invalid(commandId, 'CONFIG_INVALID', [{ key, message: '필수 설정은 기본값으로 되돌릴 수 없습니다.' }])
+  // 늘 명시 키(core.level_labels·modules.enabled) — 미설정이면 필수 키 부재이거나 기본값(토글 전부)이 켜진 것으로 풀려 저장 검사·동기화가 갈린다
+  for (const key of unset) if (defs.get(key)!.explicit) return invalid(commandId, 'CONFIG_INVALID', [{ key, message: ERR_EXPLICIT_UNSET }])
   for (const def of defs.values()) if (!canEditSetting(a.scope, def.editor, actor)) return denied(commandId, ERR_DENIED)
 
   // 3~6 — 재기준 때 한 번 더 돈다. expected 는 첫 시도에 클라이언트 값, 재기준에 방금 읽은 최신 revision
@@ -151,9 +152,10 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     if ('ok' in loaded) return loaded
     const { doc, ws, cfg } = loaded
     if (doc.schemaAhead) return { ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD', commandId, error: CONFIG_MESSAGES.CONFIG_SCHEMA_AHEAD, retryable: false }
-    // 3. 소유 모듈 규칙 — modules.allowed 가 손상이면 빈 집합(fail-closed: core 키만 저장 가능 — 그 안에 modules.allowed 자체가 있어 복구 경로는 남는다)
-    const allowedIds = allowedOrNone(ws)
-    const allowed: ReadonlySet<ModuleId> = new Set(allowedIds)
+    // 3. 소유 모듈 규칙 — modules.allowed 가 손상이면 빈 집합(fail-closed: core 키만 저장 가능 — 그 안에 modules.allowed 자체가 있어 복구 경로는 남는다).
+    // 소유 모듈 규칙만 env 가용을 본다(개정 §2.7.3). modules.enabled 의 허용 검사(5단계)는 워크스페이스 허용 그대로다(스펙 §4.1 — env 는 저장을 막지 않는다)
+    const allowedIds = workspaceAllowedOrNone(ws)
+    const allowed: ReadonlySet<ModuleId> = new Set(availableOf(allowedIds))
     const notAllowedMessage = modulesAllowedBroken(ws) ? ERR_MODULES_ALLOWED_BROKEN : '이 워크스페이스나 배포에서 사용할 수 없는 모듈의 설정입니다'
     const enabled = cfg ? new Set((stateValue(cfg.keys['modules.enabled']) as ModuleId[] | undefined) ?? []) : null
     const notAllowed: FieldError[] = []
@@ -181,14 +183,23 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
       if (mapped.code === 'ERR_DENIED') return denied(commandId, mapped.message)
       if (mapped.code === 'CONFIG_INVALID') return invalid(commandId, 'CONFIG_INVALID', mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : [], mapped.message)
       const k = kindOfCode(mapped.code)
-      if (k.kind === 'unavailable' || k.kind === 'schema_ahead') return { ok: false, kind: k.kind, code: mapped.code, commandId, error: mapped.message, retryable: k.retryable }
+      if (k.kind === 'unavailable' || k.kind === 'schema_ahead') {
+        console.error('[settings] RPC 거부', { scope: a.history, commandId, token: mapped.token })     // 교착·배포 엇갈림 — 문구는 맞아도 횟수·명령 id 는 로그에만
+        return { ok: false, kind: k.kind, code: mapped.code, commandId, error: mapped.message, retryable: k.retryable }
+      }
       if (k.kind === 'invalid' && INVALID_CODES.includes(mapped.code)) return invalid(commandId, mapped.code as InvalidCode, [], mapped.message)
       throw new Error(`[settings] 설정 RPC 가 낼 수 없는 오류: ${mapped.token}`)
     }
     const r = rpcOutcome(data)
     if (r.status === 'applied') {
       const after = await a.afterApplied(admin, doc, built.set, actor)
-      if (!after.ok) return unavailableLogged(a, commandId, '저장 뒤 동기화', after.error, `${after.what} 실패 — 설정은 revision ${r.revision} 으로 저장됨`)
+      if (!after.ok) {
+        // 저장은 됐다 — 재시도로는 동기화가 다시 돌지 않는다(같은 id 는 duplicate, 새 id 는 prev 에 이미 있어 '새로 켬'이 아니다). 계획 과제 11 과 다른 편차(retryable:false)
+        console.error('[settings] 저장 뒤 동기화 실패', { scope: a.history, commandId, cause: after.error })
+        a.revalidate()
+        return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false,
+          error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — 다시 저장해도 동기화되지 않습니다. 에이전트 허브에서 중지 뒤 다시 켜세요.` }
+      }
     }
     a.revalidate()
     return { ok: true, kind: r.status, commandId, revision: r.revision, rebased }
@@ -199,13 +210,13 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   // 7. 자동 재기준 1회 — 최신 판독이 먼저, 바뀐 키 판독이 나중이다. 반대 순서면 두 판독 사이에 요청 키가 바뀐 저장이
   // changedKeys 에는 없고 최신 revision 에는 들어가 CAS 가 통과한다(유실 갱신). 이 순서면 판독 뒤의 저장은 revision 이
   // 최신보다 커서 CAS 가 잡고, 판독 전의 저장은 changedKeys 에 든다.
-  const readLatest = async (): Promise<{ loaded: Loaded; changedKeys: string[] } | SettingsCommandResult> => {
+  const readLatest = async (): Promise<{ loaded: Loaded; changedKeys: string[]; truncated: boolean } | SettingsCommandResult> => {
     const admin = a.admin()
     const loaded = await loadOrUnavailable(a, admin, commandId)
     if ('ok' in loaded) return loaded
     const changed = await changedKeysSince(admin, a.history, patch.expectedRevision)
     if (!changed.ok) return unavailableLogged(a, commandId, '변경 이력 판독', changed.error)
-    return { loaded, changedKeys: changed.keys }
+    return { loaded, changedKeys: changed.keys, truncated: changed.truncated }
   }
   const conflict = (r: { loaded: Loaded; changedKeys: string[] }): SettingsCommandResult => {
     const values: Partial<Record<SettingKey, unknown>> = {}
@@ -220,7 +231,8 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   }
   const latest = await readLatest()
   if ('ok' in latest) return latest
-  if (latest.changedKeys.some((k) => keys.includes(k))) return conflict(latest)
+  // 이력이 한도에서 잘렸으면 빠진 변경(가장 오래된 쪽)에 요청 키가 있을 수 있다 — 재기준하지 않는다(fail-closed)
+  if (latest.truncated || latest.changedKeys.some((k) => keys.includes(k))) return conflict(latest)
   const second = await attempt(a.admin(), latest.loaded.doc.revision, true)
   if (!('retry' in second)) return second
   const after = await readLatest()

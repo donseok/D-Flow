@@ -20,7 +20,7 @@ export type ValidateResult = { ok: true } | { ok: false; fieldErrors: FieldError
 export interface ProjectValidateDeps {
   treeMaxDepth: number | null            // 0-base. 빈 트리는 null
   teamCodes: readonly string[]           // 활성 팀 코드(프로젝트 전용 + 워크스페이스 공용)
-  allowed: readonly ModuleId[]           // 워크스페이스 허용 ∩ env 가용
+  allowed: readonly ModuleId[]           // 워크스페이스 허용(env 무관 — 스펙 §4.1·§3.3: env 로 꺼진 모듈을 더해도 저장은 막지 않는다)
   prevEnabled: readonly ModuleId[] | null   // 저장된(또는 기본값의) modules.enabled. 생성이면 null
   allowedBroken?: boolean                // 워크스페이스 modules.allowed 가 손상(invalid) — allowed 는 빈 목록이고 거부 사유를 따로 알린다
 }
@@ -67,22 +67,34 @@ export function validateWorkspaceConfig(next: Partial<Record<WorkspaceSettingKey
   return fieldErrors.length ? { ok: false, fieldErrors } : { ok: true }
 }
 
-/** 워크스페이스 허용 ∩ 이 배포에서 가용 — 저장 규칙의 allowed 는 늘 이 값이다(개정 §2.7.3 "허용 밖, 또는 env 불가") */
-export function allowedAndAvailable(ws: WorkspaceConfig): ModuleId[] {
+/** 워크스페이스 허용(env 무관) — modules.enabled 의 '새로 추가된 id ⊆ allowed' 검사와 생성 초기값이 쓴다(개정 §2.7.2, 스펙 §3.3).
+ *  스펙 §4.1: 환경에서 꺼진 모듈을 modules.enabled 에 더하는 것은 저장을 막지 않는다 — env 는 런타임(effectiveModules)과 소유 모듈 규칙만 본다.
+ *  0012 ⑤ 의 이행 값도 env 와 무관하다. 손상이면 ConfigKeyError */
+export function workspaceAllowed(ws: WorkspaceConfig): ModuleId[] {
   const allowed = valueOf(ws, 'modules.allowed')
-  return MODULES.filter((m) => allowed.includes(m.id) && m.envAvailable()).map((m) => m.id)
+  return MODULES.filter((m) => allowed.includes(m.id)).map((m) => m.id)
 }
 
-/** 저장 경로용 — modules.allowed 가 손상(invalid)이면 빈 목록(fail-closed). core 키는 저장 규칙상 늘 'always' 라
+/** 저장 경로용 — modules.allowed 가 손상(invalid)이면 로그 한 줄 + 빈 목록(fail-closed). core 키는 저장 규칙상 늘 'always' 라
  *  복구 경로(플랫폼 관리자가 modules.allowed 를 다시 쓰기)와 프로젝트의 core 키 저장은 막히지 않는다(Review Focus 6) */
-export function allowedOrNone(ws: WorkspaceConfig): ModuleId[] {
-  try { return allowedAndAvailable(ws) } catch (e) {
+export function workspaceAllowedOrNone(ws: WorkspaceConfig): ModuleId[] {
+  try { return workspaceAllowed(ws) } catch (e) {
     if (!(e instanceof ConfigKeyError)) throw e
     console.error('[settings] modules.allowed 손상 — 빈 허용 목록으로 본다', { workspaceId: ws.workspaceId, code: e.code })
     return []
   }
 }
-/** 허용 목록이 손상돼 allowedOrNone 이 빈 목록을 냈는가 — 거부 사유를 "허용하지 않음"과 구분하려고 */
+
+/** 허용 중 이 배포에서 가용한 것 — 소유 모듈 규칙(moduleKeyRule, 개정 §2.7.3 "허용 밖, 또는 env 불가") 전용이다.
+ *  modules.enabled 저장 검사·생성 초기값에는 쓰지 않는다(스펙 §4.1 — 위 workspaceAllowed) */
+export function availableOf(allowed: readonly ModuleId[]): ModuleId[] {
+  return MODULES.filter((m) => allowed.includes(m.id) && m.envAvailable()).map((m) => m.id)
+}
+/** 워크스페이스 허용 ∩ 이 배포에서 가용 — 소유 모듈 규칙 전용(위 availableOf). 손상이면 ConfigKeyError */
+export function allowedAndAvailable(ws: WorkspaceConfig): ModuleId[] {
+  return availableOf(workspaceAllowed(ws))
+}
+/** 허용 목록이 손상돼 workspaceAllowedOrNone 이 빈 목록을 냈는가 — 거부 사유를 "허용하지 않음"과 구분하려고 */
 export function modulesAllowedBroken(ws: WorkspaceConfig): boolean {
   const s = ws.keys['modules.allowed']
   return s.status === 'invalid' || s.status === 'required_missing'
@@ -90,7 +102,7 @@ export function modulesAllowedBroken(ws: WorkspaceConfig): boolean {
 
 /** 선행 조회 — SUB-ACT(is_owner_split)·스텁(stub_for) 행은 단계 이름보다 한 단 깊어 0012 ① 과 같은 규칙으로 뺀다 */
 export async function loadProjectValidateDeps(
-  client: ConfigReadClient, cfg: ProjectConfig, ws: WorkspaceConfig, pre?: { allowed: readonly ModuleId[] },   // pre — 호출부가 이미 구한 allowed(손상 로그를 한 번만)
+  client: ConfigReadClient, cfg: ProjectConfig, ws: WorkspaceConfig, pre?: { allowed: readonly ModuleId[] },   // pre — 호출부가 이미 구한 워크스페이스 허용(손상 로그를 한 번만)
 ): Promise<ProjectValidateDeps> {
   const { data, error } = await client.from('wbs_items').select('id, parent_id')
     .eq('project_id', cfg.projectId).eq('is_owner_split', false).is('stub_for', null)
@@ -99,7 +111,7 @@ export async function loadProjectValidateDeps(
   return {
     treeMaxDepth: treeMaxDepth((data ?? []) as { id: string; parent_id: string | null }[]),
     teamCodes: cfg.teams.filter((t) => t.active).map((t) => t.code),
-    allowed: pre?.allowed ?? allowedOrNone(ws),
+    allowed: pre?.allowed ?? workspaceAllowedOrNone(ws),
     prevEnabled: enabled.status === 'set' || enabled.status === 'default' ? enabled.value : [],
     allowedBroken: modulesAllowedBroken(ws),
   }

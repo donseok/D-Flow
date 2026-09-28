@@ -1,7 +1,7 @@
 // 교차 불변식(개정 §2.7.2, 스펙 §3.6 교차 열) — parse 뒤 저장 직전에 돈다. 선행 조회는 SUB-ACT·스텁 행을 뺀다(0012 ① 과 같은 규칙).
-import { afterEach, describe, expect, it } from 'vitest'
-import { allowedAndAvailable, loadProjectValidateDeps, validateProjectConfig, validateWorkspaceConfig } from '@/lib/settings/validateConfig'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { allowedAndAvailable, loadProjectValidateDeps, validateProjectConfig, validateWorkspaceConfig, workspaceAllowed, workspaceAllowedOrNone } from '@/lib/settings/validateConfig'
+import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import type { WorkspaceConfig } from '@/lib/settings/workspaceConfig'
 
@@ -67,16 +67,34 @@ describe('loadProjectValidateDeps', () => {
     b.then = (res: (x: unknown) => void) => res({ data: rows, error })
     return { client: b as never, filters }
   }
-  it('wbs 행에서 SUB-ACT·스텁을 빼고 깊이를 세고, 활성 팀 코드와 허용∩env 를 싣는다', async () => {
+  it('wbs 행에서 SUB-ACT·스텁을 빼고 깊이를 세고, 활성 팀 코드와 워크스페이스 허용(env 무관 — 스펙 §4.1)을 싣는다', async () => {
     process.env.WIKI_SERVICE_ENABLED = 'true'; delete process.env.MINUTES_API_ENABLED
     const { client, filters } = client_([{ id: 'a', parent_id: null }, { id: 'b', parent_id: 'a' }, { id: 'c', parent_id: 'b' }])
     const d = await loadProjectValidateDeps(client, cfg, ws)
     expect(d.treeMaxDepth).toBe(2)
     expect(filters).toEqual(['project_id=p', 'is_owner_split=false', 'stub_for is null'])
     expect(d.teamCodes).toEqual(['DEV', 'PMO'])
-    expect(d.allowed).toEqual(['kanban', 'wiki'])           // minutes_integration 은 env 꺼짐
+    expect(d.allowed).toEqual(['kanban', 'wiki', 'minutes_integration'])     // env 로 꺼진 minutes_integration 도 허용이면 싣는다
     expect(d.prevEnabled).toEqual(['kanban'])
-    expect(allowedAndAvailable(ws)).toEqual(['kanban', 'wiki'])
+    expect(allowedAndAvailable(ws)).toEqual(['kanban', 'wiki'])               // 소유 모듈 규칙 전용 — env 를 본다
+  })
+  it('플래그가 꺼져도 저장 검사의 허용 목록은 같다 — env 는 소유 모듈 규칙(allowedAndAvailable)만 좁힌다(FN-1)', async () => {
+    delete process.env.WIKI_SERVICE_ENABLED; delete process.env.MINUTES_API_ENABLED
+    const { client } = client_([])
+    expect((await loadProjectValidateDeps(client, cfg, ws)).allowed).toEqual(['kanban', 'wiki', 'minutes_integration'])
+    expect(workspaceAllowed(ws)).toEqual(['kanban', 'wiki', 'minutes_integration'])
+    expect(allowedAndAvailable(ws)).toEqual(['kanban'])
+    // 플래그 꺼짐 + 허용된 wiki 를 새로 켜는 저장은 교차 검사를 지난다(minutes 는 워크스페이스 층 허용)
+    expect(validateProjectConfig({ 'modules.enabled': ['kanban', 'wiki'] }, { ...deps, allowed: workspaceAllowed({ keys: { 'modules.allowed': { status: 'set', value: ['kanban', 'wiki', 'minutes'] } } } as unknown as WorkspaceConfig) }))
+      .toEqual({ ok: true })
+  })
+  it('workspaceAllowed 는 손상이면 ConfigKeyError, workspaceAllowedOrNone 은 로그 한 줄 + [](fail-closed)', () => {
+    const broken = { workspaceId: WID, keys: { 'modules.allowed': { status: 'invalid', error: 'x' } } } as unknown as WorkspaceConfig
+    expect(() => workspaceAllowed(broken)).toThrow(ConfigKeyError)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(workspaceAllowedOrNone(broken)).toEqual([])
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
   })
   it('조회 실패는 throw — 검증 불가를 통과로 위장하지 않는다', async () => {
     const { client } = client_(null, { message: 'down' })

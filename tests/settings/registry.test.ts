@@ -1,4 +1,5 @@
 // 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 14키만 등록, 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -72,6 +73,18 @@ describe('등록 키', () => {
       expect(d.parse(d.default), d.key).toEqual({ ok: true, value: d.default })
     }
     expect(settingDef('project', 'core.level_labels')!.default).toBe(REQUIRED_ON_CREATE)
+  })
+  it('늘 명시(explicit) 키는 프로젝트 core.level_labels·modules.enabled 둘 — 0012 생성 RPC 의 필수 키 리터럴과 같다(FN-3)', () => {
+    const explicit = ALL.filter((d) => d.explicit).map((d) => `${d.scope}/${d.key}`)
+    expect(explicit.sort()).toEqual(['project/core.level_labels', 'project/modules.enabled'])
+    const sql = readFileSync('supabase/migrations/0012_settings.sql', 'utf8')
+    const m = /foreach k in array array\[([^\]]*)\] loop/.exec(sql)
+    expect(m, '0012 생성 RPC 의 필수 키 루프').not.toBeNull()
+    expect([...m![1].matchAll(/'([^']+)'/g)].map((x) => `project/${x[1]}`).sort()).toEqual(explicit)
+    // REQUIRED_ON_CREATE 는 explicit 이 흡수한다 — 생성 필수인데 unset 할 수 있는 키는 로드 단언이 막는다
+    for (const d of ALL) if (d.default === REQUIRED_ON_CREATE) expect(d.explicit, d.key).toBe(true)
+    const loose = [{ ...settingDef('project', 'core.level_labels')!, explicit: undefined }] as unknown as SettingDef[]
+    expect(() => assertRegistry({ defs: loose })).toThrow(/explicit/)
   })
 })
 

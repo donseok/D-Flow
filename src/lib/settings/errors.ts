@@ -21,6 +21,8 @@ export const ERR_CONFIG_SCHEMA_AHEAD = '설정 저장본이 이 서버보다 새
 export const ERR_CONFIG_UNAVAILABLE = '설정을 불러오지 못해 중단했습니다.'
 export const ERR_CONFIG_BUSY = '다른 작업과 겹쳐 처리하지 못했습니다. 잠시 뒤 다시 시도하세요.'
 export const ERR_CONFIG_STALE = '설정이 바뀌었습니다. 새로고침한 뒤 다시 입력하세요.'
+/** 늘 명시(explicit) 키의 unset — 설정 액션과 내부 쓰기가 같은 문구로 거부한다(CONFIG_INVALID) */
+export const ERR_EXPLICIT_UNSET = '필수 설정은 기본값으로 되돌릴 수 없습니다.'
 /** 같은 명령 id 로 다른 내용을 보냈다(스펙 D8) — CONFIG_INVALID 422 로 나간다 */
 export const ERR_COMMAND_REUSED = '같은 요청 번호로 다른 내용을 보냈습니다. 새로 고친 뒤 다시 시도하세요.'
 

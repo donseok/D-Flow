@@ -56,6 +56,15 @@ describe('writeProjectSettingsInternal', () => {
     expect(await writeProjectSettingsInternal(a.admin, PID, { set: { 'nope.key': 1 } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_UNKNOWN_KEY' })
     expect(await writeProjectSettingsInternal(a.admin, PID, { set: { 'core.extra_axis_label': 'x' }, unset: ['core.extra_axis_label'] }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_INVALID' })
   })
+  it('늘 명시 키(core.level_labels·modules.enabled)의 unset 은 거부 — revision 판독·RPC 없음(FN-3)', async () => {
+    for (const key of ['core.level_labels', 'modules.enabled']) {
+      const a = fakeAdmin([1], [applied(2)])
+      expect(await writeProjectSettingsInternal(a.admin, PID, { unset: [key] }, ACTOR)).toEqual({
+        ok: false, code: 'CONFIG_INVALID', error: expect.stringContaining(key), fieldErrors: [{ key, message: '필수 설정은 기본값으로 되돌릴 수 없습니다.' }],
+      })
+      expect(a.rpcCalls).toHaveLength(0); expect(a.reads).toHaveLength(0)
+    }
+  })
   it('revision 판독 실패·0행은 CONFIG_UNAVAILABLE(RPC 미호출). 표에 있는 토큰은 코드로, 없는 토큰은 throw', async () => {
     const none = fakeAdmin([], [])
     expect(await writeProjectSettingsInternal(none.admin, PID, { set: { 'ai.enabled': true } as never }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_UNKNOWN_KEY' })  // 워크스페이스 키

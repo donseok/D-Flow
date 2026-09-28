@@ -47,10 +47,15 @@ export async function findCommandOutcome(client: ConfigReadClient, scope: Histor
   return { ok: true as const, outcome: rows.length ? { status: 'applied' as const, revision: Number(rows[0].revision) } : { status: 'unknown' as const } }
 }
 
-/** 자동 재기준(개정 §2.3.1 ⑦) — expectedRevision 뒤에 바뀐 키 집합 */
+/** 재기준 판독의 행 한도 — PostgREST max_rows(supabase/config.toml)도 1000 이라 limit 만 올려서는 끝까지 읽히지 않는다 */
+const CHANGED_KEYS_LIMIT = HISTORY_MAX * 10
+
+/** 자동 재기준(개정 §2.3.1 ⑦) — expectedRevision 뒤에 바뀐 키 집합. 최신 순으로 잘리므로 빠지는 쪽은 expectedRevision 바로 뒤의
+ *  가장 오래된 변경이다 — truncated 면 '겹침 없음'을 판정할 수 없다(호출부가 재기준하지 않고 conflict 로 멈춘다, 3원칙 ②) */
 export async function changedKeysSince(client: ConfigReadClient, scope: HistoryScope, revision: number) {
   const { table, column, id } = tableOf(scope)
-  const { data, error } = await client.from(table).select('key').eq(column, id).gt('revision', revision).order('id', { ascending: false }).limit(HISTORY_MAX * 10)
+  const { data, error } = await client.from(table).select('key').eq(column, id).gt('revision', revision).order('id', { ascending: false }).limit(CHANGED_KEYS_LIMIT)
   if (error) return { ok: false as const, error: `이력 조회 실패: ${error.message}` }
-  return { ok: true as const, keys: [...new Set(((data ?? []) as { key: string }[]).map((r) => r.key))] }
+  const rows = (data ?? []) as { key: string }[]
+  return { ok: true as const, keys: [...new Set(rows.map((r) => r.key))], truncated: rows.length >= CHANGED_KEYS_LIMIT }
 }

@@ -35,6 +35,9 @@ export interface SettingDef<T = unknown, I = T, K extends string = string> {
   scope: SettingScope
   module: ModuleId                        // 소유 모듈(개정 §2.7.3 저장 규칙의 기준)
   default: T | typeof REQUIRED_ON_CREATE
+  /** 늘 명시 — 저장값이 늘 있어야 하는 키. unset(기본값으로 되돌리기)을 설정 액션·내부 쓰기가 거부한다.
+   *  REQUIRED_ON_CREATE 키는 모두 explicit 이다(로드 단언). 목록은 0012 생성 RPC 의 필수 키와 같다(tests/settings/registry) */
+  explicit?: true
   parse(raw: unknown): Parsed<T>          // 저장 형태 T 의 검증. 순수·throw 금지. 정규화(소문자·공백)는 여기서 한다
   widget: SettingWidget
   editor: SettingEditor

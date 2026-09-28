@@ -24,7 +24,11 @@ export function resolveKeys(input: {
       }
       continue
     }
-    if (def.default === REQUIRED_ON_CREATE) { keys[def.key] = { status: 'required_missing' }; continue }
+    if (def.default === REQUIRED_ON_CREATE) {
+      console.error('[settings] required_missing', { scope, id, key: def.key })     // invalid 분기와 대칭 — 화면·봇·export 가 실패를 보인다
+      keys[def.key] = { status: 'required_missing' }
+      continue
+    }
     if (def.deployDefault) {
       const v = def.deployDefault.parse(env[def.deployDefault.env])
       if (v !== undefined) { keys[def.key] = { status: 'default', value: v, from: 'deploy' }; continue }

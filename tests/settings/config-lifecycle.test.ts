@@ -8,8 +8,15 @@ vi.mock('@/lib/authz', () => ({ requireProjectAdmin: h.requireProjectAdmin, requ
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => { throw new Error('세션 클라이언트를 쓰면 안 된다') }) }))
 vi.mock('@/lib/agent/ensureOrder', () => ({ backfillProjectOrders: h.backfill }))
+// wiki 소유 키 픽스처(Phase A 에는 비core 소유 키가 없다) — 소유 모듈 규칙이 env 를 보는지 확인하려고 settingDef 에만 더한다
+vi.mock('@/lib/settings/registry', async (importOriginal) => {
+  const m = await importOriginal<typeof import('@/lib/settings/registry')>()
+  const fixture = { ...m.settingDef('project', 'core.extra_axis_label')!, key: 'wiki.fixture_key', module: 'wiki' }
+  return { ...m, settingDef: (scope: 'project' | 'workspace', key: string) => (scope === 'project' && key === 'wiki.fixture_key' ? fixture : m.settingDef(scope as 'project', key)) }
+})
 import { updateProjectSettings, updateWorkspaceSettings, type SettingsPatch } from '@/app/actions/settings'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 const PID = '00000000-0000-4000-8000-00000000aa01', WID = '00000000-0000-4000-8000-00000000bb01'
@@ -157,16 +164,68 @@ describe('updateProjectSettings', () => {
     expect((await getProjectConfig(PID, { client: db.client() as never })).schemaAhead).toBe(true)
     expect(await updateProjectSettings(PID, patch({ expectedRevision: 2, set: { 'core.extra_axis_label': 'U' } }))).toEqual({ ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD', commandId: CMD, error: expect.any(String), retryable: false })
   })
-  it('agents 를 더하면 저장 뒤 agent_projects 를 맞추고 백필한다. 동기화 실패는 unavailable 로 알린다(설정은 저장됨)', async () => {
+  it('agents 를 더하면 저장 뒤 agent_projects 를 맞추고 백필한다. 동기화 실패는 저장됨을 알리고 재시도를 권하지 않는다(FN-10)', async () => {
     const r = await updateProjectSettings(PID, patch({ set: { 'modules.enabled': ['kanban', 'agents'] } }))
     expect(r).toMatchObject({ ok: true, revision: 2 })
     expect(db.agentProjects).toEqual([{ enabled: true, project_id: PID, created_by: 'u-admin', note: '설정에서 켬' }])
     expect(h.backfill).toHaveBeenCalledTimes(1)
     h.backfill.mockResolvedValue({ ok: false, error: 'bf' })
     db.projects.get(PID)!.values['modules.enabled'] = ['kanban']; db.agentProjects = []
+    h.revalidatePath.mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const f = await updateProjectSettings(PID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd02', set: { 'modules.enabled': ['kanban', 'agents'] } }))
-    expect(f).toMatchObject({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', error: expect.stringContaining('revision 3 으로 저장됨'), retryable: true })
+    // 같은 id 재전송은 duplicate 라 동기화를 건너뛰고, 새 id 면 prev 에 agents 가 있어 동기화 조건이 거짓이다 — 재시도는 지킬 수 없는 약속
+    expect(f).toEqual({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: '00000000-0000-4000-8000-00000000dd02', retryable: false,
+      error: expect.stringContaining('revision 3 으로 저장됐지만') })
+    expect(!f.ok && f.error.startsWith(ERR_CONFIG_UNAVAILABLE)).toBe(false)
+    expect(h.revalidatePath).toHaveBeenCalledTimes(1)                     // 저장은 됐다 — 화면이 새 값을 보게
     expect(db.projects.get(PID)!.revision).toBe(3)
+  })
+  it('늘 명시 키(core.level_labels·modules.enabled)의 unset 은 CONFIG_INVALID — RPC 미호출(FN-3)', async () => {
+    for (const key of ['modules.enabled', 'core.level_labels'] as const) {
+      expect(await updateProjectSettings(PID, patch({ unset: [key] }))).toEqual({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID', commandId: CMD,
+        error: CONFIG_MESSAGES.CONFIG_INVALID, fieldErrors: [{ key, message: '필수 설정은 기본값으로 되돌릴 수 없습니다.' }], retryable: false })
+    }
+    expect(db.rpcCalls).toHaveLength(0)
+    expect(db.projects.get(PID)!.values['modules.enabled']).toEqual(['kanban'])
+  })
+  it('env 는 modules.enabled 저장을 막지 않는다 — 플래그 꺼짐 + 허용된 wiki 는 applied(FN-1, 스펙 §4.1)', async () => {
+    delete process.env.WIKI_SERVICE_ENABLED
+    expect(await updateProjectSettings(PID, patch({ set: { 'modules.enabled': ['kanban', 'wiki'] } }))).toEqual({ ok: true, kind: 'applied', commandId: CMD, revision: 2, rebased: false })
+    expect(db.projects.get(PID)!.values['modules.enabled']).toEqual(['kanban', 'wiki'])
+  })
+  it('소유 모듈 규칙은 env 를 본다 — 플래그 꺼짐이면 wiki 소유 키는 CONFIG_MODULE_NOT_ALLOWED, 켜짐이면 prepared 로 저장(FN-1, 개정 §2.7.3)', async () => {
+    delete process.env.WIKI_SERVICE_ENABLED
+    expect(await updateProjectSettings(PID, patch({ set: { 'wiki.fixture_key': 'x' } as never })))
+      .toMatchObject({ ok: false, kind: 'invalid', code: 'CONFIG_MODULE_NOT_ALLOWED', fieldErrors: [{ key: 'wiki.fixture_key', message: expect.stringContaining('wiki') }] })
+    expect(db.rpcCalls).toHaveLength(0)
+    process.env.WIKI_SERVICE_ENABLED = 'true'
+    expect(await updateProjectSettings(PID, patch({ set: { 'wiki.fixture_key': 'x' } as never }))).toMatchObject({ ok: true, kind: 'applied', revision: 2 })
+  })
+  it('재기준 판독 이력이 한도(1000행)에서 잘리면 재기준하지 않고 conflict — 999행이면 재기준(FN-4, 3원칙 ②)', async () => {
+    const flood = (n: number) => { for (let i = 0; i < n; i++) db.externalWrite({ projectId: PID }, { 'core.milestone_keywords': [`k${i}`] }) }
+    flood(999)
+    expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))).toMatchObject({ ok: true, kind: 'applied', rebased: true })
+    db = new FakeSettingsDb()
+      .addWorkspace({ id: WID, values: { 'modules.allowed': ['kanban'] }, revision: 1 })
+      .addProject({ id: PID, workspaceId: WID, values: { 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban'] }, revision: 1 })
+    flood(1000)
+    const r = await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))
+    expect(r).toMatchObject({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', latest: { revision: 1001 } })
+    expect(db.rpcCalls).toHaveLength(1)                                   // 두 번째 RPC 없음
+    expect(db.projects.get(PID)!.values['core.extra_axis_label']).toBeUndefined()
+  })
+  it('표에 있는 DB 거부 중 재시도 가능·세대 앞섬은 결과와 함께 로그를 남긴다 — 표시 = 로깅(FM-12)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.beforeRpc = () => { db.projects.get(PID)!.schemaVersion = 2 }       // 판독 뒤 새 인스턴스가 세대 2 로 저장
+    expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))).toMatchObject({ ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD' })
+    expect(spy).toHaveBeenCalledWith('[settings] RPC 거부', { scope: { projectId: PID }, commandId: CMD, token: 'SETTINGS_SCHEMA_AHEAD' })
+    spy.mockClear()
+    const orig = db.client
+    db.client = function () { const c = orig.call(this); c.rpc = (async () => ({ data: null, error: { code: '40P01', message: 'deadlock detected' } })) as never; return c }
+    db.projects.get(PID)!.schemaVersion = 1
+    expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))).toMatchObject({ ok: false, kind: 'unavailable', code: 'CONFIG_BUSY', retryable: true })
+    expect(spy).toHaveBeenCalledWith('[settings] RPC 거부', { scope: { projectId: PID }, commandId: CMD, token: '40P01' })
   })
   it('설정 행이 없으면 unavailable, patch 모양이 틀리면 invalid', async () => {
     expect(await updateProjectSettings('00000000-0000-4000-8000-00000000aa99', patch({ set: { 'core.extra_axis_label': 'T' } }))).toMatchObject({ kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', retryable: true })
@@ -212,6 +271,11 @@ describe('updateWorkspaceSettings', () => {
     expect(r).toMatchObject({ ok: true })
     const { getWorkspaceConfig } = await import('@/lib/settings/workspaceConfig')
     expect((await getWorkspaceConfig(WID, { client: db.client() as never })).keys['branding.accent']).toMatchObject({ status: 'invalid' })
+  })
+  it('워크스페이스 modules.allowed 의 unset 은 허용한다 — 미설정 = 기본값 [] 이 정상 상태(개정 §2.2.1, FN-3 범위)', async () => {
+    h.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    expect(await updateWorkspaceSettings(WID, patch({ unset: ['modules.allowed'] }))).toMatchObject({ ok: true, kind: 'applied', revision: 2 })
+    expect(Object.prototype.hasOwnProperty.call(db.workspaces.get(WID)!.values, 'modules.allowed')).toBe(false)
   })
   it('modules.allowed 가 손상돼도 복구 경로는 열려 있다 — 슈퍼유저가 다시 저장하면 ok(Review Focus 6)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

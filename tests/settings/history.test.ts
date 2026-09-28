@@ -54,7 +54,14 @@ describe('findCommandOutcome·changedKeysSince', () => {
   })
   it('changedKeysSince 는 revision 이 큰 행들의 키 집합', async () => {
     const a = fake([row(9, { key: 'a.b' }), row(8, { key: 'c.d' }), row(7, { key: 'a.b' })])
-    expect(await changedKeysSince(a.client, { workspaceId: 'w1' }, 6)).toEqual({ ok: true, keys: ['a.b', 'c.d'] })
+    expect(await changedKeysSince(a.client, { workspaceId: 'w1' }, 6)).toEqual({ ok: true, keys: ['a.b', 'c.d'], truncated: false })
     expect(a.q.filters).toEqual(['workspace_id=w1', 'revision>6'])
+  })
+  it('changedKeysSince — 한도만큼 돌아오면 truncated(PostgREST max_rows 도 같은 수에서 자른다 — FN-4)', async () => {
+    const full = fake(Array.from({ length: 1000 }, (_, i) => row(2000 - i, { key: 'a.b' })))
+    expect(await changedKeysSince(full.client, { projectId: 'p1' }, 1)).toEqual({ ok: true, keys: ['a.b'], truncated: true })
+    expect(full.q.limit).toBe(1000)
+    const under = fake(Array.from({ length: 999 }, (_, i) => row(2000 - i, { key: 'a.b' })))
+    expect(await changedKeysSince(under.client, { projectId: 'p1' }, 1)).toEqual({ ok: true, keys: ['a.b'], truncated: false })
   })
 })

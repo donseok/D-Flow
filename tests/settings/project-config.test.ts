@@ -42,7 +42,11 @@ describe('getProjectConfig', () => {
       teams: ok([{ id: 't1', code: 'DEV', name: '개발', sort_order: 0, active: true, color: '#6b7280', progress_visible: true, project_id: PID },
         { id: 't0', code: 'PMO', name: 'PMO', sort_order: 1, active: true, color: '#6b7280', progress_visible: false, project_id: null }]),
     })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const cfg = await getProjectConfig(PID, { client })
+    // required_missing 도 invalid 처럼 키당 한 줄 남긴다 — 화면·봇·export 가 실패를 보이는데 로그가 없으면 원인을 못 찾는다(FM-13)
+    expect(err.mock.calls).toEqual([['[settings] required_missing', { scope: 'project', id: PID, key: 'core.level_labels' }]])
+    err.mockRestore()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
     expect(cfg.projectId).toBe(PID); expect(cfg.workspaceId).toBe(WID); expect(cfg.revision).toBe(3); expect(cfg.schemaAhead).toBe(false)
     expect(cfg.keys['core.milestone_keywords']).toEqual({ status: 'set', value: ['오픈'] })

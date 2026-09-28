@@ -58,7 +58,7 @@ export function parseStageCredits(raw: unknown, policy: { step: number; min_gap:
 
 export const PROJECT_DEFS = [
   defineSetting<'core.level_labels', string[]>({
-    key: 'core.level_labels', scope: 'project', module: 'wbs', default: REQUIRED_ON_CREATE,
+    key: 'core.level_labels', scope: 'project', module: 'wbs', default: REQUIRED_ON_CREATE, explicit: true,
     parse: parseLevelLabels,
     widget: { kind: 'custom', component: 'LevelSettingsManager' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
@@ -78,7 +78,7 @@ export const PROJECT_DEFS = [
     widget: { kind: 'custom', component: 'ExcelProfilePanel' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
   defineSetting<'modules.enabled', ModulesList>({
-    key: 'modules.enabled', scope: 'project', module: 'settings',
+    key: 'modules.enabled', scope: 'project', module: 'settings', explicit: true,   // 생성 때 늘 명시 기록 — 미설정이면 기본값(토글 전부)이 켜진 것으로 풀린다
     default: [...PROJECT_TOGGLABLE].filter((id) => !OFF_ON_CREATE.includes(id)),
     parse: (raw) => parseModuleList(raw, [...PROJECT_TOGGLABLE]),
     widget: { kind: 'custom', component: 'ModuleToggleEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: null,

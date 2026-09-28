@@ -41,13 +41,9 @@ export const RETIRED_KEYS: readonly { scope: SettingScope; key: string; reason: 
 export const DEPLOY_DEFAULT_KEYS = ['invites.allowed_domains', 'branding.product_name', 'branding.mail_from_name'] as const
 export const KEY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/
 
-export function isRequiredOnCreate(def: SettingDef): boolean {
-  return def.default === REQUIRED_ON_CREATE
-}
-
 /**
  * 로드 단언(스펙 §3.6) — 키 이름 형식, 스코프 안 유일, deployDefault 는 세 키만, impact 비지 않음, 기본값이 자기 parse 를 통과,
- * seedFrom.key 가 워크스페이스 목록에 있음, 은퇴 키와 겹치지 않음. 모듈 소속은 moduleIds 를 받았을 때만 본다(정의의 module 은
+ * 생성 필수 키는 explicit(unset 거부), seedFrom.key 가 워크스페이스 목록에 있음, 은퇴 키와 겹치지 않음. 모듈 소속은 moduleIds 를 받았을 때만 본다(정의의 module 은
  * ModuleId 타입이라 컴파일이 이미 막는다 — 모듈 레지스트리 로드와 테스트가 목록을 넘겨 다시 본다). defs 는 테스트 주입용이다.
  */
 export function assertRegistry(opts: { moduleIds?: readonly string[]; defs?: readonly SettingDef[] } = {}): void {
@@ -67,7 +63,7 @@ export function assertRegistry(opts: { moduleIds?: readonly string[]; defs?: rea
     if (d.default !== REQUIRED_ON_CREATE) {
       const p = d.parse(d.default)
       if (!p.ok) throw new Error(`설정 레지스트리: 기본값이 parse 를 통과하지 못한다 ${at} — ${p.error}`)
-    }
+    } else if (!d.explicit) throw new Error(`설정 레지스트리: 생성 필수 키는 explicit 이어야 한다(unset 하면 required_missing) ${at}`)
     if (d.seedFrom && !wsKeys.has(d.seedFrom.key)) throw new Error(`설정 레지스트리: seedFrom 키가 워크스페이스 목록에 없다 ${at}`)
     if (RETIRED_KEYS.some((r) => r.scope === d.scope && r.key === d.key)) throw new Error(`설정 레지스트리: 은퇴 키를 다시 등록했다 ${at}`)
   }
