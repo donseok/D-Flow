@@ -252,6 +252,8 @@ describe('G0-4 — 등록하지 않는 네 선언이 형 검사를 통과하고 
 
   it('네 선언의 parse·seedFrom.map·edit 이 돈다(복합 영향·부수효과·변환 복사·입력≠저장)', async () => {
     expect(approvalSteps.parse(approvalSteps.default)).toEqual({ ok: true, value: approvalSteps.default })
+    // 네 선언 모두 기본값이 자기 parse 를 지난다(G0-4 — 형만 보지 않고 실제로 부른다, FM-6)
+    for (const d of [weekStart, issueFields, issueStatuses]) expect(d.parse(d.default), d.key).toEqual({ ok: true, value: d.default })
     expect(weekStart.seedFrom!.map!('monday')).toEqual([{ day: 'monday', from: null }])
     expect(weekStart.edit!.parseInput('friday').ok).toBe(false)
     expect(await weekStart.edit!.toStored(weekStart.default as WeekRule[], 'monday', { scope: 'project', projectId: 'p', today: '2026-09-28' }))

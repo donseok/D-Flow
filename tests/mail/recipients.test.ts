@@ -68,6 +68,7 @@ describe('classifyRecipients', () => {
   it.each([
     ['kim@xn--bj0bj06e.kr', 'kim@한글.kr'],
     ['alice@acme.test', 'Alice@Acme.Test.'],
+    ['kim@한글.kr', 'kim@xn--bj0bj06e.kr'],              // 참석자 쪽도 정규화한다 — 정규형 이전의 유니코드 명단 행(Parked C2 m-1)
   ])('참석자 %s 와 추가 입력 %s 는 같은 수신자라 한 번만 남긴다', (attendee, extra) => {
     const res = classifyRecipients([att('김', attendee)], [extra])
     expect(res.valid).toEqual([{ name: '김', email: attendee }])

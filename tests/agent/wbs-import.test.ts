@@ -384,6 +384,7 @@ describe('POST /wbs/import', () => {
     ['kim@한글.kr', 'kim@xn--bj0bj06e.kr'],
     ['alice@acme.test.', 'alice@acme.test'],
     ['Kim@XN--BJ0BJ06E.KR', 'kim@xn--bj0bj06e.kr'],
+    ['kim@xn--bj0bj06e.kr', 'kim@한글.kr'],           // 저장값 쪽도 정규화한다 — 정규형 이전의 유니코드 명단 행(Parked C2 m-1)
   ])('담당자 %s 는 명단 %s 와 매칭된다 — unmatched 없음, work.assigned 발행(R1)', async (assignee, stored) => {
     const { token, row } = patRow()
     const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'WP-01', kind: 'wp', assignee })] }

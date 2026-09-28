@@ -37,6 +37,7 @@ describe('listHistory', () => {
     const { client, q } = fake([row(5), row(4)])
     const r = await listHistory(client, { workspaceId: 'w1' }, { before: 6, limit: 500 })
     expect(q.table).toBe('workspace_settings_history'); expect(q.filters).toEqual(['workspace_id=w1', 'id<6']); expect(q.limit).toBe(101)
+    expect(r).toMatchObject({ ok: true })                          // 좁히기 전에 — ok:false 면 아래 단언이 조용히 건너뛰어진다(FM-5)
     if (r.ok) expect(r.nextBefore).toBeNull()
   })
   it('조회 실패는 ok:false — 빈 목록으로 위장하지 않는다', async () => {

@@ -55,6 +55,7 @@ describe('listSettingsHistory', () => {
     if (!p1.ok) return
     expect(p1.rows).toHaveLength(20); expect(p1.rows[0].newValue).toBe('v24'); expect(p1.nextBefore).toBe(p1.rows[19].id)
     const p2 = await listSettingsHistory({ projectId: PID }, { before: p1.nextBefore! })
+    expect(p2).toMatchObject({ ok: true })                         // 좁히기 전에 — ok:false 면 아래 단언이 조용히 건너뛰어진다(FM-5)
     if (p2.ok) { expect(p2.rows).toHaveLength(5); expect(p2.nextBefore).toBeNull() }
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     db.failTable = 'project_settings_history'

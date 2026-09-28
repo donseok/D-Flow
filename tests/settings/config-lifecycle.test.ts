@@ -62,7 +62,15 @@ describe('updateProjectSettings', () => {
   it('가드 거부는 denied 이고 admin 을 만들지 않는다', async () => {
     h.requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
     expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'x' } }))).toEqual({ ok: false, kind: 'denied', code: '권한 없음', commandId: CMD, error: '권한 없음', retryable: false })
+    expect(h.requireProjectAdmin).toHaveBeenCalledWith(PID)                          // 가드는 요청의 그 프로젝트로(FM-4)
     expect(h.adminFor).not.toHaveBeenCalled()
+  })
+  it('워크스페이스 가드 거부도 denied 이고 admin 을 만들지 않는다 — 가드는 요청의 그 워크스페이스로(FM-4)', async () => {
+    h.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
+    expect(await updateWorkspaceSettings(WID, patch({ set: { 'ai.enabled': false } }))).toEqual({ ok: false, kind: 'denied', code: '권한 없음', commandId: CMD, error: '권한 없음', retryable: false })
+    expect(h.requireWorkspaceAdmin).toHaveBeenCalledWith(WID)
+    expect(h.adminFor).not.toHaveBeenCalled()
+    expect(db.rpcCalls).toHaveLength(0)
   })
   it('미등록 키·워크스페이스 키는 CONFIG_UNKNOWN_KEY, set·unset 겹침은 CONFIG_INVALID — RPC 미호출', async () => {
     expect(await updateProjectSettings(PID, patch({ set: { 'nope.key': 1 } as never }))).toMatchObject({ ok: false, kind: 'invalid', code: 'CONFIG_UNKNOWN_KEY', fieldErrors: [{ key: 'nope.key' }] })

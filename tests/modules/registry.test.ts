@@ -132,13 +132,19 @@ describe('0012 의 동결 목록 = 레지스트리', () => {
     expect(m, `${marker} 다음 줄에 array[...]`).toBeTruthy()
     return m![1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''))
   }
-  it('프로젝트 9 = PROJECT_TOGGLABLE, 워크스페이스 13 = 토글 9 + 워크스페이스 층 4(순서까지) = NON_CORE_MODULES(원소)', () => {
-    expect(arrayAfter('-- 동결 목록(프로젝트 9)')).toEqual([...PROJECT_TOGGLABLE])
-    // 0012 는 워크스페이스 목록을 프로젝트 토글 9 다음에 워크스페이스 층 4 순서로 적었다 — MODULE_IDS 순서(NON_CORE_MODULES)와
-    // 원소는 같고 순서만 다르다(2026-09-28 실측). modules.allowed 는 집합으로 읽히므로(parseModuleList 는 순서를 보지 않는다) 순서는
-    // 이 파일의 구성(토글 + 층)으로 고정하고, 레지스트리와는 원소로 대조한다
-    const ws = arrayAfter('-- 동결 목록(워크스페이스 13)')
-    expect(ws).toEqual([...PROJECT_TOGGLABLE, ...WORKSPACE_SCOPED])
-    expect([...ws].sort()).toEqual([...NON_CORE_MODULES].sort())
+  // 0012 는 커밋된 마이그레이션이라 이 두 목록은 바뀌지 않는다 — 테스트가 리터럴로 쥐고, 레지스트리와는 ⊆ 로 대조한다.
+  // SP5 가 모듈을 더해 PROJECT_TOGGLABLE·NON_CORE_MODULES 가 늘어도 깨지지 않고, 목록의 모듈이 사라지거나 층이 바뀌면 깨진다(FM-7)
+  const FROZEN_PROJECT_9 = ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'] as const
+  const FROZEN_WORKSPACE_13 = [...FROZEN_PROJECT_9, 'minutes', 'minutes_integration', 'portfolio', 'usage'] as const
+  it('SQL 의 동결 목록 = 테스트 리터럴(프로젝트 9, 워크스페이스 13 = 토글 9 + 워크스페이스 층 4 순서)', () => {
+    expect(arrayAfter('-- 동결 목록(프로젝트 9)')).toEqual([...FROZEN_PROJECT_9])
+    // 0012 는 워크스페이스 목록을 프로젝트 토글 9 다음에 워크스페이스 층 4 순서로 적었다 — modules.allowed 는 집합으로 읽히므로
+    // (parseModuleList 는 순서를 보지 않는다) 순서는 이 파일의 구성(토글 + 층)으로 고정한다
+    expect(arrayAfter('-- 동결 목록(워크스페이스 13)')).toEqual([...FROZEN_WORKSPACE_13])
+  })
+  it('테스트 리터럴 ⊆ 레지스트리 — 프로젝트 9 는 프로젝트 토글, 워크스페이스 13 은 비core, 층 4 는 워크스페이스 층', () => {
+    expect(FROZEN_PROJECT_9.filter((id) => !PROJECT_TOGGLABLE.has(id))).toEqual([])
+    expect(FROZEN_WORKSPACE_13.filter((id) => !NON_CORE_MODULES.includes(id))).toEqual([])
+    expect(FROZEN_WORKSPACE_13.slice(9).filter((id) => !WORKSPACE_SCOPED.has(id))).toEqual([])
   })
 })

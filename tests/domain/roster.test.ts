@@ -85,6 +85,10 @@ describe('명단 이메일 계약(R3)', () => {
     const row = member({ email: 'kim@한글.kr' })
     expect(findRosterByEmail([row], 'kim@xn--bj0bj06e.kr')).toBe(row)
   })
+  it('findRosterByEmail 은 로컬 파트를 초대 규칙으로 좁히지 않는다 — 한글 로컬 파트 + IDN 호스트도 같은 행(Parked C2 m-2)', () => {
+    const row = member({ email: '홍길동@xn--bj0bj06e.kr' })
+    expect(findRosterByEmail([row], '홍길동@한글.kr')).toBe(row)
+  })
   it('validateDraft 는 한글 로컬 파트를 받는다 — 명단 로컬 파트는 초대보다 넓다(MP7·MP8)', () => {
     const r = validateDraft({ ...emptyDraft(), name: '홍길동', email: '홍길동@acme.test' })
     expect(r.ok && r.input.email).toBe('홍길동@acme.test')
