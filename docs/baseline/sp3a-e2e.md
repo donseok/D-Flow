@@ -95,3 +95,12 @@ git worktree remove --force /Users/jerry/D-Flow-wt/sp3a-a
 | RLS | `npm run test:rls` | 26 파일 · 282 테스트 통과, 건너뜀 0 |
 | E2E | 3절 | exit 0 · 24/24 ✓(2회차) |
 | 롤백 | 과제 25 인용 | 불일치 0 · 기본 권한 차이 없음 · 재적용 불일치 0 |
+
+## 6. 최종 수정 뒤 재실행(Phase A 최종 수정 — FN-1 이 생성 결과를 바꿔서)
+
+- 트리 `sp3a/phase-a` `cbf186d`(최종 수정 코드 커밋 전부), 스크래치 워크트리 `/Users/jerry/D-Flow-wt/sp3a-final` 의 `next dev -p 3101`, 2절과 같은 순서·플래그 7개.
+- **최종 수정 뒤 재실행: exit 0 · 24/24 ✓**(2회차, 2026-09-29 04:12:13~04:18:22). create-projects A·B 의 `modules.enabled` = 토글 9 — 플래그가 켜진 E2E 에서는
+  FN-1(허용 목록에서 env 를 뺌) 전후가 같다. settings-update rev 2·재전송 duplicate, trace-scan 135항목 적중 0, render-pages 10화면 문제 0.
+- 1회차(03:46~04:10)는 render-pages ✗ `TypeError: fetch failed` — dev.log `⚠ Server is approaching the used memory threshold, restarting...`(4절 둘째 줄·sp2-e2e §9 ② 와
+  같은 현상), load 10~11.8, 첫 컴파일 members 56.7s·issues 106.9s·announcements 281.2s. 23단계는 ✓. 기록한 PID 로 서버를 내리고 reset → bootstrap → 새 서버로 한 번
+  재실행했다. 재실행의 dev 서버에만 `NODE_OPTIONS=--max-old-space-size=8192`(하네스 설정, 앱 코드 무관) — 재시작 0회.
