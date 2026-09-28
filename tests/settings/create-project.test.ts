@@ -14,6 +14,7 @@ vi.mock('@/lib/teams/master', () => ({ refreshTeams: h.refreshTeams }))
 import { createProject, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
+import { ERR_MODULES_ALLOWED_BROKEN } from '@/lib/settings/validateConfig'
 import { makeActor } from '../fixtures/actor'
 
 const WID = '00000000-0000-4000-8000-00000000bb01', OTHER = '00000000-0000-4000-8000-00000000bb02'
@@ -80,6 +81,55 @@ describe('createProject', () => {
     expect(await createProject(input())).toEqual({ ok: false, code: '권한 없음', error: '권한 없음' })
     expect(h.adminFor).not.toHaveBeenCalled()
   })
+  it('env 는 생성 초기값을 바꾸지 않는다 — 플래그가 꺼져도 허용된 wiki·chatbot 이 명시 기록되고, 0012 ⑤ 리터럴 9개와 같다(FN-1, 스펙 §4.1)', async () => {
+    const ALL13 = ['kanban', 'meetings', 'weekly', 'issues', 'wiki', 'announcements', 'attendance', 'agents', 'minutes', 'minutes_integration', 'chatbot', 'portfolio', 'usage']
+    const MIGRATED_9 = ['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot']     // 0012 ⑤ 의 이행 리터럴
+    db.workspaces.get(WID)!.values['modules.allowed'] = ALL13
+    const enabledWith = async (flag: string | undefined, cmd: string) => {
+      if (flag === undefined) delete process.env.WIKI_SERVICE_ENABLED; else process.env.WIKI_SERVICE_ENABLED = flag
+      delete process.env.CHAT_V2_ENABLED
+      const r = await createProject(input({ commandId: cmd }))
+      expect(r).toMatchObject({ ok: true })
+      return db.rpcCalls.at(-1)!.args.p_values as Record<string, unknown>
+    }
+    const off = (await enabledWith(undefined, '00000000-0000-4000-8000-00000000dd11'))['modules.enabled'] as string[]
+    const on = (await enabledWith('true', '00000000-0000-4000-8000-00000000dd12'))['modules.enabled'] as string[]
+    expect(off).toEqual(expect.arrayContaining(['wiki', 'chatbot']))
+    expect(off).toEqual(on)
+    expect([...off].sort()).toEqual([...MIGRATED_9].sort())
+  })
+  it('원본이 앞선 세대(schemaAhead)면 복사를 거부한다 — 모르는 키가 없어도(D29, FN-5)', async () => {
+    const AHEAD = '00000000-0000-4000-8000-00000000aa03', AHEAD_BARE = '00000000-0000-4000-8000-00000000aa04'
+    db.addProject({ id: AHEAD, workspaceId: WID, schemaVersion: 2, values: { 'core.level_labels': ['S1'], 'modules.enabled': ['kanban'], 'future.new_key': 42 } })
+      .addProject({ id: AHEAD_BARE, workspaceId: WID, schemaVersion: 2, values: { 'core.level_labels': ['S1'], 'modules.enabled': ['kanban'] } })
+    const r = await createProject(input({ copyFromProjectId: AHEAD }))
+    expect(r).toEqual({ ok: false, code: 'CONFIG_INVALID', error: '원본 프로젝트의 설정이 이 서버보다 새 버전이라 복사할 수 없습니다.',
+      fieldErrors: [{ key: 'future.new_key', message: expect.any(String) }] })
+    const bare = await createProject(input({ copyFromProjectId: AHEAD_BARE }))
+    expect(bare).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'schema_version', message: expect.stringContaining('2') }] })
+    expect(db.rpcCalls).toHaveLength(0); expect(db.projects.size).toBe(4)
+  })
+  it('워크스페이스 modules.allowed 가 손상이면 throw 대신 CONFIG_INVALID 결과 — 복사 경로도, RPC 0회(FN-6)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const broken of [['kanban', 'nope'], 'notarray']) {
+      for (const copyFromProjectId of [null, SRC]) {
+        err.mockClear()
+        db.workspaces.get(WID)!.values['modules.allowed'] = broken
+        const r = await createProject(input({ copyFromProjectId }))
+        expect(r, JSON.stringify({ broken, copyFromProjectId })).toEqual({ ok: false, code: 'CONFIG_INVALID', error: ERR_MODULES_ALLOWED_BROKEN,
+          fieldErrors: [{ key: 'modules.allowed', message: ERR_MODULES_ALLOWED_BROKEN }] })
+        expect(err.mock.calls.filter((c) => String(c[0]).startsWith('[createProject]'))).toHaveLength(1)
+      }
+    }
+    expect(db.rpcCalls).toHaveLength(0); expect(db.projects.size).toBe(2)
+  })
+  it('한쪽만 있는 날짜도 형식·실재를 본다 — RPC 의 22008 이 "설정을 불러오지 못해"로 나가지 않게(FM-15)', async () => {
+    for (const [startDate, endDate] of [['2026-13-45', null], [null, '2026-02-30'], ['2026/01/01', null]] as const) {
+      expect(await createProject(input({ startDate, endDate })), `${startDate}~${endDate}`).toEqual({ ok: false, code: 'CONFIG_INVALID', error: '날짜 형식이 올바르지 않습니다.' })
+    }
+    expect(db.rpcCalls).toHaveLength(0)
+    expect(await createProject(input({ startDate: '2026-02-28', endDate: null }))).toMatchObject({ ok: true })
+  })
   it('워크스페이스 id 가 비면 가드 전에 거부(슈퍼유저도). commandId 가 uuid 가 아니면 거부. 워크스페이스 설정 행이 없으면 CONFIG_UNAVAILABLE', async () => {
     for (const wid of ['', null, undefined, 42]) expect((await createProject(input({ workspaceId: wid as never }))).ok, String(wid)).toBe(false)
     expect(h.requireWorkspaceAdmin).not.toHaveBeenCalled()
@@ -118,6 +168,13 @@ describe('createProject — DB 원문은 응답에 싣지 않는다(로그로)·
     expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE })
     expect(err.mock.calls.some((c) => JSON.stringify(c).includes('secret_tbl'))).toBe(true)
     expect(h.refreshTeams).not.toHaveBeenCalled()
+  })
+  it('표에 있는 DB 거부 중 재시도 가능·세대 앞섬은 결과와 함께 로그를 남긴다 — 표시 = 로깅(FM-12)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = db.client()
+    h.adminFor.mockImplementation((s: Record<string, string>) => ({ ...s, admin: { ...client, rpc: vi.fn(async () => ({ data: null, error: { code: '40P01', message: 'deadlock detected', details: null } })) } }))
+    expect(await createProject(input())).toEqual({ ok: false, code: 'CONFIG_BUSY', error: CONFIG_MESSAGES.CONFIG_BUSY })
+    expect(err).toHaveBeenCalledWith('[createProject] RPC 거부', { workspaceId: WID, copyFrom: null, commandId: CMD, token: '40P01' })
   })
   it('같은 요청 번호에 다른 내용이면 code COMMAND_REUSED(M-3 — 모달이 새 번호를 발급한다)', async () => {
     expect(await createProject(input())).toMatchObject({ ok: true })

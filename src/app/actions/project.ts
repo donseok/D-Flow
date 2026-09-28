@@ -7,7 +7,7 @@ import { getActorViewState, requireProjectAdmin, requireWorkspaceAdmin } from '@
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { canSeeProject } from '@/lib/domain/authz'
-import { isUuidLike, isValidDateRange } from '@/lib/domain/validate'
+import { isUuidLike, isValidDateRange, isValidIsoDate } from '@/lib/domain/validate'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
@@ -15,12 +15,12 @@ import { refreshTeams } from '@/lib/teams/master'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
-import { allowedAndAvailable } from '@/lib/settings/validateConfig'
+import { ERR_MODULES_ALLOWED_BROKEN, workspaceAllowed } from '@/lib/settings/validateConfig'
 import { intersectEnabledWithAllowed } from '@/lib/modules/saveRule'
 import { closeRequires } from '@/lib/modules/closure'
 import { CORE, moduleDef } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
-import { CONFIG_MESSAGES, ConfigUnavailableError, mapDbError } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, kindOfCode, mapDbError } from '@/lib/settings/errors'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -80,7 +80,8 @@ function unavailableLogged(what: string, ctx: { workspaceId: string; copyFrom: s
   return { ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
 }
 
-/** 생성 시점의 modules.enabled — 후보 ∩ (허용 ∩ env) 에서 requires 가 빠진 것을 뺀다. 자동 추가는 없다 */
+/** 생성 시점의 modules.enabled — 후보 ∩ 워크스페이스 허용에서 requires 가 빠진 것을 뺀다. 자동 추가는 없다.
+ *  env 는 보지 않는다(스펙 §4.1 — 런타임이 닫는다). 보면 플래그 없는 배포에서 만든 프로젝트에 허용된 모듈이 빠진 채 명시 기록된다 */
 function initialEnabled(candidate: readonly ModuleId[], allowed: readonly ModuleId[]): ModuleId[] {
   const chosen = intersectEnabledWithAllowed(candidate, allowed)
   const wsLayer = allowed.filter((id) => !PROJECT_TOGGLABLE.has(id))
@@ -102,6 +103,8 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: 요청 번호`)
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name) return invalidInput('프로젝트명을 입력하세요.')
+  // 한쪽만 있어도 형식·실재를 본다 — 그냥 넘기면 RPC 의 22008(표에 없는 토큰)이 '설정을 불러오지 못해'로 나간다
+  if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput('날짜 형식이 올바르지 않습니다.')
   if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput('종료일은 시작일보다 빠를 수 없습니다.')
   const labels = settingDef('project', 'core.level_labels')!.parse(input.levelLabels)
   if (!labels.ok) return invalidInput(CONFIG_MESSAGES.CONFIG_INVALID, [{ key: 'core.level_labels', message: labels.error }])
@@ -115,7 +118,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   let candidate: ModuleId[] = settingDef('project', 'modules.enabled')!.default as ModuleId[]
   try {
     const ws = await getWorkspaceConfig(workspaceId, { client: admin })
-    allowed = allowedAndAvailable(ws)
+    allowed = workspaceAllowed(ws)                                   // 손상이면 ConfigKeyError — 아래 catch 가 결과로 바꾼다
     if (copyFrom) {
       // 원본이 없거나 다른 워크스페이스면 똑같이 ERR_DENIED — 프로젝트 id 의 존재를 구분할 수 없게 한다.
       // RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다. 조회 실패는 '없음'이 아니다(3원칙 ①).
@@ -124,6 +127,13 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return denied
       const src = await getProjectConfig(copyFrom, { client: admin })
       if (src.workspaceId !== workspaceId) return denied
+      // 원본이 이 서버보다 새 세대면 거부(D29) — 모르는 키는 조용히 빠지고 세대 1 로 저장된다. 모르는 키가 없어도(기존 키의 모양만 바뀐 세대) 거부한다.
+      // DB 는 원본 세대를 보지 않는다(copy_project_config 는 values 를 다루지 않는다) — 세대 2 배포를 되돌린 뒤 도는 이 코드가 막아야 한다
+      if (src.schemaAhead) {
+        return invalidInput('원본 프로젝트의 설정이 이 서버보다 새 버전이라 복사할 수 없습니다.', src.unknownKeys.length
+          ? src.unknownKeys.map((key) => ({ key, message: '이 서버가 모르는 설정 항목입니다.' }))
+          : [{ key: 'schema_version', message: `원본 설정은 세대 ${src.schemaVersion} 이고 이 서버는 세대 ${SETTINGS_SCHEMA_VERSION} 까지 읽습니다.` }])
+      }
       const broken: { key: string; message: string }[] = []
       for (const def of PROJECT_SETTINGS) {
         const s = src.keys[def.key]
@@ -136,6 +146,13 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
     }
   } catch (e) {
     if (e instanceof ConfigUnavailableError) return unavailableLogged('설정 판독', ctx, e.message)
+    // 키 손상(지금은 워크스페이스 modules.allowed 뿐) — throw 대신 결과(스펙 §3.3·§2.1). core 만 켠 채 만들지 않는다:
+    // 비core 가 전부 빠진 modules.enabled 가 명시 기록되는 조용한 갈림이 된다
+    if (e instanceof ConfigKeyError) {
+      console.error('[createProject] 설정 키 손상', { ...ctx, key: e.key, code: e.code })
+      const message = e.key === 'modules.allowed' ? ERR_MODULES_ALLOWED_BROKEN : `${CONFIG_MESSAGES[e.code]} (${e.key})`
+      return invalidInput(message, [{ key: e.key, message }])
+    }
     throw e
   }
   values['core.level_labels'] = labels.value                        // 복사에서도 라벨은 입력값(§7.5)
@@ -151,6 +168,8 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
     if (!mapped) return unavailableLogged('생성 RPC(표에 없는 DB 오류)', ctx, `${error.code ?? ''} ${error.message}`)
     // 같은 요청 번호에 다른 내용 — 모달이 새 번호를 발급하도록 코드를 따로 준다(문구는 표의 고정 문구)
     if (mapped.token === 'COMMAND_REUSED') return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
+    const k = kindOfCode(mapped.code)
+    if (k.kind === 'unavailable' || k.kind === 'schema_ahead') console.error('[createProject] RPC 거부', { ...ctx, token: mapped.token })   // 교착·배포 엇갈림 — 횟수·명령 id 는 로그에만
     return mapped.code === 'CONFIG_INVALID'
       ? invalidInput(mapped.message, mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : undefined)
       : { ok: false, code: mapped.code, error: mapped.message }
