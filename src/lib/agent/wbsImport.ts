@@ -1,6 +1,9 @@
 import { chunked } from '@/lib/ai/util'
 import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
+import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { emitNotification } from '@/lib/notify/emit'
 import { personOf } from '@/lib/data/memberSelect'
@@ -196,11 +199,9 @@ export async function runWbsImport(
   // levels·attach 의 DB 대조 (스펙 §import 계약 v2.2)
   let attachId: string | null = null
   if (levels && attachRef) {
-    // PL 업로드: levels 는 서버 정본(level_labels)과 완전 일치해야 통과(불일치 = 파일이 낡음).
-    const { data: ps, error: psErr } = await admin
-      .from('project_settings').select('level_labels').eq('project_id', projectId).maybeSingle()
-    if (psErr) throw new Error(`프로젝트 설정 조회 실패: ${psErr.message}`)
-    const serverLabels = (ps as { level_labels: string[] } | null)?.level_labels ?? null
+    // PL 업로드: levels 는 서버 정본(core.level_labels)과 완전 일치해야 통과(불일치 = 파일이 낡음). 해석기 실패는 throw(호출자가 500).
+    const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']
+    const serverLabels = state.status === 'set' ? state.value : null
     const payloadLabels = levels.map(l => l.name)
     if (!serverLabels || JSON.stringify(serverLabels) !== JSON.stringify(payloadLabels)) {
       return { ok: false, code: 'levels_mismatch',
@@ -214,20 +215,23 @@ export async function runWbsImport(
       message: `attach 노드가 없습니다: ${attachRef} — 골격을 먼저 업로드하세요.` }
     attachId = (attachRow as { id: string }).id
   } else if (levels) {
-    // 골격 업로드: level_labels 시드 — 설정 편집과 동일한 검증(축소 fail-closed 포함).
+    // 골격 업로드: core.level_labels 시드 — 설정 편집과 같은 판정(축소 fail-closed). 선행 조회는 0012 ①·validateConfig 와 같이
+    // SUB-ACT·스텁을 뺀다. 쓰기는 설정 내부 쓰기 한 함수(parse·revision CAS·이력)를 지난다.
     const { data: rows, error: rowsErr } = await admin
-      .from('wbs_items').select('id, parent_id').eq('project_id', projectId)
+      .from('wbs_items').select('id, parent_id').eq('project_id', projectId).eq('is_owner_split', false).is('stub_for', null)
     if (rowsErr) throw new Error(`WBS 조회 실패: ${rowsErr.message}`)
     const v = validateLevelSettings({
       labels: levels.map(l => l.name),
       currentTreeMaxDepth: treeMaxDepth((rows ?? []) as Array<{ id: string; parent_id: string | null }>),
     })
     if (!v.ok) return { ok: false, code: 'validation_failed', message: `levels 시드 실패: ${v.error}` }
-    const { error: seedErr } = await admin.from('project_settings').upsert({
-      project_id: projectId, level_labels: v.labels, max_depth: v.maxDepth,
-      updated_at: new Date().toISOString(), updated_by: actorUserId,
-    })
-    if (seedErr) throw new Error(`levels 시드 실패: ${seedErr.message}`)
+    const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'core.level_labels': v.labels } }, actorUserId)
+    if (!w.ok) {
+      // 응답에는 코드의 고정 문구(+ 키 검증 사유)만 — 원인(DB 원문 포함)은 로그에만
+      console.error('[wbsImport] levels 시드 실패:', w.code, w.error)
+      const why = w.fieldErrors?.[0]?.message ?? (Object.hasOwn(CONFIG_MESSAGES, w.code) ? CONFIG_MESSAGES[w.code as ConfigCode] : ERR_CONFIG_UNAVAILABLE)
+      return { ok: false, code: 'validation_failed', message: `levels 시드 실패(${w.code}): ${why}` }
+    }
   }
 
   // 변환 — 실패 노드는 생략하지 않고 전량 보고(에러 3원칙).

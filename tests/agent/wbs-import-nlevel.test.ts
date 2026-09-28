@@ -131,6 +131,11 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: mocks.emitNotification }))
+// levels 정본 판독은 해석기(R4), 골격 시드는 설정 내부 쓰기(W6) — runWbsImport 는 설정 표를 직접 만지지 않는다
+const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
+const write = vi.hoisted(() => ({ writeProjectSettingsInternal: vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({ ok: true, status: 'applied', revision: 2, commandId: 'c' })) }))
+vi.mock('@/lib/settings/write', () => write)
 vi.mock('next/server', async (orig) => {
   const m = await orig() as Record<string, unknown>
   return { ...m, after: (fn: () => unknown) => { void fn() } }
@@ -138,18 +143,19 @@ vi.mock('next/server', async (orig) => {
 
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 type Resp = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
 
-/** wbs-import.test.ts 의 목과 동형 + upsert 기록(골격 levels 시드 검증용). */
+/** wbs-import.test.ts 의 목과 동형 + 필터 기록(골격 시드의 트리 깊이 선행 조회 검증용). */
 function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
-  const upserts: Record<string, unknown[]> = {}
+  const filters: Record<string, Array<[string, string, unknown]>> = {}
   const admin = {
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
-      b.upsert = (v: unknown) => { (upserts[table] ??= []).push(v); return b }
+      for (const k of ['select', 'update', 'insert', 'delete', 'upsert', 'in', 'limit', 'order', 'range']) b[k] = () => b
+      for (const k of ['eq', 'is']) b[k] = (col: string, v: unknown) => { (filters[table] ??= []).push([k, col, v]); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.single = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
@@ -160,7 +166,7 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
     auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'admin@example.com' } }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
-  return { admin, upserts }
+  return { admin, filters }
 }
 
 const PROJECT_ID = '87654321-4321-4321-4321-987654321def'
@@ -200,6 +206,7 @@ beforeEach(() => {
   delete process.env.AGENT_API_SECRET
   vi.clearAllMocks()
   mocks.emitNotification.mockResolvedValue({ ok: true })
+  cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': SERVER_LABELS }))
 })
 
 describe('POST /wbs/import — v2.2 nlevel', () => {
@@ -208,7 +215,6 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const q = authzQueues(); q.agent_runners[0].data = row
     const { admin } = useAdmin({
       ...q,
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
       project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
       wbs_items: [
         { data: { id: 'attach-1' } }, // attach_ref → 노드 해석
@@ -226,6 +232,8 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
       ],
     }, token))
     expect(res.status).toBe(200)
+    expect(cfg.getProjectConfig).toHaveBeenCalledWith(PROJECT_ID, { client: admin })   // 정본 대조는 admin 주입 해석기
+    expect(write.writeProjectSettingsInternal).not.toHaveBeenCalled()                   // PL 업로드는 시드하지 않는다
     expect(admin.rpc).toHaveBeenCalledWith('import_wbs_upsert', expect.objectContaining({
       p_attach_id: 'attach-1',
       p_nodes: expect.arrayContaining([
@@ -240,7 +248,6 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const q = authzQueues(); q.agent_runners[0].data = row
     useAdmin({
       ...q,
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
       wbs_items: [{ data: null }], // attach 해석 실패
     })
     const res = await importPOST(post({
@@ -252,11 +259,11 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
   })
 
   it('levels 가 서버 정본과 불일치 → 400 levels_mismatch', async () => {
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
     const { token, row } = patRow()
     const q = authzQueues(); q.agent_runners[0].data = row
     useAdmin({
       ...q,
-      project_settings: [{ data: { level_labels: ['Phase', 'Task', 'Activity'] } }],
     })
     const res = await importPOST(post({
       project_id: PROJECT_ID, module: 'acme-op', levels: LEVELS, attach_ref: 'acme-skel/SYS-OP',
@@ -285,10 +292,10 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     expect(res.status).toBe(400)
   })
 
-  it('골격 업로드(levels, attach 없음) → level_labels 를 project_settings 에 시드', async () => {
+  it('골격 업로드(levels, attach 없음) → core.level_labels 를 설정 내부 쓰기로 시드', async () => {
     const { token, row } = patRow()
     const q = authzQueues(); q.agent_runners[0].data = row
-    const { admin, upserts } = useAdmin({
+    const { admin, filters } = useAdmin({
       ...q,
       wbs_items: [{ data: [] }], // 트리 depth 조회 — 빈 트리
       project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
@@ -299,12 +306,28 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
       nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
     }, token))
     expect(res.status).toBe(200)
-    expect(upserts.project_settings).toEqual([expect.objectContaining({
-      project_id: PROJECT_ID, level_labels: SERVER_LABELS, max_depth: 7,
-    })])
+    expect(write.writeProjectSettingsInternal).toHaveBeenCalledWith(expect.anything(), PROJECT_ID, { set: { 'core.level_labels': SERVER_LABELS } }, 'u-1')
+    // 트리 깊이 선행 조회는 SUB-ACT·스텁을 뺀다(0012 ①·validateConfig 와 같은 규칙)
+    expect(filters.wbs_items).toEqual(expect.arrayContaining([['eq', 'is_owner_split', false], ['is', 'stub_for', null]]))
     // 골격 경로는 p_attach_id 를 싣지 않는다(레거시 RPC 와 인자 호환).
     expect(admin.rpc).toHaveBeenCalledWith('import_wbs_upsert',
       expect.not.objectContaining({ p_attach_id: expect.anything() }))
+  })
+
+  it('골격 시드 쓰기가 실패하면(CONFIG_CONFLICT) 400 validation_failed 이고 import_wbs_upsert 는 부르지 않는다', async () => {
+    write.writeProjectSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '다른 사용자가 설정을 먼저 바꿨습니다.' })
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    const { admin } = useAdmin({ ...q, wbs_items: [{ data: [] }] })
+    const res = await importPOST(post({
+      project_id: PROJECT_ID, module: 'acme-skel', levels: LEVELS,
+      nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
+    }, token))
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('validation_failed')
+    expect(JSON.stringify(json)).toContain('CONFIG_CONFLICT')
+    expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
   })
 
   it('레거시 payload(levels 없음) → RPC 인자에 p_attach_id 없음 (v2.0 하위호환)', async () => {

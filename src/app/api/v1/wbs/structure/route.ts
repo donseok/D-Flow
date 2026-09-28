@@ -6,6 +6,7 @@ import {
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
 import { resolveReader } from '@/lib/agent/routeShared'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
 
 /**
  * GET /api/v1/wbs/structure?project_id=&max_depth= — 프로젝트 levels 정본 + 얕은 노드 조회.
@@ -42,15 +43,15 @@ export async function GET(req: NextRequest) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 
-    // levels 정본 — 행 없음은 미설정 신호로 그대로 노출(기본값 위장 금지 — 3원칙).
-    const { data: ps, error: psErr } = await admin
-      .from('project_settings').select('level_labels, max_depth')
-      .eq('project_id', projectId).maybeSingle()
-    if (psErr) {
-      console.error('[wbs-structure] 설정 조회 실패:', psErr.message)
+    // levels 정본 — 해석기. 필수 라벨이 없으면(정상 경로로는 불가) null 로 그대로 노출한다(기본값 위장 금지). 조회 실패는 500.
+    let levels: string[] | null = null
+    try {
+      const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']
+      levels = state.status === 'set' ? state.value : null
+    } catch (e) {
+      console.error('[wbs-structure] 설정 조회 실패:', e instanceof Error ? e.message : e)
       return apiInternalError()
     }
-    const settings = ps as { level_labels: string[]; max_depth: number | null } | null
 
     const { data: rows, error: rowsErr } = await admin
       .from('wbs_items')
@@ -89,8 +90,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      levels: settings?.level_labels ?? null,
-      max_depth: settings?.max_depth ?? null,
+      levels,
+      max_depth: levels ? levels.length : null,   // 단계 이름 수(§9 #1) — levelDepthOf 와 같은 규칙
       nodes,
     })
   } catch (e) {

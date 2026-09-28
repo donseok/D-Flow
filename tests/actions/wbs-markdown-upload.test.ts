@@ -33,12 +33,16 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
   }),
 }))
+// levels 정본은 해석기(R2) — 액션은 설정 표를 직접 읽지 않는다
+const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 vi.mock('@/lib/agent/wbsImport', async (orig) => ({
   ...(await orig() as object),
   runWbsImport: (...a: unknown[]) => runWbsImport(...a),
 }))
 
 import { previewWbsUpload, applyWbsUpload } from '@/app/actions/wbsMarkdown'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const PID = 'proj-1'
 const ADMIN = { ok: true as const, actor: { userId: 'u-admin', isSuperuser: false } }
@@ -80,6 +84,7 @@ beforeEach(() => {
   requireProjectAdmin.mockReset()
   requireProjectAdmin.mockResolvedValue(ADMIN)
   runWbsImport.mockReset()
+  cfg.getProjectConfig.mockReset().mockResolvedValue(makeProjectConfig({ 'core.level_labels': SERVER_LABELS }))
 })
 
 describe('previewWbsUpload', () => {
@@ -96,7 +101,6 @@ describe('previewWbsUpload', () => {
         { data: [{ external_ref: 'acme-skel/SYS-QA' }] },          // attach suffix 해석 (유일)
         { data: [{ external_ref: 'acme-qa/TSK-QA-JD-02' }] },      // 기존 ref 조회 → 1건은 갱신
       ],
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
     }
     const r = await previewWbsUpload(PID, PL_MD)
     expect(r.ok).toBe(true)
@@ -106,12 +110,12 @@ describe('previewWbsUpload', () => {
       levelsStatus: 'match', foldCount: 1, newCount: 2, updateCount: 1, canApply: true,
     })
     expect(r.counts).toMatchObject({ Subsystem: 1, Task: 2, SubTask: 1 })
+    expect(cfg.getProjectConfig).toHaveBeenCalledWith(PID, { client: expect.anything() })   // admin 주입
   })
 
   it('attach 노드 없음 → attachFound:false, canApply:false', async () => {
     db.queues = {
       wbs_items: [{ data: [] }, { data: [] }],
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
     }
     const r = await previewWbsUpload(PID, PL_MD)
     expect(r.ok).toBe(true)
@@ -120,9 +124,9 @@ describe('previewWbsUpload', () => {
   })
 
   it('levels 불일치 → levelsStatus:mismatch, canApply:false', async () => {
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }, { data: [] }],
-      project_settings: [{ data: { level_labels: ['Phase', 'Task', 'Activity'] } }],
     }
     const r = await previewWbsUpload(PID, PL_MD)
     expect(r.levelsStatus).toBe('mismatch')
@@ -133,13 +137,13 @@ describe('previewWbsUpload', () => {
     db.queues = { wbs_items: [{ data: [] }] } // 기존 ref 조회만
     const r = await previewWbsUpload(PID, SKEL_MD)
     expect(r).toMatchObject({ mode: 'skeleton', levelsStatus: 'seed', canApply: true })
+    expect(cfg.getProjectConfig).not.toHaveBeenCalled()   // 골격은 대조하지 않는다(시드 예정)
   })
 
   it('검증 에러가 있으면 errors 전량 + canApply:false', async () => {
     const bad = PL_MD.replace('## SUB-QA-JD: 판정', '## PH-03: 구축\n\n## SUB-QA-JD: 판정')
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }, { data: [] }],
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
     }
     const r = await previewWbsUpload(PID, bad)
     expect(r.errors?.some(e => e.includes('골격'))).toBe(true)
@@ -151,7 +155,6 @@ describe('applyWbsUpload', () => {
   it('정상 PL — runWbsImport 에 해석된 attachRef·module·levels·노드가 넘어간다', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
       agent_projects: [{ data: { enabled: true } }], // 이미 활성 — ensureAgentProject no-op
     }
     runWbsImport.mockResolvedValue({ ok: true, upserted: 3, skipped: 0, unmatched: [], nonLeafSkipped: [], ordersCreated: 2 })
@@ -173,7 +176,6 @@ describe('applyWbsUpload', () => {
   it('코어 실패는 메시지 그대로 반환', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      project_settings: [{ data: { level_labels: SERVER_LABELS } }],
       agent_projects: [{ data: { enabled: true } }],
     }
     runWbsImport.mockResolvedValue({ ok: false, code: 'attach_not_found', message: 'attach 노드가 없습니다' })

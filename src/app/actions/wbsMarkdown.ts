@@ -7,6 +7,7 @@ import { runWbsImport, validateLevels } from '@/lib/agent/wbsImport'
 import { ensureAgentProject } from '@/lib/agent/ensureOrder'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
 
 /**
  * wbs.md 웹 업로드 — 스펙 §업로드 경로 2개의 "웹 경로(자동 부착 + 확인)".
@@ -87,10 +88,8 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
     let levelsStatus: WbsUploadPreview['levelsStatus'] = 'seed'
     let serverLevels: string[] | null = null
     if (role === 'pl') {
-      const { data: ps, error: psErr } = await admin
-        .from('project_settings').select('level_labels').eq('project_id', projectId).maybeSingle()
-      if (psErr) throw new Error(`프로젝트 설정 조회 실패: ${psErr.message}`)
-      serverLevels = (ps as { level_labels: string[] } | null)?.level_labels ?? null
+      const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']   // 실패는 throw — 기존과 같이 호출자가 받는다
+      serverLevels = state.status === 'set' ? state.value : null
       const fileLabels = doc.levels.map(l => l.name)
       levelsStatus = serverLevels && JSON.stringify(serverLevels) === JSON.stringify(fileLabels) ? 'match' : 'mismatch'
       if (levelsStatus === 'mismatch') {

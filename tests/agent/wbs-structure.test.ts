@@ -7,10 +7,15 @@ import { generateAgentToken } from '@/lib/agent/token'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// levels 정본은 해석기(R3) — 라우트는 설정 표를 직접 읽지 않는다
+const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 import { profileEq } from '../fixtures/profiles'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 
 const LEGACY_SECRET = 'legacy-secret'
 const PL = { id: 'u-1', email: 'pl@example.com', user_metadata: {} }
@@ -79,13 +84,15 @@ describe('GET /wbs/structure', () => {
       agent_projects: [{ data: { enabled: true } }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
       ...axes([PROJECT_ID]),
-      project_settings: [{ data: { level_labels: ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task', 'SubTask'], max_depth: 7 } }],
       wbs_items: [{ data: TREE }],
     })
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task', 'SubTask'] }))
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.levels).toEqual(['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task', 'SubTask'])
+    expect(json.max_depth).toBe(7)   // 단계 이름 수(§9 #1)
+    expect(cfg.getProjectConfig).toHaveBeenCalledWith(PROJECT_ID, { client: expect.anything() })
     expect(json.nodes).toEqual([
       { id: 'n1', external_ref: 'acme-skel/PH-03', name: '구축', parent_external_ref: null, depth: 0, level_idx: 0 },
       { id: 'n2', external_ref: 'acme-skel/SYS-OP', name: '생산운영', parent_external_ref: 'acme-skel/PH-03', depth: 1, level_idx: 1 },
@@ -99,11 +106,12 @@ describe('GET /wbs/structure', () => {
       agent_projects: [{ data: { enabled: true } }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
       ...axes([PROJECT_ID]),
-      project_settings: [{ data: { level_labels: ['A', 'B', 'C'], max_depth: 3 } }],
       wbs_items: [{ data: TREE }],
     })
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['A', 'B', 'C'] }))
     const res = await structureGET(get(`project_id=${PROJECT_ID}&max_depth=2`, token))
     const json = await res.json()
+    expect(json.max_depth).toBe(3)
     expect(json.nodes).toHaveLength(3)
     expect(json.nodes[2]).toMatchObject({ external_ref: 'acme-op/SUB-OP-EV', depth: 2 })
   })
@@ -118,6 +126,37 @@ describe('GET /wbs/structure', () => {
     })
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(404)
+  })
+
+  it('비멤버 → 404 이고 설정은 읽지 않는다(호출자의 워크스페이스 밖 프로젝트 설정을 내지 않는다)', async () => {
+    const { token, row } = patRow()
+    useAdmin({ agent_runners: [{ data: row }, { data: null }], agent_projects: [{ data: { enabled: true } }], project_members: [roster()], ...axes([]) })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
+    expect(res.status).toBe(404)
+    expect(cfg.getProjectConfig).not.toHaveBeenCalled()
+  })
+
+  it('설정 조회 실패는 500(apiInternalError)·필수 라벨 없음은 levels·max_depth null', async () => {
+    const useMemberToken = () => {
+      const { token, row } = patRow()
+      useAdmin({
+        agent_runners: [{ data: row }, { data: null }],
+        agent_projects: [{ data: { enabled: true } }],
+        project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+        ...axes([PROJECT_ID]),
+        wbs_items: [{ data: TREE }],
+      })
+      return token
+    }
+    cfg.getProjectConfig.mockRejectedValueOnce(new ConfigUnavailableError('x'))
+    let res = await structureGET(get(`project_id=${PROJECT_ID}`, useMemberToken()))
+    expect(res.status).toBe(500)
+    cfg.getProjectConfig.mockResolvedValueOnce(makeProjectConfig({}))     // required_missing
+    res = await structureGET(get(`project_id=${PROJECT_ID}`, useMemberToken()))
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.levels).toBeNull()
+    expect(json.max_depth).toBeNull()
   })
 
   it('work:read 스코프 없음 → 403 insufficient_scope', async () => {
@@ -158,10 +197,11 @@ describe('GET /wbs/structure — 레거시 시크릿 호출의 신원', () => {
     useAdmin({
       agent_projects: [{ data: { enabled: true } }],
       ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      project_settings: [{ data: { level_labels: ['Phase', 'System'], max_depth: 2 } }],
       wbs_items: [{ data: TREE }],
     })
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System'] }))
     const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
     expect(res.status).toBe(200)
+    expect((await res.json()).max_depth).toBe(2)
   })
 })
