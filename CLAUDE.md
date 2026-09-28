@@ -21,7 +21,7 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
   `npm run dev:bootstrap`(워크스페이스 1개 + 그 관리자인 플랫폼 슈퍼유저 계정 등 최소 시드 생성 — 이메일·비밀번호는
   프롬프트로 묻고, `BOOTSTRAP_EMAIL`/`BOOTSTRAP_PASSWORD`/`BOOTSTRAP_WORKSPACE_SLUG`(기본 `default`)/
   `BOOTSTRAP_WORKSPACE_NAME`(기본 `기본 워크스페이스`)/`BOOTSTRAP_MODULES`(쉼표 목록 — 워크스페이스의 허용 모듈. 없으면 비core 전부,
-  빈 문자열은 core 만) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
+  빈 문자열은 core 만. 다시 돌릴 때 기존 워크스페이스에 값이 있으면 명시했을 때만 덮는다) env 로도 받는다. 비밀번호는 파일에 남기지 않는다)
   → `npm run dev`.
 - 스키마를 바꿨으면 `npm run db:reset`(기준선 + 마이그레이션 + seed 를 빈 Postgres 에 재적용)으로 검증한다 —
   이것이 이 리포의 "스테이징 리허설"이며 아래 G4 트레일러의 근거다. 리셋은 계정까지 지우므로 이어서
