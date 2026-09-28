@@ -115,7 +115,8 @@ export const importWizardKo = {
   'importWizard.doneProfileSaved': '프로파일 저장',
   'importWizard.doneWarningsTitle': '확인해야 할 사항',
   'importWizard.profileSaveFailedTitle': '양식은 저장되지 않았습니다',
-  'importWizard.profileSaveFailedDesc': '가져오기는 끝났지만 저장 양식 기록에 실패했습니다({code}). 설정 화면에서 다시 저장하거나 잠시 뒤 다시 시도하세요.',
+  // 처방은 다음 가져오기의 '양식 저장' — 설정 화면에는 양식 저장 UI 가 없고(Phase C), 가져오기를 다시 돌리면 교체 모드가 변경 이력을 또 지운다
+  'importWizard.profileSaveFailedDesc': '가져오기는 끝났지만 저장 양식 기록에 실패했습니다({code}). 다음 가져오기에서 "이 양식을 프로젝트 기본값으로 저장"을 켜면 저장됩니다.',
   'importWizard.savedYes': '저장됨',
   'importWizard.savedNo': '저장 안 함',
   'importWizard.gotoWbs': 'WBS 화면으로 이동',

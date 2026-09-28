@@ -6,11 +6,12 @@
 //      export 이름 집합(default 포함)을 닫고, 설정 액션 파일(settings.ts)의 진입점 export 도 고정한다.
 //   G5 검사는 파일 원문에 한다(공용 codeLines 는 문자열 속 '//'·'/*' 를 주석으로 읽어 뒤 코드를 가린다 — 그 고침은 Phase B). 주석 속 이름도 적중이다.
 //   G6 대상은 src·scripts(와 생기면 supabase/functions)의 js·ts 전부, 그리고 src·scripts 의 json·sh·sql(표 이름 단어만 본다).
-//      REST 직접 경로·GraphQL 은 전 파일, raw SQL 은 scripts(pg 를 쓰는 곳)만 본다 — pg 가 src 에 들어오면 SQL 검사를 src 로 넓힌다.
+//      REST 직접 경로·GraphQL 은 전 코드 파일(js·ts), raw SQL 은 scripts(pg 를 쓰는 곳)만 본다 — pg 가 src 에 들어오면 SQL 검사를 src 로 넓힌다.
 // tests 는 제외(tests/rls 는 거부를 단언하려고 일부러 쓴다). 목록에 있는데 쓰지 않는 파일도 실패다.
 // 한계(실측 — 아래 '경계' 케이스가 못 잡음을 not 단언으로 고정한다):
 //   · 허용 파일 안에서 기존 참조를 다른 모양으로 바꾸는 것(참조 수가 그대로면) — 예: 허용 파일이 가진 표 이름을 상수로 export 해
 //     다른 파일이 from(X) 로 쓰기, 허용 파일 안 대괄호 접근 admin['from'](…) 뒤 쓰기.
+//   · 허용 파일 안 식 from 의 중첩 제네릭 from<A<B>>(…)·대문자로 시작하는 …Array 이름의 클라이언트 변수(HistArray.from(t)) 뒤 쓰기.
 //   · 이름 조립: 이중 보간 `${scope}_${KIND}`, 조각 join, 문자열 줄 이음, 유니코드·퍼센트 이스케이프 같은 의도적 난독화.
 //   · 코드·JSON 밖 운반자: process.env·DB 에 둔 표 이름, 스캔 밖 파일(tests/ 헬퍼를 scripts 가 import 하는 관례 — settings-verify.check.ts →
 //     tests/rls/harness), 중첩 node_modules(공용 walk 가 이름으로 건너뛴다 — Phase B walker CARRY).
@@ -82,7 +83,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
 /** 설정 RPC(개정 §2.11 ⑦) → 부르는 파일·리터럴 .rpc( 호출 수·사유. 새 호출은 그 가드를 확인한 뒤 수를 올린다. 권한 RPC 는 이 게이트 밖이다 */
 const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; why: string }> = {
   'src/lib/settings/write.ts': { rpcs: ['apply_project_settings'], calls: 1, why: '서버 내부 쓰기 한 함수(W5 양식 저장·W6 골격 단계 이름)' },
-  'src/app/actions/settings.ts': { rpcs: ['apply_project_settings', 'apply_workspace_settings'], calls: 2, why: '설정 액션 — 범위 어댑터 둘, 가드 requireProjectAdmin(:274)·requireWorkspaceAdmin(:282) 뒤' },
+  'src/app/actions/settings.ts': { rpcs: ['apply_project_settings', 'apply_workspace_settings'], calls: 2, why: '설정 액션 — 범위 어댑터 둘, 가드 requireProjectAdmin(:286)·requireWorkspaceAdmin(:294) 뒤' },
   'src/app/actions/project.ts': { rpcs: ['create_project_with_settings'], calls: 1, why: 'createProject — requireWorkspaceAdmin 뒤 생성·복사' },
   'scripts/dev-bootstrap.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '부트스트랩 워크스페이스의 modules.allowed(로컬 전용)' },
   'scripts/e2e-local.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '워크스페이스 B 의 modules.allowed — 생성 화면(Phase C) 전이라 service_role(로컬 전용)' },
@@ -102,12 +103,12 @@ const WRITE_EXPORTS = ['InternalWriteResult', 'SettingsChange', 'commandDigestIn
 const WRITE_IMPORTERS: Record<string, string> = {
   'src/app/actions/settings.ts': 'commandDigestInput(명령 요약의 입력 모양)만 쓴다 — 아래 INTERNAL_WRITE_CALLERS 에 없으므로 writeProjectSettingsInternal 을 언급하면 실패한다',
   'src/app/api/import/execute/route.ts': 'W5 양식 저장 — requireProjectAdmin(pid)(:62) 뒤 그 pid·actor 로 writeProjectSettingsInternal(:189)',
-  'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:234) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
+  'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:231) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
 }
 /** writeProjectSettingsInternal 을 언급하는 파일(정의 제외)과 호출 수 — import 기준과 함께 둔다(가져오는 이름·지정자 모양과 무관하게 문다) */
 const INTERNAL_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
   'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — requireProjectAdmin(:62) 뒤 :189' },
-  'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :234(가드는 RUN_WBS_IMPORT_CALLERS)' },
+  'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :231(가드는 RUN_WBS_IMPORT_CALLERS)' },
 }
 const WBS_IMPORT_FILE = 'src/lib/agent/wbsImport.ts'
 /** wbsImport 모듈의 export 이름(default 포함) — runWbsImport 를 감싸는 새 export 가 생기면 그 호출자가 아래 목록 밖으로 샌다 */
@@ -373,6 +374,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(src("await admin.from(scope + '_settings_history').insert({})").tables.size).toBe(1)
     expect(src("const kind = h ? 'settings_history' : 'settings'\nawait admin.from(`project_${kind}`).delete().eq('project_id', id)").tables.size).toBe(1)
     expect(src("await admin.from('authz_' + 'events').insert({})").tables.size).toBe(1)
+    expect(src('await admin.from(`authz_${x}`).insert({})').tables.size).toBe(1)
   })
   it('G1 PostgREST 임베드 읽기 — select 문자열 안의 표(m-4)', () => {
     expect([...src("await createAdminClient().from('projects').select('id, project_settings(values)')").tables]).toEqual(['project_settings'])
@@ -388,8 +390,10 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
   it('G1 허용 파일의 표 참조 수 — 모양과 무관하게 새 사용은 목록 갱신을 강제한다(attack m-B)', () => {
     const write = "// `project_settings`\nconst { data } = await admin.from('project_settings').select('revision')\nawait casUpdate(admin, 'project_settings', id, rev)"
     expect(judge([[WRITE_FILE, write]]).G1refs).toContain(`${WRITE_FILE}: 실측 3 / 목록 2`)
-    const e2e = "await upsertRows(admin, 'project_settings', rows)"
-    expect(judge([['scripts/e2e-local.mjs', e2e]]).G1refs).toContain('scripts/e2e-local.mjs: 실측 1 / 목록 5')
+    // e2e-local 의 기존 참조 5(목록 수) + 새 헬퍼 한 줄 → 수가 올라 실패한다
+    const e2eBase = ["'project_settings'", "'project_settings_history'", "'workspace_settings'", "'project_settings'", "'workspace_settings'"].map((t) => `await read(admin, ${t})`).join('\n')
+    expect(judge([['scripts/e2e-local.mjs', e2eBase]]).G1refs.filter((l) => l.startsWith('scripts/e2e-local.mjs'))).toEqual([])     // 대조
+    expect(judge([['scripts/e2e-local.mjs', `${e2eBase}\nawait upsertRows(admin, 'project_settings', rows)`]]).G1refs).toContain('scripts/e2e-local.mjs: 실측 6 / 목록 5')
   })
   it('G1·G6 서식 변형 — 괄호 안 공백·줄바꿈·끝 쉼표·as const(F1~F3)', () => {
     expect([...src("admin.from( 'project_settings' )").tables]).toEqual(['project_settings'])
@@ -429,6 +433,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(src(`${tbl}await client.from(tableOf(scope).table).update({})`).exprFroms).toHaveLength(1)
     expect(src(`${tbl}await client.from(\`\${table}\`).delete().eq(column, id)`).exprFroms).toHaveLength(1)
     expect(src(`${tbl}const storage = client; await storage.from(table).insert({})`).exprFroms).toHaveLength(1)
+    expect(src(`${tbl}const myArray = client; await myArray.from(table).insert({})`).exprFroms).toHaveLength(1)
     expect(src(`${tbl}await client.from(table).select('key').eq(column, id)`).exprFroms).toEqual([])                   // 대조
     expect(src(`${tbl}Array.from(xs).map(String); await sb.storage.from(BUCKET).upload(p, b)`).exprFroms).toEqual([])  // 대조
     expect(src(`${tbl}void Uint8Array.from([1]); Int32Array.from(xs).fill(0); Buffer.from(s).toString('hex')`).exprFroms).toEqual([])   // 대조
@@ -506,6 +511,9 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(empty.G4internal).toEqual(Object.keys(INTERNAL_WRITE_CALLERS).map((f) => `죽은 항목: ${f}`))
     expect(empty.G4runners).toEqual(Object.keys(RUN_WBS_IMPORT_CALLERS).map((f) => `죽은 항목: ${f}`))
     expect([empty.G4writeExports, empty.G4wbsExports, empty.G4settingsExports]).toEqual([[`${WRITE_FILE}: 파일 없음`], [`${WBS_IMPORT_FILE}: 파일 없음`], [`${SETTINGS_ACTIONS_FILE}: 파일 없음`]])
+    // 파일은 있고 목록의 export 가 사라진 방향(죽은 항목)
+    const dead = judge([[WRITE_FILE, 'export function commandDigestInput() {}\nexport interface SettingsChange {}\nexport type InternalWriteResult = unknown']]).G4writeExports
+    expect(dead).toEqual([`${WRITE_FILE} export 죽은 항목: writeProjectSettingsInternal`])
     expect(empty.G1stale).toHaveLength(Object.keys(ALLOW).length)
     expect(empty.RPCstale).toHaveLength(Object.keys(RPC_ALLOW).length)
     expect([empty.G1refs, empty.RPCcalls, empty.G4internalCalls, empty.G4runnerCalls].map((l) => l.length))
@@ -573,6 +581,13 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(judge([['src/app/actions/wbsMarkdown.ts', alias]]).G4runnerCalls).toEqual(['src/app/api/v1/wbs/import/route.ts: 실측 (파일 없음) / 목록 1'])
     // 못 잡음: 스캔 밖 파일(tests/ 헬퍼)
     expect(targetFiles(['tests/rls/zzHelpers.ts'])).toEqual([])
+    // 못 잡음: 허용 파일 안 식 from 의 중첩 제네릭·대문자 …Array 이름 변수 뒤 쓰기(참조 수 그대로)
+    const HIST = 'src/lib/settings/history.ts'
+    const tbl = "const table = pick ? 'project_settings_history' : 'workspace_settings_history'\n"
+    expect(quiet(judge([[HIST, `${tbl}await client.from<Pick<Row, 'a'>>(table).delete()`]]), HIST).filter((l) => !l.includes('실측'))).toEqual([])
+    expect(quiet(judge([[HIST, `${tbl}const HistArray = client; await HistArray.from(table).delete()`]]), HIST).filter((l) => !l.includes('실측'))).toEqual([])
+    // 못 잡음: 유니코드 이스케이프로 쓴 표 이름
+    expect(quiet(judge([[evil, "await admin.from('\\u0070roject_settings').update({})"]]), evil)).toEqual([])
     // 잡음: 허용 목록 밖의 대괄호 접근(G1 표 리터럴), String.raw(백틱 리터럴)
     expect(judge([[evil, "await admin['from']('project_settings').update({})"]]).G1).toHaveLength(1)
     const raw = judge([[evil, 'await admin.from(String.raw`project_settings`).update({})']])

@@ -1,4 +1,4 @@
-// 설정 액션 테스트용 메모리 DB — 해석기가 쓰는 체인(select/eq/is/or/gt/lt/order/limit/maybeSingle/then)과
+// 설정 액션 테스트용 메모리 DB — 해석기가 쓰는 체인(select/eq/is/or/gt/lt/order/limit/range/maybeSingle/then)과
 // apply_project_settings·apply_workspace_settings 의 CAS·중복·이력·값 불변 규칙을 RPC 와 같은 순서로 흉내 낸다(개정 §2.3.2 요지).
 // DB 층의 진짜 판정은 tests/rls/settings-lifecycle.test.ts 가 한다 — 여기는 액션 층의 분기만 본다.
 import { createHash } from 'node:crypto'
@@ -52,6 +52,7 @@ export class FakeSettingsDb {
         const filters: Filter[] = []
         let order: { col: string; asc: boolean } | null = null
         let limit: number | null = null
+        let range: [number, number] | null = null
         let select = '*'
         const run = () => {
           if (db.failTable === table) return { data: null, error: { message: `fake failure: ${table}` } }
@@ -65,6 +66,7 @@ export class FakeSettingsDb {
             })
           }
           if (limit !== null) rows = rows.slice(0, limit)
+          if (range !== null) rows = rows.slice(range[0], range[1] + 1)
           return { data: rows, error: null }
         }
         const b: Record<string, unknown> = {
@@ -76,6 +78,7 @@ export class FakeSettingsDb {
           or: (expr: string) => { filters.push({ op: 'or', expr }); return b },
           order: (col: string, o?: { ascending?: boolean }) => { order = { col, asc: o?.ascending ?? true }; return b },
           limit: (n: number) => { limit = n; return b },
+          range: (from: number, to: number) => { range = [from, to]; return b },
           maybeSingle: async () => { const r = run(); return r.error ? r : { data: (r.data as unknown[])[0] ?? null, error: null } },
           then: (res: (x: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(run()).then(res, rej),
           insert: async (row: Record<string, unknown>) => { if (table === 'agent_projects') db.agentProjects.push({ enabled: true, ...row }); return { error: null } },

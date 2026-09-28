@@ -8,8 +8,12 @@ import { generateAgentToken } from '@/lib/agent/token'
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // levels 정본은 해석기(R3) — 라우트는 설정 표를 직접 읽지 않는다
-const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
-vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
+// max_depth 는 levelDepthOf 한 함수로 낸다(§9 #1 대안 전환 비용을 한 곳에 — FM-10). 실물을 감싸 부른 것을 본다
+const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn(), levelDepthOf: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
+  const real = (await importOriginal<typeof import('@/lib/settings/projectConfig')>()).levelDepthOf
+  return { getProjectConfig: cfg.getProjectConfig, levelDepthOf: (c: never) => (cfg.levelDepthOf(c) as number | undefined) ?? real(c) }
+})
 
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
@@ -226,5 +230,18 @@ describe('GET /wbs/structure — 레거시 시크릿 호출의 신원', () => {
     const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
     expect(res.status).toBe(200)
     expect((await res.json()).max_depth).toBe(2)
+  })
+
+  it('응답의 max_depth 는 levelDepthOf 가 낸다 — 라우트에 규칙을 다시 쓰지 않는다(FM-10)', async () => {
+    useAdmin({
+      agent_projects: [{ data: { enabled: true } }],
+      ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      wbs_items: [{ data: TREE }],
+    })
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System'] }))
+    cfg.levelDepthOf.mockReturnValueOnce(42)
+    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
+    expect((await res.json()).max_depth).toBe(42)
+    expect(cfg.levelDepthOf).toHaveBeenCalledTimes(1)
   })
 })

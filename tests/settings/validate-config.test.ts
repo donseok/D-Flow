@@ -1,6 +1,7 @@
 // 교차 불변식(개정 §2.7.2, 스펙 §3.6 교차 열) — parse 뒤 저장 직전에 돈다. 선행 조회는 SUB-ACT·스텁 행을 뺀다(0012 ① 과 같은 규칙).
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { allowedAndAvailable, loadProjectValidateDeps, validateProjectConfig, validateWorkspaceConfig, workspaceAllowed, workspaceAllowedOrNone } from '@/lib/settings/validateConfig'
+import { readFileSync } from 'node:fs'
+import { allowedAndAvailable, loadProjectValidateDeps, validateProjectConfig, validateWorkspaceConfig, WBS_TREE_PAGE, workspaceAllowed, workspaceAllowedOrNone } from '@/lib/settings/validateConfig'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import type { WorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -64,6 +65,7 @@ describe('loadProjectValidateDeps', () => {
     b.from = () => b; b.select = () => b
     b.eq = (c: string, v: unknown) => { filters.push(`${c}=${v}`); return b }
     b.is = (c: string, v: unknown) => { filters.push(`${c} is ${v}`); return b }
+    b.order = () => b; b.range = () => b
     b.then = (res: (x: unknown) => void) => res({ data: rows, error })
     return { client: b as never, filters }
   }
@@ -95,6 +97,28 @@ describe('loadProjectValidateDeps', () => {
     expect(workspaceAllowedOrNone(broken)).toEqual([])
     expect(spy).toHaveBeenCalledTimes(1)
     spy.mockRestore()
+  })
+  it('선행 조회는 id 순 range 로 끝까지 읽는다 — PostgREST max_rows(1000)가 자른 둘째 쪽의 깊은 행이 축소를 막는다(FM-17)', async () => {
+    const shallow = Array.from({ length: 1000 }, (_, i) => ({ id: `r${String(i).padStart(4, '0')}`, parent_id: null }))
+    const deep = [{ id: 's1', parent_id: null }, { id: 's2', parent_id: 's1' }, { id: 's3', parent_id: 's2' }]
+    const pages = [shallow, deep]
+    const ranges: [number, number][] = []
+    const orders: string[] = []
+    const b: Record<string, unknown> = {}
+    let at = 0
+    b.from = () => b; b.select = () => b; b.eq = () => b; b.is = () => b
+    b.order = (c: string) => { orders.push(c); return b }
+    b.range = (from: number, to: number) => { ranges.push([from, to]); at = from; return b }
+    b.then = (res: (x: unknown) => void) => res({ data: (pages[at / 1000] ?? []).slice(0, 1000), error: null })
+    const d = await loadProjectValidateDeps(b as never, cfg, ws)
+    expect(ranges).toEqual([[0, 999], [1000, 1999]])
+    expect(orders).toEqual(['id', 'id'])
+    expect(d.treeMaxDepth).toBe(2)                                                  // 첫 쪽만 읽으면 0
+    expect(validateProjectConfig({ 'core.level_labels': ['A', 'B'] }, d)).toMatchObject({ ok: false, fieldErrors: [{ key: 'core.level_labels' }] })
+  })
+  it('쪽 크기는 PostgREST max_rows 이하다 — 더 크면 첫 쪽이 한도에서 잘려 끝난 것으로 읽힌다', () => {
+    const maxRows = Number(/^max_rows\s*=\s*(\d+)/m.exec(readFileSync('supabase/config.toml', 'utf8'))?.[1])
+    expect(WBS_TREE_PAGE).toBeLessThanOrEqual(maxRows)
   })
   it('조회 실패는 throw — 검증 불가를 통과로 위장하지 않는다', async () => {
     const { client } = client_(null, { message: 'down' })

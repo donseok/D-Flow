@@ -14,7 +14,9 @@ vi.mock('next/link', () => ({ default: ({ children, href }: { children: ReactNod
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ImportWizard } from '@/components/import/ImportWizard'
-import { t } from '@/lib/i18n/dict'
+import { registerEn, t } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+registerEn(EN)
 
 const DETECTED: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 2,
@@ -80,6 +82,11 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     const status = statusWith(t('ko', 'importWizard.profileSaveFailedTitle'))
     expect(status).toBeTruthy()
     expect(status!.textContent).toContain('CONFIG_UNAVAILABLE')
+    // 처방은 다음 가져오기의 '양식 저장' 선택 — 설정 화면에는 양식을 저장하는 UI 가 없고, '다시 시도'는 교체 가져오기를 다시 돌려
+    // 변경 이력을 또 지운다(FM-14)
+    expect(status!.textContent).toContain(t('ko', 'importWizard.saveProfileLabel'))
+    expect(status!.textContent).not.toMatch(/설정 화면에서 다시 저장|다시 시도/)
+    for (const locale of ['ko', 'en'] as const) expect(t(locale, 'importWizard.profileSaveFailedDesc')).toContain(t(locale, 'importWizard.saveProfileLabel'))
     expect(document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)).toBeNull()
   })
 

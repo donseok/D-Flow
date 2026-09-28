@@ -351,6 +351,24 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
       expect.not.objectContaining({ p_attach_id: expect.anything() }))
   })
 
+  it('골격 시드의 깊이 선행 조회는 쪽을 넘겨 끝까지 읽는다 — 둘째 쪽의 깊은 행이 축소 시드를 막는다(FM-17)', async () => {
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ id: `r${i}`, parent_id: null }))
+    const chain = Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, parent_id: i ? `c${i - 1}` : null }))    // 8단 — 7단 levels 보다 깊다
+    const { admin } = useAdmin({ ...q, wbs_items: [{ data: firstPage }, { data: chain }] })
+    const res = await importPOST(post({
+      project_id: PROJECT_ID, module: 'acme-skel', levels: LEVELS,
+      nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
+    }, token))
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('validation_failed')
+    expect(json.error).toContain('levels 시드 실패')
+    expect(write.writeProjectSettingsInternal).not.toHaveBeenCalled()
+    expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
+  })
+
   it('골격 시드 쓰기가 실패하면(CONFIG_CONFLICT) 400 validation_failed 이고 import_wbs_upsert 는 부르지 않는다', async () => {
     write.writeProjectSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '원문 relation "project_settings" boom' })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

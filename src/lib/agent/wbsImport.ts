@@ -3,6 +3,7 @@ import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { loadWbsTreeRows } from '@/lib/settings/validateConfig'
 import { emailKey } from '@/lib/domain/email'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
@@ -221,15 +222,11 @@ export async function runWbsImport(
       message: `attach 노드가 없습니다: ${attachRef} — 골격을 먼저 업로드하세요.` }
     attachId = (attachRow as { id: string }).id
   } else if (levels) {
-    // 골격 업로드: core.level_labels 시드 — 설정 편집과 같은 판정(축소 fail-closed). 선행 조회는 0012 ①·validateConfig 와 같이
-    // SUB-ACT·스텁을 뺀다. 쓰기는 설정 내부 쓰기 한 함수(parse·revision CAS·이력)를 지난다.
-    const { data: rows, error: rowsErr } = await admin
-      .from('wbs_items').select('id, parent_id').eq('project_id', projectId).eq('is_owner_split', false).is('stub_for', null)
-    if (rowsErr) throw new Error(`WBS 조회 실패: ${rowsErr.message}`)
-    const v = validateLevelSettings({
-      labels: levels.map(l => l.name),
-      currentTreeMaxDepth: treeMaxDepth((rows ?? []) as Array<{ id: string; parent_id: string | null }>),
-    })
+    // 골격 업로드: core.level_labels 시드 — 설정 편집과 같은 판정(축소 fail-closed). 선행 조회는 설정 저장과 같은 함수(SUB-ACT·스텁을
+    // 빼고 쪽을 넘겨 끝까지 읽는다). 쓰기는 설정 내부 쓰기 한 함수(parse·revision CAS·이력)를 지난다.
+    const tree = await loadWbsTreeRows(admin, projectId)
+    if (!tree.ok) throw new Error(`WBS 조회 실패: ${tree.error}`)
+    const v = validateLevelSettings({ labels: levels.map(l => l.name), currentTreeMaxDepth: treeMaxDepth(tree.rows) })
     if (!v.ok) return { ok: false, code: 'validation_failed', message: `levels 시드 실패: ${v.error}` }
     const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'core.level_labels': v.labels } }, actorUserId)
     if (!w.ok) {

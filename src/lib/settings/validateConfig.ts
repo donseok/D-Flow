@@ -7,7 +7,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { MODULES } from '@/lib/modules/registry'
 import { checkEnabledModules } from '@/lib/modules/saveRule'
-import { parseBrandingPath } from './brandingPath'
+import { BRANDING_SLOTS, parseBrandingPath } from './brandingPath'
 import { ConfigKeyError, ConfigUnavailableError } from './errors'
 import type { BrandingLogo } from './defs/workspace'
 import type { ConfigReadClient, ProjectConfig } from './projectConfig'
@@ -57,7 +57,7 @@ export function validateWorkspaceConfig(next: Partial<Record<WorkspaceSettingKey
   const fieldErrors: FieldError[] = []
   if (has(next, 'branding.logo')) {
     const logo = next['branding.logo'] as BrandingLogo
-    for (const slot of ['full', 'full_dark', 'mark'] as const) {
+    for (const slot of BRANDING_SLOTS) {                   // 슬롯 목록은 한 출처 — 새 슬롯이 검사에서 빠지지 않게
       const path = logo[slot]
       if (path === null) continue
       const p = parseBrandingPath(path)           // parse 가 이미 통과시킨 형태 — 워크스페이스만 본다
@@ -100,16 +100,34 @@ export function modulesAllowedBroken(ws: WorkspaceConfig): boolean {
   return s.status === 'invalid' || s.status === 'required_missing'
 }
 
-/** 선행 조회 — SUB-ACT(is_owner_split)·스텁(stub_for) 행은 단계 이름보다 한 단 깊어 0012 ① 과 같은 규칙으로 뺀다 */
+/** 트리 깊이 선행 조회의 쪽 크기 — PostgREST max_rows(supabase/config.toml) 이하여야 한다(tests/settings/validate-config) */
+export const WBS_TREE_PAGE = 1000
+type TreeRow = { id: string; parent_id: string | null }
+
+/** 트리 깊이 선행 조회(설정 저장·골격 시드 공용) — SUB-ACT(is_owner_split)·스텁(stub_for) 행은 단계 이름보다 한 단 깊어 0012 ① 과
+ *  같은 규칙으로 뺀다. max_rows 가 오류 없이 자르므로 id 순 range 로 끝까지 읽는다 — 잘린 트리로 세면 깊은 행이 빠져 단계 축소가
+ *  통과한다. 한도에서 멈추는(fail-closed) 방식은 쓰지 않는다: 큰 N단 프로젝트의 단계 이름 편집이 영구히 막힌다 */
+export async function loadWbsTreeRows(client: ConfigReadClient, projectId: string): Promise<{ ok: true; rows: TreeRow[] } | { ok: false; error: string }> {
+  const rows: TreeRow[] = []
+  for (;;) {
+    const { data, error } = await client.from('wbs_items').select('id, parent_id').eq('project_id', projectId).eq('is_owner_split', false)
+      .is('stub_for', null).order('id').range(rows.length, rows.length + WBS_TREE_PAGE - 1)
+    if (error) return { ok: false, error: error.message }
+    const page = (data ?? []) as TreeRow[]
+    rows.push(...page)
+    if (page.length < WBS_TREE_PAGE) return { ok: true, rows }
+  }
+}
+
+/** 교차 검증의 선행 조회 — 트리 깊이(loadWbsTreeRows)·활성 팀·허용·저장된 modules.enabled */
 export async function loadProjectValidateDeps(
   client: ConfigReadClient, cfg: ProjectConfig, ws: WorkspaceConfig, pre?: { allowed: readonly ModuleId[] },   // pre — 호출부가 이미 구한 워크스페이스 허용(손상 로그를 한 번만)
 ): Promise<ProjectValidateDeps> {
-  const { data, error } = await client.from('wbs_items').select('id, parent_id')
-    .eq('project_id', cfg.projectId).eq('is_owner_split', false).is('stub_for', null)
-  if (error) throw new ConfigUnavailableError(`WBS 조회 실패: ${error.message}`, { cause: error })
+  const tree = await loadWbsTreeRows(client, cfg.projectId)
+  if (!tree.ok) throw new ConfigUnavailableError(`WBS 조회 실패: ${tree.error}`)
   const enabled = cfg.keys['modules.enabled']
   return {
-    treeMaxDepth: treeMaxDepth((data ?? []) as { id: string; parent_id: string | null }[]),
+    treeMaxDepth: treeMaxDepth(tree.rows),
     teamCodes: cfg.teams.filter((t) => t.active).map((t) => t.code),
     allowed: pre?.allowed ?? workspaceAllowedOrNone(ws),
     prevEnabled: enabled.status === 'set' || enabled.status === 'default' ? enabled.value : [],

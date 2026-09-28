@@ -117,7 +117,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.doneProfileSaved': 'Profile saved',
   'importWizard.doneWarningsTitle': 'Things to note',
   'importWizard.profileSaveFailedTitle': 'The layout was not saved',
-  'importWizard.profileSaveFailedDesc': 'The import finished, but saving the layout failed ({code}). Save it again from the settings page or retry shortly.',
+  'importWizard.profileSaveFailedDesc': 'The import finished, but saving the layout failed ({code}). Turn on "Save this layout as the project default" on your next import to save it.',
   'importWizard.savedYes': 'Saved',
   'importWizard.savedNo': 'Not saved',
   'importWizard.gotoWbs': 'Go to WBS',

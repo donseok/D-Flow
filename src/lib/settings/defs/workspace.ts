@@ -5,6 +5,7 @@ import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
 import { BRANDING_SLOTS, parseBrandingPath, type BrandingSlot } from '../brandingPath'
 import { deriveAccent, parseAccentInput, parseAccentValue, type AccentValue, type Hex } from '../accent'
 import { toAsciiHostname } from '@/lib/domain/hostname'
+import { ANY_DOMAIN } from '@/lib/domain/invites'
 
 export type ModulesList = ModuleId[]
 export type BrandingLogo = { full: string | null; full_dark: string | null; mark: string | null }
@@ -38,7 +39,7 @@ function parseModuleList(raw: unknown, allowed: readonly ModuleId[]): Parsed<Mod
 export { parseModuleList }
 
 // ── 초대 도메인(D40) ──────────────────────────────────────────────────────────────────────────────────────────
-export const ANY_DOMAIN = '*'
+// 전체 허용 값 ANY_DOMAIN 은 초대 판정(domain/invites)과 한 출처다 — 두 벌이면 한쪽만 바뀌었을 때 parse 와 판정이 갈린다
 /** 한 항목의 정규화 — 소문자·앞뒤 공백·선행 @·끝 점 제거·퓨니코드. 형식이 틀리면 거부(버리지 않는다) */
 export function normalizeDomain(raw: string): { ok: true; value: string } | { ok: false; error: string } {
   let v = raw.trim().toLowerCase().replace(/^@/, '')
