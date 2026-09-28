@@ -15,6 +15,7 @@ import {
 import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
 import { planningSignals, routeChatRequest } from '@/lib/ai/chat/router'
 import { teamViewOfScope } from '@/lib/domain/authz'
+import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
 import { activeTeamCodesForProjectSync, activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,7 @@ function requestId(): string {
 /** Read-only NDJSON endpoint. Existing /api/chat and /api/chat/stream remain untouched. */
 export async function POST(req: NextRequest) {
   // Explicit kill switch used by the client to fall back to the legacy text stream.
-  if (process.env.CHAT_V2_ENABLED !== 'true') {
+  if (!chatV2Enabled()) {
     return jsonError('새 챗봇 스트림이 비활성화되어 있습니다.', 501, 'CHAT_V2_DISABLED')
   }
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
   // before membership and project-scope I/O so an intentional fallback never touches Supabase.
   // 예외: 플래너 opt-in(§7.1)이 켜져 있고 게이트를 통과하면 제한된 도구 계획을 한 번 시도한다.
   const plannerEligible = plannedRoute.kind === 'legacy'
-    && process.env.CHAT_V2_PLANNER_ENABLED === 'true'
+    && chatPlannerEnabled()
     && shouldAttemptPlan(planningSignals(request))
   if (plannedRoute.kind === 'legacy' && !plannerEligible) {
     return jsonError('기본 답변 경로로 전환합니다.', 501, 'CHAT_V2_UNSUPPORTED')

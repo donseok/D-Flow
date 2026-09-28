@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { chatIndexWorkerEnabled } from '@/lib/modules/flags'
 import {
   INDEX_BACKFILL_DOMAINS,
   checkIndexConsistency,
@@ -74,7 +75,7 @@ function parseBody(raw: unknown): WorkerRequestBody | null {
  * 게이트: ① CHAT_V2_INDEX_WORKER_ENABLED ② x-cron-secret(미설정이면 존재 자체를 숨긴다=404).
  */
 export async function POST(req: NextRequest) {
-  if (process.env.CHAT_V2_INDEX_WORKER_ENABLED !== 'true') {
+  if (!chatIndexWorkerEnabled()) {
     return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   }
   const expectedSecret = process.env.CHAT_V2_INDEX_CRON_SECRET

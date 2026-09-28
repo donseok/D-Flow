@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { runWikiWorkerOnce } from '@/lib/ai/wiki-ingest'
+import { wikiWorkerEnabled } from '@/lib/modules/flags'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,10 +10,6 @@ function secretMatches(provided: string | null, expected: string): boolean {
   const a = createHash('sha256').update(provided).digest()
   const b = createHash('sha256').update(expected).digest()
   return timingSafeEqual(a, b)
-}
-
-function workerEnabled(): boolean {
-  return process.env.WIKI_WORKER_ENABLED === 'true'
 }
 
 async function runWorker(limit: number): Promise<NextResponse> {
@@ -31,7 +28,7 @@ async function runWorker(limit: number): Promise<NextResponse> {
  * 비활성 또는 시크릿 미설정 시 존재를 404로 숨긴다.
  */
 export async function POST(req: NextRequest) {
-  if (!workerEnabled()) {
+  if (!wikiWorkerEnabled()) {
     return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   }
   const secret = process.env.WIKI_WORKER_SECRET
@@ -60,7 +57,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!workerEnabled()) {
+  if (!wikiWorkerEnabled()) {
     return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   }
   const secret = process.env.CRON_SECRET

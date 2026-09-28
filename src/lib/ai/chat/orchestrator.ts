@@ -32,6 +32,7 @@ import {
 import { verifyBotSources, verifySynthesizedAnswer } from './verifier'
 import { seoulStamp } from '@/lib/domain/dates'
 import { BRAND } from '@/lib/branding'
+import { chatLlmSynthesisEnabled } from '@/lib/modules/flags'
 
 export interface ChatSynthesisInput {
   request: ChatRequestV2
@@ -479,7 +480,7 @@ async function* finishWithEvidence(
   const failedTools = [...new Set(failures.map(f => f.tool))]
   let answer = deterministicEvidenceAnswer(pack, failedTools)
   const synthesizer = deps.synthesize
-    ?? (process.env.CHAT_V2_LLM_SYNTHESIS_ENABLED === 'true' ? synthesizeWithConfiguredLlm : null)
+    ?? (chatLlmSynthesisEnabled() ? synthesizeWithConfiguredLlm : null)
   // 취소된 요청에 LLM 합성을 시작하지 않는다(리뷰 M-7). 전송을 시작한 호출은 중단해도
   // 무료 쿼터(RPM)를 이미 소모하므로, 실질 절약 지점은 '시작 전 확인'이다.
   if (synthesizer && !deps.context.signal?.aborted) {

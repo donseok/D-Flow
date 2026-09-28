@@ -7,6 +7,7 @@ import {
   createSupabasePgvectorKnowledgeIndex,
 } from '@/lib/ai/index'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { chatIndexWorkerEnabled } from '@/lib/modules/flags'
 import type { SupabaseKnowledgeClient } from '@/lib/ai/index/pgvector'
 
 /**
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   // 그 이유는 워커 라우트도 같은 태도를 보이기 때문이다(route.ts:70-74).
   // inbox-retention 은 503 을 내는데 그건 다른 서비스이고, 이건 워커 라우트를 따른다.
   if (!secret) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
-  if (process.env.CHAT_V2_INDEX_WORKER_ENABLED !== 'true') {
+  if (!chatIndexWorkerEnabled()) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
   }
 

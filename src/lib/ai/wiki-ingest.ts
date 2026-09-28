@@ -5,6 +5,7 @@ import { hasLLM } from '@/lib/ai/provider'
 import { buildWikiCatalogText } from '@/lib/ai/wiki-catalog'
 import { loadWikiSaturation, type WikiSaturationSnapshot } from '@/lib/ai/wiki-saturation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 import {
@@ -39,9 +40,8 @@ import {
  * 코드는 지우지 않는다 — 스위치만 내린 상태이며 조회(위키 페이지·봇 검색)는 그대로 동작한다.
  * 막는 것은 **자동 쓰기**뿐이다.
  */
-export function wikiServiceEnabled(): boolean {
-  return process.env.WIKI_SERVICE_ENABLED === 'true'
-}
+// 판독 정본은 flags.ts(스펙 §4.1) — 이 경로에서 import 하는 호출부·테스트(wiki-service-suspended)를 위해 재수출한다
+export { wikiServiceEnabled }
 
 /** 중단 상태에서 진입점이 불렸을 때의 로그 — 조용히 사라지면 나중에 원인을 못 찾는다. */
 function logWikiSuspended(entry: string): void {
