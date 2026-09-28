@@ -215,4 +215,5 @@ export const settingsKo = {
   'settings.wbs.excel_profile.label': '저장된 엑셀 양식', 'settings.wbs.excel_profile.desc': '가져오기가 저장한 양식입니다. 내보내기가 같은 양식을 씁니다.',
   'settings.modules.enabled.label': '사용 모듈', 'settings.modules.enabled.desc': '이 프로젝트에서 켤 모듈입니다. 워크스페이스가 허용한 것만 켤 수 있습니다.',
   'settings.workflow.stage_credits.label': '단계 실적 크레딧', 'settings.workflow.stage_credits.desc': '단계 전이 때 기록하는 실적(%)입니다. 이미 기록된 실적은 바뀌지 않습니다.',
+  'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

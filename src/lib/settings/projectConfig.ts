@@ -1,5 +1,5 @@
 /**
- * 프로젝트 설정 해석기(개정 §2.5, 스펙 §3.5) — src/lib/data/projectConfig.ts 의 후계(그 파일은 과제 27 이 지운다).
+ * 프로젝트 설정 해석기(개정 §2.5, 스펙 §3.5) — 옛 데이터 계층 로더(data/projectConfig.ts, 과제 27 에서 삭제)의 후계.
  * 조회는 셋(설정 행 ⨝ projects, 영역 ⨝ 영역-팀, 팀). 설정 행 0행·조회 오류는 ConfigUnavailableError — 기본값으로 풀지 않는다.
  * 세션 없는 경로(외부 API·워커·봇 잡)는 { client: adminFor({ projectId }).admin } 을 넘긴다 — 쿠키 없는 RLS 클라이언트는 0행을 받는다.
  * 캐시는 요청 범위의 react cache 하나(키 = projectId, client). 모듈 수준 Map·전역 캐시를 두지 않는다(project-isolation 테스트).

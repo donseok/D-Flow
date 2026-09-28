@@ -25,7 +25,7 @@ vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: mocks.getAttenda
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: mocks.listProjectsWithState }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 // 주차 계산(report/week → fmtUTC)은 실제 것을 쓴다 — source=sheet 분기가 탄다.
 vi.mock('@/lib/report/weekly', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/report/weekly')>()),
@@ -41,6 +41,8 @@ vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: vi.fn() }))
 vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() => []) }))
 
 import { GET } from '@/app/api/report/route'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_ID = '22222222-2222-4222-8222-222222222222'
@@ -58,7 +60,7 @@ beforeEach(() => {
   mocks.getAnnouncements.mockResolvedValue({ ok: true, rows: [] })
   mocks.listProjectsWithState.mockResolvedValue({ projects: [{ id: PROJECT_ID, name: 'Acme' }], degraded: false })
   mocks.getWeeklySheet.mockResolvedValue(null)
-  mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['Phase', 'Task', 'Activity'] })
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
   mocks.buildWeeklyReportModel.mockReturnValue({ meta: { weekTag: '9월4주차' } })
   mocks.buildReportWorkbook.mockResolvedValue(new ArrayBuffer(1))
 })
@@ -85,6 +87,28 @@ describe('GET /api/report — 명단 조회', () => {
     expect(res.status).toBe(200)
     expect(mocks.getProjectRoster).toHaveBeenCalledWith(PROJECT_ID)
     expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ members: rows })
+  })
+})
+
+describe('GET /api/report — 프로젝트 설정', () => {
+  it('설정 조회 실패 → 503(전체 500 이 아니다), 보고서를 만들지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
+    const res = await GET(req())
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
+  })
+  it('단계 이름이 손상이면 그 키의 오류(422) — 기본 라벨로 만들지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 42 }))
+    const res = await GET(req())
+    expect(res.status).toBe(422)
+    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
+  })
+  it('단계 이름을 모델에 넘긴다', async () => {
+    await GET(req())
+    expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ levelLabels: ['Phase', 'Task', 'Activity'] })
   })
 })
 

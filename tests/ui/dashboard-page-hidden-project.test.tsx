@@ -28,7 +28,10 @@ vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots, recor
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: mocks.getIssuesForDashboard }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
+vi.mock('@/lib/settings/projectConfig', async () => {
+  const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
+  return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'core.milestone_keywords': [] })) }
+})
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({})) }))

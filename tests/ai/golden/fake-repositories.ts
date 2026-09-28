@@ -29,6 +29,7 @@ import {
   WEEKLY_SNAPSHOTS,
 } from './fixtures'
 import { FIXTURE_MILESTONE_KEYWORDS } from '../../fixtures/milestoneKeywords'
+import { makeProjectConfig } from '../../helpers/projectConfigFixture'
 
 export interface FakeRepositoryOptions {
   /** 지정한 에러 코드를 관련 메서드가 강제 반환한다(조회 실패 주입). */
@@ -206,10 +207,9 @@ export function createFakeRepositories(options: FakeRepositoryOptions = {}): Cor
         })
       },
       async getProjectConfig() {
-        return guard('PROJECT_SETTINGS_READ_FAILED', true, () => repositoryOk({
-          levelLabels: ['Phase', 'Task', 'Activity'], maxDepth: null, extraAxisLabel: null,
-          milestoneKeywords: [...FIXTURE_MILESTONE_KEYWORDS], excelProfile: {}, stageCredits: null,
-        }))
+        return guard('PROJECT_SETTINGS_READ_FAILED', true, () => repositoryOk(makeProjectConfig({
+          'core.level_labels': ['Phase', 'Task', 'Activity'], 'core.milestone_keywords': [...FIXTURE_MILESTONE_KEYWORDS],
+        })))
       },
     },
   }

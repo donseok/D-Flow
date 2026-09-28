@@ -21,7 +21,10 @@ vi.mock('@/app/actions/project', () => ({
   listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]),
 }))
 vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ error: 'x' })) }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => null) }))
+vi.mock('@/lib/settings/projectConfig', async () => {
+  const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
+  return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'] })) }
+})
 vi.mock('@/app/actions/projectAreas', () => ({ listAreas: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))

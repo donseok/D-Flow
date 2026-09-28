@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: vi.fn() }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/teams/master', () => ({
   projectTeamRowsSync: vi.fn(() => [{ code: '팀A' }, { code: '팀B' }]),
   teamsForProjectSync: vi.fn(() => [{ code: '팀A' }, { code: '팀B' }]),
@@ -25,6 +25,7 @@ vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0
 import { createAdminClient } from '@/lib/supabase/admin'
 import { POST as inspect } from '@/app/api/import/inspect/route'
 import { POST as execute } from '@/app/api/import/execute/route'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { buildWorkbookWithProfile } from '@/lib/excel/exportWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -69,7 +70,7 @@ const executeWith = (profile: ExcelProfile, extra: Record<string, string> = {}) 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeActor() })
-  mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['단계', '작업'], excelProfile: SAVED })
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'], 'wbs.excel_profile': SAVED }))
   mocks.rpc.mockResolvedValue({ data: 2, error: null })
 })
 

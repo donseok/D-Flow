@@ -11,6 +11,7 @@ import { computeTree, overallProgress } from '@/lib/domain/rollup'
 import { collectLeaves } from '@/lib/domain/tree'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { pick } from '@/lib/settings/pageConfig'
 import type { Status } from '@/lib/domain/types'
 import type {
   MeetingBotRepository,
@@ -79,6 +80,9 @@ export function createGetProjectDashboardTool(
       // 기본 키워드로 대신하면 화면과 다른 마일스톤을 조용히 답한다(3원칙). 프로젝트 접근·스코프 판정 뒤에 읽는다.
       const configResult = await settings.getProjectConfig(projectId)
       if (!configResult.ok) return repositoryFailure(configResult)
+      // 키워드가 손상이면 같은 실패로 올린다 — 마일스톤 0건으로 위장하지 않는다.
+      const keywords = pick(configResult.data, 'core.milestone_keywords')
+      if (!keywords.ok) return repositoryFailure({ ok: false, errorCode: 'PROJECT_SETTINGS_READ_FAILED', retryable: false })
 
       const snapshot = wbsResult.data
       // WBS 신호는 기준일(base_date 우선), 회의 신호는 실제 오늘 — 대시보드 화면의 이중 시계 관례.
@@ -103,7 +107,7 @@ export function createGetProjectDashboardTool(
         startDate, endDate, today: calculationDate,
         overallActual: actual, overallPlanned: planned,
       })
-      const milestone = detectMilestones(roots, calculationDate, configResult.data.milestoneKeywords)
+      const milestone = detectMilestones(roots, calculationDate, keywords.value)
 
       const sources: BotSource[] = [{
         id: `dashboard:${projectId}`,

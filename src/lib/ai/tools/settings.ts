@@ -103,7 +103,7 @@ export function createGetSafeProjectSettingsTool(
         projectId,
         title: '프로젝트 설정',
         href: settingsHref(projectId),
-        updatedAt: snapshot.updatedAt,
+        updatedAt: null,
       }]
       const warnings: string[] = []
       if (truncated) {

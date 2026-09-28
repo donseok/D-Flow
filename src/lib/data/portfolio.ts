@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { DEFAULT_MILESTONE_KEYWORDS } from '@/lib/settings/defs/project'
 import { listProjectsWithState } from '@/app/actions/project'
 import { seoulToday } from '@/lib/domain/dates'
 import { addDaysCal } from '@/lib/domain/dashboard'
@@ -95,8 +95,8 @@ export async function getPortfolioInputs(): Promise<{
       realToday,
     }
     try {
-      const [wbs, config] = await Promise.all([getComputedWbs(p.id), getProjectConfig(p.id)])
-      return { ...base, today: wbs.today, items: wbs.items, milestoneKeywords: config.milestoneKeywords }
+      const wbs = await getComputedWbs(p.id)
+      return { ...base, today: wbs.today, items: wbs.items, milestoneKeywords: portfolioMilestoneKeywords() }
     } catch (e) {
       console.error(`[portfolio] 프로젝트 로드 실패 — 행을 degraded 로 표시: ${p.name}(${p.id})`, e)
       return { ...base, today: realToday, items: null, milestoneKeywords: [] }
@@ -105,3 +105,7 @@ export async function getPortfolioInputs(): Promise<{
 
   return { inputs, leadersDegraded, listDegraded }
 }
+
+/** §9 #16 기본값 — 워크스페이스 화면은 프로젝트별 설정을 읽지 않는다(개정 §2.1). 모든 프로젝트를 제품 기본 키워드로 판정한다.
+ *  대안(프로젝트별 키워드·표시 제거)을 고르면 이 함수 하나가 바뀐다. */
+export function portfolioMilestoneKeywords(): readonly string[] { return DEFAULT_MILESTONE_KEYWORDS }

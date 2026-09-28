@@ -20,12 +20,14 @@ vi.mock('@/app/actions/project', () => ({
   listProjectsWithState: vi.fn(async () => mocks.state),
 }))
 vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/excel/export', () => ({ buildWbsWorkbook: mocks.buildWbsWorkbook }))
 vi.mock('@/lib/excel/exportWithProfile', () => ({ buildWorkbookWithProfile: mocks.buildWorkbookWithProfile }))
 // @/lib/excel/profile 은 mock 하지 않는다 — 실제 validateProfile 로 손상 판정을 태운다.
 
 import { GET } from '@/app/api/export/route'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ExcelProfile } from '@/lib/excel/profile'
 
 const get = (projectId: string, expand = false) =>
@@ -41,7 +43,7 @@ const SAVED: ExcelProfile = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.state = { projects: [{ id: 'p-mine', name: 'Acme' }], degraded: false }
-  mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['단계'], excelProfile: {} })
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'] }))
   mocks.buildWorkbookWithProfile.mockReturnValue({ ok: true, buffer: new ArrayBuffer(4) })
 })
 
@@ -76,7 +78,7 @@ describe('GET /api/export — 볼 수 없는 프로젝트는 팀 캐시 전에 4
 
 describe('GET /api/export — 저장 양식·부재·손상', () => {
   it.each([false, true])('저장 양식은 expand=%s 에서도 그 양식으로 만들고 expandSubActs 만 다르다', async (expand) => {
-    mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['단계', '작업'], excelProfile: SAVED })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'], 'wbs.excel_profile': SAVED }))
     const res = await get('p-mine', expand)
     expect(res.status).toBe(200)
     expect(mocks.buildWbsWorkbook).not.toHaveBeenCalled()
@@ -87,7 +89,7 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
   })
 
   it('손상 양식은 접기·펼침 모두 422 — 어떤 빌더도 부르지 않는다(LEGACY 폴백 없음)', async () => {
-    mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['단계'], excelProfile: { version: 2 } })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': { version: 2 } }))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     for (const expand of [false, true]) {
       const res = await get('p-mine', expand)
@@ -117,24 +119,24 @@ describe('GET /api/export — 저장 양식·부재·손상', () => {
   })
 
   it('빌더 거부는 400 과 그 사유', async () => {
-    mocks.getProjectConfig.mockResolvedValue({ levelLabels: ['단계'], excelProfile: SAVED })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': SAVED }))
     mocks.buildWorkbookWithProfile.mockReturnValueOnce({ ok: false, error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' })
     const res = await get('p-mine', true)
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' })
   })
 
-  it('설정 조회 실패는 500 이고 설정은 한 번만 읽는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
-    const boom = new Error('프로젝트 설정 조회 실패: relation "project_settings" boom')
+  it('설정 조회 실패는 503 이고 설정은 한 번만 읽는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
+    const boom = new ConfigUnavailableError('프로젝트 설정 조회 실패: relation "project_settings" boom')
     mocks.getProjectConfig.mockRejectedValueOnce(boom)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await get('p-mine', true)
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(503)
     const body = await res.text()
     expect(body).not.toContain('boom')
     expect(body).not.toContain('project_settings')
     expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
-    expect(err.mock.calls.some(c => c.includes(boom))).toBe(true)
+    expect(err.mock.calls.some(c => c.some(x => String(x).includes('boom')))).toBe(true)
     expect(mocks.getProjectConfig).toHaveBeenCalledTimes(1)
     expect(mocks.getComputedWbs).not.toHaveBeenCalled()
     expect(mocks.activeTeamCodesForProjectSync).not.toHaveBeenCalled()

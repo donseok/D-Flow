@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAdmin } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
 import { detectWorkbook } from '@/lib/excel/detect'
-import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import type { ExcelProfile } from '@/lib/excel/profile'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 
@@ -28,28 +29,24 @@ export async function POST(req: NextRequest) {
   const detected = detectWorkbook(await file.arrayBuffer())
   if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
 
-  let config: Awaited<ReturnType<typeof getProjectConfig>>
-  try {
-    config = await getProjectConfig(projectId)
-  } catch (e) {
+  let cfg: ProjectConfig
+  try { cfg = await getProjectConfig(projectId) } catch (e) {
     // 3원칙 — 조회 실패를 기본값(savedProfile:null)으로 위장하지 않는다. 본문은 고정 문구, PostgREST 사유는 서버 로그에만.
-    console.error('[import/inspect] 프로젝트 설정 조회 실패:', e)
-    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 500 })
+    if (e instanceof ConfigUnavailableError) { console.error('[import/inspect] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
+    throw e
   }
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.
   const detection = { ...detected.result, warnings: [...detected.result.warnings] }
 
+  // 저장 양식은 해석기의 키 상태로 판정한다 — set 이면 이미 검증된 값, 기본값(null)이면 없음(정상, 경고 아님).
+  const profileState = cfg.keys['wbs.excel_profile']
   let savedProfile: ExcelProfile | null = null
-  // '{}' 는 "저장된 프로파일 없음"이다 — 이 경우만 검증을 건너뛴다(정상 상태, 경고 아님).
-  if (Object.keys(config.excelProfile).length > 0) {
-    const validated = validateProfile(config.excelProfile)
-    if (validated.ok) {
-      savedProfile = validated.profile
-    } else {
-      // 검증 실패를 조용히 null 로만 넘기면 손상 사실이 묻힌다 — 침묵 무시 금지.
-      detection.warnings.push('저장된 프로파일이 손상됨')
-    }
+  if (profileState.status === 'set' && profileState.value !== null) savedProfile = profileState.value
+  else if (profileState.status === 'invalid') {
+    // 손상을 조용히 null 로만 넘기면 사실이 묻힌다 — 침묵 무시 금지. 사유는 서버 로그에(해석기도 키당 한 줄 남긴다).
+    console.error('[import/inspect] 저장된 양식이 손상됨:', profileState.error)
+    detection.warnings.push('저장된 프로파일이 손상됨')
   }
 
   // 저장 양식과 이 파일의 구조가 다르면 알린다(Task 1b) — 저장 양식으로 읽으면 열이 밀려 틀린 값이 쓰인다.

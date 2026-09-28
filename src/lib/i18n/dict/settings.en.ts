@@ -217,4 +217,5 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.wbs.excel_profile.label': 'Saved Excel layout', 'settings.wbs.excel_profile.desc': 'The layout saved by import. Export uses the same layout.',
   'settings.modules.enabled.label': 'Enabled modules', 'settings.modules.enabled.desc': 'Modules turned on for this project. Only modules the workspace allows can be turned on.',
   'settings.workflow.stage_credits.label': 'Stage progress credits', 'settings.workflow.stage_credits.desc': 'The progress (%) recorded on stage transitions. Progress already recorded does not change.',
+  'settings.configLoadFailed': 'Settings could not be loaded, so this view cannot be drawn. Refresh in a moment.', 'settings.configLoadFailedKey': 'Corrupt or missing setting: {key}',
 }

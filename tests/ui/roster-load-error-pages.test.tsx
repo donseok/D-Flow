@@ -39,9 +39,13 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/data/wbs', () => ({
   getComputedWbs: vi.fn(async () => ({ items: [], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-26' })),
 }))
-vi.mock('@/lib/data/projectConfig', () => ({
-  getProjectConfig: vi.fn(async () => ({ levelLabels: [], maxDepth: null, milestoneKeywords: [] })),
-}))
+vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
+  const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
+  return {
+    ...(await importOriginal<typeof import('@/lib/settings/projectConfig')>()),
+    getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'core.milestone_keywords': [] })),
+  }
+})
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: vi.fn(async () => ({})) }))
 vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: vi.fn(async () => []) }))
 vi.mock('@/lib/data/meetings', () => ({

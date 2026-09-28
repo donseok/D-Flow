@@ -7,7 +7,7 @@ vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn() }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn() }))
 vi.mock('@/lib/ai/knowledge', () => ({ getProjectName: vi.fn() }))
 vi.mock('@/lib/ai/analytics', () => ({ buildDocuments: vi.fn() }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn() }))
 // 팀 축은 그 프로젝트의 팀(SP2 16b) — 전 워크스페이스 공용 목록이 아니다.
 vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : ['B팀'])) }))
 
@@ -18,8 +18,9 @@ import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectRoster } from '@/lib/data/members'
 import { getProjectName } from '@/lib/ai/knowledge'
 import { buildDocuments } from '@/lib/ai/analytics'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { ingestProject } from '@/lib/ai/ingest'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const mHasEmb = vi.mocked(hasEmbeddings)
 const mEmbed = vi.mocked(embedDocuments)
@@ -49,7 +50,7 @@ describe('ingestProject — 재색인(전체 교체)', () => {
     mWbs.mockResolvedValue({ items: [], today: '2026-01-01' } as never)
     mRoster.mockResolvedValue({ ok: true, rows: [] })
     mName.mockResolvedValue('프로젝트 A')
-    mConfig.mockResolvedValue({ levelLabels: ['Phase', 'Task', 'Activity'] } as never)
+    mConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
   })
   afterEach(() => vi.restoreAllMocks())
 

@@ -9,7 +9,8 @@ import { getComputedWbs } from '@/lib/data/wbs'
 import { getSnapshots } from '@/lib/data/snapshots'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getProjectMinuteSignals } from '@/lib/data/minutes'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { valueOf } from '@/lib/settings/registry'
 import { createServerClient } from '@/lib/supabase/server'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 import type { ComputedItem, Meeting, MeetingException, MinuteSignal, TeamCode } from '@/lib/domain/types'
@@ -34,7 +35,7 @@ export interface ProjectFactsSource {
   minuteSignals: MinuteSignal[]
   meetings: Meeting[]
   meetingExceptions: MeetingException[]
-  /** 프로젝트 설정(project_settings)의 마일스톤 키워드. */
+  /** 프로젝트 설정의 마일스톤 키워드(core.milestone_keywords). */
   milestoneKeywords: string[]
   /** 그 프로젝트의 활성 팀 코드(전용 팀, 없으면 그 워크스페이스의 공용 팀). */
   teams: TeamCode[]
@@ -49,10 +50,12 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     getProjectMeetingData(projectId),
     getProjectMinuteSignals(projectId, MINUTE_SIGNAL_FETCH),
     sb.from('projects').select('name, start_date, end_date').eq('id', projectId).maybeSingle(),
-    getProjectConfig(projectId, sb),
+    // 설정 행이 안 보이는 것(비멤버 RLS 0행)은 해석기에서 오류다 — 아래 '프로젝트 없음 → null' 판정을 먼저 하도록 결과로 받는다.
+    getProjectConfig(projectId, { client: sb }).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
   ])
   if (project.error) throw new Error(`[projectFacts] 프로젝트 조회 실패: ${project.error.message}`)
   if (!project.data) return null
+  if (!config.ok) throw config.e
   // 진척 이력·회의 실패를 '0건'으로 브리핑하지 않는다 — 호출측이 'unavailable' 로 강등한다.
   if (!snapRes.ok) throw new Error('[projectFacts] ' + snapRes.error)
   if (!meetRes.ok) throw new Error('[projectFacts] ' + meetRes.error)
@@ -71,7 +74,7 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     minuteSignals,
     meetings: meetRes.meetings,
     meetingExceptions: meetRes.exceptions,
-    milestoneKeywords: config.milestoneKeywords,
+    milestoneKeywords: valueOf(config.cfg, 'core.milestone_keywords'),
     teams,
   }
 }

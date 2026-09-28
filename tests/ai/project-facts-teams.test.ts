@@ -8,12 +8,13 @@ const mocks = vi.hoisted(() => ({
   getSnapshots: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
   getProjectMeetingData: vi.fn(async (): Promise<{ ok: true; meetings: unknown[]; exceptions: unknown[] } | { ok: false; error: string }> =>
     ({ ok: true, meetings: [], exceptions: [] })),
+  getProjectConfig: vi.fn(),
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/minutes', () => ({ getProjectMinuteSignals: vi.fn(async () => []) }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: vi.fn(async () => ({ milestoneKeywords: [] })) }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: vi.fn(async () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => mocks.project }) }) }),
@@ -22,10 +23,12 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync }))
 
 import { loadProjectFacts } from '@/lib/ai/projectFacts'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.project = { data: { name: 'Acme', start_date: null, end_date: null }, error: null }
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['P'], 'core.milestone_keywords': [] }))
 })
 
 describe('loadProjectFacts — 팀 축은 대상 프로젝트의 팀', () => {
@@ -33,6 +36,8 @@ describe('loadProjectFacts — 팀 축은 대상 프로젝트의 팀', () => {
     const src = await loadProjectFacts('p1')
     expect(src?.teams).toEqual(['A팀'])
     expect(mocks.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
+    // 세션 클라이언트를 해석기에 주입한다 — 같은 RLS 로 읽는다
+    expect(mocks.getProjectConfig).toHaveBeenCalledWith('p1', { client: expect.objectContaining({ from: expect.any(Function) }) })
   })
 
   it('프로젝트를 볼 수 없으면(RLS 로 행 없음) service_role 팀 캐시를 읽지 않는다', async () => {

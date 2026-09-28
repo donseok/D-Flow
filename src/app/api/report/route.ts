@@ -18,7 +18,9 @@ import { loadProjectFacts } from '@/lib/ai/projectFacts'
 import { briefFactsHash, buildBriefFacts } from '@/lib/ai/brief'
 import { getAiBrief } from '@/lib/data/aiBriefs'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { valueOf } from '@/lib/settings/registry'
 import { seoulStamp } from '@/lib/domain/dates'
 
 // exceljs·템플릿 zip 읽기(fs)는 Node 전용 → Edge 런타임 금지.
@@ -106,10 +108,24 @@ export async function GET(req: NextRequest) {
   if (!target.ok) return target.res
   const { project } = target
 
-  const [{ items, today }, roster, attendance, meetRes, annRes, config] = await Promise.all([
+  // 설정 조회는 같은 배치에서 돌리되 결과로 받는다 — throw 하면 Promise.all 전체가 500 이 되어 '설정 확인 불가'(503)와 구분되지 않는다.
+  const [{ items, today }, roster, attendance, meetRes, annRes, cfgRes] = await Promise.all([
     getComputedWbs(projectId), getProjectRoster(projectId), getAttendanceRecords(projectId),
-    getProjectMeetingData(projectId), getAnnouncements(projectId), getProjectConfig(projectId),
+    getProjectMeetingData(projectId), getAnnouncements(projectId),
+    getProjectConfig(projectId).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
   ])
+  if (!cfgRes.ok) {
+    if (cfgRes.e instanceof ConfigUnavailableError) {
+      console.error('[report] 프로젝트 설정 조회 실패:', cfgRes.e.message)
+      return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
+    }
+    throw cfgRes.e
+  }
+  let levelLabels: string[]
+  try { levelLabels = valueOf(cfgRes.cfg, 'core.level_labels') } catch (e) {
+    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message }, { status: configStatus(e.code) })
+    throw e
+  }
   // 명단·회의·공지를 못 읽었으면 '멤버·회의·공지 없는 보고서' 를 내려보내지 않는다(3원칙 ① — 조회 실패를 데이터 없음으로 위장하지 않는다).
   if (!roster.ok) {
     console.error(`[report] 명단 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
@@ -128,7 +144,7 @@ export async function GET(req: NextRequest) {
   const model = buildWeeklyReportModel(items, project, today, {
     members, attendance, generatedAt: seoulNow(),
     meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
-    teams: activeTeamCodesForProjectSync(projectId), levelLabels: config.levelLabels,
+    teams: activeTeamCodesForProjectSync(projectId), levelLabels,
   })
   const meta = FORMATS[format]
 

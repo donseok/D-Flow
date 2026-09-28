@@ -1,6 +1,7 @@
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectRoster } from '@/lib/data/members'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { loadProjectConfigForPage, pick } from '@/lib/settings/pageConfig'
+import { levelDepthOf } from '@/lib/settings/projectConfig'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
@@ -13,6 +14,7 @@ import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 
 type ProjectRow = { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }
 
@@ -26,13 +28,13 @@ export default async function WbsPage({
   const { projectId } = await params
   const { view, focus } = await searchParams
   const locale = await getServerLocale()
-  const [{ items, dependencies, unresolvedDepends, holidays, today }, actor, projects, initialCollapsed, user, projectConfig, uiPrefs, roster] = await Promise.all([
+  const [{ items, dependencies, unresolvedDepends, holidays, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster] = await Promise.all([
     getComputedWbs(projectId),
     getActorForView(),
     listProjects(),
     getWbsCollapse(projectId),
     getSession(),
-    getProjectConfig(projectId),
+    loadProjectConfigForPage(projectId),
     getUiPrefs(),
     getProjectRoster(projectId),
   ])
@@ -42,15 +44,28 @@ export default async function WbsPage({
   const project = (projects as ProjectRow[]).find(p => p.id === projectId)
   // 프레즌스 신원 — 주간 시트와 동일하게 서버 세션에서 전달
   const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? '사용자' } : null
+  const hero = <PageHero
+    eyebrow="WBS · GANTT"
+    title={`${project?.name ?? t(locale, 'wbs.projectFallback')} ${t(locale, 'wbs.heroTitleSuffix')}`}
+    description={t(locale, 'wbs.heroDesc')}
+  />
+  // 설정을 못 읽거나 단계 이름이 손상이면 간트를 기본값으로 그리지 않는다(스펙 §3.5) — 트리 깊이·라벨이 틀린 채 편집하게 된다.
+  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
+  const labels = pick(pc.cfg, 'core.level_labels')
+  if (!labels.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} /></ProjectPageShell>
+  // 키워드 손상은 마커 없이 그리고 명단 오류와 같은 자리에 사유를 띄운다.
+  const keywords = pick(pc.cfg, 'core.milestone_keywords')
+  const pinned = roster.ok && keywords.ok ? undefined : (
+    <>
+      {!roster.ok && <RosterLoadError error={roster.error} />}
+      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} locale={locale} />}
+    </>
+  )
   return (
     <ProjectPageShell
       flush
-      pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
-      hero={<PageHero
-        eyebrow="WBS · GANTT"
-        title={`${project?.name ?? t(locale, 'wbs.projectFallback')} ${t(locale, 'wbs.heroTitleSuffix')}`}
-        description={t(locale, 'wbs.heroDesc')}
-      />}
+      pinned={pinned}
+      hero={hero}
     >
       <WbsGanttSheet
         key={projectId}
@@ -69,9 +84,9 @@ export default async function WbsPage({
         defaultView={view === 'timeline' ? 'timeline' : 'sheet'}
         initialCollapsed={initialCollapsed ?? undefined}
         focusId={focus ?? null}
-        levelLabels={projectConfig.levelLabels}
-        maxDepth={projectConfig.maxDepth}
-        milestoneKeywords={projectConfig.milestoneKeywords}
+        levelLabels={labels.value}
+        maxDepth={levelDepthOf(pc.cfg)}
+        milestoneKeywords={keywords.ok ? keywords.value : []}
         initialHideDone={uiPrefs.wbsHideDone ?? false}
         initialOutline={uiPrefs.wbsOutline ?? false}
         initialGanttScale={uiPrefs.wbsGanttScale}

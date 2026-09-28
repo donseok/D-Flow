@@ -22,7 +22,6 @@ const snapshot: ProjectSettingsSnapshot = {
   holidays: ['2026-05-05', '2026-08-15', '2026-10-03'],
   wbsItemCount: 120,
   memberCount: 14,
-  updatedAt: '2026-07-19T00:00:00Z',
 }
 
 function settingsRepository(
@@ -60,7 +59,7 @@ describe('get_safe_project_settings tool', () => {
           projectId: 'p1',
           title: '프로젝트 설정',
           href: '/p/p1/settings',
-          updatedAt: '2026-07-19T00:00:00Z',
+          updatedAt: null,
         }],
         asOf: context.now,
         truncated: false,

@@ -11,9 +11,11 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin }))
 vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: mocks.detectWorkbook }))
-vi.mock('@/lib/data/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 
 import { POST } from '@/app/api/import/inspect/route'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { makeActor } from '../fixtures/actor'
 import { ERR_MISSING } from '@/lib/authz/errors'
 
@@ -43,9 +45,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
   mocks.detectWorkbook.mockReturnValue({ ok: true, result: detectionResult() })
-  mocks.getProjectConfig.mockResolvedValue({
-    levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [], excelProfile: {},
-  })
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'] }))
 })
 
 describe('POST /api/import/inspect', () => {
@@ -111,10 +111,7 @@ describe('POST /api/import/inspect', () => {
   })
 
   it('저장된 프로파일이 유효하면 validateProfile 통과분을 savedProfile 로 반환한다', async () => {
-    mocks.getProjectConfig.mockResolvedValue({
-      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
-      excelProfile: LEGACY_EXCEL_PROFILE_V1 as unknown as Record<string, unknown>,
-    })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 }))
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     const body = await res.json()
     expect(body.savedProfile).toEqual(LEGACY_EXCEL_PROFILE_V1)
@@ -122,10 +119,7 @@ describe('POST /api/import/inspect', () => {
   })
 
   it('저장된 프로파일이 손상되었으면 savedProfile null + 경고 추가(침묵 무시 금지)', async () => {
-    mocks.getProjectConfig.mockResolvedValue({
-      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
-      excelProfile: { version: 2 },
-    })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': { version: 2 } }))
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     const body = await res.json()
     expect(body.ok).toBe(true)
@@ -135,10 +129,7 @@ describe('POST /api/import/inspect', () => {
 
   it('저장 양식과 감지 양식의 구조가 다르면 profileMismatch 를 싣는다(Task 1b) — savedProfile 은 그대로 돌려준다', async () => {
     const SAVED = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, start: 13, end: 14 } }
-    mocks.getProjectConfig.mockResolvedValue({
-      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
-      excelProfile: SAVED as unknown as Record<string, unknown>,
-    })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': SAVED }))
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     const body = await res.json()
     expect(res.status).toBe(200)
@@ -150,28 +141,23 @@ describe('POST /api/import/inspect', () => {
     const same = await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()
     expect(same.profileMismatch).toBeNull()
 
-    mocks.getProjectConfig.mockResolvedValue({
-      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [],
-      excelProfile: LEGACY_EXCEL_PROFILE_V1 as unknown as Record<string, unknown>,
-    })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 }))
     expect((await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()).profileMismatch).toBeNull()
 
-    mocks.getProjectConfig.mockResolvedValue({
-      levelLabels: [], maxDepth: null, extraAxisLabel: null, milestoneKeywords: [], excelProfile: { version: 2 },
-    })
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'], 'wbs.excel_profile': { version: 2 } }))
     expect((await (await POST(req({ file: FILE, projectId: PROJECT_ID }))).json()).profileMismatch).toBeNull()
   })
 
-  it('설정 조회 실패 → 500, 기본값으로 위장하지 않는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
-    const boom = new Error('프로젝트 설정 조회 실패: db down')
+  it('설정 조회 실패 → 503, 기본값으로 위장하지 않는다 — 본문은 고정 문구, DB 사유는 서버 로그에만', async () => {
+    const boom = new ConfigUnavailableError('프로젝트 설정 조회 실패: db down')
     mocks.getProjectConfig.mockRejectedValue(boom)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(503)
     const body = await res.text()
     expect(body).not.toContain('db down')
     expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
-    expect(err.mock.calls.some(c => c.includes(boom))).toBe(true)
+    expect(err.mock.calls.some(c => c.some(x => String(x).includes('db down')))).toBe(true)
     err.mockRestore()
   })
 })

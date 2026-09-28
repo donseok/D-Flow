@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+
+// 봇 저장소의 getProjectConfig 는 화면과 같은 해석기를 감싼다(R8) — 해석기 자체는 tests/settings 가 본다.
+const resolver = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: resolver.getProjectConfig }))
+
 import { createSupabaseProjectSettingsRepository } from '@/lib/repositories/supabase/settings'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 type QueryResponse = { data: unknown; error: unknown; count?: number | null }
 
@@ -23,7 +30,7 @@ function healthyBuilders(overrides: Partial<Record<string, QueryResponse>> = {})
     projects: {
       data: {
         id: 'p1', name: 'Acme 구축', start_date: '2026-01-05', end_date: '2026-12-31',
-        base_date: '2026-07-18', updated_at: '2026-07-19T00:00:00Z',
+        base_date: '2026-07-18',
       },
       error: null,
     },
@@ -59,11 +66,12 @@ describe('strict Supabase project settings repository', () => {
         holidays: ['2026-08-15', '2026-10-03'],
         wbsItemCount: 120,
         memberCount: 14,
-        updatedAt: '2026-07-19T00:00:00Z',
       },
     })
     const projectSelect = builders.projects.select as ReturnType<typeof vi.fn>
     expect(String(projectSelect.mock.calls[0][0])).not.toMatch(/email|key|secret|token|env|account/i)
+    // projects 에는 updated_at 열이 없다(E30) — 고르면 조회 전체가 실패한다
+    expect(String(projectSelect.mock.calls[0][0])).not.toContain('updated_at')
     expect(builders.projects.eq).toHaveBeenCalledWith('id', 'p1')
     expect(builders.wbs_items.select).toHaveBeenCalledWith('id', { count: 'exact', head: true })
     expect(builders.project_members.select).toHaveBeenCalledWith('id', { count: 'exact', head: true })
@@ -149,7 +157,7 @@ describe('strict Supabase project settings repository', () => {
       projects: {
         data: {
           id: 'p2', name: '다른 프로젝트', start_date: null, end_date: null,
-          base_date: null, updated_at: null,
+          base_date: null,
         },
         error: null,
       },
@@ -167,32 +175,21 @@ describe('strict Supabase project settings repository', () => {
 })
 
 describe('project config read (getProjectConfig) — 봇 대시보드 도구의 마일스톤 키워드 출처', () => {
-  const settingsRow = {
-    level_labels: ['Phase', 'Task', 'Activity'], max_depth: null, extra_axis_label: null,
-    milestone_keywords: ['Kick-off', '논문 제출'], excel_profile: {}, stage_credits: null,
-  }
+  it('해석기 결과를 그대로 넘기고 요청 클라이언트를 주입한다', async () => {
+    const cfg = makeProjectConfig({ 'core.level_labels': ['Phase'], 'core.milestone_keywords': ['Kick-off', '논문 제출'] })
+    resolver.getProjectConfig.mockResolvedValueOnce(cfg)
+    const client = { from: vi.fn() }
+    const repository = createSupabaseProjectSettingsRepository(client as never)
 
-  it('maps the project_settings row with lowercased milestone keywords', async () => {
-    const { from, builders } = healthyBuilders({ project_settings: { data: settingsRow, error: null } })
-    const repository = createSupabaseProjectSettingsRepository({ from } as never)
-
-    await expect(repository.getProjectConfig('p1')).resolves.toEqual({
-      ok: true,
-      data: {
-        levelLabels: ['Phase', 'Task', 'Activity'], maxDepth: null, extraAxisLabel: null,
-        milestoneKeywords: ['kick-off', '논문 제출'], excelProfile: {}, stageCredits: null,
-      },
-    })
-    expect(builders.project_settings.eq).toHaveBeenCalledWith('project_id', 'p1')
-    for (const method of ['insert', 'upsert', 'update', 'delete']) {
-      expect(builders.project_settings[method]).not.toHaveBeenCalled()
-    }
+    await expect(repository.getProjectConfig('p1')).resolves.toEqual({ ok: true, data: cfg })
+    expect(resolver.getProjectConfig).toHaveBeenCalledWith('p1', { client })
+    expect(client.from).not.toHaveBeenCalled()
   })
 
-  it('surfaces a project_settings query failure as retryable PROJECT_SETTINGS_READ_FAILED, not default keywords', async () => {
+  it('해석기의 ConfigUnavailableError 는 retryable PROJECT_SETTINGS_READ_FAILED — 기본 키워드로 대신하지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { from } = healthyBuilders({ project_settings: { data: null, error: { code: '08006', message: 'db down' } } })
-    const repository = createSupabaseProjectSettingsRepository({ from } as never)
+    resolver.getProjectConfig.mockRejectedValueOnce(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
+    const repository = createSupabaseProjectSettingsRepository({ from: vi.fn() } as never)
 
     await expect(repository.getProjectConfig('p1')).resolves.toEqual({
       ok: false,
@@ -200,5 +197,11 @@ describe('project config read (getProjectConfig) — 봇 대시보드 도구의 
       retryable: true,
     })
     vi.restoreAllMocks()
+  })
+
+  it('예상 밖 오류는 재시도 가능으로 위장하지 않고 던진다', async () => {
+    resolver.getProjectConfig.mockRejectedValueOnce(new TypeError('bug'))
+    const repository = createSupabaseProjectSettingsRepository({ from: vi.fn() } as never)
+    await expect(repository.getProjectConfig('p1')).rejects.toThrow('bug')
   })
 })

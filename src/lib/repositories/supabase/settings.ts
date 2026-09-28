@@ -4,13 +4,15 @@ import {
   type ProjectSettingsRepository,
   type ProjectSettingsSnapshot,
 } from '@/lib/repositories/types'
-import { getProjectConfig as loadProjectConfig } from '@/lib/data/projectConfig'
+import { getProjectConfig as loadProjectConfig } from '@/lib/settings/projectConfig'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { isRetryableReadError, type SupabaseServerClient } from './common'
 
 type Row = Record<string, unknown>
 
 // 환경변수·API 키·서비스 계정 정보는 select 절 자체에 존재하지 않는다 — 프로젝트 운영 컬럼만 조회한다.
-const PROJECT_COLUMNS = ['id', 'name', 'start_date', 'end_date', 'base_date', 'updated_at'].join(', ')
+// projects 에는 updated_at 열이 없다(E30) — 고르면 조회 전체가 실패한다.
+const PROJECT_COLUMNS = ['id', 'name', 'start_date', 'end_date', 'base_date'].join(', ')
 
 /** Request-scoped Supabase adapter. All statements in this adapter are SELECTs. */
 export function createSupabaseProjectSettingsRepository(
@@ -60,17 +62,18 @@ export function createSupabaseProjectSettingsRepository(
         holidays: ((holidaysResult.data ?? []) as Row[]).map(row => row.date as string),
         wbsItemCount,
         memberCount,
-        updatedAt: (project.updated_at as string | null) ?? null,
       }
       return repositoryOk(snapshot)
     },
 
     async getProjectConfig(projectId) {
       try {
-        return repositoryOk(await loadProjectConfig(projectId, client))
+        return repositoryOk(await loadProjectConfig(projectId, { client }))
       } catch (e) {
         // 조회 실패를 기본 설정으로 위장하지 않는다 — 봇이 화면과 다른 마일스톤을 답하게 된다(3원칙).
-        console.error('[settings-repo] 프로젝트 설정 조회 실패:', e instanceof Error ? e.message : e)
+        // 예상 밖 오류는 재시도 가능으로 위장하지 않고 그대로 던진다.
+        if (!(e instanceof ConfigUnavailableError)) throw e
+        console.error('[settings-repo] 프로젝트 설정 조회 실패:', e.message)
         return repositoryError('PROJECT_SETTINGS_READ_FAILED', true)
       }
     },

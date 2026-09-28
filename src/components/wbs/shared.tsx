@@ -11,9 +11,8 @@ export const STATUS: Record<Status, { label: string; chip: string; bar: string; 
   done: { label: '완료', chip: 'bg-done-weak text-done', bar: 'bg-done', dot: 'bg-done' },
 }
 
-/** ProjectConfig 미주입(구 테스트·데모 등) 폴백 — lib/data/projectConfig.DEFAULT_PROJECT_CONFIG.levelLabels(레거시 3라벨)와 값이 같아야
- * 회귀 0. shared.tsx 는 클라이언트 컴포넌트에서도 import 되므로, next/headers 를 물고 있는 그 서버 전용 모듈은 참조하지
- * 않고 값만 복제해 둔다. */
+/** ProjectConfig 미주입(구 테스트·데모 등) 폴백 — 옛 로더의 폴백 3라벨과 같은 값. 새 해석기는 폴백이 없다(행 0건 = 오류) —
+ * 이 상수는 config 를 주입받지 않는 데모·구 테스트만 쓴다. */
 export const DEFAULT_LEVEL_LABELS = ['Phase', 'Task', 'Activity']
 
 /** depth(0-based) 별 배지 색 팔레트 — 옛 LEVEL 상수의 cls 를 그대로 재활용(회귀 0). depth 3+ 는 pending 재사용. */

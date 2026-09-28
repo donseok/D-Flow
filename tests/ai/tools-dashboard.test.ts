@@ -15,10 +15,11 @@ import {
   type WbsBotRepository,
   type WbsProjectSnapshot,
 } from '@/lib/repositories/types'
-import type { ProjectConfig } from '@/lib/data/projectConfig'
+import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import { detectMilestones } from '@/lib/domain/dashboard'
 import { computeTree } from '@/lib/domain/rollup'
 import { FIXTURE_MILESTONE_KEYWORDS } from '../fixtures/milestoneKeywords'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -90,15 +91,11 @@ function meetingRepository(result: RepositoryResult<ProjectMeetingSnapshot>): Me
   }
 }
 
-const config = (milestoneKeywords: readonly string[]): ProjectConfig => ({
-  levelLabels: ['Phase', 'Task', 'Activity'], maxDepth: null, extraAxisLabel: null,
-  milestoneKeywords: [...milestoneKeywords], excelProfile: {}, stageCredits: null,
-})
-function settingsRepository(keywords: readonly string[] | 'fail'): Pick<ProjectSettingsRepository, 'getProjectConfig'> {
+function settingsRepository(keywords: readonly string[] | 'fail' | 'corrupt'): Pick<ProjectSettingsRepository, 'getProjectConfig'> {
   return {
     getProjectConfig: vi.fn(async () => keywords === 'fail'
       ? repositoryError<ProjectConfig>('PROJECT_SETTINGS_READ_FAILED', true)
-      : repositoryOk(config(keywords))),
+      : repositoryOk(makeProjectConfig({ 'core.level_labels': ['P'], 'core.milestone_keywords': keywords === 'corrupt' ? 42 : [...keywords] }))),
   }
 }
 // 여러 날에 걸치고 산출물이 없는 리프 하나 — single-day 규칙에 걸리지 않아 키워드만으로 판정된다.
@@ -128,6 +125,12 @@ describe('get_project_dashboard — 마일스톤 키워드는 프로젝트 설�
   })
   it('설정을 못 읽으면 DATA_SOURCE_ERROR — 기본 키워드로 대신 답하지 않는다', async () => {
     const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(wbsSnapshot)), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository('fail'))
+    const result = await tool.execute({ projectId: 'p1' }, context)
+    expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR', repositoryErrorCode: 'PROJECT_SETTINGS_READ_FAILED' } })
+  })
+  it('키워드 설정이 손상이면 같은 실패 — 마일스톤 0건으로 위장하지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(wbsSnapshot)), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository('corrupt'))
     const result = await tool.execute({ projectId: 'p1' }, context)
     expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR', repositoryErrorCode: 'PROJECT_SETTINGS_READ_FAILED' } })
   })

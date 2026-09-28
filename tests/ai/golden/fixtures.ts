@@ -317,7 +317,6 @@ export const SETTINGS: Record<string, ProjectSettingsSnapshot> = {
     holidays: ['2026-08-17', '2026-09-24'],
     wbsItemCount: 13,
     memberCount: 6,
-    updatedAt: '2026-07-18T00:00:00Z',
   },
   [PROJECT_BETA]: {
     projectId: PROJECT_BETA,
@@ -328,7 +327,6 @@ export const SETTINGS: Record<string, ProjectSettingsSnapshot> = {
     holidays: [],
     wbsItemCount: 2,
     memberCount: 1,
-    updatedAt: '2026-07-01T00:00:00Z',
   },
 }
 

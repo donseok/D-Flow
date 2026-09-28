@@ -14,7 +14,8 @@ import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { detectWorkbook } from '@/lib/excel/detect'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
@@ -75,18 +76,17 @@ export async function POST(req: NextRequest) {
   // 저장 양식 대조(Task 1b) — 서버가 최종 관문이다(fail-closed). 저장 양식으로 읽는데(명시 플래그, 또는 좌표가 저장 양식과
   // 같은 프로파일) 파일 구조가 다르면 열이 밀려 오류 없이 틀린 값이 쓰인다. 마법사가 불일치를 보여 주고 사용자가 저장 양식을
   // 직접 고른 확인 플래그가 없으면 409 로 거부한다. 조회 실패는 대조 불가라 중단한다(에러 3원칙 ②).
-  let config: Awaited<ReturnType<typeof getProjectConfig>>
-  try {
-    config = await getProjectConfig(projectId)
-  } catch (e) {
+  let cfg: ProjectConfig
+  try { cfg = await getProjectConfig(projectId) } catch (e) {
     // 본문은 고정 문구 — PostgREST 사유(e.message)는 서버 로그에만 남긴다.
-    console.error('[import/execute] 프로젝트 설정 조회 실패 — 저장 양식 대조 불가, 중단:', e)
-    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 500 })
+    if (e instanceof ConfigUnavailableError) { console.error('[import/execute] 프로젝트 설정 조회 실패 — 저장 양식 대조 불가, 중단:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
+    throw e
   }
-  // 손상된 저장 양식은 inspect 가 null 로 돌려줘 클라이언트가 쓸 수 없다 — 대조 대상이 아니다(손상 경고는 inspect 가 싣는다).
-  const saved = Object.keys(config.excelProfile).length > 0 ? validateProfile(config.excelProfile) : null
-  if (saved?.ok) {
-    const usingSaved = form.get('useSavedProfile') === 'true' || compareProfiles(saved.profile, profile) === null
+  // 손상된(invalid) 저장 양식은 inspect 가 null 로 돌려줘 클라이언트가 쓸 수 없다 — 대조 대상이 아니다(손상 경고는 inspect 가 싣는다).
+  const profileState = cfg.keys['wbs.excel_profile']
+  const saved = profileState.status === 'set' && profileState.value !== null ? profileState.value : null
+  if (saved !== null) {
+    const usingSaved = form.get('useSavedProfile') === 'true' || compareProfiles(saved, profile) === null
     const confirmed = form.get('confirmProfileMismatch') === 'true'
     if (usingSaved && !confirmed) {
       const detected = detectWorkbook(buf)
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           { code: 'PROFILE_MISMATCH', profileMismatch: null, error: errProfileUnverifiable(detected.error) }, { status: 409 })
       }
-      const profileMismatch = compareProfiles(saved.profile, detected.result.profile)
+      const profileMismatch = compareProfiles(saved, detected.result.profile)
       if (profileMismatch) {
         return NextResponse.json({ code: 'PROFILE_MISMATCH', profileMismatch, error: ERR_PROFILE_MISMATCH }, { status: 409 })
       }

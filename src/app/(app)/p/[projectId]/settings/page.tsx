@@ -13,7 +13,8 @@ import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
 import { listAreas } from '@/app/actions/projectAreas'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { loadProjectConfigForPage, pick } from '@/lib/settings/pageConfig'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -120,12 +121,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 권한·초대 관리는 팀 구성 페이지로 이동했다(2026-08-20 화면 통합).
   const llm = isSuperuser ? await llmBadge(locale) : null
   const projectTeamRows = projectTeamRowsSync(projectId)
-  // 에이전트 활성 상태 — 조회 실패(null)면 토글을 그리지 않는다(모르는 상태로 킬스위치를 누르게 하지 않는다).
-  // WBS 단계 편집 초기값 — 조회 실패 시 편집기를 그리지 않는다(잘못된 초기값으로 저장하면 설정을 덮는다).
-  const levelConfig = await getProjectConfig(projectId).catch((e: unknown) => {
-    console.error('[settings] 프로젝트 설정 조회 실패 — 단계 편집기만 degrade:', e)
-    return null
-  })
+  // 단계·크레딧·양식 편집의 초기값 — 조회 실패면 세 편집기 대신 오류 상태 하나를 그린다(잘못된 초기값으로 저장하면 설정을 덮는다).
+  // 나머지 절(팀·영역·일정·색인)은 그대로 그린다.
+  const pc = await loadProjectConfigForPage(projectId)
+  const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
+  const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
+  // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
+  const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
+  const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
 
   // 담당 영역 — 조회 실패면 절을 그리지 않고 안내만 남긴다(빈 목록으로 위장하면 이미 있는 코드를 다시 만들려 든다).
   // 색인 상태는 service_role 카운트라 관리자 판정(위 redirect) 뒤에 읽는다 — 영역 조회와 같은 배치라 직렬 왕복은 늘지 않는다.
@@ -172,6 +175,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       />}
     >
       <div className="space-y-5">
+        {!pc.ok && <ConfigLoadError error={pc.error} locale={locale} />}
         {/* ── 기본 정보 ── */}
         <SectionCard
           eyebrow="CORE INFORMATION"
@@ -225,8 +229,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <ExportExcelButton projectId={projectId} />
         </div>
         {/* 저장된 엑셀 양식이 있을 때만 — 손상·깊이 부족으로 내보내기가 막힌 교착을 관리자가 푼다(Task 1b).
-            설정 조회 실패(levelConfig null)면 그리지 않는다 — 있는지 모르는 양식을 비우라고 권하지 않는다. */}
-        {levelConfig && Object.keys(levelConfig.excelProfile).length > 0 && (
+            설정 조회 실패면 그리지 않는다 — 있는지 모르는 양식을 비우라고 권하지 않는다. */}
+        {hasProfile && (
           <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.clearExcelProfileDesc')}</p>
             <ClearExcelProfileButton projectId={projectId} />
@@ -248,11 +252,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           {t(locale, 'settings.agentDesc1')}<span className="font-medium text-pending">{t(locale, 'settings.agentDescBadge')}</span>{t(locale, 'settings.agentDesc2')}
         </p>
         {/* 개발 워크플로 크레딧(스펙 2026-09-15 §5.1) — 설정 조회 실패면 그리지 않는다(잘못된 초기값으로 저장하면 표를 덮는다). */}
-        {levelConfig && (
+        {credits && (
           <div className="mt-4 space-y-1 border-t border-line pt-4">
             <p className="text-sm font-semibold text-ink">{t(locale, 'settings.creditsTitle')}</p>
             <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.creditsDesc')}</p>
-            <StageCreditSlider projectId={projectId} initial={levelConfig.stageCredits} editable={canMutate} />
+            {credits.ok
+              ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} />
+              : <ConfigLoadError error={credits.error} keyName={credits.key} locale={locale} />}
           </div>
         )}
         </SectionCard>
@@ -387,7 +393,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         )}
 
       {/* ── WBS 단계 (관리자) — 라벨 배열이 곧 깊이. 축소 검증은 서버 액션이 한다. ── */}
-        {isAdmin && levelConfig && (
+        {isAdmin && labels && (
           <SectionCard
             eyebrow="WBS"
             title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
@@ -398,7 +404,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 ? '트리 깊이별 단계 이름입니다. 단계 수가 곧 최대 깊이이며, 기존 WBS 보다 얕게 줄일 수 없습니다. 화면 배지·보고서·엑셀 헤더가 이 이름을 씁니다.'
                 : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
             </p>
-            <LevelSettingsManager projectId={projectId} levelLabels={levelConfig.levelLabels} />
+            {labels.ok
+              ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} />
+              : <ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} />}
           </SectionCard>
         )}
 

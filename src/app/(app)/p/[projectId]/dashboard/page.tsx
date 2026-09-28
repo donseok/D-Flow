@@ -5,7 +5,7 @@ import { getSnapshots, recordProgressSnapshot } from '@/lib/data/snapshots'
 import { getAnnouncements } from '@/lib/data/announcements'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getIssuesForDashboard } from '@/lib/data/issues'
-import { getProjectConfig } from '@/lib/data/projectConfig'
+import { loadProjectConfigForPage, pick } from '@/lib/settings/pageConfig'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'
 import { getActorViewState } from '@/lib/authz'
@@ -17,11 +17,12 @@ import { PageHero } from '@/components/ui/PageHero'
 import { DashboardView } from '@/components/dashboard/DashboardView'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const locale = await getServerLocale()
-  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, config] = await Promise.all([
+  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc] = await Promise.all([
     getComputedWbs(projectId),
     listProjects(),
     getAnnouncements(projectId),
@@ -33,8 +34,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
     // 회의 카드에서 '작성자 본인이면 수정' 판정에 쓰는 식별자 — 기존 배치에 얹어 직렬 왕복을 늘리지 않는다.
     getSession(),
     getActorViewState(),
-    // 마일스톤 키워드 등 프로젝트 설정(project_settings) — 봇 대시보드 도구도 같은 로더를 쓴다.
-    getProjectConfig(projectId),
+    // 마일스톤 키워드 등 프로젝트 설정 — 봇 대시보드 도구도 같은 해석기를 쓴다. 실패는 기본값이 아니라 오류 상태(스펙 §3.5).
+    loadProjectConfigForPage(projectId),
   ])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지를 멈추지
   // 않는다. DashboardView 는 service_role 팀 캐시로 팀별 진척을 그리므로 숨은 프로젝트에서는 그리기 전에 끊는다
@@ -53,11 +54,15 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   const projectName = project?.name ?? t(locale, 'dash.heroProjectFallback')
   // 관리자 이상 — 회의 상세의 남의 회의 수정·취소와 AI 브리핑 생성이 같은 판정을 쓴다.
   const canManage = isProjectAdmin(membership, projectId)
+  const hero = <PageHero title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />
+
+  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
+  // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
+  const keywords = pick(pc.cfg, 'core.milestone_keywords')
 
   return (
-    <ProjectPageShell
-      hero={<PageHero title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />}
-    >
+    <ProjectPageShell hero={hero}>
+      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} locale={locale} />}
       <DashboardView
         items={items}
         projectId={projectId}
@@ -76,7 +81,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         currentUserId={user?.id ?? null}
         canManage={canManage}
         canGenerateBrief={canManage}
-        milestoneKeywords={config.milestoneKeywords}
+        milestoneKeywords={keywords.ok ? keywords.value : []}
       />
       {/* 진척률은 집계값이라 행 단위 패치가 정의되지 않는다 — 실시간 신호를 받아 재조회한다(0098). */}
       <WbsRealtimeRefresh projectId={projectId} />
