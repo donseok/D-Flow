@@ -68,6 +68,27 @@ describe('isAllowedInviteDomain — 퓨니코드·정규화(D40)', () => {
     expect(isAllowedInviteDomain('kim@example.com', [])).toBe(false)
     expect(normalizeEmailHost('한글.kr')).toBe('xn--bj0bj06e.kr'); expect(normalizeEmailHost('bad host')).toBeNull()
   })
+
+  // C2-F3 — URL 파서는 퓨니코드 변환에만 쓴다. 구분자에서 자르거나 %xx·soft hyphen 을 풀어 다른 호스트를 만들면 정확 일치가 뚫린다
+  it.each([
+    'alice@acme.test/evil.example', 'alice@acme.test#x', 'alice@acme.test?x', 'alice@acme.test\\x', 'alice@acm%65.test',
+    'alice@acme.test:25', 'alice@ac\u00ADme.test', 'alice@ａcme.test',
+  ])('URL 파서가 다른 호스트로 바꾸는 주소 %s 는 허용 도메인을 통과하지 못한다', (email) => {
+    expect(isAllowedInviteDomain(email, ['acme.test'])).toBe(false)
+  })
+  it('형태가 아닌 호스트는 null — 조용히 잘라 쓰지 않는다', () => {
+    expect(normalizeEmailHost('acme.test/x')).toBeNull()
+    expect(normalizeEmailHost('acm%65.test')).toBeNull()
+    expect(normalizeEmailHost('acme.test..')).toBeNull()
+  })
+  it('퓨니코드 일치와 끝 점 하나(FQDN 표기)는 지금처럼 같은 호스트로 본다', () => {
+    expect(isAllowedInviteDomain('kim@한글.kr', ['xn--bj0bj06e.kr'])).toBe(true)
+    expect(isAllowedInviteDomain('kim@xn--bj0bj06e.kr', ['xn--bj0bj06e.kr'])).toBe(true)
+    // 끝 점 하나는 저장값 정규화(normalizeDomain)와 같이 떼어 낸다 — 'acme.test.' 는 문자열로는 다르지만 같은 호스트다
+    expect(normalizeEmailHost('acme.test.')).toBe('acme.test')
+    expect(isAllowedInviteDomain('alice@acme.test.', ['acme.test'])).toBe(true)
+    expect(isAllowedInviteDomain('alice@acme.test..', ['acme.test'])).toBe(false)
+  })
 })
 
 describe('normalizeInviteDays', () => {

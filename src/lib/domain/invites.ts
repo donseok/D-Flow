@@ -2,6 +2,7 @@
 // 부수효과·now() 참조 없음: 시각은 전부 인자로 주입받는다.
 import { isValidPassword } from '@/lib/domain/accounts'
 import { isValidEmail, UUID_RE } from '@/lib/domain/validate'
+import { toAsciiHostname } from '@/lib/domain/hostname'
 
 /** 공개 라우트 토큰 형식 검증 — DB 조회 전 비정상 입력 차단. 선례: src/lib/minutes/share.ts isShareToken */
 export function isInviteToken(s: string): boolean {
@@ -16,12 +17,6 @@ export function normalizeInviteEmail(raw: string): string {
 /** 명시적 전체 허용 값. 미설정을 '제한 없음'으로 읽지 않기 위해 전체 허용은 이 값으로만 켠다. */
 export const ANY_DOMAIN = '*'
 
-/** 최소한의 호스트명 형태 — 라벨은 영숫자·하이픈(양끝 하이픈 금지), 점으로 구분된 라벨이 2개 이상.
- *  통과해도 '실재하는' 도메인이란 보장은 아니다 — 설정 오타·와일드카드 흔적을 조용히 반영하지
- *  않기 위한 최소 방어선일 뿐이다. */
-const HOSTNAME_LABEL = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?'
-const HOSTNAME_RE = new RegExp(`^${HOSTNAME_LABEL}(?:\\.${HOSTNAME_LABEL})+$`)
-
 /** 끝의 '.' 하나만 벗겨낸다(FQDN 표기 'example.com.' 흡수). 두 개 이상 연속이면 그대로 두어
  *  아래 호스트명 형태 검사에서 걸러지게 한다. */
 function stripTrailingDot(s: string): string {
@@ -32,16 +27,11 @@ function stripTrailingDot(s: string): string {
  *  product = 둘 다 없음(제품 기본값 []). */
 export type InviteDomainSource = 'workspace' | 'env' | 'product'
 
-/** 메일 호스트를 저장값의 규칙(소문자·끝 점 제거·퓨니코드 — settings/defs/workspace.ts normalizeDomain)으로 바꾼다. 형태가 아니면 null */
+/** 메일 호스트를 저장값의 규칙(소문자·끝 점 하나 제거·퓨니코드 — settings/defs/workspace.ts normalizeDomain)으로 바꾼다.
+ *  형태가 아니면 null — 판정은 초대 불가다(URL 구분자·%xx 등을 잘라 다른 호스트로 읽지 않는다, domain/hostname). */
 export function normalizeEmailHost(host: string): string | null {
   const v = stripTrailingDot(host.trim().toLowerCase())
-  if (!v) return null
-  try {
-    const h = new URL(`http://${v}`).hostname   // WHATWG URL 파서 — IDN 을 퓨니코드로 바꾼다
-    return HOSTNAME_RE.test(h) ? h : null
-  } catch {
-    return null
-  }
+  return v ? toAsciiHostname(v) : null
 }
 
 /** normalizeInviteEmail 을 거치지 않은 값이 와도 안전하도록 자기완결적으로 검증한다 —

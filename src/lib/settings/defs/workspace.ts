@@ -4,6 +4,7 @@ import { NON_CORE_MODULES, isModuleId, type ModuleId } from '@/lib/modules/defau
 import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
 import { BRANDING_SLOTS, parseBrandingPath, type BrandingSlot } from '../brandingPath'
 import { deriveAccent, parseAccentInput, parseAccentValue, type AccentValue, type Hex } from '../accent'
+import { toAsciiHostname } from '@/lib/domain/hostname'
 
 export type ModulesList = ModuleId[]
 export type BrandingLogo = { full: string | null; full_dark: string | null; mark: string | null }
@@ -37,8 +38,6 @@ function parseModuleList(raw: unknown, allowed: readonly ModuleId[]): Parsed<Mod
 export { parseModuleList }
 
 // ── 초대 도메인(D40) ──────────────────────────────────────────────────────────────────────────────────────────
-const HOSTNAME_LABEL = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?'
-const HOSTNAME_RE = new RegExp(`^${HOSTNAME_LABEL}(?:\\.${HOSTNAME_LABEL})+$`)
 export const ANY_DOMAIN = '*'
 /** 한 항목의 정규화 — 소문자·앞뒤 공백·선행 @·끝 점 제거·퓨니코드. 형식이 틀리면 거부(버리지 않는다) */
 export function normalizeDomain(raw: string): { ok: true; value: string } | { ok: false; error: string } {
@@ -46,13 +45,10 @@ export function normalizeDomain(raw: string): { ok: true; value: string } | { ok
   if (v.endsWith('.') && !v.endsWith('..')) v = v.slice(0, -1)
   if (!v) return fail('빈 도메인입니다.')
   if (v.includes('*')) return fail(`'*' 는 단독일 때만 전체 허용입니다: ${raw.trim()}`)
-  try {
-    v = new URL(`http://${v}`).hostname   // WHATWG URL 파서 — IDN 을 퓨니코드로 바꾼다
-  } catch {
-    return fail(`도메인 형식이 아닙니다: ${raw.trim()}`)
-  }
-  if (!HOSTNAME_RE.test(v)) return fail(`도메인 형식이 아닙니다: ${raw.trim()}`)
-  return { ok: true, value: v }
+  // 퓨니코드 변환만 — URL 구분자·%xx 가 섞인 값은 잘라 저장하지 않고 거부한다(메일 쪽 normalizeEmailHost 와 같은 헬퍼)
+  const h = toAsciiHostname(v)
+  if (!h) return fail(`도메인 형식이 아닙니다: ${raw.trim()}`)
+  return { ok: true, value: h }
 }
 /** 저장 형태 — 정규화된 유일 목록. [] 는 초대 불가, ['*'] 단독은 제한 없음. '*' 가 섞이면 거부 */
 export function parseAllowedDomainsSetting(raw: unknown): Parsed<string[]> {

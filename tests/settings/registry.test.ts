@@ -100,6 +100,11 @@ describe('parse — 워크스페이스 키', () => {
     expect(parseAllowedDomainsSetting(['*', 'a.com']).ok).toBe(false)                    // 섞이면 거부
     expect(parseAllowedDomainsSetting(['bad domain']).ok).toBe(false)                    // 버리지 않고 거부
     expect(parseAllowedDomainsSetting('example.com').ok).toBe(false)
+    // C2-F3 — URL 파서가 자르거나 푸는 문자(/ ? # \ : % soft hyphen)는 조용히 잘라 저장하지 않고 거부한다
+    for (const raw of ['acme.test/x', 'acme.test?x', 'acme.test#x', 'acme.test\\x', 'acme.test:8080', 'acm%65.test', 'ac\u00ADme.test', 'ａcme.test']) {
+      expect(normalizeDomain(raw).ok, raw).toBe(false)
+    }
+    expect(parseAllowedDomainsSetting(['acme.test/x']).ok).toBe(false)
     const dd = settingDef('workspace', 'invites.allowed_domains')!.deployDefault!
     expect(dd.parse('example.com, ACME.test')).toEqual(['example.com', 'acme.test'])
     expect(dd.parse(undefined)).toBeUndefined()
