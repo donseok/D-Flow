@@ -46,6 +46,9 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
   const row = s.data as unknown as SettingsRow | null
   // 행 존재는 0012 ⑨ 의 트리거가 보장한다 — 0행 = 권한 밖 조회이거나 잘못된 클라이언트(fail-closed)
   if (!row || !row.projects?.workspace_id) throw new ConfigUnavailableError(`프로젝트 설정 행이 없습니다: ${projectId}`)
+  // 객체가 아닌 values 를 {} 로 풀면 전 키가 조용히 기본값이 된다 — 읽기 실패로 멈춘다(3원칙 ①)
+  if (!isRecord(row.values)) throw new ConfigUnavailableError(`프로젝트 설정 values 가 객체가 아닙니다: ${projectId}`)
+  const values = row.values
   const workspaceId = row.projects.workspace_id
   const [a, t] = await Promise.all([
     sb.from('project_areas').select('id, kind, code, name, sort_order, active, area_teams(team_id, kind)')
@@ -56,7 +59,6 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
   if (a.error) throw new ConfigUnavailableError(`영역 조회 실패: ${a.error.message}`, { cause: a.error })
   if (t.error) throw new ConfigUnavailableError(`팀 조회 실패: ${t.error.message}`, { cause: t.error })
 
-  const values = isRecord(row.values) ? row.values : {}
   const { keys, unknownKeys } = resolveKeys({ scope: 'project', id: projectId, values, defs: PROJECT_SETTINGS })
   const areas: ProjectConfig['areas'] = { weekly_section: [], issue_area: [] }
   for (const r of (a.data ?? []) as unknown as AreaRow[]) {

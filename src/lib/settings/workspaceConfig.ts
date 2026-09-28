@@ -22,7 +22,9 @@ async function load(workspaceId: string, client: ConfigReadClient | undefined): 
   if (error) throw new ConfigUnavailableError(`워크스페이스 설정 조회 실패: ${error.message}`, { cause: error })
   const row = data as unknown as Row | null
   if (!row) throw new ConfigUnavailableError(`워크스페이스 설정 행이 없습니다: ${workspaceId}`)
-  const values = isRecord(row.values) ? row.values : {}
+  // 객체가 아닌 values 를 {} 로 풀면 전 키가 조용히 기본값이 된다 — 읽기 실패로 멈춘다(3원칙 ①)
+  if (!isRecord(row.values)) throw new ConfigUnavailableError(`워크스페이스 설정 values 가 객체가 아닙니다: ${workspaceId}`)
+  const values = row.values
   const { keys, unknownKeys } = resolveKeys({ scope: 'workspace', id: workspaceId, values, defs: WORKSPACE_SETTINGS })
   const schemaVersion = Number(row.schema_version)
   return { workspaceId, revision: Number(row.revision), schemaVersion, schemaAhead: schemaVersion > SETTINGS_SCHEMA_VERSION,

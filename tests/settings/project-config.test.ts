@@ -93,6 +93,12 @@ describe('getProjectConfig', () => {
     const areasBroken = fakeClient({ settings: row({}), areas: { data: null, error: { message: 'x' } }, teams: ok([]) })
     await expect(getProjectConfig(PID, { client: areasBroken.client })).rejects.toBeInstanceOf(ConfigUnavailableError)
   })
+  it('values 가 객체가 아니면 ConfigUnavailableError — 전 키를 기본값으로 풀지 않는다', async () => {
+    for (const values of [null, [], 'x', 3]) {
+      const c = fakeClient({ settings: row({}, { values }), areas: ok([]), teams: ok([]) })
+      await expect(getProjectConfig(PID, { client: c.client }), String(values)).rejects.toBeInstanceOf(ConfigUnavailableError)
+    }
+  })
   it('클라이언트를 안 넘기면 세션 클라이언트를 만든다', async () => {
     const { client } = fakeClient({ settings: row({}), areas: ok([]), teams: ok([]) })
     mocks.createServerClient.mockResolvedValue(client)

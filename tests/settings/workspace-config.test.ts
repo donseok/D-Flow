@@ -43,4 +43,9 @@ describe('getWorkspaceConfig', () => {
     await expect(getWorkspaceConfig(WID, { client: client(null) as never })).rejects.toBeInstanceOf(ConfigUnavailableError)
     await expect(getWorkspaceConfig(WID, { client: client(null, { message: 'x' }) as never })).rejects.toBeInstanceOf(ConfigUnavailableError)
   })
+  it('values 가 객체가 아니면 throw — 전 키를 기본값으로 풀지 않는다', async () => {
+    for (const values of [null, [], 'x', 3]) {
+      await expect(getWorkspaceConfig(WID, { client: client({ ...row({}), values }) as never }), String(values)).rejects.toBeInstanceOf(ConfigUnavailableError)
+    }
+  })
 })
