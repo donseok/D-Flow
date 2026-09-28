@@ -35,11 +35,12 @@ describe('LevelSettingsManager', () => {
     container.remove()
   })
 
-  function render(labels: string[] = ['Phase', 'Task', 'Activity']) {
+  function render(labels: string[] = ['Phase', 'Task', 'Activity'], revision = 1) {
     act(() => {
-      root.render(<LevelSettingsManager projectId="proj-1" levelLabels={labels} revision={1} />)
+      root.render(<LevelSettingsManager projectId="proj-1" levelLabels={labels} revision={revision} />)
     })
   }
+  const clickSave = async () => { await act(async () => { container.querySelector<HTMLButtonElement>('button[data-save-levels]')!.click() }) }
 
   it('현재 라벨을 단계당 입력 하나로 그린다', () => {
     render(['Phase', 'Task', 'Activity'])
@@ -111,6 +112,39 @@ describe('LevelSettingsManager', () => {
     expect(updateProjectSettings).toHaveBeenCalledWith('proj-1', expect.objectContaining({
       commandId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
     }))
+  })
+
+  // 형제 편집기 저장(자동 재기준 포함)·refresh 뒤 revision prop 만 새로워지고 초안은 옛 값이다 — prop 으로 저장하면 옛 초안이
+  // 충돌 없이 최신 revision 으로 덮는다(최종 리뷰 FN-2). 저장은 초안을 읽은 시점(base)으로 보내 서버 재기준이 겹침을 가르게 한다.
+  it('다른 저장으로 revision prop 이 바뀌어도 초안을 읽은 revision 으로 저장한다(FN-2 a)', async () => {
+    render(['Phase', 'Task'], 5)
+    render(['Stage', 'Step'], 7)                   // 형제 저장 뒤 refresh — 초안은 첫 값 그대로
+    await clickSave()
+    expect(updateProjectSettings).toHaveBeenCalledWith('proj-1', expect.objectContaining({ expectedRevision: 5, set: { 'core.level_labels': ['Phase', 'Task'] } }))
+  })
+
+  it('자기 저장이 성공하면 다음 저장은 그 revision 으로 보낸다(FN-2 b)', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 6, rebased: false })
+    render(['Phase', 'Task'], 5)
+    await clickSave()
+    await clickSave()
+    expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 6])
+  })
+
+  it('충돌을 받으면 최신 revision 을 기준으로 삼는다 — 알린 뒤 다시 저장하면 영구 충돌에 갇히지 않는다', async () => {
+    updateProjectSettings.mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
+      latest: { revision: 9, values: {}, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
+    render(['Phase', 'Task'], 5)
+    await clickSave()
+    await clickSave()
+    expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 9])
+  })
+
+  it('실패 문구는 알림 역할(role=alert)로 읽힌다(FM-16)', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: false, kind: 'denied', code: '권한 없음', commandId: 'c', error: '권한 없음', retryable: false })
+    render(['Phase'])
+    await clickSave()
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('권한 없음')
   })
 
   it('단계가 1개면 삭제 버튼이 없다 — 0단 상태를 만들 수 없다', () => {

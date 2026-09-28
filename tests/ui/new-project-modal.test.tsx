@@ -105,6 +105,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     })
 
     expect(document.body.textContent).toContain('실패 문구')
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('실패 문구')          // 알림 역할로 읽힌다(FM-16)
     expect(document.querySelector('input[placeholder="home.phName"]')).not.toBeNull()
     expect(mocks.refresh).not.toHaveBeenCalled()
   })

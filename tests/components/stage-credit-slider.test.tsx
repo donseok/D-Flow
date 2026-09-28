@@ -113,6 +113,27 @@ describe('StageCreditSlider', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('다른 저장으로 revision prop 이 바뀌어도 초안을 읽은 revision 으로 저장한다(FN-2 a)', async () => {
+    await mount({ revision: 5 })
+    await mount({ revision: 7, initial: { default: { as: 0, ip: 20, rw: 50, im: 80, xx: 100 } } })   // 형제 저장 뒤 refresh
+    await type(input('rw'), '60')
+    await act(async () => { saveBtn()!.click() })
+    expect(updateProjectSettings).toHaveBeenCalledWith('p1', expect.objectContaining({ expectedRevision: 5 }))
+  })
+
+  it('자기 저장이 성공하면 다음 저장은 그 revision 으로, 충돌이면 최신 revision 으로 보낸다(FN-2 b)', async () => {
+    updateProjectSettings.mockResolvedValueOnce({ ok: true, kind: 'applied', commandId: 'c', revision: 6, rebased: false })
+      .mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
+        latest: { revision: 9, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })
+    await mount({ revision: 5 })
+    await type(input('rw'), '60')
+    await act(async () => { saveBtn()!.click() })
+    await type(input('rw'), '65')
+    await act(async () => { saveBtn()!.click() })
+    await act(async () => { saveBtn()!.click() })
+    expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 6, 9])
+  })
+
   it('미리보기는 지금 값으로 사건 흐름을 보여 주고, 행을 누르면 현재 위치가 옮겨간다', async () => {
     await mount()
     const rows = container.querySelectorAll('[data-credit-pv-row]')

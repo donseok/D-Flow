@@ -180,7 +180,7 @@ export function NewProjectModal({
           </div>
 
           {error && (
-            <p className="rounded-xl border border-delayed/30 bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">{error}</p>
+            <p role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">{error}</p>
           )}
         </div>
       </Modal>

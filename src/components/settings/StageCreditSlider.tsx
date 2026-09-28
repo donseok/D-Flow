@@ -75,7 +75,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   /** workflow.stage_credits — null 이면 코드 기본값으로 시작한다. */
   initial: StageCredits | null
   editable: boolean
-  /** 설정 문서의 revision — 저장의 expectedRevision(CAS) */
+  /** 설정 문서의 revision — 첫 마운트 때 편집 세션의 기준(base)이 된다. 뒤에 바뀐 값은 저장에 쓰지 않는다(FN-2) */
   revision: number
 }) {
   const router = useRouter()
@@ -83,6 +83,8 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const [pending, startTransition] = useTransition()
   const [table, setTable] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [dirty, setDirty] = useState(false)
+  // 편집 세션의 기준 revision — LevelSettingsManager 와 같다(최종 리뷰 FN-2): prop 이 아니라 초안을 읽은 시점으로 보내고, 자기 저장·충돌 때만 올린다
+  const [base, setBase] = useState(revision)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 현재 위치 — 트랙 채움과 ◆ 표시가 따라간다. 미리보기 행을 누르거나 핸들을 잡으면 바뀐다.
@@ -140,9 +142,10 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     setError(null)
     startTransition(async () => {
       const r = await updateProjectSettings(projectId, {
-        expectedRevision: revision, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [],
+        expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [],
       })
-      if (!r.ok) { setError(messageOf(r) ?? t('settings.actionFailed')); if (r.kind === 'conflict') router.refresh(); return }
+      if (!r.ok) { setError(messageOf(r) ?? t('settings.actionFailed')); if (r.kind === 'conflict') { setBase(r.latest.revision); router.refresh() } return }
+      setBase(r.revision)
       setDirty(false)
       setSaved(true)
       router.refresh()

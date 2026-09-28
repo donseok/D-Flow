@@ -22,6 +22,10 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
 }) {
   const router = useRouter()
   const [labels, setLabels] = useState<string[]>(levelLabels)
+  // 편집 세션의 기준 revision — 초안을 읽은 시점. 렌더마다 오는 revision prop 으로 보내면 형제 편집기 저장·refresh 뒤
+  // 옛 초안이 충돌 없이 최신 revision 으로 덮는다(최종 리뷰 FN-2). base 로 보내면 서버 재기준이 겹침을 가른다.
+  // 자기 저장 성공·충돌 때만 올린다(충돌 뒤 다시 저장하면 알린 뒤의 덮어쓰기 — 영구 충돌에 갇히지 않는다). key 재마운트는 충돌 문구를 지워 쓰지 않는다
+  const [base, setBase] = useState(revision)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -29,9 +33,10 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
     setError(null)
     startTransition(async () => {
       const r = await updateProjectSettings(projectId, {
-        expectedRevision: revision, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [],
+        expectedRevision: base, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [],
       })
-      if (!r.ok) { setError(messageOf(r)); if (r.kind === 'conflict') router.refresh(); return }
+      if (!r.ok) { setError(messageOf(r)); if (r.kind === 'conflict') { setBase(r.latest.revision); router.refresh() } return }
+      setBase(r.revision)
       router.refresh()
     })
   }
@@ -80,7 +85,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
           저장
         </button>
       </div>
-      {error && <p className="text-xs text-delayed">{error}</p>}
+      {error && <p role="alert" className="text-xs text-delayed">{error}</p>}
     </div>
   )
 }
