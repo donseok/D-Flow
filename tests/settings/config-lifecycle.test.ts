@@ -78,7 +78,7 @@ describe('updateProjectSettings', () => {
     db.externalWrite({ projectId: PID }, { 'core.milestone_keywords': ['x'] })          // revision 2
     const c = await updateProjectSettings(PID, patch({ expectedRevision: 1, set: { 'core.milestone_keywords': ['y'] } }))
     expect(c).toEqual({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: CMD, error: expect.stringContaining('먼저 바꿨습니다'),
-      latest: { revision: 2, values: { 'core.milestone_keywords': ['x'] } }, changedKeys: ['core.milestone_keywords'], retryable: false })
+      latest: { revision: 2, values: { 'core.milestone_keywords': ['x'] }, invalidKeys: [] }, changedKeys: ['core.milestone_keywords'], retryable: false })
     const r = await updateProjectSettings(PID, patch({ expectedRevision: 1, set: { 'core.extra_axis_label': 'Track' } }))
     expect(r).toEqual({ ok: true, kind: 'applied', commandId: CMD, revision: 3, rebased: true })
     expect(db.rpcCalls.filter((x) => x.args.p_command_id === CMD).map((x) => x.args.p_expected_revision)).toEqual([1, 1, 2])
@@ -92,6 +92,60 @@ describe('updateProjectSettings', () => {
     const r = await updateProjectSettings(PID, patch({ expectedRevision: 1, set: { 'core.extra_axis_label': 'T' } }))
     expect(r).toMatchObject({ ok: false, kind: 'conflict', latest: { revision: 3 } })
     expect(n).toBe(2)
+  })
+  it('재기준 — 두 판독 사이에 요청 키가 바뀌면 덮어쓰지 않고 conflict(최신 판독이 먼저, 바뀐 키가 나중)', async () => {
+    db.externalWrite({ projectId: PID }, { 'core.milestone_keywords': ['x'] })          // revision 2 — 요청 키와 겹치지 않는다
+    let injected = false
+    const orig = db.client
+    db.client = function () {
+      const c = orig.call(this); const from = c.from
+      c.from = (table: string) => {
+        const b = from(table)
+        if (table === 'project_settings_history') {
+          const then = b.then as (res: (x: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise<unknown>
+          // 이력 판독의 결과가 정해진 직후, 다른 사용자가 요청 키를 저장한다
+          b.then = (res: (x: unknown) => unknown, rej?: (e: unknown) => unknown) => then((x) => {
+            if (!injected) { injected = true; db.externalWrite({ projectId: PID }, { 'core.extra_axis_label': 'theirs' }) }
+            return res(x)
+          }, rej)
+        }
+        return b
+      }
+      return c
+    }
+    const r = await updateProjectSettings(PID, patch({ expectedRevision: 1, set: { 'core.extra_axis_label': 'mine' } }))
+    expect(injected).toBe(true)
+    expect(r).toMatchObject({ ok: false, kind: 'conflict', latest: { revision: 3, values: { 'core.extra_axis_label': 'theirs' } } })
+    expect(db.projects.get(PID)!.values['core.extra_axis_label']).toBe('theirs')
+  })
+  it('conflict 의 latest 는 손상(invalid) 키를 invalidKeys 로 따로 알린다 — 값 없음과 구분', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.externalWrite({ projectId: PID }, { 'core.milestone_keywords': ['x'], 'wbs.excel_profile': { version: 9 } })
+    const c = await updateProjectSettings(PID, patch({ expectedRevision: 1, set: { 'core.milestone_keywords': ['y'] } }))
+    expect(c).toMatchObject({ ok: false, kind: 'conflict', latest: { revision: 2, invalidKeys: ['wbs.excel_profile'] } })
+    expect(c.ok === false && c.kind === 'conflict' && c.changedKeys.includes('wbs.excel_profile')).toBe(true)
+  })
+  it('RPC 가 오류 없이 빈 응답을 주면 이름 붙은 오류로 멈춘다(TypeError 아님)', async () => {
+    const orig = db.client
+    db.client = function () { const c = orig.call(this); c.rpc = (async () => ({ data: null, error: null })) as never; return c }
+    await expect(updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))).rejects.toMatchObject({ name: 'SettingsRpcShapeError' })
+  })
+  it('DB 원문은 사용자 응답에 싣지 않고 로그에만 남긴다 — 선행 조회·교차 검증 조회·동기화 실패', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logged = () => JSON.stringify(spy.mock.calls)
+    db.failTable = 'teams'
+    const a = await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))
+    expect(a).toMatchObject({ ok: false, kind: 'unavailable', error: expect.stringContaining('설정을 불러오지 못해') })
+    expect(JSON.stringify(a)).not.toContain('fake failure'); expect(logged()).toContain('fake failure: teams')
+    db.failTable = 'wbs_items'
+    const b = await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))
+    expect(b).toMatchObject({ ok: false, kind: 'unavailable' })
+    expect(JSON.stringify(b)).not.toContain('fake failure'); expect(logged()).toContain('fake failure: wbs_items')
+    db.failTable = null
+    h.backfill.mockResolvedValue({ ok: false, error: 'db-said-no' })
+    const c = await updateProjectSettings(PID, patch({ set: { 'modules.enabled': ['kanban', 'agents'] } }))
+    expect(c).toMatchObject({ ok: false, kind: 'unavailable', error: expect.stringContaining('revision 2') })
+    expect(JSON.stringify(c)).not.toContain('db-said-no'); expect(logged()).toContain('db-said-no')
   })
   it('손상 저장값은 그 키만 invalid — 다른 키는 저장된다. 세대가 앞서면 읽기는 되고 쓰기는 schema_ahead', async () => {
     db.projects.get(PID)!.values['wbs.excel_profile'] = { version: 9 }
@@ -111,7 +165,7 @@ describe('updateProjectSettings', () => {
     h.backfill.mockResolvedValue({ ok: false, error: 'bf' })
     db.projects.get(PID)!.values['modules.enabled'] = ['kanban']; db.agentProjects = []
     const f = await updateProjectSettings(PID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd02', set: { 'modules.enabled': ['kanban', 'agents'] } }))
-    expect(f).toMatchObject({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', error: expect.stringContaining('저장됐지만'), retryable: true })
+    expect(f).toMatchObject({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', error: expect.stringContaining('revision 3 으로 저장됨'), retryable: true })
     expect(db.projects.get(PID)!.revision).toBe(3)
   })
   it('설정 행이 없으면 unavailable, patch 모양이 틀리면 invalid', async () => {
@@ -166,11 +220,13 @@ describe('updateWorkspaceSettings', () => {
     expect(await updateWorkspaceSettings(WID, patch({ set: { 'modules.allowed': ['kanban'] } }))).toMatchObject({ ok: true, kind: 'applied', revision: 2 })
     expect(db.workspaces.get(WID)!.values['modules.allowed']).toEqual(['kanban'])
   })
-  it('워크스페이스 modules.allowed 가 손상돼도 프로젝트의 core 키는 저장되고, 새 모듈은 못 켠다(fail-closed)', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('워크스페이스 modules.allowed 가 손상돼도 프로젝트의 core 키는 저장되고, 새 모듈은 손상 사유로 거부된다(fail-closed)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     db.workspaces.get(WID)!.values['modules.allowed'] = 'nope'
     expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'T' } }))).toMatchObject({ ok: true, revision: 2 })
+    spy.mockClear()
     expect(await updateProjectSettings(PID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd06', set: { 'modules.enabled': ['kanban', 'meetings'] } })))
-      .toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'modules.enabled', message: expect.stringContaining('meetings') }] })
+      .toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'modules.enabled', message: expect.stringContaining('손상돼 새 모듈을 켤 수 없습니다') }] })
+    expect(spy.mock.calls.filter((c) => String(c[0]).includes('modules.allowed 손상'))).toHaveLength(1)     // 저장 한 번에 한 줄
   })
 })

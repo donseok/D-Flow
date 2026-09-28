@@ -37,7 +37,7 @@ export class FakeSettingsDb {
     const rev = doc.revision + 1
     for (const [k, v] of Object.entries(set)) {
       this.history.push({ id: this.seq++, ...('projectId' in scope ? { project_id: scope.projectId } : { workspace_id: scope.workspaceId }), revision: rev, key: k,
-        old_value: doc.values[k] ?? null, new_value: v, source: 'edit', command_id: `ext-${this.seq}`, command_digest: 'ext', changed_by: by, changed_at: new Date().toISOString(), copied_from: null })
+        old_value: doc.values[k] ?? null, new_value: v, source: 'edit', command_id: `00000000-0000-4000-8000-eeee${String(this.seq).padStart(8, '0')}`, command_digest: 'ext', changed_by: by, changed_at: new Date().toISOString(), copied_from: null })
       doc.values[k] = v
     }
     doc.revision = rev

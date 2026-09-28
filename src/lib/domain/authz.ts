@@ -117,6 +117,16 @@ export function canEditMinute(
   if (!actor || !isMinuteMember(actor, minute)) return false
   return minute.created_by === actor.userId || isProjectAdmin(actor, minute.project_id)
 }
+/**
+ * 설정 키의 editor 등급(스펙 §3.3) — 스코프 등급(프로젝트·워크스페이스 관리자)은 설정 액션의 가드가 이미 판정했다.
+ * 여기는 키 정의의 editor 가 그 스코프에 맞는지와 플랫폼 관리자 전용 키만 본다. 모르는 값·스코프에 안 맞는 값은 거부(fail-closed).
+ */
+export function canEditSetting(scope: 'workspace' | 'project', editor: 'platform_admin' | 'workspace_admin' | 'project_admin', actor: Actor): boolean {
+  if (scope === 'project') return editor === 'project_admin'
+  if (editor === 'workspace_admin') return true
+  if (editor === 'platform_admin') return actor.isSuperuser
+  return false
+}
 /** 비공개 프로젝트 화면 숨김(0070 의미 유지, RLS 경계 아님). 워크스페이스 관리자 승계 포함. */
 export function canSeeProject(actor: Actor | null, project: { id: string; is_private?: boolean | null }): boolean {
   if (!project.is_private) return true
