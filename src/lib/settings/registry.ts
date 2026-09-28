@@ -10,6 +10,9 @@ import type { ModuleId } from '@/lib/modules/defaults'
 import type { NavItemId } from '@/lib/nav/ids'
 import { WORKSPACE_DEFS } from './defs/workspace'
 import { PROJECT_DEFS } from './defs/project'
+import { ConfigKeyError } from './errors'
+import type { ProjectConfig } from './projectConfig'
+import type { WorkspaceConfig } from './workspaceConfig'
 
 export type { ModulesList, BrandingLogo, NavMenuSetting } from './defs/workspace'
 
@@ -74,3 +77,14 @@ export function assertRegistry(opts: { moduleIds?: readonly string[]; defs?: rea
 assertRegistry()
 
 export type { ModuleId, NavItemId }
+
+/** 값이 필요한 소비처의 유일한 접근자. invalid → CONFIG_INVALID, required_missing → CONFIG_REQUIRED (그 키를 쓰는 기능만 멈춘다) */
+export function valueOf<K extends ProjectSettingKey>(cfg: ProjectConfig, key: K): SettingValue<K>
+export function valueOf<K extends WorkspaceSettingKey>(cfg: WorkspaceConfig, key: K): SettingValue<K>
+export function valueOf(cfg: ProjectConfig | WorkspaceConfig, key: string): unknown {
+  const state = (cfg.keys as Record<string, { status: string; value?: unknown; error?: string }>)[key]
+  if (!state) throw new ConfigKeyError('CONFIG_INVALID', key)          // 등록되지 않은 키 — 타입이 막지만 런타임 방어
+  if (state.status === 'set' || state.status === 'default') return state.value
+  if (state.status === 'invalid') throw new ConfigKeyError('CONFIG_INVALID', key)
+  throw new ConfigKeyError('CONFIG_REQUIRED', key)
+}
