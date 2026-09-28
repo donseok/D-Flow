@@ -1,3 +1,6 @@
+-- ⚠ 0012 이전 상태의 기록이다 — 0012_settings 가 workspace_settings 의 쓰기 정책과 authenticated 의 쓰기 권한을 걷고 allowed_domains 열을
+-- 지웠으므로, 0012 가 적용된 DB 에서는 아래 two_policies·authenticated_crud 단언과 allowed_domains insert 가 거짓이다.
+-- 이 파일은 0008 을 리허설할 때(supabase db reset --version 0008)만 돌린다. 0012 의 스모크는 supabase/rehearsal/0012_smoke.sql.
 -- 0008_workspace_settings 리허설 스모크. docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0008_smoke.sql
 -- 카탈로그는 불리언(전부 t), 동작은 아래 do 블록이 어긋나면 예외로 멈춘다. 전부 begin…rollback 이라 아무것도 남지 않는다.
 -- 교차 계정 판정(A·B)은 tests/rls/workspace-settings.test.ts, 두 세션 동시 강등은 같은 파일의 ⑧ 과 보고서의 손 실측이 본다.

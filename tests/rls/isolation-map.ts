@@ -16,6 +16,8 @@ export const A_ROW_FILTER: Record<string, string> = {
   agent_watchers: `(${inAP} or t.user_id in ${A_ONLY})`,
   agent_work_orders: inAP,
   agent_work_reports: `t.work_order_id in (select id from public.agent_work_orders where project_id in ${AP})`,
+  authz_commands: `t.workspace_id = ${A}`,
+  authz_events: `t.workspace_id = ${A}`,
   ai_documents: inAP, ai_index_jobs: inAP, announcement_seen: inAP, announcements: inAP,
   area_teams: `t.area_id in (select id from public.project_areas where project_id in ${AP})`,
   attendance_records: inAP,
@@ -40,7 +42,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   profiles: `t.user_id in ${A_ONLY}`,
   project_ai_briefs: inAP, project_areas: inAP, project_invites: inAP,
   project_member_teams: `t.member_id in (select id from public.project_members where project_id in ${AP})`,
-  project_members: inAP, project_settings: inAP,
+  project_members: inAP, project_settings: inAP, project_settings_history: inAP,
   projects: `t.workspace_id = ${A}`,
   task_dependencies: inAP,
   teams: `t.workspace_id = ${A}`,
@@ -55,6 +57,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   wiki_topic_revisions: inAP, wiki_topics: inAP,
   workspace_members: `t.workspace_id = ${A}`,
   workspace_settings: `t.workspace_id = ${A}`,
+  workspace_settings_history: `t.workspace_id = ${A}`,
   workspaces: `t.id = ${A}`,
 }
 
@@ -106,3 +109,19 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
  * 'pmo_admin' 으로 A 회의록 폴더·하이라이트·첨부 쓰기 6 추가)은 커밋 7a0ae42·45a7c7d 의 이 파일 참조.
  */
 export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
+
+/**
+ * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
+ * 벽이므로 42501(permission denied)이 기대값이다. 목록은 카탈로그(has_any_column_privilege)와 같아야 한다 — 표에 UPDATE 를 열면 여기서
+ * 빼고(그때부터 탐침이 그 표의 정책을 태운다), 새 표가 UPDATE 없이 생기면 더한다.
+ */
+export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
+  'agent_lead_leases', 'agent_projects', 'agent_runners', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
+  'ai_documents', 'ai_index_jobs', 'authz_commands', 'authz_events', 'change_logs', 'deliverable_attachments', 'issue_analysis_runs',
+  'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_mega_areas', 'issue_number_counters',
+  'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',
+  'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_invites',
+  'project_settings', 'project_settings_history', 'usage_events', 'wbs_embeddings', 'wiki_change_events', 'wiki_feedback',
+  'wiki_item_relations', 'wiki_item_sources', 'wiki_items', 'wiki_processing_jobs', 'wiki_project_rebuild_jobs',
+  'wiki_questions', 'wiki_topic_revisions', 'wiki_topics', 'workspace_settings', 'workspace_settings_history', 'workspaces',
+])

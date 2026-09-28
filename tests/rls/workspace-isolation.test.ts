@@ -9,8 +9,8 @@
 // OWN_INSERT_PROBES 로 따로 덮여 있어야 한다. update·delete 는 RLS 가 행을 걸러 내면 0행·무오류다 — 42501 밖의 오류는 행이 정책을 통과했다는 뜻이라 누설로 센다.
 import { DatabaseError, type Pool, type PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { F, asService, asUser, loadFixture, openPool } from './harness'
-import { A_ROW_FILTER, KNOWN_LEAKS, OPEN_BY_DESIGN, OWN_INSERT_PROBES, RLS_EXEMPT, UNFILLED } from './isolation-map'
+import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
+import { A_ROW_FILTER, KNOWN_LEAKS, OPEN_BY_DESIGN, OWN_INSERT_PROBES, RLS_EXEMPT, UNFILLED, UPDATE_DENIED_BY_GRANT } from './isolation-map'
 
 let pool: Pool
 beforeAll(async () => { pool = openPool(); await loadFixture(pool) })
@@ -22,7 +22,10 @@ const TABLES_SQL = `
                 where i.indrelid = c.oid and i.indisprimary order by array_position(i.indkey::int2[], a.attnum)) as pk,
          array(select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
                 and a.attgenerated = '' and has_column_privilege('authenticated', c.oid, a.attname, 'INSERT')
-                order by a.attnum) as cols
+                order by a.attnum) as cols,
+         (select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+           and a.attgenerated = '' and has_column_privilege('authenticated', c.oid, a.attname, 'UPDATE')
+           order by a.attnum limit 1) as upd
     from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') order by 1`
 
 /** public 의 표·뷰·구체화 뷰·외부 표 — RLS·security_invoker 여부와 함께 */
@@ -42,7 +45,7 @@ const OWNER_CHECK_TABLES_SQL = `
    where schemaname = 'public' and cmd in ('INSERT', 'ALL')
      and with_check ~ '(^|[^.[:alnum:]_])[[:alnum:]_]+ = auth\\.uid\\(\\)' order by 1`
 
-type Tbl = { name: string; pk: string[]; cols: string[] }
+type Tbl = { name: string; pk: string[]; cols: string[]; /** authenticated 가 UPDATE 할 수 있는 첫 열. 없으면 null */ upd: string | null }
 type Rel = { name: string; kind: string; rls: boolean; invoker: boolean }
 const q = (id: string) => `"${id}"`
 const keyOf = (t: Tbl) => `row(${t.pk.map((c) => `t.${q(c)}`).join(', ')})::text`
@@ -97,6 +100,7 @@ async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRo
   const leaks: string[] = []
   const masked: string[] = []      // 복사 insert 를 트리거·권한이 RLS 보다 먼저 거부한 표 — OWN_INSERT_PROBES 로 덮여야 한다
   const badProbes: string[] = []   // RLS 거부가 아닌 오류로 끝난 탐침 — 정책까지 가지 못했다
+  const grantDenied: string[] = []  // update 할 열이 없어 권한(permission denied)이 막은 표 — UPDATE_DENIED_BY_GRANT 와 같아야 한다
   await asUser(pool, userId, async (c) => {
     for (const t of tables) {
       const a = aRows.get(t.name)!
@@ -111,8 +115,18 @@ async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRo
         if (!ins.err || passedRls(ins.err)) leaks.push(`${t.name}:insert`)
         else if (!isRlsDenial(ins.err)) masked.push(t.name)
       }
-      const upd = await probe(c, `update public.${q(t.name)} t set ${q(t.pk[0])} = t.${q(t.pk[0])} where ${keyOf(t)} = $1`, [a.keys[0]])
-      if (upd.err ? upd.err.code !== '42501' : upd.rowCount > 0) leaks.push(`${t.name}:update`)
+      // update 탐침은 authenticated 가 UPDATE 할 수 있는 열로 한다 — PK 열의 권한이 없으면 42501 로 멈춰 정책이 평가되지 않는다(H2 이월).
+      // 그런 열이 없는 표는 권한이 온전한 벽이다: 42501(permission denied)을 기대하고 표를 기록한다.
+      if (t.upd) {
+        const upd = await probe(c, `update public.${q(t.name)} t set ${q(t.upd)} = t.${q(t.upd)} where ${keyOf(t)} = $1`, [a.keys[0]])
+        if (upd.err ? upd.err.code !== '42501' : upd.rowCount > 0) leaks.push(`${t.name}:update`)
+        else if (upd.err && !isRlsDenial(upd.err)) badProbes.push(`${t.name}:update ${upd.err.code} ${upd.err.message}`)
+      } else {
+        // `= default` — identity(GENERATED ALWAYS) PK 는 `= t.id` 를 권한 검사 전에 428C9 로 거절한다(0012 이력 표). default 는 ACL 까지 간다
+        const upd = await probe(c, `update public.${q(t.name)} t set ${q(t.pk[0])} = default where ${keyOf(t)} = $1`, [a.keys[0]])
+        if (upd.err?.code === '42501' && upd.err.message.includes('permission denied')) grantDenied.push(t.name)
+        else leaks.push(`${t.name}:update`)
+      }
       const del = await probe(c, `delete from public.${q(t.name)} t where ${keyOf(t)} = $1`, [a.keys[0]])
       if (del.err ? del.err.code !== '42501' : del.rowCount > 0) leaks.push(`${t.name}:delete`)
     }
@@ -122,7 +136,7 @@ async function scanUser(label: 'bea' | 'ben', userId: string, tables: Tbl[], aRo
       else if (!isRlsDenial(r.err)) badProbes.push(`${p.table}: ${r.err.code} ${r.err.message}`)
     }
   })
-  return { label, leaks: leaks.sort(), masked, badProbes }
+  return { label, leaks: leaks.sort(), masked, badProbes, grantDenied: grantDenied.sort() }
 }
 
 describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
@@ -179,6 +193,8 @@ describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
       expect(r.leaks, `${r.label} 의 누설`).toEqual([...KNOWN_LEAKS[r.label]].sort())
       expect(r.badProbes, `${r.label}: RLS 거부로 끝나지 않은 탐침(정책까지 가지 못했다)`).toEqual([])
       expect(r.masked.filter((t) => !probeTables.has(t)), `${r.label}: 트리거·권한이 복사 insert 를 먼저 막았는데 탐침 없음`).toEqual([])
+      // A 행이 있는 표만 탐침한다 — UNFILLED 가 비어 있으므로 목록 전체가 나와야 한다
+      expect(r.grantDenied, `${r.label}: update 가 권한으로 막힌 표`).toEqual([...UPDATE_DENIED_BY_GRANT].sort())
     }
   })
 
@@ -189,5 +205,27 @@ describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
         expect(rows).toHaveLength(1)
       })
     }
+  })
+
+  it('update 할 열이 하나도 없는 표 = UPDATE_DENIED_BY_GRANT(실측 has_any_column_privilege) — 새 표가 끼거나 권한이 열리면 목록을 고쳐야 한다', async () => {
+    const { rows } = await pool.query<{ name: string }>(
+      `select c.relname::text as name from pg_class c
+        where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
+          and not has_any_column_privilege('authenticated', c.oid, 'UPDATE') order by 1`)
+    expect(rows.map((r) => r.name)).toEqual([...UPDATE_DENIED_BY_GRANT].sort())
+  })
+
+  it('민감도 — 열 권한만 있는 표(workspace_members)의 쓰기 정책을 열면 고친 탐침이 잡는다. PK 탐침은 권한에서 멈춰 못 잡았다', async () => {
+    await asService(pool, async (c) => {
+      await c.query('drop policy workspace_members_write on public.workspace_members')
+      await c.query('create policy workspace_members_write on public.workspace_members for all to authenticated using (true) with check (true)')
+      await c.query('set local role authenticated')
+      await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: F.users.bAdmin, role: 'authenticated' })])
+      const key = `(${F.ws},${F.users.aLoose})`
+      expect(await pgError(c, `update public.workspace_members t set workspace_id = t.workspace_id where row(t.workspace_id, t.user_id)::text = $1`, [key]))
+        .toMatchObject({ code: '42501', message: expect.stringContaining('permission denied') })
+      const upd = await c.query(`update public.workspace_members t set role = t.role where row(t.workspace_id, t.user_id)::text = $1`, [key])
+      expect(upd.rowCount, 'role 열 탐침은 열린 정책을 지나 행을 고친다').toBe(1)
+    })
   })
 })

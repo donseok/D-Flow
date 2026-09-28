@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
 import { makeStoragePath } from '@/lib/domain/storagePath'
+import { makeBrandingPath, parseBrandingPath } from '@/lib/settings/brandingPath'
 import { PRESENCE_TOPIC_RE, pagePresenceTopic, weeklyPresenceTopic } from '@/lib/domain/presenceTopics'
 
 let pool: Pool
@@ -297,6 +298,89 @@ describe('Storage 쓰기 — 명단 권한 분기(0007)', () => {
       }
       // 양성 대조: 같은 사람이 무프로젝트('_') 경로에는 쓸 수 있다 — 거부가 워크스페이스 판정이 아니라 명단 분기에서 온다
       expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', ['minutes', minuteNull.replace(/[^/]+$/, 'cy.md'), F.users.aLoose])).toBeNull()
+    })
+  })
+})
+
+describe('branding 버킷(0012 ⑪)', () => {
+  const HASH = '0123456789abcdef'
+  const logoA = makeBrandingPath({ workspaceId: F.ws, slot: 'mark', hash: HASH, ext: 'png' })
+  const logoB = makeBrandingPath({ workspaceId: F.wsB, slot: 'full', hash: HASH, ext: 'webp' })
+  /** [표본, 왜] — 정상 하나와 틀린 모양 여섯. 전부 A 워크스페이스 id 를 쓰거나 아예 uuid 가 아니다 */
+  const SAMPLES: Array<[string, string]> = [
+    [logoA, '정상'],
+    [`ws/${F.ws}/branding/extra/mark-${HASH}.png`, '조각 수 5'],
+    [`ws/${F.ws}/branding/mark-${HASH}.svg`, '확장자 svg'],
+    [`ws/not-a-uuid/branding/mark-${HASH}.png`, 'uuid 아님'],
+    [`ws/${F.ws}/branding/logo-${HASH}.png`, 'slot 틀림'],
+    [`ws/${F.ws}/branding/mark-${HASH.toUpperCase()}.png`, '요약이 대문자'],
+    [`ws/${F.ws.toUpperCase()}/branding/mark-${HASH}.png`, 'uuid 가 대문자'],
+    [`p/${F.ws}/branding/mark-${HASH}.png`, '첫 조각이 ws 가 아님'],
+    [`ws/${F.ws}/logo/mark-${HASH}.png`, '셋째 조각이 branding 이 아님'],
+  ]
+
+  it('버킷은 비공개이고 256KB·png·jpg·webp 만 받는다', async () => {
+    const { rows } = await pool.query(
+      `select public, file_size_limit::int as max, allowed_mime_types as mime from storage.buckets where id = 'branding'`)
+    expect(rows).toEqual([{ public: false, max: 262144, mime: ['image/png', 'image/jpeg', 'image/webp'] }])
+  })
+
+  it('⑬ A 멤버는 A 의 로고를 읽고 B 계정은 0행이다. 세션은 관리자여도 쓰지도 지우지도 못한다', async () => {
+    await asUser(pool, F.users.aLoose, async (c) => {
+      await c.query('reset role'); await put(c, 'branding', logoA, null); await put(c, 'branding', logoB, null)
+      await c.query('set local role authenticated')
+      expect(await visible(c, 'branding', logoA)).toBe(1)
+      expect(await visible(c, 'branding', logoB)).toBe(0)
+    })
+    await asUser(pool, F.users.bAdmin, async (c) => {
+      await c.query('reset role'); await put(c, 'branding', logoA, null); await put(c, 'branding', logoB, null)
+      await c.query('set local role authenticated')
+      expect(await visible(c, 'branding', logoA)).toBe(0)
+      expect(await visible(c, 'branding', logoB)).toBe(1)
+    })
+    await asUser(pool, F.users.wsAdmin, async (c) => {
+      await c.query('reset role'); await put(c, 'branding', logoA, null); await c.query('set local role authenticated')
+      const fresh = makeBrandingPath({ workspaceId: F.ws, slot: 'full', hash: 'fedcba9876543210', ext: 'jpg' })
+      expect(await pgError(c, 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', ['branding', fresh, F.users.wsAdmin]))
+        .toMatchObject({ code: '42501' })
+      expect((await c.query(`update storage.objects set name = $2 where bucket_id = 'branding' and name = $1`, [logoA, fresh])).rowCount).toBe(0)
+      await c.query(`select set_config('storage.allow_delete_query', 'true', true)`)
+      expect((await c.query(`delete from storage.objects where bucket_id = 'branding' and name = $1`, [logoA])).rowCount).toBe(0)
+    })
+  })
+
+  it('⑭ 다른 버킷에 브랜딩 모양 이름으로 둔 객체는 이 정책으로 열리지 않는다(bucket_id 검사)', async () => {
+    await asUser(pool, F.users.aLoose, async (c) => {
+      await c.query('reset role'); await put(c, 'deliverables', logoA, null); await put(c, 'minutes', logoA, null)
+      await put(c, 'branding', logoA, null)
+      await c.query('set local role authenticated')
+      expect(await visible(c, 'deliverables', logoA)).toBe(0)
+      expect(await visible(c, 'minutes', logoA)).toBe(0)
+      // 양성 대조: 같은 이름·같은 세션이 branding 버킷에서는 보인다 — 위의 0 이 이름이 아니라 버킷에서 온다(⑪ 이 없으면 여기서 FAIL)
+      expect(await visible(c, 'branding', logoA)).toBe(1)
+    })
+  })
+
+  it('⑮ 둘째 조각이 uuid 가 아닌 객체가 있어도 목록 조회가 22P02 로 깨지지 않는다', async () => {
+    await asUser(pool, F.users.aLoose, async (c) => {
+      await c.query('reset role')
+      for (const [name] of SAMPLES) await put(c, 'branding', name, null)
+      await c.query('set local role authenticated')
+      expect(await pgError(c, `select name from storage.objects where bucket_id = 'branding'`)).toBeNull()
+    })
+  })
+
+  it('⑯ 정책의 경로 판정 = TS parseBrandingPath — 같은 표본에 같은 답', async () => {
+    await asUser(pool, F.users.aLoose, async (c) => {
+      await c.query('reset role')
+      for (const [name] of SAMPLES) await put(c, 'branding', name, null)
+      await c.query('set local role authenticated')
+      for (const [name, why] of SAMPLES) {
+        const parsed = parseBrandingPath(name)
+        const ts = parsed.ok && parsed.value.workspaceId === F.ws
+        expect((await visible(c, 'branding', name)) === 1, `${why}: ${name}`).toBe(ts)
+      }
+      expect(SAMPLES.filter(([name]) => parseBrandingPath(name).ok).map(([, why]) => why)).toEqual(['정상'])
     })
   })
 })

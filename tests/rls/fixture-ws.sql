@@ -41,10 +41,11 @@ insert into public.projects (id, name, workspace_id, is_private) values
   ('00000000-0000-0000-7e57-0000000000c3', 'RLS A private', '00000000-0000-0000-7e57-00000000aa01', true),
   ('00000000-0000-0000-7e57-0000000000c4', 'RLS Other P',   '00000000-0000-0000-7e57-00000000aa02', false)
 on conflict do nothing;
-insert into public.project_settings (project_id, level_labels) values
-  ('00000000-0000-0000-7e57-0000000000c3', array['Phase','Task','Activity']),
-  ('00000000-0000-0000-7e57-0000000000c4', array['Phase','Task','Activity'])
-on conflict do nothing;
+update public.project_settings
+   set "values" = '{"core.level_labels": ["Phase", "Task", "Activity"], "core.milestone_keywords": [],
+                    "modules.enabled": ["kanban", "meetings", "weekly", "issues", "announcements", "attendance", "wiki", "chatbot"]}'::jsonb,
+       revision = 1
+ where project_id in ('00000000-0000-0000-7e57-0000000000c3', '00000000-0000-0000-7e57-0000000000c4');
 insert into public.teams (id, workspace_id, project_id, code, name) values
   ('00000000-0000-0000-7e57-0000000000d5', '00000000-0000-0000-7e57-00000000aa02', '00000000-0000-0000-7e57-0000000000c4', 'OPS', 'OPS')
 on conflict do nothing;
@@ -210,5 +211,41 @@ insert into public.minutes (id, project_id, workspace_id, minute_date, team_code
   ('00000000-0000-0000-7e57-00000000112b', null, '00000000-0000-0000-7e57-00000000aa01', '2026-09-02', 'ERP', 'RLS 전역 회의록', '# RLS', '00000000-0000-0000-7e57-0000000000a3')
   on conflict do nothing;
 
--- 워크스페이스 설정(0008) — A 행 하나. 전수 교차 테스트의 A 행이자 workspace-settings.test.ts ① 의 읽기 대상
-insert into public.workspace_settings (workspace_id, allowed_domains) values ('00000000-0000-0000-7e57-00000000aa01', array['example.com']) on conflict do nothing;
+-- 워크스페이스 설정(0012) — 두 워크스페이스 모두 모듈을 전부 허용하고, A 만 초대 도메인을 둔다. 전수 교차 테스트의 A 행이자
+-- workspace-settings.test.ts ① 의 읽기 대상.
+update public.workspace_settings
+   set "values" = '{"modules.allowed": ["kanban", "meetings", "weekly", "issues", "announcements", "attendance", "agents", "wiki", "chatbot",
+                                        "minutes", "minutes_integration", "portfolio", "usage"],
+                    "invites.allowed_domains": ["example.com"]}'::jsonb,
+       revision = 1
+ where workspace_id = '00000000-0000-0000-7e57-00000000aa01';
+update public.workspace_settings
+   set "values" = '{"modules.allowed": ["kanban", "meetings", "weekly", "issues", "announcements", "attendance", "agents", "wiki", "chatbot",
+                                        "minutes", "minutes_integration", "portfolio", "usage"]}'::jsonb,
+       revision = 1
+ where workspace_id = '00000000-0000-0000-7e57-00000000aa02';
+
+-- 설정 이력(0012) — A 행 하나씩. 전수 교차 테스트의 A 행이자 settings-write.test.ts 의 읽기 대상
+insert into public.project_settings_history (id, project_id, revision, key, old_value, new_value, source, command_id)
+  overriding system value
+  values (7057001, '00000000-0000-0000-7e57-0000000000c1', 1, 'core.level_labels', null, '["Phase","Task","Activity"]', 'create',
+          '00000000-0000-0000-7e57-000000001310')
+  on conflict do nothing;
+insert into public.workspace_settings_history (id, workspace_id, revision, key, old_value, new_value, source, command_id)
+  overriding system value
+  values (7057001, '00000000-0000-0000-7e57-00000000aa01', 1, 'invites.allowed_domains', null, '["example.com"]', 'create',
+          '00000000-0000-0000-7e57-000000001311')
+  on conflict do nothing;
+
+-- 권한 변경 이력(0012) — A 행 하나. 전수 교차 테스트의 A 행이자 authz-events.test.ts 의 불변 탐침 대상
+insert into public.authz_events (id, kind, workspace_id, target_user_id, before, after, cause, actor_user_id)
+  overriding system value
+  values (7057001, 'workspace_role', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000a8',
+          null, '{"role": "member", "invited_by": null}', 'direct', '00000000-0000-0000-7e57-0000000000a2')
+  on conflict do nothing;
+
+-- 권한 명령 원장(0012) — A 행 하나. 전수 교차 테스트의 A 행이자 authz-events.test.ts 의 불변 탐침 대상
+insert into public.authz_commands (actor_user_id, kind, scope_id, command_id, workspace_id, command_digest, result)
+  values ('00000000-0000-0000-7e57-0000000000a2', 'workspace_role', '00000000-0000-0000-7e57-00000000aa01',
+          '00000000-0000-0000-7e57-000000001312', '00000000-0000-0000-7e57-00000000aa01', 'fixture', '{"status": "applied", "matched": 1}')
+  on conflict do nothing;

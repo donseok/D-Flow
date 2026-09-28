@@ -26,52 +26,44 @@ const unconsumed = async (c: PoolClient, hash: string) =>
     'select redeemed_at is null and redeemed_by is null as ok from public.project_invites where token_hash = $1', [hash],
   )).rows[0]?.ok
 
-describe('workspace_settings RLS (0008)', () => {
-  it('① A 멤버는 읽기만, A 관리자는 upsert, B 계정은 0행·쓰기 거부', async () => {
+describe('workspace_settings RLS (0008 → 0012)', () => {
+  it('① A 멤버는 자기 워크스페이스 설정을 읽고, B 계정은 0행이다. 멤버·B 관리자의 insert 는 42501', async () => {
+    const domains = `select s."values" -> 'invites.allowed_domains' as d, s."values" ? 'modules.allowed' as m
+                       from public.workspace_settings s where s.workspace_id = $1`
     await asUser(pool, F.users.aLoose, async (c) => {
-      const r = await c.query<{ allowed_domains: string[] }>('select allowed_domains from public.workspace_settings where workspace_id = $1', [F.ws])
-      expect(r.rows).toEqual([{ allowed_domains: ['example.com'] }])
-      expect(await pgError(c, 'insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)', [F.wsB, ['x.test']]))
+      expect((await c.query(domains, [F.ws])).rows).toEqual([{ d: ['example.com'], m: true }])
+      expect(await pgError(c, `insert into public.workspace_settings (workspace_id, "values") values ($1, '{}')`, [F.wsB]))
         .toMatchObject({ code: '42501' })
-      expect((await c.query('update public.workspace_settings set allowed_domains = $2 where workspace_id = $1', [F.ws, ['x.test']])).rowCount)
-        .toBe(0)
-      expect((await c.query('delete from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
-      // 자기 워크스페이스(A) 행도 멤버는 쓰지 못한다 — 기존 행 upsert 는 update 경로의 using 에서 42501
-      expect(await pgError(c, `insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)
-        on conflict (workspace_id) do update set allowed_domains = excluded.allowed_domains`, [F.ws, ['x.test']]))
-        .toMatchObject({ code: '42501' })
-      // 행이 없을 때의 새 insert 도 with check 에서 42501(행은 service 로 지우고 세션으로 돌아온다)
-      await c.query('reset role')
-      await c.query('delete from public.workspace_settings where workspace_id = $1', [F.ws])
-      await c.query('set local role authenticated')
-      expect(await pgError(c, 'insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)', [F.ws, ['x.test']]))
-        .toMatchObject({ code: '42501' })
-      await c.query('reset role')
-      expect((await c.query('select 1 from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
-    })
-    // 멤버의 자기 워크스페이스 update 가 0행이면 값도 그대로여야 한다 — 같은 트랜잭션에서 service 로 읽어 확인한다
-    await asUser(pool, F.users.aLoose, async (c) => {
-      await c.query('update public.workspace_settings set allowed_domains = $2 where workspace_id = $1', [F.ws, ['x.test']])
-      await c.query('reset role')
-      const { rows } = await c.query('select allowed_domains from public.workspace_settings where workspace_id = $1', [F.ws])
-      expect(rows).toEqual([{ allowed_domains: ['example.com'] }])
-    })
-    await asUser(pool, F.users.wsAdmin, async (c) => {
-      const r = await c.query<{ allowed_domains: string[] }>(
-        `insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2)
-         on conflict (workspace_id) do update set allowed_domains = excluded.allowed_domains, updated_at = now()
-         returning allowed_domains`, [F.ws, ['acme.test', 'example.com']])
-      expect(r.rows).toEqual([{ allowed_domains: ['acme.test', 'example.com'] }])
-      // 원소 null 은 check 로 거부 — 앱이 목록을 읽을 때 null 원소를 방어하지 않아도 되게
-      expect(await pgError(c, 'update public.workspace_settings set allowed_domains = array[null]::text[] where workspace_id = $1', [F.ws]))
-        .toMatchObject({ code: '23514' })
     })
     await asUser(pool, F.users.bAdmin, async (c) => {
       expect((await c.query('select 1 from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
-      expect(await pgError(c, 'insert into public.workspace_settings (workspace_id, allowed_domains) values ($1, $2) on conflict (workspace_id) do update set allowed_domains = excluded.allowed_domains', [F.ws, ['evil.test']]))
-        .toMatchObject({ code: '42501' })
-      expect((await c.query('update public.workspace_settings set allowed_domains = $2 where workspace_id = $1', [F.ws, ['evil.test']])).rowCount)
-        .toBe(0)
+      expect(await pgError(c, `insert into public.workspace_settings (workspace_id, "values") values ($1, '{}')
+        on conflict (workspace_id) do update set "values" = excluded."values"`, [F.ws])).toMatchObject({ code: '42501' })
+    })
+  })
+
+  it('①′ 관리자의 직접 upsert 는 42501 이고, 쓰기는 apply_workspace_settings(service_role) 한 길이다. B 계정은 그 뒤에도 0행', async () => {
+    const DENIED = { code: '42501', message: expect.stringContaining('permission denied') }
+    await asUser(pool, F.users.wsAdmin, async (c) => {
+      expect(await pgError(c, `insert into public.workspace_settings (workspace_id, "values") values ($1, '{}')
+        on conflict (workspace_id) do update set "values" = excluded."values"`, [F.ws])).toMatchObject(DENIED)
+      expect(await pgError(c, `update public.workspace_settings set "values" = '{"invites.allowed_domains": ["evil.test"]}'::jsonb
+        where workspace_id = $1`, [F.ws])).toMatchObject(DENIED)
+      expect(await pgError(c, `select public.apply_workspace_settings($1, 1, gen_random_uuid(), '{}'::jsonb, null, $2, 1, 'edit')`,
+        [F.ws, F.users.wsAdmin])).toMatchObject({ code: '42501', message: expect.stringContaining('permission denied for function') })
+    })
+    await asService(pool, async (c) => {
+      await c.query('set local role service_role')
+      const r = (await c.query(`select public.apply_workspace_settings($1, 1, gen_random_uuid(),
+        '{"invites.allowed_domains": ["acme.test", "example.com"]}'::jsonb, null, $2, 1, 'edit') as r`, [F.ws, F.users.wsAdmin])).rows[0].r
+      expect(r).toEqual({ status: 'applied', revision: 2 })
+      await c.query('reset role')
+      await c.query('set local role authenticated')
+      await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: F.users.aLoose, role: 'authenticated' })])
+      expect((await c.query(`select "values" -> 'invites.allowed_domains' as d from public.workspace_settings where workspace_id = $1`, [F.ws])).rows)
+        .toEqual([{ d: ['acme.test', 'example.com'] }])
+      await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: F.users.bAdmin, role: 'authenticated' })])
+      expect((await c.query('select 1 from public.workspace_settings where workspace_id = $1', [F.ws])).rowCount).toBe(0)
     })
   })
 })

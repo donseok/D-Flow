@@ -3,7 +3,8 @@
 // 처음부터 통과할 수 있다 — 실패부터 봐야 하는 것은 잠금 절 케이스다. 단계 ≥ 2 절(WORKFLOW_APPROVAL_REQUIRED)은 SP5b 다.
 import { DatabaseError, type Pool, type PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { DEFAULT_STAGE_CREDITS, EVENT_CREDIT } from '@/lib/domain/stageCredits'
+import { DEFAULT_STAGE_CREDITS, EVENT_CREDIT, validateStageCredits } from '@/lib/domain/stageCredits'
+import golden from '../fixtures/parity/stage-credits.json'
 import { STAGE_ORDER, predecessorReached, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
 
@@ -62,6 +63,47 @@ describe('WF-GAP-2 TS↔SQL 현행 패리티', () => {
     expect(JSON.parse(m![1])).toEqual(DEFAULT_STAGE_CREDITS)
   })
 
+  it('골든 — 기본값·사건 표가 TS 와 같고, 사용자 표는 TS 검증을 통과한다(0012: TS 와 SQL 이 같은 파일을 읽는다)', () => {
+    expect(golden.default).toEqual(DEFAULT_STAGE_CREDITS)
+    expect(golden.events).toEqual(EVENT_CREDIT)
+    expect(validateStageCredits(golden.custom)).toEqual({ ok: true, credits: golden.custom })
+  })
+
+  it('values 의 workflow.stage_credits 를 읽는다 — 사용자 표는 그 값, 키 없음·JSON null 은 c_default(0012 ⑥)', async () => {
+    const START = 40
+    const setCredits = (c: PoolClient, v: string | null) => v === null
+      ? c.query(`update public.project_settings set "values" = "values" - 'workflow.stage_credits' where project_id = $1`, [F.projects.a])
+      : c.query(`update public.project_settings set "values" = "values" || jsonb_build_object('workflow.stage_credits', $2::jsonb) where project_id = $1`,
+          [F.projects.a, v])
+    await asService(pool, async (c) => {
+      for (const [label, stored, table] of [
+        ['사용자 표', JSON.stringify(golden.custom), golden.custom.default],
+        ['키 없음', null, golden.default.default],
+        ['JSON null', 'null', golden.default.default],
+      ] as const) {
+        await setCredits(c, stored)
+        for (const [event, status] of [['claim', 'ready'], ['report_completion', 'claimed'], ['reject', 'reported']] as const) {
+          await arrange(c, { delegated: false, status, pct: START })
+          const r = await rpc(c, event, { order: ORDER })
+          const key = golden.events[event] as keyof typeof table
+          expect(Number(r.actual_pct), `${label} ${event}`).toBe(table[key])
+        }
+      }
+    })
+  })
+
+  it('설정 행이 없으면 크레딧을 기본값으로 풀지 않고 SETTINGS_ROW_MISSING 으로 거절한다', async () => {
+    await asService(pool, async (c) => {
+      await arrange(c, { delegated: false, status: 'ready', pct: 40 })
+      // 행 유지 트리거(0012 ⑨)가 직접 삭제를 막으므로 트리거를 끄고 지운다 — 있을 수 없는 상태를 만들어 보는 것이다
+      await c.query(`set local session_replication_role = replica`)
+      await c.query('delete from public.project_settings where project_id = $1', [F.projects.a])
+      await c.query(`set local session_replication_role = origin`)
+      expect(await pgError(c, RPC, ['claim', F.users.member, null, ORDER, null]))
+        .toMatchObject({ code: 'P0001', message: 'SETTINGS_ROW_MISSING' })
+    })
+  })
+
   it('사건별 크레딧 — 각 주문 사건의 결과 실적 = EVENT_CREDIT 의 키(approve 는 100)', async () => {
     const from: Record<string, string> = {
       claim: 'ready', report_completion: 'claimed', release: 'claimed', approve: 'reported', reject: 'reported', unapprove: 'approved', rework: 'approved',
@@ -78,7 +120,7 @@ describe('WF-GAP-2 TS↔SQL 현행 패리티', () => {
       expect((await leafState(c)).pct, event).toBe(credit)
     }
     await asService(pool, async (c) => {
-      await c.query('update public.project_settings set stage_credits = null where project_id = $1', [F.projects.a])
+      await c.query(`update public.project_settings set "values" = "values" - 'workflow.stage_credits' where project_id = $1`, [F.projects.a])
       for (const [event, status] of Object.entries(from)) {
         await arrange(c, { delegated: false, status, pct: START })
         await applied(c, event as keyof typeof EVENT_CREDIT, await rpc(c, event, { order: ORDER }))
@@ -331,7 +373,7 @@ describe('WF-GAP-1 guard_workflow_actual(잠금 절)', () => {
     try {
       await cleanup()
       const { rows: [{ ip }] } = await pool.query<{ ip: number }>(
-        `select coalesce((select (s.stage_credits -> 'default' ->> 'ip')::numeric from public.project_settings s where s.project_id = $1), $2)::float8 as ip`,
+        `select coalesce((select (s."values" -> 'workflow.stage_credits' -> 'default' ->> 'ip')::numeric from public.project_settings s where s.project_id = $1), $2)::float8 as ip`,
         [F.projects.a, DEFAULT_STAGE_CREDITS.default.ip])
       await pool.query(`insert into public.wbs_items (id, project_id, code, name, dev_workflow, stage, actual_pct)
         values ($1, $2, 'h2-wf', 'H2 잠금 경합', true, 'ip', $3)`, [ITEM, F.projects.a, ip])

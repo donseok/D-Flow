@@ -52,10 +52,17 @@ insert into public.projects (id, name, workspace_id) values
   ('00000000-0000-0000-7e57-0000000000c2', 'RLS B', '00000000-0000-0000-7e57-00000000aa01')
 on conflict do nothing;
 
-insert into public.project_settings (project_id, level_labels) values
-  ('00000000-0000-0000-7e57-0000000000c1', array['Phase','Task','Activity']),
-  ('00000000-0000-0000-7e57-0000000000c2', array['Phase','Task','Activity'])
-on conflict do nothing;
+-- 설정 행(0012) — 값은 values 문서에 있다. 픽스처는 커밋되어 DB 에 남으므로 두 번 적재해도 같은 값이어야 한다(update).
+update public.project_settings
+   set "values" = '{"core.level_labels": ["Phase", "Task", "Activity"], "core.milestone_keywords": [],
+                    "modules.enabled": ["kanban", "meetings", "weekly", "issues", "announcements", "attendance", "agents", "wiki", "chatbot"]}'::jsonb,
+       revision = 1
+ where project_id = '00000000-0000-0000-7e57-0000000000c1';
+update public.project_settings
+   set "values" = '{"core.level_labels": ["Phase", "Task", "Activity"], "core.milestone_keywords": [],
+                    "modules.enabled": ["kanban", "meetings", "weekly", "issues", "announcements", "attendance", "wiki", "chatbot"]}'::jsonb,
+       revision = 1
+ where project_id = '00000000-0000-0000-7e57-0000000000c2';
 
 -- 팀: ERP·MES 는 A 전용, QA·QA2 는 B 전용
 insert into public.teams (id, workspace_id, project_id, code, name) values

@@ -1,0 +1,8 @@
+{
+  "default": { "default": { "as": 0, "ip": 30, "rw": 50, "im": 80, "xx": 100 } },
+  "custom": { "default": { "as": 5, "ip": 25, "rw": 45, "im": 85, "xx": 100 } },
+  "events": {
+    "assign": "as", "claim": "ip", "report_completion": "im", "approve": "xx",
+    "unapprove": "im", "reject": "rw", "rework": "rw", "release": "as"
+  }
+}
