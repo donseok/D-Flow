@@ -46,6 +46,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.clearing': 'Clearing…',
   'settings.clearExcelProfileDone': 'Saved layout cleared',
   'settings.clearExcelProfileFailed': 'Could not clear the layout',
+  'settings.configConflict': 'Someone changed the settings first. Check the latest values and save again.',
   'settings.exportErrProfileCorrupt': 'The saved Excel layout is damaged — clear it with "Clear saved layout" in Settings.',
   'settings.exportErrProfileTooDeep': 'The WBS is deeper than the hierarchy columns of the saved Excel layout — clear it with "Clear saved layout" in Settings.',
   // AI Assistant index section

@@ -57,6 +57,17 @@ describe('ClearExcelProfileButton', () => {
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
+  it('충돌(conflict)이면 충돌 문구를 보이고 최신 값을 다시 읽는다(T28-M1)', async () => {
+    mocks.updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: 'x',
+      latest: { revision: 4, values: {}, invalidKeys: [] }, changedKeys: ['wbs.excel_profile'], retryable: false })
+    await click(button('저장된 양식 비우기')!)
+    await click(button('비우기')!)
+    expect(document.body.textContent).toContain('양식을 비우지 못했습니다')
+    expect(document.body.textContent).toContain(t('ko', 'settings.configConflict'))
+    expect(document.body.textContent).not.toContain(t('ko', 'common.err.tryAgain'))
+    expect(mocks.refresh).toHaveBeenCalled()
+  })
+
   it('모르는 사유(DB 문구 등)는 날것으로 싣지 않고 일반 문구', async () => {
     mocks.updateProjectSettings.mockResolvedValue({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: 'c',
       error: 'relation "project_settings" boom', retryable: true })

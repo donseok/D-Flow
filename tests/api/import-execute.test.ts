@@ -407,11 +407,15 @@ describe('POST /api/import/execute — replace', () => {
 describe('POST /api/import/execute — saveProfile(W5)', () => {
   it('saveProfile=true → writeProjectSettingsInternal(admin, pid, { set: { wbs.excel_profile } }, actor) — profileSaved:true', async () => {
     mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'c' })
+    const admin = makeAdminClient()
+    mocks.createAdminClient.mockReturnValue(admin)
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.profileSaved).toBe(true); expect(body.profileSave).toBeUndefined()
-    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledWith(expect.anything(), PROJECT_ID, { set: { 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 } }, ACTOR.userId)
+    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledWith(admin, PROJECT_ID, { set: { 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 } }, ACTOR.userId)
+    // 라우트가 만든 admin(service_role) 클라이언트 그 객체를 넘긴다(깊은 비교가 아니라 동일성) — 감사표 분류 불변
+    expect(mocks.writeProjectSettingsInternal.mock.calls[0][0]).toBe(admin)
   })
   it('saveProfile=false → 쓰기 없음, profileSaved:false', async () => {
     const res = await POST(req(baseFields({ saveProfile: 'false' })))
@@ -420,7 +424,10 @@ describe('POST /api/import/execute — saveProfile(W5)', () => {
   })
   it('저장 실패 → 가져오기는 200 이고 profileSaved:false 에 profileSave 사유가 실린다(로그만 남기고 삼키지 않는다)', async () => {
     mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
+    expect(spy).toHaveBeenCalledWith('[import/execute] 프로파일 저장 실패:', 'CONFIG_UNAVAILABLE', '설정을 불러오지 못해 중단했습니다.')   // 원인은 로그로
+    spy.mockRestore()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.ok).toBe(true); expect(body.profileSaved).toBe(false)

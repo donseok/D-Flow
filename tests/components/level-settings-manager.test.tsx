@@ -98,6 +98,21 @@ describe('LevelSettingsManager', () => {
     expect(refresh).toHaveBeenCalled()
   })
 
+  it('crypto.randomUUID 가 없는 환경(비보안 컨텍스트)에서도 요청 id 를 만들어 저장한다(T28-M2)', async () => {
+    const real = globalThis.crypto
+    vi.stubGlobal('crypto', { getRandomValues: <T extends ArrayBufferView | null>(a: T) => real.getRandomValues(a as never) as T })
+    try {
+      render(['Phase', 'Task'])
+      const saveBtn = container.querySelector<HTMLButtonElement>('button[data-save-levels]')!
+      await act(async () => { saveBtn.click() })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(updateProjectSettings).toHaveBeenCalledWith('proj-1', expect.objectContaining({
+      commandId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+    }))
+  })
+
   it('단계가 1개면 삭제 버튼이 없다 — 0단 상태를 만들 수 없다', () => {
     render(['Phase'])
     expect(container.querySelectorAll('button[data-remove-level]')).toHaveLength(0)

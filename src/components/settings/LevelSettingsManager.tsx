@@ -7,6 +7,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
+import { newUuid } from '@/lib/domain/uuid'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 
 export function messageOf(r: SettingsCommandResult): string | null {
@@ -28,7 +29,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
     setError(null)
     startTransition(async () => {
       const r = await updateProjectSettings(projectId, {
-        expectedRevision: revision, commandId: crypto.randomUUID(), set: { 'core.level_labels': labels }, unset: [],
+        expectedRevision: revision, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [],
       })
       if (!r.ok) { setError(messageOf(r)); if (r.kind === 'conflict') router.refresh(); return }
       router.refresh()

@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { updateProjectSettings } from '@/app/actions/settings'
+import { newUuid } from '@/lib/domain/uuid'
 import { ERR_ANON, ERR_DENIED, ERR_LOOKUP } from '@/lib/authz/errors'
 import type { DictKey } from '@/lib/i18n/dict'
 
@@ -28,10 +29,13 @@ export function ClearExcelProfileButton({ projectId, revision }: { projectId: st
     setBusy(true)
     try {
       const r = await updateProjectSettings(projectId, {
-        expectedRevision: revision, commandId: crypto.randomUUID(), set: {}, unset: ['wbs.excel_profile'],
+        expectedRevision: revision, commandId: newUuid(), set: {}, unset: ['wbs.excel_profile'],
       })
       if (!r.ok) {
-        toast({ title: t('settings.clearExcelProfileFailed'), description: t(r.kind === 'denied' ? failureKey(r.code) : 'common.err.tryAgain'), variant: 'error' })
+        const key: DictKey = r.kind === 'denied' ? failureKey(r.code) : r.kind === 'conflict' ? 'settings.configConflict' : 'common.err.tryAgain'
+        toast({ title: t('settings.clearExcelProfileFailed'), description: t(key), variant: 'error' })
+        // 충돌이면 다른 두 편집기처럼 최신 값을 다시 읽는다(비교 화면은 Phase C) — 이미 비워졌으면 버튼이 사라진다
+        if (r.kind === 'conflict') { setOpen(false); router.refresh() }
         return
       }
       setOpen(false)

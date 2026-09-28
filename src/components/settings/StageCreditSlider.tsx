@@ -10,6 +10,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
+import { newUuid } from '@/lib/domain/uuid'
 import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
 import {
@@ -139,7 +140,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     setError(null)
     startTransition(async () => {
       const r = await updateProjectSettings(projectId, {
-        expectedRevision: revision, commandId: crypto.randomUUID(), set: { 'workflow.stage_credits': v.credits }, unset: [],
+        expectedRevision: revision, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [],
       })
       if (!r.ok) { setError(messageOf(r) ?? t('settings.actionFailed')); if (r.kind === 'conflict') router.refresh(); return }
       setDirty(false)
