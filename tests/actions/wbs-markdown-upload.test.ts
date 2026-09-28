@@ -43,6 +43,7 @@ vi.mock('@/lib/agent/wbsImport', async (orig) => ({
 
 import { previewWbsUpload, applyWbsUpload } from '@/app/actions/wbsMarkdown'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 
 const PID = 'proj-1'
 const ADMIN = { ok: true as const, actor: { userId: 'u-admin', isSuperuser: false } }
@@ -133,6 +134,38 @@ describe('previewWbsUpload', () => {
     expect(r.canApply).toBe(false)
   })
 
+  it('단계 이름 설정이 손상(invalid)이면 "없음"으로 합치지 않고 손상 문구로 막는다(C2-F2)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 'not-a-list' }))
+    db.queues = { wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }, { data: [] }] }
+    const r = await previewWbsUpload(PID, PL_MD)
+    spy.mockRestore()
+    expect(r.ok).toBe(true)
+    expect(r.canApply).toBe(false)
+    expect(r.serverLevels).toBeNull()
+    expect(r.errors).toContain('단계 이름 설정이 손상되어 대조할 수 없습니다 — 관리자가 설정을 다시 저장하세요.')
+    expect(r.errors?.join('\n')).not.toContain('정본: 없음')
+  })
+
+  it('설정 조회 실패의 DB 원문은 응답에 싣지 않고 로그에만 남긴다(C2-F1)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    cfg.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: relation "x" does not exist'))
+    db.queues = { wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }] }
+    const r = await previewWbsUpload(PID, PL_MD)
+    const logged = JSON.stringify(spy.mock.calls, (_k, v) => (v instanceof Error ? v.message : v))
+    spy.mockRestore()
+    expect(r).toEqual({ ok: false, error: ERR_CONFIG_UNAVAILABLE })
+    expect(logged).toContain('relation')
+  })
+
+  it('그 밖의 예외도 원문 대신 고정 문구 — 미리보기에 실패했습니다(C2-F1)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.queues = { wbs_items: [{ data: null, error: { message: 'permission denied for table wbs_items' } }] }
+    const r = await previewWbsUpload(PID, PL_MD)
+    spy.mockRestore()
+    expect(r).toEqual({ ok: false, error: '미리보기에 실패했습니다.' })
+  })
+
   it('골격 파일(attach 없음) → mode:skeleton, levelsStatus:seed', async () => {
     db.queues = { wbs_items: [{ data: [] }] } // 기존 ref 조회만
     const r = await previewWbsUpload(PID, SKEL_MD)
@@ -171,6 +204,21 @@ describe('applyWbsUpload', () => {
     const r = await applyWbsUpload(PID, bad)
     expect(r.ok).toBe(false)
     expect(runWbsImport).not.toHaveBeenCalled()
+  })
+
+  it('코어가 throw 한 DB 원문은 응답에 싣지 않는다 — 업로드에 실패했습니다(C2-F1)', async () => {
+    db.queues = {
+      wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
+      agent_projects: [{ data: { enabled: true } }],
+    }
+    runWbsImport.mockRejectedValue(new Error('[settings/write] 알 수 없는 DB 오류: boom'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await applyWbsUpload(PID, PL_MD)
+    const logged = JSON.stringify(spy.mock.calls, (_k, v) => (v instanceof Error ? v.message : v))
+    spy.mockRestore()
+    expect(r).toEqual({ ok: false, error: '업로드에 실패했습니다.' })
+    expect(JSON.stringify(r)).not.toContain('boom')
+    expect(logged).toContain('boom')
   })
 
   it('코어 실패는 메시지 그대로 반환', async () => {

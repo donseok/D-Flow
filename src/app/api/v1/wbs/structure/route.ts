@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import {
-  apiBadRequest, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
+  apiBadRequest, apiFail, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
 import { resolveReader } from '@/lib/agent/routeShared'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { CONFIG_MESSAGES, configStatus } from '@/lib/settings/errors'
 
 /**
  * GET /api/v1/wbs/structure?project_id=&max_depth= — 프로젝트 levels 정본 + 얕은 노드 조회.
@@ -44,9 +45,14 @@ export async function GET(req: NextRequest) {
     }
 
     // levels 정본 — 해석기. 필수 라벨이 없으면(정상 경로로는 불가) null 로 그대로 노출한다(기본값 위장 금지). 조회 실패는 500.
+    // 저장값 손상(invalid)은 '없음'과 다르다 — null 로 합치지 않고 422 로 멈춘다(스펙 §3.5). 원인 키는 로그에.
     let levels: string[] | null = null
     try {
       const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']
+      if (state.status === 'invalid') {
+        console.error('[wbs-structure] 설정 손상:', { projectId, key: 'core.level_labels', error: state.error })
+        return apiFail(configStatus('CONFIG_INVALID'), 'config_invalid', CONFIG_MESSAGES.CONFIG_INVALID)
+      }
       levels = state.status === 'set' ? state.value : null
     } catch (e) {
       console.error('[wbs-structure] 설정 조회 실패:', e instanceof Error ? e.message : e)

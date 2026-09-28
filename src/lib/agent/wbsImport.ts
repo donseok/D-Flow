@@ -184,6 +184,9 @@ export function toRpcNode(module: string, n: ImportNode, index: number, levels?:
  * RPC upsert·배정·자동 발행. API 라우트(PAT)와 웹 업로드 액션(세션)이 공유한다 —
  * 두 경로의 검증·순서가 갈라지면 안 되므로 여기 밖에서 이 시퀀스를 재구현하지 않는다.
  */
+/** 저장된 단계 이름(core.level_labels)이 parse 를 못 지날 때 — PL 대조 두 경로(API·웹 업로드)가 같은 문구를 쓴다 */
+export const ERR_LEVEL_LABELS_INVALID = '단계 이름 설정이 손상되어 대조할 수 없습니다 — 관리자가 설정을 다시 저장하세요.'
+
 export type RunWbsImportResult =
   | { ok: true; upserted: number; skipped: number
       unmatched: Array<{ id: string; assignee: string }>; nonLeafSkipped: string[]; ordersCreated: number }
@@ -201,6 +204,8 @@ export async function runWbsImport(
   if (levels && attachRef) {
     // PL 업로드: levels 는 서버 정본(core.level_labels)과 완전 일치해야 통과(불일치 = 파일이 낡음). 해석기 실패는 throw(호출자가 500).
     const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']
+    // 손상(invalid)은 '정본 없음'과 다르다 — 파일을 다시 복사하라고 안내하지 않고 설정을 고치게 한다(3원칙 ①)
+    if (state.status === 'invalid') return { ok: false, code: 'validation_failed', message: ERR_LEVEL_LABELS_INVALID }
     const serverLabels = state.status === 'set' ? state.value : null
     const payloadLabels = levels.map(l => l.name)
     if (!serverLabels || JSON.stringify(serverLabels) !== JSON.stringify(payloadLabels)) {

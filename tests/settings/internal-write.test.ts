@@ -1,6 +1,7 @@
 // writeProjectSettingsInternal(스펙 §3.3) — 저장 형태 parse → revision 판독 → RPC(source internal) → 충돌이면 한 번만 재시도.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { writeProjectSettingsInternal, commandDigestInput } from '@/lib/settings/write'
+import { ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 
 const PID = '00000000-0000-4000-8000-00000000aa01'
 const ACTOR = '00000000-0000-4000-8000-00000000cc01'
@@ -63,6 +64,18 @@ describe('writeProjectSettingsInternal', () => {
     expect(await writeProjectSettingsInternal(ahead.admin, PID, { set: { 'core.extra_axis_label': 'x' } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_SCHEMA_AHEAD' })
     const weird = fakeAdmin([1], [{ data: null, error: { code: '23514', message: 'SETTINGS_ROW_REQUIRED' } }])
     await expect(writeProjectSettingsInternal(weird.admin, PID, { set: { 'core.extra_axis_label': 'x' } }, ACTOR)).rejects.toThrow(/SETTINGS_ROW_REQUIRED/)
+  })
+  it('revision 판독 오류의 DB 원문은 error 에 싣지 않는다 — 고정 문구, 원인은 로그(errors-m1)', async () => {
+    const b: Record<string, unknown> = {}
+    b.select = () => b; b.eq = () => b
+    b.maybeSingle = async () => ({ data: null, error: { message: 'relation "project_settings" boom' } })
+    const admin = { from: () => b, rpc: vi.fn() } as never
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await writeProjectSettingsInternal(admin, PID, { set: { 'core.extra_axis_label': 'x' } }, ACTOR)
+    const logged = JSON.stringify(spy.mock.calls)
+    spy.mockRestore()
+    expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: ERR_CONFIG_UNAVAILABLE })
+    expect(logged).toContain('boom')
   })
   it('commandDigestInput 은 unset 을 정렬·중복 제거한다(RPC 의 요약과 같은 입력)', () => {
     expect(commandDigestInput({ b: 1 }, ['z', 'a', 'z'])).toEqual({ set: { b: 1 }, unset: ['a', 'z'] })

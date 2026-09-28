@@ -40,7 +40,11 @@ export async function writeProjectSettingsInternal(
   const commandId = randomUUID()
   const readRevision = async (): Promise<number | { ok: false; code: 'CONFIG_UNAVAILABLE'; error: string }> => {
     const { data, error } = await admin.from('project_settings').select('revision').eq('project_id', projectId).maybeSingle()
-    if (error) return { ok: false, code: 'CONFIG_UNAVAILABLE', error: `${ERR_CONFIG_UNAVAILABLE} (${error.message})` }
+    if (error) {
+      // 원인(DB 원문)은 로그로, 결과에는 고정 문구만 — 호출부가 응답에 그대로 실어도 원문이 새지 않는다
+      console.error('[settings/write] revision 판독 실패', { projectId, cause: error.message })
+      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: ERR_CONFIG_UNAVAILABLE }
+    }
     if (!data) return { ok: false, code: 'CONFIG_UNAVAILABLE', error: `${ERR_CONFIG_UNAVAILABLE} (설정 행 없음: ${projectId})` }
     return Number((data as { revision: number | string }).revision)
   }

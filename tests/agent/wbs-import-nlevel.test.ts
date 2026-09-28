@@ -144,6 +144,7 @@ vi.mock('next/server', async (orig) => {
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ERR_CONFIG_CONFLICT } from '@/lib/settings/errors'
 
 type Resp = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
 
@@ -273,6 +274,25 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     expect((await res.json()).code).toBe('levels_mismatch')
   })
 
+  it('단계 이름 설정이 손상(invalid)이면 "정본: 없음"으로 안내하지 않고 손상 문구로 막는다 — RPC 없음(C2-F2)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 'not-a-list' }))
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    const { admin } = useAdmin({ ...q })
+    const res = await importPOST(post({
+      project_id: PROJECT_ID, module: 'acme-op', levels: LEVELS, attach_ref: 'acme-skel/SYS-OP',
+      nodes: [{ ...BASE, id: 'SUB-1', level: 2 }],
+    }, token))
+    spy.mockRestore()
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe('validation_failed')
+    expect(json.error).toContain('단계 이름 설정이 손상되어 대조할 수 없습니다')
+    expect(json.error).not.toContain('정본: 없음')
+    expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
+  })
+
   it('attach_ref 있는데 levels 없음 → 400 (구조 검증, 인증 전)', async () => {
     const { token } = patRow()
     const res = await importPOST(post({
@@ -315,7 +335,8 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
   })
 
   it('골격 시드 쓰기가 실패하면(CONFIG_CONFLICT) 400 validation_failed 이고 import_wbs_upsert 는 부르지 않는다', async () => {
-    write.writeProjectSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '다른 사용자가 설정을 먼저 바꿨습니다.' })
+    write.writeProjectSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '원문 relation "project_settings" boom' })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { token, row } = patRow()
     const q = authzQueues(); q.agent_runners[0].data = row
     const { admin } = useAdmin({ ...q, wbs_items: [{ data: [] }] })
@@ -325,8 +346,11 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     }, token))
     expect(res.status).toBe(400)
     const json = await res.json()
+    spy.mockRestore()
     expect(json.code).toBe('validation_failed')
     expect(JSON.stringify(json)).toContain('CONFIG_CONFLICT')
+    expect(json.error).toContain(ERR_CONFIG_CONFLICT)          // 코드의 고정 문구
+    expect(JSON.stringify(json)).not.toContain('boom')         // 쓰기 결과의 error(원문)는 싣지 않는다
     expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
   })
 

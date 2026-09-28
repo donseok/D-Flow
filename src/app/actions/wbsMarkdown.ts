@@ -8,6 +8,8 @@ import { ensureAgentProject } from '@/lib/agent/ensureOrder'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
 
 /**
  * wbs.md 웹 업로드 — 스펙 §업로드 경로 2개의 "웹 경로(자동 부착 + 확인)".
@@ -88,11 +90,13 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
     let levelsStatus: WbsUploadPreview['levelsStatus'] = 'seed'
     let serverLevels: string[] | null = null
     if (role === 'pl') {
-      const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']   // 실패는 throw — 기존과 같이 호출자가 받는다
+      const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']   // 실패는 throw — 아래 catch 가 고정 문구로
       serverLevels = state.status === 'set' ? state.value : null
       const fileLabels = doc.levels.map(l => l.name)
       levelsStatus = serverLevels && JSON.stringify(serverLevels) === JSON.stringify(fileLabels) ? 'match' : 'mismatch'
-      if (levelsStatus === 'mismatch') {
+      // 손상(invalid)은 '정본 없음'과 다르다 — 파일이 아니라 설정을 고쳐야 한다(3원칙 ①)
+      if (state.status === 'invalid') errors.push(ERR_LEVEL_LABELS_INVALID)
+      else if (levelsStatus === 'mismatch') {
         errors.push(`levels 가 프로젝트 정본과 다릅니다 (정본: ${serverLevels?.join('>') ?? '없음'}) — 골격의 levels 를 다시 복사하세요.`)
       }
     }
@@ -131,8 +135,9 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
       canApply: errors.length === 0 && (role === 'skeleton' || (attachFound && levelsStatus === 'match')),
     }
   } catch (e) {
-    console.error('[wbs-md] 미리보기 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: e instanceof Error ? e.message : '미리보기에 실패했습니다.' }
+    // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
+    console.error('[wbs-md] 미리보기 실패:', e)
+    return { ok: false, error: e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '미리보기에 실패했습니다.' }
   }
 }
 
@@ -190,7 +195,8 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
       taskCount, ...(agentStopped ? { agentStopped: true } : {}),
     }
   } catch (e) {
-    console.error('[wbs-md] 적용 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: e instanceof Error ? e.message : '업로드에 실패했습니다.' }
+    // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
+    console.error('[wbs-md] 적용 실패:', e)
+    return { ok: false, error: e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '업로드에 실패했습니다.' }
   }
 }

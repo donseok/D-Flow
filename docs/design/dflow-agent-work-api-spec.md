@@ -384,6 +384,7 @@ ready 상태 작업 목록 조회.
 | `not_claim_owner` | 403 | report, release | 본인이 claim 하지 않은 작업 (claimed_by 불일치) |
 | `wbs_item_missing` | 409 | report (진척만) | 참조 WBS 항목이 삭제됨 |
 | `apply_failed` | 409 | report (진척만) | WBS 실적 반영 로직 실패 (항목 로크 등) |
+| `config_invalid` | 422 | `GET /api/v1/wbs/structure` | 프로젝트의 단계 이름 설정(`core.level_labels`)이 손상되어 판정할 수 없음 — 관리자가 설정을 다시 저장해야 한다(2026-09-28~) |
 | `internal_error` | 500 | 전수 | DB/서버 오류 |
 
 ---

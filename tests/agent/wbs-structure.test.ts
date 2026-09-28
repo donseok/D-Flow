@@ -15,7 +15,7 @@ import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
 import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 import { profileEq } from '../fixtures/profiles'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigUnavailableError, ERR_CONFIG_INVALID } from '@/lib/settings/errors'
 
 const LEGACY_SECRET = 'legacy-secret'
 const PL = { id: 'u-1', email: 'pl@example.com', user_metadata: {} }
@@ -157,6 +157,28 @@ describe('GET /wbs/structure', () => {
     const json = await res.json()
     expect(json.levels).toBeNull()
     expect(json.max_depth).toBeNull()
+  })
+
+  it('단계 이름 설정이 손상(invalid)이면 null 로 합치지 않고 422 config_invalid — 원인 키는 로그(C2-F2)', async () => {
+    const { token, row } = patRow()
+    useAdmin({
+      agent_runners: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }],
+      project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      ...axes([PROJECT_ID]),
+      wbs_items: [{ data: TREE }],
+    })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 'not-a-list' }))
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
+    const logged = JSON.stringify(spy.mock.calls)
+    spy.mockRestore()
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.code).toBe('config_invalid')
+    expect(json.error).toBe(ERR_CONFIG_INVALID)
+    expect(json.levels).toBeUndefined()
+    expect(logged).toContain('core.level_labels')
   })
 
   it('work:read 스코프 없음 → 403 insufficient_scope', async () => {
