@@ -1,6 +1,6 @@
 // scripts/env-swap.mjs — .env.local 대상을 바꾼다. local 은 supabase status 에서 생성, 원격은 .env.local.<대상> 복사.
 // ⚠ 파일 교체는 이 PC 의 모든 병렬 세션에 즉시 영향을 준다.
-// local 은 모듈 플래그 8개도 true 로 쓴다(스펙 §4.1) — 사용자 dev 서버가 쓰는 메인 체크아웃이 아니라 스크래치 워크트리에서 돌린다.
+// local 은 모듈 플래그 8개도 true 로 쓴다(스펙 §4.1) — 같은 키는(false 포함) 덮고 다른 키·주석은 둔다.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { detectEnvTarget, localEnvFromStatus, mergeEnv } from './lib/targets.mjs'

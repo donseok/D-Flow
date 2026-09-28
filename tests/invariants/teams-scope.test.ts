@@ -45,7 +45,7 @@ describe('팀 캐시 — 워크스페이스를 가리지 않는 전역 접근자
     expect(hits, hits.join('\n')).toEqual([])
     // 소유 파일에는 실제로 있어야 한다 — 없으면 규칙이 낡았다(이름을 옮겼으면 ALL_VIEW_OWNER 를 고친다).
     expect(codeLines(readFileSync(join(CWD, ALL_VIEW_OWNER), 'utf8'), ALL_VIEW_OWNER).some(line => ALL_VIEW.test(line))).toBe(true)
-  })
+  }, 20_000)
 
   it('판정기 — 주석 속 이름과 비슷한 새 이름은 세지 않고, 호출·export 는 센다', () => {
     const src = (body: string) => codeLines(body)

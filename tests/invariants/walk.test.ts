@@ -22,6 +22,15 @@ describe('codeLines — 리터럴 속 표지', () => {
     expect(codeLines(src('const t = `', 'http://a', '${x /* c */}`; hasLLM()'), 'x.ts'))
       .toEqual(['const t = `', 'http://a', '${x }`; hasLLM()'])
   })
+  it('템플릿 가운데 조각(TemplateMiddle) 속 // 뒤 코드를 남긴다', () => {
+    expect(codeLines('const u = `${a}//${b}`; hasLLM()', 'x.ts')).toEqual(['const u = `${a}//${b}`; hasLLM()'])
+  })
+  it('파일명의 확장자로 파서를 고른다 — .ts 의 <any>b 는 타입 단언이다(TSX 로 읽으면 JSX 로 잘못 읽는다)', () => {
+    expect(codeLines('const n = <any>b // hasLLM()', 'x.ts')).toEqual(['const n = <any>b '])
+  })
+  it('백틱이 홀수인 줄이 여러 줄 템플릿을 연다 — 가운데 줄의 // 는 템플릿 글자다', () => {
+    expect(codeLines(['const t = `', '  // x', '`; hasLLM()'].join('\n'), 'x.ts')).toEqual(['const t = `', '  // x', '`; hasLLM()'])
+  })
   it('JSX 텍스트의 URL 줄을 남긴다(표지 앞이 글자·콜론)', () => {
     expect(codeLines(src('const e = (', '  <a href={u}>', '    https://example.com', '  </a>', ')'), 'x.tsx'))
       .toEqual(['const e = (', '  <a href={u}>', '    https://example.com', '  </a>', ')'])
