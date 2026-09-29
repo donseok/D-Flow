@@ -29,7 +29,9 @@ function importsMethod(file: string, text: string, sub: string, method: string):
     && st.importClause.namedBindings.elements.some((el) => (el.propertyName ?? el.name).text === method))
 }
 /** 위임 파일을 만든 과제가 끝난 것 — 과제 14·18·20·21 이 자기 위임 파일을 더하고 과제 25 가 이 집합과 필터를 지운다(전부) */
-const DELEGATED_READY = new Set<string>([])
+const DELEGATED_READY = new Set<string>([
+  'tests/api/issue-analysis-gate.test.ts',   // 과제 14
+])
 
 describe('deny — 라우트', () => {
   it('모듈 라우트의 위임 파일이 있고, 그 핸들러(메서드)를 import 하며, 거부를 단언한다', () => {

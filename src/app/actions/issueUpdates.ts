@@ -11,6 +11,7 @@ import { getSession } from '@/lib/auth'
 import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { requireModule } from '@/lib/modules/gate'
 import { emitNotification } from '@/lib/notify/emit'
 import {
   canArchiveUpdate,
@@ -59,6 +60,9 @@ async function requireIssueMember(issueId: string): Promise<
   const projectId = found.projectId
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  // 모듈 관문(스펙 §4.2)은 관리자 판정보다 앞 — 꺼진 모듈에 관리자 판정 왕복을 쓰지 않는다
+  const mod = await requireModule({ projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const admin = await requireProjectAdmin(projectId)
   return { ok: true, projectId, userId: g.actor.userId, isAdmin: admin.ok }
 }
@@ -146,6 +150,11 @@ export async function listIssueUpdates(issueId: string): Promise<IssueUpdateList
     console.error('[listIssueUpdates] 비로그인 호출')
     return { ok: false, error: '로그인 필요' }
   }
+  // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
+  const scope = await resolveProjectId('issues', issueId)
+  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  const mod = await requireModule({ projectId: scope.projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_updates')

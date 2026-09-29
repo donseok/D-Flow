@@ -2,6 +2,7 @@
 
 import { requireProjectMember } from '@/lib/authz'
 import { loadIssueAnalysisIssues } from '@/lib/data/issueAnalysis'
+import { requireModule } from '@/lib/modules/gate'
 import {
   isIssueMegaCode,
   type IssueMegaFilter,
@@ -108,6 +109,8 @@ export async function ensureIssueAnalysisAction(
       pptExport,
     }
   }
+  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
+  if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null, template, pptExport }
   if (megaFilter !== 'all' && !isIssueMegaCode(megaFilter)) {
     return {
       ok: false,

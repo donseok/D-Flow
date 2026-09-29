@@ -41,6 +41,7 @@ import { ROSTER_SELECT, mapRosterRows } from '@/lib/data/memberSelect'
 import type { ProjectMember } from '@/lib/domain/types'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
+import { requireModule } from '@/lib/modules/gate'
 import {
   MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT,
   buildFallbackMinuteIssueDraft,
@@ -117,6 +118,8 @@ export interface IssueMajorProcessesResult {
 export async function fetchIssueMajorProcesses(projectId: string): Promise<IssueMajorProcessesResult> {
   const user = await getSession()
   if (!user || !projectId) return { ok: false, error: '로그인 필요' }
+  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 세션 확인 뒤·조회 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_major_processes')
@@ -145,6 +148,8 @@ export async function fetchIssueProjectMembers(projectId: string): Promise<Issue
   // 조회 전용 — 담당자 후보 명단은 프로젝트 화면을 볼 수 있는 로그인 사용자면 읽을 수 있다.
   const user = await getSession()
   if (!user || !projectId) return { ok: false, error: '로그인 필요' }
+  const mod = await requireModule({ projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members')
@@ -580,17 +585,26 @@ type OwnerGate = { ok: true; isAdmin: boolean; userId: string } | { ok: false; e
 async function adminOrOwnerGate(issueId: string): Promise<OwnerGate> {
   const found = await resolveProjectId('issues', issueId)
   if (!found.ok) return { ok: false, error: found.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // issues.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
   const g = await requireProjectAdmin(found.projectId)
-  if (g.ok) return { ok: true, isAdmin: true, userId: g.actor.userId }
-  let actor: Awaited<ReturnType<typeof getActor>> = null
-  try { actor = await getActor() } catch { actor = null }
-  if (!actor) return { ok: false, error: g.error }
-  return { ok: true, isAdmin: false, userId: actor.userId }
+  let pass: OwnerGate
+  if (g.ok) pass = { ok: true, isAdmin: true, userId: g.actor.userId }
+  else {
+    let actor: Awaited<ReturnType<typeof getActor>> = null
+    try { actor = await getActor() } catch { actor = null }
+    if (!actor) return { ok: false, error: g.error }
+    pass = { ok: true, isAdmin: false, userId: actor.userId }
+  }
+  const mod = await requireModule({ projectId: found.projectId }, 'issues')   // 스펙 §4.2 — 작성자 판정은 호출부가 한다(관문은 그 전)
+  if (!mod.ok) return { ok: false, error: mod.error }
+  return pass
 }
 
 export async function createIssue(projectId: string, input: IssueInput): Promise<IssueActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const checked = validateInput(input, 'normal-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
@@ -784,6 +798,8 @@ export async function prepareMinuteIssueDraft(
 ): Promise<MinuteIssueDraftActionResult> {
   const gate = await requireProjectMember(projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId }, ['issues', 'minutes'])       // 회의록 블록 → 이슈 — 둘 다 켜져야. 꺼지면 초안 캐시·LLM 앞에서 끝난다
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const verified = await verifyMinuteIssueBlock(
     projectId, gate.actor.projectWorkspace.get(projectId), source, 'prepareMinuteIssueDraft', true)
@@ -842,6 +858,8 @@ export async function createIssueFromMinuteBlock(
 ): Promise<IssueActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, ['issues', 'minutes'])
+  if (!mod.ok) return { ok: false, error: mod.error }
   const checked = validateInput(input, 'minute-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
@@ -1020,6 +1038,9 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  const mod = await requireModule({ projectId: found.projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (patch.status === undefined && patch.assigneeMemberIds === undefined) {
     return { ok: false, error: '변경할 내용이 없습니다.' }
   }

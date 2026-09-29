@@ -12,6 +12,7 @@ import {
 } from '@/lib/domain/issueAttachments'
 import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
+import { requireModule } from '@/lib/modules/gate'
 import { createServerClient } from '@/lib/supabase/server'
 
 const BUCKET = 'issue-attachments'
@@ -43,22 +44,28 @@ async function requireIssueEditable(issueId: string): Promise<
   }
   const projectId = found.projectId
 
+  let pass: { ok: true; projectId: string; userId: string }
   const admin = await requireProjectAdmin(projectId)
-  if (admin.ok) return { ok: true, projectId, userId: admin.actor.userId }
+  if (admin.ok) pass = { ok: true, projectId, userId: admin.actor.userId }
+  else {
+    let actor: Awaited<ReturnType<typeof getActor>> = null
+    try { actor = await getActor() } catch { actor = null }
+    if (!actor) return { ok: false, error: admin.error }
 
-  let actor: Awaited<ReturnType<typeof getActor>> = null
-  try { actor = await getActor() } catch { actor = null }
-  if (!actor) return { ok: false, error: admin.error }
-
-  const sb = await createServerClient()
-  const { data, error } = await sb.from('issues').select('created_by').eq('id', issueId).maybeSingle()
-  if (error) {
-    console.error('[issueAttachments] 이슈 작성자 조회 실패:', error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    const sb = await createServerClient()
+    const { data, error } = await sb.from('issues').select('created_by').eq('id', issueId).maybeSingle()
+    if (error) {
+      console.error('[issueAttachments] 이슈 작성자 조회 실패:', error.message)
+      return { ok: false, error: ERR_LOOKUP }
+    }
+    if (!data) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
+    if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: '권한 없음' }
+    pass = { ok: true, projectId, userId: actor.userId }
   }
-  if (!data) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
-  if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: '권한 없음' }
-  return { ok: true, projectId, userId: actor.userId }
+  // 모듈 관문(스펙 §4.2) — 관리자·작성자 두 성공을 모아 한 번 판정한다
+  const mod = await requireModule({ projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
+  return pass
 }
 
 /**
@@ -73,6 +80,11 @@ export async function listIssueAttachments(issueId: string): Promise<IssueAttach
     console.error('[listIssueAttachments] 비로그인 호출')
     return { ok: false, error: '로그인 필요' }
   }
+  // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
+  const scope = await resolveProjectId('issues', issueId)
+  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  const mod = await requireModule({ projectId: scope.projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_attachments')

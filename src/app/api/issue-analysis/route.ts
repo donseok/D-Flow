@@ -5,6 +5,7 @@ import { denyStatus } from '@/lib/authz/errors'
 import { toProjectActorView } from '@/lib/domain/authz'
 import { jsonError } from '@/lib/api/http'
 import { loadSavedIssueAnalysisRun } from '@/lib/data/issueAnalysis'
+import { requireModule } from '@/lib/modules/gate'
 import { buildIssueAnalysisDeckPlan } from '@/lib/report/issues/deckPlan'
 import {
   ISSUE_ANALYSIS_PPTX_MIME,
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const guard = await requireProjectMember(projectId)
   if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
+  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 세션 API — 꺼지면 404(존재 은닉)
+  if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
 
   const capability = getIssueAnalysisPptExportDiagnostic()
   if (capability.status !== 'ready') {

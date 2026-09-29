@@ -23,7 +23,9 @@ import { harness } from './_harness'
 import { ACTION_GATES, type GateEntry } from './manifest'
 
 /** 관문을 넣은 액션 파일 — 과제 14~17 이 자기 파일을 더한다. 과제 25 가 이 집합과 필터를 지운다(전 항목) */
-const COVERED_ACTION_FILES = new Set<string>([])
+const COVERED_ACTION_FILES = new Set<string>([
+  'src/app/actions/issues.ts', 'src/app/actions/issueUpdates.ts', 'src/app/actions/issueAttachments.ts', 'src/app/actions/issueAnalysis.ts',   // 과제 14
+])
 
 const listOf = (m: GateEntry['module']): ModuleId[] => (m === null ? [] : typeof m === 'string' ? [m] : [...m])
 const entries = Object.entries(ACTION_GATES)
