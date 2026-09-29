@@ -12,8 +12,15 @@ const mocks = vi.hoisted(() => ({
     }) }),
   })),
 }))
+const scope = vi.hoisted(() => ({
+  enabledIndexProjectIds: vi.fn(async (): Promise<{ ok: true; ids: string[] } | { ok: false }> => ({ ok: true, ids: ['p1'] })),
+}))
 vi.mock('@/lib/ai/index/worker', () => ({ runIndexWorkerOnce: mocks.runIndexWorkerOnce }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+vi.mock('@/lib/ai/index/moduleGate', async (original) => ({
+  ...(await original<typeof import('@/lib/ai/index/moduleGate')>()),
+  enabledIndexProjectIds: scope.enabledIndexProjectIds,
+}))
 
 import { GET } from '@/app/api/cron/ai-index/route'
 
@@ -27,6 +34,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('CRON_SECRET', 'topsecret')
   vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
+  vi.stubEnv('CHAT_V2_ENABLED', 'true')
+  scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   mocks.runIndexWorkerOnce.mockResolvedValue({ claimed: 3, succeeded: 3, failed: 0 })
 })
 
@@ -58,10 +67,22 @@ describe('GET /api/cron/ai-index', () => {
   })
 
   it('프로젝트 조회가 실패하면 503 — 빈 스코프로 위장하지 않는다', async () => {
-    mocks.createAdminClient.mockReturnValue({
-      from: () => ({ select: () => ({ limit: async () => ({ data: null, error: { code: 'ERR', message: 'boom' } }) }) }),
-    })
+    scope.enabledIndexProjectIds.mockResolvedValueOnce({ ok: false })
     expect((await GET(request('Bearer topsecret'))).status).toBe(503)
     expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
+  })
+
+  it('배포에서 챗봇을 쓸 수 없으면 잡을 선점하지 않는다', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'false')
+    expect((await GET(request('Bearer topsecret'))).status).toBe(404)
+    expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
+  })
+
+  it('service_role 클라이언트와 잡별 모듈 관문을 워커에 넘긴다', async () => {
+    await GET(request('Bearer topsecret'))
+    expect(scope.enabledIndexProjectIds).toHaveBeenCalledWith(mocks.createAdminClient.mock.results[0]?.value)
+    expect(mocks.runIndexWorkerOnce).toHaveBeenCalledWith(expect.objectContaining({
+      moduleGate: expect.objectContaining({ state: expect.any(Function), skip: expect.any(Function) }),
+    }))
   })
 })

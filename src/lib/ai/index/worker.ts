@@ -1,4 +1,6 @@
 import { safeIndexJobErrorCode } from './jobs'
+import type { ModuleState } from '@/lib/modules/gate'
+import { CONFIG_UNAVAILABLE_ERROR, type IndexJobModuleGate } from './moduleGate'
 import type {
   ClaimedIndexJob,
   IndexContentLoader,
@@ -20,6 +22,7 @@ export interface IndexWorkerDeps {
   batchSize?: number
   leaseSeconds?: number
   now?: Date
+  moduleGate: IndexJobModuleGate
 }
 
 /** payload.indexVersion이 유효한 양의 정수면 그 버전을, 아니면 현행 1을 대상으로 삼는다. */
@@ -38,7 +41,7 @@ function deleteSelector(job: ClaimedIndexJob): IndexDeleteSelector {
   }
 }
 
-type JobOutcome = 'upserted' | 'deleted' | 'failed' | 'requeued'
+type JobOutcome = 'upserted' | 'deleted' | 'failed' | 'requeued' | 'skipped'
 
 /**
  * 증분 색인 워커 1회 실행 — 순수 오케스트레이션(모든 I/O는 주입된 deps).
@@ -49,7 +52,7 @@ type JobOutcome = 'upserted' | 'deleted' | 'failed' | 'requeued'
  * 오래된 덮어쓰기를 별도로 차단한다 — 이중 방어.
  */
 export async function runIndexWorkerOnce(deps: IndexWorkerDeps): Promise<IndexWorkerRunSummary> {
-  const summary: IndexWorkerRunSummary = { claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0 }
+  const summary: IndexWorkerRunSummary = { claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, skipped: 0 }
   const batchSize = deps.batchSize ?? INDEX_WORKER_DEFAULT_BATCH
   const leaseSeconds = deps.leaseSeconds ?? INDEX_WORKER_DEFAULT_LEASE_SECONDS
   const now = deps.now ?? new Date()
@@ -64,10 +67,31 @@ export async function runIndexWorkerOnce(deps: IndexWorkerDeps): Promise<IndexWo
   summary.claimed = claimed.data.length
 
   for (const job of claimed.data) {
-    const outcome = await processJob(deps, job, now)
+    const outcome = await gateThenProcess(deps, job, now)
     summary[outcome] += 1
   }
   return summary
+}
+
+/** 선점한 잡마다 판정한다. 설정을 읽지 못한 잡은 재시도하고, 꺼진 잡은 영구히 건너뛴다. */
+async function gateThenProcess(deps: IndexWorkerDeps, job: ClaimedIndexJob, now: Date): Promise<JobOutcome> {
+  let state: ModuleState
+  try {
+    state = await deps.moduleGate.state(job)
+  } catch (error) {
+    console.error(`[assistant] 색인 작업 모듈 판정 예외(job ${job.jobKey}):`, error instanceof Error ? error.message : error)
+    state = 'unknown'
+  }
+  if (state === 'unknown') return failJob(deps, job, CONFIG_UNAVAILABLE_ERROR, now)
+  if (state === 'on') return processJob(deps, job, now)
+  try {
+    const closed = await deps.moduleGate.skip(job)
+    console.info(`[assistant] 모듈 꺼짐 — 색인 작업 건너뜀(job ${job.jobKey})`)
+    return closed ? 'skipped' : 'requeued'
+  } catch (error) {
+    console.error(`[assistant] 색인 작업 skipped 기록 실패(job ${job.jobKey}):`, error instanceof Error ? error.message : error)
+    return 'failed'
+  }
 }
 
 async function processJob(deps: IndexWorkerDeps, job: ClaimedIndexJob, now: Date): Promise<JobOutcome> {

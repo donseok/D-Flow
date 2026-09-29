@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const mocks = vi.hoisted(() => ({
   requireSuperuser: vi.fn(),
@@ -7,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   runIndexBackfill: vi.fn(),
   runIndexWorkerOnce: vi.fn(),
   runRepairOnce: vi.fn(),
+  queueEnqueue: vi.fn(async () => ({ ok: true, data: { affected: 0 } })),
+}))
+const scope = vi.hoisted(() => ({
+  enabledIndexProjectIds: vi.fn(async (): Promise<{ ok: true; ids: string[] } | { ok: false }> => ({ ok: true, ids: ['p1'] })),
 }))
 
 vi.mock('@/lib/authz', () => ({ requireSuperuser: mocks.requireSuperuser }))
@@ -17,7 +22,7 @@ vi.mock('@/lib/ai/index', async () => {
     ...actual,
     // 조립 헬퍼는 자리표시자만 반환한다 — runIndexBackfill/runIndexWorkerOnce/runRepairOnce
     // 자체를 목했으므로 실제로 이 deps 를 소비하지 않는다.
-    createSupabaseIndexJobQueue: () => ({ enqueue: vi.fn() }),
+    createSupabaseIndexJobQueue: () => ({ enqueue: mocks.queueEnqueue }),
     createSupabaseIndexContentLoader: () => vi.fn(),
     createSupabaseIndexSourceLister: () => vi.fn(),
     createSupabasePgvectorKnowledgeIndex: () => ({}),
@@ -26,6 +31,10 @@ vi.mock('@/lib/ai/index', async () => {
     runRepairOnce: mocks.runRepairOnce,
   }
 })
+vi.mock('@/lib/ai/index/moduleGate', async (original) => ({
+  ...(await original<typeof import('@/lib/ai/index/moduleGate')>()),
+  enabledIndexProjectIds: scope.enabledIndexProjectIds,
+}))
 
 import { POST } from '@/app/api/wiki/reindex/route'
 import { INDEX_BACKFILL_DOMAINS } from '@/lib/ai/index'
@@ -87,13 +96,18 @@ function fakeAdmin(options: {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubEnv('CHAT_V2_ENABLED', 'true')
+  scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   mocks.requireSuperuser.mockResolvedValue({ ok: true, actor: { userId: 'u1', isSuperuser: true } })
   mocks.createAdminClient.mockReturnValue(fakeAdmin())
   mocks.runIndexBackfill.mockResolvedValue({
     planned: 1, enqueued: 1, batches: 1, dryRun: false, listErrorCode: null, enqueueErrorCode: null,
   })
-  mocks.runIndexWorkerOnce.mockResolvedValue({ claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0 })
+  mocks.runIndexWorkerOnce.mockResolvedValue({ claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, skipped: 0 })
   mocks.runRepairOnce.mockResolvedValue({ scanned: 0, repaired: 0, stillNull: 0 })
+})
+afterEach(() => {
+  for (const fn of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(fn).mockReset()
 })
 
 describe('POST /api/wiki/reindex', () => {
@@ -163,7 +177,9 @@ describe('POST /api/wiki/reindex', () => {
   it('step 은 batchSize 8 로 runIndexWorkerOnce 를 호출한다', async () => {
     await POST(request({ action: 'step' }))
     expect(mocks.runIndexWorkerOnce).toHaveBeenCalledTimes(1)
-    expect(mocks.runIndexWorkerOnce).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 8 }))
+    expect(mocks.runIndexWorkerOnce).toHaveBeenCalledWith(expect.objectContaining({
+      batchSize: 8, moduleGate: expect.objectContaining({ state: expect.any(Function), skip: expect.any(Function) }),
+    }))
   })
 
   it('step 의 claimFailed 를 그대로 응답에 전달한다', async () => {
@@ -187,5 +203,33 @@ describe('POST /api/wiki/reindex', () => {
     mocks.runRepairOnce.mockResolvedValue({ error: 'null 임베딩 행을 조회하지 못했습니다.', status: 503 })
     const res = await POST(request({ action: 'repair' }))
     expect(res.status).toBe(503)
+  })
+
+  it('배포에서 챗봇을 쓸 수 없으면 step·enqueue 만 404', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'false')
+    expect((await POST(request({ action: 'step' }))).status).toBe(404)
+    expect((await POST(request({ action: 'enqueue' }))).status).toBe(404)
+    expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
+    expect(mocks.runIndexBackfill).not.toHaveBeenCalled()
+    expect((await POST(request({ action: 'status' }))).status).toBe(200)
+  })
+
+  it('enqueue 는 꺼진 프로젝트의 변경을 큐에 넣지 않는다', async () => {
+    vi.mocked(moduleState).mockResolvedValue('off')
+    await POST(request({ action: 'enqueue' }))
+    const enqueue = (mocks.runIndexBackfill.mock.calls[0][0] as { enqueue: (mutations: unknown[]) => Promise<unknown> }).enqueue
+    await enqueue([{ operation: 'upsert', projectId: 'p1', domain: 'wbs', entityType: 'wbs_item', entityId: 'w1' }])
+    expect(mocks.queueEnqueue).toHaveBeenCalledWith([])
+  })
+
+  it('프로젝트 스코프 조회가 실패하면 503', async () => {
+    scope.enabledIndexProjectIds.mockResolvedValueOnce({ ok: false })
+    expect((await POST(request({ action: 'step' }))).status).toBe(503)
+    expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
+  })
+
+  it('service_role 클라이언트로 켜진 프로젝트 스코프를 읽는다', async () => {
+    await POST(request({ action: 'step' }))
+    expect(scope.enabledIndexProjectIds).toHaveBeenCalledWith(mocks.createAdminClient.mock.results[0]?.value)
   })
 })

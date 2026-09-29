@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { planIndexJobFailure } from '@/lib/ai/index/jobs'
 import { createSupabaseIndexContentLoader } from '@/lib/ai/index/content'
+import type { IndexJobModuleGate } from '@/lib/ai/index/moduleGate'
 import {
   INDEX_WORKER_DEFAULT_BATCH,
   INDEX_WORKER_DEFAULT_LEASE_SECONDS,
@@ -78,6 +79,8 @@ function fakeIndex(): KnowledgeIndex {
   }
 }
 
+const ON_GATE: IndexJobModuleGate = { state: async () => 'on', skip: async () => true }
+
 const loaderWithDocuments: IndexContentLoader = async () => ({
   ok: true,
   data: { documents: [documentInput()], sourceUpdatedAt: '2026-07-19T01:00:00.000Z' },
@@ -91,11 +94,11 @@ describe('runIndexWorkerOnce', () => {
 
   it('passes batch and lease bounds to claim and defaults them safely', async () => {
     const queue = fakeQueue([])
-    await runIndexWorkerOnce({ queue, index: fakeIndex(), loadContent: loaderWithDocuments, batchSize: 5, leaseSeconds: 120 })
+    await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index: fakeIndex(), loadContent: loaderWithDocuments, batchSize: 5, leaseSeconds: 120 })
     expect(queue.claim).toHaveBeenCalledWith(5, 120)
 
     const defaulted = fakeQueue([])
-    await runIndexWorkerOnce({ queue: defaulted, index: fakeIndex(), loadContent: loaderWithDocuments })
+    await runIndexWorkerOnce({ moduleGate: ON_GATE, queue: defaulted, index: fakeIndex(), loadContent: loaderWithDocuments })
     expect(defaulted.claim).toHaveBeenCalledWith(INDEX_WORKER_DEFAULT_BATCH, INDEX_WORKER_DEFAULT_LEASE_SECONDS)
   })
 
@@ -103,24 +106,24 @@ describe('runIndexWorkerOnce', () => {
     const queue = fakeQueue([claimedJob()])
     const index = fakeIndex()
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent: loaderWithDocuments })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent: loaderWithDocuments })
 
     expect(index.upsert).toHaveBeenCalledWith([expect.objectContaining({ entityId: 'w1' })], { replaceEntityChunks: true })
     expect(queue.complete).toHaveBeenCalledWith({ id: 7, generation: 3 })
-    expect(summary).toEqual({ claimed: 1, upserted: 1, deleted: 0, failed: 0, requeued: 0 })
+    expect(summary).toEqual({ claimed: 1, upserted: 1, deleted: 0, failed: 0, requeued: 0, skipped: 0 })
   })
 
   it('deletes every chunk for a delete job using the payload index version', async () => {
     const queue = fakeQueue([claimedJob({ operation: 'delete', payload: { indexVersion: 2 } })])
     const index = fakeIndex()
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent: loaderWithDocuments })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent: loaderWithDocuments })
 
     expect(index.delete).toHaveBeenCalledWith({
       projectId: 'p1', domain: 'wbs', entityType: 'wbs_item', entityId: 'w1', indexVersion: 2,
     })
     expect(index.upsert).not.toHaveBeenCalled()
-    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 1, failed: 0, requeued: 0 })
+    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 1, failed: 0, requeued: 0, skipped: 0 })
   })
 
   it('converges an upsert whose source disappeared into a delete (tombstone rule)', async () => {
@@ -129,11 +132,11 @@ describe('runIndexWorkerOnce', () => {
     const index = fakeIndex()
     const loadContent: IndexContentLoader = async () => ({ ok: true, data: null })
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent })
 
     expect(index.delete).toHaveBeenCalledWith(expect.objectContaining({ entityId: 'w1', indexVersion: 1 }))
     expect(queue.complete).toHaveBeenCalledWith({ id: 7, generation: 3 })
-    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 1, failed: 0, requeued: 0 })
+    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 1, failed: 0, requeued: 0, skipped: 0 })
   })
 
   it('records a backoff failure with a sanitized code when the load fails', async () => {
@@ -144,12 +147,12 @@ describe('runIndexWorkerOnce', () => {
       ok: false, errorCode: 'raw failure: secret transcript', retryable: true,
     })
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent, now })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent, now })
 
     expect(queue.fail).toHaveBeenCalledWith({ id: 7, generation: 3, attempts: 1 }, 'INDEX_JOB_FAILED', now)
     expect(index.upsert).not.toHaveBeenCalled()
     expect(index.delete).not.toHaveBeenCalled()
-    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 0, failed: 1, requeued: 0 })
+    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 0, failed: 1, requeued: 0, skipped: 0 })
   })
 
   it('records an index write failure without completing the job', async () => {
@@ -160,7 +163,7 @@ describe('runIndexWorkerOnce', () => {
       error: { code: 'INDEX_UPSERT_FAILED' as const, operation: 'upsert' as const, retryable: true },
     }))
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent: loaderWithDocuments })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent: loaderWithDocuments })
 
     expect(queue.fail).toHaveBeenCalledWith(
       { id: 7, generation: 3, attempts: 1 }, 'INDEX_UPSERT_FAILED', expect.any(Date),
@@ -173,9 +176,9 @@ describe('runIndexWorkerOnce', () => {
     const queue = fakeQueue([claimedJob()])
     queue.complete = vi.fn(async () => ({ ok: true as const, data: { applied: false } }))
 
-    const summary = await runIndexWorkerOnce({ queue, index: fakeIndex(), loadContent: loaderWithDocuments })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index: fakeIndex(), loadContent: loaderWithDocuments })
 
-    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 0, failed: 0, requeued: 1 })
+    expect(summary).toEqual({ claimed: 1, upserted: 0, deleted: 0, failed: 0, requeued: 1, skipped: 0 })
   })
 
   it('returns a zero summary with claimFailed when the claim itself fails', async () => {
@@ -185,8 +188,8 @@ describe('runIndexWorkerOnce', () => {
       error: { code: 'INDEX_JOB_CLAIM_FAILED' as const, operation: 'claim' as const, retryable: true },
     }))
 
-    const summary = await runIndexWorkerOnce({ queue, index: fakeIndex(), loadContent: loaderWithDocuments })
-    expect(summary).toEqual({ claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, claimFailed: 'INDEX_JOB_CLAIM_FAILED' })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index: fakeIndex(), loadContent: loaderWithDocuments })
+    expect(summary).toEqual({ claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, skipped: 0, claimFailed: 'INDEX_JOB_CLAIM_FAILED' })
   })
 
   it('isolates one throwing job so the rest of the batch still processes', async () => {
@@ -197,8 +200,8 @@ describe('runIndexWorkerOnce', () => {
       return { ok: true, data: { documents: [documentInput({ entityId: 'w2' })], sourceUpdatedAt: null } }
     }
 
-    const summary = await runIndexWorkerOnce({ queue, index, loadContent })
-    expect(summary).toEqual({ claimed: 2, upserted: 1, deleted: 0, failed: 1, requeued: 0 })
+    const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent })
+    expect(summary).toEqual({ claimed: 2, upserted: 1, deleted: 0, failed: 1, requeued: 0, skipped: 0 })
   })
 })
 

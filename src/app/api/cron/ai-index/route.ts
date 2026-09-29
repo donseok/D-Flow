@@ -8,6 +8,8 @@ import {
 } from '@/lib/ai/index'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chatIndexWorkerEnabled } from '@/lib/modules/flags'
+import { moduleDef } from '@/lib/modules/registry'
+import { createIndexJobModuleGate, enabledIndexProjectIds } from '@/lib/ai/index/moduleGate'
 import type { SupabaseKnowledgeClient } from '@/lib/ai/index/pgvector'
 
 /**
@@ -39,6 +41,7 @@ export async function GET(request: NextRequest) {
   if (!chatIndexWorkerEnabled()) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
   }
+  if (!moduleDef('chatbot').envAvailable()) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
 
   // Authorization: Bearer <secret> 규약으로 들어온다(Vercel 크론).
   const authHeader = request.headers.get('authorization')
@@ -49,25 +52,18 @@ export async function GET(request: NextRequest) {
 
   // runIndexWorkerOnce 는 모든 I/O 를 주입받는 순수 오케스트레이션이다.
   // 어댑터 3종 조립은 /api/chat/index/worker/route.ts:101-107 과 동일하게 한다.
-  const admin = createAdminClient() as unknown as SupabaseKnowledgeClient
-  const projectsResult = await admin.from('projects').select('id').limit(100)
-  // 조회 실패를 빈 스코프로 위장하면 "처리할 것이 없다" 로 보이는 조용한 무동작이 된다.
-  // 이는 CLAUDE.md 에러 처리 3원칙 1번을 위반한다.
-  if (projectsResult.error || !Array.isArray(projectsResult.data)) {
-    if (projectsResult.error) console.error('[cron/ai-index] 프로젝트 조회 실패:', projectsResult.error)
-    return NextResponse.json({ error: 'PROJECTS_READ_FAILED' }, { status: 503 })
-  }
-
-  const allowedProjectIds = (projectsResult.data as Array<{ id?: unknown }>)
-    .map(row => (typeof row.id === 'string' ? row.id : ''))
-    .filter(Boolean)
-  const accessScope = { allowedProjectIds, allowGlobal: true }
+  const db = createAdminClient()
+  const admin = db as unknown as SupabaseKnowledgeClient
+  const scope = await enabledIndexProjectIds(db)
+  if (!scope.ok) return NextResponse.json({ error: 'PROJECTS_READ_FAILED' }, { status: 503 })
+  const accessScope = { allowedProjectIds: scope.ids, allowGlobal: true }
 
   const summary = await runIndexWorkerOnce({
     queue: createSupabaseIndexJobQueue(admin, accessScope),
     index: createSupabasePgvectorKnowledgeIndex(admin, accessScope),
     loadContent: createSupabaseIndexContentLoader(admin),
     batchSize: BATCH,
+    moduleGate: createIndexJobModuleGate(db),
   })
   return NextResponse.json({ ok: true, ...summary })
 }

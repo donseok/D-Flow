@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireSuperuser } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { moduleDef } from '@/lib/modules/registry'
+import { createIndexJobModuleGate, enabledIndexProjectIds, keepEnabledMutations } from '@/lib/ai/index/moduleGate'
 import {
   INDEX_BACKFILL_DOMAINS,
   createSupabaseIndexContentLoader,
@@ -31,16 +33,12 @@ function parseAction(raw: unknown): ReindexAction | null {
   return action === 'status' || action === 'enqueue' || action === 'step' || action === 'repair' ? action : null
 }
 
-/** 워커 라우트와 동일한 accessScope 조립 — 실제 프로젝트 전체 + global. */
+/** 워커 라우트와 동일한 accessScope 조립 — 챗봇이 켜진 프로젝트 + global. */
 async function loadAccessScope(
   admin: ReturnType<typeof createAdminClient>,
 ): Promise<{ allowedProjectIds: string[]; allowGlobal: true } | null> {
-  const projectsResult = await admin.from('projects').select('id').limit(100)
-  if (projectsResult.error || !Array.isArray(projectsResult.data)) return null
-  const allowedProjectIds = (projectsResult.data as Array<{ id?: unknown }>)
-    .map(row => (typeof row.id === 'string' ? row.id : ''))
-    .filter(Boolean)
-  return { allowedProjectIds, allowGlobal: true }
+  const scope = await enabledIndexProjectIds(admin)
+  return scope.ok ? { allowedProjectIds: scope.ids, allowGlobal: true } : null
 }
 
 export async function POST(req: NextRequest) {
@@ -83,10 +81,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result)
     }
 
+    if (!moduleDef('chatbot').envAvailable()) {
+      return NextResponse.json({ error: '이 배포에서는 챗봇 색인을 쓸 수 없습니다.' }, { status: 404 })
+    }
     // enqueue/step 은 프로젝트 스코프가 필요하다 — 워커 라우트와 동일하게 조립.
     const accessScope = await loadAccessScope(admin)
     if (!accessScope) return NextResponse.json({ error: '프로젝트 범위를 확인하지 못했습니다.' }, { status: 503 })
     const queue = createSupabaseIndexJobQueue(scopedAdmin, accessScope)
+    const gate = createIndexJobModuleGate(admin)
 
     if (action === 'enqueue') {
       let enqueued = 0
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
         const summary = await runIndexBackfill({
           domain,
           list: createSupabaseIndexSourceLister(scopedAdmin),
-          enqueue: mutations => queue.enqueue(mutations),
+          enqueue: async mutations => queue.enqueue(await keepEnabledMutations(gate, mutations)),
         })
         // 도메인 하나라도 조회/큐잉이 실패하면 부분 합계를 성공으로 위장하지 않는다.
         if (summary.listErrorCode || summary.enqueueErrorCode) {
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
       index: createSupabasePgvectorKnowledgeIndex(scopedAdmin, accessScope),
       loadContent: createSupabaseIndexContentLoader(scopedAdmin),
       batchSize: STEP_BATCH_SIZE,
+      moduleGate: gate,
     })
     return NextResponse.json(summary)
   } catch (e) {

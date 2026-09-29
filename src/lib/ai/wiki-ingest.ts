@@ -5,6 +5,7 @@ import { buildWikiCatalogText } from '@/lib/ai/wiki-catalog'
 import { loadWikiSaturation, type WikiSaturationSnapshot } from '@/lib/ai/wiki-saturation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
+import { CONFIG_UNAVAILABLE_ERROR, gateWikiJob } from '@/lib/ai/index/moduleGate'
 import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
@@ -971,6 +972,12 @@ export async function processMinuteWikiJob(jobId: number): Promise<WikiProcessSu
   const job = claimedJob as unknown as Row
 
   try {
+    const gate = await gateWikiJob(admin, {
+      table: 'wiki_processing_jobs', id: job.id as number,
+      projectId: job.project_id as string, lockedBy: job.locked_by as string,
+    })
+    if (gate === 'skipped') return null
+    if (gate === 'unknown') throw new Error(CONFIG_UNAVAILABLE_ERROR)
     const minuteVersionId = job.minute_version_id as string | null
     if (!minuteVersionId) throw new Error('VERSION_REQUIRED')
     const [{ data: minute, error: minuteError }, versionResult, latestVersionResult] = await Promise.all([
@@ -1176,11 +1183,17 @@ export async function processWikiProjectRebuildStep(
     throw new Error('PROJECT_REBUILD_CLAIM_INVALID')
   }
 
-  let processError = 'MINUTE_JOB_NOT_DONE'
-  try {
-    if (await processMinuteWikiJob(claim.wiki_job_id)) processError = ''
-  } catch (error) {
-    processError = safeJobError(error)
+  const gate = await gateWikiJob(admin, {
+    table: 'wiki_project_rebuild_jobs', projectId: claim.claimed_project_id, lockedBy: workerId,
+  })
+  if (gate === 'skipped') return { attempted: true, completed: false, finished: false }
+  let processError = gate === 'unknown' ? CONFIG_UNAVAILABLE_ERROR : 'MINUTE_JOB_NOT_DONE'
+  if (gate === 'run') {
+    try {
+      if (await processMinuteWikiJob(claim.wiki_job_id)) processError = ''
+    } catch (error) {
+      processError = safeJobError(error)
+    }
   }
 
   const { data: finishedRaw, error: finishError } = await admin

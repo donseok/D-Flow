@@ -5,9 +5,16 @@ const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   embedDocuments: vi.fn(),
 }))
+const scope = vi.hoisted(() => ({
+  enabledIndexProjectIds: vi.fn(async (): Promise<{ ok: true; ids: string[] } | { ok: false }> => ({ ok: true, ids: ['p1'] })),
+}))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/ai/embeddings', () => ({ embedDocuments: mocks.embedDocuments }))
+vi.mock('@/lib/ai/index/moduleGate', async (original) => ({
+  ...(await original<typeof import('@/lib/ai/index/moduleGate')>()),
+  enabledIndexProjectIds: scope.enabledIndexProjectIds,
+}))
 
 import { POST } from '@/app/api/chat/index/worker/route'
 
@@ -60,7 +67,7 @@ function repairAdmin(options: {
 }) {
   const updateIds: string[] = []
   const limitCalls: number[] = []
-  const from = vi.fn((_table: string) => {
+  const from = vi.fn(() => {
     let chain: 'select' | 'update' | null = null
     let updateId: string | undefined
     const builder: Record<string, unknown> = {}
@@ -91,7 +98,9 @@ describe('POST /api/chat/index/worker gates', () => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
     mocks.createAdminClient.mockReturnValue(fakeAdmin())
   })
 
@@ -133,7 +142,9 @@ describe('POST /api/chat/index/worker execution', () => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   })
 
   it('runs one worker batch and returns the run summary', async () => {
@@ -146,17 +157,30 @@ describe('POST /api/chat/index/worker execution', () => {
     const response = await POST(request({ mode: 'worker', batchSize: 5 }, { 'x-cron-secret': SECRET }))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      mode: 'worker', claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0,
+      mode: 'worker', claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, skipped: 0,
     })
     expect(admin.rpc).toHaveBeenCalledWith('claim_ai_index_jobs', { p_limit: 5, p_lease_seconds: 300 })
   })
 
   it('fails closed when the project scope cannot be resolved', async () => {
-    mocks.createAdminClient.mockReturnValue(fakeAdmin({
-      tables: { projects: { data: null, error: { code: '08006' } } },
-    }))
+    mocks.createAdminClient.mockReturnValue(fakeAdmin())
+    scope.enabledIndexProjectIds.mockResolvedValueOnce({ ok: false })
     const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
     expect(response.status).toBe(503)
+  })
+
+  it('배포에서 챗봇을 쓸 수 없으면 잡을 선점하지 않는다', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'false')
+    const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    expect(response.status).toBe(404)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('켜진 프로젝트 스코프를 service_role 클라이언트로 읽는다', async () => {
+    const admin = fakeAdmin({ rpc: name => (name === 'claim_ai_index_jobs' ? { data: [], error: null } : { data: null, error: null }) })
+    mocks.createAdminClient.mockReturnValue(admin)
+    await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    expect(scope.enabledIndexProjectIds).toHaveBeenCalledWith(admin)
   })
 
   it('reports a dry-run consistency check without enqueueing anything', async () => {
@@ -225,7 +249,9 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   })
 
   it('uses the same gate as the other modes — flag off hides it, wrong secret is rejected', async () => {

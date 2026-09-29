@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chatIndexWorkerEnabled } from '@/lib/modules/flags'
+import { moduleDef } from '@/lib/modules/registry'
+import { createIndexJobModuleGate, enabledIndexProjectIds, keepEnabledMutations } from '@/lib/ai/index/moduleGate'
 import {
   INDEX_BACKFILL_DOMAINS,
   checkIndexConsistency,
@@ -78,6 +80,7 @@ export async function POST(req: NextRequest) {
   if (!chatIndexWorkerEnabled()) {
     return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   }
+  if (!moduleDef('chatbot').envAvailable()) return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   const expectedSecret = process.env.CHAT_V2_INDEX_CRON_SECRET
   if (!expectedSecret) return NextResponse.json({ error: 'Not Found' }, { status: 404 })
   if (!secretMatches(req.headers.get('x-cron-secret'), expectedSecret)) {
@@ -95,7 +98,8 @@ export async function POST(req: NextRequest) {
 
   try {
     // service-role 전용 조립. 어댑터 스코프는 실제 프로젝트 전체 + global(회의 미연결 회의록).
-    const admin = createAdminClient() as unknown as SupabaseKnowledgeClient
+    const db = createAdminClient()
+    const admin = db as unknown as SupabaseKnowledgeClient
 
     if (body.mode === 'repair') {
       const limit = Math.min(body.batchSize ?? DEFAULT_REPAIR_LIMIT, MAX_REPAIR_LIMIT)
@@ -104,15 +108,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ mode: 'repair', ...result })
     }
 
-    const projectsResult = await admin.from('projects').select('id').limit(100)
-    if (projectsResult.error || !Array.isArray(projectsResult.data)) {
-      return NextResponse.json({ error: '프로젝트 범위를 확인하지 못했습니다.' }, { status: 503 })
-    }
-    const allowedProjectIds = (projectsResult.data as Array<{ id?: unknown }>)
-      .map(row => (typeof row.id === 'string' ? row.id : ''))
-      .filter(Boolean)
-    const accessScope = { allowedProjectIds, allowGlobal: true }
+    const scope = await enabledIndexProjectIds(db)
+    if (!scope.ok) return NextResponse.json({ error: '프로젝트 범위를 확인하지 못했습니다.' }, { status: 503 })
+    const accessScope = { allowedProjectIds: scope.ids, allowGlobal: true }
     const queue = createSupabaseIndexJobQueue(admin, accessScope)
+    const gate = createIndexJobModuleGate(db)
 
     if (body.mode === 'worker') {
       const summary = await runIndexWorkerOnce({
@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
         index: createSupabasePgvectorKnowledgeIndex(admin, accessScope),
         loadContent: createSupabaseIndexContentLoader(admin),
         batchSize: body.batchSize,
+        moduleGate: gate,
       })
       return NextResponse.json({ mode: 'worker', ...summary })
     }
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
         domain,
         projectId: body.projectId,
         list: createSupabaseIndexSourceLister(admin),
-        enqueue: mutations => queue.enqueue(mutations),
+        enqueue: async mutations => queue.enqueue(await keepEnabledMutations(gate, mutations)),
         dryRun: body.dryRun,
         batchSize: body.batchSize,
       })
@@ -147,7 +148,7 @@ export async function POST(req: NextRequest) {
     const report = await checkIndexConsistency({
       sources: sourcesResult.data,
       indexed: indexedResult.data,
-      enqueue: body.dryRun ? undefined : mutations => queue.enqueue(mutations),
+      enqueue: body.dryRun ? undefined : async mutations => queue.enqueue(await keepEnabledMutations(gate, mutations)),
       limit: body.batchSize,
     })
     // 엔티티 목록은 응답에 싣지 않는다(내부 식별자 노출 최소화) — 수량 요약만.

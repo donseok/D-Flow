@@ -73,7 +73,7 @@ export interface IndexMutation {
   runAfter?: string
 }
 
-export type IndexJobStatus = 'pending' | 'running' | 'done' | 'dead_letter'
+export type IndexJobStatus = 'pending' | 'running' | 'done' | 'dead_letter' | 'skipped'
 
 /** Camel-case projection of the `ai_index_jobs` table in migration 0031. */
 export interface IndexJob extends IndexMutation {
@@ -217,5 +217,6 @@ export interface IndexWorkerRunSummary {
   deleted: number
   failed: number
   requeued: number
+  skipped: number
   claimFailed?: string
 }
