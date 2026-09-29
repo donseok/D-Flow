@@ -102,6 +102,23 @@ describe('navFor — 순수 함수: caps', () => {
     expect(ids(navFor({ scope: 'project', base: '/p/P', effective: CORE, caps: NONE, menu: EMPTY_MENU }))).toEqual(['p.dashboard', 'p.wbs', 'p.members'])
     expect(ids(navFor({ scope: 'project', base: '/p/P', effective: CORE, caps: { ...NONE, isProjectAdmin: true }, menu: EMPTY_MENU }))).toContain('p.settings')
   })
+  // 스펙 §4.5 표의 '필요 caps' 열 — cap 하나만 켜서 짝을 가른다(두 cap 을 함께 켜면 어느 cap 이 어느 항목을 여는지 바뀌어도 초록이다)
+  it.each([
+    ['canViewPortfolio', ['ws.portfolio']],
+    ['canViewUsage', ['ws.usage']],
+    ['isWorkspaceAdmin', ['ws.members', 'ws.teams', 'ws.settings']],
+    ['isPlatformAdmin', ['ws.llm', 'ws.ui_states']],
+    ['isProjectAdmin', []],
+    ['canCreateProject', []],
+  ] as const)('%s 하나만 켜면 스펙 §4.5 표의 그 항목만 더 보인다', (cap, extra) => {
+    const at = (caps: NavCaps) => ids(navFor({ scope: 'workspace', base: '/w/acme', effective: full, caps, menu: EMPTY_MENU }))
+    const before = at(NONE)
+    expect(at({ ...NONE, [cap]: true }).filter((id) => !before.includes(id))).toEqual([...extra])
+  })
+  it('운영 그룹 — 모듈 항목(포트폴리오·사용 현황) 뒤 셸 항목(개정 §5.3.3 순서)', () => {
+    const m = navFor({ scope: 'workspace', base: '/w/acme', effective: full, caps: ALL, menu: EMPTY_MENU })
+    expect(m.find((g) => g.group === 'ws.ops')!.items.map((i) => i.id)).toEqual(['ws.portfolio', 'ws.usage', 'ws.members', 'ws.teams', 'ws.settings'])
+  })
 })
 
 describe('navFor — 순수 함수: navigation.menu', () => {
