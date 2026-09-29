@@ -1,5 +1,6 @@
 // 좌석표 조회 — 서버 전용(service_role). 프로젝트 필터는 항상 seatmapProjectIds 로 건다.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
+// 단 agents 모듈 판정 실패(설정 조회·손상)는 그 프로젝트의 층을 뺀다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13).
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
 import type { AdminClient } from '@/lib/minutes/externalApi'
@@ -37,7 +38,10 @@ async function fetchAncestors(admin: AdminClient, seedIds: string[]): Promise<It
   return [...out.values()]
 }
 
-export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] | null, nowMs: number): Promise<SeatmapRows> {
+/** excludeProjectIds — 전체(null) 조회에서 뺄 프로젝트(모듈이 꺼진 층). 주문 조회에만 걸면 나머지는 주문의 프로젝트로 따라 좁혀진다 */
+export async function fetchSeatmapRows(
+  admin: AdminClient, projectIds: string[] | null, nowMs: number, opts: { excludeProjectIds?: readonly string[] } = {},
+): Promise<SeatmapRows> {
   const empty: SeatmapRows = { orders: [], items: [], parents: [], reviews: [], watchers: [], projects: [], members: [], predecessors: [] }
   if (projectIds !== null && projectIds.length === 0) return empty
 
@@ -45,6 +49,7 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: string[] 
   let q = admin.from('agent_work_orders').select(ORDER_COLS)
     .or(`status.in.(ready,claimed,reported),and(status.eq.approved,updated_at.gte.${doneSince})`)
   if (projectIds !== null) q = q.in('project_id', projectIds)
+  if (opts.excludeProjectIds?.length) q = q.not('project_id', 'in', `(${opts.excludeProjectIds.join(',')})`)
   const orders = must<OrderRow[]>('주문', await q.order('created_at', { ascending: false }).limit(2000))
   if (orders.length === 0) return empty
 
@@ -138,15 +143,22 @@ export function seatmapFloorIds(actor: Actor, projectId?: string): string[] | nu
 
 export async function getSeatmap(actor: Actor, nowMs = Date.now(), scope: SeatmapScope = 'mine', opts: SeatmapOptions = {}): Promise<Seatmap> {
   const admin = createAdminClient()
-  // agents 모듈이 꺼진 프로젝트의 층은 싣지 않는다(스펙 §4.2 — 목록형 응답은 행을 뺀다). 층 목록이 있으면 조회 전에 좁히고,
-  // 전체(플랫폼 관리자, null)면 한 번 읽은 뒤 꺼진 프로젝트가 섞였을 때만 켜진 목록으로 다시 읽는다(모두 켜졌으면 지금과 같은 한 번).
+  // agents 모듈이 꺼진 프로젝트의 층은 싣지 않는다(스펙 §4.2 — 목록형 응답은 행을 뺀다). 층 목록이 있으면 조회 전에 좁힌다.
   const floor = seatmapFloorIds(actor, opts.projectId)
   let projectIds = floor === null ? null : await projectsWithModule(floor, 'agents', { client: admin })
   let rows = await fetchSeatmapRows(admin, projectIds, nowMs)
   if (projectIds === null) {
+    // 전체(플랫폼 관리자)면 한 번 읽은 층을 판정해 꺼진 것이 섞였을 때만 그것을 빼고 다시 읽는다(모두 켜졌으면 지금과 같은 한 번).
+    // 켜진 것으로 좁히지 않고 꺼진 것을 빼는 이유: 주문 상한(2000)에 밀려 첫 조회에 없던 켜진 프로젝트가 빈자리를 채우게.
+    // 다시 읽어 처음 보는 프로젝트가 나오면 그것도 판정하고, 또 꺼진 것이 있으면 판정을 마친 켜진 목록으로 좁혀 끝낸다(조회는 많아야 세 번).
     const seen = rows.projects.map((p) => p.id)
-    const on = await projectsWithModule(seen, 'agents', { client: admin })
-    if (on.length < seen.length) { projectIds = on; rows = await fetchSeatmapRows(admin, projectIds, nowMs) }
+    const on = new Set(await projectsWithModule(seen, 'agents', { client: admin }))
+    if (on.size < seen.length) {
+      rows = await fetchSeatmapRows(admin, null, nowMs, { excludeProjectIds: seen.filter((id) => !on.has(id)) })
+      const fresh = rows.projects.map((p) => p.id).filter((id) => !seen.includes(id))
+      const freshOn = fresh.length ? await projectsWithModule(fresh, 'agents', { client: admin }) : []
+      if (freshOn.length < fresh.length) { projectIds = [...on, ...freshOn]; rows = await fetchSeatmapRows(admin, projectIds, nowMs) }
+    }
   }
   // 결재 어포던스 재료는 범위와 무관하게 싣는다 — 전체 보기에서도 버튼 노출은 서버 가드와 같은 축이어야 한다.
   // 로스터 조회가 던지면 그대로 올린다(조회 실패를 권한 없음으로 위장하지 않는다).

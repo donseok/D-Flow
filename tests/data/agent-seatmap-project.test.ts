@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 import { getProjectOffice, getSeatmap, seatmapFloorIds } from '@/lib/data/agentSeatmap'
+import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { makeActor, makeMemberActor } from '../fixtures/actor'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
@@ -16,7 +17,7 @@ function admin(queues: Record<string, Resp[]>, calls: Record<string, unknown[][]
     from: vi.fn((table: string) => {
       const resp = (queues[table] ?? []).shift() ?? { data: [], error: null }
       const b: Record<string, unknown> = {}
-      for (const k of ['select', 'in', 'eq', 'or', 'gte', 'gt', 'order', 'limit', 'maybeSingle']) {
+      for (const k of ['select', 'in', 'not', 'eq', 'or', 'gte', 'gt', 'order', 'limit', 'maybeSingle']) {
         b[k] = (...a: unknown[]) => { (calls[`${table}.${k}`] ??= []).push(a); return b }
       }
       b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
@@ -62,26 +63,74 @@ describe('getSeatmap({ projectId })', () => {
 })
 
 describe('getSeatmap — agents 모듈이 꺼진 프로젝트의 층을 뺀다(스펙 §4.2)', () => {
+  /** 조회 한 번 분량의 응답 — 프로젝트마다 agent 태그 항목의 주문 하나. 태그 항목이 없으면 assembleSeatmap 이 주문을 떨어뜨려 층이 늘 비어 보인다 */
+  const read = (...ps: string[]) => ({
+    orders: { data: ps.map((p) => ({ id: `o-${p}`, project_id: p, wbs_item_id: `i-${p}`, status: 'approved', claimed_by_user_id: null, updated_at: '2026-09-14T08:00:00Z', created_at: '2026-09-14T08:00:00Z' })) },
+    items: { data: ps.map((p) => ({ id: `i-${p}`, project_id: p, code: '1', name: `item ${p}`, parent_id: null, actual_pct: 0, assignee_member_id: null, tags: [AGENT_TAG], depends: null })) },
+    projects: { data: ps.map((p) => ({ id: p, name: `proj ${p}`, workspace_id: 'w' })) },
+  })
+  /** 조회마다 주문·항목·프로젝트 응답 한 벌씩(그 밖의 표는 빈 응답) */
+  const reads = (...rs: ReturnType<typeof read>[]) => ({
+    agent_work_orders: rs.map((r) => r.orders), wbs_items: rs.map((r) => r.items), projects: rs.map((r) => r.projects),
+  })
+  const orderReads = (a: ReturnType<typeof admin>) => a.from.mock.calls.filter((c) => c[0] === 'agent_work_orders').length
+  const floorIds = (map: { floors: Array<{ id: string }> }) => map.floors.map((f) => f.id).sort()
+  /** 관문 판정에 넘긴 client 가 좌석표의 service_role 클라이언트 그 객체인지 — '뭔가 있다'가 아니라 같은 객체(F7) */
+  const expectAdminClient = (a: ReturnType<typeof admin>) => {
+    expect(vi.mocked(projectsWithModule).mock.calls.length).toBeGreaterThan(0)
+    for (const c of vi.mocked(projectsWithModule).mock.calls) expect(c[2]?.client).toBe(a)
+  }
+
   it('층 목록이 있는 행위자는 조회 전에 좁힌다 — 모두 꺼지면 주문을 읽지 않는다', async () => {
     const calls: Record<string, unknown[][]> = {}
-    admin({}, calls)
+    const a = admin({}, calls)
     vi.mocked(projectsWithModule).mockResolvedValueOnce([])
     const map = await getSeatmap(MEMBER_P1, NOW, 'all')
     expect(map.floors).toEqual([])
     expect(projectsWithModule).toHaveBeenCalledWith(['p1'], 'agents', { client: expect.anything() })
+    expectAdminClient(a)
     expect(calls['agent_work_orders.in']).toBeUndefined()
+    expect(orderReads(a)).toBe(0)
   })
-  it('플랫폼 관리자(전체)는 꺼진 프로젝트가 섞였을 때만 켜진 목록으로 다시 읽는다', async () => {
+  it('플랫폼 관리자(전체) — 모두 켜졌으면 지금처럼 한 번만 읽고 층을 다 그린다', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const order = (id: string, p: string) => ({ id, project_id: p, wbs_item_id: null, status: 'approved', updated_at: '2026-09-14T08:00:00Z', created_at: '2026-09-14T08:00:00Z' })
-    admin({
-      agent_work_orders: [{ data: [order('o1', 'p1'), order('o2', 'p2')] }, { data: [order('o1', 'p1')] }],
-      projects: [{ data: [{ id: 'p1', name: 'a', workspace_id: 'w' }, { id: 'p2', name: 'b', workspace_id: 'w' }] }, { data: [{ id: 'p1', name: 'a', workspace_id: 'w' }] }],
-    }, calls)
-    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])
-    await getSeatmap(SUPER, NOW, 'all')
+    const a = admin(reads(read('p1', 'p2')), calls)
+    const map = await getSeatmap(SUPER, NOW, 'all')
     expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'agents', { client: expect.anything() })
+    expectAdminClient(a)
+    expect(orderReads(a)).toBe(1)
+    expect(floorIds(map)).toEqual(['p1', 'p2'])
+  })
+  it('플랫폼 관리자 — 꺼진 프로젝트가 섞이면 그것만 빼고 다시 읽는다(켜진 것으로 좁히지 않는다 — 상한에 밀린 켜진 프로젝트를 되찾게)', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    const a = admin(reads(read('p1', 'p2'), read('p1')), calls)
+    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])
+    const map = await getSeatmap(SUPER, NOW, 'all')
+    expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'agents', { client: expect.anything() })
+    expectAdminClient(a)
+    expect(orderReads(a)).toBe(2)
+    expect(calls['agent_work_orders.not']).toEqual([['project_id', 'in', '(p2)']])
+    expect(calls['agent_work_orders.in']).toBeUndefined()
+    expect(floorIds(map)).toEqual(['p1'])
+  })
+  it('다시 읽은 결과에 처음 보는 프로젝트가 켜져 있으면 그대로 싣는다(조회 두 번)', async () => {
+    const a = admin(reads(read('p1', 'p2'), read('p1', 'p3')))
+    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])        // 둘째 판정(['p3'])은 전역 mock — 입력 그대로(켜짐)
+    const map = await getSeatmap(SUPER, NOW, 'all')
+    expect(vi.mocked(projectsWithModule).mock.calls.map((c) => c[0])).toEqual([['p1', 'p2'], ['p3']])
+    expectAdminClient(a)
+    expect(orderReads(a)).toBe(2)
+    expect(floorIds(map)).toEqual(['p1', 'p3'])
+  })
+  it('처음 보는 프로젝트도 꺼졌으면 판정을 마친 켜진 목록으로 좁혀 한 번 더 읽고 끝낸다(조회는 많아야 세 번)', async () => {
+    const calls: Record<string, unknown[][]> = {}
+    const a = admin(reads(read('p1', 'p2'), read('p1', 'p3'), read('p1')), calls)
+    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1']).mockResolvedValueOnce([])
+    const map = await getSeatmap(SUPER, NOW, 'all')
+    expectAdminClient(a)
+    expect(orderReads(a)).toBe(3)
     expect(calls['agent_work_orders.in']).toEqual([['project_id', ['p1']]])
+    expect(floorIds(map)).toEqual(['p1'])
   })
 })
 

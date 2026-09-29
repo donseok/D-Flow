@@ -28,6 +28,8 @@ function makeSb(opts: {
   const tables: string[] = []
   /** 예외 폴백 조회가 건 것 — select 옵션·정렬·범위 */
   const exceptionQueries: Array<{ options: unknown; orders: string[]; range: [number, number] | null }> = []
+  /** 예외 폴백 조회의 .in 인자 — 어느 회의 id 로 읽었는지 */
+  const exceptionIns: unknown[][] = []
   const chain = (resolve: (q: { range: [number, number] | null }) => Reply | Promise<Reply>, options?: unknown) => {
     const q = { options, orders: [] as string[], range: null as [number, number] | null }
     const o: Record<string, unknown> = {}
@@ -55,6 +57,7 @@ function makeSb(opts: {
               return typeof ex === 'function' ? ex(range?.[0] ?? 0, range?.[1] ?? Infinity) : ex
             }, options)
             exceptionQueries.push(c.q)
+            c.o.in = (...a: unknown[]) => { exceptionIns.push(a); return c.o }
             return c.o
           }
           if (table === 'project_members') return chain(() => opts.members ?? OK([])).o
@@ -65,7 +68,7 @@ function makeSb(opts: {
   }
   ;(createServerClient as unknown as { mockResolvedValue: (v: unknown) => void })
     .mockResolvedValue(sb)
-  return { selects, tables, exceptionQueries }
+  return { selects, tables, exceptionQueries, exceptionIns }
 }
 
 // 프로젝트 id 는 UUID 꼴이어야 조회가 나간다(getProjectMeetingData)
@@ -217,6 +220,18 @@ describe('getMyMeetings — meetings 모듈이 꺼진 프로젝트의 행을 뺀
     expect(res.meetings.map((x) => x.id)).toEqual(['on'])
     expect(res.exceptions.map((x) => x.meetingId)).toEqual(['on'])
     expect(projectsWithModule).toHaveBeenCalledWith([PID, P2], 'meetings')
+  })
+  it('임베드 실패 폴백도 켜진 프로젝트의 회의 id 로만 예외를 읽는다', async () => {
+    const P2 = '00000000-0000-4000-8000-0000000000b2'
+    const { exceptionIns } = makeSb({
+      user: { id: 'u1' },
+      meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('on'), meetingRow('off', { project_id: P2 })])),
+      exceptions: OK([exRow('on', '2026-07-27')]),
+    })
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([PID])
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map((x) => x.id)).toEqual(['on'])
+    expect(exceptionIns).toEqual([['meeting_id', ['on']]])
   })
 })
 

@@ -88,7 +88,8 @@ const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.'
 
-/** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다. */
+/** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다.
+ *  단 meetings 모듈 판정 실패(설정 조회·손상)는 ok:false 가 아니라 그 프로젝트의 행 생략이다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13). */
 export type MyMeetingsResult =
   | { ok: true; meetings: Meeting[]; exceptions: MeetingException[] }
   | { ok: false; error: string }
@@ -222,6 +223,9 @@ export async function resolveMemberIds(
  * fetch 조건: 비반복은 [start,end], 반복은 meeting_date<=end AND (until IS NULL OR until>=start).
  * 비로그인은 빈 성공 결과(세션은 호출부가 따로 본다). 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false —
  * 호출부가 '이번 달 회의 없음'·KPI 0 대신 사유를 보인다(에러 처리 3원칙 ①).
+ * meetings 모듈이 꺼졌거나 판정이 실패한(설정 조회·손상) 프로젝트의 행은 뺀다(스펙 §4.2·§3 modules.* fail-closed, P13) — 그래서 판정이
+ * 실패하면 달력이 비거나 일부가 빠진다. 그 원인은 [requireModule] 로그(범위 포함)에 남는다. /meetings 진입의 워크스페이스 층 장애는
+ * 페이지 관문이 404 로 먼저 닫으므로 빈 달력은 프로젝트 판정의 부분 실패(와 월 이동 새로고침)에서 생긴다. 화면 사유 표시는 SP3b(판정 [B3 F1]).
  */
 export const getMyMeetings = cache(async (
   gridStartIso: string,

@@ -59,7 +59,7 @@
 | src/app/api/wiki/reindex/route.ts | 플랫폼 | requireSuperuser(플랫폼 11곳)다. 전역 색인 큐·문서 수 통계를 다룬다 |
 | src/app/api/wiki/search/route.ts | 세션 가드 뒤 id 스코프 | getActorViewState 뒤 accessScope(내 워크스페이스 프로젝트 ∩ 비공개 판정)의 projectIds 로 in 을 건다 |
 | src/app/api/wiki/summarize/route.ts | 세션 가드 뒤 id 스코프 | getActorViewState 뒤 accessScope 판정(decideSearchAccess)을 통과한 projectId 로만 조회한다 |
-| src/app/share/minutes/[token]/page.tsx | 외부 API·서비스 | 공유 토큰 경로다. share_enabled 인 행 1건에서 화이트리스트 컬럼만 읽는다 |
+| src/app/share/minutes/[token]/page.tsx | 외부 API·서비스 | 공유 토큰 경로다. share_enabled·미보관 행 1건의 workspace_id 로 minutes 모듈 관문(admin 으로 workspace_settings 1행)을 지난 뒤, 같은 행에서 화이트리스트 컬럼만 읽는다 |
 | src/lib/agent/delegation.ts | 세션 가드 뒤 id 스코프 | requireProjectMember 또는 Admin(항목의 pid) 뒤에 그 항목 id 로 위임 여부를 읽고 쓴다 |
 | src/lib/agent/subtreeManager.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 myMemberIds·isSubtreeManager 를 pid·itemId 로 판정한다 |
 | src/lib/ai/brief.ts | 세션 가드 뒤 id 스코프 | 호출부(프로젝트 화면·가드된 액션)의 projectId 로 project_ai_briefs 를 읽고 쓴다. RLS 쓰기 정책이 없어 가드가 유일한 관문이다 |
@@ -74,7 +74,7 @@
 | src/lib/ai/wiki-saturation.ts | 세션 가드 뒤 id 스코프 | 형(type)만 import 한다. 넘겨받은 admin 으로 projectId 의 위키 토픽을 읽는다 |
 | src/lib/data/accounts.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. listProfiles 는 전 profiles 를 페이지로 읽고(fetchAllPages — count 총합 대조, 최종 리뷰 F11), 호출부 listAccounts(requireWorkspaceAdmin)가 명단으로 거른다 |
 | src/lib/data/agentApprovals.ts | 세션 가드 뒤 id 스코프 | getActorForView 뒤에 projectId 의 reported 주문 수를 센다. 판정은 isProjectAdmin·서브트리다 |
-| src/lib/data/agentSeatmap.ts | 세션 가드 뒤 id 스코프 | seatmapFloorIds(actor) 로 project_id 에 in 을 건다. 감시자는 층 프로젝트의 workspace_id 로 in 을 건다(이번에 고침) |
+| src/lib/data/agentSeatmap.ts | 세션 가드 뒤 id 스코프 | seatmapFloorIds(actor) 로 project_id 에 in 을 건다. 감시자는 층 프로젝트의 workspace_id 로 in 을 건다(이번에 고침). 층은 admin 으로 agents 모듈 관문(projectsWithModule — 층마다 프로젝트·워크스페이스 설정 표)을 지난 것만 싣는다. 전체(플랫폼 관리자) 조회는 꺼진 층을 not in 으로 빼고 다시 읽는다(SP3a Phase B) |
 | src/lib/data/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 상세 화면의 가드 뒤, minuteId·projectId 로 위키 영향 카드를 조회한다 |
 | src/lib/data/usage.ts | 플랫폼 | canViewUsage(슈퍼유저)를 다시 검사한 뒤 전역 계정 디렉터리를 만들고 usage_events 보존기간을 정리한다 |
 | src/lib/minutes/externalApi.ts | 외부 API·서비스 | 외부 회의록 API 공용부다(AdminClient 형, 게이트, 순수 판정 isBatchAuthorized). 후처리는 minuteId 로 하이라이트를 재매칭한다 |
