@@ -1,4 +1,4 @@
-// scripts/perf-baseline.mjs — SP2 성능 기준선(대시보드·WBS p50/p95). 로컬 전용.
+// scripts/perf-baseline.mjs — SP2·SP3a 성능 기준선(대시보드·WBS·이슈 p50/p95). 로컬 전용.
 //   seed:    service_role 로 부트스트랩 워크스페이스의 프로젝트 PERF(없으면 부트스트랩 관리자를 행위자로
 //            create_project_with_settings 로 생성, 있으면 재사용)에
 //            wbs_items 800행(10 단계 × 80) · announcements 20행 · issues 50행을 결정적 id 로 멱등 upsert.
@@ -7,7 +7,7 @@
 //            (리뷰 라운드 1 — 슈퍼유저로만 재면 my_workspace_ids()/is_ws_member() 가 is_superuser() 분기로
 //            빠져 평범한 멤버가 타는 exists() 서브쿼리 경로가 측정에서 빠진다). 프로젝트 id 를 stdout 에 낸다.
 //   measure: 어드민(BOOTSTRAP_EMAIL/PASSWORD)·멤버(PERF_MEMBER_EMAIL/PASSWORD) 두 계정으로 각각 로그인해
-//            PERF 프로젝트의 대시보드·WBS 화면을 워밍업 3회 + N 회 순차 요청, 페르소나별 p50/p95 를
+//            PERF 프로젝트의 대시보드·WBS·이슈 화면을 워밍업 3회 + N 회 순차 요청, 페르소나별 p50/p95 를
 //            JSON 으로 stdout 에 낸다: { label, n, personas: { admin: { routes }, member: { routes } } }.
 // 좌표는 scripts/lib/e2e.mjs(localClientEnv)·scripts/lib/targets.mjs(localAdminEnv) 로만 읽는다 — 원격
 // 좌표면 그 함수들이 throw 한다(원본 DB 금지, D-Flow CLAUDE.md).
@@ -20,9 +20,9 @@ import { readFileSync } from 'node:fs'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { Pool } from 'pg'
-import { cookieHeader, localAppUrl, localClientEnv } from './lib/e2e.mjs'
+import { cookieHeader, localClientEnv, notFoundRendered } from './lib/e2e.mjs'
 import { LOCAL_DSN, localAdminEnv } from './lib/targets.mjs'
-import { percentile } from './lib/perf.mjs'
+import { percentile, perfBaseUrl } from './lib/perf.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
 const PROJECT_NAME = 'PERF'
@@ -30,7 +30,7 @@ const STAGES = 10
 const ITEMS_PER_STAGE = 80
 const ANNOUNCEMENT_COUNT = 20
 const ISSUE_COUNT = 50
-const ROUTES_OF = (pid) => [`/p/${pid}/dashboard`, `/p/${pid}/wbs`]
+const ROUTES_OF = (pid) => [`/p/${pid}/dashboard`, `/p/${pid}/wbs`, `/p/${pid}/issues`]
 const WARMUP = 3
 const DEFAULT_N = 100
 const MEMBER_EMAIL = (process.env.PERF_MEMBER_EMAIL || 'bob@example.com').trim().toLowerCase()
@@ -224,9 +224,10 @@ async function measureRoutes(base, cookie, routes, n) {
   const timedGet = async (path) => {
     const started = performance.now()
     const res = await fetch(`${base}${path}`, { headers: { cookie } })
-    await res.text()
+    const html = await res.text()
     const elapsed = performance.now() - started
     if (res.status !== 200) fail(`${path} → ${res.status}(200 기대)`)
+    if (notFoundRendered(html)) fail(`${path} 가 notFound 를 그렸다 — 모듈 관문이 닫혔다`)
     return elapsed
   }
   const routeStats = {}
@@ -241,7 +242,7 @@ async function measureRoutes(base, cookie, routes, n) {
 
 async function measure(argv) {
   const { base: rawBase, label, n } = parseMeasureArgs(argv)
-  const base = (() => { try { return localAppUrl(rawBase) } catch (e) { return fail(e.message) } })()
+  const base = (() => { try { return perfBaseUrl(rawBase) } catch (e) { return fail(e.message) } })()
   const env = localClientEnv(envText())
   const adminEmail = (process.env.BOOTSTRAP_EMAIL || 'admin@example.com').trim().toLowerCase()
   const adminPassword = process.env.BOOTSTRAP_PASSWORD

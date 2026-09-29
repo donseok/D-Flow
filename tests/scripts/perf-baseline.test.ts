@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { median, percentile } from '../../scripts/lib/perf.mjs'
+import { judgeRegression, median, percentile, perfBaseUrl } from '../../scripts/lib/perf.mjs'
 
 describe('percentile — 최근접 순위(표본 밖 보간 없음)', () => {
   it('p50 은 정렬된 가운데 관측값', () => {
@@ -24,4 +24,21 @@ describe('median — 표준 중앙값(짝수 개는 가운데 둘의 평균, per
   it('빈 배열은 throw', () => {
     expect(() => median([])).toThrow('표본 없음')
   })
+})
+
+describe('perfBaseUrl — 격리된 로컬 앱만 측정', () => {
+  it('3101·3102 는 통과하고 사용자 dev 서버 3000 과 원격은 거부한다', () => {
+    expect(perfBaseUrl('http://localhost:3101/')).toBe('http://localhost:3101')
+    expect(perfBaseUrl('http://127.0.0.1:3102')).toBe('http://127.0.0.1:3102')
+    expect(() => perfBaseUrl('http://localhost:3000')).toThrow('3000')
+    expect(() => perfBaseUrl('https://example.vercel.app')).toThrow()
+  })
+})
+
+describe('judgeRegression — 반복 측정의 p95 중앙값 비교', () => {
+  it('중앙값 비율로 +20% 이내를 판정한다', () => {
+    expect(judgeRegression([100, 110, 90], [115, 119, 130], 0.2)).toEqual({ base: 100, cand: 119, ratio: 1.19, ok: true })
+    expect(judgeRegression([100, 100, 100], [121, 125, 119], 0.2)).toMatchObject({ ratio: 1.21, ok: false })
+  })
+  it('빈 표본은 거부한다', () => { expect(() => judgeRegression([], [1])).toThrow('표본 없음') })
 })

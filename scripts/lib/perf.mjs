@@ -1,4 +1,5 @@
 // scripts/lib/perf.mjs — perf-baseline.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
+import { localAppUrl } from './e2e.mjs'
 
 /** 최근접 순위 백분위(p ∈ (0,100]) — 표본이 작아도 실제 관측값을 돌려준다. */
 export function percentile(values, p) {
@@ -17,4 +18,19 @@ export function median(values) {
   const s = [...values].sort((a, b) => a - b)
   const mid = Math.floor(s.length / 2)
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
+/** 성능 측정 앱 주소 — 로컬만, main 체크아웃의 사용자 개발 서버(3000)는 거부한다. */
+export function perfBaseUrl(value) {
+  const url = localAppUrl(value)
+  if (new URL(url).port === '3000') throw new Error('성능 측정은 스크래치 워크트리(3101·3102)에서 돈다 — 3000 은 쓰지 않는다')
+  return url
+}
+
+/** 각 실행의 p95 중앙값으로 기준선 대비 회귀를 판정한다. */
+export function judgeRegression(baseRuns, candidateRuns, limit = 0.2) {
+  const base = median(baseRuns)
+  const cand = median(candidateRuns)
+  const ratio = Math.round((cand / base) * 100) / 100
+  return { base, cand, ratio, ok: cand <= base * (1 + limit) }
 }
