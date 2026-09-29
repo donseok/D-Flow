@@ -12,11 +12,12 @@
 //        읽기 거부 → 외부 회의록 API(meta·목록)가 user_email 의 워크스페이스로만 좁혀진다.
 //   SP3a: A 의 설정을 updateProjectSettings 로 바꿔 이력(전·후·행위자)과 같은 명령 재전송의 duplicate 를 보고, A 를 원본으로 복사
 //        생성해 이력이 copy/copied_from 인지 본다(2a·2b). 워크스페이스 B 의 modules.allowed 는 만든 직후 비core 13개로 기록한다.
+//   SP3a B: render-pages 뒤 A 의 issues·agents·chatbot 과 워크스페이스의 minutes_integration 을 끄고 화면·액션·외부 API·색인 워커의 관문을 본다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
-// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 npm run dev 가
+// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 npm run dev 가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
-//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> npm run dev -- -p 3101
-//   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
+//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> CRON_SECRET=<시크릿> npm run dev -- -p 3101
+//   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
 //   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
@@ -29,7 +30,7 @@ import { createClient } from '@supabase/supabase-js'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import {
-  A_ADMIN, B_ADMIN, COPY_LEVEL_LABELS, ERR_DENIED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
+  A_ADMIN, B_ADMIN, COPY_LEVEL_LABELS, ERR_DENIED, ERR_MODULE_DISABLED, INVITEE, LEVEL_LABELS, OTHER_WORKSPACE, OUTSIDER, SP1_TEAMS, TEMPLATE_HEADER, WS_TEAM, actionResult,
   cookieHeader, dispositionFilename, e2eRows, encodeActionArgs, findActionId, findTraces, inWorkspaceStorage, inviteInput,
   e2eBaseUrl, inviteTokenFromUrl, leafCodes, leakedIds, localClientEnv, meetingInput, minuteBodyPath, minuteInput, minuteSource,
   notFoundRendered, pageProblems, presentTexts, redactInviteTokens, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
@@ -68,6 +69,8 @@ if (!bPassword || bPassword.length < 8) { console.error('✗ E2E_B_PASSWORD 가 
 // 외부 회의록 API 시크릿 — dev 서버를 띄울 때 준 MINUTES_API_SECRET 과 같은 값(MINUTES_API_ENABLED=true 도 필요, 없으면 라우트가 404).
 const minutesApiSecret = process.env.MINUTES_API_SECRET
 if (!minutesApiSecret) { console.error('✗ MINUTES_API_SECRET 가 없다 — dev 서버에 준 값과 같은 값을 넘긴다'); process.exit(1) }
+const cronSecret = process.env.CRON_SECRET
+if (!cronSecret) { console.error('✗ CRON_SECRET 가 없다 — dev 서버에 준 값과 같은 값을 넘긴다'); process.exit(1) }
 
 const MANIFEST = '.next/server/server-reference-manifest.json'
 const ACTIONS = {
@@ -82,6 +85,9 @@ const ACTIONS = {
   createProjectInvite: { filename: 'src/app/actions/projectInvites.ts', exportedName: 'createProjectInvite', worker: '/p/[projectId]/members/page' },
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
+  createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
+  setAgentProjectEnabled: { filename: 'src/app/actions/agentWork.ts', exportedName: 'setAgentProjectEnabled', worker: '/p/[projectId]/settings/page' },
+  createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -688,7 +694,7 @@ async function main() {
   // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
   // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
   // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
-  // 마지막 단계라 앞 단계는 전부 돈다.
+  // B 단계(20~23) 앞이다 — 모듈을 끄기 전에 켜진 화면이 열려야 한다.
   const pages = [
     ['/projects', [`/p/${A.id}/dashboard`, `/p/${B.id}/dashboard`]],
     [`/p/${A.id}/dashboard`, []],
@@ -708,6 +714,119 @@ async function main() {
   }
   const broken = rendered.filter((r) => r.problems.length)
   step('render-pages', { pages: rendered, problems: broken.length }, broken.length ? `화면 오류 표식: ${JSON.stringify(broken)}` : undefined)
+
+  // ── 20~23. SP3a B 모듈 관문 — 설정 화면의 액션으로 프로젝트 모듈을 바꾸고, 워크스페이스 허용과 시드만 로컬 service_role 로 쓴다.
+  const projectModules = async () => {
+    const [row] = rows('A 설정', await admin.sb.from('project_settings').select('revision, values').eq('project_id', A.id))
+    return { revision: Number(row.revision), enabled: row.values['modules.enabled'] }
+  }
+  const setProjectModules = async (what, next) => {
+    const cur = await projectModules()
+    const response = await admin.action(`/p/${A.id}/settings`, 'updateProjectSettings',
+      [A.id, { expectedRevision: cur.revision, commandId: randomUUID(), set: { 'modules.enabled': next(cur.enabled) }, unset: [] }])
+    if (!response.result?.ok || response.result.kind !== 'applied') throw new Fail(`${what}: updateProjectSettings 결과: ${JSON.stringify(response.result)}`)
+    return (await projectModules()).enabled
+  }
+
+  // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
+  const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`
+  rows('이슈 시드', await svc.from('issues').insert({ project_id: A.id, title: issueTitle, body: 'E2E', severity: 'medium' }).select('id'))
+  if (!(await (await admin.http('GET', `/p/${A.id}/issues`)).text()).includes(issueTitle)) throw new Fail('켜진 이슈 화면에 시드 이슈가 없다')
+  const enabledNoIssues = await setProjectModules('issues 끄기', (enabled) => enabled.filter((id) => id !== 'issues'))
+  const issuesRes = await admin.http('GET', `/p/${A.id}/issues`, { expect: [200, 404] })
+  const issuesHtml = await issuesRes.text()
+  const created = await admin.action(`/p/${A.id}/issues`, 'createIssue',
+    [A.id, { title: 'E2E 거부', body: '', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null }])
+  const analysisRes = await admin.http('GET', `/api/issue-analysis?projectId=${A.id}&runId=${randomUUID()}`, { expect: 404 })
+  const analysisText = await analysisRes.text()
+  const issuesOff = {
+    enabled: enabledNoIssues,
+    page: { status: issuesRes.status, notFound: issuesRes.status === 404 || notFoundRendered(issuesHtml), issueInHtml: issuesHtml.includes(issueTitle) },
+    createIssue: created.result,
+    issueAnalysis: { status: analysisRes.status, body: JSON.parse(analysisText), issueInBody: analysisText.includes(issueTitle) },
+  }
+  step('module-issues-off', issuesOff,
+    enabledNoIssues.includes('issues') || !issuesOff.page.notFound || issuesOff.page.issueInHtml
+      || created.result?.ok !== false || created.result?.error !== ERR_MODULE_DISABLED
+      || issuesOff.issueAnalysis.body?.error !== ERR_MODULE_DISABLED || issuesOff.issueAnalysis.issueInBody
+      ? `issues 관문: ${JSON.stringify(issuesOff)}` : undefined)
+
+  // 21. agent_projects 행이 켜진 채 agents 모듈만 끈 상태를 먼저 확인해 두 원천 AND 를 증명한다.
+  const agentRow = async () => rows('agent_projects', await svc.from('agent_projects').select('enabled').eq('project_id', A.id))[0]?.enabled ?? null
+  mustOk('setAgentProjectEnabled(켜기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, true])).result)
+  await admin.http('GET', '/account')
+  const tokenResult = await admin.action('/account', 'createAgentToken', [{ name: `e2e-${randomUUID().slice(0, 8)}`, projectId: null, scopes: ['work:read'], expiresDays: 1 }])
+  mustOk('createAgentToken', tokenResult.result)
+  const agentApi = async (path, expectedStatus) => {
+    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${tokenResult.result.token}` }, redirect: 'manual' })
+    const body = await res.json().catch(() => null)
+    if (res.status !== expectedStatus) throw new Fail(`GET ${path} → ${res.status}(기대 ${expectedStatus}): ${JSON.stringify(body)?.slice(0, 300)}`)
+    return body
+  }
+  const meHas = (body) => Array.isArray(body?.projects) && body.projects.some((project) => project.id === A.id)
+  const agents = { tokenPrefix: tokenResult.result.prefix, meBefore: meHas(await agentApi('/api/v1/agent/me', 200)) }
+  await agentApi(`/api/v1/wbs/structure?project_id=${A.id}`, 200)
+  agents.enabledAfterModuleOff = await setProjectModules('agents 끄기(모듈만)', (enabled) => enabled.filter((id) => id !== 'agents'))
+  agents.rowAfterModuleOff = await agentRow()
+  agents.meAfterModuleOff = meHas(await agentApi('/api/v1/agent/me', 200))
+  agents.structureAfterModuleOff = { status: 404, body: await agentApi(`/api/v1/wbs/structure?project_id=${A.id}`, 404) }
+  mustOk('setAgentProjectEnabled(다시 켜기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, true])).result)
+  agents.meAfterToggleOn = meHas(await agentApi('/api/v1/agent/me', 200))
+  agents.enabledAfterToggleOn = (await projectModules()).enabled
+  mustOk('setAgentProjectEnabled(끄기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, false])).result)
+  agents.rowAfterToggleOff = await agentRow()
+  agents.enabledAfterToggleOff = (await projectModules()).enabled
+  agents.meAfterToggleOff = meHas(await agentApi('/api/v1/agent/me', 200))
+  step('module-agents-off', agents,
+    !agents.meBefore || agents.enabledAfterModuleOff.includes('agents') || agents.rowAfterModuleOff !== true || agents.meAfterModuleOff
+      || !agents.meAfterToggleOn || !agents.enabledAfterToggleOn.includes('agents')
+      || agents.rowAfterToggleOff !== false || agents.enabledAfterToggleOff.includes('agents') || agents.meAfterToggleOff
+      ? `agents 관문: ${JSON.stringify(agents)}` : undefined)
+
+  // 22. 회의록 연동 허용을 빼면 업로드 계열 API 는 409 이고, 다른 워크스페이스는 그대로 열린다.
+  const [wsRow] = rows('A 워크스페이스 설정', await svc.from('workspace_settings').select('revision, values').eq('workspace_id', wsA))
+  const allowedA = wsRow.values['modules.allowed']
+  const { error: allowErr } = await svc.rpc('apply_workspace_settings', {
+    p_workspace_id: wsA, p_expected_revision: Number(wsRow.revision), p_command_id: randomUUID(),
+    p_set: { 'modules.allowed': allowedA.filter((id) => id !== 'minutes_integration') },
+    p_unset: [], p_actor: me.id, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
+  })
+  if (allowErr) throw new Fail(`A modules.allowed 기록 실패: ${allowErr.message}`)
+  const externalId = `e2e:${randomUUID()}`
+  const uploadOff = await fetch(`${base}/api/v1/minutes`, {
+    method: 'POST', redirect: 'manual',
+    headers: { authorization: `Bearer ${minutesApiSecret}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ user_email: A_ADMIN.email, date: seoulToday(), team: WS_TEAM, title: 'E2E 관문', body_markdown: '# 관문', external_id: externalId }),
+  })
+  const integration = {
+    allowedBefore: allowedA.includes('minutes_integration'),
+    meta: await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(A_ADMIN.email)}`, 409),
+    list: await api(`/api/v1/minutes?user_email=${encodeURIComponent(A_ADMIN.email)}`, 409),
+    upload: { status: uploadOff.status, body: await uploadOff.json().catch(() => null) },
+    createdRows: rows('업로드 행', await svc.from('minutes').select('id').eq('external_id', externalId)).length,
+    beaStillOpen: (await meta(B_ADMIN.email)).projectIds,
+  }
+  step('module-minutes-integration-off', integration,
+    !integration.allowedBefore || integration.meta?.code !== 'module_disabled' || integration.list?.code !== 'module_disabled'
+      || integration.upload.status !== 409 || integration.upload.body?.code !== 'module_disabled' || integration.createdRows !== 0
+      || JSON.stringify(integration.beaStillOpen) !== JSON.stringify([C.id])
+      ? `회의록 업로드 관문: ${JSON.stringify(integration)}` : undefined)
+
+  // 23. chatbot 을 끈 프로젝트의 대기 잡은 처리 대신 skipped 로 마감한다.
+  const enabledNoChat = await setProjectModules('chatbot 끄기', (enabled) => enabled.filter((id) => id !== 'chatbot'))
+  const entityId = `e2e-${randomUUID()}`
+  const [job] = rows('색인 대기 행', await svc.from('ai_index_jobs').insert({
+    job_key: ['v1', A.id, 'wbs', 'wbs_item', entityId].map(encodeURIComponent).join(':'),
+    operation: 'upsert', project_id: A.id, domain: 'wbs', entity_type: 'wbs_item', entity_id: entityId,
+    payload: {}, status: 'pending', run_after: new Date(Date.now() - 86_400_000).toISOString(),
+  }).select('id'))
+  const cron = await fetch(`${base}/api/cron/ai-index`, { headers: { authorization: `Bearer ${cronSecret}` }, redirect: 'manual' })
+  const cronBody = await cron.json().catch(() => null)
+  const [after] = rows('색인 행 재조회', await svc.from('ai_index_jobs').select('status, last_error').eq('id', job.id))
+  const indexSkip = { enabled: enabledNoChat, cron: { status: cron.status, skipped: cronBody?.skipped ?? null, claimed: cronBody?.claimed ?? null }, job: after }
+  step('module-index-skip', indexSkip,
+    enabledNoChat.includes('chatbot') || cron.status !== 200 || !(cronBody?.skipped >= 1) || after.status !== 'skipped' || after.last_error !== 'module_disabled'
+      ? `색인 크론: ${JSON.stringify(indexSkip)}` : undefined)
 }
 
 try {

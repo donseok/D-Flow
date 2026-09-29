@@ -5,14 +5,14 @@ import {
   INVITEE, LEVEL_LABELS, SP1_TEAMS, TEMPLATE_HEADER, TRACE_WORDS, actionResult, cookieHeader, dispositionFilename,
   COPY_LEVEL_LABELS, e2eBaseUrl, e2eRows, encodeActionArgs, findActionId, findTraces, inviteInput, inviteTokenFromUrl, leafCodes, localAppUrl,
   localClientEnv, meetingInput, notFoundRendered, pageProblems, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
-  ERR_DENIED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
+  ERR_DENIED, ERR_MODULE_DISABLED, PAGE_MARKERS, redactInviteTokens, streamedErrorDigests,
   A_ADMIN, B_ADMIN, OUTSIDER, WS_TEAM, OTHER_WORKSPACE, inWorkspaceStorage, leakedIds, minuteBodyPath, minuteInput, minuteSource,
   presentTexts, workspaceAdminAccountInput,
 } from '../../scripts/lib/e2e.mjs'
 import { makeStoragePath, parseStoragePath } from '@/lib/domain/storagePath'
 import { isMinuteFilePathValid, validateMinuteFields } from '@/lib/domain/minutes'
 import { isValidEmail } from '@/lib/domain/validate'
-import { ERR_DENIED as APP_ERR_DENIED } from '@/lib/authz/errors'
+import { ERR_DENIED as APP_ERR_DENIED, ERR_MODULE_DISABLED as APP_ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { FORBIDDEN_REFS } from '../../scripts/lib/targets.mjs'
 import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
 import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
@@ -323,7 +323,7 @@ describe('streamedErrorDigests — 실측 화면(2026-09-26 로컬 캡처)', () 
   })
 })
 
-describe('PAGE_MARKERS·ERR_DENIED — 앱 원본과의 드리프트', () => {
+describe('PAGE_MARKERS·거부 문구 — 앱 원본과의 드리프트', () => {
   it('문구 표식이 원본 컴포넌트에 그대로 있다', () => {
     const src = {
       degraded: 'src/components/app/DegradedNotice.tsx',
@@ -336,6 +336,9 @@ describe('PAGE_MARKERS·ERR_DENIED — 앱 원본과의 드리프트', () => {
   })
   it('쓰기 거부 문구가 앱의 ERR_DENIED 와 같다', () => {
     expect(ERR_DENIED).toBe(APP_ERR_DENIED)
+  })
+  it('모듈 거부 문구가 앱의 ERR_MODULE_DISABLED 와 같다', () => {
+    expect(ERR_MODULE_DISABLED).toBe(APP_ERR_MODULE_DISABLED)
   })
 })
 

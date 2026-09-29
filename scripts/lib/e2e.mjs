@@ -342,6 +342,8 @@ export function signupInput(name, password) {
 
 /** 조회 전용(viewer) 쓰기 거부 문구 — src/lib/authz/errors.ts ERR_DENIED(드리프트는 tests/scripts/e2e.test.ts 가 대조). */
 export const ERR_DENIED = '권한 없음'
+/** 모듈 관문의 거부 문구 — tests/scripts/e2e.test.ts 가 앱 원본과 대조한다. */
+export const ERR_MODULE_DISABLED = '이 기능은 지금 사용할 수 없습니다.'
 
 /**
  * 렌더된 HTML 의 문구 표식 — DegradedNotice(권한·목록 조회 실패), (app)/error.tsx 경계, Next 오류 문서.

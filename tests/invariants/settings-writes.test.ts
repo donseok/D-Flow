@@ -76,7 +76,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
-  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings'], refs: 5, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings' },
+  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings'], refs: 7, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독' },
   // Phase D: 'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기' },
 }
 
@@ -86,7 +86,7 @@ const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; 
   'src/app/actions/settings.ts': { rpcs: ['apply_project_settings', 'apply_workspace_settings'], calls: 2, why: '설정 액션 — 범위 어댑터 둘, 가드 requireProjectAdmin(:286)·requireWorkspaceAdmin(:294) 뒤' },
   'src/app/actions/project.ts': { rpcs: ['create_project_with_settings'], calls: 1, why: 'createProject — requireWorkspaceAdmin 뒤 생성·복사' },
   'scripts/dev-bootstrap.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '부트스트랩 워크스페이스의 modules.allowed(로컬 전용)' },
-  'scripts/e2e-local.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '워크스페이스 B 의 modules.allowed — 생성 화면(Phase C) 전이라 service_role(로컬 전용)' },
+  'scripts/e2e-local.mjs': { rpcs: ['apply_workspace_settings'], calls: 2, why: '워크스페이스 B 의 modules.allowed·B 단계 22 의 A minutes_integration 해제 — 생성·편집 화면(Phase C) 전이라 service_role(로컬 전용)' },
   'scripts/perf-baseline.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: 'PERF 프로젝트 시드(로컬 전용)' },
 }
 /** G3 — 리터럴이 아닌 .rpc( 의 파일별 건수 */
@@ -392,10 +392,10 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
   it('G1 허용 파일의 표 참조 수 — 모양과 무관하게 새 사용은 목록 갱신을 강제한다(attack m-B)', () => {
     const write = "// `project_settings`\nconst { data } = await admin.from('project_settings').select('revision')\nawait casUpdate(admin, 'project_settings', id, rev)"
     expect(judge([[WRITE_FILE, write]]).G1refs).toContain(`${WRITE_FILE}: 실측 3 / 목록 2`)
-    // e2e-local 의 기존 참조 5(목록 수) + 새 헬퍼 한 줄 → 수가 올라 실패한다
-    const e2eBase = ["'project_settings'", "'project_settings_history'", "'workspace_settings'", "'project_settings'", "'workspace_settings'"].map((t) => `await read(admin, ${t})`).join('\n')
+    // e2e-local 의 참조 7(목록 수) + 새 헬퍼 한 줄 → 수가 올라 실패한다
+    const e2eBase = ["'project_settings'", "'project_settings_history'", "'workspace_settings'", "'project_settings'", "'workspace_settings'", "'project_settings'", "'workspace_settings'"].map((t) => `await read(admin, ${t})`).join('\n')
     expect(judge([['scripts/e2e-local.mjs', e2eBase]]).G1refs.filter((l) => l.startsWith('scripts/e2e-local.mjs'))).toEqual([])     // 대조
-    expect(judge([['scripts/e2e-local.mjs', `${e2eBase}\nawait upsertRows(admin, 'project_settings', rows)`]]).G1refs).toContain('scripts/e2e-local.mjs: 실측 6 / 목록 5')
+    expect(judge([['scripts/e2e-local.mjs', `${e2eBase}\nawait upsertRows(admin, 'project_settings', rows)`]]).G1refs).toContain('scripts/e2e-local.mjs: 실측 8 / 목록 7')
   })
   it('G1·G6 서식 변형 — 괄호 안 공백·줄바꿈·끝 쉼표·as const(F1~F3)', () => {
     expect([...src("admin.from( 'project_settings' )").tables]).toEqual(['project_settings'])
