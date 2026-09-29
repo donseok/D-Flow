@@ -77,14 +77,15 @@ async function turnAgentsOn(admin: AdminClient, projectId: string, actorUserId: 
   if (!read.ok) return read
   const { prev } = read
   const next: ModuleId[] = prev.includes('agents') ? prev : [...prev, 'agents']
+  let allowed: ModuleId[]
+  try { allowed = workspaceAllowed(await getWorkspaceConfig(read.workspaceId, { client: admin })) } catch (e) {
+    console.error('[agentWork] modules.allowed 판독 실패', { projectId, cause: e instanceof Error ? e.message : e })
+    return { ok: false, error: ERR_CONFIG_UNAVAILABLE }
+  }
+  const check = checkEnabledModules({ next, prev: prev.filter((id) => id !== 'agents'), allowed })
+  if (!check.ok) return { ok: false, error: check.error }
+
   if (next !== prev) {
-    let allowed: ModuleId[]
-    try { allowed = workspaceAllowed(await getWorkspaceConfig(read.workspaceId, { client: admin })) } catch (e) {
-      console.error('[agentWork] modules.allowed 판독 실패', { projectId, cause: e instanceof Error ? e.message : e })
-      return { ok: false, error: ERR_CONFIG_UNAVAILABLE }
-    }
-    const check = checkEnabledModules({ next, prev, allowed })
-    if (!check.ok) return { ok: false, error: check.error }
     const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'modules.enabled': next } }, actorUserId)
     if (!w.ok) return { ok: false, error: w.error }
   }

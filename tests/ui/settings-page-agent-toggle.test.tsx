@@ -48,7 +48,7 @@ vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: (
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
 const t = vi.hoisted(() => ({
   AgentProjectToggle: vi.fn<(p: Record<string, unknown>) => null>(() => null),
-  Slider: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  Slider: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-slider" />),
   state: vi.fn(),
 }))
 vi.mock('@/components/settings/AgentProjectToggle', () => ({ AgentProjectToggle: t.AgentProjectToggle }))
@@ -89,16 +89,24 @@ describe('설정 페이지 — 에이전트 토글(P8)', () => {
     await render()
     expect(t.AgentProjectToggle).not.toHaveBeenCalled()
   })
+  it('registered: false 이면 토글이 그 상태를 받고, getAgentProjectState 는 p1 으로 호출된다', async () => {
+    agentsModule(true)
+    t.state.mockResolvedValue({ registered: false, enabled: false })
+    await render()
+    expect(t.state).toHaveBeenCalledWith('p1')
+    expect(t.AgentProjectToggle.mock.calls[0][0]).toMatchObject({ projectId: 'p1', registered: false, enabled: false })
+  })
 })
 
 describe('설정 페이지 — agents 가 꺼져도 크레딧 편집기는 남고 안내문을 보인다(스펙 §4.4, 정본 §3.3.1)', () => {
-  it('관문 거부 → 안내문이 있고 편집기가 편집 가능하게 그려진다', async () => {
+  it('관문 거부 → 안내문이 있고 편집기가 편집 가능하게 그려진다. 안내문은 편집기 위에 나온다', async () => {
     agentsModule(false)
     t.state.mockResolvedValue({ registered: true, enabled: true })
     const html = await render()
     expect(html).toContain(NOTICE)
     expect(t.Slider).toHaveBeenCalled()
     expect(t.Slider.mock.calls[0][0]).toMatchObject({ projectId: 'p1', editable: true })
+    expect(html.indexOf(NOTICE)).toBeLessThan(html.indexOf('mock-slider'))
   })
   it('관문 통과 → 안내문이 없다', async () => {
     agentsModule(true)

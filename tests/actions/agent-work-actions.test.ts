@@ -303,6 +303,8 @@ describe('setAgentProjectEnabled — D41 두 원천을 함께 쓴다', () => {
     expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: true, backfilled: 3 })
     expect(h.write).toHaveBeenCalledWith(expect.anything(), P1, { set: { 'modules.enabled': ['kanban', 'agents'] } }, 'admin-1')
     expect(h.sync).toHaveBeenCalledWith(expect.anything(), { projectId: P1, actorUserId: 'admin-1', prevEnabled: ['kanban'], nextEnabled: ['kanban', 'agents'] })
+    expect(h.getProjectConfig).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ client: expect.anything() }))
+    expect(h.getWorkspaceConfig).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ client: expect.anything() }))
   })
   it('켜기 — 이미 agents 가 있으면(새 프로젝트) 설정은 쓰지 않고 prev 에서 agents 를 뺀 값으로 동기화를 강제한다(ON 이 헛돌지 않는다)', async () => {
     admin({})
@@ -325,7 +327,7 @@ describe('setAgentProjectEnabled — D41 두 원천을 함께 쓴다', () => {
     expect(await setAgentProjectEnabled(P1, true)).toMatchObject({ ok: false })
     expect(h.write).not.toHaveBeenCalled(); expect(h.sync).not.toHaveBeenCalled()
   })
-  it('켜기 — 설정 쓰기 실패·동기화 실패는 그 사유로 거절(동기화 실패면 설정은 남고 AND 로 닫힌 채)', async () => {
+  it('켜기 — 설정 쓰기 실패·동기화 실패는 그 사유로 거절(동기화 행 조작 실패면 설정은 남고 닫힌 채, 백필 실패면 열린 채 에러)', async () => {
     admin({})
     h.getProjectConfig.mockResolvedValue(pc(['kanban']))
     h.write.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '충돌' })
@@ -353,6 +355,20 @@ describe('setAgentProjectEnabled — D41 두 원천을 함께 쓴다', () => {
     h.getProjectConfig.mockResolvedValue(pc(['kanban']))
     expect(await setAgentProjectEnabled(P1, false)).toEqual({ ok: true })
     expect(captured.agent_projects).toBeUndefined(); expect(h.write).not.toHaveBeenCalled()
+  })
+  it('끄기 — 행 없음 + modules.enabled 에 agents 가 있으면 쓰기가 호출되어 agents 를 뺀다', async () => {
+    const { captured } = admin({ agent_projects: [{ data: null }] })
+    h.getProjectConfig.mockResolvedValue(pc(['kanban', 'agents']))
+    expect(await setAgentProjectEnabled(P1, false)).toEqual({ ok: true })
+    expect(captured.agent_projects).toBeUndefined()
+    expect(h.write).toHaveBeenCalledWith(expect.anything(), P1, { set: { 'modules.enabled': ['kanban'] } }, 'admin-1')
+  })
+  it('끄기 — 설정 판독 실패(getProjectConfig reject) 시 ok:false 반환, 단 행은 이미 false 로 닫혀 있다', async () => {
+    const { captured } = admin({ agent_projects: [{ data: { enabled: true } }, { data: null }] })
+    h.getProjectConfig.mockRejectedValueOnce(new Error('down'))
+    expect(await setAgentProjectEnabled(P1, false)).toMatchObject({ ok: false })
+    expect(captured.agent_projects).toEqual([{ enabled: false }])
+    expect(h.write).not.toHaveBeenCalled()
   })
   it('등록 조회 실패는 중단(위장 금지)', async () => {
     admin({ agent_projects: [{ data: null, error: { message: 'boom' } }] })
