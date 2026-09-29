@@ -32,12 +32,13 @@ export default async function SharedMinutePage({ params }: { params: Promise<{ t
   const gate = await requireModule({ workspaceId: head.workspace_id as string }, 'minutes', { client: admin })
   if (!gate.ok) notFound()
   // ③ 반환 컬럼 화이트리스트(스펙 §3.2) — 작성자 실명·첨부·하이라이트·인사이트 미노출
-  const { data } = await admin.from('minutes')
+  const { data, error } = await admin.from('minutes')
     .select('minute_date, team_code, title, body_md')
     .eq('share_token', token)
     .eq('share_enabled', true)
     .is('archived_at', null)
     .maybeSingle()
+  if (error) console.error('[share] 공유 회의록 본문 조회 실패:', error.message)
   if (!data) notFound()
   return (
     <ShareViewer
