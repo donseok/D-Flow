@@ -222,9 +222,16 @@ export async function createMinute(
   if (!g.ok) return { ok: false, error: g.error }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
-  // 모듈 관문(스펙 §4.2) — 프로젝트를 고르면 그 프로젝트(워크스페이스 모듈이라 곧 그 워크스페이스의 판정), 아니면 세션 유일 워크스페이스.
-  // 프로젝트 id 의 형식·소속은 뒤의 기존 검증이 본다 — 관문은 없는 프로젝트를 설정 0행 → 닫힘으로 판정한다
-  const mod = input?.projectId ? await requireModule({ projectId: input.projectId }, 'minutes') : await requireSessionModule(null, 'minutes')
+  // 모듈 관문(스펙 §4.2) — 쓰기 대상의 범위로: 프로젝트를 고르면 그 프로젝트(워크스페이스 모듈이라 곧 그 워크스페이스의 판정), 회의만 고르면
+  // 그 회의의 프로젝트(쓰기 대상을 resolveMinuteProject 가 회의의 프로젝트로 정한다 — fetchMeetingMinutesLite 와 같은 해석), 둘 다 없으면
+  // 세션 유일 워크스페이스. 프로젝트 id 의 형식·소속은 뒤의 기존 검증이 본다 — 관문은 없는 프로젝트를 설정 0행 → 닫힘으로 판정한다
+  let gateProjectId = input?.projectId ?? null
+  if (!gateProjectId && input?.meetingId) {
+    const found = await resolveProjectId('meetings', input.meetingId)
+    if (!found.ok || !found.projectId) return { ok: false, error: found.ok ? ERR_LOOKUP : found.error }
+    gateProjectId = found.projectId
+  }
+  const mod = gateProjectId ? await requireModule({ projectId: gateProjectId }, 'minutes') : await requireSessionModule(null, 'minutes')
   if (!mod.ok) return { ok: false, error: mod.error }
   // 담당 팀은 쓰기 대상 범위가 정해진 뒤(아래 targetWs) 그 범위의 팀으로 본다.
   const err = validateMinuteFields(input)
@@ -641,18 +648,24 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
 
 /** 폴더 전량(라이트). **실패는 null** — 폴더 선택이 필수가 된 §6 이후로는 빈 배열이 곧
  *  "고를 것이 없는 막다른 모달"이라 조회 실패와 구분되지 않으면 원인 표시가 불가능하다
- *  (fetchMinutesExplorer 와 같은 관례). */
+ *  (fetchMinutesExplorer 와 같은 관례).
+ *  모듈 관문은 목록형(스펙 §4.2 첫 문단·P13) — 소속 워크스페이스 가운데 minutes 가 켜진 곳의 폴더만 돌려준다. 탐색기뿐 아니라 행 판정으로
+ *  여는 /minutes/[id] 의 메타 모달도 부르므로, 유일 워크스페이스로 닫으면 여러 워크스페이스 사용자가 켜진 모듈에서 폴더 목록을 잃는다.
+ *  켜진 곳이 없으면 null(관문 거부 — 로그는 관문이 남긴다). */
 export async function fetchMinuteFoldersLite(): Promise<MinuteFolder[] | null> {
-  const user = await getSession()
-  if (!user) return null
-  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
-  if (!mod.ok) return null
+  const g = await requireActor()
+  if (!g.ok) return null
+  // 소속 워크스페이스마다 관문 — workspacesWithModule 과 같은 판정을 requireModule 로 부른다(액션의 관문은 판정 결과를 조건으로 본다 — deny 정적 검사)
+  const ids = [...g.actor.workspaceRoles.keys()]
+  const verdicts = await Promise.all(ids.map(async (workspaceId) => (await requireModule({ workspaceId }, 'minutes')).ok))
+  const on = new Set(ids.filter((_, i) => verdicts[i]))
+  if (on.size === 0) return null
   const sb = await createServerClient()
   const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds()])
   if (!folders) return null
   // 숨김 프로젝트의 폴더 제거 — getMinutesExplorer 와 같은 필터(§chat 패널이 이 액션으로
   // 폴더명을 노출하므로 비공개 프로젝트 하위 폴더명이 이름만으로도 새면 안 된다).
-  return folders.filter(f => f.projectId === null || !hidden.has(f.projectId))
+  return folders.filter(f => on.has(f.workspaceId) && (f.projectId === null || !hidden.has(f.projectId)))
 }
 
 /** 본문 교체 — 클라이언트가 새 .md 를 Storage 업로드한 뒤 호출. 기존 body 파일 0건 허용(복구 경로). */

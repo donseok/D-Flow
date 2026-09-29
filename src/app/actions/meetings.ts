@@ -292,7 +292,8 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
 }
 
 /** 클라이언트(내 회의 뷰)에서 월 이동 시 호출하는 얇은 래퍼. 로더의 실패(ok:false)는 그대로 넘긴다 —
- *  뷰가 빈 달 대신 사유와 재시도를 보인다(에러 처리 3원칙 ①). */
+ *  뷰가 빈 달 대신 사유와 재시도를 보인다(에러 처리 3원칙 ①). 모듈 관문 거부(설정 조회 실패 포함)는 빈 값 — 로그는 관문이 남긴다
+ *  (P13·Ruling B3 F1). */
 export async function fetchMyMeetings(
   gridStartIso: string,
   gridEndIso: string,

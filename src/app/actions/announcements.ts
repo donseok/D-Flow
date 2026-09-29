@@ -169,7 +169,8 @@ export async function markAnnouncementsSeen(
   return advanceSeenWatermark(projectId, user.id, clamped)
 }
 
-/** 헤더 티커용 상위 공지(고정 우선 → 최신순 5건) — 세션 확인 후 경량 조회에 위임. 조회 실패는 결과 그대로(비로그인은 빈 목록). */
+/** 헤더 티커용 상위 공지(고정 우선 → 최신순 5건) — 세션 확인 후 경량 조회에 위임. 조회 실패는 결과 그대로(비로그인은 빈 목록).
+ *  모듈 관문 거부(설정 조회 실패 포함)는 빈 값 — 로그는 관문이 남긴다(P13·Ruling B3 F1). */
 export async function getHeaderAnnouncements(
   projectId: string,
 ): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> {

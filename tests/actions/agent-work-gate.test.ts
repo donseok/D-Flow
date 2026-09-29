@@ -88,4 +88,14 @@ describe('승인 계열 — 헬퍼의 모든 성공 갈래가 agents 관문을 �
     expect(await rejectAgentCompletion(O, '사유', null)).toEqual(NO)
     expect(requireModule).not.toHaveBeenCalled()
   })
+  it.each([
+    ['승인', () => approveAgentCompletion(O, null)],
+    ['반려', () => rejectAgentCompletion(O, '사유', null)],
+  ] as const)('%s · 항목이 삭제된 주문 — 관리자 가드가 거부하면 관문을 부르지 않는다(가드 → 관문, B5 T17-m1)', async (_n, call) => {
+    m.row = { id: O, project_id: PX, status: 'reported', wbs_item_id: null, claimed_by_user_id: null }
+    m.requireProjectAdmin.mockResolvedValue(NO)
+    expect(await call()).toEqual(NO)
+    expect(m.requireProjectAdmin).toHaveBeenCalledWith(PX)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
 })
