@@ -6,6 +6,7 @@
 import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
+import { requireModule } from '@/lib/modules/gate'
 import {
   WIKI_CURATE_ACTIONS,
   WIKI_DOCUMENT_KINDS,
@@ -117,6 +118,8 @@ export async function createWikiDocument(args: {
 }): Promise<WikiDocumentActionResult> {
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const title = args.title.trim()
   if (!textWithin(title, WIKI_TITLE_MAX) || args.bodyMd.length > WIKI_BODY_MAX) {
     return { ok: false, error: '제목과 본문 길이를 확인해 주세요.' }
@@ -160,6 +163,8 @@ export async function updateWikiDocument(args: {
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const title = args.title.trim()
@@ -206,6 +211,8 @@ export async function verifyWikiDocument(args: {
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const reviewDays = args.reviewDays ?? 90
@@ -244,6 +251,8 @@ export async function restoreWikiDocumentRevision(args: {
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const sb = await createServerClient()
@@ -280,6 +289,8 @@ export async function createWikiQuestion(args: {
 }): Promise<WikiActionResult & { questionId?: string }> {
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const question = args.question.trim()
   if (!textWithin(question, WIKI_QUESTION_MAX)) {
     return { ok: false, error: '질문을 2,000자 이내로 입력해 주세요.' }
@@ -307,6 +318,8 @@ export async function answerWikiQuestion(args: {
 }): Promise<WikiActionResult> {
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const answer = args.answerMd.trim()
   if (!textWithin(answer, WIKI_ANSWER_MAX)) {
     return { ok: false, error: '답변을 20,000자 이내로 입력해 주세요.' }
@@ -339,6 +352,8 @@ export async function reviewWikiItem(args: {
 }): Promise<WikiActionResult> {
   const gate = await requireProjectAdmin(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data: item, error: targetError } = await sb.from('wiki_items')
     .select('id').eq('id', args.itemId).eq('project_id', args.projectId).maybeSingle()
@@ -370,6 +385,8 @@ export async function submitWikiFeedback(args: {
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   if (!['helpful', 'outdated'].includes(args.kind)) {
@@ -410,6 +427,8 @@ export async function curateWikiItem(args: {
 }): Promise<WikiActionResult> {
   const g = await requireProjectAdmin(args.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!(WIKI_CURATE_ACTIONS as readonly string[]).includes(args.action)) {
     return { ok: false, error: '알 수 없는 작업입니다.' }
   }
@@ -447,6 +466,8 @@ export async function mergeWikiTopics(args: {
 }): Promise<WikiActionResult> {
   const g = await requireProjectAdmin(args.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId: args.projectId }, 'wiki')
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (args.sourceTopicId === args.targetTopicId) {
     return { ok: false, error: '서로 다른 주제를 선택하세요.' }
   }

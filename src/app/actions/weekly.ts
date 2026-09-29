@@ -10,6 +10,7 @@ import {
 import { findCarryOverSource, getWeeklySheet } from '@/lib/data/weeklySheet'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
+import { requireModule } from '@/lib/modules/gate'
 import { errMsg } from '@/lib/domain/format'
 import {
   buildWeeklyRewritePrompt, parseWeeklyRewriteResponse, WEEKLY_REWRITE_MAX_CELLS,
@@ -91,6 +92,8 @@ export async function createWeeklyReport(
   // 회차(주차 문서) 생성은 시트의 구조를 만드는 일이라 관리자 몫 — 셀 편집(멤버)과 급이 다르다.
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'weekly')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const weekStart = mondayIso(weekStartIso)
 
   // 이미 있으면 멱등 성공(동시 생성 경쟁 대비). 조회 실패는 throw로 오므로 정직하게 중단.
@@ -145,6 +148,8 @@ export async function saveWeeklyTitle(
 ): Promise<WeeklyActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'weekly')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const t = title.trim()
   if (t.length > TITLE_MAX) return { ok: false, error: `제목은 ${TITLE_MAX}자 이하여야 합니다.` }
 
@@ -192,6 +197,8 @@ export async function prepareWeeklyCellRewrite(
 ): Promise<WeeklyRewriteResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'weekly')                    // 입력 검증 앞 — AI 판정(aiAvailable)은 그대로 뒤에 있다
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!Array.isArray(inputs) || inputs.length === 0)
     return { ok: false, error: '다듬을 내용이 없습니다.' }
   if (inputs.length > WEEKLY_REWRITE_MAX_CELLS)
@@ -298,6 +305,8 @@ export async function saveWeeklyCell(
 ): Promise<WeeklyActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'weekly')
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!isWeeklyCellKey(cellKey)) return { ok: false, error: '잘못된 셀입니다.' }
   if (content.length > CELL_MAX) return { ok: false, error: `내용은 ${CELL_MAX}자 이하여야 합니다.` }
 
@@ -332,6 +341,8 @@ export async function saveWeeklyCells(
 ): Promise<WeeklyBatchResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'weekly')
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (edits.length === 0) return { ok: true }                                             // no-op — DB 접근 없음
   if (edits.length > BATCH_MAX) return { ok: false, error: '한 번에 저장할 수 있는 셀 수를 초과했습니다.' } // dedupe 전 원본 길이 기준
   for (const e of edits) {

@@ -1,6 +1,8 @@
 'use server'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireProjectMember, resolveProjectId } from '@/lib/authz'
+import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import type { AttendanceType } from '@/lib/domain/types'
 
@@ -12,6 +14,8 @@ export async function upsertAttendance(
   if (!input.memberId || !input.date) return { ok: false, error: '멤버와 날짜는 필수입니다' }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'attendance')                 // 스펙 §4.2 — 가드 뒤(가드 앞 필수값 검사는 그대로)
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const sb = await createServerClient()
   // 대상 멤버가 **이 프로젝트 로스터** 소속인지 확인한다. 없으면 남의 프로젝트 멤버 id 로
@@ -52,6 +56,9 @@ export async function removeAttendance(recordId: string): Promise<{ ok: boolean;
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  const mod = await requireModule({ projectId: found.projectId }, 'attendance')
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const sb = await createServerClient()
   const { error } = await sb.from('attendance_records').delete().eq('id', recordId)

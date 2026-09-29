@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import { getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
 import { expandMeetings, MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
@@ -84,12 +85,19 @@ type OwnerGate = { ok: true; isAdmin: boolean; userId: string } | { ok: false; e
 async function adminOrOwnerGate(meetingId: string): Promise<OwnerGate> {
   const found = await resolveProjectId('meetings', meetingId)
   if (!found.ok) return { ok: false, error: found.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // meetings.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
   const g = await requireProjectAdmin(found.projectId)
-  if (g.ok) return { ok: true, isAdmin: true, userId: g.actor.userId }
-  let actor: Awaited<ReturnType<typeof getActor>> = null
-  try { actor = await getActor() } catch { actor = null }
-  if (!actor) return { ok: false, error: g.error }
-  return { ok: true, isAdmin: false, userId: actor.userId }
+  let pass: OwnerGate
+  if (g.ok) pass = { ok: true, isAdmin: true, userId: g.actor.userId }
+  else {
+    let actor: Awaited<ReturnType<typeof getActor>> = null
+    try { actor = await getActor() } catch { actor = null }
+    if (!actor) return { ok: false, error: g.error }
+    pass = { ok: true, isAdmin: false, userId: actor.userId }
+  }
+  const mod = await requireModule({ projectId: found.projectId }, 'meetings')   // 스펙 §4.2 — 작성자 판정은 호출부가 한다(관문은 그 전)
+  if (!mod.ok) return { ok: false, error: mod.error }
+  return pass
 }
 
 /** 참석자 전체 교체(시리즈 단위). 소유권은 부모 RLS 가 강제. */
@@ -126,6 +134,8 @@ async function replaceAttendees(sb: Awaited<ReturnType<typeof createServerClient
 export async function createMeeting(projectId: string, input: MeetingInput): Promise<MeetingActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'meetings')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const err = validate(input)
   if (err) return { ok: false, error: err }
 
@@ -289,6 +299,8 @@ export async function fetchMyMeetings(
 ): Promise<MyMeetingsResult> {
   const user = await getSession()
   if (!user) return { ok: true, meetings: [], exceptions: [] }
+  const mod = await requireSessionModule(null, 'meetings')                   // 전역 내 회의 — 세션 유일 워크스페이스(P13). 행은 getMyMeetings 가 거른다
+  if (!mod.ok) return { ok: true, meetings: [], exceptions: [] }
   return getMyMeetings(gridStartIso, gridEndIso)
 }
 
@@ -296,5 +308,10 @@ export async function fetchMyMeetings(
 export async function fetchMeetingDetail(id: string): Promise<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null> {
   const user = await getSession()
   if (!user) return null
+  // 모듈 관문(스펙 §4.2) — 회의 행의 프로젝트로 판정한다. 범위 실패·거부는 기존 '없음'(null)
+  const scope = await resolveProjectId('meetings', id)
+  if (!scope.ok || !scope.projectId) return null
+  const mod = await requireModule({ projectId: scope.projectId }, 'meetings')
+  if (!mod.ok) return null
   return getMeetingDetail(id)
 }

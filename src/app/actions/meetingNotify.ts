@@ -1,7 +1,9 @@
 'use server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, resolveProjectId } from '@/lib/authz'
+import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { getMeetingDetail } from '@/lib/data/meetings'
+import { requireModule } from '@/lib/modules/gate'
 import { classifyRecipients, MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 import { renderMeetingInvite, type InviteKind } from '@/lib/mail/meetingInvite'
 import { getTransport } from '@/lib/mail/transport'
@@ -50,6 +52,9 @@ export async function notifyMeetingSaved(
   let actor: Awaited<ReturnType<typeof getActor>> = null
   try { actor = g.ok ? g.actor : await getActor() } catch { actor = null }
   if (!g.ok && !actor) return { ok: false, error: g.error, ...NONE }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP, ...NONE }
+  const mod = await requireModule({ projectId: found.projectId }, 'meetings')   // 스펙 §4.2 — 가드 뒤·입력 검증·발송 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error, ...NONE }
 
   // 서버 액션 인자는 클라이언트가 임의로 만든다 — 타입과 개수를 여기서 다시 못박는다.
   const extras = Array.isArray(extraEmails)

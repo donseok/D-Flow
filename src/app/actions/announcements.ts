@@ -2,6 +2,8 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
+import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import { getTopAnnouncements } from '@/lib/data/announcements'
 import type { AnnouncementSummary } from '@/lib/domain/types'
@@ -32,6 +34,8 @@ export async function createAnnouncement(
 ): Promise<AnnouncementActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'announcements')             // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -69,6 +73,9 @@ export async function updateAnnouncement(
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  const mod = await requireModule({ projectId: found.projectId }, 'announcements')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -98,6 +105,9 @@ export async function deleteAnnouncement(id: string): Promise<AnnouncementAction
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
+  const mod = await requireModule({ projectId: found.projectId }, 'announcements')
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const sb = await createServerClient()
   const { data, error } = await sb
@@ -150,6 +160,8 @@ export async function markAnnouncementsSeen(
 ): Promise<AnnouncementActionResult> {
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
+  const mod = await requireModule({ projectId }, 'announcements')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const ts = Date.parse(seenAt)
   if (Number.isNaN(ts)) return { ok: false, error: '잘못된 시각입니다.' }
   // 미래 시각 방지(클라이언트 값 신뢰 금지) — now 로 클램프
@@ -163,6 +175,8 @@ export async function getHeaderAnnouncements(
 ): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> {
   const user = await getSession()
   if (!user) return { ok: true, rows: [] }
+  const mod = await requireModule({ projectId }, 'announcements')            // 셸 티커 — 꺼지면 그 항목만 비운다(§4.2 셸 행)
+  if (!mod.ok) return { ok: true, rows: [] }
   return getTopAnnouncements(projectId)
 }
 
@@ -174,6 +188,8 @@ export async function getHeaderAnnouncements(
 export async function getUnreadAnnouncementCount(projectId: string): Promise<number> {
   const user = await getSession()
   if (!user) return 0
+  const mod = await requireModule({ projectId }, 'announcements')            // 셸 배지 — 꺼지면 0(§4.2 셸 행)
+  if (!mod.ok) return 0
   const sb = await createServerClient()
   const { data: seen } = await sb
     .from('announcement_seen')
@@ -210,6 +226,9 @@ export async function createAnnouncementFromMeeting(
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
+  const mod = await requireModule({ projectId: found.projectId }, ['announcements', 'meetings'])   // 회의 → 공지 — 둘 다 켜져야
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: '잘못된 날짜입니다.' }
 
   const sb = await createServerClient()
