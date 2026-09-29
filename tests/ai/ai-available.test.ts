@@ -90,6 +90,13 @@ describe('aiAvailable — 스코프 네 모양', () => {
     expect(await aiAvailable({ minuteId: MID }, { module: 'minutes', client: minuteClient(null) as never })).toBe(false)
     expect(err.mock.calls[0][0]).toBe('[aiAvailable]')
   })
+  it('{ minuteId } 행 조회가 실패하면 false 와 그 원인을 로그에 — "행 없음"으로 위장하지 않는다(에러 처리 원칙 1)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const b: Record<string, unknown> = {}; b.select = () => b; b.eq = () => b; b.maybeSingle = async () => ({ data: null, error: { message: 'boom' } })
+    expect(await aiAvailable({ minuteId: MID }, { module: 'minutes', client: { from: () => b } as never })).toBe(false)
+    expect(err.mock.calls[0][0]).toBe('[aiAvailable]')
+    expect(err.mock.calls[0].join(' ')).toContain('회의록 범위 조회 실패: boom')
+  })
   it('{ minuteId } 에 client 가 없으면 세션 클라이언트로 행을 읽고, 행의 프로젝트까지 범위에 싣는다(프로젝트 층 모듈)', async () => {
     const c = minuteClient({ workspace_id: WID, project_id: PID })
     m.createServerClient.mockResolvedValue(c)
