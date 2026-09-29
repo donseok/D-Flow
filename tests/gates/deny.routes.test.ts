@@ -104,10 +104,11 @@ function delegationProblems(key: string, e: GateEntry, f: string, text: string):
   const sub = file.replace(/^src\/app\//, '@/app/').replace(/\.tsx?$/, '')
   const sf = parse(f, text)
   if (e.delegatedStatic) {
-    // v1 에이전트 — 판정은 파일 밖 헬퍼(requireAgentProject·loadGatedOrder*)라 실행 확인은 세 라우트 테스트가 한다(note). 여기서는 경로와 거부 흔적만,
-    // 핸들러 쪽의 판정 호출·결과 사용·지배는 아래 AST 케이스가 메서드마다 본다
+    // v1 에이전트 — 판정은 파일 밖 헬퍼(requireAgentProject·loadGatedOrder*)이고 꺼지면 404 not_found(존재 은닉)라 응답에 거부 토큰이 없다.
+    // 실행 확인은 세 라우트 테스트가 한다(note). 여기서는 경로와 코드 안의 거부 흔적(주석 제외 — 두 원천 AND 의 거부 mock)만 보고,
+    // 메서드 단위 보장은 핸들러 쪽 AST 케이스(판정 원천·결과 사용·최상위 지배)가 맡는다
     if (!text.includes(`'${sub}'`)) return [`${key}: ${f} 에 경로 '${sub}' 가 없다(delegatedStatic)`]
-    return hasDenyToken(sf) ? [] : [`${key}: ${f} 에 모듈 거부 단언(expect 안의 거부 흔적)이 없다`]
+    return tokenIn(sf) ? [] : [`${key}: ${f} 에 모듈 거부 흔적(코드)이 없다`]
   }
   const local = importedAs(sf, sub, method)
   if (!local) return [`${key}: ${f} 가 ${sub} 에서 ${method} 를 import 하지 않는다`]
@@ -226,6 +227,10 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', viaHelper)).toEqual([])
     const mockOnly = file("it('GET 꺼짐', async () => { vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED }); expect((await GET(req())).status).toBe(404) })")
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', mockOnly), 'mock 준비의 토큰은 단언이 아니다').toHaveLength(1)
+    const stat: GateEntry = { ...e, guard: 'agentPrincipal', module: 'agents', delegatedStatic: '두 원천 AND — 실행은 라우트 테스트' }
+    const staticFile = "const V1 = ['@/app/api/v1/agent/me/route'] // ERR_MODULE_DISABLED\nit('자리', () => { expect(src).toMatch(/requireAgentProject/) })"
+    expect(delegationProblems('src/app/api/v1/agent/me/route.ts#GET', stat, 'a.test.ts', staticFile), 'delegatedStatic — 주석의 토큰은 흔적이 아니다').toHaveLength(1)
+    expect(delegationProblems('src/app/api/v1/agent/me/route.ts#GET', stat, 'a.test.ts', `import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'\n${staticFile}`)).toEqual([])
     const skipped = file("it.skip('GET 꺼짐', async () => { await GET(req()); expect(x).toBe(ERR_MODULE_DISABLED) })")
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', skipped)).toHaveLength(1)
   })
