@@ -143,7 +143,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#updateMinuteMeta`]: { guard: 'session', module: 'minutes', note: 'requireActor + checkOwner(행의 워크스페이스) — 관문이 입력 검증 뒤라 유효한 표본', sample: [U, { minuteDate: '2026-09-01', teamCode: 'PMO', title: 'Acme', meetingId: null }] },
   [`${A('minutes')}#assignMinutesProject`]: { guard: 'session', module: 'minutes', note: 'requireActor — 일괄(회의록 화면 전용) 세션 유일 워크스페이스', sample: [[U], null], target: 'session' },
   [`${A('minutes')}#resetMinuteExternalId`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
-  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: 'requireActor(로그인·행위자) — 목록형: 소속 워크스페이스마다 관문, 켜진 곳의 폴더만(P13 둘째 문장, B5 T16-I1). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 유일 워크스페이스(P28 폴더 조작)가 아니다. 켜진 곳이 없으면 null', sample: [], deny: null },
+  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: '로그인 — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 관문, 꺼진 곳의 행을 뺀다(P13 둘째 문장, Ruling B5 fix 우려 ②). 행이 있는 곳이 모두 꺼지면 null, 보이는 행이 없으면 세션 유일 워크스페이스 판정(꺼짐 null·켜짐 []). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 P28 폴더 조작과 다르다', sample: [], deny: null },
   [`${A('minutes')}#replaceMinuteBody`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, '# b', { fileName: 'a.md', filePath: 'x/a.md', size: 1, mime: 'text/markdown' }] },
   [`${A('minutes')}#recordMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, { role: 'attachment', fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }] },
   [`${A('minutes')}#removeMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 파일 행의 회의록', sample: [U] },

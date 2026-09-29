@@ -649,20 +649,23 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
 /** 폴더 전량(라이트). **실패는 null** — 폴더 선택이 필수가 된 §6 이후로는 빈 배열이 곧
  *  "고를 것이 없는 막다른 모달"이라 조회 실패와 구분되지 않으면 원인 표시가 불가능하다
  *  (fetchMinutesExplorer 와 같은 관례).
- *  모듈 관문은 목록형(스펙 §4.2 첫 문단·P13) — 소속 워크스페이스 가운데 minutes 가 켜진 곳의 폴더만 돌려준다. 탐색기뿐 아니라 행 판정으로
- *  여는 /minutes/[id] 의 메타 모달도 부르므로, 유일 워크스페이스로 닫으면 여러 워크스페이스 사용자가 켜진 모듈에서 폴더 목록을 잃는다.
- *  켜진 곳이 없으면 null(관문 거부 — 로그는 관문이 남긴다). */
+ *  모듈 관문은 목록형(스펙 §4.2 첫 문단 '꺼진 곳의 행을 뺀다'·P13) — RLS 가 보여 준 폴더 행의 워크스페이스마다 판정해 꺼진 곳의 행을 뺀다.
+ *  행위자 소속이 아니라 행으로 보므로 여러 워크스페이스 사용자도, 소속 밖 워크스페이스 회의록을 /minutes/[id] 로 연 플랫폼 관리자도
+ *  켜진 곳의 폴더를 잃지 않는다(메타 모달·업로드 모달·챗 패널이 부른다 — 탐색기 전용이 아니다). 행이 있는 곳이 모두 꺼지면 null.
+ *  폴더 읽기는 관문 앞이지만 읽기뿐이다(getMyMeetings 의 행 거르기와 같은 모양, 쓰기 0). */
 export async function fetchMinuteFoldersLite(): Promise<MinuteFolder[] | null> {
-  const g = await requireActor()
-  if (!g.ok) return null
-  // 소속 워크스페이스마다 관문 — workspacesWithModule 과 같은 판정을 requireModule 로 부른다(액션의 관문은 판정 결과를 조건으로 본다 — deny 정적 검사)
-  const ids = [...g.actor.workspaceRoles.keys()]
-  const verdicts = await Promise.all(ids.map(async (workspaceId) => (await requireModule({ workspaceId }, 'minutes')).ok))
-  const on = new Set(ids.filter((_, i) => verdicts[i]))
-  if (on.size === 0) return null
+  const user = await getSession()
+  if (!user) return null
   const sb = await createServerClient()
   const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds()])
   if (!folders) return null
+  const ids = [...new Set(folders.map(f => f.workspaceId))]
+  // 보이는 행이 없으면 판정할 워크스페이스가 없다 — 세션 판정으로 '켜졌지만 폴더 없음'([], 전과 같다)과 '꺼짐'(null)을 가른다
+  if (ids.length === 0) return (await requireSessionModule(null, 'minutes')).ok ? [] : null
+  // 워크스페이스마다 관문(workspacesWithModule 과 같은 판정) — 액션의 관문은 판정 결과를 조건으로 보는 requireModule 로 부른다(deny 정적 검사)
+  const verdicts = await Promise.all(ids.map(async (workspaceId) => (await requireModule({ workspaceId }, 'minutes')).ok))
+  const on = new Set(ids.filter((_, i) => verdicts[i]))
+  if (on.size === 0) return null
   // 숨김 프로젝트의 폴더 제거 — getMinutesExplorer 와 같은 필터(§chat 패널이 이 액션으로
   // 폴더명을 노출하므로 비공개 프로젝트 하위 폴더명이 이름만으로도 새면 안 된다).
   return folders.filter(f => on.has(f.workspaceId) && (f.projectId === null || !hidden.has(f.projectId)))

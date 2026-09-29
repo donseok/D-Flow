@@ -1,6 +1,6 @@
 // 회의록 액션의 minutes 관문이 무엇으로 판정하는가(스펙 §4.2·판정 P28·사전 점검 D-I4) — 대상 행이 있으면 **행의 워크스페이스**,
 // 첨부 내려받기는 **파일 행의 회의록**, 새 회의록은 고른 프로젝트(회의만 고르면 그 회의의 프로젝트, 없으면 세션 유일 워크스페이스), 폴더 조작은
-// 세션 유일 워크스페이스, 폴더 목록(fetchMinuteFoldersLite)은 소속 워크스페이스 가운데 켜진 곳의 폴더만(목록형 — P13).
+// 세션 유일 워크스페이스, 폴더 목록(fetchMinuteFoldersLite)은 RLS 가 보여 준 폴더 행의 워크스페이스마다 판정해 꺼진 곳의 행을 뺀다(목록형 — P13).
 // deny 하네스(tests/gates)는 범위를 한 값으로 고정해 "무엇을 넘겼나"를 못 본다 — 여기서 인자를 문다. 꺼지면 본문에 닿지 않는다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   getSession: vi.fn(), getActor: vi.fn(), resolveScope: vi.fn(), resolveProjectId: vi.fn(),
   createAdminClient: vi.fn(), ensureMinuteInsights: vi.fn(), getMinuteDetail: vi.fn(),
   signed: vi.fn(), fromCalls: [] as string[], rows: {} as Record<string, unknown>, lists: {} as Record<string, unknown[]>,
+  listErrors: {} as Record<string, { message: string }>,
 }))
 vi.mock('@/lib/auth', () => ({ getSession: m.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor, resolveScope: m.resolveScope, resolveProjectId: m.resolveProjectId }))
@@ -18,7 +19,8 @@ vi.mock('@/lib/supabase/server', () => ({
       const chain: Record<string, unknown> = {}
       for (const k of ['select', 'eq', 'is', 'order', 'in', 'update', 'delete', 'insert', 'upsert']) chain[k] = () => chain
       chain.maybeSingle = async () => ({ data: m.rows[table] ?? null, error: null })
-      chain.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: m.lists[table] ?? [], error: null }).then(res)
+      chain.then = (res: (v: unknown) => unknown) =>
+        Promise.resolve(m.listErrors[table] ? { data: null, error: m.listErrors[table] } : { data: m.lists[table] ?? [], error: null }).then(res)
       return chain
     },
     storage: { from: () => ({ createSignedUrl: m.signed }) },
@@ -57,6 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.fromCalls.length = 0
   m.lists = {}
+  m.listErrors = {}
   m.rows = { minute_files: { file_path: `${M}/a.pdf`, file_name: 'a.pdf', minute_id: M }, minutes: { created_by: actor.userId, archived_at: null } }
   m.getSession.mockResolvedValue({ id: actor.userId, email: 'alice@example.com', user_metadata: {} })
   m.getActor.mockResolvedValue(actor)
@@ -179,38 +182,62 @@ describe('회의록 관문 — 행이 없는 경로', () => {
   })
 })
 
-describe('폴더 목록(fetchMinuteFoldersLite) — 목록형: 소속 워크스페이스 가운데 minutes 가 켜진 곳의 폴더만(P13, B5 T16-I1)', () => {
+describe('폴더 목록(fetchMinuteFoldersLite) — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 판정하고 꺼진 곳의 행을 뺀다(P13, Ruling B5 fix 우려 ②)', () => {
   const folder = (id: string, workspaceId: string) => ({ id, name: id, parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: workspaceId })
-  const multi = makeAdminActor(PB, { projectWorkspace: new Map([[PB, WB]]), workspaceRoles: new Map([[WA, 'member'], [WB, 'member']]) })
-  /** 진짜 세션 판정은 소속이 둘이면 닫는다(유일 워크스페이스 없음) — 목록형은 그 판정을 쓰지 않는다 */
-  const asMulti = () => { m.getActor.mockResolvedValue(multi); vi.mocked(requireSessionModule).mockResolvedValue(OFF) }
-  beforeEach(() => { m.lists = { minute_folders: [folder('fa', WA), folder('fb', WB)] } })
-  it('여러 워크스페이스 소속·둘 다 켜짐 — 두 곳의 폴더를 모두 돌려준다(/minutes/[id] 메타 모달이 목록을 잃지 않는다)', async () => {
-    asMulti()
+  /** 워크스페이스 off 들만 끈 관문 */
+  const offIn = (...off: string[]) => vi.mocked(requireModule).mockImplementation(async (s) => ('workspaceId' in s && off.includes(s.workspaceId) ? OFF : { ok: true }))
+  // 판정은 행위자 소속이 아니라 행이다 — 진짜 세션 판정은 소속이 0·2개면 닫지만 목록형은 그 판정을 쓰지 않는다(행이 있을 때)
+  beforeEach(() => { vi.mocked(requireSessionModule).mockResolvedValue(OFF) })
+
+  it('플랫폼 관리자가 소속 밖 워크스페이스의 행을 본다 — 켜져 있으면 그 폴더도 포함한다(과제 16 전처럼)', async () => {
+    m.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map([[WB, 'admin']]) }))   // WA 는 소속 밖
+    m.lists = { minute_folders: [folder('fa', WA), folder('fb', WB)] }
     expect((await fetchMinuteFoldersLite())?.map((f) => f.id)).toEqual(['fa', 'fb'])
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: WA }, 'minutes')
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: WB }, 'minutes')
     expect(requireSessionModule).not.toHaveBeenCalled()
   })
-  it('여러 워크스페이스 소속·한쪽 꺼짐 — 꺼진 워크스페이스의 폴더를 뺀다', async () => {
-    asMulti()
-    vi.mocked(requireModule).mockImplementation(async (s) => ('workspaceId' in s && s.workspaceId === WB ? OFF : { ok: true }))
-    expect((await fetchMinuteFoldersLite())?.map((f) => f.id)).toEqual(['fa'])
+  it('플랫폼 관리자 — 소속 밖 워크스페이스에서 꺼져 있으면 그 폴더만 뺀다', async () => {
+    m.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map([[WB, 'admin']]) }))
+    m.lists = { minute_folders: [folder('fa', WA), folder('fb', WB)] }
+    offIn(WA)
+    expect((await fetchMinuteFoldersLite())?.map((f) => f.id)).toEqual(['fb'])
   })
-  it('켜진 곳이 없으면 null(매니페스트 거부 값)이고 폴더를 읽지 않는다', async () => {
-    asMulti()
-    vi.mocked(requireModule).mockResolvedValue(OFF)
-    expect(await fetchMinuteFoldersLite()).toBeNull()
-    expect(m.fromCalls).toEqual([])
+  it('여러 워크스페이스 소속·한쪽 꺼짐 — 꺼진 워크스페이스의 폴더를 빼고, 워크스페이스마다 한 번씩 판정한다', async () => {
+    m.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WA, 'member'], [WB, 'member']]) }))
+    m.lists = { minute_folders: [folder('fa1', WA), folder('fb', WB), folder('fa2', WA)] }
+    offIn(WB)
+    expect((await fetchMinuteFoldersLite())?.map((f) => f.id)).toEqual(['fa1', 'fa2'])
+    expect(vi.mocked(requireModule).mock.calls).toEqual([[{ workspaceId: WA }, 'minutes'], [{ workspaceId: WB }, 'minutes']])
   })
-  it('유일 소속 — 결과가 전과 같다(소속 워크스페이스의 폴더 전부)', async () => {
-    m.getActor.mockResolvedValue(makeAdminActor(PB, { projectWorkspace: new Map([[PB, WB]]), workspaceRoles: new Map([[WB, 'member']]) }))
+  it('유일 소속 — 결과가 전과 같다(그 워크스페이스의 폴더 전부)', async () => {
     m.lists = { minute_folders: [folder('fb1', WB), folder('fb2', WB)] }
     expect((await fetchMinuteFoldersLite())?.map((f) => f.id)).toEqual(['fb1', 'fb2'])
     expect(vi.mocked(requireModule).mock.calls).toEqual([[{ workspaceId: WB }, 'minutes']])
   })
-  it('행위자가 없으면 null 이고 관문·폴더에 닿지 않는다', async () => {
-    m.getActor.mockResolvedValue(null); m.getSession.mockResolvedValue(null)
+  it('행이 있는 모든 워크스페이스가 꺼지면 null(매니페스트 거부 값)', async () => {
+    m.lists = { minute_folders: [folder('fa', WA), folder('fb', WB)] }
+    offIn(WA, WB)
+    expect(await fetchMinuteFoldersLite()).toBeNull()
+  })
+  it('폴더 조회 실패 — 로그를 남기고 기존대로 null 이며 관문을 부르지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.listErrors = { minute_folders: { message: 'boom' } }
+    expect(await fetchMinuteFoldersLite()).toBeNull()
+    expect(spy).toHaveBeenCalledWith('[loadFolders] 조회 실패:', 'boom')
+    expect(requireModule).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('보이는 폴더 행이 없으면 판정할 워크스페이스가 없다 — 세션 판정으로 켜짐은 [](전과 같다), 꺼짐은 null', async () => {
+    m.lists = { minute_folders: [] }
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: true })
+    expect(await fetchMinuteFoldersLite()).toEqual([])
+    expect(await fetchMinuteFoldersLite()).toBeNull()
+    expect(vi.mocked(requireSessionModule).mock.calls).toEqual([[null, 'minutes'], [null, 'minutes']])
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+  it('세션이 없으면 null 이고 관문·폴더에 닿지 않는다', async () => {
+    m.getSession.mockResolvedValue(null)
     expect(await fetchMinuteFoldersLite()).toBeNull()
     expect(requireModule).not.toHaveBeenCalled()
     expect(m.fromCalls).toEqual([])
