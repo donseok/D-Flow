@@ -90,6 +90,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [streamStatus, setStreamStatus] = useState<string | null>(null)
+  const [available, setAvailable] = useState<boolean | null>(null)
 
   const idRef = useRef(0)
   const nextId = () => (idRef.current += 1)
@@ -137,6 +138,24 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
   }, [open, currentProjectId])
 
   useEffect(() => () => streamAbortRef.current?.abort(), [])
+
+  // 처음과 프로젝트 전환 때 모듈 관문만 확인한다. 전환 중에는 이전 판정을 유지한다.
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/chat/context?projectId=${currentProjectId ?? ''}&probe=1`, { cache: 'no-store' })
+      .then((response) => {
+        if (!alive) return
+        if (response.status === 404) {
+          streamAbortRef.current?.abort()
+          setOpen(false)
+          setAvailable(false)
+        } else {
+          setAvailable(true)
+        }
+      })
+      .catch(() => { if (alive) setAvailable(true) })
+    return () => { alive = false }
+  }, [currentProjectId])
 
   // 완전 닫기 — 접힘 상태도 리셋해 다음에 열 때는 펼친 상태로 시작
   const close = useCallback(() => {
@@ -462,6 +481,8 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
+
+  if (available !== true) return null
 
   return (
     <>

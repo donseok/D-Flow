@@ -125,6 +125,7 @@ describe('AssistantChat v2 스트림', () => {
           <AssistantChat projects={[{ id: PROJECT_ID, name: 'ERP' }]} />
         </BotPageContextProvider>,
       )
+      await new Promise(resolve => setTimeout(resolve, 0))
     })
 
     await act(async () => {
