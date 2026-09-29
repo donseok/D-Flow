@@ -207,6 +207,7 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
     useAdmin(runnerQueues(), calls)
     expect((await post({ agent: 'a', project_id: P2 })).status).toBe(404)
     expect(calls['agent_watchers:upsert']).toBeUndefined()
+    expect(requireModule).not.toHaveBeenCalled()
   })
   it('명단 member 면 upsert 한다', async () => {
     const calls: Record<string, unknown[]> = {}
@@ -229,13 +230,36 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
     expect((await post({ agent: 'a', project_id: P2, stop: true })).status).toBe(200)
     expect(mocks.actorFromUser).not.toHaveBeenCalled()
   })
-  it('agents 가 꺼지면 404 이고 upsert 하지 않는다. stop 은 관문 앞이라 정리는 된다(과제 18, P19)', async () => {
+  it('agents 가 워크스페이스에서 꺼지면 404 이고 upsert 하지 않는다. stop 은 관문 앞이라 정리는 된다(과제 18, P19)', async () => {
     const calls: Record<string, unknown[]> = {}
     vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     useAdmin(runnerQueues(), calls)
     expect((await post({ agent: 'hong/mbp/lead' })).status).toBe(404)
     expect(calls['agent_watchers:upsert']).toBeUndefined()
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'agents', { client: expect.anything() })
     useAdmin(runnerQueues(), calls)
     expect((await post({ agent: 'hong/mbp/lead', stop: true })).status).toBe(200)
+  })
+  it('agents 가 프로젝트에서 꺼지면 404 이고 upsert 하지 않는다.', async () => {
+    const calls: Record<string, unknown[]> = {}
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P2, [], { userId: 'u-1', projectRoles: new Map<string, ProjectRole>([[P2, 'member']]) }))
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+    expect(requireModule).toHaveBeenCalledWith({ projectId: P2 }, 'agents', { client: expect.anything() })
+  })
+  it('범위 한정 거부 — 프로젝트는 꺼지고 워크스페이스는 켜져 있을 때', async () => {
+    const calls: Record<string, unknown[]> = {}
+    vi.mocked(requireModule).mockImplementation(async (s) => 'projectId' in s ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true })
+    mocks.actorFromUser.mockResolvedValue(makeMemberActor(P2, [], { userId: 'u-1', projectRoles: new Map<string, ProjectRole>([[P2, 'member']]) }))
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'a', project_id: P2 })).status).toBe(404)
+  })
+  it('범위 한정 거부 — 프로젝트는 켜지고 워크스페이스는 꺼져 있을 때', async () => {
+    const calls: Record<string, unknown[]> = {}
+    vi.mocked(requireModule).mockImplementation(async (s) => 'workspaceId' in s ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true })
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'hong/mbp/lead' })).status).toBe(404)
   })
 })

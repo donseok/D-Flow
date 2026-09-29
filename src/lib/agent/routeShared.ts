@@ -52,12 +52,12 @@ export async function loadGatedOrder(admin: AdminClient, id: string, userEmail: 
   const loaded = await fetchOrderRow(admin, id)
   if (!loaded.ok) return loaded
   const row = loaded.row
-  if (!(await requireAgentProject(admin, row.project_id))) return { ok: false, res: apiNotFound() }
   const user = await resolveUserByEmail(admin, userEmail)
   if (!user) return { ok: false, res: apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`) }
   if (!(await isAgentProjectMember(admin, user.id, row.project_id))) {
     return { ok: false, res: apiFail(403, 'forbidden_role', '그 프로젝트의 멤버 이상만 실행할 수 있습니다.') }
   }
+  if (!(await requireAgentProject(admin, row.project_id))) return { ok: false, res: apiNotFound() }
   return { ok: true, order: row, userId: user.id }
 }
 
@@ -77,11 +77,11 @@ export async function loadGatedOrderForUser(
   if (!loaded.ok) return loaded
   const row = loaded.row
   if (!patProjectAllowed(principal, row.project_id)) return { ok: false, res: apiNotFound() }
-  if (!(await requireAgentProject(admin, row.project_id))) return { ok: false, res: apiNotFound() }
   if (!(await isAgentProjectMember(admin, userId, row.project_id))) {
     console.error(`[agent-api] PAT 멤버십 거절: user=${userEmail} project=${row.project_id}`)
     return { ok: false, res: apiFail(403, 'forbidden_role', '그 프로젝트의 멤버 이상만 실행할 수 있습니다.') }
   }
+  if (!(await requireAgentProject(admin, row.project_id))) return { ok: false, res: apiNotFound() }
   return { ok: true, order: row, userId }
 }
 

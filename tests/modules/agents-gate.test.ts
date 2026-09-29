@@ -9,9 +9,10 @@ vi.mock('@/lib/agent/externalApi', async (orig) => {
 })
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
-import { requireAgentProject } from '@/lib/agent/externalApi'
+import { requireAgentProject, isAgentProjectMember, type AgentPrincipal } from '@/lib/agent/externalApi'
 import { accessibleProjectIds } from '@/lib/agent/mineShared'
 import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
+import { loadGatedOrder, loadGatedOrderForUser } from '@/lib/agent/routeShared'
 
 const PID = '00000000-0000-0000-7e57-000000001451', P2 = '00000000-0000-0000-7e57-000000001452'
 const OFF = { ok: false as const, error: ERR_MODULE_DISABLED }
@@ -57,6 +58,7 @@ describe('ensureOrder — 발행 게이트', () => {
     vi.mocked(requireModule).mockResolvedValue(OFF)
     const { admin } = fakeAdmin({ reg: { enabled: true } })
     expect(await ensureOrderForWorkflowLeaf(admin, { projectId: PID, wbsItemId: PID, actorUserId: 'u' })).toEqual({ ok: true, created: false, reason: 'not_agent_project' })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
     vi.mocked(requireModule).mockClear()
     await ensureOrderForWorkflowLeaf(admin, { projectId: PID, wbsItemId: PID, actorUserId: 'u', agentsOn: true })
     expect(requireModule).not.toHaveBeenCalled()
@@ -70,15 +72,31 @@ describe('ensureOrder — 발행 게이트', () => {
     expect(await backfillProjectOrders(a.admin, { projectId: PID, actorUserId: 'u' })).toMatchObject({ ok: false })
     expect(a.from).not.toHaveBeenCalled()                                // 판정이 항목 조회보다 앞 — 꺼짐·판정 불가에서 후보를 읽지 않는다
   })
+  it("backfillProjectOrders: 'on' 이면 후보를 조회하고 requireModule 은 재호출하지 않는다 (agentsOn 전달)", async () => {
+    const a = fakeAdmin({ items: [{ id: 'i1' }, { id: 'i2' }] })
+    vi.mocked(moduleState).mockResolvedValueOnce('on')
+    expect(await backfillProjectOrders(a.admin, { projectId: PID, actorUserId: 'u' })).toMatchObject({ ok: true, created: 0 })
+    expect(a.from).toHaveBeenCalledWith('wbs_items')
+    expect(requireModule).not.toHaveBeenCalled()
+  })
   it('ensureAgentProject: 모듈이 꺼지면 moduleOff·enabled false, stopped 는 사람이 멈춘 것만. 행이 없으면 자동 생성은 남는다', async () => {
     vi.mocked(requireModule).mockResolvedValue(OFF)
-    expect(await ensureAgentProject(fakeAdmin({ reg: { enabled: true } }).admin, { projectId: PID, actorUserId: 'u' }))
+    const f1 = fakeAdmin({ reg: { enabled: true } })
+    expect(await ensureAgentProject(f1.admin, { projectId: PID, actorUserId: 'u' }))
       .toEqual({ ok: true, enabled: false, activated: false, stopped: false, moduleOff: true })
-    expect(await ensureAgentProject(fakeAdmin({ reg: { enabled: false } }).admin, { projectId: PID, actorUserId: 'u' }))
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: f1.admin })
+
+    vi.mocked(requireModule).mockClear()
+    const f2 = fakeAdmin({ reg: { enabled: false } })
+    expect(await ensureAgentProject(f2.admin, { projectId: PID, actorUserId: 'u' }))
       .toEqual({ ok: true, enabled: false, activated: false, stopped: true, moduleOff: true })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: f2.admin })
+
+    vi.mocked(requireModule).mockClear()
     const none = fakeAdmin({ reg: null })
     expect(await ensureAgentProject(none.admin, { projectId: PID, actorUserId: 'u' })).toEqual({ ok: true, enabled: false, activated: true, stopped: false, moduleOff: true })
     expect(none.writes).toEqual(['agent_projects.insert'])
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: none.admin })
   })
 })
 
@@ -112,5 +130,45 @@ describe('v1 에이전트 핸들러 11 — 관문의 자리', () => {
     expect(readFileSync(file(V1_ROUTES[8]), 'utf8')).toMatch(/projectsWithModule\(/)
     expect(readFileSync(file(V1_ROUTES[9]), 'utf8')).toMatch(/accessibleProjectIds\(/)
     expect(readFileSync(file(V1_ROUTES[10]), 'utf8')).toMatch(/requireModule\(/)
+  })
+})
+
+vi.mock('@/lib/minutes/externalApi', async (orig) => {
+  const real = await orig<typeof import('@/lib/minutes/externalApi')>()
+  return { ...real, resolveUserByEmail: vi.fn(async () => ({ id: 'u' })) }
+})
+
+describe('loadGatedOrder / loadGatedOrderForUser', () => {
+  it('Row enabled AND requireModule rejects → result 404', async () => {
+    vi.mocked(requireModule).mockResolvedValue(OFF)
+    vi.mocked(isAgentProjectMember).mockResolvedValue(true)
+
+    const admin = { from: vi.fn((table: string) => {
+      const b: Record<string, unknown> = {}
+      for (const k of ['select', 'eq', 'neq', 'in', 'order', 'limit']) b[k] = () => b
+      b.maybeSingle = async () => {
+        if (table === 'users') return { data: { id: 'u' }, error: null }
+        if (table === 'agent_projects') return { data: { enabled: true }, error: null }
+        if (table === 'agent_work_orders') return { data: { id: 'o1', project_id: PID }, error: null }
+        return { data: null, error: null }
+      }
+      return b
+    }) } as unknown as Parameters<typeof loadGatedOrder>[0]
+
+    const res1 = await loadGatedOrder(admin, 'o1', 'test@test.com')
+    expect(res1.ok).toBe(false)
+    if (!res1.ok) expect(res1.res.status).toBe(404)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
+
+    vi.mocked(requireModule).mockClear()
+    const principal: AgentPrincipal = {
+      kind: 'pat', runnerId: 'runner-1', userId: 'u', userEmail: 'test@test.com',
+      scopes: ['work:read'], projectId: null, runnerKind: 'user_pat',
+      tokenExpiresAt: '2099-01-01T00:00:00Z', runnerName: 'test', tokenPrefix: 'test',
+    }
+    const res2 = await loadGatedOrderForUser(admin, 'o1', 'u', 'test@test.com', principal)
+    expect(res2.ok).toBe(false)
+    if (!res2.ok) expect(res2.res.status).toBe(404)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
   })
 })

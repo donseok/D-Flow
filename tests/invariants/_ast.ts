@@ -145,11 +145,20 @@ const exitOnlyCatch = (t: ts.TryStatement): boolean => {
   const st = t.catchClause.block.statements
   const last = st[st.length - 1]
   if (!last) return false
-  const logs = st.slice(0, -1).every((s) => ts.isExpressionStatement(s) && ts.isCallExpression(s.expression)
-    && ts.isPropertyAccessExpression(s.expression.expression) && ts.isIdentifier(s.expression.expression.expression)
-    && s.expression.expression.expression.text === 'console')
+  const logs = st.slice(0, -1).every((s) => {
+    if (!ts.isExpressionStatement(s) || !ts.isCallExpression(s.expression)) return false
+    const exp = s.expression.expression
+    if (!ts.isPropertyAccessExpression(exp) || !ts.isIdentifier(exp.expression) || exp.expression.text !== 'console') return false
+    let hasCallOrAwait = false
+    const checkArgs = (n: ts.Node) => {
+      if (ts.isCallExpression(n) || ts.isAwaitExpression(n)) hasCallOrAwait = true
+      else ts.forEachChild(n, checkArgs)
+    }
+    s.expression.arguments.forEach(a => checkArgs(a))
+    return !hasCallOrAwait
+  })
   if (!logs) return false
-  if (ts.isThrowStatement(last)) return true
+  if (ts.isThrowStatement(last)) return !!last.expression && ts.isIdentifier(last.expression)
   const r = ts.isReturnStatement(last) ? last.expression : undefined
   return !!r && ts.isCallExpression(r) && ts.isIdentifier(r.expression) && EXIT_RESPONSES.has(r.expression.text)
     && r.arguments.every((a) => ts.isStringLiteralLike(a) || ts.isNumericLiteral(a))
@@ -182,13 +191,24 @@ export function gateSitesIn(sf: ts.SourceFile, exportName: string, names: Readon
   }
   /** call 이 fnBody 의 최상위 문에서 늘 도는가 — 가지·try·반복·중첩 함수·단락 평가 오른쪽·가지 한쪽에만 관문이 있는 삼항이면 거짓.
    *  예외: 로그 뒤 고정 응답만 하는 catch 의 try 블록(exitOnlyCatch)은 투명하다 — 그 try 가 최상위여야 최상위다 */
-  const alwaysRuns = (call: ts.Node, fnBody: ts.ConciseBody): boolean => {
+  const alwaysRuns = (call: ts.Node, fnBody: ts.ConciseBody, isHandler: boolean): boolean => {
     if (!ts.isBlock(fnBody)) return true
+
+    const containsLabelBreak = (n: ts.Node): boolean => {
+      let hasBreak = false
+      const walk = (node: ts.Node) => {
+        if (ts.isBreakStatement(node) && node.label) hasBreak = true
+        else ts.forEachChild(node, walk)
+      }
+      walk(n)
+      return hasBreak
+    }
+
     for (let cur: ts.Node = call; cur.parent; cur = cur.parent) {
       const p = cur.parent
       if (p === fnBody) return true
-      if (ts.isBlock(p) && ts.isTryStatement(p.parent) && p.parent.tryBlock === p && exitOnlyCatch(p.parent)) continue
-      if (ts.isTryStatement(p) && p.tryBlock === cur && exitOnlyCatch(p)) continue
+      if (isHandler && ts.isBlock(p) && ts.isTryStatement(p.parent) && p.parent.tryBlock === p && exitOnlyCatch(p.parent) && !containsLabelBreak(p)) continue
+      if (isHandler && ts.isTryStatement(p) && p.tryBlock === cur && exitOnlyCatch(p) && !containsLabelBreak(cur)) continue
       if (ts.isBlock(p) || ts.isFunctionLike(p) || ts.isTryStatement(p) || ts.isIterationStatement(p, false) || ts.isCaseClause(p) || ts.isDefaultClause(p)) return false
       if (ts.isIfStatement(p) && p.expression !== cur) return false
       if (ts.isBinaryExpression(p) && p.right === cur && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(p.operatorToken.kind)) return false
@@ -232,10 +252,10 @@ export function gateSitesIn(sf: ts.SourceFile, exportName: string, names: Readon
           }
           sites.push({
             name: r.name, line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, bound: r.bound, discarded,
-            checked: !discarded && (checked || !MUST_CHECK.has(r.name)), topLevel: top && alwaysRuns(n, body), call: n,
+            checked: !discarded && (checked || !MUST_CHECK.has(r.name)), topLevel: top && alwaysRuns(n, body, fnName === exportName), call: n,
           })
         } else if (ts.isIdentifier(n.expression) && bodies.has(n.expression.text) && !named.has(n.expression.text)) {
-          visitFn(n.expression.text, top && alwaysRuns(n, body))
+          visitFn(n.expression.text, top && alwaysRuns(n, body, fnName === exportName))
         }
       }
       ts.forEachChild(n, walk)

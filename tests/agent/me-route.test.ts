@@ -138,12 +138,12 @@ describe('GET /agent/me', () => {
 
   it('agents 모듈이 꺼진 프로젝트는 목록에서 빠진다(과제 18 — 스펙 §4.2 목록형, E2E 4단계)', async () => {
     mocks.actorFromUser.mockResolvedValue(makeActor({
-      userId: 'u-1', projectWorkspace: new Map([[P1, WS]]), projectRoles: new Map<string, ProjectRole>([[P1, 'admin']]),
+      userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]), projectRoles: new Map<string, ProjectRole>([[P1, 'admin']]),
     }))
-    useAdmin({ agent_runners: [{ data: RUNNER }, { data: null }], agent_projects: [{ data: [reg(P1, '테스트')] }] })
-    vi.mocked(projectsWithModule).mockResolvedValueOnce([])
+    useAdmin({ agent_runners: [{ data: RUNNER }, { data: null }], agent_projects: [{ data: [reg(P1, '테스트'), reg(P2, '남의것')] }] })
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([P1])
     const body = await (await meGET(get(PAT.token))).json()
-    expect(body.projects).toEqual([])
+    expect(body.projects.map((p: { id: string }) => p.id)).toEqual([P1])
     expect(projectsWithModule).toHaveBeenCalledWith([P1], 'agents', { client: expect.anything() })
   })
 })

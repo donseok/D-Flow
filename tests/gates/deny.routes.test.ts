@@ -352,6 +352,12 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
       `export async function DELETE(req) { try { ${G}; return body() } catch (e) { console.error(e); return body(admin) } }`,
       `export async function HEAD(req) { if (q) { try { ${G} } catch (e) { return apiInternalError() } } return body() }`,
       `export async function OPTIONS(req) { try { try { ${G} } catch (e) { throw e } ; return body() } catch (e) { console.warn(e); return apiInternalError('실패') } }`,
+      `async function gate(a,p) { try { if (!(await requireAgentProject(a, p))) return false } catch (e) { console.error(e); return apiInternalError() } return true }\nexport async function PROPFIND(req) { if (!await gate(admin, p)) return deny; return body() }`,
+      `export async function TRACE(req) { try { ${G}; return body() } catch (e) { return apiInternalError(body()) } }`,
+      `export async function CONNECT(req) { try { ${G}; return body() } catch (e) { audit.write(e); return apiInternalError() } }`,
+      `export async function MKCOL(req) { try { ${G}; return body() } catch (e) { console.error(await write()); return apiInternalError() } }`,
+      `export async function COPY(req) { try { ${G}; return body() } catch (e) { throw await body(admin) } }`,
+      `export async function MOVE(req) { L: try { ${G}; break L; } catch (e) { console.error(e); return apiInternalError() } return body() }`
     ].join('\n')
     const tf = parse('src/app/api/y/route.ts', tsrc)
     const p = (m: string) => handlerProblems(`y#${m}`, gateSitesIn(tf, m, MODULE_ROUTE_GATES))
@@ -363,6 +369,12 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(p('PATCH'), 'finally').toEqual(notTop('PATCH'))
     expect(p('DELETE'), '닫힌 목록 밖의 응답(본문 호출)').toEqual(notTop('DELETE'))
     expect(p('HEAD'), '가지 안의 try').toEqual(notTop('HEAD'))
+    expect(p('PROPFIND'), '지역 헬퍼 안의 exitOnlyCatch 는 최상위가 아님').toEqual(notTop('PROPFIND'))
+    expect(p('TRACE'), 'apiInternalError 에 함수 호출이 포함됨').toEqual(notTop('TRACE'))
+    expect(p('CONNECT'), 'catch 문에 audit.write 가 포함됨').toEqual(notTop('CONNECT'))
+    expect(p('MKCOL'), 'console.error 에 await 가 포함됨').toEqual(notTop('MKCOL'))
+    expect(p('COPY'), 'throw 식에 함수 호출이 포함됨').toEqual(notTop('COPY'))
+    expect(p('MOVE'), '라벨 break').toEqual(notTop('MOVE'))
   })
   it('세션 없는 라우트의 { client } 누락을 잡는다(F8)', () => {
     expect(clientProblems('x#GET', gateSitesIn(sf, 'GET', CLIENT_GATES))).toEqual(["x#GET:4 requireModule 에 { client } 가 없다(쿠키 없는 세션 클라이언트는 설정 0행 — 켜진 모듈이 닫힌다)"])
