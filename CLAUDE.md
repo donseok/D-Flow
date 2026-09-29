@@ -117,6 +117,9 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - 가드는 넷뿐이다: `requireSuperuser()` · `requireWorkspaceAdmin(wid)` · `requireProjectAdmin(pid)` · `requireProjectMember(pid)`
   (시그니처는 `tests/authz/guard-signatures.test.ts` 가 고정한다).
   `projectId` 를 인자로 받지 않는 액션은 `resolveProjectId(table, id)`(워크스페이스까지 필요하면 `resolveScope`)로 먼저 읽는다.
+- **모듈 관문은 가드가 아니다**: `requireModule(scope, moduleId, opts?)`·`requireSessionModule(projectId|null, moduleId)`(`src/lib/modules/gate.ts`)는
+  권한 가드 **다음, 입력 검증 앞**에서 꺼진 모듈을 `ERR_MODULE_DISABLED`(404)로 닫는다. 페이지는 `requireModulePage`, 세션 없는 경로(워커·외부 API·
+  공유 링크)는 `{ client: admin }` 을 넘긴다. 새 액션·라우트 핸들러는 `tests/gates/manifest.ts` 에 모듈 또는 `null`(사유)을 적어야 열거 게이트를 통과한다.
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.

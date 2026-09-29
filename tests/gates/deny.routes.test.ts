@@ -240,24 +240,13 @@ function branchDelegationProblems(key: string, bg: BranchGate, f: string, text: 
   }
   return out
 }
-/** 위임 파일을 만든 과제가 끝난 것 — 과제 14·18·20·21 이 자기 위임 파일을 더하고 과제 25 가 이 집합과 필터를 지운다(전부) */
-const DELEGATED_READY = new Set<string>([
-  'tests/api/issue-analysis-gate.test.ts',   // 과제 14
-  'tests/modules/agents-gate.test.ts',       // 과제 18 — v1 에이전트 11(delegatedStatic)
-  // 과제 20 — 세션 API 14 핸들러
-  'tests/api/chat-command-gate.test.ts', 'tests/api/chat-legacy-scope.test.ts', 'tests/ai/chat-v2-route.test.ts', 'tests/api/chat-reindex.test.ts',
-  'tests/api/minutes-chat-route.test.ts', 'tests/minutes/export-route.test.ts', 'tests/api/report-route.test.ts', 'tests/actions/usage-track-gate.test.ts',
-  'tests/actions/wiki-ask-route.test.ts', 'tests/actions/wiki-search-route.test.ts', 'tests/actions/wiki-summarize-route.test.ts',
-  // 과제 21 — v1 회의록 업로드 API 5 핸들러
-  'tests/minutes/external-api.test.ts', 'tests/minutes/folder-batch.test.ts', 'tests/api/minutes-meta-modules.test.ts',
-])
-const ready = entries.filter(([, e]) => e.module !== null && DELEGATED_READY.has(e.delegatedTo!))
+const moduleRoutes = entries.filter(([, e]) => e.module !== null)
 const sfOf = (key: string) => { const file = key.split('#')[0]; return parse(file, readFileSync(file, 'utf8')) }
 const sitesOf = (key: string, names: ReadonlySet<string>) => gateSitesIn(sfOf(key), key.split('#')[1], names)
 
 describe('deny — 라우트', () => {
   it('모듈 라우트의 위임 파일이 있고, 그 메서드를 import 하며, 그 메서드를 부르는 it 블록이 거부를 단언한다', () => {
-    const bad = ready.flatMap(([key, e]) => {
+    const bad = moduleRoutes.flatMap(([key, e]) => {
       const f = e.delegatedTo!
       if (!existsSync(f)) return [`${key}: ${f} 없음`]
       const text = readFileSync(f, 'utf8')
@@ -267,7 +256,7 @@ describe('deny — 라우트', () => {
     expect(bad).toEqual([])
   })
   it('모듈 라우트 핸들러는 판정 모듈의 판정을 부르고, 결과를 조건으로 보며, 최상위에서 늘 돈다 — 메서드 단위(R3·F1·F2). BRANCH_GATE 는 갈래마다', () => {
-    expect(ready.flatMap(([key]) => {
+    expect(moduleRoutes.flatMap(([key]) => {
       const sf = sfOf(key)                                         // 판정 자리와 핸들러 몸은 같은 구문 트리에서 — branchOf 가 노드 동일성으로 멈춘다
       const sites = gateSitesIn(sf, key.split('#')[1], MODULE_ROUTE_GATES)
       const bg = BRANCH_GATE[key]
@@ -275,9 +264,9 @@ describe('deny — 라우트', () => {
     })).toEqual([])
   })
   it('BRANCH_GATE 는 검사 대상 모듈 라우트 항목이고 사유·갈래가 있다(닫힌 목록)', () => {
-    const readyKeys = new Set(ready.map(([k]) => k))
+    const moduleRouteKeys = new Set(moduleRoutes.map(([key]) => key))
     const bad = Object.entries(BRANCH_GATE).flatMap(([key, bg]) => [
-      ...(readyKeys.has(key) ? [] : [`${key}: 검사 대상 모듈 라우트(ready) 항목이 아니다`]),
+      ...(moduleRouteKeys.has(key) ? [] : [`${key}: 검사 대상 모듈 라우트 항목이 아니다`]),
       ...(bg.reason.trim() ? [] : [`${key}: 사유 없음`]),
       ...(Object.keys(bg.gated).length ? [] : [`${key}: 갈래 없음`]),
       ...Object.values(bg.gated).filter((m) => !m.trim()).map(() => `${key}: 빈 표지`),

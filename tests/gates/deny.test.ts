@@ -3,7 +3,7 @@
 // 만들지 않는다(adminBeforeGuard 예외) ③ 관문 호출은 판정 모듈의 import 이고 결과를 조건으로 본다(AST). null 항목: 본문(+같은 파일 헬퍼)에 관문
 // 호출이 없고(AST), 가드 통과 실행에서도 관문을 부르지 않는다(다른 파일 헬퍼 경유). 가드 등급 null 항목은 세션 없음·등급 거부 두 모드로, session
 // null 항목은 세션 없음으로 가드 거부 실행(가드에 닿았는지·거부 응답·쓰기 0 — 스펙 §4.3 deny 첫 줄은 전 항목이다).
-// 모듈 항목의 실행 검사는 COVERED_ACTION_FILES 의 파일만 — 과제 14~17 이 관문을 넣으며 자기 파일을 더하고 과제 25 가 필터를 지운다.
+// 모듈 항목의 실행 검사는 매니페스트의 모든 모듈 항목을 덮는다.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,14 +23,6 @@ import { gateCallsIn, gateSitesIn, parse, siteProblems } from '../invariants/_as
 import { harness, P, U, type Target } from './_harness'
 import { ACTION_GATES, type GateEntry } from './manifest'
 
-/** 관문을 넣은 액션 파일 — 과제 14~17 이 자기 파일을 더한다. 과제 25 가 이 집합과 필터를 지운다(전 항목) */
-const COVERED_ACTION_FILES = new Set<string>([
-  'src/app/actions/issues.ts', 'src/app/actions/issueUpdates.ts', 'src/app/actions/issueAttachments.ts', 'src/app/actions/issueAnalysis.ts',   // 과제 14
-  'src/app/actions/meetings.ts', 'src/app/actions/meetingNotify.ts', 'src/app/actions/announcements.ts', 'src/app/actions/attendance.ts',   // 과제 15
-  'src/app/actions/weekly.ts', 'src/app/actions/wiki.ts', 'src/app/actions/chat.ts',
-  'src/app/actions/minutes.ts',   // 과제 16
-  'src/app/actions/agentHub.ts', 'src/app/actions/agentSeatmap.ts', 'src/app/actions/agentWork.ts', 'src/app/actions/wbsSpec.ts',   // 과제 17
-])
 /** 액션의 관문 — 판정 모듈(@/lib/modules/gate)의 import 로 부르고 결과를 조건으로 본다 */
 const ACTION_GATE_NAMES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule'])
 
@@ -40,7 +32,7 @@ const has = (v: unknown, id: string): boolean =>
 /** 모듈 판정의 대상 — 매니페스트 target, 없으면 sample 에서(프로젝트 id → project, 행 id → row, 없으면 session) */
 const targetOf = (e: GateEntry): Target => e.target ?? (has(e.sample ?? [], P) ? 'project' : has(e.sample ?? [], U) ? 'row' : 'session')
 const entries = Object.entries(ACTION_GATES)
-const moduleEntries = entries.filter(([k, e]) => e.module !== null && COVERED_ACTION_FILES.has(k.split('#')[0]))
+const moduleEntries = entries.filter(([, e]) => e.module !== null)
 const load = async (key: string) => {
   const [file, name] = key.split('#')
   const mod = (await import(/* @vite-ignore */ join(process.cwd(), file))) as Record<string, (...a: unknown[]) => Promise<unknown>>
@@ -62,12 +54,7 @@ beforeEach(() => {
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset(); vi.unstubAllEnvs() })
 
 describe('deny — 모듈 항목(실행)', () => {
-  it('덮는 파일이 매니페스트에 있다(오타 금지)', () => {
-    const files = new Set(entries.map(([k]) => k.split('#')[0]))
-    for (const f of COVERED_ACTION_FILES) expect(files.has(f), f).toBe(true)
-  })
-  it.each(moduleEntries.length ? moduleEntries : [['(아직 없음)', null as unknown as GateEntry]])('%s — 모듈을 기대 범위에서 끄면 거부 값이고, 관문 앞에서 쓰지 않고, 거부 뒤 DB 에 닿지 않는다', async (key, e) => {
-    if (!e) { expect(COVERED_ACTION_FILES.size, '덮은 파일이 있는데 모듈 항목이 0 이다 — 경로 오타').toBe(0); return }   // 자리표시 행은 빈 범위에서만
+  it.each(moduleEntries)('%s — 모듈을 기대 범위에서 끄면 거부 값이고, 관문 앞에서 쓰지 않고, 거부 뒤 DB 에 닿지 않는다', async (key, e) => {
     const fn = await load(key)
     const target = targetOf(e)
     for (const off of listOf(e.module)) {
@@ -81,8 +68,7 @@ describe('deny — 모듈 항목(실행)', () => {
       expect(harness.afterDeny(), `관문이 거부한 뒤 DB 에 닿았다(결과를 버리거나 본문이 돌았다): ${at}`).toBe(0)
     }
   }, 30_000)
-  it.each(moduleEntries.length ? moduleEntries : [['(아직 없음)', null as unknown as GateEntry]])('%s — 가드가 거부하면 관문·쓰기·admin 이 없다', async (key, e) => {
-    if (!e) { expect(COVERED_ACTION_FILES.size, '덮은 파일이 있는데 모듈 항목이 0 이다 — 경로 오타').toBe(0); return }   // 자리표시 행은 빈 범위에서만
+  it.each(moduleEntries)('%s — 가드가 거부하면 관문·쓰기·admin 이 없다', async (key, e) => {
     const fn = await load(key)
     harness.reset(); harness.denyGuards()
     const r = await runRefused(fn, e.sample ?? [], [ERR_DENIED, ERR_ANON])
@@ -117,7 +103,7 @@ describe('deny — 작성자·주최자 분기(관리자 거부 + 모듈 끔, B5
 })
 
 describe('deny — 모듈 항목(정적)', () => {
-  it('모듈 항목(덮은 파일)은 관문을 부르고, 그 호출은 판정 모듈의 import 이며 결과를 조건으로 본다(결과를 버린 관문 금지)', () => {
+  it('모듈 항목은 관문을 부르고, 그 호출은 판정 모듈의 import 이며 결과를 조건으로 본다(결과를 버린 관문 금지)', () => {
     const bad = moduleEntries.flatMap(([key]) => {
       const [file, name] = key.split('#')
       const sites = gateSitesIn(parse(file, readFileSync(file, 'utf8')), name, ACTION_GATE_NAMES)
