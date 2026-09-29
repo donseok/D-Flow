@@ -122,7 +122,17 @@ function session(label) {
   const cookies = () => cookieHeader([...jar].map(([name, value]) => ({ name, value })))
 
   async function http(method, path, { body, headers = {}, expect = 200 } = {}) {
-    const res = await fetch(`${base}${path}`, { method, body, redirect: 'manual', headers: { cookie: cookies(), ...headers } })
+    let res
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(`${base}${path}`, { method, body, redirect: 'manual', headers: { cookie: cookies(), ...headers } })
+        break
+      } catch (error) {
+        // next dev 는 첫 대형 화면 컴파일 중 메모리 감시로 서버를 재시작할 수 있다. 안전한 GET 의 연결 끊김만 재시도한다.
+        if (method !== 'GET' || !(error instanceof TypeError) || attempt >= 3) throw error
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
+    }
     if (Array.isArray(expect) ? !expect.includes(res.status) : res.status !== expect) {
       const text = (await res.text()).slice(0, 500)
       throw new Fail(`[${label}] ${method} ${path} → ${res.status}(기대 ${expect}): ${text}`)
