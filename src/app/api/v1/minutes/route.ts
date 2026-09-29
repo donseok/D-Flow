@@ -11,10 +11,11 @@ import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/t
 import { activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 import { validateMinuteTeam } from '@/lib/domain/minutes'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, gateMinutesApi,
   parseMinutePayload, parseUserEmail, resolveUserByEmail, runMinutePostProcessing,
   type AdminClient, type ExternalMinutePayload, type ResolvedUser,
 } from '@/lib/minutes/externalApi'
+import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
@@ -420,6 +421,9 @@ async function insertNew(
         // 범위도 그 행 기준으로 다시 정한다(워크스페이스는 그 행의 것).
         const racedTarget = resolveWriteTarget(p, racedRow, meetingProjectId, authz)
         if (!racedTarget.ok) return racedTarget.response
+        // 모듈 판정도 그 행의 워크스페이스로 다시 — 위에서 판정한 새 회의록 대상과 다를 수 있다(플랫폼 관리자의 다른 워크스페이스 행)
+        const racedMod = await requireModule({ workspaceId: racedTarget.target.scope.workspaceId }, 'minutes_integration', { client: admin })
+        if (!racedMod.ok) return apiModuleDisabled()
         return handleExisting(req, admin, p, racedRow, user, racedTarget.target, meetingCreated)
       }
     }
@@ -521,6 +525,10 @@ export async function POST(req: NextRequest) {
     const resolved = resolveWriteTarget(p, ex, meetingProjectId, authz)
     if (!resolved.ok) return resolved.response
     const { target } = resolved
+    // 쓰기 대상의 워크스페이스로 모듈 판정(스펙 §4.2) — 세션이 없으니 admin 으로. 담당 팀·교차 워크스페이스 400 은 위(resolveWriteTarget)가 먼저다.
+    // 보관·skip 분기·회의 확보·폴더·RPC 어느 것보다 앞이다
+    const mod = await requireModule({ workspaceId: target.scope.workspaceId }, 'minutes_integration', { client: admin })
+    if (!mod.ok) return apiModuleDisabled()
 
     // v2.5 — skip/error/보관 분기가 회의 확보보다 먼저다. 이 분기들은 회의록을 갱신하지 않는
     // 응답이라 회의를 만들면 실패·무시 응답 뒤에 고아 회의가 남는다(409 archived 포함).
@@ -622,15 +630,23 @@ export async function GET(req: NextRequest) {
       return apiBadRequest('잘못된 담당입니다.')
     }
     if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })
+    // 목록형 — minutes_integration 이 허용된 워크스페이스만(스펙 §4.2). 하나도 없으면 닫는다(409). 플랫폼 관리자('all')도 허용된 것만 —
+    // 단 전부 켜져 있으면 필터를 걸지 않는다(플랫폼 관리자 '워크스페이스 필터 없이 전부' 계약 — external-api.test.ts 의 케이스, P24)
+    let candidates: string[]
+    if (scope === 'all') {
+      const { data: wsRows, error: wsErr } = await admin.from('workspaces').select('id')
+      if (wsErr) { console.error('[minutes-api] 워크스페이스 목록 조회 실패:', wsErr.message); return apiInternalError() }   // 빈 목록으로 위장하지 않는다
+      candidates = ((wsRows ?? []) as Array<{ id: string }>).map((w) => w.id)
+    } else candidates = scope.workspaceIds
+    const onWs = await workspacesWithModule(candidates, 'minutes_integration', { client: admin })
+    if (onWs.length === 0) return apiModuleDisabled()
 
     let q = admin.from('minutes').select(
       'id, minute_date, team_code, title, external_id, archived_at, created_by_name, created_at, updated_at',
       { count: 'exact' },
     )
-    if (scope !== 'all') {
-      q = q.in('workspace_id', scope.workspaceIds)
-      if (scope.hiddenProjectIds.length > 0) q = q.or(hiddenProjectFilter(scope.hiddenProjectIds))
-    }
+    if (scope !== 'all' || onWs.length < candidates.length) q = q.in('workspace_id', onWs)   // 플랫폼 관리자는 꺼진 워크스페이스가 있을 때만 거른다
+    if (scope !== 'all' && scope.hiddenProjectIds.length > 0) q = q.or(hiddenProjectFilter(scope.hiddenProjectIds))
     if (!includeArchived) q = q.is('archived_at', null)
     const externalId = sp.get('external_id')
     if (externalId) q = q.eq('external_id', externalId)
@@ -650,10 +666,8 @@ export async function GET(req: NextRequest) {
       // 같은 필터의 head 카운트로 total 만 채워 빈 페이지로 응답한다(500 아님).
       if (error.code === 'PGRST103') {
         let cq = admin.from('minutes').select('id', { count: 'exact', head: true })
-        if (scope !== 'all') {
-          cq = cq.in('workspace_id', scope.workspaceIds)
-          if (scope.hiddenProjectIds.length > 0) cq = cq.or(hiddenProjectFilter(scope.hiddenProjectIds))
-        }
+        if (scope !== 'all' || onWs.length < candidates.length) cq = cq.in('workspace_id', onWs)   // 본 조회와 같은 범위 — total 이 어긋나지 않게
+        if (scope !== 'all' && scope.hiddenProjectIds.length > 0) cq = cq.or(hiddenProjectFilter(scope.hiddenProjectIds))
         if (!includeArchived) cq = cq.is('archived_at', null)
         if (externalId) cq = cq.eq('external_id', externalId)
         if (linked === 'true') cq = cq.not('external_id', 'is', null)

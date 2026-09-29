@@ -8,8 +8,9 @@ import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
 import { fetchAllPages } from '@/lib/data/paging'
 import { BRAND } from '@/lib/branding'
+import { workspacesWithModule } from '@/lib/modules/gate'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
   resolveUserByEmail,
 } from '@/lib/minutes/externalApi'
 
@@ -39,6 +40,10 @@ export async function GET(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
     const actor = await actorFromUser(admin, user.id)
+    // 목록형 — minutes_integration 이 허용된 워크스페이스의 프로젝트·팀만(스펙 §4.2·§4.3). 하나도 없으면 닫는다(409)
+    const actorWs = [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
+    const onWs = new Set(await workspacesWithModule(actorWs, 'minutes_integration', { client: admin }))
+    if (onWs.size === 0) return apiModuleDisabled()
 
     // 후보 = 스냅샷의 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부). 프로젝트 id 목록을 .in() 으로 싣지 않는다 —
     // URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다(GET 목록 listScope 와 같은 이유). 워크스페이스로
@@ -58,7 +63,7 @@ export async function GET(req: NextRequest) {
         return apiInternalError()
       }
       projects = rows
-        .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p))
+        .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p) && onWs.has(actor.projectWorkspace.get(p.id)!))
         .map(p => ({ id: p.id, name: p.name }))
     }
     // 회의 목록은 볼 수 있는 프로젝트일 때만 — 다른 워크스페이스·비공개 프로젝트는 존재를 드러내지 않는다(404).
@@ -66,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     // 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(첫 등장 순서 유지). 팀 마스터를 한 번도 못 읽었으면
     // 접근자가 throw 한다 → 500.
-    const teams = [...new Set([...actor.workspaceRoles.keys()].flatMap(wid => activeTeamCodesForWorkspaceSync(wid)))]
+    const teams = [...new Set([...actor.workspaceRoles.keys()].filter((w) => onWs.has(w)).flatMap(wid => activeTeamCodesForWorkspaceSync(wid)))]
 
     const body: Record<string, unknown> = {
       teams,

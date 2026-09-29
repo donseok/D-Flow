@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +60,8 @@ import { GET as META } from '@/app/api/v1/minutes/meta/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
 import type { ProjectRole, TeamView } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const SECRET = 'test-minutes-secret'
 const EXTERNAL_ID = 'ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b77'
@@ -1908,7 +1910,7 @@ describe('SP2 Task 13 — 외부 회의록 API 를 호출자(user_email) 권한�
     })
     it('플랫폼 관리자는 워크스페이스 필터 없이 전부', async () => {
       mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
-      const { builders } = useAdmin({ minutes: [{ data: [], count: 0 }] })
+      const { builders } = useAdmin({ workspaces: [{ data: [{ id: WS }] }], minutes: [{ data: [], count: 0 }] })
       expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(200)
       expect(builders.minutes[0].in).not.toHaveBeenCalled()
       expect(builders.minutes[0].or).not.toHaveBeenCalled()
@@ -2233,7 +2235,109 @@ describe('SP2 Task 16a — 쓰기 대상의 워크스페이스·담당 팀을 �
   it('GET team 필터 — 멤버십 없는 플랫폼 관리자는 전 워크스페이스의 팀으로 본다(항상 400 이 아니다)', async () => {
     splitTeams()
     mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id, workspaceRoles: new Map() }))
-    useAdmin({ minutes: [{ data: [], count: 0 }] })
+    useAdmin({ workspaces: [{ data: [{ id: WS }] }], minutes: [{ data: [], count: 0 }] })
     expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=ERP'))).status).toBe(200)
+  })
+})
+
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
+
+describe('minutes_integration 관문 — 409 module_disabled(과제 21)', () => {
+  it('POST: 대상 워크스페이스가 꺼지면 409 이고 회의록을 쓰지 않는다 — 판정은 admin 으로', async () => {
+    const { admin } = useAdmin({ minutes: [{ data: null }] })          // external_id 선조회 — 새 회의록
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(post(payload))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'minutes_integration', { client: admin })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+  it('POST: 기존 회의록(skip·보관 분기 포함)도 그 행의 워크스페이스로 먼저 판정한다 — 회의·폴더를 만들지 않는다', async () => {
+    const { admin, builders } = useAdmin({ minutes: [{ data: { ...existingRow, archived_at: '2026-07-02T00:00:00Z' } }] })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(post({ ...payload, meeting: { project_id: PROJECT_UUID, title: '회의', date: '2026-08-06' } }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'minutes_integration', { client: admin })
+    expect(builders.meetings).toBeUndefined()
+    expect(builders.minute_folders).toBeUndefined()
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+  it('POST: 담당 팀·교차 워크스페이스 400 은 관문보다 먼저다(resolveWriteTarget — 계약 유지)', async () => {
+    useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post({ ...payload, team: 'NOPE' }))
+    expect(res.status).toBe(400)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+  it('POST: 동시 전송 경합(23505) 뒤 재조회한 행의 워크스페이스도 판정한다 — 꺼졌으면 409 이고 갱신하지 않는다', async () => {
+    const { admin } = useAdmin({
+      minutes: [{ data: null }, { error: { code: '23505', message: 'duplicate key' } }, { data: existingRow }],
+    })
+    vi.mocked(requireModule)
+      .mockResolvedValueOnce({ ok: true })                                // 새 회의록 대상(유일 워크스페이스)
+      .mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })   // 경합으로 생긴 행
+    const res = await POST(post(payload))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledTimes(2)
+    expect(requireModule).toHaveBeenLastCalledWith({ workspaceId: existingRow.workspace_id }, 'minutes_integration', { client: admin })
+    expect(admin.rpc).not.toHaveBeenCalledWith('commit_minute_body_version', expect.anything())
+  })
+  it('GET 목록: 허용된 워크스페이스가 없으면 409 — 회의록을 읽지 않는다', async () => {
+    const { builders, admin } = useAdmin({ projects: [{ data: [] }] })  // listScope 의 비공개 프로젝트 조회
+    vi.mocked(workspacesWithModule).mockResolvedValueOnce([])
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com'))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(workspacesWithModule).toHaveBeenCalledWith([WS], 'minutes_integration', { client: admin })
+    expect(builders.minutes).toBeUndefined()
+  })
+  it('GET 목록: 일부만 허용되면 허용된 워크스페이스로 좁힌다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id, workspaceRoles: new Map([[WS, 'member'], ['ws-off', 'member']]) }))
+    const { builders } = useAdmin({ projects: [{ data: [] }], minutes: [{ data: [], count: 0 }] })
+    vi.mocked(workspacesWithModule).mockResolvedValueOnce([WS])
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(200)
+    expect(builders.minutes[0].in).toHaveBeenCalledWith('workspace_id', [WS])
+  })
+  it('GET 목록: 플랫폼 관리자는 꺼진 워크스페이스가 있을 때만 거르고, 워크스페이스 목록 조회 실패는 500(빈 목록으로 위장하지 않는다)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
+    const { builders, admin } = useAdmin({ workspaces: [{ data: [{ id: WS }, { id: 'ws-off' }] }], minutes: [{ data: [], count: 0 }] })
+    vi.mocked(workspacesWithModule).mockResolvedValueOnce([WS])
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(200)
+    expect(workspacesWithModule).toHaveBeenCalledWith([WS, 'ws-off'], 'minutes_integration', { client: admin })
+    expect(builders.minutes[0].in).toHaveBeenCalledWith('workspace_id', [WS])
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const broken = useAdmin({ workspaces: [{ error: { message: 'down' } }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com'))).status).toBe(500)
+    expect(broken.builders.minutes).toBeUndefined()
+    spy.mockRestore()
+  })
+  it('GET 목록: 범위 초과 페이지(PGRST103)의 카운트도 허용된 워크스페이스로 좁힌다 — 본 조회와 total 이 같다', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeSuperuser({ userId: USER.id }))
+    const { builders } = useAdmin({
+      workspaces: [{ data: [{ id: WS }, { id: 'ws-off' }] }],
+      minutes: [{ error: { code: 'PGRST103', message: 'Requested range not satisfiable' } }, { count: 2 }],
+    })
+    vi.mocked(workspacesWithModule).mockResolvedValueOnce([WS])
+    const res = await GET(get('/api/v1/minutes?user_email=lead%40example.com&page=9'))
+    expect(await res.json()).toMatchObject({ items: [], total: 2 })
+    expect(builders.minutes[0].in).toHaveBeenCalledWith('workspace_id', [WS])
+    expect(builders.minutes[1].in).toHaveBeenCalledWith('workspace_id', [WS])   // 카운트도 같은 범위
+  })
+  it('link: 대상 회의록의 워크스페이스가 꺼지면 409 이고 갱신하지 않는다', async () => {
+    const { builders, admin } = useAdmin({ minutes: [{ data: { id: MINUTE_UUID, created_by: USER.id, project_id: null, workspace_id: WS, archived_at: null, external_id: null } }] })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await LINK(link({ user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'minutes_integration', { client: admin })
+    expect(builders.minutes).toHaveLength(1)                            // 대상 조회 1회뿐 — update 없음
+  })
+  it('link: 편집 자격이 없는 회의록은 모듈 판정 전에 404 — 존재 은닉이 먼저다', async () => {
+    useAdmin({ minutes: [{ data: { id: MINUTE_UUID, created_by: 'u-9', project_id: null, workspace_id: 'ws-9', archived_at: null, external_id: null } }] })
+    const res = await LINK(link({ user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }))
+    expect(res.status).toBe(404)
+    expect(requireModule).not.toHaveBeenCalled()
   })
 })

@@ -94,6 +94,9 @@ export const apiFail = (status: number, code: string, error: string) =>
   NextResponse.json({ error, code }, { status })
 export const apiInternalError = (error = '서버 오류가 발생했습니다.') =>
   NextResponse.json({ error, code: 'internal_error' }, { status: 500 })
+/** minutes_integration 모듈이 꺼진 워크스페이스(스펙 §4.2 회의록 업로드 행) — 409 module_disabled. 킬스위치(gateMinutesApi)와 다르다: 그건 배포 전체 404 */
+export const ERR_MINUTES_INTEGRATION_OFF = '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.'
+export const apiModuleDisabled = () => apiFail(409, 'module_disabled', ERR_MINUTES_INTEGRATION_OFF)
 
 /** 전 라우트 공통 선두 게이트 — 실패 시 응답, 통과 시 null. */
 export function gateMinutesApi(req: Request): NextResponse | null {

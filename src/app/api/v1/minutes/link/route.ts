@@ -3,8 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
 import { canEditMinute } from '@/lib/domain/authz'
+import { requireModule } from '@/lib/modules/gate'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiNotFound, EXTERNAL_ID_MAX, gateMinutesApi,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX, gateMinutesApi,
   isUuid, resolveUserByEmail,
 } from '@/lib/minutes/externalApi'
 
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
     // 자격이 없으면 없는 회의록과 같은 404 — 다른 워크스페이스 회의록의 존재·보관 여부를 드러내지 않는다.
     const row = target as { created_by: string | null; project_id: string | null; workspace_id: string } | null
     if (!row || !canEditMinute(actor, row)) return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
+    // 대상 행의 워크스페이스로 minutes_integration 판정(스펙 §4.2) — 세션이 없으니 admin 으로. 편집 자격(존재 은닉 404) 뒤·보관 409 앞
+    const mod = await requireModule({ workspaceId: row.workspace_id }, 'minutes_integration', { client: admin })
+    if (!mod.ok) return apiModuleDisabled()
     if ((target as { archived_at: string | null }).archived_at) {
       return apiFail(409, 'archived', '보관된 회의록은 연결할 수 없습니다.')
     }

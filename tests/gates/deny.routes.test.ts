@@ -248,6 +248,8 @@ const DELEGATED_READY = new Set<string>([
   'tests/api/chat-command-gate.test.ts', 'tests/api/chat-legacy-scope.test.ts', 'tests/ai/chat-v2-route.test.ts', 'tests/api/chat-reindex.test.ts',
   'tests/api/minutes-chat-route.test.ts', 'tests/minutes/export-route.test.ts', 'tests/api/report-route.test.ts', 'tests/actions/usage-track-gate.test.ts',
   'tests/actions/wiki-ask-route.test.ts', 'tests/actions/wiki-search-route.test.ts', 'tests/actions/wiki-summarize-route.test.ts',
+  // 과제 21 — v1 회의록 업로드 API 5 핸들러
+  'tests/minutes/external-api.test.ts', 'tests/minutes/folder-batch.test.ts', 'tests/api/minutes-meta-modules.test.ts',
 ])
 const ready = entries.filter(([, e]) => e.module !== null && DELEGATED_READY.has(e.delegatedTo!))
 const sfOf = (key: string) => { const file = key.split('#')[0]; return parse(file, readFileSync(file, 'utf8')) }

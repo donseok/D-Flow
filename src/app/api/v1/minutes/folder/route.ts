@@ -9,10 +9,11 @@ import {
   ancestorIdsOf, folderPathOfSnapshot, loadFolderSnapshot, resolveFolderPath, type FolderSnapshot,
 } from '@/lib/minutes/folders'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiNotFound, EXTERNAL_ID_MAX,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX,
   gateMinutesApi, parseFolderPathValue, parseUserEmail, resolveUserByEmail, isBatchAuthorized,
   type AdminClient,
 } from '@/lib/minutes/externalApi'
+import { workspacesWithModule } from '@/lib/modules/gate'
 
 /**
  * POST /api/v1/minutes/folder — 이미 전송된 회의록의 **일괄 재편철**. 계약 §4c(작업지시 §8).
@@ -292,6 +293,10 @@ export async function POST(req: NextRequest) {
     if (!isAnyProjectAdmin(authz)) {
       return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
     }
+    // 행위자의 워크스페이스 가운데 minutes_integration 이 켜진 것 — 없으면 닫는다(프로브도 — 연동 설정 오류를 첫 호출에서 드러낸다).
+    // 플랫폼 관리자는 대상 판정만 한다(P24 — 소속이 없어도 전 워크스페이스를 옮길 수 있다)
+    const onWs = new Set(await workspacesWithModule([...authz.workspaceRoles.keys()], 'minutes_integration', { client: admin }))
+    if (onWs.size === 0 && !authz.isSuperuser) return apiModuleDisabled()
 
     const parsed = parseBatchPayload(raw)
     if ('error' in parsed) return apiBadRequest(parsed.error)
@@ -333,6 +338,10 @@ export async function POST(req: NextRequest) {
     if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
       return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
     }
+    // 대상 가운데 하나라도 꺼진 워크스페이스면 요청 전체 거절 — 부분 이동 없음(위 관리자 판정과 같은 규칙, P24)
+    const targetWs = [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
+    const onTarget = new Set(await workspacesWithModule(targetWs, 'minutes_integration', { client: admin }))
+    if (targetWs.some((w) => !onTarget.has(w))) return apiModuleDisabled()
     // 건별 편철의 팀 목록 — 그 회의록의 범위(프로젝트, 미지정이면 워크스페이스)의 것. 전 워크스페이스 공용 목록이면 다른
     // 워크스페이스의 팀 루트가 활성으로 보인다. 첫 이동 전에 전부 확보한다 — 팀 캐시를 한 번도 못 채웠으면 throw → 아래
     // catch 의 500 이고, 몇 건을 옮긴 뒤에 터져 결과 보고 없이 끝나는 일이 없다.

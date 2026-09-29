@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +23,7 @@ import { DELETE, GET, POST } from '@/app/api/v1/minutes/folder/route'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
 import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeSuperuser, WS } from '../fixtures/actor'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const SECRET = 'test-minutes-secret'
 const USER = { id: 'u-1', email: 'lead@example.com', user_metadata: { full_name: '팀장' } }
@@ -114,6 +115,8 @@ beforeEach(() => {
   vi.stubEnv('MINUTES_API_SECRET', SECRET)
   useAdmin()
 })
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('게이트·봉투 검증 (§4c)', () => {
   it('플래그 미설정이면 404 — 존재 은닉, DB 미접근', async () => {
@@ -316,6 +319,45 @@ describe('판정 (§8.3 · 요건 6·10)', () => {
       items: [{ external_id: EID(1), folder_path: ['MES', '품질'] }],
     })))
     expect((await r.json()).results[0]).toMatchObject({ status: 'moved', folder_id: 'f-q' })
+  })
+
+  it('minutes_integration 이 꺼진 워크스페이스의 회의록이 하나라도 있으면 요청 전체 409 — 옮기지 않는다(과제 21)', async () => {
+    const { builders, admin } = useBatch([minute(1), minute(2, { workspace_id: 'ws-2' })])
+    vi.mocked(workspacesWithModule).mockImplementation(async (ids) => ids.filter((w) => w !== 'ws-2'))
+    const res = await POST(post(body({ dry_run: false, items: [
+      { external_id: EID(1), folder_path: ['MES', '품질'] }, { external_id: EID(2), folder_path: ['MES', '품질'] },
+    ] })))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(workspacesWithModule).toHaveBeenLastCalledWith(['ws-1', 'ws-2'], 'minutes_integration', { client: admin })
+    expect(builders.minutes).toHaveLength(1)                            // 대상 조회뿐 — update 없음
+  })
+  it('대상이 모두 켜진 워크스페이스면 옮긴다(대조 — 플랫폼 관리자는 대상 판정만)', async () => {
+    const { builders } = useBatch([minute(1)], [{ data: [{ id: 'm-1' }] }])
+    vi.mocked(workspacesWithModule).mockImplementation(async (ids) => ids.filter((w) => w === 'ws-1'))
+    const res = await POST(post(body({ dry_run: false, items: [{ external_id: EID(1), folder_path: ['MES', '품질'] }] })))
+    expect(res.status).toBe(200)
+    expect((await res.json()).results[0]).toMatchObject({ status: 'moved', folder_id: 'f-q' })
+    expect(builders.minutes[1].update).toHaveBeenCalledWith({ folder_id: 'f-q' })
+  })
+  it('프로브(items: [])는 관리자 행위자의 워크스페이스가 모두 꺼졌으면 409 — 연동 설정 오류를 첫 호출에서 드러낸다(과제 21)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeAdminActor('p-1', { userId: USER.id }))
+    const { admin } = useAdmin()
+    vi.mocked(workspacesWithModule).mockResolvedValueOnce([])
+    const res = await POST(post(body({ items: [] })))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(workspacesWithModule).toHaveBeenCalledWith([WS], 'minutes_integration', { client: admin })
+  })
+  it('프로브: 플랫폼 관리자는 소속 워크스페이스가 꺼져도 통과한다 — 대상 판정만(P24)', async () => {
+    vi.mocked(workspacesWithModule).mockResolvedValue([])
+    expect((await POST(post(body({ items: [] })))).status).toBe(200)
+  })
+  it('관리자가 아니면 모듈 판정 전에 403 — 권한 게이트가 먼저다(과제 21)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({ userId: USER.id }))
+    useAdmin()
+    expect((await POST(post(body({ items: [] })))).status).toBe(403)
+    expect(workspacesWithModule).not.toHaveBeenCalled()
   })
 })
 
