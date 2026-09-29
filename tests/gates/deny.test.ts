@@ -27,6 +27,7 @@ const COVERED_ACTION_FILES = new Set<string>([
   'src/app/actions/issues.ts', 'src/app/actions/issueUpdates.ts', 'src/app/actions/issueAttachments.ts', 'src/app/actions/issueAnalysis.ts',   // 과제 14
   'src/app/actions/meetings.ts', 'src/app/actions/meetingNotify.ts', 'src/app/actions/announcements.ts', 'src/app/actions/attendance.ts',   // 과제 15
   'src/app/actions/weekly.ts', 'src/app/actions/wiki.ts', 'src/app/actions/chat.ts',
+  'src/app/actions/minutes.ts',   // 과제 16
 ])
 
 const listOf = (m: GateEntry['module']): ModuleId[] => (m === null ? [] : typeof m === 'string' ? [m] : [...m])

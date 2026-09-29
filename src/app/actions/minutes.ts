@@ -3,12 +3,13 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
-import { getActor, resolveScope } from '@/lib/authz'
+import { getActor, resolveProjectId, resolveScope } from '@/lib/authz'
 import {
   canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
 } from '@/lib/domain/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
-import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
@@ -115,6 +116,8 @@ async function requireMinuteMember(
   const s = await resolveScope('minutes', minuteId)
   if (!s.ok) return s
   if (!isMinuteMember(actor, { project_id: s.projectId, workspace_id: s.workspaceId })) return { ok: false, error: ERR_DENIED }
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')   // 회의록은 워크스페이스 모듈 — 행의 워크스페이스로(스펙 §4.2)
+  if (!mod.ok) return { ok: false, error: mod.error }
   return { ok: true, scope: { projectId: s.projectId, workspaceId: s.workspaceId } }
 }
 
@@ -144,6 +147,8 @@ async function checkOwner(
   if (!canEditMinute(actor, {
     created_by: (row.created_by as string | null) ?? null, project_id: s.projectId, workspace_id: s.workspaceId,
   })) return { ok: false, error: ERR_DENIED }
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')   // 회의록은 워크스페이스 모듈 — 행의 워크스페이스로(스펙 §4.2)
+  if (!mod.ok) return { ok: false, error: mod.error }
   return { ok: true, scope: { projectId: s.projectId, workspaceId: s.workspaceId }, row }
 }
 
@@ -217,6 +222,10 @@ export async function createMinute(
   if (!g.ok) return { ok: false, error: g.error }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
+  // 모듈 관문(스펙 §4.2) — 프로젝트를 고르면 그 프로젝트(워크스페이스 모듈이라 곧 그 워크스페이스의 판정), 아니면 세션 유일 워크스페이스.
+  // 프로젝트 id 의 형식·소속은 뒤의 기존 검증이 본다 — 관문은 없는 프로젝트를 설정 0행 → 닫힘으로 판정한다
+  const mod = input?.projectId ? await requireModule({ projectId: input.projectId }, 'minutes') : await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   // 담당 팀은 쓰기 대상 범위가 정해진 뒤(아래 targetWs) 그 범위의 팀으로 본다.
   const err = validateMinuteFields(input)
   if (err) return { ok: false, error: err }
@@ -481,6 +490,8 @@ export async function assignMinutesProject(
   if (!g.ok) return { ok: false, error: g.error, ...empty }
   // 대상 프로젝트로 지정하는 것은 그 프로젝트의 관리자 이상(스펙 §4.3). 해제(null)는 건별 판정만.
   if (projectId && !isProjectAdmin(g.actor, projectId)) return { ok: false, error: '권한 없음', ...empty }
+  const mod = await requireSessionModule(null, 'minutes')                    // 일괄 지정은 회의록 화면 전용 — 화면과 같은 유일 워크스페이스(P13)
+  if (!mod.ok) return { ok: false, error: mod.error, ...empty }
   const targets = [...new Set(ids)].filter(id => UUID_RE.test(id))
   if (targets.length === 0) return { ok: false, error: '선택된 회의록이 없습니다.', ...empty }
   if (targets.length > MINUTES_PROJECT_BULK_MAX) {
@@ -634,6 +645,8 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
 export async function fetchMinuteFoldersLite(): Promise<MinuteFolder[] | null> {
   const user = await getSession()
   if (!user) return null
+  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
+  if (!mod.ok) return null
   const sb = await createServerClient()
   const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds()])
   if (!folders) return null
@@ -866,6 +879,10 @@ export async function deleteMinute(id: string): Promise<MinuteActionResult> {
 export async function fetchMinuteDetail(id: string) {
   const user = await getSession()
   if (!user) return null
+  const s = await resolveScope('minutes', id)                                 // 행의 워크스페이스로 판정(스펙 §4.2)
+  if (!s.ok) return null
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+  if (!mod.ok) return null
   return getMinuteDetail(id)
 }
 
@@ -874,13 +891,17 @@ export async function getMinuteFileUrl(fileId: string): Promise<{ ok: boolean; u
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
   const sb = await createServerClient()
-  const { data: f, error: fErr } = await sb.from('minute_files').select('file_path, file_name').eq('id', fileId).maybeSingle()
+  const { data: f, error: fErr } = await sb.from('minute_files').select('file_path, file_name, minute_id').eq('id', fileId).maybeSingle()
   // 조회 실패를 '파일 없음'으로 위장하지 않는다(3원칙 ①).
   if (fErr) {
     console.error('[getMinuteFileUrl] 첨부 조회 실패:', fErr.message)
     return { ok: false, error: FILE_LOOKUP_FAILED_MSG }
   }
   if (!f) return { ok: false, error: '파일 없음' }
+  const s = await resolveScope('minutes', f.minute_id as string)             // 파일 행의 회의록 → 그 워크스페이스(스펙 §4.2 첫 문단 — 대상 행)
+  if (!s.ok) return { ok: false, error: s.error }
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   // download 지정 → Content-Disposition: attachment. 인라인 렌더 시 charset 미지정으로
   // 한글이 깨져 보이는 문제를 피하고, 원본 파일명으로 바로 내려받게 한다.
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
@@ -897,6 +918,10 @@ export async function getMinuteVersionFileUrl(
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
+  const s = await resolveScope('minutes', minuteId)                           // 행의 워크스페이스로 판정(스펙 §4.2)
+  if (!s.ok) return { ok: false, error: s.error }
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data: v, error: vErr } = await sb.from('minute_versions')
     .select('file_path, file_name').eq('minute_id', minuteId).eq('id', versionId).maybeSingle()
@@ -920,6 +945,8 @@ export async function fetchProjectMeetingsLite(
 ): Promise<{ ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }> {
   const user = await getSession()
   if (!user) return { ok: true, meetings: [] }
+  const mod = await requireModule({ projectId }, ['minutes', 'meetings'])     // 회의록 폼의 회의 선택 — 둘 다 켜져야. 꺼지면 연결할 회의 없음
+  if (!mod.ok) return { ok: true, meetings: [] }
   const res = await getProjectMeetingData(projectId)
   if (!res.ok) return res
   return { ok: true, meetings: res.meetings.map(mt => ({ id: mt.id, title: mt.title, meetingDate: mt.meetingDate })) }
@@ -931,6 +958,10 @@ export async function fetchMeetingMinutesLite(
 ): Promise<{ id: string; title: string; minuteDate: string }[]> {
   const user = await getSession()
   if (!user) return []
+  const found = await resolveProjectId('meetings', meetingId)                 // 회의 행의 프로젝트로 판정(스펙 §4.2)
+  if (!found.ok || !found.projectId) return []
+  const mod = await requireModule({ projectId: found.projectId }, ['minutes', 'meetings'])
+  if (!mod.ok) return []
   const sb = await createServerClient()
   const { data, error } = await sb.from('minutes')
     .select('id, title, minute_date')
@@ -951,6 +982,8 @@ export async function fetchMinutesRange(
 ): Promise<Minute[]> {
   const user = await getSession()
   if (!user) return []
+  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
+  if (!mod.ok) return []
   return getMinutesPage(rangeStart, rangeEnd, team)
 }
 
@@ -958,6 +991,8 @@ export async function fetchMinutesRange(
 export async function fetchMinutesSearch(q: string, team: TeamCode | null): Promise<Minute[]> {
   const user = await getSession()
   if (!user) return []
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return []
   return searchMinutes(q, team, 100)
 }
 
@@ -968,6 +1003,8 @@ export async function fetchMinutesSearch(q: string, team: TeamCode | null): Prom
 export async function fetchMinutesExplorer(): Promise<ExplorerData | null> {
   const user = await getSession()
   if (!user) return null
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return null
   return getMinutesExplorer()
 }
 
@@ -994,6 +1031,8 @@ export async function createMinuteFolder(
 ): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireSessionModule(null, 'minutes')                    // 폴더 조작은 /minutes 탐색기 전용 — 화면과 같은 유일 워크스페이스(P28)
+  if (!mod.ok) return { ok: false, error: mod.error }
   const nameErr = validateFolderName(name)
   if (nameErr) return { ok: false, error: nameErr }
   // W18(§6.3) — 루트 폴더 생성 금지. 회의록의 team_code 를 폴더에서 파생하려면 "모든 폴더는
@@ -1037,6 +1076,8 @@ export async function renameMinuteFolder(
 ): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const nameErr = validateFolderName(name)
   if (nameErr) return { ok: false, error: nameErr }
   const sb = await createServerClient()
@@ -1089,6 +1130,8 @@ export async function renameMinuteFolder(
 export async function deleteMinuteFolder(id: string): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const folders = await loadFolders(sb)
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
@@ -1181,6 +1224,8 @@ export async function moveMinuteFolder(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   // 이동 가드 선행조회 — 실패하면 판정 불가이므로 중단(쓰기 선행조회 원칙)
   const folders = await loadFolders(sb)
@@ -1310,6 +1355,8 @@ export async function moveMinuteToFolder(
 export async function fetchMinuteFavorites(): Promise<string[] | null> {
   const user = await getSession()
   if (!user) return null
+  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
+  if (!mod.ok) return null
   return getMinuteFavorites()
 }
 
@@ -1317,6 +1364,10 @@ export async function fetchMinuteFavorites(): Promise<string[] | null> {
 export async function toggleMinuteFavorite(minuteId: string, on: boolean): Promise<boolean> {
   const user = await getSession()
   if (!user) return false
+  const s = await resolveScope('minutes', minuteId)                           // 행의 워크스페이스로 판정(스펙 §4.2)
+  if (!s.ok) return false
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+  if (!mod.ok) return false
   const sb = await createServerClient()
   if (on) {
     const { error } = await sb.from('minute_favorites')
@@ -1401,8 +1452,9 @@ export async function ensureMinuteInsightsAction(
 ): Promise<{ status: 'ready' | 'generated' | 'unavailable'; error?: string }> {
   // 멤버십 게이트(무료 쿼터 보호) — 그 회의록 범위의 멤버 이상만. 조회 전용·다른 워크스페이스는 self-heal 을 트리거하지 못한다.
   // 조회 실패는 '자격 없음'과 같은 unavailable 이되 error 문구를 싣는다 — 화면이 원인을 보인다(3원칙 ①).
+  // 모듈 꺼짐도 사유를 싣는다 — 화면이 '지금 사용할 수 없음'을 보인다(ERR_DENIED 는 사유 없는 모양 그대로)
   const refused = (error: string) =>
-    error === ERR_LOOKUP ? { status: 'unavailable' as const, error } : { status: 'unavailable' as const }
+    error === ERR_LOOKUP || error === ERR_MODULE_DISABLED ? { status: 'unavailable' as const, error } : { status: 'unavailable' as const }
   const g = await requireActor()
   if (!g.ok) return refused(g.error)
   const m = await requireMinuteMember(g.actor, minuteId)

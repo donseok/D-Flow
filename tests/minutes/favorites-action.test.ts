@@ -11,6 +11,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/ai/minutes-ingest', () => ({ ingestMinute: vi.fn() }))
 vi.mock('@/lib/ai/minutes-insights', () => ({ ensureMinuteInsights: vi.fn(), generateMinuteInsights: vi.fn() }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn() }))
+// toggleMinuteFavorite 가 행의 워크스페이스로 모듈 관문을 판정한다(resolveScope) — 관문 자체는 전역 mock 이 통과시킨다
+vi.mock('@/lib/authz', () => ({ getActor: vi.fn(), resolveProjectId: vi.fn(), resolveScope: vi.fn(async () => ({ ok: true, projectId: null, workspaceId: 'ws-1' })) }))
 
 const getMinuteFavorites = vi.fn()
 vi.mock('@/lib/data/minutes', () => ({

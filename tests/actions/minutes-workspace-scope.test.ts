@@ -435,7 +435,7 @@ describe('회의록 파일 서명 URL — 60초, 버전 원본은 클릭 때 발
   const NO_SOURCE = '원본 파일이 없습니다.'
 
   it('getMinuteFileUrl: 첨부를 60초 TTL·원본 파일명 download 로 서명한다', async () => {
-    const db = seedDb({ minute_files: { data: { file_path: `${M}/a.pdf`, file_name: 'a.pdf' }, error: null } })
+    const db = seedDb({ minute_files: { data: { file_path: `${M}/a.pdf`, file_name: 'a.pdf', minute_id: M }, error: null } })
     expect(await getMinuteFileUrl('file-1')).toEqual({ ok: true, url: 'https://signed.example.com/x' })
     expect(db.storageCalls).toEqual([
       { bucket: 'minutes', op: 'createSignedUrl', args: [`${M}/a.pdf`, 60, { download: 'a.pdf' }] },
