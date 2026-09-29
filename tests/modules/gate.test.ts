@@ -9,7 +9,7 @@ import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { makeActor } from '../fixtures/actor'
-const { requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule } =
+const { requireModule, requireSessionModule, moduleState, moduleSetFor, projectsWithModule, workspacesWithModule } =
   await vi.importActual<typeof import('@/lib/modules/gate')>('@/lib/modules/gate')
 
 const PID = '00000000-0000-0000-7e57-000000001401', WID = '00000000-0000-0000-7e57-000000001402'
@@ -137,6 +137,24 @@ describe('moduleState — 워커 3값(P10)', () => {
     m.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('down'))
     expect(await moduleState({ projectId: PID }, 'wbs', { client })).toBe('on')
     expect(m.getProjectConfig).not.toHaveBeenCalled(); expect(m.effectiveModules).not.toHaveBeenCalled()
+  })
+})
+
+describe('moduleSetFor — 한 스코프에서 여러 모듈을 볼 때 설정을 한 번 읽는다', () => {
+  it('유효 집합과 client 를 그대로 넘긴다', async () => {
+    expect(await moduleSetFor({ projectId: PID }, { client })).toEqual(eff('issues', 'minutes'))
+    expect(m.getProjectConfig).toHaveBeenCalledWith(PID, { client })
+    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, {
+      client, projectConfig: { projectId: PID, workspaceId: WID },
+    })
+  })
+
+  it('설정 조회가 실패하면 로그를 남기고 core 만 돌려준다', async () => {
+    m.effectiveModules.mockRejectedValue(new ConfigUnavailableError('down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await moduleSetFor({ workspaceId: WID })).toEqual(eff())
+    expect(error).toHaveBeenCalledWith('[moduleSetFor]', 'down')
+    error.mockRestore()
   })
 })
 

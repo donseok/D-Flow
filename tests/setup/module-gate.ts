@@ -9,6 +9,7 @@ vi.mock('@/lib/modules/gate', () => ({
   requireModule: vi.fn(async () => ({ ok: true })),
   requireSessionModule: vi.fn(async () => ({ ok: true })),
   moduleState: vi.fn(async () => 'on'),
+  moduleSetFor: vi.fn(async () => new Set((await import('@/lib/modules/defaults')).MODULE_IDS)),
   projectsWithModule: vi.fn(async (ids: readonly string[]) => [...new Set(ids)]),
   workspacesWithModule: vi.fn(async (ids: readonly string[]) => [...new Set(ids)]),
 }))

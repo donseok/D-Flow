@@ -46,6 +46,17 @@ export async function requireModule(scope: ModuleScope, moduleId: ModuleId | rea
   }
 }
 
+/** 한 스코프의 유효 모듈을 한 번만 읽는다. 읽기 실패는 로그를 남기고 core 만 허용한다. */
+export async function moduleSetFor(scope: ModuleScope, opts?: { client?: ConfigReadClient }): Promise<ReadonlySet<ModuleId>> {
+  try {
+    return await effectiveFor(scope, opts?.client)
+  } catch (error) {
+    unstable_rethrow(error)
+    console.error('[moduleSetFor]', error instanceof Error ? error.message : String(error))
+    return CORE
+  }
+}
+
 /** 대상 행이 없는 세션 판정(스펙 §4.2 2행) — projectId 가 있으면 그 프로젝트, 없으면 행위자의 유일 워크스페이스. 소속 0개·2개 이상·
  *  비로그인·권한 조회 실패는 닫는다(판정 P13, 리스크 R15). 세션 경로 전용 — 세션 없는 경로는 requireModule 에 범위와 client 를 넘긴다. */
 export async function requireSessionModule(projectId: string | null, moduleId: ModuleId | readonly ModuleId[]): Promise<ModuleGateResult> {

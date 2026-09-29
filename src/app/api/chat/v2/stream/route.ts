@@ -3,6 +3,7 @@ import { jsonError } from '@/lib/api/http'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
+import { gateChatTools } from '@/lib/ai/chat/tool-modules'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
 import { validateChatProjectScope } from '@/lib/ai/chat/access-scope'
 import { createChatNdjsonStream, orchestrateChatV2 } from '@/lib/ai/chat/orchestrator'
@@ -115,7 +116,10 @@ export async function POST(req: NextRequest) {
   }
 
   const id = requestId()
-  const registry = createDefaultChatToolRegistry(sb)
+  const gated = await gateChatTools(createDefaultChatToolRegistry(sb), {
+    projectId: scope.projectId, allowedProjectIds, workspaceIds, capabilities,
+  })
+  const registry = gated.registry
 
   // 플래너 경로: 계획 생성·검증에 실패하면 어떤 오류도 노출하지 않고 기존 501 폴백으로 수렴한다(§7.3).
   let plan: ToolPlan | undefined
@@ -138,7 +142,7 @@ export async function POST(req: NextRequest) {
     ...(plan ? { plan } : {}),
     context: {
       userId: user.id,
-      capabilities,
+      capabilities: gated.capabilities,
       allowedProjectIds,
       workspaceIds,
       isSuperuser,
