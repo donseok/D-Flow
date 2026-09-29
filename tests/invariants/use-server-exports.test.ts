@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
-import { hasModifier, isUseServerModule, parse } from './_ast'
+import { hasModifier, isUseServerModule, mayHaveUseServer, parse } from './_ast'
 import { walk } from './_walk'
 
 const ROOT = join(process.cwd(), 'src')
@@ -60,12 +60,18 @@ describe("'use server' 모듈의 export", () => {
     expect(isUseServerModule(parse('z.ts', "'use client'\nexport const X = 1"))).toBe(false)
   })
 
+  it('선필터: 글자 그대로·이스케이프로 쓴 지시문 후보를 놓치지 않는다', () => {
+    expect(["'use server'", "'use\\x20server'", '"use\\u0020server"', "'use\\u{0020}server'", "'u\\se server'", "'use \\\nserver'"].map(mayHaveUseServer)).toEqual([true, true, true, true, true, true])
+    expect(["'use client'", "const re = /use\\s+server/", "'use\\x20client'", 'no backslash'].map(mayHaveUseServer)).toEqual([false, false, false, false])
+  })
+
   it('src 의 모든 use server 모듈은 async 함수와 타입만 export 한다', () => {
-    // 글자로 먼저 거른다 — 지시문은 이 글자를 반드시 담는다. src 전체를 TypeScript 로 파싱하면 부하 때 5초 한도를 넘는다
-    // (최종 리뷰 integ F1). 판정은 여전히 isUseServerModule(AST)이 한다.
-    const files = walk(ROOT)
+    // 글자로 먼저 거른다 — src 전체를 TypeScript 로 파싱하면 부하 때 5초 한도를 넘는다(최종 리뷰 integ F1). 지시문은 이스케이프로도
+    // 쓸 수 있어('use\x20server' — Next 는 익은 값으로 읽는다) 글자 그대로만 보지 않는다(mayHaveUseServer). 판정은 isUseServerModule(AST)이 한다.
+    // allowJs 라 .js 계열 모듈도 번들에 들어간다.
+    const files = walk(ROOT, undefined, /\.[cm]?[jt]sx?$/)
       .map(f => ({ f, text: readFileSync(f, 'utf8') }))
-      .filter(({ text }) => text.includes('use server'))
+      .filter(({ text }) => mayHaveUseServer(text))
       .map(({ f, text }) => ({ rel: relative(process.cwd(), f), sf: parse(f, text) }))
       .filter(({ sf }) => isUseServerModule(sf))
     // 파일을 하나도 못 찾으면 검사가 공허하게 통과한다.

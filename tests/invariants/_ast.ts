@@ -20,6 +20,24 @@ export function isUseServerModule(sf: ts.SourceFile): boolean {
   return prologue(sf.statements).includes('use server')
 }
 
+/** 'use server' 로 익는(cooked) 문자열 리터럴이 있을 수 있는 파일인가 — 파싱 비용을 줄이는 선필터다(판정은 AST 가 한다).
+ *  Next(SWC)는 익은 값으로 지시문을 읽는다 — 글자 그대로가 아니어도 '\x20'·'\u0020'·'\u{20}'·항등 이스케이프('u\se')·줄 이음으로
+ *  쓴 'use server' 는 지시문이다. 글자가 없으면 역슬래시가 든 문자열 리터럴 후보마다 익혀 본다 */
+export function mayHaveUseServer(text: string): boolean {
+  if (text.includes('use server')) return true
+  if (!text.includes('\\')) return false
+  const literal = /(['"])(?:(?!\1)[^\\\r\n]|\\(?:\r\n|[\s\S])){0,2000}\1/y
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "'" && text[i] !== '"') continue
+    literal.lastIndex = i
+    const m = literal.exec(text)
+    if (!m || !m[0].includes('\\')) continue
+    const sc = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, m[0])
+    if (sc.scan() === ts.SyntaxKind.StringLiteral && sc.getTokenValue() === 'use server') return true
+  }
+  return false
+}
+
 export const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
   ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some((m) => m.kind === kind)
 

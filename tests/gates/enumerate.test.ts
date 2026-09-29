@@ -2,13 +2,15 @@
 // (덮어쓰기·core 허용 목록 제외), /api/v1/** 는 core 접두에 안 걸린다, const 스텁은 두 모양만. 수는 실행 때 센다.
 import { existsSync, readFileSync } from 'node:fs'
 import { relative } from 'node:path'
-import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { isModuleId, type ModuleId } from '@/lib/modules/defaults'
 import { MODULES } from '@/lib/modules/registry'
 import { walk } from '../invariants/_walk'
-import { enumerateActions, enumerateRoutes, expectedRouteModule, manifestDiff, routeFileProblems, routePath, type Src } from './_enumerate'
-import { ACTION_GATES, CORE_ROUTE_ALLOW, NOTE_REQUIRED, ROUTE_GATES, ROUTE_MODULE_OVERRIDES, type GateEntry } from './manifest'
+import {
+  enumerateActions, enumerateRoutes, expectedRouteModule, isHiddenSegment, manifestDiff, METADATA_FILE, metadataModule, ROUTE_FILE, routeFileProblems,
+  routePath, stubShapeOk, type Src,
+} from './_enumerate'
+import { ACTION_GATES, CORE_ROUTE_ALLOW, METADATA_ROUTE_ALLOW, NOTE_REQUIRED, ROUTE_GATES, ROUTE_MODULE_OVERRIDES, type GateEntry } from './manifest'
 
 const ids = (m: GateEntry['module']): readonly ModuleId[] => (m === null ? [] : typeof m === 'string' ? [m] : m)
 function entryProblems(key: string, e: GateEntry, kind: 'action' | 'route'): string[] {
@@ -29,7 +31,7 @@ function entryProblems(key: string, e: GateEntry, kind: 'action' | 'route'): str
 const read = (f: string): Src => ({ rel: relative(process.cwd(), f), text: readFileSync(f, 'utf8') })
 // allowJs 라 .js 액션 모듈도 번들에 들어간다 — 액션은 확장자와 무관하게 연다
 const actionSrc = () => walk('src', undefined, /\.[cm]?[jt]sx?$/).map(read)
-const routeSrc = () => walk('src/app/api').filter((f) => f.endsWith('/route.ts')).map(read)
+const routeSrc = () => walk('src/app/api', undefined, /^route\.tsx?$/).map(read)
 
 describe('열거 — 액션', () => {
   const { keys, problems } = enumerateActions(actionSrc())
@@ -48,7 +50,7 @@ describe('열거 — 라우트', () => {
   const { handlers, stubs, problems } = enumerateRoutes(routeSrc())
   it('export 는 메서드 함수·메서드 스텁·라우트 설정 상수뿐', () => { expect(problems).toEqual([]) })
   it('라우트 파일은 src/app/api 아래 route.ts 뿐이다(다른 자리·확장자·pages 라우터는 열거 밖)', () => {
-    const anywhere = walk('src/app', undefined, /^route\.[cm]?[jt]sx?$/).map((f) => relative(process.cwd(), f))
+    const anywhere = walk('src/app', undefined, ROUTE_FILE).map((f) => relative(process.cwd(), f))
     expect(anywhere.length).toBeGreaterThan(30)
     expect(routeFileProblems(anywhere)).toEqual([])
     expect(['pages', 'src/pages'].filter((d) => existsSync(d)), 'pages 라우터의 API 는 열거 밖이다').toEqual([])
@@ -69,10 +71,20 @@ describe('열거 — 라우트', () => {
     })
     expect([...bad, ...Object.entries(ROUTE_GATES).flatMap(([k, e]) => entryProblems(k, e, 'route'))]).toEqual([])
   })
-  it('덮어쓰기·core 허용 목록은 실재하는 경로이고 사유가 있다', () => {
+  it('덮어쓰기·core 허용 목록은 실재하는 URL 경로이고(그룹·슬롯 조각 없음) 사유가 있다', () => {
     const paths = new Set(handlers.map((k) => routePath(k.split('#')[0])))
     for (const [p, why] of [...Object.entries(ROUTE_MODULE_OVERRIDES), ...Object.entries(CORE_ROUTE_ALLOW)]) {
+      expect(p.split('/').some(isHiddenSegment), `${p} — 파일 경로가 아니라 URL 경로로 적는다`).toBe(false)
       expect(paths.has(p), p).toBe(true); expect(why.length, p).toBeGreaterThan(3)
+    }
+  })
+  it('메타데이터 라우트(opengraph-image·icon·sitemap 등)는 닫힌 허용 목록이고 모듈 경로 아래에 없다(F12)', () => {
+    const files = walk('src/app', undefined, METADATA_FILE).map((f) => relative(process.cwd(), f)).sort()
+    expect(files.length).toBeGreaterThan(0)
+    expect(files.filter((f) => !(f in METADATA_ROUTE_ALLOW)), '허용 목록 밖 — 모듈 데이터를 그리면 관문이 필요하다').toEqual([])
+    for (const [f, why] of Object.entries(METADATA_ROUTE_ALLOW)) {
+      expect(files, f).toContain(f); expect(why.length, f).toBeGreaterThan(3)
+      expect(metadataModule(f), `${f} 는 모듈 경로 아래다`).toBeNull()
     }
   })
   it('/api/v1/** 는 core 모듈의 apiPrefixes 에 걸리지 않는다', () => {
@@ -85,19 +97,7 @@ describe('열거 — 라우트', () => {
   it('const 스텁은 apiNotFound(또는 그 별칭)·404 인라인 클로저 두 모양뿐(P16)', () => {
     expect(stubs.length).toBeGreaterThan(50)
     const byKey = new Map(stubs.map((s) => [s.key, s.init]))
-    const ok = (key: string, init: ts.Expression, depth = 0): boolean => {
-      if (ts.isIdentifier(init)) {
-        if (init.text === 'apiNotFound') return true
-        const alias = byKey.get(`${key.split('#')[0]}#${init.text}`)
-        return !!alias && depth < 3 && ok(key, alias, depth + 1)
-      }
-      if (ts.isArrowFunction(init) && ts.isCallExpression(init.body) && ts.isIdentifier(init.body.expression) && init.body.expression.text === 'apiFail') {
-        const [s, c] = init.body.arguments
-        return !!s && ts.isNumericLiteral(s) && s.text === '404' && !!c && ts.isStringLiteral(c) && c.text === 'not_found'
-      }
-      return false
-    }
-    expect(stubs.filter((s) => !ok(s.key, s.init)).map((s) => s.key)).toEqual([])
+    expect(stubs.filter((s) => !stubShapeOk(s, byKey)).map((s) => s.key)).toEqual([])
   })
 })
 
@@ -143,12 +143,50 @@ describe('열거 — 민감도(합성 소스)', () => {
       "c.ts: 인라인 'use server'",
     ])
   })
-  it('라우트 파일의 자리·확장자를 잡는다', () => {
+  it('라우트 파일의 자리·확장자를 잡는다(api 아래 route.tsx 는 열거한다 — F10)', () => {
     expect(routeFileProblems(['src/app/api/x/route.ts', 'src/app/api/route.ts', 'src/app/(app)/p/[projectId]/x/route.ts', 'src/app/api/y/route.tsx', 'src/app/api/z/route.js'])).toEqual([
-      'src/app/(app)/p/[projectId]/x/route.ts: 라우트 파일은 src/app/api/**/route.ts 에만 둔다',
-      'src/app/api/y/route.tsx: 라우트 파일은 src/app/api/**/route.ts 에만 둔다',
-      'src/app/api/z/route.js: 라우트 파일은 src/app/api/**/route.ts 에만 둔다',
+      'src/app/(app)/p/[projectId]/x/route.ts: 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다',
+      'src/app/api/z/route.js: 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다',
     ])
+    expect(routePath('src/app/api/og/route.tsx')).toBe('/api/og')
+  })
+  it('Next 세그먼트 설정·generateStaticParams 는 통과하고(F10 오탐), 원천 모듈의 별칭 import 스텁은 허용·지역 그림자 스텁은 거부한다(F9 b)', () => {
+    const r = enumerateRoutes([{ rel: 'src/app/api/v1/s/route.ts', text: [
+      "import { apiNotFound as nf, apiFail } from '@/lib/agent/externalApi'",
+      "export const fetchCache = 'force-no-store'", "export const preferredRegion = 'icn1'", 'export const dynamicParams = false',
+      'export async function generateStaticParams() { return [] }',
+      'export const GET = nf', 'export const PUT = GET', "export const POST = () => apiFail(404, 'not_found', 'Not Found')",
+    ].join('\n') }, { rel: 'src/app/api/v1/t/route.ts', text: [
+      'const apiNotFound = async (req?: Request) => (req ? Response.json({ rows: [] }) : new Response(null, { status: 404 }))',
+      "const apiFail = (s: number, c: string) => Response.json({ c }, { status: s === 404 ? 200 : s })",
+      'export const GET = apiNotFound', "export const POST = () => apiFail(404, 'not_found')",
+      "export const PATCH = (req: Request) => apiFailImported(404, 'not_found')",
+    ].join('\n') }])
+    expect(r.problems).toEqual([])
+    const byKey = new Map(r.stubs.map((s) => [s.key, s.init]))
+    expect(r.stubs.filter((s) => stubShapeOk(s, byKey)).map((s) => s.key)).toEqual(['src/app/api/v1/s/route.ts#GET', 'src/app/api/v1/s/route.ts#PUT', 'src/app/api/v1/s/route.ts#POST'])
+  })
+  it('URL 판정은 route group·슬롯 조각을 뺀다(F11) — api/(legacy)/wiki 는 wiki 다', () => {
+    expect(routePath('src/app/api/(legacy)/wiki/export/route.ts')).toBe('/api/wiki/export')
+    expect(expectedRouteModule(routePath('src/app/api/(legacy)/wiki/export/route.ts'))).toEqual({ module: 'wiki' })
+    expect(expectedRouteModule(routePath('src/app/api/@x/(g)/chat/route.ts'))).toEqual({ module: 'chatbot' })
+  })
+  it('메타데이터 파일의 모듈 경로 판정(F12)', () => {
+    expect(metadataModule('src/app/icon.tsx')).toBeNull()
+    expect(metadataModule('src/app/(app)/p/[projectId]/wiki/topics/[topicId]/opengraph-image.tsx')).toBe('wiki')
+    expect(metadataModule('src/app/(app)/minutes/[id]/twitter-image.tsx')).toBe('minutes')
+    expect(METADATA_FILE.test('opengraph-image2.tsx') && METADATA_FILE.test('sitemap.ts') && !METADATA_FILE.test('icon.png')).toBe(true)
+  })
+  it("이스케이프로 쓴 'use server' 지시문도 열거한다(T13-m2 — Next 는 익은 값으로 읽는다)", () => {
+    const r = enumerateActions([
+      { rel: 'e1.ts', text: "'use\\x20server'\nexport async function e1() {}\n" },
+      { rel: 'e2.ts', text: "\"use\\u0020server\"\nexport const e2 = async () => 1\n" },
+      { rel: 'e3.ts', text: "// 주석 don't\n'u\\se\\u{20}server'\nexport async function e3() {}\n" },
+      { rel: 'e4.ts', text: "export function g() {\n  'use\\x20server'\n}\n" },
+      { rel: 'no.ts', text: "'use\\x20client'\nexport async function no() {}\nconst re = /\\u0020/\n" },
+    ])
+    expect(r.keys).toEqual(['e1.ts#e1', 'e3.ts#e3'])
+    expect(r.problems).toEqual(['e2.ts: 함수 선언이 아닌 값 export — 액션은 export async function 으로', "e4.ts: 인라인 'use server'"])
   })
   it('자기 검사 — 매니페스트에 없는 새 액션·새 핸들러와 죽은 항목을 FAIL 로 잡는다(D38)', () => {
     const acts = enumerateActions([...actionSrc(), { rel: 'src/app/actions/issues.ts', text: "'use server'\nexport async function sneakyIssueAction() {}\n" }]).keys

@@ -316,3 +316,10 @@ export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/shell': '셸 — 알림함·파생 알림·공지 배지·티커·결재 배지 통합 조회',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
 }
+
+/** 메타데이터 라우트(icon·opengraph-image·sitemap 등 — 요청마다 서버 코드로 그린다) 닫힌 허용 목록(판정 F12). 모듈 경로 아래의 메타데이터는 모듈 데이터를
+ *  그릴 수 있어 관문이 필요하다 — 여기 더하지 말고 먼저 관문 설계를 정한다 */
+export const METADATA_ROUTE_ALLOW: Readonly<Record<string, string>> = {
+  'src/app/icon.tsx': '앱 아이콘(정적 그림) — 데이터 없음',
+  'src/app/apple-icon.tsx': '앱 아이콘(정적 그림) — 데이터 없음',
+}
