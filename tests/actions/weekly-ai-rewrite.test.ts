@@ -181,8 +181,9 @@ describe('prepareWeeklyCellRewrite', () => {
   it('AI 판정은 aiAvailable({ projectId }, { module: weekly }) 이다(D17) — 거짓이면 AI 를 부르지 않는다', async () => {
     mocks.createServerClient.mockResolvedValue(weeklyClient() as never)
     mocks.hasLLM.mockReturnValue(false)
-    expect((await prepareWeeklyCellRewrite('p1', [input()])).ok).toBe(false)
-    expect(vi.mocked(aiAvailable)).toHaveBeenCalledWith({ projectId: 'p1' }, { module: 'weekly' })
+    // 거부 사유까지 고정한다 — ok:false 만 보면 앞 케이스가 남긴 쿨다운('너무 빠릅니다')으로도 초록이다
+    expect(await prepareWeeklyCellRewrite('p1', [input()])).toEqual({ ok: false, error: 'AI 를 사용할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.' })
+    expect(vi.mocked(aiAvailable)).toHaveBeenLastCalledWith({ projectId: 'p1' }, { module: 'weekly' })
     expect(mocks.generateAnswer).not.toHaveBeenCalled()
   })
 })

@@ -800,8 +800,8 @@ async function ensureIssueAnalysisSnapshot(
   if (!(await aiAvailable({ projectId }, { module: 'issues' }))) {
     return {
       state: 'unavailable',
-      reason: 'llm_missing',
-      error: 'LLM 설정이 없어 이슈 분석서를 생성할 수 없습니다.',
+      reason: 'llm_missing',   // 코드값은 유지 — 키 없음·워크스페이스 AI 끔·issues 꺼짐·판정 실패가 모두 이 갈래다
+      error: 'AI 를 사용할 수 없어 이슈 분석서를 생성할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.',
       inputHash,
     }
   }

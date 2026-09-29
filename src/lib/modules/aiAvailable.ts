@@ -13,7 +13,7 @@ import { getProjectConfig, type ConfigReadClient, type ProjectConfig } from '@/l
 import { valueOf } from '@/lib/settings/registry'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { createServerClient } from '@/lib/supabase/server'
-import type { ModuleId } from './defaults'
+import { WORKSPACE_SCOPED, type ModuleId } from './defaults'
 import { effectiveModules } from './effective'
 
 export type AiScope = { workspaceId: string; projectId?: string } | { projectId: string } | { minuteId: string } | null
@@ -49,7 +49,11 @@ export async function aiAvailable(scope: AiScope, opts?: { module?: ModuleId; cl
     const ws = await getWorkspaceConfig(r.scope.workspaceId, { client })
     if (valueOf(ws, 'ai.enabled') === false) return false
     if (opts?.module) {
-      const eff = await effectiveModules(r.scope, { client, ...(r.projectConfig ? { projectConfig: r.projectConfig } : {}) })
+      // 워크스페이스 층 모듈(회의록 등)은 프로젝트 토글과 무관하다 — 범위에서 프로젝트를 빼 그 설정을 읽지 않는다.
+      // 읽으면 손상된 프로젝트 설정 하나가 무관한 워크스페이스 층 AI 까지 끈다(회의록 행에 프로젝트가 붙은 경우)
+      const eff = WORKSPACE_SCOPED.has(opts.module)
+        ? await effectiveModules({ workspaceId: r.scope.workspaceId }, { client })
+        : await effectiveModules(r.scope, { client, ...(r.projectConfig ? { projectConfig: r.projectConfig } : {}) })
       if (!eff.has(opts.module)) return false
     }
     return true
