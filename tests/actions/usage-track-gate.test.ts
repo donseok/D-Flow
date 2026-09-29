@@ -14,6 +14,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 
 import { POST } from '@/app/api/track/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const PID = '3f2504e0-4f89-11d3-9a0c-0305e82c3301'
 const req = (body: unknown) =>
@@ -27,6 +29,8 @@ beforeEach(() => {
   process.env.USAGE_TRACKING = 'on'
 })
 afterEach(() => { delete process.env.USAGE_TRACKING })
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('수집 게이트', () => {
   it('수집이 꺼져 있으면 DB 에 접근하지 않는다', async () => {
@@ -139,5 +143,35 @@ describe('기록 내용 — 본문을 신뢰하지 않는다', () => {
     insert.mockResolvedValueOnce({ error: { message: 'boom' } } as never)
     const res = await POST(req({ path: '/minutes' }))
     expect(res.status).toBe(500)
+  })
+})
+
+describe('usage 모듈 관문(과제 20, P19)', () => {
+  beforeEach(() => { getClaimsMock.mockResolvedValue({ data: { claims: { sub: 'real-user' } } }) })
+  it('프로젝트 경로는 그 프로젝트로 판정 — 꺼지면 200 skipped 이고 기록하지 않는다(404 면 트래커가 전환마다 오류를 남긴다)', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(req({ path: `/p/${PID}/wbs` }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, skipped: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'usage')
+    expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('프로젝트 없는 경로는 세션 유일 워크스페이스 — 유일하지 않거나 꺼지면 skipped(Review Focus 5)', async () => {
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await (await POST(req({ path: '/minutes' }))).json()).toMatchObject({ skipped: 'module_disabled' })
+    expect(requireSessionModule).toHaveBeenCalledWith(null, 'usage')
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('잘못된 이벤트 경로는 모듈 판정 전에 400 — 입력 모양 검사는 관문 앞(기존 계약)', async () => {
+    expect((await POST(req({ path: `/p/${PID}/wbs`, eventName: 'wiki_search' }))).status).toBe(400)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+  it('켜져 있으면 판정한 프로젝트를 그대로 기록한다(대조)', async () => {
+    expect((await POST(req({ path: `/p/${PID}/wbs` }))).status).toBe(200)
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ project_id: PID }))
   })
 })

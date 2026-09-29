@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   embedDocuments: vi.fn(),
   lexical: vi.fn(),
   rpc: vi.fn(),
+  // GET(코퍼스 집계)의 from 호출 기록 — 관문 거부 뒤 집계하지 않는지 본다(과제 20)
+  from: vi.fn(),
   // GET(코퍼스 집계)용 count 체인 — from().select().eq().eq().in() 의 끝이 결과를 돌려준다.
   countResult: { count: 3, error: null as { message: string } | null },
 }))
@@ -20,7 +22,7 @@ vi.mock('@/lib/ai/index/lexical', () => ({ createLexicalSearch: () => mocks.lexi
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     rpc: mocks.rpc,
-    from: () => ({
+    from: (table: string) => (mocks.from(table), {
       select: () => ({
         eq: () => ({
           eq: () => ({ in: async () => mocks.countResult }),
@@ -39,6 +41,8 @@ vi.mock('@/lib/ai/index/lexical', async () => {
 })
 
 import { GET, POST } from '@/app/api/wiki/search/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 const OTHER = '22222222-2222-2222-2222-222222222222'
@@ -163,5 +167,38 @@ describe('GET /api/wiki/search (코퍼스 집계)', () => {
     mocks.countResult.error = { message: 'boom' }
     expect((await GET(statsRequest(PROJECT))).status).toBe(503)
     mocks.countResult.error = null
+  })
+})
+
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
+
+// wiki 모듈 관문(과제 20) — 접근 판정(decideSearchAccess)이 확정한 한 프로젝트로. 메서드마다 거부를 본다.
+describe('/api/wiki/search — wiki 모듈 관문(과제 20)', () => {
+  it('POST: wiki 모듈이 꺼지면 404 이고 검색하지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({ projectId: PROJECT, q: '권한' }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT }, 'wiki')
+    expect(mocks.embedDocuments).not.toHaveBeenCalled()
+    expect(mocks.rpc).not.toHaveBeenCalled(); expect(mocks.lexical).not.toHaveBeenCalled()
+  })
+  it('GET: wiki 모듈이 꺼지면 404 이고 집계하지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await GET(statsRequest(PROJECT))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT }, 'wiki')
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it('허용 밖 프로젝트는 모듈 판정 전에 403 — 두 메서드 모두', async () => {
+    expect((await POST(request({ projectId: OTHER, q: '권한' }))).status).toBe(403)
+    expect((await GET(statsRequest(OTHER))).status).toBe(403)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+  it('대조: 켜져 있으면 집계한다(from 기록이 관문 거부 단언의 짝)', async () => {
+    expect((await GET(statsRequest(PROJECT))).status).toBe(200)
+    expect(mocks.from).toHaveBeenCalledWith('ai_documents')
   })
 })

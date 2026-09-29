@@ -43,6 +43,8 @@ vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() =
 import { GET } from '@/app/api/report/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_ID = '22222222-2222-4222-8222-222222222222'
@@ -65,6 +67,8 @@ beforeEach(() => {
   mocks.buildReportWorkbook.mockResolvedValue(new ArrayBuffer(1))
 })
 afterEach(() => vi.restoreAllMocks())
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('GET /api/report — 명단 조회', () => {
   it('명단 조회 실패 → 503 + 로그, 보고서를 만들지 않는다', async () => {
@@ -193,5 +197,28 @@ describe('GET /api/report — AI 코멘트 슬라이드(ai=1) 근거 조회 실�
     expect(await res.json()).toEqual({ error: 'AI 브리핑 근거를 불러오지 못했습니다.' })
     expect(err).toHaveBeenCalledWith('[report] AI 브리핑 근거 조회 실패:', { projectId: PROJECT_ID }, boom)
     expect(mocks.fillWeeklyTemplate).not.toHaveBeenCalled()
+  })
+})
+
+// P4 — weekly 관문은 주간업무 시트 갈래(source=sheet)만(BRANCH_GATE). 기본 갈래는 WBS 화면 보고서 모달이 부르는 core 기능이다.
+describe('GET /api/report — weekly 관문은 시트 갈래만(과제 20, P4)', () => {
+  it('source=sheet 는 weekly 가 꺼지면 404 이고 시트를 읽지 않는다 — 프로젝트 판정 뒤', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT_ID }, 'weekly')
+    expect(mocks.listProjectsWithState).toHaveBeenCalled()
+    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
+  })
+  it('source=sheet 의 없는 프로젝트는 모듈 판정 전에 404 — 존재 판정이 먼저다', async () => {
+    expect((await GET(sheetReq(OTHER_ID))).status).toBe(404)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+  it('기본 갈래(WBS 화면의 현황 보고서 — core)는 weekly 관문을 부르지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    expect((await GET(req())).status).toBe(200)
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(requireSessionModule).not.toHaveBeenCalled()
   })
 })

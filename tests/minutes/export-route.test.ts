@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -10,6 +10,8 @@ vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 
 import { GET } from '@/app/api/minutes/export/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 type MinuteRow = {
   id: string
@@ -91,6 +93,24 @@ describe('GET /api/minutes/export', () => {
     vi.clearAllMocks()
     vi.useRealTimers()
     mocks.getSession.mockResolvedValue({ id: 'user-1' })
+  })
+  // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+  afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
+
+  it('minutes 모듈이 꺼지면 404 JSON 이고 DB 에 접근하지 않는다 — 세션 유일 워크스페이스로 판정(과제 20)', async () => {
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await GET()
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireSessionModule).toHaveBeenCalledWith(null, 'minutes')
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('로그인하지 않았으면 모듈 판정 전에 401(과제 20)', async () => {
+    mocks.getSession.mockResolvedValue(null)
+    expect((await GET()).status).toBe(401)
+    expect(requireSessionModule).not.toHaveBeenCalled()
   })
 
   it('로그인하지 않은 요청은 JSON 401이며 DB에 접근하지 않는다', async () => {

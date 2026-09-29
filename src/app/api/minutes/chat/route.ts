@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { getActor } from '@/lib/authz'
+import { getActor, resolveScope } from '@/lib/authz'
+import { denyStatus, ERR_MISSING } from '@/lib/authz/errors'
+import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { sanitizeHistory } from '@/lib/ai/answer'
 import { streamDocAnswer, streamArchiveAnswer } from '@/lib/ai/minutes-answer'
@@ -43,11 +45,19 @@ export async function POST(req: NextRequest) {
     if (body.mode === 'doc') {
       const minuteId = typeof body.minuteId === 'string' ? body.minuteId : ''
       if (!minuteId) return NextResponse.json({ error: 'minuteId가 필요합니다.' }, { status: 400 })
+      // 회의록 행의 워크스페이스로 minutes 관문(스펙 §4.2) — 볼 수 없는 행은 404, 조회 실패는 500(없는 회의록으로 위장하지 않는다)
+      const s = await resolveScope('minutes', minuteId)
+      if (!s.ok) return NextResponse.json({ error: s.error === ERR_MISSING ? '회의록을 찾을 수 없습니다.' : s.error }, { status: denyStatus(s.error) })
+      const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+      if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
       const stream = await streamDocAnswer({ minuteId, message, history })
       if (!stream) return NextResponse.json({ error: '회의록을 찾을 수 없습니다.' }, { status: 404 })
       return new Response(stream, { headers })
     }
     if (body.mode === 'archive') {
+      // 보관함 전체 Q&A — 대상 행이 없어 세션 유일 워크스페이스로 minutes 관문(P13)
+      const mod = await requireSessionModule(null, 'minutes')
+      if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
       const f = body.filters ?? {}
       // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 볼 수 있는 프로젝트의 전용 팀,
       // 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과한다.

@@ -16,6 +16,7 @@ import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
 import { planningSignals, routeChatRequest } from '@/lib/ai/chat/router'
 import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
+import { requireSessionModule } from '@/lib/modules/gate'
 import { activeTeamCodesForProjectSync, activeTeamCodesVisibleToSync } from '@/lib/teams/master'
 
 export const dynamic = 'force-dynamic'
@@ -56,10 +57,18 @@ export async function POST(req: NextRequest) {
   const parsed = sanitizeChatRequestV2(raw)
   if (!parsed.ok) return jsonError(parsed.error.message, parsed.error.status, parsed.error.code)
   const request = parsed.value
+  // chatbot 관문(스펙 §4.2 챗 위젯 행, P23) — 검증된 요청의 프로젝트(화면 문맥 우선)로. 스코프 검증(allowedProjectIds)은 아래지만,
+  // 볼 수 없는 프로젝트면 설정 0행으로 닫혀 404 라 존재가 드러나지 않는다. env 501 은 위(클라이언트 강등 신호), 라우팅 501 강등은 아래다 —
+  // 강등 경로도 설정을 한 번 읽는다(옛 챗도 같은 관문이라 꺼진 모듈이 강등으로 새지 않는다).
+  // 관문이 스코프 검증(validateChatProjectScope) 앞이라, 허용 밖 프로젝트 힌트의 응답은 403 PROJECT_ACCESS_DENIED 가 아니라
+  // 404 MODULE_DISABLED 가 된다(은닉 쪽 — 볼 수 없는 프로젝트의 설정은 0행이라 닫힌다). 과제 28 보고에 적는다.
+  const mod = await requireSessionModule(request.pageContext?.projectId ?? request.projectId, 'chatbot')
+  if (!mod.ok) return jsonError(mod.error, 404, 'MODULE_DISABLED')
   const now = new Date()
   const plannedRoute = routeChatRequest(request, now)
   // Unsupported questions contain no v2 data and immediately fall back to the legacy bot. Keep this
-  // before membership and project-scope I/O so an intentional fallback never touches Supabase.
+  // before membership and project-scope I/O so an intentional fallback never touches Supabase
+  // (위 모듈 관문의 설정 조회 하나만 앞선다 — P23).
   // 예외: 플래너 opt-in(§7.1)이 켜져 있고 게이트를 통과하면 제한된 도구 계획을 한 번 시도한다.
   const plannerEligible = plannedRoute.kind === 'legacy'
     && chatPlannerEnabled()

@@ -1,6 +1,8 @@
 import { Readable } from 'node:stream'
 import { getSession } from '@/lib/auth'
 import { jsonError } from '@/lib/api/http'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireSessionModule } from '@/lib/modules/gate'
 import { seoulYmd } from '@/lib/domain/dates'
 import { createServerClient } from '@/lib/supabase/server'
 import {
@@ -98,6 +100,9 @@ async function loadAllMinutes(cutoffIso: string): Promise<MinuteExportRow[]> {
 /** 로그인 사용자가 현재 열람 가능한 전역 회의록 본문을 분석용 ZIP으로 받는다. */
 export async function GET() {
   if (!(await getSession())) return jsonError('인증이 필요합니다.', 401)
+  // 전 회의록 ZIP 이라 대상 행이 없다 — 세션 유일 워크스페이스로 minutes 관문(P13). 첫 DB 접근 앞
+  const mod = await requireSessionModule(null, 'minutes')
+  if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
 
   const exportedAt = new Date()
   try {

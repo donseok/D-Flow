@@ -7,12 +7,13 @@
 //
 // 이 라우트는 그 전부를 GET 1왕복으로 합친다. GET 이므로 액션 큐와 경쟁하지 않는다.
 // 각 조회 함수가 내부에서 세션을 스스로 확인하므로(비로그인 = 빈 값) 별도 가드가 필요 없고,
-// 응답은 개인화 데이터라 no-store 다.
+// 응답은 개인화 데이터라 no-store 다. 공지 두 항목은 액션이 모듈 꺼짐에 빈 값을 돌려준다(과제 15).
 import { type NextRequest, NextResponse } from 'next/server'
 import { getInboxFeed } from '@/app/actions/inbox'
 import { getNotifications } from '@/app/actions/notifications'
 import { getHeaderAnnouncements, getUnreadAnnouncementCount } from '@/app/actions/announcements'
 import { getPendingApprovalCount } from '@/lib/data/agentApprovals'
+import { projectsWithModule } from '@/lib/modules/gate'
 
 export async function GET(req: NextRequest) {
   // route = 현재 URL 의 프로젝트(파생 알림·티커 기준), menu = 메뉴 문맥 프로젝트(공지 배지 기준 —
@@ -31,7 +32,8 @@ export async function GET(req: NextRequest) {
       return { ok: false as const, error: '' }
     }) : Promise.resolve({ ok: true as const, rows: [] }),
     // 에이전트 메뉴의 결재 대기 배지 — 공지 배지처럼 메뉴 문맥 기준. 배지 하나 때문에 셸 전체를 죽이지 않되 로그는 남긴다.
-    menu ? getPendingApprovalCount(menu).catch((e: unknown) => {
+    // 결재 배지는 액션이 아니라(열거 게이트 밖) 여기서 agents 판정 — 꺼진 메뉴 문맥이면 그 항목만 비운다(§4.2 셸 행)
+    menu ? projectsWithModule([menu], 'agents').then((on) => (on.length ? getPendingApprovalCount(menu) : 0)).catch((e: unknown) => {
       console.error('[shell] 결재 대기 수 조회 실패:', e instanceof Error ? e.message : e)
       return 0
     }) : Promise.resolve(0),

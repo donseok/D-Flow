@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireSessionModule } from '@/lib/modules/gate'
 import { answerQuestion, sanitizeHistory } from '@/lib/ai/answer'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +26,9 @@ export async function POST(req: NextRequest) {
   // 볼 수 없는 프로젝트면 파이프라인(service_role 팀 캐시·자가 치유 색인)에 들이지 않는다.
   const gate = await legacyChatProjectGate(projectId)
   if (gate) return gate
+  // 옛 챗도 chatbot 관문(스펙 §4.2 챗 위젯 행) — 프로젝트 없는 전체 질문은 세션 유일 워크스페이스(P13)
+  const mod = await requireSessionModule(projectId, 'chatbot')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   try {
     const result = await answerQuestion({ projectId, message, history })

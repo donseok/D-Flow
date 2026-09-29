@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { generateAnswer, type ChatMessage } from '@/lib/ai/llm'
 import { getActorViewState } from '@/lib/authz'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { decideSearchAccess } from '@/lib/domain/searchAccess'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -86,6 +88,9 @@ export async function POST(request: NextRequest) {
   const scope = await createSupabaseAccessScopeResolver(admin).resolve(actor.userId)
   const access = decideSearchAccess(body.projectId, scope)
   if (!access.ok) return NextResponse.json({ error: access.reason }, { status: access.status })
+  // wiki 관문 — 접근 판정이 확정한 한 프로젝트로(decideSearchAccess 는 요청 하나만 넘긴다)
+  const mod = await requireModule({ projectId: access.projectIds[0] }, 'wiki')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   const messages: ChatMessage[] = [{ role: 'user', content: buildUserMessage(body.q, body.sources) }]
   const answer = await generateAnswer(SUMMARY_SYSTEM, messages)

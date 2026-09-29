@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { EMPTY_CHAT_TOOL_REGISTRY } from '@/lib/ai/chat/registry'
 
@@ -38,6 +38,8 @@ vi.mock('@/lib/ai/chat/router', async (importOriginal) => ({
 const actualRouter = () => vi.importActual<typeof import('@/lib/ai/chat/router')>('@/lib/ai/chat/router')
 
 import { POST } from '@/app/api/chat/v2/stream/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 function request(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/chat/v2/stream', {
@@ -79,6 +81,8 @@ describe('POST /api/chat/v2/stream composition', () => {
     teams.activeTeamCodesForProjectSync.mockImplementation(() => ['ERP'])
     teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['ERP'])
   })
+  // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+  afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
   it('returns 400 before streaming for mismatched page and legacy project context', async () => {
     const response = await POST(request({
@@ -221,6 +225,39 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(mocks.createServerClient).not.toHaveBeenCalled()
     expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
     expect(teams.activeTeamCodesVisibleToSync).not.toHaveBeenCalled()
+  })
+
+  it('chatbot 모듈이 꺼지면 404 — 검증된 요청의 프로젝트로 판정하고 라우팅·스코프 조회 전에 멈춘다(과제 20)', async () => {
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({ projectId: 'p1', message: '이번 주 회의 알려줘', history: [] }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED, code: 'MODULE_DISABLED' })
+    expect(requireSessionModule).toHaveBeenCalledWith('p1', 'chatbot')
+    expect(router.routeChatRequest).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+  it('화면 문맥의 프로젝트가 우선이다 — pageContext.projectId 로 판정(과제 20, P23)', async () => {
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({
+      projectId: null, message: '이번 주 회의 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul' },
+    }))
+    expect(res.status).toBe(404)
+    expect(requireSessionModule).toHaveBeenCalledWith('p1', 'chatbot')
+  })
+  it('프로젝트 힌트가 없으면 세션 유일 워크스페이스 — 강등(legacy 501) 경로도 관문을 지난다(과제 20, P23)', async () => {
+    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({
+      projectId: null, message: '도와줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul' },
+    }))
+    expect(res.status).toBe(404)
+    expect(requireSessionModule).toHaveBeenCalledWith(null, 'chatbot')
+  })
+  it('env 로 꺼져 있으면 관문 전에 501(강등 신호 유지 — 과제 20)', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'false')
+    expect((await POST(request({ projectId: 'p1', message: 'x', history: [] }))).status).toBe(501)
+    expect(requireSessionModule).not.toHaveBeenCalled()
   })
 
   it('returns 501 when the explicit v2 kill switch is off', async () => {

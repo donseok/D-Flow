@@ -6,6 +6,8 @@ import { CURRENT_INDEX_VERSION } from '@/lib/ai/index/content'
 import { INDEX_BACKFILL_DOMAINS } from '@/lib/ai/index/backfill'
 import { getActorViewState } from '@/lib/authz'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { decideSearchAccess } from '@/lib/domain/searchAccess'
 import { fuseSearchResults, preferBodyChunk } from '@/lib/domain/searchFusion'
 import type { SupabaseKnowledgeClient } from '@/lib/ai/index/pgvector'
@@ -30,6 +32,9 @@ export async function GET(request: NextRequest) {
   const scope = await createSupabaseAccessScopeResolver(admin).resolve(actor.userId)
   const access = decideSearchAccess(projectId, scope)
   if (!access.ok) return NextResponse.json({ error: access.reason }, { status: access.status })
+  // wiki 관문 — 접근 판정이 확정한 한 프로젝트로(decideSearchAccess 는 요청 하나만 넘긴다)
+  const mod = await requireModule({ projectId: access.projectIds[0] }, 'wiki')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   const counts = await Promise.all(INDEX_BACKFILL_DOMAINS.map(async domain => {
     const { count, error } = await admin
@@ -73,6 +78,9 @@ export async function POST(request: NextRequest) {
   // 이 판정이 유일한 관문이다 — ai_documents 의 RLS 는 authenticated using (true) 다.
   const access = decideSearchAccess(projectId, scope)
   if (!access.ok) return NextResponse.json({ error: access.reason }, { status: access.status })
+  // wiki 관문 — 접근 판정이 확정한 한 프로젝트로(decideSearchAccess 는 요청 하나만 넘긴다)
+  const mod = await requireModule({ projectId: access.projectIds[0] }, 'wiki')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   if (!query) return NextResponse.json({ results: [], degraded: false })
 

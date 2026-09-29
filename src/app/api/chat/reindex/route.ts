@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAdmin } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { ingestProject } from '@/lib/ai/ingest'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
 
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g.error) })
+  // chatbot 관문 — 가드 뒤(정본 §3.2.4)
+  const mod = await requireModule({ projectId }, 'chatbot')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   try {
     const result = await ingestProject(projectId)

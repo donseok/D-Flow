@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +15,8 @@ vi.mock('@/lib/ai/llm', () => ({ generateAnswer: mocks.generateAnswer }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
 
 import { POST } from '@/app/api/wiki/summarize/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 const OTHER = '22222222-2222-2222-2222-222222222222'
@@ -33,6 +35,24 @@ beforeEach(() => {
   mocks.getActorViewState.mockResolvedValue({ actor: { userId: 'u1' }, degraded: false })
   mocks.resolveScope.mockResolvedValue({ ok: true, scope: { allowedProjectIds: [PROJECT] } })
   mocks.generateAnswer.mockResolvedValue('MES 권한은 팀장 승인 후 IT팀이 발급합니다. [1]')
+})
+
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
+
+describe('POST /api/wiki/summarize — wiki 모듈 관문(과제 20)', () => {
+  it('wiki 모듈이 꺼지면 404 — LLM 미호출', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({ projectId: PROJECT, q: '권한', sources: ONE_SOURCE }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT }, 'wiki')
+    expect(mocks.generateAnswer).not.toHaveBeenCalled()
+  })
+  it('허용 밖 프로젝트는 모듈 판정 전에 403', async () => {
+    expect((await POST(request({ projectId: OTHER, q: '권한', sources: ONE_SOURCE }))).status).toBe(403)
+    expect(requireModule).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/wiki/summarize', () => {

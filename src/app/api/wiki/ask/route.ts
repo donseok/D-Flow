@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { createSupabaseWikiRepository } from '@/lib/repositories/supabase/wiki'
 import { wikiTopicHref } from '@/lib/ai/chat/deep-links'
 import { ilikeOrPattern } from '@/lib/domain/minutes'
@@ -273,6 +275,9 @@ export async function POST(req: NextRequest) {
   if (!scope.scope.allowedProjectIds.includes(projectId)) {
     return NextResponse.json({ error: '이 프로젝트를 조회할 수 없습니다.' }, { status: 403 })
   }
+  // wiki 관문 — 스코프가 허용한 그 프로젝트로(권한 판정 뒤, 저장소 조회 앞)
+  const mod = await requireModule({ projectId }, 'wiki')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
 
   const repository = createSupabaseWikiRepository(sb)
   const kind = kindFromQuestion(question)

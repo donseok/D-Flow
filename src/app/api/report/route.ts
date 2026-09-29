@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { denyStatus } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectRoster } from '@/lib/data/members'
 import { getAttendanceRecords } from '@/lib/data/attendance'
@@ -79,6 +81,9 @@ export async function GET(req: NextRequest) {
     const weekStart = mondayIso(week) // 임의 날짜 → 월요일 정규화(스펙 §7)
     const target = await resolveReportProject(projectId)
     if (!target.ok) return target.res
+    // 주간업무 시트만 weekly 관문(P4) — 기본 갈래(WBS 화면의 현황 보고서)는 core 라 부르지 않는다
+    const mod = await requireModule({ projectId }, 'weekly')
+    if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
     const { project } = target
     const sheet = await getWeeklySheet(projectId, weekStart)
     const hasContent = sheet?.rows.some(r =>

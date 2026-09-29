@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { trackingEnabled, usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
 import { extractProjectId, normalizeUsagePath, resolveMenuKey } from '@/lib/domain/usageMenu'
 import {
@@ -48,12 +49,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad event path' }, { status: 400 })
   }
 
+  // usage 모듈(P19) — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 기록하지 않고 200(404 면 트래커가 화면 전환마다 오류를 남긴다).
+  // service_role 클라이언트는 관문 뒤에 만든다(이 파일 테스트의 "게이트 전 admin 미생성" 규칙)
+  const projectId = extractProjectId(path)
+  const mod = projectId ? await requireModule({ projectId }, 'usage') : await requireSessionModule(null, 'usage')
+  if (!mod.ok) return NextResponse.json({ ok: true, skipped: 'module_disabled' })
+
   const admin = createAdminClient()
   const legacyRow = {
     user_id: uid,
     menu_key: resolveMenuKey(path),
     path: normalizeUsagePath(path),
-    project_id: extractProjectId(path),
+    project_id: projectId,
   }
   const { error } = await admin.from('usage_events').insert({
     ...legacyRow,

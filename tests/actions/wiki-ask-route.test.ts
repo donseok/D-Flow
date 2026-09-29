@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -21,6 +21,8 @@ vi.mock('@/lib/repositories/supabase/wiki', () => ({
 }))
 
 import { POST } from '@/app/api/wiki/ask/route'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { wikiAskTokens } from '@/lib/domain/wikiAsk'
 
 const request = (body: unknown) => new Request('http://localhost/api/wiki/ask', {
@@ -61,6 +63,27 @@ beforeEach(() => {
   mocks.searchWikiKnowledge.mockResolvedValue({
     ok: true,
     data: { items: [record], scanTruncated: false },
+  })
+})
+
+// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
+
+describe('Wiki Ask — wiki 모듈 관문(과제 20)', () => {
+  it('wiki 모듈이 꺼지면 404 이고 저장소를 부르지 않는다 — 스코프 판정 뒤', async () => {
+    mocks.resolve.mockResolvedValue({ ok: true, scope: { allowedProjectIds: ['project-1'], capabilities: ['wiki:read'] } })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await POST(request({ projectId: 'project-1', question: '결정 사항은?' }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'project-1' }, 'wiki')
+    expect(mocks.searchWikiKnowledge).not.toHaveBeenCalled()
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it('스코프 밖 프로젝트는 모듈 판정 전에 403 — 권한이 관문보다 먼저다', async () => {
+    const res = await POST(request({ projectId: 'project-2', question: '결정 사항은?' }))
+    expect(res.status).toBe(403)
+    expect(requireModule).not.toHaveBeenCalled()
   })
 })
 
