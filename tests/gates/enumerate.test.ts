@@ -21,6 +21,7 @@ function entryProblems(key: string, e: GateEntry, kind: 'action' | 'route'): str
     if (kind === 'route' && !e.delegatedTo) out.push(`${key}: 모듈 라우트는 delegatedTo 필수(P15)`)
   } else if (e.deny !== undefined || e.delegatedTo || e.delegatedStatic !== undefined) out.push(`${key}: module null 항목에 deny·delegatedTo·delegatedStatic 이 있다`)
   // null 항목의 sample 은 허용한다 — 가드 거부 실행(deny.test)이 가드 앞 검증을 지나게
+  if (e.target !== undefined && (kind !== 'action' || e.module === null || !e.note)) out.push(`${key}: target 은 note 가 있는 모듈 액션 항목에만(판정 대상 덮어쓰기)`)
   if (e.delegatedStatic !== undefined && (kind !== 'route' || e.delegatedStatic.length <= 3)) out.push(`${key}: delegatedStatic 은 라우트 모듈 항목의 사유(3자 초과)`)
   return out
 }
