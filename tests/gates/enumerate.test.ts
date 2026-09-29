@@ -24,6 +24,10 @@ function entryProblems(key: string, e: GateEntry, kind: 'action' | 'route'): str
   } else if (e.deny !== undefined || e.delegatedTo || e.delegatedStatic !== undefined) out.push(`${key}: module null 항목에 deny·delegatedTo·delegatedStatic 이 있다`)
   // null 항목의 sample 은 허용한다 — 가드 거부 실행(deny.test)이 가드 앞 검증을 지나게
   if (e.target !== undefined && (kind !== 'action' || e.module === null || !e.note)) out.push(`${key}: target 은 note 가 있는 모듈 액션 항목에만(판정 대상 덮어쓰기)`)
+  // 작성자·주최자 분기 — note 의 '관리자 또는 작성자|주최자' 와 ownerBranch 는 짝이다(한쪽만 있으면 deny 하네스가 작성자 분기를 달리지 않는다)
+  const ownerNote = /관리자 또는 (작성자|주최자)/.test(e.note ?? '')
+  if (ownerNote !== (e.ownerBranch !== undefined)) out.push(`${key}: note '관리자 또는 작성자·주최자' 와 ownerBranch 는 함께 둔다`)
+  if (e.ownerBranch !== undefined && (kind !== 'action' || e.module === null || e.ownerBranch.length <= 3)) out.push(`${key}: ownerBranch 는 모듈 액션 항목의 사유(3자 초과)`)
   if (e.delegatedStatic !== undefined && (kind !== 'route' || e.delegatedStatic.length <= 3)) out.push(`${key}: delegatedStatic 은 라우트 모듈 항목의 사유(3자 초과)`)
   return out
 }

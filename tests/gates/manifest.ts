@@ -14,6 +14,8 @@
 // target: 모듈 판정의 대상(deny 하네스가 그 범위에서만 모듈을 끈다 — 틀린 범위의 관문은 통과해 FAIL). 기본은 sample 에서 파생한다 — 프로젝트 id(P)가
 // 있으면 project, 행 id(U)만 있으면 row(행의 프로젝트·워크스페이스), 둘 다 없으면 session(세션 유일 워크스페이스). 행 id 를 받지만 판정은 세션인
 // 항목만 적는다(회의록 폴더 넷·일괄 지정 — P13·P28).
+// ownerBranch: '관리자 또는 작성자·주최자' 헬퍼를 지나는 모듈 액션의 작성자 판정 — deny 하네스가 관리자 거부(멤버 행위자, ROW.created_by 가 그
+// userId) 상태로 모듈을 꺼서 작성자 분기도 관문을 지나는지 본다(B5 F1-14·F1-15). note 의 '관리자 또는 작성자|주최자' 와 짝이다.
 import type { ModuleId } from '@/lib/modules/defaults'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
@@ -28,6 +30,7 @@ export interface GateEntry {
   delegatedStatic?: string
   adminBeforeGuard?: string
   target?: 'project' | 'row' | 'session'
+  ownerBranch?: string
 }
 export const NOTE_REQUIRED: ReadonlySet<Guard> = new Set<Guard>(['session', 'public', 'cronSecret', 'minutesSecret'])
 
@@ -50,7 +53,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── agentHub — 허브(agents)
   [`${A('agentHub')}#refreshAgentHub`]: { guard: 'projectMember', module: 'agents', sample: [P] },
   [`${A('agentHub')}#applyHubDelegations`]: { guard: 'projectMember', module: 'agents', sample: [P, [{ itemId: U, delegated: true }]] },   // 길이 0 은 가드 앞 검증에서 막힌다
-  [`${A('agentHub')}#runHubProcessOp`]: { guard: 'projectMember', module: 'agents', sample: [P, { kind: 'unapprove', orderId: U }] },   // isProcessOp 가 가드 앞에서 본다
+  [`${A('agentHub')}#runHubProcessOp`]: { guard: 'projectMember', module: 'agents', sample: [P, { kind: 'stop', orderId: U }] },   // isProcessOp 가 가드 앞에서 본다. 내부 관문이 없는 갈래(stop)로 외곽 관문을 문다 — unapprove 는 loadOrderForReview 의 내부 관문이 대신 거부해 외곽 관문을 증명하지 못한다(B5 T17-I1)
   // ── agentSeatmap — 전역 좌석표(projectId 가 없으면 세션 유일 워크스페이스)
   [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents — 층은 getSeatmap 이 거른다', sample: ['all'] },
   // ── agentTokens — 계정 단위 PAT(P19)
@@ -99,8 +102,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issues', sample: [P, 'all'] },
   // ── issueAttachments
   [`${A('issueAttachments')}#listIssueAttachments`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트', sample: [U] },
-  [`${A('issueAttachments')}#recordIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(requireIssueEditable)', sample: [U, { fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }] },
-  [`${A('issueAttachments')}#removeIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U] },
+  [`${A('issueAttachments')}#recordIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(requireIssueEditable)', sample: [U, { fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }], ownerBranch: 'requireIssueEditable — issues.created_by' },
+  [`${A('issueAttachments')}#removeIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'requireIssueEditable(첨부 행의 이슈) — issues.created_by' },
   // ── issueUpdates
   [`${A('issueUpdates')}#listIssueUpdates`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트', sample: [U] },
   [`${A('issueUpdates')}#addIssueUpdate`]: { guard: 'projectMember', module: 'issues', sample: [U, { body: 'b', category: null, mentionedMemberIds: [] }] },
@@ -113,9 +116,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issues')}#createIssue`]: { guard: 'projectMember', module: 'issues', sample: [P, {}] },
   [`${A('issues')}#prepareMinuteIssueDraft`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}] },
   [`${A('issues')}#createIssueFromMinuteBlock`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}, {}] },
-  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate)', sample: [U, {}] },
+  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate)', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   [`${A('issues')}#updateIssueProgress`]: { guard: 'projectMember', module: 'issues', sample: [U, {}] },
-  [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U] },
+  [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   // ── llmConfig — 플랫폼
   [`${A('llmConfig')}#maskToken`]: nul('public', '순수 문자열 가림 — 서버 액션으로 노출된 순수 함수(데이터 없음)'),
   [`${A('llmConfig')}#listLlmProfiles`]: nul('superuser'),
@@ -126,13 +129,13 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('llmConfig')}#saveLlmConfig`]: nul('superuser'),
   [`${A('llmConfig')}#testLlmConnection`]: nul('superuser'),
   // ── meetingNotify
-  [`${A('meetingNotify')}#notifyMeetingSaved`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, 'created', []] },
+  [`${A('meetingNotify')}#notifyMeetingSaved`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, 'created', []], ownerBranch: '관리자 가드 거부 뒤 getActor 로 합류 — 주최자 비교는 관문 뒤' },
   // ── meetings
   [`${A('meetings')}#createMeeting`]: { guard: 'projectMember', module: 'meetings', sample: [P, {}] },
-  [`${A('meetings')}#updateMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자(adminOrOwnerGate)', sample: [U, {}] },
-  [`${A('meetings')}#deleteMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U] },
-  [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []] },
-  [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'] },
+  [`${A('meetings')}#updateMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자(adminOrOwnerGate)', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
+  [`${A('meetings')}#deleteMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
+  [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
+  [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'], ownerBranch: 'occurrenceGate → adminOrOwnerGate' },
   [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '전역 내 회의 — 세션 유일 워크스페이스, 행은 getMyMeetings 가 거른다', sample: ['2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [] } },
   [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: null },
   // ── minutes — 워크스페이스 모듈(행의 워크스페이스 / 새 회의록은 대상 / 행 없는 목록·폴더는 세션 유일 워크스페이스)

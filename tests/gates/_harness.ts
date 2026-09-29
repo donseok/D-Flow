@@ -7,12 +7,14 @@ import { ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { moduleDef } from '@/lib/modules/registry'
-import { makeAdminActor, WS } from '../fixtures/actor'
+import { makeAdminActor, makeMemberActor, WS } from '../fixtures/actor'
 
 export const U = '00000000-0000-0000-7e57-000000001431'
 export const P = '00000000-0000-0000-7e57-000000001432'
 export const W = WS
 export const ACTOR = makeAdminActor(P, { userId: 'u-gate', workspaceRoles: new Map([[WS, 'admin']]) })
+/** 관리자가 아닌 멤버(같은 userId) — 관리자 거부 모드의 행위자. ROW.created_by 가 이 userId 라 작성자·주최자 판정이 성립한다 */
+export const MEMBER_ACTOR = makeMemberActor(P, [], { userId: 'u-gate' })
 /** 가드를 통과한 뒤 관문까지 가는 동안 액션이 읽는 행 — 필드는 넉넉히(관문 뒤는 거부 경로라 쓰이지 않는다) */
 export const ROW: Record<string, unknown> = {
   id: U, project_id: P, workspace_id: W, wbs_item_id: U, status: 'reported', created_by: 'u-gate', enabled: true, archived_at: null,
@@ -21,8 +23,9 @@ export const ROW: Record<string, unknown> = {
 /** 표에 따라 달라야 가드까지 가는 행 — 워크스페이스 팀은 project_id 가 null 이다(updateTeam 이 프로젝트 팀을 ERR_MISSING 으로 거른다) */
 const TABLE_ROWS: Readonly<Record<string, Record<string, unknown>>> = { teams: { project_id: null } }
 
-/** pass = 가드 통과, deny = 세션 없음(모든 가드·행위자·세션 거부), rank = 세션은 있고 네 등급 가드만 거부 */
-export type GuardMode = 'pass' | 'deny' | 'rank'
+/** pass = 가드 통과, deny = 세션 없음(모든 가드·행위자·세션 거부), rank = 세션은 있고 네 등급 가드만 거부,
+ *  notAdmin = 관리자 아닌 멤버(관리자 가드 셋만 거부 — requireProjectMember·행위자·세션은 통과, 행위자는 MEMBER_ACTOR) */
+export type GuardMode = 'pass' | 'deny' | 'rank' | 'notAdmin'
 export const state = { guards: 'pass' as GuardMode, authReads: 0, writes: 0, gateDenied: false, afterDeny: 0, guardDenied: false, afterGuardDeny: 0 }
 /** 가드가 거부를 돌려준 순간부터 DB 접근을 센다 — 거부 뒤 본문이 돌면(가드 fail-open) 0 이 아니다 */
 const guardSaid = <T>(denied: boolean, v: T): T => { if (denied) state.guardDenied = true; return v }
@@ -56,15 +59,18 @@ export function fakeClient(): Record<string, unknown> {
 }
 
 const rankGuard = async () => guardSaid(state.guards !== 'pass', state.guards === 'pass' ? { ok: true, actor: ACTOR } : { ok: false, error: ERR_DENIED })
+/** requireProjectMember — 관리자 거부 모드에서는 멤버로 통과 */
+const memberGuard = async () => (state.guards === 'notAdmin' ? { ok: true, actor: MEMBER_ACTOR } : rankGuard())
 const sessionOk = () => !guardSaid(state.guards === 'deny', state.guards === 'deny')
+const viewer = () => (sessionOk() ? (state.guards === 'notAdmin' ? MEMBER_ACTOR : ACTOR) : null)
 const admins = vi.fn(() => fakeClient())
 export const authzMock = {
-  requireSuperuser: vi.fn(rankGuard), requireWorkspaceAdmin: vi.fn(rankGuard), requireProjectAdmin: vi.fn(rankGuard), requireProjectMember: vi.fn(rankGuard),
+  requireSuperuser: vi.fn(rankGuard), requireWorkspaceAdmin: vi.fn(rankGuard), requireProjectAdmin: vi.fn(rankGuard), requireProjectMember: vi.fn(memberGuard),
   resolveProjectId: vi.fn(async () => ({ ok: true, projectId: P })),
   resolveScope: vi.fn(async () => ({ ok: true, projectId: P, workspaceId: W })),
-  getActor: vi.fn(async () => (sessionOk() ? ACTOR : null)),
-  getActorForView: vi.fn(async () => (sessionOk() ? ACTOR : null)),
-  getActorViewState: vi.fn(async () => ({ actor: sessionOk() ? ACTOR : null, degraded: false })),
+  getActor: vi.fn(async () => viewer()),
+  getActorForView: vi.fn(async () => viewer()),
+  getActorViewState: vi.fn(async () => ({ actor: viewer(), degraded: false })),
   actorFromUser: vi.fn(async () => ACTOR),
 }
 export const authMock = {
@@ -120,6 +126,8 @@ export const harness = {
   denyGuards(): void { state.guards = 'deny' },
   /** 세션은 있고 네 등급 가드만 거부 — 인증을 먼저 보고 등급 가드를 나중에 부르는 액션도 등급 가드까지 간다(F6) */
   denyRanks(): void { state.guards = 'rank' },
+  /** 관리자가 아닌 멤버 — 관리자 가드(프로젝트·워크스페이스·플랫폼)만 거부. '관리자 또는 작성자·주최자' 헬퍼의 작성자 분기로 간다(B5 F1-14·F1-15) */
+  denyAdmin(): void { state.guards = 'notAdmin' },
   /** 이 모듈을 target 에 맞는 범위에서만 끈다(offFor). 목록형은 꺼진 대상을 뺀다 */
   moduleOff(off: ModuleId, target: Target): void {
     const o = offFor(off, target)
@@ -142,6 +150,8 @@ export const harness = {
   guardCalls(): number { return guardMocks().reduce((n, f) => n + f.mock.calls.length, 0) + state.authReads },
   /** 네 등급 가드 가운데 하나가 불렸는가 */
   rankCalls(): number { return rankMocks().reduce((n, f) => n + f.mock.calls.length, 0) },
+  /** 관리자 가드 셋(requireProjectAdmin·requireWorkspaceAdmin·requireSuperuser) 호출 수 */
+  adminGuardCalls(): number { return [authzMock.requireSuperuser, authzMock.requireWorkspaceAdmin, authzMock.requireProjectAdmin].reduce((n, f) => n + f.mock.calls.length, 0) },
   /** 관문 가운데 하나라도 이 모듈을 물었는가 */
   asked(id: ModuleId): boolean { return log.some((c) => c.modules.includes(id)) },
   /** 이 모듈을 물은 관문이 기대 범위에서 거부했는가 — 틀린 범위로 물으면 거짓 */

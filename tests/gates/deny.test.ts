@@ -95,6 +95,27 @@ describe('deny — 모듈 항목(실행)', () => {
   }, 30_000)
 })
 
+const ownerEntries = moduleEntries.filter(([, e]) => e.ownerBranch !== undefined)
+describe('deny — 작성자·주최자 분기(관리자 거부 + 모듈 끔, B5 F1-14·F1-15)', () => {
+  it('ownerBranch 항목이 있다(이슈 넷·회의 다섯)', () => { expect(ownerEntries.length).toBeGreaterThanOrEqual(9) })
+  it.each(ownerEntries)('%s — 관리자가 아닌 작성자·주최자도 관문을 지나고, 모듈을 끄면 거부 값이며 쓰지 않는다', async (key, e) => {
+    const fn = await load(key)
+    const target = targetOf(e)
+    for (const off of listOf(e.module)) {
+      harness.reset(); harness.denyAdmin(); harness.moduleOff(off, target)
+      const r = await fn(...(e.sample ?? []))
+      const at = `${key} off=${off} (관리자 거부·작성자) — ${harness.gateLog()}`
+      expect(harness.adminGuardCalls(), `관리자 가드를 부르지 않았다 — 작성자 분기를 달리지 못했다: ${at}`).toBeGreaterThan(0)
+      if ('deny' in e) expect(r, at).toEqual(e.deny)
+      else expect(r, at).toMatchObject({ ok: false, error: ERR_MODULE_DISABLED })
+      expect(harness.asked(off), `작성자 분기가 ${off} 를 묻지 않았다: ${at}`).toBe(true)
+      expect(harness.deniedBy(off), `관문이 기대 범위로 ${off} 를 묻지 않았다: ${at}`).toBe(true)
+      expect(harness.writes(), `관문 앞에서 썼다(P17): ${at}`).toBe(0)
+      expect(harness.afterDeny(), `관문이 거부한 뒤 DB 에 닿았다: ${at}`).toBe(0)
+    }
+  }, 30_000)
+})
+
 describe('deny — 모듈 항목(정적)', () => {
   it('모듈 항목(덮은 파일)은 관문을 부르고, 그 호출은 판정 모듈의 import 이며 결과를 조건으로 본다(결과를 버린 관문 금지)', () => {
     const bad = moduleEntries.flatMap(([key]) => {
