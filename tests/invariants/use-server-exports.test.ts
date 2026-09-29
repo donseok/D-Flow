@@ -5,18 +5,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
+import { hasModifier, isUseServerModule, parse } from './_ast'
 import { walk } from './_walk'
 
 const ROOT = join(process.cwd(), 'src')
-
-function isUseServerModule(sf: ts.SourceFile): boolean {
-  const first = sf.statements[0]
-  return !!first && ts.isExpressionStatement(first) && ts.isStringLiteral(first.expression)
-    && first.expression.text === 'use server'
-}
-
-const hasModifier = (node: ts.Node, kind: ts.SyntaxKind) =>
-  ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some(m => m.kind === kind)
 
 /** 런타임 값이 남는 export 문. 허용: `export async function`, `export type`·`export interface`, 타입만 담은 `export { type … }`. */
 function valueExports(sf: ts.SourceFile): string[] {
@@ -35,14 +27,11 @@ function valueExports(sf: ts.SourceFile): string[] {
     if (ts.isExportAssignment(s)) { report(s); continue }
     if (!hasModifier(s, ts.SyntaxKind.ExportKeyword)) continue
     if (ts.isTypeAliasDeclaration(s) || ts.isInterfaceDeclaration(s)) continue
-    if (ts.isFunctionDeclaration(s) && hasModifier(s, ts.SyntaxKind.AsyncKeyword)) continue
+    if (ts.isFunctionDeclaration(s) && hasModifier(s, ts.SyntaxKind.AsyncKeyword) && !hasModifier(s, ts.SyntaxKind.DefaultKeyword)) continue
     report(s)
   }
   return bad
 }
-
-const parse = (name: string, text: string) =>
-  ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, name.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
 
 describe("'use server' 모듈의 export", () => {
   it('판정기: 값 export 는 잡고 async 함수·타입은 통과시킨다', () => {
@@ -63,9 +52,10 @@ describe("'use server' 모듈의 export", () => {
       'export { local }',
       "export * from './other'",
       'export default local',
+      'export default async function named() {}',
     ].join('\n'))
     expect(isUseServerModule(sf)).toBe(true)
-    expect(valueExports(sf).map(v => v.split(':')[0])).toEqual(['7', '10', '11', '12', '14', '15', '16'])
+    expect(valueExports(sf).map(v => v.split(':')[0])).toEqual(['7', '10', '11', '12', '14', '15', '16', '17'])
     expect(isUseServerModule(parse('y.ts', "// 주석\n'use server'\nexport const X = 1"))).toBe(true)
     expect(isUseServerModule(parse('z.ts', "'use client'\nexport const X = 1"))).toBe(false)
   })
