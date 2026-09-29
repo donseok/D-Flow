@@ -9,6 +9,7 @@ import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/l
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import { applyDelegation, requireDelegationRight, type AgentDelegationResult } from '@/lib/agent/delegation'
+import { requireModule } from '@/lib/modules/gate'
 // 결과 타입은 명세 패널 등 화면이 이 모듈에서 import 한다 — 본체를 옮겨도 계약 위치는 유지(타입 재export 는 런타임에 없다).
 export type { AgentDelegationResult } from '@/lib/agent/delegation'
 
@@ -192,6 +193,8 @@ export async function updateAgentPrompt(
   // 자격은 위임 토글과 같다(허브 스펙 §3) — 관리자 또는 담당자 본인.
   const right = await requireDelegationRight(itemId)
   if (!right.ok) return { ok: false, error: right.error }
+  const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
+  if (!mod.ok) return { ok: false, error: mod.error }
   const admin = createAdminClient()
   const { data: updated, error } = await admin
     .from('wbs_items')
@@ -214,6 +217,8 @@ export async function setAgentDelegation(
   if (!isUuidLike(itemId) || typeof delegated !== 'boolean') return { ok: false, error: '잘못된 요청입니다.' }
   const right = await requireDelegationRight(itemId)
   if (!right.ok) return { ok: false, error: right.error }
+  const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
+  if (!mod.ok) return { ok: false, error: mod.error }
   const r = await applyDelegation(createAdminClient(), {
     itemId, projectId: right.projectId, delegated, actorUserId: right.actor.userId, isAdmin: right.isAdmin,
   })

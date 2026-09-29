@@ -1,6 +1,7 @@
 'use server'
 // 에이전트 허브 액션 — 재조회와 위임 묶음 저장. 판정은 authz 가드로만, 본체는 src/lib/agent/delegation.ts.
 import { requireProjectMember } from '@/lib/authz'
+import { requireModule } from '@/lib/modules/gate'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { isUuidLike, resumeHostFromClaimLabel } from '@/lib/domain/agentWork'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -24,6 +25,8 @@ export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hu
   if (!isUuidLike(projectId)) return { ok: false, error: ERR_BAD }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'agents')                    // 스펙 §4.2 — 가드 뒤·본문 앞(P17)
+  if (!mod.ok) return { ok: false, error: mod.error }
   try {
     return { ok: true, hub: await getAgentHub(projectId, { userId: g.actor.userId, isAdmin: isProjectAdmin(g.actor, projectId) }) }
   } catch (e) {
@@ -64,6 +67,8 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'agents')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const wanted = new Map<string, boolean>()
   for (const c of changes) wanted.set(c.itemId, c.delegated)
@@ -272,6 +277,8 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   // 중단·재개 요청은 아래서 별도로 좁힌다 — 남의 PC 러너를 세우거나 되살리는 관리 행위라 일반 멤버에겐 안 연다.
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'agents')
+  if (!mod.ok) return { ok: false, error: mod.error }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const admin = createAdminClient()
 

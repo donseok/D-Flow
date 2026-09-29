@@ -6,6 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { backfillProjectOrders } from '@/lib/agent/ensureOrder'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
+import { requireModule } from '@/lib/modules/gate'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ERR_REPORT_STALE, isUuidLike } from '@/lib/domain/agentWork'
@@ -25,6 +26,12 @@ import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/a
  */
 
 type ActionResult = { ok: boolean; error?: string; warning?: string; stale?: true }
+
+/** 승인 계열의 agents 관문(스펙 §4.2) — 가드를 지난 주문의 프로젝트로 판정한다. 옛 토글(setAgentProjectEnabled)은 이 관문 밖이다(P8) */
+async function withAgents<T extends { ok: true }>(projectId: string, pass: T): Promise<T | { ok: false; error: string }> {
+  const mod = await requireModule({ projectId }, 'agents')
+  return mod.ok ? pass : { ok: false, error: mod.error }
+}
 
 /**
  * 에이전트 중지/재개(2026-08-24 — 킬스위치). "루프 등록"은 사라졌다: 위임 체크·dev_workflow ON·
@@ -91,11 +98,11 @@ async function loadOrderForAdmin(orderId: string): Promise<
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
     if (!g.ok) return { ok: false, error: g.error }
-    return { ok: true, order: row, actor: { userId: g.actor.userId } }
+    return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId } })
   }
   const right = await requireCompletionApprover(row.wbs_item_id, row.project_id, { claimedByUserId: row.claimed_by_user_id })
   if (!right.ok) return { ok: false, error: right.error }
-  return { ok: true, order: row, actor: right.actor }
+  return withAgents(row.project_id, { ok: true as const, order: row, actor: right.actor })
 }
 
 /**
@@ -122,15 +129,15 @@ async function loadOrderForReview(orderId: string): Promise<
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
     if (!g.ok) return { ok: false, error: g.error }
-    return { ok: true, order: row, actor: { userId: g.actor.userId } }
+    return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId } })
   }
   const right = await requireDelegationRight(row.wbs_item_id)
-  if (right.ok) return { ok: true, order: row, actor: { userId: right.actor.userId } }
+  if (right.ok) return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: right.actor.userId } })
   // 관리자도 리프 담당자 본인도 아니다 — 서브트리 관리자인지 추가로 본다. 최종 거부는
   // requireDelegationRight 의 사유를 그대로 쓴다(ERR_NOT_ASSIGNEE — 기존 계약·테스트 유지).
   const subtree = await requireSubtreeManagerOrAdmin(row.wbs_item_id, row.project_id)
   if (!subtree.ok) return { ok: false, error: right.error }
-  return { ok: true, order: row, actor: subtree.actor }
+  return withAgents(row.project_id, { ok: true as const, order: row, actor: subtree.actor })
 }
 
 /**
@@ -376,8 +383,11 @@ export async function getAgentOrderForItem(itemId: string): Promise<
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('project_id').eq('id', itemId).maybeSingle()
   if (itemErr) return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
   if (!item) return { ok: false, error: '대상을 찾을 수 없습니다.' }
-  const g = await requireProjectMember((item as { project_id: string }).project_id)
+  const projectId = (item as { project_id: string }).project_id
+  const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  const mod = await requireModule({ projectId }, 'agents')
+  if (!mod.ok) return { ok: true, order: null, priorOrders: [], projectId }   // 명세 패널은 core 화면 — 오류 대신 '주문 없음'(P19)
 
   // limit(1) 을 쓰지 않는다 — 한 항목에 주문이 여러 개 쌓인다. approved 는 "활성 주문" 검사
   // 어디에도 안 들어가므로(ensureOrder Step4·wbsImport:361·unique index) 승인된 주문은 항목을
@@ -391,7 +401,6 @@ export async function getAgentOrderForItem(itemId: string): Promise<
   const rows = (orders ?? []) as Array<{
     id: string; status: string; claimed_by: string | null; claimed_at: string | null; updated_at: string
   }>
-  const projectId = (item as { project_id: string }).project_id
   if (rows.length === 0) return { ok: true, order: null, priorOrders: [], projectId }
   const row = rows[0]
   const priorOrders: AgentOrderBrief[] = rows.slice(1)

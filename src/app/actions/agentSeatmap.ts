@@ -3,6 +3,7 @@
 import { getActorForView } from '@/lib/authz'
 import { canViewAgents } from '@/lib/authz/agentsAccess'
 import { isProjectMember } from '@/lib/domain/authz'
+import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { getSeatmap, type SeatmapOptions } from '@/lib/data/agentSeatmap'
 import { SEATMAP_SCOPES, type Seatmap, type SeatmapScope } from '@/lib/domain/seatmap'
 import { UUID_RE } from '@/lib/domain/validate'
@@ -21,6 +22,10 @@ export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: s
     if (!isProjectMember(actor, projectId)) return { ok: false, error: '권한이 없습니다.' }
     opts.projectId = projectId
   }
+  // 프로젝트 층이면 그 프로젝트, 전체 좌석표면 세션 유일 워크스페이스(P13). 층 행은 getSeatmap 이 거른다(과제 12).
+  // 프로젝트 층의 멤버 판정(가드)을 지난 뒤에 둔다 — 남의 프로젝트·형식이 틀린 id 는 설정을 읽기 전에 기존 문구로 끝난다
+  const mod = opts.projectId ? await requireModule({ projectId: opts.projectId }, 'agents') : await requireSessionModule(null, 'agents')
+  if (!mod.ok) return { ok: false, error: mod.error }
   try {
     return { ok: true, seatmap: await getSeatmap(actor, Date.now(), scope, opts) }
   } catch (e) {
