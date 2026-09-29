@@ -1,15 +1,17 @@
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { orderPriorityFromLabel } from '@/lib/domain/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
+import { moduleState, requireModule } from '@/lib/modules/gate'
 
 /**
  * §2.8 재정의(2026-08-13): dev_workflow ON 인 리프에는 주문이 존재한다 — 배정은 조건이 아니다.
  * 멱등: 활성 주문(ready/claimed/reported) 부분 유니크(0077)가 DB 보증, 여기는 선행조회 + 23505 수렴.
- * 발행 조건은 기존 가드 그대로: agent_projects.enabled · 리프 · 호출부가 관리자 권한 경로.
+ * 발행 조건은 기존 가드 그대로: agent_projects.enabled ∧ agents 모듈(스펙 §4.4) · 리프 · 호출부가 관리자 권한 경로.
+ * agentsOn — 호출자가 이미 모듈을 판정했으면(백필) 넘겨 리프마다의 판정을 건너뛴다.
  */
 export async function ensureOrderForWorkflowLeaf(
   admin: AdminClient,
-  args: { projectId: string; wbsItemId: string; actorUserId: string; instructions?: string },
+  args: { projectId: string; wbsItemId: string; actorUserId: string; instructions?: string; agentsOn?: boolean },
 ): Promise<
   | { ok: true; created: boolean; reason?: 'not_agent_project' | 'not_leaf' | 'active_exists' | 'not_workflow' }
   | { ok: false; error: string }
@@ -26,6 +28,9 @@ export async function ensureOrderForWorkflowLeaf(
   if (!reg || (reg as { enabled: boolean }).enabled !== true) {
     return { ok: true, created: false, reason: 'not_agent_project' }
   }
+  // 두 원천 AND(스펙 §4.4) — 호출자가 한 번 판정했으면(백필) 건너뛴다. 판정 실패는 발행하지 않는다(fail-closed)
+  const agentsOn = args.agentsOn ?? (await requireModule({ projectId }, 'agents', { client: admin })).ok
+  if (!agentsOn) return { ok: true, created: false, reason: 'not_agent_project' }
 
   // Step 2: 항목 조회 — priority 라벨과 설명 정보, 담당자 ID, dev_workflow 게이트.
   // 주문 priority = 항목 priority 라벨의 정수 매핑(계약 v2.0: critical=100/high=50/medium=10/low=0).
@@ -123,17 +128,20 @@ export async function ensureOrderForWorkflowLeaf(
  * - 행 있음·enabled=true → no-op.
  * - 행 있음·enabled=false → **되살리지 않는다**(`stopped:true`). 설정 페이지의 "에이전트 중지"는
  *   사람이 명시적으로 내린 킬스위치라 위임 체크가 조용히 무력화하면 안 된다. 호출부는 경고로 노출한다.
+ * - moduleOff — agents 모듈이 꺼졌으면 활성해도 발행하지 않는다(두 원천 AND, 스펙 §4.4). stopped 는 사람이 멈춘 것만.
+ *   enabled = 행 enabled ∧ 모듈. 모듈을 뺄 때 행은 고치지 않는다 — 자동 생성(행 없음 → insert)은 모듈이 꺼져도 남는다.
  */
 export async function ensureAgentProject(
   admin: AdminClient,
   args: { projectId: string; actorUserId: string },
-): Promise<{ ok: true; enabled: boolean; activated: boolean; stopped: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; enabled: boolean; activated: boolean; stopped: boolean; moduleOff: boolean } | { ok: false; error: string }> {
   const { data: reg, error: regErr } = await admin
     .from('agent_projects').select('enabled').eq('project_id', args.projectId).maybeSingle()
   if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
+  const moduleOff = !(await requireModule({ projectId: args.projectId }, 'agents', { client: admin })).ok
   if (reg) {
     const enabled = (reg as { enabled: boolean }).enabled === true
-    return { ok: true, enabled, activated: false, stopped: !enabled }
+    return { ok: true, enabled: enabled && !moduleOff, activated: false, stopped: !enabled, moduleOff }
   }
   const { error: insErr } = await admin
     .from('agent_projects')
@@ -144,11 +152,11 @@ export async function ensureAgentProject(
       const again = await admin.from('agent_projects').select('enabled').eq('project_id', args.projectId).maybeSingle()
       if (again.error) return { ok: false, error: `등록 재조회 실패: ${again.error.message}` }
       const enabled = (again.data as { enabled: boolean } | null)?.enabled === true
-      return { ok: true, enabled, activated: false, stopped: !enabled }
+      return { ok: true, enabled: enabled && !moduleOff, activated: false, stopped: !enabled, moduleOff }
     }
     return { ok: false, error: `프로젝트 활성 실패: ${insErr.message}` }
   }
-  return { ok: true, enabled: true, activated: true, stopped: false }
+  return { ok: true, enabled: !moduleOff, activated: true, stopped: false, moduleOff }
 }
 
 /**
@@ -161,13 +169,17 @@ export async function backfillProjectOrders(
   admin: AdminClient,
   args: { projectId: string; actorUserId: string },
 ): Promise<{ ok: true; created: number; failed: string[] } | { ok: false; error: string }> {
+  // 모듈 판정은 한 번(루프 안 판정 비용 — map-agents J8). 꺼짐이면 발행 0, 판정 불가면 오류로 돌려 호출부가 보이게(3원칙)
+  const state = await moduleState({ projectId: args.projectId }, 'agents', { client: admin })
+  if (state === 'off') return { ok: true, created: 0, failed: [] }
+  if (state === 'unknown') return { ok: false, error: '에이전트 모듈 설정을 확인하지 못했습니다.' }
   const { data: items, error } = await admin
     .from('wbs_items').select('id').eq('project_id', args.projectId).eq('dev_workflow', true)
   if (error) return { ok: false, error: `백필 대상 조회 실패: ${error.message}` }
   let created = 0
   const failed: string[] = []
   for (const it of (items ?? []) as Array<{ id: string }>) {
-    const r = await ensureOrderForWorkflowLeaf(admin, { projectId: args.projectId, wbsItemId: it.id, actorUserId: args.actorUserId })
+    const r = await ensureOrderForWorkflowLeaf(admin, { projectId: args.projectId, wbsItemId: it.id, actorUserId: args.actorUserId, agentsOn: true })
     if (!r.ok) { failed.push(it.id); console.error('[backfill] 주문 보장 실패:', it.id, r.error); continue }
     if (r.created) created += 1
   }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 
@@ -12,6 +12,7 @@ vi.mock('@/lib/authz/buildActor', () => ({ buildActor: mocks.buildActor }))
 import { GET as meGET } from '@/app/api/v1/agent/me/route'
 import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor, WS } from '../fixtures/actor'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const P2 = '22222222-2222-4222-8222-222222222222'
@@ -52,6 +53,8 @@ beforeEach(() => {
   // 기본: 소유자는 WS 의 두 프로젝트를 볼 수 있다(P1·P2 둘 다 내 워크스페이스).
   mocks.actorFromUser.mockResolvedValue(makeActor({ userId: 'u-1', projectWorkspace: new Map([[P1, WS], [P2, WS]]) }))
 })
+// 목록 거르기 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('GET /agent/me', () => {
   it('PAT → 소유자·스코프·contract_version + 멤버인 enabled 프로젝트만', async () => {
@@ -131,5 +134,16 @@ describe('GET /agent/me', () => {
     const res = await meGET(get('legacy-secret'))
     expect(res.status).toBe(400)
     expect((await res.json()).code).toBe('identity_required')
+  })
+
+  it('agents 모듈이 꺼진 프로젝트는 목록에서 빠진다(과제 18 — 스펙 §4.2 목록형, E2E 4단계)', async () => {
+    mocks.actorFromUser.mockResolvedValue(makeActor({
+      userId: 'u-1', projectWorkspace: new Map([[P1, WS]]), projectRoles: new Map<string, ProjectRole>([[P1, 'admin']]),
+    }))
+    useAdmin({ agent_runners: [{ data: RUNNER }, { data: null }], agent_projects: [{ data: [reg(P1, '테스트')] }] })
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([])
+    const body = await (await meGET(get(PAT.token))).json()
+    expect(body.projects).toEqual([])
+    expect(projectsWithModule).toHaveBeenCalledWith([P1], 'agents', { client: expect.anything() })
   })
 })

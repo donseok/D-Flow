@@ -1,9 +1,10 @@
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { isAgentProjectMember, patProjectAllowed, type AgentPrincipal } from '@/lib/agent/externalApi'
 import { myMemberIds } from '@/lib/agent/assignee'
+import { projectsWithModule } from '@/lib/modules/gate'
 
 /**
- * PAT 가 접근 가능한 프로젝트 ID 목록 — enabled agent_projects ∩ 멤버 프로젝트.
+ * PAT 가 접근 가능한 프로젝트 ID 목록 — enabled agent_projects ∩ 멤버 프로젝트 ∩ agents 모듈이 켜진 프로젝트(스펙 §4.4 두 원천 AND).
  * Task 7: GET /work/mine · Task 10·15: /work/mine (claimed/all/assigned 스코프 확장용)
  */
 export async function accessibleProjectIds(
@@ -17,7 +18,7 @@ export async function accessibleProjectIds(
     if (!patProjectAllowed(principal, r.project_id)) continue
     if (await isAgentProjectMember(admin, principal.userId, r.project_id)) out.push(r.project_id)
   }
-  return out
+  return projectsWithModule(out, 'agents', { client: admin })   // 목록형 — agents 가 꺼진 프로젝트는 생략(스펙 §4.2)
 }
 
 /**

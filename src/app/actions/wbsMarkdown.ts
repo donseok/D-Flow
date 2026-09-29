@@ -181,7 +181,7 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
     if (taskCount > 0) {
       const proj = await ensureAgentProject(admin, { projectId, actorUserId: g.actor.userId })
       if (!proj.ok) return { ok: false, error: proj.error }
-      agentStopped = proj.stopped
+      agentStopped = proj.stopped || proj.moduleOff   // 모듈이 꺼져도 주문이 나가지 않는다 — 조용히 0건이 되지 않게 같은 안내
     }
     const result = await runWbsImport(admin, {
       projectId, module: module_, actorUserId: g.actor.userId,

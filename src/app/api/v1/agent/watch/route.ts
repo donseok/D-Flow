@@ -8,6 +8,7 @@ import {
 import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { hasProjectRoleInWorkspace, isProjectMember } from '@/lib/domain/authz'
+import { projectsWithModule, requireModule } from '@/lib/modules/gate'
 
 /**
  * watch — 감시자(팀장 /dflow-team · 단독 /dflow-poll) 존재 신호. 좌석표 v1 스펙 §3-3.
@@ -132,6 +133,10 @@ export async function POST(req: NextRequest) {
       if (!hasProjectRoleInWorkspace(actor, w.workspaceId)) return apiNotFound()
       workspaceId = w.workspaceId
     }
+    // agents 관문(스펙 §4.2 에이전트 API 행) — 권한 판정 뒤·쓰기 앞. 프로젝트 감시자는 그 프로젝트, 프로젝트 없는 감시자는 그 워크스페이스에서
+    // agents 가 유효해야 한다(꺼지면 없는 것과 같은 404). 두 갈래가 한 호출을 지난다. stop 은 위 — 자기 행을 지우는 정리라 관문 앞이다(P19)
+    const gate = await requireModule(projectId ? { projectId } : { workspaceId: workspaceId! }, 'agents', { client: admin })
+    if (!gate.ok) return apiNotFound()
 
     const now = new Date()
     const { error: upErr } = await admin
@@ -148,7 +153,9 @@ export async function POST(req: NextRequest) {
     const { error: gcErr } = await admin
       .from('agent_watchers').delete().lt('last_seen_at', new Date(now.getTime() - STALE_ROW_MS).toISOString())
     if (gcErr) console.error('[agent-api] watch 오래된 행 정리 실패:', gcErr.message)
-    const resume = await loadResumeRequests(admin, principal.userId, projectId)
+    const loaded = await loadResumeRequests(admin, principal.userId, projectId)
+    const onIds = loaded === null ? null : new Set(await projectsWithModule(loaded.map((r) => r.project_id), 'agents', { client: admin }))
+    const resume = loaded === null ? null : loaded.filter((r) => onIds!.has(r.project_id))   // 목록형 — 꺼진 프로젝트의 재개 요청은 싣지 않는다
     return NextResponse.json({
       ok: true,
       expires_at: new Date(now.getTime() + WATCHER_TTL_MS).toISOString(),

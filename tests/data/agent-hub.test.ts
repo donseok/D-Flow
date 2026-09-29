@@ -1,9 +1,11 @@
 // tests/data/agent-hub.test.ts
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 import { fetchAgentHubRows, getAgentHub } from '@/lib/data/agentHub'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const P1 = '0a000000-0000-4000-8000-0000000000a1' // getAgentHub 가 adminFor({ projectId }) 로 스코프를 검사한다 — uuid 여야 한다
@@ -33,6 +35,8 @@ function admin(queues: Record<string, Resp[]>) {
 }
 
 beforeEach(() => vi.clearAllMocks())
+// 모듈 거부 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 const c0 = (calls: ReturnType<typeof admin>['calls'], t: string) => calls.find(x => x.table === t)!
 
 describe('fetchAgentHubRows', () => {
@@ -99,6 +103,13 @@ describe('fetchAgentHubRows', () => {
     const { client } = admin({ agent_projects: [{ data: [] }], projects: [{ data: [{ id: P1, name: 'x' }] }] })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
     expect(rows.agentProject).toBeNull()
+  })
+  it('행이 enabled 여도 agents 모듈이 꺼지면 agentProject.enabled 는 false — 두 원천 AND 의 두 번째 방어선(과제 18)', async () => {
+    const { client } = admin({ agent_projects: [{ data: [{ enabled: true }] }], projects: [{ data: [{ id: P1, name: 'p', workspace_id: WA }] }] })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const rows = await fetchAgentHubRows(client as never, P1, NOW)
+    expect(rows.agentProject).toEqual({ enabled: false })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: P1 }, 'agents', { client })
   })
 })
 

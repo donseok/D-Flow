@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor, makeMemberActor, WS } from '../fixtures/actor'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), actorFromUser: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
@@ -53,6 +55,8 @@ beforeEach(() => {
   // 기본: WS 한 곳 소속 + P1(WS) 명단 member — 프로젝트 없는 감시자도 그 워크스페이스에 역할이 있어야 한다(T13-2·F13)
   mocks.actorFromUser.mockResolvedValue(makeMemberActor(P1, [], { userId: 'u-1' }))
 })
+// 모듈 거부 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('POST /agent/watch', () => {
   it('200 — (user_id, agent) 로 upsert 하고 expires_at = last_seen_at + 70분', async () => {
@@ -157,6 +161,15 @@ describe('POST /agent/watch — 재개 요청 전달(0099)', () => {
     expect(body.resume_requests_error).toBeUndefined()
   })
 
+  it('agents 가 꺼진 프로젝트의 재개 요청은 싣지 않는다 — 목록형(과제 18, 스펙 §4.2)', async () => {
+    const OTHER = { ...ORDER, id: '44444444-4444-4444-8444-444444444442', project_id: P2, wbs_item_id: null }
+    useAdmin({ ...runnerQueues(), agent_work_orders: [{ data: [ORDER, OTHER] }], wbs_items: [{ data: [{ id: 'item-1', code: 'TSK-04-02', name: '주문 상세' }] }] })
+    vi.mocked(projectsWithModule).mockResolvedValueOnce([P1])
+    const body = await (await post({ agent: 'hong/mbp/lead' })).json()
+    expect(body.resume_requests.map((r: { order_id: string }) => r.order_id)).toEqual([ORDER.id])
+    expect(projectsWithModule).toHaveBeenCalledWith([P1, P2], 'agents', { client: expect.anything() })
+  })
+
   it('요청이 없으면 빈 배열이다 — 항목 조회를 부르지 않는다', async () => {
     useAdmin({ ...runnerQueues(), agent_work_orders: [{ data: [] }] })
     const body = await (await post({ agent: 'a' })).json()
@@ -215,5 +228,14 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
     useAdmin(runnerQueues())
     expect((await post({ agent: 'a', project_id: P2, stop: true })).status).toBe(200)
     expect(mocks.actorFromUser).not.toHaveBeenCalled()
+  })
+  it('agents 가 꺼지면 404 이고 upsert 하지 않는다. stop 은 관문 앞이라 정리는 된다(과제 18, P19)', async () => {
+    const calls: Record<string, unknown[]> = {}
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'hong/mbp/lead' })).status).toBe(404)
+    expect(calls['agent_watchers:upsert']).toBeUndefined()
+    useAdmin(runnerQueues(), calls)
+    expect((await post({ agent: 'hong/mbp/lead', stop: true })).status).toBe(200)
   })
 })

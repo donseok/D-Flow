@@ -5,6 +5,7 @@ import { parsePatPrefix, tokenUsable } from '@/lib/domain/agentToken'
 import { hashMatches } from '@/lib/agent/token'
 import { buildActor } from '@/lib/authz/buildActor'
 import { isProjectAdmin, isProjectMember, roleIn, type Actor } from '@/lib/domain/authz'
+import { requireModule } from '@/lib/modules/gate'
 
 /**
  * 에이전트 작업 루프 외부 API 공용 헬퍼 — 스펙 §3.1.
@@ -45,12 +46,14 @@ export function gateAgentApi(req: Request): NextResponse | null {
   return null
 }
 
-/** 등록·enabled 프로젝트만 루프가 열린다(스펙 §1.1-2). 조회 실패는 404 로 위장하지 않고 throw. */
+/** 등록·enabled 프로젝트이고 agents 모듈이 켜졌을 때만 루프가 열린다(스펙 §1.1-2, §4.4 두 원천 AND). 행 조회 실패는 404 로 위장하지 않고 throw.
+ *  행을 먼저 본다 — 꺼진 행은 설정을 읽지 않는다. 모듈 판정은 세션이 없으니 admin 으로(스펙 §4.2 에이전트 API 행) */
 export async function requireAgentProject(admin: AdminClient, projectId: string): Promise<boolean> {
   const { data, error } = await admin
     .from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
   if (error) throw new Error(`agent_projects 조회 실패: ${error.message}`)
-  return !!data && (data as { enabled: boolean }).enabled === true
+  if (!data || (data as { enabled: boolean }).enabled !== true) return false
+  return (await requireModule({ projectId }, 'agents', { client: admin })).ok
 }
 
 /*

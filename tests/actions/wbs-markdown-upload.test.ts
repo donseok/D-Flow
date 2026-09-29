@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 /** wbs.md 웹 업로드 액션 — 미리보기(자동 부착 판정)·적용(runWbsImport 공유 코어).
  *  계약: 스펙 §업로드 경로 2개 — 웹 경로 = 자동 부착 + 확인(미리보기 카드 → [적용/취소]). */
@@ -51,6 +51,8 @@ import { previewWbsUpload, applyWbsUpload } from '@/app/actions/wbsMarkdown'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const PID = 'proj-1'
 const ADMIN = { ok: true as const, actor: { userId: 'u-admin', isSuperuser: false } }
@@ -95,6 +97,8 @@ beforeEach(() => {
   runWbsImport.mockReset()
   cfg.getProjectConfig.mockReset().mockResolvedValue(makeProjectConfig({ 'core.level_labels': SERVER_LABELS }))
 })
+// 모듈 거부 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('previewWbsUpload', () => {
   it('관리자 아님 → 거부, DB 접근 없음', async () => {
@@ -216,6 +220,16 @@ describe('applyWbsUpload', () => {
       projectId: PID, module: 'acme-qa', attachRef: 'acme-skel/SYS-QA', actorUserId: 'u-admin',
       nodes: expect.arrayContaining([expect.objectContaining({ id: 'TSK-QA-JD-01', level: 3, weight: 5 })]),
     }))
+  })
+
+  it('agents 모듈이 꺼져 있으면 행이 활성이어도 agentStopped 로 알린다 — 주문 0건을 조용히 두지 않는다(과제 18)', async () => {
+    db.queues = {
+      wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
+      agent_projects: [{ data: { enabled: true } }],
+    }
+    vi.mocked(requireModule).mockImplementation(async (_s, m) => (m === 'agents' ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+    runWbsImport.mockResolvedValue({ ok: true, upserted: 3, skipped: 0, unmatched: [], nonLeafSkipped: [], ordersCreated: 0 })
+    expect(await applyWbsUpload(PID, PL_MD)).toMatchObject({ ok: true, agentStopped: true })
   })
 
   it('검증 에러 파일 — runWbsImport 를 호출하지 않는다(fail-closed, 클라이언트 신뢰 안 함)', async () => {

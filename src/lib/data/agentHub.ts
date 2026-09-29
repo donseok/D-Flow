@@ -6,6 +6,7 @@ import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import type { OrderRow, WatcherRow } from '@/lib/domain/seatmap'
 import { DONE_WINDOW_MS } from '@/lib/data/agentSeatmap'
 import { personOf } from '@/lib/data/memberSelect'
+import { requireModule } from '@/lib/modules/gate'
 import {
   assembleAgentHub, type AgentHub, type AgentHubRows, type HubItemRow, type HubMemberRow, type HubReportRow,
 } from '@/lib/domain/agentHub'
@@ -28,7 +29,7 @@ function toHubMember(r: Record<string, unknown>): HubMemberRow {
 
 export async function fetchAgentHubRows(admin: AdminClient, projectId: string, nowMs: number): Promise<AgentHubRows> {
   const doneSince = new Date(nowMs - DONE_WINDOW_MS).toISOString()
-  const [items, agentProject, orders, members, projects] = await Promise.all([
+  const [items, agentRow, orders, members, projects, agentsOn] = await Promise.all([
     admin.from('wbs_items').select(HUB_ITEM_COLS).eq('project_id', projectId).then(r => must<HubItemRow[]>('항목', r)),
     admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle().then(r => {
       if (r.error) throw new Error(`[agent-hub] 등록 조회 실패: ${r.error.message}`)
@@ -42,7 +43,10 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
       .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toHubMember)),
     admin.from('projects').select('id, name, workspace_id').eq('id', projectId)
       .then(r => must<Array<{ id: string; name: string; workspace_id: string }>>('프로젝트', r)),
+    // 두 원천 AND(스펙 §4.4)의 두 번째 방어선 — 허브 페이지·액션은 이미 agents 관문으로 닫혔다. 판정 실패는 꺼짐(fail-closed)
+    requireModule({ projectId }, 'agents', { client: admin }).then((r) => r.ok),
   ])
+  const agentProject = agentRow ? { enabled: agentRow.enabled && agentsOn } : null
   const project = projects[0] ?? null
   // 감시자는 이 프로젝트의 워크스페이스로 좁힌다 — 프로젝트 없는(project_id null) 감시자는 워크스페이스 단위라,
   // 필터가 없으면 다른 워크스페이스의 팀장이 이 허브에 떠 있는 것으로 보인다(SP2 §4.2). 워크스페이스를 알려면

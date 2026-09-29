@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { generateAgentToken } from '@/lib/agent/token'
 
@@ -20,6 +20,8 @@ import { axes, roster, rosterRow } from '../fixtures/actorQueues'
 import { profileEq } from '../fixtures/profiles'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError, ERR_CONFIG_INVALID } from '@/lib/settings/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const LEGACY_SECRET = 'legacy-secret'
 const PL = { id: 'u-1', email: 'pl@example.com', user_metadata: {} }
@@ -79,6 +81,8 @@ beforeEach(() => {
   delete process.env.AGENT_API_SECRET
   vi.clearAllMocks()
 })
+// 모듈 거부 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('GET /wbs/structure', () => {
   it('PAT 멤버 → levels + depth≤1(기본) 노드, parent 는 external_ref 로', async () => {
@@ -198,6 +202,22 @@ describe('GET /wbs/structure', () => {
     const { token } = patRow()
     const res = await structureGET(get('', token))
     expect(res.status).toBe(400)
+  })
+
+  it('agents 모듈이 꺼지면 행이 enabled 여도 404 이고 트리를 읽지 않는다(과제 18 — 두 원천 AND)', async () => {
+    const { token, row } = patRow()
+    const admin = useAdmin({
+      agent_runners: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }],
+      project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+      ...axes([PROJECT_ID]),
+      wbs_items: [{ data: TREE }],
+    })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
+    expect(res.status).toBe(404)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT_ID }, 'agents', { client: admin })
+    expect(admin.from).not.toHaveBeenCalledWith('wbs_items')
   })
 })
 

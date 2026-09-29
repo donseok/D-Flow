@@ -134,6 +134,7 @@ function clientProblems(key: string, sites: readonly GateSite[]): string[] {
 /** 위임 파일을 만든 과제가 끝난 것 — 과제 14·18·20·21 이 자기 위임 파일을 더하고 과제 25 가 이 집합과 필터를 지운다(전부) */
 const DELEGATED_READY = new Set<string>([
   'tests/api/issue-analysis-gate.test.ts',   // 과제 14
+  'tests/modules/agents-gate.test.ts',       // 과제 18 — v1 에이전트 11(delegatedStatic)
 ])
 const ready = entries.filter(([, e]) => e.module !== null && DELEGATED_READY.has(e.delegatedTo!))
 const sitesOf = (key: string, names: ReadonlySet<string>) => {
@@ -207,6 +208,30 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(probs('PUT')).toEqual(['x#PUT: 판정이 본문을 지배하지 않는다 — 핸들러 최상위 문에서 늘 도는 판정 호출이 없다(조건·try·단락 평가 안)'])
     expect(probs('PATCH')).toEqual(['x#PATCH: 판정 호출이 없다'])
     expect(probs('DELETE')).toEqual([])
+  })
+  it('try 안의 판정은 catch 가 로그 뒤 고정 응답만 할 때만 최상위다 — 삼키는 catch·일하는 catch·finally·가지 안의 try 는 잡는다(과제 18)', () => {
+    const G = "if (!(await requireAgentProject(admin, p))) return deny"
+    const tsrc = [
+      "import { requireAgentProject } from '@/lib/agent/externalApi'",
+      "import { apiInternalError } from '@/lib/agent/externalApi'",
+      `export async function GET(req) { try { const a = mk(); ${G}; return body(a) } catch (e) { console.error('x', e); return apiInternalError() } }`,
+      `export async function POST(req) { try { ${G} } catch (e) { console.error('x', e) } return body() }`,
+      `export async function PUT(req) { try { ${G}; return body() } catch (e) { await admin.from('t').insert({}); return apiInternalError() } }`,
+      `export async function PATCH(req) { try { ${G}; return body() } catch (e) { return apiInternalError() } finally { body() } }`,
+      `export async function DELETE(req) { try { ${G}; return body() } catch (e) { console.error(e); return body(admin) } }`,
+      `export async function HEAD(req) { if (q) { try { ${G} } catch (e) { return apiInternalError() } } return body() }`,
+      `export async function OPTIONS(req) { try { try { ${G} } catch (e) { throw e } ; return body() } catch (e) { console.warn(e); return apiInternalError('실패') } }`,
+    ].join('\n')
+    const tf = parse('src/app/api/y/route.ts', tsrc)
+    const p = (m: string) => handlerProblems(`y#${m}`, gateSitesIn(tf, m, MODULE_ROUTE_GATES))
+    const notTop = (m: string) => [`y#${m}: 판정이 본문을 지배하지 않는다 — 핸들러 최상위 문에서 늘 도는 판정 호출이 없다(조건·try·단락 평가 안)`]
+    expect(p('GET')).toEqual([])
+    expect(p('OPTIONS'), '중첩 try 도 둘 다 로그 뒤 응답·재던짐이면 최상위').toEqual([])
+    expect(p('POST'), '삼키는 catch — try 뒤 본문이 판정 없이 돈다').toEqual(notTop('POST'))
+    expect(p('PUT'), 'catch 가 일을 한다').toEqual(notTop('PUT'))
+    expect(p('PATCH'), 'finally').toEqual(notTop('PATCH'))
+    expect(p('DELETE'), '닫힌 목록 밖의 응답(본문 호출)').toEqual(notTop('DELETE'))
+    expect(p('HEAD'), '가지 안의 try').toEqual(notTop('HEAD'))
   })
   it('세션 없는 라우트의 { client } 누락을 잡는다(F8)', () => {
     expect(clientProblems('x#GET', gateSitesIn(sf, 'GET', CLIENT_GATES))).toEqual(["x#GET:4 requireModule 에 { client } 가 없다(쿠키 없는 세션 클라이언트는 설정 0행 — 켜진 모듈이 닫힌다)"])

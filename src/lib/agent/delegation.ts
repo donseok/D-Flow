@@ -9,6 +9,7 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
 import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { applyWorkflowEvent } from '@/lib/agent/workflowEvent'
+import { requireModule } from '@/lib/modules/gate'
 
 export const ERR_NOT_ASSIGNEE = '담당자 본인 또는 프로젝트 관리자만 바꿀 수 있습니다.'
 export const ERR_AGENT_OFF = '프로젝트 에이전트가 꺼져 있습니다. 관리자가 에이전트 페이지에서 켜야 합니다.'
@@ -81,6 +82,8 @@ export async function applyDelegation(
     const { data: reg, error: regErr } = await admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
     if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
     if (!reg || (reg as { enabled: boolean }).enabled !== true) return { ok: false, error: ERR_AGENT_OFF }
+    // 두 원천 AND(스펙 §4.4) — 행이 켜져도 agents 모듈이 꺼졌으면 멤버는 켤 수 없다(관리자 경로는 아래 주문 보장이 막는다)
+    if (!(await requireModule({ projectId }, 'agents', { client: admin })).ok) return { ok: false, error: ERR_AGENT_OFF }
   }
   const tags: string[] = (row as { tags: string[] | null } | null)?.tags ?? []
   const alreadyDelegated = tags.includes(AGENT_TAG)
@@ -132,8 +135,10 @@ export async function applyDelegation(
       }
     }
     // 3) 이 항목 주문 보장 — 멱등(활성 주문 있으면 skip)
-    if (proj.stopped) {
-      warnings.push('프로젝트가 "에이전트 중지" 상태라 주문을 발행하지 않았습니다. 에이전트 페이지에서 켜면 발행됩니다.')
+    if (proj.stopped || proj.moduleOff) {
+      warnings.push(proj.moduleOff
+        ? '이 프로젝트의 에이전트 모듈이 꺼져 있어 주문을 발행하지 않았습니다. 프로젝트 설정에서 켜면 발행됩니다.'
+        : '프로젝트가 "에이전트 중지" 상태라 주문을 발행하지 않았습니다. 에이전트 페이지에서 켜면 발행됩니다.')
     } else {
       const ord = await ensureOrderForWorkflowLeaf(admin, { projectId, wbsItemId: itemId, actorUserId })
       if (!ord.ok) return { ok: false, error: ord.error }

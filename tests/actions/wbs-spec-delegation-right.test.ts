@@ -1,5 +1,5 @@
 // tests/actions/wbs-spec-delegation-right.test.ts — 위임·프롬프트 자격(관리자 또는 담당자 본인)과 멤버 경로의 본체
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), resolveProjectId: vi.fn(),
@@ -21,6 +21,8 @@ vi.mock('@/lib/agent/workflowEvent', () => ({ applyWorkflowEvent: mocks.applyWor
 
 import { ERR_AGENT_OFF, ERR_NOT_ASSIGNEE, requireDelegationRight } from '@/lib/agent/delegation'
 import { setAgentDelegation, updateAgentPrompt } from '@/app/actions/wbsSpec'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const W1 = '33333333-3333-4333-8333-333333333333'
@@ -61,6 +63,8 @@ beforeEach(() => {
   mocks.ensureOrderForWorkflowLeaf.mockResolvedValue({ ok: true, created: true })
   mocks.applyWorkflowEvent.mockResolvedValue({ ok: true })
 })
+// 모듈 거부 케이스가 바꾼 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙)
+afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('requireDelegationRight', () => {
   it('관리자면 멤버 판정·담당자 조회 없이 통과', async () => {
@@ -127,6 +131,24 @@ describe('setAgentDelegation — 멤버 경로', () => {
   it('담당자 본인 + 프로젝트 중지(enabled=false) → ERR_AGENT_OFF', async () => {
     admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: { enabled: false } }] })
     expect(await setAgentDelegation(W1, true)).toEqual({ ok: false, error: ERR_AGENT_OFF })
+  })
+  it('담당자 본인 + 행은 활성이어도 agents 모듈이 꺼지면 ERR_AGENT_OFF — 태그 쓰기 0(과제 18, 두 원천 AND)', async () => {
+    const { captured } = admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: { enabled: true } }] })
+    // 액션 관문(세션)은 통과시키고 본체의 두 원천 판정(service_role — { client })만 거부한다
+    vi.mocked(requireModule).mockImplementation(async (_s, _m, o) => (o?.client ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+    expect(await setAgentDelegation(W1, true)).toEqual({ ok: false, error: ERR_AGENT_OFF })
+    expect(captured.wbs_items).toBeUndefined()
+    expect(requireModule).toHaveBeenCalledWith({ projectId: P1 }, 'agents', { client: expect.anything() })
+    expect(mocks.ensureAgentProject).not.toHaveBeenCalled()
+  })
+  it('관리자 위임 ON — 모듈이 꺼졌으면(moduleOff) 태그는 붙이되 주문은 내지 않고 모듈 안내를 경고로(과제 18)', async () => {
+    mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' } })
+    mocks.ensureAgentProject.mockResolvedValue({ ok: true, enabled: false, activated: false, stopped: false, moduleOff: true })
+    const { captured } = admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
+    const r = await setAgentDelegation(W1, true)
+    expect(r).toMatchObject({ ok: true, warning: expect.stringContaining('에이전트 모듈이 꺼져') })
+    expect((captured.wbs_items?.[0] as { tags: string[] }).tags).toEqual(['agent'])
+    expect(mocks.ensureOrderForWorkflowLeaf).not.toHaveBeenCalled()
   })
   it('담당자 본인 해제(false)는 프로젝트 상태와 무관하게 진행 — ready 주문 취소', async () => {
     const { captured } = admin({

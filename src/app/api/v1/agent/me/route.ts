@@ -6,6 +6,7 @@ import {
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
 import { fetchAllPages } from '@/lib/data/paging'
+import { projectsWithModule } from '@/lib/modules/gate'
 
 type Registration = { project_id: string; projects: { name: string } | Array<{ name: string }> | null }
 
@@ -51,13 +52,16 @@ export async function GET(req: NextRequest) {
       const role = agentRoleFromActor(actor, projectId)
       if (role) projects.push({ id: projectId, name, role })
     }
+    // 목록형 — agents 가 꺼진 프로젝트는 생략(스펙 §4.2, E2E 4단계). 역할 판정 뒤라 비멤버 프로젝트의 설정은 읽지 않는다
+    const on = new Set(await projectsWithModule(projects.map((p) => p.id), 'agents', { client: admin }))
+    const visible = projects.filter((p) => on.has(p.id))
     return NextResponse.json({
       ok: true, user_email: principal.userEmail,
       // 계약 2.4 — .env 에 토큰이 여럿일 때 사람이 키를 알아보게 한다. prefix 는 토큰 안에 평문으로 든 조회 키다.
       token_name: principal.runnerName, token_prefix: principal.tokenPrefix,
       scopes: principal.scopes,
       kind: principal.runnerKind, token_expires_at: principal.tokenExpiresAt,
-      contract_version: AGENT_CONTRACT_VERSION, projects,
+      contract_version: AGENT_CONTRACT_VERSION, projects: visible,
     })
   } catch (e) {
     console.error('[agent-api] me 처리 실패:', e instanceof Error ? e.message : e)

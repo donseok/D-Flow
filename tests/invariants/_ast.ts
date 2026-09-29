@@ -109,7 +109,8 @@ export type GateSite = {
   discarded: boolean
   /** 결과가 조건(if·삼항 조건)이나 return 으로 흐른다(MUST_CHECK 가 아니면 쓰기만 해도 참) */
   checked: boolean
-  /** export 함수 몸의 최상위 문(조건 가지·try·반복·단락 평가의 오른쪽 밖)에서 늘 도는 호출 — 지역 헬퍼 안이면 헬퍼 호출도 최상위여야 한다 */
+  /** export 함수 몸의 최상위 문(조건 가지·try·반복·단락 평가의 오른쪽 밖)에서 늘 도는 호출 — 지역 헬퍼 안이면 헬퍼 호출도 최상위여야 한다.
+   *  try 는 하나만 예외다: 최상위 try 의 블록이고 그 catch 가 로그 뒤 고정 응답만 하는 모양(exitOnlyCatch)이면 블록을 최상위로 본다 */
   topLevel: boolean
   call: ts.CallExpression
 }
@@ -133,6 +134,25 @@ const inCondition = (n: ts.Node, stop: ts.Node): boolean => {
     if (ts.isFunctionLike(p)) return false
   }
   return false
+}
+/** catch 가 끝나면 함수도 끝나는 try 의 고정 응답 — 인자는 리터럴만(본문을 부를 자리가 없다). v1 에이전트 핸들러의 500 응답 */
+const EXIT_RESPONSES: ReadonlySet<string> = new Set(['apiInternalError'])
+/** 로그 뒤 고정 응답만 하는 catch 의 try — finally 없음, catch 의 문장은 console.* 호출뿐이고 마지막이 throw 이거나 EXIT_RESPONSES 호출(리터럴 인자)의
+ *  return 이다. 이 모양이면 try 뒤로는 블록이 정상으로 끝났을 때만 가므로, 블록 안에서 늘 도는 판정은 try 밖까지 지배한다(판정이 throw 하면
+ *  catch 가 응답하고 끝난다 — 본문으로 새지 않는다). catch 가 삼키거나 일을 하거나 finally 가 있으면 여전히 최상위가 아니다(과제 18) */
+const exitOnlyCatch = (t: ts.TryStatement): boolean => {
+  if (t.finallyBlock || !t.catchClause) return false
+  const st = t.catchClause.block.statements
+  const last = st[st.length - 1]
+  if (!last) return false
+  const logs = st.slice(0, -1).every((s) => ts.isExpressionStatement(s) && ts.isCallExpression(s.expression)
+    && ts.isPropertyAccessExpression(s.expression.expression) && ts.isIdentifier(s.expression.expression.expression)
+    && s.expression.expression.expression.text === 'console')
+  if (!logs) return false
+  if (ts.isThrowStatement(last)) return true
+  const r = ts.isReturnStatement(last) ? last.expression : undefined
+  return !!r && ts.isCallExpression(r) && ts.isIdentifier(r.expression) && EXIT_RESPONSES.has(r.expression.text)
+    && r.arguments.every((a) => ts.isStringLiteralLike(a) || ts.isNumericLiteral(a))
 }
 const namesOf = (b: ts.BindingName): string[] => (ts.isIdentifier(b) ? [b.text] : b.elements.flatMap((e) => (ts.isOmittedExpression(e) ? [] : namesOf(e.name))))
 
@@ -160,12 +180,15 @@ export function gateSitesIn(sf: ts.SourceFile, exportName: string, names: Readon
     }
     return null
   }
-  /** call 이 fnBody 의 최상위 문에서 늘 도는가 — 가지·try·반복·중첩 함수·단락 평가 오른쪽·가지 한쪽에만 관문이 있는 삼항이면 거짓 */
+  /** call 이 fnBody 의 최상위 문에서 늘 도는가 — 가지·try·반복·중첩 함수·단락 평가 오른쪽·가지 한쪽에만 관문이 있는 삼항이면 거짓.
+   *  예외: 로그 뒤 고정 응답만 하는 catch 의 try 블록(exitOnlyCatch)은 투명하다 — 그 try 가 최상위여야 최상위다 */
   const alwaysRuns = (call: ts.Node, fnBody: ts.ConciseBody): boolean => {
     if (!ts.isBlock(fnBody)) return true
     for (let cur: ts.Node = call; cur.parent; cur = cur.parent) {
       const p = cur.parent
       if (p === fnBody) return true
+      if (ts.isBlock(p) && ts.isTryStatement(p.parent) && p.parent.tryBlock === p && exitOnlyCatch(p.parent)) continue
+      if (ts.isTryStatement(p) && p.tryBlock === cur && exitOnlyCatch(p)) continue
       if (ts.isBlock(p) || ts.isFunctionLike(p) || ts.isTryStatement(p) || ts.isIterationStatement(p, false) || ts.isCaseClause(p) || ts.isDefaultClause(p)) return false
       if (ts.isIfStatement(p) && p.expression !== cur) return false
       if (ts.isBinaryExpression(p) && p.right === cur && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(p.operatorToken.kind)) return false

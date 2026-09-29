@@ -519,6 +519,7 @@ export async function setWbsDevWorkflow(
     try {
       const proj = await ensureAgentProject(admin, { projectId: resolved.projectId, actorUserId: g.actor.userId })
       if (!proj.ok) console.error('[wbsAssign] dev_workflow ON 프로젝트 활성 실패:', proj.error)
+      else if (proj.moduleOff) console.warn('[wbsAssign] agents 모듈이 꺼져 있어 dev_workflow ON 이 주문을 발행하지 않는다:', resolved.projectId)
       else if (proj.activated) {
         const bf = await backfillProjectOrders(admin, { projectId: resolved.projectId, actorUserId: g.actor.userId })
         if (!bf.ok) console.error('[wbsAssign] 백필 실패:', bf.error)
