@@ -31,6 +31,9 @@ import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { requireModule } from '@/lib/modules/gate'
+import { getAgentProjectState } from '@/app/actions/agentWork'
+import { AgentProjectToggle } from '@/components/settings/AgentProjectToggle'
 
 type ProjectRow = {
   id: string
@@ -129,6 +132,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const pc = await loadProjectConfigForPage(projectId)
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
+  // 에이전트 켜기/중지(D41·P8) — 허브는 agents 가 꺼지면 404 라 다시 켤 자리가 여기(core)뿐이다. 상태 = 행 enabled ∧ agents 유효(관문 판정 —
+  // 워크스페이스 허용·AI 스위치·프로젝트 토글을 모두 본다). 상태 조회 실패(null)면 토글을 그리지 않는다(getAgentProjectState 가 로그를 남긴다).
+  // 관문 판정 실패는 거부로 닫힌다(모르면 꺼짐으로 표시 — 원인은 [requireModule] 로그). 페이지 관문(settings, core)과 다른 표시 판정이다.
+  const [agentRow, agentsGate] = await Promise.all([getAgentProjectState(projectId), requireModule({ projectId }, 'agents')])
+  const agentsOn = agentsGate.ok
   // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
   const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
   const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
@@ -249,8 +257,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         title={t(locale, 'settings.agentTitle')}
         icon={Bot}
         actions={
-          // 켜기/중지·위임·승인은 에이전트 허브로 이동(2026-09-14) — 여기는 입구만 남긴다.
-          <Link href={`/p/${projectId}/agents`} className="btn btn-ghost h-9 px-3 text-[13px]">{t(locale, 'settings.agentHubLink')}</Link>
+          // 좁은 화면(390)에서는 칩·버튼 한 줄, 허브 링크 한 줄로 접는다 — 카드 머리 actions 는 줄어들지 않아(shrink-0) 폭을 여기서 묶는다
+          <div className="flex max-w-[13rem] flex-wrap items-center justify-end gap-2 sm:max-w-none">
+            {agentRow && <AgentProjectToggle projectId={projectId} registered={agentRow.registered} enabled={agentRow.enabled && agentsOn} />}
+            {/* 위임·승인은 에이전트 허브 — 에이전트가 꺼져 있으면 허브는 404 다(사이드바 링크처럼 SP3b 전까지 남는다) */}
+            <Link href={`/p/${projectId}/agents`} className="btn btn-ghost h-9 px-3 text-[13px]">{t(locale, 'settings.agentHubLink')}</Link>
+          </div>
         }
       >
         <p className="-mt-2 text-xs leading-5 text-ink-muted">
@@ -261,6 +273,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <div className="mt-4 space-y-1 border-t border-line pt-4">
             <p className="text-sm font-semibold text-ink">{t(locale, 'settings.creditsTitle')}</p>
             <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.creditsDesc')}</p>
+            {/* agents 가 꺼져도 크레딧 편집기는 남는다 — 다시 켤 때 쓸 값이다(스펙 §4.4, 정본 §3.3.1) */}
+            {!agentsOn && <p className="text-xs leading-5 text-pending">{t(locale, 'settings.agentsModuleOff')}</p>}
             {credits.ok
               ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} revision={revision} />
               : <ConfigLoadError error={credits.error} keyName={credits.key} locale={locale} />}

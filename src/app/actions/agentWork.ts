@@ -3,10 +3,18 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@/lib/supabase/server'
-import { backfillProjectOrders } from '@/lib/agent/ensureOrder'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
 import { requireModule } from '@/lib/modules/gate'
+import { syncAgentsModule } from '@/lib/modules/agentsSync'
+import { checkEnabledModules } from '@/lib/modules/saveRule'
+import type { ModuleId } from '@/lib/modules/defaults'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { valueOf } from '@/lib/settings/registry'
+import { workspaceAllowed } from '@/lib/settings/validateConfig'
+import { writeProjectSettingsInternal } from '@/lib/settings/write'
+import { ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ERR_REPORT_STALE, isUuidLike } from '@/lib/domain/agentWork'
@@ -37,35 +45,69 @@ async function withAgents<T extends { ok: true }>(projectId: string, pass: T): P
  * 에이전트 중지/재개(2026-08-24 — 킬스위치). "루프 등록"은 사라졌다: 위임 체크·dev_workflow ON·
  * agent 태그 업로드가 프로젝트를 자동 활성한다(ensureAgentProject). 사람이 명시적으로 하는 건
  * 이 스위치뿐 — 끄면 새 주문이 안 나가고 `GET /agent/me` 에서 프로젝트가 사라져 claim 이 막힌다.
- * 켜면 백필로 dev_workflow 리프 전부에 주문을 보장한다. 권한: 프로젝트 관리자(종전 등록은 슈퍼유저였다 —
- * 위임 체크가 관리자 권한이므로 같은 단계로 내렸다).
+ * 켜면 백필로 dev_workflow 리프 전부에 주문을 보장한다. 권한: 프로젝트 관리자.
+ * 두 원천(agent_projects 행·modules.enabled 의 agents)을 함께 쓴다(D41) — Phase B 부터 사용 여부는 둘의 AND 다.
+ * 모듈을 켜는 문이라 agents 관문 밖이다(P8). Phase C 가 ModuleToggleEditor 로 대신하며 지운다.
  */
 export async function setAgentProjectEnabled(projectId: string, enabled: boolean): Promise<ActionResult & { backfilled?: number }> {
   if (!isUuidLike(projectId)) return { ok: false, error: '잘못된 요청입니다.' }
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const admin = createAdminClient()
-  const { data: reg, error: regErr } = await admin
-    .from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
+  const r = enabled ? await turnAgentsOn(admin, projectId, g.actor.userId) : await turnAgentsOff(admin, projectId, g.actor.userId)
+  if (r.ok) revalidatePath(`/p/${projectId}`, 'layout')
+  return r
+}
+
+/** 옛 토글의 설정 판독 — 실패·손상은 쓰기 전 중단(3원칙 ②). 원인은 로그로, 결과에는 고정 문구 */
+async function readEnabled(admin: AdminClient, projectId: string): Promise<{ ok: true; prev: ModuleId[]; workspaceId: string } | { ok: false; error: string }> {
+  try {
+    const cfg = await getProjectConfig(projectId, { client: admin })
+    return { ok: true, prev: [...valueOf(cfg, 'modules.enabled')], workspaceId: cfg.workspaceId }
+  } catch (e) {
+    console.error('[agentWork] modules.enabled 판독 실패', { projectId, cause: e instanceof Error ? e.message : e })
+    return { ok: false, error: ERR_CONFIG_UNAVAILABLE }
+  }
+}
+
+/** D41·P8 켜기 — 워크스페이스 허용 검사 → (없으면) modules.enabled 에 agents → 두 원천 동기화(prev 에서 agents 를 빼서 넘겨 늘 돈다).
+ *  동기화는 행이 이미 켜졌으면 insert·update 를 건너뛰고 백필만 한다 — 켜려는 명령 ∧ 행이 꺼짐일 때만 행을 바꾼다(CR-2) */
+async function turnAgentsOn(admin: AdminClient, projectId: string, actorUserId: string): Promise<ActionResult & { backfilled?: number }> {
+  const read = await readEnabled(admin, projectId)
+  if (!read.ok) return read
+  const { prev } = read
+  const next: ModuleId[] = prev.includes('agents') ? prev : [...prev, 'agents']
+  if (next !== prev) {
+    let allowed: ModuleId[]
+    try { allowed = workspaceAllowed(await getWorkspaceConfig(read.workspaceId, { client: admin })) } catch (e) {
+      console.error('[agentWork] modules.allowed 판독 실패', { projectId, cause: e instanceof Error ? e.message : e })
+      return { ok: false, error: ERR_CONFIG_UNAVAILABLE }
+    }
+    const check = checkEnabledModules({ next, prev, allowed })
+    if (!check.ok) return { ok: false, error: check.error }
+    const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'modules.enabled': next } }, actorUserId)
+    if (!w.ok) return { ok: false, error: w.error }
+  }
+  const s = await syncAgentsModule(admin, { projectId, actorUserId, prevEnabled: prev.filter((id) => id !== 'agents'), nextEnabled: next })
+  if (!s.ok) return { ok: false, error: s.error }
+  return s.changed ? { ok: true, backfilled: s.backfilled } : { ok: true }
+}
+
+/** D41 끄기 — 킬스위치(행 false)가 먼저다: 설정 쓰기가 실패해도 두 원천의 AND 라 닫힌다. 그 뒤 modules.enabled 에서 agents 를 뺀다 */
+async function turnAgentsOff(admin: AdminClient, projectId: string, actorUserId: string): Promise<ActionResult> {
+  const { data: reg, error: regErr } = await admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
   if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
-  if (!reg) {
-    if (!enabled) return { ok: true } // 활성된 적 없는 프로젝트를 "중지"하는 건 no-op
-    const { error: insErr } = await admin.from('agent_projects')
-      .insert({ project_id: projectId, created_by: g.actor.userId, note: '설정에서 켬' })
-    if (insErr) return { ok: false, error: insErr.message }
-  } else if ((reg as { enabled: boolean }).enabled !== enabled) {
-    const { error: updErr } = await admin.from('agent_projects')
-      .update({ enabled }).eq('project_id', projectId)
-    if (updErr) return { ok: false, error: updErr.message }
+  if (reg && (reg as { enabled: boolean }).enabled === true) {
+    const { error } = await admin.from('agent_projects').update({ enabled: false }).eq('project_id', projectId)
+    if (error) return { ok: false, error: error.message }
   }
-  let backfilled: number | undefined
-  if (enabled) {
-    const bf = await backfillProjectOrders(admin, { projectId, actorUserId: g.actor.userId })
-    if (!bf.ok) return { ok: false, error: bf.error }
-    backfilled = bf.created
+  const read = await readEnabled(admin, projectId)
+  if (!read.ok) return read
+  if (read.prev.includes('agents')) {
+    const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'modules.enabled': read.prev.filter((id) => id !== 'agents') } }, actorUserId)
+    if (!w.ok) return { ok: false, error: w.error }
   }
-  revalidatePath(`/p/${projectId}`, 'layout')
-  return backfilled === undefined ? { ok: true } : { ok: true, backfilled }
+  return { ok: true }
 }
 
 /** 프로젝트 에이전트 활성 상태 — 설정 페이지 표시용. 조회 실패는 null(모름)로 넘긴다 — 위장 금지. */

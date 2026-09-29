@@ -22,7 +22,7 @@
 | src/app/actions/accounts.ts | 세션 가드 뒤 id 스코프 | create·bulk·setWorkspaceRole·listAccounts 는 requireWorkspaceAdmin(wid) 뒤에 그 wid(listAccounts 는 pid)로 좁힌다. resetPassword·setPlatformAdmin 은 requireSuperuser(플랫폼 11곳)이다. assertCanTouchAccount 는 전역으로 둔다(D1 계정 전역, 컨트롤러 판정 a35) |
 | src/app/actions/agentHub.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤. 항목·주문은 id 로 읽고 project_id === pid 인지 다시 확인한 뒤에 쓴다 |
 | src/app/actions/agentTokens.ts | 세션 가드 뒤 id 스코프 | 세션 사용자 = owner_user_id 로만 발급·폐기·목록 처리한다. PAT 의 project_id 는 쓰는 시점에 라우트가 멤버십으로 판정한다 |
-| src/app/actions/agentWork.ts | 세션 가드 뒤 id 스코프 | 주문 행의 project_id 로 requireProjectAdmin 또는 서브트리 관리자를 판정한 뒤, 그 주문·항목 id 로만 쓴다 |
+| src/app/actions/agentWork.ts | 세션 가드 뒤 id 스코프 | 주문 행의 project_id 로 requireProjectAdmin 또는 서브트리 관리자를 판정한 뒤, 그 주문·항목 id 로만 쓴다 · 옛 토글의 modules.enabled 내부 쓰기(D41, SP3a Phase B — Phase C 가 지운다) |
 | src/app/actions/inbox.ts | 세션 가드 뒤 id 스코프 | getSession 사용자의 notification_recipients(user_id 필터)만 읽음 표시한다 |
 | src/app/actions/inviteRedeem.ts | 외부 API·서비스 | 초대 토큰의 해시로 초대 1건을 찾는다. 그 초대가 가리키는 워크스페이스(허용 도메인 설정)·프로젝트·팀 id 와 이메일로만 조회하고 쓴다 |
 | src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다. 회의록 블록 이슈의 원문은 그 회의록의 프로젝트가 pid 이거나, 프로젝트가 없으면 그 워크스페이스가 pid 의 워크스페이스일 때만 받는다(최종 리뷰 F10 — 0009 issue_links 트리거가 DB 에서도 막는다) |

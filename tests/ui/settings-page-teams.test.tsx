@@ -47,6 +47,8 @@ vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () =>
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: mocks.ReindexButton }))
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
+vi.mock('@/app/actions/agentWork', () => ({ getAgentProjectState: vi.fn(async () => ({ registered: true, enabled: true })) }))
+vi.mock('@/components/settings/AgentProjectToggle', () => ({ AgentProjectToggle: () => null }))
 
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 
