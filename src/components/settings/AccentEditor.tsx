@@ -7,6 +7,7 @@ import { deriveAccent } from '@/lib/settings/accent'
 import type { AccentValue } from '@/lib/settings/accent'
 import { newUuid } from '@/lib/domain/uuid'
 import { ACCENT_TOKENS } from '@/lib/settings/accentTokens'
+import { ConfigStateNotice } from './ConfigStateNotice'
 
 function baseOf(value: unknown): string | null {
   if (value === null) return null
@@ -28,6 +29,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
   const [conflict, setConflict] = useState<{ revision: number; value: string | null; invalid: boolean } | null>(null)
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const preview = draft === null ? null : deriveAccent(draft)
@@ -37,22 +39,24 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     let result: SettingsCommandResult | null = null
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
-      setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null)
-      setNotice('강조색 설정을 저장했습니다.'); router.refresh(); return
+      setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
+      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '강조색 설정을 저장했습니다.'); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, value: baseOf(result.latest.values['branding.accent']),
         invalid: result.latest.invalidKeys.includes('branding.accent') })
-      setUncertainPatch(null); return
+      setUncertainPatch(null); setFieldError(null); return
     }
     if (result && (result.kind !== 'unavailable' || !result.retryable)) {
-      setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
+      const field = result.kind === 'invalid' ? result.fieldErrors.find(e => e.key === 'branding.accent') : undefined
+      setFieldError(field?.message ?? null)
+      setError(field ? null : (result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error))
       setUncertainPatch(null); return
     }
     try {
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
-        setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null)
+        setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
         setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재전송 */ }
@@ -63,7 +67,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
 
   function save() {
     if ((!dirty && !uncertainPatch) || (preview && !preview.ok)) return
-    setError(null); setNotice(null)
+    setError(null); setFieldError(null); setNotice(null)
     const patch = uncertainPatch ?? { expectedRevision: baseRevision, commandId: newUuid(), set: { 'branding.accent': draft }, unset: [] }
     startTransition(async () => submit(patch))
   }
@@ -73,7 +77,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       <h3 className="text-sm font-semibold text-ink">강조색</h3>
       <p className="mt-1 text-xs text-ink-muted">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 화면 전체 반영은 다음 셸 갱신부터 적용됩니다.</p>
     </div>
-    {invalidReason && needsRepair && <p role="alert" className="text-xs text-delayed">설정 손상: {invalidReason}. 새 색을 저장해 복구하세요.</p>}
+    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">
       <label htmlFor="workspace-accent" className="text-sm text-ink">기준 색</label>
       <input id="workspace-accent" className="input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
@@ -83,7 +87,8 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch || draft === null}
         onClick={() => setDraft(null)}>기본값으로</button>
     </div>
-    {preview && !preview.ok && <p role="alert" className="text-xs text-delayed">{preview.error} {preview.failures.map(f => `${f.pair} ${f.contrast} (최소 ${f.min})`).join(', ')}</p>}
+    {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => `${f.pair} ${f.contrast} (최소 ${f.min})`).join(', ')}`} />}
+    {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
       {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-line">
         <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS[mode].surface }}>
@@ -102,7 +107,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
         {!conflict.invalid && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.value); setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
       </div>
     </div>}
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
+    {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
       {uncertainPatch ? '저장 결과 확인 및 재시도' : '강조색 저장'}
