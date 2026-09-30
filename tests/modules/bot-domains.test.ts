@@ -27,4 +27,10 @@ describe('봇 도구와 모듈의 대응', () => {
     const missing = MODULES.flatMap((module) => module.botDomains).filter((domain) => !covered.has(domain))
     expect(missing.sort()).toEqual(Object.keys(NO_TOOL_YET).sort())
   })
+
+  it('도메인이 정확히 한 모듈이 아니면 throw 한다 — 조용히 첫 모듈이나 빈 값을 돌려주지 않는다', () => {
+    // 위 세 it 이 "throw 에 도달하지 않는다" 의 전제를 고정한다. 전제가 느슨해지는 순간(NO_TOOL_YET 에 사유 없이
+    // 도메인 추가 등) 이 throw 가 없으면 없는 capability 가 500 으로 새어 나간다.
+    expect(() => moduleOfCapability('nope:read' as never)).toThrow(/모듈이/)
+  })
 })

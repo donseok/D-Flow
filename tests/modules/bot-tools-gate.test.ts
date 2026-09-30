@@ -65,4 +65,36 @@ describe('프로젝트 문맥이 없는 봇 도구', () => {
     expect(gated.registry.names()).not.toContain('search_minutes')
     expect(gated.registry.names()).toContain('find_wbs_items')
   })
+
+  it('chatbot 이 꺼진 프로젝트는 어떤 도구의 조회 범위에도 남지 않는다', async () => {
+    // 라우트는 `requireSessionModule(…, 'chatbot')` 로 시작하지만 `scope.projectId` 가 null 인 갈래(화면 문맥에 프로젝트가
+    // 없는 전체 질문)는 `allowedProjectIds` 안에 **챗봇이 꺼진 프로젝트를 그대로** 품고 온다. 그 갈래를 메우는 것이
+    // `enabledIds` 의 `enabled.has('chatbot')` 절이다 — 도구 소스는 RLS/스코프가 아니라 narrowed() 가 넘긴 목록으로 본다.
+    vi.mocked(moduleSetFor).mockImplementation(async (scope) => (
+      'projectId' in scope && scope.projectId === P2 ? without('chatbot') : ALL
+    ))
+    const gated = await gateChatTools(registry(), input(null))
+    const weekly = await gated.registry.get('get_weekly_sheet')!.execute({}, { allowedProjectIds: [P1, P2] } as never)
+    expect(weekly).toMatchObject({ ok: true, result: { allowedProjectIds: [P1] } })
+    const wbs = await gated.registry.get('find_wbs_items')!.execute({}, { allowedProjectIds: [P1, P2] } as never)
+    expect(wbs).toMatchObject({ ok: true, result: { allowedProjectIds: [P1] } })
+  })
+
+  it('프로젝트 문맥이 없어도 설정을 스코프당 한 번만 읽는다 — 도구마다 다시 읽지 않는다', async () => {
+    // 브리프 첫 문장("모듈마다 다시 읽지 않도록")이 참인 형태는 스코프당 한 번이다.
+    // 프로젝트 문맥 쪽은 toHaveBeenCalledTimes(1) 로 고정돼 있는데 이 갈래는 그게 없다 — 모듈 N × 스코프 M 으로 늘어난다.
+    vi.mocked(moduleSetFor).mockResolvedValue(ALL)
+    await gateChatTools(registry(), input(null))
+    expect(moduleSetFor).toHaveBeenCalledTimes(input(null).allowedProjectIds.length + input(null).workspaceIds.length)
+  })
+
+  it('설정 판정이 실패하면(core 만 반환) 도구 0·capability 0 으로 닫힌다 — 챗봇이 꺼진 것과 같은 결론이다', async () => {
+    // T23-m2 — `moduleSetFor` 실패는 `CORE` 만 돌려주고 CORE 에 `chatbot` 이 없다. 즉 "판정 실패" 와 "chatbot 꺼짐" 이
+    // **같은 결과**(빈 집합)로 번역된다. fail-closed 라 의도된 방향이고 고치지 않는다. 다만 두 경우의 의미가 다르다
+    // (설정 장애는 전역이고 잠깐이다) — 어느 날 판별이 필요해질 때를 위해 "닫힘" 을 여기서 박아 둔다.
+    vi.mocked(moduleSetFor).mockResolvedValue(new Set<ModuleId>(['dashboard', 'wbs', 'members', 'settings']))
+    const gated = await gateChatTools(registry(), input(P1))
+    expect(gated.registry.names()).toEqual([])
+    expect(gated.capabilities).toEqual([])
+  })
 })

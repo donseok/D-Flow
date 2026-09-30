@@ -156,6 +156,18 @@ describe('moduleSetFor — 한 스코프에서 여러 모듈을 볼 때 설정�
     expect(error).toHaveBeenCalledWith('[moduleSetFor]', 'down')
     error.mockRestore()
   })
+
+  it('Next 제어 흐름 신호는 삼키지 않고 다시 던진다 — requireModule 과 같은 닫힘의 절반이다', async () => {
+    // 신호(dynamic 사용·notFound·redirect)를 삼키면 core 만 허용한 뒤 **성공한 것처럼** 넘어간다 — 호출부가
+    // 404 를 내야 할 자리에 도구 목록만 비어 있는 200 이 나온다.
+    for (const digest of ['DYNAMIC_SERVER_USAGE', 'NEXT_HTTP_ERROR_FALLBACK;404', 'NEXT_REDIRECT;replace;/login;307;']) {
+      const signal = Object.assign(new Error('signal'), { digest })
+      m.effectiveModules.mockRejectedValueOnce(signal)
+      await expect(moduleSetFor({ workspaceId: WID })).rejects.toBe(signal)
+      m.effectiveModules.mockRejectedValueOnce(new ConfigUnavailableError('wrapped', { cause: signal }))
+      await expect(moduleSetFor({ workspaceId: WID })).rejects.toBe(signal)
+    }
+  })
 })
 
 describe('목록형(스펙 §4.2 첫 문단)', () => {
