@@ -7,9 +7,8 @@ import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const runOp = vi.fn(), setEnabled = vi.fn()
+const runOp = vi.fn()
 vi.mock('@/app/actions/agentHub', () => ({ runHubProcessOp: (...a: unknown[]) => runOp(...(a as [])) }))
-vi.mock('@/app/actions/agentWork', () => ({ setAgentProjectEnabled: (...a: unknown[]) => setEnabled(...(a as [])) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 const L = vi.hoisted(() => ({ locale: 'ko' as 'ko' | 'en' }))
@@ -34,7 +33,7 @@ const QSELF: HubQueueEntry[] = [{ ...Q[0], canManage: true, assigneeMine: true, 
 const HUB = { projectId: 'p1', queue: [] } as unknown as AgentHub
 
 let host: HTMLDivElement, root: Root
-beforeEach(() => { L.locale = 'ko'; runOp.mockReset(); setEnabled.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
+beforeEach(() => { L.locale = 'ko'; runOp.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
 afterEach(() => { act(() => root.unmount()); host.remove() })
 
 const setValue = (el: HTMLTextAreaElement, v: string) => {
@@ -156,12 +155,13 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
 })
 
 describe('HubStatusBar', () => {
-  const base = { projectId: 'p1', watchers: [], onChanged: () => {} }
-  it('켜짐 배지와 감시자, 관리자에게 토글 — 카운터는 공통 헤더 타일로 올라갔다(2026-09-18)', () => {
+  const base = { projectId: 'p1', watchers: [] }
+  it('켜짐 배지와 감시자, 관리자에게 설정 링크 — 카운터는 공통 헤더 타일로 올라갔다(2026-09-18)', () => {
     act(() => root.render(<HubStatusBar {...base} registered enabled isAdmin watchers={[{ agent: 'hong/mbp', host: 'mbp', slots: 2, busy: 1, untilLabel: '18:00', lastSeenAt: '2026-09-14T08:59:00Z', projectId: 'p1' }]} />))
     expect(host.querySelector('[data-hub-counter]')).toBeNull()
     expect(host.textContent).toContain('hong/mbp 1/2 ~18:00')
-    expect(host.querySelector('button')).not.toBeNull()
+    expect(host.textContent).toContain('에이전트 켜짐')
+    expect(host.querySelector('a[href="/p/p1/settings#project-modules"]')).not.toBeNull()
     expect((host.querySelector('a[href="/account"]') as HTMLAnchorElement).textContent).toContain('내 토큰')
     expect(host.querySelector('[data-hub-seatmap-link]')).toBeNull() // 전체 스튜디오 링크는 스튜디오 탭으로 옮겼다
   })
@@ -170,12 +170,8 @@ describe('HubStatusBar', () => {
     expect(host.textContent).toContain('첫 위임 때 켜집니다')
     expect(host.querySelector('button')).toBeNull()
   })
-  it('관리자 토글 성공 → onChanged 호출(router.refresh 대신)', async () => {
-    setEnabled.mockResolvedValueOnce({ ok: true })
-    const onChanged = vi.fn()
-    act(() => root.render(<HubStatusBar {...base} registered enabled isAdmin onChanged={onChanged} />))
-    await act(async () => { (host.querySelector('button') as HTMLButtonElement).click() })
-    expect(setEnabled).toHaveBeenCalledWith('p1', false)
-    expect(onChanged).toHaveBeenCalled()
+  it('관리자에게 프로젝트 모듈 설정 링크를 보인다', () => {
+    act(() => root.render(<HubStatusBar {...base} registered enabled isAdmin />))
+    expect(host.textContent).toContain('프로젝트 설정 → 모듈·메뉴')
   })
 })

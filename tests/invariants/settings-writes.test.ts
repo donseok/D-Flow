@@ -104,13 +104,11 @@ const WRITE_IMPORTERS: Record<string, string> = {
   'src/app/actions/settings.ts': 'commandDigestInput(명령 요약의 입력 모양)만 쓴다 — 아래 INTERNAL_WRITE_CALLERS 에 없으므로 writeProjectSettingsInternal 을 언급하면 실패한다',
   'src/app/api/import/execute/route.ts': 'W5 양식 저장 — requireProjectAdmin(pid)(:62) 뒤 그 pid·actor 로 writeProjectSettingsInternal(:189)',
   'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:231) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
-  'src/app/actions/agentWork.ts': 'D41 옛 토글 — requireProjectAdmin 뒤 modules.enabled 의 agents 를 더하거나 뺀다(Phase C 가 액션과 함께 지운다)',
 }
 /** writeProjectSettingsInternal 을 언급하는 파일(정의 제외)과 호출 수 — import 기준과 함께 둔다(가져오는 이름·지정자 모양과 무관하게 문다) */
 const INTERNAL_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
   'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — requireProjectAdmin(:62) 뒤 :189' },
   'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :231(가드는 RUN_WBS_IMPORT_CALLERS)' },
-  'src/app/actions/agentWork.ts': { calls: 2, why: 'D41 — requireProjectAdmin 뒤 켜기(checkEnabledModules 뒤)·끄기(행 false 뒤) 각 한 번' },
 }
 const WBS_IMPORT_FILE = 'src/lib/agent/wbsImport.ts'
 /** wbsImport 모듈의 export 이름(default 포함) — runWbsImport 를 감싸는 새 export 가 생기면 그 호출자가 아래 목록 밖으로 샌다 */

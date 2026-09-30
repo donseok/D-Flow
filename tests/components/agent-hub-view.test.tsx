@@ -14,7 +14,7 @@ import type { HubWbsBundle } from '@/components/agent-hub/AgentHubView'
 const refresh = vi.fn(), apply = vi.fn()
 vi.mock('@/app/actions/agentHub', () => ({ refreshAgentHub: (...a: unknown[]) => refresh(...(a as [])), applyHubDelegations: (...a: unknown[]) => apply(...(a as [])), runHubProcessOp: vi.fn() }))
 vi.mock('@/app/actions/wbsSpec', () => ({ setAgentDelegation: vi.fn(), updateAgentPrompt: vi.fn() }))
-vi.mock('@/app/actions/agentWork', () => ({ approveAgentCompletion: vi.fn(), rejectAgentCompletion: vi.fn(), setAgentProjectEnabled: vi.fn() }))
+vi.mock('@/app/actions/agentWork', () => ({ approveAgentCompletion: vi.fn(), rejectAgentCompletion: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => '/p/p1/agents' }))
 // 실시간 구독(0098) — 채널은 스텁이고 broadcast 콜백만 붙잡아 테스트가 직접 쏜다.
 const rt = vi.hoisted(() => ({ broadcast: null as ((m: { payload?: unknown }) => void) | null }))

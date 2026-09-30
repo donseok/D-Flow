@@ -25,6 +25,9 @@ vi.mock('@/lib/settings/projectConfig', async () => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
   return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'] })) }
 })
+vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: vi.fn(async () => ({ keys: { 'modules.allowed': { status: 'set', value: ['agents'] } } })) }))
+vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: vi.fn(async () => []) }))
+vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor: () => null }))
 vi.mock('@/app/actions/projectAreas', () => ({ listAreas: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
@@ -47,8 +50,6 @@ vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () =>
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: mocks.ReindexButton }))
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
-vi.mock('@/app/actions/agentWork', () => ({ getAgentProjectState: vi.fn(async () => ({ registered: true, enabled: true })) }))
-vi.mock('@/components/settings/AgentProjectToggle', () => ({ AgentProjectToggle: () => null }))
 
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 

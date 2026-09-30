@@ -6,8 +6,8 @@
 // deny: 모듈 거부 때의 반환값(결과 유니온이 아닌 액션·셸 항목 — P17). 없으면 { ok:false, error: ERR_MODULE_DISABLED } 를 포함해야 한다.
 // sample: 액션 호출 인자 — 관문은 가드 바로 뒤·입력 검증 앞이라(P17) 가드 앞 검증만 통과하면 된다(uuid·빈 객체). null 항목도 가드 앞 검증이
 // 표본을 거부하면(가드에 닿지 않으면) sample 을 둔다(실측 18개 — 워크스페이스 id·항목 uuid·값 범위를 가드 앞에서 본다: accounts 셋·createProject·teams 둘·
-// setAgentProjectEnabled·settings 둘·updateActual·wbsAssign 다섯·wbsSpec 셋). session null 항목도 세션 없음 실행(deny.test)이 로그인 판정까지 가게 넷에
-// 둔다(revokeAgentToken·getAgentProjectState 의 uuid, settings 조회 둘의 범위 객체). 행 헬퍼 안의 관문(checkOwner 등)은 입력 검증 뒤라 그 검증을 통과하는 표본이 필요하다.
+// settings 둘·updateActual·wbsAssign 다섯·wbsSpec 셋). session null 항목도 세션 없음 실행(deny.test)이 로그인 판정까지 가게 넷에
+// 둔다(revokeAgentToken 의 uuid, settings 조회 둘의 범위 객체). 행 헬퍼 안의 관문(checkOwner 등)은 입력 검증 뒤라 그 검증을 통과하는 표본이 필요하다.
 // adminBeforeGuard 는 null 항목에도 둔다 — 등급 거부 모드(세션은 있고 등급 가드만 거부)에서 인증 뒤·등급 가드 앞에 행을 service_role 로 읽는 것(updateTeam).
 // delegatedTo: 라우트의 실행 확인을 맡은 전용 테스트(P15). delegatedStatic: 위임 파일이 메서드를 import 하지 않고 경로 문자열로 정적 확인하는
 // 라우트의 사유(닫힌 목록 — 지금은 v1 에이전트 11). adminBeforeGuard: 가드 앞에서 대상 행을 service_role 로 읽는 액션의 사유.
@@ -61,8 +61,6 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
   [`${A('agentTokens')}#listMyAgentTokens`]: nul('session', '계정 단위 PAT 목록'),
   // ── agentWork — 옛 토글 둘은 모듈을 켜는 문(P8), 승인 계열은 agents
-  [`${A('agentWork')}#setAgentProjectEnabled`]: { ...nul('projectAdmin', 'D41 옛 토글 — agents 를 켜는 문이라 자기 관문에 막히면 안 된다(P8)'), sample: [P, true] },   // isUuidLike 가 가드 앞(과제 19 뒤에도 그대로)
-  [`${A('agentWork')}#getAgentProjectState`]: { ...nul('session', '세션 RLS(read_agent_projects) — 설정 화면의 토글 상태'), sample: [P] },   // isUuidLike 가 앞. 코드 가드 없이 RLS 로 읽는다(deny.test RLS_ONLY)
   [`${A('agentWork')}#approveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, null], adminBeforeGuard: 'loadOrderForAdmin 이 주문 행에서 프로젝트를 읽는다(service_role)' },
   [`${A('agentWork')}#rejectAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, '사유', null], adminBeforeGuard: 'loadOrderForReview 가 주문 행에서 프로젝트를 읽는다' },
   [`${A('agentWork')}#unapproveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U], adminBeforeGuard: 'loadOrderForReview' },
@@ -201,6 +199,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('settings')}#getSettingsCommandOutcome`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }, U] },   // 범위 객체가 가드 인자
   [`${A('settings')}#listSettingsHistory`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }] },
   [`${A('settingsPreview')}#previewSettingsImpact`]: { ...nul('workspaceAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [U, ['agents']] },
+  [`${A('settingsPreview')}#previewProjectSettingsImpact`]: { ...nul('projectAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [P, ['agents']] },
   // ── teams — 워크스페이스 관리
   [`${A('teams')}#addTeam`]: { ...nul('workspaceAdmin'), sample: [U, 'T'] },   // typeof workspaceId 가 가드 앞
   [`${A('teams')}#updateTeam`]: { ...nul('workspaceAdmin'), adminBeforeGuard: '인증 뒤 teams 행에서 대상 워크스페이스를 읽는다(service_role) — 등급 가드는 그 뒤' },

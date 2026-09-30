@@ -199,7 +199,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         a.revalidate()
         const recovery = a.scope === 'workspace'
           ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
-          : '에이전트 허브에서 중지 뒤 다시 켜세요.'
+          : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
         return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false,
           error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
       }

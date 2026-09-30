@@ -32,8 +32,10 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { requireModule } from '@/lib/modules/gate'
-import { getAgentProjectState } from '@/app/actions/agentWork'
-import { AgentProjectToggle } from '@/components/settings/AgentProjectToggle'
+import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
+import { MODULES } from '@/lib/modules/registry'
+import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
 type ProjectRow = {
@@ -135,11 +137,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const pc = await loadProjectConfigForPage(projectId)
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
-  // 에이전트 켜기/중지(D41·P8) — 허브는 agents 가 꺼지면 404 라 다시 켤 자리가 여기(core)뿐이다. 상태 = 행 enabled ∧ agents 유효(관문 판정 —
-  // 워크스페이스 허용·AI 스위치·프로젝트 토글을 모두 본다). 상태 조회 실패(null)면 토글을 그리지 않는다(getAgentProjectState 가 로그를 남긴다).
-  // 관문 판정 실패는 거부로 닫힌다(모르면 꺼짐으로 표시 — 원인은 [requireModule] 로그). 페이지 관문(settings, core)과 다른 표시 판정이다.
-  const [agentRow, agentsGate] = await Promise.all([getAgentProjectState(projectId), requireModule({ projectId }, 'agents')])
+  // 에이전트 관문 상태는 크레딧 편집기 안내에만 쓴다. 켜기·중지는 위의 모듈 편집기가 맡는다.
+  const agentsGate = await requireModule({ projectId }, 'agents')
   const agentsOn = agentsGate.ok
+  let workspaceModules: Awaited<ReturnType<typeof getWorkspaceConfig>> | null = null
+  let workspaceModulesError: string | null = null
+  if (pc.ok) {
+    try { workspaceModules = await getWorkspaceConfig(pc.cfg.workspaceId) }
+    catch (error) { console.error('[settings] 모듈 허용 목록 조회 실패:', error); workspaceModulesError = '워크스페이스 허용 목록을 불러오지 못했습니다.' }
+  }
   // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
   const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
   const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
@@ -230,6 +236,28 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </dl>
         </SectionCard>
 
+        <div id="project-modules" className="scroll-mt-24">
+        <SectionCard eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+          {pc.ok && workspaceModules ? (() => {
+            const enabled = pc.cfg.keys['modules.enabled']
+            const allowed = workspaceModules.keys['modules.allowed']
+            const allowedIds = allowed.status === 'set' || allowed.status === 'default' ? allowed.value : []
+            const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
+            return <>
+              {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
+                <p role="alert" className="mb-3 text-sm text-delayed">워크스페이스 모듈 허용 설정이 손상됐습니다. 워크스페이스 관리자에게 복구를 요청하세요.</p>}
+              {!agentsOn && allowedIds.includes('agents') && (enabled.status === 'set' || enabled.status === 'default') && enabled.value.includes('agents') &&
+                <p role="alert" className="mb-3 text-sm text-pending">에이전트 사용 설정은 켜져 있지만 현재 기능은 닫혀 있습니다. 등록 동기화 실패라면 에이전트를 끈 뒤 다시 켜세요.</p>}
+              <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision}
+                initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
+                invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
+                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
+                  allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
+            </>
+          })() : workspaceModulesError ? <ConfigLoadError error={workspaceModulesError} locale={locale} /> : null}
+        </SectionCard>
+        </div>
+
       {/* ── WBS 데이터 가져오기 / 내보내기 ── */}
         <SectionCard
         eyebrow="DATA"
@@ -267,7 +295,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         actions={
           // 좁은 화면(390)에서는 칩·버튼 한 줄, 허브 링크 한 줄로 접는다 — 카드 머리 actions 는 줄어들지 않아(shrink-0) 폭을 여기서 묶는다
           <div className="flex max-w-[13rem] flex-wrap items-center justify-end gap-2 sm:max-w-none">
-            {agentRow && <AgentProjectToggle projectId={projectId} registered={agentRow.registered} enabled={agentRow.enabled && agentsOn} />}
             {/* 위임·승인은 에이전트 허브 — 에이전트가 꺼져 있으면 허브는 404 다(사이드바 링크처럼 SP3b 전까지 남는다) */}
             <Link href={`/p/${projectId}/agents`} className="btn btn-ghost h-9 px-3 text-[13px]">{t(locale, 'settings.agentHubLink')}</Link>
           </div>

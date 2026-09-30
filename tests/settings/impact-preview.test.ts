@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { FakeSettingsDb } from '../helpers/fakeSettingsDb'
-import { previewModuleAllowImpact } from '@/lib/settings/impactPreview'
+import { previewModuleAllowImpact, previewProjectModuleImpact } from '@/lib/settings/impactPreview'
 
 const WID = '00000000-0000-4000-8000-00000000bb01'
 const OTHER = '00000000-0000-4000-8000-00000000bb02'
@@ -31,5 +31,21 @@ describe('modules.allowed 영향 미리보기', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(previewModuleAllowImpact(db.client() as never, { workspaceId: WID, before: ['agents'], next: [] }))
       .rejects.toThrow()
+  })
+})
+
+describe('modules.enabled 영향 미리보기', () => {
+  it('꺼지는 모듈의 대표 데이터 건수를 세고 별도 집계가 없는 모듈을 구분한다', async () => {
+    const from = vi.fn((table: string) => ({ select: () => ({ eq: async () => ({ count: table === 'meetings' ? 7 : 0, error: null }) }) }))
+    const result = await previewProjectModuleImpact({ from } as never, { projectId: one, before: ['meetings', 'chatbot'], next: [] })
+    expect(result).toEqual({ removed: [
+      { moduleId: 'meetings', dataCount: 7, dataLabel: '회의' },
+      { moduleId: 'chatbot', dataCount: null, dataLabel: '별도 데이터 집계 없음' },
+    ] })
+    expect(from).toHaveBeenCalledTimes(1)
+  })
+  it('건수 조회가 실패하면 0건으로 위장하지 않는다', async () => {
+    const from = () => ({ select: () => ({ eq: async () => ({ count: null, error: { message: 'offline' } }) }) })
+    await expect(previewProjectModuleImpact({ from } as never, { projectId: one, before: ['meetings'], next: [] })).rejects.toThrow('offline')
   })
 })

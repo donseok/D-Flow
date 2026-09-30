@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSettingsDb } from '../helpers/fakeSettingsDb'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
-const h = vi.hoisted(() => ({ guard: vi.fn(), adminFor: vi.fn() }))
-vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin: h.guard }))
+const h = vi.hoisted(() => ({ guard: vi.fn(), projectGuard: vi.fn(), adminFor: vi.fn() }))
+vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin: h.guard, requireProjectAdmin: h.projectGuard }))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 
-import { previewSettingsImpact } from '@/app/actions/settingsPreview'
+import { previewSettingsImpact, previewProjectSettingsImpact } from '@/app/actions/settingsPreview'
 
 const WID = '00000000-0000-4000-8000-00000000bb01'
 const PID = '00000000-0000-4000-8000-00000000aa01'
@@ -18,6 +18,7 @@ beforeEach(() => {
     .addWorkspace({ id: WID, values: { 'modules.allowed': ['agents', 'minutes'] }, revision: 4 })
     .addProject({ id: PID, workspaceId: WID, values: { 'core.level_labels': ['Phase'], 'modules.enabled': ['agents'] } })
   h.guard.mockResolvedValue({ ok: true, actor: makeSuperuser() })
+  h.projectGuard.mockResolvedValue({ ok: true, actor: makeActor({ projectRoles: new Map([[PID, 'admin']]) }) })
   h.adminFor.mockImplementation(() => ({ admin: db.client() }))
 })
 
@@ -47,5 +48,11 @@ describe('previewSettingsImpact action', () => {
     db.failTable = 'projects'
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await previewSettingsImpact(WID, ['minutes'])).toMatchObject({ ok: false, error: expect.stringContaining('영향을 확인하지 못했습니다') })
+  })
+  it('프로젝트 미리보기는 그 프로젝트 관리자 가드를 거치고 현재 revision을 돌린다', async () => {
+    db.projects.get(PID)!.values['modules.enabled'] = ['chatbot']
+    expect(await previewProjectSettingsImpact(PID, [])).toEqual({ ok: true, revision: 0, before: ['chatbot'],
+      impact: { removed: [{ moduleId: 'chatbot', dataCount: null, dataLabel: '별도 데이터 집계 없음' }] } })
+    expect(h.projectGuard).toHaveBeenCalledWith(PID)
   })
 })

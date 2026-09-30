@@ -36,15 +36,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn().mockResolvedValue(undefined) }))
-// D41·P8 — 옛 토글이 modules.enabled 의 agents 도 쓴다. 켜기: 허용 검사 → (없으면) 설정에 더함 → 강제 동기화. 끄기: 행 false 먼저 → 설정에서 뺌.
-const h = vi.hoisted(() => ({ write: vi.fn(), sync: vi.fn(), getProjectConfig: vi.fn(), getWorkspaceConfig: vi.fn() }))
-vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: h.write }))
-vi.mock('@/lib/modules/agentsSync', () => ({ syncAgentsModule: h.sync, agentsNewlyEnabled: vi.fn() }))
-vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
-vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: h.getWorkspaceConfig }))
-
 import {
-  approveAgentCompletion, rejectAgentCompletion, setAgentProjectEnabled, getAgentOrderForItem,
+  approveAgentCompletion, rejectAgentCompletion, getAgentOrderForItem,
   unapproveAgentCompletion, requestAgentRework,
 } from '@/app/actions/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
@@ -278,102 +271,6 @@ describe('rejectAgentCompletion', () => {
       entityType: 'agent_order', entityId: O1,
       recipientMemberIds: ['m-1'],
     }))
-  })
-})
-
-describe('setAgentProjectEnabled — D41 두 원천을 함께 쓴다', () => {
-  const pc = (enabled: string[] | 'invalid') => ({ projectId: P1, workspaceId: 'ws-1',
-    keys: { 'modules.enabled': enabled === 'invalid' ? { status: 'invalid', error: 'x' } : { status: 'set', value: enabled } } })
-  const ws = (allowed: string[]) => ({ workspaceId: 'ws-1', keys: { 'modules.allowed': { status: 'set', value: allowed } } })
-  beforeEach(() => {
-    h.write.mockReset().mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'c' })
-    h.sync.mockReset().mockResolvedValue({ ok: true, changed: true, backfilled: 3, failed: [] })
-    h.getProjectConfig.mockReset()
-    h.getWorkspaceConfig.mockReset().mockResolvedValue(ws(['agents', 'kanban']))
-  })
-  it('비형식 projectId·관리자 아님은 거부(설정·행 무접근)', async () => {
-    expect(await setAgentProjectEnabled('invalid-id', true)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
-    mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '관리자 필요' })
-    expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: false, error: '관리자 필요' })
-    expect(h.getProjectConfig).not.toHaveBeenCalled()
-  })
-  it('켜기 — modules.enabled 에 agents 가 없으면 더하고(순서 유지) 강제 동기화, backfilled 를 돌려준다', async () => {
-    admin({})
-    h.getProjectConfig.mockResolvedValue(pc(['kanban']))
-    expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: true, backfilled: 3 })
-    expect(h.write).toHaveBeenCalledWith(expect.anything(), P1, { set: { 'modules.enabled': ['kanban', 'agents'] } }, 'admin-1')
-    expect(h.sync).toHaveBeenCalledWith(expect.anything(), { projectId: P1, actorUserId: 'admin-1', prevEnabled: ['kanban'], nextEnabled: ['kanban', 'agents'] })
-    expect(h.getProjectConfig).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ client: expect.anything() }))
-    expect(h.getWorkspaceConfig).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ client: expect.anything() }))
-  })
-  it('켜기 — 이미 agents 가 있으면(새 프로젝트) 설정은 쓰지 않고 prev 에서 agents 를 뺀 값으로 동기화를 강제한다(ON 이 헛돌지 않는다)', async () => {
-    admin({})
-    h.getProjectConfig.mockResolvedValue(pc(['agents']))
-    expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: true, backfilled: 3 })
-    expect(h.write).not.toHaveBeenCalled()
-    expect(h.sync).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ prevEnabled: [], nextEnabled: ['agents'] }))
-  })
-  it('켜기 — 워크스페이스가 agents 를 허용하지 않으면 거절하고 쓰지 않는다', async () => {
-    admin({})
-    h.getProjectConfig.mockResolvedValue(pc(['kanban'])); h.getWorkspaceConfig.mockResolvedValue(ws(['kanban']))
-    expect(await setAgentProjectEnabled(P1, true)).toMatchObject({ ok: false, error: expect.stringContaining('agents') })
-    expect(h.write).not.toHaveBeenCalled(); expect(h.sync).not.toHaveBeenCalled()
-  })
-  it('켜기 — 설정 판독 실패·modules.enabled 손상은 중단(쓰기 전 선행 조회 — 3원칙 ②)', async () => {
-    admin({})
-    h.getProjectConfig.mockRejectedValueOnce(new Error('down'))
-    expect(await setAgentProjectEnabled(P1, true)).toMatchObject({ ok: false })
-    h.getProjectConfig.mockResolvedValue(pc('invalid'))
-    expect(await setAgentProjectEnabled(P1, true)).toMatchObject({ ok: false })
-    expect(h.write).not.toHaveBeenCalled(); expect(h.sync).not.toHaveBeenCalled()
-  })
-  it('켜기 — 설정 쓰기 실패·동기화 실패는 그 사유로 거절(동기화 행 조작 실패면 설정은 남고 닫힌 채, 백필 실패면 열린 채 에러)', async () => {
-    admin({})
-    h.getProjectConfig.mockResolvedValue(pc(['kanban']))
-    h.write.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '충돌' })
-    expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: false, error: '충돌' })
-    h.sync.mockResolvedValueOnce({ ok: false, error: '주문 백필 실패: x' })
-    expect(await setAgentProjectEnabled(P1, true)).toEqual({ ok: false, error: '주문 백필 실패: x' })
-  })
-  it('끄기 — 행 false 를 먼저 쓰고 modules.enabled 에서 agents 를 뺀다. 동기화·백필 없음', async () => {
-    const { captured } = admin({ agent_projects: [{ data: { enabled: true } }, { data: null }] })
-    h.getProjectConfig.mockResolvedValue(pc(['kanban', 'agents']))
-    expect(await setAgentProjectEnabled(P1, false)).toEqual({ ok: true })
-    expect(captured.agent_projects).toEqual([{ enabled: false }])
-    expect(h.write).toHaveBeenCalledWith(expect.anything(), P1, { set: { 'modules.enabled': ['kanban'] } }, 'admin-1')
-    expect(h.sync).not.toHaveBeenCalled()
-  })
-  it('끄기 — 설정 쓰기가 실패해도 행은 이미 false(닫힘)이고 결과는 거절', async () => {
-    const { captured } = admin({ agent_projects: [{ data: { enabled: true } }, { data: null }] })
-    h.getProjectConfig.mockResolvedValue(pc(['agents']))
-    h.write.mockResolvedValueOnce({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
-    expect(await setAgentProjectEnabled(P1, false)).toMatchObject({ ok: false })
-    expect(captured.agent_projects).toEqual([{ enabled: false }])
-  })
-  it('끄기 — 행 없음·모듈에 없음이면 no-op', async () => {
-    const { captured } = admin({ agent_projects: [{ data: null }] })
-    h.getProjectConfig.mockResolvedValue(pc(['kanban']))
-    expect(await setAgentProjectEnabled(P1, false)).toEqual({ ok: true })
-    expect(captured.agent_projects).toBeUndefined(); expect(h.write).not.toHaveBeenCalled()
-  })
-  it('끄기 — 행 없음 + modules.enabled 에 agents 가 있으면 쓰기가 호출되어 agents 를 뺀다', async () => {
-    const { captured } = admin({ agent_projects: [{ data: null }] })
-    h.getProjectConfig.mockResolvedValue(pc(['kanban', 'agents']))
-    expect(await setAgentProjectEnabled(P1, false)).toEqual({ ok: true })
-    expect(captured.agent_projects).toBeUndefined()
-    expect(h.write).toHaveBeenCalledWith(expect.anything(), P1, { set: { 'modules.enabled': ['kanban'] } }, 'admin-1')
-  })
-  it('끄기 — 설정 판독 실패(getProjectConfig reject) 시 ok:false 반환, 단 행은 이미 false 로 닫혀 있다', async () => {
-    const { captured } = admin({ agent_projects: [{ data: { enabled: true } }, { data: null }] })
-    h.getProjectConfig.mockRejectedValueOnce(new Error('down'))
-    expect(await setAgentProjectEnabled(P1, false)).toMatchObject({ ok: false })
-    expect(captured.agent_projects).toEqual([{ enabled: false }])
-    expect(h.write).not.toHaveBeenCalled()
-  })
-  it('등록 조회 실패는 중단(위장 금지)', async () => {
-    admin({ agent_projects: [{ data: null, error: { message: 'boom' } }] })
-    const r = await setAgentProjectEnabled(P1, false)
-    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('등록 조회 실패') })
   })
 })
 

@@ -10,6 +10,35 @@ export interface ModuleAllowImpact {
   affectedProjects: number
 }
 
+export interface ProjectModuleImpact {
+  removed: { moduleId: ModuleId; dataCount: number | null; dataLabel: string }[]
+}
+
+const MODULE_DATA: Partial<Record<ModuleId, { table: string; label: string }>> = {
+  kanban: { table: 'wbs_items', label: 'WBS 항목(보드와 공유)' },
+  meetings: { table: 'meetings', label: '회의' },
+  weekly: { table: 'weekly_reports', label: '주간보고' },
+  issues: { table: 'issues', label: '이슈' },
+  wiki: { table: 'wiki_topics', label: '위키 주제' },
+  announcements: { table: 'announcements', label: '공지' },
+  attendance: { table: 'attendance_records', label: '근태 기록' },
+  agents: { table: 'agent_work_orders', label: '에이전트 작업' },
+}
+
+/** 프로젝트 모듈을 끌 때 그 모듈의 대표 데이터 건수를 센다. 공유 데이터는 이름에 표시한다. */
+export async function previewProjectModuleImpact(
+  admin: AdminClient, args: { projectId: string; before: readonly ModuleId[]; next: readonly ModuleId[] },
+): Promise<ProjectModuleImpact> {
+  const removed = args.before.filter(id => !args.next.includes(id))
+  return { removed: await Promise.all(removed.map(async moduleId => {
+    const source = MODULE_DATA[moduleId]
+    if (!source) return { moduleId, dataCount: null, dataLabel: '별도 데이터 집계 없음' }
+    const { count, error } = await admin.from(source.table).select('id', { count: 'exact', head: true }).eq('project_id', args.projectId)
+    if (error || typeof count !== 'number') throw new Error(`${source.table} 영향 건수 조회 실패: ${error?.message ?? 'count 없음'}`)
+    return { moduleId, dataCount: count, dataLabel: source.label }
+  })) }
+}
+
 /** 허용 목록을 좁힐 때 영향을 받는 프로젝트 수. 조회 실패·손상은 숫자 0으로 위장하지 않는다. */
 export async function previewModuleAllowImpact(
   admin: AdminClient,

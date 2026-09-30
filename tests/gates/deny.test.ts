@@ -42,8 +42,6 @@ const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why
   'src/app/actions/agentTokens.ts#createAgentToken': { tables: ['agent_runners'], why: '계정 단위 PAT — 대상 프로젝트가 없다. agents 모듈이 아니라 API 계정 표(노트)' },
   'src/app/actions/agentTokens.ts#revokeAgentToken': { tables: ['agent_runners'], why: 'PAT 회수 — 계정 단위 표' },
   'src/app/actions/agentTokens.ts#listMyAgentTokens': { tables: ['agent_runners'], why: 'PAT 목록 — 계정 단위 표' },
-  'src/app/actions/agentWork.ts#setAgentProjectEnabled': { tables: ['agent_projects'], why: 'D41 옛 토글 — agents 를 켜는 문이라 자기 관문에 막히면 안 된다(P8)' },
-  'src/app/actions/agentWork.ts#getAgentProjectState': { tables: ['agent_projects'], why: '세션 RLS(read_agent_projects) — 설정 화면의 토글 상태' },
   'src/app/actions/teams.ts#addTeam': { tables: ['minute_folders'], why: '담당 팀의 시드 루트 폴더 한 줄 — 폴더 트리의 루트이지 회의록 데이터가 아니다' },
   'src/app/actions/wbs.ts#updateActual': { tables: ['agent_work_orders'], why: 'WBS(core) 진척의 갱신이 에이전트 주문 행에도 닿는다 — 같은 로컬 쓰기다' },
   'src/app/actions/wbsAssign.ts#setWbsDevWorkflow': { tables: ['agent_work_orders'], why: 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)' },
@@ -250,9 +248,7 @@ const DENY_SHAPE: Readonly<Record<string, { why: string; deny?: unknown; rank?: 
 /** session null 항목 가운데 세션 없음 실행에서 뺀 것(닫힌 목록) — 사유와 그 거부를 고정하는 테스트 파일 */
 const SESSION_EXEMPT: Readonly<Record<string, { why: string; coveredBy: string }>> = {}
 /** 코드 가드 없이 세션 클라이언트의 RLS 로만 읽는 session null 항목(닫힌 목록) — 로그인 판정 대신 "세션 클라이언트로만 읽고 admin·쓰기·관문이 없다"를 본다 */
-const RLS_ONLY: Readonly<Record<string, string>> = {
-  'src/app/actions/agentWork.ts#getAgentProjectState': 'read_agent_projects RLS — 설정 화면의 옛 토글 상태(P8). 세션이 없으면 RLS 가 0행',
-}
+const RLS_ONLY: Readonly<Record<string, string>> = {}
 /** 로그인 판정과 세션 클라이언트(RLS) 읽기를 한 왕복에 병렬로 도는 session null 항목(닫힌 목록) — "로그인 거부 뒤 DB 접근 0" 대신
  *  "그 읽기가 세션 클라이언트다(admin 0)"를 본다. 비로그인이면 RLS 가 0행이다 */
 const RLS_PARALLEL: Readonly<Record<string, string>> = {
