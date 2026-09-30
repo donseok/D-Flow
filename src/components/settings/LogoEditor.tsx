@@ -55,7 +55,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
       setConflict({ revision: result.latest.revision, logo: value && typeof value === 'object' ? value as BrandingLogo : null })
       setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
       setUncertainPatch(null); return
     }

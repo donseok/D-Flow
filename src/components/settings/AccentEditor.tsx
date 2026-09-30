@@ -44,7 +44,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
         invalid: result.latest.invalidKeys.includes('branding.accent') })
       setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
       setUncertainPatch(null); return
     }

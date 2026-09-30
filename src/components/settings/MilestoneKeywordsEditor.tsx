@@ -31,7 +31,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     if (result?.ok) {
       setBaseline(text); setBaseRevision(result.revision); setRepair(false); setConflict(null); setUncertainPatch(null)
       setReviewing(false)
-      setNotice('마일스톤 키워드를 저장했습니다. 대시보드에 즉시 적용됩니다.')
+      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '마일스톤 키워드를 저장했습니다. 대시보드에 즉시 적용됩니다.')
       router.refresh(); return
     }
     if (result?.kind === 'conflict') {
@@ -48,7 +48,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
       const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline(text); setBaseRevision(found.outcome.revision); setRepair(false); setUncertainPatch(null)
-        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setNotice(found.outcome.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '저장된 명령을 확인했습니다.'); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재시도 */ }
     if (resendCount === 0) return submit(patch, 1)

@@ -59,7 +59,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
       setConflict({ revision: result.latest.revision, values: result.latest.values, invalidKeys: result.latest.invalidKeys })
       setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
       setUncertainPatch(null); return
     }

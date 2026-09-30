@@ -75,7 +75,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
       setUncertainPatch(null)
       return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setReview(null)
       setUncertainPatch(null)
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)

@@ -82,7 +82,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       setConflict({ revision: result.latest.revision, menu: fromLatest(result.latest.values['navigation.menu']) })
       setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
       setUncertainPatch(null); return
     }

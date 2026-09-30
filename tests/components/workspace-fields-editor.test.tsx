@@ -69,4 +69,13 @@ describe('WorkspaceFieldsEditor', () => {
     change('branding.mail_from_name', 'Team'); await click('저장')
     expect(update).toHaveBeenCalledWith('ws', expect.objectContaining({ set: { 'branding.mail_from_name': 'Team' } }))
   })
+
+  it('적용 뒤 동기화 실패는 다시 저장하지 않는다', async () => {
+    update.mockResolvedValue({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: 'c',
+      error: 'revision 6으로 저장됐지만 동기화에 실패했습니다.', retryable: false })
+    render(); change('branding.product_name', 'Flow'); await click('저장')
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(outcome).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('revision 6으로 저장됐지만 동기화에 실패했습니다.')
+  })
 })

@@ -129,6 +129,14 @@ describe('StageCreditSlider', () => {
     expect(container.querySelector('[data-credit-saved]')).not.toBeNull()
   })
 
+  it('서버가 변경 0건을 반환하면 바뀐 값이 없다고 알린다', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 1, rebased: false })
+    await mount()
+    await type(input('rw'), '60')
+    await saveAfterReview()
+    expect(container.querySelector('[data-credit-saved]')?.textContent).toBe('바뀐 값이 없습니다.')
+  })
+
   it('충돌(conflict)이면 내 값과 최신 값을 비교하고 선택 전 저장을 막는다', async () => {
     updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
       latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })

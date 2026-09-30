@@ -88,6 +88,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   // 편집 세션의 기준 revision — LevelSettingsManager 와 같다(최종 리뷰 FN-2): prop 이 아니라 초안을 읽은 시점으로 보내고, 자기 저장·충돌 때만 올린다
   const [base, setBase] = useState(revision)
   const [saved, setSaved] = useState(false)
+  const [noChange, setNoChange] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<{ revision: number; latest: StageCredits | null } | null>(null)
   const [reviewing, setReviewing] = useState(false)
@@ -104,7 +105,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const locked = !editable || pending || !!uncertainPatch
   const setValue = (key: CreditKey, raw: number) => {
     setTable(prev => ({ ...prev, [key]: clampCredit(raw, key, prev) }))
-    setDirty(true); setSaved(false); setError(null); setReviewing(false)
+    setDirty(true); setSaved(false); setNoChange(false); setError(null); setReviewing(false)
   }
   const commitDraft = (key: CreditKey) => {
     const raw = draft[key]
@@ -145,7 +146,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     let r: SettingsCommandResult | null = null
     try { r = await updateProjectSettings(projectId, patch) } catch { /* 명령 이력에서 확인 */ }
     if (r?.ok) {
-      setBase(r.revision); setBaseline({ ...table }); setDirty(false); setSaved(true)
+      setBase(r.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(r.revision === patch.expectedRevision)
       setReviewing(false); setUncertainPatch(null); router.refresh(); return
     }
     if (r?.kind === 'conflict') {
@@ -159,7 +160,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     try {
       const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
-        setBase(found.outcome.revision); setBaseline({ ...table }); setDirty(false); setSaved(true)
+        setBase(found.outcome.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(found.outcome.revision === patch.expectedRevision)
         setReviewing(false); setUncertainPatch(null); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재시도 */ }
@@ -403,7 +404,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
       }]} latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setReviewing(false); setError(null) }}
         onLatest={() => { if (conflict.latest) { setTable({ ...conflict.latest.default }); setBaseline({ ...conflict.latest.default }) } setBase(conflict.revision); setDirty(false); setReviewing(false); setConflict(null); setError(null) }} />}
-      {saved && <p data-credit-saved role="status" className="text-xs text-done">{t('settings.creditsSaved')}</p>}
+      {saved && <p data-credit-saved role="status" className="text-xs text-done">{noChange ? '바뀐 값이 없습니다.' : t('settings.creditsSaved')}</p>}
       {error && <p data-credit-error role="alert" className="text-xs text-delayed">{error}</p>}
     </div>
   )

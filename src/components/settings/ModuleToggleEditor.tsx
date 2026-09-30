@@ -64,7 +64,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
       setConflict({ revision: result.latest.revision, enabled: Array.isArray(value) ? value as ModuleId[] : null })
       setReview(null); setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setReview(null); setUncertainPatch(null)
       setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
       return
