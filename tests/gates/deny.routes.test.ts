@@ -11,10 +11,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/supabase/admin', async () => (await import('./_harness')).adminMock)
 vi.mock('@/lib/supabase/server', async () => (await import('./_harness')).serverMock)
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
-import { gateCallsIn, gateSitesIn, parse, siteProblems, type GateSite } from '../invariants/_ast'
+import { gateCallsIn, gateSitesIn, parse, siteProblems, tablesInNode, type GateSite } from '../invariants/_ast'
 import { walk } from '../invariants/_walk'
 import { enumerateRoutes } from './_enumerate'
 import { harness, U } from './_harness'
+import { MODULE_TABLE_OWNER } from './_tables'
 import { ROUTE_GATES, type GateEntry } from './manifest'
 
 const entries = Object.entries(ROUTE_GATES)
@@ -95,10 +96,17 @@ const expectRoot = (c: ts.CallExpression): ts.CallExpression | null => {
   return null
 }
 const expectRooted = (c: ts.CallExpression): boolean => expectRoot(c) !== null
-/** 부정 사슬이다 — expect(x).not.toMatchObject(…) 의 토큰은 "그 코드가 **없어야** 한다"를 말한다(B4 m-3·T25-I2) */
+/** 부정 사슬이다 — expect(x).not.toMatchObject(…) 뿐 아니라 expect(x).resolves.not.toBe(…) 도 "그 코드가 **없어야** 한다"를 말한다.
+ *  사슬 안에서만 걷는다(인자 경계에서 멈춘다) — 바깥 expect 의 부정이 안쪽 expect 를 부정으로 만들지 않게 하는 것이 목적이다(F-1) */
 const negated = (c: ts.CallExpression): boolean => {
   const r = expectRoot(c)
-  return !!r && ts.isPropertyAccessExpression(r.parent) && r.parent.name.text === 'not'
+  if (!r) return false
+  let e: ts.Node = r.parent
+  while (e && (ts.isPropertyAccessExpression(e) || ts.isCallExpression(e) || ts.isAwaitExpression(e) || ts.isElementAccessExpression(e))) {
+    if (ts.isPropertyAccessExpression(e) && e.name.text === 'not') return true
+    e = e.parent
+  }
+  return false
 }
 /** 블록 안의 거부 단언 — 거부 흔적이 expect 사슬(대상·매처 인자) 안에 있어야 하고 **부정이 아니어야** 한다.
  *  mock 준비(mockResolvedValue 의 ERR_MODULE_DISABLED)·주석은 단언이 아니다 */
@@ -207,19 +215,24 @@ function handlerBody(sf: ts.SourceFile, name: string): ts.Node | undefined {
 }
 /** 핸들러 몸의 최상위 if 사슬(else if 도 한 갈래) — 소스 순서로. 최상위 try 블록은 통과한다(branchOf 도 try 를 통과시킨다 — 실패는
  *  catch 가 응답하고 끝나므로 그 안 if 는 갈래다). if 안에 숨은 갈래·반복문·중첩 함수는 최상위 문이 아니므로 없다 */
-function topLevelBranches(sf: ts.SourceFile, body: ts.Node | undefined): ts.IfStatement[] {
+/** 최상위 분기 하나 — if 사슬의 각 갈래, 그리고 switch 한 벌. `then` 이 null 이면 조기 반환 가드로 인정될 수 없다(switch) */
+type TopBranch = { label: string; node: ts.Node; then: ts.Statement | null }
+function topLevelBranches(sf: ts.SourceFile, body: ts.Node | undefined): TopBranch[] {
   if (!body || !ts.isBlock(body)) return []
-  const out: ts.IfStatement[] = []
+  const out: TopBranch[] = []
   const scan = (stmts: readonly ts.Statement[]): void => {
     for (const st of stmts) {
       if (ts.isIfStatement(st)) {
         let cur: ts.IfStatement = st
         for (;;) {
-          out.push(cur)
+          out.push({ label: cur.expression.getText(sf), node: cur, then: cur.thenStatement })
           const els = cur.elseStatement
           if (els === undefined || !ts.isIfStatement(els)) break
           cur = els
         }
+      } else if (ts.isSwitchStatement(st)) {
+        // switch 도 갈래다 — 코어 구간에 숨은 "토글 모듈 표를 읽는 switch" 가 갈래 목록 밖으로 빠져나가지 않게(F-2)
+        out.push({ label: `switch ${st.expression.getText(sf)}`, node: st, then: null })
       } else if (ts.isTryStatement(st)) scan(st.tryBlock.statements)
     }
   }
@@ -239,6 +252,10 @@ function ifChainEnd(b: ts.IfStatement): number {
     cur = els
   }
 }
+/** 노드가 토글 모듈 소유 표를 직접 만지는가 — 없는 파일의 임포트 로더는 못 본다(한계는 코드 주석) */
+function moduleTablesInNode(sf: ts.SourceFile, node: ts.Node): string[] {
+  return tablesInNode(sf, node).filter((t) => MODULE_TABLE_OWNER[t])
+}
 /** BRANCH_GATE 핸들러의 판정 확인 — 모든 판정이 원천·결과 사용을 지키고, 목록의 갈래 블록에서 늘 돌며, 갈래마다 판정이 있고,
  *  최상위 if 는 전부 목록(관문 갈래·조기 반환 가드)이나 core 구간에 속한다(B4 T20-I1 — 목록 밖 갈래의 무관문 본문은 목록으로 덮이지 않는다) */
 function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: readonly GateSite[]): string[] {
@@ -254,21 +271,28 @@ function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: r
   for (const w of Object.keys(bg.gated)) if (!seen.has(w)) out.push(`${key}: 갈래 ${w} 에 판정이 없다`)
   const ungated = bg.ungated ?? {}
   const branches = topLevelBranches(sf, body)
-  const at = (b: ts.IfStatement) => b.expression.getText(sf)
-  // core 구간 = 마지막 gated 갈래(else 사슬 포함) 뒤. core 를 선언하지 않은 핸들러에는 그 구간이 없다(무한대여서 아무 갈래도 면제되지 않는다) — 목록 밖 갈래가 아무 데도 못 숨는다
-  const coreFrom = bg.core === undefined
-    ? Number.POSITIVE_INFINITY
-    : Math.max(-1, ...branches.filter((b) => at(b) in bg.gated).map((b) => ifChainEnd(b)))
+  const gatedIfEnds = branches.flatMap((x) => (x.label in bg.gated && ts.isIfStatement(x.node) ? [ifChainEnd(x.node)] : []))
+  const coreFrom = bg.core === undefined ? Number.POSITIVE_INFINITY : Math.max(-1, ...gatedIfEnds)
   for (const b of branches) {
-    const c = at(b)
+    const c = b.label
     if (c in bg.gated || c in ungated) continue
-    if (b.getStart(sf) > coreFrom) continue
-    out.push(`${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다`)
+    // ① 모양 — 목록 밖 갈래는 core 구간이 아니면 실패한다(세션 가드까지 열거해 목록의 완전성을 본다)
+    if (b.node.getStart(sf) <= coreFrom) {
+      out.push(`${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다`)
+      continue
+    }
+    // ② 데이터 — core 구간이라도 토글 모듈 표를 직접 만지면 실패한다(F-2). 예전 판정은 "마지막 관문 갈래 뒤면 면제"였고 그 면제는
+    //    무한했다 — 최종 리뷰가 그 면제 안에 weekly_reports 를 읽는 갈래를 넣고 8543 테스트가 초록인 것을 실측했다.
+    //    에러 가드(NextResponse 반환)와 core 폴스루는 표에 닿지 않으므로 통과한다(가짜 양성 대조는 민감도 it 에 있다)
+    const hits = moduleTablesInNode(sf, b.node)
+    if (hits.length) {
+      out.push(`${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 없고 core 구간(${bg.core}) 안이면서 토글 모듈의 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 직접 만진다 — 꺼진 뒤에도 그 데이터가 읽히거나 바뀐다`)
+    }
   }
   for (const [c, why] of Object.entries(ungated)) {
-    const b = branches.find((x) => at(x) === c)
+    const b = branches.find((x) => x.label === c)
     if (!b) out.push(`${key}: 조기 반환 목록 ${c} 가 핸들러에 없다(죽은 항목)`)
-    else if (!singleReturn(b.thenStatement)) out.push(`${key}: 조기 반환 목록 ${c} 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: ${why})`)
+    else if (b.then === null || !singleReturn(b.then)) out.push(`${key}: 조기 반환 목록 ${c} 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: ${why})`)
   }
   return out
 }
@@ -473,6 +497,14 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', negatedOnly), '부정 단언은 거부를 말하지 않는다').toHaveLength(1)
     const negatedHelper = file("it('GET 꺼짐', async () => { expect(await (await callGet()).json()).not.toBe(ERR_MODULE_DISABLED) })")
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', negatedHelper), 'not.toBe(ERR_MODULE_DISABLED) 도 부정이다').toHaveLength(1)
+    // F-1 — 최종 리뷰가 실제 exploits 한 축. .resolves.not / .rejects.not 은 한 겹 더 깊어서 사슬의 첫 단계만 보면 놓친다
+    const resolvedNot = file("it('GET 꺼짐', async () => { expect(resolve(await (await callGet()).json())).not.toMatchObject({ error: ERR_MODULE_DISABLED }) })")
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', resolvedNot), '.resolves.not 도 부정이다').toHaveLength(1)
+    const rejectsNot = file("it('GET 꺼짐', async () => { expect(reject()).rejects.not.toThrow() })")
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', rejectsNot), '.rejects.not 도 부정이다').toHaveLength(1)
+    // 대조 — 바깥 expect 의 부정이 안쪽 expect 를 부정으로 만들면 안 된다(사슬 안에서만 걷는다)
+    const nested = file("it('GET 꺼짐', async () => { expect(ok(await (await callGet()).json())).not.toEqual(expect(body).toMatchObject({ error: ERR_MODULE_DISABLED })) })")
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', nested), '바깥 부정 안에 있는 비부정 단언은 통과시킨다').toEqual([])
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', file(deniedIt)), '대조 — 비부정 단언이 있으면 통과').toEqual([])
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', file(deniedIt, negatedOnly.slice(negatedOnly.indexOf("it('GET")))), '대조 — 부정 it 이 옆에 있어도 비부정 it 이 통과시킨다').toEqual([])
   })
@@ -508,30 +540,40 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
       ungated: { '!p': '세션 가드 400' },
     }
     const G = "const mod = await requireModule({ projectId: p }, 'weekly'); if (!mod.ok) return deny"
+    const READ = "const rows = await admin.from('weekly_reports').select(); return pdfSheet(rows)"
     const bsrc = [
       "import { requireModule } from '@/lib/modules/gate'",
       `export async function GET(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } return core() }`,
-      // (가) 관문 갈래 **앞**에 있는 목록 밖 본문 갈래 — 살아남던 변이(mode==='quick')의 모양
-      `export async function POST(req) { if (!p) return bad; if (source === 'pdf') { return pdfSheet() } if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // (가) 관문 갈래 **앞**에 있는 목록 밖 본문 갈래 — 살아남던 변이(mode==='quick')의 모양. 토글 모듈 표를 직접 읽는다
+      `export async function POST(req) { if (!p) return bad; if (source === 'pdf') { ${READ} } if (source === 'sheet') { ${G}; return sheet() } return core() }`,
       // (나) 조기 반환 목록에 넣은 조건에 본문을 붙인 것
       `export async function PUT(req) { if (!p) { const a = await read(); return a } if (source === 'sheet') { ${G}; return sheet() } return core() }`,
-      // 대조 — core 구간(마지막 관문 갈래 뒤)의 갈래는 관문 없는 것이 설계다
+      // (다) 대조 — core 구간의 **모듈 표를 닿지 않는** 갈래는 관문 없는 것이 설계다
       `export async function PATCH(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'pdf') { return pdfSheet() } return core() }`,
       `export async function DELETE(req) { if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // (라) 최종 리뷰가 실측한 구멍 — core 구간이 무한 면제였다. 모듈 표를 읽는 갈래를 붙이면 잡혀야 한다
+      `export async function PUT2(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'xlsx') { ${READ} } return core() }`,
+      // (마) 갈래 목록 밖 switch — 갈래 문법만 훑으면 빠져나간다(F-2)
+      `export async function POST2(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } switch (source) { case 'csv': { ${READ} } } return core() }`,
     ].join('\n')
     const bf = parse('src/app/api/z/route.ts', bsrc)
     const p = (m: string) => branchProblems(`z#${m}`, bg, bf, gateSitesIn(bf, m, MODULE_ROUTE_GATES))
-    const listed = "최상위 갈래 source === 'pdf' 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다"
+    const tail = "토글 모듈의 표 weekly_reports(weekly) 를 직접 만진다 — 꺼진 뒤에도 그 데이터가 읽히거나 바뀐다"
     expect(p('GET')).toEqual([])
-    expect(p('POST'), '목록 밖 무관문 본문 갈래').toEqual([`z#POST: ${listed}`])
+    expect(p('POST'), '목록 밖 무관문 본문 갈래 — core 구간 전이라 모양 판정이 먼저 말한다')
+      .toEqual([`z#POST: 최상위 갈래 source === 'pdf' 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다`])
     expect(p('PUT'), '조기 반환 목록의 조건에 본문을 붙이면 가드가 아니다').toEqual(['z#PUT: 조기 반환 목록 !p 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: 세션 가드 400)'])
-    expect(p('PATCH'), '대조 — core 구간(마지막 관문 갈래 뒤)의 갈래는 자유다').toEqual([])
+    expect(p('PATCH'), '대조 — core 구간의 갈래가 모듈 표를 닿지 않으면 자유다').toEqual([])
     expect(p('DELETE'), '죽은 조기 반환 항목').toEqual(['z#DELETE: 조기 반환 목록 !p 가 핸들러에 없다(죽은 항목)'])
-    // core 를 선언하지 않은 핸들러에는 core 구간이 없다 — 마지막 관문 갈래 뒤의 갈래도 목록에 있어야 한다(minutes/chat)
+    expect(p('PUT2'), 'core 구간이 무한 면제여서는 안 된다 — 모듈 표를 읽는 갈래는 잡힌다')
+      .toEqual([`z#PUT2: 최상위 갈래 source === 'xlsx' 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 없고 core 구간(기본) 안이면서 ${tail}`])
+    expect(p('POST2'), '목록 밖 switch 도 갈래다')
+      .toEqual([`z#POST2: 최상위 갈래 switch source 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 없고 core 구간(기본) 안이면서 ${tail}`])
+    // core 를 선언하지 않은 핸들러에는 core 구간이 없다 — 모듈 표를 읽는 갈래는 목록에 있어야 한다(minutes/chat)
     const noCore: BranchGate = { reason: '합성', gated: { "mode === 'doc'": 'doc' }, ungated: { '!p': '세션 가드 400' } }
     const nsrc = [
       "import { requireModule } from '@/lib/modules/gate'",
-      `export async function GET(req) { if (!p) return bad; if (mode === 'doc') { ${G}; return doc() } if (mode === 'quick') { return quick() } return bad }`,
+      `export async function GET(req) { if (!p) return bad; if (mode === 'doc') { ${G}; return doc() } if (mode === 'quick') { ${READ} } return bad }`,
     ].join('\n')
     const nf = parse('src/app/api/y/route.ts', nsrc)
     expect(branchProblems('y#GET', noCore, nf, gateSitesIn(nf, 'GET', MODULE_ROUTE_GATES))).toEqual([

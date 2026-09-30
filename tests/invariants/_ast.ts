@@ -99,6 +99,22 @@ export function gateCallsIn(sf: ts.SourceFile, exportName: string, names: Readon
   return found
 }
 
+/** 노드 안(자기 자신 포함)이 `.from('<표>')` 로 만지는 표 이름 — 문자열 리터럴 인자만 센다. 같은 파일 헬퍼는 따라가지 않는다 */
+export function tablesInNode(sf: ts.SourceFile, node: ts.Node): string[] {
+  const out = new Set<string>()
+  const walk = (n: ts.Node): void => {
+    if (ts.isCallExpression(n)) {
+      if (ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'from') {
+        const arg = n.arguments[0]
+        if (arg && ts.isStringLiteralLike(arg)) out.add(arg.text)
+      }
+    }
+    ts.forEachChild(n, walk)
+  }
+  walk(node)
+  return [...out].sort()
+}
+
 /** exportName 본문(과 재귀적으로 부르는 같은 파일 최상위 함수)이 `.from('<표>')` 로 만지는 표 이름 — 문자열 리터럴 인자만 센다.
  *  다른 파일(임포트한 데이터 로더)이 만지는 표는 못 본다. 게이트는 그것을 한계로 적었다 — 표 이름 대조는 관리 목록의 감시 대상이다 */
 export function tablesIn(sf: ts.SourceFile, exportName: string): string[] {
@@ -107,10 +123,7 @@ export function tablesIn(sf: ts.SourceFile, exportName: string): string[] {
   const seen = new Set<string>()
   const walk = (n: ts.Node): void => {
     if (ts.isCallExpression(n)) {
-      if (ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'from') {
-        const arg = n.arguments[0]
-        if (arg && ts.isStringLiteralLike(arg)) out.add(arg.text)
-      }
+      for (const t of tablesInNode(sf, n)) out.add(t)
       if (ts.isIdentifier(n.expression) && bodies.has(n.expression.text) && !seen.has(n.expression.text)) {
         seen.add(n.expression.text)
         walk(bodies.get(n.expression.text) as ts.ConciseBody)

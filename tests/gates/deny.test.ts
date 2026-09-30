@@ -19,6 +19,7 @@ vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn(async () => null), genera
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn(async () => ({ ok: true })) }))
 import { ERR_ANON, ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
+import { MODULE_TABLE_OWNER } from './_tables'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { gateCallsIn, gateSitesIn, parse, siteProblems, tablesIn } from '../invariants/_ast'
 import { harness, P, U, type Target } from './_harness'
@@ -34,23 +35,7 @@ const has = (v: unknown, id: string): boolean =>
  *  core 모듈 소유 표(wbs_items·projects·profiles·teams·설정 표 등)는 여기 없다 — core 는 끌 수 없어 관문이 필요 없다.
  *  모듈이 표를 '직접' 소유하는지(apiPrefixes·routePrefixes 가 그 모듈의 면인 표)를 기준으로 적었고, 다른 모듈의 표를 같이 쓰는
  *  캐시 표(llm_profiles — ai.enabled 는 settings 모듈 소유)는 일부러 뺀다. 새 표를 여기 더하면 그 표를 쓰는 모듈 하나가 자동으로 막힌다 */
-const MODULE_TABLE_OWNER: Readonly<Record<string, ModuleId>> = {
-  meetings: 'meetings', meeting_attendees: 'meetings', meeting_exceptions: 'meetings',
-  weekly_reports: 'weekly', weekly_report_rows: 'weekly',
-  issues: 'issues', issue_assignees: 'issues', issue_attachments: 'issues', issue_links: 'issues',
-  issue_major_processes: 'issues', issue_mega_areas: 'issues', issue_number_counters: 'issues', issue_updates: 'issues',
-  issue_analysis_runs: 'issues',
-  wiki_items: 'wiki', wiki_topics: 'wiki', wiki_questions: 'wiki', wiki_item_relations: 'wiki', wiki_item_sources: 'wiki',
-  wiki_change_events: 'wiki', wiki_feedback: 'wiki', wiki_processing_jobs: 'wiki', wiki_project_rebuild_jobs: 'wiki',
-  wiki_topic_revisions: 'wiki', ai_documents: 'wiki', ai_index_jobs: 'wiki',
-  announcements: 'announcements', announcement_seen: 'announcements',
-  attendance_records: 'attendance',
-  agent_projects: 'agents', agent_runners: 'agents', agent_work_orders: 'agents', agent_work_reports: 'agents',
-  agent_lead_leases: 'agents', agent_watchers: 'agents',
-  minutes: 'minutes', minute_folders: 'minutes', minute_files: 'minutes', minute_highlights: 'minutes',
-  minute_insights: 'minutes', minute_versions: 'minutes', minute_favorites: 'minutes', minute_embeddings: 'minutes',
-  usage_events: 'usage',
-}
+// 토글 모듈이 소유한 표 목록은 tests/gates/_tables.ts 한 곳에 있다 — deny.routes.test.ts 의 "무관문 갈래" 축이 같은 표를 쓴다(F-2)
 /** module null 인데 모듈 데이터 표를 만지는 항목(닫힌 목록 — 항목마다 그 표와 사유. settings-writes 의 허용 파일 표와 같은 모양이다).
  *  새 null 항목이 모듈 표를 만지면 여기 표·사유를 확인한 뒤 더한다 — 관문 모듈로 적는 쪽은 다른 축(MU4)이 교차 검증한다 */
 const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why: string }>> = {
