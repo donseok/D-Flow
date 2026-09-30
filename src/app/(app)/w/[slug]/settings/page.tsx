@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu } from 'lucide-react'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -7,6 +7,7 @@ import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
 import { LogoEditor } from '@/components/settings/LogoEditor'
 import { AccentEditor } from '@/components/settings/AccentEditor'
+import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -75,6 +76,11 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       </SectionCard>
       <SectionCard eyebrow="초대" title="초대 정책" icon={Mail}>
         <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'invites.allowed_domains')]} />
+      </SectionCard>
+      <SectionCard eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
+        <MenuOrderEditor workspaceId={access.id} revision={config.revision}
+          initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
+          invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
       </SectionCard>
     </div>
   )
