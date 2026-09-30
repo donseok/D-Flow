@@ -41,10 +41,11 @@ describe('설정 카탈로그 동기화', () => {
 
   it('수기 절의 근거 파일과 심볼이 실재한다', () => {
     const manual = readFileSync(file, 'utf8').replace(/<!-- catalog:auto:\d+:start -->[\s\S]*?<!-- catalog:auto:\d+:end -->/g, '')
-    for (const match of manual.matchAll(/`(src\/[^`]+\.[cm]?[jt]sx?)`(?:\s+`([A-Za-z_$][\w$]*)`)?/g)) {
+    for (const match of manual.matchAll(/`(src\/[^`]+\.[cm]?[jt]sx?)`(?:\S{0,3}\s+`([A-Za-z_$][\w$]*)`)?/g)) {
       const [, path, symbol] = match
       expect(existsSync(path), path).toBe(true)
-      if (symbol) expect(readFileSync(path, 'utf8').includes(symbol), `${path}: ${symbol}`).toBe(true)
+      // 식별자 경계로 본다 — 부분 문자열이면 GET·Locale 같은 짧은 이름이 파일 어디에든 걸린다.
+      if (symbol) expect(new RegExp(`(?<![\\w$])${symbol.replace(/\$/g, '\\$')}(?![\\w$])`).test(readFileSync(path, 'utf8')), `${path}: ${symbol}`).toBe(true)
     }
   })
 })
