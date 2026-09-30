@@ -33,7 +33,7 @@ function parseAction(raw: unknown): ReindexAction | null {
   return action === 'status' || action === 'enqueue' || action === 'step' || action === 'repair' ? action : null
 }
 
-/** 워커 라우트와 동일한 accessScope 조립 — 챗봇이 켜진 프로젝트 + global. */
+/** 워커 라우트와 동일한 accessScope 조립 — chatbot 이 켜진 워크스페이스·프로젝트 + global(P29). */
 async function loadAccessScope(
   admin: ReturnType<typeof createAdminClient>,
 ): Promise<{ allowedProjectIds: string[]; allowGlobal: true } | null> {
@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result)
     }
 
+    // 정본 §3.2.7 규칙 2 — status·repair 는 위에서 처리하므로 배포 플래그가 꺼져도 남는다.
     if (!moduleDef('chatbot').envAvailable()) {
       return NextResponse.json({ error: '이 배포에서는 챗봇 색인을 쓸 수 없습니다.' }, { status: 404 })
     }

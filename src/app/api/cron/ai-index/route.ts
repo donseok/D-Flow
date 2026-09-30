@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
   if (!chatIndexWorkerEnabled()) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
   }
+  // 배포에서 쓸 수 없는 모듈은 잡을 선점하지 않는다(정본 §3.2.7 규칙 2) — 선점하면 잡마다 off → skipped 로 영구히 소모된다(D16).
   if (!moduleDef('chatbot').envAvailable()) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 })
 
   // Authorization: Bearer <secret> 규약으로 들어온다(Vercel 크론).
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
   // 어댑터 3종 조립은 /api/chat/index/worker/route.ts:101-107 과 동일하게 한다.
   const db = createAdminClient()
   const admin = db as unknown as SupabaseKnowledgeClient
+  // 스코프는 워크스페이스 → 프로젝트 순으로 chatbot 이 켜진 것만(스펙 §4.2 워커 행, P29). 조회 실패를 빈 스코프로 위장하지 않는다(3원칙 ①).
   const scope = await enabledIndexProjectIds(db)
   if (!scope.ok) return NextResponse.json({ error: 'PROJECTS_READ_FAILED' }, { status: 503 })
   const accessScope = { allowedProjectIds: scope.ids, allowGlobal: true }

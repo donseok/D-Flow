@@ -972,6 +972,7 @@ export async function processMinuteWikiJob(jobId: number): Promise<WikiProcessSu
   const job = claimedJob as unknown as Row
 
   try {
+    // wiki 모듈 판정(스펙 §4.2 워커 행, D16) — 요청 경로의 즉시 처리도 이 함수를 지나 같이 닫힌다.
     const gate = await gateWikiJob(admin, {
       table: 'wiki_processing_jobs', id: job.id as number,
       projectId: job.project_id as string, lockedBy: job.locked_by as string,
@@ -1183,6 +1184,9 @@ export async function processWikiProjectRebuildStep(
     throw new Error('PROJECT_REBUILD_CLAIM_INVALID')
   }
 
+  // wiki 모듈 판정 — 꺼지면 재구성 잡을 skipped 로 닫고 이 단계를 끝낸다(finish 를 부르지 않는다).
+  // 걸린 회의록 잡은 pending 으로 남아 다음 워커가 같은 판정으로 닫는다. 모르면 finish 실패 경로로 재시도한다.
+  // 첫 claim 의 soft-reset 은 이미 실행됐다. 여기서 skipped 되면 모듈을 다시 켜도 지식은 복구되지 않아 /api/wiki/reindex enqueue 가 필요하다.
   const gate = await gateWikiJob(admin, {
     table: 'wiki_project_rebuild_jobs', projectId: claim.claimed_project_id, lockedBy: workerId,
   })

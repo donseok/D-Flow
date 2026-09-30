@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
 
   try {
-    // service-role 전용 조립. 어댑터 스코프는 실제 프로젝트 전체 + global(회의 미연결 회의록).
+    // service-role 전용 조립. repair 는 전역 스캔이고, 그 밖의 어댑터는 아래에서 켜진 프로젝트 + global 로 좁힌다(P29).
     const db = createAdminClient()
     const admin = db as unknown as SupabaseKnowledgeClient
 
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ mode: 'repair', ...result })
     }
 
+    // 전역 backfill·consistency 도 워크스페이스 → 프로젝트 관문을 통과한 범위만 큐에 넣는다(스펙 §4.2 워커 행).
     const scope = await enabledIndexProjectIds(db)
     if (!scope.ok) return NextResponse.json({ error: '프로젝트 범위를 확인하지 못했습니다.' }, { status: 503 })
     const accessScope = { allowedProjectIds: scope.ids, allowGlobal: true }
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
         domain,
         projectId: body.projectId,
         list: createSupabaseIndexSourceLister(admin),
-        enqueue: async mutations => queue.enqueue(await keepEnabledMutations(gate, mutations)),
+        enqueue: async mutations => queue.enqueue(await keepEnabledMutations(gate, mutations)), // 켜진 것만(스펙 §4.2 워커 행)
         dryRun: body.dryRun,
         batchSize: body.batchSize,
       })
