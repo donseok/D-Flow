@@ -5,6 +5,9 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
+import { LEVEL_LABELS_4, SEED_ACCOUNTS, fnv1a64, seedIds, seedPlan } from '../../scripts/ui-capture.mjs'
+import { findTraces } from '../../scripts/lib/e2e.mjs'
+import { deriveSeatState } from '../../src/lib/domain/seatState'
 
 const root = process.cwd()
 const pageFiles = (() => {
@@ -122,5 +125,82 @@ describe('ui-capture.routes.json', () => {
   })
   it('설정 표 이름을 담지 않는다(settings-writes 가 scripts 의 json 을 단어로 센다 — 판정 Q7)', () => {
     expect(JSON.stringify(routesDoc)).not.toMatch(/project_settings|workspace_settings|authz_events/)
+  })
+})
+
+const CTX = {
+  today: '2026-09-29', projectId: '00000000-0000-0000-7e57-000000001501', wsA: '00000000-0000-0000-7e57-000000001502',
+  memberIds: { member: '00000000-0000-0000-7e57-000000001503', duo: '00000000-0000-0000-7e57-000000001504', wsAdmin: '00000000-0000-0000-7e57-000000001505' },
+  users: { wsAdmin: '00000000-0000-0000-7e57-000000001506' },
+}
+
+describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
+  const plan = seedPlan(CTX)
+  it('같은 입력이면 같은 행', () => { expect(seedPlan(CTX)).toEqual(plan) })
+  it('WBS 60행, 깊이 4(level_idx 0..3), 부모가 자식보다 먼저, id 유일', () => {
+    expect(plan.wbs).toHaveLength(60)
+    expect(new Set(plan.wbs.map((r) => r.level_idx))).toEqual(new Set([0, 1, 2, 3]))
+    const seen = new Set<string>()
+    for (const r of plan.wbs) { if (r.parent_id) expect(seen.has(r.parent_id)).toBe(true); seen.add(r.id) }
+    expect(seen.size).toBe(60)
+    expect(LEVEL_LABELS_4).toHaveLength(4)
+  })
+  it('완료·지연·진행·오늘 마감·예정·이정표·분리 부모가 모두 있다', () => {
+    const leaves = plan.wbs.filter((r) => r.weight === 1)
+    expect(leaves.some((r) => r.actual_pct === 100 && r.planned_end < CTX.today)).toBe(true)              // 완료
+    expect(leaves.some((r) => (r.actual_pct ?? 0) < 100 && r.planned_end < CTX.today)).toBe(true)          // 지연
+    expect(leaves.some((r) => r.planned_start <= CTX.today && CTX.today < r.planned_end)).toBe(true)      // 진행
+    expect(leaves.some((r) => r.planned_end === CTX.today)).toBe(true)                                     // 오늘 마감
+    expect(leaves.some((r) => r.planned_start > CTX.today)).toBe(true)                                     // 예정
+    expect(plan.wbs.filter((r) => r.milestone)).toHaveLength(2)
+    expect(plan.wbs.filter((r) => r.is_owner_split)).toHaveLength(1)
+  })
+  it('팀 5색, 모든 잎에 primary 담당, 의존은 존재하는 행끼리', () => {
+    expect(plan.teams).toHaveLength(5)
+    const ids = new Set(plan.wbs.map((r) => r.id))
+    const leaves = plan.wbs.filter((r) => r.weight === 1)
+    for (const l of leaves) expect(plan.owners.some((o) => o.wbs_item_id === l.id && o.kind === 'primary')).toBe(true)
+    for (const d of plan.deps) { expect(ids.has(d.predecessor_id)).toBe(true); expect(ids.has(d.successor_id)).toBe(true) }
+    expect(plan.deps.length).toBeGreaterThanOrEqual(3)
+  })
+  it('날짜는 today 상대값 — 하루 뒤 시드는 모든 날짜가 하루 밀린다', () => {
+    const next = seedPlan({ ...CTX, today: '2026-09-30' })
+    expect(next.wbs.map((r) => r.planned_end)).toEqual(plan.wbs.map((r) => r.planned_end && (() => { const d = new Date(`${r.planned_end}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10) })()))
+  })
+  it('문구에 고객 흔적이 없다', () => {
+    expect(findTraces([{ name: 'seed', text: JSON.stringify(plan) }, { name: 'accounts', text: JSON.stringify(SEED_ACCOUNTS) }])).toEqual([])
+  })
+  it('seedIds 는 결정적이고 토큰은 plan 의 해시와 짝이다', () => {
+    const ids = seedIds(CTX.projectId)
+    expect(seedIds(CTX.projectId)).toEqual(ids)
+    expect(plan.minutes[0].id).toBe(ids.minuteId)
+    expect(plan.wikiTopic.id).toBe(ids.topicId)
+    expect(plan.invite.token_hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(plan.invite.token_hash).not.toContain(ids.inviteToken)
+  })
+  it('에이전트 좌석 1 — agent 태그 잎 하나의 점유·막힘 주문, 시각과 무관하게 BLOCKED(판정 Q34)', () => {
+    const o = plan.agentOrder as unknown as { project_id: string; wbs_item_id: string; status: 'claimed'; heartbeat_phase: string; last_heartbeat_at: string; claimed_at: string }
+    const wbs = plan.wbs as unknown as { id: string; weight: number | null; actual_pct: number | null; tags: string[] | null }[]
+    const tagged = wbs.filter((r) => (r.tags ?? []).includes('agent'))
+    expect(tagged.map((r) => r.id)).toEqual([o.wbs_item_id])
+    expect(tagged[0].weight).toBe(1)
+    expect([o.project_id, o.status, o.heartbeat_phase]).toEqual([CTX.projectId, 'claimed', 'blocked'])
+    for (const hours of [0, 2, 48]) {
+      const now = Date.parse(`${CTX.today}T00:00:00+09:00`) + hours * 3_600_000
+      expect(deriveSeatState({ status: o.status, lastHeartbeatAt: o.last_heartbeat_at, heartbeatPhase: o.heartbeat_phase, updatedAt: o.claimed_at, lastReview: null, actualPct: tagged[0].actual_pct }, now)).toBe('BLOCKED')
+    }
+  })
+  // 아래 기댓값은 전부 레인 B DB 의 public.wiki_fnv1a64 로 확인한 값이다(2026-09-30 실측). 회의록 생성 RPC 가
+  // sha256 이 아니라 이 해시를 요구하므로 — FNV-1a 64 와 어긋나면 seed 가 MINUTE_CREATE_INPUT_INVALID 로 죽는다.
+  it('fnv1a64 은 SQL 쪽과 같은 값이다 — 회의록 본문 해시 계약(빈 문자열·ASCII·한글 BMP)', () => {
+    expect(fnv1a64('')).toBe('cbf29ce484222325')
+    expect(fnv1a64('a')).toBe('af63dc4c8601ec8c')
+    expect(fnv1a64('foobar')).toBe('85944171f73967e8')
+    expect(fnv1a64('한')).toBe('b037114c8768cf9b')
+    expect(fnv1a64('a한')).toBe('07e92607b4153c70')
+    expect(fnv1a64('설계 검토 회의')).toBe('1ce8bc02eb78a6e9')
+  })
+  it('fnv1a64 은 시드의 회의록 본문에서 SQL 실측값과 같다(본문 전체를 해시로 고정)', () => {
+    expect(plan.minutes.map((m) => fnv1a64(m.body))).toEqual(['b78d8307b9571ce9', '88019ce70f34c6bc'])
   })
 })

@@ -3,10 +3,14 @@
 // 순수 함수는 export 해 tests/scripts/ui-capture.test.ts 가 import 한다 — 최상위에서 파일·네트워크·env 를 건드리지 않는다(isMain 가드).
 // Playwright 는 package.json 에 없다: `npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs …` 로 부르고 PATH 에서 찾는다.
 // 주석에 설정 표·설정 RPC 이름을 따옴표로 적지 않는다(settings-writes 게이트가 원문을 센다).
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { assertNotForbidden, classifySupabaseUrl } from './lib/targets.mjs'
+import { createClient } from '@supabase/supabase-js'
+import { assertNotForbidden, classifySupabaseUrl, localAdminEnv } from './lib/targets.mjs'
 import { e2eBaseUrl } from './lib/e2e.mjs'
+import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
+import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 
 export const DEFAULT_SIZES = Object.freeze([[1440, 900], [1280, 720], [768, 1024], [390, 844]])
 export const GRADES = Object.freeze(['public', 'member', 'wsAdmin', 'platformAdmin', 'duo'])
@@ -170,8 +174,277 @@ export function kstToday(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
 }
 
+export const SEED_ACCOUNTS = Object.freeze({
+  platformAdmin: 'ui-platform@example.com', wsAdmin: 'ui-wsadmin@example.com', member: 'ui-member@example.com', duo: 'ui-duo@example.com',
+})
+export const SEED_PROJECT = 'UI-CAPTURE'
+export const SEED_WS_B = Object.freeze({ slug: 'ui-capture-b', name: '캡처 B 워크스페이스' })
+export const LEVEL_LABELS_4 = Object.freeze(['단계', '작업', '활동', '세부'])
+const TEAM_DEFS = [['PLN', '기획', '#4f46e5'], ['DSG', '설계', '#0276a8'], ['DEV', '개발', '#7c3aed'], ['QAS', '품질', '#a65b00'], ['OPS', '운영', '#0f766e']]
+const FENCE = '`'.repeat(3)
+const sha256 = (s) => createHash('sha256').update(s, 'utf8').digest('hex')
+
+/** shoot·seed 가 같은 값을 계산한다(저장하지 않는다 — 초대 토큰은 자격 증명이다) */
+export function seedIds(projectId) {
+  return {
+    minuteId: deterministicId(`ui-capture:${projectId}:minute:1`),
+    minute2Id: deterministicId(`ui-capture:${projectId}:minute:2`),
+    topicId: deterministicId(`ui-capture:${projectId}:wiki:1`),
+    inviteToken: deterministicId(`ui-capture:${projectId}:invite`),
+    shareToken: deterministicId(`ui-capture:${projectId}:share`),
+  }
+}
+
+/**
+ * 결정적 시드 행(순수) — 같은 ctx 면 같은 행. 날짜는 ctx.today(KST) 상대값이라 캡처 쌍은 같은 KST 날짜 안에 찍는다.
+ * WBS: 3단계 × 3작업 × 5활동 + 1.1.1 아래 세부 3 = 60행(깊이 4). 모든 행 is_owner_split=false 인데 세부 1.1.1.3 하나만 true(분리 부모 접힘 표본).
+ * 에이전트 좌석 1(판정 Q34): 잎 2.2.5 만 tags ['agent'] + 점유·막힘 주문 하나 — 좌석 상태 BLOCKED 는 경과 시간과 무관하다(감시자 행은 두지 않는다 — 생존 창 70분).
+ * @param {{ today: string, projectId: string, wsA: string, memberIds: { member: string, duo: string, wsAdmin: string }, users: { wsAdmin: string } }} ctx
+ */
+export function seedPlan(ctx) {
+  const { today, projectId: pid } = ctx
+  const id = (k) => deterministicId(`ui-capture:${pid}:${k}`)
+  const ids = seedIds(pid)
+  const teams = TEAM_DEFS.map(([code, name, color], i) => ({ id: id(`team:${code}`), workspace_id: ctx.wsA, project_id: pid, code, name, color, sort_order: i + 1 }))
+  const wbs = []
+  let sort = 0
+  const row = (code, name, parentId, level, extra = {}) => {
+    const r = { id: id(`wbs:${code}`), project_id: pid, parent_id: parentId, code, name, level_idx: level, sort_order: ++sort,
+      planned_start: null, planned_end: null, weight: null, actual_pct: null, milestone: false, is_owner_split: false, assignee_member_id: null, tags: null, ...extra }
+    wbs.push(r)
+    return r
+  }
+  const leaf = (code, name, parentId, level, p, t, a) => {
+    const start = plusDays(today, -40 + (p - 1) * 25 + (t - 1) * 8 + (a - 1))
+    const end = plusDays(start, 3)
+    let pct = end < plusDays(today, -2) ? 100 : start <= today && today <= end ? 50 : 0
+    if (code === '1.2.4' || code === '1.3.5') pct = 40                                              // 지연
+    const extra = { planned_start: start, planned_end: end, weight: 1, actual_pct: pct,
+      assignee_member_id: a === 1 ? ctx.memberIds.member : a === 2 ? ctx.memberIds.duo : null }
+    if (code === '2.1.3') Object.assign(extra, { planned_start: plusDays(today, -2), planned_end: today, actual_pct: 60 })   // 오늘 마감
+    if (code === '2.2.5') Object.assign(extra, { planned_start: plusDays(today, -2), planned_end: plusDays(today, 3), actual_pct: 50, tags: ['agent'] })   // 진행 · 에이전트 좌석(판정 Q34)
+    if (code === '2.3.5') Object.assign(extra, { planned_start: plusDays(today, 5), planned_end: plusDays(today, 5), actual_pct: 0, milestone: true })
+    if (code === '1.1.5') Object.assign(extra, { planned_start: plusDays(today, -30), planned_end: plusDays(today, -30), actual_pct: 100, milestone: true })
+    return row(code, name, parentId, level, extra)
+  }
+  for (let p = 1; p <= 3; p++) {
+    const ph = row(`${p}`, `${p}단계 ${['준비', '구축', '전환'][p - 1]}`, null, 0)
+    for (let t = 1; t <= 3; t++) {
+      const tk = row(`${p}.${t}`, `${['요구 정리', '화면 설계', '데이터 이관'][t - 1]} ${p}-${t}`, ph.id, 1)
+      for (let a = 1; a <= 5; a++) {
+        const code = `${p}.${t}.${a}`
+        const act = leaf(code, `활동 ${code}`, tk.id, 2, p, t, a)
+        if (code === '1.1.1') {
+          act.weight = null; act.actual_pct = null; act.assignee_member_id = null
+          for (let d = 1; d <= 3; d++) {
+            const det = leaf(`1.1.1.${d}`, `세부 1.1.1.${d}`, act.id, 3, 1, 1, d)
+            if (d === 3) det.is_owner_split = true
+          }
+        }
+      }
+    }
+  }
+  // 부모 날짜 = 자식 범위(뒤에서 앞으로 — 자식이 먼저 채워진다)
+  for (const r of [...wbs].reverse()) {
+    const kids = wbs.filter((k) => k.parent_id === r.id && k.planned_start)
+    if (kids.length && r.weight === null) {
+      r.planned_start = kids.map((k) => k.planned_start).sort()[0]
+      r.planned_end = kids.map((k) => k.planned_end).sort().at(-1)
+    }
+  }
+  const leaves = wbs.filter((r) => r.weight === 1)
+  const owners = leaves.map((r, i) => ({ wbs_item_id: r.id, team_id: teams[i % 5].id, kind: 'primary' }))
+  const supportOf = wbs.find((r) => r.code === '2.2.2')
+  owners.push({ wbs_item_id: supportOf.id, team_id: teams[4].id, kind: 'support' })
+  const byCode = (c) => wbs.find((r) => r.code === c).id
+  const chain = ['2.1.1', '2.1.2', '2.1.3', '2.2.1']
+  const deps = chain.slice(1).map((c, i) => ({ id: id(`dep:${i}`), project_id: pid, predecessor_id: byCode(chain[i]), successor_id: byCode(c) }))
+  // 좌석 1(판정 Q34) — 점유(claimed) + 막힘(blocked). 그 잎의 진척 칸은 점유 중 편집이 막힌다(0011 guard_workflow_actual)
+  const seatAt = `${plusDays(today, -1)}T09:00:00+09:00`
+  const agentOrder = { id: id('order:1'), project_id: pid, wbs_item_id: byCode('2.2.5'), status: 'claimed', instructions: '캡처 표본 — 선행 확인 대기',
+    claimed_by: 'ui-capture-host', claimed_by_user_id: ctx.users.wsAdmin, claimed_at: seatAt, last_heartbeat_at: seatAt,
+    heartbeat_phase: 'blocked', heartbeat_agent: 'ui-capture-agent', heartbeat_note: '선행 확인 대기' }
+  const issues = [
+    ['로그인 화면 응답 지연', 'open', 'high'], ['일정표 인쇄 여백', 'in_progress', 'medium'], ['권한 안내 문구 누락', 'resolved', 'low'],
+    ['첨부 미리보기 실패', 'on_hold', 'medium'], ['주간 보고 합계 오차', 'open', 'low'],
+  ].map(([title, status, severity], i) => ({ id: id(`issue:${i}`), project_id: pid, title, body: `${title} — 캡처 표본`, status, severity }))
+  const announcements = [
+    ['분기 점검 일정 안내', 'important', true], ['회의실 변경', 'general', false], ['워크숍 참가 신청', 'event', false],
+  ].map(([title, category, is_pinned], i) => ({ id: id(`ann:${i}`), project_id: pid, title, body: `${title} 본문`, category, is_pinned, created_by: ctx.users.wsAdmin }))
+  const meetings = [
+    { id: id('meeting:1'), project_id: pid, title: '주간 점검', meeting_date: today, start_time: '10:00', end_time: '11:00', category: 'routine', created_by: ctx.users.wsAdmin, created_by_name: 'ui-wsadmin' },
+    { id: id('meeting:2'), project_id: pid, title: '설계 검토', meeting_date: plusDays(today, 7), start_time: '14:00', end_time: '15:30', category: 'review', created_by: ctx.users.wsAdmin, created_by_name: 'ui-wsadmin' },
+  ]
+  const attendees = meetings.flatMap((m) => [ctx.memberIds.member, ctx.memberIds.duo].map((member_id) => ({ meeting_id: m.id, member_id, project_id: pid })))
+  const attendance = [['work', -2], ['remote', -1], ['annual', 0]].map(([type, off], i) => ({ id: id(`att:${i}`), project_id: pid, member_id: ctx.memberIds.member, date: plusDays(today, off), type }))
+  const dow = new Date(`${today}T00:00:00Z`).getUTCDay()
+  const weeklyReport = { id: id('weekly:1'), project_id: pid, week_start: plusDays(today, -((dow + 6) % 7)) }
+  const weeklyRows = [
+    // this_issue/next_issue 도 표가 NOT NULL 이다. PostgREST 다중 insert 는 빠진 키를 기본값이 아니라 명시적 NULL 로
+    // 채운다(열 목록은 행들의 키 합집합이다) — 두 행의 키 집합이 달라지면 없는 쪽이 NOT NULL 위반으로 죽는다.
+    { id: id('weekly-row:1'), report_id: weeklyReport.id, section: '구축', module: '화면', sort_order: 1, this_content: '목록 화면 초안', this_issue: '', next_content: '상세 화면', next_issue: '' },
+    { id: id('weekly-row:2'), report_id: weeklyReport.id, section: '전환', module: '데이터', sort_order: 2, this_content: '이관 규칙 정리', this_issue: '원천 누락 3건', next_content: '시험 이관', next_issue: '' },
+  ]
+  const wikiBody = '# 배포 절차\n\n1. 변경 요약을 공유한다\n2. 점검 창에 배포한다\n'
+  const wikiTopic = { id: ids.topicId, project_id: pid, title: '배포 절차', normalized_title: '배포 절차' }
+  const wikiRevision = { id: id('wiki-rev:1'), topic_id: ids.topicId, project_id: pid, version_no: 1, title: '배포 절차', body_md: wikiBody, body_hash: sha256(wikiBody), document_kind: 'overview' }
+  const invite = { id: id('invite:1'), workspace_id: ctx.wsA, project_id: pid, email: 'ui-invitee@example.com', access_role: 'member',
+    token_hash: sha256(ids.inviteToken), created_by: ctx.users.wsAdmin, expires_at: `${plusDays(today, 7)}T00:00:00Z` }
+  const runner = { id: id('runner:1'), name: 'ui-capture-runner', owner_user_id: ctx.users.wsAdmin, token_prefix: 'uic_', token_hash: sha256(`ui-capture:${pid}:runner`),
+    expires_at: `${plusDays(today, 365)}T00:00:00Z`, project_id: pid }
+  const body1 = ['# 설계 검토 회의', '', '## 결정', '- 배포 창은 목요일 오후로 한다', '', `${FENCE}mermaid`, 'flowchart LR', '  A[요청] --> B[검토] --> C[배포]', FENCE, '',
+    '| 항목 | 담당 | 기한 |', '|---|---|---|', '| 배포 스크립트 | 개발 | 금요일 |', '', `${FENCE}ts`, "export const window = 'thu-pm'", FENCE, ''].join('\n')
+  const body2 = '# 주간 점검\n\n- 지연 항목 두 건을 확인했다\n'
+  const minutes = [
+    { id: ids.minuteId, date: plusDays(today, -1), team: 'DSG', title: '설계 검토 회의', body: body1 },
+    { id: ids.minute2Id, date: plusDays(today, -8), team: 'PLN', title: '주간 점검 회의', body: body2 },
+  ]
+  return { teams, wbs, owners, deps, issues, announcements, meetings, attendees, attendance, weeklyReport, weeklyRows, wikiTopic, wikiRevision, invite, runner, agentOrder, minutes }
+}
+
 /** @type {Record<string, (opts: ReturnType<typeof parseArgs>) => Promise<void>>} */
 export const COMMANDS = {}
+
+/** 좌표 — cwd 는 레인 B 워크트리(래퍼). service_role·anon·앱 주소·산출 폴더 */
+export function laneEnv() {
+  const envText = readFileSync('.env.local', 'utf8')
+  const admin = localAdminEnv(envText)
+  const target = laneTarget({ localDbUrl: process.env.LOCAL_DB_URL, supabaseUrl: admin.url, appUrl: process.env.NEXT_PUBLIC_APP_URL })
+  const outDir = process.env.UI_CAPTURE_OUT_DIR
+  if (!outDir) throw new Error('UI_CAPTURE_OUT_DIR 이 없다 — 래퍼(lane-b.env)로 부른다')
+  return { envText, admin, target, outDir }
+}
+
+export const must = (label, { data, error }) => { if (error) throw new Error(`${label}: ${error.message}`); return data }
+
+export async function userIdByEmail(db, email) {
+  return must(`profiles 조회(${email})`, await db.from('profiles').select('user_id').eq('email', email).maybeSingle())?.user_id ?? null
+}
+
+/** FNV-1a 64bit hex — src/lib/minutes/blocks.ts 의 fnv1a64 과 같은 값이다(그 TS 는 .mjs 가 import 못 한다).
+ *  회의록 생성 RPC 가 요구하는 본문 해시가 이 값이라 sha256 로는 그 RPC 가 MINUTE_CREATE_INPUT_INVALID 로 거절한다. */
+export function fnv1a64(text) {
+  let h = 0xcbf29ce484222325n
+  for (let i = 0; i < text.length; i++) h = BigInt.asUintN(64, (h ^ BigInt(text.charCodeAt(i))) * 0x100000001b3n)
+  return h.toString(16).padStart(16, '0')
+}
+
+/** GoTrue 로 만든다(SQL 로 넣은 auth.users 는 GoTrue 가 못 읽는다). 비밀번호는 버린다 — shoot 가 시작 때 재설정한다(판정 Q4) */
+async function ensureAccount(db, email) {
+  const existing = await userIdByEmail(db, email)
+  if (existing) return existing
+  const { data, error } = await db.auth.admin.createUser({ email, password: randomBytes(24).toString('base64'), email_confirm: true })
+  if (error) throw new Error(`계정 생성 실패(${email}): ${error.message}`)
+  must(`profiles(${email})`, await db.from('profiles').upsert({ user_id: data.user.id, email, display_name: email.split('@')[0] }))
+  return data.user.id
+}
+
+/** people(workspace_id, email) 은 부분 유니크 인덱스라 upsert 를 못 쓴다 — select 후 insert/link(perf-baseline.mjs 와 같은 패턴) */
+async function ensurePerson(db, wsId, email, userId) {
+  const found = must(`people 조회(${email})`, await db.from('people').select('id, user_id').eq('workspace_id', wsId).eq('email', email).maybeSingle())
+  if (found) {
+    if (!found.user_id) must(`people 연결(${email})`, await db.from('people').update({ user_id: userId }).eq('id', found.id))
+    return found.id
+  }
+  return must(`people 생성(${email})`, await db.from('people').insert({ workspace_id: wsId, email, display_name: email.split('@')[0], user_id: userId }).select('id').single()).id
+}
+
+/** 멱등 삽입 — 같은 키는 건너뛴다(갱신 트리거를 타지 않게 insert 만). write 는 **리터럴 표 이름**의 upsert 다 —
+ *  이 파일은 설정 표 이름을 가지므로 settings-writes G2 가 식으로 받는 from(표)(…) 뒤에 select 만 허용한다.
+ *  다중 insert 는 열 목록을 행들의 키 합집합으로 잡고 없는 키를 NULL 로 채운다 — NOT NULL 열은 전부 명시해야 한다. */
+async function insertOnce(label, rows, write) {
+  for (let i = 0; i < rows.length; i += 200) must(`${label} 시드(${i})`, await write(rows.slice(i, i + 200)))
+}
+const once = (onConflict = 'id') => ({ onConflict, ignoreDuplicates: true })
+
+async function cmdSeed() {
+  const { admin: coord } = laneEnv()
+  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+  const today = kstToday()
+  const slugA = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
+  const wsA = must('워크스페이스 A 조회', await db.from('workspaces').select('id').eq('slug', slugA).maybeSingle())
+  if (!wsA) throw new Error(`워크스페이스 '${slugA}' 가 없다 — dev:bootstrap 을 먼저`)
+
+  // 계정 넷 — 소속 순서가 가입 순서다(duo 는 A 먼저 → 선호값 키 워크스페이스 = A)
+  const users = {}
+  for (const [grade, email] of Object.entries(SEED_ACCOUNTS)) users[grade] = await ensureAccount(db, email)
+  let wsB = must('워크스페이스 B 조회', await db.from('workspaces').select('id').eq('slug', SEED_WS_B.slug).maybeSingle())
+  if (!wsB) wsB = must('워크스페이스 B 생성', await db.from('workspaces').insert({ slug: SEED_WS_B.slug, name: SEED_WS_B.name }).select('id').single())
+  const memberships = [[wsA.id, users.platformAdmin, 'admin'], [wsA.id, users.wsAdmin, 'admin'], [wsA.id, users.member, 'member'], [wsA.id, users.duo, 'member'], [wsB.id, users.duo, 'member']]
+  for (const [workspace_id, user_id, role] of memberships) {
+    must('workspace_members', await db.from('workspace_members').upsert({ workspace_id, user_id, role }, { onConflict: 'workspace_id,user_id' }))
+  }
+  must('platform_admins', await db.from('platform_admins').upsert({ user_id: users.platformAdmin }))
+
+  // 워크스페이스 B 의 허용 모듈 — 기본 [] 이면 B 뒤 모듈 화면이 404 다(판정 Q7). 이미 값이 있으면 덮지 않는다
+  const wsRow = must('B 설정 revision', await db.from('workspace_settings').select('revision, values').eq('workspace_id', wsB.id).single())
+  if (!Object.prototype.hasOwnProperty.call(wsRow.values ?? {}, 'modules.allowed')) {
+    must('B 허용 모듈', await db.rpc('apply_workspace_settings', {
+      p_workspace_id: wsB.id, p_expected_revision: wsRow.revision, p_command_id: randomUUID(), p_set: { 'modules.allowed': [...BOOTSTRAP_MODULE_IDS] },
+      p_unset: [], p_actor: users.duo, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
+    }))
+  }
+
+  // 프로젝트 — 생성 RPC 가 core.level_labels 를 채운다(없으면 WBS·설정이 오류 화면). 같은 날 재실행만 멱등, 다른 날이면 멈춘다
+  let project = must('프로젝트 조회', await db.from('projects').select('id, description').eq('workspace_id', wsA.id).eq('name', SEED_PROJECT).maybeSingle())
+  const marker = `ui-capture seed ${today}`
+  if (project && project.description !== marker) throw new Error(`시드 날짜가 다르다(${project.description}) — db:reset → dev:bootstrap 부터(갱신 트리거를 타지 않게 insert 만 한다)`)
+  if (!project) {
+    const created = must('프로젝트 생성', await db.rpc('create_project_with_settings', {
+      p_workspace_id: wsA.id, p_name: SEED_PROJECT, p_start_date: plusDays(today, -40), p_end_date: plusDays(today, 60), p_description: marker,
+      p_values: { 'core.level_labels': [...LEVEL_LABELS_4], 'modules.enabled': [...PROJECT_TOGGLE_IDS] },
+      p_copy_from: null, p_actor: users.wsAdmin, p_command_id: randomUUID(), p_schema_version: SCRIPT_SCHEMA_VERSION,
+    }))
+    project = { id: created.project_id }
+  }
+  const pid = project.id
+
+  // 명단 — 워크스페이스 관리자는 admin, 멤버·duo 는 member(플랫폼 관리자는 명단 없음)
+  const person = {}
+  for (const g of ['wsAdmin', 'member', 'duo']) person[g] = await ensurePerson(db, wsA.id, SEED_ACCOUNTS[g], users[g])
+  await ensurePerson(db, wsB.id, SEED_ACCOUNTS.duo, users.duo)
+  const memberIds = {}
+  for (const [g, role] of [['wsAdmin', 'admin'], ['member', 'member'], ['duo', 'member']]) {
+    memberIds[g] = must(`project_members(${g})`, await db.from('project_members')
+      .upsert({ project_id: pid, person_id: person[g], access_role: role, active: true }, { onConflict: 'project_id,person_id' }).select('id').single()).id
+  }
+  const plan = seedPlan({ today, projectId: pid, wsA: wsA.id, memberIds, users: { wsAdmin: users.wsAdmin } })
+  await insertOnce('teams', plan.teams, (c) => db.from('teams').upsert(c, once()))
+  await insertOnce('project_member_teams', [
+    { member_id: memberIds.member, team_id: plan.teams[0].id, is_primary: true },
+    { member_id: memberIds.duo, team_id: plan.teams[1].id, is_primary: true },
+  ], (c) => db.from('project_member_teams').upsert(c, once('member_id,team_id')))
+  await insertOnce('wbs_items', plan.wbs, (c) => db.from('wbs_items').upsert(c, once()))
+  must('item_owners 비우기', await db.from('item_owners').delete().in('wbs_item_id', plan.wbs.map((r) => r.id)))
+  must('item_owners', await db.from('item_owners').insert(plan.owners))
+  await insertOnce('task_dependencies', plan.deps, (c) => db.from('task_dependencies').upsert(c, once()))
+  await insertOnce('issues', plan.issues, (c) => db.from('issues').upsert(c, once()))
+  await insertOnce('announcements', plan.announcements, (c) => db.from('announcements').upsert(c, once()))
+  await insertOnce('meetings', plan.meetings, (c) => db.from('meetings').upsert(c, once()))
+  await insertOnce('meeting_attendees', plan.attendees, (c) => db.from('meeting_attendees').upsert(c, once('meeting_id,member_id')))
+  await insertOnce('attendance_records', plan.attendance, (c) => db.from('attendance_records').upsert(c, once()))
+  await insertOnce('weekly_reports', [plan.weeklyReport], (c) => db.from('weekly_reports').upsert(c, once()))
+  await insertOnce('weekly_report_rows', plan.weeklyRows, (c) => db.from('weekly_report_rows').upsert(c, once()))
+  await insertOnce('wiki_topics', [plan.wikiTopic], (c) => db.from('wiki_topics').upsert(c, once()))
+  await insertOnce('wiki_topic_revisions', [plan.wikiRevision], (c) => db.from('wiki_topic_revisions').upsert(c, once()))
+  await insertOnce('agent_projects', [{ project_id: pid }], (c) => db.from('agent_projects').upsert(c, once('project_id')))
+  await insertOnce('agent_runners', [plan.runner], (c) => db.from('agent_runners').upsert(c, once()))
+  await insertOnce('agent_work_orders', [plan.agentOrder], (c) => db.from('agent_work_orders').upsert(c, once()))   // 좌석 1(판정 Q34) — wbs_items 뒤
+  await insertOnce('project_invites', [plan.invite], (c) => db.from('project_invites').upsert(c, once()))
+  for (const m of plan.minutes) {
+    const exists = must('회의록 조회', await db.from('minutes').select('id').eq('id', m.id).maybeSingle())
+    if (exists) continue
+    must(`회의록 생성(${m.title})`, await db.rpc('create_minute_with_version', {
+      p_minute_id: m.id, p_minute_date: m.date, p_team_code: m.team, p_title: m.title, p_body_md: m.body, p_body_hash: fnv1a64(m.body),
+      p_meeting_id: null, p_project_id: pid, p_meeting_occurrence_date: null, p_folder_id: null, p_external_id: null,
+      p_actor_id: users.wsAdmin, p_actor_name: 'ui-wsadmin', p_workspace_id: wsA.id,
+    }))
+  }
+  const ids = seedIds(pid)
+  must('공유 토큰', await db.from('minutes').update({ share_token: ids.shareToken, share_enabled: true }).eq('id', ids.minuteId))
+  console.log(JSON.stringify({ ok: true, today, projectId: pid, wsB: wsB.id, wbs: plan.wbs.length, minutes: plan.minutes.length }))
+}
+COMMANDS.seed = cmdSeed
 
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {
