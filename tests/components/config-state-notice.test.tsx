@@ -18,4 +18,12 @@ describe('ConfigStateNotice', () => {
     expect(admin).toContain('href="/p/one/settings"')
     expect(member).toContain('관리자에게 문의하세요.')
   })
+  it('키 손상은 조회 실패와 구분하고 관리자에게 설정 경로를 보여 준다', () => {
+    const html = renderToStaticMarkup(<ConfigLoadError locale="ko" keyName="core.milestone_keywords" error="내부 오류" kind="invalid"
+      isAdmin settingsHref="/p/one/settings" />)
+    expect(html).toContain('data-config-state="invalid"')
+    expect(html).toContain('설정이 손상되었습니다.')
+    expect(html).toContain('href="/p/one/settings"')
+    expect(html).not.toContain('내부 오류')
+  })
 })

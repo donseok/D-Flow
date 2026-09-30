@@ -8,8 +8,12 @@ import { createRoot, type Root } from 'react-dom/client'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const updateProjectSettings = vi.fn()
+const getSettingsCommandOutcome = vi.fn()
 const refresh = vi.fn()
-vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])) }))
+vi.mock('@/app/actions/settings', () => ({
+  updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])),
+  getSettingsCommandOutcome: (...a: unknown[]) => getSettingsCommandOutcome(...(a as [])),
+}))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
 
@@ -21,6 +25,7 @@ describe('StageCreditSlider', () => {
   let root: Root
   beforeEach(() => {
     updateProjectSettings.mockReset().mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 2, rebased: false })
+    getSettingsCommandOutcome.mockReset()
     refresh.mockReset()
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
   })
@@ -31,6 +36,10 @@ describe('StageCreditSlider', () => {
   const saveBtn = () => container.querySelector<HTMLButtonElement>('[data-credit-save]')
   async function mount(props: Partial<Parameters<typeof StageCreditSlider>[0]> = {}) {
     await act(async () => root.render(<StageCreditSlider projectId="p1" initial={null} editable revision={1} {...props} />))
+  }
+  async function saveAfterReview() {
+    await act(async () => { saveBtn()!.click() })
+    await act(async () => { saveBtn()!.click() })
   }
   async function type(el: HTMLInputElement, value: string) {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -86,6 +95,10 @@ describe('StageCreditSlider', () => {
     await mount({ initial: { default: { as: 0, ip: 30, rw: 50, im: 80, xx: 100 } } })
     await type(input('rw'), '60')
     await act(async () => { saveBtn()!.click() })
+    expect(updateProjectSettings).not.toHaveBeenCalled()
+    expect(container.querySelector('[aria-label="변경 내용 검토"]')?.textContent).toContain('RW: 50% → 60%')
+    expect(container.querySelector('[aria-label="변경 내용 검토"]')?.textContent).toContain('이미 기록된 실적은 바뀌지 않습니다')
+    await act(async () => { saveBtn()!.click() })
     expect(updateProjectSettings).toHaveBeenCalledWith('p1', expect.objectContaining({
       expectedRevision: 1, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/),
       set: { 'workflow.stage_credits': { default: { as: 0, ip: 30, rw: 60, im: 80, xx: 100 } } }, unset: [],
@@ -98,9 +111,22 @@ describe('StageCreditSlider', () => {
     updateProjectSettings.mockResolvedValue({ ok: false, kind: 'denied', code: '권한 없음', commandId: 'c', error: '권한 없음', retryable: false })
     await mount()
     await type(input('rw'), '60')
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     expect(container.querySelector('[data-credit-error]')?.textContent).toBe('권한 없음')
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('응답을 확인할 수 없으면 같은 명령으로 재시도한다', async () => {
+    updateProjectSettings.mockResolvedValueOnce({ ok: false, kind: 'unavailable', retryable: true, error: '일시 장애' })
+      .mockResolvedValueOnce({ ok: true, kind: 'applied', commandId: 'c', revision: 2, rebased: false })
+    getSettingsCommandOutcome.mockResolvedValue({ ok: true, outcome: { status: 'unknown' } })
+    await mount()
+    await type(input('rw'), '60')
+    await saveAfterReview()
+    expect(updateProjectSettings).toHaveBeenCalledTimes(2)
+    expect(updateProjectSettings.mock.calls[0][1].commandId).toBe(updateProjectSettings.mock.calls[1][1].commandId)
+    expect(getSettingsCommandOutcome).toHaveBeenCalledWith({ projectId: 'p1' }, updateProjectSettings.mock.calls[0][1].commandId)
+    expect(container.querySelector('[data-credit-saved]')).not.toBeNull()
   })
 
   it('충돌(conflict)이면 내 값과 최신 값을 비교하고 선택 전 저장을 막는다', async () => {
@@ -108,7 +134,7 @@ describe('StageCreditSlider', () => {
       latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })
     await mount()
     await type(input('rw'), '60')
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     expect(container.querySelector('[data-credit-error]')?.textContent).toBe(ERR_CONFIG_CONFLICT)
     expect(container.textContent).toContain('내 값')
     expect(saveBtn()?.disabled).toBe(true)
@@ -119,7 +145,7 @@ describe('StageCreditSlider', () => {
     await mount({ revision: 5 })
     await mount({ revision: 7, initial: { default: { as: 0, ip: 20, rw: 50, im: 80, xx: 100 } } })   // 형제 저장 뒤 refresh
     await type(input('rw'), '60')
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     expect(updateProjectSettings).toHaveBeenCalledWith('p1', expect.objectContaining({ expectedRevision: 5 }))
   })
 
@@ -129,11 +155,11 @@ describe('StageCreditSlider', () => {
         latest: { revision: 9, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })
     await mount({ revision: 5 })
     await type(input('rw'), '60')
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     await type(input('rw'), '65')
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     act(() => Array.from(container.querySelectorAll('button')).find(button => button.textContent === '내 값 다시 적용')!.click())
-    await act(async () => { saveBtn()!.click() })
+    await saveAfterReview()
     expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 6, 9])
   })
 

@@ -324,7 +324,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             {!agentsOn && <p className="text-xs leading-5 text-pending">{t(locale, 'settings.agentsModuleOff')}</p>}
             {credits.ok
               ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} revision={revision} />
-              : <ConfigLoadError error={credits.error} keyName={credits.key} locale={locale} />}
+              : <ConfigLoadError error={credits.error} keyName={credits.key} kind={credits.kind} locale={locale}
+                isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
           </div>
         )}
         </SectionCard>
@@ -453,7 +454,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             </p>
             {labels.ok
               ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
-              : <ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} />}
+              : <ConfigLoadError error={labels.error} keyName={labels.key} kind={labels.kind} locale={locale}
+                isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
           </SectionCard>
         )}
 

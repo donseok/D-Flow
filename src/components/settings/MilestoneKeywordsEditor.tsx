@@ -21,6 +21,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [reviewing, setReviewing] = useState(false)
   const [pending, startTransition] = useTransition()
   const dirty = repair || text !== baseline
 
@@ -29,6 +30,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     try { result = await updateProjectSettings(projectId, patch) } catch { /* 이력에서 결과 확인 */ }
     if (result?.ok) {
       setBaseline(text); setBaseRevision(result.revision); setRepair(false); setConflict(null); setUncertainPatch(null)
+      setReviewing(false)
       setNotice('마일스톤 키워드를 저장했습니다. 대시보드에 즉시 적용됩니다.')
       router.refresh(); return
     }
@@ -38,7 +40,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
         latest: result.latest.invalidKeys.includes('core.milestone_keywords') ? null : Array.isArray(value) ? value as string[] : null })
       setUncertainPatch(null); return
     }
-    if (result && result.kind !== 'unavailable') {
+    if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setError(result.kind === 'invalid' ? result.fieldErrors[0]?.message ?? result.error : result.error)
       setUncertainPatch(null); return
     }
@@ -60,6 +62,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     if (values.length > 50 || values.some(value => value.length > 40)) {
       setError('키워드는 최대 50개, 각 40자까지 입력할 수 있습니다.'); return
     }
+    if (!reviewing && !uncertainPatch) { setError(null); setReviewing(true); return }
     setError(null); setNotice(null)
     const patch = uncertainPatch ?? { expectedRevision: baseRevision, commandId: newUuid(), set: { 'core.milestone_keywords': values }, unset: [] }
     startTransition(async () => submit(patch))
@@ -73,17 +76,24 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     <p className="text-xs text-ink-muted">작업 이름에 포함된 단어로 대시보드의 마일스톤을 표시합니다. 비우면 마커가 표시되지 않습니다.</p>
     {repair && <p role="alert" className="text-xs text-delayed">저장된 키워드가 손상됐습니다: {invalidReason}. 새 값을 저장해 복구하세요.</p>}
     <textarea id="milestone-keywords" className="input min-h-28 w-full text-sm" value={text}
-      disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
+      disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setReviewing(false); setError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
     <p className="text-[11px] text-ink-subtle">저장 시 소문자로 바뀝니다.</p>
+    {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+      <h3 className="font-semibold text-ink">변경 내용 검토</h3>
+      <p className="text-ink-muted">현재: {lines(baseline).join(', ') || '없음'}</p>
+      <p className="text-ink-muted">변경: {lines(text).join(', ') || '없음'}</p>
+      <p className="text-ink-muted">저장하면 대시보드의 마일스톤 판정이 즉시 다시 계산됩니다. WBS 작업의 저장값은 바뀌지 않습니다.</p>
+      <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
+    </section>}
     {conflict && <ConflictCompare rows={[{ key: 'keywords', label: '마일스톤 키워드',
       mine: lines(text).join(', '), latest: conflict.latest?.join(', ') ?? '설정 손상',
     }]} latestAvailable={conflict.latest !== null}
-      onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setConflict(null) }}
-      onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setConflict(null) }} />}
+      onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setReviewing(false); setConflict(null) }}
+      onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setReviewing(false); setConflict(null) }} />}
     {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
-      {uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}
+      {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? '검토 후 저장' : '변경 내용 검토'}
     </button>
   </div>
 }

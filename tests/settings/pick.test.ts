@@ -10,10 +10,10 @@ describe('pick', () => {
     const cfg = makeProjectConfig({ 'core.level_labels': ['P', 'T'], 'core.milestone_keywords': 42 })
     expect(pick(cfg, 'core.level_labels')).toEqual({ ok: true, value: ['P', 'T'] })
     expect(pick(cfg, 'core.extra_axis_label')).toEqual({ ok: true, value: null })
-    expect(pick(cfg, 'core.milestone_keywords')).toMatchObject({ ok: false, key: 'core.milestone_keywords', error: expect.stringContaining('core.milestone_keywords') })
+    expect(pick(cfg, 'core.milestone_keywords')).toMatchObject({ ok: false, key: 'core.milestone_keywords', kind: 'invalid', error: expect.stringContaining('core.milestone_keywords') })
   })
   it('required_missing 도 ok:false', () => {
-    expect(pick(makeProjectConfig({}), 'core.level_labels')).toMatchObject({ ok: false, key: 'core.level_labels' })
+    expect(pick(makeProjectConfig({}), 'core.level_labels')).toMatchObject({ ok: false, key: 'core.level_labels', kind: 'required' })
   })
 })
 

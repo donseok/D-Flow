@@ -5,11 +5,11 @@
 // 값은 핸들 위에서 바로 고치고, XX 는 승인으로만 100 이 되므로 입력 없이 자물쇠로 굳힌다.
 // 아래 미리보기는 지금 값으로 위임 Task 의 사건 흐름을 보여 준다(저장과 무관한 계산기).
 // 순서·간격·5 단위 제약의 정본은 도메인(clampCredit·validateStageCredits)이고 설정 액션(updateProjectSettings,
-// workflow.stage_credits)이 다시 검사한다. 충돌이면 문구를 보이고 최신 값을 다시 읽는다(비교 화면은 Phase C). 저장은 소급하지 않는다 — 이미 기록된 실적%는 그대로이고 다음 단계 전이부터 새 값이 쓰인다.
+// workflow.stage_credits)이 다시 검사한다. 저장은 소급하지 않는다 — 이미 기록된 실적%는 그대로이고 다음 단계 전이부터 새 값이 쓰인다.
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
+import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
 import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -83,12 +83,15 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const { t } = useLocale()
   const [pending, startTransition] = useTransition()
   const [table, setTable] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
+  const [baseline, setBaseline] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [dirty, setDirty] = useState(false)
   // 편집 세션의 기준 revision — LevelSettingsManager 와 같다(최종 리뷰 FN-2): prop 이 아니라 초안을 읽은 시점으로 보내고, 자기 저장·충돌 때만 올린다
   const [base, setBase] = useState(revision)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<{ revision: number; latest: StageCredits | null } | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   // 현재 위치 — 트랙 채움과 ◆ 표시가 따라간다. 미리보기 행을 누르거나 핸들을 잡으면 바뀐다.
   const [cursor, setCursor] = useState<Cursor>('rw')
   const [manual, setManual] = useState(50)
@@ -98,10 +101,10 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   // 이웃 간격에 걸려 튀지 않게.
   const [draft, setDraft] = useState<Partial<Record<CreditKey, string>>>({})
 
-  const locked = !editable || pending
+  const locked = !editable || pending || !!uncertainPatch
   const setValue = (key: CreditKey, raw: number) => {
     setTable(prev => ({ ...prev, [key]: clampCredit(raw, key, prev) }))
-    setDirty(true); setSaved(false); setError(null)
+    setDirty(true); setSaved(false); setError(null); setReviewing(false)
   }
   const commitDraft = (key: CreditKey) => {
     const raw = draft[key]
@@ -138,29 +141,40 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     e.preventDefault()
     setValue(key, next)
   }
+  async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
+    let r: SettingsCommandResult | null = null
+    try { r = await updateProjectSettings(projectId, patch) } catch { /* 명령 이력에서 확인 */ }
+    if (r?.ok) {
+      setBase(r.revision); setBaseline({ ...table }); setDirty(false); setSaved(true)
+      setReviewing(false); setUncertainPatch(null); router.refresh(); return
+    }
+    if (r?.kind === 'conflict') {
+      const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'])
+      setConflict({ revision: r.latest.revision, latest: parsed.ok ? parsed.credits : null })
+      setError(messageOf(r)); setUncertainPatch(null); setReviewing(false); router.refresh(); return
+    }
+    if (r && (r.kind !== 'unavailable' || !r.retryable)) {
+      setError(messageOf(r) ?? t('settings.actionFailed')); setUncertainPatch(null); return
+    }
+    try {
+      const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
+      if (found.ok && found.outcome.status === 'applied') {
+        setBase(found.outcome.revision); setBaseline({ ...table }); setDirty(false); setSaved(true)
+        setReviewing(false); setUncertainPatch(null); router.refresh(); return
+      }
+    } catch { /* 같은 명령으로 재시도 */ }
+    if (resendCount === 0) return submit(patch, 1)
+    setUncertainPatch(patch)
+    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+  }
   function save() {
-    if (conflict) return
+    if (conflict || (!dirty && !uncertainPatch)) return
     const v = validateStageCredits({ default: table })
     if (!v.ok) { setError(v.error); return }
+    if (!reviewing && !uncertainPatch) { setError(null); setReviewing(true); return }
     setError(null)
-    startTransition(async () => {
-      const r = await updateProjectSettings(projectId, {
-        expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [],
-      })
-      if (!r.ok) {
-        setError(messageOf(r) ?? t('settings.actionFailed'))
-        if (r.kind === 'conflict') {
-          const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'])
-          setConflict({ revision: r.latest.revision, latest: parsed.ok ? parsed.credits : null })
-          router.refresh()
-        }
-        return
-      }
-      setBase(r.revision)
-      setDirty(false)
-      setSaved(true)
-      router.refresh()
-    })
+    const patch = uncertainPatch ?? { expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [] }
+    startTransition(async () => submit(patch))
   }
 
   const cursorPct = cursor === 'manual' ? manual : table[cursor]
@@ -370,18 +384,25 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</span>
         {editable && (
-          <button type="button" data-credit-save onClick={save} disabled={pending || !dirty || !!conflict}
+          <button type="button" data-credit-save onClick={save} disabled={pending || (!dirty && !uncertainPatch) || !!conflict}
             className="btn btn-primary ml-auto h-8 px-3 text-xs">
-            {t('settings.creditsSave')}
+            {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? t('settings.creditsSave') : '변경 내용 검토'}
           </button>
         )}
       </div>
+      {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+        <h3 className="font-semibold text-ink">변경 내용 검토</h3>
+        {CREDIT_KEYS.filter(key => baseline[key] !== table[key]).map(key =>
+          <p key={key} className="text-ink-muted">{key.toUpperCase()}: {baseline[key]}% → {table[key]}%</p>)}
+        <p className="text-ink-muted">새 크레딧은 다음 단계 전이부터 적용됩니다. 이미 기록된 실적은 바뀌지 않습니다.</p>
+        <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
+      </section>}
       {conflict && <ConflictCompare rows={[{ key: 'workflow.stage_credits', label: '단계 실적 크레딧',
         mine: CREDIT_KEYS.map(key => `${key.toUpperCase()} ${table[key]}`).join(' · '),
         latest: conflict.latest ? CREDIT_KEYS.map(key => `${key.toUpperCase()} ${conflict.latest!.default[key]}`).join(' · ') : '설정 손상',
       }]} latestAvailable={conflict.latest !== null}
-        onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
-        onLatest={() => { if (conflict.latest) setTable({ ...conflict.latest.default }); setBase(conflict.revision); setDirty(false); setConflict(null); setError(null) }} />}
+        onMine={() => { setBase(conflict.revision); setConflict(null); setReviewing(false); setError(null) }}
+        onLatest={() => { if (conflict.latest) { setTable({ ...conflict.latest.default }); setBaseline({ ...conflict.latest.default }) } setBase(conflict.revision); setDirty(false); setReviewing(false); setConflict(null); setError(null) }} />}
       {saved && <p data-credit-saved role="status" className="text-xs text-done">{t('settings.creditsSaved')}</p>}
       {error && <p data-credit-error role="alert" className="text-xs text-delayed">{error}</p>}
     </div>

@@ -3,10 +3,10 @@ import { ConfigKeyError } from './errors'
 import type { ProjectConfig } from './projectConfig'
 import { valueOf, type ProjectSettingKey, type SettingValue } from './registry'
 
-/** ConfigKeyError 는 { ok:false, key } — 문구는 고정 문구 + 키 이름이라 화면에 그려도 된다 */
-export function pick<K extends ProjectSettingKey>(cfg: ProjectConfig, key: K): { ok: true; value: SettingValue<K> } | { ok: false; error: string; key: K } {
+/** ConfigKeyError 의 구분을 유지한다 — 화면은 손상과 필요 설정 누락을 다른 상태로 표시한다. */
+export function pick<K extends ProjectSettingKey>(cfg: ProjectConfig, key: K): { ok: true; value: SettingValue<K> } | { ok: false; error: string; key: K; kind: 'invalid' | 'required' } {
   try { return { ok: true, value: valueOf(cfg, key) } } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, error: e.message, key }
+    if (e instanceof ConfigKeyError) return { ok: false, error: e.message, key, kind: e.code === 'CONFIG_REQUIRED' ? 'required' : 'invalid' }
     throw e
   }
 }

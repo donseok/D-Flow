@@ -6,7 +6,7 @@ import { levelDepthOf } from '@/lib/settings/projectConfig'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
-import { toProjectActorView } from '@/lib/domain/authz'
+import { isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { getWbsCollapse, getUiPrefs } from '@/app/actions/preferences'
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
@@ -55,13 +55,15 @@ export default async function WbsPage({
   // 설정을 못 읽거나 단계 이름이 손상이면 간트를 기본값으로 그리지 않는다(스펙 §3.5) — 트리 깊이·라벨이 틀린 채 편집하게 된다.
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   const labels = pick(pc.cfg, 'core.level_labels')
-  if (!labels.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={labels.error} keyName={labels.key} locale={locale} /></ProjectPageShell>
+  if (!labels.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={labels.error} keyName={labels.key} kind={labels.kind} locale={locale}
+    isAdmin={isProjectAdmin(actor, projectId)} settingsHref={`/p/${projectId}/settings`} /></ProjectPageShell>
   // 키워드 손상은 마커 없이 그리고 명단 오류와 같은 자리에 사유를 띄운다.
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
   const pinned = roster.ok && keywords.ok ? undefined : (
     <>
       {!roster.ok && <RosterLoadError error={roster.error} />}
-      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} locale={locale} />}
+      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
+        isAdmin={isProjectAdmin(actor, projectId)} settingsHref={`/p/${projectId}/settings`} />}
     </>
   )
   return (

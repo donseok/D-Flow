@@ -98,8 +98,17 @@ describe.each(pages.filter((p) => p.name === 'wbs'))('$name 페이지 — 단계
   it('문구에 키 이름이 들고 본체는 그리지 않는다', async () => {
     mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 42 }))
     const out = await render()
-    expect(out).toContain(LOAD_FAILED)
+    expect(out).toContain('설정이 손상되었습니다.')
+    expect(out).toContain('data-config-state="invalid"')
     expect(out).toContain('core.level_labels')
+    expect(view).not.toHaveBeenCalled()
+  })
+  it('필수 단계 이름이 없으면 누락 상태를 표시한다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
+    const out = await render()
+    expect(out).toContain('필요한 설정이 없습니다.')
+    expect(out).toContain('data-config-state="required"')
+    expect(out).toContain('관리자에게 문의하세요.')
     expect(view).not.toHaveBeenCalled()
   })
 })

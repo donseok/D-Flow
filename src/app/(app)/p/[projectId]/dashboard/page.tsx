@@ -65,7 +65,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
 
   return (
     <ProjectPageShell hero={hero}>
-      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} locale={locale} />}
+      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
+        isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
       <DashboardView
         items={items}
         projectId={projectId}
