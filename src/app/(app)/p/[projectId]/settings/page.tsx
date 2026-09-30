@@ -1,16 +1,16 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
+import { listSettingsHistory } from '@/app/actions/settings'
+import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
-import { projectTeamRowsSync, teamsForProjectSync, workspaceTeamsForProjectSync } from '@/lib/teams/master'
+import { projectTeamRowsSync, workspaceTeamsForProjectSync } from '@/lib/teams/master'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
-import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
-import { listAreas } from '@/app/actions/projectAreas'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
@@ -152,15 +152,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
 
-  // 담당 영역 — 조회 실패면 절을 그리지 않고 안내만 남긴다(빈 목록으로 위장하면 이미 있는 코드를 다시 만들려 든다).
-  // 색인 상태는 service_role 카운트라 관리자 판정(위 redirect) 뒤에 읽는다 — 영역 조회와 같은 배치라 직렬 왕복은 늘지 않는다.
-  const [weeklyAreas, issueAreas, assistantIndex] = await Promise.all([
-    listAreas(projectId, 'weekly_section'), listAreas(projectId, 'issue_area'), assistantIndexStatus(projectId),
-  ])
-  const areasError = !weeklyAreas.ok ? weeklyAreas.error : !issueAreas.ok ? issueAreas.error : null
-  if (areasError) console.error('[settings] 담당 영역 조회 실패 — 절만 degrade:', areasError)
-  // 비활성 팀도 넘긴다 — 이미 배정된 비활성 팀이 화면에서 숨은 채 재저장되지 않게(관리 절이 '비활성' 으로 표시).
-  const areaTeamOptions = teamsForProjectSync(projectId).map(x => ({ id: x.id, code: x.code, active: x.active }))
+  // 담당 영역 편집은 소비 화면이 열리는 SP4·SP5에서 다시 노출한다. 저장된 행은 유지한다.
+  const assistantIndex = await assistantIndexStatus(projectId)
+  const settingsHistory = await listSettingsHistory({ projectId })
 
   const scheduleLabel =
     project?.start_date || project?.end_date
@@ -420,32 +414,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </SectionCard>
         )}
 
-      {/* ── 담당 영역 (관리자) — 팀과 별개 축(주간 구분·이슈 영역). 소비처는 SP4/SP5. ── */}
-        {isAdmin && (
-          <SectionCard
-            eyebrow="AREAS"
-            title={locale === 'ko' ? '담당 영역' : 'Areas'}
-            icon={LayoutList}
-          >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
-              {locale === 'ko'
-                ? '주간보고 구분과 이슈 영역 목록입니다. 한 영역을 여러 팀이 주·보조로 나눠 맡을 수 있습니다.'
-                : 'Weekly report sections and issue areas. Several teams can own an area as primary or support.'}
-            </p>
-            {weeklyAreas.ok && issueAreas.ok ? (
-              <ProjectAreasManager
-                projectId={projectId}
-                areas={{ weekly_section: weeklyAreas.areas, issue_area: issueAreas.areas }}
-                teamOptions={areaTeamOptions}
-              />
-            ) : (
-              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">
-                {locale === 'ko' ? '담당 영역을 불러오지 못했습니다. 새로고침하세요.' : 'Could not load areas. Please refresh.'}
-              </p>
-            )}
-          </SectionCard>
-        )}
-
       {/* ── WBS 단계 (관리자) — 라벨 배열이 곧 깊이. 축소 검증은 서버 액션이 한다. ── */}
         {isAdmin && labels && (
           <SectionCard
@@ -535,6 +503,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             </p>
           </div>
         </div>
+        </SectionCard>
+        <SectionCard eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
+          <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} />
         </SectionCard>
       </div>
     </ProjectPageShell>

@@ -41,7 +41,8 @@ export type SettingsCommandResult =
   | { ok: false; kind: 'denied' | 'unavailable' | 'schema_ahead'; code: string; commandId: string; error: string; retryable: boolean }
 export type SettingsHistoryScope = { projectId: string } | { workspaceId: string }
 export type SettingsOutcomeResult = { ok: true; outcome: { status: 'applied'; revision: number } | { status: 'unknown' } } | { ok: false; error: string }
-export type SettingsHistoryResult = { ok: true; rows: SettingsHistoryRow[]; nextBefore: number | null } | { ok: false; error: string }
+type SettingsHistoryViewRow = SettingsHistoryRow & { changedByName: string }
+export type SettingsHistoryResult = { ok: true; rows: SettingsHistoryViewRow[]; nextBefore: number | null } | { ok: false; error: string }
 
 type Doc = { revision: number; schemaAhead: boolean; keys: Record<string, KeyState<unknown>> }
 type Loaded = { doc: Doc; ws: WorkspaceConfig; cfg: ProjectConfig | null }
@@ -331,5 +332,22 @@ export async function listSettingsHistory(scope: SettingsHistoryScope, opts?: { 
   const sb = await createServerClient()
   const r = await listHistory(sb, scope, opts)
   if (!r.ok) { console.error('[settings] 이력 조회 실패', { scope, cause: r.error }); return { ok: false, error: ERR_HISTORY } }
-  return r
+  const ids = [...new Set(r.rows.map(row => row.changedBy).filter((id): id is string => id !== null))]
+  let names: Map<string, string> | null = new Map()
+  if (ids.length) {
+    try {
+      // 이력 자체는 세션/RLS로 읽었다. 행에 나타난 계정 id만 권한 범위가 있는 admin으로 찾아,
+      // 이미 워크스페이스에서 나간 계정과 삭제된 계정을 구분한다.
+      const { data, error } = await adminFor(scope).admin.from('profiles').select('user_id, display_name').in('user_id', ids)
+      if (error) throw error
+      names = new Map(((data ?? []) as { user_id: string; display_name: string | null }[])
+        .map(row => [row.user_id, row.display_name?.trim() || '이름 없음']))
+    } catch (error) {
+      console.error('[settings] 이력 작성자 조회 실패', { scope, cause: error })
+      names = null
+    }
+  }
+  return { ...r, rows: r.rows.map(row => ({ ...row,
+    changedByName: row.changedBy === null ? '시스템' : names === null ? '이름 확인 불가' : names.get(row.changedBy) ?? '삭제된 계정',
+  })) }
 }

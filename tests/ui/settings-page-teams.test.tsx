@@ -21,6 +21,7 @@ vi.mock('@/app/actions/project', () => ({
   listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]),
 }))
 vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ error: 'x' })) }))
+vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: vi.fn(async () => ({ ok: true, rows: [], nextBefore: null })) }))
 vi.mock('@/lib/settings/projectConfig', async () => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
   return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'] })) }

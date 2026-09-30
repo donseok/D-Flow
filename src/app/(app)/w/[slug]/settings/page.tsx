@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
+import { listSettingsHistory } from '@/app/actions/settings'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -8,6 +9,7 @@ import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
 import { LogoEditor } from '@/components/settings/LogoEditor'
 import { AccentEditor } from '@/components/settings/AccentEditor'
 import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
+import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -44,6 +46,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   }
 
   const allowed = config.keys['modules.allowed']
+  const history = await listSettingsHistory({ workspaceId: access.id })
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-20">
       <div>
@@ -81,6 +84,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
           initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
           invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
+      </SectionCard>
+      <SectionCard eyebrow="기록" title="설정 변경 이력" icon={History}>
+        <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} />
       </SectionCard>
     </div>
   )

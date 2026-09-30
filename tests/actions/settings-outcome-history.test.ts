@@ -1,7 +1,7 @@
 // getSettingsCommandOutcome·listSettingsHistory — 스코프 가드, 세션 클라이언트(D24), applied/unknown, 20건 쪽 나눔, 오류 원문은 로그에만.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSettingsDb } from '../helpers/fakeSettingsDb'
-const h = vi.hoisted(() => ({ requireProjectAdmin: vi.fn(), requireWorkspaceAdmin: vi.fn(), createServerClient: vi.fn(), adminFor: vi.fn(() => { throw new Error('이력 읽기는 세션 클라이언트다') }) }))
+const h = vi.hoisted(() => ({ requireProjectAdmin: vi.fn(), requireWorkspaceAdmin: vi.fn(), createServerClient: vi.fn(), adminFor: vi.fn() }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: h.requireProjectAdmin, requireWorkspaceAdmin: h.requireWorkspaceAdmin }))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
@@ -15,6 +15,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   db = new FakeSettingsDb().addProject({ id: PID, workspaceId: WID, values: {} }).addWorkspace({ id: WID, values: {} })
   h.createServerClient.mockResolvedValue(db.client())
+  h.adminFor.mockReturnValue({ admin: { from: () => ({ select: () => ({ in: async () => ({ data: [{ user_id: 'me', display_name: '관리자' }], error: null }) }) }) } })
   h.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeActor({ userId: 'me' }) })
   h.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: makeActor({ userId: 'me' }) })
 })
@@ -54,6 +55,7 @@ describe('listSettingsHistory', () => {
     expect(p1.ok).toBe(true)
     if (!p1.ok) return
     expect(p1.rows).toHaveLength(20); expect(p1.rows[0].newValue).toBe('v24'); expect(p1.nextBefore).toBe(p1.rows[19].id)
+    expect(p1.rows[0].changedByName).toBe('관리자')
     const p2 = await listSettingsHistory({ projectId: PID }, { before: p1.nextBefore! })
     expect(p2).toMatchObject({ ok: true })                         // 좁히기 전에 — ok:false 면 아래 단언이 조용히 건너뛰어진다(FM-5)
     if (p2.ok) { expect(p2.rows).toHaveLength(5); expect(p2.nextBefore).toBeNull() }
@@ -62,5 +64,10 @@ describe('listSettingsHistory', () => {
     const f = await listSettingsHistory({ projectId: PID })
     expect(f).toEqual({ ok: false, error: expect.stringContaining('이력을 불러오지 못했습니다') })
     expect(JSON.stringify(f)).not.toContain('fake failure'); expect(JSON.stringify(spy.mock.calls)).toContain('fake failure')
+  })
+  it('프로필이 지워진 작성자는 삭제된 계정으로 표시한다', async () => {
+    db.externalWrite({ workspaceId: WID }, { 'ai.enabled': false }, 'deleted-user')
+    const result = await listSettingsHistory({ workspaceId: WID })
+    expect(result).toMatchObject({ ok: true, rows: [{ changedByName: '삭제된 계정' }] })
   })
 })
