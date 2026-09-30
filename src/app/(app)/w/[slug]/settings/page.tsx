@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
@@ -84,7 +85,13 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         </div>
       </SectionCard>
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
-        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
+        <div className="space-y-4">
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
+          {/* /admin/teams 는 플랫폼 관리자 전용(canManageTeams)이라 그 밖에는 링크 대신 안내만 둔다 — 눌러서 튕기는 링크를 만들지 않는다. */}
+          {access.isSuperuser
+            ? <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href="/admin/teams" className="font-medium text-brand underline">팀 관리</Link>에서 편집합니다.</p>
+            : <p className="text-sm text-ink-muted">공용 팀 기준정보는 플랫폼 관리자가 팀 관리에서 편집합니다.</p>}
+        </div>
       </SectionCard>
       <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
