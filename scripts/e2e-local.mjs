@@ -666,7 +666,9 @@ async function main() {
     const entry = {
       who: who.label, path, status: res.status, notFound: res.status === 404 || digest,
       notFoundSignal: res.status === 404 ? 'http-404' : digest ? 'digest' : null,
-      nameInHtml: html.includes(wsName), modulesAllowedInHtml: html.includes('modules.allowed'),
+      nameInHtml: html.includes(wsName),
+      // 구역의 유무는 편집기 전용 문구로 본다 — 키 이름은 '기록' 범주의 변경 이력에도 나온다(부트스트랩이 modules.allowed 를 썼다).
+      modulesAllowedInHtml: html.includes('프로젝트 관리자가 켤 수 있는 모듈을 고릅니다'),
       ...(hidden ? {} : { problems: pageProblems(html, [`${wsName} 설정`]) }),
     }
     if (entry.notFound !== hidden) throw new Fail(`${who.label} ${path}: notFound=${entry.notFound}(기대 ${hidden})`)
@@ -680,8 +682,8 @@ async function main() {
     await wsSettings(bea, wsARow.slug, wsARow.name, { hidden: true }),
     await wsSettings(admin, OTHER_WORKSPACE.slug, OTHER_WORKSPACE.name, { hidden: false }),
   ]
-  if (wsSettingsChecks[1].modulesAllowedInHtml) throw new Fail('플랫폼 관리자가 아닌 ana 의 설정 화면에 modules.allowed 구역이 있다')
-  if (!wsSettingsChecks[3].modulesAllowedInHtml) throw new Fail('플랫폼 관리자의 설정 화면에 modules.allowed 구역이 없다')
+  if (wsSettingsChecks[1].modulesAllowedInHtml) throw new Fail('플랫폼 관리자가 아닌 ana 의 설정 화면에 모듈 허용 구역이 있다')
+  if (!wsSettingsChecks[3].modulesAllowedInHtml) throw new Fail('플랫폼 관리자의 설정 화면에 모듈 허용 구역이 없다')
   step('workspace-settings-boundary', { checks: wsSettingsChecks })
 
   // ── 18. 외부 회의록 API(시크릿 + user_email) — meta 의 projects·목록의 items 가 그 사람의 워크스페이스로만 좁혀진다.
