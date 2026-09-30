@@ -82,4 +82,13 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
     expect(html).toContain('href="/w/alpha/settings"')
     expect(html).toContain('Alpha 워크스페이스 설정 →')
   })
+  it('목차의 앵커가 범주 컨테이너 다섯을 스펙 순서로 가리키고 크레딧은 상태·승인 안에 든다', async () => {
+    const html = await render()
+    const at = (id: string) => html.indexOf(`id="${id}"`)
+    const ids = ['project-general', 'project-modules', 'project-team', 'project-status', 'project-calendar']
+    expect(ids.map(at).every(i => i >= 0)).toBe(true)
+    expect(ids.map(at)).toEqual([...ids.map(at)].sort((a, b) => a - b))
+    expect(html.indexOf('mock-slider')).toBeGreaterThan(at('project-status'))
+    expect(html.indexOf('mock-slider')).toBeLessThan(at('project-calendar'))
+  })
 })

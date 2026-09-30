@@ -200,9 +200,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       ]}>
       <div className="space-y-5">
         {!pc.ok && <ConfigLoadError error={pc.error} locale={locale} />}
+        {/* ════ 일반 — 정보·단계·공개 범위·데이터·AI ════ */}
+        <div id="project-general" className="scroll-mt-24 space-y-5">
         {/* ── 기본 정보 ── */}
         <SectionCard
-          id="project-general"
           searchText="project name description start date end date 프로젝트 이름 설명 기간 마일스톤 키워드"
           eyebrow="CORE INFORMATION"
           title={t(locale, 'settings.coreInfoTitle')}
@@ -245,32 +246,41 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             invalidReason={pc.cfg.keys['core.milestone_keywords'].status === 'invalid' ? pc.cfg.keys['core.milestone_keywords'].error : undefined} />
         </div>}
         </SectionCard>
-
-        <div>
-        <SectionCard id="project-modules" searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
-          {pc.ok && workspaceModules ? (() => {
-            const enabled = pc.cfg.keys['modules.enabled']
-            const allowed = workspaceModules.keys['modules.allowed']
-            const allowedIds = allowed.status === 'set' || allowed.status === 'default' ? allowed.value : []
-            const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
-            return <>
-              {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
-                <ConfigStateNotice kind={allowed.status === 'invalid' ? 'invalid' : 'required'} locale={locale} keyName="modules.allowed"
-                  message={allowed.status === 'invalid' ? allowed.error : undefined}
-                  isAdmin={Boolean(workspaceLink)} settingsHref={workspaceLink ? `/w/${encodeURIComponent(workspaceLink.slug)}/settings` : undefined} />}
-              {!agentsOn && allowedIds.includes('agents') && (enabled.status === 'set' || enabled.status === 'default') && enabled.value.includes('agents') &&
-                <p role="alert" className="mb-3 text-sm text-pending">에이전트 사용 설정은 켜져 있지만 현재 기능은 닫혀 있습니다. 등록 동기화 실패라면 에이전트를 끈 뒤 다시 켜세요.</p>}
-              <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
-                initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
-                invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
-                requiredMissing={enabled.status === 'required_missing'}
-                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
-                  allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
-            </>
-          })() : workspaceModulesError ? <ConfigLoadError error={workspaceModulesError} locale={locale} /> : null}
-        </SectionCard>
-        </div>
-
+      {/* ── WBS 단계 (관리자) — 라벨 배열이 곧 깊이. 축소 검증은 서버 액션이 한다. ── */}
+        {isAdmin && labels && (
+          <SectionCard
+            searchText="core.level_labels 단계 깊이 WBS"
+            eyebrow="WBS"
+            title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
+            icon={ListTree}
+          >
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+              {locale === 'ko'
+                ? '트리 깊이별 단계 이름입니다. 단계 수가 곧 최대 깊이이며, 기존 WBS 보다 얕게 줄일 수 없습니다. 화면 배지·보고서·엑셀 헤더가 이 이름을 씁니다.'
+                : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
+            </p>
+            {labels.ok
+              ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
+              : <ConfigLoadError error={labels.error} keyName={labels.key} kind={labels.kind} locale={locale}
+                isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
+          </SectionCard>
+        )}
+      {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}
+        {isSuperuser && (
+          <SectionCard
+            searchText="프로젝트 공개 범위 비공개"
+            eyebrow="AUTHORIZATION"
+            title={t(locale, 'settings.privacyTitle')}
+            icon={Lock}
+            actions={<ProjectPrivacyToggle projectId={projectId} isPrivate={Boolean(project?.is_private)} />}
+          >
+            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+              {t(locale, 'settings.privacyDesc1')}
+              <strong className="text-ink">{t(locale, 'settings.privacyDescStrong')}</strong>
+              {t(locale, 'settings.privacyDesc2')}
+            </p>
+          </SectionCard>
+        )}
       {/* ── WBS 데이터 가져오기 / 내보내기 ── */}
         <SectionCard
         searchText="wbs.excel_profile import export 데이터 가져오기 내보내기"
@@ -300,10 +310,131 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         )}
         </SectionCard>
+      {/* ── AI 어시스턴트 의미검색 색인 ── */}
+        <SectionCard
+        searchText="ai.enabled 색인 재색인"
+        eyebrow="AI ASSISTANT"
+        title={t(locale, 'settings.assistantTitle')}
+        icon={Sparkles}
+        actions={
+          <div className="flex items-center gap-2">
+            <span className={`badge px-2 py-1 ${assistantBadge(assistantIndex, locale).cls}`}>{assistantBadge(assistantIndex, locale).label}</span>
+            {/* 서버 가드(reindexProjectAction·/api/chat/reindex)가 requireProjectAdmin 이라 이 화면에 온 관리자에게 그대로 준다. */}
+            <ReindexButton projectId={projectId} />
+          </div>
+        }
+      >
+        <p className="-mt-2 text-xs leading-5 text-ink-muted">
+          {t(locale, 'settings.assistantDesc1')}<span className="font-medium text-pending">{t(locale, 'settings.assistantDescBadge')}</span>{t(locale, 'settings.assistantDesc2')}
+          <br />
+          <span className="text-ink-subtle">
+            {t(locale, 'settings.assistantDesc3')}
+          </span>
+        </p>
+        </SectionCard>
+      {/* ── 서버 LLM 설정 (슈퍼유저 전용) ── */}
+        {isSuperuser && llm && (
+          <SectionCard
+            searchText="llm ai 모델 환경변수"
+            eyebrow="AI ASSISTANT"
+            title={t(locale, 'settings.llmTitle')}
+            icon={Cpu}
+            actions={
+              <div className="flex items-center gap-2">
+                <span className="badge bg-surface-2 px-2 py-1 text-ink-muted">{t(locale, 'settings.llmGlobalBadge')}</span>
+                <span className={`badge px-2 py-1 ${llm.cls}`}>{llm.label}</span>
+                <Link href="/admin/llm-config" className="btn btn-ghost shrink-0">
+                  <ArrowUpRight className="h-4 w-4" /> {t(locale, 'settings.llmOpenAdmin')}
+                </Link>
+              </div>
+            }
+          >
+            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+              {t(locale, 'settings.llmDesc1')}
+              <br />
+              <span className="text-ink-subtle">{t(locale, 'settings.llmDesc2')}</span>
+            </p>
+          </SectionCard>
+        )}
+        </div>
 
+        {/* ════ 모듈·메뉴 ════ */}
+        <div id="project-modules" className="scroll-mt-24 space-y-5">
+        <div>
+        <SectionCard id="project-modules" searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+          {pc.ok && workspaceModules ? (() => {
+            const enabled = pc.cfg.keys['modules.enabled']
+            const allowed = workspaceModules.keys['modules.allowed']
+            const allowedIds = allowed.status === 'set' || allowed.status === 'default' ? allowed.value : []
+            const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
+            return <>
+              {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
+                <ConfigStateNotice kind={allowed.status === 'invalid' ? 'invalid' : 'required'} locale={locale} keyName="modules.allowed"
+                  message={allowed.status === 'invalid' ? allowed.error : undefined}
+                  isAdmin={Boolean(workspaceLink)} settingsHref={workspaceLink ? `/w/${encodeURIComponent(workspaceLink.slug)}/settings` : undefined} />}
+              {!agentsOn && allowedIds.includes('agents') && (enabled.status === 'set' || enabled.status === 'default') && enabled.value.includes('agents') &&
+                <p role="alert" className="mb-3 text-sm text-pending">에이전트 사용 설정은 켜져 있지만 현재 기능은 닫혀 있습니다. 등록 동기화 실패라면 에이전트를 끈 뒤 다시 켜세요.</p>}
+              <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
+                initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
+                invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
+                requiredMissing={enabled.status === 'required_missing'}
+                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
+                  allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
+            </>
+          })() : workspaceModulesError ? <ConfigLoadError error={workspaceModulesError} locale={locale} /> : null}
+        </SectionCard>
+        </div>
+        </div>
+
+        {/* ════ 팀·업무영역 ════ */}
+        <div id="project-team" className="scroll-mt-24 space-y-5">
+      {/* ── 권한·초대는 팀 구성 페이지로 이동(2026-08-20 화면 통합) — 길 잃지 않게 이정표만 남긴다 ── */}
+        {isAdmin && (
+          <SectionCard
+            searchText="권한 역할 멤버"
+            eyebrow="AUTHORIZATION"
+            title={locale === 'ko' ? '권한' : 'Roles'}
+            icon={Shield}
+          >
+            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+              {locale === 'ko'
+                ? '권한과 초대는 참여 인력 명단과 함께 팀 구성에서 관리합니다.'
+                : 'Roles and invites are managed under Members, together with the roster.'}
+              {' '}
+              <Link href={`/p/${projectId}/members`} className="font-semibold text-brand hover:underline">
+                {locale === 'ko' ? '팀 구성 열기' : 'Open Members'}
+                <ArrowUpRight className="ml-0.5 inline h-3.5 w-3.5" aria-hidden />
+              </Link>
+            </p>
+          </SectionCard>
+        )}
+      {/* ── 팀 관리 (관리자 이상) — 프로젝트 스코프 팀(0071). 전역 팀은 /admin/teams. ── */}
+        {isAdmin && (
+          <SectionCard
+            searchText="팀 업무영역 담당"
+            eyebrow="TEAMS"
+            title={locale === 'ko' ? '팀 관리' : 'Teams'}
+            icon={Users}
+          >
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+              {locale === 'ko'
+                ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 전역 팀을 상속합니다.'
+                : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits global teams until defined.'}
+            </p>
+            <ProjectTeamsManager
+              projectId={projectId}
+              teams={projectTeamRows.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
+              inherited={projectTeamRows.length === 0}
+              hasGlobalTeams={workspaceTeamsForProjectSync(projectId).some(t => t.active)}
+            />
+          </SectionCard>
+        )}
+        </div>
+
+        {/* ════ 상태·승인 ════ */}
+        <div id="project-status" className="scroll-mt-24 space-y-5">
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
-        id="project-status"
         searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"
         eyebrow="AGENT"
         title={t(locale, 'settings.agentTitle')}
@@ -333,172 +464,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         )}
         </SectionCard>
-
-      {/* ── AI 어시스턴트 의미검색 색인 ── */}
-        <SectionCard
-        searchText="ai.enabled 색인 재색인"
-        eyebrow="AI ASSISTANT"
-        title={t(locale, 'settings.assistantTitle')}
-        icon={Sparkles}
-        actions={
-          <div className="flex items-center gap-2">
-            <span className={`badge px-2 py-1 ${assistantBadge(assistantIndex, locale).cls}`}>{assistantBadge(assistantIndex, locale).label}</span>
-            {/* 서버 가드(reindexProjectAction·/api/chat/reindex)가 requireProjectAdmin 이라 이 화면에 온 관리자에게 그대로 준다. */}
-            <ReindexButton projectId={projectId} />
-          </div>
-        }
-      >
-        <p className="-mt-2 text-xs leading-5 text-ink-muted">
-          {t(locale, 'settings.assistantDesc1')}<span className="font-medium text-pending">{t(locale, 'settings.assistantDescBadge')}</span>{t(locale, 'settings.assistantDesc2')}
-          <br />
-          <span className="text-ink-subtle">
-            {t(locale, 'settings.assistantDesc3')}
-          </span>
-        </p>
-        </SectionCard>
-
-      {/* ── 서버 LLM 설정 (슈퍼유저 전용) ── */}
-        {isSuperuser && llm && (
-          <SectionCard
-            searchText="llm ai 모델 환경변수"
-            eyebrow="AI ASSISTANT"
-            title={t(locale, 'settings.llmTitle')}
-            icon={Cpu}
-            actions={
-              <div className="flex items-center gap-2">
-                <span className="badge bg-surface-2 px-2 py-1 text-ink-muted">{t(locale, 'settings.llmGlobalBadge')}</span>
-                <span className={`badge px-2 py-1 ${llm.cls}`}>{llm.label}</span>
-                <Link href="/admin/llm-config" className="btn btn-ghost shrink-0">
-                  <ArrowUpRight className="h-4 w-4" /> {t(locale, 'settings.llmOpenAdmin')}
-                </Link>
-              </div>
-            }
-          >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
-              {t(locale, 'settings.llmDesc1')}
-              <br />
-              <span className="text-ink-subtle">{t(locale, 'settings.llmDesc2')}</span>
-            </p>
-          </SectionCard>
-        )}
-
-      {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}
-        {isSuperuser && (
-          <SectionCard
-            searchText="프로젝트 공개 범위 비공개"
-            eyebrow="AUTHORIZATION"
-            title={t(locale, 'settings.privacyTitle')}
-            icon={Lock}
-            actions={<ProjectPrivacyToggle projectId={projectId} isPrivate={Boolean(project?.is_private)} />}
-          >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
-              {t(locale, 'settings.privacyDesc1')}
-              <strong className="text-ink">{t(locale, 'settings.privacyDescStrong')}</strong>
-              {t(locale, 'settings.privacyDesc2')}
-            </p>
-          </SectionCard>
-        )}
-
-      {/* ── 권한·초대는 팀 구성 페이지로 이동(2026-08-20 화면 통합) — 길 잃지 않게 이정표만 남긴다 ── */}
-        {isAdmin && (
-          <SectionCard
-            searchText="권한 역할 멤버"
-            eyebrow="AUTHORIZATION"
-            title={locale === 'ko' ? '권한' : 'Roles'}
-            icon={Shield}
-          >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
-              {locale === 'ko'
-                ? '권한과 초대는 참여 인력 명단과 함께 팀 구성에서 관리합니다.'
-                : 'Roles and invites are managed under Members, together with the roster.'}
-              {' '}
-              <Link href={`/p/${projectId}/members`} className="font-semibold text-brand hover:underline">
-                {locale === 'ko' ? '팀 구성 열기' : 'Open Members'}
-                <ArrowUpRight className="ml-0.5 inline h-3.5 w-3.5" aria-hidden />
-              </Link>
-            </p>
-          </SectionCard>
-        )}
-
-      {/* ── 팀 관리 (관리자 이상) — 프로젝트 스코프 팀(0071). 전역 팀은 /admin/teams. ── */}
-        {isAdmin && (
-          <SectionCard
-            id="project-team"
-            searchText="팀 업무영역 담당"
-            eyebrow="TEAMS"
-            title={locale === 'ko' ? '팀 관리' : 'Teams'}
-            icon={Users}
-          >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
-              {locale === 'ko'
-                ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 전역 팀을 상속합니다.'
-                : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits global teams until defined.'}
-            </p>
-            <ProjectTeamsManager
-              projectId={projectId}
-              teams={projectTeamRows.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
-              inherited={projectTeamRows.length === 0}
-              hasGlobalTeams={workspaceTeamsForProjectSync(projectId).some(t => t.active)}
-            />
-          </SectionCard>
-        )}
-
-      {/* ── WBS 단계 (관리자) — 라벨 배열이 곧 깊이. 축소 검증은 서버 액션이 한다. ── */}
-        {isAdmin && labels && (
-          <SectionCard
-            searchText="core.level_labels 단계 깊이 WBS"
-            eyebrow="WBS"
-            title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
-            icon={ListTree}
-          >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
-              {locale === 'ko'
-                ? '트리 깊이별 단계 이름입니다. 단계 수가 곧 최대 깊이이며, 기존 WBS 보다 얕게 줄일 수 없습니다. 화면 배지·보고서·엑셀 헤더가 이 이름을 씁니다.'
-                : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
-            </p>
-            {labels.ok
-              ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
-              : <ConfigLoadError error={labels.error} keyName={labels.key} kind={labels.kind} locale={locale}
-                isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
-          </SectionCard>
-        )}
-
-      {/* ── 일정 기준 및 공휴일 ── */}
-        <SectionCard
-        id="project-calendar"
-        searchText="달력 기준일 공휴일 휴일"
-        eyebrow="CALENDAR"
-        title={t(locale, 'settings.calendarTitle')}
-        icon={CalendarDays}
-      >
-        {wbs ? (
-          <ScheduleManager
-            projectId={projectId}
-            baseDate={project?.base_date ?? null}
-            holidays={wbs.holidays}
-            canEdit={canMutate}
-          />
-        ) : (
-          // 공휴일을 빈 배열로 넘기면 '공휴일 0건'(정상)과 구분되지 않아 조용히 틀린 화면이 된다 —
-          // 조회 실패는 안내로 드러내고, 임포트·기본 설정 등 나머지 카드는 그대로 쓰게 둔다.
-          <div className="panel-soft flex items-center gap-4 p-5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pending-weak text-pending">
-              <Info className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-ink">
-                {locale === 'ko' ? '일정·공휴일 정보를 불러오지 못했습니다.' : 'Could not load schedule and holiday data.'}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-ink-muted">
-                {locale === 'ko'
-                  ? '일시적인 오류일 수 있습니다. 잠시 후 새로고침하세요. 이 페이지의 다른 설정(WBS 임포트 포함)은 그대로 사용할 수 있습니다.'
-                  : 'This may be temporary — please refresh shortly. Other settings on this page (including WBS import) remain available.'}
-              </p>
-            </div>
-          </div>
-        )}
-        </SectionCard>
-
       {/* ── 프로젝트 상태 관리 (시각 전용) ── */}
         <SectionCard searchText="workflow.stage_credits 상태 정책 자동 동기화" eyebrow="STATUS POLICY" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
@@ -537,6 +502,46 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         </div>
         </SectionCard>
+        </div>
+
+        {/* ════ 달력 ════ */}
+        <div id="project-calendar" className="scroll-mt-24 space-y-5">
+      {/* ── 일정 기준 및 공휴일 ── */}
+        <SectionCard
+        searchText="달력 기준일 공휴일 휴일"
+        eyebrow="CALENDAR"
+        title={t(locale, 'settings.calendarTitle')}
+        icon={CalendarDays}
+      >
+        {wbs ? (
+          <ScheduleManager
+            projectId={projectId}
+            baseDate={project?.base_date ?? null}
+            holidays={wbs.holidays}
+            canEdit={canMutate}
+          />
+        ) : (
+          // 공휴일을 빈 배열로 넘기면 '공휴일 0건'(정상)과 구분되지 않아 조용히 틀린 화면이 된다 —
+          // 조회 실패는 안내로 드러내고, 임포트·기본 설정 등 나머지 카드는 그대로 쓰게 둔다.
+          <div className="panel-soft flex items-center gap-4 p-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pending-weak text-pending">
+              <Info className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">
+                {locale === 'ko' ? '일정·공휴일 정보를 불러오지 못했습니다.' : 'Could not load schedule and holiday data.'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-ink-muted">
+                {locale === 'ko'
+                  ? '일시적인 오류일 수 있습니다. 잠시 후 새로고침하세요. 이 페이지의 다른 설정(WBS 임포트 포함)은 그대로 사용할 수 있습니다.'
+                  : 'This may be temporary — please refresh shortly. Other settings on this page (including WBS import) remain available.'}
+              </p>
+            </div>
+          </div>
+        )}
+        </SectionCard>
+        </div>
+
         <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
           <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} />
         </SectionCard>
