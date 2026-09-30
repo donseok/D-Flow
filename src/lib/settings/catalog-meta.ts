@@ -1,17 +1,26 @@
 // 카탈로그 메타(개정 §2.10) — 레지스트리를 런타임에 가볍게 두려고 소비처·테스트·상태를 옆 파일에 둔다. 상태 어휘: planned·stored·wired·verified.
-// SP3a Phase A 는 키마다 마감 상태(스펙 §3.6 표)와 SP 를 적는다. Phase C 가 consumers·tests 경로를 채우고 catalog-sync 가 대조한다.
+// 소비처는 설정값을 실제로 읽거나 표시하는 대표 진입점이다. 뒤 SP 가 소비를 배선하면 이 목록과 상태를 함께 갱신한다.
 import type { SettingKey, SettingScope } from './registry'
 
 export type CatalogStatus = 'planned' | 'stored' | 'wired' | 'verified'
 export interface CatalogMeta { consumers: readonly string[]; tests: readonly string[]; status: CatalogStatus; sp: string }
 
-const A = (status: CatalogStatus): CatalogMeta => ({ consumers: [], tests: [], status, sp: 'SP3a' })
+const A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP3a' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
-  'modules.allowed': A('verified'), 'ai.enabled': A('verified'), 'invites.allowed_domains': A('verified'),
-  'branding.product_name': A('stored'), 'branding.logo': A('stored'), 'branding.accent': A('stored'), 'branding.mail_from_name': A('verified'),
-  'navigation.menu': A('stored'),
-  'core.level_labels': A('verified'), 'core.extra_axis_label': A('stored'), 'core.milestone_keywords': A('verified'),
-  'wbs.excel_profile': A('stored'), 'modules.enabled': A('verified'), 'workflow.stage_credits': A('wired'),
+  'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
+  'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
+  'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),
+  'branding.product_name': A('stored', ['src/lib/settings/displayBranding.ts', 'src/app/(app)/projects/page.tsx'], ['tests/settings/display-branding.test.ts']),
+  'branding.logo': A('stored', ['src/app/api/brand/[workspaceId]/[slot]/route.ts', 'src/app/(app)/projects/page.tsx'], ['tests/settings/logo-upload.test.ts', 'tests/api/brand-route.test.ts']),
+  'branding.accent': A('stored', ['src/components/settings/AccentEditor.tsx'], ['tests/settings/accent.test.ts']),
+  'branding.mail_from_name': A('verified', ['src/lib/mail/fromName.ts', 'src/lib/settings/displayBranding.ts'], ['tests/settings/display-branding.test.ts']),
+  'navigation.menu': A('stored', ['src/components/settings/MenuOrderEditor.tsx'], ['tests/settings/registry.test.ts']),
+  'core.level_labels': A('verified', ['src/app/api/v1/wbs/structure/route.ts', 'src/lib/agent/wbsImport.ts'], ['tests/settings/project-config.test.ts', 'tests/settings/create-project.test.ts']),
+  'core.extra_axis_label': A('stored', [], ['tests/settings/registry.test.ts']),
+  'core.milestone_keywords': A('verified', ['src/app/(app)/p/[projectId]/dashboard/page.tsx', 'src/lib/ai/tools/dashboard.ts'], ['tests/settings/default-keywords.test.ts', 'tests/settings/project-config.test.ts']),
+  'wbs.excel_profile': A('stored', ['src/app/api/import/inspect/route.ts', 'src/app/api/export/route.ts'], ['tests/settings/registry.test.ts']),
+  'modules.enabled': A('verified', ['src/lib/modules/effective.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
+  'workflow.stage_credits': A('wired', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0012_settings.sql'], ['tests/settings/registry.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
