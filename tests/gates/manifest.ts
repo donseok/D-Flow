@@ -200,6 +200,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('settings')}#updateWorkspaceSettings`]: { ...nul('workspaceAdmin'), sample: [U, {}] },   // isUuidLike 가 가드 앞
   [`${A('settings')}#getSettingsCommandOutcome`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }, U] },   // 범위 객체가 가드 인자
   [`${A('settings')}#listSettingsHistory`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }] },
+  [`${A('settingsPreview')}#previewSettingsImpact`]: { ...nul('workspaceAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [U, ['agents']] },
   // ── teams — 워크스페이스 관리
   [`${A('teams')}#addTeam`]: { ...nul('workspaceAdmin'), sample: [U, 'T'] },   // typeof workspaceId 가 가드 앞
   [`${A('teams')}#updateTeam`]: { ...nul('workspaceAdmin'), adminBeforeGuard: '인증 뒤 teams 행에서 대상 워크스페이스를 읽는다(service_role) — 등급 가드는 그 뒤' },

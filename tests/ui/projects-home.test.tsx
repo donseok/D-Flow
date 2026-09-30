@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getActorForView: vi.fn<() => Promise<unknown>>(),
   getProjectsCompletion: vi.fn<() => Promise<unknown>>(),
   select: vi.fn<() => Promise<{ data: unknown[] | null; error: { message: string } | null }>>(),
+  workspaceLinks: vi.fn<() => Promise<{ id: string; slug: string; name: string }[]>>(),
 }))
 
 vi.mock('@/app/actions/project', () => ({
@@ -29,6 +30,7 @@ vi.mock('@/app/actions/project', () => ({
 }))
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/data/wbs', () => ({ getProjectsCompletion: mocks.getProjectsCompletion }))
+vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: mocks.workspaceLinks }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({ from: () => ({ select: mocks.select }) }),
@@ -128,6 +130,7 @@ beforeEach(() => {
   mocks.getActorForView.mockResolvedValue(makeActor())
   mocks.getProjectsCompletion.mockResolvedValue(realCompletionMap())
   mocks.select.mockResolvedValue({ data: dbRows, error: null })
+  mocks.workspaceLinks.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -179,8 +182,10 @@ describe('프로젝트 홈 — 트리 재로드 제거 후 표시 동등성', ()
 describe('프로젝트 홈 — 생성 버튼은 대상 워크스페이스의 관리자(SP2)', () => {
   it('유일 소속 워크스페이스의 관리자에게 그 워크스페이스로 생성 버튼을 준다', async () => {
     mocks.getActorForView.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WS, 'admin']]) }))
+    mocks.workspaceLinks.mockResolvedValue([{ id: WS, slug: 'default', name: '기본' }])
     const markup = await renderPage()
     expect(markup).toContain(`data-new-project="${WS}"`)
+    expect(markup).toContain('/w/default/settings')
   })
 
   it('워크스페이스 멤버에게는 버튼도 사유도 없다', async () => {

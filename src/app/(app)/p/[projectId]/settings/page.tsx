@@ -34,6 +34,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { requireModule } from '@/lib/modules/gate'
 import { getAgentProjectState } from '@/app/actions/agentWork'
 import { AgentProjectToggle } from '@/components/settings/AgentProjectToggle'
+import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
 type ProjectRow = {
   id: string
@@ -119,6 +120,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 설정은 프로젝트 관리자 전용(2026-08-20 결정) — 사이드바 숨김과 같은 판정(isProjectAdmin).
   // actor null(권한 조회 실패 포함)도 거부다 — fail-closed.
   if (!isAdmin) redirect(`/p/${projectId}/dashboard`)
+  const workspaceId = actor?.projectWorkspace.get(projectId)
+  const workspaceLink = workspaceId ? (await manageableWorkspaceLinks(actor, workspaceId))[0] : null
   const isSuperuser = actor?.isSuperuser === true
   const canMutate = isAdmin
   const taskCount = wbs ? collectLeaves(wbs.items).length : '—'
@@ -204,6 +207,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             />
           ) : undefined}
         >
+        {workspaceLink && (
+          <Link href={`/w/${encodeURIComponent(workspaceLink.slug)}/settings`} className="mb-4 inline-flex text-sm font-medium text-brand hover:underline">
+            {workspaceLink.name} 워크스페이스 설정 →
+          </Link>
+        )}
         <dl className="-mt-1">
           <InfoRow label={t(locale, 'settings.projectName')}>
             <span className="font-semibold">{project?.name ?? t(locale, 'settings.unassigned')}</span>

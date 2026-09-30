@@ -1,0 +1,71 @@
+import { redirect } from 'next/navigation'
+import { Settings2, Palette, Mail } from 'lucide-react'
+import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
+import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
+import { SectionCard } from '@/components/ui/SectionCard'
+import { getServerLocale } from '@/lib/i18n/server'
+
+const SIMPLE: Record<SimpleWorkspaceKey, Omit<WorkspaceField, 'key' | 'value' | 'source' | 'error'>> = {
+  'branding.product_name': { label: '제품 이름', description: '워크스페이스의 제품 이름입니다.', kind: 'text' },
+  'branding.mail_from_name': { label: '메일 발신 이름', description: '비우면 제품 이름을 사용합니다.', kind: 'text' },
+  'ai.enabled': { label: 'AI 기능', description: '워크스페이스의 AI 기능 사용 여부입니다.', kind: 'boolean' },
+  'invites.allowed_domains': { label: '초대 허용 도메인', description: '한 줄에 한 도메인을 적습니다. 비우면 새 초대를 허용하지 않습니다. * 단독 입력은 모든 도메인을 허용합니다.', kind: 'domains' },
+}
+
+function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: SimpleWorkspaceKey): WorkspaceField {
+  const state = config.keys[key]
+  const kind = SIMPLE[key].kind
+  const valid = state.status === 'set' || state.status === 'default'
+  const raw = valid ? state.value : null
+  const value = kind === 'boolean' ? raw === true : kind === 'domains' ? (Array.isArray(raw) ? raw.join('\n') : '') : (typeof raw === 'string' ? raw : '')
+  const source = state.status === 'set' ? '워크스페이스 설정' : state.status === 'default' ? (state.from === 'deploy' ? '배포 기본값' : '제품 기본값') : '설정 손상'
+  return { key, ...SIMPLE[key], value, source, error: state.status === 'invalid' ? state.error : undefined }
+}
+
+export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const access = await workspacePageAccess(slug)
+  if (!access.isAdmin) redirect('/projects')
+  const locale = await getServerLocale()
+  let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
+  try {
+    config = await getWorkspaceConfig(access.id)
+  } catch (error) {
+    if (!(error instanceof ConfigUnavailableError)) throw error
+    console.error('[workspace settings] 설정 조회 실패:', { workspaceId: access.id, cause: error.message })
+    return <ConfigLoadError locale={locale} error="워크스페이스 설정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." />
+  }
+
+  const allowed = config.keys['modules.allowed']
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 pb-20">
+      <div>
+        <p className="eyebrow">Workspace settings</p>
+        <h1 className="mt-1 text-2xl font-bold text-ink">{access.name} 설정</h1>
+      </div>
+      <SectionCard eyebrow="일반" title="이름과 메일" icon={Palette}>
+        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision}
+          fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
+      </SectionCard>
+      <SectionCard eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
+        <div className="space-y-5">
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'ai.enabled')]} />
+          {access.isSuperuser ? (
+            <ModuleAllowEditor workspaceId={access.id} revision={config.revision}
+              initialAllowed={allowed.status === 'set' || allowed.status === 'default' ? allowed.value : null}
+              invalidReason={allowed.status === 'invalid' ? allowed.error : undefined} />
+          ) : (
+            <p className="text-sm text-ink-muted">모듈 허용 범위는 플랫폼 관리자가 변경할 수 있습니다.</p>
+          )}
+        </div>
+      </SectionCard>
+      <SectionCard eyebrow="초대" title="초대 정책" icon={Mail}>
+        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'invites.allowed_domains')]} />
+      </SectionCard>
+    </div>
+  )
+}

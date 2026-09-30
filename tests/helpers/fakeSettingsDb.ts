@@ -54,6 +54,7 @@ export class FakeSettingsDb {
         let limit: number | null = null
         let range: [number, number] | null = null
         let select = '*'
+        let withCount = false
         const run = () => {
           if (db.failTable === table) return { data: null, error: { message: `fake failure: ${table}` } }
           let rows = db.rowsOf(table, select)
@@ -65,12 +66,13 @@ export class FakeSettingsDb {
               return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1)
             })
           }
+          const count = withCount ? rows.length : null
           if (limit !== null) rows = rows.slice(0, limit)
           if (range !== null) rows = rows.slice(range[0], range[1] + 1)
-          return { data: rows, error: null }
+          return { data: rows, error: null, count }
         }
         const b: Record<string, unknown> = {
-          select: (s: string) => { select = s; return b },
+          select: (s: string, opts?: { count?: string }) => { select = s; withCount = opts?.count === 'exact'; return b },
           eq: (col: string, val: unknown) => { filters.push({ op: 'eq', col, val }); return b },
           is: (col: string, val: unknown) => { filters.push({ op: 'is', col, val }); return b },
           gt: (col: string, val: unknown) => { filters.push({ op: 'gt', col, val }); return b },

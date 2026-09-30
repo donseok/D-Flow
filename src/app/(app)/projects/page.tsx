@@ -15,6 +15,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { seoulToday } from '@/lib/domain/dates'
 import { BRAND } from '@/lib/branding'
 import { BrandGlyph } from '@/components/ui/BrandMark'
+import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
 type ProjectRow = {
   id: string
@@ -172,6 +173,7 @@ export default async function ProjectsHome() {
   const soleWs = actor ? resolveSoleWorkspaceId(actor) : null
   const createWorkspaceId = soleWs?.ok && isWorkspaceAdmin(actor, soleWs.workspaceId) ? soleWs.workspaceId : null
   const createBlockedReason = actor && soleWs && !soleWs.ok && isAnyWorkspaceAdmin(actor) ? soleWs.error : null
+  const workspaceLinks = await manageableWorkspaceLinks(actor)
 
   const heroStats = [
     { label: 'Tasks', value: taskStats ? taskStats.tasks : '–' },
@@ -210,6 +212,12 @@ export default async function ProjectsHome() {
 
         <div className="flex flex-wrap items-center gap-2">
           {createWorkspaceId && <NewProjectModal workspaceId={createWorkspaceId} />}
+          {workspaceLinks.map(ws => (
+            <Link key={ws.id} href={`/w/${encodeURIComponent(ws.slug)}/settings`}
+              className="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20">
+              {ws.name} 설정
+            </Link>
+          ))}
           {createBlockedReason && (
             <span role="status" className="text-xs font-medium text-hero-ink-muted">{createBlockedReason}</span>
           )}
