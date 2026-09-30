@@ -63,6 +63,29 @@ describe('WorkspaceFieldsEditor', () => {
     expect(update).toHaveBeenCalledWith('ws', expect.objectContaining({ expectedRevision: 8, set: { 'branding.product_name': 'Mine' } }))
   })
 
+  it('내 값 다시 적용은 내가 안 고친 키를 그 사이 바뀐 최신 값으로 두고 덮어쓰지 않는다', async () => {
+    update.mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: '충돌',
+      latest: { revision: 8, values: { 'branding.product_name': 'Other', 'branding.mail_from_name': 'OtherMail' }, invalidKeys: [] },
+      changedKeys: ['branding.product_name', 'branding.mail_from_name'], retryable: false })
+    render(); change('branding.product_name', 'Mine'); await click('저장')
+    await click('내 값 다시 적용')
+    expect(host.textContent).toContain('변경 1개')
+    expect(input('branding.mail_from_name').value).toBe('OtherMail')
+    await click('저장')
+    expect(update).toHaveBeenLastCalledWith('ws', expect.objectContaining({ expectedRevision: 8, set: { 'branding.product_name': 'Mine' } }))
+  })
+
+  it('최신 값 사용은 내가 안 고친 키도 최신 값으로 맞춘다', async () => {
+    update.mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: '충돌',
+      latest: { revision: 8, values: { 'branding.product_name': 'Other', 'branding.mail_from_name': 'OtherMail' }, invalidKeys: [] },
+      changedKeys: ['branding.product_name', 'branding.mail_from_name'], retryable: false })
+    render(); change('branding.product_name', 'Mine'); await click('저장')
+    await click('최신 값 사용')
+    expect(input('branding.product_name').value).toBe('Other')
+    expect(input('branding.mail_from_name').value).toBe('OtherMail')
+    expect(host.textContent).toContain('변경 0개')
+  })
+
   it('손상된 키는 새 값을 넣으면 복구 패치에 포함한다', async () => {
     render([{ key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: '설정 손상', error: '제어 문자' }])
     expect(host.querySelector('[data-config-state="invalid"]')?.textContent).toContain('제어 문자')

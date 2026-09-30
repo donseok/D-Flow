@@ -98,12 +98,17 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
 
   function chooseMine() {
     if (!conflict) return
-    const next = { ...baseline }
+    // 내가 고친 키만 내 값을 남긴다(baseline 만 최신으로). 안 고친 키는 draft 도 최신으로 올려 상대 변경을 되돌리지 않는다.
+    const nextBaseline = { ...baseline }
+    const nextDraft = { ...draft }
     for (const f of fields) {
       if (conflict.invalidKeys.includes(f.key)) continue
-      if (Object.prototype.hasOwnProperty.call(conflict.values, f.key)) next[f.key] = inputValue(f, conflict.values[f.key])
+      if (!Object.prototype.hasOwnProperty.call(conflict.values, f.key)) continue
+      const latest = inputValue(f, conflict.values[f.key])
+      if (same(draft[f.key], baseline[f.key])) nextDraft[f.key] = latest
+      nextBaseline[f.key] = latest
     }
-    setBaseline(next); setBaseRevision(conflict.revision); setConflict(null); setError(null)
+    setDraft(nextDraft); setBaseline(nextBaseline); setBaseRevision(conflict.revision); setConflict(null); setError(null)
   }
 
   function chooseLatest() {
