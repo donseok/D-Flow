@@ -230,7 +230,7 @@ describe('setAgentDelegation — 멤버 경로', () => {
     admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
     const r = await setAgentDelegation(W1, true)
     expect(r.ok).toBe(true)
-    expect(r.warning).toContain('에이전트 페이지에서 켜면')
+    expect(r.warning).toContain('모듈·메뉴에서 에이전트를 껐다 다시 켜면')
     expect(mocks.ensureOrderForWorkflowLeaf).not.toHaveBeenCalled()
   })
 })

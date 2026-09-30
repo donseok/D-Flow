@@ -132,7 +132,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
                   <span>
                     task {result.taskCount}건이 있는데 주문이 0건입니다.{' '}
                     {result.agentStopped
-                      ? '프로젝트가 "에이전트 중지" 상태입니다 — 설정 › 에이전트에서 재개하면 백필로 주문이 발행됩니다.'
+                      ? '이 프로젝트의 에이전트가 꺼져 있습니다 — 프로젝트 설정 › 모듈·메뉴에서 에이전트를 켜면 백필로 주문이 발행됩니다.'
                       : '이미 활성 주문이 있는 항목(재업로드)이거나 task 가 리프가 아닙니다. WBS 화면에서 확인하세요.'}
                   </span>
                 </p>

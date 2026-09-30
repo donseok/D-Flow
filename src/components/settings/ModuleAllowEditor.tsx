@@ -164,7 +164,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
             <p>영향받는 프로젝트: {review.impact.affectedProjects}개</p>
             {review.impact.removed.map(row => <p key={row.moduleId}>{LABEL[row.moduleId as keyof typeof LABEL]}: {row.projectCount}개 프로젝트</p>)}
           </>}
-          <p>데이터는 삭제되지 않으며, 저장 직후 모듈과 메뉴에 반영됩니다.</p>
+          <p>데이터는 삭제되지 않으며, 저장 직후 프로젝트 모듈 설정에 반영되고, 메뉴 표시는 다음 셸 갱신부터 바뀝니다.</p>
         </div>
       )}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}

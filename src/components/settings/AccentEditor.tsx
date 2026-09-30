@@ -6,6 +6,7 @@ import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsComman
 import { deriveAccent } from '@/lib/settings/accent'
 import type { AccentValue } from '@/lib/settings/accent'
 import { newUuid } from '@/lib/domain/uuid'
+import { ACCENT_TOKENS } from '@/lib/settings/accentTokens'
 
 function baseOf(value: unknown): string | null {
   if (value === null) return null
@@ -75,9 +76,9 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     {invalidReason && needsRepair && <p role="alert" className="text-xs text-delayed">설정 손상: {invalidReason}. 새 색을 저장해 복구하세요.</p>}
     <div className="flex flex-wrap items-center gap-3">
       <label htmlFor="workspace-accent" className="text-sm text-ink">기준 색</label>
-      <input id="workspace-accent" className="input w-32 font-mono text-sm" value={draft ?? ''} placeholder="#315cdb" maxLength={7}
+      <input id="workspace-accent" className="input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value || null)} />
-      <input type="color" aria-label="강조색 선택" value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : '#315cdb'}
+      <input type="color" aria-label="강조색 선택" value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value)} />
       <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch || draft === null}
         onClick={() => setDraft(null)}>기본값으로</button>
@@ -85,7 +86,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     {preview && !preview.ok && <p role="alert" className="text-xs text-delayed">{preview.error} {preview.failures.map(f => `${f.pair} ${f.contrast} (최소 ${f.min})`).join(', ')}</p>}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
       {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-line">
-        <div className="p-4" style={{ backgroundColor: mode === 'light' ? '#ffffff' : '#191f29' }}>
+        <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS[mode].surface }}>
           <span className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ backgroundColor: preview.value[mode].bg, color: preview.value[mode].fg }}>
             {mode === 'light' ? '밝은 화면' : '어두운 화면'}
           </span>
