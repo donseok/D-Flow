@@ -6,6 +6,7 @@ import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
 import { LogoEditor } from '@/components/settings/LogoEditor'
+import { AccentEditor } from '@/components/settings/AccentEditor'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -55,6 +56,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           <LogoEditor workspaceId={access.id} revision={config.revision}
             initialLogo={config.keys['branding.logo'].status === 'set' || config.keys['branding.logo'].status === 'default' ? config.keys['branding.logo'].value : null}
             invalidReason={config.keys['branding.logo'].status === 'invalid' ? config.keys['branding.logo'].error : undefined} />
+          <AccentEditor workspaceId={access.id} revision={config.revision}
+            initialAccent={config.keys['branding.accent'].status === 'set' || config.keys['branding.accent'].status === 'default' ? config.keys['branding.accent'].value : null}
+            invalidReason={config.keys['branding.accent'].status === 'invalid' ? config.keys['branding.accent'].error : undefined} />
         </div>
       </SectionCard>
       <SectionCard eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
