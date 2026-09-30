@@ -71,16 +71,15 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             invalidReason={config.keys['branding.accent'].status === 'invalid' ? config.keys['branding.accent'].error : undefined} />
         </div>
       </SectionCard>
-      <SectionCard id="workspace-modules" searchText="modules.allowed ai.enabled" eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
+      <SectionCard id="workspace-modules" searchText={access.isSuperuser ? 'modules.allowed ai.enabled' : 'ai.enabled'}
+        eyebrow="모듈·AI" title={access.isSuperuser ? '모듈 사용 범위' : 'AI 사용'} icon={Settings2}>
         <div className="space-y-5">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'ai.enabled')]} />
           {access.isSuperuser ? (
             <ModuleAllowEditor workspaceId={access.id} revision={config.revision}
               initialAllowed={allowed.status === 'set' || allowed.status === 'default' ? allowed.value : null}
               invalidReason={allowed.status === 'invalid' ? allowed.error : undefined} />
-          ) : (
-            <p className="text-sm text-ink-muted">모듈 허용 범위는 플랫폼 관리자가 변경할 수 있습니다.</p>
-          )}
+          ) : null}
         </div>
       </SectionCard>
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
