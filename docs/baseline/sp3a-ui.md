@@ -92,3 +92,44 @@
 | A-8 | 같음 | 768×1024 | 통과 | A-8-wbs-kw-768x1024.png | 27cf966f7362 | 같음 |
 | A-8 | 같음 | 390×844 | 통과 | A-8-wbs-kw-390x844.png | 46cf9d972e15 | 같음(사유 상자가 머리에 남고 간트가 아래에 그려진다) |
 | A-9 | `/p/<A>/{wbs,settings}` en(FM-1 — A-4 의 en 1크기) | 1440×900 | 통과(관찰 1) | A-9-wbs-en-1440x900.png<br>A-9-settings-en-1440x900.png | fce0f9464b91<br>9f1db660cb23 | 단계 이름 손상 + en: 제목 `Settings could not be loaded, so this view cannot be drawn. Refresh in a moment.`·키 줄 `Corrupt or missing setting: core.level_labels`, wbs 는 화면 대신, settings 는 WBS Levels 절 자리에. **셋째 줄(서버 문구 `설정 값이 올바르지 않습니다. (core.level_labels)`)은 한국어** — CR-13(Phase C ConfigStateNotice 교체 때 셋째 줄 제거)의 관찰 그대로. 서버에 저장된 UI 설정 언어가 쿠키를 이겨(PrefsSync) 확인 동안만 `user_preferences.prefs.locale` 을 en 으로 두고 ko 로 되돌림 |
+
+# Phase B(과제 28)
+
+| 항목 | 값 |
+|---|---|
+| 트리 | `sp3a/phase-b` `178a4babf6de21067ae54efba992c0aad506eebc` |
+| 일시 | 2026-09-30 09:50~09:53 KST (3회차, 22/22 통과) |
+| 서버 | 스크래치 워크트리 `/Users/jerry/D-Flow-wt/sp3a-b-26` 의 `next dev -p 3101`(Next.js 15.5.19, Node 22.18.0) — E2E(`docs/baseline/sp3a-e2e.md` 3절) 직후의 DB. 사용자의 :3000 은 건드리지 않음 |
+| 계정 | 부트스트랩 관리자 1개(`admin@example.com`, 플랫폼 관리자) — Phase B 화면은 **모듈만** 본다(등급별 화면 차이 없음 — Phase A 절과 같은 관례). 비밀번호는 스크립트가 env 로만 받아 메모리에서 썼다(출력·파일 없음) |
+| 도구 | 헤드리스 Chromium(Playwright 1.63.0, npx 캐시 — `package.json` 에 없음), 라이트(`colorScheme: 'light'`), `reducedMotion: 'reduce'`, 로케일 ko-KR |
+| 크기 | 1440×900 · 1280×720 · 768×1024 · 390×844 (B-2·B-3·B-4 는 1440·390, B-1 만 네 크기) |
+| 대상 | `<A>` = E2E A(`482539e8-d9fd-4cff-964a-56ab72e89153` — `issues`·`agents`·`chatbot` 꺼짐), `<B>` = E2E B(`28f43d04-8017-4e61-a63c-6c3c14407574` — 9모듈 켜짐). 뒤의 `db:reset` 으로 사라지는 로컬 id |
+| 판정 | 조작 뒤 DB(`project_settings.values`·`agent_projects.enabled`)와 새로고침 뒤 화면을 둘 다 대조. 22개 항목 전부 통과. 모든 행에서 오류 경계(Next 오류 문서·`(app)/error.tsx`) 0 |
+| 스크린샷 | 커밋하지 않는다 — 아래 해시는 파일 식별용 `shasum -a 256` 앞 12자다 |
+
+| # | 라우트 | 크기 | 결과 | 스크린샷 | 해시 | 비고 |
+|---|---|---|---|---|---|---|
+| B-1 | `/p/<A>/wbs` ↔ `/p/<B>/wbs` | 1440×900 · 1280×720 · 768×1024 · 390×844 | 통과 | B-1-A-wbs-{1440,1280,768,390}.png<br>B-1-B-wbs-{1440,1280,768,390}.png | A: 196494108f6c · f28a08b83498 · 7fe13ab1b8fd · 76fd20aebe3b<br>B: c1c5bc2aae4d · 1c1e26d8c8e8 · 22ee3b0ac01a · 4d3b461c04ca | 챗봇 FAB(`button[aria-label="AI 어시스턴트 열기"]`)가 **A 에는 0개 · B 에는 1개**, 네 크기 모두. 두 화면 다 404 아님·설정 오류 상태 아님. DB 대조: A `["kanban","meetings","weekly","announcements","attendance","wiki"]` / B `["kanban","meetings","weekly","issues","announcements","attendance","agents","wiki","chatbot"]` |
+| B-1 | 전환: B 에서 패널을 연 채 A 로 | 1440×900 | 통과 | B-1-B-panel-open-1440.png<br>B-1-after-switch-1440.png | 297f940c7c4a · 8c1f012958cc | B 에서 FAB 를 눌러 패널(`role="dialog"`) 1개 → A 로 옮기면 **다이얼로그 0 · FAB 0**(패널이 닫히고 진입점도 사라진다). 스크립트는 헤더에서 'E2E A'/'E2E B' 글자를 가진 버튼·링크를 찾았으나 0개여서(헤더에 프로젝트 전환기가 이 형태가 아니다) URL 이동으로 대신했다 — 판정에는 영향 없다 |
+| B-2 | `/p/<A>/issues` · `/p/<A>/agents` | 1440×900 · 390×844 | 통과 | B-2-A-issues-{1440,390}.png<br>B-2-A-agents-{1440,390}.png | issues·agents 1440: 7fec01f01f18(둘이 동일 — 같은 404 화면) · 390: 8dbaab029cb1 | 꺼진 모듈 URL 은 **not-found 화면**(`NEXT_HTTP_ERROR_FALLBACK;` digest)이고 **오류 경계가 아니다**(Next 오류 문서·`화면을 불러오지 못했습니다` 없음) |
+| B-2 | `/p/<A>/wbs` 사이드바 | 1440×900 · 390×844 | 통과 | B-2-A-wbs-sidebar-{1440,390}.png | 196494108f6c · 76fd20aebe3b | 꺼진 상태에서도 사이드바에 `/p/<A>/issues` 1개와 `/p/<A>/agents/office` 1개가 **남아 있다**(스펙 §2.1 — SP3b UI-2 까지). 켜진 모듈 화면은 정상. **주의:** 사이드바의 에이전트 항목 href 는 `/agents/office`(스튜디오)다 — `/agents` 는 그 항목의 활성 접두일 뿐(`Sidebar.tsx:62`)이라 `/agents` 로 찾으면 0개가 나온다. 또 404 화면에는 셸째가 없어 **사이드바가 없다** — 링크 잔존은 셸이 있는 화면에서 봐야 한다 |
+| B-3 | `/p/<A>/settings` 에이전트 카드 | 1440×900 · 390×844 | 통과 | B-3-1-stopped-{1440,390}.png | 7d4b6e62b65f · 408bef2957b3 | 모듈이 꺼진 상태: 칩 `에이전트 중지` · 버튼 `재개` · **안내문 '에이전트 모듈이 꺼져 있습니다.' 1개** · 크레딧 블록(개발 워크플로 크레딧) 1개 — 크레딧 편집기가 남아 있다(스펙 §4.4 넷째 줄). DB: `modules.enabled` 에 `agents` 없음 ∧ `agent_projects.enabled` false |
+| B-3 | 재개 → 새로고침 | 1440×900 | 통과 | B-3-2-resumed-1440.png | ff6efffdae11 | 새로고침에 칩 `에이전트 활성` · 버튼 `전체 중지` · 안내문 0 · 크레딧 블록 유지. DB: `modules.enabled` 에 `agents` 있음 ∧ 행 true — **두 원천이 같이 바뀐다** |
+| B-3 | 다시 중지 | 1440×900 | 통과 | B-3-3-restopped-1440.png | 0ebfea2258c5 | 칩 `에이전트 중지` · 안내문 1 · DB 도 `modules.enabled` 에서 빠지고 행 false(E2E 가 남긴 상태로 복귀) |
+| B-4 | `/p/<B>/dashboard` · `/p/<B>/wbs` (설정 손상) | 1440×900 · 390×844 | 통과 | B-4-dashboard-{1440,390}.png<br>B-4-wbs-{1440,390}.png | aaaf6b60923f · 2d90008ddd29 · 1aa16c80bfb0 · 807297281343 | `core.level_labels` 와 `core.milestone_keywords` 를 `42` 로 손상 → 네 화면 모두 **404 가 아니라 Phase A 의 오류 상태**(Plan Review Focus 3 — core 관문은 설정을 읽지 않는다). `설정을 불러오지 못해 이 화면을 그릴 수 없습니다` 문구 확인 |
+| B-4 | 복구 뒤 `/p/<B>/wbs` | 1440×900 | 통과 | B-4-restored-wbs-1440.png | 4d3b461c04ca | `core.level_labels = ["단계","작업","활동"]` 로 되돌린 뒤 정상(해시가 B 의 원본 캡처와 동일 — 화면이 정확히 복구됨) |
+
+## 비고(Phase B)
+
+- **B-1의 "패널이 닫힌다"는 클라이언트 판정이다** — 위젯은 프로젝트 전환 때 `GET /api/chat/context?probe=1` 을 다시 부르고
+  404 면 스스로 안 그린다(과제 24 · 판정 P12). 그래서 A 로 옮긴 뒤에는 **패널과 FAB 이 둘 다 없다**. 404 응답을 실제로
+  받아 그렸다면 위젯이 남았어야 한다.
+- **B-4의 복구는 `values` 통째로 되돌렸다** — 손상 전 `project_settings.values` 전문을 스크립트 메모리에 저장했다가
+  그대로 `$json$…$json$::jsonb` 로 되돌렸다. 복구 후 캡처 해시가 B 의 원본 캡처와 같다(위 표).
+- **1·2회차는 무효다** — 1회차는 서브에이전트 리뷰와 dev 서버 워밍업이 겹쳐 타임아웃으로 잘렸다. 그때 B-4 에서
+  손상해 둔 `<B>` 설정을 복구하기 전에 죽어 **3회차 시작 시 `<B>` 의 `core.level_labels` 가 이미 `42` 였다**
+  (그래서 2회차의 B-1 네 항목이 "B 화면이 설정 오류 상태"로 실패했다). 2회차는 그 사실을 스크립트가 모르고
+  "손상 전" 값을 `42` 로 저장·복구해 B-4 복구가 무효가 되었다. 3회차는 DB 를 직접 되돌린 뒤 돌렸고,
+  손상 전 값이 `["단계","작업","활동"]` 임을 로그에 남겼다. **실결함 아님 — 측정 절차의 문제였다.**
+- **눈확인 결과는 스크립트 판정 22개뿐이다** — B-1 의 네 크기 × 2 화면처럼 같은 사실을 여러 번 찍는 행이 있다.
+  사람 눈으로 다시 볼 필요는 없고, 사람이 볼 것은 `Preview-checked` 트레일러와 여기 표다.

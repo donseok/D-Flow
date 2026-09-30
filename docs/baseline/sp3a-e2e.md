@@ -104,3 +104,138 @@ git worktree remove --force /Users/jerry/D-Flow-wt/sp3a-a
 - 1회차(03:46~04:10)는 render-pages ✗ `TypeError: fetch failed` — dev.log `⚠ Server is approaching the used memory threshold, restarting...`(4절 둘째 줄·sp2-e2e §9 ② 와
   같은 현상), load 10~11.8, 첫 컴파일 members 56.7s·issues 106.9s·announcements 281.2s. 23단계는 ✓. 기록한 PID 로 서버를 내리고 reset → bootstrap → 새 서버로 한 번
   재실행했다. 재실행의 dev 서버에만 `NODE_OPTIONS=--max-old-space-size=8192`(하네스 설정, 앱 코드 무관) — 재시작 0회.
+
+# Phase B — 체크포인트(과제 28)
+
+**요약**
+
+- 깨끗한 DB(`db:reset` 0000~0012 → `dev:bootstrap`) 위에서 E2E **exit 0, 28단계 전부 ✓** — Phase A 의 24단계와
+  B 의 새 넷(`module-issues-off`·`module-agents-off`·`module-minutes-integration-off`·`module-index-skip`).
+  산출물 흔적 검사(`trace-scan`) 135항목 적중 0, `render-pages` 10화면 오류 표식 0.
+- **눈확인 B-1~B-4 전부 통과(22개 항목)** — 챗 위젯 탐침, 꺼진 모듈 URL 과 사이드바 링크 잔존, 에이전트 카드
+  중지·재개, core 화면의 설정 손상 상태. 기록은 `docs/baseline/sp3a-ui.md` 의 `# Phase B(과제 28)` 절.
+- **성능 통과** — 관문이 붙은 셸의 p95 가 기준선 대비 +20% 이내(가장 높은 비율 1.12). 기록은
+  `docs/baseline/sp3a-perf.md`. 조건부 최적화(과제 27 Step 6)는 측정값이 기준 안이라 실행하지 않았다.
+- `test:rls` 26 파일 · 282 케이스(건너뜀 0), `settings:verify` 문제 0건, `typecheck`·`lint`(0 error)·`vitest`(650 파일 · 8513)·`build` 초록.
+- **롤백 리허설 R 은 돌지 않았다** — Phase B 에 마이그레이션이 없다(P18). `git log --oneline main..HEAD -- supabase` 가 비어 있음을 확인했다.
+
+## 1. 환경
+
+| 항목 | 값 |
+|---|---|
+| 로컬 스택 | Supabase CLI 2.75.0 · Postgres 17.6.1.075(Docker/colima) · 마이그레이션 `0000`~`0012` |
+| 스택 이름 | **`d-flow-sp3a-e2e`**(api 54421 · db 54422) — 전용 스택을 하나 더 띄웠다. 근거는 4절 ⑤ |
+| 앱 | Next.js 15.5.19 `next dev -p 3101` · Node 22.18.0 |
+| 앱 위치 | 스크래치 워크트리 `/Users/jerry/D-Flow-wt/sp3a-b-26`(detached `178a4ba`, node_modules 는 메인 체크아웃으로 심볼릭 링크, `.env.local` 복사 후 `NEXT_PUBLIC_SUPABASE_URL` 만 54421 로 바꿈). 러너는 cwd = 그 워크트리(서버 액션 id 를 그 워크트리의 `.next` 매니페스트에서 찾는다). 사용자의 :3000 은 건드리지 않음. 성능 측정 뒤 `git worktree remove --force` |
+| dev 서버 env | 명령줄로만 `NEXT_PUBLIC_APP_URL=http://localhost:3101 INVITE_ALLOWED_DOMAINS=example.com MINUTES_API_SECRET=<생성값> CRON_SECRET=<생성값>`. 모듈 플래그 8개는 `npm run env:local` 가 워크트리 `.env.local` 에 써 준다(과제 5) |
+| 계정 | 부트스트랩 `admin@example.com`(플랫폼 관리자, 워크스페이스 A=`default` 관리자, 허용 모듈 13개 rev 1). 부트스트랩·B 관리자(`E2E_B_PASSWORD`) 비밀번호와 API 시크릿은 `openssl rand` 로 만들어 한 셸의 변수로만 넘겼다(출력·파일·커밋 없음). ana·외부 계정·carol 비밀번호는 러너가 실행마다 만든다 |
+| 산출물 | `/Users/jerry/D-Flow-wt/e2e-out-b`(커밋 안 함) |
+
+## 2. 순서와 명령
+
+```bash
+# 전용 스택은 워크트리의 supabase/config.toml 을 project_id="d-flow-sp3a-e2e" · 54421/54422 로 바꿔 띄웠다(커밋 안 함)
+colima start --cpu 4 --memory 6 --disk 60
+npm run db:start                                              # supabase_db_d-flow-sp3a-e2e healthy
+( cd "$WT" && npm run db:reset )                              # 0000~0012, max(version)=0012
+BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD="$BP" npm run dev:bootstrap    # ✓ 허용 모듈 13개 (revision 1)
+npm run settings:verify                                       # exit 0 — 1 passed
+npm run test:rls                                              # 26 파일 · 282 통과, 건너뜀 0
+npm run db:reset && BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD="$BP" npm run dev:bootstrap   # RLS 픽스처를 지우고 E2E 용 깨끗한 DB
+( cd "$WT" && npm run build )                                 # Compiled successfully
+( cd "$WT" && <env> nohup npm run dev -- -p 3101 > "$WT/dev.log" 2>&1 & )          # /login 200
+( cd "$WT" && BOOTSTRAP_PASSWORD="$BP" E2E_B_PASSWORD="$(openssl rand -base64 24)" MINUTES_API_SECRET="$MS" CRON_SECRET="$CS" \
+    E2E_OUT_DIR=/Users/jerry/D-Flow-wt/e2e-out-b node scripts/e2e-local.mjs > …/e2e.json )   # exit 0
+# 눈확인(과제 28 Step 5) — 같은 3101 dev 서버 위, 헤드리스 Chromium
+node /Users/jerry/D-Flow-wt/.eye28/eye.mjs                    # pass 22 / fail 0
+# 성능(과제 27) — 기준선 h2-done(00bfe8c) 을 3102, 후보를 3101. 한 스택을 0011 ↔ 0012 로 오간다
+( cd "$WT0" && supabase db reset --version 0011 && BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD="$BP" npm run dev:bootstrap && npm run build )
+node scripts/perf-baseline.mjs measure --base http://localhost:3102 --label h2-done-run1 --n 30   # ×3
+```
+
+E2E 실행 2026-09-30 09:02:36~09:05:54 KST(3분 18초), 눈확인 09:50~09:53 KST. 첫 실행은 서브에이전트 리뷰와
+dev 서버 워밍업이 겹쳐 한 차례 타임아웃으로 잘렸고(캡처는 `render-pages` 직후까지), 두 번째 실행은 1분 만에 끝났다.
+
+## 3. E2E 단계표
+
+28단계 전부 `ok: true`, exit 0. **굵은 이름**이 Phase B 에서 새로 넣은 단계다. 워크스페이스 A = `default`,
+B = `e2e-other`. 프로젝트 A·B·A-copy·A2 는 워크스페이스 A, C 는 B. `<A>`=`482539e8-…`·`<B>`=`28f43d04-…`·`<C>`=`ede3843f-…`
+(뒤의 `db:reset` 으로 사라지는 로컬 id).
+
+| # | 단계 | 판정 |
+|---|---|---|
+| 1 | login | 부트스트랩 계정의 워크스페이스 소속 A 관리자 1건, 쿠키 `sb-127-auth-token` |
+| 2 | create-projects | `createProject(input)`(create_project_with_settings 한 트랜잭션). A·B, `modules.enabled` 9개 |
+| 3 | settings-update | revision 2, 같은 명령 재전송 `duplicate`, 이력 1행 |
+| 4 | create-copy | A 를 원본으로 복사 → 이력 키 `copy/copied_from`, 단계 라벨 `["국면","과업","세부"]` |
+| 5 | project-teams | 워크스페이스 A 3팀, B 1팀 |
+| 6 | roster | 명단 3행(본인@A 관리자·다중 팀, 외부 인력 bob@A, 본인@B 멤버) |
+| 7 | fill-template | WBS 양식 5행 채움(팀 `ERP`) |
+| 8 | import-inspect | 계층 `outline`(col 0), 팀 열 `[(8,"*")]`, 경고 0 |
+| 9 | import-append | `{ ok: true, count: 5, mode: "append", reindexed: 0, profileSaved: true }` |
+| 10 | import-replace | 5행 · `item_owners` ERP 배정 2건(리프 `1.1.1`·`1.2.1`) |
+| 11 | assign-external | `1.1.1` 담당 = 외부 인력 bob, `item_owners` 1행 |
+| 12 | meeting | 회의 1건, 참석 1명(bob) |
+| 13 | export | 산출물 3개(PPT·XLSX·WBS XLSX) |
+| 14 | trace-scan | 135항목 스캔 · **원 고객사 흔적 적중 0** |
+| 15 | invite-issue | 초대 1행(`carol@example.com`, `member`, 팀 `ERP`, 상태 `active`, 초대 URL origin `http://localhost:3101`) — 메일 발송은 미설정이라 발송 없음 |
+| 16 | invite-redeem | carol 가입+합류 → 명단 3행, 워크스페이스 소속 A 하나 |
+| 17 | other-workspace-fixture | 워크스페이스 B(`e2e-other`) + 프로젝트 `<C>` + 관리자 bea — 행만 service_role |
+| 18 | visibility | carol: A 200(명단)·B 200(조회 전용, `createMeeting` → `권한 없음`)·`<C>` notFound digest·미존재 id notFound digest / admin: `<C>` 200 |
+| 19 | workspace-admin-project | 워크스페이스 A 관리자 ana(슈퍼유저 아님)가 `createProject` 로 프로젝트 `E2E A2` 생성(0c94c0e9-…) |
+| 20 | outsider-invite | 워크스페이스 밖 이메일 초대 1행(거부 경로) |
+| 21 | minutes-upload | 프로젝트 지정·미지정 각 1건, Storage 키 `ws/<A>/p/<pid>/…`·`ws/<A>/p/_/…`, 행 2 |
+| 22 | workspace-b-isolation | bea: A 제목 0·A 프로젝트명 0 / ana: A 제목 2 |
+| 23 | minutes-api-scope | 미등록 사용자 403 `unknown_user`, bea 의 A2 회의 404 `Not Found` |
+| 24 | render-pages | 10화면 렌더, 오류 표식 0. `/p/<A>/issues` 198183 bytes 등 |
+| **25** | **module-issues-off** | **`GET /p/<A>/issues` → `page.status` 200 + `notFoundRendered` true(로딩 경계), `issueInHtml` false · `createIssue` → `{ ok: false, error: '이 기능은 지금 사용할 수 없습니다.' }` · `GET /api/issue-analysis?projectId=<A>` → 404 + 같은 문구 + `issueInBody` false. 끄기 전 대조: `modules.enabled` 8개에 `issues` 포함, 시드한 고유 제목이 화면에 있었다** |
+| **26** | **module-agents-off** | **`meBefore` true(켜진 대조) → `modules.enabled` 에서 `agents` 만 뺀 상태에서 `rowAfterModuleOff` true(행은 켜진 채 모듈만 꺼짐)·`meAfterModuleOff` false(목록에서 빠짐)·`GET /api/v1/wbs/structure?project_id=<A>` → 404 `Not Found` · 옛 토글 재개 → `meAfterToggleOn` true + `modules.enabled` 에 `agents` 복귀 · 옛 토글 중지 → `rowAfterToggleOff` false + `modules.enabled` 에서 빠짐 + `meAfterToggleOff` false** |
+| **27** | **module-minutes-integration-off** | **워크스페이스 A 의 `modules.allowed` 에서 `minutes_integration` 해제(`allowedBefore` true) → `meta`·목록 모두 `{ error: '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.', code: 'module_disabled' }` · 업로드 `POST` → **409** + 같은 `code` · `createdRows` 0(부분 이동 없음) · `beaStillOpen` `[<C>]` — 워크스페이스 B 는 여전히 연다** |
+| **28** | **module-index-skip** | **`<A>` 의 `chatbot` 해제 후 `modules.enabled` = `[kanban, meetings, weekly, announcements, attendance, wiki]` · service_role 로 넣은 대기 잡 1건을 `CRON_SECRET` 색인 크론이 선점(`claimed` 1) → 잡이 `status: 'skipped'` · `last_error: 'module_disabled'`** |
+
+## 4. 비고
+
+① **스펙 R15** — 여러 워크스페이스에 속한 사용자는 SP3b 까지 전역 화면 다섯(`/meetings`·`/minutes`·`agents`·`/portfolio`·`/usage`)과
+프로젝트 없는 챗·트래커가 닫힌다(판정 P13 — `resolveSoleWorkspaceId` fail-closed). 로컬의 다중 소속 계정은 픽스처뿐이라
+E2E 로는 재지 않는다 — **SP3b 인수 목록**이다.
+
+② **스펙 §2.1** — Phase B 뒤 SP3b UI-2 까지 사이드바는 꺼진 모듈의 링크를 **계속 보이고** 그 링크는 404 다(메뉴 소비가 SP3b).
+눈확인 B-2 가 이걸 눈으로 봤다(아래 ③ 참고).
+
+③ **3단계 판정과 스펙 §7.3 문언의 차이** — 페이지 404 는 로딩 경계 때문에 스트리밍 뒤 **200 + notFound 화면**으로 나올 수 있어
+`notFoundRendered` 로 판정했다(실측 상태 코드 `page.status` = 200 을 함께 적었다). 이슈 분석 API 는 `runId` 가 필수라
+(없으면 가드 앞 400) `runId` 를 붙여 불렀다.
+
+④ **계정 구성** — E2E 는 부트스트랩 관리자 1 + 러너가 실행마다 만드는 계정(ana·외부·carol) + B 관리자 bea.
+눈확인은 부트스트랩 관리자 하나(Phase B 화면은 모듈만 본다 — 등급별 화면 차이가 없다) + 성능은
+`admin`(슈퍼유저)·`bob@example.com`(일반 멤버) 두 페르소나. 임시 플랫폼 관리자 계정은 쓰지 않았다(판정 P30).
+
+⑤ **전용 스택을 하나 더 띄운 이유(계획 편차)** — 계획은 "로컬 스택은 하나다 — `db:reset`·`test:rls`·E2E·성능·눈확인을 동시에
+돌리지 않는다"를 전제로 `npm run db:reset` 을 메인 체크아웃에서 돌리게 한다. 그런데 이 시점에 메인 스택(`d-flow`, 54321)에는
+**실제 개발 데이터 8계정·3워크스페이스·4프로젝트가 있었다**(사용자의 :3000 dev 서버가 쓰는 곳). 이를 지우지 않기 위해
+`supabase/config.toml` 을 **워크트리 안에서만** `project_id = "d-flow-sp3a-e2e"` · api 54421 · db 54422 로 바꿔 스택을 하나 더 띄우고
+그 위에서만 리허설했다(커밋되지 않았다 — 1절에도 적었다). 성능 측정의 `scripts/lib/targets.mjs` `LOCAL_DSN` 도 54422 로 바꿔
+시드가 같은 DB 를 보게 했다. 이 편차는 **측정 하네스와 로컬 환경에만** 있고 커밋된 코드에는 없다. 사용자에게는
+"메인 스택은 그대로였고, `:3000` 은 재부트스트랩이 필요 없다"는 뜻이다(계획이 예고한 사용자 조치 ① 이 발생하지 않았다).
+
+## 5. 게이트 결과
+
+| 게이트 | 명령 | 결과 |
+|---|---|---|
+| 타입 | `npm run typecheck` | 0 error |
+| 린트 | `npm run lint` | 0 error, warning 4(기존 — `tests/ai/index-lexical`·`tests/ai/tools-members` 미사용 변수) |
+| 단위 | `npx vitest run --reporter=dot --maxWorkers=4` | **650 파일 · 8513 테스트 통과** |
+| 빌드 | `npm run build`(스크래치 워크트리 `sp3a-b-26`, `178a4ba`) | Compiled successfully · 정적 페이지 19/19 |
+| DB | `npm run db:reset`(전용 스택) | 0000~0012 적용, `max(version)` = 0012. 성능 기준선은 `--version 0011` |
+| 설정 | `npm run settings:verify` | exit 0 — 1 passed(부트스트랩 직후) |
+| RLS | `npm run test:rls` | 26 파일 · 282 통과, 건너뜀 0 |
+| E2E | 3절 | **exit 0 · 28/28 ✓** |
+| 눈확인 | `docs/baseline/sp3a-ui.md` Phase B 절 | B-1~B-4 · 22 항목 전부 통과 |
+| 성능 | `docs/baseline/sp3a-perf.md` | p95 비율 최대 **1.12**(admin 대시보드) — 기준 +20% 이내, 조건부 최적화 미실행 |
+| 열거 게이트 | `tests/gates` (리뷰 B7·B8·B9 참조) | 액션 174 · 라우트 핸들러 44 · 스텁 74 · 가드 등급 null 59 양방향 대조 |
+| 마이그레이션 | `git log --oneline main..HEAD -- supabase` | **비어 있음** — Phase B 는 마이그레이션이 없다(P18). 롤백 리허설 대상 없음 |
+
+main 반영 뒤 컨트롤러가 채울 두 줄:
+
+- main 커밋의 스크래치 워크트리 빌드: (컨트롤러)
+- push 뒤 GitHub Actions run: (컨트롤러)
