@@ -797,6 +797,8 @@ async function main() {
   // 옛 토글(setAgentProjectEnabled)은 Phase C 에서 지워졌다 — 켜기·끄기는 모듈 편집기(modules.enabled 의 agents)가 한 길이다.
   // 켜기는 agent_projects 행을 만들거나 enabled 로 되돌리고, 끄기는 행을 건드리지 않는다(agentsSync.ts).
   const withAgents = (enabled) => (enabled.includes('agents') ? enabled : [...enabled, 'agents'])
+  // 기본 modules.enabled 에 agents 가 이미 있어 그대로 저장하면 '새로 켬'이 아니라 등록 행이 안 생긴다 — 껐다 켜야 행이 만들어진다(agentsSync).
+  await setProjectModules('agents 끄기(등록 준비)', (enabled) => enabled.filter((id) => id !== 'agents'))
   await setProjectModules('agents 켜기', withAgents)
   await admin.http('GET', '/account')
   const tokenResult = await admin.action('/account', 'createAgentToken', [{ name: `e2e-${randomUUID().slice(0, 8)}`, projectId: null, scopes: ['work:read'], expiresDays: 1 }])
