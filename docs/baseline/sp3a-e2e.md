@@ -116,7 +116,7 @@ git worktree remove --force /Users/jerry/D-Flow-wt/sp3a-a
   중지·재개, core 화면의 설정 손상 상태. 기록은 `docs/baseline/sp3a-ui.md` 의 `# Phase B(과제 28)` 절.
 - **성능 통과** — 관문이 붙은 셸의 p95 가 기준선 대비 +20% 이내(가장 높은 비율 1.12). 기록은
   `docs/baseline/sp3a-perf.md`. 조건부 최적화(과제 27 Step 6)는 측정값이 기준 안이라 실행하지 않았다.
-- `test:rls` 26 파일 · 282 케이스(건너뜀 0), `settings:verify` 문제 0건, `typecheck`·`lint`(0 error)·`vitest`(650 파일 · 8513)·`build` 초록.
+- `test:rls` 26 파일 · 282 케이스(건너뜀 0), `settings:verify` 문제 0건, `typecheck`·`lint`(0 error)·`vitest`(651 파일 · 8543 — 최종 리뷰 때 실측값으로 고친 것, 중간값 650/8513 은 수정 라운드 전 스냅샷)·`build` 초록.
 - **롤백 리허설 R 은 돌지 않았다** — Phase B 에 마이그레이션이 없다(P18). `git log --oneline main..HEAD -- supabase` 가 비어 있음을 확인했다.
 
 ## 1. 환경
@@ -224,7 +224,7 @@ E2E 로는 재지 않는다 — **SP3b 인수 목록**이다.
 |---|---|---|
 | 타입 | `npm run typecheck` | 0 error |
 | 린트 | `npm run lint` | 0 error, warning 4(기존 — `tests/ai/index-lexical`·`tests/ai/tools-members` 미사용 변수) |
-| 단위 | `npx vitest run --reporter=dot --maxWorkers=4` | **650 파일 · 8513 테스트 통과** |
+| 단위 | `npx vitest run --reporter=dot --maxWorkers=4` | **651 파일 · 8543 테스트 통과**(최종 리뷰 때 실측. 수정 라운드 전 스냅샷은 650/8513) |
 | 빌드 | `npm run build`(스크래치 워크트리 `sp3a-b-26`, `178a4ba`) | Compiled successfully · 정적 페이지 19/19 |
 | DB | `npm run db:reset`(전용 스택) | 0000~0012 적용, `max(version)` = 0012. 성능 기준선은 `--version 0011` |
 | 설정 | `npm run settings:verify` | exit 0 — 1 passed(부트스트랩 직후) |
@@ -239,3 +239,10 @@ main 반영 뒤 컨트롤러가 채울 두 줄:
 
 - main 커밋의 스크래치 워크트리 빌드: (컨트롤러)
 - push 뒤 GitHub Actions run: (컨트롤러)
+
+## 6. 남아 있는 한계 — `docs/baseline/sp3a-b-known-limits.md`
+
+체크포인트 시점에 남은 것은 위키 재구성 잡의 파괴적 선점(운영자가 알아야 함)·`agents` 허용 백필 공백·
+열거 게이트의 축 한계 넷·스펙 귀결 둘이다. 원래 SDD 원장에만 적혀 있었고 **그 원장은 브랜치에 따라가지
+않으므로** 머지한 사람이 볼 수 없었다 — 최종 리뷰가 지적해 `docs/baseline/sp3a-b-known-limits.md` 로
+옮겼다. 머지 전에 그 파일을 읽는 사람이 있어야 한다.
