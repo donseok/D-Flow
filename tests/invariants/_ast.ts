@@ -1,8 +1,17 @@
 // 불변식·열거 게이트 공용 AST 판별기 — use-server-exports·tests/gates 가 같은 판정을 쓴다(과제 13 에서 옮김).
 import ts from 'typescript'
 
-export const parse = (fileName: string, text: string): ts.SourceFile =>
-  ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, /\.[jt]sx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+/** 파일별 parse 캐시 — deny.test 의 모듈 항목 89개가 같은 파일(issues.ts 등)을 89번 다시 파싱했다(B4 m-1·T25-m4).
+ *  키에 원문까지 넣으므로 내용이 다른 같은 이름을 부르면 캐시를 타지 않는다. 구문 트리는 읽기만 하므로 재사용이 안전하다 */
+const PARSED = new Map<string, ts.SourceFile>()
+export const parse = (fileName: string, text: string): ts.SourceFile => {
+  const k = `${fileName}\n${text}`
+  const hit = PARSED.get(k)
+  if (hit) return hit
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, /\.[jt]sx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+  PARSED.set(k, sf)
+  return sf
+}
 
 /** 지시문 머리(directive prologue) — 맨 앞의 문자열 식 문장들. Next 는 'use server' 를 첫 문장만이 아니라 이 머리 어디서든 읽는다
  *  ('use strict' 뒤에 둔 'use server' 도 서버 액션 모듈이다) */
@@ -88,6 +97,30 @@ export function gateCallsIn(sf: ts.SourceFile, exportName: string, names: Readon
   }
   visitFn(exportName)
   return found
+}
+
+/** exportName 본문(과 재귀적으로 부르는 같은 파일 최상위 함수)이 `.from('<표>')` 로 만지는 표 이름 — 문자열 리터럴 인자만 센다.
+ *  다른 파일(임포트한 데이터 로더)이 만지는 표는 못 본다. 게이트는 그것을 한계로 적었다 — 표 이름 대조는 관리 목록의 감시 대상이다 */
+export function tablesIn(sf: ts.SourceFile, exportName: string): string[] {
+  const bodies = localBodies(sf)
+  const out = new Set<string>()
+  const seen = new Set<string>()
+  const walk = (n: ts.Node): void => {
+    if (ts.isCallExpression(n)) {
+      if (ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'from') {
+        const arg = n.arguments[0]
+        if (arg && ts.isStringLiteralLike(arg)) out.add(arg.text)
+      }
+      if (ts.isIdentifier(n.expression) && bodies.has(n.expression.text) && !seen.has(n.expression.text)) {
+        seen.add(n.expression.text)
+        walk(bodies.get(n.expression.text) as ts.ConciseBody)
+      }
+    }
+    ts.forEachChild(n, walk)
+  }
+  const body = bodies.get(exportName)
+  if (body) walk(body)
+  return [...out].sort()
 }
 
 /** 판정 함수의 원천 — 이 모듈에서 import 한 바인딩이라야 판정 호출로 센다(같은 이름의 지역 함수·아무 객체의 메서드는 판정이 아니다) */

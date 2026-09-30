@@ -2334,6 +2334,14 @@ describe('minutes_integration 관문 — 409 module_disabled(과제 21)', () => 
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'minutes_integration', { client: admin })
     expect(builders.minutes).toHaveLength(1)                            // 대상 조회 1회뿐 — update 없음
   })
+  it('link: 보관됨 ∧ 연동 꺼짐이면 관문이 먼저다 — archived 409 가 아니라 module_disabled(과제 21 · B7 T21-I1)', async () => {
+    const { builders, admin } = useAdmin({ minutes: [{ data: { id: MINUTE_UUID, created_by: USER.id, project_id: null, workspace_id: WS, archived_at: '2026-09-01T00:00:00Z', external_id: null } }] })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await LINK(link({ user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }))
+    expect(await res.json()).toMatchObject({ code: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WS }, 'minutes_integration', { client: admin })
+    expect(builders.minutes).toHaveLength(1)                            // 대상 조회 1회뿐 — update 없음
+  })
   it('link: 편집 자격이 없는 회의록은 모듈 판정 전에 404 — 존재 은닉이 먼저다', async () => {
     useAdmin({ minutes: [{ data: { id: MINUTE_UUID, created_by: 'u-9', project_id: null, workspace_id: 'ws-9', archived_at: null, external_id: null } }] })
     const res = await LINK(link({ user_email: 'lead@example.com', minute_id: MINUTE_UUID, external_id: EXTERNAL_ID }))

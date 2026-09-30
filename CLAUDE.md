@@ -118,8 +118,11 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
   (시그니처는 `tests/authz/guard-signatures.test.ts` 가 고정한다).
   `projectId` 를 인자로 받지 않는 액션은 `resolveProjectId(table, id)`(워크스페이스까지 필요하면 `resolveScope`)로 먼저 읽는다.
 - **모듈 관문은 가드가 아니다**: `requireModule(scope, moduleId, opts?)`·`requireSessionModule(projectId|null, moduleId)`(`src/lib/modules/gate.ts`)는
-  권한 가드 **다음, 입력 검증 앞**에서 꺼진 모듈을 `ERR_MODULE_DISABLED`(404)로 닫는다. 페이지는 `requireModulePage`, 세션 없는 경로(워커·외부 API·
-  공유 링크)는 `{ client: admin }` 을 넘긴다. 새 액션·라우트 핸들러는 `tests/gates/manifest.ts` 에 모듈 또는 `null`(사유)을 적어야 열거 게이트를 통과한다.
+  권한 가드 **다음, 입력 검증 앞**에서 꺼진 모듈을 닫는다 — 그 모듈의 행·본문·도구를 돌려주지 않는다. 오류 코드 매핑은
+  `ERR_MODULE_DISABLED`(404)지만 **반환 형태는 항목마다 다르다**(결과 유니온이 아닌 액션·셸 항목은 그 항목만 비운 빈 값, `/api/track` 은
+  200 `skipped`, 회의록 업로드는 409 `module_disabled`). 페이지는 `requireModulePage`, 세션 없는 경로(워커·외부 API·
+  공유 링크)는 `{ client: admin }` 을 넘긴다. 새 액션·라우트 핸들러는 `tests/gates/manifest.ts` 에 모듈 또는 `null` 을 적어야 열거 게이트를
+  통과한다 — `null` 항목의 사유(note)는 가드가 `session`·`public`·`cronSecret`·`minutesSecret` 일 때만 강제된다.
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.

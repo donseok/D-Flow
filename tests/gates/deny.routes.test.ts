@@ -85,19 +85,26 @@ function tokenIn(node: ts.Node): boolean {
   }
   return look(node)
 }
-/** expect(…).matcher(…) 사슬의 뿌리가 expect 호출인가 */
-const expectRooted = (c: ts.CallExpression): boolean => {
+/** expect(…).matcher(…) 사슬의 뿌리 expect 호출(없으면 null) */
+const expectRoot = (c: ts.CallExpression): ts.CallExpression | null => {
   let e: ts.Expression = c.expression
   while (ts.isPropertyAccessExpression(e) || ts.isCallExpression(e)) {
-    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'expect') return true
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'expect') return e
     e = e.expression
   }
-  return false
+  return null
 }
-/** 블록 안의 거부 단언 — 거부 흔적이 expect 사슬(대상·매처 인자) 안에 있어야 한다. mock 준비(mockResolvedValue 의 ERR_MODULE_DISABLED)·주석은 단언이 아니다 */
+const expectRooted = (c: ts.CallExpression): boolean => expectRoot(c) !== null
+/** 부정 사슬이다 — expect(x).not.toMatchObject(…) 의 토큰은 "그 코드가 **없어야** 한다"를 말한다(B4 m-3·T25-I2) */
+const negated = (c: ts.CallExpression): boolean => {
+  const r = expectRoot(c)
+  return !!r && ts.isPropertyAccessExpression(r.parent) && r.parent.name.text === 'not'
+}
+/** 블록 안의 거부 단언 — 거부 흔적이 expect 사슬(대상·매처 인자) 안에 있어야 하고 **부정이 아니어야** 한다.
+ *  mock 준비(mockResolvedValue 의 ERR_MODULE_DISABLED)·주석은 단언이 아니다 */
 function hasDenyToken(block: ts.Node): boolean {
   const look = (n: ts.Node): boolean => {
-    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && expectRooted(n) && tokenIn(n)) return true
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && expectRooted(n) && !negated(n) && tokenIn(n)) return true
     return ts.forEachChild(n, look) ?? false
   }
   return look(block)
@@ -138,17 +145,29 @@ function clientProblems(key: string, sites: readonly GateSite[]): string[] {
 /** 설계상 한 갈래에만 관문을 두는 모듈 라우트 핸들러(닫힌 목록 — 항목마다 사유, Ruling [B4 I-1] (b)). 여기 없는 핸들러는 최상위 판정이 본문을
  *  지배해야 한다. gated: 핸들러의 갈래 if 조건 원문 → 위임 파일에서 그 갈래를 고르는 요청의 표지(문자열 조각 — 낱말 경계로 찾는다). 판정은
  *  갈래 if 의 then 블록에서 늘 돌아야 하고(가지·try·단락 평가 안이면 FAIL), 그 if 는 핸들러 몸의 최상위(try 블록·else if 사슬 포함)여야 한다.
+ *  ungated: 관문 앞에 조기 반환만 하는 최상위 if 의 조건 원문 → 사유(400·세션 가드 등). 그 then 블록은 **단일 return 문**일 때만 인정한다.
+ *  core: 마지막 gated 갈래 뒤 구간 — 그 뒤의 최상위 if 는 관문 없는 것이 설계다(core 를 안 쓴 핸들러에는 그 구간이 없다).
  *  위임 파일은 갈래마다 그 표지만 품고 거부를 단언하는 it 을, core 가 있으면 어느 갈래 표지도 없이 관문 비호출을 단언하는 it 을 둔다 */
-type BranchGate = { reason: string; gated: Readonly<Record<string, string>>; core?: string }
+type BranchGate = { reason: string; gated: Readonly<Record<string, string>>; ungated?: Readonly<Record<string, string>>; core?: string }
 const BRANCH_GATE: Readonly<Record<string, BranchGate>> = {
   'src/app/api/report/route.ts#GET': {
     reason: 'P4 — 주간업무 시트 갈래(source=sheet)만 weekly 관문. 기본 갈래는 WBS 화면 보고서 모달이 부르는 core 현황 보고서라 관문을 부르지 않는다',
     gated: { "source === 'sheet'": 'source=sheet' },
+    ungated: {
+      '!(await getSession())': '로그인 가드',
+      '!projectId': 'projectId 누락 400',
+      "format !== 'xlsx' && format !== 'pptx'": '형식 검증 400',
+    },
     core: '기본 갈래 — WBS 현황 보고서(xlsx·pptx)',
   },
   'src/app/api/minutes/chat/route.ts#POST': {
     reason: '두 모드의 판정 범위가 다르다 — 문서 모드는 회의록 행의 워크스페이스(resolveScope 뒤), 보관함 모드는 세션 유일 워크스페이스(P13). 모드 밖 요청은 400 뿐이라 core 갈래가 없다',
     gated: { "body.mode === 'doc'": 'doc', "body.mode === 'archive'": 'archive' },
+    ungated: {
+      '!(await getSession())': '로그인 가드',
+      '!message': '질문 없음 400',
+      'message.length > 2000': '질문 2000자 초과 400',
+    },
   },
 }
 const LOGICAL: ReadonlySet<ts.SyntaxKind> = new Set([ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken])
@@ -186,7 +205,42 @@ function handlerBody(sf: ts.SourceFile, name: string): ts.Node | undefined {
   }
   return undefined
 }
-/** BRANCH_GATE 핸들러의 판정 확인 — 모든 판정이 원천·결과 사용을 지키고, 목록의 갈래 블록에서 늘 돌며, 갈래마다 판정이 있다 */
+/** 핸들러 몸의 최상위 if 사슬(else if 도 한 갈래) — 소스 순서로. 최상위 try 블록은 통과한다(branchOf 도 try 를 통과시킨다 — 실패는
+ *  catch 가 응답하고 끝나므로 그 안 if 는 갈래다). if 안에 숨은 갈래·반복문·중첩 함수는 최상위 문이 아니므로 없다 */
+function topLevelBranches(sf: ts.SourceFile, body: ts.Node | undefined): ts.IfStatement[] {
+  if (!body || !ts.isBlock(body)) return []
+  const out: ts.IfStatement[] = []
+  const scan = (stmts: readonly ts.Statement[]): void => {
+    for (const st of stmts) {
+      if (ts.isIfStatement(st)) {
+        let cur: ts.IfStatement = st
+        for (;;) {
+          out.push(cur)
+          const els = cur.elseStatement
+          if (els === undefined || !ts.isIfStatement(els)) break
+          cur = els
+        }
+      } else if (ts.isTryStatement(st)) scan(st.tryBlock.statements)
+    }
+  }
+  scan(body.statements)
+  return out
+}
+/** 조기 반환 가드로 인정되는 then 블록 — 단일 return 문뿐(본문이 붙으면 가드가 아니다) */
+const singleReturn = (s: ts.Statement): boolean =>
+  ts.isReturnStatement(s) || (ts.isBlock(s) && s.statements.length === 1 && ts.isReturnStatement(s.statements[0]))
+/** if 사슬(if … else if … else …)이 끝나는 위치 — core 구간의 시작을 재는 데 쓴다 */
+function ifChainEnd(b: ts.IfStatement): number {
+  let cur: ts.IfStatement = b
+  for (;;) {
+    const els = cur.elseStatement
+    if (els === undefined) return cur.end
+    if (!ts.isIfStatement(els)) return els.end
+    cur = els
+  }
+}
+/** BRANCH_GATE 핸들러의 판정 확인 — 모든 판정이 원천·결과 사용을 지키고, 목록의 갈래 블록에서 늘 돌며, 갈래마다 판정이 있고,
+ *  최상위 if 는 전부 목록(관문 갈래·조기 반환 가드)이나 core 구간에 속한다(B4 T20-I1 — 목록 밖 갈래의 무관문 본문은 목록으로 덮이지 않는다) */
 function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: readonly GateSite[]): string[] {
   if (!sites.length) return [`${key}: 판정 호출이 없다`]
   const body = handlerBody(sf, key.split('#')[1])
@@ -198,6 +252,24 @@ function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: r
     else out.push(`${key}:${s.line} ${s.name} 가 목록의 갈래(${Object.keys(bg.gated).join(' | ')}) 블록에서 늘 도는 자리가 아니다`)
   }
   for (const w of Object.keys(bg.gated)) if (!seen.has(w)) out.push(`${key}: 갈래 ${w} 에 판정이 없다`)
+  const ungated = bg.ungated ?? {}
+  const branches = topLevelBranches(sf, body)
+  const at = (b: ts.IfStatement) => b.expression.getText(sf)
+  // core 구간 = 마지막 gated 갈래(else 사슬 포함) 뒤. core 를 선언하지 않은 핸들러에는 그 구간이 없다(무한대여서 아무 갈래도 면제되지 않는다) — 목록 밖 갈래가 아무 데도 못 숨는다
+  const coreFrom = bg.core === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.max(-1, ...branches.filter((b) => at(b) in bg.gated).map((b) => ifChainEnd(b)))
+  for (const b of branches) {
+    const c = at(b)
+    if (c in bg.gated || c in ungated) continue
+    if (b.getStart(sf) > coreFrom) continue
+    out.push(`${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다`)
+  }
+  for (const [c, why] of Object.entries(ungated)) {
+    const b = branches.find((x) => at(x) === c)
+    if (!b) out.push(`${key}: 조기 반환 목록 ${c} 가 핸들러에 없다(죽은 항목)`)
+    else if (!singleReturn(b.thenStatement)) out.push(`${key}: 조기 반환 목록 ${c} 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: ${why})`)
+  }
   return out
 }
 /** it 블록의 몸(제목 제외 — 제목의 낱말은 갈래 표지가 아니다) */
@@ -263,6 +335,9 @@ describe('deny — 라우트', () => {
       return bg ? branchProblems(key, bg, sf, sites) : handlerProblems(key, sites)
     })).toEqual([])
   })
+  it('모듈 라우트 항목이 0건이 아니다 — vitest 4 의 it.each([]) 은 0개를 만들고 실패하지 않는다(빈 필터의 조용한 무효화)', () => {
+    expect(moduleRoutes.length, '모듈 라우트 항목 0건 — 필터가 조용히 비었다').toBeGreaterThan(25)
+  })
   it('BRANCH_GATE 는 검사 대상 모듈 라우트 항목이고 사유·갈래가 있다(닫힌 목록)', () => {
     const moduleRouteKeys = new Set(moduleRoutes.map(([key]) => key))
     const bad = Object.entries(BRANCH_GATE).flatMap(([key, bg]) => [
@@ -270,6 +345,8 @@ describe('deny — 라우트', () => {
       ...(bg.reason.trim() ? [] : [`${key}: 사유 없음`]),
       ...(Object.keys(bg.gated).length ? [] : [`${key}: 갈래 없음`]),
       ...Object.values(bg.gated).filter((m) => !m.trim()).map(() => `${key}: 빈 표지`),
+      ...Object.entries(bg.ungated ?? {}).filter(([cond]) => cond in bg.gated).map(([cond]) => `${key}: ${cond} 가 관문 갈래와 조기 반환에 둘 다 있다`),
+      ...Object.entries(bg.ungated ?? {}).filter(([, why]) => !why.trim()).map(([cond]) => `${key}: 조기 반환 ${cond} 사유 없음`),
     ])
     expect(bad).toEqual([])
   })
@@ -371,11 +448,11 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
   })
   it('위임 파일: 그 메서드를 부르는 it 안의 거부 단언만 센다 — 다른 메서드의 거부 단언·mock 준비·주석의 토큰은 채워 주지 않는다(F2 — H3)', () => {
     const e: GateEntry = { guard: 'session', module: 'wiki', note: '로그인', delegatedTo: 't.test.ts' }
-    const file = (body: string) => [
+    const file = (...its: string[]) => [
       "import { GET, POST as post } from '@/app/api/wiki/search/route'",
       "import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'",
       'const callGet = () => GET(req())',
-      body,
+      ...its,
     ].join('\n')
     const onlyPost = file("it('POST 꺼짐', async () => { expect(await (await post(req())).json()).toMatchObject({ error: ERR_MODULE_DISABLED }) })\nit('GET 켜짐', async () => { expect((await GET(req())).status).toBe(200) }) // ERR_MODULE_DISABLED")
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', onlyPost)).toEqual(['src/app/api/wiki/search/route.ts#GET: t.test.ts 에 GET(GET) 를 부르며 모듈 거부를 단언하는 it 블록이 없다(메서드 단위)'])
@@ -390,6 +467,14 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(delegationProblems('src/app/api/v1/agent/me/route.ts#GET', stat, 'a.test.ts', `import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'\n${staticFile}`)).toEqual([])
     const skipped = file("it.skip('GET 꺼짐', async () => { await GET(req()); expect(x).toBe(ERR_MODULE_DISABLED) })")
     expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', skipped)).toHaveLength(1)
+    // 부정 단언은 "거부가 났는가"의 반대다 — 파일에 토큰이 있어도 비부정 단언 없으면 통과로 치지 않는다(B4 m-3)
+    const deniedIt = "it('GET 꺼짐', async () => { expect(await (await GET(req())).json()).toMatchObject({ error: ERR_MODULE_DISABLED }) })"
+    const negatedOnly = file("it('GET 꺼짐', async () => { expect(await (await GET(req())).json()).not.toMatchObject({ code: 'module_disabled' }) })")
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', negatedOnly), '부정 단언은 거부를 말하지 않는다').toHaveLength(1)
+    const negatedHelper = file("it('GET 꺼짐', async () => { expect(await (await callGet()).json()).not.toBe(ERR_MODULE_DISABLED) })")
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', negatedHelper), 'not.toBe(ERR_MODULE_DISABLED) 도 부정이다').toHaveLength(1)
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', file(deniedIt)), '대조 — 비부정 단언이 있으면 통과').toEqual([])
+    expect(delegationProblems('src/app/api/wiki/search/route.ts#GET', e, 't.test.ts', file(deniedIt, negatedOnly.slice(negatedOnly.indexOf("it('GET")))), '대조 — 부정 it 이 옆에 있어도 비부정 it 이 통과시킨다').toEqual([])
   })
   it('BRANCH_GATE 핸들러: 목록의 갈래 블록에서 늘 도는 판정만 인정한다 — 목록 밖 갈래·숨은 갈래·빠진 갈래·최상위로 옮긴 판정은 잡는다(과제 20)', () => {
     const bg: BranchGate = { reason: '합성', gated: { "source === 'sheet'": 'source=sheet', "mode === 'doc'": 'doc' } }
@@ -406,14 +491,52 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     ].join('\n')
     const bf = parse('src/app/api/z/route.ts', bsrc)
     const p = (m: string) => branchProblems(`z#${m}`, bg, bf, gateSitesIn(bf, m, MODULE_ROUTE_GATES))
-    expect(p('GET')).toEqual([])
+    // 목록 밖 최상위 갈래의 문제(T20-I1) — 이 목록에 없는 최상위 if 는 조기 반환 목록에도 없으므로 전부 잡힌다
+    const unlisted = (key: string, cond: string) => `${key}: 최상위 갈래 ${cond} 가 목록(관문 source === 'sheet' | mode === 'doc' · 조기 반환 (없음))에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다`
+    expect(p('GET'), '조기 반환 목록에 없는 세션 가드').toEqual([unlisted('z#GET', '!p')])
     expect(p('POST'), 'try 블록 안·else if 사슬의 갈래도 갈래다').toEqual([])
-    expect(p('PUT'), '목록 밖 갈래의 판정').toEqual([`z#PUT:4 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#PUT: 갈래 mode === 'doc' 에 판정이 없다"])
-    expect(p('PATCH'), '다른 조건 안에 숨은 갈래').toEqual([`z#PATCH:5 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#PATCH: 갈래 source === 'sheet' 에 판정이 없다"])
+    expect(p('PUT'), '목록 밖 갈래의 판정').toEqual([`z#PUT:4 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#PUT: 갈래 mode === 'doc' 에 판정이 없다", unlisted('z#PUT', "mode === 'pdf'")])
+    expect(p('PATCH'), '다른 조건 안에 숨은 갈래').toEqual([`z#PATCH:5 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#PATCH: 갈래 source === 'sheet' 에 판정이 없다", unlisted('z#PATCH', 'q')])
     expect(p('DELETE'), '갈래 안 조건 속 판정').toEqual([`z#DELETE:6 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#DELETE: 갈래 source === 'sheet' 에 판정이 없다"])
     expect(p('HEAD'), '빠진 갈래').toEqual(["z#HEAD: 갈래 mode === 'doc' 에 판정이 없다"])
-    expect(p('OPTIONS'), '최상위로 옮긴 판정 — 목록 항목을 지워야 한다').toEqual([`z#OPTIONS:8 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#OPTIONS: 갈래 source === 'sheet' 에 판정이 없다", "z#OPTIONS: 갈래 mode === 'doc' 에 판정이 없다"])
+    expect(p('OPTIONS'), '최상위로 옮긴 판정 — 목록 항목을 지워야 한다').toEqual([`z#OPTIONS:8 requireModule 가 목록의 갈래(source === 'sheet' | mode === 'doc') 블록에서 늘 도는 자리가 아니다`, "z#OPTIONS: 갈래 source === 'sheet' 에 판정이 없다", "z#OPTIONS: 갈래 mode === 'doc' 에 판정이 없다", unlisted('z#OPTIONS', '!mod.ok')])
     expect(handlerProblems('z#GET', gateSitesIn(bf, 'GET', MODULE_ROUTE_GATES)), '목록 밖 핸들러의 갈래 판정은 최상위 규칙에 걸린다').toEqual(['z#GET: 판정이 본문을 지배하지 않는다 — 핸들러 최상위 문에서 늘 도는 판정 호출이 없다(조건·try·단락 평가 안)'])
+  })
+  it('BRANCH_GATE 핸들러: 목록 밖의 무관문 본문 갈래와, 조기 반환 목록에 넣었는데 본문을 붙인 갈래를 잡는다(T20-I1 — 목록은 우회구가 아니다)', () => {
+    const bg: BranchGate = {
+      reason: '합성', gated: { "source === 'sheet'": 'source=sheet' }, core: '기본',
+      ungated: { '!p': '세션 가드 400' },
+    }
+    const G = "const mod = await requireModule({ projectId: p }, 'weekly'); if (!mod.ok) return deny"
+    const bsrc = [
+      "import { requireModule } from '@/lib/modules/gate'",
+      `export async function GET(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // (가) 관문 갈래 **앞**에 있는 목록 밖 본문 갈래 — 살아남던 변이(mode==='quick')의 모양
+      `export async function POST(req) { if (!p) return bad; if (source === 'pdf') { return pdfSheet() } if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // (나) 조기 반환 목록에 넣은 조건에 본문을 붙인 것
+      `export async function PUT(req) { if (!p) { const a = await read(); return a } if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // 대조 — core 구간(마지막 관문 갈래 뒤)의 갈래는 관문 없는 것이 설계다
+      `export async function PATCH(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'pdf') { return pdfSheet() } return core() }`,
+      `export async function DELETE(req) { if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+    ].join('\n')
+    const bf = parse('src/app/api/z/route.ts', bsrc)
+    const p = (m: string) => branchProblems(`z#${m}`, bg, bf, gateSitesIn(bf, m, MODULE_ROUTE_GATES))
+    const listed = "최상위 갈래 source === 'pdf' 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다"
+    expect(p('GET')).toEqual([])
+    expect(p('POST'), '목록 밖 무관문 본문 갈래').toEqual([`z#POST: ${listed}`])
+    expect(p('PUT'), '조기 반환 목록의 조건에 본문을 붙이면 가드가 아니다').toEqual(['z#PUT: 조기 반환 목록 !p 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: 세션 가드 400)'])
+    expect(p('PATCH'), '대조 — core 구간(마지막 관문 갈래 뒤)의 갈래는 자유다').toEqual([])
+    expect(p('DELETE'), '죽은 조기 반환 항목').toEqual(['z#DELETE: 조기 반환 목록 !p 가 핸들러에 없다(죽은 항목)'])
+    // core 를 선언하지 않은 핸들러에는 core 구간이 없다 — 마지막 관문 갈래 뒤의 갈래도 목록에 있어야 한다(minutes/chat)
+    const noCore: BranchGate = { reason: '합성', gated: { "mode === 'doc'": 'doc' }, ungated: { '!p': '세션 가드 400' } }
+    const nsrc = [
+      "import { requireModule } from '@/lib/modules/gate'",
+      `export async function GET(req) { if (!p) return bad; if (mode === 'doc') { ${G}; return doc() } if (mode === 'quick') { return quick() } return bad }`,
+    ].join('\n')
+    const nf = parse('src/app/api/y/route.ts', nsrc)
+    expect(branchProblems('y#GET', noCore, nf, gateSitesIn(nf, 'GET', MODULE_ROUTE_GATES))).toEqual([
+      "y#GET: 최상위 갈래 mode === 'quick' 가 목록(관문 mode === 'doc' · 조기 반환 !p)에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다",
+    ])
   })
   it('BRANCH_GATE 위임: 갈래마다 그 표지만 품은 거부 단언, core 는 표지 없이 관문 비호출 단언 — 없거나 한 it 이 두 갈래를 섞으면 잡는다(과제 20)', () => {
     const bg: BranchGate = { reason: '합성', gated: { "source === 'sheet'": 'source=sheet', "mode === 'doc'": 'doc' }, core: '기본' }

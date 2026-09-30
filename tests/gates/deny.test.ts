@@ -1,7 +1,8 @@
 // deny — 액션(스펙 §4.3 deny 행, 판정 P15·P17). 모듈 항목: ① 모듈 하나를 기대 범위(target)에서 끄면 거부 값(목록형 module 은 원소마다), 관문이 그
 // 범위로 물어 거부했고, 관문 앞에서 쓰지 않았고, 거부 뒤 DB 에 닿지 않았다 ② 가드를 모두 거부시키면 관문을 부르지 않고 쓰지 않으며 admin 클라이언트도
 // 만들지 않는다(adminBeforeGuard 예외) ③ 관문 호출은 판정 모듈의 import 이고 결과를 조건으로 본다(AST). null 항목: 본문(+같은 파일 헬퍼)에 관문
-// 호출이 없고(AST), 가드 통과 실행에서도 관문을 부르지 않는다(다른 파일 헬퍼 경유). 가드 등급 null 항목은 세션 없음·등급 거부 두 모드로, session
+// 호출이 없고(AST), 가드 통과 실행에서도 관문을 부르지 않는다(다른 파일 헬퍼 경유), 토글되는 모듈의 데이터 표도 만들지 않는다(닫힌 목록).
+// 가드 등급 null 항목은 세션 없음·등급 거부 두 모드로, session
 // null 항목은 세션 없음으로 가드 거부 실행(가드에 닿았는지·거부 응답·쓰기 0 — 스펙 §4.3 deny 첫 줄은 전 항목이다).
 // 모듈 항목의 실행 검사는 매니페스트의 모든 모듈 항목을 덮는다.
 import { readFileSync } from 'node:fs'
@@ -19,9 +20,9 @@ vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn(async () => ({ ok:
 import { ERR_ANON, ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
-import { gateCallsIn, gateSitesIn, parse, siteProblems } from '../invariants/_ast'
+import { gateCallsIn, gateSitesIn, parse, siteProblems, tablesIn } from '../invariants/_ast'
 import { harness, P, U, type Target } from './_harness'
-import { ACTION_GATES, type GateEntry } from './manifest'
+import { ACTION_GATES, ROUTE_GATES, type GateEntry } from './manifest'
 
 /** 액션의 관문 — 판정 모듈(@/lib/modules/gate)의 import 로 부르고 결과를 조건으로 본다 */
 const ACTION_GATE_NAMES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule'])
@@ -29,6 +30,49 @@ const ACTION_GATE_NAMES: ReadonlySet<string> = new Set(['requireModule', 'requir
 const listOf = (m: GateEntry['module']): ModuleId[] => (m === null ? [] : typeof m === 'string' ? [m] : [...m])
 const has = (v: unknown, id: string): boolean =>
   v === id || (Array.isArray(v) ? v.some((x) => has(x, id)) : !!v && typeof v === 'object' && Object.values(v).some((x) => has(x, id)))
+/** 토글되는 모듈(non-core)이 자기 데이터로 소유하는 표 — 매니페스트가 `module: null` 을 믿는 그 공백을 메운다(B9 T25-I1).
+ *  core 모듈 소유 표(wbs_items·projects·profiles·teams·설정 표 등)는 여기 없다 — core 는 끌 수 없어 관문이 필요 없다.
+ *  모듈이 표를 '직접' 소유하는지(apiPrefixes·routePrefixes 가 그 모듈의 면인 표)를 기준으로 적었고, 다른 모듈의 표를 같이 쓰는
+ *  캐시 표(llm_profiles — ai.enabled 는 settings 모듈 소유)는 일부러 뺀다. 새 표를 여기 더하면 그 표를 쓰는 모듈 하나가 자동으로 막힌다 */
+const MODULE_TABLE_OWNER: Readonly<Record<string, ModuleId>> = {
+  meetings: 'meetings', meeting_attendees: 'meetings', meeting_exceptions: 'meetings',
+  weekly_reports: 'weekly', weekly_report_rows: 'weekly',
+  issues: 'issues', issue_assignees: 'issues', issue_attachments: 'issues', issue_links: 'issues',
+  issue_major_processes: 'issues', issue_mega_areas: 'issues', issue_number_counters: 'issues', issue_updates: 'issues',
+  issue_analysis_runs: 'issues',
+  wiki_items: 'wiki', wiki_topics: 'wiki', wiki_questions: 'wiki', wiki_item_relations: 'wiki', wiki_item_sources: 'wiki',
+  wiki_change_events: 'wiki', wiki_feedback: 'wiki', wiki_processing_jobs: 'wiki', wiki_project_rebuild_jobs: 'wiki',
+  wiki_topic_revisions: 'wiki', ai_documents: 'wiki', ai_index_jobs: 'wiki',
+  announcements: 'announcements', announcement_seen: 'announcements',
+  attendance_records: 'attendance',
+  agent_projects: 'agents', agent_runners: 'agents', agent_work_orders: 'agents', agent_work_reports: 'agents',
+  agent_lead_leases: 'agents', agent_watchers: 'agents',
+  minutes: 'minutes', minute_folders: 'minutes', minute_files: 'minutes', minute_highlights: 'minutes',
+  minute_insights: 'minutes', minute_versions: 'minutes', minute_favorites: 'minutes', minute_embeddings: 'minutes',
+  usage_events: 'usage',
+}
+/** module null 인데 모듈 데이터 표를 만지는 항목(닫힌 목록 — 항목마다 그 표와 사유. settings-writes 의 허용 파일 표와 같은 모양이다).
+ *  새 null 항목이 모듈 표를 만지면 여기 표·사유를 확인한 뒤 더한다 — 관문 모듈로 적는 쪽은 다른 축(MU4)이 교차 검증한다 */
+const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why: string }>> = {
+  'src/app/actions/agentTokens.ts#createAgentToken': { tables: ['agent_runners'], why: '계정 단위 PAT — 대상 프로젝트가 없다. agents 모듈이 아니라 API 계정 표(노트)' },
+  'src/app/actions/agentTokens.ts#revokeAgentToken': { tables: ['agent_runners'], why: 'PAT 회수 — 계정 단위 표' },
+  'src/app/actions/agentTokens.ts#listMyAgentTokens': { tables: ['agent_runners'], why: 'PAT 목록 — 계정 단위 표' },
+  'src/app/actions/agentWork.ts#setAgentProjectEnabled': { tables: ['agent_projects'], why: 'D41 옛 토글 — agents 를 켜는 문이라 자기 관문에 막히면 안 된다(P8)' },
+  'src/app/actions/agentWork.ts#getAgentProjectState': { tables: ['agent_projects'], why: '세션 RLS(read_agent_projects) — 설정 화면의 토글 상태' },
+  'src/app/actions/teams.ts#addTeam': { tables: ['minute_folders'], why: '담당 팀의 시드 루트 폴더 한 줄 — 폴더 트리의 루트이지 회의록 데이터가 아니다' },
+  'src/app/actions/wbs.ts#updateActual': { tables: ['agent_work_orders'], why: 'WBS(core) 진척의 갱신이 에이전트 주문 행에도 닿는다 — 같은 로컬 쓰기다' },
+  'src/app/actions/wbsAssign.ts#setWbsDevWorkflow': { tables: ['agent_work_orders'], why: 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)' },
+  'src/app/api/wiki/reindex/route.ts#POST': { tables: ['ai_documents', 'ai_index_jobs'], why: '플랫폼 진단 — ROUTE_MODULE_OVERRIDES 가 이 경로를 플랫폼 전용으로 뺐다' },
+}
+/** 목록 항목의 표 접촉 — 문제 목록. entry 의 note 를 먼저 읽어 사람이 맥락을 보게 하고(계층 서술일 수 있다), 없으면 표 이름으로 판정한다 */
+function nullTableProblems(key: string, e: GateEntry, tables: readonly string[]): string[] {
+  const hits = tables.filter((t) => MODULE_TABLE_OWNER[t])
+  if (!hits.length) return []
+  const why = NULL_TABLE_ALLOW[key]
+  if (!why) return [`${key}: module null 인데 모듈 데이터 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 만진다 — 관문이 없으면 꺼진 뒤에도 그 표가 바뀐다(사유: ${e.note ?? 'note 없음'})`]
+  const stale = why.tables.filter((t) => !hits.includes(t))
+  return stale.length ? [`${key}: 허용 목록의 표 ${stale.join(', ')} 를 더 이상 만나지 않는다(죽은 항목)`] : []
+}
 /** 모듈 판정의 대상 — 매니페스트 target, 없으면 sample 에서(프로젝트 id → project, 행 id → row, 없으면 session) */
 const targetOf = (e: GateEntry): Target => e.target ?? (has(e.sample ?? [], P) ? 'project' : has(e.sample ?? [], U) ? 'row' : 'session')
 const entries = Object.entries(ACTION_GATES)
@@ -54,6 +98,9 @@ beforeEach(() => {
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset(); vi.unstubAllEnvs() })
 
 describe('deny — 모듈 항목(실행)', () => {
+  it('모듈 항목이 0건이 아니다 — vitest 4 의 it.each([]) 은 0개를 만들고 실패하지 않는다(빈 필터의 조용한 무효화)', () => {
+    expect(moduleEntries.length, '모듈 항목 0건 — 필터가 조용히 비었다').toBeGreaterThan(80)
+  })
   it.each(moduleEntries)('%s — 모듈을 기대 범위에서 끄면 거부 값이고, 관문 앞에서 쓰지 않고, 거부 뒤 DB 에 닿지 않는다', async (key, e) => {
     const fn = await load(key)
     const target = targetOf(e)
@@ -110,7 +157,7 @@ describe('deny — 모듈 항목(정적)', () => {
       return sites.length ? sites.flatMap(siteProblems).map((p) => `${key}${p}`) : [`${key}: 관문 호출이 없다`]
     })
     expect(bad).toEqual([])
-  })
+  }, 30_000)
   it('판별기 민감도 — 결과를 버린 호출·지역 흉내·아무 객체의 메서드·조건으로 보지 않는 결과를 잡는다(합성 소스)', () => {
     const sf = parse('s.ts', [
       "import { requireModule, requireSessionModule as rsm } from '@/lib/modules/gate'",
@@ -141,6 +188,42 @@ describe('deny — null 항목(정적)', () => {
       return calls.length ? [`${key}: ${calls.join(',')}`] : []
     })
     expect(bad).toEqual([])
+  }, 30_000)
+  it('module null 항목은 토글되는 모듈의 데이터 표를 만들지 않는다 — 닫힌 목록 밖 접촉은 실패다(B9 T25-I1: 매니페스트 값을 그대로 믿지 않는다)', () => {
+    const allNull = [...entries, ...Object.entries(ROUTE_GATES)].filter(([, e]) => e.module === null)
+    const reached = new Map(allNull.map(([key]) => {
+      const [file, name] = key.split('#')
+      return [key, tablesIn(parse(file, readFileSync(file, 'utf8')), name)] as const
+    }))
+    const bad = allNull.flatMap(([key, e]) => nullTableProblems(key, e, reached.get(key) ?? []))
+    expect(bad).toEqual([])
+    expect(Object.entries(NULL_TABLE_ALLOW).flatMap(([key, x]) => {
+      const e = allNull.find(([k]) => k === key)?.[1]
+      if (!e) return [`${key}: 죽은 항목 — module null 항목이 아니다`]
+      if (x.why.length < 12) return [`${key}: 사유가 없다`]
+      const hit = (reached.get(key) ?? []).filter((t) => MODULE_TABLE_OWNER[t])
+      const diff = [...hit.filter((t) => !x.tables.includes(t)), ...x.tables.filter((t) => !hit.includes(t))]
+      return diff.length ? [`${key}: 허용 목록과 실측 표가 다르다(추가 ${hit.filter((t) => !x.tables.includes(t)).join(', ') || '(없음)'} / 죽은 ${x.tables.filter((t) => !hit.includes(t)).join(', ') || '(없음)'})`] : []
+    })).toEqual([])
+    // 사유 부재는 경고다 — 실측 61건(action 57 · route 4, B9 T25-I1-3). 사유 강제는 98개 null 항목의 대량 편집이 따르므로 failing 으로
+    // 만들지 않는다(B9 도 같은 결정을 냈다). 새 null 항목이 사유 없이 들어와도 이 줄이 깨지지 않게 **하한만** 건다 — 0 이 되면
+    // 계측과 사유 강제 결정을 함께 되돌린다. 수치는 task-b789-fix-report.md 에 남긴다
+    const reasonless = allNull.filter(([, e]) => !(e.note && e.note.length > 3))
+    expect(reasonless.length, 'module null 항목 중 사유가 없는 것(실측 61 — 보고 참조). 0 이 되면 이 계측을 되돌린다').toBeGreaterThan(0)
+  }, 30_000)
+  it('판별기 민감도 — module null 항목이 모듈 표를 만지면 사유 없이도 실패한다(합성 소스)', () => {
+    const sf = parse('s.ts', [
+      "import { requireProjectMember } from '@/lib/authz'",
+      "const seed = async (sb) => { await sb.from('issues').insert({ title: 'x' }) }",
+      "export async function a(projectId) { const g = await requireProjectMember(projectId); if (!g.ok) return g; await seed(null); return { ok: true } }",
+      "export async function b(projectId) { const g = await requireProjectMember(projectId); if (!g.ok) return g; await sb.from('wbs_items').insert({}); return { ok: true } }",
+    ].join('\n'))
+    const nullE: GateEntry = { guard: 'projectMember', module: null }
+    expect(nullTableProblems('s.ts#a', nullE, tablesIn(sf, 'a'))).toEqual([
+      's.ts#a: module null 인데 모듈 데이터 표 issues(issues) 를 만진다 — 관문이 없으면 꺼진 뒤에도 그 표가 바뀐다(사유: note 없음)',
+    ])
+    expect(nullTableProblems('s.ts#b', nullE, tablesIn(sf, 'b')), '대조 — core(wbs) 표는 여기 없다').toEqual([])
+    expect(nullTableProblems('s.ts#c', nullE, []), '대조 — 모듈 표 접촉이 없으면 조용하다').toEqual([])
   })
   it('판별기 민감도 — 같은 파일의 함수 선언·const 화살표 헬퍼·별칭 import·네임스페이스 호출을 따라간다(합성 소스)', () => {
     const sf = parse('s.ts', [
@@ -204,6 +287,9 @@ function expectRefusal(key: string, r: unknown, mode: 'deny' | 'rank'): void {
 
 describe('deny — null 항목(가드 거부 실행, 스펙 §4.3 deny 첫 줄·정본 §6.5.3)', () => {
   it('가드 등급 null 항목이 있다(표본 수 하한)', () => { expect(nullGuarded.length).toBeGreaterThan(40) })
+  it('session null 항목도 0건이 아니다 — it.each([]) 은 0개를 만들고 실패하지 않는다(빈 필터의 조용한 무효화)', () => {
+    expect(nullSession.length, 'session null 항목 0건 — 필터가 조용히 비었다').toBeGreaterThan(10)
+  })
   it.each(nullGuarded)('%s — 세션이 없으면 가드에 닿고, 거부 응답이며, 쓰기·admin·관문이 없다', async (key, e) => {
     const fn = await load(key)
     harness.reset(); harness.denyGuards()
