@@ -6,9 +6,13 @@ import { createRoot, type Root } from 'react-dom/client'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const updateProjectSettings = vi.fn()
+const getOutcome = vi.fn()
 const refresh = vi.fn()
 
-vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])) }))
+vi.mock('@/app/actions/settings', () => ({
+  updateProjectSettings: (...a: unknown[]) => updateProjectSettings(...(a as [])),
+  getSettingsCommandOutcome: (...a: unknown[]) => getOutcome(...(a as [])),
+}))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
@@ -24,7 +28,7 @@ describe('LevelSettingsManager', () => {
 
   beforeEach(() => {
     updateProjectSettings.mockReset().mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 2, rebased: false })
-    refresh.mockClear()
+    refresh.mockClear(); getOutcome.mockReset()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -147,7 +151,60 @@ describe('LevelSettingsManager', () => {
     updateProjectSettings.mockResolvedValue({ ok: false, kind: 'denied', code: '권한 없음', commandId: 'c', error: '권한 없음', retryable: false })
     render(['Phase'])
     await clickSave()
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('권한 없음')
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('권한 없음')
+  })
+
+  it('바뀐 값이 없으면 저장했다고 하지 않고 "바뀐 값이 없습니다"를 보인다', async () => {
+    updateProjectSettings.mockResolvedValue({ ok: true, kind: 'applied', commandId: 'c', revision: 1, rebased: false })
+    render(['Phase'], 1)
+    await clickSave()
+    expect(container.textContent).toContain('바뀐 값이 없습니다.')
+    expect(container.textContent).not.toContain('저장했습니다')
+  })
+
+  it('필드 오류는 입력 자리의 알림(field)으로, 패치 거부는 저장 영역의 알림(patch)으로 갈라 보인다', async () => {
+    updateProjectSettings
+      .mockResolvedValueOnce({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID', commandId: 'c', error: '입력 오류', retryable: false,
+        fieldErrors: [{ key: 'core.level_labels', message: '단계 이름이 겹칩니다.' }] })
+      .mockResolvedValueOnce({ ok: false, kind: 'denied', code: 'ERR_DENIED', commandId: 'c', error: '권한이 없습니다.', retryable: false })
+    render(['Phase']); await clickSave()
+    expect(container.querySelector('[data-config-state="field"]')?.textContent).toContain('단계 이름이 겹칩니다.')
+    expect(container.querySelector('[data-config-state="patch"]')).toBeNull()
+    await clickSave()
+    expect(container.querySelector('[data-config-state="patch"]')?.textContent).toContain('권한이 없습니다.')
+    expect(container.querySelector('[data-config-state="field"]')).toBeNull()
+  })
+
+  it('응답이 유실되면 명령 이력으로 결과를 확인하고, 적용이면 재전송하지 않는다', async () => {
+    updateProjectSettings.mockRejectedValueOnce(new Error('network'))
+    getOutcome.mockResolvedValue({ ok: true, outcome: { status: 'applied', revision: 2 } })
+    render(['Phase']); await clickSave()
+    expect(updateProjectSettings).toHaveBeenCalledTimes(1)
+    expect(getOutcome).toHaveBeenCalledWith({ projectId: 'proj-1' }, updateProjectSettings.mock.calls[0][1].commandId)
+    expect(container.textContent).toContain('저장된 명령을 확인했습니다.')
+    expect(refresh).toHaveBeenCalled()
+  })
+
+  it('결과가 끝내 불명이면 같은 commandId 로 한 번 재전송하고, 다시 눌러도 그 명령을 쓴다', async () => {
+    updateProjectSettings.mockRejectedValue(new Error('network'))
+    getOutcome.mockResolvedValue({ ok: true, outcome: { status: 'unknown' } })
+    render(['Phase']); await clickSave()
+    expect(updateProjectSettings).toHaveBeenCalledTimes(2)
+    expect(updateProjectSettings.mock.calls[1][1]).toEqual(updateProjectSettings.mock.calls[0][1])
+    expect(container.textContent).toContain('저장 결과를 확인하지 못했습니다')
+    await clickSave()
+    expect(updateProjectSettings.mock.calls[2][1].commandId).toBe(updateProjectSettings.mock.calls[0][1].commandId)
+  })
+
+  it('충돌 뒤 저장은 새 commandId 를 쓴다', async () => {
+    updateProjectSettings.mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
+      latest: { revision: 5, values: { 'core.level_labels': ['Other'] }, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
+    render(['Phase']); await clickSave()
+    const first = updateProjectSettings.mock.calls[0][1].commandId
+    await act(async () => { [...container.querySelectorAll('button')].find(b => b.textContent?.includes('내 값 다시 적용'))!.click() })
+    await clickSave()
+    expect(updateProjectSettings.mock.calls[1][1].commandId).not.toBe(first)
+    expect(updateProjectSettings.mock.calls[1][1].expectedRevision).toBe(5)
   })
 
   it('단계가 1개면 삭제 버튼이 없다 — 0단 상태를 만들 수 없다', () => {

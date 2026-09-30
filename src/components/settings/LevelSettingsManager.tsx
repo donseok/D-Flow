@@ -6,9 +6,10 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
-import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
+import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
+import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
 
 export function messageOf(r: SettingsCommandResult): string | null {
@@ -28,28 +29,50 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
   // 자기 저장 성공·충돌 때만 올린다(충돌 뒤 다시 저장하면 알린 뒤의 덮어쓰기 — 영구 충돌에 갇히지 않는다). key 재마운트는 충돌 문구를 지워 쓰지 않는다
   const [base, setBase] = useState(revision)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  // 응답 유실 — 같은 명령으로 결과를 다시 확인해야 한다(멱등). 확정되면 비운다.
+  const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [conflict, setConflict] = useState<{ revision: number; latest: string[] | null } | null>(null)
   const [pending, startTransition] = useTransition()
 
+  async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
+    let r: SettingsCommandResult | null = null
+    try { r = await updateProjectSettings(projectId, patch) } catch { /* 결과 불명 — 이력으로 판정 */ }
+    if (r?.ok) {
+      setBase(r.revision); setUncertainPatch(null); setFieldError(null)
+      setNotice(r.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : 'WBS 단계를 저장했습니다.')
+      router.refresh(); return
+    }
+    if (r?.kind === 'conflict') {
+      const value = r.latest.values['core.level_labels']
+      setConflict({ revision: r.latest.revision, latest: r.latest.invalidKeys.includes('core.level_labels') ? null : Array.isArray(value) ? value as string[] : null })
+      setUncertainPatch(null); setFieldError(null); setError(r.error)
+      router.refresh(); return
+    }
+    if (r && (r.kind !== 'unavailable' || !r.retryable)) {
+      const field = r.kind === 'invalid' ? r.fieldErrors.find(e => e.key === 'core.level_labels') : undefined
+      setFieldError(field?.message ?? null)
+      setError(field ? null : (r.kind === 'invalid' ? (r.fieldErrors[0]?.message ?? r.error) : r.error))
+      setUncertainPatch(null); return
+    }
+    try {
+      const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
+      if (found.ok && found.outcome.status === 'applied') {
+        setBase(found.outcome.revision); setUncertainPatch(null); setFieldError(null)
+        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+      }
+    } catch { /* 같은 명령을 재전송 */ }
+    if (resendCount === 0) return submit(patch, 1)
+    setUncertainPatch(patch)
+    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+  }
+
   function save() {
     if (conflict) return
-    setError(null)
-    startTransition(async () => {
-      const r = await updateProjectSettings(projectId, {
-        expectedRevision: base, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [],
-      })
-      if (!r.ok) {
-        setError(messageOf(r))
-        if (r.kind === 'conflict') {
-          const value = r.latest.values['core.level_labels']
-          setConflict({ revision: r.latest.revision, latest: r.latest.invalidKeys.includes('core.level_labels') ? null : Array.isArray(value) ? value as string[] : null })
-          router.refresh()
-        }
-        return
-      }
-      setBase(r.revision)
-      router.refresh()
-    })
+    setError(null); setFieldError(null); setNotice(null)
+    const patch = uncertainPatch ?? { expectedRevision: base, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [] }
+    startTransition(async () => submit(patch))
   }
 
   return (
@@ -93,14 +116,16 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
           </button>
         )}
         <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
-          저장
+          {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
         </button>
       </div>
       {conflict && <ConflictCompare rows={[{ key: 'core.level_labels', label: 'WBS 단계', mine: labels.join(' → '), latest: conflict.latest?.join(' → ') ?? '설정 손상' }]}
         latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
         onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
-      {error && <p role="alert" className="text-xs text-delayed">{error}</p>}
+      {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
+      {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
+      {notice && <p role="status" className="text-xs text-done">{notice}</p>}
     </div>
   )
 }
