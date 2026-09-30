@@ -1,10 +1,10 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, FolderPlus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { createProject } from '@/app/actions/project'
+import { createProject, getProjectCopySource } from '@/app/actions/project'
 import { isValidDateRange } from '@/lib/domain/validate'
 import { validateLevelSettings } from '@/lib/domain/levelSettings'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -17,11 +17,13 @@ import { newUuid } from '@/lib/domain/uuid'
  */
 export function NewProjectModal({
   workspaceId,
+  copyCandidates = [],
   label,
   className = 'inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20',
 }: {
   /** 만들 워크스페이스 — SP3 전까지 서버 컴포넌트가 유일 소속(resolveSoleWorkspaceId)으로 정해 넘긴다. */
   workspaceId: string
+  copyCandidates?: { id: string; name: string }[]
   label?: string
   className?: string
 }) {
@@ -34,19 +36,60 @@ export function NewProjectModal({
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [levels, setLevels] = useState('')
+  const [mode, setMode] = useState<'blank' | 'copy'>('blank')
+  const [copyFromProjectId, setCopyFromProjectId] = useState('')
+  const [sourceReady, setSourceReady] = useState(false)
+  const sourceRequest = useRef(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 요청 번호 — 모달이 열릴 때 하나 만들어 재시도에도 같은 값을 쓴다(결과 불명 재전송이 중복 생성이 되지 않게)
   const [commandId, setCommandId] = useState(() => newUuid())
 
   function reset() {
+    sourceRequest.current += 1
     setName('')
     setDescription('')
     setStart('')
     setEnd('')
     setLevels('')
+    setMode('blank')
+    setCopyFromProjectId('')
+    setSourceReady(false)
     setError(null)
     setCommandId(newUuid())
+  }
+
+  function chooseMode(next: 'blank' | 'copy') {
+    sourceRequest.current += 1
+    setMode(next)
+    setCopyFromProjectId('')
+    setSourceReady(false)
+    setLevels('')
+    setError(null)
+    setCommandId(newUuid())
+  }
+
+  async function chooseSource(projectId: string) {
+    const request = ++sourceRequest.current
+    setCopyFromProjectId(projectId)
+    setSourceReady(false)
+    setLevels('')
+    setError(null)
+    setCommandId(newUuid())
+    if (!projectId) return
+    try {
+      const result = await getProjectCopySource(workspaceId, projectId)
+      if (request !== sourceRequest.current) return
+      if (!result.ok) {
+        const keys = result.fieldErrors?.map(field => field.key).join(', ')
+        setError(keys ? `${result.error} (${keys})` : result.error)
+        return
+      }
+      setLevels(result.levelLabels.join(', '))
+      setSourceReady(true)
+    } catch {
+      if (request === sourceRequest.current) setError('복사 원본 설정을 불러오지 못했습니다.')
+    }
   }
 
   function close() {
@@ -57,7 +100,7 @@ export function NewProjectModal({
 
   async function submit() {
     const trimmed = name.trim()
-    if (!trimmed || busy) return
+    if (!trimmed || busy || (mode === 'copy' && !sourceReady)) return
     if (!isValidDateRange(start || null, end || null)) {
       setError(t('home.errEndBeforeStart'))
       return
@@ -77,11 +120,12 @@ export function NewProjectModal({
       const r = await createProject({
         workspaceId, name: trimmed, startDate: start || null, endDate: end || null,
         description: description.trim() || null, levelLabels: lv.labels, commandId,
+        copyFromProjectId: mode === 'copy' ? copyFromProjectId : null,
       })
       if (!r.ok) {
         // 같은 번호로 다른 내용을 보냈다 — 입력을 고쳐 다시 누르면 새 요청으로 나가게 번호를 바꾼다. 그 밖의 실패는 같은 번호로 재시도한다.
         if (r.code === 'COMMAND_REUSED') setCommandId(newUuid())
-        setError(r.fieldErrors?.[0]?.message ?? r.error)
+        setError(r.fieldErrors?.length ? `${r.error} (${r.fieldErrors.map(field => field.key).join(', ')})` : r.error)
         return
       }
       router.refresh()
@@ -111,7 +155,7 @@ export function NewProjectModal({
             <button type="button" className="btn btn-ghost" onClick={close} disabled={busy}>
               {t('common.cancel')}
             </button>
-            <button type="button" className="btn btn-primary" onClick={submit} disabled={!name.trim() || !levels.trim() || busy}>
+            <button type="button" className="btn btn-primary" onClick={submit} disabled={!name.trim() || !levels.trim() || busy || (mode === 'copy' && !sourceReady)}>
               <FolderPlus className="h-4 w-4" />
               {busy ? t('home.creating') : t('home.createProject')}
             </button>
@@ -122,6 +166,22 @@ export function NewProjectModal({
           <p className="text-sm leading-6 text-ink-muted">
             {t('home.newProjectDesc')}
           </p>
+
+          {copyCandidates.length > 0 && <fieldset className="space-y-2">
+            <legend className="text-xs font-semibold text-ink-muted">시작 방법</legend>
+            <div className="flex flex-wrap gap-4 text-sm text-ink">
+              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'blank'} onChange={() => chooseMode('blank')} />빈 값으로 시작</label>
+              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'copy'} onChange={() => chooseMode('copy')} />기존 프로젝트에서 복사</label>
+            </div>
+          </fieldset>}
+          {mode === 'copy' && <div className="space-y-2">
+            <label className="block text-xs font-semibold text-ink-muted" htmlFor="copy-source-project">복사 원본 프로젝트</label>
+            <select id="copy-source-project" className="app-input" value={copyFromProjectId} onChange={event => void chooseSource(event.target.value)}>
+              <option value="">프로젝트를 선택하세요</option>
+              {copyCandidates.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+            <p className="text-xs leading-5 text-ink-muted">복사합니다: 설정 값·팀·업무영역. 복사하지 않습니다: 멤버·WBS·회의록·이슈.</p>
+          </div>}
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">

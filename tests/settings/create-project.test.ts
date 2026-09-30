@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => { throw 
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => { throw new Error('createProject 는 세션 클라이언트를 쓰지 않는다') }) }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams: h.refreshTeams }))
-import { createProject, type CreateProjectInput } from '@/app/actions/project'
+import { createProject, getProjectCopySource, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { ERR_MODULES_ALLOWED_BROKEN } from '@/lib/settings/validateConfig'
@@ -38,6 +38,13 @@ beforeEach(() => {
 })
 
 describe('createProject', () => {
+  it('복사 원본 미리보기는 같은 워크스페이스의 유효한 라벨만 제공하고 손상 키를 보여준다', async () => {
+    expect(await getProjectCopySource(WID, SRC)).toEqual({ ok: true, levelLabels: ['S1'] })
+    expect(await getProjectCopySource(WID, FOREIGN)).toEqual({ ok: false, error: ERR_DENIED })
+    db.projects.get(SRC)!.values['wbs.excel_profile'] = { version: 9 }
+    expect(await getProjectCopySource(WID, SRC)).toMatchObject({ ok: false, fieldErrors: [{ key: 'wbs.excel_profile' }] })
+    expect(db.rpcCalls).toHaveLength(0)
+  })
   it('빈 값 — 라벨은 parse 를 거치고 modules.enabled 는 기본값 ∩ 허용∩env 에서 requires 닫힘으로 명시 기록된다. 팀 캐시 갱신·revalidate', async () => {
     const r = await createProject(input({ levelLabels: [' Phase ', 'Task'] }))
     expect(r).toMatchObject({ ok: true, status: 'applied' })

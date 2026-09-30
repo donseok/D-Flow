@@ -178,6 +178,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('project')}#listProjects`]: nul('session', '로그인 + RLS — 셸 프로젝트 목록'),
   [`${A('project')}#listProjectsWithState`]: nul('session', '로그인 + RLS'),
   [`${A('project')}#createProject`]: { ...nul('workspaceAdmin'), sample: [{ workspaceId: U }] },   // isWorkspaceIdInput 이 가드 앞
+  [`${A('project')}#getProjectCopySource`]: { ...nul('workspaceAdmin'), sample: [U, P] },
   [`${A('project')}#updateProject`]: nul('projectAdmin'),
   [`${A('project')}#setProjectPrivacy`]: nul('projectAdmin'),
   [`${A('project')}#setBaseDate`]: nul('projectAdmin'),

@@ -22,6 +22,7 @@ import { resolveBrandMark } from '@/lib/settings/brandMark'
 type ProjectRow = {
   id: string
   name: string
+  workspace_id: string
   description?: string | null
   start_date: string | null
   end_date: string | null
@@ -174,6 +175,9 @@ export default async function ProjectsHome() {
   // 워크스페이스 선택 UI 는 SP3 몫이라 유일 소속일 때만 그 워크스페이스로 만든다. 관리자인데 소속이 여럿·없으면 사유를 보인다.
   const soleWs = actor ? resolveSoleWorkspaceId(actor) : null
   const createWorkspaceId = soleWs?.ok && isWorkspaceAdmin(actor, soleWs.workspaceId) ? soleWs.workspaceId : null
+  const copyCandidates = createWorkspaceId
+    ? projects.filter(project => project.workspace_id === createWorkspaceId).map(project => ({ id: project.id, name: project.name }))
+    : []
   const createBlockedReason = actor && soleWs && !soleWs.ok && isAnyWorkspaceAdmin(actor) ? soleWs.error : null
   const workspaceLinks = await manageableWorkspaceLinks(actor)
   let productName: string = BRAND.productName
@@ -229,7 +233,7 @@ export default async function ProjectsHome() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {createWorkspaceId && <NewProjectModal workspaceId={createWorkspaceId} />}
+          {createWorkspaceId && <NewProjectModal workspaceId={createWorkspaceId} copyCandidates={copyCandidates} />}
           {workspaceLinks.map(ws => (
             <Link key={ws.id} href={`/w/${encodeURIComponent(ws.slug)}/settings`}
               className="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20">
@@ -269,7 +273,7 @@ export default async function ProjectsHome() {
             title={t(locale, 'home.emptyTitle')}
             description={t(locale, 'home.emptyDesc')}
             action={createWorkspaceId
-              ? <NewProjectModal workspaceId={createWorkspaceId} label={t(locale, 'home.newProjectStart')} className="btn btn-primary" />
+              ? <NewProjectModal workspaceId={createWorkspaceId} copyCandidates={copyCandidates} label={t(locale, 'home.newProjectStart')} className="btn btn-primary" />
               : undefined}
           />
         ) : (

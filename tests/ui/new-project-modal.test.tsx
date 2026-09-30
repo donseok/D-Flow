@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
+  getProjectCopySource: vi.fn(),
   refresh: vi.fn(),
 }))
 
@@ -18,6 +19,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/app/actions/project', () => ({
   createProject: mocks.createProject,
+  getProjectCopySource: mocks.getProjectCopySource,
 }))
 
 import { NewProjectModal } from '@/components/home/NewProjectModal'
@@ -37,6 +39,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     container = document.createElement('div')
     document.body.appendChild(container)
     mocks.createProject.mockReset()
+    mocks.getProjectCopySource.mockReset()
     mocks.refresh.mockReset()
   })
 
@@ -67,6 +70,43 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     })
 
     expect(document.body.textContent).toContain('단계 이름이 중복됩니다.')
+    expect(mocks.createProject).not.toHaveBeenCalled()
+  })
+
+  it('원본을 선택하면 단계 라벨을 채우고 복사 범위와 원본 id를 생성 요청에 담는다', async () => {
+    const sourceId = '00000000-0000-4000-8000-00000000aa01'
+    mocks.getProjectCopySource.mockResolvedValue({ ok: true, levelLabels: ['단계', '작업'] })
+    mocks.createProject.mockResolvedValue({ ok: true, projectId: 'p-new', status: 'applied' })
+    root = createRoot(container)
+    act(() => root.render(<NewProjectModal workspaceId="ws-1" copyCandidates={[{ id: sourceId, name: '원본' }]} />))
+    act(() => container.querySelector('button')!.click())
+    const copyRadio = document.querySelectorAll<HTMLInputElement>('input[name="project-start-mode"]')[1]
+    act(() => copyRadio.click())
+    const select = document.querySelector<HTMLSelectElement>('#copy-source-project')!
+    await act(async () => {
+      select.value = sourceId
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(mocks.getProjectCopySource).toHaveBeenCalledWith('ws-1', sourceId)
+    expect(document.body.textContent).toContain('복사합니다: 설정 값·팀·업무영역')
+    expect(document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')?.value).toBe('단계, 작업')
+    act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!, '복사본'))
+    await act(async () => { document.querySelector<HTMLButtonElement>('button.btn-primary')!.click(); await Promise.resolve() })
+    expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({ copyFromProjectId: sourceId, levelLabels: ['단계', '작업'] }))
+  })
+
+  it('손상된 원본이면 키를 보여주고 생성을 막는다', async () => {
+    const sourceId = '00000000-0000-4000-8000-00000000aa01'
+    mocks.getProjectCopySource.mockResolvedValue({ ok: false, error: '원본 설정 손상', fieldErrors: [{ key: 'wbs.excel_profile', message: '잘못된 값' }] })
+    root = createRoot(container)
+    act(() => root.render(<NewProjectModal workspaceId="ws-1" copyCandidates={[{ id: sourceId, name: '손상 원본' }]} />))
+    act(() => container.querySelector('button')!.click())
+    act(() => document.querySelectorAll<HTMLInputElement>('input[name="project-start-mode"]')[1].click())
+    const select = document.querySelector<HTMLSelectElement>('#copy-source-project')!
+    await act(async () => { select.value = sourceId; select.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve() })
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('wbs.excel_profile')
+    expect(document.querySelector<HTMLButtonElement>('button.btn-primary')!.disabled).toBe(true)
     expect(mocks.createProject).not.toHaveBeenCalled()
   })
 

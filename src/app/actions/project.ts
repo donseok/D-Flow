@@ -74,6 +74,40 @@ export type CreateProjectResult =
 const invalidInput = (error: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
   ({ ok: false, code: 'CONFIG_INVALID', error, ...(fieldErrors ? { fieldErrors } : {}) })
 const denied: CreateProjectResult = { ok: false, code: ERR_DENIED, error: ERR_DENIED }
+export type CopySourceResult =
+  | { ok: true; levelLabels: string[] }
+  | { ok: false; error: string; fieldErrors?: { key: string; message: string }[] }
+
+/** 복사 선택 직후 원본을 검증해 단계 라벨과 손상 키를 화면에 보여준다. 생성 시에도 다시 검증한다. */
+export async function getProjectCopySource(workspaceId: string, projectId: string): Promise<CopySourceResult> {
+  if (!workspaceId || !isUuidLike(projectId)) return { ok: false, error: CONFIG_MESSAGES.CONFIG_INVALID }
+  const guard = await requireWorkspaceAdmin(workspaceId)
+  if (!guard.ok) return { ok: false, error: guard.error }
+  const { admin } = adminFor({ workspaceId })
+  const owner = await admin.from('projects').select('workspace_id').eq('id', projectId).maybeSingle()
+  if (owner.error) {
+    console.error('[getProjectCopySource] 원본 조회 실패', { workspaceId, projectId, cause: owner.error.message })
+    return { ok: false, error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+  }
+  if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return { ok: false, error: ERR_DENIED }
+  try {
+    const source = await getProjectConfig(projectId, { client: admin })
+    if (source.workspaceId !== workspaceId) return { ok: false, error: ERR_DENIED }
+    if (source.schemaAhead) return { ok: false, error: '원본 프로젝트의 설정이 이 서버보다 새 버전이라 복사할 수 없습니다.',
+      fieldErrors: source.unknownKeys.map(key => ({ key, message: '이 서버가 모르는 설정 항목입니다.' })) }
+    const broken = PROJECT_SETTINGS.flatMap(def => {
+      const state = source.keys[def.key]
+      return state.status === 'invalid' ? [{ key: def.key, message: state.error }] : []
+    })
+    if (broken.length) return { ok: false, error: '원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.', fieldErrors: broken }
+    const labels = source.keys['core.level_labels']
+    return { ok: true, levelLabels: labels.status === 'set' || labels.status === 'default' ? labels.value : [] }
+  } catch (error) {
+    if (!(error instanceof ConfigUnavailableError)) throw error
+    console.error('[getProjectCopySource] 설정 조회 실패', { workspaceId, projectId, cause: error.message })
+    return { ok: false, error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+  }
+}
 /** 원인(DB 원문 포함)은 로그로, 사용자에게는 고정 문구만 — 표시 = 로깅(설정 액션의 unavailableLogged 와 같은 태도) */
 function unavailableLogged(what: string, ctx: { workspaceId: string; copyFrom: string | null; commandId: string }, cause: string): CreateProjectResult {
   console.error(`[createProject] ${what} 실패`, { ...ctx, cause })
