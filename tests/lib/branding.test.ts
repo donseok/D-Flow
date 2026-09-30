@@ -8,12 +8,10 @@ describe('BRAND', () => {
     vi.stubEnv('NEXT_PUBLIC_BRAND_NAME', '')
     vi.stubEnv('NEXT_PUBLIC_BRAND_TAGLINE', '')
     vi.stubEnv('NEXT_PUBLIC_BRAND_COPYRIGHT', '')
-    vi.stubEnv('NEXT_PUBLIC_BRAND_PORTAL_ICON', '')
     const { BRAND } = await import('@/lib/branding')
     expect(BRAND.productName).toBe('D-Flow')
     expect(BRAND.tagline).toBe('일하는 방식이 바뀌다')
     expect(BRAND.copyright).toBe('')
-    expect(BRAND.portalIcon).toBe('flow')
   })
   it('env 로 덮어쓴다', async () => {
     vi.stubEnv('NEXT_PUBLIC_BRAND_NAME', 'Acme PM')
@@ -26,14 +24,6 @@ describe('BRAND', () => {
     vi.stubEnv('NEXT_PUBLIC_BRAND_NAME', '  ')
     const { BRAND } = await import('@/lib/branding')
     expect(BRAND.productName).toBe('D-Flow')
-  })
-  // 화이트라벨 배포(제품명 변경)가 D 글리프를 달고 나오지 않게 — 명시값이 없으면 제품명으로 정한다(D6-§13).
-  it.each([
-    [undefined, 'D-Flow', 'flow'], ['', 'D-Flow', 'flow'], ['monogram', 'D-Flow', 'monogram'],
-    ['', 'Acme PM', 'monogram'], ['flow', 'Acme PM', 'flow'], ['sparkle', 'Acme PM', 'monogram'],
-  ])('resolvePortalIcon(%j, %s) → %s', async (raw, name, want) => {
-    const { resolvePortalIcon } = await import('@/lib/branding')
-    expect(resolvePortalIcon(raw, name)).toBe(want)
   })
   it('메일 발신명은 BRAND 에 없다 — 서버 전용 모듈(mail/fromName)이 소유한다', async () => {
     const { BRAND } = await import('@/lib/branding')

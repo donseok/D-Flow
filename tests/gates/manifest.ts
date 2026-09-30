@@ -84,6 +84,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── brief — 대시보드(core) 카드의 AI. AI 판정은 aiAvailable(모듈 없음 — P19)
   [`${A('brief')}#ensureProjectBriefAction`]: nul('projectAdmin'),
   [`${A('brief')}#getProjectBriefAction`]: nul('session', '로그인 + 세션 RLS — 저장된 브리핑 읽기'),
+  // ── branding — core 설정
+  [`${A('branding')}#uploadBrandLogo`]: { ...nul('workspaceAdmin', '비공개 브랜딩 버킷 — 관리자만 업로드'), sample: [U, 'mark', {}] },
   // ── chat
   [`${A('chat')}#reindexProjectAction`]: { guard: 'projectAdmin', module: 'chatbot', sample: [P] },
   // ── inbox — 셸 알림함
@@ -258,6 +260,7 @@ const LEGACY_CHAT = 'tests/api/chat-legacy-scope.test.ts'
 const MINUTES_EXT = 'tests/minutes/external-api.test.ts'
 
 export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
+  [`${R('brand/[workspaceId]/[slot]')}#GET`]: nul('session', '로그인·워크스페이스 소속 확인 뒤 현재 로고만 RLS 읽기'),
   [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문)'),
   [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트 문맥이면 그 프로젝트, 없으면 세션 유일 워크스페이스. ?probe=1 은 관문만(P12)'),
   [`${R('chat/health')}#GET`]: nul('superuser'),
@@ -315,6 +318,7 @@ export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
 
 /** 어느 모듈의 apiPrefixes 에도 걸리지 않는 셸·크론 경로(스펙 §4.3 닫힌 목록). Phase C 가 /api/brand 를 더한다 */
 export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
+  '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
   '/api/prefs': '셸 — 개인 UI 설정',
   '/api/shell': '셸 — 알림함·파생 알림·공지 배지·티커·결재 배지 통합 조회',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',

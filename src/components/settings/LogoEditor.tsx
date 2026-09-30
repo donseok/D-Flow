@@ -1,0 +1,118 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { uploadBrandLogo } from '@/app/actions/branding'
+import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
+import { BRANDING_SLOTS, type BrandingSlot } from '@/lib/settings/brandingPath'
+import type { BrandingLogo } from '@/lib/settings/defs/workspace'
+import { newUuid } from '@/lib/domain/uuid'
+
+const EMPTY: BrandingLogo = { full: null, full_dark: null, mark: null }
+const LABEL: Record<BrandingSlot, string> = { full: '기본 로고', full_dark: '어두운 배경 로고', mark: '아이콘 마크' }
+const same = (a: BrandingLogo, b: BrandingLogo) => BRANDING_SLOTS.every(slot => a[slot] === b[slot])
+
+export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }: {
+  workspaceId: string; revision: number; initialLogo: BrandingLogo | null; invalidReason?: string
+}) {
+  const router = useRouter()
+  const [baseline, setBaseline] = useState<BrandingLogo>(initialLogo ?? EMPTY)
+  const [draft, setDraft] = useState<BrandingLogo>(initialLogo ?? EMPTY)
+  const [files, setFiles] = useState<Partial<Record<BrandingSlot, File>>>({})
+  const [baseRevision, setBaseRevision] = useState(revision)
+  const [needsRepair, setNeedsRepair] = useState(initialLogo === null)
+  const [conflict, setConflict] = useState<{ revision: number; logo: BrandingLogo | null } | null>(null)
+  const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const dirty = needsRepair || !same(baseline, draft)
+
+  function upload(slot: BrandingSlot) {
+    const file = files[slot]
+    if (!file) return
+    setError(null); setNotice(null)
+    startTransition(async () => {
+      let result: Awaited<ReturnType<typeof uploadBrandLogo>>
+      try { result = await uploadBrandLogo(workspaceId, slot, file) }
+      catch { setError('로고 업로드 결과를 확인하지 못했습니다. 다시 시도하세요.'); return }
+      if (!result.ok) { setError(result.error); return }
+      setDraft(current => ({ ...current, [slot]: result.path }))
+      setFiles(current => ({ ...current, [slot]: undefined }))
+      setNotice(`${LABEL[slot]} 업로드가 끝났습니다. 설정을 저장하면 적용됩니다.`)
+    })
+  }
+
+  async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
+    let result: SettingsCommandResult | null = null
+    try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
+    if (result?.ok) {
+      setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null)
+      setNotice('로고 설정을 저장했습니다.'); router.refresh(); return
+    }
+    if (result?.kind === 'conflict') {
+      const value = result.latest.values['branding.logo']
+      setConflict({ revision: result.latest.revision, logo: value && typeof value === 'object' ? value as BrandingLogo : null })
+      setUncertainPatch(null); return
+    }
+    if (result && result.kind !== 'unavailable') {
+      setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
+      setUncertainPatch(null); return
+    }
+    try {
+      const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
+      if (found.ok && found.outcome.status === 'applied') {
+        setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null)
+        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+      }
+    } catch { /* 같은 명령으로 다시 보낸다 */ }
+    if (resendCount === 0) return submit(patch, 1)
+    setUncertainPatch(patch)
+    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+  }
+
+  function save() {
+    if (!dirty && !uncertainPatch) return
+    setError(null)
+    const patch = uncertainPatch ?? { expectedRevision: baseRevision, commandId: newUuid(), set: { 'branding.logo': draft }, unset: [] }
+    startTransition(async () => submit(patch))
+  }
+
+  return <div className="space-y-4">
+    <p className="text-xs leading-5 text-ink-muted">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장해야 적용됩니다. 이전 파일은 삭제되지 않습니다.</p>
+    {invalidReason && needsRepair && <p role="alert" className="text-xs text-delayed">저장된 로고 설정이 손상됐습니다: {invalidReason}. 슬롯을 다시 정해 복구하세요.</p>}
+    <div className="grid gap-3 sm:grid-cols-3">
+      {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-line p-3">
+        <div className="text-sm font-semibold text-ink">{LABEL[slot]}</div>
+        {draft[slot] ? <>
+          {draft[slot] === baseline[slot] ? <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/brand/${workspaceId}/${slot}`} alt={`${LABEL[slot]} 미리보기`} className="h-16 max-w-full object-contain" />
+          </> : <p className="text-xs text-pending">새 이미지 업로드됨 · 저장 후 미리보기</p>}
+          <p className="break-all text-[11px] text-ink-subtle">{draft[slot]}</p>
+        </> : <p className="text-xs text-ink-muted">설정된 이미지 없음</p>}
+        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`}
+          disabled={pending || !!uncertainPatch} onChange={event => { setFiles({ ...files, [slot]: event.target.files?.[0] }); event.target.value = '' }} />
+        {files[slot] && <p className="break-all text-xs text-ink-muted">선택: {files[slot].name}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-ghost" disabled={pending || !files[slot] || !!uncertainPatch} onClick={() => upload(slot)}>업로드</button>
+          {draft[slot] && <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch}
+            onClick={() => { setDraft({ ...draft, [slot]: null }); setError(null); setNotice(null) }}>제거</button>}
+        </div>
+      </div>)}
+    </div>
+    {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
+      <strong>다른 사용자가 로고를 바꿨습니다.</strong>
+      {BRANDING_SLOTS.map(slot => <p key={slot}>{LABEL[slot]} — 내 값: {draft[slot] ?? '없음'} / 최신 값: {conflict.logo?.[slot] ?? '없음'}</p>)}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.logo ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.logo === null); setConflict(null) }}>내 값 다시 적용</button>
+        {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
+      </div>
+    </div>}
+    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
+    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+    <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
+      {uncertainPatch ? '저장 결과 확인 및 재시도' : '로고 설정 저장'}
+    </button>
+  </div>
+}

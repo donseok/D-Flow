@@ -5,6 +5,7 @@ import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
+import { LogoEditor } from '@/components/settings/LogoEditor'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -48,8 +49,13 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <h1 className="mt-1 text-2xl font-bold text-ink">{access.name} 설정</h1>
       </div>
       <SectionCard eyebrow="일반" title="이름과 메일" icon={Palette}>
-        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision}
-          fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
+        <div className="space-y-6">
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision}
+            fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
+          <LogoEditor workspaceId={access.id} revision={config.revision}
+            initialLogo={config.keys['branding.logo'].status === 'set' || config.keys['branding.logo'].status === 'default' ? config.keys['branding.logo'].value : null}
+            invalidReason={config.keys['branding.logo'].status === 'invalid' ? config.keys['branding.logo'].error : undefined} />
+        </div>
       </SectionCard>
       <SectionCard eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
         <div className="space-y-5">

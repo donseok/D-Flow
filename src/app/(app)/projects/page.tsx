@@ -16,6 +16,8 @@ import { seoulToday } from '@/lib/domain/dates'
 import { BRAND } from '@/lib/branding'
 import { BrandGlyph } from '@/components/ui/BrandMark'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { resolveBrandMark } from '@/lib/settings/brandMark'
 
 type ProjectRow = {
   id: string
@@ -174,6 +176,22 @@ export default async function ProjectsHome() {
   const createWorkspaceId = soleWs?.ok && isWorkspaceAdmin(actor, soleWs.workspaceId) ? soleWs.workspaceId : null
   const createBlockedReason = actor && soleWs && !soleWs.ok && isAnyWorkspaceAdmin(actor) ? soleWs.error : null
   const workspaceLinks = await manageableWorkspaceLinks(actor)
+  let productName: string = BRAND.productName
+  let markSrc: string | null = null
+  if (soleWs?.ok) {
+    try {
+      const config = await getWorkspaceConfig(soleWs.workspaceId)
+      const name = config.keys['branding.product_name']
+      if (name.status === 'set' || name.status === 'default') productName = name.value
+      const logo = config.keys['branding.logo']
+      if ((logo.status === 'set' || logo.status === 'default') && logo.value.mark) {
+        markSrc = `/api/brand/${soleWs.workspaceId}/mark`
+      }
+    } catch (error) {
+      console.error('[projects] branding unavailable', error)
+    }
+  }
+  const brandMark = resolveBrandMark(productName, markSrc)
 
   const heroStats = [
     { label: 'Tasks', value: taskStats ? taskStats.tasks : '–' },
@@ -187,8 +205,8 @@ export default async function ProjectsHome() {
       <section className="hero-glow hero-card flex flex-col gap-5 p-5 sm:p-6">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <BrandGlyph size={40} variant={BRAND.portalIcon} />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-hero-ink-muted">Workspace · {BRAND.productName}</span>
+            <BrandGlyph size={40} choice={brandMark} />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-hero-ink-muted">Workspace · {productName}</span>
           </div>
           <h1 className="mt-2 break-words text-[26px] font-bold leading-tight tracking-tight text-hero-ink sm:text-[34px]">
             {t(locale, 'home.heroTitle')}

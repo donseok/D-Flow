@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { BRAND } from '@/lib/branding'
+import { resolveBrandMark, type BrandMarkChoice } from '@/lib/settings/brandMark'
 
 /**
  * 제품 브랜드 마크.
@@ -11,17 +12,24 @@ import { BRAND } from '@/lib/branding'
  * - `BrandGlyph` : 기본 모노그램 또는 새 flow 벡터 아이콘.
  * - `BrandMark`  : 로고 글리프 + 선택적 워드마크(BRAND.productName) + 선택적 태그라인.
  *
- * 새 아이콘은 /projects 포털에서 먼저 적용하며 BRAND.portalIcon 으로 선택한다.
+ * 새 아이콘은 /projects 포털에서 먼저 적용한다.
  * 다른 화면은 기존 제품명 모노그램을 유지한다.
  */
 
 /** 장식용 브랜드 아이콘. 접근 가능한 제품명은 호출부의 텍스트/링크 레이블이 제공한다. */
-export function BrandGlyph({ size = 40, className = '', variant = 'monogram' }: {
+export function BrandGlyph({ size = 40, className = '', variant = 'monogram', choice, productName = BRAND.productName }: {
   size?: number
   className?: string
   variant?: 'monogram' | 'flow'
+  choice?: BrandMarkChoice
+  productName?: string
 }) {
-  if (variant === 'flow') {
+  if (choice?.kind === 'image') return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={choice.src} alt="" aria-hidden="true" width={size} height={size}
+      className={`inline-block shrink-0 object-contain ${className}`} style={{ width: size, height: size }} />
+  )
+  if (choice?.kind === 'flow' || (!choice && variant === 'flow')) {
     return (
       <Image
         src="/brand/dflow-flow.svg"
@@ -42,7 +50,7 @@ export function BrandGlyph({ size = 40, className = '', variant = 'monogram' }: 
       aria-hidden
     >
       <span className="flex h-full w-full items-center justify-center bg-brand font-bold text-white" style={{ fontSize: Math.round(size * 0.46) }}>
-        {BRAND.productName.slice(0, 1)}
+        {choice?.kind === 'monogram' ? choice.letter : Array.from(productName)[0]}
       </span>
     </span>
   )
@@ -65,12 +73,12 @@ export function BrandMark({
 }) {
   const { t, locale } = useLocale()
   const pathname = usePathname()
-  const variant = pathname === '/projects' ? BRAND.portalIcon : 'monogram'
-  if (!withWordmark) return <BrandGlyph size={size} className={className} variant={variant} />
+  const choice = pathname === '/projects' ? resolveBrandMark(BRAND.productName, null) : undefined
+  if (!withWordmark) return <BrandGlyph size={size} className={className} choice={choice} />
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <BrandGlyph size={size} variant={variant} />
+      <BrandGlyph size={size} choice={choice} />
       <span className="leading-tight">
         <span className="block font-bold tracking-tight text-ink" style={{ fontSize: Math.round(size * 0.4) }}>
           {BRAND.productName}
