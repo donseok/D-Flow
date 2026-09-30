@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { BRAND } from '@/lib/branding'
-import { displayBranding } from '@/lib/settings/displayBranding'
+import { displayBranding, workspaceIconHref } from '@/lib/settings/displayBranding'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
 import type { WorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -23,6 +23,25 @@ describe('displayBranding', () => {
       productName: BRAND.productName, mailFromName: '발신팀',
     })
     expect(error).toHaveBeenCalledWith('[settings] invalid', expect.objectContaining({ key: 'branding.product_name' }))
+    error.mockRestore()
+  })
+})
+
+describe('workspaceIconHref', () => {
+  const WS = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
+  const path = (slot: string) => `ws/${WS}/branding/${slot}-0123456789abcdef.png`
+  const icons = (values: Record<string, unknown>): WorkspaceConfig => ({ ...config(values), workspaceId: WS })
+  it('마크가 저장돼 있으면 세션 읽기 라우트 주소를 돌려준다', () => {
+    expect(workspaceIconHref(icons({ 'branding.logo': { full: null, full_dark: null, mark: path('mark') } }))).toBe(`/api/brand/${WS}/mark`)
+  })
+  it('마크가 없으면 null — 루트 파일 아이콘을 그대로 둔다', () => {
+    expect(workspaceIconHref(icons({}))).toBeNull()
+    expect(workspaceIconHref(icons({ 'branding.logo': { full: path('full'), full_dark: null, mark: null } }))).toBeNull()
+  })
+  it('손상된 로고 값은 null 로 돌아가고 해석기가 로그를 남긴다', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(workspaceIconHref(icons({ 'branding.logo': 42 }))).toBeNull()
+    expect(error).toHaveBeenCalledWith('[settings] invalid', expect.objectContaining({ key: 'branding.logo' }))
     error.mockRestore()
   })
 })
