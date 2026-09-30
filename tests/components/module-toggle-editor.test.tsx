@@ -56,4 +56,8 @@ describe('ModuleToggleEditor', () => {
     await click('내 값 다시 검토'); await click('변경 내용 검토')
     expect(preview).toHaveBeenCalledTimes(2)
   })
+  it('필수 프로젝트 모듈 설정 누락을 목록 자리에서 알린다', () => {
+    act(() => root.render(<ModuleToggleEditor key="missing" projectId="p" revision={3} initialEnabled={null} requiredMissing options={options} />))
+    expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.enabled')
+  })
 })

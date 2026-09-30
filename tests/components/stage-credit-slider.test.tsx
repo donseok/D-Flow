@@ -112,7 +112,8 @@ describe('StageCreditSlider', () => {
     await mount()
     await type(input('rw'), '60')
     await saveAfterReview()
-    expect(container.querySelector('[data-credit-error]')?.textContent).toBe('권한 없음')
+    expect(container.querySelector('[data-credit-error]')?.textContent).toContain('권한 없음')
+    expect(container.querySelector('[data-credit-error] [data-config-state="patch"]')).not.toBeNull()
     expect(refresh).not.toHaveBeenCalled()
   })
 
@@ -143,7 +144,7 @@ describe('StageCreditSlider', () => {
     await mount()
     await type(input('rw'), '60')
     await saveAfterReview()
-    expect(container.querySelector('[data-credit-error]')?.textContent).toBe(ERR_CONFIG_CONFLICT)
+    expect(container.querySelector('[data-credit-error]')?.textContent).toContain(ERR_CONFIG_CONFLICT)
     expect(container.textContent).toContain('내 값')
     expect(saveBtn()?.disabled).toBe(true)
     expect(refresh).toHaveBeenCalledTimes(1)

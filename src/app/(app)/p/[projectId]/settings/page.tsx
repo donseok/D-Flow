@@ -18,6 +18,7 @@ import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { ConfigStateNotice } from '@/components/settings/ConfigStateNotice'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -238,7 +239,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </InfoRow>
         </dl>
         {pc.ok && <div className="mt-6 border-t border-line pt-5">
-          <MilestoneKeywordsEditor projectId={projectId} revision={pc.cfg.revision}
+          <MilestoneKeywordsEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
             initial={pc.cfg.keys['core.milestone_keywords'].status === 'set' || pc.cfg.keys['core.milestone_keywords'].status === 'default' ? pc.cfg.keys['core.milestone_keywords'].value : []}
             source={pc.cfg.keys['core.milestone_keywords'].status === 'set' ? '프로젝트 설정' : '제품 기본값'}
             invalidReason={pc.cfg.keys['core.milestone_keywords'].status === 'invalid' ? pc.cfg.keys['core.milestone_keywords'].error : undefined} />
@@ -254,12 +255,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
             return <>
               {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
-                <p role="alert" className="mb-3 text-sm text-delayed">워크스페이스 모듈 허용 설정이 손상됐습니다. 워크스페이스 관리자에게 복구를 요청하세요.</p>}
+                <ConfigStateNotice kind={allowed.status === 'invalid' ? 'invalid' : 'required'} locale={locale} keyName="modules.allowed"
+                  message={allowed.status === 'invalid' ? allowed.error : undefined}
+                  isAdmin={Boolean(workspaceLink)} settingsHref={workspaceLink ? `/w/${encodeURIComponent(workspaceLink.slug)}/settings` : undefined} />}
               {!agentsOn && allowedIds.includes('agents') && (enabled.status === 'set' || enabled.status === 'default') && enabled.value.includes('agents') &&
                 <p role="alert" className="mb-3 text-sm text-pending">에이전트 사용 설정은 켜져 있지만 현재 기능은 닫혀 있습니다. 등록 동기화 실패라면 에이전트를 끈 뒤 다시 켜세요.</p>}
-              <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision}
+              <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
                 initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
                 invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
+                requiredMissing={enabled.status === 'required_missing'}
                 options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
             </>

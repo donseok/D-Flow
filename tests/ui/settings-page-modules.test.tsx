@@ -68,7 +68,9 @@ describe('설정 페이지 — 프로젝트 모듈', () => {
   it('워크스페이스 허용 설정이 손상되면 사유를 보이고 추가 허용을 막는다', async () => {
     h.workspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'invalid', error: 'bad' } } })
     const html = await render()
-    expect(html).toContain('워크스페이스 모듈 허용 설정이 손상됐습니다')
+    expect(html).toContain('data-config-state="invalid"')
+    expect(html).toContain('modules.allowed')
+    expect(html).toContain('bad')
     expect((h.editor.mock.calls[0][0].options as { allowed: boolean }[]).every(x => !x.allowed)).toBe(true)
   })
   it('agents가 꺼져도 크레딧 편집기와 안내문이 남는다', async () => {

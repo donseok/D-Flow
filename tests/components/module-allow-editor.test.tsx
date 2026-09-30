@@ -79,4 +79,20 @@ describe('ModuleAllowEditor', () => {
     expect(update).toHaveBeenCalledTimes(3)
     expect(update.mock.calls[2]).toEqual(update.mock.calls[0])
   })
+
+  it('필수 허용 목록 누락을 표시하고 저장 후 복구 안내를 숨긴다', async () => {
+    act(() => root.render(<ModuleAllowEditor key="missing" workspaceId="ws" initialAllowed={null} requiredMissing revision={1} />))
+    expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.allowed')
+    await click('변경 내용 검토')
+    await click('변경 저장')
+    expect(host.querySelector('[data-config-state="required"]')).toBeNull()
+  })
+
+  it('서버의 허용 목록 필드 오류를 목록 바로 아래에 표시한다', async () => {
+    update.mockResolvedValue({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID', commandId: 'c',
+      error: '입력 오류', fieldErrors: [{ key: 'modules.allowed', message: '허용 목록을 확인하세요.' }], retryable: false })
+    toggle('kanban'); await click('변경 내용 검토'); await click('변경 저장')
+    expect(host.querySelector('[data-config-state="field"]')?.textContent).toContain('허용 목록을 확인하세요.')
+    expect(host.querySelector('[data-config-state="patch"]')).toBeNull()
+  })
 })

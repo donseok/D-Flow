@@ -6,6 +6,8 @@ import { previewSettingsImpact, type SettingsImpactResult } from '@/app/actions/
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { newUuid } from '@/lib/domain/uuid'
+import type { Locale } from '@/lib/i18n/dict'
+import { ConfigStateNotice } from './ConfigStateNotice'
 
 const LABEL: Record<Exclude<ModuleId, 'dashboard' | 'wbs' | 'members' | 'settings'>, string> = {
   kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키',
@@ -16,8 +18,8 @@ const LABEL: Record<Exclude<ModuleId, 'dashboard' | 'wbs' | 'members' | 'setting
 const sameIds = (a: readonly ModuleId[], b: readonly ModuleId[]) => a.length === b.length && a.every(id => b.includes(id))
 type Conflict = { revision: number; allowed: ModuleId[] | null }
 
-export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, invalidReason }: {
-  workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string
+export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, invalidReason, requiredMissing = false, locale = 'ko' }: {
+  workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string; requiredMissing?: boolean; locale?: Locale
 }) {
   const router = useRouter()
   const [baseline, setBaseline] = useState<ModuleId[]>(initialAllowed ?? [])
@@ -28,6 +30,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const dirty = needsRepair || !sameIds(baseline, selected)
@@ -37,6 +40,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
     setReview(null)
     setConflict(null)
     setError(null)
+    setFieldError(null)
   }
 
   function inspect() {
@@ -62,6 +66,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
       setBaseline(selected)
       setBaseRevision(result.revision)
       setNeedsRepair(false)
+      setFieldError(null)
       setReview(null)
       setUncertainPatch(null)
       setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '모듈 허용 목록을 저장했습니다.')
@@ -78,16 +83,18 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
     if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setReview(null)
       setUncertainPatch(null)
-      setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
+      setFieldError(result.kind === 'invalid' ? (result.fieldErrors.find(e => e.key === 'modules.allowed')?.message ?? null) : null)
+      setError(result.kind === 'invalid' && result.fieldErrors.some(e => e.key === 'modules.allowed') ? null : result.error)
       return
     }
-    // 응답 유실이나 저장 후 부수효과 실패는 명령 이력을 먼저 확인한다.
+    // 응답 유실은 명령 이력을 먼저 확인한다.
     try {
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline(selected)
         setBaseRevision(found.outcome.revision)
         setNeedsRepair(false)
+        setFieldError(null)
         setReview(null)
         setUncertainPatch(null)
         setNotice('저장된 명령을 확인했습니다.')
@@ -113,7 +120,8 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-ink-muted">프로젝트 관리자가 켤 수 있는 모듈을 고릅니다. 허용에서 빼도 기존 데이터는 삭제되지 않습니다.</p>
-      {invalidReason && <p role="alert" className="rounded-lg border border-delayed/30 bg-delayed-weak p-3 text-sm text-delayed">저장된 허용 목록이 손상됐습니다: {invalidReason}. 목록을 다시 선택해 복구하세요.</p>}
+      {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
+        keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {NON_CORE_MODULES.map(id => (
           <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 text-sm text-ink">
@@ -123,6 +131,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
           </label>
         ))}
       </div>
+      {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
       {conflict && (
         <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
           <strong>다른 사용자가 허용 목록을 바꿨습니다.</strong>
@@ -146,11 +155,11 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
           <p>데이터는 삭제되지 않으며, 저장 직후 모듈과 메뉴에 반영됩니다.</p>
         </div>
       )}
+      {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
       <div className="flex gap-2">
         <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
         {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
       </div>
-      {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
       {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     </div>
   )

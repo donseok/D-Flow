@@ -4,7 +4,9 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
+import type { Locale } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
+import { ConfigStateNotice } from './ConfigStateNotice'
 
 export type SimpleWorkspaceKey = 'ai.enabled' | 'invites.allowed_domains' | 'branding.product_name' | 'branding.mail_from_name'
 export interface WorkspaceField {
@@ -33,7 +35,9 @@ function stored(field: WorkspaceField, value: string | boolean): unknown {
 function same(a: string | boolean, b: string | boolean): boolean { return a === b }
 
 /** 영향 검토가 필요 없는 워크스페이스 키를 범주 단위로 저장한다. */
-export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { workspaceId: string; revision: number; fields: WorkspaceField[] }) {
+export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 'ko' }: {
+  workspaceId: string; revision: number; fields: WorkspaceField[]; locale?: Locale
+}) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(() => initial(fields))
   const [baseline, setBaseline] = useState<Draft>(() => initial(fields))
@@ -42,6 +46,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<SimpleWorkspaceKey, string>>>({})
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const changed = fields.filter(f => !same(draft[f.key], baseline[f.key]) || (f.source === '설정 손상' && !repaired.includes(f.key)))
@@ -51,23 +56,25 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
       setBaseline({ ...draft }); setBaseRevision(result.revision); setRepaired([...repaired, ...changed.map(f => f.key)])
-      setUncertainPatch(null); setConflict(null)
+      setUncertainPatch(null); setConflict(null); setFieldErrors({})
       setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : `${changed.length}개 설정을 저장했습니다.`)
       router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, values: result.latest.values, invalidKeys: result.latest.invalidKeys })
-      setUncertainPatch(null); return
+      setUncertainPatch(null); setFieldErrors({}); return
     }
     if (result && (result.kind !== 'unavailable' || !result.retryable)) {
-      setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
+      const entries = result.kind === 'invalid' ? result.fieldErrors.filter(e => fields.some(f => f.key === e.key)).map(e => [e.key, e.message] as const) : []
+      setFieldErrors(Object.fromEntries(entries))
+      setError(entries.length > 0 ? null : result.error)
       setUncertainPatch(null); return
     }
     try {
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline({ ...draft }); setBaseRevision(found.outcome.revision); setRepaired([...repaired, ...changed.map(f => f.key)])
-        setUncertainPatch(null); setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setUncertainPatch(null); setFieldErrors({}); setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
       }
     } catch { /* 같은 명령을 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
@@ -77,10 +84,16 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
 
   function save() {
     if (changed.length === 0 && !uncertainPatch) return
-    setError(null); setNotice(null)
+    setError(null); setFieldErrors({}); setNotice(null)
     const set = Object.fromEntries(changed.map(f => [f.key, stored(f, draft[f.key])]))
     const patch = uncertainPatch ?? { expectedRevision: baseRevision, commandId: newUuid(), set, unset: [] }
     startTransition(async () => submit(patch))
+  }
+
+  function edit(key: SimpleWorkspaceKey, value: string | boolean) {
+    setDraft(current => ({ ...current, [key]: value }))
+    setFieldErrors(current => { const next = { ...current }; delete next[key]; return next })
+    setError(null); setNotice(null)
   }
 
   function chooseMine() {
@@ -110,21 +123,23 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
         <span className="text-xs text-ink-subtle">{field.source} · 즉시 적용</span>
       </div>
       <p className="text-xs text-ink-muted">{field.description}</p>
-      {field.error && !repaired.includes(field.key) && <p role="alert" className="text-xs text-delayed">설정 손상: {field.error}. 새 값을 저장해 복구하세요.</p>}
+      {field.error && !repaired.includes(field.key) && <ConfigStateNotice kind="invalid" locale={locale} keyName={field.key}
+        message={field.error} isAdmin settingsHref={`#workspace-${field.key}`} />}
       {field.kind === 'boolean' ?
         <input id={`workspace-${field.key}`} type="checkbox" checked={draft[field.key] === true}
-          disabled={pending || !!uncertainPatch} onChange={e => setDraft({ ...draft, [field.key]: e.target.checked })} /> :
+          disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.checked)} /> :
         field.kind === 'domains' ?
           <textarea id={`workspace-${field.key}`} className="input min-h-24 w-full text-sm" value={String(draft[field.key])}
-            disabled={pending || !!uncertainPatch} onChange={e => setDraft({ ...draft, [field.key]: e.target.value })} placeholder="한 줄에 한 도메인" /> :
+            disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} placeholder="한 줄에 한 도메인" /> :
           <input id={`workspace-${field.key}`} className="input w-full text-sm" value={String(draft[field.key])}
-            maxLength={40} disabled={pending || !!uncertainPatch} onChange={e => setDraft({ ...draft, [field.key]: e.target.value })} />}
+            maxLength={40} disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
+      {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
       <p className="text-[11px] text-ink-subtle">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
+    {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <div className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-1 p-3 shadow-sm">
       <span className="text-xs text-ink-muted">변경 {changed.length}개</span>

@@ -14,6 +14,7 @@ import { newUuid } from '@/lib/domain/uuid'
 import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
+import { ConfigStateNotice } from './ConfigStateNotice'
 import {
   CREDIT_GAP, CREDIT_KEYS, CREDIT_STEP, DEFAULT_STAGE_CREDITS, clampCredit, validateStageCredits,
   type CreditKey, type CreditTable, type StageCredits,
@@ -80,7 +81,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   revision: number
 }) {
   const router = useRouter()
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const [pending, startTransition] = useTransition()
   const [table, setTable] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [baseline, setBaseline] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
@@ -90,6 +91,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const [saved, setSaved] = useState(false)
   const [noChange, setNoChange] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<{ revision: number; latest: StageCredits | null } | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
@@ -105,7 +107,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const locked = !editable || pending || !!uncertainPatch
   const setValue = (key: CreditKey, raw: number) => {
     setTable(prev => ({ ...prev, [key]: clampCredit(raw, key, prev) }))
-    setDirty(true); setSaved(false); setNoChange(false); setError(null); setReviewing(false)
+    setDirty(true); setSaved(false); setNoChange(false); setError(null); setFieldError(null); setReviewing(false)
   }
   const commitDraft = (key: CreditKey) => {
     const raw = draft[key]
@@ -147,7 +149,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     try { r = await updateProjectSettings(projectId, patch) } catch { /* 명령 이력에서 확인 */ }
     if (r?.ok) {
       setBase(r.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(r.revision === patch.expectedRevision)
-      setReviewing(false); setUncertainPatch(null); router.refresh(); return
+      setReviewing(false); setUncertainPatch(null); setFieldError(null); router.refresh(); return
     }
     if (r?.kind === 'conflict') {
       const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'])
@@ -155,13 +157,16 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
       setError(messageOf(r)); setUncertainPatch(null); setReviewing(false); router.refresh(); return
     }
     if (r && (r.kind !== 'unavailable' || !r.retryable)) {
-      setError(messageOf(r) ?? t('settings.actionFailed')); setUncertainPatch(null); return
+      const fieldMessage = r.kind === 'invalid' ? r.fieldErrors.find(e => e.key === 'workflow.stage_credits')?.message : undefined
+      setFieldError(fieldMessage ?? null)
+      setError(fieldMessage ? null : messageOf(r) ?? t('settings.actionFailed'))
+      setUncertainPatch(null); return
     }
     try {
       const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBase(found.outcome.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(found.outcome.revision === patch.expectedRevision)
-        setReviewing(false); setUncertainPatch(null); router.refresh(); return
+        setReviewing(false); setUncertainPatch(null); setFieldError(null); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재시도 */ }
     if (resendCount === 0) return submit(patch, 1)
@@ -171,9 +176,9 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   function save() {
     if (conflict || (!dirty && !uncertainPatch)) return
     const v = validateStageCredits({ default: table })
-    if (!v.ok) { setError(v.error); return }
+    if (!v.ok) { setFieldError(v.error); return }
     if (!reviewing && !uncertainPatch) { setError(null); setReviewing(true); return }
-    setError(null)
+    setError(null); setFieldError(null)
     const patch = uncertainPatch ?? { expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [] }
     startTransition(async () => submit(patch))
   }
@@ -382,6 +387,8 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
         </div>
       </div>
 
+      {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
+      {error && <div data-credit-error><ConfigStateNotice kind="patch" locale={locale} message={error} /></div>}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</span>
         {editable && (
@@ -405,7 +412,6 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
         onMine={() => { setBase(conflict.revision); setConflict(null); setReviewing(false); setError(null) }}
         onLatest={() => { if (conflict.latest) { setTable({ ...conflict.latest.default }); setBaseline({ ...conflict.latest.default }) } setBase(conflict.revision); setDirty(false); setReviewing(false); setConflict(null); setError(null) }} />}
       {saved && <p data-credit-saved role="status" className="text-xs text-done">{noChange ? '바뀐 값이 없습니다.' : t('settings.creditsSaved')}</p>}
-      {error && <p data-credit-error role="alert" className="text-xs text-delayed">{error}</p>}
     </div>
   )
 }

@@ -61,7 +61,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       ]}>
       <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
         <div className="space-y-6">
-          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision}
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale}
             fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
           <LogoEditor workspaceId={access.id} revision={config.revision}
             initialLogo={config.keys['branding.logo'].status === 'set' || config.keys['branding.logo'].status === 'default' ? config.keys['branding.logo'].value : null}
@@ -74,16 +74,17 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       <SectionCard id="workspace-modules" searchText={access.isSuperuser ? 'modules.allowed ai.enabled' : 'ai.enabled'}
         eyebrow="모듈·AI" title={access.isSuperuser ? '모듈 사용 범위' : 'AI 사용'} icon={Settings2}>
         <div className="space-y-5">
-          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'ai.enabled')]} />
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'ai.enabled')]} />
           {access.isSuperuser ? (
-            <ModuleAllowEditor workspaceId={access.id} revision={config.revision}
+            <ModuleAllowEditor workspaceId={access.id} revision={config.revision} locale={locale}
               initialAllowed={allowed.status === 'set' || allowed.status === 'default' ? allowed.value : null}
-              invalidReason={allowed.status === 'invalid' ? allowed.error : undefined} />
+              invalidReason={allowed.status === 'invalid' ? allowed.error : undefined}
+              requiredMissing={allowed.status === 'required_missing'} />
           ) : null}
         </div>
       </SectionCard>
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
-        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'invites.allowed_domains')]} />
+        <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
       </SectionCard>
       <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
