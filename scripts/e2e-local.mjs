@@ -654,6 +654,36 @@ async function main() {
   same('거부된 업로드의 객체', (probeListed ?? []).length, 0)
   step('workspace-b-isolation', { bea: beaChecks, lists, storage })
 
+  // ── 17b. SP3a C — 워크스페이스 설정 화면의 경계. A 에만 속한 ana(워크스페이스 A 관리자, 플랫폼 관리자 아님)가 B 의 설정 화면을 열면
+  // not-found(존재 은닉 — 상태 코드가 아니라 notFound() digest 로도 판정, 이름이 HTML 에 실리면 실패)이고, 자기 워크스페이스 화면은 열리되
+  // 플랫폼 관리자 전용 구역(modules.allowed)이 없다. 플랫폼 관리자는 B 화면을 열고 그 구역을 본다(대조 — 은닉이 부재가 아니라는 근거).
+  const [wsARow] = rows('워크스페이스 A 이름·슬러그', await svc.from('workspaces').select('slug, name').eq('id', wsA))
+  const wsSettings = async (who, slug, wsName, { hidden }) => {
+    const path = `/w/${encodeURIComponent(slug)}/settings`
+    const res = await who.http('GET', path, { expect: hidden ? [200, 404] : 200 })
+    const html = await res.text()
+    const digest = notFoundRendered(html)
+    const entry = {
+      who: who.label, path, status: res.status, notFound: res.status === 404 || digest,
+      notFoundSignal: res.status === 404 ? 'http-404' : digest ? 'digest' : null,
+      nameInHtml: html.includes(wsName), modulesAllowedInHtml: html.includes('modules.allowed'),
+      ...(hidden ? {} : { problems: pageProblems(html, [`${wsName} 설정`]) }),
+    }
+    if (entry.notFound !== hidden) throw new Fail(`${who.label} ${path}: notFound=${entry.notFound}(기대 ${hidden})`)
+    if (hidden && entry.nameInHtml) throw new Fail(`${who.label} ${path}: 은닉된 워크스페이스 이름이 HTML 에 실렸다`)
+    if (!hidden && entry.problems.length) throw new Fail(`${who.label} ${path} 화면 문제: ${entry.problems.join(', ')}`)
+    return entry
+  }
+  const wsSettingsChecks = [
+    await wsSettings(ana, OTHER_WORKSPACE.slug, OTHER_WORKSPACE.name, { hidden: true }),
+    await wsSettings(ana, wsARow.slug, wsARow.name, { hidden: false }),
+    await wsSettings(bea, wsARow.slug, wsARow.name, { hidden: true }),
+    await wsSettings(admin, OTHER_WORKSPACE.slug, OTHER_WORKSPACE.name, { hidden: false }),
+  ]
+  if (wsSettingsChecks[1].modulesAllowedInHtml) throw new Fail('플랫폼 관리자가 아닌 ana 의 설정 화면에 modules.allowed 구역이 있다')
+  if (!wsSettingsChecks[3].modulesAllowedInHtml) throw new Fail('플랫폼 관리자의 설정 화면에 modules.allowed 구역이 없다')
+  step('workspace-settings-boundary', { checks: wsSettingsChecks })
+
   // ── 18. 외부 회의록 API(시크릿 + user_email) — meta 의 projects·목록의 items 가 그 사람의 워크스페이스로만 좁혀진다.
   // A 관리자(ana)·A 에 초대된 외부 계정은 C 를 못 보고, B 관리자(bea)는 C 만 본다. 플랫폼 관리자는 전부 본다(대조 — 음성 판정이
   // 비어 있지 않다는 근거). 모르는 이메일은 403 unknown_user, 볼 수 없는 프로젝트의 회의 목록은 404.
