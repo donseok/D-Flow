@@ -3,12 +3,15 @@
 // 순수 함수는 export 해 tests/scripts/ui-capture.test.ts 가 import 한다 — 최상위에서 파일·네트워크·env 를 건드리지 않는다(isMain 가드).
 // Playwright 는 package.json 에 없다: `npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs …` 로 부르고 PATH 에서 찾는다.
 // 주석에 설정 표·설정 RPC 이름을 따옴표로 적지 않는다(settings-writes 게이트가 원문을 센다).
+import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { assertNotForbidden, classifySupabaseUrl, localAdminEnv } from './lib/targets.mjs'
-import { e2eBaseUrl } from './lib/e2e.mjs'
+import { e2eBaseUrl, localClientEnv, pageProblems, redactInviteTokens } from './lib/e2e.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 
@@ -302,6 +305,48 @@ export function seedPlan(ctx) {
   return { teams, wbs, owners, deps, issues, announcements, meetings, attendees, attendance, weeklyReport, weeklyRows, wikiTopic, wikiRevision, invite, runner, agentOrder, minutes }
 }
 
+/** 비밀번호를 재설정할 계정 — 시드 계정 넷만. 부트스트랩 관리자면 throw(판정 Q4) */
+export function resetTargets(grades, bootstrapEmail) {
+  return grades.map((grade) => {
+    const email = SEED_ACCOUNTS[grade]
+    if (!email) throw new Error(`시드 계정이 아닌 등급: ${grade}`)
+    if (bootstrapEmail && email.toLowerCase() === String(bootstrapEmail).trim().toLowerCase()) throw new Error('부트스트랩 관리자의 비밀번호는 바꾸지 않는다')
+    return { grade, email }
+  })
+}
+
+/** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값 @param {{ width: number, height: number, theme: string }} s */
+export function contextOptions({ width, height, theme }) {
+  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme }
+}
+
+/** 두 라벨이 비교 가능한가 — 같은 KST 날짜·시드 날짜·브라우저. 문제 목록(빈 배열이면 비교 가능) */
+export function compareMeta(a, b) {
+  return ['kstDate', 'seedDate', 'browser'].filter((k) => a?.[k] !== b?.[k]).map((k) => `${k} 다름: ${a?.[k]} ≠ ${b?.[k]}`)
+}
+
+/**
+ * 라우트 고르기 — --routes 가 있으면 그 키만, 없으면 since 집합 안의 행(until 이 집합에 들면 뺀다).
+ * JSDoc 이 없으면 TS 호출부의 콜백 인자가 암묵 any 가 된다(allowJs, checkJs 없음).
+ * @template {{ key: string, since: string, until?: string }} R
+ * @param {{ routes: R[] }} doc @param {{ routes: string[] | null, since: string[] }} sel @returns {R[]}
+ */
+export function selectRoutes(doc, { routes, since }) {
+  if (routes) {
+    const miss = routes.filter((k) => !doc.routes.some((r) => r.key === k))
+    if (miss.length) throw new Error(`routes.json 에 없는 키: ${miss.join(',')}`)
+    return doc.routes.filter((r) => routes.includes(r.key))
+  }
+  return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)))
+}
+
+/** 한 장의 판정 — 글꼴 무효는 비교 제외, 크기 다름, SAME_RATIO 이하는 같음(판정 Q33) */
+export function diffVerdict({ ratio, fontA, fontB }) {
+  if (fontA !== 'ok' || fontB !== 'ok') return 'skip-font'
+  if (ratio === null || ratio === undefined) return 'skip-size'
+  return ratio <= SAME_RATIO ? 'same' : 'diff'
+}
+
 /** @type {Record<string, (opts: ReturnType<typeof parseArgs>) => Promise<void>>} */
 export const COMMANDS = {}
 
@@ -445,6 +490,219 @@ async function cmdSeed() {
   console.log(JSON.stringify({ ok: true, today, projectId: pid, wsB: wsB.id, wbs: plan.wbs.length, minutes: plan.minutes.length }))
 }
 COMMANDS.seed = cmdSeed
+
+export const CDN_HOST = 'https://cdn.jsdelivr.net/'
+const gitHead = () => execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()
+
+/** Playwright 1.58.2 — npx -p 가 PATH 에 둔 .bin 옆 패키지를 import 한다(ESM 은 NODE_PATH·PATH 를 보지 않는다, 판정 Q2) */
+export async function loadPlaywright() {
+  const bin = (process.env.PATH || '').split(':').find((p) => /\/_npx\/[^/]+\/node_modules\/\.bin$/.test(p) && existsSync(join(p, '..', 'playwright', 'package.json')))
+  if (!bin) throw new Error('Playwright 가 PATH 에 없다 — npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs … 로 부른다')
+  const version = JSON.parse(readFileSync(join(bin, '..', 'playwright', 'package.json'), 'utf8')).version
+  if (version !== '1.58.2') throw new Error(`Playwright ${version} — 1.58.2 로 고정한다(판정 Q2)`)
+  return import(pathToFileURL(join(bin, '..', 'playwright', 'index.mjs')).href)
+}
+
+/** 시드 계정의 비밀번호를 새 임의 값(메모리)으로 바꾸고 앱과 같은 @supabase/ssr 쿠키 항아리로 로그인한다(판정 Q4) */
+export async function freshSessions(db, anon, grades) {
+  const sessions = {}
+  for (const { grade, email } of resetTargets(grades, process.env.BOOTSTRAP_EMAIL || 'admin@example.com')) {
+    const userId = await userIdByEmail(db, email)
+    if (!userId) throw new Error(`시드 계정이 없다(${email}) — ui-capture.mjs seed 를 먼저`)
+    const password = randomBytes(24).toString('base64')
+    must(`비밀번호 재설정(${grade})`, await db.auth.admin.updateUserById(userId, { password }))
+    const jar = new Map()
+    const sb = createServerClient(anon.url, anon.anonKey, { cookies: {
+      getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+      setAll: (list) => list.forEach(({ name, value }) => (value ? jar.set(name, value) : jar.delete(name))),
+    } })
+    const { error } = await sb.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(`로그인 실패(${grade}): ${error.message}`)
+    sessions[grade] = { userId, cookies: [...jar].map(([name, value]) => ({ name, value })) }
+  }
+  return sessions
+}
+
+/** 캡처 계정의 서버 테마를 명시로 쓴다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다 */
+export async function setServerTheme(db, userIds, theme) {
+  for (const userId of userIds) {
+    const rows = must('소속 조회', await db.from('workspace_members').select('workspace_id').eq('user_id', userId))
+    for (const { workspace_id } of rows) {
+      const cur = must('선호 조회', await db.from('user_preferences').select('prefs').eq('user_id', userId).eq('workspace_id', workspace_id).maybeSingle())
+      must('선호 쓰기', await db.from('user_preferences').upsert(
+        { user_id: userId, workspace_id, prefs: { ...(cur?.prefs ?? {}), theme }, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,workspace_id' },
+      ))
+    }
+  }
+}
+
+/** jsDelivr 응답을 리포 밖 캐시에서 준다 — 라벨 사이 글꼴 바이트를 고정한다(판정 Q3) */
+async function routeCdn(context, cacheDir) {
+  mkdirSync(cacheDir, { recursive: true })
+  await context.route(`${CDN_HOST}**`, async (route) => {
+    const file = join(cacheDir, createHash('sha256').update(route.request().url()).digest('hex'))
+    if (existsSync(file) && existsSync(`${file}.json`)) {
+      return route.fulfill({ status: 200, headers: JSON.parse(readFileSync(`${file}.json`, 'utf8')), body: readFileSync(file) })
+    }
+    const res = await route.fetch()
+    const body = await res.body()
+    if (res.status() === 200) {
+      writeFileSync(file, body)
+      writeFileSync(`${file}.json`, JSON.stringify({ 'content-type': res.headers()['content-type'] ?? 'application/octet-stream', 'access-control-allow-origin': '*' }))
+    }
+    return route.fulfill({ response: res, body })
+  })
+}
+
+async function resolveSeed(db) {
+  const slugA = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
+  const wsA = must('워크스페이스 A', await db.from('workspaces').select('id, slug').eq('slug', slugA).single())
+  const project = must('시드 프로젝트', await db.from('projects').select('id, description').eq('workspace_id', wsA.id).eq('name', SEED_PROJECT).maybeSingle())
+  if (!project) throw new Error('시드 프로젝트가 없다 — ui-capture.mjs seed 를 먼저')
+  const seedDate = String(project.description ?? '').replace('ui-capture seed ', '')
+  if (seedDate !== kstToday()) throw new Error(`시드 날짜 ${seedDate} ≠ 오늘(KST) ${kstToday()} — db:reset → dev:bootstrap → seed 를 다시`)
+  return { pid: project.id, seedDate, wsSlug: wsA.slug, ...seedIds(project.id) }
+}
+
+/** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다 */
+export async function forEachShot(opts, visit) {
+  const { envText, admin: coord, target, outDir } = laneEnv()
+  const baseUrl = opts.base ? e2eBaseUrl(opts.base) : target.appUrl
+  const anon = localClientEnv(envText)
+  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+  const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
+  const routes = selectRoutes(doc, opts)
+  const seed = await resolveSeed(db)
+  const grades = [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))]
+  const sessions = await freshSessions(db, anon, grades)
+  const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
+  const { chromium } = await loadPlaywright()
+  const browser = await chromium.launch()
+  const browserVersion = browser.version()
+  const rows = []
+  try {
+    for (const theme of opts.theme) {
+      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme)
+      for (const r of routes) {
+        for (const [width, height] of opts.sizes) {
+          const context = await browser.newContext(contextOptions({ width, height, theme }))
+          try {
+            await routeCdn(context, join(outDir, 'cdn-cache'))
+            const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
+            await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+            await context.addInitScript((entries) => {
+              try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
+            }, r.init ?? {})
+            const page = await context.newPage()
+            await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
+            let idle = true
+            try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false }
+            await page.evaluate(() => document.fonts.ready.then(() => true))
+            await page.waitForTimeout(500)
+            let clickFailed = false
+            if (r.click) {
+              try { await page.locator(r.click).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true }
+            }
+            const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
+            for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
+            const u = new URL(page.url())
+            const expectFinal = r.expectFinal ? fillPath(r.expectFinal, values) : null
+            const problems = [...pageProblems(await page.content()), ...(expectFinal && u.pathname + u.search !== expectFinal ? [`final:${redactInviteTokens(u.pathname + u.search)}`] : []),
+              ...(clickFailed ? ['click-failed'] : []), ...missing]
+            const base = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redactInviteTokens(u.pathname + u.search), problems }
+            rows.push({ ...base, ...(await visit(page, { r, width, height, theme, doc, outDir })) })
+          } finally { await context.close() }
+        }
+      }
+    }
+  } finally { await browser.close() }
+  return { rows, outDir, baseUrl, browserVersion, seed }
+}
+
+async function cmdShoot(opts) {
+  if (!opts.label) throw new Error('--label 이 필요하다')
+  const res = await forEachShot(opts, async (page, { r, width, height, theme, doc, outDir }) => {
+    const fonts = await page.evaluate(() => {
+      const f = [...document.fonts].filter((x) => x.family.replace(/["']/g, '') === 'Pretendard Variable')
+      return { registered: f.length, loaded: f.filter((x) => x.status === 'loaded').length, loading: f.filter((x) => x.status === 'loading').length }
+    })
+    const h1 = await page.evaluate(() => [...document.querySelectorAll('h1')].filter((e) => e.checkVisibility()).map((e) => (e.textContent ?? '').trim().slice(0, 60)))
+    const dir = join(outDir, opts.label)
+    mkdirSync(dir, { recursive: true })
+    const file = shotFileName({ key: r.key, width, height, theme })
+    const style = maskStyle([...(doc.commonMask ?? []), ...(r.mask ?? [])])
+    const buf = await page.screenshot({ path: join(dir, file), ...(style ? { style } : {}), animations: 'disabled', caret: 'hide' })
+    return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1 }
+  })
+  const meta = { label: opts.label, commit: process.env.UI_CAPTURE_SERVER_COMMIT || gitHead(), scriptCommit: gitHead(), browser: res.browserVersion,
+    kstDate: kstToday(), seedDate: res.seed.seedDate, baseUrl: res.baseUrl, themes: opts.theme, sizes: opts.sizes, rows: res.rows }
+  writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
+  console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}/${x.theme}:${x.problems.join('+')}`), fallbackFonts: res.rows.filter((x) => x.font !== 'ok').length }))
+}
+
+async function cmdDiff(opts) {
+  const [baseLabel, headLabel] = opts.positional
+  if (!baseLabel || !headLabel) throw new Error('사용: diff <기준 label> <대상 label>')
+  const { outDir } = laneEnv()
+  const A = JSON.parse(readFileSync(join(outDir, baseLabel, 'meta.json'), 'utf8'))
+  const B = JSON.parse(readFileSync(join(outDir, headLabel, 'meta.json'), 'utf8'))
+  const problems = compareMeta(A, B)
+  if (problems.length) throw new Error(`비교할 수 없다 — ${problems.join('; ')}`)
+  const { chromium } = await loadPlaywright()
+  const browser = await chromium.launch()
+  const out = []
+  try {
+    const page = await browser.newPage()
+    const fnSrc = pixelDiffRatio.toString()
+    for (const b of B.rows) {
+      const a = A.rows.find((x) => x.key === b.key && x.width === b.width && x.height === b.height && x.theme === b.theme)
+      const at = { key: b.key, width: b.width, height: b.height, theme: b.theme }
+      if (!a) { out.push({ ...at, ratio: null, verdict: 'new' }); continue }
+      const ratio = await page.evaluate(async ({ pa, pb, src }) => {
+        const load = async (b64) => {
+          const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
+          const c = new OffscreenCanvas(bmp.width, bmp.height)
+          const ctx = c.getContext('2d')
+          ctx.drawImage(bmp, 0, 0)
+          return ctx.getImageData(0, 0, bmp.width, bmp.height)
+        }
+        return new Function(`return (${src})`)()(await load(pa), await load(pb))
+      }, { pa: readFileSync(join(outDir, baseLabel, a.file)).toString('base64'), pb: readFileSync(join(outDir, headLabel, b.file)).toString('base64'), src: fnSrc })
+      out.push({ ...at, ratio, verdict: diffVerdict({ ratio, fontA: a.font, fontB: b.font }) })
+    }
+  } finally { await browser.close() }
+  const sorted = [...out].sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1))
+  const pct = (r) => (r === null || r === undefined ? '—' : `${(r * 100).toFixed(2)}%`)
+  const md = [`# diff ${baseLabel}(${A.commit}) → ${headLabel}(${B.commit})`, '', '| 라우트 | 크기 | 테마 | 차이율 | 판정 |', '|---|---|---|---|---|',
+    ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pct(r.ratio)} | ${r.verdict} |`)].join('\n')
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.json`), JSON.stringify(sorted, null, 2))
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.md`), `${md}\n`)
+  console.log(JSON.stringify({ ok: true, compared: out.length, diff: out.filter((r) => r.verdict === 'diff').length,
+    skipped: out.filter((r) => r.verdict.startsWith('skip')).length, top10: sorted.slice(0, 10).map((r) => `${r.key}@${r.width}x${r.height}/${r.theme} ${pct(r.ratio)}`) }))
+}
+
+async function cmdAxe(opts) {
+  if (!opts.label) throw new Error('--label 이 필요하다')
+  const axePath = join(process.cwd(), 'node_modules/axe-core/axe.min.js')
+  if (!existsSync(axePath)) throw new Error('node_modules/axe-core/axe.min.js 가 없다(전이 의존) — 멈추고 알린다(스펙 D48)')
+  const res = await forEachShot(opts, async (page) => {
+    await page.addScriptTag({ path: axePath })
+    return page.evaluate(async () => {
+      const r = await window.axe.run(document, { runOnly: { type: 'rule', values: ['color-contrast'] } })
+      const nodes = r.violations.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html.slice(0, 200), summary: (n.failureSummary ?? '').slice(0, 200) })))
+      return { violations: nodes.length, incomplete: r.incomplete.reduce((s, v) => s + v.nodes.length, 0), nodes }
+    })
+  })
+  const dir = join(res.outDir, opts.label)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'axe.json'), JSON.stringify({ browser: res.browserVersion, kstDate: kstToday(), rows: res.rows }, null, 2))
+  console.log(JSON.stringify({ ok: true, label: opts.label, pages: res.rows.length, violations: res.rows.reduce((s, r) => s + r.violations, 0) }))
+}
+
+COMMANDS.shoot = cmdShoot
+COMMANDS.diff = cmdDiff
+COMMANDS.axe = cmdAxe
 
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {

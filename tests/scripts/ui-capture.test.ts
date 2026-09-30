@@ -5,7 +5,7 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
-import { LEVEL_LABELS_4, SEED_ACCOUNTS, fnv1a64, seedIds, seedPlan } from '../../scripts/ui-capture.mjs'
+import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 
@@ -202,5 +202,39 @@ describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
   })
   it('fnv1a64 은 시드의 회의록 본문에서 SQL 실측값과 같다(본문 전체를 해시로 고정)', () => {
     expect(plan.minutes.map((m) => fnv1a64(m.body))).toEqual(['b78d8307b9571ce9', '88019ce70f34c6bc'])
+  })
+})
+
+describe('캡처 조건·계정·비교 가능성', () => {
+  it('비밀번호 재설정은 시드 계정만 — 부트스트랩 관리자면 throw(판정 Q4, Review Focus 3)', () => {
+    expect(resetTargets(['member', 'wsAdmin'], 'admin@example.com')).toEqual([
+      { grade: 'member', email: SEED_ACCOUNTS.member }, { grade: 'wsAdmin', email: SEED_ACCOUNTS.wsAdmin },
+    ])
+    expect(() => resetTargets(['member'], SEED_ACCOUNTS.member.toUpperCase())).toThrow(/부트스트랩/)
+    expect(() => resetTargets(['public'], 'admin@example.com')).toThrow(/시드 계정이 아닌/)
+  })
+  it('컨텍스트 옵션 — 배율 1·ko-KR·서울·모션 줄임·테마 = colorScheme', () => {
+    expect(contextOptions({ width: 390, height: 844, theme: 'dark' })).toEqual({
+      viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: 'dark',
+    })
+  })
+  it('KST 날짜·시드 날짜·브라우저가 다르면 비교하지 않는다(Review Focus 2)', () => {
+    const a = { kstDate: '2026-09-29', seedDate: '2026-09-29', browser: '145.0.7632.6' }
+    expect(compareMeta(a, { ...a })).toEqual([])
+    expect(compareMeta(a, { ...a, kstDate: '2026-09-30' })).toEqual(['kstDate 다름: 2026-09-29 ≠ 2026-09-30'])
+    expect(compareMeta(a, { ...a, browser: '146.0.0.0', seedDate: '2026-09-28' })).toHaveLength(2)
+  })
+  it('장 판정 — 글꼴 무효는 비교 제외, 크기 다름, 0.2% 문턱(판정 Q33)', () => {
+    expect(diffVerdict({ ratio: 0.5, fontA: 'fallback', fontB: 'ok' })).toBe('skip-font')
+    expect(diffVerdict({ ratio: null, fontA: 'ok', fontB: 'ok' })).toBe('skip-size')
+    expect(diffVerdict({ ratio: 0.002, fontA: 'ok', fontB: 'ok' })).toBe('same')
+    expect(diffVerdict({ ratio: 0.0021, fontA: 'ok', fontB: 'ok' })).toBe('diff')
+  })
+  it('라우트 고르기 — 키 지정(모르는 키 throw), 아니면 since 집합(until 이 집합에 들면 뺀다)', () => {
+    const doc = { routes: [{ key: 'a', since: 'b4283c0' }, { key: 'b', since: 'UI-1' }, { key: 'c', since: 'b4283c0', until: 'UI-2a' }] }
+    expect(selectRoutes(doc, { routes: null, since: ['b4283c0'] }).map((r) => r.key)).toEqual(['a', 'c'])
+    expect(selectRoutes(doc, { routes: null, since: ['b4283c0', 'UI-1', 'UI-2a'] }).map((r) => r.key)).toEqual(['a', 'b'])
+    expect(selectRoutes(doc, { routes: ['b'], since: ['b4283c0'] }).map((r) => r.key)).toEqual(['b'])
+    expect(() => selectRoutes(doc, { routes: ['zz'], since: [] })).toThrow(/없는 키/)
   })
 })
