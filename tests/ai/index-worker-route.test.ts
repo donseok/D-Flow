@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import {
+  moduleSetFor, moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule,
+} from '@/lib/modules/gate'
 
 const mocks = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
@@ -19,6 +22,13 @@ vi.mock('@/lib/ai/index/moduleGate', async (original) => ({
 import { POST } from '@/app/api/chat/index/worker/route'
 
 const SECRET = 'test-cron-secret'
+
+// 관문 mock 의 값을 바꾼 케이스가 남은 Once 값을 새어 나가지 않게 되돌린다(공통 규칙 — 전역 mock 여섯 함수).
+afterEach(() => {
+  for (const fn of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule, moduleSetFor]) {
+    vi.mocked(fn).mockReset()
+  }
+})
 
 function request(body: unknown, headers: Record<string, string> = {}): NextRequest {
   return new NextRequest('http://localhost/api/chat/index/worker', {
@@ -241,6 +251,84 @@ describe('POST /api/chat/index/worker execution', () => {
     expect(body.error).toBe('색인 워커 실행에 실패했습니다.')
     expect(JSON.stringify(body)).not.toContain('secret')
     consoleError.mockRestore()
+  })
+})
+
+/**
+ * 전역 열거는 켜진 것만 큐에 넣는다(스펙 §4.2 워커 행). 원본 열거는 스코프가 아니라 **원본 표**를 훑으므로,
+ * 꺼진(또는 모르는) 프로젝트의 변경이 목록에 섞이면 `createSupabaseIndexJobQueue.enqueue` 가
+ * **목록의 한 건이라도 스코프 밖이면 배치 전체를 거절**한다(pgvector.ts) — 켜진 프로젝트의 변경까지 못 들어가고
+ * 사용자가 보는 응답은 `enqueued:0, enqueueErrorCode:'INDEX_JOB_INVALID'` 다. 래퍼는 이 거절을 막는 유일한 층이다.
+ *
+ * 반쪽 고정 두 가지가 함께 있어야 한다:
+ *  - 꺼진(모르는) 프로젝트의 변경이 RPC 인자에 **없다** (필터를 걸면 always-empty 여야 통과),
+ *  - 켜진 프로젝트의 변경이 RPC 인자에 **있다** (항상 닫는 회귀도 막는다 — enqueued 가 1 이어야 한다).
+ */
+describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 넣는다', () => {
+  const OFF_PROJECT = 'p2'
+  /** 원본 표에 켜진 p1 과 꺼진/모르는 p2 행이 함께 있는 상태 — 전역 열거의 실패 시나리오 그대로다. */
+  function twoProjectAdmin() {
+    return fakeAdmin({
+      tables: {
+        projects: { data: [{ id: 'p1' }, { id: OFF_PROJECT }], error: null },
+        wbs_items: {
+          data: [
+            { id: 'w1', project_id: 'p1', updated_at: '2026-07-19T01:00:00.000Z' },
+            { id: 'w2', project_id: OFF_PROJECT, updated_at: '2026-07-19T01:00:00.000Z' },
+          ],
+          error: null,
+        },
+        ai_documents: { data: [], error: null },
+      },
+      rpc: name => (name === 'upsert_ai_index_jobs' ? { data: 1, error: null } : { data: null, error: null }),
+    })
+  }
+  function enqueuedJobs(admin: ReturnType<typeof fakeAdmin>) {
+    return admin.rpc.mock.calls
+      .filter(([name]) => name === 'upsert_ai_index_jobs')
+      .flatMap(([, args]) => (args as { p_jobs: Array<{ project_id: string; entity_id: string }> }).p_jobs)
+  }
+  const offOnly = (state: 'off' | 'unknown') => vi.mocked(moduleState).mockImplementation(async (scope) => (
+    'projectId' in scope && scope.projectId === OFF_PROJECT ? state : 'on'
+  ))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllEnvs()
+    vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
+    vi.stubEnv('CHAT_V2_ENABLED', 'true')
+    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    // 켜진 프로젝트는 p1 하나뿐 — 꺼진 p2 가 스코프 밖이라 배치가 통째로 거절될 조건이 이미 갖춰져 있다.
+    scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
+  })
+
+  it.each(['off', 'unknown'] as const)('backfill 은 %s 프로젝트를 큐에 넣지 않는다', async (state) => {
+    offOnly(state)
+    const admin = twoProjectAdmin()
+    mocks.createAdminClient.mockReturnValue(admin)
+
+    const response = await POST(request({ mode: 'backfill', domain: 'wbs' }, { 'x-cron-secret': SECRET }))
+    expect(response.status).toBe(200)
+    // 켜진 p1 의 변경은 들어가고(항상 닫는 회귀 방지) 꺼진 p2 는 빠진다(enqueued 0 이면 필터가 존재하지 않는다).
+    await expect(response.json()).resolves.toMatchObject({ mode: 'backfill', planned: 2, enqueued: 1 })
+    expect(enqueuedJobs(admin).map((job) => job.project_id)).toEqual(['p1'])
+  })
+
+  it.each(['off', 'unknown'] as const)('정합성 검사 enqueue 도 %s 프로젝트를 큐에 넣지 않는다', async (state) => {
+    offOnly(state)
+    const admin = twoProjectAdmin()
+    mocks.createAdminClient.mockReturnValue(admin)
+
+    // dryRun:false 여야 enqueue 경로가 존재한다(참고: dryRun 면 enqueue 자체가 undefined 다).
+    const response = await POST(request(
+      { mode: 'consistency', domain: 'wbs', dryRun: false },
+      { 'x-cron-secret': SECRET },
+    ))
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      mode: 'consistency', checked: 2, planned: 2, enqueued: 1, enqueueErrorCode: null, dryRun: false,
+    })
+    expect(enqueuedJobs(admin).map((job) => job.project_id)).toEqual(['p1'])
   })
 })
 

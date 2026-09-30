@@ -205,13 +205,17 @@ describe('POST /api/wiki/reindex', () => {
     expect(res.status).toBe(503)
   })
 
-  it('배포에서 챗봇을 쓸 수 없으면 step·enqueue 만 404', async () => {
+  it('배포에서 챗봇을 쓸 수 없으면 step·enqueue 만 404 — repair·status 는 그 앞이라 남는다', async () => {
+    // 정본 §3.2.7 규칙 2 — status·repair 는 env 404 **앞**이다. 어느 쪽이 스펙인지 이 it 가 고정한다.
     vi.stubEnv('CHAT_V2_ENABLED', 'false')
     expect((await POST(request({ action: 'step' }))).status).toBe(404)
     expect((await POST(request({ action: 'enqueue' }))).status).toBe(404)
     expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
     expect(mocks.runIndexBackfill).not.toHaveBeenCalled()
     expect((await POST(request({ action: 'status' }))).status).toBe(200)
+    // repair 는 전역 스캔이라 챗봇 env 404 에 물리지 않는다(깨진 임베딩 청크는 챗봇 모듈과 무관하다).
+    expect((await POST(request({ action: 'repair' }))).status).toBe(200)
+    expect(mocks.runRepairOnce).toHaveBeenCalled()
   })
 
   it('enqueue 는 꺼진 프로젝트의 변경을 큐에 넣지 않는다', async () => {

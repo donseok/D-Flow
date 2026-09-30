@@ -95,6 +95,17 @@ describe('색인 워커 — 잡마다 모듈 판정', () => {
       moduleGate: gate(async () => 'off', async () => false) })
     expect(result).toMatchObject({ requeued: 1, skipped: 0 })
   })
+
+  it('skipped 기록이 실패하면 skipped 가 아니라 failed 로 센다 — 잡은 running 으로 남아 다음 선점에 다시 걸린다', async () => {
+    // 요약만 거짓말하는 축이다(데이터 유실은 없다). 그래도 "재처리 안 된다" 고 오해하는 사람 때문에 고정한다.
+    const q = queue([job()])
+    const result = await runIndexWorkerOnce({
+      queue: q, index: index(), loadContent: vi.fn(),
+      moduleGate: gate(async () => 'off', async () => { throw new Error('INDEX_JOB_SKIP_FAILED:42501') }),
+    })
+    expect(result).toEqual({ claimed: 1, upserted: 0, deleted: 0, failed: 1, requeued: 0, skipped: 0 })
+    expect(q.complete).not.toHaveBeenCalled()
+  })
 })
 
 describe('색인 잡의 범위와 skipped 쓰기', () => {
@@ -118,7 +129,8 @@ describe('색인 잡의 범위와 skipped 쓰기', () => {
   it('skipped 는 id 와 running 상태를 함께 조건으로 쓴다', async () => {
     const db = fakeDb()
     expect(await createIndexJobModuleGate(db as never).skip(job())).toBe(true)
-    expect(db.updates[0]).toMatchObject({ table: 'ai_index_jobs', values: expect.objectContaining({ status: 'skipped', last_error: 'module_disabled' }) })
+    // 잠금 시각을 함께 푼다 — 잠금이 남은 skipped 행은 "아직 처리 중" 으로 보여 관측성만 흐린다(D16 자체는 claim 조건이 막는다).
+    expect(db.updates[0]).toMatchObject({ table: 'ai_index_jobs', values: expect.objectContaining({ status: 'skipped', last_error: 'module_disabled', locked_at: null }) })
     expect(db.updates[0].filters).toEqual([['id', 7], ['status', 'running']])
     expect(await createIndexJobModuleGate(fakeDb({ updateRows: [] }) as never).skip(job())).toBe(false)
     await expect(createIndexJobModuleGate(fakeDb({ updateError: { code: '42501' } }) as never).skip(job()))
@@ -131,6 +143,29 @@ describe('색인 잡의 범위와 skipped 쓰기', () => {
     const kept = await keepEnabledMutations(gate(state), [mutation(P, 'a'), mutation('other', 'b'), mutation(P, 'c')])
     expect(kept.map((item) => item.entityId)).toEqual(['a', 'c'])
     expect(state).toHaveBeenCalledTimes(2)
+  })
+
+  it('모르는(unknown) 프로젝트의 변경도 뺀다 — 스펙은 "꺼짐·모름 모두 뺀다"', async () => {
+    // spec §4.2 워커 행: 켜진 것만. unknown 은 큐에 넣으면 그 잡이 워커에서 CONFIG_UNAVAILABLE 로 죽는다.
+    const state = vi.fn(async (reference: { projectId: string | null }) => (
+      reference.projectId === P ? 'on' as const : reference.projectId === 'off-p' ? 'off' as const : 'unknown' as const
+    ))
+    const mutation = (projectId: string, entityId: string) => ({ operation: 'upsert' as const, projectId, domain: 'wbs' as const, entityType: 'wbs_item' as const, entityId })
+    const kept = await keepEnabledMutations(gate(state), [
+      mutation(P, 'on-entity'), mutation('off-p', 'off-entity'), mutation('unknown-p', 'unknown-entity'),
+    ])
+    expect(kept.map((item) => item.entityId)).toEqual(['on-entity'])
+    expect(state).toHaveBeenCalledTimes(3)
+  })
+
+  it('판정 예외는 unknown 으로 번역해 뺀다 — throw 로 새면 배치 전체가 죽는다', async () => {
+    const state = vi.fn(async (reference: { projectId: string | null }) => {
+      if (reference.projectId === P) return 'on' as const
+      throw new Error('down')
+    })
+    const mutation = (projectId: string, entityId: string) => ({ operation: 'upsert' as const, projectId, domain: 'wbs' as const, entityType: 'wbs_item' as const, entityId })
+    await expect(keepEnabledMutations(gate(state), [mutation(P, 'a'), mutation('bad', 'b')]))
+      .resolves.toEqual([expect.objectContaining({ entityId: 'a' })])
   })
 
   it('프로젝트 없는 회의록 변경은 회의록마다 한 번씩 판정한다', async () => {
@@ -228,5 +263,26 @@ describe('위키 잡', () => {
     expect(await processWikiProjectRebuildStep()).toEqual({ attempted: true, completed: false, finished: false })
     expect(db.updates[0].table).toBe('wiki_project_rebuild_jobs')
     expect(db.rpcCalls.map(([name]) => name)).toEqual(['claim_wiki_project_rebuild_step'])
+  })
+
+  it('재구성 단계의 설정을 모르면 CONFIG_UNAVAILABLE 로 실패시키고 회의록 잡을 건드리지 않는다', async () => {
+    // 두 축이 한 짝이다: `unknown` 일 때 (a) 재시도 예산을 태우는 사유가 MINUTE_JOB_NOT_DONE 이 아니라 CONFIG_UNAVAILABLE 이고,
+    // (b) `gate === 'run'` 가 아니므로 회의록 잡을 선점하지 않는다(이중 선점 1회 왕복 방지).
+    //   둘째가 없어도 최종 processError 는 같은 값이라 초록이었다 — 선점 횟수로만 갈린다.
+    const db = fakeDb({
+      rpc: {
+        claim_wiki_project_rebuild_step: { claimed_project_id: P, wiki_job_id: 11, finished: false },
+        finish_wiki_project_rebuild_step: { rebuild_status: 'running', cursor_advanced: false },
+      },
+    })
+    adminHolder.admin = db
+    vi.mocked(moduleState).mockResolvedValueOnce('unknown')
+    expect(await processWikiProjectRebuildStep()).toEqual({ attempted: true, completed: false, finished: false })
+    expect(db.rpcCalls).toContainEqual(['finish_wiki_project_rebuild_step', expect.objectContaining({
+      p_last_error: 'CONFIG_UNAVAILABLE',
+    })])
+    // 회의록 잡을 한 번도 선점하지 않았어야 한다.
+    expect(db.rpcCalls.filter(([name]) => name === 'claim_wiki_processing_job')).toHaveLength(0)
+    expect(db.updates).toHaveLength(0)
   })
 })

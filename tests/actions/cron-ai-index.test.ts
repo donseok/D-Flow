@@ -76,6 +76,9 @@ describe('GET /api/cron/ai-index', () => {
     vi.stubEnv('CHAT_V2_ENABLED', 'false')
     expect((await GET(request('Bearer topsecret'))).status).toBe(404)
     expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
+    // 404 는 admin 클라이언트를 만들기 **전에** 닫는다 — 플래그를 통과한 뒤 만들어도 잡을 선점하지 않는다.
+    // (chat/index/worker 라우트와 검증 세기를 맞춘다.)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
   it('service_role 클라이언트와 잡별 모듈 관문을 워커에 넘긴다', async () => {
