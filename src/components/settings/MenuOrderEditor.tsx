@@ -6,6 +6,7 @@ import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsComman
 import { NAV_GROUP_OF, NAV_ITEM_IDS, type NavGroupId, type NavItemId } from '@/lib/nav/ids'
 import type { NavMenuSetting } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
+import { ConfigStateNotice } from './ConfigStateNotice'
 
 const GROUPS: readonly { id: NavGroupId; label: string }[] = [
   { id: 'ws.main', label: '워크스페이스 · 기본' }, { id: 'ws.shared', label: '워크스페이스 · 협업' },
@@ -54,6 +55,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
   const [conflict, setConflict] = useState<{ revision: number; menu: NavMenuSetting | null } | null>(null)
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const dirty = needsRepair || !same(baseline, draft)
@@ -75,21 +77,23 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
     let result: SettingsCommandResult | null = null
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
-      setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null)
-      setNotice('메뉴 설정을 저장했습니다.'); router.refresh(); return
+      setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
+      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '메뉴 설정을 저장했습니다.'); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, menu: fromLatest(result.latest.values['navigation.menu']) })
-      setUncertainPatch(null); return
+      setUncertainPatch(null); setFieldError(null); return
     }
     if (result && (result.kind !== 'unavailable' || !result.retryable)) {
-      setError(result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error)
+      const field = result.kind === 'invalid' ? result.fieldErrors.find(e => e.key === 'navigation.menu') : undefined
+      setFieldError(field?.message ?? null)
+      setError(field ? null : (result.kind === 'invalid' ? (result.fieldErrors[0]?.message ?? result.error) : result.error))
       setUncertainPatch(null); return
     }
     try {
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
-        setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null)
+        setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
         setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재전송 */ }
@@ -99,14 +103,14 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
 
   function save() {
     if ((!dirty && !uncertainPatch) || badLabel) return
-    setError(null); setNotice(null)
+    setError(null); setFieldError(null); setNotice(null)
     const patch = uncertainPatch ?? { expectedRevision: baseRevision, commandId: newUuid(), set: { 'navigation.menu': draft }, unset: [] }
     startTransition(async () => submit(patch))
   }
 
   return <div className="space-y-5">
     <p className="text-xs leading-5 text-ink-muted">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다. 실제 메뉴 반영은 다음 셸 갱신부터 적용됩니다.</p>
-    {invalidReason && needsRepair && <p role="alert" className="text-xs text-delayed">설정 손상: {invalidReason}. 새 값을 저장해 복구하세요.</p>}
+    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-line p-3">
       <h3 className="mb-3 text-sm font-semibold text-ink">{group.label}</h3>
       <div className="space-y-2">
@@ -124,7 +128,8 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
         </div>)}
       </div>
     </section>)}
-    {badLabel && <p role="alert" className="text-xs text-delayed">{badLabel[0]}의 이름은 1~20자이며 꺾쇠를 쓸 수 없습니다.</p>}
+    {badLabel && <ConfigStateNotice kind="field" locale="ko" message={`${badLabel[0]}의 이름은 1~20자이며 꺾쇠를 쓸 수 없습니다.`} />}
+    {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>다른 사용자가 메뉴를 바꿨습니다.</strong>
       <p>내 순서: {draft.order.join(', ') || '기본 순서'}</p>
@@ -134,7 +139,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
         {conflict.menu && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.menu!); setBaseline(conflict.menu!); setDisplayOrder(ordered(conflict.menu!)); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
       </div>
     </div>}
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
+    {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
       {uncertainPatch ? '저장 결과 확인 및 재시도' : '메뉴 설정 저장'}
