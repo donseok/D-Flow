@@ -21,6 +21,8 @@ import { codeLines, walk } from './_walk'
 
 const CWD = process.cwd()
 const PAGES_ROOT = join(CWD, 'src/app/(app)/p/[projectId]')
+// 워크스페이스 설정 화면도 같은 이유로 본다(스펙 SP3a §7.1) — 레이아웃이 아니라 페이지가 자기 가드를 건다.
+const WORKSPACE_PAGES_ROOT = join(CWD, 'src/app/(app)/w/[slug]')
 
 /** service_role 에 닿지만 그 내용이 결과에 실리지 않는 로더 — 탐색을 여기서 끊는다. 한 줄 근거 필수. */
 const SAFE_LOADERS: Record<string, string> = {
@@ -147,7 +149,7 @@ function pageReport(abs: string) {
   return { symbols, gate, uses }
 }
 
-const pages = () => walk(PAGES_ROOT).filter((f) => f.endsWith('page.tsx')).sort()
+const pages = () => [...walk(PAGES_ROOT), ...walk(WORKSPACE_PAGES_ROOT)].filter((f) => f.endsWith('page.tsx')).sort()
 
 describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트', () => {
   it('service_role 원천을 쓰는 페이지는 그보다 앞 줄에 게이트가 있다', () => {
@@ -161,6 +163,11 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
       }
     }
     expect(violations).toEqual([])
+  })
+
+  it('검사 대상에 워크스페이스 설정 페이지가 들어 있다(루트를 잘못 좁히면 조용히 빠진다)', () => {
+    expect(pages().map(rel)).toContain('src/app/(app)/w/[slug]/settings/page.tsx')
+    expect(pages().map(rel)).toContain('src/app/(app)/p/[projectId]/settings/page.tsx')
   })
 
   it('분석이 알려진 원천을 잡는다 — 팀 캐시·admin 로더·서버 컴포넌트 경유', () => {

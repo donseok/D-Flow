@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { inspectBrandLogo } from '@/lib/settings/logoFile'
 
 const h = vi.hoisted(() => ({ guard: vi.fn(), adminFor: vi.fn(), upload: vi.fn() }))
@@ -51,5 +52,16 @@ describe('로고 파일 검증과 업로드', () => {
     h.upload.mockResolvedValue({ data: null, error: { message: 'offline' } })
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await uploadBrandLogo(WID, 'mark', file(png))).toMatchObject({ ok: false, error: expect.stringContaining('올리지 못했습니다') })
+  })
+})
+
+describe('로고는 <img> 로만 그린다(스펙 §5.4)', () => {
+  // 로고 바이트가 문서 안으로 들어가는 길을 막는다 — 업로드 검증을 통과한 이미지라도 마크업으로 풀어 넣지 않는다.
+  it.each([
+    'src/components/settings/LogoEditor.tsx',
+    'src/components/ui/BrandMark.tsx',
+    'src/app/(app)/projects/page.tsx',
+  ])('%s 에 dangerouslySetInnerHTML 이 없다', (file) => {
+    expect(readFileSync(file, 'utf8')).not.toContain('dangerouslySetInnerHTML')
   })
 })
