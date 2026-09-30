@@ -9,6 +9,7 @@ import { displayNameFrom } from '@/lib/domain/display-name'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import {
   DEFAULT_INVITE_DAYS, inviteStatus, canonicalInviteEmail, isAllowedInviteDomain, normalizeInviteDays,
   normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
@@ -285,7 +286,8 @@ export async function createProjectInvite(
   const url = `${origin}/invite/${token}`
   const row = toInviteRow(inserted as unknown as RawInvite, teamCodes, url, now)
   const mail = await sendInviteMail(admin, {
-    to: email, projectName: String(project.name ?? ''), inviterId: g.actor.userId, url, expiresAt,
+    to: email, projectName: String(project.name ?? ''), workspaceId: project.workspace_id as string,
+    inviterId: g.actor.userId, url, expiresAt,
     // 팀 이름은 코드와 동기(teams.name = code) — 팀 마스터의 코드를 그대로 싣는다.
     teamNames: teamCodes,
   })
@@ -341,9 +343,10 @@ async function hasAccount(admin: AdminClient, email: string): Promise<boolean | 
 /** 초대 메일 1통. 실패는 결과에 담아 올린다 — 초대 자체는 이미 유효하다. */
 async function sendInviteMail(
   admin: AdminClient,
-  i: { to: string; projectName: string; inviterId: string; url: string; expiresAt: string; teamNames: string[] },
+  i: { to: string; projectName: string; workspaceId: string; inviterId: string; url: string; expiresAt: string; teamNames: string[] },
 ): Promise<{ mailed: boolean; mailError?: string }> {
-  const transport = getTransport()
+  const branding = await loadDisplayBranding(i.workspaceId, admin)
+  const transport = getTransport(branding.mailFromName)
   if (!transport.ok) return { mailed: false, mailError: transport.error }
 
   // 초대한 사람의 이름·주소는 본문 한 줄과 Reply-To 에만 쓰인다. 못 읽어도 발송은 계속한다.
@@ -358,7 +361,8 @@ async function sendInviteMail(
   }
 
   const { subject, html, text } = renderInviteMail({
-    projectName: i.projectName, inviterName, url: i.url, expiresAt: i.expiresAt, teamNames: i.teamNames,
+    projectName: i.projectName, productName: branding.productName,
+    inviterName, url: i.url, expiresAt: i.expiresAt, teamNames: i.teamNames,
   })
   try {
     const { rejected } = await transport.send({

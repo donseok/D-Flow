@@ -22,6 +22,7 @@ import { getAiBrief } from '@/lib/data/aiBriefs'
 import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
 import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { valueOf } from '@/lib/settings/registry'
 import { seoulStamp } from '@/lib/domain/dates'
 
@@ -184,7 +185,7 @@ export async function GET(req: NextRequest) {
 
   // pptx는 번들된 템플릿(.pptx)의 slide2 표 셀만 교체 — 내용이 넘치면 동일 디자인의 연속 슬라이드 추가.
   const body = format === 'xlsx'
-    ? await buildReportWorkbook(model)
+    ? await buildReportWorkbook(model, (await loadDisplayBranding(cfgRes.cfg.workspaceId)).productName)
     : await fillWeeklyTemplate(buildWeeklyNarrative(model), model, extra ? { extra } : {})
 
   // 파일명: {프로젝트명}_{월기준 몇째주}_{기준일} (예: 샘플 프로젝트_7월1주차_2026-07-04)

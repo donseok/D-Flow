@@ -130,6 +130,7 @@ function uniqueEntryPath(basePath: string, used: Set<string>): string {
 export function createMinutesExportArchive(
   rows: MinuteExportRow[],
   exportedAt: Date = new Date(),
+  productName: string = BRAND.productName,
 ): { zip: JSZip; manifest: MinuteExportManifestEntry[] } {
   const stableRows = [...rows].sort(compareRows)
   const zip = new JSZip()
@@ -158,7 +159,7 @@ export function createMinutesExportArchive(
   }
 
   const readme = [
-    `${BRAND.productName} 회의록 전체 내보내기`,
+    `${productName} 회의록 전체 내보내기`,
     `생성 시각: ${exportedAt.toISOString()}`,
     `회의록 수: ${manifest.length}`,
     '',

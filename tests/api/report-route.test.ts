@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
   buildWeeklyReportModel: vi.fn(),
   buildReportWorkbook: vi.fn(),
+  loadDisplayBranding: vi.fn(),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
@@ -32,6 +33,7 @@ vi.mock('@/lib/report/weekly', async (importOriginal) => ({
   buildWeeklyReportModel: mocks.buildWeeklyReportModel,
 }))
 vi.mock('@/lib/report/excel', () => ({ buildReportWorkbook: mocks.buildReportWorkbook }))
+vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
 vi.mock('@/lib/report/narrative', () => ({ buildWeeklyNarrative: vi.fn() }))
 vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: mocks.fillWeeklyTemplate, fillSheetTemplate: vi.fn() }))
 vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: mocks.getWeeklySheet }))
@@ -65,6 +67,7 @@ beforeEach(() => {
   mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
   mocks.buildWeeklyReportModel.mockReturnValue({ meta: { weekTag: '9월4주차' } })
   mocks.buildReportWorkbook.mockResolvedValue(new ArrayBuffer(1))
+  mocks.loadDisplayBranding.mockResolvedValue({ productName: '한빛 플로우', mailFromName: '한빛 플로우' })
 })
 afterEach(() => vi.restoreAllMocks())
 // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
@@ -95,6 +98,11 @@ describe('GET /api/report — 명단 조회', () => {
 })
 
 describe('GET /api/report — 프로젝트 설정', () => {
+  it('엑셀 작성자는 프로젝트 워크스페이스 제품명을 쓴다', async () => {
+    expect((await GET(req())).status).toBe(200)
+    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith('ws-test')
+    expect(mocks.buildReportWorkbook).toHaveBeenCalledWith(expect.anything(), '한빛 플로우')
+  })
   it('설정 조회 실패 → 503(전체 500 이 아니다), 보고서를 만들지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))

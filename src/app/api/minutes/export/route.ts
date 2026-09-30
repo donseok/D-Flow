@@ -5,6 +5,9 @@ import { denyStatus } from '@/lib/authz/errors'
 import { requireSessionModule } from '@/lib/modules/gate'
 import { seoulYmd } from '@/lib/domain/dates'
 import { createServerClient } from '@/lib/supabase/server'
+import { getActor } from '@/lib/authz'
+import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import {
   createMinutesExportArchive,
   MINUTES_EXPORT_SOURCE_MAX_BYTES,
@@ -103,13 +106,17 @@ export async function GET() {
   // 전 회의록 ZIP 이라 대상 행이 없다 — 세션 유일 워크스페이스로 minutes 관문(P13). 첫 DB 접근 앞
   const mod = await requireSessionModule(null, 'minutes')
   if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
+  const actor = await getActor()
+  const sole = actor ? resolveSoleWorkspaceId(actor) : null
+  if (!sole?.ok) return jsonError('워크스페이스를 확인할 수 없습니다.', 403)
+  const { productName } = await loadDisplayBranding(sole.workspaceId)
 
   const exportedAt = new Date()
   try {
     const rows = await loadAllMinutes(exportedAt.toISOString())
     if (rows.length === 0) return jsonError('내려받을 회의록이 없습니다.', 404)
 
-    const { zip } = createMinutesExportArchive(rows, exportedAt)
+    const { zip } = createMinutesExportArchive(rows, exportedAt, productName)
     // 결과 Buffer를 한 번 더 만들지 않고 압축 결과를 스트림으로 응답한다.
     const nodeStream = zip.generateNodeStream({
       type: 'nodebuffer',
@@ -119,7 +126,7 @@ export async function GET() {
       platform: 'UNIX',
     })
     const stream = Readable.toWeb(nodeStream as unknown as Readable) as ReadableStream<Uint8Array>
-    const { utf8Name, fallbackName } = minutesExportFileNames(seoulYmd(exportedAt))
+    const { utf8Name, fallbackName } = minutesExportFileNames(seoulYmd(exportedAt), productName)
 
     return new Response(stream as unknown as BodyInit, {
       headers: {

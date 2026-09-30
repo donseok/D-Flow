@@ -7,6 +7,8 @@ import { requireModule } from '@/lib/modules/gate'
 import { classifyRecipients, MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 import { renderMeetingInvite, type InviteKind } from '@/lib/mail/meetingInvite'
 import { getTransport } from '@/lib/mail/transport'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import type { MeetingNotifyResult } from '@/lib/mail/outcome'
@@ -80,7 +82,12 @@ export async function notifyMeetingSaved(
   // 빈 To 로 SMTP 를 때리면 계정 평판만 깎인다.
   if (valid.length === 0) return { ok: true, sentTo: [], skipped }
 
-  const transport = getTransport()
+  let fromName: string | undefined
+  try {
+    const project = await getProjectConfig(found.projectId)
+    fromName = (await loadDisplayBranding(project.workspaceId)).mailFromName
+  } catch (error) { console.error('[notifyMeetingSaved] 브랜딩 조회 실패:', error) }
+  const transport = getTransport(fromName)
   if (!transport.ok) return { ok: false, error: transport.error, sentTo: [], skipped }
 
   const { subject, html, text } = renderMeetingInvite({

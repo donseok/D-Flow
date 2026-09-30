@@ -71,14 +71,14 @@ export function resolveSmtpSettings(env: Record<string, string | undefined>):
  * ok:false 를 낸다 — 로컬·Preview 에서 화면을 죽이지 않기 위해서다. `from` 은 이 모듈이 소유한다(호출자가 바꿀 수 없다).
  * env 는 호출 시점에 읽는다(fromName.ts 와 같은 관례). 오류의 키 이름은 서버 로그에만 — 반환 문구는 사용자에게 그대로 뜬다.
  */
-export function getTransport(): Transport {
+export function getTransport(workspaceFromName?: string): Transport {
   const r = resolveSmtpSettings(process.env)
   if (!r.ok) {
     if (r.kind === 'invalid') console.error('[mail] SMTP 설정 오류:', r.reason)
     return { ok: false, error: r.kind === 'unset' ? SMTP_NOT_CONFIGURED : SMTP_MISCONFIGURED }
   }
   const s = r.settings
-  const fromName = mailFromName()
+  const fromName = mailFromName(workspaceFromName)
   const tx = nodemailer.createTransport({
     host: s.host,
     port: s.port,

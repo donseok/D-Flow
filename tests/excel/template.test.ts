@@ -16,6 +16,12 @@ describe('wbs.xlsx 양식', () => {
     expect(aoa.length).toBe(TEMPLATE_ROWS.length + 1)
   })
 
+  it('워크스페이스 제품명을 작성법에 쓴다', () => {
+    const wb = XLSX.read(buildWbsTemplateWorkbook('한빛 플로우'), { type: 'array' })
+    const guide = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['작성법'], { header: 1 })
+    expect(JSON.stringify(guide)).toContain('진도는 한빛 플로우에서 관리합니다.')
+  })
+
   it('감지기가 아웃라인 계층·논리 열 전부·Holiday 를 잡고 confidence 가 전부 1.0', () => {
     const r = detectWorkbook(buf)
     expect(r.ok).toBe(true)

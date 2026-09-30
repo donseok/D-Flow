@@ -220,9 +220,9 @@ function buildWbsSheet(ws: Worksheet, model: WeeklyReportModel) {
 }
 
 /** 주간 공정보고 모델 → 보라 테마 2시트 xlsx 버퍼(공정보고 + WBS). */
-export async function buildReportWorkbook(model: WeeklyReportModel): Promise<ArrayBuffer> {
+export async function buildReportWorkbook(model: WeeklyReportModel, productName: string = BRAND.productName): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook()
-  wb.creator = BRAND.productName
+  wb.creator = productName
   wb.created = new Date(model.meta.today + 'T00:00:00Z')
 
   buildProcessSheet(wb.addWorksheet('1.공정보고', { views: [{ showGridLines: false }] }), model)

@@ -47,7 +47,7 @@ export const TEMPLATE_GUIDE: string[][] = [
   ['9', '예시 행은 지우고 실제 항목을 넣습니다. 행 수 제한은 없습니다.'],
 ]
 
-export function buildWbsTemplateWorkbook(): ArrayBuffer {
+export function buildWbsTemplateWorkbook(productName: string = BRAND.productName): ArrayBuffer {
   const ws = XLSX.utils.aoa_to_sheet([[...TEMPLATE_HEADER], ...TEMPLATE_ROWS], { cellDates: true })
   ws['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 14 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }]
   for (const ref of Object.keys(ws)) {
@@ -60,7 +60,10 @@ export function buildWbsTemplateWorkbook(): ArrayBuffer {
     const cell = hs[ref] as { t?: string; z?: string }
     if (!ref.startsWith('!') && cell.t === 'd') cell.z = 'yyyy-mm-dd'
   }
-  const gs = XLSX.utils.aoa_to_sheet(TEMPLATE_GUIDE)
+  const guide = TEMPLATE_GUIDE.map((row) => row[0] === '7'
+    ? [row[0], `실적% 는 비워 둡니다 — 진도는 ${productName}에서 관리합니다.`]
+    : row)
+  const gs = XLSX.utils.aoa_to_sheet(guide)
   gs['!cols'] = [{ wch: 4 }, { wch: 90 }]
 
   const wb = XLSX.utils.book_new()

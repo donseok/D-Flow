@@ -4,10 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   createServerClient: vi.fn(),
+  getActor: vi.fn(),
+  loadDisplayBranding: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
+vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor }))
+vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
 
 import { GET } from '@/app/api/minutes/export/route'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
@@ -93,6 +97,8 @@ describe('GET /api/minutes/export', () => {
     vi.clearAllMocks()
     vi.useRealTimers()
     mocks.getSession.mockResolvedValue({ id: 'user-1' })
+    mocks.getActor.mockResolvedValue({ workspaceRoles: new Map([['ws-1', 'member']]) })
+    mocks.loadDisplayBranding.mockResolvedValue({ productName: 'Acme PM', mailFromName: 'Acme PM' })
   })
   // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
   afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
@@ -216,6 +222,9 @@ describe('GET /api/minutes/export', () => {
     await expect(archive.file(minutePath)!.async('string')).resolves.toBe(source.body_md)
     expect(archive.file('_manifest.csv')).not.toBeNull()
     expect(archive.file('_README.txt')).not.toBeNull()
+    expect(decodeURIComponent(disposition)).toContain('Acme_PM_회의록_전체')
+    expect(await archive.file('_README.txt')!.async('string')).toContain('Acme PM 회의록 전체 내보내기')
+    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith('ws-1')
 
     const manifest = await archive.file('_manifest.csv')!.async('string')
     expect(manifest).toContain(source.id)

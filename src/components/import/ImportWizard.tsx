@@ -71,9 +71,9 @@ function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedA
   URL.revokeObjectURL(url)
 }
 
-/** wbs.xlsx 양식 — 프로젝트 무관 정적 파일(/api/import/template). 빈손인 사용자가 마법사가 100% 잡는 형식으로 시작하게. */
-async function downloadTemplate(toast: ReturnType<typeof useToast>['toast'], failedTitle: string) {
-  const res = await fetch('/api/import/template')
+/** wbs.xlsx 양식 — 프로젝트 워크스페이스의 제품명을 안내문에 넣어 내려받는다. */
+async function downloadTemplate(toast: ReturnType<typeof useToast>['toast'], failedTitle: string, projectId: string) {
+  const res = await fetch(`/api/import/template?projectId=${encodeURIComponent(projectId)}`)
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: string } | null
     toast({ title: failedTitle, description: err?.error, variant: 'error' })
@@ -294,7 +294,7 @@ export function ImportWizard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-ink-muted">{t('importWizard.templateDesc')}</p>
             <button type="button" className="btn btn-ghost shrink-0" disabled={state.busy}
-              onClick={() => void downloadTemplate(toast, t('importWizard.templateFailed'))}>
+              onClick={() => void downloadTemplate(toast, t('importWizard.templateFailed'), projectId)}>
               <Download className="h-4 w-4" />{t('importWizard.templateButton')}
             </button>
           </div>

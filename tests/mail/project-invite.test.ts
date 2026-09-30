@@ -15,6 +15,9 @@ function render(overrides: Partial<InviteMailInput> = {}) {
 }
 
 describe('renderInviteMail — 제목', () => {
+  it('워크스페이스 제품명을 제목에 쓴다', () => {
+    expect(render({ productName: '한빛 플로우' }).subject).toBe('[한빛 플로우] Acme 구축 프로젝트 초대')
+  })
   it('프로젝트명을 담은 고정 형식이다', () => {
     expect(render().subject).toBe(`[${BRAND.productName}] Acme 구축 프로젝트 초대`)
   })

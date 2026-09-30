@@ -31,6 +31,11 @@ const model = buildWeeklyReportModel(sampleItems, project, '2026-06-30', { gener
 const emptyModel = buildWeeklyReportModel([], { name: '빈 프로젝트' }, '2026-06-30', { teams: TEST_TEAMS })
 
 describe('buildReportWorkbook (보라 공정보고 2시트)', () => {
+  it('워크스페이스 제품명을 작성자로 기록한다', async () => {
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(await buildReportWorkbook(model, '한빛 플로우'))
+    expect(wb.creator).toBe('한빛 플로우')
+  })
   it('2개 시트(공정보고/WBS) — 프로그램개발현황 제외', async () => {
     const buf = await buildReportWorkbook(model)
     const wb = new ExcelJS.Workbook()

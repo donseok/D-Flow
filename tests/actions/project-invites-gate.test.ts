@@ -485,6 +485,18 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     send.mockResolvedValue({ rejected: [] })
   })
 
+  it('초대 제목과 발신 표시명에 워크스페이스 브랜딩을 쓴다', async () => {
+    const { client } = createClient({ settings: { data: wsRow({
+      'invites.allowed_domains': ['example.com'],
+      'branding.product_name': '한빛 플로우',
+      'branding.mail_from_name': '한빛 초대팀',
+    }), error: null } })
+    createAdminClient.mockReturnValue(client as never)
+    expect(await createProjectInvite(P1, VALID)).toMatchObject({ ok: true, mailed: true })
+    expect(getTransport).toHaveBeenCalledWith('한빛 초대팀')
+    expect(send.mock.calls[0]![0].subject).toContain('[한빛 플로우]')
+  })
+
   it('정상 발급: DB 에는 토큰 해시만 — 링크의 토큰을 해시하면 저장된 값과 같다', async () => {
     const { client, insert } = createClient()
     createAdminClient.mockReturnValue(client as never)

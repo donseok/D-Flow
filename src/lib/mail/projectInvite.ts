@@ -46,6 +46,7 @@ const NOTE_ONETIME = '이 링크는 1회용이며 이 메일 주소로만 사용
 const NOTE_IGNORE = '본인이 요청하지 않은 메일이면 무시하세요.'
 
 export interface InviteMailInput {
+  productName?: string
   projectName: string
   /** 알 수 없으면 null — 줄 자체를 만들지 않는다(빈 항목을 나열하지 않는다). */
   inviterName: string | null
@@ -63,7 +64,7 @@ export function renderInviteMail(i: InviteMailInput): { subject: string; html: s
   const inviter = i.inviterName?.trim() || null
   const expires = expiresLabel(i.expiresAt)
 
-  const subject = oneLine(`[${BRAND.productName}] ${projectName} 프로젝트 초대`)
+  const subject = oneLine(`[${i.productName ?? BRAND.productName}] ${projectName} 프로젝트 초대`)
 
   const teams = (i.teamNames ?? []).map(n => n.trim()).filter(Boolean)
 
