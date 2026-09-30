@@ -13,6 +13,7 @@ import { isProjectAdmin } from '@/lib/domain/authz'
 import { projectTeamRowsSync, workspaceTeamsForProjectSync } from '@/lib/teams/master'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
+import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
@@ -201,7 +202,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ── 기본 정보 ── */}
         <SectionCard
           id="project-general"
-          searchText="project name description start date end date 프로젝트 이름 설명 기간"
+          searchText="project name description start date end date 프로젝트 이름 설명 기간 마일스톤 키워드"
           eyebrow="CORE INFORMATION"
           title={t(locale, 'settings.coreInfoTitle')}
           icon={Info}
@@ -236,6 +237,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             <span className="tabular-nums">{project?.end_date ? fmtDate(project.end_date) : t(locale, 'settings.tbd')}</span>
           </InfoRow>
         </dl>
+        {pc.ok && <div className="mt-6 border-t border-line pt-5">
+          <MilestoneKeywordsEditor projectId={projectId} revision={pc.cfg.revision}
+            initial={pc.cfg.keys['core.milestone_keywords'].status === 'set' || pc.cfg.keys['core.milestone_keywords'].status === 'default' ? pc.cfg.keys['core.milestone_keywords'].value : []}
+            source={pc.cfg.keys['core.milestone_keywords'].status === 'set' ? '프로젝트 설정' : '제품 기본값'}
+            invalidReason={pc.cfg.keys['core.milestone_keywords'].status === 'invalid' ? pc.cfg.keys['core.milestone_keywords'].error : undefined} />
+        </div>}
         </SectionCard>
 
         <div>
