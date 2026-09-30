@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
+import { SettingsShell } from '@/components/settings/SettingsShell'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
@@ -190,10 +191,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         }
       />}
     >
+      <SettingsShell items={[
+        { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
+        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []), { id: 'project-status', label: '상태·승인' },
+        { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
+      ]}>
       <div className="space-y-5">
         {!pc.ok && <ConfigLoadError error={pc.error} locale={locale} />}
         {/* ── 기본 정보 ── */}
         <SectionCard
+          id="project-general"
+          searchText="project name description start date end date 프로젝트 이름 설명 기간"
           eyebrow="CORE INFORMATION"
           title={t(locale, 'settings.coreInfoTitle')}
           icon={Info}
@@ -230,8 +238,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </dl>
         </SectionCard>
 
-        <div id="project-modules" className="scroll-mt-24">
-        <SectionCard eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+        <div>
+        <SectionCard id="project-modules" searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
           {pc.ok && workspaceModules ? (() => {
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
@@ -254,6 +262,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
       {/* ── WBS 데이터 가져오기 / 내보내기 ── */}
         <SectionCard
+        searchText="wbs.excel_profile import export 데이터 가져오기 내보내기"
         eyebrow="DATA"
         title={t(locale, 'settings.importExportTitle')}
         icon={Upload}
@@ -283,6 +292,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
+        id="project-status"
+        searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"
         eyebrow="AGENT"
         title={t(locale, 'settings.agentTitle')}
         icon={Bot}
@@ -313,6 +324,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
       {/* ── AI 어시스턴트 의미검색 색인 ── */}
         <SectionCard
+        searchText="ai.enabled 색인 재색인"
         eyebrow="AI ASSISTANT"
         title={t(locale, 'settings.assistantTitle')}
         icon={Sparkles}
@@ -336,6 +348,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 서버 LLM 설정 (슈퍼유저 전용) ── */}
         {isSuperuser && llm && (
           <SectionCard
+            searchText="llm ai 모델 환경변수"
             eyebrow="AI ASSISTANT"
             title={t(locale, 'settings.llmTitle')}
             icon={Cpu}
@@ -360,6 +373,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}
         {isSuperuser && (
           <SectionCard
+            searchText="프로젝트 공개 범위 비공개"
             eyebrow="AUTHORIZATION"
             title={t(locale, 'settings.privacyTitle')}
             icon={Lock}
@@ -376,6 +390,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 권한·초대는 팀 구성 페이지로 이동(2026-08-20 화면 통합) — 길 잃지 않게 이정표만 남긴다 ── */}
         {isAdmin && (
           <SectionCard
+            searchText="권한 역할 멤버"
             eyebrow="AUTHORIZATION"
             title={locale === 'ko' ? '권한' : 'Roles'}
             icon={Shield}
@@ -396,6 +411,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 팀 관리 (관리자 이상) — 프로젝트 스코프 팀(0071). 전역 팀은 /admin/teams. ── */}
         {isAdmin && (
           <SectionCard
+            id="project-team"
+            searchText="팀 업무영역 담당"
             eyebrow="TEAMS"
             title={locale === 'ko' ? '팀 관리' : 'Teams'}
             icon={Users}
@@ -417,6 +434,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── WBS 단계 (관리자) — 라벨 배열이 곧 깊이. 축소 검증은 서버 액션이 한다. ── */}
         {isAdmin && labels && (
           <SectionCard
+            searchText="core.level_labels 단계 깊이 WBS"
             eyebrow="WBS"
             title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
             icon={ListTree}
@@ -434,6 +452,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
       {/* ── 일정 기준 및 공휴일 ── */}
         <SectionCard
+        id="project-calendar"
+        searchText="달력 기준일 공휴일 휴일"
         eyebrow="CALENDAR"
         title={t(locale, 'settings.calendarTitle')}
         icon={CalendarDays}
@@ -467,7 +487,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </SectionCard>
 
       {/* ── 프로젝트 상태 관리 (시각 전용) ── */}
-        <SectionCard eyebrow="STATUS POLICY" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
+        <SectionCard searchText="workflow.stage_credits 상태 정책 자동 동기화" eyebrow="STATUS POLICY" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
           {t(locale, 'settings.statusPolicyDesc')}
         </p>
@@ -504,10 +524,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         </div>
         </SectionCard>
-        <SectionCard eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
+        <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
           <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} />
         </SectionCard>
       </div>
+      </SettingsShell>
     </ProjectPageShell>
   )
 }

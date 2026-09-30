@@ -10,6 +10,7 @@ import { LogoEditor } from '@/components/settings/LogoEditor'
 import { AccentEditor } from '@/components/settings/AccentEditor'
 import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
+import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -53,7 +54,12 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <p className="eyebrow">Workspace settings</p>
         <h1 className="mt-1 text-2xl font-bold text-ink">{access.name} 설정</h1>
       </div>
-      <SectionCard eyebrow="일반" title="이름과 메일" icon={Palette}>
+      <SettingsShell items={[
+        { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
+        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-menu', label: '메뉴' },
+        { id: 'workspace-history', label: '기록' },
+      ]}>
+      <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
         <div className="space-y-6">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision}
             fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
@@ -65,7 +71,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             invalidReason={config.keys['branding.accent'].status === 'invalid' ? config.keys['branding.accent'].error : undefined} />
         </div>
       </SectionCard>
-      <SectionCard eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
+      <SectionCard id="workspace-modules" searchText="modules.allowed ai.enabled" eyebrow="모듈·AI" title="모듈 사용 범위" icon={Settings2}>
         <div className="space-y-5">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'ai.enabled')]} />
           {access.isSuperuser ? (
@@ -77,17 +83,18 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           )}
         </div>
       </SectionCard>
-      <SectionCard eyebrow="초대" title="초대 정책" icon={Mail}>
+      <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
         <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} fields={[field(config, 'invites.allowed_domains')]} />
       </SectionCard>
-      <SectionCard eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
+      <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
           initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
           invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
       </SectionCard>
-      <SectionCard eyebrow="기록" title="설정 변경 이력" icon={History}>
+      <SectionCard id="workspace-history" searchText="settings history revision 기록 이력" eyebrow="기록" title="설정 변경 이력" icon={History}>
         <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} />
       </SectionCard>
+      </SettingsShell>
     </div>
   )
 }
