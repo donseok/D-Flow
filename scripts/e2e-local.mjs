@@ -152,9 +152,15 @@ function session(label) {
    */
   async function action(pagePath, name, args) {
     const ref = ACTIONS[name]
-    const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'))
+    // next dev 가 메모리 감시로 재시작하면 매니페스트가 비는다 — 그 페이지를 다시 GET 해 컴파일·등록을 끝낸 뒤 읽는다(최대 3번).
     let found
-    try { found = findActionId(manifest, ref) } catch (e) { throw new Fail(`${e.message}(${pagePath} 를 먼저 GET 했는가)`) }
+    for (let attempt = 0; ; attempt++) {
+      try { found = findActionId(JSON.parse(readFileSync(MANIFEST, 'utf8')), ref); break } catch (e) {
+        if (attempt >= 3) throw new Fail(`${e.message}(${pagePath} 를 먼저 GET 했는가)`)
+        await http('GET', pagePath, { expect: [200, 404] })
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
     if (!found.workers.some((w) => w.endsWith(ref.worker))) {
       throw new Fail(`${name} 가 ${ref.worker} 에 묶여 있지 않다(${found.workers.join(', ')})`)
     }
