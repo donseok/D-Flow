@@ -12,7 +12,7 @@ import { isUuidLike } from '@/lib/domain/validate'
 import { adminFor, type AdminClient } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
 import type { ModuleId } from '@/lib/modules/defaults'
-import { agentsNewlyEnabled, syncAgentsModule } from '@/lib/modules/agentsSync'
+import { agentsNewlyEnabled, backfillWorkspaceAgentOrders, syncAgentsModule } from '@/lib/modules/agentsSync'
 import { moduleKeyRule } from '@/lib/modules/saveRule'
 import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
@@ -197,8 +197,11 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         // 저장은 됐다 — 재시도로는 동기화가 다시 돌지 않는다(같은 id 는 duplicate, 새 id 는 prev 에 이미 있어 '새로 켬'이 아니다). 계획 과제 11 과 다른 편차(retryable:false)
         console.error('[settings] 저장 뒤 동기화 실패', { scope: a.history, commandId, cause: after.error })
         a.revalidate()
+        const recovery = a.scope === 'workspace'
+          ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
+          : '에이전트 허브에서 중지 뒤 다시 켜세요.'
         return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false,
-          error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — 다시 저장해도 동기화되지 않습니다. 에이전트 허브에서 중지 뒤 다시 켜세요.` }
+          error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
       }
     }
     a.revalidate()
@@ -252,12 +255,13 @@ function projectAdapter(projectId: string): ScopeAdapter {
     validate: async (admin, next, { ws, cfg }, allowed) => validateProjectConfig(next, await loadProjectValidateDeps(admin, cfg!, ws, { allowed })),
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
-    afterApplied: async (admin, prev, set, actor) => {
+    afterApplied: async (_admin, prev, set, actor) => {
       if (!('modules.enabled' in set)) return { ok: true }
       const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
       const next = set['modules.enabled'] as ModuleId[]
       if (!agentsNewlyEnabled(prevEnabled, next)) return { ok: true }
-      const r = await syncAgentsModule(admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
+      // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
+      const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
       return r.ok ? { ok: true } : { ok: false, what: '에이전트 등록 동기화', error: r.error }
     },
     revalidate: () => revalidatePath(`/p/${projectId}`, 'layout'),
@@ -275,7 +279,14 @@ function workspaceAdapter(workspaceId: string): ScopeAdapter {
     validate: async (_admin, next) => validateWorkspaceConfig(next, { workspaceId }),
     rpc: (admin, x) => admin.rpc('apply_workspace_settings', { p_workspace_id: workspaceId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
-    afterApplied: async () => ({ ok: true }),
+    afterApplied: async (_admin, _prev, set, actor) => {
+      const allowed = set['modules.allowed'] as ModuleId[] | undefined
+      if (!allowed?.includes('agents')) return { ok: true }
+      // 허용 목록의 같은 값 재저장도 백필한다. RPC 적용 후 일부 프로젝트에서 실패한 경우의 복구 경로다.
+      // 저장 전 getWorkspaceConfig 와 다른 클라이언트로 모듈 판정 캐시를 새로 읽는다.
+      const r = await backfillWorkspaceAgentOrders(adminFor({ workspaceId }).admin, { workspaceId, actorUserId: actor.userId })
+      return r.ok ? { ok: true } : { ok: false, what: '에이전트 주문 백필', error: r.error }
+    },
     revalidate: () => revalidatePath('/', 'layout'),      // 워크스페이스 전역 키는 /p/* 에도 적용된다
   }
 }

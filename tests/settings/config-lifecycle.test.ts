@@ -177,6 +177,7 @@ describe('updateProjectSettings', () => {
     expect(r).toMatchObject({ ok: true, revision: 2 })
     expect(db.agentProjects).toEqual([{ enabled: true, project_id: PID, created_by: 'u-admin', note: '설정에서 켬' }])
     expect(h.backfill).toHaveBeenCalledTimes(1)
+    expect(h.backfill.mock.calls[0][0]).not.toBe(h.adminFor.mock.results[0].value.admin)
     h.backfill.mockResolvedValue({ ok: false, error: 'bf' })
     db.projects.get(PID)!.values['modules.enabled'] = ['kanban']; db.agentProjects = []
     h.revalidatePath.mockClear()
@@ -247,6 +248,20 @@ describe('updateProjectSettings', () => {
 })
 
 describe('updateWorkspaceSettings', () => {
+  it('agents 재허용 뒤 주문을 백필하고 같은 값 재저장으로 실패분을 재시도한다', async () => {
+    h.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: makeSuperuser({ userId: 'u-su' }) })
+    db.workspaces.get(WID)!.values['modules.allowed'] = ['kanban']
+    db.projects.get(PID)!.values['modules.enabled'] = ['kanban', 'agents']
+    h.backfill.mockResolvedValueOnce({ ok: false, error: 'queue unavailable' })
+    const first = await updateWorkspaceSettings(WID, patch({ set: { 'modules.allowed': ['kanban', 'agents'] } }))
+    expect(first).toMatchObject({ ok: false, kind: 'unavailable', retryable: false, error: expect.stringContaining('같은 modules.allowed 값을 새 명령으로 다시 저장') })
+    expect(db.workspaces.get(WID)!.values['modules.allowed']).toEqual(['kanban', 'agents'])
+    expect(h.backfill).toHaveBeenCalledWith(expect.anything(), { projectId: PID, actorUserId: 'u-su' })
+    expect(h.backfill.mock.calls[0][0]).not.toBe(h.adminFor.mock.results[0].value.admin)
+    const retry = await updateWorkspaceSettings(WID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd07', set: { 'modules.allowed': ['kanban', 'agents'] } }))
+    expect(retry).toMatchObject({ ok: true, kind: 'applied', revision: 2 })
+    expect(h.backfill).toHaveBeenCalledTimes(2)
+  })
   it('platform_admin 키(modules.allowed)는 슈퍼유저만 — 워크스페이스 관리자는 ERR_DENIED', async () => {
     const r = await updateWorkspaceSettings(WID, patch({ set: { 'modules.allowed': ['kanban'] } }))
     expect(r).toMatchObject({ ok: false, kind: 'denied', code: expect.stringContaining('권한') })

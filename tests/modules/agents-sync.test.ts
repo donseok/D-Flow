@@ -1,8 +1,9 @@
 // agentsSync(스펙 §4.4) — agents 를 더하면 agent_projects insert/enable + backfillProjectOrders, 빼면 무변경, 실패는 오류.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FakeSettingsDb } from '../helpers/fakeSettingsDb'
 const mocks = vi.hoisted(() => ({ backfillProjectOrders: vi.fn() }))
 vi.mock('@/lib/agent/ensureOrder', () => ({ backfillProjectOrders: mocks.backfillProjectOrders }))
-import { agentsNewlyEnabled, syncAgentsModule } from '@/lib/modules/agentsSync'
+import { agentsNewlyEnabled, backfillWorkspaceAgentOrders, syncAgentsModule } from '@/lib/modules/agentsSync'
 
 const PID = 'p1', U = 'u1'
 function fakeAdmin(existing: { enabled: boolean } | null, opts: { selectError?: string; insertError?: string; updateError?: string } = {}) {
@@ -60,5 +61,36 @@ describe('syncAgentsModule', () => {
     expect(await syncAgentsModule(fakeAdmin({ enabled: false }, { updateError: 'upd' }).admin, { projectId: PID, actorUserId: U, prevEnabled: [], nextEnabled: ['agents'] })).toEqual({ ok: false, error: '에이전트 등록 갱신 실패: upd' })
     mocks.backfillProjectOrders.mockResolvedValue({ ok: false, error: 'bf' })
     expect(await syncAgentsModule(fakeAdmin({ enabled: true }).admin, { projectId: PID, actorUserId: U, prevEnabled: [], nextEnabled: ['agents'] })).toEqual({ ok: false, error: '주문 백필 실패: bf' })
+  })
+})
+
+describe('backfillWorkspaceAgentOrders', () => {
+  it('워크스페이스의 프로젝트를 페이지 끝까지 훑고 다른 워크스페이스는 건드리지 않는다', async () => {
+    const db = new FakeSettingsDb()
+    const wid = '00000000-0000-4000-8000-00000000bb01'
+    for (let n = 1; n <= 201; n++) db.addProject({
+      id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+      workspaceId: wid, values: {},
+    })
+    db.addProject({ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', workspaceId: 'other', values: {} })
+    const result = await backfillWorkspaceAgentOrders(db.client() as never, { workspaceId: wid, actorUserId: U })
+    expect(result).toEqual({ ok: true, created: 402 })
+    expect(mocks.backfillProjectOrders).toHaveBeenCalledTimes(201)
+    expect(mocks.backfillProjectOrders).not.toHaveBeenCalledWith(expect.anything(), { projectId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', actorUserId: U })
+  })
+
+  it('목록 조회나 백필 실패를 성공으로 위장하지 않는다', async () => {
+    const db = new FakeSettingsDb().addProject({ id: PID, workspaceId: 'w1', values: {} })
+    db.failTable = 'projects'
+    expect(await backfillWorkspaceAgentOrders(db.client() as never, { workspaceId: 'w1', actorUserId: U }))
+      .toEqual({ ok: false, error: '프로젝트 목록 조회 실패: fake failure: projects' })
+    expect(mocks.backfillProjectOrders).not.toHaveBeenCalled()
+    db.failTable = null
+    mocks.backfillProjectOrders.mockResolvedValueOnce({ ok: false, error: 'failed' })
+    expect(await backfillWorkspaceAgentOrders(db.client() as never, { workspaceId: 'w1', actorUserId: U }))
+      .toEqual({ ok: false, error: 'p1 주문 백필 실패: failed' })
+    mocks.backfillProjectOrders.mockResolvedValueOnce({ ok: true, created: 0, failed: ['wbs-1'] })
+    expect(await backfillWorkspaceAgentOrders(db.client() as never, { workspaceId: 'w1', actorUserId: U }))
+      .toEqual({ ok: false, error: 'p1 주문 1건 백필 실패' })
   })
 })
