@@ -86,7 +86,6 @@ const ACTIONS = {
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
-  setAgentProjectEnabled: { filename: 'src/app/actions/agentWork.ts', exportedName: 'setAgentProjectEnabled', worker: '/p/[projectId]/settings/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
 }
 
@@ -763,7 +762,10 @@ async function main() {
 
   // 21. agent_projects 행이 켜진 채 agents 모듈만 끈 상태를 먼저 확인해 두 원천 AND 를 증명한다.
   const agentRow = async () => rows('agent_projects', await svc.from('agent_projects').select('enabled').eq('project_id', A.id))[0]?.enabled ?? null
-  mustOk('setAgentProjectEnabled(켜기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, true])).result)
+  // 옛 토글(setAgentProjectEnabled)은 Phase C 에서 지워졌다 — 켜기·끄기는 모듈 편집기(modules.enabled 의 agents)가 한 길이다.
+  // 켜기는 agent_projects 행을 만들거나 enabled 로 되돌리고, 끄기는 행을 건드리지 않는다(agentsSync.ts).
+  const withAgents = (enabled) => (enabled.includes('agents') ? enabled : [...enabled, 'agents'])
+  await setProjectModules('agents 켜기', withAgents)
   await admin.http('GET', '/account')
   const tokenResult = await admin.action('/account', 'createAgentToken', [{ name: `e2e-${randomUUID().slice(0, 8)}`, projectId: null, scopes: ['work:read'], expiresDays: 1 }])
   mustOk('createAgentToken', tokenResult.result)
@@ -780,17 +782,17 @@ async function main() {
   agents.rowAfterModuleOff = await agentRow()
   agents.meAfterModuleOff = meHas(await agentApi('/api/v1/agent/me', 200))
   agents.structureAfterModuleOff = { status: 404, body: await agentApi(`/api/v1/wbs/structure?project_id=${A.id}`, 404) }
-  mustOk('setAgentProjectEnabled(다시 켜기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, true])).result)
+  await setProjectModules('agents 다시 켜기', withAgents)
   agents.meAfterToggleOn = meHas(await agentApi('/api/v1/agent/me', 200))
   agents.enabledAfterToggleOn = (await projectModules()).enabled
-  mustOk('setAgentProjectEnabled(끄기)', (await admin.action(`/p/${A.id}/settings`, 'setAgentProjectEnabled', [A.id, false])).result)
+  await setProjectModules('agents 끄기(모듈 편집기)', (enabled) => enabled.filter((id) => id !== 'agents'))
   agents.rowAfterToggleOff = await agentRow()
   agents.enabledAfterToggleOff = (await projectModules()).enabled
   agents.meAfterToggleOff = meHas(await agentApi('/api/v1/agent/me', 200))
   step('module-agents-off', agents,
     !agents.meBefore || agents.enabledAfterModuleOff.includes('agents') || agents.rowAfterModuleOff !== true || agents.meAfterModuleOff
       || !agents.meAfterToggleOn || !agents.enabledAfterToggleOn.includes('agents')
-      || agents.rowAfterToggleOff !== false || agents.enabledAfterToggleOff.includes('agents') || agents.meAfterToggleOff
+      || agents.rowAfterToggleOff !== true || agents.enabledAfterToggleOff.includes('agents') || agents.meAfterToggleOff
       ? `agents 관문: ${JSON.stringify(agents)}` : undefined)
 
   // 22. 회의록 연동 허용을 빼면 업로드 계열 API 는 409 이고, 다른 워크스페이스는 그대로 열린다.
