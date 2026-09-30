@@ -103,13 +103,15 @@ describe('StageCreditSlider', () => {
     expect(refresh).not.toHaveBeenCalled()
   })
 
-  it('충돌(conflict)이면 충돌 문구를 보이고 최신 값을 다시 읽는다', async () => {
+  it('충돌(conflict)이면 내 값과 최신 값을 비교하고 선택 전 저장을 막는다', async () => {
     updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
       latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['workflow.stage_credits'], retryable: false })
     await mount()
     await type(input('rw'), '60')
     await act(async () => { saveBtn()!.click() })
     expect(container.querySelector('[data-credit-error]')?.textContent).toBe(ERR_CONFIG_CONFLICT)
+    expect(container.textContent).toContain('내 값')
+    expect(saveBtn()?.disabled).toBe(true)
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
@@ -130,6 +132,7 @@ describe('StageCreditSlider', () => {
     await act(async () => { saveBtn()!.click() })
     await type(input('rw'), '65')
     await act(async () => { saveBtn()!.click() })
+    act(() => Array.from(container.querySelectorAll('button')).find(button => button.textContent === '내 값 다시 적용')!.click())
     await act(async () => { saveBtn()!.click() })
     expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 6, 9])
   })

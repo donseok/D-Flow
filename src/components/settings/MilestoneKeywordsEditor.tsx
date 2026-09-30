@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
+import { ConflictCompare } from './ConflictCompare'
 
 const lines = (text: string) => text.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
 const display = (values: readonly string[]) => values.join('\n')
@@ -74,15 +75,11 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     <textarea id="milestone-keywords" className="input min-h-28 w-full text-sm" value={text}
       disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
     <p className="text-[11px] text-ink-subtle">저장 시 소문자로 바뀝니다.</p>
-    {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-      <strong>다른 사용자가 키워드를 바꿨습니다.</strong>
-      <p>내 값: {lines(text).join(', ') || '없음'}</p>
-      <p>최신 값: {conflict.latest?.join(', ') ?? '설정 손상'}</p>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setConflict(null) }}>내 값 다시 적용</button>
-        {conflict.latest && <button type="button" className="btn btn-ghost" onClick={() => { const next = display(conflict.latest!); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setConflict(null) }}>최신 값 사용</button>}
-      </div>
-    </div>}
+    {conflict && <ConflictCompare rows={[{ key: 'keywords', label: '마일스톤 키워드',
+      mine: lines(text).join(', '), latest: conflict.latest?.join(', ') ?? '설정 손상',
+    }]} latestAvailable={conflict.latest !== null}
+      onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setConflict(null) }}
+      onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setConflict(null) }} />}
     {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>

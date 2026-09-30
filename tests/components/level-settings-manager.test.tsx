@@ -89,13 +89,15 @@ describe('LevelSettingsManager', () => {
     expect(refresh).not.toHaveBeenCalled()
   })
 
-  it('충돌(conflict)이면 충돌 문구를 보이고 최신 값을 다시 읽는다', async () => {
+  it('충돌(conflict)이면 내 초안과 최신 값을 비교하고 선택 전 저장을 막는다', async () => {
     updateProjectSettings.mockResolvedValue({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: ERR_CONFIG_CONFLICT,
-      latest: { revision: 2, values: {}, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
+      latest: { revision: 2, values: { 'core.level_labels': ['Latest', 'Task'] }, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
     render(['Phase', 'Task'])
     const saveBtn = container.querySelector<HTMLButtonElement>('button[data-save-levels]')!
     await act(async () => { saveBtn.click() })
     expect(container.textContent).toContain(ERR_CONFIG_CONFLICT)
+    expect(container.textContent).toContain('Latest → Task')
+    expect(saveBtn.disabled).toBe(true)
     expect(refresh).toHaveBeenCalled()
   })
 
@@ -136,6 +138,7 @@ describe('LevelSettingsManager', () => {
       latest: { revision: 9, values: {}, invalidKeys: [] }, changedKeys: ['core.level_labels'], retryable: false })
     render(['Phase', 'Task'], 5)
     await clickSave()
+    act(() => Array.from(container.querySelectorAll('button')).find(button => button.textContent === '내 값 다시 적용')!.click())
     await clickSave()
     expect(updateProjectSettings.mock.calls.map((c) => (c[1] as { expectedRevision: number }).expectedRevision)).toEqual([5, 9])
   })

@@ -9,6 +9,7 @@ import { Plus, X } from 'lucide-react'
 import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
+import { ConflictCompare } from './ConflictCompare'
 
 export function messageOf(r: SettingsCommandResult): string | null {
   if (r.ok) return null
@@ -27,15 +28,25 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
   // 자기 저장 성공·충돌 때만 올린다(충돌 뒤 다시 저장하면 알린 뒤의 덮어쓰기 — 영구 충돌에 갇히지 않는다). key 재마운트는 충돌 문구를 지워 쓰지 않는다
   const [base, setBase] = useState(revision)
   const [error, setError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<{ revision: number; latest: string[] | null } | null>(null)
   const [pending, startTransition] = useTransition()
 
   function save() {
+    if (conflict) return
     setError(null)
     startTransition(async () => {
       const r = await updateProjectSettings(projectId, {
         expectedRevision: base, commandId: newUuid(), set: { 'core.level_labels': labels }, unset: [],
       })
-      if (!r.ok) { setError(messageOf(r)); if (r.kind === 'conflict') { setBase(r.latest.revision); router.refresh() } return }
+      if (!r.ok) {
+        setError(messageOf(r))
+        if (r.kind === 'conflict') {
+          const value = r.latest.values['core.level_labels']
+          setConflict({ revision: r.latest.revision, latest: r.latest.invalidKeys.includes('core.level_labels') ? null : Array.isArray(value) ? value as string[] : null })
+          router.refresh()
+        }
+        return
+      }
       setBase(r.revision)
       router.refresh()
     })
@@ -81,10 +92,14 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
             <Plus className="h-4 w-4" /> 단계 추가
           </button>
         )}
-        <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending}>
+        <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
           저장
         </button>
       </div>
+      {conflict && <ConflictCompare rows={[{ key: 'core.level_labels', label: 'WBS 단계', mine: labels.join(' → '), latest: conflict.latest?.join(' → ') ?? '설정 손상' }]}
+        latestAvailable={conflict.latest !== null}
+        onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
+        onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
       {error && <p role="alert" className="text-xs text-delayed">{error}</p>}
     </div>
   )

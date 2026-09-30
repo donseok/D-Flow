@@ -56,7 +56,8 @@ describe('WorkspaceFieldsEditor', () => {
     update.mockResolvedValueOnce({ ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId: 'c', error: '충돌',
       latest: { revision: 8, values: { 'branding.product_name': 'Other' }, invalidKeys: [] }, changedKeys: ['branding.product_name'], retryable: false })
     render(); change('branding.product_name', 'Mine'); await click('저장')
-    expect(host.textContent).toContain('내 값: Mine / 최신 값: Other')
+    expect(host.textContent).toContain('내 값Mine')
+    expect(host.textContent).toContain('최신 값Other')
     expect(update).toHaveBeenCalledTimes(1)
     await click('내 값 다시 적용'); await click('저장')
     expect(update).toHaveBeenCalledWith('ws', expect.objectContaining({ expectedRevision: 8, set: { 'branding.product_name': 'Mine' } }))

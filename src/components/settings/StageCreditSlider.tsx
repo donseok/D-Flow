@@ -13,6 +13,7 @@ import { updateProjectSettings, type SettingsCommandResult } from '@/app/actions
 import { newUuid } from '@/lib/domain/uuid'
 import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
+import { ConflictCompare } from './ConflictCompare'
 import {
   CREDIT_GAP, CREDIT_KEYS, CREDIT_STEP, DEFAULT_STAGE_CREDITS, clampCredit, validateStageCredits,
   type CreditKey, type CreditTable, type StageCredits,
@@ -87,6 +88,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const [base, setBase] = useState(revision)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<{ revision: number; latest: StageCredits | null } | null>(null)
   // 현재 위치 — 트랙 채움과 ◆ 표시가 따라간다. 미리보기 행을 누르거나 핸들을 잡으면 바뀐다.
   const [cursor, setCursor] = useState<Cursor>('rw')
   const [manual, setManual] = useState(50)
@@ -137,6 +139,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     setValue(key, next)
   }
   function save() {
+    if (conflict) return
     const v = validateStageCredits({ default: table })
     if (!v.ok) { setError(v.error); return }
     setError(null)
@@ -144,7 +147,15 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
       const r = await updateProjectSettings(projectId, {
         expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [],
       })
-      if (!r.ok) { setError(messageOf(r) ?? t('settings.actionFailed')); if (r.kind === 'conflict') { setBase(r.latest.revision); router.refresh() } return }
+      if (!r.ok) {
+        setError(messageOf(r) ?? t('settings.actionFailed'))
+        if (r.kind === 'conflict') {
+          const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'])
+          setConflict({ revision: r.latest.revision, latest: parsed.ok ? parsed.credits : null })
+          router.refresh()
+        }
+        return
+      }
       setBase(r.revision)
       setDirty(false)
       setSaved(true)
@@ -359,12 +370,18 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</span>
         {editable && (
-          <button type="button" data-credit-save onClick={save} disabled={pending || !dirty}
+          <button type="button" data-credit-save onClick={save} disabled={pending || !dirty || !!conflict}
             className="btn btn-primary ml-auto h-8 px-3 text-xs">
             {t('settings.creditsSave')}
           </button>
         )}
       </div>
+      {conflict && <ConflictCompare rows={[{ key: 'workflow.stage_credits', label: '단계 실적 크레딧',
+        mine: CREDIT_KEYS.map(key => `${key.toUpperCase()} ${table[key]}`).join(' · '),
+        latest: conflict.latest ? CREDIT_KEYS.map(key => `${key.toUpperCase()} ${conflict.latest!.default[key]}`).join(' · ') : '설정 손상',
+      }]} latestAvailable={conflict.latest !== null}
+        onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
+        onLatest={() => { if (conflict.latest) setTable({ ...conflict.latest.default }); setBase(conflict.revision); setDirty(false); setConflict(null); setError(null) }} />}
       {saved && <p data-credit-saved role="status" className="text-xs text-done">{t('settings.creditsSaved')}</p>}
       {error && <p data-credit-error role="alert" className="text-xs text-delayed">{error}</p>}
     </div>

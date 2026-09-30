@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
+import { ConflictCompare } from './ConflictCompare'
 
 export type SimpleWorkspaceKey = 'ai.enabled' | 'invites.allowed_domains' | 'branding.product_name' | 'branding.mail_from_name'
 export interface WorkspaceField {
@@ -120,14 +121,9 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: { works
             maxLength={40} disabled={pending || !!uncertainPatch} onChange={e => setDraft({ ...draft, [field.key]: e.target.value })} />}
       <p className="text-[11px] text-ink-subtle">{field.key}</p>
     </div>)}
-    {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-      <strong>다른 사용자가 설정을 바꿨습니다.</strong>
-      {changed.map(f => <p key={f.key}>{f.label} — 내 값: {String(draft[f.key]) || '없음'} / 최신 값: {conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])) || '없음'}</p>)}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost" onClick={chooseMine}>내 값 다시 적용</button>
-        <button type="button" className="btn btn-ghost" onClick={chooseLatest}>최신 값 사용</button>
-      </div>
-    </div>}
+    {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
+      mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),
+    }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
     {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     <div className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-1 p-3 shadow-sm">
