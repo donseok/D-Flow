@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { isUuidLike } from '@/lib/domain/validate'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
   if (!(await getSession())) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
   const projectId = new URL(request.url).searchParams.get('projectId')
   let productName: string | undefined
-  if (projectId) {
+  if (projectId && isUuidLike(projectId)) {
     try {
       const project = await getProjectConfig(projectId)
       productName = (await loadDisplayBranding(project.workspaceId)).productName
