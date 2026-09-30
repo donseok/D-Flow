@@ -184,7 +184,7 @@ describe('updateProjectSettings', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const f = await updateProjectSettings(PID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd02', set: { 'modules.enabled': ['kanban', 'agents'] } }))
     // 같은 id 재전송은 duplicate 라 동기화를 건너뛰고, 새 id 면 prev 에 agents 가 있어 동기화 조건이 거짓이다 — 재시도는 지킬 수 없는 약속
-    expect(f).toEqual({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: '00000000-0000-4000-8000-00000000dd02', retryable: false,
+    expect(f).toEqual({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: '00000000-0000-4000-8000-00000000dd02', retryable: false, appliedRevision: 3,
       error: expect.stringContaining('revision 3 으로 저장됐지만') })
     expect(!f.ok && f.error.startsWith(ERR_CONFIG_UNAVAILABLE)).toBe(false)
     expect(h.revalidatePath).toHaveBeenCalledTimes(1)                     // 저장은 됐다 — 화면이 새 값을 보게

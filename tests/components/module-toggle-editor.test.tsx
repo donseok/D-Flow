@@ -56,6 +56,23 @@ describe('ModuleToggleEditor', () => {
     await click('내 값 다시 검토'); await click('변경 내용 검토')
     expect(preview).toHaveBeenCalledTimes(2)
   })
+  it('같은 문서의 다른 편집기를 먼저 저장해 revision 만 올랐다면 충돌이 아니다', async () => {
+    preview.mockResolvedValueOnce({ ok: true, revision: 6, before: ['agents', 'kanban'], impact: { removed: [{ moduleId: 'agents', dataCount: 4, dataLabel: '에이전트 작업' }] } })
+    toggle('agents'); await click('변경 내용 검토')
+    expect(host.textContent).not.toContain('다른 사용자가')
+    await click('변경 저장')
+    expect(update).toHaveBeenCalledWith('p', expect.objectContaining({ expectedRevision: 6, set: { 'modules.enabled': ['kanban'] } }))
+  })
+  it('저장은 됐지만 에이전트 동기화가 실패하면 그 값을 기준으로 채택해 안내된 껐다 켜기를 저장할 수 있다', async () => {
+    update.mockResolvedValueOnce({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: 'c1', retryable: false, appliedRevision: 4,
+      error: '설정은 revision 4 으로 저장됐지만 에이전트 등록 동기화에 실패했습니다 — 프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.' })
+    toggle('위키'); await click('변경 내용 검토'); await click('변경 저장')
+    expect(host.textContent).toContain('동기화에 실패했습니다')
+    expect(refresh).toHaveBeenCalledOnce()
+    toggle('위키')                                     // 안내대로 끈다 — 기준이 저장값이라 dirty 가 된다
+    const review = [...host.querySelectorAll('button')].find(x => x.textContent?.includes('변경 내용 검토'))!
+    expect(review.disabled).toBe(false)
+  })
   it('필수 프로젝트 모듈 설정 누락을 목록 자리에서 알린다', () => {
     act(() => root.render(<ModuleToggleEditor key="missing" projectId="p" revision={3} initialEnabled={null} requiredMissing options={options} />))
     expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.enabled')

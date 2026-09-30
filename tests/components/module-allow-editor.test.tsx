@@ -66,6 +66,34 @@ describe('ModuleAllowEditor', () => {
     expect(preview).toHaveBeenCalledTimes(2)
   })
 
+  it('같은 문서의 다른 편집기를 먼저 저장해 revision 만 올랐다면 충돌이 아니다', async () => {
+    preview.mockResolvedValueOnce({ ok: true, revision: 4, before: ['kanban'], impact: { removed: [{ moduleId: 'kanban', projectCount: 2 }], affectedProjects: 2 } })
+    toggle('kanban')
+    await click('변경 내용 검토')
+    expect(host.textContent).not.toContain('다른 사용자가')
+    expect(host.textContent).toContain('영향받는 프로젝트: 2개')
+    await click('변경 저장')
+    expect(update).toHaveBeenCalledWith('ws', expect.objectContaining({ expectedRevision: 4, set: { 'modules.allowed': [] } }))
+  })
+
+  it('저장은 됐지만 백필이 실패하면 그 revision 을 채택하고 같은 값을 새 명령으로 다시 저장할 수 있다', async () => {
+    update.mockResolvedValueOnce({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId: 'c1', retryable: false, appliedRevision: 2,
+      error: '설정은 revision 2 으로 저장됐지만 에이전트 주문 백필에 실패했습니다' })
+    toggle('agents')
+    await click('변경 내용 검토'); await click('변경 저장')
+    expect(host.textContent).toContain('백필에 실패했습니다')
+    preview.mockResolvedValueOnce({ ok: true, revision: 2, before: ['kanban', 'agents'], impact: { removed: [], affectedProjects: 0 } })
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(button('변경 내용 검토').disabled).toBe(false)
+    await click('변경 내용 검토')
+    expect(host.textContent).not.toContain('다른 사용자가')
+    await click('변경 저장')
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(update.mock.calls[1][1]).toMatchObject({ expectedRevision: 2, set: { 'modules.allowed': ['kanban', 'agents'] } })
+    expect(update.mock.calls[1][1].commandId).not.toBe(update.mock.calls[0][1].commandId)
+    expect(button('변경 내용 검토').disabled).toBe(true)
+  })
+
   it('응답 유실 뒤 결과가 불명이면 같은 commandId와 패치를 다시 보낸다', async () => {
     update.mockRejectedValueOnce(new Error('network')).mockRejectedValueOnce(new Error('network'))
     outcome.mockResolvedValue({ ok: true, outcome: { status: 'unknown' } })
@@ -81,6 +109,7 @@ describe('ModuleAllowEditor', () => {
   })
 
   it('필수 허용 목록 누락을 표시하고 저장 후 복구 안내를 숨긴다', async () => {
+    preview.mockResolvedValueOnce({ ok: true, revision: 1, before: null, impact: null })      // 저장값이 없으면 서버도 before 를 null 로 낸다
     act(() => root.render(<ModuleAllowEditor key="missing" workspaceId="ws" initialAllowed={null} requiredMissing revision={1} />))
     expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.allowed')
     await click('변경 내용 검토')

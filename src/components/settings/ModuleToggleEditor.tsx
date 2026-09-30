@@ -50,7 +50,10 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
       try { result = await previewProjectSettingsImpact(projectId, selected) }
       catch { setError('변경 영향을 확인하지 못했습니다. 다시 시도하세요.'); return }
       if (!result.ok) { setError(result.error); return }
-      if (result.revision !== baseRevision) { setConflict({ revision: result.revision, enabled: result.before }); return }
+      // 충돌은 문서 revision 이 아니라 이 키의 값으로 본다 — 같은 문서의 다른 편집기를 먼저 저장해도 revision 만 오른다.
+      const latestSame = result.before === null ? needsRepair : sameIds(result.before, baseline)
+      if (!latestSame) { setConflict({ revision: result.revision, enabled: result.before }); return }
+      setBaseRevision(result.revision)
       setReview(result)
     })
   }
@@ -70,6 +73,11 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
     }
     if (result && (result.kind !== 'unavailable' || !result.retryable)) {
       setReview(null); setUncertainPatch(null)
+      if (result.kind === 'unavailable' && result.appliedRevision !== undefined) {
+        // 값은 저장됐다 — 그 revision 을 기준으로 채택해야 안내된 복구(껐다 다시 켜기)가 저장 가능하다
+        setBaseline(selected); setBaseRevision(result.appliedRevision); setNeedsRepair(false)
+        setError(result.error); router.refresh(); return
+      }
       setFieldError(result.kind === 'invalid' ? (result.fieldErrors.find(e => e.key === 'modules.enabled')?.message ?? null) : null)
       setError(result.kind === 'invalid' && result.fieldErrors.some(e => e.key === 'modules.enabled') ? null : result.error)
       return

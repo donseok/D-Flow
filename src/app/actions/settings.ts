@@ -38,7 +38,8 @@ export type SettingsCommandResult =
       latest: { revision: number; values: Partial<Record<SettingKey, unknown>>; invalidKeys: SettingKey[] }; changedKeys: SettingKey[]; retryable: false }
   | { ok: false; kind: 'invalid'; code: InvalidCode
       commandId: string; error: string; fieldErrors: { key: SettingKey; message: string; refCount?: number }[]; retryable: false }
-  | { ok: false; kind: 'denied' | 'unavailable' | 'schema_ahead'; code: string; commandId: string; error: string; retryable: boolean }
+  // appliedRevision: 저장은 됐지만 저장 뒤 동기화가 실패한 경우에만 — 편집기가 그 revision 을 기준으로 채택한다
+  | { ok: false; kind: 'denied' | 'unavailable' | 'schema_ahead'; code: string; commandId: string; error: string; retryable: boolean; appliedRevision?: number }
 export type SettingsHistoryScope = { projectId: string } | { workspaceId: string }
 export type SettingsOutcomeResult = { ok: true; outcome: { status: 'applied'; revision: number } | { status: 'unknown' } } | { ok: false; error: string }
 type SettingsHistoryViewRow = SettingsHistoryRow & { changedByName: string }
@@ -201,7 +202,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         const recovery = a.scope === 'workspace'
           ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
           : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
-        return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false,
+        return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false, appliedRevision: r.revision,
           error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
       }
     }
