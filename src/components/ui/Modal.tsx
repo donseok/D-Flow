@@ -83,9 +83,10 @@ export function Modal({
   const width = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
 
   return createPortal(
-    <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4 transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" role="dialog" aria-modal="true" aria-label={title}>
-      <button className="absolute inset-0 bg-black/45 backdrop-blur-sm" aria-label={t('common.close')} onClick={onClose} tabIndex={-1} />
-      <div ref={panelRef} tabIndex={-1} className={`relative z-10 w-full ${width} overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none`}>
+    <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+      {/* 등장 페이드는 배경·패널에 따로 — 바깥(조상)에 opacity 전환을 두면 전환 동안 배경의 backdrop-blur 가 꺼졌다가 끝에 켜진다 */}
+      <button className="absolute inset-0 bg-black/45 backdrop-blur-sm transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" aria-label={t('common.close')} onClick={onClose} tabIndex={-1} />
+      <div ref={panelRef} tabIndex={-1} className={`relative z-10 w-full ${width} overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0`}>
         <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-4">
           <div className="min-w-0">
             {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
