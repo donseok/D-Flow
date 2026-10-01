@@ -1,20 +1,21 @@
 # SP3b UI-0 — 현행 기준선(COM-0)
 
-UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**이다(스펙 §3). 각 Phase 의 판정은 D48 대로 그 브랜치의 (기준, 머리)를 같은 시드·같은 스크립트로 새로 찍어 비교한다. 이미지는 리포 밖 `/Users/jerry/D-Flow/.superpowers/qa/sp3b/ui0/` 에 있고 여기에는 파일명과 sha256 앞 12자만 적는다. 경로의 `{pid}`·`{minuteId}`·`{topicId}` 는 `db:reset` 으로 사라지는 로컬 시드 id, `[token]` 은 가린 초대·공유 토큰이다.
+UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**이다(스펙 §3). 각 Phase 의 판정은 D48 대로 그 브랜치의 (기준, 머리)를 같은 시드·같은 스크립트로 새로 찍어 비교한다. 이미지는 리포 밖 `/Users/jerry/D-Flow/.superpowers/qa/sp3b/ui0/`(과제 5b 에서 다시 찍은 `invite` 네 장만 `ui0-invite/`)에 있고 여기에는 파일명과 sha256 앞 12자만 적는다. 경로의 `{pid}`·`{minuteId}`·`{topicId}` 는 `db:reset` 으로 사라지는 로컬 시드 id, `[token]` 은 가린 초대·공유 토큰이다.
 
 | 항목 | 값 |
 |---|---|
 | 트리 | `sp3b/ui0` 머리 `56fa0af` — 앱 코드 = main `81deae9`(`sp3a-done`, `git diff --quiet main HEAD -- src` 참). 빌드는 같은 `src` 의 `a253af1` 에서 했다(그 뒤 커밋은 `scripts/`·`tests/` 만) |
-| 일시 | 2026-10-01 12:22~13:56 KST — 시드·빌드 12:22~12:23 · 캡처(2차) 12:40~12:48 · 규모별 성능 12:51~13:11(1차)·13:12~13:56(재측정) |
+| 일시 | 2026-10-01 12:22~13:56 KST — 시드·빌드 12:22~12:23 · 캡처(2차) 12:40~12:48 · 규모별 성능 12:51~13:11(1차)·13:12~13:56(재측정). 과제 5b — 새 `db:reset` 시드·`invite` 재촬영·결정성 확인 14:16~14:27(스크립트 `341e2a3`·`2f5ef01`, 앱 트리는 같은 main `81deae9`) |
 | 서버 | 레인 B 3201 `next start`(프로덕션 빌드), Next 15.5.19, Node v22.18.0 |
 | 스택 | `d-flow-lane-b`(api 54421 · db 54422), `[api] max_rows = 20000`(D51 — 로컬 수정, 리포 값은 1000) |
 | 브라우저 | Chromium 145.0.7632.6 / Playwright 1.58.2(npx 캐시 — `package.json` 무변경) |
-| 시드 | `db:reset` → `dev:bootstrap` → `node scripts/ui-capture.mjs seed`(커밋 `a253af1` — 시드 코드는 과제 2 이후 무변경) — KST 2026-10-01 상대 날짜 |
+| 시드 | `db:reset` → `dev:bootstrap` → `node scripts/ui-capture.mjs seed`(커밋 `a253af1` — 시드 코드는 과제 2 이후 무변경) — KST 2026-10-01 상대 날짜. 과제 5b(`17f2b82`)부터 시드가 워크스페이스 A 의 초대 허용 도메인에 `example.com` 을 넣는다(이미 있으면 쓰지 않는다) — 그래서 `invite` 네 장만 다시 찍었다(§2) |
 | 계정 | 시드 계정 넷(플랫폼 관리자 `ui-platform`·비플랫폼 워크스페이스 관리자 `ui-wsadmin`·멤버 `ui-member`·두 워크스페이스 멤버 `ui-duo`). 비밀번호는 실행마다 임의 값(메모리) — 부트스트랩 관리자 무변경. 화면마다 볼 수 있는 가장 낮은 등급으로 찍는다(`routes.json` 의 `grade`) |
-| 캡처 방식 | 뷰포트 캡처(판정 Q5), deviceScaleFactor 1·ko-KR·Asia/Seoul·reducedMotion·새 컨텍스트·CDN 캐시(판정 Q3), 로드 → 네트워크 유휴 → `document.fonts.ready` → 500ms. 가림 = `routes.json` 의 `commonMask`·`mask`(자리를 남기는 `visibility:hidden`)와 `hide`(폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다 — 과제 5). 실행 시작 때 캡처 계정의 서버 테마(판정 Q8)와 `lastProjectId`(= 시드 프로젝트, 과제 5a)를 고정한다 |
+| 캡처 방식 | 뷰포트 캡처(판정 Q5), deviceScaleFactor 1·ko-KR·Asia/Seoul·reducedMotion·새 컨텍스트·CDN 캐시(판정 Q3), 로드 → 네트워크 유휴 → `document.fonts.ready` → 500ms. 가림 = `routes.json` 의 `commonMask`·`mask`(자리를 남기는 `visibility:hidden`)와 `hide`(폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다 — 과제 5). 실행 시작 때 캡처 계정의 서버 테마(판정 Q8)와 `lastProjectId`(= 시드 프로젝트, 과제 5a)를 고정한다. 과제 5b 부터는 테마 패스마다 캡처 계정 넷의 공지 읽음 워터마크와 시드 프로젝트의 진척 스냅샷도 지운다(시작 상태 = `db:reset` 뒤 첫 실행 — 아래 결정성 행) |
 | 범위 | `shoot --since b4283c0,C` — 기준선 31 + 보충 둘(`p-import-admin`·`p-office-lane`) + 설정(C) `ws-settings` = 34행 × 4크기 × 라이트 = 136장 |
 | 글꼴 | 136장 가운데 `fallback` 0장 |
 | 자기 차이 | `diff ui0 ui0-self` — 136장 가운데 `diff` 0장(0 이어야 한다). 차이율이 0 이 아닌 장: `p-agents@768x1024` 0.178% · `minute@1280x720` 0.000% — 모두 문턱 0.2% 아래(판정 Q33). 앞의 것은 위임 표 sticky 머리글 아래 테두리의 1px 스냅(§2 메모), 뒤의 것은 4px. 이 가림 규칙은 1차 자기 차이(diff 2 — 좌석 화면의 시각 표시)를 고친 뒤의 2차 실행이다 |
+| 결정성(과제 5b) | 첫 방문이 써서 다음 화면을 바꾸는 상태 둘을 테마 패스 시작에서 지운다 — ① 공지 읽음 워터마크(과제 5 권고 1, `17f2b82`) ② 시드 프로젝트의 진척 스냅샷(`2f5ef01` — 대시보드가 응답 뒤 오늘 스냅샷을 써서 `db:reset` 뒤 첫 대시보드 방문만 속도 지표가 '—'). `shoot --routes p-announcements,projects,p-dashboard --sizes 1440x900` 를 두 번 찍어 비교: ①만 고친 1차(`ui0-ann-a`·`ui0-ann-b`)는 `diff` 1(`p-dashboard` 0.26% — ②), ② 뒤 2차(`ui0-ann-a2`·`ui0-ann-b2`)는 **`diff` 0**(세 장 0.00%, `p-announcements`·`p-dashboard`·`projects` sha 같음). 전 경로 순서(`portfolio` → `p-dashboard`)로 찍은 `ui0-pf` 는 `diff ui0 ui0-pf` 0(`p-dashboard` sha 같음) — 전 경로를 새로 찍지는 않았다. 과제 5 1차 실행이 같은 시작 상태(워터마크·스냅샷 없음)였고 그때 2차와의 차이는 좌석 시각(가림으로 고침)과 공지 칩뿐이었으므로, 새 시작 상태에서 이 기록과 달라지는 장은 `p-announcements@1440x900` 의 NEW 칩(0.13%, 문턱 아래 — §2 메모)으로 본다 |
 
 ## 1. 라우트 표
 
@@ -65,14 +66,15 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 
 ## 2. 캡처(라우트 × 4크기 × 라이트)
 
-`meta.json`: commit `56fa0af` · scriptCommit `56fa0af` · browser `145.0.7632.6` · kstDate `2026-10-01` · seedDate `2026-10-01` · baseUrl `http://127.0.0.1:3201` · 136행 모두 `idle: true`(네트워크 유휴 도달)·`font: ok`·`problems` 없음. `expect` 셋(`agents`·`p-office` 의 `[data-roster-desk]`, `p-office-lane` 의 `[data-state="BLOCKED"]`)이 모두 잡혔다.
+`meta.json`: commit `56fa0af` · scriptCommit `56fa0af` · browser `145.0.7632.6` · kstDate `2026-10-01` · seedDate `2026-10-01` · baseUrl `http://127.0.0.1:3201` · 136행 모두 `idle: true`(네트워크 유휴 도달)·`font: ok`·`problems` 없음. `expect` 셋(`agents`·`p-office` 의 `[data-roster-desk]`, `p-office-lane` 의 `[data-state="BLOCKED"]`)이 모두 잡혔다. 표의 `invite` 네 행만 과제 5b 재촬영 `ui0-invite` 다 — `meta.json`: commit `341e2a3` · scriptCommit `341e2a3` · browser `145.0.7632.6` · kstDate·seedDate `2026-10-01`(새 `db:reset` 시드) · 2026-10-01 14:17 KST · 같은 앱 트리(main `81deae9`) 프로덕션 빌드 · 네 장 `idle: true`·`font: ok`·문제 없음.
 
 캡처 메모(기록 — 판정이 아니다):
 
 - **좌석 화면의 시각 표시는 가렸다**(과제 5 자기 차이에서 찾음). `agents`·`p-office`·`p-office-lane` 은 조작 줄 끝의 '갱신 HH시 MM분 SS초'를 `hide`(`[aria-label="표시 범위"] + div`) — 고정폭이지만 분·초 자릿수가 바뀌면 폭이 달라져 '잡담'·'내 작업|전체'를 민다. `agents`·`p-office` 의 책상 카드 '신호 N분 전'·프로필 '마지막 신호 · N분 전'·신호 계기 표식은 `mask`(계기 막대 자체는 보인다). `p-agents` 의 '갱신' 시각은 `hide`(`[data-hub-stamp]`). 그래서 이 네 화면의 PNG 에는 그 시각 글자가 없다(좌석표 세 화면은 '내 작업|전체' 가 줄 오른쪽 끝에 붙는다).
 - `p-agents@768x1024` 의 자기 차이 0.178% 는 위임 표 sticky 머리글 아래 테두리가 1px 위아래로 스냅하는 것이다 — 머리글 글자와 아래 행은 픽셀까지 같고, 실행마다 두 상태를 오간다(판정 Q33 의 서브픽셀 흔들림). UI-1 비교에서 이 장의 0.18% 안팎은 잡음 후보다.
-- **`invite` 는 유효 초대가 아니라 "만료되었거나 사용할 수 없는 초대입니다" 화면이다.** 시드 초대(`ui-invitee@example.com`)는 만료·취소·소비 전이지만 워크스페이스 A 의 `invites.allowed_domains`(SP3a 가 더한 초대 도메인 허용)가 기본값이라 `example.com` 이 허용되지 않아 `getInvitePreview` 가 '사용할 수 없음'을 낸다. 유효 초대 화면(워크스페이스·프로젝트·권한·본인 식별)은 이 기준선에 없다.
-- **`p-announcements` 는 '읽음' 상태(NEW 칩 없음)로 찍혔다.** 공지 화면 방문이 `announcement_seen` 워터마크를 쓰고 이 기록의 두 실행은 같은 DB 의 세 번째·네 번째 실행이다(첫 두 실행은 가림을 고치기 전의 1차). `db:reset` 직후 첫 실행만 1440×900 장에 NEW 칩이 있다(0.13% — 문턱 아래). 사이드바의 공지 배지 3 은 방문 뒤에도 남는다 — 워터마크가 밀리초로 잘리고(`.483`) `created_at` 은 마이크로초(`.483017`)라 SQL `created_at > last_seen_at` 이 가장 최근 공지를 계속 안 읽음으로 센다(제품 결함 후보, src 무수정).
+- **`invite` 는 과제 5b 에서 다시 찍었다(`ui0-invite`) — 이유: 시드 초대 도메인.** 처음 기록(`ui0`)은 유효 초대가 아니라 "만료되었거나 사용할 수 없는 초대입니다" 화면이었다 — 시드 초대(`ui-invitee@example.com`)는 만료·취소·소비 전이지만 워크스페이스 A 의 `invites.allowed_domains`(SP3a 가 더한 초대 도메인 허용)가 제품 기본값 `[]`(초대 불가)이라 `getInvitePreview` 의 도메인 재검사가 '사용할 수 없음'을 냈다. 시드가 A 에 `example.com` 을 넣도록 고친 뒤(`17f2b82`) 네 장 모두 수락 가능한 카드다 — 계정 없는 초대 대상의 가입 폼(초대받은 프로젝트 `UI-CAPTURE`·설명(시드 표식 `ui-capture seed 2026-10-01`)·가린 이메일 `ui********@example.com`·이름·비밀번호·비밀번호 확인·'가입하고 합류하기'). `diff ui0 ui0-invite` 는 네 장 모두 차이(1440 3.71% · 1280 7.26% · 768 6.12% · 390 23.42%). A 의 설정이 바뀌어도 `ws-settings` 네 장은 그대로다(`diff ui0 ui0-wsset` 0.00% — '초대' 구역은 뷰포트 밖).
+- **`p-announcements` 의 이 기록(`ui0`)은 '읽음' 상태(NEW 칩 없음)다.** 공지 화면 방문이 `announcement_seen` 워터마크를 쓰고 이 기록의 두 실행은 같은 DB 의 세 번째·네 번째 실행이었다(첫 두 실행은 가림을 고치기 전의 1차). 과제 5b 부터 `shoot` 은 테마 패스마다 캡처 계정의 워터마크를 지워 '아무 공지도 보지 않음'(= `db:reset` 뒤 첫 실행)에서 시작하므로, 이제 실행마다 첫 크기(1440×900) 장에 NEW 칩 셋이 있고 나머지 크기는 없다 — 이 기록의 1440 장과 0.13%(문턱 아래, `diff ui0 ui0-ann-a`). 사이드바의 공지 배지 3 은 방문 뒤에도 남는다 — 워터마크가 밀리초로 잘리고(`.483`) `created_at` 은 마이크로초(`.483017`)라 SQL `created_at > last_seen_at` 이 가장 최근 공지를 계속 안 읽음으로 센다(제품 결함 후보, src 무수정).
+- `p-dashboard` 의 속도 지표(SPI 0.84 — 게이지 숫자·호는 1440×900 에서만 뷰포트 안, 1280×720 은 카드 머리만)는 진척 스냅샷에서 나온다 — 대시보드·포트폴리오가 응답 뒤(`after`) 오늘 스냅샷을 쓰므로 `db:reset` 뒤 **첫** 대시보드 방문만 '—' 다. 전 경로 실행은 `portfolio` 가 `p-dashboard` 앞이라 늘 0.84 이고(이 기록·과제 5 1차·`ui0-pf` 바이트 동일), `portfolio` 없는 부분 실행은 테마 패스마다 첫 크기가 '—' 다(과제 5b 가 스냅샷을 패스 시작에서 지운다 — 머리 표 결정성 행).
 - `minute`·`share` 의 mermaid 흐름도는 넓은 틀의 왼쪽 위에 작게 그려진다(현행 그대로). `admin-teams` 의 팀 목록은 빈 상태다 — 공용 팀(`project_id is null`)만 보이는데 시드 팀 다섯은 프로젝트 팀이다.
 - 전역 브리지 화면(`meetings`·`minutes`·`minute`·`agents` 등)의 사이드바에는 `UI-CAPTURE 메뉴` 가 보인다 — 실행 시작 때 `lastProjectId` 를 시드 프로젝트로 고정했기 때문이다(과제 5a, 과제 3 보고 §4-2).
 
@@ -86,10 +88,10 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 | login | 1280×720 | login-1280x720-light.png | 65add31653bb | ok | /login | — | 1 |
 | login | 768×1024 | login-768x1024-light.png | 5dda6c264b8e | ok | /login | — | 1 |
 | login | 390×844 | login-390x844-light.png | 85a55b8bb6a7 | ok | /login | — | 1 |
-| invite | 1440×900 | invite-1440x900-light.png | af766ac56cdd | ok | /invite/[token] | — | 1 |
-| invite | 1280×720 | invite-1280x720-light.png | bb330ae74aac | ok | /invite/[token] | — | 1 |
-| invite | 768×1024 | invite-768x1024-light.png | d5eaceca9e14 | ok | /invite/[token] | — | 1 |
-| invite | 390×844 | invite-390x844-light.png | b6ab6a466d04 | ok | /invite/[token] | — | 1 |
+| invite | 1440×900 | ui0-invite/invite-1440x900-light.png | b7786a31a361 | ok | /invite/[token] | — | 1 |
+| invite | 1280×720 | ui0-invite/invite-1280x720-light.png | 202956a89254 | ok | /invite/[token] | — | 1 |
+| invite | 768×1024 | ui0-invite/invite-768x1024-light.png | 6fa9940467a1 | ok | /invite/[token] | — | 1 |
+| invite | 390×844 | ui0-invite/invite-390x844-light.png | 5d1f7fd27c0a | ok | /invite/[token] | — | 1 |
 | share | 1440×900 | share-1440x900-light.png | d065fba36663 | ok | /share/minutes/[token] | — | 2 |
 | share | 1280×720 | share-1280x720-light.png | 9b7d32eca974 | ok | /share/minutes/[token] | — | 2 |
 | share | 768×1024 | share-768x1024-light.png | f6f2c9cdffe5 | ok | /share/minutes/[token] | — | 2 |
@@ -223,7 +225,7 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 |---|---|
 | `root` | 로그인한 사용자를 `/projects` 로 보낸다(최종 경로 단언 `expectFinal`). UI-2a 리졸버가 대체한다 |
 | `login` | 이메일·비밀번호 로그인(비밀번호 보기 토글·제출). 1024 이상은 왼쪽 어두운 히어로(제품 문구·부유 장식·통계 칩) + 오른쪽 폼, 좁은 화면은 머리 + 폼 |
-| `invite` | 초대 링크 미리보기(초대 대상·권한) → 로그인 또는 가입 뒤 합류. 이 기준선은 '사용할 수 없는 초대' 카드 + '로그인 화면으로'(§2 메모) |
+| `invite` | 초대 링크 미리보기(초대 대상·권한) → 로그인 또는 가입 뒤 합류. 이 기준선(`ui0-invite`, 과제 5b)은 계정 없는 초대 대상의 가입 폼 카드('가입하고 합류하기' — §2 메모). 처음 기록(`ui0`)은 '사용할 수 없는 초대' 카드 + '로그인 화면으로'였다 |
 | `share` | 읽기 전용 공유 회의록 — 목차(접기)·본문(mermaid·표·코드 블록)·글자 크기 A−/A+ |
 | `projects` | 워크스페이스 히어로(TASKS·DONE·% 칩, '전체 프로젝트')와 프로젝트 라이브러리 카드(이니셜·상태 칩·설명·기간·'열기'). 관리자는 새 프로젝트(모달) |
 | `meetings` | 내 회의 — 월 달력/리스트, '내 것만·전체 프로젝트', 이전·다음 달·오늘, 공휴일 표시, 회의 칩 → 상세 모달 |
@@ -280,6 +282,7 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 - 지표: ① `goto` 시작 → 첫 `[data-row-id]`(MutationObserver) ② 첫 행 전 longtask 합 ③ `[data-wbs-scroll-region]` 을 프레임마다 400px 씩 40,000px(또는 끝)까지 스크롤한 프레임 간격의 평균·50ms 초과 수 ④ navigation `responseEnd − requestStart`(HTML 끝) / `responseStart − requestStart`(TTFB) — 판정 Q9. 1440×900 라이트, run 마다 새 컨텍스트. 응답한 run 의 DOM 행은 시드 행과 모두 같았다(D51). 무응답 run 의 `domRowsAt` 는 5·15·30·60초 이후 첫 표본의 `[data-row-id]` 수이고 `null` 은 그 시점의 `page.evaluate` 가 3초 안에 돌아오지 않았다(메인 스레드 점유)는 뜻이다 — 로딩 중 값이 시드 행보다 큰 것(3,539·4,473)은 같은 속성을 쓰는 요소가 표와 간트 양쪽에 있어서로 보인다.
 - run 수: 1,011·3,033 행은 5회(제한 120초), 5,055 행 3회·10,110 행 1회(제한 60초) — 응답하지 않는 규모는 기계 시간 때문에 줄였다(스펙 §3.2 의 "5회"와 다른 편차, 보충 지시 Step 3 확정).
 - exit(재측정): 1,011행 0 · 3,033행 2 · 5,055행 1(멈춘 run 을 끝냄 — 결과 파일 없음) · 10,110행 2 — 0 = 전 run 응답, 2 = 측정됨·무응답 run 있음(결과), 1 = 오류. 5,055행의 1 은 '응답' 판정 뒤 단계(행 수 안정 대기·스크롤 `page.evaluate`)에 시간 제한이 없어 멈춘 run 을 15분 뒤 끝낸 것이다(`✗ page.evaluate: Target page, context or browser has been closed`) — 도구 보강 후보.
+- 그 뒤 상한을 더했다(`341e2a3`, 과제 5b) — 응답 뒤 두 단계도 각각 `timeoutMs` 와 겨루고 넘으면 오류가 아니라 `unresponsive` + `stalledAt`(`load`·`settle`·`scroll`)으로 남는다. 위 수치는 상한 전 도구로 잰 것이고 다시 재지 않았다 — 같은 조건이면 3,033행의 응답 run(스크롤 100프레임 × 1.6~4초)은 이제 `stalledAt: 'scroll'` 무응답으로 기록되므로 비교(Q07, SPU2)는 같은 도구 판으로 다시 잰다.
 - 기준 장치: Apple M3 · 메모리 8 GB · macOS 26.6.2 · Node v22.18.0 · Chromium 145.0.7632.6 · 스크립트 커밋 `56fa0af`(앱 = main `81deae9`) · `max_rows` 20000 · 페르소나 비플랫폼 워크스페이스 관리자 `ui-wsadmin`(판정 Q9 — `measure` 가 `user_wbs_state` 0행·`wbsHideDone` 없음을 확인) · 시드 `perf-grid.mjs seed --phases 1|3|5|10`(이름 `PERF-GRID-p1|p3|p5`·`PERF-GRID`) · 서버 3201 `next start` · 공유 잠금 안에서 한 번에 하나.
 - 조용한 기계 확인: 묶음마다 서버 기동 전 `pgrep -fl 'next (dev|build|start)|vitest'` 가 비었다(`qa/sp3b/quiet-ui0-try1.txt`·`quiet-ui0.txt` — 재측정은 규모마다 vitest·next dev|build 가 0 이 될 때까지 기다렸다가 쟀다. `quiet-ui0.txt` 의 post-p1 `heavy_n=1` 은 측정 쪽 표본기 자신이 패턴에 걸린 것이다). 5초 간격 표본 `quiet-sampler-t5*.log`, 재측정의 20초 간격 부하 표본(load1·컨테이너 CPU) `load-sampler-t5.log`. 산출 JSON: 재측정 `perf-grid-ui0-p1.json`·`perf-grid-ui0-p3.json`·`perf-grid-ui0.json`, 1차 `perf-grid-ui0-p1-try1.json`·`perf-grid-ui0-p3-noisy.json`·`perf-grid-ui0-p5-try1.json`·`perf-grid-ui0-try1.json`(모두 `qa/sp3b/`).
 - 과제 4(`a41b6b9`, 오전)의 실측도 같은 꼴이다 — 1,011행 3/3 응답(첫 행 410·TTFB 316·프레임 96ms), 3,033행 2/3 응답, 5,055행 0/3, 10,110행 0/1(앞선 진단에서 20분 뒤에도 `readyState` 가 `complete` 가 아니었다).
