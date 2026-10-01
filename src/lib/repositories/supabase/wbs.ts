@@ -184,12 +184,14 @@ export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBo
       if (projectResult.error) {
         return repositoryError('WBS_PROJECT_READ_FAILED', isRetryableReadError(projectResult.error))
       }
+      // 없는·볼 수 없는 프로젝트는 null(영구 상태)이다 — 그 프로젝트의 팀 원천은 설정 0행으로 실패하므로, 팀 판정보다 먼저 본다
+      // (재시도 가능한 WBS_TEAMS_READ_FAILED 로 바꾸지 않는다 — A2-1 리뷰 보안 P3)
+      if (!projectResult.data) return repositoryOk(null)
       // 끝까지 읽기의 실패(조회 오류·잘림·읽는 사이 변경)는 재시도할 만하다 — 원문은 위 로그에만
       if (!items.ok) return repositoryError(items.code, true)
       if (!holidays.ok) return repositoryError(holidays.code, true)
       if (!deps.ok) return repositoryError(deps.code, true)
       if (!teams.ok) return repositoryError(teams.code, true)
-      if (!projectResult.data) return repositoryOk(null)
 
       const project = projectResult.data as Row
       const itemRows = items.data

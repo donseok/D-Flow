@@ -18,8 +18,8 @@ const row = (i: number, owners: Array<{ kind: string; teams: { code: string } }>
   biz: null, deliverable: null, planned_start: null, planned_end: null, weight: null, actual_pct: 0, updated_at: null, is_owner_split: false,
   external_ref: null, depends: null, item_owners: owners })
 
-function clientOf(t: { items: ReturnType<typeof keysetTable>; holidays?: ReturnType<typeof keysetTable>; deps?: ReturnType<typeof keysetTable> }) {
-  const project = keysetTable([{ id: PID, base_date: null }])
+function clientOf(t: { items: ReturnType<typeof keysetTable>; holidays?: ReturnType<typeof keysetTable>; deps?: ReturnType<typeof keysetTable>; noProject?: boolean }) {
+  const project = keysetTable(t.noProject ? [] : [{ id: PID, base_date: null }])
   return { from: (name: string) => name === 'projects' ? project.make() : name === 'wbs_items' ? t.items.make()
     : name === 'holidays' ? (t.holidays ?? keysetTable([])).make() : name === 'task_dependencies' ? (t.deps ?? keysetTable([])).make()
     : (() => { throw new Error(`unexpected ${name}`) })() }
@@ -54,6 +54,13 @@ describe('봇 WBS 리포지토리 — 세 표를 끝까지, 팀 순서는 한 �
     m.projectTeams.mockRejectedValue(new TeamsUnavailableError())
     const r = await createSupabaseWbsRepository(clientOf({ items: keysetTable([row(0)]) }) as never).getProjectSnapshot(PID)
     expect(r).toEqual({ ok: false, errorCode: 'WBS_TEAMS_READ_FAILED', retryable: true })
+    err.mockRestore()
+  })
+  it('없는·볼 수 없는 프로젝트는 null — 그 프로젝트의 팀 원천이 실패해도 재시도 가능한 오류로 바꾸지 않는다(A2-1 리뷰 보안 P3)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.projectTeams.mockRejectedValue(new TeamsUnavailableError())
+    const r = await createSupabaseWbsRepository(clientOf({ items: keysetTable([]), noProject: true }) as never).getProjectSnapshot(PID)
+    expect(r).toEqual({ ok: true, data: null })
     err.mockRestore()
   })
   it('wbs_items 를 읽는 사이 변경이면 WBS_ITEMS_READ_FAILED — 잘린 트리를 봇 답의 근거로 쓰지 않는다', async () => {
