@@ -56,6 +56,8 @@
     { "key": "mobile-menu", "path": "/w/{wsSlug}/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"메뉴 열기\"]" },
     { "key": "account-popover", "path": "/w/{wsSlug}/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[data-profile-trigger]" },
     { "key": "p-wbs-fullscreen", "path": "/p/{pid}/wbs", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "[data-wbs-fullscreen-toggle]" },
+    { "key": "p-dashboard-ai", "path": "/p/{pid}/dashboard", "grade": "member", "tags": ["P"], "since": "UI-2b", "click": "button[aria-haspopup=\"dialog\"][aria-label=\"AI 어시스턴트 열기\"]", "expect": ["[role=\"dialog\"][aria-label=\"AI 어시스턴트 채팅\"]"] },
+    { "key": "p-wbs-fullscreen-ai", "path": "/p/{pid}/wbs", "grade": "member", "tags": ["P"], "since": "UI-2b", "clicks": ["button[aria-haspopup=\"dialog\"][aria-label=\"AI 어시스턴트 열기\"]", "[data-wbs-fullscreen-toggle]"], "expect": ["[data-wbs-fullscreen=\"open\"] [data-rail-host=\"fullscreen\"]"] },
     { "key": "inbox-popover", "path": "/p/{pid}/dashboard", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"알림\"]" },
     { "key": "ws-settings", "path": "/w/{wsSlug}/settings", "file": "(app)/w/[slug]/settings/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" },
     { "key": "report-modal", "path": "/p/{pid}/dashboard", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "button:has-text(\"주간보고서 요약(PPT)\")", "focusStart": "[role=\"dialog\"]", "focusTargets": ["[role=\"dialog\"] button"] },

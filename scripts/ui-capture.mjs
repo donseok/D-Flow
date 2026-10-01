@@ -216,6 +216,12 @@ export function fillPath(template, values) {
  * 뒤 Phase 가 페이지를 옮기면 옛 행에 until 을, 새 행에 since 를 적는다(보충 행은 supplement: true).
  * @param {any} doc @param {string[]} pageFiles
  */
+/** 행의 클릭 단계 — clicks(여러 단계, 컨트롤러 보충 1)가 있으면 그 순서, 없으면 click 하나(하위 호환) */
+export function clickSteps(r) {
+  if (Array.isArray(r?.clicks)) return [...r.clicks]
+  return typeof r?.click === 'string' && r.click ? [r.click] : []
+}
+
 export function validateRoutes(doc, pageFiles) {
   const p = []
   if (doc?.version !== 1) p.push('version 은 1')
@@ -235,6 +241,8 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.init !== undefined && (typeof r.init !== 'object' || Object.values(r.init).some((v) => typeof v !== 'string'))) p.push(`${id}: init 은 문자열 값 객체`)
     if (r?.baseFinal !== undefined && (typeof r.baseFinal !== 'string' || !r.baseFinal.startsWith('/') || /[<]/.test(r.baseFinal))) p.push(`${id}: baseFinal 경로`)
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
+    if (r?.clicks !== undefined && (!Array.isArray(r.clicks) || r.clicks.length === 0 || r.clicks.some((s) => typeof s !== 'string' || !s || /[{}<]/.test(s)))) p.push(`${id}: clicks 선택자`)
+    if (r?.clicks !== undefined && r?.click !== undefined) p.push(`${id}: click 과 clicks 를 같이 쓰지 않는다`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
     for (const f of ['expect', 'focusTargets', 'hide']) {
@@ -1060,8 +1068,8 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
             await page.evaluate(() => document.fonts.ready.then(() => true))
             await page.waitForTimeout(500)
             let clickFailed = false
-            if (r.click) {
-              try { await page.locator(r.click).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true }
+            for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
+              try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
             }
             const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
             for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
@@ -1394,7 +1402,7 @@ async function checkTab(opts) {
       }
     }
     // ① 첫머리 25걸음 — click 행(모달·팝오버)은 모서리를 누르면 배경이 닫으므로 누르지 않는다. 초점만 문서로 되돌린다
-    if (!r.click) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
+    if (!clickSteps(r).length) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
     await walk('top', 25)
     // ② focusStart 의 첫 요소에서 15걸음 — 비초점 요소면 임시 tabindex=-1 을 달아 시작점으로만 쓴다
     const startProblems = []

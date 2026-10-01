@@ -971,3 +971,30 @@ describe('baseFinal — 기준 서버에서 옛 경로가 기대하는 최종 �
     expect(x?.file).toBe((routesDoc.routes as { key: string; file: string }[]).find((r) => r.key === 'ws-admin-accounts')?.file)
   })
 })
+
+// 컨트롤러 보충 1(UI-2 계획 끝) — 여러 단계 클릭(clicks). click 하나는 하위 호환으로 남긴다
+import { clickSteps } from '../../scripts/ui-capture.mjs'
+describe('clicks — 여러 단계 클릭', () => {
+  it('clickSteps: clicks 가 있으면 그 순서, 없으면 click 하나, 둘 다 없으면 빈 배열', () => {
+    expect(clickSteps({ clicks: ['[a]', '[b]'] })).toEqual(['[a]', '[b]'])
+    expect(clickSteps({ click: '[a]' })).toEqual(['[a]'])
+    expect(clickSteps({})).toEqual([])
+  })
+  it('validateRoutes: clicks 는 비지 않은 선택자 배열, click 과 같이 쓰지 않는다', () => {
+    const doc = { version: 1, commonMask: [], routes: [
+      { key: 'a', path: '/a', grade: 'member', since: 'UI-2b', clicks: ['[x]', '[y]'] },
+      { key: 'b', path: '/b', grade: 'member', since: 'UI-2b', clicks: [] },
+      { key: 'c', path: '/c', grade: 'member', since: 'UI-2b', clicks: ['<x'] },
+      { key: 'd', path: '/d', grade: 'member', since: 'UI-2b', clicks: ['[x]'], click: '[y]' },
+      { key: 'e', path: '/e', grade: 'member', since: 'UI-2b', clicks: '[x]' },
+    ] }
+    const p = validateRoutes(doc, [])
+    expect(p.filter((x) => x.startsWith('a:'))).toEqual([])
+    expect(p).toEqual(expect.arrayContaining(['b: clicks 선택자', 'c: clicks 선택자', 'd: click 과 clicks 를 같이 쓰지 않는다', 'e: clicks 선택자']))
+  })
+  it('촬영 루프는 clickSteps 를 차례로 누르고, 초점 순회의 click 행 판정도 같은 함수로 한다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/for \(const sel of clickSteps\(r\)\)/)
+    expect(src).not.toMatch(/if \(!r\.click\)/)
+  })
+})
