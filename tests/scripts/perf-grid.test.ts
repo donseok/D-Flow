@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { GRID_SHAPE, classifyRuns, gridProjectName, gridRowCount, gridRows, gridTarget, mulberry32, parsePhases, rowCountVerdict, summarize } from '../../scripts/perf-grid.mjs'
+import { STALL_STAGES, stalledRun, withDeadline } from '../../scripts/perf-grid.mjs'
 import { median, percentile } from '../../scripts/lib/perf.mjs'
 
 const CTX = {
@@ -99,5 +100,38 @@ describe('응답 없음은 오류가 아니라 결과 — classifyRuns', () => {
   })
   it('전부 응답 없음이면 median 은 null', () => {
     expect(classifyRuns([dead])).toEqual({ unresponsive: true, exitCode: 2, statuses: ['unresponsive'], median: null })
+  })
+})
+
+describe('응답 뒤 단계의 상한 — 멈춘 run 은 끝없이 기다리지 않고 멈춘 단계를 남긴다(과제 5 권고 3, 과제 5b)', () => {
+  const ok = { status: 'ok', firstRowMs: 900, longTaskMs: 0, frameAvgMs: 16, framesOver50: 0, htmlEndMs: 100, ttfbMs: 50, domRows: 1011 }
+  it('withDeadline — 기한 안에 끝나면 그 값', async () => {
+    await expect(withDeadline(Promise.resolve(7), 1000)).resolves.toStrictEqual({ ok: true, value: 7 })
+  })
+  it('withDeadline — 기한을 넘기면 ok 거짓(끝나지 않는 page.evaluate 를 더 기다리지 않는다 — 과제 5 의 5,055행 15분 멈춤)', async () => {
+    await expect(withDeadline(new Promise(() => {}), 20)).resolves.toStrictEqual({ ok: false })
+  })
+  it('withDeadline — 기한 안의 거부는 그대로 거부(닫힌 페이지는 결과가 아니라 오류 → exit 1)', async () => {
+    await expect(withDeadline(Promise.reject(new Error('Target page, context or browser has been closed')), 1000)).rejects.toThrow(/closed/)
+  })
+  it('withDeadline — 먼저 끝나면 기한 타이머를 남기지 않는다', async () => {
+    vi.useFakeTimers()
+    try {
+      await withDeadline(Promise.resolve(1), 60_000)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+  it('stalledRun — unresponsive + 멈춘 단계(load 응답 전 · settle 행 수 안정 대기 · scroll 스크롤 측정), 그 밖의 단계는 거부', () => {
+    expect(STALL_STAGES).toEqual(['load', 'settle', 'scroll'])
+    expect(stalledRun('load', { timeoutMs: 60000, domRowsAt: [{ atMs: 5000, rows: null }] }))
+      .toStrictEqual({ status: 'unresponsive', stalledAt: 'load', timeoutMs: 60000, domRowsAt: [{ atMs: 5000, rows: null }] })
+    expect(stalledRun('settle', { timeoutMs: 60000, domRowsAt: [] })).toStrictEqual({ status: 'unresponsive', stalledAt: 'settle', timeoutMs: 60000, domRowsAt: [] })
+    expect(stalledRun('scroll', { timeoutMs: 120000, domRowsAt: [], domRows: 3033 }))
+      .toStrictEqual({ status: 'unresponsive', stalledAt: 'scroll', timeoutMs: 120000, domRowsAt: [], domRows: 3033 })
+    expect(() => stalledRun('render', { timeoutMs: 1000, domRowsAt: [] })).toThrow(/단계/)
+  })
+  it('멈춘 run 은 응답 없음으로 센다 — 중앙값에서 빠지고 exit 2(결과), 오류(1)가 아니다', () => {
+    const stalled = stalledRun('scroll', { timeoutMs: 120000, domRowsAt: [], domRows: 3033 })
+    expect(classifyRuns([ok, stalled])).toEqual({ unresponsive: true, exitCode: 2, statuses: ['ok', 'unresponsive'], median: summarize([ok]) })
   })
 })

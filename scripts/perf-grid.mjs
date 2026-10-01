@@ -8,6 +8,8 @@
 //                      첫 표시 뒤 DOM 행 수 ≠ 시드 행 수면 실패 exit 1(max_rows 잘림을 측정으로 삼지 않는다).
 //                      timeout-ms 안에 메인 스레드가 풀려 첫 행이 보이지 않으면 그 run 은 오류가 아니라 '응답 없음' 결과다 —
 //                      가상화 없이 전 행을 렌더하는 현재 상태의 기록(스펙 §3.2). 결과 파일을 쓴 뒤 exit 2.
+//                      응답 뒤 단계(행 수 안정 대기·스크롤 측정)도 각각 timeout-ms 안에 끝나야 한다 — 넘으면 같은 '응답 없음'이고
+//                      멈춘 단계를 stalledAt(load·settle·scroll)으로 남긴다(과제 5b — 한순간 응답 뒤 다시 막힌 run 이 끝없이 기다렸다).
 // 사용: seed 는 node 로, measure 는 npx --yes -p playwright@1.58.2 node scripts/perf-grid.mjs measure … (래퍼 경유)
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
@@ -93,6 +95,26 @@ export function rowCountVerdict(domRows, seedRows) {
   if (domRows !== seedRows) throw new Error(`첫 표시 뒤 DOM 행 ${domRows} ≠ 시드 행 ${seedRows} — max_rows 잘림·접힘·완료 숨김을 확인한다(D51)`)
 }
 
+/** 응답 없음 run 이 멈춘 단계 — load 응답 판정 전(첫 행·로드 완료) · settle 행 수 안정 대기 · scroll 스크롤 프레임 측정 */
+export const STALL_STAGES = Object.freeze(['load', 'settle', 'scroll'])
+
+/** 응답 없음 run 의 기록(순수) — 어느 단계에서 멈췄는지(stalledAt)를 남긴다. 그 밖의 단계 이름은 거부
+ *  @param {string} stage @param {{ timeoutMs: number, domRowsAt: { atMs: number, rows: number | null }[], domRows?: number }} info */
+export function stalledRun(stage, { timeoutMs, domRowsAt, domRows }) {
+  if (!STALL_STAGES.includes(stage)) throw new Error(`멈춘 단계는 ${STALL_STAGES.join('·')} 가운데 하나다: ${stage}`)
+  return { status: 'unresponsive', stalledAt: stage, timeoutMs, domRowsAt, ...(domRows === undefined ? {} : { domRows }) }
+}
+
+/** 약속을 기한과 겨룬다 — 기한 안에 끝나면 { ok: true, value }, 넘으면 { ok: false }. 기한 안의 거부는 그대로 거부한다(닫힌 페이지는
+ *  결과가 아니라 오류). 먼저 끝나면 기한 타이머를 지운다. 진 약속은 컨텍스트를 닫을 때 거부로 끝나고 여기서 이미 받아 두었다
+ *  @template T @param {Promise<T>} promise @param {number} ms @returns {Promise<{ ok: true, value: T } | { ok: false }>} */
+export function withDeadline(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve({ ok: false }), ms)
+    promise.then((value) => { clearTimeout(timer); resolve({ ok: true, value }) }, (e) => { clearTimeout(timer); reject(e) })
+  })
+}
+
 /** run 목록 → 응답 없음 여부·종료 코드·응답한 run 의 중앙값. 응답 없음은 오류(1)가 아니라 결과(2) */
 export function classifyRuns(runs) {
   const okRuns = runs.filter((r) => r.status !== 'unresponsive')
@@ -167,8 +189,10 @@ const probe = (page, ms = 3000) => Promise.race([
   sleep(ms).then(() => null),
 ])
 
-/** 한 run — 응답하면 { status:'ok', … }, timeoutMs 안에 첫 행이 보이고 로드가 끝나지 않으면 { status:'unresponsive', … }.
- *  '응답'은 page.evaluate 가 돌아오고 readyState=complete·행 ≥ 1 이다(메인 스레드가 풀렸다는 뜻). domRowsAt 은 5·15·30·60초 이후 첫 표본. */
+/** 한 run — 응답하면 { status:'ok', … }, timeoutMs 안에 첫 행이 보이고 로드가 끝나지 않으면 { status:'unresponsive', stalledAt:'load', … }.
+ *  '응답'은 page.evaluate 가 돌아오고 readyState=complete·행 ≥ 1 이다(메인 스레드가 풀렸다는 뜻). domRowsAt 은 5·15·30·60초 이후 첫 표본.
+ *  응답 뒤 단계(행 수 안정 대기 settle·스크롤 측정 scroll)도 각각 timeoutMs 와 겨룬다 — 한순간 응답으로 잡힌 뒤 메인 스레드가 다시 막히면
+ *  시간 제한 없는 page.evaluate 를 끝없이 기다렸다(과제 5 의 5,055행 재측정 셋째 run 15분). 넘으면 그 단계로 stalledRun. */
 async function oneRun({ browser, sessions, base, projectId, seedRows, timeoutMs }) {
   const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: 'light' }))
   try {
@@ -193,16 +217,22 @@ async function oneRun({ browser, sessions, base, projectId, seedRows, timeoutMs 
       if (r && r.ready === 'complete' && r.rows > 0) { responsive = true; break }
       await sleep(1000)
     }
-    if (!responsive) return { status: 'unresponsive', timeoutMs, domRowsAt }
-    let domRows = -1
-    for (let k = 0; k < 30; k++) {           // 행 수가 1초 동안 그대로면 첫 표시 완료
-      const n = await page.evaluate(() => document.querySelectorAll('[data-row-id]').length)
-      if (n === domRows) break
-      domRows = n
-      await page.waitForTimeout(1000)
+    if (!responsive) return stalledRun('load', { timeoutMs, domRowsAt })
+    const settle = async () => {
+      let rows = -1
+      for (let k = 0; k < 30; k++) {         // 행 수가 1초 동안 그대로면 첫 표시 완료
+        const n = await page.evaluate(() => document.querySelectorAll('[data-row-id]').length)
+        if (n === rows) break
+        rows = n
+        await page.waitForTimeout(1000)
+      }
+      return rows
     }
+    const settled = await withDeadline(settle(), timeoutMs)
+    if (!settled.ok) return stalledRun('settle', { timeoutMs, domRowsAt })
+    const domRows = settled.value
     rowCountVerdict(domRows, seedRows)
-    const m = await page.evaluate(async () => {
+    const scrolled = await withDeadline(page.evaluate(async () => {
       const g = window.__grid
       const nav = performance.getEntriesByType('navigation')[0]
       const el = document.querySelector('[data-wbs-scroll-region]')
@@ -219,7 +249,9 @@ async function oneRun({ browser, sessions, base, projectId, seedRows, timeoutMs 
       return { firstRowMs: g.firstRow, longTaskMs: g.longTasks.filter(([s]) => s < g.firstRow).reduce((s, [, d]) => s + d, 0),
         frameAvgMs: f.length ? f.reduce((a, b) => a + b, 0) / f.length : null, framesOver50: f.filter((x) => x > 50).length,
         htmlEndMs: nav.responseEnd - nav.requestStart, ttfbMs: nav.responseStart - nav.requestStart, scrolled: Boolean(el) }
-    })
+    }), timeoutMs)
+    if (!scrolled.ok) return stalledRun('scroll', { timeoutMs, domRowsAt, domRows })
+    const m = scrolled.value
     if (!m.scrolled) throw new Error('[data-wbs-scroll-region] 이 없다 — 스크롤 주체가 바뀌었다')
     return { status: 'ok', ...m, domRows }
   } finally {
