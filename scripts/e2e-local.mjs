@@ -43,7 +43,7 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso,
+  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, nextServerMode,
   pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
@@ -953,7 +953,7 @@ async function main() {
   //    가져오기가 바로 본다 — 옛 캐시는 모듈 인스턴스마다 60초 TTL 이라 next start 에서 409(needsTeams)였다(KLC:56). 양식은 저장하지 않는다 —
   //    다음 단계가 이 프로젝트를 "저장 양식 없음"으로 내보낸다.
   const N = await createProject(admin, wsA, 'N')
-  await admin.http('GET', `/p/${N.id}/settings`)
+  const serverMode = nextServerMode(await (await admin.http('GET', `/p/${N.id}/settings`)).text())   // next start 인지(W3) — dev 면 이 단계는 근거가 아니다
   mustOk(`addProjectTeam(${A2_TEAM})`, (await admin.action(`/p/${N.id}/settings`, 'addProjectTeam', [N.id, A2_TEAM])).result)
   const nRows = e2eRows(A2_TEAM)
   const nFile = await fillWbsWorkbook(nRows)
@@ -978,8 +978,9 @@ async function main() {
     applied: nApplied.ok === true && nApplied.kind === 'applied' && nApplied.commandId === nCmd,
     items: nItems.length === nRows.length,
     owned: nItems.some((i) => i.item_owners.some((o) => o.teams?.code === A2_TEAM)),
+    nextStart: serverMode === 'production',
   }
-  step('teams-source-next-start', { projectId: N.id, commandId: nCmd, response: importResultView(nApplied), items: nItems.length, checks: nCheck },
+  step('teams-source-next-start', { projectId: N.id, serverMode, commandId: nCmd, response: importResultView(nApplied), items: nItems.length, checks: nCheck },
     Object.values(nCheck).every(Boolean) ? undefined : `방금 만든 팀으로 가져오기: ${JSON.stringify(nCheck)}`)
 
   // export-standard — 저장 양식이 없는 N 의 엑셀 내보내기(접기·펼침) 둘 다 200·X-Excel-Layout standard(SP4 §4.3 — 예전 펼침은 409),

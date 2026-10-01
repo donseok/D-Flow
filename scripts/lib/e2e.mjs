@@ -626,6 +626,18 @@ export const REGISTERED_AREA = Object.freeze({ code: 'SALES', name: sp4Sentinels
 /** 상속 프로젝트에 들일 미등록 팀 code — 새 팀 코드 규칙을 통과하고 SP1 팀·공용 팀과 겹치지 않는다(테스트가 대조) */
 export const UNREGISTERED_TEAM = 'LAB'
 
+/**
+ * 서버 렌더 HTML 로 Next 서버 종류를 가른다 — next start(프로덕션 빌드)는 해시 붙은 main-app 청크만, next dev 는 해시 없는 main-app·
+ * react-refresh·webpack-hmr·static/development 흔적이 있다. teams-source-next-start 는 production 일 때만 통과한다(스펙 D19 — 모듈 인스턴스별
+ * 옛 캐시 결함은 next start 에서만 드러났다. A2-4 리뷰 P3-1). 어느 흔적도 없으면 unknown(통과로 세지 않는다).
+ * @param {string} html @returns {'production' | 'development' | 'unknown'}
+ */
+export function nextServerMode(html) {
+  if (/react-refresh|webpack-hmr|\/_next\/static\/development\/|\/_next\/static\/chunks\/main-app\.js/.test(html)) return 'development'
+  if (/\/_next\/static\/chunks\/main-app-[0-9a-f]{8,}\.js/.test(html)) return 'production'
+  return 'unknown'
+}
+
 /** SP4 A2 — 같은 서버 프로세스에서 방금 만든 팀을 가져오기가 바로 보는지(teams-source-next-start)에 쓰는 팀 코드. 옛 이름이 아니다 */
 export const A2_TEAM = 'RUN'
 

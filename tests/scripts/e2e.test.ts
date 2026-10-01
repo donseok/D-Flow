@@ -31,7 +31,7 @@ import { carryOverRows } from '@/lib/domain/weeklyCarry'
 import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
 import { excludeRegistered, findSentinels, sp4Sentinels } from '../../scripts/lib/sentinels.mjs'
 import {
-  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, carriedText, pptText, sentinelReport, slideCount, teamRefs,
+  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, carriedText, nextServerMode, pptText, sentinelReport, slideCount, teamRefs,
 } from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
@@ -720,5 +720,25 @@ describe('SP4 A2 — E2E 새 단계(스펙 §6.3)', () => {
   })
   it('새 단계는 표준 내보내기의 레이아웃 머리를 본다', () => {
     expect(src).toMatch(/headers\.get\('x-excel-layout'\)/)
+  })
+  it('teams-source-next-start 는 서버가 next start(프로덕션 빌드)일 때만 통과하고 그 판정을 기록한다(A2-4 리뷰 P3-1 · W3)', () => {
+    expect(src).toMatch(/const serverMode = nextServerMode\(/)
+    expect(src).toMatch(/nextStart: serverMode === 'production'/)
+    expect(src).toMatch(/step\('teams-source-next-start', \{ projectId: N\.id, serverMode,/)
+  })
+})
+
+describe('nextServerMode — HTML 로 next start 와 next dev 를 가른다(W3)', () => {
+  it('해시 붙은 main-app 청크만 있으면 production', () => {
+    expect(nextServerMode('<script src="/_next/static/chunks/main-app-ba5b57b221901741.js" async></script>')).toBe('production')
+  })
+  it('dev 흔적(해시 없는 main-app·react-refresh·webpack-hmr·development 폴더)이 하나라도 있으면 development', () => {
+    expect(nextServerMode('<script src="/_next/static/chunks/main-app.js?v=1727" async></script>')).toBe('development')
+    expect(nextServerMode('<script src="/_next/static/chunks/main-app-ba5b57b221901741.js"></script><script src="/_next/static/chunks/react-refresh.js"></script>')).toBe('development')
+    expect(nextServerMode('/_next/webpack-hmr')).toBe('development')
+    expect(nextServerMode('/_next/static/development/_buildManifest.js')).toBe('development')
+  })
+  it('어느 쪽 흔적도 없으면 unknown(통과로 세지 않는다)', () => {
+    expect(nextServerMode('<html><body>권한 없음</body></html>')).toBe('unknown')
   })
 })
