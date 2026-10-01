@@ -5,6 +5,8 @@
 -- 적용한다(옛 코드만 도는 동안 적용하면 옛 코드가 계정 키를 못 읽어 첫 소속 행에 다시 백필한다). 되돌릴 때는 롤백 SQL 을 **먼저**,
 -- 옛 코드를 바로 이어서 — 반대 순서면 그 사이 옛 코드가 첫 소속 행에 쓴 계정 키를 롤백이 account_preferences 의 옛 값으로 덮는다.
 -- 새 함수·트리거는 없다(updated_at 은 앱이 쓴다 — user_preferences 와 같다). CLI 가 파일 하나를 한 트랜잭션으로 적용한다.
+-- 수동 적용은 `psql -1`(--single-transaction)만 — 자동커밋(문장 단위) 적용 금지: 3-0 의 set_config(…, true)·3-2b 의 temp 표(on commit drop)가
+-- 트랜잭션 범위라, 문장마다 커밋하면 notifRead 를 지운 뒤 재배치가 실패해 읽음 기록이 사라지고 부분 적용으로 남는다.
 -- 롤백: supabase/rollbacks/0013_account_preferences_rollback.sql. 리허설: supabase/rehearsal/0013_account_preferences_{seed,smoke}.sql.
 -- 번호는 개발 번호다 — main 반영 때 SP4 와 겹치면 접미를 지키며 rename 한다(테스트·코드는 접미로 찾는다).
 -- ACCOUNT_KEYS: theme, locale, sidebarCollapsed, dashSections, minutesView, minuteFontSize, minutesExplorerLayout, wbsHideDone, wbsOutline, wbsGanttScale, notif
