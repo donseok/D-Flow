@@ -38,10 +38,6 @@ export const PAIRS: Pair[] = [
   ['action', 'plan-track', NON_TEXT, '개정 §5.5.4 진척 막대'],
 ]
 
-/** 이행 중 토큰(@theme inline 의 hex — 과제 10 이 사이드바 마크업과 함께 지운다) 쌍. 의미 토큰이 아니라 PAIRS 의 메타 단언 밖에 둔다.
- *  옛 대비 표의 사이드바 셋을 과제 10 까지 지킨다(U1a 리뷰 R3 P3) */
-export const TRANSITIONAL_PAIRS: Pair[] = on('sidebar-ink-subtle', ['sidebar', 'sidebar-2', 'sidebar-3'], TEXT, '옛 대비 표 — 사이드바 보조 글자')
-
 /** 쌍에 들지 않는 의미 색 토큰 — 사유와 함께 닫는다 */
 export const DECORATIVE: Record<string, string> = {
   'fg-disabled': '조작 불가 글자 — WCAG 예외(개정 §5.5.3). 사유 설명은 fg-secondary',
@@ -52,14 +48,6 @@ export const DECORATIVE: Record<string, string> = {
 describe('의미 토큰 대비 — 라이트·다크(스펙 §8.1 ⑤)', () => {
   for (const theme of ['light', 'dark'] as const) {
     it.each(PAIRS.map((p) => [...p]))(`${theme} %s / %s ≥ %s (%s)`, (fg, bg, min) => {
-      expect(contrastRatio(resolve(theme, fg as string), resolve(theme, bg as string))).toBeGreaterThanOrEqual(min as number)
-    })
-  }
-})
-
-describe('이행 중 사이드바 대비(과제 10 까지)', () => {
-  for (const theme of ['light', 'dark'] as const) {
-    it.each(TRANSITIONAL_PAIRS.map((p) => [...p]))(`${theme} %s / %s ≥ %s (%s)`, (fg, bg, min) => {
       expect(contrastRatio(resolve(theme, fg as string), resolve(theme, bg as string))).toBeGreaterThanOrEqual(min as number)
     })
   }

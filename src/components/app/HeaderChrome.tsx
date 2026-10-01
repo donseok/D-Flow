@@ -157,7 +157,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
 
   return (
     <>
-      <header className="sticky top-0 z-[70] px-1.5 pt-1.5 sm:px-5 sm:pt-2 lg:px-7">
+      <header className="sticky top-0 z-(--z-shell) px-1.5 pt-1.5 sm:px-5 sm:pt-2 lg:px-7">
         <div className="flex h-12 items-center gap-3 rounded-2xl border border-line bg-surface/85 px-3 shadow-[var(--shadow-sm)] backdrop-blur-xl sm:px-4">
           {/* 로고 */}
           <button onClick={() => setMenuOpen(true)} className="chrome-icon lg:hidden" aria-label="메뉴 열기"><Menu className="h-4 w-4" /></button>
@@ -207,7 +207,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
                 <button onClick={openNotif} className="chrome-icon relative" aria-label={t('chrome.notifications')}>
                   <Bell className="h-4 w-4" />
                   {badge > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-secondary px-1 text-[9px] font-bold text-white ring-2 ring-surface">{badge}</span>
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-action px-1 text-xs font-bold text-action-fg ring-2 ring-surface">{badge}</span>
                   )}
                 </button>
               </Tooltip>
@@ -225,7 +225,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
             {/* 프로필 */}
             <div className="relative">
               <button data-profile-trigger onClick={() => setOpen(open === 'profile' ? null : 'profile')} className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-2.5 transition hover:border-line-strong sm:pr-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ backgroundImage: 'var(--gradient-primary)' }}><User className="h-4 w-4" /></span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-action text-action-fg"><User className="h-4 w-4" /></span>
                 <span className="hidden leading-tight sm:block">
                   <span className="block text-[11px] font-semibold text-ink">{displayName ?? roleLabel}</span>
                   <span className="block text-[9px] text-ink-subtle">{displayName ? roleLabel : teamLabel}</span>
@@ -284,8 +284,8 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
 function Popover({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <>
-      <button className="fixed inset-0 z-[90] cursor-default" aria-label="닫기" onClick={onClose} />
-      <div className="absolute right-0 top-12 z-[95] w-80 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-lg)]">{children}</div>
+      <button className="fixed inset-0 z-(--z-popover) cursor-default" aria-label="닫기" onClick={onClose} />
+      <div className="absolute right-0 top-12 z-(--z-popover) w-80 overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-popover)">{children}</div>
     </>
   )
 }
@@ -305,8 +305,8 @@ function MobileMenu({
   const { menuUnreadAnnouncements, menuPendingApprovals } = useShellState()
   const badgeOf: Partial<Record<string, { count: number; bg: string }>> = menuProjectId
     ? {
-        'nav.announcements': { count: menuUnreadAnnouncements, bg: 'bg-accent-secondary' },
-        'nav.projectAgents': { count: menuPendingApprovals, bg: 'bg-amber-500' },
+        'nav.announcements': { count: menuUnreadAnnouncements, bg: 'bg-action text-action-fg' },
+        'nav.projectAgents': { count: menuPendingApprovals, bg: 'bg-warning text-warning-fg' },
       }
     : {}
 
@@ -317,12 +317,12 @@ function MobileMenu({
         .map(item => ({ href: item.href, match: item.match, labelKey: item.labelKey, label: t(item.labelKey), badge: badgeOf[item.labelKey] }))
     : []
   return (
-    <div className="fixed inset-0 z-[100] lg:hidden" role="dialog" aria-modal="true" aria-label="모바일 메뉴">
+    <div className="fixed inset-0 z-(--z-overlay) lg:hidden" role="dialog" aria-modal="true" aria-label="모바일 메뉴">
       <button className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} aria-label="메뉴 닫기" />
-      <div className="absolute inset-y-0 left-0 flex w-[min(86vw,320px)] flex-col bg-sidebar p-4 text-sidebar-ink shadow-2xl">
+      <div className="absolute inset-y-0 left-0 flex w-[min(86vw,320px)] flex-col bg-surface p-4 text-fg shadow-(--shadow-modal)">
         <div className="flex items-center justify-between">
           <span className="text-[15px] font-bold">{BRAND.productName}</span>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg border border-sidebar-line text-sidebar-ink-muted"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-fg-secondary"><X className="h-4 w-4" /></button>
         </div>
         <nav className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto">
           <Link href="/projects" onClick={onClose} aria-current={pathname === '/projects' ? 'page' : undefined} className={`side-link ${pathname === '/projects' ? 'side-link-active' : ''}`}>{t('nav.allProjects')}</Link>
@@ -336,7 +336,7 @@ function MobileMenu({
           {identity?.showUsage && (
             <Link href="/usage" onClick={onClose} aria-current={pathname === '/usage' ? 'page' : undefined} className={`side-link ${pathname === '/usage' ? 'side-link-active' : ''}`}>{t('nav.usage')}</Link>
           )}
-          <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-ink-subtle">프로젝트</div>
+          <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">프로젝트</div>
           <div className="mx-1">
             <select
               aria-label={t('common.selectProject')}
@@ -348,7 +348,7 @@ function MobileMenu({
                 router.push(`/p/${encodeURIComponent(projectId)}/dashboard`)
                 onClose()
               }}
-              className="h-10 w-full rounded-xl border border-sidebar-line bg-sidebar-2 px-3 text-[13px] font-medium text-sidebar-ink outline-none transition focus:border-sidebar-ink-subtle disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-10 w-full rounded-xl border border-border bg-surface-subtle px-3 text-[13px] font-medium text-fg outline-none transition focus:border-border-focus disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="" disabled={projects.length > 0}>
                 {projects.length === 0 ? t('common.noProjects') : t('common.selectProject')}
@@ -362,7 +362,7 @@ function MobileMenu({
           </div>
           {links.length > 0 && (
             <>
-              <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-ink-subtle">
+              <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">
                 프로젝트 메뉴{menuProject ? ` · ${menuProject.name}` : ''}
               </div>
               {links.map(l => {
@@ -373,7 +373,7 @@ function MobileMenu({
                   <Link key={l.href} onClick={onClose} href={l.href} aria-current={active ? 'page' : undefined} className={`side-link ${active ? 'side-link-active' : ''}`}>
                     <span className="flex-1">{l.label}</span>
                     {l.badge && n && (
-                      <span data-nav-badge={l.labelKey} className={`flex h-5 min-w-5 items-center justify-center rounded-full ${l.badge.bg} px-1.5 text-[10px] font-bold tabular-nums text-white`}>
+                      <span data-nav-badge={l.labelKey} className={`flex h-5 min-w-5 items-center justify-center rounded-full ${l.badge.bg} px-1.5 text-xs font-bold tabular-nums`}>
                         {n}
                       </span>
                     )}
@@ -384,8 +384,8 @@ function MobileMenu({
           )}
         </nav>
         {identity && (
-          <div data-identity-card className="mt-auto rounded-xl border border-sidebar-line bg-sidebar-2 p-3 text-xs text-sidebar-ink-muted">
-            <div className="font-semibold text-sidebar-ink">{displayName ?? roleLabel}</div>
+          <div data-identity-card className="mt-auto rounded-xl border border-border bg-surface-subtle p-3 text-xs text-fg-secondary">
+            <div className="font-semibold text-fg">{displayName ?? roleLabel}</div>
             <div className="mt-0.5">{identity.teamCodes?.length ? (displayName ? `${roleLabel} · ${identityTeamLabel(identity.teamCodes)}` : identityTeamLabel(identity.teamCodes)) : roleLabel}</div>
           </div>
         )}

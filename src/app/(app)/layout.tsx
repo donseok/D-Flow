@@ -103,11 +103,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <PrefsSync server={prefs} />
             <UsageTracker />
             {process.env.STAGING === "1" && (
-              <div className="pointer-events-none fixed bottom-3 right-3 z-[300] rounded-md bg-amber-500/90 px-2.5 py-1 text-xs font-bold tracking-wider text-white shadow-lg">
+              <div className="pointer-events-none fixed bottom-3 right-3 z-(--z-skip) rounded-md bg-warning px-2.5 py-1 text-xs font-bold tracking-wider text-warning-fg shadow-lg">
                 STAGING
               </div>
             )}
-            <a href="#main-content" className="fixed left-4 top-3 z-[200] -translate-y-20 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition focus:translate-y-0">본문 바로가기</a>
+            <a href="#main-content" className="fixed left-4 top-3 z-(--z-skip) -translate-y-20 rounded-(--radius-control) bg-action px-4 py-2 text-sm font-semibold text-action-fg transition focus:translate-y-0">본문 바로가기</a>
             <Sidebar projects={projectLinks} showUsage={identity?.showUsage ?? false} showPortfolio={identity?.showPortfolio ?? false} canCreateProject={identity?.canCreateProject ?? false} />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <HeaderChrome identity={identity} projects={projectLinks} userName={userName} />

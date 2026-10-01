@@ -35,13 +35,13 @@ export function dispatchSidebarToggle(collapsed: boolean): void {
 }
 
 const STATUS_META: Record<SidebarProject['status'], { dot: string; label: string }> = {
-  ready: { dot: 'bg-amber-400', label: '준비' },
-  active: { dot: 'bg-emerald-400', label: '진행중' },
+  ready: { dot: 'bg-pending', label: '준비' },
+  active: { dot: 'bg-progress', label: '진행중' },
   // '지연 종료' = 기간 경과+미완(생애 축) — 대시보드의 '지연'(계획 대비 미달)과 다른 개념이라 라벨을 홈과 통일
-  overdue: { dot: 'bg-rose-400', label: '지연 종료' },
-  done: { dot: 'bg-sky-400', label: '완료' },
+  overdue: { dot: 'bg-danger', label: '지연 종료' },
+  done: { dot: 'bg-success', label: '완료' },
   // WBS 조회 실패 — 완료 여부를 모른다. 모름을 '완료'로 표시하지 않기 위한 상태(추측 금지)
-  unknown: { dot: 'bg-slate-400', label: '확인 불가' },
+  unknown: { dot: 'bg-warning', label: '확인 불가' },
 }
 
 /** 프로젝트 메뉴 목록 — 데스크톱 사이드바와 모바일 메뉴(HeaderChrome)가 같은 목록을 쓴다(2026-09-19, 모바일에 에이전트가 빠져 있었다). */
@@ -125,17 +125,17 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
   // 에이전트 메뉴 결재 대기 배지(2026-09-18) — 내가 승인할 수 있는 완료 보고 수. 허브에 들어가지 않아도 알 수 있게.
   const pending = menuProjectId ? menuPendingApprovals : 0
   const badges: Partial<Record<DictKey, { count: number; tip: string; bg: string }>> = {
-    'nav.announcements': { count: unread, tip: '', bg: 'bg-accent-secondary' },
-    'nav.projectAgents': { count: pending, tip: '결재 대기 ', bg: 'bg-amber-500' },
+    'nav.announcements': { count: unread, tip: '', bg: 'bg-action text-action-fg' },
+    'nav.projectAgents': { count: pending, tip: '결재 대기 ', bg: 'bg-warning text-warning-fg' },
   }
 
   return (
     <aside
-      className={`sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto bg-sidebar px-3 py-3 text-sidebar-ink lg:flex ${collapsed ? 'w-[78px]' : 'w-[248px]'} transition-[width] duration-200`}
+      className={`sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-3 py-3 text-fg lg:flex ${collapsed ? 'w-[78px]' : 'w-[248px]'} transition-[width] duration-200`}
     >
       <div className="flex items-center justify-end">
         <Tooltip label={collapsed ? '사이드바 펼치기' : '사이드바 접기'} side="right">
-          <button onClick={toggleCollapse} className="flex h-6 w-6 items-center justify-center rounded-md border border-sidebar-line text-sidebar-ink-muted transition hover:bg-sidebar-3 hover:text-sidebar-ink" aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}>
+          <button onClick={toggleCollapse} className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-fg-secondary transition hover:bg-surface-hover hover:text-fg" aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}>
             <PanelLeft className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
@@ -144,8 +144,8 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
       {/* 프로젝트 선택 — 핵심 작업 문맥이므로 사이드바 최상단에 둔다. */}
       <div className="mt-2 flex shrink-0 flex-col">
         <div className="mb-1.5 flex shrink-0 items-center justify-between px-2">
-          {!collapsed && <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-ink-subtle">프로젝트</span>}
-          {!collapsed && <Link href="/projects" className="text-[10px] font-medium text-sidebar-ink-muted transition hover:text-sidebar-ink">{t('common.viewAll')}</Link>}
+          {!collapsed && <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">프로젝트</span>}
+          {!collapsed && <Link href="/projects" className="text-[10px] font-medium text-fg-secondary transition hover:text-fg">{t('common.viewAll')}</Link>}
         </div>
         {collapsed ? (
           <Tooltip
@@ -156,7 +156,7 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
                 : t('common.selectProject')}
             side="right"
           >
-            <div className="relative mx-auto flex h-9 w-10 items-center justify-center rounded-xl border border-sidebar-line bg-sidebar-2 text-sidebar-ink-muted transition focus-within:border-sidebar-ink-subtle focus-within:ring-2 focus-within:ring-sidebar-line hover:bg-sidebar-3 hover:text-sidebar-ink">
+            <div className="relative mx-auto flex h-9 w-10 items-center justify-center rounded-xl border border-border bg-surface-subtle text-fg-secondary transition focus-within:border-border-focus focus-within:ring-2 focus-within:ring-border-focus/25 hover:bg-surface-hover hover:text-fg">
               <FolderOpen className="h-[18px] w-[18px]" aria-hidden />
               <select
                 aria-label={t('common.selectProject')}
@@ -178,13 +178,13 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
           </Tooltip>
         ) : (
           <div className="relative">
-            <FolderOpen className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-sidebar-ink-muted" aria-hidden />
+            <FolderOpen className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-fg-secondary" aria-hidden />
             <select
               aria-label={t('common.selectProject')}
               value={selectedProjectId}
               disabled={projects.length === 0}
               onChange={event => selectProject(event.target.value)}
-              className="h-11 w-full cursor-pointer rounded-xl border border-sidebar-line bg-sidebar-2 py-2 pl-9 pr-2 text-[13px] font-medium text-sidebar-ink outline-none transition hover:border-sidebar-ink-subtle focus:border-sidebar-ink-subtle focus:ring-2 focus:ring-sidebar-line disabled:cursor-not-allowed disabled:text-sidebar-ink-subtle"
+              className="h-11 w-full cursor-pointer rounded-xl border border-border bg-surface-subtle py-2 pl-9 pr-2 text-[13px] font-medium text-fg outline-none transition hover:border-border-input focus:border-border-focus focus:ring-2 focus:ring-border-focus/25 disabled:cursor-not-allowed disabled:text-fg-disabled"
             >
               <option value="" disabled={projects.length > 0}>
                 {projects.length === 0 ? t('common.noProjects') : t('common.selectProject')}
@@ -219,16 +219,16 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
 
       {/* 메뉴 섹션 */}
       <div className="mt-4 flex shrink-0 flex-col">
-        <nav className="shrink-0 border-t border-sidebar-line pt-3" aria-label="주요 메뉴">
+        <nav className="shrink-0 border-t border-border pt-3" aria-label="주요 메뉴">
           <div className="mb-1.5 flex items-center justify-between px-2">
             {!collapsed && (
-              <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-ink-subtle">
+              <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">
                 {isGlobalBridge && menuProject ? `${menuProject.name} 메뉴` : '메뉴'}
               </span>
             )}
             {canCreateProject && (
               <Tooltip label={t('common.newProject')} side="right">
-                <Link href="/projects" className={`flex h-6 w-6 items-center justify-center rounded-lg border border-sidebar-line text-sidebar-ink-muted transition hover:bg-sidebar-3 hover:text-sidebar-ink ${collapsed ? 'mx-auto' : ''}`} aria-label={t('common.newProject')}>
+                <Link href="/projects" className={`flex h-6 w-6 items-center justify-center rounded-lg border border-border text-fg-secondary transition hover:bg-surface-hover hover:text-fg ${collapsed ? 'mx-auto' : ''}`} aria-label={t('common.newProject')}>
                   <Plus className="h-3.5 w-3.5" />
                 </Link>
               </Tooltip>
@@ -255,12 +255,12 @@ export function Sidebar({ projects, showUsage = false, showPortfolio = false, ca
                         {!collapsed && <span className="flex-1">{label}</span>}
                         {!collapsed && badge && n && (
                           <span data-nav-badge={item.labelKey} title={badge.tip ? `${badge.tip}${n}건` : undefined}
-                            className={`flex h-5 min-w-5 items-center justify-center rounded-full ${badge.bg} px-1.5 text-[10px] font-bold tabular-nums text-white`}>
+                            className={`flex h-5 min-w-5 items-center justify-center rounded-full ${badge.bg} px-1.5 text-xs font-bold tabular-nums`}>
                             {n}
                           </span>
                         )}
                         {collapsed && badge && n && (
-                          <span aria-hidden data-nav-dot={item.labelKey} className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ${badge.bg} ring-2 ring-sidebar`} />
+                          <span aria-hidden data-nav-dot={item.labelKey} className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ${badge.bg} ring-2 ring-surface`} />
                         )}
                       </Link>
                     </Tooltip>
