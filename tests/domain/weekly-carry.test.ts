@@ -102,6 +102,14 @@ describe('carryOverRows — 20,000자 넘침은 거부한다(D31·E25 — 자르
     expect(r).toEqual({ ok: false, pending: [], overflow: [{ areaId: EXP, areaName: '실험', cell: 'this_content', length: 21001 }] })
   })
 
+  it('[K3] 경계 — 이은 길이가 정확히 20,000 이면 통과, 20,001 이면 넘침(저장 상한 WEEKLY_CELL_MAX 와 같은 값은 이월도 받는다)', () => {
+    const areas = deactivate(R, DATA)
+    const at = (n: number) => carryOverRows([src(EXP, { nextIssue: 'a'.repeat(n) }), src(DATA, { nextIssue: 'b' })], areas, { [DATA]: EXP })
+    const ok = at(19998)   // 'a'×19998 + '\n' + 'b' = 20,000
+    expect(rowOf(ok, EXP)?.thisIssue).toHaveLength(20000)
+    expect(at(19999)).toEqual({ ok: false, pending: [], overflow: [{ areaId: EXP, areaName: '실험', cell: 'this_issue', length: 20001 }] })
+  })
+
   it('대기와 넘침이 함께면 둘 다 싣는다(한 번에 다시 고르게)', () => {
     const areas = deactivate(R, DATA, RUN)
     const r = carryOverRows([
