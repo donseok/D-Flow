@@ -44,7 +44,7 @@ async function fetchSnapshot(): Promise<Snapshot> {
   const [teamRows, projectRows] = await Promise.all([
     fetchAllPages<Record<string, unknown>>('teams', (from, to) => admin
       .from('teams')
-      .select('id, code, sort_order, active, progress_visible, project_id, workspace_id', { count: 'exact' })
+      .select('id, code, name, color, sort_order, active, progress_visible, project_id, workspace_id', { count: 'exact' })
       .order('sort_order').order('code').order('id')
       .range(from, to)),
     fetchAllPages<Record<string, unknown>>('projects', (from, to) => admin
@@ -67,11 +67,17 @@ function toTeams(rows: Array<Record<string, unknown>>): readonly Team[] {
   if (rows.some(r => typeof r.workspace_id !== 'string' || r.workspace_id === '')) {
     throw new Error('teams 행에 workspace_id 가 없습니다')
   }
+  // name·color 도 not null 이다(0003) — 없으면 같은 결함이다(SP4 부터 Team 의 필수 필드).
+  if (rows.some(r => typeof r.name !== 'string' || typeof r.color !== 'string')) {
+    throw new Error('teams 행에 name·color 가 없습니다')
+  }
   const teams = rows
     .filter(r => typeof r.code === 'string' && (r.code as string).trim() !== '')
     .map(r => ({
       id: String(r.id),
       code: (r.code as string).trim(),
+      name: r.name as string,
+      color: r.color as string,
       sortOrder: Number(r.sort_order ?? 0),
       active: r.active !== false,
       progressVisible: r.progress_visible !== false,

@@ -13,9 +13,9 @@ describe('domain/teams', () => {
 
   it('activeCodes는 active만 sortOrder→code 순 정렬', () => {
     const teams: Team[] = [
-      { id: '3', code: 'C', sortOrder: 2, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-      { id: '2', code: 'B', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-      { id: '1', code: 'A', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+      { id: '3', code: 'C', name: 'C', color: '#6b7280', sortOrder: 2, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+      { id: '2', code: 'B', name: 'B', color: '#6b7280', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+      { id: '1', code: 'A', name: 'A', color: '#6b7280', sortOrder: 1, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
     ]
     expect(activeCodes(teams)).toEqual(['A', 'B'])
   })

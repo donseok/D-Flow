@@ -36,9 +36,9 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 const WA = 'ws-a'
 const WB = 'ws-b'
 const ROWS = [
-  { id: 't1', code: 'PMO', sort_order: 0, active: true, progress_visible: true, workspace_id: WA },
-  { id: 't2', code: '신팀', sort_order: 5, active: true, progress_visible: true, workspace_id: WA },
-  { id: 't3', code: '구팀', sort_order: 6, active: false, progress_visible: true, workspace_id: WA },
+  { id: 't1', code: 'PMO', name: 'PMO', color: '#6b7280', sort_order: 0, active: true, progress_visible: true, workspace_id: WA },
+  { id: 't2', code: '신팀', name: '신팀', color: '#6b7280', sort_order: 5, active: true, progress_visible: true, workspace_id: WA },
+  { id: 't3', code: '구팀', name: '구팀', color: '#6b7280', sort_order: 6, active: false, progress_visible: true, workspace_id: WA },
 ]
 const PROJECTS = [
   { id: 'p-a', workspace_id: WA },
@@ -48,9 +48,9 @@ const PROJECTS = [
 /** 두 워크스페이스 픽스처 — W1(WA) 공용 3 + 프로젝트 전용 1, W2(WB) 공용 2(1 비활성). */
 const MIXED = [
   ...ROWS,
-  { id: 'b1', code: 'B팀', sort_order: 0, active: true, progress_visible: true, workspace_id: WB },
-  { id: 'b2', code: 'B휴면', sort_order: 1, active: false, progress_visible: true, workspace_id: WB },
-  { id: 'ap', code: 'A프로젝트팀', sort_order: 0, active: true, progress_visible: true, workspace_id: WA, project_id: 'p-a' },
+  { id: 'b1', code: 'B팀', name: 'B팀', color: '#6b7280', sort_order: 0, active: true, progress_visible: true, workspace_id: WB },
+  { id: 'b2', code: 'B휴면', name: 'B휴면', color: '#6b7280', sort_order: 1, active: false, progress_visible: true, workspace_id: WB },
+  { id: 'ap', code: 'A프로젝트팀', name: 'A프로젝트팀', color: '#6b7280', sort_order: 0, active: true, progress_visible: true, workspace_id: WA, project_id: 'p-a' },
 ]
 
 async function importMaster() {
@@ -96,7 +96,7 @@ describe('teams/master', () => {
   // max_rows(1000) 를 넘어도 페이지로 끝까지 읽는다 — 한 번에 읽으면 1000행에서 잘려 로드가 영영 실패했다(SP2 최종 리뷰 ERR-1).
   it('projects·teams 가 max_rows 를 넘으면(1500행) 두 페이지로 전부 싣는다', async () => {
     db.teams.rows = [...ROWS, ...Array.from({ length: 1497 }, (_, i) => (
-      { id: `tp${i}`, code: `P${i}`, sort_order: 10, active: true, progress_visible: true, project_id: `p-${i}`, workspace_id: WB }))]
+      { id: `tp${i}`, code: `P${i}`, name: `P${i}`, color: '#6b7280', sort_order: 10, active: true, progress_visible: true, project_id: `p-${i}`, workspace_id: WB }))]
     db.projects = { rows: [...PROJECTS, ...Array.from({ length: 1497 }, (_, i) => ({ id: `p-${i}`, workspace_id: WB }))], error: null }
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const m = await importMaster()
@@ -161,7 +161,7 @@ describe('teams/master', () => {
     db.teams.rows = ROWS
     const m = await importMaster()
     expect(m.teamsForProjectSync('p-new')).toEqual([])
-    db.teams.rows = [...ROWS, { id: 't4', code: '추가팀', sort_order: 7, active: true, progress_visible: true, workspace_id: WA }]
+    db.teams.rows = [...ROWS, { id: 't4', code: '추가팀', name: '추가팀', color: '#6b7280', sort_order: 7, active: true, progress_visible: true, workspace_id: WA }]
     db.projects.rows = [...PROJECTS, { id: 'p-new', workspace_id: WA }]
     await m.refreshTeams()
     expect(m.activeTeamCodesForWorkspaceSync(WA)).toContain('추가팀')
@@ -174,7 +174,7 @@ describe('teams/master', () => {
     expect(m.teamsForWorkspaceSync(WA).map(t => t.code)).toEqual(['PMO', '신팀', '구팀'])
 
     // 갱신 시점에 공용 행이 전부 사라지고 프로젝트 행만 남는다 — 빈 DB 출발 플랫폼에선 정상 상태.
-    db.teams.rows = [{ id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'p-a', workspace_id: WA }]
+    db.teams.rows = [{ id: 'tp1', code: '개발', name: '개발', color: '#6b7280', sort_order: 0, active: true, progress_visible: true, project_id: 'p-a', workspace_id: WA }]
     const ok = await m.refreshTeams()
     expect(ok).toBe(true)
     expect(m.teamsForWorkspaceSync(WA)).toEqual([]) // 공용 팀 0개 — 정상, 지어내지 않는다
@@ -185,14 +185,14 @@ describe('teams/master', () => {
   it('project_id가 있는 행은 Team.projectId로 매핑되고 워크스페이스 접근자에는 섞이지 않는다(봉쇄)', async () => {
     db.teams.rows = [
       ...ROWS,
-      { id: 'tp1', code: '개발', sort_order: 0, active: true, progress_visible: true, project_id: 'p-a', workspace_id: WA },
+      { id: 'tp1', code: '개발', name: '개발', color: '#6b7280', sort_order: 0, active: true, progress_visible: true, project_id: 'p-a', workspace_id: WA },
     ]
     const m = await importMaster()
 
     // DB 행 → Team.projectId 매핑이 실값으로 통과한다.
     expect(m.teamsForProjectSync('p-a').map(t => t.code)).toEqual(['개발'])
     expect(m.projectTeamRowsSync('p-a')).toEqual([
-      { id: 'tp1', code: '개발', sortOrder: 0, active: true, progressVisible: true, projectId: 'p-a', workspaceId: WA },
+      { id: 'tp1', code: '개발', name: '개발', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: 'p-a', workspaceId: WA },
     ])
 
     // 워크스페이스 접근자는 프로젝트 행 혼입 없이 공용 3행만 반환한다(봉쇄).
@@ -239,12 +239,25 @@ describe('teams/master', () => {
     })
 
     it('workspace_id 가 없는 행은 로드 실패로 본다 — 워크스페이스를 모르는 팀을 캐시에 넣지 않는다', async () => {
-      db.teams.rows = [{ id: 'x', code: 'X', sort_order: 0, active: true, progress_visible: true }]
+      db.teams.rows = [{ id: 'x', code: 'X', name: 'X', color: '#6b7280', sort_order: 0, active: true, progress_visible: true }]
       const err = vi.spyOn(console, 'error').mockImplementation(() => {})
       const m = await importMaster()
       expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining('workspace_id'))
       expect(() => m.teamsForWorkspaceSync(WA)).toThrow(/팀 마스터/)
       err.mockRestore()
+    })
+    it('name·color 가 없는 행도 로드 실패로 본다 — select 누락 결함(Team.name·color 는 SP4 의 필수 필드)', async () => {
+      db.teams.rows = [{ id: 'y', code: 'Y', sort_order: 0, active: true, progress_visible: true, workspace_id: WA }]
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const m = await importMaster()
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('최초 팀 마스터 로드 실패'), expect.stringContaining('name·color'))
+      expect(() => m.teamsForWorkspaceSync(WA)).toThrow(/팀 마스터/)
+      err.mockRestore()
+    })
+    it('name·color 를 Team 에 싣는다', async () => {
+      db.teams.rows = [{ id: 'z', code: 'RES', name: '연구팀', color: '#0276a8', sort_order: 0, active: true, progress_visible: true, workspace_id: WA }]
+      const m = await importMaster()
+      expect(m.teamsForWorkspaceSync(WA)[0]).toMatchObject({ code: 'RES', name: '연구팀', color: '#0276a8' })
     })
 
     it('activeTeamsForWorkspacesSync 는 주어진 워크스페이스들의 활성 공용 팀만(앱 레이아웃용)', async () => {

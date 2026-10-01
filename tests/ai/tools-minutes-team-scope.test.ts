@@ -7,7 +7,7 @@ import type { Team } from '@/lib/domain/teams'
 // 관리자가 빈 집합이 되고 프로젝트 전용 팀 코드가 빠졌다(16a 리뷰).
 const TEAMS = vi.hoisted((): Team[] => {
   const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
-    ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+    ({ id: `${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
   return [t('PMO', 'ws-a'), t('ERP', 'ws-b'), t('MES', 'ws-a', 'p1'), t('QA', 'ws-a', 'p-hidden')]
 })
 vi.mock('@/lib/teams/master', async () => {

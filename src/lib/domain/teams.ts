@@ -1,11 +1,15 @@
-// 팀 기준정보 순수 도메인 — I/O 없음. 런타임 소스는 lib/teams/master.ts(서버 캐시).
+// 팀 기준정보 순수 도메인 — I/O 없음. 런타임 원천은 요청 범위 lib/teams/source.ts(SP4 — 옛 캐시 lib/teams/master.ts 는 B 에서 지운다).
 import type { TeamView } from './authz'
 import type { TeamCode } from './types'
 
 export interface Team {
   id: string
-  /** 표시명이자 식별 코드(teams.code). teams.name은 code와 동기. */
+  /** 식별 코드(teams.code) — 불변. 담당·엑셀 팀 열·필터·봇 대조가 이 값으로 판정한다. */
   code: TeamCode
+  /** 표시 이름(teams.name) — 지금은 만들 때 code 와 같다. SP4 A2 부터 개명할 수 있다(code 는 그대로, 스펙 D37). */
+  name: string
+  /** 저장된 색(teams.color, hex — 0003 기본값, 생성 순 팔레트 pickTeamColor). 화면 색 슬롯은 SP4 B 가 이 값으로 정한다(D3). */
+  color: string
   sortOrder: number
   active: boolean
   /** 대시보드 '팀별 진척현황' 노출 여부(진척 제외 팀 규칙의 데이터화). */
