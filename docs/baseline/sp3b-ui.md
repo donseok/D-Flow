@@ -76,12 +76,34 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-agents,p-wiki,p-wiki-topic,minute,
 ## 3. UI-1 눈확인(스펙 §8.5 UI-1 행)
 (과제 25 — (a) 전 라우트 라이트 회귀 차이율 표 · (b) 다크 · (c) axe · (d) 쇼케이스·지정 화면 · (e) Tab · (f) 인쇄 · 깜빡임 · 이월 목록. 쇼케이스 두 열 대조는 라이트 페이지 캡처로 본다 — 판정 Q37)
 
+**조건:** 기준 `f2356ae`(UI-1 착수점, 스크래치 워크트리 `lane-b-base` 3202, 빌드 `Rm26jaiPqj7Feyg2u7uW0`) · 머리 `680c5d0`(3201, 빌드 `WqCys8H4DUXOqzZgRybvQ`) · KST 2026-10-01(시드 같은 날, db:reset → bootstrap → seed 21:34) · Chromium 145.0.7632.6 · 촬영 21:39~21:58(`qa/sp3b/bundle-t25.log`). 대조표 `qa/sp3b/ui1-sheet.html`(비교 132·ui1-dark 84·ui1-dark4 156·ui1-extra 30, axe 117행, checks 넷). 묶음 뒤 3201·3202 LISTEN 없음.
+
+| 항목 | 결과 | 산출 |
+|---|---|---|
+| (a) 라이트 회귀 | 132장 same 0 · near 0 · **diff 132** · problem 0 · missing 0(토큰 전환이라 전 장이 다르다 — 예상). 대체 글꼴 0·maskZero 0. 상위 10(p-wiki 768 94.4% · root 1440 91.2% · projects 1440 91.2% · p-wiki 390 91.2% · projects·root 1280 89.5% · projects·root 768 88.2% · login 1440 88.0% · invite 1440 85.1%)과 §2 화면(p-wbs·p-dashboard·p-weekly·p-issues·p-settings·p-office-lane·login)을 열어 봤다 — 넘침·잘림·사라진 경계 없음, `.btn` 36 툴바 정렬 맞음 | `diff-ui1-base--ui1.md` |
+| (b) 다크 | ui1-dark 84장(1440·390, `--since b4283c0,UI-1,C`)·ui1-dark4 156장(DARK4 39키 × 4) — 대체 글꼴 0, `expect-missing` 0(좌석표·위임표 막힘 좌석 그려짐). problem 은 `click-failed` 뿐: `mobile-menu`@1440·1280(햄버거는 lg 미만에만 — 라우트 정의), `p-wbs-fullscreen`@1280·768·390(좁은 폭은 툴바가 설정 버튼으로 접혀 토글이 숨는다 — 라우트 정의, 회귀 아님). 본 장: p-dashboard·p-weekly·p-attendance 1440, agents·p-wbs 390, report-modal·not-found 1440 — 글자 사라진 곳 없음. 주간 시트 표는 다크에서도 흰 바탕(하드코딩 — 이월) | `ui1-dark/`·`ui1-dark4/` |
+| (c) axe 라이트 | 기준 33쪽 162 → 머리 52(같은 33쪽 기준). 라우트별 증가는 **p-office-lane 9 → 15** 하나 — 새 7노드는 범례 글자 `seatmap.module.css` `--sm-ink-3`(#7e8b93) on 캔버스 3.26. 같은 색이 기준에서도 3.28 이었고, 기준은 `.app-backdrop` 그라데이션 때문에 axe 가 판정 못 함(incomplete 31 → 머리 8) — 새로 측정된 기존 결함으로 본다(하드코딩 색, 이월). 나머지 6노드는 기준과 같다 | `ui1-base-axe/axe.json`·`ui1/axe.json` |
+| (c) axe 다크 | 34노드. 하드코딩: 아바타 인라인 `#f538a0`+흰 글자 3.52(p-wbs·p-gantt·p-weekly·p-wbs-fullscreen), `PhaseBadge` 인라인 `#f2aa4c`+흰 1.97(agents·p-office·p-office-lane), `seatmap.module.css` eyebrow·cardZone 4.43, 주간 시트 `text-neutral-400` 2.58, 근태 칩 색 1.71~4.39. 화면 파일의 `opacity-40`(달력의 이번 달 밖 날짜 — `MeetingCalendar`·`AttendanceView`, 3.51·2.31)·`opacity-80`(회의 시각 4.23). **토큰 경로 의심 1 — `src/lib/domain/issues.ts` 의 칩 `bg-line text-ink-subtle`(보류 상태·낮음 심각도) 다크 4.19**: 경계 토큰을 채움으로 쓴 화면 조합(설계 쌍 표 밖). 고치지 않고 판정을 컨트롤러에 올린다 | `ui1/axe.json` |
+| (d) 쇼케이스 | `showcase.json` 9쌍 unequal 0. 라이트 장(`ui1-extra/admin-ui-states-1440x900-light.png`)에서 두 열 대조 — 상태 8종 두 열 모두 읽힘, '설정 열기' 36px ghost. `/projects`·WBS·설정·로그인·404·초대·공유·ws-settings 1440 라이트·다크 30장 problem 은 mobile-menu@1440 click-failed 뿐 | `ui1/showcase.json`·`ui1-extra/` |
+| (e) Tab | p-dashboard·p-wbs·p-meetings-list·report-modal × 라이트·다크 8쪽 — failedSteps 0 · unreached 0 | `ui1/tab.json` |
+| (f) 인쇄 | report-modal 다크·라이트 각 글자 100, low 0, 최저 5.10 | `ui1/print.json` |
+| 깜빡임 | login·account·p-dashboard × light·dark·system(OS 다크) 9행 모두 ok | `ui1/flicker.json` |
+| 스모크 | exit 0 — §4 UI-1 행 | `smoke-ui1.txt` |
+| 대조표 | 비교 절·추가 라벨 절 셋·axe 절(다크 행 포함)·checks 절 넷 | `ui1-sheet.html` |
+
+**사용자 눈확인 볼 목록(정지 캡처로 다 못 본 것 — 원장 CARRY):** 전체 화면 층(`p-wbs-fullscreen` — FAB·AI 패널 겹침), `not-found`, 모달 바닥 `.btn` 36(정지 캡처에 열린 모달은 report-modal 뿐), 포커스 링 색(`border-focus`), SegmentedTabs 탭 폭 +15~18px(회의록 채팅 머리·회의록 툴바·회의일정·공지), 이정표 칩 9px 글자, 390 보고서 모달 바닥 좁음, `/projects` 히어로 pill 경계(UI-2b).
+
+**이월(파일 → 소유 SP):** 주간 시트 표 흰 바탕·`text-neutral-400`(`WeeklySheetView` 계열 → 주간 화면 SP) · 근태 칩 색(`AttendanceView` → 근태 화면 SP) · 달력 `opacity-40`/`opacity-80`(`MeetingCalendar`·`AttendanceView` → 화면 SP) · 좌석표 `seatmap.module.css` `--sm-ink-3`·`PhaseBadge` 인라인 색(에이전트 화면 SP) · 아바타 인라인 색(프레즌스 → 화면 SP) · 벤더 색 grok 흰 위 2.64(판정 Q40) · 공용 기기 백필(판정 Q24) · 라우트 정의: `mobile-menu`·`p-wbs-fullscreen` 의 넓은·좁은 폭 click-failed(ui-capture 행에 sizes 를 두는 쪽 — 도구 이어 고치기) · 판정 대기: `issues.ts` 칩(위 (c) 다크).
+
+**트레일러 시각 정정(기록):** 과제 9 커밋 `1d0d385` 은 트레일러가 없다 — 눈확인 근거 `local 2026-10-01 17:03 — p-wbs·p-issues·p-weekly·p-dashboard·projects·p-settings·minute·usage × 1440·390 × 라이트·다크`(u1-t9 32장). U1a 수정 커밋의 트레일러 18:43 은 실제 18:40, 과제 18 `cd36e3e` 의 20:13 은 실제 20:11.
+
 ## 4. 로컬 스모크(`SMOKE_URL=http://127.0.0.1:3201 npm run smoke:prod`)
 
 | 시점 | 기록 | smoke exit | CSS 크기 | 규칙 수 | 커스텀 프로퍼티 | @property | @keyframes | 안전망 사본 |
 |---|---|---|---|---|---|---|---|---|
 | UI-0 기준(`b4283c0` 트리, 과제 5) | `qa/sp3b/smoke-ui0.txt`(2026-10-01 12:40) | 0(통과) | 130,834 B | 1,931 | 493 | 71 | 9 | 1 |
 | UI-0 끝(`sp3b/ui0` 수정 라운드 머리 = main 반영 트리, 과제 6 수정) | `qa/sp3b/smoke-t6fix.txt`(2026-10-01 15:50) | 0(통과) | 130,834 B | 1,931 | 493 | 71 | 9 | 1 |
+| UI-1 머리(`680c5d0`, 과제 25) | `qa/sp3b/smoke-ui1.txt`(2026-10-01 21:39) | 0(통과) | 124,966 B | 1,795 | 616 | 71 | 5 | 1 |
 
 (UI-0 은 창 ① rebase 없이 main 에 들어갔다(ui1-addendum §1) — 계획의 델타 행 `smoke-ui0-delta.txt`(과제 6 Step 4)는 해당 없음이라 수정 라운드 끝 기록을 둘째 행으로 둔다. UI-0 은 `src/**` 무수정이라 두 행이 같다. UI-1 행은 과제 25.)
 
