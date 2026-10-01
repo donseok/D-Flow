@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   items: [] as Array<{ id: string; parent_id: string | null; assignee_member_id: string | null }>,
   memberIds: [] as string[],
   itemReads: 0,
+  orderReads: 0,
   maxRows: 1000 as number,
   afterOrders: undefined as undefined | ((n: number, rows: Array<Record<string, unknown>>) => Array<Record<string, unknown>> | void),
   ordersTable: undefined as unknown,
@@ -24,6 +25,7 @@ vi.mock('@/lib/supabase/admin', async () => {
     createAdminClient: () => ({
       from: (table: string) => {
         if (table === 'agent_work_orders') {
+          m.orderReads++
           m.ordersTable ??= keysetTable(
             m.orders.map((o, i) => ({ id: `o${String(i).padStart(5, '0')}`, project_id: P_ID, status: 'reported', ...o })),
             { maxRows: m.maxRows, error: m.ordersError ?? undefined, afterResponse: m.afterOrders },
@@ -93,7 +95,7 @@ describe('countApprovable', () => {
 
 describe('getPendingApprovalCount', () => {
   beforeEach(() => {
-    m.actor = actor('admin'); m.orders = ORDERS; m.ordersError = null; m.items = ITEMS; m.memberIds = []; m.itemReads = 0
+    m.actor = actor('admin'); m.orders = ORDERS; m.ordersError = null; m.items = ITEMS; m.memberIds = []; m.itemReads = 0; m.orderReads = 0
     m.maxRows = 1000; m.afterOrders = undefined; m.ordersTable = undefined; m.itemsTable = undefined
   })
   it('비로그인·잘못된 id 는 0', async () => {
@@ -113,6 +115,17 @@ describe('getPendingApprovalCount', () => {
     m.actor = actor()
     expect(await getPendingApprovalCount(P)).toBe(0)
     expect(m.itemReads).toBe(0)
+  })
+  it('[X3] 관리자도 멤버도 아니면 주문조차 읽지 않는다 — 판정이 조회 앞이다(셸의 menu=<uuid> 로 남의 프로젝트 주문을 끝까지 읽게 하지 못한다)', async () => {
+    m.actor = actor()
+    expect(await getPendingApprovalCount(P)).toBe(0)
+    expect(m.orderReads).toBe(0)
+    m.actor = actor(); m.memberIds = ['m-boss']   // 조회 전용 명단
+    expect(await getPendingApprovalCount(P)).toBe(0)
+    expect(m.orderReads).toBe(0)
+    m.actor = actor('member')
+    await getPendingApprovalCount(P)
+    expect(m.orderReads).toBeGreaterThan(0)
   })
   it('조회 전용 명단(access_role null)은 부모 항목 담당자여도 0 — 서버 가드(requireProjectMember)와 같은 축, 트리도 읽지 않는다', async () => {
     m.actor = actor(); m.memberIds = ['m-boss'] // 명단 행은 있으나 역할이 없다 — roleIn 은 view
