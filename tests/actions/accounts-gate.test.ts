@@ -674,6 +674,21 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
     expect(res.ok && res.workspaceId).toBe(WS)
   })
 
+  it('워크스페이스 관리자가 직접 불러도 행별 isPlatformAdmin 은 내려가지 않는다 — 플랫폼 관리자 화면에만 있는 정보(U2a-5 S4)', async () => {
+    signedInAs(WS_ADMIN)
+    createAdminClient.mockReturnValue({
+      from: vi.fn((t: string) => {
+        if (t === 'profiles') return chain({ data: [{ user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' }], count: 1, error: null })
+        if (t === 'platform_admins') return chain({ data: [{ user_id: 'u1' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'project_members') return chain({ data: [], error: null })
+        throw new Error('예상치 못한 테이블 접근: ' + t)
+      }),
+    } as never)
+    const res = await listAccounts(P1)
+    expect(res.ok && res.rows.map(r => [r.id, r.isPlatformAdmin])).toEqual([['u1', false]])
+  })
+
   it('플랫폼 관리자도 그 워크스페이스 소속·명단 계정만 — /w/<slug>/admin/accounts 는 그 워크스페이스 화면이다(U2a-4 T4, D21 과 같은 한정)', async () => {
     signedInAs(SU)
     createAdminClient.mockReturnValue({

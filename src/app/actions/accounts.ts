@@ -448,7 +448,8 @@ export async function listAccounts(
       email: p.email,
       name: p.displayName,
       workspaceRole: wsRoleBy.get(p.userId) ?? null,
-      isPlatformAdmin: platformIds.has(p.userId),
+      // 플랫폼 관리자 여부는 플랫폼 관리자에게만 낸다 — 워크스페이스 관리자가 이 액션을 직접 불러도 행별 플래그를 받지 않는다(U2a-5 S4)
+      isPlatformAdmin: g.actor.isSuperuser && platformIds.has(p.userId),
       accessRole: accessBy.get(p.userId) ?? null,
       createdAt: p.createdAt,
     }))
