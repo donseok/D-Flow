@@ -38,7 +38,10 @@ begin
      or has_function_privilege('authenticated', 'public.import_wbs_cmd(uuid, uuid, text, jsonb, jsonb, uuid)', 'EXECUTE')
      or not has_function_privilege('service_role', 'public.convert_inherited_teams(uuid, uuid)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.convert_inherited_teams(uuid, uuid)', 'EXECUTE')
-     or not has_function_privilege('authenticated', 'public.import_wbs(uuid, jsonb, jsonb)', 'EXECUTE') then
+     or not has_function_privilege('authenticated', 'public.import_wbs(uuid, jsonb, jsonb)', 'EXECUTE')
+     -- ⑤′ 공용 팀 참조 거부 트리거 넷(A1-3 리뷰 M1)
+     or (select count(*) from pg_trigger g where g.tgfoid = 'public.team_ref_owned_scope()'::regprocedure
+          and not g.tgisinternal and g.tgenabled in ('O', 'A')) <> 4 then
     raise exception 'COMMAND_RECEIPTS_SMOKE: 표·트리거·권한이 기대와 다르다';
   end if;
 end $$;
@@ -133,4 +136,30 @@ begin
     raise exception 'COMMAND_RECEIPTS_SMOKE: 전환한 프로젝트에 공용 팀 참조가 남았거나 전용 팀이 없다: %', v_left;
   end if;
 end $$;
+-- 전환 뒤 공용 팀 참조 쓰기는 거부된다(⑤′ — A1-3 리뷰 M1). 같은 code 의 전용 팀이 있는 공용 팀 하나를 그 프로젝트 영역에 붙여 본다(rollback)
+begin;
+do $$
+declare
+  v_p uuid := pg_catalog.current_setting('rehearsal.project')::uuid;
+  v_area uuid;
+  v_common uuid;
+begin
+  select a.id into v_area from public.project_areas a where a.project_id = v_p order by a.id limit 1;
+  select t.id into v_common from public.teams t join public.teams o on o.code = t.code and o.project_id = v_p
+   where t.project_id is null and t.workspace_id = (select p.workspace_id from public.projects p where p.id = v_p)
+     and not exists (select 1 from public.area_teams x where x.area_id = v_area and x.team_id = t.id)
+   order by t.id limit 1;
+  if v_area is null or v_common is null then
+    raise exception 'COMMAND_RECEIPTS_SMOKE: 전환 뒤 거부를 볼 영역·공용 팀이 없다: % / %', v_area, v_common;
+  end if;
+  begin
+    insert into public.area_teams (area_id, team_id, kind) values (v_area, v_common, 'support');
+    raise exception 'COMMAND_RECEIPTS_SMOKE: 전환한 프로젝트에 공용 팀 참조가 다시 붙었다';
+  exception when check_violation then
+    if sqlerrm is distinct from 'TEAM_SCOPE_PROJECT_OWNED' then
+      raise exception 'COMMAND_RECEIPTS_SMOKE: 거부 토큰이 다르다: %', sqlerrm;
+    end if;
+  end;
+end $$;
+rollback;
 \endif
