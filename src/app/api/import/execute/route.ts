@@ -271,10 +271,32 @@ export async function POST(req: NextRequest) {
       // 워크스페이스는 폼 값이 아니라 가드 결과다. 슈퍼유저는 미존재 pid 도 가드를 통과하므로 없으면 404
       const workspaceId = g.actor.projectWorkspace.get(projectId)
       if (!workspaceId) return fail(404, 'ERR_MISSING', ERR_MISSING)
+      // 전환이 실제로 복사하는 공용 팀 code(아래 ensureProjectTeams 의 copiedCodes) — 상속 프로젝트에서만 채운다
+      let copiedCodes: string[] = []
       if (inheritsCommon) {
         // 전환 뒤에는 파일의 팀 전부를 전용 팀으로 맞추므로(아래 R2) 그 이름도 전환 앞에서 검사한다 — 검사 실패가 전환을 남기지 않는다
         const all = validateNewTeamCodes(fileTeams, reserved)
         if (!all.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: all.team })
+        // 전환(convert_inherited_teams)은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 공용 팀만 복사한다. 파일이 가리키는 비활성 공용 팀은
+        // 참조 여부를 읽어(정확히 같은 팀이 참조될 때만 복사) 복사되지 않는 code — 전환 뒤 새로 만드는 code — 를 가른다(A2-3 리뷰 보안·정확성
+        // P3 — X4). 그 code 는 복사될 팀과의 키 겹침을 전환 앞에서 본다(겹침 판정이 전환 뒤 400 이 되어 되돌릴 수 없는 전환만 남지 않게).
+        // 참조 조회 실패는 무엇이 복사될지 모르는 채 전환하지 않는다(3원칙 ②)
+        const inactiveKnown = fileTeams.filter((t) => teams.some((x) => x.code === t && !x.active))
+        let referencedInactive = new Set<string>()
+        if (inactiveKnown.length > 0) {
+          try {
+            const refs = await referencedCommonTeamCodes({ projectId, workspaceId }, inactiveKnown)
+            referencedInactive = new Set(inactiveKnown.filter((t) => refs.get(t) === t))
+          } catch (e) {
+            return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 비활성 공용 팀 참조 조회', e, ERR_TEAMS))
+          }
+        }
+        copiedCodes = fileTeams.filter((t) => teams.some((x) => x.code === t && x.active) || referencedInactive.has(t))
+        const recreated = fileTeams.filter((t) => known.has(t) && !copiedCodes.includes(t))
+        const recreatedClash = firstNewCodeClash(recreated, teams.filter((x) => !recreated.includes(x.code)))
+        if (recreatedClash) {
+          return fail(400, 'INVALID_TEAM_CODE', teamCodeClashError(recreatedClash.code, recreatedClash.clash), { team: recreatedClash.code, clash: recreatedClash.clash })
+        }
         // 첫 전용 팀이 생기면 상속하던 공용 팀이 그 프로젝트 화면에서 사라진다 — 먼저 같은 code·이름·색의 전용 팀으로 바꾸고
         // 그 프로젝트 안의 참조(담당·명단 팀·영역 팀·수락 전 초대)를 옮긴다(D54). converted·already 모두 성공이다
         const conv = await admin.rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
@@ -287,10 +309,11 @@ export async function POST(req: NextRequest) {
       // R2 — 전환을 부른 요청은 대조를 전환 뒤 상태로 다시 한다: 파일의 팀 code 전부를 전용 팀으로 맞춘다(이미 있는 전용 팀은 existing).
       // 전환은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 팀만 복사하므로, 파일이 가리키는 "비활성·미참조 공용 팀"은 전용 팀으로 새로
       // 만들어야 import_wbs_cmd 가 그 담당을 공용 팀 id 로 넣지 않는다(전용·공용 혼재 = D4 분열 — DB 가 같은 code 의 공용 참조만 막는다)
-      // 상속 프로젝트는 파일이 가리키는 기존 공용 팀 code 를 복사(copiedCodes)로 넘긴다 — 등록의 겹침 검사가 그 code 끼리(워크스페이스에 이미
-      // 따로 있던 팀)로 전환 뒤 400 을 내지 않게(A1-5 R1, A2-2 리뷰 보안 P3). 새 code 의 겹침은 위에서 전환 앞에 봤다(teams ⊇ 전환이 옮길 팀)
+      // 상속 프로젝트는 전환이 실제로 복사한 공용 팀 code 를 복사(copiedCodes)로 넘긴다 — 등록의 겹침 검사가 그 code 끼리(워크스페이스에 이미
+      // 따로 있던 팀)로 전환 뒤 400 을 내지 않게(A1-5 R1, A2-2 리뷰 보안 P3). 복사되지 않고 새로 만드는 code(비활성·미참조)와 새 code 의
+      // 겹침은 위에서 전환 앞에 봤다(X4)
       const ensured = inheritsCommon
-        ? await ensureProjectTeams({ projectId, workspaceId }, fileTeams, reserved, { copiedCodes: fileTeams.filter((t) => known.has(t)) })
+        ? await ensureProjectTeams({ projectId, workspaceId }, fileTeams, reserved, { copiedCodes })
         : await ensureProjectTeams({ projectId, workspaceId }, unknownTeams, reserved)
       if (!ensured.ok) {
         if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: ensured.team })
