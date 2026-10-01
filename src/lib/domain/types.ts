@@ -199,6 +199,7 @@ export interface MeetingAttendeeInfo {
 
 /** 계정별로 동기화되는 전역 UI 설정. 각 키는 서버에 없을 수 있음(부분 저장). */
 export interface UiPrefs {
+  /** @deprecated 계정·워크스페이스 분리(SP3b D9) — 서버가 버린다. 옛 셸과 함께 과제 31 이 지운다 */
   heroCollapsed?: boolean
   sidebarCollapsed?: boolean
   theme?: ThemePref        // 선호 — 형식 밖 저장값은 읽는 쪽(isThemePref)이 '없음'으로 본다
@@ -208,11 +209,15 @@ export interface UiPrefs {
   minuteFontSize?: number   // 회의록 뷰어 본문 글자크기(px, 12~28)
   minutesExplorerLayout?: 'grid' | 'list'  // 회의록 탐색기 우측 카드 레이아웃
   notifRead?: Record<string, string[]> // 프로젝트 id → 읽음 처리한 알림 id('모두 읽음' 시점 피드)
+  /** @deprecated 계정·워크스페이스 분리(SP3b D9) — 서버가 버린다. 옛 셸과 함께 과제 31 이 지운다 */
   lastProjectId?: string    // 전역 브리지 화면(내 계정·회의록 등)에서 유지할 최근 프로젝트 탐색 문맥
   wbsHideDone?: boolean     // WBS 완료 숨김 토글 — 전 프로젝트 공통(스펙 2026-08-10-wbs-hide-completed)
   wbsOutline?: boolean      // WBS 개요 번호 열 표시 토글 — 전 프로젝트 공통(2026-08-21 구분 열 개편)
   wbsGanttScale?: number    // WBS 간트 일 폭(px, 프리셋 12/24/48) — 전 프로젝트 공통
   notif?: Record<string, boolean> // 알림 타입 → on/off (조회 시점 필터, REQUIRED 는 무시)
+  startPage?: 'home' | 'my_work' | 'projects' | 'last_project'   // 워크스페이스 키 — 루트 리졸버의 시작 화면(D44)
+  favoriteProjectIds?: string[]                                   // 워크스페이스 키 — 즐겨찾기(최대 20)
+  recentProjects?: { id: string; at: string }[]                   // 워크스페이스 키 — 최근 방문(최대 10, 셸이 쓴다)
 }
 
 /* ── 회의록 (minutes) ── */
