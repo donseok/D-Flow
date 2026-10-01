@@ -43,7 +43,7 @@ vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: vi.fn(async () => (
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: vi.fn(async () => ({})) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
-vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getUiPrefs: vi.fn(async () => ({})) }))
+vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({})) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))

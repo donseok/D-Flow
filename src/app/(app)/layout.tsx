@@ -19,7 +19,7 @@ import { activeTeamsForWorkspacesSync } from '@/lib/teams/master'
 import type { Team } from '@/lib/domain/teams'
 import { projectLifecycleStatus } from '@/lib/domain/project-status'
 import { getProjectsCompletion } from '@/lib/data/wbs'
-import { getUiPrefs } from '@/app/actions/preferences'
+import { getAccountPrefs } from '@/app/actions/preferences'
 import { seoulToday } from '@/lib/domain/dates'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     getActorViewState(),
     listProjectsWithState(),
     getDisplayName(),
-    getUiPrefs(),
+    getAccountPrefs(),
     getProjectsCompletion(),
   ])
   const actor = actorState.actor

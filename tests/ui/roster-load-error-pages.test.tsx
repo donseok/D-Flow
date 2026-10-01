@@ -62,7 +62,7 @@ vi.mock('@/lib/data/minutes', () => ({
   getMinuteFolderPath: vi.fn(async () => null),
 }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
-vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getUiPrefs: vi.fn(async () => ({})) }))
+vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))

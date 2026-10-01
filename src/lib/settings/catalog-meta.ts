@@ -70,11 +70,15 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'views.default', scope: 'project', sp: 'SP3b', shape: "{ wbs: 'sheet'|'timeline'|'board'; density }" },
 ]
 
-/** 개인 설정(개정 §2.8.5) — 개인 설정 저장소의 키. 저장 위치는 SP3b 스펙이 정한다(D32) */
-export const PERSONAL_PREFS: readonly { key: string; desc: string }[] = [
-  { key: 'theme', desc: '시스템·라이트·다크' }, { key: 'locale', desc: 'ko·en' }, { key: 'heroCollapsed', desc: '머리 접기' },
-  { key: 'sidebarCollapsed', desc: '사이드바 접기' }, { key: 'dashSections', desc: '대시보드 구역' }, { key: 'minutesView', desc: '회의록 보기' },
-  { key: 'minuteFontSize', desc: '회의록 글자 크기' }, { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치' }, { key: 'notifRead', desc: '읽은 알림' },
-  { key: 'lastProjectId', desc: '마지막 프로젝트' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김' }, { key: 'wbsOutline', desc: 'WBS 아웃라인' },
-  { key: 'wbsGanttScale', desc: '간트 축척' }, { key: 'notif', desc: '알림 토글' },
+/** 개인 설정(개정 §2.8.5) — 계정 키는 계정 행, 워크스페이스 키는 그 워크스페이스의 개인 행(SP3b D9 — 키 목록의 정본은 prefs 의 split.ts).
+ *  표 이름을 여기 적지 않는다 — 설정 해석기 쪽 파일은 개인 설정 저장소 이름을 원문에 두지 않는다(tests/settings/project-isolation) */
+export const PERSONAL_PREFS: readonly { key: string; desc: string; scope: '계정' | '워크스페이스' }[] = [
+  { key: 'theme', desc: '시스템·라이트·다크', scope: '계정' }, { key: 'locale', desc: 'ko·en', scope: '계정' },
+  { key: 'sidebarCollapsed', desc: '사이드바 접기', scope: '계정' }, { key: 'dashSections', desc: '대시보드 구역', scope: '계정' },
+  { key: 'minutesView', desc: '회의록 보기', scope: '계정' }, { key: 'minuteFontSize', desc: '회의록 글자 크기', scope: '계정' },
+  { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치', scope: '계정' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김', scope: '계정' },
+  { key: 'wbsOutline', desc: 'WBS 아웃라인', scope: '계정' }, { key: 'wbsGanttScale', desc: '간트 축척', scope: '계정' },
+  { key: 'notif', desc: '알림 토글', scope: '계정' },
+  { key: 'startPage', desc: '시작 화면', scope: '워크스페이스' }, { key: 'favoriteProjectIds', desc: '즐겨찾기 프로젝트(최대 20)', scope: '워크스페이스' },
+  { key: 'recentProjects', desc: '최근 방문 프로젝트(최대 10)', scope: '워크스페이스' }, { key: 'notifRead', desc: '읽은 알림', scope: '워크스페이스' },
 ]

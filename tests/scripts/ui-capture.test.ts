@@ -8,7 +8,7 @@ import {
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
-import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
+import { PIN_AT, WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, startPin, warmupFailure } from '../../scripts/ui-capture.mjs'
 import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
   summarizeDiff } from '../../scripts/ui-capture.mjs'
 import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, flickerVerdict, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
@@ -314,29 +314,31 @@ describe('ui-capture.routes.json', () => {
 })
 
 describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 객체로 덮는다(UI-0 결정성 리뷰 P2 — D4)', () => {
-  it('PrefsSync 가 맞추는 키(새 컨텍스트의 로컬값) + 테마 + pin, 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
-    expect(fixedPrefs('light', { lastProjectId: 'p' })).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'light', lastProjectId: 'p' })
-    expect(Object.keys(fixedPrefs('dark'))).toEqual(['heroCollapsed', 'sidebarCollapsed', 'locale', 'theme'])
+  it('계정 키만 — 히어로 접힘·마지막 프로젝트는 은퇴 키(D9), 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
+    expect(fixedPrefs('light')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'light' })
+    expect(Object.keys(fixedPrefs('dark'))).toEqual(['sidebarCollapsed', 'locale', 'theme'])
+  })
+  it('워크스페이스 행 pin — 최근 방문 = 그 프로젝트, 고정 시각(결정적), 빈 id 는 멈춘다', () => {
+    expect(startPin('p1')).toEqual({ recentProjects: [{ id: 'p1', at: PIN_AT }] })
+    expect(PIN_AT).toBe('2026-01-01T00:00:00Z')
+    expect(() => startPin('')).toThrow(/pin/)
   })
   it('새 컨텍스트에서 앱의 PrefsSync 가 적용·백필할 것이 없다 — 키 목록은 앱의 동기화 키(computePrefsSync)가 정한다', () => {
     for (const theme of ['light', 'dark'] as const) {
-      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 히어로 접힘 상수 true · 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
-      expect(computePrefsSync(fixedPrefs(theme, { lastProjectId: 'p' }), { heroCollapsed: true, sidebarCollapsed: false, theme, locale: 'ko' }))
+      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
+      expect(computePrefsSync(fixedPrefs(theme), { sidebarCollapsed: false, theme, locale: 'ko' }))
         .toEqual({ apply: {}, backfill: {} })
     }
   })
   it('지난 실행·수동 확인이 남긴 키(간트 일 폭·개요 번호·완료 숨김·대시보드 펼침 등)를 이어받지 않는다 — 입력에 지금 값이 없다', () => {
-    expect(fixedPrefs.length).toBe(1)   // (theme, pin = {}) — 지금 값을 받지 않는다
+    expect(fixedPrefs.length).toBe(1)   // (theme) — 지금 값을 받지 않는다
     for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs('light')).not.toHaveProperty(k)
   })
-  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5), pin 은 입력을 바꾸지 않는다', () => {
+  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5)', () => {
     expect(() => fixedPrefs('sepia')).toThrow(/테마/)
-    expect(fixedPrefs('system')).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'system' })
+    expect(fixedPrefs('system')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'system' })
     // system 선호 + 쿠키 system 이면 새 컨텍스트에서 PrefsSync 가 적용·백필할 것이 없다(로컬값 theme = 쿠키 system)
-    expect(computePrefsSync(fixedPrefs('system'), { heroCollapsed: true, sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
-    const pin = { lastProjectId: 'p' }
-    fixedPrefs('light', pin)
-    expect(pin).toEqual({ lastProjectId: 'p' })
+    expect(computePrefsSync(fixedPrefs('system'), { sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
   })
 })
 
@@ -371,8 +373,8 @@ const fakeDb = (fail?: string, memberships: Record<string, string[]> = {}) => {
       calls.push(`${t} select ${cols} ${c} = ${v}`)
       return res(t, (memberships[v] ?? []).map((workspace_id) => ({ workspace_id })))
     } }),
-    upsert: async (row: { user_id: string; workspace_id: string; prefs: unknown }, o: { onConflict: string }) => {
-      calls.push(`${t} upsert ${row.user_id}/${row.workspace_id} ${JSON.stringify(row.prefs)} on ${o.onConflict}`)
+    upsert: async (row: { user_id: string; workspace_id?: string; prefs: unknown }, o: { onConflict: string }) => {
+      calls.push(`${t} upsert ${row.user_id}${row.workspace_id ? `/${row.workspace_id}` : ''} ${JSON.stringify(row.prefs)} on ${o.onConflict}`)
       return res(t)
     },
   }) }
@@ -404,25 +406,30 @@ describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실�
 })
 
 describe('passStart — 테마 패스의 시작(조립 — UI-0 결정성 리뷰 P3, D15)', () => {
-  it('캡처 계정의 선호값을 모든 소속에서 고정 객체로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정', async () => {
+  it('캡처 계정의 계정 행을 고정 객체로, 모든 소속 워크스페이스 행을 pin 으로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정(SP3b D9)', async () => {
     const { db, calls } = fakeDb(undefined, { u1: ['wA'], u2: ['wA', 'wB'] })
     await passStart(db, { theme: 'dark', userIds: ['u1', 'u2'], projectId: 'p1' })
-    const prefs = JSON.stringify(fixedPrefs('dark', { lastProjectId: 'p1' }))
+    const prefs = JSON.stringify(fixedPrefs('dark'))
+    const pin = JSON.stringify(startPin('p1'))
     expect(calls).toEqual([
+      `account_preferences upsert u1 ${prefs} on user_id`,
       'workspace_members select workspace_id user_id = u1',
-      `user_preferences upsert u1/wA ${prefs} on user_id,workspace_id`,
+      `user_preferences upsert u1/wA ${pin} on user_id,workspace_id`,
+      `account_preferences upsert u2 ${prefs} on user_id`,
       'workspace_members select workspace_id user_id = u2',
-      `user_preferences upsert u2/wA ${prefs} on user_id,workspace_id`,
-      `user_preferences upsert u2/wB ${prefs} on user_id,workspace_id`,
+      `user_preferences upsert u2/wA ${pin} on user_id,workspace_id`,
+      `user_preferences upsert u2/wB ${pin} on user_id,workspace_id`,
       'announcement_seen delete user_id in u1,u2',
       'notification_recipients update {"seen_at":null,"read_at":null} user_id in u1,u2',
       'wbs_progress_snapshots delete project_id = p1',
     ])
   })
-  it('선호 쓰기가 실패하면 되돌리기로 넘어가지 않는다', async () => {
-    const { db, calls } = fakeDb('user_preferences', { u1: ['wA'] })
-    await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
-    expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
+  it('선호 쓰기(계정 행·워크스페이스 행)가 실패하면 되돌리기로 넘어가지 않는다', async () => {
+    for (const t of ['account_preferences', 'user_preferences']) {
+      const { db, calls } = fakeDb(t, { u1: ['wA'] })
+      await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
+      expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
+    }
   })
 })
 

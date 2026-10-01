@@ -20,7 +20,7 @@ vi.mock('@/lib/teams/master', () => ({ activeTeamsForWorkspacesSync: mocks.activ
 vi.mock('@/lib/authz', () => ({ getActorViewState: vi.fn(async () => mocks.state) }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: vi.fn(async () => ({ projects: [], degraded: false })) }))
-vi.mock('@/app/actions/preferences', () => ({ getUiPrefs: vi.fn(async () => ({ lastProjectId: null })) }))
+vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: vi.fn(async () => ({ lastProjectId: null })) }))
 vi.mock('@/lib/data/wbs', () => ({ getProjectsCompletion: vi.fn(async () => ({})) }))
 vi.mock('@/components/app/TeamsProvider', () => ({ TeamsProvider: mocks.pass }))
 vi.mock('@/components/app/Sidebar', () => ({ Sidebar: () => null }))

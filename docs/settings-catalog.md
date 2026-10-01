@@ -138,20 +138,21 @@
 <!-- catalog:auto:5:start -->
 | 설정 키 | 스코프 | 편집 주체 | 편집 UI/API | 저장소 | 기본값(출처) | 검증기 | 소비처 | 적용 시점 | 기존 데이터 영향 | 테스트 | 현재 상태 | 담당 SP |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `theme` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `locale` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `heroCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 머리 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `sidebarCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `dashSections` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 대시보드 구역 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minutesView` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 보기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minuteFontSize` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 글자 크기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minutesExplorerLayout` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 탐색기 배치 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `notifRead` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 읽은 알림 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `lastProjectId` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 마지막 프로젝트 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsHideDone` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | WBS 완료 숨김 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsOutline` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | WBS 아웃라인 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsGanttScale` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 간트 축척 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `notif` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 알림 토글 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `theme` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `locale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `sidebarCollapsed` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `dashSections` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 대시보드 구역 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minutesView` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 보기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minuteFontSize` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 글자 크기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minutesExplorerLayout` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 탐색기 배치 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsHideDone` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | WBS 완료 숨김 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsOutline` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | WBS 아웃라인 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsGanttScale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 간트 축척 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `notif` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 알림 토글 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `startPage` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 시작 화면 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `favoriteProjectIds` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 즐겨찾기 프로젝트(최대 20) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `recentProjects` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 최근 방문 프로젝트(최대 10) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `notifRead` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 읽은 알림 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 <!-- catalog:auto:5:end -->
 
 ## 6. 제품 고정

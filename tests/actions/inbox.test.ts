@@ -51,25 +51,23 @@ describe('getInboxFeed', () => {
   it('수신 행을 InboxItem 으로 변환하고 unseen 을 센다', async () => {
     mocks.createServerClient.mockResolvedValue(client({
       notification_recipients: [{ data: [row(), row({ id: 'r2', seen_at: '2026-08-11T01:00:00Z' })] }],
-      workspace_members: [{ data: { workspace_id: 'ws-1' } }],
-      user_preferences: [{ data: null }],
+      account_preferences: [{ data: null }],
     }))
     const r = await getInboxFeed()
     expect(r.items).toHaveLength(2)
     expect(r.items[0]).toMatchObject({ recipientId: 'r1', title: '이슈 A', seen: false, read: false })
     expect(r.unseen).toBe(1)
   })
-  it('prefs 로 꺼진 타입은 피드·배지에서 제외 — prefs 는 선호값 키 워크스페이스의 행', async () => {
+  it('prefs 로 꺼진 타입은 피드·배지에서 제외 — 알림 토글(notif)은 계정 키라 account_preferences 자기 행(SP3b D9)', async () => {
     const c = client({
       notification_recipients: [{ data: [row()] }],
-      workspace_members: [{ data: { workspace_id: 'ws-1' } }],
-      user_preferences: [{ data: { prefs: { notif: { 'issue.assigned': false } } } }],
+      account_preferences: [{ data: { prefs: { notif: { 'issue.assigned': false } } } }],
     })
     mocks.createServerClient.mockResolvedValue(c)
     const r = await getInboxFeed()
     expect(r.items).toHaveLength(0)
     expect(r.unseen).toBe(0)
-    expect(c.eqs.user_preferences).toEqual([['user_id', 'u1'], ['workspace_id', 'ws-1']])
+    expect(c.eqs.account_preferences).toEqual([['user_id', 'u1']])
   })
   it('조회 실패는 failed 로 표면화 — 빈 피드로 위장하지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -85,8 +83,7 @@ describe('getInboxFeed', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.createServerClient.mockResolvedValue(client({
       notification_recipients: [{ data: [row()] }],
-      workspace_members: [{ data: { workspace_id: 'ws-1' } }],
-      user_preferences: [{ data: null, error: { message: 'prefs boom' } }],
+      account_preferences: [{ data: null, error: { message: 'prefs boom' } }],
     }))
     const r = await getInboxFeed()
     expect(r.failed).toBeUndefined()
@@ -94,19 +91,17 @@ describe('getInboxFeed', () => {
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
   })
-  it('선호값 키 워크스페이스 조회 실패도 같은 열화 — prefs 를 읽지 않고 피드는 살린다', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('워크스페이스 행·첫 소속을 읽지 않는다 — 알림 토글이 워크스페이스마다 갈리지 않는다(옛 "키 워크스페이스 조회 실패" 경로는 없어졌다)', async () => {
     const c = client({
       notification_recipients: [{ data: [row()] }],
-      workspace_members: [{ data: null, error: { message: 'wm boom' } }],
+      account_preferences: [{ data: { prefs: {} } }],
+      user_preferences: [{ data: { prefs: { notif: { 'issue.assigned': false } } } }],
     })
     mocks.createServerClient.mockResolvedValue(c)
     const r = await getInboxFeed()
-    expect(r.failed).toBeUndefined()
     expect(r.items).toHaveLength(1)
     expect(c.eqs.user_preferences).toBeUndefined()
-    expect(spy).toHaveBeenCalledWith('[inbox] prefs 조회 실패', expect.stringContaining('wm boom'))
-    spy.mockRestore()
+    expect(c.eqs.workspace_members).toBeUndefined()
   })
 })
 

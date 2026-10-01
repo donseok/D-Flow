@@ -198,8 +198,8 @@ describe('측정 조립의 순수 조각(UI-0 결정성 리뷰 P3 — D12·D13·
 })
 
 describe('측정 시작 상태·run 격리(UI-0 결정성 리뷰 P2 — D6·D7)', () => {
-  it('측정 계정의 선호값 확인 — 모든 소속이 고정 객체(테마 light·lastProjectId)와 정확히 같아야 한다(간트 일 폭·개요 번호·완료 숨김 없음)', () => {
-    const want = { heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'light', lastProjectId: 'p1' }
+  it('측정 계정의 선호값 확인 — 행마다 고정 객체(계정 행: 테마 light, 워크스페이스 행: pin)와 정확히 같아야 한다(간트 일 폭·개요 번호·완료 숨김 없음)', () => {
+    const want = { sidebarCollapsed: false, locale: 'ko', theme: 'light' }
     expect(prefsMismatch([{ workspace_id: 'wA', prefs: { ...want } }], want)).toEqual([])
     expect(prefsMismatch([{ workspace_id: 'wA', prefs: { ...want, wbsGanttScale: 48 } }, { workspace_id: 'wB', prefs: { ...want, theme: 'dark' } }], want)).toEqual(['wA', 'wB'])
     expect(prefsMismatch([], want)).toEqual(['(소속 없음)'])

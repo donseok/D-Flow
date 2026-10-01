@@ -8,7 +8,7 @@ import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInAnyWorkspace } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
-import { getUiPrefs } from '@/app/actions/preferences'
+import { getAccountPrefs } from '@/app/actions/preferences'
 import { listProjects } from '@/app/actions/project'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
@@ -39,7 +39,7 @@ export default async function MinutesPage() {
     getMinuteFavorites(),
     getActorForView(),
     getSession(),
-    getUiPrefs(),
+    getAccountPrefs(),
     listProjects(),
     getServerLocale(),
     getMyProjectIds(),

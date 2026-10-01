@@ -25,7 +25,7 @@ vi.mock('@/lib/data/minutes', () => ({
   getMinuteWikiImpact: vi.fn(), getMinuteVersionBody: vi.fn(), getMinuteFolderPath: vi.fn(),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
-vi.mock('@/app/actions/preferences', () => ({ getUiPrefs: vi.fn(async () => ({})) }))
+vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/data/issues', () => ({ getMinuteLinkedIssues: vi.fn(async () => []) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(), getMyProjectIds: vi.fn(async () => []) }))
 vi.mock('@/components/minutes/MinuteViewer', () => ({ MinuteViewer: () => null }))

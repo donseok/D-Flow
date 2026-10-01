@@ -7,7 +7,7 @@ import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
 import { canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
-import { getUiPrefs } from '@/app/actions/preferences'
+import { getAccountPrefs } from '@/app/actions/preferences'
 import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
@@ -36,7 +36,7 @@ export default async function MinuteDetailPage({
   const [detail, annotations, versions, requestedVersion, m, user, projects, prefs, linkedIssues] = await Promise.all([
     getMinuteDetail(id), getMinuteAnnotations(id), getMinuteVersions(id),
     requestedVersionId ? getMinuteVersionBody(id, requestedVersionId) : Promise.resolve(null),
-    getActorForView(), getSession(), listProjects(), getUiPrefs(), getMinuteLinkedIssues(id),
+    getActorForView(), getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id),
   ])
   if (!detail) notFound()
   if (requestedVersionId && !requestedVersion) notFound()

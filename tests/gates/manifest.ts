@@ -175,7 +175,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── notifications·preferences — 셸
   [`${A('notifications')}#getNotifications`]: nul('session', '셸 파생 알림 — 로그인 + RLS'),
   [`${A('notifications')}#markAllNotificationsRead`]: nul('session', SESSION_SELF),
-  [`${A('preferences')}#getUiPrefs`]: nul('session', SESSION_SELF),
+  [`${A('preferences')}#getAccountPrefs`]: nul('session', SESSION_SELF),
+  [`${A('preferences')}#getWorkspacePrefs`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#saveUiPrefs`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#getWbsCollapse`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#saveWbsCollapse`]: nul('session', SESSION_SELF),

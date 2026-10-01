@@ -804,36 +804,51 @@ export async function freshSessions(env, grades) {
   return sessions
 }
 
-/** 실행 시작 선호값의 고정 키 — PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새 컨텍스트의 로컬값으로: 히어로 접힘은
- *  상수 true(PrefsSync.readLocal), 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
-export const RUN_START_PREFS = Object.freeze({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko' })
+/** 실행 시작 선호값의 고정 키 — 계정 키(account_preferences, SP3b D9). PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새
+ *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
+export const RUN_START_PREFS = Object.freeze({ sidebarCollapsed: false, locale: 'ko' })
+
+/** 워크스페이스 행 pin 의 고정 시각 — 결정적이어야 한다(실행 시각을 쓰면 행이 실행마다 바뀐다) */
+export const PIN_AT = '2026-01-01T00:00:00Z'
+/** 실행 시작의 워크스페이스 행(워크스페이스 키만, SP3b D9) — 최근 방문 = 시드 프로젝트. 은퇴 키 lastProjectId 를 대신한다
+ *  @param {string} projectId @returns {Record<string, unknown>} */
+export function startPin(projectId) {
+  if (!projectId) throw new Error('실행 시작 pin: 프로젝트 id 가 비었다')
+  return { recentProjects: [{ id: projectId, at: PIN_AT }] }
+}
 
 /**
  * 실행 시작 선호값(순수, UI-0 결정성 리뷰 P2 — D4) — 지금 값과 병합하지 않고 이 객체로 **덮는다**. 그 밖의 UiPrefs 키(간트 일 폭·개요 번호·
  * 완료 숨김·대시보드 펼침·회의록 보기·알림 읽음·알림 설정 …)는 없음 = 제품 기본값이라 db:reset 뒤 첫 실행(빈 prefs + 고정 키)과 같은
  * 화면이다. 병합하면 지난 실행·수동 확인·perf-grid 가 남긴 키가 다음 실행의 시작 상태를 바꿨다. 새 컨텍스트에서 PrefsSync 가 적용·백필할
  * 것이 없어 실행 중 선호 쓰기도 생기지 않는다(테스트가 앱의 computePrefsSync 로 확인).
- * @param {string} theme @param {Record<string, unknown>} [pin] @returns {Record<string, unknown>}
+ * 계정 키만이다 — 워크스페이스 키(최근 방문 등)는 setServerTheme 의 pin 이 워크스페이스 행에 쓴다(SP3b D9).
+ * @param {string} theme @returns {Record<string, unknown>}
  */
-export function fixedPrefs(theme, pin = {}) {
+export function fixedPrefs(theme) {
   // system 은 checks flicker 의 OS 다크 패스만 쓴다(ui1-addendum §5) — 그 패스의 컨텍스트 색 체계가 해석값을 정한다. shoot·axe 는 --theme 이 light|dark 로 막는다
   if (!['light', 'dark', 'system'].includes(theme)) throw new Error(`테마는 light|dark|system: ${theme}`)
-  return { ...RUN_START_PREFS, theme, ...pin }
+  return { ...RUN_START_PREFS, theme }
 }
 
 /**
- * 캡처 계정의 서버 선호값을 고정 객체(fixedPrefs)로 덮는다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다.
- * pin(shoot 는 lastProjectId = 시드 프로젝트)도 같이: 첫 shoot 가 /p/… 방문으로 lastProjectId 를 써서 전역 브리지 화면(사이드바)이 다음
- * 실행과 달라졌다(과제 3 보고 §4-2). seed 가 아니라 실행 시작에서 덮는 이유: perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
+ * 캡처 계정의 서버 선호값을 고정 객체로 덮는다(판정 Q8 — PrefsSync 는 서버값이 이긴다). 계정 행(account_preferences) = fixedPrefs(theme),
+ * 모든 소속 워크스페이스 행(user_preferences) = pin(워크스페이스 키만 — shoot 는 startPin(시드 프로젝트))(SP3b D9). 두 행 모두 병합이 아니라
+ * 덮는다 — 앞 실행이 남긴 계정 키·알림 읽음·즐겨찾기가 다음 실행의 시작 상태를 바꾸지 않게. seed 가 아니라 실행 시작에서 덮는 이유:
+ * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
  * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin]
  */
 export async function setServerTheme(db, userIds, theme, pin = {}) {
-  const prefs = fixedPrefs(theme, pin)
+  const prefs = fixedPrefs(theme)
   for (const userId of userIds) {
+    must('계정 선호 쓰기', await db.from('account_preferences').upsert(
+      { user_id: userId, prefs, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    ))
     const rows = must('소속 조회', await db.from('workspace_members').select('workspace_id').eq('user_id', userId))
     for (const { workspace_id } of rows) {
       must('선호 쓰기', await db.from('user_preferences').upsert(
-        { user_id: userId, workspace_id, prefs, updated_at: new Date().toISOString() },
+        { user_id: userId, workspace_id, prefs: pin, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,workspace_id' },
       ))
     }
@@ -861,12 +876,12 @@ export async function resetRunStart(db, { userIds, projectId }) {
 }
 
 /**
- * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(lastProjectId = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
+ * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(워크스페이스 행 최근 방문 = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
  * 순서가 계약이다: 선호 → 워터마크 → 알림 → 스냅샷(그 뒤 사전 방문). 앞 단계가 실패하면 멈춘다.
  * @param {any} db @param {{ theme: string, userIds: string[], projectId: string }} pass
  */
 export async function passStart(db, { theme, userIds, projectId }) {
-  await setServerTheme(db, userIds, theme, { lastProjectId: projectId })
+  await setServerTheme(db, userIds, theme, startPin(projectId))
   await resetRunStart(db, { userIds, projectId })
 }
 
@@ -967,7 +982,7 @@ async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId,
 }
 
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·lastProjectId·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
+ *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·워크스페이스 행 pin·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
 export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
   const { db, outDir, baseUrl } = env
@@ -1392,7 +1407,7 @@ async function checkFlicker(opts) {
   const rows = []
   try {
     for (const [pref, scheme] of FLICKER_PASSES) {
-      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, { lastProjectId: seed.pid })
+      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, startPin(seed.pid))
       for (const r of routes) {
         const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: scheme }))
         try {

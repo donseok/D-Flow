@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-/** 선호값(user_preferences)의 워크스페이스 키 — 가장 먼저 가입한 소속. 0006 백필과 같은 규칙이라 기존 행을 그대로 찾는다.
- *  선호값은 보안 경계가 아니다(스펙 §2.3). 전환 UI 는 SP3 — 그때 이 함수가 "현재 워크스페이스" 로 바뀐다. */
+/** 현재 워크스페이스를 모를 때의 폴백(첫 소속 — created_at → workspace_id, 0006 백필·0013 이행과 같은 규칙).
+ *  소비처는 src/lib/workspace/current.ts 와 이 계획 이전의 경로뿐이다 — 개인 설정 저장은 더 이상 이 함수로 행을 고르지 않는다(SP3b D9). */
 export async function prefsWorkspaceId(db: Pick<SupabaseClient, 'from'>, userId: string): Promise<string | null> {
   const { data, error } = await db.from('workspace_members').select('workspace_id')
     .eq('user_id', userId).order('created_at', { ascending: true }).order('workspace_id', { ascending: true })

@@ -18,8 +18,7 @@ function readLocal(): LocalPrefs {
   const theme = readStoredPreference()
   const cookieLocale = document.cookie.match(/(?:^|; )dflow-locale=([^;]+)/)?.[1]
   const locale: 'ko' | 'en' = cookieLocale === 'en' ? 'en' : 'ko'
-  // 히어로 접기 토글 제거됨 — 항상 접힘 상태이므로 상수 true.
-  return { heroCollapsed: true, sidebarCollapsed, theme, locale }
+  return { sidebarCollapsed, theme, locale }
 }
 
 /**
@@ -27,7 +26,7 @@ function readLocal(): LocalPrefs {
  * 서버 값이 있으면 UI에 적용, 없으면 로컬값을 서버에 백필. 렌더 출력 없음.
  *
  * 서버 설정은 레이아웃이 이미 서버에서 읽은 값을 prop 으로 받는다 — 종전처럼 마운트 후
- * getUiPrefs 서버 액션을 다시 쏘면 완전 중복 왕복이다(2026-08-18 성능 감사).
+ * 계정 설정 서버 액션(getAccountPrefs)을 다시 쏘면 완전 중복 왕복이다(2026-08-18 성능 감사). 서버 값은 계정 키만이다(SP3b D9).
  */
 export function PrefsSync({ server }: { server: UiPrefs }) {
   const { setPreference } = useTheme()
