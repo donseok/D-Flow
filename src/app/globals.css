@@ -61,6 +61,16 @@
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, "Noto Sans KR", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 
+  /* 글자 크기(D14, 개정 §5.5.6) — 새 코드는 이 여덟만. 기본 text-xs·text-sm 의 행간은 그대로 */
+  --text-title: 1.5rem;       --text-title--line-height: 2rem;        --text-title--font-weight: 600;
+  --text-title-sm: 1.375rem;  --text-title-sm--line-height: 1.875rem; --text-title-sm--font-weight: 600;
+  --text-section: 1rem;       --text-section--line-height: 1.5rem;    --text-section--font-weight: 600;
+  --text-body: 0.875rem;      --text-body--line-height: 1.375rem;
+  --text-control: 0.875rem;   --text-control--line-height: 1.25rem;
+  --text-meta: 0.75rem;       --text-meta--line-height: 1.125rem;
+  --text-kpi: 1.75rem;        --text-kpi--line-height: 2.125rem;      --text-kpi--font-weight: 600;
+  --text-doc: 1rem;           --text-doc--line-height: 1.625rem;
+
   /* 표면·글자·경계·동작(개정 §5.5.3) */
   --color-canvas: var(--p-gray-25);
   --color-surface: var(--p-gray-0);
@@ -318,9 +328,7 @@
 
   /* C 소유 (app)/projects/page.tsx 의 카드 이니셜 한 곳 — UI-2b 이동 커밋이 지운다(계획 판정 Q15) */
   --gradient-primary: linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600));
-  /* 과제 9(.btn-accent)·13(AssistantChat)이 소비처와 함께 지운다 */
-  --gradient-accent: linear-gradient(135deg, #c2410c 0%, #a63a12 50%, #8f3414 100%);
-  --color-accent-fg: #ffffff;
+  /* 과제 13(AssistantChat)이 소비처와 함께 지운다 */
   --gradient-dark: linear-gradient(165deg, #1c2028 0%, #14181f 55%, #0d1014 100%);
 }
 
@@ -329,9 +337,7 @@
   --shadow-popover: 0 8px 24px -8px rgb(0 0 0 / 0.55);
   --shadow-modal: 0 24px 56px -16px rgb(0 0 0 / 0.65);
 
-  /* 비색 — 과제 9(.btn-accent)·13(AssistantChat)이 소비처와 함께 지운다 */
-  --gradient-accent: linear-gradient(135deg, #f2a35f 0%, #e6853c 50%, #d76f22 100%);
-  --color-accent-fg: #241206;
+  /* 비색 — 과제 13(AssistantChat)이 소비처와 함께 지운다 */
   --gradient-dark: linear-gradient(165deg, #14181f 0%, #0e1116 55%, #090b0e 100%);
 }
 
@@ -380,27 +386,26 @@ textarea {
 /* ------------------------------------------------------------------ */
 @layer components {
   .card {
-    @apply rounded-2xl border border-line bg-surface;
-    box-shadow: var(--shadow-sm);
+    @apply rounded-(--radius-panel) border border-border bg-surface;
   }
 
   .panel-soft {
-    @apply rounded-2xl border border-line/80 bg-surface-2;
+    @apply rounded-(--radius-panel) border border-border bg-surface-subtle;
   }
 
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle;
+    @apply text-meta font-semibold text-fg-muted;
   }
 
   .app-input {
-    @apply h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink
-           outline-none transition duration-150 placeholder:text-ink-subtle
-           focus:border-brand focus:ring-2 focus:ring-brand-ring;
+    @apply h-(--control-h) w-full rounded-(--radius-control) border border-border-input bg-surface px-3 text-sm text-fg
+           outline-none transition-[color,background-color,border-color] duration-(--motion-fast) placeholder:text-fg-muted
+           focus:border-border-focus focus:ring-2 focus:ring-border-focus/25;
   }
   .app-textarea {
-    @apply w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink
-           outline-none transition duration-150 placeholder:text-ink-subtle
-           focus:border-brand focus:ring-2 focus:ring-brand-ring;
+    @apply w-full rounded-(--radius-control) border border-border-input bg-surface px-3 py-2.5 text-sm text-fg
+           outline-none transition-[color,background-color,border-color] duration-(--motion-fast) placeholder:text-fg-muted
+           focus:border-border-focus focus:ring-2 focus:ring-border-focus/25;
   }
 
   /* 회의록 md 뷰어 타이포 — 토큰만 사용, .dark 자동 대응.
@@ -461,7 +466,7 @@ textarea {
   .minutes-md [data-hl-count] { @apply relative; }
   .minutes-md [data-hl-count]::after {
     content: '👤 ' attr(data-hl-count);
-    @apply absolute -top-2 right-1 rounded-full bg-accent-warning px-1.5 py-0.5 text-[10px] font-bold leading-none text-white;
+    @apply absolute -top-2 right-1 rounded-full bg-warning px-1.5 py-0.5 text-[10px] font-bold leading-none text-warning-fg;
   }
 
   /* 이슈 연결 블록 — 본문을 다시 열어도 등록 여부가 보이고, 클릭하면 기존 블록 팝오버에서 이슈를 연다. */
@@ -472,7 +477,7 @@ textarea {
   }
   .minutes-md [data-issue-count]::before {
     content: '⚑ ' attr(data-issue-count);
-    @apply absolute -top-2 right-1 rounded-full bg-progress px-1.5 py-0.5 text-[10px] font-bold leading-none text-white;
+    @apply absolute -top-2 right-1 rounded-full bg-progress px-1.5 py-0.5 text-[10px] font-bold leading-none text-progress-fg;
   }
   .minutes-md [data-issue-count][data-hl-count]::before { right: 3rem; }
 
@@ -491,22 +496,14 @@ textarea {
   .minutes-md .mblock-flash { @apply outline outline-2 outline-brand; }
 
   .btn {
-    @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2
-           rounded-xl px-4 text-sm font-semibold transition duration-150
+    @apply inline-flex h-(--control-h) cursor-pointer items-center justify-center gap-2
+           rounded-(--radius-control) px-4 text-sm font-semibold
+           transition-[color,background-color,border-color,opacity] duration-(--motion-fast)
            disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply text-white;
-    background-image: var(--gradient-primary);
-    box-shadow: var(--shadow-sm);
+    @apply bg-action text-action-fg hover:bg-action-hover active:bg-action-pressed;
   }
-  .btn-primary:hover { filter: brightness(1.06); }
-  .btn-accent {
-    color: var(--color-accent-fg);
-    background-image: var(--gradient-accent);
-    box-shadow: var(--shadow-sm);
-  }
-  .btn-accent:hover { filter: brightness(1.06); }
   .btn-ghost {
     @apply border border-line bg-surface text-ink-muted shadow-sm hover:border-line-strong hover:bg-surface-2 hover:text-ink;
   }
@@ -523,13 +520,13 @@ textarea {
   }
 
   .badge {
-    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-none;
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium leading-none;
   }
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-none;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium leading-none;
   }
   .lvl-badge {
-    @apply inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide;
+    @apply inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-semibold leading-none;
   }
 
   /* 세그먼트 뷰 탭 */
@@ -539,21 +536,25 @@ textarea {
   .seg-item {
     @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-ink-muted transition duration-150 hover:bg-surface-2 hover:text-ink;
   }
+  .seg-item::before {
+    content: "✓" / "";
+    visibility: hidden;
+  }
   .seg-item-active {
-    @apply text-white hover:text-white;
-    background-image: var(--gradient-primary);
-    box-shadow: var(--shadow-sm);
+    @apply bg-surface-selected font-semibold text-action hover:bg-surface-selected hover:text-action;
+  }
+  .seg-item-active::before {
+    visibility: visible;
   }
 
   /* KPI 카드 (히어로 우측 레일 / 그리드) */
   .kpi-card {
-    @apply rounded-2xl border border-line bg-surface p-5;
-    box-shadow: var(--shadow-sm);
+    @apply rounded-(--radius-panel) border border-border bg-surface p-5;
   }
 
   /* 히어로 카드 — 평면 표면(D13). 어두운 그라데이션 위 밝은 글자 전제를 버렸다 */
   .hero-card {
-    @apply relative isolate overflow-hidden rounded-2xl border border-border bg-surface text-fg;
+    @apply relative isolate overflow-hidden rounded-(--radius-panel) border border-border bg-surface text-fg;
   }
 
   /* 사이드바 항목 (항상 다크) */
@@ -564,10 +565,21 @@ textarea {
     @apply bg-sidebar-3 text-sidebar-ink shadow-sm;
   }
 
+  /* 로고 라이트·다크(D24) — 소비는 UI-2b. 크기별 전환은 바깥 래퍼에서 한다 */
+  .brand-logo-dark {
+    display: none;
+  }
+  .dark .brand-logo-light {
+    display: none;
+  }
+  .dark .brand-logo-dark {
+    display: revert;
+  }
+
   /* 동결 컬럼 우측 경계 */
   .freeze-edge {
-    border-right: 1.5px solid var(--color-grid-strong);
-    box-shadow: 6px 0 8px -6px rgb(20 30 50 / 0.1);
+    border-right: 1.5px solid var(--color-border-input);
+    box-shadow: 6px 0 8px -6px color-mix(in srgb, var(--color-fg) 12%, transparent);
   }
 }
 

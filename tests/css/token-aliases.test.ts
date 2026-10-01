@@ -17,9 +17,9 @@ export const TRANSITIONAL = ['sidebar', 'sidebar-2', 'sidebar-3', 'sidebar-line'
 /** 지운 이름 — 유틸(접두 뒤)·var() 어디에도 없다. 과제마다 늘어난다(Review Focus 1) */
 export const DELETED_TOKENS = ['hero-from', 'hero-via', 'hero-to', 'sheet-gutter']
 /** 지운 클래스(globals.css 규칙과 src 의 사용 모두 0) — 과제 8·9·14 가 더한다 */
-export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile']
+export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile', 'btn-accent']
 /** 지운 비색 변수(선언과 var() 사용 모두 0) — 과제 8·9·13 이 더한다 */
-export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft']
+export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft', '--gradient-accent', '--color-accent-fg']
 const UTIL = '(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|via|to|fill|stroke|divide|decoration|placeholder|shadow|accent|caret)'
 
 describe('별칭 표(@theme inline)', () => {
