@@ -11,7 +11,7 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
-import type { Team } from '@/lib/domain/teams'
+import { validateNewTeamCodes, type Team } from '@/lib/domain/teams'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
@@ -20,6 +20,7 @@ import {
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { validateProjectConfig } from '@/lib/settings/validateConfig'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
+import { convertConsentToken } from '@/lib/teams/convertConsent'
 import { ensureProjectTeams } from '@/lib/teams/register'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
 
@@ -200,18 +201,36 @@ export async function POST(req: NextRequest) {
     const [teams, ownTeams] = teamSets
     // 등록 = 그 프로젝트가 쓰는 팀(비활성 포함) — 비활성 팀의 담당도 대조를 통과한다(지금과 같다)
     const known = new Set(teams.map((t) => t.code))
-    const unknownTeams = [...new Set(parsed.rows.flatMap((r) => r.owners.map((o) => o.team)))].filter((t) => !known.has(t))
+    // 파일이 가리키는 팀 = 행의 담당 팀 + (양식을 저장하는 요청이면) 프로파일의 팀 열. 표시가 하나도 없는 새 팀 열도 양식 저장의 교차 검증
+    // (#10 — 양식의 팀 열 ⊆ 프로젝트 팀)에는 걸리므로, 그 팀을 등록 대상에 넣어야 등록하면 저장이 통과한다(A1-5 R5). 저장하지 않는 요청은
+    // 교차 검증이 없어 표시된 팀만 본다
+    const fileTeams = [...new Set([
+      ...parsed.rows.flatMap((r) => r.owners.map((o) => o.team)),
+      ...(saveProfile ? profile.teamColumns.map(([, name]) => name) : []),
+    ])]
+    const unknownTeams = fileTeams.filter((t) => !known.has(t))
     if (unknownTeams.length > 0) {
+      // 이름 검사는 409 판정·전환 앞이다(A1-5 R1) — 쓸 수 없는 이름이 든 요청은 registerTeams 와 무관하게 400 이고 부수효과가 없다.
+      // 되돌릴 수 없는 공용 팀 전환이 거절된 요청 뒤에 남지 않고, 409 확인 창에는 등록할 수 있는 이름만 오른다
+      const named = validateNewTeamCodes(unknownTeams)
+      if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: named.team })
       const inheritsCommon = ownTeams.length === 0
-      if (!registerTeams) {
+      // 전환 동의 토큰(A1-5 R3) — 상속 프로젝트의 확인은 "등록해도 되나" 한 비트가 아니라 409 가 보여 준 전환 대상(공용 팀 전부 + 등록할 팀)에
+      // 묶인다. 확인 사이에 대상이 바뀌었으면(토큰이 다르거나 없으면) 전환하지 않고 지금 대상으로 다시 409 를 낸다
+      const consent = inheritsCommon ? convertConsentToken(teams, unknownTeams) : null
+      const consented = !inheritsCommon || String(form.get('convertToken') ?? '') === consent
+      if (!registerTeams || !consented) {
         return fail(409, 'NEEDS_TEAMS', ERR_NEEDS_TEAMS, {
-          needsTeams: unknownTeams, inheritsCommon, commonTeams: inheritsCommon ? activeCommon(teams) : [],
+          needsTeams: unknownTeams, inheritsCommon, commonTeams: inheritsCommon ? activeCommon(teams) : [], convertToken: consent,
         })
       }
       // 워크스페이스는 폼 값이 아니라 가드 결과다. 슈퍼유저는 미존재 pid 도 가드를 통과하므로 없으면 404
       const workspaceId = g.actor.projectWorkspace.get(projectId)
       if (!workspaceId) return fail(404, 'ERR_MISSING', ERR_MISSING)
       if (inheritsCommon) {
+        // 전환 뒤에는 파일의 팀 전부를 전용 팀으로 맞추므로(아래 R2) 그 이름도 전환 앞에서 검사한다 — 검사 실패가 전환을 남기지 않는다
+        const all = validateNewTeamCodes(fileTeams)
+        if (!all.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: all.team })
         // 첫 전용 팀이 생기면 상속하던 공용 팀이 그 프로젝트 화면에서 사라진다 — 먼저 같은 code·이름·색의 전용 팀으로 바꾸고
         // 그 프로젝트 안의 참조(담당·명단 팀·영역 팀·수락 전 초대)를 옮긴다(D54). converted·already 모두 성공이다
         const conv = await admin.rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
@@ -221,7 +240,10 @@ export async function POST(req: NextRequest) {
           return fail(500, 'TEAM_CONVERT_FAILED', failWith('import/execute 팀 전환 결과', conv.data, ERR_TEAM_CONVERT))
         }
       }
-      const ensured = await ensureProjectTeams({ projectId, workspaceId }, unknownTeams)
+      // R2 — 전환을 부른 요청은 대조를 전환 뒤 상태로 다시 한다: 파일의 팀 code 전부를 전용 팀으로 맞춘다(이미 있는 전용 팀은 existing).
+      // 전환은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 팀만 복사하므로, 파일이 가리키는 "비활성·미참조 공용 팀"은 전용 팀으로 새로
+      // 만들어야 import_wbs_cmd 가 그 담당을 공용 팀 id 로 넣지 않는다(전용·공용 혼재 = D4 분열 — DB 가 같은 code 의 공용 참조만 막는다)
+      const ensured = await ensureProjectTeams({ projectId, workspaceId }, inheritsCommon ? fileTeams : unknownTeams)
       if (!ensured.ok) {
         if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: ensured.team })
         return fail(500, 'TEAM_REGISTER_FAILED', ERR_TEAM_REGISTER)

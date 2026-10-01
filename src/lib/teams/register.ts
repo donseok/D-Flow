@@ -8,7 +8,7 @@ import 'server-only'
 // 호출부는 requireProjectAdmin(pid) 를 통과한 뒤 부르고 workspaceId 는 그 가드 결과다(teams_guard 가 프로젝트와의 일치를 다시 본다).
 // DB 오류 원문은 결과에 싣지 않는다(failWith — 로그로만, 스펙 §4.7).
 import { adminFor } from '@/lib/supabase/adminFor'
-import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { validateNewTeamCodes } from '@/lib/domain/teams'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { failWith } from '@/lib/errors/dbFail'
 
@@ -22,13 +22,11 @@ export const ERR_REGISTER_TEAMS = '팀을 등록하지 못했습니다. 잠시 �
 export async function ensureProjectTeams(
   scope: { projectId: string; workspaceId: string }, codes: readonly string[],
 ): Promise<EnsureTeamsResult> {
-  // 하나라도 이름이 틀리면 아무것도 만들지 않는다 — 정규화를 DB 보다 먼저 끝낸다
-  const wanted: string[] = []
-  for (const input of codes) {
-    const n = normalizeNewTeamCode(input)
-    if (!n.ok) return { ok: false, code: 'INVALID_TEAM_CODE', error: n.error, team: input }
-    if (!wanted.includes(n.code)) wanted.push(n.code)
-  }
+  // 하나라도 이름이 틀리면 아무것도 만들지 않는다 — 정규화를 DB 보다 먼저 끝낸다. 가져오기 라우트는 같은 검사(validateNewTeamCodes)를
+  // 전환·409 앞에서 이미 했다 — 여기는 두 번째 방어선이다(다른 호출부·경합)
+  const checked = validateNewTeamCodes(codes)
+  if (!checked.ok) return { ok: false, code: 'INVALID_TEAM_CODE', error: checked.error, team: checked.team }
+  const wanted = checked.codes
   if (wanted.length === 0) return { ok: true, created: [], existing: [] }
 
   const { admin, projectId } = adminFor({ projectId: scope.projectId })

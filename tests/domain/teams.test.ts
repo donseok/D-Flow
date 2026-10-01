@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  activeCodes, normalizeNewTeamCode, teamOrderMap,
+  activeCodes, normalizeNewTeamCode, teamOrderMap, validateNewTeamCodes,
   type Team,
 } from '@/lib/domain/teams'
 import { FIXTURE_TEAMS, FIXTURE_TEAM_CODES } from '../fixtures/teams'
@@ -31,5 +31,13 @@ describe('domain/teams', () => {
     expect(normalizeNewTeamCode('a'.repeat(21)).ok).toBe(false)
     expect(normalizeNewTeamCode('산출물').ok).toBe(false) // 엑셀 헤더 예약어
     expect(normalizeNewTeamCode('Activity').ok).toBe(false)
+  })
+
+  it('validateNewTeamCodes: 입력 순서로 정규화(중복 제거), 첫 불가 이름을 입력 그대로 돌려준다(전환·등록 앞의 사전 검사 — SP4 R1)', () => {
+    expect(validateNewTeamCodes([' 신팀 ', 'CIV', '신팀'])).toEqual({ ok: true, codes: ['신팀', 'CIV'] })
+    expect(validateNewTeamCodes([])).toEqual({ ok: true, codes: [] })
+    const bad = validateNewTeamCodes(['CIV', '산출물', 'a'.repeat(21)])
+    expect(bad).toMatchObject({ ok: false, team: '산출물' })
+    expect(validateNewTeamCodes(['  ', 'CIV'])).toMatchObject({ ok: false, team: '  ' })
   })
 })
