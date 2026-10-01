@@ -11,6 +11,8 @@
 --     영역을 재사용한다 — Q33)
 --   · SP4 경로로 만든 행의 원래 순서 — sort_order 는 그 문서 안 영역 순서(sort_order, code, id — D32)의 순위로 매긴다
 --   · 트리거(⑪)가 매긴 updated_at — 그 값 그대로 옮긴다
+--   · 기존 영역 code 의 비반각 앞뒤 공백(NBSP·U+3000·탭 — 0003 의 code 검사는 반각만 본다. SQL·service_role 로 만든 영역만 해당) —
+--     section 은 그 code 그대로 돌아가고 재적용의 ⑤ 는 다듬은 라벨로 찾으므로 그 행은 다른 영역(신설·재사용)으로 간다. 내용 손실은 없다(⑦)
 --   · modules.* 를 건드리지 않는다 — CR-4 해당 없음(이월은 스펙 §9). 0006·0012 소유 함수는 지우지 않는다
 -- 재생성하는 표의 이전 모양(0012 적용 뒤 — 2026-10-01 main 81deae9 실측): weekly_report_rows 10열 id uuid default gen_random_uuid(),
 --   report_id uuid, section text default '', module text default '', sort_order integer default 1, this_content·this_issue·next_content·next_issue
@@ -20,6 +22,15 @@
 --   anon=r · authenticated=arwd · service_role=arwdDxtm, supabase_realtime 발행 표.
 
 begin;
+-- 순서 정지 — *_command_receipts 의 두 RPC 가 남아 있으면 그 롤백을 먼저 한다(머리 주석 '먼저'). 카탈로그를 바꾸지 않는다
+do $$
+begin
+  if pg_catalog.to_regprocedure('public.import_wbs_cmd(uuid,uuid,text,jsonb,jsonb,uuid)') is not null
+     or pg_catalog.to_regprocedure('public.convert_inherited_teams(uuid,uuid)') is not null then
+    raise exception 'WEEKLY_AREAS_ROLLBACK_ORDER: *_command_receipts 롤백을 먼저 한다';
+  end if;
+end $$;
+
 -- ⑪ 함수·트리거 — 트리거 둘을 먼저 지우고 함수 넷(트리거 함수·RPC 둘·도우미)
 drop trigger weekly_report_rows_touch on public.weekly_report_rows;
 drop trigger weekly_reports_touch on public.weekly_reports;
