@@ -70,7 +70,7 @@ describe('주간업무 시트 — 개편 전에는 로그인만으로 쓸 수 �
   it('createWeeklyReport: 회차 생성은 멤버 가드가 아니라 관리자 가드다', async () => {
     requireProjectAdmin.mockResolvedValue(DENIED)
     const res = await createWeeklyReport('p1', '2026-07-27', false)
-    expect(res).toEqual({ ok: false, error: '권한 없음' })
+    expect(res).toEqual({ ok: false, code: '권한 없음', error: '권한 없음' })
     expect(requireProjectAdmin).toHaveBeenCalledWith('p1')
     expect(requireProjectMember).not.toHaveBeenCalled()
     expect(createServerClient).not.toHaveBeenCalled()

@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { sortWeeklyRows, WEEKLY_SECTIONS, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { sortWeeklyRows, WEEKLY_SECTIONS, type WeeklyAreaRow, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 export interface WeeklyReportDoc { id: string; projectId: string; weekStart: string; title: string }
 
@@ -17,6 +17,22 @@ function mapRow(r: RowRecord): WeeklySheetRow {
 }
 
 const ROW_COLS = 'id, report_id, section, module, sort_order, this_content, this_issue, next_content, next_issue'
+
+/** 영역 행의 열(SP4 — 지운 section·module·sort_order 대신 area_id, Q35). 과제 22 가 getWeeklySheet 도 이 열로 옮기고 옛 ROW_COLS 를 지운다 */
+export const AREA_ROW_COLS = 'id, report_id, area_id, this_content, this_issue, next_content, next_issue'
+
+type AreaRowRecord = {
+  id: string; report_id: string; area_id: string
+  this_content: string; this_issue: string; next_content: string; next_issue: string
+}
+
+export function mapAreaRow(r: AreaRowRecord): WeeklyAreaRow {
+  return {
+    id: r.id, reportId: r.report_id, areaId: r.area_id,
+    thisContent: r.this_content, thisIssue: r.this_issue,
+    nextContent: r.next_content, nextIssue: r.next_issue,
+  }
+}
 
 /** 지연 마이그레이션: WEEKLY_SECTIONS에 구분이 추가돼도(예: PMO) 과거 주차 시트에 그 구분 행이 없어
  *  그리드에서 안 보이는 문제를 막는다. 표준 구분 중 빠진 것만 **빈 행으로 추가**한다 —
@@ -78,27 +94,25 @@ export async function getWeeklySheet(
   return { report, rows: await ensureStandardRows(report.id, rows) }
 }
 
-/** 이월 원본: 해당 주 이전 가장 최근 week_start 문서(직전 주 한정 아님 — 연휴 건너뜀 대응, 스펙 §4). */
+/** 이월 원본: 해당 주 이전 가장 최근 week_start 문서(직전 주 한정 아님 — 연휴 건너뜀 대응, 스펙 §4).
+ *  행은 영역 행(WeeklyAreaRow)이고 순서를 정하지 않는다 — 이월(carryOverRows)이 영역 순서로 내놓는다(옛 sort_order 참조 정렬 삭제, Q35).
+ *  임베드 weekly_reports → weekly_report_rows 의 FK 는 복합 FK 하나(weekly_report_rows_report_fk)라 모호하지 않다(W21). */
 export async function findCarryOverSource(
   projectId: string, beforeWeekStartIso: string,
-): Promise<{ report: WeeklyReportDoc; rows: WeeklySheetRow[] } | null> {
+): Promise<{ report: WeeklyReportDoc; rows: WeeklyAreaRow[] } | null> {
   const sb = await createServerClient()
-  // '가장 최근 이전 문서'의 행은 그 문서가 정해져야 고를 수 있는 진짜 의존이라 Promise.all 로는
-  // 못 묶는다 — 대신 행을 임베드로 같은 왕복에 실어 직렬 2단(문서 → 행)을 한 단으로 줄인다.
-  // 반환 내용(전체 셀 포함)·정렬·에러 시맨틱은 종전과 동일: 이월 생성(weekly.ts)이 전체 행을 쓴다.
   const { data, error } = await sb.from('weekly_reports')
-    .select(`id, project_id, week_start, title, weekly_report_rows(${ROW_COLS})`)
+    .select(`id, project_id, week_start, title, weekly_report_rows(${AREA_ROW_COLS})`)
     .eq('project_id', projectId).lt('week_start', beforeWeekStartIso)
     .order('week_start', { ascending: false }).limit(1)
-    .order('sort_order', { referencedTable: 'weekly_report_rows' })
     .maybeSingle()
-  if (error) throw new Error(error.message) // null(원본 없음)과 조회 실패를 구분 — 실패 시 이월 폴백 금지
+  if (error) throw new Error(error.message) // null(원본 없음)과 조회 실패를 구분 — 실패 시 이월 폴백 금지. 원문은 호출부가 로그로만(failWith)
   if (!data) return null
   const report = {
     id: data.id as string, projectId: data.project_id as string,
     weekStart: data.week_start as string, title: (data.title as string | null) ?? '',
   }
-  const rows = sortWeeklyRows((((data as { weekly_report_rows?: unknown }).weekly_report_rows ?? []) as RowRecord[]).map(mapRow))
+  const rows = (((data as { weekly_report_rows?: unknown }).weekly_report_rows ?? []) as AreaRowRecord[]).map(mapAreaRow)
   return { report, rows }
 }
 

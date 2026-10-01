@@ -35,27 +35,30 @@ function query(result: { data: unknown; error: null | { message: string } }) {
   return chain
 }
 
+const A_EXP = '00000000-0000-0000-7e57-0000000018b1'
+const A_DATA = '00000000-0000-0000-7e57-0000000018b2'
+
 function weeklyClient({
-  scopeRows = [{ id: 'r1' }],
-  labelRows = [{ id: 'r1', section: '영업', module: '' }],
+  scopeRows = [{ id: 'r1', area_id: A_EXP }],
+  areaRows = [{ id: A_EXP, name: '실험', active: true }, { id: A_DATA, name: '데이터', active: false }],
   scopeError = null,
-  labelError = null,
+  areaError = null,
 }: {
-  scopeRows?: { id: string }[]
-  labelRows?: { id: string; section: string; module: string }[]
+  scopeRows?: { id: string; area_id: string }[]
+  areaRows?: { id: string; name: string; active: boolean }[]
   scopeError?: { message: string } | null
-  labelError?: { message: string } | null
+  areaError?: { message: string } | null
 } = {}) {
   let call = 0
   const scope = query({ data: scopeRows, error: scopeError })
-  const labels = query({ data: labelRows, error: labelError })
-  const from = vi.fn(() => {
+  const areas = query({ data: areaRows, error: areaError })
+  const from = vi.fn((table: string) => {
     call += 1
-    if (call === 1) return scope
-    if (call === 2) return labels
-    throw new Error('AI 미리보기에서 추가 DB 접근 금지')
+    if (call === 1 && table === 'weekly_report_rows') return scope
+    if (call === 2 && table === 'project_areas') return areas
+    throw new Error(`AI 미리보기에서 추가 DB 접근 금지: ${call}:${table}`)
   })
-  return { from, scope, labels }
+  return { from, scope, areas }
 }
 
 const input = (over: Partial<WeeklyRewriteInput> = {}): WeeklyRewriteInput => ({
@@ -124,14 +127,8 @@ describe('prepareWeeklyCellRewrite', () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
 
-  it('현재 로컬 내용을 가상 ID로 한 번만 요청하고 제안만 반환한다', async () => {
-    const client = weeklyClient({
-      scopeRows: [{ id: 'r1' }, { id: 'r2' }],
-      labelRows: [
-        { id: 'r1', section: '영업', module: '' },
-        { id: 'r2', section: 'ERP', module: 'MM' },
-      ],
-    })
+  it('현재 로컬 내용을 가상 ID로 한 번만 요청하고 제안만 반환한다 — 라벨은 행의 영역 이름', async () => {
+    const client = weeklyClient({ scopeRows: [{ id: 'r1', area_id: A_EXP }, { id: 'r2', area_id: A_DATA }] })
     mocks.createServerClient.mockResolvedValue(client as never)
     mocks.generateAnswer.mockResolvedValue(JSON.stringify({ cells: [
       { id: 'c0', content: 'ERP-21 전환을 80% 완료했습니다.' },
@@ -152,8 +149,8 @@ describe('prepareWeeklyCellRewrite', () => {
     const [system, messages, options] = mocks.generateAnswer.mock.calls[0]
     expect(system).toContain('한국어 프로젝트 주간업무 보고서 편집자')
     expect(JSON.parse(messages[0].content)).toEqual({ cells: [
-      { id: 'c0', section: '영업', field: '금주실적 내용', content: inputs[0].content },
-      { id: 'c1', section: 'ERP · MM', field: '금주 이슈·이벤트', content: inputs[1].content },
+      { id: 'c0', section: '실험', field: '금주실적 내용', content: inputs[0].content },
+      { id: 'c1', section: '데이터 (비활성)', field: '금주 이슈·이벤트', content: inputs[1].content },
     ] })
     expect(options).toEqual({
       timeoutMs: 15_000,
@@ -163,6 +160,11 @@ describe('prepareWeeklyCellRewrite', () => {
       retryRateLimit: false,
     })
     expect(client.from).toHaveBeenCalledTimes(2)
+    expect(client.scope.select).toHaveBeenCalledWith('id, area_id')
+    expect(client.scope.eq).toHaveBeenCalledWith('project_id', 'p-success')
+    expect(client.areas.select).toHaveBeenCalledWith('id, name, active')
+    expect(client.areas.eq).toHaveBeenCalledWith('project_id', 'p-success')
+    expect(client.areas.eq).toHaveBeenCalledWith('kind', 'weekly_section')
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
 
@@ -185,5 +187,15 @@ describe('prepareWeeklyCellRewrite', () => {
     expect(await prepareWeeklyCellRewrite('p1', [input()])).toEqual({ ok: false, error: 'AI 를 사용할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.' })
     expect(vi.mocked(aiAvailable)).toHaveBeenLastCalledWith({ projectId: 'p1' }, { module: 'weekly' })
     expect(mocks.generateAnswer).not.toHaveBeenCalled()
+  })
+
+  it('영역 조회가 실패하면 AI 를 부르지 않고 중단한다 — 원문을 싣지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.createServerClient.mockResolvedValue(weeklyClient({ areaError: { message: 'relation secret_areas' } }) as never)
+    const result = await prepareWeeklyCellRewrite('p-areas', [input()])
+    expect(result).toEqual({ ok: false, error: '선택한 셀을 확인할 수 없습니다.' })
+    expect(JSON.stringify(result)).not.toContain('secret_areas')
+    expect(mocks.generateAnswer).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

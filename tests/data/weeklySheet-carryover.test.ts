@@ -8,9 +8,7 @@ import { findCarryOverSource, hasCarryOverSource, getWeeklySheet } from '@/lib/d
 type DbRow = {
   id: string
   report_id: string
-  section: string
-  module: string
-  sort_order: number
+  area_id: string
   this_content: string
   this_issue: string
   next_content: string
@@ -19,16 +17,18 @@ type DbRow = {
 
 type DbReport = { id: string; project_id: string; week_start: string; title: string | null }
 
-function row(reportId: string, section: string, sortOrder: number, thisContent = ''): DbRow {
+// 합성 영역 id(단위 테스트 구간 18b0~18bf — weekly-create 와 같은 값)
+const A_EXP = '00000000-0000-0000-7e57-0000000018b1'
+const A_DATA = '00000000-0000-0000-7e57-0000000018b2'
+
+function row(reportId: string, areaId: string, thisContent = ''): DbRow {
   return {
-    id: `row-${reportId}-${section}`,
+    id: `row-${reportId}-${areaId}`,
     report_id: reportId,
-    section,
-    module: '',
-    sort_order: sortOrder,
+    area_id: areaId,
     this_content: thisContent,
     this_issue: '',
-    next_content: `${section} 차주계획`,
+    next_content: `${areaId} 차주계획`,
     next_issue: '',
   }
 }
@@ -41,6 +41,7 @@ function row(reportId: string, section: string, sortOrder: number, thisContent =
  */
 function stubCarryClient(state: { reports: DbReport[]; rowsByReport: Record<string, DbRow[]>; failWith?: string }) {
   const selects: string[] = []
+  const orders: unknown[][] = []
   const client = {
     from: vi.fn((table: string) => {
       if (table !== 'weekly_reports') throw new Error(`unexpected table: ${table}`)
@@ -58,7 +59,7 @@ function stubCarryClient(state: { reports: DbReport[]; rowsByReport: Record<stri
         filters.before = v
         return q
       })
-      q.order = vi.fn(() => q)
+      q.order = vi.fn((...a: unknown[]) => { orders.push(a); return q })
       q.limit = vi.fn(() => q)
       q.maybeSingle = vi.fn(async () => {
         if (state.failWith) return { data: null, error: { message: state.failWith } }
@@ -69,14 +70,14 @@ function stubCarryClient(state: { reports: DbReport[]; rowsByReport: Record<stri
         const rows = state.rowsByReport[latest.id] ?? []
         const embed = sel.includes('weekly_report_rows(count)')
           ? [{ count: rows.length }]
-          : [...rows].sort((a, b) => a.sort_order - b.sort_order)
+          : [...rows]
         return { data: { ...latest, weekly_report_rows: embed }, error: null }
       })
       return q
     }),
   }
   mocks.createServerClient.mockResolvedValue(client as never)
-  return { selects }
+  return { selects, orders }
 }
 
 /** 소비처(weekly/page.tsx)의 이월 제안 판정 원식 — 이 판정과 hasCarryOverSource 가 항상 일치해야 한다. */
@@ -107,8 +108,8 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
         { id: 'r-new', project_id: 'p1', week_start: '2026-08-10', title: '지난 주' },
       ],
       rowsByReport: {
-        'r-old': [row('r-old', 'PMO', 1)],
-        'r-new': [row('r-new', 'PMO', 1), row('r-new', '영업', 2)],
+        'r-old': [row('r-old', A_EXP)],
+        'r-new': [row('r-new', A_EXP), row('r-new', A_DATA)],
       },
     }
     stubCarryClient(state)
@@ -126,7 +127,7 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
         { id: 'r-empty', project_id: 'p1', week_start: '2026-08-10', title: null },
       ],
       rowsByReport: {
-        'r-old': [row('r-old', 'PMO', 1), row('r-old', '영업', 2)],
+        'r-old': [row('r-old', A_EXP), row('r-old', A_DATA)],
         'r-empty': [],
       },
     }
@@ -141,7 +142,7 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
   it('해당 주 자신(week_start == before)은 원본이 아니다 — lt 경계 보존', async () => {
     const state = {
       reports: [{ id: 'r-same', project_id: 'p1', week_start: '2026-08-17', title: null }],
-      rowsByReport: { 'r-same': [row('r-same', 'PMO', 1)] },
+      rowsByReport: { 'r-same': [row('r-same', A_EXP)] },
     }
     stubCarryClient(state)
     const legacy = await legacyJudgment('p1', '2026-08-17')
@@ -154,7 +155,7 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
   it('다른 프로젝트의 문서는 원본이 아니다', async () => {
     const state = {
       reports: [{ id: 'r-other', project_id: 'p2', week_start: '2026-08-10', title: null }],
-      rowsByReport: { 'r-other': [row('r-other', 'PMO', 1)] },
+      rowsByReport: { 'r-other': [row('r-other', A_EXP)] },
     }
     stubCarryClient(state)
     const legacy = await legacyJudgment('p1', '2026-08-17')
@@ -174,7 +175,7 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
   it('판정 쿼리는 셀 내용 컬럼을 전혀 싣지 않는다(count 임베드만) — 페이로드 제거 증명', async () => {
     const { selects } = stubCarryClient({
       reports: [{ id: 'r1', project_id: 'p1', week_start: '2026-08-10', title: null }],
-      rowsByReport: { r1: [row('r1', 'PMO', 1, 'ㅁ'.repeat(1000))] },
+      rowsByReport: { r1: [row('r1', A_EXP, 'ㅁ'.repeat(1000))] },
     })
     await hasCarryOverSource('p1', '2026-08-17')
     expect(selects).toHaveLength(1)
@@ -186,24 +187,21 @@ describe('hasCarryOverSource — 판정 시맨틱 보존 (findCarryOverSource �
 })
 
 describe('findCarryOverSource — 임베드 1왕복화 이후에도 반환 계약 유지', () => {
-  it('전체 셀 내용을 그대로 반환한다(이월 생성 소비처 계약) + title null 은 빈 문자열', async () => {
-    const { selects } = stubCarryClient({
+  it('전체 셀 내용을 영역 행으로 돌려준다(이월 소비처 계약) — title null 은 빈 문자열, 지운 열을 읽지 않고 순서를 정하지 않는다', async () => {
+    const { selects, orders } = stubCarryClient({
       reports: [{ id: 'r1', project_id: 'p1', week_start: '2026-08-10', title: null }],
-      rowsByReport: {
-        r1: [row('r1', '영업', 2, '이번주 한 일'), row('r1', 'PMO', 1, 'PMO 내용')],
-      },
+      rowsByReport: { r1: [row('r1', A_DATA, '데이터 한 일'), row('r1', A_EXP, '실험 한 일')] },
     })
     const src = await findCarryOverSource('p1', '2026-08-17')
-    expect(src).not.toBeNull()
     expect(src?.report).toEqual({ id: 'r1', projectId: 'p1', weekStart: '2026-08-10', title: '' })
-    // 셀 내용 컬럼이 여전히 select 에 실린다 — 경량화는 hasCarryOverSource 쪽 일이다.
+    expect(selects[0]).toContain('area_id')
     expect(selects[0]).toContain('this_content')
-    // sortWeeklyRows 시맨틱: 표준 구분 이름 순(PMO 가 영업보다 앞)
-    expect(src?.rows.map(r => r.section)).toEqual(['PMO', '영업'])
-    expect(src?.rows.map(r => r.thisContent)).toEqual(['PMO 내용', '이번주 한 일'])
-    expect(src?.rows[0]).toMatchObject({
-      id: 'row-r1-PMO', reportId: 'r1', section: 'PMO', module: '', sortOrder: 1,
-      thisContent: 'PMO 내용', thisIssue: '', nextContent: 'PMO 차주계획', nextIssue: '',
+    for (const col of ['section', 'module', 'sort_order']) expect(selects[0]).not.toContain(col)
+    expect(orders).toEqual([['week_start', { ascending: false }]])        // 임베드 참조 정렬(sort_order) 없음 — Q35
+    expect(src?.rows.map(r => r.areaId)).toEqual([A_DATA, A_EXP])          // 받은 그대로
+    expect(src?.rows[1]).toEqual({
+      id: `row-r1-${A_EXP}`, reportId: 'r1', areaId: A_EXP,
+      thisContent: '실험 한 일', thisIssue: '', nextContent: `${A_EXP} 차주계획`, nextIssue: '',
     })
   })
 

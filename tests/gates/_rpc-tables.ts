@@ -30,6 +30,7 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   can_attach: [],
   consume_project_invite: ['people', 'profiles', 'project_invites', 'project_member_teams', 'project_members', 'workspace_members'],
   create_project_with_settings: ['area_teams', 'project_areas', 'project_settings', 'project_settings_history', 'projects', 'teams'],
+  create_weekly_report: ['weekly_reports', 'weekly_report_rows'],
   import_wbs: ['holidays', 'item_owners', 'wbs_items'],
   purge_read_notifications: ['notification_events', 'notification_recipients'],
   replace_wbs: ['holidays', 'item_owners', 'wbs_items'],
