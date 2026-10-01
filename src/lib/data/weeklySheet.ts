@@ -41,6 +41,16 @@ export async function getWeeklySheet(
   return { report, rows: ((rowsRes.data ?? []) as AreaRowRecord[]).map(mapAreaRow) }
 }
 
+/** 해당 주차 문서의 id(없으면 null) — 이월 판정 앞의 존재 확인(A1-4 리뷰 P7: 이미 있는 주차에 매핑 창을 띄우지 않는다).
+ *  읽기만 한다. 조회 실패는 throw — 없음으로 위장하면 있는 주차에 이월 판정·매핑을 다시 요구한다(3원칙 ①). */
+export async function findWeeklyReportId(projectId: string, weekStartIso: string): Promise<string | null> {
+  const sb = await createServerClient()
+  const { data, error } = await sb.from('weekly_reports').select('id')
+    .eq('project_id', projectId).eq('week_start', weekStartIso).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? (data.id as string) : null
+}
+
 /** 이월 원본: 해당 주 이전 가장 최근 week_start 문서(직전 주 한정 아님 — 연휴 건너뜀 대응, 스펙 §4).
  *  행은 영역 행(WeeklySheetRow)이고 순서를 정하지 않는다 — 이월(carryOverRows)이 영역 순서로 내놓는다(옛 sort_order 참조 정렬 삭제, Q35).
  *  임베드 weekly_reports → weekly_report_rows 의 FK 는 복합 FK 하나(weekly_report_rows_report_fk)라 모호하지 않다(W21). */
