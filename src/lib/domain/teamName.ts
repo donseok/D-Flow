@@ -36,3 +36,14 @@ export function newTeamCodeClash(code: string, siblings: readonly { code: string
   return hit ? hit.code : null
 }
 export const teamCodeClashError = (code: string, clash: string) => `'${code}'는 같은 범위의 다른 팀(${clash})의 코드·이름과 겹칩니다.`
+/** 새 code 목록의 첫 겹침 — 기존 팀(siblings)과, 그리고 앞서 통과한 새 code 끼리(A2-2 리뷰 보안 P3 — 한 번의 가져오기에 ab·AB 가 함께
+ *  등록되던 길. 액션은 두 번째 추가에서 막혔다). 정확히 같은 code 는 겹침이 아니다(호출부의 "이미 있음"). 겹치면 { code, clash }, 아니면 null */
+export function firstNewCodeClash(codes: readonly string[], siblings: readonly { code: string; name: string }[]): { code: string; clash: string } | null {
+  const seen = [...siblings]
+  for (const code of codes) {
+    const clash = newTeamCodeClash(code, seen)
+    if (clash) return { code, clash }
+    if (!seen.some((s) => s.code === code)) seen.push({ code, name: code })
+  }
+  return null
+}

@@ -36,7 +36,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProj
 vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: mocks.writeProjectSettingsInternal }))
 vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: mocks.ensureProjectTeams }))
 // 혼합 프로젝트의 공용 팀 참조 판정(Z4) — 이 파일은 그 경우를 보지 않는다: 참조 없음
-vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: async () => new Set<string>() }))
+vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: async () => new Map<string, string>() }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 
 import { POST } from '@/app/api/import/execute/route'

@@ -22,6 +22,7 @@ export const ERR_REGISTER_TEAMS = '팀을 등록하지 못했습니다. 잠시 �
 /** codes 를 그 프로젝트의 전용 팀으로 — 이미 있으면 existing, 새로 만들면 created(정규화한 code, 입력 순·중복 없음) */
 export async function ensureProjectTeams(
   scope: { projectId: string; workspaceId: string }, codes: readonly string[], reserved: readonly string[],
+  opts?: { copiedCodes?: readonly string[] },
 ): Promise<EnsureTeamsResult> {
   // 하나라도 이름이 틀리면 아무것도 만들지 않는다 — 정규화를 DB 보다 먼저 끝낸다. 가져오기 라우트는 같은 검사(validateNewTeamCodes)를
   // 전환·409 앞에서 이미 했다 — 여기는 두 번째 방어선이다(다른 호출부·경합)
@@ -37,11 +38,16 @@ export async function ensureProjectTeams(
     return { ok: false, code: 'TEAM_REGISTER_FAILED', error: failWith('teams/register 사전 조회', have.error, ERR_REGISTER_TEAMS), team: wanted[0] }
   }
   const siblings = (have.data ?? []) as { code: string; name: string }[]
-  // 같은 프로젝트 팀의 code·이름(개명 포함)과 대소문자·전각만 다른 새 code 는 만들지 않는다(개명 규칙의 대칭 — A2-1 리뷰 정확성 P3).
-  // 가져오기 라우트는 같은 판정을 전환·409 앞에서 했다 — 여기는 두 번째 방어선이다
+  // 같은 프로젝트 팀의 code·이름(개명 포함)과, 같은 요청의 앞선 새 code 와 대소문자·전각만 다른 새 code 는 만들지 않는다(개명 규칙의 대칭 —
+  // A2-1 리뷰 정확성 P3, 요청 안의 겹침 — A2-2 리뷰 보안 P3). 가져오기 라우트는 같은 판정을 전환·409 앞에서 했다 — 여기는 두 번째 방어선이다.
+  // copiedCodes(상속 프로젝트의 전환이 옮기는 공용 팀 code)는 보지 않는다 — 워크스페이스에 이미 따로 있던 팀의 복사라 새 이름이 아니고,
+  // 전환이 커밋된 뒤 여기서 거부하면 되돌릴 수 없는 전환만 남는다(A1-5 R1)
+  const copied = new Set(opts?.copiedCodes ?? [])
+  const seen: { code: string; name: string }[] = [...siblings]
   for (const code of wanted) {
-    const clash = newTeamCodeClash(code, siblings)
+    const clash = copied.has(code) ? null : newTeamCodeClash(code, seen)
     if (clash) return { ok: false, code: 'INVALID_TEAM_CODE', error: teamCodeClashError(code, clash), team: code }
+    if (!seen.some((s) => s.code === code)) seen.push({ code, name: code })
   }
   const max = await admin.from('teams').select('sort_order').eq('project_id', projectId)
     .order('sort_order', { ascending: false }).limit(1).maybeSingle()

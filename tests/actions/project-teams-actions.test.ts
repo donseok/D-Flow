@@ -62,7 +62,7 @@ const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, wor
   const refreshTeams = vi.fn(async () => true)
   const requireProjectAdmin = vi.fn()
   const workspaceTeams = vi.fn()
-  const referencedCommonTeamCodes = vi.fn(async (): Promise<Set<string>> => new Set())
+  const referencedCommonTeamCodes = vi.fn(async (): Promise<Map<string, string>> => new Map())
   return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -95,7 +95,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
     requireProjectAdmin.mockReset()
     workspaceTeams.mockReset()
     referencedCommonTeamCodes.mockReset()
-    referencedCommonTeamCodes.mockResolvedValue(new Set())
+    referencedCommonTeamCodes.mockResolvedValue(new Map())
     cfg.getProjectConfig.mockReset()
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
   })
@@ -146,10 +146,20 @@ describe('프로젝트 팀 관리 서버액션', () => {
 
     it('[Q4] 이 프로젝트가 이미 쓰는 공용 팀과 같은 code 의 전용 팀은 만들지 않는다 — 안내 문구, insert 없음(D4 분열 방지)', async () => {
       asAdmin()
-      referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+      referencedCommonTeamCodes.mockResolvedValue(new Map([['QA', 'QA']]))
       const r = await addProjectTeam('p1', 'QA')
       expect(r).toEqual({ ok: false, error: expect.stringContaining("공용 팀 'QA'") })
       expect(referencedCommonTeamCodes).toHaveBeenCalledWith({ projectId: 'p1', workspaceId: 'ws-1' }, ['QA'])
+      expect(db.inserted.teams).toHaveLength(0)
+    })
+
+    it('[U4] 이 프로젝트가 쓰는 공용 팀과 대소문자·전각만 다른 code 는 겹침으로 거부 — 전용 qa 가 공용 QA 참조와 갈라지지 않는다', async () => {
+      asAdmin()
+      for (const input of ['qa', 'ＱＡ']) {
+        referencedCommonTeamCodes.mockResolvedValue(new Map([[input === 'qa' ? 'qa' : 'ＱＡ', 'QA']]))
+        const r = await addProjectTeam('p1', input)
+        expect(r, input).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(QA)') })
+      }
       expect(db.inserted.teams).toHaveLength(0)
     })
 

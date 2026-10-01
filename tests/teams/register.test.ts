@@ -81,6 +81,21 @@ describe('ensureProjectTeams — 늘 전용 팀, 이미 있으면 성공', () =>
       expect(inserted).toEqual([])
     }
   })
+  it('[U4] 같은 요청의 새 code 끼리도 겹치면 만들지 않는다 — ab·AB 둘 다 생기지 않는다(액션 두 번과 같은 규칙)', async () => {
+    const { inserted } = teamsAdmin({ have: [] })
+    const r = await ensureProjectTeams(SCOPE, ['ab', 'AB'], RESERVED)
+    expect(r).toMatchObject({ ok: false, code: 'INVALID_TEAM_CODE', team: 'AB' })
+    if (!r.ok) expect(r.error).toContain('(ab)')
+    expect(inserted).toEqual([])
+  })
+  it('[U4] 전환이 옮긴 공용 팀의 code(copiedCodes)는 겹침을 보지 않는다 — 워크스페이스에 이미 따로 있던 팀의 복사다(전환 뒤 400 이 나지 않는다)', async () => {
+    const { inserted } = teamsAdmin({ have: ['ZED'], maxSort: 0 })
+    expect(await ensureProjectTeams(SCOPE, ['ZED', 'Zed'], RESERVED, { copiedCodes: ['ZED', 'Zed'] })).toEqual({ ok: true, created: ['Zed'], existing: ['ZED'] })
+    expect(inserted).toEqual([expect.objectContaining({ code: 'Zed' })])
+    // 새 이름은 그대로 본다 — 복사가 아닌 code 가 복사된 팀과 겹치면 거부
+    teamsAdmin({ have: ['ZED'] })
+    expect(await ensureProjectTeams(SCOPE, ['ZED', 'zed'], RESERVED, { copiedCodes: ['ZED'] })).toMatchObject({ ok: false, team: 'zed' })
+  })
   it('전용 팀이 0개면 순번 0 부터', async () => {
     const { inserted } = teamsAdmin({ maxSort: null })
     await ensureProjectTeams(SCOPE, ['RES'], RESERVED)

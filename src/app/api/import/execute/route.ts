@@ -12,7 +12,7 @@ import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { reservedTeamNames, validateNewTeamCodes, type Team } from '@/lib/domain/teams'
-import { newTeamCodeClash } from '@/lib/domain/teamName'
+import { firstNewCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
@@ -226,13 +226,18 @@ export async function POST(req: NextRequest) {
     // 가져오기 RPC 가 그 워크스페이스 공용 팀으로 잇는다(지금의 참조와 같은 팀). 조회 실패는 등록 전 선행 조회 실패라 중단한다(3원칙 ②)
     const wsOfProject = g.actor.projectWorkspace.get(projectId)
     if (ownTeams.length > 0 && unknownTeams.length > 0 && wsOfProject) {
-      let referenced: Set<string>
+      let referenced: Map<string, string>
       try {
         referenced = await referencedCommonTeamCodes({ projectId, workspaceId: wsOfProject }, unknownTeams)
       } catch (e) {
         return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 공용 팀 참조 조회', e, ERR_TEAMS))
       }
-      unknownTeams = unknownTeams.filter((t) => !referenced.has(t))
+      // 참조 중인 공용 팀과 대소문자·전각·개명 이름만 다른 code 는 겹침(A2-2 리뷰 보안 P3) — 전용 팀으로 만들면 같은 낱말의 두 팀으로 갈라진다
+      for (const t of unknownTeams) {
+        const common = referenced.get(t)
+        if (common && common !== t) return fail(400, 'INVALID_TEAM_CODE', teamCodeClashError(t, common), { team: t, clash: common })
+      }
+      unknownTeams = unknownTeams.filter((t) => referenced.get(t) !== t)
     }
     if (unknownTeams.length > 0) {
       // 예약어 = 엑셀 머리 낱말 ∪ 이 프로젝트의 단계 이름·추가 축 이름(SP4 D38) — 위에서 읽은 같은 설정으로. 손상된 키는 그 키의 오류
@@ -250,8 +255,9 @@ export async function POST(req: NextRequest) {
       if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: named.team })
       // 이 프로젝트 팀(상속이면 전환이 복사할 공용 팀)의 code·이름(개명 포함)과 대소문자·전각만 다른 새 code 도 같은 자리에서 거부한다
       // (개명 규칙의 대칭 — A2-1 리뷰 정확성 P3). 전환 앞이라 거절이 전환을 남기지 않는다
-      const clashing = named.codes.find((c) => newTeamCodeClash(c, teams) !== null)
-      if (clashing) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: clashing })
+      // 한 파일 안의 새 code 끼리(ab·AB)도 같은 규칙으로 본다(A2-2 리뷰 보안 P3). 응답은 겹친 팀을 싣는다 — 'ops' 가 왜 안 되는지 보이게
+      const clashing = firstNewCodeClash(named.codes, teams)
+      if (clashing) return fail(400, 'INVALID_TEAM_CODE', teamCodeClashError(clashing.code, clashing.clash), { team: clashing.code, clash: clashing.clash })
       const inheritsCommon = ownTeams.length === 0
       // 전환 동의 토큰(A1-5 R3) — 상속 프로젝트의 확인은 "등록해도 되나" 한 비트가 아니라 409 가 보여 준 전환 대상(공용 팀 전부 + 등록할 팀)에
       // 묶인다. 확인 사이에 대상이 바뀌었으면(토큰이 다르거나 없으면) 전환하지 않고 지금 대상으로 다시 409 를 낸다
@@ -281,7 +287,11 @@ export async function POST(req: NextRequest) {
       // R2 — 전환을 부른 요청은 대조를 전환 뒤 상태로 다시 한다: 파일의 팀 code 전부를 전용 팀으로 맞춘다(이미 있는 전용 팀은 existing).
       // 전환은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 팀만 복사하므로, 파일이 가리키는 "비활성·미참조 공용 팀"은 전용 팀으로 새로
       // 만들어야 import_wbs_cmd 가 그 담당을 공용 팀 id 로 넣지 않는다(전용·공용 혼재 = D4 분열 — DB 가 같은 code 의 공용 참조만 막는다)
-      const ensured = await ensureProjectTeams({ projectId, workspaceId }, inheritsCommon ? fileTeams : unknownTeams, reserved)
+      // 상속 프로젝트는 파일이 가리키는 기존 공용 팀 code 를 복사(copiedCodes)로 넘긴다 — 등록의 겹침 검사가 그 code 끼리(워크스페이스에 이미
+      // 따로 있던 팀)로 전환 뒤 400 을 내지 않게(A1-5 R1, A2-2 리뷰 보안 P3). 새 code 의 겹침은 위에서 전환 앞에 봤다(teams ⊇ 전환이 옮길 팀)
+      const ensured = inheritsCommon
+        ? await ensureProjectTeams({ projectId, workspaceId }, fileTeams, reserved, { copiedCodes: fileTeams.filter((t) => known.has(t)) })
+        : await ensureProjectTeams({ projectId, workspaceId }, unknownTeams, reserved)
       if (!ensured.ok) {
         if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: ensured.team })
         return fail(500, 'TEAM_REGISTER_FAILED', ERR_TEAM_REGISTER)

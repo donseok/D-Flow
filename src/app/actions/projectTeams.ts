@@ -58,13 +58,16 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
   // 이 프로젝트가 이미 쓰는 공용 팀과 같은 code 의 전용 팀은 만들지 않는다(A2-1 리뷰 보안 P3 — 가져오기 Z4 와 같은 판정). 만들면 기존 공용
   // 참조(담당·명단·영역·초대)와 같은 code·다른 id 가 된다(D4 분열). 판정 조회 실패는 쓰기 전 선행 조회 실패라 중단한다(3원칙 ②)
-  let referenced: Set<string>
+  // 대소문자·전각·개명 이름만 다른 참조 중인 공용 팀도 겹침으로 거부한다(A2-2 리뷰 보안 P3 — 전용 qa 가 공용 QA 참조와 갈라진다)
+  let referenced: Map<string, string>
   try {
     referenced = await referencedCommonTeamCodes({ projectId, workspaceId }, [norm.code])
   } catch (e) {
     return { ok: false, error: failWith('projectTeams.add 공용 팀 참조 조회', e, ERR_TEAM_LOOKUP) }
   }
-  if (referenced.has(norm.code)) return { ok: false, error: ERR_COMMON_IN_USE(norm.code) }
+  const common = referenced.get(norm.code)
+  if (common === norm.code) return { ok: false, error: ERR_COMMON_IN_USE(norm.code) }
+  if (common) return { ok: false, error: teamCodeClashError(norm.code, common) }
 
   const max = await admin.from('teams')
     .select('sort_order').eq('project_id', projectId)

@@ -20,7 +20,7 @@ vi.mock('@/lib/excel/validate', () => ({ splitLeafOwners: m.splitLeafOwners }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: m.ensureProjectTeams }))
 // 혼합 프로젝트의 공용 팀 참조 판정(Z4) — 이 파일은 그 경우를 보지 않는다: 참조 없음
-vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: async () => new Set<string>() }))
+vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: async () => new Map<string, string>() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: m.recordProgressSnapshot }))

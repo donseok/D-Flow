@@ -39,7 +39,7 @@ vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: () => ({ admin: m.client }
 vi.mock('@/lib/teams/master', () => ({ refreshTeams: vi.fn(async () => true) }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 
-import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { checkTeamRename, firstNewCodeClash, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { updateProjectTeam } from '@/app/actions/projectTeams'
 import { updateTeam } from '@/app/actions/teams'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -142,5 +142,18 @@ describe('newTeamCodeClash — 생성 경로의 겹침', () => {
     expect(newTeamCodeClash('RES', sib)).toBeNull()
     expect(newTeamCodeClash('OPS', sib)).toBeNull()
     expect(teamCodeClashError('운영', 'RES')).toContain('다른 팀(RES)')
+  })
+})
+
+// A2-2 리뷰 보안 P3(U4) — 한 번의 가져오기 안의 새 code 끼리도 겹침을 본다(액션 두 번이면 둘째가 막히는데 가져오기 길만 비켜 갔다)
+describe('firstNewCodeClash — 새 code 끼리와 기존 팀', () => {
+  it('앞서 통과한 새 code 와 키가 같으면 그 뒤 code 가 겹친다(대소문자·전각)', () => {
+    expect(firstNewCodeClash(['ab', 'AB'], [])).toEqual({ code: 'AB', clash: 'ab' })
+    expect(firstNewCodeClash(['AB', 'ＡＢ'], [])).toEqual({ code: 'ＡＢ', clash: 'AB' })
+  })
+  it('기존 팀과의 겹침은 newTeamCodeClash 와 같다, 겹치지 않으면 null', () => {
+    expect(firstNewCodeClash(['OPS', 'res'], [{ code: 'RES', name: '연구' }])).toEqual({ code: 'res', clash: 'RES' })
+    expect(firstNewCodeClash(['OPS', 'LAB'], [{ code: 'RES', name: '연구' }])).toBeNull()
+    expect(firstNewCodeClash(['RES'], [{ code: 'RES', name: 'RES' }])).toBeNull()   // 정확히 같은 code 는 호출부의 "이미 있음"
   })
 })

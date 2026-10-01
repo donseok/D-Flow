@@ -138,7 +138,7 @@ beforeEach(() => {
   m.recordProgressSnapshot.mockResolvedValue(undefined)
   m.ingestProject.mockResolvedValue({ count: 2 })
   m.ensureProjectTeams.mockResolvedValue({ ok: true, created: [], existing: [] })
-  m.referencedCommonTeamCodes.mockResolvedValue(new Set())
+  m.referencedCommonTeamCodes.mockResolvedValue(new Map())
   m.writeProjectSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'settings-cmd' })
   teamsAre([OWN_RES], [OWN_RES])
   session()
@@ -235,7 +235,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
   })
   it('[Z4] 혼합 프로젝트(전용 팀 + 이미 참조 중인 공용 QA)는 QA 를 전용 팀으로 등록하지 않는다 — 409·등록 없이 가져오기 RPC 가 공용 QA 로 잇는다', async () => {
-    m.referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+    m.referencedCommonTeamCodes.mockResolvedValue(new Map([['QA', 'QA']]))
     const { rpc } = admin()
     expect((await POST(req())).status).toBe(200)
     expect(m.referencedCommonTeamCodes).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
@@ -254,7 +254,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     err.mockRestore()
   })
   it('[Q3] 팀 열 이름의 앞뒤 공백(" QA")은 등록과 같은 정규화로 대조한다 — 참조 판정·파서가 모두 "QA" 를 본다(A2-1 리뷰 보안 P3)', async () => {
-    m.referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+    m.referencedCommonTeamCodes.mockResolvedValue(new Map([['QA', 'QA']]))
     const spaced: ExcelProfile = { ...PROFILE, teamColumns: [[2, 'RES'], [3, ' QA ']] }
     const { rpc } = admin()
     const res = await POST(req({ profile: JSON.stringify(spaced), saveProfile: 'true' }))
@@ -275,6 +275,27 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
       expect(rpc).not.toHaveBeenCalled()
       expect(m.ensureProjectTeams).not.toHaveBeenCalled()
     }
+  })
+  it('[U4] 혼합 프로젝트에서 참조 중인 공용 QA 와 대소문자만 다른 qa 는 400(겹침 — 어느 팀과 겹치는지 싣는다), 등록·가져오기 없음', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'qa')], holidays: [] })
+    m.referencedCommonTeamCodes.mockResolvedValue(new Map([['qa', 'QA']]))
+    const { rpc } = admin()
+    const res = await POST(req({ registerTeams: 'true' }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body).toMatchObject({ code: 'INVALID_TEAM_CODE', team: 'qa', clash: 'QA' })
+    expect(body.error).toContain('다른 팀(QA)')
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('[U4] 한 파일 안의 새 code 끼리 겹치면(ab·AB) 409·등록 앞에서 400 — 겹친 쌍을 싣는다', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'ab'), row('AB')], holidays: [] })
+    const { rpc } = admin()
+    const res = await POST(req({ registerTeams: 'true' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'INVALID_TEAM_CODE', team: 'AB', clash: 'ab' })
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
   })
   it('[Z4] 상속 프로젝트(전용 팀 0)는 참조 판정을 하지 않는다 — 전환이 공용 팀을 전부 옮긴다', async () => {
     teamsAre(COMMON, [])
@@ -358,7 +379,8 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))
     expect(res.status).toBe(200)
     expect(m.ensureProjectTeams).toHaveBeenCalledTimes(1)
-    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['RES', 'OLD', 'QA'], RESERVED)
+    // 기존 공용 팀 code(RES·OLD)는 복사로 넘긴다 — 등록의 겹침 검사가 전환 뒤 그 code 끼리로 400 을 내지 않게(U4 — A1-5 R1)
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['RES', 'OLD', 'QA'], RESERVED, { copiedCodes: ['RES', 'OLD'] })
     const [convertAt, importAt] = rpc.mock.invocationCallOrder
     expect(convertAt).toBeLessThan(m.ensureProjectTeams.mock.invocationCallOrder[0])
     expect(m.ensureProjectTeams.mock.invocationCallOrder[0]).toBeLessThan(importAt)
