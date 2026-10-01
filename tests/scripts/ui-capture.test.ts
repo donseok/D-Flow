@@ -6,7 +6,7 @@ import {
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
-import { SEED_INVITE_DOMAIN, inviteDomainPatch, seenResetTargets } from '../../scripts/ui-capture.mjs'
+import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 
@@ -197,6 +197,35 @@ describe('seenResetTargets — 공지 읽음 워터마크를 지울 계정(과�
   it('부트스트랩 관리자는 넣지 않는다 — 시드 계정과 겹치면 throw(판정 Q4, Review Focus 3)', () => {
     expect(seenResetTargets('admin@example.com').map((t) => t.email)).not.toContain('admin@example.com')
     expect(() => seenResetTargets(` ${SEED_ACCOUNTS.duo.toUpperCase()} `)).toThrow(/부트스트랩/)
+  })
+})
+
+describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실행(첫 방문이 쓰는 상태 둘, 과제 5b)', () => {
+  /** 호출을 적는 가짜 클라이언트 — from(표).delete().in|eq(열, 값) 만 흉내 낸다. fail 에 표 이름을 주면 그 표의 삭제가 오류다 */
+  const fakeDb = (fail?: string) => {
+    const calls: string[] = []
+    const res = (t: string) => ({ data: null, error: t === fail ? { message: 'boom' } : null })
+    const db = { from: (t: string) => ({ delete: () => ({
+      in: async (c: string, v: string[]) => { calls.push(`${t} ${c} in ${v.join(',')}`); return res(t) },
+      eq: async (c: string, v: string) => { calls.push(`${t} ${c} = ${v}`); return res(t) },
+    }) }) }
+    return { db, calls }
+  }
+  it('캡처 계정의 공지 읽음 워터마크 → 시드 프로젝트의 진척 스냅샷 순서로 지운다(그 밖의 표·행은 건드리지 않는다)', async () => {
+    const { db, calls } = fakeDb()
+    await resetRunStart(db, { userIds: ['u1', 'u2'], projectId: 'p1' })
+    expect(calls).toEqual(['announcement_seen user_id in u1,u2', 'wbs_progress_snapshots project_id = p1'])
+  })
+  it('삭제 오류는 숨기지 않는다 — 그 단계 이름으로 멈춘다', async () => {
+    await expect(resetRunStart(fakeDb('announcement_seen').db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/워터마크.*boom/)
+    await expect(resetRunStart(fakeDb('wbs_progress_snapshots').db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/스냅샷.*boom/)
+  })
+  it('거르는 값이 비면 아무것도 지우지 않고 멈춘다 — 조건 없는 삭제를 만들지 않는다(fail-closed)', async () => {
+    for (const bad of [{ userIds: [], projectId: 'p1' }, { userIds: ['u1', ''], projectId: 'p1' }, { userIds: ['u1'], projectId: '' }]) {
+      const { db, calls } = fakeDb()
+      await expect(resetRunStart(db, bad)).rejects.toThrow(/실행 시작 상태/)
+      expect(calls).toEqual([])
+    }
   })
 })
 

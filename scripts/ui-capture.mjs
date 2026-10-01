@@ -604,12 +604,20 @@ export async function setServerTheme(db, userIds, theme, pin = {}) {
 }
 
 /**
- * 공지 읽음 워터마크를 지운다 — 캡처 계정(seenResetTargets)의 행 전부. 시작 상태 = '아무 공지도 보지 않음' = db:reset 뒤 첫 실행.
- * 공지 화면 방문이 워터마크를 써서 db:reset 뒤 첫 실행만 공지 화면에 NEW 칩이 있었고(과제 5 자기 차이 0.13%), 워터마크가 마이크로초로
- * 저장되면(레인 A 수정) 첫 방문 뒤 공지 배지가 사라져 같은 실행의 뒤 화면과 다음 실행이 달라진다. lastProjectId 고정과 같은 자리에서 한다.
+ * 테마 패스의 시작 상태 = db:reset 뒤 첫 실행(과제 5b) — 첫 방문이 써서 그 뒤 화면을 바꾸는 상태 둘을 지운다. lastProjectId 고정과 같은 자리.
+ * ① 공지 읽음 워터마크(announcement_seen) — 캡처 계정(seenResetTargets)의 행 전부. 공지 화면 방문이 워터마크를 써서 db:reset 뒤 첫 실행만
+ *    공지 화면에 NEW 칩이 있었고(과제 5 자기 차이 0.13%), 워터마크가 마이크로초로 저장되면(레인 A 수정) 첫 방문 뒤 공지 배지가 사라져
+ *    같은 실행의 뒤 화면과 다음 실행이 달라진다.
+ * ② 진척 스냅샷(wbs_progress_snapshots) — 시드 프로젝트의 행 전부. 대시보드·포트폴리오가 응답 뒤(after) 오늘 스냅샷을 써서 db:reset 뒤 첫
+ *    대시보드 방문만 속도 지표(SPI)가 '—' 였다(과제 5b 결정성 확인 0.26%). 전 경로 실행은 포트폴리오가 대시보드 앞이라 늘 값이 있다.
+ * 거르는 값이 비면 아무것도 지우지 않고 멈춘다 — 조건 없는 삭제를 만들지 않는다.
+ * @param {any} db @param {{ userIds: string[], projectId: string }} target
  */
-async function clearSeenWatermarks(db, userIds) {
+export async function resetRunStart(db, { userIds, projectId }) {
+  if (!Array.isArray(userIds) || userIds.length === 0 || userIds.some((u) => !u)) throw new Error('실행 시작 상태: 캡처 계정 id 가 비었다')
+  if (!projectId) throw new Error('실행 시작 상태: 시드 프로젝트 id 가 비었다')
   must('공지 읽음 워터마크 지우기', await db.from('announcement_seen').delete().in('user_id', userIds))
+  must('진척 스냅샷 지우기', await db.from('wbs_progress_snapshots').delete().eq('project_id', projectId))
 }
 
 /** jsDelivr 응답을 리포 밖 캐시에서 준다 — 라벨 사이 글꼴 바이트를 고정한다(판정 Q3) */
@@ -641,7 +649,7 @@ async function resolveSeed(db) {
 }
 
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크(과제 5b) */
+ *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크·진척 스냅샷(과제 5b — resetRunStart) */
 export async function forEachShot(opts, visit) {
   const { envText, admin: coord, target, outDir } = laneEnv()
   const baseUrl = opts.base ? e2eBaseUrl(opts.base) : target.appUrl
@@ -666,7 +674,7 @@ export async function forEachShot(opts, visit) {
   try {
     for (const theme of opts.theme) {
       await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme, { lastProjectId: seed.pid })
-      await clearSeenWatermarks(db, seenUserIds)
+      await resetRunStart(db, { userIds: seenUserIds, projectId: seed.pid })
       for (const r of routes) {
         for (const [width, height] of opts.sizes) {
           const context = await browser.newContext(contextOptions({ width, height, theme }))
