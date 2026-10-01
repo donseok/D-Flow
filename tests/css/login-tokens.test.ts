@@ -16,6 +16,12 @@ describe('로그인 — 의미 토큰만', () => {
   it('h1 은 하나다(브레이크포인트마다 하나씩 두지 않는다)', () => {
     expect(page.match(/<h1\b/g)).toHaveLength(1)
   })
+  it('env 태그라인은 모든 크기에서 한 번 그려진다 — lg 이상은 소개 카드, 미만은 폼 머리(스펙 E14·§4.4 — U1b 리뷰 R1 P2)', () => {
+    expect(page.match(/\{BRAND\.tagline\}/g)).toHaveLength(2)
+    // 소개 카드는 hidden … lg:flex 컨테이너 안이고, 폼 머리 줄은 lg:hidden — 두 줄이 같은 크기에서 함께 보이지 않는다
+    expect(page).toMatch(/<div className="hidden [^"]*lg:flex">[\s\S]*?\{BRAND\.tagline\}[\s\S]*?\{\/\* ── 로그인 폼/)
+    expect(page).toMatch(/<p className="[^"]*\blg:hidden\b[^"]*">\{BRAND\.tagline\}<\/p>/)
+  })
   it('부유 장식을 지웠다 — globals 의 login-float·loginFloat 도 없고 smoke 하한은 이유와 함께 4', () => {
     expect(page).not.toMatch(/login-float/)
     expect(readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8')).not.toMatch(/loginFloat|login-float/)

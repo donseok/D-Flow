@@ -77,6 +77,8 @@ export default function Login() {
           <div className="mb-8 flex flex-col items-center gap-3 text-center lg:items-start lg:text-left">
             <span className="lg:hidden"><BrandGlyph size={56} /></span>
             <h1 className="text-title text-fg">{BRAND.productName}</h1>
+            {/* env 태그라인 — lg 이상은 소개 카드가 보인다(스펙 E14 "env 브랜드는 그대로") */}
+            <p className="text-body text-fg-secondary lg:hidden">{BRAND.tagline}</p>
             <p className="text-body text-fg-secondary">이메일과 비밀번호로 로그인하세요.</p>
           </div>
 
