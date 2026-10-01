@@ -89,13 +89,17 @@ function baseFields(overrides: Record<string, string | Blob> = {}) {
   }
 }
 
-/** wbs_items 백업 select 체인(select().eq()) 만 지원하는 최소 thenable 빌더. */
-function backupBuilder(response: { data: unknown; error: unknown }) {
+/** wbs_items 백업 select 체인(select().eq().order().range()) — fetchAllPages 의 쪽 읽기와 count(총합)를 흉내 낸다.
+ *  count 를 주지 않으면 data 의 길이(한 쪽에 다 담긴다), 오류 응답이면 null. */
+function backupBuilder(response: { data: unknown; error: unknown; count?: number | null }) {
   const builder: Record<string, unknown> = {}
   builder.select = vi.fn(() => builder)
   builder.eq = vi.fn(() => builder)
+  builder.order = vi.fn(() => builder)
+  builder.range = vi.fn(() => builder)
+  const count = response.count !== undefined ? response.count : Array.isArray(response.data) ? response.data.length : null
   builder.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
-    Promise.resolve(response).then(resolve, reject)
+    Promise.resolve({ ...response, count }).then(resolve, reject)
   return builder
 }
 
@@ -362,13 +366,15 @@ describe('POST /api/import/execute — append', () => {
 })
 
 describe('POST /api/import/execute — replace', () => {
-  it('백업 select 실패 → 500, RPC 미호출(중단)', async () => {
+  it('백업 select 실패 → 500 고정 문구(원문 없음), RPC 미호출(중단)', async () => {
     const sb = makeSbClient({ backup: { data: null, error: { message: 'read failed' } } })
     mocks.createServerClient.mockResolvedValue(sb)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields({ mode: 'replace' })))
     expect(res.status).toBe(500)
     const body = await res.json()
-    expect(body.error).toContain('read failed')
+    expect(body).toEqual({ error: '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(body)).not.toContain('read failed')
     expect(sb.rpc).not.toHaveBeenCalled()
   })
 

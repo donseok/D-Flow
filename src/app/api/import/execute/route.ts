@@ -9,6 +9,7 @@ import { splitLeafOwners } from '@/lib/excel/validate'
 import { projectTeamRowsSync, teamsForProjectSync } from '@/lib/teams/master'
 import { addTeam } from '@/app/actions/teams'
 import { addProjectTeam } from '@/app/actions/projectTeams'
+import { fetchAllPages } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
@@ -33,6 +34,8 @@ const ERR_PROFILE_MISMATCH =
   '감지 결과로 가져오거나, 마법사에서 "저장된 양식 사용"을 직접 고른 뒤 실행하세요.'
 const errProfileUnverifiable = (detail: string) =>
   `파일 구조를 감지하지 못해 저장된 엑셀 양식과 대조할 수 없습니다: ${detail} — 저장 양식으로 읽으려면 확인 후 다시 실행하세요.`
+/** replace 백업을 읽지 못함 — 잘림·읽는 사이의 변경(count 불일치)·조회 오류 모두. 원인은 로그로만(에러 3원칙). */
+const ERR_BACKUP_FAILED = '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
 
 /**
  * 임포트 마법사 2단계 — 실제 쓰기(§6.6). append 는 기존 import_wbs 와 동일하게 삽입만,
@@ -157,13 +160,17 @@ export async function POST(req: NextRequest) {
 
   if (mode === 'replace') {
     // 백업 먼저(§6.6-2, Q1: wbs_items 전 컬럼만 — change_logs 는 대상 아님). 실패 시 RPC 를 호출하지 않고 중단한다.
-    const { data: backupRows, error: backupErr } = await sb
-      .from('wbs_items').select('*').eq('project_id', projectId)
-    if (backupErr) {
-      console.error('[import/execute] replace 백업 select 실패 — RPC 미호출:', backupErr.message)
-      return NextResponse.json({ error: `백업 생성 실패로 중단했습니다: ${backupErr.message}` }, { status: 500 })
+    // 끝까지 읽는다(SP4 D18·Q5) — 한 응답은 max_rows(1000)에서 조용히 잘리는데 이 백업이 바로 뒤 replace 가 지울 원본의 유일한 사본이다.
+    // 잘림·읽는 사이의 변경(count 불일치)·조회 오류는 모두 중단이다 — 원문은 로그로만, 응답은 고정 문구.
+    let backupRows: Record<string, unknown>[]
+    try {
+      backupRows = await fetchAllPages<Record<string, unknown>>('wbs_items 백업', (from, to) => sb
+        .from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId).order('id').range(from, to))
+    } catch (e) {
+      console.error('[import/execute] replace 백업 읽기 실패 — RPC 미호출:', e instanceof Error ? e.message : e)
+      return NextResponse.json({ error: ERR_BACKUP_FAILED }, { status: 500 })
     }
-    backup = { rows: backupRows ?? [], generatedAt: new Date().toISOString() }
+    backup = { rows: backupRows, generatedAt: new Date().toISOString() }
     warnings.push(...REPLACE_WARNINGS)
 
     const { data, error } = await sb.rpc('replace_wbs', {
