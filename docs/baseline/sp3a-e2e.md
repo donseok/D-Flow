@@ -246,3 +246,40 @@ main 반영 뒤 컨트롤러가 채울 두 줄:
 열거 게이트의 축 한계 넷·스펙 귀결 둘이다. 원래 SDD 원장에만 적혀 있었고 **그 원장은 브랜치에 따라가지
 않으므로** 머지한 사람이 볼 수 없었다 — 최종 리뷰가 지적해 `docs/baseline/sp3a-b-known-limits.md` 로
 옮겼다. 머지 전에 그 파일을 읽는 사람이 있어야 한다.
+
+
+# Phase C — 체크포인트
+
+스펙 §7.3 의 **7단계**(워크스페이스 설정 화면의 경계)를 `scripts/e2e-local.mjs` 에 더해 로컬에서 잰 기록이다. 트리는 `ui/sp3a-settings`
+(측정일 2026-10-01, 시각은 KST). 눈확인은 `docs/baseline/sp3a-ui.md` 의 Phase C 절, 남은 한계는 `docs/baseline/sp3a-c-known-limits.md`.
+
+**요약**
+
+- 깨끗한 DB(`db:reset` 0000~0012 → `dev:bootstrap`) 위에서 E2E **exit 0, 29단계 전부 ✓** — Phase B 의 28단계 + 새 `workspace-settings-boundary`.
+  산출물 흔적 검사(`trace-scan`)·`render-pages` 오류 0 은 그대로다.
+- 전용 스택 `d-flow-sp3a-c-visual`(api 54521 · db 54522) 위에서만 돌렸다 — 메인 스택(사용자 데이터)은 이번에도 건드리지 않았다.
+- `settings:verify` exit 0 · `test:rls` 26 파일 · 282 통과(건너뜀 0) · `build` 초록 · `typecheck` 0 · `lint` 0 error(경고 4 — 기존) ·
+  `vitest` **675 파일 · 8663 통과**.
+- 마이그레이션이 없다 — `git log --oneline main..HEAD -- supabase` 가 비어 있다. 롤백 리허설 대상 없음.
+
+## 새 단계
+
+| # | 단계 | 판정값 |
+|---|---|---|
+| 7 | `workspace-settings-boundary` | ana(워크스페이스 A 관리자, 플랫폼 관리자 아님)가 `/w/e2e-other/settings`(B)를 열면 notFound digest(HTTP 200 — 스트리밍), 응답에 B 이름 없음 · ana 의 `/w/default/settings` 는 열리고 문제 0, **모듈 허용 구역 없음** · bea(B 관리자)의 `/w/default/settings` 는 notFound, A 이름 없음 · 플랫폼 관리자 admin 의 `/w/e2e-other/settings` 는 열리고 **모듈 허용 구역 있음**(은닉이 부재가 아니라는 대조) |
+
+구역 유무는 키 이름이 아니라 `ModuleAllowEditor` 전용 문구로 판정한다 — `modules.allowed` 는 '기록' 범주의 변경 이력에도 나온다(첫 실행이 이 때문에 ✗ 였다).
+
+## 기존 단계의 변경
+
+- `module-agents-off`: 옛 토글(`setAgentProjectEnabled`)이 Phase C 에서 지워졌다. 켜기·끄기는 `modules.enabled` 의 `agents` 저장 한 길이다.
+  기본 모듈 목록에 `agents` 가 이미 있어 같은 값을 저장하면 '새로 켬'이 아니라서 `agent_projects` 등록 행이 만들어지지 않는다 — **끈 뒤 켜는** 경로로 고쳤다.
+  끄기는 등록 행을 건드리지 않으므로 `rowAfterToggleOff` 기대값이 `false` → `true` 다(두 원천 AND 라 `meAfterToggleOff` 는 여전히 false).
+  이 간극(켜짐으로 보이지만 등록 안 됨)은 `sp3a-c-known-limits.md` 에 운영 한계로 적었다.
+
+## 실행 메모
+
+- 서버는 `next dev -p 3101`(`--max-old-space-size=4096`)이다. `next start` 는 팀 캐시 TTL 때문에 임포트 단계가 409 라 쓸 수 없다.
+- 작은 머신에서 dev 서버가 메모리 감시로 재시작해(`Server is approaching the used memory threshold`) 두 번 실패했다 — 한 번은 요청 끊김, 한 번은 서버 액션
+  매니페스트가 빔. 스크립트가 매니페스트를 다시 읽기 전에 그 페이지를 GET 해 복구하도록 고쳤다(`action()`). 마지막 실행에서도 재시작이 1회 있었지만 단계가 통과했다.
+- 명령은 Phase B 와 같다(`LOCAL_DB_URL` 로 전용 스택 지정, 공유 잠금 `heavy-lock.sh` 아래). 비밀번호·시크릿은 `openssl rand` 로 만든 셸 변수·스크래치 파일(mode 600)에만 두었고 커밋·출력하지 않았다.
