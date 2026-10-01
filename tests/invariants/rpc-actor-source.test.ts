@@ -3,8 +3,11 @@
 //  (a) 직접: 값이 `<g>.actor.userId` 이고 <g> 의 가장 가까운 선언이 `const <g> = await <가드>(…)`(@/lib/authz 의 네 가드 — 별칭·네임스페이스 import 포함)
 //  (b) 한 단계: 값이 지역 const(또는 그 객체 리터럴의 필드)면 초기값이 (a). 같은 파일 함수의 매개변수(또는 그 필드)면 그 함수의 모든
 //      참조가 호출이고(export·콜백·객체 필드 아님) 각 호출이 그 자리에 (a) 를 넘긴다
-//  (c) 그 밖은 닫힌 허용 목록 ACTOR_SOURCE_EXCEPTIONS(`<파일>#<rpc>` → 값 식·사유, 죽은 항목 검사) — 세션 가드가 아닌 행위자(에이전트
-//      토큰·내부 경로)도 받는 라이브러리 도우미와 두 단계 전달
+//  (a)·(b) 모두 판정한 이름(가드 결과 g·매개변수·지역 const)을 같은 함수 안에서 바꾸면(대입·필드 쓰기·Object.assign·증감·delete·
+//      var 재선언) 실패다(K5 — 선언만 보면 그 뒤 쓰기를 못 본다)
+//  (c) 그 밖은 닫힌 허용 목록 ACTOR_SOURCE_EXCEPTIONS(`<파일>#<rpc>` → 값 식·자리 수·사유, 죽은 항목 검사) — 세션 가드가 아닌 행위자(에이전트
+//      토큰·내부 경로)도 받는 라이브러리 도우미와 두 단계 전달. 도우미 예외는 HELPER_CALLERS 가 호출부(파일·호출 수·각 호출의 행위자 필드)를
+//      닫는다(K6)
 // 구조 규칙(허용 목록으로 덮지 못한다): p_actor 는 `.rpc('<P_ACTOR_RPCS 의 이름>', { … })` 의 객체 리터럴에만, 그 호출에는 반드시, 그 뒤
 // 펼침이 p_actor 를 덮을 수 없게. 대상 = 마이그레이션에서 인자 이름이 정확히 p_actor 인 함수(자동 추출) ↔ P_ACTOR_RPCS(양방향 —
 // p_actor_id·p_actor_name 의 회의록 RPC 는 범위 밖). 첫날 실측(main 81deae9 — 스펙 §6.1): p_actor 자리 9곳 = 직접 3·한 단계 2·허용 목록 4.
@@ -22,23 +25,78 @@ const P_ACTOR_RPCS: ReadonlySet<string> = new Set([
   'set_platform_admin', 'set_workspace_role', 'upsert_project_member', 'upsert_project_member_cmd',
 ])
 
-/** (c) 닫힌 허용 목록 — `<파일>#<rpc>` → 그 자리의 p_actor 값 식(공백 하나로 정규화)과 사유. (a)·(b) 로 통과하는 자리를 적으면 죽은 항목 */
-const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, { expr: string; why: string }>> = {
+/** (c) 닫힌 허용 목록 — `<파일>#<rpc>` → 그 자리의 p_actor 값 식(공백 하나로 정규화)·그 식의 자리 수·사유. (a)·(b) 로 통과하는 자리를
+ *  적으면 죽은 항목, 같은 식의 자리가 늘거나 줄면 실패(K6 — 같은 파일의 새 자리가 자동으로 덮이지 않게) */
+type ActorException = { expr: string; count: number; why: string }
+const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, ActorException>> = {
   'src/app/actions/settings.ts#apply_project_settings': {
     expr: 'x.actor',
+    count: 1,
     why: '설정 명령 어댑터(두 단계) — updateProjectSettings 의 가드 결과 g.actor 를 runCommand 가 받아 어댑터 rpc(admin, x) 의 x.actor 로 싣는다',
   },
   'src/app/actions/settings.ts#apply_workspace_settings': {
     expr: 'x.actor',
+    count: 1,
     why: '설정 명령 어댑터(두 단계) — updateWorkspaceSettings 의 가드 결과 g.actor 를 runCommand 가 받아 어댑터 rpc(admin, x) 의 x.actor 로 싣는다',
   },
   'src/lib/settings/write.ts#apply_project_settings': {
     expr: 'actorUserId',
+    count: 1,
     why: '서버 내부 쓰기 writeProjectSettingsInternal — 가져오기 라우트(가드 결과)와 에이전트 경로(lib/agent/wbsImport.ts)의 행위자를 함께 받는 라이브러리 도우미',
   },
   'src/lib/agent/workflowEvent.ts#apply_workflow_event': {
     expr: 'args.actorUserId',
-    why: '워크플로 사건 도우미 applyWorkflowEvent — 세션 액션의 가드 결과와 에이전트 토큰 라우트(api/v1/agent/work/[id]/*)·위임(lib/agent/delegation.ts)의 행위자를 함께 받는다',
+    count: 1,
+    why: '워크플로 사건 도우미 applyWorkflowEvent — 세션 액션의 가드 결과와 에이전트 토큰 라우트(api/v1/agent/work/[id]/*)·위임(lib/agent/delegation.ts)의 행위자를 함께 받는다. 호출부는 HELPER_CALLERS 가 닫는다',
+  },
+}
+
+/** 라이브러리 도우미 예외의 호출부 닫힌 목록(K6) — 도우미가 행위자를 인자 필드로 받으면 p_actor 자리의 예외만으로는 호출부를 아무도 보지
+ *  않는다. 도우미를 부르는 파일·호출 수를 닫고, 각 호출의 행위자 필드를 같은 judge(직접·한 단계)로 본다. 통과하지 못하는 호출은 파일별
+ *  값 식·사유로만(세션 가드가 아닌 행위자 — 에이전트 토큰 라우트 등). settings-writes 의 INTERNAL_WRITE_CALLERS 와 같은 모양이다
+ *  (writeProjectSettingsInternal 의 호출부는 그쪽이 닫는다) */
+interface HelperSpec {
+  helper: string
+  source: string
+  field: string
+  /** 파일 → 도우미 호출 수, 그중 judge 를 통과하지 못해 값 식·사유로 허용하는 호출(except — 값 식이 같고 개수도 같아야 한다) */
+  callers: Readonly<Record<string, { count: number; except?: { expr: string; count: number; why: string } }>>
+}
+const HELPER_CALLERS: Readonly<Record<string, HelperSpec>> = {
+  'src/lib/agent/workflowEvent.ts#apply_workflow_event': {
+    helper: 'applyWorkflowEvent', source: '@/lib/agent/workflowEvent', field: 'actorUserId',
+    callers: {
+      'src/app/actions/wbsAssign.ts': {
+        count: 4,   // setWbsAssignee·assignWbsCascade 의 둘은 requireProjectAdmin 직접
+        except: {
+          expr: 'g.actor.userId', count: 2,
+          why: 'setWbsStage·setWbsDevWorkflow 의 g 는 requireSubtreeManagerOrAdmin(lib/agent/subtreeManager — requireProjectAdmin 또는 requireProjectMember + 서브트리 관리자 판정의 actor)',
+        },
+      },
+      'src/app/actions/agentWork.ts': {
+        count: 3,
+        except: {
+          expr: 'actor.userId', count: 3,
+          why: '주문 검토 액션 — loadOrderForAdmin·loadOrderForReview 가 requireProjectAdmin 결과의 g.actor.userId 를 actor 로 돌려준다(두 단계)',
+        },
+      },
+      'src/app/api/v1/agent/work/[id]/claim/route.ts': {
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+      },
+      'src/app/api/v1/agent/work/[id]/release/route.ts': {
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+      },
+      'src/app/api/v1/agent/work/[id]/report/route.ts': {
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+      },
+      'src/lib/agent/delegation.ts': {
+        count: 2,
+        except: {
+          expr: 'actorUserId', count: 2,
+          why: '위임 도우미 applyDelegation 의 args.actorUserId(구조 분해) — 호출부는 세션 액션 agentHub.ts·wbsSpec.ts(이 불변식은 그 단계를 보지 않는다)',
+        },
+      },
+    },
   },
 }
 
@@ -148,15 +206,68 @@ function isGuardCall(e: ts.Expression): boolean {
   return false
 }
 
-/** (a) 값이 `<g>.actor.userId` 이고 <g> 의 가장 가까운 선언이 가드 결과의 const 인가 */
-function isGuardUserId(e: ts.Expression): boolean {
-  const v = unwrap(e)
-  if (!ts.isPropertyAccessExpression(v) || v.name.text !== 'userId') return false
-  const a = unwrap(v.expression)
-  if (!ts.isPropertyAccessExpression(a) || a.name.text !== 'actor' || !ts.isIdentifier(a.expression)) return false
-  const b = bindingOf(a.expression)
-  return b?.kind === 'const' && isGuardCall(b.init)
+/** 식의 맨 앞 이름 — `a.b.c`·`a['b']`·괄호·as 를 벗긴 a */
+function rootName(e: ts.Expression): string | null {
+  let c = unwrap(e)
+  while (ts.isPropertyAccessExpression(c) || ts.isElementAccessExpression(c)) c = unwrap(c.expression)
+  return ts.isIdentifier(c) ? c.text : null
 }
+/** 대입 왼쪽의 대상 식들 — 구조 분해(배열·객체·기본값·나머지)를 펼친다 */
+function targetsOf(lhs: ts.Expression): ts.Expression[] {
+  const x = unwrap(lhs)
+  if (ts.isArrayLiteralExpression(x)) {
+    return x.elements.flatMap((el) => (ts.isOmittedExpression(el) ? [] : ts.isSpreadElement(el) ? targetsOf(el.expression) : targetsOf(el)))
+  }
+  if (ts.isObjectLiteralExpression(x)) {
+    return x.properties.flatMap((p) => (ts.isPropertyAssignment(p) ? targetsOf(p.initializer) : ts.isShorthandPropertyAssignment(p) ? [p.name]
+      : ts.isSpreadAssignment(p) ? targetsOf(p.expression) : []))
+  }
+  if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.EqualsToken) return targetsOf(x.left)
+  return [x]
+}
+const isAssignOp = (k: ts.SyntaxKind) => k >= ts.SyntaxKind.FirstAssignment && k <= ts.SyntaxKind.LastAssignment
+/** scope(함수 본문) 안에서 name 을 바꾸는 첫 자리 — 대입(복합·구조 분해 포함, `name.x… = ` 처럼 필드 쓰기도)·증감·delete·for 대입·
+ *  `Object.assign(name…, …)`·`var name` 재선언(K5). 이름으로만 본다(가림 무시 — 보수적). 없으면 null */
+function writeIn(sf: ts.SourceFile, scope: ts.Node, name: string): string | null {
+  let hit: string | null = null
+  const at = (n: ts.Node, what: string) => { hit ??= `:${lineOf(sf, n)} ${what}` }
+  const visit = (n: ts.Node): void => {
+    if (hit) return
+    if (ts.isBinaryExpression(n) && isAssignOp(n.operatorToken.kind) && targetsOf(n.left).some((t) => rootName(t) === name)) at(n, '대입')
+    else if ((ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n))
+      && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken) && rootName(n.operand) === name) at(n, '증감')
+    else if (ts.isDeleteExpression(n) && rootName(n.expression) === name) at(n, 'delete')
+    else if ((ts.isForOfStatement(n) || ts.isForInStatement(n)) && !ts.isVariableDeclarationList(n.initializer)
+      && targetsOf(n.initializer).some((t) => rootName(t) === name)) at(n, 'for 대입')
+    else if (ts.isCallExpression(n) && unwrap(n.expression).getText(sf).replace(/\s+/g, '') === 'Object.assign' && n.arguments[0]
+      && rootName(n.arguments[0]) === name) at(n, 'Object.assign')
+    else if (ts.isVariableDeclarationList(n) && (n.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
+      && n.declarations.some((d) => bindsName(d.name, name))) at(n, 'var 재선언')
+    ts.forEachChild(n, visit)
+  }
+  visit(scope)
+  return hit
+}
+/** 선언을 감싸는 함수 본문(없으면 소스 파일) — 그 이름을 바꾸는 자리를 찾는 범위 */
+function scopeOf(n: ts.Node): ts.Node {
+  for (let c: ts.Node | undefined = n.parent; c; c = c.parent) {
+    if (ts.isFunctionLike(c) && 'body' in c && c.body) return c.body as ts.Node
+  }
+  return n.getSourceFile()
+}
+
+/** (a) 값이 `<g>.actor.userId` 이고 <g> 의 가장 가까운 선언이 가드 결과의 const 이며, 그 함수 안에서 <g> 를 바꾸지 않는가(K5) */
+function guardUse(e: ts.Expression): { kind: 'ok' } | { kind: 'no' } | { kind: 'mutated'; why: string } {
+  const v = unwrap(e)
+  if (!ts.isPropertyAccessExpression(v) || v.name.text !== 'userId') return { kind: 'no' }
+  const a = unwrap(v.expression)
+  if (!ts.isPropertyAccessExpression(a) || a.name.text !== 'actor' || !ts.isIdentifier(a.expression)) return { kind: 'no' }
+  const b = bindingOf(a.expression)
+  if (b?.kind !== 'const' || !isGuardCall(b.init)) return { kind: 'no' }
+  const w = writeIn(a.getSourceFile(), scopeOf(b.init), a.expression.text)
+  return w === null ? { kind: 'ok' } : { kind: 'mutated', why: `가드 결과 ${a.expression.text} 를 함수 안에서 바꾼다(${w})` }
+}
+const isGuardUserId = (e: ts.Expression): boolean => guardUse(e).kind === 'ok'
 
 /** 같은 파일에서 이름으로만 부르는 함수의 이름 — 함수 선언 또는 const 의 화살표·함수 식. export·이름 없음(객체 필드의 화살표 등)은 null */
 function callableName(fn: ts.SignatureDeclaration): string | null {
@@ -218,10 +329,15 @@ function oneHop(v: ts.Expression, sf: ts.SourceFile): string | null {
   const label = field === null ? id.text : `${id.text}.${field}`
   const b = bindingOf(id)
   if (b?.kind === 'const') {
+    const w = writeIn(sf, scopeOf(b.init), id.text)
+    if (w !== null) return `지역 const ${id.text} 를 함수 안에서 바꾼다(${w})`
     const src = field === null ? b.init : fieldOf(b.init, field)
     return src && isGuardUserId(src) ? null : `지역 const ${label} 의 초기값이 가드 결과가 아니다`
   }
   if (b?.kind === 'param') {
+    const body = (b.fn as ts.FunctionLikeDeclaration).body
+    const w = body ? writeIn(sf, body, id.text) : null
+    if (w !== null) return `매개변수 ${id.text} 를 함수 안에서 바꾼다(${w})`
     const name = callableName(b.fn)
     if (!name) return `${id.text} 는 export 되거나 이름 없는 함수의 매개변수다 — 호출을 모두 볼 수 없다`
     const calls = callsOf(sf, b.fn, name)
@@ -240,7 +356,9 @@ function oneHop(v: ts.Expression, sf: ts.SourceFile): string | null {
 }
 
 function judge(v: ts.Expression, sf: ts.SourceFile): Verdict {
-  if (isGuardUserId(v)) return { ok: true, how: 'direct' }
+  const g = guardUse(v)
+  if (g.kind === 'ok') return { ok: true, how: 'direct' }
+  if (g.kind === 'mutated') return { ok: false, why: g.why }
   const why = oneHop(v, sf)
   return why === null ? { ok: true, how: 'indirect' } : { ok: false, why }
 }
@@ -302,24 +420,75 @@ function scanFile(file: string, sf: ts.SourceFile, rpcs: ReadonlySet<string>): S
 }
 
 /** 판정 — 구조 문제 + (a)·(b) 로 통과하지 못하고 허용 목록에도 없는 자리 + 허용 목록의 죽은 항목·사유 없음 */
-function evaluate(scan: Scan, exceptions: Readonly<Record<string, { expr: string; why: string }>>): string[] {
+function evaluate(scan: Scan, exceptions: Readonly<Record<string, ActorException>>): string[] {
   const out = [...scan.problems]
-  const used = new Set<string>()
+  const used = new Map<string, number>()
   for (const s of scan.sites) {
     if (s.verdict.ok) continue
     const key = `${s.file}#${s.rpc}`
-    if (Object.hasOwn(exceptions, key) && exceptions[key].expr === s.expr) { used.add(key); continue }
+    if (Object.hasOwn(exceptions, key) && exceptions[key].expr === s.expr) { used.set(key, (used.get(key) ?? 0) + 1); continue }
     out.push(`${s.file}:${s.line} ${s.rpc} 의 p_actor(${s.expr}) — ${s.verdict.why}. 가드 결과의 actor.userId 를 넘기거나, 다른 행위자도 받는 라이브러리 도우미면 ACTOR_SOURCE_EXCEPTIONS 에 사유와 함께 적는다(SP4 D51)`)
   }
   for (const [key, ex] of Object.entries(exceptions)) {
     if (ex.why.length < 12) out.push(`ACTOR_SOURCE_EXCEPTIONS ${key}: 사유가 없다`)
-    if (used.has(key)) continue
+    if (used.has(key)) {
+      if (used.get(key) !== ex.count) out.push(`ACTOR_SOURCE_EXCEPTIONS ${key}: 자리 수 ${ex.count} ≠ 실측 ${used.get(key)} — 새 자리는 출처를 확인하고 개수를 고친다`)
+      continue
+    }
     const live = scan.sites.filter((s) => `${s.file}#${s.rpc}` === key)
     if (live.length === 0) out.push(`ACTOR_SOURCE_EXCEPTIONS ${key}: 죽은 항목 — 그 자리가 없다`)
     else if (live.every((s) => s.verdict.ok)) out.push(`ACTOR_SOURCE_EXCEPTIONS ${key}: 죽은 항목 — 예외 없이 통과한다(${live.map((s) => s.expr).join(', ')})`)
     else out.push(`ACTOR_SOURCE_EXCEPTIONS ${key}: 값 식 ${ex.expr} 이 실제(${live.map((s) => s.expr).join(', ')})와 다르다`)
   }
   return out
+}
+
+/** 도우미 호출부 판정(K6) — files 의 모든 도우미 참조가 호출이고, 호출의 둘째 인자 객체 리터럴에 행위자 필드 값 속성이 있으며, 그 값이
+ *  judge 를 통과하거나 파일별 값 식·사유와 같다. 파일·호출 수는 닫힌 목록과 같아야 한다(목록 문제가 먼저, 호출 문제가 뒤) */
+function helperCallerProblems(files: readonly (readonly [string, ts.SourceFile])[], spec: HelperSpec): string[] {
+  const list: string[] = []
+  const calls: string[] = []
+  const counts = new Map<string, number>()
+  const usedExpr = new Map<string, number>()
+  for (const [file, sf] of files) {
+    let n = 0
+    const isHelperImport = (id: ts.Identifier, imported: string) => {
+      const b = bindingOf(id)
+      return b?.kind === 'import' && b.source === spec.source && b.imported === imported
+    }
+    const onRef = (r: ts.Expression) => {
+      const call = ts.isCallExpression(r.parent) && r.parent.expression === r ? r.parent : null
+      if (!call) { calls.push(`${file}:${lineOf(sf, r)} ${spec.helper} 를 호출 밖에서 쓴다 — 호출마다 행위자 출처를 볼 수 없다`); return }
+      n++
+      const arg = call.arguments[1] ? unwrap(call.arguments[1]) : null
+      const prop = arg && ts.isObjectLiteralExpression(arg) && !arg.properties.some((p) => ts.isSpreadAssignment(p))
+        ? [...arg.properties].reverse().find((p) => propName(p) === spec.field) : undefined
+      const value = prop && ts.isShorthandPropertyAssignment(prop) ? prop.name : prop && ts.isPropertyAssignment(prop) ? prop.initializer : null
+      if (!value) { calls.push(`${file}:${lineOf(sf, call)} ${spec.helper} 의 인자에 ${spec.field} 값 속성이 없거나 펼침이 있다 — 출처를 볼 수 없다`); return }
+      const v = judge(value, sf)
+      if (v.ok) return
+      const expr = value.getText(sf).replace(/\s+/g, ' ')
+      const allowed = Object.hasOwn(spec.callers, file) ? spec.callers[file] : undefined
+      if (allowed?.except?.expr === expr && allowed.except.why.length >= 12) { usedExpr.set(file, (usedExpr.get(file) ?? 0) + 1); return }
+      calls.push(`${file}:${lineOf(sf, value)} ${spec.helper} 의 ${spec.field}(${expr}) — ${v.why}. 가드 결과를 넘기거나 HELPER_CALLERS 에 파일별 값 식·사유를 적는다`)
+    }
+    const visit = (x: ts.Node): void => {
+      if (ts.isIdentifier(x) && isReference(x) && isHelperImport(x, spec.helper)) onRef(x)
+      else if (ts.isPropertyAccessExpression(x) && x.name.text === spec.helper && ts.isIdentifier(x.expression) && isHelperImport(x.expression, '*')) onRef(x)
+      ts.forEachChild(x, visit)
+    }
+    visit(sf)
+    counts.set(file, n)
+  }
+  for (const [file, n] of counts) if (n > 0 && !Object.hasOwn(spec.callers, file)) list.push(`${spec.helper} 호출부 ${file}: 닫힌 목록에 없는 파일이다(호출 ${n})`)
+  for (const [file, c] of Object.entries(spec.callers)) {
+    const n = counts.get(file) ?? 0
+    if (n !== c.count) list.push(`${spec.helper} 호출부 ${file}: 호출 수 ${c.count} ≠ 실측 ${n}`)
+    else if (n > 0 && c.except !== undefined && (usedExpr.get(file) ?? 0) !== c.except.count) {
+      list.push(`${spec.helper} 호출부 ${file}: 값 식 ${c.except.expr} 의 허용 호출 수 ${c.except.count} ≠ 실측 ${usedExpr.get(file) ?? 0}`)
+    }
+  }
+  return [...list, ...calls]
 }
 
 /** 마이그레이션 원문에서 인자 이름이 정확히 p_actor 인 public 함수(주석 제외, 대소문자·따옴표 무시, 인자 모드 IN·OUT·INOUT·VARIADIC 건너뜀) */
@@ -380,6 +549,16 @@ describe('p_actor 출처 — src 의 모든 자리(D51·T7)', () => {
     expect(evaluate(SCAN, ACTOR_SOURCE_EXCEPTIONS)).toEqual([])
   })
 
+  it('[K6] 라이브러리 도우미 예외의 호출부 — 파일·호출 수 닫힘, 각 호출의 행위자는 가드 결과 또는 파일별 값 식·사유', () => {
+    expect(Object.keys(HELPER_CALLERS).filter((k) => !Object.hasOwn(ACTOR_SOURCE_EXCEPTIONS, k)), 'HELPER_CALLERS 키는 허용 목록 항목이다').toEqual([])
+    const bad = Object.values(HELPER_CALLERS).flatMap((spec) => {
+      const files = walk('src').filter((f) => readFileSync(f, 'utf8').includes(spec.helper))
+        .map((f) => [f, parse(f, readFileSync(f, 'utf8'))] as const)
+      return helperCallerProblems(files, spec)
+    })
+    expect(bad).toEqual([])
+  })
+
   it('첫날 9곳의 분류가 실측과 같다(스펙 §6.1 — 직접 3·한 단계 2·허용 목록 4)', () => {
     const classOf = (s: Site) => (s.verdict.ok ? s.verdict.how : 'exception')
     const bad = Object.entries(FIRST_DAY).flatMap(([key, want]) => {
@@ -396,7 +575,7 @@ describe('판별기 민감도 — 합성 소스', () => {
   const HEAD = "import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'\nimport * as authz from '@/lib/authz'\n"
   const scan = (body: string) => scanFile('s.ts', parse('s.ts', HEAD + body), RPCS)
   const kinds = (body: string) => scan(body).sites.map((s) => (s.verdict.ok ? s.verdict.how : 'fail'))
-  const run = (body: string, ex: Readonly<Record<string, { expr: string; why: string }>> = {}) => evaluate(scan(body), ex)
+  const run = (body: string, ex: Readonly<Record<string, ActorException>> = {}) => evaluate(scan(body), ex)
 
   it('(a) 직접 — 가드 결과의 actor.userId(네임스페이스 import·중첩 블록·콜백·as 안 포함)', () => {
     expect(kinds([
@@ -443,6 +622,78 @@ describe('판별기 민감도 — 합성 소스', () => {
     ].join('\n'))).toEqual(['fail', 'fail', 'fail', 'fail', 'fail', 'fail'])
   })
 
+  it('[K5] 판정한 이름을 같은 함수 안에서 바꾸면 실패 — 매개변수 재대입·구조 분해 대입·가드 결과 필드 변이·지역 객체 필드 변이·Object.assign·var 재선언', () => {
+    const body = [
+      "async function re(sb, actorId, input) { if (input.as) actorId = input.as; await sb.rpc('rpc_a', { p_actor: actorId }) }",
+      'export async function a(p, input) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await re(sb, g.actor.userId, input) }',
+      "export async function b(p, body) { const g = await requireProjectAdmin(p); if (!g.ok) return g; g.actor.userId = body.actorId; await sb.rpc('rpc_a', { p_actor: g.actor.userId }) }",
+      "export async function c(p, x) { const g = await requireProjectAdmin(p); if (!g.ok) return g; const ctx = { actor: g.actor.userId }; ctx.actor = x; await sb.rpc('rpc_a', { p_actor: ctx.actor }) }",
+      "export async function d(p, body) { const g = await requireProjectAdmin(p); if (!g.ok) return g; Object.assign(g.actor, body); await sb.rpc('rpc_a', { p_actor: g.actor.userId }) }",
+      "async function hoist(actorId, input) { if (input.as) { var actorId = input.as } await sb.rpc('rpc_a', { p_actor: actorId }) }",
+      'export async function e(p, input) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await hoist(g.actor.userId, input) }',
+      "async function des(actorId, input) { ;({ actorId } = input); await sb.rpc('rpc_a', { p_actor: actorId }) }",
+      'export async function f(p, input) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await des(g.actor.userId, input) }',
+      "async function viaCaller(actorId) { await sb.rpc('rpc_a', { p_actor: actorId }) }",
+      'export async function h(p, body) { const g = await requireProjectAdmin(p); if (!g.ok) return g; g.actor = body; await viaCaller(g.actor.userId) }',
+    ].join('\n')
+    expect(kinds(body)).toEqual(['fail', 'fail', 'fail', 'fail', 'fail', 'fail', 'fail'])
+    const why = scan(body).sites.map((x) => (x.verdict.ok ? '' : x.verdict.why))
+    expect(why.slice(0, 5)).toEqual([
+      expect.stringContaining('매개변수 actorId 를 함수 안에서 바꾼다(:3 대입)'),
+      expect.stringContaining('가드 결과 g 를 함수 안에서 바꾼다(:5 대입)'),
+      expect.stringContaining('지역 const ctx 를 함수 안에서 바꾼다(:6 대입)'),
+      expect.stringContaining('가드 결과 g 를 함수 안에서 바꾼다(:7 Object.assign)'),
+      expect.stringContaining('매개변수 actorId 를 함수 안에서 바꾼다(:8 var 재선언)'),
+    ])
+    // 대조 — 다른 이름을 바꾸거나 가드 결과를 읽기만 하는 것은 자유다
+    expect(kinds([
+      "export async function k(p, x) { const g = await requireProjectAdmin(p); if (!g.ok) return g; let n = 0; n += 1; x.y = g.actor.userId; await sb.rpc('rpc_a', { p_actor: g.actor.userId }) }",
+    ].join('\n'))).toEqual(['direct'])
+  })
+
+  it('[K6] 허용 항목은 자리 수까지 닫는다 — 같은 파일에 같은 식의 새 자리가 생기면 실패', () => {
+    const lib = [
+      "export async function lib(admin, args) { await admin.rpc('rpc_a', { p_actor: args.actorUserId }) }",
+      "export async function lib2(admin, args) { await admin.rpc('rpc_a', { p_actor: args.actorUserId }) }",
+    ].join('\n')
+    const why = '라이브러리 도우미 — 합성 사유(열두 글자 넘게)'
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', count: 2, why } })).toEqual([])
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', count: 1, why } })).toEqual([
+      'ACTOR_SOURCE_EXCEPTIONS s.ts#rpc_a: 자리 수 1 ≠ 실측 2 — 새 자리는 출처를 확인하고 개수를 고친다',
+    ])
+  })
+
+  it('[K6] 도우미 호출부 닫힌 목록 — 파일·호출 수, 각 호출의 행위자 필드는 가드 결과(직접·한 단계) 또는 파일별 값 식·사유', () => {
+    const W = "import { applyWorkflowEvent } from '@/lib/agent/workflowEvent'\n"
+    const spec = (callers: HelperSpec['callers']): HelperSpec => ({ helper: 'applyWorkflowEvent', source: '@/lib/agent/workflowEvent', field: 'actorUserId', callers })
+    const why = '에이전트 토큰 라우트 — 합성 사유(열두 글자 넘게)'
+    const files = (...xs: [string, string][]) => xs.map(([f, t]) => [f, parse(f, HEAD + W + t)] as const)
+    const ok = "export async function a(p) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await applyWorkflowEvent(admin, { event: 'x', actorUserId: g.actor.userId }) }"
+    const tok = 'export async function r(loaded) { await applyWorkflowEvent(admin, { event: \'x\', actorUserId: loaded.userId }) }'
+    const bad = "export async function b(p, input) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await applyWorkflowEvent(admin, { event: 'x', actorUserId: input.actorId }) }"
+    expect(helperCallerProblems(files(['a.ts', ok], ['r.ts', tok]), spec({ 'a.ts': { count: 1 }, 'r.ts': { count: 1, except: { expr: 'loaded.userId', count: 1, why } } }))).toEqual([])
+    expect(helperCallerProblems(files(['a.ts', ok], ['b.ts', bad]), spec({ 'a.ts': { count: 1 } }))).toEqual([
+      'applyWorkflowEvent 호출부 b.ts: 닫힌 목록에 없는 파일이다(호출 1)',
+      expect.stringContaining('b.ts:4 applyWorkflowEvent 의 actorUserId(input.actorId) — '),
+    ])
+    expect(helperCallerProblems(files(['a.ts', ok + '\n' + ok.replace('function a', 'function a2')]), spec({ 'a.ts': { count: 1 } }))).toEqual([
+      'applyWorkflowEvent 호출부 a.ts: 호출 수 1 ≠ 실측 2',
+    ])
+    expect(helperCallerProblems(files(['a.ts', ok]), spec({ 'a.ts': { count: 1 }, 'gone.ts': { count: 1, except: { expr: 'x', count: 1, why } } }))).toEqual([
+      'applyWorkflowEvent 호출부 gone.ts: 호출 수 1 ≠ 실측 0',
+    ])
+    expect(helperCallerProblems(files(['r.ts', tok + '\n' + tok.replace('function r', 'function r2')]),
+      spec({ 'r.ts': { count: 2, except: { expr: 'loaded.userId', count: 1, why } } }))).toEqual([
+      'applyWorkflowEvent 호출부 r.ts: 값 식 loaded.userId 의 허용 호출 수 1 ≠ 실측 2',
+    ])
+    const esc = "export function c() { return [1].map(applyWorkflowEvent) }"
+    const spreadArg = "export async function d(args) { await applyWorkflowEvent(admin, { ...args }) }"
+    expect(helperCallerProblems(files(['c.ts', esc], ['d.ts', spreadArg]), spec({ 'c.ts': { count: 0 }, 'd.ts': { count: 1 } }))).toEqual([
+      'c.ts:4 applyWorkflowEvent 를 호출 밖에서 쓴다 — 호출마다 행위자 출처를 볼 수 없다',
+      'd.ts:4 applyWorkflowEvent 의 인자에 actorUserId 값 속성이 없거나 펼침이 있다 — 출처를 볼 수 없다',
+    ])
+  })
+
   it('구조 — .rpc 밖의 p_actor·객체 리터럴 아닌 인자·p_actor 없음·덮는 펼침·목록 밖 RPC·이름 아닌 RPC(허용 목록으로 덮지 못한다)', () => {
     const problems = run([
       "export async function a(p) { const g = await requireProjectAdmin(p); if (!g.ok) return g; const args = { p_actor: g.actor.userId }; await sb.rpc('rpc_a', args) }",
@@ -465,18 +716,18 @@ describe('판별기 민감도 — 합성 소스', () => {
   it('허용 목록 — 값 식이 같아야 덮는다, 죽은 항목(자리 없음·예외 없이 통과·값 식 다름)과 사유 없음은 실패', () => {
     const lib = "export async function lib(admin, args) { await admin.rpc('rpc_a', { p_actor: args.actorUserId }) }"
     const why = '라이브러리 도우미 — 합성 사유(열두 글자 넘게)'
-    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', why } })).toEqual([])
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', count: 1, why } })).toEqual([])
     expect(run(lib)).toEqual([expect.stringContaining('s.ts:3 rpc_a 의 p_actor(args.actorUserId) — args 는 export 되거나 이름 없는 함수의 매개변수다')])
-    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actor', why } })).toEqual([
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actor', count: 1, why } })).toEqual([
       expect.stringContaining('s.ts:3 rpc_a 의 p_actor(args.actorUserId) — '),
       'ACTOR_SOURCE_EXCEPTIONS s.ts#rpc_a: 값 식 args.actor 이 실제(args.actorUserId)와 다르다',
     ])
-    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', why: '짧음' } })).toEqual(['ACTOR_SOURCE_EXCEPTIONS s.ts#rpc_a: 사유가 없다'])
-    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', why }, 's.ts#other': { expr: 'x', why } })).toEqual([
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', count: 1, why: '짧음' } })).toEqual(['ACTOR_SOURCE_EXCEPTIONS s.ts#rpc_a: 사유가 없다'])
+    expect(run(lib, { 's.ts#rpc_a': { expr: 'args.actorUserId', count: 1, why }, 's.ts#other': { expr: 'x', count: 1, why } })).toEqual([
       'ACTOR_SOURCE_EXCEPTIONS s.ts#other: 죽은 항목 — 그 자리가 없다',
     ])
     const direct = "export async function a(p) { const g = await requireProjectAdmin(p); if (!g.ok) return g; await sb.rpc('rpc_a', { p_actor: g.actor.userId }) }"
-    expect(run(direct, { 's.ts#rpc_a': { expr: 'g.actor.userId', why } })).toEqual([
+    expect(run(direct, { 's.ts#rpc_a': { expr: 'g.actor.userId', count: 1, why } })).toEqual([
       'ACTOR_SOURCE_EXCEPTIONS s.ts#rpc_a: 죽은 항목 — 예외 없이 통과한다(g.actor.userId)',
     ])
   })
