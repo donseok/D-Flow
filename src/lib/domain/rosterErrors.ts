@@ -21,6 +21,8 @@ const BY_TOKEN: ReadonlyArray<readonly [string, string]> = [
   // 가드는 통과했는데 RPC 가 호출자 등급을 다시 보고 거부했다(그 사이 권한이 바뀐 경우) — 가드와 같은 문구.
   ['PROJECT_MEMBER_FORBIDDEN', ERR_DENIED],
   ['PROJECT_MEMBER_TEAM_SCOPE', '이 프로젝트에서 쓸 수 없는 팀입니다.'],
+  // 같은 code 의 전용 팀이 있는 공용 팀을 새로 붙임(*_command_receipts ⑤′ team_ref_owned_scope) — 재시도로 풀리지 않는다
+  ['TEAM_SCOPE_PROJECT_OWNED', '이 프로젝트에서 쓸 수 없는 팀입니다.'],
   ['PERSON_NOT_FOUND', '인물을 찾을 수 없습니다.'],
   ['PERSON_NAME_REQUIRED', '이름을 입력하세요.'],
   ['PROJECT_NOT_FOUND', '프로젝트를 찾을 수 없습니다.'],

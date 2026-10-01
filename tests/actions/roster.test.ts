@@ -183,6 +183,8 @@ describe('rosterWriteError — DB 오류 → 사용자 문구', () => {
       '담당·참석 기록이 있는 사람은 삭제할 수 없습니다. 비활성으로 바꾸세요.'],
     [{ code: '42501', message: 'PROJECT_MEMBER_FORBIDDEN' }, '권한 없음'],
     [{ code: '23514', message: 'PROJECT_MEMBER_TEAM_SCOPE' }, '이 프로젝트에서 쓸 수 없는 팀입니다.'],
+    // 같은 code 의 전용 팀이 있는 공용 팀을 새로 붙임(*_command_receipts ⑤′ — A1-4 리뷰 P1). 재시도로는 풀리지 않는다 — '잠시 후' 문구가 아니다
+    [{ code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' }, '이 프로젝트에서 쓸 수 없는 팀입니다.'],
     [{ code: 'P0002', message: 'PERSON_NOT_FOUND' }, '인물을 찾을 수 없습니다.'],
   ])('%o', (error, expected) => {
     expect(rosterWriteError(error)).toBe(expected)
