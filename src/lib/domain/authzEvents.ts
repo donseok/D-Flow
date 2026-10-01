@@ -2,7 +2,8 @@
 //   platform_admin  {granted: true[, granted_by]}                — 지정은 before 없음, 해제는 after 없음
 //   workspace_role  {role[, invited_by]}                         — 소속 추가는 before 없음, 제거는 after 없음, 변경은 둘 다
 //   project_access  {access_role[, access_granted_by][, active]} — 부여는 before 없음, 회수는 after 없음, 변경(권한·활성)은 둘 다.
-//                   active 는 SP4 부터 실린다 — 그 전 기록에는 없고 그때는 권한 칸만 읽는다
+//                   active 는 SP4 부터 실린다 — 그 전 기록에는 없고 그때는 권한 칸만 읽는다. 부여·회수 기록의 active 가 false 면
+//                   `부여 (멤버, 비활성)` 처럼 꼬리를 붙인다(비활성 행 — 권한이 생기지 않았거나 이미 정지돼 있었다)
 //   project_access  {person_active}                              — 인물의 비활성·재활성(SP4) — 그 인물의 권한 있는 명단 행마다 한 기록
 // 문구는 이 모듈의 한국어 상수다 — 소비 경로(actions/authzEvents.ts 의 summary)가 한국어 표시 문자열 계약이라 사전 키로 내지 않는다(스펙 §3.4 T11).
 // 모르는 모양은 지어내지 않는다 — 읽을 수 있는 값만 쓰고 아니면 그대로 알린다(3원칙: 모르면 unknown).
@@ -20,6 +21,8 @@ const ROLE_LABEL: Record<string, string> = { admin: '관리자', member: '멤버
 const ACTIVE_LABEL = { off: '비활성화', on: '다시 활성' } as const
 /** 인물의 활성 전환(SP4) — 그 인물의 권한 있는 명단 행마다 같은 문구 */
 const PERSON_ACTIVE_LABEL = { off: '인물 비활성 (권한 정지)', on: '인물 다시 활성' } as const
+/** 비활성 명단 행의 추가·삭제(A1-3 리뷰 M2) — 권한이 생기지 않았거나 이미 정지돼 있었다. `부여 (멤버, 비활성)` 꼴로 괄호 안에 잇는다 */
+const INACTIVE_TAIL = '비활성'
 const UNREADABLE = '변경 내용을 읽지 못했습니다'
 const JOIN = ' · '
 
@@ -72,13 +75,15 @@ export function describeAuthzChange(kind: AuthzEventKind, before: unknown, after
   const field = kind === 'workspace_role' ? 'role' : 'access_role'
   const was = b === null ? null : roleText(b[field])
   const now = a === null ? null : roleText(a[field])
+  // 명단 행의 추가·삭제는 그 행의 active 도 싣는다(SP4) — false 면 꼬리를 붙인다. 없는 옛 기록·워크스페이스 등급은 그대로
+  const tail = (row: Record<string, unknown>): string => (kind === 'project_access' && flag(row.active) === false ? `, ${INACTIVE_TAIL}` : '')
   if (b === null) {
-    if (!now) return UNREADABLE
-    return kind === 'workspace_role' ? `소속 추가 (${now})` : `부여 (${now})`
+    if (!now || a === null) return UNREADABLE
+    return kind === 'workspace_role' ? `소속 추가 (${now})` : `부여 (${now}${tail(a)})`
   }
   if (a === null) {
     if (!was) return UNREADABLE
-    return kind === 'workspace_role' ? `소속 제거 (${was})` : `회수 (${was})`
+    return kind === 'workspace_role' ? `소속 제거 (${was})` : `회수 (${was}${tail(b)})`
   }
   if (kind === 'project_access') return describeRosterChange(b, a)
   if (!was || !now) return UNREADABLE

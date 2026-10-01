@@ -30,7 +30,7 @@ export async function writeProjectSettingsInternal(
     if (!settingDef('project', key)) return { ok: false, code: 'CONFIG_UNKNOWN_KEY', error: `${CONFIG_MESSAGES.CONFIG_UNKNOWN_KEY}: ${key}` }
   }
   for (const key of unset) if (key in rawSet) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES.CONFIG_INVALID}: ${key} — set 과 unset 에 같이 있습니다.` }
-  // 늘 명시 키는 설정 액션과 같은 규칙 — RPC 는 필수 키 unset 을 보지 않는다(DB 층 방어는 다음 마이그레이션 carry)
+  // 늘 명시 키는 설정 액션과 같은 규칙 — RPC 도 같은 키를 거부한다(*_authz_carry ③ — CONFIG_INVALID:<키>). TS 는 같은 문구로 먼저 막는다
   for (const key of unset) {
     if (settingDef('project', key)!.explicit) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES.CONFIG_INVALID}: ${key} — ${ERR_EXPLICIT_UNSET}`, fieldErrors: [{ key, message: ERR_EXPLICIT_UNSET }] }
   }

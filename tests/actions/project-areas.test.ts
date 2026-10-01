@@ -204,6 +204,8 @@ describe('RPC 토큰 → 코드(D45·T6) — 원문 비노출', () => {
     ['PROJECT_AREA_CODE_IMMUTABLE', '23514', { code: 'INVALID_INPUT', error: ERR_AREA_CODE_IMMUTABLE }],
     ['PROJECT_AREA_PROJECT_IMMUTABLE', '23514', { code: 'INVALID_INPUT', error: '다른 프로젝트의 영역으로 옮길 수 없습니다.' }],
     ['AREA_TEAM_SCOPE', '23514', { code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE }],
+    // 같은 code 의 전용 팀이 있는 공용 팀(전환 뒤 오래된 폼·D4 분열 — *_command_receipts ⑤′, A1-3 리뷰 M1)
+    ['TEAM_SCOPE_PROJECT_OWNED', '23514', { code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE }],
     ['duplicate key value violates unique constraint "project_areas_project_id_kind_code_key"', '23505', { code: 'INVALID_INPUT', error: "'DATA' 코드가 이미 있습니다." }],
     ['deadlock detected', '40P01', { code: 'CONFIG_BUSY', error: ERR_CONFIG_BUSY, retryable: true }],
     ['canceling statement due to lock timeout', '55P03', { code: 'CONFIG_BUSY', error: ERR_CONFIG_BUSY, retryable: true }],
