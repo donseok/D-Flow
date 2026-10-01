@@ -12,7 +12,7 @@ import { queueProjectVisit } from '@/lib/prefs/debouncedSave'
 import { SLUG_RE, WS_COOKIE, type WorkspaceRef } from '@/lib/workspace/constants'
 
 export interface ShellScopeState { workspace: WorkspaceRef | null; projectId: string | null; projects: { id: string; name: string }[] }
-const Store = createContext<{ state: ShellScopeState | null; publish: (s: ShellScopeState) => void } | null>(null)
+const Store = createContext<{ state: ShellScopeState | null; publish: (s: ShellScopeState | null) => void } | null>(null)
 
 export function ShellScopeProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ShellScopeState | null>(null)
@@ -33,6 +33,9 @@ export function ShellScope({ workspace, projectId, projects, persist = true }: S
     publish?.({ workspace, projectId, projects })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 게시는 범위가 바뀔 때만(목록은 id·이름 열로 비교)
   }, [publish, workspace?.id, workspace?.slug, workspace?.name, projectId, projectsKey])
+  // 범위를 떠나면 해제한다(Z7) — (global) 화면이 직전 워크스페이스·프로젝트를 지금 범위로 보지 않게(벨 합산·봇 문맥·사용 기록).
+  // 범위 레이아웃끼리의 교체는 언마운트와 새 게시가 한 커밋이라 새 범위로 끝난다
+  useEffect(() => () => { publish?.(null) }, [publish])
   useEffect(() => {
     if (!persist || !workspace || !SLUG_RE.test(workspace.slug)) return
     if (readCookie(WS_COOKIE) === workspace.slug) return

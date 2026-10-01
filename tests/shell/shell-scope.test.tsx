@@ -49,4 +49,16 @@ describe('ShellScope — 게시 저장소(D38 ②)·쿠키(D3)·최근 방문(§
     expect(seen).toEqual({ workspace: WS, projectId: P, projects: [] })
     set.mockRestore()
   })
+  it('Z7 — 범위를 떠나면(ShellScope 언마운트, 예: (global) 화면) 게시를 해제한다 — 직전 범위를 지금 범위로 보지 않는다', () => {
+    const { rerender } = render(<ShellScopeProvider><Reader /><ShellScope workspace={WS} projectId={P} projects={[]} /></ShellScopeProvider>)
+    expect(seen).toEqual({ workspace: WS, projectId: P, projects: [] })
+    rerender(<ShellScopeProvider><Reader /></ShellScopeProvider>)
+    expect(seen).toBeNull()
+  })
+  it('범위가 바뀌는 교체(언마운트 + 새 게시가 한 커밋)는 새 범위로 끝난다', () => {
+    const { rerender } = render(<ShellScopeProvider><Reader /><ShellScope key="a" workspace={WS} projectId={null} projects={[]} /></ShellScopeProvider>)
+    rerender(<ShellScopeProvider><Reader /><ShellScope key="b" workspace={WS} projectId={P} projects={[]} /></ShellScopeProvider>)
+    expect(seen).toEqual({ workspace: WS, projectId: P, projects: [] })
+  })
 })
+
