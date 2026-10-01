@@ -10,9 +10,10 @@
 // 탐색은 'use client'(렌더 중 실행되지 않는다)와 'use server'(서버 액션 — 각자 require* 가드를 건다, 감사표) 경계에서 멈춘다.
 // 탐색 간선은 값 import 와 re-export(`export { x } from`·`export * from`) 둘 다다 — 배럴을 거쳐도 원천에 닿는다.
 // 게이트 = `if (…) notFound()|redirect(…)` 한 줄 중 조건이 거부형·은닉형인 것만: `!isProjectMember(`·`!isProjectAdmin(`·`!roleIn(`,
-// `isHiddenProject(`(부정 없이), `!canViewAgents(` — 워크스페이스 좌석표(/w/[slug]/agents, SP3b), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
+// `isHiddenProject(`(부정 없이), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
 // require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
-// 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
+// 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다). `!canViewAgents(` 같은 워크스페이스 단위 판정은 프로젝트 하나의 가시성이
+// 아니므로 게이트로 세지 않는다(U2a-4 리뷰 T1) — /w/[slug]/agents 는 그 앞의 `await loadWorkspaceScope` 가 게이트다.
 // /w/[slug]/** 페이지(그 루트 아래 파일만 — /p/[projectId] 는 숨김 프로젝트 게이트가 따로 있어야 한다, U2a-3 리뷰 V3)는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
 // 않는 워크스페이스는 0행 → notFound(), 보여도 역할이 없으면 notFound() 를 그 함수 안에서 던진다. 열화(권한 조회 실패)여도 슬러그 조회는
 // RLS 로 했으므로 그 워크스페이스가 보이는 사람만 다음 줄로 간다. await 없이 부르면 흐름을 끊지 않으므로 게이트가 아니다.
@@ -34,7 +35,7 @@ const SAFE_LOADERS: Record<string, string> = {}
 const ALLOWLIST: Record<string, string> = {}
 
 /** 조건에 직접 쓴 거부형·은닉형 판정 — 허용 판정은 부정으로, 은닉 판정은 부정 없이. */
-const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn|canViewAgents)\(|(?<![!\w])isHiddenProject\(/
+const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isHiddenProject\(/
 const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
 /** 그 호출 자체가 거부(notFound)를 던지는 범위 판정 — 끝까지 기다려야 게이트다 */
@@ -253,9 +254,20 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(pageReport(join(WORKSPACE_PAGES_ROOT, 'agents/page.tsx')).gate).toBeGreaterThan(-1)
   })
 
-  it('워크스페이스 좌석표 — !canViewAgents( 거부형은 게이트, 역전(canViewAgents( 로 redirect)은 아니다', () => {
-    expect(firstGateLine(["  if (!scope.actor || !canViewAgents(scope.actor, scope.ws.id)) redirect(wsHref(slug))"])).toBe(0)
-    expect(firstGateLine(["  if (canViewAgents(actor, w)) redirect('/x')"])).toBe(-1)
+  it('워크스페이스 단위 판정(!canViewAgents()은 게이트가 아니다 — 프로젝트 하나의 가시성이 아니다(T1). /w/[slug]/agents 는 loadWorkspaceScope 가 게이트', () => {
+    expect(firstGateLine(["  if (!scope.actor || !canViewAgents(scope.actor, scope.ws.id)) redirect(wsHref(slug))"])).toBe(-1)
+    expect(firstGateLine(["  if (!canViewAgents(actor, w)) redirect('/x')"], 0, { scopeCall: true })).toBe(-1)
+    // 실제 분석 — /p 꼴 파일에서 canViewAgents 거부 뒤 service_role 로더는 게이트 없음으로 잡힌다
+    const dir = mkdtempSync(join(tmpdir(), 'page-gates-agents-'))
+    try {
+      const f = join(dir, 'page.tsx')
+      writeFileSync(f, "import { getAgentHub } from '@/lib/data/agentHub'\nexport default async function P() {\n  if (!canViewAgents(actor, actor.projectWorkspace.get(pid))) redirect('/')\n  return getAgentHub(pid)\n}\n")
+      expect(pageReport(f).gate).toBe(-1)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+    // 좌석표 페이지는 첫 줄(loadWorkspaceScope)이 게이트다 — canViewAgents 줄보다 앞
+    const agents = join(WORKSPACE_PAGES_ROOT, 'agents/page.tsx')
+    const lines = code(agents)
+    expect(pageReport(agents).gate).toBe(lines.findIndex((l) => /await loadWorkspaceScope\(/.test(l)))
   })
 
   it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {
