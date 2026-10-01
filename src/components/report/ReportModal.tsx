@@ -151,7 +151,7 @@ export function ReportModal({
       <label className={`no-print flex items-center gap-1.5 text-xs ${aiStatus === 'fresh' ? 'text-ink-muted' : 'text-ink-subtle'}`}
         title={aiStatus === 'fresh' ? 'PPT 마지막에 AI 종합 코멘트 슬라이드를 추가합니다' : '신선한 AI 브리핑이 있어야 포함할 수 있습니다'}>
         <input type="checkbox" checked={withAi} disabled={aiStatus !== 'fresh'}
-          onChange={e => setAiChecked(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--brand)]" />
+          onChange={e => setAiChecked(e.target.checked)} className="h-3.5 w-3.5 accent-(--color-action)" />
         AI 코멘트 포함
       </label>
       {(aiStatus === 'stale' || aiStatus === 'none' || aiStatus === 'failed') && (

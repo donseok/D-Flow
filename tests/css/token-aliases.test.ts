@@ -59,3 +59,43 @@ describe('지운 클래스·비색 변수 0건', () => {
     expect(srcFiles().filter(([, t]) => t.includes(`var(${v})`)).map(([f]) => f)).toEqual([])
   })
 })
+
+// 정의되지 않은 토큰 이름 0건(UI-1 최종 리뷰 N4). 지운 이름 목록(위)은 "알고 있는 이름"만 막는다 — 오타·상상 이름(`bg-surface-1`)도
+// Tailwind 가 오류 없이 버려 그 요소는 조용히 색을 잃는다. 토큰 계열 접두로 시작하는 색 유틸 이름은 globals.css 가 선언한
+// --color-* 이름 집합 안에 있어야 한다. Tailwind 기본 팔레트(neutral-100 같은 숫자 단계)는 no-raw-color 가 따로 본다.
+const FAMILIES = 'surface|fg|action|success|warning|danger|progress|pending|neutral|today|critical|phasebar|plan|category|canvas|weekend|holiday|border|brand|accent|ink|line|done|delayed|grid|team|hero|zebra|sheet'
+const COLOR_UTIL = new RegExp(`(?<![\\w-])(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|via|to|fill|stroke|divide|decoration|placeholder|caret|accent)-((?:${FAMILIES})(?:-[a-z0-9]+)*)(?![\\w$\\{-])`, 'g')
+
+export function unknownTokenUtils(text: string, defined: Set<string>): string[] {
+  return [...text.matchAll(COLOR_UTIL)].filter((m) => !/^neutral-\d+$/.test(m[1]) && !defined.has(m[1])).map((m) => m[0])
+}
+/** var(--x) 의 x 가 globals.css 에도, src 의 선언(CSS `--x:` · 인라인 style 키 `'--x':` · `setProperty('--x'`)에도 없으면 그 값은 조용히 무효다 */
+export function undefinedVars(files: [string, string][], declared: Set<string>): string[] {
+  const local = new Set(files.flatMap(([, t]) => [
+    ...[...t.matchAll(/(?:^|[\s{;'"])(--[\w-]+)['"]?\s*:/gm)].map((m) => m[1]),
+    ...[...t.matchAll(/setProperty\(\s*['"`](--[\w-]+)/g)].map((m) => m[1]),
+  ]))
+  return files.flatMap(([f, t]) => [...t.matchAll(/var\(\s*(--[\w-]+)/g)].filter((m) => !declared.has(m[1]) && !local.has(m[1])).map((m) => `${f} ${m[1]}`))
+}
+
+describe('정의되지 않은 토큰 이름 0건(N4)', () => {
+  const css = readGlobals()
+  const defined = new Set([...css.matchAll(/--color-([\w-]+)\s*:/g)].map((m) => m[1]))
+  const declared = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]))
+  const files = srcFiles().filter(([f]) => f !== 'src/app/globals.css')
+  it('src 의 토큰 계열 색 유틸은 선언된 --color-* 이름이다', () => {
+    expect(files.flatMap(([f, t]) => unknownTokenUtils(t, defined).map((u) => `${f} ${u}`))).toEqual([])
+  })
+  it('src 의 var(--…) 는 globals.css 또는 src 안에서 선언된 변수다', () => {
+    expect(undefinedVars(files, declared)).toEqual([])
+  })
+  it('판정기가 살아 있다 — 모양별 표본', () => {
+    const d = new Set(['surface', 'surface-subtle', 'line', 'action'])
+    expect(unknownTokenUtils("'bg-surface-1' 'bg-surface-1/40' hover:text-fg-faint", d)).toEqual(['bg-surface-1', 'bg-surface-1', 'text-fg-faint'])
+    expect(unknownTokenUtils('bg-surface-subtle/40 border-line hover:bg-action bg-neutral-100 border-t-2 text-sm', d)).toEqual([])
+    expect(unknownTokenUtils('bg-category-${n} text-${tone}', d)).toEqual([])
+    expect(undefinedVars([['a.tsx', "accent-[var(--brand)] style={{ '--k': 1 }} w-[var(--k)]"]], new Set())).toEqual(['a.tsx --brand'])
+    expect(undefinedVars([['a.module.css', '.x{--m:1;left:var(--m)}']], new Set())).toEqual([])
+    expect(undefinedVars([['b.tsx', "el.style.setProperty('--s', '1px'); calc(var(--s, 0px))"]], new Set())).toEqual([])
+  })
+})

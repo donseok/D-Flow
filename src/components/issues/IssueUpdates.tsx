@@ -190,7 +190,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                 <li
                   key={u.id}
                   className={`rounded-lg border border-line px-2.5 py-2 ${
-                    u.kind === 'status' ? 'bg-surface-1/40' : 'bg-surface-1'
+                    u.kind === 'status' ? 'bg-surface-subtle/40' : 'bg-surface-subtle'
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
@@ -284,7 +284,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   작성 중 본문이 사라진다(IssuesView.tsx:365 에 dirty 가드가 없다).
               인라인 목록이면 Escape 를 가로챌 필요가 없다. */}
           {mentionCandidates.length > 0 && (
-            <ul className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-1 p-1.5">
+            <ul className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-subtle p-1.5">
               {mentionCandidates.map(m => (
                 <li key={m.id}>
                   <button
