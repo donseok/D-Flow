@@ -18,6 +18,7 @@
     "db:diff:baseline": "supabase db reset --version 0001 && node scripts/baseline-diff.mjs && supabase migration up --local",
     "dev:bootstrap": "node scripts/dev-bootstrap.mjs",
     "settings:verify": "node scripts/settings-verify.mjs",
+    "accept:synthetic": "node scripts/e2e-synthetic.mjs",
     "catalog:write": "node scripts/settings-catalog.mjs",
     "build": "next build",
     "start": "next start",
