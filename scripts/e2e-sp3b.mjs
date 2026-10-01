@@ -182,9 +182,16 @@ async function main(steps) {
     if (!b.html.includes(MINUTE_B_TITLE)) p.push('B 목록에 B 회의록이 없다')
     if (b.html.includes(minuteA.title)) p.push('B 목록에 A 회의록이 샌다')
     const title = `E2E SP3b 생성 ${stamp()}`
-    const { result } = await S.duo.action(`/w/${wsB.slug}/minutes`, 'createMinute', [
-      minuteInput({ date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }), teamCode: 'OPS', title, bodyMd: '# 생성\n', projectId: null }), null, null, wsB.id,
-    ])
+    // 팀 마스터는 프로세스 전역 캐시(TTL 60초 — 오래된 값을 주면서 뒤에서 갱신)라, 방금 만든 B 의 공용 팀이 아직 캐시에 없으면 '잘못된 담당' 이 난다.
+    // 그 한 가지 거절만 갱신될 때까지 다시 시도한다(최대 90초) — 다른 거절은 바로 문제로 둔다
+    let result
+    for (let attempt = 0; attempt < 19; attempt++) {
+      result = (await S.duo.action(`/w/${wsB.slug}/minutes`, 'createMinute', [
+        minuteInput({ date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }), teamCode: 'OPS', title, bodyMd: '# 생성\n', projectId: null }), null, null, wsB.id,
+      ])).result
+      if (result?.ok || result?.error !== '잘못된 담당입니다.') break
+      await new Promise((r) => setTimeout(r, 5000))
+    }
     if (!result?.ok) p.push(`createMinute 실패: ${JSON.stringify(result)}`)
     else {
       const row = must('생성 행', await db.from('minutes').select('workspace_id').eq('id', result.id).maybeSingle())
