@@ -19,15 +19,15 @@
 //           measure [--items <n>] [--routes dashboard,wbs,issues,export,weekly(기본 dashboard,wbs,issues)] [--personas admin|admin,member(기본 둘)]
 //           [--expect-items <n>(wbs 화면·export 본문의 서로 다른 시드 항목 이름 수가 n 인지 — 다르면 실패. 표준 내보내기에는 코드 열이 없어
 //           이름으로 센다)]. export 는 바이너리로 읽는다.
-//   DSN 은 resolveTarget('local').dsn(LOCAL_DB_URL 우선 — 전용 스택에서 메인 스택 54322 로 새지 않는다).
+//   DSN 은 perfDsn(scripts/lib/perf.mjs) — LOCAL_DB_URL 필수(없으면 멈춘다 — 기본 DSN 인 메인 스택으로 떨어지지 않는다), .env.local 의 API 와 같은 스택인지 포트로 대조.
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { Pool } from 'pg'
 import { cookieHeader, localClientEnv, notFoundRendered } from './lib/e2e.mjs'
-import { localAdminEnv, resolveTarget } from './lib/targets.mjs'
-import { distinctSeedNames, parseNameList, percentile, perfBaseUrl, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
+import { localAdminEnv } from './lib/targets.mjs'
+import { distinctSeedNames, parseNameList, percentile, perfBaseUrl, perfDsn, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
 import { zipTextParts } from './lib/sentinels.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
@@ -59,11 +59,11 @@ function plusDays(base, n) {
 /**
  * email 로 기존 auth 사용자 id 를 찾는다 — supabase-js 의 auth.admin.listUsers() 는 쓰지 않는다: 로컬 GoTrue 가
  * 이 리포의 RLS 픽스처(SQL 로 auth.users 에 직접 넣은 행 — confirmation_token 이 NULL)를 만나면
- * "Database error finding users"(500, NULL→string 스캔 오류)로 죽는다. 대신 직접 접속(resolveTarget('local').dsn
- * — LOCAL_DB_URL 우선, 금지 목록이면 throw)으로 `auth.users` 를 읽는다.
+ * "Database error finding users"(500, NULL→string 스캔 오류)로 죽는다. 대신 직접 접속(seed 가 perfDsn 으로 정한 DSN
+ * — LOCAL_DB_URL 필수·API 와 같은 스택·금지 목록이면 throw)으로 `auth.users` 를 읽는다.
  */
-async function findAuthUserIdByEmail(email) {
-  const pool = new Pool({ connectionString: resolveTarget('local').dsn })
+async function findAuthUserIdByEmail(dsn, email) {
+  const pool = new Pool({ connectionString: dsn })
   try {
     const { rows } = await pool.query('select id from auth.users where lower(email) = lower($1)', [email])
     return rows[0]?.id ?? null
@@ -73,8 +73,8 @@ async function findAuthUserIdByEmail(email) {
 }
 
 /** 없으면 만들고, 있으면 그대로 쓴다(비밀번호는 최초 생성 때만 반영 — 이미 있으면 재사용, 바꾸지 않는다). */
-async function findOrCreateAuthUserId(admin, email, password) {
-  const existingId = await findAuthUserIdByEmail(email)
+async function findOrCreateAuthUserId(admin, dsn, email, password) {
+  const existingId = await findAuthUserIdByEmail(dsn, email)
   if (existingId) return existingId
   const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true })
   if (error) fail(`계정 생성 실패(${email}): ${error.message}`)
@@ -115,6 +115,8 @@ async function seed(argv) {
   const { items, weekly } = parseSeedArgs(argv)
   const projectName = perfProjectName(items)
   const target = localAdminEnv(envText())
+  let dsn
+  try { dsn = perfDsn(process.env, target.url) } catch (e) { fail(e.message) }
   const admin = createClient(target.url, target.serviceRoleKey, { auth: { persistSession: false } })
   const slug = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
   const memberPassword = process.env.PERF_MEMBER_PASSWORD
@@ -202,7 +204,7 @@ async function seed(argv) {
   }
 
   // 슈퍼유저가 아닌 워크스페이스 멤버 — is_superuser() 분기를 타지 않는 실제 멤버 경로를 측정하기 위함.
-  const memberUserId = await findOrCreateAuthUserId(admin, MEMBER_EMAIL, memberPassword)
+  const memberUserId = await findOrCreateAuthUserId(admin, dsn, MEMBER_EMAIL, memberPassword)
   const { error: profErr } = await admin.from('profiles')
     .upsert({ user_id: memberUserId, email: MEMBER_EMAIL, display_name: MEMBER_EMAIL.split('@')[0] })
   if (profErr) fail(`profiles 시드 실패: ${profErr.message}`)

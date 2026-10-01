@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { judgeRegression, median, percentile, perfBaseUrl } from '../../scripts/lib/perf.mjs'
+import { judgeRegression, median, percentile, perfBaseUrl, perfDsn } from '../../scripts/lib/perf.mjs'
 import { distinctSeedNames, distinctWbsCodes, parseNameList, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from '../../scripts/lib/perf.mjs'
 
 describe('percentile — 최근접 순위(표본 밖 보간 없음)', () => {
@@ -48,9 +48,27 @@ describe('judgeRegression — 반복 측정의 p95 중앙값 비교', () => {
 
 describe('perf-baseline — 좌표는 resolveTarget 한 길(SP3b 알림 11)', () => {
   const src = readFileSync('scripts/perf-baseline.mjs', 'utf8')
-  it('LOCAL_DSN 상수를 쓰지 않고 resolveTarget(\'local\') 로 DSN 을 얻는다(LOCAL_DB_URL 우선)', () => {
+  it('LOCAL_DSN 상수를 쓰지 않고 perfDsn(→ resolveTarget(\'local\')) 로 DSN 을 얻는다 — .env.local 의 API 좌표와 대조', () => {
     expect(src).not.toMatch(/\bLOCAL_DSN\b/)
-    expect(src).toMatch(/resolveTarget\('local'\)\.dsn/)
+    expect(src).not.toMatch(/resolveTarget\(/)
+    expect(src).toMatch(/perfDsn\(process\.env, target\.url\)/)
+  })
+})
+
+describe('perfDsn — LOCAL_DB_URL 이 없으면 메인 스택(54322)으로 떨어지지 않는다(A2-4 리뷰 P3-3 · W2)', () => {
+  const sp4 = 'postgresql://postgres:postgres@127.0.0.1:54522/postgres'
+  it('LOCAL_DB_URL 이 API 포트 + 1 이면 그 DSN', () => {
+    expect(perfDsn({ LOCAL_DB_URL: sp4 }, 'http://127.0.0.1:54521')).toBe(sp4)
+  })
+  it('LOCAL_DB_URL 이 없거나 비면 throw — resolveTarget 의 기본 DSN 으로 가지 않는다', () => {
+    expect(() => perfDsn({}, 'http://127.0.0.1:54521')).toThrow(/LOCAL_DB_URL/)
+    expect(() => perfDsn({ LOCAL_DB_URL: '  ' }, 'http://127.0.0.1:54321')).toThrow(/LOCAL_DB_URL/)
+  })
+  it('DSN 과 .env.local 의 API 가 다른 스택이면 throw', () => {
+    expect(() => perfDsn({ LOCAL_DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' }, 'http://127.0.0.1:54521')).toThrow(/같은 스택/)
+  })
+  it('금지 ref 는 resolveTarget 이 그대로 막는다', () => {
+    expect(() => perfDsn({ LOCAL_DB_URL: 'postgresql://x@db.rglfgrwwwwdqejohdnty.supabase.co:5432/postgres' }, 'http://127.0.0.1:5431')).toThrow(/금지/)
   })
 })
 

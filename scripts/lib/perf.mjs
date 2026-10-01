@@ -1,5 +1,6 @@
 // scripts/lib/perf.mjs — perf-baseline.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
 import { localAppUrl } from './e2e.mjs'
+import { resolveTarget } from './targets.mjs'
 
 /** 최근접 순위 백분위(p ∈ (0,100]) — 표본이 작아도 실제 관측값을 돌려준다. */
 export function percentile(values, p) {
@@ -25,6 +26,22 @@ export function perfBaseUrl(value) {
   const url = localAppUrl(value)
   if (new URL(url).port === '3000') throw new Error('성능 측정은 스크래치 워크트리(3101·3102)에서 돈다 — 3000 은 쓰지 않는다')
   return url
+}
+
+/**
+ * 성능 러너의 직접 접속 DSN — LOCAL_DB_URL 이 반드시 있어야 하고(resolveTarget 의 기본 DSN = 메인 스택 54322 로 떨어지지 않는다 — 래퍼 밖에서
+ * 돌려도), .env.local 의 API 와 같은 스택(DB 포트 = API 포트 + 1 — supabase CLI 의 기본 배치)이어야 한다(A2-4 리뷰 P3-3). 금지 ref 는 resolveTarget 이 막는다.
+ * @param {Record<string, string | undefined>} env @param {string} apiUrl @returns {string}
+ */
+export function perfDsn(env, apiUrl) {
+  if (!env.LOCAL_DB_URL?.trim()) throw new Error('LOCAL_DB_URL 이 없다 — 성능 러너는 기본 DSN(메인 스택)으로 떨어지지 않는다. 전용 스택 래퍼(lane-a-run.sh 등)로 돌린다')
+  const { dsn } = resolveTarget('local', env)
+  const dbPort = Number(new URL(dsn).port)
+  const apiPort = Number(new URL(apiUrl).port)
+  if (!dbPort || !apiPort || dbPort !== apiPort + 1) {
+    throw new Error(`LOCAL_DB_URL(포트 ${dbPort || '?'})과 .env.local 의 API(포트 ${apiPort || '?'})가 같은 스택이 아니다 — DB 포트는 API 포트 + 1 이어야 한다`)
+  }
+  return dsn
 }
 
 /** 각 실행의 p95 중앙값으로 기준선 대비 회귀를 판정한다. */
