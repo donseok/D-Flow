@@ -154,6 +154,44 @@ export function inspect(file: string, text: string, expected: readonly ModuleId[
   return problems
 }
 
+/** `/w/[slug]/**` 페이지의 슬러그 판정 — 첫 데이터 await 가 loadWorkspaceScope(설정 페이지만 workspacePageAccess)여야 한다(스펙 §5.2, E19).
+ *  레이아웃의 notFound() 는 페이지 로더를 멈추지 못한다(병렬로 도는 로더·after() 쓰기가 비소속에게도 실행된다) — 페이지가 스스로 판정한다.
+ *  params·searchParams 를 기다리는 것만 그 앞에 올 수 있다. 판정은 함수 본문 최상위 문이고, 인자는 경로 조각에서 꺼낸 식별자다(UI-2a 최종 수정 FA2). */
+const SCOPE_ROOT = 'src/app/(app)/w/[slug]/'
+const SCOPE_GATE_BY_FILE: Record<string, string> = { 'src/app/(app)/w/[slug]/settings/page.tsx': 'workspacePageAccess' }
+export function inspectScopeFirst(file: string, text: string): string[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const fn = sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s)
+    && (ts.getModifiers(s) ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
+  if (!fn?.body) return ['export default function 이 없다']
+  const awaits: ts.AwaitExpression[] = []
+  const calls: ts.CallExpression[] = []
+  const visit = (n: ts.Node): void => {
+    if (ts.isAwaitExpression(n)) awaits.push(n)
+    if (ts.isCallExpression(n)) calls.push(n)
+    if (ts.isFunctionLike(n) && n !== fn) return
+    ts.forEachChild(n, visit)
+  }
+  ts.forEachChild(fn.body, visit)
+  const want = SCOPE_GATE_BY_FILE[file] ?? 'loadWorkspaceScope'
+  const isParamsWait = (a: ts.AwaitExpression) => (ts.isIdentifier(a.expression) && (a.expression.text === 'params' || a.expression.text === 'searchParams')) || isParamsAll(a.expression)
+  const first = awaits.find((a) => !isParamsWait(a))
+  const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1
+  if (!first) return [`await ${want}(…) 가 없다`]
+  if (!(ts.isCallExpression(first.expression) && calleeOf(first.expression) === want)) {
+    return [`첫 데이터 await(:${lineOf(first)}) 가 ${want} 가 아니다 — 슬러그 판정이 먼저`]
+  }
+  const problems: string[] = []
+  if (!isTopLevel(first, fn.body)) problems.push(`슬러그 판정(:${lineOf(first)})이 조건·try·단락 평가 안에 있다 — 함수 본문 최상위 문으로`)
+  const arg = (first.expression as ts.CallExpression).arguments[0]
+  if (!arg || !ts.isIdentifier(arg)) problems.push('슬러그 판정의 인자는 경로 조각에서 꺼낸 식별자(slug)')
+  // 판정 앞에서 await 없이 시작한 로더도 안 된다 — params·searchParams 를 모으는 Promise.all 말고는 호출이 없어야 한다
+  for (const c of calls.filter((x) => x.getStart() < first.getStart() && !isChainInner(x))) {
+    if (!isParamsAll(c)) problems.push(`슬러그 판정 앞의 ${calleeOf(c)}(:${lineOf(c)}) — 호출은 판정 뒤로`)
+  }
+  return problems
+}
+
 /** Next 기본 pageExtensions(tsx·ts·jsx·js) + mdx — page.ts 로 만든 페이지도 관문 검사를 받는다 */
 const PAGE_FILE = /^page\.(tsx|ts|jsx|js|mdx)$/
 const pages = walk(APP, undefined, PAGE_FILE).map((f) => relative(process.cwd(), f)).sort()
@@ -180,6 +218,37 @@ describe('페이지 관문 — src/app 의 모든 page.tsx', () => {
       expect(modulesOf(routeOf(f)), `${f} 는 이제 모듈에 걸린다 — 제외에서 빼고 관문을 넣는다`).toEqual([])
     }
     for (const f of [...Object.keys(SPECIAL), ...Object.keys(PRE_GATE)]) expect(existsSync(f), f).toBe(true)
+  })
+})
+
+describe('워크스페이스 범위 페이지 — 첫 await 는 슬러그 판정(E19, FA2)', () => {
+  const scoped = pages.filter((f) => f.startsWith(SCOPE_ROOT))
+  it('/w/[slug]/** 의 모든 페이지가 첫 데이터 await 로 슬러그를 판정한다', () => {
+    expect(scoped.length).toBeGreaterThanOrEqual(10)                       // 홈·내 업무·프로젝트·회의·회의록 둘·좌석표·포트폴리오·사용 현황·계정·공용 팀·설정
+    expect(scoped.flatMap((f) => inspectScopeFirst(f, readFileSync(f, 'utf8')).map((p) => `${f}: ${p}`))).toEqual([])
+  })
+  it('설정 페이지만 workspacePageAccess 를 쓴다(관리자 판정이 그 안에 있다) — 목록의 항목은 파일이 있다', () => {
+    for (const f of Object.keys(SCOPE_GATE_BY_FILE)) expect(existsSync(f), f).toBe(true)
+  })
+  const S = 'src/app/(app)/w/[slug]/x/page.tsx'
+  const page = (body: string) => `export default async function X({ params }) {\n${body}\n}`
+  it('민감도 — 판정이 없거나 로더 뒤이거나 try·조건 안이거나 앞에서 로더를 시작하거나 인자가 식별자가 아니면 잡는다', () => {
+    const pre = 'const { slug } = await params\n'
+    expect(inspectScopeFirst(S, page(`${pre}const scope = await loadWorkspaceScope(slug)`))).toEqual([])
+    expect(inspectScopeFirst(S, page(`${pre}const [a] = await Promise.all([load()])\nconst scope = await loadWorkspaceScope(slug)`))[0]).toMatch(/첫 데이터 await/)
+    expect(inspectScopeFirst(S, page(`${pre}const d = await listThings()`))[0]).toMatch(/loadWorkspaceScope 가 아니다/)
+    expect(inspectScopeFirst(S, page(pre))[0]).toMatch(/가 없다/)
+    expect(inspectScopeFirst(S, page(`${pre}try { await loadWorkspaceScope(slug) } catch {}`))[0]).toMatch(/최상위/)
+    expect(inspectScopeFirst(S, page(`${pre}if (x) await loadWorkspaceScope(slug)`))[0]).toMatch(/최상위/)
+    expect(inspectScopeFirst(S, page(`${pre}const early = getThings()\nawait loadWorkspaceScope(slug)\nawait early`))[0]).toMatch(/판정 앞의 getThings/)
+    expect(inspectScopeFirst(S, page(`${pre}await loadWorkspaceScope('acme')`))[0]).toMatch(/식별자/)
+    // params 와 searchParams 를 함께 기다리는 것은 판정 앞이어도 된다
+    expect(inspectScopeFirst(S, page(`const [{ slug }, q] = await Promise.all([params, searchParams])\nawait loadWorkspaceScope(slug)`))).toEqual([])
+    // 설정 페이지는 workspacePageAccess, 그 밖의 페이지에서는 그 이름이 판정이 아니다
+    const SET = 'src/app/(app)/w/[slug]/settings/page.tsx'
+    expect(inspectScopeFirst(SET, page(`${pre}await workspacePageAccess(slug)`))).toEqual([])
+    expect(inspectScopeFirst(SET, page(`${pre}await loadWorkspaceScope(slug)`))[0]).toMatch(/workspacePageAccess 가 아니다/)
+    expect(inspectScopeFirst(S, page(`${pre}await workspacePageAccess(slug)`))[0]).toMatch(/loadWorkspaceScope 가 아니다/)
   })
 })
 
