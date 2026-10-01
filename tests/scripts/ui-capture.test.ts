@@ -5,9 +5,11 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
-import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
+import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
+import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
+import { computePrefsSync } from '../../src/lib/prefs/sync'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 import { computeTree } from '../../src/lib/domain/rollup'
@@ -278,25 +280,27 @@ describe('ui-capture.routes.json', () => {
   })
 })
 
-describe('pinnedPrefs — 실행마다 같은 시작 상태(과제 3 보고 §4-2)', () => {
-  it('다른 키는 두고 테마와 고정 키만 덮는다', () => {
-    expect(pinnedPrefs({ wbsOutline: 'x', lastProjectId: 'old', theme: 'dark' }, 'light', { lastProjectId: 'p' }))
-      .toEqual({ wbsOutline: 'x', lastProjectId: 'p', theme: 'light' })
+describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 객체로 덮는다(UI-0 결정성 리뷰 P2 — D4)', () => {
+  it('PrefsSync 가 맞추는 키(새 컨텍스트의 로컬값) + 테마 + pin, 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
+    expect(fixedPrefs('light', { lastProjectId: 'p' })).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'light', lastProjectId: 'p' })
+    expect(Object.keys(fixedPrefs('dark'))).toEqual(['heroCollapsed', 'sidebarCollapsed', 'locale', 'theme'])
   })
-  it('지금 값이 null·undefined 면 테마와 고정 키만', () => {
-    expect(pinnedPrefs(null, 'dark', { lastProjectId: 'p' })).toEqual({ theme: 'dark', lastProjectId: 'p' })
-    expect(pinnedPrefs(undefined, 'light', { lastProjectId: 'p' })).toEqual({ theme: 'light', lastProjectId: 'p' })
+  it('새 컨텍스트에서 앱의 PrefsSync 가 적용·백필할 것이 없다 — 키 목록은 앱의 동기화 키(computePrefsSync)가 정한다', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 히어로 접힘 상수 true · 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
+      expect(computePrefsSync(fixedPrefs(theme, { lastProjectId: 'p' }), { heroCollapsed: true, sidebarCollapsed: false, theme, locale: 'ko' }))
+        .toEqual({ apply: {}, backfill: {} })
+    }
   })
-  it('입력 객체를 바꾸지 않고 새 객체를 낸다', () => {
-    const cur = { wbsOutline: 'x', theme: 'dark' }
+  it('지난 실행·수동 확인이 남긴 키(간트 일 폭·개요 번호·완료 숨김·대시보드 펼침 등)를 이어받지 않는다 — 입력에 지금 값이 없다', () => {
+    expect(fixedPrefs.length).toBe(1)   // (theme, pin = {}) — 지금 값을 받지 않는다
+    for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs('light')).not.toHaveProperty(k)
+  })
+  it('테마는 light|dark 만, pin 은 입력을 바꾸지 않는다', () => {
+    expect(() => fixedPrefs('sepia')).toThrow(/테마/)
     const pin = { lastProjectId: 'p' }
-    const out = pinnedPrefs(cur, 'light', pin)
-    expect(cur).toEqual({ wbsOutline: 'x', theme: 'dark' })
+    fixedPrefs('light', pin)
     expect(pin).toEqual({ lastProjectId: 'p' })
-    expect(out).not.toBe(cur)
-  })
-  it('pin 을 생략하면 테마만 덮는다', () => {
-    expect(pinnedPrefs({ wbsOutline: 'x', lastProjectId: 'old' }, 'dark')).toEqual({ wbsOutline: 'x', lastProjectId: 'old', theme: 'dark' })
   })
 })
 
@@ -316,32 +320,103 @@ describe('seenResetTargets — 공지 읽음 워터마크를 지울 계정(과�
   })
 })
 
-describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실행(첫 방문이 쓰는 상태 둘, 과제 5b)', () => {
-  /** 호출을 적는 가짜 클라이언트 — from(표).delete().in|eq(열, 값) 만 흉내 낸다. fail 에 표 이름을 주면 그 표의 삭제가 오류다 */
-  const fakeDb = (fail?: string) => {
-    const calls: string[] = []
-    const res = (t: string) => ({ data: null, error: t === fail ? { message: 'boom' } : null })
-    const db = { from: (t: string) => ({ delete: () => ({
-      in: async (c: string, v: string[]) => { calls.push(`${t} ${c} in ${v.join(',')}`); return res(t) },
-      eq: async (c: string, v: string) => { calls.push(`${t} ${c} = ${v}`); return res(t) },
-    }) }) }
-    return { db, calls }
-  }
-  it('캡처 계정의 공지 읽음 워터마크 → 시드 프로젝트의 진척 스냅샷 순서로 지운다(그 밖의 표·행은 건드리지 않는다)', async () => {
+/** 호출을 적는 가짜 클라이언트 — from(표) 의 delete().in|eq · update(값).in · select(열).eq · upsert(행, 선택) 만 흉내 낸다.
+ *  fail 에 표 이름을 주면 그 표의 호출이 오류다. memberships = user_id → 소속 워크스페이스 id */
+const fakeDb = (fail?: string, memberships: Record<string, string[]> = {}) => {
+  const calls: string[] = []
+  const res = (t: string, data: unknown = null) => ({ data, error: t === fail ? { message: 'boom' } : null })
+  const db = { from: (t: string) => ({
+    delete: () => ({
+      in: async (c: string, v: string[]) => { calls.push(`${t} delete ${c} in ${v.join(',')}`); return res(t) },
+      eq: async (c: string, v: string) => { calls.push(`${t} delete ${c} = ${v}`); return res(t) },
+    }),
+    update: (v: Record<string, unknown>) => ({ in: async (c: string, ids: string[]) => { calls.push(`${t} update ${JSON.stringify(v)} ${c} in ${ids.join(',')}`); return res(t) } }),
+    select: (cols: string) => ({ eq: async (c: string, v: string) => {
+      calls.push(`${t} select ${cols} ${c} = ${v}`)
+      return res(t, (memberships[v] ?? []).map((workspace_id) => ({ workspace_id })))
+    } }),
+    upsert: async (row: { user_id: string; workspace_id: string; prefs: unknown }, o: { onConflict: string }) => {
+      calls.push(`${t} upsert ${row.user_id}/${row.workspace_id} ${JSON.stringify(row.prefs)} on ${o.onConflict}`)
+      return res(t)
+    },
+  }) }
+  return { db, calls }
+}
+
+describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실행(첫 방문·클릭이 쓰는 상태 셋 — 과제 5b, D4)', () => {
+  it('캡처 계정의 공지 읽음 워터마크 → 알림 열람·읽음 되돌리기 → 시드 프로젝트의 진척 스냅샷 순서(그 밖의 표·행은 건드리지 않는다)', async () => {
     const { db, calls } = fakeDb()
     await resetRunStart(db, { userIds: ['u1', 'u2'], projectId: 'p1' })
-    expect(calls).toEqual(['announcement_seen user_id in u1,u2', 'wbs_progress_snapshots project_id = p1'])
+    expect(calls).toEqual([
+      'announcement_seen delete user_id in u1,u2',
+      'notification_recipients update {"seen_at":null,"read_at":null} user_id in u1,u2',
+      'wbs_progress_snapshots delete project_id = p1',
+    ])
   })
-  it('삭제 오류는 숨기지 않는다 — 그 단계 이름으로 멈춘다', async () => {
+  it('오류는 숨기지 않는다 — 그 단계 이름으로 멈춘다', async () => {
     await expect(resetRunStart(fakeDb('announcement_seen').db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/워터마크.*boom/)
+    await expect(resetRunStart(fakeDb('notification_recipients').db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/알림.*boom/)
     await expect(resetRunStart(fakeDb('wbs_progress_snapshots').db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/스냅샷.*boom/)
   })
-  it('거르는 값이 비면 아무것도 지우지 않고 멈춘다 — 조건 없는 삭제를 만들지 않는다(fail-closed)', async () => {
+  it('거르는 값이 비면 아무것도 지우거나 고치지 않고 멈춘다 — 조건 없는 삭제·갱신을 만들지 않는다(fail-closed)', async () => {
     for (const bad of [{ userIds: [], projectId: 'p1' }, { userIds: ['u1', ''], projectId: 'p1' }, { userIds: ['u1'], projectId: '' }]) {
       const { db, calls } = fakeDb()
       await expect(resetRunStart(db, bad)).rejects.toThrow(/실행 시작 상태/)
       expect(calls).toEqual([])
     }
+  })
+})
+
+describe('passStart — 테마 패스의 시작(조립 — UI-0 결정성 리뷰 P3, D15)', () => {
+  it('캡처 계정의 선호값을 모든 소속에서 고정 객체로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정', async () => {
+    const { db, calls } = fakeDb(undefined, { u1: ['wA'], u2: ['wA', 'wB'] })
+    await passStart(db, { theme: 'dark', userIds: ['u1', 'u2'], projectId: 'p1' })
+    const prefs = JSON.stringify(fixedPrefs('dark', { lastProjectId: 'p1' }))
+    expect(calls).toEqual([
+      'workspace_members select workspace_id user_id = u1',
+      `user_preferences upsert u1/wA ${prefs} on user_id,workspace_id`,
+      'workspace_members select workspace_id user_id = u2',
+      `user_preferences upsert u2/wA ${prefs} on user_id,workspace_id`,
+      `user_preferences upsert u2/wB ${prefs} on user_id,workspace_id`,
+      'announcement_seen delete user_id in u1,u2',
+      'notification_recipients update {"seen_at":null,"read_at":null} user_id in u1,u2',
+      'wbs_progress_snapshots delete project_id = p1',
+    ])
+  })
+  it('선호 쓰기가 실패하면 되돌리기로 넘어가지 않는다', async () => {
+    const { db, calls } = fakeDb('user_preferences', { u1: ['wA'] })
+    await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
+    expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
+  })
+})
+
+describe('속도 계기 사전 방문(T6-R1) — 세션 등급·대기 판정·상한·실패 문구', () => {
+  const clock = () => { let t = 0; return { now: () => t, sleep: async (ms: number) => { t += ms } } }
+  it('세션 등급 = 라우트의 등급 + 사전 방문 계정(member) — 공개 화면만 찍는 실행도 member 세션을 연다(부트스트랩 관리자로 대신하지 않는다)', () => {
+    expect(WARMUP_GRADE).toBe('member')
+    expect(runGrades([{ grade: 'public' }])).toEqual(['member'])
+    expect(runGrades([{ grade: 'wsAdmin' }, { grade: 'public' }, { grade: 'wsAdmin' }])).toEqual(['wsAdmin', 'member'])
+    expect(runGrades([{ grade: 'member' }, { grade: 'platformAdmin' }])).toEqual(['member', 'platformAdmin'])
+  })
+  it('상한은 30초', () => { expect(WARMUP_LIMIT_MS).toBe(30_000) })
+  it('조건이 참이 되면 그때까지의 시도·경과를 낸다', async () => {
+    let n = 0
+    await expect(pollUntil(async () => ++n >= 3, { limitMs: 30_000, intervalMs: 500, ...clock() })).resolves.toEqual({ ok: true, tries: 3, elapsedMs: 1000 })
+  })
+  it('상한까지 거짓이면 ok 거짓 — 상한을 넘겨 기다리지 않는다(fail-closed 는 호출자가 throw)', async () => {
+    await expect(pollUntil(async () => false, { limitMs: 30_000, intervalMs: 500, ...clock() })).resolves.toEqual({ ok: false, tries: 61, elapsedMs: 30_000 })
+    await expect(pollUntil(async () => false, { limitMs: 1200, intervalMs: 500, ...clock() })).resolves.toEqual({ ok: false, tries: 4, elapsedMs: 1200 })
+  })
+  it('확인 중 조회 오류는 숨기지 않는다 — "아직 없음"으로 위장하지 않는다', async () => {
+    await expect(pollUntil(async () => { throw new Error('boom') }, { limitMs: 1000, ...clock() })).rejects.toThrow(/boom/)
+  })
+  it('상한·간격은 양의 정수', async () => {
+    await expect(pollUntil(async () => true, { limitMs: 0, ...clock() })).rejects.toThrow(/상한/)
+    await expect(pollUntil(async () => true, { limitMs: 1000, intervalMs: 0, ...clock() })).rejects.toThrow(/간격/)
+  })
+  it('실패 문구 — 계정·날짜(KST)·서버와 레인 B 스택(54421) 확인 안내, RLS 거부 가능성', () => {
+    const m = warmupFailure({ email: 'ui-member@example.com', date: '2026-10-01', baseUrl: 'http://127.0.0.1:3202', limitMs: 30_000 })
+    for (const s of ['ui-member@example.com', '2026-10-01', 'KST', 'http://127.0.0.1:3202', '레인 B 스택(54421)', 'RLS', '30초']) expect(m).toContain(s)
   })
 })
 

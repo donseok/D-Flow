@@ -633,28 +633,35 @@ export async function freshSessions(env, grades) {
   return sessions
 }
 
+/** 실행 시작 선호값의 고정 키 — PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새 컨텍스트의 로컬값으로: 히어로 접힘은
+ *  상수 true(PrefsSync.readLocal), 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
+export const RUN_START_PREFS = Object.freeze({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko' })
+
 /**
- * 선호값 고정(순수) — 다른 키는 두고 theme 과 pin 의 키만 덮은 새 객체. cur 가 null·undefined 면 빈 객체에서 시작한다.
- * @param {Record<string, unknown> | null | undefined} cur @param {string} theme @param {Record<string, unknown>} [pin]
- * @returns {Record<string, unknown>}
+ * 실행 시작 선호값(순수, UI-0 결정성 리뷰 P2 — D4) — 지금 값과 병합하지 않고 이 객체로 **덮는다**. 그 밖의 UiPrefs 키(간트 일 폭·개요 번호·
+ * 완료 숨김·대시보드 펼침·회의록 보기·알림 읽음·알림 설정 …)는 없음 = 제품 기본값이라 db:reset 뒤 첫 실행(빈 prefs + 고정 키)과 같은
+ * 화면이다. 병합하면 지난 실행·수동 확인·perf-grid 가 남긴 키가 다음 실행의 시작 상태를 바꿨다. 새 컨텍스트에서 PrefsSync 가 적용·백필할
+ * 것이 없어 실행 중 선호 쓰기도 생기지 않는다(테스트가 앱의 computePrefsSync 로 확인).
+ * @param {string} theme @param {Record<string, unknown>} [pin] @returns {Record<string, unknown>}
  */
-export function pinnedPrefs(cur, theme, pin = {}) {
-  return { ...(cur ?? {}), theme, ...pin }
+export function fixedPrefs(theme, pin = {}) {
+  if (!['light', 'dark'].includes(theme)) throw new Error(`테마는 light|dark: ${theme}`)
+  return { ...RUN_START_PREFS, theme, ...pin }
 }
 
 /**
- * 캡처 계정의 서버 테마를 명시로 쓴다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다.
- * pin(shoot 는 lastProjectId = 시드 프로젝트)도 같이 고정한다: 실행마다 같은 시작 상태 — 첫 shoot 가 /p/… 방문으로 lastProjectId 를
- * 써서 전역 브리지 화면(사이드바)이 다음 실행과 달라졌다(과제 3 보고 §4-2). seed 가 아니라 shoot 시작에서 고정하는 이유:
- * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
+ * 캡처 계정의 서버 선호값을 고정 객체(fixedPrefs)로 덮는다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다.
+ * pin(shoot 는 lastProjectId = 시드 프로젝트)도 같이: 첫 shoot 가 /p/… 방문으로 lastProjectId 를 써서 전역 브리지 화면(사이드바)이 다음
+ * 실행과 달라졌다(과제 3 보고 §4-2). seed 가 아니라 실행 시작에서 덮는 이유: perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
+ * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin]
  */
 export async function setServerTheme(db, userIds, theme, pin = {}) {
+  const prefs = fixedPrefs(theme, pin)
   for (const userId of userIds) {
     const rows = must('소속 조회', await db.from('workspace_members').select('workspace_id').eq('user_id', userId))
     for (const { workspace_id } of rows) {
-      const cur = must('선호 조회', await db.from('user_preferences').select('prefs').eq('user_id', userId).eq('workspace_id', workspace_id).maybeSingle())
       must('선호 쓰기', await db.from('user_preferences').upsert(
-        { user_id: userId, workspace_id, prefs: pinnedPrefs(cur?.prefs, theme, pin), updated_at: new Date().toISOString() },
+        { user_id: userId, workspace_id, prefs, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,workspace_id' },
       ))
     }
@@ -662,20 +669,70 @@ export async function setServerTheme(db, userIds, theme, pin = {}) {
 }
 
 /**
- * 테마 패스의 시작 상태 = db:reset 뒤 첫 실행(과제 5b) — 첫 방문이 써서 그 뒤 화면을 바꾸는 상태 둘을 지운다. lastProjectId 고정과 같은 자리.
+ * 테마 패스의 시작 상태 = db:reset 뒤 첫 실행(과제 5b·D4) — 첫 방문·클릭이 써서 그 뒤 화면을 바꾸는 상태 셋을 되돌린다.
  * ① 공지 읽음 워터마크(announcement_seen) — 캡처 계정(seenResetTargets)의 행 전부. 공지 화면 방문이 워터마크를 써서 db:reset 뒤 첫 실행만
  *    공지 화면에 NEW 칩이 있었고(과제 5 자기 차이 0.13%), 워터마크가 마이크로초로 저장되면(레인 A 수정) 첫 방문 뒤 공지 배지가 사라져
  *    같은 실행의 뒤 화면과 다음 실행이 달라진다.
- * ② 진척 스냅샷(wbs_progress_snapshots) — 시드 프로젝트의 행 전부. 대시보드·포트폴리오가 응답 뒤(after) 오늘 스냅샷을 써서 db:reset 뒤 첫
- *    대시보드 방문만 속도 지표(SPI)가 '—' 였다(과제 5b 결정성 확인 0.26%). 전 경로 실행은 포트폴리오가 대시보드 앞이라 늘 값이 있다.
- * 거르는 값이 비면 아무것도 지우지 않고 멈춘다 — 조건 없는 삭제를 만들지 않는다.
+ * ② 알림 열람·읽음(notification_recipients 의 seen_at·read_at) — 캡처 계정의 행을 미열람·미읽음으로. 벨 열람(markInboxSeen)·모두 읽음·
+ *    항목 읽음이 쓰고(전부 user_id 로 거른다) 벨 배지에 든다 — UI-1 의 알림 팝오버 클릭 행이 앞 실행의 뒤 화면·다음 실행을 바꾼다.
+ * ③ 진척 스냅샷(wbs_progress_snapshots) — 시드 프로젝트의 행 전부. 대시보드·포트폴리오가 응답 뒤(after) 오늘 스냅샷을 써서 db:reset 뒤 첫
+ *    대시보드 방문만 속도 지표(SPI)가 '—' 였다(과제 5b 0.26%). 지운 뒤 사전 방문(warmupSnapshot)이 같은 서버로 다시 쓰게 한다(T6-R1).
+ * 거르는 값이 비면 아무것도 지우거나 고치지 않고 멈춘다 — 조건 없는 삭제·갱신을 만들지 않는다.
  * @param {any} db @param {{ userIds: string[], projectId: string }} target
  */
 export async function resetRunStart(db, { userIds, projectId }) {
   if (!Array.isArray(userIds) || userIds.length === 0 || userIds.some((u) => !u)) throw new Error('실행 시작 상태: 캡처 계정 id 가 비었다')
   if (!projectId) throw new Error('실행 시작 상태: 시드 프로젝트 id 가 비었다')
   must('공지 읽음 워터마크 지우기', await db.from('announcement_seen').delete().in('user_id', userIds))
+  must('알림 열람·읽음 되돌리기', await db.from('notification_recipients').update({ seen_at: null, read_at: null }).in('user_id', userIds))
   must('진척 스냅샷 지우기', await db.from('wbs_progress_snapshots').delete().eq('project_id', projectId))
+}
+
+/**
+ * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(lastProjectId = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
+ * 순서가 계약이다: 선호 → 워터마크 → 알림 → 스냅샷(그 뒤 사전 방문). 앞 단계가 실패하면 멈춘다.
+ * @param {any} db @param {{ theme: string, userIds: string[], projectId: string }} pass
+ */
+export async function passStart(db, { theme, userIds, projectId }) {
+  await setServerTheme(db, userIds, theme, { lastProjectId: projectId })
+  await resetRunStart(db, { userIds, projectId })
+}
+
+/** 속도 계기 사전 방문(T6-R1)의 계정 등급 — 대시보드를 볼 수 있는 가장 낮은 등급(명단 member — 쓰기 RLS 는 명단 계정만 통과) */
+export const WARMUP_GRADE = 'member'
+/** 사전 방문 뒤 오늘 스냅샷을 기다리는 상한 — 넘으면 실패(fail-closed) */
+export const WARMUP_LIMIT_MS = 30_000
+
+/** 그 실행이 로그인할 등급(순수) — 라우트 등급(공개 제외) + 사전 방문 계정. 공개 화면만 찍는 실행도 member 세션을 연다
+ *  @param {{ grade: string }[]} routes @returns {string[]} */
+export function runGrades(routes) {
+  return [...new Set([...routes.map((r) => r.grade).filter((g) => g !== 'public'), WARMUP_GRADE])]
+}
+
+/**
+ * check() 가 참이 될 때까지 다시 본다(대기 판정·상한) — { ok, tries, elapsedMs }. 상한까지 거짓이면 ok 거짓(호출자가 throw).
+ * check 의 오류는 그대로 올린다 — 조회 실패를 '아직 없음'으로 위장하지 않는다. now·sleep 은 테스트가 가짜 시계로 바꾼다.
+ * @param {() => Promise<boolean>} check
+ * @param {{ limitMs: number, intervalMs?: number, now?: () => number, sleep?: (ms: number) => Promise<void> }} opts
+ */
+export async function pollUntil(check, { limitMs, intervalMs = 500, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  if (!Number.isInteger(limitMs) || limitMs <= 0) throw new Error(`대기 상한은 양의 정수(ms): ${limitMs}`)
+  if (!Number.isInteger(intervalMs) || intervalMs <= 0) throw new Error(`대기 간격은 양의 정수(ms): ${intervalMs}`)
+  const t0 = now()
+  for (let tries = 1; ; tries++) {
+    if (await check()) return { ok: true, tries, elapsedMs: now() - t0 }
+    const elapsed = now() - t0
+    if (elapsed >= limitMs) return { ok: false, tries, elapsedMs: elapsed }
+    await sleep(Math.min(intervalMs, limitMs - elapsed))
+  }
+}
+
+/** 사전 방문 실패 문구(순수) — 계정·날짜·서버, 그리고 가장 흔한 원인(남의 서버·다른 스택에 붙은 서버, 명단 밖 계정의 RLS 거부)
+ *  @param {{ email: string, date: string, baseUrl: string, limitMs: number }} f */
+export function warmupFailure({ email, date, baseUrl, limitMs }) {
+  return `속도 계기 사전 방문: ${email} 로 ${baseUrl}/p/{pid}/dashboard 를 열었지만 오늘(${date} KST) 진척 스냅샷이 ${Math.round(limitMs / 1000)}초 안에 `
+    + '레인 B DB 에 생기지 않았다 — 앱 서버가 레인 B 스택(54421)에 붙어 있는지 확인(남의 서버·다른 스택이면 레인 B pid 를 숨겨 스냅샷을 쓰지 않는다). '
+    + '명단 밖 계정이면 쓰기 RLS 거부(앱은 로그도 남기지 않는다)일 수 있다'
 }
 
 /** jsDelivr 응답을 리포 밖 캐시에서 준다 — 라벨 사이 글꼴 바이트를 고정한다(판정 Q3) */
@@ -714,32 +771,55 @@ export function redactTokens(text, { inviteToken, shareToken } = {}) {
   return s
 }
 
+/**
+ * 속도 계기 사전 방문(T6-R1) — 그 실행이 찍는 서버(baseUrl — 기준 서버 실행이면 기준 서버)로 시드 프로젝트 대시보드를 캡처 없이 한 번 열고,
+ * 앱이 응답 뒤(after) 쓰는 오늘(KST) 진척 스냅샷이 레인 B DB 에 생길 때까지 읽기로 확인한다(상한 WARMUP_LIMIT_MS — 넘으면 throw).
+ * 그래서 포트폴리오 없이 대시보드를 찍는 부분 실행도 계기가 '—' 가 아니라 전 경로 실행과 같은 값이다. 스냅샷을 service_role 로 직접 넣지
+ * 않는다 — 방문한 서버 코드의 계산값이어야 (기준, 머리) 비교가 롤업 회귀를 본다. 남의 서버·다른 스택이면 여기서 멈춘다(안전 리뷰 §3).
+ */
+async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId, outDir }) {
+  const date = kstToday()
+  const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme }))
+  try {
+    await routeCdn(context, join(outDir, 'cdn-cache'))
+    await context.addCookies([...session.cookies, { name: 'dflow-theme', value: theme }].map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+    const page = await context.newPage()
+    await page.goto(`${baseUrl}/p/${encodeURIComponent(projectId)}/dashboard`, { waitUntil: 'load', timeout: 60_000 })
+    try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { /* 판정은 아래 DB 확인이 한다 */ }
+  } finally { await context.close() }
+  const found = async () => Boolean(must('스냅샷 확인', await db.from('wbs_progress_snapshots').select('snap_date')
+    .eq('project_id', projectId).eq('snap_date', date).maybeSingle()))
+  const res = await pollUntil(found, { limitMs: WARMUP_LIMIT_MS })
+  if (!res.ok) throw new Error(warmupFailure({ email: session.email, date, baseUrl, limitMs: WARMUP_LIMIT_MS }))
+  return { theme, date, tries: res.tries, elapsedMs: res.elapsedMs }
+}
+
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크·진척 스냅샷(과제 5b — resetRunStart).
+ *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·lastProjectId·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
 export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
   const { db, outDir, baseUrl } = env
   const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
   const routes = selectRoutes(doc, opts)
   const seed = await resolveSeed(db)
-  const seenUserIds = []
+  const captureIds = []   // 캡처 계정 넷 — 그 실행이 쓰는 등급과 무관하게 넷 모두의 시작 상태를 덮는다
   for (const { email } of seenResetTargets(process.env.BOOTSTRAP_EMAIL || 'admin@example.com')) {
     const userId = await userIdByEmail(db, email)
     if (!userId) throw new Error(`시드 계정이 없다(${email}) — ui-capture.mjs seed 를 먼저`)
-    seenUserIds.push(userId)
+    captureIds.push(userId)
   }
-  const grades = [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))]
-  const sessions = await freshSessions(env, grades)
+  const sessions = await freshSessions(env, runGrades(routes))
   const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
   const redact = (s) => redactInviteTokens(redactTokens(s, values))
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const browserVersion = browser.version()
   const rows = []
+  const warmups = []
   try {
     for (const theme of opts.theme) {
-      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme, { lastProjectId: seed.pid })
-      await resetRunStart(db, { userIds: seenUserIds, projectId: seed.pid })
+      await passStart(db, { theme, userIds: captureIds, projectId: seed.pid })
+      warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], theme, projectId: seed.pid, outDir }))
       for (const r of routes) {
         for (const [width, height] of opts.sizes) {
           const context = await browser.newContext(contextOptions({ width, height, theme }))
@@ -773,7 +853,7 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
       }
     }
   } finally { await browser.close() }
-  return { rows, outDir, baseUrl, browserVersion, seed }
+  return { rows, outDir, baseUrl, browserVersion, seed, warmups }
 }
 
 async function cmdShoot(opts) {
@@ -793,7 +873,7 @@ async function cmdShoot(opts) {
     return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1 }
   }, env)
   const meta = { label: opts.label, commit: process.env.UI_CAPTURE_SERVER_COMMIT || gitHead(), scriptCommit: gitHead(), browser: res.browserVersion,
-    kstDate: kstToday(), seedDate: res.seed.seedDate, baseUrl: res.baseUrl, themes: opts.theme, sizes: opts.sizes, rows: res.rows }
+    kstDate: kstToday(), seedDate: res.seed.seedDate, baseUrl: res.baseUrl, themes: opts.theme, sizes: opts.sizes, warmups: res.warmups, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}/${x.theme}:${x.problems.join('+')}`), fallbackFonts: res.rows.filter((x) => x.font !== 'ok').length }))
 }
