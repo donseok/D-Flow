@@ -3,7 +3,7 @@ import { validateArea, type AreaInput } from '@/lib/domain/areas'
 
 const base = (over: Partial<AreaInput> = {}): AreaInput => ({
   kind: 'weekly_section', code: 'PLAN', name: '수급계획', sortOrder: 0, active: true,
-  teams: [{ teamId: 't-erp', kind: 'primary' }, { teamId: 't-mes', kind: 'support' }],
+  teams: [{ teamId: 't-a', kind: 'primary' }, { teamId: 't-b', kind: 'support' }],
   ...over,
 })
 

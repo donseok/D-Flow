@@ -14,7 +14,7 @@ const items: WeeklyAiRewriteItem[] = [
     original: '매출 자료 정리함', content: '매출 자료를 정리했습니다.',
   },
   {
-    rowId: 'r2', cellKey: 'this_issue', section: '품질', label: '금주 이슈·이벤트',
+    rowId: 'r2', cellKey: 'this_issue', section: '검수', label: '금주 이슈·이벤트',
     original: '검수 지연 없음', content: '검수 지연 없음',
   },
 ]
@@ -53,13 +53,16 @@ describe('WeeklyAiRewriteModal', () => {
     expect(document.body.textContent).toContain('매출 자료 정리함')
     expect(document.body.textContent).toContain('매출 자료를 정리했습니다.')
     expect(document.body.textContent).toContain('변경 없음')
+    // 안내 문구는 화면 머리·라벨과 같은 낱말 — '구분' 이 아니라 업무영역(A1-4 리뷰 P6)
+    expect(document.body.textContent).toContain('선택한 내용과 업무영역 이름만 AI에 보내')
+    expect(document.body.textContent).not.toContain('구분 정보')
 
     const first = document.querySelector<HTMLInputElement>('[aria-label="홍보 금주실적 내용 제안 선택"]')!
-    const second = document.querySelector<HTMLInputElement>('[aria-label="품질 금주 이슈·이벤트 제안 선택"]')!
+    const second = document.querySelector<HTMLInputElement>('[aria-label="검수 금주 이슈·이벤트 제안 선택"]')!
     expect(first.checked).toBe(true)
     expect(second.checked).toBe(false)
 
-    const secondDraft = document.querySelector<HTMLTextAreaElement>('[aria-label="품질 금주 이슈·이벤트 AI 제안"]')!
+    const secondDraft = document.querySelector<HTMLTextAreaElement>('[aria-label="검수 금주 이슈·이벤트 AI 제안"]')!
     act(() => typeText(secondDraft, '검수 지연은 없습니다.'))
     expect(second.checked).toBe(true)
     act(() => typeText(secondDraft, '검수 지연 없음'))

@@ -17,7 +17,7 @@ export interface LegacySectionRow {
 }
 
 /** 옛 구분 순서 자리의 합성 낱말 — 목록에 있는 구분은 이 자리로, 없는 구분은 뒤로 */
-export const LEGACY_SECTION_ORDER: readonly string[] = ['HQ', '홍보', '조달', '재무분석', '품질', '수급계획', '운전', '규격화', '운송', '시설', '성형']
+export const LEGACY_SECTION_ORDER: readonly string[] = ['HQ', '홍보', '조달', '재무분석', '검수', '수급계획', '운전', '규격화', '운송', '시설', '성형']
 
 const isListed = (section: string): boolean => LEGACY_SECTION_ORDER.includes(section)
 

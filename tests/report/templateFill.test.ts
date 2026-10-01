@@ -336,10 +336,10 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
   })
 
   it('내용이 없는 구분도 빈 페이지를 만들고 구분명만 표기(이슈/이벤트는 빈칸)', async () => {
-    const sections = [sec('홍보', ['수주 협의'], ['견적 발송']), sec('품질')]
+    const sections = [sec('홍보', ['수주 협의'], ['견적 발송']), sec('검수')]
     const slides = await readSlides(await fillSheetTemplate(sections, meta, { lineFormatter: sheetLineText }))
-    expect(slides).toHaveLength(2)                 // 품질도 페이지 생성
-    expect(slides[1]).toContain('품질')            // 빈 구분도 라벨 표기
+    expect(slides).toHaveLength(2)                 // 검수도 페이지 생성
+    expect(slides[1]).toContain('검수')            // 빈 구분도 라벨 표기
     expect(slides[1]).not.toContain('특이 이슈 없음')        // 대체 문구 없이 빈칸으로 둔다
     expect(slides[1]).not.toContain('예정된 주요 이벤트 없음')
   })
