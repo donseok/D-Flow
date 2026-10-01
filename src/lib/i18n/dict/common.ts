@@ -39,6 +39,8 @@ export const commonKo = {
   'chrome.themeSystem': '시스템',
   'chrome.themeLight': '라이트',
   'chrome.themeDark': '다크',
+  'chrome.display': '화면',
+  'chrome.language': '언어',
   'workspace.title': 'Planning cockpit',
   'workspace.desc': '일정, WBS, 팀 상태를 하나의 워크스페이스 톤으로 정리했습니다.',
   'workspace.projects': 'PROJECTS',

@@ -38,6 +38,8 @@ export const commonEn: Record<keyof typeof commonKo, string> = {
   'chrome.themeSystem': 'System',
   'chrome.themeLight': 'Light',
   'chrome.themeDark': 'Dark',
+  'chrome.display': 'Display',
+  'chrome.language': 'Language',
   'workspace.title': 'Planning cockpit',
   'workspace.desc': 'Schedule, WBS, and team status unified into one workspace tone.',
   'workspace.projects': 'PROJECTS',

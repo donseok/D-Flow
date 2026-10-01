@@ -18,14 +18,26 @@ import { createRoot, type Root } from 'react-dom/client'
 const mocks = vi.hoisted(() => ({
   theme: 'light' as 'light' | 'dark',
   preference: null as 'system' | 'light' | 'dark' | null,
+  ready: true,
+  version: 0,
+  listeners: new Set<() => void>(),
   initialize: vi.fn(),
   render: vi.fn(async () => ({ svg: '<svg data-testid="mmd"></svg>' })),
 }))
 
 vi.mock('mermaid', () => ({ default: { initialize: mocks.initialize, render: mocks.render } }))
-vi.mock('@/components/providers/ThemeProvider', () => ({
-  useTheme: () => ({ resolved: mocks.theme, preference: mocks.preference, ready: true, setPreference: vi.fn() }),
-}))
+// 구독형 mock — 값이 바뀌면 같은 인스턴스가 다시 렌더된다(ThemeProvider 의 ready false→true 전환을 흉내)
+vi.mock('@/components/providers/ThemeProvider', async () => {
+  const { useSyncExternalStore } = await import('react')
+  const subscribe = (f: () => void) => { mocks.listeners.add(f); return () => { mocks.listeners.delete(f) } }
+  return {
+    useTheme: () => {
+      useSyncExternalStore(subscribe, () => mocks.version)
+      return { resolved: mocks.theme, preference: mocks.preference, ready: mocks.ready, setPreference: vi.fn() }
+    },
+  }
+})
+const bump = () => { mocks.version++; for (const f of mocks.listeners) f() }
 
 import { MarkdownView } from '@/components/minutes/MarkdownView'
 
@@ -37,6 +49,7 @@ let root: Root
 beforeEach(() => {
   mocks.theme = 'light'
   mocks.preference = null
+  mocks.ready = true
   mocks.initialize.mockClear()
   mocks.render.mockClear()
   container = document.createElement('div')
@@ -94,5 +107,19 @@ describe('회의록 Mermaid 렌더 설정', () => {
   it('securityLevel strict 를 유지한다', async () => {
     await renderView()
     expect(lastConfig().securityLevel).toBe('strict')
+  })
+
+  // ready 전(선호를 아직 모름) 해석값은 늘 light 다 — 그때 그리면 다크 선호 사용자는 회의록을 열 때마다 도식을 두 번 그린다(U1c 리뷰 R1 P3)
+  it('ready 전에는 initialize·render 를 부르지 않고, ready 뒤 해석값으로 한 번 그린다', async () => {
+    mocks.ready = false
+    mocks.theme = 'light'
+    await renderView()
+    expect(mocks.initialize).not.toHaveBeenCalled()
+    expect(mocks.render).not.toHaveBeenCalled()
+    await act(async () => { mocks.ready = true; mocks.theme = 'dark'; bump() })
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    expect(mocks.initialize).toHaveBeenCalledTimes(1)
+    expect(mocks.render).toHaveBeenCalledTimes(1)
+    expect(lastConfig().theme).toBe('dark')
   })
 })

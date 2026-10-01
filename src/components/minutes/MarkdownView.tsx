@@ -58,9 +58,12 @@ function MermaidBlock({ source, anchorProps }: { source: string; anchorProps: Re
   const [state, setState] = useState<MermaidState>({ status: 'loading' })
   // 또박또박(원본 앱)과 같은 내장 테마로 그린다 — 라이트 default, 다크 dark.
   // themeVariables 로 앱 팔레트를 덮으면 mindmap 섹션 색이 거기서 파생돼 원본과 달라진다.
-  const mermaidTheme = useTheme().resolved === 'dark' ? 'dark' : 'default'   // 해석값 — system + OS 다크도 다크
+  const { resolved, ready } = useTheme()
+  const mermaidTheme = resolved === 'dark' ? 'dark' : 'default'   // 해석값 — system + OS 다크도 다크
 
   useEffect(() => {
+    // 선호를 읽기 전(ready=false)의 해석값은 늘 light 다 — 그때 그리면 다크 선호에서 초기화·렌더가 두 번 돈다. 'loading' 을 유지한다
+    if (!ready) return
     let cancelled = false
     async function renderDiagram() {
       setState({ status: 'loading' })
@@ -83,7 +86,7 @@ function MermaidBlock({ source, anchorProps }: { source: string; anchorProps: Re
     }
     void renderDiagram()
     return () => { cancelled = true }
-  }, [source, mermaidTheme])
+  }, [source, mermaidTheme, ready])
 
   // 앵커 속성은 세 렌더 경로 모두에 포워딩 — SSR(loading)·성공·실패 어디서든 앵커 유지(스펙 §2.3)
   if (state.status === 'rendered') {
