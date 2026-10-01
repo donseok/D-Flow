@@ -558,7 +558,8 @@ textarea {
     @apply bg-surface-selected text-fg;
   }
 
-  /* 로고 라이트·다크(D24) — 소비는 UI-2b. 크기별 전환은 바깥 래퍼에서 한다 */
+  /* 로고 라이트·다크(D24) — 소비는 UI-2b. 크기별 전환은 바깥 래퍼에서 한다.
+     되돌림은 revert-layer — revert 는 preflight(@layer base 의 img display:block)까지 버려 다크 로고만 inline 이 된다 */
   .brand-logo-dark {
     display: none;
   }
@@ -566,7 +567,7 @@ textarea {
     display: none;
   }
   .dark .brand-logo-dark {
-    display: revert;
+    display: revert-layer;
   }
 
   /* 동결 컬럼 우측 경계 */
