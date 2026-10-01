@@ -9,7 +9,7 @@ import { splitLeafOwners } from '@/lib/excel/validate'
 import { projectTeamRowsSync, teamsForProjectSync } from '@/lib/teams/master'
 import { addTeam } from '@/app/actions/teams'
 import { addProjectTeam } from '@/app/actions/projectTeams'
-import { fetchAllPages } from '@/lib/data/paging'
+import { fetchAllByKeyset } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
@@ -164,8 +164,11 @@ export async function POST(req: NextRequest) {
     // 잘림·읽는 사이의 변경(count 불일치)·조회 오류는 모두 중단이다 — 원문은 로그로만, 응답은 고정 문구.
     let backupRows: Record<string, unknown>[]
     try {
-      backupRows = await fetchAllPages<Record<string, unknown>>('wbs_items 백업', (from, to) => sb
-        .from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId).order('id').range(from, to))
+      // 키셋(id 다음부터, K2) — offset 은 쪽 사이의 삽입(+삭제)에서 한 행을 두 번, 다른 한 행을 0번 읽고 행 수가 같아 통과한다.
+      backupRows = await fetchAllByKeyset<Record<string, unknown>>('wbs_items 백업', (r) => String(r.id), (after, limit) => {
+        const q = sb.from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId)
+        return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+      })
     } catch (e) {
       console.error('[import/execute] replace 백업 읽기 실패 — RPC 미호출:', e instanceof Error ? e.message : e)
       return NextResponse.json({ error: ERR_BACKUP_FAILED }, { status: 500 })

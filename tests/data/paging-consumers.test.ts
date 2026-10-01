@@ -36,23 +36,47 @@ import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { makeActor, WS } from '../fixtures/actor'
 
 type Call = { method: string; args: unknown[] }
-/** PostgREST 흉내 — 쿼리(make)마다 range(from, to) 를 기억하고 한 응답을 maxRows 에서 자르며 count 는 총합이다(count: 'exact').
- *  log 는 쿼리별 호출 목록 — 필터·정렬이 실제로 걸렸는지 본다. error 를 주면 그 쿼리는 조회 오류다. */
-function pagedTable(rows: readonly unknown[], opts: { maxRows?: number; count?: number; error?: { message: string } } = {}) {
+type Row = Record<string, unknown>
+/** PostgREST 흉내 — 쿼리(make)마다 필터·정렬·쪽을 기억하고, 정렬(order 열 순)·gt·키셋 or(`a.gt.X,and(a.eq.X,b.gt.Y)`)를 실제로 적용하며,
+ *  한 응답을 maxRows 에서 자르고 count 는 필터에 맞는 행 수다(count: 'exact'). eq 는 기록만 한다(가짜의 행은 모두 그 프로젝트 것).
+ *  log 는 쿼리별 호출 목록 — 필터·정렬이 실제로 걸렸는지 본다. error 를 주면 그 쿼리는 조회 오류다.
+ *  afterResponse(n, rows) 는 n 번째 응답을 만든 뒤 표를 바꾼다 — 쪽 사이의 동시 변경(이동·삽입·삭제)을 흉내 낸다. */
+function pagedTable(initial: readonly Row[], opts: {
+  maxRows?: number; count?: number; error?: { message: string }; afterResponse?: (n: number, rows: Row[]) => Row[] | void
+} = {}) {
+  let rows: Row[] = [...initial]
   const log: Call[][] = []
+  const cmp = (a: unknown, b: unknown) => (typeof a === 'number' && typeof b === 'number' ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0)
   const make = () => {
     const calls: Call[] = []
     log.push(calls)
-    let range: [number, number] = [0, Number.MAX_SAFE_INTEGER]
+    const orders: string[] = []
+    const filters: Array<(r: Row) => boolean> = []
+    let window: [number, number] = [0, Number.MAX_SAFE_INTEGER]
     const q: Record<string, unknown> = {}
-    for (const method of ['select', 'eq', 'order', 'in', 'is', 'or', 'not']) {
-      q[method] = (...args: unknown[]) => { calls.push({ method, args }); return q }
+    const rec = (method: string, args: unknown[]) => { calls.push({ method, args }); return q }
+    for (const method of ['select', 'eq', 'in', 'is', 'not']) q[method] = (...args: unknown[]) => rec(method, args)
+    q.order = (col: string) => { orders.push(col); return rec('order', [col]) }
+    q.gt = (col: string, v: unknown) => { filters.push((r) => cmp(r[col], v) > 0); return rec('gt', [col, v]) }
+    q.or = (expr: string) => {
+      const m = /^(\w+)\.gt\.([^,]+),and\((\w+)\.eq\.([^,]+),(\w+)\.gt\.([^)]+)\)$/.exec(expr)
+      if (!m || m[1] !== m[3] || m[2] !== m[4]) throw new Error(`가짜가 모르는 or: ${expr}`)
+      const [, a, x, , , b, y] = m
+      filters.push((r) => cmp(r[a], x) > 0 || (cmp(r[a], x) === 0 && cmp(r[b], y) > 0))
+      return rec('or', [expr])
     }
-    q.range = (from: number, to: number) => { calls.push({ method: 'range', args: [from, to] }); range = [from, to]; return q }
-    q.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => Promise.resolve(opts.error
-      ? { data: null, error: opts.error, count: null }
-      : { data: rows.slice(range[0], Math.min(range[1] + 1, range[0] + (opts.maxRows ?? 1000))), error: null, count: opts.count ?? rows.length },
-    ).then(resolve, reject)
+    q.range = (from: number, to: number) => { window = [from, to]; return rec('range', [from, to]) }
+    q.limit = (n: number) => { window = [0, n - 1]; return rec('limit', [n]) }
+    q.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => {
+      if (opts.error) return Promise.resolve({ data: null, error: opts.error, count: null }).then(resolve, reject)
+      const hit = rows.filter((r) => filters.every((f) => f(r)))
+        .sort((a, b) => { for (const c of orders) { const d = cmp(a[c], b[c]); if (d) return d } return 0 })
+      const data = hit.slice(window[0], Math.min(window[1] + 1, window[0] + (opts.maxRows ?? 1000))).map((r) => ({ ...r }))
+      const res = { data, error: null, count: opts.count ?? hit.length }
+      const next = opts.afterResponse?.(log.length, rows.map((r) => ({ ...r })))
+      if (next) rows = next
+      return Promise.resolve(res).then(resolve, reject)
+    }
     return q
   }
   return { make, log }
@@ -106,12 +130,27 @@ describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본�
     const body = await res.json()
     expect(body.backup.rows).toHaveLength(1003)
     expect(body.backup.rows[1002]).toEqual(tree[1002])
-    expect(t.log).toHaveLength(Math.ceil(1003 / 3))
+    expect(t.log).toHaveLength(Math.ceil(1003 / 3) + 1)   // 마지막은 빈 쪽 — 짧은 쪽을 끝으로 믿지 않는다(서버 상한)
     expect(t.log[0]).toEqual([
       { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PROJECT_ID] },
-      { method: 'order', args: ['id'] }, { method: 'range', args: [0, 999] },
+      { method: 'order', args: ['id'] }, { method: 'limit', args: [1000] },
+    ])
+    expect(t.log[1]).toEqual([
+      { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PROJECT_ID] },
+      { method: 'gt', args: ['id', 'w0002'] }, { method: 'order', args: ['id'] }, { method: 'limit', args: [1000] },
     ])
     expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('[K2] 첫 쪽을 읽은 직후 앞 구간 id 로 행이 삽입돼도(총합이 쪽 크기의 배수) 백업에 중복·누락이 없다 — 키셋', async () => {
+    const tree = Array.from({ length: 2000 }, (_, i) => ({ id: `w${String(i).padStart(4, '0')}`, project_id: PROJECT_ID }))
+    const t = pagedTable(tree, { afterResponse: (n, rows) => (n === 1 ? [...rows, { id: 'w0500a', project_id: PROJECT_ID }] : undefined) })
+    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc: vi.fn(async () => ({ data: 1, error: null })) })
+    const res = await POST(replaceRequest())
+    expect(res.status).toBe(200)
+    const ids = (await res.json()).backup.rows.map((r: { id: string }) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).toEqual(tree.map((r) => r.id))
   })
 
   it('[RF5] 쪽을 읽는 사이 행 수가 바뀌면(count 불일치) 500 고정 문구 — 원문·건수를 싣지 않고 RPC 를 부르지 않는다', async () => {
@@ -171,10 +210,48 @@ describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·ite
     const { items } = await getComputedWbs(PID)
     expect(items).toHaveLength(5)
     expect(items.every((n) => n.owners.length === 1 && n.owners[0].team === 'RES')).toBe(true)
-    expect([wbs.log.length, own.log.length]).toEqual([3, 3])
+    expect([wbs.log.length, own.log.length]).toEqual([4, 4])   // 2·2·1 + 빈 쪽
   })
 
-  it('item_owners 는 이 프로젝트 항목의 담당만 묻고(wbs_items!inner + 프로젝트 필터) 유일 키로 정렬한다', async () => {
+  it('[K1] 쪽 사이에 형제 순서를 바꿔도(sort_order 교환) 항목이 두 번·0번 읽히지 않는다 — id 키셋, 형제 정렬은 computeTree', async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => wbsRow(i))
+    const swap = (n: number, cur: Row[]) => n === 1
+      ? cur.map((r) => (r.id === 'i0001' ? { ...r, sort_order: 4 } : r.id === 'i0004' ? { ...r, sort_order: 1 } : r)) : undefined
+    const wbs = pagedTable(rows, { maxRows: 2, afterResponse: swap })
+    m.createServerClient.mockResolvedValue(client(wbs, pagedTable(rows.map(ownerOf))))
+    const { items } = await getComputedWbs(PID)
+    expect(items.map((n) => n.id).sort()).toEqual(rows.map((r) => r.id))
+  })
+
+  it('[K1] item_owners 도 PK 키셋 — 쪽 사이 앞 구간 삽입이 이미 있던 담당을 밀어내지 않는다', async () => {
+    const rows = Array.from({ length: 4 }, (_, i) => wbsRow(i))
+    const owners = rows.map(ownerOf)
+    const own = pagedTable(owners, {
+      maxRows: 2,
+      afterResponse: (n, cur) => (n === 1 ? [...cur, { ...ownerOf(rows[0]), team_id: 't-aaa', teams: { code: 'AAA' } }] : undefined),
+    })
+    m.createServerClient.mockResolvedValue(client(pagedTable(rows), own))
+    const { items } = await getComputedWbs(PID)
+    expect(items.map((n) => n.owners.map((o) => o.team))).toEqual([['RES'], ['RES'], ['RES'], ['RES']])
+    expect(own.log[1]).toContainEqual({ method: 'or', args: ['wbs_item_id.gt.i0001,and(wbs_item_id.eq.i0001,team_id.gt.t-res)'] })
+  })
+
+  it('[K3] wbs_items 조회 오류는 throw — 빈 트리로 위장하지 않는다', async () => {
+    m.createServerClient.mockResolvedValue(client(pagedTable([], { error: { message: 'down' } }), pagedTable([])))
+    await expect(getComputedWbs(PID)).rejects.toThrow('[getComputedWbs] wbs_items 조회 실패: down')
+  })
+
+  it('[K3] item_owners 조회 오류도 throw — 담당 없음으로 위장하지 않는다', async () => {
+    m.createServerClient.mockResolvedValue(client(pagedTable([wbsRow(1)]), pagedTable([], { error: { message: 'down' } })))
+    await expect(getComputedWbs(PID)).rejects.toThrow('[getComputedWbs] item_owners 조회 실패: down')
+  })
+
+  it('[K3] wbs_items 행 수가 count 와 다르면 throw', async () => {
+    m.createServerClient.mockResolvedValue(client(pagedTable([wbsRow(1), wbsRow(2)], { count: 3 }), pagedTable([])))
+    await expect(getComputedWbs(PID)).rejects.toThrow('[getComputedWbs] wbs_items 목록을 끝까지 읽지 못했습니다(2/3건)')
+  })
+
+  it('item_owners 는 이 프로젝트 항목의 담당만 묻고(wbs_items!inner + 프로젝트 필터) 유일 키로 정렬한다 — wbs_items 는 바뀌지 않는 id 하나로', async () => {
     const wbs = pagedTable([wbsRow(1)])
     const own = pagedTable([])
     m.createServerClient.mockResolvedValue(client(wbs, own))
@@ -182,11 +259,11 @@ describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·ite
     expect(own.log[0]).toEqual([
       { method: 'select', args: ['wbs_item_id, team_id, kind, teams(code), wbs_items!inner(project_id)', { count: 'exact' }] },
       { method: 'eq', args: ['wbs_items.project_id', PID] },
-      { method: 'order', args: ['wbs_item_id'] }, { method: 'order', args: ['team_id'] }, { method: 'range', args: [0, 999] },
+      { method: 'order', args: ['wbs_item_id'] }, { method: 'order', args: ['team_id'] }, { method: 'limit', args: [1000] },
     ])
     expect(wbs.log[0]).toEqual([
       { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PID] },
-      { method: 'order', args: ['sort_order'] }, { method: 'order', args: ['id'] }, { method: 'range', args: [0, 999] },
+      { method: 'order', args: ['id'] }, { method: 'limit', args: [1000] },
     ])
   })
 
