@@ -21,6 +21,9 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export function findSentinels(text, sentinels) {
   let s = String(text)
   for (const m of SENTINEL_MASKS) s = s.split(m).join(' ')
+  // 원문 소스·JSON 본문에 글자 그대로 남은 이스케이프(\n·\t·\r·\b·\f·\uXXXX·\xXX)는 공백으로 — 앞 글자(n·t·숫자)가 영숫자라
+  // 바로 뒤 영문 코드의 앞 경계가 막혀 적중을 놓쳤다(A1-4 리뷰 P5). 실제 제어 문자는 원래 경계 밖이다
+  s = s.replace(/\\(?:[nrtbf]|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})/g, ' ')
   const hits = []
   for (const w of sentinels) {
     if (!w || hits.includes(w)) continue

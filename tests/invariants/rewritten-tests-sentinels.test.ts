@@ -77,5 +77,8 @@ describe('다시 쓴 주간 테스트 — SP4 센티널 0건(P13)', () => {
     const [, sales, , , quality] = LEGACY_SENTINELS.weeklySections
     expect(SENTINELS_BY_SP.SP4.filter((w) => !WATCHED.includes(w))).toEqual([quality])
     expect(findSentinels(`row({ section: '${sales}', module: '' })`, WATCHED)).toEqual([sales])
+    // 원문 소스의 이스케이프 뒤 영문 코드(과제 25 치환 결함이 남긴 꼴 — A1-4 리뷰 P5)도 잡는다
+    const [code] = LEGACY_SENTINELS.teamCodes   // 이 파일도 목록에 있다 — 평문으로 적지 않는다
+    expect(findSentinels(`body: '1. 첫 줄\\n${code} 연동'`, WATCHED)).toEqual([code])
   })
 })

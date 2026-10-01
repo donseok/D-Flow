@@ -65,6 +65,17 @@ describe('findSentinels — 일치 규칙', () => {
     expect(findSentinels('담당: MDM', SP4)).toEqual(['MDM'])
   })
 
+  it('원문 소스·JSON 출력의 이스케이프 시퀀스 바로 뒤 영문 코드도 적중이다(A1-4 리뷰 P5 — 앞 글자가 n·t·r·숫자라 경계가 막혔다)', () => {
+    // 소스·JSON 본문에 글자 그대로 남은 두 글자 이스케이프(\\n 등)·\\uXXXX·\\xXX
+    for (const s of ['a\\nERP', 'a\\tMES', 'a\\rPMO', '\\u00a0MDM', '\\x20ERP', 'ERP\\n', '1.\\nMES 이슈']) {
+      expect(findSentinels(s, SP4).length, s).toBe(1)
+    }
+    // JSON.stringify 가 줄바꿈·탭을 \\n·\\t 로 내보낸 응답 본문
+    expect(findSentinels(JSON.stringify({ cell: '첫 줄\nERP 이슈\tMES' }), SP4)).toEqual(['ERP', 'MES'])
+    // 영숫자 경계 규칙은 그대로 — 이스케이프가 아닌 글자에 붙은 코드는 여전히 비적중
+    for (const s of ['ERPx', 'Times New Roman', 'a\\\\nERPs', 'nERP']) expect(findSentinels(s, SP4), s).toEqual([])
+  })
+
   it('한글 센티널은 부분 문자열 — 닫힌 마스크 복합어(영업일·영업관리팀)만 먼저 지운다', () => {
     expect(findSentinels('계획 기간에 영업일이 없는 작업', SP4)).toEqual([])
     expect(findSentinels('예: 영업관리팀', SP4)).toEqual([])
