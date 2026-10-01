@@ -55,8 +55,8 @@ it('expand 는 쿼리의 &expand=1 로만 갈리고 projectId 는 인코딩한�
 })
 
 // 실패 토스트의 설명은 서버 본문(한국어)을 그대로 쓰지 않고 상태 코드로 사전 키를 고른다(최종 리뷰 UI M-1).
-it('exportFailureKey — 409·422·400 은 사전 키, 400 은 호출부(접기·펼침)로 갈린다, 그 밖은 null(제목만)', () => {
-  expect(exportFailureKey(409, true)).toBe('importWizard.exportProfileNeedsSaved')
+it('exportFailureKey — 422·400 은 사전 키, 400 은 호출부(접기·펼침)로 갈린다, 409·PROFILE_REQUIRED 는 더 없다 — 그 밖은 null(제목만)', () => {
+  expect(exportFailureKey(409, true)).toBeNull()
   expect(exportFailureKey(422, false)).toBe('settings.exportErrProfileCorrupt')
   expect(exportFailureKey(422, true)).toBe('settings.exportErrProfileCorrupt')
   expect(exportFailureKey(400, false)).toBe('settings.exportErrProfileTooDeep')
@@ -66,13 +66,13 @@ it('exportFailureKey — 409·422·400 은 사전 키, 400 은 호출부(접기�
 
 // 같은 422·409 가 단계 이름 손상·부재(과제 27)와 양식 손상·부재 두 뜻을 갖게 됐다 — 상태 코드만 보면 정상 양식을 비우라는
 // 틀린 처방이 나간다(최종 리뷰 FN-7). 본문의 code 를 먼저 보고, code 가 없으면(옛 서버) 상태 코드로 고른다.
-it('exportFailureKey — code 가 CONFIG_INVALID·CONFIG_REQUIRED 면 단계 이름 안내, PROFILE_* 는 양식 안내, 모르는 code 는 null', () => {
+it('exportFailureKey — code 가 CONFIG_INVALID·CONFIG_REQUIRED 면 단계 이름 안내, PROFILE_CORRUPT 는 양식 안내, 모르는 code(PROFILE_REQUIRED 포함)는 null', () => {
   expect(exportFailureKey(422, false, 'CONFIG_INVALID')).toBe('settings.exportErrLevelLabels')
   expect(exportFailureKey(422, false, 'CONFIG_INVALID')).not.toBe('settings.exportErrProfileCorrupt')
   expect(exportFailureKey(409, true, 'CONFIG_REQUIRED')).toBe('settings.exportErrLevelLabels')
   expect(exportFailureKey(409, false, 'CONFIG_REQUIRED')).toBe('settings.exportErrLevelLabels')
   expect(exportFailureKey(422, true, 'PROFILE_CORRUPT')).toBe('settings.exportErrProfileCorrupt')
-  expect(exportFailureKey(409, true, 'PROFILE_REQUIRED')).toBe('importWizard.exportProfileNeedsSaved')
+  expect(exportFailureKey(409, true, 'PROFILE_REQUIRED')).toBeNull()   // 409·PROFILE_REQUIRED 는 더 없다(SP4 §4.3) — 모르는 code
   expect(exportFailureKey(422, false, 'SOMETHING_NEW')).toBeNull()
   expect(exportFailureKey(422, false, null)).toBe('settings.exportErrProfileCorrupt')
 })

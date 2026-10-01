@@ -136,7 +136,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.exportProfileButton': 'Export with profile (expanded)',
   'importWizard.exportProfileBusy': 'Exporting…',
   'importWizard.exportProfileFailedHttp': 'Export failed',
-  'importWizard.exportProfileNeedsSaved': 'The layout was not saved in this import, so expanded export is unavailable. Turn on "Save this layout as the project default" and import again.',
+  'importWizard.exportLayoutDesc': "Exports with sub-tasks expanded, using the project's saved layout if there is one, otherwise the standard layout built from the project's teams and levels.",
   'importWizard.exportProfileUnsupported': 'The expanded export cannot be built from the saved layout — it is an outline layout, or the WBS is deeper than its hierarchy columns.',
 
   'importWizard.linkFromOldForm': 'New import wizard (auto layout detection) →',

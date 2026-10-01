@@ -17,7 +17,6 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/app/actions/project.ts',
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
-  'src/app/api/export/route.ts',
   'src/components/dashboard/DashboardView.tsx',
 ]
 /** 옛 캐시에서 refreshTeams 만 가져오는 파일 — 화면 팀 목록(레이아웃)의 갱신 신호라 B 까지 남는다(계획 P20) */
@@ -39,6 +38,14 @@ describe('옛 팀 캐시 소비처 — 닫힌 목록(SP4 A2 P2)', () => {
       const names = (/\{([^}]*)\}/.exec(line)?.[1] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
       expect(names, f).toEqual(['refreshTeams'])
     }
+  })
+  it('A2 끝 — 남은 소비처는 B 의 화면 넷 + refreshTeams 액션 셋뿐(스펙 §7 A2)', () => {
+    expect([...MASTER_CONSUMERS].sort()).toEqual([
+      'src/app/(app)/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/p/[projectId]/members/page.tsx',
+      'src/app/actions/project.ts', 'src/app/actions/projectTeams.ts', 'src/app/actions/teams.ts',
+      'src/components/dashboard/DashboardView.tsx',
+    ].sort())
+    expect([...REFRESH_ONLY].sort()).toEqual(['src/app/actions/project.ts', 'src/app/actions/projectTeams.ts', 'src/app/actions/teams.ts'])
   })
   it('목록은 정렬돼 있고 중복이 없다 — 지울 때 자리를 찾기 쉽게', () => {
     expect([...MASTER_CONSUMERS]).toEqual([...new Set(MASTER_CONSUMERS)].sort())

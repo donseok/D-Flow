@@ -76,7 +76,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('profileSave 실패가 경고(role=status)로 보이고 사유 코드를 싣는다 — 내보내기 버튼은 없다', async () => {
+  it('profileSave 실패가 경고(role=status)로 보이고 사유 코드를 싣는다 — 펼침 버튼은 그대로 있고 설명은 저장/표준 양식 안내(SP4 §4.3)', async () => {
     executeResponse = () => new Response(JSON.stringify({ ok: true, count: 2, mode: 'append', reindexed: 0, profileSaved: false,
       profileSave: { ok: false, code: 'CONFIG_UNAVAILABLE', error: 'x' } }), { status: 200 })
     await runToDone()
@@ -88,7 +88,10 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     expect(status!.textContent).toContain(t('ko', 'importWizard.saveProfileLabel'))
     expect(status!.textContent).not.toMatch(/설정 화면에서 다시 저장|다시 시도/)
     for (const locale of ['ko', 'en'] as const) expect(t(locale, 'importWizard.profileSaveFailedDesc')).toContain(t(locale, 'importWizard.saveProfileLabel'))
-    expect(document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)).toBeNull()
+    // 저장 양식이 없으면 라우트가 표준 양식으로 낸다(409 는 더 없다) — 버튼은 양식 저장 여부와 무관하게 보이고 설명만 다르다
+    expect(document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)).not.toBeNull()
+    expect(container.textContent).toContain(t('ko', 'importWizard.exportLayoutDesc'))
+    expect(container.textContent).not.toContain(t('ko', 'importWizard.exportProfileDesc'))
   })
 
   it('저장하지 않았을 뿐(profileSave 없음)이면 경고가 없다', async () => {

@@ -34,15 +34,13 @@ export async function downloadWbsExport(
 }
 
 /** 실패 토스트의 설명 사전 키 — 서버 본문(한국어)을 그대로 싣지 않고 본문의 기계 코드, 없으면 상태 코드로 고른다. null 이면 제목(실패)만.
- *  같은 422·409 가 단계 이름 손상·부재(CONFIG_*)와 양식 손상·부재(PROFILE_*) 두 뜻이라 code 가 먼저다 — 상태 코드만 보면
+ *  422 가 단계 이름 손상(CONFIG_INVALID)과 양식 손상(PROFILE_CORRUPT) 두 뜻(409 는 단계 이름 부재뿐 — 저장 양식이 없으면 표준으로 낸다, SP4 §4.3)이라 code 가 먼저다 — 상태 코드만 보면
  *  정상 양식을 비우라는 틀린 처방이 나간다. 모르는 code 는 추측하지 않는다(null). code 가 없으면(옛 서버) 상태 코드 매핑.
  *  400 은 호출부로 갈린다: 접기(설정 화면)는 양식보다 깊은 WBS 뿐, 펼침(마법사)은 아웃라인 양식도 있다(api/export). */
 export function exportFailureKey(status: number | null, expand: boolean, code: string | null = null): DictKey | null {
   if (code === 'CONFIG_INVALID' || code === 'CONFIG_REQUIRED') return 'settings.exportErrLevelLabels'
   if (code === 'PROFILE_CORRUPT') return 'settings.exportErrProfileCorrupt'
-  if (code === 'PROFILE_REQUIRED') return 'importWizard.exportProfileNeedsSaved'
   if (code !== null) return null
-  if (status === 409) return 'importWizard.exportProfileNeedsSaved'
   if (status === 422) return 'settings.exportErrProfileCorrupt'
   if (status === 400) return expand ? 'importWizard.exportProfileUnsupported' : 'settings.exportErrProfileTooDeep'
   return null

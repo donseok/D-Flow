@@ -135,7 +135,7 @@ export const importWizardKo = {
   'importWizard.exportProfileButton': '프로파일로 내보내기(펼침)',
   'importWizard.exportProfileBusy': '내보내는 중…',
   'importWizard.exportProfileFailedHttp': '내보내기에 실패했습니다',
-  'importWizard.exportProfileNeedsSaved': '이번 가져오기에서 양식을 저장하지 않아 펼침 내보내기를 쓸 수 없습니다 — "이 양식을 프로젝트 기본값으로 저장"을 켜고 다시 가져오세요.',
+  'importWizard.exportLayoutDesc': '프로젝트에 저장된 양식이 있으면 그 양식으로, 없으면 표준 양식(프로젝트 팀·단계로 생성)으로 세부 업무까지 펼쳐 내보냅니다.',
   'importWizard.exportProfileUnsupported': '저장된 양식으로는 펼침 내보내기를 만들 수 없습니다 — 아웃라인 양식이거나 WBS가 양식의 계층 열보다 깊습니다.',
 
   'importWizard.linkFromOldForm': '새 임포트 마법사(양식 자동 감지) →',
