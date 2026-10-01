@@ -34,3 +34,47 @@ export function judgeRegression(baseRuns, candidateRuns, limit = 0.2) {
   const ratio = Math.round((cand / base) * 100) / 100
   return { base, cand, ratio, ok: cand <= base * (1 + limit) }
 }
+
+/** 측정 경로 이름 — measure --routes 가 받는 값(SP4 §6.5: 판정 경로 wbs·dashboard·export, 기록 weekly). */
+export const PERF_ROUTE_NAMES = ['dashboard', 'wbs', 'issues', 'export', 'weekly']
+/** 주간 시드·측정의 고정 주(월요일). */
+export const PERF_WEEK = '2026-01-05'
+
+/** 시드 프로젝트 이름 — 800 행은 SP2·SP3a 와 같은 PERF, 다른 크기는 따로 둔다(같은 스택에서 서로를 바꾸지 않게). */
+export function perfProjectName(items) {
+  if (!Number.isInteger(items) || items <= 0) throw new Error(`항목 수는 양의 정수: ${items}`)
+  return items === 800 ? 'PERF' : `PERF-${items}`
+}
+
+/** WBS 시드 코드 — 단계마다 perStage 개, 마지막 단계는 나머지. 800 이면 지금 시드(10 × 80)와 같다. */
+export function wbsSeedCodes(items, perStage = 80) {
+  perfProjectName(items)
+  return Array.from({ length: items }, (_, k) => {
+    const stage = Math.floor(k / perStage) + 1
+    const index = (k % perStage) + 1
+    return { code: `P.${stage}.${index}`, stage, index, sortOrder: k + 1 }
+  })
+}
+
+/** 이름 → 경로. export 는 표준 레이아웃 접기(기본), weekly 는 PERF_WEEK 주. */
+export function perfRoutes(pid, names) {
+  const of = {
+    dashboard: `/p/${pid}/dashboard`, wbs: `/p/${pid}/wbs`, issues: `/p/${pid}/issues`,
+    export: `/api/export?projectId=${pid}`, weekly: `/p/${pid}/weekly?week=${PERF_WEEK}`,
+  }
+  return names.map((n) => { if (!of[n]) throw new Error(`모르는 경로 이름: ${n}`); return of[n] })
+}
+
+/** 쉼표 목록 — 빈 값·모르는 이름·중복은 throw(측정 조합이 조용히 바뀌지 않게). */
+export function parseNameList(value, allowed) {
+  const names = String(value ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (!names.length) throw new Error('빈 목록')
+  for (const n of names) if (!allowed.includes(n)) throw new Error(`모르는 이름: ${n}(허용 ${allowed.join(',')})`)
+  if (new Set(names).size !== names.length) throw new Error(`중복: ${value}`)
+  return names
+}
+
+/** 본문의 서로 다른 시드 코드(P.<n>.<n>) 개수 — 1,500 행 기록의 "항목 수" 확인. */
+export function distinctWbsCodes(text) {
+  return new Set(String(text).match(/(?<![A-Za-z0-9.])P\.\d+\.\d+(?![0-9])/g) ?? []).size
+}
