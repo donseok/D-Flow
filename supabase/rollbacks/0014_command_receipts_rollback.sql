@@ -7,6 +7,13 @@
 -- 순서: *_weekly_areas 의 롤백보다 먼저 돈다(그 롤백은 import_wbs_cmd 가 있으면 멈춘다). *_authz_carry 와는 서로 기대지 않는다.
 begin;
 
+-- ⑤′ 역순 — 공용 팀 참조 거부 트리거 넷과 함수(기존 범위 가드 넷은 고치지 않았다 — 되돌릴 본문 없음)
+drop trigger project_invites_owned_scope on public.project_invites;
+drop trigger area_teams_owned_scope on public.area_teams;
+drop trigger project_member_teams_owned_scope on public.project_member_teams;
+drop trigger item_owners_owned_scope on public.item_owners;
+drop function public.team_ref_owned_scope();
+
 -- ⑤ 역순 — 전환 RPC(그것이 만든 전용 팀과 옮긴 참조는 되돌리지 않는다 — 머리 주석)
 drop function public.convert_inherited_teams(uuid, uuid);
 
