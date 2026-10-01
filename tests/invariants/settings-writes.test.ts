@@ -92,6 +92,7 @@ const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; 
   'scripts/e2e-synthetic.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '합성 워크스페이스 세 개의 허용 모듈 시드(로컬 전용 — 생성 화면은 SP3, 서버 액션 경로는 그 위에서 구성별로 바꾼다)' },
   'scripts/perf-baseline.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: 'PERF 프로젝트 시드(로컬 전용)' },
   'scripts/ui-capture.mjs': { rpcs: ['create_project_with_settings', 'apply_workspace_settings'], calls: 2, why: '캡처 시드 — UI-CAPTURE 프로젝트 생성·워크스페이스 B 허용 모듈(로컬 전용, SP3b UI-0)' },
+  'scripts/perf-grid.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: '1만 행 WBS 시드 — PERF-GRID 생성(로컬 전용, SP3b UI-0)' },
 }
 /** G3 — 리터럴이 아닌 .rpc( 의 파일별 건수 */
 const RPC_DYNAMIC_ALLOW: Record<string, { count: number; why: string }> = {
