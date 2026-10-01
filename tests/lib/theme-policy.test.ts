@@ -45,6 +45,16 @@ describe('noFlashScript — 페인트 전 규칙', () => {
   })
   it('형식 밖 localStorage 값은 건너뛰고 쿠키로', () => { localStorage.setItem(THEME_KEY, 'purple'); setCookie('dark'); expect(runScript()).toBe('dark') })
   it('matchMedia 가 없으면 system 은 light 이고 던지지 않는다', () => { localStorage.setItem(THEME_KEY, 'system'); expect(runScript()).toBe('light') })
+  // 우선순위는 절대값으로 고정한다 — 40조합은 '스크립트 = TS 규칙'만 보므로 둘이 함께 쿠키를 먼저 읽게 바뀌어도 초록이다(U1c 리뷰 R2 P3)
+  it('localStorage 가 쿠키보다 먼저다 — LS light + 쿠키 dark → light, LS dark + 쿠키 light → dark', () => {
+    stubOs(true)
+    localStorage.setItem(THEME_KEY, 'light'); setCookie('dark')
+    expect(readStoredPreference()).toBe('light')
+    expect(runScript()).toBe('light')
+    localStorage.setItem(THEME_KEY, 'dark'); setCookie('light')
+    expect(readStoredPreference()).toBe('dark')
+    expect(runScript()).toBe('dark')
+  })
   it('40조합 — 스크립트 결과 = resolveTheme(readStoredPreference(), OS)', () => {
     const LS = [null, 'light', 'dark', 'system', 'THROW'] as const
     const CK = [null, 'light', 'dark', 'system'] as const
