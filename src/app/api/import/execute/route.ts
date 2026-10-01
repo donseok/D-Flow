@@ -203,10 +203,11 @@ export async function POST(req: NextRequest) {
     const known = new Set(teams.map((t) => t.code))
     // 파일이 가리키는 팀 = 행의 담당 팀 + (양식을 저장하는 요청이면) 프로파일의 팀 열. 표시가 하나도 없는 새 팀 열도 양식 저장의 교차 검증
     // (#10 — 양식의 팀 열 ⊆ 프로젝트 팀)에는 걸리므로, 그 팀을 등록 대상에 넣어야 등록하면 저장이 통과한다(A1-5 R5). 저장하지 않는 요청은
-    // 교차 검증이 없어 표시된 팀만 본다
+    // 교차 검증이 없어 표시된 팀만 본다. 팀명 직접 방식의 표지 '*'(detect.ts — 담당 열 하나에 팀명이 든 양식)는 팀이 아니다 — 교차 검증
+    // (validateConfig.ts)도 건너뛰고, 그 열의 팀은 행의 담당으로 이미 들어온다
     const fileTeams = [...new Set([
       ...parsed.rows.flatMap((r) => r.owners.map((o) => o.team)),
-      ...(saveProfile ? profile.teamColumns.map(([, name]) => name) : []),
+      ...(saveProfile ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== '*') : []),
     ])]
     const unknownTeams = fileTeams.filter((t) => !known.has(t))
     if (unknownTeams.length > 0) {

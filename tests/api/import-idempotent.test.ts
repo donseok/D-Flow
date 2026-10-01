@@ -376,6 +376,15 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect((await POST(req({ saveProfile: 'true' }))).status).toBe(200)
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
   })
+  it('[R5] 팀명 직접 방식의 표지(`*` — 담당 열 하나에 팀명이 든 양식)는 팀이 아니다 — 등록 대상·needsTeams 에 오르지 않는다(교차 검증과 같은 규칙)', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    teamsAre([OWN_RES], [OWN_RES])
+    admin()
+    const star: ExcelProfile = { ...PROFILE, teamColumns: [[2, '*']] }
+    const res = await POST(req({ saveProfile: 'true', profile: JSON.stringify(star) }))
+    expect(res.status).toBe(200)
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+  })
 
   it('가드 결과에 그 프로젝트의 워크스페이스가 없으면(슈퍼유저·없는 프로젝트) 404 — 전환·등록·가져오기 없음', async () => {
     m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeSuperuser() })
