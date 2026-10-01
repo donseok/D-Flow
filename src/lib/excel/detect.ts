@@ -5,7 +5,7 @@
 import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
 // 별칭 사전(논리·담당)은 엑셀 머리 낱말의 단일 출처에 있다(SP4 D38) — 팀 예약어가 같은 사전에서 파생한다. 기존 import 경로를 위해 재수출한다
-import { LOGICAL_ALIASES, TEAM_DIRECT_MARK, TEAM_HEADER_ALIASES } from '@/lib/excel/headerWords'
+import { LOGICAL_ALIASES, TEAM_DIRECT_MARK, TEAM_HEADER_ALIASES, isHeaderWordMatch } from '@/lib/excel/headerWords'
 export { LOGICAL_ALIASES } from '@/lib/excel/headerWords'
 
 export interface DetectionResult {
@@ -177,27 +177,33 @@ export function detectLogicalColumns(
   return { logical, warnings, partialMatchCount }
 }
 
-/* ── 규칙 6: 팀 열 — 마크 방식(계층·논리 열 제외 후, 데이터 셀이 DEFAULT_OWNER_MARKS 키 또는 공백뿐인
- *  열) 우선. 없으면 '담당' 계열 헤더 열 하나에 팀명이 직접 든 방식(teamColumns=[[열,'*']]).
- *  둘 다 없으면 빈 배열 + warning. 마크 방식은 실제 마크가 최소 1개 있어야 인정한다(완전히 빈 스페이서
- *  열이 팀 열로 오인되는 것을 막기 위함 — 헤더 라벨도 비어 있으면 후보에서 제외). ── */
+/** '담당' 계열 머리 열에 마크(●/△)가 있을 때의 안내 — 그 열을 팀 열로 잡으면 '담당' 이라는 팀이 생긴다(SP4 D39) */
+export const OWNER_MARKS_IN_TEAM_HEADER = '담당 열에는 팀 이름을 적으세요 — ●/△ 는 팀마다 열을 둘 때 씁니다'
+
+/* ── 규칙 6: 팀 열 — 마크 방식(계층·논리 열과 '담당' 계열 머리 열을 뺀 뒤, 데이터 셀이 DEFAULT_OWNER_MARKS 키 또는 공백뿐인 열) 우선.
+ *  없으면 '담당' 계열 머리 열 하나에 팀명이 직접 든 방식(teamColumns=[[열, TEAM_DIRECT_MARK]]). 그 열에 마크가 있으면 팀 열 없음 + 안내(D39 —
+ *  마크는 팀마다 열을 둘 때 쓴다; 그 열을 마크 방식으로 잡으면 머리 '담당' 이 팀 이름이 된다). 둘 다 없으면 빈 배열 + warning. 마크 방식은
+ *  실제 마크가 최소 1개 있어야 인정한다(완전히 빈 스페이서 열이 팀 열로 오인되는 것을 막기 위함 — 헤더 라벨도 비어 있으면 후보에서 제외).
+ *  '담당' 계열 별칭 비교는 머리 낱말 비교(isHeaderWordMatch — 대소문자·전각·앞뒤 공백 무시)다. ── */
 export function detectTeamColumns(
   headerLabels: string[],
   dataRows: unknown[][],
   excluded: ReadonlySet<number> = new Set(),
 ): { teamColumns: [number, string][]; warnings: string[] } {
+  const isTeamHeader = (label: string) => TEAM_HEADER_ALIASES.some((a) => isHeaderWordMatch(a, label))
+  const isMark = (v: string) => Object.prototype.hasOwnProperty.call(DEFAULT_OWNER_MARKS, v)
   const maxCol = Math.max(headerLabels.length, dataRows.reduce((m, r) => Math.max(m, r.length), 0))
   const markCols: [number, string][] = []
   for (let c = 0; c < maxCol; c++) {
     if (excluded.has(c)) continue
     const label = headerLabels[c] ?? ''
-    if (!label) continue
+    if (!label || isTeamHeader(label)) continue
     let sawMark = false
     let allMarkOrBlank = true
     for (const r of dataRows) {
       const v = cellText(r[c])
       if (v === '') continue
-      if (Object.prototype.hasOwnProperty.call(DEFAULT_OWNER_MARKS, v)) sawMark = true
+      if (isMark(v)) sawMark = true
       else { allMarkOrBlank = false; break }
     }
     if (sawMark && allMarkOrBlank) markCols.push([c, label])
@@ -205,11 +211,9 @@ export function detectTeamColumns(
   if (markCols.length > 0) return { teamColumns: markCols, warnings: [] }
 
   for (let c = 0; c < headerLabels.length; c++) {
-    if (excluded.has(c)) continue
-    const lower = headerLabels[c].toLowerCase()
-    if (lower && TEAM_HEADER_ALIASES.some(a => a.toLowerCase() === lower)) {
-      return { teamColumns: [[c, TEAM_DIRECT_MARK]], warnings: ['담당 열의 팀명을 직접 사용'] }
-    }
+    if (excluded.has(c) || !headerLabels[c] || !isTeamHeader(headerLabels[c])) continue
+    if (dataRows.some((r) => isMark(cellText(r[c])))) return { teamColumns: [], warnings: [OWNER_MARKS_IN_TEAM_HEADER] }
+    return { teamColumns: [[c, TEAM_DIRECT_MARK]], warnings: ['담당 열의 팀명을 직접 사용'] }
   }
   return { teamColumns: [], warnings: ['팀 열을 찾지 못했습니다'] }
 }

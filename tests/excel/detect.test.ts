@@ -10,6 +10,7 @@ import {
   detectOutlineHierarchy,
   detectLogicalColumns,
   detectTeamColumns,
+  OWNER_MARKS_IN_TEAM_HEADER,
 } from '@/lib/excel/detect'
 
 function makeBook(sheets: { name: string; aoa: unknown[][] }[]): ArrayBuffer {
@@ -396,5 +397,26 @@ describe('detectTeamColumns (규칙 6)', () => {
     const { teamColumns, warnings } = detectTeamColumns(headerLabels, dataRows)
     expect(teamColumns).toEqual([])
     expect(warnings).toEqual(['팀 열을 찾지 못했습니다'])
+  })
+})
+
+describe('규칙 6 — 담당 계열 머리 열은 마크 방식 팀 열이 아니다(SP4 D39)', () => {
+  const header = ['코드', '업무명', '담당']
+  it('담당 열에 팀 이름 → 팀명 직접 방식 [[열, "*"]]', () => {
+    expect(detectTeamColumns(header, [['1', 'a', 'RES'], ['2', 'b', 'OPS,RES']], new Set([0, 1]))).toEqual({
+      teamColumns: [[2, '*']], warnings: ['담당 열의 팀명을 직접 사용'],
+    })
+  })
+  it('담당 열에 ●/△ → 팀 열 없음 + 안내 — "담당" 이라는 팀을 만들지 않는다', () => {
+    expect(detectTeamColumns(header, [['1', 'a', '●'], ['2', 'b', '△']], new Set([0, 1]))).toEqual({
+      teamColumns: [], warnings: [OWNER_MARKS_IN_TEAM_HEADER],
+    })
+    expect(OWNER_MARKS_IN_TEAM_HEADER).toBe('담당 열에는 팀 이름을 적으세요 — ●/△ 는 팀마다 열을 둘 때 씁니다')
+  })
+  it('담당 계열 별칭은 대소문자·전각을 무시한다(Team·ＴＥＡＭ)', () => {
+    expect(detectTeamColumns(['코드', 'ＴＥＡＭ'], [['1', '●']], new Set([0])).teamColumns).toEqual([])
+  })
+  it('팀마다 열을 둔 마크 방식은 그대로 — 머리가 팀 이름이면 마크 열', () => {
+    expect(detectTeamColumns(['코드', 'RES', 'OPS'], [['1', '●', ''], ['2', '', '△']], new Set([0])).teamColumns).toEqual([[1, 'RES'], [2, 'OPS']])
   })
 })

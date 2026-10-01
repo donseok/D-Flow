@@ -33,7 +33,7 @@ describe('wbs.xlsx 양식', () => {
       expect(profile.logical[key], key).not.toBeNull()
     }
     expect(profile.holidaySheetName).toBe('Holiday')
-    expect(warnings).toEqual([])
+    expect(warnings).toEqual(['담당 열의 팀명을 직접 사용'])   // 담당 열은 팀명 직접 방식(SP4 D39) — 규칙 6 대안의 기존 경고
   })
 
   it('형제 가중치 합 1.0 — 예시 행이 규칙을 어기지 않는다', () => {
@@ -53,5 +53,17 @@ describe('wbs.xlsx 양식', () => {
     const parsed = parseWithProfile(buf, r.result.profile)
     if (!parsed.ok) throw new Error(parsed.error)
     expect(parsed.holidays).toEqual([])
+  })
+
+  it('담당 열은 팀명 직접 방식으로 감지된다 — 예시 행이 마크를 쓰지 않아 "담당" 이라는 팀이 생기지 않는다(D39)', () => {
+    const r = detectWorkbook(buf)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.result.profile.teamColumns).toEqual([[8, '*']])
+    for (const row of TEMPLATE_ROWS) expect(row[8], String(row[0])).toBe('')
+  })
+  it('작성법 6행은 담당 열에 팀 이름을 적으라고 한다', () => {
+    const wb = XLSX.read(buf, { type: 'array' })
+    const guide = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['작성법'], { header: 1 })
+    expect(guide.find((r) => r[0] === '6')?.[1]).toBe('담당 열에는 팀 이름(코드)을 적습니다. ●/△ 는 팀마다 열(머리 = 팀 이름)을 둘 때 씁니다.')
   })
 })
