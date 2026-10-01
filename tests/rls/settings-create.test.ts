@@ -107,6 +107,27 @@ describe('0012 ⑧-2 create_project_with_settings', () => {
     })
   })
 
+  it('A1 이월(Z3) — 갈라진 원본(같은 code 의 공용·전용 팀을 함께 가리키는 영역)도 복사한다: 영역 팀은 대상의 같은 code 전용 팀으로 잇고, 같은 팀으로 겹친 링크는 하나(주관 우선)다', async () => {
+    await asService(pool, async (c) => {
+      // 갈라진 상태 — 영역이 공용 DIV 를 먼저 가리킨 뒤 같은 code 의 전용 DIV 가 생겼다(복사 버튼 꼴). 트리거는 새 공용 참조만 막는다
+      const shared = (await c.query<{ id: string }>(
+        `insert into public.teams (workspace_id, project_id, code, name) values ($1, null, 'DIV', '분기') returning id`, [F.ws])).rows[0].id
+      await c.query(`insert into public.area_teams (area_id, team_id, kind) values ('00000000-0000-0000-7e57-00000000110c', $1, 'support')`, [shared])
+      const own = (await c.query<{ id: string }>(
+        `insert into public.teams (workspace_id, project_id, code, name) values ($1, $2, 'DIV', '분기') returning id`, [F.ws, F.projects.a])).rows[0].id
+      await c.query(`insert into public.area_teams (area_id, team_id, kind) values ('00000000-0000-0000-7e57-00000000110c', $1, 'primary')`, [own])
+      const r = await create(c, { cmd: CMD(82), copyFrom: F.projects.a, name: 'Acme 갈라진 원본 복사' })
+      expect(r.status).toBe('applied')
+      const div = (await c.query<{ id: string }>(`select id from public.teams where project_id = $1 and code = 'DIV'`, [r.project_id])).rows
+      expect(div).toHaveLength(1)
+      const links = (await c.query<{ team_id: string; kind: string; common: boolean }>(
+        `select x.team_id, x.kind, t.project_id is null as common from public.project_areas a
+           join public.area_teams x on x.area_id = a.id join public.teams t on t.id = x.team_id
+          where a.project_id = $1 and t.code = 'DIV'`, [r.project_id])).rows
+      expect(links).toEqual([{ team_id: div[0].id, kind: 'primary', common: false }])   // 공용 DIV 참조를 옮기지 않는다(분열을 복사하지 않는다)
+    })
+  })
+
   it('다른 워크스페이스의 프로젝트는 복사 원본이 될 수 없다 — COPY_SOURCE_FORBIDDEN, 아무것도 만들지 않는다', async () => {
     await asService(pool, async (c) => {
       expect(await pgError(c, RPC, argsOf({ name: 'Acme 남의 원본', cmd: CMD(76), ws: F.wsB, copyFrom: F.projects.a })))

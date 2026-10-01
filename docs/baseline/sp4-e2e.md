@@ -215,8 +215,19 @@
 | 0013~0016 | 데이터 업그레이드(seed_wide → 0013~0016 → 전환 스모크 → 0016 롤백 → 스모크 → 0016 재적용 → 스모크, authz_carry 스모크) | 2026-10-02 02:56 KST | 첫 적용 `영역 신설 8, 재사용 2, 병합으로 지운 행 5, 머리표 4, 남은 행 11` · 상속 프로젝트 `…5b04-000000000c03` 전환 `{"moved": {"invites": 1, "area_teams": 1, "item_owners": 2, "project_member_teams": 2}, "teams": 3, "status": "converted"}` · 스모크 전부 통과 |
 | CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up` → `test:rls` | 2026-10-02 02:58 KST | max(version) 0016 · 30 파일 382 초록·건너뜀 0 |
 
+## 리허설 — `*_copy_config_team_map`(Z3, 보안 P3)
+
+`tests/rls/settings-create.test.ts` 의 갈라진 원본 복사 케이스는 0017 없이 **빨강**(`TEAM_SCOPE_PROJECT_OWNED` — 생성 전체가 되돌아감), 적용 뒤 초록.
+
+| 파일 | 리허설 | 일시 | 결과 |
+|---|---|---|---|
+| `*_copy_config_team_map` | R(카탈로그) | 2026-10-02 03:03 KST | `diff r b` 불일치 0 · 기본 권한 diff 없음 · 재적용 `diff f a` 불일치 0 · ② `COPY_CONFIG_TEAM_MAP_POSTCHECK` 통과 |
+| `*_copy_config_team_map` | 사후검사 민감도(옛 본문으로 되돌린 뒤 ② 만) | 2026-10-02 03:03 KST | `COPY_CONFIG_TEAM_MAP_POSTCHECK: 영역 팀 대응이 code 기준이 아니다` 로 멈춤 |
+| 0013~0017 | 연쇄 롤백(0017→0013) = `--version 0012`, 다시 다섯 적용 = 전체 | 2026-10-02 03:04 KST | 두 `diff` 모두 불일치 0 |
+| CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up` → `test:rls` | 2026-10-02 03:05 KST | max(version) 0017 · 30 파일 383 초록·건너뜀 0 |
+
 ## 머지 체크리스트(A2 반영 때)
 
 - 번호를 공유했던 로컬 스택(레인 B 의 `0013_account_preferences` 를 적용한 DB 등)은 `db:reset` 으로 맞춘다 — `migration up` 은 같은 번호를 적용된 것으로 보고
-  SP4 파일을 건너뛴다. 0016 은 SP4 가 쓴다(레인 B 의 account_preferences 는 rebase 때 다음 빈 번호로 — 컨트롤러가 레인 B 원장에 알림).
-- 메인 스택(사용자 데이터)에 0013 이후를 적용할 때는 0016 까지 함께(0014 만 적용하면 경합 창이 열린 트리거가 남는다).
+  SP4 파일을 건너뛴다. 0016·0017 은 SP4 가 쓴다(레인 B 의 account_preferences 는 rebase 때 다음 빈 번호로 — 컨트롤러가 레인 B 원장에 알림).
+- 메인 스택(사용자 데이터)에 0013 이후를 적용할 때는 0017 까지 함께(0014 만 적용하면 경합 창이 열린 트리거가, 0017 이 없으면 갈라진 원본 복사 실패가 남는다).
