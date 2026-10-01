@@ -288,6 +288,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
   [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
   [`${R('shell')}#GET`]: nul('session', '셸 — 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
+  [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
   [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 200 skipped(P19)'),
   [`${R('v1/agent/me')}#GET`]: agent(),
   [`${R('v1/agent/watch')}#POST`]: agent(),
@@ -328,6 +329,7 @@ export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
   '/api/prefs': '셸 — 개인 UI 설정',
   '/api/shell': '셸 — 알림함·파생 알림·공지 배지·티커·결재 배지 통합 조회',
+  '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
 }
 

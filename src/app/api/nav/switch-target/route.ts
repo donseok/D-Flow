@@ -1,0 +1,38 @@
+/**
+ * 프로젝트 전환의 '같은 모듈 유지'(D41, 개정 §5.3.6) — 세션 라우트(읽기 전용). 대상의 모듈 집합은 effectiveModules 를 직접 받아(moduleSetFor 는
+ * 실패를 core 로 위장한다) 판독 실패면 degraded 개요를 낸다 — '사용하지 않는 모듈'로 위장하지 않는다.
+ * 숨김·미존재·내 워크스페이스 밖 대상은 같은 404(존재 은닉, 판정 W12 — 레이아웃 404 와 같은 isHiddenProject 축). href 는 switchTarget 이
+ * 늘 /p/<대상>/… 로 만든다(path·query 는 모듈 조각·보기 키만 쓰인다).
+ * 열화(권한 조회 실패)는 숨김을 판정할 수 없으므로 대상의 모듈을 읽지 않고 개요로 보낸다 — 이동만 하고 쓰기는 없다, 개요 페이지가 자기 판정을 한다.
+ */
+import { type NextRequest, NextResponse } from 'next/server'
+import { getActorViewState } from '@/lib/authz'
+import { isHiddenProject } from '@/lib/domain/authz'
+import { UUID_RE } from '@/lib/domain/validate'
+import { effectiveModules } from '@/lib/modules/effective'
+import { switchTarget } from '@/lib/nav/switchTarget'
+
+export const dynamic = 'force-dynamic'
+
+const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams
+  const pid = (sp.get('project') ?? '').toLowerCase()
+  const path = sp.get('path') ?? ''
+  const query = sp.get('query') ?? ''
+  if (!UUID_RE.test(pid) || !path.startsWith('/') || path.length > 512 || query.length > 1024) return json({ error: 'bad_request' }, 400)
+  const { actor, degraded } = await getActorViewState()
+  const overview = { href: `/p/${pid}/dashboard`, fallbackModule: null, degraded: true as const }
+  if (degraded) return json(overview)
+  if (!actor) return json({ error: 'unauthorized' }, 401)
+  const workspaceId = actor.projectWorkspace.get(pid)
+  if (!workspaceId || isHiddenProject(actor, pid)) return json({ error: 'not_found' }, 404)
+  try {
+    const targetModules = await effectiveModules({ workspaceId, projectId: pid })
+    return json(switchTarget({ pathname: path, search: query, targetProjectId: pid, targetModules }))
+  } catch (e) {
+    console.error('[switch-target] 대상 모듈 판독 실패 — 개요로:', pid, e instanceof Error ? e.message : e)
+    return json(overview)
+  }
+}
