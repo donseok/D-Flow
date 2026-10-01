@@ -6,7 +6,7 @@ import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { readStoredPreference } from '@/lib/theme/policy'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { dispatchSidebarToggle, SIDEBAR_STORAGE_KEY } from '@/components/app/Sidebar'
+import { dispatchSidebarToggle, SIDEBAR_STORAGE_KEY } from '@/components/app/sidebarState'
 
 /**
  * 현재 로컬 상태를 LocalPrefs 로 읽는다. 테마는 저장된 **선호**(localStorage → 쿠키, 없으면 null — D10: 해석값을 백필하지 않는다),

@@ -13,6 +13,7 @@ import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useShellState } from './ShellStateProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useProjectNavigation } from './ProjectNavigationContext'
+import { SIDEBAR_STORAGE_KEY, SIDEBAR_TOGGLE_EVENT, dispatchSidebarToggle } from './sidebarState'
 
 export type SidebarProject = {
   id: string
@@ -23,16 +24,8 @@ export type SidebarProject = {
   isAdmin?: boolean
 }
 
-export const SIDEBAR_STORAGE_KEY = 'dflow-sidebar'
-
-/** 헤더 등 외부에서 사이드바 접기/펼치기를 일괄 제어할 때 dispatch하는 CustomEvent 이름. */
-export const SIDEBAR_TOGGLE_EVENT = 'dflow-sidebar-toggle'
-
-/** localStorage 갱신 + 이벤트 dispatch. 서버 쓰기는 사용자 토글 시에만(여기서 하지 않음 — reconcile 재사용 안전). */
-export function dispatchSidebarToggle(collapsed: boolean): void {
-  try { localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0') } catch {}
-  window.dispatchEvent(new CustomEvent(SIDEBAR_TOGGLE_EVENT, { detail: { collapsed } }))
-}
+// 접힘 상태의 정본은 sidebarState.ts(새 셸과 공유) — 이 파일은 과제 31 이 지운다
+export { SIDEBAR_STORAGE_KEY, SIDEBAR_TOGGLE_EVENT, dispatchSidebarToggle } from './sidebarState'
 
 const STATUS_META: Record<SidebarProject['status'], { dot: string; label: string }> = {
   ready: { dot: 'bg-pending', label: '준비' },

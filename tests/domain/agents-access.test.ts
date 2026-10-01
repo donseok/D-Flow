@@ -60,7 +60,7 @@ describe('seatmapProjectIds(actor, workspaceId) — 층 목록', () => {
 
 describe('nav 사전 키', () => {
   it('전역 좌석표와 프로젝트 에이전트 라벨이 ko/en 양쪽에 있다', () => {
-    expect(KO['nav.agents']).toBe('전체 스튜디오'); expect(EN['nav.agents']).toBe('All studios')
+    expect(KO['nav.agents']).toBe('에이전트 현황'); expect(EN['nav.agents']).toBe('Agent status')   // D30 라벨
     expect(KO['nav.projectAgents']).toBe('에이전트'); expect(EN['nav.projectAgents']).toBe('Agents')
   })
 })
