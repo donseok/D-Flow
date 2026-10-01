@@ -1,4 +1,5 @@
 /* ── 주간업무 시트 도메인(순수) — 행 타입·셀 키·이월·서버 병합. I/O 없음. ── */
+import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
 
 export interface WeeklySheetRow {
   id: string
@@ -143,4 +144,83 @@ export function applyServerRow(
     if (dirty.has(`${server.id}:${key}`)) merged[CELL_FIELD[key]] = local[CELL_FIELD[key]]
   }
   return merged
+}
+
+/* ── SP4 주간 영역(project_areas kind='weekly_section') — 순수(스펙 §4.1.1·D32). 행은 영역 id 로 묶이고 순서·라벨은 영역에서 온다.
+ *    ① 단계에서는 옛 행 모양(WeeklySheetRow)과 함께 둔다 — 소비처가 하나씩 옮겨 간 뒤(SP4 계획 과제 19~24) 과제 25 가 옛 것을 지우고
+ *    WeeklyAreaRow 를 WeeklySheetRow 로 이름을 되돌린다. 영역 모양은 해석기의 ConfigArea 그대로다(형만 가져온다 — 이 모듈은 클라이언트
+ *    컴포넌트도 import 한다). ── */
+
+/** 주간 행의 내용 네 칸 */
+export interface WeeklyCells {
+  thisContent: string
+  thisIssue: string
+  nextContent: string
+  nextIssue: string
+}
+
+/** 영역 id 로 묶인 주간 행 — weekly_report_rows(report_id, area_id) 유일 */
+export interface WeeklyAreaRow extends WeeklyCells {
+  id: string
+  reportId: string
+  areaId: string
+}
+
+export type NewWeeklyAreaRow = Omit<WeeklyAreaRow, 'id' | 'reportId'>
+
+/** 주간 영역 — 해석기 getProjectConfig(pid).areas.weekly_section 의 원소 */
+export type WeeklyArea = Pick<ConfigArea, 'id' | 'code' | 'name' | 'sortOrder' | 'active' | 'teams'>
+
+export const ALL_CELLS: readonly (keyof WeeklyCells)[] = ['thisContent', 'thisIssue', 'nextContent', 'nextIssue']
+export const NEXT_CELLS: readonly (keyof WeeklyCells)[] = ['nextContent', 'nextIssue']
+
+/** 코드 포인트 비교 — 로캘(ko)·ICU 판에 따라 동률 순서가 흔들리지 않게(서버·브라우저·봇이 같은 순서) */
+const cmpCode = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/** 영역 순서 — (sortOrder, code, id). sort_order 는 기본 0·유일 아님이라 동률을 code·id 로 끊는다(스펙 D32). 입력은 바꾸지 않는다 */
+export function orderAreas<A extends Pick<WeeklyArea, 'id' | 'code' | 'sortOrder'>>(areas: readonly A[]): A[] {
+  return [...areas].sort((a, b) => a.sortOrder - b.sortOrder || cmpCode(a.code, b.code) || cmpCode(a.id, b.id))
+}
+
+/** "내용 있음" — 주어진 칸 가운데 trim() 이 빈 문자열이 아닌 것이 있는가(스펙 D32·Q37). 이월의 대기 판정은 NEXT_CELLS, 표시·시드
+ *  보존은 ALL_CELLS 로 부른다 — 이월·표시·시드가 이 술어 하나만 쓴다(마이그레이션 이관은 다듬지 않는 다른 술어다 — 보존이 목적) */
+export function hasContent(row: Partial<WeeklyCells>, cells: readonly (keyof WeeklyCells)[]): boolean {
+  return cells.some((c) => (row[c] ?? '').trim() !== '')
+}
+
+/** 시트·점검·PPT·봇이 보이는 행(스펙 D32) — 활성 영역의 행(영역 순) → 내용 있는 비활성 영역의 행(영역 순) → 내용 있는 모르는 영역의
+ *  행(맨 뒤 — FK 가 막아 정상 경로에서는 없다). 같은 영역 안은 입력 순. 내용 없는 비활성·모르는 영역 행은 뺀다. 화면은 페이지를 읽을 때
+ *  한 번 부르고 같은 화면 안에서는 다시 부르지 않는다(Q37 — 실시간 병합이 행을 빼지 않는다) */
+export function visibleRows<R extends { areaId: string } & WeeklyCells>(rows: readonly R[], areas: readonly WeeklyArea[]): R[] {
+  const ordered = orderAreas(areas)
+  const rank = new Map(ordered.map((a, i) => [a.id, i]))
+  const active = new Set(ordered.filter((a) => a.active).map((a) => a.id))
+  const group = (r: R): number => (active.has(r.areaId) ? 0 : rank.has(r.areaId) ? 1 : 2)
+  return rows
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => active.has(r.areaId) || hasContent(r, ALL_CELLS))
+    .sort((x, y) => group(x.r) - group(y.r)
+      || (rank.get(x.r.areaId) ?? ordered.length) - (rank.get(y.r.areaId) ?? ordered.length)
+      || x.i - y.i)
+    .map(({ r }) => r)
+}
+
+export const UNKNOWN_AREA_LABEL = '알 수 없는 영역'
+
+/** 행 라벨 — 영역 이름. 비활성이면 표지를 붙이고, 영역 목록에 없으면 알 수 없는 영역 */
+export function rowLabel(row: { areaId: string }, areas: readonly Pick<WeeklyArea, 'id' | 'name' | 'active'>[]): string {
+  const a = areas.find((x) => x.id === row.areaId)
+  if (!a) return UNKNOWN_AREA_LABEL
+  return a.active ? a.name : `${a.name} (비활성)`
+}
+
+/** 그 code 의 팀(전용·공용 모두 — area_teams_guard 가 허용하는 범위)이 주·보조로 든 영역 id(스펙 §4.1.1·D24). 주간 보고서와 봇이 같이
+ *  쓴다(패리티 W18). code 는 그대로 비교한다(팀 code 는 대소문자를 가린다) */
+export function areasForTeam(
+  areas: readonly Pick<WeeklyArea, 'id' | 'teams'>[],
+  teams: readonly Pick<ConfigTeam, 'id' | 'code'>[],
+  teamCode: string,
+): Set<string> {
+  const ids = new Set(teams.filter((t) => t.code === teamCode).map((t) => t.id))
+  return new Set(areas.filter((a) => a.teams.some((t) => ids.has(t.teamId))).map((a) => a.id))
 }
