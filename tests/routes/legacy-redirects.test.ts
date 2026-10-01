@@ -1,4 +1,4 @@
-// 옛 경로 스텁(스펙 §5.3, D5·D6) — ① 본문 함수의 동작(세션·조회 mock) ② src/app/(legacy)/** 의 모든 route.ts 가 세 줄 모양이고 경로에 맞는 종류를 부른다.
+// 옛 경로 스텁(스펙 §5.3, D5·D6) — ① 본문 함수의 동작(세션·조회 mock) ② src/app/(legacy)/** 의 모든 route.ts 가 정본 전문 그대로이고 경로에 맞는 종류를 부른다.
 import { existsSync, readFileSync } from 'node:fs'
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -106,21 +106,45 @@ const STUB_FILE: Readonly<Record<LegacyKind, string>> = {
   gantt: 'src/app/(legacy)/p/[projectId]/gantt/route.ts',
 }
 
+/** 스텁 파일의 정본 전문(계획 V11) — 열거 게이트(tests/gates/_enumerate.ts)가 (legacy) route.ts 를 관문 열거에서 빼는 전제다.
+ *  정규식 부분 일치는 `export const POST = …`·`export { h as POST }`·가드 없는 top-level 조회를 놓친다(U2a-3 리뷰 V2) — 전문을 대조해 닫는다 */
+const stubTemplate = (kind: LegacyKind) => [
+  "import { type NextRequest } from 'next/server'",
+  "import { legacyRedirect } from '@/lib/workspace/legacyStub'",
+  '',
+  "export const dynamic = 'force-dynamic'",
+  `export async function GET(req: NextRequest) { return legacyRedirect(req, '${kind}') }`,
+  '',
+].join('\n')
+function stubShapeProblem(text: string, kind: LegacyKind): string | null {
+  return text === stubTemplate(kind) ? null : `정본 전문과 다르다 — import 둘·dynamic·GET 한 줄만 둔다(다른 export·top-level 문장 금지)`
+}
+
 describe('src/app/(legacy)/** — 스텁 모양', () => {
   const files = existsSync('src/app/(legacy)') ? walk('src/app/(legacy)') : []
   it('(legacy) 아래에는 route.ts 만 있다(페이지·레이아웃을 두지 않는다)', () => {
     expect(files.filter((f) => !f.endsWith('/route.ts'))).toEqual([])
   })
-  it('모든 route.ts 가 표의 파일이고 경로에 맞는 종류를 부른다(세 줄 모양)', () => {
+  it('모든 route.ts 가 표의 파일이고 경로에 맞는 종류를 부르는 정본 전문 그대로다', () => {
     const byFile = new Map(Object.entries(STUB_FILE).map(([k, f]) => [f, k as LegacyKind]))
+    expect(files.length).toBeGreaterThan(0)
     for (const f of files.filter((x) => x.endsWith('route.ts'))) {
       const kind = byFile.get(f)
       expect(kind, `${f} 는 STUB_FILE 에 없다`).toBeDefined()
-      const text = readFileSync(f, 'utf8')
-      expect(text, f).toContain("export const dynamic = 'force-dynamic'")
-      expect(text, f).toMatch(new RegExp(`export async function GET\\(req: NextRequest\\)\\s*\\{\\s*return legacyRedirect\\(req, '${kind}'\\)\\s*\\}`))
-      expect(text, f).not.toMatch(/export (async )?function (POST|PUT|PATCH|DELETE|HEAD|OPTIONS)/)
+      expect(stubShapeProblem(readFileSync(f, 'utf8'), kind!), f).toBeNull()
     }
+  })
+  it('전문 대조의 민감도 — 다른 메서드(const·재수출)·top-level 조회·다른 종류는 거부한다', () => {
+    const ok = stubTemplate('agents')
+    expect(stubShapeProblem(ok, 'agents')).toBeNull()
+    for (const bad of [
+      `${ok}export const POST = async (req: NextRequest) => legacyRedirect(req, 'agents')\n`,
+      `${ok}export { GET as POST }\n`,
+      `${ok}export const revalidate = 0\n`,
+      ok.replace("export const dynamic", "const rows = await createAdminClient().from('x').select('*')\nexport const dynamic"),
+      ok.replace("legacyRedirect(req, 'agents') }", "legacyRedirect(req, 'agents') }\nexport async function POST() { return new Response() }"),
+    ]) expect(stubShapeProblem(bad, 'agents'), bad).not.toBeNull()
+    expect(stubShapeProblem(ok, 'usage')).not.toBeNull()
   })
   it('표의 옛 경로와 파일 경로가 맞는다', () => {
     for (const [kind, f] of Object.entries(STUB_FILE) as [LegacyKind, string][]) {

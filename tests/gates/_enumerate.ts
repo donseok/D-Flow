@@ -104,8 +104,8 @@ export function stubShapeOk(stub: Stub, byKey: ReadonlyMap<string, ts.Expression
 /** Next 가 라우트 핸들러로 쓰는 파일 이름(pageExtensions 기본 넷) — src/app/api 아래의 route.ts·route.tsx 만 열거한다 */
 export const ROUTE_FILE = /^route\.[cm]?[jt]sx?$/
 // 라우트 핸들러 파일은 src/app/api 아래의 route.ts·route.tsx 뿐이다 — 앱 폴더 어디든 route.{ts,tsx,js,jsx} 는 핸들러가 되므로 다른 자리·확장자는 열거 밖이다.
-// 예외 하나: 옛 경로 스텁 src/app/(legacy)/**/route.ts(SP3b D5) — 데이터를 내지 않는 GET 307 뿐이고, 모양(GET 하나가 legacyRedirect 를 부른다·
-// 다른 메서드 없음·표에 있는 파일만)은 tests/routes/legacy-redirects.test.ts 가 고정한다. 모듈 관문은 이동 대상 페이지가 한다
+// 예외 하나: 옛 경로 스텁 src/app/(legacy)/**/route.ts(SP3b D5) — 데이터를 내지 않는 GET 307 뿐이고, 모양은 tests/routes/legacy-redirects.test.ts 가
+// 파일 **전문 대조**로 닫는다(import 둘·dynamic·legacyRedirect 를 부르는 GET 한 줄만 — 다른 export·top-level 문장 금지, 표에 있는 파일만). 모듈 관문은 이동 대상 페이지가 한다
 const LEGACY_STUB_FILE = /^src\/app\/\(legacy\)\/(.+\/)?route\.ts$/
 export function routeFileProblems(rels: readonly string[]): string[] {
   return rels.filter((f) => !/^src\/app\/api\/(.+\/)?route\.tsx?$/.test(f) && !LEGACY_STUB_FILE.test(f)).map((f) => `${f}: 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다(옛 경로 스텁은 src/app/(legacy)/**/route.ts)`)
