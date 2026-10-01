@@ -65,8 +65,10 @@ function rows(what, { data, error }) {
   return data
 }
 const mustOk = (what, result) => { if (!result || result.ok !== true) throw new Fail(`${what} 실패: ${JSON.stringify(result)}`); return result }
+/** 키 순서를 정렬한 JSON — jsonb 는 키를 정렬해 저장하므로 순서가 다른 같은 값을 같다고 본다(배열 순서는 그대로다). */
+const canonical = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x))
 const same = (what, actual, expected) => {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Fail(`${what} 가 다르다: ${JSON.stringify(actual)} (기대 ${JSON.stringify(expected)})`)
+  if (canonical(actual) !== canonical(expected)) throw new Fail(`${what} 가 다르다: ${canonical(actual)} (기대 ${canonical(expected)})`)
 }
 /**
  * 소스·스키마가 깨끗한가 — 합성 게이트는 코드를 고치지 않고 통과해야 한다(스펙 §7.3: `git diff --quiet -- src supabase`).
