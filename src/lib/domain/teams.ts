@@ -94,12 +94,20 @@ export function activeTeamsForWorkspaces(all: readonly Team[], workspaceIds: Ite
     })
 }
 
-/** 조회자가 볼 수 있는 활성 팀 코드(activeCodes 순, 중복 없음) — 회의록 담당 필터·검증(채팅·외부 GET·봇)의 단일 판정.
+/** 조회자가 볼 수 있는 활성 팀(activeCodes 순, 같은 code 는 첫 것만) — 회의록 담당 필터·검증(채팅·외부 GET·봇)과 봇 이름 매칭의 단일 판정.
  *  view 는 domain/authz 의 teamViewOf·teamViewOfScope 만 만든다(전부를 여는 뷰는 플랫폼 관리자 판정과 한 곳에).
  *  프로젝트에 연결된 회의록의 담당은 그 프로젝트 팀이라, 소속 워크스페이스의 공용 팀만으로는 전용 팀 코드가 빠진다. */
+export function teamsVisibleTo(all: readonly Team[], view: TeamView): Team[] {
+  const ws = view.all ? null : new Set(view.workspaceIds)
+  const ps = view.all ? null : new Set(view.projectIds)
+  const seen = new Set<string>()
+  return all
+    .filter((t) => t.active && (view.all || (t.projectId === null ? ws!.has(t.workspaceId) : ps!.has(t.projectId))))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code, 'ko'))
+    .filter((t) => (seen.has(t.code) ? false : (seen.add(t.code), true)))
+}
+
+/** teamsVisibleTo 의 code — 같은 규칙(SP4 A2 에서 행 판정 위로 옮겼다. 결과는 옛 정의와 같다) */
 export function teamCodesVisibleTo(all: readonly Team[], view: TeamView): TeamCode[] {
-  if (view.all) return [...new Set(activeCodes(all))]
-  const ws = new Set(view.workspaceIds)
-  const ps = new Set(view.projectIds)
-  return [...new Set(activeCodes(all.filter(t => (t.projectId === null ? ws.has(t.workspaceId) : ps.has(t.projectId)))))]
+  return teamsVisibleTo(all, view).map((t) => t.code)
 }

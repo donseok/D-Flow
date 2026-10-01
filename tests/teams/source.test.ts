@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({ getProjectConfig: vi.fn(), createServerClient: vi.
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 
-import { TeamsUnavailableError, projectOwnTeams, projectTeams, workspaceTeams } from '@/lib/teams/source'
+import { TeamsUnavailableError, projectOwnTeams, projectTeams, teamCodesVisibleTo, visibleTeams, workspaceTeams } from '@/lib/teams/source'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ConfigTeam } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -107,6 +107,72 @@ describe('workspaceTeams — 한 워크스페이스의 공용 팀(비활성 포�
     const { client } = teamsClient([row(1)])
     h.createServerClient.mockResolvedValue(client)
     expect((await workspaceTeams(W)).map((t) => t.code)).toEqual(['T1'])
+    expect(h.createServerClient).toHaveBeenCalledTimes(1)
+  })
+})
+
+/** PostgREST 키셋 흉내 — eq·gt·order('id')·limit 를 실제로 적용하고 한 응답을 maxRows 에서 자른다. count 는 필터에 맞는 행 수.
+ *  afterFirst 는 첫 응답 뒤 표를 바꾼다(읽는 사이 변경). error 면 그 조회는 실패다. */
+function keysetTeams(initial: Array<Record<string, unknown>>, opts: { maxRows?: number; error?: string; afterFirst?: (rows: Array<Record<string, unknown>>) => Array<Record<string, unknown>> } = {}) {
+  let rows = [...initial]
+  let calls = 0
+  const client = {
+    from: (table: string) => {
+      if (table !== 'teams') throw new Error(`unexpected table ${table}`)
+      const eqs: Array<[string, unknown]> = []
+      let after: string | null = null
+      let lim = 1000
+      const b: Record<string, unknown> = {}
+      b.select = () => b
+      b.eq = (c: string, v: unknown) => { eqs.push([c, v]); return b }
+      b.gt = (c: string, v: string) => { if (c !== 'id') throw new Error(`gt ${c}`); after = v; return b }
+      b.order = (c: string) => { if (c !== 'id') throw new Error(`order ${c}`); return b }
+      b.limit = (n: number) => { lim = n; return b }
+      b.then = (res: (v: unknown) => unknown) => {
+        calls++
+        if (opts.error) return Promise.resolve({ data: null, error: { message: opts.error }, count: null }).then(res)
+        const hit = rows.filter((r) => eqs.every(([c, v]) => r[c] === v)).sort((a, z) => String(a.id).localeCompare(String(z.id)))
+        const page = hit.filter((r) => after === null || String(r.id) > after).slice(0, Math.min(lim, opts.maxRows ?? 1000))
+        const out = { data: page.map((r) => ({ ...r })), error: null, count: hit.length }
+        if (calls === 1 && opts.afterFirst) rows = opts.afterFirst(rows)
+        return Promise.resolve(out).then(res)
+      }
+      return b
+    },
+  }
+  return { client, calls: () => calls }
+}
+const trow = (id: string, code: string, ws: string, pid: string | null, active = true) =>
+  ({ id, code, name: `${code} 팀`, color: '#6b7280', sort_order: 0, active, progress_visible: true, project_id: pid, workspace_id: ws })
+
+describe('visibleTeams·teamCodesVisibleTo — 가시 범위(스펙 §4.2.1), 끝까지 읽는다', () => {
+  const WA = '00000000-0000-0000-7e57-000000001901'
+  const WB = '00000000-0000-0000-7e57-000000001902'
+  const P1 = '00000000-0000-0000-7e57-000000001903'
+  it('보이는 워크스페이스의 공용 + 보이는 프로젝트의 전용(활성만), 이름·색을 싣는다', async () => {
+    const { client } = keysetTeams([trow('t1', 'RES', WA, null), trow('t2', 'CIV', WB, null), trow('t3', 'MEP', WA, P1), trow('t4', 'ARC', WA, null, false)])
+    const got = await visibleTeams({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })
+    expect(got.map((t) => t.code)).toEqual(['MEP', 'RES'])
+    expect(got[1]).toMatchObject({ name: 'RES 팀', color: '#6b7280', workspaceId: WA, projectId: null })
+    expect(await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })).toEqual(['MEP', 'RES'])
+  })
+  it('[RF3] 플랫폼 관리자 범위가 한 응답의 상한(여기서는 3행)을 넘어도 끝까지 — 뒤 워크스페이스 팀이 빠지지 않는다', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => trow(`t${String(i).padStart(2, '0')}`, `T${i}`, i % 2 ? WA : WB, null))
+    const { client, calls } = keysetTeams(many, { maxRows: 3 })
+    const got = await teamCodesVisibleTo({ all: true }, { client: client as never })
+    expect(new Set(got)).toEqual(new Set(many.map((r) => r.code)))
+    expect(calls()).toBeGreaterThan(2)
+  })
+  it('[RF3] 조회 오류·읽는 사이 행 수 변경은 TeamsUnavailableError — 빈 목록으로 위장하지 않는다', async () => {
+    await expect(visibleTeams({ all: true }, { client: keysetTeams([], { error: 'db down' }).client as never })).rejects.toBeInstanceOf(TeamsUnavailableError)
+    const rows = Array.from({ length: 4 }, (_, i) => trow(`t${i}`, `T${i}`, WA, null))
+    const moving = keysetTeams(rows, { maxRows: 2, afterFirst: (r) => [...r, trow('t9', 'T9', WA, null)] })
+    await expect(teamCodesVisibleTo({ all: true }, { client: moving.client as never })).rejects.toBeInstanceOf(TeamsUnavailableError)
+  })
+  it('비활성은 질의에서 거른다(eq active true) — 클라이언트를 넘기지 않으면 세션 클라이언트', async () => {
+    const { client } = keysetTeams([trow('t1', 'RES', WA, null)])
+    h.createServerClient.mockResolvedValue(client)
+    expect(await teamCodesVisibleTo({ all: true })).toEqual(['RES'])
     expect(h.createServerClient).toHaveBeenCalledTimes(1)
   })
 })

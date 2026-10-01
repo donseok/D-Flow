@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, type Team } from '@/lib/domain/teams'
+import { activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, teamsVisibleTo, type Team } from '@/lib/domain/teams'
 import { teamViewOf, teamViewOfScope } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
@@ -108,5 +108,28 @@ describe('teamViewOfScope — 봇 접근 범위(accessScope → 도구 컨텍스
   it('teamViewOf(actor) 는 같은 규칙 — 숨긴 비공개 프로젝트를 뺀 스코프로 위임한다', () => {
     const actor = makeActor({ workspaceRoles: new Map([['ws-a', 'member']]), projectWorkspace: new Map([['pa', 'ws-a'], ['pp', 'ws-a']]) })
     expect(teamViewOf(actor, ['pp'])).toEqual(teamViewOfScope({ isSuperuser: false, workspaceIds: ['ws-a'], allowedProjectIds: ['pa'] }))
+  })
+})
+
+describe('teamsVisibleTo — 가시 범위의 활성 팀 행(SP4 A2 — teamCodesVisibleTo 와 같은 규칙, 이름·색을 싣는다)', () => {
+  const t = (id: string, code: string, ws: string, pid: string | null, over: Partial<Team> = {}): Team => ({
+    id, code, name: `${code} 팀`, color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: pid, workspaceId: ws, ...over,
+  })
+  const ALL = [
+    t('a', 'OPS', 'w1', null, { sortOrder: 1 }), t('b', 'RES', 'w1', null), t('c', 'CIV', 'w2', null),
+    t('d', 'MEP', 'w1', 'p1'), t('e', 'SAF', 'w1', 'p2'), t('f', 'OPS', 'w2', null, { sortOrder: 1 }), t('g', 'ARC', 'w1', null, { active: false }),
+  ]
+  it('보이는 워크스페이스의 공용 + 보이는 프로젝트의 전용, 활성만, activeCodes 순, 같은 code 는 첫 것', () => {
+    const got = teamsVisibleTo(ALL, { all: false, workspaceIds: ['w1'], projectIds: ['p1'] })
+    expect(got.map((x) => x.id)).toEqual(['d', 'b', 'a'])
+    expect(got[0]).toMatchObject({ code: 'MEP', name: 'MEP 팀' })
+  })
+  it('{ all: true } 는 전부(활성) — code 가 겹치면 첫 것만', () => {
+    expect(teamsVisibleTo(ALL, { all: true }).map((x) => x.code)).toEqual(['CIV', 'MEP', 'RES', 'SAF', 'OPS'])
+  })
+  it('teamCodesVisibleTo 는 teamsVisibleTo 의 code 와 같다', () => {
+    for (const view of [{ all: true } as const, { all: false as const, workspaceIds: ['w2'], projectIds: ['p2'] }]) {
+      expect(teamCodesVisibleTo(ALL, view)).toEqual(teamsVisibleTo(ALL, view).map((x) => x.code))
+    }
   })
 })
