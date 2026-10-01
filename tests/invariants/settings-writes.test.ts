@@ -94,6 +94,7 @@ const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; 
   'scripts/perf-baseline.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: 'PERF 프로젝트 시드(로컬 전용)' },
   'scripts/ui-capture.mjs': { rpcs: ['create_project_with_settings', 'apply_workspace_settings'], calls: 2, why: '캡처 시드 — UI-CAPTURE 프로젝트 생성·워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인 — 같은 값이면 부르지 않는다)(로컬 전용, SP3b UI-0)' },
   'scripts/perf-grid.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: '1만 행 WBS 시드 — PERF-GRID 생성(로컬 전용, SP3b UI-0)' },
+  'scripts/e2e-sp3b.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: 'UI-2a E2E 픽스처 — 이슈 모듈이 꺼진 프로젝트 하나(로컬 전용, 브랜치 전용 스크립트 — 과제 39 가 e2e-local 로 합치며 이 줄도 옮긴다)' },
 }
 /** G3 — 리터럴이 아닌 .rpc( 의 파일별 건수 */
 const RPC_DYNAMIC_ALLOW: Record<string, { count: number; why: string }> = {

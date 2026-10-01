@@ -9,7 +9,7 @@ import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { PIN_AT, WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, startPin, warmupFailure } from '../../scripts/ui-capture.mjs'
-import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
+import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, pairPlan, pairRows, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
   summarizeDiff } from '../../scripts/ui-capture.mjs'
 import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, flickerVerdict, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
 import { computePrefsSync } from '../../src/lib/prefs/sync'
@@ -240,7 +240,8 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
   })
   it('--server-commit(서버 커밋)·--allow-cross(시드·판이 다른 참고 대조) — 기본값은 없음·거짓', () => {
-    expect(parseArgs([])).toMatchObject({ serverCommit: null, allowCross: false })
+    expect(parseArgs([])).toMatchObject({ serverCommit: null, allowCross: false, pair: false })
+    expect(parseArgs(['ui2a-base', 'ui2a', '--pair'])).toMatchObject({ pair: true, positional: ['ui2a-base', 'ui2a'] })
     expect(parseArgs(['ui0', 'ui0b', '--allow-cross'])).toMatchObject({ allowCross: true, positional: ['ui0', 'ui0b'] })
     expect(parseArgs(['--server-commit', 'b4283c0', '--base', 'http://127.0.0.1:3202'])).toMatchObject({ serverCommit: 'b4283c0', base: 'http://127.0.0.1:3202' })
   })
@@ -920,5 +921,53 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
     expect(s.flicker?.[0].ok).toBe(true)
     expect(s.showcase).toEqual({ pairs: 2, unequal: ['notify'] })
     expect(checksSummary({})).toEqual({ tab: null, print: null, flicker: null, showcase: null })
+  })
+})
+
+describe('pairPlan·pairRows — 옛 경로 캡처와 새 경로 캡처를 짝짓는다(UI-0·1 판정 Q35, 스펙 §8.5 UI-2a)', () => {
+  it('pair 가 있는 행만, 짝 행 키와 함께', () => {
+    const doc = { routes: [{ key: 'minutes', since: 'b4283c0', until: 'UI-2a' }, { key: 'ws-minutes', since: 'UI-2a', pair: 'minutes' }, { key: 'login', since: 'b4283c0' }] }
+    expect(pairPlan(doc.routes, doc)).toEqual([{ key: 'ws-minutes', pairKey: 'minutes' }])
+    // 짝 행이 목록에 없으면 계획에 올리지 않는다
+    expect(pairPlan([{ key: 'x', pair: 'zz' }], doc)).toEqual([])
+  })
+  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true, problems: [] as string[], finalPath: `/${key}`, ...extra })
+  it('같은 크기·테마의 짝만 잇고, 짝 장이 없으면 unmatched(같음으로 숨기지 않는다)', () => {
+    const A = [row('minutes'), row('minutes', { theme: 'dark' }), row('meetings')]
+    const B = [row('ws-minutes'), row('ws-minutes', { width: 390, height: 844 }), row('ws-home')]
+    const r = pairRows(A, B, [{ key: 'ws-minutes', pairKey: 'minutes' }])
+    expect(r.pairs.map((p) => [p.label, p.a.key, p.b.key])).toEqual([['ws-minutes⇐minutes', 'minutes', 'ws-minutes']])
+    expect(r.unmatched.map((u) => `${u.label}@${u.b.width}`)).toEqual(['ws-minutes⇐minutes@390'])
+  })
+  it('최종 경로가 다른 것이 기대인 쌍은 ignoreFinal 로 건너뛴다 — 문제·idle 은 그대로 본다', () => {
+    const a = row('minutes', { finalPath: '/minutes' }), b = row('ws-minutes', { finalPath: '/w/acme/minutes' })
+    const zero = { ratio: 0, diffPixels: 0, bbox: null }
+    expect(rowVerdict({ a, b, stats: zero })).toMatchObject({ verdict: 'problem' })
+    expect(rowVerdict({ a, b, stats: zero }, { ignoreFinal: true })).toMatchObject({ verdict: 'same' })
+    expect(rowVerdict({ a: { ...a, idle: false }, b, stats: zero }, { ignoreFinal: true })).toMatchObject({ verdict: 'problem', reasons: ['기준:idle=false'] })
+  })
+})
+
+describe('baseFinal — 기준 서버에서 옛 경로가 기대하는 최종 경로(UI-2a)', () => {
+  const v = { wsSlug: 'acme', minuteId: 'm1' }
+  const r = { path: '/minutes/{minuteId}', expectFinal: '/w/{wsSlug}/minutes/{minuteId}', baseFinal: '/minutes/{minuteId}' }
+  it('머리 서버는 expectFinal, 기준 서버(base)는 baseFinal', () => {
+    expect(finalProblem(r, v, new URL('http://x/w/acme/minutes/m1'))).toBeNull()
+    expect(finalProblem(r, v, new URL('http://x/minutes/m1'))).toBe('final:/minutes/m1')
+    expect(finalProblem(r, v, new URL('http://x/minutes/m1'), { base: true })).toBeNull()
+    expect(finalProblem(r, v, new URL('http://x/w/acme/minutes/m1'), { base: true })).toBe('final:/w/acme/minutes/m1')
+    // baseFinal 이 없는 행은 기준 서버에서도 expectFinal
+    expect(finalProblem({ path: '/', expectFinal: '/projects' }, v, new URL('http://x/projects'), { base: true })).toBeNull()
+  })
+  it('routes.json — 옛 행 아홉(root 포함)이 baseFinal 을 갖고 expectFinal 은 새 경로, 형식은 validateRoutes 가 본다', () => {
+    const old = (routesDoc.routes as { key: string; expectFinal?: string; baseFinal?: string }[]).filter((x) => x.baseFinal !== undefined)
+    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'portfolio', 'root', 'usage'])
+    for (const x of old) expect(x.expectFinal, x.key).toMatch(/^\/w\/\{wsSlug\}/)
+    expect(validateRoutes({ version: 1, routes: [{ key: 'a', path: '/a', file: 'a/page.tsx', grade: 'member', since: 'b4283c0', baseFinal: 'x' }] }, ['a/page.tsx'])).toContain('a: baseFinal 경로')
+  })
+  it('워크스페이스 관리자 등급 행 — 같은 페이지 파일의 보충 행', () => {
+    const x = (routesDoc.routes as { key: string; file: string; grade: string; supplement?: boolean }[]).find((r) => r.key === 'ws-admin-accounts-wsadmin')
+    expect(x).toMatchObject({ grade: 'wsAdmin', supplement: true })
+    expect(x?.file).toBe((routesDoc.routes as { key: string; file: string }[]).find((r) => r.key === 'ws-admin-accounts')?.file)
   })
 })

@@ -172,8 +172,8 @@ export function parseSize(s) {
 
 /** 하위 명령 뒤 argv → 옵션. 모르는 인자·값 밖은 throw @param {string[]} argv */
 export function parseArgs(argv) {
-  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, positional: string[] }} */
-  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, positional: [] }
+  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, positional: string[] }} */
+  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, positional: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} 뒤에 값이 없다`); return v }
@@ -184,6 +184,7 @@ export function parseArgs(argv) {
     else if (a === '--since') out.since = next().split(',')
     else if (a === '--base') out.base = next()
     else if (a === '--server-commit') out.serverCommit = next()     // --base 서버를 띄운 트리(D3)
+    else if (a === '--pair') out.pair = true                       // diff — 머리 라벨의 pair 행을 기준 라벨의 짝 행과 비교(옛 경로 ↔ 새 경로)
     else if (a === '--allow-cross') out.allowCross = true           // diff — 판·시드가 다른 라벨의 참고 대조(D3)
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
@@ -210,6 +211,7 @@ export function fillPath(template, values) {
  * routes.json 형식 검사 → 문제 목록(빈 배열이면 통과). pageFiles = src/app 아래 page.tsx 의 상대 경로.
  * 규칙: 모든 page.tsx 는 어떤 행의 file 이다 / 기준선 행(since b4283c0, until 없음)의 file 은 존재한다 / 값은 닫힌 집합 /
  * 선택 필드(판정 Q35) pair = 다른 행의 키, expect·focusTargets = 비지 않은 선택자 배열, focusStart = 선택자.
+ * baseFinal(UI-2a) = 기준 서버(--base, 옛 경로가 아직 페이지인 착수점)에서 그 행이 기대하는 최종 경로 — expectFinal 은 머리(스텁을 거친 새 경로)의 값이다.
  * hide(과제 5) = 비지 않은 선택자 배열 — 폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다(mask 는 자리를 남기고 가린다).
  * 뒤 Phase 가 페이지를 옮기면 옛 행에 until 을, 새 행에 since 를 적는다(보충 행은 supplement: true).
  * @param {any} doc @param {string[]} pageFiles
@@ -231,6 +233,7 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.since === 'b4283c0' && !r?.until && !pageFiles.includes(r?.file)) p.push(`${id}: 없는 페이지 파일 ${r?.file}`)
     for (const s of r?.mask ?? []) if (/[{}<]/.test(s)) p.push(`${id}: 가림 선택자 ${s}`)
     if (r?.init !== undefined && (typeof r.init !== 'object' || Object.values(r.init).some((v) => typeof v !== 'string'))) p.push(`${id}: init 은 문자열 값 객체`)
+    if (r?.baseFinal !== undefined && (typeof r.baseFinal !== 'string' || !r.baseFinal.startsWith('/') || /[<]/.test(r.baseFinal))) p.push(`${id}: baseFinal 경로`)
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
@@ -534,17 +537,42 @@ export function diffRows(A, B) {
 /**
  * 한 쌍의 판정(순수, D2) — 어느 쪽이든 problems·idle 거짓·최종 경로(모양) 다름이면 'problem'(사유와 함께 — 같은 이유로 둘 다 엉뚱한 화면이면
  * 픽셀이 같아도 같음이 아니다), 아니면 픽셀 판정(diffVerdict). 알려진 잡음은 near·diff 에 표시만 한다.
- * @param {{ a: any, b: any, stats: { ratio: number, diffPixels: number, bbox: any } | null }} p
+ * ignoreFinal(UI-2a) = 최종 경로 비교를 건너뛴다 — 옛 경로 ↔ 새 경로 짝 비교, 또는 기준 서버(옛 경로가 페이지)와 머리(스텁을 거친 새 경로)처럼 다름이 기대인 쌍.
+ * 각자의 기대 최종 경로는 찍을 때 finalProblem(expectFinal·baseFinal)이 이미 판정해 problems 에 남는다.
+ * @param {{ a: any, b: any, stats: { ratio: number, diffPixels: number, bbox: any } | null }} p @param {{ ignoreFinal?: boolean }} [opt]
  */
-export function rowVerdict({ a, b, stats }) {
+export function rowVerdict({ a, b, stats }, { ignoreFinal = false } = {}) {
   const reasons = [...(a.problems ?? []).map((x) => `기준:${x}`), ...(b.problems ?? []).map((x) => `대상:${x}`),
     ...(a.idle === false ? ['기준:idle=false'] : []), ...(b.idle === false ? ['대상:idle=false'] : []),
-    ...(finalShape(a.finalPath) !== finalShape(b.finalPath) ? [`finalPath 다름: ${a.finalPath} ≠ ${b.finalPath}`] : [])]
+    ...(!ignoreFinal && finalShape(a.finalPath) !== finalShape(b.finalPath) ? [`finalPath 다름: ${a.finalPath} ≠ ${b.finalPath}`] : [])]
   const ratio = stats?.ratio ?? null
   const verdict = reasons.length ? 'problem' : diffVerdict({ ratio, fontA: a.font, fontB: b.font })
   const noise = KNOWN_NOISE.find((k) => k.key === b.key && k.width === b.width && k.height === b.height)
   return { ...shotAt(b), file: b.file, ratio, diffPixels: stats?.diffPixels ?? null, bbox: stats?.bbox ?? null, verdict, reasons,
     ...(noise && (verdict === 'near' || verdict === 'diff') ? { known: noise.note } : {}) }
+}
+
+/** 짝 비교 계획(순수) — pair 를 가진 행과 그 짝 행 키. diff --pair 가 머리 라벨의 행 장을 기준 라벨의 짝 행 장과 비교한다(옛 경로 ↔ 새 경로)
+ *  @param {{ key: string, pair?: string }[]} rows @param {{ routes: { key: string }[] }} doc */
+export function pairPlan(rows, doc) {
+  const keys = new Set(doc.routes.map((r) => r.key))
+  return rows.flatMap((r) => (r.pair && keys.has(r.pair) ? [{ key: r.key, pairKey: r.pair }] : []))
+}
+
+/** diff --pair 의 행 매칭(순수) — 머리 라벨의 pair 행마다 기준 라벨의 짝 행(같은 크기·테마)을 찾는다. 짝 장이 없으면 unmatched(볼 목록에 new 로 오른다 —
+ *  짝이 빠진 채 같음처럼 숨기지 않는다). pair 가 없는 머리 행은 이 비교의 대상이 아니다
+ *  @param {any[]} A @param {any[]} B @param {{ key: string, pairKey: string }[]} plan */
+export function pairRows(A, B, plan) {
+  const pairs = []
+  const unmatched = []
+  for (const { key, pairKey } of plan) {
+    for (const b of B.filter((x) => x.key === key)) {
+      const a = A.find((x) => x.key === pairKey && x.width === b.width && x.height === b.height && x.theme === b.theme)
+      if (a) pairs.push({ label: `${key}⇐${pairKey}`, a, b })
+      else unmatched.push({ label: `${key}⇐${pairKey}`, b })
+    }
+  }
+  return { pairs, unmatched }
 }
 
 const LOOK_ORDER = ['problem', 'diff', 'missing', 'new', 'near']
@@ -562,9 +590,11 @@ export function summarizeDiff(rows) {
 
 /** 최종 경로 판정(순수, D2) — expectFinal 이 있으면 경로+검색어가 그 값, 없으면 채운 경로의 pathname 이 기대값. 다르면 'final:<실제>'.
  *  권한 거부 리디렉션(agents → /projects 등)·로그인 튕김(세션 만료)이 문제로 남지 않던 것을 잡는다 @param {URL} actual */
-export function finalProblem(r, values, actual) {
-  const got = r.expectFinal ? actual.pathname + actual.search : actual.pathname
-  const want = r.expectFinal ? fillPath(r.expectFinal, values) : new URL(fillPath(r.path, values), 'http://x').pathname
+export function finalProblem(r, values, actual, { base = false } = {}) {
+  // base = 기준 서버(--base) 실행 — 그 서버는 옛 경로가 아직 페이지라 baseFinal 이 있으면 그 값이 기대(없으면 expectFinal 과 같다)
+  const expectFinal = base && r.baseFinal ? r.baseFinal : r.expectFinal
+  const got = expectFinal ? actual.pathname + actual.search : actual.pathname
+  const want = expectFinal ? fillPath(expectFinal, values) : new URL(fillPath(r.path, values), 'http://x').pathname
   return got === want ? null : `final:${actual.pathname + actual.search}`
 }
 
@@ -1036,7 +1066,7 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
             const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
             for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
             const u = new URL(page.url())
-            const final = finalProblem(r, values, u)   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
+            const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
             const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
             const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
             const v = await visit(page, { r, width, height, theme, doc, outDir })
@@ -1085,20 +1115,34 @@ async function cmdShoot(opts) {
 
 async function cmdDiff(opts) {
   const [baseLabel, headLabel] = opts.positional
-  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label> [--allow-cross]')
+  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label> [--allow-cross] [--pair]')
   const { outDir } = laneEnv()
   const A = JSON.parse(readFileSync(join(outDir, baseLabel, 'meta.json'), 'utf8'))
   const B = JSON.parse(readFileSync(join(outDir, headLabel, 'meta.json'), 'utf8'))
   const cmp = compareMeta(A, B, { allowCross: opts.allowCross })
   if (cmp.problems.length) throw new Error(`비교할 수 없다 — ${cmp.problems.join('; ')}(판·시드가 다른 참고 대조는 같은 KST 날짜에서 --allow-cross)`)
-  const plan = diffRows(A.rows, B.rows)
+  // 비교 쌍 — 기본은 같은 키끼리, --pair 는 머리의 pair 행 ↔ 기준의 짝 행(옛 경로 캡처 ↔ 새 경로 캡처). 최종 경로가 다른 것이 기대인 쌍은 그 비교를 건너뛴다
+  const routesDoc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
+  const baseFinalKeys = new Set(routesDoc.routes.filter((r) => r.baseFinal !== undefined).map((r) => r.key))
+  let jobs, added, missing
+  if (opts.pair) {
+    const pp = pairRows(A.rows, B.rows, pairPlan(routesDoc.routes.filter((r) => B.rows.some((x) => x.key === r.key)), routesDoc))
+    jobs = pp.pairs.map((p) => ({ a: p.a, b: p.b, label: p.label, ignoreFinal: true }))
+    added = pp.unmatched.map((u) => ({ ...u.b, key: u.label, reasons: ['기준에 짝 장 없음'] }))
+    missing = []
+  } else {
+    const plan = diffRows(A.rows, B.rows)
+    jobs = plan.pairs.map(({ a, b }) => ({ a, b, label: b.key, ignoreFinal: baseFinalKeys.has(b.key) }))
+    added = plan.added
+    missing = plan.missing
+  }
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const out = []
   try {
     const page = await browser.newPage()
     const fnSrc = pixelDiffStats.toString()
-    for (const { a, b } of plan.pairs) {
+    for (const { a, b, label, ignoreFinal } of jobs) {
       const stats = await page.evaluate(async ({ pa, pb, src }) => {
         const load = async (b64) => {
           const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
@@ -1109,23 +1153,24 @@ async function cmdDiff(opts) {
         }
         return new Function(`return (${src})`)()(await load(pa), await load(pb))
       }, { pa: readFileSync(join(outDir, baseLabel, a.file)).toString('base64'), pb: readFileSync(join(outDir, headLabel, b.file)).toString('base64'), src: fnSrc })
-      out.push(rowVerdict({ a, b, stats }))
+      out.push({ ...rowVerdict({ a, b, stats }, { ignoreFinal }), key: label })
     }
   } finally { await browser.close() }
-  for (const b of plan.added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: [] })
-  for (const a of plan.missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
+  for (const b of added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: b.reasons ?? [] })
+  for (const a of missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
   const sorted = [...out].sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1))
   const sum = summarizeDiff(sorted)
   const box = (r) => (r.bbox ? `${r.bbox.x},${r.bbox.y} ${r.bbox.w}×${r.bbox.h}` : '—')
   const head = (m) => `${m.label} — 서버 ${m.commit}${m.commitSource ? `(${m.commitSource})` : ''} · 빌드 ${m.buildId ?? '—'} · 스크립트 ${m.scriptCommit} · 시드 ${m.seedDate}`
-  const md = [`# diff ${baseLabel} → ${headLabel}`, '', `- 기준: ${head(A)}`, `- 대상: ${head(B)}`,
+  const suffix = opts.pair ? '-pair' : ''
+  const md = [`# diff ${baseLabel} → ${headLabel}${opts.pair ? ' (--pair: 머리의 pair 행 ⇐ 기준의 짝 행)' : ''}`, '', `- 기준: ${head(A)}`, `- 대상: ${head(B)}`,
     `- 판정 수: same ${sum.same} · near ${sum.near} · diff ${sum.diff} · problem ${sum.problem} · missing ${sum.missing} · new ${sum.new} · skip ${sum.skipped}(판정 Q33 문턱 0.2%, near = 0 초과 문턱 이하)`,
     ...(cmp.warnings.length ? ['', '## 경고', ...cmp.warnings.map((w) => `- ${w}`)] : []),
     '', '## 볼 목록', ...(sum.look.length ? sum.look.map((l) => `- ${l}`) : ['- (없음 — 전부 same 또는 skip)']),
     '', '## 전체', '', '| 라우트 | 크기 | 테마 | 차이율 | 다른 픽셀 | 차이 영역(x,y w×h) | 판정 |', '|---|---|---|---|---|---|---|',
     ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pctOf(r.ratio)} | ${r.diffPixels ?? '—'} | ${box(r)} | ${r.verdict}${r.known ? ' (알려진 잡음)' : ''} |`)].join('\n')
-  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.json`), JSON.stringify(sorted, null, 2))
-  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.md`), `${md}\n`)
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.json`), JSON.stringify(sorted, null, 2))
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.md`), `${md}\n`)
   console.log(JSON.stringify({ ok: true, compared: sum.compared, same: sum.same, near: sum.near, diff: sum.diff, problem: sum.problem, missing: sum.missing, new: sum.new,
     skipped: sum.skipped, warnings: cmp.warnings, look: sum.look.slice(0, 20) }))
 }
