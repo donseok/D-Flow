@@ -24,6 +24,8 @@ import { PresenceStrip } from '@/components/app/PresenceStrip'
 import { useSheetGrid } from './useSheetGrid'
 import { WeeklyLintPanel } from './WeeklyLintPanel'
 import { WeeklyAiRewriteModal, type WeeklyAiRewriteItem } from './WeeklyAiRewriteModal'
+import { CarryMappingModal, mergeCarrySources } from './CarryMappingModal'
+import type { CarryMapping, CarryOverflow, CarryPending } from '@/lib/domain/weeklyCarry'
 import { usePresence } from './usePresence'
 import { SheetCell, type BatchChip } from './SheetCell'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
@@ -93,6 +95,10 @@ export function WeeklySheetView({
   // 점검 묶음 — 키 = 영역 id, 라벨 = 행 라벨(D22). 영역이 바뀔 때만 새로 만든다(점검 패널의 재계산 키).
   const lintGroupOf = useMemo(() => areaGroupOf(areas), [areas])
   const [isPending, startTransition] = useTransition()
+  // 이월 매핑 라운드(스펙 §5.1) — 주차에 묶는다: 창이 열린 채 다른 주차로 옮기면(뒤로 가기 포함) 그 창을 그리지 않는다.
+  const [carry, setCarry] = useState<{
+    weekStart: string; round: number; sources: CarryPending[]; overflow: CarryOverflow[]; mapping: CarryMapping
+  } | null>(null)
   const reportId = report?.id ?? null
   useBotPageContext({
     domain: 'weekly',
@@ -270,11 +276,29 @@ export function WeeklySheetView({
     timersRef.current.set(k, setTimeout(() => commit(rowId, key), DEBOUNCE_MS))
   }
 
-  const runAction = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+  // 회차 생성(스펙 §4.1.3·§5.1, D43). 이월이 비활성 영역의 대기 내용을 만나면 CARRY_PENDING — 매핑 창을 열고 같은 액션을 매핑과
+  // 다시 부른다. 대기 영역은 라운드마다 모은다(mergeCarrySources) — 넘침만 돌아온 응답(대기 목록이 빔)에도 고칠 줄이 남아야 한다.
+  // 다시 대기로 온 영역(그새 비활성 — Q37)은 고른 값을 지워 다시 고르게 하고, 영역 목록을 새로 받는다(router.refresh — 창의 선택지).
+  // 그 밖의 실패는 결과의 고정 문구를 토스트로만 보인다(D45 — 원문은 서버 로그).
+  const startReport = (carryOver: boolean, mapping?: CarryMapping) =>
     startTransition(async () => {
-      const res = await fn()
-      if (!res.ok) toast({ title: '실패', description: res.error, variant: 'error' })
-      router.refresh()
+      const res = await createWeeklyReport(projectId, weekStart, carryOver, mapping)
+      if (res.ok) { setCarry(null); router.refresh(); return }
+      if ('pending' in res) {
+        const again = new Set(res.pending.map(p => p.areaId))
+        const kept: CarryMapping = Object.fromEntries(Object.entries(mapping ?? {}).filter(([areaId]) => !again.has(areaId)))
+        setCarry(c => {
+          const prev = c?.weekStart === weekStart ? c : null
+          return {
+            weekStart, round: (prev?.round ?? 0) + 1,
+            sources: mergeCarrySources(prev?.sources ?? [], res.pending),
+            overflow: res.overflow, mapping: kept,
+          }
+        })
+        router.refresh()
+        return
+      }
+      toast({ title: '시트를 만들지 못했습니다', description: res.error, variant: 'error' })
     })
 
   // 재시도 직전 edits 재구성 — 여전히 dirty이고 행이 존재하는 키만 유지, content는 rowsRef 현재값으로 재스냅샷.
@@ -597,34 +621,77 @@ export function WeeklySheetView({
     if (batchShowTimerRef.current) clearTimeout(batchShowTimerRef.current)
   }, [])
 
-  // ── 문서 없음: EmptyState + 시작 버튼 2종(스펙 §3 — 자동 생성 금지) ──
+  // ── 문서 없음: EmptyState + 시작 버튼 2종(스펙 §3 — 자동 생성 금지). 활성 영역이 없으면 시작할 수 없다(W1 — 액션도 CONFIG_REQUIRED) ──
+  // 설정의 팀·업무영역 절(#project-team)은 관리자에게만 보인다 — 생성 자격(canCreateRound = isProjectAdmin)과 같은 술어라 그때만 링크를 둔다.
+  const areaSettingsHref = `/p/${projectId}/settings#project-team`
   if (!report) {
     const activeAreaNames = orderAreas(areas.filter(a => a.active)).map(a => a.name)
     return (
       <div className="space-y-4">
         <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
-        {/* 회차 생성은 시트의 구조를 만드는 일이라 관리자 몫(createWeeklyReport=requireProjectAdmin).
-            권한이 없으면 버튼 대신 '누가 만들어야 하는지'를 알린다 — 눌러서 거부당해 알게 하지 않는다. */}
+        {activeAreaNames.length === 0 ? (
+          <EmptyState
+            icon={FileSpreadsheet}
+            title="주간보고 영역을 먼저 설정하세요"
+            description={canCreateRound
+              ? '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 설정의 팀·업무영역에서 주간보고 영역을 추가하세요.'
+              : '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 관리자에게 주간보고 영역 설정을 요청하세요.'}
+            action={canCreateRound ? <Link className="btn btn-primary" href={areaSettingsHref}>업무영역 설정으로</Link> : undefined}
+          />
+        ) : (
+          // 회차 생성은 시트의 구조를 만드는 일이라 관리자 몫(createWeeklyReport=requireProjectAdmin).
+          // 권한이 없으면 버튼 대신 '누가 만들어야 하는지'를 알린다 — 눌러서 거부당해 알게 하지 않는다.
+          <EmptyState
+            icon={FileSpreadsheet}
+            title={`${weekLabel} 시트가 없습니다`}
+            description={canCreateRound
+              ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
+              : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
+            action={canCreateRound ? (
+              <div className="flex gap-2">
+                {hasCarrySource && (
+                  <button className="btn btn-primary" disabled={isPending} onClick={() => startReport(true)}>
+                    이전 주차에서 이월해 시작
+                  </button>
+                )}
+                <button className="btn btn-ghost" disabled={isPending} onClick={() => startReport(false)}>
+                  기본 시트로 시작
+                </button>
+              </div>
+            ) : undefined}
+          />
+        )}
+        {carry && carry.weekStart === weekStart && (
+          <CarryMappingModal
+            key={carry.round}
+            open
+            pending={carry.sources}
+            overflow={carry.overflow}
+            areas={areas}
+            mapping={carry.mapping}
+            busy={isPending}
+            onSubmit={mapping => startReport(true, mapping)}
+            onClose={() => setCarry(null)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // ── 문서는 있는데 보일 행이 0개([RF4] — 옛 보상 삭제가 실패한 잔재, 또는 영역이 모두 비활성이고 행이 다 비었다).
+  //    RPC 는 같은 주 문서가 있으면 아무것도 바꾸지 않으므로(D33) 다시 만들 길은 없다 — 활성 영역을 저장하면 RPC 가 이번 주 이후
+  //    문서에 행을 넣고(§3.2) 실시간으로 이 화면에 들어온다(mergeServerRow — 그때 표가 나타난다).
+  if (rows.length === 0) {
+    return (
+      <div className="space-y-4">
+        <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         <EmptyState
           icon={FileSpreadsheet}
-          title={`${weekLabel} 시트가 없습니다`}
+          title={`${weekLabel} 시트에 업무영역 행이 없습니다`}
           description={canCreateRound
-            ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
-            : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
-          action={canCreateRound ? (
-            <div className="flex gap-2">
-              {hasCarrySource && (
-                <button className="btn btn-primary" disabled={isPending}
-                  onClick={() => runAction(() => createWeeklyReport(projectId, weekStart, true))}>
-                  이전 주차에서 이월해 시작
-                </button>
-              )}
-              <button className="btn btn-ghost" disabled={isPending}
-                onClick={() => runAction(() => createWeeklyReport(projectId, weekStart, false))}>
-                기본 시트로 시작
-              </button>
-            </div>
-          ) : undefined}
+            ? '프로젝트 설정의 팀·업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'
+            : '프로젝트 관리자가 업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'}
+          action={canCreateRound ? <Link className="btn btn-primary" href={areaSettingsHref}>업무영역 설정으로</Link> : undefined}
         />
       </div>
     )
