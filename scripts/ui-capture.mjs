@@ -70,6 +70,14 @@ export function maskStyle(selectors) {
   return list.length ? `${list.join(', ')} { visibility: hidden !important; }` : ''
 }
 
+/** 숨길 선택자 → display:none 한 규칙. 폭이 실행마다 바뀌어 이웃을 미는 표시(오른쪽 정렬 줄 끝의 갱신 시각처럼)는 visibility 가림으로는
+ *  밀림이 남는다 — 레이아웃에서 뺀다(제품 코드 무수정). 선택자 규칙은 maskStyle 과 같다 */
+export function hideStyle(selectors) {
+  const list = [...new Set(selectors)].filter(Boolean)
+  for (const s of list) if (/[{}<]/.test(s)) throw new Error(`숨김 선택자에 { } < 금지: ${s}`)
+  return list.length ? `${list.join(', ')} { display: none !important; }` : ''
+}
+
 /** Pretendard 판정(판정 Q3) — 등록 ≥1 ∧ 로드 ≥1 ∧ 로딩 0 이면 'ok', 아니면 'fallback'(그 장은 비교하지 않는다) */
 export function fontVerdict({ registered, loaded, loading }) {
   return registered >= 1 && loaded >= 1 && loading === 0 ? 'ok' : 'fallback'
@@ -125,6 +133,7 @@ export function fillPath(template, values) {
  * routes.json 형식 검사 → 문제 목록(빈 배열이면 통과). pageFiles = src/app 아래 page.tsx 의 상대 경로.
  * 규칙: 모든 page.tsx 는 어떤 행의 file 이다 / 기준선 행(since b4283c0, until 없음)의 file 은 존재한다 / 값은 닫힌 집합 /
  * 선택 필드(판정 Q35) pair = 다른 행의 키, expect·focusTargets = 비지 않은 선택자 배열, focusStart = 선택자.
+ * hide(과제 5) = 비지 않은 선택자 배열 — 폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다(mask 는 자리를 남기고 가린다).
  * 뒤 Phase 가 페이지를 옮기면 옛 행에 until 을, 새 행에 since 를 적는다(보충 행은 supplement: true).
  * @param {any} doc @param {string[]} pageFiles
  */
@@ -148,7 +157,7 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
-    for (const f of ['expect', 'focusTargets']) {
+    for (const f of ['expect', 'focusTargets', 'hide']) {
       if (r?.[f] !== undefined && (!Array.isArray(r[f]) || r[f].length === 0 || r[f].some((s) => typeof s !== 'string' || /[{}<]/.test(s)))) p.push(`${id}: ${f} 선택자`)
     }
     if (r?.focusStart !== undefined && (typeof r.focusStart !== 'string' || /[{}<]/.test(r.focusStart))) p.push(`${id}: focusStart 선택자`)
@@ -645,7 +654,7 @@ async function cmdShoot(opts) {
     const dir = join(outDir, opts.label)
     mkdirSync(dir, { recursive: true })
     const file = shotFileName({ key: r.key, width, height, theme })
-    const style = maskStyle([...(doc.commonMask ?? []), ...(r.mask ?? [])])
+    const style = [maskStyle([...(doc.commonMask ?? []), ...(r.mask ?? [])]), hideStyle(r.hide ?? [])].filter(Boolean).join('\n')
     const buf = await page.screenshot({ path: join(dir, file), ...(style ? { style } : {}), animations: 'disabled', caret: 'hide' })
     return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1 }
   })

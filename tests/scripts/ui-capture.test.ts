@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import {
-  DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, kstToday, laneTarget, maskStyle,
+  DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
@@ -70,6 +70,11 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(maskStyle([])).toBe('')
   })
   it.each(['a{b', 'a}', '</style>'])('CSS 주입 모양 %s 은 거부', (s) => { expect(() => maskStyle([s])).toThrow(/금지/) })
+  it('숨김 선택자 → display:none 한 규칙(폭이 실행마다 바뀌어 이웃을 미는 표시), 중복 제거, 빈 목록은 빈 문자열, 주입 모양 거부', () => {
+    expect(hideStyle(['[data-hub-stamp]', '.x', '.x'])).toBe('[data-hub-stamp], .x { display: none !important; }')
+    expect(hideStyle([])).toBe('')
+    expect(() => hideStyle(['a{b'])).toThrow(/금지/)
+  })
   it('글꼴 — 등록·로드 ≥1 ∧ 로딩 0 만 ok(판정 Q3)', () => {
     expect(fontVerdict({ registered: 92, loaded: 2, loading: 0 })).toBe('ok')
     expect(fontVerdict({ registered: 0, loaded: 0, loading: 0 })).toBe('fallback')
@@ -135,6 +140,24 @@ describe('ui-capture.routes.json', () => {
     expect(lane).toMatchObject({ path: '/p/{pid}/agents/office', grade: 'member', since: 'b4283c0', supplement: true, click: '[data-view="lane"]' })
     expect(lane?.expect).toEqual(['[data-state="BLOCKED"]'])
     expect(lane?.init).toMatchObject({ 'dflow.office.chatter': '0' })
+  })
+  it('validateRoutes — hide 는 비지 않은 선택자 배열이고 주입 모양을 거부한다', () => {
+    const doc = { version: 1, commonMask: [], routes: [
+      { key: 'a', path: '/a', file: 'a/page.tsx', grade: 'member', since: 'b4283c0', hide: ['x{y'] },
+      { key: 'b', path: '/b', grade: 'member', since: 'UI-1', hide: [] },
+      { key: 'c', path: '/c', grade: 'member', since: 'UI-1', hide: '[data-hub-stamp]' },
+      { key: 'd', path: '/d', grade: 'member', since: 'UI-1', hide: ['[data-hub-stamp]'] },
+    ] }
+    expect(validateRoutes(doc, ['a/page.tsx'])).toEqual(['a: hide 선택자', 'b: hide 선택자', 'c: hide 선택자'])
+  })
+  it('좌석 화면의 시각 표시 — 갱신 시각은 레이아웃에서 빼고(hide) 상대 시각·신호 표식은 가린다(mask) — 과제 5 자기 차이', () => {
+    type Row = { key: string; mask?: string[]; hide?: string[] }
+    const byKey = (k: string) => (routesDoc.routes as Row[]).find((r) => r.key === k)
+    for (const k of ['agents', 'p-office', 'p-office-lane']) expect(byKey(k)?.hide).toEqual(['[aria-label="표시 범위"] + div'])
+    expect(byKey('p-agents')?.hide).toEqual(['[data-hub-stamp]'])
+    for (const k of ['agents', 'p-office']) {
+      expect(byKey(k)?.mask).toEqual(['[data-roster-desk] .tabular-nums', '[data-roster-profile] > section:last-of-type > h3', '[data-roster-profile] > section:last-of-type i'])
+    }
   })
 })
 
