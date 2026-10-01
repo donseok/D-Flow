@@ -13,6 +13,7 @@ import { isUuidLike } from '@/lib/domain/validate'
 import { canonicalEmail } from '@/lib/domain/email'
 import { rosterWriteError, ROSTER_WRITE_FAILED, ROSTER_HAS_RECORDS } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT, mapRosterRows, type RosterMember } from '@/lib/data/memberSelect'
+import { projectTeams } from '@/lib/teams/source'
 import type { AccessRole, RosterInput } from '@/lib/domain/roster'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -28,6 +29,7 @@ const ERR_ACCESS = '알 수 없는 권한입니다.'
 const ERR_BAD_REQUEST = '잘못된 요청입니다.'
 const ERR_ROSTER_LOOKUP = '명단 정보를 확인할 수 없어 중단했습니다.'
 const ERR_ROSTER_LIST = '명단을 불러오지 못했습니다.'
+const ERR_TEAM = '이 프로젝트에서 고를 수 있는 팀이 아닙니다.'
 /** 행이 있는데(resolveProjectId 가 찾았다) 삭제가 0행 = RLS 가 막았다 — 관리자 행은 워크스페이스 관리자만(admin_write_member_rows). */
 const ERR_REMOVE_ADMIN_ROW = '관리자 권한이 있는 사람은 워크스페이스 관리자만 명단에서 삭제할 수 있습니다.'
 
@@ -79,6 +81,36 @@ async function memberHasRecords(admin: AdminClient, memberId: string): Promise<{
   return { ok: true, has: counts.some(c => (c as number) > 0) }
 }
 
+/**
+ * 고를 수 있는 팀만(A2-3 리뷰 보안 P3 — X1). 이 프로젝트의 활성 팀(초대 액션과 같은 원천 projectTeams — 전용 팀이 있으면 그것만)이고,
+ * 편집이면 그 사람이 이 프로젝트에서 이미 가진 팀(비활성이 된 팀 등 — 편집 화면 RosterEditRow 가 기존 소속을 그대로 다시 보낸다)도 된다.
+ * 그래서 전용 팀이 있는 프로젝트에 공용 팀 참조(정규화 키가 같은 'qa' 포함)를 새로 붙이지 못한다 — DB(M1)는 정확히 같은 code 만 본다.
+ * 기존 소속은 활성 목록 밖의 id 가 있을 때만 읽는다. 조회 실패는 쓰기 전 선행 조회 실패라 중단한다(3원칙 ②, 원문은 로그로만).
+ */
+async function checkRosterTeams(
+  admin: AdminClient, projectId: string, personId: string | null, teamIds: readonly string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (teamIds.length === 0) return { ok: true }
+  const allowed = new Set<string>()
+  try {
+    for (const t of await projectTeams(projectId)) if (t.active) allowed.add(t.id)
+  } catch (e) {
+    console.error('[roster] 팀 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: ERR_ROSTER_LOOKUP }
+  }
+  if (teamIds.every(id => allowed.has(id))) return { ok: true }
+  if (personId) {
+    const { data, error } = await admin.from('project_members')
+      .select('project_member_teams(team_id)').eq('project_id', projectId).eq('person_id', personId).maybeSingle()
+    if (error) {
+      console.error('[roster] 기존 팀 소속 조회 실패:', error.message)
+      return { ok: false, error: ERR_ROSTER_LOOKUP }
+    }
+    for (const r of ((data as { project_member_teams?: { team_id: string }[] } | null)?.project_member_teams ?? [])) allowed.add(r.team_id)
+  }
+  return teamIds.every(id => allowed.has(id)) ? { ok: true } : { ok: false, error: ERR_TEAM }
+}
+
 /** RPC 한 번. 성공하면 명단 화면을 다시 그린다. */
 async function callUpsert(
   admin: AdminClient, actorId: string, projectId: string,
@@ -120,7 +152,10 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
     access_role: input.accessRole, role_label: trimOrNull(input.roleLabel), title: trimOrNull(input.title),
   }
   if (input.active !== undefined) member.active = input.active
-  return callUpsert(createAdminClient(), g.actor.userId, projectId, person, member, input.teamIds)
+  const admin = createAdminClient()
+  const teams = await checkRosterTeams(admin, projectId, personId, input.teamIds)
+  if (!teams.ok) return teams
+  return callUpsert(admin, g.actor.userId, projectId, person, member, input.teamIds)
 }
 
 /**

@@ -14,6 +14,12 @@ vi.mock('@/lib/authz', () => guards)
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => admin }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: async () => server }))
 vi.mock('next/cache', () => ({ revalidatePath }))
+// 고를 수 있는 팀의 원천(A2-3 수정 X1 — 초대와 같은 projectTeams). 기본은 입력의 두 팀(T1·T2)이 이 프로젝트의 활성 전용 팀이다
+vi.mock('@/lib/teams/source', async () => {
+  const { teamsSourceMock, teamRows } = await import('../helpers/teams-source-mock')
+  const [a, b] = teamRows(['QA', 'OPS'], { projectId: 'p1' })
+  return teamsSourceMock([{ ...a!, id: '00000000-0000-4000-8000-0000000000a1' }, { ...b!, id: '00000000-0000-4000-8000-0000000000a2' }])
+})
 
 import {
   upsertRosterMember, removeRosterMember, listRoster, type RosterInput,
@@ -21,6 +27,8 @@ import {
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
 import { ROSTER_SELECT } from '@/lib/data/memberSelect'
 import { makeAdminActor } from '../fixtures/actor'
+import { projectTeams } from '@/lib/teams/source'
+import { teamRows } from '../helpers/teams-source-mock'
 
 const P1 = 'p1'
 // 입력의 인물·팀 id 는 uuid 모양이어야 한다(RPC 앞에서 검사).
@@ -167,6 +175,60 @@ describe('upsertRosterMember — RPC upsert_project_member_cmd 한 번', () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
     expect(await upsertRosterMember(P1, { ...INPUT, ...patch })).toEqual({ ok: false, error: '잘못된 요청입니다.' })
     expect(admin.rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('upsertRosterMember — 팀은 이 프로젝트에서 고를 수 있는 것만(A2-3 리뷰 보안 P3 — X1)', () => {
+  // 전용 팀 'QA' 가 있는 프로젝트(projectTeams = 전용 팀뿐)에 정규화 키가 같은 공용 'qa' 를 서버 액션으로 직접 붙이면 '같은 낱말의 두 팀'이
+  // 된다 — 초대 액션처럼 projectTeams 의 활성 팀으로 검증한다. 편집은 그 사람이 이미 가진 팀(비활성 등)을 그대로 다시 보낼 수 있다(화면과 같다)
+  const C_QA = '00000000-0000-0000-7e57-0000000019a1'   // 공용 'qa'(GC — 19a0~19af 는 이 describe)
+  const T_OLD = '00000000-0000-0000-7e57-0000000019a2'  // 이 프로젝트의 비활성 전용 팀
+  const own = (over: Partial<Parameters<typeof teamRows>[1]> = {}) => teamRows(['QA'], { projectId: P1, id: T1, ...over })
+  beforeEach(() => {
+    vi.mocked(projectTeams).mockClear()
+    guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
+  })
+  it('[X1] 전용 팀 QA 가 있는 프로젝트에 공용 qa 를 붙이면 RPC 전에 거부한다', async () => {
+    vi.mocked(projectTeams).mockResolvedValueOnce([...own(), ...teamRows(['OLD'], { projectId: P1, id: T_OLD, active: false })])
+    expect(await upsertRosterMember(P1, { ...INPUT, teamIds: [T1, C_QA] })).toEqual({ ok: false, error: '이 프로젝트에서 고를 수 있는 팀이 아닙니다.' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+    expect(projectTeams).toHaveBeenCalledWith(P1)
+  })
+  it('[X1] 새 인물에게 비활성 팀은 고를 수 없다 — 초대와 같은 활성 팀 규칙', async () => {
+    vi.mocked(projectTeams).mockResolvedValueOnce([...own(), ...teamRows(['OLD'], { projectId: P1, id: T_OLD, active: false })])
+    expect(await upsertRosterMember(P1, { ...INPUT, teamIds: [T_OLD] })).toMatchObject({ ok: false })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+  it('[X1] 편집은 그 사람이 이 프로젝트에서 이미 가진 팀(비활성)을 그대로 다시 보낼 수 있다 — 그때만 기존 소속을 읽는다', async () => {
+    vi.mocked(projectTeams).mockResolvedValueOnce([...own(), ...teamRows(['OLD'], { projectId: P1, id: T_OLD, active: false })])
+    const q = chain({ data: { project_member_teams: [{ team_id: T_OLD }] }, error: null })
+    admin.from.mockImplementation((t: string) => { if (t === 'project_members') return q; throw new Error(t) })
+    expect(await upsertRosterMember(P1, { ...INPUT, personId: PE, teamIds: [T1, T_OLD] })).toEqual({ ok: true, memberId: 'm-1' })
+    expect(q.eq).toHaveBeenCalledWith('project_id', P1)
+    expect(q.eq).toHaveBeenCalledWith('person_id', PE)
+    expect(admin.rpc.mock.calls[0]![1].p_team_ids).toEqual([T1, T_OLD])
+  })
+  it('[X1] 편집이어도 그 사람이 갖지 않은 공용 팀은 거부한다', async () => {
+    const q = chain({ data: { project_member_teams: [] }, error: null })
+    admin.from.mockImplementation((t: string) => { if (t === 'project_members') return q; throw new Error(t) })
+    vi.mocked(projectTeams).mockResolvedValueOnce(own())
+    expect(await upsertRosterMember(P1, { ...INPUT, personId: PE, teamIds: [C_QA] })).toMatchObject({ ok: false })
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+  it('[X1] 팀 원천·기존 소속 조회 실패는 쓰기 전 선행 조회 실패 — 중단한다(3원칙 ②)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(projectTeams).mockRejectedValueOnce(new Error('down'))
+    expect(await upsertRosterMember(P1, INPUT)).toEqual({ ok: false, error: '명단 정보를 확인할 수 없어 중단했습니다.' })
+    vi.mocked(projectTeams).mockResolvedValueOnce(own())
+    admin.from.mockImplementation(() => chain({ data: null, error: { message: 'boom' } }))
+    expect(await upsertRosterMember(P1, { ...INPUT, personId: PE, teamIds: [C_QA] })).toEqual({ ok: false, error: '명단 정보를 확인할 수 없어 중단했습니다.' })
+    expect(admin.rpc).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+  it('[X1] 팀이 없으면 팀 원천을 읽지 않는다(외부 인력·팀 없는 명단)', async () => {
+    await upsertRosterMember(P1, { ...INPUT, teamIds: [] })
+    expect(projectTeams).not.toHaveBeenCalled()
   })
 })
 
