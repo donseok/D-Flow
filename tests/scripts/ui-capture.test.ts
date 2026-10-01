@@ -5,7 +5,7 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
-import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
+import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 
@@ -125,6 +125,38 @@ describe('ui-capture.routes.json', () => {
   })
   it('설정 표 이름을 담지 않는다(settings-writes 가 scripts 의 json 을 단어로 센다 — 판정 Q7)', () => {
     expect(JSON.stringify(routesDoc)).not.toMatch(/project_settings|workspace_settings|authz_events/)
+  })
+  it('좌석 확인 — 기본 보기(에이전트)는 좌석 버튼, 막힘 좌석 표지는 레인 보기 보충 행이 본다(판정 Q34 전제 정정)', () => {
+    type Row = { key: string; path: string; grade: string; since: string; supplement?: boolean; click?: string; expect?: string[]; init?: Record<string, string> }
+    const byKey = (k: string) => (routesDoc.routes as Row[]).find((r) => r.key === k)
+    expect(byKey('agents')?.expect).toEqual(['[data-roster-desk]'])
+    expect(byKey('p-office')?.expect).toEqual(['[data-roster-desk]'])
+    const lane = byKey('p-office-lane')
+    expect(lane).toMatchObject({ path: '/p/{pid}/agents/office', grade: 'member', since: 'b4283c0', supplement: true, click: '[data-view="lane"]' })
+    expect(lane?.expect).toEqual(['[data-state="BLOCKED"]'])
+    expect(lane?.init).toMatchObject({ 'dflow.office.chatter': '0' })
+  })
+})
+
+describe('pinnedPrefs — 실행마다 같은 시작 상태(과제 3 보고 §4-2)', () => {
+  it('다른 키는 두고 테마와 고정 키만 덮는다', () => {
+    expect(pinnedPrefs({ wbsOutline: 'x', lastProjectId: 'old', theme: 'dark' }, 'light', { lastProjectId: 'p' }))
+      .toEqual({ wbsOutline: 'x', lastProjectId: 'p', theme: 'light' })
+  })
+  it('지금 값이 null·undefined 면 테마와 고정 키만', () => {
+    expect(pinnedPrefs(null, 'dark', { lastProjectId: 'p' })).toEqual({ theme: 'dark', lastProjectId: 'p' })
+    expect(pinnedPrefs(undefined, 'light', { lastProjectId: 'p' })).toEqual({ theme: 'light', lastProjectId: 'p' })
+  })
+  it('입력 객체를 바꾸지 않고 새 객체를 낸다', () => {
+    const cur = { wbsOutline: 'x', theme: 'dark' }
+    const pin = { lastProjectId: 'p' }
+    const out = pinnedPrefs(cur, 'light', pin)
+    expect(cur).toEqual({ wbsOutline: 'x', theme: 'dark' })
+    expect(pin).toEqual({ lastProjectId: 'p' })
+    expect(out).not.toBe(cur)
+  })
+  it('pin 을 생략하면 테마만 덮는다', () => {
+    expect(pinnedPrefs({ wbsOutline: 'x', lastProjectId: 'old' }, 'dark')).toEqual({ wbsOutline: 'x', lastProjectId: 'old', theme: 'dark' })
   })
 })
 

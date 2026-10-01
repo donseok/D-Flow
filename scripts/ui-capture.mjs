@@ -523,14 +523,28 @@ export async function freshSessions(db, anon, grades) {
   return sessions
 }
 
-/** 캡처 계정의 서버 테마를 명시로 쓴다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다 */
-export async function setServerTheme(db, userIds, theme) {
+/**
+ * 선호값 고정(순수) — 다른 키는 두고 theme 과 pin 의 키만 덮은 새 객체. cur 가 null·undefined 면 빈 객체에서 시작한다.
+ * @param {Record<string, unknown> | null | undefined} cur @param {string} theme @param {Record<string, unknown>} [pin]
+ * @returns {Record<string, unknown>}
+ */
+export function pinnedPrefs(cur, theme, pin = {}) {
+  return { ...(cur ?? {}), theme, ...pin }
+}
+
+/**
+ * 캡처 계정의 서버 테마를 명시로 쓴다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다.
+ * pin(shoot 는 lastProjectId = 시드 프로젝트)도 같이 고정한다: 실행마다 같은 시작 상태 — 첫 shoot 가 /p/… 방문으로 lastProjectId 를
+ * 써서 전역 브리지 화면(사이드바)이 다음 실행과 달라졌다(과제 3 보고 §4-2). seed 가 아니라 shoot 시작에서 고정하는 이유:
+ * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
+ */
+export async function setServerTheme(db, userIds, theme, pin = {}) {
   for (const userId of userIds) {
     const rows = must('소속 조회', await db.from('workspace_members').select('workspace_id').eq('user_id', userId))
     for (const { workspace_id } of rows) {
       const cur = must('선호 조회', await db.from('user_preferences').select('prefs').eq('user_id', userId).eq('workspace_id', workspace_id).maybeSingle())
       must('선호 쓰기', await db.from('user_preferences').upsert(
-        { user_id: userId, workspace_id, prefs: { ...(cur?.prefs ?? {}), theme }, updated_at: new Date().toISOString() },
+        { user_id: userId, workspace_id, prefs: pinnedPrefs(cur?.prefs, theme, pin), updated_at: new Date().toISOString() },
         { onConflict: 'user_id,workspace_id' },
       ))
     }
@@ -583,7 +597,7 @@ export async function forEachShot(opts, visit) {
   const rows = []
   try {
     for (const theme of opts.theme) {
-      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme)
+      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme, { lastProjectId: seed.pid })
       for (const r of routes) {
         for (const [width, height] of opts.sizes) {
           const context = await browser.newContext(contextOptions({ width, height, theme }))
