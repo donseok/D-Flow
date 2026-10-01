@@ -95,10 +95,13 @@ const EMPTY_REFS: string[] = []
 const EMPTY_MILESTONE_KEYWORDS: readonly string[] = []
 const EMPTY_MEMBERS: ProjectMember[] = []
 /* 마일스톤 기준선 색 — 간트는 초록·청록(brand/done)이 바·상태색으로 포화라 대시보드 배색(MS_TONE)과
-   의도적으로 다르다. 예정=바이올렛(#7c3aed, 팔레트의 team-3 계열·팀 원색처럼 양 테마 고정 hex),
+   의도적으로 다르다. 예정=바이올렛(category-3 — 라이트 값은 옛 #7c3aed 와 같고 다크 값이 따로 있다),
    완료=phasebar 슬레이트(가라앉음·다크 자동 대응), 지연=delayed 빨강(전역 지연 경보와 일치). */
-const MS_LINE: Record<MilestoneStatus, string> = { done: 'border-phasebar', overdue: 'border-delayed', upcoming: 'border-[#7c3aed]' }
-const MS_CHIP: Record<MilestoneStatus, string> = { done: 'bg-phasebar', overdue: 'bg-delayed', upcoming: 'bg-[#7c3aed]' }
+const MS_LINE: Record<MilestoneStatus, string> = { done: 'border-phasebar', overdue: 'border-delayed', upcoming: 'border-category-3' }
+/** 칩은 채움과 전경을 짝으로 — 다크 채움 위 흰 글자는 1.7~3.6:1 이다(D12·판정 Q13) */
+const MS_CHIP: Record<MilestoneStatus, string> = { done: 'bg-phasebar text-phasebar-fg', overdue: 'bg-delayed text-danger-fg', upcoming: 'bg-category-3 text-category-fg' }
+/** 막대 안 % 라벨 — STATUS[…].bar 채움의 전경 */
+const BAR_FG: Record<keyof typeof STATUS, string> = { not_started: 'text-pending-fg', in_progress: 'text-progress-fg', delayed: 'text-danger-fg', done: 'text-success-fg' }
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -1511,11 +1514,13 @@ export function WbsGanttSheet({
               !isL1End && l2GroupId.get(n.id) != null && l2GroupId.get(nextRow.id) !== l2GroupId.get(n.id)
             // 레벨별 배경은 종전 그대로 유지(사용자 결정 2026-08-21) — 구분 열이 사라져도
             // depth 0/1 틴트가 레벨 식별을 계속 담당한다. depth 2+ 는 zebra.
+            // 배경은 불투명이어야 한다 — 번호·이름 칸은 sticky 라 그 아래로 가로 스크롤된 칸이 지나간다. depth 1 은
+            // 불투명 surface 위에 옅은 action-soft 층(배경 이미지)을 얹는다: 라이트 합성은 옛 #f8faff, 다크는 depth 0 과 구별(판정 Q19).
             const rowBg =
               depth === 0
-                ? 'bg-[#f1f4f9]'
+                ? 'bg-surface-subtle'
                 : depth === 1
-                  ? 'bg-[#f8faff]'
+                  ? 'bg-surface bg-linear-to-r from-action-soft/40 to-action-soft/40'
                   : rowNo % 2 === 0
                     ? 'bg-zebra'
                     : 'bg-surface'
@@ -1959,7 +1964,7 @@ export function WbsGanttSheet({
                     <div className="absolute top-0 h-full w-0" style={{ left: x }}>
                       <div
                         data-wbs-milestone-chip
-                        className={`pointer-events-auto sticky truncate rounded-sm px-1 py-0.5 font-bold leading-none text-white ${MS_CHIP[m.status]}`}
+                        className={`pointer-events-auto sticky truncate rounded-sm px-1 py-0.5 font-bold leading-none ${MS_CHIP[m.status]}`}
                         style={{
                           top: m.tier === 0 ? 'var(--wbs-head-h)' : 'calc(var(--wbs-head-h) + 14px)',
                           width: 'max-content',
@@ -1989,8 +1994,8 @@ export function WbsGanttSheet({
             <div className="absolute top-0 h-full w-0" style={{ left: todayX }}>
               <div
                 data-wbs-today-chip
-                className="sticky rounded-sm bg-today px-1 py-0.5 font-bold leading-none text-white"
-                style={{ top: 'var(--wbs-head-h)', width: 'max-content', transform: 'translateX(-50%)', fontSize: 'var(--wbs-day-font, 9px)' }}
+                className="sticky rounded-sm bg-today px-1 py-0.5 font-bold leading-none text-today-fg"
+                style={{ top: 'var(--wbs-head-h)', width: 'max-content', transform: 'translateX(-50%)', fontSize: 'max(12px, var(--wbs-day-font, 9px))' }}
               >
                 {t('wbs.today')}
               </div>
@@ -2077,7 +2082,7 @@ export function WbsGanttSheet({
       {toast && (
         <div
           className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${
-            toast.kind === 'ok' ? 'bg-done text-white' : 'bg-delayed text-white'
+            toast.kind === 'ok' ? 'bg-done text-success-fg' : 'bg-delayed text-danger-fg'
           }`}
           role={toast.kind === 'err' ? 'alert' : 'status'}
         >
@@ -2263,7 +2268,7 @@ function Bar({
           onMouseLeave={onHover ? () => onHover(false) : undefined}
         >
           <div
-            className="h-full rounded-[3px] bg-phasebar-fill opacity-60"
+            className="h-full rounded-[3px] bg-phasebar-fill"
             style={{ width: `${pct}%` }}
           />
           {showOutside && (
@@ -2296,7 +2301,7 @@ function Bar({
         </div>
         {showInside && (
           <span
-            className="absolute top-1/2 -translate-x-full -translate-y-1/2 pr-1 font-medium tabular-nums text-white/95"
+            className={`absolute top-1/2 -translate-x-full -translate-y-1/2 pr-1 font-medium tabular-nums ${BAR_FG[n.status]}`}
             style={{ left: `${pct}%`, fontSize: 'var(--wbs-bar-font, 9px)' }}
           >
             {pctLabel}

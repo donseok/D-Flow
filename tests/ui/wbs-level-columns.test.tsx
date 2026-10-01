@@ -107,14 +107,14 @@ describe('WBS 구분 열 개편', () => {
     expect(idx('r1')).not.toBe(idx('r0'))
   })
 
-  it('레벨별 배경 틴트는 종전 그대로 — depth 0/1 틴트, depth 2+ 는 zebra 계열', async () => {
+  it('레벨별 배경 틴트 — depth 0 surface-subtle·depth 1 불투명 surface 위 action-soft/40 층(라이트 합성은 종전 값), depth 2+ 는 zebra 계열', async () => {
     await render(fixture())
     const nameCell = (id: string) =>
       container.querySelector<HTMLElement>(`[data-row-id="${id}"] [data-wbs-col="name"]`)!.className
-    expect(nameCell('p1')).toContain('bg-[#f1f4f9]')
-    expect(nameCell('t1')).toContain('bg-[#f8faff]')
-    expect(nameCell('a1')).not.toContain('bg-[#f1f4f9]')
-    expect(nameCell('a1')).not.toContain('bg-[#f8faff]')
+    expect(nameCell('p1')).toContain('bg-surface-subtle')
+    expect(nameCell('t1')).toContain('bg-surface bg-linear-to-r from-action-soft/40 to-action-soft/40')
+    expect(nameCell('a1')).not.toContain('bg-surface-subtle')
+    expect(nameCell('a1')).not.toContain('from-action-soft/40')
   })
 
   it('phase 경계(서브트리 마지막 표시 행)에만 가로 구분선이 그어진다', async () => {

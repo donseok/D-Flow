@@ -8,7 +8,6 @@ const WHITE = /(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])/
 /** 파일 → [허용 줄 수, 사유] — 과제 12·13 이 지운다 */
 export const ALLOW: Record<string, [number, string]> = {
   'src/components/ui/BrandMark.tsx': [1, '주인 C — UI-2b 이동 커밋'],
-  'src/components/wbs/WbsGanttSheet.tsx': [2, '과제 12(오늘 칩·토스트)'],
   'src/components/chat/AssistantChat.tsx': [3, '과제 13(주인 B — UI-1 몫 세 줄)'],
 }
 
