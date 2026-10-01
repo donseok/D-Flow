@@ -1,6 +1,7 @@
 // 담당 영역(project_areas·area_teams) 순수 검증 — I/O 없음. kind 는 제품 고정, 행 값은 프로젝트 관리자 설정값.
 // 소비처: 주간보고 영역(SP4 — 시트·이월·PPT·봇)과 이슈 영역(SP5). 담당 팀 0개를 허용한다 — 주간 영역은 담당 팀 없이도 쓰고
 // 봇의 팀 필터에서 빠질 뿐이다(스펙 §4.1.3). 저장은 RPC upsert_project_area 한 길이고 여기서는 저장 전 형태만 맞춘다.
+import type { Team } from './teams'
 
 export const AREA_KINDS = ['weekly_section', 'issue_area'] as const
 export type AreaKind = (typeof AREA_KINDS)[number]
@@ -42,3 +43,31 @@ export function validateArea(
 
 /** code 는 이슈 ID 접두 등에 쓰여 불변이다(트리거 project_areas_guard). 액션 사전검사와 트리거 오류 매핑이 같은 문구를 쓴다. */
 export const ERR_AREA_CODE_IMMUTABLE = '영역 코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.'
+
+/** 영역 편집기의 팀 선택지 — active=false 인 팀은 이미 배정된 영역에서만 보인다(해제할 수 있게). 새로 고를 수는 없다. */
+export interface AreaTeamOption { id: string; code: string; active: boolean }
+
+/**
+ * 주간 영역 편집기의 팀 선택지(SP4 §4.1.8) — 그 프로젝트 팀(projectTeams 규칙, 비활성 포함 — 편집기가 활성만 새로 고르게 거른다)
+ * + 어떤 영역에 이미 배정됐지만 그 목록 밖인 팀(전환 전 공용 팀 배정 등 — 비활성 선택지로 그 영역에서만 보여 해제할 수 있다).
+ * 서버(upsertArea)의 허용 집합 "프로젝트 팀 ∪ 그 영역에 이미 배정된 팀"과 같은 재료다. 목록 밖 팀의 code 는 해석기 팀
+ * (그 워크스페이스 공용 ∪ 그 프로젝트 전용)에서 찾고, 거기도 없으면 뺀다(표는 '알 수 없는 팀'으로 보인다).
+ */
+export function areaTeamOptions(
+  projectTeams: readonly Pick<Team, 'id' | 'code' | 'active'>[],
+  knownTeams: readonly { id: string; code: string }[],
+  areas: readonly { teams: readonly { teamId: string }[] }[],
+): AreaTeamOption[] {
+  const out: AreaTeamOption[] = projectTeams.map(t => ({ id: t.id, code: t.code, active: t.active }))
+  const seen = new Set(out.map(t => t.id))
+  const codeOf = new Map(knownTeams.map(t => [t.id, t.code]))
+  for (const a of areas) {
+    for (const { teamId } of a.teams) {
+      if (seen.has(teamId)) continue
+      seen.add(teamId)
+      const code = codeOf.get(teamId)
+      if (code !== undefined) out.push({ id: teamId, code, active: false })
+    }
+  }
+  return out
+}

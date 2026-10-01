@@ -4,11 +4,11 @@ import type { ReactElement, ReactNode } from 'react'
 import { makeAdminActor } from '../fixtures/actor'
 
 const h = vi.hoisted(() => ({
-  workspaceTeams: vi.fn(), editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   slider: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-slider" />),
   workspaceConfig: vi.fn(),
 }))
-vi.mock('@/lib/teams/master', () => ({ projectTeamRowsSync: vi.fn(() => []), teamsForProjectSync: vi.fn(() => []), workspaceTeamsForProjectSync: h.workspaceTeams }))
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]) }))
@@ -51,7 +51,7 @@ const agentsModule = (on: boolean) => vi.mocked(requireModule).mockImplementatio
   (!on && m === 'agents') ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true })
 
 beforeEach(() => {
-  vi.clearAllMocks(); h.workspaceTeams.mockReturnValue([])
+  vi.clearAllMocks()
   h.workspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'set', value: ['agents'] } } })
 })
 afterEach(() => { vi.mocked(requireModule).mockReset() })

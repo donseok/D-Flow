@@ -15,21 +15,11 @@ import { mondayIso } from '@/lib/report/week'
 import { resolveTeamsForProject } from '@/lib/domain/teams'
 import {
   ERR_AREA_CODE_IMMUTABLE, validateArea,
-  type AreaInput, type AreaKind, type AreaTeamKind,
+  type AreaInput,
 } from '@/lib/domain/areas'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
-
-export interface AreaRow {
-  id: string
-  kind: AreaKind
-  code: string
-  name: string
-  sortOrder: number
-  active: boolean
-  teams: { teamId: string; kind: AreaTeamKind }[]
-}
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
 export type UpsertAreaResult =

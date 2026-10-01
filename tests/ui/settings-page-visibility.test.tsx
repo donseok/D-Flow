@@ -4,12 +4,13 @@ import type { ReactElement, ReactNode } from 'react'
 import { makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
 
 const h = vi.hoisted(() => ({
-  workspaceTeams: vi.fn(), editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   slider: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-slider" />),
   workspaceConfig: vi.fn(), actor: vi.fn(), links: vi.fn(),
   privacy: vi.fn<(p: Record<string, unknown>) => null>(() => null), areas: vi.fn<(p: Record<string, unknown>) => null>(() => null),
 }))
-vi.mock('@/lib/teams/master', () => ({ projectTeamRowsSync: vi.fn(() => []), teamsForProjectSync: vi.fn(() => []), workspaceTeamsForProjectSync: h.workspaceTeams }))
+// 팀 원천은 요청 범위 원천(SP4 §4.2.1) — 기본 픽스처 팀이면 팀 절·업무영역 편집기가 그려진다
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/authz', () => ({ getActorForView: () => h.actor() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]) }))
@@ -17,11 +18,17 @@ vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ e
 vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: vi.fn(async () => ({ ok: true, rows: [], nextBefore: null })) }))
 vi.mock('@/lib/settings/projectConfig', async () => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
-  return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'modules.enabled': ['agents', 'kanban'] })) }
+  const area = (id: string, kind: 'weekly_section' | 'issue_area', code: string, name: string) =>
+    ({ id, kind, code, name, sortOrder: 0, active: true, teams: [] })
+  return {
+    getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'modules.enabled': ['agents', 'kanban'] }, {
+      projectId: 'p1',
+      areas: { weekly_section: [area('a-exp', 'weekly_section', 'EXP', '실험')], issue_area: [area('a-iss', 'issue_area', 'ISS', '이슈 표본')] },
+    })),
+  }
 })
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.workspaceConfig(...a) }))
 vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: (...a: unknown[]) => h.links(...a) }))
-vi.mock('@/app/actions/projectAreas', () => ({ listAreas: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
@@ -49,7 +56,7 @@ import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 const render = async () => renderToStaticMarkup((await SettingsPage({ params: Promise.resolve({ projectId: 'p1' }) })) as ReactElement)
 
 beforeEach(() => {
-  vi.clearAllMocks(); h.workspaceTeams.mockReturnValue([])
+  vi.clearAllMocks()
   h.actor.mockResolvedValue(makeAdminActor('p1'))
   h.links.mockResolvedValue([])
   h.workspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'set', value: ['agents'] } } })
@@ -69,10 +76,15 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
     expect(h.privacy).toHaveBeenCalledTimes(1)
     expect(h.privacy.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
   })
-  it('담당 영역 편집기와 추가 축 이름(core.extra_axis_label)은 화면에 없다(#7·#8)', async () => {
+  it('주간 영역 편집기는 있고 kind 는 weekly_section 고정 — 이슈 영역은 넘기지 않는다(SP4 D26). 추가 축 이름은 화면에 없다(#8)', async () => {
     h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]) }))
     const html = await render()
-    expect(h.areas).not.toHaveBeenCalled()
+    expect(h.areas).toHaveBeenCalledTimes(1)
+    const props = h.areas.mock.calls[0][0]
+    expect(props).toMatchObject({ projectId: 'p1', kind: 'weekly_section' })
+    expect((props.areas as Array<{ code: string; kind: string }>).map(a => [a.code, a.kind])).toEqual([['EXP', 'weekly_section']])
+    expect(JSON.stringify(props)).not.toContain('issue_area')
+    expect(html).not.toContain('이슈 영역')
     expect(html).not.toContain('core.extra_axis_label')
   })
   it('워크스페이스 설정 링크는 그 워크스페이스를 관리할 수 있을 때만 보인다', async () => {
