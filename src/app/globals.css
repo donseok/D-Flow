@@ -320,13 +320,19 @@
   --icon-toolbar: 16px;
   --icon-stroke: 1.75;
 
-  /* 옛 그림자 이름 — var(--shadow-*) 소비처에만 든다. Tailwind shadow-* 유틸은 값을 인라인해 영향이 없다(UI-5) */
-  --shadow-sm: none;
-  --shadow-md: none;
+  /* 옛 그림자 이름 — var(--shadow-*) 소비처에만 든다. Tailwind shadow-* 유틸은 값을 인라인해 영향이 없다(UI-5).
+     sm·md 는 "그림자 없음"을 none 이 아니라 0 0 #0000(Tailwind shadow-none 과 같은 값)으로 쓴다 — shadow-[var(--shadow-sm)] 은
+     box-shadow 쉼표 목록 끝에 이 값을 넣는데, none 이 들면 선언 전체가 무효가 되어 같은 요소의 ring 까지 사라진다(스펙 §4.1 블록 6 정정) */
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
   --shadow-lg: var(--shadow-popover);
   --shadow-xl: var(--shadow-modal);
 
-  /* C 소유 (app)/projects/page.tsx 의 카드 이니셜 한 곳 — UI-2b 이동 커밋이 지운다(계획 판정 Q15) */
+  /* 동결 컬럼 경계 그림자 — 다크는 아래 .dark 가 어두운 그림자로 다시 정의한다(fg 를 섞으면 다크에서 밝게 번진다) */
+  --shadow-freeze-edge: 6px 0 8px -6px rgb(17 21 28 / 0.12);
+
+  /* 소비 넷 — C 소유 (app)/projects/page.tsx 카드 이니셜(UI-2b 이동 커밋)·not-found.tsx 둘(과제 13)·HeaderChrome 계정 아바타(UI-2b).
+     마지막 소비처를 고치는 커밋이 함께 지운다(계획 판정 Q15) */
   --gradient-primary: linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600));
   /* 과제 13(AssistantChat)이 소비처와 함께 지운다 */
   --gradient-dark: linear-gradient(165deg, #1c2028 0%, #14181f 55%, #0d1014 100%);
@@ -336,6 +342,7 @@
 .dark {
   --shadow-popover: 0 8px 24px -8px rgb(0 0 0 / 0.55);
   --shadow-modal: 0 24px 56px -16px rgb(0 0 0 / 0.65);
+  --shadow-freeze-edge: 6px 0 8px -6px rgb(0 0 0 / 0.5);
 
   /* 비색 — 과제 13(AssistantChat)이 소비처와 함께 지운다 */
   --gradient-dark: linear-gradient(165deg, #14181f 0%, #0e1116 55%, #090b0e 100%);
@@ -505,7 +512,7 @@ textarea {
     @apply bg-action text-action-fg hover:bg-action-hover active:bg-action-pressed;
   }
   .btn-ghost {
-    @apply border border-line bg-surface text-ink-muted shadow-sm hover:border-line-strong hover:bg-surface-2 hover:text-ink;
+    @apply border border-border bg-surface text-fg-secondary hover:border-border-input hover:bg-surface-subtle hover:text-fg;
   }
 
   /* 둥근 헤더 크롬 버튼/칩 */
@@ -579,7 +586,7 @@ textarea {
   /* 동결 컬럼 우측 경계 */
   .freeze-edge {
     border-right: 1.5px solid var(--color-border-input);
-    box-shadow: 6px 0 8px -6px color-mix(in srgb, var(--color-fg) 12%, transparent);
+    box-shadow: var(--shadow-freeze-edge);
   }
 }
 

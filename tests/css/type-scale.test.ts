@@ -30,6 +30,12 @@ describe('12px 미만·uppercase·넓은 자간 — 공용 클래스 넷', () =>
     expect(body, `${sel} 규칙이 없다`).toBeDefined()
     expect(body).not.toMatch(SMALL_OR_CAPS)
   })
+  // 부정형만으로는 text-[11.5px]·font-size: 11px·크기 유틸 삭제(상속)가 통과한다(U1a 리뷰 R3 P3) — 12px 이상 크기 토큰을 직접 단다
+  it.each(['.eyebrow', '.chip', '.badge', '.lvl-badge'])('%s 는 12px 이상 크기 토큰(text-xs·text-meta 이상)을 단다', (sel) => {
+    const body = comps.find((b) => b.prelude === sel)?.body ?? ''
+    expect(body).toMatch(/(?:^|\s)text-(?:xs|meta|sm|control|body|base)(?:\s|;|$)/)
+    expect(body).not.toMatch(/text-\[|font-size\s*:/)
+  })
   it.each(COMPONENTS.map((f) => [f]))('공용 컴포넌트 %s', (f) => {
     expect(readFileSync(join(process.cwd(), f), 'utf8')).not.toMatch(SMALL_OR_CAPS)
   })

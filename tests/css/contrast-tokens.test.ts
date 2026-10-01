@@ -28,6 +28,8 @@ export const PAIRS: Pair[] = [
     [`category-${n}`, `category-${n}-weak`, TEXT, 'D12·판정 Q13 범주 칩'] as const,
     ['category-fg', `category-${n}`, TEXT, '판정 Q13 범주 막대 글자'] as const,
   ]),
+  // 조회 실패 알림(LoadErrorNotice — bg-delayed-weak + text-ink)·상태 알림 문구(U1a 리뷰 R3 P3 — 옛 표의 ink/delayed-weak 복원)
+  ...on('fg', ['success-weak', 'warning-weak', 'danger-weak', 'progress-weak'], TEXT, '옛 대비 표·LoadErrorNotice'),
   ['critical', 'critical-weak', TEXT, 'D12·판정 Q13'],
   ['critical', 'surface', TEXT, '개정 §5.5.4'],
   ...on('today', ['surface', 'weekend', 'holiday-band'], NON_TEXT, '개정 §5.5.4 오늘 선'),
@@ -35,6 +37,10 @@ export const PAIRS: Pair[] = [
   ['phasebar-fill', 'phasebar', NON_TEXT, 'D12·판정 Q13 — 채움은 phasebar 위(스펙 §8.1 의 plan-track 정정)'],
   ['action', 'plan-track', NON_TEXT, '개정 §5.5.4 진척 막대'],
 ]
+
+/** 이행 중 토큰(@theme inline 의 hex — 과제 10 이 사이드바 마크업과 함께 지운다) 쌍. 의미 토큰이 아니라 PAIRS 의 메타 단언 밖에 둔다.
+ *  옛 대비 표의 사이드바 셋을 과제 10 까지 지킨다(U1a 리뷰 R3 P3) */
+export const TRANSITIONAL_PAIRS: Pair[] = on('sidebar-ink-subtle', ['sidebar', 'sidebar-2', 'sidebar-3'], TEXT, '옛 대비 표 — 사이드바 보조 글자')
 
 /** 쌍에 들지 않는 의미 색 토큰 — 사유와 함께 닫는다 */
 export const DECORATIVE: Record<string, string> = {
@@ -46,6 +52,14 @@ export const DECORATIVE: Record<string, string> = {
 describe('의미 토큰 대비 — 라이트·다크(스펙 §8.1 ⑤)', () => {
   for (const theme of ['light', 'dark'] as const) {
     it.each(PAIRS.map((p) => [...p]))(`${theme} %s / %s ≥ %s (%s)`, (fg, bg, min) => {
+      expect(contrastRatio(resolve(theme, fg as string), resolve(theme, bg as string))).toBeGreaterThanOrEqual(min as number)
+    })
+  }
+})
+
+describe('이행 중 사이드바 대비(과제 10 까지)', () => {
+  for (const theme of ['light', 'dark'] as const) {
+    it.each(TRANSITIONAL_PAIRS.map((p) => [...p]))(`${theme} %s / %s ≥ %s (%s)`, (fg, bg, min) => {
       expect(contrastRatio(resolve(theme, fg as string), resolve(theme, bg as string))).toBeGreaterThanOrEqual(min as number)
     })
   }
