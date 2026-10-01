@@ -32,7 +32,11 @@ describe('legacyTarget — 옛 경로 → 새 경로 변환표(§5.3)', () => {
     expect(legacyTarget('kanban', '/p/p1/kanban', '?view=phase&team=X', null)).toEqual({ path: '/p/p1/wbs', search: '?view=board&group=phase&team=X' })
     expect(legacyTarget('kanban', '/p/p1/kanban', '', null)).toEqual({ path: '/p/p1/wbs', search: '?view=board' })
   })
-  it('표는 열 종류를 모두 가진다', () => {
-    expect(Object.keys(LEGACY_ROUTES).sort()).toEqual(['adminAccounts', 'adminTeams', 'agents', 'kanban', 'meetings', 'minute', 'minutes', 'portfolio', 'projects', 'usage'])
+  it('간트(S-1 ① 대안 — 컨트롤러 W1)는 view=timeline 고정, 나머지 쿼리 보존·_rsc 제거, 슬러그 없이', () => {
+    expect(legacyTarget('gantt', '/p/p1/gantt', '', null)).toEqual({ path: '/p/p1/wbs', search: '?view=timeline' })
+    expect(legacyTarget('gantt', '/p/p1/gantt', '?scale=24&view=board&team=A&team=B&_rsc=z', 'acme')).toEqual({ path: '/p/p1/wbs', search: '?view=timeline&scale=24&team=A&team=B' })
+  })
+  it('표는 열한 종류를 모두 가진다', () => {
+    expect(Object.keys(LEGACY_ROUTES).sort()).toEqual(['adminAccounts', 'adminTeams', 'agents', 'gantt', 'kanban', 'meetings', 'minute', 'minutes', 'portfolio', 'projects', 'usage'])
   })
 })

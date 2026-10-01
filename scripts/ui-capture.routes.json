@@ -20,7 +20,7 @@
     { "key": "account", "path": "/account", "file": "(app)/account/page.tsx", "grade": "member", "tags": [], "since": "b4283c0" },
     { "key": "p-dashboard", "path": "/p/{pid}/dashboard", "file": "(app)/p/[projectId]/dashboard/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "focusStart": "header", "focusTargets": ["aside a, aside button, aside select", "header a, header button"] },
     { "key": "p-wbs", "path": "/p/{pid}/wbs", "file": "(app)/p/[projectId]/wbs/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0", "focusStart": "[data-wbs-scroll-region]", "focusTargets": ["[data-row-id] button, [data-row-id] [tabindex=\"0\"]"] },
-    { "key": "p-gantt", "path": "/p/{pid}/gantt", "file": "(app)/p/[projectId]/gantt/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "expectFinal": "/p/{pid}/wbs?view=timeline" },
+    { "key": "p-gantt", "path": "/p/{pid}/gantt", "file": "(app)/p/[projectId]/gantt/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "until": "UI-2a", "expectFinal": "/p/{pid}/wbs?view=timeline" },
     { "key": "p-kanban", "path": "/p/{pid}/kanban", "file": "(app)/p/[projectId]/kanban/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-import", "path": "/p/{pid}/import", "file": "(app)/p/[projectId]/import/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-import-admin", "path": "/p/{pid}/import", "file": "(app)/p/[projectId]/import/page.tsx", "grade": "wsAdmin", "tags": ["P"], "since": "b4283c0", "supplement": true },
