@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LEGACY_EXCEL_PROFILE_V1, type ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import {
   initialWizardState, reducer, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
-  recordToRows, rowsToRecord, deriveMappedPreview, compareProfiles, type MarkRow,
+  recordToRows, rowsToRecord, deriveMappedPreview, compareProfiles, executionIntentKey, commandIdFor,
+  preBackupReady, isDefinitiveFailure, type ExecuteResult, type MarkRow, type WizardState,
 } from '@/lib/domain/importWizard'
 
 const DETECTION: DetectionResult = {
@@ -41,36 +42,37 @@ describe('importWizard reducer — 상태 전이(§6.2)', () => {
     expect(next.busy).toBe(false)
   })
 
-  it('executeStart — 이전 실패 상태(error/errors/needsTeams/needsTeamsScope)를 전부 지운다', () => {
-    const dirty: typeof initialWizardState = {
-      ...initialWizardState, error: 'x', errors: [{ excelRow: 1, message: 'y' }], needsTeams: ['A팀'], needsTeamsScope: 'global',
+  it('executeStart — 이전 실패 상태(error/errors/needsTeams/inheritsCommon/commonTeams)를 전부 지운다', () => {
+    const dirty: WizardState = {
+      ...initialWizardState, error: 'x', errors: [{ excelRow: 1, message: 'y' }], needsTeams: ['CIV'],
+      inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }],
     }
     const next = reducer(dirty, { type: 'executeStart' })
-    expect(next).toMatchObject({ busy: true, error: null, errors: null, needsTeams: null, needsTeamsScope: null })
+    expect(next).toMatchObject({ busy: true, error: null, errors: null, needsTeams: null, inheritsCommon: false, commonTeams: [] })
   })
 
-  it('executeNeedsTeams — busy 를 풀고 팀 목록+스코프를 싣는다(409 다이얼로그 트리거, 0071 scope)', () => {
-    const project = reducer({ ...initialWizardState, busy: true }, { type: 'executeNeedsTeams', teams: ['신팀'], scope: 'project' })
-    expect(project).toMatchObject({ busy: false, needsTeams: ['신팀'], needsTeamsScope: 'project' })
-
-    const global = reducer({ ...initialWizardState, busy: true }, { type: 'executeNeedsTeams', teams: ['신팀'], scope: 'global' })
-    expect(global).toMatchObject({ busy: false, needsTeams: ['신팀'], needsTeamsScope: 'global' })
+  it('executeNeedsTeams — busy 를 풀고 팀 목록·상속 여부·상속 공용 팀을 싣는다(409 확인 창 — D54)', () => {
+    const inherit = reducer({ ...initialWizardState, busy: true }, {
+      type: 'executeNeedsTeams', teams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }],
+    })
+    expect(inherit).toMatchObject({ busy: false, needsTeams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }] })
+    const own = reducer({ ...initialWizardState, busy: true }, { type: 'executeNeedsTeams', teams: ['CIV'], inheritsCommon: false, commonTeams: [] })
+    expect(own).toMatchObject({ busy: false, needsTeams: ['CIV'], inheritsCommon: false, commonTeams: [] })
   })
 
-  it('dismissNeedsTeams — needsTeams 와 함께 scope 도 지운다', () => {
-    const dirty = { ...initialWizardState, needsTeams: ['T'], needsTeamsScope: 'project' as const }
-    const next = reducer(dirty, { type: 'dismissNeedsTeams' })
-    expect(next).toMatchObject({ needsTeams: null, needsTeamsScope: null })
+  it('dismissNeedsTeams — needsTeams 와 함께 상속 표시도 지운다', () => {
+    const dirty: WizardState = { ...initialWizardState, needsTeams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }] }
+    expect(reducer(dirty, { type: 'dismissNeedsTeams' })).toMatchObject({ needsTeams: null, inheritsCommon: false, commonTeams: [] })
   })
 
-  it('executeSuccess — done 단계로 전이하고 에러류(scope 포함)를 전부 비운다', () => {
-    const dirty = { ...initialWizardState, errors: [{ excelRow: 1, message: 'z' }], needsTeams: ['T'], needsTeamsScope: 'global' as const }
-    const result = { kind: 'applied' as const, commandId: 'c-1', count: 3, mode: 'append' as const, reindexed: 3, profileSaved: true }
+  it('executeSuccess — done 단계로 전이하고 에러류·상속 표시를 비운다', () => {
+    const dirty: WizardState = { ...initialWizardState, errors: [{ excelRow: 1, message: 'z' }], needsTeams: ['CIV'], inheritsCommon: true }
+    const result: ExecuteResult = { commandId: 'cmd-1', kind: 'applied', count: 3, mode: 'append', reindexed: 3, profileSaved: true }
     const next = reducer(dirty, { type: 'executeSuccess', result })
-    expect(next).toMatchObject({ step: 'done', result, error: null, errors: null, needsTeams: null, needsTeamsScope: null })
+    expect(next).toMatchObject({ step: 'done', result, error: null, errors: null, needsTeams: null, inheritsCommon: false, commonTeams: [] })
   })
 
-  it('reset — 완전 초기 상태로 되돌린다', () => {
+  it('reset — 실행 의도가 없으면 완전 초기 상태로 되돌린다', () => {
     const dirty = { ...initialWizardState, step: 'done' as const, fileName: 'a.xlsx' }
     expect(reducer(dirty, { type: 'reset' })).toEqual(initialWizardState)
   })
@@ -287,5 +289,177 @@ describe('deriveMappedPreview — 리뷰 Important #2: 미리보기가 편집된
     const rows: unknown[][] = [['B1', '', '', '', ...Array(12).fill('')]]
     const preview = deriveMappedPreview(headers, rows, LEGACY_EXCEL_PROFILE_V1)
     expect(preview.rows[0].cells).toBe(rows[0])
+  })
+})
+
+/* ── SP4 §4.4·RF3 — 명령 id 는 실행 의도 단위다. 같은 의도의 재시도·needsTeams 재실행은 같은 id(서버가 이미 적용했으면 duplicate),
+ *  의도가 바뀌거나 성공·확정 실패 뒤에는 새 id. 파일을 다시 골라도(같은 파일) 의도는 남는다 ── */
+const FILE = { fileName: 'wbs.xlsx', fileSize: 2048, lastModified: 1_790_000_000_000 }
+const intent = (over: Partial<Parameters<typeof executionIntentKey>[0]> = {}) =>
+  executionIntentKey({ ...FILE, profile: COLS, mode: 'append', saveProfile: true, ...over })
+/** 서로 다른 id 를 차례로 내는 가짜 newUuid — 불린 횟수로 "새로 뽑았는가"를 본다 */
+function minter() {
+  let n = 0
+  return vi.fn(() => `cmd-${++n}`)
+}
+/** 컴포넌트의 실행 시작과 같은 순서 — 의도 키로 id 를 고르고(commandIdFor) intentChanged → executeStart */
+function startExecute(s: WizardState, key: string, mint: () => string): { state: WizardState; id: string } {
+  const id = commandIdFor(s, key, mint)
+  return { id, state: reducer(reducer(s, { type: 'intentChanged', intentKey: key, commandId: id }), { type: 'executeStart' }) }
+}
+const lost = (s: WizardState) => reducer(s, { type: 'executeFailure', error: '네트워크 오류', definitive: false })
+
+describe('명령 id — 실행 의도 단위(스펙 §4.4) [RF3]', () => {
+  it('executionIntentKey — 같은 입력이면 같은 키, 마크 사전의 키 순서는 무관하다', () => {
+    expect(intent()).toBe(intent())
+    const reordered: ExcelProfile = { ...COLS, ownerMarks: { '△': 'support', '●': 'primary' } }
+    expect(intent({ profile: reordered })).toBe(intent())
+  })
+
+  it('executionIntentKey — 파일 이름·크기·수정 시각·프로파일·모드·양식 저장 중 하나만 바뀌어도 다른 키', () => {
+    const variants = [
+      intent({ fileName: 'wbs (1).xlsx' }), intent({ fileSize: 2049 }), intent({ lastModified: FILE.lastModified + 1 }),
+      intent({ profile: { ...COLS, logical: { ...COLS.logical, start: 9 } } }),
+      intent({ profile: { ...COLS, ownerMarks: { '●': 'primary' } } }), intent({ profile: null }),
+      intent({ mode: 'replace' }), intent({ saveProfile: false }),
+    ]
+    for (const v of variants) expect(v).not.toBe(intent())
+    expect(new Set(variants).size).toBe(variants.length)
+  })
+
+  it('첫 실행은 새 id, 같은 의도의 재실행은 같은 id(새로 뽑지 않는다), 의도가 바뀌면 새 id', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    expect(a.id).toBe('cmd-1')
+    expect(a.state).toMatchObject({ commandId: 'cmd-1', intentKey: intent(), busy: true })
+    const b = startExecute(lost(a.state), intent(), mint)
+    expect(b.id).toBe('cmd-1')
+    expect(mint).toHaveBeenCalledTimes(1)
+    const c = startExecute(lost(b.state), intent({ saveProfile: false }), mint)
+    expect(c.id).toBe('cmd-2')
+    expect(c.state.commandId).toBe('cmd-2')
+  })
+
+  it('intentChanged — 같은 키에 id 가 있으면 상태를 바꾸지 않고, 다른 키면 id 를 바꾸고 사전 백업을 버린다', () => {
+    const s1 = reducer(initialWizardState, { type: 'intentChanged', intentKey: 'K1', commandId: 'cmd-1' })
+    expect(reducer(s1, { type: 'intentChanged', intentKey: 'K1', commandId: 'cmd-1' })).toBe(s1)
+    const taken = reducer(s1, { type: 'preBackupTaken', generatedAt: '2026-10-01T00:00:00.000Z' })
+    expect(reducer(taken, { type: 'intentChanged', intentKey: 'K2', commandId: 'cmd-2' }))
+      .toMatchObject({ intentKey: 'K2', commandId: 'cmd-2', preBackup: null })
+  })
+
+  it('네트워크 실패·응답 유실·5xx 뒤 재시도는 같은 id — 서버가 이미 적용했으면 duplicate 로 받는다', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    for (const status of [0, 200, 500, 502, 503]) {
+      const failed = reducer(a.state, { type: 'executeFailure', error: 'x', definitive: isDefinitiveFailure(status) })
+      expect(failed.commandId, String(status)).toBe(a.id)
+      expect(startExecute(failed, intent(), mint).id, String(status)).toBe(a.id)
+    }
+    expect(mint).toHaveBeenCalledTimes(1)
+  })
+
+  it('409 needsTeams 뒤 등록 재실행은 같은 id — 409 는 영수증을 남기지 않는다(창을 닫았다 다시 실행해도 같다)', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    const asked = reducer(a.state, { type: 'executeNeedsTeams', teams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }] })
+    expect(asked.commandId).toBe(a.id)
+    expect(startExecute(asked, intent(), mint).id).toBe(a.id)
+    expect(startExecute(reducer(asked, { type: 'dismissNeedsTeams' }), intent(), mint).id).toBe(a.id)
+  })
+
+  it('성공 뒤 같은 입력으로 다시 실행하면 새 id — 옛 id 로 duplicate 만 받지 않는다', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    const done = reducer(a.state, {
+      type: 'executeSuccess', result: { commandId: a.id, kind: 'applied', count: 2, mode: 'append', reindexed: 0, profileSaved: true },
+    })
+    expect(done).toMatchObject({ commandId: null, intentKey: null, preBackup: null })
+    expect(startExecute(reducer(done, { type: 'reset' }), intent(), mint).id).toBe('cmd-2')
+  })
+
+  it('확정 실패(409 를 뺀 4xx) 뒤 다음 실행은 새 id — 같은 id 는 COMMAND_REUSED 일 수 있다', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    const refused = reducer(a.state, { type: 'executeFailure', error: '이미 다른 내용으로 쓴 실행 ID 입니다.', definitive: isDefinitiveFailure(422) })
+    expect(refused).toMatchObject({ commandId: null, intentKey: intent(), busy: false })
+    expect(startExecute(refused, intent(), mint).id).toBe('cmd-2')
+  })
+
+  it('링크 오류(400 errors) 뒤 다음 실행은 새 id', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    const invalid = reducer(a.state, { type: 'executeValidationFailure', errors: [{ excelRow: 3, message: '부모 행이 없습니다' }] })
+    expect(invalid.commandId).toBeNull()
+    expect(startExecute(invalid, intent(), mint).id).toBe('cmd-2')
+  })
+
+  it('isDefinitiveFailure — 409 를 뺀 4xx 만 확정 실패다', () => {
+    for (const s of [400, 401, 403, 404, 422]) expect(isDefinitiveFailure(s), String(s)).toBe(true)
+    for (const s of [0, 200, 409, 500, 502, 503, 504]) expect(isDefinitiveFailure(s), String(s)).toBe(false)
+  })
+
+  it('응답을 잃은 뒤 같은 파일을 다시 고르거나 처음부터 다시 해도 같은 id — 두 벌이 되지 않는다', () => {
+    const mint = minter()
+    const a = startExecute(initialWizardState, intent(), mint)
+    const failed = lost(a.state)
+    const reselected = reducer(failed, { type: 'fileSelected', fileName: FILE.fileName })
+    expect(reselected).toMatchObject({ step: 'select', detection: null, profile: null, fileName: FILE.fileName, commandId: a.id, intentKey: intent() })
+    expect(startExecute(reselected, intent(), mint).id).toBe(a.id)
+    const restarted = reducer(failed, { type: 'reset' })
+    expect(restarted).toMatchObject({ step: 'select', fileName: null, commandId: a.id, intentKey: intent() })
+    expect(startExecute(restarted, intent(), mint).id).toBe(a.id)
+    expect(mint).toHaveBeenCalledTimes(1)
+    expect(startExecute(reselected, intent({ fileName: 'other.xlsx' }), mint).id).toBe('cmd-2')   // 다른 파일이면 다른 의도
+  })
+})
+
+describe('replace 사전 백업 — 실행 의도에 묶인다(D50)', () => {
+  const K = intent({ mode: 'replace' })
+  const T = '2026-10-01T00:00:00.000Z'
+  const withBackup = () => reducer(
+    reducer(initialWizardState, { type: 'intentChanged', intentKey: K, commandId: 'cmd-1' }),
+    { type: 'preBackupTaken', generatedAt: T },
+  )
+
+  it('받기 전에는 잠겨 있다 — 백업 읽기에 실패하면(preBackupTaken 이 없다) 실행할 수 없다', () => {
+    const s = reducer(initialWizardState, { type: 'intentChanged', intentKey: K, commandId: 'cmd-1' })
+    expect(preBackupReady(s, K)).toBe(false)
+    expect(preBackupReady(initialWizardState, null)).toBe(false)
+  })
+
+  it('받으면 그 의도에서만 열린다 — 입력이 바뀌면 잠기고, 되돌리면 다시 열린다', () => {
+    const s = withBackup()
+    expect(s.preBackup).toEqual({ generatedAt: T })
+    expect(preBackupReady(s, K)).toBe(true)
+    expect(preBackupReady(s, intent({ mode: 'replace', saveProfile: false }))).toBe(false)
+    expect(preBackupReady(s, intent({ mode: 'replace', fileName: 'other.xlsx' }))).toBe(false)
+    expect(preBackupReady(s, null)).toBe(false)
+    expect(preBackupReady(s, K)).toBe(true)
+  })
+
+  it('다른 의도로 실행이나 백업을 시작하면(intentChanged) 받아 둔 백업을 버린다', () => {
+    const next = reducer(withBackup(), { type: 'intentChanged', intentKey: intent({ mode: 'replace', saveProfile: false }), commandId: 'cmd-2' })
+    expect(next.preBackup).toBeNull()
+    expect(preBackupReady(next, K)).toBe(false)
+  })
+
+  it('의도 없이 온 preBackupTaken 은 무시한다 — 묶을 의도가 없다', () => {
+    expect(reducer(initialWizardState, { type: 'preBackupTaken', generatedAt: T })).toBe(initialWizardState)
+  })
+
+  it('성공 뒤에는 백업이 사라진다 — 다음 replace 는 바뀐 트리를 다시 받아야 한다', () => {
+    const done = reducer(reducer(withBackup(), { type: 'executeStart' }), {
+      type: 'executeSuccess', result: { commandId: 'cmd-1', kind: 'applied', count: 4, mode: 'replace', reindexed: 4, profileSaved: true },
+    })
+    expect(preBackupReady(done, K)).toBe(false)
+  })
+
+  it('확정 실패·응답 유실 뒤에도 같은 의도의 백업은 남는다 — 적용되지 않았거나, 그 백업이 교체 전 원본이다', () => {
+    const refused = reducer(reducer(withBackup(), { type: 'executeStart' }), { type: 'executeFailure', error: 'x', definitive: true })
+    expect(preBackupReady(refused, K)).toBe(true)
+    const failed = lost(reducer(withBackup(), { type: 'executeStart' }))
+    expect(preBackupReady(failed, K)).toBe(true)
+    expect(preBackupReady(reducer(failed, { type: 'fileSelected', fileName: FILE.fileName }), K)).toBe(true)
   })
 })

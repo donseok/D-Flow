@@ -8,9 +8,10 @@ import { WbsMarkdownImport } from '@/components/import/WbsMarkdownImport'
 /**
  * 임포트 모드 전환 — wbs.md(levels 계약 N단, 자동 부착) | 엑셀(.xlsx 위저드).
  * 기본은 마크다운: N단 분리 업로드의 정본 경로. 엑셀 위저드는 레거시·표 형태 입력용으로 유지.
+ * 미등록 팀 등록은 프로젝트 관리자 몫이라(SP4 D4) 슈퍼유저 여부를 넘기지 않는다.
  */
-export function ImportModes({ projectId, isSuperuser, currentItemCount }: {
-  projectId: string; isSuperuser: boolean; currentItemCount: number | null
+export function ImportModes({ projectId, currentItemCount }: {
+  projectId: string; currentItemCount: number | null
 }) {
   const [mode, setMode] = useState<'md' | 'xlsx'>('md')
   return (
@@ -33,7 +34,7 @@ export function ImportModes({ projectId, isSuperuser, currentItemCount }: {
       </div>
       {mode === 'md'
         ? <WbsMarkdownImport projectId={projectId} />
-        : <ImportWizard projectId={projectId} isSuperuser={isSuperuser} currentItemCount={currentItemCount} />}
+        : <ImportWizard projectId={projectId} currentItemCount={currentItemCount} />}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a> }))
+vi.mock('@/app/actions/importBackup', () => ({ getWbsBackup: vi.fn() }))   // 마법사가 import 하는 서버 액션 — 이 테스트는 append 만 돈다
 
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
@@ -65,7 +66,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     root = createRoot(container)
     await act(async () => root.render(
       <LocaleProvider initialLocale="ko"><ToastProvider>
-        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" isSuperuser={false} currentItemCount={0} />
+        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} />
       </ToastProvider></LocaleProvider>,
     ))
   })
