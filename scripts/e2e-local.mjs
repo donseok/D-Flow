@@ -906,12 +906,15 @@ async function main() {
     body: inspectForm({ file: dFile, fileName: 'wbs-unregistered.xlsx', projectId: D.id }),
   })).json()).detection.profile
   const KD = randomUUID()
-  const sendD = async (registerTeams, expect) => (await admin.http('POST', '/api/import/execute', {
-    body: importForm({ file: dFile, fileName: 'wbs-unregistered.xlsx', projectId: D.id, profile: profD, mode: 'append', commandId: KD, registerTeams }), expect,
+  const sendD = async (registerTeams, expect, convertToken = null) => (await admin.http('POST', '/api/import/execute', {
+    body: importForm({ file: dFile, fileName: 'wbs-unregistered.xlsx', projectId: D.id, profile: profD, mode: 'append', commandId: KD, registerTeams, convertToken }), expect,
   })).json()
   const needs = await sendD(false, 409)
   const ownBefore = rows('D 전용 팀', await svc.from('teams').select('id').eq('project_id', D.id))
-  const done = await sendD(true, 200)
+  // 등록 재요청은 409 가 준 전환 동의 토큰을 돌려보낸다(A1-5 R3) — 토큰 없는 등록은 전환 없이 다시 409 다
+  const noToken = await sendD(true, 409)
+  const ownAfterNoToken = rows('D 전용 팀', await svc.from('teams').select('id').eq('project_id', D.id))
+  const done = await sendD(true, 200, needs.convertToken)
   const ownTeams = rows('D 전용 팀', await svc.from('teams').select('id, code, name, color, sort_order, progress_visible, active').eq('project_id', D.id))
   const opsAfter = rows('공용 팀', await svc.from('teams').select('id, project_id, active').eq('id', ops.id))
   const wiring = {
@@ -927,6 +930,8 @@ async function main() {
     needs: needs.ok === false && needs.code === 'NEEDS_TEAMS' && JSON.stringify(needs.needsTeams) === JSON.stringify([UNREGISTERED_TEAM])
       && needs.inheritsCommon === true && (needs.commonTeams ?? []).some((t) => t.code === WS_TEAM),
     nothingBeforeRegister: ownBefore.length === 0,
+    tokenRequired: noToken.ok === false && noToken.code === 'NEEDS_TEAMS' && noToken.convertToken === needs.convertToken && ownAfterNoToken.length === 0
+      && typeof needs.convertToken === 'string',
     applied: done.ok === true && done.kind === 'applied' && done.commandId === KD && done.count === dRows.length,
     convertedSameAsCommon: !!ownOps && JSON.stringify([ownOps.name, ownOps.color, ownOps.sort_order, ownOps.progress_visible, ownOps.active])
       === JSON.stringify([ops.name, ops.color, ops.sort_order, ops.progress_visible, ops.active]),

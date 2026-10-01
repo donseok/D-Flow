@@ -559,9 +559,17 @@ describe('SP4 A1 — 가져오기 파일·폼·영역 입력(스펙 §4.4 #1·§
     expect(() => importForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: {}, mode: 'merge' as 'append', commandId: cmd }))
       .toThrow(/모드/)
   })
+  it('importForm — 전환 동의 토큰(A1-5 R3)은 주어졌을 때만 마지막 필드로 싣는다 — 409 가 준 값을 그대로 돌려보내는 용도', () => {
+    const cmd = '11111111-2222-4333-8444-555555555555'
+    const base = { file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: {}, mode: 'append' as const, commandId: cmd, registerTeams: true }
+    expect(importForm(base).get('convertToken')).toBeNull()
+    const f = importForm({ ...base, convertToken: 'tok-1' })
+    expect([...f.keys()].at(-1)).toBe('convertToken')
+    expect(f.get('convertToken')).toBe('tok-1')
+  })
   it('importForm 의 필드 이름은 실행 라우트가 읽는 이름이다 — commandId 포함(과제 29)', () => {
     const route = readFileSync('src/app/api/import/execute/route.ts', 'utf8')
-    for (const k of ['file', 'projectId', 'profile', 'mode', 'saveProfile', 'registerTeams', 'commandId']) expect(route, k).toContain(`get('${k}')`)
+    for (const k of ['file', 'projectId', 'profile', 'mode', 'saveProfile', 'registerTeams', 'commandId', 'convertToken']) expect(route, k).toContain(`get('${k}')`)
   })
   it('inspectForm — 파일·프로젝트 둘', () => {
     expect([...inspectForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1' }).keys()]).toEqual(['file', 'projectId'])
