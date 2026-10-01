@@ -77,7 +77,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
   'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 8, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳)' },
-  'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 B 의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
+  'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인)의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
   'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 20, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings' },
   'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
 }
@@ -91,7 +91,7 @@ const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; 
   'scripts/e2e-local.mjs': { rpcs: ['apply_workspace_settings'], calls: 2, why: '워크스페이스 B 의 modules.allowed·B 단계 22 의 A minutes_integration 해제 — 생성·편집 화면(Phase C) 전이라 service_role(로컬 전용)' },
   'scripts/e2e-synthetic.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '합성 워크스페이스 세 개의 허용 모듈 시드(로컬 전용 — 생성 화면은 SP3, 서버 액션 경로는 그 위에서 구성별로 바꾼다)' },
   'scripts/perf-baseline.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: 'PERF 프로젝트 시드(로컬 전용)' },
-  'scripts/ui-capture.mjs': { rpcs: ['create_project_with_settings', 'apply_workspace_settings'], calls: 2, why: '캡처 시드 — UI-CAPTURE 프로젝트 생성·워크스페이스 B 허용 모듈(로컬 전용, SP3b UI-0)' },
+  'scripts/ui-capture.mjs': { rpcs: ['create_project_with_settings', 'apply_workspace_settings'], calls: 2, why: '캡처 시드 — UI-CAPTURE 프로젝트 생성·워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인 — 같은 값이면 부르지 않는다)(로컬 전용, SP3b UI-0)' },
   'scripts/perf-grid.mjs': { rpcs: ['create_project_with_settings'], calls: 1, why: '1만 행 WBS 시드 — PERF-GRID 생성(로컬 전용, SP3b UI-0)' },
 }
 /** G3 — 리터럴이 아닌 .rpc( 의 파일별 건수 */

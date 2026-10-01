@@ -6,6 +6,7 @@ import {
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
+import { SEED_INVITE_DOMAIN, inviteDomainPatch, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 
@@ -183,6 +184,22 @@ describe('pinnedPrefs — 실행마다 같은 시작 상태(과제 3 보고 §4-
   })
 })
 
+describe('seenResetTargets — 공지 읽음 워터마크를 지울 계정(과제 5 권고 1, 과제 5b)', () => {
+  it('캡처 계정 넷 — 등급 순서 고정(플랫폼 관리자·워크스페이스 관리자·멤버·두 워크스페이스 멤버)', () => {
+    expect(seenResetTargets('admin@example.com')).toEqual([
+      { grade: 'platformAdmin', email: SEED_ACCOUNTS.platformAdmin }, { grade: 'wsAdmin', email: SEED_ACCOUNTS.wsAdmin },
+      { grade: 'member', email: SEED_ACCOUNTS.member }, { grade: 'duo', email: SEED_ACCOUNTS.duo },
+    ])
+  })
+  it('실행에 쓰는 등급과 무관하게 늘 넷이다 — 공개 화면만 찍는 실행도 다음 실행의 시작 상태를 같게 둔다', () => {
+    expect(seenResetTargets(undefined).map((t) => t.grade)).toEqual(['platformAdmin', 'wsAdmin', 'member', 'duo'])
+  })
+  it('부트스트랩 관리자는 넣지 않는다 — 시드 계정과 겹치면 throw(판정 Q4, Review Focus 3)', () => {
+    expect(seenResetTargets('admin@example.com').map((t) => t.email)).not.toContain('admin@example.com')
+    expect(() => seenResetTargets(` ${SEED_ACCOUNTS.duo.toUpperCase()} `)).toThrow(/부트스트랩/)
+  })
+})
+
 const CTX = {
   today: '2026-09-29', projectId: '00000000-0000-0000-7e57-000000001501', wsA: '00000000-0000-0000-7e57-000000001502',
   memberIds: { member: '00000000-0000-0000-7e57-000000001503', duo: '00000000-0000-0000-7e57-000000001504', wsAdmin: '00000000-0000-0000-7e57-000000001505' },
@@ -257,6 +274,40 @@ describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
   })
   it('fnv1a64 은 시드의 회의록 본문에서 SQL 실측값과 같다(본문 전체를 해시로 고정)', () => {
     expect(plan.minutes.map((m) => fnv1a64(m.body))).toEqual(['b78d8307b9571ce9', '88019ce70f34c6bc'])
+  })
+})
+
+describe('inviteDomainPatch — 시드 초대가 수락 가능한 카드로 찍히게 워크스페이스 A 의 초대 허용 도메인(과제 5 권고 2, 과제 5b)', () => {
+  const K = 'invites.allowed_domains'
+  it('허용 도메인은 시드 초대 이메일의 도메인이다', () => {
+    expect(SEED_INVITE_DOMAIN).toBe('example.com')
+    expect(seedPlan(CTX).invite.email.split('@')[1]).toBe(SEED_INVITE_DOMAIN)
+  })
+  it('값이 없으면(제품 기본 [] = 초대 불가) 그 도메인 하나를 쓴다 — null·undefined 값도 같다', () => {
+    expect(inviteDomainPatch({})).toEqual({ [K]: ['example.com'] })
+    expect(inviteDomainPatch(null)).toEqual({ [K]: ['example.com'] })
+    expect(inviteDomainPatch(undefined)).toEqual({ [K]: ['example.com'] })
+  })
+  it('이미 들어 있으면 쓰지 않는다(null — 멱등, 이력 행을 늘리지 않는다). 대소문자·앞뒤 공백은 같은 도메인', () => {
+    expect(inviteDomainPatch({ [K]: ['example.com'] })).toBeNull()
+    expect(inviteDomainPatch({ [K]: ['acme.test', ' Example.COM '] })).toBeNull()
+  })
+  it('전체 허용(* 단독)이면 이미 허용이라 쓰지 않는다 — * 와 섞으면 저장값이 무효가 된다', () => {
+    expect(inviteDomainPatch({ [K]: ['*'] })).toBeNull()
+  })
+  it('다른 도메인이 있으면 지우지 않고 뒤에 더한다, 명시 [] 도 같다', () => {
+    expect(inviteDomainPatch({ [K]: ['acme.test'] })).toEqual({ [K]: ['acme.test', 'example.com'] })
+    expect(inviteDomainPatch({ [K]: [] })).toEqual({ [K]: ['example.com'] })
+  })
+  it('목록이 아닌 값(손상)은 덮지 않고 멈춘다', () => {
+    expect(() => inviteDomainPatch({ [K]: 'example.com' })).toThrow(/손상/)
+    expect(() => inviteDomainPatch({ [K]: [1] })).toThrow(/손상/)
+  })
+  it('patch 에는 그 키 하나만 — 다른 키는 건드리지 않고 입력 객체를 바꾸지 않는다', () => {
+    const cur = { 'modules.allowed': ['wiki'], [K]: ['acme.test'] }
+    const out = inviteDomainPatch(cur)
+    expect(Object.keys(out ?? {})).toEqual([K])
+    expect(cur).toEqual({ 'modules.allowed': ['wiki'], [K]: ['acme.test'] })
   })
 })
 

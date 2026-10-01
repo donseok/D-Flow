@@ -191,6 +191,8 @@ export const SEED_ACCOUNTS = Object.freeze({
 })
 export const SEED_PROJECT = 'UI-CAPTURE'
 export const SEED_WS_B = Object.freeze({ slug: 'ui-capture-b', name: '캡처 B 워크스페이스' })
+/** 시드 초대(seedPlan 의 invite.email)의 도메인 — 워크스페이스 A 의 초대 허용 도메인에 있어야 초대 화면이 수락 가능한 카드다(과제 5b) */
+export const SEED_INVITE_DOMAIN = 'example.com'
 export const LEVEL_LABELS_4 = Object.freeze(['단계', '작업', '활동', '세부'])
 const TEAM_DEFS = [['PLN', '기획', '#4f46e5'], ['DSG', '설계', '#0276a8'], ['DEV', '개발', '#7c3aed'], ['QAS', '품질', '#a65b00'], ['OPS', '운영', '#0f766e']]
 const FENCE = '`'.repeat(3)
@@ -324,6 +326,34 @@ export function resetTargets(grades, bootstrapEmail) {
   })
 }
 
+/** 공지 읽음 워터마크를 지울 계정(순수) — 캡처 계정 넷, 등급 순서 고정. 그 실행이 쓰는 등급과 무관하게 늘 넷이다(공개 화면만 찍는 실행도
+ *  다음 실행의 시작 상태를 같게 둔다). 부트스트랩 관리자는 넣지 않는다 — 겹치면 throw(resetTargets 와 같은 가드, 판정 Q4)
+ *  @param {string | undefined} bootstrapEmail @returns {{ grade: string, email: string }[]} */
+export function seenResetTargets(bootstrapEmail) {
+  return resetTargets(Object.keys(SEED_ACCOUNTS), bootstrapEmail)
+}
+
+/**
+ * 워크스페이스 A 의 초대 허용 도메인 patch(순수) — 쓸 키·값, 쓸 것이 없으면 null(과제 5 권고 2).
+ * 제품 기본값 [] 은 초대 불가라 시드 초대가 '사용할 수 없는 초대' 카드로 찍혔다. 값이 없거나 명시 [] 이면 그 도메인 하나, 다른 도메인이
+ * 있으면 지우지 않고 뒤에 더한다. 이미 있거나(대소문자·앞뒤 공백 무관) 전체 허용(* 단독)이면 null — 쓰지 않아 이력 행을 늘리지 않는다.
+ * 문자열 목록이 아니거나 * 가 다른 항목과 섞인 값(손상 — 해석기가 무효로 본다)은 덮지 않고 멈춘다.
+ * @param {Record<string, unknown> | null | undefined} values @param {string} [domain] @returns {Record<string, string[]> | null}
+ */
+export function inviteDomainPatch(values, domain = SEED_INVITE_DOMAIN) {
+  const key = 'invites.allowed_domains'
+  const want = domain.trim().toLowerCase()
+  const cur = (values ?? {})[key]
+  if (cur === undefined) return { [key]: [want] }
+  if (!Array.isArray(cur) || cur.some((d) => typeof d !== 'string')) throw new Error(`워크스페이스 A 의 ${key} 가 문자열 목록이 아니다(손상) — 덮지 않는다`)
+  const norm = cur.map((d) => d.trim().toLowerCase())
+  if (norm.includes('*')) {
+    if (norm.length === 1) return null
+    throw new Error(`워크스페이스 A 의 ${key} 에 * 가 다른 항목과 섞였다(손상) — 덮지 않는다`)
+  }
+  return norm.includes(want) ? null : { [key]: [...cur, want] }
+}
+
 /** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값 @param {{ width: number, height: number, theme: string }} s */
 export function contextOptions({ width, height, theme }) {
   return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme }
@@ -411,6 +441,19 @@ async function insertOnce(label, rows, write) {
 }
 const once = (onConflict = 'id') => ({ onConflict, ignoreDuplicates: true })
 
+/** 워크스페이스 설정 시드의 한 길 — revision 을 읽고 patch(지금 값 → 쓸 키·값 | null)가 낸 것만 설정 RPC 로 쓴다(설정 쓰기는 RPC 한 길).
+ *  쓸 것이 없으면 부르지 않는다 — 이력 행을 늘리지 않는다. 이 파일의 설정 표 읽기·설정 RPC 쓰기는 여기 한 곳이다(settings-writes 의 수) */
+async function seedWorkspaceSettings(db, label, workspaceId, actor, patch) {
+  const row = must(`${label} — 설정 revision`, await db.from('workspace_settings').select('revision, values').eq('workspace_id', workspaceId).single())
+  const set = patch(row.values ?? {})
+  if (!set) return { wrote: false, values: row.values ?? {} }
+  const res = must(label, await db.rpc('apply_workspace_settings', {
+    p_workspace_id: workspaceId, p_expected_revision: row.revision, p_command_id: randomUUID(), p_set: set,
+    p_unset: [], p_actor: actor, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
+  }))
+  return { wrote: true, values: { ...(row.values ?? {}), ...set }, status: res?.status ?? null, revision: res?.revision ?? null }
+}
+
 async function cmdSeed() {
   const { admin: coord } = laneEnv()
   const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
@@ -431,13 +474,11 @@ async function cmdSeed() {
   must('platform_admins', await db.from('platform_admins').upsert({ user_id: users.platformAdmin }))
 
   // 워크스페이스 B 의 허용 모듈 — 기본 [] 이면 B 뒤 모듈 화면이 404 다(판정 Q7). 이미 값이 있으면 덮지 않는다
-  const wsRow = must('B 설정 revision', await db.from('workspace_settings').select('revision, values').eq('workspace_id', wsB.id).single())
-  if (!Object.prototype.hasOwnProperty.call(wsRow.values ?? {}, 'modules.allowed')) {
-    must('B 허용 모듈', await db.rpc('apply_workspace_settings', {
-      p_workspace_id: wsB.id, p_expected_revision: wsRow.revision, p_command_id: randomUUID(), p_set: { 'modules.allowed': [...BOOTSTRAP_MODULE_IDS] },
-      p_unset: [], p_actor: users.duo, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
-    }))
-  }
+  await seedWorkspaceSettings(db, 'B 허용 모듈', wsB.id, users.duo,
+    (v) => (Object.prototype.hasOwnProperty.call(v, 'modules.allowed') ? null : { 'modules.allowed': [...BOOTSTRAP_MODULE_IDS] }))
+  // 워크스페이스 A 의 초대 허용 도메인 — 같은 길로(과제 5 권고 2). 이미 그 도메인이 있으면 쓰지 않는다(inviteDomainPatch — 멱등).
+  // 행위자는 A 의 워크스페이스 관리자(그 설정의 편집 등급)
+  const domainsA = await seedWorkspaceSettings(db, 'A 초대 허용 도메인', wsA.id, users.wsAdmin, (v) => inviteDomainPatch(v))
 
   // 프로젝트 — 생성 RPC 가 core.level_labels 를 채운다(없으면 WBS·설정이 오류 화면). 같은 날 재실행만 멱등, 다른 날이면 멈춘다
   let project = must('프로젝트 조회', await db.from('projects').select('id, description').eq('workspace_id', wsA.id).eq('name', SEED_PROJECT).maybeSingle())
@@ -496,7 +537,9 @@ async function cmdSeed() {
   }
   const ids = seedIds(pid)
   must('공유 토큰', await db.from('minutes').update({ share_token: ids.shareToken, share_enabled: true }).eq('id', ids.minuteId))
-  console.log(JSON.stringify({ ok: true, today, projectId: pid, wsB: wsB.id, wbs: plan.wbs.length, minutes: plan.minutes.length }))
+  const inviteDomainsA = { value: domainsA.values['invites.allowed_domains'] ?? null, wrote: domainsA.wrote,
+    ...(domainsA.wrote ? { status: domainsA.status, revision: domainsA.revision } : {}) }
+  console.log(JSON.stringify({ ok: true, today, projectId: pid, wsB: wsB.id, wbs: plan.wbs.length, minutes: plan.minutes.length, inviteDomainsA }))
 }
 COMMANDS.seed = cmdSeed
 
@@ -560,6 +603,15 @@ export async function setServerTheme(db, userIds, theme, pin = {}) {
   }
 }
 
+/**
+ * 공지 읽음 워터마크를 지운다 — 캡처 계정(seenResetTargets)의 행 전부. 시작 상태 = '아무 공지도 보지 않음' = db:reset 뒤 첫 실행.
+ * 공지 화면 방문이 워터마크를 써서 db:reset 뒤 첫 실행만 공지 화면에 NEW 칩이 있었고(과제 5 자기 차이 0.13%), 워터마크가 마이크로초로
+ * 저장되면(레인 A 수정) 첫 방문 뒤 공지 배지가 사라져 같은 실행의 뒤 화면과 다음 실행이 달라진다. lastProjectId 고정과 같은 자리에서 한다.
+ */
+async function clearSeenWatermarks(db, userIds) {
+  must('공지 읽음 워터마크 지우기', await db.from('announcement_seen').delete().in('user_id', userIds))
+}
+
 /** jsDelivr 응답을 리포 밖 캐시에서 준다 — 라벨 사이 글꼴 바이트를 고정한다(판정 Q3) */
 async function routeCdn(context, cacheDir) {
   mkdirSync(cacheDir, { recursive: true })
@@ -588,7 +640,8 @@ async function resolveSeed(db) {
   return { pid: project.id, seedDate, wsSlug: wsA.slug, ...seedIds(project.id) }
 }
 
-/** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다 */
+/** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
+ *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크(과제 5b) */
 export async function forEachShot(opts, visit) {
   const { envText, admin: coord, target, outDir } = laneEnv()
   const baseUrl = opts.base ? e2eBaseUrl(opts.base) : target.appUrl
@@ -597,6 +650,12 @@ export async function forEachShot(opts, visit) {
   const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
   const routes = selectRoutes(doc, opts)
   const seed = await resolveSeed(db)
+  const seenUserIds = []
+  for (const { email } of seenResetTargets(process.env.BOOTSTRAP_EMAIL || 'admin@example.com')) {
+    const userId = await userIdByEmail(db, email)
+    if (!userId) throw new Error(`시드 계정이 없다(${email}) — ui-capture.mjs seed 를 먼저`)
+    seenUserIds.push(userId)
+  }
   const grades = [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))]
   const sessions = await freshSessions(db, anon, grades)
   const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
@@ -607,6 +666,7 @@ export async function forEachShot(opts, visit) {
   try {
     for (const theme of opts.theme) {
       await setServerTheme(db, Object.values(sessions).map((s) => s.userId), theme, { lastProjectId: seed.pid })
+      await clearSeenWatermarks(db, seenUserIds)
       for (const r of routes) {
         for (const [width, height] of opts.sizes) {
           const context = await browser.newContext(contextOptions({ width, height, theme }))
