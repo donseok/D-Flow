@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { computeTree } from '@/lib/domain/rollup'
 import { computeCompletionMap, type ProjectCompletion } from '@/lib/domain/project-status'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
 import type { WbsRow, ComputedItem, TeamCode, OwnerKind, TaskDependency } from '@/lib/domain/types'
 import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { seoulToday } from '@/lib/domain/dates'
@@ -30,14 +30,8 @@ export const getComputedWbs = cache(async (
   // 항목의 담당만 읽는다(wbs_items!inner) — 전 프로젝트의 담당을 읽으면 1,000행에 먼저 닿는다. 쪽 키는 wbs_items id, item_owners 는 PK
   // (wbs_item_id, team_id) — sort_order 로 쪽을 나누면 쪽 사이의 형제 이동 한 번이 중복 1 + 누락 1 을 만들고 행 수가 같아 통과한다(K1).
   // 형제 정렬은 computeTree 가 sortOrder 로 한다(동률은 입력 순 = id 순). 잘림·count 불일치·조회 오류는 throw — 아래 세 표와 같은 취급.
-  // 나머지 셋(holidays·task_dependencies 의 끝까지 읽기)과 팀 정렬 원천은 SP4 A2 가 바꾼다.
-  const [
-    items,
-    ownerRows,
-    { data: hol, error: holErr },
-    { data: proj, error: projErr },
-    { data: dependencyRows, error: dependenciesErr },
-  ] = await Promise.all([
+  // holidays·task_dependencies 도 끝까지(SP4 A2 — 키는 PK 의 date 와 id), 팀 정렬은 요청 범위 원천(projectTeams — 같은 요청의 설정 조회와 캐시를 나눈다).
+  const [items, ownerRows, hol, { data: proj, error: projErr }, dependencyRows, teams] = await Promise.all([
     fetchAllByKeyset<Record<string, unknown>>('[getComputedWbs] wbs_items', (r) => String(r.id), (after, limit) => {
       const q = sb.from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId)
       return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
@@ -49,29 +43,31 @@ export const getComputedWbs = cache(async (
       return (after ? q.or(`wbs_item_id.gt.${after.wbs_item_id},and(wbs_item_id.eq.${after.wbs_item_id},team_id.gt.${after.team_id})`) : q)
         .order('wbs_item_id').order('team_id').limit(limit)
     }),
-    sb.from('holidays').select('date').eq('project_id', projectId),
+    fetchAllByKeyset<{ date: string }>('[getComputedWbs] holidays', (r) => r.date, (after, limit) => {
+      const q = sb.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
+      return (after ? q.gt('date', after.date) : q).order('date').limit(limit)
+    }),
     sb.from('projects').select('base_date').eq('id', projectId).maybeSingle(),
-    sb.from('task_dependencies')
-      .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days')
-      .eq('project_id', projectId),
+    fetchAllByKeyset<Record<string, unknown>>('[getComputedWbs] task_dependencies', (r) => String(r.id), (after, limit) => {
+      const q = sb.from('task_dependencies')
+        .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days', { count: 'exact' })
+        .eq('project_id', projectId)
+      return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+    }),
+    // 팀 원천 실패(TeamsUnavailableError)는 그대로 올린다 — 데이터 로더라 화면의 오류 경계가 받는다(빈 순서로 위장하지 않는다, 계획 P4)
+    projectTeams(projectId),
   ])
 
   // 핵심 조회 실패를 '없음'으로 폴백하면 화면이 비는 게 아니라 '조용히 틀린 화면/숫자'가 된다.
   // - wbs_items: 빈 트리 → 대시보드가 'WBS 데이터 없음' EmptyState를 띄워 운영 데이터 위 재임포트를 유도한다(최악).
   // - item_owners: 담당 배지·행 분리가 사라져 팀 편집 권한이 회수된 것처럼 보인다.
-  //   (이 둘은 위의 fetchAllByKeyset 이 잘림·오류에서 throw 한다)
+  //   (wbs_items·item_owners·holidays·task_dependencies 는 위의 fetchAllByKeyset 이 잘림·오류에서 throw 한다)
   // - holidays: 빈 배열이 '공휴일 없음'(정상)과 구분되지 않아, 영업일 기반 계획%가 틀어져도 아무도 감지할 수 없다.
-  //   (정상적으로 0건인 경우와 달리 error는 명백한 실패이므로 여기서만 throw — 빈 결과는 그대로 통과시킨다.)
+  //   (빈 결과는 정상 0건이다 — 오류·잘림만 throw.)
   // - projects.base_date: 기준일이 조용히 오늘로 바뀌어 전 지표(계획%·지연 판정·PPT·봇 답변)가 어긋난다.
   // - task_dependencies: 연결선·지연 전파·크리티컬 패스가 모두 사라져 "의존성 없음"으로 오인된다.
   // 계산 결과가 알림/리포트/임베딩 쓰기로도 흘러가므로, 에러 바운더리('문제가 발생했습니다')가 조용한 오염보다 안전하다.
-  for (const [table, err] of [
-    ['holidays', holErr],
-    ['projects', projErr],
-    ['task_dependencies', dependenciesErr],
-  ] as const) {
-    if (err) throw new Error(`[getComputedWbs] ${table} 조회 실패: ${err.message}`)
-  }
+  if (projErr) throw new Error(`[getComputedWbs] projects 조회 실패: ${projErr.message}`)
 
   const ownerMap = new Map<string, { team: TeamCode; kind: OwnerKind }[]>()
   ownerRows.forEach((o: Record<string, unknown>) => {
@@ -83,9 +79,9 @@ export const getComputedWbs = cache(async (
     arr.push({ team: code, kind: o.kind as OwnerKind })
     ownerMap.set(wbsItemId, arr)
   })
-  // DB가 순서를 보장하지 않으므로 표시 순서를 고정: 주관 먼저, 팀은 팀 마스터 sort_order.
+  // DB가 순서를 보장하지 않으므로 표시 순서를 고정: 주관 먼저, 팀은 그 프로젝트 팀의 sort_order(비활성 포함 — 기존 데이터 정렬 안정).
   // (담당별 행 분리 UI에서 순서가 요청마다 바뀌면 같은 항목의 행 배치가 흔들린다.)
-  const teamOrder = teamOrderMap(teamsForProjectSync(projectId).map(t => t.code))
+  const teamOrder = teamOrderMap(teams.map(t => t.code))
   const rank = (t: TeamCode) => teamOrder.get(t) ?? Number.MAX_SAFE_INTEGER
   ownerMap.forEach(arr =>
     arr.sort((a, b) =>
@@ -115,8 +111,8 @@ export const getComputedWbs = cache(async (
     agentDelegated: Array.isArray(r.tags) && (r.tags as unknown[]).includes(AGENT_TAG),
   }))
 
-  const holidays = new Set((hol ?? []).map((h: { date: string }) => h.date))
-  const manualDependencies: TaskDependency[] = (dependencyRows ?? []).map((r: Record<string, unknown>) => ({
+  const holidays = new Set(hol.map((h) => h.date))
+  const manualDependencies: TaskDependency[] = dependencyRows.map((r: Record<string, unknown>) => ({
     id: r.id as string,
     projectId: r.project_id as string,
     predecessorId: r.predecessor_id as string,
@@ -151,37 +147,32 @@ export const getComputedWbs = cache(async (
   }
 })
 
-// 사이드바용 경량 완료율 맵 — 프로젝트 전체를 1쿼리로 (트리 로드 없이)
+// 사이드바용 경량 완료율 맵 — 볼 수 있는 프로젝트 전체를 키셋으로 끝까지(트리 로드 없이).
 // 반환 null = 조회 실패. 빈 맵({})과 반드시 구분해야 한다 — 빈 맵은 'WBS가 없는 프로젝트'라는 정상 상태이고,
 // 실패를 그것과 같게 취급하면 종료일 지난 미완 프로젝트가 '완료' 배지로 둔갑한다(projectLifecycleStatus).
-//
-// 인자를 받지 않는다(2026-08-18 성능 감사): 종전에는 projectIds 를 받아 레이아웃의 프로젝트
-// 목록 조회 **뒤에** 직렬로 실행됐다. RLS 가 authenticated 전체 읽기 개방이라 id 필터는
-// 결과를 바꾸지 않으므로, 무인자로 바꿔 첫 Promise.all 에 병합한다(직렬 1단 제거).
-// 조회에 비공개 프로젝트 행이 섞여도 소비처가 가시 프로젝트 id 로만 lookup 하므로 화면 유출은 없다.
-// cache() 키도 무인자라 레이아웃·페이지가 같은 요청에서 불러도 1회만 실행된다(배열 인자는
-// 참조 동일성 키라 사실상 캐시가 안 됐다).
+// 한 응답은 max_rows(1000)에서 잘린다 — 잘린 맵은 실패와 같은 결과(뒤 프로젝트의 미완 항목이 빠진 '완료')라 끝까지 읽고,
+// 잘림·읽는 사이 변경·조회 오류는 모두 null + 로그다(SP4 A2 §4.6). 키는 바뀌지 않는 id(P15).
+// 인자를 받지 않는다(2026-08-18 성능 감사): 레이아웃의 첫 Promise.all 에 병합한다. wbs_items 의 읽기 정책이 볼 수 있는 프로젝트로
+// 좁힌다(0006 격리 — 전체 개방이 아니다). 소비처는 가시 프로젝트 id 로만 lookup 한다.
+// cache() 키도 무인자라 레이아웃·페이지가 같은 요청에서 불러도 1회만 실행된다.
 export const getProjectsCompletion = cache(
   async (): Promise<Record<string, ProjectCompletion> | null> => {
-    const sb = await createServerClient()
-    const { data, error } = await sb
-      .from('wbs_items')
-      .select('id, parent_id, project_id, actual_pct')
-
-    // 표시 전용이라 throw하지 않는다 — 이 함수는 앱 루트 layout에서 호출되므로 throw하면 배지 하나 때문에
-    // 모든 페이지가 에러 화면이 된다(복구 경로인 설정/임포트까지 막힌다). 대신 실패를 null로 신호한다.
-    if (error) {
-      console.error('[getProjectsCompletion] 조회 실패:', error.message)
-      return null
-    }
-
-    return computeCompletionMap(
-      (data ?? []).map(r => ({
+    try {
+      const sb = await createServerClient()
+      const rows = await fetchAllByKeyset<Record<string, unknown>>('[getProjectsCompletion] wbs_items', (r) => String(r.id), (after, limit) => {
+        const q = sb.from('wbs_items').select('id, parent_id, project_id, actual_pct', { count: 'exact' })
+        return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+      })
+      return computeCompletionMap(rows.map(r => ({
         id: r.id as string,
         parentId: (r.parent_id as string | null) ?? null,
         projectId: r.project_id as string,
         actualPct: (r.actual_pct as number | null) ?? null,
-      })),
-    )
+      })))
+    } catch (e) {
+      // 표시 전용이라 throw하지 않는다 — 앱 루트 layout에서 호출되므로 throw하면 배지 하나 때문에 모든 페이지가 에러 화면이 된다.
+      console.error('[getProjectsCompletion] 조회 실패:', e instanceof Error ? e.message : e)
+      return null
+    }
   },
 )

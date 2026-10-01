@@ -37,7 +37,6 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/lib/ai/wiki-ingest.ts',
   'src/lib/data/portfolio.ts',
   'src/lib/data/snapshots.ts',
-  'src/lib/data/wbs.ts',
   'src/lib/minutes/teamScope.ts',
   'src/lib/repositories/supabase/wbs.ts',
 ]

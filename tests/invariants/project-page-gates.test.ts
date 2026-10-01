@@ -26,7 +26,6 @@ const WORKSPACE_PAGES_ROOT = join(CWD, 'src/app/(app)/w/[slug]')
 
 /** service_role 에 닿지만 그 내용이 결과에 실리지 않는 로더 — 탐색을 여기서 끊는다. 한 줄 근거 필수. */
 const SAFE_LOADERS: Record<string, string> = {
-  'src/lib/data/wbs.ts': '팀 캐시(teamsForProjectSync)는 RLS 로 읽은 담당 행을 정렬하는 키로만 쓴다 — 캐시 내용이 결과에 실리지 않는다',
   'src/lib/data/snapshots.ts': '팀 캐시는 RLS 로 읽은 항목 롤업의 정렬 키(subActTeamOrder)로만 쓰고, 결과는 실적·계획 % 숫자다(쓰기도 세션 클라이언트)',
 }
 /** `<page>#<symbol>` — 로더가 자기 가드를 가져 페이지 게이트가 필요 없는 경우. 한 줄 근거 필수. 지금은 없다. */

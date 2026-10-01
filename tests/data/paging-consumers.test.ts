@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(),
   parseWithProfile: vi.fn(), linkByDepth: vi.fn(), resolveLegacyLevelLabels: vi.fn(), splitLeafOwners: vi.fn(),
-  teamsForProjectSync: vi.fn(), ensureProjectTeams: vi.fn(),
+  ensureProjectTeams: vi.fn(),
   createServerClient: vi.fn(), createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(), ingestProject: vi.fn(), detectWorkbook: vi.fn(),
   getProjectConfig: vi.fn(), writeProjectSettingsInternal: vi.fn(),
@@ -17,8 +17,6 @@ vi.mock('@/lib/excel/parseWithProfile', () => ({
   parseWithProfile: m.parseWithProfile, linkByDepth: m.linkByDepth, resolveLegacyLevelLabels: m.resolveLegacyLevelLabels,
 }))
 vi.mock('@/lib/excel/validate', () => ({ splitLeafOwners: m.splitLeafOwners }))
-// 옛 팀 캐시는 getComputedWbs(아래 describe — 팀 정렬 원천은 A2 가 옮긴다)만 쓴다. 가져오기 라우트는 요청 범위 원천(과제 27)을 쓴다
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: m.teamsForProjectSync }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: m.ensureProjectTeams }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
@@ -32,7 +30,7 @@ vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: m.writePr
 vi.mock('react', async () => ({ ...(await vi.importActual<typeof import('react')>('react')), cache: <T,>(fn: T) => fn }))
 
 import { POST } from '@/app/api/import/execute/route'
-import { getComputedWbs } from '@/lib/data/wbs'
+import { getComputedWbs, getProjectsCompletion } from '@/lib/data/wbs'
 import { projectOwnTeams, projectTeams } from '@/lib/teams/source'
 import type { Team } from '@/lib/domain/teams'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -208,6 +206,25 @@ describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본�
   })
 })
 
+/** select·eq·maybeSingle 체인 하나로 끝나는 표(projects — holidays·task_dependencies 는 SP4 A2 부터 키셋 가짜) */
+const simple = (data: unknown) => {
+  const q: Record<string, unknown> = {}
+  for (const k of ['select', 'eq', 'maybeSingle']) q[k] = () => q
+  q.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res, rej)
+  return q
+}
+/** getComputedWbs 의 다섯 표 — wbs_items·item_owners·holidays·task_dependencies 는 키셋 가짜, projects 는 단건 */
+const client = (wbs: ReturnType<typeof pagedTable>, owners: ReturnType<typeof pagedTable>,
+  rest: { holidays?: ReturnType<typeof pagedTable>; deps?: ReturnType<typeof pagedTable> } = {}) => {
+  const holidays = rest.holidays ?? pagedTable([])
+  const deps = rest.deps ?? pagedTable([])
+  return {
+    from: (t: string) => t === 'wbs_items' ? wbs.make() : t === 'item_owners' ? owners.make()
+      : t === 'holidays' ? holidays.make() : t === 'task_dependencies' ? deps.make()
+      : t === 'projects' ? simple({ base_date: '2026-09-01' }) : simple([]),
+  }
+}
+
 describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·item_owners, D18·Q5)', () => {
   const PID = '22222222-2222-4222-8222-222222222222'
   const wbsRow = (i: number) => ({
@@ -216,18 +233,7 @@ describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·ite
     external_ref: null, depends: null, stage: null,
   })
   const ownerOf = (r: { id: string }) => ({ wbs_item_id: r.id, team_id: 't-res', kind: 'primary', teams: { code: 'RES' }, wbs_items: { project_id: PID } })
-  /** select·eq·maybeSingle 체인 하나로 끝나는 표(holidays·projects·task_dependencies — A2 가 끝까지 읽기로 바꾼다) */
-  const simple = (data: unknown) => {
-    const q: Record<string, unknown> = {}
-    for (const k of ['select', 'eq', 'maybeSingle']) q[k] = () => q
-    q.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res, rej)
-    return q
-  }
-  const client = (wbs: ReturnType<typeof pagedTable>, owners: ReturnType<typeof pagedTable>) => ({
-    from: (t: string) => t === 'wbs_items' ? wbs.make() : t === 'item_owners' ? owners.make()
-      : t === 'projects' ? simple({ base_date: '2026-09-01' }) : simple([]),
-  })
-  beforeEach(() => { m.teamsForProjectSync.mockReturnValue([]) })
+  beforeEach(() => { vi.mocked(projectTeams).mockResolvedValue([]) })
 
   it('두 표가 한 응답의 상한(여기서는 2행)을 넘어도 끝까지 읽힌다 — 담당이 빠지지 않는다', async () => {
     const rows = Array.from({ length: 5 }, (_, i) => wbsRow(i))
@@ -298,5 +304,79 @@ describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·ite
     const rows = [wbsRow(1), wbsRow(2)]
     m.createServerClient.mockResolvedValue(client(pagedTable(rows), pagedTable(rows.map(ownerOf), { count: 3 })))
     await expect(getComputedWbs(PID)).rejects.toThrow('[getComputedWbs] item_owners 목록을 끝까지 읽지 못했습니다(2/3건)')
+  })
+})
+
+describe('getComputedWbs — 나머지 끝까지(holidays·task_dependencies)·팀 정렬 원천(SP4 A2 §4.6)', () => {
+  const PID = '00000000-0000-0000-7e57-000000001910'
+  const day = (i: number) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10)
+  const one = { id: 'i0001', project_id: PID, parent_id: null, code: '1', sort_order: 0, name: '항목', biz: null, deliverable: null,
+    planned_start: '2026-01-01', planned_end: '2026-01-31', weight: null, actual_pct: 0, is_owner_split: false, external_ref: null, depends: null, stage: null }
+  const dep = (i: number) => ({ id: `d${String(i).padStart(4, '0')}`, project_id: PID, predecessor_id: 'i0001', successor_id: 'i0001',
+    dependency_type: 'FS', lag_days: 0 })
+  const team = (id: string, code: string, sortOrder: number, active = true) => ({
+    id, code, name: code, color: '#6b7280', sortOrder, active, progressVisible: true, projectId: PID, workspaceId: 'w' })
+  beforeEach(() => { vi.mocked(projectTeams).mockResolvedValue([]) })
+
+  it('두 표가 한 응답의 상한(2행)을 넘어도 끝까지 — 영업일 계산의 휴일과 연결선이 빠지지 않는다, 키셋(date·id)', async () => {
+    const holidays = pagedTable(Array.from({ length: 5 }, (_, i) => ({ project_id: PID, date: day(i) })), { maxRows: 2 })
+    const deps = pagedTable(Array.from({ length: 5 }, (_, i) => dep(i)), { maxRows: 2 })
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { holidays, deps }))
+    const got = await getComputedWbs(PID)
+    expect(got.holidays).toHaveLength(5)
+    expect(got.dependencies.filter((d) => d.origin === 'manual')).toHaveLength(5)
+    expect(holidays.log[0]).toEqual(expect.arrayContaining([{ method: 'order', args: ['date'] }]))
+    expect(holidays.log[1]).toEqual(expect.arrayContaining([{ method: 'gt', args: ['date', day(1)] }]))
+    expect(deps.log[0]).toEqual(expect.arrayContaining([{ method: 'order', args: ['id'] }]))
+  })
+  it('holidays 를 읽는 사이 행 수가 바뀌면 throw — 휴일이 빠진 계획%를 정상처럼 내지 않는다', async () => {
+    const holidays = pagedTable(Array.from({ length: 4 }, (_, i) => ({ project_id: PID, date: day(i) })), {
+      maxRows: 2, afterResponse: (n, rows) => (n === 1 ? [...rows, { project_id: PID, date: day(9) }] : undefined) })
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { holidays }))
+    await expect(getComputedWbs(PID)).rejects.toThrow(/holidays 목록을 끝까지 읽지 못했습니다/)
+  })
+  it('task_dependencies 조회 오류는 throw — "의존성 없음"으로 위장하지 않는다', async () => {
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { deps: pagedTable([], { error: { message: 'boom' } }) }))
+    await expect(getComputedWbs(PID)).rejects.toThrow(/task_dependencies 조회 실패/)
+  })
+  it('담당 순서는 요청 범위 projectTeams(비활성 포함)의 sortOrder — 옛 캐시를 읽지 않는다', async () => {
+    vi.mocked(projectTeams).mockResolvedValue([team('t-ops', 'OPS', 0, false), team('t-res', 'RES', 1)])
+    const owners = pagedTable([
+      { wbs_item_id: 'i0001', team_id: 't-res', kind: 'support', teams: { code: 'RES' }, wbs_items: { project_id: PID } },
+      { wbs_item_id: 'i0001', team_id: 't-ops', kind: 'support', teams: { code: 'OPS' }, wbs_items: { project_id: PID } },
+    ])
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), owners))
+    const got = await getComputedWbs(PID)
+    expect(got.items[0].owners).toEqual([{ team: 'OPS', kind: 'support' }, { team: 'RES', kind: 'support' }])
+    expect(vi.mocked(projectTeams)).toHaveBeenCalledWith(PID)
+  })
+  it('팀 원천 실패는 그대로 올린다(데이터 로더 — 화면의 오류 경계, 빈 순서로 위장하지 않는다)', async () => {
+    const { TeamsUnavailableError } = await import('@/lib/teams/source')
+    vi.mocked(projectTeams).mockRejectedValue(new TeamsUnavailableError())
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([])))
+    await expect(getComputedWbs(PID)).rejects.toBeInstanceOf(TeamsUnavailableError)
+  })
+})
+
+describe('getProjectsCompletion — 볼 수 있는 프로젝트의 wbs_items 를 끝까지, 실패는 null(SP4 A2 §4.6)', () => {
+  const row = (i: number, pid: string) => ({ id: `w${String(i).padStart(4, '0')}`, parent_id: null, project_id: pid, actual_pct: 100 })
+  it('한 응답의 상한(3행)을 넘어도 끝까지 — 뒤 프로젝트의 미완 항목이 빠져 "완료"로 보이지 않는다', async () => {
+    const rows = [...Array.from({ length: 6 }, (_, i) => row(i, 'pA')), { id: 'w9999', parent_id: null, project_id: 'pB', actual_pct: 10 }]
+    const t = pagedTable(rows, { maxRows: 3 })
+    m.createServerClient.mockResolvedValue({ from: (tb: string) => { if (tb !== 'wbs_items') throw new Error(tb); return t.make() } })
+    const map = await getProjectsCompletion()
+    expect(map && Object.keys(map).sort()).toEqual(['pA', 'pB'])
+    expect(t.log[0]).toEqual(expect.arrayContaining([{ method: 'order', args: ['id'] }]))
+    expect(t.log.length).toBeGreaterThan(2)
+  })
+  it('조회 오류·읽는 사이 변경은 null + 로그(배지 하나로 앱 셸이 멈추지 않는다) — 빈 맵({})과 다르다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.createServerClient.mockResolvedValue({ from: () => pagedTable([], { error: { message: 'boom' } }).make() })
+    expect(await getProjectsCompletion()).toBeNull()
+    const moving = pagedTable([row(0, 'pA'), row(1, 'pA'), row(2, 'pA')], { maxRows: 2, afterResponse: (n, r) => (n === 1 ? [...r, row(7, 'pA')] : undefined) })
+    m.createServerClient.mockResolvedValue({ from: () => moving.make() })
+    expect(await getProjectsCompletion()).toBeNull()
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('[getProjectsCompletion]'), expect.anything())
+    err.mockRestore()
   })
 })

@@ -25,7 +25,7 @@ vi.mock('@/lib/supabase/server', () => ({
     from: (table: string) => queryBuilder(responses[table] ?? { data: [], error: null }),
   }),
 }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 // React cache() 는 같은 인자로 두 번째 호출을 재사용한다 — 케이스마다 projectId 를 달리해 피한다.
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react')
