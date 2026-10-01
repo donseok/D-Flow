@@ -235,10 +235,10 @@ E2E 로는 재지 않는다 — **SP3b 인수 목록**이다.
 | 열거 게이트 | `tests/gates` (리뷰 B7·B8·B9 참조) | 액션 174 · 라우트 핸들러 44 · 스텁 74 · 가드 등급 null 59 양방향 대조 |
 | 마이그레이션 | `git log --oneline main..HEAD -- supabase` | **비어 있음** — Phase B 는 마이그레이션이 없다(P18). 롤백 리허설 대상 없음 |
 
-main 반영 뒤 컨트롤러가 채울 두 줄:
+main 반영 뒤 채운 두 줄(2026-10-01):
 
-- main 커밋의 스크래치 워크트리 빌드: (컨트롤러)
-- push 뒤 GitHub Actions run: (컨트롤러)
+- main 커밋의 스크래치 워크트리 빌드: 전용 스택 워크트리 `sp3a-c-visual` 에서 `npm run build` **exit 0**(`b0f617d` — Phase D 마지막 `src` 변경 커밋). main `dce80f7` 과 `src`·`supabase` 가 같고 그 사이 차이는 `package.json` 의 `accept:synthetic` 스크립트 한 줄과 `scripts`·`tests`·`docs` 뿐이라 같은 빌드로 본다. 같은 시점 `settings:verify` 0 · `test:rls` 26 파일·282 통과
+- push 뒤 GitHub Actions run: [36802017871](https://github.com/donseok/D-Flow/actions/runs/36802017871) — `dce80f7`, **success**(`test`·`db` 두 job)
 
 ## 6. 남아 있는 한계 — `docs/baseline/sp3a-b-known-limits.md`
 
