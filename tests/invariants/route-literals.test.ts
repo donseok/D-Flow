@@ -14,7 +14,6 @@ const GROUP_REVALIDATE = /revalidatePath\(\s*'(\/\([^']*)'\s*(?:,\s*'(page|layou
 
 const SHELL = 'UI-2b: 옛 셸 — 과제 31 이 파일째 지운다'
 const CLIENT_LINK = 'UI-2b: 과제 35 — 클라이언트 링크(useScope 뒤)'
-const RESOLVER = 'UI-2a: 과제 18 — 리졸버·D7'
 const BASE_ARG = 'UI-2a: 과제 21 — base 인자'
 const PERMALINK = '영구: 영구 링크(D6) — 옛 형식을 내거나 두 형식을 읽는다'
 
@@ -33,11 +32,6 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/components/admin/AccountsManager.tsx': { count: 1, why: CLIENT_LINK },
   'src/components/ui/BrandMark.tsx': { count: 1, why: 'UI-2b: 과제 25 — C 파일 과제' },
   'src/lib/nav/legacyPaths.ts': { count: 2, why: 'UI-2b: 과제 25 — C 파일 과제' },
-  'src/app/page.tsx': { count: 1, why: RESOLVER },
-  'src/app/not-found.tsx': { count: 1, why: RESOLVER },
-  'src/app/login/page.tsx': { count: 1, why: RESOLVER },
-  'src/components/invite/InviteRedeemCard.tsx': { count: 2, why: RESOLVER },
-  'src/app/(app)/admin/llm-config/page.tsx': { count: 1, why: RESOLVER },
   'src/lib/minutes/source.ts': { count: 1, why: BASE_ARG },
   'src/lib/domain/usage.ts': { count: 2, why: BASE_ARG },
   'src/lib/data/minutes.ts': { count: 1, why: BASE_ARG },

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic' // 설정·프로필은 항상 최신 DB 
 export default async function LlmConfigAdminPage() {
   // 슈퍼유저 전용 — 판정은 canManageLlmConfig 한 곳에서. 어포던스(헤더 메뉴)도 같은 판정을 쓴다.
   const actor = await getActorForView()
-  if (!canManageLlmConfig(actor)) redirect('/projects')
+  if (!canManageLlmConfig(actor)) redirect('/')
 
   // 설정값(무엇을 저장했나)과 별개로 **지금 서버가 해석한 실제 모델**을 함께 읽는다.
   // 둘이 갈리는 경우가 있다(env 오버라이드·프로필이 임베딩을 안 덮음) — 그게 관리자가 알아야 할 것이다.

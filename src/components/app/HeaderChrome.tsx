@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Bell, ChevronRight, Cpu, KeyRound, LogOut, Menu, User, UserCog, Users, X,
 } from 'lucide-react'
-import { createBrowserClient } from '@/lib/supabase/client'
 import { canManageTeams } from '@/lib/authz/teamsAccess'
 import { canManageLlmConfig } from '@/lib/authz/llmConfigAccess'
 import { markAllNotificationsRead } from '@/app/actions/notifications'
@@ -22,7 +21,7 @@ import { useProjectNavigation } from './ProjectNavigationContext'
 import { projectMenu, type SidebarProject } from './Sidebar'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
-import { clearAllWikiDrafts } from '@/lib/drafts/wikiDrafts'
+import { signOutAndLeave } from '@/lib/auth/signOut'
 
 const SECTION_LABEL: Record<string, string> = {
   dashboard: '대시보드', wbs: 'WBS · 간트', gantt: '간트 차트', kanban: '칸반 보드', issues: '이슈관리',
@@ -84,14 +83,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
     }
   }, [pathname, projects, routeProjectId, t])
 
-  const signOut = async () => {
-    // 공용 PC 에서 다음 사용자에게 위키 초안이 남지 않게 — 세션을 끊기 전에 지운다.
-    // 세션 만료·/login 진입에서는 지우지 않는다(주인의 초안을 부순다).
-    try { clearAllWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
-    await createBrowserClient().auth.signOut()
-    router.replace('/login')
-    router.refresh()
-  }
+  const signOut = () => signOutAndLeave(router)   // 위키 초안 정리 → 세션 끊기 → /login(lib/auth/signOut)
 
   // 패널·배지는 안읽음만 표시(읽은 항목은 목록에서 제거 — 사용자 결정). notifs는 읽음 포함
   // 전체를 유지한다 — '모두 읽음' 저장이 전체 id를 보내야 기존 읽음이 유실되지 않는다(replace 시맨틱).

@@ -15,7 +15,7 @@ const APP = 'src/app'
 const EXCLUDED: Record<string, string> = {
   'src/app/login/page.tsx': '로그인 전 — 워크스페이스 미확정',
   'src/app/invite/[token]/page.tsx': '초대 토큰 — 로그인 전·워크스페이스 미확정',
-  'src/app/page.tsx': '/projects 로 redirect 만',
+  'src/app/page.tsx': '리졸버 — 쿠키·소속으로 redirect',
   'src/app/(app)/account/page.tsx': '계정 단위(개인 토큰 포함) — 모듈 밖',
   'src/app/(app)/w/[slug]/admin/accounts/page.tsx': '셸 — 모듈 밖(워크스페이스 관리, 정본 §3.2.2 끝 문단)',
   'src/app/(app)/admin/llm-config/page.tsx': '플랫폼 관리 — 모듈 밖',
