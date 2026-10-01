@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea, WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import { findSentinels, sentinelsFor } from '../fixtures/legacy-sentinels'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -39,9 +39,9 @@ const OPS = area('a-ops', 'OPS', '운영', 3)
 const OLD = area('a-old', 'OLD', '구 영역', 0, false)
 const REPORT = { id: 'rep', title: '' }
 const SETTINGS = '/p/p1/settings#project-team'
-const row = (id: string, areaId: string, thisContent = ''): WeeklyAreaRow =>
+const row = (id: string, areaId: string, thisContent = ''): WeeklySheetRow =>
   ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
-const record = (r: WeeklyAreaRow) => ({
+const record = (r: WeeklySheetRow) => ({
   id: r.id, report_id: r.reportId, project_id: 'p1', area_id: r.areaId,
   this_content: r.thisContent, this_issue: r.thisIssue, next_content: r.nextContent, next_issue: r.nextIssue,
 })
@@ -54,7 +54,7 @@ const settingsLink = () => document.querySelector(`a[href="${SETTINGS}"]`)
 const labels = () => [...container.querySelectorAll('tbody tr')].map(tr => tr.querySelector('td')?.textContent)
 
 /** 같은 root 에 다시 그리면 router.refresh() 뒤 서버가 내려준 새 props 와 같다. */
-function show(p: { areas: WeeklyArea[]; report?: { id: string; title: string } | null; rows?: WeeklyAreaRow[]; admin?: boolean }) {
+function show(p: { areas: WeeklyArea[]; report?: { id: string; title: string } | null; rows?: WeeklySheetRow[]; admin?: boolean }) {
   act(() => root.render(
     <WeeklySheetView
       projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"

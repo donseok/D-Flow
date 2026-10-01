@@ -3,14 +3,14 @@ import {
   buildWeeklyRewriteSelection, prepareApplicableWeeklyRewriteEdits,
   type WeeklyRewriteCandidate,
 } from '@/lib/domain/weeklyRewrite'
-import { rowLabel, type WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import { rowLabel, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 const A_EXP = '00000000-0000-0000-7e57-0000000018d1'
 const A_DATA = '00000000-0000-0000-7e57-0000000018d2'
 const AREAS = [{ id: A_EXP, name: '실험', active: true }, { id: A_DATA, name: '데이터', active: false }]
-const labelOf = (r: WeeklyAreaRow) => rowLabel(r, AREAS)
+const labelOf = (r: WeeklySheetRow) => rowLabel(r, AREAS)
 
-const row = (id: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+const row = (id: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
   id,
   reportId: 'report-1',
   areaId: id === 'r1' ? A_EXP : A_DATA,
@@ -53,7 +53,7 @@ describe('prepareApplicableWeeklyRewriteEdits', () => {
   })
 
   it('행 삭제나 동시 수정이 하나라도 있으면 전체 적용을 막는다', () => {
-    expect(prepareApplicableWeeklyRewriteEdits([] as WeeklyAreaRow[], candidates)).toEqual({ ok: false })
+    expect(prepareApplicableWeeklyRewriteEdits([] as WeeklySheetRow[], candidates)).toEqual({ ok: false })
     expect(prepareApplicableWeeklyRewriteEdits(
       [row('r1', { thisContent: '다른 사용자가 수정', thisIssue: '원문 B' })],
       candidates,

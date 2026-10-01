@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import type { WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 export interface WeeklyReportDoc { id: string; projectId: string; weekStart: string; title: string }
 
@@ -11,7 +11,7 @@ type AreaRowRecord = {
   this_content: string; this_issue: string; next_content: string; next_issue: string
 }
 
-export function mapAreaRow(r: AreaRowRecord): WeeklyAreaRow {
+export function mapAreaRow(r: AreaRowRecord): WeeklySheetRow {
   return {
     id: r.id, reportId: r.report_id, areaId: r.area_id,
     thisContent: r.this_content, thisIssue: r.this_issue,
@@ -25,7 +25,7 @@ export function mapAreaRow(r: AreaRowRecord): WeeklyAreaRow {
  *  조회 실패는 throw — 행 없음으로 위장하면 이월·PPT 가 빈 시트로 대체된다(3원칙 ①). */
 export async function getWeeklySheet(
   projectId: string, weekStartIso: string,
-): Promise<{ report: WeeklyReportDoc; rows: WeeklyAreaRow[] } | null> {
+): Promise<{ report: WeeklyReportDoc; rows: WeeklySheetRow[] } | null> {
   const sb = await createServerClient()
   const rep = await sb.from('weekly_reports').select('id, project_id, week_start, title')
     .eq('project_id', projectId).eq('week_start', weekStartIso).maybeSingle()
@@ -42,11 +42,11 @@ export async function getWeeklySheet(
 }
 
 /** 이월 원본: 해당 주 이전 가장 최근 week_start 문서(직전 주 한정 아님 — 연휴 건너뜀 대응, 스펙 §4).
- *  행은 영역 행(WeeklyAreaRow)이고 순서를 정하지 않는다 — 이월(carryOverRows)이 영역 순서로 내놓는다(옛 sort_order 참조 정렬 삭제, Q35).
+ *  행은 영역 행(WeeklySheetRow)이고 순서를 정하지 않는다 — 이월(carryOverRows)이 영역 순서로 내놓는다(옛 sort_order 참조 정렬 삭제, Q35).
  *  임베드 weekly_reports → weekly_report_rows 의 FK 는 복합 FK 하나(weekly_report_rows_report_fk)라 모호하지 않다(W21). */
 export async function findCarryOverSource(
   projectId: string, beforeWeekStartIso: string,
-): Promise<{ report: WeeklyReportDoc; rows: WeeklyAreaRow[] } | null> {
+): Promise<{ report: WeeklyReportDoc; rows: WeeklySheetRow[] } | null> {
   const sb = await createServerClient()
   const { data, error } = await sb.from('weekly_reports')
     .select(`id, project_id, week_start, title, weekly_report_rows(${AREA_ROW_COLS})`)

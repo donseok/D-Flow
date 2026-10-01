@@ -1,11 +1,13 @@
 // no-runtime-constants 허용 목록(정본 §6.5.2) — 파일마다 걸린 패턴과 지우는 SP. SP4(양식·주간·팀)·SP5(어휘·달력·이슈 영역)가 항목을 지우고
 // SP5 done_when 에서 이 목록이 빈다. 새 파일은 여기 오르지 못한다 — 설정 레지스트리를 읽어야 한다.
 export type RuntimeConstantPattern =
-  | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
+  | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000'
 
+// SP4 A1 이 지운 주간 상수(WEEKLY_SECTIONS·WEEKLY_TEAM_SECTIONS·FALLBACK_SECTION)는 허용 항목 없이 패턴만 남는다 — 재도입을 막는 영구 가드(스펙 §4.8)
 export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
   DEFAULT_TEAMS: /\bDEFAULT_TEAMS\b/, WEEKLY_SECTIONS: /\bWEEKLY_SECTIONS\b/, WEEKLY_TEAM_SECTIONS: /\bWEEKLY_TEAM_SECTIONS\b/,
+  FALLBACK_SECTION: /\bFALLBACK_SECTION\b/,
   ISSUE_MEGA_AREAS: /\bISSUE_MEGA_AREAS\b/, LEGACY_EXCEL_PROFILE_V1: /\bLEGACY_EXCEL_PROFILE_V1\b/, LEGACY_LABEL_ABBR: /\bLEGACY_LABEL_ABBR\b/,
   ATTENDANCE_TYPES: /\bATTENDANCE_TYPES\b/, MEETING_CATEGORIES: /\bMEETING_CATEGORIES\b/, ISSUE_SEVERITIES: /\bISSUE_SEVERITIES\b/,
   'Asia/Seoul': /Asia\/Seoul/, '+09:00': /\+09:00/, '9 * 3600_000': /9 \* 3600_000/,
@@ -13,8 +15,6 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
 
 /** 파일 → { patterns, removedBy } */
 export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP4' | 'SP5' | 'SP5b' | 'SP6' }> = {
-  // WEEKLY_*(주간 구분·팀 구분 — SP4 주간 영역 설정으로)
-  'src/lib/domain/weeklySheet.ts': { patterns: ['WEEKLY_SECTIONS', 'WEEKLY_TEAM_SECTIONS'], removedBy: 'SP4' },
   // ISSUE_MEGA_AREAS(이슈 영역 — SP5 Phase B 가 project_areas(issue_area) 로)
   'src/components/dashboard/IssueStatusCard.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
   'src/components/issues/IssueAnalysisModal.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },

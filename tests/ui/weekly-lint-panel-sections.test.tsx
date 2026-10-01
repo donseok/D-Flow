@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { WeeklyLintPanel } from '@/components/weekly/WeeklyLintPanel'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { LegacySectionRow } from '../helpers/legacySectionRows'
 import { legacyGroup, legacyOrdered } from '../helpers/weekly-legacy'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const mkRow = (id: string, section: string, sortOrder: number, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
+const mkRow = (id: string, section: string, sortOrder: number, over: Partial<LegacySectionRow> = {}): LegacySectionRow => ({
   id, reportId: 'rep', section, module: '', sortOrder,
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
@@ -31,7 +31,7 @@ describe('주간보고 점검 패널 — 구분 단위', () => {
     document.body.innerHTML = ''
   })
 
-  const show = (rows: WeeklySheetRow[]) => {
+  const show = (rows: LegacySectionRow[]) => {
     root = createRoot(container)
     act(() => root.render(
       <WeeklyLintPanel open rows={legacyOrdered(rows)} groupOf={legacyGroup} onClose={() => {}} onApply={() => {}} onGoToCell={() => {}} />,

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
 import { fillSheetTemplate, fillWeeklyTemplate } from '@/lib/report/templateFill'
 import { lintWeeklySheet } from '@/lib/domain/weeklyLint'
-import { areaGroupOf, visibleRows, type WeeklyArea, type WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import { areaGroupOf, visibleRows, type WeeklyArea, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { NarrativeModel } from '@/lib/report/narrative'
 import { findSentinels, sentinelsFor, zipTextParts } from '../fixtures/legacy-sentinels'
 
@@ -16,9 +16,9 @@ const AREAS: WeeklyArea[] = [
   area('a-old', '구 영역', 0, false), area('a-gone', '닫힌 영역', 4, false),
 ]
 const DUP = '- 같은 줄\n- 같은 줄'   // 점검이 묶음마다 지적 하나 이상을 내게 한다(완전 중복)
-const row = (id: string, areaId: string, thisContent = ''): WeeklyAreaRow =>
+const row = (id: string, areaId: string, thisContent = ''): WeeklySheetRow =>
   ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
-const ROWS: WeeklyAreaRow[] = [
+const ROWS: WeeklySheetRow[] = [
   row('r-ops', 'a-ops', DUP), row('r-exp', 'a-exp', DUP), row('r-data', 'a-data', DUP),
   row('r-old', 'a-old', DUP),   // 내용 있는 비활성 — 활성 뒤 페이지
   row('r-gone', 'a-gone'),      // 내용 없는 비활성 — 페이지·점검 묶음 없음

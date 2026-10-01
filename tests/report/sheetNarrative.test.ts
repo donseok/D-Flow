@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { sheetLineText, cellLines, buildSheetSections } from '@/lib/report/sheetNarrative'
-import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea, WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 const area = (id: string, name: string, sortOrder: number, active = true): WeeklyArea =>
   ({ id, code: id.toUpperCase(), name, sortOrder, active, teams: [] })
 const AREAS: WeeklyArea[] = [area('a-exp', '실험', 1), area('a-data', '데이터', 2), area('a-ops', '운영', 3)]
-const row = (id: string, areaId: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+const row = (id: string, areaId: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
   id, reportId: 'rep1', areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
 

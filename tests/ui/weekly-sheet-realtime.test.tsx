@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea, WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -34,9 +34,9 @@ const AREAS: WeeklyArea[] = [
   { id: 'a-data', code: 'DATA', name: '데이터', sortOrder: 2, active: true, teams: [] },
   { id: 'a-ops', code: 'OPS', name: '운영', sortOrder: 3, active: true, teams: [] },
 ]
-const row = (id: string, areaId: string, thisContent = ''): WeeklyAreaRow =>
+const row = (id: string, areaId: string, thisContent = ''): WeeklySheetRow =>
   ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
-const record = (r: WeeklyAreaRow) => ({
+const record = (r: WeeklySheetRow) => ({
   id: r.id, report_id: r.reportId, project_id: 'p1', area_id: r.areaId,
   this_content: r.thisContent, this_issue: r.thisIssue, next_content: r.nextContent, next_issue: r.nextIssue,
 })
@@ -46,7 +46,7 @@ let root: Root
 const labels = () => [...container.querySelectorAll('tbody tr')].map(tr => tr.querySelector('td')?.textContent)
 
 /** 같은 root 에 다시 그리면 router.refresh() 뒤 서버가 내려준 새 props 와 같다(컴포넌트는 key 없이 유지된다). */
-function show(initialRows: WeeklyAreaRow[], opts: { areas?: WeeklyArea[]; reportId?: string } = {}) {
+function show(initialRows: WeeklySheetRow[], opts: { areas?: WeeklyArea[]; reportId?: string } = {}) {
   act(() => root.render(
     <WeeklySheetView
       projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"

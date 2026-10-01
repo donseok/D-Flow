@@ -4,7 +4,7 @@
  *    옛 구분 기반 이월(weeklySheet.ts 의 carryOverRows)은 SP4 계획 과제 25 가 지운다. ── */
 import {
   NEXT_CELLS, UNKNOWN_AREA_LABEL, WEEKLY_CELL_MAX, hasContent, orderAreas,
-  type NewWeeklyAreaRow, type WeeklyArea, type WeeklyCellKey, type WeeklyCells,
+  type NewWeeklyRow, type WeeklyArea, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
 /** 매핑 값 — 옮기지 않음(원본 문서는 바뀌지 않으므로 유실이 아니다) */
@@ -14,11 +14,11 @@ export type CarryMapping = Readonly<Record<string, string>>
 export interface CarryPending { areaId: string; areaName: string; cells: (keyof WeeklyCells)[] }
 export interface CarryOverflow { areaId: string; areaName: string; cell: WeeklyCellKey; length: number }
 export type CarryOverResult =
-  | { ok: true; rows: NewWeeklyAreaRow[] }
+  | { ok: true; rows: NewWeeklyRow[] }
   | { ok: false; pending: CarryPending[]; overflow: CarryOverflow[] }
 
 /** 새 문서의 빈 시드 — 지금 활성인 영역마다 빈 행 하나(영역 순) */
-export function defaultWeeklyRows(areas: readonly WeeklyArea[]): NewWeeklyAreaRow[] {
+export function defaultWeeklyRows(areas: readonly WeeklyArea[]): NewWeeklyRow[] {
   return orderAreas(areas).filter((a) => a.active)
     .map((a) => ({ areaId: a.id, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '' }))
 }
@@ -88,7 +88,7 @@ export function carryOverRows(
 }
 
 /** RPC create_weekly_report 의 p_seed 모양 — 영역 id + 네 칸(snake). custom 은 싣지 않는다(SP5c) */
-export function seedOf(rows: readonly NewWeeklyAreaRow[]): {
+export function seedOf(rows: readonly NewWeeklyRow[]): {
   area_id: string; this_content: string; this_issue: string; next_content: string; next_issue: string
 }[] {
   return rows.map((r) => ({

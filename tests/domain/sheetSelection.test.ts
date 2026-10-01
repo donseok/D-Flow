@@ -4,9 +4,9 @@ import {
   pasteEdits, fillEdits, clearEdits, reconcileSelection,
   type CellAddr, type GridRect, type SelectionState,
 } from '@/lib/domain/sheetSelection'
-import type { WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
-const mkRow = (id: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+const mkRow = (id: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
   id, reportId: 'rep', areaId: 'area-1',
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })

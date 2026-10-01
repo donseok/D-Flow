@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea, WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,7 +26,7 @@ vi.mock('@/lib/supabase/client', () => ({
 const { WeeklySheetView } = await import('@/components/weekly/WeeklySheetView')
 
 const AREAS: WeeklyArea[] = [{ id: 'a1', code: 'EXP', name: '실험', sortOrder: 1, active: true, teams: [] }]
-const row: WeeklyAreaRow = {
+const row: WeeklySheetRow = {
   id: 'r1', reportId: 'rep', areaId: 'a1',
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '',
 }
