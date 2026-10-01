@@ -45,13 +45,26 @@ async function moduleProjects(workspaceId: string, pids: string[], client: Db): 
   return { on: (m) => (CORE_MODULES.includes(m) ? pids : pids.filter((p) => sets.get(p)?.has(m))), failed: failed.length > 0 }
 }
 
+/**
+ * 화면에서 볼 수 있는 프로젝트(canSeeProject — 비공개 프로젝트는 명단·워크스페이스 관리자만, 0070 의미). 프로젝트를 가로지르는 목록은 모두 이 거르기를 거친다
+ * (공지 RLS 같은 읽기 정책은 비공개를 거르지 않는다 — 비공개는 앱 층 화면 숨김). 조회 실패는 throw — 호출부가 원천 실패로 받는다(숨길 것을 못 숨기느니 막는다).
+ */
+async function visibleProjectIds(client: Db, actor: Actor, pids: readonly string[]): Promise<Set<string>> {
+  const rows = (await Promise.all(chunks(pids).map((ids) => page<{ id: string; is_private: boolean | null }>('프로젝트 가시성', (f, t) => client.from('projects')
+    .select('id, is_private', { count: 'exact' }).in('id', ids).order('id').range(f, t))))).flat()
+  return new Set(rows.filter((p) => canSeeProject(actor, p)).map((p) => p.id))
+}
+
 async function wbsRows(client: Db, actor: Actor, pids: string[], today: string): Promise<MyWorkRow[]> {
-  const mine = myMemberIdsIn(actor, pids)
-  if (!mine.length) return []
+  if (!myMemberIdsIn(actor, pids).length) return []
   type R = { id: string; name: string; project_id: string; planned_end: string | null; actual_pct: number | null; projects: { name: string } | null }
-  const items = await page<R>('내 담당 작업', (f, t) => client.from('wbs_items')
-    .select('id, name, project_id, planned_end, actual_pct, projects!inner(name)', { count: 'exact' })
-    .in('project_id', pids).in('assignee_member_id', mine).order('id').range(f, t))
+  // 프로젝트 id 목록도 나눠 묻는다(요청 URL 길이) — 명단 id 는 프로젝트마다 하나라 같은 조각의 프로젝트에서 고른다
+  const items = (await Promise.all(chunks(pids).map((ids) => {
+    const mine = myMemberIdsIn(actor, ids)
+    return mine.length ? page<R>('내 담당 작업', (f, t) => client.from('wbs_items')
+      .select('id, name, project_id, planned_end, actual_pct, projects!inner(name)', { count: 'exact' })
+      .in('project_id', ids).in('assignee_member_id', mine).order('id').range(f, t)) : Promise.resolve([] as R[])
+  }))).flat()
   if (!items.length) return []
   const kids = (await Promise.all(chunks(items.map((i) => i.id)).map((ids) => page<{ parent_id: string }>('내 담당 작업의 하위', (f, t) => client.from('wbs_items')
     .select('parent_id', { count: 'exact' }).in('parent_id', ids).order('id').range(f, t))))).flat()
@@ -64,12 +77,14 @@ async function wbsRows(client: Db, actor: Actor, pids: string[], today: string):
 }
 
 async function issueRows(client: Db, actor: Actor, pids: string[], today: string): Promise<MyWorkRow[]> {
-  const mine = myMemberIdsIn(actor, pids)
-  if (!pids.length || !mine.length) return []
+  if (!pids.length || !myMemberIdsIn(actor, pids).length) return []
   type R = { issue_id: string; issues: { id: string; title: string; status: string; due_date: string | null; project_id: string; projects: { name: string } | null } | null }
-  const rows = await page<R>('내 담당 이슈', (f, t) => client.from('issue_assignees')
-    .select('issue_id, issues!inner(id, title, status, due_date, project_id, projects!inner(name))', { count: 'exact' })
-    .in('project_id', pids).in('member_id', mine).in('issues.status', [...OPEN_ISSUE]).order('issue_id').order('member_id').range(f, t))
+  const rows = (await Promise.all(chunks(pids).map((ids) => {
+    const mine = myMemberIdsIn(actor, ids)
+    return mine.length ? page<R>('내 담당 이슈', (f, t) => client.from('issue_assignees')
+      .select('issue_id, issues!inner(id, title, status, due_date, project_id, projects!inner(name))', { count: 'exact' })
+      .in('project_id', ids).in('member_id', mine).in('issues.status', [...OPEN_ISSUE]).order('issue_id').order('member_id').range(f, t)) : Promise.resolve([] as R[])
+  }))).flat()
   const seen = new Set<string>()
   return rows.flatMap((r) => (r.issues && !seen.has(r.issues.id) && seen.add(r.issues.id) ? [{
     kind: 'issue' as const, id: r.issues.id, title: r.issues.title, projectId: r.issues.project_id, projectName: r.issues.projects?.name ?? '',
@@ -86,15 +101,15 @@ async function approvalRows(client: Db, actor: Actor, pids: string[]): Promise<M
   if (!eligible.length) return []
   type O = { id: string; project_id: string; wbs_item_id: string | null; claimed_by_user_id: string | null; created_at: string
     wbs_items: { name: string } | null; projects: { name: string } | null }
-  const orders = await page<O>('결재 대기 주문', (f, t) => client.from('agent_work_orders')
+  const orders = (await Promise.all(chunks(eligible).map((ids) => page<O>('결재 대기 주문', (f, t) => client.from('agent_work_orders')
     .select('id, project_id, wbs_item_id, claimed_by_user_id, created_at, wbs_items(name), projects!inner(name)', { count: 'exact' })
-    .in('project_id', eligible).eq('status', 'reported').order('id').range(f, t))
+    .in('project_id', ids).eq('status', 'reported').order('id').range(f, t))))).flat()
   if (!orders.length) return []
   const need = [...new Set(orders.map((o) => o.project_id))]
   const treeFor = need.filter((p) => !isProjectAdmin(actor, p))
   type I = { id: string; parent_id: string | null; assignee_member_id: string | null; project_id: string }
-  const items = treeFor.length ? await page<I>('결재 대기 항목 트리', (f, t) => client.from('wbs_items')
-    .select('id, parent_id, assignee_member_id, project_id', { count: 'exact' }).in('project_id', treeFor).order('id').range(f, t)) : []
+  const items = (await Promise.all(chunks(treeFor).map((ids) => page<I>('결재 대기 항목 트리', (f, t) => client.from('wbs_items')
+    .select('id, parent_id, assignee_member_id, project_id', { count: 'exact' }).in('project_id', ids).order('id').range(f, t))))).flat()
   const out: MyWorkRow[] = []
   for (const pid of need) {
     const own = actor.memberIds.get(pid)
@@ -107,10 +122,10 @@ async function approvalRows(client: Db, actor: Actor, pids: string[]): Promise<M
   return out
 }
 
-async function meetingRows(workspaceId: string, today: string): Promise<MyWorkRow[]> {
+async function meetingRows(workspaceId: string, today: string, visible: ReadonlySet<string>): Promise<MyWorkRow[]> {
   const res = await getMyMeetings(workspaceId, today, today)          // meetings 가 꺼진 프로젝트의 행은 로더가 뺀다
   if (!res.ok) throw new Error(res.error)
-  return expandMeetings(res.meetings.filter((m) => m.isMine), res.exceptions, today, today).map((o) => ({
+  return expandMeetings(res.meetings.filter((m) => m.isMine), res.exceptions, today, today).filter((o) => visible.has(o.projectId)).map((o) => ({
     kind: 'meeting', id: o.occurrenceId, title: o.title, projectId: o.projectId, projectName: o.projectName ?? '',
     due: o.occurrenceDate, overdueDays: null, status: o.startTime ?? '종일', href: meetingHref(o.projectId, o.seriesId, o.occurrenceDate),
   }))
@@ -126,8 +141,10 @@ export async function getMyWork(workspaceId: string, actor: Actor, opts: { kinds
   const pids = projectsIn(actor, workspaceId)
   if (!pids.length) return { ok: true, rows: [], nextCursor: null, failedKinds: [] }
   let mods: Awaited<ReturnType<typeof moduleProjects>>
-  try { mods = await moduleProjects(workspaceId, pids, client) } catch (e) {
-    console.error('[portal] 모듈 판정 실패', workspaceId, errMsg(e))
+  let visible: Set<string>
+  // 모듈 판정과 가시성(비공개 거르기)을 함께 — 둘 다 못 읽으면 내 업무를 그리지 않는다(비공개 프로젝트 이름을 샐 수 있다)
+  try { [mods, visible] = await Promise.all([moduleProjects(workspaceId, pids, client), visibleProjectIds(client, actor, pids)]) } catch (e) {
+    console.error('[portal] 모듈·가시성 판정 실패', workspaceId, errMsg(e))
     return { ok: false, error: '내 업무를 불러오지 못했습니다.' }
   }
   const today = seoulToday()
@@ -135,13 +152,13 @@ export async function getMyWork(workspaceId: string, actor: Actor, opts: { kinds
   const run = async (kind: MyWorkKind): Promise<MyWorkRow[]> => {
     // 일부 프로젝트의 판정 실패 — 비core 원천은 그 프로젝트 행이 빠졌을 수 있다고 알린다(core 는 판정과 무관하게 읽는다)
     if (mods.failed && !CORE_MODULES.includes(SOURCE_MODULE[kind])) failedKinds.push(kind)
-    const on = mods.on(SOURCE_MODULE[kind])
+    const on = mods.on(SOURCE_MODULE[kind]).filter((p) => visible.has(p))
     if (!on.length) return []                                          // 어디서도 effective 가 아니면 조회하지 않는다(D39)
     try {
       if (kind === 'wbs') return await wbsRows(client, actor, on, today)
       if (kind === 'issue') return await issueRows(client, actor, on, today)
       if (kind === 'approval') return await approvalRows(client, actor, on)
-      return await meetingRows(workspaceId, today)
+      return await meetingRows(workspaceId, today, visible)
     } catch (e) {
       console.error('[portal] 원천 실패', kind, workspaceId, errMsg(e))
       failedKinds.push(kind)
@@ -197,7 +214,7 @@ export async function getProjectRows(workspaceId: string, actor: Actor, opts: { 
     const [rows, completion, prefs] = await Promise.all([
       page<PRow>('프로젝트 행', (f, t) => {
         let q = client.from('projects').select('id, name, start_date, end_date, is_private', { count: 'exact' }).eq('workspace_id', workspaceId)
-        if (opts.q?.trim()) q = q.ilike('name', `%${opts.q.trim().replace(/[%_\\]/g, (c) => `\\${c}`)}%`)
+        if (opts.q?.trim()) q = q.ilike('name', `%${opts.q.trim().replace(/[%_*\\]/g, (c) => `\\${c}`)}%`)
         return q.order('name').order('id').range(f, t)
       }),
       getProjectsCompletion(),
@@ -218,25 +235,35 @@ export async function getProjectRows(workspaceId: string, actor: Actor, opts: { 
   }
 }
 
-/** 그 워크스페이스 프로젝트의 게시 중 공지 — announcements 가 effective 인 프로젝트만(D20 — 티커를 지우는 UI-2b 의 대체 표면) */
+/**
+ * 그 워크스페이스 프로젝트의 게시 중 공지 — announcements 가 effective 이고 화면에서 볼 수 있는(비공개는 명단·워크스페이스 관리자만) 프로젝트만
+ * (D20 — 티커를 지우는 UI-2b 의 대체 표면). partial = 모듈 판정이 일부 프로젝트에서 실패해 그 프로젝트의 공지가 빠졌을 수 있다(S2 — 화면이 알린다).
+ * 거르기는 조회 전에 한다 — 숨길 프로젝트의 공지가 상한 행을 차지해 보일 공지가 줄지 않게.
+ */
 export async function getWorkspaceAnnouncements(workspaceId: string, actor: Actor, opts: { limit?: number } & Opts = {}):
-  Promise<{ ok: true; rows: { id: string; title: string; projectId: string; projectName: string; isPinned: boolean; createdAt: string }[] } | { ok: false; error: string }> {
+  Promise<{ ok: true; rows: { id: string; title: string; projectId: string; projectName: string; isPinned: boolean; createdAt: string }[]; partial: boolean } | { ok: false; error: string }> {
   try {
     const client = opts.client ?? (await createServerClient())
     const pids = projectsIn(actor, workspaceId)
-    if (!pids.length) return { ok: true, rows: [] }
-    const mods = await moduleProjects(workspaceId, pids, client)
-    const on = mods.on('announcements')
-    if (mods.failed) console.error('[portal] 공지 — 일부 프로젝트의 모듈 판정 실패(그 프로젝트 공지는 빠진다)', workspaceId)
-    if (!on.length) return { ok: true, rows: [] }
+    if (!pids.length) return { ok: true, rows: [], partial: false }
+    const [mods, visible] = await Promise.all([moduleProjects(workspaceId, pids, client), visibleProjectIds(client, actor, pids)])
+    if (mods.failed) console.error('[portal] 공지 — 일부 프로젝트의 모듈 판정 실패(그 프로젝트 공지는 빠질 수 있다)', workspaceId)
+    const on = mods.on('announcements').filter((p) => visible.has(p))
+    if (!on.length) return { ok: true, rows: [], partial: mods.failed }
     const today = seoulToday()
-    const { data, error } = await client.from('announcements')
-      .select('id, title, project_id, is_pinned, created_at, projects!inner(name)')
-      .in('project_id', on).or(`publish_from.is.null,publish_from.lte.${today}`).or(`publish_to.is.null,publish_to.gte.${today}`)
-      .order('is_pinned', { ascending: false }).order('created_at', { ascending: false }).order('id').limit(Math.min(Math.max(1, opts.limit ?? 5), 20))
-    if (error) throw new Error(error.message)
+    const limit = Math.min(Math.max(1, opts.limit ?? 5), 20)
     type A = { id: string; title: string; project_id: string; is_pinned: boolean; created_at: string; projects: { name: string } | null }
-    return { ok: true, rows: ((data ?? []) as unknown as A[]).map((a) => ({ id: a.id, title: a.title, projectId: a.project_id, projectName: a.projects?.name ?? '', isPinned: a.is_pinned, createdAt: a.created_at })) }
+    // 프로젝트 id 목록은 나눠 묻고(각 조각이 상한만큼) 메모리에서 합쳐 자른다 — 정렬 키는 DB 와 같다(고정 → 최신 → id)
+    const got = (await Promise.all(chunks(on).map(async (ids) => {
+      const { data, error } = await client.from('announcements')
+        .select('id, title, project_id, is_pinned, created_at, projects!inner(name)')
+        .in('project_id', ids).or(`publish_from.is.null,publish_from.lte.${today}`).or(`publish_to.is.null,publish_to.gte.${today}`)
+        .order('is_pinned', { ascending: false }).order('created_at', { ascending: false }).order('id').limit(limit)
+      if (error) throw new Error(error.message)
+      return (data ?? []) as unknown as A[]
+    }))).flat()
+    got.sort((x, y) => Number(y.is_pinned) - Number(x.is_pinned) || (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : 0) || (x.id < y.id ? -1 : 1))
+    return { ok: true, partial: mods.failed, rows: got.slice(0, limit).map((a) => ({ id: a.id, title: a.title, projectId: a.project_id, projectName: a.projects?.name ?? '', isPinned: a.is_pinned, createdAt: a.created_at })) }
   } catch (e) {
     console.error('[portal] 공지 실패', workspaceId, errMsg(e))
     return { ok: false, error: '공지를 불러오지 못했습니다.' }

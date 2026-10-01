@@ -15,7 +15,7 @@ function fakeClient(tables: Record<string, Row[]>, calls: string[]): ConfigReadC
       const q: Record<string, unknown> = {
         select: (_c: string, o?: { count?: string }) => { counted = !!o?.count; calls.push(`${table}.select`); return q },
         eq: (c: string, v: unknown) => { rows = rows.filter((r) => (c.includes('.') ? (r[c.split('.')[0]] as Row)?.[c.split('.')[1]] : r[c]) === v); return q },
-        in: (c: string, vs: unknown[]) => { rows = rows.filter((r) => vs.includes(r[c])); return q },
+        in: (c: string, vs: unknown[]) => { calls.push(`${table}.in:${vs.length}`); rows = rows.filter((r) => vs.includes(r[c])); return q },
         or: () => q, order: () => q,
         range: (a: number, b: number) => Promise.resolve({ data: rows.slice(a, b + 1), error: null, count: counted ? rows.length : null }),
         maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
@@ -114,5 +114,9 @@ describe('effectiveModulesMany = 프로젝트마다 effectiveModules(D39)', () =
     expect(many.sets.size).toBe(n)
     expect(many.sets.get(ids[n - 1])!.has('issues')).toBe(true)
     expect(calls.filter((c) => c === 'project_settings.select').length).toBeGreaterThanOrEqual(2)   // 두 쪽 이상
+    // id 목록은 나눠 묻는다 — 한 요청에 200개 넘게 싣지 않는다(요청 URL 길이, S4)
+    const sizes = calls.filter((c) => c.startsWith('project_settings.in:')).map((c) => Number(c.split(':')[1]))
+    expect(sizes.length).toBeGreaterThan(1)
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(200)
   })
 })

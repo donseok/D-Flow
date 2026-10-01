@@ -14,6 +14,8 @@ import { AI_MODULES, PROJECT_TOGGLABLE, type ModuleId } from './defaults'
 import { CORE, MODULES, moduleDef } from './registry'
 import { closeRequires } from './closure'
 
+/** in() 한 번에 실을 프로젝트 id 수 */
+const ID_CHUNK = 200
 type Row = { project_id: string; values: unknown; projects: { workspace_id: string } | null }
 
 export async function effectiveModulesMany(
@@ -27,9 +29,11 @@ export async function effectiveModulesMany(
   let optional = MODULES.filter((m) => !m.core && m.envAvailable() && allowed.has(m.id)).map((m) => m.id)
   if (valueOf(ws, 'ai.enabled') === false) optional = optional.filter((id) => !AI_MODULES.includes(id))
 
-  const rows = await fetchAllPages<Row>('프로젝트 설정(여러 프로젝트)', (from, to) => client.from('project_settings')
-    .select('project_id, values, projects!inner(workspace_id)', { count: 'exact' })
-    .in('project_id', ids).order('project_id').range(from, to) as unknown as PromiseLike<{ data: Row[] | null; error: { message: string } | null; count: number | null }>)
+  // id 목록은 200개씩 나눠 묻는다(요청 URL 길이 — 프로젝트가 수백 개여도 한 URL 에 싣지 않는다). 각 조각은 끝까지(D51)
+  const rows = (await Promise.all(Array.from({ length: Math.ceil(ids.length / ID_CHUNK) }, (_, i) => ids.slice(i * ID_CHUNK, (i + 1) * ID_CHUNK)).map((part) =>
+    fetchAllPages<Row>('프로젝트 설정(여러 프로젝트)', (from, to) => client.from('project_settings')
+      .select('project_id, values, projects!inner(workspace_id)', { count: 'exact' })
+      .in('project_id', part).order('project_id').range(from, to) as unknown as PromiseLike<{ data: Row[] | null; error: { message: string } | null; count: number | null }>)))).flat()
   const byId = new Map(rows.map((r) => [r.project_id, r]))
   const sets = new Map<string, ReadonlySet<ModuleId>>()
   const failed: string[] = []
