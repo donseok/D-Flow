@@ -47,6 +47,7 @@ async function mergeUpsert(sb: Sb, table: 'account_preferences' | 'user_preferen
 
 /**
  * 개인 설정 부분 병합 저장. 계정 키 → account_preferences, 워크스페이스 키 → opts.workspaceId 행(소속일 때만 — 쿠키를 읽지 않는다).
+ * 워크스페이스 판정이 거부면 같은 요청의 계정 키도 쓰지 않는다(전부 아니면 전무). 값 검사·상한은 splitPrefs(notifRead 는 받지 않는다).
  * 결과는 `{ ok }` 하나뿐이다(W10): 비로그인·workspaceId 없음·형식 밖·없는 워크스페이스·비소속·권한 조회 실패·저장 실패가 모두 같은
  * `{ ok: false }` 라 응답으로 워크스페이스의 존재를 가늠할 수 없다(사유는 서버 로그에만). 은퇴 키만 담긴 요청은 조용히 버리고 ok.
  */
@@ -55,29 +56,39 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
   if (!u) return { ok: false }
   const { account, workspace, dropped } = splitPrefs(patch)
   const unknown = dropped.filter((k) => !(RETIRED_PREF_KEYS as readonly string[]).includes(k))
-  if (unknown.length) console.error('[saveUiPrefs] 모르는 키·형식 밖 값 — 버린다:', unknown.join(','))
+  // 키 이름은 요청자가 정한다 — 개수와 앞 몇 개(길이 절단)만 남긴다(로그 범람 방지, Y4)
+  if (unknown.length) {
+    console.error(`[saveUiPrefs] 모르는 키·형식 밖 값 — 버린다(${unknown.length}개):`,
+      unknown.slice(0, LOG_KEYS_MAX).map((k) => k.slice(0, LOG_KEY_LEN)).join(',') + (unknown.length > LOG_KEYS_MAX ? ',…' : ''))
+  }
   const hasAccount = Object.keys(account).length > 0
   const hasWorkspace = Object.keys(workspace).length > 0
   if (!hasAccount && !hasWorkspace) return { ok: true }
+  // 워크스페이스 키가 있으면 판정을 먼저 한다 — 거부면 계정 키도 쓰지 않는다(전부 아니면 전무: 섞인 요청이 '저장 실패' 응답과
+  // 부분 저장으로 갈리지 않게, Y4). 지금 클라이언트는 두 큐를 나눠 섞인 요청을 보내지 않는다
+  let wid: string | null = null
+  if (hasWorkspace) {
+    const raw = opts.workspaceId
+    if (typeof raw !== 'string' || !UUID_RE.test(raw)) {
+      console.error('[saveUiPrefs] workspaceId 없음·형식 밖 — 저장하지 않는다:', Object.keys(workspace).join(','))
+      return { ok: false }
+    }
+    wid = raw.toLowerCase()   // 소속 맵의 키는 DB 의 소문자 uuid — 대문자로 온 같은 id 를 비소속으로 보지 않게
+    let member = false
+    try { member = isWorkspaceMember(await getActor(), wid) } catch (e) {
+      console.error('[saveUiPrefs] 권한 조회 실패 — 저장하지 않는다:', e instanceof Error ? e.message : e)
+      return { ok: false }
+    }
+    if (!member) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 저장하지 않는다:', wid); return { ok: false } }
+  }
   const sb = await createServerClient()
   let ok = true
   if (hasAccount) ok = await mergeUpsert(sb, 'account_preferences', { user_id: u.id }, account)
-  if (!hasWorkspace) return { ok }
-  const raw = opts.workspaceId
-  if (typeof raw !== 'string' || !UUID_RE.test(raw)) {
-    console.error('[saveUiPrefs] workspaceId 없음·형식 밖 — 워크스페이스 키를 버린다:', Object.keys(workspace).join(','))
-    return { ok: false }
-  }
-  const wid = raw.toLowerCase()   // 소속 맵의 키는 DB 의 소문자 uuid — 대문자로 온 같은 id 를 비소속으로 보지 않게
-  let member = false
-  try { member = isWorkspaceMember(await getActor(), wid) } catch (e) {
-    console.error('[saveUiPrefs] 권한 조회 실패 — 워크스페이스 키를 버린다:', e instanceof Error ? e.message : e)
-    return { ok: false }
-  }
-  if (!member) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 키를 버린다:', wid); return { ok: false } }
-  const wsOk = await mergeUpsert(sb, 'user_preferences', { user_id: u.id, workspace_id: wid }, workspace)
-  return { ok: ok && wsOk }
+  if (wid) ok = (await mergeUpsert(sb, 'user_preferences', { user_id: u.id, workspace_id: wid }, workspace)) && ok
+  return { ok }
 }
+const LOG_KEYS_MAX = 5
+const LOG_KEY_LEN = 40
 
 /** 프로젝트의 WBS 접힘 id 배열(행 없으면 null). 미로그인 시 null. */
 export async function getWbsCollapse(projectId: string): Promise<string[] | null> {

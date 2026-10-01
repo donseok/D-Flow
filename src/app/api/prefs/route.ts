@@ -8,7 +8,8 @@
 //
 // 인가는 내부 함수가 세션으로 판정한다(비로그인 = 아래 거부 응답, 본인 행만 upsert).
 // CSRF: JSON content-type 은 cross-origin 에서 preflight 를 강제하고 이 라우트는 CORS
-// 를 열지 않으므로 타 사이트발 쓰기는 차단된다(+ SameSite=Lax 쿠키).
+// 를 열지 않으므로 타 사이트발 쓰기는 차단된다(+ SameSite=Lax 쿠키). 그 전제를 코드로 둔다 — application/json 이 아니면
+// 본문을 읽지 않고 415(text/plain 폼으로 JSON 본문을 지어 보내는 단순 요청을 받지 않는다, U2a-2 리뷰 Y5).
 // 개인 설정의 범위(SP3b D9): 계정 키는 account_preferences, 워크스페이스 키는 본문의 workspaceId 행(그 화면의 워크스페이스 —
 // 쿠키를 읽지 않는다. 두 탭이 서로 다른 워크스페이스를 볼 때 남의 행에 쓰지 않게). 소속은 saveUiPrefs 가 확인한다.
 // 거부 응답은 하나다(W10) — 없는 워크스페이스·비소속·형식 밖·저장 실패가 같은 403·같은 문구라 응답이 존재 오라클이 되지 않는다.
@@ -26,6 +27,8 @@ type Body = {
 const PREFS_DENIED = '설정을 저장하지 못했습니다'
 
 export async function POST(req: NextRequest) {
+  const ct = req.headers.get('content-type') ?? ''
+  if (!/^application\/json(\s*;|$)/i.test(ct.trim())) return NextResponse.json({ ok: false }, { status: 415 })
   let body: Body
   try {
     body = await req.json()

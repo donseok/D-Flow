@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ getSession: vi.fn(), getActor: vi.fn(), createServerClient: vi.fn(), ops: [] as unknown[][] }))
+const h = vi.hoisted(() => ({ getSession: vi.fn(), getActor: vi.fn(), createServerClient: vi.fn(), ops: [] as unknown[][], eqs: {} as Record<string, unknown[][]> }))
 vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: h.getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
@@ -12,12 +12,12 @@ import { makeActor } from '../fixtures/actor'
 
 const WS = '00000000-0000-0000-7e57-000000001652'
 const WS_X = '00000000-0000-0000-7e57-000000001651'
-/** 표마다 maybeSingle 결과·upsert 기록. readFail 이면 선행 조회 오류, writeFail 이면 upsert 오류 */
+/** 표마다 maybeSingle 결과·upsert 기록·선행 조회의 .eq 인자 기록(Y1). readFail 이면 선행 조회 오류, writeFail 이면 upsert 오류 */
 function db(existing: Record<string, unknown>, opts: { readFail?: string; writeFail?: string } = {}) {
   return {
     from: (table: string) => {
       const q: Record<string, unknown> = {
-        select: () => q, eq: () => q,
+        select: () => q, eq: (...a: unknown[]) => { (h.eqs[table] ??= []).push(a); return q },
         maybeSingle: async () => (opts.readFail === table ? { data: null, error: { message: 'down' } } : { data: existing[table] ? { prefs: existing[table] } : null, error: null }),
         upsert: async (row: Record<string, unknown>, o: unknown) => {
           h.ops.push([table, row.prefs, row.workspace_id ?? null, o])
@@ -29,7 +29,7 @@ function db(existing: Record<string, unknown>, opts: { readFail?: string; writeF
   }
 }
 beforeEach(() => {
-  vi.clearAllMocks(); h.ops.length = 0
+  vi.clearAllMocks(); h.ops.length = 0; h.eqs = {}
   h.getSession.mockResolvedValue({ id: 'u1' })
   h.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WS, 'member']]) }))
 })
@@ -39,24 +39,63 @@ describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 
     h.createServerClient.mockResolvedValue(db({ account_preferences: { locale: 'en' } }))
     expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: true })
     expect(h.ops).toEqual([['account_preferences', { locale: 'en', theme: 'dark' }, null, { onConflict: 'user_id' }]])
+    expect(h.eqs).toEqual({ account_preferences: [['user_id', 'u1']] })
   })
   it('워크스페이스 키는 본문의 workspaceId 행에만(쿠키를 읽지 않는다 — Review Focus 4)', async () => {
     h.createServerClient.mockResolvedValue(db({ user_preferences: { notifRead: { p: ['n'] } } }))
     expect(await saveUiPrefs({ startPage: 'my_work' }, { workspaceId: WS })).toEqual({ ok: true })
     expect(h.ops).toEqual([['user_preferences', { notifRead: { p: ['n'] }, startPage: 'my_work' }, WS, { onConflict: 'user_id,workspace_id' }]])
+    // 병합 원천(선행 조회)도 그 워크스페이스 행으로 좁힌다 — 빠지면 다른 워크스페이스 행을 읽어 이 행에 병합한다(Y1)
+    expect(h.eqs).toEqual({ user_preferences: [['user_id', 'u1'], ['workspace_id', WS]] })
   })
   it('대문자로 온 같은 워크스페이스 id 는 소문자로 맞춰 소속을 본다 — 남의 행이 아니라 같은 행', async () => {
     h.createServerClient.mockResolvedValue(db({}))
     expect(await saveUiPrefs({ startPage: 'home' }, { workspaceId: WS.toUpperCase() })).toEqual({ ok: true })
     expect(h.ops.map((o) => o[2])).toEqual([WS])
+    expect(h.eqs.user_preferences).toEqual([['user_id', 'u1'], ['workspace_id', WS]])
   })
-  it('workspaceId 가 없거나 비소속이면 워크스페이스 키를 버리고 로그, 계정 키는 저장', async () => {
+  it('workspaceId 가 없거나 비소속이면 같은 요청의 계정 키도 쓰지 않는다 — 전부 아니면 전무(Y4)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.createServerClient.mockResolvedValue(db({}))
     expect(await saveUiPrefs({ theme: 'light', startPage: 'home' })).toEqual({ ok: false })
+    expect(await saveUiPrefs({ theme: 'light', startPage: 'home' }, { workspaceId: WS_X })).toEqual({ ok: false })
     expect(await saveUiPrefs({ startPage: 'home' }, { workspaceId: WS_X })).toEqual({ ok: false })
-    expect(h.ops.map((o) => o[0])).toEqual(['account_preferences'])
-    expect(err).toHaveBeenCalledTimes(2); err.mockRestore()
+    expect(h.ops).toEqual([]); expect(h.eqs).toEqual({})
+    expect(err).toHaveBeenCalledTimes(3); err.mockRestore()
+  })
+  it('섞인 요청이 통과하면 둘 다 저장한다', async () => {
+    h.createServerClient.mockResolvedValue(db({}))
+    expect(await saveUiPrefs({ theme: 'light', startPage: 'home' }, { workspaceId: WS })).toEqual({ ok: true })
+    expect(h.ops.map((o) => o[0])).toEqual(['account_preferences', 'user_preferences'])
+  })
+  it('notifRead 는 이 경로로 받지 않는다 — 쓰기 주체는 markAllNotificationsRead 하나(Y4)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.createServerClient.mockResolvedValue(db({}))
+    expect(await saveUiPrefs({ notifRead: { p: Array.from({ length: 10_000 }, (_, i) => `n${i}`) } }, { workspaceId: WS })).toEqual({ ok: true })
+    expect(h.ops).toEqual([])
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('모르는 키'), 'notifRead'); err.mockRestore()
+  })
+  it('계정 키 값 검사 — 형식 밖 값은 그 키만 버린다(크기 상한 포함, Y4)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.createServerClient.mockResolvedValue(db({}))
+    const bad = {
+      theme: 'purple', locale: 'fr', sidebarCollapsed: 'yes', minuteFontSize: 99, wbsGanttScale: Number.NaN, minutesView: 'grid',
+      dashSections: Array.from({ length: 51 }, (_, i) => `s${i}`), notif: { a: 'on' },
+    }
+    expect(await saveUiPrefs({ ...bad, wbsOutline: true, minutesExplorerLayout: 'list' } as never)).toEqual({ ok: true })
+    expect(h.ops).toEqual([['account_preferences', { wbsOutline: true, minutesExplorerLayout: 'list' }, null, { onConflict: 'user_id' }]])
+    err.mockRestore()
+  })
+  it('모르는 키 로그는 개수와 앞 다섯(길이 절단)만 — 키 수만 개 요청이 거대 로그를 남기지 않는다(Y4)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.createServerClient.mockResolvedValue(db({}))
+    const keys = Object.fromEntries(Array.from({ length: 5000 }, (_, i) => [`k${i}${'x'.repeat(100)}`, 1]))
+    expect(await saveUiPrefs(keys as never)).toEqual({ ok: true })
+    expect(err).toHaveBeenCalledTimes(1)
+    const [msg, list] = err.mock.calls[0] as [string, string]
+    expect(msg).toContain('(5000개)')
+    expect(list.split(',').length).toBe(6); expect(list.length).toBeLessThan(5 * 41 + 3)
+    err.mockRestore()
   })
   it('선행 조회 실패면 그 표의 저장을 중단한다(원칙 ②)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -129,6 +168,15 @@ describe('/api/prefs — 거부 응답은 하나(W10 — 존재 오라클 금지
     expect((await post({ prefs: { startPage: 'home' }, workspaceId: WS })).status).toBe(200)
     expect((await post({ prefs: { lastProjectId: 'p', heroCollapsed: true } })).status).toBe(200)
     expect(h.ops.map((o) => o[0])).toEqual(['account_preferences', 'user_preferences'])
+  })
+  it('content-type 이 application/json 이 아니면 본문을 읽지 않고 415(Y5 — text/plain 폼 CSRF)', async () => {
+    h.createServerClient.mockResolvedValue(db({}))
+    for (const ct of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', 'application/jsonp']) {
+      const res = await POST(new NextRequest('http://localhost/api/prefs', { method: 'POST', headers: { 'content-type': ct }, body: JSON.stringify({ prefs: { theme: 'dark' } }) }))
+      expect(res.status, ct).toBe(415)
+    }
+    expect((await post({ prefs: { theme: 'dark' } }, { 'content-type': 'application/json; charset=utf-8' })).status).toBe(200)
+    expect(h.ops.map((o) => o[0])).toEqual(['account_preferences'])
   })
   it('본문이 JSON 이 아니거나 객체가 아니면 400(prefs 배열은 무시)', async () => {
     const bad = await POST(new NextRequest('http://localhost/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' }))

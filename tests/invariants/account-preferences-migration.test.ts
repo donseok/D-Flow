@@ -25,4 +25,17 @@ describe('account_preferences 마이그레이션 원문', () => {
     for (const k of RETIRED_PREF_KEYS) expect(text.split(`'${k}'`).length - 1, k).toBeGreaterThanOrEqual(2)   // 삭제 + 사후검사
     expect(text).toContain('SP3B_ACCOUNT_PREFS_POSTCHECK')
   })
+  it('U2a-2 수정(Y2·Y3) — uuid 캐스트는 CASE 가드 안에서만, notifRead 를 재배치하고 롤백이 합친다, 계정 키 이동을 기준값으로 대조한다', () => {
+    const text = readFileSync(join(dir('supabase/migrations'), fwd!), 'utf8')
+    const rbText = readFileSync(join(dir('supabase/rollbacks'), rb!), 'utf8')
+    // '::uuid' 는 모두 'case when … then …::uuid end' 안에 있다 — 술어 평가 순서에 기대지 않는다
+    const casts = text.split('\n').filter((l) => l.includes('::uuid') && !l.trim().startsWith('--'))
+    expect(casts.length).toBeGreaterThanOrEqual(2)
+    for (const l of casts) expect(l, l).toMatch(/case when [^)]*~\* '[^']+' then [^)]*::uuid end/)
+    expect(text).toContain("prefs - 'notifRead'")
+    expect(text).toMatch(/jsonb_build_object\('notifRead'/)
+    expect(rbText).toMatch(/jsonb_build_object\('notifRead'/)
+    expect(text).toContain("set_config('sp3b.account_rows_expected'")
+    expect(text).toContain("current_setting('sp3b.account_rows_expected'")
+  })
 })

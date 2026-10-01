@@ -11,10 +11,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn() }))
+vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], today: '2026-10-02' })) }))
 
 import { saveUiPrefs } from '@/app/actions/preferences'
-import { markAllNotificationsRead } from '@/app/actions/notifications'
+import { getNotifications, markAllNotificationsRead } from '@/app/actions/notifications'
 import { makeActor } from '../fixtures/actor'
 
 type Resp = { data?: unknown; error?: { message: string } | null }
@@ -92,9 +92,23 @@ describe('markAllNotificationsRead — 그 프로젝트의 워크스페이스 �
     expect(await markAllNotificationsRead('p1', ['n1'])).toEqual({ ok: false })
     expect(c.upserts).toHaveLength(0)
   })
+  it('저장된 notifRead 가 객체가 아니면(본인 직접 쓰기로 손상) 펼치지 않고 새 객체로 쓴다(Y4)', async () => {
+    const c = client({ user_preferences: [{ data: { prefs: { notifRead: ['x', 'y'] } } }] })
+    expect(await markAllNotificationsRead('p1', ['n1'])).toEqual({ ok: true })
+    expect((c.upserts[0][1] as { prefs: unknown }).prefs).toEqual({ notifRead: { p1: ['n1'] } })
+  })
   it('병합 선행 조회 실패면 ok:false — 다른 설정을 덮어쓰지 않는다', async () => {
     const c = client({ user_preferences: [{ error: { message: 'prefs boom' } }] })
     expect(await markAllNotificationsRead('p1', ['n1'])).toEqual({ ok: false })
     expect(c.upserts).toHaveLength(0)
+  })
+})
+
+describe('getNotifications — 저장된 읽음 값이 손상돼도 피드가 죽지 않는다(Y4)', () => {
+  it.each([
+    ['숫자', { p1: 5 }], ['문자열', { p1: 'n1' }], ['배열 안 비문자열', { p1: [1, null] }], ['notifRead 가 배열', ['p1']], ['notifRead 가 문자열', 'p1'],
+  ])('%s → 전부 안 읽음으로 열화(throw 없음)', async (_l, notifRead) => {
+    client({ user_preferences: [{ data: { prefs: { notifRead } } }] })
+    await expect(getNotifications('p1')).resolves.toEqual({ items: [], count: 0 })
   })
 })

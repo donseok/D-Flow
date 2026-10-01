@@ -17,6 +17,10 @@ export type NotificationItem = {
 }
 
 const NOTIF_IDS_MAX = 200 // 읽음 목록 상한 — 피드가 15개라 여유치, prefs 비대 방지
+/** 저장된 notifRead 를 객체로만 읽는다 — 형식 밖(배열·문자열·null)이면 빈 객체(본인 직접 쓰기에 견딘다) */
+function readNotifRead(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
 
 /** 프로젝트의 워크스페이스(actor 의 소속 프로젝트 맵 — 조회 없음). 비로그인·소속 밖·형식 밖 projectId 는 null. 권한 조회 실패는 throw */
 async function projectWorkspaceOf(projectId: string): Promise<string | null> {
@@ -75,7 +79,9 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
       prefRow = data
     }
   } catch (e) { console.error('[notifications]', e instanceof Error ? e.message : e) }
-  const readIds = new Set((prefRow?.prefs as UiPrefs | null)?.notifRead?.[projectId] ?? [])
+  // 개인 설정은 본인이 PostgREST 로 직접 쓸 수도 있다 — 읽는 쪽이 방어한다(배열의 문자열만, Y4). 잘못된 값이면 '전부 안 읽음'
+  const readRaw = readNotifRead((prefRow?.prefs as UiPrefs | null)?.notifRead)[projectId]
+  const readIds = new Set(Array.isArray(readRaw) ? readRaw.filter((x): x is string => typeof x === 'string') : [])
 
   const items_ = [...delayed, ...dueSoon].slice(0, 15).map(n => ({ ...n, read: readIds.has(n.id) }))
   return { items: items_, count: items_.filter(n => !n.read).length }
@@ -102,7 +108,7 @@ export async function markAllNotificationsRead(projectId: string, ids: string[])
   // 병합 선행 조회 실패를 '설정 없음'으로 보면 다른 설정을 덮어쓴다 — 중단.
   if (readErr) { console.error('[markAllNotificationsRead] 기존 설정 조회 실패:', readErr.message); return { ok: false } }
   const prefs = (existing?.prefs as UiPrefs | null) ?? {}
-  const notifRead = { ...(prefs.notifRead ?? {}), [projectId]: ids }
+  const notifRead = { ...readNotifRead(prefs.notifRead), [projectId]: ids }
   const { error } = await sb.from('user_preferences').upsert(
     { user_id: user.id, workspace_id: ws, prefs: { ...prefs, notifRead }, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,workspace_id' },
