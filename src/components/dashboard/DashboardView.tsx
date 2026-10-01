@@ -51,6 +51,8 @@ export async function DashboardView({
   canManage = false,
   canGenerateBrief = false,
   milestoneKeywords,
+  modules,
+  minutesHref,
 }: {
   items: ComputedItem[]
   projectId: string
@@ -79,15 +81,21 @@ export async function DashboardView({
   canGenerateBrief?: boolean
   /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — page.tsx 가 getProjectConfig 로 주입. */
   milestoneKeywords: readonly string[]
+  /** 교차 모듈 표시(P20) — 꺼진 모듈의 카드는 그리지 않는다(실패 표시로도 남기지 않는다). 판정 실패는 page 가 core 만 = 전부 false */
+  modules: { issues: boolean; announcements: boolean; meetings: boolean }
+  /** 회의 카드 머리의 '이 프로젝트 회의록'(D53) — 회의록 모듈이 꺼졌거나 슬러그를 모르면 null */
+  minutesHref: string | null
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
 
   const hasWbs = items.length > 0
   // 전부 비었을 때만 화면 전체 빈 상태 — 실패한 데이터셋(null)은 '빈 것'이 아니다(그 자리에 오류가 보여야 한다).
+  // 꺼진 모듈(P20)은 그리지 않으므로 빈 것으로 본다.
+  const emptyOrOff = (on: boolean, rows: readonly unknown[] | null) => !on || (rows !== null && rows.length === 0)
   if (
-    !hasWbs && issues !== null && announcements !== null && meetings !== null
-    && issues.length === 0 && announcements.length === 0 && meetings.length === 0
+    !hasWbs && emptyOrOff(modules.issues, issues) && emptyOrOff(modules.announcements, announcements)
+    && emptyOrOff(modules.meetings, meetings)
   ) {
     return <EmptyState icon={BarChart3} title={tr('dash.emptyTitle')} description={tr('dash.emptyDesc')} />
   }
@@ -107,7 +115,7 @@ export async function DashboardView({
   // WBS 가 없으면 공지 마일스톤만, 공지를 못 읽었으면 WBS 마일스톤만(공지 자리에 사유가 뜬다).
   const milestones = mergeMilestonePoints(
     hasWbs ? milestoneTimeline(items, today, milestoneKeywords) : [],
-    announcements ? announcementMilestones(announcements, today) : [],
+    modules.announcements && announcements ? announcementMilestones(announcements, today) : [],
   )
   // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(섹션 D~F 주석).
   const realToday = seoulToday()
@@ -117,9 +125,9 @@ export async function DashboardView({
   return (
     <div className="space-y-5">
       {/* 게시중 공지 1건 — WBS 없이도 보인다(경영진 요약에서 분리). */}
-      {announcements === null
+      {modules.announcements && (announcements === null
         ? <LoadErrorNotice message={tr('common.loadFailed.announcements')} />
-        : <AnnouncementStrip projectId={projectId} announcements={announcements} today={today} />}
+        : <AnnouncementStrip projectId={projectId} announcements={announcements} today={today} />)}
 
       {/* A. 경영진 요약 — 게이지 + 신호등 3 + 리포트. WBS 가 없으면 그 자리에 WBS 화면 안내. */}
       {wbs ? (
@@ -158,33 +166,33 @@ export async function DashboardView({
       {/* D. 회의 일정(전폭) — 진척 다음에 '이번 주 무슨 회의가 있나'. 이슈 카드 사이에 끼우면
           맥락이 끊긴다는 사용자 피드백(2026-08-28)으로 이슈 섹션 위로 분리. 실행 큐가 오래 전폭이었듯
           날짜 셀 + 제목 행 목록은 전폭에 어울린다. 회의는 실제 달력이므로 실제 오늘 기준(base_date 금지). */}
-      {meetings === null ? <LoadErrorNotice message={tr('common.loadFailed.meetings')} /> : (
+      {modules.meetings && (meetings === null ? <LoadErrorNotice message={tr('common.loadFailed.meetings')} /> : (
         <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
-          currentUserId={currentUserId} canManage={canManage} />
-      )}
+          currentUserId={currentUserId} canManage={canManage} minutesHref={minutesHref} />
+      ))}
 
       {/* E. 이슈 — 좌: 이슈 현황(KPI·상태 분포·Mega별), 우: 등록·해결 추이(차트 + 최근 6주 표).
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
-      {issues === null ? issuesError : issues.length === 0 ? (
+      {modules.issues && (issues === null ? issuesError : issues.length === 0 ? (
         <IssueStatusCard issues={issues} projectId={projectId} today={realToday} locale={locale} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           <IssueStatusCard issues={issues} projectId={projectId} today={realToday} locale={locale} />
           <IssueTrendCard issues={issues} today={realToday} locale={locale} />
         </div>
-      )}
+      ))}
 
       {/* F. 조치(맨 아래, 사용자 요청 2026-08-28) — '지금 챙길 것'을 한 줄에: 좌 WBS 실행 큐(지연·임박·뒤처짐), 우 지연·임박 이슈.
           두 카드는 같은 문법(틴트 행 + 딥링크)이라 나란히 두면 한 번의 시선으로 스캔된다.
           시계가 다르다 — WBS 는 today(base_date 우선, 진척 산정과 동일), 이슈는 실제 오늘(달력 기한).
           WBS 가 없으면 이슈 큐가 전체 폭이다. 이슈 조회 실패 사유는 실행 큐 옆 자리를 채울 때만 여기 둔다 —
           WBS 가 없으면 바로 위 이슈 섹션(E)의 사유와 나란히 겹쳐 재시도 버튼·스크린리더 알림이 두 번이 된다. */}
-      {(wbs || issues !== null) && (
-        <div className={wbs ? 'grid gap-5 lg:grid-cols-2' : undefined}>
+      {(wbs || (modules.issues && issues !== null)) && (
+        <div className={wbs && modules.issues ? 'grid gap-5 lg:grid-cols-2' : undefined}>
           {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
-          {issues === null ? issuesError
-            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} />}
+          {modules.issues && (issues === null ? issuesError
+            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} />)}
         </div>
       )}
 

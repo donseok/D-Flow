@@ -82,7 +82,7 @@ type Props = Parameters<typeof DashboardView>[0]
 const base: Props = {
   items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY,
   holidays: [], snapshots: [], historyFailed: false, announcements: [ANN], meetings: [MEETING], meetingExceptions: [],
-  issues: [ISSUE], milestoneKeywords: [],
+  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
 }
 const view = async (over: Partial<Props> = {}) => (await DashboardView({ ...base, ...over })) as ReactElement
 

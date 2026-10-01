@@ -73,6 +73,6 @@ export async function resolveOrCreateExternalMeeting(
   }
   // 내부 회의 화면 캐시 갱신 — actions/meetings.ts revalidateMeetings 와 동일 경로.
   revalidatePath(`/p/${m.projectId}/meetings`)
-  revalidatePath('/meetings')
+  revalidatePath('/(app)/w/[slug]/meetings', 'page')
   return { ok: true, meetingId: created.id as string, projectId: m.projectId, created: true }
 }

@@ -16,6 +16,9 @@ import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { seoulToday } from '@/lib/domain/dates'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { moduleSetFor } from '@/lib/modules/gate'
+import { workspaceRefById } from '@/lib/workspace/resolve'
+import { wsHref } from '@/lib/workspace/paths'
 
 function monthGrid(todayIso: string): [string, string] {
   const [y, m] = todayIso.split('-').map(Number)
@@ -29,14 +32,23 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
   const { projectId } = await params
   await requireModulePage({ projectId }, 'meetings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const today = seoulToday()
-  const [meetRes, roster, m, user, projects, locale] = await Promise.all([
+  const actorP = getActorForView()
+  const [meetRes, roster, m, user, projects, locale, mods, wsRef] = await Promise.all([
     getProjectMeetingData(projectId),
     getProjectRoster(projectId),
-    getActorForView(),
+    actorP,
     getSession(),
     listProjects(),
     getServerLocale(),
+    // D53 — '이 프로젝트 회의록' 은 회의록 모듈이 켜졌을 때만(판정 실패는 core 만 = 숨김, 로그는 moduleSetFor)
+    moduleSetFor({ projectId }),
+    // 그 링크의 슬러그 — 같은 행위자 조회를 이어 받는다(직렬 왕복을 늘리지 않게 같은 묶음에)
+    actorP.then(async (actor) => {
+      const wid = actor?.projectWorkspace.get(projectId)
+      return wid ? workspaceRefById(wid) : null
+    }),
   ])
+  const minutesHref = mods.has('minutes') && wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes', { project: projectId }) : null
   // 명단은 참석자 선택·이름 표시용 곁가지 — 실패해도 일정은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[meetings] 명단 조회 실패(project=${projectId}) — 참석자 목록 없이 그리고 경고를 띄운다`)
   const members = roster.ok ? roster.rows : []
@@ -74,7 +86,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     >
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
         loadFailed={!meetRes.ok} todayIso={today} currentUserId={user?.id ?? null}
-        canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} />
+        canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} minutesHref={minutesHref} />
     </ProjectPageShell>
   )
 }

@@ -20,6 +20,10 @@ vi.mock('@/lib/data/meetings', async (importOriginal) => ({
   getMyMeetings: mocks.getMyMeetings,
 }))
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+// /w/[slug]/meetings — 첫 await 은 슬러그 판정(E19). 같은 행위자 mock 을 싣는다
+vi.mock('@/lib/authz/workspaceScope', () => ({
+  loadWorkspaceScope: vi.fn(async () => ({ ws: { id: 'ws-1', slug: 'acme', name: 'Acme' }, actor: await mocks.getActorForView(), degraded: false, role: 'member' })),
+}))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1', email: 'alice@example.com' })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
 vi.mock('@/lib/domain/dates', async (importOriginal) => ({
@@ -29,13 +33,13 @@ vi.mock('@/lib/domain/dates', async (importOriginal) => ({
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: mocks.ProjectPageShell }))
 vi.mock('@/components/meetings/MyMeetingsView', () => ({ MyMeetingsView: mocks.MyMeetingsView }))
 
-import MyMeetingsPage from '@/app/(app)/meetings/page'
+import MyMeetingsPage from '@/app/(app)/w/[slug]/meetings/page'
 import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import type { Meeting } from '@/lib/domain/types'
 
 /** 페이지가 돌려준 트리에서 셸·뷰에 넘긴 props 를 꺼낸다(렌더하지 않고 요소만 본다). */
 async function renderPage() {
-  const shell = (await MyMeetingsPage()) as ReactElement<{
+  const shell = (await MyMeetingsPage({ params: Promise.resolve({ slug: 'acme' }) })) as ReactElement<{
     hero: ReactElement<{ heroKpis: ReactElement<{ children: ReactElement<{ value: unknown }>[] }> }>
     children: ReactElement<Record<string, unknown>> | unknown
   }>
@@ -63,7 +67,8 @@ describe('내 회의 화면 — 회의 조회 실패', () => {
   it('실패를 뷰에 넘기고(initialFailed) 일정은 빈 목록 — 히어로에 넘기는 KPI 값은 0 이 아니라 —(지금은 그려지지 않는 자리)', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
     const { kpis, viewProps } = await renderPage()
-    expect(viewProps).toMatchObject({ initialMeetings: [], initialExceptions: [], initialFailed: true })
+    expect(viewProps).toMatchObject({ workspaceId: 'ws-1', initialMeetings: [], initialExceptions: [], initialFailed: true })
+    expect(mocks.getMyMeetings).toHaveBeenCalledWith('ws-1', expect.any(String), expect.any(String))
     expect(kpis).toEqual(['—', '—', '—'])
   })
 

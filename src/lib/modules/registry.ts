@@ -45,7 +45,7 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'meetings', core: false, scope: 'both', requires: [], envAvailable: always, botDomains: ['meetings'], settings: settingsOf('meetings'),
     nav: { project: { id: 'p.meetings', labelKey: 'nav.meetings', icon: 'CalendarClock', segment: 'meetings', group: 'p.collab', order: 10 },
       workspace: { id: 'ws.meetings', labelKey: 'nav.myMeetings', icon: 'CalendarClock', segment: 'meetings', group: 'ws.shared', order: 10 } },
-    routePrefixes: ['/p/[projectId]/meetings', '/meetings'], apiPrefixes: [] },
+    routePrefixes: ['/p/[projectId]/meetings', '/w/[slug]/meetings'], apiPrefixes: [] },
   { id: 'weekly', core: false, scope: 'project', requires: [], envAvailable: always, botDomains: ['weekly'], settings: settingsOf('weekly'),
     nav: { project: { id: 'p.weekly', labelKey: 'nav.weekly', icon: 'NotebookPen', segment: 'weekly', group: 'p.plan', order: 30 } },
     routePrefixes: ['/p/[projectId]/weekly'], apiPrefixes: ['/api/report'] },
@@ -90,7 +90,7 @@ export const CORE: ReadonlySet<ModuleId> = new Set(MODULES.filter((m) => m.core)
 
 /** 경로 이동(SP3b) 전의 전역 경로 — 페이지 관문이 워크스페이스 층 모듈을 찾는 표. SP3b 가 /w/[slug]/* 로 옮기며 지운다 */
 export const LEGACY_GLOBAL_PREFIXES = {
-  '/meetings': 'meetings', '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage',
+  '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage',
 } as const satisfies Record<string, ModuleId>
 
 /** 적재 단언(개정 §2.7.1) — 목록 = MODULE_IDS, core 는 requires: []·envAvailable 상수 true, requires 는 등록 id 이고 순환 없음,

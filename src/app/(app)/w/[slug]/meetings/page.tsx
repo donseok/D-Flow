@@ -4,7 +4,8 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { getMyMeetings } from '@/lib/data/meetings'
 import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
-import { getActorForView } from '@/lib/authz'
+import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
+import { BRAND } from '@/lib/branding'
 import { adminProjectIds } from '@/lib/domain/authz'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
@@ -21,16 +22,20 @@ function monthGrid(todayIso: string): [string, string] {
   return [f(s), f(e)]
 }
 
-export default async function MyMeetingsPage() {
-  await requireModulePage(null, 'meetings')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13). 목록의 행 거르기는 로더(getMyMeetings)
+export const metadata = { title: `회의 일정 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
+
+export default async function MyMeetingsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const scope = await loadWorkspaceScope(slug)                             // 첫 await — 비소속 404(E19)
+  await requireModulePage({ workspaceId: scope.ws.id }, 'meetings')       // 슬러그 워크스페이스로 판정(D26). 목록의 행 거르기는 로더(getMyMeetings)
   const today = seoulToday()
   const [gs, ge] = monthGrid(today)
-  const [res, m, user, locale] = await Promise.all([
-    getMyMeetings(gs, ge),
-    getActorForView(),
+  const [res, user, locale] = await Promise.all([
+    getMyMeetings(scope.ws.id, gs, ge),
     getSession(),
     getServerLocale(),
   ])
+  const m = scope.actor
   // 회의를 못 읽었으면 달력은 빈 채로 넘기되 뷰가 사유와 재시도를 띄운다(initialFailed) — 화면에서 실패를 알리는 것은 뷰다.
   // 히어로 KPI 자리는 지금 그려지지 않는다(PageHero 는 heroKpis 를 받기만 한다). 넘기는 값은 그 자리가 다시 그려질 때
   // 실패가 0 으로 보이지 않게 '—'(모름)로 맞춰 둔다. 실패 로그는 로더(getMyMeetings)가 남긴다.
@@ -58,7 +63,7 @@ export default async function MyMeetingsPage() {
     >
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
-      <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}
+      <MyMeetingsView workspaceId={scope.ws.id} initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}
         todayIso={today} currentUserId={user?.id ?? null}
         adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
     </ProjectPageShell>

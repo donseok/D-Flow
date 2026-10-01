@@ -193,7 +193,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('MyMeetingsView: /meetings?focus= 로 초기 데이터에서 상세를 연다', async () => {
     currentSearch = 'focus=m1'
     await mount(
-      <MyMeetingsView
+      <MyMeetingsView workspaceId="ws-1"
         initialMeetings={[meeting({ meetingDate: '2026-07-21', projectName: '프로젝트 1', isMine: true })]}
         initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />,
     )

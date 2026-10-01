@@ -73,7 +73,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   }
   async function mount(props: Partial<Parameters<typeof MyMeetingsView>[0]> = {}) {
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
       await Promise.resolve()
     })
   }
@@ -85,7 +85,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   it('initialFailed 면 경고와 재시도, 재시도가 성공하면 경고가 사라진다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} />)
       await Promise.resolve()
     })
     const alert = container.querySelector('[role="alert"]')
@@ -99,7 +99,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   it('달을 옮겨 다시 읽다가 실패하면 경고가 뜬다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />)
       await Promise.resolve()
     })
     expect(container.querySelector('[role="alert"]')).toBeNull()
@@ -198,7 +198,7 @@ describe('MyMeetingsView — 조회 실패', () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting({ title: '8월 회의', meetingDate: '2026-08-10' })], exceptions: [] })
     await act(async () => { retryBtn()!.click(); await flush() })
     expect(mocks.fetchMyMeetings).toHaveBeenCalledTimes(2)
-    expect(mocks.fetchMyMeetings).toHaveBeenLastCalledWith('2026-07-26', '2026-09-05')
+    expect(mocks.fetchMyMeetings).toHaveBeenLastCalledWith('ws-1', '2026-07-26', '2026-09-05')
     expect(mocks.routerRefresh).not.toHaveBeenCalled()
     expect(alertEl()).toBeNull()
     expect(container.textContent).toContain('8월 회의')
@@ -248,7 +248,7 @@ describe('MyMeetingsView — 조회 실패', () => {
       expect(alertEl()).not.toBeNull()
       const release = holdFetch()
       await act(async () => { monthBtn('next').click(); await flush() })
-      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('2026-07-26', '2026-09-05')
+      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('ws-1', '2026-07-26', '2026-09-05')
       // 8월은 아직 실패하지 않았다 — 읽는 중이다.
       expect(alertEl()).toBeNull()
       expect(hasGrid()).toBe(true)
@@ -281,7 +281,7 @@ describe('MyMeetingsView — 조회 실패', () => {
       currentSearch = 'focus=m1&date=2026-09-10'
       const release = holdFetch()
       await mount({ initialFailed: true })
-      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('2026-08-30', '2026-10-10')
+      expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('ws-1', '2026-08-30', '2026-10-10')
       // 실패한 것은 서버가 읽은 7월이지 지금 보이는 9월이 아니다.
       expect(alertEl()).toBeNull()
       await release({ ok: true, meetings: [meeting({ meetingDate: '2026-09-10' })], exceptions: [] })

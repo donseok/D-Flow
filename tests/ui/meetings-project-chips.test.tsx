@@ -72,7 +72,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p1 = meeting({ id: 'm-p1', projectId: 'p1', projectName: '프로젝트 하나', title: '피원 회의' })
     const p2 = meeting({ id: 'm-p2', projectId: 'p2', projectName: '프로젝트 둘', title: '피투 회의', meetingDate: '2026-07-15' })
     await mount(
-      <MyMeetingsView
+      <MyMeetingsView workspaceId="ws-1"
         initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
       />,
     )
@@ -101,7 +101,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p1a = meeting({ id: 'm-p1a', projectId: 'p1', projectName: '프로젝트 하나', title: '피원 회의 1' })
     const p1b = meeting({ id: 'm-p1b', projectId: 'p1', projectName: '프로젝트 하나', title: '피원 회의 2', meetingDate: '2026-07-16' })
     await mount(
-      <MyMeetingsView
+      <MyMeetingsView workspaceId="ws-1"
         initialMeetings={[p1a, p1b]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
       />,
     )
@@ -115,7 +115,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p1 = meeting({ id: 'm-p1', projectId: 'p1', projectName: '프로젝트 하나', title: '피원 회의' })
     const p2 = meeting({ id: 'm-p2', projectId: 'p2', projectName: '프로젝트 둘', title: '피투 회의', meetingDate: '2026-07-15' })
     await mount(
-      <MyMeetingsView
+      <MyMeetingsView workspaceId="ws-1"
         initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
       />,
     )

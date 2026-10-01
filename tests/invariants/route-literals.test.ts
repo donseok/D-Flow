@@ -33,8 +33,6 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/components/admin/AccountsManager.tsx': { count: 1, why: CLIENT_LINK },
   'src/components/ui/BrandMark.tsx': { count: 1, why: 'UI-2b: 과제 25 — C 파일 과제' },
   'src/lib/nav/legacyPaths.ts': { count: 2, why: 'UI-2b: 과제 25 — C 파일 과제' },
-  'src/app/actions/meetings.ts': { count: 1, why: 'UI-2a: 과제 12 — revalidatePath' },
-  'src/lib/minutes/meetings.ts': { count: 1, why: 'UI-2a: 과제 12 — revalidatePath' },
   'src/app/(app)/agents/page.tsx': { count: 1, why: 'UI-2a: 과제 13 — 이동·D7' },
   'src/app/(app)/portfolio/page.tsx': { count: 1, why: 'UI-2a: 과제 14 — 이동·D7' },
   'src/app/(app)/usage/page.tsx': { count: 1, why: 'UI-2a: 과제 14 — 이동·D7' },
@@ -42,7 +40,7 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/app/(app)/admin/teams/page.tsx': { count: 1, why: 'UI-2a: 과제 15 — 이동·D7·revalidatePath' },
   'src/app/actions/accounts.ts': { count: 4, why: 'UI-2a: 과제 15 — 이동·D7·revalidatePath' },
   'src/app/actions/teams.ts': { count: 2, why: 'UI-2a: 과제 15 — 이동·D7·revalidatePath' },
-  'src/lib/modules/registry.ts': { count: 8, why: 'UI-2a: 과제 14 — routePrefixes·LEGACY_GLOBAL_PREFIXES(과제 10~14 가 줄인다)' },
+  'src/lib/modules/registry.ts': { count: 6, why: 'UI-2a: 과제 14 — routePrefixes·LEGACY_GLOBAL_PREFIXES(과제 10~14 가 줄인다)' },
   'src/app/page.tsx': { count: 1, why: RESOLVER },
   'src/app/not-found.tsx': { count: 1, why: RESOLVER },
   'src/app/login/page.tsx': { count: 1, why: RESOLVER },
@@ -63,8 +61,6 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
 /** ① 임시 허용 — UI-2b 에서 0. createProject 계열 3·초대 합류 2 는 레이아웃 데이터라 UI-2b 의 범위 레이아웃 뒤에 바꾼다(§5.7).
  *  'UI-2a: 과제 N' 항목은 그 화면을 옮기는 과제가 지운다 */
 export const TEMP_REVALIDATE: Record<string, { count: number; why: string }> = {
-  'src/app/actions/meetings.ts': { count: 1, why: 'UI-2a: 과제 12 — 내 회의' },
-  'src/lib/minutes/meetings.ts': { count: 1, why: 'UI-2a: 과제 12 — 내 회의' },
   'src/app/actions/accounts.ts': { count: 4, why: 'UI-2a: 과제 15 — 계정 관리' },
   'src/app/actions/teams.ts': { count: 2, why: 'UI-2a: 과제 15 — 공용 팀' },
   'src/app/actions/project.ts': { count: 3, why: "UI-2b: 과제 25 — ('/(app)/w/[slug]', 'layout') 로(전환기 목록이 레이아웃 데이터)" },

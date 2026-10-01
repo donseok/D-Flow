@@ -20,12 +20,15 @@ import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { moduleSetFor } from '@/lib/modules/gate'
+import { workspaceRefById } from '@/lib/workspace/resolve'
+import { wsHref } from '@/lib/workspace/paths'
 
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
-  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc] = await Promise.all([
+  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc, mods, wsRef] = await Promise.all([
     getComputedWbs(projectId),
     listProjects(),
     getAnnouncements(projectId),
@@ -39,6 +42,14 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
     getActorViewState(),
     // 마일스톤 키워드 등 프로젝트 설정 — 봇 대시보드 도구도 같은 해석기를 쓴다. 실패는 기본값이 아니라 오류 상태(스펙 §3.5).
     loadProjectConfigForPage(projectId),
+    // P20 — 교차 모듈 카드(이슈·공지·회의). 판정 실패는 core 만 = 숨김(로그는 moduleSetFor). 꺼진 모듈의 로더도 위에서 그대로 부른다
+    // (관문은 로더 안 — 호출을 조건부로 바꾸면 이 묶음의 병렬이 깨진다). 데이터는 카드에서만 버린다
+    moduleSetFor({ projectId }),
+    // D53 — 회의 카드의 '이 프로젝트 회의록' 슬러그. getActor 는 요청 캐시라 권한 조회를 더하지 않는다
+    getActorViewState().then(async ({ actor }) => {
+      const wid = actor?.projectWorkspace.get(projectId)
+      return wid ? workspaceRefById(wid) : null
+    }),
   ])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지를 멈추지
   // 않는다. DashboardView 는 service_role 팀 캐시로 팀별 진척을 그리므로 숨은 프로젝트에서는 그리기 전에 끊는다
@@ -62,6 +73,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
+  const modules = { issues: mods.has('issues'), announcements: mods.has('announcements'), meetings: mods.has('meetings') }
+  const minutesHref = mods.has('minutes') && wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes', { project: projectId }) : null
 
   return (
     <ProjectPageShell hero={hero}>
@@ -86,6 +99,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         canManage={canManage}
         canGenerateBrief={canManage}
         milestoneKeywords={keywords.ok ? keywords.value : []}
+        modules={modules}
+        minutesHref={minutesHref}
       />
       {/* 진척률은 집계값이라 행 단위 패치가 정의되지 않는다 — 실시간 신호를 받아 재조회한다(0098). */}
       <WbsRealtimeRefresh projectId={projectId} />

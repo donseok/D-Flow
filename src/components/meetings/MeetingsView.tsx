@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, List, Plus, CalendarX2 } from 'lucide-react'
 import type { Meeting, MeetingException, MeetingOccurrence, ProjectMember } from '@/lib/domain/types'
@@ -50,7 +51,7 @@ function gridRange(year: number, month0: number): [string, string] {
 }
 
 export function MeetingsView({
-  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit,
+  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, minutesHref = null,
 }: {
   projectId: string
   meetings: Meeting[]
@@ -64,6 +65,8 @@ export function MeetingsView({
   canManage: boolean
   /** 이 프로젝트 멤버 이상(isProjectMember) — 회의 등록. */
   canEdit: boolean
+  /** '이 프로젝트 회의록'(D53) — /w/<slug>/minutes?project=<pid>. 회의록 모듈이 꺼졌거나 슬러그를 모르면 null */
+  minutesHref?: string | null
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -130,6 +133,9 @@ export function MeetingsView({
           <button onClick={() => { setYear(initY); setMonth0((initM || 1) - 1) }} className="btn btn-ghost h-10">{t('meet.today')}</button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {minutesHref && (
+            <Link href={minutesHref} className="px-2 text-meta font-semibold text-action hover:underline">{t('meet.projectMinutes')}</Link>
+          )}
           <SegmentedTabs<ViewKey>
             tabs={[{ key: 'calendar', label: t('meet.view.calendar'), icon: CalendarDays }, { key: 'list', label: t('meet.view.list'), icon: List }]}
             value={view} onChange={setView} size="sm"

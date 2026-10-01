@@ -4,6 +4,8 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { createServerClient } from '@/lib/supabase/server'
 import { ERR_MEETINGS_LOAD, getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
+/** 내 회의의 워크스페이스(D26 — 로더 첫 인자). 로그 tag 에 실린다 */
+const MWS = '00000000-0000-0000-7e57-000000001693'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 type Reply = { data: unknown[] | null; error: { message: string } | null; count?: number | null }
@@ -30,6 +32,8 @@ function makeSb(opts: {
   const exceptionQueries: Array<{ options: unknown; orders: string[]; range: [number, number] | null }> = []
   /** 예외 폴백 조회의 .in 인자 — 어느 회의 id 로 읽었는지 */
   const exceptionIns: unknown[][] = []
+  /** 회의 조회의 .eq 인자 — 워크스페이스 한정(D26)을 본다 */
+  const meetingEqs: unknown[][] = []
   const chain = (resolve: (q: { range: [number, number] | null }) => Reply | Promise<Reply>, options?: unknown) => {
     const q = { options, orders: [] as string[], range: null as [number, number] | null }
     const o: Record<string, unknown> = {}
@@ -50,7 +54,12 @@ function makeSb(opts: {
       tables.push(table)
       return {
         select: (sel: string, options?: unknown) => {
-          if (table === 'meetings') { selects.push(sel); return chain(() => opts.meetings(sel)).o }
+          if (table === 'meetings') {
+            selects.push(sel)
+            const c = chain(() => opts.meetings(sel))
+            c.o.eq = (...a: unknown[]) => { meetingEqs.push(a); return c.o }
+            return c.o
+          }
           if (table === 'meeting_exceptions') {
             const c = chain(({ range }) => {
               const ex = opts.exceptions ?? OK([])
@@ -68,7 +77,7 @@ function makeSb(opts: {
   }
   ;(createServerClient as unknown as { mockResolvedValue: (v: unknown) => void })
     .mockResolvedValue(sb)
-  return { selects, tables, exceptionQueries, exceptionIns }
+  return { selects, tables, exceptionQueries, exceptionIns, meetingEqs }
 }
 
 // 프로젝트 id 는 UUID 꼴이어야 조회가 나간다(getProjectMeetingData)
@@ -97,7 +106,7 @@ async function projectMeetings(projectId: string) {
 
 /** 내 회의의 성공 결과만 — 실패면 테스트를 깬다. */
 async function myMeetings(gridStartIso: string, gridEndIso: string) {
-  const res = await getMyMeetings(gridStartIso, gridEndIso)
+  const res = await getMyMeetings(MWS, gridStartIso, gridEndIso)
   if (!res.ok) throw new Error('ok 여야 한다')
   return res
 }
@@ -147,10 +156,20 @@ describe('getProjectMeetingData — 예외 FK 임베드', () => {
   })
 })
 
+describe('getMyMeetings — 그 워크스페이스의 회의만(D26)', () => {
+  it('프로젝트 임베드를 inner 로 걸고 projects.workspace_id 로 거른다 — 여러 소속의 회의를 한 달력에 섞지 않는다', async () => {
+    const { selects, meetingEqs } = makeSb({ user: { id: 'u1', email: null }, meetings: () => OK([]) })
+    await getMyMeetings(MWS, '2026-07-01', '2026-07-31')
+    expect(selects.length).toBeGreaterThan(0)
+    for (const s of selects) expect(s).toContain('projects!inner(name, workspace_id)')
+    expect(meetingEqs).toContainEqual(['projects.workspace_id', MWS])
+  })
+})
+
 describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
   it('비로그인이면 조회 없이 빈 결과', async () => {
     const { tables } = makeSb({ user: null, meetings: () => OK([]) })
-    expect(await getMyMeetings('2026-07-01', '2026-07-31'))
+    expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31'))
       .toEqual({ ok: true, meetings: [], exceptions: [] })
     expect(tables).not.toContain('meetings')
   })
@@ -164,7 +183,7 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
       meetings: () => OK([]),
     })
 
-    const p = getMyMeetings('2026-07-01', '2026-07-31')
+    const p = getMyMeetings(MWS, '2026-07-01', '2026-07-31')
     // 멤버 응답을 아직 주지 않았는데도 회의 select 가 이미 나가 있어야 병렬이다.
     // (직렬이었다면 멤버가 풀릴 때까지 meetings 는 시작조차 못 한다.)
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
@@ -248,7 +267,7 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
   it('getMyMeetings: 회의 조회가 재시도까지 실패하면 ok:false — 빈 달력이 아니다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
-    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(logged().some(m => m.includes('getMyMeetings') && m.includes('meetings 조회 실패'))).toBe(true)
     // 회의를 못 읽었으면 예외 폴백 조회도 하지 않는다
     expect(tables).not.toContain('meeting_exceptions')
@@ -260,7 +279,7 @@ describe('조회 실패를 없음으로 위장하지 않는다(M5)', () => {
       meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])),
       exceptions: ERR('boom'),
     })
-    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(logged().some(m => m.includes('getMyMeetings') && m.includes('meeting_exceptions'))).toBe(true)
   })
   it('임베드만 실패하고 예외 별도 조회가 0건이면 종전대로 ok:true — 0건과 실패를 가른다', async () => {
@@ -282,12 +301,12 @@ describe('내 명단 행 조회 실패를 \'내 회의 없음\'으로 위장하�
       members: ERR('down'),
       meetings: () => OK([meetingRow('m1', { meeting_attendees: [{ member_id: 'member-a' }] })]),
     })
-    expect(await getMyMeetings('2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('resolveMemberIds'), 'down')
     // resolveMemberIds 의 로그에는 로더 이름도 범위도 없고 호출부가 둘이다(이슈 화면) — 화면에 띄운 '내 회의' 실패를
     // 로그에서 짚을 수 있게 getMyMeetings 의 tag 로도 한 줄 남긴다.
     const lines = (console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]))
-    expect(lines.filter(m => m.startsWith('[getMyMeetings range=2026-07-01..2026-07-31]') && m.includes('명단'))).toHaveLength(1)
+    expect(lines.filter(m => m.startsWith(`[getMyMeetings ws=${MWS} range=2026-07-01..2026-07-31]`) && m.includes('명단'))).toHaveLength(1)
     // 실패로 돌려줄 것이면 예외 폴백 조회도 하지 않는다
     expect(tables).not.toContain('meeting_exceptions')
   })
@@ -343,22 +362,22 @@ describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣�
 
   it('getMyMeetings: 회의 조회 실패·예외 폴백 실패 로그에 달력 범위', async () => {
     makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
-    await getMyMeetings('2026-08-30', '2026-10-10')
+    await getMyMeetings(MWS, '2026-08-30', '2026-10-10')
     expect(logged()).toHaveLength(2)
-    expect(logged().every(m => m.includes('[getMyMeetings range=2026-08-30..2026-10-10]'))).toBe(true)
+    expect(logged().every(m => m.includes(`[getMyMeetings ws=${MWS} range=2026-08-30..2026-10-10]`))).toBe(true)
 
     makeSb({
       user: { id: 'u1', email: null },
       meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : OK([meetingRow('m1')])),
       exceptions: ERR('boom'),
     })
-    await getMyMeetings('2026-09-27', '2026-11-07')
-    expect(logged().some(m => m.includes('[getMyMeetings range=2026-09-27..2026-11-07] meeting_exceptions'))).toBe(true)
+    await getMyMeetings(MWS, '2026-09-27', '2026-11-07')
+    expect(logged().some(m => m.includes(`[getMyMeetings ws=${MWS} range=2026-09-27..2026-11-07] meeting_exceptions`))).toBe(true)
   })
 
   it('getMyMeetings: 날짜 꼴이 아닌 인자는 로그에 그대로 찍지 않는다 — 액션 인자라 형식이 보장되지 않는다', async () => {
     makeSb({ user: { id: 'u1', email: null }, meetings: () => ERR('down') })
-    await getMyMeetings('2026-07-01\n[forged] line', '2026-07-31')
+    await getMyMeetings(MWS, '2026-07-01\n[forged] line', '2026-07-31')
     expect(logged().length).toBeGreaterThan(0)
     expect(logged().some(m => m.includes('forged') || m.includes('\n'))).toBe(false)
     expect(logged().every(m => m.includes('..2026-07-31]'))).toBe(true)
@@ -371,7 +390,7 @@ describe('실패 로그는 어느 프로젝트·어느 범위의 것인지 싣�
     ['빈 값', '', '2026-07-31'],
   ])('getMyMeetings: 날짜 꼴이 아닌 %s 인자는 조회하지 않고 ok:false', async (_name, start, end) => {
     const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => OK([meetingRow('m1')]) })
-    expect(await getMyMeetings(start, end)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect(await getMyMeetings(MWS, start, end)).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
     expect(tables).toEqual([])
     expect(logged()).toHaveLength(1)
     expect(logged()[0]).toContain('getMyMeetings')

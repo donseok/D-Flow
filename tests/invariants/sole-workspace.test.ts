@@ -10,8 +10,6 @@ const EXCLUDE = new Set(['src/lib/modules/gate.ts', 'src/lib/modules/pageGate.ts
 const isV1 = (f: string) => f.startsWith('src/app/api/v1/')
 
 export const TEMP: Record<string, { count: number; why: string }> = {
-  'src/app/actions/meetings.ts': { count: 1, why: 'UI-2a: 과제 12 — fetchMyMeetings' },
-  'src/app/(app)/meetings/page.tsx': { count: 1, why: 'UI-2a: 과제 12 — 이동' },
   'src/app/(app)/agents/page.tsx': { count: 3, why: 'UI-2a: 과제 13 — 이동·workspaceId' },
   'src/app/actions/agentSeatmap.ts': { count: 3, why: 'UI-2a: 과제 13 — 이동·workspaceId' },
   'src/app/(app)/portfolio/page.tsx': { count: 1, why: 'UI-2a: 과제 14 — 이동' },
