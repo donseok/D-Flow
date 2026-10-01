@@ -56,7 +56,17 @@ export async function GET(req: NextRequest) {
   }
   const saved = profileState.status === 'set' && profileState.value !== null ? profileState.value : null
 
-  const { items, holidays } = await getComputedWbs(projectId)
+  // getComputedWbs 는 정렬용 팀(projectTeams)을 먼저 읽는다 — 팀 원천 실패는 아래 표준 분기와 같은 503 이다(A2-2 리뷰 보안 P3 — 이 줄이 try 밖이라
+  // 본문 없는 500 이 나 문서화한 계약이 닿지 않았다. 저장 양식 경로도 같다)
+  let wbs: Awaited<ReturnType<typeof getComputedWbs>>
+  try {
+    wbs = await getComputedWbs(projectId)
+  } catch (e) {
+    if (!(e instanceof TeamsUnavailableError)) throw e
+    console.error('[export] 프로젝트 팀 조회 실패(WBS):', e.message, e.cause)
+    return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
+  }
+  const { items, holidays } = wbs
   const hol = holidays.map(d => ({ date: d, name: '' }))
   let profile: ExcelProfile
   let layout: 'standard' | 'saved'

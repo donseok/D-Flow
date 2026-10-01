@@ -230,6 +230,8 @@ export async function runWbsImport(
     if (!v.ok) return { ok: false, code: 'validation_failed', message: `levels 시드 실패: ${v.error}` }
     // CR-7(SP4 D15) — 설정 저장과 같은 교차 검사를 쓰기 전에 돈다(설정 내부 쓰기는 교차 불변식을 돌리지 않는다 — 호출부 몫, write.ts 머리).
     // 이 키(core.level_labels)의 교차는 트리 깊이다 — 팀 열 교차는 양식 키에만 걸리므로 다른 의존값은 쓰이지 않는다.
+    // 지금은 validateLevelSettings(위)와 같은 규칙이라 여기서 새로 거부되는 경우는 없다 — core.level_labels 의 교차 규칙이 늘면 이 호출이
+    // 시드도 같이 막는다(D15 의 취지, A2-2 리뷰 정확성 P3). 거부 테스트가 교차 검사를 목으로 거부시키는 이유다.
     const cross = validateProjectConfig({ 'core.level_labels': v.labels }, {
       treeMaxDepth: treeMaxDepth(tree.rows), teamCodes: [], allowed: [], prevEnabled: null,
     })

@@ -411,7 +411,13 @@ describe('규칙 6 — 담당 계열 머리 열은 마크 방식 팀 열이 아�
     expect(detectTeamColumns(header, [['1', 'a', '●'], ['2', 'b', '△']], new Set([0, 1]))).toEqual({
       teamColumns: [], warnings: [OWNER_MARKS_IN_TEAM_HEADER],
     })
-    expect(OWNER_MARKS_IN_TEAM_HEADER).toBe('담당 열에는 팀 이름을 적으세요 — ●/△ 는 팀마다 열을 둘 때 씁니다')
+    // 안내는 결과도 말한다(A2-2 리뷰 P3 U5) — 이대로 가져오면 그 열의 담당이 버려진다. 옛 공식 양식이 400 으로 멈추던 것과 달리 가져오기는 진행된다
+    expect(OWNER_MARKS_IN_TEAM_HEADER).toBe('담당 열에는 팀 이름을 적으세요 — ●/△ 는 팀마다 열을 둘 때 씁니다. 이대로 가져오면 이 열의 담당은 버려지고 항목은 담당 없이 들어갑니다')
+  })
+  it('[U5] 한 담당 열에 팀명과 ●/△ 가 섞이면 팀명도 함께 버려진다 — 같은 안내(담당 없이 들어간다는 결과 포함)', () => {
+    expect(detectTeamColumns(header, [['1', 'a', 'RES'], ['2', 'b', '●']], new Set([0, 1]))).toEqual({
+      teamColumns: [], warnings: [OWNER_MARKS_IN_TEAM_HEADER],
+    })
   })
   it('담당 계열 별칭은 대소문자·전각을 무시한다(Team·ＴＥＡＭ)', () => {
     expect(detectTeamColumns(['코드', 'ＴＥＡＭ'], [['1', '●']], new Set([0])).teamColumns).toEqual([])

@@ -40,7 +40,11 @@ export async function downloadWbsExport(
 export function exportFailureKey(status: number | null, expand: boolean, code: string | null = null): DictKey | null {
   if (code === 'CONFIG_INVALID' || code === 'CONFIG_REQUIRED') return 'settings.exportErrLevelLabels'
   if (code === 'PROFILE_CORRUPT') return 'settings.exportErrProfileCorrupt'
+  // 팀 원천 실패(503)는 재시도할 만하다 — 제목만 띄우면 사용자가 일시 오류인지 알 수 없다(A2-2 리뷰 정확성 P3)
+  if (code === 'TEAMS_UNAVAILABLE') return 'settings.exportErrRetry'
   if (code !== null) return null
+  // code 없는 5xx(설정 조회 실패 503·표준 빌더 결함 500) — 같은 안내. 서버 문구는 싣지 않는다
+  if (status !== null && status >= 500) return 'settings.exportErrRetry'
   if (status === 422) return 'settings.exportErrProfileCorrupt'
   if (status === 400) return expand ? 'importWizard.exportProfileUnsupported' : 'settings.exportErrProfileTooDeep'
   return null

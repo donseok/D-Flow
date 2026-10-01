@@ -245,6 +245,10 @@
 - 번호를 공유했던 로컬 스택(레인 B 의 `0013_account_preferences` 를 적용한 DB 등)은 `db:reset` 으로 맞춘다 — `migration up` 은 같은 번호를 적용된 것으로 보고
   SP4 파일을 건너뛴다. 0016·0017 은 SP4 가 쓴다(레인 B 의 account_preferences 는 rebase 때 다음 빈 번호로 — 컨트롤러가 레인 B 원장에 알림).
 - 메인 스택(사용자 데이터)에 0013 이후를 적용할 때는 0017 까지 함께(0014 만 적용하면 경합 창이 열린 트리거가, 0017 이 없으면 갈라진 원본 복사 실패가 남는다).
+- `0016_team_scope_lock_order` 는 e6122e9 에서 **그 자리 수정**됐다(격리 수준 가드 `TEAM_SCOPE_ISOLATION` 추가 — A2-1 수정 Q2). 1dcbe08~e6122e9 사이에
+  옛 0016 을 적용한 스택은 `schema_migrations` 에 0016 이 있어 `migration up` 이 새 본문을 건너뛴다 — `db:reset`(또는 0016 롤백 → 재적용)으로 맞춘다.
+  확인: `select prosrc like '%TEAM_SCOPE_ISOLATION%' from pg_proc where proname = 'team_ref_owned_scope'` 가 참. 옛 본문 위에서는 0016 의 사후검사(②)를
+  다시 돌려야 잡힌다(리허설 첫 줄 — 민감도 확인과 같은 절차). 원격·태그에 옛 0016 은 없다(A2-2 리뷰 보안 P3 확인 — sp4/a2 로컬 브랜치뿐).
 
 ## render-pages 센티널 `ERP` 의 원인(Z5 F-1 — A2 S10 앞, 정적 확인)
 

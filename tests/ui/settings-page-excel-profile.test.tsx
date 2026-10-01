@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
   ClearExcelProfileButton: vi.fn<(props: { projectId: string }) => null>(() => null),
   ExportExcelButton: vi.fn<(props: { projectId: string; layout: unknown }) => null>(() => null),
-  latestKeyChange: vi.fn(async (): Promise<{ ok: true; changedAt: string | null } | { ok: false; error: string }> => ({ ok: true, changedAt: null })),
+  latestKeyChange: vi.fn(async (): Promise<{ ok: true; changedAt: string | null; source: string | null } | { ok: false; error: string }> => ({ ok: true, changedAt: null, source: null })),
 }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
@@ -102,17 +102,23 @@ describe('내보내기 표기(D48)', () => {
   })
   it('저장 양식이면 그 키의 최신 변경 날짜(서울 날짜)', async () => {
     mocks.getProjectConfig.mockResolvedValue(config(LEGACY_EXCEL_PROFILE_V1))
-    mocks.latestKeyChange.mockResolvedValue({ ok: true, changedAt: '2026-09-30T03:00:00Z' })
+    mocks.latestKeyChange.mockResolvedValue({ ok: true, changedAt: '2026-09-30T03:00:00Z', source: 'internal' })
     await render()
-    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: '2026-09-30' })
+    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: '2026-09-30', viaWizard: true })
     expect(mocks.latestKeyChange).toHaveBeenCalledWith(expect.anything(), { projectId: 'p1' }, 'wbs.excel_profile')
+  })
+  it('[U5] 마법사가 아닌 출처(복사)면 viaWizard 거짓 — "임포트 마법사"라 적지 않는다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(config(LEGACY_EXCEL_PROFILE_V1))
+    mocks.latestKeyChange.mockResolvedValue({ ok: true, changedAt: '2026-09-30T03:00:00Z', source: 'copy' })
+    await render()
+    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: '2026-09-30', viaWizard: false })
   })
   it('이력 조회 실패는 날짜 미상 + 로그 — 표준으로 위장하지 않는다', async () => {
     mocks.getProjectConfig.mockResolvedValue(config(LEGACY_EXCEL_PROFILE_V1))
     mocks.latestKeyChange.mockResolvedValue({ ok: false, error: '이력 조회 실패' })
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     await render()
-    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: null })
+    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: null, viaWizard: false })
     expect(err).toHaveBeenCalled()
     err.mockRestore()
   })

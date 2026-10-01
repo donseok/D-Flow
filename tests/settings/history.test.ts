@@ -76,15 +76,17 @@ describe('latestKeyChange — 한 키의 최신 변경 시각(SP4 D48 — Excel 
     return { client: { from: (t: string) => { calls.push(['from', [t]]); return q } }, calls }
   }
   it('그 프로젝트·그 키의 가장 최근 changed_at — 이력 표를 id 내림차순 1행', async () => {
-    const { client, calls } = fake([{ changed_at: '2026-09-30T03:00:00Z' }])
-    expect(await latestKeyChange(client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: '2026-09-30T03:00:00Z' })
+    const { client, calls } = fake([{ changed_at: '2026-09-30T03:00:00Z', source: 'internal' }])
+    // 출처(source)도 싣는다 — 'internal' 은 가져오기 마법사의 양식 저장 길(U5 — 복사·이행으로 들어온 양식을 "임포트 마법사"라 적지 않는다)
+    expect(await latestKeyChange(client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: '2026-09-30T03:00:00Z', source: 'internal' })
+    expect(calls).toEqual(expect.arrayContaining([['select', ['changed_at, source']]]))
     expect(calls).toEqual(expect.arrayContaining([
       ['from', ['project_settings_history']], ['eq', ['project_id', 'p1']], ['eq', ['key', 'wbs.excel_profile']],
       ['order', ['id', { ascending: false }]], ['limit', [1]],
     ]))
   })
   it('이력이 없으면 changedAt null(저장 양식은 있는데 이력이 없는 옛 데이터), 조회 오류는 ok:false', async () => {
-    expect(await latestKeyChange(fake([]).client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: null })
+    expect(await latestKeyChange(fake([]).client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: null, source: null })
     expect((await latestKeyChange(fake([], { message: 'boom' }).client as never, { projectId: 'p1' }, 'wbs.excel_profile')).ok).toBe(false)
   })
 })

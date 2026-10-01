@@ -178,7 +178,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   if (profileState?.status === 'set' && profileState.value !== null) {
     const h = await latestKeyChange(await createServerClient(), { projectId }, 'wbs.excel_profile')
     if (!h.ok) console.error('[settings] 저장 양식 이력 조회 실패:', h.error)
-    exportLayout = { kind: 'saved', savedAt: h.ok && h.changedAt ? seoulYmd(new Date(h.changedAt)) : null }
+    // 출처 — 엑셀 양식을 설정 내부 쓰기('internal')로 저장하는 길은 가져오기 마법사뿐이다(api/import/execute #10). 복사·이행·모름이면 출처를 적지 않는다
+    exportLayout = { kind: 'saved', savedAt: h.ok && h.changedAt ? seoulYmd(new Date(h.changedAt)) : null, viaWizard: h.ok && h.source === 'internal' }
   } else if (profileState !== null && profileState.status !== 'invalid') {
     exportLayout = { kind: 'standard' }
   }

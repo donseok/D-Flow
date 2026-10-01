@@ -61,7 +61,17 @@ it('exportFailureKey — 422·400 은 사전 키, 400 은 호출부(접기·펼�
   expect(exportFailureKey(422, true)).toBe('settings.exportErrProfileCorrupt')
   expect(exportFailureKey(400, false)).toBe('settings.exportErrProfileTooDeep')
   expect(exportFailureKey(400, true)).toBe('importWizard.exportProfileUnsupported')
-  for (const s of [401, 403, 404, 500, null]) expect(exportFailureKey(s, false)).toBeNull()
+  for (const s of [401, 403, 404, null]) expect(exportFailureKey(s, false)).toBeNull()
+})
+
+// A2-2 리뷰 정확성 P3(U5) — 팀 원천 실패(503 TEAMS_UNAVAILABLE)·설정 조회 실패(503)·표준 빌더 결함(500)은 제목만 떠 재시도해도 되는지 몰랐다
+it('exportFailureKey — TEAMS_UNAVAILABLE·5xx 는 "잠시 후 다시" 안내(접기·펼침 같다)', () => {
+  for (const expand of [false, true]) {
+    expect(exportFailureKey(503, expand, 'TEAMS_UNAVAILABLE')).toBe('settings.exportErrRetry')
+    expect(exportFailureKey(503, expand)).toBe('settings.exportErrRetry')
+    expect(exportFailureKey(500, expand)).toBe('settings.exportErrRetry')
+  }
+  expect(exportFailureKey(503, false, 'SOMETHING_NEW')).toBeNull()   // 모르는 code 는 그대로 추측하지 않는다
 })
 
 // 같은 422·409 가 단계 이름 손상·부재(과제 27)와 양식 손상·부재 두 뜻을 갖게 됐다 — 상태 코드만 보면 정상 양식을 비우라는

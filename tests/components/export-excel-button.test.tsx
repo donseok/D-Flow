@@ -76,8 +76,8 @@ describe('ExportExcelButton — 레이아웃 표기', () => {
   }
   it('표준·저장(날짜)·저장(날짜 미상)·없음', async () => {
     expect(await draw('ko', { kind: 'standard' })).toEqual({ kind: 'standard', text: '표준 양식(프로젝트 팀·단계로 생성)' })
-    expect(await draw('ko', { kind: 'saved', savedAt: '2026-09-30' })).toEqual({ kind: 'saved', text: '저장된 양식(임포트 마법사, 2026-09-30)' })
-    expect(await draw('en', { kind: 'saved', savedAt: null })).toEqual({ kind: 'saved', text: 'Saved layout (import wizard, date unknown)' })
+    expect(await draw('ko', { kind: 'saved', savedAt: '2026-09-30', viaWizard: true })).toEqual({ kind: 'saved', text: '저장된 양식(임포트 마법사, 2026-09-30)' })
+    expect(await draw('en', { kind: 'saved', savedAt: null, viaWizard: false })).toEqual({ kind: 'saved', text: 'Saved layout (date unknown)' })
     expect(await draw('en', null)).toEqual({ kind: null, text: null })
   })
 })

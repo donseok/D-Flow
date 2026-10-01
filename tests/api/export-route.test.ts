@@ -112,6 +112,15 @@ describe('GET /api/export — 저장 양식 없음 → 표준(W22)', () => {
     expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
     err.mockRestore()
   })
+  it('[U5] WBS 를 읽는 단계(getComputedWbs — 같은 팀 원천을 먼저 읽는다)의 팀 원천 실패도 503 TEAMS_UNAVAILABLE — 본문 없는 500 이 아니다(저장 양식 경로 포함)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getComputedWbs.mockRejectedValueOnce(new TeamsUnavailableError())
+    const res = await get('p-mine')
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: '프로젝트 팀을 확인할 수 없습니다.', code: 'TEAMS_UNAVAILABLE' })
+    expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
   it('표준 경로의 빌더 거부는 결함 — 500 고정 문구와 로그(거부 문구 "저장된 양식 비우기"가 표준의 처방으로 나가지 않는다)', async () => {
     mocks.buildWorkbookWithProfile.mockReturnValueOnce({ ok: false, error: '저장된 엑셀 양식의 계층 열(2개)보다 WBS가 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요' })
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
