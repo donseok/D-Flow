@@ -277,8 +277,9 @@ begin
   if pg_catalog.current_setting('transaction_isolation') is distinct from 'read committed' then
     raise exception using errcode = '25001', message = 'TEAM_CONVERT_ISOLATION';
   end if;
-  -- 프로젝트 행을 for update 로 잡는다 — 공용 팀 참조를 쓰는 트리거(⑤′ team_ref_owned_scope)는 같은 행을 for share 로 잡으므로,
-  -- 전환과 엇갈려 커밋되는 공용 팀 참조는 전환 앞에 끝나(아래 UPDATE 가 옮긴다) 전환 뒤에 오거나(트리거가 전용 팀을 보고 거부한다) 둘 중 하나다
+  -- 프로젝트 행을 for update 로 잡는다 — 새 공용 팀 참조를 쓰는 트리거(⑤′ team_ref_owned_scope)는 같은 행을 for key share 로 잡으므로,
+  -- 전환과 엇갈려 커밋되는 공용 팀 참조는 전환 앞에 끝나(아래 UPDATE 가 옮긴다) 전환 뒤에 오거나(트리거가 전용 팀을 보고 거부한다),
+  -- 참조 행을 먼저 잠근 쓰기(영역·명단 RPC 의 delete → insert)와 엇갈리면 교착 탐지로 한쪽이 40P01 로 롤백된다(재시도 가능 — 호출부가 503)
   select p.workspace_id into v_ws from public.projects p where p.id = p_project_id for update;
   if v_ws is null then
     raise exception using errcode = 'P0002', message = 'PROJECT_NOT_FOUND';
@@ -347,7 +348,13 @@ end $$;
 --    복사하므로 전환 뒤 공용 팀 참조는 모두 여기 걸린다. "전용 팀이 하나라도 있으면 모든 공용 팀 거부"로 넓히지 않은 것은 전용 팀과 다른
 --    code 의 공용 팀을 함께 쓰는 프로젝트를 DB 가 지금 허용하고 그 계약을 무수정 불변식(workspace-isolation-cases ⓚ 의 대조 — A 프로젝트
 --    항목에 공용 SHR 담당)이 고정하기 때문이다("전용 팀이 있으면 공용 제외"의 표시 규칙은 앱 계층 그대로 — 0003).
---    동시 실행 창: 이 트리거는 공용 팀 참조를 쓸 때만 프로젝트 행을 for share 로, 전환은 for update 로 읽는다(⑤).
+--    새로 생기는 참조만 본다(A1-4 리뷰 P1): INSERT 는 같은 키의 행이 이미 있으면(명단·영역 RPC 의 on conflict 재저장 — PostgreSQL 은
+--    충돌로 갈 행에도 BEFORE INSERT 트리거를 돌린다), UPDATE 는 팀·부모 열이 그대로면, 초대는 옛 team_ids 에 있던 id 는 통과한다 —
+--    갈라진(D4) 프로젝트의 기존 참조를 다시 저장하는 쓰기(명단 권한 회수·비활성화, 영역 이름 바꾸기)가 막히면 권한이 남는다.
+--    기존 분열은 지금보다 나빠지지 않고(전환이 옮기지 않은 것과 같은 상태), 전환 뒤 공용 팀을 "다시 붙이기"는 여전히 닫힌다.
+--    동시 실행 창: 이 트리거는 새 공용 팀 참조를 쓸 때만 프로젝트 행을 for key share 로, 전환은 for update 로 읽는다(⑤). key share 는
+--    for update 와만 충돌하고 프로젝트 행의 일반 갱신(이름·기준일 — no key update)과는 서로 막지 않는다(A1-4 리뷰 P2).
+--    교착: 참조 행을 먼저 잠근 쓰기(delete → insert)가 전환과 엇갈리면 한쪽이 40P01(⑤ 머리 주석).
 --    기존 가드 본문을 고치지 않고 트리거를 따로 둔 것은 롤백이 drop 만으로 끝나게 하려는 것이다.
 --    열이 바뀔 때만 돈다 — 팀·부모 열을 건드리지 않는 갱신(초대 수락의 redeemed_* 등)은 옛 행을 다시 판정하지 않는다.
 --    한계: 전용 팀을 새로 만드는 쓰기(팀 추가 액션)는 이 잠금을 잡지 않는다 — 전환의 전제 판독과 엇갈리면 23505(같은 code)가 날 수 있다
@@ -357,18 +364,36 @@ declare
   v_project uuid;
   v_teams uuid[];
 begin
+  -- 새로 생기는 참조만 본다 — 같은 키의 행이 이미 있는 INSERT(on conflict 재저장)·팀·부모 열이 그대로인 UPDATE 는 판정하지 않는다
   if tg_table_name = 'item_owners' then
+    if (tg_op = 'UPDATE' and new.team_id = old.team_id and new.wbs_item_id = old.wbs_item_id)
+       or (tg_op = 'INSERT' and exists (select 1 from public.item_owners x where x.wbs_item_id = new.wbs_item_id and x.team_id = new.team_id)) then
+      return new;
+    end if;
     select w.project_id into v_project from public.wbs_items w where w.id = new.wbs_item_id;
     v_teams := array[new.team_id];
   elsif tg_table_name = 'project_member_teams' then
+    if (tg_op = 'UPDATE' and new.team_id = old.team_id and new.member_id = old.member_id)
+       or (tg_op = 'INSERT' and exists (select 1 from public.project_member_teams x where x.member_id = new.member_id and x.team_id = new.team_id)) then
+      return new;
+    end if;
     select pm.project_id into v_project from public.project_members pm where pm.id = new.member_id;
     v_teams := array[new.team_id];
   elsif tg_table_name = 'area_teams' then
+    if (tg_op = 'UPDATE' and new.team_id = old.team_id and new.area_id = old.area_id)
+       or (tg_op = 'INSERT' and exists (select 1 from public.area_teams x where x.area_id = new.area_id and x.team_id = new.team_id)) then
+      return new;
+    end if;
     select a.project_id into v_project from public.project_areas a where a.id = new.area_id;
     v_teams := array[new.team_id];
   elsif tg_table_name = 'project_invites' then
     v_project := new.project_id;
-    v_teams := new.team_ids;
+    -- 같은 프로젝트의 초대 갱신이면 옛 team_ids 에 없던 id 만 새 참조다
+    if tg_op = 'UPDATE' and new.project_id = old.project_id then
+      v_teams := array(select x from pg_catalog.unnest(new.team_ids) as x where not (x = any (coalesce(old.team_ids, '{}'::uuid[]))));
+    else
+      v_teams := new.team_ids;
+    end if;
   else
     raise exception using errcode = '55000', message = 'TEAM_SCOPE_TRIGGER_MISPLACED';
   end if;
@@ -378,7 +403,7 @@ begin
     return new;
   end if;
   -- 전환이 진행 중이면 여기서 기다렸다가(read committed — 다음 문장은 새 스냅샷) 커밋된 전용 팀을 본다
-  perform 1 from public.projects p where p.id = v_project for share;
+  perform 1 from public.projects p where p.id = v_project for key share;
   if exists (select 1 from public.teams t join public.teams o on o.project_id = v_project and o.code = t.code
               where t.id = any (v_teams) and t.project_id is null) then
     raise exception using errcode = '23514', message = 'TEAM_SCOPE_PROJECT_OWNED';
@@ -488,11 +513,11 @@ begin
                         and not g.tgisinternal and g.tgenabled in ('O', 'A'));
   if v is not null then raise exception 'COMMAND_RECEIPTS_POSTCHECK: 공용 팀 참조 거부 트리거가 없다: %', v; end if;
   if not (select p.prosecdef and coalesce('search_path=""' = any(p.proconfig), false)
-            and position('TEAM_SCOPE_PROJECT_OWNED' in p.prosrc) > 0 and position('for share' in p.prosrc) > 0
+            and position('TEAM_SCOPE_PROJECT_OWNED' in p.prosrc) > 0 and position('for key share' in p.prosrc) > 0
             from pg_proc p where p.oid = 'public.team_ref_owned_scope()'::regprocedure)
      or position('where p.id = p_project_id for update' in
           (select p.prosrc from pg_proc p where p.oid = 'public.convert_inherited_teams(uuid, uuid)'::regprocedure)) = 0 then
-    raise exception 'COMMAND_RECEIPTS_POSTCHECK: 공용 팀 참조 거부의 잠금 짝(for share / for update)이 기대와 다르다';
+    raise exception 'COMMAND_RECEIPTS_POSTCHECK: 공용 팀 참조 거부의 잠금 짝(for key share / for update)이 기대와 다르다';
   end if;
 
   -- ③ 옛 두 함수 — 표 이름이 전부 public. 한정, INVOKER·search_path 미지정, authenticated 실행권 유지(ⓚ)
