@@ -215,7 +215,8 @@ export function ReportModal({
         </header>
 
         {/* ── 전체 요약 KPI ── */}
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {/* 열 수는 모달 폭(672px)에 맞춘다 — 4열이면 28px 수치가 칸을 넘고 아이콘과 겹친다(U1b 수정 G4) */}
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <KpiCard label="전체 실적" value={`${kpi.actual}%`} sub="Actual progress" icon={Activity} tone="brand" />
           <KpiCard label="전체 계획" value={`${kpi.planned}%`} sub="Planned" icon={CalendarRange} tone="default" />
           <KpiCard
