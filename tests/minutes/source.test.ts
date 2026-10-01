@@ -22,6 +22,14 @@ describe('minute source deep link', () => {
     )).toBe(`/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}&version=version-1`)
   })
 
+  it('base 를 주면 그 경로 아래로 — 범위를 아는 호출부가 새 형식을 넘긴다(기본값은 영구 링크 형식)', () => {
+    const a = { blockIndex: 2, blockHash: blocks[2].hash, bodyHash }
+    expect(minuteSourceHref('m1', a, 'v1', '/w/acme/minutes'))
+      .toBe(`/w/acme/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}&version=v1`)
+    expect(minuteSourceHref('m1', a, null, '/w/acme/minutes'))
+      .toBe(`/w/acme/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}`)
+  })
+
   it('정상 searchParams만 파싱한다', () => {
     expect(parseMinuteSourceAnchor({ block: '2', hash: blocks[2].hash, body: bodyHash }))
       .toEqual({ blockIndex: 2, blockHash: blocks[2].hash, bodyHash })

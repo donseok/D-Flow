@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), moduleSetFor: vi.fn(),
   getMinuteDetail: vi.fn(), getMinuteLinkedIssues: vi.fn(async () => [{ id: 'i1' }]), getMinuteWikiImpact: vi.fn(async () => ({ topics: [] })),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }), viewerProps: vi.fn(), getMinuteVersionBody: vi.fn(async (): Promise<unknown> => null),
+  getMinuteVersions: vi.fn(async () => ({ ok: true, rows: [] })),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
@@ -14,7 +15,7 @@ vi.mock('@/lib/modules/gate', () => ({ moduleSetFor: h.moduleSetFor }))
 vi.mock('next/navigation', () => ({ notFound: h.notFound }))
 vi.mock('@/lib/data/minutes', () => ({
   getMinuteDetail: h.getMinuteDetail, getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),
-  getMinuteVersions: vi.fn(async () => ({ ok: true, rows: [] })), getMinuteWikiImpact: h.getMinuteWikiImpact,
+  getMinuteVersions: h.getMinuteVersions, getMinuteWikiImpact: h.getMinuteWikiImpact,
   getMinuteVersionBody: h.getMinuteVersionBody, getMinuteFolderPath: vi.fn(async () => []),
 }))
 vi.mock('@/lib/data/issues', () => ({ getMinuteLinkedIssues: h.getMinuteLinkedIssues }))
@@ -49,6 +50,8 @@ describe('/w/[slug]/minutes/[id]', () => {
     expect(h.loadWorkspaceScope).toHaveBeenCalledWith('acme')
     expect(h.requireModulePage).toHaveBeenCalledWith({ workspaceId: WA.id }, 'minutes')
     expect(h.getMinuteWikiImpact).toHaveBeenCalled()
+    // 버전 목록의 '이 판 보기' 링크가 스텁을 한 번 더 거치지 않게 새 형식 base 를 넘긴다(과제 21)
+    expect(h.getMinuteVersions).toHaveBeenCalledWith(MID, '/w/acme/minutes')
     expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({ linkedIssues: [{ id: 'i1' }], wikiImpact: { topics: [] } }))
   })
   it('행의 워크스페이스가 슬러그와 다르거나 없으면 404(다른 워크스페이스 회의록을 이 주소로 열지 않는다) — 관문·로더 미호출', async () => {

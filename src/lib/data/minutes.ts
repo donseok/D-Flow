@@ -269,9 +269,13 @@ export const ERR_MINUTE_VERSIONS_LOAD = '버전 목록을 불러오지 못했습
 /** 버전 목록 결과 — 실패를 빈 목록('버전 없음')과 구분한다(MinuteFilesResult 와 같은 관례). */
 export type MinuteVersionsResult = { ok: true; rows: MinuteVersionListItem[] } | { ok: false; error: string }
 
-/** 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC). */
+/**
+ * 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC).
+ * base = '이 판 보기' 링크의 경로(범위의 회의록 주소, 예: /w/<slug>/minutes) — 호출부가 슬러그를 안다.
+ */
 export const getMinuteVersions = cache(async (
   id: string,
+  base: string,
 ): Promise<MinuteVersionsResult> => {
   const sb = await createServerClient()
   const { data, error } = await sb.from('minute_versions')
@@ -292,7 +296,7 @@ export const getMinuteVersions = cache(async (
     createdByName: (row.created_by_name as string | null) ?? null,
     fileName: (row.file_name as string | null) ?? null,
     hasFile: Boolean(row.file_path),
-    viewHref: `/minutes/${id}?version=${encodeURIComponent(row.id as string)}`,
+    viewHref: `${base}/${id}?version=${encodeURIComponent(row.id as string)}`,
   }))
   return { ok: true, rows }
 })

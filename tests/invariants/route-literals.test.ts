@@ -1,7 +1,7 @@
 // 옛 전역 경로 리터럴(스펙 §5.7 불변식) — ① 옛 전역 접두의 revalidatePath 0건(임시 허용 제외) ② '/(' 로 시작하는 revalidatePath 는 둘째 인자가 있고
 // 그 경로 + '/<종류>.tsx' 파일이 src/app 아래 있다(D8 — Next 15 의 암묵 태그는 라우트 그룹을 포함한 파일 경로다. 동작 테스트는 판별력이 없다)
 // ③ 따옴표 접두 옛 경로 리터럴은 닫힌 허용 목록(파일 + 개수 + 사유)에만. 주석은 세지 않는다(codeLines). 목록은 줄기만 한다.
-// 사유 접두: '영구: '(옛 형식을 계속 내거나 읽는다) · 'UI-2a: 과제 N — '(UI-2a 체크포인트까지 0) · 'UI-2b: '(UI-2b 체크포인트까지 0, V19).
+// 사유 접두: '영구: '(옛 형식을 계속 내거나 읽는다) · UI-2a 사유 접두(과제 번호 — UI-2a 체크포인트까지 0) · 'UI-2b: '(UI-2b 체크포인트까지 0, V19).
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -14,7 +14,6 @@ const GROUP_REVALIDATE = /revalidatePath\(\s*'(\/\([^']*)'\s*(?:,\s*'(page|layou
 
 const SHELL = 'UI-2b: 옛 셸 — 과제 31 이 파일째 지운다'
 const CLIENT_LINK = 'UI-2b: 과제 35 — 클라이언트 링크(useScope 뒤)'
-const BASE_ARG = 'UI-2a: 과제 21 — base 인자'
 const PERMALINK = '영구: 영구 링크(D6) — 옛 형식을 내거나 두 형식을 읽는다'
 
 /** ③ 허용 목록 — 과제 9 의 생성 스크립트가 초안을 만들고 사유는 계획 과제 9 Step 3 의 규칙표로 달았다 */
@@ -32,9 +31,7 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/components/admin/AccountsManager.tsx': { count: 1, why: CLIENT_LINK },
   'src/components/ui/BrandMark.tsx': { count: 1, why: 'UI-2b: 과제 25 — C 파일 과제' },
   'src/lib/nav/legacyPaths.ts': { count: 2, why: 'UI-2b: 과제 25 — C 파일 과제' },
-  'src/lib/minutes/source.ts': { count: 1, why: BASE_ARG },
-  'src/lib/domain/usage.ts': { count: 2, why: BASE_ARG },
-  'src/lib/data/minutes.ts': { count: 1, why: BASE_ARG },
+  'src/lib/minutes/source.ts': { count: 1, why: '영구: base 기본값은 영구 링크 형식(D6) — 범위를 아는 호출부가 base 를 넘긴다' },
   'src/app/actions/project.ts': { count: 3, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
   'src/app/actions/inviteRedeem.ts': { count: 2, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
   'src/lib/domain/usageMenu.ts': { count: 8, why: '영구: 역사 키 — 옛 경로 사용 이벤트를 같은 키로 읽는다' },
@@ -44,7 +41,7 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/lib/workspace/legacy.ts': { count: 9, why: '영구: 옛 경로 변환표' },
 }
 /** ① 임시 허용 — UI-2b 에서 0. createProject 계열 3·초대 합류 2 는 레이아웃 데이터라 UI-2b 의 범위 레이아웃 뒤에 바꾼다(§5.7).
- *  'UI-2a: 과제 N' 항목은 그 화면을 옮기는 과제가 지운다 */
+ *  UI-2a 사유 항목은 그 화면을 옮기는 과제가 지운다 */
 export const TEMP_REVALIDATE: Record<string, { count: number; why: string }> = {
   'src/app/actions/project.ts': { count: 3, why: "UI-2b: 과제 25 — ('/(app)/w/[slug]', 'layout') 로(전환기 목록이 레이아웃 데이터)" },
   'src/app/actions/inviteRedeem.ts': { count: 2, why: "UI-2b: 과제 25 — ('/(app)/w/[slug]', 'layout') 로" },

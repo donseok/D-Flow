@@ -68,6 +68,7 @@ export default async function UsagePage({ params, searchParams }: {
   const userRows = mergeUserRows(directory, rollup)
   const names = new Map(directory.map(a => [a.id, a.name]))
   const filter = { days: period, user: userFilter, menu: menuFilter }
+  const usageBase = wsHref(scope.ws.slug, 'usage')
 
   // 프로미스를 반환한다 — void 로 버리면 Next 가 waitUntil 로 추적하지 못해
   // 응답 직후 인스턴스가 얼면 DELETE 왕복이 끊긴다(리포의 다른 after() 9곳과 동일 형태).
@@ -82,7 +83,7 @@ export default async function UsagePage({ params, searchParams }: {
         <p className="text-xs text-ink-muted">
           최근 {period}일 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.
         </p>
-        <PeriodTabs filter={filter} />
+        <PeriodTabs base={usageBase} filter={filter} />
       </div>
       <UsageSummary summary={summary} days={period} sessions={sessions} />
       <div className="grid gap-5 lg:grid-cols-2">
@@ -90,7 +91,7 @@ export default async function UsagePage({ params, searchParams }: {
         <MenuRankingCard ranks={ranks} locale={locale} />
       </div>
       <UsageUserTable rows={userRows} days={period} />
-      <UsageEventLog events={events} names={names} limit={EVENT_LIMIT} locale={locale}
+      <UsageEventLog base={usageBase} events={events} names={names} limit={EVENT_LIMIT} locale={locale}
         menus={ranks.map(r => r.menuKey)} filter={filter} />
     </div>
   )

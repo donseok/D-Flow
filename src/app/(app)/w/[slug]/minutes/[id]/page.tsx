@@ -16,6 +16,7 @@ import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { moduleSetFor } from '@/lib/modules/gate'
 import { UUID_RE } from '@/lib/domain/validate'
+import { wsHref } from '@/lib/workspace/paths'
 
 export const metadata = { title: `회의록 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
 
@@ -48,7 +49,7 @@ export default async function MinuteDetailPage({
   const modScope = head.minute.projectId ? { projectId: head.minute.projectId } : { workspaceId: head.minute.workspaceId }
   // prefs 는 기존 병렬 묶음에 합류 — 직렬 왕복 단수는 그대로다(스펙 §4.5)
   const [detail, annotations, versions, requestedVersion, user, projects, prefs, linkedIssuesRaw, mods] = await Promise.all([
-    getMinuteDetail(id), getMinuteAnnotations(id), getMinuteVersions(id),
+    getMinuteDetail(id), getMinuteAnnotations(id), getMinuteVersions(id, wsHref(scope.ws.slug, 'minutes')),
     requestedVersionId ? getMinuteVersionBody(id, requestedVersionId) : Promise.resolve(null),
     getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id),
     moduleSetFor(modScope),

@@ -104,14 +104,15 @@ describe('pickAllowed — 쿼리스트링 필터 검증', () => {
 
 describe('usageHref — 다른 필터를 보존한다', () => {
   it('기본 기간(30일)은 URL 에 싣지 않는다', () => {
-    expect(usageHref({ days: 30 }, {})).toBe('/usage')
+    expect(usageHref('/w/acme/usage', { days: 30 }, {})).toBe('/w/acme/usage')
   })
   it('기간을 바꿔도 사용자 필터가 남는다', () => {
-    expect(usageHref({ days: 30, user: 'u1' }, { days: 7 })).toBe('/usage?days=7&user=u1')
+    expect(usageHref('/w/acme/usage', { days: 30, user: 'u1' }, { days: 7 })).toBe('/w/acme/usage?days=7&user=u1')
   })
   it('필터를 undefined 로 지우면 파라미터가 빠진다', () => {
-    expect(usageHref({ days: 7, user: 'u1', menu: 'wbs' }, { user: undefined }))
-      .toBe('/usage?days=7&menu=wbs')
+    expect(usageHref('/w/acme/usage', { days: 7, user: 'u1', menu: 'wbs' }, { user: undefined }))
+      .toBe('/w/acme/usage?days=7&menu=wbs')
+    expect(usageHref('/w/acme/usage', { days: 30 }, { days: 7, menu: 'wbs' })).toBe('/w/acme/usage?days=7&menu=wbs')
   })
 })
 
