@@ -43,6 +43,7 @@ const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why
   'src/app/actions/agentTokens.ts#createAgentToken': { tables: ['agent_runners'], why: '계정 단위 PAT — 대상 프로젝트가 없다. agents 모듈이 아니라 API 계정 표(노트)' },
   'src/app/actions/agentTokens.ts#revokeAgentToken': { tables: ['agent_runners'], why: 'PAT 회수 — 계정 단위 표' },
   'src/app/actions/agentTokens.ts#listMyAgentTokens': { tables: ['agent_runners'], why: 'PAT 목록 — 계정 단위 표' },
+  'src/app/actions/projectAreas.ts#upsertArea': { tables: ['weekly_report_rows'], why: '영역 추가·재활성은 모듈이 꺼져도 현 주 이후 문서에 행을 만든다 — 다시 켰을 때 행이 있어야 한다(R25)' },
   'src/app/actions/teams.ts#addTeam': { tables: ['minute_folders'], why: '담당 팀의 시드 루트 폴더 한 줄 — 폴더 트리의 루트이지 회의록 데이터가 아니다' },
   'src/app/actions/wbs.ts#updateActual': { tables: ['agent_work_orders'], why: 'WBS(core) 진척의 갱신이 에이전트 주문 행에도 닿는다 — 같은 로컬 쓰기다' },
   'src/app/actions/wbsAssign.ts#setWbsDevWorkflow': { tables: ['agent_work_orders'], why: 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)' },

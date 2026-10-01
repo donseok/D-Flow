@@ -186,7 +186,6 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('project')}#setBaseDate`]: nul('projectAdmin'),
   [`${A('project')}#addHoliday`]: nul('projectAdmin'),
   [`${A('project')}#removeHoliday`]: nul('projectAdmin'),
-  [`${A('projectAreas')}#listAreas`]: nul('projectAdmin'),
   [`${A('projectAreas')}#upsertArea`]: nul('projectAdmin'),
   [`${A('projectInvites')}#listProjectInvites`]: nul('projectAdmin'),
   [`${A('projectInvites')}#createProjectInvite`]: nul('projectAdmin'),

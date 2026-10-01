@@ -1,174 +1,230 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// 담당 영역 관리 — 가드·검증·code 불변(액션 사전검사 + 트리거 오류 매핑)·area_teams 동기화 순서를 고정한다.
-// 가드와 admin 클라이언트를 모킹한다(roster.test.ts 관례). 테이블마다 호출 순서대로 결과를 꺼내 쓴다.
-const { guards, admin, revalidatePath } = vi.hoisted(() => ({
-  guards: { requireProjectAdmin: vi.fn() },
-  admin: { from: vi.fn() },
-  revalidatePath: vi.fn(),
+// 담당 영역 저장(스펙 §4.1.3·§4.1.8·D45·D51) — 가드 → 입력 모양 → validateArea → 팀 범위(설정에서 읽은 프로젝트 팀 ∪ 그 영역의 기존 배정)
+// → RPC upsert_project_area 한 길. 표를 직접 쓰지 않고(D27 — 세션 쓰기 정책이 없다) DB 원문을 응답에 싣지 않는다(D21).
+const h = vi.hoisted(() => ({
+  requireProjectAdmin: vi.fn(), getProjectConfig: vi.fn(), rpc: vi.fn(), adminFor: vi.fn(), revalidatePath: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => guards)
-vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => admin }))
-vi.mock('next/cache', () => ({ revalidatePath }))
+vi.mock('next/cache', () => ({ revalidatePath: h.revalidatePath }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin: h.requireProjectAdmin }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
+vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 
-import { listAreas, upsertArea } from '@/app/actions/projectAreas'
+import * as areaActions from '@/app/actions/projectAreas'
 import { ERR_AREA_CODE_IMMUTABLE, type AreaInput } from '@/lib/domain/areas'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
+import { ConfigUnavailableError, ERR_CONFIG_BUSY, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { makeAdminActor } from '../fixtures/actor'
 
-const P1 = 'p1'
-const A1 = '00000000-0000-4000-8000-00000000a001'
-const T1 = '00000000-0000-4000-8000-0000000000a1'
-const T2 = '00000000-0000-4000-8000-0000000000a2'
-const DENIED = { ok: false as const, error: '권한 없음' }
+const { upsertArea } = areaActions
 
-type Result = { data: unknown; error: { code?: string; message: string } | null }
-type Chain = Record<string, ReturnType<typeof vi.fn>> & PromiseLike<Result>
-function chain(result: Result): Chain {
-  const c: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'in', 'not', 'order', 'delete', 'update', 'insert', 'upsert']) c[m] = vi.fn(() => c)
-  c.single = vi.fn(async () => result)
-  c.then = (res: (v: Result) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej)
-  return c as Chain
-}
-/** 테이블별 결과 큐 — from(t) 가 불릴 때마다 다음 체인을 꺼내고, 불린 체인을 calls 에 남긴다. */
-let queues: Record<string, Result[]>
-let calls: Array<{ table: string; c: Chain }>
-const ok = (data: unknown = null): Result => ({ data, error: null })
+// 단위 테스트 id 구간 18c0~18cf(RLS 구간과 겹치지 않는다)
+const P = '00000000-0000-0000-7e57-0000000018c0'
+const A_EXP = '00000000-0000-0000-7e57-0000000018c1'   // 기존 주간 영역 '실험'(code EXP) — 공용 팀 MEP 가 보조로 걸려 있다(전환 전 배정)
+const T_RES = '00000000-0000-0000-7e57-0000000018c2'   // 이 프로젝트 전용 팀(활성)
+const T_OPS = '00000000-0000-0000-7e57-0000000018c3'   // 이 프로젝트 전용 팀(비활성 — 규칙상 프로젝트 팀이다)
+const T_CIV = '00000000-0000-0000-7e57-0000000018c4'   // 워크스페이스 공용 팀 — 전용 팀이 있으면 선택지 밖
+const T_MEP = '00000000-0000-0000-7e57-0000000018c5'   // 워크스페이스 공용 팀 — 실험 영역에 이미 배정
+const T_FOREIGN = '00000000-0000-0000-7e57-0000000018cf' // 해석기가 모르는 팀(다른 워크스페이스 등)
+const NEW_ID = '00000000-0000-0000-7e57-0000000018c9'
+const ERR_TEAM_SCOPE = '이 프로젝트에서 쓸 수 없는 팀입니다.'
+const ERR_SAVE = '영역을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ACTOR = makeAdminActor(P, { userId: 'u-guard' })
 
-const INPUT: AreaInput = {
-  kind: 'weekly_section', code: 'PLAN', name: '생산계획', sortOrder: 1, active: true,
-  teams: [{ teamId: T1, kind: 'primary' }, { teamId: T2, kind: 'support' }],
+const team = (id: string, code: string, projectId: string | null, active = true): ConfigTeam =>
+  ({ id, code, name: code, sortOrder: 1, active, color: '#4f46e5', progressVisible: true, projectId })
+const OWN = [team(T_RES, 'RES', P), team(T_OPS, 'OPS', P, false)]
+const COMMON = [team(T_CIV, 'CIV', null), team(T_MEP, 'MEP', null)]
+const EXP_AREA: ConfigArea = {
+  id: A_EXP, kind: 'weekly_section', code: 'EXP', name: '실험', sortOrder: 1, active: true,
+  teams: [{ teamId: T_MEP, kind: 'support' }],
 }
+const cfgWith = (teams: ConfigTeam[]) => makeProjectConfig({}, {
+  projectId: P, workspaceId: 'ws-synthetic', teams, areas: { weekly_section: [EXP_AREA], issue_area: [] },
+})
+const NEW_AREA: AreaInput = {
+  kind: 'weekly_section', code: ' DATA ', name: ' 데이터 ', sortOrder: 2, active: true,
+  teams: [{ teamId: T_RES, kind: 'primary' }],
+}
+const EXP_EDIT: AreaInput = {
+  id: A_EXP, kind: 'weekly_section', code: 'EXP', name: '실험', sortOrder: 1, active: false,
+  teams: [{ teamId: T_MEP, kind: 'support' }, { teamId: T_OPS, kind: 'primary' }],
+}
+/** console.error 인자 어딘가에 needle 이 있는가 — failWith 는 원문을 그대로(Error·객체) 남긴다.
+ *  객체는 JSON 으로 보므로 needle 도 같은 이스케이프(따옴표 → \")로 맞춘다 */
+const logged = (spy: { mock: { calls: unknown[][] } }, needle: string): boolean =>
+  spy.mock.calls.flat().some((x) => x instanceof Error ? x.message.includes(needle)
+    : typeof x === 'string' ? x.includes(needle)
+    : (JSON.stringify(x) ?? '').includes(JSON.stringify(needle).slice(1, -1)))
 
 beforeEach(() => {
-  guards.requireProjectAdmin.mockReset(); admin.from.mockReset(); revalidatePath.mockReset()
-  queues = {}; calls = []
-  admin.from.mockImplementation((t: string) => {
-    const r = queues[t]?.shift()
-    if (!r) throw new Error('예상치 못한 테이블 접근: ' + t)
-    const c = chain(r); calls.push({ table: t, c }); return c
-  })
-  guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeAdminActor(P1) })
+  vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-01T03:00:00Z'))        // 서울 2026-10-01(목) 12:00 → 이번 주 월요일 2026-09-28
+  h.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
+  h.getProjectConfig.mockResolvedValue(cfgWith([...OWN, ...COMMON]))
+  h.adminFor.mockImplementation((scope: Record<string, string>) => ({ ...scope, admin: { rpc: h.rpc } }))
+  h.rpc.mockResolvedValue({ data: { status: 'created', area_id: NEW_ID, rows_added: 3 }, error: null })
 })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-describe('listAreas', () => {
-  it('가드 거부면 조회하지 않는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue(DENIED)
-    expect(await listAreas(P1, 'issue_area')).toEqual(DENIED)
-    expect(admin.from).not.toHaveBeenCalled()
+describe('액션 면 — 목록 액션 없음, 쓰기는 RPC 하나', () => {
+  it('listAreas 는 없다 — 설정 페이지가 cfg.areas 를 넘긴다(스펙 §4.1.3)', () => {
+    expect('listAreas' in areaActions).toBe(false)
   })
 
-  it('프로젝트·kind 로 좁혀 camelCase 로 돌려준다', async () => {
-    queues.project_areas = [ok([{
-      id: A1, kind: 'weekly_section', code: 'PLAN', name: '생산계획', sort_order: 1, active: true,
-      area_teams: [{ team_id: T1, kind: 'primary' }],
-    }])]
-    const r = await listAreas(P1, 'weekly_section')
-    expect(r).toEqual({ ok: true, areas: [{
-      id: A1, kind: 'weekly_section', code: 'PLAN', name: '생산계획', sortOrder: 1, active: true,
-      teams: [{ teamId: T1, kind: 'primary' }],
-    }] })
-    expect(calls[0].c.eq).toHaveBeenCalledWith('project_id', P1)
-    expect(calls[0].c.eq).toHaveBeenCalledWith('kind', 'weekly_section')
-  })
-
-  it('조회 실패를 빈 목록으로 위장하지 않는다', async () => {
-    queues.project_areas = [{ data: null, error: { message: 'boom' } }]
-    expect((await listAreas(P1, 'weekly_section')).ok).toBe(false)
+  it('표를 직접 쓰지 않는다 — .from( 이 없고 .rpc( 는 하나, service_role 클라이언트를 직접 만들지 않는다(D27)', () => {
+    const src = readFileSync('src/app/actions/projectAreas.ts', 'utf8')
+    expect(src).not.toMatch(/\.from\(/)
+    expect(src.match(/\.rpc\(/g)).toHaveLength(1)
+    expect(src).not.toMatch(/\bcreateAdminClient\b/)
   })
 })
 
-describe('upsertArea', () => {
-  it('가드 거부면 DB 를 건드리지 않는다', async () => {
-    guards.requireProjectAdmin.mockResolvedValue(DENIED)
-    expect(await upsertArea(P1, INPUT)).toEqual(DENIED)
-    expect(admin.from).not.toHaveBeenCalled()
+describe('가드 → 입력 → 팀 범위 — RPC 앞에서 거른다', () => {
+  it('가드가 거부하면 설정도 RPC 도 없다 — code 는 가드 문구(선례 createProject)', async () => {
+    h.requireProjectAdmin.mockResolvedValue({ ok: false, error: ERR_DENIED })
+    expect(await upsertArea(P, NEW_AREA)).toEqual({ ok: false, code: ERR_DENIED, error: ERR_DENIED })
+    expect(h.getProjectConfig).not.toHaveBeenCalled()
+    expect(h.rpc).not.toHaveBeenCalled()
   })
 
-  it('형상이 틀린 팀 id 는 DB 앞에서 거부', async () => {
-    const r = await upsertArea(P1, { ...INPUT, teams: [{ teamId: 'x', kind: 'primary' }] })
-    expect(r.ok).toBe(false)
-    expect(admin.from).not.toHaveBeenCalled()
+  it.each([
+    ['id 가 uuid 아님', { ...NEW_AREA, id: 'area-1' }],
+    ['팀 id 가 uuid 아님', { ...NEW_AREA, teams: [{ teamId: 'RES', kind: 'primary' }] }],
+    ['active 가 불리언 아님', { ...NEW_AREA, active: 'yes' }],
+    ['teams 가 배열 아님', { ...NEW_AREA, teams: null }],
+  ])('모양 위반(%s)은 잘못된 요청', async (_n, input) => {
+    expect(await upsertArea(P, input as never)).toEqual({ ok: false, code: 'INVALID_INPUT', error: '잘못된 요청입니다.' })
+    expect(h.getProjectConfig).not.toHaveBeenCalled()
+    expect(h.rpc).not.toHaveBeenCalled()
   })
 
-  it('새 영역: 기존 목록 대조 → insert(project_id 포함) → 담당 팀 upsert → 목록 밖 팀 삭제', async () => {
-    queues.project_areas = [ok([]), { data: { id: A1 }, error: null }]
-    queues.area_teams = [ok(), ok()]
-    expect(await upsertArea(P1, { ...INPUT, code: ' PLAN ' })).toEqual({ ok: true, id: A1 })
-    const [, ins] = calls
-    expect(ins.c.insert).toHaveBeenCalledWith({
-      project_id: P1, kind: 'weekly_section', code: 'PLAN', name: '생산계획', sort_order: 1, active: true,
+  it.each([
+    ['종류', { ...NEW_AREA, kind: 'misc' }, '알 수 없는 영역 종류입니다.'],
+    ['code 공백', { ...NEW_AREA, code: '  ' }, '영역 코드를 입력하세요.'],
+    ['이름 공백', { ...NEW_AREA, name: '' }, '영역 이름을 입력하세요.'],
+    ['순서 소수', { ...NEW_AREA, sortOrder: 1.5 }, '순서는 정수여야 합니다.'],
+    ['팀 구분', { ...NEW_AREA, teams: [{ teamId: T_RES, kind: 'lead' }] }, '담당 팀 구분은 주·보조만 됩니다.'],
+    ['같은 팀 두 번', { ...NEW_AREA, teams: [{ teamId: T_RES, kind: 'primary' }, { teamId: T_RES, kind: 'support' }] }, '같은 팀을 두 번 지정할 수 없습니다.'],
+  ])('validateArea 위반(%s)은 그 문구 — RPC 의 입력 토큰까지 가지 않는다(D45)', async (_n, input, msg) => {
+    expect(await upsertArea(P, input as never)).toEqual({ ok: false, code: 'INVALID_INPUT', error: msg })
+    expect(h.getProjectConfig).not.toHaveBeenCalled()
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('설정을 읽지 못하면 쓰지 않는다 — 선행 조회 실패는 중단(3원칙 ②), 원문은 로그로만', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('팀 조회 실패: relation secret_teams'))
+    const r = await upsertArea(P, NEW_AREA)
+    expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: ERR_CONFIG_UNAVAILABLE, retryable: true })
+    expect(JSON.stringify(r)).not.toContain('secret_teams')
+    expect(logged(err, 'secret_teams')).toBe(true)
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('전용 팀이 있는 프로젝트에 공용 팀 id 를 보내면 400 — 전환 전에 연 낡은 화면(§4.1.8)', async () => {
+    expect(await upsertArea(P, { ...NEW_AREA, teams: [{ teamId: T_CIV, kind: 'primary' }] }))
+      .toEqual({ ok: false, code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE })
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('다른 영역에 걸린 공용 팀도 새 영역에는 못 건다 — 기존 배정은 그 영역의 것', async () => {
+    expect(await upsertArea(P, { ...NEW_AREA, teams: [{ teamId: T_MEP, kind: 'support' }] }))
+      .toEqual({ ok: false, code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE })
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('해석기가 모르는 팀 id 는 400', async () => {
+    expect(await upsertArea(P, { ...NEW_AREA, teams: [{ teamId: T_FOREIGN, kind: 'primary' }] }))
+      .toEqual({ ok: false, code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE })
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('그 영역에 이미 배정된 공용 팀과 비활성 전용 팀은 통과 — 편집기 선택지와 같은 집합', async () => {
+    h.rpc.mockResolvedValue({ data: { status: 'updated', area_id: A_EXP, rows_added: 0 }, error: null })
+    expect(await upsertArea(P, EXP_EDIT)).toEqual({ ok: true, id: A_EXP, status: 'updated', rowsAdded: 0 })
+    expect(h.rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('전용 팀이 없는 프로젝트는 그 워크스페이스 공용 팀을 쓴다', async () => {
+    h.getProjectConfig.mockResolvedValue(cfgWith(COMMON))
+    expect(await upsertArea(P, { ...NEW_AREA, teams: [{ teamId: T_CIV, kind: 'primary' }] })).toMatchObject({ ok: true })
+  })
+
+  it('담당 팀 0개도 저장한다 — 주간 영역은 팀 없이 쓰고 봇 팀 필터에서 빠질 뿐(스펙 §4.1.3)', async () => {
+    expect(await upsertArea(P, { ...NEW_AREA, teams: [] })).toMatchObject({ ok: true })
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_teams: [] })
+  })
+})
+
+describe('RPC 한 길(D22·D51)', () => {
+  it('새 영역 — p_actor 는 가드 결과, p_area 는 다듬은 값(id 없음), p_from_week 는 서울 기준 이번 주 월요일', async () => {
+    expect(await upsertArea(P, NEW_AREA)).toEqual({ ok: true, id: NEW_ID, status: 'created', rowsAdded: 3 })
+    expect(h.adminFor).toHaveBeenCalledWith({ projectId: P })
+    expect(h.rpc).toHaveBeenCalledWith('upsert_project_area', {
+      p_actor: 'u-guard',
+      p_project_id: P,
+      p_area: { kind: 'weekly_section', code: 'DATA', name: '데이터', sort_order: 2, active: true },
+      p_teams: [{ team_id: T_RES, kind: 'primary' }],
+      p_from_week: '2026-09-28',
     })
-    const [up, del] = calls.filter(x => x.table === 'area_teams')
-    expect(up.c.upsert).toHaveBeenCalledWith(
-      [{ area_id: A1, team_id: T1, kind: 'primary' }, { area_id: A1, team_id: T2, kind: 'support' }],
-      { onConflict: 'area_id,team_id' },
-    )
-    expect(del.c.delete).toHaveBeenCalled()
-    expect(del.c.eq).toHaveBeenCalledWith('area_id', A1)
-    expect(del.c.not).toHaveBeenCalledWith('team_id', 'in', `(${T1},${T2})`)
-    expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/settings`)
+    expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]/settings', 'page')
+    expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]/weekly', 'page')
   })
 
-  it('같은 kind 의 코드 중복은 쓰기 전에 거부', async () => {
-    queues.project_areas = [ok([{ id: 'other', kind: 'weekly_section', code: 'PLAN' }])]
-    const r = await upsertArea(P1, INPUT)
-    expect(r).toEqual({ ok: false, error: "'PLAN' 코드가 이미 있습니다." })
-    expect(calls).toHaveLength(1)
+  it('기존 영역 — p_area 에 id 를 싣는다', async () => {
+    h.rpc.mockResolvedValue({ data: { status: 'updated', area_id: A_EXP, rows_added: 0 }, error: null })
+    await upsertArea(P, EXP_EDIT)
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({
+      p_area: { id: A_EXP, kind: 'weekly_section', code: 'EXP', name: '실험', sort_order: 1, active: false },
+      p_teams: [{ team_id: T_MEP, kind: 'support' }, { team_id: T_OPS, kind: 'primary' }],
+    })
   })
 
-  it('기존 영역의 코드 변경은 사전검사로 거부(트리거까지 가지 않는다)', async () => {
-    queues.project_areas = [ok([{ id: A1, kind: 'weekly_section', code: 'PLAN' }])]
-    const r = await upsertArea(P1, { ...INPUT, id: A1, code: 'PLAN2' })
-    expect(r).toEqual({ ok: false, error: ERR_AREA_CODE_IMMUTABLE })
-    expect(ERR_AREA_CODE_IMMUTABLE).toBe('영역 코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.')
-    expect(calls).toHaveLength(1)
+  it.each([
+    ['2026-09-27T16:00:00Z', '2026-09-28'],   // UTC 일요일 16시 = 서울 월요일 01시
+    ['2026-09-27T14:59:00Z', '2026-09-21'],   // 서울 일요일 23:59 — 아직 지난주
+  ])('p_from_week 는 서울 날짜로 정한다(%s → %s)', async (now, monday) => {
+    vi.setSystemTime(new Date(now))
+    await upsertArea(P, NEW_AREA)
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_from_week: monday })
+  })
+})
+
+describe('RPC 토큰 → 코드(D45·T6) — 원문 비노출', () => {
+  it.each([
+    ['AREA_FORBIDDEN', '42501', { code: 'ERR_DENIED', error: ERR_DENIED }],
+    ['PROJECT_NOT_FOUND', 'P0002', { code: 'ERR_MISSING', error: ERR_MISSING }],
+    ['AREA_NOT_FOUND', 'P0002', { code: 'ERR_MISSING', error: '이 프로젝트의 영역이 아니거나 존재하지 않습니다.' }],
+    ['PROJECT_AREA_KIND_IMMUTABLE', '23514', { code: 'INVALID_INPUT', error: '영역 종류는 바꿀 수 없습니다.' }],
+    ['PROJECT_AREA_CODE_IMMUTABLE', '23514', { code: 'INVALID_INPUT', error: ERR_AREA_CODE_IMMUTABLE }],
+    ['PROJECT_AREA_PROJECT_IMMUTABLE', '23514', { code: 'INVALID_INPUT', error: '다른 프로젝트의 영역으로 옮길 수 없습니다.' }],
+    ['AREA_TEAM_SCOPE', '23514', { code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE }],
+    ['duplicate key value violates unique constraint "project_areas_project_id_kind_code_key"', '23505', { code: 'INVALID_INPUT', error: "'DATA' 코드가 이미 있습니다." }],
+    ['deadlock detected', '40P01', { code: 'CONFIG_BUSY', error: ERR_CONFIG_BUSY, retryable: true }],
+    ['canceling statement due to lock timeout', '55P03', { code: 'CONFIG_BUSY', error: ERR_CONFIG_BUSY, retryable: true }],
+  ] as const)('%s(%s)', async (message, code, want) => {
+    h.rpc.mockResolvedValue({ data: null, error: { code, message } })
+    expect(await upsertArea(P, NEW_AREA)).toEqual({ ok: false, ...want })
+    expect(h.revalidatePath).not.toHaveBeenCalled()
   })
 
-  it('이 프로젝트에 없는 id 는 거부', async () => {
-    queues.project_areas = [ok([])]
-    expect((await upsertArea(P1, { ...INPUT, id: A1 })).ok).toBe(false)
-    expect(calls).toHaveLength(1)
-  })
-
-  it('기존 영역: code 를 보내지 않고 이 프로젝트 행만 update, 팀 0개면 전부 삭제', async () => {
-    queues.project_areas = [ok([{ id: A1, kind: 'weekly_section', code: 'PLAN' }]), ok([{ id: A1 }])]
-    queues.area_teams = [ok()]
-    expect(await upsertArea(P1, { ...INPUT, id: A1, active: false, teams: [] })).toEqual({ ok: true, id: A1 })
-    const upd = calls[1]
-    expect(upd.c.update).toHaveBeenCalledWith({ name: '생산계획', sort_order: 1, active: false })
-    expect(upd.c.eq).toHaveBeenCalledWith('id', A1)
-    expect(upd.c.eq).toHaveBeenCalledWith('project_id', P1)
-    const del = calls[2]
-    expect(del.table).toBe('area_teams')
-    expect(del.c.delete).toHaveBeenCalled()
-    expect(del.c.not).not.toHaveBeenCalled()
-  })
-
-  it('트리거의 code 불변 오류는 같은 안내 문구로 바꾼다(경쟁 조건 대비)', async () => {
-    queues.project_areas = [
-      ok([{ id: A1, kind: 'weekly_section', code: 'PLAN' }]),
-      { data: null, error: { code: '23514', message: 'PROJECT_AREA_CODE_IMMUTABLE' } },
-    ]
-    expect(await upsertArea(P1, { ...INPUT, id: A1 })).toEqual({ ok: false, error: ERR_AREA_CODE_IMMUTABLE })
-  })
-
-  it('유니크 위반(23505)은 코드 중복 문구로', async () => {
-    queues.project_areas = [ok([]), { data: null, error: { code: '23505', message: 'dup' } }]
-    expect(await upsertArea(P1, INPUT)).toEqual({ ok: false, error: "'PLAN' 코드가 이미 있습니다." })
-  })
-
-  it('다른 프로젝트 팀(AREA_TEAM_SCOPE)은 안내 문구로, 담당 팀 삭제 단계로 가지 않는다', async () => {
-    queues.project_areas = [ok([]), { data: { id: A1 }, error: null }]
-    queues.area_teams = [{ data: null, error: { code: '23514', message: 'AREA_TEAM_SCOPE' } }]
-    const r = await upsertArea(P1, INPUT)
-    expect(r).toEqual({ ok: false, error: '영역은 저장했지만 담당 팀을 저장하지 못했습니다: 이 프로젝트에서 쓸 수 없는 팀입니다.' })
-    expect(calls.filter(x => x.table === 'area_teams')).toHaveLength(1)
-  })
-
-  it('선행 조회 실패면 쓰지 않는다', async () => {
-    queues.project_areas = [{ data: null, error: { message: 'boom' } }]
-    expect((await upsertArea(P1, INPUT)).ok).toBe(false)
-    expect(calls).toHaveLength(1)
+  // 입력 토큰(22023)은 모양 검사·validateArea 가 RPC 앞에서 같은 것을 거르므로, 격리(25001 — 같은 잠금의 격리 가드)는 정상 경로에서
+  // 나지 않으므로 자기 표에 넣지 않는다 — 나면 결함(로그 + 일반 문구, D45·T6)
+  it.each([
+    ['AREA_INVALID_INPUT', '22023'],
+    ['WEEKLY_ISOLATION', '25001'],
+    ['relation "public.secret_table" does not exist', '42P01'],
+  ])('표에 없는 %s 는 UNAVAILABLE 고정 문구 + 로그', async (message, code) => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.rpc.mockResolvedValue({ data: null, error: { code, message } })
+    const r = await upsertArea(P, NEW_AREA)
+    expect(r).toEqual({ ok: false, code: 'UNAVAILABLE', error: ERR_SAVE })
+    expect(JSON.stringify(r)).not.toContain(message)
+    expect(logged(err, message)).toBe(true)
   })
 })

@@ -1,5 +1,6 @@
 // 담당 영역(project_areas·area_teams) 순수 검증 — I/O 없음. kind 는 제품 고정, 행 값은 프로젝트 관리자 설정값.
-// 소비처(주간보고 구분·이슈 영역)는 SP4/SP5 — 여기서는 저장 전 형태만 맞춘다.
+// 소비처: 주간보고 영역(SP4 — 시트·이월·PPT·봇)과 이슈 영역(SP5). 담당 팀 0개를 허용한다 — 주간 영역은 담당 팀 없이도 쓰고
+// 봇의 팀 필터에서 빠질 뿐이다(스펙 §4.1.3). 저장은 RPC upsert_project_area 한 길이고 여기서는 저장 전 형태만 맞춘다.
 
 export const AREA_KINDS = ['weekly_section', 'issue_area'] as const
 export type AreaKind = (typeof AREA_KINDS)[number]
@@ -16,7 +17,7 @@ export interface AreaInput {
   teams: AreaTeamInput[]
 }
 
-/** 저장 전 검증. existing 은 같은 프로젝트의 영역(중복 kind/code 대조용) — DB 유니크가 최종 판정이다. */
+/** 저장 전 검증. existing 은 같은 프로젝트의 영역(중복 kind/code 대조용) — DB 유니크가 최종 판정이다(upsertArea 는 [] 를 넘기고 23505 로 판정). */
 export function validateArea(
   input: AreaInput,
   existing: readonly { id: string; kind: AreaKind; code: string }[],
