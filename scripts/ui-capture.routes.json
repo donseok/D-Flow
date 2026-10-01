@@ -32,7 +32,7 @@
     { "key": "p-announcements", "path": "/p/{pid}/announcements", "file": "(app)/p/[projectId]/announcements/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-members", "path": "/p/{pid}/members", "file": "(app)/p/[projectId]/members/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-attendance", "path": "/p/{pid}/attendance", "file": "(app)/p/[projectId]/attendance/page.tsx", "grade": "member", "tags": ["P", "S"], "since": "b4283c0" },
-    { "key": "p-agents", "path": "/p/{pid}/agents", "file": "(app)/p/[projectId]/agents/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0", "hide": ["[data-hub-stamp]"] },
+    { "key": "p-agents", "path": "/p/{pid}/agents", "file": "(app)/p/[projectId]/agents/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0", "mask": ["[data-hub-row] td span.tabular-nums"], "hide": ["[data-hub-stamp]"] },
     { "key": "p-office", "path": "/p/{pid}/agents/office", "file": "(app)/p/[projectId]/agents/office/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "init": { "dflow.office.chatter": "0" }, "expect": ["[data-roster-desk]"],
       "mask": ["[data-roster-desk] .tabular-nums", "[data-roster-profile] > section:last-of-type > h3", "[data-roster-profile] > section:last-of-type i"], "hide": ["[aria-label=\"표시 범위\"] + div"] },
     { "key": "p-office-lane", "path": "/p/{pid}/agents/office", "file": "(app)/p/[projectId]/agents/office/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "supplement": true, "init": { "dflow.office.chatter": "0" }, "click": "[data-view=\"lane\"]", "expect": ["[data-state=\"BLOCKED\"]"],

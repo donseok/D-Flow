@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { assertNotForbidden, classifySupabaseUrl, localAdminEnv } from './lib/targets.mjs'
+import { assertNotForbidden, classifySupabaseUrl, localAdminEnv, parseEnvFile } from './lib/targets.mjs'
 import { localAppUrl, localClientEnv, pageProblems, redactInviteTokens } from './lib/e2e.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
@@ -69,36 +69,86 @@ export function resolveBase(base, target) {
 }
 
 /**
- * 두 RGBA 버퍼의 차이율 — 네 채널 가운데 하나라도 |차| > threshold 인 픽셀 비율. 크기가 다르면 null.
+ * 두 RGBA 버퍼의 차이(D1) — 네 채널 가운데 하나라도 |차| > threshold 인 픽셀의 비율·수·영역(bbox). 크기가 다르면 null.
  * diff 가 이 함수의 원문을 브라우저로 보내 그 안에서 돌린다 — 바깥 식별자를 참조하지 않는다(기본값도 리터럴).
  * @param {{ width: number, height: number, data: ArrayLike<number> }} a
  * @param {{ width: number, height: number, data: ArrayLike<number> }} b
+ * @returns {{ ratio: number, diffPixels: number, bbox: { x: number, y: number, w: number, h: number } | null } | null}
  */
-export function pixelDiffRatio(a, b, threshold = 16) {
+export function pixelDiffStats(a, b, threshold = 16) {
   if (a.width !== b.width || a.height !== b.height) return null
+  const w = a.width
   const n = a.width * a.height
   if (a.data.length !== n * 4 || b.data.length !== n * 4) throw new Error('RGBA 길이가 크기와 맞지 않다')
   let diff = 0
-  for (let i = 0; i < n * 4; i += 4) {
+  let x0 = w
+  let y0 = a.height
+  let x1 = -1
+  let y1 = -1
+  for (let p = 0; p < n; p++) {
+    const i = p * 4
     if (Math.abs(a.data[i] - b.data[i]) > threshold || Math.abs(a.data[i + 1] - b.data[i + 1]) > threshold
-      || Math.abs(a.data[i + 2] - b.data[i + 2]) > threshold || Math.abs(a.data[i + 3] - b.data[i + 3]) > threshold) diff++
+      || Math.abs(a.data[i + 2] - b.data[i + 2]) > threshold || Math.abs(a.data[i + 3] - b.data[i + 3]) > threshold) {
+      diff++
+      const x = p % w
+      const y = (p - x) / w
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
   }
-  return n === 0 ? 0 : diff / n
+  return { ratio: n === 0 ? 0 : diff / n, diffPixels: diff, bbox: diff ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : null }
 }
 
-/** 가릴 선택자 → 스크린샷 style 문자열(제품 코드 무수정 — 스펙 §3.4). 선택자에 { } < 가 있으면 CSS 주입이라 거부 */
+/** 차이율만(옛 계약 — 과제 1 테스트·이웃 도구). 브라우저로는 pixelDiffStats 를 보낸다 */
+export function pixelDiffRatio(a, b, threshold = 16) {
+  return pixelDiffStats(a, b, threshold)?.ratio ?? null
+}
+
+/** 선택자 목록 → 선택자마다 규칙 하나(D8). 한 목록 규칙은 무효 선택자 하나에 규칙 전체가 버려져(CSS 규정) 그 행의 가림이 다 꺼졌다.
+ *  선택자에 { } < 가 있으면 CSS 주입이라 거부 @param {string[]} selectors @param {string} decl @param {string} what */
+function perSelectorRules(selectors, decl, what) {
+  const list = [...new Set(selectors)].filter(Boolean)
+  for (const s of list) if (/[{}<]/.test(s)) throw new Error(`${what} 선택자에 { } < 금지: ${s}`)
+  return list.map((s) => `${s} { ${decl} }`).join('\n')
+}
+
+/** 가릴 선택자 → 스크린샷 style 문자열(제품 코드 무수정 — 스펙 §3.4). 자리를 남기는 visibility:hidden, 선택자마다 규칙 하나 */
 export function maskStyle(selectors) {
-  const list = [...new Set(selectors)].filter(Boolean)
-  for (const s of list) if (/[{}<]/.test(s)) throw new Error(`가림 선택자에 { } < 금지: ${s}`)
-  return list.length ? `${list.join(', ')} { visibility: hidden !important; }` : ''
+  return perSelectorRules(selectors, 'visibility: hidden !important;', '가림')
 }
 
-/** 숨길 선택자 → display:none 한 규칙. 폭이 실행마다 바뀌어 이웃을 미는 표시(오른쪽 정렬 줄 끝의 갱신 시각처럼)는 visibility 가림으로는
- *  밀림이 남는다 — 레이아웃에서 뺀다(제품 코드 무수정). 선택자 규칙은 maskStyle 과 같다 */
+/** 숨길 선택자 → display:none, 선택자마다 규칙 하나. 폭이 실행마다 바뀌어 이웃을 미는 표시(오른쪽 정렬 줄 끝의 갱신 시각처럼)는
+ *  visibility 가림으로는 밀림이 남는다 — 레이아웃에서 뺀다(제품 코드 무수정, C-hide) */
 export function hideStyle(selectors) {
-  const list = [...new Set(selectors)].filter(Boolean)
-  for (const s of list) if (/[{}<]/.test(s)) throw new Error(`숨김 선택자에 { } < 금지: ${s}`)
-  return list.length ? `${list.join(', ')} { display: none !important; }` : ''
+  return perSelectorRules(selectors, 'display: none !important;', '숨김')
+}
+
+/** 한 장의 가림·숨김 선택자(순수, D8) — 공통 가림·행 가림·행 숨김 순, 종류 안에서 중복 제거(행 가림에 공통 가림과 같은 것은 뺀다)
+ *  @param {{ commonMask?: string[] }} doc @param {{ mask?: string[], hide?: string[] }} r @returns {{ sel: string, kind: 'common' | 'mask' | 'hide' }[]} */
+export function shotSelectors(doc, r) {
+  const common = [...new Set(doc.commonMask ?? [])]
+  const mask = [...new Set(r.mask ?? [])].filter((s) => !common.includes(s))
+  const hide = [...new Set(r.hide ?? [])]
+  return [...common.map((sel) => ({ sel, kind: 'common' })), ...mask.map((sel) => ({ sel, kind: 'mask' })), ...hide.map((sel) => ({ sel, kind: 'hide' }))]
+}
+
+/** 한 장의 스크린샷 style(순수 조립, D15) — 공통·행 가림은 visibility, 행 숨김은 display, 규칙은 선택자마다 */
+export function shotStyle(doc, r) {
+  const sels = shotSelectors(doc, r)
+  return [maskStyle(sels.filter((s) => s.kind !== 'hide').map((s) => s.sel)), hideStyle(sels.filter((s) => s.kind === 'hide').map((s) => s.sel))].filter(Boolean).join('\n')
+}
+
+/** 선택자별 일치 수 → 기록·경고(순수, D8). 행 가림·숨김이 0 이면 경고(낡은 선택자 — C-hide 대로 실패는 아니다), 무효(-1)면 문제,
+ *  공통 가림 0 은 기록만(그 장치가 없는 화면이 있다) @param {{ sel: string, kind: string }[]} sels @param {number[]} counts */
+export function maskReport(sels, counts) {
+  if (sels.length !== counts.length) throw new Error('가림 선택자 수와 일치 수 목록의 수가 다르다')
+  return {
+    counts: Object.fromEntries(sels.map((s, i) => [s.sel, counts[i]])),
+    zero: sels.filter((s, i) => s.kind !== 'common' && counts[i] === 0).map((s) => s.sel),
+    invalid: sels.filter((s, i) => counts[i] < 0).map((s) => s.sel),
+  }
 }
 
 /** Pretendard 판정(판정 Q3) — 등록 ≥1 ∧ 로드 ≥1 ∧ 로딩 0 이면 'ok', 아니면 'fallback'(그 장은 비교하지 않는다) */
@@ -122,8 +172,8 @@ export function parseSize(s) {
 
 /** 하위 명령 뒤 argv → 옵션. 모르는 인자·값 밖은 throw @param {string[]} argv */
 export function parseArgs(argv) {
-  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, positional: string[] }} */
-  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, positional: [] }
+  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, positional: string[] }} */
+  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, positional: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} 뒤에 값이 없다`); return v }
@@ -133,6 +183,8 @@ export function parseArgs(argv) {
     else if (a === '--routes') out.routes = next().split(',')
     else if (a === '--since') out.since = next().split(',')
     else if (a === '--base') out.base = next()
+    else if (a === '--server-commit') out.serverCommit = next()     // --base 서버를 띄운 트리(D3)
+    else if (a === '--allow-cross') out.allowCross = true           // diff — 판·시드가 다른 라벨의 참고 대조(D3)
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
   }
@@ -406,9 +458,25 @@ export function contextOptions({ width, height, theme }) {
   return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme }
 }
 
-/** 두 라벨이 비교 가능한가 — 같은 KST 날짜·시드 날짜·브라우저. 문제 목록(빈 배열이면 비교 가능) */
-export function compareMeta(a, b) {
-  return ['kstDate', 'seedDate', 'browser'].filter((k) => a?.[k] !== b?.[k]).map((k) => `${k} 다름: ${a?.[k]} ≠ ${b?.[k]}`)
+/** 비교 조건 — 늘 같아야 하는 것(날짜·브라우저)과 판·시드의 정체(--allow-cross 참고 대조로만 다를 수 있다, D3) */
+export const META_HARD = Object.freeze(['kstDate', 'seedDate', 'browser'])
+export const META_CROSS = Object.freeze(['scriptCommit', 'routesSha256', 'seedProjectId'])
+
+/**
+ * 두 라벨이 비교 가능한가 → { problems, warnings }(problems 가 비면 비교한다). KST 날짜·시드 날짜·브라우저가 다르면 늘 거부.
+ * 스크립트 판(가림·시작 상태 규칙)·routes.json 해시·시드 프로젝트가 다르면 거부 — allowCross(참고 대조)면 경고로 낮춘다(D3: 같은 날 다른
+ * db:reset 시드·다른 가림 판이 조용히 비교됐다). 두 라벨의 서버 빌드 id 가 같으면 경고 — 기준·머리 비교라면 같은 서버를 두 번 찍었다.
+ * @param {any} a @param {any} b @param {{ allowCross?: boolean }} [opt]
+ */
+export function compareMeta(a, b, { allowCross = false } = {}) {
+  const msg = (k) => `${k} 다름: ${a?.[k]} ≠ ${b?.[k]}`
+  const problems = META_HARD.filter((k) => a?.[k] !== b?.[k]).map(msg)
+  const cross = META_CROSS.filter((k) => a?.[k] !== b?.[k]).map(msg)
+  const warnings = []
+  if (allowCross) warnings.push(...cross.map((m) => `참고 대조(--allow-cross): ${m}`))
+  else problems.push(...cross)
+  if (a?.buildId && a.buildId === b?.buildId) warnings.push(`두 라벨의 서버 빌드 id 가 같다(${a.buildId}) — 기준·머리 비교라면 같은 서버를 두 번 찍었다(자기 결정성 확인이면 정상)`)
+  return { problems, warnings }
 }
 
 /**
@@ -426,11 +494,103 @@ export function selectRoutes(doc, { routes, since }) {
   return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)))
 }
 
-/** 한 장의 판정 — 글꼴 무효는 비교 제외, 크기 다름, SAME_RATIO 이하는 같음(판정 Q33) */
+/** 한 장의 픽셀 판정(D1) — 글꼴 무효는 비교 제외, 크기 다름, 0 이면 same, SAME_RATIO(판정 Q33 의 0.2%) 이하는 near(볼 목록에 오른다 —
+ *  배지 숫자·칩 하나·한 단어 같은 실제 변화가 이 문턱 아래였다), 넘으면 diff */
 export function diffVerdict({ ratio, fontA, fontB }) {
   if (fontA !== 'ok' || fontB !== 'ok') return 'skip-font'
   if (ratio === null || ratio === undefined) return 'skip-size'
-  return ratio <= SAME_RATIO ? 'same' : 'diff'
+  if (ratio === 0) return 'same'
+  return ratio <= SAME_RATIO ? 'near' : 'diff'
+}
+
+/** 알려진 잡음(허용 목록 — 표시만, 판정은 바꾸지 않는다) */
+export const KNOWN_NOISE = Object.freeze([
+  { key: 'p-agents', width: 768, height: 1024, note: '위임 표 sticky 머리글 아래 테두리 1px 스냅(과제 5 — T5-R6, 0.18% 안팎)' },
+])
+
+/** 최종 경로의 모양 — 시드 id(uuid)·자리표시·옛 가림 표기를 하나로(시드가 다른 참고 대조에서도 같은 화면이면 같다) */
+const finalShape = (p) => String(p ?? '').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{id}').replace(/\{[A-Za-z]+\}|<token>/g, '{id}')
+const shotAt = (r) => ({ key: r.key, width: r.width, height: r.height, theme: r.theme })
+const sameShot = (x, y) => x.key === y.key && x.width === y.width && x.height === y.height && x.theme === y.theme
+
+/** diff 의 행 매칭(순수, D11·D15) — 둘 다 있는 쌍·대상에만(added → new)·기준에만(missing — 부분 실행이 빠진 장을 같음처럼 숨기지 않는다)
+ *  @template {{ key: string, width: number, height: number, theme: string }} R @param {R[]} A @param {R[]} B */
+export function diffRows(A, B) {
+  return {
+    pairs: B.flatMap((b) => { const a = A.find((x) => sameShot(x, b)); return a ? [{ at: shotAt(b), a, b }] : [] }),
+    added: B.filter((b) => !A.some((x) => sameShot(x, b))),
+    missing: A.filter((a) => !B.some((x) => sameShot(x, a))),
+  }
+}
+
+/**
+ * 한 쌍의 판정(순수, D2) — 어느 쪽이든 problems·idle 거짓·최종 경로(모양) 다름이면 'problem'(사유와 함께 — 같은 이유로 둘 다 엉뚱한 화면이면
+ * 픽셀이 같아도 같음이 아니다), 아니면 픽셀 판정(diffVerdict). 알려진 잡음은 near·diff 에 표시만 한다.
+ * @param {{ a: any, b: any, stats: { ratio: number, diffPixels: number, bbox: any } | null }} p
+ */
+export function rowVerdict({ a, b, stats }) {
+  const reasons = [...(a.problems ?? []).map((x) => `기준:${x}`), ...(b.problems ?? []).map((x) => `대상:${x}`),
+    ...(a.idle === false ? ['기준:idle=false'] : []), ...(b.idle === false ? ['대상:idle=false'] : []),
+    ...(finalShape(a.finalPath) !== finalShape(b.finalPath) ? [`finalPath 다름: ${a.finalPath} ≠ ${b.finalPath}`] : [])]
+  const ratio = stats?.ratio ?? null
+  const verdict = reasons.length ? 'problem' : diffVerdict({ ratio, fontA: a.font, fontB: b.font })
+  const noise = KNOWN_NOISE.find((k) => k.key === b.key && k.width === b.width && k.height === b.height)
+  return { ...shotAt(b), file: b.file, ratio, diffPixels: stats?.diffPixels ?? null, bbox: stats?.bbox ?? null, verdict, reasons,
+    ...(noise && (verdict === 'near' || verdict === 'diff') ? { known: noise.note } : {}) }
+}
+
+const LOOK_ORDER = ['problem', 'diff', 'missing', 'new', 'near']
+const pctOf = (r) => (r === null || r === undefined ? '—' : `${(r * 100).toFixed(2)}%`)
+
+/** diff 의 집계(순수, D1·D15) — 판정별 수와 '볼 목록'(problem → diff → missing → new → near, 같은 판정 안에서는 차이율 큰 순) */
+export function summarizeDiff(rows) {
+  const count = (v) => rows.filter((r) => r.verdict === v).length
+  const look = rows.filter((r) => LOOK_ORDER.includes(r.verdict))
+    .sort((x, y) => LOOK_ORDER.indexOf(x.verdict) - LOOK_ORDER.indexOf(y.verdict) || (y.ratio ?? -1) - (x.ratio ?? -1))
+    .map((r) => `${r.key}@${r.width}x${r.height}/${r.theme} ${r.verdict} ${pctOf(r.ratio)}${r.reasons?.length ? ` ${r.reasons.join(' · ')}` : ''}${r.known ? ` (알려진 잡음: ${r.known})` : ''}`)
+  return { compared: rows.length, same: count('same'), near: count('near'), diff: count('diff'), problem: count('problem'), missing: count('missing'),
+    new: count('new'), skipped: rows.filter((r) => String(r.verdict).startsWith('skip')).length, look }
+}
+
+/** 최종 경로 판정(순수, D2) — expectFinal 이 있으면 경로+검색어가 그 값, 없으면 채운 경로의 pathname 이 기대값. 다르면 'final:<실제>'.
+ *  권한 거부 리디렉션(agents → /projects 등)·로그인 튕김(세션 만료)이 문제로 남지 않던 것을 잡는다 @param {URL} actual */
+export function finalProblem(r, values, actual) {
+  const got = r.expectFinal ? actual.pathname + actual.search : actual.pathname
+  const want = r.expectFinal ? fillPath(r.expectFinal, values) : new URL(fillPath(r.path, values), 'http://x').pathname
+  return got === want ? null : `final:${actual.pathname + actual.search}`
+}
+
+/** 서버 빌드 id(순수, D3) — 앱 HTML 의 /_next/static/<id>/_buildManifest.js 또는 RSC 머리 { "b": <id>, "p": … }(HTML 안에서는 이스케이프). 없으면 null */
+export function buildIdOf(html) {
+  const text = String(html)
+  const m = /\/_next\/static\/([\w-]{6,})\/_(?:buildManifest|ssgManifest)\.js/.exec(text) ?? /\\?"b\\?":\\?"([\w-]{6,})\\?",\\?"p\\?":/.exec(text)
+  return m ? m[1] : null
+}
+
+/** 서버 커밋(순수, D3) — 플래그 > env > 스크립트 HEAD. --base(기준 서버) 실행은 플래그·env 가 없으면 거부(머리 커밋을 서버 정체로 적지 않는다)
+ *  @param {{ explicitBase: boolean, envCommit?: string, flagCommit?: string | null, head: string }} s */
+export function serverCommitOf({ explicitBase, envCommit, flagCommit, head }) {
+  const flag = (flagCommit ?? '').trim()
+  const env = (envCommit ?? '').trim()
+  const given = flag || env
+  if (explicitBase && !given) throw new Error('--base 실행은 서버 커밋이 필요하다 — --server-commit <sha> 또는 UI_CAPTURE_SERVER_COMMIT(기준 서버를 빌드한 트리)')
+  if (given && !/^[0-9a-f]{7,40}$/.test(given)) throw new Error(`서버 커밋 형식 밖(7~40자 16진): ${given}`)
+  return given ? { commit: given, source: flag ? 'flag' : 'env' } : { commit: head, source: 'head' }
+}
+
+/** LLM 키 이름(값은 다루지 않는다) — 있으면 회의록 첫 방문 self-heal 이 외부 LLM 결과를 DB 에 써 다음 실행부터 화면이 달라진다(D9) */
+export const LLM_KEYS = Object.freeze(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'LLM_API_KEY'])
+
+/** 결정성 전제(순수, D9) — 사용 기록 수집이 켜지면(USAGE_TRACKING=on, VERCEL_ENV=production) 방문마다 기록이 쌓여 사용 현황 화면이 실행마다
+ *  달라진다 → 거부. LLM 키는 이름만 기록. 프로세스 env 가 .env.local 보다 앞선다(Next) @param {string} envText @param {Record<string, string | undefined>} env */
+export function envPremise(envText, env) {
+  const file = parseEnvFile(envText).values
+  const val = (k) => String(env[k] ?? file[k] ?? '').trim()
+  const problems = [
+    ...(val('USAGE_TRACKING') === 'on' ? ['USAGE_TRACKING=on — 방문마다 사용 기록이 쌓여 사용 현황 화면이 실행마다 달라진다'] : []),
+    ...(val('VERCEL_ENV') === 'production' ? ['VERCEL_ENV=production — 사용 기록 수집이 켜진다(그 밖의 운영 분기도)'] : []),
+  ]
+  return { problems, llmKeys: LLM_KEYS.filter((k) => val(k) !== '') }
 }
 
 /** @type {Record<string, (opts: ReturnType<typeof parseArgs>) => Promise<void>>} */
@@ -449,6 +609,8 @@ export function laneEnv({ base = null } = {}) {
   const target = laneTarget({ localDbUrl: process.env.LOCAL_DB_URL, supabaseUrl: admin.url, appUrl: process.env.NEXT_PUBLIC_APP_URL })
   const outDir = process.env.UI_CAPTURE_OUT_DIR
   if (!outDir) throw new Error('UI_CAPTURE_OUT_DIR 이 없다 — 래퍼(lane-b.env)로 부른다')
+  const premise = envPremise(envText, process.env)
+  if (premise.problems.length) throw new Error(`결정성 전제 위반 — ${premise.problems.join('; ')}`)
   const anon = localClientEnv(envText)
   if (anon.url.replace(/\/+$/, '') !== target.supabaseUrl) throw new Error('세션 클라이언트의 Supabase URL 이 검사한 값과 다르다')
   const db = createClient(target.supabaseUrl, admin.serviceRoleKey, { auth: { persistSession: false } })
@@ -457,7 +619,7 @@ export function laneEnv({ base = null } = {}) {
     getAll: () => [...jar].map(([name, value]) => ({ name, value })),
     setAll: (list) => list.forEach(({ name, value }) => (value ? jar.set(name, value) : jar.delete(name))),
   } })
-  return { envText, target, outDir, db, sessionClient, baseUrl: resolveBase(base, target), explicitBase: base !== null && base !== undefined }
+  return { envText, target, outDir, db, sessionClient, baseUrl: resolveBase(base, target), explicitBase: base !== null && base !== undefined, llmKeys: premise.llmKeys }
 }
 
 export const must = (label, { data, error }) => { if (error) throw new Error(`${label}: ${error.message}`); return data }
@@ -799,9 +961,15 @@ async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId,
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
 export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
   const { db, outDir, baseUrl } = env
-  const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
+  const routesText = readFileSync('scripts/ui-capture.routes.json', 'utf8')
+  const doc = JSON.parse(routesText)
   const routes = selectRoutes(doc, opts)
   const seed = await resolveSeed(db)
+  // 서버 정체(D3) — 그 실행이 찍는 서버의 빌드 id. 못 찾으면 멈춘다(Next 프로덕션 빌드가 아니거나 다른 것이 그 포트에 떠 있다)
+  const loginRes = await fetch(`${baseUrl}/login`)
+  if (!loginRes.ok) throw new Error(`앱 서버 확인 실패(${baseUrl}/login → ${loginRes.status})`)
+  const buildId = buildIdOf(await loginRes.text())
+  if (!buildId) throw new Error(`서버 빌드 id 를 HTML 에서 찾지 못했다(${baseUrl}) — 그 포트의 서버가 Next 프로덕션 빌드인지 확인`)
   const captureIds = []   // 캡처 계정 넷 — 그 실행이 쓰는 등급과 무관하게 넷 모두의 시작 상태를 덮는다
   for (const { email } of seenResetTargets(process.env.BOOTSTRAP_EMAIL || 'admin@example.com')) {
     const userId = await userIdByEmail(db, email)
@@ -843,60 +1011,70 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
             const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
             for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
             const u = new URL(page.url())
-            const expectFinal = r.expectFinal ? fillPath(r.expectFinal, values) : null
-            const problems = [...pageProblems(await page.content()), ...(expectFinal && u.pathname + u.search !== expectFinal ? [`final:${u.pathname + u.search}`] : []),
-              ...(clickFailed ? ['click-failed'] : []), ...missing].map(redact)
-            const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search), problems }
-            rows.push({ ...row0, ...(await visit(page, { r, width, height, theme, doc, outDir })) })
+            const final = finalProblem(r, values, u)   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
+            const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
+            const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
+            const v = await visit(page, { r, width, height, theme, doc, outDir })
+            rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
           } finally { await context.close() }
         }
       }
     }
   } finally { await browser.close() }
-  return { rows, outDir, baseUrl, browserVersion, seed, warmups }
+  return { rows, outDir, baseUrl, browserVersion, seed, warmups, buildId, routesSha256: sha256(routesText) }
 }
 
 async function cmdShoot(opts) {
   if (!opts.label) throw new Error('--label 이 필요하다')
   const env = laneEnv({ base: opts.base })
+  const head = gitHead()
+  // 서버 정체(D3) — --base(기준 서버) 실행은 그 서버를 빌드한 트리가 있어야 한다. 찍기 전에 판정한다
+  const server = serverCommitOf({ explicitBase: env.explicitBase, envCommit: process.env.UI_CAPTURE_SERVER_COMMIT, flagCommit: opts.serverCommit, head })
   const res = await forEachShot(opts, async (page, { r, width, height, theme, doc, outDir }) => {
     const fonts = await page.evaluate(() => {
       const f = [...document.fonts].filter((x) => x.family.replace(/["']/g, '') === 'Pretendard Variable')
       return { registered: f.length, loaded: f.filter((x) => x.status === 'loaded').length, loading: f.filter((x) => x.status === 'loading').length }
     })
     const h1 = await page.evaluate(() => [...document.querySelectorAll('h1')].filter((e) => e.checkVisibility()).map((e) => (e.textContent ?? '').trim().slice(0, 60)))
+    // 가림 선택자별 일치 수(D8) — 무효(-1)는 그 장의 문제, 행 가림·숨김 0 은 경고(낡은 선택자)
+    const sels = shotSelectors(doc, r)
+    const mask = maskReport(sels, await page.evaluate((list) => list.map((s) => { try { return document.querySelectorAll(s).length } catch { return -1 } }), sels.map((s) => s.sel)))
     const dir = join(outDir, opts.label)
     mkdirSync(dir, { recursive: true })
     const file = shotFileName({ key: r.key, width, height, theme })
-    const style = [maskStyle([...(doc.commonMask ?? []), ...(r.mask ?? [])]), hideStyle(r.hide ?? [])].filter(Boolean).join('\n')
+    const style = shotStyle(doc, r)
     const buf = await page.screenshot({ path: join(dir, file), ...(style ? { style } : {}), animations: 'disabled', caret: 'hide' })
-    return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1 }
+    return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1,
+      maskCounts: mask.counts, maskZero: mask.zero, problems: mask.invalid.map((s) => `mask-invalid:${s}`) }
   }, env)
-  const meta = { label: opts.label, commit: process.env.UI_CAPTURE_SERVER_COMMIT || gitHead(), scriptCommit: gitHead(), browser: res.browserVersion,
-    kstDate: kstToday(), seedDate: res.seed.seedDate, baseUrl: res.baseUrl, themes: opts.theme, sizes: opts.sizes, warmups: res.warmups, rows: res.rows }
+  const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}/${x.theme}: ${s}`))
+  const meta = { label: opts.label, commit: server.commit, commitSource: server.source, scriptCommit: head, buildId: res.buildId, browser: res.browserVersion,
+    kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
+    themes: opts.theme, sizes: opts.sizes, warmups: res.warmups, maskWarnings, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
-  console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}/${x.theme}:${x.problems.join('+')}`), fallbackFonts: res.rows.filter((x) => x.font !== 'ok').length }))
+  console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, buildId: res.buildId, commit: `${server.commit}(${server.source})`,
+    warmups: res.warmups.map((w) => `${w.theme} ${w.elapsedMs}ms`),
+    withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}/${x.theme}:${x.problems.join('+')}`),
+    fallbackFonts: res.rows.filter((x) => x.font !== 'ok').length, maskZero: maskWarnings.length }))
 }
 
 async function cmdDiff(opts) {
   const [baseLabel, headLabel] = opts.positional
-  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label>')
+  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label> [--allow-cross]')
   const { outDir } = laneEnv()
   const A = JSON.parse(readFileSync(join(outDir, baseLabel, 'meta.json'), 'utf8'))
   const B = JSON.parse(readFileSync(join(outDir, headLabel, 'meta.json'), 'utf8'))
-  const problems = compareMeta(A, B)
-  if (problems.length) throw new Error(`비교할 수 없다 — ${problems.join('; ')}`)
+  const cmp = compareMeta(A, B, { allowCross: opts.allowCross })
+  if (cmp.problems.length) throw new Error(`비교할 수 없다 — ${cmp.problems.join('; ')}(판·시드가 다른 참고 대조는 같은 KST 날짜에서 --allow-cross)`)
+  const plan = diffRows(A.rows, B.rows)
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const out = []
   try {
     const page = await browser.newPage()
-    const fnSrc = pixelDiffRatio.toString()
-    for (const b of B.rows) {
-      const a = A.rows.find((x) => x.key === b.key && x.width === b.width && x.height === b.height && x.theme === b.theme)
-      const at = { key: b.key, width: b.width, height: b.height, theme: b.theme }
-      if (!a) { out.push({ ...at, ratio: null, verdict: 'new' }); continue }
-      const ratio = await page.evaluate(async ({ pa, pb, src }) => {
+    const fnSrc = pixelDiffStats.toString()
+    for (const { a, b } of plan.pairs) {
+      const stats = await page.evaluate(async ({ pa, pb, src }) => {
         const load = async (b64) => {
           const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
           const c = new OffscreenCanvas(bmp.width, bmp.height)
@@ -906,17 +1084,25 @@ async function cmdDiff(opts) {
         }
         return new Function(`return (${src})`)()(await load(pa), await load(pb))
       }, { pa: readFileSync(join(outDir, baseLabel, a.file)).toString('base64'), pb: readFileSync(join(outDir, headLabel, b.file)).toString('base64'), src: fnSrc })
-      out.push({ ...at, ratio, verdict: diffVerdict({ ratio, fontA: a.font, fontB: b.font }) })
+      out.push(rowVerdict({ a, b, stats }))
     }
   } finally { await browser.close() }
+  for (const b of plan.added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: [] })
+  for (const a of plan.missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
   const sorted = [...out].sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1))
-  const pct = (r) => (r === null || r === undefined ? '—' : `${(r * 100).toFixed(2)}%`)
-  const md = [`# diff ${baseLabel}(${A.commit}) → ${headLabel}(${B.commit})`, '', '| 라우트 | 크기 | 테마 | 차이율 | 판정 |', '|---|---|---|---|---|',
-    ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pct(r.ratio)} | ${r.verdict} |`)].join('\n')
+  const sum = summarizeDiff(sorted)
+  const box = (r) => (r.bbox ? `${r.bbox.x},${r.bbox.y} ${r.bbox.w}×${r.bbox.h}` : '—')
+  const head = (m) => `${m.label} — 서버 ${m.commit}${m.commitSource ? `(${m.commitSource})` : ''} · 빌드 ${m.buildId ?? '—'} · 스크립트 ${m.scriptCommit} · 시드 ${m.seedDate}`
+  const md = [`# diff ${baseLabel} → ${headLabel}`, '', `- 기준: ${head(A)}`, `- 대상: ${head(B)}`,
+    `- 판정 수: same ${sum.same} · near ${sum.near} · diff ${sum.diff} · problem ${sum.problem} · missing ${sum.missing} · new ${sum.new} · skip ${sum.skipped}(판정 Q33 문턱 0.2%, near = 0 초과 문턱 이하)`,
+    ...(cmp.warnings.length ? ['', '## 경고', ...cmp.warnings.map((w) => `- ${w}`)] : []),
+    '', '## 볼 목록', ...(sum.look.length ? sum.look.map((l) => `- ${l}`) : ['- (없음 — 전부 same 또는 skip)']),
+    '', '## 전체', '', '| 라우트 | 크기 | 테마 | 차이율 | 다른 픽셀 | 차이 영역(x,y w×h) | 판정 |', '|---|---|---|---|---|---|---|',
+    ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pctOf(r.ratio)} | ${r.diffPixels ?? '—'} | ${box(r)} | ${r.verdict}${r.known ? ' (알려진 잡음)' : ''} |`)].join('\n')
   writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.json`), JSON.stringify(sorted, null, 2))
   writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.md`), `${md}\n`)
-  console.log(JSON.stringify({ ok: true, compared: out.length, diff: out.filter((r) => r.verdict === 'diff').length,
-    skipped: out.filter((r) => r.verdict.startsWith('skip')).length, top10: sorted.slice(0, 10).map((r) => `${r.key}@${r.width}x${r.height}/${r.theme} ${pct(r.ratio)}`) }))
+  console.log(JSON.stringify({ ok: true, compared: sum.compared, same: sum.same, near: sum.near, diff: sum.diff, problem: sum.problem, missing: sum.missing, new: sum.new,
+    skipped: sum.skipped, warnings: cmp.warnings, look: sum.look.slice(0, 20) }))
 }
 
 async function cmdAxe(opts) {

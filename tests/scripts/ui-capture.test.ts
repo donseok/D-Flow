@@ -9,6 +9,8 @@ import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
+import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
+  summarizeDiff } from '../../scripts/ui-capture.mjs'
 import { computePrefsSync } from '../../src/lib/prefs/sync'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
@@ -180,15 +182,30 @@ describe('pixelDiffRatio — 채널 차 > 16 인 픽셀 비율', () => {
 })
 
 describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
-  it('가림 선택자 → visibility:hidden 한 규칙, 중복 제거, 빈 목록은 빈 문자열', () => {
-    expect(maskStyle(['[title^="함께 보는 중"]', '.x', '.x'])).toBe('[title^="함께 보는 중"], .x { visibility: hidden !important; }')
+  it('가림 선택자 → 선택자마다 visibility:hidden 규칙 하나(무효 선택자 하나가 다른 가림을 끄지 않는다 — D8), 중복 제거, 빈 목록은 빈 문자열', () => {
+    expect(maskStyle(['[title^="함께 보는 중"]', '.x', '.x'])).toBe('[title^="함께 보는 중"] { visibility: hidden !important; }\n.x { visibility: hidden !important; }')
     expect(maskStyle([])).toBe('')
   })
   it.each(['a{b', 'a}', '</style>'])('CSS 주입 모양 %s 은 거부', (s) => { expect(() => maskStyle([s])).toThrow(/금지/) })
-  it('숨김 선택자 → display:none 한 규칙(폭이 실행마다 바뀌어 이웃을 미는 표시), 중복 제거, 빈 목록은 빈 문자열, 주입 모양 거부', () => {
-    expect(hideStyle(['[data-hub-stamp]', '.x', '.x'])).toBe('[data-hub-stamp], .x { display: none !important; }')
+  it('숨김 선택자 → 선택자마다 display:none 규칙 하나(폭이 실행마다 바뀌어 이웃을 미는 표시), 중복 제거, 빈 목록은 빈 문자열, 주입 모양 거부', () => {
+    expect(hideStyle(['[data-hub-stamp]', '.x', '.x'])).toBe('[data-hub-stamp] { display: none !important; }\n.x { display: none !important; }')
     expect(hideStyle([])).toBe('')
     expect(() => hideStyle(['a{b'])).toThrow(/금지/)
+  })
+  it('장의 스크린샷 style(조립 — D15) — 공통 가림 + 행 가림은 visibility, 행 숨김은 display, 규칙은 선택자마다', () => {
+    const doc = { commonMask: ['.common'] }
+    expect(shotStyle(doc, { mask: ['.m1', '.common'], hide: ['.h1'] })).toBe([
+      '.common { visibility: hidden !important; }', '.m1 { visibility: hidden !important; }', '.h1 { display: none !important; }',
+    ].join('\n'))
+    expect(shotStyle({ commonMask: [] }, {})).toBe('')
+    expect(shotSelectors(doc, { mask: ['.m1', '.common'], hide: ['.h1'] })).toEqual([
+      { sel: '.common', kind: 'common' }, { sel: '.m1', kind: 'mask' }, { sel: '.h1', kind: 'hide' },
+    ])
+  })
+  it('가림 선택자 일치 수(D8) — 행 가림·숨김이 0 이면 경고, 무효(-1)면 문제, 공통 가림 0 은 기록만(화면마다 없을 수 있다)', () => {
+    const sels = [{ sel: '.common', kind: 'common' }, { sel: '.m1', kind: 'mask' }, { sel: '.h1', kind: 'hide' }, { sel: 'a:bad(', kind: 'mask' }]
+    expect(maskReport(sels, [0, 0, 2, -1])).toEqual({ counts: { '.common': 0, '.m1': 0, '.h1': 2, 'a:bad(': -1 }, zero: ['.m1'], invalid: ['a:bad('] })
+    expect(() => maskReport(sels, [1])).toThrow(/수/)
   })
   it('글꼴 — 등록·로드 ≥1 ∧ 로딩 0 만 ok(판정 Q3)', () => {
     expect(fontVerdict({ registered: 92, loaded: 2, loading: 0 })).toBe('ok')
@@ -210,6 +227,11 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/light\|dark/)
     expect(() => parseArgs(['--since', 'UI-9'])).toThrow(/since/)
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
+  })
+  it('--server-commit(서버 커밋)·--allow-cross(시드·판이 다른 참고 대조) — 기본값은 없음·거짓', () => {
+    expect(parseArgs([])).toMatchObject({ serverCommit: null, allowCross: false })
+    expect(parseArgs(['ui0', 'ui0b', '--allow-cross'])).toMatchObject({ allowCross: true, positional: ['ui0', 'ui0b'] })
+    expect(parseArgs(['--server-commit', 'b4283c0', '--base', 'http://127.0.0.1:3202'])).toMatchObject({ serverCommit: 'b4283c0', base: 'http://127.0.0.1:3202' })
   })
   it('위치 인자(diff 의 두 라벨)도 라벨 형식만 — 경로 문자로 산출 폴더 밖을 읽거나 쓰지 않는다(UI-0 안전 리뷰 P3-2)', () => {
     expect(parseArgs(['ui0', 'ui0b']).positional).toEqual(['ui0', 'ui0b'])
@@ -599,16 +621,27 @@ describe('캡처 조건·계정·비교 가능성', () => {
       viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: 'dark',
     })
   })
-  it('KST 날짜·시드 날짜·브라우저가 다르면 비교하지 않는다(Review Focus 2)', () => {
-    const a = { kstDate: '2026-09-29', seedDate: '2026-09-29', browser: '145.0.7632.6' }
-    expect(compareMeta(a, { ...a })).toEqual([])
-    expect(compareMeta(a, { ...a, kstDate: '2026-09-30' })).toEqual(['kstDate 다름: 2026-09-29 ≠ 2026-09-30'])
-    expect(compareMeta(a, { ...a, browser: '146.0.0.0', seedDate: '2026-09-28' })).toHaveLength(2)
+  it('비교 가능성(Review Focus 2·D3) — KST 날짜·시드 날짜·브라우저는 늘 거부, 스크립트 판·routes 해시·시드 프로젝트는 --allow-cross 로만(경고), 같은 빌드 id 는 경고', () => {
+    const a = { kstDate: '2026-09-29', seedDate: '2026-09-29', browser: '145.0.7632.6', scriptCommit: 'aaa1111', routesSha256: 'r1', seedProjectId: 'p1', buildId: 'B1' }
+    expect(compareMeta(a, { ...a, buildId: 'B2' })).toEqual({ problems: [], warnings: [] })
+    expect(compareMeta(a, { ...a, kstDate: '2026-09-30', buildId: 'B2' }).problems).toEqual(['kstDate 다름: 2026-09-29 ≠ 2026-09-30'])
+    expect(compareMeta(a, { ...a, browser: '146.0.0.0', seedDate: '2026-09-28', buildId: 'B2' }).problems).toHaveLength(2)
+    expect(compareMeta(a, { ...a, browser: '146.0.0.0', buildId: 'B2' }, { allowCross: true }).problems).toHaveLength(1)   // 날짜·브라우저는 플래그로도 못 넘는다
+    expect(compareMeta(a, { ...a, scriptCommit: 'bbb2222', buildId: 'B2' }).problems).toEqual(['scriptCommit 다름: aaa1111 ≠ bbb2222'])
+    const cross = compareMeta(a, { ...a, scriptCommit: 'bbb2222', routesSha256: 'r2', seedProjectId: 'p2', buildId: 'B2' }, { allowCross: true })
+    expect(cross.problems).toEqual([])
+    expect(cross.warnings).toEqual(['참고 대조(--allow-cross): scriptCommit 다름: aaa1111 ≠ bbb2222', '참고 대조(--allow-cross): routesSha256 다름: r1 ≠ r2',
+      '참고 대조(--allow-cross): seedProjectId 다름: p1 ≠ p2'])
+    expect(compareMeta(a, { ...a }).warnings).toEqual([expect.stringMatching(/빌드 id 가 같다\(B1\)/)])
+    const old = { kstDate: '2026-09-29', seedDate: '2026-09-29', browser: '145.0.7632.6', scriptCommit: 'aaa1111' }   // 이 필드들 전의 라벨(ui0)
+    expect(compareMeta(old, a).problems).toEqual(['routesSha256 다름: undefined ≠ r1', 'seedProjectId 다름: undefined ≠ p1'])
   })
-  it('장 판정 — 글꼴 무효는 비교 제외, 크기 다름, 0.2% 문턱(판정 Q33)', () => {
+  it('장 판정(D1) — 0 만 same, 0 초과 0.2% 이하는 near(볼 목록), 넘으면 diff, 글꼴 무효·크기 다름은 건너뜀(판정 Q33 문턱 그대로)', () => {
     expect(diffVerdict({ ratio: 0.5, fontA: 'fallback', fontB: 'ok' })).toBe('skip-font')
     expect(diffVerdict({ ratio: null, fontA: 'ok', fontB: 'ok' })).toBe('skip-size')
-    expect(diffVerdict({ ratio: 0.002, fontA: 'ok', fontB: 'ok' })).toBe('same')
+    expect(diffVerdict({ ratio: 0, fontA: 'ok', fontB: 'ok' })).toBe('same')
+    expect(diffVerdict({ ratio: 1 / 1_296_000, fontA: 'ok', fontB: 'ok' })).toBe('near')   // 1440×900 에서 1px
+    expect(diffVerdict({ ratio: 0.002, fontA: 'ok', fontB: 'ok' })).toBe('near')
     expect(diffVerdict({ ratio: 0.0021, fontA: 'ok', fontB: 'ok' })).toBe('diff')
   })
   it('라우트 고르기 — 키 지정(모르는 키 throw), 아니면 since 집합(until 이 집합에 들면 뺀다)', () => {
@@ -617,5 +650,119 @@ describe('캡처 조건·계정·비교 가능성', () => {
     expect(selectRoutes(doc, { routes: null, since: ['b4283c0', 'UI-1', 'UI-2a'] }).map((r) => r.key)).toEqual(['a', 'b'])
     expect(selectRoutes(doc, { routes: ['b'], since: ['b4283c0'] }).map((r) => r.key)).toEqual(['b'])
     expect(() => selectRoutes(doc, { routes: ['zz'], since: [] })).toThrow(/없는 키/)
+  })
+})
+
+describe('pixelDiffStats — 차이 픽셀 수·영역(UI-0 결정성 리뷰 P2 — D1)', () => {
+  it('비율은 pixelDiffRatio 와 같고, 다른 픽셀 수와 차이 영역(bbox)을 낸다', () => {
+    const a = img(10, 10, [100, 100, 100, 255])
+    const b = img(10, 10, [100, 100, 100, 255])
+    for (const [x, y] of [[2, 3], [7, 5]]) b.data[(y * 10 + x) * 4] = 200
+    expect(pixelDiffStats(a, b)).toEqual({ ratio: 0.02, diffPixels: 2, bbox: { x: 2, y: 3, w: 6, h: 3 } })
+    expect(pixelDiffRatio(a, b)).toBe(0.02)
+    expect(pixelDiffStats(a, a)).toEqual({ ratio: 0, diffPixels: 0, bbox: null })
+    expect(pixelDiffStats(img(2, 2, [0, 0, 0, 255]), img(2, 3, [0, 0, 0, 255]))).toBeNull()
+  })
+  it('브라우저로 보내는 원문 — 바깥 식별자 없이 기본 문턱 리터럴 16', () => {
+    const src = pixelDiffStats.toString()
+    expect(src).toContain('threshold = 16')
+    for (const id of ['DIFF_THRESHOLD', 'SAME_RATIO', 'pixelDiffRatio']) expect(src).not.toContain(id)
+  })
+})
+
+describe('diffRows·rowVerdict·summarizeDiff — diff 의 행 매칭·판정·집계(D1·D2·D11·D15)', () => {
+  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true,
+    problems: [] as string[], finalPath: `/${key}`, ...extra })
+  const zero = { ratio: 0, diffPixels: 0, bbox: null }
+  it('행 매칭 — 둘 다 있는 쌍, 대상에만(new), 기준에만(missing — 부분 실행이 빠진 장을 같음처럼 숨기지 않는다)', () => {
+    const r = diffRows([row('a'), row('b'), row('b', { width: 390, height: 844 })], [row('b'), row('c')])
+    expect(r.pairs.map((p) => [p.a.key, p.b.width])).toEqual([['b', 1440]])
+    expect(r.added.map((x) => x.key)).toEqual(['c'])
+    expect(r.missing.map((x) => `${x.key}@${x.width}`)).toEqual(['a@1440', 'b@390'])
+  })
+  it('어느 쪽이든 문제·idle 거짓·최종 경로 다름이면 problem(사유와 함께) — 같음으로 세지 않는다', () => {
+    expect(rowVerdict({ a: row('x', { problems: ['not-found'] }), b: row('x'), stats: zero })).toMatchObject({ verdict: 'problem', reasons: ['기준:not-found'] })
+    expect(rowVerdict({ a: row('x'), b: row('x', { idle: false }), stats: zero })).toMatchObject({ verdict: 'problem', reasons: ['대상:idle=false'] })
+    expect(rowVerdict({ a: row('x', { finalPath: '/login' }), b: row('x'), stats: zero })).toMatchObject({ verdict: 'problem', reasons: ['finalPath 다름: /login ≠ /x'] })
+    expect(rowVerdict({ a: row('x'), b: row('x'), stats: zero })).toMatchObject({ verdict: 'same', ratio: 0, diffPixels: 0, bbox: null, reasons: [] })
+    expect(rowVerdict({ a: row('x'), b: row('x'), stats: { ratio: 0.01, diffPixels: 12960, bbox: { x: 1, y: 2, w: 3, h: 4 } } }))
+      .toMatchObject({ verdict: 'diff', ratio: 0.01, diffPixels: 12960, bbox: { x: 1, y: 2, w: 3, h: 4 } })
+  })
+  it('최종 경로는 모양으로 비교 — 시드가 다른 참고 대조(--allow-cross)에서 id·가림 표기만 다르면 problem 이 아니다', () => {
+    const p = (fp: string) => row('p', { finalPath: fp })
+    expect(rowVerdict({ a: p('/p/00000000-0000-4000-8000-000000000001/wbs'), b: p('/p/00000000-0000-4000-8000-000000000002/wbs'), stats: zero }).verdict).toBe('same')
+    expect(rowVerdict({ a: p('/invite/<token>'), b: p('/invite/{inviteToken}'), stats: zero }).verdict).toBe('same')
+    expect(rowVerdict({ a: p('/p/00000000-0000-4000-8000-000000000001/wbs'), b: p('/projects'), stats: zero }).verdict).toBe('problem')
+  })
+  it('알려진 잡음(KNOWN_NOISE — p-agents@768x1024 머리글 1px 스냅)은 near·diff 에 표시만 하고 판정은 바꾸지 않는다', () => {
+    expect(KNOWN_NOISE.map((k) => `${k.key}@${k.width}x${k.height}`)).toEqual(['p-agents@768x1024'])
+    const pa = (extra = {}) => row('p-agents', { width: 768, height: 1024, ...extra })
+    expect(rowVerdict({ a: pa(), b: pa(), stats: { ratio: 0.00178, diffPixels: 1401, bbox: null } })).toMatchObject({ verdict: 'near', known: expect.stringMatching(/머리글/) })
+    expect(rowVerdict({ a: pa(), b: pa(), stats: zero })).not.toHaveProperty('known')
+    expect(rowVerdict({ a: row('x'), b: row('x'), stats: { ratio: 0.001, diffPixels: 1, bbox: null } })).not.toHaveProperty('known')
+  })
+  it('집계 — 판정별 수와 볼 목록(problem·diff·missing·new·near — near 도 오른다)', () => {
+    const out = [
+      { key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'same' },
+      { key: 'b', width: 1440, height: 900, theme: 'light', ratio: 0.001, verdict: 'near' },
+      { key: 'p-agents', width: 768, height: 1024, theme: 'light', ratio: 0.00178, verdict: 'near', known: '머리글' },
+      { key: 'c', width: 390, height: 844, theme: 'light', ratio: 0.05, verdict: 'diff' },
+      { key: 'd', width: 390, height: 844, theme: 'light', ratio: 0, verdict: 'problem', reasons: ['대상:idle=false'] },
+      { key: 'e', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'missing' },
+      { key: 'f', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'new' },
+      { key: 'g', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'skip-font' },
+    ]
+    const s = summarizeDiff(out)
+    expect(s).toMatchObject({ compared: 8, same: 1, near: 2, diff: 1, problem: 1, missing: 1, new: 1, skipped: 1 })
+    expect(s.look).toEqual(['d@390x844/light problem 0.00% 대상:idle=false', 'c@390x844/light diff 5.00%', 'e@390x844/light missing —', 'f@390x844/light new —',
+      'p-agents@768x1024/light near 0.18% (알려진 잡음: 머리글)', 'b@1440x900/light near 0.10%'])
+  })
+})
+
+describe('촬영 쪽 판정 — 최종 경로·서버 빌드 id·서버 커밋·env 전제(D2·D3·D9)', () => {
+  const v = { pid: 'p1', minuteId: 'm1', topicId: 't1', inviteToken: 'i1', shareToken: 's1', wsSlug: 'default' }
+  it('최종 경로(D2) — expectFinal 이 없으면 채운 경로의 pathname 이 기대값, 다르면 final: 문제(권한 거부 리디렉션·로그인 튕김을 잡는다)', () => {
+    expect(finalProblem({ path: '/p/{pid}/wbs' }, v, new URL('http://x/p/p1/wbs'))).toBeNull()
+    expect(finalProblem({ path: '/p/{pid}/agents' }, v, new URL('http://x/p/p1/dashboard'))).toBe('final:/p/p1/dashboard')
+    expect(finalProblem({ path: '/agents' }, v, new URL('http://x/login?next=%2Fagents'))).toBe('final:/login?next=%2Fagents')
+    expect(finalProblem({ path: '/p/{pid}/agents/office' }, v, new URL('http://x/p/p1/agents/office?view=lane'))).toBeNull()   // 검색어는 expectFinal 행만 본다
+    expect(finalProblem({ path: '/p/{pid}/gantt', expectFinal: '/p/{pid}/wbs?view=timeline' }, v, new URL('http://x/p/p1/wbs?view=timeline'))).toBeNull()
+    expect(finalProblem({ path: '/', expectFinal: '/projects' }, v, new URL('http://x/login'))).toBe('final:/login')
+  })
+  it('지금 routes.json 의 모든 행은 경로가 그대로 최종 경로다(expectFinal 둘 빼고) — ui0 실측과 같다', () => {
+    for (const r of routesDoc.routes as { key: string; path: string; expectFinal?: string }[]) {
+      if (r.expectFinal) continue
+      const filled = fillPath(r.path, v)
+      expect(finalProblem(r, v, new URL(`http://x${filled}`)), r.key).toBeNull()
+    }
+  })
+  it('서버 빌드 id(D3) — HTML 의 /_next/static/<id>/_buildManifest.js 또는 RSC 머리의 "b"(이스케이프 포함), 없으면 null', () => {
+    expect(buildIdOf('<script src="/_next/static/wrWlxVYxqYm3vMcdnS0hL/_buildManifest.js"></script>')).toBe('wrWlxVYxqYm3vMcdnS0hL')
+    expect(buildIdOf('self.__next_f.push([1,"0:{\\"P\\":null,\\"b\\":\\"wrWlxVYxqYm3vMcdnS0hL\\",\\"p\\":\\"\\",\\"c\\":[\\"\\",\\"login\\"]"])')).toBe('wrWlxVYxqYm3vMcdnS0hL')
+    expect(buildIdOf('0:{"P":null,"b":"Ab_c-123456","p":"","c":["",""]}')).toBe('Ab_c-123456')
+    expect(buildIdOf('<link href="/_next/static/chunks/app.js"><link href="/_next/static/css/x.css">')).toBeNull()
+    expect(buildIdOf('<html></html>')).toBeNull()
+  })
+  it('서버 커밋(D3) — --base 실행은 플래그·env 가 없으면 거부, 형식은 7~40자 16진, 출처를 함께 낸다', () => {
+    expect(serverCommitOf({ explicitBase: false, head: 'abc1234' })).toEqual({ commit: 'abc1234', source: 'head' })
+    expect(serverCommitOf({ explicitBase: false, envCommit: 'def5678', head: 'abc1234' })).toEqual({ commit: 'def5678', source: 'env' })
+    expect(() => serverCommitOf({ explicitBase: true, head: 'abc1234' })).toThrow(/서버 커밋/)
+    expect(() => serverCommitOf({ explicitBase: true, envCommit: '  ', head: 'abc1234' })).toThrow(/서버 커밋/)
+    expect(serverCommitOf({ explicitBase: true, flagCommit: 'b4283c0', envCommit: 'def5678', head: 'abc1234' })).toEqual({ commit: 'b4283c0', source: 'flag' })
+    expect(() => serverCommitOf({ explicitBase: true, flagCommit: 'not-a-sha', head: 'abc1234' })).toThrow(/형식/)
+  })
+  it('env 전제(D9) — USAGE_TRACKING=on·VERCEL_ENV=production 이면 거부(프로세스 env 가 .env.local 보다 앞선다), LLM 키는 이름만', () => {
+    expect(envPremise('A=1\n', {})).toEqual({ problems: [], llmKeys: [] })
+    expect(envPremise('USAGE_TRACKING=on\n', {}).problems).toEqual([expect.stringMatching(/USAGE_TRACKING=on/)])
+    expect(envPremise('', { VERCEL_ENV: 'production' }).problems).toEqual([expect.stringMatching(/VERCEL_ENV=production/)])
+    expect(envPremise('USAGE_TRACKING=on\n', { USAGE_TRACKING: 'off' }).problems).toEqual([])
+    const r = envPremise('GEMINI_API_KEY=secret-value\nOPENAI_API_KEY=\n', { LLM_API_KEY: 'x' })
+    expect(r.llmKeys).toEqual(['GEMINI_API_KEY', 'LLM_API_KEY'])
+    expect(JSON.stringify(r)).not.toContain('secret-value')
+  })
+  it('위임 표의 신호 시각 칸을 미리 가린다(D10 — 멤버 기본 필터라 지금은 안 보일 뿐, 분 단위 글자)', () => {
+    const pa = (routesDoc.routes as { key: string; mask?: string[]; hide?: string[] }[]).find((r) => r.key === 'p-agents')
+    expect(pa?.mask).toEqual(['[data-hub-row] td span.tabular-nums'])
+    expect(pa?.hide).toEqual(['[data-hub-stamp]'])
   })
 })
