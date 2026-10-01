@@ -10,6 +10,10 @@ import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets 
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
+import { computeTree } from '../../src/lib/domain/rollup'
+import { milestoneTimeline } from '../../src/lib/domain/dashboard'
+import { DEFAULT_MILESTONE_KEYWORDS } from '../../src/lib/settings/defs/project'
+import type { ComputedItem } from '../../src/lib/domain/types'
 
 const root = process.cwd()
 const pageFiles = (() => {
@@ -347,15 +351,32 @@ const CTX = {
   users: { wsAdmin: '00000000-0000-0000-7e57-000000001506' },
 }
 
+type SeedRow = { id: string; parent_id: string | null; code: string; sort_order: number; name: string; deliverable: string | null; planned_start: string | null
+  planned_end: string | null; weight: number | null; actual_pct: number | null; is_owner_split: boolean; assignee_member_id: string | null; tags: string[] | null; milestone: boolean }
+/** 시드 행 → 앱의 계산 트리(src/lib/data/wbs.ts 의 행 사상과 같은 필드, 상태·계획%는 앱의 computeTree 가 낸다 — 공휴일 없음) */
+const computedOf = (rows: SeedRow[], today: string): ComputedItem[] => computeTree(rows.map((r) => ({
+  id: r.id, parentId: r.parent_id, code: r.code, sortOrder: r.sort_order, name: r.name, biz: null, deliverable: r.deliverable,
+  plannedStart: r.planned_start, plannedEnd: r.planned_end, weight: r.weight, actualPct: r.actual_pct, owners: [], isOwnerSplit: r.is_owner_split,
+  assigneeMemberId: r.assignee_member_id, agentDelegated: (r.tags ?? []).includes('agent'),
+})), today, new Set(), { subActTeamOrder: new Map() })
+/** 간트 첫 화면의 행 순서 — 트리 전위 순회, 분리 부모(isOwnerSplit 자식을 가진 노드)는 기본 접힘(WbsGanttSheet 의 splitParentIds 와 같은 규칙) */
+const displayRows = (items: ComputedItem[]): ComputedItem[] => {
+  const out: ComputedItem[] = []
+  const walk = (ns: ComputedItem[]) => ns.forEach((n) => { out.push(n); if (!n.children.some((c) => c.isOwnerSplit)) walk(n.children) })
+  walk(items)
+  return out
+}
+
 describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
   const plan = seedPlan(CTX)
+  const wbsRows = plan.wbs as unknown as SeedRow[]
   it('같은 입력이면 같은 행', () => { expect(seedPlan(CTX)).toEqual(plan) })
-  it('WBS 60행, 깊이 4(level_idx 0..3), 부모가 자식보다 먼저, id 유일', () => {
-    expect(plan.wbs).toHaveLength(60)
+  it('WBS 61행(3단계 × 3작업 × 5활동 + 1.3 의 이정표 잎 하나 + 1.1.1 아래 세부 3), 깊이 4(level_idx 0..3), 부모가 자식보다 먼저, id 유일', () => {
+    expect(plan.wbs).toHaveLength(61)
     expect(new Set(plan.wbs.map((r) => r.level_idx))).toEqual(new Set([0, 1, 2, 3]))
     const seen = new Set<string>()
     for (const r of plan.wbs) { if (r.parent_id) expect(seen.has(r.parent_id)).toBe(true); seen.add(r.id) }
-    expect(seen.size).toBe(60)
+    expect(seen.size).toBe(61)
     expect(LEVEL_LABELS_4).toHaveLength(4)
   })
   it('완료·지연·진행·오늘 마감·예정·이정표·분리 부모가 모두 있다', () => {
@@ -365,8 +386,46 @@ describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
     expect(leaves.some((r) => r.planned_start <= CTX.today && CTX.today < r.planned_end)).toBe(true)      // 진행
     expect(leaves.some((r) => r.planned_end === CTX.today)).toBe(true)                                     // 오늘 마감
     expect(leaves.some((r) => r.planned_start > CTX.today)).toBe(true)                                     // 예정
-    expect(plan.wbs.filter((r) => r.milestone)).toHaveLength(2)
+    expect(plan.wbs.filter((r) => r.milestone).map((r) => r.code)).toEqual(['1.1.5', '1.3.6', '2.3.5'])
     expect(plan.wbs.filter((r) => r.is_owner_split)).toHaveLength(1)
+  })
+  // 화면은 wbs_items.milestone 이 아니라 앱의 감지(이름 키워드 ∨ 단일일 + 산출물)로 이정표를 그린다 — 대시보드 '다음 마일스톤'·타임라인과
+  // 간트의 이정표 칩·선이 같은 함수(milestoneTimeline)다. 플래그만 보던 옛 단언은 감지 0건인 채 초록이었다(UI-0 충실도 리뷰 P2-1)
+  it('이정표 — 앱의 감지(milestoneTimeline, 기본 키워드)로 완료·기한 지남·예정 셋이 하나씩 잡힌다', () => {
+    for (const today of [CTX.today, '2026-10-01', '2026-10-03', '2026-10-04', '2026-10-05']) {   // 화·목·토·일·월 — 요일과 무관
+      const rows = seedPlan({ ...CTX, today }).wbs as unknown as SeedRow[]
+      const codeOf = new Map(rows.map((r) => [r.id, r.code]))
+      expect(milestoneTimeline(computedOf(rows, today), today, DEFAULT_MILESTONE_KEYWORDS).map((m) => [codeOf.get(m.id), m.status]))
+        .toEqual([['1.1.5', 'done'], ['1.3.6', 'overdue'], ['2.3.5', 'upcoming']])
+    }
+  })
+  it('이정표 잎의 이름은 키워드가 아니다 — 산출물로만 감지되고 다른 화면 글자는 그대로다', () => {
+    for (const code of ['1.1.5', '1.3.6', '2.3.5']) {
+      const r = wbsRows.find((x) => x.code === code)!
+      expect(r.name).toBe(`활동 ${code}`)
+      expect(r.planned_start).toBe(r.planned_end)
+      expect(r.deliverable?.trim()).toBeTruthy()
+    }
+  })
+  // 간트 첫 화면 = 1~14행(1280 은 15행이 잘린다) · 날짜 창은 1440 오늘 ±15일, 1280 −12~+11, 768 −7~+6, 390 −3~+3(ui0 PNG 실측).
+  // 1단계가 오늘보다 17일 넘게 앞서 있어 세 크기의 첫 화면에 막대가 하나도 없었다(UI-0 충실도 리뷰 P2-2) — 가장 좁은 390 창에 넷이 함께 든다
+  it('간트 첫 화면(1~14행 · 오늘 ±3일)에 완료·지연·진행·오늘 마감 막대가 함께 든다 — 요일과 무관', () => {
+    for (const today of [CTX.today, '2026-10-01', '2026-10-03', '2026-10-04', '2026-10-05']) {
+      const shown = displayRows(computedOf(seedPlan({ ...CTX, today }).wbs as unknown as SeedRow[], today)).slice(0, 14)
+      const lo = plusDays(today, -3)
+      const hi = plusDays(today, 3)
+      const bars = shown.filter((n) => n.children.length === 0 && n.plannedStart && n.plannedEnd && n.plannedStart <= hi && n.plannedEnd >= lo)
+      const has = (f: (n: ComputedItem) => boolean) => bars.some(f)
+      expect(has((n) => n.status === 'done'), `완료 ${today}`).toBe(true)
+      expect(has((n) => n.status === 'delayed' && n.plannedEnd! < today), `지연 ${today}`).toBe(true)
+      expect(has((n) => n.status === 'in_progress'), `진행 ${today}`).toBe(true)
+      expect(has((n) => n.plannedEnd === today && n.status !== 'done'), `오늘 마감 ${today}`).toBe(true)
+    }
+  })
+  it('1단계 끝에 더한 잎(1.3.6)은 다른 잎의 담당 팀을 밀지 않는다 — 원래 47잎은 순서대로 팀 5개를 돈다', () => {
+    const leaves = plan.wbs.filter((r) => r.weight === 1 && r.code !== '1.3.6')
+    expect(leaves).toHaveLength(47)
+    leaves.forEach((l, i) => expect(plan.owners.find((o) => o.wbs_item_id === l.id && o.kind === 'primary')?.team_id).toBe(plan.teams[i % 5].id))
   })
   it('팀 5색, 모든 잎에 primary 담당, 의존은 존재하는 행끼리', () => {
     expect(plan.teams).toHaveLength(5)

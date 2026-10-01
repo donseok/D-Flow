@@ -235,8 +235,29 @@ export function seedIds(projectId) {
 }
 
 /**
+ * 1단계 잎의 일정 [시작 오프셋, 끝 오프셋, 실적%](오늘 = 0) — 간트 첫 화면 표본(UI-0 충실도 리뷰 P2-2). 첫 화면은 1~14행이고 날짜 창은
+ * 1440 오늘 ±15일·1280 −12~+11·768 −7~+6·390 −3~+3 이다(ui0 PNG 실측) — 가장 좁은 390 창에 완료(1.1.2·1.2.5)·지연(1.1.3·1.2.4)·
+ * 진행(1.1.4·1.2.3)·오늘 마감(1.2.1) 막대가 함께 든다. 진행 표본은 어느 요일에 시드해도 실적 ≥ 계획(영업일 계획%)이다(1.1.4 계획 ≤ 40%,
+ * 1.2.3 ≤ 20%). 2·3단계는 아래 일반식 그대로다(주 경로·좌석·오늘 마감 2.1.3 등).
+ */
+const PHASE1_SCHEDULE = Object.freeze({
+  '1.1.1.1': [-24, -20, 100], '1.1.1.2': [-21, -17, 100], '1.1.1.3': [-18, -14, 100],   // 접힌 분리 부모의 세부(첫 화면 밖)
+  '1.1.2': [-8, -1, 100], '1.1.3': [-10, -2, 40], '1.1.4': [-1, 5, 60], '1.1.5': [-6, -6, 100],
+  '1.2.1': [-3, 0, 60], '1.2.2': [1, 6, 0], '1.2.3': [0, 6, 30], '1.2.4': [-6, -1, 40], '1.2.5': [-7, -2, 100],
+  '1.3.1': [2, 7, 0], '1.3.2': [4, 9, 0], '1.3.3': [6, 11, 0], '1.3.4': [8, 13, 0], '1.3.5': [-12, -6, 40], '1.3.6': [-2, -2, 0],
+})
+/**
+ * 이정표 잎의 산출물 — 앱은 wbs_items.milestone 이 아니라 '이름 키워드 ∨ 단일일 + 산출물'(milestoneTimeline)로 이정표를 그린다(UI-0 충실도
+ * 리뷰 P2-1: 플래그만 둔 시드는 감지 0건이었다). 이름은 바꾸지 않는다 — 다른 화면 글자가 그대로다. 완료(1.1.5)·기한 지남(1.3.6)·예정(2.3.5)
+ */
+const MILESTONE_DELIVERABLES = Object.freeze({ '1.1.5': '착수 보고서', '1.3.6': '중간 점검표', '2.3.5': '설계 승인서' })
+/** 3×3×5 뒤에 더한 잎 — 담당 팀 순환(잎 순서 i % 5)에서 빼서 뒤 잎의 팀이 밀리지 않게 한다 */
+const EXTRA_LEAVES = Object.freeze(['1.3.6'])
+
+/**
  * 결정적 시드 행(순수) — 같은 ctx 면 같은 행. 날짜는 ctx.today(KST) 상대값이라 캡처 쌍은 같은 KST 날짜 안에 찍는다.
- * WBS: 3단계 × 3작업 × 5활동 + 1.1.1 아래 세부 3 = 60행(깊이 4). 모든 행 is_owner_split=false 인데 세부 1.1.1.3 하나만 true(분리 부모 접힘 표본).
+ * WBS: 3단계 × 3작업 × 5활동 + 1.3 의 이정표 잎 1.3.6 + 1.1.1 아래 세부 3 = 61행(깊이 4). 모든 행 is_owner_split=false 인데
+ * 세부 1.1.1.3 하나만 true(분리 부모 접힘 표본). 1단계 일정은 PHASE1_SCHEDULE, 이정표는 MILESTONE_DELIVERABLES.
  * 에이전트 좌석 1(판정 Q34): 잎 2.2.5 만 tags ['agent'] + 점유·막힘 주문 하나 — 좌석 상태 BLOCKED 는 경과 시간과 무관하다(감시자 행은 두지 않는다 — 생존 창 70분).
  * @param {{ today: string, projectId: string, wsA: string, memberIds: { member: string, duo: string, wsAdmin: string }, users: { wsAdmin: string } }} ctx
  */
@@ -248,29 +269,29 @@ export function seedPlan(ctx) {
   const wbs = []
   let sort = 0
   const row = (code, name, parentId, level, extra = {}) => {
-    const r = { id: id(`wbs:${code}`), project_id: pid, parent_id: parentId, code, name, level_idx: level, sort_order: ++sort,
+    const r = { id: id(`wbs:${code}`), project_id: pid, parent_id: parentId, code, name, level_idx: level, sort_order: ++sort, deliverable: null,
       planned_start: null, planned_end: null, weight: null, actual_pct: null, milestone: false, is_owner_split: false, assignee_member_id: null, tags: null, ...extra }
     wbs.push(r)
     return r
   }
   const leaf = (code, name, parentId, level, p, t, a) => {
-    const start = plusDays(today, -40 + (p - 1) * 25 + (t - 1) * 8 + (a - 1))
-    const end = plusDays(start, 3)
-    let pct = end < plusDays(today, -2) ? 100 : start <= today && today <= end ? 50 : 0
-    if (code === '1.2.4' || code === '1.3.5') pct = 40                                              // 지연
+    const fixed = PHASE1_SCHEDULE[code]
+    const start = fixed ? plusDays(today, fixed[0]) : plusDays(today, -40 + (p - 1) * 25 + (t - 1) * 8 + (a - 1))
+    const end = fixed ? plusDays(today, fixed[1]) : plusDays(start, 3)
+    const pct = fixed ? fixed[2] : end < plusDays(today, -2) ? 100 : start <= today && today <= end ? 50 : 0
     const extra = { planned_start: start, planned_end: end, weight: 1, actual_pct: pct,
       assignee_member_id: a === 1 ? ctx.memberIds.member : a === 2 ? ctx.memberIds.duo : null }
     if (code === '2.1.3') Object.assign(extra, { planned_start: plusDays(today, -2), planned_end: today, actual_pct: 60 })   // 오늘 마감
     if (code === '2.2.5') Object.assign(extra, { planned_start: plusDays(today, -2), planned_end: plusDays(today, 3), actual_pct: 50, tags: ['agent'] })   // 진행 · 에이전트 좌석(판정 Q34)
-    if (code === '2.3.5') Object.assign(extra, { planned_start: plusDays(today, 5), planned_end: plusDays(today, 5), actual_pct: 0, milestone: true })
-    if (code === '1.1.5') Object.assign(extra, { planned_start: plusDays(today, -30), planned_end: plusDays(today, -30), actual_pct: 100, milestone: true })
+    if (code === '2.3.5') Object.assign(extra, { planned_start: plusDays(today, 5), planned_end: plusDays(today, 5), actual_pct: 0 })
+    if (MILESTONE_DELIVERABLES[code]) Object.assign(extra, { deliverable: MILESTONE_DELIVERABLES[code], milestone: true })
     return row(code, name, parentId, level, extra)
   }
   for (let p = 1; p <= 3; p++) {
     const ph = row(`${p}`, `${p}단계 ${['준비', '구축', '전환'][p - 1]}`, null, 0)
     for (let t = 1; t <= 3; t++) {
       const tk = row(`${p}.${t}`, `${['요구 정리', '화면 설계', '데이터 이관'][t - 1]} ${p}-${t}`, ph.id, 1)
-      for (let a = 1; a <= 5; a++) {
+      for (let a = 1; a <= (p === 1 && t === 3 ? 6 : 5); a++) {
         const code = `${p}.${t}.${a}`
         const act = leaf(code, `활동 ${code}`, tk.id, 2, p, t, a)
         if (code === '1.1.1') {
@@ -291,8 +312,9 @@ export function seedPlan(ctx) {
       r.planned_end = kids.map((k) => k.planned_end).sort().at(-1)
     }
   }
-  const leaves = wbs.filter((r) => r.weight === 1)
+  const leaves = wbs.filter((r) => r.weight === 1 && !EXTRA_LEAVES.includes(r.code))
   const owners = leaves.map((r, i) => ({ wbs_item_id: r.id, team_id: teams[i % 5].id, kind: 'primary' }))
+  for (const r of wbs.filter((x) => EXTRA_LEAVES.includes(x.code))) owners.push({ wbs_item_id: r.id, team_id: teams[0].id, kind: 'primary' })
   const supportOf = wbs.find((r) => r.code === '2.2.2')
   owners.push({ wbs_item_id: supportOf.id, team_id: teams[4].id, kind: 'support' })
   const byCode = (c) => wbs.find((r) => r.code === c).id
