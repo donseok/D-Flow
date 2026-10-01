@@ -138,7 +138,7 @@
 <!-- catalog:auto:5:start -->
 | 설정 키 | 스코프 | 편집 주체 | 편집 UI/API | 저장소 | 기본값(출처) | 검증기 | 소비처 | 적용 시점 | 기존 데이터 영향 | 테스트 | 현재 상태 | 담당 SP |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `theme` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `theme` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `locale` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `heroCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 머리 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `sidebarCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |

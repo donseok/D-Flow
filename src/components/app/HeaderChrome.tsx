@@ -20,7 +20,7 @@ import { HeaderAnnouncementTicker } from './HeaderAnnouncementTicker'
 import { InboxPanel } from './InboxPanel'
 import { useProjectNavigation } from './ProjectNavigationContext'
 import { projectMenu, type SidebarProject } from './Sidebar'
-import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
+import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
 import { clearAllWikiDrafts } from '@/lib/drafts/wikiDrafts'
 
@@ -50,7 +50,6 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
   const { t } = useLocale()
   const [menuOpen, setMenuOpen] = useState(false)
   const [open, setOpen] = useState<null | 'notif' | 'profile'>(null)
-  const [pwOpen, setPwOpen] = useState(false)
 
   const { routeProjectId } = useProjectNavigation()
   // 알림함·파생 알림·공지 배지 조회는 ShellStateProvider 가 내비게이션당 GET 1왕복으로
@@ -232,6 +231,11 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
                   <Link href="/account" onClick={() => setOpen(null)} className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-ink-muted transition hover:bg-surface-2 hover:text-ink">
                     <KeyRound className="h-4 w-4" />내 계정
                   </Link>
+                  {/* 화면 테마 3단(결정 #21) — 관리 링크 묶음과 떨어뜨려 둔다(UI-2b 가 AccountMenu 로 그대로 옮긴다) */}
+                  <div data-theme-section className="border-t border-border px-4 py-3">
+                    <div className="mb-2 text-meta font-semibold text-fg-muted">{t('chrome.theme')}</div>
+                    <ThemeRadioGroup compact />
+                  </div>
                   {/* 어포던스 판정은 각 화면 게이트와 같은 predicate — 링크만 보이고 페이지는 거부되는 드리프트 방지 */}
                   {(canManageTeams(identity) || canManageLlmConfig(identity) || identity?.isSuperuser) && (
                     <>
@@ -268,7 +272,6 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
       </header>
 
       {menuOpen && <MobileMenu projects={projects} pathname={pathname} onClose={() => setMenuOpen(false)} roleLabel={roleLabel} identity={identity} displayName={displayName} />}
-      <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
     </>
   )
 }

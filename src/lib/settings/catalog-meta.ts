@@ -63,7 +63,7 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
 
 /** 개인 설정(개정 §2.8.5) — 개인 설정 저장소의 키. 저장 위치는 SP3b 스펙이 정한다(D32) */
 export const PERSONAL_PREFS: readonly { key: string; desc: string }[] = [
-  { key: 'theme', desc: '라이트·다크' }, { key: 'locale', desc: 'ko·en' }, { key: 'heroCollapsed', desc: '머리 접기' },
+  { key: 'theme', desc: '시스템·라이트·다크' }, { key: 'locale', desc: 'ko·en' }, { key: 'heroCollapsed', desc: '머리 접기' },
   { key: 'sidebarCollapsed', desc: '사이드바 접기' }, { key: 'dashSections', desc: '대시보드 구역' }, { key: 'minutesView', desc: '회의록 보기' },
   { key: 'minuteFontSize', desc: '회의록 글자 크기' }, { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치' }, { key: 'notifRead', desc: '읽은 알림' },
   { key: 'lastProjectId', desc: '마지막 프로젝트' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김' }, { key: 'wbsOutline', desc: 'WBS 아웃라인' },

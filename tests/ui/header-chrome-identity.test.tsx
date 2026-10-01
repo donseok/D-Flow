@@ -39,6 +39,10 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
       'common.selectProject': '프로젝트 선택',
       'common.noProjects': '프로젝트 없음',
       'brand.tagline': '일하는 방식이 바뀐다',
+      'chrome.theme': '화면 테마',
+      'chrome.themeSystem': '시스템',
+      'chrome.themeLight': '라이트',
+      'chrome.themeDark': '다크',
     } as Record<string, string>)[key] ?? key,
   }),
 }))
@@ -124,6 +128,14 @@ describe('HeaderChrome 소속 표시', () => {
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="메뉴 열기"]')!.click())
     return container.querySelector<HTMLElement>('[data-identity-card]')!.textContent
   }
+
+  it('프로필 팝오버에 화면 테마 3단(결정 #21) — 전역 바에는 테마·언어 버튼이 없다', async () => {
+    await render(['PMO'], null)
+    expect(container.querySelector('button[title="Language"]')).toBeNull()
+    await act(async () => profileTrigger().click())
+    const group = container.querySelector('[data-theme-section] [role="radiogroup"]')!
+    expect([...group.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['시스템', '라이트', '다크'])
+  })
 
   it.each([
     [[], '소속 미지정'],
