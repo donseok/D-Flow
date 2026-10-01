@@ -152,38 +152,45 @@ export function MinutesView({
     setTreeState(res ?? 'error')
   }
 
-  async function loadMonth(y: number, m0: number, tk: TeamKey) {
+  /** 반환: 참 = 받음, 거짓 = 실패(지난 목록을 두고 토스트), null = 더 새 요청이 있어 버림 */
+  async function loadMonth(y: number, m0: number, tk: TeamKey): Promise<boolean | null> {
     const gen = ++reqRef.current
     const [rs, re] = monthRangeOf(y, m0)
     const res = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
-    if (reqRef.current !== gen) return
+    if (reqRef.current !== gen) return null
     // 실패는 '이 달 회의록 없음'이 아니다 — 지난 목록을 두고 사유를 알린다(에러 처리 3원칙 ①)
-    if (res.ok) setMinutes(res.rows)
-    else toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    if (res.ok) { setMinutes(res.rows); return true }
+    toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    return false
   }
   function shift(delta: number) {
     if (isSearch) return
     const base = new Date(Date.UTC(year, month0 + delta, 1))
     const y = base.getUTCFullYear(); const m0 = base.getUTCMonth()
+    const prev = { y: year, m0: month0 }
     setYear(y); setMonth0(m0)
     setSelectedDate(null)
-    void loadMonth(y, m0, team)
+    // 실패면 머리(연·월)도 지난 목록에 맞춰 되돌린다 — 새 달 머리 아래 지난 달 목록이 남지 않게
+    void loadMonth(y, m0, team).then((ok) => { if (ok === false) { setYear(prev.y); setMonth0(prev.m0) } })
   }
   function changeTeam(tk: TeamKey) {
+    const prevTeam = team
     setTeam(tk)
     setSelectedDate(null)
-    if (isSearch) void runSearch(query, tk)
-    else void loadMonth(year, month0, tk)
+    const revert = (ok: boolean | null) => { if (ok === false) setTeam(prevTeam) }   // 팀 칩과 목록이 어긋나지 않게
+    if (isSearch) void runSearch(query, tk).then(revert)
+    else void loadMonth(year, month0, tk).then(revert)
   }
-  async function runSearch(q: string, tk: TeamKey) {
+  async function runSearch(q: string, tk: TeamKey): Promise<boolean | null> {
     const gen = ++reqRef.current
-    if (!q.trim()) { void loadMonth(year, month0, tk); return }
+    if (!q.trim()) return loadMonth(year, month0, tk)
     setSearching(true)
     const res = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
-    if (reqRef.current !== gen) return
+    if (reqRef.current !== gen) return null
     setSearching(false)
-    if (res.ok) setMinutes(res.rows)
-    else toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    if (res.ok) { setMinutes(res.rows); return true }
+    toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    return false
   }
   function changeView(v: ViewKey) {
     setView(v)

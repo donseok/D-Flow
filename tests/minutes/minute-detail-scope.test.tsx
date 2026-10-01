@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), moduleSetFor: vi.fn(),
   getMinuteDetail: vi.fn(), getMinuteLinkedIssues: vi.fn(async () => [{ id: 'i1' }]), getMinuteWikiImpact: vi.fn(async () => ({ topics: [] })),
-  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }), viewerProps: vi.fn(),
+  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }), viewerProps: vi.fn(), getMinuteVersionBody: vi.fn(async (): Promise<unknown> => null),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({ notFound: h.notFound }))
 vi.mock('@/lib/data/minutes', () => ({
   getMinuteDetail: h.getMinuteDetail, getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),
   getMinuteVersions: vi.fn(async () => ({ ok: true, rows: [] })), getMinuteWikiImpact: h.getMinuteWikiImpact,
-  getMinuteVersionBody: vi.fn(async () => null), getMinuteFolderPath: vi.fn(async () => []),
+  getMinuteVersionBody: h.getMinuteVersionBody, getMinuteFolderPath: vi.fn(async () => []),
 }))
 vi.mock('@/lib/data/issues', () => ({ getMinuteLinkedIssues: h.getMinuteLinkedIssues }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })), getMyProjectIds: vi.fn(async () => []) }))
@@ -75,6 +75,19 @@ describe('/w/[slug]/minutes/[id]', () => {
       expect(h.getMinuteDetail).not.toHaveBeenCalled()
       expect(h.requireModulePage).not.toHaveBeenCalled()
     }
+  })
+  it('형식 밖 ?version= 도 조회 없이 404 — 판 본문 조회의 22P02 로그에 입력 문자열을 싣지 않는다(U2a-4 T5)', async () => {
+    for (const bad of ['v2', `${MID}x`, "1' or '1'='1", '%0A']) {
+      vi.clearAllMocks()
+      await expect(MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: MID }), searchParams: Promise.resolve({ version: bad }) })).rejects.toThrow('NEXT_NOT_FOUND')
+      expect(h.getMinuteVersionBody).not.toHaveBeenCalled()
+      expect(h.getMinuteDetail).not.toHaveBeenCalled()
+    }
+    vi.clearAllMocks()
+    const V = '00000000-0000-0000-7e57-000000001684'
+    h.getMinuteVersionBody.mockResolvedValue({ id: V, body: 'b' })
+    await MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: MID }), searchParams: Promise.resolve({ version: V }) })
+    expect(h.getMinuteVersionBody).toHaveBeenCalledWith(MID, V)
   })
   it('권한 조회 열화(degraded)면 위키 영향(service_role)을 부르지 않는다(V3)', async () => {
     h.loadWorkspaceScope.mockResolvedValue({ ws: WA, actor: null, degraded: true, role: null })

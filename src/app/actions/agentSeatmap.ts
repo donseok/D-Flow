@@ -23,8 +23,11 @@ export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: s
     if (!isProjectMember(actor, projectId)) return { ok: false, error: '권한이 없습니다.' }
     opts.projectId = projectId
   } else {
-    // 전체 좌석표 — 인자 워크스페이스(D26). 소속·역할이 없으면 존재를 드러내지 않고 같은 문구
-    if (typeof workspaceId !== 'string' || !canViewAgents(actor, workspaceId)) return { ok: false, error: '권한이 없습니다.' }
+    // 전체 좌석표 — 인자 워크스페이스(D26). 소속·역할이 없으면 존재를 드러내지 않고 같은 문구. 플랫폼 관리자는 canViewAgents 가 어떤
+    // 값이든 통과시켜 형식 밖 값이 설정 조회(22P02)까지 가 로그에 실리므로 형식을 먼저 본다(U2a-4 리뷰 T5). 그 밖의 사람은 소속 맵 조회에서 끝난다
+    if (typeof workspaceId !== 'string' || (actor.isSuperuser && !UUID_RE.test(workspaceId)) || !canViewAgents(actor, workspaceId)) {
+      return { ok: false, error: '권한이 없습니다.' }
+    }
     opts.workspaceId = workspaceId
   }
   // 프로젝트 층이면 그 프로젝트, 전체 좌석표면 인자 워크스페이스. 층 행은 getSeatmap 이 다시 거른다(seatmapFloorIds).

@@ -187,6 +187,21 @@ describe('MinutesView 트리 뷰 배선', () => {
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="next month"]')!.click())
     expect(fetchMinutesRange).toHaveBeenCalledWith({ workspaceId: 'ws-1', projectId: null }, '2026-08-01', '2026-08-31', null)
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.list.loadError', description: '권한을 확인할 수 없어 중단했습니다.', variant: 'error' }))
+    // 머리(연·월)도 되돌린다 — '8월' 머리 아래 7월 목록이 남지 않게(U2a-4 T5)
+    const last = chatProps.mock.calls.at(-1)![0] as { from: string | null; to: string | null }
+    expect([last.from, last.to]).toEqual(['2026-07-01', '2026-07-31'])
+  })
+
+  it('팀 변경이 실패로 돌아오면 팀 선택도 되돌린다 — 필터 칩과 목록이 어긋나지 않게(U2a-4 T5)', async () => {
+    await mount('calendar')
+    fetchMinutesRange.mockResolvedValueOnce({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    await act(async () => tabByText('PMO')!.click())
+    expect(fetchMinutesRange).toHaveBeenLastCalledWith({ workspaceId: 'ws-1', projectId: null }, '2026-07-01', '2026-07-31', 'PMO')
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.list.loadError', variant: 'error' }))
+    expect(tabByText('PMO')!.getAttribute('aria-selected')).toBe('false')
+    // 성공하면 바뀐다(대조)
+    await act(async () => tabByText('PMO')!.click())
+    expect(tabByText('PMO')!.getAttribute('aria-selected')).toBe('true')
   })
 
   it('그리드/리스트는 트리 선택 중에만 상단 액션줄에 노출된다', async () => {

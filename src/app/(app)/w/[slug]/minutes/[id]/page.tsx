@@ -35,6 +35,8 @@ export default async function MinuteDetailPage({
   // 형식 밖 id 는 조회 없이 404 — 옛 /minutes/<id> 스텁이 형식 밖 id 를 그대로 이 주소로 보낸다. 보내면 Postgres 22P02 가
   // 오류 경계가 되고 입력 문자열(공격자가 정한 값)이 서버 오류 로그에 실린다(U2a-3 리뷰 V1)
   if (!UUID_RE.test(id)) notFound()
+  // ?version= 도 같다 — 판 본문 조회의 22P02 로그에 입력 문자열이 실리지 않게 조회 전에 404(U2a-4 리뷰 T5)
+  if (typeof query.version === 'string' && !UUID_RE.test(query.version)) notFound()
   // 대상 행의 워크스페이스로 판정(스펙 §4.2 2행). getMinuteDetail 은 react cache — 아래 묶음이 다시 읽지 않는다
   const head = await getMinuteDetail(id)
   // 다른 워크스페이스의 행은 이 주소로 열지 않는다(D6 — 옛 /minutes/<id> 스텁이 행의 워크스페이스로 보낸다)

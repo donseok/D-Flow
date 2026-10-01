@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ getActorForView: vi.fn(), getSeatmap: vi.fn() 
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: mocks.getSeatmap }))
 import { refreshSeatmap } from '@/app/actions/agentSeatmap'
-import { makeMemberActor, WS } from '../fixtures/actor'
+import { makeMemberActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const P2 = '22222222-2222-4222-8222-222222222222'
@@ -22,6 +22,13 @@ describe('refreshSeatmap — projectId', () => {
   it('projectId 없으면 인자 워크스페이스로 좁힌다({ workspaceId }, D26)', async () => {
     await refreshSeatmap('all', undefined, WS)
     expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'all', { workspaceId: WS })
+  })
+  it('플랫폼 관리자가 형식 밖 워크스페이스 값을 보내면 같은 문구로 거절 — 설정 조회(22P02 로그)까지 가지 않는다(U2a-4 T5)', async () => {
+    mocks.getActorForView.mockResolvedValue(makeSuperuser())
+    for (const bad of ['ws-1', "x' or 1=1", '00000000-0000-0000-7e57-00000000000g']) {
+      expect(await refreshSeatmap('all', undefined, bad)).toEqual({ ok: false, error: '권한이 없습니다.' })
+    }
+    expect(mocks.getSeatmap).not.toHaveBeenCalled()
   })
   it('워크스페이스 인자가 없으면 권한 없음 — 전 워크스페이스로 넓히지 않는다(W9)', async () => {
     expect(await refreshSeatmap('all')).toEqual({ ok: false, error: '권한이 없습니다.' })
