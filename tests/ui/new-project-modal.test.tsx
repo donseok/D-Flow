@@ -12,10 +12,11 @@ const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
   getProjectCopySource: vi.fn(),
   refresh: vi.fn(),
+  replace: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: mocks.refresh }),
+  useRouter: () => ({ push: vi.fn(), refresh: mocks.refresh, replace: mocks.replace }),
 }))
 vi.mock('@/app/actions/project', () => ({
   createProject: mocks.createProject,
@@ -41,6 +42,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     mocks.createProject.mockReset()
     mocks.getProjectCopySource.mockReset()
     mocks.refresh.mockReset()
+    mocks.replace.mockReset()
   })
 
   afterEach(() => {
@@ -62,6 +64,23 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
     act(() => root.render(<NewProjectModal key="closed" workspaceId="ws-1" />))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('?new=1 로 열린 모달을 닫으면 그 쿼리만 주소에서 뺀다(새로고침에 다시 열리지 않게), 버튼으로 연 모달은 주소를 건드리지 않는다', () => {
+    window.history.replaceState(null, '', '/w/acme/projects?new=1&q=x')
+    root = createRoot(container)
+    act(() => root.render(<NewProjectModal workspaceId="ws-1" defaultOpen />))
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === 'common.cancel')!
+    act(() => cancel.click())
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(mocks.replace).toHaveBeenCalledWith('/w/acme/projects?q=x', { scroll: false })
+    mocks.replace.mockReset()
+    act(() => root.render(<NewProjectModal key="btn" workspaceId="ws-1" />))
+    act(() => container.querySelector('button')!.click())
+    const cancel2 = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === 'common.cancel')!
+    act(() => cancel2.click())
+    expect(mocks.replace).not.toHaveBeenCalled()
+    window.history.replaceState(null, '', '/')
   })
 
   it('라벨이 중복되면 validateLevelSettings 의 에러를 그대로 보여주고 createProject 는 부르지 않는다', async () => {

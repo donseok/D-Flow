@@ -9,7 +9,7 @@ export default function Loading() {
           <Skeleton className="h-6 w-40 rounded" />
           <Skeleton className="h-3 w-16 rounded" />
         </div>
-        <Skeleton className="h-9 w-32 rounded-xl" />
+        {/* 생성 버튼 자리는 두지 않는다 — 권한을 모르는 동안 멤버에게 버튼 자리를 보였다가 지우면 머리가 한 번 바뀐다 */}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (

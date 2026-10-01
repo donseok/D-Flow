@@ -95,10 +95,20 @@ export function NewProjectModal({
     }
   }
 
+  /** `?new=1` 로 열린 모달을 닫으면 주소에서 그 쿼리를 뺀다 — 새로고침·뒤로 가기에 다시 열리지 않게(나머지 쿼리는 그대로) */
+  function dropNewQuery() {
+    if (!defaultOpen || typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    if (!u.searchParams.has('new')) return
+    u.searchParams.delete('new')
+    router.replace(`${u.pathname}${u.search}${u.hash}`, { scroll: false })
+  }
+
   function close() {
     if (busy) return
     setOpen(false)
     reset()
+    dropNewQuery()
   }
 
   async function submit() {
@@ -134,6 +144,7 @@ export function NewProjectModal({
       router.refresh()
       setOpen(false)
       reset()
+      dropNewQuery()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('home.errCreateFailed'))
     } finally {
