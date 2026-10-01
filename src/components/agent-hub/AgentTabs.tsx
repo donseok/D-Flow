@@ -17,8 +17,8 @@ export function agentTabs(projectId: string): ReadonlyArray<{ key: AgentTabKey; 
 export const TAB_TONE = {
   light: { on: 'bg-brand-weak text-brand', off: 'text-ink-muted hover:text-ink' },
   dark: {
-    on: 'border border-[#32b6ab66] bg-[#32b6ab22] text-[#66d6c6]',
-    off: 'border border-hero-line text-hero-ink-muted hover:text-hero-ink',
+    on: 'border border-action/40 bg-action-soft text-action',
+    off: 'border border-border text-fg-secondary hover:text-fg',
   },
 } as const
 

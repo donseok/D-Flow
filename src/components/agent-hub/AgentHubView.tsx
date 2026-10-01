@@ -125,12 +125,12 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
 
   const c = hub.counters
   const tiles: HeroTile[] = [
-    { key: 'delegated', label: '위임', value: c.delegated, color: '#ffffff55', valueColor: 'var(--color-hero-ink)', bar: false },
-    { key: 'ready', label: '대기', value: c.ready, color: '#8a8f99' },
-    { key: 'working', label: '작업 중', value: c.working, color: 'var(--sm-active, #5DB1E5)' },
-    { key: 'waiting', label: '승인 대기', value: c.waiting, color: 'var(--sm-wait, #F0B068)' },
+    { key: 'delegated', label: '위임', value: c.delegated, color: 'var(--color-border-input)', valueColor: 'var(--color-fg)', bar: false },
+    { key: 'ready', label: '대기', value: c.ready, color: 'var(--color-pending)' },
+    { key: 'working', label: '작업 중', value: c.working, color: 'var(--color-progress)' },
+    { key: 'waiting', label: '승인 대기', value: c.waiting, color: 'var(--color-warning)' },
     // 막힘은 대기의 부분집합(선행 대기·에이전트 꺼짐) — 막대에 넣으면 이중으로 센다.
-    { key: 'stuck', label: '막힘', value: c.stuck, color: '#D8563E', valueColor: '#ff8a78', bar: false },
+    { key: 'stuck', label: '막힘', value: c.stuck, color: 'var(--color-danger)', bar: false },
   ]
   const lede = (
     <>

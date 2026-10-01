@@ -61,11 +61,11 @@ function signalAt(d: RosterDesk): string | null {
 export function rosterHero(roster: Roster): { tiles: HeroTile[]; lede: ReactNode } {
   const t = roster.tiles
   const tiles: HeroTile[] = [
-    { key: 'working', label: '업무 중', value: t.working, color: '#5DB1E5' },
-    { key: 'blocked', label: '결정 대기', value: t.blocked, color: '#F0B068' },
-    { key: 'stale', label: '무응답', value: t.stale, color: '#D8563E', valueColor: '#ff8a78' },
-    { key: 'offline', label: '끊김', value: t.offline, color: '#6b7580', valueColor: '#b7bfba' },
-    { key: 'empty', label: '빈자리', value: t.empty, color: '#ffffff40', valueColor: 'var(--color-hero-ink)' },
+    { key: 'working', label: '업무 중', value: t.working, color: 'var(--color-progress)' },
+    { key: 'blocked', label: '결정 대기', value: t.blocked, color: 'var(--color-warning)' },
+    { key: 'stale', label: '무응답', value: t.stale, color: 'var(--color-danger)' },
+    { key: 'offline', label: '끊김', value: t.offline, color: 'var(--color-fg-muted)' },
+    { key: 'empty', label: '빈자리', value: t.empty, color: 'var(--color-border-input)', valueColor: 'var(--color-fg)' },
   ]
   const pcs = roster.hosts.filter(h => h.conforming).length
   const lede = roster.hosts.length === 0

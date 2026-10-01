@@ -19,7 +19,7 @@ export const DELETED_TOKENS = ['hero-from', 'hero-via', 'hero-to', 'sheet-gutter
 /** 지운 클래스(globals.css 규칙과 src 의 사용 모두 0) — 과제 8·9·14 가 더한다 */
 export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile', 'btn-accent']
 /** 지운 비색 변수(선언과 var() 사용 모두 0) — 과제 8·9·13 이 더한다 */
-export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft', '--gradient-accent', '--color-accent-fg']
+export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft', '--gradient-accent', '--color-accent-fg', '--gradient-dark']
 const UTIL = '(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|via|to|fill|stroke|divide|decoration|placeholder|shadow|accent|caret)'
 
 describe('별칭 표(@theme inline)', () => {

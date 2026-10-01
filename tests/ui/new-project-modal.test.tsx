@@ -63,7 +63,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     act(() => setValue(nameInput, '신규 프로젝트'))
     act(() => setValue(levelsInput, '단계,단계'))
 
-    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    const createBtn = document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!
     await act(async () => {
       createBtn.click()
       await Promise.resolve()
@@ -92,7 +92,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     expect(document.body.textContent).toContain('복사합니다: 설정 값·팀·업무영역')
     expect(document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')?.value).toBe('단계, 작업')
     act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!, '복사본'))
-    await act(async () => { document.querySelector<HTMLButtonElement>('button.btn-primary')!.click(); await Promise.resolve() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!.click(); await Promise.resolve() })
     expect(mocks.createProject).toHaveBeenCalledWith(expect.objectContaining({ copyFromProjectId: sourceId, levelLabels: ['단계', '작업'] }))
   })
 
@@ -106,7 +106,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     const select = document.querySelector<HTMLSelectElement>('#copy-source-project')!
     await act(async () => { select.value = sourceId; select.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve() })
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('wbs.excel_profile')
-    expect(document.querySelector<HTMLButtonElement>('button.btn-primary')!.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!.disabled).toBe(true)
     expect(mocks.createProject).not.toHaveBeenCalled()
   })
 
@@ -118,7 +118,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     act(() => setValue(nameInput, '신규 프로젝트'))
     act(() => setValue(levelsInput, ' 단계 , 작업 '))
 
-    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    const createBtn = document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!
     await act(async () => {
       createBtn.click()
       await Promise.resolve()
@@ -138,7 +138,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     act(() => setValue(nameInput, '신규 프로젝트'))
     act(() => setValue(levelsInput, '단계,작업'))
 
-    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    const createBtn = document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!
     await act(async () => {
       createBtn.click()
       await Promise.resolve()
@@ -155,7 +155,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     const levelsInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!
     act(() => setValue(nameInput, name))
     act(() => setValue(levelsInput, '단계,작업'))
-    const createBtn = document.querySelector<HTMLButtonElement>('button.btn-primary')!
+    const createBtn = document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!
     await act(async () => {
       createBtn.click()
       await Promise.resolve()

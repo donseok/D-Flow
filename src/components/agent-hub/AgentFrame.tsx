@@ -22,21 +22,21 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
   const barTiles = tiles.filter(t => t.bar !== false && t.value > 0)
   const total = barTiles.reduce((n, t) => n + t.value, 0)
   return (
-    <header data-agent-hero className="hero-card hero-glow grid items-center gap-7 px-7 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
-      <div className="relative z-[1] min-w-0">
+    <header data-agent-hero className="hero-card grid items-center gap-7 px-7 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
+      <div className="relative z-10 min-w-0">
         {nav}
         <p className="mt-3.5 text-[11px] font-semibold tracking-[0.12em] text-hero-ink-muted">{projectName}</p>
         <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-hero-ink">{title}</h1>
-        <div data-agent-lede className="mt-1.5 text-[15px] text-hero-ink-muted [&_b]:text-hero-ink [&_em]:not-italic [&_em]:text-[#f2aa4c]">{lede}</div>
+        <div data-agent-lede className="mt-1.5 text-[15px] text-hero-ink-muted [&_b]:text-fg [&_em]:not-italic [&_em]:text-warning">{lede}</div>
       </div>
-      <div className="relative z-[1] flex min-w-0 flex-col gap-3">
+      <div className="relative z-10 flex min-w-0 flex-col gap-3">
         {aside}
-        <div className="flex h-3.5 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden>
+        <div className="flex h-3.5 overflow-hidden rounded-full bg-surface-subtle" aria-hidden>
           {total > 0 && barTiles.map(t => <i key={t.key} className="block h-full" style={{ width: `${(t.value / total) * 100}%`, background: t.color }} />)}
         </div>
         <ul aria-label="현황" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
           {tiles.map(t => (
-            <li key={t.key} className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
+            <li key={t.key} className="rounded-(--radius-panel) border border-border bg-surface-subtle px-3 py-2.5">
               <b data-hero-tile={t.key} className="block text-2xl font-extrabold leading-none tabular-nums" style={{ color: t.valueColor ?? t.color }}>{t.value}</b>
               <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-hero-ink-muted">
                 <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: t.color }} />{t.label}

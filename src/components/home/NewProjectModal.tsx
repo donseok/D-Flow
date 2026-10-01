@@ -19,7 +19,7 @@ export function NewProjectModal({
   workspaceId,
   copyCandidates = [],
   label,
-  className = 'inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-hero-ink backdrop-blur transition hover:bg-white/20',
+  className = 'btn btn-primary',
 }: {
   /** 만들 워크스페이스 — SP3 전까지 서버 컴포넌트가 유일 소속(resolveSoleWorkspaceId)으로 정해 넘긴다. */
   workspaceId: string

@@ -493,12 +493,12 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
           onClick={() => setOpen(true)}
           aria-label={t('chat.open')}
           aria-haspopup="dialog"
-          className="fixed bottom-16 right-5 z-[120] flex h-[52px] w-[52px] items-center justify-center rounded-full text-white ring-1 ring-white/10 transition hover:scale-105 active:scale-95"
-          style={{ backgroundImage: 'var(--gradient-dark)', boxShadow: 'var(--shadow-lg)' }}
+          className="fixed bottom-16 right-5 z-[120] flex h-[52px] w-[52px] items-center justify-center rounded-full border border-border bg-surface-raised text-fg transition hover:scale-105 active:scale-95"
+          style={{ boxShadow: 'var(--shadow-popover)' }}
         >
           <RobotMascot className="h-9 w-9" label={assistantName} />
           {ctx && ctx.weekStartCount > 0 && (
-            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-[#13161c] bg-brand" />
+            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-surface-raised bg-brand" />
           )}
         </button>
       )}
@@ -508,16 +508,16 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
         <button
           onClick={() => setCollapsed(false)}
           aria-label={t('chat.expand')}
-          className="fixed bottom-16 right-5 z-[130] flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 text-white ring-1 ring-white/10 transition hover:brightness-110 active:scale-95"
-          style={{ backgroundImage: 'var(--gradient-dark)', boxShadow: 'var(--shadow-lg)' }}
+          className="fixed bottom-16 right-5 z-[130] flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 border border-border bg-surface-raised text-fg transition hover:bg-surface-hover active:scale-95"
+          style={{ boxShadow: 'var(--shadow-popover)' }}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-subtle ring-1 ring-border">
             <RobotMascot className="h-6 w-6" label={assistantName} />
           </span>
           <span className="text-sm font-bold">{assistantName}</span>
           {/* 응답 스트리밍 중 표시점 — 접혀 있어도 진행 상황을 알 수 있게 */}
           {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-brand" />}
-          <ChevronUp className="h-4 w-4 text-white/70" />
+          <ChevronUp className="h-4 w-4 text-fg-secondary" />
         </button>
       )}
 
@@ -530,32 +530,32 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
           style={{ boxShadow: 'var(--shadow-xl)' }}
         >
           {/* 헤더 */}
-          <header className="flex items-center gap-3 px-4 py-3.5 text-white" style={{ backgroundImage: 'var(--gradient-dark)' }}>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+          <header className="flex items-center gap-3 border-b border-border bg-surface-raised px-4 py-3.5 text-fg">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface-subtle ring-1 ring-border">
               <RobotMascot className="h-8 w-8" label={assistantName} />
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[15px] font-bold leading-tight">{assistantName}</div>
-              <div className="truncate text-xs text-white/60">{currentProjectName ?? t('nav.allProjects')}</div>
+              <div className="truncate text-xs text-fg-muted">{currentProjectName ?? t('nav.allProjects')}</div>
             </div>
             <button
               onClick={() => setCollapsed(true)}
               aria-label={t('chat.collapse')}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
             >
               <ChevronDown className="h-4 w-4" />
             </button>
             <button
               onClick={reset}
               aria-label={t('chat.reset')}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
             >
               <RotateCcw className="h-4 w-4" />
             </button>
             <button
               onClick={close}
               aria-label={t('common.close')}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
             >
               <X className="h-4 w-4" />
             </button>
@@ -578,7 +578,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
                   <button
                     onClick={() => send('이번 주 시작 작업 알려줘')}
                     disabled={loading}
-                    className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:brightness-110 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
                   >
                     <CalendarDays className="h-3.5 w-3.5" /> {t('chat.chip.weekStartPrefix')}
                     {ctx.weekStartCount}
@@ -648,8 +648,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
                 onClick={() => send(input)}
                 disabled={!input.trim() || loading}
                 aria-label={t('chat.send')}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition hover:brightness-105 disabled:opacity-40"
-                style={{ backgroundColor: '#ef9a9a', boxShadow: 'var(--shadow-sm)' }}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-action text-action-fg transition hover:bg-action-hover disabled:opacity-40"
               >
                 <Send className="h-5 w-5" />
               </button>
@@ -684,7 +683,7 @@ function Bubble({
       <div
         className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
           isUser
-            ? 'rounded-br-md bg-brand text-white'
+            ? 'rounded-br-md bg-brand text-action-fg'
             : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
         }`}
       >
@@ -763,7 +762,7 @@ function ProposalCard({
               <button
                 onClick={() => onApply(msg.id, p)}
                 disabled={disabled}
-                className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-white transition hover:brightness-110 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
               >
                 적용
               </button>

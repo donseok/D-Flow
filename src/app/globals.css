@@ -325,8 +325,6 @@
   /* 소비 넷 — C 소유 (app)/projects/page.tsx 카드 이니셜(UI-2b 이동 커밋)·not-found.tsx 둘(과제 13)·HeaderChrome 계정 아바타(UI-2b).
      마지막 소비처를 고치는 커밋이 함께 지운다(계획 판정 Q15) */
   --gradient-primary: linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600));
-  /* 과제 13(AssistantChat)이 소비처와 함께 지운다 */
-  --gradient-dark: linear-gradient(165deg, #1c2028 0%, #14181f 55%, #0d1014 100%);
 }
 
 /* 위 :root 와 같은 이름의 다크 값은 반드시 이 뒤에(같은 특이성은 뒤가 이긴다 — 판정 Q36) */
@@ -334,9 +332,6 @@
   --shadow-popover: 0 8px 24px -8px rgb(0 0 0 / 0.55);
   --shadow-modal: 0 24px 56px -16px rgb(0 0 0 / 0.65);
   --shadow-freeze-edge: 6px 0 8px -6px rgb(0 0 0 / 0.5);
-
-  /* 비색 — 과제 13(AssistantChat)이 소비처와 함께 지운다 */
-  --gradient-dark: linear-gradient(165deg, #14181f 0%, #0e1116 55%, #090b0e 100%);
 }
 
 html,

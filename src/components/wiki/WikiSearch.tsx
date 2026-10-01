@@ -88,7 +88,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
   // (회귀: 랩탑에서 검색창·칩이 통째로 사라짐). 페이지 제목(pageHero)은
   // 다른 화면과 같이 `hero` 로 두어 컴팩트에서 걷힌다 — 헤더 브레드크럼이 위치를 보여준다.
   const searchCard = (
-    <section className="hero-card hero-glow overflow-hidden px-5 py-4 sm:px-7 sm:py-5" aria-labelledby="wiki-search-title">
+    <section className="hero-card overflow-hidden px-5 py-4 sm:px-7 sm:py-5" aria-labelledby="wiki-search-title">
       {/* 2분할 개편(2026-08-17): 결과 그리드가 카드 전폭을 쓰도록 max-w-3xl 을 풀었다.
           높이 압축(2026-08-19): 이 카드는 c635f14 이후 고정 히어로라 화면에서 차지한
           높이만큼 결과·읽기 패널이 영구히 줄어든다. 아이브로우·제목·설명 3단 세로
@@ -96,8 +96,8 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
           flex-wrap 으로 종전처럼 접히므로 모바일 가독성은 그대로다. */}
       <div className="relative z-10">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="inline-flex shrink-0 translate-y-px items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-hero-ink-muted">
-            <Sparkles className="h-3.5 w-3.5 text-[#3fd8c6]" aria-hidden />
+          <span className="inline-flex shrink-0 translate-y-px items-center gap-1.5 text-xs font-semibold text-fg-secondary">
+            <Sparkles className="h-3.5 w-3.5 text-action" aria-hidden />
             {t(locale, 'wiki.ask.eyebrow')}
           </span>
           <h2 id="wiki-search-title" className="text-lg font-bold tracking-tight text-hero-ink sm:text-xl">
@@ -123,7 +123,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
               placeholder={t(locale, 'wiki.search2.placeholder')}
               aria-label={t(locale, 'wiki.search2.placeholder')}
               disabled={busy}
-              className="h-11 w-full rounded-2xl border border-white/15 bg-surface pl-11 pr-4 text-sm text-ink shadow-[var(--shadow-sm)] outline-none transition placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand-ring disabled:opacity-70"
+              className="h-11 w-full rounded-(--radius-control) border border-border-input bg-surface pl-11 pr-4 text-sm text-fg outline-none transition-[border-color] duration-(--motion-fast) placeholder:text-fg-muted focus:border-border-focus focus:ring-2 focus:ring-border-focus/25 disabled:opacity-70"
             />
           </div>
           <button type="submit" disabled={busy || !query.trim()} className="btn btn-primary h-11 rounded-2xl px-5">
@@ -144,7 +144,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
                   type="button"
                   onClick={() => runChip(label)}
                   disabled={busy}
-                  className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-xs text-hero-ink-muted transition hover:bg-white/[0.11] hover:text-hero-ink disabled:opacity-50"
+                  className="rounded-full border border-border bg-surface-subtle px-3 py-1 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg disabled:opacity-50"
                 >
                   {label}
                 </button>

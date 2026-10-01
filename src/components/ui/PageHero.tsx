@@ -21,10 +21,10 @@ export function PageHero({
     // 기준은 크롬 압축(useCompactViewport COMPACT_MQ)과 동일: 폭≥1280 그리고 높이≥800 일 때만 표시.
     // lg: 같은 폭 전용 유틸을 쓰면 낮은 랩탑 화면에서 새 나온다(높이 조건이 없어서).
     <section className="hidden gap-4 [@media(min-width:1280px)_and_(min-height:800px)]:grid">
-      <div className="hero-glow hero-card flex flex-col px-6 py-3 sm:px-8">
+      <div className="flex flex-col border-b border-border bg-surface px-6 py-3 sm:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold leading-tight tracking-tight text-hero-ink">
+            <h1 className="truncate text-lg font-bold leading-tight tracking-tight text-fg">
               {title}
             </h1>
           </div>
@@ -37,7 +37,7 @@ export function PageHero({
 /** 히어로 상단의 작은 카테고리 pill (예: "Settings") */
 export function HeroBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.08] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-hero-ink">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-3 py-1 text-xs font-semibold text-fg-secondary">
       {children}
     </span>
   )

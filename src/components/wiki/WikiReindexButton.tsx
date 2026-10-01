@@ -128,10 +128,9 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
         .replace('{chunks}', String(status.chunks))
     : null
 
-  // 히어로 카드(항상 다크) 위에 앉으므로 시맨틱 done/delayed 토큰을 쓰지 않는다 —
-  // 라이트 테마 값(#138a67·#cb4b5f)이 다크 배경에서 안 보인다. 다크 테마 값을 직접 쓴다.
+  // 히어로 카드는 밝은 표면이다(SP3b UI-1) — 상태 글자는 의미 토큰 success·danger 가 테마마다 대비를 맞춘다.
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-hero-ink-muted">
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-fg-secondary">
       {statusText && <span>{statusText}</span>}
 
       {run.kind === 'stepping' && (
@@ -144,17 +143,17 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
             .replace('{b}', String(run.total))}
         </span>
       )}
-      {run.kind === 'done' && <span className="text-[#34c997]">{t(locale, 'wiki.reindex.done')}</span>}
+      {run.kind === 'done' && <span className="text-success">{t(locale, 'wiki.reindex.done')}</span>}
       {run.kind === 'quotaExhausted' && (
         <span>{t(locale, 'wiki.reindex.quotaExhausted').replace('{n}', String(run.remaining))}</span>
       )}
-      {run.kind === 'failed' && <span className="text-[#ff738a]">{t(locale, 'wiki.reindex.failed')}</span>}
+      {run.kind === 'failed' && <span className="text-danger">{t(locale, 'wiki.reindex.failed')}</span>}
 
       <button
         type="button"
         onClick={() => void runReindex()}
         disabled={running}
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-2.5 text-xs text-hero-ink-muted transition hover:bg-white/[0.11] hover:text-hero-ink disabled:opacity-50"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-2.5 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg disabled:opacity-50"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${running ? 'animate-spin' : ''}`} aria-hidden />
         {t(locale, 'wiki.reindex.button')}
@@ -163,7 +162,7 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
         <button
           type="button"
           onClick={() => { stopRef.current = true }}
-          className="inline-flex h-7 shrink-0 items-center rounded-full border border-white/15 bg-white/[0.06] px-2.5 text-xs text-hero-ink-muted transition hover:bg-white/[0.11] hover:text-hero-ink"
+          className="inline-flex h-7 shrink-0 items-center rounded-full border border-border bg-surface-subtle px-2.5 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
         >
           {t(locale, 'wiki.reindex.stop')}
         </button>
