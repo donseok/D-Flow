@@ -277,7 +277,9 @@ export async function createProjectInvite(
     if ((insErr as { code?: string } | null)?.code === '23505') return { ok: false, error: ERR_DUP }
     // 트리거(project_invites_guard)의 2차 판정 — 가드와 엇갈리면 DB 판정을 문구로.
     if (insErr?.message.includes('PROJECT_INVITE_ADMIN_FORBIDDEN')) return { ok: false, error: ERR_ADMIN_INVITE }
-    if (insErr?.message.includes('PROJECT_INVITE_TEAM_SCOPE')) return { ok: false, error: ERR_TEAM }
+    if (insErr?.message.includes('PROJECT_INVITE_TEAM_SCOPE') || insErr?.message.includes('TEAM_SCOPE_PROJECT_OWNED')) {
+      return { ok: false, error: ERR_TEAM }   // 둘째는 같은 code 의 전용 팀이 있는 공용 팀(*_command_receipts ⑤′) — 팀 캐시가 전환 직후 낡았을 때
+    }
     // 토큰은 로그에 남기지 않는다 — 로그 열람 권한이 곧 가입 자격이 되어서는 안 된다.
     console.error('[createProjectInvite] 저장 실패:', insErr?.message ?? 'unknown')
     return { ok: false, error: '초대를 저장하지 못했습니다.' }

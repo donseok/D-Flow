@@ -569,6 +569,14 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  // 같은 code 의 전용 팀이 있는 공용 팀(*_command_receipts ⑤′) — 사전검사의 팀 캐시가 전환 직후 낡았으면 트리거까지 온다(A1-4 리뷰 P1)
+  it('트리거의 공용 팀 참조 거부(TEAM_SCOPE_PROJECT_OWNED)는 팀 범위 문구로 바꾼다', async () => {
+    const { client } = createClient({ insertError: { code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' } })
+    createAdminClient.mockReturnValue(client as never)
+    expect(await createProjectInvite(P1, VALID)).toEqual({ ok: false, error: '알 수 없는 팀입니다.' })
+    expect(send).not.toHaveBeenCalled()
+  })
+
   // 토큰은 초대 링크 그 자체다. UI 가 읽지도 않는 필드로 원본 토큰이 RSC 페이로드에 실려 브라우저까지 가면
   // 목록을 볼 수 있는 사람이 곧 전부의 열쇠를 갖는다 — 해시도 싣지 않는다(DB 조회 키다).
   it('반환 행에 토큰·해시를 싣지 않는다', async () => {
