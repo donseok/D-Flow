@@ -72,8 +72,8 @@ describe('목록 액션(scope 첫 인자)', () => {
     expect(await fetchMinuteFavorites(WA)).toEqual(['m1'])
   })
   it('비소속 워크스페이스는 관문 전에 거부 값(존재 은닉) — 로더를 부르지 않는다', async () => {
-    expect(await fetchMinutesRange({ workspaceId: WB, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual([])
-    expect(await fetchMinutesSearch({ workspaceId: WB, projectId: null }, 'acme', null)).toEqual([])
+    expect(await fetchMinutesRange({ workspaceId: WB, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual({ ok: true, rows: [] })
+    expect(await fetchMinutesSearch({ workspaceId: WB, projectId: null }, 'acme', null)).toEqual({ ok: true, rows: [] })
     expect(await fetchMinutesExplorer({ workspaceId: WB, projectId: null })).toBeNull()
     expect(await fetchMinuteFavorites(WB)).toBeNull()
     expect(requireModule).not.toHaveBeenCalled()
@@ -82,7 +82,7 @@ describe('목록 액션(scope 첫 인자)', () => {
   })
   it('W11 — 프로젝트가 그 워크스페이스의 아는 프로젝트가 아니면(다른 워크스페이스·모름·형식 밖) 비소속과 같은 거부 값', async () => {
     for (const p of [PB, '00000000-0000-0000-7e57-00000000167f', 'x']) {
-      expect(await fetchMinutesRange({ workspaceId: WA, projectId: p }, '2026-09-01', '2026-09-30', null), p).toEqual([])
+      expect(await fetchMinutesRange({ workspaceId: WA, projectId: p }, '2026-09-01', '2026-09-30', null), p).toEqual({ ok: true, rows: [] })
     }
     expect(h.getMinutesPage).not.toHaveBeenCalled()
     expect(requireModule).not.toHaveBeenCalled()
@@ -95,13 +95,24 @@ describe('목록 액션(scope 첫 인자)', () => {
   })
   it('관문이 닫히면 로더를 부르지 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: '꺼짐' })
-    expect(await fetchMinutesRange({ workspaceId: WA, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual([])
+    expect(await fetchMinutesRange({ workspaceId: WA, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual({ ok: true, rows: [] })
     expect(h.getMinutesPage).not.toHaveBeenCalled()
   })
   it('권한 조회 실패는 거부 값(목록) — 로더를 부르지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.getActor.mockRejectedValue(new Error('down'))
     expect(await fetchMinutesExplorer({ workspaceId: WA, projectId: null })).toBeNull()
     expect(h.getMinutesExplorer).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+  it('월 이동·검색은 권한 조회 실패를 빈 목록이 아니라 실패로 돌려주고 원인을 로그에 남긴다(fetchMyMeetings 와 같은 꼴, V5)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getActor.mockRejectedValue(new Error('down'))
+    expect(await fetchMinutesRange({ workspaceId: WA, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await fetchMinutesSearch({ workspaceId: WA, projectId: null }, 'acme', null)).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(err).toHaveBeenCalledWith('[minutes] 권한 조회 실패:', 'down')
+    expect(h.getMinutesPage).not.toHaveBeenCalled(); expect(h.searchMinutes).not.toHaveBeenCalled()
+    err.mockRestore()
   })
 })
 

@@ -96,7 +96,11 @@ async function minutesScopeGate(scope: unknown): Promise<{ ok: true; scope: Minu
   const s = parseMinutesScope(scope)
   if (!s || (s.projectId !== null && !ANY_UUID_RE.test(s.projectId))) return { ok: false, error: ERR_MISSING }
   let actor: Actor | null
-  try { actor = await getActor() } catch { return { ok: false, error: ERR_LOOKUP } }
+  try { actor = await getActor() } catch (e) {
+    // 권한 조회 실패는 '없음'이 아니다 — 원인을 남기고 ERR_LOOKUP 으로 구분한다(목록 액션은 실패로 돌려준다, U2a-3 리뷰 V5)
+    console.error('[minutes] 권한 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: ERR_LOOKUP }
+  }
   if (!actor || !isWorkspaceMember(actor, s.workspaceId)) return { ok: false, error: ERR_MISSING }
   if (s.projectId !== null && actor.projectWorkspace.get(s.projectId) !== s.workspaceId) return { ok: false, error: ERR_MISSING }
   const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
@@ -1027,23 +1031,29 @@ export async function fetchMeetingMinutesLite(
 }
 
 /** 월 이동 시 클라이언트 호출용. 범위는 화면의 워크스페이스·?project=(계획 V13) — 소속·프로젝트 확인 뒤 관문(minutesScopeGate). */
+/** 회의록 목록(월 이동·검색) 결과 — 권한 조회 실패는 빈 목록이 아니라 실패다(fetchMyMeetings 와 같은 꼴, U2a-3 리뷰 V5).
+ *  비소속·남의 프로젝트·꺼진 모듈은 존재를 드러내지 않고 빈 목록(ok). */
+export type MinutesListResult = { ok: true; rows: Minute[] } | { ok: false; error: string }
+const listOrFail = (g: { ok: false; error: string }): MinutesListResult =>
+  g.error === ERR_LOOKUP ? { ok: false, error: g.error } : { ok: true, rows: [] }
+
 export async function fetchMinutesRange(
   scope: MinutesScope, rangeStart: string, rangeEnd: string, team: TeamCode | null,
-): Promise<Minute[]> {
+): Promise<MinutesListResult> {
   const user = await getSession()
-  if (!user) return []
+  if (!user) return { ok: true, rows: [] }
   const g = await minutesScopeGate(scope)
-  if (!g.ok) return []
-  return getMinutesPage(g.scope.workspaceId, g.scope.projectId, rangeStart, rangeEnd, team)
+  if (!g.ok) return listOrFail(g)
+  return { ok: true, rows: await getMinutesPage(g.scope.workspaceId, g.scope.projectId, rangeStart, rangeEnd, team) }
 }
 
 /** 검색 입력 시 클라이언트 호출용(전 기간, 100건 캡). */
-export async function fetchMinutesSearch(scope: MinutesScope, q: string, team: TeamCode | null): Promise<Minute[]> {
+export async function fetchMinutesSearch(scope: MinutesScope, q: string, team: TeamCode | null): Promise<MinutesListResult> {
   const user = await getSession()
-  if (!user) return []
+  if (!user) return { ok: true, rows: [] }
   const g = await minutesScopeGate(scope)
-  if (!g.ok) return []
-  return searchMinutes(g.scope.workspaceId, g.scope.projectId, q, team, 100)
+  if (!g.ok) return listOrFail(g)
+  return { ok: true, rows: await searchMinutes(g.scope.workspaceId, g.scope.projectId, q, team, 100) }
 }
 
 /** 탐색기 진입/재시도/업로드 후 클라이언트 호출용.

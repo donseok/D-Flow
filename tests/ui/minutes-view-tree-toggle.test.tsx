@@ -53,9 +53,11 @@ const treeResultTwoLeaves = {
 }
 const fetchMinutesExplorer = vi.fn(async () => treeResult as typeof treeResult | null)
 const toggleMinuteFavorite = vi.fn(async (id: string, on: boolean) => { void id; void on; return true })
+type ListResult = { ok: true; rows: unknown[] } | { ok: false; error: string }
+const fetchMinutesRange = vi.fn<(...a: unknown[]) => Promise<ListResult>>(async () => ({ ok: true, rows: [] }))
 vi.mock('@/app/actions/minutes', () => ({
-  fetchMinutesRange: vi.fn(async () => []),
-  fetchMinutesSearch: vi.fn(async () => []),
+  fetchMinutesRange: (...a: unknown[]) => fetchMinutesRange(...a),
+  fetchMinutesSearch: vi.fn(async () => ({ ok: true, rows: [] })),
   fetchMinutesExplorer: (...a: unknown[]) => fetchMinutesExplorer(...(a as [])),
   fetchMinuteFavorites: vi.fn(async () => []),
   toggleMinuteFavorite: (...a: unknown[]) => toggleMinuteFavorite(...(a as [string, boolean])),
@@ -177,6 +179,14 @@ describe('MinutesView 트리 뷰 배선', () => {
     const last = chatProps.mock.calls.at(-1)![0] as { from: string | null; to: string | null }
     expect(last.from).toBe('2026-07-01')
     expect(last.to).toBe('2026-07-31')
+  })
+
+  it('월 이동이 실패로 돌아오면 빈 달로 갈아 끼우지 않고 토스트로 사유를 알린다(V5)', async () => {
+    fetchMinutesRange.mockResolvedValueOnce({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    await mount('calendar')
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="next month"]')!.click())
+    expect(fetchMinutesRange).toHaveBeenCalledWith({ workspaceId: 'ws-1', projectId: null }, '2026-08-01', '2026-08-31', null)
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.list.loadError', description: '권한을 확인할 수 없어 중단했습니다.', variant: 'error' }))
   })
 
   it('그리드/리스트는 트리 선택 중에만 상단 액션줄에 노출된다', async () => {

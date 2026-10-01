@@ -21,8 +21,8 @@ vi.mock('@/components/minutes/MinutesCalendar', () => ({ MinutesCalendar: () => 
 vi.mock('@/components/minutes/MinuteUploadModal', () => ({ MinuteUploadModal: () => null }))
 vi.mock('@/components/minutes/ArchiveChatPanel', () => ({ ArchiveChatPanel: () => null }))
 vi.mock('@/app/actions/minutes', () => ({
-  fetchMinutesRange: vi.fn(async () => []),
-  fetchMinutesSearch: vi.fn(async () => []),
+  fetchMinutesRange: vi.fn(async () => ({ ok: true, rows: [] })),
+  fetchMinutesSearch: vi.fn(async () => ({ ok: true, rows: [] })),
   fetchMinutesExplorer: vi.fn(async () => ({ folders: [], leaves: [], total: 0, truncated: false })),
   fetchMinuteFavorites: vi.fn(async () => []),
   toggleMinuteFavorite: vi.fn(async () => true),

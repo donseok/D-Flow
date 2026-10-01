@@ -155,8 +155,11 @@ export function MinutesView({
   async function loadMonth(y: number, m0: number, tk: TeamKey) {
     const gen = ++reqRef.current
     const [rs, re] = monthRangeOf(y, m0)
-    const rows = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
-    if (reqRef.current === gen) setMinutes(rows)
+    const res = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
+    if (reqRef.current !== gen) return
+    // 실패는 '이 달 회의록 없음'이 아니다 — 지난 목록을 두고 사유를 알린다(에러 처리 3원칙 ①)
+    if (res.ok) setMinutes(res.rows)
+    else toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
   }
   function shift(delta: number) {
     if (isSearch) return
@@ -176,8 +179,11 @@ export function MinutesView({
     const gen = ++reqRef.current
     if (!q.trim()) { void loadMonth(year, month0, tk); return }
     setSearching(true)
-    const rows = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
-    if (reqRef.current === gen) { setMinutes(rows); setSearching(false) }
+    const res = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
+    if (reqRef.current !== gen) return
+    setSearching(false)
+    if (res.ok) setMinutes(res.rows)
+    else toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
   }
   function changeView(v: ViewKey) {
     setView(v)
