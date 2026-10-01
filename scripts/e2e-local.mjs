@@ -87,6 +87,8 @@ const ACTIONS = {
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
+  setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/admin/accounts/page' },
+  listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -691,6 +693,30 @@ async function main() {
   if (wsSettingsChecks[1].modulesAllowedInHtml) throw new Fail('플랫폼 관리자가 아닌 ana 의 설정 화면에 모듈 허용 구역이 있다')
   if (!wsSettingsChecks[3].modulesAllowedInHtml) throw new Fail('플랫폼 관리자의 설정 화면에 모듈 허용 구역이 없다')
   step('workspace-settings-boundary', { checks: wsSettingsChecks })
+
+  // ── 17c. SP3a D — 관리 화면의 권한 변경이 행위자·명령 id 와 함께 이력에 남고 관리자가 읽는다(스펙 §7.3 의 8단계).
+  // 플랫폼 관리자(admin)가 setWorkspaceRole(A, ana, member) → 다시 admin 으로 되돌린다. 화면이 부르는 같은 서버 액션이다.
+  // 이력은 DB(권한 RPC 안의 트리거가 쓴다)와 listAuthzEvents(화면의 읽기)로 둘 다 본다. 직접 쓰기 길은 없다.
+  await admin.http('GET', `/admin/accounts?project=${A.id}`, { expect: [200, 404] })
+  await admin.http('GET', `/w/${encodeURIComponent(wsARow.slug)}/settings`)
+  const flip = async (role) => mustOk(`setWorkspaceRole(${role})`, (await admin.action('/admin/accounts', 'setWorkspaceRole', [wsA, anaWs.userId, role])).result)
+  await flip('member'); await flip('admin')
+  const events = rows('권한 이력', await svc.from('authz_events').select('id, kind, workspace_id, target_user_id, before, after, cause, actor_user_id, command_id')
+    .eq('kind', 'workspace_role').eq('workspace_id', wsA).eq('target_user_id', anaWs.userId).eq('actor_user_id', me.id).order('id', { ascending: false }).limit(2))
+  same('이력 행 수(되돌림 + 변경)', events.length, 2)
+  same('되돌림(최신)의 전·후', [events[0].before, events[0].after], [{ role: 'member' }, { role: 'admin' }])
+  same('변경의 전·후', [events[1].before, events[1].after], [{ role: 'admin' }, { role: 'member' }])
+  for (const e of events) {
+    if (e.cause !== 'direct') throw new Fail(`권한 이력의 원인이 direct 가 아니다: ${e.cause}`)
+    if (!e.command_id) throw new Fail('권한 이력에 명령 id 가 없다')
+  }
+  if (events[0].command_id === events[1].command_id) throw new Fail('두 호출이 같은 명령 id 를 썼다')
+  const listed = (await admin.action(`/w/${wsARow.slug}/settings`, 'listAuthzEvents', [wsA])).result
+  if (!listed?.ok) throw new Fail(`listAuthzEvents 실패: ${JSON.stringify(listed)}`)
+  const flipRows = listed.rows.filter((r) => r.kind === 'workspace_role').slice(0, 2)
+  same('화면 목록의 요약', flipRows.map((r) => r.summary), ['멤버 → 관리자', '관리자 → 멤버'])
+  if (flipRows.some((r) => r.actorName === '삭제된 계정' || r.actorName === '시스템')) throw new Fail(`행위자 이름이 비었다: ${JSON.stringify(flipRows)}`)
+  step('authz-events', { rows: events.map((e) => ({ id: e.id, before: e.before, after: e.after, cause: e.cause, hasCommandId: !!e.command_id })), listed: flipRows })
 
   // ── 18. 외부 회의록 API(시크릿 + user_email) — meta 의 projects·목록의 items 가 그 사람의 워크스페이스로만 좁혀진다.
   // A 관리자(ana)·A 에 초대된 외부 계정은 C 를 못 보고, B 관리자(bea)는 C 만 본다. 플랫폼 관리자는 전부 본다(대조 — 음성 판정이
