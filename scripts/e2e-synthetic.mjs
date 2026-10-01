@@ -156,11 +156,17 @@ async function main() {
     same(`${label} modules.allowed`, wdoc.values['modules.allowed'], cfg.workspace['modules.allowed'])
     if (cfg.workspace['ai.enabled'] !== undefined) same(`${label} ai.enabled`, wdoc.values['ai.enabled'], cfg.workspace['ai.enabled'])
     const phist = await readHistory(admin.sb, 'project_settings_history', 'project_id', proj.id)
-    const edited = phist.filter((h) => h.source === 'edit')
+    // 키마다 이력이 남아야 한다 — 서버 액션으로 바뀐 키는 source=edit·행위자=플랫폼 관리자. 생성 때 이미 그 값이었던 키(modules.enabled 의 기본값은
+    // 워크스페이스 허용 목록에서 나온다)는 값이 안 바뀌어 edit 행이 없고, 생성 행(source=create)의 값이 기대값이어야 한다.
     for (const key of Object.keys(proj.expected).filter((k) => k !== 'core.level_labels')) {
-      const h = edited.find((x) => x.key === key)
-      if (!h) throw new Fail(`${label} ${key} 의 설정 이력이 없다`)
-      if (h.changed_by !== me.id) throw new Fail(`${label} ${key} 이력의 행위자가 플랫폼 관리자가 아니다: ${h.changed_by}`)
+      const edit = phist.find((x) => x.source === 'edit' && x.key === key)
+      if (edit) {
+        if (edit.changed_by !== me.id) throw new Fail(`${label} ${key} 이력의 행위자가 플랫폼 관리자가 아니다: ${edit.changed_by}`)
+        continue
+      }
+      const created = phist.find((x) => x.source === 'create' && x.key === key)
+      if (!created) throw new Fail(`${label} ${key} 의 설정 이력이 없다`)
+      same(`${label} ${key} 의 생성 시점 값(edit 행이 없어 생성 행이 근거)`, created.new_value, proj.expected[key])
     }
   }
   step('S1-create', {
