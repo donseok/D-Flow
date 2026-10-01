@@ -1,7 +1,7 @@
 -- NNNN_command_receipts — 가져오기 명령 영수증과 명령 RPC(SP4 Phase A1)
 -- 정본: docs/superpowers/specs/2026-10-01-sp4-weekly-teams-design.md §3.3(D5·D17·D34·D35·D54). 번호를 참조하지 않는다 — 리허설·테스트는 접미로 찾는다.
 -- 절: ① 영수증 표·인덱스·RLS ② 트리거 셋(워크스페이스 일치·고칠 수 없음·비우지 못함) ③ 옛 import_wbs·replace_wbs 의 표 이름 한정
---     ④ import_wbs_cmd ⑤ convert_inherited_teams ⑥ 권한 ⑦ 사후검사(COMMAND_RECEIPTS_POSTCHECK)
+--     ④ import_wbs_cmd ⑤ convert_inherited_teams ⑤′ 전용 팀 프로젝트의 공용 팀 참조 거부 ⑥ 권한 ⑦ 사후검사(COMMAND_RECEIPTS_POSTCHECK)
 -- 권한 원칙: 세션은 자기 영수증을 읽기만 한다(쓰기 정책·쓰기 grant 없음 — 남의 command_id 로 결과를 재생하지 못한다). 쓰기는 service_role 이
 --   부르는 DEFINER RPC 둘(④⑤)뿐이고, RPC 가 행위자(p_actor — 라우트 가드 결과의 actor.userId, D51)의 프로젝트 관리자 등급을 다시
 --   판정한다(*_weekly_areas 의 actor_is_project_admin). DEFINER 라 RLS admin_write_items 가 빠진 자리의 2차 방어선이다(D17).
@@ -277,7 +277,9 @@ begin
   if pg_catalog.current_setting('transaction_isolation') is distinct from 'read committed' then
     raise exception using errcode = '25001', message = 'TEAM_CONVERT_ISOLATION';
   end if;
-  select p.workspace_id into v_ws from public.projects p where p.id = p_project_id;
+  -- 프로젝트 행을 for update 로 잡는다 — 공용 팀 참조를 쓰는 트리거(⑤′ team_ref_owned_scope)는 같은 행을 for share 로 잡으므로,
+  -- 전환과 엇갈려 커밋되는 공용 팀 참조는 전환 앞에 끝나(아래 UPDATE 가 옮긴다) 전환 뒤에 오거나(트리거가 전용 팀을 보고 거부한다) 둘 중 하나다
+  select p.workspace_id into v_ws from public.projects p where p.id = p_project_id for update;
   if v_ws is null then
     raise exception using errcode = 'P0002', message = 'PROJECT_NOT_FOUND';
   end if;
@@ -337,13 +339,68 @@ begin
     'item_owners', v_owners, 'project_member_teams', v_member_teams, 'area_teams', v_area_teams, 'invites', v_invites));
 end $$;
 
+-- ⑤′ 전용 팀을 가진 프로젝트의 공용 팀 참조 거부(D4·D54 — A1-3 리뷰 M1). 전환 RPC 의 "그 프로젝트 안 공용 팀 참조 0" 은 커밋하는
+--    순간에만 맞았다 — 같은 잠금을 잡지 않는 쓰기(영역 RPC 의 'weekly:' 잠금·명단 RPC 의 'authz:' 잠금·세션 RLS 의 item_owners·명단 팀 쓰기·
+--    초대 발급)가 전환 뒤에도 공용 팀 id 를 다시 붙여 같은 code·다른 id 분열(D4)을 되살렸다. 기존 범위 가드 넷(0003·0009 — "전용 팀이거나
+--    같은 워크스페이스 공용 팀")은 그대로 두고, 이 트리거가 "그 프로젝트에 같은 code 의 전용 팀(비활성 포함)이 있는 공용 팀 거부"를 더한다
+--    (23514 TEAM_SCOPE_PROJECT_OWNED — 오래된 폼이 닫힌다). 분열(D4)은 같은 code·다른 id 이고, 전환은 쓰이는 공용 팀을 전부 같은 code 로
+--    복사하므로 전환 뒤 공용 팀 참조는 모두 여기 걸린다. "전용 팀이 하나라도 있으면 모든 공용 팀 거부"로 넓히지 않은 것은 전용 팀과 다른
+--    code 의 공용 팀을 함께 쓰는 프로젝트를 DB 가 지금 허용하고 그 계약을 무수정 불변식(workspace-isolation-cases ⓚ 의 대조 — A 프로젝트
+--    항목에 공용 SHR 담당)이 고정하기 때문이다("전용 팀이 있으면 공용 제외"의 표시 규칙은 앱 계층 그대로 — 0003).
+--    동시 실행 창: 이 트리거는 공용 팀 참조를 쓸 때만 프로젝트 행을 for share 로, 전환은 for update 로 읽는다(⑤).
+--    기존 가드 본문을 고치지 않고 트리거를 따로 둔 것은 롤백이 drop 만으로 끝나게 하려는 것이다.
+--    열이 바뀔 때만 돈다 — 팀·부모 열을 건드리지 않는 갱신(초대 수락의 redeemed_* 등)은 옛 행을 다시 판정하지 않는다.
+--    한계: 전용 팀을 새로 만드는 쓰기(팀 추가 액션)는 이 잠금을 잡지 않는다 — 전환의 전제 판독과 엇갈리면 23505(같은 code)가 날 수 있다
+create function public.team_ref_owned_scope() returns trigger
+language plpgsql security definer set search_path to '' as $$
+declare
+  v_project uuid;
+  v_teams uuid[];
+begin
+  if tg_table_name = 'item_owners' then
+    select w.project_id into v_project from public.wbs_items w where w.id = new.wbs_item_id;
+    v_teams := array[new.team_id];
+  elsif tg_table_name = 'project_member_teams' then
+    select pm.project_id into v_project from public.project_members pm where pm.id = new.member_id;
+    v_teams := array[new.team_id];
+  elsif tg_table_name = 'area_teams' then
+    select a.project_id into v_project from public.project_areas a where a.id = new.area_id;
+    v_teams := array[new.team_id];
+  elsif tg_table_name = 'project_invites' then
+    v_project := new.project_id;
+    v_teams := new.team_ids;
+  else
+    raise exception using errcode = '55000', message = 'TEAM_SCOPE_TRIGGER_MISPLACED';
+  end if;
+  -- 공용 팀을 가리키지 않으면 볼 것이 없다(범위 자체 — 다른 프로젝트·워크스페이스 팀 — 는 기존 가드 넷이 본다)
+  if v_project is null or v_teams is null
+     or not exists (select 1 from public.teams t where t.id = any (v_teams) and t.project_id is null) then
+    return new;
+  end if;
+  -- 전환이 진행 중이면 여기서 기다렸다가(read committed — 다음 문장은 새 스냅샷) 커밋된 전용 팀을 본다
+  perform 1 from public.projects p where p.id = v_project for share;
+  if exists (select 1 from public.teams t join public.teams o on o.project_id = v_project and o.code = t.code
+              where t.id = any (v_teams) and t.project_id is null) then
+    raise exception using errcode = '23514', message = 'TEAM_SCOPE_PROJECT_OWNED';
+  end if;
+  return new;
+end $$;
+create trigger item_owners_owned_scope before insert or update of team_id, wbs_item_id on public.item_owners
+  for each row execute function public.team_ref_owned_scope();
+create trigger project_member_teams_owned_scope before insert or update of team_id, member_id on public.project_member_teams
+  for each row execute function public.team_ref_owned_scope();
+create trigger area_teams_owned_scope before insert or update of team_id, area_id on public.area_teams
+  for each row execute function public.team_ref_owned_scope();
+create trigger project_invites_owned_scope before insert or update of team_ids, project_id on public.project_invites
+  for each row execute function public.team_ref_owned_scope();
+
 -- ⑥ 권한 — 새 함수는 public·anon·authenticated 에서 회수하고 서버 RPC 만 service_role 에 실행권을 준다. 트리거 함수는 revoke 만
 --    (service_role 은 기본 권한이 준 대로 둔다 — 스펙 §3.1). authenticated 가 실행하는 새 함수 0 — DEFINER_EXECUTABLE 무수정
 revoke all on function public.import_wbs_cmd(uuid, uuid, text, jsonb, jsonb, uuid), public.convert_inherited_teams(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function public.import_wbs_cmd(uuid, uuid, text, jsonb, jsonb, uuid), public.convert_inherited_teams(uuid, uuid)
   to service_role;
-revoke all on function public.command_receipts_reject_mutation() from public, anon, authenticated;
+revoke all on function public.command_receipts_reject_mutation(), public.team_ref_owned_scope() from public, anon, authenticated;
 
 -- ⑦ 사후검사 — COMMAND_RECEIPTS_POSTCHECK. 읽기만 한다(롤백 절 없음)
 do $$
@@ -402,7 +459,8 @@ begin
         from (values
           ('public.import_wbs_cmd(uuid, uuid, text, jsonb, jsonb, uuid)', true),
           ('public.convert_inherited_teams(uuid, uuid)', true),
-          ('public.command_receipts_reject_mutation()', false)) as f(fn, service)
+          ('public.command_receipts_reject_mutation()', false),
+          ('public.team_ref_owned_scope()', false)) as f(fn, service)
        cross join unnest(array['anon', 'authenticated', 'service_role']) as r(role)) e
    where has_function_privilege(e.role, e.fn::regprocedure, 'EXECUTE') is distinct from e.want
      and not (e.role = 'service_role' and not e.want);   -- 트리거 함수의 service_role 은 기본 권한이 준 대로 둔다(§3.1)
@@ -419,6 +477,23 @@ begin
       or not p.prosecdef
       or not coalesce('lock_timeout=15s' = any(p.proconfig), false);
   if v is not null then raise exception 'COMMAND_RECEIPTS_POSTCHECK: 격리 검사·DEFINER·잠금 대기 상한이 없다: %', v; end if;
+
+  -- ⑤′ 공용 팀 참조 거부 트리거 넷 존재·활성, 함수는 DEFINER·search_path '', 전환은 프로젝트 행을 for update 로 잡는다(동시 실행 창)
+  select string_agg(format('%s.%s', x.tbl, x.name), ', ') into v
+    from (values ('item_owners', 'item_owners_owned_scope'), ('project_member_teams', 'project_member_teams_owned_scope'),
+                 ('area_teams', 'area_teams_owned_scope'), ('project_invites', 'project_invites_owned_scope')) as x(tbl, name)
+   where not exists (select 1 from pg_trigger g
+                      where g.tgrelid = ('public.' || x.tbl)::regclass and g.tgname = x.name
+                        and g.tgfoid = 'public.team_ref_owned_scope()'::regprocedure
+                        and not g.tgisinternal and g.tgenabled in ('O', 'A'));
+  if v is not null then raise exception 'COMMAND_RECEIPTS_POSTCHECK: 공용 팀 참조 거부 트리거가 없다: %', v; end if;
+  if not (select p.prosecdef and coalesce('search_path=""' = any(p.proconfig), false)
+            and position('TEAM_SCOPE_PROJECT_OWNED' in p.prosrc) > 0 and position('for share' in p.prosrc) > 0
+            from pg_proc p where p.oid = 'public.team_ref_owned_scope()'::regprocedure)
+     or position('where p.id = p_project_id for update' in
+          (select p.prosrc from pg_proc p where p.oid = 'public.convert_inherited_teams(uuid, uuid)'::regprocedure)) = 0 then
+    raise exception 'COMMAND_RECEIPTS_POSTCHECK: 공용 팀 참조 거부의 잠금 짝(for share / for update)이 기대와 다르다';
+  end if;
 
   -- ③ 옛 두 함수 — 표 이름이 전부 public. 한정, INVOKER·search_path 미지정, authenticated 실행권 유지(ⓚ)
   select string_agg(x.fn, ', ') into v
