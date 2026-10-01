@@ -12,6 +12,7 @@ vi.mock('@/lib/supabase/admin', async () => (await import('./_harness')).adminMo
 vi.mock('@/lib/supabase/server', async () => (await import('./_harness')).serverMock)
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { gateCallsIn, gateSitesIn, parse, siteProblems, tablesInNode, type GateSite } from '../invariants/_ast'
+import { UNKNOWN_RPC_PREFIX } from './_rpc-tables'
 import { walk } from '../invariants/_walk'
 import { enumerateRoutes } from './_enumerate'
 import { harness, U } from './_harness'
@@ -256,6 +257,11 @@ function ifChainEnd(b: ts.IfStatement): number {
 function moduleTablesInNode(sf: ts.SourceFile, node: ts.Node): string[] {
   return tablesInNode(sf, node).filter((t) => MODULE_TABLE_OWNER[t])
 }
+/** 노드가 부르는 대응 없는 RPC(`rpc?:<이름>` 표지)의 이름 — 소유 표를 모르니 관문 없는 갈래에서는 실패로 센다(K4·D25, 액션 축과 같다) */
+function unknownRpcsInNode(sf: ts.SourceFile, node: ts.Node): string[] {
+  return tablesInNode(sf, node).filter((t) => t.startsWith(UNKNOWN_RPC_PREFIX)).map((t) => t.slice(UNKNOWN_RPC_PREFIX.length))
+}
+const unknownRpcTail = (names: readonly string[]) => `소유 표를 모르는 RPC ${names.join(', ')} 를 부른다 — tests/gates/_rpc-tables.ts 에 대응을 적는다`
 /** BRANCH_GATE 핸들러의 판정 확인 — 모든 판정이 원천·결과 사용을 지키고, 목록의 갈래 블록에서 늘 돌며, 갈래마다 판정이 있고,
  *  최상위 if 는 전부 목록(관문 갈래·조기 반환 가드)이나 core 구간에 속한다(B4 T20-I1 — 목록 밖 갈래의 무관문 본문은 목록으로 덮이지 않는다) */
 function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: readonly GateSite[]): string[] {
@@ -284,15 +290,24 @@ function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: r
     // ② 데이터 — core 구간이라도 토글 모듈 표를 직접 만지면 실패한다(F-2). 예전 판정은 "마지막 관문 갈래 뒤면 면제"였고 그 면제는
     //    무한했다 — 최종 리뷰가 그 면제 안에 weekly_reports 를 읽는 갈래를 넣고 8543 테스트가 초록인 것을 실측했다.
     //    에러 가드(NextResponse 반환)와 core 폴스루는 표에 닿지 않으므로 통과한다(가짜 양성 대조는 민감도 it 에 있다)
+    //    대응 없는 RPC 도 실패다(K4) — 그 RPC 가 모듈 표를 쓰는지 모른다. 한계: 최상위 if·switch 밖의 core 폴스루 문장은 보지 않는다
+    const where = `${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 없고 core 구간(${bg.core}) 안이면서`
     const hits = moduleTablesInNode(sf, b.node)
     if (hits.length) {
-      out.push(`${key}: 최상위 갈래 ${c} 가 목록(관문 ${Object.keys(bg.gated).join(' | ') || '(없음)'} · 조기 반환 ${Object.keys(ungated).join(' | ') || '(없음)'})에도 없고 core 구간(${bg.core}) 안이면서 토글 모듈의 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 직접 만진다 — 꺼진 뒤에도 그 데이터가 읽히거나 바뀐다`)
+      out.push(`${where} 토글 모듈의 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 직접 만진다 — 꺼진 뒤에도 그 데이터가 읽히거나 바뀐다`)
     }
+    const unknown = unknownRpcsInNode(sf, b.node)
+    if (unknown.length) out.push(`${where} ${unknownRpcTail(unknown)}`)
   }
   for (const [c, why] of Object.entries(ungated)) {
     const b = branches.find((x) => x.label === c)
     if (!b) out.push(`${key}: 조기 반환 목록 ${c} 가 핸들러에 없다(죽은 항목)`)
     else if (b.then === null || !singleReturn(b.then)) out.push(`${key}: 조기 반환 목록 ${c} 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: ${why})`)
+    else {
+      // 단일 return 이라도 관문 없는 갈래다 — 대응 없는 RPC 를 부르면 실패(K4)
+      const unknown = unknownRpcsInNode(sf, b.then)
+      if (unknown.length) out.push(`${key}: 조기 반환 목록 ${c} 의 갈래가 ${unknownRpcTail(unknown)}`)
+    }
   }
   return out
 }
@@ -579,6 +594,28 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
     expect(branchProblems('y#GET', noCore, nf, gateSitesIn(nf, 'GET', MODULE_ROUTE_GATES))).toEqual([
       "y#GET: 최상위 갈래 mode === 'quick' 가 목록(관문 mode === 'doc' · 조기 반환 !p)에도 core 구간에도 없다 — 본문이 있는 갈래는 관문 뒤여야 한다",
     ])
+  })
+  it('[K4] BRANCH_GATE 핸들러: 관문 없는 갈래(core 구간·조기 반환)가 대응 없는 RPC 를 부르면 실패 — 소유 표를 모르면 모른다고 센다(D25)', () => {
+    const bg: BranchGate = { reason: '합성', gated: { "source === 'sheet'": 'source=sheet' }, core: '기본', ungated: { '!p': '세션 가드 400' } }
+    const G = "const mod = await requireModule({ projectId: p }, 'weekly'); if (!mod.ok) return deny"
+    const bsrc = [
+      "import { requireModule } from '@/lib/modules/gate'",
+      // (가) core 구간 갈래가 _rpc-tables.ts 에 없는 RPC 를 부른다 — 그 RPC 가 모듈 표를 쓰는지 게이트는 모른다
+      `export async function GET(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'xlsx') { await sb.rpc('touch_weekly_snapshot'); return x() } return core() }`,
+      // (나) 조기 반환 갈래의 단일 return 이 대응 없는 RPC 를 부른다
+      `export async function POST(req) { if (!p) return await sb.rpc('touch_weekly_snapshot'); if (source === 'sheet') { ${G}; return sheet() } return core() }`,
+      // (다) 대조 — 대응에 있고 토글 모듈 표를 쓰지 않는 RPC 는 자유다
+      `export async function PUT(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'xlsx') { await sb.rpc('can_attach'); return x() } return core() }`,
+    ].join('\n')
+    const bf = parse('src/app/api/z/route.ts', bsrc)
+    const p = (m: string) => branchProblems(`z#${m}`, bg, bf, gateSitesIn(bf, m, MODULE_ROUTE_GATES))
+    expect(p('GET')).toEqual([
+      "z#GET: 최상위 갈래 source === 'xlsx' 가 목록(관문 source === 'sheet' · 조기 반환 !p)에도 없고 core 구간(기본) 안이면서 소유 표를 모르는 RPC touch_weekly_snapshot 를 부른다 — tests/gates/_rpc-tables.ts 에 대응을 적는다",
+    ])
+    expect(p('POST')).toEqual([
+      'z#POST: 조기 반환 목록 !p 의 갈래가 소유 표를 모르는 RPC touch_weekly_snapshot 를 부른다 — tests/gates/_rpc-tables.ts 에 대응을 적는다',
+    ])
+    expect(p('PUT')).toEqual([])
   })
   it('BRANCH_GATE 위임: 갈래마다 그 표지만 품은 거부 단언, core 는 표지 없이 관문 비호출 단언 — 없거나 한 it 이 두 갈래를 섞으면 잡는다(과제 20)', () => {
     const bg: BranchGate = { reason: '합성', gated: { "source === 'sheet'": 'source=sheet', "mode === 'doc'": 'doc' }, core: '기본' }
