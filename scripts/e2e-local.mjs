@@ -17,8 +17,11 @@
 //        B 의 주간 영역 0개 → CONFIG_REQUIRED, 영역(실험·운영)·주차 셋·이월 대기 → 매핑·개명·추가(W17), B 의 시트 PPT·기본 보고서 둘의 센티널 0·
 //        임베드, A 의 등록 이름 영역, 새 프로젝트 I 의 가져오기 멱등(같은 명령 id 2회 = 1벌, 다른 내용 422), 상속 프로젝트 D 의 미등록 팀 →
 //        409 → 전환·등록. render-pages 는 B 의 주간·설정 화면을 더하고 B 주간 HTML 의 센티널을 기록한다(스펙 §6.3 — 단계는 이름으로 부른다).
+//   SP4 A2: next build + next start -p 3101 에서 돈다(과제 24 — 팀 원천에 프로세스 전역 캐시가 없음을 본다). import-unregistered-teams 뒤·render-pages 앞에서
+//        새 프로젝트 N 에 팀을 만든 직후 그 팀이 든 파일을 가져오고(409 없음 — KLC:56 해제), 저장 양식 없는 N 의 엑셀 내보내기 접기·펼침이 표준 양식
+//        (X-Excel-Layout: standard)이고 텍스트 파트에 SP4 센티널이 0 이다(스펙 §6.3).
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
-// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 npm run dev 가
+// 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
 //   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> CRON_SECRET=<시크릿> npm run dev -- -p 3101
 //   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
@@ -40,7 +43,7 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso,
+  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso,
   pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
@@ -945,6 +948,59 @@ async function main() {
     needs: { code: needs.code, needsTeams: needs.needsTeams, inheritsCommon: needs.inheritsCommon, commonTeams: (needs.commonTeams ?? []).map((t) => t.code) },
     applied: importResultView(done), ownTeams: ownTeams.map((t) => t.code), commonRefs, ownOpsRefs, checks: teamCheck,
   }, Object.values(teamCheck).every(Boolean) ? undefined : `미등록 팀·전환: ${JSON.stringify(teamCheck)}`)
+
+  // ── 18c. SP4 A2(스펙 §6.3 — 단계는 이름으로 부른다). 팀 원천은 요청 범위라(프로세스 전역 캐시 없음) 같은 서버 프로세스에서 방금 만든 팀을
+  //    가져오기가 바로 본다 — 옛 캐시는 모듈 인스턴스마다 60초 TTL 이라 next start 에서 409(needsTeams)였다(KLC:56). 양식은 저장하지 않는다 —
+  //    다음 단계가 이 프로젝트를 "저장 양식 없음"으로 내보낸다.
+  const N = await createProject(admin, wsA, 'N')
+  await admin.http('GET', `/p/${N.id}/settings`)
+  mustOk(`addProjectTeam(${A2_TEAM})`, (await admin.action(`/p/${N.id}/settings`, 'addProjectTeam', [N.id, A2_TEAM])).result)
+  const nRows = e2eRows(A2_TEAM)
+  const nFile = await fillWbsWorkbook(nRows)
+  const nInspected = await (await admin.http('POST', '/api/import/inspect', {
+    body: inspectForm({ file: nFile, fileName: 'wbs-n.xlsx', projectId: N.id }),
+  })).json()
+  const nCmd = randomUUID()
+  let nApplied
+  try {
+    nApplied = await (await admin.http('POST', '/api/import/execute', {
+      body: importForm({ file: nFile, fileName: 'wbs-n.xlsx', projectId: N.id, profile: nInspected.detection.profile, mode: 'append',
+        commandId: nCmd, saveProfile: false, registerTeams: false }),
+    })).json()
+  } catch (e) {
+    if (e instanceof Fail && e.message.includes('→ 409')) {
+      throw new Fail(`${e.message} — 방금 만든 팀을 가져오기가 못 봤다(프로세스 전역 팀 캐시가 남았다 — SP4 A2 결함)`)
+    }
+    throw e
+  }
+  const nItems = rows('N 항목', await admin.sb.from('wbs_items').select('id, item_owners(teams(code))').eq('project_id', N.id))
+  const nCheck = {
+    applied: nApplied.ok === true && nApplied.kind === 'applied' && nApplied.commandId === nCmd,
+    items: nItems.length === nRows.length,
+    owned: nItems.some((i) => i.item_owners.some((o) => o.teams?.code === A2_TEAM)),
+  }
+  step('teams-source-next-start', { projectId: N.id, commandId: nCmd, response: importResultView(nApplied), items: nItems.length, checks: nCheck },
+    Object.values(nCheck).every(Boolean) ? undefined : `방금 만든 팀으로 가져오기: ${JSON.stringify(nCheck)}`)
+
+  // export-standard — 저장 양식이 없는 N 의 엑셀 내보내기(접기·펼침) 둘 다 200·X-Excel-Layout standard(SP4 §4.3 — 예전 펼침은 409),
+  // 텍스트 파트(시트·공유 문자열·docProps)에 SP4 센티널 0 — N 이 스스로 등록한 팀 code·name 은 뺀다(D8).
+  const nTeams = rows('N 팀', await admin.sb.from('teams').select('code, name').eq('project_id', N.id))
+  const nSentinels = excludeRegistered(sp4Sentinels(), nTeams.flatMap((t) => [t.code, t.name]))
+  const nExports = []
+  for (const expand of [false, true]) {
+    const res = await admin.http('GET', `/api/export?projectId=${N.id}${expand ? '&expand=1' : ''}`)
+    const buf = Buffer.from(await res.arrayBuffer())
+    const file = join(outDir, `wbs-n${expand ? '-expand' : ''}.xlsx`)
+    writeFileSync(file, buf)
+    nExports.push({ expand, status: res.status, layout: res.headers.get('x-excel-layout'), file, hits: sentinelReport(await zipTextParts(buf), nSentinels) })
+  }
+  const exportCheck = {
+    ok: nExports.every((e) => e.status === 200),
+    standard: nExports.every((e) => e.layout === 'standard'),
+    noSentinels: nExports.every((e) => e.hits.length === 0),
+  }
+  step('export-standard', { projectId: N.id, exports: nExports, checks: exportCheck },
+    Object.values(exportCheck).every(Boolean) ? undefined : `표준 내보내기: ${JSON.stringify(exportCheck)}`)
 
   // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
   // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트

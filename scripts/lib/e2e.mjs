@@ -626,6 +626,9 @@ export const REGISTERED_AREA = Object.freeze({ code: 'SALES', name: sp4Sentinels
 /** 상속 프로젝트에 들일 미등록 팀 code — 새 팀 코드 규칙을 통과하고 SP1 팀·공용 팀과 겹치지 않는다(테스트가 대조) */
 export const UNREGISTERED_TEAM = 'LAB'
 
+/** SP4 A2 — 같은 서버 프로세스에서 방금 만든 팀을 가져오기가 바로 보는지(teams-source-next-start)에 쓰는 팀 코드. 옛 이름이 아니다 */
+export const A2_TEAM = 'RUN'
+
 /** 이월 덧붙임의 기대값 — 붙일 값의 앞뒤 공백을 걷고 빈 값은 건너뛰어 '\n' 으로 잇는다(앱 weeklyCarry.ts 의 규칙 — 테스트가 그 함수와
  *  대조한다). 순서는 부르는 쪽이 정한다: 그 영역 자신의 이월분 → 매핑된 영역(영역 순서) @param {...string} parts */
 export function carriedText(...parts) {

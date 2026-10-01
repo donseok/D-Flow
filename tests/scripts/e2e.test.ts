@@ -29,9 +29,9 @@ import {
 } from '../../scripts/lib/e2e.mjs'
 import { carryOverRows } from '@/lib/domain/weeklyCarry'
 import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
-import { excludeRegistered, findSentinels } from '../../scripts/lib/sentinels.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels } from '../../scripts/lib/sentinels.mjs'
 import {
-  E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, carriedText, pptText, sentinelReport, slideCount, teamRefs,
+  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, carriedText, pptText, sentinelReport, slideCount, teamRefs,
 } from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
@@ -703,5 +703,22 @@ describe('e2e-local.mjs — SP4 A1 단계(이름으로 부른다 — 스펙 §6.
   })
   it('지역 seoulToday 가 없다 — 공용 도우미 하나(과제 34)', () => {
     expect(src).not.toMatch(/const seoulToday\s*=/)
+  })
+})
+
+describe('SP4 A2 — E2E 새 단계(스펙 §6.3)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  it('두 단계가 A1 새 단계 묶음 뒤·render-pages 앞에 이 순서로 있다', () => {
+    const at = (n: string) => src.indexOf(`step('${n}'`)
+    expect(at('teams-source-next-start')).toBeGreaterThan(at('import-unregistered-teams'))
+    expect(at('export-standard')).toBeGreaterThan(at('teams-source-next-start'))
+    expect(at('render-pages')).toBeGreaterThan(at('export-standard'))
+  })
+  it('A2_TEAM 은 옛 이름이 아니고 팀 이름 규칙을 지난다', () => {
+    expect(findSentinels(A2_TEAM, sp4Sentinels())).toEqual([])
+    expect(normalizeNewTeamCode(A2_TEAM, EXCEL_HEADER_WORDS)).toEqual({ ok: true, code: A2_TEAM })
+  })
+  it('새 단계는 표준 내보내기의 레이아웃 머리를 본다', () => {
+    expect(src).toMatch(/headers\.get\('x-excel-layout'\)/)
   })
 })
