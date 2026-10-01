@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildWbsAoa } from '@/lib/excel/export'               // 동등성 오라클 — 과제 12 가 tests/fixtures/excel/legacyBuild 로 옮긴다(P7)
-import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'   // 과제 12 가 tests/fixtures/excel/legacy-3row-profile 로 옮긴다
+import { buildWbsAoa } from '../fixtures/excel/legacyBuild'   // 동등성 오라클 — 옛 원문(P7)
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'   // 옛 3행 양식(W26 의 비교 기준)
 import { buildAoaWithProfile } from '@/lib/excel/exportWithProfile'
 import { deriveStandardExcelProfile, resolveTeamColumns } from '@/lib/excel/standardProfile'
 import { computeTree } from '@/lib/domain/rollup'

@@ -3,6 +3,7 @@
 export type RuntimeConstantPattern =
   | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000' | 'RESERVED_TEAM_NAMES'
+  | 'fixtures/excel/legacyBuild'
 
 // SP4 A1 이 지운 주간 상수(WEEKLY_SECTIONS·WEEKLY_TEAM_SECTIONS·FALLBACK_SECTION)는 허용 항목 없이 패턴만 남는다 — 재도입을 막는 영구 가드(스펙 §4.8)
 export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
@@ -13,6 +14,8 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
   'Asia/Seoul': /Asia\/Seoul/, '+09:00': /\+09:00/, '9 * 3600_000': /9 \* 3600_000/,
   // SP4 A2 가 지운 손 베낀 팀 예약어 — 머리 낱말 단일 출처(src/lib/excel/headerWords.ts)에서 파생한다. 허용 항목 없음 = 영구 가드(D38)
   RESERVED_TEAM_NAMES: /\bRESERVED_TEAM_NAMES\b/,
+  // SP4 A2 가 테스트 오라클로 옮긴 옛 엑셀 빌더 — src 가 import 하면 걸린다. 허용 항목 없음 = 영구 가드(Q31)
+  'fixtures/excel/legacyBuild': /fixtures\/excel\/legacyBuild/,
 }
 
 /** 파일 → { patterns, removedBy } */
@@ -28,8 +31,6 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/lib/report/issues/model.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
   'src/lib/report/issues/processSlideRenderer.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
   'src/lib/report/issues/storedRun.ts': { patterns: ['ISSUE_MEGA_AREAS', 'ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  // LEGACY_EXCEL_PROFILE_V1(원본 양식 — SP4 표준 레이아웃으로)
-  'src/lib/excel/profile.ts': { patterns: ['LEGACY_EXCEL_PROFILE_V1'], removedBy: 'SP4' },
   // LEGACY_LABEL_ABBR(단계 약어 — SP4)
   'src/components/wbs/shared.tsx': { patterns: ['LEGACY_LABEL_ABBR'], removedBy: 'SP4' },
   // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 Phase B)

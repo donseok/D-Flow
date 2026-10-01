@@ -1,3 +1,6 @@
+// 옛 WBS 엑셀 빌더(src/lib/excel/export.ts — SP4 A2 에서 옮김)의 원문 — 테스트 오라클이다. 런타임 import 금지(tests/settings/no-runtime-constants 의
+// 패턴 fixtures/excel/legacyBuild). 상태 머리를 고친 뒤(과제 9)의 원문이라 표준 레이아웃(src/lib/excel/standardProfile.ts)과 셀 단위로 같다(W23).
+// 옛 tests/fixtures/excel/legacyParse.ts 와 같은 관례 — 지운 런타임의 원문을 계약 기준으로 남긴다(스펙 D16·Q31).
 import * as XLSX from 'xlsx'
 import type { ComputedItem, TeamCode } from '@/lib/domain/types'
 
@@ -41,7 +44,7 @@ function isoToDate(iso: string | null): Date | '' {
 
 /** 팀 열 목록 확정 — 주입된 목록(활성 팀) ∪ 데이터에 실제 등장하는 담당 팀.
  *  비활성 팀 담당이 열 부재로 조용히 유실되지 않게 뒤에 덧붙인다(등장 순). */
-function resolveTeamColumns(items: ComputedItem[], teamCodes: readonly TeamCode[]): TeamCode[] {
+export function resolveTeamColumns(items: ComputedItem[], teamCodes: readonly TeamCode[]): TeamCode[] {
   const cols = [...teamCodes]
   const seen = new Set(cols)
   const walk = (ns: ComputedItem[]) => ns.forEach(n => {

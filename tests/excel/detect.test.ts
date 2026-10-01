@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { LEGACY_EXCEL_PROFILE_V1, validateProfile } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
+import { validateProfile } from '@/lib/excel/profile'
 import {
   detectWorkbook,
   pickSheets,

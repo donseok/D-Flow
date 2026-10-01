@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 
 // 라우트 mock 관례(tests/agent/work-routes.test.ts, tests/actions/authz-gate-wbs.test.ts 참고) —

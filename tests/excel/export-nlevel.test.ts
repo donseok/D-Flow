@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildWbsAoa } from '@/lib/excel/export'
+import { standardAoa as buildWbsAoa } from '../fixtures/excel/standardAoa'
 import { buildAoaWithProfile } from '@/lib/excel/exportWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'

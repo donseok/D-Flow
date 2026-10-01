@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
-import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
 import { validateAndLink } from '../fixtures/excel/legacyParse'

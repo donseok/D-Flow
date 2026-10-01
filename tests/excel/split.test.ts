@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { splitLeafOwners, type ImportItem } from '@/lib/excel/validate'
-import { buildWbsAoa } from '@/lib/excel/export'
+import { standardAoa as buildWbsAoa } from '../fixtures/excel/standardAoa'
 import type { ComputedItem } from '@/lib/domain/types'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 

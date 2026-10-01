@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 import { makeAdminActor } from '../fixtures/actor'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
-import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 
 // Task 1b — "저장된 양식 비우기"는 저장된 엑셀 양식이 있을 때만(손상 양식 포함 — 그게 풀어야 할 교착이다) 보인다.

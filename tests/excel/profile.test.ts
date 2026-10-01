@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { LEGACY_EXCEL_PROFILE_V1, validateProfile } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
+import { validateProfile } from '@/lib/excel/profile'
 
 describe('ExcelProfile', () => {
   it('레거시 3행 헤더 프로파일이 현행 파서 좌표와 일치한다', () => {

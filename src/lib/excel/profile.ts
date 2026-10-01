@@ -138,19 +138,6 @@ export function validateProfile(p: unknown): { ok: true; profile: ExcelProfile }
   }
 }
 
-/** 레거시 3행 헤더 규약 v1(5팀 열) — 라운드트립 계약 테스트의 기준, SP4 에서 fixtures 로 이동. */
-export const LEGACY_EXCEL_PROFILE_V1: ExcelProfile = {
-  version: 1,
-  sheetName: 'WBS',
-  holidaySheetName: 'Holiday',
-  headerRow: 2,
-  hierarchy: { kind: 'columns', columns: [1, 2, 3] },
-  // name: null — columns 계층(Phase/Task/Activity)은 계층 열 자체가 이름의 출처라 별도 이름 열이 없다.
-  logical: { extraAxis: 0, code: null, name: null, deliverable: 11, start: 12, end: 13, weight: 14, actualPct: 16 },
-  teamColumns: [[6, 'PMO'], [7, 'ERP'], [8, 'MES'], [9, '가공'], [10, 'MDM']],
-  ownerMarks: { '●': 'primary', '△': 'support' },
-}
-
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }

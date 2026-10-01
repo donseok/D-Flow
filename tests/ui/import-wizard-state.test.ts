@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { LEGACY_EXCEL_PROFILE_V1, type ExcelProfile } from '@/lib/excel/profile'
+import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
+import { type ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import {
   initialWizardState, reducer, switchHierarchyKind, setOutlineColumn, setLogicalColumn,

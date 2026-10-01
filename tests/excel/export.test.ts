@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildWbsWorkbook } from '@/lib/excel/export'
+import { standardWorkbook as buildWbsWorkbook } from '../fixtures/excel/standardAoa'
 import { parseWbsWorkbook } from '../fixtures/excel/legacyParse'
 import { validateAndLink } from '../fixtures/excel/legacyParse'
 import { computeTree } from '@/lib/domain/rollup'
@@ -115,7 +115,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
 
 /* ── 동적 팀 열(팀 마스터 대응) ── */
 import { buildWbsColumnMap } from '../fixtures/excel/legacyParse'
-import { buildWbsAoa } from '@/lib/excel/export'
+import { standardAoa as buildWbsAoa } from '../fixtures/excel/standardAoa'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 describe('buildWbsAoa: 계층 열은 depth로 배치, levelLabels로 헤더 커스터마이즈', () => {

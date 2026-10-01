@@ -1,5 +1,5 @@
 /** 프로파일 주입형 N단 파서 + 링커(Plan B §6.4, Task 4).
- *  `ExcelProfile` 을 받아 임의 양식을 파싱한다. 레거시 프로파일 v1(`LEGACY_EXCEL_PROFILE_V1`)을
+ *  `ExcelProfile` 을 받아 임의 양식을 파싱한다. 옛 3행 헤더 양식(tests/fixtures/excel/legacy-3row-profile)을
  *  주입하면 구 3행 헤더 파서와 동등한 결과를 낸다(라운드트립 계약,
  *  tests/excel/parse-with-profile.test.ts 케이스 (a)). 구 파서는 tests/fixtures/excel/legacyParse.ts 의
  *  테스트 오라클로만 남았다 — 런타임 임포터는 이 파일이다. */

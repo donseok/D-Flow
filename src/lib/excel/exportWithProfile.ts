@@ -60,7 +60,7 @@ function collectTeams(items: ComputedItem[]): string[] {
  *  시프트가 전혀 없다). expandSubActs=true 면 sub-act 를 계층 열 하나를 "삽입"해 실제 행으로 펼친다.
  *
  *  ── 삽입-시프트 설계(리뷰 픽스, Important #1) ──
- *  최초 구현은 sub-act 를 "마지막 계층 열 + 1" 의 *기존* 위치에 얹었는데, 이건 LEGACY_EXCEL_PROFILE_V1
+ *  최초 구현은 sub-act 를 "마지막 계층 열 + 1" 의 *기존* 위치에 얹었는데, 이건 옛 3행 양식
  *  이 우연히 그 자리를 빈 여백 열로 남겨뒀을 때만 안전했다. 계층 열 바로 다음에 다른 논리 열이 선언된
  *  프로파일(예: hierarchy=[0,1,2], deliverable=3)에서는 sub-act 이름과 산출물 값이 같은 물리 열을
  *  다퉈 — 재감지(detectWorkbook) 시 그 열이 "산출물"인지 "4단 계층 이름"인지 모호해지고, 실제로는
@@ -72,7 +72,7 @@ function collectTeams(items: ComputedItem[]): string[] {
  *  시프트 대상이 아니므로 계층 열의 "연속 구간"이 안 끊긴다 — detectColumnHierarchy(Task3, 규칙3)가
  *  그 연속 구간을 그대로 4열 계층으로 재감지할 수 있다(테스트 (c)).
  *  접기(expandSubActs=false)는 insertAt 자체가 없다(null) → shift 가 항등 함수라 라운드트립 계약
- *  (a)에 전혀 영향이 없다. LEGACY_EXCEL_PROFILE_V1 도 예외가 아니다 — 펼침 모드에선 팀 열(원래 6~10)도
+ *  (a)에 전혀 영향이 없다. 옛 3행 양식도 예외가 아니다 — 펼침 모드에선 팀 열(원래 6~10)도
  *  전부 +1 밀린다(insertAt=4 이상이라서). "우연히 안 겹치는 레거시"를 특별 취급하지 않고 모든
  *  프로파일에 같은 규칙을 균일하게 적용한 결과다.
  *
