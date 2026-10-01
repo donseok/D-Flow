@@ -94,7 +94,7 @@ const minuteDetail = (
   files: { ok: true; rows: unknown[] } | { ok: false; error: string } = { ok: true, rows: [] },
 ) => ({
   minute: {
-    id: 'min-1', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null,
+    id: '00000000-0000-0000-7e57-0000000016fa', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null,
     workspaceId: WS, ownProjectId: PID, ...over,
   },
   files,
@@ -159,7 +159,7 @@ describe('agents 페이지 — 명단 조회 실패', () => {
 
 describe('회의록 상세 — 이슈 담당자 명단 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   it('실패 사유를 뷰어(issueMembersError)로 넘기고 로그를 남긴다', async () => {
     mocks.getProjectRoster.mockResolvedValue({ ok: false, error: ERR })
@@ -182,7 +182,7 @@ describe('회의록 상세 — 이슈 담당자 명단 조회 실패', () => {
 
 describe('회의록 상세 — 첨부 목록 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
   it('실패는 빈 목록과 사유(filesError)로 넘긴다 — 뷰어가 경고를 띄운다', async () => {
@@ -193,7 +193,7 @@ describe('회의록 상세 — 첨부 목록 조회 실패', () => {
     expect(props.filesError).toBe(FILES_ERR)
   })
   it('정상은 행을 그대로 넘기고 filesError=null', async () => {
-    const row = { id: 'f1', minuteId: 'min-1', role: 'attachment', fileName: 'a.pdf' }
+    const row = { id: 'f1', minuteId: '00000000-0000-0000-7e57-0000000016fa', role: 'attachment', fileName: 'a.pdf' }
     mocks.getMinuteDetail.mockResolvedValue(minuteDetail({}, { ok: true, rows: [row] }))
     await render()
     const props = lastProps(mocks.MinuteViewer)
@@ -204,7 +204,7 @@ describe('회의록 상세 — 첨부 목록 조회 실패', () => {
 
 describe('회의록 상세 — 버전 목록 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
   it('실패는 빈 목록과 사유(versionsError)로 넘긴다 — 버전 패널이 LoadErrorNotice 를 띄운다', async () => {
@@ -226,7 +226,7 @@ describe('회의록 상세 — 버전 목록 조회 실패', () => {
 
 describe('회의록 상세 — 관리 어포던스(canManage)는 서버 checkOwner 와 같다', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   const canManage = async () => { await render(); return lastProps(mocks.MinuteViewer).canManage }
   beforeEach(() => {

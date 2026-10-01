@@ -15,6 +15,7 @@ import { getMinuteLinkedIssues } from '@/lib/data/issues'
 import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { moduleSetFor } from '@/lib/modules/gate'
+import { UUID_RE } from '@/lib/domain/validate'
 
 export const metadata = { title: `회의록 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
 
@@ -31,6 +32,9 @@ export default async function MinuteDetailPage({
 }) {
   const [{ slug, id }, query] = await Promise.all([params, searchParams])
   const scope = await loadWorkspaceScope(slug)                              // 첫 await — 슬러그 판정(E19)
+  // 형식 밖 id 는 조회 없이 404 — 옛 /minutes/<id> 스텁이 형식 밖 id 를 그대로 이 주소로 보낸다. 보내면 Postgres 22P02 가
+  // 오류 경계가 되고 입력 문자열(공격자가 정한 값)이 서버 오류 로그에 실린다(U2a-3 리뷰 V1)
+  if (!UUID_RE.test(id)) notFound()
   // 대상 행의 워크스페이스로 판정(스펙 §4.2 2행). getMinuteDetail 은 react cache — 아래 묶음이 다시 읽지 않는다
   const head = await getMinuteDetail(id)
   // 다른 워크스페이스의 행은 이 주소로 열지 않는다(D6 — 옛 /minutes/<id> 스텁이 행의 워크스페이스로 보낸다)
@@ -55,7 +59,8 @@ export default async function MinuteDetailPage({
   // folderPath 는 folderId 를 알아야 풀 수 있어 이 2단 묶음에 합류시킨다 — 위 Promise.all 로
   // 끌어올릴 수 없고, 단독으로 await 하면 직렬 왕복이 한 단 더 붙는다.
   const [wikiImpact, issueRoster, folderPath, myProjectIds] = await Promise.all([
-    mods.has('wiki')
+    // 위키 영향은 service_role 로더 — 권한 조회 열화(scope.degraded)에서는 부르지 않는다(workspaceScope 계약, U2a-3 리뷰 V3)
+    mods.has('wiki') && !scope.degraded
       ? getMinuteWikiImpact(id, detail.minute.projectId ?? null, detail.minute.projectName ?? null)
       : Promise.resolve(null),
     issueProjectId ? getProjectRoster(issueProjectId) : Promise.resolve(null),

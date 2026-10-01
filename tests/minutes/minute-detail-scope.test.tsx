@@ -67,6 +67,21 @@ describe('/w/[slug]/minutes/[id]', () => {
     expect(h.getMinuteWikiImpact).not.toHaveBeenCalled()
     expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({ linkedIssues: [], wikiImpact: null }))
   })
+  it('형식 밖 id 는 조회 없이 404 — 오류 경계·서버 로그에 입력 문자열을 싣지 않는다(V1)', async () => {
+    for (const bad of ['not-a-uuid', `${MID}x`, 'abc\n%0A', '']) {
+      vi.clearAllMocks()
+      await expect(MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: bad }), searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_NOT_FOUND')
+      expect(h.loadWorkspaceScope).toHaveBeenCalledWith('acme')   // 슬러그 판정이 먼저(비소속은 거기서 404)
+      expect(h.getMinuteDetail).not.toHaveBeenCalled()
+      expect(h.requireModulePage).not.toHaveBeenCalled()
+    }
+  })
+  it('권한 조회 열화(degraded)면 위키 영향(service_role)을 부르지 않는다(V3)', async () => {
+    h.loadWorkspaceScope.mockResolvedValue({ ws: WA, actor: null, degraded: true, role: null })
+    await run()
+    expect(h.getMinuteWikiImpact).not.toHaveBeenCalled()
+    expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({ wikiImpact: null }))
+  })
   it('프로젝트 없는 회의록은 워크스페이스 범위로 모듈 판정', async () => {
     h.getMinuteDetail.mockResolvedValue(detail(WA.id, null))
     await run()

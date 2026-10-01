@@ -34,7 +34,7 @@ const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'ge
 const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage', 'wsHref'])
 /** 페이지별 관문 앞 허용(사유) — 대상 행에서 워크스페이스를 알아야 하는 페이지. selects 는 관문 앞 조회 체인이 고를 수 있는 열(그 밖의 열을 읽는 체인은 문제) */
 const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: string }> = {
-  'src/app/(app)/w/[slug]/minutes/[id]/page.tsx': { calls: ['getMinuteDetail'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다' },
+  'src/app/(app)/w/[slug]/minutes/[id]/page.tsx': { calls: ['getMinuteDetail', 'test'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다. test 는 형식 밖 id 를 조회 전에 404 로 보내는 UUID_RE.test(순수, U2a-3 리뷰 V1)' },
   'src/app/share/minutes/[token]/page.tsx': {
     calls: ['isShareToken', 'serviceRoleConfigured', 'createAdminClient'], selects: ['workspace_id'],
     why: '토큰 형식·env 가드 뒤 토큰 행의 workspace_id 한 열(본문은 관문 뒤)',

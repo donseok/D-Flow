@@ -13,13 +13,13 @@
 // `isHiddenProject(`(부정 없이), `!canViewAgents(` — 워크스페이스 좌석표(/w/[slug]/agents, SP3b), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
 // require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
 // 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
-// /w/[slug]/** 페이지는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
+// /w/[slug]/** 페이지(그 루트 아래 파일만 — /p/[projectId] 는 숨김 프로젝트 게이트가 따로 있어야 한다, U2a-3 리뷰 V3)는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
 // 않는 워크스페이스는 0행 → notFound(), 보여도 역할이 없으면 notFound() 를 그 함수 안에서 던진다. 열화(권한 조회 실패)여도 슬러그 조회는
 // RLS 로 했으므로 그 워크스페이스가 보이는 사람만 다음 줄로 간다. await 없이 부르면 흐름을 끊지 않으므로 게이트가 아니다.
 import { describe, it, expect } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { codeLines, walk } from './_walk'
 
 const CWD = process.cwd()
@@ -124,11 +124,12 @@ function reachesServiceRole(abs: string, useSafe = true): boolean {
   return hit
 }
 
-/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. 조건이 거부형·은닉형일 때만 게이트로 센다. */
-function firstGateLine(lines: string[], bodyStart = 0): number {
+/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. 조건이 거부형·은닉형일 때만 게이트로 센다.
+ *  scopeCall — 범위 판정 호출(GATE_CALL)을 게이트로 셀지. /w/[slug] 루트 아래 페이지만 참이다(기본 거짓 — fail-closed) */
+function firstGateLine(lines: string[], bodyStart = 0, { scopeCall = false }: { scopeCall?: boolean } = {}): number {
   const vars: Array<{ name: string; kind: GateVarKind }> = []
   for (let i = bodyStart; i < lines.length; i++) {
-    if (GATE_CALL.test(lines[i])) return i
+    if (scopeCall && GATE_CALL.test(lines[i])) return i
     const v = lines[i].match(GATE_VAR)
     if (v) vars.push({ name: v[1], kind: gateVarKind(v[2]) })
     const g = lines[i].match(GATE_IF)
@@ -148,7 +149,7 @@ function pageReport(abs: string) {
   const imports = valueImports(lines, abs)
   const bodyStart = imports.length ? Math.max(...imports.map((i) => i.endLine)) + 1 : 0
   const symbols = imports.filter((i) => i.module !== null && reachesServiceRole(i.module)).flatMap((i) => i.names)
-  const gate = firstGateLine(lines, bodyStart)
+  const gate = firstGateLine(lines, bodyStart, { scopeCall: abs.startsWith(WORKSPACE_PAGES_ROOT + sep) })
   const uses = symbols.map((s) => ({ symbol: s, line: firstUseLine(lines, [s], bodyStart) })).filter((u) => u.line >= 0)
   return { symbols, gate, uses }
 }
@@ -234,9 +235,22 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
 
   it('판정기 — /w/[slug] 의 await loadWorkspaceScope(…) 는 게이트, await 없는 호출·주석은 아니다', () => {
     const src = (body: string) => codeLines(body)
-    expect(firstGateLine(src('const { slug } = await params\nconst scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(scope.ws.id)'))).toBe(1)
-    expect(firstGateLine(src('const p = loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
-    expect(firstGateLine(src('// const scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
+    const ws = { scopeCall: true }
+    expect(firstGateLine(src('const { slug } = await params\nconst scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(scope.ws.id)'), 0, ws)).toBe(1)
+    expect(firstGateLine(src('const p = loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'), 0, ws)).toBe(-1)
+    expect(firstGateLine(src('// const scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'), 0, ws)).toBe(-1)
+  })
+  it('판정기 — /p/[projectId] 페이지(scopeCall 거짓)에서는 loadWorkspaceScope 가 게이트가 아니다 — 숨김 프로젝트 게이트가 따로 있어야 한다(V3)', () => {
+    const src = (body: string) => codeLines(body)
+    expect(firstGateLine(src('const scope = await loadWorkspaceScope(slug)\nconst x = await getAgentHub(pid)'))).toBe(-1)
+    // 실제 분석 — 프로젝트 루트 파일은 scopeCall 없이, 워크스페이스 루트 파일은 scopeCall 로 본다
+    const dir = mkdtempSync(join(tmpdir(), 'page-gates-root-'))
+    try {
+      const f = join(dir, 'page.tsx')
+      writeFileSync(f, "import { getAgentHub } from '@/lib/data/agentHub'\nexport default async function P() {\n  const scope = await loadWorkspaceScope(slug)\n  return getAgentHub(scope.ws.id)\n}\n")
+      expect(pageReport(f).gate).toBe(-1)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+    expect(pageReport(join(WORKSPACE_PAGES_ROOT, 'agents/page.tsx')).gate).toBeGreaterThan(-1)
   })
 
   it('워크스페이스 좌석표 — !canViewAgents( 거부형은 게이트, 역전(canViewAgents( 로 redirect)은 아니다', () => {
