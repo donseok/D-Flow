@@ -276,10 +276,11 @@ describe('카탈로그 메타와 사전', () => {
   it('등록 키마다 메타가 있고 마감 상태가 §3.6 표와 같다. 미등록 네 키는 PLANNED_KEYS 에 있다', () => {
     expect(Object.keys(CATALOG_META).sort()).toEqual([...KEYS].sort())
     const status = (k: string) => CATALOG_META[k as keyof typeof CATALOG_META].status
-    expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled']
-      .map(status)).toEqual(Array(7).fill('verified'))
-    expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label', 'wbs.excel_profile'].map(status))
-      .toEqual(Array(6).fill('stored'))
+    // wbs.excel_profile 은 SP4 A2 가 verified 로 올렸다(표준 레이아웃·한 경로 내보내기·표기 — catalog-meta.ts 의 그 행)
+    expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
+      .map(status)).toEqual(Array(8).fill('verified'))
+    expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label'].map(status))
+      .toEqual(Array(5).fill('stored'))
     expect(status('workflow.stage_credits')).toBe('wired')
     expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default', 'calendar.week_start', 'workflow.approval_steps']))
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)

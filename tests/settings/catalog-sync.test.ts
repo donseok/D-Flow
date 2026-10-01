@@ -10,7 +10,7 @@ const expectedStatus: Record<string, string> = {
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
-  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'stored', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
+  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
 }
 
 describe('설정 카탈로그 동기화', () => {

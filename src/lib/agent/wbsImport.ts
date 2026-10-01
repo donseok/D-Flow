@@ -3,7 +3,7 @@ import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
-import { loadWbsTreeRows } from '@/lib/settings/validateConfig'
+import { loadWbsTreeRows, validateProjectConfig } from '@/lib/settings/validateConfig'
 import { emailKey } from '@/lib/domain/email'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
@@ -228,6 +228,12 @@ export async function runWbsImport(
     if (!tree.ok) throw new Error(`WBS 조회 실패: ${tree.error}`)
     const v = validateLevelSettings({ labels: levels.map(l => l.name), currentTreeMaxDepth: treeMaxDepth(tree.rows) })
     if (!v.ok) return { ok: false, code: 'validation_failed', message: `levels 시드 실패: ${v.error}` }
+    // CR-7(SP4 D15) — 설정 저장과 같은 교차 검사를 쓰기 전에 돈다(설정 내부 쓰기는 교차 불변식을 돌리지 않는다 — 호출부 몫, write.ts 머리).
+    // 이 키(core.level_labels)의 교차는 트리 깊이다 — 팀 열 교차는 양식 키에만 걸리므로 다른 의존값은 쓰이지 않는다.
+    const cross = validateProjectConfig({ 'core.level_labels': v.labels }, {
+      treeMaxDepth: treeMaxDepth(tree.rows), teamCodes: [], allowed: [], prevEnabled: null,
+    })
+    if (!cross.ok) return { ok: false, code: 'validation_failed', message: `levels 시드 실패: ${cross.fieldErrors[0]?.message ?? '교차 검사 거부'}` }
     const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'core.level_labels': v.labels } }, actorUserId)
     if (!w.ok) {
       // 응답에는 코드의 고정 문구(+ 키 검증 사유)만 — 원인(DB 원문 포함)은 로그에만

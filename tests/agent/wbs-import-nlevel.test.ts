@@ -136,6 +136,18 @@ const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 const write = vi.hoisted(() => ({ writeProjectSettingsInternal: vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({ ok: true, status: 'applied', revision: 2, commandId: 'c' })) }))
 vi.mock('@/lib/settings/write', () => write)
+// CR-7(SP4 D15) — 골격 시드는 쓰기 전에 설정 저장과 같은 교차 검사를 거친다. 실물을 감싸 호출 인자를 기록하고, reject 를 주면 그 사유로 거부한다
+const vcfg = vi.hoisted(() => ({ reject: null as string | null, calls: [] as unknown[][] }))
+vi.mock('@/lib/settings/validateConfig', async (orig) => {
+  const m = await orig() as typeof import('@/lib/settings/validateConfig')
+  return {
+    ...m,
+    validateProjectConfig: (...a: Parameters<typeof m.validateProjectConfig>) => {
+      vcfg.calls.push(a)
+      return vcfg.reject ? { ok: false as const, fieldErrors: [{ key: 'core.level_labels', message: vcfg.reject }] } : m.validateProjectConfig(...a)
+    },
+  }
+})
 vi.mock('next/server', async (orig) => {
   const m = await orig() as Record<string, unknown>
   return { ...m, after: (fn: () => unknown) => { void fn() } }
@@ -349,6 +361,41 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     // 골격 경로는 p_attach_id 를 싣지 않는다(레거시 RPC 와 인자 호환).
     expect(admin.rpc).toHaveBeenCalledWith('import_wbs_upsert',
       expect.not.objectContaining({ p_attach_id: expect.anything() }))
+  })
+
+  it('[CR-7] 골격 시드는 교차 검사(validateProjectConfig)를 지난 뒤에만 쓴다 — 시드 라벨과 트리 깊이를 넘긴다', async () => {
+    vcfg.calls.length = 0
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    useAdmin({ ...q, wbs_items: [{ data: [] }], project_members: [...q.project_members, { data: [] }] },
+      [{ data: { upserted: 1, skipped: 0, ids: { 'acme-skel/PH-01': 'id-p' }, new_refs: [] } }])
+    const res = await importPOST(post({
+      project_id: PROJECT_ID, module: 'acme-skel', levels: LEVELS,
+      nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
+    }, token))
+    expect(res.status).toBe(200)
+    expect(vcfg.calls).toHaveLength(1)
+    expect(vcfg.calls[0][0]).toEqual({ 'core.level_labels': SERVER_LABELS })
+    expect(vcfg.calls[0][1]).toMatchObject({ treeMaxDepth: null })
+  })
+
+  it('[CR-7] 교차 검사가 거부하면 400 validation_failed — 설정을 쓰지 않고 upsert 도 부르지 않는다', async () => {
+    const { token, row } = patRow()
+    const q = authzQueues(); q.agent_runners[0].data = row
+    const { admin } = useAdmin({ ...q, wbs_items: [{ data: [] }] })
+    vcfg.reject = '교차 검사 거부'
+    try {
+      const res = await importPOST(post({
+        project_id: PROJECT_ID, module: 'acme-skel', levels: LEVELS,
+        nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
+      }, token))
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.code).toBe('validation_failed')
+      expect(json.error).toContain('교차 검사 거부')
+      expect(write.writeProjectSettingsInternal).not.toHaveBeenCalled()
+      expect(admin.rpc).not.toHaveBeenCalledWith('import_wbs_upsert', expect.anything())
+    } finally { vcfg.reject = null }
   })
 
   it('골격 시드의 깊이 선행 조회는 쪽을 넘겨 끝까지 읽는다 — 둘째 쪽의 깊은 행이 축소 시드를 막는다(FM-17)', async () => {
