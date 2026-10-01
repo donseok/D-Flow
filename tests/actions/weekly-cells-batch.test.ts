@@ -13,7 +13,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 
-import { saveWeeklyCells } from '@/app/actions/weekly'
+import { saveWeeklyCell, saveWeeklyCells, saveWeeklyTitle } from '@/app/actions/weekly'
 import { WEEKLY_CELL_MAX, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
 import { makeMemberActor } from '../fixtures/actor'
 
@@ -99,7 +99,7 @@ describe('행 단위 그룹핑 — 같은 행의 여러 셀은 update 1회로 �
     const r1 = track.updateCalls.find(c => c.rowId === 'r1')!
     expect(r1.payload).toMatchObject({ this_content: 'a', this_issue: 'b', next_content: 'c' })
     expect(r1.payload).not.toHaveProperty('next_issue')
-    expect(typeof r1.payload.updated_at).toBe('string') // 수동 updated_at 유지(트리거 없음)
+    expect(r1.payload).not.toHaveProperty('updated_at') // 트리거(weekly_report_rows_touch)가 채운다 — 세션 열 권한 밖(Q13, 보내면 42501)
     const r2 = track.updateCalls.find(c => c.rowId === 'r2')!
     expect(r2.payload).toMatchObject({ next_issue: 'd' })
   })
@@ -129,31 +129,41 @@ describe('청크 병렬 — 동시성 상한 안에서 병렬, 상한 밖은 다
   })
 })
 
-describe('진성 DB 에러 — 기존 계약(즉시 중단·롤백 없음·ok:false+error) 유지, 중단 단위만 청크', () => {
-  it('첫 청크에서 에러가 나면 그 error 로 반환하고 다음 청크는 시작하지 않는다', async () => {
+describe('진성 DB 에러 — 즉시 중단·롤백 없음·ok:false 계약 유지, 중단 단위만 청크, 원문은 응답에 싣지 않는다', () => {
+  const ERR_CELL_SAVE = '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+  const logged = (spy: { mock: { calls: unknown[][] } }, needle: string): boolean =>
+    spy.mock.calls.flat().some(x => (x instanceof Error ? x.message : typeof x === 'string' ? x : JSON.stringify(x) ?? '').includes(needle))
+
+  it('첫 청크에서 에러가 나면 고정 문구로 반환하고 다음 청크는 시작하지 않는다 — 원문은 로그로만', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const ids = Array.from({ length: 12 }, (_, i) => `r${String(i + 1).padStart(2, '0')}`)
     const { sb, track } = makeSb({
       allowedIds: ids,
       updateResult: rowId => rowId === 'r03'
-        ? { data: null, error: { message: 'boom' } }
+        ? { data: null, error: { message: 'boom: relation secret_x' } }
         : { data: [{ id: rowId }], error: null },
     })
     createServerClient.mockResolvedValue(sb as never)
     const res = await saveWeeklyCells('p1', ids.map(id => edit(id, 'this_content')))
-    expect(res).toEqual({ ok: false, error: 'boom' })
+    expect(res).toEqual({ ok: false, error: ERR_CELL_SAVE })
+    expect(logged(spy, 'secret_x')).toBe(true)
+    spy.mockRestore()
     // 같은 청크(첫 8행)는 이미 출발했을 수 있다(비원자·멱등 재시도 계약) — 2번째 청크는 미출발.
     expect(track.updateCalls).toHaveLength(CONCURRENCY)
     expect(track.updateCalls.map(c => c.rowId)).toEqual(ids.slice(0, CONCURRENCY))
   })
 
-  it('전송 계층 예외(rejection)도 ok:false 로 흡수한다 — 액션이 throw 로 새지 않는다', async () => {
+  it('전송 계층 예외(rejection)도 고정 문구로 흡수한다 — 액션이 throw 로 새지 않고 원문(errMsg 경로)을 싣지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { sb } = makeSb({
       allowedIds: ['r1'],
       updateResult: () => ({ data: null, error: null, rejectWith: 'conn reset' }),
     })
     createServerClient.mockResolvedValue(sb as never)
     const res = await saveWeeklyCells('p1', [edit('r1', 'this_content')])
-    expect(res).toEqual({ ok: false, error: 'conn reset' })
+    expect(res).toEqual({ ok: false, error: ERR_CELL_SAVE })
+    expect(logged(spy, 'conn reset')).toBe(true)
+    spy.mockRestore()
   })
 })
 
@@ -228,5 +238,49 @@ describe('검증·가드 로직 보존 — DB 도달 전에 자른다', () => {
     spy.mockRestore()
     expect(res).toEqual({ ok: false, error: '대상을 확인할 수 없어 저장을 중단했습니다.' })
     expect(track.updateCalls).toHaveLength(0)
+  })
+})
+
+describe('소속 확인 — 행의 project_id 로 거른다(임베드 없음 — Q35)', () => {
+  it('weekly_report_rows 를 id 목록과 project_id 로 읽고 weekly_reports 임베드를 쓰지 않는다', async () => {
+    const { sb } = makeSb({ allowedIds: ['r1'] })
+    createServerClient.mockResolvedValue(sb as never)
+    await saveWeeklyCells('p1', [edit('r1', 'this_content')])
+    const scope = sb.from.mock.results[0].value as Record<string, ReturnType<typeof vi.fn>>
+    expect(sb.from).toHaveBeenNthCalledWith(1, 'weekly_report_rows')
+    expect(scope.select).toHaveBeenCalledWith('id, area_id')
+    expect(scope.in).toHaveBeenCalledWith('id', ['r1'])
+    expect(scope.eq).toHaveBeenCalledWith('project_id', 'p1')
+    expect(JSON.stringify(scope.select.mock.calls)).not.toContain('weekly_reports')
+  })
+})
+
+describe('단건·제목 저장 — updated_at 을 보내지 않고 원문을 싣지 않는다(Q13·Q20)', () => {
+  it('saveWeeklyCell: 그 칸만 update, 실패는 고정 문구', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { sb, track } = makeSb({ allowedIds: ['r1'] })
+    createServerClient.mockResolvedValue(sb as never)
+    expect(await saveWeeklyCell('p1', 'r1', 'next_issue', '이슈')).toEqual({ ok: true })
+    expect(track.updateCalls).toEqual([{ rowId: 'r1', payload: { next_issue: '이슈' } }])
+    const failing = makeSb({ allowedIds: ['r1'], updateResult: () => ({ data: null, error: { message: 'permission denied for table secret_y' } }) })
+    createServerClient.mockResolvedValue(failing.sb as never)
+    const res = await saveWeeklyCell('p1', 'r1', 'next_issue', '이슈')
+    expect(res).toEqual({ ok: false, error: '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(res)).not.toContain('secret_y')
+    spy.mockRestore()
+  })
+
+  it('saveWeeklyTitle: title 만 보내고(updated_at 없음 — 트리거) 그 프로젝트 문서로 묶는다, 실패는 고정 문구', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { sb, track } = makeSb({})
+    createServerClient.mockResolvedValue(sb as never)
+    expect(await saveWeeklyTitle('p1', 'rep1', ' 제목 ')).toEqual({ ok: true })
+    expect(track.updateCalls).toEqual([{ rowId: 'rep1', payload: { title: '제목' } }])
+    const failing = makeSb({ updateResult: () => ({ data: null, error: { message: 'column secret_z does not exist' } }) })
+    createServerClient.mockResolvedValue(failing.sb as never)
+    const res = await saveWeeklyTitle('p1', 'rep1', '제목')
+    expect(res).toEqual({ ok: false, error: '제목을 저장하지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(res)).not.toContain('secret_z')
+    spy.mockRestore()
   })
 })
