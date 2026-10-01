@@ -23,6 +23,7 @@ import {
   createGetWikiTopicTool,
 } from '@/lib/ai/tools'
 import { assistantIndexStatus } from '@/lib/ai/health'
+import { createToolTeamSource } from '@/lib/ai/tools/teamSource'
 import { createSupabaseCoreBotRepositories } from '@/lib/repositories/supabase'
 import type { SupabaseServerClient } from '@/lib/repositories/supabase/common'
 import { createChatToolRegistry, type ChatToolRegistry } from './registry'
@@ -40,10 +41,11 @@ async function safeIndexStatusProbe(projectId: string): Promise<{ freshness: str
 /** Composition root only: domain tools and repositories remain independently replaceable. */
 export function createDefaultChatToolRegistry(client: SupabaseServerClient): ChatToolRegistry {
   const repositories = createSupabaseCoreBotRepositories(client)
+  const teams = createToolTeamSource(client)
   return createChatToolRegistry([
-    createFindWbsItemsTool(repositories.wbs),
-    createGetWbsItemDetailTool(repositories.wbs),
-    createGetWbsDependenciesTool(repositories.wbs),
+    createFindWbsItemsTool(repositories.wbs, teams),
+    createGetWbsItemDetailTool(repositories.wbs, teams),
+    createGetWbsDependenciesTool(repositories.wbs, teams),
     createGetWbsChangeLogTool(repositories.wbs),
     createListWbsAttachmentsTool(repositories.wbs),
     createGetWeeklySheetTool(repositories.weekly, repositories.settings),
@@ -51,17 +53,17 @@ export function createDefaultChatToolRegistry(client: SupabaseServerClient): Cha
     createListMeetingsTool(repositories.meetings),
     createGetMeetingDetailTool(repositories.meetings),
     createListMyMeetingsTool(repositories.meetings),
-    createGetAttendanceTool(repositories.attendance),
+    createGetAttendanceTool(repositories.attendance, teams),
     createListAnnouncementsTool(repositories.announcements),
     createSearchAnnouncementsTool(repositories.announcements),
-    createSearchMinutesTool(repositories.minutes),
+    createSearchMinutesTool(repositories.minutes, teams),
     createGetMinuteDetailTool(repositories.minutes),
     createSearchWikiTool(repositories.wiki),
     createGetWikiTopicTool(repositories.wiki),
-    createGetKanbanViewTool(repositories.wbs),
-    createGetProjectDashboardTool(repositories.wbs, repositories.meetings, repositories.settings),
-    createListMembersTool(repositories.members),
-    createGetMemberWorkloadTool(repositories.members, repositories.wbs),
+    createGetKanbanViewTool(repositories.wbs, teams),
+    createGetProjectDashboardTool(repositories.wbs, repositories.meetings, repositories.settings, teams),
+    createListMembersTool(repositories.members, teams),
+    createGetMemberWorkloadTool(repositories.members, repositories.wbs, teams),
     createGetSafeProjectSettingsTool(repositories.settings, safeIndexStatusProbe),
   ])
 }

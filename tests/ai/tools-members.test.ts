@@ -8,6 +8,7 @@ import type {
   WbsProjectSnapshot,
 } from '@/lib/repositories/types'
 import { repositoryError, repositoryOk } from '@/lib/repositories/types'
+import { fixedToolTeams } from '../helpers/tool-team-source'
 
 // 다른 봇 도구 테스트와 동일하게 실 DB 접근 없이 팀 마스터를 목(mock)한다 — 서버 팀 마스터는
 // 더 이상 폴백하지 않으므로(콜드스타트 실패 시 빈 목록) 고정 팀 목록(FIXTURE_TEAMS)을 직접
@@ -15,9 +16,8 @@ import { repositoryError, repositoryOk } from '@/lib/repositories/types'
 const mocks = vi.hoisted(() => ({
   activeTeamCodesForProjectSync: vi.fn((_projectId: string): string[] => ['PMO', 'ERP', 'MES', '가공', 'MDM']),
 }))
-vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync,
-}))
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 프로젝트별 코드는 위 목이 정한다.
+const toolTeams = fixedToolTeams((pid) => (pid ? mocks.activeTeamCodesForProjectSync(pid) : []))
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -110,7 +110,7 @@ function wbsRepository(
 describe('list_members tool', () => {
   it('returns members with a single members-menu source and no email anywhere', async () => {
     const repository = memberRepository(memberRows)
-    const result = await createListMembersTool(repository).execute({ projectId: 'p1' }, context)
+    const result = await createListMembersTool(repository, toolTeams).execute({ projectId: 'p1' }, context)
 
     expect(result.ok && result.result.records).toHaveLength(5)
     if (result.ok) {
@@ -126,7 +126,7 @@ describe('list_members tool', () => {
   })
 
   it('filters by team and role', async () => {
-    const tool = createListMembersTool(memberRepository(memberRows))
+    const tool = createListMembersTool(memberRepository(memberRows), toolTeams)
 
     const byTeam = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
     expect(byTeam.ok && byTeam.result.records.map(record => record.name)).toEqual(['김ERP', '이ERP'])
@@ -144,7 +144,7 @@ describe('list_members tool', () => {
       id: 'member-6', projectId: 'p1', name: '한겸직', teamCodes: ['MES', 'ERP'], accessRole: 'member',
       title: null, hasAccount: true, createdAt: '2026-07-06T00:00:00Z',
     }
-    const tool = createListMembersTool(memberRepository([...memberRows, multi]))
+    const tool = createListMembersTool(memberRepository([...memberRows, multi]), toolTeams)
     const byErp = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
     expect(byErp.ok && byErp.result.records.map(record => record.name)).toEqual(['김ERP', '이ERP', '한겸직'])
     const byMes = await tool.execute({ projectId: 'p1', team: 'MES' }, context)
@@ -152,7 +152,7 @@ describe('list_members tool', () => {
   })
 
   it('keeps a valid zero-member project as a successful empty result', async () => {
-    const result = await createListMembersTool(memberRepository([])).execute({ projectId: 'p1' }, context)
+    const result = await createListMembersTool(memberRepository([]), toolTeams).execute({ projectId: 'p1' }, context)
 
     expect(result).toMatchObject({
       ok: true,
@@ -161,7 +161,7 @@ describe('list_members tool', () => {
   })
 
   it('truncates above the limit and says so', async () => {
-    const result = await createListMembersTool(memberRepository(memberRows)).execute(
+    const result = await createListMembersTool(memberRepository(memberRows), toolTeams).execute(
       { projectId: 'p1', limit: 2 }, context,
     )
 
@@ -175,7 +175,7 @@ describe('list_members tool', () => {
 
   it('rejects invalid arguments before touching the repository', async () => {
     const repository = memberRepository(memberRows)
-    const tool = createListMembersTool(repository)
+    const tool = createListMembersTool(repository, toolTeams)
 
     const results = await Promise.all([
       tool.execute(null, context),
@@ -192,7 +192,7 @@ describe('list_members tool', () => {
 
   it('fails closed on project scope and capability before repository access', async () => {
     const repository = memberRepository(memberRows)
-    const tool = createListMembersTool(repository)
+    const tool = createListMembersTool(repository, toolTeams)
 
     const outOfScope = await tool.execute({ projectId: 'p2' }, context)
     const noCapability = await tool.execute({ projectId: 'p1' }, { ...context, capabilities: [] })
@@ -206,7 +206,7 @@ describe('list_members tool', () => {
     const repository: MemberRepository = {
       listMembers: vi.fn(async () => repositoryError<MemberRepositoryRecord[]>('MEMBERS_READ_FAILED', true)),
     }
-    await expect(createListMembersTool(repository).execute({ projectId: 'p1' }, context)).resolves.toMatchObject({
+    await expect(createListMembersTool(repository, toolTeams).execute({ projectId: 'p1' }, context)).resolves.toMatchObject({
       ok: false,
       error: { code: 'DATA_SOURCE_ERROR', retryable: true, repositoryErrorCode: 'MEMBERS_READ_FAILED' },
     })
@@ -214,7 +214,7 @@ describe('list_members tool', () => {
 
   it('rejects repository rows that widen the requested project scope without leaking them', async () => {
     const rogue = memberRepository([{ ...memberRows[0], projectId: 'p2', name: '다른 프로젝트 멤버' }])
-    const result = await createListMembersTool(rogue).execute({ projectId: 'p1' }, context)
+    const result = await createListMembersTool(rogue, toolTeams).execute({ projectId: 'p1' }, context)
 
     expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
     expect(JSON.stringify(result)).not.toContain('다른 프로젝트 멤버')
@@ -223,7 +223,7 @@ describe('list_members tool', () => {
 
 describe('get_member_workload tool', () => {
   it('aggregates leaf tasks per team with member names and never invents personal assignments', async () => {
-    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(wbsSnapshot)))
+    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(wbsSnapshot)), toolTeams)
     const result = await tool.execute({ projectId: 'p1' }, context)
 
     expect(result.ok).toBe(true)
@@ -259,7 +259,7 @@ describe('get_member_workload tool', () => {
       id: 'member-6', projectId: 'p1', name: '한겸직', teamCodes: ['MES', 'ERP'], accessRole: 'member',
       title: null, hasAccount: true, createdAt: '2026-07-06T00:00:00Z',
     }
-    const tool = createGetMemberWorkloadTool(memberRepository([...memberRows, multi]), wbsRepository(repositoryOk(wbsSnapshot)))
+    const tool = createGetMemberWorkloadTool(memberRepository([...memberRows, multi]), wbsRepository(repositoryOk(wbsSnapshot)), toolTeams)
     const result = await tool.execute({ projectId: 'p1' }, context)
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -270,7 +270,7 @@ describe('get_member_workload tool', () => {
   })
 
   it('filters aggregation to one team while keeping project-wide leaf totals', async () => {
-    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(wbsSnapshot)))
+    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(wbsSnapshot)), toolTeams)
     const result = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
 
     expect(result.ok && result.result.records).toHaveLength(1)
@@ -281,7 +281,7 @@ describe('get_member_workload tool', () => {
   })
 
   it('keeps a missing project distinct from a repository failure', async () => {
-    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(null)))
+    const tool = createGetMemberWorkloadTool(memberRepository(memberRows), wbsRepository(repositoryOk(null)), toolTeams)
     const result = await tool.execute({ projectId: 'p1' }, context)
 
     expect(result).toMatchObject({
@@ -300,6 +300,7 @@ describe('get_member_workload tool', () => {
     }
     const membersFailed = await createGetMemberWorkloadTool(
       failedMembers, wbsRepository(repositoryOk(wbsSnapshot)),
+      toolTeams,
     ).execute({ projectId: 'p1' }, context)
     expect(membersFailed).toMatchObject({
       ok: false,
@@ -309,6 +310,7 @@ describe('get_member_workload tool', () => {
     const wbsFailed = await createGetMemberWorkloadTool(
       memberRepository(memberRows),
       wbsRepository(repositoryError<WbsProjectSnapshot | null>('WBS_ITEMS_READ_FAILED', true)),
+      toolTeams,
     ).execute({ projectId: 'p1' }, context)
     expect(wbsFailed).toMatchObject({
       ok: false,
@@ -322,6 +324,7 @@ describe('get_member_workload tool', () => {
     const rogueMembers = await createGetMemberWorkloadTool(
       memberRepository([{ ...memberRows[0], projectId: 'p2', name: '다른 프로젝트 멤버' }]),
       wbsRepository(repositoryOk(wbsSnapshot)),
+      toolTeams,
     ).execute({ projectId: 'p1' }, context)
     expect(rogueMembers).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
     expect(JSON.stringify(rogueMembers)).not.toContain('다른 프로젝트 멤버')
@@ -329,6 +332,7 @@ describe('get_member_workload tool', () => {
     const rogueWbs = await createGetMemberWorkloadTool(
       memberRepository(memberRows),
       wbsRepository(repositoryOk({ ...wbsSnapshot, projectId: 'p2' })),
+      toolTeams,
     ).execute({ projectId: 'p1' }, context)
     expect(rogueWbs).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
   })
@@ -336,7 +340,7 @@ describe('get_member_workload tool', () => {
   it('fails closed on access and validates arguments before repository access', async () => {
     const members = memberRepository(memberRows)
     const wbs = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createGetMemberWorkloadTool(members, wbs)
+    const tool = createGetMemberWorkloadTool(members, wbs, toolTeams)
 
     const results = await Promise.all([
       tool.execute({ projectId: 'p2' }, context),
@@ -370,14 +374,14 @@ describe('team scoping (0071) — readTeam은 프로젝트 팀 목록으로 검�
       id: 'dev-1', projectId: 'p-scoped', name: '김DEV', teamCodes: ['DEV'], accessRole: 'admin',
       title: null, hasAccount: true, createdAt: '2026-08-01T00:00:00Z',
     }]
-    const result = await createListMembersTool(memberRepository(rows)).execute(
+    const result = await createListMembersTool(memberRepository(rows), toolTeams).execute(
       { projectId: 'p-scoped', team: 'DEV' }, scopedContext,
     )
     expect(result.ok && result.result.records.map(record => record.name)).toEqual(['김DEV'])
   })
 
   it('list_members는 팀을 정의한 프로젝트에서 전역 목록에만 있는 코드(PMO)를 거부한다', async () => {
-    const result = await createListMembersTool(memberRepository([])).execute(
+    const result = await createListMembersTool(memberRepository([]), toolTeams).execute(
       { projectId: 'p-scoped', team: 'PMO' }, scopedContext,
     )
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })

@@ -6,7 +6,10 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn() }))
 vi.mock('@/lib/ai/provider', () => ({ hasLLM: vi.fn(() => false) }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() => ['ERP']) }))
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  return { projectTeams: vi.fn(async () => teamRows(['ERP'])) }
+})
 
 import {
   applyExtractedItem,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-// teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 목하지 않는다).
-// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
-vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { fixedToolTeams } from '../helpers/tool-team-source'
+const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
 import { createListMeetingsTool } from '@/lib/ai/tools/meetings'
 import { createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
@@ -72,7 +72,7 @@ function wbsRepository(result: ReturnType<WbsRepository['getProjectSnapshot']> e
 describe('core read tools', () => {
   it('fails closed before repository access when project scope is not allowed', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const tool = createFindWbsItemsTool(repository)
+    const tool = createFindWbsItemsTool(repository, toolTeams)
     const deniedContext = { ...context, allowedProjectIds: [] }
 
     await expect(tool.execute({ projectId: 'p1', query: 'ERP' }, deniedContext)).resolves.toMatchObject({
@@ -84,7 +84,7 @@ describe('core read tools', () => {
 
   it('also requires the domain capability, even for an allowed project', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const tool = createGetWbsItemDetailTool(repository)
+    const tool = createGetWbsItemDetailTool(repository, toolTeams)
 
     const result = await tool.execute(
       { projectId: 'p1', itemId: 'task-1' },
@@ -125,14 +125,14 @@ describe('core read tools', () => {
     }
 
     const results = await Promise.all([
-      createFindWbsItemsTool(rogueWbs).execute({ projectId: 'p1' }, context),
+      createFindWbsItemsTool(rogueWbs, toolTeams).execute({ projectId: 'p1' }, context),
       createGetWeeklySheetTool(rogueWeekly, weeklySettingsUnused).execute(
         { projectId: 'p1', weekStart: '2026-07-20' }, context,
       ),
       createListMeetingsTool(rogueMeetings).execute(
         { projectId: 'p1', from: '2026-07-20', to: '2026-07-20' }, context,
       ),
-      createGetAttendanceTool(rogueAttendance).execute(
+      createGetAttendanceTool(rogueAttendance, toolTeams).execute(
         { projectId: 'p1', from: '2026-07-20', to: '2026-07-20' }, context,
       ),
     ])
@@ -143,7 +143,7 @@ describe('core read tools', () => {
 
   it('returns WBS hierarchy/detail and dependency forecasts with source links', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const find = await createFindWbsItemsTool(repository).execute(
+    const find = await createFindWbsItemsTool(repository, toolTeams).execute(
       { projectId: 'p1', query: 'ERP', team: 'ERP' }, context,
     )
     expect(find.ok && find.result.records).toHaveLength(2)
@@ -152,7 +152,7 @@ describe('core read tools', () => {
       expect(find.result.sources[0].href).toBe('/p/p1/wbs?focus=task-1')
     }
 
-    const dependencies = await createGetWbsDependenciesTool(repository).execute(
+    const dependencies = await createGetWbsDependenciesTool(repository, toolTeams).execute(
       { projectId: 'p1', itemId: 'task-2' }, context,
     )
     expect(dependencies.ok && dependencies.result.records).toHaveLength(1)
@@ -166,7 +166,7 @@ describe('core read tools', () => {
 
   it('filters WBS items by overlap, start, and end schedule semantics', async () => {
     const repository = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createFindWbsItemsTool(repository)
+    const tool = createFindWbsItemsTool(repository, toolTeams)
 
     const [overlap, starts, ends] = await Promise.all([
       tool.execute({
@@ -194,7 +194,7 @@ describe('core read tools', () => {
 
   it('rejects partial, invalid, or unscoped WBS schedule arguments', async () => {
     const repository = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createFindWbsItemsTool(repository)
+    const tool = createFindWbsItemsTool(repository, toolTeams)
 
     const results = await Promise.all([
       tool.execute({ projectId: 'p1', from: '2026-07-22' }, context),
@@ -263,7 +263,7 @@ describe('core read tools', () => {
           { id: 'a2', projectId: 'p1', memberId: 'member-2', memberName: '박PMO', teamCodes: ['PMO'], date: '2026-07-20', type: 'trip' },
       ])),
     }
-    const result = await createGetAttendanceTool(repository).execute(
+    const result = await createGetAttendanceTool(repository, toolTeams).execute(
       { projectId: 'p1', from: '2026-07-20', to: '2026-07-26', team: 'ERP' }, context,
     )
 

@@ -20,7 +20,7 @@ import {
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionResult } from './types'
-import { activeTeamCodesForProjectSync, activeTeamCodesVisibleToSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 import { teamViewOfScope } from '@/lib/domain/authz'
 
 const MINUTES_CAPABILITY = 'minutes:read' as const
@@ -95,6 +95,7 @@ function seoulDateMinusDays(now: string, days: number): string {
 
 export function createSearchMinutesTool(
   repository: MinutesRepository,
+  teams: ToolTeamSource,
 ): ReadOnlyBotTool<MinuteToolRecord> {
   return {
     name: 'search_minutes',
@@ -132,11 +133,9 @@ export function createSearchMinutesTool(
       // 담당팀은 조회 범위의 팀이어야 한다 — 프로젝트를 주면 그 프로젝트의 팀, 아니면 호출자가 볼 수 있는 팀(소속
       // 워크스페이스들의 공용 팀 + 스코프 프로젝트의 전용 팀, 플랫폼 관리자는 전부 — teamViewOfScope). 전 워크스페이스
       // 목록이면 다른 워크스페이스의 팀 코드가 통과한다. 접근 판정 뒤에 봐야 남의 프로젝트 팀 구성이 검증 결과로 새지 않는다.
-      // 팀 캐시를 한 번도 못 채웠으면 throw — 오케스트레이터가 도구 실패로 올린다.
+      // 팀 원천 실패는 throw — 오케스트레이터가 도구 실패로 올린다.
       if (team) {
-        const teamCodes = projectId
-          ? activeTeamCodesForProjectSync(projectId)
-          : activeTeamCodesVisibleToSync(teamViewOfScope(context))
+        const teamCodes = projectId ? await teams.projectTeamCodes(projectId) : await teams.visibleTeamCodes(teamViewOfScope(context))
         if (!teamCodes.includes(team)) return invalidArgument('알 수 없는 담당팀입니다.')
       }
 

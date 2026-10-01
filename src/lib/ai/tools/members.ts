@@ -22,7 +22,7 @@ import {
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 
 const MEMBERS_CAPABILITY = 'members:read' as const
 /** role 인자 = 명단 권한(access_role). 권한 없는(조회 전용) 명단 인원은 어느 값에도 걸리지 않는다. */
@@ -51,11 +51,11 @@ export interface MemberWorkloadToolRecord {
   avgActualPct: number | null
 }
 
-/** 담당팀 인자 — 그 프로젝트의 활성 팀이 아니면 null. service_role 팀 캐시를 읽으므로 접근 판정 뒤에만 부른다. */
-function readTeam(value: unknown, projectId: string): TeamCode | null | undefined {
+/** 담당팀 인자 — 그 프로젝트의 활성 팀이 아니면 null. 팀 목록을 읽으므로 접근 판정 뒤에만 부른다. */
+async function readTeam(value: unknown, projectId: string, teams: ToolTeamSource): Promise<TeamCode | null | undefined> {
   const team = readOptionalString(value, 30)
   if (team === undefined) return undefined
-  if (team === null || !activeTeamCodesForProjectSync(projectId).includes(team)) return null
+  if (team === null || !(await teams.projectTeamCodes(projectId)).includes(team)) return null
   return team as TeamCode
 }
 
@@ -73,7 +73,7 @@ function membersMenuSource(projectId: string, team?: TeamCode): BotSource {
   }
 }
 
-export function createListMembersTool(repository: MemberRepository): ReadOnlyBotTool<MemberToolRecord> {
+export function createListMembersTool(repository: MemberRepository, teams: ToolTeamSource): ReadOnlyBotTool<MemberToolRecord> {
   return {
     name: 'list_members',
     requiredCapability: MEMBERS_CAPABILITY,
@@ -89,7 +89,7 @@ export function createListMembersTool(repository: MemberRepository): ReadOnlyBot
       }
       const denied = checkProjectAccess(context, projectId, MEMBERS_CAPABILITY)
       if (denied) return denied
-      const team = readTeam(args.team, projectId)
+      const team = await readTeam(args.team, projectId, teams)
       if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
 
       const repoResult = await repository.listMembers(projectId)
@@ -147,6 +147,7 @@ function emptyWorkload(context: ToolExecutionContext): ToolExecutionResult<Membe
 export function createGetMemberWorkloadTool(
   members: MemberRepository,
   wbs: WbsBotRepository,
+  teams: ToolTeamSource,
 ): ReadOnlyBotTool<MemberWorkloadToolRecord> {
   return {
     name: 'get_member_workload',
@@ -157,7 +158,7 @@ export function createGetMemberWorkloadTool(
       if (!projectId) return invalidArgument()
       const denied = checkProjectAccess(context, projectId, MEMBERS_CAPABILITY)
       if (denied) return denied
-      const team = readTeam(args.team, projectId)
+      const team = await readTeam(args.team, projectId, teams)
       if (team === null) return invalidArgument('알 수 없는 담당팀입니다.')
 
       // 워크로드는 멤버 명단과 WBS 집계가 둘 다 있어야 의미가 있다 — 부분 성공을 조합하지 않는다.
@@ -177,7 +178,7 @@ export function createGetMemberWorkloadTool(
       ) return repositoryScopeViolation()
 
       const today = wbsResult.data.baseDate ?? todayInSeoul(context.now)
-      const teamCodes = activeTeamCodesForProjectSync(projectId)
+      const teamCodes = await teams.projectTeamCodes(projectId)
       const computed = computeTree(wbsResult.data.items, today, new Set(wbsResult.data.holidays), {
         subActTeamOrder: teamOrderMap(teamCodes),
       })

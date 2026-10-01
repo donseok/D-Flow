@@ -6,7 +6,8 @@ import { embedDocuments } from './embeddings'
 import { hasEmbeddings } from './provider'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { chunked } from './util'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 
@@ -25,18 +26,19 @@ export interface IngestResult {
 export async function ingestProject(projectId: string): Promise<IngestResult> {
   if (!hasEmbeddings()) return { count: 0, skipped: true, reason: 'no_embedding_key' }
 
-  // RLS 관문 — 호출자가 볼 수 없는 프로젝트(다른 워크스페이스·없는 pid)면 throw. 아래 service_role 팀 캐시 읽기와 admin upsert 는
+  // RLS 관문 — 호출자가 볼 수 없는 프로젝트(다른 워크스페이스·없는 pid)면 throw. 아래 팀 읽기(세션)와 admin upsert 는
   // 이 뒤에만 간다(자가 치유 색인이 다른 워크스페이스의 wbs_embeddings 에 쓰던 경로 — SP2 최종 리뷰 ISO-1).
   const name = await getProjectName(projectId)
-  const [{ items, today }, roster, config] = await Promise.all([
+  const [{ items, today }, roster, config, teams] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
     getProjectConfig(projectId),
+    projectTeams(projectId),
   ])
   // 명단을 못 읽었으면 여기서 멈춘다 — 빈 명단으로 진행하면 아래 stale 삭제가 기존 member 임베딩을 지운다(3원칙 ①·②).
   if (!roster.ok) throw new Error(roster.error)
   // 팀 축은 그 프로젝트의 팀 — 전 워크스페이스 공용 목록이면 남의 워크스페이스 팀 코드가 색인 문서에 실린다.
-  const docs = buildDocuments(items, name, today, activeTeamCodesForProjectSync(projectId), roster.rows, valueOf(config, 'core.level_labels'))
+  const docs = buildDocuments(items, name, today, activeCodes(teams), roster.rows, valueOf(config, 'core.level_labels'))
   if (docs.length === 0) return { count: 0 }
 
   const vectors = await embedDocuments(

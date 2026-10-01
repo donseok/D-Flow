@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-// teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 목하지 않는다).
-// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
-vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { fixedToolTeams } from '../helpers/tool-team-source'
+const toolTeams = fixedToolTeams()
 import { createGetKanbanViewTool, type KanbanColumnRecord } from '@/lib/ai/tools/kanban'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import type {
@@ -83,7 +83,7 @@ function columnByKey(records: KanbanColumnRecord[], key: string): KanbanColumnRe
 describe('get_kanban_view', () => {
   it('returns the status board by default with distribution facts and focus-deep-linked sources', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const result = await createGetKanbanViewTool(repository).execute({ projectId: 'p1' }, context)
+    const result = await createGetKanbanViewTool(repository, toolTeams).execute({ projectId: 'p1' }, context)
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -125,7 +125,7 @@ describe('get_kanban_view', () => {
 
   it('groups by phase and by owner, sending unassigned cards to 미배정', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const tool = createGetKanbanViewTool(repository)
+    const tool = createGetKanbanViewTool(repository, toolTeams)
 
     const phase = await tool.execute({ projectId: 'p1', view: 'phase' }, context)
     expect(phase.ok).toBe(true)
@@ -153,7 +153,7 @@ describe('get_kanban_view', () => {
 
   it('applies team filter on primary owners only and status filter on card status', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const tool = createGetKanbanViewTool(repository)
+    const tool = createGetKanbanViewTool(repository, toolTeams)
 
     const byTeam = await tool.execute({ projectId: 'p1', team: 'ERP' }, context)
     expect(byTeam.ok).toBe(true)
@@ -177,7 +177,7 @@ describe('get_kanban_view', () => {
 
   it('caps cards per column and reports truncation honestly', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const result = await createGetKanbanViewTool(repository).execute(
+    const result = await createGetKanbanViewTool(repository, toolTeams).execute(
       { projectId: 'p1', cardLimit: 1 }, context,
     )
     expect(result.ok).toBe(true)
@@ -202,7 +202,7 @@ describe('get_kanban_view', () => {
         })),
       ],
     }
-    const result = await createGetKanbanViewTool(botRepository(repositoryOk(manyTasks))).execute(
+    const result = await createGetKanbanViewTool(botRepository(repositoryOk(manyTasks)), toolTeams).execute(
       { projectId: 'p1', cardLimit: 50 }, context,
     )
     expect(result.ok).toBe(true)
@@ -215,7 +215,7 @@ describe('get_kanban_view', () => {
     const empty: WbsProjectSnapshot = {
       projectId: 'p1', baseDate: null, holidays: [], items: [], dependencies: [],
     }
-    const result = await createGetKanbanViewTool(botRepository(repositoryOk(empty))).execute(
+    const result = await createGetKanbanViewTool(botRepository(repositoryOk(empty)), toolTeams).execute(
       { projectId: 'p1' }, context,
     )
     expect(result.ok).toBe(true)
@@ -227,7 +227,7 @@ describe('get_kanban_view', () => {
   })
 
   it('reports a missing project as ok with projectFound=false', async () => {
-    const result = await createGetKanbanViewTool(botRepository(repositoryOk(null))).execute(
+    const result = await createGetKanbanViewTool(botRepository(repositoryOk(null)), toolTeams).execute(
       { projectId: 'p1' }, context,
     )
     expect(result).toMatchObject({
@@ -239,6 +239,7 @@ describe('get_kanban_view', () => {
   it('propagates repository failure without masking it as empty', async () => {
     const result = await createGetKanbanViewTool(
       botRepository(repositoryError('WBS_ITEMS_READ_FAILED', true)),
+      toolTeams,
     ).execute({ projectId: 'p1' }, context)
     expect(result).toMatchObject({
       ok: false,
@@ -252,7 +253,7 @@ describe('get_kanban_view', () => {
 
   it('rejects invalid arguments before touching the repository', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const tool = createGetKanbanViewTool(repository)
+    const tool = createGetKanbanViewTool(repository, toolTeams)
     const invalidCalls: unknown[] = [
       'not-an-object',
       {},
@@ -275,7 +276,7 @@ describe('get_kanban_view', () => {
 
   it('fails closed on project scope and capability before repository access', async () => {
     const repository = botRepository(repositoryOk(snapshot))
-    const tool = createGetKanbanViewTool(repository)
+    const tool = createGetKanbanViewTool(repository, toolTeams)
 
     await expect(tool.execute({ projectId: 'p2' }, context)).resolves.toMatchObject({
       ok: false, error: { code: 'ACCESS_DENIED' },
@@ -287,7 +288,7 @@ describe('get_kanban_view', () => {
   })
 
   it('rejects repository rows that widen the requested project scope', async () => {
-    const tool1 = createGetKanbanViewTool(botRepository(repositoryOk({ ...snapshot, projectId: 'p2' })))
+    const tool1 = createGetKanbanViewTool(botRepository(repositoryOk({ ...snapshot, projectId: 'p2' })), toolTeams)
     await expect(tool1.execute({ projectId: 'p1' }, context)).resolves.toMatchObject({
       ok: false, error: { code: 'DATA_SOURCE_ERROR' },
     })
@@ -296,14 +297,14 @@ describe('get_kanban_view', () => {
       ...snapshot,
       items: [...snapshot.items, item({ id: 'rogue-1', projectId: 'p2' })],
     }
-    const tool2 = createGetKanbanViewTool(botRepository(repositoryOk(rogueItems)))
+    const tool2 = createGetKanbanViewTool(botRepository(repositoryOk(rogueItems)), toolTeams)
     await expect(tool2.execute({ projectId: 'p1' }, context)).resolves.toMatchObject({
       ok: false, error: { code: 'DATA_SOURCE_ERROR' },
     })
   })
 
   it('never serializes PII or storage internals', async () => {
-    const result = await createGetKanbanViewTool(botRepository(repositoryOk(snapshot))).execute(
+    const result = await createGetKanbanViewTool(botRepository(repositoryOk(snapshot)), toolTeams).execute(
       { projectId: 'p1' }, context,
     )
     expect(JSON.stringify(result)).not.toMatch(/email|file_path|filePath|signed|note/i)

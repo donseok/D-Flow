@@ -9,7 +9,10 @@ vi.mock('@/lib/ai/knowledge', () => ({ getProjectName: vi.fn() }))
 vi.mock('@/lib/ai/analytics', () => ({ buildDocuments: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn() }))
 // 팀 축은 그 프로젝트의 팀(SP2 16b) — 전 워크스페이스 공용 목록이 아니다.
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : ['B팀'])) }))
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  return { projectTeams: vi.fn(async (pid: string) => teamRows(pid === 'p1' ? ['A팀'] : ['B팀'])) }
+})
 
 import { hasEmbeddings } from '@/lib/ai/provider'
 import { embedDocuments } from '@/lib/ai/embeddings'
@@ -20,6 +23,7 @@ import { getProjectName } from '@/lib/ai/knowledge'
 import { buildDocuments } from '@/lib/ai/analytics'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { ingestProject } from '@/lib/ai/ingest'
+import { projectTeams } from '@/lib/teams/source'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const mHasEmb = vi.mocked(hasEmbeddings)
@@ -151,6 +155,19 @@ describe('ingestProject — 재색인(전체 교체)', () => {
     expect(await ingestProject('p1')).toEqual({ count: 0 })
     expect(mDocs.mock.calls[0][4]).toBe(rows)
     expect(mDocs.mock.calls[0][3]).toEqual(['A팀'])
+  })
+
+  it('팀 원천 실패는 색인을 멈춘다(빈 팀 축으로 문서를 쓰지 않는다 — SP4 A2)', async () => {
+    mHasEmb.mockReturnValue(true)
+    vi.mocked(projectTeams).mockRejectedValueOnce(new Error('teams down'))
+    mDocs.mockReturnValue([{ kind: 'wbs_item', refId: 'w1', content: 'doc1' }])
+    mEmbed.mockResolvedValue([[0.1, 0.2]])
+    const { del, upsert } = mockAdmin()
+
+    await expect(ingestProject('p1')).rejects.toThrow('teams down')
+    expect(mDocs).not.toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+    expect(del).not.toHaveBeenCalled()
   })
 
   it('전부 실패: 기존 색인을 지우지 않고 보존(삭제 호출 없음)', async () => {

@@ -15,7 +15,7 @@ import {
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 
 const KANBAN_CAPABILITY = 'kanban:read' as const
 
@@ -82,7 +82,7 @@ function groupColumns(view: KanbanView, computed: ComputedItem[], teamCodes: rea
   return groupByStatus(computed)
 }
 
-export function createGetKanbanViewTool(repository: WbsBotRepository): ReadOnlyBotTool<KanbanColumnRecord> {
+export function createGetKanbanViewTool(repository: WbsBotRepository, teams: ToolTeamSource): ReadOnlyBotTool<KanbanColumnRecord> {
   return {
     name: 'get_kanban_view',
     requiredCapability: KANBAN_CAPABILITY,
@@ -103,8 +103,8 @@ export function createGetKanbanViewTool(repository: WbsBotRepository): ReadOnlyB
       }
       const denied = checkProjectAccess(context, projectId, KANBAN_CAPABILITY)
       if (denied) return denied
-      // 팀 목록(service_role 팀 캐시)은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
-      const teamCodes = activeTeamCodesForProjectSync(projectId)
+      // 팀 목록은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
+      const teamCodes = await teams.projectTeamCodes(projectId)
       if (team && !teamCodes.includes(team)) {
         return invalidArgument('알 수 없는 담당팀입니다.')
       }

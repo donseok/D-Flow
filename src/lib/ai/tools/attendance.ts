@@ -16,7 +16,7 @@ import {
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 
 const ATTENDANCE_CAPABILITY = 'attendance:read' as const
 const ATTENDANCE_TYPES = new Set<AttendanceType>([
@@ -44,6 +44,7 @@ function parseTypes(value: unknown): AttendanceType[] | null | undefined {
 
 export function createGetAttendanceTool(
   repository: AttendanceRepository,
+  teams: ToolTeamSource,
 ): ReadOnlyBotTool<AttendanceToolRecord> {
   return {
     name: 'get_attendance',
@@ -63,8 +64,8 @@ export function createGetAttendanceTool(
       if (!validDateRange(from, to)) return invalidArgument('근태 조회 기간이 올바르지 않습니다.')
       const denied = checkProjectAccess(context, projectId, ATTENDANCE_CAPABILITY)
       if (denied) return denied
-      // 담당팀은 접근 판정 뒤에 본다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다(service_role 팀 캐시).
-      if (team && !activeTeamCodesForProjectSync(projectId).includes(team)) {
+      // 담당팀은 접근 판정 뒤에 본다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다(팀 목록).
+      if (team && !(await teams.projectTeamCodes(projectId)).includes(team)) {
         return invalidArgument('알 수 없는 담당팀입니다.')
       }
 

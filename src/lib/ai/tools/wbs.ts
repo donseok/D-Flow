@@ -25,7 +25,7 @@ import {
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 
 const WBS_CAPABILITY = 'wbs:read' as const
 
@@ -182,7 +182,7 @@ function loadArgs(args: unknown): { projectId: string; raw: Record<string, unkno
   return projectId ? { projectId, raw: args } : null
 }
 
-export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTool<WbsToolItemRecord> {
+export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTeamSource): ReadOnlyBotTool<WbsToolItemRecord> {
   return {
     name: 'find_wbs_items',
     requiredCapability: WBS_CAPABILITY,
@@ -217,8 +217,8 @@ export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTo
       }
       const denied = checkProjectAccess(context, parsed.projectId, WBS_CAPABILITY)
       if (denied) return denied
-      // 팀 목록(service_role 팀 캐시)은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
-      const teamCodes = activeTeamCodesForProjectSync(parsed.projectId)
+      // 팀 목록은 접근 판정 뒤에 읽는다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
+      const teamCodes = await teams.projectTeamCodes(parsed.projectId)
       if (team && !teamCodes.includes(team)) {
         return invalidArgument('알 수 없는 담당팀입니다.')
       }
@@ -290,7 +290,7 @@ export function createFindWbsItemsTool(repository: WbsRepository): ReadOnlyBotTo
   }
 }
 
-export function createGetWbsItemDetailTool(repository: WbsRepository): ReadOnlyBotTool<WbsToolItemRecord> {
+export function createGetWbsItemDetailTool(repository: WbsRepository, teams: ToolTeamSource): ReadOnlyBotTool<WbsToolItemRecord> {
   return {
     name: 'get_wbs_item_detail',
     requiredCapability: WBS_CAPABILITY,
@@ -307,7 +307,7 @@ export function createGetWbsItemDetailTool(repository: WbsRepository): ReadOnlyB
       if (!isScopedWbsSnapshot(repoResult.data, parsed.projectId)) return repositoryScopeViolation()
       const snapshot = computedSnapshot(
         repoResult.data.items, repoResult.data.baseDate, repoResult.data.holidays, context,
-        activeTeamCodesForProjectSync(parsed.projectId),
+        await teams.projectTeamCodes(parsed.projectId),
       )
       const flat = snapshot.flat.find(value => value.item.id === itemId)
       if (!flat) return emptyWbsDetail(context, true)
@@ -344,6 +344,7 @@ function emptyWbsDetail(
 
 export function createGetWbsDependenciesTool(
   repository: WbsRepository,
+  teams: ToolTeamSource,
 ): ReadOnlyBotTool<WbsDependencyRecord> {
   return {
     name: 'get_wbs_dependencies',
@@ -361,7 +362,7 @@ export function createGetWbsDependenciesTool(
       if (!isScopedWbsSnapshot(repoResult.data, parsed.projectId)) return repositoryScopeViolation()
       const snapshot = computedSnapshot(
         repoResult.data.items, repoResult.data.baseDate, repoResult.data.holidays, context,
-        activeTeamCodesForProjectSync(parsed.projectId),
+        await teams.projectTeamCodes(parsed.projectId),
       )
       const byId = new Map(snapshot.flat.map(value => [value.item.id, value]))
       if (itemId && !byId.has(itemId)) return emptyDependencies(context, true, false)

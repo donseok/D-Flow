@@ -6,15 +6,19 @@ const mocks = vi.hoisted(() => ({
   generateAnswer: vi.fn(),
   hasLLM: vi.fn(() => false),
   activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(() => ['PMO', 'ERP', 'MES', '가공', 'MDM']),
+  projectTeams: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: mocks.generateAnswer }))
 vi.mock('@/lib/ai/provider', () => ({ hasLLM: mocks.hasLLM }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
-vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync,
-}))
+// 팀 원천(SP4 A2 — 워커는 service_role 을 넘긴다). 코드는 위 함수가 정하고 행으로 바꿔 돌려준다
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  mocks.projectTeams.mockImplementation(async (pid: string) => teamRows(mocks.activeTeamCodesForProjectSync(pid)))
+  return { projectTeams: mocks.projectTeams }
+})
 
 import {
   applyExtractedItem,
@@ -525,7 +529,7 @@ describe('processMinuteWikiJob 버전 안전성', () => {
     })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(1)
     // 담당 팀 후보는 이 job 프로젝트의 팀이다(전 워크스페이스 공용 목록 아님).
-    expect(mocks.activeTeamCodesForProjectSync).toHaveBeenCalledWith('project-1')
+    expect(mocks.projectTeams).toHaveBeenCalledWith('project-1', { client: admin })
     expect(admin.rpc).toHaveBeenCalledWith(
       'finish_wiki_processing_job',
       expect.objectContaining({

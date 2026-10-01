@@ -28,3 +28,11 @@ export function teamsSourceMock(teams: readonly Team[] = FIXTURE_TEAMS) {
     teamCodesVisibleTo: vi.fn(async (): Promise<string[]> => teams.filter((t) => t.active).map((t) => t.code)),
   }
 }
+
+/** 코드 목록 → Team 행(테스트용). 순서 = sortOrder, 활성, 그 워크스페이스 공용 팀이 기본 */
+export function teamRows(codes: readonly string[], over: Partial<Team> = {}): Team[] {
+  return codes.map((code, i) => ({
+    id: `t-${code}`, code, name: code, color: '#6b7280', sortOrder: i, active: true, progressVisible: true,
+    projectId: null, workspaceId: '00000000-0000-0000-7e57-0000000019f0', ...over,
+  }))
+}

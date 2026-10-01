@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getProjectMeetingData: vi.fn(async (): Promise<{ ok: true; meetings: unknown[]; exceptions: unknown[] } | { ok: false; error: string }> =>
     ({ ok: true, meetings: [], exceptions: [] })),
   getProjectConfig: vi.fn(),
+  projectTeams: vi.fn(),
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots }))
@@ -20,7 +21,12 @@ vi.mock('@/lib/supabase/server', () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => mocks.project }) }) }),
   })),
 }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync }))
+// 팀 원천(SP4 A2 — 요청 범위). 코드는 위 함수가 정하고 행으로 바꿔 돌려준다
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  mocks.projectTeams.mockImplementation(async (pid: string) => teamRows(mocks.activeTeamCodesForProjectSync(pid)))
+  return { projectTeams: mocks.projectTeams }
+})
 
 import { loadProjectFacts } from '@/lib/ai/projectFacts'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -35,20 +41,21 @@ describe('loadProjectFacts — 팀 축은 대상 프로젝트의 팀', () => {
   it('그 프로젝트의 활성 팀 코드를 싣는다 — 다른 프로젝트·워크스페이스의 팀은 없다', async () => {
     const src = await loadProjectFacts('p1')
     expect(src?.teams).toEqual(['A팀'])
-    expect(mocks.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
-    // 세션 클라이언트를 해석기에 주입한다 — 같은 RLS 로 읽는다
+    // 세션 클라이언트를 해석기에 주입한다 — 같은 RLS 로 읽는다. 팀도 같은 세션 클라이언트로(SP4 A2)
     expect(mocks.getProjectConfig).toHaveBeenCalledWith('p1', { client: expect.objectContaining({ from: expect.any(Function) }) })
+    const { client } = mocks.getProjectConfig.mock.calls[0][1] as { client: unknown }
+    expect(mocks.projectTeams).toHaveBeenCalledWith('p1', { client })
   })
 
-  it('프로젝트를 볼 수 없으면(RLS 로 행 없음) service_role 팀 캐시를 읽지 않는다', async () => {
+  it('프로젝트를 볼 수 없으면(RLS 로 행 없음) 팀을 읽지 않는다', async () => {
     mocks.project = { data: null, error: null }
     expect(await loadProjectFacts('p-hidden')).toBeNull()
-    expect(mocks.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.projectTeams).not.toHaveBeenCalled()
   })
 
-  it('팀 캐시 미로드는 throw 로 올린다 — 빈 팀으로 브리핑을 만들지 않는다(호출측이 unavailable 로 강등)', async () => {
-    mocks.activeTeamCodesForProjectSync.mockImplementationOnce(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
-    await expect(loadProjectFacts('p1')).rejects.toThrow(/팀 마스터/)
+  it('팀 원천 실패는 throw 로 올린다 — 빈 팀으로 브리핑을 만들지 않는다(호출측이 unavailable 로 강등)', async () => {
+    mocks.projectTeams.mockRejectedValueOnce(new Error('팀 목록을 불러오지 못했습니다.'))
+    await expect(loadProjectFacts('p1')).rejects.toThrow(/팀 목록/)
   })
 })
 

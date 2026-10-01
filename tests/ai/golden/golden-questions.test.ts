@@ -5,10 +5,10 @@
 //  3) orchestrateChatV2 이벤트 수집(LLM 합성 없음) → done.tools 정확 일치·argsSubset 부분 일치·
 //     delta 결합 문자열 includes/excludes·sources href prefix·terminal 이벤트 정확히 1개
 // 실제 DB·네트워크·LLM 접근 없음. 전체 실행 5초 이내(단일 파일).
-import { describe, expect, it, vi } from 'vitest'
-// teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 목하지 않는다).
-// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
-vi.mock('@/lib/teams/master', async () => (await import('../../helpers/teams-master-mock')).teamsMasterMock())
+import { describe, expect, it } from 'vitest'
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { fixedToolTeams } from '../../helpers/tool-team-source'
+const toolTeams = fixedToolTeams()
 import {
   orchestrateChatV2,
   type ChatOrchestratorDependencies,
@@ -49,9 +49,9 @@ import { GOLDEN_CASES } from './cases'
 function buildRegistry(options: FakeRepositoryOptions) {
   const repos = createFakeRepositories(options)
   const tools: ChatTool[] = [
-    createFindWbsItemsTool(repos.wbs),
-    createGetWbsItemDetailTool(repos.wbs),
-    createGetWbsDependenciesTool(repos.wbs),
+    createFindWbsItemsTool(repos.wbs, toolTeams),
+    createGetWbsItemDetailTool(repos.wbs, toolTeams),
+    createGetWbsDependenciesTool(repos.wbs, toolTeams),
     createGetWbsChangeLogTool(repos.wbs),
     createListWbsAttachmentsTool(repos.wbs),
     createGetWeeklySheetTool(repos.weekly, repos.settings),
@@ -59,15 +59,15 @@ function buildRegistry(options: FakeRepositoryOptions) {
     createListMeetingsTool(repos.meetings),
     createGetMeetingDetailTool(repos.meetings),
     createListMyMeetingsTool(repos.meetings),
-    createGetAttendanceTool(repos.attendance),
+    createGetAttendanceTool(repos.attendance, toolTeams),
     createListAnnouncementsTool(repos.announcements),
     createSearchAnnouncementsTool(repos.announcements),
-    createSearchMinutesTool(repos.minutes),
+    createSearchMinutesTool(repos.minutes, toolTeams),
     createGetMinuteDetailTool(repos.minutes),
-    createGetKanbanViewTool(repos.wbs),
-    createGetProjectDashboardTool(repos.wbs, repos.meetings, repos.settings),
-    createListMembersTool(repos.members),
-    createGetMemberWorkloadTool(repos.members, repos.wbs),
+    createGetKanbanViewTool(repos.wbs, toolTeams),
+    createGetProjectDashboardTool(repos.wbs, repos.meetings, repos.settings, toolTeams),
+    createListMembersTool(repos.members, toolTeams),
+    createGetMemberWorkloadTool(repos.members, repos.wbs, toolTeams),
     createGetSafeProjectSettingsTool(repos.settings),
   ]
   return createChatToolRegistry(tools)

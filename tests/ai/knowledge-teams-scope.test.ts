@@ -5,13 +5,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getComputedWbs: vi.fn(async () => ({ items: [], today: '2026-09-26' })),
   activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : pid === 'p2' ? ['B팀'] : [])),
+  projectTeams: vi.fn(),
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/app/actions/project', () => ({
   listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme' }, { id: 'p2', name: 'Beta' }]),
 }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: mocks.activeTeamCodesForProjectSync }))
+// 팀 원천(SP4 A2 — 요청 범위). 코드는 위 함수가 정하고 행으로 바꿔 돌려준다
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  mocks.projectTeams.mockImplementation(async (pid: string) => teamRows(mocks.activeTeamCodesForProjectSync(pid)))
+  return { projectTeams: mocks.projectTeams }
+})
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: vi.fn(async () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: 'Acme' } }) }) }) }),
@@ -27,12 +33,12 @@ describe('knowledge — 팀 축은 대상 프로젝트의 팀', () => {
     const k = await gatherKnowledge('by_team', 'p1')
     expect(k.text).toContain('A팀')
     expect(k.text).not.toContain('B팀')
-    expect(mocks.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
-    expect(mocks.activeTeamCodesForProjectSync).not.toHaveBeenCalledWith('p2')
+    expect(mocks.projectTeams).toHaveBeenCalledWith('p1')
+    expect(mocks.projectTeams).not.toHaveBeenCalledWith('p2')
   })
 
   it('전사 요약은 프로젝트마다 그 프로젝트의 팀으로 분석한다', async () => {
     await gatherKnowledge('overview', null)
-    expect(mocks.activeTeamCodesForProjectSync.mock.calls.map(c => c[0]).sort()).toEqual(['p1', 'p2'])
+    expect(mocks.projectTeams.mock.calls.map(c => c[0]).sort()).toEqual(['p1', 'p2'])
   })
 })

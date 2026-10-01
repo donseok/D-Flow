@@ -12,7 +12,8 @@ import { getProjectMinuteSignals } from '@/lib/data/minutes'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { createServerClient } from '@/lib/supabase/server'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 import type { ComputedItem, Meeting, MeetingException, MinuteSignal, TeamCode } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { seoulToday } from '@/lib/domain/dates'
@@ -59,8 +60,8 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
   // 진척 이력·회의 실패를 '0건'으로 브리핑하지 않는다 — 호출측이 'unavailable' 로 강등한다.
   if (!snapRes.ok) throw new Error('[projectFacts] ' + snapRes.error)
   if (!meetRes.ok) throw new Error('[projectFacts] ' + meetRes.error)
-  // 팀 캐시는 service_role 이라 프로젝트 행을 RLS 로 확인한 뒤에 읽는다. 캐시 미로드는 throw — 호출측이 'unavailable' 로 강등한다.
-  const teams = activeTeamCodesForProjectSync(projectId)
+  // 팀은 프로젝트 행을 RLS 로 확인한 뒤에 같은 세션으로 읽는다. 원천 실패는 throw — 호출측이 'unavailable' 로 강등한다.
+  const teams = activeCodes(await projectTeams(projectId, { client: sb }))
   return {
     projectId,
     projectName: (project.data.name as string) ?? '',

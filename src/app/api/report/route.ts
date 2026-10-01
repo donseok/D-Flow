@@ -20,7 +20,8 @@ import { briefToExtraSlide, type ExtraNarrativeSlide } from '@/lib/report/aiComm
 import { loadProjectFacts } from '@/lib/ai/projectFacts'
 import { briefFactsHash, buildBriefFacts } from '@/lib/ai/brief'
 import { getAiBrief } from '@/lib/data/aiBriefs'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
@@ -122,10 +123,11 @@ export async function GET(req: NextRequest) {
   const { project } = target
 
   // 설정 조회는 같은 배치에서 돌리되 결과로 받는다 — throw 하면 Promise.all 전체가 500 이 되어 '설정 확인 불가'(503)와 구분되지 않는다.
-  const [{ items, today }, roster, attendance, meetRes, annRes, cfgRes] = await Promise.all([
+  const [{ items, today }, roster, attendance, meetRes, annRes, cfgRes, teamsRes] = await Promise.all([
     getComputedWbs(projectId), getProjectRoster(projectId), getAttendanceRecords(projectId),
     getProjectMeetingData(projectId), getAnnouncements(projectId),
     getProjectConfig(projectId).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
+    projectTeams(projectId).then((teams) => ({ ok: true as const, teams }), (e: unknown) => ({ ok: false as const, e })),
   ])
   if (!cfgRes.ok) {
     if (cfgRes.e instanceof ConfigUnavailableError) {
@@ -133,6 +135,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
     }
     throw cfgRes.e
+  }
+  if (!teamsRes.ok) {
+    console.error('[report] 프로젝트 팀 조회 실패:', { projectId }, teamsRes.e)
+    return NextResponse.json({ error: '프로젝트 팀을 확인할 수 없습니다.' }, { status: 503 })
   }
   let levelLabels: string[]
   try { levelLabels = valueOf(cfgRes.cfg, 'core.level_labels') } catch (e) {
@@ -157,7 +163,7 @@ export async function GET(req: NextRequest) {
   const model = buildWeeklyReportModel(items, project, today, {
     members, attendance, generatedAt: seoulNow(),
     meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
-    teams: activeTeamCodesForProjectSync(projectId), levelLabels,
+    teams: activeCodes(teamsRes.teams), levelLabels,
   })
   const meta = FORMATS[format]
 
@@ -171,7 +177,7 @@ export async function GET(req: NextRequest) {
     try {
       src = await loadProjectFacts(projectId)
     } catch (e) {
-      // 근거 로더는 조회 실패(진척 이력·회의)와 팀 캐시 미로드를 throw 로 올린다 — 명단·공지·회의처럼 503 으로 사유를 돌려준다.
+      // 근거 로더는 조회 실패(진척 이력·회의·팀)를 throw 로 올린다 — 명단·공지·회의처럼 503 으로 사유를 돌려준다.
       console.error('[report] AI 브리핑 근거 조회 실패:', { projectId }, e)
       return NextResponse.json({ error: 'AI 브리핑 근거를 불러오지 못했습니다.' }, { status: 503 })
     }

@@ -8,7 +8,8 @@ import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { CONFIG_UNAVAILABLE_ERROR, gateWikiJob } from '@/lib/ai/index/moduleGate'
 import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 import {
   fnv1a64, isMarkableBlock, splitMinuteBlocks, type MinuteBlock,
 } from '@/lib/minutes/blocks'
@@ -1070,8 +1071,8 @@ export async function processMinuteWikiJob(jobId: number): Promise<WikiProcessSu
     )
 
     const saturation = await loadWikiSaturation(admin, job.project_id as string)
-    // 담당 팀 후보는 이 위키 프로젝트의 팀이다. 팀 캐시 미로드는 throw — 아래 catch 가 작업 실패(재시도)로 올린다.
-    const teamCodes = activeTeamCodesForProjectSync(job.project_id as string)
+    // 담당 팀 후보는 이 위키 프로젝트의 팀이다(워커 — 세션 없음, service_role). 팀 원천 실패는 throw — 아래 catch 가 작업 실패(재시도)로 올린다.
+    const teamCodes = activeCodes(await projectTeams(job.project_id as string, { client: admin }))
     const { blocks, items } = await extractItems(
       bodyMd,
       title,

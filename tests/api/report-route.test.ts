@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   buildWeeklyReportModel: vi.fn(),
   buildReportWorkbook: vi.fn(),
   loadDisplayBranding: vi.fn(),
+  projectTeams: vi.fn(async () => []),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
@@ -41,7 +42,7 @@ vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: mocks.getWeeklySheet 
 vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: mocks.loadProjectFacts }))
 vi.mock('@/lib/ai/brief', () => ({ briefFactsHash: vi.fn(), buildBriefFacts: vi.fn() }))
 vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: vi.fn(() => []) }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 
 import { GET } from '@/app/api/report/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -111,6 +112,15 @@ describe('GET /api/report — 프로젝트 설정', () => {
     expect(res.status).toBe(503)
     expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
     expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
+  })
+  it('팀 원천 실패는 503 고정 문구 — 보고서를 빈 팀 축으로 만들지 않는다(SP4 A2)', async () => {
+    mocks.projectTeams.mockRejectedValueOnce(new Error('relation "teams" boom'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await GET(req())
+    expect(res.status).toBe(503)
+    expect(await res.text()).not.toContain('boom')
+    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
+    err.mockRestore()
   })
   it('단계 이름이 손상이면 그 키의 오류(422) — 기본 라벨로 만들지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -20,18 +20,7 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/app/actions/teams.ts',
   'src/app/api/chat/v2/stream/route.ts',
   'src/app/api/export/route.ts',
-  'src/app/api/report/route.ts',
   'src/components/dashboard/DashboardView.tsx',
-  'src/lib/ai/ingest.ts',
-  'src/lib/ai/knowledge.ts',
-  'src/lib/ai/projectFacts.ts',
-  'src/lib/ai/tools/attendance.ts',
-  'src/lib/ai/tools/dashboard.ts',
-  'src/lib/ai/tools/kanban.ts',
-  'src/lib/ai/tools/members.ts',
-  'src/lib/ai/tools/minutes.ts',
-  'src/lib/ai/tools/wbs.ts',
-  'src/lib/ai/wiki-ingest.ts',
 ]
 /** 옛 캐시에서 refreshTeams 만 가져오는 파일 — 화면 팀 목록(레이아웃)의 갱신 신호라 B 까지 남는다(계획 P20) */
 export const REFRESH_ONLY: readonly string[] = ['src/app/actions/project.ts']

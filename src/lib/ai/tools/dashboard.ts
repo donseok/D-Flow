@@ -10,7 +10,7 @@ import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { computeTree, overallProgress } from '@/lib/domain/rollup'
 import { collectLeaves } from '@/lib/domain/tree'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ToolTeamSource } from './teamSource'
 import { pick } from '@/lib/settings/pick'
 import type { Status } from '@/lib/domain/types'
 import type {
@@ -53,6 +53,7 @@ export function createGetProjectDashboardTool(
   wbs: WbsBotRepository,
   meetings: MeetingBotRepository,
   settings: Pick<ProjectSettingsRepository, 'getProjectConfig'>,
+  teams: ToolTeamSource,
 ): ReadOnlyBotTool<never> {
   return {
     name: 'get_project_dashboard',
@@ -89,7 +90,7 @@ export function createGetProjectDashboardTool(
       const realToday = todayInSeoul(context.now)
       const calculationDate = snapshot.baseDate ?? realToday
       const roots = computeTree(snapshot.items, calculationDate, new Set(snapshot.holidays), {
-        subActTeamOrder: teamOrderMap(activeTeamCodesForProjectSync(projectId)),
+        subActTeamOrder: teamOrderMap(await teams.projectTeamCodes(projectId)),
       })
       const leaves = collectLeaves(roots)
       const statusCount = (status: Status) => leaves.filter(leaf => leaf.status === status).length

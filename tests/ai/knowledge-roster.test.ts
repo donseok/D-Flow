@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: vi.fn(async () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: 'Acme' } }) }) }) }),

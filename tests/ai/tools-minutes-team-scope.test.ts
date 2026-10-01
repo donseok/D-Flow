@@ -10,14 +10,9 @@ const TEAMS = vi.hoisted((): Team[] => {
     ({ id: `${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
   return [t('PMO', 'ws-a'), t('ERP', 'ws-b'), t('MES', 'ws-a', 'p1'), t('QA', 'ws-a', 'p-hidden')]
 })
-vi.mock('@/lib/teams/master', async () => {
-  const { teamCodesVisibleTo } = await import('@/lib/domain/teams')
-  return {
-    activeTeamCodesVisibleToSync: (view: Parameters<typeof teamCodesVisibleTo>[1]) => teamCodesVisibleTo(TEAMS, view),
-    activeTeamCodesForProjectSync: (pid: string) => (pid === 'p1' ? ['MES'] : []),
-  }
-})
 import { createSearchMinutesTool } from '@/lib/ai/tools/minutes'
+import type { ToolTeamSource } from '@/lib/ai/tools/teamSource'
+import { teamCodesVisibleTo } from '@/lib/domain/teams'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import { repositoryOk, type MinuteSearchSnapshot, type MinutesRepository } from '@/lib/repositories/types'
 
@@ -35,24 +30,29 @@ const repository = (): MinutesRepository => ({
   getMinuteDetail: vi.fn(),
 })
 const INVALID = { ok: false, error: { code: 'INVALID_ARGUMENT' } }
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 가시 범위는 케이스의 view(teamViewOfScope(context))로 순수 규칙을 그대로 적용한다.
+const toolTeams: ToolTeamSource = {
+  projectTeamCodes: async (pid) => (pid === 'p1' ? ['MES'] : []),
+  visibleTeamCodes: async (view) => teamCodesVisibleTo(TEAMS, view),
+}
 
 describe('search_minutes 담당팀 — 조회 범위의 팀만', () => {
   it('프로젝트 없이: 호출자 워크스페이스의 팀은 통과, 다른 워크스페이스의 팀은 INVALID_ARGUMENT', async () => {
     const repo = repository()
-    const tool = createSearchMinutesTool(repo)
+    const tool = createSearchMinutesTool(repo, toolTeams)
     await expect(tool.execute({ team: 'PMO', query: '설계' }, context)).resolves.toMatchObject({ ok: true })
     await expect(tool.execute({ team: 'ERP', query: '설계' }, context)).resolves.toMatchObject(INVALID)
     expect(repo.searchMinutes).toHaveBeenCalledTimes(1)
   })
 
   it('프로젝트 없이: 스코프 프로젝트의 전용 팀 코드는 통과, 스코프 밖(숨은) 프로젝트의 전용 팀은 거절', async () => {
-    const tool = createSearchMinutesTool(repository())
+    const tool = createSearchMinutesTool(repository(), toolTeams)
     await expect(tool.execute({ team: 'MES', query: '설계' }, context)).resolves.toMatchObject({ ok: true })
     await expect(tool.execute({ team: 'QA', query: '설계' }, context)).resolves.toMatchObject(INVALID)
   })
 
   it('멤버십 없는 플랫폼 관리자는 전 워크스페이스의 팀으로 본다 — 빈 집합으로 거부하지 않는다', async () => {
-    const tool = createSearchMinutesTool(repository())
+    const tool = createSearchMinutesTool(repository(), toolTeams)
     const admin = { ...context, workspaceIds: [], allowedProjectIds: [], isSuperuser: true }
     await expect(tool.execute({ team: 'ERP', query: '설계' }, admin)).resolves.toMatchObject({ ok: true })
     await expect(tool.execute({ team: 'QA', query: '설계' }, admin)).resolves.toMatchObject({ ok: true })
@@ -60,20 +60,20 @@ describe('search_minutes 담당팀 — 조회 범위의 팀만', () => {
   })
 
   it('프로젝트를 주면 그 프로젝트의 팀으로 본다', async () => {
-    const tool = createSearchMinutesTool(repository())
+    const tool = createSearchMinutesTool(repository(), toolTeams)
     await expect(tool.execute({ team: 'MES', projectId: 'p1', query: '설계' }, context)).resolves.toMatchObject({ ok: true })
     await expect(tool.execute({ team: 'PMO', projectId: 'p1', query: '설계' }, context)).resolves.toMatchObject(INVALID)
   })
 
   it('접근 판정이 먼저다 — 볼 수 없는 프로젝트의 팀 구성은 검증 결과로 새지 않는다', async () => {
-    const tool = createSearchMinutesTool(repository())
+    const tool = createSearchMinutesTool(repository(), toolTeams)
     await expect(tool.execute({ team: 'QA', projectId: 'p9', query: '설계' }, context)).resolves.toMatchObject({
       ok: false, error: { code: 'ACCESS_DENIED' },
     })
   })
 
   it('호출자 워크스페이스를 모르면(컨텍스트 누락) 공용 팀 담당 필터는 거절 — fail-closed', async () => {
-    const tool = createSearchMinutesTool(repository())
+    const tool = createSearchMinutesTool(repository(), toolTeams)
     const { workspaceIds: _omit, ...withoutWorkspaces } = context
     void _omit
     await expect(tool.execute({ team: 'PMO', query: '설계' }, withoutWorkspaces)).resolves.toMatchObject(INVALID)

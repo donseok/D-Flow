@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-// teams/master 는 콜드스타트 시 실 DB 접근이 필요하다(이 테스트는 admin client 를 목하지 않는다).
-// 팀 검증만 공유 목(tests/fixtures/teams 의 FIXTURE_TEAMS 고정값)으로 대체해 실 DB 무관하게 만든다.
-vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
+// 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { fixedToolTeams } from '../helpers/tool-team-source'
+const toolTeams = fixedToolTeams()
 import { createGetMinuteDetailTool, createSearchMinutesTool } from '@/lib/ai/tools/minutes'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import {
@@ -61,7 +61,7 @@ describe('search_minutes tool', () => {
         records: [minuteRecord()], truncated: false,
       })),
     })
-    const result = await createSearchMinutesTool(repository).execute({
+    const result = await createSearchMinutesTool(repository, toolTeams).execute({
       query: '설계', team: 'ERP', projectId: 'p1', from: '2026-07-01', to: '2026-07-20',
     }, context)
 
@@ -89,7 +89,7 @@ describe('search_minutes tool', () => {
 
   it('applies the recent-90-days default window only when query and range are both absent', async () => {
     const repository = repositoryWith()
-    const noArgs = await createSearchMinutesTool(repository).execute({}, context)
+    const noArgs = await createSearchMinutesTool(repository, toolTeams).execute({}, context)
 
     expect(repository.searchMinutes).toHaveBeenCalledWith({
       query: null, team: null, projectId: null, from: '2026-04-21', to: '2026-07-20', limit: 20,
@@ -102,7 +102,7 @@ describe('search_minutes tool', () => {
       },
     })
 
-    await createSearchMinutesTool(repository).execute({ query: '설계' }, context)
+    await createSearchMinutesTool(repository, toolTeams).execute({ query: '설계' }, context)
     expect(repository.searchMinutes).toHaveBeenLastCalledWith({
       query: '설계', team: null, projectId: null, from: null, to: null, limit: 20,
     })
@@ -110,7 +110,7 @@ describe('search_minutes tool', () => {
 
   it('rejects malformed arguments before any repository access', async () => {
     const repository = repositoryWith({ searchMinutes: vi.fn() })
-    const tool = createSearchMinutesTool(repository)
+    const tool = createSearchMinutesTool(repository, toolTeams)
 
     for (const args of [
       'not-a-record',
@@ -130,7 +130,7 @@ describe('search_minutes tool', () => {
 
   it('fails closed for an out-of-scope project and for a missing capability', async () => {
     const repository = repositoryWith({ searchMinutes: vi.fn() })
-    const tool = createSearchMinutesTool(repository)
+    const tool = createSearchMinutesTool(repository, toolTeams)
 
     await expect(tool.execute({ projectId: 'p3', query: '설계' }, context)).resolves.toMatchObject({
       ok: false, error: { code: 'ACCESS_DENIED' },
@@ -147,7 +147,7 @@ describe('search_minutes tool', () => {
         records: [minuteRecord({ id: 'min-x', meetingProjectId: 'p2' })], truncated: false,
       })),
     })
-    const result = await createSearchMinutesTool(repository).execute(
+    const result = await createSearchMinutesTool(repository, toolTeams).execute(
       { projectId: 'p1', query: '설계' }, context,
     )
     expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR', retryable: false } })
@@ -158,7 +158,7 @@ describe('search_minutes tool', () => {
     const repository = repositoryWith({
       searchMinutes: vi.fn(async () => repositoryError<MinuteSearchSnapshot>('MINUTES_READ_FAILED', true)),
     })
-    await expect(createSearchMinutesTool(repository).execute({ query: '설계' }, context)).resolves.toMatchObject({
+    await expect(createSearchMinutesTool(repository, toolTeams).execute({ query: '설계' }, context)).resolves.toMatchObject({
       ok: false,
       error: { code: 'DATA_SOURCE_ERROR', retryable: true, repositoryErrorCode: 'MINUTES_READ_FAILED' },
     })
@@ -170,7 +170,7 @@ describe('search_minutes tool', () => {
         records: [minuteRecord(), minuteRecord({ id: 'min-2' })], truncated: true,
       })),
     })
-    const result = await createSearchMinutesTool(repository).execute({ query: '설계', limit: 2 }, context)
+    const result = await createSearchMinutesTool(repository, toolTeams).execute({ query: '설계', limit: 2 }, context)
     expect(result).toMatchObject({
       ok: true,
       result: { status: 'partial', truncated: true, facts: { returned: 2 } },

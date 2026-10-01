@@ -20,8 +20,9 @@ import {
   type ProjectSummary,
 } from './analytics'
 import { extractSearchKeywords, type ChatIntent } from './intent'
-import type { ProjectMember } from '@/lib/domain/types'
-import { activeTeamCodesForProjectSync } from '@/lib/teams/master'
+import type { ProjectMember, TeamCode } from '@/lib/domain/types'
+import { projectTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 
 /**
  * 프로젝트 이름 — 동시에 RLS 관문이다. 세션으로 프로젝트 행을 읽어 없으면(다른 워크스페이스·없는 프로젝트) throw 한다.
@@ -42,20 +43,24 @@ export interface LoadedProject {
   /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있지만 '0명' 이 아니다(gatherKnowledge 가 근거에 밝힌다). */
   rosterError: string | null
   name: string
+  /** 그 프로젝트의 활성 팀 코드(activeCodes 순) — 팀 축 질문(by_team)이 같은 요청의 팀을 다시 읽지 않게 싣는다 */
+  teamCodes: TeamCode[]
 }
 
 export const loadProjectAnalysis = cache(async (projectId: string): Promise<LoadedProject> => {
-  const name = await getProjectName(projectId)   // RLS 관문 — 볼 수 없는 프로젝트면 여기서 throw(아래 팀 캐시를 읽지 않는다)
-  const [{ items, today }, roster] = await Promise.all([
+  const name = await getProjectName(projectId)   // RLS 관문 — 볼 수 없는 프로젝트면 여기서 throw(아래 팀을 읽지 않는다)
+  const [{ items, today }, roster, teams] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
+    projectTeams(projectId),
   ])
   if (!roster.ok) console.error(`[assistant] 명단 조회 실패(project=${projectId}) — 담당자 정보 없이 답하고 근거에 그 사실을 밝힌다`)
   const members = roster.ok ? roster.rows : []
+  const teamCodes = activeCodes(teams)
   // 팀 축은 그 프로젝트의 팀(전용 팀, 없으면 그 워크스페이스의 공용 팀) — 전 워크스페이스 공용 목록이면 남의 팀이 근거에 섞인다.
   return {
-    analysis: analyzeProject(items, name, today, activeTeamCodesForProjectSync(projectId), members),
-    members, rosterError: roster.ok ? null : roster.error, name,
+    analysis: analyzeProject(items, name, today, teamCodes, members),
+    members, rosterError: roster.ok ? null : roster.error, name, teamCodes,
   }
 })
 
@@ -64,8 +69,8 @@ async function allProjectSummaries(): Promise<{ summaries: ProjectSummary[]; exc
   const results = await Promise.all(
     projects.map(async p => {
       try {
-        const { items, today } = await getComputedWbs(p.id)
-        return summarizeProject(analyzeProject(items, p.name, today, activeTeamCodesForProjectSync(p.id)))
+        const [{ items, today }, teams] = await Promise.all([getComputedWbs(p.id), projectTeams(p.id)])
+        return summarizeProject(analyzeProject(items, p.name, today, activeCodes(teams)))
       } catch (e) {
         console.error(`[assistant] 전사 요약 — 프로젝트 "${p.name}" 분석 실패(제외):`, e instanceof Error ? e.message : e)
         return null
@@ -106,13 +111,14 @@ export async function gatherKnowledge(intent: ChatIntent, projectId: string | nu
     return { text, facts: text, scopeProjectId: null }
   }
 
-  const { analysis, members, rosterError } = await loadProjectAnalysis(projectId)
-  const k = projectKnowledge(intent, projectId, analysis, members, message)
+  const { analysis, members, rosterError, teamCodes } = await loadProjectAnalysis(projectId)
+  const k = projectKnowledge(intent, projectId, analysis, members, message, teamCodes)
   return rosterError ? withRosterFailure(k) : k
 }
 
 function projectKnowledge(
   intent: ChatIntent, projectId: string, analysis: ProjectAnalysis, members: ProjectMember[], message: string,
+  teamCodes: readonly TeamCode[],
 ): Knowledge {
   const only = (text: string): Knowledge => ({ text, facts: text, scopeProjectId: projectId })
   switch (intent) {
@@ -125,7 +131,7 @@ function projectKnowledge(
     case 'this_week_start':
       return only(answerThisWeekStart(analysis))
     case 'by_team':
-      return only(answerByTeam(analysis, members, activeTeamCodesForProjectSync(projectId)))
+      return only(answerByTeam(analysis, members, teamCodes))
     case 'weekly_summary':
       return only(answerWeeklySummary(analysis))
     case 'project_status':

@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   listProjectsWithState: vi.fn(),
   visibleProjectRow: vi.fn(),
   upsert: vi.fn(async () => ({ error: null })),
-  teamCodes: vi.fn(() => ['A-ERP']),
+  teamCodes: vi.fn<(pid: string) => string[]>(() => ['A-ERP']),
   embedDocuments: vi.fn(async (docs: string[]) => docs.map(() => [0.1])),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'user-b' })) }))
@@ -58,8 +58,12 @@ vi.mock('@/lib/settings/projectConfig', async () => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
   return { getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] })) }
 })
-// service_role 팀 캐시 — pid 만 주면 그 프로젝트의 팀을 돌려준다(권한 판정 없음). A 의 팀 코드가 답변에 실리면 누설이다.
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: mocks.teamCodes }))
+// 팀 원천(SP4 A2 — 요청 범위) — pid 만 주면 그 프로젝트의 팀을 돌려준다(권한 판정 없음). A 의 팀 코드가 답변에 실리면 누설이다.
+// mocks.teamCodes 호출 = 원천 projectTeams 호출이다(아래 단언은 그 프로젝트의 팀을 읽었는지를 본다).
+vi.mock('@/lib/teams/source', async () => {
+  const { teamRows } = await import('../helpers/teams-source-mock')
+  return { projectTeams: vi.fn(async (pid: string) => teamRows(mocks.teamCodes(pid))) }
+})
 
 import { POST as chatPOST } from '@/app/api/chat/route'
 import { POST as streamPOST } from '@/app/api/chat/stream/route'
