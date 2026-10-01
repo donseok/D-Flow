@@ -21,7 +21,7 @@ import { useProjectNavigation } from './ProjectNavigationContext'
 import { projectMenu, type SidebarProject } from './Sidebar'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
-import { signOutAndLeave } from '@/lib/auth/signOut'
+import { signOutAndClear } from '@/lib/auth/signOut'
 
 const SECTION_LABEL: Record<string, string> = {
   dashboard: '대시보드', wbs: 'WBS · 간트', gantt: '간트 차트', kanban: '칸반 보드', issues: '이슈관리',
@@ -83,7 +83,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
     }
   }, [pathname, projects, routeProjectId, t])
 
-  const signOut = () => signOutAndLeave(router)   // 위키 초안 정리 → 세션 끊기 → /login(lib/auth/signOut)
+  const signOut = () => signOutAndClear(router)   // 위키 초안 정리 → 세션 끊기 → /login(lib/auth/signOut)
 
   // 패널·배지는 안읽음만 표시(읽은 항목은 목록에서 제거 — 사용자 결정). notifs는 읽음 포함
   // 전체를 유지한다 — '모두 읽음' 저장이 전체 id를 보내야 기존 읽음이 유실되지 않는다(replace 시맨틱).
