@@ -207,6 +207,12 @@ export function fillPath(template, values) {
   })
 }
 
+/** 행의 클릭 단계 — clicks(여러 단계, 컨트롤러 보충 1)가 있으면 그 순서, 없으면 click 하나(하위 호환) */
+export function clickSteps(r) {
+  if (Array.isArray(r?.clicks)) return [...r.clicks]
+  return typeof r?.click === 'string' && r.click ? [r.click] : []
+}
+
 /**
  * routes.json 형식 검사 → 문제 목록(빈 배열이면 통과). pageFiles = src/app 아래 page.tsx 의 상대 경로.
  * 규칙: 모든 page.tsx 는 어떤 행의 file 이다 / 기준선 행(since b4283c0, until 없음)의 file 은 존재한다 / 값은 닫힌 집합 /
@@ -216,12 +222,6 @@ export function fillPath(template, values) {
  * 뒤 Phase 가 페이지를 옮기면 옛 행에 until 을, 새 행에 since 를 적는다(보충 행은 supplement: true).
  * @param {any} doc @param {string[]} pageFiles
  */
-/** 행의 클릭 단계 — clicks(여러 단계, 컨트롤러 보충 1)가 있으면 그 순서, 없으면 click 하나(하위 호환) */
-export function clickSteps(r) {
-  if (Array.isArray(r?.clicks)) return [...r.clicks]
-  return typeof r?.click === 'string' && r.click ? [r.click] : []
-}
-
 export function validateRoutes(doc, pageFiles) {
   const p = []
   if (doc?.version !== 1) p.push('version 은 1')
