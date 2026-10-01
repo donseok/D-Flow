@@ -25,6 +25,7 @@ import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { convertConsentToken } from '@/lib/teams/convertConsent'
 import { ensureProjectTeams } from '@/lib/teams/register'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
+import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
@@ -210,7 +211,7 @@ export async function POST(req: NextRequest) {
     // (validateConfig.ts)도 건너뛰고, 그 열의 팀은 행의 담당으로 이미 들어온다
     const fileTeams = [...new Set([
       ...parsed.rows.flatMap((r) => r.owners.map((o) => o.team)),
-      ...(saveProfile ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== '*') : []),
+      ...(saveProfile ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== TEAM_DIRECT_MARK) : []),
     ])]
     let unknownTeams = fileTeams.filter((t) => !known.has(t))
     // 전용 팀이 있는(비상속) 프로젝트가 이미 참조 중인 공용 팀 code 는 등록하지 않는다(A1 최종 리뷰 보안 P3 — Z4). 혼합 상태(전환 없이 첫 전용 팀을

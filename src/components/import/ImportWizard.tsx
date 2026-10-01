@@ -16,6 +16,7 @@ import type { DictKey } from '@/lib/i18n/dict'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
+import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
   recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, executionIntentKey, commandIdFor,
@@ -57,7 +58,7 @@ function previewRoleLabel(role: PreviewColumnRole, t: (k: DictKey) => string): s
   if (!role) return null
   if (role.kind === 'hierarchy') return t('importWizard.previewRoleHierarchy')
   if (role.kind === 'logical') return t(LOGICAL_FIELD_LABEL_KEYS[role.field])
-  const teamLabel = role.team === '*' ? t('importWizard.previewRoleTeamDirect') : role.team
+  const teamLabel = role.team === TEAM_DIRECT_MARK ? t('importWizard.previewRoleTeamDirect') : role.team
   return `${t('importWizard.previewRoleTeam')}: ${teamLabel}`
 }
 

@@ -4,6 +4,7 @@
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
+import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
 export type ImportMode = 'append' | 'replace'
 
@@ -60,8 +61,8 @@ export function compareProfiles(saved: ExcelProfile, detected: ExcelProfile): Pr
   if (!sameHierarchy(saved.hierarchy, detected.hierarchy)) fields.push('hierarchy')
   for (const k of LOGICAL_KEYS) if (saved.logical[k] !== detected.logical[k]) fields.push(k)
 
-  const teamCols = (p: ExcelProfile) => new Map(p.teamColumns.filter(([, t]) => t !== '*').map(([c, t]) => [t, c]))
-  const starCol = (p: ExcelProfile) => p.teamColumns.find(([, t]) => t === '*')?.[0] ?? null
+  const teamCols = (p: ExcelProfile) => new Map(p.teamColumns.filter(([, t]) => t !== TEAM_DIRECT_MARK).map(([c, t]) => [t, c]))
+  const starCol = (p: ExcelProfile) => p.teamColumns.find(([, t]) => t === TEAM_DIRECT_MARK)?.[0] ?? null
   const savedTeams = teamCols(saved)
   const detectedTeams = teamCols(detected)
   const moved = [...savedTeams].some(([t, c]) => detectedTeams.has(t) && detectedTeams.get(t) !== c)

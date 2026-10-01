@@ -29,6 +29,10 @@ export const LOGICAL_ALIASES: Record<keyof ExcelProfile['logical'], readonly str
  *  팀은 ExcelProfile.logical 의 필드가 아니라 teamColumns 다. */
 export const TEAM_HEADER_ALIASES: readonly string[] = ['담당', '담당팀', '담당자', 'Owner', 'Team', '팀']
 
+/** 팀명 직접 방식의 표지 — teamColumns=[[열, TEAM_DIRECT_MARK]] 는 '담당' 열 하나에 팀명이 든 양식이고 팀 code 가 아니다(감지기 규칙 6 대안).
+ *  소비처(감지·빌더·파서·교차 검증·가져오기 라우트·마법사)가 이 상수 하나를 쓴다 — 리터럴로 흩어져 한 곳이 빠진 회귀(A1-5 R5)가 있었다(A2 이월 Z5 F-4) */
+export const TEAM_DIRECT_MARK = '*'
+
 /** 팀 이름으로 쓸 수 없는 엑셀 머리 낱말 전부(중복 없음, 등장 순) */
 export const EXCEL_HEADER_WORDS: readonly string[] = Object.freeze([...new Set([
   ...Object.values(HEADER),

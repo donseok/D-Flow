@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
-import { HEADER } from '@/lib/excel/headerWords'
+import { HEADER, TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
 const STATUS_LABEL: Record<ComputedItem['status'], string> = {
   not_started: '시작전', in_progress: '진행중', delayed: '지연', done: '완료',
@@ -149,7 +149,7 @@ export function buildAoaWithProfile(
 
   // 프로파일 밖 팀 — 시프트된 선언 열 다음(맨 끝)에 등장 순으로 추가. teamColumns=[[c,'*']] 방식은
   // 팀명을 셀 값으로 직접 적는 방식이라 "특정 팀 전용 열"이 아니므로 확장 후보에서 제외한다.
-  const declaredTeamCodes = new Set(declaredTeamCols.map(([, label]) => label).filter(l => l !== '*'))
+  const declaredTeamCodes = new Set(declaredTeamCols.map(([, label]) => label).filter(l => l !== TEAM_DIRECT_MARK))
   const extraTeams = collectTeams(items).filter(t => !declaredTeamCodes.has(t))
   const extraTeamCols: [number, string][] = extraTeams.map((team, i) => [maxKnown + 1 + i, team])
   const teamCols = [...declaredTeamCols, ...extraTeamCols]
@@ -214,7 +214,7 @@ export function buildAoaWithProfile(
     }
 
     for (const [col, label] of teamCols) {
-      if (label === '*') {
+      if (label === TEAM_DIRECT_MARK) {
         // 팀명 직접 방식(콤마 분리) — detect.ts 규칙 6 대안 방식의 역변환.
         const teams = item.owners.map(o => o.team)
         if (teams.length > 0) row[col] = teams.join(',')

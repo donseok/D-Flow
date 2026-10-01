@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { EXCEL_HEADER_WORDS, HEADER, LOGICAL_ALIASES, TEAM_HEADER_ALIASES, isHeaderWordMatch } from '@/lib/excel/headerWords'
+import { EXCEL_HEADER_WORDS, HEADER, LOGICAL_ALIASES, TEAM_DIRECT_MARK, TEAM_HEADER_ALIASES, isHeaderWordMatch } from '@/lib/excel/headerWords'
 import { LOGICAL_ALIASES as FROM_DETECT } from '@/lib/excel/detect'
 import { buildAoaWithProfile } from '@/lib/excel/exportWithProfile'
 import { TEMPLATE_HEADER } from '@/lib/excel/template'
@@ -8,6 +9,7 @@ import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { WbsRow } from '@/lib/domain/types'
+import { codeLines } from '../invariants/_walk'
 
 // 엑셀 머리 낱말의 단일 출처(SP4 D38·E30) — 빌더가 쓰는 낱말·감지기의 논리 별칭·담당 별칭. 팀 예약어는 여기서 파생한다.
 describe('EXCEL_HEADER_WORDS', () => {
@@ -75,5 +77,21 @@ describe('reservedTeamNames·normalizeNewTeamCode(D38)', () => {
   it('빈 값·길이 초과는 지금처럼 거부', () => {
     expect(normalizeNewTeamCode('  ', EXCEL_HEADER_WORDS).ok).toBe(false)
     expect(normalizeNewTeamCode('a'.repeat(21), EXCEL_HEADER_WORDS).ok).toBe(false)
+  })
+})
+
+describe('TEAM_DIRECT_MARK — 팀명 직접 방식 표지의 단일 출처(A2 이월 Z5 F-4)', () => {
+  // 리터럴이 흩어져 한 소비처(가져오기 라우트)가 빠진 회귀(A1-5 R5 — 늘 409 needsTeams ['*'])가 있었다 — 소비처는 상수만 쓴다
+  const CONSUMERS = [
+    'src/app/api/import/execute/route.ts', 'src/lib/domain/importWizard.ts', 'src/lib/settings/validateConfig.ts', 'src/lib/excel/detect.ts',
+    'src/lib/excel/exportWithProfile.ts', 'src/lib/excel/parseWithProfile.ts', 'src/components/import/ImportWizard.tsx',
+  ]
+  it('값은 * 이고, 소비처에 표지 리터럴 비교·생성이 없다(상수를 import 한다)', () => {
+    expect(TEAM_DIRECT_MARK).toBe('*')
+    for (const f of CONSUMERS) {
+      const text = codeLines(readFileSync(f, 'utf8'), f).join('\n')   // 주석의 설명(`[[c,'*']]`)은 세지 않는다
+      expect(text, f).toMatch(/TEAM_DIRECT_MARK/)
+      expect(text.match(/[!=]==\s*'\*'|'\*'\s*[!=]==|\[\s*\w+\s*,\s*'\*'\s*\]/g) ?? [], f).toEqual([])
+    }
   })
 })

@@ -5,7 +5,7 @@
 import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
 // 별칭 사전(논리·담당)은 엑셀 머리 낱말의 단일 출처에 있다(SP4 D38) — 팀 예약어가 같은 사전에서 파생한다. 기존 import 경로를 위해 재수출한다
-import { LOGICAL_ALIASES, TEAM_HEADER_ALIASES } from '@/lib/excel/headerWords'
+import { LOGICAL_ALIASES, TEAM_DIRECT_MARK, TEAM_HEADER_ALIASES } from '@/lib/excel/headerWords'
 export { LOGICAL_ALIASES } from '@/lib/excel/headerWords'
 
 export interface DetectionResult {
@@ -208,7 +208,7 @@ export function detectTeamColumns(
     if (excluded.has(c)) continue
     const lower = headerLabels[c].toLowerCase()
     if (lower && TEAM_HEADER_ALIASES.some(a => a.toLowerCase() === lower)) {
-      return { teamColumns: [[c, '*']], warnings: ['담당 열의 팀명을 직접 사용'] }
+      return { teamColumns: [[c, TEAM_DIRECT_MARK]], warnings: ['담당 열의 팀명을 직접 사용'] }
     }
   }
   return { teamColumns: [], warnings: ['팀 열을 찾지 못했습니다'] }

@@ -7,6 +7,7 @@
 import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ImportItem, ImportError } from '@/lib/excel/validate'
+import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
 export interface ParsedRowN {
   depth: number                 // 0-based
@@ -68,7 +69,7 @@ function parseOwners(row: unknown[], profile: ExcelProfile): ParsedRowN['owners'
   for (const [col, label] of profile.teamColumns) {
     const raw = String(row[col] ?? '').trim()
     if (raw === '') continue
-    if (label === '*') {
+    if (label === TEAM_DIRECT_MARK) {
       const teams = raw.split(',').map(s => s.trim()).filter(Boolean)
       teams.forEach((team, i) => out.push({ team, kind: i === 0 ? 'primary' : 'support' }))
     } else {

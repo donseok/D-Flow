@@ -14,6 +14,7 @@ import type { ConfigReadClient, ProjectConfig } from './projectConfig'
 import type { ProjectSettingKey, WorkspaceSettingKey } from './registry'
 import type { WorkspaceConfig } from './workspaceConfig'
 import { valueOf } from './registry'
+import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
 export interface FieldError { key: string; message: string; refCount?: number }
 export type ValidateResult = { ok: true } | { ok: false; fieldErrors: FieldError[] }
@@ -38,7 +39,7 @@ export function validateProjectConfig(next: Partial<Record<ProjectSettingKey, un
   }
   if (has(next, 'wbs.excel_profile') && next['wbs.excel_profile'] !== null) {
     const profile = next['wbs.excel_profile'] as ExcelProfile
-    const unknownCodes = profile.teamColumns.map(([, code]) => code).filter((c) => c !== '*' && !deps.teamCodes.includes(c))
+    const unknownCodes = profile.teamColumns.map(([, code]) => code).filter((c) => c !== TEAM_DIRECT_MARK && !deps.teamCodes.includes(c))
     if (unknownCodes.length) fieldErrors.push({ key: 'wbs.excel_profile', message: `양식의 팀 열이 프로젝트 팀에 없습니다: ${[...new Set(unknownCodes)].join(', ')}` })
   }
   if (has(next, 'modules.enabled')) {
