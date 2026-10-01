@@ -83,7 +83,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
             <span className="w-10 shrink-0 text-right text-xs tabular-nums text-ink-subtle">{i + 1}단</span>
             <input
               data-level-label
-              className="input h-8 flex-1 text-sm"
+              className="app-input h-8 flex-1 text-sm"
               value={label}
               onChange={(e) => setLabels(labels.map((l, j) => (j === i ? e.target.value : l)))}
               disabled={pending}

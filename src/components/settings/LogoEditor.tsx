@@ -31,6 +31,8 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   const [uncertainPatch, setUncertainPatch] = useState<SettingsPatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
+  // 업로드 거부는 저장 실패가 아니다 — 저장 영역의 '설정을 저장하지 못했습니다' 제목 아래가 아니라 입력 자리에 보인다
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [previews, setPreviews] = useState<Partial<Record<BrandingSlot, string>>>({})
   const previewsRef = useRef(previews)
   previewsRef.current = previews
@@ -42,12 +44,12 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   function upload(slot: BrandingSlot) {
     const file = files[slot]
     if (!file) return
-    setError(null); setNotice(null)
+    setError(null); setUploadError(null); setNotice(null)
     startTransition(async () => {
       let result: Awaited<ReturnType<typeof uploadBrandLogo>>
       try { result = await uploadBrandLogo(workspaceId, slot, file) }
-      catch { setError('로고 업로드 결과를 확인하지 못했습니다. 다시 시도하세요.'); return }
-      if (!result.ok) { setError(result.error); return }
+      catch { setUploadError('로고 업로드 결과를 확인하지 못했습니다. 다시 시도하세요.'); return }
+      if (!result.ok) { setUploadError(result.error); return }
       setDraft(current => ({ ...current, [slot]: result.path }))
       setFiles(current => ({ ...current, [slot]: undefined }))
       setNotice(`${LABEL[slot]} 업로드가 끝났습니다. 설정을 저장하면 적용됩니다.`)
@@ -110,7 +112,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
           </>}
           <p className="break-all text-[11px] text-ink-subtle">{draft[slot]}</p>
         </> : <p className="text-xs text-ink-muted">설정된 이미지 없음</p>}
-        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`}
+        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`} className="block w-full min-w-0 max-w-full text-xs text-ink-muted file:mr-2 file:rounded-lg file:border file:border-line file:bg-surface-2 file:px-2 file:py-1 file:text-xs"
           disabled={pending || !!uncertainPatch} onChange={event => {
             const picked = event.target.files?.[0]
             revoke(previews[slot]); setFiles({ ...files, [slot]: picked })
@@ -137,6 +139,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
         {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
       </div>
     </div>}
+    {uploadError && <ConfigStateNotice kind="field" locale="ko" message={uploadError} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}

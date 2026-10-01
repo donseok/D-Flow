@@ -49,7 +49,9 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<SimpleWorkspaceKey, string>>>({})
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  const changed = fields.filter(f => !same(draft[f.key], baseline[f.key]) || (f.source === '설정 손상' && !repaired.includes(f.key)))
+  // 저장되는 값으로 비교한다 — 공백만 넣은 메일 발신 이름(→ null)·빈 줄뿐인 도메인 목록이 '변경'으로 새지 않게
+  const differs = (f: WorkspaceField) => !same(draft[f.key], baseline[f.key]) && JSON.stringify(stored(f, draft[f.key])) !== JSON.stringify(stored(f, baseline[f.key]))
+  const changed = fields.filter(f => differs(f) || (f.source === '설정 손상' && !repaired.includes(f.key)))
 
   async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
     let result: SettingsCommandResult | null = null
@@ -134,10 +136,10 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
         <input id={`workspace-${field.key}`} type="checkbox" checked={draft[field.key] === true}
           disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.checked)} /> :
         field.kind === 'domains' ?
-          <textarea id={`workspace-${field.key}`} className="input min-h-24 w-full text-sm" value={String(draft[field.key])}
+          <textarea id={`workspace-${field.key}`} className="app-textarea min-h-24 w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} placeholder="한 줄에 한 도메인" /> :
-          <input id={`workspace-${field.key}`} className="input w-full text-sm" value={String(draft[field.key])}
-            maxLength={40} disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
+          <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
+            disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
       {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
       <p className="text-[11px] text-ink-subtle">{field.key}</p>
     </div>)}
@@ -146,7 +148,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <div className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-1 p-3 shadow-sm">
+    <div className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm">
       <span className="text-xs text-ink-muted">변경 {changed.length}개</span>
       <button type="button" className="btn btn-primary" disabled={pending || (!changed.length && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}

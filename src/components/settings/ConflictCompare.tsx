@@ -9,7 +9,7 @@ export function ConflictCompare({ rows, onMine, onLatest, latestAvailable = true
   return <div role="alert" className="space-y-3 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
     <strong className="text-ink">다른 사용자가 설정을 바꿨습니다.</strong>
     <div className="space-y-2">
-      {rows.map(row => <div key={row.key} className="rounded-lg border border-line bg-surface-1 p-3">
+      {rows.map(row => <div key={row.key} className="rounded-lg border border-line bg-surface p-3">
         <p className="mb-2 font-semibold text-ink">{row.label}</p>
         <div className="grid gap-2 sm:grid-cols-2">
           <div><span className="text-xs text-ink-muted">내 값</span><p className="break-words text-ink">{row.mine || '없음'}</p></div>

@@ -317,7 +317,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         title={t(locale, 'settings.assistantTitle')}
         icon={Sparkles}
         actions={
-          <div className="flex items-center gap-2">
+          // 좁은 화면(390)에서 카드 머리 actions 는 줄어들지 않아(shrink-0) 폭을 여기서 묶고 줄바꿈한다
+          <div className="flex max-w-[13rem] flex-wrap items-center justify-end gap-2 sm:max-w-none">
             <span className={`badge px-2 py-1 ${assistantBadge(assistantIndex, locale).cls}`}>{assistantBadge(assistantIndex, locale).label}</span>
             {/* 서버 가드(reindexProjectAction·/api/chat/reindex)가 requireProjectAdmin 이라 이 화면에 온 관리자에게 그대로 준다. */}
             <ReindexButton projectId={projectId} />
@@ -340,7 +341,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             title={t(locale, 'settings.llmTitle')}
             icon={Cpu}
             actions={
-              <div className="flex items-center gap-2">
+              <div className="flex max-w-[13rem] flex-wrap items-center justify-end gap-2 sm:max-w-none">
                 <span className="badge bg-surface-2 px-2 py-1 text-ink-muted">{t(locale, 'settings.llmGlobalBadge')}</span>
                 <span className={`badge px-2 py-1 ${llm.cls}`}>{llm.label}</span>
                 <Link href="/admin/llm-config" className="btn btn-ghost shrink-0">
@@ -361,7 +362,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ════ 모듈·메뉴 ════ */}
         <div id="project-modules" className="scroll-mt-24 space-y-5">
         <div>
-        <SectionCard id="project-modules" searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+        <SectionCard searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
           {pc.ok && workspaceModules ? (() => {
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']

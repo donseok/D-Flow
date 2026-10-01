@@ -93,4 +93,15 @@ describe('LogoEditor', () => {
     expect(update).toHaveBeenCalledTimes(2)
     expect(update.mock.calls[1][1]).toEqual(update.mock.calls[0][1])
   })
+  it('업로드 거부 사유는 저장 실패 알림이 아니라 입력 자리(field)에 보인다', async () => {
+    upload.mockResolvedValueOnce({ ok: false, error: '지원하지 않는 형식입니다.' })
+    const file = new File(['svg'], 'mark.svg', { type: 'image/svg+xml' })
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="아이콘 마크 파일"]')!
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    act(() => input.dispatchEvent(new Event('change', { bubbles: true })))
+    const uploadButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(x => x.textContent === '업로드' && !x.disabled)!
+    await act(async () => uploadButton.click())
+    expect(host.querySelector('[data-config-state="field"]')?.textContent).toContain('지원하지 않는 형식입니다.')
+    expect(host.querySelector('[data-config-state="patch"]')).toBeNull()
+  })
 })

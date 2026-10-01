@@ -136,7 +136,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
         keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {NON_CORE_MODULES.map(id => (
-          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 text-sm text-ink">
+          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink">
             <input type="checkbox" checked={selected.includes(id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(id)} />
             <span>{LABEL[id as keyof typeof LABEL]}</span>
             <span className="ml-auto text-[11px] text-ink-subtle">{id}</span>

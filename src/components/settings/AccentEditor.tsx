@@ -80,7 +80,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">
       <label htmlFor="workspace-accent" className="text-sm text-ink">기준 색</label>
-      <input id="workspace-accent" className="input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
+      <input id="workspace-accent" className="app-input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value || null)} />
       <input type="color" aria-label="강조색 선택" value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value)} />

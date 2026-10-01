@@ -82,7 +82,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     <p className="text-xs text-ink-muted">작업 이름에 포함된 단어로 대시보드의 마일스톤을 표시합니다. 비우면 마커가 표시되지 않습니다.</p>
     {repair && <ConfigStateNotice kind="invalid" locale={locale} keyName="core.milestone_keywords" message={invalidReason}
       isAdmin settingsHref="#milestone-keywords" />}
-    <textarea id="milestone-keywords" className="input min-h-28 w-full text-sm" value={text}
+    <textarea id="milestone-keywords" className="app-textarea min-h-28 w-full text-sm" value={text}
       disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setReviewing(false); setError(null); setFieldError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
     {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
     <p className="text-[11px] text-ink-subtle">저장 시 소문자로 바뀝니다.</p>

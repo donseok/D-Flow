@@ -86,6 +86,20 @@ describe('WorkspaceFieldsEditor', () => {
     expect(host.textContent).toContain('변경 0개')
   })
 
+  it('공백만 넣은 메일 발신 이름은 저장되는 값(null)이 그대로라 변경으로 세지 않는다', () => {
+    render(); change('branding.mail_from_name', '   ')
+    expect(host.textContent).toContain('변경 0개')
+  })
+
+  it('제품 이름을 41자 넘게 넣어도 조용히 자르지 않는다 — 서버 필드 오류가 입력 아래에 보인다', async () => {
+    update.mockResolvedValueOnce({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID', commandId: 'c', error: '입력 오류', retryable: false,
+      fieldErrors: [{ key: 'branding.product_name', message: '제품 이름은 40자까지입니다.' }] })
+    render(); const long = 'x'.repeat(45); change('branding.product_name', long)
+    expect(input('branding.product_name').value).toBe(long)
+    await click('저장')
+    expect(input('branding.product_name').nextElementSibling?.textContent).toContain('제품 이름은 40자까지입니다.')
+  })
+
   it('손상된 키는 새 값을 넣으면 복구 패치에 포함한다', async () => {
     render([{ key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: '설정 손상', error: '제어 문자' }])
     expect(host.querySelector('[data-config-state="invalid"]')?.textContent).toContain('제어 문자')

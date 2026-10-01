@@ -101,7 +101,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
     startTransition(async () => submit(patch))
   }
 
-  const row = (o: ProjectModuleOption) => <label key={o.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm">
+  const row = (o: ProjectModuleOption) => <label key={o.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
     <input type="checkbox" checked={selected.includes(o.id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(o.id)} />
     <span>{o.label}</span><span className="ml-auto text-xs text-ink-subtle">{o.id}</span>
   </label>
