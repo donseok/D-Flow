@@ -4,10 +4,10 @@
  * 쿠키는 보안 경계가 아니다 — 이 값으로 권한을 판정하지 않는다.
  */
 import { cookies } from 'next/headers'
-import { SLUG_RE, type WorkspaceRef } from './resolve'
+import { SLUG_RE, WS_COOKIE, type WorkspaceRef } from './constants'
 import { listMyWorkspaces, type MyWorkspace } from './list'
 
-export const WS_COOKIE = 'dflow-ws'
+export { WS_COOKIE } from './constants'
 
 export function pickCurrentWorkspace(rows: readonly MyWorkspace[], cookieValue: string | undefined): WorkspaceRef | null {
   if (rows.length === 0) return null

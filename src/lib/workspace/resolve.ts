@@ -6,15 +6,14 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { UUID_RE } from '@/lib/domain/validate'
+import { SLUG_RE, type WorkspaceRef } from './constants'
 
-export interface WorkspaceRef { id: string; slug: string; name: string }
+export { SLUG_RE, type WorkspaceRef } from './constants'
+
 export type WsLookup =
   | { ok: true; ws: WorkspaceRef }
   | { ok: false; kind: 'missing' }
   | { ok: false; kind: 'unavailable'; error: string }
-
-/** 0003_org_core.sql 의 workspaces.slug check 와 같은 식. 디코드·소문자화하지 않는다 — 형식 밖은 없는 워크스페이스다 */
-export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}$/
 
 async function lookup(col: 'slug' | 'id', value: string): Promise<WsLookup> {
   const db = await createServerClient()
