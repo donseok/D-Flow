@@ -174,7 +174,7 @@ export function MeetingDetailModal({
         footer={
           <>
             <button onClick={() => setConfirmDelete(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
-            <button onClick={runDelete} disabled={pending} className="btn bg-delayed text-white hover:brightness-105 disabled:opacity-50">{pending ? t('meet.deleting') : t('common.delete')}</button>
+            <button onClick={runDelete} disabled={pending} className="btn bg-delayed text-danger-fg hover:brightness-105 disabled:opacity-50">{pending ? t('meet.deleting') : t('common.delete')}</button>
           </>
         }
       >
@@ -190,7 +190,7 @@ export function MeetingDetailModal({
         footer={
           <>
             <button onClick={() => setConfirmCancel(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
-            <button onClick={runCancel} disabled={pending} className="btn bg-delayed text-white hover:brightness-105 disabled:opacity-50"><Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}</button>
+            <button onClick={runCancel} disabled={pending} className="btn bg-delayed text-danger-fg hover:brightness-105 disabled:opacity-50"><Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}</button>
           </>
         }
       >

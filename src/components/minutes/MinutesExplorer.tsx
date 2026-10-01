@@ -749,7 +749,7 @@ export function MinutesExplorer({
             </button>
             <button onClick={() => void archiveMinute()} disabled={archiveBusy}
               aria-busy={archiveBusy}
-              className="btn bg-delayed text-white hover:bg-delayed disabled:cursor-not-allowed disabled:opacity-50">
+              className="btn bg-delayed text-danger-fg hover:bg-delayed disabled:cursor-not-allowed disabled:opacity-50">
               {t('min.detail.delete')}
             </button>
           </div>
@@ -971,7 +971,7 @@ function MinuteCard({
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
       </div>
@@ -1027,7 +1027,7 @@ function MinuteRow({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
         <span className="min-w-0 flex-1">

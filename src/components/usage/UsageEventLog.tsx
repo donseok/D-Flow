@@ -43,7 +43,7 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter }: {
 
   const translate = (k: DictKey) => t(locale, k)
   const chip = (active: boolean) =>
-    `chip ${active ? 'bg-brand text-white' : 'text-ink-muted transition hover:text-ink'}`
+    `chip ${active ? 'bg-brand text-action-fg' : 'text-ink-muted transition hover:text-ink'}`
 
   return (
     <SectionCard eyebrow="ACCESS LOG" title="접속 로그" icon={ScrollText}
@@ -59,7 +59,7 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter }: {
         ))}
         {filter.user && (
           <Link href={usageHref(filter, { user: undefined })}
-            className="chip ml-auto bg-brand-weak text-brand transition hover:bg-brand hover:text-white">
+            className="chip ml-auto bg-brand-weak text-brand transition hover:bg-brand hover:text-action-fg">
             {names.get(filter.user) ?? '확인 불가'} <X className="ml-1 h-3 w-3" />
           </Link>
         )}

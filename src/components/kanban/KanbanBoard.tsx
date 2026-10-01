@@ -286,7 +286,7 @@ export function KanbanBoard({
                   aria-pressed={quick[k]}
                   title={t(group === 'bucket' ? 'kanban.qfBucketHint' : 'kanban.qfScheduleHint')}
                   onClick={() => toggleQuick(k)}
-                  className={`badge transition ${quick[k] ? 'bg-brand text-white' : 'bg-surface-2 text-ink-muted hover:text-ink'}`}
+                  className={`badge transition ${quick[k] ? 'bg-brand text-action-fg' : 'bg-surface-2 text-ink-muted hover:text-ink'}`}
                 >{t(label)}</button>
               </Fragment>
             ))}

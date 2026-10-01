@@ -73,7 +73,7 @@ export function ChatBubble({ role, content, renderContent }: {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-relaxed ${
-        isUser ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
+        isUser ? 'rounded-br-md bg-brand text-action-fg' : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
       }`}>
         {!isUser && renderContent ? renderContent(content) : content}
       </div>

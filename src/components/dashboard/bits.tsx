@@ -17,7 +17,7 @@ export function DateCell({ date, isToday, todayLabel, weekday }: {
   return (
     <div className="w-14 shrink-0">
       {isToday ? (
-        <span className="badge bg-brand text-white">{todayLabel}</span>
+        <span className="badge bg-brand text-action-fg">{todayLabel}</span>
       ) : (
         <>
           <div className="tabular-nums text-xs font-semibold text-ink">{date.slice(5).replace('-', '.')}</div>

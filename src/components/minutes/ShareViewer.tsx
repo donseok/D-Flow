@@ -31,7 +31,7 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
         <div className="card flex flex-wrap items-center gap-3 p-4">
           <BrandGlyph size={28} />
           <span className="text-sm tabular-nums text-ink-muted">{minuteDate}</span>
-          <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white ${teamStyle(teamCode).bar}`}>
+          <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(teamCode).bar}`}>
             {teamCode}
           </span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-ink">{title}</h1>

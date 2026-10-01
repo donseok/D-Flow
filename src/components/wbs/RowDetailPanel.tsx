@@ -674,7 +674,7 @@ export function RowDetailPanel({
                         <div className="inline-flex rounded-lg border border-line p-0.5">
                           {(['primary', 'support'] as OwnerKind[]).map(k => (
                             <button key={k} onClick={() => setSubKind(k)}
-                              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${subKind === k ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'}`}>
+                              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${subKind === k ? 'bg-brand text-action-fg' : 'text-ink-muted hover:text-ink'}`}>
                               {k === 'primary' ? `● ${t('wbs.ownerPrimary')}` : `△ ${t('wbs.ownerSupport')}`}
                             </button>
                           ))}
@@ -688,7 +688,7 @@ export function RowDetailPanel({
               {confirmDel && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg bg-delayed-weak px-3 py-2 text-xs text-delayed">
                   <span className="flex-1">{t('wbs.deleteConfirm')}</span>
-                  <button onClick={doDelete} disabled={busy} className="btn h-7 bg-delayed px-2.5 text-xs text-white">{t('common.delete')}</button>
+                  <button onClick={doDelete} disabled={busy} className="btn h-7 bg-delayed px-2.5 text-xs text-danger-fg">{t('common.delete')}</button>
                   <button onClick={() => setConfirmDel(false)} className="btn btn-ghost h-7 px-2.5 text-xs">{t('common.cancel')}</button>
                 </div>
               )}

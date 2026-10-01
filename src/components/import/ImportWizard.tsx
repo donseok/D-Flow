@@ -95,7 +95,7 @@ function StepBadge({ n, label, active, done }: { n: number; label: string; activ
     <div className="flex items-center gap-2">
       <span
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-          done ? 'bg-done text-white' : active ? 'bg-brand text-white' : 'bg-surface-2 text-ink-subtle'
+          done ? 'bg-done text-success-fg' : active ? 'bg-brand text-action-fg' : 'bg-surface-2 text-ink-subtle'
         }`}
       >
         {done ? <CheckCircle2 className="h-4 w-4" /> : n}

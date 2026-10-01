@@ -41,7 +41,7 @@ export function FolderManageModal({
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="btn">{t('min.fold.cancel')}</button>
           <button onClick={() => void submit()} disabled={busy || (mode !== 'delete' && !name.trim())}
-            className={mode === 'delete' ? 'btn bg-delayed text-white hover:bg-delayed' : 'btn btn-primary'}>
+            className={mode === 'delete' ? 'btn bg-delayed text-danger-fg hover:bg-delayed' : 'btn btn-primary'}>
             {busy ? t('min.form.saving') : mode === 'delete' ? t('min.fold.delete') : t('min.form.save')}
           </button>
         </div>

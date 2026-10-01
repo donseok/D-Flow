@@ -202,7 +202,7 @@ function AnnouncementRow({
 
   return (
     <div
-      className={`group flex items-start gap-3 rounded-2xl border bg-surface p-4 transition duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[var(--shadow-md)] ${item.isPinned ? 'border-brand/40 bg-brand-weak/30' : 'border-line'} ${status === 'expired' ? 'opacity-60' : ''}`}
+      className={`group flex items-start gap-3 rounded-2xl border bg-surface p-4 transition-colors duration-(--motion-fast) hover:border-line-strong hover:shadow-[var(--shadow-md)] ${item.isPinned ? 'border-brand/40 bg-brand-weak/30' : 'border-line'} ${status === 'expired' ? 'opacity-60' : ''}`}
     >
       <button onClick={onRead} className="flex min-w-0 flex-1 items-start gap-3 text-left">
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />
@@ -289,7 +289,7 @@ function ReadModal({
           {canEdit && (
             <button
               onClick={onDelete}
-              className="btn bg-delayed text-white shadow-sm transition hover:brightness-105"
+              className="btn bg-delayed text-danger-fg transition hover:brightness-105"
             >
               <Trash2 className="h-4 w-4" />
               {t('common.delete')}
@@ -593,7 +593,7 @@ function DeleteAnnouncementModal({ item, onClose }: { item: Announcement | null;
           <button
             onClick={confirm}
             disabled={pending}
-            className="btn bg-delayed text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? t('ann.deleting') : t('common.delete')}
           </button>

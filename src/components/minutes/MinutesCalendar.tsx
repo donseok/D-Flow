@@ -61,13 +61,13 @@ export function MinutesCalendar({
           return (
             <button key={cell} type="button" onClick={() => rows.length && onSelectDate(cell)}
               className={`min-h-[92px] bg-surface p-1.5 text-left ${inMonth ? '' : 'opacity-40'} ${isSelected ? 'ring-2 ring-inset ring-brand-ring' : ''} ${rows.length ? 'cursor-pointer hover:bg-surface-2' : 'cursor-default'}`}>
-              <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-white' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
+              <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
                 {dayNum}
               </span>
               <div className="mt-1 flex flex-wrap gap-1">
                 {rows.slice(0, 4).map(mi => (
                   <span key={mi.id}
-                    className={`inline-flex items-center rounded px-1 py-px text-[10px] font-bold text-white ${teamStyle(mi.teamCode).bar}`}>
+                    className={`inline-flex items-center rounded px-1 py-px text-[10px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
                     {mi.teamCode}
                   </span>
                 ))}

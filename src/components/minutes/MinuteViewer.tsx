@@ -695,7 +695,7 @@ export function MinuteViewer({
               표시 전용 링크 아님 — 탐색기가 아직 폴더 딥링크(?folder=)를 받지 않는다. */}
           <div className={`inline-flex min-w-0 max-w-[22rem] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 shadow-sm ${
             pathSegments ? 'border-line-strong bg-surface' : 'border-dashed border-line-strong bg-surface/60'}`}>
-            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white ${teamStyle(minute.teamCode).bar}`}>
+            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(minute.teamCode).bar}`}>
               {minute.teamCode}
             </span>
             <nav aria-label={t('min.detail.pathAria')} title={pathTitle}

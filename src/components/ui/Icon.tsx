@@ -85,7 +85,7 @@ export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGEle
 
 export function ProductMark({ compact = false }: { compact?: boolean }) {
   return (
-    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden bg-brand text-white shadow-[0_8px_24px_rgb(51_92_255/0.3)] ${compact ? 'h-8 w-8 rounded-[10px]' : 'h-10 w-10 rounded-xl'}`} aria-hidden>
+    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden bg-brand text-action-fg ${compact ? 'h-8 w-8 rounded-[10px]' : 'h-10 w-10 rounded-xl'}`} aria-hidden>
       <span className="absolute -right-2 -top-2 h-6 w-6 rounded-full border-[5px] border-white/20" />
       <span className="relative text-[13px] font-black tracking-[-0.08em]">WB</span>
     </span>

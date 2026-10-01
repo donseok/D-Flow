@@ -204,7 +204,7 @@ export function LlmProfilesModal({
         <button
           onClick={confirmDelete}
           disabled={pending}
-          className="btn bg-delayed text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? '삭제 중…' : '삭제'}
         </button>

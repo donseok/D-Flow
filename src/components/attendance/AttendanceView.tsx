@@ -328,7 +328,7 @@ export function AttendanceView({
               return (
                 <div key={cell} className={`min-h-[96px] bg-surface p-1.5 ${inMonth ? '' : 'opacity-40'}`}>
                   <div className="flex items-center justify-between gap-1 px-0.5">
-                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-white' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
+                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
                       {dayNum}
                     </span>
                     {specialName && (
@@ -516,7 +516,7 @@ export function AttendanceView({
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="btn bg-delayed text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {deleting ? t('att.deleting') : t('common.delete')}
             </button>

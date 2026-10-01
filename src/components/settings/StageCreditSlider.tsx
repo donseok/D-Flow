@@ -246,7 +246,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
                 return (
                   <span key={key} data-credit-handle="xx" data-credit-locked="" role="img"
                     aria-label={t('settings.creditXxLocked')} title={t('settings.creditXxLocked')}
-                    className={`absolute top-1/2 grid cursor-not-allowed place-items-center border-2 text-white shadow-sm ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical' : '-ml-2 -mt-2 h-4 w-4 rounded-full border-done bg-done'}`}
+                    className={`absolute top-1/2 grid cursor-not-allowed place-items-center border-2 shadow-sm ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical text-critical-fg' : '-ml-2 -mt-2 h-4 w-4 rounded-full border-done bg-done text-success-fg'}`}
                     style={{ left: '100%' }}>
                     <LockGlyph spin={isCursor} />
                   </span>
