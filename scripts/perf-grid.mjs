@@ -10,15 +10,17 @@
 //                      가상화 없이 전 행을 렌더하는 현재 상태의 기록(스펙 §3.2). 결과 파일을 쓴 뒤 exit 2.
 //                      응답 뒤 단계(행 수 안정 대기·스크롤 측정)도 각각 timeout-ms 안에 끝나야 한다 — 넘으면 같은 '응답 없음'이고
 //                      멈춘 단계를 stalledAt(load·settle·scroll)으로 남긴다(과제 5b — 한순간 응답 뒤 다시 막힌 run 이 끝없이 기다렸다).
+//                      run 마다 브라우저를 새로 띄우고 닫기 소요·시간 초과를 표본에(D7). 시작 상태 = 측정 계정 선호 고정 객체(라이트)·
+//                      테마 쿠키(D6), item_owners 총수 < max_rows(D12). 스크롤 = 1,000행 × 행 높이(D13).
 // 사용: seed 는 node 로, measure 는 npx --yes -p playwright@1.58.2 node scripts/perf-grid.mjs measure … (래퍼 경유)
 // DB·세션 클라이언트와 앱 주소(--base)는 ui-capture 의 laneEnv 가 만든다 — 이 파일은 클라이언트를 만들지 않는다(UI-0 안전 리뷰 P2-2).
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  KEY_RE, LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, freshSessions, kstToday, laneEnv, laneTarget,
-  loadPlaywright, must, plusDays, userIdByEmail,
+  KEY_RE, LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, fixedPrefs, freshSessions, kstToday, laneEnv, laneTarget,
+  loadPlaywright, must, plusDays, setServerTheme, userIdByEmail,
 } from './ui-capture.mjs'
 import { median } from './lib/perf.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
@@ -122,8 +124,82 @@ export function classifyRuns(runs) {
 }
 
 const KEYS = ['firstRowMs', 'longTaskMs', 'frameAvgMs', 'framesOver50', 'htmlEndMs', 'ttfbMs', 'domRows']
+/** run 들의 키별 중앙값 — null·없음(스크롤 여지 없음·첫 행 없음)은 그 키에서 빼고 뺀 수를 excluded 에 적는다(D14 — 0 으로 세면 중앙값이
+ *  내려갔다). 값이 하나도 없으면 null
+ *  @param {Record<string, unknown>[]} runs
+ *  @returns {{ firstRowMs: number | null, longTaskMs: number | null, frameAvgMs: number | null, framesOver50: number | null, htmlEndMs: number | null,
+ *    ttfbMs: number | null, domRows: number | null, excluded: Record<string, number> }} */
 export function summarize(runs) {
-  return Object.fromEntries(KEYS.map((k) => [k, median(runs.map((r) => r[k]))]))
+  const excluded = {}
+  const out = Object.fromEntries(KEYS.map((k) => {
+    const vals = runs.map((r) => r[k]).filter((v) => v !== null && v !== undefined)
+    if (vals.length < runs.length) excluded[k] = runs.length - vals.length
+    return [k, vals.length ? median(vals) : null]
+  }))
+  return { ...out, excluded }
+}
+
+/** 프레임 간격 목록 → 통계(순수, D15) — 첫 간격(측정 시작 → 첫 rAF)은 프레임이 아니라 뺀다 @param {number[]} frames */
+export function frameStats(frames) {
+  const f = frames.slice(1)
+  return { frameAvgMs: f.length ? f.reduce((a, b) => a + b, 0) / f.length : null, framesOver50: f.filter((x) => x > 50).length, frameCount: f.length }
+}
+
+/** 첫 행까지의 긴 작업 합(순수, D15) — 첫 행 전에 시작한 작업의 길이 합. 첫 행을 못 봤으면 null(0 이 아니다)
+ *  @param {[number, number][]} tasks [시작, 길이] @param {number | null} firstRow */
+export function longTaskBefore(tasks, firstRow) {
+  if (firstRow === null || firstRow === undefined) return null
+  return tasks.filter(([s]) => s < firstRow).reduce((sum, [, d]) => sum + d, 0)
+}
+
+/** 행 수 표본의 체크포인트(순수, D15) — 지난(≤ 경과) 체크포인트 가운데 아직 안 적은 첫 것, 상한 밖 체크포인트는 없다. 한 반복에 하나만 적고
+ *  표본에는 실제 경과도 함께 남긴다 @param {number} elapsed @param {number} timeoutMs @param {number[]} taken */
+export function dueCheckpoint(elapsed, timeoutMs, taken) {
+  return CHECKPOINTS_MS.find((c) => c <= timeoutMs && c <= elapsed && !taken.includes(c))
+}
+
+/** '1,000행 스크롤'(스펙 §3.2 ③)은 행 수다(순수, D13) — 목표 = 1,000 × 행 높이, 한 프레임 10행. 픽셀 고정(40,000px)이면 UI-1 밀도·SPU2 그리드가
+ *  행 높이를 바꿀 때 같은 이름의 지표가 다른 행 수를 잰다 @param {number | null} rowHeight */
+export function scrollPlan(rowHeight) {
+  if (!Number.isInteger(rowHeight) || rowHeight <= 0) throw new Error(`행 높이가 양의 정수가 아니다(${rowHeight}) — [data-row-id] 의 offsetHeight`)
+  return { rowHeight, targetPx: 1000 * rowHeight, stepPx: 10 * rowHeight }
+}
+
+/** config.toml 의 [api] max_rows(순수, D12) — 래퍼가 20000 으로 고정한 값을 읽는다 @param {string} configText */
+export function maxRowsOf(configText) {
+  const m = /^max_rows\s*=\s*(\d+)\s*$/m.exec(configText)
+  if (!m) throw new Error('supabase/config.toml 에 max_rows 가 없다 — 래퍼(lane-b-run.sh)로 부른다')
+  return Number(m[1])
+}
+
+/** item_owners 총수 < max_rows(순수, D12) — 앱의 WBS 조회는 item_owners 를 프로젝트 거름·범위 없이 읽는다(src/lib/data/wbs.ts). 총수가 max_rows 에
+ *  닿으면 담당 배지가 순서 없이 잘린 채 행 수 대조(wbs_items)는 통과하고 측정이 가벼워진다(D51) @param {number | null} count @param {number} maxRows */
+export function ownersVerdict(count, maxRows) {
+  if (!Number.isInteger(count)) throw new Error(`item_owners 총수를 읽지 못했다(${count})`)
+  if (count >= maxRows) throw new Error(`item_owners ${count} 행 ≥ max_rows ${maxRows} — 앱의 무범위 담당 조회가 잘린다(D51). db:reset 뒤 필요한 규모만 시드한다`)
+}
+
+/** 측정 계정 선호값 확인(순수, D6) — 소속 행마다 prefs 가 고정 객체와 정확히 같은가. 다른 소속 id(소속이 없으면 '(소속 없음)')
+ *  @param {{ workspace_id: string, prefs: unknown }[]} rows @param {Record<string, unknown>} want */
+export function prefsMismatch(rows, want) {
+  if (!rows.length) return ['(소속 없음)']
+  const norm = (o) => JSON.stringify(Object.fromEntries(Object.entries(o ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))))
+  return rows.filter((r) => norm(r.prefs) !== norm(want)).map((r) => r.workspace_id)
+}
+
+/** run 마다 브라우저를 새로 띄운다(D7) — 막힌 렌더러가 다음 run 을 잴 때 살아 있지 않게(프로세스 단위 격리). 결과 JSON 에 적는다 */
+export const BROWSER_PER_RUN = true
+
+/** 닫기(순수 조립, D7) — 단계마다 상한(ms)과 겨루고 넘으면 다음 단계로(컨텍스트 → 브라우저). 닫기 오류(이미 닫힘)는 삼킨다.
+ *  { closeMs, closeTimedOut } 를 run 표본에 남긴다 @param {[() => Promise<unknown>, number][]} steps */
+export async function timedClose(steps) {
+  const t0 = Date.now()
+  let timedOut = false
+  for (const [step, ms] of steps) {
+    const r = await withDeadline(Promise.resolve().then(step).catch(() => undefined), ms)
+    if (!r.ok) timedOut = true
+  }
+  return { closeMs: Date.now() - t0, closeTimedOut: timedOut }
 }
 
 /** "--키 값" 인자 파서 — 알려진 키만 */
@@ -200,74 +276,89 @@ const probe = (page, ms = 3000) => Promise.race([
   sleep(ms).then(() => null),
 ])
 
-/** 한 run — 응답하면 { status:'ok', … }, timeoutMs 안에 첫 행이 보이고 로드가 끝나지 않으면 { status:'unresponsive', stalledAt:'load', … }.
- *  '응답'은 page.evaluate 가 돌아오고 readyState=complete·행 ≥ 1 이다(메인 스레드가 풀렸다는 뜻). domRowsAt 은 5·15·30·60초 이후 첫 표본.
- *  응답 뒤 단계(행 수 안정 대기 settle·스크롤 측정 scroll)도 각각 timeoutMs 와 겨룬다 — 한순간 응답으로 잡힌 뒤 메인 스레드가 다시 막히면
- *  시간 제한 없는 page.evaluate 를 끝없이 기다렸다(과제 5 의 5,055행 재측정 셋째 run 15분). 넘으면 그 단계로 stalledRun. */
-async function oneRun({ browser, sessions, base, projectId, seedRows, timeoutMs }) {
+/** 한 run(D7) — 브라우저를 새로 띄워 재고 닫는다. 막힌 렌더러가 다음 run 을 잴 때 살아 있지 않게(프로세스 격리 — 과제 5 의 3,033행 재측정에서
+ *  무응답 뒤 run 이 느렸고 도구가 그 사실을 구분할 자료를 남기지 않았다). 닫기 소요·시간 초과(closeMs·closeTimedOut)를 표본에 남긴다 */
+async function oneRun({ chromium, ...rest }) {
+  const browser = await chromium.launch()
+  const browserVersion = browser.version()
   const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: 'light' }))
+  let sample = null
   try {
-    await context.addCookies(sessions.wsAdmin.cookies.map((c) => ({ ...c, url: base })))
-    await context.addInitScript(() => {
-      const g = { firstRow: null, longTasks: [] }
-      window.__grid = g
-      new PerformanceObserver((l) => { for (const e of l.getEntries()) g.longTasks.push([e.startTime, e.duration]) }).observe({ type: 'longtask', buffered: true })
-      const mo = new MutationObserver(() => { if (g.firstRow === null && document.querySelector('[data-row-id]')) { g.firstRow = performance.now(); mo.disconnect() } })
-      mo.observe(document, { childList: true, subtree: true })
-    })
-    const page = await context.newPage()
-    const t0 = Date.now()
-    await page.goto(`${base}/p/${projectId}/wbs`, { waitUntil: 'commit', timeout: timeoutMs })
-    const domRowsAt = []
-    let responsive = false
-    while (Date.now() - t0 < timeoutMs) {
-      const r = await probe(page)
-      const el = Date.now() - t0
-      const due = CHECKPOINTS_MS.find((c) => c <= timeoutMs && c <= el && !domRowsAt.some((d) => d.atMs === c))
-      if (due !== undefined) domRowsAt.push({ atMs: due, rows: r ? r.rows : null })
-      if (r && r.ready === 'complete' && r.rows > 0) { responsive = true; break }
-      await sleep(1000)
-    }
-    if (!responsive) return stalledRun('load', { timeoutMs, domRowsAt })
-    const settle = async () => {
-      let rows = -1
-      for (let k = 0; k < 30; k++) {         // 행 수가 1초 동안 그대로면 첫 표시 완료
-        const n = await page.evaluate(() => document.querySelectorAll('[data-row-id]').length)
-        if (n === rows) break
-        rows = n
-        await page.waitForTimeout(1000)
-      }
-      return rows
-    }
-    const settled = await withDeadline(settle(), timeoutMs)
-    if (!settled.ok) return stalledRun('settle', { timeoutMs, domRowsAt })
-    const domRows = settled.value
-    rowCountVerdict(domRows, seedRows)
-    const scrolled = await withDeadline(page.evaluate(async () => {
-      const g = window.__grid
-      const nav = performance.getEntriesByType('navigation')[0]
-      const el = document.querySelector('[data-wbs-scroll-region]')
-      const frames = []
-      if (el) {
-        let last = performance.now()
-        await new Promise((resolve) => {
-          const tick = (t) => { frames.push(t - last); last = t; el.scrollTop += 400
-            if (el.scrollTop >= 40_000 || el.scrollTop + el.clientHeight >= el.scrollHeight) resolve(null); else requestAnimationFrame(tick) }
-          requestAnimationFrame(tick)
-        })
-      }
-      const f = frames.slice(1)
-      return { firstRowMs: g.firstRow, longTaskMs: g.longTasks.filter(([s]) => s < g.firstRow).reduce((s, [, d]) => s + d, 0),
-        frameAvgMs: f.length ? f.reduce((a, b) => a + b, 0) / f.length : null, framesOver50: f.filter((x) => x > 50).length,
-        htmlEndMs: nav.responseEnd - nav.requestStart, ttfbMs: nav.responseStart - nav.requestStart, scrolled: Boolean(el) }
-    }), timeoutMs)
-    if (!scrolled.ok) return stalledRun('scroll', { timeoutMs, domRowsAt, domRows })
-    const m = scrolled.value
-    if (!m.scrolled) throw new Error('[data-wbs-scroll-region] 이 없다 — 스크롤 주체가 바뀌었다')
-    return { status: 'ok', ...m, domRows }
+    sample = await measureIn(context, rest)
   } finally {
-    await Promise.race([context.close().catch(() => {}), sleep(10_000)])   // 막힌 렌더러는 browser.close 가 정리한다
+    const closed = await timedClose([[() => context.close(), 10_000], [() => browser.close(), 15_000]])
+    if (sample) sample = { ...sample, ...closed, browser: browserVersion }
   }
+  return sample
+}
+
+/** 한 컨텍스트에서 한 번 잰다 — 응답하면 { status:'ok', … }, timeoutMs 안에 첫 행이 보이고 로드가 끝나지 않으면 { status:'unresponsive', stalledAt:'load', … }.
+ *  '응답'은 page.evaluate 가 돌아오고 readyState=complete·행 ≥ 1 이다(메인 스레드가 풀렸다는 뜻). domRowsAt 은 5·15·30·60초 이후 첫 표본(실제 경과 함께).
+ *  응답 뒤 단계(행 수 안정 대기 settle·스크롤 측정 scroll)도 각각 timeoutMs 와 겨룬다 — 한순간 응답으로 잡힌 뒤 메인 스레드가 다시 막히면
+ *  시간 제한 없는 page.evaluate 를 끝없이 기다렸다(과제 5 의 5,055행 재측정 셋째 run 15분). 넘으면 그 단계로 stalledRun.
+ *  스크롤은 1,000행(행 높이 × 1,000 — scrollPlan), 통계는 페이지가 돌려준 원자료로 node 가 낸다(frameStats·longTaskBefore — 단위 테스트) */
+async function measureIn(context, { sessions, base, projectId, seedRows, timeoutMs }) {
+  // 측정 시작 상태(D6) — 서버 선호(light, cmdMeasure 가 덮는다)와 같은 테마 쿠키(no-flash 가 첫 칠부터 라이트)
+  await context.addCookies([...sessions.wsAdmin.cookies, { name: 'dflow-theme', value: 'light' }].map((c) => ({ name: c.name, value: c.value, url: base })))
+  await context.addInitScript(() => {
+    const g = { firstRow: null, longTasks: [] }
+    window.__grid = g
+    new PerformanceObserver((l) => { for (const e of l.getEntries()) g.longTasks.push([e.startTime, e.duration]) }).observe({ type: 'longtask', buffered: true })
+    const mo = new MutationObserver(() => { if (g.firstRow === null && document.querySelector('[data-row-id]')) { g.firstRow = performance.now(); mo.disconnect() } })
+    mo.observe(document, { childList: true, subtree: true })
+  })
+  const page = await context.newPage()
+  const t0 = Date.now()
+  await page.goto(`${base}/p/${projectId}/wbs`, { waitUntil: 'commit', timeout: timeoutMs })
+  const domRowsAt = []
+  let responsive = false
+  while (Date.now() - t0 < timeoutMs) {
+    const r = await probe(page)
+    const el = Date.now() - t0
+    const due = dueCheckpoint(el, timeoutMs, domRowsAt.map((d) => d.atMs))
+    if (due !== undefined) domRowsAt.push({ atMs: due, elapsedMs: el, rows: r ? r.rows : null })
+    if (r && r.ready === 'complete' && r.rows > 0) { responsive = true; break }
+    await sleep(1000)
+  }
+  if (!responsive) return stalledRun('load', { timeoutMs, domRowsAt })
+  const settle = async () => {
+    let rows = -1
+    for (let k = 0; k < 30; k++) {         // 행 수가 1초 동안 그대로면 첫 표시 완료
+      const n = await page.evaluate(() => document.querySelectorAll('[data-row-id]').length)
+      if (n === rows) break
+      rows = n
+      await page.waitForTimeout(1000)
+    }
+    return rows
+  }
+  const settled = await withDeadline(settle(), timeoutMs)
+  if (!settled.ok) return stalledRun('settle', { timeoutMs, domRowsAt })
+  const domRows = settled.value
+  rowCountVerdict(domRows, seedRows)
+  const height = await withDeadline(page.evaluate(() => document.querySelector('[data-row-id]')?.offsetHeight ?? null), timeoutMs)
+  if (!height.ok) return stalledRun('scroll', { timeoutMs, domRowsAt, domRows })
+  const plan = scrollPlan(height.value)
+  const scrolled = await withDeadline(page.evaluate(async ({ targetPx, stepPx }) => {
+    const g = window.__grid
+    const nav = performance.getEntriesByType('navigation')[0]
+    const el = document.querySelector('[data-wbs-scroll-region]')
+    const frames = []
+    if (el) {
+      let last = performance.now()
+      await new Promise((resolve) => {
+        const tick = (t) => { frames.push(t - last); last = t; el.scrollTop += stepPx
+          if (el.scrollTop >= targetPx || el.scrollTop + el.clientHeight >= el.scrollHeight) resolve(null); else requestAnimationFrame(tick) }
+        requestAnimationFrame(tick)
+      })
+    }
+    return { firstRow: g.firstRow, longTasks: g.longTasks, frames, requestStart: nav.requestStart, responseStart: nav.responseStart, responseEnd: nav.responseEnd,
+      scrolled: Boolean(el), scrollTop: el ? el.scrollTop : null }
+  }, { targetPx: plan.targetPx, stepPx: plan.stepPx }), timeoutMs)
+  if (!scrolled.ok) return stalledRun('scroll', { timeoutMs, domRowsAt, domRows })
+  const m = scrolled.value
+  if (!m.scrolled) throw new Error('[data-wbs-scroll-region] 이 없다 — 스크롤 주체가 바뀌었다')
+  return { status: 'ok', firstRowMs: m.firstRow, longTaskMs: longTaskBefore(m.longTasks, m.firstRow), ...frameStats(m.frames),
+    htmlEndMs: m.responseEnd - m.requestStart, ttfbMs: m.responseStart - m.requestStart, domRows, rowHeight: plan.rowHeight, scrollTargetPx: plan.targetPx, scrollTop: m.scrollTop }
 }
 
 /** @returns {Promise<number>} 종료 코드 — 0 응답, 2 응답 없음(측정은 됐다). 오류는 throw → 1 */
@@ -282,23 +373,30 @@ async function cmdMeasure(argv) {
   const { count: seedRows, error: cErr } = await db.from('wbs_items').select('id', { count: 'exact', head: true }).eq('project_id', project.id)
   if (cErr) throw new Error(`행 수 조회: ${cErr.message}`)
   if (seedRows !== gridRowCount(phases)) throw new Error(`${name} 의 DB 행 ${seedRows} ≠ 기대 ${gridRowCount(phases)} — seed --phases ${phases} 를 다시`)
+  // D12 — 앱의 무범위 item_owners 조회가 max_rows 에 닿으면 담당 배지가 잘린 채 행 수 대조는 통과한다
+  const { count: ownersTotal, error: oErr } = await db.from('item_owners').select('wbs_item_id', { count: 'exact', head: true })
+  if (oErr) throw new Error(`item_owners 총수 조회: ${oErr.message}`)
+  const maxRows = maxRowsOf(readFileSync('supabase/config.toml', 'utf8'))
+  ownersVerdict(ownersTotal, maxRows)
   const uid = await userIdByEmail(db, SEED_ACCOUNTS.wsAdmin)
+  if (!uid) throw new Error('측정 계정(ui-wsadmin)이 없다 — ui-capture seed 를 먼저')
   const { count: stateRows, error: sErr } = await db.from('user_wbs_state').select('project_id', { count: 'exact', head: true }).eq('user_id', uid).eq('project_id', project.id)
   if (sErr) throw new Error(`user_wbs_state 조회: ${sErr.message}`)
   if (stateRows !== 0) throw new Error('측정 계정에 user_wbs_state 가 있다 — 접힘이 행 수를 바꾼다(판정 Q9)')
-  const prefs = must('선호 조회', await db.from('user_preferences').select('prefs').eq('user_id', uid))
-  if (prefs.some((p) => p.prefs?.wbsHideDone === true)) throw new Error('측정 계정의 wbsHideDone 이 켜져 있다(판정 Q9)')
+  // D6 — 측정 시작 상태: 측정 계정의 서버 선호를 shoot 와 같은 고정 객체(라이트·lastProjectId = 측정 프로젝트)로 덮고 읽어 확인한다.
+  // 캡처의 다크 패스가 남긴 테마·간트 일 폭·개요 번호·완료 숨김(판정 Q9)이 측정 조건을 바꾸지 않게. 쿠키 dflow-theme=light 는 run 마다
+  const startPrefs = fixedPrefs('light', { lastProjectId: project.id })
+  await setServerTheme(db, [uid], 'light', { lastProjectId: project.id })
+  const bad = prefsMismatch(must('선호 확인', await db.from('user_preferences').select('workspace_id, prefs').eq('user_id', uid)), startPrefs)
+  if (bad.length) throw new Error(`측정 계정의 선호값이 고정 객체와 다르다(${bad.join(', ')}) — 측정 시작 상태를 확인한다`)
   const sessions = await freshSessions(env, ['wsAdmin'])
   const { chromium } = await loadPlaywright()
-  const browser = await chromium.launch()
-  const browserVersion = browser.version()
   const runs = []
-  try {
-    for (let i = 0; i < opts.runs; i++) runs.push(await oneRun({ browser, sessions, base, projectId: project.id, seedRows, timeoutMs: opts.timeoutMs }))
-  } finally { await Promise.race([browser.close().catch(() => {}), sleep(15_000)]) }
+  for (let i = 0; i < opts.runs; i++) runs.push(await oneRun({ chromium, sessions, base, projectId: project.id, seedRows, timeoutMs: opts.timeoutMs }))
   const verdict = classifyRuns(runs)
   const out = { label: opts.label, base, phases, project: name, projectRows: seedRows, runs: runs.length, timeoutMs: opts.timeoutMs,
-    unresponsive: verdict.unresponsive, runStatuses: verdict.statuses, median: verdict.median, browser: browserVersion, kstDate: kstToday() }
+    unresponsive: verdict.unresponsive, runStatuses: verdict.statuses, median: verdict.median, browser: runs[0]?.browser ?? null, kstDate: kstToday(),
+    browserPerRun: BROWSER_PER_RUN, closeTimedOut: runs.filter((r) => r.closeTimedOut).length, itemOwners: ownersTotal, maxRows, startTheme: startPrefs.theme, llmKeys: env.llmKeys }
   writeFileSync(join(outDir, `perf-grid-${opts.label}.json`), JSON.stringify({ ...out, samples: runs }, null, 2))
   console.log(JSON.stringify(out))
   return verdict.exitCode

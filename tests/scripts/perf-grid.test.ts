@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { GRID_SHAPE, classifyRuns, gridProjectName, gridRowCount, gridRows, gridTarget, mulberry32, parsePhases, rowCountVerdict, summarize } from '../../scripts/perf-grid.mjs'
 import { STALL_STAGES, stalledRun, withDeadline } from '../../scripts/perf-grid.mjs'
 import { measureArgs } from '../../scripts/perf-grid.mjs'
+import { BROWSER_PER_RUN, CHECKPOINTS_MS, dueCheckpoint, frameStats, longTaskBefore, maxRowsOf, ownersVerdict, prefsMismatch, scrollPlan, timedClose } from '../../scripts/perf-grid.mjs'
 import { median, percentile } from '../../scripts/lib/perf.mjs'
 
 const CTX = {
@@ -42,9 +43,16 @@ describe('측정 판정', () => {
   })
   it('요약은 run 마다의 중앙값', () => {
     const runs = [1, 5, 3].map((x) => ({ firstRowMs: x, longTaskMs: x * 2, frameAvgMs: 16, framesOver50: x, htmlEndMs: x * 10, ttfbMs: x, domRows: 10110 }))
-    expect(summarize(runs)).toEqual({ firstRowMs: 3, longTaskMs: 6, frameAvgMs: 16, framesOver50: 3, htmlEndMs: 30, ttfbMs: 3, domRows: 10110 })
+    expect(summarize(runs)).toEqual({ firstRowMs: 3, longTaskMs: 6, frameAvgMs: 16, framesOver50: 3, htmlEndMs: 30, ttfbMs: 3, domRows: 10110, excluded: {} })
     expect(median([4, 1, 3, 2])).toBe(2.5)
     expect(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 95)).toBe(10)
+  })
+  it('null(스크롤 여지 없음·첫 행 없음)은 그 키의 중앙값에서 빼고 뺀 수를 적는다 — 0 으로 세면 중앙값이 내려간다(D14)', () => {
+    const base = { firstRowMs: 1, longTaskMs: 0, framesOver50: 0, htmlEndMs: 1, ttfbMs: 1, domRows: 1011 }
+    const s = summarize([{ ...base, frameAvgMs: null }, { ...base, frameAvgMs: 30 }, { ...base, frameAvgMs: 50 }])
+    expect(s.frameAvgMs).toBe(40)
+    expect(s.excluded).toEqual({ frameAvgMs: 1 })
+    expect(summarize([{ ...base, frameAvgMs: null }]).frameAvgMs).toBeNull()
   })
   it.each([
     ['LOCAL_DB_URL 없음', { LOCAL_DB_URL: undefined }, /LOCAL_DB_URL/],
@@ -151,5 +159,63 @@ describe('응답 뒤 단계의 상한 — 멈춘 run 은 끝없이 기다리지 
   it('멈춘 run 은 응답 없음으로 센다 — 중앙값에서 빠지고 exit 2(결과), 오류(1)가 아니다', () => {
     const stalled = stalledRun('scroll', { timeoutMs: 120000, domRowsAt: [], domRows: 3033 })
     expect(classifyRuns([ok, stalled])).toEqual({ unresponsive: true, exitCode: 2, statuses: ['ok', 'unresponsive'], median: summarize([ok]) })
+  })
+})
+
+describe('측정 조립의 순수 조각(UI-0 결정성 리뷰 P3 — D12·D13·D15)', () => {
+  it('프레임 통계 — 첫 간격(측정 시작 → 첫 rAF)은 빼고 평균·50ms 초과 수·프레임 수', () => {
+    expect(frameStats([5, 16, 16, 61])).toEqual({ frameAvgMs: 31, framesOver50: 1, frameCount: 3 })
+    expect(frameStats([5])).toEqual({ frameAvgMs: null, framesOver50: 0, frameCount: 0 })
+    expect(frameStats([])).toEqual({ frameAvgMs: null, framesOver50: 0, frameCount: 0 })
+  })
+  it('첫 행까지의 긴 작업 합 — 첫 행 전에 시작한 작업만, 첫 행이 없으면 null(0 이 아니다)', () => {
+    expect(longTaskBefore([[10, 60], [100, 80], [500, 70]], 400)).toBe(140)
+    expect(longTaskBefore([], 100)).toBe(0)
+    expect(longTaskBefore([[10, 60]], null)).toBeNull()
+  })
+  it('행 수 표본의 체크포인트 — 지난 것 가운데 아직 안 적은 첫 것(한 반복에 하나), 상한 밖 체크포인트는 없다', () => {
+    expect(CHECKPOINTS_MS).toEqual([5000, 15000, 30000, 60000])
+    expect(dueCheckpoint(4000, 120_000, [])).toBeUndefined()
+    expect(dueCheckpoint(5200, 120_000, [])).toBe(5000)
+    expect(dueCheckpoint(16_000, 120_000, [5000])).toBe(15_000)
+    expect(dueCheckpoint(16_000, 120_000, [])).toBe(5000)
+    expect(dueCheckpoint(61_000, 30_000, [5000, 15_000, 30_000])).toBeUndefined()
+  })
+  it('1,000행 스크롤은 행 높이로 — 목표 1,000 × 행 높이, 한 프레임 10행(행 높이가 바뀌어도 같은 행 수·프레임 수 — 비교 Q07 의 전제)', () => {
+    expect(scrollPlan(40)).toEqual({ rowHeight: 40, targetPx: 40_000, stepPx: 400 })
+    expect(scrollPlan(32)).toEqual({ rowHeight: 32, targetPx: 32_000, stepPx: 320 })
+    for (const bad of [0, -1, null, Number.NaN, 1.5]) expect(() => scrollPlan(bad)).toThrow(/행 높이/)
+  })
+  it('max_rows — 래퍼가 고정한 config.toml 의 값을 읽는다(없으면 멈춘다)', () => {
+    expect(maxRowsOf('[api]\nenabled = true\nport = 54421\nmax_rows = 20000\n\n[db]\nport = 54422\n')).toBe(20_000)
+    expect(() => maxRowsOf('[api]\nport = 54421\n')).toThrow(/max_rows/)
+  })
+  it('item_owners 총수 < max_rows — 앱의 무범위 item_owners 조회가 잘리면 담당 배지가 순서 없이 빠진 채 행 수 대조는 통과한다(D12·D51)', () => {
+    expect(() => ownersVerdict(17_148, 20_000)).not.toThrow()
+    expect(() => ownersVerdict(20_000, 20_000)).toThrow(/item_owners 20000.*max_rows 20000/)
+    expect(() => ownersVerdict(null, 20_000)).toThrow(/item_owners/)
+  })
+})
+
+describe('측정 시작 상태·run 격리(UI-0 결정성 리뷰 P2 — D6·D7)', () => {
+  it('측정 계정의 선호값 확인 — 모든 소속이 고정 객체(테마 light·lastProjectId)와 정확히 같아야 한다(간트 일 폭·개요 번호·완료 숨김 없음)', () => {
+    const want = { heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'light', lastProjectId: 'p1' }
+    expect(prefsMismatch([{ workspace_id: 'wA', prefs: { ...want } }], want)).toEqual([])
+    expect(prefsMismatch([{ workspace_id: 'wA', prefs: { ...want, wbsGanttScale: 48 } }, { workspace_id: 'wB', prefs: { ...want, theme: 'dark' } }], want)).toEqual(['wA', 'wB'])
+    expect(prefsMismatch([], want)).toEqual(['(소속 없음)'])
+  })
+  it('닫기 소요·시간 초과를 run 표본에 — 단계마다 상한, 앞 단계가 넘어도 다음 단계(브라우저 닫기)를 부른다, 닫기 오류는 삼킨다', async () => {
+    const fast = () => Promise.resolve()
+    const never = () => new Promise<void>(() => {})
+    await expect(timedClose([[fast, 1000], [fast, 1000]])).resolves.toMatchObject({ closeTimedOut: false })
+    const calls: string[] = []
+    const r = await timedClose([[() => { calls.push('context'); return never() }, 20], [() => { calls.push('browser'); return fast() }, 1000]])
+    expect(r.closeTimedOut).toBe(true)
+    expect(calls).toEqual(['context', 'browser'])
+    expect(r.closeMs).toBeGreaterThanOrEqual(0)
+    await expect(timedClose([[() => Promise.reject(new Error('already closed')), 1000]])).resolves.toMatchObject({ closeTimedOut: false })
+  })
+  it('run 마다 브라우저를 새로 띄운다(프로세스 격리) — 결과 JSON 이 그 방식을 적는다', () => {
+    expect(BROWSER_PER_RUN).toBe(true)
   })
 })
