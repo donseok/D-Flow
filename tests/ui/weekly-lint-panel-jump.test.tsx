@@ -4,6 +4,7 @@ import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { WeeklyLintPanel } from '@/components/weekly/WeeklyLintPanel'
 import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { legacyGroup } from '../helpers/weekly-legacy'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -23,6 +24,7 @@ function Harness() {
       <WeeklyLintPanel
         open={open}
         rows={[row]}
+        groupOf={legacyGroup}
         onClose={() => setOpen(false)}
         onApply={() => {}}
         onGoToCell={() => document.querySelector<HTMLTextAreaElement>('[data-testid="cell"]')!.focus()}

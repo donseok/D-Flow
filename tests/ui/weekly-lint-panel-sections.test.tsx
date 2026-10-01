@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { WeeklyLintPanel } from '@/components/weekly/WeeklyLintPanel'
 import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { legacyGroup, legacyOrdered } from '../helpers/weekly-legacy'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -33,7 +34,7 @@ describe('주간보고 점검 패널 — 구분 단위', () => {
   const show = (rows: WeeklySheetRow[]) => {
     root = createRoot(container)
     act(() => root.render(
-      <WeeklyLintPanel open rows={rows} onClose={() => {}} onApply={() => {}} onGoToCell={() => {}} />,
+      <WeeklyLintPanel open rows={legacyOrdered(rows)} groupOf={legacyGroup} onClose={() => {}} onApply={() => {}} onGoToCell={() => {}} />,
     ))
   }
 
@@ -105,6 +106,7 @@ describe('주간보고 점검 패널 — 구분 단위', () => {
       <WeeklyLintPanel
         open
         rows={[mkRow('r1', 'PMO', 1, { thisContent: '가\n가' })]}
+        groupOf={legacyGroup}
         onClose={() => {}}
         onApply={edits => got.push(edits)}
         onGoToCell={() => {}}
@@ -113,5 +115,26 @@ describe('주간보고 점검 패널 — 구분 단위', () => {
     const apply = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === '적용')!
     act(() => apply.click())
     expect(got).toEqual([[{ rowId: 'r1', cellKey: 'this_content', content: '가' }]])
+  })
+
+  it('묶음은 groupOf 의 키로 — 이름이 같은 두 영역도 따로 묶고, data-lint-section 은 키·머리는 이름', () => {
+    type Row = { id: string; areaId: string; thisContent: string; thisIssue: string; nextContent: string; nextIssue: string }
+    const r = (id: string, areaId: string, thisContent: string): Row =>
+      ({ id, areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
+    root = createRoot(container)
+    act(() => root.render(
+      <WeeklyLintPanel
+        open
+        rows={[r('r1', 'a-1', '가\n가'), r('r2', 'a-2', '나\n나')]}
+        groupOf={(row: Row) => ({ key: row.areaId, label: '실험' })}
+        onClose={() => {}}
+        onApply={() => {}}
+        onGoToCell={() => {}}
+      />,
+    ))
+    expect(sections().map(el => el.dataset.lintSection)).toEqual(['a-1', 'a-2'])
+    const heads = sections().map(el => el.querySelector('h3')!.textContent ?? '')
+    expect(heads).toHaveLength(2)
+    for (const h of heads) { expect(h).toContain('실험'); expect(h).toContain('1건') }
   })
 })

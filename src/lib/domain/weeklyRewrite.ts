@@ -1,7 +1,7 @@
 import { cellsInRect, type GridRect } from './sheetSelection'
 import {
-  CELL_FIELD, rowSectionLabel, WEEKLY_CELL_LABEL,
-  type WeeklyCellEdit, type WeeklyCellKey, type WeeklySheetRow,
+  CELL_FIELD, WEEKLY_CELL_LABEL,
+  type WeeklyCellEdit, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
 export interface WeeklyRewriteTarget {
@@ -19,10 +19,12 @@ export interface WeeklyRewriteCandidate {
   content: string
 }
 
-/** 현재 선택 사각형을 행 우선 순서의 AI 대상 목록으로 바꾸되 빈 셀은 제외한다. */
-export function buildWeeklyRewriteSelection(
-  rows: WeeklySheetRow[],
+/** 현재 선택 사각형을 행 우선 순서의 AI 대상 목록으로 바꾸되 빈 셀은 제외한다.
+ *  머리(section)는 호출부가 정한다(labelOf — 시트는 영역 이름). 행 순서는 받은 그대로(화면 순서)다. */
+export function buildWeeklyRewriteSelection<R extends { id: string } & WeeklyCells>(
+  rows: readonly R[],
   rect: GridRect,
+  labelOf: (row: R) => string,
 ): WeeklyRewriteTarget[] {
   const byId = new Map(rows.map(row => [row.id, row]))
   return cellsInRect(rows.map(row => row.id), rect).flatMap(({ rowId, col }) => {
@@ -33,7 +35,7 @@ export function buildWeeklyRewriteSelection(
     return [{
       rowId,
       cellKey: col,
-      section: rowSectionLabel(row),
+      section: labelOf(row),
       label: WEEKLY_CELL_LABEL[col],
       original,
     }]
@@ -44,8 +46,8 @@ export function buildWeeklyRewriteSelection(
  * AI 요청 이후 원문이 한 글자라도 달라졌거나 행이 사라졌다면 전체 적용을 막는다.
  * 일부만 적용하면 사용자가 미리보기에서 확인한 변경 묶음과 실제 저장 결과가 달라지기 때문이다.
  */
-export function prepareApplicableWeeklyRewriteEdits(
-  rows: WeeklySheetRow[],
+export function prepareApplicableWeeklyRewriteEdits<R extends { id: string } & WeeklyCells>(
+  rows: readonly R[],
   candidates: WeeklyRewriteCandidate[],
 ): { ok: true; edits: WeeklyCellEdit[] } | { ok: false } {
   const byId = new Map(rows.map(row => [row.id, row]))

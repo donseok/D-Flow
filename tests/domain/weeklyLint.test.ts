@@ -1,9 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import {
-  normalizeForCompare, lineSimilarity, lintDuplicates, lintNearDuplicates,
-  lintNumbering, lintFormat, lintWeeklySheet, NEAR_DUPLICATE_THRESHOLD,
+  normalizeForCompare, lineSimilarity, NEAR_DUPLICATE_THRESHOLD,
+  lintDuplicates as lintDuplicatesBy, lintNearDuplicates as lintNearDuplicatesBy,
+  lintNumbering as lintNumberingBy, lintFormat as lintFormatBy, lintWeeklySheet as lintWeeklySheetBy,
+  type LintGroupOf,
 } from '@/lib/domain/weeklyLint'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyCells, WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { legacyGroup, legacyOrdered } from '../helpers/weekly-legacy'
+
+// 규칙은 묶음 함수(groupOf)를 받고 행을 입력 순서로 본다(SP4 과제 21). 아래 옛 구분 행 케이스는 옛 동작(sortWeeklyRows 순 +
+// sectionKeyOf 묶음)으로 그대로 돌린다 — 과제 25 가 영역 행·합성 이름으로 바꾸며 이 래퍼를 지운다.
+const lintDuplicates = (rows: WeeklySheetRow[]) => lintDuplicatesBy(legacyOrdered(rows), legacyGroup)
+const lintNearDuplicates = (rows: WeeklySheetRow[]) => lintNearDuplicatesBy(legacyOrdered(rows), legacyGroup)
+const lintNumbering = (rows: WeeklySheetRow[]) => lintNumberingBy(legacyOrdered(rows), legacyGroup)
+const lintFormat = (rows: WeeklySheetRow[]) => lintFormatBy(legacyOrdered(rows), legacyGroup)
+const lintWeeklySheet = (rows: WeeklySheetRow[]) => lintWeeklySheetBy(legacyOrdered(rows), legacyGroup)
 
 describe('normalizeForCompare', () => {
   it('앞뒤 공백·연속 공백을 정리한다', () => {
@@ -930,5 +941,80 @@ describe('lintWeeklySheet', () => {
     const [f] = lintWeeklySheet(rows)
     const applied = rows.map(r => ({ ...r, thisContent: f.edits[0].content }))
     expect(lintWeeklySheet(applied)).toEqual([])
+  })
+})
+
+type AreaRow = { id: string; areaId: string } & WeeklyCells
+const A_EXP = '00000000-0000-0000-7e57-0000000018d1'
+const A_DATA = '00000000-0000-0000-7e57-0000000018d2'
+const AREA_NAME: Record<string, string> = { [A_EXP]: '실험', [A_DATA]: '데이터' }
+const arow = (id: string, areaId: string, over: Partial<WeeklyCells> = {}): AreaRow =>
+  ({ id, areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over })
+const byArea: LintGroupOf<AreaRow> = (r) => ({ key: r.areaId, label: AREA_NAME[r.areaId] ?? '알 수 없는 영역' })
+
+describe('묶음 함수(groupOf) — 키로 견주고 이름은 머리에만', () => {
+  it('같은 영역의 행끼리만 견준다 — 다른 영역의 같은 줄은 남남', () => {
+    const rows = [
+      arow('r1', A_EXP, { thisContent: '견적 회신' }),
+      arow('r2', A_DATA, { thisContent: '견적 회신' }),
+      arow('r3', A_EXP, { thisContent: '견적 회신' }),
+    ]
+    const out = lintDuplicatesBy(rows, byArea)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ groupKey: A_EXP, section: '실험', rowId: 'r3' })
+    expect(out[0].id).toContain(A_EXP)
+    expect(out[0].edits).toEqual([{ rowId: 'r3', cellKey: 'this_content', content: '' }])
+  })
+
+  it('이름이 같은 두 묶음도 키가 다르면 남남이고 지적 id 가 부딪히지 않는다', () => {
+    const sameName: LintGroupOf<AreaRow> = (r) => ({ key: r.areaId, label: '같은 이름' })
+    const out = lintDuplicatesBy([arow('r1', A_EXP, { thisContent: '가\n가' }), arow('r2', A_DATA, { thisContent: '가\n가' })], sameName)
+    expect(out.map(f => f.groupKey)).toEqual([A_EXP, A_DATA])
+    expect(out.map(f => f.section)).toEqual(['같은 이름', '같은 이름'])
+    expect(new Set(out.map(f => f.id)).size).toBe(2)
+  })
+
+  it('묶음·행 순서 = 입력 순서 — 정렬하지 않는다(남길 줄도 입력에서 앞선 행)', () => {
+    const rows = [
+      arow('r2', A_DATA, { thisContent: '나\n나' }),
+      arow('r1', A_EXP, { thisContent: '다' }),
+      arow('r3', A_EXP, { thisContent: '다' }),
+    ]
+    const out = lintWeeklySheetBy(rows, byArea)
+    expect(out.map(f => f.section)).toEqual(['데이터', '실험'])
+    expect(out[1].edits).toEqual([{ rowId: 'r3', cellKey: 'this_content', content: '' }])
+  })
+
+  it('목록 순서는 묶음 → 부류 → 행(입력 위치) → 열', () => {
+    const rows = [
+      arow('r9', A_EXP, { nextIssue: '위\n위' }),
+      arow('r1', A_EXP, { thisContent: '아래\n아래' }),
+    ]
+    expect(lintWeeklySheetBy(rows, byArea).map(f => `${f.rowId}/${f.cellKey}`)).toEqual(['r9/next_issue', 'r1/this_content'])
+  })
+})
+
+// 이관(①·⑦)은 합쳐지는 행이든 혼자인 행이든 모듈이 구분과 다르면 칸 앞에 `[모듈]` 단독 줄을 붙인다(스펙 T4). 그 칸이 점검에서
+// 체번·중복 지적을 내지 않음을 고정한다 — 지금 splitCellBlocks·BLOCK_HEADER·numberingBlocks 의 동작 그대로여야 한다(코드 변경 없이 통과).
+describe('이관 꼴 칸 — `[모듈]` 머리글 줄 + 구획마다 1부터 번호(스펙 §6.1·T4)', () => {
+  const MERGED = '[모듈A]\n1. 가\n2. 나\n[모듈B]\n1. 다\n2. 라'   // 병합 묶음 꼴 — 한 영역으로 합쳐진 두 모듈
+  const SINGLE = '[모듈A]\n1. 가\n2. 나'                           // 단독 꼴 — 머리표만 붙은 혼자인 행
+  const SAME_LINE = '[모듈A]\n1. 가\n[모듈B]\n1. 가'               // 두 모듈의 같은 줄 — 지우면 한 모듈의 내용이 사라진다
+  const rows = [
+    arow('m1', A_EXP, { thisContent: MERGED, nextContent: SINGLE }),
+    arow('m2', A_DATA, { thisContent: SINGLE, thisIssue: SAME_LINE }),
+  ]
+
+  it('체번 지적 0 — 구획마다 1부터 다시 시작하는 번호는 성하다', () => {
+    expect(lintNumberingBy(rows, byArea)).toEqual([])
+  })
+
+  it('중복·유사 중복 지적 0 — 두 구획의 같은 줄은 남남이다', () => {
+    expect(lintDuplicatesBy(rows, byArea)).toEqual([])
+    expect(lintNearDuplicatesBy(rows, byArea)).toEqual([])
+  })
+
+  it('점검 전체 0건', () => {
+    expect(lintWeeklySheetBy(rows, byArea)).toEqual([])
   })
 })

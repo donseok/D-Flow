@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Sparkles } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import {
-  applyServerRow, rowSectionLabel, sortWeeklyRows, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
+  applyServerRow, rowSectionLabel, sectionKeyOf, sortWeeklyRows, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
   WEEKLY_CELL_LABEL, WEEKLY_SECTIONS,
   CELL_FIELD, type WeeklyCellKey, type WeeklySheetRow, type WeeklyCellEdit,
 } from '@/lib/domain/weeklySheet'
@@ -516,7 +516,7 @@ export function WeeklySheetView({
       toast({ title: '셀을 먼저 선택해 주세요', description: '다듬을 셀 하나를 클릭하거나 범위로 선택해 주세요.', variant: 'info' })
       return
     }
-    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect)
+    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, rowSectionLabel)
     if (targets.length === 0) {
       toast({ title: '작성된 내용이 없습니다', description: '선택 범위의 빈 셀은 AI로 다듬지 않습니다.', variant: 'info' })
       return
@@ -767,6 +767,7 @@ export function WeeklySheetView({
       <WeeklyLintPanel
         open={lintOpen}
         rows={rows}
+        groupOf={row => { const key = sectionKeyOf(row); return { key, label: key } }}
         canApply={canEditCells}
         onClose={() => setLintOpen(false)}
         onApply={edits => runBatch(edits, { undoable: true })}

@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { lintWeeklySheet, type LintFinding, type LintKind } from '@/lib/domain/weeklyLint'
-import type { WeeklyCellEdit, WeeklyCellKey, WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { lintWeeklySheet, type LintFinding, type LintGroupOf, type LintKind, type LintRow } from '@/lib/domain/weeklyLint'
+import type { WeeklyCellEdit, WeeklyCellKey } from '@/lib/domain/weeklySheet'
 
 const KIND_LABEL: Record<LintKind, string> = {
   duplicate: '완전 중복', nearDuplicate: '유사 중복', numbering: '체번', format: '정리',
@@ -15,34 +15,38 @@ const KIND_TONE: Record<LintKind, string> = {
   format: 'bg-sky-100 text-sky-800',
 }
 
-/** 구분별 묶음. lintWeeklySheet가 구분 순서를 먼저 세워 내주므로, 처음 나온 순서를 그대로 쓴다. */
-function groupBySection(findings: LintFinding[]): { section: string; items: LintFinding[] }[] {
-  const out: { section: string; items: LintFinding[] }[] = []
+/** 묶음별 목록. lintWeeklySheet 가 묶음 순서(입력에서 처음 나온 순서)를 먼저 세워 내주므로, 처음 나온 순서를 그대로 쓴다.
+ *  키는 groupKey 다 — 이름(section)이 같은 두 묶음(동명 영역)이 한 머리 아래 섞이지 않게. 머리에는 이름을 쓴다. */
+function groupFindings(findings: LintFinding[]): { key: string; label: string; items: LintFinding[] }[] {
+  const out: { key: string; label: string; items: LintFinding[] }[] = []
   const at = new Map<string, number>()
   for (const f of findings) {
-    const i = at.get(f.section)
-    if (i === undefined) { at.set(f.section, out.length); out.push({ section: f.section, items: [f] }) }
+    const i = at.get(f.groupKey)
+    if (i === undefined) { at.set(f.groupKey, out.length); out.push({ key: f.groupKey, label: f.section, items: [f] }) }
     else out[i].items.push(f)
   }
   return out
 }
 
 /** 주간보고 점검 패널 — 현재 화면의 rows로 지적을 계산해 보여주고, 항목별로 수정을 적용한다.
- *  점검은 구분 안에서만 이뤄지므로(도메인 규칙) 목록도 구분별로 묶어 보여준다.
+ *  점검은 묶음(groupOf — 호출부가 정한다) 안에서만 이뤄지므로(도메인 규칙) 목록도 묶음별로 묶어 보여준다.
+ *  rows 는 화면 순서 그대로 넘긴다 — 묶음·행 순서가 이 순서를 따른다.
  *  저장은 부모가 넘긴 onApply(=runBatch)가 담당한다. 이 컴포넌트는 I/O를 하지 않는다. */
-export function WeeklyLintPanel({ open, rows, canApply = true, onClose, onApply, onGoToCell }: {
+export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApply = true, onClose, onApply, onGoToCell }: {
   open: boolean
-  rows: WeeklySheetRow[]
+  rows: readonly R[]
+  /** 점검 묶음 — 키로 견주고 이름을 머리에 쓴다. PPT 페이지 단위와 같은 키여야 한다(스펙 D22) */
+  groupOf: LintGroupOf<R>
   /** 자동수정('적용') 노출 여부 = 셀 편집 자격(isProjectMember). 점검 자체는 조회 전용도 볼 수 있다. */
   canApply?: boolean
   onClose: () => void
   onApply: (edits: WeeklyCellEdit[]) => void
   onGoToCell: (rowId: string, cellKey: WeeklyCellKey) => void
 }) {
-  // 열려 있는 동안 rows가 바뀔 때마다 재계산 — 적용 직후에도, 타인의 Realtime 수정에도 목록이 따라간다.
-  // 구분 수만큼의 행 × 4열이라 비용은 무시할 만하다. 닫혀 있으면 계산하지 않는다.
-  const findings = useMemo(() => (open ? lintWeeklySheet(rows) : []), [open, rows])
-  const groups = useMemo(() => groupBySection(findings), [findings])
+  // 열려 있는 동안 rows(또는 groupOf)가 바뀔 때마다 재계산 — 적용 직후에도, 타인의 Realtime 수정에도 목록이 따라간다.
+  // 묶음 수만큼의 행 × 4열이라 비용은 무시할 만하다. 닫혀 있으면 계산하지 않는다.
+  const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf) : []), [open, rows, groupOf])
+  const groups = useMemo(() => groupFindings(findings), [findings])
 
   return (
     <Modal
@@ -57,11 +61,11 @@ export function WeeklyLintPanel({ open, rows, canApply = true, onClose, onApply,
         <p className="py-6 text-center text-sm text-ink-muted">점검할 내용이 없습니다.</p>
       ) : (
         <>
-          {/* 왜 다른 구분의 같은 문구가 안 잡히는지 매번 묻지 않도록 점검 범위를 못박되,
+          {/* 왜 다른 업무영역의 같은 문구가 안 잡히는지 매번 묻지 않도록 점검 범위를 못박되,
               글머리 기호·번호 표기만 시트 전체 기준이라는 예외까지 같이 적는다(안 적으면 그 지적이 버그로 읽힌다).
               셀 안 [머리글] 구획도 같이 적는다 — 적지 않으면 이번엔 반대로 "왜 안 잡히지?"를 묻게 된다. */}
           <p className="pb-2 text-xs text-ink-muted">
-            점검은 구분 안에서만 합니다 — 서로 다른 구분끼리는 견주지 않습니다. 한 셀 안이라도 <code>[현장]</code> 처럼
+            점검은 업무영역 안에서만 합니다 — 서로 다른 업무영역끼리는 견주지 않습니다. 한 셀 안이라도 <code>[현장]</code> 처럼
             머리글로 갈린 구획은 서로 다른 영역으로 보아, <b>이름이 다른</b> 구획끼리는 같은 문구여도 중복으로 잡지
             않습니다. 번호도 구획마다 따로 세지만, 머리글 뒤에서 번호가 <b>1로 다시 시작할 때만</b> 새 구획으로
             봅니다 — <code>[완료]</code> 같은 표시 뒤로 번호를 이어 쓴 경우는 한 목록으로 셉니다.
@@ -69,14 +73,14 @@ export function WeeklyLintPanel({ open, rows, canApply = true, onClose, onApply,
           </p>
           <div className="divide-y divide-line">
             {groups.map(g => (
-              <section key={g.section} data-lint-section={g.section} className="py-2">
+              <section key={g.key} data-lint-section={g.key} className="py-2">
                 <h3 className="flex items-baseline gap-2 pb-1 text-sm font-semibold text-ink">
-                  {g.section}
+                  {g.label}
                   <span className="text-xs font-normal text-ink-muted">{g.items.length}건</span>
                 </h3>
                 <ul className="divide-y divide-line/60">
                   {g.items.map(f => (
-                    <LintRow
+                    <LintItem
                       key={f.id}
                       finding={f}
                       canApply={canApply}
@@ -96,7 +100,7 @@ export function WeeklyLintPanel({ open, rows, canApply = true, onClose, onApply,
   )
 }
 
-function LintRow({ finding, canApply, onApply, onGo }: {
+function LintItem({ finding, canApply, onApply, onGo }: {
   finding: LintFinding; canApply: boolean; onApply: () => void; onGo: () => void
 }) {
   return (
