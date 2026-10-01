@@ -68,6 +68,7 @@ export default async function WbsPage({
   )
   return (
     <ProjectPageShell
+      variant="fill"
       flush
       pinned={pinned}
       hero={hero}

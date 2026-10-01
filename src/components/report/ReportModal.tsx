@@ -192,7 +192,7 @@ export function ReportModal({
         {/* ── 보고서 헤더 ── */}
         <header className="card overflow-hidden p-6">
           <div className="eyebrow">주간 보고서 · Weekly Report</div>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">{meta.projectName}</h1>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-ink">{meta.projectName}</h2>
           {meta.description && (
             <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">{meta.description}</p>
           )}
