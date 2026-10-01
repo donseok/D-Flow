@@ -8,6 +8,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectC
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 
 import { TeamsUnavailableError, projectOwnTeams, projectTeams, teamCodesVisibleTo, visibleTeams, workspaceTeams } from '@/lib/teams/source'
+import { keysetTable } from '../helpers/keysetTable'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ConfigTeam } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -137,11 +138,37 @@ describe('visibleTeams·teamCodesVisibleTo — 가시 범위(스펙 §4.2.1), �
   const WB = '00000000-0000-0000-7e57-000000001902'
   const P1 = '00000000-0000-0000-7e57-000000001903'
   it('보이는 워크스페이스의 공용 + 보이는 프로젝트의 전용(활성만), 이름·색을 싣는다', async () => {
-    const { client } = keysetTeams([trow('t1', 'RES', WA, null), trow('t2', 'CIV', WB, null), trow('t3', 'MEP', WA, P1), trow('t4', 'ARC', WA, null, false)])
+    const table = keysetTable([trow('t1', 'RES', WA, null), trow('t2', 'CIV', WB, null), trow('t3', 'MEP', WA, P1), trow('t4', 'ARC', WA, null, false)])
+    const client = { from: () => table.make() }
     const got = await visibleTeams({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })
     expect(got.map((t) => t.code)).toEqual(['MEP', 'RES'])
     expect(got[1]).toMatchObject({ name: 'RES 팀', color: '#6b7280', workspaceId: WA, projectId: null })
     expect(await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })).toEqual(['MEP', 'RES'])
+  })
+  it('[Q6] 질의를 view 범위로 좁힌다 — 다른 테넌트 팀을 읽지 않고, 그 테넌트의 읽는 사이 변경이 이 요청을 깨지 않는다(세션 없는 경로의 admin)', async () => {
+    const P2 = '00000000-0000-0000-7e57-000000001904'
+    const mine = Array.from({ length: 3 }, (_, i) => trow(`a${i}`, `A${i}`, WA, null))
+    const others = Array.from({ length: 5 }, (_, i) => trow(`b${i}`, `B${i}`, WB, i === 0 ? P2 : null))
+    // 첫 쪽 뒤에 다른 워크스페이스 WB 에 팀이 생긴다 — 좁히지 않으면 count 가 어긋나 TeamsUnavailableError 였다
+    const table = keysetTable([...mine, trow('p1x', 'PX', WA, P1), ...others], {
+      maxRows: 2, afterResponse: (n, rows) => (n === 1 ? [...rows, trow('b9', 'B9', WB, null)] : undefined),
+    })
+    const read: Array<Record<string, unknown>> = []
+    const client = { from: () => { const q = table.make() as Record<string, unknown>; const then = q.then as (r: (v: unknown) => unknown, j: (e: unknown) => unknown) => unknown
+      q.then = (r: (v: unknown) => unknown, j: (e: unknown) => unknown) => then((v) => { read.push(...(((v as { data?: unknown[] }).data ?? []) as Array<Record<string, unknown>>)); return r(v) }, j)
+      return q } }
+    const got = await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })
+    expect(new Set(got)).toEqual(new Set(['A0', 'A1', 'A2', 'PX']))
+    expect(read.every((r) => r.workspace_id === WA)).toBe(true)
+    expect(table.log[0].find((c) => c.method === 'or')?.args[0]).toBe(`and(project_id.is.null,workspace_id.in.(${WA})),project_id.in.(${P1})`)
+  })
+  it('[Q6] 플랫폼 관리자(view.all)는 범위를 좁히지 않는다, 아무 범위도 없으면 질의 없이 빈 목록', async () => {
+    const table = keysetTable([trow('t1', 'RES', WA, null), trow('t2', 'CIV', WB, null)])
+    expect(new Set(await teamCodesVisibleTo({ all: true }, { client: { from: () => table.make() } as never }))).toEqual(new Set(['RES', 'CIV']))
+    expect(table.log[0].some((c) => c.method === 'or')).toBe(false)
+    const none = keysetTable([trow('t1', 'RES', WA, null)])
+    expect(await visibleTeams({ all: false, workspaceIds: [], projectIds: [] }, { client: { from: () => none.make() } as never })).toEqual([])
+    expect(none.log).toEqual([])
   })
   it('[RF3] 플랫폼 관리자 범위가 한 응답의 상한(여기서는 3행)을 넘어도 끝까지 — 뒤 워크스페이스 팀이 빠지지 않는다', async () => {
     const many = Array.from({ length: 8 }, (_, i) => trow(`t${String(i).padStart(2, '0')}`, `T${i}`, i % 2 ? WA : WB, null))

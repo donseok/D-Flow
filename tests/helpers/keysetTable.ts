@@ -27,9 +27,14 @@ function splitTop(expr: string): string[] {
 function condOf(term: string): (r: Row) => boolean {
   const and = /^and\((.*)\)$/.exec(term)
   if (and) { const parts = splitTop(and[1]).map(condOf); return (r) => parts.every((f) => f(r)) }
-  const m = /^([^.]+)\.(eq|gt|gte|lt)\.(.*)$/.exec(term)
+  const m = /^([^.]+)\.(eq|gt|gte|lt|is|in)\.(.*)$/.exec(term)
   if (!m) throw new Error(`keysetTable.or: 해석할 수 없는 항 ${term}`)
   const [, col, op, val] = m
+  if (op === 'is') return (r) => (r[col] ?? null) === (val === 'null' ? null : val)
+  if (op === 'in') {
+    const list = /^\((.*)\)$/.exec(val)?.[1].split(',') ?? []
+    return (r) => list.includes(String(r[col]))
+  }
   return (r) => {
     const d = cmpOf(r[col], val)
     return op === 'eq' ? d === 0 : op === 'gt' ? d > 0 : op === 'gte' ? d >= 0 : d < 0
@@ -62,7 +67,7 @@ export function keysetTable(initial: readonly Row[], opts: {
     q.in = (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return rec('in', [c, vs]) }
     q.gt = (c: string, v: unknown) => { filters.push((r) => cmp(r[c], v) > 0); return rec('gt', [c, v]) }
     q.gte = (c: string, v: unknown) => { filters.push((r) => cmp(r[c], v) >= 0); return rec('gte', [c, v]) }
-    // PostgREST or 필터의 작은 부분집합 — `a.op.v,and(b.op.v,c.op.v)`(op: eq·gt·gte·lt). 복합 키셋(item_owners·포트폴리오 스냅샷)의 꼴
+    // PostgREST or 필터의 작은 부분집합 — `a.op.v,and(b.op.v,c.op.v)`(op: eq·gt·gte·lt·is·in). 복합 키셋(item_owners·포트폴리오 스냅샷)·가시 범위 팀의 꼴
     q.or = (expr: string) => { filters.push(orFilter(expr)); return rec('or', [expr]) }
     q.order = (c: string) => { orders.push(c); return rec('order', [c]) }
     q.limit = (n: number) => { limit = n; return rec('limit', [n]) }

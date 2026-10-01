@@ -94,14 +94,26 @@ export function workspaceTeams(workspaceId: string, opts?: SourceOpts): Promise<
 }
 
 /** 가시 범위의 활성 팀(스펙 §4.2.1 — 회의록 담당 필터·챗·외부 회의록 API·봇 이름 매칭). 규칙은 순수 teamsVisibleTo 그대로다.
- *  받은 클라이언트(기본 세션)가 볼 수 있는 활성 팀을 id 키셋으로 끝까지 읽고(P15 — 팀은 지우지 않고 프로젝트마다 전환 복사가 생긴다)
- *  메모리에서 view 로 거른다 — 세션의 teams 읽기 정책(my_workspace_ids)은 view 가 여는 범위를 덮는다(플랫폼 관리자 = 전부).
- *  세션 없는 경로는 { client: admin } 을 넘긴다. 조회 실패·잘림·읽는 사이 변경은 TeamsUnavailableError(빈 목록으로 위장하지 않는다). */
+ *  view 가 여는 범위(보이는 워크스페이스의 공용 ∪ 보이는 프로젝트의 전용)만 질의로 좁혀 id 키셋으로 끝까지 읽고(P15 — 팀은 지우지 않고
+ *  프로젝트마다 전환 복사가 생긴다) 메모리에서 같은 규칙으로 다시 거른다. 질의를 좁히는 이유(A2-1 리뷰 보안 P3): 세션 없는 경로가
+ *  { client: admin } 을 넘기면 RLS 가 없어 다른 테넌트의 팀까지 매 요청 읽었고, 쪽이 나뉘면 다른 워크스페이스의 팀 생성이 이 요청의
+ *  count 대조를 깨 500 이 됐다. 플랫폼 관리자(view.all)는 전부다. 조회 실패·잘림·읽는 사이 변경은 TeamsUnavailableError(빈 목록으로 위장하지 않는다). */
 export async function visibleTeams(view: TeamView, opts?: SourceOpts): Promise<Team[]> {
+  let scope: string | null = null
+  if (!view.all) {
+    const ws = [...view.workspaceIds]
+    const ps = [...view.projectIds]
+    if (ws.length === 0 && ps.length === 0) return []
+    scope = [
+      ...(ws.length ? [`and(project_id.is.null,workspace_id.in.(${ws.join(',')}))`] : []),
+      ...(ps.length ? [`project_id.in.(${ps.join(',')})`] : []),
+    ].join(',')
+  }
   try {
     const sb = opts?.client ?? (await createServerClient())
     const rows = await fetchAllByKeyset<Record<string, unknown>>('[teams] 가시 범위', (r) => String(r.id), (after, limit) => {
-      const q = sb.from('teams').select(TEAM_COLS, { count: 'exact' }).eq('active', true)
+      const base = sb.from('teams').select(TEAM_COLS, { count: 'exact' }).eq('active', true)
+      const q = scope ? base.or(scope) : base
       return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
     })
     return teamsVisibleTo(teamsFromRows(rows), view)
