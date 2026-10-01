@@ -7,6 +7,7 @@ import {
 } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, pinnedPrefs, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
+import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
 
@@ -38,6 +39,113 @@ describe('laneTarget — 레인 B 스택만(스펙 §3.2·§3.4, Review Focus 3)
   })
   it('금지 ref 가 끼면 멈춘다', () => {
     expect(() => laneTarget({ ...LANE, appUrl: 'http://rglfgrwwwwdqejohdnty.local:3201' })).toThrow(/금지/)
+  })
+})
+
+describe('앱 주소 — 레인 B 앱 포트 허용 목록(C-port, UI-0 안전 리뷰 P2-1)', () => {
+  it('허용 목록은 3201(머리)·3202·3203(기준 서버)뿐이다', () => {
+    expect(LANE_APP_PORTS).toEqual(['3201', '3202', '3203'])
+  })
+  it.each(['http://127.0.0.1:3201', 'http://localhost:3202', 'http://127.0.0.1:3203'])('%s 는 통과', (u) => {
+    expect(laneAppUrl(u)).toBe(u)
+    expect(laneAppUrl(`${u}/`)).toBe(u)
+  })
+  it.each([
+    ['3000(사용자·Codex)', 'http://127.0.0.1:3000'], ['3001(Next 가 자동으로 고르는 포트)', 'http://127.0.0.1:3001'],
+    ['3101(레인 A)', 'http://127.0.0.1:3101'], ['3102(레인 A)', 'http://localhost:3102'], ['포트 없음(80)', 'http://127.0.0.1'],
+  ])('%s 는 멈춘다', (_n, u) => {
+    expect(() => laneAppUrl(u)).toThrow(/앱 포트/)
+  })
+  it('호스트는 127.0.0.1·localhost 만 — 사설·와일드카드·원격 주소는 멈춘다', () => {
+    for (const u of ['http://10.0.0.5:3201', 'http://0.0.0.0:3201', 'https://app.example.com', '']) expect(() => laneAppUrl(u)).toThrow(/로컬이 아니다/)
+  })
+  it('경로·검색어가 붙은 주소는 앱 주소가 아니다', () => {
+    for (const u of ['http://127.0.0.1:3201/p', 'http://127.0.0.1:3202/?x=1']) expect(() => laneAppUrl(u)).toThrow(/경로/)
+  })
+  it('laneTarget 의 앱 주소도 같은 판정 — 3001·3101·3102 를 거부한다', () => {
+    for (const port of ['3001', '3101', '3102']) expect(() => laneTarget({ ...LANE, appUrl: `http://127.0.0.1:${port}` })).toThrow(new RegExp(port))
+  })
+  it('--base 판정 — 없으면 그 실행의 앱 주소(머리), 있으면 같은 허용 목록을 거친다', () => {
+    const t = laneTarget(LANE)
+    expect(resolveBase(null, t)).toBe('http://127.0.0.1:3201')
+    expect(resolveBase(undefined, t)).toBe('http://127.0.0.1:3201')
+    expect(resolveBase('http://127.0.0.1:3202', t)).toBe('http://127.0.0.1:3202')
+    expect(resolveBase('http://localhost:3203/', t)).toBe('http://localhost:3203')
+    for (const bad of ['http://127.0.0.1:3102', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001', '']) expect(() => resolveBase(bad, t)).toThrow()
+  })
+})
+
+describe('배선 — DB·세션 클라이언트와 앱 주소는 laneEnv 한 곳(UI-0 안전 리뷰 P2-2)', () => {
+  const read = (f: string) => readFileSync(join(root, f), 'utf8')
+  const UC = read('scripts/ui-capture.mjs')
+  const PG = read('scripts/perf-grid.mjs')
+  /** `export function NAME(` 의 본문 [시작, 끝) — 매개변수 괄호를 건너 첫 { 부터 짝 } 까지. 문자열·템플릿·주석 안은 센다지 않는다 */
+  const bodyOf = (text: string, name: string): [number, number] => {
+    const at = text.indexOf(`export function ${name}(`)
+    if (at < 0) throw new Error(`${name} 정의가 없다`)
+    let i = at + `export function ${name}`.length
+    let depth = 0
+    let open = -1
+    for (; i < text.length; i++) {
+      const c = text[i]
+      if (c === '/' && text[i + 1] === '/') { i = text.indexOf('\n', i); continue }
+      if (c === '/' && text[i + 1] === '*') { i = text.indexOf('*/', i) + 1; continue }
+      if (c === '\'' || c === '"' || c === '`') { const q = c; for (i++; i < text.length && text[i] !== q; i++) if (text[i] === '\\') i++; continue }
+      if (open < 0) {
+        if (c === '(') depth++
+        else if (c === ')') depth--
+        else if (c === '{' && depth === 0) { open = i; depth = 1 }
+        continue
+      }
+      if (c === '{') depth++
+      else if (c === '}' && --depth === 0) return [open, i + 1]
+    }
+    throw new Error(`${name} 본문의 끝을 못 찾았다`)
+  }
+  const at = (text: string, re: RegExp) => [...text.matchAll(re)].map((m) => m.index ?? -1)
+  const inside = (i: number, [s, e]: [number, number]) => i > s && i < e
+  it('createClient(·createServerClient( 는 ui-capture 의 laneEnv 본문 안에서만 — perf-grid 는 그 결과만 쓴다', () => {
+    const env = bodyOf(UC, 'laneEnv')
+    const hits = at(UC, /\bcreate(?:Server)?Client\s*\(/g)
+    expect(hits.length).toBe(2)
+    for (const i of hits) expect(inside(i, env)).toBe(true)
+    expect(at(PG, /\bcreate(?:Server)?Client\b/g)).toEqual([])
+  })
+  it('대상 해석을 우회하는 이름이 없다 — resolveTarget·LOCAL_DSN·process.env.NEXT_PUBLIC_SUPABASE·process.env.SUPABASE_(옛 3000 판정 e2eBaseUrl 도)', () => {
+    for (const text of [UC, PG]) {
+      for (const re of [/resolveTarget/, /LOCAL_DSN/, /process\.env\.NEXT_PUBLIC_SUPABASE/, /process\.env\.SUPABASE_/, /\be2eBaseUrl\b/]) expect(text).not.toMatch(re)
+    }
+  })
+  it('좌표 env(LOCAL_DB_URL·NEXT_PUBLIC_APP_URL)는 laneEnv 본문 안에서만 읽는다', () => {
+    const env = bodyOf(UC, 'laneEnv')
+    for (const i of at(UC, /process\.env\.(?:LOCAL_DB_URL|NEXT_PUBLIC_APP_URL)\b/g)) expect(inside(i, env)).toBe(true)
+    expect(at(PG, /process\.env\.(?:LOCAL_DB_URL|NEXT_PUBLIC_APP_URL)\b/g)).toEqual([])
+  })
+  it('--base 값은 인자 파서가 옵션으로 옮긴 뒤 laneEnv({ base: … }) → resolveBase 로만 쓰인다', () => {
+    for (const [text, parser] of [[UC, 'parseArgs'], [PG, 'measureArgs']] as const) {
+      const range = bodyOf(text, parser)
+      for (const m of text.matchAll(/\b\w+\.base\b/g)) {
+        const i = m.index ?? 0
+        const viaLaneEnv = text.slice(i - 'laneEnv({ base: '.length, i) === 'laneEnv({ base: '
+        expect(inside(i, range) || viaLaneEnv, `${m[0]} @${i}`).toBe(true)
+      }
+    }
+    const env = bodyOf(UC, 'laneEnv')
+    expect(UC.slice(...env)).toMatch(/resolveBase\(base, target\)/)
+    for (const i of at(UC, /(?<!function )\bresolveBase\(/g)) expect(inside(i, env)).toBe(true)
+    expect(PG).not.toMatch(/\b(?:resolveBase|laneAppUrl)\b/)
+  })
+})
+
+describe('산출물 가림 — 값 기준(UI-0 안전 리뷰 P3-1)', () => {
+  const v = { inviteToken: '00000000-0000-4000-8000-0000000015a1', shareToken: '00000000-0000-4000-8000-0000000015a2' }
+  it('초대·공유 토큰 원값을 자리표시로 — 경로 모양이 바뀌어도(쿼리·문제 문구 안) 새지 않는다', () => {
+    expect(redactTokens(`/invite/${v.inviteToken}`, v)).toBe('/invite/{inviteToken}')
+    expect(redactTokens(`final:/share/minutes/${v.shareToken}?next=/invite/${v.inviteToken}`, v)).toBe('final:/share/minutes/{shareToken}?next=/invite/{inviteToken}')
+  })
+  it('토큰이 없는 문자열은 그대로, 빈 값은 건너뛴다(빈 문자열로 전부를 갈지 않는다)', () => {
+    expect(redactTokens('/p/x/dashboard', v)).toBe('/p/x/dashboard')
+    expect(redactTokens('/p/x', { inviteToken: '', shareToken: undefined })).toBe('/p/x')
   })
 })
 
@@ -96,6 +204,10 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/light\|dark/)
     expect(() => parseArgs(['--since', 'UI-9'])).toThrow(/since/)
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
+  })
+  it('위치 인자(diff 의 두 라벨)도 라벨 형식만 — 경로 문자로 산출 폴더 밖을 읽거나 쓰지 않는다(UI-0 안전 리뷰 P3-2)', () => {
+    expect(parseArgs(['ui0', 'ui0b']).positional).toEqual(['ui0', 'ui0b'])
+    for (const bad of ['../../../../scripts', 'a/b', 'UI0']) expect(() => parseArgs(['ui0', bad])).toThrow(/라벨/)
   })
   it('경로 템플릿 — 알려진 변수만, 값은 인코딩', () => {
     expect(fillPath('/p/{pid}/wiki/topics/{topicId}', { pid: 'a b', topicId: 't' })).toBe('/p/a%20b/wiki/topics/t')

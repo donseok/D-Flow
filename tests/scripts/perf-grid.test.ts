@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 import { GRID_SHAPE, classifyRuns, gridProjectName, gridRowCount, gridRows, gridTarget, mulberry32, parsePhases, rowCountVerdict, summarize } from '../../scripts/perf-grid.mjs'
 import { STALL_STAGES, stalledRun, withDeadline } from '../../scripts/perf-grid.mjs'
+import { measureArgs } from '../../scripts/perf-grid.mjs'
 import { median, percentile } from '../../scripts/lib/perf.mjs'
 
 const CTX = {
@@ -53,6 +54,23 @@ describe('측정 판정', () => {
   ])('대상 거부 — %s', (_n, over, re) => {
     const env = { LOCAL_DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54422/postgres', supabaseUrl: 'http://127.0.0.1:54421', appUrl: 'http://127.0.0.1:3201', ...over }
     expect(() => gridTarget(env)).toThrow(re)
+  })
+})
+
+describe('measure 인자 — measureArgs(순수)', () => {
+  it('기본값 — 10단계·5회·120초·기준 주소 없음·라벨 ui0', () => {
+    expect(measureArgs([])).toEqual({ phases: 10, runs: 5, timeoutMs: 120_000, base: null, label: 'ui0' })
+    expect(measureArgs(['--phases', '3', '--runs', '2', '--timeout-ms', '60000', '--label', 'spu2-p3', '--base', 'http://127.0.0.1:3202']))
+      .toEqual({ phases: 3, runs: 2, timeoutMs: 60_000, base: 'http://127.0.0.1:3202', label: 'spu2-p3' })
+  })
+  it('--label 은 라벨 형식(KEY_RE)만 — 경로 문자로 산출 폴더 밖에 쓰지 않는다(UI-0 안전 리뷰 P3-2)', () => {
+    for (const bad of ['../../../../tmp/x', 'a/b', 'UI0', '']) expect(() => measureArgs(['--label', bad])).toThrow(/--label/)
+  })
+  it('모르는 인자·값 없음·범위 밖은 throw', () => {
+    expect(() => measureArgs(['--nope', '1'])).toThrow(/알 수 없는/)
+    expect(() => measureArgs(['--runs'])).toThrow(/값이 없다/)
+    expect(() => measureArgs(['--runs', '0'])).toThrow(/--runs/)
+    expect(() => measureArgs(['--timeout-ms', '999'])).toThrow(/--timeout-ms/)
   })
 })
 

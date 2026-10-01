@@ -1,8 +1,9 @@
 // scripts/ui-capture.mjs — SP3b 캡처·눈확인 도구(스펙 D48·§3.4, 계획 판정 Q2~Q5·Q8·Q33). 로컬 레인 B 전용
-// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202). 하위 명령: seed · shoot · diff · axe (UI-1 이 checks·sheet 를 더한다).
+// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202·3203 — C-port). 하위 명령: seed · shoot · diff · axe (UI-1 이 checks·sheet 를 더한다).
 // 순수 함수는 export 해 tests/scripts/ui-capture.test.ts 가 import 한다 — 최상위에서 파일·네트워크·env 를 건드리지 않는다(isMain 가드).
 // Playwright 는 package.json 에 없다: `npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs …` 로 부르고 PATH 에서 찾는다.
 // 주석에 설정 표·설정 RPC 이름을 따옴표로 적지 않는다(settings-writes 게이트가 원문을 센다).
+// DB·세션 클라이언트와 앱 주소는 laneEnv 한 곳에서만 만든다(UI-0 안전 리뷰 P2-2) — 원문 검사 테스트가 그 밖의 생성을 막는다.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -11,7 +12,7 @@ import { pathToFileURL } from 'node:url'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { assertNotForbidden, classifySupabaseUrl, localAdminEnv } from './lib/targets.mjs'
-import { e2eBaseUrl, localClientEnv, pageProblems, redactInviteTokens } from './lib/e2e.mjs'
+import { localAppUrl, localClientEnv, pageProblems, redactInviteTokens } from './lib/e2e.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 
@@ -25,9 +26,25 @@ export const KEY_RE = /^[a-z0-9][a-z0-9-]*$/
 
 export const fail = (m) => { console.error(`✗ ${m}`); process.exit(1) }
 
+/** 레인 B 앱 포트(C-port) — 머리 3201, 기준 서버 3202·3203. 3000(사용자·Codex)·3001(Next 자동)·3101·3102(레인 A)는 목록 밖이다 */
+export const LANE_APP_PORTS = Object.freeze(['3201', '3202', '3203'])
+
 /**
- * 레인 B 대상 판정 — 셋 모두 로컬이고 db 54422·api 54421(같은 스택)·앱 ≠ 3000. 하나라도 어긋나면 throw.
- * resolveTarget('local') 은 LOCAL_DB_URL 이 없으면 54322(레인 A)로 넘어가므로 쓰지 않는다(스펙 §3.2).
+ * 앱 주소 판정(순수, UI-0 안전 리뷰 P2-1) — 로컬(127.0.0.1·localhost) ∧ 포트 ∈ LANE_APP_PORTS ∧ 경로·검색어 없음. 끝 슬래시는 뗀다.
+ * 로컬 스택들은 같은 서명 키를 써서 레인 B 세션이 다른 레인의 앱 서버 인증도 통과한다 — 포트가 유일한 분리선이다.
+ * @param {string | null | undefined} value
+ */
+export function laneAppUrl(value) {
+  const url = localAppUrl(value)
+  const u = new URL(url)
+  if (!LANE_APP_PORTS.includes(u.port)) throw new Error(`앱 포트 ${u.port || '(없음)'} — 레인 B 앱 포트는 ${LANE_APP_PORTS.join('·')} 뿐이다(C-port)`)
+  if (u.pathname !== '/' || u.search || u.hash) throw new Error(`앱 주소에 경로·검색어를 붙이지 않는다: ${url}`)
+  return url
+}
+
+/**
+ * 레인 B 대상 판정 — 셋 모두 로컬이고 db 54422·api 54421(같은 스택)·앱 포트 허용 목록. 하나라도 어긋나면 throw.
+ * targets.mjs 의 로컬 기본 대상 해석은 LOCAL_DB_URL 이 없으면 54322(레인 A)로 넘어가므로 쓰지 않는다(스펙 §3.2).
  * @param {{ localDbUrl: string | undefined, supabaseUrl: string | undefined, appUrl: string | undefined }} input
  * @param {{ db: string, api: string }} [expect]
  */
@@ -41,8 +58,14 @@ export function laneTarget({ localDbUrl, supabaseUrl, appUrl }, expect = { db: '
   if (classifySupabaseUrl(supabaseUrl, {}) !== 'local') throw new Error(`Supabase URL 이 로컬이 아니다(${JSON.stringify(supabaseUrl)})`)
   const api = new URL(String(supabaseUrl))
   if (api.port !== expect.api) throw new Error(`Supabase URL 포트가 ${api.port} — 레인 B api 는 ${expect.api}(db 와 같은 스택)`)
-  const app = e2eBaseUrl(appUrl)
+  const app = laneAppUrl(appUrl)
   return { dbUrl: localDbUrl.trim(), supabaseUrl: String(supabaseUrl).replace(/\/+$/, ''), appUrl: app }
+}
+
+/** --base 판정(순수, C-port) — 없으면 그 실행의 앱 주소(머리 3201), 있으면 laneAppUrl 과 같은 허용 목록을 거친다.
+ *  @param {string | null | undefined} base @param {{ appUrl: string }} target */
+export function resolveBase(base, target) {
+  return base === null || base === undefined ? target.appUrl : laneAppUrl(base)
 }
 
 /**
@@ -116,6 +139,8 @@ export function parseArgs(argv) {
   for (const t of out.theme) if (!['light', 'dark'].includes(t)) throw new Error(`--theme 은 light|dark: ${t}`)
   for (const s of out.since) if (!SINCE.includes(s)) throw new Error(`--since 값 밖: ${s}`)
   if (out.label !== null && !KEY_RE.test(out.label)) throw new Error(`--label 형식 밖: ${out.label}`)
+  // 위치 인자는 라벨이다(diff 의 기준·대상, UI-1 sheet 의 추가 라벨) — 산출 폴더 아래 경로가 되므로 같은 형식만(UI-0 안전 리뷰 P3-2)
+  for (const p of out.positional) if (!KEY_RE.test(p)) throw new Error(`위치 인자(라벨) 형식 밖: ${p}`)
   return out
 }
 
@@ -198,7 +223,7 @@ const TEAM_DEFS = [['PLN', '기획', '#4f46e5'], ['DSG', '설계', '#0276a8'], [
 const FENCE = '`'.repeat(3)
 const sha256 = (s) => createHash('sha256').update(s, 'utf8').digest('hex')
 
-/** shoot·seed 가 같은 값을 계산한다(저장하지 않는다 — 초대 토큰은 자격 증명이다) */
+/** shoot·seed 가 같은 값을 계산한다 — pid 로 유도되는 로컬 합성 값 — 산출물에는 가린다(redactTokens, UI-0 안전 리뷰 P3-1) */
 export function seedIds(projectId) {
   return {
     minuteId: deterministicId(`ui-capture:${projectId}:minute:1`),
@@ -389,14 +414,28 @@ export function diffVerdict({ ratio, fontA, fontB }) {
 /** @type {Record<string, (opts: ReturnType<typeof parseArgs>) => Promise<void>>} */
 export const COMMANDS = {}
 
-/** 좌표 — cwd 는 레인 B 워크트리(래퍼). service_role·anon·앱 주소·산출 폴더 */
-export function laneEnv() {
+/**
+ * 좌표·클라이언트의 한 곳(UI-0 안전 리뷰 P2-2) — cwd 는 레인 B 워크트리(래퍼). 검사(laneTarget) 뒤에만 만든다:
+ * db = service_role 클라이언트(검사한 바로 그 URL), sessionClient(jar) = 앱과 같은 @supabase/ssr 쿠키 항아리의 anon 클라이언트,
+ * baseUrl = 그 실행이 찍는 앱 서버(--base 는 resolveBase 의 허용 목록을 거친다). 키는 로컬 스택 사이에 같아 대상을 가르지 못하므로
+ * 두 스크립트의 다른 곳은 클라이언트를 만들지 않고 이 결과만 쓴다(원문 검사 테스트).
+ * @param {{ base?: string | null }} [sel]
+ */
+export function laneEnv({ base = null } = {}) {
   const envText = readFileSync('.env.local', 'utf8')
   const admin = localAdminEnv(envText)
   const target = laneTarget({ localDbUrl: process.env.LOCAL_DB_URL, supabaseUrl: admin.url, appUrl: process.env.NEXT_PUBLIC_APP_URL })
   const outDir = process.env.UI_CAPTURE_OUT_DIR
   if (!outDir) throw new Error('UI_CAPTURE_OUT_DIR 이 없다 — 래퍼(lane-b.env)로 부른다')
-  return { envText, admin, target, outDir }
+  const anon = localClientEnv(envText)
+  if (anon.url.replace(/\/+$/, '') !== target.supabaseUrl) throw new Error('세션 클라이언트의 Supabase URL 이 검사한 값과 다르다')
+  const db = createClient(target.supabaseUrl, admin.serviceRoleKey, { auth: { persistSession: false } })
+  /** @param {Map<string, string>} jar */
+  const sessionClient = (jar) => createServerClient(target.supabaseUrl, anon.anonKey, { cookies: {
+    getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+    setAll: (list) => list.forEach(({ name, value }) => (value ? jar.set(name, value) : jar.delete(name))),
+  } })
+  return { envText, target, outDir, db, sessionClient, baseUrl: resolveBase(base, target), explicitBase: base !== null && base !== undefined }
 }
 
 export const must = (label, { data, error }) => { if (error) throw new Error(`${label}: ${error.message}`); return data }
@@ -455,8 +494,7 @@ async function seedWorkspaceSettings(db, label, workspaceId, actor, patch) {
 }
 
 async function cmdSeed() {
-  const { admin: coord } = laneEnv()
-  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+  const { db } = laneEnv()
   const today = kstToday()
   const slugA = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
   const wsA = must('워크스페이스 A 조회', await db.from('workspaces').select('id').eq('slug', slugA).maybeSingle())
@@ -555,22 +593,20 @@ export async function loadPlaywright() {
   return import(pathToFileURL(join(bin, '..', 'playwright', 'index.mjs')).href)
 }
 
-/** 시드 계정의 비밀번호를 새 임의 값(메모리)으로 바꾸고 앱과 같은 @supabase/ssr 쿠키 항아리로 로그인한다(판정 Q4) */
-export async function freshSessions(db, anon, grades) {
+/** 시드 계정의 비밀번호를 새 임의 값(메모리)으로 바꾸고 앱과 같은 @supabase/ssr 쿠키 항아리로 로그인한다(판정 Q4).
+ *  클라이언트는 laneEnv 의 것(env.db·env.sessionClient)만 쓴다 @param {ReturnType<typeof laneEnv>} env @param {string[]} grades
+ *  @returns {Promise<Record<string, { userId: string, email: string, cookies: { name: string, value: string }[] }>>} */
+export async function freshSessions(env, grades) {
   const sessions = {}
   for (const { grade, email } of resetTargets(grades, process.env.BOOTSTRAP_EMAIL || 'admin@example.com')) {
-    const userId = await userIdByEmail(db, email)
+    const userId = await userIdByEmail(env.db, email)
     if (!userId) throw new Error(`시드 계정이 없다(${email}) — ui-capture.mjs seed 를 먼저`)
     const password = randomBytes(24).toString('base64')
-    must(`비밀번호 재설정(${grade})`, await db.auth.admin.updateUserById(userId, { password }))
+    must(`비밀번호 재설정(${grade})`, await env.db.auth.admin.updateUserById(userId, { password }))
     const jar = new Map()
-    const sb = createServerClient(anon.url, anon.anonKey, { cookies: {
-      getAll: () => [...jar].map(([name, value]) => ({ name, value })),
-      setAll: (list) => list.forEach(({ name, value }) => (value ? jar.set(name, value) : jar.delete(name))),
-    } })
-    const { error } = await sb.auth.signInWithPassword({ email, password })
+    const { error } = await env.sessionClient(jar).auth.signInWithPassword({ email, password })
     if (error) throw new Error(`로그인 실패(${grade}): ${error.message}`)
-    sessions[grade] = { userId, cookies: [...jar].map(([name, value]) => ({ name, value })) }
+    sessions[grade] = { userId, email, cookies: [...jar].map(([name, value]) => ({ name, value })) }
   }
   return sessions
 }
@@ -648,13 +684,19 @@ async function resolveSeed(db) {
   return { pid: project.id, seedDate, wsSlug: wsA.slug, ...seedIds(project.id) }
 }
 
+/** 산출물 가림(순수, UI-0 안전 리뷰 P3-1) — 초대·공유 토큰의 **값**을 자리표시로 바꾼다(경로 모양이 바뀌어도 새지 않는다). 빈 값은 건너뛴다
+ *  @param {string} text @param {{ inviteToken?: string | null, shareToken?: string | null }} values */
+export function redactTokens(text, { inviteToken, shareToken } = {}) {
+  let s = String(text)
+  for (const [value, mark] of [[inviteToken, '{inviteToken}'], [shareToken, '{shareToken}']]) if (value) s = s.split(value).join(mark)
+  return s
+}
+
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크·진척 스냅샷(과제 5b — resetRunStart) */
-export async function forEachShot(opts, visit) {
-  const { envText, admin: coord, target, outDir } = laneEnv()
-  const baseUrl = opts.base ? e2eBaseUrl(opts.base) : target.appUrl
-  const anon = localClientEnv(envText)
-  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+ *  테마 패스마다 시작 상태를 고정한다 — 서버 테마·lastProjectId(판정 Q8, 과제 5a)와 공지 읽음 워터마크·진척 스냅샷(과제 5b — resetRunStart).
+ *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
+export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
+  const { db, outDir, baseUrl } = env
   const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
   const routes = selectRoutes(doc, opts)
   const seed = await resolveSeed(db)
@@ -665,8 +707,9 @@ export async function forEachShot(opts, visit) {
     seenUserIds.push(userId)
   }
   const grades = [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))]
-  const sessions = await freshSessions(db, anon, grades)
+  const sessions = await freshSessions(env, grades)
   const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
+  const redact = (s) => redactInviteTokens(redactTokens(s, values))
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const browserVersion = browser.version()
@@ -699,10 +742,10 @@ export async function forEachShot(opts, visit) {
             for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
             const u = new URL(page.url())
             const expectFinal = r.expectFinal ? fillPath(r.expectFinal, values) : null
-            const problems = [...pageProblems(await page.content()), ...(expectFinal && u.pathname + u.search !== expectFinal ? [`final:${redactInviteTokens(u.pathname + u.search)}`] : []),
-              ...(clickFailed ? ['click-failed'] : []), ...missing]
-            const base = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redactInviteTokens(u.pathname + u.search), problems }
-            rows.push({ ...base, ...(await visit(page, { r, width, height, theme, doc, outDir })) })
+            const problems = [...pageProblems(await page.content()), ...(expectFinal && u.pathname + u.search !== expectFinal ? [`final:${u.pathname + u.search}`] : []),
+              ...(clickFailed ? ['click-failed'] : []), ...missing].map(redact)
+            const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search), problems }
+            rows.push({ ...row0, ...(await visit(page, { r, width, height, theme, doc, outDir })) })
           } finally { await context.close() }
         }
       }
@@ -713,6 +756,7 @@ export async function forEachShot(opts, visit) {
 
 async function cmdShoot(opts) {
   if (!opts.label) throw new Error('--label 이 필요하다')
+  const env = laneEnv({ base: opts.base })
   const res = await forEachShot(opts, async (page, { r, width, height, theme, doc, outDir }) => {
     const fonts = await page.evaluate(() => {
       const f = [...document.fonts].filter((x) => x.family.replace(/["']/g, '') === 'Pretendard Variable')
@@ -725,7 +769,7 @@ async function cmdShoot(opts) {
     const style = [maskStyle([...(doc.commonMask ?? []), ...(r.mask ?? [])]), hideStyle(r.hide ?? [])].filter(Boolean).join('\n')
     const buf = await page.screenshot({ path: join(dir, file), ...(style ? { style } : {}), animations: 'disabled', caret: 'hide' })
     return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1 }
-  })
+  }, env)
   const meta = { label: opts.label, commit: process.env.UI_CAPTURE_SERVER_COMMIT || gitHead(), scriptCommit: gitHead(), browser: res.browserVersion,
     kstDate: kstToday(), seedDate: res.seed.seedDate, baseUrl: res.baseUrl, themes: opts.theme, sizes: opts.sizes, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
@@ -734,7 +778,7 @@ async function cmdShoot(opts) {
 
 async function cmdDiff(opts) {
   const [baseLabel, headLabel] = opts.positional
-  if (!baseLabel || !headLabel) throw new Error('사용: diff <기준 label> <대상 label>')
+  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label>')
   const { outDir } = laneEnv()
   const A = JSON.parse(readFileSync(join(outDir, baseLabel, 'meta.json'), 'utf8'))
   const B = JSON.parse(readFileSync(join(outDir, headLabel, 'meta.json'), 'utf8'))

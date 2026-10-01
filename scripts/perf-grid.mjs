@@ -11,16 +11,15 @@
 //                      응답 뒤 단계(행 수 안정 대기·스크롤 측정)도 각각 timeout-ms 안에 끝나야 한다 — 넘으면 같은 '응답 없음'이고
 //                      멈춘 단계를 stalledAt(load·settle·scroll)으로 남긴다(과제 5b — 한순간 응답 뒤 다시 막힌 run 이 끝없이 기다렸다).
 // 사용: seed 는 node 로, measure 는 npx --yes -p playwright@1.58.2 node scripts/perf-grid.mjs measure … (래퍼 경유)
+// DB·세션 클라이언트와 앱 주소(--base)는 ui-capture 의 laneEnv 가 만든다 — 이 파일은 클라이언트를 만들지 않는다(UI-0 안전 리뷰 P2-2).
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createClient } from '@supabase/supabase-js'
 import {
-  LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, freshSessions, kstToday, laneEnv, laneTarget,
+  KEY_RE, LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, freshSessions, kstToday, laneEnv, laneTarget,
   loadPlaywright, must, plusDays, userIdByEmail,
 } from './ui-capture.mjs'
-import { localClientEnv } from './lib/e2e.mjs'
 import { median } from './lib/perf.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
@@ -139,12 +138,24 @@ function flags(argv, known) {
   return out
 }
 
+/** measure 인자(순수) — 값 범위와 라벨 형식까지 본다. --label 은 산출 파일 이름이 되므로 KEY_RE 만(UI-0 안전 리뷰 P3-2).
+ *  --base 는 여기서는 옮기기만 하고 판정은 laneEnv(앱 포트 허용 목록 — C-port)가 한다
+ *  @param {string[]} argv @returns {{ phases: number, runs: number, timeoutMs: number, base: string | null, label: string }} */
+export function measureArgs(argv) {
+  const f = flags(argv, ['phases', 'runs', 'timeout-ms', 'base', 'label'])
+  const opts = { phases: parsePhases(f.phases), runs: f.runs === undefined ? 5 : Number(f.runs),
+    timeoutMs: f['timeout-ms'] === undefined ? 120_000 : Number(f['timeout-ms']), base: f.base ?? null, label: f.label ?? 'ui0' }
+  if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Error('--runs 는 양의 정수')
+  if (!Number.isInteger(opts.timeoutMs) || opts.timeoutMs < 1000) throw new Error('--timeout-ms 는 1000 이상의 정수')
+  if (!KEY_RE.test(opts.label)) throw new Error(`--label 형식 밖: ${opts.label}`)
+  return opts
+}
+
 async function cmdSeed(argv) {
   const phases = parsePhases(flags(argv, ['phases']).phases)
   const name = gridProjectName(phases)
   const expectRows = gridRowCount(phases)
-  const { admin: coord } = laneEnv()
-  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+  const { db } = laneEnv()
   const today = kstToday()
   const wsA = must('워크스페이스 A', await db.from('workspaces').select('id').eq('slug', (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()).single())
   const actor = await userIdByEmail(db, SEED_ACCOUNTS.wsAdmin)
@@ -261,15 +272,11 @@ async function oneRun({ browser, sessions, base, projectId, seedRows, timeoutMs 
 
 /** @returns {Promise<number>} 종료 코드 — 0 응답, 2 응답 없음(측정은 됐다). 오류는 throw → 1 */
 async function cmdMeasure(argv) {
-  const f = flags(argv, ['phases', 'runs', 'timeout-ms', 'base', 'label'])
-  const phases = parsePhases(f.phases)
-  const opts = { runs: f.runs === undefined ? 5 : Number(f.runs), timeoutMs: f['timeout-ms'] === undefined ? 120_000 : Number(f['timeout-ms']), base: f.base ?? null, label: f.label ?? 'ui0' }
-  if (!Number.isInteger(opts.runs) || opts.runs < 1) throw new Error('--runs 는 양의 정수')
-  if (!Number.isInteger(opts.timeoutMs) || opts.timeoutMs < 1000) throw new Error('--timeout-ms 는 1000 이상의 정수')
+  const opts = measureArgs(argv)
+  const phases = opts.phases
   const name = gridProjectName(phases)
-  const { envText, admin: coord, target, outDir } = laneEnv()
-  const base = opts.base ? laneTarget({ localDbUrl: process.env.LOCAL_DB_URL, supabaseUrl: coord.url, appUrl: opts.base }).appUrl : target.appUrl
-  const db = createClient(coord.url, coord.serviceRoleKey, { auth: { persistSession: false } })
+  const env = laneEnv({ base: opts.base })
+  const { db, outDir, baseUrl: base } = env
   const wsA = must('워크스페이스 A', await db.from('workspaces').select('id').eq('slug', (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()).single())
   const project = must(name, await db.from('projects').select('id').eq('workspace_id', wsA.id).eq('name', name).single())
   const { count: seedRows, error: cErr } = await db.from('wbs_items').select('id', { count: 'exact', head: true }).eq('project_id', project.id)
@@ -281,7 +288,7 @@ async function cmdMeasure(argv) {
   if (stateRows !== 0) throw new Error('측정 계정에 user_wbs_state 가 있다 — 접힘이 행 수를 바꾼다(판정 Q9)')
   const prefs = must('선호 조회', await db.from('user_preferences').select('prefs').eq('user_id', uid))
   if (prefs.some((p) => p.prefs?.wbsHideDone === true)) throw new Error('측정 계정의 wbsHideDone 이 켜져 있다(판정 Q9)')
-  const sessions = await freshSessions(db, localClientEnv(envText), ['wsAdmin'])
+  const sessions = await freshSessions(env, ['wsAdmin'])
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const browserVersion = browser.version()
