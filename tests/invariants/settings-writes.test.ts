@@ -73,7 +73,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC(머리 주석의 백틱 이름도 원문 검사라 센다)' },
-  'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
+  'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24·SP4 D48 의 latestKeyChange) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
   'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 8, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳)' },

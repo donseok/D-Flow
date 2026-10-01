@@ -50,6 +50,10 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.exportErrLevelLabels': 'The WBS level names setting is damaged or missing, so the export cannot be built — check the WBS level names in Settings.',
   'settings.exportErrProfileCorrupt': 'The saved Excel layout is damaged — clear it with "Clear saved layout" in Settings.',
   'settings.exportErrProfileTooDeep': 'The WBS is deeper than the hierarchy columns of the saved Excel layout — clear it with "Clear saved layout" in Settings.',
+  // Export layout label (SP4 D48)
+  'settings.exportLayoutStandard': 'Standard layout (built from project teams and levels)',
+  'settings.exportLayoutSaved': 'Saved layout (import wizard, {date})',
+  'settings.exportLayoutDateUnknown': 'date unknown',
   // AI Assistant index section
   'settings.assistantTitle': 'AI Assistant semantic search index',
   'settings.assistantDesc1':

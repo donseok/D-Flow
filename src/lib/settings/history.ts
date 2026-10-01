@@ -59,3 +59,13 @@ export async function changedKeysSince(client: ConfigReadClient, scope: HistoryS
   const rows = (data ?? []) as { key: string }[]
   return { ok: true as const, keys: [...new Set(rows.map((r) => r.key))], truncated: rows.length >= CHANGED_KEYS_LIMIT }
 }
+
+/** 한 키의 가장 최근 변경 시각(SP4 D48 — 설정 화면의 Excel 표기 '저장된 양식(임포트 마법사, 날짜)'). 이력이 없으면 changedAt null.
+ *  표 이름은 tableOf 가 고른다 — 읽기(select)뿐이다(settings-writes G1·G2). error 문자열은 호출부가 로그로만 쓴다(응답에 싣지 않는다). */
+export async function latestKeyChange(client: ConfigReadClient, scope: { projectId: string }, key: string) {
+  const { table, column, id } = tableOf(scope)
+  const { data, error } = await client.from(table).select('changed_at').eq(column, id).eq('key', key).order('id', { ascending: false }).limit(1)
+  if (error) return { ok: false as const, error: `이력 조회 실패: ${error.message}` }
+  const rows = (data ?? []) as { changed_at: string }[]
+  return { ok: true as const, changedAt: rows[0]?.changed_at ?? null }
+}

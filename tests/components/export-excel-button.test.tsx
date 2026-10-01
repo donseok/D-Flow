@@ -23,7 +23,7 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <LocaleProvider initialLocale="en"><ToastProvider><ExportExcelButton projectId="p1" /></ToastProvider></LocaleProvider>,
+      <LocaleProvider initialLocale="en"><ToastProvider><ExportExcelButton projectId="p1" layout={null} /></ToastProvider></LocaleProvider>,
     ))
   })
   afterEach(() => { act(() => root.unmount()); document.body.innerHTML = ''; vi.unstubAllGlobals() })
@@ -56,5 +56,28 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     expect(document.body.textContent).toContain(t('en', 'settings.exportFailed'))
     expect(button.disabled).toBe(false)
     err.mockRestore()
+  })
+})
+
+// 버튼 옆 레이아웃 표기(SP4 D48) — 실제 컴포넌트·사전으로 그린다. null 이면(손상·설정 조회 실패) 표기 칸이 없다.
+describe('ExportExcelButton — 레이아웃 표기', () => {
+  const draw = async (locale: 'ko' | 'en', layout: Parameters<typeof ExportExcelButton>[0]['layout']) => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const r = createRoot(container)
+    await act(async () => r.render(
+      <LocaleProvider initialLocale={locale}><ToastProvider><ExportExcelButton projectId="p1" layout={layout} /></ToastProvider></LocaleProvider>,
+    ))
+    const label = container.querySelector('[data-export-layout]')
+    const out = { kind: label?.getAttribute('data-export-layout') ?? null, text: label?.textContent ?? null }
+    act(() => r.unmount())
+    container.remove()
+    return out
+  }
+  it('표준·저장(날짜)·저장(날짜 미상)·없음', async () => {
+    expect(await draw('ko', { kind: 'standard' })).toEqual({ kind: 'standard', text: '표준 양식(프로젝트 팀·단계로 생성)' })
+    expect(await draw('ko', { kind: 'saved', savedAt: '2026-09-30' })).toEqual({ kind: 'saved', text: '저장된 양식(임포트 마법사, 2026-09-30)' })
+    expect(await draw('en', { kind: 'saved', savedAt: null })).toEqual({ kind: 'saved', text: 'Saved layout (import wizard, date unknown)' })
+    expect(await draw('en', null)).toEqual({ kind: null, text: null })
   })
 })

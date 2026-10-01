@@ -30,6 +30,10 @@ import { ProjectPrivacyToggle } from '@/components/settings/ProjectPrivacyToggle
 import { ScheduleManager } from '@/components/settings/ScheduleManager'
 import { ReindexButton } from '@/components/settings/ReindexButton'
 import { ExportExcelButton } from '@/components/settings/ExportExcelButton'
+import type { ExportLayout } from '@/components/settings/exportLayout'
+import { latestKeyChange } from '@/lib/settings/history'
+import { seoulYmd } from '@/lib/domain/dates'
+import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
 import { t, type Locale } from '@/lib/i18n/dict'
@@ -168,6 +172,16 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
   const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
   const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
+  // 내보내기 표기(SP4 D48) — 저장 양식이 있으면 그 키의 최신 저장 날짜, 없으면 표준. 손상·설정 조회 실패면 표기하지 않는다(모르는 것을
+  // 말하지 않는다 — 손상은 아래 '저장된 양식 비우기'가 안내한다). 이력 조회 실패는 날짜 미상 + 로그(표준으로 위장하지 않는다).
+  let exportLayout: ExportLayout | null = null
+  if (profileState?.status === 'set' && profileState.value !== null) {
+    const h = await latestKeyChange(await createServerClient(), { projectId }, 'wbs.excel_profile')
+    if (!h.ok) console.error('[settings] 저장 양식 이력 조회 실패:', h.error)
+    exportLayout = { kind: 'saved', savedAt: h.ok && h.changedAt ? seoulYmd(new Date(h.changedAt)) : null }
+  } else if (profileState !== null && profileState.status !== 'invalid') {
+    exportLayout = { kind: 'standard' }
+  }
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
 
@@ -314,7 +328,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.exportDesc')}</p>
-          <ExportExcelButton projectId={projectId} />
+          <ExportExcelButton projectId={projectId} layout={exportLayout} />
         </div>
         {/* 저장된 엑셀 양식이 있을 때만 — 손상·깊이 부족으로 내보내기가 막힌 교착을 관리자가 푼다(Task 1b).
             설정 조회 실패면 그리지 않는다 — 있는지 모르는 양식을 비우라고 권하지 않는다. */}

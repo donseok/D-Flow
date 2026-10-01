@@ -49,6 +49,10 @@ export const settingsKo = {
   'settings.exportErrLevelLabels': 'WBS 단계 이름 설정이 손상되었거나 없어 내보낼 수 없습니다 — 설정 화면의 WBS 단계 이름을 확인하세요.',
   'settings.exportErrProfileCorrupt': '저장된 엑셀 양식이 손상되었습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.',
   'settings.exportErrProfileTooDeep': 'WBS가 저장된 엑셀 양식의 계층 열보다 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.',
+  // 내보내기 레이아웃 표기(SP4 D48)
+  'settings.exportLayoutStandard': '표준 양식(프로젝트 팀·단계로 생성)',
+  'settings.exportLayoutSaved': '저장된 양식(임포트 마법사, {date})',
+  'settings.exportLayoutDateUnknown': '저장일 미상',
   // AI 어시스턴트 색인 섹션
   'settings.assistantTitle': 'AI 어시스턴트 의미검색 색인',
   'settings.assistantDesc1':

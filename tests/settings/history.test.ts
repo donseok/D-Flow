@@ -1,6 +1,6 @@
 // 이력 읽기(history.ts) — 쪽 나눔(id 내림차순, 커서 before), 명령 결과 찾기(자기 명령만), 재기준용 changedKeysSince.
 import { describe, expect, it } from 'vitest'
-import { HISTORY_PAGE, changedKeysSince, findCommandOutcome, listHistory } from '@/lib/settings/history'
+import { HISTORY_PAGE, changedKeysSince, findCommandOutcome, latestKeyChange, listHistory } from '@/lib/settings/history'
 
 function fake(rows: Record<string, unknown>[], error: { message: string } | null = null) {
   const q: { table?: string; filters: string[]; order?: string; limit?: number } = { filters: [] }
@@ -64,5 +64,27 @@ describe('findCommandOutcome·changedKeysSince', () => {
     expect(full.q.limit).toBe(1000)
     const under = fake(Array.from({ length: 999 }, (_, i) => row(2000 - i, { key: 'a.b' })))
     expect(await changedKeysSince(under.client, { projectId: 'p1' }, 1)).toEqual({ ok: true, keys: ['a.b'], truncated: false })
+  })
+})
+
+describe('latestKeyChange — 한 키의 최신 변경 시각(SP4 D48 — Excel 표기의 날짜)', () => {
+  const fake = (rows: Array<Record<string, unknown>>, error: { message: string } | null = null) => {
+    const calls: Array<[string, unknown[]]> = []
+    const q: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'order', 'limit']) q[m] = (...a: unknown[]) => { calls.push([m, a]); return q }
+    q.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: error ? null : rows, error }).then(res)
+    return { client: { from: (t: string) => { calls.push(['from', [t]]); return q } }, calls }
+  }
+  it('그 프로젝트·그 키의 가장 최근 changed_at — 이력 표를 id 내림차순 1행', async () => {
+    const { client, calls } = fake([{ changed_at: '2026-09-30T03:00:00Z' }])
+    expect(await latestKeyChange(client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: '2026-09-30T03:00:00Z' })
+    expect(calls).toEqual(expect.arrayContaining([
+      ['from', ['project_settings_history']], ['eq', ['project_id', 'p1']], ['eq', ['key', 'wbs.excel_profile']],
+      ['order', ['id', { ascending: false }]], ['limit', [1]],
+    ]))
+  })
+  it('이력이 없으면 changedAt null(저장 양식은 있는데 이력이 없는 옛 데이터), 조회 오류는 ok:false', async () => {
+    expect(await latestKeyChange(fake([]).client as never, { projectId: 'p1' }, 'wbs.excel_profile')).toEqual({ ok: true, changedAt: null })
+    expect((await latestKeyChange(fake([], { message: 'boom' }).client as never, { projectId: 'p1' }, 'wbs.excel_profile')).ok).toBe(false)
   })
 })

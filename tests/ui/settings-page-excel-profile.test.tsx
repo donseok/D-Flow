@@ -11,6 +11,8 @@ import { ConfigUnavailableError } from '@/lib/settings/errors'
 const mocks = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
   ClearExcelProfileButton: vi.fn<(props: { projectId: string }) => null>(() => null),
+  ExportExcelButton: vi.fn<(props: { projectId: string; layout: unknown }) => null>(() => null),
+  latestKeyChange: vi.fn(async (): Promise<{ ok: true; changedAt: string | null } | { ok: false; error: string }> => ({ ok: true, changedAt: null })),
 }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
@@ -42,7 +44,9 @@ vi.mock('@/components/settings/ProjectInfoEditButton', () => ({ ProjectInfoEditB
 vi.mock('@/components/settings/ProjectPrivacyToggle', () => ({ ProjectPrivacyToggle: () => null }))
 vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () => null }))
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => null }))
-vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
+vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: mocks.ExportExcelButton }))
+vi.mock('@/lib/settings/history', () => ({ latestKeyChange: mocks.latestKeyChange }))
+vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({ from: vi.fn() })) }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: mocks.ClearExcelProfileButton }))
 
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
@@ -84,6 +88,42 @@ describe('설정 화면 — 저장된 엑셀 양식 비우기', () => {
     expect(html).toContain('설정을 불러오지 못해 이 화면을 그릴 수 없습니다')
     expect(html).toContain('data-config-load-error')
     expect(html).not.toContain('db down')   // 원문은 로그에만(I-2)
+    err.mockRestore()
+  })
+})
+
+describe('내보내기 표기(D48)', () => {
+  const layoutProp = () => mocks.ExportExcelButton.mock.calls.at(-1)?.[0].layout
+  it('저장 양식이 없으면 표준', async () => {
+    mocks.getProjectConfig.mockResolvedValue(config())
+    await render()
+    expect(layoutProp()).toEqual({ kind: 'standard' })
+    expect(mocks.latestKeyChange).not.toHaveBeenCalled()
+  })
+  it('저장 양식이면 그 키의 최신 변경 날짜(서울 날짜)', async () => {
+    mocks.getProjectConfig.mockResolvedValue(config(LEGACY_EXCEL_PROFILE_V1))
+    mocks.latestKeyChange.mockResolvedValue({ ok: true, changedAt: '2026-09-30T03:00:00Z' })
+    await render()
+    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: '2026-09-30' })
+    expect(mocks.latestKeyChange).toHaveBeenCalledWith(expect.anything(), { projectId: 'p1' }, 'wbs.excel_profile')
+  })
+  it('이력 조회 실패는 날짜 미상 + 로그 — 표준으로 위장하지 않는다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(config(LEGACY_EXCEL_PROFILE_V1))
+    mocks.latestKeyChange.mockResolvedValue({ ok: false, error: '이력 조회 실패' })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await render()
+    expect(layoutProp()).toEqual({ kind: 'saved', savedAt: null })
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
+  })
+  it('손상 양식·설정 조회 실패면 표기하지 않는다(모르는 것을 말하지 않는다)', async () => {
+    mocks.getProjectConfig.mockResolvedValue(config({ version: 2 }))
+    await render()
+    expect(layoutProp()).toBeNull()
+    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('x'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await render()
+    expect(layoutProp()).toBeNull()
     err.mockRestore()
   })
 })
