@@ -6,7 +6,7 @@ const responses: Record<string, QueryResponse> = {}
 
 function queryBuilder(response: QueryResponse) {
   const builder: Record<string, unknown> = {}
-  for (const method of ['select', 'eq', 'in', 'order', 'range', 'maybeSingle']) {
+  for (const method of ['select', 'eq', 'in', 'order', 'range', 'limit', 'gt', 'or', 'maybeSingle']) {
     builder[method] = vi.fn(() => builder)
   }
   for (const method of ['insert', 'upsert', 'update', 'delete']) {

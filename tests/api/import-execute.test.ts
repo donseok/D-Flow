@@ -89,7 +89,7 @@ function baseFields(overrides: Record<string, string | Blob> = {}) {
   }
 }
 
-/** wbs_items 백업 select 체인(select().eq().order().range()) — fetchAllPages 의 쪽 읽기와 count(총합)를 흉내 낸다.
+/** wbs_items 백업 select 체인(select().eq().[gt()].order().limit()) — fetchAllByKeyset 의 쪽 읽기와 count(총합)를 흉내 낸다.
  *  count 를 주지 않으면 data 의 길이(한 쪽에 다 담긴다), 오류 응답이면 null. */
 function backupBuilder(response: { data: unknown; error: unknown; count?: number | null }) {
   const builder: Record<string, unknown> = {}
@@ -97,6 +97,8 @@ function backupBuilder(response: { data: unknown; error: unknown; count?: number
   builder.eq = vi.fn(() => builder)
   builder.order = vi.fn(() => builder)
   builder.range = vi.fn(() => builder)
+  builder.limit = vi.fn(() => builder)
+  builder.gt = vi.fn(() => builder)
   const count = response.count !== undefined ? response.count : Array.isArray(response.data) ? response.data.length : null
   builder.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
     Promise.resolve({ ...response, count }).then(resolve, reject)
