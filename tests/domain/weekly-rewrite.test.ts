@@ -3,14 +3,17 @@ import {
   buildWeeklyRewriteSelection, prepareApplicableWeeklyRewriteEdits,
   type WeeklyRewriteCandidate,
 } from '@/lib/domain/weeklyRewrite'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { rowLabel, type WeeklyAreaRow } from '@/lib/domain/weeklySheet'
 
-const row = (id: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
+const A_EXP = '00000000-0000-0000-7e57-0000000018d1'
+const A_DATA = '00000000-0000-0000-7e57-0000000018d2'
+const AREAS = [{ id: A_EXP, name: '실험', active: true }, { id: A_DATA, name: '데이터', active: false }]
+const labelOf = (r: WeeklyAreaRow) => rowLabel(r, AREAS)
+
+const row = (id: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
   id,
   reportId: 'report-1',
-  section: id === 'r1' ? '영업' : '품질',
-  module: '',
-  sortOrder: id === 'r1' ? 1 : 2,
+  areaId: id === 'r1' ? A_EXP : A_DATA,
   thisContent: '',
   thisIssue: '',
   nextContent: '',
@@ -19,15 +22,15 @@ const row = (id: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => 
 })
 
 describe('buildWeeklyRewriteSelection', () => {
-  it('선택 범위에서 빈 셀을 제외하고 행 우선 순서와 표시 문구를 보존한다', () => {
+  it('선택 범위에서 빈 셀을 제외하고 행 우선 순서를 보존한다 — 라벨은 호출부의 labelOf(영역 이름·비활성 표지)', () => {
     const rows = [
-      row('r1', { thisContent: '금주 영업', nextContent: '차주 영업' }),
-      row('r2', { thisIssue: '품질 이슈', nextContent: '   ' }),
+      row('r1', { thisContent: '금주 실험', nextContent: '차주 실험' }),
+      row('r2', { thisIssue: '데이터 이슈', nextContent: '   ' }),
     ]
-    expect(buildWeeklyRewriteSelection(rows, { top: 0, left: 0, bottom: 1, right: 2 })).toEqual([
-      { rowId: 'r1', cellKey: 'this_content', section: '영업', label: '금주실적 내용', original: '금주 영업' },
-      { rowId: 'r1', cellKey: 'next_content', section: '영업', label: '차주계획 내용', original: '차주 영업' },
-      { rowId: 'r2', cellKey: 'this_issue', section: '품질', label: '금주 이슈·이벤트', original: '품질 이슈' },
+    expect(buildWeeklyRewriteSelection(rows, { top: 0, left: 0, bottom: 1, right: 2 }, labelOf)).toEqual([
+      { rowId: 'r1', cellKey: 'this_content', section: '실험', label: '금주실적 내용', original: '금주 실험' },
+      { rowId: 'r1', cellKey: 'next_content', section: '실험', label: '차주계획 내용', original: '차주 실험' },
+      { rowId: 'r2', cellKey: 'this_issue', section: '데이터 (비활성)', label: '금주 이슈·이벤트', original: '데이터 이슈' },
     ])
   })
 })
@@ -50,7 +53,7 @@ describe('prepareApplicableWeeklyRewriteEdits', () => {
   })
 
   it('행 삭제나 동시 수정이 하나라도 있으면 전체 적용을 막는다', () => {
-    expect(prepareApplicableWeeklyRewriteEdits([], candidates)).toEqual({ ok: false })
+    expect(prepareApplicableWeeklyRewriteEdits([] as WeeklyAreaRow[], candidates)).toEqual({ ok: false })
     expect(prepareApplicableWeeklyRewriteEdits(
       [row('r1', { thisContent: '다른 사용자가 수정', thisIssue: '원문 B' })],
       candidates,

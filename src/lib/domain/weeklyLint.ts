@@ -1,15 +1,13 @@
 /* ── 주간보고 점검(순수) — 중복(완전·유사)·체번·글머리 기호 규칙과 수정 편집 생성. I/O 없음.
  *  공백·빈 줄은 점검하지 않는다(사용자 결정, 2026-07-24) — tidyBlankLines 가 남아 있는 것은
  *  검사가 아니라 중복 삭제가 남긴 빈 줄을 치우는 수정의 뒤처리이기 때문이다.
- *  모든 규칙은 **구분 안에서만** 본다. 한 구분의 줄과 다른 구분의 줄을 견주는 일은 없다 —
- *  구분마다 담당이 다르고, 같은 문구가 두 구분에 있는 것은 보고서상 정상이기 때문이다.
- *  같은 이유로 **한 셀 안이라도 `[조업]`·`[표준화]` 같은 머리글로 갈린 구획은 서로 남남이다** —
- *  한 구분에 담당 영역 둘을 담은 셀이라 번호도 구획마다 1부터 다시 시작하고, 같은 문구가
- *  두 구획에 있어도 중복이 아니다(사용자 확인, 2026-08-06).
- *  (이 파일의 `[조업]`·`[표준화]` 예시는 그 관행이 실제로 있던 셀에서 왔다. 2026-08-14에 그 둘은
- *   구분 자체로 갈렸지만 — WEEKLY_SECTIONS — 구획 머리글 기능은 구분명과 무관한 일반 장치다.
- *   머리글 이름이 구분명과 같아야 하는 것은 아니다.) 구획의 정체는 **머리글 이름**이라
- *  떨어져 있는 같은 이름은 한 구획이고, 세 규칙이 이 묶음 키 하나를 공유한다(blockKeyOf).
+ *  모든 규칙은 **묶음 안에서만** 본다. 묶음은 호출부가 groupOf 로 정한다 — PPT 페이지 단위와 같은 키여야 한다(스펙 D22).
+ *  한 묶음의 줄과 다른 묶음의 줄을 견주는 일은 없다 — 묶음마다 담당이 다르고, 같은 문구가 두 묶음에 있는 것은 보고서상 정상이다.
+ *  같은 이유로 **한 셀 안이라도 `[현장]`·`[설계]` 같은 머리글로 갈린 구획은 서로 남남이다** — 한 묶음에 담당 영역 둘을 담은 셀
+ *  (이관이 합친 모듈들의 `[모듈]` 머리표 포함 — 스펙 T4)이라 번호도 구획마다 1부터 다시 시작하고, 같은 문구가 두 구획에 있어도
+ *  중복이 아니다(사용자 확인, 2026-08-06). 구획 머리글 기능은 묶음 이름과 무관한 일반 장치다 — 머리글 이름이 영역 이름과 같아야
+ *  하는 것은 아니다. 구획의 정체는 **머리글 이름**이라 떨어져 있는 같은 이름은 한 구획이고, 세 규칙이 이 묶음 키 하나를
+ *  공유한다(blockKeyOf).
  *  단 구획 분할은 **지적을 줄이는 쪽으로만** 쓴다 — 대괄호 한 줄이 늘 담당 영역 머리글이라는 보장이
  *  없으므로(`[완료]`·`[8/7]`), 체번은 (a) 머리글 뒤 번호가 1로 다시 시작할 때만 경계로 인정하고
  *  (numberingBlocks) (b) 셀 전체로 봐서 성한 번호는 구획을 갈랐다는 이유로 덮어쓰지 않는다.
@@ -17,22 +15,31 @@
  *  (예외: 글머리 기호·번호 표기 통일만 보고서 겉모습 문제라 시트 전체 다수결을 따른다.) ── */
 
 import {
-  CELL_FIELD, sectionKeyOf, sortWeeklyRows, WEEKLY_CELL_KEYS, WEEKLY_CELL_LABEL,
-  type WeeklyCellEdit, type WeeklyCellKey, type WeeklySheetRow,
+  CELL_FIELD, WEEKLY_CELL_KEYS, WEEKLY_CELL_LABEL,
+  type WeeklyCellEdit, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
 export type LintKind = 'duplicate' | 'nearDuplicate' | 'numbering' | 'format'
+
+/** 점검이 읽는 행 — id 와 내용 네 칸만. 영역 행이든 옛 묶음 행이든 이 모양이면 된다 */
+export type LintRow = { id: string } & WeeklyCells
+/** 묶음 — key 는 견주는 단위(같은 key 끼리만 견준다), label 은 패널 머리와 지적의 section 에 쓰는 이름 */
+export type LintGroup = { key: string; label: string }
+/** 행 → 묶음. 시트는 화면·PPT 와 같은 키를 넘긴다 — 어긋나면 '점검 통과한 시트가 PPT 에서 중복'이 된다(스펙 D22) */
+export type LintGroupOf<R> = (row: R) => LintGroup
 
 export interface LintFinding {
   /** 안정 키(React list). 같은 지적이면 재계산해도 같은 값이어야 한다. */
   id: string
   kind: LintKind
-  /** 지적이 속한 구분. 점검 단위이자 패널의 묶음 기준 — 이 값을 넘나드는 지적은 없다. */
+  /** 지적이 속한 묶음의 키(LintGroup.key). 점검 단위이자 패널의 묶음 기준 — 이 값을 넘나드는 지적은 없다. */
+  groupKey: string
+  /** 그 묶음의 이름(LintGroup.label) — 패널 머리글. 이름이 같은 두 묶음은 groupKey 로 갈린다. */
   section: string
-  /** 클릭 시 이동할 대표 셀. 중복은 '삭제 대상' 중 sortOrder가 가장 작은 행. */
+  /** 클릭 시 이동할 대표 셀. 중복은 '삭제 대상' 중 입력 순서가 가장 앞선 행. */
   rowId: string
   cellKey: WeeklyCellKey
-  /** 목록 제목 — 열 이름만. 구분은 section이 따로 들고 패널이 머리글로 보여준다. */
+  /** 목록 제목 — 열 이름만. 묶음 이름은 section 이 따로 들고 패널이 머리글로 보여준다. */
   title: string
   /** 무엇이 문제이고 적용하면 어떻게 되는지 */
   detail: string
@@ -85,26 +92,19 @@ export function normalizeForCompare(line: string): string {
   return s.replace(/\s+/g, ' ').trim()
 }
 
-/** 점검의 유일한 단위 — 구분별 묶음. 화면 표시 순서(sortWeeklyRows — 구분 이름 순, 같은 구분
- *  안에서는 sortOrder 순)를 그대로 물려받으므로 묶음 순서 = 구분 순서, 묶음 안 행 순서 =
- *  화면 순서(중복 규칙의 '남길 행' 기준)다. 그리드와 같은 정렬을 써야 패널에서 짚은 행과
- *  화면에서 보이는 행이 어긋나지 않는다.
- *  묶음 키는 PPT 페이지 단위와 같은 sectionKeyOf다 — 비표준 구분 하나 아래 모듈로 나뉜 행들을
- *  서로 견주지 않으려면 모듈까지 봐야 하고, 반대로 PPT가 한 장에 싣는 행들은 점검도 한 묶음으로
- *  봐야 '점검 통과한 시트가 PPT에서 중복'인 상태가 생기지 않는다.
- *  표준 시트는 구분당 1행이지만, 한 구분에 행이 여럿이면(옛 시트·백업 백필) 그 행들이 한 묶음이 된다.
- *  이월(carryOverRows)이 합치는 단위(표준 구분명 하나, 비표준은 첫 구분으로)와는 다르다 —
- *  옛 시트에서 갈라 본 두 행이 이월 뒤 한 셀로 합쳐지면, 그때 새 시트에서 중복으로 잡힌다.
- *  같은 구분 행이 떨어져 있어도 하나로 모은다 — 인접 여부가 아니라 이름이 기준이다. */
-interface SectionGroup { section: string; rows: WeeklySheetRow[] }
+/** 점검의 유일한 단위 — 묶음(groupOf). 묶음 순서 = 입력에서 처음 나온 순서, 묶음 안 행 순서 = 입력 순서(중복 규칙의
+ *  '남길 행' 기준)다. 정렬은 호출부 몫이다 — 시트는 화면 순서 그대로 넘겨야 패널에서 짚은 행과 화면의 행이 어긋나지 않는다.
+ *  묶음 키는 PPT 페이지 단위와 같아야 한다 — PPT 가 한 장에 싣는 행들은 점검도 한 묶음으로 봐야 '점검 통과한 시트가
+ *  PPT 에서 중복'인 상태가 생기지 않는다. 같은 키의 행이 떨어져 있어도 하나로 모은다 — 인접 여부가 아니라 키가 기준이다. */
+interface RowGroup<R> { key: string; label: string; rows: R[] }
 
-function bySection(rows: WeeklySheetRow[]): SectionGroup[] {
-  const out: SectionGroup[] = []
+function byGroup<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): RowGroup<R>[] {
+  const out: RowGroup<R>[] = []
   const at = new Map<string, number>()
-  for (const row of sortWeeklyRows(rows)) {
-    const section = sectionKeyOf(row)
-    const i = at.get(section)
-    if (i === undefined) { at.set(section, out.length); out.push({ section, rows: [row] }) }
+  for (const row of rows) {
+    const { key, label } = groupOf(row)
+    const i = at.get(key)
+    if (i === undefined) { at.set(key, out.length); out.push({ key, label, rows: [row] }) }
     else out[i].rows.push(row)
   }
   return out
@@ -139,7 +139,7 @@ function victimsWhere(victims: readonly { rowId: string; line: number }[]): stri
 /** 줄 앞 공백 길이(들여쓰기 깊이). 전각 공백·탭도 공백으로 센다. */
 const indentOf = (line: string): number => line.length - line.trimStart().length
 
-/** 셀 안 하위 구획의 머리글 — **줄 전체가 대괄호 한 쌍**인 줄(`[조업]`). 한 구분에 담당 영역이
+/** 셀 안 하위 구획의 머리글 — **줄 전체가 대괄호 한 쌍**인 줄(`[현장]`). 한 묶음에 담당 영역이
  *  둘 이상 섞인 셀에서 작성자가 영역을 가르는 표기다. `[참고] 확정 예정`처럼 뒤에 본문이 붙으면
  *  머리글이 아니라 본문 줄이다 — 줄 전체 일치를 요구하는 이유이자, 본문에 흔한 `[]` 표기를
  *  경계로 오인해 검사를 조용히 무력화하지 않기 위한 선이다.
@@ -163,7 +163,7 @@ function blockHeaderName(line: string): string | null {
 /** 그 셀에서 '항목' 줄로 볼 깊이 = 내용 있는 줄의 최소 들여쓰기. 셀 전체를 들여 쓴 사람도 있으므로
  *  0이 아니라 최소값을 기준으로 삼는다. 내용이 없으면 아무 줄도 대상이 아니다.
  *
- *  **머리글 후보(대괄호만인 줄)는 항목이 아니므로 이 최소값에서 뺀다.** 빼지 않으면 `[조업]` 아래로
+ *  **머리글 후보(대괄호만인 줄)는 항목이 아니므로 이 최소값에서 뺀다.** 빼지 않으면 `[현장]` 아래로
  *  항목을 들여 쓰는 가장 자연스러운 표기에서 머리글이 기준선을 0으로 끌어내려, 그 아래 항목이 전부
  *  '딸린 줄'로 분류되고 중복 검사가 셀 전체에서 조용히 꺼진다. 머리글이 없는 셀에서는 뺄 것이 없으므로
  *  기존 동작과 한 글자도 다르지 않다. */
@@ -178,7 +178,7 @@ function topLevelIndent(lines: readonly string[]): number {
 }
 
 /** 셀 안 하위 구획. name 은 머리글 이름(맨 앞 머리글 없는 구획은 null), lines 는 원문 줄 인덱스,
- *  label 은 화면에 되돌려 쓸 원문 표기(`【조업】`처럼 쓴 표기를 반각으로 바꿔 적지 않기 위함),
+ *  label 은 화면에 되돌려 쓸 원문 표기(`【현장】`처럼 쓴 표기를 반각으로 바꿔 적지 않기 위함),
  *  headerLine 은 머리글 줄의 원문 인덱스(맨 앞 구획은 null).
  *  **머리글 줄 자체는 어느 구획에도 넣지 않는다** — 항목이 아니라 경계이기 때문이다.
  *  덕분에 머리글은 중복 비교에도, 체번에도 걸리지 않는다(경계가 지워져 두 구획이 합쳐지는 사고 방지). */
@@ -201,12 +201,12 @@ function splitCellBlocks(lines: readonly string[]): CellBlock[] {
   return out
 }
 
-/** 규칙들이 견주는 단위의 키 = 구분(바깥 루프) × 열 × **구획 이름**.
+/** 규칙들이 견주는 단위의 키 = 묶음(바깥 루프) × 열 × **구획 이름**.
  *  위치가 아니라 이름으로 묶는 것은 의도이고, **중복·유사중복·체번 셋이 이 정의를 공유한다** —
  *  하나는 위치로 하나는 이름으로 가르면 "중복은 한 몸으로 보고 지우는데 체번은 남남으로 세는" 어긋남이
  *  생긴다(같은 함정을 글머리 기호 규칙에서 이미 겪었다).
- *  이름으로 묶으면 한 구분에 행이 여럿인 옛 시트에서 두 행의 `[조업]`이 같은 영역으로 견줘지고,
- *  `[조업]`과 `[표준화]`는 글자가 같아도 남남이 된다. 이름 없는 구획(null)도 자기들끼리만 묶인다 —
+ *  이름으로 묶으면 한 묶음에 행이 여럿인 옛 시트에서 두 행의 `[현장]`이 같은 영역으로 견줘지고,
+ *  `[현장]`과 `[설계]`는 글자가 같아도 남남이 된다. 이름 없는 구획(null)도 자기들끼리만 묶인다 —
  *  머리글을 안 쓴 행과 쓴 행 사이의 행 간 중복은 그래서 잡히지 않는다(어느 영역인지 알 수 없으니
  *  지우지 않는 쪽을 택한다). JSON 직렬화는 이름에 흔한 구분자 문자가 키를 뭉개지 않게 하기 위함. */
 const blockKeyOf = (name: string | null): string => JSON.stringify(name)
@@ -221,7 +221,7 @@ function numberedLines(lines: readonly string[], idx: readonly number[]): { i: n
 
 /** 체번이 쓸 구획 목록 — splitCellBlocks 의 경계 중 **믿을 만한 것만** 남긴다.
  *
- *  BLOCK_HEADER 는 `[조업]`(담당 영역)과 `[완료]`·`[8/7]`(주석·상태 표기)을 형태로 구별하지 못한다.
+ *  BLOCK_HEADER 는 `[현장]`(담당 영역)과 `[완료]`·`[8/7]`(주석·상태 표기)을 형태로 구별하지 못한다.
  *  그래서 **번호가 스스로 밝히게 한다**: 머리글 뒤 목록이 1번부터 다시 시작할 때만 새 구획으로 인정하고,
  *  이어지는 번호(3, 4 …)면 작성자가 한 목록으로 이어 쓴 것이므로 앞 구획에 도로 붙인다.
  *  이 판정이 없으면 `1. 가 / 2. 나 / [완료] / 3. 다 / 4. 라 / 6. 마` 에서 앞이 성하다는 이유로
@@ -257,16 +257,16 @@ function removeLines(content: string, drop: ReadonlySet<number>): { content: str
   return { content: tidyBlankLines(lines.filter((_, i) => !gone.has(i))).kept.join('\n'), headers }
 }
 
-/** 규칙 ① — **한 구분·한 열·한 구획 안에서** 되풀이되는 줄. 같은 셀 안 반복도, 그 구분에 행이 여럿일 때
- *  행을 가로지르는 반복도 대상이다. 구분이 다르면 글자가 같아도 서로 남남이다.
+/** 규칙 ① — **한 묶음·한 열·한 구획 안에서** 되풀이되는 줄. 같은 셀 안 반복도, 그 묶음에 행이 여럿일 때
+ *  행을 가로지르는 반복도 대상이다. 묶음이 다르면 글자가 같아도 서로 남남이다.
  *
  *  단, **들여쓴 줄은 검사에서 뺀다.** 비교는 글머리·번호를 떼고 하기 때문에, 항목마다 달아 둔
  *  `- 완료` 같은 상태줄이 서로 '같은 줄'로 보여 뒤쪽 항목의 상태줄이 통째로 지워진다.
  *  들여쓴 줄은 바로 위 항목에 딸린 것이라 문맥이 다르다 — 같은 글자여도 중복이 아니다. */
-export function lintDuplicates(rows: WeeklySheetRow[]): LintFinding[] {
+export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
   const out: LintFinding[] = []
 
-  for (const { section, rows: group } of bySection(rows)) {
+  for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     const byId = new Map(group.map(r => [r.id, r]))
 
     for (const cellKey of WEEKLY_CELL_KEYS) {
@@ -312,10 +312,11 @@ export function lintDuplicates(rows: WeeklySheetRow[]): LintFinding[] {
         })
 
         out.push({
-          // 구분·구획이 키에 들어가야 두 구분(또는 한 셀의 두 구획)에서 같은 줄이 반복돼도
+          // 묶음·구획이 키에 들어가야 두 묶음(또는 한 셀의 두 구획)에서 같은 줄이 반복돼도
           // 지적 id가 부딪히지 않는다. key 는 이미 `구획:정규화줄` 이다.
-          id: `duplicate:${section}:${cellKey}:${key}`,
+          id: `duplicate:${groupKey}:${cellKey}:${key}`,
           kind: 'duplicate',
+          groupKey,
           section,
           rowId: edits[0].rowId,
           cellKey,
@@ -363,7 +364,7 @@ export function lineSimilarity(a: string, b: string): number {
   return 1 - levenshtein(a, b) / max
 }
 
-/** 규칙 ①-b — **한 구분·한 열 안에서** 90% 이상 비슷하지만 완전히 같지는 않은 줄들.
+/** 규칙 ①-b — **한 묶음·한 열 안에서** 90% 이상 비슷하지만 완전히 같지는 않은 줄들.
  *  범위·들여쓰기 제외는 규칙 ①과 같다. 완전 동일은 정규화 키가 같아 여기 오지 않는다
  *  (첫 등장만 견주므로).
  *
@@ -375,14 +376,14 @@ export function lineSimilarity(a: string, b: string): number {
  *  유사한 두 줄은 다르다 — "진행 중 60%"와 "진행 중 70%"에서 남길 쪽은 사람만 안다.
  *  기계가 앞줄을 지우면 최신 값이, 뒷줄을 지우면 정정된 값이 사라질 수 있다.
  *  그래서 이 지적은 위치를 보여 주고 셀로 데려가는 데서 멈춘다. */
-export function lintNearDuplicates(rows: WeeklySheetRow[]): LintFinding[] {
+export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
   const out: LintFinding[] = []
 
-  for (const { section, rows: group } of bySection(rows)) {
+  for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const cellKey of WEEKLY_CELL_KEYS) {
       // 구획별로, 정규화 줄의 첫 등장만 모은다. 같은 줄의 2번째 이후 등장은 규칙 ①이 지운다.
-      // 첫 등장 판정(seen)도 구획 안에서 한다 — 시트 전체로 한 벌만 두면 `[조업]`에 먼저 나온 줄이
-      // `[표준화]`의 같은 줄을 잡아먹어, 그 구획 안의 진짜 유사 쌍이 통째로 사라진다.
+      // 첫 등장 판정(seen)도 구획 안에서 한다 — 시트 전체로 한 벌만 두면 `[현장]`에 먼저 나온 줄이
+      // `[설계]`의 같은 줄을 잡아먹어, 그 구획 안의 진짜 유사 쌍이 통째로 사라진다.
       const buckets = new Map<string, { firsts: { norm: string; rowId: string; line: number }[]; seen: Set<string> }>()
       for (const row of group) {
         const lines = toLines(row[CELL_FIELD[cellKey]])
@@ -457,11 +458,12 @@ export function lintNearDuplicates(rows: WeeklySheetRow[]): LintFinding[] {
           }
 
           out.push({
-            // JSON 직렬화로 구분한다 — 본문에 흔한 '~'(기간 표기) 같은 문자를 구분자로 쓰면
+            // JSON 직렬화로 묶음한다 — 본문에 흔한 '~'(기간 표기) 같은 문자를 구분자로 쓰면
             // 서로 다른 두 지적이 같은 id 로 뭉갤 수 있다. 구획 키(bk)도 함께 넣어야
             // 한 셀의 두 구획에 같은 군집이 생겨도 id 가 부딪히지 않는다.
-            id: `nearDuplicate:${section}:${cellKey}:${bk}:${JSON.stringify(ms.map(m => m.norm))}`,
+            id: `nearDuplicate:${groupKey}:${cellKey}:${bk}:${JSON.stringify(ms.map(m => m.norm))}`,
             kind: 'nearDuplicate',
+            groupKey,
             section,
             // 이동 목표는 맨 뒤에 등장한 줄 — 대개 나중에 붙여 넣거나 고쳐 쓴 쪽이라 볼 확률이 높다.
             rowId: ms[ms.length - 1].rowId,
@@ -480,7 +482,7 @@ export function lintNearDuplicates(rows: WeeklySheetRow[]): LintFinding[] {
 /** 시트 전체에서 다수결로 정한 번호 구분자. 번호 줄이 없으면 null(규칙 전체 침묵).
  *  보고서 겉모습 문제라 글머리 기호처럼 시트 전체 기준이고, 동수면 . 이 이긴다.
  *  한 종류뿐이어도 그 값을 반환한다 — 그 표기를 존중하되 공백 정규화의 기준으로 쓴다. */
-function dominantNumberSep(rows: WeeklySheetRow[]): '.' | ')' | null {
+function dominantNumberSep(rows: readonly LintRow[]): '.' | ')' | null {
   let dot = 0, paren = 0
   for (const row of rows) {
     for (const cellKey of WEEKLY_CELL_KEYS) {
@@ -498,13 +500,13 @@ function dominantNumberSep(rows: WeeklySheetRow[]): '.' | ')' | null {
 
 /** 규칙 ② — 셀 안 줄 번호: 체번 + 표기. 재부여는 기존대로 번호 줄 2개 이상이면서
  *  1..n 이 아닐 때만 하고, 표기(구분자 시트 다수결·번호 뒤 공백 1칸)는 번호 줄 1개부터
- *  맞춘다. 구분자만 시트 전체 기준이다(구분 단위 원칙의 의도된 예외 — 글머리 기호와 동일).
+ *  맞춘다. 구분자만 시트 전체 기준이다(묶음 단위 원칙의 의도된 예외 — 글머리 기호와 동일).
  *  순서와 표기를 한 규칙이 소유해야 같은 줄을 두 지적이 서로 다르게 고치는 충돌이 없다. */
-export function lintNumbering(rows: WeeklySheetRow[]): LintFinding[] {
+export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
   const sep = dominantNumberSep(rows)
   if (sep === null) return []
   const out: LintFinding[] = []
-  for (const { section, rows: group } of bySection(rows)) {
+  for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const row of group) {
       for (const cellKey of WEEKLY_CELL_KEYS) {
         const content = row[CELL_FIELD[cellKey]]
@@ -521,7 +523,7 @@ export function lintNumbering(rows: WeeklySheetRow[]): LintFinding[] {
         // 구분자가 바뀌는 줄은 공백도 함께 다시 쓰이므로 else if — 표기 노트가 공백 노트를 포괄한다.
         let sepFixed = 0, gapFixed = 0
         const next = [...lines]
-        // 체번은 **구획마다 따로** 센다 — `[조업] 1.` 다음의 `[표준화] 1.` 은 중복 번호가 아니라
+        // 체번은 **구획마다 따로** 센다 — `[현장] 1.` 다음의 `[설계] 1.` 은 중복 번호가 아니라
         // 새 영역의 첫 항목이다. 구획은 blockKeyOf 와 같이 **이름**으로 묶는다(떨어져 있어도 같은 이름이면
         // 한 목록). 표기(구분자·공백) 통일은 반대로 구획과 무관하게 셀 전체에 건다:
         // 순서는 영역별 의미가 있지만 겉모습은 보고서 전체가 한 벌이어야 하기 때문이다.
@@ -567,6 +569,7 @@ export function lintNumbering(rows: WeeklySheetRow[]): LintFinding[] {
         out.push({
           id: `numbering:${row.id}:${cellKey}`,
           kind: 'numbering',
+          groupKey,
           section,
           rowId: row.id,
           cellKey,
@@ -581,7 +584,7 @@ export function lintNumbering(rows: WeeklySheetRow[]): LintFinding[] {
 }
 
 /** 시트 전체에서 가장 많이 쓰인 글머리 기호. 종류가 하나뿐이면 통일할 것이 없으므로 null. */
-function dominantBullet(rows: WeeklySheetRow[]): string | null {
+function dominantBullet(rows: readonly LintRow[]): string | null {
   const count = new Map<string, number>()
   for (const row of rows) {
     for (const cellKey of WEEKLY_CELL_KEYS) {
@@ -620,19 +623,19 @@ function formatCell(content: string, bullet: string | null): FormatResult {
     return line.slice(0, line.length - head.length) + bullet + head.slice(1)
   })
 
-  // '시트 전체 기준'을 밝혀 둔다 — 자기 구분 안에서는 기호가 일관된 셀도 여기서 지적되기 때문에,
-  // 근거를 적지 않으면 "우리 구분엔 ·밖에 없는데 왜?"가 되고 지적이 버그로 읽힌다.
+  // '시트 전체 기준'을 밝혀 둔다 — 자기 묶음 안에서는 기호가 일관된 셀도 여기서 지적되기 때문에,
+  // 근거를 적지 않으면 "우리 묶음엔 ·밖에 없는데 왜?"가 되고 지적이 버그로 읽힌다.
   const notes = bulletFixed > 0 ? [`글머리 기호 → ${bullet} (시트 전체 기준)`] : []
   return { next: out.join('\n'), notes }
 }
 
 /** 규칙 ③ — 글머리 기호 통일. 셀당 지적 1건.
  *  보고서 겉모습을 맞추는 검사라 시트 전체 다수결을 기준으로 삼는다
- *  (구분별 다수결이 아니다 — 번호 표기 통일과 더불어 구분 단위 원칙의 의도된 예외). */
-export function lintFormat(rows: WeeklySheetRow[]): LintFinding[] {
+ *  (묶음별 다수결이 아니다 — 번호 표기 통일과 더불어 묶음 단위 원칙의 의도된 예외). */
+export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
   const bullet = dominantBullet(rows)
   const out: LintFinding[] = []
-  for (const { section, rows: group } of bySection(rows)) {
+  for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const row of group) {
       for (const cellKey of WEEKLY_CELL_KEYS) {
         const content = row[CELL_FIELD[cellKey]]
@@ -641,6 +644,7 @@ export function lintFormat(rows: WeeklySheetRow[]): LintFinding[] {
         out.push({
           id: `format:${row.id}:${cellKey}`,
           kind: 'format',
+          groupKey,
           section,
           rowId: row.id,
           cellKey,
@@ -654,22 +658,24 @@ export function lintFormat(rows: WeeklySheetRow[]): LintFinding[] {
   return out
 }
 
-/** 목록 안 정렬 우선순위 — 같은 구분 안에서 중대한 것(중복)부터. 유사 중복은 완전 중복 바로 뒤. */
+/** 목록 안 정렬 우선순위 — 같은 묶음 안에서 중대한 것(중복)부터. 유사 중복은 완전 중복 바로 뒤. */
 const KIND_ORDER: Record<LintKind, number> = { duplicate: 0, nearDuplicate: 1, numbering: 2, format: 3 }
 
-/** 점검 진입점. 목록 순서는 **구분 → 부류 → 행 → 열**이다.
- *  부류를 바깥에 두고 이어붙이기만 하면, 위쪽 구분에 정리 지적만 있고 아래쪽 구분에 중복 지적이
- *  있을 때 아래 구분이 목록 맨 앞으로 올라와 화면(시트) 순서와 어긋난다. 행·열까지 정렬 키에 넣는
- *  것은 중복 규칙만 열 바깥으로 도는 탓 — 한 구분에 행이 여럿이면 그 부류만 순서가 튄다. */
-export function lintWeeklySheet(rows: WeeklySheetRow[]): LintFinding[] {
-  const sectionRank = new Map(bySection(rows).map((g, i) => [g.section, i]))
-  const rowRank = new Map(rows.map(r => [r.id, r.sortOrder]))
+/** 점검 진입점. 목록 순서는 **묶음 → 부류 → 행 → 열**이다(묶음·행 순서 = 입력 순서 — 정렬은 호출부 몫).
+ *  부류를 바깥에 두고 이어붙이기만 하면, 위쪽 묶음에 정리 지적만 있고 아래쪽 묶음에 중복 지적이
+ *  있을 때 아래 묶음이 목록 맨 앞으로 올라와 화면(시트) 순서와 어긋난다. 행·열까지 정렬 키에 넣는
+ *  것은 중복 규칙만 열 바깥으로 도는 탓 — 한 묶음에 행이 여럿이면 그 부류만 순서가 튄다. */
+export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+  const groupRank = new Map(byGroup(rows, groupOf).map((g, i) => [g.key, i]))
+  const rowRank = new Map(rows.map((r, i) => [r.id, i]))
   const cellRank = new Map(WEEKLY_CELL_KEYS.map((k, i) => [k, i]))
-  const at = (f: LintFinding) => sectionRank.get(f.section) ?? sectionRank.size
-  return [...lintDuplicates(rows), ...lintNearDuplicates(rows), ...lintNumbering(rows), ...lintFormat(rows)]
-    .sort((a, b) =>
-      at(a) - at(b)
-      || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]
-      || (rowRank.get(a.rowId) ?? 0) - (rowRank.get(b.rowId) ?? 0)
-      || cellRank.get(a.cellKey)! - cellRank.get(b.cellKey)!)
+  const at = (f: LintFinding) => groupRank.get(f.groupKey) ?? groupRank.size
+  return [
+    ...lintDuplicates(rows, groupOf), ...lintNearDuplicates(rows, groupOf),
+    ...lintNumbering(rows, groupOf), ...lintFormat(rows, groupOf),
+  ].sort((a, b) =>
+    at(a) - at(b)
+    || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]
+    || (rowRank.get(a.rowId) ?? 0) - (rowRank.get(b.rowId) ?? 0)
+    || cellRank.get(a.cellKey)! - cellRank.get(b.cellKey)!)
 }
