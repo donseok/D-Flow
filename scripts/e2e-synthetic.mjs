@@ -29,7 +29,7 @@ import {
 import { excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
-  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, teamView, wbsRows,
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent,
 } from './lib/synthetic.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
@@ -364,17 +364,31 @@ async function main() {
     await viewer.login(addr, pw)
     return viewer
   }
+  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름(시트의 행 머리), WBS = 루트 항목 이름(S2 가 만든 트리의 첫 단 — 접힘과 무관하게 그려진다)
+  const proofNamesOf = async (proj) => ({
+    weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('active', true)).map((x) => x.name),
+    wbs: rows('S10 루트 항목 이름', await admin.sb.from('wbs_items').select('name').eq('project_id', proj.id).is('parent_id', null)).map((x) => x.name),
+  })
   const s10Today = seoulToday()
   const capture = async (proj, viewer) => {
     const out = []
     // ① 응답 본문 — 이번 주 주간 문서 생성(없으면 만들고, 있으면 exists — 쓰기 없이 같은 응답 꼴)
     await admin.http('GET', `/p/${proj.id}/weekly`)
     out.push({ target: '①', path: 'createWeeklyReport', text: JSON.stringify((await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, s10Today, false])).result) })
-    // ② 시트 PPT — 그 프로젝트의 주간 문서 전부
-    const weeks = rows('주차', await admin.sb.from('weekly_reports').select('week_start').eq('project_id', proj.id).order('week_start'))
+    // ② 시트 PPT — 그 프로젝트의 주간 문서 전부. 내용 없는 주차(① 이 방금 만든 이번 주 등)는 앱이 400 '해당 주차에 작성된 내용이 없습니다' 로
+    //    거절한다(SP0 부터 — 출력이 없다). 그 주차는 400 과 문구를 확인해 emptyWeeks 에 적고 출력 대상으로 세지 않는다(과제 24 첫 실행에서 찾은 러너 결함)
+    const emptyWeeks = []
+    const weeks = rows('주차', await admin.sb.from('weekly_reports').select('id, week_start').eq('project_id', proj.id).order('week_start'))
     for (const w of weeks) {
       const path = `/api/report?projectId=${proj.id}&source=sheet&format=pptx&week=${w.week_start}`
-      out.push({ target: '②', path, text: await zipText(await admin.http('GET', path)) })
+      const cells = rows('주차 행', await admin.sb.from('weekly_report_rows').select('this_content, this_issue, next_content, next_issue').eq('report_id', w.id))
+      if (weekRowsHaveContent(cells)) {
+        out.push({ target: '②', path, text: await zipText(await admin.http('GET', path)) })
+      } else {
+        const body = await (await admin.http('GET', path, { expect: 400 })).json()
+        if (body.error !== '해당 주차에 작성된 내용이 없습니다') throw new Fail(`S10 ② 빈 주차 ${w.week_start}: ${JSON.stringify(body)}`)
+        emptyWeeks.push({ week: w.week_start, rows: cells.length, status: 400 })
+      }
     }
     // ③ 기본 갈래 주간 보고서
     for (const path of [`/api/report?projectId=${proj.id}&format=xlsx`, `/api/report?projectId=${proj.id}&format=pptx`]) {
@@ -393,29 +407,33 @@ async function main() {
     }
     // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
     const shell = []
-    for (const path of [`/p/${proj.id}/weekly`, `/p/${proj.id}/wbs`]) {
-      out.push({ target: '⑤', path, text: await (await viewer.http('GET', path)).text() })
+    const proofNames = await proofNamesOf(proj)
+    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`]]) {
+      const text = await (await viewer.http('GET', path)).text()
+      out.push({ target: '⑤', path, text, proof: renderedProof(text, proofNames[kind]) })
       shell.push({ path, text: await (await admin.http('GET', path)).text() })
     }
-    return { out, shell }
+    return { out, shell, emptyWeeks }
   }
   const s10 = {}
   const regR = await registeredOf(R)
   const regC = await registeredOf(C)
   for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
     const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
-    const { out: outs, shell } = await capture(proj, await viewerOf(label, proj.ws))
+    const { out: outs, shell, emptyWeeks } = await capture(proj, await viewerOf(label, proj.ws))
     s10[label] = {
       targets: outs.map((o) => `${o.target} ${o.path}`),
+      emptyWeeks,
       hits: outs.map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, sentinels) }))
         .filter((x) => x.words.length).map((x) => ({ ...x, at: around(outs.find((o) => o.path === x.path && o.target === x.target).text, x.words) })),
       cross: outs.filter((o) => o.target !== '⑤').map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, other.teamCodes) })).filter((x) => x.words.length),
       adminShell: shell.map((h) => ({ path: h.path, words: findSentinels(h.text, sentinels) })).filter((x) => x.words.length)
         .map((x) => ({ ...x, at: around(shell.find((h) => h.path === x.path).text, x.words) })),
+      rendered: outs.filter((o) => o.target === '⑤').map((o) => ({ path: o.path, ...o.proof })),
     }
   }
-  const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].cross.length === 0)
-  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4 부분) 적중: ${JSON.stringify({ R: { hits: s10.R.hits, cross: s10.R.cross }, C: { hits: s10.C.hits, cross: s10.C.cross } })}`)
+  const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].cross.length === 0 && s10[k].rendered.every((r) => r.ok))
+  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
 
   // ── 경계 행렬 SP4 행(W39) — R·C 각각. 설정 없음: 새 빈 프로젝트(단계 이름만)의 주간 생성 → CONFIG_REQUIRED·문서 0, 엑셀 → 표준과 그 표기.
   //    비활성 유형: 둘째 주간 영역에 차주 계획을 적고 비활성화 → 다음 주 이월이 대기(CARRY_PENDING)에 그 영역을 싣고 활성 영역 목록에서 빠진다,

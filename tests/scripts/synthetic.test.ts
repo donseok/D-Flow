@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, teamView, wbsRows,
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent,
 } from '../../scripts/lib/synthetic.mjs'
 import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
@@ -121,5 +121,49 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
   it('가져오기 실행은 importForm 한 곳(명령 id 필수) — 같은 명령 id 를 두 번 보낸다', () => {
     expect(src).toContain('importForm(')
     expect(src).not.toMatch(/append\('mode'/)
+  })
+})
+
+describe('renderedProof — S10 ⑤ 화면이 실제로 그려졌는지(A2-4 리뷰 P3-2 · W1)', () => {
+  it('기대 이름이 모두 HTML 에 있으면 ok, 찾은 것과 빠진 것을 나눠 돌려준다', () => {
+    expect(renderedProof('<td>실험</td><td>데이터</td>', ['실험', '데이터'])).toEqual({ ok: true, found: ['실험', '데이터'], missing: [] })
+    expect(renderedProof('<td>실험</td>', ['실험', '데이터'])).toEqual({ ok: false, found: ['실험'], missing: ['데이터'] })
+  })
+  it('권한 없음·빈 화면(200)은 실패다 — 센티널 0 만으로 초록이 되지 않는다', () => {
+    expect(renderedProof('<p>이 프로젝트를 볼 권한이 없습니다</p>', ['실험']).ok).toBe(false)
+  })
+  it('기대 이름이 없으면(빈 목록·공백 이름뿐) 판정할 수 없어 실패다', () => {
+    expect(renderedProof('아무 내용', []).ok).toBe(false)
+    expect(renderedProof('아무 내용', ['', '  ']).ok).toBe(false)
+  })
+})
+
+describe('e2e-synthetic.mjs — S10 ⑤ 의 그려짐 단언(W1)', () => {
+  const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+  it('주간 HTML 은 활성 영역 이름, WBS HTML 은 루트 항목 이름으로 확인하고 S10 판정이 그것을 요구한다', () => {
+    expect(src).toMatch(/from\('project_areas'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.eq\('active', true\)/)
+    expect(src).toMatch(/from\('wbs_items'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.is\('parent_id', null\)/)
+    expect(src).toMatch(/renderedProof\(text, /)
+    expect(src).toMatch(/s10Ok = \['R', 'C'\]\.every\(\(k\) => [^\n]*rendered\.every\(\(r\) => r\.ok\)/)
+  })
+})
+
+describe('weekRowsHaveContent — S10 ② 의 빈 주차(과제 24 첫 실행에서 찾은 러너 결함)', () => {
+  it('네 칸 가운데 trim 뒤 내용이 하나라도 있으면 참(앱 hasContent(ALL_CELLS) 와 같은 술어)', () => {
+    const empty = { this_content: '', this_issue: ' ', next_content: '\n', next_issue: '' }
+    expect(weekRowsHaveContent([empty, empty])).toBe(false)
+    expect(weekRowsHaveContent([])).toBe(false)
+    expect(weekRowsHaveContent([empty, { ...empty, next_issue: '이슈' }])).toBe(true)
+  })
+})
+
+describe('e2e-synthetic.mjs — S10 ② 는 빈 주차를 앱의 400(내용 없음)으로 확인하고 출력 대상으로 세지 않는다', () => {
+  const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+  it('주차 행의 네 칸을 읽어 내용 있는 주차만 PPT 200 을 기대하고, 빈 주차는 400 과 그 문구를 기록한다', () => {
+    expect(src).toMatch(/from\('weekly_report_rows'\)\.select\('this_content, this_issue, next_content, next_issue'\)/)
+    expect(src).toMatch(/weekRowsHaveContent\(/)
+    expect(src).toContain("{ expect: 400 }")
+    expect(src).toContain("'해당 주차에 작성된 내용이 없습니다'")
+    expect(src).toMatch(/emptyWeeks/)
   })
 })

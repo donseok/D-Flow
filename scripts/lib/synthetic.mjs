@@ -80,6 +80,27 @@ export function wbsRows(depth, teams) {
   return rows
 }
 
+/**
+ * S10 ⑤ 화면 HTML 이 실제로 그 프로젝트의 내용을 그렸는지 — 기대 이름(주간 = 활성 영역 이름, WBS = 루트 항목 이름)이 모두 본문에 있어야 ok.
+ * 권한 없음·모듈 꺼짐·빈 화면이 200 으로 와도 센티널 0 이면 초록이던 틈을 닫는다(A2-4 리뷰 P3-2). 기대 이름이 없으면 판정할 수 없어 실패다.
+ * @param {string} text @param {readonly string[]} names @returns {{ ok: boolean, found: string[], missing: string[] }}
+ */
+export function renderedProof(text, names) {
+  const want = names.map((n) => String(n ?? '').trim()).filter(Boolean)
+  const found = want.filter((n) => text.includes(n))
+  const missing = want.filter((n) => !text.includes(n))
+  return { ok: want.length > 0 && missing.length === 0, found, missing }
+}
+
+/**
+ * 주간 문서 행(weekly_report_rows 네 칸, snake) 가운데 내용이 있는가 — 앱 hasContent(row, ALL_CELLS)(src/lib/domain/weeklySheet.ts)와 같은 술어.
+ * 시트 PPT 는 내용 없는 주차에 400 '해당 주차에 작성된 내용이 없습니다' 를 돌려준다(SP0 부터의 동작) — S10 ② 가 그 주차를 가른다.
+ * @param {ReadonlyArray<Record<string, string | null>>} rows @returns {boolean}
+ */
+export function weekRowsHaveContent(rows) {
+  return rows.some((r) => ['this_content', 'this_issue', 'next_content', 'next_issue'].some((c) => String(r[c] ?? '').trim() !== ''))
+}
+
 /** addProjectTeam 이 만든 팀의 기대 모양 — 이름은 code 와 같고(개명은 A2·B — D37) 순서는 0부터 만든 순 @param {readonly string[]} codes */
 export function expectedTeams(codes) {
   return codes.map((code, i) => ({ code, name: code, sortOrder: i, active: true }))
