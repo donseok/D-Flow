@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ANNOUNCEMENT_META, ANNOUNCEMENT_CATEGORIES,
-  sortAnnouncements, isUnread, countUnread, summarizeAnnouncements,
+  sortAnnouncements, isUnread, countUnread, summarizeAnnouncements, isoMicros,
   announcementStatus, isPublishedNow,
   announcementMilestones, mergeMilestonePoints, validateAnnouncementInput,
 } from '@/lib/domain/announcements'
@@ -68,6 +68,22 @@ describe('isUnread / countUnread', () => {
 
   it('빈 배열은 0', () => {
     expect(countUnread([], null)).toBe(0)
+  })
+})
+
+describe('isoMicros — DB 시각(µs)을 JS Date(ms)로 자르지 않고 비교한다', () => {
+  it('PostgREST 의 µs 시각과 toISOString 의 ms 시각을 같은 축의 마이크로초로 바꾼다', () => {
+    expect(isoMicros('2026-10-01T03:22:44.483017+00:00')).toBe(isoMicros('2026-10-01T03:22:44.483Z')! + BigInt(17))
+    expect(isoMicros('2026-10-01T12:22:44.5+09:00')).toBe(isoMicros('2026-10-01T03:22:44.500000Z'))
+    expect(isoMicros('2026-10-01T03:22:44Z')).toBe(BigInt(Date.UTC(2026, 9, 1, 3, 22, 44)) * BigInt(1000))
+  })
+  it('ISO 꼴이 아니면 null — Date.parse 가 받는 느슨한 문자열을 받지 않는다', () => {
+    for (const bad of ['Oct 1 2026', '2026-10-01', '2026-10-01T03:22:44.1234567Z', '', 'NaN']) expect(isoMicros(bad)).toBeNull()
+  })
+  it('isUnread 는 같은 밀리초 안의 뒤 공지를 안읽음으로 본다(SQL 배지와 같은 정밀도)', () => {
+    const a = ann('a', '2026-10-01T03:22:44.483017+00:00')
+    expect(isUnread(a, '2026-10-01T03:22:44.483Z')).toBe(true)
+    expect(isUnread(a, '2026-10-01T03:22:44.483017+00:00')).toBe(false)
   })
 })
 

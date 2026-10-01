@@ -52,9 +52,27 @@ export function isPublishedNow(a: Announcement, todayIso: string): boolean {
 }
 
 /** 워터마크(마지막으로 목록을 본 시각) 이후 생성된 공지인가. null 워터마크 = 전부 안읽음. */
+const ISO_TS = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/
+
+/**
+ * ISO 시각 → 에포크 마이크로초. DB(timestamptz)는 µs 정밀도이고 JS Date 는 ms 라, 둘을 Date.parse 로 비교하면 같은 밀리초 안의
+ * 뒤 공지를 놓친다(워터마크를 ms 로 잘라 저장하면 SQL 배지 `created_at > last_seen_at` 가 마지막 공지를 영원히 안읽음으로 센다).
+ * ISO 꼴(초까지 필수, 소수 1~6자리, Z 또는 ±hh:mm)이 아니면 null — Date.parse 가 받는 느슨한 문자열은 받지 않는다.
+ */
+export function isoMicros(iso: string): bigint | null {
+  const m = ISO_TS.exec(iso)
+  if (!m) return null
+  const ms = Date.parse(`${m[1]}${m[3]}`)
+  if (Number.isNaN(ms)) return null
+  return BigInt(ms) * BigInt(1000) + BigInt((m[2] ?? '').padEnd(6, '0'))
+}
+
 export function isUnread(a: Announcement, lastSeenAt: string | null): boolean {
   if (lastSeenAt === null) return true
-  return Date.parse(a.createdAt) > Date.parse(lastSeenAt)
+  const created = isoMicros(a.createdAt)
+  const seen = isoMicros(lastSeenAt)
+  if (created === null || seen === null) return Date.parse(a.createdAt) > Date.parse(lastSeenAt)   // ISO 가 아닌 옛 값 — 예전 규칙
+  return created > seen
 }
 
 export function countUnread(items: Announcement[], lastSeenAt: string | null): number {

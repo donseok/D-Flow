@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { getTopAnnouncements } from '@/lib/data/announcements'
 import type { AnnouncementSummary } from '@/lib/domain/types'
 import { expandMeetings } from '@/lib/domain/meetings'
-import { composeAnnouncementFromMeeting, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
+import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
 import type { MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 import { seoulToday } from '@/lib/domain/dates'
 
@@ -140,7 +140,10 @@ async function advanceSeenWatermark(
     .eq('project_id', projectId)
     .maybeSingle()
   const current = existing?.last_seen_at as string | undefined
-  if (current && Date.parse(current) >= Date.parse(seenAt)) return { ok: true }
+  // µs 로 비교한다 — ms 로 비교하면 예전 코드가 잘라 둔 워터마크(.483)가 같은 공지의 µs 값(.483017)과 '같다'고 보여 앞으로 가지 않는다
+  const cur = current ? isoMicros(current) : null
+  const next = isoMicros(seenAt)
+  if (cur !== null && next !== null && cur >= next) return { ok: true }
   const { error } = await sb.from('announcement_seen').upsert(
     { user_id: userId, project_id: projectId, last_seen_at: seenAt },
     { onConflict: 'user_id,project_id' },
@@ -162,10 +165,10 @@ export async function markAnnouncementsSeen(
   if (!user) return { ok: false, error: '로그인 필요' }
   const mod = await requireModule({ projectId }, 'announcements')
   if (!mod.ok) return { ok: false, error: mod.error }
-  const ts = Date.parse(seenAt)
-  if (Number.isNaN(ts)) return { ok: false, error: '잘못된 시각입니다.' }
-  // 미래 시각 방지(클라이언트 값 신뢰 금지) — now 로 클램프
-  const clamped = new Date(Math.min(ts, Date.now())).toISOString()
+  const micros = typeof seenAt === 'string' ? isoMicros(seenAt) : null
+  if (micros === null) return { ok: false, error: '잘못된 시각입니다.' }
+  // 미래 시각 방지(클라이언트 값 신뢰 금지) — now 로 클램프. 과거 시각은 µs 그대로 둔다(DB created_at 과 같은 정밀도)
+  const clamped = micros > BigInt(Date.now()) * BigInt(1000) ? new Date().toISOString() : seenAt
   return advanceSeenWatermark(projectId, user.id, clamped)
 }
 
