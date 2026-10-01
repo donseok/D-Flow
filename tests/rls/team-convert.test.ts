@@ -459,6 +459,43 @@ describe('convert_inherited_teams — 두 연결(커밋)', () => {
     }
     await assertCleaned()
   })
+  it('Z1 경합 ④ — 전환이 참조를 옮긴 뒤·커밋 전에 같은 키를 on conflict 로 다시 넣는 쓰기는 기다렸다가 TEAM_SCOPE_PROJECT_OWNED 로 거부된다(A1 최종 리뷰 보안 P2)', async () => {
+    // 옛 판정은 "이미 있는 키면 통과"를 잠금 앞에 두어, 전환이 아직 커밋하지 않은 스냅숏의 옛 행을 보고 통과한 뒤 유일 검사에서 전환 커밋을
+    // 기다렸다가 — 옛 행은 새 키로 옮겨 갔으므로 — 공용 팀 참조를 새로 넣었다(같은 영역에 공용 RES·전용 RES 의 D4 분열)
+    let s1: PoolClient | undefined
+    let s2: PoolClient | undefined
+    try {
+      await seedRace()
+      await pool.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'primary')`, [AREA3, RES3])
+      s1 = await pool.connect()
+      s2 = await pool.connect()
+      const s2Pid = (await s2.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0].pid
+      await s1.query('begin')
+      await s2.query('begin')
+      expect((await s1.query(CONVERT, [F.users.platform, P3])).rows[0].r)
+        .toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0 } })
+      let settled = false
+      // 영역·명단 RPC 의 재저장 꼴 — 같은 키 insert … on conflict do update
+      const write = s2.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'support')
+                              on conflict (area_id, team_id) do update set kind = excluded.kind`, [AREA3, RES3]).then(
+        () => null as unknown, (e: unknown) => { if (e instanceof DatabaseError) return e; throw e },
+      ).finally(() => { settled = true })
+      expect(await waitBlocked(s1, s2Pid, () => settled), '재저장이 전환의 커밋을 기다린다').toBe(true)
+      await s1.query('commit')
+      expect(await write).toMatchObject({ code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' })
+      await s2.query('rollback')
+      const { rows } = await s1.query<{ project_id: string | null }>(
+        'select t.project_id from public.area_teams art join public.teams t on t.id = art.team_id where art.area_id = $1', [AREA3])
+      expect(rows).toEqual([{ project_id: P3 }])   // 전환이 옮긴 전용 팀 참조 하나뿐 — 공용 팀 참조가 되살아나지 않았다
+    } finally {
+      await s1?.query('rollback').catch(() => undefined)
+      await s2?.query('rollback').catch(() => undefined)
+      s1?.release()
+      s2?.release()
+      await cleanup()
+    }
+    await assertCleaned()
+  })
 })
 
 describe('카탈로그 불변식 — teams 를 가리키는 열 = 전환 RPC 가 옮기는 열', () => {

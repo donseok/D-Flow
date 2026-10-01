@@ -198,3 +198,25 @@
 에이전트가 일한 시간은 원장에 시간 단위로 남지 않았다 — 구현자 1 + 리뷰어 1~2 가 대부분의 구간에서 병렬이었으므로 에이전트 시간 합은 경과보다 크다(추정 1.5~2.5배).
 스펙·계획(스펙 커밋 16:28·계획 18:25)과 그 앞의 실측·비평은 이 표에 없다. K17 의 넘침 판단(§2.5 ③ 끝 — A1-3 구현 끝 20:10)은 원장에 따로 적히지 않았다 — 그 시점까지 착수 뒤 1.7시간으로
 3.0주 상한에 견줄 필요가 없었고, 넘긴 것은 없다(T14 의 `copyGlobalTeams` → B 는 기본값).
+
+# A2 — A1 이월 수정(A1 최종 리뷰 Z1~Z5)
+
+## 리허설 — `*_team_scope_lock_order`(Z1, 보안 P2)
+
+0014 는 origin/main 에 있어 원문을 고치지 않고 `team_ref_owned_scope` 하나를 바꾸는 새 마이그레이션(0016)으로 냈다(컨트롤러 판정).
+`tests/rls/team-convert.test.ts` 의 경합 ④(전환이 참조를 옮긴 뒤·커밋 전의 같은 키 on conflict 재삽입)는 0016 없이 **빨강**(쓰기가 성공 —
+공용 RES 참조가 되살아남)으로 재현했고, 0016 적용 뒤 초록이다(team-convert 3회 반복 15/15).
+
+| 파일 | 리허설 | 일시 | 결과 |
+|---|---|---|---|
+| `*_team_scope_lock_order` | R(카탈로그) | 2026-10-02 02:56 KST | `diff r b` 불일치 0 · 기본 권한 diff 없음 · 재적용 `diff f a` 불일치 0 · ② `TEAM_SCOPE_LOCK_ORDER_POSTCHECK` 통과 |
+| `*_team_scope_lock_order` | 사후검사 민감도(옛 본문으로 되돌린 뒤 ② 만) | 2026-10-02 02:57 KST | `TEAM_SCOPE_LOCK_ORDER_POSTCHECK: 잠금 앞에서 판정하는 면제가 있다: from public.item_owners x, from public.project_member_teams x, from public.area_teams x` 로 멈춤 |
+| 0013~0016 | 연쇄 롤백(0016→0015→0014→0013) = `--version 0012`, 다시 넷 적용 = 전체 | 2026-10-02 02:55 KST | 두 `diff` 모두 불일치 0 |
+| 0013~0016 | 데이터 업그레이드(seed_wide → 0013~0016 → 전환 스모크 → 0016 롤백 → 스모크 → 0016 재적용 → 스모크, authz_carry 스모크) | 2026-10-02 02:56 KST | 첫 적용 `영역 신설 8, 재사용 2, 병합으로 지운 행 5, 머리표 4, 남은 행 11` · 상속 프로젝트 `…5b04-000000000c03` 전환 `{"moved": {"invites": 1, "area_teams": 1, "item_owners": 2, "project_member_teams": 2}, "teams": 3, "status": "converted"}` · 스모크 전부 통과 |
+| CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up` → `test:rls` | 2026-10-02 02:58 KST | max(version) 0016 · 30 파일 382 초록·건너뜀 0 |
+
+## 머지 체크리스트(A2 반영 때)
+
+- 번호를 공유했던 로컬 스택(레인 B 의 `0013_account_preferences` 를 적용한 DB 등)은 `db:reset` 으로 맞춘다 — `migration up` 은 같은 번호를 적용된 것으로 보고
+  SP4 파일을 건너뛴다. 0016 은 SP4 가 쓴다(레인 B 의 account_preferences 는 rebase 때 다음 빈 번호로 — 컨트롤러가 레인 B 원장에 알림).
+- 메인 스택(사용자 데이터)에 0013 이후를 적용할 때는 0016 까지 함께(0014 만 적용하면 경합 창이 열린 트리거가 남는다).
