@@ -23,15 +23,16 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin, requireWorkspaceAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/mail/transport', () => ({ getTransport }))
-// 팀 마스터는 모듈 로드 시 DB 를 읽는다(캐시 프라이밍). 여기서는 이 프로젝트의 팀 목록만 필요하므로
-// 실물을 태우지 않는다 — 태우면 TTL 만료 시점에 createAdminClient 호출 단언이 흔들린다.
-vi.mock('@/lib/teams/master', () => ({
-  teamsForProjectSync: () => [
-    { id: 'team-1', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: 'p1' },
-    { id: 'team-2', code: 'MES', sortOrder: 1, active: true, progressVisible: true, projectId: 'p1' },
-    { id: 'team-off', code: 'OLD', sortOrder: 2, active: false, progressVisible: true, projectId: 'p1' },
+// 팀은 요청 범위 원천(SP4 A2)에서 읽는다 — 이 프로젝트의 팀 목록만 필요하므로 목으로. 케이스가 실패·개명을 바꿔 건다.
+const teamsSrc = vi.hoisted(() => ({
+  rows: () => [
+    { id: 'team-1', code: 'PMO', name: 'PMO', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: 'p1', workspaceId: 'ws-1' },
+    { id: 'team-2', code: 'MES', name: 'MES', color: '#6b7280', sortOrder: 1, active: true, progressVisible: true, projectId: 'p1', workspaceId: 'ws-1' },
+    { id: 'team-off', code: 'OLD', name: 'OLD', color: '#6b7280', sortOrder: 2, active: false, progressVisible: true, projectId: 'p1', workspaceId: 'ws-1' },
   ],
+  projectTeams: vi.fn(),
 }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: teamsSrc.projectTeams }))
 
 import { revalidatePath } from 'next/cache'
 import {
@@ -66,6 +67,8 @@ const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL
 const originalDomains = process.env.INVITE_ALLOWED_DOMAINS
 
 beforeEach(() => {
+  teamsSrc.projectTeams.mockReset()
+  teamsSrc.projectTeams.mockImplementation(async () => teamsSrc.rows())
   createAdminClient.mockReset()
   createAdminClient.mockImplementation(guardThrow)
   requireProjectAdmin.mockReset()
@@ -432,6 +435,14 @@ describe('createProjectInvite 입력 검증 — 저장 전에 막는다', () => 
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
+  it('팀 원천 실패는 초대를 만들지 않는다 — 선행 조회 실패는 중단(SP4 A2)', async () => {
+    teamsSrc.projectTeams.mockRejectedValueOnce(new Error('teams down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await createProjectInvite(P1, { ...VALID, teamIds: ['team-1'] })).toEqual({ ok: false, error: '초대를 확인할 수 없어 중단했습니다.' })
+    expect(createAdminClient).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+
   it('알 수 없는 권한 값은 거부한다', async () => {
     const res = await createProjectInvite(P1, { ...VALID, accessRole: 'owner' as never })
     expect(res).toEqual({ ok: false, error: '알 수 없는 권한입니다.' })
@@ -527,9 +538,19 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     expect(res.row.url).toBe(res.url)
     expect(res.row.teamCodes).toEqual(['MES', 'PMO'])
     expect(send).toHaveBeenCalledTimes(1)
-    // 메일에는 팀 코드 대신 팀 이름 목록이 실린다(팀 이름은 코드와 동기).
+    // 메일에는 팀 코드 대신 팀 이름 목록이 실린다(여기서는 이름 = 코드).
     expect(send.mock.calls[0]![0].text).toContain('팀: MES, PMO')
     expect(revalidatePath).toHaveBeenCalledWith(`/p/${P1}/members`)
+  })
+
+  it('개명한 팀은 메일에 표시 이름으로 — 행의 팀은 code 그대로(SP4 D37)', async () => {
+    teamsSrc.projectTeams.mockResolvedValueOnce(teamsSrc.rows().map((t) => (t.id === 'team-1' ? { ...t, name: '기획팀' } : t)))
+    const { client } = createClient()
+    createAdminClient.mockReturnValue(client as never)
+    const res = await createProjectInvite(P1, { ...VALID, teamIds: ['team-2', 'team-1'] })
+    if (!res.ok) throw new Error('발급이 실패했다')
+    expect(res.row.teamCodes).toEqual(['MES', 'PMO'])
+    expect(send.mock.calls[0]![0].text).toContain('팀: MES, 기획팀')
   })
 
   it('팀을 고르지 않으면 team_ids 는 null — 합류해도 팀을 건드리지 않는다', async () => {

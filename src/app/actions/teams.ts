@@ -15,8 +15,16 @@ import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
+import { checkTeamRename } from '@/lib/domain/teamName'
+import { failWith } from '@/lib/errors/dbFail'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
+
+// DB 원문은 로그로만(SP4 D21) — 응답에는 고정 문구. 'use server' 라 export 하지 않는다.
+const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_SEED_FOLDER = '팀은 생성됐지만 회의록 기본 폴더를 만들지 못했습니다 — 관리자에게 알리세요.'
 
 // 'use server' 모듈이라 export 하지 않는다(비동기 함수만 내보낼 수 있다). PostgREST 원문은 로그에만 남긴다.
 const ERR_TEAMS_LIST = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
@@ -38,19 +46,19 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   // workspace_id 도 함께 건다(0003) — 다른 워크스페이스의 동명 전역 팀을 오탐하지 않는다.
   const dup = await admin.from('teams').select('id').eq('code', norm.code).is('project_id', null)
     .eq('workspace_id', workspaceId).maybeSingle()
-  if (dup.error) return { ok: false, error: `팀 조회 실패: ${dup.error.message}` }
+  if (dup.error) return { ok: false, error: failWith('teams.add', dup.error, ERR_TEAM_LOOKUP) }
   if (dup.data) return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }
 
   // 정렬 순번도 워크스페이스별로 잰다 — 안 그러면 다른 워크스페이스의 순번을 이어받는다.
   const max = await admin.from('teams')
     .select('sort_order').is('project_id', null).eq('workspace_id', workspaceId)
     .order('sort_order', { ascending: false }).limit(1).maybeSingle()
-  if (max.error) return { ok: false, error: `팀 조회 실패: ${max.error.message}` }
+  if (max.error) return { ok: false, error: failWith('teams.add', max.error, ERR_TEAM_LOOKUP) }
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
   const ins = await admin.from('teams')
     .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
-  if (ins.error) return { ok: false, error: `팀 생성 실패: ${ins.error.message}` }
+  if (ins.error) return { ok: false, error: failWith('teams.add', ins.error, ERR_TEAM_CREATE) }
 
   // 자동 편철 앵커(0043 계약): 팀코드 동명 시드 루트 폴더. 실패해도 팀은 유지하되 관리자에게
   // 표시한다(편철은 미분류 폴백이라 치명적이진 않지만 조용히 넘기지 않는다 — 에러 3원칙).
@@ -60,27 +68,24 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   const seed = await admin.from('minute_folders')
     .select('id').is('parent_id', null).is('created_by', null).is('project_id', null).eq('name', norm.code)
     .eq('workspace_id', workspaceId).maybeSingle()
-  let seedError: string | null = seed.error ? seed.error.message : null
+  let seedError: unknown = seed.error ?? null
   if (!seed.error && !seed.data) {
     // 미지정 루트는 워크스페이스별이다(0006) — 트리거가 채울 부모·프로젝트가 없으니 명시한다.
     const folder = await admin.from('minute_folders')
       .insert({ name: norm.code, parent_id: null, created_by: null, project_id: null, workspace_id: workspaceId, sort: 100 + sortOrder })
-    if (folder.error) seedError = folder.error.message
+    if (folder.error) seedError = folder.error
   }
 
   await refreshTeams()
   revalidatePath('/admin/teams')
-  if (seedError) {
-    console.error('[teams] 시드 폴더 생성 실패:', seedError)
-    return { ok: false, error: `팀은 생성됐지만 회의록 기본 폴더 생성에 실패했습니다: ${seedError}` }
-  }
+  if (seedError) return { ok: false, error: failWith('teams.seedFolder', seedError, ERR_SEED_FOLDER) }
   return { ok: true }
 }
 
 /** 활성/진척현황 표시/정렬 변경. */
 export async function updateTeam(
   id: string,
-  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number },
+  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number; name?: string },
 ): Promise<TeamActionResult> {
   // 인증을 행 조회보다 먼저 — 비로그인 호출자가 ERR_MISSING(없는 id)과 ERR_ANON(있는 id)으로 팀 id 존재를 가려내지 못하게.
   let actor
@@ -106,6 +111,17 @@ export async function updateTeam(
   if (typeof patch.active === 'boolean') row.active = patch.active
   if (typeof patch.progressVisible === 'boolean') row.progress_visible = patch.progressVisible
   if (typeof patch.sortOrder === 'number' && Number.isInteger(patch.sortOrder)) row.sort_order = patch.sortOrder
+  if (patch.name !== undefined) {
+    // 개명(D37) — 공용 팀은 머리 낱말만 예약어(여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — K14), 겹침은 그 워크스페이스 공용 팀끼리
+    const sib = await admin.from('teams').select('id, code, name').is('project_id', null).eq('workspace_id', target.workspace_id)
+    if (sib.error) return { ok: false, error: failWith('teams.rename', sib.error, ERR_TEAM_LOOKUP) }
+    const siblings = (sib.data ?? []) as { id: string; code: string; name: string }[]
+    const self = siblings.find((s) => s.id === id)
+    if (!self) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
+    const checked = checkTeamRename({ name: patch.name, selfId: id, selfCode: self.code, siblings, reserved: EXCEL_HEADER_WORDS })
+    if (!checked.ok) return checked
+    row.name = checked.name
+  }
   if (Object.keys(row).length === 0) return { ok: false, error: '변경할 항목이 없습니다.' }
   // .is('project_id', null)·.eq('workspace_id') 를 함께 건다 — 가드가 판정한 그 워크스페이스의 공용 행만 만진다
   // (조회와 쓰기 사이에 행이 바뀌어도 판정 밖의 행을 건드리지 않는다; projectTeams.ts 의 updateProjectTeam 과 대칭).
@@ -113,7 +129,7 @@ export async function updateTeam(
   // (조용한 no-op 금지 관례, revokeProjectInvite 와 동일).
   const upd = await admin.from('teams').update(row).eq('id', id).is('project_id', null)
     .eq('workspace_id', target.workspace_id).select('id')
-  if (upd.error) return { ok: false, error: `팀 수정 실패: ${upd.error.message}` }
+  if (upd.error) return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
   await refreshTeams()
   revalidatePath('/admin/teams')
@@ -126,9 +142,13 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
   | { ok: true; rows: Array<{ id: string; code: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
   | { ok: false; error: string }
 > {
-  const g = typeof workspaceId === 'string' && workspaceId
-    ? await requireWorkspaceAdmin(workspaceId)
-    : { ok: false as const, error: ERR_WORKSPACE_REQUIRED }
+  // 대상 워크스페이스가 비면 가드 전에 거부한다(가드는 null 을 슈퍼유저에게 통과시킨다). g 는 가드 결과만 담는다 — 원문 가드(no-raw-db-errors)가
+  // 이 파일의 g.error 를 가드 출처로 판정한다(SP4 A2 에서 가드 대상이 되며 삼항의 리터럴 대안을 분기로 뺐다 — 동작 그대로)
+  if (typeof workspaceId !== 'string' || !workspaceId) {
+    console.error('[teams] 관리 목록 거부:', ERR_WORKSPACE_REQUIRED)
+    return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  }
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) {
     console.error('[teams] 관리 목록 거부:', g.error)
     return { ok: false, error: g.error }

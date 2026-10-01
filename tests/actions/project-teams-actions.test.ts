@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 프로젝트 팀은 이 프로젝트 관리자만 손댈 수 있다(0071 §4) — 전역 teams.ts(슈퍼유저 전용)와는
 // 가드가 다르고, 회의록 시드 폴더도 만들지 않는다(스펙 §5) — from('minute_folders') 호출 자체를
 // 차단해 그 계약을 무너뜨리는 회귀를 즉시 실패로 드러낸다.
-const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, teamsForWorkspaceSync } = vi.hoisted(() => {
+const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams } = vi.hoisted(() => {
   const db = {
     teams: [] as Array<Record<string, unknown>>,
     inserted: { teams: [] as Array<Record<string, unknown>> },
@@ -58,13 +58,15 @@ const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, tea
   }))
   const refreshTeams = vi.fn(async () => true)
   const requireProjectAdmin = vi.fn()
-  const teamsForWorkspaceSync = vi.fn()
-  return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, teamsForWorkspaceSync }
+  const workspaceTeams = vi.fn()
+  return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams, teamsForWorkspaceSync }))
+vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
+// 공용 팀 복사의 원천(SP4 A2 — 요청 범위, service_role 로)
+vi.mock('@/lib/teams/source', () => ({ workspaceTeams }))
 // 팀 예약어는 그 프로젝트의 단계 이름까지(SP4 D38) — 설정 해석기는 목이라 admin 의 "teams 만" 계약에 걸리지 않는다
 const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
@@ -85,7 +87,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
     createAdminClient.mockClear()
     refreshTeams.mockClear()
     requireProjectAdmin.mockReset()
-    teamsForWorkspaceSync.mockReset()
+    workspaceTeams.mockReset()
     cfg.getProjectConfig.mockReset()
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
   })
@@ -191,7 +193,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
 
     it('전역 활성 팀이 0개면 거부(복사할 것이 없음) — 빈 insert 를 성공으로 위장하지 않는다', async () => {
       asAdmin()
-      teamsForWorkspaceSync.mockReturnValue([])
+      workspaceTeams.mockResolvedValue([])
       const r = await copyGlobalTeams('p1')
       expect(r).toEqual({ ok: false, error: '복사할 전역 팀이 없습니다.' })
       expect(db.inserted.teams).toHaveLength(0)
@@ -200,7 +202,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
 
     it('전역 팀이 전부 비활성이어도 거부(활성 0건과 동치)', async () => {
       asAdmin()
-      teamsForWorkspaceSync.mockReturnValue([
+      workspaceTeams.mockResolvedValue([
         { id: 'g-old', code: 'OLD', sortOrder: 0, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
       ])
       const r = await copyGlobalTeams('p1')
@@ -210,7 +212,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
 
     it('성공: 전역 활성 팀만 복사하고 MDM 의 progressVisible=false 를 보존한다', async () => {
       asAdmin()
-      teamsForWorkspaceSync.mockReturnValue([
+      workspaceTeams.mockResolvedValue([
         { id: 'g-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
         { id: 'g-mdm', code: 'MDM', sortOrder: 4, active: true, progressVisible: false, projectId: null, workspaceId: 'ws-1' },
         { id: 'g-old', code: 'OLD', sortOrder: 5, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
@@ -226,12 +228,12 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(db.inserted.teams.some(t => t.code === 'OLD')).toBe(false)
       expect(refreshTeams).toHaveBeenCalled()
       // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀 — 다른 워크스페이스의 공용 팀을 끌어오지 않는다(SP2 §4.2).
-      expect(teamsForWorkspaceSync).toHaveBeenCalledWith('ws-1')
+      expect(workspaceTeams).toHaveBeenCalledWith('ws-1', { client: expect.objectContaining({ from: expect.any(Function) }) })
     })
 
-    it('팀 마스터를 한 번도 읽지 못했으면 오류 — "복사할 팀 없음" 으로 위장하지 않는다', async () => {
+    it('팀 원천 실패는 오류 — "복사할 팀 없음" 으로 위장하지 않는다', async () => {
       asAdmin()
-      teamsForWorkspaceSync.mockImplementation(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+      workspaceTeams.mockRejectedValue(new Error('팀 목록을 불러오지 못했습니다.'))
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const r = await copyGlobalTeams('p1')
       expect(r).toEqual({ ok: false, error: '팀 기준정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.' })

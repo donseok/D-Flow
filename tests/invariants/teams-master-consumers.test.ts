@@ -15,14 +15,13 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/app/(app)/p/[projectId]/layout.tsx',
   'src/app/(app)/p/[projectId]/members/page.tsx',
   'src/app/actions/project.ts',
-  'src/app/actions/projectInvites.ts',
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
   'src/app/api/export/route.ts',
   'src/components/dashboard/DashboardView.tsx',
 ]
 /** 옛 캐시에서 refreshTeams 만 가져오는 파일 — 화면 팀 목록(레이아웃)의 갱신 신호라 B 까지 남는다(계획 P20) */
-export const REFRESH_ONLY: readonly string[] = ['src/app/actions/project.ts']
+export const REFRESH_ONLY: readonly string[] = ['src/app/actions/project.ts', 'src/app/actions/projectTeams.ts', 'src/app/actions/teams.ts']
 
 const consumers = () => walk(join(CWD, 'src'))
   .filter((f) => /\.(ts|tsx)$/.test(f))

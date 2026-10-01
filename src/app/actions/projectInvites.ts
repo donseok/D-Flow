@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadInviteDomains } from '@/lib/data/inviteDomains'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import type { Team } from '@/lib/domain/teams'
 import { ACCESS_ROLE, isAdminAccessRole } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
@@ -218,11 +219,19 @@ export async function createProjectInvite(
   if (!email) return { ok: false, error: ERR_EMAIL }
   // 팀은 이 프로젝트에서 고를 수 있는 활성 팀만(resolveTeamsForProject 규칙) — 트리거가 워크스페이스 범위를 다시 본다.
   if (!Array.isArray(input.teamIds)) return { ok: false, error: ERR_TEAM }
-  const selectable = teamsForProjectSync(projectId).filter(t => t.active)
+  // 팀은 요청 범위 원천에서(SP4 A2). 조회 실패는 쓰기 전 선행 조회 실패라 중단한다(3원칙 ②) — 빈 목록으로 두면 고른 팀이 전부 '없는 팀'이 된다
+  let selectable: Team[]
+  try {
+    selectable = (await projectTeams(projectId)).filter(t => t.active)
+  } catch (e) {
+    console.error('[createProjectInvite] 팀 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: ERR_LOOKUP }
+  }
   const teams = [...new Set(input.teamIds)].map(id => selectable.find(t => t.id === id))
   if (teams.some(t => !t)) return { ok: false, error: ERR_TEAM }
   const teamIds = teams.map(t => t!.id)
   const teamCodes = teams.map(t => t!.code)
+  const teamNames = teams.map(t => t!.name)
   const roleLabel = typeof input.roleLabel === 'string' && input.roleLabel.trim() ? input.roleLabel.trim() : null
   const days = normalizeInviteDays(input.days ?? DEFAULT_INVITE_DAYS)
   if (days === null) return { ok: false, error: ERR_DAYS }
@@ -290,8 +299,8 @@ export async function createProjectInvite(
   const mail = await sendInviteMail(admin, {
     to: email, projectName: String(project.name ?? ''), workspaceId: project.workspace_id as string,
     inviterId: g.actor.userId, url, expiresAt,
-    // 팀 이름은 코드와 동기(teams.name = code) — 팀 마스터의 코드를 그대로 싣는다.
-    teamNames: teamCodes,
+    // 메일에는 팀의 표시 이름(개명 — SP4 D37)을 싣는다
+    teamNames,
   })
 
   revalidatePath(`/p/${projectId}/members`)

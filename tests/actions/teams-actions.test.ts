@@ -144,6 +144,18 @@ describe('팀 관리 서버액션', () => {
     expect(db.updated).toHaveLength(0)
   })
 
+  it('addTeam: 조회 실패는 고정 문구 — DB 원문을 싣지 않는다(SP4 D21)', async () => {
+    asAdmin()
+    db.lookupError = { message: 'relation "teams" boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await addTeam(WS, '신팀')
+    expect(r).toEqual({ ok: false, error: '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(r)).not.toContain('boom')
+    expect(db.inserted.teams).toHaveLength(0)
+    db.lookupError = null
+    err.mockRestore()
+  })
+
   // 행 조회보다 인증이 먼저 — 아니면 비로그인 호출자가 ERR_MISSING(없는 id)과 ERR_ANON(있는 id)으로 팀 id 존재를 가려낸다.
   it('updateTeam: 비로그인은 행 조회 없이 ERR_ANON — 있는 id·없는 id 가 같은 응답, 권한 조회 실패는 ERR_LOOKUP', async () => {
     db.teams = [{ id: 't1', code: 'PMO', project_id: null, workspace_id: WS }]

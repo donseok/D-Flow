@@ -7,7 +7,7 @@ export interface Team {
   id: string
   /** 식별 코드(teams.code) — 불변. 담당·엑셀 팀 열·필터·봇 대조가 이 값으로 판정한다. */
   code: TeamCode
-  /** 표시 이름(teams.name) — 지금은 만들 때 code 와 같다. SP4 A2 부터 개명할 수 있다(code 는 그대로, 스펙 D37). */
+  /** 표시 이름(teams.name) — 만들 때 code 와 같고 SP4 A2 부터 개명할 수 있다(code 는 그대로, 스펙 D37). */
   name: string
   /** 저장된 색(teams.color, hex — 0003 기본값, 생성 순 팔레트 pickTeamColor). 화면 색 슬롯은 SP4 B 가 이 값으로 정한다(D3). */
   color: string
