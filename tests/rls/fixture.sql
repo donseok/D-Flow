@@ -1,5 +1,5 @@
 -- tests/rls 픽스처 — harness.ts 의 loadFixture 가 postgres 롤로 한 트랜잭션에 흘린다(RLS·실행 권한 우회).
--- 멱등: 전부 고정 uuid + on conflict do nothing. 케이스는 asUser/asService 의 begin…rollback 안에서만 쓰므로
+-- 멱등: 전부 고정 uuid + on conflict do nothing(auth.users 만 NULL 토큰 열을 고치는 do update). 케이스는 asUser/asService 의 begin…rollback 안에서만 쓰므로
 -- 이 행들은 바뀌지 않고 DB 에 남는다(개발 DB 의 부트스트랩 행과 공존 — 워크스페이스 slug·이메일이 겹치지 않게 rls- 접두).
 -- 이메일에 rls- 접두를 붙인 이유: auth.users.email 과 profiles.email 은 전역 유일이고, supabase/rehearsal/0003_smoke.sql 이
 -- alice@example.com 등을 자기 id 로 넣는다 — 같은 이메일을 여기 남기면 그 스모크가 이 DB 에서 유일 위반으로 멈춘다.
@@ -14,14 +14,20 @@ insert into public.workspaces (id, slug, name) values
 on conflict do nothing;
 
 -- 계정 3: 플랫폼 관리자 · 워크스페이스 관리자 · alice(프로젝트 A 관리자, B 멤버). 열 목록은 0003_smoke.sql 과 같다.
-insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, aud, role, instance_id, created_at, updated_at)
+insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, aud, role, instance_id, created_at, updated_at,
+                        confirmation_token, recovery_token, email_change_token_new, email_change)
 select v.id, v.email, '', now(), '{"provider":"email","providers":["email"]}', '{}', 'authenticated', 'authenticated',
-       '00000000-0000-0000-0000-000000000000', now(), now()
+       '00000000-0000-0000-0000-000000000000', now(), now(), '', '', '', ''
   from (values
     ('00000000-0000-0000-7e57-0000000000a1'::uuid, 'rls-platform@example.com'),
     ('00000000-0000-0000-7e57-0000000000a2'::uuid, 'rls-wsadmin@example.com'),
     ('00000000-0000-0000-7e57-0000000000a3'::uuid, 'rls-alice@example.com')) as v(id, email)
-on conflict do nothing;
+-- 기본값이 없는 GoTrue 문자열 열 넷은 '' 로 — NULL 이면 GoTrue admin/users 가 500 이다. 예전 픽스처가 NULL 로 남긴 행만 고친다.
+on conflict (id) do update set
+  confirmation_token = coalesce(auth.users.confirmation_token, ''), recovery_token = coalesce(auth.users.recovery_token, ''),
+  email_change_token_new = coalesce(auth.users.email_change_token_new, ''), email_change = coalesce(auth.users.email_change, '')
+  where auth.users.confirmation_token is null or auth.users.recovery_token is null
+     or auth.users.email_change_token_new is null or auth.users.email_change is null;
 
 insert into public.profiles (user_id, email, display_name) values
   ('00000000-0000-0000-7e57-0000000000a1', 'rls-platform@example.com', 'platform'),
