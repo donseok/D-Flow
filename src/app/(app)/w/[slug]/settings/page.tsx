@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
+import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -11,6 +12,7 @@ import { LogoEditor } from '@/components/settings/LogoEditor'
 import { AccentEditor } from '@/components/settings/AccentEditor'
 import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
+import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -48,7 +50,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   }
 
   const allowed = config.keys['modules.allowed']
-  const history = await listSettingsHistory({ workspaceId: access.id })
+  const [history, authzEvents] = await Promise.all([listSettingsHistory({ workspaceId: access.id }), listAuthzEvents(access.id)])
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-20">
       <div>
@@ -98,8 +100,18 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
           invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
       </SectionCard>
-      <SectionCard id="workspace-history" searchText="settings history revision 기록 이력" eyebrow="기록" title="설정 변경 이력" icon={History}>
-        <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} />
+      <SectionCard id="workspace-history" searchText="settings history revision authz 기록 이력 설정 변경 권한 변경" eyebrow="기록" title="변경 이력" icon={History}>
+        <div className="space-y-8">
+          <section aria-label="설정 변경">
+            <h4 className="mb-3 text-sm font-semibold text-ink">설정 변경</h4>
+            <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} />
+          </section>
+          <section aria-label="권한 변경" className="border-t border-line pt-6">
+            <h4 className="mb-1 text-sm font-semibold text-ink">권한 변경</h4>
+            <p className="mb-3 text-xs text-ink-muted">누가 누구의 권한을 바꿨는지 남는 기록입니다.{access.isSuperuser ? ' 플랫폼 관리자 지정·해제도 함께 보입니다.' : ''}</p>
+            <AuthzEventsList workspaceId={access.id} initial={authzEvents} />
+          </section>
+        </div>
       </SectionCard>
       </SettingsShell>
     </div>

@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 
 const h = vi.hoisted(() => ({
-  access: vi.fn(), config: vi.fn(), history: vi.fn(),
+  access: vi.fn(), config: vi.fn(), history: vi.fn(), events: vi.fn(),
+  eventsList: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   allowEditor: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-allow-editor" />),
   shell: vi.fn<(p: { items: { id: string; label: string }[]; children: ReactNode }) => ReactNode>(({ children }) => <>{children}</>),
   redirect: vi.fn((to: string): never => { throw new Error(`NEXT_REDIRECT ${to}`) }),
@@ -11,6 +12,8 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/settings/workspacePageAccess', () => ({ workspacePageAccess: (...a: unknown[]) => h.access(...a) }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.config(...a) }))
 vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: (...a: unknown[]) => h.history(...a) }))
+vi.mock('@/app/actions/authzEvents', () => ({ listAuthzEvents: (...a: unknown[]) => h.events(...a) }))
+vi.mock('@/components/settings/AuthzEventsList', () => ({ AuthzEventsList: (p: Record<string, unknown>) => h.eventsList(p) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }))
@@ -42,6 +45,7 @@ beforeEach(() => {
   h.access.mockResolvedValue(access())
   h.config.mockResolvedValue(config())
   h.history.mockResolvedValue({ ok: true, rows: [], nextBefore: null })
+  h.events.mockResolvedValue({ ok: true, rows: [], nextBefore: null })
 })
 
 describe('/w/[slug]/settings 페이지', () => {
@@ -85,5 +89,21 @@ describe('/w/[slug]/settings 페이지', () => {
   it('설정 조회 실패가 아닌 예외는 삼키지 않고 다시 던진다', async () => {
     h.config.mockRejectedValue(new Error('boom'))
     await expect(render()).rejects.toThrow('boom')
+  })
+
+  it('기록 범주에 설정 변경과 권한 변경 목록이 함께 있고, 권한 목록에는 이 워크스페이스의 첫 페이지를 넘긴다', async () => {
+    h.events.mockResolvedValue({ ok: true, rows: [], nextBefore: null })
+    const html = await render()
+    expect(h.events).toHaveBeenCalledWith(WID)
+    expect(h.eventsList).toHaveBeenCalledTimes(1)
+    expect(h.eventsList.mock.calls[0][0]).toMatchObject({ workspaceId: WID, initial: { ok: true } })
+    expect(html).toContain('권한 변경')
+    expect(html).toContain('설정 변경')
+  })
+
+  it('권한 이력 조회가 실패해도 설정 화면은 열리고 오류가 목록 자리에 간다', async () => {
+    h.events.mockResolvedValue({ ok: false, error: '권한 변경 이력을 불러오지 못했습니다.' })
+    await render()
+    expect(h.eventsList.mock.calls[0][0]).toMatchObject({ initial: { ok: false } })
   })
 })
