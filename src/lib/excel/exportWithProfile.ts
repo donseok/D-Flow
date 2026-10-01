@@ -176,10 +176,9 @@ export function buildAoaWithProfile(
   if (startCol != null) header2[startCol] = HEADER.plan
 
   // ── 헤더 3행(라벨 행) ──
-  // trailing 라벨은 3개뿐이다(계획%/계획대비%/진척) — 데이터 행의 4개(+성과율)와 폭이 다른 기존
-  // buildWbsAoa 의 결함을 그대로 재현한다(무접촉 원칙 + 바이트 불변 회귀 기준 때문에 여기서 고치지
-  // 않는다 — 계약 (a) 참조).
-  const header3 = new Array(maxCol + 4).fill('')
+  // trailing 은 데이터 행과 같은 4칸이다 — 계획%·계획대비%·진척·상태(SP4 §4.3 ①에서 상태 머리를 더했다).
+  // 앞 세 칸의 머리가 값과 한 칸씩 어긋난 것(계획대비% 가 롤업 실적% 위, 진척 이 성과율 위)은 감지 낱말 호환 때문에 그대로 둔다(D16).
+  const header3 = new Array(maxCol + 5).fill('')
   if (hierColsOut) hierColsOut.forEach((c, i) => { header3[c] = hierarchyLabel(profile, i, levelLabels) })
   else if (outlineColOut != null) header3[outlineColOut] = HEADER.code
   if (extraAxisCol != null) header3[extraAxisCol] = HEADER.extraAxis
@@ -195,6 +194,7 @@ export function buildAoaWithProfile(
   header3[maxCol + 1] = HEADER.plannedPct
   header3[maxCol + 2] = HEADER.vsPlan
   header3[maxCol + 3] = HEADER.progress
+  header3[maxCol + 4] = HEADER.status
 
   // 라벨 행(header3)은 profile.headerRow 위치에 둔다 — parseWithProfile 이 headerRow+1 부터 데이터를 읽는다.
   const rows: unknown[][] = [...headerRowsBeforeLabel(profile.headerRow, header1, header2, projectName), header3]

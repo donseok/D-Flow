@@ -72,7 +72,7 @@ export function buildWbsAoa(
   const header2 = ['', ...levelLabels, '', '',
     ...(teams.length > 0 ? ['담당', ...Array<string>(teams.length - 1).fill('')] : []), '산출물', '계획', '']
   const header3 = ['Biz', ...levelLabels, '', '', ...teams,
-    '산출물', '시작', '종료', '가중치', '', '실적%', '계획%', '계획대비%', '진척']
+    '산출물', '시작', '종료', '가중치', '', '실적%', '계획%', '계획대비%', '진척', '상태']
 
   const rows: unknown[][] = [header1, header2, header3]
   for (const it of flatten(items)) {
