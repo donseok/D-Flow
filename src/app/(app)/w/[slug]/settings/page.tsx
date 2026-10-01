@@ -4,6 +4,7 @@ import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
+import { LEGACY_PATHS } from '@/lib/nav/legacyPaths'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -38,7 +39,7 @@ function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: Simp
 export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await workspacePageAccess(slug)
-  if (!access.isAdmin) redirect('/projects')
+  if (!access.isAdmin) redirect(LEGACY_PATHS.projects)
   const locale = await getServerLocale()
   let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
   try {
@@ -91,7 +92,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
           {/* /admin/teams 는 플랫폼 관리자 전용(canManageTeams)이라 그 밖에는 링크 대신 안내만 둔다 — 눌러서 튕기는 링크를 만들지 않는다. */}
           {access.isSuperuser
-            ? <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href="/admin/teams" className="font-medium text-brand underline">팀 관리</Link>에서 편집합니다.</p>
+            ? <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href={LEGACY_PATHS.adminTeams} className="font-medium text-brand underline">팀 관리</Link>에서 편집합니다.</p>
             : <p className="text-sm text-ink-muted">공용 팀 기준정보는 플랫폼 관리자가 팀 관리에서 편집합니다.</p>}
         </div>
       </SectionCard>

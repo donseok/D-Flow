@@ -148,7 +148,8 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
     {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <div className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm">
+    {/* data-save-bar: 셸의 떠 있는 버튼이 저장 바를 가리지 않게 찾는 표지(SP3b 알림 13·D33) */}
+    <div data-save-bar className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm">
       <span className="text-xs text-ink-muted">변경 {changed.length}개</span>
       <button type="button" className="btn btn-primary" disabled={pending || (!changed.length && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}

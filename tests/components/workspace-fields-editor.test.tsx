@@ -100,6 +100,14 @@ describe('WorkspaceFieldsEditor', () => {
     expect(input('branding.product_name').nextElementSibling?.textContent).toContain('제품 이름은 40자까지입니다.')
   })
 
+  it('저장 바 루트에 data-save-bar 를 단다 — 셸의 떠 있는 버튼이 저장 바를 가리지 않게 찾는 표지(SP3b 알림 13·D33)', () => {
+    render()
+    const bar = host.querySelector('[data-save-bar]')
+    expect(bar).not.toBeNull()
+    expect(bar?.textContent).toContain('변경 0개')
+    expect(bar?.querySelector('button')?.textContent).toContain('저장')
+  })
+
   it('손상된 키는 새 값을 넣으면 복구 패치에 포함한다', async () => {
     render([{ key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: '설정 손상', error: '제어 문자' }])
     expect(host.querySelector('[data-config-state="invalid"]')?.textContent).toContain('제어 문자')
