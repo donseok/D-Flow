@@ -1,32 +1,36 @@
 # SP3b UI-0 — 현행 기준선(COM-0)
 
-UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**이다(스펙 §3). 각 Phase 의 판정은 D48 대로 그 브랜치의 (기준, 머리)를 같은 시드·같은 스크립트로 새로 찍어 비교한다. 이미지는 리포 밖 `/Users/jerry/D-Flow/.superpowers/qa/sp3b/ui0/`(과제 5b 에서 다시 찍은 `invite` 네 장만 `ui0-invite/`)에 있고 여기에는 파일명과 sha256 앞 12자만 적는다. 경로의 `{pid}`·`{minuteId}`·`{topicId}` 는 `db:reset` 으로 사라지는 로컬 시드 id, `[token]` 은 가린 초대·공유 토큰이다.
+UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**이다(스펙 §3). 각 Phase 의 판정은 D48 대로 그 브랜치의 (기준, 머리)를 같은 시드·같은 스크립트로 새로 찍어 비교한다. 이미지는 리포 밖 `/Users/jerry/D-Flow/.superpowers/qa/sp3b/ui0b/`(UI-0 수정 라운드의 전 경로 재촬영)에 있고 여기에는 파일명과 sha256 앞 12자만 적는다. 과제 5 첫 기록 `ui0/`(과제 5b 의 `invite` 네 장 `ui0-invite/` 포함)는 그 폴더에 그대로 두었다 — 그 뒤 시드·도구가 바뀌어 기준선이 아니다(머리 표 'ui0 대조'). 경로의 `{pid}`·`{minuteId}`·`{topicId}` 는 `db:reset` 으로 사라지는 로컬 시드 id, `{inviteToken}`·`{shareToken}` 은 가린 초대·공유 토큰이다(도구가 토큰 값을 자리표시로 바꿔 meta 에 적는다).
+
+**날짜 고정.** 시드는 KST 오늘 날짜의 상대값이라 기준·머리는 같은 KST 날짜에 찍는다 — `shoot` 은 시드 날짜 ≠ 오늘(KST)이면, `diff` 는 KST 날짜·시드 날짜·브라우저가 다르면 거부한다(스크립트 판·`routes.json` 해시·시드 프로젝트가 다르면 같은 날의 `--allow-cross` 참고 대조로만 비교한다). 자정을 넘기면 `db:reset → dev:bootstrap → seed` 부터 다시 한다. 그래서 이 기록(2026-10-01)은 다른 날의 라벨과 `diff` 되지 않는다 — 각 Phase 는 자기 (기준, 머리)를 같은 날 같은 시드로 새로 찍는다(D48).
 
 | 항목 | 값 |
 |---|---|
-| 트리 | `sp3b/ui0` 머리 `56fa0af` — 앱 코드 = main `81deae9`(`sp3a-done`, `git diff --quiet main HEAD -- src` 참). 빌드는 같은 `src` 의 `a253af1` 에서 했다(그 뒤 커밋은 `scripts/`·`tests/` 만) |
-| 일시 | 2026-10-01 12:22~13:56 KST — 시드·빌드 12:22~12:23 · 캡처(2차) 12:40~12:48 · 규모별 성능 12:51~13:11(1차)·13:12~13:56(재측정). 과제 5b — 새 `db:reset` 시드·`invite` 재촬영·결정성 확인 14:16~14:27(스크립트 `341e2a3`·`2f5ef01`, 앱 트리는 같은 main `81deae9`) |
-| 서버 | 레인 B 3201 `next start`(프로덕션 빌드), Next 15.5.19, Node v22.18.0 |
+| 트리 | `sp3b/ui0` 머리 `d17d130`(캡처 meta 의 `scriptCommit`) — 앱 코드 = main `81deae9`(`sp3a-done`, `git diff --quiet main HEAD -- src` 참). 빌드는 재촬영 묶음 안에서 같은 트리로 새로 했다(서버 빌드 id `qGIycPlB1H0kMS8zSQU2n` — meta `buildId`) |
+| 일시 | 2026-10-01 — **이 기록(`ui0b`)은 UI-0 수정 라운드 재촬영 묶음 15:49:24~15:57:46 KST**(db:reset 15:49 · 빌드 15:50 · `ui0b` 15:50:28~15:54:05 · `ui0b-self` 15:54:05~15:57:32). 과제 5 첫 기록(`ui0`) 12:22~13:56(캡처 2차 12:40~12:48 · 규모별 성능 12:51~13:56), 과제 5b 14:16~14:27. §4 성능은 과제 5 측정 그대로 |
+| 서버 | 레인 B 3201 `next start -H 127.0.0.1`(프로덕션 빌드 — 기동 전 포트가 비었는지 확인, C-bind), Next 15.5.19, Node v22.18.0 |
 | 스택 | `d-flow-lane-b`(api 54421 · db 54422), `[api] max_rows = 20000`(D51 — 로컬 수정, 리포 값은 1000) |
 | 브라우저 | Chromium 145.0.7632.6 / Playwright 1.58.2(npx 캐시 — `package.json` 무변경) |
-| 시드 | `db:reset` → `dev:bootstrap` → `node scripts/ui-capture.mjs seed`(커밋 `a253af1` — 시드 코드는 과제 2 이후 무변경) — KST 2026-10-01 상대 날짜. 과제 5b(`17f2b82`)부터 시드가 워크스페이스 A 의 초대 허용 도메인에 `example.com` 을 넣는다(이미 있으면 쓰지 않는다) — 그래서 `invite` 네 장만 다시 찍었다(§2) |
+| 시드 | `db:reset` → `dev:bootstrap` → `node scripts/ui-capture.mjs seed`(WBS 61행 — 커밋 `c72c1e9` 부터) — KST 2026-10-01 상대 날짜. 수정 라운드에서 시드가 바뀌었다: ① 이정표(충실도 리뷰 P2-1) — 앱은 `wbs_items.milestone` 이 아니라 '이름 키워드 ∨ 단일일 + 산출물'로 이정표를 감지한다. 1.1.5(완료)·2.3.5(예정)에 산출물을 넣고 지난 미완료 단일일 잎 1.3.6(+산출물)을 1단계 끝에 더해 완료·기한 지남·예정 셋이 다 있다(이름은 그대로) ② 1단계 일정(P2-2) — 1단계 잎을 오늘 근처로 당겨 1440·1280·390 첫 화면(1~14행, 390 의 간트 창 = 오늘 ±3일)에 완료·지연·진행·오늘 마감 막대가 함께 든다. 그 결과 시드의 SPI 가 0.84 → 0.72(2026-10-01 — 계기 색 구간은 둘 다 0.9 미만). 워크스페이스 A 의 초대 허용 도메인 `example.com`(과제 5b `17f2b82`)은 그대로 |
 | 계정 | 시드 계정 넷(플랫폼 관리자 `ui-platform`·비플랫폼 워크스페이스 관리자 `ui-wsadmin`·멤버 `ui-member`·두 워크스페이스 멤버 `ui-duo`). 비밀번호는 실행마다 임의 값(메모리) — 부트스트랩 관리자 무변경. 화면마다 볼 수 있는 가장 낮은 등급으로 찍는다(`routes.json` 의 `grade`) |
-| 캡처 방식 | 뷰포트 캡처(판정 Q5), deviceScaleFactor 1·ko-KR·Asia/Seoul·reducedMotion·새 컨텍스트·CDN 캐시(판정 Q3), 로드 → 네트워크 유휴 → `document.fonts.ready` → 500ms. 가림 = `routes.json` 의 `commonMask`·`mask`(자리를 남기는 `visibility:hidden`)와 `hide`(폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다 — 과제 5). 실행 시작 때 캡처 계정의 서버 테마(판정 Q8)와 `lastProjectId`(= 시드 프로젝트, 과제 5a)를 고정한다. 과제 5b 부터는 테마 패스마다 캡처 계정 넷의 공지 읽음 워터마크와 시드 프로젝트의 진척 스냅샷도 지운다(시작 상태 = `db:reset` 뒤 첫 실행 — 아래 결정성 행) |
+| 캡처 방식 | 뷰포트 캡처(판정 Q5), deviceScaleFactor 1·ko-KR·Asia/Seoul·reducedMotion·새 컨텍스트·CDN 캐시(판정 Q3), 로드 → 네트워크 유휴 → `document.fonts.ready` → 500ms. 가림 = `routes.json` 의 `commonMask`·`mask`(자리를 남기는 `visibility:hidden`)와 `hide`(폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다 — 과제 5) — 수정 라운드부터 선택자마다 규칙 하나, 선택자별 일치 수를 meta 에(행 가림 0 이면 경고, 무효면 그 장의 문제). **테마 패스 시작 상태**(수정 라운드 `passStart`): 캡처 계정 넷의 서버 선호를 고정 객체로 덮는다(PrefsSync 동기화 키 = 새 컨텍스트의 로컬값 + 테마(판정 Q8) + `lastProjectId` = 시드 프로젝트(과제 5a), 그 밖의 키 없음 — 병합하지 않는다) → 공지 읽음 워터마크 삭제(과제 5b) → 알림 열람·읽음 되돌리기 → 시드 프로젝트 진척 스냅샷 삭제 → **속도 계기 사전 방문**(그 실행의 서버로 대시보드를 캡처 없이 열고 오늘 스냅샷이 레인 B DB 에 생길 때까지 확인 — 상한 30초, T6-R1). 장마다 최종 경로가 채운 경로(`expectFinal` 이 있으면 그 값)와 같은지 본다 — 다르면 `final:` 문제 |
 | 범위 | `shoot --since b4283c0,C` — 기준선 31 + 보충 둘(`p-import-admin`·`p-office-lane`) + 설정(C) `ws-settings` = 34행 × 4크기 × 라이트 = 136장 |
-| 글꼴 | 136장 가운데 `fallback` 0장 |
-| 자기 차이 | `diff ui0 ui0-self` — 136장 가운데 `diff` 0장(0 이어야 한다). 차이율이 0 이 아닌 장: `p-agents@768x1024` 0.178% · `minute@1280x720` 0.000% — 모두 문턱 0.2% 아래(판정 Q33). 앞의 것은 위임 표 sticky 머리글 아래 테두리의 1px 스냅(§2 메모), 뒤의 것은 4px. 이 가림 규칙은 1차 자기 차이(diff 2 — 좌석 화면의 시각 표시)를 고친 뒤의 2차 실행이다 |
-| 결정성(과제 5b) | 첫 방문이 써서 다음 화면을 바꾸는 상태 둘을 테마 패스 시작에서 지운다 — ① 공지 읽음 워터마크(과제 5 권고 1, `17f2b82`) ② 시드 프로젝트의 진척 스냅샷(`2f5ef01` — 대시보드가 응답 뒤 오늘 스냅샷을 써서 `db:reset` 뒤 첫 대시보드 방문만 속도 지표가 '—'). `shoot --routes p-announcements,projects,p-dashboard --sizes 1440x900` 를 두 번 찍어 비교: ①만 고친 1차(`ui0-ann-a`·`ui0-ann-b`)는 `diff` 1(`p-dashboard` 0.26% — ②), ② 뒤 2차(`ui0-ann-a2`·`ui0-ann-b2`)는 **`diff` 0**(세 장 0.00%, `p-announcements`·`p-dashboard`·`projects` sha 같음). 전 경로 순서(`portfolio` → `p-dashboard`)로 찍은 `ui0-pf` 는 `diff ui0 ui0-pf` 0(`p-dashboard` sha 같음) — 전 경로를 새로 찍지는 않았다. 과제 5 1차 실행이 같은 시작 상태(워터마크·스냅샷 없음)였고 그때 2차와의 차이는 좌석 시각(가림으로 고침)과 공지 칩뿐이었으므로, 새 시작 상태에서 이 기록과 달라지는 장은 `p-announcements@1440x900` 의 NEW 칩(0.13%, 문턱 아래 — §2 메모)으로 본다 |
+| 글꼴 | 136장 가운데 `fallback` 0장(`ui0b`·`ui0b-self` 모두) |
+| 자기 차이 | `diff ui0b ui0b-self`(같은 판·같은 서버·같은 DB, 연속 두 실행 15:50~15:57) — 136장 가운데 **same 134 · near 2 · diff 0 · problem 0 · missing 0**. near(0 초과 ~ 0.2% — 볼 목록): `p-issues@768x1024` 0.048%(377px — 네이티브 select 두 개 'Mega 전체'·페이지 크기 '20' 의 글자가 한 실행에서만 1px 아래로 스냅, 다른 실행은 과제 5 기록과 같은 자리) · `minute@1440x900` 4px(폴더 칩 점선 테두리의 안티앨리어싱). 알려진 잡음 `p-agents@768x1024`(머리글 1px)는 이번엔 0. 과제 5 기록의 자기 차이(`diff ui0 ui0-self` — diff 0, 0 아닌 장 `p-agents@768x1024` 0.178%·`minute@1280x720` 4px)는 그 판의 근거로 남는다 |
+| 결정성 | 첫 방문이 써서 다음 화면을 바꾸는 상태를 테마 패스 시작에서 되돌린다 — 공지 읽음 워터마크(과제 5b `17f2b82`) · 진척 스냅샷(`2f5ef01`) · 알림 열람·읽음과 선호값 고정 객체(수정 라운드 `4a1ad46`). 스냅샷을 지운 뒤에는 사전 방문이 같은 서버로 오늘 스냅샷을 다시 쓰게 해(T6-R1) 포트폴리오 없는 부분 실행도 속도 계기가 전 경로와 같다 — `shoot --routes p-dashboard --sizes 1440x900`(`ui0b-dash`)의 `p-dashboard` 가 `ui0b` 와 same(사전 방문 8ms). 과제 5b 의 확인(`ui0-ann-a/b` diff 1 → 스냅샷 삭제 뒤 `ui0-ann-a2/b2` diff 0, `ui0-pf` = `ui0`)은 그 판의 기록이다 |
+| ui0 대조 | `diff ui0 ui0b --allow-cross`(같은 KST 날짜, 판·시드가 다른 참고 대조 — 경고: 스크립트 판 `56fa0af ≠ d17d130`·`routes.json` 해시·시드 프로젝트) — same 48 · near 64 · diff 24 · problem 0. 바뀐 장과 이유: **시드 F1·F2** — `p-dashboard`·`p-wbs`·`p-gantt`·`p-kanban`·`portfolio` 네 크기 diff 20장(이정표·1단계 막대·카드·비교 행), `root`·`projects` 히어로 칩 near 8장(TASKS 47→48·DONE 21→12·% 45→25), 그 밖의 프로젝트 화면 머리글 벨 배지 14 → 18 near(프로젝트 파생 알림 수) · **계기** — `p-dashboard`·`portfolio` 의 SPI 0.84 → 0.72 · **초대** — `invite` 네 장 diff(과제 5 첫 기록은 '사용할 수 없는 초대', 과제 5b `ui0-invite` 부터 수락 가능한 카드) · **공지 시작 상태**(과제 5b) — `p-announcements@1440x900` NEW 칩 셋 near 0.135%. 같음 48 = `login`·`share`·`meetings`·`minutes`·`minute`·`agents`·`usage`·`admin-accounts`·`admin-teams`·`llm-config`·`account`·`ws-settings` 네 크기 |
+| 도구(수정 라운드) | 안전 — 앱 주소·`--base` 는 레인 B 포트 3201·3202·3203 과 127.0.0.1·localhost 만(S1), DB·세션 클라이언트와 앱 주소는 `laneEnv` 한 곳(원문 검사 테스트, S2), 초대·공유 토큰은 값으로 가린다(S3), `diff` 위치 인자·perf-grid `--label` 은 라벨 형식만(S4) — `58aced9`. 비교 — `diff` 판정 same(0)·near(0 초과 ~ 0.2%, 판정 Q33 문턱 그대로)·diff·problem(어느 쪽이든 문제·idle 거짓·최종 경로 다름)·missing(기준에만)·new, 행마다 다른 픽셀 수·영역, 알려진 잡음 표시. meta 에 서버 커밋과 출처(`--base` 실행은 서버 커밋 필수)·서버 빌드 id·시드 프로젝트 id·`routes.json` sha256·LLM 키 이름·사전 방문 기록(`43b0d2e`) |
 
 ## 1. 라우트 표
 
-셸 의존: `PPS` = `ProjectPageShell` 직접, `PPS 하위` = 하위 컴포넌트(`AgentFrame`·`WikiSearch`)가 `ProjectPageShell`, `main` = 셸 없이 main 스크롤(실측 shell §5 를 main `81deae9` 에서 다시 확인). 현재 게이트의 줄 번호는 main `81deae9` 기준. 가시 h1 은 `meta.json` 의 `h1Count`(보이는 h1 수). SP3b 처분은 브리프의 배정에 스펙 §6(UI-3)이 더하는 일을 괄호로 붙였다.
+셸 의존: `PPS` = `ProjectPageShell` 직접, `PPS 하위` = 하위 컴포넌트(`AgentFrame`·`WikiSearch`)가 `ProjectPageShell`, `main` = 셸 없이 main 스크롤(실측 shell §5 를 main `81deae9` 에서 다시 확인). 현재 게이트의 줄 번호는 main `81deae9` 기준. 가시 h1 은 `meta.json` 의 `h1Count`(보이는 h1 수 — `ui0b`, 과제 5 첫 기록과 같은 값). SP3b 처분은 브리프의 배정에 스펙 §6(UI-3)이 더하는 일을 괄호로 붙였다.
 
 | # | 키 | 경로 | 파일 | 패턴(개정 §5.9.4) | 태그 | 셸 의존 | 현재 게이트 | 가시 h1(1280×720 / 390) | SP3b 처분 | 화면 이행 SP |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `root` | `/` | `page.tsx` | 리디렉션 | W | — | `redirect('/projects')`(:4) | 1 / 1(최종 `/projects`) | UI-2a(리졸버) | SP3b |
 | 2 | `login` | `/login` | `login/page.tsx` | 단일 작업 | O | 앱 셸 없음 | 없음(공개) | 1 / 1 | 셸 교체(UI-2b)만(앱 셸 없음 — 토큰은 UI-1, 스펙 §6.6) | SP3b(UI-1 토큰) |
 | 3 | `invite` | `/invite/[token]` | `invite/[token]/page.tsx` | 단일 작업: 워크스페이스·프로젝트·권한·본인 식별 | O | 앱 셸 없음(`app-backdrop`) | `notFound()`(:17 — service_role 미설정), 무효 초대는 카드 문구 | 1 / 1 | 셸 교체(UI-2b)만(+ UI-3 단일 작업 모양, 스펙 §6.6) | SP3b |
-| 4 | `share` | `/share/minutes/[token]` | `share/minutes/[token]/page.tsx` | 문서 읽기(앱 메뉴 없음, 공유 범위·버전) | O | 앱 셸 없음(`ShareViewer`) | `notFound()`(:15·:19·:30·:33·:42) | 2 / 2 | 셸 교체(UI-2b)만 | SP8 |
+| 4 | `share` | `/share/minutes/[token]` | `share/minutes/[token]/page.tsx` | 문서 읽기(앱 메뉴 없음, 공유 범위·버전) | O | 앱 셸 없음(`ShareViewer`) | `requireModule({ workspaceId }, 'minutes', { client: admin })`(:32 — 행의 워크스페이스, 세션 없는 경로라 service_role) → 꺼지면 `notFound()`(:33), 그 밖 `notFound()`(:15·:19·:30·:42) | 2 / 2 | 셸 교체(UI-2b)만 | SP8 |
 | 5 | `projects` | `/projects` | `(app)/projects/page.tsx` | 행 목록 | W | `main`(`.hero-card`) | 없음 | 1 / 1 | UI-2b(`/w/[slug]/projects` 이동 — C 파일, D45)(+ UI-3 행 목록, 스펙 §6.2) | SP3b |
 | 6 | `meetings` | `/meetings` | `(app)/meetings/page.tsx` | 월/주/목록, 범위 칩 | W·S | PPS | `requireModulePage(null, 'meetings')`(:25) | 0 / 0 | UI-2a(`/w/[slug]` 이동) | 이동 SP3b, 화면 SP5 |
 | 7 | `minutes` | `/minutes` | `(app)/minutes/page.tsx` | 폴더·목록·문서 3영역 | W·S | PPS | `requireModulePage(null, 'minutes')`(:29) | 0 / 0 | UI-2a(`/w/[slug]` 이동) | 이동 SP3b, 화면 SP5 |
@@ -66,41 +70,42 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 
 ## 2. 캡처(라우트 × 4크기 × 라이트)
 
-`meta.json`: commit `56fa0af` · scriptCommit `56fa0af` · browser `145.0.7632.6` · kstDate `2026-10-01` · seedDate `2026-10-01` · baseUrl `http://127.0.0.1:3201` · 136행 모두 `idle: true`(네트워크 유휴 도달)·`font: ok`·`problems` 없음. `expect` 셋(`agents`·`p-office` 의 `[data-roster-desk]`, `p-office-lane` 의 `[data-state="BLOCKED"]`)이 모두 잡혔다. 표의 `invite` 네 행만 과제 5b 재촬영 `ui0-invite` 다 — `meta.json`: commit `341e2a3` · scriptCommit `341e2a3` · browser `145.0.7632.6` · kstDate·seedDate `2026-10-01`(새 `db:reset` 시드) · 2026-10-01 14:17 KST · 같은 앱 트리(main `81deae9`) 프로덕션 빌드 · 네 장 `idle: true`·`font: ok`·문제 없음.
+`meta.json`(`ui0b`): commit `d17d130`(출처 head — 스크립트 HEAD 와 같은 트리로 빌드) · scriptCommit `d17d130` · buildId `qGIycPlB1H0kMS8zSQU2n` · browser `145.0.7632.6` · kstDate·seedDate `2026-10-01` · baseUrl `http://127.0.0.1:3201` · LLM 키 없음 · 사전 방문 light 5ms(첫 확인에 스냅샷 있음) · 136행 모두 `idle: true`·`font: ok`·`problems` 없음(최종 경로 판정 포함) · 가림 일치 0 경고 없음. `expect` 셋(`agents`·`p-office` 의 `[data-roster-desk]`, `p-office-lane` 의 `[data-state="BLOCKED"]`)이 모두 잡혔다. 같은 조건의 두 번째 실행 `ui0b-self` 도 136장·문제 0·대체 글꼴 0.
 
 캡처 메모(기록 — 판정이 아니다):
 
-- **좌석 화면의 시각 표시는 가렸다**(과제 5 자기 차이에서 찾음). `agents`·`p-office`·`p-office-lane` 은 조작 줄 끝의 '갱신 HH시 MM분 SS초'를 `hide`(`[aria-label="표시 범위"] + div`) — 고정폭이지만 분·초 자릿수가 바뀌면 폭이 달라져 '잡담'·'내 작업|전체'를 민다. `agents`·`p-office` 의 책상 카드 '신호 N분 전'·프로필 '마지막 신호 · N분 전'·신호 계기 표식은 `mask`(계기 막대 자체는 보인다). `p-agents` 의 '갱신' 시각은 `hide`(`[data-hub-stamp]`). 그래서 이 네 화면의 PNG 에는 그 시각 글자가 없다(좌석표 세 화면은 '내 작업|전체' 가 줄 오른쪽 끝에 붙는다).
-- `p-agents@768x1024` 의 자기 차이 0.178% 는 위임 표 sticky 머리글 아래 테두리가 1px 위아래로 스냅하는 것이다 — 머리글 글자와 아래 행은 픽셀까지 같고, 실행마다 두 상태를 오간다(판정 Q33 의 서브픽셀 흔들림). UI-1 비교에서 이 장의 0.18% 안팎은 잡음 후보다.
-- **`invite` 는 과제 5b 에서 다시 찍었다(`ui0-invite`) — 이유: 시드 초대 도메인.** 처음 기록(`ui0`)은 유효 초대가 아니라 "만료되었거나 사용할 수 없는 초대입니다" 화면이었다 — 시드 초대(`ui-invitee@example.com`)는 만료·취소·소비 전이지만 워크스페이스 A 의 `invites.allowed_domains`(SP3a 가 더한 초대 도메인 허용)가 제품 기본값 `[]`(초대 불가)이라 `getInvitePreview` 의 도메인 재검사가 '사용할 수 없음'을 냈다. 시드가 A 에 `example.com` 을 넣도록 고친 뒤(`17f2b82`) 네 장 모두 수락 가능한 카드다 — 계정 없는 초대 대상의 가입 폼(초대받은 프로젝트 `UI-CAPTURE`·설명(시드 표식 `ui-capture seed 2026-10-01`)·가린 이메일 `ui********@example.com`·이름·비밀번호·비밀번호 확인·'가입하고 합류하기'). `diff ui0 ui0-invite` 는 네 장 모두 차이(1440 3.71% · 1280 7.26% · 768 6.12% · 390 23.42%). A 의 설정이 바뀌어도 `ws-settings` 네 장은 그대로다(`diff ui0 ui0-wsset` 0.00% — '초대' 구역은 뷰포트 밖).
-- **`p-announcements` 의 이 기록(`ui0`)은 '읽음' 상태(NEW 칩 없음)다.** 공지 화면 방문이 `announcement_seen` 워터마크를 쓰고 이 기록의 두 실행은 같은 DB 의 세 번째·네 번째 실행이었다(첫 두 실행은 가림을 고치기 전의 1차). 과제 5b 부터 `shoot` 은 테마 패스마다 캡처 계정의 워터마크를 지워 '아무 공지도 보지 않음'(= `db:reset` 뒤 첫 실행)에서 시작하므로, 이제 실행마다 첫 크기(1440×900) 장에 NEW 칩 셋이 있고 나머지 크기는 없다 — 이 기록의 1440 장과 0.13%(문턱 아래, `diff ui0 ui0-ann-a`). 사이드바의 공지 배지 3 은 방문 뒤에도 남는다 — 워터마크가 밀리초로 잘리고(`.483`) `created_at` 은 마이크로초(`.483017`)라 SQL `created_at > last_seen_at` 이 가장 최근 공지를 계속 안 읽음으로 센다(제품 결함 후보, src 무수정).
-- `p-dashboard` 의 속도 지표(SPI 0.84 — 게이지 숫자·호는 1440×900 에서만 뷰포트 안, 1280×720 은 카드 머리만)는 진척 스냅샷에서 나온다 — 대시보드·포트폴리오가 응답 뒤(`after`) 오늘 스냅샷을 쓰므로 `db:reset` 뒤 **첫** 대시보드 방문만 '—' 다. 전 경로 실행은 `portfolio` 가 `p-dashboard` 앞이라 늘 0.84 이고(이 기록·과제 5 1차·`ui0-pf` 바이트 동일), `portfolio` 없는 부분 실행은 테마 패스마다 첫 크기가 '—' 다(과제 5b 가 스냅샷을 패스 시작에서 지운다 — 머리 표 결정성 행).
+- **좌석 화면의 시각 표시는 가렸다**(과제 5 자기 차이에서 찾음). `agents`·`p-office`·`p-office-lane` 은 조작 줄 끝의 '갱신 HH시 MM분 SS초'를 `hide`(`[aria-label="표시 범위"] + div`) — 고정폭이지만 분·초 자릿수가 바뀌면 폭이 달라져 '잡담'·'내 작업|전체'를 민다. `agents`·`p-office` 의 책상 카드 '신호 N분 전'·프로필 '마지막 신호 · N분 전'·신호 계기 표식은 `mask`(계기 막대 자체는 보인다). `p-agents` 의 '갱신' 시각은 `hide`(`[data-hub-stamp]`), 위임 표의 '신호 N시간 M분 전' 칸은 `mask`(`[data-hub-row] td span.tabular-nums` — 수정 라운드, 멤버 기본 필터 '내 담당'에서는 빈 글자라 지금 화면은 같다). 그래서 이 네 화면의 PNG 에는 그 시각 글자가 없다(좌석표 세 화면은 '내 작업|전체' 가 줄 오른쪽 끝에 붙는다).
+- `p-agents@768x1024` 의 자기 차이 0.178% 는 위임 표 sticky 머리글 아래 테두리가 1px 위아래로 스냅하는 것이다 — 머리글 글자와 아래 행은 픽셀까지 같고, 실행마다 두 상태를 오간다(판정 Q33 의 서브픽셀 흔들림). UI-1 비교에서 이 장의 0.18% 안팎은 잡음 후보다 — 도구가 '알려진 잡음'으로 표시한다(`KNOWN_NOISE`). 같은 종류로 `p-issues@768x1024` 의 네이티브 select 글자 1px 세로 스냅(0.05% 안팎 — 수정 라운드 자기 차이)도 있다.
+- **`invite` 는 수락 가능한 초대 카드다 — 이유: 시드 초대 도메인(과제 5b).** 과제 5 첫 기록(`ui0`)은 유효 초대가 아니라 "만료되었거나 사용할 수 없는 초대입니다" 화면이었다 — 시드 초대(`ui-invitee@example.com`)는 만료·취소·소비 전이지만 워크스페이스 A 의 `invites.allowed_domains`(SP3a 가 더한 초대 도메인 허용)가 제품 기본값 `[]`(초대 불가)이라 `getInvitePreview` 의 도메인 재검사가 '사용할 수 없음'을 냈다. 시드가 A 에 `example.com` 을 넣도록 고친 뒤(`17f2b82`) 네 장 모두 계정 없는 초대 대상의 가입 폼이다(초대받은 프로젝트 `UI-CAPTURE`·설명(시드 표식 `ui-capture seed 2026-10-01`)·가린 이메일 `ui********@example.com`·이름·비밀번호·비밀번호 확인·'가입하고 합류하기'). A 의 설정이 바뀌어도 `ws-settings` 네 장은 그대로다('초대' 구역은 뷰포트 밖 — 과제 5b `diff ui0 ui0-wsset` 0.00%, 이번 `diff ui0 ui0b` 도 same).
+- **`p-announcements` 는 '아무 공지도 보지 않음'에서 시작한다.** 공지 화면 방문이 `announcement_seen` 워터마크를 쓰므로 `shoot` 은 테마 패스마다 캡처 계정의 워터마크를 지운다(과제 5b) — 실행마다 첫 크기(1440×900) 장에 NEW 칩 셋이 있고 나머지 크기는 없다(과제 5 첫 기록은 같은 DB 의 세 번째 실행이라 '읽음' 상태였다 — `diff ui0 ui0b` 의 그 장 0.135%). 사이드바의 공지 배지 3 은 방문 뒤에도 남는다 — 워터마크가 밀리초로 잘리고(`.483`) `created_at` 은 마이크로초(`.483017`)라 SQL `created_at > last_seen_at` 이 가장 최근 공지를 계속 안 읽음으로 센다(제품 결함 후보, src 무수정).
+- `p-dashboard` 의 속도 지표(SPI 0.72 — 게이지 숫자·호는 1440×900 에서만 뷰포트 안, 1280×720 은 카드 머리만)는 진척 스냅샷에서 나온다 — 대시보드·포트폴리오가 응답 뒤(`after`) 오늘 스냅샷을 쓴다. 테마 패스 시작에서 스냅샷을 지우고(과제 5b) 사전 방문이 같은 서버로 다시 쓰게 하므로(T6-R1) 전 경로든 `portfolio` 없는 부분 실행이든 같은 값이다(`ui0b-dash` 의 `p-dashboard@1440` = `ui0b`). 과제 5 첫 기록의 0.84 는 옛 시드의 값이다(1단계가 거의 다 지난 완료였다). 다음 마일스톤 카드는 기한 지난 이정표 '예정일 경과 · 활동 1.3.6 · 26.09.29'(위험), 마일스톤 타임라인은 3건(완료 1.1.5 · 경과 1.3.6 · 예정 2.3.5 D-5)이다.
+- **간트 첫 화면**(`p-wbs`·`p-gantt`): 1~14행에 완료(1.1.2·1.2.5·단일일 1.1.5)·지연(1.1.3·1.2.4 40%, 오늘 마감 1.2.1 60%)·진행(1.1.4 60%·1.2.3 30%)·예정(1.2.2) 막대, 1단계 단계 막대 44.2%, 도구 줄의 마일스톤 토글, 이정표 칩·세로선 셋(활동 1.1.5 · 활동 1.3.6 · D+2 · 활동 2.3.5 · D-5 — 1440·1280·768). 390 은 간트 창이 좁아(`p-wbs` 9/28~10/4) 칩 1.3.6 하나와 진행·완료·오늘 마감 막대가 보인다(기한 지난 두 잎은 빨간 실적 채움이 창 왼쪽 — 계획 꼬리만). `p-gantt@390` 은 타임라인 보기의 초기 창이 오늘+2~+7일이다(앱의 스크롤 — 과제 5 기록도 같은 창) — 진행·예정 막대와 예정 이정표 칩만 든다.
 - `minute`·`share` 의 mermaid 흐름도는 넓은 틀의 왼쪽 위에 작게 그려진다(현행 그대로). `admin-teams` 의 팀 목록은 빈 상태다 — 공용 팀(`project_id is null`)만 보이는데 시드 팀 다섯은 프로젝트 팀이다.
 - 전역 브리지 화면(`meetings`·`minutes`·`minute`·`agents` 등)의 사이드바에는 `UI-CAPTURE 메뉴` 가 보인다 — 실행 시작 때 `lastProjectId` 를 시드 프로젝트로 고정했기 때문이다(과제 5a, 과제 3 보고 §4-2).
 
 | 라우트 | 크기 | 파일 | sha256(앞 12) | 글꼴 | 최종 경로 | 문제 | 가시 h1 |
 |---|---|---|---|---|---|---|---|
-| root | 1440×900 | root-1440x900-light.png | 555f5cb83a7a | ok | /projects | — | 1 |
-| root | 1280×720 | root-1280x720-light.png | 32f703637664 | ok | /projects | — | 1 |
-| root | 768×1024 | root-768x1024-light.png | 2a172eb85fe4 | ok | /projects | — | 1 |
-| root | 390×844 | root-390x844-light.png | b91d8c7dfe2d | ok | /projects | — | 1 |
+| root | 1440×900 | root-1440x900-light.png | 824940e53f45 | ok | /projects | — | 1 |
+| root | 1280×720 | root-1280x720-light.png | ad06231f6f19 | ok | /projects | — | 1 |
+| root | 768×1024 | root-768x1024-light.png | a63f1d6c667a | ok | /projects | — | 1 |
+| root | 390×844 | root-390x844-light.png | fb49d41635ec | ok | /projects | — | 1 |
 | login | 1440×900 | login-1440x900-light.png | 51f78431dc11 | ok | /login | — | 1 |
 | login | 1280×720 | login-1280x720-light.png | 65add31653bb | ok | /login | — | 1 |
 | login | 768×1024 | login-768x1024-light.png | 5dda6c264b8e | ok | /login | — | 1 |
 | login | 390×844 | login-390x844-light.png | 85a55b8bb6a7 | ok | /login | — | 1 |
-| invite | 1440×900 | ui0-invite/invite-1440x900-light.png | b7786a31a361 | ok | /invite/[token] | — | 1 |
-| invite | 1280×720 | ui0-invite/invite-1280x720-light.png | 202956a89254 | ok | /invite/[token] | — | 1 |
-| invite | 768×1024 | ui0-invite/invite-768x1024-light.png | 6fa9940467a1 | ok | /invite/[token] | — | 1 |
-| invite | 390×844 | ui0-invite/invite-390x844-light.png | 5d1f7fd27c0a | ok | /invite/[token] | — | 1 |
-| share | 1440×900 | share-1440x900-light.png | d065fba36663 | ok | /share/minutes/[token] | — | 2 |
-| share | 1280×720 | share-1280x720-light.png | 9b7d32eca974 | ok | /share/minutes/[token] | — | 2 |
-| share | 768×1024 | share-768x1024-light.png | f6f2c9cdffe5 | ok | /share/minutes/[token] | — | 2 |
-| share | 390×844 | share-390x844-light.png | d58efcc9e35e | ok | /share/minutes/[token] | — | 2 |
-| projects | 1440×900 | projects-1440x900-light.png | 555f5cb83a7a | ok | /projects | — | 1 |
-| projects | 1280×720 | projects-1280x720-light.png | 0c561373d9b8 | ok | /projects | — | 1 |
-| projects | 768×1024 | projects-768x1024-light.png | 2a172eb85fe4 | ok | /projects | — | 1 |
-| projects | 390×844 | projects-390x844-light.png | b91d8c7dfe2d | ok | /projects | — | 1 |
-| meetings | 1440×900 | meetings-1440x900-light.png | 740a1ef5efed | ok | /meetings | — | 1 |
+| invite | 1440×900 | invite-1440x900-light.png | b7786a31a361 | ok | /invite/{inviteToken} | — | 1 |
+| invite | 1280×720 | invite-1280x720-light.png | 202956a89254 | ok | /invite/{inviteToken} | — | 1 |
+| invite | 768×1024 | invite-768x1024-light.png | 6fa9940467a1 | ok | /invite/{inviteToken} | — | 1 |
+| invite | 390×844 | invite-390x844-light.png | 5d1f7fd27c0a | ok | /invite/{inviteToken} | — | 1 |
+| share | 1440×900 | share-1440x900-light.png | d065fba36663 | ok | /share/minutes/{shareToken} | — | 2 |
+| share | 1280×720 | share-1280x720-light.png | 9b7d32eca974 | ok | /share/minutes/{shareToken} | — | 2 |
+| share | 768×1024 | share-768x1024-light.png | f6f2c9cdffe5 | ok | /share/minutes/{shareToken} | — | 2 |
+| share | 390×844 | share-390x844-light.png | d58efcc9e35e | ok | /share/minutes/{shareToken} | — | 2 |
+| projects | 1440×900 | projects-1440x900-light.png | 824940e53f45 | ok | /projects | — | 1 |
+| projects | 1280×720 | projects-1280x720-light.png | ad06231f6f19 | ok | /projects | — | 1 |
+| projects | 768×1024 | projects-768x1024-light.png | a63f1d6c667a | ok | /projects | — | 1 |
+| projects | 390×844 | projects-390x844-light.png | fb49d41635ec | ok | /projects | — | 1 |
+| meetings | 1440×900 | meetings-1440x900-light.png | ba9107a984b1 | ok | /meetings | — | 1 |
 | meetings | 1280×720 | meetings-1280x720-light.png | 8a085ed6e556 | ok | /meetings | — | 0 |
 | meetings | 768×1024 | meetings-768x1024-light.png | 94fdd9ac0af2 | ok | /meetings | — | 0 |
 | meetings | 390×844 | meetings-390x844-light.png | d622f7f1b731 | ok | /meetings | — | 0 |
@@ -111,15 +116,15 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 | minute | 1440×900 | minute-1440x900-light.png | 84997732d911 | ok | /minutes/{minuteId} | — | 2 |
 | minute | 1280×720 | minute-1280x720-light.png | d715d8452541 | ok | /minutes/{minuteId} | — | 2 |
 | minute | 768×1024 | minute-768x1024-light.png | 3cde4469aa2d | ok | /minutes/{minuteId} | — | 2 |
-| minute | 390×844 | minute-390x844-light.png | cabbfea0f967 | ok | /minutes/{minuteId} | — | 2 |
-| agents | 1440×900 | agents-1440x900-light.png | d477ea7ecbb7 | ok | /agents | — | 1 |
-| agents | 1280×720 | agents-1280x720-light.png | 683f670869b9 | ok | /agents | — | 0 |
+| minute | 390×844 | minute-390x844-light.png | 23c80dbdd7b0 | ok | /minutes/{minuteId} | — | 2 |
+| agents | 1440×900 | agents-1440x900-light.png | dc5f21729c38 | ok | /agents | — | 1 |
+| agents | 1280×720 | agents-1280x720-light.png | ed017891cc1e | ok | /agents | — | 0 |
 | agents | 768×1024 | agents-768x1024-light.png | 39c12c5ae800 | ok | /agents | — | 0 |
 | agents | 390×844 | agents-390x844-light.png | eedfec7bd665 | ok | /agents | — | 0 |
-| portfolio | 1440×900 | portfolio-1440x900-light.png | 71b908dd2db7 | ok | /portfolio | — | 1 |
-| portfolio | 1280×720 | portfolio-1280x720-light.png | deff2cfe1e75 | ok | /portfolio | — | 0 |
-| portfolio | 768×1024 | portfolio-768x1024-light.png | 4aed5eb40f81 | ok | /portfolio | — | 0 |
-| portfolio | 390×844 | portfolio-390x844-light.png | b9e1c4358c19 | ok | /portfolio | — | 0 |
+| portfolio | 1440×900 | portfolio-1440x900-light.png | 8cec0f4a3c5d | ok | /portfolio | — | 1 |
+| portfolio | 1280×720 | portfolio-1280x720-light.png | 0060fc6c4010 | ok | /portfolio | — | 0 |
+| portfolio | 768×1024 | portfolio-768x1024-light.png | 14efcfd68a0f | ok | /portfolio | — | 0 |
+| portfolio | 390×844 | portfolio-390x844-light.png | 5db319c918f5 | ok | /portfolio | — | 0 |
 | usage | 1440×900 | usage-1440x900-light.png | 2e9ea6cb04dc | ok | /usage | — | 1 |
 | usage | 1280×720 | usage-1280x720-light.png | a30a9176a038 | ok | /usage | — | 0 |
 | usage | 768×1024 | usage-768x1024-light.png | 16e781d6cf1e | ok | /usage | — | 0 |
@@ -140,78 +145,78 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 | account | 1280×720 | account-1280x720-light.png | 8b1308a285cc | ok | /account | — | 0 |
 | account | 768×1024 | account-768x1024-light.png | 1c454a4c00ef | ok | /account | — | 0 |
 | account | 390×844 | account-390x844-light.png | 62650f2756df | ok | /account | — | 0 |
-| p-dashboard | 1440×900 | p-dashboard-1440x900-light.png | 0ff561eafac0 | ok | /p/{pid}/dashboard | — | 1 |
-| p-dashboard | 1280×720 | p-dashboard-1280x720-light.png | d86628e09f35 | ok | /p/{pid}/dashboard | — | 0 |
-| p-dashboard | 768×1024 | p-dashboard-768x1024-light.png | 939361978392 | ok | /p/{pid}/dashboard | — | 0 |
-| p-dashboard | 390×844 | p-dashboard-390x844-light.png | dbb02cfa5a7c | ok | /p/{pid}/dashboard | — | 0 |
-| p-wbs | 1440×900 | p-wbs-1440x900-light.png | decc658986fd | ok | /p/{pid}/wbs | — | 1 |
-| p-wbs | 1280×720 | p-wbs-1280x720-light.png | 9c53ab7730cd | ok | /p/{pid}/wbs | — | 0 |
-| p-wbs | 768×1024 | p-wbs-768x1024-light.png | d06a3d84e677 | ok | /p/{pid}/wbs | — | 0 |
-| p-wbs | 390×844 | p-wbs-390x844-light.png | df223ea4340b | ok | /p/{pid}/wbs | — | 0 |
-| p-gantt | 1440×900 | p-gantt-1440x900-light.png | 2f8096ef5509 | ok | /p/{pid}/wbs?view=timeline | — | 1 |
-| p-gantt | 1280×720 | p-gantt-1280x720-light.png | a0cea87e3cc4 | ok | /p/{pid}/wbs?view=timeline | — | 0 |
-| p-gantt | 768×1024 | p-gantt-768x1024-light.png | fe6ee0ab9e3c | ok | /p/{pid}/wbs?view=timeline | — | 0 |
-| p-gantt | 390×844 | p-gantt-390x844-light.png | a6de8e8f7a14 | ok | /p/{pid}/wbs?view=timeline | — | 0 |
-| p-kanban | 1440×900 | p-kanban-1440x900-light.png | b7f8b6d96a0f | ok | /p/{pid}/kanban | — | 1 |
-| p-kanban | 1280×720 | p-kanban-1280x720-light.png | a8c0ab92d50a | ok | /p/{pid}/kanban | — | 0 |
-| p-kanban | 768×1024 | p-kanban-768x1024-light.png | 6c1672998f84 | ok | /p/{pid}/kanban | — | 0 |
-| p-kanban | 390×844 | p-kanban-390x844-light.png | 79a737c56343 | ok | /p/{pid}/kanban | — | 0 |
-| p-import | 1440×900 | p-import-1440x900-light.png | 47196afd0765 | ok | /p/{pid}/import | — | 1 |
-| p-import | 1280×720 | p-import-1280x720-light.png | cf5caedf7ff6 | ok | /p/{pid}/import | — | 0 |
-| p-import | 768×1024 | p-import-768x1024-light.png | ce09855d9c61 | ok | /p/{pid}/import | — | 0 |
-| p-import | 390×844 | p-import-390x844-light.png | 7352df4bca0b | ok | /p/{pid}/import | — | 0 |
-| p-import-admin | 1440×900 | p-import-admin-1440x900-light.png | 0b7ca1360626 | ok | /p/{pid}/import | — | 1 |
-| p-import-admin | 1280×720 | p-import-admin-1280x720-light.png | 7f89bd2e0b78 | ok | /p/{pid}/import | — | 0 |
-| p-import-admin | 768×1024 | p-import-admin-768x1024-light.png | 655a02565582 | ok | /p/{pid}/import | — | 0 |
-| p-import-admin | 390×844 | p-import-admin-390x844-light.png | f3e8e279b0ec | ok | /p/{pid}/import | — | 0 |
-| p-issues | 1440×900 | p-issues-1440x900-light.png | abc8467570ba | ok | /p/{pid}/issues | — | 1 |
-| p-issues | 1280×720 | p-issues-1280x720-light.png | 4bf0186d52f3 | ok | /p/{pid}/issues | — | 0 |
-| p-issues | 768×1024 | p-issues-768x1024-light.png | 8b0ce5043b4a | ok | /p/{pid}/issues | — | 0 |
-| p-issues | 390×844 | p-issues-390x844-light.png | 80c7e6581f73 | ok | /p/{pid}/issues | — | 0 |
-| p-weekly | 1440×900 | p-weekly-1440x900-light.png | 1cc4401b377f | ok | /p/{pid}/weekly | — | 1 |
-| p-weekly | 1280×720 | p-weekly-1280x720-light.png | 786fcc3dc18e | ok | /p/{pid}/weekly | — | 0 |
-| p-weekly | 768×1024 | p-weekly-768x1024-light.png | d7215ada2a70 | ok | /p/{pid}/weekly | — | 0 |
-| p-weekly | 390×844 | p-weekly-390x844-light.png | b11e19c5fa2a | ok | /p/{pid}/weekly | — | 0 |
-| p-meetings | 1440×900 | p-meetings-1440x900-light.png | e45d3a771ae3 | ok | /p/{pid}/meetings | — | 1 |
-| p-meetings | 1280×720 | p-meetings-1280x720-light.png | 67d7dbd2c8a2 | ok | /p/{pid}/meetings | — | 0 |
-| p-meetings | 768×1024 | p-meetings-768x1024-light.png | 103d2285cd57 | ok | /p/{pid}/meetings | — | 0 |
-| p-meetings | 390×844 | p-meetings-390x844-light.png | 689596694717 | ok | /p/{pid}/meetings | — | 0 |
-| p-wiki | 1440×900 | p-wiki-1440x900-light.png | 4fccefd8526b | ok | /p/{pid}/wiki | — | 1 |
-| p-wiki | 1280×720 | p-wiki-1280x720-light.png | 3f3d034aeb3e | ok | /p/{pid}/wiki | — | 0 |
-| p-wiki | 768×1024 | p-wiki-768x1024-light.png | 7f901e602f66 | ok | /p/{pid}/wiki | — | 0 |
-| p-wiki | 390×844 | p-wiki-390x844-light.png | ef7056c6a1ef | ok | /p/{pid}/wiki | — | 0 |
-| p-wiki-topic | 1440×900 | p-wiki-topic-1440x900-light.png | 9e48fc79ad09 | ok | /p/{pid}/wiki/topics/{topicId} | — | 1 |
-| p-wiki-topic | 1280×720 | p-wiki-topic-1280x720-light.png | be1e0f895961 | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
-| p-wiki-topic | 768×1024 | p-wiki-topic-768x1024-light.png | 85cb7e87ee1f | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
-| p-wiki-topic | 390×844 | p-wiki-topic-390x844-light.png | 63b0d34534b8 | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
-| p-announcements | 1440×900 | p-announcements-1440x900-light.png | 72141c4e8804 | ok | /p/{pid}/announcements | — | 1 |
-| p-announcements | 1280×720 | p-announcements-1280x720-light.png | 7703a22ef9c1 | ok | /p/{pid}/announcements | — | 0 |
-| p-announcements | 768×1024 | p-announcements-768x1024-light.png | 653fac7438e6 | ok | /p/{pid}/announcements | — | 0 |
-| p-announcements | 390×844 | p-announcements-390x844-light.png | 6a08d3d12678 | ok | /p/{pid}/announcements | — | 0 |
-| p-members | 1440×900 | p-members-1440x900-light.png | 252ae7e6862e | ok | /p/{pid}/members | — | 1 |
-| p-members | 1280×720 | p-members-1280x720-light.png | 83366583da25 | ok | /p/{pid}/members | — | 0 |
-| p-members | 768×1024 | p-members-768x1024-light.png | 33874f9d341d | ok | /p/{pid}/members | — | 0 |
-| p-members | 390×844 | p-members-390x844-light.png | ca62823060e3 | ok | /p/{pid}/members | — | 0 |
-| p-attendance | 1440×900 | p-attendance-1440x900-light.png | 0f3e6878eadb | ok | /p/{pid}/attendance | — | 1 |
-| p-attendance | 1280×720 | p-attendance-1280x720-light.png | 90cafd92334b | ok | /p/{pid}/attendance | — | 0 |
-| p-attendance | 768×1024 | p-attendance-768x1024-light.png | 87b82684aced | ok | /p/{pid}/attendance | — | 0 |
-| p-attendance | 390×844 | p-attendance-390x844-light.png | c1de3beaf6ff | ok | /p/{pid}/attendance | — | 0 |
-| p-agents | 1440×900 | p-agents-1440x900-light.png | ca3361106db0 | ok | /p/{pid}/agents | — | 1 |
-| p-agents | 1280×720 | p-agents-1280x720-light.png | f2128e5d6492 | ok | /p/{pid}/agents | — | 0 |
-| p-agents | 768×1024 | p-agents-768x1024-light.png | 3eb5d6eacbd9 | ok | /p/{pid}/agents | — | 0 |
-| p-agents | 390×844 | p-agents-390x844-light.png | 38ff4b029ec3 | ok | /p/{pid}/agents | — | 0 |
-| p-office | 1440×900 | p-office-1440x900-light.png | 32ff0c866733 | ok | /p/{pid}/agents/office | — | 1 |
-| p-office | 1280×720 | p-office-1280x720-light.png | 7063f90203d3 | ok | /p/{pid}/agents/office | — | 0 |
-| p-office | 768×1024 | p-office-768x1024-light.png | ced7196901ab | ok | /p/{pid}/agents/office | — | 0 |
-| p-office | 390×844 | p-office-390x844-light.png | e008fe07b042 | ok | /p/{pid}/agents/office | — | 0 |
-| p-office-lane | 1440×900 | p-office-lane-1440x900-light.png | 102a8003b369 | ok | /p/{pid}/agents/office | — | 1 |
-| p-office-lane | 1280×720 | p-office-lane-1280x720-light.png | dc3539ada9fe | ok | /p/{pid}/agents/office | — | 0 |
-| p-office-lane | 768×1024 | p-office-lane-768x1024-light.png | a3681cf7b580 | ok | /p/{pid}/agents/office | — | 0 |
-| p-office-lane | 390×844 | p-office-lane-390x844-light.png | ee47665258c0 | ok | /p/{pid}/agents/office | — | 0 |
-| p-settings | 1440×900 | p-settings-1440x900-light.png | f9f02d801d01 | ok | /p/{pid}/settings | — | 1 |
-| p-settings | 1280×720 | p-settings-1280x720-light.png | 6cf268defc0c | ok | /p/{pid}/settings | — | 0 |
-| p-settings | 768×1024 | p-settings-768x1024-light.png | b0f1082c6de3 | ok | /p/{pid}/settings | — | 0 |
-| p-settings | 390×844 | p-settings-390x844-light.png | b9c5e1e75e23 | ok | /p/{pid}/settings | — | 0 |
+| p-dashboard | 1440×900 | p-dashboard-1440x900-light.png | bcf8ec7f6364 | ok | /p/{pid}/dashboard | — | 1 |
+| p-dashboard | 1280×720 | p-dashboard-1280x720-light.png | 4dd0efb9fea2 | ok | /p/{pid}/dashboard | — | 0 |
+| p-dashboard | 768×1024 | p-dashboard-768x1024-light.png | 79016c11a690 | ok | /p/{pid}/dashboard | — | 0 |
+| p-dashboard | 390×844 | p-dashboard-390x844-light.png | e2260924e1a1 | ok | /p/{pid}/dashboard | — | 0 |
+| p-wbs | 1440×900 | p-wbs-1440x900-light.png | 75bf0a02f728 | ok | /p/{pid}/wbs | — | 1 |
+| p-wbs | 1280×720 | p-wbs-1280x720-light.png | d6b04877364d | ok | /p/{pid}/wbs | — | 0 |
+| p-wbs | 768×1024 | p-wbs-768x1024-light.png | 287a9201b948 | ok | /p/{pid}/wbs | — | 0 |
+| p-wbs | 390×844 | p-wbs-390x844-light.png | 27bf3b4ec20a | ok | /p/{pid}/wbs | — | 0 |
+| p-gantt | 1440×900 | p-gantt-1440x900-light.png | 8454156131ac | ok | /p/{pid}/wbs?view=timeline | — | 1 |
+| p-gantt | 1280×720 | p-gantt-1280x720-light.png | d7212002893a | ok | /p/{pid}/wbs?view=timeline | — | 0 |
+| p-gantt | 768×1024 | p-gantt-768x1024-light.png | 0b0ad2476d84 | ok | /p/{pid}/wbs?view=timeline | — | 0 |
+| p-gantt | 390×844 | p-gantt-390x844-light.png | e7c13867953d | ok | /p/{pid}/wbs?view=timeline | — | 0 |
+| p-kanban | 1440×900 | p-kanban-1440x900-light.png | 11b3f0cd9977 | ok | /p/{pid}/kanban | — | 1 |
+| p-kanban | 1280×720 | p-kanban-1280x720-light.png | 0dedef0a7e2f | ok | /p/{pid}/kanban | — | 0 |
+| p-kanban | 768×1024 | p-kanban-768x1024-light.png | 66d9164d389d | ok | /p/{pid}/kanban | — | 0 |
+| p-kanban | 390×844 | p-kanban-390x844-light.png | efe81678c9bf | ok | /p/{pid}/kanban | — | 0 |
+| p-import | 1440×900 | p-import-1440x900-light.png | 84d63cd31fc7 | ok | /p/{pid}/import | — | 1 |
+| p-import | 1280×720 | p-import-1280x720-light.png | 3e8f3898047d | ok | /p/{pid}/import | — | 0 |
+| p-import | 768×1024 | p-import-768x1024-light.png | 9fe79b0614c2 | ok | /p/{pid}/import | — | 0 |
+| p-import | 390×844 | p-import-390x844-light.png | da211a844597 | ok | /p/{pid}/import | — | 0 |
+| p-import-admin | 1440×900 | p-import-admin-1440x900-light.png | da9f54384abd | ok | /p/{pid}/import | — | 1 |
+| p-import-admin | 1280×720 | p-import-admin-1280x720-light.png | d5f97fa6232c | ok | /p/{pid}/import | — | 0 |
+| p-import-admin | 768×1024 | p-import-admin-768x1024-light.png | f11d5c0f84f6 | ok | /p/{pid}/import | — | 0 |
+| p-import-admin | 390×844 | p-import-admin-390x844-light.png | fd15bd4a9eed | ok | /p/{pid}/import | — | 0 |
+| p-issues | 1440×900 | p-issues-1440x900-light.png | d78db4e26a6e | ok | /p/{pid}/issues | — | 1 |
+| p-issues | 1280×720 | p-issues-1280x720-light.png | 9dff70a91bfa | ok | /p/{pid}/issues | — | 0 |
+| p-issues | 768×1024 | p-issues-768x1024-light.png | 34341109ac05 | ok | /p/{pid}/issues | — | 0 |
+| p-issues | 390×844 | p-issues-390x844-light.png | b2e7dac5ab8a | ok | /p/{pid}/issues | — | 0 |
+| p-weekly | 1440×900 | p-weekly-1440x900-light.png | d5a91d239a6d | ok | /p/{pid}/weekly | — | 1 |
+| p-weekly | 1280×720 | p-weekly-1280x720-light.png | e4be18d772fa | ok | /p/{pid}/weekly | — | 0 |
+| p-weekly | 768×1024 | p-weekly-768x1024-light.png | f57a7faef4b3 | ok | /p/{pid}/weekly | — | 0 |
+| p-weekly | 390×844 | p-weekly-390x844-light.png | 1aaf75766dc5 | ok | /p/{pid}/weekly | — | 0 |
+| p-meetings | 1440×900 | p-meetings-1440x900-light.png | d40504565f7c | ok | /p/{pid}/meetings | — | 1 |
+| p-meetings | 1280×720 | p-meetings-1280x720-light.png | ac72351c5348 | ok | /p/{pid}/meetings | — | 0 |
+| p-meetings | 768×1024 | p-meetings-768x1024-light.png | 004da1c2ff48 | ok | /p/{pid}/meetings | — | 0 |
+| p-meetings | 390×844 | p-meetings-390x844-light.png | 7a56b0ae43cb | ok | /p/{pid}/meetings | — | 0 |
+| p-wiki | 1440×900 | p-wiki-1440x900-light.png | 8c2aa2a86d12 | ok | /p/{pid}/wiki | — | 1 |
+| p-wiki | 1280×720 | p-wiki-1280x720-light.png | 1c9d498be354 | ok | /p/{pid}/wiki | — | 0 |
+| p-wiki | 768×1024 | p-wiki-768x1024-light.png | 5316e71faa7c | ok | /p/{pid}/wiki | — | 0 |
+| p-wiki | 390×844 | p-wiki-390x844-light.png | 542d44256fa8 | ok | /p/{pid}/wiki | — | 0 |
+| p-wiki-topic | 1440×900 | p-wiki-topic-1440x900-light.png | c65fdf7ed638 | ok | /p/{pid}/wiki/topics/{topicId} | — | 1 |
+| p-wiki-topic | 1280×720 | p-wiki-topic-1280x720-light.png | 496cf4b45ad8 | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
+| p-wiki-topic | 768×1024 | p-wiki-topic-768x1024-light.png | ea39d09438fc | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
+| p-wiki-topic | 390×844 | p-wiki-topic-390x844-light.png | 4585769c1d17 | ok | /p/{pid}/wiki/topics/{topicId} | — | 0 |
+| p-announcements | 1440×900 | p-announcements-1440x900-light.png | 0ebb12961da8 | ok | /p/{pid}/announcements | — | 1 |
+| p-announcements | 1280×720 | p-announcements-1280x720-light.png | 23b54426872c | ok | /p/{pid}/announcements | — | 0 |
+| p-announcements | 768×1024 | p-announcements-768x1024-light.png | cd35d87c182c | ok | /p/{pid}/announcements | — | 0 |
+| p-announcements | 390×844 | p-announcements-390x844-light.png | ebf2f4e62da2 | ok | /p/{pid}/announcements | — | 0 |
+| p-members | 1440×900 | p-members-1440x900-light.png | 79a0c9892798 | ok | /p/{pid}/members | — | 1 |
+| p-members | 1280×720 | p-members-1280x720-light.png | 1515f95c43bc | ok | /p/{pid}/members | — | 0 |
+| p-members | 768×1024 | p-members-768x1024-light.png | 39ca18fe81c1 | ok | /p/{pid}/members | — | 0 |
+| p-members | 390×844 | p-members-390x844-light.png | df4977ca1a35 | ok | /p/{pid}/members | — | 0 |
+| p-attendance | 1440×900 | p-attendance-1440x900-light.png | bc14fbec9d76 | ok | /p/{pid}/attendance | — | 1 |
+| p-attendance | 1280×720 | p-attendance-1280x720-light.png | 3b988253f220 | ok | /p/{pid}/attendance | — | 0 |
+| p-attendance | 768×1024 | p-attendance-768x1024-light.png | 4813e916064e | ok | /p/{pid}/attendance | — | 0 |
+| p-attendance | 390×844 | p-attendance-390x844-light.png | d6b6d47db078 | ok | /p/{pid}/attendance | — | 0 |
+| p-agents | 1440×900 | p-agents-1440x900-light.png | 0155478d3a95 | ok | /p/{pid}/agents | — | 1 |
+| p-agents | 1280×720 | p-agents-1280x720-light.png | adec197562d2 | ok | /p/{pid}/agents | — | 0 |
+| p-agents | 768×1024 | p-agents-768x1024-light.png | 1dff678fed05 | ok | /p/{pid}/agents | — | 0 |
+| p-agents | 390×844 | p-agents-390x844-light.png | 702cac81ee78 | ok | /p/{pid}/agents | — | 0 |
+| p-office | 1440×900 | p-office-1440x900-light.png | b5a50f1d602e | ok | /p/{pid}/agents/office | — | 1 |
+| p-office | 1280×720 | p-office-1280x720-light.png | 55ed75a6bf3a | ok | /p/{pid}/agents/office | — | 0 |
+| p-office | 768×1024 | p-office-768x1024-light.png | 10e29e834158 | ok | /p/{pid}/agents/office | — | 0 |
+| p-office | 390×844 | p-office-390x844-light.png | e00a91a166b0 | ok | /p/{pid}/agents/office | — | 0 |
+| p-office-lane | 1440×900 | p-office-lane-1440x900-light.png | 55d780d18a8e | ok | /p/{pid}/agents/office | — | 1 |
+| p-office-lane | 1280×720 | p-office-lane-1280x720-light.png | addf225afaac | ok | /p/{pid}/agents/office | — | 0 |
+| p-office-lane | 768×1024 | p-office-lane-768x1024-light.png | db17d708980f | ok | /p/{pid}/agents/office | — | 0 |
+| p-office-lane | 390×844 | p-office-lane-390x844-light.png | cd99deda1abc | ok | /p/{pid}/agents/office | — | 0 |
+| p-settings | 1440×900 | p-settings-1440x900-light.png | 1ea115d87a3d | ok | /p/{pid}/settings | — | 1 |
+| p-settings | 1280×720 | p-settings-1280x720-light.png | 2c2610276bf8 | ok | /p/{pid}/settings | — | 0 |
+| p-settings | 768×1024 | p-settings-768x1024-light.png | 9ca9fa4afde6 | ok | /p/{pid}/settings | — | 0 |
+| p-settings | 390×844 | p-settings-390x844-light.png | 8fd8eec20f10 | ok | /p/{pid}/settings | — | 0 |
 | ws-settings | 1440×900 | ws-settings-1440x900-light.png | f3c555f620e0 | ok | /w/default/settings | — | 1 |
 | ws-settings | 1280×720 | ws-settings-1280x720-light.png | 23792e0f160f | ok | /w/default/settings | — | 1 |
 | ws-settings | 768×1024 | ws-settings-768x1024-light.png | 1fe93008d121 | ok | /w/default/settings | — | 1 |
@@ -238,8 +243,8 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 | `admin-teams` | 팀 관리 — 새 팀 이름 + 팀 추가, 팀 목록(순서·상태·팀별 진척현황·작업) |
 | `llm-config` | LLM 설정(플랫폼 관리자) — 서버 적용 중 생성·임베딩 모델, 활성 LLM(환경변수 기본값·프로필 선택·선택 안 함), 프로필 관리, 저장 |
 | `account` | 내 계정 — 프로필(이름·이메일)·비밀번호 변경, 개인 액세스 토큰 목록과 새 토큰 발급(이름·프로젝트·스코프·만료) |
-| `p-dashboard` | 프로젝트 운영 현황 — 공지 띠, 요약(진척 게이지·일정 D+N·리스크·다음 마일스톤), 주간보고서 요약(PPT), 마일스톤 타임라인, S-커브 진척현황·속도 지표 |
-| `p-wbs` | 작업 계획 — 계층 표 + 간트(주·일 눈금·오늘 표식·주말·공휴일·계획/실적·크리티컬 패스·의존선), 단계 펼침(1·2·3·4), 도구 줄(검색·코드 표시·간트 확대·완료 숨김·마일스톤·진척 렌즈·글자 크기·전체 화면·주간보고). 진척 % 셀 편집(멤버)·가중치·행 추가(관리자), 행 상세 패널(필드·산출물·의존·담당·단계) |
+| `p-dashboard` | 프로젝트 운영 현황 — 공지 띠, 요약(진척 게이지·일정 D+N·리스크·다음 마일스톤), 주간보고서 요약(PPT), 마일스톤 타임라인(시드 이정표 셋 — 완료·경과·예정), S-커브 진척현황·속도 지표 |
+| `p-wbs` | 작업 계획 — 계층 표 + 간트(주·일 눈금·오늘 표식·주말·공휴일·계획/실적·크리티컬 패스·의존선), 단계 펼침(1·2·3·4), 도구 줄(검색·코드 표시·간트 확대·완료 숨김·마일스톤(이정표가 감지될 때만 — 칩·세로선)·진척 렌즈·글자 크기·전체 화면·주간보고). 진척 % 셀 편집(멤버)·가중치·행 추가(관리자), 행 상세 패널(필드·산출물·의존·담당·단계) |
 | `p-gantt` | `/p/{pid}/wbs?view=timeline` 으로 리디렉션 — 같은 작업 계획 화면 |
 | `p-kanban` | 칸반 보드 — 진행/Phase별/담당자별, 내 팀/전체, 필터 칩(지연·이번 주 마감·진행중·미착수)·검색, 카드 끌기·+/−·착수·완료·재개로 진척 변경, 첫 방문 안내 띠('알겠어요') |
 | `p-import` | 멤버: '임포트 권한이 없습니다' 제한 문구 |
@@ -264,27 +269,28 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 
 `/p/{pid}/wbs` 를 규모별 합성 프로젝트(깊이 4 · 팀 5 · 담당 20 · 날짜·진척 분포 고정 시드, 행 전부 `is_owner_split=false`)로 잰다. 중앙값은 **응답한 run 만**이다. '응답' = 3초 안에 돌아오는 `page.evaluate` 에서 `readyState === 'complete'` ∧ `[data-row-id]` ≥ 1(과제 4 후속 — 원장 Ruling [T4 무응답 = 기준선 결과]). 무응답은 결함이 아니라 이 기준선의 수치다. DOM 행 = 시드 행 대조(D51)는 응답한 run 에서만 한다.
 
-- 1,011행: 두 묶음 10/10 응답. 3,033행: 1차 1/5 · 재측정 4/5(과제 4 는 2/3) — 응답과 무응답의 경계이고, 응답해도 스크롤 프레임이 평균 1.6~4초다. 5,055행: 여섯 run 가운데 측정을 끝낸 run 이 없다(재측정 셋째 run 은 한순간 '응답'으로 잡힌 뒤 15분 넘게 멈췄다). 10,110행: 두 묶음 모두 무응답.
+- 1,011행: 두 묶음 10/10 응답. 3,033행: 1차 1/5 · 재측정 4/5(과제 4 는 2/3) — 응답과 무응답의 경계이고, 응답해도 스크롤 프레임이 평균 1.6~3.6초다(이 묶음들의 응답 run 1,637~3,147ms, 과제 4 의 3,594ms 포함). 5,055행: 여섯 run 가운데 측정을 끝낸 run 이 없다(재측정 셋째 run 은 한순간 '응답'으로 잡힌 뒤 15분 넘게 멈췄다). 10,110행: 두 묶음 모두 무응답.
 
-**측정 환경 경고.** 이 기계에서는 측정 내내 다른 프로젝트의 Docker 컨테이너 `pms-app`(이미지 `prj-manager-app`)이 재시작을 되풀이했다(RestartCount 628 → 724, `unless-stopped`) — 시작할 때마다 CPU 2~3코어를 쓰고 load1 이 8~25 로 오른다. 1차 묶음의 3,033행은 다른 세션의 vitest 와도 겹쳤다. 그래서 두 묶음을 모두 싣고 묶음마다 그 시간의 기계 상태를 적었다. 행 수 경계는 두 묶음과 과제 4 실측이 같고, ms 값은 부하에 따라 두 배쯤 흔들린다(1,011행 TTFB 270 → 969ms).
+**측정 환경 경고.** 이 기계에서는 측정 내내 다른 프로젝트의 Docker 컨테이너 `pms-app`(이미지 `prj-manager-app`)이 재시작을 되풀이했다(RestartCount 628 → 724, `unless-stopped`) — 시작할 때마다 CPU 2~3코어를 쓰고 load1 이 8~25 로 오른다. 1차 묶음의 3,033행은 다른 세션의 vitest 와도 겹쳤다. 그래서 두 묶음을 모두 싣고 묶음마다 그 시간의 기계 상태를 적었다. 행 수 경계는 두 묶음과 과제 4 실측이 같고, ms 값은 부하에 따라 2~4배 흔들린다(1,011행 두 묶음 사이 — 첫 행 2.2배 · 프레임 2.1배 · HTML 끝 2.7배 · TTFB 3.6배(270 → 969ms)).
 
 | 규모 | 묶음 · 시각(KST) | run 상태 | ① 이동 → 첫 행(ms) | ② 첫 행까지 긴 작업 합(ms) | ③ 스크롤 프레임 평균(ms) / 50ms 초과 | ④ HTML 끝 / TTFB(ms) | DOM 행 = 시드 행 | 무응답 run 의 `domRowsAt` | 그 시간의 기계 |
 |---|---|---|---|---|---|---|---|---|---|
 | 1,011행(`PERF-GRID-p1`) | 1차 12:51:39~12:53:18 | 5/5 응답(제한 120초) | 520 | 0 | 109.1 / 10 | 414 / 270 | 1,011 = 1,011 | — | next·vitest 없음(Docker 부하 표본 없음) |
 | 1,011행(`PERF-GRID-p1`) | 재측정 13:12:18~13:15:21 | 5/5 응답(제한 120초) | 1,167 | 54 | 225.4 / 27 | 1,106 / 969 | 1,011 = 1,011 | — | next·vitest 없음. 끝난 직후(13:15) `pms-app` 117%·Docker VM 290%·load1 6.1 — 부하 표본기는 그 뒤에 띄웠다 |
 | 3,033행(`PERF-GRID-p3`) | 1차 12:53:18~13:07:28 | 1/5 응답 · 4 무응답(제한 120초) | 959 | 0 | 3,146.6 / 97 | 849 / 758 | 3,033 = 3,033 | #2 5s=null 15s=null 30s=null 60s=null ; #3 5s=0 15s=null 30s=null 60s=null ; #4 5s=0 15s=3539 30s=null 60s=4473 ; #5 5s=null 15s=null 30s=null 60s=null | **12:59:49~약 13:04 다른 세션 vitest(워커 7) 겹침** |
-| 3,033행(`PERF-GRID-p3`) | 재측정 13:16:51~13:37:24 | 4/5 응답 · 1 무응답(제한 120초) | 1,804 | 145 | 1,888.4 / 98 | 2,107 / 1,013 | 3,033 = 3,033 | #3 5s=null 15s=null 30s=null 60s=null | next·vitest 없음, load1 3.2~25.4, `pms-app` 최대 353%(20초 표본 52 중 47 바쁨) |
+| 3,033행(`PERF-GRID-p3`) | 재측정 13:16:51~13:37:24 | 4/5 응답 · 1 무응답(제한 120초) | 1,804 | 145 | 1,888.4 / 98 | 2,107 / 1,013 | 3,033 = 3,033 | #3 5s=null 15s=null 30s=null 60s=null | next·vitest 없음, load1 3.2~25.4, `pms-app` 최대 353%(부하 표본 52 중 47 바쁨) |
 | 5,055행(`PERF-GRID-p5`) | 1차 13:07:28~13:10:36 | 0/3 응답 · 3 무응답(제한 60초) | — | — | — | — | — | #1 5s=null 15s=null 30s=null 60s=null ; #2 5s=null 15s=null 30s=null ; #3 5s=null 15s=null 30s=null | next·vitest 없음(5초 표본 0) |
-| 5,055행 | 재측정 13:37:24~13:55:18 | 결과 없음 — 첫 두 run 무응답, 셋째 run 이 응답 판정 뒤 15분 넘게 멈춰 측정을 끝냈다(exit 1) | — | — | — | — | — | — | next·vitest 없음, load1 8.3~13.9, `pms-app` 최대 339%(20초 표본 45) |
+| 5,055행 | 재측정 13:37:24~13:55:18 | 결과 없음 — 첫 두 run 무응답, 셋째 run 이 응답 판정 뒤 15분 넘게 멈춰 측정을 끝냈다(exit 1) | — | — | — | — | — | — | next·vitest 없음, load1 8.3~13.9, `pms-app` 최대 339%(부하 표본 45) |
 | 10,110행(`PERF-GRID`) | 1차 13:10:36~13:11:50 | 0/1 응답 · 1 무응답(제한 60초) | — | — | — | — | — | #1 5s=null 15s=10110 30s=null 60s=null | next·vitest 없음(5초 표본 0) |
-| 10,110행(`PERF-GRID`) | 재측정 13:55:19~13:56:26 | 0/1 응답 · 1 무응답(제한 60초) | — | — | — | — | — | #1 5s=0 15s=null 30s=null 60s=null | next·vitest 없음, load1 9.4~12.6, `pms-app` 최대 323%(20초 표본 3 중 3 바쁨) |
+| 10,110행(`PERF-GRID`) | 재측정 13:55:19~13:56:26 | 0/1 응답 · 1 무응답(제한 60초) | — | — | — | — | — | #1 5s=0 15s=null 30s=null 60s=null | next·vitest 없음, load1 9.4~12.6, `pms-app` 최대 323%(부하 표본 3 중 3 바쁨) |
 
-- 지표: ① `goto` 시작 → 첫 `[data-row-id]`(MutationObserver) ② 첫 행 전 longtask 합 ③ `[data-wbs-scroll-region]` 을 프레임마다 400px 씩 40,000px(또는 끝)까지 스크롤한 프레임 간격의 평균·50ms 초과 수 ④ navigation `responseEnd − requestStart`(HTML 끝) / `responseStart − requestStart`(TTFB) — 판정 Q9. 1440×900 라이트, run 마다 새 컨텍스트. 응답한 run 의 DOM 행은 시드 행과 모두 같았다(D51). 무응답 run 의 `domRowsAt` 는 5·15·30·60초 이후 첫 표본의 `[data-row-id]` 수이고 `null` 은 그 시점의 `page.evaluate` 가 3초 안에 돌아오지 않았다(메인 스레드 점유)는 뜻이다 — 로딩 중 값이 시드 행보다 큰 것(3,539·4,473)은 같은 속성을 쓰는 요소가 표와 간트 양쪽에 있어서로 보인다.
+- 지표: ① `goto` 시작 → 첫 `[data-row-id]`(MutationObserver) ② 첫 행 전 longtask 합 ③ `[data-wbs-scroll-region]` 을 프레임마다 400px 씩 40,000px(또는 끝)까지 스크롤한 프레임 간격의 평균·50ms 초과 수 ④ navigation `responseEnd − requestStart`(HTML 끝) / `responseStart − requestStart`(TTFB) — 판정 Q9. 1440×900 라이트, run 마다 새 컨텍스트. 응답한 run 의 DOM 행은 시드 행과 모두 같았다(D51). 무응답 run 의 `domRowsAt` 는 5·15·30·60초 이후 첫 표본의 `[data-row-id]` 수이고 `null` 은 그 시점의 `page.evaluate` 가 3초 안에 돌아오지 않았다(메인 스레드 점유)는 뜻이다 — 로딩 중 값이 시드 행보다 큰 것(3,539·4,473)은 원인 미확정이다. 그 속성을 내는 요소는 행마다 하나(`WbsGanttSheet` 의 한 곳 — 표와 간트를 가로지르는 한 줄)이고 응답한 run 의 안정된 최종 행 수는 시드와 같았다(1,011·3,033) — 스트리밍 중 일시 상태로 추정한다.
 - run 수: 1,011·3,033 행은 5회(제한 120초), 5,055 행 3회·10,110 행 1회(제한 60초) — 응답하지 않는 규모는 기계 시간 때문에 줄였다(스펙 §3.2 의 "5회"와 다른 편차, 보충 지시 Step 3 확정).
 - exit(재측정): 1,011행 0 · 3,033행 2 · 5,055행 1(멈춘 run 을 끝냄 — 결과 파일 없음) · 10,110행 2 — 0 = 전 run 응답, 2 = 측정됨·무응답 run 있음(결과), 1 = 오류. 5,055행의 1 은 '응답' 판정 뒤 단계(행 수 안정 대기·스크롤 `page.evaluate`)에 시간 제한이 없어 멈춘 run 을 15분 뒤 끝낸 것이다(`✗ page.evaluate: Target page, context or browser has been closed`) — 도구 보강 후보.
-- 그 뒤 상한을 더했다(`341e2a3`, 과제 5b) — 응답 뒤 두 단계도 각각 `timeoutMs` 와 겨루고 넘으면 오류가 아니라 `unresponsive` + `stalledAt`(`load`·`settle`·`scroll`)으로 남는다. 위 수치는 상한 전 도구로 잰 것이고 다시 재지 않았다 — 같은 조건이면 3,033행의 응답 run(스크롤 100프레임 × 1.6~4초)은 이제 `stalledAt: 'scroll'` 무응답으로 기록되므로 비교(Q07, SPU2)는 같은 도구 판으로 다시 잰다.
+- 그 뒤 상한을 더했다(`341e2a3`, 과제 5b) — 응답 뒤 두 단계도 각각 `timeoutMs` 와 겨루고 넘으면 오류가 아니라 `unresponsive` + `stalledAt`(`load`·`settle`·`scroll`)으로 남는다. 위 수치는 상한 전 도구로 잰 것이고 다시 재지 않았다 — 같은 조건이면 3,033행의 응답 run(스크롤 100프레임 × 1.6~3.6초)은 이제 `stalledAt: 'scroll'` 무응답으로 기록되므로 비교(Q07, SPU2)는 같은 도구 판으로 다시 잰다.
+- UI-0 수정 라운드(`d17d130`)가 도구를 더 고쳤다 — 이 표도 그 전 판이다. ① run 마다 브라우저를 새로 띄운다(막힌 렌더러가 다음 run 을 잴 때 살아 있지 않게 — 표본에 `closeMs`·`closeTimedOut`) ② 측정 시작에 측정 계정의 서버 선호를 고정 객체(라이트·`lastProjectId` = 측정 프로젝트)로 덮고 다시 읽어 확인 + 테마 쿠키 라이트(캡처의 다크 패스가 남긴 테마·간트 일 폭·개요 번호·완료 숨김을 이어받지 않는다 — 옛 `wbsHideDone` 확인을 포함한다) ③ 사전 확인에 `item_owners` 총수 < `max_rows`(앱의 무범위 담당 조회 — D51) ④ ③ 의 스크롤을 픽셀이 아니라 1,000행(행 높이 × 1,000, 한 프레임 10행 — 행 높이 40px 이면 이 표와 같은 400px·40,000px), 결과에 `rowHeight`·`frameCount` ⑤ 중앙값은 키마다 `null` 을 빼고 뺀 수를 `excluded` 에. 동작 확인만 했다(1,011행 2회 — 기준선 아님).
 - 기준 장치: Apple M3 · 메모리 8 GB · macOS 26.6.2 · Node v22.18.0 · Chromium 145.0.7632.6 · 스크립트 커밋 `56fa0af`(앱 = main `81deae9`) · `max_rows` 20000 · 페르소나 비플랫폼 워크스페이스 관리자 `ui-wsadmin`(판정 Q9 — `measure` 가 `user_wbs_state` 0행·`wbsHideDone` 없음을 확인) · 시드 `perf-grid.mjs seed --phases 1|3|5|10`(이름 `PERF-GRID-p1|p3|p5`·`PERF-GRID`) · 서버 3201 `next start` · 공유 잠금 안에서 한 번에 하나.
-- 조용한 기계 확인: 묶음마다 서버 기동 전 `pgrep -fl 'next (dev|build|start)|vitest'` 가 비었다(`qa/sp3b/quiet-ui0-try1.txt`·`quiet-ui0.txt` — 재측정은 규모마다 vitest·next dev|build 가 0 이 될 때까지 기다렸다가 쟀다. `quiet-ui0.txt` 의 post-p1 `heavy_n=1` 은 측정 쪽 표본기 자신이 패턴에 걸린 것이다). 5초 간격 표본 `quiet-sampler-t5*.log`, 재측정의 20초 간격 부하 표본(load1·컨테이너 CPU) `load-sampler-t5.log`. 산출 JSON: 재측정 `perf-grid-ui0-p1.json`·`perf-grid-ui0-p3.json`·`perf-grid-ui0.json`, 1차 `perf-grid-ui0-p1-try1.json`·`perf-grid-ui0-p3-noisy.json`·`perf-grid-ui0-p5-try1.json`·`perf-grid-ui0-try1.json`(모두 `qa/sp3b/`).
+- 조용한 기계 확인: 묶음마다 서버 기동 전 `pgrep -fl 'next (dev|build|start)|vitest'` 가 비었다(`qa/sp3b/quiet-ui0-try1.txt`·`quiet-ui0.txt` — 재측정은 규모마다 vitest·next dev|build 가 0 이 될 때까지 기다렸다가 쟀다. `quiet-ui0.txt` 의 post-p1 `heavy_n=1` 은 측정 쪽 표본기 자신이 패턴에 걸린 것이다). 5초 간격 표본 `quiet-sampler-t5*.log`, 재측정의 부하 표본(load1·컨테이너 CPU — 표본 간격은 실측 약 23초) `load-sampler-t5.log`. 산출 JSON: 재측정 `perf-grid-ui0-p1.json`·`perf-grid-ui0-p3.json`·`perf-grid-ui0.json`, 1차 `perf-grid-ui0-p1-try1.json`·`perf-grid-ui0-p3-noisy.json`·`perf-grid-ui0-p5-try1.json`·`perf-grid-ui0-try1.json`(모두 `qa/sp3b/`).
 - 과제 4(`a41b6b9`, 오전)의 실측도 같은 꼴이다 — 1,011행 3/3 응답(첫 행 410·TTFB 316·프레임 96ms), 3,033행 2/3 응답, 5,055행 0/3, 10,110행 0/1(앞선 진단에서 20분 뒤에도 `readyState` 가 `complete` 가 아니었다).
 - 비교(Q07)는 SPU2 가 같은 도구·같은 규모로, **같은 기계 조건(다른 컨테이너 부하 없음 — `docker stats`·load1 를 함께 적는다)**에서 다시 잰다. 스펙 §3.2 의 단일 수치(1만 행 5회 중앙값, `domRows 10110`)는 이 상태에서 낼 수 없어 규모 곡선으로 바꿨다(원장 Ruling [T4 무응답 = 기준선 결과]).
 
@@ -307,17 +313,18 @@ UI-1~UI-3 눈확인과 SPU2 Q07·SP9 Q01 의 비교 기준이 되는 **기록**�
 
 | 술어 파일(`src/lib/authz/*Access.ts`) | export | 쓰는 곳 |
 |---|---|---|
-| `agentsAccess.ts` | `canViewAgents`·`seatmapProjectIds` | `agents` 페이지, `actions/agentSeatmap.ts` |
+| `agentsAccess.ts` | `canViewAgents`·`seatmapProjectIds` | `agents` 페이지, `actions/agentSeatmap.ts`(`canViewAgents`), `lib/data/agentSeatmap.ts`(`seatmapProjectIds` — 좌석표 조회의 프로젝트 거름) |
 | `llmConfigAccess.ts` | `canManageLlmConfig` | `llm-config` 페이지, `HeaderChrome`(메뉴 노출) |
 | `portfolioAccess.ts` | `canViewPortfolio` | `portfolio` 페이지, `(app)/layout.tsx`, `lib/data/portfolio.ts` |
 | `teamsAccess.ts` | `canManageTeams` | `admin-teams` 페이지, `HeaderChrome` |
 | `usageAccess.ts` | `canViewUsage` | `usage` 페이지, `(app)/layout.tsx`, `lib/data/usage.ts` |
+| `src/lib/settings/workspacePageAccess.ts`(authz 밖) | `workspacePageAccess` | `ws-settings` 페이지(:40 — 비관리자 → `/projects`), `(app)/w/[slug]/layout.tsx`(:11·:27). UI-2b 가 그 페이지의 첫 await 를 `loadWorkspaceScope` 로 바꾸는 자리(스펙 §2.4) |
 
 화면별 페이지 관문은 §1 의 '현재 게이트' 열(모듈 관문 `requireModulePage` 는 권한 가드가 아니다 — CLAUDE.md).
 
 ### 5.3 인라인 편집 저장
 
-SPU1 의 표면별 채택 순서(개정 §5.8.7)의 입력. 액션 파일 wbs·wbsAssign·weekly·issues·issueUpdates·minutes·attendance·announcements·meetings·roster 의 **쓰기** export 를 부르는 화면만 적었다(조회 export 는 뺐다). 가드 열의 `+` 는 호출 순서, 괄호는 같은 파일의 도우미가 부르는 가드다.
+SPU1 의 표면별 채택 순서(개정 §5.8.7)의 입력. 액션 파일 wbs·wbsAssign·weekly·issues·issueUpdates·minutes·attendance·announcements·meetings·roster 의 **쓰기** export 를 부르는 화면만 적었다(조회 export 는 뺐다). 그 밖이지만 같은 화면에서 쓰는 쓰기 액션 `agentHub`·`wbsSpec`(p-wbs·p-agents 행 상세의 사양 패널, 위임 표의 지시문)도 한 행씩 넣었다. 가드 열의 `+` 는 호출 순서, 괄호는 같은 파일의 도우미가 부르는 가드다.
 
 | 화면 | 컴포넌트 | 액션(파일#export) | 가드 |
 |---|---|---|---|
@@ -326,6 +333,7 @@ SPU1 의 표면별 채택 순서(개정 §5.8.7)의 입력. 액션 파일 wbs·w
 | `p-wbs`·`p-agents` | `RowDetailPanel`(행 상세) | `wbs#updateWbsFields`·`addSubAct`·`deleteWbsItem`·`moveWbsItem`·`removeTaskDependency` · `wbs#addWbsItem`·`addTaskDependency` · `wbs#updateDeliverable` | `resolveProjectId` + `requireProjectAdmin` · `requireProjectAdmin` · `resolveProjectId` + `requireProjectMember` |
 | `p-wbs`·`p-agents` | `WbsAssigneeStagePanel`(행 상세 안) | `wbsAssign#setWbsAssignee`·`setWbsAssigneeCascade` · `wbsAssign#setWbsStage`·`setWbsDevWorkflow` | `requireProjectAdmin` · `resolveItemProjectId` + `requireSubtreeManagerOrAdmin`(관리자 ∨ 하위 트리 담당자) |
 | `p-agents`·`agents`·`p-office` | `DelegationTable`·`ApprovalQueue`·`SeatmapView` | `agentHub#runHubProcessOp`(10개 밖 파일 — 단계 op 는 안에서 `wbsAssign#setWbsStage` 를 부른다) | `requireProjectMember` + 단계는 `requireSubtreeManagerOrAdmin` |
+| `p-wbs`·`p-agents` | `WbsSpecPanel`(행 상세 `WbsAssigneeStagePanel` 안) · `DelegationTable`(지시문 편집) | `wbsSpec#updateWbsSpec`·`updateWbsSpecFields` · `wbsSpec#setAgentDelegation`·`updateAgentPrompt`(10개 밖 파일) | `resolveProjectId` + `requireProjectAdmin` · `requireDelegationRight`(`resolveProjectId` + 관리자 ∨ 그 항목의 담당자 본인) + `requireModule('agents')` |
 | `p-kanban` | `KanbanBoard` | `wbs#updateActual` | `resolveProjectId` + `requireProjectMember` |
 | 전 `(app)` 화면(AI 패널) | `AssistantChat` | `wbs#updateActual`·`updateWbsFields` | 위와 같음 |
 | `p-weekly` | `WeeklySheetView` | `weekly#saveWeeklyCell`·`saveWeeklyCells`·`saveWeeklyTitle`·`prepareWeeklyCellRewrite` · `weekly#createWeeklyReport` | `requireProjectMember` + `requireModule` · `requireProjectAdmin` + `requireModule` |
@@ -349,7 +357,7 @@ SPU1 의 표면별 채택 순서(개정 §5.8.7)의 입력. 액션 파일 wbs·w
 
 UI-1 이 `FLOOR` 를 건드릴 때의 기준(`FLOOR` 는 UI-0 이 바꾸지 않는다). 래퍼 경유(`lane-b.env` 의 `SMOKE_URL`).
 
-결과: **스모크 통과(exit 0)** — 2026-10-01 12:40 KST, 3201 `next start`(위 빌드). 산출 `qa/sp3b/smoke-ui0.txt`(1차 12:24 의 값과 같다).
+결과: **스모크 통과(exit 0)** — 2026-10-01 12:40 KST, 3201 `next start`(과제 5 빌드). 산출 `qa/sp3b/smoke-ui0.txt`(1차 12:24 의 값과 같다). 수정 라운드 재촬영 묶음(15:50 KST, `-H 127.0.0.1`)의 `qa/sp3b/smoke-t6fix.txt` 도 아래와 같은 값이다(같은 CSS 파일).
 
 | 검사 | 값 | `FLOOR`(하한) |
 |---|---|---|
