@@ -3,12 +3,15 @@
 // 부른다, 값은 SQL 이 쓰는 표 안에 있고 그중 토글 모듈 표는 빠짐없다(스펙 §4.1.9 — 대응은 쓰기 표다. 읽기만 하는 표는 넣지 않는다 — RPC 의
 // 모듈 표 읽기는 이 게이트가 보지 않는 한계). SQL 판독은 정규식이다: 함수 본문의 insert into·update·delete from·merge into·truncate 뒤
 // 이름과 본문이 부르는 public 함수(재귀). 트리거·동적 SQL(execute)·오버로드 구분은 보지 않는다(한계 — 오버로드는 이름 단위 마지막 정의).
+// 본문은 달러 인용(`as $tag$`)만 읽는다 — `begin atomic` 이나 `as '…'` 본문의 함수는 그 뒤 함수의 달러 본문을 제 것으로 읽는다(한계, A1-1 리뷰
+// 이월 — 지금 마이그레이션에 그런 본문은 없고, CLAUDE.md 가 atomic 꼴을 피하게 한다).
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { parse, tablesIn, tablesInNode } from '../invariants/_ast'
 import { walk } from '../invariants/_walk'
-import { RPC_TABLES, UNKNOWN_RPC_PREFIX } from './_rpc-tables'
+import { DYNAMIC_RPC, DYNAMIC_RPC_ALLOW, RPC_TABLES, UNKNOWN_RPC_PREFIX } from './_rpc-tables'
 import { MODULE_TABLE_OWNER } from './_tables'
 
 interface Catalog { tables: Set<string>; fns: Map<string, string> }
@@ -115,9 +118,36 @@ describe('tablesInNode — .rpc 를 표로 바꾼다(합성 소스·합성 대�
     expect(tablesInNode(sf, sf, MAP)).toEqual([])
   })
 
-  it('리터럴이 아닌 이름(변수·보간 템플릿)과 .rpc 가 아닌 메서드는 세지 않는다 — .from 과 같은 한계', () => {
-    const sf = parse('s.ts', "export async function f(sb, name, a) { await sb.rpc(name); await sb.rpc(`x_${name}`); await a.rpc(sb, {}); await sb.call('known_rpc') }")
-    expect(tablesInNode(sf, sf, MAP)).toEqual([])
+  it('[K8] 리터럴이 아닌 이름(변수·보간 템플릿·요소 접근)은 rpc?:<dynamic> 표지 — DEFINER RPC 는 RLS 2차 방어선이 없어 .from 보다 엄하다', () => {
+    for (const call of ['sb.rpc(name)', 'sb.rpc(`x_${name}`)', 'a.rpc(sb, {})', "sb['rpc'](name)", 'sb.rpc()', "sb['rpc'](`known_${name}`)"]) {
+      const sf = parse('s.ts', `export async function f(sb, name, a) { await ${call} }`)
+      expect(tablesInNode(sf, sf, MAP), call).toEqual([`${UNKNOWN_RPC_PREFIX}${DYNAMIC_RPC}`])
+    }
+    const lit = parse('s.ts', "export async function f(sb) { await sb['rpc']('known_rpc'); await sb.call('mystery') }")
+    expect(tablesInNode(lit, lit, MAP), '요소 접근이라도 리터럴 이름은 대응으로, .rpc 가 아닌 메서드는 세지 않는다').toEqual(['a_table', 'b_table'])
+  })
+
+  it('[K8] 비리터럴 허용은 파일 + 호출 식 그대로의 닫힌 목록 — 같은 파일의 다른 식은 표지다', () => {
+    const sf = parse('src/app/actions/settings.ts', 'export async function f(a, b, admin) { await a.rpc(admin, {}); await b.rpc(admin, {}) }')
+    expect(tablesInNode(sf, sf, MAP)).toEqual([`${UNKNOWN_RPC_PREFIX}${DYNAMIC_RPC}`])
+    const only = parse('src/app/actions/settings.ts', 'export async function f(a, admin) { await a.rpc(admin, {}) }')
+    expect(tablesInNode(only, only, MAP)).toEqual([])
+  })
+
+  it('[K8] 비리터럴 허용 항목은 src 에 선언한 개수만큼 있다(죽은 항목·새 자리 모두 실패)', () => {
+    const bad: string[] = []
+    for (const [key, { count }] of Object.entries(DYNAMIC_RPC_ALLOW)) {
+      const [file, callee] = key.split('#')
+      const sf = parse(file, readFileSync(file, 'utf8'))
+      let n = 0
+      const look = (x: ts.Node): void => {
+        if (ts.isCallExpression(x) && x.expression.getText(sf) === callee) n++
+        ts.forEachChild(x, look)
+      }
+      look(sf)
+      if (n !== count) bad.push(`${key}: 선언 ${count} · 실측 ${n}`)
+    }
+    expect(bad).toEqual([])
   })
 
   it('프로토타입 이름(constructor·toString)은 대응이 아니다 — 표지로 낸다', () => {

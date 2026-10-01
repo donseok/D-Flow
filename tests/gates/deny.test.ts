@@ -232,7 +232,9 @@ describe('deny — null 항목(정적)', () => {
     expect(nullTableProblems('s.ts#c', nullE, tablesIn(sf, 'c', map))).toEqual([
       's.ts#c: module null 항목이 부르는 RPC mystery_rpc 의 소유 표를 모른다 — tests/gates/_rpc-tables.ts 에 그 RPC 가 만지는 표를 적는다(SP4 D25)',
     ])
-    expect(tablesIn(sf, 'd', map), '대조 — 리터럴이 아닌 이름은 세지 않는다(.from 과 같은 한계)').toEqual([])
+    expect(nullTableProblems('s.ts#d', nullE, tablesIn(sf, 'd', map)), '[K8] 리터럴이 아닌 이름도 실패 — 무엇을 부르는지 모른다').toEqual([
+      's.ts#d: module null 항목이 부르는 RPC <dynamic> 의 소유 표를 모른다 — tests/gates/_rpc-tables.ts 에 그 RPC 가 만지는 표를 적는다(SP4 D25)',
+    ])
   })
   it('판별기 민감도 — 같은 파일의 함수 선언·const 화살표 헬퍼·별칭 import·네임스페이스 호출을 따라간다(합성 소스)', () => {
     const sf = parse('s.ts', [

@@ -1,6 +1,6 @@
 // 불변식·열거 게이트 공용 AST 판별기 — use-server-exports·tests/gates 가 같은 판정을 쓴다(과제 13 에서 옮김).
 import ts from 'typescript'
-import { RPC_TABLES, UNKNOWN_RPC_PREFIX } from '../gates/_rpc-tables'
+import { DYNAMIC_RPC, DYNAMIC_RPC_ALLOW, RPC_TABLES, UNKNOWN_RPC_PREFIX } from '../gates/_rpc-tables'
 
 /** 파일별 parse 캐시 — deny.test 의 모듈 항목 89개가 같은 파일(issues.ts 등)을 89번 다시 파싱했다(B4 m-1·T25-m4).
  *  키에 원문까지 넣으므로 내용이 다른 같은 이름을 부르면 캐시를 타지 않는다. 구문 트리는 읽기만 하므로 재사용이 안전하다 */
@@ -100,18 +100,30 @@ export function gateCallsIn(sf: ts.SourceFile, exportName: string, names: Readon
   return found
 }
 
+/** 호출의 메서드 이름 — `x.m(…)`·`x?.m(…)` 이면 m, 리터럴 요소 접근 `x['m'](…)` 도 m. 그 밖은 null */
+function methodName(e: ts.Expression): string | null {
+  if (ts.isPropertyAccessExpression(e)) return e.name.text
+  if (ts.isElementAccessExpression(e) && ts.isStringLiteralLike(e.argumentExpression)) return e.argumentExpression.text
+  return null
+}
 /** 노드 안(자기 자신 포함)이 만지는 표 이름 — 리터럴 `.from('<표>')` 의 표, 그리고 리터럴 `.rpc('<함수>')` 를 rpcTables(기본
  *  tests/gates/_rpc-tables.ts 의 RPC_TABLES)로 바꾼 표(SP4 D25 — RPC 안의 쓰기는 .from 을 우회한다). 대응이 없는 RPC 는 `rpc?:<이름>`
- *  표지로 낸다(판정은 호출부 — module null 항목만 실패). 문자열 리터럴 인자만 센다. 같은 파일 헬퍼는 따라가지 않는다 */
+ *  표지로 낸다(판정은 호출부 — 관문 없는 자리만 실패). `.from` 은 문자열 리터럴 인자만 센다(RLS 2차 방어선이 있다). `.rpc` 는 이름이
+ *  리터럴이 아니면(변수·보간 템플릿·인자 없음) `rpc?:<dynamic>` 표지다(K8 — DEFINER RPC 는 RLS 를 건너뛴다). 단 DYNAMIC_RPC_ALLOW 의
+ *  `<파일>#<호출 식>` 은 Supabase 가 아닌 같은 이름의 메서드라 뺀다. 같은 파일 헬퍼는 따라가지 않는다 */
 export function tablesInNode(sf: ts.SourceFile, node: ts.Node, rpcTables: typeof RPC_TABLES = RPC_TABLES): string[] {
   const out = new Set<string>()
   const walk = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
+    if (ts.isCallExpression(n)) {
+      const m = methodName(n.expression)
       const arg = n.arguments[0]
-      if (arg && ts.isStringLiteralLike(arg)) {
-        if (n.expression.name.text === 'from') out.add(arg.text)
-        else if (n.expression.name.text === 'rpc') {
-          for (const t of Object.hasOwn(rpcTables, arg.text) ? rpcTables[arg.text] : [`${UNKNOWN_RPC_PREFIX}${arg.text}`]) out.add(t)
+      const lit = arg && ts.isStringLiteralLike(arg) ? arg.text : null
+      if (m === 'from' && lit !== null) out.add(lit)
+      else if (m === 'rpc') {
+        if (lit !== null) {
+          for (const t of Object.hasOwn(rpcTables, lit) ? rpcTables[lit] : [`${UNKNOWN_RPC_PREFIX}${lit}`]) out.add(t)
+        } else if (!Object.hasOwn(DYNAMIC_RPC_ALLOW, `${sf.fileName}#${n.expression.getText(sf)}`)) {
+          out.add(`${UNKNOWN_RPC_PREFIX}${DYNAMIC_RPC}`)
         }
       }
     }
