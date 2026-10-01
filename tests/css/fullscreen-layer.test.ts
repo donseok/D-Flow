@@ -57,3 +57,15 @@ describe('AI 패널 층(z 대응표 §1 — UI-2b)', () => {
     expect(src).toContain("data-wbs-fullscreen={fullscreen ? 'open' : undefined}")
   })
 })
+
+describe('전체 화면 안 레일 자리(U2b-2 충실도 리뷰 P1 — Z1)', () => {
+  it('레일 자리 층은 토큰이고 전체 화면 스태킹 안 어떤 형제(행·머리·구분선·렌즈·토스트)보다 위다', () => {
+    const src = read('src/components/wbs/WbsGanttSheet.tsx')
+    const slot = /data-rail-host="fullscreen" className="[^"]*\bz-\(--z-([\w-]+)\)/.exec(src)
+    expect(slot, '레일 자리는 z-(--z-…) 토큰').not.toBeNull()
+    const inner = [...src.matchAll(/(?<![\w-])z-(?:\[(\d+)\]|(\d+))(?![\w-])/g)].map((m) => Number(m[1] ?? m[2]))
+    expect(inner.length).toBeGreaterThan(0)
+    expect(zToken(slot![1])).toBeGreaterThan(Math.max(...inner))
+  })
+})
+

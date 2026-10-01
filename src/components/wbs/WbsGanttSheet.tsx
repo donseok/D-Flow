@@ -1103,7 +1103,7 @@ export function WbsGanttSheet({
       }
     >
       {/* 전체 화면 안 레일 자리(D56) — 열린 동안 우측 레일(AI·인스펙터)이 전체 화면 층 아래로 숨지 않게 여기로 포털된다(RightRail 의 useRailHost) */}
-      {fullscreen && <div data-rail-host="fullscreen" className="fixed inset-y-0 right-0 z-10 flex" />}
+      {fullscreen && <div data-rail-host="fullscreen" className="fixed inset-y-0 right-0 z-(--z-rail) flex" />}
       {/* ── 툴바 ── */}
       {/* 컴팩트: 툴바를 통째로 걷고 플로팅 버튼으로 연다 — 접힌 한 줄(검색+토글)조차 표 공간을
           먹는다는 피드백(2026-08-21). 분기는 JS(compact)로만 — CSS 반응형 display 유틸은
