@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(), parseWithProfile: vi.fn(), linkByDepth: vi.fn(), resolveLegacyLevelLabels: vi.fn(),
   splitLeafOwners: vi.fn(), detectWorkbook: vi.fn(), createServerClient: vi.fn(), createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(), ingestProject: vi.fn(), getProjectConfig: vi.fn(), writeProjectSettingsInternal: vi.fn(),
-  ensureProjectTeams: vi.fn(),
+  ensureProjectTeams: vi.fn(), referencedCommonTeamCodes: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin }))
 vi.mock('@/lib/excel/parseWithProfile', () => ({
@@ -23,6 +23,7 @@ vi.mock('@/lib/ai/ingest', () => ({ ingestProject: m.ingestProject }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: m.writeProjectSettingsInternal }))
 vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: m.ensureProjectTeams }))
+vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: m.referencedCommonTeamCodes }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 
 import { POST } from '@/app/api/import/execute/route'
@@ -137,6 +138,7 @@ beforeEach(() => {
   m.recordProgressSnapshot.mockResolvedValue(undefined)
   m.ingestProject.mockResolvedValue({ count: 2 })
   m.ensureProjectTeams.mockResolvedValue({ ok: true, created: [], existing: [] })
+  m.referencedCommonTeamCodes.mockResolvedValue(new Set())
   m.writeProjectSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'settings-cmd' })
   teamsAre([OWN_RES], [OWN_RES])
   session()
@@ -231,6 +233,30 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     teamsAre([OWN_RES, qaOff], [OWN_RES, qaOff])
     expect((await POST(req())).status).toBe(200)
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+  })
+  it('[Z4] 혼합 프로젝트(전용 팀 + 이미 참조 중인 공용 QA)는 QA 를 전용 팀으로 등록하지 않는다 — 409·등록 없이 가져오기 RPC 가 공용 QA 로 잇는다', async () => {
+    m.referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+    const { rpc } = admin()
+    expect((await POST(req())).status).toBe(200)
+    expect(m.referencedCommonTeamCodes).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['import_wbs_cmd'])
+  })
+  it('[Z4] 참조 판정 조회가 실패하면 503 — 등록·가져오기 없음(원문은 로그로만)', async () => {
+    m.referencedCommonTeamCodes.mockRejectedValue(new Error('relation boom'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { rpc } = admin()
+    const res = await POST(req({ registerTeams: 'true' }))
+    expect(res.status).toBe(503)
+    expect(await res.text()).not.toContain('boom')
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+  it('[Z4] 상속 프로젝트(전용 팀 0)는 참조 판정을 하지 않는다 — 전환이 공용 팀을 전부 옮긴다', async () => {
+    teamsAre(COMMON, [])
+    await POST(req())
+    expect(m.referencedCommonTeamCodes).not.toHaveBeenCalled()
   })
   it('전용 팀 프로젝트 + registerTeams=true → 전환 없이 ensureProjectTeams(가드의 워크스페이스) 뒤 가져오기', async () => {
     const { rpc } = admin()

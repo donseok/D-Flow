@@ -24,6 +24,7 @@ import { validateProjectConfig } from '@/lib/settings/validateConfig'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
 import { convertConsentToken } from '@/lib/teams/convertConsent'
 import { ensureProjectTeams } from '@/lib/teams/register'
+import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
@@ -211,7 +212,20 @@ export async function POST(req: NextRequest) {
       ...parsed.rows.flatMap((r) => r.owners.map((o) => o.team)),
       ...(saveProfile ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== '*') : []),
     ])]
-    const unknownTeams = fileTeams.filter((t) => !known.has(t))
+    let unknownTeams = fileTeams.filter((t) => !known.has(t))
+    // 전용 팀이 있는(비상속) 프로젝트가 이미 참조 중인 공용 팀 code 는 등록하지 않는다(A1 최종 리뷰 보안 P3 — Z4). 혼합 상태(전환 없이 첫 전용 팀을
+    // 만든 프로젝트 — D54 의 한계)에서 그 code 를 전용 팀으로 만들면 기존 공용 참조와 같은 code·다른 id(D4 분열)가 된다. 등록하지 않은 code 는
+    // 가져오기 RPC 가 그 워크스페이스 공용 팀으로 잇는다(지금의 참조와 같은 팀). 조회 실패는 등록 전 선행 조회 실패라 중단한다(3원칙 ②)
+    const wsOfProject = g.actor.projectWorkspace.get(projectId)
+    if (ownTeams.length > 0 && unknownTeams.length > 0 && wsOfProject) {
+      let referenced: Set<string>
+      try {
+        referenced = await referencedCommonTeamCodes({ projectId, workspaceId: wsOfProject }, unknownTeams)
+      } catch (e) {
+        return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 공용 팀 참조 조회', e, ERR_TEAMS))
+      }
+      unknownTeams = unknownTeams.filter((t) => !referenced.has(t))
+    }
     if (unknownTeams.length > 0) {
       // 예약어 = 엑셀 머리 낱말 ∪ 이 프로젝트의 단계 이름·추가 축 이름(SP4 D38) — 위에서 읽은 같은 설정으로. 손상된 키는 그 키의 오류
       // (예약어를 모르는 채 이름을 통과시키지 않는다 — 아래 전환·등록을 하지 않는다)

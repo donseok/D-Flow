@@ -14,6 +14,8 @@ vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin }
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: vi.fn() }))
+// 혼합 프로젝트의 공용 팀 참조 판정(Z4) — 이 파일은 그 경우를 보지 않는다: 참조 없음
+vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes: async () => new Set<string>() }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: vi.fn(async () => ({
     // 영수증 선확인 — 이 시나리오의 명령은 처음이다(append 라 백업을 읽지 않는다)
