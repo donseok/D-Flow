@@ -404,7 +404,7 @@ export function IssueDetailModal({
                       <FileText className="h-3.5 w-3.5 text-brand" aria-hidden />
                       <span className="text-sm font-semibold text-ink">{source.minuteTitle}</span>
                       <span className="text-xs tabular-nums text-ink-subtle">{source.minuteDate}</span>
-                      <span className="chip bg-line text-ink-subtle">
+                      <span className="chip bg-surface text-neutral">
                         {t('issue.source.version').replace('{n}', String(source.minuteVersionNo))}
                       </span>
                       <Link
@@ -773,7 +773,7 @@ export function IssueFormModal({
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
               <FileText className="h-3.5 w-3.5" aria-hidden="true" />
               {t('issue.analysis.minuteAutoLinked')}
-              {sourcePreview.label && <span className="chip bg-line text-ink-subtle">{sourcePreview.label}</span>}
+              {sourcePreview.label && <span className="chip bg-surface text-neutral">{sourcePreview.label}</span>}
             </div>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <p className="text-sm font-semibold text-ink">{sourcePreview.title}</p>

@@ -33,7 +33,7 @@ export const ANNOUNCEMENT_STATUS_META: Record<
 > = {
   scheduled: { labelKey: 'ann.status.scheduled', chip: 'bg-pending-weak text-accent-warning' },
   active:    { labelKey: 'ann.status.active',    chip: 'bg-progress-weak text-progress' },
-  expired:   { labelKey: 'ann.status.expired',   chip: 'bg-line text-ink-subtle' },
+  expired:   { labelKey: 'ann.status.expired',   chip: 'bg-neutral-weak text-neutral' },
 }
 
 /**

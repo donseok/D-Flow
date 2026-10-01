@@ -53,6 +53,18 @@ describe('의미 토큰 대비 — 라이트·다크(스펙 §8.1 ⑤)', () => {
   }
 })
 
+describe('N1 중립 칩 — 옛 bg-line text-ink-subtle(경계 채움 위 fg-muted) 6곳의 대체 쌍', () => {
+  // 경계(border)는 DECORATIVE 라 그 위 글자는 쌍 표가 보증하지 않는다(라이트 3.97·다크 4.19 였다). 대체 쌍은 neutral on neutral-weak,
+  // surface-subtle 상자 안의 칩(이슈 모달 둘)은 neutral on surface(neutral-weak 는 surface-subtle 과 같은 값이라 칩 모양이 사라진다).
+  const N1: [string, string][] = [['neutral', 'neutral-weak'], ['neutral', 'surface']]
+  it.each(N1)('쌍 표에 %s / %s(TEXT)가 있다', (fg, bg) => {
+    expect(PAIRS.some(([f, b, min]) => f === fg && b === bg && min === TEXT)).toBe(true)
+  })
+  it.each((['light', 'dark'] as const).flatMap((t) => N1.map(([fg, bg]) => [t, fg, bg] as const)))('%s %s on %s ≥ 4.5', (theme, fg, bg) => {
+    expect(contrastRatio(resolve(theme, fg), resolve(theme, bg))).toBeGreaterThanOrEqual(TEXT)
+  })
+})
+
 describe('메타 단언', () => {
   const names = semanticNames(maps)
   it('모든 의미 색 토큰은 쌍에 들거나 DECORATIVE 에 있다(닫힌 표)', () => {

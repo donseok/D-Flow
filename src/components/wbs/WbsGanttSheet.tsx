@@ -1673,7 +1673,7 @@ export function WbsGanttSheet({
                     {isCollapsed && (
                       <span
                         data-collapsed-count
-                        className="ml-1.5 shrink-0 rounded-full bg-line px-1.5 py-px tabular-nums text-ink-subtle"
+                        className="ml-1.5 shrink-0 rounded-full bg-surface px-1.5 py-px tabular-nums text-neutral ring-1 ring-inset ring-border"
                         style={{ fontSize: 'var(--wbs-badge-font, 10px)' }}
                         title={t('wbs.hiddenDescendants')}
                       >

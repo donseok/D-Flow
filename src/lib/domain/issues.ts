@@ -86,7 +86,7 @@ export const ISSUE_STATUS_META: Record<
   open:        { labelKey: 'issue.status.open',        chip: 'bg-delayed-weak text-delayed',   dot: 'bg-delayed' },
   in_progress: { labelKey: 'issue.status.in_progress', chip: 'bg-progress-weak text-progress', dot: 'bg-progress' },
   resolved:    { labelKey: 'issue.status.resolved',    chip: 'bg-done-weak text-done',         dot: 'bg-done' },
-  on_hold:     { labelKey: 'issue.status.on_hold',     chip: 'bg-line text-ink-subtle',        dot: 'bg-slate-400' },
+  on_hold:     { labelKey: 'issue.status.on_hold',     chip: 'bg-neutral-weak text-neutral',   dot: 'bg-slate-400' },
 }
 
 export const ISSUE_SEVERITY_META: Record<
@@ -95,7 +95,7 @@ export const ISSUE_SEVERITY_META: Record<
 > = {
   high:   { labelKey: 'issue.severity.high',   chip: 'bg-delayed-weak text-delayed' },
   medium: { labelKey: 'issue.severity.medium', chip: 'bg-pending-weak text-pending' },
-  low:    { labelKey: 'issue.severity.low',    chip: 'bg-line text-ink-subtle' },
+  low:    { labelKey: 'issue.severity.low',    chip: 'bg-neutral-weak text-neutral' },
 }
 
 /** 지연 = 기한 경과(당일 제외) + 미해결. today 는 'YYYY-MM-DD'(Asia/Seoul) — 호출부가 계산해 내려준다. */
