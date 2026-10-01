@@ -200,16 +200,19 @@ describe('chat v2 source and answer verifier', () => {
       callId: 'c1', tool: 'compare_weekly_sheets',
       result: {
         status: 'ok', facts: { totalCompared: 2 },
+        // 판별력 있는 픽스처(A1-4 리뷰 P4) — 개명된 영역의 지난주 제목('실험 준비')은 이번 주 이름('검증')을 품지 않고,
+        // 다른 두 영역(area-ops·area-qa)이 같은 이름('운영')이다. 제목 부분 문자열로 묶는 옛 구현은 이 둘을 섞고 지난주 행을 잃는다
         records: [
-          { areaId: 'area-exp', section: '실험', change: 'changed' },
+          { areaId: 'area-exp', section: '검증', change: 'changed' },
           { areaId: 'area-ops', section: '운영', change: 'added' },
+          { areaId: 'area-qa', section: '운영', change: 'changed' },
         ],
         sources: [
           // 지난주 행의 제목은 개명 전 이름이다 — 제목이 아니라 영역 id 로 묶인다
           weeklySource('a-old', 'area-exp', '실험 준비'),
-          weeklySource('a-new', 'area-exp', '실험'),
-          weeklySource('b-old', 'area-ops', '운영'),
+          weeklySource('a-new', 'area-exp', '검증'),
           weeklySource('b-new', 'area-ops', '운영'),
+          weeklySource('c-new', 'area-qa', '운영'),
         ],
         asOf: '2026-07-19T00:00:00.000Z', truncated: false, warnings: [],
       },
@@ -217,7 +220,8 @@ describe('chat v2 source and answer verifier', () => {
 
     expect(pack.records.map(record => record.sourceIds)).toEqual([
       ['S1', 'S2'],
-      ['S3', 'S4'],
+      ['S3'],
+      ['S4'],
     ])
     const answer = deterministicEvidenceAnswer(pack)
     const citedLine = answer.split('\n').find(line => line.includes('[S1]')) ?? ''
