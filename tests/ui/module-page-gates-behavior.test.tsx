@@ -1,4 +1,4 @@
-// 페이지 관문의 동작(R14) — 거부면 notFound() 이고 데이터 로더가 돌지 않는다. 프로젝트 페이지(칸반)·전역 페이지(/agents)·대상 행 페이지(/minutes/[id]) 하나씩.
+// 페이지 관문의 동작(R14) — 거부면 notFound() 이고 데이터 로더가 돌지 않는다. 프로젝트 페이지(칸반)·워크스페이스 페이지(/w/[slug]/agents)·대상 행 페이지(/minutes/[id]) 하나씩.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   getComputedWbs: vi.fn(async () => ({ items: [], today: '2026-09-29' })),
@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: m.getComputedWbs }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: m.getSeatmap }))
 vi.mock('@/lib/authz', () => ({ getActorForView: m.getActorForView }))
-// 회의록 상세는 /w/[slug] 아래 — 슬러그 판정이 워크스페이스 w1 을 준다(행의 워크스페이스와 같아야 관문까지 간다)
+// 좌석표·회의록 상세는 /w/[slug] 아래 — 슬러그 판정이 워크스페이스 w1 을 준다(회의록은 행의 워크스페이스와 같아야 관문까지 간다)
 vi.mock('@/lib/authz/workspaceScope', () => ({
   loadWorkspaceScope: vi.fn(async () => ({ ws: { id: 'w1', slug: 'acme', name: 'Acme' }, actor: await m.getActorForView(), degraded: false, role: 'member' })),
 }))
@@ -34,7 +34,7 @@ vi.mock('@/lib/data/issues', () => ({ getMinuteLinkedIssues: vi.fn(async () => [
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(), getMyProjectIds: vi.fn(async () => []) }))
 vi.mock('@/components/minutes/MinuteViewer', () => ({ MinuteViewer: () => null }))
 import KanbanPage from '@/app/(app)/p/[projectId]/kanban/page'
-import AgentsPage from '@/app/(app)/agents/page'
+import AgentsPage from '@/app/(app)/w/[slug]/agents/page'
 import MinuteDetailPage from '@/app/(app)/w/[slug]/minutes/[id]/page'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
@@ -56,10 +56,11 @@ describe('페이지 관문 — 거부면 로더가 돌지 않는다', () => {
     await KanbanPage({ params: Promise.resolve({ projectId: 'p1' }) })
     expect(m.getComputedWbs).toHaveBeenCalledWith('p1')
   })
-  it('전역 페이지(/agents) — 세션 유일 워크스페이스로 판정(null), 거부면 좌석표를 읽지 않는다', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
-    await expect(AgentsPage()).rejects.toThrow('NEXT_NOT_FOUND')
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'agents')
+  it('워크스페이스 페이지(/w/[slug]/agents) — 슬러그 워크스페이스({ workspaceId })로 판정, 거부면 좌석표를 읽지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    await expect(AgentsPage({ params: Promise.resolve({ slug: 'acme' }) })).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'w1' }, 'agents')
+    expect(requireSessionModule).not.toHaveBeenCalled()
     expect(m.getSeatmap).not.toHaveBeenCalled()
   })
   const openMinute = () => MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}) })

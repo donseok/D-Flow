@@ -19,21 +19,29 @@ describe('refreshSeatmap — projectId', () => {
     expect(r).toEqual({ ok: true, seatmap: { floors: [] } })
     expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'mine', { projectId: P1 })
   })
-  it('projectId 없으면 세션 유일 워크스페이스로 좁힌다({ workspaceId })', async () => {
-    await refreshSeatmap('all')
+  it('projectId 없으면 인자 워크스페이스로 좁힌다({ workspaceId }, D26)', async () => {
+    await refreshSeatmap('all', undefined, WS)
     expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'all', { workspaceId: WS })
   })
-  it('소속이 둘 이상이면 전체 좌석표는 권한 없음(유일 워크스페이스 없음) — 프로젝트 층은 그대로 열린다', async () => {
+  it('워크스페이스 인자가 없으면 권한 없음 — 전 워크스페이스로 넓히지 않는다(W9)', async () => {
+    expect(await refreshSeatmap('all')).toEqual({ ok: false, error: '권한이 없습니다.' })
+    expect(await refreshSeatmap('all', undefined, 42 as unknown as string)).toEqual({ ok: false, error: '권한이 없습니다.' })
+    expect(mocks.getSeatmap).not.toHaveBeenCalled()
+  })
+  it('소속이 둘이면 인자 워크스페이스가 판정 축 — 역할 없는 쪽·모르는 쪽은 같은 문구, 프로젝트 층은 그대로 열린다', async () => {
     const duo = makeMemberActor(P1, [], { workspaceRoles: new Map([[WS, 'member' as const], ['ws-2', 'member' as const]]) })
     mocks.getActorForView.mockResolvedValue(duo)
-    expect(await refreshSeatmap('all')).toEqual({ ok: false, error: '권한이 없습니다.' })
+    expect(await refreshSeatmap('all', undefined, 'ws-2')).toEqual({ ok: false, error: '권한이 없습니다.' })
+    expect(await refreshSeatmap('all', undefined, 'ws-unknown')).toEqual({ ok: false, error: '권한이 없습니다.' })
     expect(mocks.getSeatmap).not.toHaveBeenCalled()
+    expect(await refreshSeatmap('all', undefined, WS)).toEqual({ ok: true, seatmap: { floors: [] } })
+    expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'all', { workspaceId: WS })
     expect(await refreshSeatmap('mine', P1)).toEqual({ ok: true, seatmap: { floors: [] } })
     expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'mine', { projectId: P1 })
   })
-  it('유일 워크스페이스에 역할이 없으면(조회 전용) 전체 좌석표는 권한 없음', async () => {
+  it('그 워크스페이스에 역할이 없으면(조회 전용) 전체 좌석표는 권한 없음', async () => {
     mocks.getActorForView.mockResolvedValue(makeMemberActor(P1, [], { projectRoles: new Map() }))
-    expect(await refreshSeatmap('all')).toEqual({ ok: false, error: '권한이 없습니다.' })
+    expect(await refreshSeatmap('all', undefined, WS)).toEqual({ ok: false, error: '권한이 없습니다.' })
     expect(mocks.getSeatmap).not.toHaveBeenCalled()
   })
   it('멤버가 아닌 프로젝트는 권한 없음 — 조회하지 않는다', async () => {

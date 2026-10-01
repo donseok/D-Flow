@@ -72,12 +72,13 @@ describe('목록', () => {
     // SP3b 과제 10·11 — 목록·상세 모두 /w/[slug]/minutes 아래(옛 /minutes·/minutes/<id> 는 (legacy) 스텁)
     expect([...byId.minutes.routePrefixes]).toEqual(['/w/[slug]/minutes'])
     expect([...byId.meetings.routePrefixes]).toEqual(['/p/[projectId]/meetings', '/w/[slug]/meetings'])   // 과제 12
+    expect([...byId.agents.routePrefixes]).toEqual(['/p/[projectId]/agents', '/w/[slug]/agents'])   // 과제 13
     expect([...byId.agents.apiPrefixes]).toEqual(['/api/v1/agent', '/api/v1/wbs'])
     expect([...byId.minutes_integration.apiPrefixes]).toEqual(['/api/v1/minutes'])
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])
     expect([...byId.usage.apiPrefixes]).toEqual(['/api/track'])
     expect([...byId.issues.apiPrefixes]).toEqual(['/api/issue-analysis'])   // 스펙 E16 — issue_analysis 모듈은 SP5(과제 4)
-    expect(LEGACY_GLOBAL_PREFIXES).toEqual({ '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage' })
+    expect(LEGACY_GLOBAL_PREFIXES).toEqual({ '/portfolio': 'portfolio', '/usage': 'usage' })   // 과제 14 가 상수째 지운다
   })
   it('botDomains 는 BOT_DOMAINS 의 부분집합이고, projects·unknown 은 어느 모듈에도 없다', () => {
     const claimed = MODULES.flatMap((m) => [...m.botDomains])

@@ -57,14 +57,16 @@ describe('fetchSeatmapRows', () => {
     // 2000건 상한에 걸리면 오름차순은 최신(가장 claimed/ACTIVE 일 가능성이 큰) 주문을 버린다 — 내림차순이어야 한다.
     expect(calls['agent_work_orders.order']?.[0]).toEqual(['created_at', { ascending: false }])
   })
-  it('projectIds null(슈퍼유저)이면 프로젝트 필터를 걸지 않는다', async () => {
+  it('전 워크스페이스(null) 갈래가 없다 — 층 목록만 받고 늘 프로젝트 필터를 건다(D21, W9)', async () => {
+    // @ts-expect-error null(전체)은 받지 않는다
+    void (() => fetchSeatmapRows(admin({}), null, NOW))
     const calls: Record<string, unknown[][]> = {}
-    await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [] }] }, calls), null, NOW)
-    expect(calls['agent_work_orders.in']).toBeUndefined()
+    await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [] }] }, calls), ['p1', 'p2'], NOW)
+    expect(calls['agent_work_orders.in']).toEqual([['project_id', ['p1', 'p2']]])
   })
   it('층 프로젝트 행이 없으면 감시자를 조회하지 않는다 — 워크스페이스를 모르면 전역으로 넓히지 않는다', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const rows = await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [O] }], projects: [{ data: [] }] }, calls), null, NOW)
+    const rows = await fetchSeatmapRows(admin({ agent_work_orders: [{ data: [O] }], projects: [{ data: [] }] }, calls), ['p1'], NOW)
     expect(rows.watchers).toEqual([])
     expect(calls['agent_watchers.select']).toBeUndefined()
   })
@@ -89,12 +91,9 @@ describe('fetchMyMemberIds', () => {
     expect(calls['project_members.eq']).toEqual([['people.user_id', 'u1'], ['active', true], ['people.active', true]])
     expect(calls['project_members.in']?.[0]).toEqual(['project_id', ['p1']])
   })
-  it('projectIds null(슈퍼유저)이면 프로젝트 필터 없이 같은 신원 필터만', async () => {
-    const calls: Record<string, unknown[][]> = {}
-    const a = admin({ project_members: [{ data: [{ id: 'm1' }] }] }, calls)
-    expect(await fetchMyMemberIds(a, { userId: 'u1' }, null)).toEqual(['m1'])
-    expect(calls['project_members.in']).toBeUndefined()
-    expect(calls['project_members.eq']).toEqual([['people.user_id', 'u1'], ['active', true], ['people.active', true]])
+  it('전체(null) 갈래가 없다 — 층 목록만 받는다(W9)', () => {
+    // @ts-expect-error null(전체)은 받지 않는다
+    void (() => fetchMyMemberIds(admin({}), { userId: 'u1' }, null))
   })
   it('projectIds 가 빈 배열이면 조회하지 않는다', async () => {
     const calls: Record<string, unknown[][]> = {}

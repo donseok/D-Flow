@@ -64,7 +64,7 @@ export const MODULES: readonly ModuleDef[] = [
   { id: 'agents', core: false, scope: 'both', requires: ['wbs'], envAvailable: always, botDomains: [], settings: settingsOf('agents'),
     nav: { project: { id: 'p.agents', labelKey: 'nav.projectAgents', icon: 'Bot', segment: 'agents/office', group: 'p.team', order: 30 },
       workspace: { id: 'ws.agents', labelKey: 'nav.agents', icon: 'Bot', segment: 'agents', group: 'ws.shared', order: 30 } },
-    routePrefixes: ['/p/[projectId]/agents', '/agents'], apiPrefixes: ['/api/v1/agent', '/api/v1/wbs'] },
+    routePrefixes: ['/p/[projectId]/agents', '/w/[slug]/agents'], apiPrefixes: ['/api/v1/agent', '/api/v1/wbs'] },
   { id: 'minutes', core: false, scope: 'workspace', requires: [], envAvailable: always, botDomains: ['minutes'], settings: settingsOf('minutes'),
     nav: { workspace: { id: 'ws.minutes', labelKey: 'nav.minutes', icon: 'FileText', segment: 'minutes', group: 'ws.shared', order: 20 } },
     routePrefixes: ['/w/[slug]/minutes'], apiPrefixes: ['/api/minutes'] },
@@ -90,7 +90,7 @@ export const CORE: ReadonlySet<ModuleId> = new Set(MODULES.filter((m) => m.core)
 
 /** 경로 이동(SP3b) 전의 전역 경로 — 페이지 관문이 워크스페이스 층 모듈을 찾는 표. SP3b 가 /w/[slug]/* 로 옮기며 지운다 */
 export const LEGACY_GLOBAL_PREFIXES = {
-  '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage',
+  '/portfolio': 'portfolio', '/usage': 'usage',
 } as const satisfies Record<string, ModuleId>
 
 /** 적재 단언(개정 §2.7.1) — 목록 = MODULE_IDS, core 는 requires: []·envAvailable 상수 true, requires 는 등록 id 이고 순환 없음,

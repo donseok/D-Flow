@@ -10,7 +10,7 @@
 // 탐색은 'use client'(렌더 중 실행되지 않는다)와 'use server'(서버 액션 — 각자 require* 가드를 건다, 감사표) 경계에서 멈춘다.
 // 탐색 간선은 값 import 와 re-export(`export { x } from`·`export * from`) 둘 다다 — 배럴을 거쳐도 원천에 닿는다.
 // 게이트 = `if (…) notFound()|redirect(…)` 한 줄 중 조건이 거부형·은닉형인 것만: `!isProjectMember(`·`!isProjectAdmin(`·`!roleIn(`,
-// `isHiddenProject(`(부정 없이), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
+// `isHiddenProject(`(부정 없이), `!canViewAgents(` — 워크스페이스 좌석표(/w/[slug]/agents, SP3b), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
 // require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
 // 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
 // /w/[slug]/** 페이지는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
@@ -34,7 +34,7 @@ const SAFE_LOADERS: Record<string, string> = {}
 const ALLOWLIST: Record<string, string> = {}
 
 /** 조건에 직접 쓴 거부형·은닉형 판정 — 허용 판정은 부정으로, 은닉 판정은 부정 없이. */
-const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isHiddenProject\(/
+const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn|canViewAgents)\(|(?<![!\w])isHiddenProject\(/
 const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
 /** 그 호출 자체가 거부(notFound)를 던지는 범위 판정 — 끝까지 기다려야 게이트다 */
@@ -237,6 +237,11 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(firstGateLine(src('const { slug } = await params\nconst scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(scope.ws.id)'))).toBe(1)
     expect(firstGateLine(src('const p = loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
     expect(firstGateLine(src('// const scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
+  })
+
+  it('워크스페이스 좌석표 — !canViewAgents( 거부형은 게이트, 역전(canViewAgents( 로 redirect)은 아니다', () => {
+    expect(firstGateLine(["  if (!scope.actor || !canViewAgents(scope.actor, scope.ws.id)) redirect(wsHref(slug))"])).toBe(0)
+    expect(firstGateLine(["  if (canViewAgents(actor, w)) redirect('/x')"])).toBe(-1)
   })
 
   it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {

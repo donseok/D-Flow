@@ -120,17 +120,17 @@ describe('SeatmapView', () => {
 describe('SeatmapView — 내 작업 / 전체 전환', () => {
   it('기본은 내 작업이고, 전체를 누르면 즉시 scope=all 로 재조회하며 이후 폴링도 그 범위로 간다', async () => {
     refresh.mockResolvedValue({ ok: true, seatmap: map({ scope: 'all' }) })
-    await act(async () => { root.render(<SeatmapView initial={map()} pollMs={30_000} />) })
+    await act(async () => { root.render(<SeatmapView initial={map()} pollMs={30_000} workspaceId="ws-1" />) })
     const mine = [...host.querySelectorAll('button')].find(b => b.textContent === '내 작업') as HTMLButtonElement
     const all = [...host.querySelectorAll('button')].find(b => b.textContent === '전체') as HTMLButtonElement
     expect(mine.getAttribute('aria-pressed')).toBe('true')
     expect(all.getAttribute('aria-pressed')).toBe('false')
     await act(async () => { all.click() })
-    expect(refresh).toHaveBeenCalledWith('all')
+    expect(refresh).toHaveBeenCalledWith('all', undefined, 'ws-1')
     expect(all.getAttribute('aria-pressed')).toBe('true')
     refresh.mockClear()
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
-    expect(refresh).toHaveBeenCalledWith('all')
+    expect(refresh).toHaveBeenCalledWith('all', undefined, 'ws-1')
   })
   it('내 작업에 아무것도 없으면 전체로 바꿔 보라는 안내가 뜬다', async () => {
     await act(async () => { root.render(<SeatmapView initial={map({ floors: [], attention: [], counters: { active: 0, standby: 0, idle: 0, offline: 0 } })} />) })
@@ -146,12 +146,12 @@ describe('SeatmapView — 프로젝트 스튜디오(projectId)', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
     expect(refresh).toHaveBeenCalledWith('mine', 'p1')
   })
-  it('projectId 없으면 링크가 없고 재조회는 범위만 넘긴다', async () => {
+  it('projectId 없으면 링크가 없고 재조회는 범위와 워크스페이스를 넘긴다(/w/[slug]/agents — D26)', async () => {
     refresh.mockResolvedValue({ ok: true, seatmap: map() })
-    act(() => root.render(<SeatmapView initial={map()} pollMs={1000} />))
+    act(() => root.render(<SeatmapView initial={map()} pollMs={1000} workspaceId="ws-1" />))
     expect(host.querySelector('[data-office-all-link]')).toBeNull()
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-    expect(refresh).toHaveBeenCalledWith('mine')
+    expect(refresh).toHaveBeenCalledWith('mine', undefined, 'ws-1')
   })
   it('층이 비고 범위가 전체면 프로젝트에 위임이 없다는 문구', () => {
     act(() => root.render(<SeatmapView initial={map({ floors: [], attention: [], counters: { active: 0, standby: 0, idle: 0, offline: 0 }, scope: 'all' })} projectId="p1" />))

@@ -38,18 +38,16 @@ async function fetchAncestors(admin: AdminClient, seedIds: string[]): Promise<It
   return [...out.values()]
 }
 
-/** excludeProjectIds — 전체(null) 조회에서 뺄 프로젝트(모듈이 꺼진 층). 주문 조회에만 걸면 나머지는 주문의 프로젝트로 따라 좁혀진다 */
-export async function fetchSeatmapRows(
-  admin: AdminClient, projectIds: string[] | null, nowMs: number, opts: { excludeProjectIds?: readonly string[] } = {},
-): Promise<SeatmapRows> {
+/** projectIds — 층 프로젝트 목록(seatmapFloorIds → 모듈 거르기). 늘 목록이다 — 전 워크스페이스(null) 갈래는 없다(D21, 컨트롤러 W9).
+ *  주문 조회에만 걸면 나머지는 주문의 프로젝트로 따라 좁혀진다 */
+export async function fetchSeatmapRows(admin: AdminClient, projectIds: readonly string[], nowMs: number): Promise<SeatmapRows> {
   const empty: SeatmapRows = { orders: [], items: [], parents: [], reviews: [], watchers: [], projects: [], members: [], predecessors: [] }
-  if (projectIds !== null && projectIds.length === 0) return empty
+  if (projectIds.length === 0) return empty
 
   const doneSince = new Date(nowMs - DONE_WINDOW_MS).toISOString()
-  let q = admin.from('agent_work_orders').select(ORDER_COLS)
+  const q = admin.from('agent_work_orders').select(ORDER_COLS)
     .or(`status.in.(ready,claimed,reported),and(status.eq.approved,updated_at.gte.${doneSince})`)
-  if (projectIds !== null) q = q.in('project_id', projectIds)
-  if (opts.excludeProjectIds?.length) q = q.not('project_id', 'in', `(${opts.excludeProjectIds.join(',')})`)
+    .in('project_id', [...projectIds])
   const orders = must<OrderRow[]>('주문', await q.order('created_at', { ascending: false }).limit(2000))
   if (orders.length === 0) return empty
 
@@ -115,16 +113,16 @@ function toSeatMember(r: Record<string, unknown>): MemberRow {
 }
 
 /**
- * 내 로스터 행 id — 접근 가능 프로젝트(null = 전체)의 활성 명단 행 중 people.user_id 가 나이고 인물이 활성인 행.
+ * 내 로스터 행 id — 층 프로젝트(늘 목록 — 전체 갈래 없음)의 활성 명단 행 중 people.user_id 가 나이고 인물이 활성인 행.
  * scope=assigned(src/lib/agent/assignee.ts myMemberIds)와 같은 축 — 결재 어포던스가 서버 가드와 어긋나지 않게. 실패는 throw.
  */
 export async function fetchMyMemberIds(
-  admin: AdminClient, who: { userId: string }, projectIds: string[] | null,
+  admin: AdminClient, who: { userId: string }, projectIds: readonly string[],
 ): Promise<string[]> {
-  if (projectIds !== null && projectIds.length === 0) return []
-  let q = admin.from('project_members').select('id, people!inner(user_id, active)')
+  if (projectIds.length === 0) return []
+  const q = admin.from('project_members').select('id, people!inner(user_id, active)')
     .eq('people.user_id', who.userId).eq('active', true).eq('people.active', true)
-  if (projectIds !== null) q = q.in('project_id', projectIds)
+    .in('project_id', [...projectIds])
   return must<Array<{ id: string }>>('로스터', await q).map(m => m.id)
 }
 

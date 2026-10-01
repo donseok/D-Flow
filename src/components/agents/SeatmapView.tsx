@@ -38,8 +38,9 @@ const CHATTER_KEY = 'dflow.office.chatter'
 
 /** 좌석표 클라이언트 루트. 30초 폴링, 숨긴 탭은 쉬고 다시 보이면 즉시 1회. 실패는 마지막 데이터 유지 + 표시.
  *  projectId 가 있으면 프로젝트 스튜디오(/p/[id]/agents/office): 재조회를 그 층으로 좁히고 전체 스튜디오 링크를 보인다.
+ *  없으면 전체 좌석표(/w/[slug]/agents) — workspaceId 가 재조회 범위다(없으면 액션이 권한 없음으로 거절한다 — 넓히지 않는다).
  *  보기는 셋이다 — 에이전트(기본)·평면도(지켜보는 화면)·상태 레인(처리하는 화면). 결재는 평면도·상태 레인의 좌석에 붙는다. */
-export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }: { initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string }) {
+export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, workspaceId = null }: { initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string; workspaceId?: string | null }) {
   const [map, setMap] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -104,13 +105,13 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }
     }
     inflight.current = true
     try {
-      const r = projectId === undefined ? await refreshSeatmap(scopeRef.current) : await refreshSeatmap(scopeRef.current, projectId)
+      const r = projectId === undefined ? await refreshSeatmap(scopeRef.current, undefined, workspaceId ?? undefined) : await refreshSeatmap(scopeRef.current, projectId)
       if (r.ok) { setMap(r.seatmap); setNowMs(Date.parse(r.seatmap.fetchedAt)); setError(null) }
       else setError({ at: new Date().toISOString(), message: r.error })
     } catch (e) {
       setError({ at: new Date().toISOString(), message: e instanceof Error ? e.message : String(e) })
     } finally { inflight.current = false }
-  }, [projectId])
+  }, [projectId, workspaceId])
 
   /** 결재 실행 — 실패는 삼키지 않고 상세 패널에 그대로 띄운다(에러 3원칙). 성공하면 좌석표를 다시 읽는다. */
   const runOp = useCallback(async (seat: Seat, kind: SeatOpKind, text: string) => {

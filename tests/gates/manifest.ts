@@ -57,8 +57,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('agentHub')}#refreshAgentHub`]: { guard: 'projectMember', module: 'agents', sample: [P] },
   [`${A('agentHub')}#applyHubDelegations`]: { guard: 'projectMember', module: 'agents', sample: [P, [{ itemId: U, delegated: true }]] },   // 길이 0 은 가드 앞 검증에서 막힌다
   [`${A('agentHub')}#runHubProcessOp`]: { guard: 'projectMember', module: 'agents', sample: [P, { kind: 'stop', orderId: U }] },   // isProcessOp 가 가드 앞에서 본다. 내부 관문이 없는 갈래(stop)로 외곽 관문을 문다 — unapprove 는 loadOrderForReview 의 내부 관문이 대신 거부해 외곽 관문을 증명하지 못한다(B5 T17-I1)
-  // ── agentSeatmap — 전역 좌석표(projectId 가 없으면 세션 유일 워크스페이스)
-  [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents — 층은 getSeatmap 이 거른다', sample: ['all'] },
+  // ── agentSeatmap — 좌석표(projectId 가 없으면 인자 워크스페이스 — D26)
+  [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents(인자 워크스페이스) — 층은 getSeatmap 이 그 워크스페이스로 거른다', sample: ['all', undefined, W], target: 'workspace' },
   // ── agentTokens — 계정 단위 PAT(P19)
   [`${A('agentTokens')}#createAgentToken`]: nul('session', '계정 단위 PAT — 대상 프로젝트가 없다. API 표면은 v1 라우트 관문이 닫는다'),
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
