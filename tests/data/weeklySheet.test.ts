@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 
-import { getWeeklySheet } from '@/lib/data/weeklySheet'
+import { findWeeklyReportId, getWeeklySheet } from '@/lib/data/weeklySheet'
 
 type DbReport = { id: string; project_id: string; week_start: string; title: string | null }
 type DbRow = {
@@ -91,5 +91,21 @@ describe('getWeeklySheet — 쿼리 모양(스펙 §4.1.2·Q35·W21)', () => {
     const { calls } = stub({ report: null, rows: [dbRow('r', 'a')] })
     expect(await getWeeklySheet('p1', '2026-09-21')).toBeNull()
     expect(calls.map(c => c.table)).toEqual(['weekly_reports'])
+  })
+})
+
+describe('findWeeklyReportId — 이월 판정 앞의 존재 확인(A1-4 리뷰 P7)', () => {
+  it('그 프로젝트·그 주의 문서 id, 없으면 null — 읽기만 한다', async () => {
+    const { calls, writes } = stub({ report: REPORT })
+    expect(await findWeeklyReportId('p1', '2026-09-21')).toBe('rep-1')
+    expect(calls).toEqual([{ table: 'weekly_reports', select: 'id', eq: [['project_id', 'p1'], ['week_start', '2026-09-21']], ordered: 0 }])
+    stub({ report: null })
+    expect(await findWeeklyReportId('p1', '2026-09-21')).toBeNull()
+    expect(writes).not.toHaveBeenCalled()
+  })
+
+  it('조회 실패는 throw — 없음으로 위장하지 않는다', async () => {
+    stub({ report: null, reportError: 'permission denied' })
+    await expect(findWeeklyReportId('p1', '2026-09-21')).rejects.toThrow('permission denied')
   })
 })

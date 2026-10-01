@@ -42,6 +42,11 @@ const record = (r: WeeklySheetRow) => ({
 })
 
 let container: HTMLDivElement
+/** 제어 textarea 에 입력 — React 의 값 추적을 우회해 input 이벤트로 onChange 를 부른다(weekly-sheet-no-areas 와 같은 도우미) */
+function typeInto(el: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+  act(() => { setter.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })) })
+}
 let root: Root
 const labels = () => [...container.querySelectorAll('tbody tr')].map(tr => tr.querySelector('td')?.textContent)
 
@@ -99,6 +104,24 @@ describe('WeeklySheetView — 영역 라벨과 실시간 병합', () => {
     expect(labels()).toEqual(['실험', '운영'])
     const cell = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주실적 내용, 실험"]')!
     expect(cell.value).toBe('서버 실적')
+  })
+
+  // 화면이 dirty 칸 집합을 병합에 넘기는지(A1-4 리뷰 P7) — 도메인 함수(mergeServerRow·mergeRefreshedRows)는 따로 고정돼 있다
+  it('입력 중인(dirty) 칸은 같은 행의 실시간 UPDATE 가 와도 내 입력이 남고, 다른 칸은 서버 값으로 바뀐다', () => {
+    show([row('r1', 'a-exp', '처음'), row('r3', 'a-ops')])
+    const cell = () => container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주실적 내용, 실험"]')!
+    typeInto(cell(), '내가 쓰는 중')
+    act(() => h.onChange!({ eventType: 'UPDATE', new: { ...record(row('r1', 'a-exp', '남이 저장한 값')), this_issue: '서버 이슈' } }))
+    expect(cell().value).toBe('내가 쓰는 중')
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주 이슈·이벤트, 실험"]')!.value).toBe('서버 이슈')
+  })
+
+  it('입력 중인 칸은 같은 문서의 새로고침(서버가 새 props 를 내려줌)에도 내 입력이 남는다', () => {
+    show([row('r1', 'a-exp', '처음'), row('r3', 'a-ops')])
+    const cell = () => container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주실적 내용, 실험"]')!
+    typeInto(cell(), '내가 쓰는 중')
+    show([row('r1', 'a-exp', '서버 새 값'), row('r3', 'a-ops')])
+    expect(cell().value).toBe('내가 쓰는 중')
   })
 
   it('D44 의 새로고침이 영역과 행을 다시 내려주면 새 영역의 행이 영역 순서 자리에 보인다', () => {

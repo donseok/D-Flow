@@ -14,7 +14,7 @@ import {
   type CarryMapping, type CarryOverflow, type CarryPending,
 } from '@/lib/domain/weeklyCarry'
 import { isUuidLike, isValidIsoDate } from '@/lib/domain/validate'
-import { findCarryOverSource } from '@/lib/data/weeklySheet'
+import { findCarryOverSource, findWeeklyReportId } from '@/lib/data/weeklySheet'
 import { getProjectConfig, type ConfigArea } from '@/lib/settings/projectConfig'
 import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
@@ -143,11 +143,21 @@ export async function createWeeklyReport(
 
   let seed: ReturnType<typeof seedOf> | null = null
   if (carryOver === true) {
-    let src: Awaited<ReturnType<typeof findCarryOverSource>>
+    // 같은 주 문서가 이미 있으면(다른 관리자가 먼저 만들었다) 이월을 판정하지 않는다 — RPC 가 시드를 버리고 exists 를 돌려줄 문서에
+    // 매핑 창을 띄우지 않는다(A1-4 리뷰 P7). 확인과 RPC 사이에 생긴 문서는 RPC 의 exists 가 그대로 받는다
+    let existing: string | null
     try {
-      src = await findCarryOverSource(projectId, weekStart)
+      existing = await findWeeklyReportId(projectId, weekStart)
     } catch (e) {
       return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CARRY_SOURCE), retryable: true }
+    }
+    let src: Awaited<ReturnType<typeof findCarryOverSource>> = null
+    if (existing === null) {
+      try {
+        src = await findCarryOverSource(projectId, weekStart)
+      } catch (e) {
+        return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CARRY_SOURCE), retryable: true }
+      }
     }
     if (src && src.rows.length > 0) {
       const carried = carryOverRows(src.rows, areas, mapping)

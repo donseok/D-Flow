@@ -1,16 +1,19 @@
-// createWeeklyReport(스펙 §4.1.3·D43·D45·D51) — 가드 → 관문 → 입력 → 영역(설정) → 이월 → RPC 한 길. 읽기 경로로 존재를 확인하지 않고(D22),
+// createWeeklyReport(스펙 §4.1.3·D43·D45·D51) — 가드 → 관문 → 입력 → 영역(설정) → 이월 → RPC 한 길. 존재 확인은 이월할 때 판정 앞의 읽기
+// 하나뿐이고(같은 주 문서가 있으면 매핑 없이 RPC 의 exists — A1-4 리뷰 P7) 문서를 만드는 읽기 경로는 없으며(D22),
 // 세션으로 문서·행을 쓰지 않으며(D27), 보상 삭제가 없다. DB 원문은 응답에 싣지 않는다(D21 — failWith 가 로그로만).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(),
-  getProjectConfig: vi.fn(), findCarryOverSource: vi.fn(), getWeeklySheet: vi.fn(),
+  getProjectConfig: vi.fn(), findCarryOverSource: vi.fn(), findWeeklyReportId: vi.fn(), getWeeklySheet: vi.fn(),
   rpc: vi.fn(), adminFor: vi.fn(), createServerClient: vi.fn(), revalidatePath: vi.fn(),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: h.revalidatePath }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: h.requireProjectAdmin, requireProjectMember: h.requireProjectMember }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
-vi.mock('@/lib/data/weeklySheet', () => ({ findCarryOverSource: h.findCarryOverSource, getWeeklySheet: h.getWeeklySheet }))
+vi.mock('@/lib/data/weeklySheet', () => ({
+  findCarryOverSource: h.findCarryOverSource, findWeeklyReportId: h.findWeeklyReportId, getWeeklySheet: h.getWeeklySheet,
+}))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn() }))
@@ -47,6 +50,7 @@ beforeEach(() => {
   h.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
   h.getProjectConfig.mockResolvedValue(cfgWith(AREAS))
   h.findCarryOverSource.mockResolvedValue(null)
+  h.findWeeklyReportId.mockResolvedValue(null)
   h.adminFor.mockImplementation((scope: Record<string, string>) => ({ ...scope, admin: { rpc: h.rpc } }))
   h.rpc.mockResolvedValue({ data: { status: 'created', report_id: REPORT, rows: 2 }, error: null })
   h.createServerClient.mockImplementation(async () => { throw new Error('createWeeklyReport 는 세션 클라이언트를 만들지 않는다') })
@@ -188,6 +192,31 @@ describe('RPC 한 길(D22·D43·D51)', () => {
     ]))
     const r = await createWeeklyReport(P, '2026-09-28', true, { [A_OPS]: A_EXP })
     expect(r).toMatchObject({ ok: false, code: 'CARRY_PENDING', pending: [], overflow: [expect.objectContaining({ areaId: A_EXP, cell: 'this_content' })] })
+    expect(h.rpc).not.toHaveBeenCalled()
+  })
+
+  it('같은 주 문서가 이미 있으면 이월 판정 없이(매핑 창 없이) RPC 의 exists — 다른 관리자가 먼저 만든 주차(A1-4 리뷰 P7)', async () => {
+    h.findWeeklyReportId.mockResolvedValue(REPORT)
+    h.findCarryOverSource.mockResolvedValue(source([prev(A_OPS, { nextContent: '운영 할 일' })]))   // 판정했다면 CARRY_PENDING
+    h.rpc.mockResolvedValue({ data: { status: 'exists', report_id: REPORT }, error: null })
+    expect(await createWeeklyReport(P, '2026-09-28', true)).toEqual({ ok: true, reportId: REPORT, status: 'exists' })
+    expect(h.findWeeklyReportId).toHaveBeenCalledWith(P, '2026-09-28')
+    expect(h.findCarryOverSource).not.toHaveBeenCalled()
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_seed: null })
+  })
+
+  it('이월 없이 만들 때는 존재를 미리 읽지 않는다 — RPC 가 판정한다', async () => {
+    await createWeeklyReport(P, '2026-09-28', false)
+    expect(h.findWeeklyReportId).not.toHaveBeenCalled()
+  })
+
+  it('같은 주 문서 확인 실패는 중단 — CARRY_SOURCE_UNAVAILABLE, RPC 미호출, 원문은 로그로만', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.findWeeklyReportId.mockRejectedValue(new Error('relation "secret_docs" does not exist'))
+    const r = await createWeeklyReport(P, '2026-09-28', true)
+    expect(r).toMatchObject({ ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', retryable: true })
+    expect(JSON.stringify(r)).not.toContain('secret_docs')
+    expect(logged(err, 'secret_docs')).toBe(true)
     expect(h.rpc).not.toHaveBeenCalled()
   })
 
