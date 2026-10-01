@@ -180,6 +180,8 @@ end $$;
 -- 프로젝트 삭제와 영역 restrict: 주간 행은 weekly_report_rows_project_id_fkey 로 projects 의 1단 캐스케이드에서 지워지고, 영역 검사는 영역 삭제가 낳는
 -- 2단 사건이라 늘 그 뒤에 돈다. RI 트리거 이름(OID 문자열) 순서에 기대지 않는다 — 덤프·복원·FK 재생성에도 같다. 영역을 지우는 캐스케이드 길을
 -- 새로 만들면(예: project_areas 에 workspace FK) 주간 행에도 같은 깊이의 길을 둔다.
+-- 네 칸의 길이 상한(WEEKLY_CELL_MAX 20,000자)은 DB 에도 둔다 — 세션의 칸 update(⑩)가 서버 액션의 상한을 건너뛰지 못하게. ① 이 이관 뒤 칸이
+-- 상한 안임을 보장한다. char_length 는 코드 포인트라 TS(UTF-16 길이)가 통과시키는 값을 거절하지 않는다
 alter table public.weekly_report_rows
   alter column project_id set not null,
   alter column area_id set not null,
@@ -189,7 +191,10 @@ alter table public.weekly_report_rows
   add constraint weekly_report_rows_area_fk foreign key (area_id, project_id, area_kind)
     references public.project_areas (id, project_id, kind) on delete restrict,
   add constraint weekly_report_rows_project_id_fkey foreign key (project_id)
-    references public.projects (id) on delete cascade;
+    references public.projects (id) on delete cascade,
+  add constraint weekly_report_rows_cells_len check (
+    char_length(this_content) <= 20000 and char_length(this_issue) <= 20000
+    and char_length(next_content) <= 20000 and char_length(next_issue) <= 20000);
 create unique index weekly_report_rows_report_area_uidx on public.weekly_report_rows (report_id, area_id);
 create index weekly_report_rows_project_idx on public.weekly_report_rows (project_id);   -- 직접 FK 의 캐스케이드를 받친다
 create index weekly_report_rows_area_idx on public.weekly_report_rows (area_id);         -- 영역 삭제 검사용
@@ -565,6 +570,14 @@ begin
     join pg_proc p on p.oid = x.fn::regprocedure
    where not coalesce('lock_timeout=15s' = any(p.proconfig), false);
   if v is not null then raise exception 'WEEKLY_AREAS_POSTCHECK: lock_timeout 이 15s 가 아니다: %', v; end if;
+
+  -- DEFINER·search_path ''(§3.1 함수 규칙): 도우미·RPC 둘. 본문이 public.·pg_catalog. 로 한정돼도 연산자 해석은 search_path 를 따른다
+  select string_agg(x.fn, ', ') into v
+    from (values ('public.actor_is_project_admin(uuid, uuid)'), ('public.create_weekly_report(uuid, uuid, date, jsonb)'),
+                 ('public.upsert_project_area(uuid, uuid, jsonb, jsonb, date)')) as x(fn)
+    join pg_proc p on p.oid = x.fn::regprocedure
+   where not p.prosecdef or not coalesce('search_path=""' = any(p.proconfig), false);
+  if v is not null then raise exception 'WEEKLY_AREAS_POSTCHECK: DEFINER·search_path 가 기대와 다르다: %', v; end if;
 
   -- 잠금 뒤 다른 행을 읽는 RPC 둘의 격리 검사 문자열(H2 ③ — 0012 ⑫ 와 같은 문장)
   select string_agg(x.fn, ', ') into v
