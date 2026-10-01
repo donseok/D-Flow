@@ -76,8 +76,9 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
     projectId, workspaceId,
     revision: Number(row.revision), schemaVersion, schemaAhead: schemaVersion > SETTINGS_SCHEMA_VERSION,
     keys: keys as ProjectConfig['keys'], unknownKeys, areas,
-    teams: ((t.data ?? []) as unknown as TeamRow[]).map((r) => ({
-      id: r.id, code: r.code, name: r.name, sortOrder: r.sort_order, active: r.active, color: r.color, progressVisible: r.progress_visible, projectId: r.project_id,
+    // code 는 앞뒤 공백을 걷고 빈 code 행은 팀이 아니다 — 팀 원천(teams/source.ts teamFromRow)·옛 팀 캐시와 같은 정리(A2-1 리뷰 정확성 P3)
+    teams: ((t.data ?? []) as unknown as TeamRow[]).filter((r) => r.code.trim() !== '').map((r) => ({
+      id: r.id, code: r.code.trim(), name: r.name, sortOrder: r.sort_order, active: r.active, color: r.color, progressVisible: r.progress_visible, projectId: r.project_id,
     })),
   }
 }

@@ -70,6 +70,11 @@ describe('getProjectConfig', () => {
     const cut = fakeClient({ settings: row({}), areas: ok([]), teams: { data: [team(1), team(2)], error: null, count: 1001 } })
     await expect(getProjectConfig(PID, { client: cut.client })).rejects.toBeInstanceOf(ConfigUnavailableError)
   })
+  it('[A2-1 Q5] 팀 code 의 앞뒤 공백은 걷고, 걷은 뒤 빈 code 행은 팀이 아니다(팀 원천·옛 팀 캐시와 같은 정리)', async () => {
+    const team = (id: string, code: string) => ({ id, code, name: code, sort_order: 0, active: true, color: '#6b7280', progress_visible: true, project_id: PID })
+    const { client } = fakeClient({ settings: row({}), areas: ok([]), teams: { data: [team('t1', ' DEV '), team('t2', '  '), team('t3', 'OPS')], error: null, count: 3 } })
+    expect((await getProjectConfig(PID, { client })).teams.map((t) => t.code)).toEqual(['DEV', 'OPS'])
+  })
   it('손상 값은 그 키만 invalid 이고 로그 한 줄, 다른 키는 정상. 미등록 키는 unknownKeys', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { client } = fakeClient({

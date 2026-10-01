@@ -8,7 +8,7 @@ import 'server-only'
 // 조회 실패는 TeamsUnavailableError — 빈 목록으로 위장하지 않는다(3원칙 ①). 원인(DB 원문 포함)은 cause 에만 둔다.
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
-import { fetchAllByKeyset, fetchAllPages } from '@/lib/data/paging'
+import { fetchAllByKeyset } from '@/lib/data/paging'
 import type { TeamView } from '@/lib/domain/authz'
 import { resolveTeamsForProject, teamsVisibleTo, type Team } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
@@ -54,33 +54,38 @@ export async function projectOwnTeams(projectId: string, opts?: SourceOpts): Pro
 
 const TEAM_COLS = 'id, code, name, color, sort_order, active, progress_visible, project_id, workspace_id'
 
-/** teams 행 → Team(공용 팀·가시 범위 공용). 모든 열이 not null(0003) — 빠지면 select 누락 같은 결함이라 throw */
-function teamFromRow(r: Record<string, unknown>): Team {
+/** teams 행 → Team(공용 팀·가시 범위 공용). 모든 열이 not null(0003) — 빠지면 select 누락 같은 결함이라 throw.
+ *  code 는 앞뒤 공백을 걷고, 걷은 뒤 빈 code 의 행은 팀이 아니다(null — 옛 팀 캐시와 같은 정리, A2-1 리뷰 정확성 P3). 모든 쓰기 경로가
+ *  normalizeNewTeamCode 로 trim 하므로 정상 데이터에서는 같다 — 직접 SQL·옛 시드로 생긴 행이 화면과 다른 문자열로 대조되지 않게 한다 */
+function teamFromRow(r: Record<string, unknown>): Team | null {
   if (typeof r.id !== 'string' || typeof r.code !== 'string' || typeof r.name !== 'string' || typeof r.color !== 'string'
       || typeof r.workspace_id !== 'string' || (r.project_id !== null && r.project_id !== undefined && typeof r.project_id !== 'string')) {
     throw new TeamsUnavailableError('팀 행의 모양이 기대와 다릅니다(select 누락)')
   }
+  const code = r.code.trim()
+  if (code === '') return null
   return {
-    id: r.id, code: r.code, name: r.name, color: r.color, sortOrder: Number(r.sort_order ?? 0),
+    id: r.id, code, name: r.name, color: r.color, sortOrder: Number(r.sort_order ?? 0),
     active: r.active !== false, progressVisible: r.progress_visible !== false,
     projectId: typeof r.project_id === 'string' ? r.project_id : null, workspaceId: r.workspace_id,
   }
 }
+const teamsFromRows = (rows: Array<Record<string, unknown>>): Team[] => rows.map(teamFromRow).filter((t): t is Team => t !== null)
 
 const loadWorkspaceTeams = cache(async (workspaceId: string, client: ConfigReadClient | undefined): Promise<Team[]> => {
   const sb = client ?? (await createServerClient())
   let rows: Array<Record<string, unknown>>
   try {
-    // 공용 팀은 지우지 않고 쌓인다 — 한 응답의 max_rows 에서 잘리지 않게 끝까지 읽는다(유일 키 id 로 정렬을 끝낸다)
-    rows = await fetchAllPages<Record<string, unknown>>('공용 팀', (from, to) => sb.from('teams')
-      .select(TEAM_COLS, { count: 'exact' })
-      .eq('workspace_id', workspaceId).is('project_id', null)
-      .order('sort_order').order('code').order('id')
-      .range(from, to))
+    // 공용 팀은 지우지 않고 쌓인다 — 한 응답의 max_rows 에서 잘리지 않게 끝까지 읽는다. 키는 바뀌지 않는 id(키셋 — 계획 P15·A2-1 리뷰
+    // 정확성 P3): offset 은 정렬 앞 키(sort_order)를 바꾸는 순서 변경이 쪽 사이에 끼면 한 행 중복·한 행 누락이 count 를 통과한다. 표시 순은 아래 정렬
+    rows = await fetchAllByKeyset<Record<string, unknown>>('공용 팀', (r) => String(r.id), (after, limit) => {
+      const q = sb.from('teams').select(TEAM_COLS, { count: 'exact' }).eq('workspace_id', workspaceId).is('project_id', null)
+      return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+    })
   } catch (e) {
     throw new TeamsUnavailableError(`공용 팀을 불러오지 못했습니다: ${workspaceId}`, { cause: e })
   }
-  return rows.map(teamFromRow).sort(byDisplayOrder)
+  return teamsFromRows(rows).sort(byDisplayOrder)
 })
 
 /** 한 워크스페이스의 공용 팀(비활성 포함 — 화면이 활성을 거른다). 다른 워크스페이스 팀·프로젝트 전용 팀은 없다 */
@@ -99,7 +104,7 @@ export async function visibleTeams(view: TeamView, opts?: SourceOpts): Promise<T
       const q = sb.from('teams').select(TEAM_COLS, { count: 'exact' }).eq('active', true)
       return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
     })
-    return teamsVisibleTo(rows.map(teamFromRow), view)
+    return teamsVisibleTo(teamsFromRows(rows), view)
   } catch (e) {
     throw new TeamsUnavailableError('볼 수 있는 팀 목록을 불러오지 못했습니다.', { cause: e })
   }

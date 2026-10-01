@@ -286,6 +286,12 @@ describe('프로젝트 팀 관리 서버액션', () => {
     expect(await addProjectTeam('p1', 'START')).toEqual({ ok: false, error: "'START'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
     expect(db.inserted.teams).toEqual([])
   })
+  it('프로젝트의 추가 축 이름(core.extra_axis_label)도 예약어다(D38 — 카탈로그 소비처)', async () => {
+    asAdmin()
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'], 'core.extra_axis_label': '사업영역A' }))
+    expect(await addProjectTeam('p1', '사업영역a')).toEqual({ ok: false, error: "'사업영역a'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
+    expect(db.inserted.teams).toEqual([])
+  })
   it('설정을 읽지 못하면 팀을 만들지 않는다 — 예약어를 모르는 채 통과시키지 않는다(3원칙 ②)', async () => {
     asAdmin()
     cfg.getProjectConfig.mockRejectedValueOnce(new Error('db down'))
