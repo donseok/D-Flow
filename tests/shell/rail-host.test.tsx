@@ -51,3 +51,33 @@ describe('RightRail — 점유자 하나·병치/오버레이', () => {
     expect(closed).toBe(1)
   })
 })
+
+describe('RightRail 첫 커밋(U2b-2 충실도 리뷰 Z6·Z11)', () => {
+  it('열린 첫 커밋에 본문이 붙는다 — 그 커밋의 효과가 입력창 ref 를 본다(한 커밋 늦게 그리지 않는다)', () => {
+    document.body.innerHTML = '<div id="app-rail"></div>'
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    let seenInEffect: HTMLElement | null = null
+    // 부모(AssistantChat 꼴)의 효과는 레일이 열린 첫 커밋에 한 번 돈다 — 그때 본문이 DOM 에 있어야 입력 초점·맨 아래 스크롤이 된다
+    function Parent() {
+      useLayoutEffectLike(() => { seenInEffect = document.querySelector('#app-rail textarea') }, [])
+      return <RightRail occupant="ai" title="도우미" sidebarWidth={232} onClose={() => {}}><textarea /></RightRail>
+    }
+    render(<Parent />)
+    expect(seenInEffect).not.toBeNull()
+  })
+  it('오버레이 첫 초점은 입력창([data-autofocus])이지 머리의 버튼(대화 초기화)이 아니다', () => {
+    document.body.innerHTML = '<div id="app-rail"></div>'
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1100 })
+    render(<RightRail occupant="ai" title="도우미" sidebarWidth={232} onClose={() => {}} header={<button data-reset>초기화</button>}><textarea data-autofocus /></RightRail>)
+    expect((document.activeElement as HTMLElement).hasAttribute('data-autofocus')).toBe(true)
+  })
+  it('전체 화면 안 레일 자리에서는 사이드바 폭을 세지 않는다(전체 화면이 사이드바를 덮는다) — 1280 에서 병치', () => {
+    document.body.innerHTML = '<div data-wbs-fullscreen="open"><div data-rail-host="fullscreen"></div></div><div id="app-rail"></div>'
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
+    render(<RightRail occupant="ai" title="도우미" sidebarWidth={232} onClose={() => {}}><button>안</button></RightRail>)
+    expect(document.querySelector('[data-rail-host="fullscreen"] [role="complementary"]')).not.toBeNull()
+  })
+})
+
+import { useEffect as useLayoutEffectLike } from 'react'
+

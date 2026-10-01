@@ -677,6 +677,7 @@ export function AssistantChat() {
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
+                data-autofocus
                 value={input}
                 onChange={onInputChange}
                 onKeyDown={onInputKey}

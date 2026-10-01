@@ -57,25 +57,32 @@ function sidebarWidthNow(): number {
   return window.innerWidth >= XL ? SIDEBAR_WIDTH.open : SIDEBAR_WIDTH.closed
 }
 
-export function useRailMode(sidebarWidth?: number): 'side' | 'overlay' | 'closed' {
-  const [mode, setMode] = useState<'side' | 'overlay' | 'closed'>('closed')
+/** sync: 첫 렌더에 바로 판정(사용자 조작 뒤에만 마운트되는 RightRail 용 — SSR 하지 않으므로 불일치가 없다). 아니면 SSR·첫 렌더 닫힘(D55).
+ *  ignoreSidebar: 전체 화면 안 레일 자리 — 전체 화면이 사이드바를 덮으므로 그 폭을 세지 않는다 */
+export function useRailMode(sidebarWidth?: number, opts: { sync?: boolean; ignoreSidebar?: boolean } = {}): 'side' | 'overlay' | 'closed' {
+  const { sync = false, ignoreSidebar = false } = opts
+  const calc = useCallback((): 'side' | 'overlay' => {
+    const sb = ignoreSidebar || window.innerWidth < LG ? 0 : sidebarWidth ?? sidebarWidthNow()
+    return railSideBySide(window.innerWidth, sb) ? 'side' : 'overlay'
+  }, [sidebarWidth, ignoreSidebar])
+  const [mode, setMode] = useState<'side' | 'overlay' | 'closed'>(() => (sync && typeof window !== 'undefined' ? calc() : 'closed'))
   useEffect(() => {
-    const calc = () => {
-      const sb = window.innerWidth < LG ? 0 : sidebarWidth ?? sidebarWidthNow()
-      setMode(railSideBySide(window.innerWidth, sb) ? 'side' : 'overlay')
-    }
-    calc()
-    window.addEventListener('resize', calc)
-    window.addEventListener(SIDEBAR_TOGGLE_EVENT, calc)
-    return () => { window.removeEventListener('resize', calc); window.removeEventListener(SIDEBAR_TOGGLE_EVENT, calc) }
-  }, [sidebarWidth])
+    const on = () => setMode(calc())
+    on()
+    window.addEventListener('resize', on)
+    window.addEventListener(SIDEBAR_TOGGLE_EVENT, on)
+    return () => { window.removeEventListener('resize', on); window.removeEventListener(SIDEBAR_TOGGLE_EVENT, on) }
+  }, [calc])
   return mode
 }
 
-export function useRailHost(): HTMLElement | null {
-  const [host, setHost] = useState<HTMLElement | null>(null)
+const pickHost = () => document.querySelector<HTMLElement>('[data-wbs-fullscreen="open"] [data-rail-host="fullscreen"]') ?? document.getElementById('app-rail')
+
+/** sync: 첫 렌더에 바로 찾는다(RightRail 용 — SSR 하지 않는다). AssistantChat 처럼 SSR 되는 소비처는 기본값(첫 렌더 null — 수화 불일치 방지) */
+export function useRailHost(opts: { sync?: boolean } = {}): HTMLElement | null {
+  const [host, setHost] = useState<HTMLElement | null>(() => (opts.sync && typeof document !== 'undefined' ? pickHost() : null))
   useEffect(() => {
-    const pick = () => setHost(document.querySelector<HTMLElement>('[data-wbs-fullscreen="open"] [data-rail-host="fullscreen"]') ?? document.getElementById('app-rail'))
+    const pick = () => setHost(pickHost())
     pick()
     const mo = new MutationObserver(pick)
     mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-wbs-fullscreen'] })
@@ -87,15 +94,21 @@ export function useRailHost(): HTMLElement | null {
 export function RightRail({ title, onClose, sidebarWidth, header, children }: {
   occupant: RailOccupant; title: string; onClose(): void; sidebarWidth?: number; header?: ReactNode; children: ReactNode
 }) {
-  const mode = useRailMode(sidebarWidth)
-  const host = useRailHost()
+  // 첫 커밋에 모드·자리를 정해 본문을 바로 붙인다 — 한 커밋 늦으면 부모(AssistantChat)의 입력 초점·맨 아래 스크롤 효과가 빈 ref 를 본다(Z6)
+  const host = useRailHost({ sync: true })
+  const mode = useRailMode(sidebarWidth, { sync: true, ignoreSidebar: host?.getAttribute('data-rail-host') === 'fullscreen' })
   const ref = useRef<HTMLDivElement>(null)
   const trigger = useRef<Element | null>(null)
   useEffect(() => {
     trigger.current = document.activeElement
     return () => { const el = trigger.current as HTMLElement | null; if (el?.isConnected) el.focus?.() }
   }, [])
-  useEffect(() => { if (mode === 'overlay' && host) focusablesIn(ref.current)[0]?.focus() }, [mode, host])
+  // 오버레이(모달) 첫 초점은 입력창([data-autofocus]) — 머리의 첫 버튼(대화 초기화)에 두면 Enter 한 번에 대화가 지워진다(Z6)
+  useEffect(() => {
+    if (mode !== 'overlay' || !host) return
+    const auto = ref.current?.querySelector<HTMLElement>('[data-autofocus]')
+    ;(auto ?? focusablesIn(ref.current)[0])?.focus()
+  }, [mode, host])
   if (mode === 'closed' || !host) return null
   const head = header ?? (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
@@ -107,7 +120,7 @@ export function RightRail({ title, onClose, sidebarWidth, header, children }: {
   const body = mode === 'side'
     ? <aside ref={ref} role="complementary" aria-label={title} className="flex h-full w-(--rail-w) flex-col border-l border-border bg-surface" style={width}>{head}<div className="flex min-h-0 flex-1 flex-col">{children}</div></aside>
     : <div className="fixed inset-0 z-(--z-overlay) flex justify-end bg-fg/20" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-        <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
+        <div ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); return } trapTab(e, ref.current) }}
           className="flex h-full w-(--rail-w) max-w-full flex-col border-l border-border bg-surface" style={width}>{head}<div className="flex min-h-0 flex-1 flex-col">{children}</div></div>
       </div>
