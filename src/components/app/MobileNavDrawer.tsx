@@ -28,6 +28,15 @@ export function MobileNavDrawer({ open, onClose, workspaceSwitcher, groups, path
     if (open && lastPath.current !== pathname) onClose()
     lastPath.current = pathname
   }, [open, pathname, onClose])
+  // 열린 채 1024 이상으로 넓어지면 닫는다 — 그 폭에는 사이드바가 있고 드로어(모달)가 남으면 화면을 가린다(Z11)
+  useEffect(() => {
+    if (!open || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    if (mq.matches) { onClose(); return }
+    const on = (e: { matches: boolean }) => { if (e.matches) onClose() }
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [open, onClose])
   if (!open) return null
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { e.stopPropagation(); onClose(); return }
@@ -35,7 +44,7 @@ export function MobileNavDrawer({ open, onClose, workspaceSwitcher, groups, path
   }
   return (
     <div data-drawer-backdrop className="fixed inset-0 z-(--z-overlay) bg-fg/30" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label="메뉴" onKeyDown={onKey}
+      <div ref={ref} role="dialog" aria-modal="true" aria-label="메뉴" tabIndex={-1} onKeyDown={onKey}
         className="flex h-full w-72 max-w-[85vw] flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">{workspaceSwitcher}</div>
