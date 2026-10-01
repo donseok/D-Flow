@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
+import { fetchAllByKeyset, type PageResult } from '@/lib/data/paging'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { DEFAULT_MILESTONE_KEYWORDS } from '@/lib/settings/defs/project'
 import { listProjectsWithState } from '@/app/actions/project'
@@ -63,22 +64,32 @@ export async function getPortfolioInputs(): Promise<{
     for (const arr of leadersByProject.values()) arr.sort(compareKoreanName)
   }
 
-  // 진척 스냅샷(최근 60일) — 프로젝트 IN 한 방. 실패는 로그만: 추세 화살표·지연 추세 신호가
-  // 비표기될 뿐 합성되지는 않는다(getSnapshots 의 '조용한 거짓 차트 금지' 관례와 동일 결).
+  // 진척 스냅샷(최근 60일) — 프로젝트 IN, 끝까지 읽는다(A2-1 리뷰 정확성 P2). 프로젝트당 하루 1행이 쌓이므로 17개 × 60일이면 한 응답(max_rows
+  // 1000)을 넘는다 — 잘리면 최근 날짜가 빠진 채 추세 화살표가 조용히 낡은 시점으로 계산된다. 키는 PK (project_id, snap_date) 복합 키셋
+  // (getComputedWbs 의 item_owners 와 같은 꼴 — 계획 P15). 실패·잘림·읽는 사이 변경은 로그만: 추세 화살표·지연 추세 신호가 비표기될 뿐
+  // 합성되지 않는다(getSnapshots 의 '조용한 거짓 차트 금지' 관례와 같은 결). 일부만 읽은 행은 쓰지 않는다.
   const realToday = seoulToday()
   const snapshotsByProject = new Map<string, SnapshotPoint[]>()
   if (ids.length) {
-    const { data, error } = await sb
-      .from('wbs_progress_snapshots')
-      .select('project_id, snap_date, actual_pct, planned_pct')
-      .gte('snap_date', addDaysCal(realToday, -SNAPSHOT_WINDOW_DAYS))
-      .in('project_id', ids)
-      .order('snap_date', { ascending: true })
-    if (error) console.error('[portfolio] 스냅샷 조회 실패(추세 화살표 비표기):', error.message)
-    for (const r of data ?? []) {
-      const arr = snapshotsByProject.get(r.project_id as string) ?? []
-      arr.push({ date: r.snap_date as string, actual: Number(r.actual_pct), planned: Number(r.planned_pct) })
-      snapshotsByProject.set(r.project_id as string, arr)
+    type SnapRow = { project_id: string; snap_date: string; actual_pct: unknown; planned_pct: unknown }
+    const since = addDaysCal(realToday, -SNAPSHOT_WINDOW_DAYS)
+    try {
+      const rows = await fetchAllByKeyset<SnapRow>('[portfolio] 스냅샷', (r) => `${r.project_id}|${r.snap_date}`, (after, limit) => {
+        const q = sb.from('wbs_progress_snapshots')
+          .select('project_id, snap_date, actual_pct, planned_pct', { count: 'exact' })
+          .gte('snap_date', since)
+          .in('project_id', ids)
+        return (after ? q.or(`project_id.gt.${after.project_id},and(project_id.eq.${after.project_id},snap_date.gt.${after.snap_date})`) : q)
+          .order('project_id').order('snap_date').limit(limit) as unknown as PromiseLike<PageResult<SnapRow>>
+      })
+      // 프로젝트 안에서는 snap_date 오름차순으로 온다(키셋 정렬 = project_id, snap_date) — 추세 계산이 기대하는 순서
+      for (const r of rows) {
+        const arr = snapshotsByProject.get(r.project_id) ?? []
+        arr.push({ date: r.snap_date, actual: Number(r.actual_pct), planned: Number(r.planned_pct) })
+        snapshotsByProject.set(r.project_id, arr)
+      }
+    } catch (e) {
+      console.error('[portfolio] 스냅샷 조회 실패(추세 화살표 비표기):', e instanceof Error ? e.message : e)
     }
   }
 

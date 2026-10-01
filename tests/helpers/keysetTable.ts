@@ -9,6 +9,37 @@ export type Call = { method: string; args: unknown[] }
  * error 면 그 표의 모든 조회가 실패, afterResponse(n, rows) 는 n 번째 응답을 만든 뒤 표를 바꾼다(쪽 사이의 동시 변경).
  * 여러 표를 흉내 내려면 표마다 keysetTable 을 만들고 클라이언트의 from(table) 에서 그 표의 make() 를 돌려준다.
  */
+type Cmp = (a: unknown, b: unknown) => number
+const cmpOf: Cmp = (a, b) => (typeof a === 'number' && typeof b === 'number' ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0)
+/** 최상위 쉼표로 나눈다(괄호 안의 쉼표는 그대로) */
+function splitTop(expr: string): string[] {
+  const out: string[] = []
+  let depth = 0, cur = ''
+  for (const ch of expr) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue }
+    cur += ch
+  }
+  if (cur) out.push(cur)
+  return out
+}
+function condOf(term: string): (r: Row) => boolean {
+  const and = /^and\((.*)\)$/.exec(term)
+  if (and) { const parts = splitTop(and[1]).map(condOf); return (r) => parts.every((f) => f(r)) }
+  const m = /^([^.]+)\.(eq|gt|gte|lt)\.(.*)$/.exec(term)
+  if (!m) throw new Error(`keysetTable.or: 해석할 수 없는 항 ${term}`)
+  const [, col, op, val] = m
+  return (r) => {
+    const d = cmpOf(r[col], val)
+    return op === 'eq' ? d === 0 : op === 'gt' ? d > 0 : op === 'gte' ? d >= 0 : d < 0
+  }
+}
+function orFilter(expr: string): (r: Row) => boolean {
+  const terms = splitTop(expr).map(condOf)
+  return (r) => terms.some((f) => f(r))
+}
+
 export function keysetTable(initial: readonly Row[], opts: {
   maxRows?: number; error?: { message: string }; afterResponse?: (n: number, rows: Row[]) => Row[] | void
 } = {}) {
@@ -30,6 +61,9 @@ export function keysetTable(initial: readonly Row[], opts: {
     q.is = (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return rec('is', [c, v]) }
     q.in = (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return rec('in', [c, vs]) }
     q.gt = (c: string, v: unknown) => { filters.push((r) => cmp(r[c], v) > 0); return rec('gt', [c, v]) }
+    q.gte = (c: string, v: unknown) => { filters.push((r) => cmp(r[c], v) >= 0); return rec('gte', [c, v]) }
+    // PostgREST or 필터의 작은 부분집합 — `a.op.v,and(b.op.v,c.op.v)`(op: eq·gt·gte·lt). 복합 키셋(item_owners·포트폴리오 스냅샷)의 꼴
+    q.or = (expr: string) => { filters.push(orFilter(expr)); return rec('or', [expr]) }
     q.order = (c: string) => { orders.push(c); return rec('order', [c]) }
     q.limit = (n: number) => { limit = n; return rec('limit', [n]) }
     q.maybeSingle = () => { single = true; return rec('maybeSingle', []) }
