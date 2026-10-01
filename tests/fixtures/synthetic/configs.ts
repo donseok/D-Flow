@@ -34,10 +34,10 @@ export const SYNTHETIC_CONFIGS: readonly [SyntheticConfig, SyntheticConfig, Synt
     id: 'construction', name: 'C — 건설 현장(근태·공지 중심, AI 끔)',
     project: {
       'core.level_labels': ['공구', '공종', '작업'],
-      'modules.enabled': ['kanban', 'announcements', 'attendance', 'issues', 'wiki'],   // wiki 는 켜 두지만 ai.enabled=false 로 빠진다
+      'modules.enabled': ['kanban', 'weekly', 'announcements', 'attendance', 'issues', 'wiki'],   // wiki 는 켜 두지만 ai.enabled=false 로 빠진다. weekly — SP4 S4(월)(D40)
       'core.milestone_keywords': [],
       'workflow.stage_credits': { default: { as: 0, ip: 10, rw: 20, im: 80, xx: 100 } },
     },
-    workspace: { 'modules.allowed': ['kanban', 'announcements', 'attendance', 'issues', 'wiki', 'minutes', 'usage'], 'ai.enabled': false },
+    workspace: { 'modules.allowed': ['kanban', 'weekly', 'announcements', 'attendance', 'issues', 'wiki', 'minutes', 'usage'], 'ai.enabled': false },
   },
 ]

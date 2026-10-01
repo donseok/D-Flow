@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B } from '../../scripts/lib/synthetic.mjs'
+import {
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, teamView, wbsRows,
+} from '../../scripts/lib/synthetic.mjs'
+import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
+import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
+import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
 
 // 합성 게이트 러너(scripts/e2e-synthetic.mjs)의 구성값은 .mjs 라 TS 픽스처를 import 하지 못해 한 번 더 적는다 — 같은 값인지 대조한다.
 const plain = (v: unknown) => JSON.parse(JSON.stringify(v))
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 
 describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', () => {
   const [, research, construction] = SYNTHETIC_CONFIGS
@@ -15,13 +22,93 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(SYNTHETIC_R.config.id).toBe(research.id)
     expect(SYNTHETIC_C.config.id).toBe(construction.id)
   })
+  it('C 는 프로젝트 modules.enabled 와 워크스페이스 modules.allowed 둘 다에 weekly 가 있다(스펙 D40·E10 — 한쪽만이면 허용 밖 모듈로 저장이 거부된다)', () => {
+    expect(construction.project['modules.enabled']).toContain('weekly')
+    expect(construction.workspace['modules.allowed']).toContain('weekly')
+  })
   it('세 워크스페이스 슬러그가 서로 다르고 이름이 합성임을 밝힌다', () => {
     const slugs = [SYNTHETIC_R.slug, SYNTHETIC_C.slug, SYNTHETIC_WORKSPACE_B.slug]
     expect(new Set(slugs).size).toBe(3)
     for (const ws of [SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B]) expect(String(ws.name)).toMatch(/^합성 /)
   })
-  it('아직 켜지지 않은 단계는 S1·S9 를 뺀 전부이고 담당 SP 가 적혀 있다(D25 — 건너뜀으로 세지 않는다)', () => {
-    expect(Object.keys(PENDING_STEPS)).toEqual(['S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S10'])
+  it('아직 켜지지 않은 단계는 S1·S2·S9 와 S4 의 월요일 키를 뺀 전부이고 담당 SP 가 적혀 있다(D25 — 건너뜀으로 세지 않는다)', () => {
+    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S10'])
+    expect(PENDING_STEPS.S4).toBe('SP5(일)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
+  })
+})
+
+describe('S1 추가분 — 팀·주간 영역(스펙 §6.4 S1)', () => {
+  it.each([[SYNTHETIC_R, 'research'], [SYNTHETIC_C, 'construction']] as const)('%# — 팀 code 순서와 영역(code·이름·순서·담당 팀 code)이 픽스처와 같다', (def, id) => {
+    const codeOf = new Map(SYNTHETIC_TEAMS[id].map((t) => [t.id, t.code]))
+    expect([...def.teams]).toEqual(SYNTHETIC_TEAMS[id].map((t) => t.code))
+    expect(plain(def.weeklyAreas)).toEqual(SYNTHETIC_WEEKLY_AREAS[id].map((a) => ({
+      code: a.code, name: a.name, sortOrder: a.sortOrder, teams: a.teams.map((t) => [codeOf.get(t.teamId), t.kind]),
+    })))
+  })
+  it('areaView 는 DB 행(순서 뒤섞임·area_teams 임베드)을 expectedAreas 와 같은 모양으로 — 모르는 팀 id 는 다르게 남는다', () => {
+    const ids = new Map([['t-res', 'RES'], ['t-ops', 'OPS']])
+    const rows = [
+      { id: 'a3', code: 'RUN', name: '운영', sort_order: 3, active: true, area_teams: [{ team_id: 't-ops', kind: 'primary' }] },
+      { id: 'a1', code: 'EXP', name: '실험', sort_order: 1, active: true, area_teams: [{ team_id: 't-res', kind: 'primary' }] },
+      { id: 'a2', code: 'DATA', name: '데이터', sort_order: 2, active: true,
+        area_teams: [{ team_id: 't-ops', kind: 'support' }, { team_id: 't-res', kind: 'primary' }] },
+    ]
+    expect(areaView(rows, ids)).toEqual(expectedAreas(SYNTHETIC_R.weeklyAreas))
+    expect(areaView([{ ...rows[1], area_teams: [{ team_id: 't-x', kind: 'primary' }] }], ids)[0].teams).toEqual([['?t-x', 'primary']])
+    expect(areaView([{ ...rows[1], active: false }], ids)[0].active).toBe(false)
+  })
+  it('teamView·expectedTeams — addProjectTeam 이 만든 순서(0부터)·이름 = code(개명은 A2·B — D37)', () => {
+    expect(teamView([{ code: 'OPS', name: 'OPS', sort_order: 1, active: true }, { code: 'RES', name: 'RES', sort_order: 0, active: true }]))
+      .toEqual(expectedTeams(SYNTHETIC_R.teams))
+  })
+})
+
+describe('wbsRows — S2 가져오기 행(R 4단·C 3단, 담당 = 그 프로젝트 팀)', () => {
+  it.each([[SYNTHETIC_R], [SYNTHETIC_C]] as const)('%# — 깊이 = 단계 이름 수, 담당은 잎에만 그 프로젝트 팀, 형제 가중치 합 1, 코드 유일', (def) => {
+    const depth = def.config.project['core.level_labels'].length
+    const rows = wbsRows(depth, def.teams)
+    const codes = rows.map((r) => String(r[0]))
+    expect(new Set(codes).size).toBe(codes.length)
+    expect(Math.max(...codes.map((c) => c.split('.').length))).toBe(depth)
+    const isLeaf = (c: string) => !codes.some((o) => o.startsWith(`${c}.`))
+    for (const r of rows) {
+      expect(r).toHaveLength(TEMPLATE_HEADER.length)
+      if (isLeaf(String(r[0]))) expect([...def.teams]).toContain(r[8])
+      else expect(r[8]).toBe('')
+    }
+    const parentOf = (c: string) => c.split('.').slice(0, -1).join('.')
+    const sums = new Map<string, number>()
+    for (const r of rows) sums.set(parentOf(String(r[0])), (sums.get(parentOf(String(r[0]))) ?? 0) + Number(r[6]))
+    for (const s of sums.values()) expect(s).toBeCloseTo(1)
+  })
+  it('깊이가 2 미만이거나 팀이 없으면 throw', () => {
+    expect(() => wbsRows(1, ['RES'])).toThrow()
+    expect(() => wbsRows(3, [])).toThrow()
+  })
+})
+
+describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
+  const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+  it('새 단계가 이름으로 있고 S1 추가 → S9 → S2 → S4 순서다(S9 의 C 스냅샷은 S1 직후의 설정이다)', () => {
+    const at = (n: string) => src.indexOf(`step('${n}'`)
+    for (const n of ['S1-create', 'S1-teams-areas', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday']) expect(at(n), n).toBeGreaterThan(-1)
+    expect(at('S1-create')).toBeLessThan(at('S1-teams-areas'))
+    expect(at('S1-teams-areas')).toBeLessThan(at('S9-isolation'))
+    expect(at('S9-isolation')).toBeLessThan(at('S2-wbs-import'))
+    expect(at('S2-wbs-import')).toBeLessThan(at('S4-weekly-monday'))
+  })
+  it('팀·영역·주간 쓰기는 화면과 같은 서버 액션 넷 — worker 는 그 액션을 쓰는 페이지', () => {
+    for (const [name, worker] of [
+      ['addProjectTeam', '/p/[projectId]/settings/page'], ['upsertArea', '/p/[projectId]/settings/page'],
+      ['createWeeklyReport', '/p/[projectId]/weekly/page'], ['saveWeeklyCells', '/p/[projectId]/weekly/page'],
+    ] as const) {
+      expect(src, name).toMatch(new RegExp(`${name}: \\{[^}]*exportedName: '${name}', worker: '${esc(worker)}'`))
+    }
+    expect(src).not.toMatch(/svc\.from\('(?:teams|project_areas|area_teams|weekly_reports|weekly_report_rows|wbs_items)'\)/)
+  })
+  it('가져오기 실행은 importForm 한 곳(명령 id 필수) — 같은 명령 id 를 두 번 보낸다', () => {
+    expect(src).toContain('importForm(')
+    expect(src).not.toMatch(/append\('mode'/)
   })
 })
