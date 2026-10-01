@@ -99,15 +99,16 @@ describe('H2-e access_granted_*', () => {
     }
   })
 
-  it('계정 없는 인물의 역할은 주거나 옮기는 문장(INSERT·역할 변경·인물 변경)에서 여전히 PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT', async () => {
+  it('계정 없는 인물의 역할은 주는 문장(INSERT·역할 변경)에서 여전히 PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT — 인물 변경은 그보다 먼저 PROJECT_MEMBER_PERSON_IMMUTABLE', async () => {
     const NO_ACCOUNT = { code: '23514', message: 'PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT' }
     await asService(pool, async (c) => {
       expect(await pgError(c, `insert into public.project_members (project_id, person_id, access_role) values ($1, $2, 'member')`,
         [F.projects.b, F.people.external]), 'insert').toMatchObject(NO_ACCOUNT)
       expect(await pgError(c, `update public.project_members set access_role = 'member' where id = $1`, [F.members.bobA]), 'role')
         .toMatchObject(NO_ACCOUNT)
+      // SP4 _authz_carry ②′ — 명단 행의 person_id 는 바꿀 수 없다(project_id 불변 검사 바로 뒤라 계정 검사보다 먼저 멈춘다)
       expect(await pgError(c, 'update public.project_members set person_id = $2 where id = $1', [F.members.danaA, F.people.external]), 'person')
-        .toMatchObject(NO_ACCOUNT)
+        .toMatchObject({ code: '23514', message: 'PROJECT_MEMBER_PERSON_IMMUTABLE' })
     })
   })
 })

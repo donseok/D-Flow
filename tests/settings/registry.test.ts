@@ -1,5 +1,5 @@
 // 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 14키만 등록, 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -85,6 +85,14 @@ describe('등록 키', () => {
     for (const d of ALL) if (d.default === REQUIRED_ON_CREATE) expect(d.explicit, d.key).toBe(true)
     const loose = [{ ...settingDef('project', 'core.level_labels')!, explicit: undefined }] as unknown as SettingDef[]
     expect(() => assertRegistry({ defs: loose })).toThrow(/explicit/)
+  })
+  it('명시(explicit) 키 = NNNN_authz_carry 의 apply_project_settings 거부 목록(CR-6) — 뒤 SP 가 explicit 키를 더하면 같은 커밋에서 RPC 를 고친다', () => {
+    const explicit = ALL.filter((d) => d.explicit).map((d) => `${d.scope}/${d.key}`).sort()
+    const files = readdirSync('supabase/migrations').filter((f) => f.endsWith('_authz_carry.sql'))   // 번호가 아니라 접미로 찾는다
+    expect(files, '_authz_carry 마이그레이션').toHaveLength(1)
+    const m = /foreach k in array array\[([^\]]*)\] loop/.exec(readFileSync(`supabase/migrations/${files[0]}`, 'utf8'))
+    expect(m, 'apply_project_settings 의 명시 키 루프').not.toBeNull()
+    expect([...m![1].matchAll(/'([^']+)'/g)].map((x) => `project/${x[1]}`).sort()).toEqual(explicit)
   })
 })
 

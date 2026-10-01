@@ -99,8 +99,9 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   // user_id·asked_by 는 컬럼 권한이 없고 기본값이 auth.uid() 다 — 열린 컬럼만 넣는다
   { table: 'wiki_feedback', sql: `insert into public.wiki_feedback (project_id, topic_id, feedback_type, comment) values ('${F.projects.a}', '${F.rows.wikiTopic}', 'helpful', 'RLS ' || $1::text)` },
   { table: 'wiki_questions', sql: `insert into public.wiki_questions (project_id, topic_id, question) values ('${F.projects.a}', '${F.rows.wikiTopic}', 'RLS ' || $1::text)` },
-  // people 은 표 단위 INSERT 가 없고 세 컬럼만 열려 있다 — 그 컬럼으로 넣어 people_insert(워크스페이스 판정)를 태운다
-  { table: 'people', sql: `insert into public.people (display_name, email, workspace_id) values ('RLS 침입', 'rls-probe-' || $1::text || '@example.com', '${F.ws}')` },
+  // people 은 표 단위 INSERT 가 없고 두 컬럼(workspace_id·display_name)만 열려 있다(email 은 SP4 _authz_carry ① 이 닫았다) — 그 컬럼으로
+  // 넣어 people_insert(워크스페이스 판정)를 태운다
+  { table: 'people', sql: `insert into public.people (display_name, workspace_id) values ('RLS 침입 ' || $1::text, '${F.ws}')` },
   // teams — 복사 insert(첫 행 = A 공용 팀 …d0)는 wsadmin_insert_teams 를, 이 탐침은 프로젝트 팀 분기(pa_insert_project_teams)를 태운다
   { table: 'teams', sql: `insert into public.teams (workspace_id, project_id, code, name) values ('${F.ws}', '${F.projects.a}', 'RLSX', 'RLS ' || $1::text)` },
 ]

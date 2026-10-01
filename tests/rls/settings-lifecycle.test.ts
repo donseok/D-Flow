@@ -225,9 +225,9 @@ describe('0012 ⑧-1 apply_project_settings — 한 연결', () => {
   it("unset ['a,b'] 와 ['a','b'] 는 다른 내용이다 — 같은 명령 id 로 바꿔 보내면 COMMAND_REUSED(프로젝트·워크스페이스)", async () => {
     const REUSED = { code: '23505', message: 'COMMAND_REUSED' }
     await asService(pool, async (c) => {
-      expect(await applyP(c, { rev: 1, cmd: CMD(24), set: { 'core.extra_axis_label': 'x' }, unset: ['core.level_labels,wbs.excel_profile'] }))
+      expect(await applyP(c, { rev: 1, cmd: CMD(24), set: { 'core.extra_axis_label': 'x' }, unset: ['core.milestone_keywords,wbs.excel_profile'] }))
         .toEqual({ status: 'applied', revision: 2 })
-      expect(await errP(c, { rev: 1, cmd: CMD(24), set: { 'core.extra_axis_label': 'x' }, unset: ['core.level_labels', 'wbs.excel_profile'] }))
+      expect(await errP(c, { rev: 1, cmd: CMD(24), set: { 'core.extra_axis_label': 'x' }, unset: ['core.milestone_keywords', 'wbs.excel_profile'] }))
         .toMatchObject(REUSED)
       expect(await applyW(c, { rev: 1, cmd: CMD(25), set: { 'ai.enabled': false }, unset: ['a', 'b'] })).toEqual({ status: 'applied', revision: 2 })
       expect(await pgError(c, W_RPC, argsOf(F.ws, { rev: 1, cmd: CMD(25), set: { 'ai.enabled': false }, unset: ['a,b'] }))).toMatchObject(REUSED)
