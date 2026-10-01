@@ -253,6 +253,17 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(rpc).not.toHaveBeenCalled()
     err.mockRestore()
   })
+  it('[Q3] 팀 열 이름의 앞뒤 공백(" QA")은 등록과 같은 정규화로 대조한다 — 참조 판정·파서가 모두 "QA" 를 본다(A2-1 리뷰 보안 P3)', async () => {
+    m.referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+    const spaced: ExcelProfile = { ...PROFILE, teamColumns: [[2, 'RES'], [3, ' QA ']] }
+    const { rpc } = admin()
+    const res = await POST(req({ profile: JSON.stringify(spaced), saveProfile: 'true' }))
+    expect(res.status).toBe(200)
+    expect(m.referencedCommonTeamCodes).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()   // 참조 중인 공용 QA — 전용 'QA' 를 만들지 않는다(분열 없음)
+    expect(m.parseWithProfile.mock.calls[0][1].teamColumns).toEqual([[2, 'RES'], [3, 'QA']])
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['import_wbs_cmd'])
+  })
   it('[Z4] 상속 프로젝트(전용 팀 0)는 참조 판정을 하지 않는다 — 전환이 공용 팀을 전부 옮긴다', async () => {
     teamsAre(COMMON, [])
     await POST(req())

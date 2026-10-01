@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireProjectAdmin } from '@/lib/authz'
 import { denyStatus, ERR_ANON, ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
-import { validateProfile } from '@/lib/excel/profile'
+import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { splitLeafOwners } from '@/lib/excel/validate'
 import { fetchAllByKeyset } from '@/lib/data/paging'
@@ -147,7 +147,13 @@ export async function POST(req: NextRequest) {
   }
   const validated = validateProfile(profileJson)
   if (!validated.ok) return fail(400, 'INVALID_INPUT', validated.error)
-  const profile = validated.profile
+  // 팀 열 이름은 등록과 같은 정규화(trim — normalizeNewTeamCode)로 맞춘다(A2-1 리뷰 보안 P3). 마크 방식의 담당 code 는 이 이름이라, 원문 ' X' 로
+  // 두면 대조·참조 판정(Z4)은 ' X' 로 보고 등록은 'X' 로 만들어 같은 code 분열이 생기고, 가져오기 RPC 는 ' X' 담당을 조용히 뺀다.
+  // 감지기가 만든 프로파일은 이미 trim 돼 있다 — 손으로 고친 요청·저장 양식만 달라진다
+  const profile: ExcelProfile = {
+    ...validated.profile,
+    teamColumns: validated.profile.teamColumns.map(([col, name]) => [col, name.trim()] as [number, string]),
+  }
   const buf = await file.arrayBuffer()
 
   // 저장 양식 대조(Task 1b) — 서버가 최종 관문이다(fail-closed). 저장 양식으로 읽는데(명시 플래그, 또는 좌표가 저장 양식과
