@@ -31,7 +31,7 @@ export function rpcFailure(err: DbErrorLike, own: OwnTokenTable): RpcFailure | n
   }
   if (err.code === LOCK_TIMEOUT) return { status: 503, code: 'CONFIG_BUSY', message: ERR_CONFIG_BUSY, retryable: true, token: LOCK_TIMEOUT }
   const mapped = mapDbError(err)
-  // mapDbError 의 표는 객체 리터럴이라 'constructor'·'__proto__' 같은 토큰에 상태 없는 값을 낸다 — 그 모양은 표에 없는 것으로 본다
+  // mapDbError 가 프로토타입 이름을 걸러낸다(SP4 A2) — 아래 typeof 는 상태 없는 값에 대한 두 번째 방어다
   if (!mapped || typeof mapped.status !== 'number') return null
   return { status: mapped.status, code: mapped.code, message: mapped.message, retryable: kindOfCode(mapped.code).retryable, token: mapped.token }
 }

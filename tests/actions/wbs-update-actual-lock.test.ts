@@ -95,7 +95,7 @@ describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => 
   })
   it('주문 조회가 실패하면 거부 — 모르는 채로 100 을 쓰지 않는다', async () => {
     const { writes } = server({ wbs_items: [item(), { data: null }], agent_work_orders: [{ data: null, error: { message: 'boom' } }] })
-    expect(await updateActual(W1, 100, 40)).toEqual({ ok: false, error: '에이전트 주문 확인 실패: boom' })
+    expect(await updateActual(W1, 100, 40)).toEqual({ ok: false, error: '에이전트 주문을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.' })
     expect(writes).toHaveLength(0)
   })
   it('앱 판정 뒤 쓰기 사이에 주문이 claim 되면 DB 잠금(WORKFLOW_ACTUAL_LOCKED)이 막는다 — 같은 잠금 문구로', async () => {

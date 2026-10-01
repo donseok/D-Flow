@@ -110,7 +110,7 @@ export function mapDbError(err: DbErrorLike): MappedDbError | null {
   const detail = err.details ?? null
   if (err.code === '40P01') return { code: 'CONFIG_BUSY', status: 503, message: ERR_CONFIG_BUSY, token: '40P01', fieldKey: null, detail }
   const token = dbToken(err.message)
-  const row = TOKENS[token]
+  const row = Object.hasOwn(TOKENS, token) ? TOKENS[token] : undefined   // 프로토타입 이름('constructor' 등)은 표의 값이 아니다(SP4 A2 P11)
   if (!row) return null
   const fieldKey = token === 'CONFIG_INVALID' ? ((err.message ?? '').split(':')[1]?.trim() || null) : null
   const status = row.code === 'ERR_DENIED' ? 403 : STATUS[row.code]

@@ -13,6 +13,8 @@ import { subActName } from '@/lib/domain/subact'
 import { businessDaysBetween } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
+import { failWith } from '@/lib/errors/dbFail'
+import { dbToken } from '@/lib/settings/errors'
 
 /** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role, 활성 명단 행이 없으면 viewer. */
 export type ChangeActorRole = 'admin' | 'member' | 'viewer'
@@ -110,6 +112,22 @@ const ACTUAL_LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에
  *  문구를 그대로 그리면 영어 화면에 한국어 토스트가 뜬다. 문구는 챗봇 등 code 를 모르는 호출부를 위해 그대로 싣는다. */
 const ACTUAL_LOCKED = { ok: false, error: ACTUAL_LOCKED_MSG, code: 'actual_locked' } as const
 
+// DB 원문은 로그로만(SP4 D21) — 응답에는 기능별 고정 문구. 화면의 사전 매핑(토스트)은 B 몫이라 그 전까지 영어 화면에도 이 한국어가 뜬다.
+const ERR_ITEM_LOOKUP = '항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_CHILD_LOOKUP = '하위 항목을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_OWNER_LOOKUP = '담당을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_ORDER_LOOKUP = '에이전트 주문을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_SIBLING_LOOKUP = '형제 항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_TEAM_LOOKUP = '담당 팀을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_DEP_LOOKUP = '의존성을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_TASK_LOOKUP = '작업을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_HOLIDAY_LOOKUP = '공휴일을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_SAVE = '저장하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_ADD = '추가하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_DELETE = '삭제하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_MOVE = '순서를 바꾸지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_MOVE_DENIED = '순서 변경 실패: 저장 권한이 없습니다(관리자만 가능)'
+
 /** 실적% 입력 — 말단(자식 없는) 항목만. level 은 보지 않는다: 롤업(computeNode)이 자식 유무로
  *  말단을 판정하므로, 자식 없는 Task/Phase 도 자기 actual_pct 가 그대로 상위로 올라간다.
  *  UI 게이트 canEditActual 과 동일 불변식. */
@@ -127,12 +145,12 @@ export async function updateActual(
   const sb = await createServerClient()
   // PGRST116 = 0행(항목 없음). 그 외 에러는 진성 조회 실패이므로 '항목 없음'으로 위장하지 않고 그대로 알린다.
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, actual_pct, project_id, dev_workflow, tags').eq('id', itemId).single()
-  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
+  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateActual', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: '항목 없음' }
   // 자식이 있으면 롤업 부모 — 직접 입력한 값은 화면에도 엑셀에도 안 나오므로 거부한다.
   // 조회 실패를 '자식 없음'으로 오인하면 롤업 부모에 실적%가 박혀 화면엔 안 보이는 유령 값이 남는다 → 실패는 거부.
   const { data: child, error: childErr } = await sb.from('wbs_items').select('id').eq('parent_id', itemId).limit(1).maybeSingle()
-  if (childErr) return { ok: false, error: `하위 항목 확인 실패: ${childErr.message}` }
+  if (childErr) return { ok: false, error: failWith('wbs.updateActual', childErr, ERR_CHILD_LOOKUP) }
   if (child) return { ok: false, error: '하위 항목이 있어 롤업으로 계산됩니다' }
 
   // 관리자 이상은 담당 무관 전체 허용. 멤버는 자기 팀이 담당인 항목만.
@@ -142,7 +160,7 @@ export async function updateActual(
     if (myTeamIds.length === 0) return { ok: false, error: '담당 작업이 아님' }
     // 권한 가드 — 조회 실패를 '담당 아님'이 아니라 통과로 흘려보내면 안 된다. 실패 = 거부(fail-closed).
     const { data: owner, error: ownerErr } = await sb.from('item_owners').select('team_id').eq('wbs_item_id', itemId).in('team_id', myTeamIds).limit(1).maybeSingle()
-    if (ownerErr) return { ok: false, error: `담당 확인 실패: ${ownerErr.message}` }
+    if (ownerErr) return { ok: false, error: failWith('wbs.updateActual', ownerErr, ERR_OWNER_LOOKUP) }
     if (!owner) return { ok: false, error: '담당 작업이 아님' }
   }
 
@@ -158,7 +176,7 @@ export async function updateActual(
       const { data: held, error: heldErr } = await sb
         .from('agent_work_orders').select('status').eq('wbs_item_id', itemId)
         .in('status', [...AGENT_HELD_ORDER_STATUSES]).limit(1).maybeSingle()
-      if (heldErr) return { ok: false, error: `에이전트 주문 확인 실패: ${heldErr.message}` }
+      if (heldErr) return { ok: false, error: failWith('wbs.updateActual', heldErr, ERR_ORDER_LOOKUP) }
       heldStatus = (held as { status: string } | null)?.status ?? null
     }
     if (stageLockedForHuman({ delegated, orderStatus: heldStatus })) return ACTUAL_LOCKED
@@ -179,8 +197,9 @@ export async function updateActual(
     .select('id')
   if (upErr) {
     // 앱 잠금 판정과 이 쓰기 사이에 주문이 claim 되면 DB 가드(0011 guard_workflow_actual)가 막는다 — 같은 문구로.
-    if (upErr.message.includes('WORKFLOW_ACTUAL_LOCKED')) return ACTUAL_LOCKED
-    return { ok: false, error: upErr.message }
+    // — 첫 낱말로 판정한다(부분 문자열로 뜻을 뽑지 않는다, D21)
+    if (dbToken(upErr.message) === 'WORKFLOW_ACTUAL_LOCKED') return ACTUAL_LOCKED
+    return { ok: false, error: failWith('wbs.updateActual', upErr, ERR_SAVE) }
   }
   if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)' }
 
@@ -190,7 +209,7 @@ export async function updateActual(
     old_value: old == null ? null : String(old), new_value: String(newPct),
   })
   if (logInsErr) console.error('[updateActual] 변경 이력 기록 실패:', logInsErr.message)
-  revalidatePath(`/p/${item.project_id}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(item.project_id))
   return { ok: true }
 }
@@ -212,7 +231,7 @@ export async function updateWeight(
 
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, weight, project_id').eq('id', itemId).single()
-  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${itemErr.message}` } // 실패를 '항목 없음'으로 위장 금지
+  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateWeight', itemErr, ERR_ITEM_LOOKUP) } // 실패를 '항목 없음'으로 위장 금지
   if (!item) return { ok: false, error: '항목 없음' }
 
   const old = item.weight
@@ -224,14 +243,14 @@ export async function updateWeight(
   }
   if (Number(old ?? NaN) === Number(weight ?? NaN) && (old == null) === (weight == null)) return { ok: true }
   const { error: upErr } = await sb.from('wbs_items').update({ weight, updated_at: new Date().toISOString() }).eq('id', itemId)
-  if (upErr) return { ok: false, error: upErr.message }
+  if (upErr) return { ok: false, error: failWith('wbs.updateWeight', upErr, ERR_SAVE) }
 
   const { error: logInsErr } = await sb.from('change_logs').insert({
     user_id: g.actor.userId, wbs_item_id: itemId, field: 'weight',
     old_value: old == null ? null : String(old), new_value: weight == null ? null : String(weight),
   })
   if (logInsErr) console.error('[updateWeight] 변경 이력 기록 실패:', logInsErr.message) // 본 저장은 성공 — 이력만 유실
-  revalidatePath(`/p/${item.project_id}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(item.project_id))
   return { ok: true }
 }
@@ -291,7 +310,7 @@ export async function addWbsItem(
   // 형제 조회 실패를 '형제 0개'로 오인하면 (1) sort_order 가 1로 충돌하고 (2) 아래에서 '첫 자식'으로 착각해
   // 부모의 직접 입력 실적%를 지운다. 둘 다 되돌릴 수 없으니 쓰기 전에 중단한다.
   const { data: sibs, error: sibErr } = await q
-  if (sibErr || !sibs) return { ok: false, error: `형제 항목 조회 실패: ${sibErr?.message ?? '알 수 없는 오류'}` }
+  if (sibErr || !sibs) return { ok: false, error: failWith('wbs.addWbsItem', sibErr ?? '형제 목록 없음', ERR_SIBLING_LOOKUP) }
   // addSubAct 가드 ①의 대칭 — 부모의 기존 자식에 SUB-ACT 가 섞여 있으면 일반 항목을 추가할 수 없다.
   // 혼재 형제 집합은 tree.ts 의 팀 정렬 분기(형제 중 isOwnerSplit 존재)와 엑셀 라운드트립(sub-act 접기)
   // 계약을 둘 다 깬다(Task 9 리뷰 발견). 기존 자식이 전부 일반 항목이거나 없으면 영향 없음.
@@ -306,12 +325,12 @@ export async function addWbsItem(
     .insert({ project_id: projectId, parent_id: parentId, code, sort_order: nextOrder, name: trimmedName })
     .select('id')
     .single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('wbs.addWbsItem', error, ERR_ADD) }
   const { error: logInsErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: data.id, field: 'created', old_value: null, new_value: trimmedName })
   if (logInsErr) console.error('[addWbsItem] 변경 이력 기록 실패:', logInsErr.message) // 항목 생성은 성공 — 이력만 유실
   // 부모가 방금 말단에서 롤업 부모로 바뀌었다면 남아 있던 직접 입력 실적%를 정리(sibs 는 위에서 검증된 실제 형제 목록).
   if (parentId && sibs.length === 0) await discardRolledUpActual(sb, parentId, projectId, g.actor.userId)
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true, id: data.id as string }
 }
@@ -337,7 +356,7 @@ export async function addSubAct(
     .from('wbs_items')
     .select('id, project_id, code, name, biz, deliverable, planned_start, planned_end, is_owner_split')
     .eq('id', actId).single()
-  if (actErr && actErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${actErr.message}` } // 0행(PGRST116)만 '항목 없음'
+  if (actErr && actErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.addSubAct', actErr, ERR_ITEM_LOOKUP) } // 0행(PGRST116)만 '항목 없음'
   if (!act) return { ok: false, error: '항목 없음' }
   // 가드 ②: 대상 자신이 SUB-ACT면 거부 — 1단계 제한(엑셀 3단 형식 보존).
   if (act.is_owner_split) return { ok: false, error: 'SUB-ACT 아래에는 추가할 수 없습니다' }
@@ -346,7 +365,7 @@ export async function addSubAct(
   // 조회 실패를 '형제 0개'로 오인하면 가드 ①이 오통과하고, sort_order 충돌 + 중복 팀 검사 무력화 +
   // '첫 SUB-ACT' 오판으로 ACT 의 직접 입력 실적%까지 지운다. 쓰기 전에 중단한다.
   const { data: sibs, error: sibErr } = await sb.from('wbs_items').select('id, sort_order, is_owner_split').eq('parent_id', actId)
-  if (sibErr || !sibs) return { ok: false, error: `기존 SUB-ACT 조회 실패: ${sibErr?.message ?? '알 수 없는 오류'}` }
+  if (sibErr || !sibs) return { ok: false, error: failWith('wbs.addSubAct', sibErr ?? '형제 목록 없음', ERR_SIBLING_LOOKUP) }
   // 가드 ①: 대상은 리프여야 한다 — 자식이 있으면 거부한다. 단, 자식 전원이 SUB-ACT면 예외 허용
   // (기존 SUB-ACT 형제에 새 팀을 추가하는 정상 경로).
   if (sibs.length > 0 && !sibs.every(s => s.is_owner_split === true)) {
@@ -361,7 +380,7 @@ export async function addSubAct(
   const { data: teamRows, error: teamErr } = await sb.from('teams')
     .select('id, project_id').eq('code', team).eq('workspace_id', projectWs)
     .or(`project_id.eq.${act.project_id},project_id.is.null`)
-  if (teamErr) return { ok: false, error: `담당 팀 조회 실패: ${teamErr.message}` } // 실패를 '팀 없음'으로 위장 금지
+  if (teamErr) return { ok: false, error: failWith('wbs.addSubAct', teamErr, ERR_TEAM_LOOKUP) } // 실패를 '팀 없음'으로 위장 금지
   const teamRow = (teamRows ?? []).find(r => r.project_id !== null) ?? (teamRows ?? [])[0]
   if (!teamRow) return { ok: false, error: '담당 팀을 찾을 수 없습니다' }
   const teamId = teamRow.id as string
@@ -370,7 +389,7 @@ export async function addSubAct(
   if (sibIds.length) {
     const { data: dup, error: dupErr } = await sb
       .from('item_owners').select('wbs_item_id').eq('team_id', teamId).in('wbs_item_id', sibIds).limit(1).maybeSingle()
-    if (dupErr) return { ok: false, error: `중복 담당 팀 확인 실패: ${dupErr.message}` } // 실패 = 거부(중복 SUB-ACT 생성 방지)
+    if (dupErr) return { ok: false, error: failWith('wbs.addSubAct', dupErr, ERR_TEAM_LOOKUP) } // 실패 = 거부(중복 SUB-ACT 생성 방지)
     if (dup) return { ok: false, error: '이미 해당 팀의 SUB-ACT가 있습니다' }
   }
   const nextOrder = sibs.reduce((mx, r) => Math.max(mx, Number(r.sort_order) || 0), 0) + 1
@@ -385,14 +404,14 @@ export async function addSubAct(
       planned_start: act.planned_start, planned_end: act.planned_end, weight: null, actual_pct: null,
     })
     .select('id').single()
-  if (insErr || !inserted) return { ok: false, error: insErr?.message ?? '추가 실패' }
+  if (insErr || !inserted) return { ok: false, error: failWith('wbs.addSubAct', insErr ?? '추가 결과 없음', ERR_ADD) }
   const newId = inserted.id as string
 
   const { error: ownErr } = await sb.from('item_owners').insert({ wbs_item_id: newId, team_id: teamId, kind })
   if (ownErr) {
     // 담당 없는 고아 SUB-ACT 를 남기지 않도록 방금 만든 행 정리 후 실패 반환.
     await sb.from('wbs_items').delete().eq('id', newId)
-    return { ok: false, error: ownErr.message }
+    return { ok: false, error: failWith('wbs.addSubAct', ownErr, ERR_ADD) }
   }
 
   // 부모 ACT 에 담당 팀 표기 보강(라운드트립 안정용) — 이미 있으면 그대로 둔다. 베스트에포트.
@@ -408,7 +427,7 @@ export async function addSubAct(
   if (logInsErr) console.error('[addSubAct] 변경 이력 기록 실패:', logInsErr.message) // SUB-ACT 생성은 성공 — 이력만 유실
   // 첫 SUB-ACT 면 ACT 가 방금 롤업 부모가 된 것 — 직접 입력돼 있던 실적%를 정리(sibIds 는 위에서 검증된 실제 형제 목록).
   if (sibIds.length === 0) await discardRolledUpActual(sb, actId, act.project_id as string, g.actor.userId)
-  revalidatePath(`/p/${act.project_id}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(act.project_id))
   return { ok: true, id: newId }
 }
@@ -429,7 +448,7 @@ export async function updateWbsFields(
     .from('wbs_items')
     .select('id, project_id, name, planned_start, planned_end, deliverable, biz')
     .eq('id', itemId).single()
-  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
+  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateWbsFields', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: '항목 없음' }
 
   const patch: Record<string, unknown> = {}
@@ -450,7 +469,7 @@ export async function updateWbsFields(
       .or(`predecessor_id.eq.${itemId},successor_id.eq.${itemId}`)
       .limit(1)
       .maybeSingle()
-    if (linkedErr) return { ok: false, error: `의존성 확인 실패: ${linkedErr.message}` }
+    if (linkedErr) return { ok: false, error: failWith('wbs.updateWbsFields', linkedErr, ERR_DEP_LOOKUP) }
     if (linked) return { ok: false, error: '의존성이 연결된 작업의 계획일은 비울 수 없습니다. 연결을 먼저 삭제하세요.' }
   }
   if (ns !== undefined && ns !== item.planned_start) { patch.planned_start = ns; logs.push({ field: 'planned_start', old: item.planned_start, new: ns }) }
@@ -466,12 +485,12 @@ export async function updateWbsFields(
   if (Object.keys(patch).length === 0) return { ok: true }
   patch.updated_at = new Date().toISOString()
   const { error } = await sb.from('wbs_items').update(patch).eq('id', itemId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('wbs.updateWbsFields', error, ERR_SAVE) }
   if (logs.length) {
     const { error: logInsErr } = await sb.from('change_logs').insert(logs.map(l => ({ user_id: g.actor.userId, wbs_item_id: itemId, field: l.field, old_value: l.old, new_value: l.new })))
     if (logInsErr) console.error('[updateWbsFields] 변경 이력 기록 실패:', logInsErr.message) // 본 저장은 성공 — 이력만 유실
   }
-  revalidatePath(`/p/${item.project_id}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(item.project_id))
   return { ok: true }
 }
@@ -498,7 +517,7 @@ export async function addTaskDependency(
     .from('wbs_items')
     .select('id, project_id, planned_start, planned_end')
     .in('id', [predecessorId, successorId])
-  if (endpointErr) return { ok: false, error: `작업 조회 실패: ${endpointErr.message}` }
+  if (endpointErr) return { ok: false, error: failWith('wbs.addTaskDependency', endpointErr, ERR_TASK_LOOKUP) }
   if (!endpoints || endpoints.length !== 2) return { ok: false, error: '연결할 작업을 찾을 수 없습니다' }
   if (endpoints.some(item => item.project_id !== projectId)) {
     return { ok: false, error: '같은 프로젝트의 작업끼리만 연결할 수 있습니다' }
@@ -510,7 +529,7 @@ export async function addTaskDependency(
     return { ok: false, error: '시작일이 종료일보다 늦은 작업은 연결할 수 없습니다' }
   }
   const { data: holidayRows, error: holidayErr } = await sb.from('holidays').select('date').eq('project_id', projectId)
-  if (holidayErr) return { ok: false, error: `공휴일 조회 실패: ${holidayErr.message}` }
+  if (holidayErr) return { ok: false, error: failWith('wbs.addTaskDependency', holidayErr, ERR_HOLIDAY_LOOKUP) }
   const holidaySet = new Set((holidayRows ?? []).map(row => row.date as string))
   if (endpoints.some(item => businessDaysBetween(item.planned_start, item.planned_end, holidaySet) === 0)) {
     return { ok: false, error: '계획 기간에 영업일이 없는 작업은 연결할 수 없습니다' }
@@ -521,7 +540,7 @@ export async function addTaskDependency(
     .from('task_dependencies')
     .select('predecessor_id, successor_id')
     .eq('project_id', projectId)
-  if (dependencyErr) return { ok: false, error: `의존성 조회 실패: ${dependencyErr.message}` }
+  if (dependencyErr) return { ok: false, error: failWith('wbs.addTaskDependency', dependencyErr, ERR_DEP_LOOKUP) }
   const nextById = new Map<string, string[]>()
   for (const dep of existing ?? []) {
     const arr = nextById.get(dep.predecessor_id as string) ?? []
@@ -550,7 +569,7 @@ export async function addTaskDependency(
     .select('id')
     .single()
   if (error?.code === '23505') return { ok: false, error: '이미 연결된 선행 작업입니다' }
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('wbs.addTaskDependency', error, ERR_ADD) }
 
   const { error: logErr } = await sb.from('change_logs').insert({
     user_id: g.actor.userId,
@@ -560,7 +579,7 @@ export async function addTaskDependency(
     new_value: `${predecessorId}|${type}|${lagDays}`,
   })
   if (logErr) console.error('[addTaskDependency] 변경 이력 기록 실패:', logErr.message)
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true, id: inserted.id as string }
 }
 
@@ -579,14 +598,14 @@ export async function removeTaskDependency(
     .eq('id', dependencyId)
     .single()
   if (findErr?.code === 'PGRST116') return { ok: false, error: '의존성을 찾을 수 없습니다' }
-  if (findErr || !dependency) return { ok: false, error: `의존성 조회 실패: ${findErr?.message ?? '알 수 없는 오류'}` }
+  if (findErr || !dependency) return { ok: false, error: failWith('wbs.removeTaskDependency', findErr ?? '의존성 없음', ERR_DEP_LOOKUP) }
 
   const { data: deleted, error } = await sb
     .from('task_dependencies')
     .delete()
     .eq('id', dependencyId)
     .select('id')
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('wbs.removeTaskDependency', error, ERR_DELETE) }
   if (!deleted?.length) return { ok: false, error: '삭제 권한이 없습니다' }
 
   const { error: logErr } = await sb.from('change_logs').insert({
@@ -597,7 +616,7 @@ export async function removeTaskDependency(
     new_value: null,
   })
   if (logErr) console.error('[removeTaskDependency] 변경 이력 기록 실패:', logErr.message)
-  revalidatePath(`/p/${dependency.project_id as string}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -614,23 +633,23 @@ export async function updateDeliverable(
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb
     .from('wbs_items').select('id, project_id, deliverable').eq('id', itemId).single()
-  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
+  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateDeliverable', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: '항목 없음' }
   // 권한 — 관리자 아니면 담당팀만(item_owners). attachments.canAttach 와 같은 판정.
   if (!isProjectAdmin(g.actor, found.projectId)) {
     const myTeamIds = actorTeamIdsFor(g.actor, found.projectId!) // 팀 없는 멤버는 담당이 될 수 없다
     if (myTeamIds.length === 0) return { ok: false, error: '담당 작업이 아닙니다.' }
     const { data: own, error: ownErr } = await sb.from('item_owners').select('team_id').eq('wbs_item_id', itemId).in('team_id', myTeamIds).limit(1).maybeSingle()
-    if (ownErr) return { ok: false, error: `담당 확인 실패: ${ownErr.message}` } // 실패를 '담당 아님'으로도, 통과로도 위장하지 않는다
+    if (ownErr) return { ok: false, error: failWith('wbs.updateDeliverable', ownErr, ERR_OWNER_LOOKUP) } // 실패를 '담당 아님'으로도, 통과로도 위장하지 않는다
     if (!own) return { ok: false, error: '담당 작업이 아닙니다.' }
   }
   const v = deliverable?.trim() || null
   if (v === item.deliverable) return { ok: true }
   const { error } = await sb.from('wbs_items').update({ deliverable: v, updated_at: new Date().toISOString() }).eq('id', itemId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('wbs.updateDeliverable', error, ERR_SAVE) }
   const { error: logErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: itemId, field: 'deliverable', old_value: item.deliverable, new_value: v })
   if (logErr) console.error('[updateDeliverable] 변경 이력 기록 실패:', logErr.message) // 본 저장은 성공 — 이력만 유실
-  revalidatePath(`/p/${item.project_id}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -648,8 +667,8 @@ export async function deleteWbsItem(itemId: string): Promise<{ ok: boolean; erro
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { error } = await sb.from('wbs_items').delete().eq('id', itemId)
-  if (error) return { ok: false, error: error.message }
-  revalidatePath(`/p/${projectId}`, 'layout')
+  if (error) return { ok: false, error: failWith('wbs.deleteWbsItem', error, ERR_DELETE) }
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }
 }
@@ -662,14 +681,14 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, project_id, parent_id, sort_order').eq('id', itemId).single()
-  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
+  if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.moveWbsItem', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: '항목 없음' }
   let q = sb.from('wbs_items').select('id, sort_order').eq('project_id', item.project_id)
   q = item.parent_id ? q.eq('parent_id', item.parent_id) : q.is('parent_id', null)
   // 형제 조회 실패를 빈 목록으로 폴백하면 idx=-1 이 되어 "경계라 무시"(ok:true) 경로로 빠진다 —
   // 아무것도 안 하고 이동 성공으로 위장하게 되므로 실패를 그대로 알린다.
   const { data: sibs, error: sibErr } = await q.order('sort_order', { ascending: true })
-  if (sibErr || !sibs) return { ok: false, error: `형제 항목 조회 실패: ${sibErr?.message ?? '알 수 없는 오류'}` }
+  if (sibErr || !sibs) return { ok: false, error: failWith('wbs.moveWbsItem', sibErr ?? '형제 목록 없음', ERR_SIBLING_LOOKUP) }
   const arr = sibs
   const idx = arr.findIndex(s => s.id === itemId)
   const swapIdx = dir === 'up' ? idx - 1 : idx + 1
@@ -680,7 +699,7 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
   const { data: movedA, error: swapAErr } = await sb
     .from('wbs_items').update({ sort_order: b.sort_order }).eq('id', a.id).select('id')
   if (swapAErr || !movedA?.length) {
-    return { ok: false, error: `순서 변경 실패: ${swapAErr?.message ?? '저장 권한이 없습니다(관리자만 가능)'}` }
+    return { ok: false, error: (swapAErr ? failWith('wbs.moveWbsItem', swapAErr, ERR_MOVE) : ERR_MOVE_DENIED) }
   }
   const { data: movedB, error: swapBErr } = await sb
     .from('wbs_items').update({ sort_order: a.sort_order }).eq('id', b.id).select('id')
@@ -695,8 +714,8 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
         rollbackErr?.message ?? '0행(RLS 차단 추정)',
       )
     }
-    return { ok: false, error: `순서 변경 실패: ${swapBErr?.message ?? '저장 권한이 없습니다(관리자만 가능)'}` }
+    return { ok: false, error: (swapBErr ? failWith('wbs.moveWbsItem', swapBErr, ERR_MOVE) : ERR_MOVE_DENIED) }
   }
-  revalidatePath(`/p/${item.project_id as string}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }

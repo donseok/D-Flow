@@ -22,6 +22,7 @@ const GUARDED_FILES: readonly string[] = [
   'src/app/actions/importBackup.ts',
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
+  'src/app/actions/wbs.ts',
 ]
 
 /** `.error` 를 옮겨도 되는 결과의 출처 — 고정 문구만 낸다 */
