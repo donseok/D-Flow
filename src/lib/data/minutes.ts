@@ -16,12 +16,12 @@ import { getHiddenProjectIds } from '@/lib/authz/visibility'
 
 type Row = Record<string, unknown>
 
-/** 비공개 프로젝트(0070) 회의록을 목록 표면에서 뺀다. 미지정(projectId null)은 유지. */
 /** 비공개 프로젝트 숨김 집합 — 판정이 실패하면 null(fail-closed: 호출부가 목록을 열지 않고 자기 실패 관례로 돌려준다). 원인은 getHiddenProjectIds 가 로그로 남긴다 */
 async function hiddenOrNull(): Promise<ReadonlySet<string> | null> {
   try { return await getHiddenProjectIds() } catch { return null }
 }
 
+/** 비공개 프로젝트(0070) 회의록을 목록 표면에서 뺀다. 미지정(projectId null)은 유지. */
 export function dropHidden<T extends { projectId?: string | null }>(rows: T[], hidden: ReadonlySet<string>): T[] {
   if (hidden.size === 0) return rows
   return rows.filter(r => !r.projectId || !hidden.has(r.projectId))
