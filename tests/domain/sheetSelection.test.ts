@@ -4,10 +4,10 @@ import {
   pasteEdits, fillEdits, clearEdits, reconcileSelection,
   type CellAddr, type GridRect, type SelectionState,
 } from '@/lib/domain/sheetSelection'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyAreaRow } from '@/lib/domain/weeklySheet'
 
-const mkRow = (id: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
-  id, reportId: 'rep', section: 'ERP', module: 'MM', sortOrder: 0,
+const mkRow = (id: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+  id, reportId: 'rep', areaId: 'area-1',
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
 const addr = (rowId: string, col: CellAddr['col']): CellAddr => ({ rowId, col })

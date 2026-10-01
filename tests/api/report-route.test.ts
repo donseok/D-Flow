@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getWeeklySheet: vi.fn(),
   loadProjectFacts: vi.fn(),
   fillWeeklyTemplate: vi.fn(),
+  fillSheetTemplate: vi.fn(),
   getProjectConfig: vi.fn(),
   buildWeeklyReportModel: vi.fn(),
   buildReportWorkbook: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock('@/lib/report/weekly', async (importOriginal) => ({
 vi.mock('@/lib/report/excel', () => ({ buildReportWorkbook: mocks.buildReportWorkbook }))
 vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
 vi.mock('@/lib/report/narrative', () => ({ buildWeeklyNarrative: vi.fn() }))
-vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: mocks.fillWeeklyTemplate, fillSheetTemplate: vi.fn() }))
+vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: mocks.fillWeeklyTemplate, fillSheetTemplate: mocks.fillSheetTemplate }))
 vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: mocks.getWeeklySheet }))
 vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: mocks.loadProjectFacts }))
 vi.mock('@/lib/ai/brief', () => ({ briefFactsHash: vi.fn(), buildBriefFacts: vi.fn() }))
@@ -228,5 +229,57 @@ describe('GET /api/report — weekly 관문은 시트 갈래만(과제 20, P4)',
     expect((await GET(req())).status).toBe(200)
     expect(requireModule).not.toHaveBeenCalled()
     expect(requireSessionModule).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/report — 시트 갈래(source=sheet) 의 영역 기준(스펙 §4.1.4)', () => {
+  const area = (id: string, name: string, sortOrder: number, active = true) =>
+    ({ id, kind: 'weekly_section' as const, code: id.toUpperCase(), name, sortOrder, active, teams: [] })
+  const AREAS = [area('a-exp', '실험', 1), area('a-ops', '운영', 2), area('a-old', '구 영역', 0, false)]
+  const withAreas = () => makeProjectConfig({ 'core.level_labels': ['Phase'] }, { areas: { weekly_section: AREAS, issue_area: [] } })
+  const sheetRow = (id: string, areaId: string, thisContent = '') =>
+    ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
+  const sheetOf = (rows: ReturnType<typeof sheetRow>[]) =>
+    ({ report: { id: 'rep', projectId: PROJECT_ID, weekStart: '2026-09-21', title: '' }, rows })
+
+  it('설정 조회 실패 → 503 이고 시트를 읽지 않으며 PPT 를 만들지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(err.mock.calls.some(c => c.some(x => String(x).includes('db down')))).toBe(true)   // 원인은 로그로만
+    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
+    expect(mocks.fillSheetTemplate).not.toHaveBeenCalled()
+  })
+
+  it('페이지는 보이는 영역 순 — 내용 없는 비활성 영역은 빠지고, 페이지 머리는 영역 이름', async () => {
+    mocks.getProjectConfig.mockResolvedValue(withAreas())
+    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-ops', 'a-ops', '운영 실적'), sheetRow('r-old', 'a-old'), sheetRow('r-exp', 'a-exp')]))
+    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(200)
+    const sections = mocks.fillSheetTemplate.mock.calls[0][0] as { areaId: string; section: string }[]
+    expect(sections.map(s => [s.areaId, s.section])).toEqual([['a-exp', '실험'], ['a-ops', '운영']])
+  })
+
+  it('네 칸이 모두 비면(공백뿐 포함) 400 — 지금 문구 그대로, PPT 를 만들지 않는다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(withAreas())
+    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '   \n  '), sheetRow('r-ops', 'a-ops')]))
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: '해당 주차에 작성된 내용이 없습니다' })
+    expect(mocks.fillSheetTemplate).not.toHaveBeenCalled()
+  })
+
+  it('시트 갈래는 WBS 모델·명단·회의·공지를 읽지 않는다 — 시트 하나만 읽는다(쓰기 0)', async () => {
+    mocks.getProjectConfig.mockResolvedValue(withAreas())
+    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '실적')]))
+    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
+    expect((await GET(sheetReq())).status).toBe(200)
+    for (const fn of [mocks.getComputedWbs, mocks.getProjectRoster, mocks.getProjectMeetingData, mocks.getAnnouncements]) {
+      expect(fn).not.toHaveBeenCalled()
+    }
+    expect(mocks.getWeeklySheet).toHaveBeenCalledTimes(1)
   })
 })

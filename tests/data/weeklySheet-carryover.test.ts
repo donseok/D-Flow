@@ -211,53 +211,49 @@ describe('findCarryOverSource — 임베드 1왕복화 이후에도 반환 계�
   })
 })
 
-/** getWeeklySheet 병렬화(문서·행 동시 조회) 이후의 에러 시맨틱 흉내 — 두 쿼리 결과를 독립 주입한다. */
-function stubSheetClient(opts: {
-  report: DbReport | null
-  reportError?: string
-  rows?: DbRow[]
-  rowsError?: string
-}) {
-  const reportQuery: Record<string, unknown> = {}
-  reportQuery.select = vi.fn(() => reportQuery)
-  reportQuery.eq = vi.fn(() => reportQuery)
-  reportQuery.maybeSingle = vi.fn(async () =>
-    opts.reportError ? { data: null, error: { message: opts.reportError } } : { data: opts.report, error: null })
-
-  const rowsQuery: Record<string, unknown> = {}
-  rowsQuery.eq = vi.fn(() => rowsQuery)
-  rowsQuery.order = vi.fn(async () =>
-    opts.rowsError ? { data: null, error: { message: opts.rowsError } } : { data: opts.rows ?? [], error: null })
-  const rowsTable = { select: vi.fn(() => rowsQuery), insert: vi.fn() }
-
+/** getWeeklySheet 의 에러 시맨틱 — 문서 → 행 직렬 2왕복(스펙 §4.1.2: 행은 report_id·project_id 로, 임베드 없음). */
+type SheetReport = { id: string; project_id: string; week_start: string; title: string | null }
+type SheetRowRecord = {
+  id: string; report_id: string; area_id: string
+  this_content: string; this_issue: string; next_content: string; next_issue: string
+}
+function stubSheetClient(opts: { report: SheetReport | null; reportError?: string; rows?: SheetRowRecord[]; rowsError?: string }) {
+  const tables: string[] = []
+  const insert = vi.fn()
   const client = {
     from: vi.fn((table: string) => {
-      if (table === 'weekly_reports') return reportQuery
-      if (table === 'weekly_report_rows') return rowsTable
-      throw new Error(`unexpected table: ${table}`)
+      tables.push(table)
+      const q: Record<string, unknown> = {}
+      q.select = vi.fn(() => q)
+      q.eq = vi.fn(() => q)
+      q.insert = insert
+      q.maybeSingle = vi.fn(async () =>
+        opts.reportError ? { data: null, error: { message: opts.reportError } } : { data: opts.report, error: null })
+      q.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => Promise.resolve(
+        opts.rowsError ? { data: null, error: { message: opts.rowsError } } : { data: opts.rows ?? [], error: null }).then(resolve, reject)
+      return q
     }),
   }
   mocks.createServerClient.mockResolvedValue(client as never)
-  return { insert: rowsTable.insert }
+  return { tables, insert }
 }
 
-describe('getWeeklySheet — 병렬화 이후에도 에러·null 시맨틱 유지', () => {
+describe('getWeeklySheet — 에러·null 시맨틱(직렬 2왕복)', () => {
   it('문서가 있는데 행 조회가 실패하면 throw(행 없음으로 위장 금지)', async () => {
-    stubSheetClient({
-      report: { id: 'r1', project_id: 'p1', week_start: '2026-08-17', title: '' },
-      rowsError: 'rows down',
-    })
+    stubSheetClient({ report: { id: 'r1', project_id: 'p1', week_start: '2026-08-17', title: '' }, rowsError: 'rows down' })
     await expect(getWeeklySheet('p1', '2026-08-17')).rejects.toThrow('rows down')
   })
 
-  it('문서 조회가 실패하면 throw', async () => {
-    stubSheetClient({ report: null, reportError: 'reports down', rows: [] })
+  it('문서 조회가 실패하면 throw 하고 행을 읽지 않는다', async () => {
+    const { tables } = stubSheetClient({ report: null, reportError: 'reports down', rows: [] })
     await expect(getWeeklySheet('p1', '2026-08-17')).rejects.toThrow('reports down')
+    expect(tables).toEqual(['weekly_reports'])
   })
 
-  it('문서가 없으면 행 조회가 실패했어도 null(종전에는 행 조회 자체가 없었다)', async () => {
-    const { insert } = stubSheetClient({ report: null, rowsError: 'rows down' })
+  it('문서가 없으면 null — 행 조회 자체가 없다(행 쪽 오류가 있어도 보지 않는다), 쓰기 0', async () => {
+    const { tables, insert } = stubSheetClient({ report: null, rowsError: 'rows down' })
     expect(await getWeeklySheet('p1', '2026-08-17')).toBeNull()
+    expect(tables).toEqual(['weekly_reports'])
     expect(insert).not.toHaveBeenCalled()
   })
 })

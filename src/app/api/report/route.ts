@@ -15,6 +15,7 @@ import { fillWeeklyTemplate, fillSheetTemplate } from '@/lib/report/templateFill
 import { mondayIso, sheetWeekMeta } from '@/lib/report/week'
 import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
 import { getWeeklySheet } from '@/lib/data/weeklySheet'
+import { ALL_CELLS, hasContent, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { briefToExtraSlide, type ExtraNarrativeSlide } from '@/lib/report/aiComment'
 import { loadProjectFacts } from '@/lib/ai/projectFacts'
 import { briefFactsHash, buildBriefFacts } from '@/lib/ai/brief'
@@ -86,19 +87,25 @@ export async function GET(req: NextRequest) {
     const mod = await requireModule({ projectId }, 'weekly')
     if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
     const { project } = target
-    const sheet = await getWeeklySheet(projectId, weekStart)
-    const hasContent = sheet?.rows.some(r =>
-      (r.thisContent + r.thisIssue + r.nextContent + r.nextIssue).trim() !== '')
-    if (!sheet || !hasContent) {
+    // 페이지·머리는 프로젝트의 주간 영역이 정한다 — 설정 조회 실패는 기본 갈래와 같은 503(영역 없이 시트를 그리지 않는다)
+    let areas: WeeklyArea[]
+    try { areas = (await getProjectConfig(projectId)).areas.weekly_section } catch (e) {
+      if (e instanceof ConfigUnavailableError) {
+        console.error('[report] 프로젝트 설정 조회 실패(시트 갈래):', e.message)
+        return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
+      }
+      throw e
+    }
+    const sheet = await getWeeklySheet(projectId, weekStart)   // 읽기만 한다(W16)
+    if (!sheet || !sheet.rows.some(r => hasContent(r, ALL_CELLS))) {
       return NextResponse.json({ error: '해당 주차에 작성된 내용이 없습니다' }, { status: 400 })
     }
     const wk = sheetWeekMeta(weekStart)
-    // 구분(업무영역)당 1페이지 — 내용 없는 구분도 페이지를 만들고, 각 페이지에 그 구분의 실적·계획·이슈·이벤트를 함께 싣는다.
+    // 보이는 영역마다 1페이지(활성 영역 → 내용 있는 비활성 영역, D32) — 각 페이지에 그 영역의 실적·계획·이슈·이벤트를 함께 싣는다.
     const body = await fillSheetTemplate(
-      buildSheetSections(sheet.rows),
+      buildSheetSections(sheet.rows, areas),
       { meta: { prevWeekRange: wk.thisRange, weekRange: wk.nextRange } }, // 좌=금주실적, 우=차주계획
       { labels: { left: '금주실적', right: '차주계획' }, lineFormatter: sheetLineText },
-
     )
     const filename = `${project.name}_주간업무_${wk.weekTag}_${weekStart}.pptx`.replace(/[^\w가-힣.\-]+/g, '_')
     return new NextResponse(body as unknown as ArrayBuffer, { // Buffer 단독 타입 → 기존 반환부(route.ts:74)의 ArrayBuffer|Buffer 유니온과 달리 unknown 경유 필요

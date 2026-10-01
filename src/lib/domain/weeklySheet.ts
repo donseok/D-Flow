@@ -96,7 +96,7 @@ export function isWeeklyCellKey(v: string): v is WeeklyCellKey {
 export const CELL_FIELD = {
   this_content: 'thisContent', this_issue: 'thisIssue',
   next_content: 'nextContent', next_issue: 'nextIssue',
-} as const satisfies Record<WeeklyCellKey, keyof WeeklySheetRow>
+} as const satisfies Record<WeeklyCellKey, keyof WeeklyCells>
 
 /** 열 표시 라벨 — 그리드 헤더(COLS)의 단일 출처. */
 export const WEEKLY_CELL_LABEL = {
@@ -135,13 +135,14 @@ export function carryOverRows(prev: WeeklySheetRow[]): NewWeeklyRow[] {
   return out
 }
 
-/** Realtime/refresh 병합(스펙 §5): dirty(`${rowId}:${cellKey}`) 셀만 로컬 유지, 나머지는 서버 채택. */
-export function applyServerRow(
-  local: WeeklySheetRow, server: WeeklySheetRow, dirty: ReadonlySet<string>,
-): WeeklySheetRow {
-  const merged = { ...server }
+/** Realtime/refresh 병합(스펙 §5): dirty(`${rowId}:${cellKey}`) 셀만 로컬 유지, 나머지(영역 id 포함)는 서버 채택. */
+export function applyServerRow<R extends { id: string } & WeeklyCells>(
+  local: R, server: R, dirty: ReadonlySet<string>,
+): R {
+  const merged: R = { ...server }
   for (const key of WEEKLY_CELL_KEYS) {
-    if (dirty.has(`${server.id}:${key}`)) merged[CELL_FIELD[key]] = local[CELL_FIELD[key]]
+    const field = CELL_FIELD[key]
+    if (dirty.has(`${server.id}:${key}`)) (merged as WeeklyCells)[field] = (local as WeeklyCells)[field]
   }
   return merged
 }
@@ -223,4 +224,64 @@ export function areasForTeam(
 ): Set<string> {
   const ids = new Set(teams.filter((t) => t.code === teamCode).map((t) => t.id))
   return new Set(areas.filter((a) => a.teams.some((t) => ids.has(t.teamId))).map((a) => a.id))
+}
+
+/** 실시간 병합(스펙 §4.1.7, D32·D44) — 표시 집합은 페이지를 읽을 때 정해졌고(visibleRows) 여기서 다시 계산하지 않는다.
+ *  ① 있는 행(id): 자리를 지키고 dirty 칸만 로컬(applyServerRow). 비활성 영역 행의 마지막 칸이 비어도 남는다.
+ *  ② 없는 행·활성 영역, 또는 비활성 영역인데 내용이 있다(숨겨 있던 행에 누가 쓴 경우): visibleRows 와 같은 순서(활성 영역 순 →
+ *     비활성 영역 순 → 모르는 영역) 자리에 끼운다. 표시 집합은 늘 수만 있다.
+ *  ③ 없는 행·모르는 영역(관리자가 방금 더한 영역 — RPC 가 이번 주 문서에 행을 넣었다): 끼우지 않고 refresh 를 알린다 —
+ *     라벨·순서가 없는 행을 그리지 않고 영역 목록을 다시 받는다.
+ *  ④ 없는 행·비활성으로 아는 영역·내용 없음: 끼우지 않고 refresh — RPC 는 활성 영역에만 행을 넣으므로(§3.2) 그 영역은 그새
+ *     재활성됐고 화면의 영역 목록이 낡았다. 숨긴 행에 빈 값이 저장된 경우라면 새로고침이 그대로 숨긴다(헛도는 새로고침 한 번).
+ *  순수 함수 — 입력 배열을 바꾸지 않는다. */
+export function mergeServerRow(
+  rows: readonly WeeklyAreaRow[], server: WeeklyAreaRow, areas: readonly WeeklyArea[], dirty: ReadonlySet<string>,
+): { rows: WeeklyAreaRow[]; refresh: boolean } {
+  const at = rows.findIndex(r => r.id === server.id)
+  if (at >= 0) {
+    const next = [...rows]
+    next[at] = applyServerRow(rows[at], server, dirty)
+    return { rows: next, refresh: false }
+  }
+  const area = areas.find(a => a.id === server.areaId)
+  if (!area) return { rows: [...rows], refresh: true }
+  if (!area.active && !hasContent(server, ALL_CELLS)) return { rows: [...rows], refresh: true }
+  return { rows: insertByAreaOrder(rows, server, areas), refresh: false }
+}
+
+/** 새로고침 반영(스펙 §4.1.7, D32) — 페이지가 다시 정한 표시 집합(server — visibleRows 순)과 순서를 따르고 dirty 칸만 로컬이다.
+ *  같은 문서에서 지금 보이는 행이 server 에 없으면(그새 마지막 칸이 빈 비활성 영역 행 — 페이지가 숨겼다) 빼지 않고 영역 순서
+ *  자리에 남긴다. 행 삭제는 실시간 DELETE 가 맡는다. 문서가 바뀌면(주차 이동) 호출부가 local 을 [] 로 넘긴다. 순수 함수. */
+export function mergeRefreshedRows(
+  local: readonly WeeklyAreaRow[], server: readonly WeeklyAreaRow[], areas: readonly WeeklyArea[], dirty: ReadonlySet<string>,
+): WeeklyAreaRow[] {
+  const localById = new Map(local.map(r => [r.id, r]))
+  const serverIds = new Set(server.map(r => r.id))
+  let out = server.map(sv => {
+    const lc = localById.get(sv.id)
+    return lc ? applyServerRow(lc, sv, dirty) : sv
+  })
+  for (const lc of local) if (!serverIds.has(lc.id)) out = insertByAreaOrder(out, lc, areas)
+  return out
+}
+
+/** visibleRows 와 같은 순서(활성 영역 순 → 비활성 영역 순 → 모르는 영역) 자리에 행 하나를 끼운다 — 같은 순위 안에서는 뒤에. */
+function insertByAreaOrder(
+  rows: readonly WeeklyAreaRow[], row: WeeklyAreaRow, areas: readonly WeeklyArea[],
+): WeeklyAreaRow[] {
+  const ordered = [...orderAreas(areas.filter(a => a.active)), ...orderAreas(areas.filter(a => !a.active))]
+  const rankOf = new Map(ordered.map((a, i) => [a.id, i]))
+  const rank = (areaId: string) => rankOf.get(areaId) ?? Number.MAX_SAFE_INTEGER
+  const mine = rank(row.areaId)
+  const at = rows.findIndex(r => rank(r.areaId) > mine)
+  return at < 0 ? [...rows, row] : [...rows.slice(0, at), row, ...rows.slice(at)]
+}
+
+/** 점검 묶음(과제 21 의 groupOf) — 키 = 영역 id, 라벨 = rowLabel. 시트 화면과 테스트가 같은 함수를 쓴다
+ *  (D22: 점검과 시트 PPT 가 같은 묶음 키 — PPT 는 buildSheetSections 가 영역 id 로 묶는다). */
+export function areaGroupOf(
+  areas: readonly Pick<WeeklyArea, 'id' | 'name' | 'active'>[],
+): (row: { areaId: string }) => { key: string; label: string } {
+  return (row) => ({ key: row.areaId, label: rowLabel(row, areas) })
 }
