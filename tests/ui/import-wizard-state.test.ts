@@ -65,7 +65,7 @@ describe('importWizard reducer — 상태 전이(§6.2)', () => {
 
   it('executeSuccess — done 단계로 전이하고 에러류(scope 포함)를 전부 비운다', () => {
     const dirty = { ...initialWizardState, errors: [{ excelRow: 1, message: 'z' }], needsTeams: ['T'], needsTeamsScope: 'global' as const }
-    const result = { count: 3, mode: 'append' as const, reindexed: 3, profileSaved: true }
+    const result = { kind: 'applied' as const, commandId: 'c-1', count: 3, mode: 'append' as const, reindexed: 3, profileSaved: true }
     const next = reducer(dirty, { type: 'executeSuccess', result })
     expect(next).toMatchObject({ step: 'done', result, error: null, errors: null, needsTeams: null, needsTeamsScope: null })
   })

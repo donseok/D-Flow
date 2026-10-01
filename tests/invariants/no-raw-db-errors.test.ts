@@ -17,6 +17,7 @@ const GUARDED_FILES: readonly string[] = [
   'src/app/actions/weekly.ts',
   'src/app/actions/projectAreas.ts',
   'src/lib/teams/register.ts',
+  'src/app/api/import/execute/route.ts',
 ]
 
 /** `.error` 를 옮겨도 되는 결과의 출처 — 고정 문구만 낸다 */

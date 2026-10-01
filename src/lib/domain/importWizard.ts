@@ -7,8 +7,12 @@ import type { ImportError } from '@/lib/excel/validate'
 
 export type ImportMode = 'append' | 'replace'
 
-/** `/api/import/execute` 200 응답 바디(§B6) — ok 는 판별에만 쓰고 이 타입엔 담지 않는다. */
+/** `/api/import/execute` 200 응답 바디(§B6·SP4 §4.4) — ok 는 판별에만 쓰고 이 타입엔 담지 않는다. */
 export interface ExecuteResult {
+  /** 결과 종류(SP4 §4.4 #9) — duplicate 는 같은 명령 id 의 재전송이 저장된 결과(건수·모드)를 받은 것이다(백업 없음) */
+  kind: 'applied' | 'duplicate'
+  /** 이 실행의 명령 id — 마법사가 실행 의도마다 뽑아 보낸 값(재전송은 같은 값) */
+  commandId: string
   count: number
   mode: ImportMode
   reindexed: number

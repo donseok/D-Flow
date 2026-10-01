@@ -107,12 +107,12 @@ const WRITE_EXPORTS = ['InternalWriteResult', 'SettingsChange', 'commandDigestIn
 /** write 모듈을 값으로 import 하는 파일(import type 은 부를 수 없어 뺀다) */
 const WRITE_IMPORTERS: Record<string, string> = {
   'src/app/actions/settings.ts': 'commandDigestInput(명령 요약의 입력 모양)만 쓴다 — 아래 INTERNAL_WRITE_CALLERS 에 없으므로 writeProjectSettingsInternal 을 언급하면 실패한다',
-  'src/app/api/import/execute/route.ts': 'W5 양식 저장 — requireProjectAdmin(pid)(:65) 뒤 그 pid·actor 로 writeProjectSettingsInternal(:196)',
+  'src/app/api/import/execute/route.ts': 'W5 양식 저장 — requireProjectAdmin(pid)(:133) 뒤 그 pid·actor 로 writeProjectSettingsInternal(:277)',
   'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:231) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
 }
 /** writeProjectSettingsInternal 을 언급하는 파일(정의 제외)과 호출 수 — import 기준과 함께 둔다(가져오는 이름·지정자 모양과 무관하게 문다) */
 const INTERNAL_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
-  'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — requireProjectAdmin(:65) 뒤 :196' },
+  'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — requireProjectAdmin(:133) 뒤 :277' },
   'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :231(가드는 RUN_WBS_IMPORT_CALLERS)' },
 }
 const WBS_IMPORT_FILE = 'src/lib/agent/wbsImport.ts'

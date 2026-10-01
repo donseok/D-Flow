@@ -4,44 +4,59 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // 논리·팀 열을 +1 밀고, 양식 밖 팀(팀B)을 끝에 붙인다. 그 파일을 저장 양식으로 다시 읽으면 산출물·시작=null,
 // 종료=시작일, 실적%=날짜 일련값, 담당=[] 이 되어 틀린 값이 쓰였다. 이제 inspect 가 불일치를 알리고, 마법사는 감지 결과로
 // 시작하며, 저장 양식을 확인 없이 보내면 execute 가 409 로 막는다. 엑셀 모듈(export·detect·parse·link)은 실물이다.
+// SP4: execute 는 명령 id 를 받고 import_wbs_cmd(service_role RPC)로 쓴다 — 팀은 요청 범위 원천, 영수증 선확인은 세션(§4.4).
 const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(),
   getProjectConfig: vi.fn(),
   rpc: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: vi.fn() }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
-vi.mock('@/lib/teams/master', () => ({
-  projectTeamRowsSync: vi.fn(() => [{ code: '팀A' }, { code: '팀B' }]),
-  teamsForProjectSync: vi.fn(() => [{ code: '팀A' }, { code: '팀B' }]),
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
+vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: vi.fn() }))
+vi.mock('@/lib/supabase/server', () => ({
+  createServerClient: vi.fn(async () => ({
+    // 영수증 선확인 — 이 시나리오의 명령은 처음이다(append 라 백업을 읽지 않는다)
+    from: () => {
+      const q: Record<string, unknown> = {}
+      q.select = () => q
+      q.eq = () => q
+      q.maybeSingle = async () => ({ data: null, error: null })
+      return q
+    },
+  })),
 }))
-vi.mock('@/app/actions/teams', () => ({ addTeam: vi.fn() }))
-vi.mock('@/app/actions/projectTeams', () => ({ addProjectTeam: vi.fn() }))
-vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({ rpc: mocks.rpc })) }))
-vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => ({ rpc: mocks.rpc })) }))
+vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: vi.fn() }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn(async () => undefined) }))
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0 })) }))
 
-import { createAdminClient } from '@/lib/supabase/admin'
+import { writeProjectSettingsInternal } from '@/lib/settings/write'
+import { projectOwnTeams, projectTeams } from '@/lib/teams/source'
 import { POST as inspect } from '@/app/api/import/inspect/route'
 import { POST as execute } from '@/app/api/import/execute/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { buildWorkbookWithProfile } from '@/lib/excel/exportWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
-import { teamOrderMap } from '@/lib/domain/teams'
+import { teamOrderMap, type Team } from '@/lib/domain/teams'
 import { initialWizardState, reducer } from '@/lib/domain/importWizard'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ImportItem } from '@/lib/excel/validate'
 import type { WbsRow } from '@/lib/domain/types'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, WS } from '../fixtures/actor'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const COMMAND_ID = '55555555-5555-4555-8555-555555555555'
 const SAVED: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 2,
   hierarchy: { kind: 'columns', columns: [0, 1] },
   logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 },
   teamColumns: [[6, '팀A']], ownerMarks: { '●': 'primary', '△': 'support' },
 }
+/** 이 프로젝트의 전용 팀 — 파일의 두 팀(대조를 통과한다) */
+const TEAMS: Team[] = ['팀A', '팀B'].map((code, i) => ({
+  id: `own-${i}`, code, name: code, color: '#6b7280', sortOrder: i, active: true, progressVisible: true, projectId: PROJECT_ID, workspaceId: WS,
+}))
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
@@ -64,14 +79,17 @@ function req(fields: Record<string, string | Blob>) {
   return { formData: async () => form } as unknown as Parameters<typeof execute>[0]
 }
 const executeWith = (profile: ExcelProfile, extra: Record<string, string> = {}) => execute(req({
-  file: FILE, projectId: PROJECT_ID, profile: JSON.stringify(profile), mode: 'append', saveProfile: 'false', registerTeams: 'false', ...extra,
+  file: FILE, projectId: PROJECT_ID, profile: JSON.stringify(profile), mode: 'append', saveProfile: 'false', registerTeams: 'false',
+  commandId: COMMAND_ID, ...extra,
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeActor() })
   mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'], 'wbs.excel_profile': SAVED }))
-  mocks.rpc.mockResolvedValue({ data: 2, error: null })
+  vi.mocked(projectTeams).mockResolvedValue(TEAMS)
+  vi.mocked(projectOwnTeams).mockResolvedValue(TEAMS)
+  mocks.rpc.mockResolvedValue({ data: { status: 'applied', mode: 'append', count: 2, command_id: COMMAND_ID }, error: null })
 })
 
 describe('펼침 내보내기 → 저장 양식이 있는 프로젝트로 재임포트', () => {
@@ -97,6 +115,7 @@ describe('펼침 내보내기 → 저장 양식이 있는 프로젝트로 재임
     const state = reducer(initialWizardState, { type: 'inspectSuccess', detection: body.detection, savedProfile: body.savedProfile })
     const res = await executeWith(state.profile!)
     expect(res.status).toBe(200)
+    expect(mocks.rpc.mock.calls[0][0]).toBe('import_wbs_cmd')
     const sent = mocks.rpc.mock.calls[0][1].p_items as ImportItem[]
     const task = sent.find(i => i.name === '착수')!
     expect(task).toMatchObject({ deliverable: '계획서', plannedStart: '2026-07-01', plannedEnd: '2026-07-03' })
@@ -112,6 +131,6 @@ describe('펼침 내보내기 → 저장 양식이 있는 프로젝트로 재임
     const res = await executeWith(state.profile!, { saveProfile: String(state.saveProfile) })
     expect(res.status).toBe(200)
     expect((await res.json()).profileSaved).toBe(false)
-    expect(createAdminClient).not.toHaveBeenCalled()   // project_settings upsert 의 유일한 경로
+    expect(writeProjectSettingsInternal).not.toHaveBeenCalled()   // 양식 저장의 유일한 경로
   })
 })

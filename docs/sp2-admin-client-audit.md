@@ -38,7 +38,7 @@
 | src/app/api/chat/index/worker/route.ts | 플랫폼 | cron 시크릿(x-cron-secret)으로만 들어온다. 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다 |
 | src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 전역 색인 큐 배치다 |
 | src/app/api/cron/inbox-retention/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 읽은 알림 90일 정리 RPC(전역)다 |
-| src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 그 pid 로 import 한다. 전역 팀 등록은 requireWorkspaceAdmin(프로젝트의 wid) 뒤에 한다. 양식 저장은 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 |
+| src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤 그 pid 로만 쓴다(SP4 §4.4). ① 미등록 팀은 그 pid 의 전용 팀만 만든다(ensureProjectTeams — adminFor, 워크스페이스는 가드 결과, teams_guard 가 일치 강제) ② 상속 공용 팀 전환은 convert_inherited_teams 가 행위자 등급을 다시 판정한다 ③ 공용 팀은 그 pid 의 워크스페이스 것만 읽는다(요청 범위 원천 — 세션) ④ 항목·담당·휴일·영수증은 import_wbs_cmd 가 한 트랜잭션에 쓰고 행위자 등급을 다시 판정한다(p_actor = 가드 결과) ⑤ 양식 저장은 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |
 | src/app/api/v1/agent/me/route.ts | 외부 API·서비스 | PAT 소유자의 actorFromUser 스냅샷의 워크스페이스로 agent_projects 를 projects!inner 임베드에서 좁혀(플랫폼 관리자는 전부) 이름까지 한 번에 읽고, 응답 행은 스냅샷 키로 다시 거른다 — 프로젝트 id 목록을 URL 에 싣지 않는다(최종 리뷰 F12, 414 방지) |
 | src/app/api/v1/agent/watch/route.ts | 외부 API·서비스 | PAT 의 user_id·agent 로 upsert·stop 한다. upsert 전에 PAT 소유자의 actorFromUser 스냅샷으로 isProjectMember(감시 project_id)를 본다 — 조회 전용·다른 워크스페이스면 404(Task 13 에서 고침, 프로젝트 한정 PAT 포함). 프로젝트 없는 감시자는 그 유일 워크스페이스에 역할(hasProjectRoleInWorkspace)이 있어야 하고 아니면 404(최종 리뷰 F13). 7일 GC 는 내용을 읽지 않는 전역 정리 |
@@ -139,3 +139,11 @@ service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 
 |---|---|---|---|
 | `src/app/actions/weekly.ts#createWeeklyReport` | `create_weekly_report` | `requireProjectAdmin(pid)` → `requireModule weekly` | 관리자 아님 `42501 WEEKLY_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
 | `src/app/actions/projectAreas.ts#upsertArea` | `upsert_project_area` | `requireProjectAdmin(pid)`(모듈 관문 없음 — D25) | 관리자 아님 `42501 AREA_FORBIDDEN`, 영역은 `project_id = p_project_id` 로만 찾아 다른 프로젝트의 영역 id 는 `P0002 AREA_NOT_FOUND`(아무것도 바꾸지 않는다) |
+| `src/app/api/import/execute/route.ts#POST` | `import_wbs_cmd` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 IMPORT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND`, 같은 명령 id·다른 요약 `23505 COMMAND_REUSED` |
+| `src/app/api/import/execute/route.ts#POST`(상속 프로젝트의 미등록 팀 등록 앞) — '공용 팀 복사로 시작'(`copyGlobalTeams`)은 SP4 B 에서 잇는다 | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
+
+가져오기 라우트는 `createAdminClient` 를 직접 부르므로 위 감사표에도 행이 있다(이 절은 클라이언트와 무관하게 RPC 쪽 판정을 적는다).
+넷 모두 실행권은 service_role 만이고(anon·authenticated 는 EXECUTE 가 없다 — 각 마이그레이션의 사후검사), 등급은 도우미
+`public.actor_is_project_admin(p_actor, p_project_id)`(플랫폼 관리자 ∨ 그 프로젝트 워크스페이스 관리자 ∨ 활성 명단 행·인물의
+`access_role = 'admin'`) 하나로 판정하고 거짓이면 쓰기 전에 42501 이다. 넷 다 advisory 잠금을 잡고 함수 속성 `lock_timeout = 15s` 를
+둔다(55P03 은 호출부가 503 재시도로 바꾼다).
