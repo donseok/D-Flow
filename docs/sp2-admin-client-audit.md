@@ -28,7 +28,6 @@
 | src/app/actions/issues.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 그 pid 로 RPC 를 부르고, 이슈 id 로 issue_updates 에 insert 한다. 회의록 블록 이슈의 원문은 그 회의록의 프로젝트가 pid 이거나, 프로젝트가 없으면 그 워크스페이스가 pid 의 워크스페이스일 때만 받는다(최종 리뷰 F10 — 0009 issue_links 트리거가 DB 에서도 막는다) |
 | src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유 토큰을 읽고 쓴다(0011 뒤 세션은 share_token 열을 읽지 못한다) |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid) 뒤 adminFor({ workspaceId }) 로 create_project_with_settings 를 부른다(복사 원본은 그 wid 소속인지 먼저 확인). 비공개는 requireProjectAdmin(pid) 뒤 그 pid 로 projects 를 쓴다. 설정 쓰기는 이 파일에 없다(SP3a — settings.ts·write.ts 로 옮겼다) |
-| src/app/actions/projectAreas.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 project_areas 를 eq('project_id', pid) 로 읽고 쓴다 |
 | src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로 읽고 쓴다. 허용 도메인은 해석기(getWorkspaceConfig)로 그 프로젝트의 워크스페이스 설정을 읽기만 한다(설정 표를 직접 만지지 않는다 — SP3a) |
 | src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 의 원본은 teamsForWorkspaceSync(프로젝트의 wid)다(이번에 고침) |
 | src/app/actions/roster.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin 또는 Member(pid) 뒤에 project_members 를 pid·memberId 로 읽고, upsert RPC 에 pid 를 넘긴다 |
@@ -129,3 +128,14 @@
   `.claude/skills/dflow-work/references/api-contract.md` 반영. PAT 계약 버전 2.4 는 그대로다).
 - `minutes/meta`·`agent/me` 의 `.in('id', …)` 은 프로젝트 약 205개부터 414 로 거절됐다 — 워크스페이스로 좁히고 메모리에서 거른다(F12).
 - `agent/watch`·`minutes` POST 의 프로젝트 없는 분기는 워크스페이스 역할을 보지 않았다(F13·F14).
+
+## DEFINER RPC 가 등급을 다시 판정하는 경로(SP4 — D28·D51)
+
+위 표는 service_role 클라이언트를 직접 만드는 파일만 담는다(`tests/invariants/admin-scope.test.ts`). 아래 경로는 `adminFor(scope).admin` 으로
+service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 방어선)가 빠지는 대신, RPC 가 `p_actor`(액션 가드 결과의 `actor.userId` —
+`tests/invariants/rpc-actor-source.test.ts` 가 출처를 본다)로 그 프로젝트의 관리자 등급을 `actor_is_project_admin` 으로 다시 판정한다.
+
+| 호출부 | RPC | 액션 가드 | RPC 안의 판정 |
+|---|---|---|---|
+| `src/app/actions/weekly.ts#createWeeklyReport` | `create_weekly_report` | `requireProjectAdmin(pid)` → `requireModule weekly` | 관리자 아님 `42501 WEEKLY_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
+| `src/app/actions/projectAreas.ts#upsertArea` | `upsert_project_area` | `requireProjectAdmin(pid)`(모듈 관문 없음 — D25) | 관리자 아님 `42501 AREA_FORBIDDEN`, 영역은 `project_id = p_project_id` 로만 찾아 다른 프로젝트의 영역 id 는 `P0002 AREA_NOT_FOUND`(아무것도 바꾸지 않는다) |

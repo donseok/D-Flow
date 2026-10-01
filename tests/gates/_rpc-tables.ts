@@ -36,5 +36,6 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   replace_wbs: ['holidays', 'item_owners', 'wbs_items'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
   set_workspace_role: ['authz_commands', 'workspace_members'],
+  upsert_project_area: ['project_areas', 'area_teams', 'weekly_report_rows'],
   upsert_project_member_cmd: ['authz_commands', 'people', 'project_member_teams', 'project_members'],
 }
