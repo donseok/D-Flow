@@ -22,6 +22,8 @@ select v.id, v.email, '', now(), '{"provider":"email","providers":["email"]}', '
     ('00000000-0000-0000-7e57-0000000000a1'::uuid, 'rls-platform@example.com'),
     ('00000000-0000-0000-7e57-0000000000a2'::uuid, 'rls-wsadmin@example.com'),
     ('00000000-0000-0000-7e57-0000000000a3'::uuid, 'rls-alice@example.com')) as v(id, email)
+-- 같은 이메일이 다른 id 로 이미 있으면(누가 GoTrue 로 만든 경우 — 이메일 부분 유일 인덱스) 그 행만 건너뛴다. 예전 `on conflict do nothing` 이 모든 유일 위반을 건너뛰던 동작을 id 충돌 처리(do update)와 함께 잇는다.
+  where not exists (select 1 from auth.users u where lower(u.email) = lower(v.email) and u.id <> v.id)
 -- 기본값이 없는 GoTrue 문자열 열 넷은 '' 로 — NULL 이면 GoTrue admin/users 가 500 이다. 예전 픽스처가 NULL 로 남긴 행만 고친다.
 on conflict (id) do update set
   confirmation_token = coalesce(auth.users.confirmation_token, ''), recovery_token = coalesce(auth.users.recovery_token, ''),

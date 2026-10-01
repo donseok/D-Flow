@@ -10,18 +10,21 @@ const TOKEN_COLS = [
   'email_change_token_current', 'phone_change', 'phone_change_token', 'reauthentication_token',
 ] as const
 
+const FIXTURE_IDS = ['a1', 'a2', 'a3', 'a6', 'a7', 'a8', 'a9'].map((s) => `00000000-0000-0000-7e57-0000000000${s}`)
+
 let pool: Pool
 beforeAll(async () => { pool = openPool() })
 afterAll(async () => { await pool?.end() })
 
 const nullRows = async () => (await pool.query<{ email: string }>(
-  `select email from auth.users where email like 'rls-%@example.com' and (${TOKEN_COLS.map((c) => `${c} is null`).join(' or ')}) order by email`,
+  `select email from auth.users where id = any($1::uuid[]) and (${TOKEN_COLS.map((c) => `${c} is null`).join(' or ')}) order by email`, [FIXTURE_IDS],
 )).rows.map((r) => r.email)
 
 describe('RLS 픽스처 계정의 GoTrue 문자열 열', () => {
-  it('픽스처를 흘린 뒤 rls- 계정 일곱의 토큰 열에 NULL 이 없다', async () => {
+  it('픽스처를 흘린 뒤 픽스처 계정 일곱의 토큰 열에 NULL 이 없다', async () => {
     await loadFixture(pool)
-    const { rows } = await pool.query<{ n: number }>(`select count(*)::int as n from auth.users where email like 'rls-%@example.com'`)
+    // 개수는 픽스처의 id 일곱으로 센다 — 이메일 접두로 세면 다른 레인이 rls- 계정을 더할 때 깨진다
+    const { rows } = await pool.query<{ n: number }>(`select count(*)::int as n from auth.users where id = any($1::uuid[])`, [FIXTURE_IDS])
     expect(rows[0].n).toBe(7)
     expect(await nullRows()).toEqual([])
   })
