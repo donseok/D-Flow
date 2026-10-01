@@ -77,7 +77,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
   'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings'], refs: 7, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독' },
-  // Phase D: 'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기' },
+  'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
 }
 
 /** 설정 RPC(개정 §2.11 ⑦) → 부르는 파일·리터럴 .rpc( 호출 수·사유. 새 호출은 그 가드를 확인한 뒤 수를 올린다. 권한 RPC 는 이 게이트 밖이다 */

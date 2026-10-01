@@ -50,6 +50,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('accounts')}#setPlatformAdmin`]: nul('superuser'),
   [`${A('accounts')}#setWorkspaceRole`]: { ...nul('workspaceAdmin'), sample: [U, U, 'member'] },
   [`${A('accounts')}#listAccounts`]: nul('workspaceAdmin'),
+  // ── authzEvents — 권한 변경 이력 읽기(SP3a Phase D) — 워크스페이스 관리자, 플랫폼 행은 플랫폼 관리자에게만
+  [`${A('authzEvents')}#listAuthzEvents`]: { ...nul('workspaceAdmin'), sample: [U] },
   // ── agentHub — 허브(agents)
   [`${A('agentHub')}#refreshAgentHub`]: { guard: 'projectMember', module: 'agents', sample: [P] },
   [`${A('agentHub')}#applyHubDelegations`]: { guard: 'projectMember', module: 'agents', sample: [P, [{ itemId: U, delegated: true }]] },   // 길이 0 은 가드 앞 검증에서 막힌다
