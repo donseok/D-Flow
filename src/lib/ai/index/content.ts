@@ -13,6 +13,7 @@ import {
   type IndexContentSnapshot,
   type KnowledgeDocumentInput,
 } from './types'
+import { rowLabel, visibleRows, type WeeklyArea } from '@/lib/domain/weeklySheet'
 
 export const CURRENT_INDEX_VERSION = 1
 export const INDEX_CHUNKER_VERSION = 'md1500-v1'
@@ -161,27 +162,51 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
   const report = reportResult.data as Row
   if (report.project_id !== job.projectId) return scopeMismatch()
 
-  const rowsResult = await client.from('weekly_report_rows')
-    .select('section, module, sort_order, this_content, this_issue, next_content, next_issue, updated_at')
-    .eq('report_id', job.entityId)
-    .order('sort_order')
+  // 행은 영역 id 로 묶인다(SP4) — 머리는 그 프로젝트 주간 영역의 이름, 순서는 시트와 같은 visibleRows(D32).
+  // 지운 열(section·module·sort_order)을 고르면 열 drop 뒤 조회 전체가 42703 으로 실패한다(런타임에서만 드러난다).
+  const [rowsResult, areasResult] = await Promise.all([
+    client.from('weekly_report_rows')
+      .select('area_id, this_content, this_issue, next_content, next_issue, updated_at')
+      .eq('report_id', job.entityId)
+      .eq('project_id', report.project_id),
+    client.from('project_areas')
+      .select('id, code, name, sort_order, active')
+      .eq('project_id', report.project_id)
+      .eq('kind', 'weekly_section'),
+  ])
   if (rowsResult.error) return readError('WEEKLY_ROWS_READ_FAILED', rowsResult.error)
-  const rows = (Array.isArray(rowsResult.data) ? rowsResult.data : []) as Row[]
+  if (areasResult.error) return readError('WEEKLY_AREAS_READ_FAILED', areasResult.error)
+  const areas: WeeklyArea[] = (Array.isArray(areasResult.data) ? areasResult.data as Row[] : []).map(area => ({
+    id: String(area.id),
+    code: str(area.code) ?? '',
+    name: str(area.name) ?? '',
+    sortOrder: Number(area.sort_order) || 0,
+    active: area.active !== false,
+    teams: [],
+  }))
+  const rows = visibleRows((Array.isArray(rowsResult.data) ? rowsResult.data as Row[] : []).map(row => ({
+    areaId: str(row.area_id) ?? '',
+    thisContent: str(row.this_content) ?? '',
+    thisIssue: str(row.this_issue) ?? '',
+    nextContent: str(row.next_content) ?? '',
+    nextIssue: str(row.next_issue) ?? '',
+    updatedAt: row.updated_at,
+  })), areas)
 
   const weekStart = safeDate(report.week_start)
   const lines: Array<string | null> = [`# 주간업무 ${weekStart ?? ''}`.trim()]
   let latest = safeTimestamp(report.updated_at)
   for (const row of rows) {
     const cells = [
-      ['금주 업무', str(row.this_content)],
-      ['금주 이슈', str(row.this_issue)],
-      ['차주 업무', str(row.next_content)],
-      ['차주 이슈', str(row.next_issue)],
+      ['금주 업무', row.thisContent],
+      ['금주 이슈', row.thisIssue],
+      ['차주 업무', row.nextContent],
+      ['차주 이슈', row.nextIssue],
     ].filter((cell): cell is [string, string] => Boolean(cell[1] && cell[1].trim()))
     if (!cells.length) continue
-    lines.push(`## ${str(row.section) ?? ''}`.trim())
+    lines.push(`## ${rowLabel(row, areas)}`)
     for (const [label, value] of cells) lines.push(`${label}: ${value.trim()}`)
-    const rowUpdated = safeTimestamp(row.updated_at)
+    const rowUpdated = safeTimestamp(row.updatedAt)
     // 멀티셀 편집은 행 단위로 갱신되므로 최신 시각은 보고서·행 전체의 max가 원본 시각이다.
     if (rowUpdated && (!latest || Date.parse(rowUpdated) > Date.parse(latest))) latest = rowUpdated
   }

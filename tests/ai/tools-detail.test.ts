@@ -17,11 +17,16 @@ import {
   repositoryOk,
   type MyMeetingRepository,
   type MyMeetingSnapshot,
+  type RepositoryResult,
   type WbsChangeLogSnapshot,
   type WbsSupplementalRepository,
   type WeeklyRepository,
   type WeeklySheetSnapshot,
 } from '@/lib/repositories/types'
+import type { ConfigArea, ConfigTeam, ProjectConfig } from '@/lib/settings/projectConfig'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
+import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -32,18 +37,32 @@ const context: ToolExecutionContext = {
   timezone: 'Asia/Seoul',
 }
 
+// 합성 구성 R — 영역 실험(RES 주)·데이터(RES 주·OPS 보조)·운영(OPS 주), p1 은 공용 팀 RES·OPS 를 상속한다
+const R_AREAS: ConfigArea[] = SYNTHETIC_WEEKLY_AREAS.research.map(a => ({ ...a }))
+const R_TEAMS: ConfigTeam[] = SYNTHETIC_TEAMS.research.map(t => ({ ...t, projectId: null }))
+const areaIdOf = (name: string): string => {
+  const area = R_AREAS.find(a => a.name === name)
+  if (!area) throw new Error(`합성 영역이 없다: ${name}`)
+  return area.id
+}
+const weeklySettings = {
+  getProjectConfig: vi.fn(async (projectId: string): Promise<RepositoryResult<ProjectConfig>> => repositoryOk(makeProjectConfig({}, {
+    projectId, workspaceId: 'ws-1', teams: R_TEAMS, areas: { weekly_section: R_AREAS, issue_area: [] },
+  }))),
+}
+
 function weeklySnapshot(
   reportId: string,
   weekStart: string,
   rows: Array<{
     id: string
-    section: string
-    module?: string
+    area: string
     thisContent?: string
     thisIssue?: string
     nextContent?: string
     nextIssue?: string
   }>,
+  areas: ConfigArea[] = R_AREAS,
 ): WeeklySheetSnapshot {
   return {
     report: {
@@ -56,15 +75,14 @@ function weeklySnapshot(
     rows: rows.map((row, index) => ({
       id: row.id,
       reportId,
-      section: row.section,
-      module: row.module ?? '',
-      sortOrder: index + 1,
+      areaId: areaIdOf(row.area),
       thisContent: row.thisContent ?? '',
       thisIssue: row.thisIssue ?? '',
       nextContent: row.nextContent ?? '',
       nextIssue: row.nextIssue ?? '',
       updatedAt: `${weekStart}T0${index + 2}:00:00Z`,
     })),
+    areas,
   }
 }
 
@@ -146,33 +164,34 @@ describe('menu-detail read tools', () => {
     )).resolves.toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
   })
 
-  it('maps team filters to new weekly sections instead of treating ERP/MES as exact sections', async () => {
+  it('filters a team by the areas it owns in area_teams (primary ∪ support) — no section-name mapping', async () => {
     const sheet = weeklySnapshot('r1', '2026-07-20', [
-      { id: 'sales', section: '영업', thisContent: '영업 업무' },
-      { id: 'buy', section: '구매', thisContent: '구매 업무' },
-      { id: 'quality', section: '품질', thisContent: '품질 업무' },
-      { id: 'legacy-erp', section: 'ERP', thisContent: '레거시 ERP' },
-      { id: 'legacy-mes', section: 'MES', thisContent: '레거시 MES' },
+      { id: 'exp', area: '실험', thisContent: '실험 업무' },
+      { id: 'data', area: '데이터', thisContent: '데이터 업무' },
+      { id: 'ops', area: '운영', thisContent: '운영 업무' },
     ])
     const repository: WeeklyRepository = {
       getSheet: vi.fn(async () => repositoryOk(sheet)),
     }
 
-    const erp = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'ERP' }, context,
+    const res = await createGetWeeklySheetTool(repository, weeklySettings).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'RES' }, context,
     )
-    const mes = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'MES' }, context,
+    const ops = await createGetWeeklySheetTool(repository, weeklySettings).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'OPS' }, context,
     )
 
-    expect(erp.ok && erp.result.records.map(row => row.section)).toEqual(['영업', '구매', 'ERP'])
-    expect(mes.ok && mes.result.records.map(row => row.section)).toEqual(['품질', 'MES'])
+    expect(res.ok && res.result.records.map(row => row.section)).toEqual(['실험', '데이터'])
+    expect(ops.ok && ops.result.records.map(row => row.section)).toEqual(['데이터', '운영'])
+    // 출처는 영역 id 를 qualifier 로 싣는다 — 비교 레코드의 증거를 영역으로 묶는 열쇠(evidence.ts)
+    expect(res.ok && res.result.sources.filter(s => s.entityType === 'weekly_row').map(s => s.qualifier))
+      .toEqual([{ anchor: `area:${areaIdOf('실험')}` }, { anchor: `area:${areaIdOf('데이터')}` }])
   })
 
   it('rejects a weekly response for a different week or report id', async () => {
     const wrongWeek = weeklySnapshot('r1', '2026-07-13', [])
     const wrongRow = weeklySnapshot('r1', '2026-07-20', [
-      { id: 'row-1', section: '영업', thisContent: '업무' },
+      { id: 'row-1', area: '실험', thisContent: '업무' },
     ])
     wrongRow.rows[0].reportId = 'r-other'
 
@@ -184,21 +203,23 @@ describe('menu-detail read tools', () => {
     }
     const args = { projectId: 'p1', weekStart: '2026-07-20' }
 
-    await expect(createGetWeeklySheetTool(wrongWeekRepository).execute(args, context))
+    await expect(createGetWeeklySheetTool(wrongWeekRepository, weeklySettings).execute(args, context))
       .resolves.toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
-    await expect(createGetWeeklySheetTool(wrongRowRepository).execute(args, context))
+    await expect(createGetWeeklySheetTool(wrongRowRepository, weeklySettings).execute(args, context))
       .resolves.toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR' } })
   })
 
-  it('compares two weekly sheets with pure reads and applies the ERP section mapping', async () => {
+  it('compares two weekly sheets by area id — a renamed area is the same area (W14)', async () => {
+    // 지난주에는 '실험' 영역의 이름이 '실험 준비'였다 — 같은 id 라 같은 영역의 변경으로 본다(문자열 키였다면 삭제 + 추가)
+    const renamedBefore = R_AREAS.map(a => (a.name === '실험' ? { ...a, name: '실험 준비' } : a))
     const before = weeklySnapshot('r-before', '2026-07-13', [
-      { id: 'old-sales', section: '영업', thisContent: '요건 분석' },
-      { id: 'old-quality', section: '품질', thisContent: '검사 기준' },
-    ])
+      { id: 'old-exp', area: '실험', thisContent: '요건 분석' },
+      { id: 'old-ops', area: '운영', thisContent: '점검 기준' },
+    ], renamedBefore)
     const after = weeklySnapshot('r-after', '2026-07-20', [
-      { id: 'new-sales', section: '영업', thisContent: '설계 완료' },
-      { id: 'new-buy', section: '구매', thisContent: '발주 준비' },
-      { id: 'new-quality', section: '품질', thisContent: '검사 완료' },
+      { id: 'new-exp', area: '실험', thisContent: '설계 완료' },
+      { id: 'new-data', area: '데이터', thisContent: '수집 준비' },
+      { id: 'new-ops', area: '운영', thisContent: '점검 기준' },
     ])
     const repository: WeeklyRepository = {
       getSheet: vi.fn(async (_projectId, weekStart) => repositoryOk(
@@ -206,28 +227,35 @@ describe('menu-detail read tools', () => {
       )),
     }
 
-    const result = await createCompareWeeklySheetsTool(repository).execute({
-      projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'ERP',
+    const result = await createCompareWeeklySheetsTool(repository, weeklySettings).execute({
+      projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'RES',
     }, context)
 
     expect(repository.getSheet).toHaveBeenCalledTimes(2)
     expect(repository.getSheet).toHaveBeenCalledWith('p1', '2026-07-13')
     expect(repository.getSheet).toHaveBeenCalledWith('p1', '2026-07-20')
-    expect(result.ok && result.result.records.map(row => [row.section, row.change])).toEqual([
-      ['영업', 'changed'],
-      ['구매', 'added'],
+    expect(result.ok && result.result.records.map(row => [row.areaId, row.section, row.change])).toEqual([
+      [areaIdOf('실험'), '실험', 'changed'],      // 라벨은 뒤 주차(개명 뒤) 이름
+      [areaIdOf('데이터'), '데이터', 'added'],
     ])
     expect(result).toMatchObject({
       ok: true,
       result: { facts: { changed: 1, added: 1, removed: 0, totalCompared: 2 } },
     })
+    // 팀 없이 보면 운영은 내용이 같아 unchanged 다
+    const all = await createCompareWeeklySheetsTool(repository, weeklySettings).execute({
+      projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20',
+    }, context)
+    expect(all.ok && all.result.records.map(row => [row.section, row.change])).toEqual([
+      ['실험', 'changed'], ['데이터', 'added'], ['운영', 'unchanged'],
+    ])
   })
 
   it('keeps a missing comparison sheet distinct from a failed read', async () => {
     const missing: WeeklyRepository = {
       getSheet: vi.fn(async () => repositoryOk<WeeklySheetSnapshot | null>(null)),
     }
-    const missingResult = await createCompareWeeklySheetsTool(missing).execute({
+    const missingResult = await createCompareWeeklySheetsTool(missing, weeklySettings).execute({
       projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20',
     }, context)
     expect(missingResult).toMatchObject({
@@ -240,7 +268,7 @@ describe('menu-detail read tools', () => {
         ? repositoryError<WeeklySheetSnapshot | null>('WEEKLY_REPORT_READ_FAILED', true)
         : repositoryOk<WeeklySheetSnapshot | null>(null)),
     }
-    const failedResult = await createCompareWeeklySheetsTool(failed).execute({
+    const failedResult = await createCompareWeeklySheetsTool(failed, weeklySettings).execute({
       projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20',
     }, context)
     expect(failedResult).toMatchObject({

@@ -61,6 +61,67 @@ describe('strict Supabase repositories', () => {
     }
   })
 
+  it('weekly: rows are read by area id (no section/module/sort_order) and come back in sheet order — empty inactive areas hidden', async () => {
+    const report = queryBuilder({
+      data: { id: 'wr1', project_id: 'p1', week_start: '2026-07-20', title: '주간', updated_at: '2026-07-20T01:00:00Z' },
+      error: null,
+    })
+    const rows = queryBuilder({
+      data: [
+        { id: 'row-ops', report_id: 'wr1', area_id: 'a-ops', this_content: '운영 업무', this_issue: '', next_content: '', next_issue: '', updated_at: null },
+        { id: 'row-old', report_id: 'wr1', area_id: 'a-old', this_content: '', this_issue: '', next_content: '', next_issue: '', updated_at: null },
+        { id: 'row-exp', report_id: 'wr1', area_id: 'a-exp', this_content: '실험 업무', this_issue: '', next_content: '', next_issue: '', updated_at: null },
+      ],
+      error: null,
+    })
+    const areas = queryBuilder({
+      data: [
+        { id: 'a-ops', code: 'OPS-A', name: '운영', sort_order: 2, active: true, area_teams: [{ team_id: 't-ops', kind: 'primary' }] },
+        { id: 'a-exp', code: 'EXP', name: '실험', sort_order: 1, active: true, area_teams: [] },
+        { id: 'a-old', code: 'OLD', name: '옛 영역', sort_order: 0, active: false, area_teams: [] },
+      ],
+      error: null,
+    })
+    const from = vi.fn((table: string) => (table === 'weekly_reports' ? report : table === 'weekly_report_rows' ? rows : areas))
+    const repository = createSupabaseWeeklyRepository({ from } as never)
+
+    const result = await repository.getSheet('p1', '2026-07-20')
+    expect(result.ok).toBe(true)
+    if (!result.ok || !result.data) throw new Error('스냅샷이 없다')
+    expect(result.data.rows.map(r => r.id)).toEqual(['row-exp', 'row-ops'])   // 영역 순서, 내용 없는 비활성 영역 행은 숨김
+    expect(result.data.rows[0]).toEqual({
+      id: 'row-exp', reportId: 'wr1', areaId: 'a-exp', thisContent: '실험 업무', thisIssue: '', nextContent: '', nextIssue: '', updatedAt: null,
+    })
+    expect(result.data.areas.map(a => [a.id, a.sortOrder, a.active, a.teams])).toEqual([
+      ['a-ops', 2, true, [{ teamId: 't-ops', kind: 'primary' }]], ['a-exp', 1, true, []], ['a-old', 0, false, []],
+    ])
+    const rowSelect = String((rows.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
+    expect(rowSelect).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, updated_at')
+    expect(rowSelect).not.toMatch(/\b(section|module|sort_order)\b/)
+    expect(rows.eq).toHaveBeenCalledWith('report_id', 'wr1')
+    expect(rows.eq).toHaveBeenCalledWith('project_id', 'p1')
+    expect(areas.eq).toHaveBeenCalledWith('project_id', 'p1')
+    expect(areas.eq).toHaveBeenCalledWith('kind', 'weekly_section')
+    for (const builder of [report, rows, areas]) {
+      for (const method of ['insert', 'upsert', 'update', 'delete']) expect(builder[method]).not.toHaveBeenCalled()
+    }
+  })
+
+  it('weekly: area query failure is a failed read, not a label-less sheet', async () => {
+    const report = queryBuilder({
+      data: { id: 'wr1', project_id: 'p1', week_start: '2026-07-20', title: '주간', updated_at: null },
+      error: null,
+    })
+    const rows = queryBuilder({ data: [], error: null })
+    const areas = queryBuilder({ data: null, error: { code: '08006' } })
+    const from = vi.fn((table: string) => (table === 'weekly_reports' ? report : table === 'weekly_report_rows' ? rows : areas))
+    const repository = createSupabaseWeeklyRepository({ from } as never)
+
+    await expect(repository.getSheet('p1', '2026-07-20')).resolves.toEqual({
+      ok: false, errorCode: 'WEEKLY_AREAS_READ_FAILED', retryable: true,
+    })
+  })
+
   it('WBS: a project query failure stays distinct from a project with no WBS rows', async () => {
     const responses: Record<string, QueryResponse> = {
       projects: { data: null, error: { code: '08006' } },

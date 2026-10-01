@@ -1,9 +1,13 @@
 import { weeklyHref } from '@/lib/ai/chat/deep-links'
 import type {
+  ProjectSettingsRepository,
   WeeklyRepository,
   WeeklyRepositoryRow,
   WeeklySheetSnapshot,
 } from '@/lib/repositories/types'
+import { resolveTeamsForProject, type Team } from '@/lib/domain/teams'
+import { areasForTeam, orderAreas, rowLabel, type WeeklyArea } from '@/lib/domain/weeklySheet'
+import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import {
   checkProjectAccess,
   invalidArgument,
@@ -16,34 +20,49 @@ import {
   repositoryScopeViolation,
   shortExcerpt,
 } from './common'
-import type { BotSource, ReadOnlyBotTool } from './types'
-import { isRegisteredTeamCodeForProject } from '@/lib/teams/master'
-// 팀 → 구분 매핑은 구분 목록(WEEKLY_SECTIONS)의 소유 파일로 이사했다 — 구분 개명이
-// 도구 쪽 사본과 손동기화되지 않아 과거 주차가 필터에서 새는 사고를 구조적으로 막는다.
-import { WEEKLY_TEAM_SECTIONS } from '@/lib/domain/weeklySheet'
+import type { BotSource, ReadOnlyBotTool, ToolExecutionResult } from './types'
 
 const WEEKLY_CAPABILITY = 'weekly:read' as const
+const ERR_UNKNOWN_TEAM = '알 수 없는 담당팀입니다.'
+const errNoAreasForTeam = (team: string): string =>
+  `'${team}' 팀이 맡은 주간보고 영역이 없습니다 — 프로젝트 설정의 업무영역에서 담당 팀을 지정하세요.`
 
-/** 팀 → 주간업무 구분 집합. 그 프로젝트에 등록된 팀(비활성 포함)만 — 등록 팀이면 매핑이 있을 때 그 구분들, 없으면 동명
- *  구분(구분 신설 시 자동 활성). 미등록 팀은 매핑이 있어도 null(알 수 없는 팀) — 원본 구분 매핑의 팀 코드('ERP' 등)가
- *  등록 여부와 무관하게 필터로 통과하지 않게 한다. 등록 판정은 그 프로젝트의 팀으로 한다 — 전 워크스페이스 공용 목록이면
- *  다른 워크스페이스의 팀 코드가 통과한다. 팀 캐시 미로드는 throw — 오케스트레이터가 도구 실패로 올린다. */
-function sectionsForTeam(team: string, projectId: string): ReadonlySet<string> | null {
-  if (!isRegisteredTeamCodeForProject(team, projectId)) return null
-  // 팀 코드는 자유 문자열이라 'constructor'·'__proto__' 같은 프로토타입 키가 올 수 있다 — 자기 키만 매핑으로 본다.
-  return Object.hasOwn(WEEKLY_TEAM_SECTIONS, team) ? WEEKLY_TEAM_SECTIONS[team] : new Set([team])
+type SettingsReader = Pick<ProjectSettingsRepository, 'getProjectConfig'>
+
+/** 프로젝트 화면과 같은 팀 규칙(D19·D36) — 전용 팀이 하나라도 있으면(비활성 포함) 그것만, 없으면 그 워크스페이스 공용.
+ *  ConfigTeam 에는 워크스페이스 열이 없다 — 해석기가 이미 그 프로젝트 워크스페이스의 공용 ∪ 그 프로젝트 전용으로 좁혀 읽었다. */
+function registeredTeamCodes(cfg: ProjectConfig, projectId: string): Set<string> {
+  const teams: Team[] = cfg.teams.map(t => ({ ...t, workspaceId: cfg.workspaceId }))
+  return new Set(resolveTeamsForProject(teams, projectId, cfg.workspaceId).map(t => t.code))
 }
 
-/** team 인자 검증 — 미지 팀과 '매핑 구분 없음'을 구분해 명시 거부(조용한 빈 결과 금지).
- *  프로젝트 접근 판정 뒤에 부른다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다. */
-function validateTeam(team: string | undefined, projectId: string): ReturnType<typeof invalidArgument> | null {
-  if (!team) return null
-  const sections = sectionsForTeam(team, projectId)
-  if (!sections) return invalidArgument('알 수 없는 담당팀입니다.')
-  if (sections.size === 0) {
-    return invalidArgument(`${team} 팀에 매핑된 주간업무 구분이 아직 없습니다. 주간업무 시트는 업무영역 구분 체계라 ${team} 전용 구분 신설 전까지 팀 필터를 지원하지 않습니다.`)
-  }
-  return null
+type TeamFilter =
+  | { ok: true; areaIds: ReadonlySet<string> | null }
+  | { ok: false; result: ToolExecutionResult<never> }
+
+/** team 인자 → 그 팀이 주·보조로 든 영역 id 집합(D24). 영역 대응은 그 code 의 팀 전부(공용·전용 — area_teams_guard 가 허용하는 넓이)와
+ *  설정의 주간 영역으로 정하고 보고서와 같은 areasForTeam 을 쓴다(W18). 미등록 팀과 '맡은 영역 0' 을 구분해 명시 거부한다(조용한 빈 결과
+ *  금지). 동명 구분 폴백은 없다. 프로젝트 접근 판정 뒤에 부른다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
+ *  설정을 못 읽으면 도구 실패다(팀 없음으로 위장하지 않는다). */
+async function resolveTeamFilter(settings: SettingsReader, projectId: string, team: string | undefined): Promise<TeamFilter> {
+  if (!team) return { ok: true, areaIds: null }
+  const configResult = await settings.getProjectConfig(projectId)
+  if (!configResult.ok) return { ok: false, result: repositoryFailure(configResult) }
+  const cfg = configResult.data
+  if (!registeredTeamCodes(cfg, projectId).has(team)) return { ok: false, result: invalidArgument(ERR_UNKNOWN_TEAM) }
+  const areaIds = areasForTeam(cfg.areas.weekly_section, cfg.teams, team)
+  if (areaIds.size === 0) return { ok: false, result: invalidArgument(errNoAreasForTeam(team)) }
+  return { ok: true, areaIds }
+}
+
+const norm = (value: string): string => value.trim().toLocaleLowerCase('ko-KR')
+
+/** section 인자 = 영역 이름 또는 code(앞뒤 공백·대소문자 무시 일치). 인자 이름은 플래너 계약이라 그대로 둔다(SP8) */
+function matchesSection(area: WeeklyArea | undefined, section: string | undefined): boolean {
+  if (!section) return true
+  if (!area) return false
+  const want = norm(section)
+  return norm(area.name) === want || norm(area.code) === want
 }
 
 export interface WeeklySheetToolRecord {
@@ -51,9 +70,9 @@ export interface WeeklySheetToolRecord {
   reportId: string
   projectId: string
   weekStart: string
+  areaId: string
+  /** 영역 라벨(rowLabel — 비활성이면 표지, 모르는 영역이면 '알 수 없는 영역') */
   section: string
-  module: string
-  sortOrder: number
   thisContent: string
   thisIssue: string
   nextContent: string
@@ -71,8 +90,9 @@ export interface WeeklyComparisonValues {
 
 export interface WeeklySheetComparisonRecord {
   projectId: string
+  /** 비교 키 — 영역을 개명해도 같은 영역이다(W14) */
+  areaId: string
   section: string
-  module: string
   fromWeekStart: string
   toWeekStart: string
   change: 'added' | 'removed' | 'changed' | 'unchanged'
@@ -81,9 +101,7 @@ export interface WeeklySheetComparisonRecord {
 }
 
 interface AggregatedWeeklyRow extends WeeklyComparisonValues {
-  section: string
-  module: string
-  sortOrder: number
+  areaId: string
   sourceRows: WeeklyRepositoryRow[]
 }
 
@@ -97,18 +115,25 @@ function isScopedWeeklySnapshot(
     && snapshot.rows.every(row => row.reportId === snapshot.report.id)
 }
 
-function matchesWeeklyScope(rowSection: string, projectId: string, section?: string, team?: string): boolean {
-  const normalized = rowSection.trim().toLocaleLowerCase('ko-KR')
-  if (section && normalized !== section.trim().toLocaleLowerCase('ko-KR')) return false
-  if (!team) return true
-  const mapped = sectionsForTeam(team, projectId)
-  return !!mapped && [...mapped].some(value =>
-    value.toLocaleLowerCase('ko-KR') === normalized,
-  )
+/** 주간 행 출처 — 비교 레코드는 여러 물리 행을 묶어 행 id 가 없으므로, 증거는 영역 id(qualifier.anchor)로 묶는다(evidence.ts) */
+function rowSource(row: WeeklyRepositoryRow, projectId: string, weekStart: string, areas: readonly WeeklyArea[]): BotSource {
+  return {
+    id: `weekly-row:${row.id}`,
+    domain: 'weekly',
+    entityType: 'weekly_row',
+    entityId: row.id,
+    projectId,
+    title: rowLabel(row, areas),
+    href: weeklyHref(projectId, weekStart),
+    updatedAt: row.updatedAt,
+    qualifier: { anchor: `area:${row.areaId}` },
+    excerpt: shortExcerpt(row.thisContent, row.thisIssue, row.nextContent, row.nextIssue),
+  }
 }
 
 export function createGetWeeklySheetTool(
   repository: WeeklyRepository,
+  settings: SettingsReader,
 ): ReadOnlyBotTool<WeeklySheetToolRecord> {
   return {
     name: 'get_weekly_sheet',
@@ -127,13 +152,14 @@ export function createGetWeeklySheetTool(
       ) {
         return invalidArgument()
       }
+      // 주 시작 규칙(월요일)은 SP5 가 바꾼다 — 지금은 그대로
       if (new Date(`${weekStart}T00:00:00Z`).getUTCDay() !== 1) {
         return invalidArgument('주간업무 기준일은 월요일이어야 합니다.')
       }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
-      const teamError = validateTeam(team || undefined, projectId)
-      if (teamError) return teamError
+      const teamFilter = await resolveTeamFilter(settings, projectId, team || undefined)
+      if (!teamFilter.ok) return teamFilter.result
 
       const repoResult = await repository.getSheet(projectId, weekStart)
       if (!repoResult.ok) return repositoryFailure(repoResult)
@@ -148,19 +174,29 @@ export function createGetWeeklySheetTool(
       }
       if (!isScopedWeeklySnapshot(repoResult.data, projectId, weekStart)) return repositoryScopeViolation()
 
+      const { areas } = repoResult.data
+      const areaById = new Map(areas.map(area => [area.id, area]))
       const needle = query?.toLocaleLowerCase('ko-KR')
       const matched = repoResult.data.rows.filter(row => {
-        if (!matchesWeeklyScope(row.section, projectId, section, team)) return false
+        if (teamFilter.areaIds && !teamFilter.areaIds.has(row.areaId)) return false
+        if (!matchesSection(areaById.get(row.areaId), section || undefined)) return false
         if (!needle) return true
-        return [row.section, row.module, row.thisContent, row.thisIssue, row.nextContent, row.nextIssue]
+        return [rowLabel(row, areas), row.thisContent, row.thisIssue, row.nextContent, row.nextIssue]
           .some(value => value.toLocaleLowerCase('ko-KR').includes(needle))
       })
       const records: WeeklySheetToolRecord[] = matched.slice(0, limit).map(row => ({
-        ...row,
+        id: row.id,
+        reportId: row.reportId,
         projectId,
         weekStart,
+        areaId: row.areaId,
+        section: rowLabel(row, areas),
+        thisContent: row.thisContent,
+        thisIssue: row.thisIssue,
+        nextContent: row.nextContent,
+        nextIssue: row.nextIssue,
+        updatedAt: row.updatedAt,
       }))
-      const href = weeklyHref(projectId, weekStart)
       const reportSource: BotSource = {
         id: `weekly-report:${repoResult.data.report.id}`,
         domain: 'weekly',
@@ -168,20 +204,10 @@ export function createGetWeeklySheetTool(
         entityId: repoResult.data.report.id,
         projectId,
         title: repoResult.data.report.title || `${weekStart} 주간업무`,
-        href,
+        href: weeklyHref(projectId, weekStart),
         updatedAt: repoResult.data.report.updatedAt,
       }
-      const rowSources: BotSource[] = records.map(row => ({
-        id: `weekly-row:${row.id}`,
-        domain: 'weekly',
-        entityType: 'weekly_row',
-        entityId: row.id,
-        projectId,
-        title: [row.section, row.module].filter(Boolean).join(' · ') || '주간업무 행',
-        href,
-        updatedAt: row.updatedAt,
-        excerpt: shortExcerpt(row.thisContent, row.thisIssue, row.nextContent, row.nextIssue),
-      }))
+      const rowSources = matched.slice(0, limit).map(row => rowSource(row, projectId, weekStart, areas))
       const truncated = matched.length > records.length
       return {
         ok: true,
@@ -210,22 +236,18 @@ function monday(value: string): boolean {
   return new Date(`${value}T00:00:00Z`).getUTCDay() === 1
 }
 
-function aggregateRows(rows: WeeklyRepositoryRow[]): Map<string, AggregatedWeeklyRow> {
+/** 영역마다 하나로 묶는다(키 = 영역 id). 같은 영역 행이 여럿이면(유일 인덱스 앞의 옛 데이터) 저장소의 표시 순서대로 잇는다. */
+function aggregateRows(rows: readonly WeeklyRepositoryRow[]): Map<string, AggregatedWeeklyRow> {
   const out = new Map<string, AggregatedWeeklyRow>()
   const append = (left: string, right: string): string => {
     const value = right.trim()
     return !value ? left : left ? `${left}\n${value}` : value
   }
-  for (const row of [...rows].sort((a, b) => a.sortOrder - b.sortOrder)) {
-    const section = row.section.trim()
-    const moduleName = row.module.trim()
-    const key = `${section.toLocaleLowerCase('ko-KR')}\u0000${moduleName.toLocaleLowerCase('ko-KR')}`
-    const current = out.get(key)
+  for (const row of rows) {
+    const current = out.get(row.areaId)
     if (!current) {
-      out.set(key, {
-        section,
-        module: moduleName,
-        sortOrder: row.sortOrder,
+      out.set(row.areaId, {
+        areaId: row.areaId,
         thisContent: row.thisContent,
         thisIssue: row.thisIssue,
         nextContent: row.nextContent,
@@ -272,6 +294,13 @@ function comparisonChange(
     : 'changed'
 }
 
+/** 두 주차의 영역을 id 로 합친다(같은 프로젝트라 보통 같다 — 사이에 개명·추가가 있으면 뒤 주차 값이 이긴다) */
+function mergedAreas(...snapshots: Array<WeeklySheetSnapshot | null>): WeeklyArea[] {
+  const byId = new Map<string, WeeklyArea>()
+  for (const snapshot of snapshots) for (const area of snapshot?.areas ?? []) byId.set(area.id, area)
+  return [...byId.values()]
+}
+
 function comparisonReportSource(
   snapshot: WeeklySheetSnapshot,
   projectId: string,
@@ -290,6 +319,7 @@ function comparisonReportSource(
 
 export function createCompareWeeklySheetsTool(
   repository: WeeklyRepository,
+  settings: SettingsReader,
 ): ReadOnlyBotTool<WeeklySheetComparisonRecord> {
   return {
     name: 'compare_weekly_sheets',
@@ -312,8 +342,8 @@ export function createCompareWeeklySheetsTool(
       }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
-      const teamError = validateTeam(team || undefined, projectId)
-      if (teamError) return teamError
+      const teamFilter = await resolveTeamFilter(settings, projectId, team || undefined)
+      if (!teamFilter.ok) return teamFilter.result
 
       const [fromResult, toResult] = await Promise.all([
         repository.getSheet(projectId, fromWeekStart),
@@ -326,35 +356,39 @@ export function createCompareWeeklySheetsTool(
         || (toResult.data && !isScopedWeeklySnapshot(toResult.data, projectId, toWeekStart))
       ) return repositoryScopeViolation()
 
+      const areas = mergedAreas(fromResult.data, toResult.data)
+      const areaById = new Map(areas.map(area => [area.id, area]))
+      const rank = new Map(orderAreas(areas).map((area, index) => [area.id, index]))
+      const rankOf = (areaId: string): number => rank.get(areaId) ?? Number.MAX_SAFE_INTEGER
       const fromRows = aggregateRows(fromResult.data?.rows ?? [])
       const toRows = aggregateRows(toResult.data?.rows ?? [])
       const needle = query?.toLocaleLowerCase('ko-KR')
       const keys = [...new Set([...fromRows.keys(), ...toRows.keys()])]
-      const compared = keys.flatMap(key => {
-        const from = fromRows.get(key)
-        const to = toRows.get(key)
-        const representative = to ?? from
-        if (!representative) return []
-        if (!matchesWeeklyScope(representative.section, projectId, section, team)) return []
+      const compared = keys.flatMap(areaId => {
+        const from = fromRows.get(areaId)
+        const to = toRows.get(areaId)
+        if (!from && !to) return []
+        if (teamFilter.areaIds && !teamFilter.areaIds.has(areaId)) return []
+        if (!matchesSection(areaById.get(areaId), section || undefined)) return []
+        const label = rowLabel({ areaId }, areas)
         if (needle) {
           const haystack = [
-            representative.section, representative.module,
+            label,
             from?.thisContent, from?.thisIssue, from?.nextContent, from?.nextIssue,
             to?.thisContent, to?.thisIssue, to?.nextContent, to?.nextIssue,
           ].filter((value): value is string => typeof value === 'string')
           if (!haystack.some(value => value.toLocaleLowerCase('ko-KR').includes(needle))) return []
         }
-        return [{ key, from, to, representative, change: comparisonChange(from, to) }]
+        return [{ areaId, label, from, to, change: comparisonChange(from, to) }]
       }).sort((a, b) =>
-        a.representative.sortOrder - b.representative.sortOrder
-        || a.representative.section.localeCompare(b.representative.section, 'ko-KR')
-        || a.representative.module.localeCompare(b.representative.module, 'ko-KR'),
+        rankOf(a.areaId) - rankOf(b.areaId)
+        || a.label.localeCompare(b.label, 'ko-KR'),
       )
       const selected = compared.slice(0, limit)
       const records: WeeklySheetComparisonRecord[] = selected.map(value => ({
         projectId,
-        section: value.representative.section,
-        module: value.representative.module,
+        areaId: value.areaId,
+        section: value.label,
         fromWeekStart,
         toWeekStart,
         change: value.change,
@@ -366,28 +400,8 @@ export function createCompareWeeklySheetsTool(
         .filter((value): value is WeeklySheetSnapshot => value !== null)
         .map(snapshot => comparisonReportSource(snapshot, projectId))
       const rowSources: BotSource[] = selected.flatMap(value => [
-        ...(value.from?.sourceRows ?? []).map(row => ({
-          id: `weekly-row:${row.id}`,
-          domain: 'weekly' as const,
-          entityType: 'weekly_row' as const,
-          entityId: row.id,
-          projectId,
-          title: [row.section, row.module].filter(Boolean).join(' · ') || '주간업무 행',
-          href: weeklyHref(projectId, fromWeekStart),
-          updatedAt: row.updatedAt,
-          excerpt: shortExcerpt(row.thisContent, row.thisIssue, row.nextContent, row.nextIssue),
-        })),
-        ...(value.to?.sourceRows ?? []).map(row => ({
-          id: `weekly-row:${row.id}`,
-          domain: 'weekly' as const,
-          entityType: 'weekly_row' as const,
-          entityId: row.id,
-          projectId,
-          title: [row.section, row.module].filter(Boolean).join(' · ') || '주간업무 행',
-          href: weeklyHref(projectId, toWeekStart),
-          updatedAt: row.updatedAt,
-          excerpt: shortExcerpt(row.thisContent, row.thisIssue, row.nextContent, row.nextIssue),
-        })),
+        ...(value.from?.sourceRows ?? []).map(row => rowSource(row, projectId, fromWeekStart, areas)),
+        ...(value.to?.sourceRows ?? []).map(row => rowSource(row, projectId, toWeekStart, areas)),
       ])
       const truncated = compared.length > selected.length
       const count = (change: WeeklySheetComparisonRecord['change']) =>

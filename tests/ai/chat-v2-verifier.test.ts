@@ -190,24 +190,26 @@ describe('chat v2 source and answer verifier', () => {
     expect(verifySynthesizedAnswer('완료 예정일은 2026-08-02입니다. [S1]', pack).ok).toBe(false)
   })
 
-  it('binds weekly comparison records by section/module and caps deterministic citations', () => {
-    const weeklySource = (id: string, entityId: string, title: string) => ({
+  it('binds weekly comparison records by area id (qualifier anchor) and caps deterministic citations — 개명해도 같은 영역(W14)', () => {
+    const weeklySource = (id: string, areaId: string, title: string) => ({
       id, domain: 'weekly' as const, entityType: 'weekly_row' as const,
-      entityId, projectId: 'p1', title, href: '/p/p1/weekly', updatedAt: null,
+      entityId: id, projectId: 'p1', title, href: '/p/p1/weekly', updatedAt: null,
+      qualifier: { anchor: `area:${areaId}` },
     })
     const pack = buildEvidencePack([{
       callId: 'c1', tool: 'compare_weekly_sheets',
       result: {
         status: 'ok', facts: { totalCompared: 2 },
         records: [
-          { section: 'ERP', module: 'FI', change: 'changed' },
-          { section: 'MES', module: '품질', change: 'added' },
+          { areaId: 'area-exp', section: '실험', change: 'changed' },
+          { areaId: 'area-ops', section: '운영', change: 'added' },
         ],
         sources: [
-          weeklySource('a-old', 'a-old', 'ERP · FI'),
-          weeklySource('a-new', 'a-new', 'ERP · FI'),
-          weeklySource('b-old', 'b-old', 'MES · 품질'),
-          weeklySource('b-new', 'b-new', 'MES · 품질'),
+          // 지난주 행의 제목은 개명 전 이름이다 — 제목이 아니라 영역 id 로 묶인다
+          weeklySource('a-old', 'area-exp', '실험 준비'),
+          weeklySource('a-new', 'area-exp', '실험'),
+          weeklySource('b-old', 'area-ops', '운영'),
+          weeklySource('b-new', 'area-ops', '운영'),
         ],
         asOf: '2026-07-19T00:00:00.000Z', truncated: false, warnings: [],
       },
@@ -221,6 +223,22 @@ describe('chat v2 source and answer verifier', () => {
     const citedLine = answer.split('\n').find(line => line.includes('[S1]')) ?? ''
     expect(citedLine).toContain('[S1][S2][S3]')
     expect(citedLine).not.toContain('[S4]')
+  })
+
+  it('a weekly comparison record whose area has no anchored source falls back to the call-wide sources', () => {
+    const pack = buildEvidencePack([{
+      callId: 'c1', tool: 'compare_weekly_sheets',
+      result: {
+        status: 'ok', facts: { totalCompared: 1 },
+        records: [{ areaId: 'area-gone', section: '알 수 없는 영역', change: 'removed' }],
+        sources: [{
+          id: 'x', domain: 'weekly' as const, entityType: 'weekly_report' as const, entityId: 'r1', projectId: 'p1',
+          title: '주간업무', href: '/p/p1/weekly', updatedAt: null,
+        }],
+        asOf: '2026-07-19T00:00:00.000Z', truncated: false, warnings: [],
+      },
+    }])
+    expect(pack.records.map(record => record.sourceIds)).toEqual([['S1']])
   })
 
   it('grounds an attendance person count with the memberCount fact', () => {
