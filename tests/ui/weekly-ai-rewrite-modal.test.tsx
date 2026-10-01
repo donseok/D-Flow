@@ -10,7 +10,7 @@ import {
 
 const items: WeeklyAiRewriteItem[] = [
   {
-    rowId: 'r1', cellKey: 'this_content', section: '영업', label: '금주실적 내용',
+    rowId: 'r1', cellKey: 'this_content', section: '홍보', label: '금주실적 내용',
     original: '매출 자료 정리함', content: '매출 자료를 정리했습니다.',
   },
   {
@@ -54,7 +54,7 @@ describe('WeeklyAiRewriteModal', () => {
     expect(document.body.textContent).toContain('매출 자료를 정리했습니다.')
     expect(document.body.textContent).toContain('변경 없음')
 
-    const first = document.querySelector<HTMLInputElement>('[aria-label="영업 금주실적 내용 제안 선택"]')!
+    const first = document.querySelector<HTMLInputElement>('[aria-label="홍보 금주실적 내용 제안 선택"]')!
     const second = document.querySelector<HTMLInputElement>('[aria-label="품질 금주 이슈·이벤트 제안 선택"]')!
     expect(first.checked).toBe(true)
     expect(second.checked).toBe(false)

@@ -1,5 +1,5 @@
 // 시트 PPT 의 페이지 집합과 점검 묶음이 같은 키(영역 id)를 쓴다(D22), 템플릿 예시 문구가 출력에 남지 않는다(E23).
-// E23 정적 분석: 예시 문구 '…데이터 표준화…' 는 weekly-template.pptx slide2 표 칸 (1,2) 에만 있고 렌더러가 그 칸을 늘 교체한다
+// E23 정적 분석: 예시 문구('예시 작업 4 — …')는 weekly-template.pptx slide2 표 칸 (1,2) 에만 있고 렌더러가 그 칸을 늘 교체한다
 // (templateFill.ts renderTemplate 의 buildPage — 시트 갈래·기본 갈래·연속 슬라이드 모두). 아래 두 케이스가 실측으로 판정한다.
 import { describe, expect, it } from 'vitest'
 import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
@@ -40,7 +40,7 @@ describe('시트 PPT 페이지 = 보이는 행(영역 순) — 점검과 같은 
 })
 
 describe('E23 — 템플릿 예시 문구가 출력의 텍스트 파트에 남지 않는다', () => {
-  // 뺄 등록 이름 없음 — 합성 영역 이름(실험·데이터·운영·구 영역)은 센티널과 같지 않다. 예시 문구 '…데이터 표준화…' 는 '표준화' 로 적중한다.
+  // 뺄 등록 이름 없음 — 합성 영역 이름(실험·데이터·운영·구 영역)은 센티널과 같지 않다. 예시 문구는 그 안의 옛 구분명 하나로 적중한다.
   const SP4 = sentinelsFor('SP4', [])
   const hitsIn = async (buf: Buffer) =>
     (await zipTextParts(buf)).flatMap(p => findSentinels(p.text, SP4).map(hit => `${p.name}: ${hit}`))
