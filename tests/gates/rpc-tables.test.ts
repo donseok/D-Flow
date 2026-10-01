@@ -157,10 +157,10 @@ describe('tablesInNode — .rpc 를 표로 바꾼다(합성 소스·합성 대�
 
   it('기본 대응은 RPC_TABLES — 같은 파일 헬퍼를 따라가는 tablesIn 도 같은 대응을 쓴다', () => {
     const sf = parse('s.ts', [
-      "const save = async (sb) => sb.rpc('replace_wbs', {})",
+      "const save = async (sb) => sb.rpc('import_wbs_cmd', {})",
       'export async function f(sb) { await save(sb) }',
     ].join('\n'))
-    expect(tablesIn(sf, 'f')).toEqual([...RPC_TABLES.replace_wbs].sort())
+    expect(tablesIn(sf, 'f')).toEqual([...RPC_TABLES.import_wbs_cmd].sort())
   })
 })
 

@@ -1,20 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { LEGACY_EXCEL_PROFILE_V1 } from '@/lib/excel/profile'
+// 가져오기 실행 라우트의 입력·가드·검증·저장 양식 대조·양식 저장(W5)·후처리 배선(SP4 §4.4 #1~#4·#10·#11).
+// 명령 경로(영수증 선확인·팀 대조와 등록·전환·백업·RPC·결과 종류·실패 순서)는 tests/api/import-idempotent.test.ts,
+// replace 백업의 끝까지 읽기는 tests/data/paging-consumers.test.ts 가 본다.
+// 라우트 mock 관례(tests/api/import-inspect.test.ts 참고) — 가드·파서·팀 원천·DB 클라이언트를 각각 mock 해 라우트의 배선(순서·상태코드·
+// 에러 위장 금지)만 검증한다. validateProfile·compareProfiles·validateProjectConfig 는 실물이다.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// 라우트 mock 관례(tests/api/import-inspect.test.ts, tests/actions/authz-gate-wbs.test.ts 참고) —
-// 가드·파서·팀 마스터·DB 클라이언트를 각각 mock 해 라우트의 배선(순서·상태코드·에러 위장 금지)만 검증한다.
-// validateProfile 은 실물(mock 아님) — 프로파일 검증 배선까지 통합적으로 확인(Task5 관례 계승).
 const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(),
-  requireWorkspaceAdmin: vi.fn(),
   parseWithProfile: vi.fn(),
   linkByDepth: vi.fn(),
   resolveLegacyLevelLabels: vi.fn(),
   splitLeafOwners: vi.fn(),
-  projectTeamRowsSync: vi.fn(),
-  teamsForProjectSync: vi.fn(),
-  addTeam: vi.fn(),
-  addProjectTeam: vi.fn(),
   createServerClient: vi.fn(),
   createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(),
@@ -22,21 +18,15 @@ const mocks = vi.hoisted(() => ({
   detectWorkbook: vi.fn(),
   getProjectConfig: vi.fn(),
   writeProjectSettingsInternal: vi.fn(),
+  ensureProjectTeams: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => ({
-  requireProjectAdmin: mocks.requireProjectAdmin, requireWorkspaceAdmin: mocks.requireWorkspaceAdmin,
-}))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin }))
 vi.mock('@/lib/excel/parseWithProfile', () => ({
   parseWithProfile: mocks.parseWithProfile,
   linkByDepth: mocks.linkByDepth,
   resolveLegacyLevelLabels: mocks.resolveLegacyLevelLabels,
 }))
 vi.mock('@/lib/excel/validate', () => ({ splitLeafOwners: mocks.splitLeafOwners }))
-vi.mock('@/lib/teams/master', () => ({
-  projectTeamRowsSync: mocks.projectTeamRowsSync, teamsForProjectSync: mocks.teamsForProjectSync,
-}))
-vi.mock('@/app/actions/teams', () => ({ addTeam: mocks.addTeam }))
-vi.mock('@/app/actions/projectTeams', () => ({ addProjectTeam: mocks.addProjectTeam }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordProgressSnapshot }))
@@ -44,31 +34,55 @@ vi.mock('@/lib/ai/ingest', () => ({ ingestProject: mocks.ingestProject }))
 vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: mocks.detectWorkbook }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: mocks.writeProjectSettingsInternal }))
+vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: mocks.ensureProjectTeams }))
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 
 import { POST } from '@/app/api/import/execute/route'
+import { projectOwnTeams, projectTeams } from '@/lib/teams/source'
+import type { Team } from '@/lib/domain/teams'
+import type { ExcelProfile } from '@/lib/excel/profile'
+import type { ConfigTeam } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
-import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
+import { makeActor, WS } from '../fixtures/actor'
 import { ERR_MISSING } from '@/lib/authz/errors'
 
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const COMMAND_ID = '44444444-4444-4444-8444-444444444444'
 // 라우트 진입 가드(requireProjectAdmin)를 통과한 액터 — 이 프로젝트는 워크스페이스 WS 소속이다.
 const ACTOR = makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) })
-const SUPER_ACTOR = makeSuperuser({ userId: 'su1', projectWorkspace: new Map([[PROJECT_ID, WS]]) })
 const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-const KNOWN_TEAMS = [{ code: 'PMO' }, { code: 'ERP' }, { code: 'MES' }, { code: '가공' }, { code: 'MDM' }]
+/** 합성 양식(3행 머리) — 계층 3열 + 팀 열 둘(RES·OPS). 옛 5팀 양식 상수는 쓰지 않는다(A2 가 fixture 로 옮긴다) */
+const PROFILE: ExcelProfile = {
+  version: 1, sheetName: 'WBS', holidaySheetName: 'Holiday', headerRow: 2,
+  hierarchy: { kind: 'columns', columns: [1, 2, 3] },
+  logical: { extraAxis: 0, code: null, name: null, deliverable: 6, start: 7, end: 8, weight: 9, actualPct: 11 },
+  teamColumns: [[4, 'RES'], [5, 'OPS']],
+  ownerMarks: { '●': 'primary', '△': 'support' },
+}
+const team = (code: string, sortOrder: number): Team => ({
+  id: `own-${code.toLowerCase()}`, code, name: code, color: '#6b7280', sortOrder,
+  active: true, progressVisible: true, projectId: PROJECT_ID, workspaceId: WS,
+})
+/** 이 프로젝트의 전용 팀 — 양식의 팀 열과 같은 code(대조·교차 검증이 통과하는 기준) */
+const TEAMS = [team('RES', 0), team('OPS', 1)]
+const configTeam = ({ id, code, name, color, sortOrder, active, progressVisible, projectId }: Team): ConfigTeam =>
+  ({ id, code, name, color, sortOrder, active, progressVisible, projectId })
+const cfgWith = (excelProfile?: unknown, teams: ConfigTeam[] = TEAMS.map(configTeam)) => makeProjectConfig(
+  { 'core.level_labels': ['단계'], ...(excelProfile === undefined ? {} : { 'wbs.excel_profile': excelProfile }) },
+  { projectId: PROJECT_ID, workspaceId: WS, teams },
+)
 
-const ROW_PMO = {
+const ROW = {
   depth: 0, code: null, name: 'x', extraAxis: null, deliverable: null,
   plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
-  owners: [{ team: 'PMO', kind: 'primary' as const }], excelRow: 4,
+  owners: [{ team: 'RES', kind: 'primary' as const }], excelRow: 4,
 }
-const ROW_UNKNOWN_TEAM = { ...ROW_PMO, owners: [{ team: 'NEWTEAM', kind: 'primary' as const }] }
 const LINKED_ITEM = {
   tempId: 't0', parentTempId: null, level: 'activity' as const, code: '1', sortOrder: 0,
   name: 'x', biz: null, deliverable: null, plannedStart: null, plannedEnd: null,
-  weight: null, actualPct: null, owners: [{ team: 'PMO', kind: 'primary' as const }], isOwnerSplit: false,
+  weight: null, actualPct: null, owners: [{ team: 'RES', kind: 'primary' as const }], isOwnerSplit: false,
 }
 
 function req(fields: Record<string, string | Blob>): Parameters<typeof POST>[0] {
@@ -81,79 +95,64 @@ function baseFields(overrides: Record<string, string | Blob> = {}) {
   return {
     file: FILE,
     projectId: PROJECT_ID,
-    profile: JSON.stringify(LEGACY_EXCEL_PROFILE_V1),
+    profile: JSON.stringify(PROFILE),
     mode: 'append',
     saveProfile: 'false',
     registerTeams: 'false',
+    commandId: COMMAND_ID,
     ...overrides,
   }
 }
 
-/** wbs_items 백업 select 체인(select().eq().[gt()].order().limit()) — fetchAllByKeyset 의 쪽 읽기와 count(총합)를 흉내 낸다.
- *  count 를 주지 않으면 data 의 길이(한 쪽에 다 담긴다), 오류 응답이면 null. */
-function backupBuilder(response: { data: unknown; error: unknown; count?: number | null }) {
-  const builder: Record<string, unknown> = {}
-  builder.select = vi.fn(() => builder)
-  builder.eq = vi.fn(() => builder)
-  builder.order = vi.fn(() => builder)
-  builder.range = vi.fn(() => builder)
-  builder.limit = vi.fn(() => builder)
-  builder.gt = vi.fn(() => builder)
-  const count = response.count !== undefined ? response.count : Array.isArray(response.data) ? response.data.length : null
-  builder.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
-    Promise.resolve({ ...response, count }).then(resolve, reject)
-  return builder
-}
-
-function makeSbClient(opts: {
-  backup?: { data: unknown; error: unknown }
-  rpc?: { data: unknown; error: unknown }
-} = {}) {
-  const builder = backupBuilder(opts.backup ?? { data: [], error: null })
+/** 세션 클라이언트 — 영수증 선확인만 받는다(이 파일의 경로는 영수증 없음·append. 백업은 import-idempotent·paging-consumers 가 본다) */
+function makeSbClient() {
   const from = vi.fn((table: string) => {
-    if (table === 'wbs_items') return builder
-    throw new Error(`unexpected table: ${table}`)
+    if (table !== 'command_receipts') throw new Error(`unexpected table: ${table}`)
+    const q: Record<string, unknown> = {}
+    q.select = () => q
+    q.eq = () => q
+    q.maybeSingle = async () => ({ data: null, error: null })
+    return q
   })
-  const rpc = vi.fn(async () => opts.rpc ?? { data: 5, error: null })
-  return { from, rpc }
+  return { from }
 }
 
-/** 라우트는 admin 으로 표를 직접 만지지 않는다 — 프로파일 저장은 writeProjectSettingsInternal(mock)에 넘길 뿐이다. */
+/** service_role 클라이언트 — import_wbs_cmd 만 받는다. 표는 직접 만지지 않는다(양식 저장은 writeProjectSettingsInternal 목에 넘길 뿐) */
 function makeAdminClient() {
+  const rpc = vi.fn(async () => ({ data: { status: 'applied', mode: 'append', count: 5, command_id: COMMAND_ID }, error: null }))
   const from = vi.fn((table: string) => { throw new Error(`unexpected table: ${table}`) })
-  return { from }
+  return { rpc, from }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
-  mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
-  mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_PMO], holidays: [] })
+  mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [] })
   mocks.resolveLegacyLevelLabels.mockReturnValue(true)
   mocks.linkByDepth.mockReturnValue({ ok: true, items: [LINKED_ITEM] })
   mocks.splitLeafOwners.mockImplementation((items: unknown) => items)
-  // 기본: projectTeamRowsSync 빈 배열 = 전역 상속 프로젝트(기존 단일 팀 구성 동치) — 기존 동작을 보존한다.
-  mocks.projectTeamRowsSync.mockReturnValue([])
-  mocks.teamsForProjectSync.mockReturnValue(KNOWN_TEAMS)
-  mocks.addTeam.mockResolvedValue({ ok: true })
-  mocks.addProjectTeam.mockResolvedValue({ ok: true })
   mocks.recordProgressSnapshot.mockResolvedValue(undefined)
   mocks.ingestProject.mockResolvedValue({ count: 3 })
   mocks.createServerClient.mockImplementation(async () => makeSbClient())
   mocks.createAdminClient.mockImplementation(() => makeAdminClient())
+  mocks.ensureProjectTeams.mockResolvedValue({ ok: true, created: [], existing: [] })
+  vi.mocked(projectTeams).mockResolvedValue(TEAMS)
+  vi.mocked(projectOwnTeams).mockResolvedValue(TEAMS)
   // 기본: 저장 양식 없음 — 구조 대조(Task 1b)를 건너뛰는 종전 경로.
-  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계'] }))
-  mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: LEGACY_EXCEL_PROFILE_V1, warnings: [] } })
+  mocks.getProjectConfig.mockResolvedValue(cfgWith())
+  mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: PROFILE, warnings: [] } })
 })
+afterEach(() => { vi.restoreAllMocks() })
 
 describe('POST /api/import/execute — 입력 검증(가드 이전)', () => {
   it.each([
-    ['file 누락', { projectId: PROJECT_ID, profile: '{}', mode: 'append' }],
-    ['projectId 누락', { file: FILE, profile: '{}', mode: 'append' }],
-    ['profile 누락', { file: FILE, projectId: PROJECT_ID, mode: 'append' }],
-  ] as const)('%s → 400, 가드 호출 없음', async (_name, fields) => {
+    ['file 누락', { projectId: PROJECT_ID, profile: '{}', mode: 'append', commandId: COMMAND_ID }],
+    ['projectId 누락', { file: FILE, profile: '{}', mode: 'append', commandId: COMMAND_ID }],
+    ['profile 누락', { file: FILE, projectId: PROJECT_ID, mode: 'append', commandId: COMMAND_ID }],
+  ] as const)('%s → 400 INVALID_INPUT, 가드 호출 없음', async (_name, fields) => {
     const res = await POST(req(fields as Record<string, string | Blob>))
     expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ ok: false, code: 'INVALID_INPUT' })
     expect(mocks.requireProjectAdmin).not.toHaveBeenCalled()
   })
 
@@ -168,34 +167,43 @@ describe('POST /api/import/execute — 입력 검증(가드 이전)', () => {
     expect(res.status).toBe(400)
     expect(mocks.requireProjectAdmin).not.toHaveBeenCalled()
   })
+
+  it.each([['없음', ''], ['uuid 아님', 'cmd-1']])('명령 id %s → 400 COMMAND_ID_REQUIRED(고정 문구), 가드 호출 없음 — 재전송을 한 벌로 묶을 수 없다', async (_n, commandId) => {
+    const res = await POST(req(baseFields({ commandId })))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ ok: false, code: 'COMMAND_ID_REQUIRED', error: expect.stringContaining('commandId') })
+    expect(mocks.requireProjectAdmin).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/import/execute — 가드', () => {
-  it('미인가(관리자 아님) → 403, 파서 미호출', async () => {
+  it('미인가(관리자 아님) → 403 ERR_DENIED, 파서 미호출', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: '권한 없음' })
+    expect(await res.json()).toEqual({ ok: false, code: 'ERR_DENIED', error: '권한 없음' })
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
 
-  it('비로그인 → 401', async () => {
+  it('비로그인 → 401 ERR_ANON', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '로그인 필요' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({ ok: false, code: 'ERR_ANON' })
   })
 
-  it('권한 조회 실패 → 500(거부가 아니라 서버 사정)', async () => {
+  it('권한 조회 실패 → 500 ERR_LOOKUP(거부가 아니라 서버 사정)', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ ok: false, code: 'ERR_LOOKUP', error: '권한을 확인할 수 없어 중단했습니다.' })
   })
 
   it('타 워크스페이스·미존재 프로젝트(ERR_MISSING) → 404, 파서 미호출 — 500 이 아니다(존재 은닉, denyStatus 와 같은 매핑)', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: false, error: ERR_MISSING })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(404)
-    expect(await res.json()).toEqual({ error: ERR_MISSING })
+    expect(await res.json()).toEqual({ ok: false, code: 'ERR_MISSING', error: ERR_MISSING })
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
 })
@@ -205,6 +213,7 @@ describe('POST /api/import/execute — 검증 오류 400', () => {
     const res = await POST(req(baseFields({ profile: JSON.stringify({ version: 2 }) })))
     expect(res.status).toBe(400)
     const body = await res.json()
+    expect(body.code).toBe('INVALID_INPUT')
     expect(body.error).toContain('version')
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
@@ -215,200 +224,31 @@ describe('POST /api/import/execute — 검증 오류 400', () => {
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
 
-  it('parseWithProfile 실패 → 그 에러 문자열 그대로 400, 팀 검증 이후 단계 미호출', async () => {
+  it('parseWithProfile 실패 → 그 에러 문자열 그대로 400, 팀 원천·DB 미호출', async () => {
     mocks.parseWithProfile.mockReturnValue({ ok: false, error: '시트를 찾을 수 없습니다: WBS' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: '시트를 찾을 수 없습니다: WBS' })
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ ok: false, code: 'INVALID_INPUT', error: '시트를 찾을 수 없습니다: WBS' })
+    expect(projectTeams).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 
-  it('linkByDepth 구조 오류 → errors 배열 그대로 400', async () => {
+  it('linkByDepth 구조 오류 → errors 배열 그대로 400 LINK_ERRORS', async () => {
     mocks.linkByDepth.mockReturnValue({ ok: false, errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
+    expect(await res.json()).toMatchObject({ ok: false, code: 'LINK_ERRORS', errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
   })
 
-  it('미등록 팀 포함 + linkByDepth 구조 오류 → 팀 부트스트랩 전에 400, 팀 대조·등록 전부 미호출(리뷰 Minor — 검증 실패 요청은 팀 마스터에 부수효과를 남기지 않는다)', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
+  it('미등록 팀 포함 + linkByDepth 구조 오류 → 팀 단계 전에 400 — 팀 대조·등록·영수증 확인 전부 미호출(검증 실패 요청은 부수효과를 남기지 않는다)', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [{ ...ROW, owners: [{ team: 'NEWTEAM', kind: 'primary' as const }] }], holidays: [] })
     mocks.linkByDepth.mockReturnValue({ ok: false, errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
-    expect(mocks.projectTeamRowsSync).not.toHaveBeenCalled()
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
-    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
-    expect(mocks.addTeam).not.toHaveBeenCalled()
-    expect(mocks.addProjectTeam).not.toHaveBeenCalled()
-  })
-})
-
-describe('POST /api/import/execute — 팀 부트스트랩(§10.3, 전역 상속 프로젝트 — projectTeamRowsSync 빈 배열)', () => {
-  it('미등록 팀 + registerTeams=false → 409 needsTeams scope:global, DB 무접근', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    const res = await POST(req(baseFields()))
-    expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ needsTeams: ['NEWTEAM'], scope: 'global' })
-    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(projectTeams).not.toHaveBeenCalled()
+    expect(projectOwnTeams).not.toHaveBeenCalled()
+    expect(mocks.ensureProjectTeams).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
-  })
-
-  it('미등록 팀 + registerTeams=true + 워크스페이스 관리자 아님 → 403, 대상 프로젝트의 워크스페이스로 판정, addTeam·addProjectTeam 미호출', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: '팀 등록은 워크스페이스 관리자 권한' })
-    expect(mocks.requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
-    expect(mocks.addTeam).not.toHaveBeenCalled()
-    expect(mocks.addProjectTeam).not.toHaveBeenCalled()
-  })
-
-  it('미등록 팀 + registerTeams=true + 워크스페이스 가드가 존재 은닉(404) → 404, addTeam 미호출', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '대상을 찾을 수 없습니다.' })
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(res.status).toBe(404)
-    expect(mocks.addTeam).not.toHaveBeenCalled()
-  })
-
-  it('미등록 팀 + registerTeams=true + 워크스페이스 관리자 → addTeam(그 워크스페이스) 호출 후 임포트 성공, addProjectTeam 미호출', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(mocks.addTeam).toHaveBeenCalledWith(WS, 'NEWTEAM')
-    expect(mocks.addProjectTeam).not.toHaveBeenCalled()
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.ok).toBe(true)
-    expect(body.count).toBe(5)
-  })
-
-  it('addTeam 실패 → 500, 그 사유를 위장하지 않고 그대로 전달, RPC 미호출', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: SUPER_ACTOR })
-    mocks.addTeam.mockResolvedValue({ ok: false, error: '팀 생성 실패: db down' })
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(res.status).toBe(500)
-    expect(mocks.createServerClient).not.toHaveBeenCalled()
-  })
-})
-
-describe('POST /api/import/execute — 팀 부트스트랩(0071, 프로젝트 스코프 — projectTeamRowsSync 비어있지 않음)', () => {
-  const PROJECT_TEAM_ROWS = [{ code: 'PMO', projectId: PROJECT_ID }]
-
-  it('팀 정의 프로젝트 + 미등록 팀 + registerTeams=false → 409 needsTeams scope:project, 워크스페이스 가드 미호출', async () => {
-    mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    const res = await POST(req(baseFields()))
-    expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ needsTeams: ['NEWTEAM'], scope: 'project' })
-    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
-    expect(mocks.createServerClient).not.toHaveBeenCalled()
-  })
-
-  it('팀 정의 프로젝트 + registerTeams=true(프로젝트 관리자로 충분) → addProjectTeam 경유, 전역 addTeam·requireWorkspaceAdmin 미호출', async () => {
-    mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    // requireWorkspaceAdmin 기본 mock 은 ok:false 지만(beforeEach), 프로젝트 스코프 분기는 이를 아예 호출하지 않는다 —
-    // 상단 requireProjectAdmin(라우트 진입 가드)만으로 충분하다는 것이 이 테스트의 핵심 단언.
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(mocks.addProjectTeam).toHaveBeenCalledWith(PROJECT_ID, 'NEWTEAM')
-    expect(mocks.addTeam).not.toHaveBeenCalled()
-    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.ok).toBe(true)
-  })
-
-  it('addProjectTeam 실패 → 500, 사유를 위장하지 않고 그대로 전달, RPC 미호출', async () => {
-    mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    mocks.addProjectTeam.mockResolvedValue({ ok: false, error: '팀 생성 실패: db down' })
-    const res = await POST(req(baseFields({ registerTeams: 'true' })))
-    expect(res.status).toBe(500)
-    const body = await res.json()
-    expect(body.error).toContain('db down')
-    expect(mocks.createServerClient).not.toHaveBeenCalled()
-  })
-
-  it('teamsForProjectSync 가 이미(비활성 포함) 등록된 것으로 보고하면 대조 통과 — 등록 액션 자체가 호출되지 않는다', async () => {
-    mocks.projectTeamRowsSync.mockReturnValue(PROJECT_TEAM_ROWS)
-    mocks.teamsForProjectSync.mockReturnValue([...KNOWN_TEAMS, { code: 'NEWTEAM' }])
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW_UNKNOWN_TEAM], holidays: [] })
-    const res = await POST(req(baseFields()))
-    expect(res.status).toBe(200)
-    expect(mocks.addProjectTeam).not.toHaveBeenCalled()
-    expect(mocks.addTeam).not.toHaveBeenCalled()
-  })
-})
-
-describe('POST /api/import/execute — append', () => {
-  it('성공 — import_wbs RPC 호출, backup 없음, 팀 백업 select 없음', async () => {
-    const sb = makeSbClient({ rpc: { data: 7, error: null } })
-    mocks.createServerClient.mockResolvedValue(sb)
-    const res = await POST(req(baseFields({ mode: 'append' })))
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body).toEqual({ ok: true, count: 7, mode: 'append', reindexed: 3, profileSaved: false })
-    expect(sb.rpc).toHaveBeenCalledWith('import_wbs', {
-      p_project_id: PROJECT_ID, p_items: [LINKED_ITEM], p_holidays: [],
-    })
-    expect(sb.from).not.toHaveBeenCalled() // append 는 백업을 만들지 않는다
-  })
-
-  it('import_wbs RPC 오류 → 500', async () => {
-    const sb = makeSbClient({ rpc: { data: null, error: { message: 'insert failed' } } })
-    mocks.createServerClient.mockResolvedValue(sb)
-    const res = await POST(req(baseFields({ mode: 'append' })))
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: 'insert failed' })
-  })
-})
-
-describe('POST /api/import/execute — replace', () => {
-  it('백업 select 실패 → 500 고정 문구(원문 없음), RPC 미호출(중단)', async () => {
-    const sb = makeSbClient({ backup: { data: null, error: { message: 'read failed' } } })
-    mocks.createServerClient.mockResolvedValue(sb)
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await POST(req(baseFields({ mode: 'replace' })))
-    expect(res.status).toBe(500)
-    const body = await res.json()
-    expect(body).toEqual({ error: '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.' })
-    expect(JSON.stringify(body)).not.toContain('read failed')
-    expect(sb.rpc).not.toHaveBeenCalled()
-  })
-
-  it('성공 — 백업 선행 후 replace_wbs 호출, 응답에 backup+경고 포함', async () => {
-    const backupRows = [{ id: 'w1', project_id: PROJECT_ID, name: '기존 항목' }]
-    const sb = makeSbClient({ backup: { data: backupRows, error: null }, rpc: { data: 9, error: null } })
-    mocks.createServerClient.mockResolvedValue(sb)
-    const res = await POST(req(baseFields({ mode: 'replace' })))
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.ok).toBe(true)
-    expect(body.count).toBe(9)
-    expect(body.mode).toBe('replace')
-    expect(body.backup.rows).toEqual(backupRows)
-    expect(typeof body.backup.generatedAt).toBe('string')
-    expect(body.warnings).toEqual(expect.arrayContaining([
-      expect.stringContaining('휴일은 삭제되지 않고 갱신만 됩니다'),
-    ]))
-    expect(sb.rpc).toHaveBeenCalledWith('replace_wbs', {
-      p_project_id: PROJECT_ID, p_items: [LINKED_ITEM], p_holidays: [],
-    })
-  })
-
-  it('replace_wbs RPC 오류 → 500(백업은 이미 select 됨)', async () => {
-    const sb = makeSbClient({
-      backup: { data: [], error: null },
-      rpc: { data: null, error: { message: 'replace failed' } },
-    })
-    mocks.createServerClient.mockResolvedValue(sb)
-    const res = await POST(req(baseFields({ mode: 'replace' })))
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: 'replace failed' })
   })
 })
 
@@ -421,7 +261,7 @@ describe('POST /api/import/execute — saveProfile(W5)', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.profileSaved).toBe(true); expect(body.profileSave).toBeUndefined()
-    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledWith(admin, PROJECT_ID, { set: { 'wbs.excel_profile': LEGACY_EXCEL_PROFILE_V1 } }, ACTOR.userId)
+    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledWith(admin, PROJECT_ID, { set: { 'wbs.excel_profile': PROFILE } }, ACTOR.userId)
     // 라우트가 만든 admin(service_role) 클라이언트 그 객체를 넘긴다(깊은 비교가 아니라 동일성) — 감사표 분류 불변
     expect(mocks.writeProjectSettingsInternal.mock.calls[0][0]).toBe(admin)
   })
@@ -435,7 +275,6 @@ describe('POST /api/import/execute — saveProfile(W5)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     expect(spy).toHaveBeenCalledWith('[import/execute] 프로파일 저장 실패:', 'CONFIG_UNAVAILABLE', '설정을 불러오지 못해 중단했습니다.')   // 원인은 로그로
-    spy.mockRestore()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.ok).toBe(true); expect(body.profileSaved).toBe(false)
@@ -443,6 +282,7 @@ describe('POST /api/import/execute — saveProfile(W5)', () => {
   })
   it('저장 실패 사유의 DB 원문은 응답에 싣지 않는다 — 코드의 고정 문구만(원문은 로그)', async () => {
     mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다. (relation "x" boom)' })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     const body = await res.json()
     expect(body.profileSave).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
@@ -450,11 +290,25 @@ describe('POST /api/import/execute — saveProfile(W5)', () => {
   })
   it('저장이 throw(표에 없는 DB 오류)해도 가져오기는 200 — CONFIG_UNAVAILABLE 경고로 싣는다', async () => {
     mocks.writeProjectSettingsInternal.mockRejectedValue(new Error('[settings/write] 알 수 없는 DB 오류: boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields({ saveProfile: 'true' })))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.profileSave).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '설정을 불러오지 못해 중단했습니다.' })
     expect(JSON.stringify(body)).not.toContain('boom')
+  })
+  it('양식의 팀 열이 활성 설정 팀에 없으면(비활성 팀의 열) 저장하지 않고 CONFIG_INVALID 경고 — 가져오기는 성공(교차 검증, 스펙 §4.3)', async () => {
+    const opsOff = { ...TEAMS[1], active: false }
+    mocks.getProjectConfig.mockResolvedValue(cfgWith(undefined, [configTeam(TEAMS[0]), configTeam(opsOff)]))
+    vi.mocked(projectTeams).mockResolvedValue([TEAMS[0], opsOff])
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await POST(req(baseFields({ saveProfile: 'true' })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      ok: true, profileSaved: false, profileSave: { ok: false, code: 'CONFIG_INVALID', error: '설정 값이 올바르지 않습니다.' },
+    })
+    expect(mocks.writeProjectSettingsInternal).not.toHaveBeenCalled()
+    expect(err).toHaveBeenCalledWith('[import/execute] 양식 저장 교차 검증 실패:', [expect.objectContaining({ key: 'wbs.excel_profile' })])
   })
 })
 
@@ -466,6 +320,7 @@ describe('POST /api/import/execute — 후처리(스냅샷·색인)', () => {
 
   it('ingestProject 실패해도 응답은 200 유지, reindexed=0', async () => {
     mocks.ingestProject.mockRejectedValue(new Error('embed down'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -476,45 +331,44 @@ describe('POST /api/import/execute — 후처리(스냅샷·색인)', () => {
 
 /* ── Task 1b — 저장 양식으로 읽는데 파일 구조가 다르면 서버가 최종 관문으로 거부한다(fail-closed) ── */
 describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', () => {
-  // 저장 양식 = LEGACY, 업로드 파일의 감지 결과 = 시작·종료 열이 한 칸씩 밀린 모양.
-  const SHIFTED = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, start: 13, end: 14 } }
-  const savedIs = (excelProfile: unknown) => mocks.getProjectConfig.mockResolvedValue(
-    makeProjectConfig({ 'core.level_labels': ['단계'], ...(excelProfile === undefined ? {} : { 'wbs.excel_profile': excelProfile }) }))
+  // 저장 양식 = PROFILE, 업로드 파일의 감지 결과 = 시작·종료 열이 밀린 모양.
+  const SHIFTED = { ...PROFILE, logical: { ...PROFILE.logical, start: 13, end: 14 } }
+  const savedIs = (excelProfile: unknown) => mocks.getProjectConfig.mockResolvedValue(cfgWith(excelProfile))
   const detectedIs = (profile: unknown) => mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile, warnings: [] } })
 
-  it('저장 양식(내용이 같다)으로 실행 + 확인 없음 → 409 PROFILE_MISMATCH, 파싱·팀·RPC 미호출', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+  it('저장 양식(내용이 같다)으로 실행 + 확인 없음 → 409 PROFILE_MISMATCH, 파싱·팀·DB 미호출', async () => {
+    savedIs(PROFILE)
     detectedIs(SHIFTED)
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(409)
     const body = await res.json()
-    expect(body.code).toBe('PROFILE_MISMATCH')
+    expect(body).toMatchObject({ ok: false, code: 'PROFILE_MISMATCH' })
     expect(body.profileMismatch).toEqual({ fields: ['start', 'end'], extraTeams: [], missingTeams: [] })
     expect(body.error).toMatch(/저장된 엑셀 양식/)
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(projectTeams).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 
   it('useSavedProfile=true 를 보내면 내용이 조금 달라도 저장 양식 사용으로 본다 — 확인 없으면 409', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    savedIs(PROFILE)
     detectedIs(SHIFTED)
-    const edited = { ...LEGACY_EXCEL_PROFILE_V1, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, weight: null } }
+    const edited = { ...PROFILE, logical: { ...PROFILE.logical, weight: null } }
     const res = await POST(req(baseFields({ profile: JSON.stringify(edited), useSavedProfile: 'true' })))
     expect(res.status).toBe(409)
     expect((await res.json()).code).toBe('PROFILE_MISMATCH')
   })
 
   it('명시 확인(confirmProfileMismatch=true)이 있으면 저장 양식으로 진행한다', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    savedIs(PROFILE)
     detectedIs(SHIFTED)
     const res = await POST(req(baseFields({ useSavedProfile: 'true', confirmProfileMismatch: 'true' })))
     expect(res.status).toBe(200)
-    expect(mocks.parseWithProfile).toHaveBeenCalledWith(expect.any(ArrayBuffer), LEGACY_EXCEL_PROFILE_V1)
+    expect(mocks.parseWithProfile).toHaveBeenCalledWith(expect.any(ArrayBuffer), PROFILE)
   })
 
   it('감지 결과로 실행(저장 양식과 다른 프로파일)하면 확인 없이 진행한다', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    savedIs(PROFILE)
     detectedIs(SHIFTED)
     const res = await POST(req(baseFields({ profile: JSON.stringify(SHIFTED) })))
     expect(res.status).toBe(200)
@@ -522,18 +376,18 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
   })
 
   it('저장 양식과 파일 구조가 같으면 확인 없이 진행한다', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    savedIs(PROFILE)
     const res = await POST(req(baseFields({ useSavedProfile: 'true' })))
     expect(res.status).toBe(200)
   })
 
   it('저장 양식으로 읽는데 파일 구조를 감지하지 못하면 대조할 수 없으니 409(fail-closed)', async () => {
-    savedIs(LEGACY_EXCEL_PROFILE_V1)
+    savedIs(PROFILE)
     mocks.detectWorkbook.mockReturnValue({ ok: false, error: '시트가 없습니다' })
     const res = await POST(req(baseFields()))
     expect(res.status).toBe(409)
     const body = await res.json()
-    expect(body).toMatchObject({ code: 'PROFILE_MISMATCH', profileMismatch: null })
+    expect(body).toMatchObject({ ok: false, code: 'PROFILE_MISMATCH', profileMismatch: null })
     expect(body.error).toContain('시트가 없습니다')
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
   })
@@ -548,7 +402,7 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
     expect(mocks.detectWorkbook).not.toHaveBeenCalled()
   })
 
-  it('설정 조회 실패 → 503, 파싱·RPC 미호출(대조 불가를 통과로 위장하지 않는다)', async () => {
+  it('설정 조회 실패 → 503 재시도 가능, 파싱·DB 미호출(대조 불가를 통과로 위장하지 않는다)', async () => {
     const boom = new ConfigUnavailableError('프로젝트 설정 조회 실패: db down')
     mocks.getProjectConfig.mockRejectedValue(boom)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -557,10 +411,9 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
     // 본문은 고정 문구 — PostgREST 사유는 서버 로그에만 남긴다.
     const body = await res.text()
     expect(body).not.toContain('db down')
-    expect(JSON.parse(body)).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
-    expect(err.mock.calls.some(c => c.some(x => String(x).includes('db down')))).toBe(true)
+    expect(JSON.parse(body)).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: '프로젝트 설정을 확인할 수 없습니다.', retryable: true })
+    expect(err.mock.calls.flat().some((x) => (x instanceof Error ? x.message : String(x)).includes('db down'))).toBe(true)
     expect(mocks.parseWithProfile).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
-    err.mockRestore()
   })
 })

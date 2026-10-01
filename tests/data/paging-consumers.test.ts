@@ -5,21 +5,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
-  requireProjectAdmin: vi.fn(), requireWorkspaceAdmin: vi.fn(),
+  requireProjectAdmin: vi.fn(),
   parseWithProfile: vi.fn(), linkByDepth: vi.fn(), resolveLegacyLevelLabels: vi.fn(), splitLeafOwners: vi.fn(),
-  projectTeamRowsSync: vi.fn(), teamsForProjectSync: vi.fn(), addTeam: vi.fn(), addProjectTeam: vi.fn(),
+  teamsForProjectSync: vi.fn(), ensureProjectTeams: vi.fn(),
   createServerClient: vi.fn(), createAdminClient: vi.fn(),
   recordProgressSnapshot: vi.fn(), ingestProject: vi.fn(), detectWorkbook: vi.fn(),
   getProjectConfig: vi.fn(), writeProjectSettingsInternal: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin, requireWorkspaceAdmin: m.requireWorkspaceAdmin }))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin }))
 vi.mock('@/lib/excel/parseWithProfile', () => ({
   parseWithProfile: m.parseWithProfile, linkByDepth: m.linkByDepth, resolveLegacyLevelLabels: m.resolveLegacyLevelLabels,
 }))
 vi.mock('@/lib/excel/validate', () => ({ splitLeafOwners: m.splitLeafOwners }))
-vi.mock('@/lib/teams/master', () => ({ projectTeamRowsSync: m.projectTeamRowsSync, teamsForProjectSync: m.teamsForProjectSync }))
-vi.mock('@/app/actions/teams', () => ({ addTeam: m.addTeam }))
-vi.mock('@/app/actions/projectTeams', () => ({ addProjectTeam: m.addProjectTeam }))
+// 옛 팀 캐시는 getComputedWbs(아래 describe — 팀 정렬 원천은 A2 가 옮긴다)만 쓴다. 가져오기 라우트는 요청 범위 원천(과제 27)을 쓴다
+vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: m.teamsForProjectSync }))
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
+vi.mock('@/lib/teams/register', () => ({ ensureProjectTeams: m.ensureProjectTeams }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: m.recordProgressSnapshot }))
@@ -32,6 +33,8 @@ vi.mock('react', async () => ({ ...(await vi.importActual<typeof import('react')
 
 import { POST } from '@/app/api/import/execute/route'
 import { getComputedWbs } from '@/lib/data/wbs'
+import { projectOwnTeams, projectTeams } from '@/lib/teams/source'
+import type { Team } from '@/lib/domain/teams'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { makeActor, WS } from '../fixtures/actor'
 
@@ -83,6 +86,7 @@ function pagedTable(initial: readonly Row[], opts: {
 }
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const COMMAND_ID = '33333333-3333-4333-8333-333333333333'
 // 합성 양식(계층 2열 + 팀 열 RES) — 옛 5팀 양식 상수를 쓰지 않는다(그 상수는 A2 가 fixture 로 옮긴다)
 const PROFILE = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0, hierarchy: { kind: 'columns', columns: [0, 1] },
@@ -95,14 +99,32 @@ const ITEM = { tempId: 't0', parentTempId: null, level: 'activity' as const, cod
   deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
   owners: [{ team: 'RES', kind: 'primary' as const }], isOwnerSplit: false }
 const ERR_BACKUP = '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
+/** 이 프로젝트의 전용 팀 RES — 파일의 담당 팀이 등록돼 있어 팀 단계는 지나간다 */
+const RES: Team = { id: 'own-res', code: 'RES', name: 'RES', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true,
+  projectId: PROJECT_ID, workspaceId: WS }
 
 function replaceRequest(): Parameters<typeof POST>[0] {
   const form = new FormData()
   for (const [k, v] of Object.entries({
     file: new Blob(['x']), projectId: PROJECT_ID, profile: JSON.stringify(PROFILE), mode: 'replace', saveProfile: 'false', registerTeams: 'false',
+    commandId: COMMAND_ID,
   })) form.append(k, v)
   return { formData: async () => form } as unknown as Parameters<typeof POST>[0]
 }
+/** 세션 클라이언트 — 영수증 선확인(처음 명령 — 없음)은 따로 받고, wbs_items(백업)는 pagedTable 로 읽는다 */
+function session(t: ReturnType<typeof pagedTable>) {
+  const noReceipt = () => {
+    const q: Record<string, unknown> = {}
+    q.select = () => q
+    q.eq = () => q
+    q.maybeSingle = async () => ({ data: null, error: null })
+    return q
+  }
+  return { from: vi.fn((table: string) => (table === 'command_receipts' ? noReceipt() : t.make())) }
+}
+/** console.error 인자에 원문이 있는가 — failWith 가 원문을 무엇으로 싣든(문자열·Error·객체) 찾는다 */
+const logged = (spy: { mock: { calls: unknown[][] } }, text: string) =>
+  spy.mock.calls.flat().some((x) => (x instanceof Error ? x.message : typeof x === 'string' ? x : JSON.stringify(x) ?? '').includes(text))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -111,8 +133,8 @@ beforeEach(() => {
   m.resolveLegacyLevelLabels.mockReturnValue(false)
   m.linkByDepth.mockReturnValue({ ok: true, items: [ITEM] })
   m.splitLeafOwners.mockImplementation((items: unknown) => items)
-  m.projectTeamRowsSync.mockReturnValue([{ code: 'RES', projectId: PROJECT_ID }])
-  m.teamsForProjectSync.mockReturnValue([{ code: 'RES' }])
+  vi.mocked(projectTeams).mockResolvedValue([RES])
+  vi.mocked(projectOwnTeams).mockResolvedValue([RES])
   m.recordProgressSnapshot.mockResolvedValue(undefined)
   m.ingestProject.mockResolvedValue({ count: 0 })
   m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
@@ -120,11 +142,13 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본의 유일한 사본, D18·Q5)', () => {
+  const applied = vi.fn(async () => ({ data: { status: 'applied', mode: 'replace', count: 1, command_id: COMMAND_ID }, error: null }))
+
   it('1,000행을 넘는 트리(서버가 한 응답을 3행으로 자른다)도 백업에 전부 실린다 — id 정렬·count 로 끝까지', async () => {
     const tree = Array.from({ length: 1003 }, (_, i) => ({ id: `w${String(i).padStart(4, '0')}`, project_id: PROJECT_ID, name: `항목 ${i}` }))
     const t = pagedTable(tree, { maxRows: 3 })
-    const rpc = vi.fn(async () => ({ data: 1, error: null }))
-    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    m.createServerClient.mockResolvedValue(session(t))
+    m.createAdminClient.mockReturnValue({ rpc: applied })
     const res = await POST(replaceRequest())
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -139,13 +163,14 @@ describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본�
       { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PROJECT_ID] },
       { method: 'gt', args: ['id', 'w0002'] }, { method: 'order', args: ['id'] }, { method: 'limit', args: [1000] },
     ])
-    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(applied).toHaveBeenCalledTimes(1)
   })
 
   it('[K2] 첫 쪽을 읽은 직후 앞 구간 id 로 행이 삽입돼도(총합이 쪽 크기의 배수) 백업에 중복·누락이 없다 — 키셋', async () => {
     const tree = Array.from({ length: 2000 }, (_, i) => ({ id: `w${String(i).padStart(4, '0')}`, project_id: PROJECT_ID }))
     const t = pagedTable(tree, { afterResponse: (n, rows) => (n === 1 ? [...rows, { id: 'w0500a', project_id: PROJECT_ID }] : undefined) })
-    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc: vi.fn(async () => ({ data: 1, error: null })) })
+    m.createServerClient.mockResolvedValue(session(t))
+    m.createAdminClient.mockReturnValue({ rpc: applied })
     const res = await POST(replaceRequest())
     expect(res.status).toBe(200)
     const ids = (await res.json()).backup.rows.map((r: { id: string }) => r.id)
@@ -156,27 +181,29 @@ describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본�
   it('[RF5] 쪽을 읽는 사이 행 수가 바뀌면(count 불일치) 500 고정 문구 — 원문·건수를 싣지 않고 RPC 를 부르지 않는다', async () => {
     const t = pagedTable([{ id: 'w1' }, { id: 'w2' }], { count: 3 })
     const rpc = vi.fn()
-    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    m.createServerClient.mockResolvedValue(session(t))
+    m.createAdminClient.mockReturnValue({ rpc })
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(replaceRequest())
     expect(res.status).toBe(500)
     const text = await res.text()
-    expect(JSON.parse(text)).toEqual({ error: ERR_BACKUP })
+    expect(JSON.parse(text)).toEqual({ ok: false, code: 'BACKUP_FAILED', error: ERR_BACKUP })
     expect(text).not.toMatch(/\d+\/\d+건/)
     expect(rpc).not.toHaveBeenCalled()
-    expect(err.mock.calls.some((c) => c.some((x) => String(x).includes('2/3건')))).toBe(true)   // 원문은 서버 로그로만
+    expect(logged(err, '2/3건')).toBe(true)   // 원문은 서버 로그로만
   })
 
   it('조회 오류도 같은 고정 문구 — PostgREST 원문을 응답에 싣지 않고 RPC 를 부르지 않는다', async () => {
     const t = pagedTable([], { error: { message: 'permission denied for table wbs_items' } })
     const rpc = vi.fn()
-    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    m.createServerClient.mockResolvedValue(session(t))
+    m.createAdminClient.mockReturnValue({ rpc })
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await POST(replaceRequest())
     expect(res.status).toBe(500)
     const text = await res.text()
     expect(text).not.toContain('permission denied')
-    expect(JSON.parse(text)).toEqual({ error: ERR_BACKUP })
+    expect(JSON.parse(text)).toEqual({ ok: false, code: 'BACKUP_FAILED', error: ERR_BACKUP })
     expect(rpc).not.toHaveBeenCalled()
   })
 })
