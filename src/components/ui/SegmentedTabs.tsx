@@ -4,7 +4,8 @@ import type { LucideIcon } from 'lucide-react'
 
 export type SegTab<T extends string = string> = { key: T; label: string; icon?: LucideIcon }
 
-/** 세그먼트 토글 — 칸반 그룹/뷰 전환, 근태 캘린더/리스트 등. */
+/** 세그먼트 토글 — 칸반 그룹/뷰 전환, 근태 캘린더/리스트 등.
+ *  모든 항목이 .seg-item 을 단다 — 선택 체크(::before)가 그 규칙에 있고, 비활성 항목은 숨은 체크로 같은 폭을 잡는다(스펙 §4.1 블록 8). */
 export function SegmentedTabs<T extends string>({
   tabs, value, onChange, size = 'md',
 }: {
@@ -25,7 +26,7 @@ export function SegmentedTabs<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.key)}
-            className={`inline-flex items-center gap-1.5 rounded-lg font-medium transition duration-150 ${pad} ${active ? 'seg-item-active' : 'text-ink-muted hover:bg-surface-2 hover:text-ink'}`}
+            className={`seg-item ${pad} ${active ? 'seg-item-active' : ''}`}
           >
             {Icon && <Icon className="h-3.5 w-3.5" />}
             {tab.label}
