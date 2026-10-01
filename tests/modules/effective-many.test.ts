@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectiveModules } from '@/lib/modules/effective'
 import { effectiveModulesMany } from '@/lib/modules/effectiveMany'
 import type { ConfigReadClient } from '@/lib/settings/projectConfig'
@@ -33,7 +33,7 @@ describe('effectiveModulesMany = 프로젝트마다 effectiveModules(D39)', () =
     workspace_settings: [wsRow(WS, { 'modules.allowed': ['issues', 'meetings', 'agents', 'kanban', 'minutes'] })],
     project_settings: [
       pRow(P1, WS, { 'modules.enabled': ['issues', 'meetings'] }),
-      pRow(P2, WS, { 'modules.enabled': ['agents'] }),         // agents → wbs(core) 닫힘
+      pRow(P2, WS, { 'modules.enabled': ['agents'] }),         // agents 만(wbs 는 core 라 닫힘이 더하는 것이 없다 — 닫힘은 아래 별도 케이스)
       pRow(P3, WS2, { 'modules.enabled': ['issues'] }),        // CR-5 — 다른 워크스페이스
     ],
     project_areas: [], teams: [],
@@ -69,5 +69,50 @@ describe('effectiveModulesMany = 프로젝트마다 effectiveModules(D39)', () =
     const calls: string[] = []
     await expect(effectiveModulesMany(WS, [], { client: fakeClient(tables, calls) })).resolves.toEqual({ sets: new Map(), failed: [] })
     expect(calls).toEqual([])
+  })
+
+  afterEach(() => { vi.unstubAllEnvs() })
+  /** 프로젝트마다 effectiveModules 와 같은지 — 동치가 규칙 갈림을 막는 유일한 장치다(effective.ts 의 compute 복제) */
+  async function expectSame(t: Record<string, Row[]>, ids: string[]) {
+    const many = await effectiveModulesMany(WS, ids, { client: fakeClient(t, []) })
+    for (const pid of ids) {
+      const one = await effectiveModules({ workspaceId: WS, projectId: pid }, { client: fakeClient(t, []) })
+      expect([...many.sets.get(pid)!].sort(), pid).toEqual([...one].sort())
+    }
+    return many
+  }
+  it('requires 닫힘이 실제로 결과를 바꾼다 — minutes 가 허용되지 않으면 wiki 가 빠지고(뺄 뿐 더하지 않는다), 허용되면 남는다', async () => {
+    vi.stubEnv('WIKI_SERVICE_ENABLED', 'true')
+    const project_settings = [pRow(P1, WS, { 'modules.enabled': ['wiki', 'issues'] })]
+    const without = await expectSame({ ...tables, project_settings,
+      workspace_settings: [wsRow(WS, { 'modules.allowed': ['wiki', 'issues'], 'ai.enabled': true })] }, [P1])
+    expect(without.sets.get(P1)!.has('wiki')).toBe(false)          // closeRequires 호출을 빼면 빨강
+    expect(without.sets.get(P1)!.has('issues')).toBe(true)
+    const withMinutes = await expectSame({ ...tables, project_settings,
+      workspace_settings: [wsRow(WS, { 'modules.allowed': ['wiki', 'issues', 'minutes'], 'ai.enabled': true })] }, [P1])
+    expect(withMinutes.sets.get(P1)!.has('wiki')).toBe(true)
+    expect(withMinutes.sets.get(P1)!.has('minutes')).toBe(true)    // 워크스페이스 층 모듈은 프로젝트 토글 없이 통과
+  })
+  it('ai.enabled = false 면 AI 모듈(wiki)이 빠진다 — 같은 조건의 ai.enabled = true 는 남는다', async () => {
+    vi.stubEnv('WIKI_SERVICE_ENABLED', 'true')
+    const project_settings = [pRow(P1, WS, { 'modules.enabled': ['wiki', 'issues'] })]
+    const off = await expectSame({ ...tables, project_settings,
+      workspace_settings: [wsRow(WS, { 'modules.allowed': ['wiki', 'issues', 'minutes'], 'ai.enabled': false })] }, [P1])
+    expect(off.sets.get(P1)!.has('wiki')).toBe(false)              // ai.enabled 분기를 빼면 빨강
+    expect(off.sets.get(P1)!.has('issues')).toBe(true)
+    const on = await expectSame({ ...tables, project_settings,
+      workspace_settings: [wsRow(WS, { 'modules.allowed': ['wiki', 'issues', 'minutes'], 'ai.enabled': true })] }, [P1])
+    expect(on.sets.get(P1)!.has('wiki')).toBe(true)
+  })
+  it('1,000행을 넘는 프로젝트 목록도 .range() 로 끝까지 읽는다(D51) — 잘리면 뒤 프로젝트가 failed 로 샌다', async () => {
+    const n = 1005
+    const ids = Array.from({ length: n }, (_, i) => `00000000-0000-0000-7e57-${String(900000 + i).padStart(12, '0')}`)
+    const t = { ...tables, project_settings: ids.map((pid) => pRow(pid, WS, { 'modules.enabled': ['issues'] })) }
+    const calls: string[] = []
+    const many = await effectiveModulesMany(WS, ids, { client: fakeClient(t, calls) })
+    expect(many.failed).toEqual([])
+    expect(many.sets.size).toBe(n)
+    expect(many.sets.get(ids[n - 1])!.has('issues')).toBe(true)
+    expect(calls.filter((c) => c === 'project_settings.select').length).toBeGreaterThanOrEqual(2)   // 두 쪽 이상
   })
 })
