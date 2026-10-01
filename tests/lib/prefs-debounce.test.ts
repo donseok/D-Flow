@@ -49,3 +49,34 @@ describe('queueWbsCollapse', () => {
     ]))
   })
 })
+
+// 저장 실패는 로컬 적용을 되돌리지 않고 경고 한 줄을 남긴다(SP3b 스펙 §4.8 "로컬 적용 유지 + 로그", U1c 리뷰 R1 P2) —
+// 401(세션 만료)·500 이나 네트워크 실패가 조용히 사라지면 "테마가 저절로 돌아갔다"의 원인 기록이 없다.
+describe('postPrefs 실패 기록', () => {
+  const flush = async () => { await vi.advanceTimersByTimeAsync(600); for (let i = 0; i < 5; i++) await Promise.resolve() }
+  it('응답이 ok 가 아니면 상태 코드를 경고한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    fetchMock.mockImplementationOnce(async () => ({ ok: false, status: 401 }) as Response)
+    queueUiPref({ theme: 'dark' })
+    await flush()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0].join(' ')).toMatch(/\[prefs\].*저장 실패.*401/)
+    warn.mockRestore()
+  })
+  it('네트워크 실패(reject)도 경고한다 — 던지지 않는다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    fetchMock.mockImplementationOnce(async () => { throw new TypeError('Failed to fetch') })
+    queueWbsCollapse('p1', ['a'])
+    await flush()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0].join(' ')).toMatch(/\[prefs\].*저장 실패.*Failed to fetch/)
+    warn.mockRestore()
+  })
+  it('성공은 조용하다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    queueUiPref({ theme: 'light' })
+    await flush()
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
