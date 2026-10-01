@@ -26,7 +26,14 @@ describe('describeAuthzChange — 권한 변경 한 줄 요약', () => {
     expect(describeAuthzChange('project_access', { access_role: 'admin', active: true }, { access_role: 'member', active: true }))
       .toBe('관리자 → 멤버')
     expect(describeAuthzChange('project_access', null, { access_role: 'member', access_granted_by: null, active: true })).toBe('부여 (멤버)')
-    expect(describeAuthzChange('project_access', { access_role: 'admin', active: false }, null)).toBe('회수 (관리자)')
+    expect(describeAuthzChange('project_access', { access_role: 'admin', active: true }, null)).toBe('회수 (관리자)')
+  })
+  it('명단 행의 추가·삭제 기록도 active 를 읽는다 — 비활성 행이면 권한이 생기지 않았거나 이미 정지돼 있었다(A1-3 리뷰 M2)', () => {
+    expect(describeAuthzChange('project_access', null, { access_role: 'member', access_granted_by: null, active: false })).toBe('부여 (멤버, 비활성)')
+    expect(describeAuthzChange('project_access', { access_role: 'admin', active: false }, null)).toBe('회수 (관리자, 비활성)')
+    // active 가 없는 옛 기록·워크스페이스 등급은 그대로
+    expect(describeAuthzChange('project_access', { access_role: 'admin' }, null)).toBe('회수 (관리자)')
+    expect(describeAuthzChange('workspace_role', null, { role: 'member', active: false })).toBe('소속 추가 (멤버)')
   })
   it('명단 권한의 update 회수·부여 — 권한 칸이 null 로·null 에서(옛 모양도 읽는다)', () => {
     expect(describeAuthzChange('project_access', { access_role: 'admin', active: true }, { access_role: null, active: true }))

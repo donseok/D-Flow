@@ -54,6 +54,8 @@ const AREA_TOKENS: OwnTokenTable = {
   PROJECT_AREA_CODE_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', message: ERR_AREA_CODE_IMMUTABLE },
   PROJECT_AREA_PROJECT_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', message: ERR_PROJECT_IMMUTABLE },
   AREA_TEAM_SCOPE: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
+  // 같은 code 의 전용 팀이 있는 공용 팀 — 전환 뒤 오래된 폼이나 옛 분열(D4)이 남은 영역을 그대로 저장할 때(*_command_receipts ⑤′)
+  TEAM_SCOPE_PROJECT_OWNED: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
 }
 
 /**
