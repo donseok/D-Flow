@@ -28,6 +28,7 @@ vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source
 import { POST } from '@/app/api/import/execute/route'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
 import { ERR_MISSING } from '@/lib/authz/errors'
+import { convertConsentToken } from '@/lib/teams/convertConsent'
 import type { Team } from '@/lib/domain/teams'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ConfigTeam } from '@/lib/settings/projectConfig'
@@ -61,6 +62,10 @@ const COMMON = [
   team('OPS', { id: 'common-ops', name: '운영팀', sortOrder: 1, projectId: null }),
   team('OLD', { id: 'common-old', sortOrder: 2, active: false, projectId: null }),
 ]
+/** 상속 프로젝트(COMMON)에서 미등록 팀 QA 를 등록하는 요청이 409 에서 받았어야 할 전환 동의 토큰(R3) — 서버가 지금 상태로 다시 계산한 값과 같아야 전환한다 */
+const TOKEN = convertConsentToken(COMMON, ['QA'])
+/** 상속 프로젝트의 등록 요청 — 409 가 준 토큰을 함께 보낸다 */
+const registerReq = (fields: Record<string, string> = {}) => req({ registerTeams: 'true', convertToken: TOKEN, ...fields })
 /** 이 프로젝트가 쓰는 팀(원천 projectTeams)·전용 팀(projectOwnTeams)과, 같은 팀을 든 설정(#3 — 교차 검증 기준의 한쪽) */
 function teamsAre(teams: Team[], own: Team[]) {
   vi.mocked(projectTeams).mockResolvedValue(teams)
@@ -205,7 +210,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     const res = await POST(req())
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({
-      ok: false, code: 'NEEDS_TEAMS', error: expect.any(String), needsTeams: ['QA'], inheritsCommon: false, commonTeams: [],
+      ok: false, code: 'NEEDS_TEAMS', error: expect.any(String), needsTeams: ['QA'], inheritsCommon: false, commonTeams: [], convertToken: null,
     })
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
     expect(rpc).not.toHaveBeenCalled()
@@ -235,7 +240,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   it('상속 프로젝트 + registerTeams=true → 전환 RPC 한 번(가드의 행위자) → 등록 → 가져오기 순', async () => {
     teamsAre(COMMON, [])
     const { rpc } = admin()
-    expect((await POST(req({ registerTeams: 'true' }))).status).toBe(200)
+    expect((await POST(registerReq())).status).toBe(200)
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['convert_inherited_teams', 'import_wbs_cmd'])
     expect(rpc.mock.calls[0][1]).toEqual({ p_actor: ACTOR.userId, p_project_id: P })
     const [convertAt, importAt] = rpc.mock.invocationCallOrder
@@ -247,7 +252,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     teamsAre(COMMON, [])
     admin({ convert: { data: { status: 'already' }, error: null }, import: duplicate('append', 1) })
     m.ensureProjectTeams.mockResolvedValue({ ok: true, created: [], existing: ['QA'] })
-    const res = await POST(req({ registerTeams: 'true' }))
+    const res = await POST(registerReq())
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, kind: 'duplicate', commandId: CMD })
   })
@@ -268,6 +273,110 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(await res.json()).toMatchObject({ ok: false, code: 'INVALID_TEAM_CODE', team: 'QA' })
     expect(rpc).not.toHaveBeenCalled()
   })
+  // ── A1-5 수정 R1 — 쓸 수 없는 이름은 전환 앞에서 400(되돌릴 수 없는 전환을 남기지 않는다) ──────────────────────────────
+  it.each([
+    ['예약어', '산출물'],
+    ['21자', 'a'.repeat(21)],
+  ])('[R1] 상속 프로젝트 + 쓸 수 없는 미등록 팀(%s) → registerTeams 와 무관하게 400 INVALID_TEAM_CODE(그 팀) — 409·전환·등록·가져오기 없음', async (_n, bad) => {
+    teamsAre(COMMON, [])
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', bad)], holidays: [] })
+    const variants: Record<string, string>[] = [{}, { registerTeams: 'true' }, { registerTeams: 'true', convertToken: TOKEN }]
+    for (const fields of variants) {
+      const { rpc } = admin()
+      const res = await POST(req(fields))
+      expect(res.status, JSON.stringify(fields)).toBe(400)
+      expect(await res.json()).toMatchObject({ ok: false, code: 'INVALID_TEAM_CODE', team: bad })
+      expect(rpc).not.toHaveBeenCalled()   // 전환도 가져오기도 없다
+      expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    }
+  })
+  it('[R1] 쓸 수 있는 팀과 섞여도 409 목록은 만들지 않는다 — 전용 팀 프로젝트도 같다(등록 가능한 이름만 확인 창에 오른다)', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA', '산출물')], holidays: [] })
+    const res = await POST(req())
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'INVALID_TEAM_CODE', team: '산출물' })
+  })
+
+  // ── R2 — 전환 뒤 같은 요청의 담당은 전부 이 프로젝트의 전용 팀이다(비활성·미참조 공용 팀의 담당이 공용 id 로 들어가 분열하지 않는다) ──
+  it('[R2] 상속 + 등록: 파일의 팀 code 전부를 전환 뒤 ensureProjectTeams 로 맞춘다(비활성 미참조 공용 OLD 도 전용 팀으로)', async () => {
+    teamsAre(COMMON, [])
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
+    const { rpc } = admin()
+    const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))
+    expect(res.status).toBe(200)
+    expect(m.ensureProjectTeams).toHaveBeenCalledTimes(1)
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['RES', 'OLD', 'QA'])
+    const [convertAt, importAt] = rpc.mock.invocationCallOrder
+    expect(convertAt).toBeLessThan(m.ensureProjectTeams.mock.invocationCallOrder[0])
+    expect(m.ensureProjectTeams.mock.invocationCallOrder[0]).toBeLessThan(importAt)
+  })
+  it('[R2] 전용 팀 프로젝트의 등록은 그대로 — 미등록 팀만(이미 있는 팀을 다시 만들지 않는다)', async () => {
+    admin()
+    expect((await POST(req({ registerTeams: 'true' }))).status).toBe(200)
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+  })
+
+  // ── R3 — 전환 동의는 1비트가 아니라 409 가 보여 준 대상에 묶인다 ─────────────────────────────────────────────────────
+  it('[R3] 409 가 전환 토큰을 싣는다 — 상속이면 그 대상(공용 팀 전부 + 등록할 팀)의 지문, 전용 팀 프로젝트는 null', async () => {
+    teamsAre(COMMON, [])
+    const inherit = await (await POST(req())).json()
+    expect(inherit).toMatchObject({ code: 'NEEDS_TEAMS', inheritsCommon: true, convertToken: TOKEN })
+    teamsAre([OWN_RES], [OWN_RES])
+    expect(await (await POST(req())).json()).toMatchObject({ code: 'NEEDS_TEAMS', inheritsCommon: false, convertToken: null })
+  })
+  it.each([
+    ['토큰 없음', {}],
+    ['다른 토큰', { convertToken: 'f'.repeat(32) }],
+  ])('[R3] 상속 + registerTeams=true 인데 %s → 전환 없이 409 NEEDS_TEAMS 를 다시 낸다(현재 대상의 토큰과 함께)', async (_n, extra) => {
+    teamsAre(COMMON, [])
+    const { rpc } = admin()
+    const res = await POST(req({ registerTeams: 'true', ...extra }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'NEEDS_TEAMS', needsTeams: ['QA'], inheritsCommon: true, convertToken: TOKEN })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+  })
+  it('[R3] 409 와 확인 사이에 공용 팀이 늘면(사용자가 보지 못한 팀) 옛 토큰으로는 전환되지 않고 새 토큰을 받는다', async () => {
+    const grown = [...COMMON, team('NEW', { id: 'common-new', sortOrder: 3, projectId: null })]
+    teamsAre(grown, [])
+    const { rpc } = admin()
+    const res = await POST(registerReq())   // TOKEN 은 COMMON 기준 — 늘어난 목록과 다르다
+    expect(res.status).toBe(409)
+    expect((await res.json()).convertToken).toBe(convertConsentToken(grown, ['QA']))
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('[R3] 전용 팀 프로젝트의 등록은 토큰이 필요 없다(전환이 없다)', async () => {
+    admin()
+    expect((await POST(req({ registerTeams: 'true' }))).status).toBe(200)
+  })
+
+  // ── R5 — 양식 저장이 요구하는 팀 열(표시 없는 새 팀 열 포함)을 등록 대상에 넣는다 ──────────────────────────────────────
+  it('[R5] 양식을 저장하는 요청 — 헤더의 팀 열이 어느 행에도 표시되지 않았어도 미등록이면 needsTeams 에 든다(등록하면 교차 검증을 통과한다)', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })   // QA 열은 PROFILE 헤더에 있으나 표시 없음
+    const { rpc } = admin()
+    const res = await POST(req({ saveProfile: 'true' }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: 'NEEDS_TEAMS', needsTeams: ['QA'] })
+    expect(rpc).not.toHaveBeenCalled()
+    m.ensureProjectTeams.mockResolvedValue({ ok: true, created: ['QA'], existing: [] })
+    const done = await (await POST(req({ saveProfile: 'true', registerTeams: 'true' }))).json()
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(done).toMatchObject({ ok: true, profileSaved: true })
+    expect(done.profileSave).toBeUndefined()
+  })
+  it('[R5] 양식을 저장하지 않는 요청은 표시된 팀만 본다(저장 교차 검증이 없으니 빈 팀 열을 등록하라고 하지 않는다)', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    admin()
+    expect((await POST(req({ saveProfile: 'false' }))).status).toBe(200)
+  })
+  it('[R5] 헤더의 팀 열이 이미 등록(비활성 포함)이면 새로 요구하지 않는다', async () => {
+    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    teamsAre([OWN_RES, OWN_QA], [OWN_RES, OWN_QA])
+    admin()
+    expect((await POST(req({ saveProfile: 'true' }))).status).toBe(200)
+    expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+  })
+
   it('가드 결과에 그 프로젝트의 워크스페이스가 없으면(슈퍼유저·없는 프로젝트) 404 — 전환·등록·가져오기 없음', async () => {
     m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeSuperuser() })
     const { rpc } = admin()
@@ -315,7 +424,7 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
     teamsAre(COMMON, [])
     m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })
     const { rpc } = admin({ convert: { data: null, error: err } })
-    const res = await POST(req({ registerTeams: 'true' }))
+    const res = await POST(registerReq())
     expect(res.status).toBe(status)
     const body = await res.json()
     expect(body.ok).toBe(false)
@@ -356,6 +465,7 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
     ['입력 토큰(정상 경로 밖)', { message: 'IMPORT_INVALID_INPUT', code: '22023' }, 500, 'IMPORT_FAILED'],
     ['명령 id 없음(정상 경로 밖)', { message: 'COMMAND_ID_REQUIRED', code: '22023' }, 500, 'IMPORT_FAILED'],
   ] as const)('가져오기 RPC 실패(#8) — %s → %i, 양식 저장·스냅샷·색인 없음', async (_n, err, status, code) => {
+    teamsAre([OWN_RES, OWN_QA], [OWN_RES, OWN_QA])   // 양식을 저장하는 요청은 팀 열(RES·QA)이 모두 등록돼 있어야 #8 까지 온다(R5)
     admin({ import: { data: null, error: err } })
     const res = await POST(req({ saveProfile: 'true' }))
     expect(res.status).toBe(status)

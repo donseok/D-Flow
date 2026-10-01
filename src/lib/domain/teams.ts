@@ -54,6 +54,20 @@ export function normalizeNewTeamCode(
   return { ok: true, code }
 }
 
+/** 여러 팀 이름의 사전 검사(SP4 A1-5 R1) — 입력 순서대로 normalizeNewTeamCode 를 적용하고(중복은 한 번), 첫 불가 이름을 입력 그대로 돌려준다.
+ *  가져오기 라우트가 되돌릴 수 없는 공용 팀 전환·409 확인 목록 앞에서 부른다 — 쓸 수 없는 이름이 든 요청은 아무 부수효과도 남기지 않는다. */
+export function validateNewTeamCodes(
+  inputs: readonly string[],
+): { ok: true; codes: string[] } | { ok: false; team: string; error: string } {
+  const codes: string[] = []
+  for (const input of inputs) {
+    const n = normalizeNewTeamCode(input)
+    if (!n.ok) return { ok: false, team: input, error: n.error }
+    if (!codes.includes(n.code)) codes.push(n.code)
+  }
+  return { ok: true, codes }
+}
+
 /** 프로젝트 화면의 팀 목록 해석 — 프로젝트 행이 하나라도 있으면(비활성 포함) 그것만, 없으면 그 프로젝트 워크스페이스의
  *  공용 팀으로 폴백. 비활성 포함으로 판정해야 "전 팀 비활성화"가 공용 상속으로 오해 복귀하지 않는다(스펙 §2).
  *  workspaceId 는 그 프로젝트의 워크스페이스다 — 모르면(null, 존재하지 않는 프로젝트) 어느 워크스페이스로도 폴백하지 않는다.

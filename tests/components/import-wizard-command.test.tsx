@@ -39,8 +39,9 @@ const INSPECT_BODY = {
 const applied = (over: Record<string, unknown> = {}) => new Response(JSON.stringify({
   ok: true, kind: 'applied', commandId: 'echo', count: 2, mode: 'append', reindexed: 0, profileSaved: false, ...over,
 }), { status: 200 })
+const TOKEN = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
 const needsTeams = (inheritsCommon: boolean) => new Response(JSON.stringify({
-  ok: false, code: 'NEEDS_TEAMS', needsTeams: ['CIV'], inheritsCommon,
+  ok: false, code: 'NEEDS_TEAMS', needsTeams: ['CIV'], inheritsCommon, convertToken: inheritsCommon ? TOKEN : null,
   commonTeams: inheritsCommon ? [{ code: 'RES', name: '연구팀' }, { code: 'OPS', name: '운영팀' }] : [],
   error: '등록되지 않은 팀이 있습니다.',
 }), { status: 409 })
@@ -152,6 +153,16 @@ describe('ImportWizard — 명령 id·전환 확인·사전 백업(SP4 §4.4·D5
     expect([sent(0).registerTeams, sent(1).registerTeams]).toEqual(['false', 'true'])
     expect(sent(1).commandId).toBe(sent(0).commandId)
     expect(document.body.textContent).toContain('가져오기 완료')
+    // R3 — 확인 창이 보여 준 전환 대상의 토큰을 등록 재실행에 싣는다(첫 요청에는 없다)
+    expect([forms[0].get('convertToken'), forms[1].get('convertToken')]).toEqual([null, TOKEN])
+  })
+
+  it('전용 팀 프로젝트의 등록 재실행에는 전환 토큰이 없다', async () => {
+    executeResponse = (fd) => (fd.get('registerTeams') === 'true' ? applied() : needsTeams(false))
+    await inspect()
+    await press(button('가져오기 실행')!)
+    await press(button('등록하고 계속')!)
+    expect([forms[0].get('convertToken'), forms[1].get('convertToken')]).toEqual([null, null])
   })
 
   it('전용 팀이 있는 프로젝트의 409 — 이 프로젝트 팀으로 등록한다는 안내(전환 문구 없음), 등록 버튼은 열려 있다', async () => {

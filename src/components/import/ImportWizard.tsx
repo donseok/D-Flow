@@ -292,6 +292,9 @@ export function ImportWizard({
       fd.append('mode', state.mode)
       fd.append('saveProfile', String(state.saveProfile))
       fd.append('registerTeams', String(registerTeams))
+      // 상속 프로젝트의 등록 재실행 — 409 확인 창이 보여 준 전환 대상의 토큰을 돌려보낸다(서버가 지금 대상과 같을 때만 전환한다 — A1-5 R3).
+      // 확인 창이 없는 첫 실행에는 없다
+      if (registerTeams && state.convertToken !== null) fd.append('convertToken', state.convertToken)
       // 저장 양식으로 읽는지와, 불일치를 보고 직접 골랐는지 — 서버가 같은 대조를 다시 해 확인 없는 저장 양식 실행을 409 로 막는다.
       fd.append('useSavedProfile', String(state.profileSource === 'saved'))
       fd.append('confirmProfileMismatch', String(state.profileSource === 'saved' && state.profileMismatch !== null))
@@ -310,7 +313,10 @@ export function ImportWizard({
       if (res.status === 409 && Array.isArray(data.needsTeams)) {
         // 등록은 늘 프로젝트 관리자 몫이다(D4 — 슈퍼유저 분기 없음). 상속 프로젝트면 확인 창이 공용 팀 전환을 알린다(D54).
         const commonTeams = Array.isArray(data.commonTeams) ? (data.commonTeams as { code: string; name: string }[]) : []
-        dispatch({ type: 'executeNeedsTeams', teams: data.needsTeams as string[], inheritsCommon: data.inheritsCommon === true, commonTeams })
+        dispatch({
+          type: 'executeNeedsTeams', teams: data.needsTeams as string[], inheritsCommon: data.inheritsCommon === true, commonTeams,
+          convertToken: typeof data.convertToken === 'string' ? data.convertToken : null,
+        })
         return
       }
       if (res.ok && data.ok) {

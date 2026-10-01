@@ -57,7 +57,17 @@ describe('importWizard reducer — 상태 전이(§6.2)', () => {
     })
     expect(inherit).toMatchObject({ busy: false, needsTeams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }] })
     const own = reducer({ ...initialWizardState, busy: true }, { type: 'executeNeedsTeams', teams: ['CIV'], inheritsCommon: false, commonTeams: [] })
-    expect(own).toMatchObject({ busy: false, needsTeams: ['CIV'], inheritsCommon: false, commonTeams: [] })
+    expect(own).toMatchObject({ busy: false, needsTeams: ['CIV'], inheritsCommon: false, commonTeams: [], convertToken: null })
+  })
+
+  it('executeNeedsTeams — 서버가 준 전환 동의 토큰을 싣고, 실행 시작·창 닫기·실패가 지운다(A1-5 R3 — 토큰은 그 확인 창의 것이다)', () => {
+    const asked = reducer({ ...initialWizardState, busy: true }, {
+      type: 'executeNeedsTeams', teams: ['CIV'], inheritsCommon: true, commonTeams: [{ code: 'RES', name: '연구팀' }], convertToken: 'tok-1',
+    })
+    expect(asked.convertToken).toBe('tok-1')
+    expect(reducer(asked, { type: 'executeStart' }).convertToken).toBeNull()
+    expect(reducer(asked, { type: 'dismissNeedsTeams' }).convertToken).toBeNull()
+    expect(reducer(asked, { type: 'executeFailure', error: 'x', definitive: false }).convertToken).toBeNull()
   })
 
   it('dismissNeedsTeams — needsTeams 와 함께 상속 표시도 지운다', () => {

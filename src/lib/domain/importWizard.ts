@@ -106,6 +106,9 @@ export interface WizardState {
   inheritsCommon: boolean
   /** 상속 중인 활성 공용 팀 — 전환 확인 창의 목록. needsTeams 와 함께 지운다. */
   commonTeams: { code: string; name: string }[]
+  /** 409 가 준 전환 동의 토큰(A1-5 R3 — 확인 창이 보여 준 전환 대상의 지문). 상속 프로젝트의 등록 재실행이 그대로 돌려보낸다.
+   *  전용 팀 프로젝트는 null. needsTeams 와 함께 지운다(토큰은 그 확인 창의 것이다). */
+  convertToken: string | null
   /** 실행 의도(intentKey)의 명령 id(SP4 §4.4 — 같은 id 2회 = 1벌). 같은 의도의 재시도·needsTeams 재실행은 이 id 를 다시 쓰고,
    *  성공·확정 실패(isDefinitiveFailure·링크 오류) 뒤에는 null — 다음 실행은 새 id. 파일 재선택·처음부터 다시에도 남는다(RF3). */
   commandId: string | null
@@ -132,6 +135,7 @@ export const initialWizardState: WizardState = {
   needsTeams: null,
   inheritsCommon: false,
   commonTeams: [],
+  convertToken: null,
   commandId: null,
   intentKey: null,
   preBackup: null,
@@ -149,7 +153,7 @@ export type WizardAction =
   | { type: 'intentChanged'; intentKey: string; commandId: string }
   | { type: 'preBackupTaken'; generatedAt: string }
   | { type: 'executeStart' }
-  | { type: 'executeNeedsTeams'; teams: string[]; inheritsCommon: boolean; commonTeams: { code: string; name: string }[] }
+  | { type: 'executeNeedsTeams'; teams: string[]; inheritsCommon: boolean; commonTeams: { code: string; name: string }[]; convertToken?: string | null }
   | { type: 'dismissNeedsTeams' }
   | { type: 'executeFailure'; error: string; definitive: boolean }
   | { type: 'executeValidationFailure'; errors: ImportError[] }
@@ -195,7 +199,8 @@ export function isDefinitiveFailure(status: number): boolean {
 }
 
 /** 409 확인 창을 닫은 상태 */
-const NO_TEAMS_PROMPT: Pick<WizardState, 'needsTeams' | 'inheritsCommon' | 'commonTeams'> = { needsTeams: null, inheritsCommon: false, commonTeams: [] }
+const NO_TEAMS_PROMPT: Pick<WizardState, 'needsTeams' | 'inheritsCommon' | 'commonTeams' | 'convertToken'> =
+  { needsTeams: null, inheritsCommon: false, commonTeams: [], convertToken: null }
 /** 화면을 처음으로 되돌려도 남기는 실행 의도 — 응답을 잃은 뒤 같은 파일·같은 입력으로 다시 실행하면 같은 id 여야 두 벌이 되지 않는다(RF3).
  *  다른 파일·다른 입력이면 지문이 달라 새 id 다. */
 const keptIntent = (s: WizardState): Pick<WizardState, 'commandId' | 'intentKey' | 'preBackup'> =>
@@ -244,7 +249,7 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, busy: true, error: null, errors: null, ...NO_TEAMS_PROMPT }
     case 'executeNeedsTeams':
       // 409 는 영수증을 남기지 않는다 — 등록 재실행은 같은 의도·같은 id(commandId 를 지우지 않는다)
-      return { ...state, busy: false, needsTeams: action.teams, inheritsCommon: action.inheritsCommon, commonTeams: action.commonTeams }
+      return { ...state, busy: false, needsTeams: action.teams, inheritsCommon: action.inheritsCommon, commonTeams: action.commonTeams, convertToken: action.convertToken ?? null }
     case 'dismissNeedsTeams':
       return { ...state, ...NO_TEAMS_PROMPT }
     case 'executeFailure':

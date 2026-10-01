@@ -26,7 +26,7 @@ const GUARDED_FILES: readonly string[] = [
 const SAFE_ERROR_SOURCES: ReadonlySet<string> = new Set([
   'requireSuperuser', 'requireWorkspaceAdmin', 'requireProjectAdmin', 'requireProjectMember',
   'requireModule', 'requireSessionModule', 'resolveProjectId', 'resolveScope',
-  'validateArea', 'normalizeNewTeamCode',
+  'validateArea', 'normalizeNewTeamCode', 'validateNewTeamCodes',
 ])
 /** `.message` 를 읽어도 되는 결과의 출처 — 토큰을 고정 문구로 바꾼 것 */
 const SAFE_MESSAGE_SOURCES: ReadonlySet<string> = new Set(['rpcFailure', 'mapDbError'])
