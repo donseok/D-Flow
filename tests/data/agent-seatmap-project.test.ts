@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 import { getProjectOffice, getSeatmap, seatmapFloorIds } from '@/lib/data/agentSeatmap'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
-import { makeActor, makeMemberActor } from '../fixtures/actor'
+import { makeActor, makeMemberActor, WS } from '../fixtures/actor'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
@@ -28,7 +28,8 @@ function admin(queues: Record<string, Resp[]>, calls: Record<string, unknown[][]
   mocks.createAdminClient.mockReturnValue(client)
   return client
 }
-const SUPER = makeActor({ isSuperuser: true })
+// 플랫폼 관리자 — buildActor 가 전 프로젝트를 싣는다(p1~p3 = WS, px = 다른 워크스페이스). 좌석표는 그중 한 워크스페이스만(D21)
+const SUPER = makeActor({ isSuperuser: true, projectWorkspace: new Map([['p1', WS], ['p2', WS], ['p3', WS], ['px', 'ws-2']]) })
 const MEMBER_P1 = makeMemberActor('p1')
 
 beforeEach(() => { vi.clearAllMocks() })
@@ -36,14 +37,17 @@ beforeEach(() => { vi.clearAllMocks() })
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
 describe('seatmapFloorIds', () => {
-  it('projectId 없으면 seatmapProjectIds 그대로(슈퍼유저 null, 멤버는 역할 목록)', () => {
-    expect(seatmapFloorIds(SUPER)).toBeNull()
-    expect(seatmapFloorIds(MEMBER_P1)).toEqual(['p1'])
+  it('projectId 없으면 그 워크스페이스의 접근 범위(슈퍼유저는 그 워크스페이스 전부), 워크스페이스도 없으면 [](전 워크스페이스로 넓히지 않는다)', () => {
+    expect(seatmapFloorIds(SUPER, { workspaceId: WS })).toEqual(['p1', 'p2', 'p3'])
+    expect(seatmapFloorIds(MEMBER_P1, { workspaceId: WS })).toEqual(['p1'])
+    expect(seatmapFloorIds(MEMBER_P1, { workspaceId: 'ws-2' })).toEqual([])
+    expect(seatmapFloorIds(SUPER, {})).toEqual([])
   })
-  it('projectId 있으면 접근 범위와 교집합 — 슈퍼유저 [id], 멤버는 목록에 있을 때만 [id], 없으면 []', () => {
-    expect(seatmapFloorIds(SUPER, 'p2')).toEqual(['p2'])
-    expect(seatmapFloorIds(MEMBER_P1, 'p1')).toEqual(['p1'])
-    expect(seatmapFloorIds(MEMBER_P1, 'p2')).toEqual([])
+  it('projectId 있으면 그 프로젝트의 워크스페이스 범위와 교집합 — 슈퍼유저 [id], 멤버는 목록에 있을 때만 [id], 모르는 id 는 []', () => {
+    expect(seatmapFloorIds(SUPER, { projectId: 'p2' })).toEqual(['p2'])
+    expect(seatmapFloorIds(SUPER, { projectId: 'p9' })).toEqual([])
+    expect(seatmapFloorIds(MEMBER_P1, { projectId: 'p1' })).toEqual(['p1'])
+    expect(seatmapFloorIds(MEMBER_P1, { projectId: 'p2' })).toEqual([])
   })
 })
 
@@ -85,52 +89,39 @@ describe('getSeatmap — agents 모듈이 꺼진 프로젝트의 층을 뺀다(�
     const calls: Record<string, unknown[][]> = {}
     const a = admin({}, calls)
     vi.mocked(projectsWithModule).mockResolvedValueOnce([])
-    const map = await getSeatmap(MEMBER_P1, NOW, 'all')
+    const map = await getSeatmap(MEMBER_P1, NOW, 'all', { workspaceId: WS })
     expect(map.floors).toEqual([])
     expect(projectsWithModule).toHaveBeenCalledWith(['p1'], 'agents', { client: expect.anything() })
     expectAdminClient(a)
     expect(calls['agent_work_orders.in']).toBeUndefined()
     expect(orderReads(a)).toBe(0)
   })
-  it('플랫폼 관리자(전체) — 모두 켜졌으면 지금처럼 한 번만 읽고 층을 다 그린다', async () => {
+  it('플랫폼 관리자 — 그 워크스페이스 프로젝트로 조회 전에 좁힌다(다른 워크스페이스 층·전체 조회 없음, D21)', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin(reads(read('p1', 'p2')), calls)
-    const map = await getSeatmap(SUPER, NOW, 'all')
-    expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'agents', { client: expect.anything() })
+    const a = admin(reads(read('p1', 'p2', 'p3')), calls)
+    const map = await getSeatmap(SUPER, NOW, 'all', { workspaceId: WS })
+    expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2', 'p3'], 'agents', { client: expect.anything() })
     expectAdminClient(a)
     expect(orderReads(a)).toBe(1)
-    expect(floorIds(map)).toEqual(['p1', 'p2'])
+    expect(calls['agent_work_orders.in']).toEqual([['project_id', ['p1', 'p2', 'p3']]])
+    expect(calls['agent_work_orders.not']).toBeUndefined()
+    expect(floorIds(map)).toEqual(['p1', 'p2', 'p3'])
   })
-  it('플랫폼 관리자 — 꺼진 프로젝트가 섞이면 그것만 빼고 다시 읽는다(켜진 것으로 좁히지 않는다 — 상한에 밀린 켜진 프로젝트를 되찾게)', async () => {
+  it('플랫폼 관리자 — 꺼진 프로젝트는 조회 전에 뺀다(한 번 읽는다)', async () => {
     const calls: Record<string, unknown[][]> = {}
-    const a = admin(reads(read('p1', 'p2'), read('p1')), calls)
+    const a = admin(reads(read('p1')), calls)
     vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])
-    const map = await getSeatmap(SUPER, NOW, 'all')
-    expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'agents', { client: expect.anything() })
+    const map = await getSeatmap(SUPER, NOW, 'all', { workspaceId: WS })
     expectAdminClient(a)
-    expect(orderReads(a)).toBe(2)
-    expect(calls['agent_work_orders.not']).toEqual([['project_id', 'in', '(p2)']])
-    expect(calls['agent_work_orders.in']).toBeUndefined()
-    expect(floorIds(map)).toEqual(['p1'])
-  })
-  it('다시 읽은 결과에 처음 보는 프로젝트가 켜져 있으면 그대로 싣는다(조회 두 번)', async () => {
-    const a = admin(reads(read('p1', 'p2'), read('p1', 'p3')))
-    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1'])        // 둘째 판정(['p3'])은 전역 mock — 입력 그대로(켜짐)
-    const map = await getSeatmap(SUPER, NOW, 'all')
-    expect(vi.mocked(projectsWithModule).mock.calls.map((c) => c[0])).toEqual([['p1', 'p2'], ['p3']])
-    expectAdminClient(a)
-    expect(orderReads(a)).toBe(2)
-    expect(floorIds(map)).toEqual(['p1', 'p3'])
-  })
-  it('처음 보는 프로젝트도 꺼졌으면 판정을 마친 켜진 목록으로 좁혀 한 번 더 읽고 끝낸다(조회는 많아야 세 번)', async () => {
-    const calls: Record<string, unknown[][]> = {}
-    const a = admin(reads(read('p1', 'p2'), read('p1', 'p3'), read('p1')), calls)
-    vi.mocked(projectsWithModule).mockResolvedValueOnce(['p1']).mockResolvedValueOnce([])
-    const map = await getSeatmap(SUPER, NOW, 'all')
-    expectAdminClient(a)
-    expect(orderReads(a)).toBe(3)
+    expect(orderReads(a)).toBe(1)
     expect(calls['agent_work_orders.in']).toEqual([['project_id', ['p1']]])
     expect(floorIds(map)).toEqual(['p1'])
+  })
+  it('워크스페이스도 프로젝트도 없으면 조회 없이 빈 좌석표 — 플랫폼 관리자도 전 워크스페이스로 넓히지 않는다(fail-closed)', async () => {
+    const a = admin({})
+    const map = await getSeatmap(SUPER, NOW, 'all')
+    expect(map.floors).toEqual([])
+    expect(orderReads(a)).toBe(0)
   })
 })
 

@@ -1,18 +1,17 @@
-// 좌석표(/agents) 접근 — 슈퍼유저 또는 역할(member/admin)이 있는 프로젝트가 1개 이상. usageAccess 와 같은 자리(페이지·사이드바가 함께 쓴다).
-// (2026-09-14 사용자 결정) 기본 범위가 '내 작업'이 되면서 관리자 전용에서 멤버까지 연다. 역할이 없는 조회 전용 계정은 여전히 못 본다.
-import { hasAnyProjectRole, isProjectMember, type Actor } from '@/lib/domain/authz'
+// 좌석표(/w/[slug]/agents) 접근 — 그 워크스페이스에 역할이 있는가(D21, §5.8). 판정은 여기 한 곳(페이지·재조회 액션이 같이 쓴다).
+// 층 목록도 그 워크스페이스로 한정한다 — 지금까지는 플랫폼 관리자에게 전 워크스페이스 프로젝트가 나갔다(SP2 스펙 :50).
+import { hasProjectRoleInWorkspace, isProjectMember, type Actor } from '@/lib/domain/authz'
 
-export function canViewAgents(actor: Actor | null): boolean {
-  return hasAnyProjectRole(actor)
+export function canViewAgents(actor: Actor | null, workspaceId: string): boolean {
+  return hasProjectRoleInWorkspace(actor, workspaceId)
 }
 
 /**
- * 층(프로젝트) 목록. null = 전체(슈퍼유저). 그 외는 roleIn 기준 member 이상인 프로젝트 — 멤버가 보는 화면(WBS·칸반)과 같은 범위.
- * 워크스페이스 관리자는 명단 행이 없어도 그 워크스페이스 프로젝트 전부가 들어온다(roleIn ⑤ 승계) — canViewAgents 와 같은 축.
- * 내 워크스페이스 밖 프로젝트(projectWorkspace 에 없는 pid)는 명단 역할이 있어도 빠진다(존재 은닉과 같은 판정).
+ * 층(프로젝트) 목록 — 그 워크스페이스의 프로젝트 가운데 멤버 이상(roleIn — 워크스페이스 관리자 승계 포함). 플랫폼 관리자는 그 워크스페이스 전부
+ * (buildActor 가 플랫폼 관리자에게 전 프로젝트를 싣는다). 내 워크스페이스 밖 pid 는 projectWorkspace 에 없어 빠진다(존재 은닉).
  */
-export function seatmapProjectIds(actor: Actor | null): string[] | null {
+export function seatmapProjectIds(actor: Actor | null, workspaceId: string): string[] {
   if (!actor) return []
-  if (actor.isSuperuser) return null
-  return [...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid))
+  const inWs = [...actor.projectWorkspace].filter(([, wid]) => wid === workspaceId).map(([pid]) => pid)
+  return actor.isSuperuser ? inWs : inWs.filter((pid) => isProjectMember(actor, pid))
 }

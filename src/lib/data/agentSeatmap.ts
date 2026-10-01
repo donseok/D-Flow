@@ -128,38 +128,27 @@ export async function fetchMyMemberIds(
   return must<Array<{ id: string }>>('로스터', await q).map(m => m.id)
 }
 
-export interface SeatmapOptions { projectId?: string }
+export interface SeatmapOptions { projectId?: string; workspaceId?: string }
 
 /**
- * 층 목록 — projectId 가 있으면 접근 가능 범위와 교집합(슈퍼유저는 그대로 [projectId]).
+ * 층 목록 — 그 워크스페이스의 접근 가능 프로젝트(seatmapProjectIds). projectId 가 있으면 그 프로젝트의 워크스페이스 범위와 교집합.
+ * 워크스페이스도 프로젝트도 없으면 [] — 전 워크스페이스로 넓히지 않는다(fail-closed, D21).
  * 범위 밖이면 [] 라 조회가 일어나지 않는다. 페이지 게이트를 통과했어도 여기서 다시 좁힌다(fail-closed).
  */
-export function seatmapFloorIds(actor: Actor, projectId?: string): string[] | null {
-  const ids = seatmapProjectIds(actor)
-  if (projectId === undefined) return ids
-  if (ids === null) return [projectId]
-  return ids.includes(projectId) ? [projectId] : []
+export function seatmapFloorIds(actor: Actor, opts: SeatmapOptions): string[] {
+  const wid = opts.projectId ? actor.projectWorkspace.get(opts.projectId) : opts.workspaceId
+  if (!wid) return []
+  const ids = seatmapProjectIds(actor, wid)
+  if (opts.projectId === undefined) return ids
+  return ids.includes(opts.projectId) ? [opts.projectId] : []
 }
 
 export async function getSeatmap(actor: Actor, nowMs = Date.now(), scope: SeatmapScope = 'mine', opts: SeatmapOptions = {}): Promise<Seatmap> {
   const admin = createAdminClient()
   // agents 모듈이 꺼진 프로젝트의 층은 싣지 않는다(스펙 §4.2 — 목록형 응답은 행을 뺀다). 층 목록이 있으면 조회 전에 좁힌다.
-  const floor = seatmapFloorIds(actor, opts.projectId)
-  let projectIds = floor === null ? null : await projectsWithModule(floor, 'agents', { client: admin })
-  let rows = await fetchSeatmapRows(admin, projectIds, nowMs)
-  if (projectIds === null) {
-    // 전체(플랫폼 관리자)면 한 번 읽은 층을 판정해 꺼진 것이 섞였을 때만 그것을 빼고 다시 읽는다(모두 켜졌으면 지금과 같은 한 번).
-    // 켜진 것으로 좁히지 않고 꺼진 것을 빼는 이유: 주문 상한(2000)에 밀려 첫 조회에 없던 켜진 프로젝트가 빈자리를 채우게.
-    // 다시 읽어 처음 보는 프로젝트가 나오면 그것도 판정하고, 또 꺼진 것이 있으면 판정을 마친 켜진 목록으로 좁혀 끝낸다(조회는 많아야 세 번).
-    const seen = rows.projects.map((p) => p.id)
-    const on = new Set(await projectsWithModule(seen, 'agents', { client: admin }))
-    if (on.size < seen.length) {
-      rows = await fetchSeatmapRows(admin, null, nowMs, { excludeProjectIds: seen.filter((id) => !on.has(id)) })
-      const fresh = rows.projects.map((p) => p.id).filter((id) => !seen.includes(id))
-      const freshOn = fresh.length ? await projectsWithModule(fresh, 'agents', { client: admin }) : []
-      if (freshOn.length < fresh.length) { projectIds = [...on, ...freshOn]; rows = await fetchSeatmapRows(admin, projectIds, nowMs) }
-    }
-  }
+  const floor = seatmapFloorIds(actor, opts)
+  const projectIds = await projectsWithModule(floor, 'agents', { client: admin })
+  const rows = await fetchSeatmapRows(admin, projectIds, nowMs)
   // 결재 어포던스 재료는 범위와 무관하게 싣는다 — 전체 보기에서도 버튼 노출은 서버 가드와 같은 축이어야 한다.
   // 로스터 조회가 던지면 그대로 올린다(조회 실패를 권한 없음으로 위장하지 않는다).
   const memberIds = new Set(await fetchMyMemberIds(admin, { userId: actor.userId }, projectIds))
