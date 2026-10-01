@@ -71,7 +71,7 @@ const items = computeTree([
     owners: [{ team: '팀A', kind: 'primary' }, { team: '팀B', kind: 'support' }] }),
 ], '2026-07-02', new Set(), { subActTeamOrder: teamOrderMap(['팀A', '팀B']) })
 
-const built = buildWorkbookWithProfile(items, SAVED, [], { expandSubActs: true }, 'Acme')
+const built = buildWorkbookWithProfile(items, SAVED, [], { expandSubActs: true, levelLabels: [] }, 'Acme')
 if (!built.ok) throw new Error(built.error)
 const FILE = new Blob([built.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 

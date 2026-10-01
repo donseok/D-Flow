@@ -41,7 +41,7 @@ describe('buildAoaWithProfile — (a) LEGACY_EXCEL_PROFILE_V1 접기는 기존 b
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
 
   const legacyAoa = buildWbsAoa(items, '테스트 프로젝트', FIXTURE_TEAM_CODES)
-  const profileAoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false }, '테스트 프로젝트'))
+  const profileAoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false, levelLabels: ['Phase', 'Task', 'Activity'] }, '테스트 프로젝트'))
 
   it('행 개수가 같다', () => {
     expect(profileAoa.length).toBe(legacyAoa.length)
@@ -77,7 +77,7 @@ describe('buildAoaWithProfile — (b) expandSubActs:true 는 sub-act 를 4번째
     }),
   ]
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
-  const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true }, '테스트'))
+  const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, '테스트'))
   const header3 = aoa[2] as unknown[]
   const TEAM_LABELS = ['PMO', 'ERP', 'MES', '가공', 'MDM']
   const teamColIdxs = header3.map((v, i) => (TEAM_LABELS.includes(v as string) ? i : -1)).filter(i => i >= 0)
@@ -112,7 +112,7 @@ describe('buildAoaWithProfile — (b) expandSubActs:true 는 sub-act 를 4번째
   })
 
   it('접기(expandSubActs:false)였다면 sub-act 행이 아예 없다(대조군, 시프트도 없다)', () => {
-    const collapsed = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false }, '테스트'))
+    const collapsed = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false, levelLabels: ['Phase', 'Task', 'Activity'] }, '테스트'))
     const subActRows = collapsed.slice(3).filter(r => (r as unknown[])[4] !== '')
     expect(subActRows.length).toBe(0)
     // 접기는 시프트가 없으므로 팀 열이 원래 자리(6~10)에 그대로 있다.
@@ -145,7 +145,7 @@ describe('buildAoaWithProfile — (b-2) 삽입-시프트: 계층 다음 열 충�
     }),
   ]
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
-  const aoa = unwrap(buildAoaWithProfile(items, CONFLICT_PROFILE, { expandSubActs: true }, 'C'))
+  const aoa = unwrap(buildAoaWithProfile(items, CONFLICT_PROFILE, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'C'))
   const rows = aoa.slice(3) as unknown[][]
   const subAct = rows.find(r => r[3] === 'A1 (PMO 주관)')
   const parent = rows.find(r => r[2] === 'A1')
@@ -164,7 +164,7 @@ describe('buildAoaWithProfile — (b-2) 삽입-시프트: 계층 다음 열 충�
   })
 
   it('detect→parseWithProfile 왕복이 성공한다(무증상 오파싱 없음)', () => {
-    const built = buildWorkbookWithProfile(items, CONFLICT_PROFILE, [], { expandSubActs: true }, 'C')
+    const built = buildWorkbookWithProfile(items, CONFLICT_PROFILE, [], { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'C')
     expect(built.ok).toBe(true)
     if (!built.ok) return
     const detected = detectWorkbook(built.buffer)
@@ -188,7 +188,7 @@ describe('buildAoaWithProfile — 프로파일 밖 팀은 말미에 열을 추�
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
 
   it('펼침 모드 — 6번째 팀 라벨이 헤더 말미에 추가되고, 데이터 행에 마크가 실재한다', () => {
-    const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true }, 'T'))
+    const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'T'))
     const header3 = aoa[2] as unknown[]
     const col = header3.indexOf('신팀6')
     expect(col).toBeGreaterThan(-1)
@@ -198,7 +198,7 @@ describe('buildAoaWithProfile — 프로파일 밖 팀은 말미에 열을 추�
   })
 
   it('접기 모드에서도 동일하게 유실되지 않는다', () => {
-    const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false }, 'T'))
+    const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false, levelLabels: ['Phase', 'Task', 'Activity'] }, 'T'))
     const header3 = aoa[2] as unknown[]
     const col = header3.indexOf('신팀6')
     expect(col).toBeGreaterThan(-1)
@@ -239,7 +239,7 @@ describe('buildAoaWithProfile — (c) 펼침 산출물의 detect→parseWithProf
     }),
   ]
   const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
-  const built = buildWorkbookWithProfile(items, LEGACY_EXCEL_PROFILE_V1, [], { expandSubActs: true }, 'RT')
+  const built = buildWorkbookWithProfile(items, LEGACY_EXCEL_PROFILE_V1, [], { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'RT')
   if (!built.ok) throw new Error(`setup failed: ${built.error}`)
   const buf = built.buffer
 
@@ -289,17 +289,17 @@ describe('buildAoaWithProfile — outline 계층 + 펼침은 명시적으로 거
   )
 
   it('outline + expandSubActs:true 는 ok:false 로 거부한다', () => {
-    const built = buildAoaWithProfile(items, OUTLINE_PROFILE, { expandSubActs: true })
+    const built = buildAoaWithProfile(items, OUTLINE_PROFILE, { expandSubActs: true, levelLabels: [] })
     expect(built).toEqual({ ok: false, error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' })
   })
 
   it('buildWorkbookWithProfile 도 동일하게 거부를 그대로 전파한다', () => {
-    const built = buildWorkbookWithProfile(items, OUTLINE_PROFILE, [], { expandSubActs: true })
+    const built = buildWorkbookWithProfile(items, OUTLINE_PROFILE, [], { expandSubActs: true, levelLabels: [] })
     expect(built.ok).toBe(false)
   })
 
   it('outline + 접기는 회귀 없이 그대로 동작한다', () => {
-    const built = buildAoaWithProfile(items, OUTLINE_PROFILE, { expandSubActs: false })
+    const built = buildAoaWithProfile(items, OUTLINE_PROFILE, { expandSubActs: false, levelLabels: [] })
     expect(built.ok).toBe(true)
   })
 })
@@ -325,7 +325,7 @@ describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', ()
     teamColumns: [], ownerMarks: { '●': 'primary', '△': 'support' },
   })
   const readBack = (profile: ExcelProfile) => {
-    const built = buildWorkbookWithProfile(items, profile, [], { expandSubActs: false }, 'Acme')
+    const built = buildWorkbookWithProfile(items, profile, [], { expandSubActs: false, levelLabels: [] }, 'Acme')
     if (!built.ok) throw new Error(built.error)
     // detect·parse 와 같은 읽기 규칙(blankrows:false) — 빈 행은 세지 않는다
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(
@@ -353,7 +353,7 @@ describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', ()
       row({ id: 'C', parentId: 'B', code: '1.1.1', sortOrder: 2, name: 'C' }),
     ], '2026-07-02', new Set(), OPTS)
     for (const expandSubActs of [false, true]) {
-      const r = buildAoaWithProfile(deep, COLUMNS(2), { expandSubActs })
+      const r = buildAoaWithProfile(deep, COLUMNS(2), { expandSubActs, levelLabels: [] })
       expect(r.ok).toBe(false)
       if (!r.ok) {
         expect(r.error).toContain('계층 열(2개)')

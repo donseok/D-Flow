@@ -3,7 +3,6 @@
 import * as XLSX from 'xlsx'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
-import { resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { HEADER, TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
 const STATUS_LABEL: Record<ComputedItem['status'], string> = {
@@ -16,16 +15,9 @@ function isoToDate(iso: string | null): Date | '' {
   return new Date(iso + 'T00:00:00Z')
 }
 
-const LEGACY_LEVEL_LABELS = ['Phase', 'Task', 'Activity'] as const
-
-/** 계층 열 라벨 — 우선순위: 주입된 프로젝트 라벨(levelLabels) → 레거시 3열 이름 → Level{N}.
- *  주입 라벨이 계층 열보다 짧으면 남는 열만 Level{N} 폴백(주입이 부분 적용되는 게 아니라 열 단위 폴백).
- *  미주입 시 종전 동작과 바이트 동일 — resolveLegacyLevelLabels 판정 재사용(§ 라운드트립 규약의 단일 출처). */
-function hierarchyLabel(profile: ExcelProfile, depth: number, levelLabels?: readonly string[]): string {
-  const injected = levelLabels?.[depth]
-  if (injected) return injected
-  if (levelLabels == null && resolveLegacyLevelLabels(profile)) return LEGACY_LEVEL_LABELS[depth] ?? 'Activity'
-  return `Level${depth + 1}`
+/** 계층 열 라벨 — 주입된 프로젝트 라벨(늘 있다 — 라우트가 core.level_labels 를 넘긴다). 라벨이 계층 열보다 짧으면 남는 열만 Level{N}. */
+function hierarchyLabel(depth: number, levelLabels: readonly string[]): string {
+  return levelLabels[depth] || `Level${depth + 1}`
 }
 
 /** 트리를 (항목, 깊이) 페어로 평탄화. sub-act(isOwnerSplit) 자식 여부로만 판단한다 — level 문자열은
@@ -93,23 +85,28 @@ function collectTeams(items: ComputedItem[]): string[] {
  *  outline 코드 열은 "깊이 = 구분자 수"로 표현되는데, sub-act 는 코드 자릿수를 늘릴 데이터 근거가
  *  없다(splitLeafOwners 가 sub-act 에 부모와 동일한 code 를 승계 — 자릿수 합성은 별도 설계가
  *  필요한 일이라 이 태스크 범위 밖). 예전엔 이 조합에서도 조용히 (틀린 모양의) 결과를 냈는데, 그건
- *  무증상 왕복 오파싱을 낳는다 — 대신 명시적으로 실패를 반환한다. */
+ *  무증상 왕복 오파싱을 낳는다 — 대신 명시적으로 실패를 반환한다.
+ *
+ *  ── 깊은 트리(SP4 D16) ──
+ *  deep='reject'(저장 양식 — 기본)는 계층 열보다 깊은 일반 항목을 거부한다(문구는 '저장된 양식 비우기' 처방 — 저장 양식에만 맞다).
+ *  deep='fold'(표준 레이아웃)는 그 항목의 이름을 마지막 계층 열에 쓴다(옛 export.ts 의 접기와 같다). 펼침의 sub-act 는 깊이와 무관하게
+ *  insertAt 에 쓴다 — 접는 것은 일반 항목뿐이다(Q40). */
 export function buildAoaWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,
-  opts: { expandSubActs: boolean; levelLabels?: readonly string[] },
+  opts: { expandSubActs: boolean; levelLabels: readonly string[]; deep?: 'fold' | 'reject' },
   projectName = 'WBS',
 ): { ok: true; aoa: unknown[][] } | { ok: false; error: string } {
-  const { expandSubActs, levelLabels } = opts
+  const { expandSubActs, levelLabels, deep = 'reject' } = opts
 
   if (profile.hierarchy.kind === 'outline' && expandSubActs) {
     return { ok: false, error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' }
   }
 
   const hierCols = profile.hierarchy.kind === 'columns' ? profile.hierarchy.columns : null
-  // 계층 열보다 깊은 항목(sub-act 제외)은 접기에서 이름이 사라지고(아래 데이터 행의 hierColsOut 분기), 펼침에서는 '세부업무' 열로 잘못 들어간다.
-  // 단계 추가(LevelSettingsManager)나 더 깊은 파일의 append 임포트 뒤에 생긴다 — 조용한 손상 대신 거부한다.
-  if (hierCols) {
+  // 계층 열보다 깊은 항목(sub-act 제외)은 저장 양식의 계층 열에 자리가 없다 — 단계 추가(LevelSettingsManager)나 더 깊은 파일의
+  // append 임포트 뒤에 생긴다. 저장 양식(deep='reject')은 조용한 손상 대신 거부하고, 표준(deep='fold')은 마지막 계층 열로 접는다.
+  if (hierCols && deep === 'reject') {
     const tooDeep = flattenWithDepth(items, false).some(({ item, depth }) => !item.isOwnerSplit && depth >= hierCols.length)
     if (tooDeep) {
       return { ok: false, error: `저장된 엑셀 양식의 계층 열(${hierCols.length}개)보다 WBS가 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요` }
@@ -170,7 +167,7 @@ export function buildAoaWithProfile(
     -1,
   )
   const header2 = new Array(header2Bound + 1).fill('')
-  if (hierColsOut) hierColsOut.forEach((c, i) => { header2[c] = hierarchyLabel(profile, i, levelLabels) })
+  if (hierColsOut) hierColsOut.forEach((c, i) => { header2[c] = hierarchyLabel(i, levelLabels) })
   if (teamCols.length > 0) header2[teamCols[0][0]] = HEADER.owner
   if (deliverableCol != null) header2[deliverableCol] = HEADER.deliverable
   if (startCol != null) header2[startCol] = HEADER.plan
@@ -179,7 +176,7 @@ export function buildAoaWithProfile(
   // trailing 은 데이터 행과 같은 4칸이다 — 계획%·계획대비%·진척·상태(SP4 §4.3 ①에서 상태 머리를 더했다).
   // 앞 세 칸의 머리가 값과 한 칸씩 어긋난 것(계획대비% 가 롤업 실적% 위, 진척 이 성과율 위)은 감지 낱말 호환 때문에 그대로 둔다(D16).
   const header3 = new Array(maxCol + 5).fill('')
-  if (hierColsOut) hierColsOut.forEach((c, i) => { header3[c] = hierarchyLabel(profile, i, levelLabels) })
+  if (hierColsOut) hierColsOut.forEach((c, i) => { header3[c] = hierarchyLabel(i, levelLabels) })
   else if (outlineColOut != null) header3[outlineColOut] = HEADER.code
   if (extraAxisCol != null) header3[extraAxisCol] = HEADER.extraAxis
   if (codeCol != null) header3[codeCol] = HEADER.code
@@ -206,8 +203,9 @@ export function buildAoaWithProfile(
     if (codeCol != null) row[codeCol] = item.code ?? ''
 
     if (hierColsOut) {
-      if (depth < hierColsOut.length) row[hierColsOut[depth]] = item.name
-      else if (insertAt != null) row[insertAt] = item.name // depth === hierCols.length(sub-act, 펼침 전용)
+      if (item.isOwnerSplit && insertAt != null) row[insertAt] = item.name               // 펼침의 sub-act — 깊이와 무관하게(Q40)
+      else if (depth < hierColsOut.length) row[hierColsOut[depth]] = item.name
+      else row[hierColsOut[hierColsOut.length - 1]] = item.name                          // deep='fold' — reject 는 위에서 거부했다
     } else if (outlineColOut != null) {
       row[outlineColOut] = item.code ?? ''
       if (nameCol != null) row[nameCol] = item.name
@@ -271,7 +269,7 @@ export function buildWorkbookWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,
   holidays: { date: string; name: string }[],
-  opts: { expandSubActs: boolean; levelLabels?: readonly string[] },
+  opts: { expandSubActs: boolean; levelLabels: readonly string[]; deep?: 'fold' | 'reject' },
   projectName = 'WBS',
 ): { ok: true; buffer: ArrayBuffer } | { ok: false; error: string } {
   const built = buildAoaWithProfile(items, profile, opts, projectName)

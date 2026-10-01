@@ -101,7 +101,7 @@ describe('buildAoaWithProfile — levelLabels 주입 시 Level{N} 대신 프로�
   })
 
   it('주입하지 않으면 기존 동작 그대로 — Level1..N (바이트 불변)', () => {
-    const r = buildAoaWithProfile(items, PROFILE4, { expandSubActs: false })
+    const r = buildAoaWithProfile(items, PROFILE4, { expandSubActs: false, levelLabels: [] })
     expect(r.ok).toBe(true)
     if (!r.ok) return
     const h3 = r.aoa[2] as string[]
