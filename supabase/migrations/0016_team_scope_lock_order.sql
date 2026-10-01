@@ -8,6 +8,11 @@
 --   본다. 전환이 커밋됐으면 옛 행이 없어 면제되지 않고 TEAM_SCOPE_PROJECT_OWNED 로 간다. 갈라진(D4) 프로젝트의 기존 참조 재저장은 잠금 뒤에도
 --   행이 있어 그대로 통과한다. UPDATE 면제(팀·부모 열이 그대로)는 잠금 앞 그대로 둔다 — 행 잠금 대기 뒤 EPQ 로 OLD 가 전환된 행이 되어 면제가
 --   깨지므로 같은 구멍이 없다. 나머지(오류 코드·토큰·대상 표 넷·초대 분기)는 원문 그대로다. 트리거 넷·ACL 은 create or replace 가 그대로 둔다.
+-- 격리 수준(H2 규칙 ③ — A2-1 리뷰 보안 P3): 위 순서는 잠금을 기다린 다음 문장이 새 스냅숏을 본다는 데(read committed) 기댄다. repeatable read·
+--   serializable 에서는 잠금 뒤에도 트랜잭션 스냅숏의 옛 행(전환 전 공용 참조)이 보여 면제되고, on conflict 검사는 키가 옮겨 간 옛 튜플과 충돌하지
+--   않아 공용 팀 참조가 다시 들어간다. 그래서 공용 팀을 가리키는 쓰기는 잠금 앞에서 read committed 가 아니면 25001 TEAM_SCOPE_ISOLATION 으로
+--   거절한다(짝인 convert_inherited_teams 의 TEAM_CONVERT_ISOLATION 과 같은 꼴). 전용 팀만 가리키는 쓰기는 이 판정에 닿지 않는다.
+--   (0016 이 아직 main 밖이라 새 번호 대신 이 파일을 고쳤다 — 적용된 곳은 전용 리허설 스택뿐이다.)
 -- 롤백: supabase/rollbacks/*_team_scope_lock_order_rollback.sql(옛 본문 원문). 이 파일은 함수 하나만 바꾸고 표·권한을 만들지 않는다.
 
 -- ① team_ref_owned_scope — 잠금 먼저, 그다음 "이미 있는 키" 면제
@@ -52,6 +57,10 @@ begin
      or not exists (select 1 from public.teams t where t.id = any (v_teams) and t.project_id is null) then
     return new;
   end if;
+  -- 격리 수준 규칙(H2 ③): 아래 잠금 뒤 판정은 새 스냅숏(read committed)에 기댄다 — 스냅숏이 고정된 수준이면 옛 행이 보여 면제되므로 거절한다
+  if pg_catalog.current_setting('transaction_isolation') is distinct from 'read committed' then
+    raise exception using errcode = '25001', message = 'TEAM_SCOPE_ISOLATION';
+  end if;
   -- 잠금 먼저 — 전환이 진행 중이면 여기서 기다렸다가(read committed — 다음 문장은 새 스냅숏) 커밋된 상태를 본다
   perform 1 from public.projects p where p.id = v_project for key share;
   -- 잠금 뒤의 "이미 있는 키" 면제 — 같은 키 INSERT(on conflict 재저장)는 새 참조가 아니다. 전환이 그 행을 전용 팀으로 옮겼으면 행이 없어 면제되지 않는다.
@@ -95,6 +104,12 @@ begin
   if v is not null then raise exception 'TEAM_SCOPE_LOCK_ORDER_POSTCHECK: 잠금 앞에서 판정하는 면제가 있다: %', v; end if;
   if position('TEAM_SCOPE_PROJECT_OWNED' in v_src) < v_lock then
     raise exception 'TEAM_SCOPE_LOCK_ORDER_POSTCHECK: 거부 판정이 잠금 앞에 있다';
+  end if;
+  -- 격리 수준 가드 — 잠금 앞에 있고(그 뒤 판정이 새 스냅숏에 기댄다) 토큰이 있다(H2 ③)
+  if position('if pg_catalog.current_setting(''transaction_isolation'') is distinct from ''read committed'' then' in v_src) = 0
+     or position('TEAM_SCOPE_ISOLATION' in v_src) = 0
+     or position('TEAM_SCOPE_ISOLATION' in v_src) > v_lock then
+    raise exception 'TEAM_SCOPE_LOCK_ORDER_POSTCHECK: 격리 수준 가드(TEAM_SCOPE_ISOLATION)가 잠금 앞에 없다';
   end if;
   -- DEFINER·search_path·EXECUTE(트리거 함수 — public·anon·authenticated 회수 그대로)
   if not exists (select 1 from pg_proc p where p.oid = 'public.team_ref_owned_scope()'::regprocedure
