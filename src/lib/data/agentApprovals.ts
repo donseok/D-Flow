@@ -8,6 +8,7 @@
 // service_role 로 읽으므로 RLS 가 없다 — 판정은 여기서 세션 actor 로 직접 한다. 셸 라우트에 가드가 없어
 // 임의의 menu=<uuid> 가 들어올 수 있으니, 관리자가 아니면 로스터에 내가 없을 때 0 이다(남의 프로젝트 수를 흘리지 않는다).
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/agentWork'
@@ -41,16 +42,20 @@ export function countApprovable(
   }).length
 }
 
-/** 이 프로젝트에서 내가 승인할 수 있는 결재 대기 수. 비로그인·잘못된 id 는 0. 조회 실패는 throw(호출부가 로깅). */
+/** 이 프로젝트에서 내가 승인할 수 있는 결재 대기 수. 비로그인·잘못된 id 는 0. 조회 실패·잘림은 throw(호출부 — 셸 — 가 로그 + 배지 0). */
 export async function getPendingApprovalCount(projectId: string): Promise<number> {
   if (!isUuidLike(projectId)) return 0
   const actor = await getActorForView()
   if (!actor) return 0
   const admin = createAdminClient()
-  const { data: orders, error } = await admin.from('agent_work_orders')
-    .select('wbs_item_id, claimed_by_user_id').eq('project_id', projectId).eq('status', 'reported').limit(500)
-  if (error) throw new Error(`[approvals] 결재 대기 조회 실패: ${error.message}`)
-  const rows = (orders ?? []) as Array<{ wbs_item_id: string | null; claimed_by_user_id: string | null }>
+  // 끝까지 읽는다(SP4 A2 §4.6 — limit(500) 은 배지를 500 에서 포화시켰다). 키는 바뀌지 않는 id(P15). 잘림·읽는 사이 변경·조회 오류는 throw —
+  // 호출부(셸)가 로그 + 배지 0 으로 격리한다(이 함수의 계약 그대로).
+  const rows = await fetchAllByKeyset<{ id: string; wbs_item_id: string | null; claimed_by_user_id: string | null }>(
+    '[approvals] 결재 대기', (r) => r.id, (after, limit) => {
+      const q = admin.from('agent_work_orders').select('id, wbs_item_id, claimed_by_user_id', { count: 'exact' })
+        .eq('project_id', projectId).eq('status', 'reported')
+      return (after ? q.gt('id', after.id) : q).order('id').limit(limit)
+    })
   if (rows.length === 0) return 0
   if (isProjectAdmin(actor, projectId)) return rows.length
   // 조회 전용 명단(access_role null)은 부모 항목 담당자여도 승인할 수 없다 — 서버 requireCompletionApprover 가
@@ -58,8 +63,9 @@ export async function getPendingApprovalCount(projectId: string): Promise<number
   if (!isProjectMember(actor, projectId)) return 0
   const memberIds = await myMemberIds(admin, { userId: actor.userId, projectId })
   if (memberIds.length === 0) return 0
-  const { data: items, error: itemErr } = await admin.from('wbs_items')
-    .select('id, parent_id, assignee_member_id').eq('project_id', projectId)
-  if (itemErr) throw new Error(`[approvals] 항목 트리 조회 실패: ${itemErr.message}`)
-  return countApprovable(rows, (items ?? []) as ItemRow[], { isAdmin: false, memberIds, userId: actor.userId })
+  const items = await fetchAllByKeyset<ItemRow>('[approvals] 항목 트리', (r) => r.id, (after, limit) => {
+    const q = admin.from('wbs_items').select('id, parent_id, assignee_member_id', { count: 'exact' }).eq('project_id', projectId)
+    return (after ? q.gt('id', after.id) : q).order('id').limit(limit)
+  })
+  return countApprovable(rows, items, { isAdmin: false, memberIds, userId: actor.userId })
 }

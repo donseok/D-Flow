@@ -8,23 +8,39 @@ const m = vi.hoisted(() => ({
   items: [] as Array<{ id: string; parent_id: string | null; assignee_member_id: string | null }>,
   memberIds: [] as string[],
   itemReads: 0,
+  maxRows: 1000 as number,
+  afterOrders: undefined as undefined | ((n: number, rows: Array<Record<string, unknown>>) => Array<Record<string, unknown>> | void),
+  ordersTable: undefined as unknown,
+  itemsTable: undefined as unknown,
 }))
 
 vi.mock('@/lib/authz', () => ({ getActorForView: async () => m.actor }))
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: async () => m.memberIds }))
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({
-    from: (table: string) => {
-      const chain = {
-        select: () => chain, eq: () => chain,
-        limit: async () => ({ data: m.orders, error: m.ordersError }),
-        then: (res: (v: unknown) => void) => { m.itemReads++; res({ data: m.items, error: null }) },
-      }
-      if (table !== 'agent_work_orders' && table !== 'wbs_items') throw new Error(`unexpected ${table}`)
-      return chain
-    },
-  }),
-}))
+// 키셋 가짜(SP4 A2 과제 17) — 표는 테스트마다 한 번 만들어 쪽 사이에 이어 쓴다(afterOrders 의 변경이 다음 쪽에 보이게).
+// itemReads 는 이제 "항목 표를 연 횟수"(쪽마다)다 — 관리자·로스터 밖은 0 그대로.
+vi.mock('@/lib/supabase/admin', async () => {
+  const { keysetTable } = await import('../helpers/keysetTable')
+  return {
+    createAdminClient: () => ({
+      from: (table: string) => {
+        if (table === 'agent_work_orders') {
+          m.ordersTable ??= keysetTable(
+            m.orders.map((o, i) => ({ id: `o${String(i).padStart(5, '0')}`, project_id: P_ID, status: 'reported', ...o })),
+            { maxRows: m.maxRows, error: m.ordersError ?? undefined, afterResponse: m.afterOrders },
+          )
+          return (m.ordersTable as ReturnType<typeof keysetTable>).make()
+        }
+        if (table === 'wbs_items') {
+          m.itemReads++
+          m.itemsTable ??= keysetTable(m.items.map((it) => ({ project_id: P_ID, ...it })), { maxRows: m.maxRows })
+          return (m.itemsTable as ReturnType<typeof keysetTable>).make()
+        }
+        throw new Error(`unexpected ${table}`)
+      },
+    }),
+  }
+})
+const P_ID = vi.hoisted(() => '11111111-1111-4111-8111-111111111111')
 
 import { countApprovable, getPendingApprovalCount } from '@/lib/data/agentApprovals'
 import { makeActor, WS } from '../fixtures/actor'
@@ -78,6 +94,7 @@ describe('countApprovable', () => {
 describe('getPendingApprovalCount', () => {
   beforeEach(() => {
     m.actor = actor('admin'); m.orders = ORDERS; m.ordersError = null; m.items = ITEMS; m.memberIds = []; m.itemReads = 0
+    m.maxRows = 1000; m.afterOrders = undefined; m.ordersTable = undefined; m.itemsTable = undefined
   })
   it('비로그인·잘못된 id 는 0', async () => {
     expect(await getPendingApprovalCount('not-a-uuid')).toBe(0)
@@ -118,5 +135,29 @@ describe('getPendingApprovalCount', () => {
   it('조회 실패는 0 으로 위장하지 않고 throw', async () => {
     m.ordersError = { message: 'boom' }
     await expect(getPendingApprovalCount(P)).rejects.toThrow('결재 대기 조회 실패')
+  })
+  it('결재 대기가 한 응답의 상한(여기서는 2)·옛 500 을 넘어도 끝까지 센다 — 배지가 포화하지 않는다', async () => {
+    m.actor = actor('admin')
+    m.maxRows = 2
+    m.orders = Array.from({ length: 503 }, () => ({ wbs_item_id: null, claimed_by_user_id: null }))
+    expect(await getPendingApprovalCount(P)).toBe(503)
+  })
+  it('비관리자의 항목 트리도 끝까지 — 둘째 쪽의 리프를 못 찾아 덜 세지 않는다', async () => {
+    m.actor = actor('member')
+    m.memberIds = ['m-boss']
+    m.maxRows = 2
+    m.items = [
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `a${i}`, parent_id: null, assignee_member_id: null })),
+      { id: 'root', parent_id: null, assignee_member_id: 'm-boss' }, { id: 'zleaf', parent_id: 'root', assignee_member_id: 'm-dev' },
+    ]
+    m.orders = [{ wbs_item_id: 'zleaf', claimed_by_user_id: null }]
+    expect(await getPendingApprovalCount(P)).toBe(1)
+  })
+  it('[RF5] 읽는 사이 주문이 바뀌면(count 불일치) throw — 잘린 수를 배지로 내지 않는다(셸이 격리한다)', async () => {
+    m.actor = actor('admin')
+    m.maxRows = 2
+    m.orders = Array.from({ length: 4 }, () => ({ wbs_item_id: null, claimed_by_user_id: null }))
+    m.afterOrders = (n, rows) => (n === 1 ? [...rows, { id: 'o99999', project_id: P_ID, status: 'reported', wbs_item_id: null, claimed_by_user_id: null }] : undefined)
+    await expect(getPendingApprovalCount(P)).rejects.toThrow(/끝까지 읽지 못했습니다/)
   })
 })

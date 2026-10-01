@@ -105,4 +105,13 @@ describe('GET /api/shell — 모듈이 꺼진 항목만 비운다(과제 20)', (
     const body = await (await GET(req())).json()
     expect(body).toMatchObject({ headerAnnouncements: [], headerAnnouncementsFailed: false, unreadAnnouncements: 0 })
   })
+  it('[RF5] 결재 대기 조회가 throw 하면 배지 0 + 로그 — 셸의 나머지(받은편지함·공지)는 그대로', async () => {
+    mocks.getPendingApprovalCount.mockRejectedValueOnce(new Error('[approvals] 결재 대기 목록을 끝까지 읽지 못했습니다(2/3건)'))
+    const res = await GET(req())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.pendingApprovals).toBe(0)
+    expect(body).toMatchObject({ inbox: [], unreadAnnouncements: 0, headerAnnouncements: ROWS, headerAnnouncementsFailed: false })
+    expect(errSpy).toHaveBeenCalledWith('[shell] 결재 대기 수 조회 실패:', expect.stringContaining('끝까지 읽지 못했습니다'))
+  })
 })
