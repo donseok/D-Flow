@@ -80,7 +80,7 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   }
 
   await refreshTeams()
-  revalidatePath('/admin/teams')
+  revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   if (seedError) return { ok: false, error: failWith('teams.seedFolder', seedError, ERR_SEED_FOLDER) }
   return { ok: true }
 }
@@ -135,7 +135,7 @@ export async function updateTeam(
   if (upd.error) return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
   await refreshTeams()
-  revalidatePath('/admin/teams')
+  revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   return { ok: true }
 }
 

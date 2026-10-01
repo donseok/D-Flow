@@ -59,7 +59,7 @@ describe('AccountsManager', () => {
   function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], canManageAdmins = true) {
     act(() => {
       root.render(<AccountsManager accounts={rows} projectId="p-1" workspaceId="ws-1"
-        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} currentUserId="u-bob" />)
+        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} canPlatformOps={canManageAdmins} currentUserId="u-bob" />)
     })
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
@@ -75,10 +75,16 @@ describe('AccountsManager', () => {
     expect(hs.some(h => h.includes('팀'))).toBe(false)
   })
 
-  it('플랫폼 관리자 열은 슈퍼유저에게만 보인다', () => {
+  it('플랫폼 조작(플랫폼 관리자 열·비번 리셋)은 플랫폼 관리자에게만 그린다 — 워크스페이스 관리자에게는 거부될 버튼을 보이지 않는다(D22)', () => {
     render(undefined, false)
     expect(headers()).not.toContain('플랫폼 관리자')
+    expect(headers()).not.toContain('작업')
     expect(container.querySelector('[data-platform-admin-toggle]')).toBeNull()
+    expect(container.textContent).not.toContain('비번 리셋')
+    act(() => root.unmount()); root = createRoot(container)
+    render()
+    expect(headers()).toContain('작업')
+    expect(row('u-alice').textContent).toContain('비번 리셋')
   })
 
   it('워크스페이스 역할 토글은 반대 등급으로 setWorkspaceRole(workspaceId, userId, role) 을 부른다', async () => {

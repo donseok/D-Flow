@@ -1,37 +1,47 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { ShieldCheck, Users, UserCog, Eye } from 'lucide-react'
-import { getActorForView } from '@/lib/authz'
+import { BRAND } from '@/lib/branding'
+import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
+import { canManageWorkspaceAccounts } from '@/lib/authz/accountsAccess'
 import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
 import { listAccounts } from '@/app/actions/accounts'
 import { listProjects } from '@/app/actions/project'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { AccountsManager } from '@/components/admin/AccountsManager'
+import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 목록은 항상 최신(admin API) 조회
+export const metadata = { title: `멤버·초대 | ${BRAND.productName}` }
 
-export default async function AccountsAdminPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ project?: string }>
+export default async function AccountsAdminPage({ params, searchParams }: {
+  params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string }>
 }) {
-  // 계정 관리는 슈퍼유저 전용(2026-08-20 결정 — 종전 설계 D7 '관리자 이상'을 대체).
-  // getActorForView 는 권한 조회 실패를 null 로 열화한다 — 비로그인과 구분되지 않으므로
-  // /projects 로 보낸다(그 화면은 권한 없이도 뜬다). /login 으로 보내면 로그인된 사용자가 튕겨 돈다.
-  const actor = await getActorForView()
-  if (!actor) redirect('/projects')
-  if (!actor.isSuperuser) redirect('/projects')
+  const { slug } = await params
+  const scope = await loadWorkspaceScope(slug)                                  // 첫 await — 비소속 404
+  const actor = scope.actor
+  // 슬러그 워크스페이스의 관리자(D22 — 플랫폼 관리자 포함). 열화(actor null)·권한 없음은 그 워크스페이스 홈(D7)
+  if (!actor || !canManageWorkspaceAccounts(actor, scope.ws.id)) redirect(wsHref(scope.ws.slug))
 
   const [{ project }, projects] = await Promise.all([searchParams, listProjects()])
-  const projectRows = projects as { id: string; name: string }[]
-  // 기본 프로젝트는 **내가 관리자인 것** 중에서 고른다. 목록의 첫 항목으로 정하면
-  // B 프로젝트 관리자가 들어왔을 때 A 가 기본값이 되어 게이트에 거부당하고,
-  // 화면은 그 거부를 '계정 0개'로 보여준다(권한 화면이 곧 오정보가 된다).
-  const managed = projectRows.filter(p => isProjectAdmin(actor, p.id))
-  const projectId = managed.some(p => p.id === project) ? project! : managed[0]?.id
-  if (!projectId) redirect('/projects') // 관리할 프로젝트가 없으면 역할을 부여할 대상이 없다
+  // 후보 = 그 워크스페이스의, 내가 관리자인 프로젝트. 목록의 첫 항목으로 정하면 B 프로젝트 관리자가 들어왔을 때 A 가 기본값이 되어
+  // 게이트에 거부당하고 화면은 그 거부를 '계정 0개'로 보여준다. 다른 워크스페이스 pid 는 ?project= 로도 고를 수 없다(W11)
+  const managed = (projects as { id: string; name: string; workspace_id?: string }[])
+    .filter((p) => p.workspace_id === scope.ws.id && isProjectAdmin(actor, p.id))
+  const projectId = managed.some((p) => p.id === project) ? project! : managed[0]?.id
+  if (!projectId) {
+    // 역할을 부여할 대상이 없다 — 다른 화면으로 튕기지 않고 그 사실을 보여 준다
+    return (
+      <div className="space-y-6">
+        <PageHero eyebrow="ADMIN" badge={<HeroBadge>Accounts</HeroBadge>} title="계정 관리" />
+        <StatusMessage kind="empty" title="관리할 프로젝트가 없습니다" detail="이 워크스페이스에 프로젝트를 만든 뒤 계정과 권한을 지정할 수 있습니다." />
+      </div>
+    )
+  }
 
   const res = await listAccounts(projectId)
+  if (res.ok && res.workspaceId !== scope.ws.id) notFound()               // 슬러그와 다른 워크스페이스의 명단을 이 주소로 보이지 않는다
   if (!res.ok) {
     // 조용한 빈 화면 금지 — 원인을 그대로 보여준다(표시 = 로깅).
     return (
@@ -73,6 +83,7 @@ export default async function AccountsAdminPage({
         workspaceId={res.workspaceId}
         projects={managed.map(p => ({ id: p.id, name: p.name }))}
         canManageAdmins={actor.isSuperuser}
+        canPlatformOps={actor.isSuperuser}
         currentUserId={actor.userId}
       />
     </div>

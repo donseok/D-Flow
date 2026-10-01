@@ -36,15 +36,18 @@ function randomPassword(): string {
   return Array.from(arr, (n) => chars[n % chars.length]).join('')
 }
 
-export function AccountsManager({ accounts, projectId, workspaceId, projects, canManageAdmins, currentUserId }: {
+export function AccountsManager({ accounts, projectId, workspaceId, projects, canManageAdmins, canPlatformOps, currentUserId }: {
   accounts: AccountRow[]
   /** 역할 열·역할 변경이 대상으로 삼는 프로젝트 */
   projectId: string
   /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경과 새 계정(단건·일괄) 소속의 대상 */
   workspaceId: string
   projects: { id: string; name: string }[]
-  /** 슈퍼유저만 true — 관리자 슬롯·슈퍼유저 토글 조작 가능 여부 */
+  /** 슈퍼유저만 true — 관리자 슬롯 조작 가능 여부 */
   canManageAdmins: boolean
+  /** 플랫폼 관리자만 true — 플랫폼 전용 조작(비밀번호 재설정·플랫폼 관리자 지정)을 그린다(SP3b D22). 액션 가드는 그대로 requireSuperuser.
+   *  워크스페이스 관리자가 이 화면을 열게 되며, 눌러도 거부될 버튼을 보이지 않게 한다 */
+  canPlatformOps: boolean
   /** 보는 사람 — 본인 행의 플랫폼 관리자 해제를 막는다(서버 액션도 거부). */
   currentUserId: string
 }) {
@@ -97,9 +100,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                   <th className="py-2 pr-3">이름</th>
                   <th className="py-2 pr-3">워크스페이스 역할</th>
                   <th className="py-2 pr-3">이 프로젝트 권한</th>
-                  {canManageAdmins && <th className="py-2 pr-3">플랫폼 관리자</th>}
+                  {canPlatformOps && <th className="py-2 pr-3">플랫폼 관리자</th>}
                   <th className="py-2 pr-3">생성일</th>
-                  <th className="py-2 pr-3 text-right">작업</th>
+                  {canPlatformOps && <th className="py-2 pr-3 text-right">작업</th>}
                 </tr>
               </thead>
               <tbody>
@@ -121,19 +124,21 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                         {ROLE_LABEL[accountRole(a)]}
                       </Link>
                     </td>
-                    {canManageAdmins && (
+                    {canPlatformOps && (
                       <td className="py-2.5 pr-3">
                         <PlatformAdminCell account={a} isSelf={a.id === currentUserId} />
                       </td>
                     )}
                     <td className="py-2.5 pr-3 text-ink-subtle">{a.createdAt.slice(0, 10)}</td>
-                    <td className="py-2.5 pr-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
-                          <KeyRound className="h-3.5 w-3.5" />비번 리셋
-                        </button>
-                      </div>
-                    </td>
+                    {canPlatformOps && (
+                      <td className="py-2.5 pr-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
+                            <KeyRound className="h-3.5 w-3.5" />비번 리셋
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -144,7 +149,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
 
       <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} workspaceId={workspaceId} canManageAdmins={canManageAdmins} />
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} workspaceId={workspaceId} />
-      <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />
+      {canPlatformOps && <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />}
     </div>
   )
 }

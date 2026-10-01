@@ -231,7 +231,7 @@ export async function createAccount(input: AccountInput & { workspaceId: string 
   if (input.projectId && !projectInWorkspace(g.actor, input.projectId, workspaceId)) return { ok: false, error: ERR_MISSING }
   const res = await createOne(createAdminClient(), workspaceId, input, g.actor.userId)
   if (res.ok) {
-    revalidatePath('/admin/accounts')
+    revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
     if (input.projectId) revalidatePath(`/p/${input.projectId}/members`)
   }
   return res
@@ -261,7 +261,7 @@ export async function bulkCreateAccounts(
     }, g.actor.userId)
     results.push({ lineNo: line.lineNo, email: line.email!, ok: res.ok, error: res.error })
   }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true, results }
 }
@@ -347,7 +347,7 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   }
   // 해제의 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다. (지정의 0행은 이미 지정된 것 — 멱등)
   if (!value && result.matched === 0) return { ok: false, error: '슈퍼유저가 아닌 계정입니다.' }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   return { ok: true }
 }
 
@@ -381,7 +381,7 @@ export async function setWorkspaceRole(
   }
   // 0행 = 소속 아님. 조용한 no-op 을 성공으로 보고하지 않는다.
   if (result.matched === 0) return { ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   return { ok: true }
 }
 
