@@ -4,7 +4,6 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
-import { BRAND } from '@/lib/branding'
 import { UUID_RE } from '@/lib/domain/validate'
 import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
@@ -28,7 +27,7 @@ function monthRange(todayIso: string): [string, string] {
   return [`${y}-${mm}-01`, `${y}-${mm}-${String(last).padStart(2, '0')}`]
 }
 
-export const metadata = { title: `회의록 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
+export const metadata = { title: '회의록' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinutesPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string | string[] }>

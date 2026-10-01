@@ -29,6 +29,12 @@ describe('ProjectSwitcher(★6, D41)', () => {
     fireEvent.focus(input)
     expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['전체'])
   })
+  it('목록 조회 실패(projectsFailed)면 "일치하는 프로젝트가 없습니다" 대신 실패 문구(U2b-2 권한 리뷰 Y3)', () => {
+    render(<ProjectSwitcher currentProjectId="p1" projects={[]} favoriteIds={['p1']} recentIds={[]} projectsFailed />)
+    fireEvent.focus(screen.getByRole('combobox'))
+    const box = screen.getByRole('listbox').textContent ?? ''
+    expect(box).toContain('프로젝트 목록을 불러오지 못했습니다'); expect(box).not.toContain('일치하는 프로젝트가 없습니다')
+  })
   it('Enter — 전환 라우트 → push, 꺼진 모듈이면 토스트', async () => {
     fetchMock().mockResolvedValue({ ok: true, json: async () => ({ href: '/p/p2/dashboard', fallbackModule: 'issues' }) })
     render(<ProjectSwitcher currentProjectId="p1" projects={projects} favoriteIds={[]} recentIds={[]} />)

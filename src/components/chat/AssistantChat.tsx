@@ -127,16 +127,16 @@ export function useAiRailButton(): ReactNode | null {
  * AI 도우미(D33·D56). 1024 이상이고 레일 공급자·레일 자리(#app-rail 또는 WBS 전체 화면 안 자리)가 있으면 우측 레일 점유자 'ai' 로 그리고
  * FAB 를 그리지 않는다(진입은 전역 바 아이콘). 1024 미만이거나 레일 자리가 없으면(옛 셸) 지금의 FAB·떠 있는 패널 — FAB 는 저장 바·가상 키보드가
  * 보이는 동안 그리지 않는다. 대화 상태는 레일 밖(이 컴포넌트)에 있어 레일을 닫았다 열어도, 범위를 바꿔도 남는다.
- * projects 는 옛 (app)/layout 의 prop — 없으면 게시 저장소(현재 워크스페이스의 프로젝트 목록)를 쓴다(과제 31 이 prop 을 지운다).
+ * 프로젝트 목록은 게시 저장소(현재 범위 워크스페이스의 가시 프로젝트 — 범위 레이아웃의 <ShellScope>)에서 읽는다.
  */
-export function AssistantChat({ projects }: { projects?: { id: string; name: string }[] } = {}) {
+export function AssistantChat() {
   const { t, locale } = useLocale()
   const assistantName = ASSISTANT_NAME[locale]
   const router = useRouter()
   const pageContext = useCurrentBotPageContext()
   const currentProjectId = pageContext.projectId
   const shellScope = useShellScope()
-  const projectList = projects ?? shellScope?.projects ?? []
+  const projectList = shellScope?.projects ?? []
   const currentProjectName = projectList.find(p => p.id === currentProjectId)?.name ?? null
 
   const rail = useRightRailOptional()

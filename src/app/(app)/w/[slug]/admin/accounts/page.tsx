@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
 import { ShieldCheck, Users, UserCog, Eye } from 'lucide-react'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canManageWorkspaceAccounts } from '@/lib/authz/accountsAccess'
 import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
@@ -13,7 +12,7 @@ import { AccountsManager } from '@/components/admin/AccountsManager'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 목록은 항상 최신(admin API) 조회
-export const metadata = { title: `멤버·초대 | ${BRAND.productName}` }
+export const metadata = { title: '멤버·초대' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function AccountsAdminPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string }>

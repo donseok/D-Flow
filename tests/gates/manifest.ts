@@ -74,7 +74,6 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('announcements')}#updateAnnouncement`]: { guard: 'projectAdmin', module: 'announcements', sample: [U, {}] },
   [`${A('announcements')}#deleteAnnouncement`]: { guard: 'projectAdmin', module: 'announcements', sample: [U] },
   [`${A('announcements')}#markAnnouncementsSeen`]: { guard: 'session', module: 'announcements', note: '로그인만 — 자기 읽음 시각', sample: [P, '2026-09-01T00:00:00Z'] },
-  [`${A('announcements')}#getHeaderAnnouncements`]: { guard: 'session', module: 'announcements', note: '셸 티커 — 꺼지면 빈 목록(§4.2 셸 행)', sample: [P], deny: { ok: true, rows: [] } },
   [`${A('announcements')}#getUnreadAnnouncementCount`]: { guard: 'session', module: 'announcements', note: '셸 배지 — 꺼지면 0', sample: [P], deny: 0 },
   [`${A('announcements')}#createAnnouncementFromMeeting`]: { guard: 'projectAdmin', module: ['announcements', 'meetings'], sample: [U, '2026-09-01'] },
   // ── attachments — WBS 산출물(core)
@@ -287,7 +286,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — 세션 유일 워크스페이스(전 회의록 ZIP)'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
   [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
-  [`${R('shell')}#GET`]: nul('session', '셸 — 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
+  [`${R('shell')}#GET`]: nul('session', '셸 — 범위(ws 소속·볼 수 있는 프로젝트)를 먼저 거르고 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
   [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
   [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 200 skipped(P19)'),
   [`${R('v1/agent/me')}#GET`]: agent(),
@@ -328,7 +327,7 @@ export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
 export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
   '/api/prefs': '셸 — 개인 UI 설정',
-  '/api/shell': '셸 — 알림함·파생 알림·공지 배지·티커·결재 배지 통합 조회',
+  '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
   '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
 }

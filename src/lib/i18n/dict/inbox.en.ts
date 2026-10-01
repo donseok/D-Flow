@@ -10,6 +10,7 @@ export const inboxEn: Record<keyof typeof inboxKo, string> = {
   'inbox.empty': 'No new notifications. 👍',
   'inbox.markAllRead': 'Mark all read',
   'inbox.loadFailed': 'Failed to load notifications',
+  'inbox.announcementsUnknown': 'Could not check unread announcements',
   'inbox.announceUnread': 'unread announcements',
   'inbox.viewAnnouncements': 'View announcements',
 }

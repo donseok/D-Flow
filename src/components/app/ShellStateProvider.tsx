@@ -1,33 +1,26 @@
 'use client'
-// 앱 셸 상태(알림함·파생 알림·공지 배지·헤더 티커) 공급자 — 2026-08-18 성능 감사 P0.
+// 앱 셸 상태(알림함·파생 알림·범위 배지 셋) 공급자 — 2026-08-18 성능 감사 P0 의 통합 조회를 새 계약(D34)으로.
 //
-// 종전에는 HeaderChrome(3곳)·Sidebar·HeaderAnnouncementTicker 가 마운트·내비게이션마다
-// 서버 액션을 각자 POST 했고(내비당 3~6건, 액션은 클라이언트당 직렬 큐), 여기서
-// /api/shell GET 1왕복으로 합쳐 컨텍스트로 나눠준다. 조회 시맨틱은 종전과 동일하다:
-//  - 내비게이션(pathname 변경)마다 재조회 — 공지 페이지를 다녀오면 배지가 꺼지는 기존 동작 유지
-//  - 파생 알림·티커는 URL 프로젝트(route) 기준, 공지 배지는 메뉴 문맥(menu) 기준
-//  - 실패 시 알림함만 failed 로 표시하고 나머지는 직전 값을 유지(기존 catch 시맨틱)
-//  - 헤더 공지 조회만 실패하면 서버가 headerAnnouncementsFailed 로 알린다 — 티커가 '공지 없음'과 구분해 그린다
+// /api/shell GET 1왕복(이동당 1회 — R25)으로 합쳐 컨텍스트로 나눠준다. 범위는 게시 저장소(useShellScope — 범위 레이아웃의 <ShellScope>)에서 읽는다:
+//  - ?ws=<워크스페이스 id>&project=<프로젝트 id>. 범위가 없으면(첫 게시 전·(global)) 쿼리 없이 인박스만 읽고 배지는 null(모름)이다
+//  - 배지 셋(myWorkReview·projectApprovals·projectUnreadAnnouncements)은 서버가 실패를 null 로 낸다 — 0 으로 바꾸지 않는다(3원칙 ①)
+//  - 프로젝트를 벗어나면 파생 알림을 비우고 로딩 플래그를 리셋한다(공유 게이트 loading = inboxLoading || notifLoading 이 갇히지 않게)
+//  - 응답 실패는 알림함만 failed 로 표시하고 나머지는 직전 값을 유지(옛 catch 시맨틱). 늦게 온 옛 응답은 시퀀스로 버린다
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { NotificationItem } from '@/app/actions/notifications'
 import type { InboxItem } from '@/app/actions/inbox'
-import type { AnnouncementSummary } from '@/lib/domain/types'
-import { useProjectNavigation } from '@/components/app/ProjectNavigationContext'
+import { useShellScope } from '@/components/app/ShellScope'
 import { useInboxRealtime } from '@/lib/hooks/useInboxRealtime'
 
+export type ShellBadges = { myWorkReview: number | null; projectApprovals: number | null; projectUnreadAnnouncements: number | null }
 type ShellPayload = {
   inbox: { items: InboxItem[]; unseen: number; failed?: true }
   notifications: { items: NotificationItem[]; count: number } | null
-  unreadAnnouncements: number
-  /** 메뉴 문맥 프로젝트에서 내가 승인할 수 있는 에이전트 결재 대기 수. 옛 응답(필드 없음)은 0. */
-  pendingApprovals?: number
-  headerAnnouncements: AnnouncementSummary[]
-  /** 헤더 공지 조회 실패 — '공지 0건'과 구분한다. 옛 응답(필드 없음)은 false. */
-  headerAnnouncementsFailed?: boolean
+  badges: ShellBadges
 }
 
-type ShellState = {
+export type ShellState = {
   inbox: InboxItem[]
   setInbox: React.Dispatch<React.SetStateAction<InboxItem[]>>
   inboxLoading: boolean
@@ -35,92 +28,79 @@ type ShellState = {
   notifs: NotificationItem[]
   setNotifs: React.Dispatch<React.SetStateAction<NotificationItem[]>>
   notifLoading: boolean
-  /** 메뉴 문맥 프로젝트의 안읽음 공지 수 — 전역 화면에서도 사이드바 배지를 유지한다. */
-  menuUnreadAnnouncements: number
-  /** 메뉴 문맥 프로젝트의 에이전트 결재 대기 수(내가 승인할 수 있는 것만) — 사이드바 「에이전트」 배지. */
-  menuPendingApprovals: number
-  headerAnnouncements: AnnouncementSummary[]
-  /** URL 프로젝트의 헤더 공지 조회 실패 — 티커가 실패 상태를 그린다(프로젝트 밖에서는 false). */
-  headerAnnouncementsFailed: boolean
+  /** 범위 배지 — null 은 모름(조회 실패·범위 밖). 내비·벨은 null 을 그리지 않는다 */
+  badges: ShellBadges
   refresh: () => void
 }
 
+const SCOPE_WAIT_MS = 1500
+/** 게시된 범위가 지금 경로의 범위인가 — /p/<pid> 는 그 프로젝트, /w/<slug> 는 그 워크스페이스(프로젝트 없음). 그 밖의 경로((global) 등)는 기다리지 않는다 */
+export function scopeMatchesPath(pathname: string | null, slug: string | null, projectId: string | null): boolean {
+  const p = /^\/p\/([^/]+)/.exec(pathname ?? '')
+  if (p) return projectId === p[1]
+  const w = /^\/w\/([^/]+)/.exec(pathname ?? '')
+  if (w) return slug === w[1] && projectId === null
+  return true
+}
+const NO_BADGES: ShellBadges = { myWorkReview: null, projectApprovals: null, projectUnreadAnnouncements: null }
 const Ctx = createContext<ShellState | null>(null)
 
 export function ShellStateProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { routeProjectId, menuProjectId } = useProjectNavigation()
+  const scope = useShellScope()
+  const wsId = scope?.workspace?.id ?? null
+  const projectId = scope?.projectId ?? null
   const [inbox, setInbox] = useState<InboxItem[]>([])
   const [inboxLoading, setInboxLoading] = useState(true)
   const [inboxFailed, setInboxFailed] = useState(false)
   const [notifs, setNotifs] = useState<NotificationItem[]>([])
   const [notifLoading, setNotifLoading] = useState(false)
-  const [menuUnreadAnnouncements, setMenuUnreadAnnouncements] = useState(0)
-  const [menuPendingApprovals, setMenuPendingApprovals] = useState(0)
-  const [headerAnnouncements, setHeaderAnnouncements] = useState<AnnouncementSummary[]>([])
-  const [headerAnnouncementsFailed, setHeaderAnnouncementsFailed] = useState(false)
+  const [badges, setBadges] = useState<ShellBadges>(NO_BADGES)
   // 내비게이션 연타 시 늦게 도착한 이전 응답이 최신 상태를 덮지 않도록 시퀀스로 가드.
   const seq = useRef(0)
 
   const load = useCallback(async () => {
     const id = ++seq.current
     setInboxLoading(true)
-    if (routeProjectId) {
-      setNotifLoading(true)
-    } else {
-      // 프로젝트를 벗어나면 파생 알림·티커를 비우고 로딩 플래그도 리셋 — 안 하면 공유 게이트
-      // (loading = inboxLoading || notifLoading)가 무기한 스피너에 갇힌다(기존 시맨틱).
-      setNotifs([])
-      setNotifLoading(false)
-      setHeaderAnnouncements([])
-      setHeaderAnnouncementsFailed(false)
-    }
-    if (!menuProjectId) { setMenuUnreadAnnouncements(0); setMenuPendingApprovals(0) }
+    if (projectId) setNotifLoading(true)
+    else { setNotifs([]); setNotifLoading(false) }
+    if (!wsId) setBadges(NO_BADGES)
+    else if (!projectId) setBadges((b) => ({ ...b, projectApprovals: null, projectUnreadAnnouncements: null }))
     try {
       const qs = new URLSearchParams()
-      if (routeProjectId) qs.set('route', routeProjectId)
-      if (menuProjectId) qs.set('menu', menuProjectId)
+      if (wsId) qs.set('ws', wsId)
+      if (projectId) qs.set('project', projectId)
       const res = await fetch(`/api/shell?${qs.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`shell ${res.status}`)
       const data: ShellPayload = await res.json()
       if (id !== seq.current) return
       setInbox(data.inbox.items)
       setInboxFailed(data.inbox.failed === true)
-      if (routeProjectId) {
-        // notifications null = 서버측 파생 알림 실패 — 직전 값 유지(기존 catch(() => {}) 시맨틱)
-        if (data.notifications) setNotifs(data.notifications.items)
-        setHeaderAnnouncements(data.headerAnnouncements)
-        setHeaderAnnouncementsFailed(data.headerAnnouncementsFailed === true)
-      }
-      if (menuProjectId) {
-        setMenuUnreadAnnouncements(data.unreadAnnouncements)
-        setMenuPendingApprovals(data.pendingApprovals ?? 0)
-      }
+      // notifications null = 서버측 파생 알림 실패·범위 밖 — 프로젝트 안이면 직전 값 유지(옛 catch(() => {}) 시맨틱)
+      if (projectId && data.notifications) setNotifs(data.notifications.items)
+      setBadges(wsId ? data.badges ?? NO_BADGES : NO_BADGES)
     } catch {
       if (id === seq.current) setInboxFailed(true)
     } finally {
-      if (id === seq.current) {
-        setInboxLoading(false)
-        setNotifLoading(false)
-      }
+      if (id === seq.current) { setInboxLoading(false); setNotifLoading(false) }
     }
-  }, [routeProjectId, menuProjectId])
+  }, [wsId, projectId])
 
-  // 내비게이션당 1회 재조회 — pathname 이 deps 에 있어 같은 프로젝트 내 메뉴 이동에도 갱신된다.
-  useEffect(() => { void load() }, [pathname, load])
+  // 내비게이션당 1회 재조회(R25) — pathname 이 deps 에 있어 같은 범위 안 메뉴 이동에도 갱신된다(공지 화면을 다녀오면 배지가 꺼진다).
+  // 범위를 넘는 이동은 경로가 먼저 바뀌고 새 범위 레이아웃의 <ShellScope> 게시가 나중 커밋(스트리밍)에 온다 — 게시된 범위가 경로와 맞을 때만 부르고,
+  // 맞지 않으면(옛 범위) 게시를 기다린다(S-3 실측: 기다리지 않으면 이동당 2회). 게시가 오지 않는 화면(열화 최소 셸 등)은 잠시 뒤 그대로 부른다.
+  const scopeSlug = scope?.workspace?.slug ?? null
+  useEffect(() => {
+    const t = setTimeout(() => { void load() }, scopeMatchesPath(pathname, scopeSlug, projectId) ? 0 : SCOPE_WAIT_MS)
+    return () => clearTimeout(t)
+  }, [pathname, load, scopeSlug, projectId])
 
   const refresh = useCallback(() => { void load() }, [load])
   // 실시간 배지 갱신 — 향상 계층(구독 실패해도 내비게이션당 재조회가 대신 채운다).
   useInboxRealtime(refresh)
 
   return (
-    <Ctx.Provider
-      value={{
-        inbox, setInbox, inboxLoading, inboxFailed,
-        notifs, setNotifs, notifLoading,
-        menuUnreadAnnouncements, menuPendingApprovals, headerAnnouncements, headerAnnouncementsFailed, refresh,
-      }}
-    >
+    <Ctx.Provider value={{ inbox, setInbox, inboxLoading, inboxFailed, notifs, setNotifs, notifLoading, badges, refresh }}>
       {children}
     </Ctx.Provider>
   )

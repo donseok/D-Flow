@@ -17,6 +17,7 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWbsFields: vi
 
 import { BotPageContextProvider } from '@/components/chat/BotPageContextProvider'
 import { AssistantChat } from '@/components/chat/AssistantChat'
+import { ShellScope, ShellScopeProvider } from '@/components/app/ShellScope'
 
 const ON = '12345678-1234-1234-1234-123456789abc'
 const OFF = '87654321-4321-4321-4321-cba987654321'
@@ -26,7 +27,9 @@ let probeStatus = 200
 let container: HTMLDivElement
 let root: Root
 const tree = () => (
-  <BotPageContextProvider><AssistantChat projects={[{ id: ON, name: 'ERP' }, { id: OFF, name: 'MES' }]} /></BotPageContextProvider>
+  // 프로젝트 목록은 게시 저장소에서(과제 31 — AssistantChat 의 projects prop 삭제)
+  <ShellScopeProvider><ShellScope workspace={null} projectId={null} projects={[{ id: ON, name: 'ERP' }, { id: OFF, name: 'MES' }]} />
+    <BotPageContextProvider><AssistantChat /></BotPageContextProvider></ShellScopeProvider>
 )
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 const fab = () => container.querySelector('button[aria-label="chat.open"]')

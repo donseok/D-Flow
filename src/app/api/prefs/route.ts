@@ -2,7 +2,7 @@
 //
 // 왜 서버 액션이 아니라 라우트인가: Next 는 **서버 액션이 성공할 때마다 클라이언트
 // 라우터 캐시 전체를 비운다**. queueUiPref 는 프로젝트 메뉴 이동마다 최근 프로젝트를
-// 저장하므로(ProjectNavigationContext), 액션으로 두면 내비게이션마다 캐시가 비워져
+// 저장하므로(옛 ProjectNavigationContext — 지금은 ShellScope 의 방문 기록), 액션으로 두면 내비게이션마다 캐시가 비워져
 // experimental.staleTimes(30s) 가 사실상 무효였다(실측). 설정 저장은 화면 RSC 내용을
 // 바꾸지 않는 부차 쓰기라 캐시를 비울 이유가 없다 — 일반 POST 로 옮긴다.
 //
@@ -20,6 +20,8 @@ import type { UiPrefs } from '@/lib/domain/types'
 type Body = {
   prefs?: Partial<UiPrefs>
   workspaceId?: string
+  /** 프로젝트 방문(최근 방문 — 서버가 자기 행 앞에 넣는다, U2b-2 권한 리뷰 Y1) */
+  visits?: unknown
   wbsCollapse?: { projectId: string; ids: string[] }
 }
 
@@ -37,8 +39,10 @@ export async function POST(req: NextRequest) {
   }
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false }, { status: 400 })
   let denied = false
-  if (body.prefs && typeof body.prefs === 'object' && !Array.isArray(body.prefs)) {
-    const r = await saveUiPrefs(body.prefs, { workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : null })
+  const prefs = body.prefs && typeof body.prefs === 'object' && !Array.isArray(body.prefs) ? body.prefs : null
+  const visits = Array.isArray(body.visits) ? body.visits : null
+  if (prefs || visits) {
+    const r = await saveUiPrefs(prefs ?? {}, { workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : null, visits })
     denied = !r.ok
   }
   const wc = body.wbsCollapse

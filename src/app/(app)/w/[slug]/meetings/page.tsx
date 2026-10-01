@@ -5,7 +5,6 @@ import { getMyMeetings } from '@/lib/data/meetings'
 import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
-import { BRAND } from '@/lib/branding'
 import { adminProjectIds } from '@/lib/domain/authz'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
@@ -22,7 +21,7 @@ function monthGrid(todayIso: string): [string, string] {
   return [f(s), f(e)]
 }
 
-export const metadata = { title: `회의 일정 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
+export const metadata = { title: '회의 일정' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MyMeetingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

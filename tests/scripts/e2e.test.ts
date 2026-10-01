@@ -341,11 +341,15 @@ describe('PAGE_MARKERS·거부 문구 — 앱 원본과의 드리프트', () => 
   it('문구 표식이 원본 컴포넌트에 그대로 있다', () => {
     const src = {
       degraded: 'src/components/app/DegradedNotice.tsx',
-      'error-boundary': 'src/app/(app)/error.tsx',
+      'error-boundary': 'src/components/app/ScopeError.tsx',
     } as Record<string, string>
     for (const [name, marker] of PAGE_MARKERS) {
       if (name === 'next-error') continue
       expect(readFileSync(src[name], 'utf8')).toContain(marker)
+    }
+    // 오류 경계 넷(셸 없는 전체 + 범위 셋 — 과제 31)이 모두 그 표지를 그리는 ScopeError 를 쓴다
+    for (const f of ['src/app/(app)/error.tsx', 'src/app/(app)/w/[slug]/error.tsx', 'src/app/(app)/p/[projectId]/error.tsx', 'src/app/(app)/(global)/error.tsx']) {
+      expect(readFileSync(f, 'utf8'), f).toContain('<ScopeError reset={reset} />')
     }
   })
   it('쓰기 거부 문구가 앱의 ERR_DENIED 와 같다', () => {

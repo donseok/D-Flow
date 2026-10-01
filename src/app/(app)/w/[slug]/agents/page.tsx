@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewAgents } from '@/lib/authz/agentsAccess'
 import { getSeatmap } from '@/lib/data/agentSeatmap'
@@ -8,7 +7,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 좌석표는 항상 최신이어야 한다
-export const metadata = { title: `에이전트 현황 | ${BRAND.productName}` }
+export const metadata = { title: '에이전트 현황' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function AgentsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

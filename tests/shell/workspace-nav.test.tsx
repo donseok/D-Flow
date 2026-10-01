@@ -13,11 +13,15 @@ const pj = navFor({ scope: 'project', base: '/p/p1', effective: all, caps, menu:
 const ariaCurrentHref = (html: string, href: string) =>
   new RegExp(`href="${href}"[^>]*aria-current="page"|aria-current="page"[^>]*href="${href}"`).test(html)
 
+const SP = (id: string, name: string) => ({ id, name, status: 'active' as const, isAdmin: false })
+const nav = (over: Partial<Parameters<typeof WorkspaceNav>[0]> = {}) => renderToString(
+  <WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={false} {...over} />)
+
 describe('WorkspaceNav', () => {
   it('활성 항목 하나에만 aria-current, 즐겨찾기 5·최근 3·전체 보기·새 프로젝트', () => {
-    const fav = Array.from({ length: 7 }, (_, i) => ({ id: `f${i}`, name: `즐겨찾기 ${i}` }))
-    const rec = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, name: `최근 ${i}` }))
-    const html = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme/minutes/x" slug="acme" favorites={fav} recent={rec} canCreateProject badges={{ 'ws.my_work': 3 }} collapsed={false} />)
+    const fav = Array.from({ length: 7 }, (_, i) => SP(`f${i}`, `즐겨찾기 ${i}`))
+    const rec = Array.from({ length: 5 }, (_, i) => SP(`r${i}`, `최근 ${i}`))
+    const html = nav({ pathname: '/w/acme/minutes/x', projects: [...fav, ...rec], favoriteIds: fav.map((p) => p.id), recentIds: rec.map((p) => p.id), canCreateProject: true, badges: { 'ws.my_work': 3 } })
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
     expect(ariaCurrentHref(html, '/w/acme/minutes')).toBe(true)
     expect((html.match(/data-fav-project/g) ?? []).length).toBe(5)
@@ -26,20 +30,26 @@ describe('WorkspaceNav', () => {
     expect(html).toContain('>3<')
   })
   it('최근 방문은 즐겨찾기와 겹치는 것을 빼고 센다', () => {
-    const fav = [{ id: 'a', name: 'A' }]
-    const rec = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }]
-    const html = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={fav} recent={rec} canCreateProject={false} badges={{}} collapsed={false} />)
+    const html = nav({ projects: [SP('a', 'A'), SP('b', 'B')], favoriteIds: ['a'], recentIds: ['a', 'b'] })
     expect((html.match(/data-recent-project/g) ?? []).length).toBe(1)
     expect(html).not.toContain('projects?new=1')
   })
+  it('W14 — 목록(현재 워크스페이스의 가시 프로젝트)에 없는 즐겨찾기·최근 id 는 그리지 않는다(이름도 목록에서만)', () => {
+    const html = nav({ projects: [SP('a', 'Apollo')], favoriteIds: ['other-ws', 'a'], recentIds: ['hidden'] })
+    expect((html.match(/data-fav-project/g) ?? []).length).toBe(1)
+    expect(html).not.toContain('data-recent-project'); expect(html).not.toContain('other-ws'); expect(html).not.toContain('hidden"')
+  })
+  it('목록 조회 실패면 즐겨찾기 자리에 실패 한 줄(빈 목록으로 위장하지 않는다 — U2b-2 권한 리뷰 Y3)', () => {
+    const html = nav({ projectsFailed: true, favoriteIds: ['a'] })
+    expect(html).toContain('프로젝트 목록을 불러오지 못했습니다'); expect(html).toContain('data-projects-failed')
+  })
   it('배지 null 은 그리지 않는다(0 으로 위장 금지)', () => {
-    const html = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={[]} recent={[]} canCreateProject={false} badges={{ 'ws.my_work': null }} collapsed={false} />)
-    expect(html).not.toContain('data-nav-badge')
+    expect(nav({ badges: { 'ws.my_work': null } })).not.toContain('data-nav-badge')
   })
   it('선호 없음(null)은 CSS 폭 규칙(1024~1279 접힘·1280+ 펼침), 명시 선호는 조건부 렌더 — 조건부 hidden 을 반응형 display 에 덧붙이지 않는다', () => {
-    const auto = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={[]} recent={[]} canCreateProject={false} badges={{}} collapsed={null} />)
+    const auto = nav({ collapsed: null })
     expect(auto).toContain('lg:w-16'); expect(auto).toContain('xl:w-58'); expect(auto).toContain('hidden xl:inline')
-    const closed = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={[]} recent={[]} canCreateProject={false} badges={{}} collapsed />)
+    const closed = nav({ collapsed: true })
     expect(closed).not.toContain('xl:w-58'); expect(closed).toContain('data-collapsed="true"')
   })
 })

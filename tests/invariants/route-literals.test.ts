@@ -12,15 +12,11 @@ const LITERAL = new RegExp(`(['"\`])${OLD}(?=[/'"\`?]|\\$\\{)`, 'g')
 const OLD_REVALIDATE = new RegExp(`revalidatePath\\(\\s*(['"\`])${OLD}(?=[/'"\`?]|\\$\\{)`, 'g')
 const GROUP_REVALIDATE = /revalidatePath\(\s*'(\/\([^']*)'\s*(?:,\s*'(page|layout)')?\s*\)/g
 
-const SHELL = 'UI-2b: 옛 셸 — 과제 31 이 파일째 지운다'
 const CLIENT_LINK = 'UI-2b: 과제 35 — 클라이언트 링크(useScope 뒤)'
 const PERMALINK = '영구: 영구 링크(D6) — 옛 형식을 내거나 두 형식을 읽는다'
 
 /** ③ 허용 목록 — 과제 9 의 생성 스크립트가 초안을 만들고 사유는 계획 과제 9 Step 3 의 규칙표로 달았다 */
 export const ALLOW: Record<string, { count: number; why: string }> = {
-  'src/components/app/Sidebar.tsx': { count: 21, why: SHELL },
-  'src/components/app/HeaderChrome.tsx': { count: 21, why: SHELL },
-  'src/components/app/ProjectNavigationContext.tsx': { count: 6, why: SHELL },
   'src/components/wiki/WikiShared.tsx': { count: 5, why: CLIENT_LINK },
   'src/components/minutes/MinuteViewer.tsx': { count: 3, why: CLIENT_LINK },
   'src/components/minutes/MinutesView.tsx': { count: 2, why: CLIENT_LINK },

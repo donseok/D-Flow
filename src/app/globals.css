@@ -575,6 +575,13 @@ textarea {
     border-right: 1.5px solid var(--color-border-input);
     box-shadow: var(--shadow-freeze-edge);
   }
+
+  /* 앱 본문 스크롤(SP3b D19) — main 이 문서형 화면의 유일한 세로 스크롤. gutter 고정으로 보기 전환 때 폭이 흔들리지 않는다.
+     main 에 overflow·scrollbar 유틸을 달지 않는다(utilities 층이 아래 채움 규칙을 이긴다). 채움 규칙은 과제 32 가 이 바로 뒤에 더한다 */
+  .app-main {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

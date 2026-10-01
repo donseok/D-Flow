@@ -1,6 +1,5 @@
 import { after } from 'next/server'
 import { redirect } from 'next/navigation'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { PageHero } from '@/components/ui/PageHero'
@@ -26,7 +25,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
-export const metadata = { title: `사용 현황 | ${BRAND.productName}` }
+export const metadata = { title: '사용 현황' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 /** 접속 로그 표시 상한. 넘치면 화면이 그 사실을 밝힌다. */
 const EVENT_LIMIT = 200

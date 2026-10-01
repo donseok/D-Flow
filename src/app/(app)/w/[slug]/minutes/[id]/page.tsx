@@ -5,7 +5,6 @@ import {
 } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
-import { BRAND } from '@/lib/branding'
 import { canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -18,7 +17,7 @@ import { moduleSetFor } from '@/lib/modules/gate'
 import { UUID_RE } from '@/lib/domain/validate'
 import { wsHref } from '@/lib/workspace/paths'
 
-export const metadata = { title: `회의록 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
+export const metadata = { title: '회의록' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinuteDetailPage({
   params, searchParams,

@@ -14,7 +14,6 @@ import { fmtDate } from '@/components/wbs/shared'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { seoulToday } from '@/lib/domain/dates'
-import { BRAND } from '@/lib/branding'
 
 type ProjectRow = {
   id: string
@@ -89,7 +88,7 @@ function ProjectCard({ project, status, locale }: { project: ProjectRow; status:
   )
 }
 
-export const metadata = { title: `전체 프로젝트 | ${BRAND.productName}` }
+export const metadata = { title: '전체 프로젝트' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function ProjectsPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ new?: string }>

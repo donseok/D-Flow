@@ -27,7 +27,7 @@ describe('셸 소비 — navFor 결과와 같은 항목만(③)', () => {
       const ws = navFor({ scope: 'workspace', base: '/w/acme', effective, caps, menu })
       const pj = navFor({ scope: 'project', base: '/p/p1', effective, caps, menu })
       const expectOf = (g: typeof ws) => g.flatMap((x) => x.items.map((i) => `${i.id}=${i.href}`)).sort()
-      const wHtml = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={[]} recent={[]} canCreateProject={false} badges={{}} collapsed={false} />)
+      const wHtml = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={false} />)
       const pHtml = renderToString(<ProjectNav groups={pj} pathname="/p/p1/dashboard" workspaceHome="/w/acme" projectSwitcher={null} badges={{}} collapsed={false} />)
       expect(hrefs(wHtml)).toEqual(expectOf(ws))
       expect(hrefs(pHtml)).toEqual(expectOf(pj))
@@ -44,7 +44,7 @@ describe('셸 소비 — navFor 결과와 같은 항목만(③)', () => {
   }
   it('모듈을 끄면 그 항목이 사라진다(회의록·위키)', () => {
     const ws = navFor({ scope: 'workspace', base: '/w/acme', effective: sets.noMinutes, caps: ALL_CAPS, menu: menus.none })
-    const html = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" favorites={[]} recent={[]} canCreateProject={false} badges={{}} collapsed={false} />)
+    const html = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={false} />)
     expect(html).not.toContain('/w/acme/minutes')
   })
 })

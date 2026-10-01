@@ -26,6 +26,14 @@ describe('InboxPanel', () => {
     expect(html).toContain('이슈 A')
     expect(html).toContain('inbox.personal')
   })
+  it('공지 안읽음을 모르면(null) 빈 상태라고 말하지 않고 확인 실패 한 줄(U2b-2 권한 리뷰 Y3)', () => {
+    const html = renderToStaticMarkup(<InboxPanel {...base} items={[]} unreadAnnouncements={null} />)
+    expect(html).not.toContain('inbox.empty'); expect(html).toContain('inbox.announcementsUnknown')
+  })
+  it('프로젝트 밖(projectId null)이면 공지 모름 줄을 그리지 않는다', () => {
+    const html = renderToStaticMarkup(<InboxPanel {...base} projectId={null} items={[]} unreadAnnouncements={null} />)
+    expect(html).toContain('inbox.empty'); expect(html).not.toContain('inbox.announcementsUnknown')
+  })
   it('조회 실패는 위장하지 않고 표시', () => {
     expect(renderToStaticMarkup(<InboxPanel {...base} items={[]} failed />)).toContain('inbox.loadFailed')
   })

@@ -18,11 +18,6 @@ describe('계정·공용 팀 — 슬러그 워크스페이스 관리자(D22)', (
     expect(canManageTeams(admin, W)).toBe(true)
     expect(canManageTeams(admin, W2)).toBe(false)
   })
-  it('V12 — 둘째 인자가 없으면 옛 판정(플랫폼 관리자만) — 옛 셸 HeaderChrome 전용', () => {
-    expect(canManageTeams({ isSuperuser: true })).toBe(true)
-    expect(canManageTeams({ isSuperuser: false, workspaceRoles: new Map([[W, 'admin']]) })).toBe(false)
-    expect(canManageTeams(null)).toBe(false)
-  })
 })
 
 describe('좌석표 — 그 워크스페이스로 한정(D21, §5.8)', () => {

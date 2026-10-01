@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClie
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: h.getWorkspaceConfig }))
 vi.mock('next/navigation', () => ({ notFound: h.notFound }))
 
-import WorkspaceLayout, { generateMetadata } from '@/app/(app)/w/[slug]/layout'
+import { generateMetadata } from '@/app/(app)/w/[slug]/layout'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
@@ -26,16 +26,22 @@ beforeEach(() => {
   h.getWorkspaceConfig.mockResolvedValue(config({ 'branding.product_name': 'Acme' }))
 })
 
+// 과제 31 — 레이아웃 본문(셸·404)은 tests/shell/scope-layouts*.test.tsx 가 본다. 여기는 메타데이터(제목 템플릿 V6·아이콘 S-6)와 설정 페이지의 접근 판정.
+const TITLE = (product: string) => ({ template: `%s · Alpha | ${product}`, default: `Alpha | ${product}` })
 describe('/w/[slug] 레이아웃', () => {
-  it('소속 관리자는 열고 제품명 메타데이터를 쓴다', async () => {
-    await expect(WorkspaceLayout({ children: 'content', params: Promise.resolve({ slug: 'alpha' }) })).resolves.toBe('content')
-    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: 'Alpha 설정 | Acme' })
+  it('소속이면 제목 템플릿 \'{화면} · {워크스페이스} | {제품}\'(V6)', async () => {
+    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: TITLE('Acme') })
+  })
+  it('비소속이면 메타데이터가 비어 있다 — 404 가 될 워크스페이스의 이름을 제목으로 내지 않는다', async () => {
+    h.getActorViewState.mockResolvedValue({ actor: makeActor({ workspaceRoles: new Map() }), degraded: false })
+    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({})
+    expect(h.getWorkspaceConfig).not.toHaveBeenCalled()
   })
 
   it('마크가 저장돼 있으면 아이콘을 읽기 라우트로 내고, 없으면 루트 아이콘을 덮지 않는다', async () => {
     const mark = `ws/${WID}/branding/mark-0123456789abcdef.png`
     h.getWorkspaceConfig.mockResolvedValue(config({ 'branding.product_name': 'Acme', 'branding.logo': { full: null, full_dark: null, mark } }))
-    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: 'Alpha 설정 | Acme', icons: { icon: `/api/brand/${WID}/mark` } })
+    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: TITLE('Acme'), icons: { icon: `/api/brand/${WID}/mark` } })
     h.getWorkspaceConfig.mockResolvedValue(config({ 'branding.product_name': 'Acme' }))
     expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).not.toHaveProperty('icons')
   })
@@ -43,8 +49,8 @@ describe('/w/[slug] 레이아웃', () => {
   it('설정 조회가 실패해도 제목은 기본 제품명으로 나오고 로그를 남긴다', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.getWorkspaceConfig.mockRejectedValue(new Error('db down'))
-    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: 'Alpha 설정 | D-Flow' })
-    expect(error).toHaveBeenCalledWith('[workspace settings] 브랜딩 판독 실패:', expect.any(Error))
+    expect(await generateMetadata({ params: Promise.resolve({ slug: 'alpha' }) })).toEqual({ title: TITLE('D-Flow') })
+    expect(error).toHaveBeenCalledWith('[workspace layout] 브랜딩 판독 실패:', 'db down')
     error.mockRestore()
   })
 

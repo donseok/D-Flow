@@ -1,6 +1,5 @@
 import { after } from 'next/server'
 import { redirect } from 'next/navigation'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewPortfolio } from '@/lib/authz/portfolioAccess'
 import { createServerClient } from '@/lib/supabase/server'
@@ -18,7 +17,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 워크스페이스 비교 화면은 항상 최신이어야 한다
-export const metadata = { title: `포트폴리오 | ${BRAND.productName}` }
+export const metadata = { title: '포트폴리오' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

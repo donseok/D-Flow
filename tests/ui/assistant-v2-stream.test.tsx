@@ -21,6 +21,7 @@ vi.mock('@/app/actions/wbs', () => ({
 
 import { BotPageContextProvider } from '@/components/chat/BotPageContextProvider'
 import { AssistantChat } from '@/components/chat/AssistantChat'
+import { ShellScope, ShellScopeProvider } from '@/components/app/ShellScope'
 
 const PROJECT_ID = '12345678-1234-1234-1234-123456789abc'
 
@@ -121,9 +122,12 @@ describe('AssistantChat v2 스트림', () => {
   it('PageContextV1을 전송하고 부분 답변·출처·terminal error를 각각 보존한다', async () => {
     await act(async () => {
       root.render(
-        <BotPageContextProvider>
-          <AssistantChat projects={[{ id: PROJECT_ID, name: 'ERP' }]} />
-        </BotPageContextProvider>,
+        <ShellScopeProvider>
+          <ShellScope workspace={null} projectId={null} projects={[{ id: PROJECT_ID, name: 'ERP' }]} />
+          <BotPageContextProvider>
+            <AssistantChat />
+          </BotPageContextProvider>
+        </ShellScopeProvider>,
       )
       await new Promise(resolve => setTimeout(resolve, 0))
     })

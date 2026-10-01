@@ -8,6 +8,7 @@ export const inboxKo = {
   'inbox.empty': '새 알림이 없습니다. 👍',
   'inbox.markAllRead': '모두 읽음',
   'inbox.loadFailed': '알림을 불러오지 못했습니다',
+  'inbox.announcementsUnknown': '공지 안읽음을 확인하지 못했습니다',
   'inbox.announceUnread': '안읽은 공지',
   'inbox.viewAnnouncements': '공지사항 보기',
 } as const

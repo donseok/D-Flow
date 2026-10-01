@@ -9,20 +9,22 @@ const ALL: Record<keyof UiPrefs, true> = {
   theme: true, locale: true, sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
   wbsHideDone: true, wbsOutline: true, wbsGanttScale: true, notif: true,
   startPage: true, favoriteProjectIds: true, recentProjects: true, notifRead: true,
-  heroCollapsed: true, lastProjectId: true,
 }
 
-describe('두 목록 — 서로소이고 합집합 = UiPrefs 키(은퇴 둘 제외)', () => {
+describe('두 목록 — 서로소이고 합집합 = UiPrefs 키', () => {
   it('서로소·합집합', () => {
     const a = new Set<string>(ACCOUNT_PREF_KEYS), w = new Set<string>(WORKSPACE_PREF_KEYS)
     expect([...a].filter((k) => w.has(k))).toEqual([])
-    expect([...a, ...w, ...RETIRED_PREF_KEYS].sort()).toEqual(Object.keys(ALL).sort())
+    expect([...a, ...w].sort()).toEqual(Object.keys(ALL).sort())
+  })
+  it('은퇴 키는 UiPrefs 에 없다(과제 31 — 옛 셸과 함께 지웠다). 서버는 옛 클라이언트가 보내도 조용히 버린다(RETIRED_PREF_KEYS)', () => {
+    for (const k of RETIRED_PREF_KEYS) expect(Object.keys(ALL)).not.toContain(k)
   })
 })
 
 describe('splitPrefs', () => {
   it('계정·워크스페이스로 가르고 은퇴·모르는 키는 버린다', () => {
-    expect(splitPrefs({ theme: 'dark', startPage: 'my_work', heroCollapsed: true, ...({ evil: 1 } as object) } as Partial<UiPrefs>))
+    expect(splitPrefs({ theme: 'dark', startPage: 'my_work', ...({ heroCollapsed: true, evil: 1 } as object) } as Partial<UiPrefs>))
       .toEqual({ account: { theme: 'dark' }, workspace: { startPage: 'my_work' }, dropped: ['heroCollapsed', 'evil'] })
   })
   it('형식 검사 — 즐겨찾기 uuid·상한 20(중복 제거), 최근 {id,at}·상한 10, startPage 닫힌 값', () => {

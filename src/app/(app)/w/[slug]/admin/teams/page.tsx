@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { Landmark, ListChecks, Users } from 'lucide-react'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canManageTeams } from '@/lib/authz/teamsAccess'
 import { listTeamsAdmin } from '@/app/actions/teams'
@@ -10,7 +9,7 @@ import { TeamsManager } from '@/components/admin/TeamsManager'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 기준정보는 항상 최신 조회(관리 직후 반영)
-export const metadata = { title: `공용 팀 | ${BRAND.productName}` }
+export const metadata = { title: '공용 팀' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function TeamsAdminPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

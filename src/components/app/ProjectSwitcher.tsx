@@ -14,8 +14,10 @@ const DEGRADED_TOAST = '설정을 불러오지 못해 개요를 열었습니다'
  * 프로젝트 전환기(★6, D41) — 셸이 가진 그 워크스페이스 목록을 클라이언트에서 거른다(⌘K 와 다르다). 고르면 서버가 같은 모듈 유지를 판정한다.
  * 즐겨찾기·최근 id 는 목록(현재 워크스페이스의 가시 프로젝트)에 있는 것만 그린다 — 다른 워크스페이스·숨김 프로젝트 id 는 조용히 빠진다(W14).
  */
-export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds }: {
+export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false }: {
   currentProjectId: string | null; projects: ShellProject[]; favoriteIds: string[]; recentIds: string[]
+  /** 셸 목록 조회 실패 — '일치하는 프로젝트가 없습니다' 대신 실패 문구(3원칙 ①) */
+  projectsFailed?: boolean
 }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams(); const { toast } = useToast()
   const listId = useId(); const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [active, setActive] = useState(0)
@@ -70,7 +72,9 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
         className="h-9 w-full rounded-(--radius-control) border border-border-input bg-surface px-3 text-control" />
       {open && (
         <div id={listId} role="listbox" aria-label="프로젝트" className="absolute left-1 right-1 top-full z-(--z-popover) mt-1 max-h-80 overflow-y-auto rounded-(--radius-panel) border border-border bg-surface-raised p-1 shadow-(--shadow-popover)">
-          {sections.length === 0 && <div className="px-2 py-1.5 text-meta text-fg-secondary">일치하는 프로젝트가 없습니다</div>}
+          {projectsFailed
+            ? <div data-projects-failed className="px-2 py-1.5 text-meta text-danger">프로젝트 목록을 불러오지 못했습니다</div>
+            : sections.length === 0 && <div className="px-2 py-1.5 text-meta text-fg-secondary">일치하는 프로젝트가 없습니다</div>}
           {sections.map((s) => (
             <div key={s.label} role="group" aria-label={s.label}>
               <div aria-hidden className="px-2 pb-0.5 pt-2 text-meta font-semibold text-fg-secondary">{s.label}</div>

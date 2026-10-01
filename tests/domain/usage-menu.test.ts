@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   USAGE_KEY_OF, USAGE_MENUS, resolveMenuKey, normalizeUsagePath, extractProjectId, menuLabel,
@@ -58,20 +57,6 @@ describe('resolveMenuKey — 레지스트리 파생(D27)', () => {
     const keys = new Set(USAGE_MENUS.map((m) => m.key))
     for (const p of [`/p/${PID}/issues`, '/minutes', '/w/acme/usage', '/w/acme', '/nope']) {
       expect(keys.has(resolveMenuKey(p)), p).toBe(true)
-    }
-  })
-})
-
-describe('드리프트 가드 — 사이드바 메뉴가 전부 해석된다', () => {
-  it('Sidebar.tsx 의 프로젝트 메뉴 href 가 하나도 unknown 이 아니다', () => {
-    const src = readFileSync(
-      new URL('../../src/components/app/Sidebar.tsx', import.meta.url),
-      'utf8',
-    )
-    const segments = [...src.matchAll(/href:\s*`\$\{base\}\/([a-z-]+)`/g)].map(m => m[1])
-    expect(segments.length).toBeGreaterThanOrEqual(11) // 현재 11개 — 줄면 정규식이 깨진 것
-    for (const seg of segments) {
-      expect(resolveMenuKey(`/p/${PID}/${seg}`)).not.toBe('unknown')
     }
   })
 })

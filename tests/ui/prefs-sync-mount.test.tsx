@@ -10,7 +10,6 @@ import { createRoot, type Root } from 'react-dom/client'
 const mocks = vi.hoisted(() => ({ queueUiPref: vi.fn(), setLocale: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueUiPref: mocks.queueUiPref }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', setLocale: mocks.setLocale, t: (k: string) => k }) }))
-vi.mock('@/components/app/Sidebar', () => ({ SIDEBAR_STORAGE_KEY: 'dflow-sidebar-collapsed', dispatchSidebarToggle: vi.fn() }))
 
 import { ThemeProvider } from '@/components/providers/ThemeProvider'
 import { PrefsSync } from '@/components/app/PrefsSync'

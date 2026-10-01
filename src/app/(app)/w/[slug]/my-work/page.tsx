@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { BRAND } from '@/lib/branding'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { getMyWork } from '@/lib/data/portal'
 import { MY_WORK_KINDS, type MyWorkKind } from '@/lib/portal/myWork'
@@ -10,7 +9,7 @@ import { KIND_LABEL, MyWorkList } from '@/components/portal/MyWorkList'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { buttonClass } from '@/components/ui/buttonStyles'
 
-export const metadata = { title: `내 업무 | ${BRAND.productName}` }
+export const metadata = { title: '내 업무' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 /** 내 업무 v0(D20) — 종류 칩 + 50행 쪽 나눔. 탭·인스펙터·알림 탭은 SPU2 */
 export default async function MyWorkPage({ params, searchParams }: {

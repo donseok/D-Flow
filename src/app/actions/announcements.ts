@@ -5,8 +5,6 @@ import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
-import { getTopAnnouncements } from '@/lib/data/announcements'
-import type { AnnouncementSummary } from '@/lib/domain/types'
 import { expandMeetings } from '@/lib/domain/meetings'
 import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
 import type { MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
@@ -172,20 +170,9 @@ export async function markAnnouncementsSeen(
   return advanceSeenWatermark(projectId, user.id, clamped)
 }
 
-/** 헤더 티커용 상위 공지(고정 우선 → 최신순 5건) — 세션 확인 후 경량 조회에 위임. 조회 실패는 결과 그대로(비로그인은 빈 목록).
- *  모듈 관문 거부(설정 조회 실패 포함)는 빈 값 — 로그는 관문이 남긴다(P13·Ruling B3 F1). */
-export async function getHeaderAnnouncements(
-  projectId: string,
-): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> {
-  const user = await getSession()
-  if (!user) return { ok: true, rows: [] }
-  const mod = await requireModule({ projectId }, 'announcements')            // 셸 티커 — 꺼지면 그 항목만 비운다(§4.2 셸 행)
-  if (!mod.ok) return { ok: true, rows: [] }
-  return getTopAnnouncements(projectId)
-}
-
 /**
- * 사이드바 배지용 안읽음 공지 수 — 워터마크 이후 생성된 "오늘 게시중" 공지 count.
+ * 셸 배지용 안읽음 공지 수(/api/shell — 프로젝트 내비 '공지'·벨) — 워터마크 이후 생성된 "오늘 게시중" 공지 count.
+ * 조회 오류는 던진다 — 셸 라우트가 null(모름)로 바꾼다. 0 으로 위장하지 않는다(3원칙 ①, D34). 모듈 꺼짐은 오류가 아니라 0.
  * 게시기간 필터가 없으면 만료 공지가 영구 안읽음으로 남는다(일반 사용자는 만료 공지를
  * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). getTopAnnouncements와 같은 조건.
  */
@@ -195,12 +182,14 @@ export async function getUnreadAnnouncementCount(projectId: string): Promise<num
   const mod = await requireModule({ projectId }, 'announcements')            // 셸 배지 — 꺼지면 0(§4.2 셸 행)
   if (!mod.ok) return 0
   const sb = await createServerClient()
-  const { data: seen } = await sb
+  const { data: seen, error: seenError } = await sb
     .from('announcement_seen')
     .select('last_seen_at')
     .eq('user_id', user.id)
     .eq('project_id', projectId)
     .maybeSingle()
+  // 워터마크를 못 읽으면 전부 안읽음으로 셀 수 없다 — 모름(throw)
+  if (seenError) throw new Error(`공지 워터마크 조회 실패: ${seenError.message}`)
 
   const today = seoulToday()
   // 게시중만: (from is null 또는 from<=today) AND (to is null 또는 to>=today).
@@ -212,7 +201,8 @@ export async function getUnreadAnnouncementCount(projectId: string): Promise<num
     .or(`publish_from.is.null,publish_from.lte.${today}`)
     .or(`publish_to.is.null,publish_to.gte.${today}`)
   if (seen?.last_seen_at) query = query.gt('created_at', seen.last_seen_at as string)
-  const { count } = await query
+  const { count, error } = await query
+  if (error) throw new Error(`공지 안읽음 수 조회 실패: ${error.message}`)
   return count ?? 0
 }
 

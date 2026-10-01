@@ -13,6 +13,10 @@ export const NAV_GROUP_LABEL: Partial<Record<NavGroupId, DictKey>> = {
   'p.plan': 'nav.group.plan', 'p.collab': 'nav.group.collab', 'p.team': 'nav.group.team',
 }
 
+/** 배지 색 계열(스펙 §4.3·개정 §5.5.4 — 판정 Q17): 알림 수 = action, 검토·결재 대기 = warning. 채움과 전경은 짝 토큰 */
+const BADGE_TONE: Partial<Record<NavItemId, string>> = { 'ws.my_work': 'bg-warning text-warning-fg', 'p.agents': 'bg-warning text-warning-fg' }
+const BADGE_DEFAULT = 'bg-action text-action-fg'
+
 /** navFor 결과만 그린다 — 손으로 적은 항목·경로가 없다(§5.4.2). 상태(배지 값)에 따른 표시는 조건부 렌더(D17) */
 export function NavList({ groups, activeId, collapsed, badges = {}, exclude = [] }: {
   groups: readonly NavGroup[]; activeId: NavItemId | null; collapsed: SidebarCollapsed
@@ -44,7 +48,7 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
                   <Icon size={NAV_ICON_SIZE.menu} strokeWidth={NAV_ICON_STROKE} aria-hidden className="shrink-0" />
                   {collapsed !== true && <span className={`min-w-0 flex-1 truncate ${textCls}`}>{label}</span>}
                   {typeof badge === 'number' && badge > 0 && (
-                    <span data-nav-badge className="rounded-full bg-action px-1.5 text-meta font-semibold text-action-fg">{badge}</span>
+                    <span data-nav-badge className={`rounded-full px-1.5 text-meta font-semibold ${BADGE_TONE[i.id] ?? BADGE_DEFAULT}`}>{badge}</span>
                   )}
                 </Link>
               )
