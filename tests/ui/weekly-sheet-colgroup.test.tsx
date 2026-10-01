@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -25,8 +25,9 @@ vi.mock('@/lib/supabase/client', () => ({
 
 const { WeeklySheetView } = await import('@/components/weekly/WeeklySheetView')
 
-const row: WeeklySheetRow = {
-  id: 'r1', reportId: 'rep', section: 'PMO', module: '', sortOrder: 1,
+const AREAS: WeeklyArea[] = [{ id: 'a1', code: 'EXP', name: '실험', sortOrder: 1, active: true, teams: [] }]
+const row: WeeklyAreaRow = {
+  id: 'r1', reportId: 'rep', areaId: 'a1',
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '',
 }
 
@@ -51,7 +52,7 @@ describe('WeeklySheetView — colgroup', () => {
       <WeeklySheetView
         projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"
         thisRange="9/21~9/25" nextRange="9/28~10/2" projectName="Acme"
-        report={{ id: 'rep', title: '' }} initialRows={[row]} hasCarrySource={false}
+        report={{ id: 'rep', title: '' }} areas={AREAS} initialRows={[row]} hasCarrySource={false}
         me={{ id: 'u1', name: 'alice' }} canEditCells canCreateRound
       />,
     ))

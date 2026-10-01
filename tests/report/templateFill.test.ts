@@ -283,7 +283,7 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
   const sec = (
     section: string, thisContent: string[] = [], nextContent: string[] = [],
     thisIssue: string[] = [], nextIssue: string[] = [],
-  ): SheetSectionCells => ({ section, thisContent, nextContent, thisIssue, nextIssue })
+  ): SheetSectionCells => ({ areaId: `area-${section}`, section, thisContent, nextContent, thisIssue, nextIssue })
 
   const readSlides = async (buf: Buffer) => {
     const zip = await JSZip.loadAsync(buf)

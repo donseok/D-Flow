@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Sparkles } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import {
-  applyServerRow, rowSectionLabel, sectionKeyOf, sortWeeklyRows, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
-  WEEKLY_CELL_LABEL, WEEKLY_SECTIONS,
-  CELL_FIELD, type WeeklyCellKey, type WeeklySheetRow, type WeeklyCellEdit,
+  areaGroupOf, mergeRefreshedRows, mergeServerRow, orderAreas, rowLabel, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
+  WEEKLY_CELL_LABEL, CELL_FIELD,
+  type WeeklyArea, type WeeklyAreaRow, type WeeklyCellKey, type WeeklyCellEdit,
 } from '@/lib/domain/weeklySheet'
 import { type CellAddr } from '@/lib/domain/sheetSelection'
 import { emptyUndo, pushUndo, undo as undoOp, redo as redoOp, type UndoState } from '@/lib/domain/sheetUndo'
@@ -39,11 +39,10 @@ const BATCH_MAX = 500    // 한 배치 최대 edit 수(BE와 동일) — 사전 
 const COLS: { key: WeeklyCellKey; label: string }[] =
   WEEKLY_CELL_KEYS.map(key => ({ key, label: WEEKLY_CELL_LABEL[key] }))
 
-/** DB 행 payload(snake) → WeeklySheetRow. Realtime payload 매핑용. */
-function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
+/** DB 행 payload(snake) → WeeklyAreaRow. Realtime payload 매핑용(영역 id — 스펙 §4.1.7). */
+function fromRecord(r: Record<string, unknown>): WeeklyAreaRow {
   return {
-    id: String(r.id), reportId: String(r.report_id), section: String(r.section ?? ''),
-    module: String(r.module ?? ''), sortOrder: Number(r.sort_order ?? 0),
+    id: String(r.id), reportId: String(r.report_id), areaId: String(r.area_id ?? ''),
     thisContent: String(r.this_content ?? ''), thisIssue: String(r.this_issue ?? ''),
     nextContent: String(r.next_content ?? ''), nextIssue: String(r.next_issue ?? ''),
   }
@@ -51,7 +50,7 @@ function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
 
 export function WeeklySheetView({
   projectId, weekStart, weekLabel, weekTitle, thisRange, nextRange, projectName,
-  report, initialRows, hasCarrySource, me, canEditCells, canCreateRound,
+  report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound,
 }: {
   projectId: string
   weekStart: string
@@ -61,7 +60,10 @@ export function WeeklySheetView({
   nextRange: string   // '7/13~7/17' — 차주계획 헤더
   projectName: string
   report: { id: string; title: string } | null
-  initialRows: WeeklySheetRow[]
+  /** 프로젝트의 주간 영역(비활성 포함) — 행 라벨·실시간 병합의 순서·빈 시트 설명이 쓴다. */
+  areas: WeeklyArea[]
+  /** 페이지가 visibleRows 로 정한 표시 집합과 순서(D32). */
+  initialRows: WeeklyAreaRow[]
   hasCarrySource: boolean
   me: { id: string; name: string } | null // 프레즌스 신원 — 서버(getSession)에서 전달
   /** 셀·제목 편집 자격 = isProjectMember. saveWeeklyCell(s)·saveWeeklyTitle 의 requireProjectMember 미러. */
@@ -71,7 +73,7 @@ export function WeeklySheetView({
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [rows, setRows] = useState<WeeklySheetRow[]>(initialRows)
+  const [rows, setRows] = useState<WeeklyAreaRow[]>(initialRows)
   const [lintOpen, setLintOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiBusy, setAiBusy] = useState(false)
@@ -86,6 +88,10 @@ export function WeeklySheetView({
   const retriedRef = useRef<Set<string>>(new Set())
   const rowsRef = useRef(rows)
   rowsRef.current = rows
+  const areasRef = useRef(areas)
+  areasRef.current = areas
+  // 점검 묶음 — 키 = 영역 id, 라벨 = 행 라벨(D22). 영역이 바뀔 때만 새로 만든다(점검 패널의 재계산 키).
+  const lintGroupOf = useMemo(() => areaGroupOf(areas), [areas])
   const [isPending, startTransition] = useTransition()
   const reportId = report?.id ?? null
   useBotPageContext({
@@ -128,15 +134,19 @@ export function WeeklySheetView({
     })
   }, [])
 
-  // 서버 refetch(라우터 refresh) 반영 — dirty 셀은 로컬 유지(스펙 §5), 사라진 행은 상태 정리
+  // 서버 refetch(라우터 refresh) 반영 — dirty 셀은 로컬 유지(스펙 §5). 같은 문서 안에서는 지금 보이는 행을 빼지 않는다(D32 —
+  // 다시 거른 집합에서 빠진 행은 그새 마지막 칸이 빈 비활성 영역 행이다. 행 삭제는 실시간 DELETE 가 맡는다).
+  // 문서가 바뀌면(주차 이동·문서 생성) 받은 집합으로 바꾸고 옛 행의 dirty·타이머·상태를 정리한다.
+  const rowsReportRef = useRef(reportId)
   useEffect(() => {
-    const serverIds = new Set(initialRows.map(r => r.id))
-    for (const l of rowsRef.current) if (!serverIds.has(l.id)) cleanupRowKeys(l.id)
-    setRows(local => initialRows.map(sv => {
-      const lc = local.find(l => l.id === sv.id)
-      return lc ? applyServerRow(lc, sv, dirtyRef.current) : sv
-    }))
-  }, [initialRows, cleanupRowKeys])
+    const sameReport = rowsReportRef.current === reportId
+    rowsReportRef.current = reportId
+    if (!sameReport) {
+      const serverIds = new Set(initialRows.map(r => r.id))
+      for (const l of rowsRef.current) if (!serverIds.has(l.id)) cleanupRowKeys(l.id)
+    }
+    setRows(local => mergeRefreshedRows(sameReport ? local : [], initialRows, areasRef.current, dirtyRef.current))
+  }, [initialRows, reportId, cleanupRowKeys])
 
   // 주차/프로젝트 전환(reportId 변경) 시 편집 레이어 세션 초기화 — 컴포넌트가 key 없이 유지되므로
   // 잔존 시 주차 B에서 Ctrl+Z가 주차 A의 rowId를 서버로 되돌려 화면 밖 데이터를 파괴한다(F1, 블로킹).
@@ -174,13 +184,11 @@ export function WeeklySheetView({
             return
           }
           const server = fromRecord(payload.new as Record<string, unknown>)
-          setRows(rs => {
-            const i = rs.findIndex(r => r.id === server.id)
-            if (i < 0) return sortWeeklyRows([...rs, server])
-            const next = [...rs]
-            next[i] = applyServerRow(rs[i], server, dirtyRef.current)
-            return sortWeeklyRows(next)
-          })
+          // 표시 집합은 페이지를 읽을 때 정했다 — 다시 계산하지 않는다(D32). 모르는 영역의 행(D44)과 비활성으로 아는 영역의 빈 새 행
+          // (그새 재활성 — RPC 는 활성 영역에만 행을 넣는다)은 그리지 않고 영역 목록을 다시 받는다. refresh 판정은 '없는 행'에만 걸리고
+          // 병합이 그런 행을 더하는 일은 없으므로 렌더 시점의 rowsRef 로 충분하다.
+          if (mergeServerRow(rowsRef.current, server, areasRef.current, dirtyRef.current).refresh) { router.refresh(); return }
+          setRows(rs => mergeServerRow(rs, server, areasRef.current, dirtyRef.current).rows)
         })
       .subscribe(st => {
         if (st !== 'SUBSCRIBED') return
@@ -516,7 +524,7 @@ export function WeeklySheetView({
       toast({ title: '셀을 먼저 선택해 주세요', description: '다듬을 셀 하나를 클릭하거나 범위로 선택해 주세요.', variant: 'info' })
       return
     }
-    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, rowSectionLabel)
+    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, r => rowLabel(r, areasRef.current))
     if (targets.length === 0) {
       toast({ title: '작성된 내용이 없습니다', description: '선택 범위의 빈 셀은 AI로 다듬지 않습니다.', variant: 'info' })
       return
@@ -591,6 +599,7 @@ export function WeeklySheetView({
 
   // ── 문서 없음: EmptyState + 시작 버튼 2종(스펙 §3 — 자동 생성 금지) ──
   if (!report) {
+    const activeAreaNames = orderAreas(areas.filter(a => a.active)).map(a => a.name)
     return (
       <div className="space-y-4">
         <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
@@ -600,7 +609,7 @@ export function WeeklySheetView({
           icon={FileSpreadsheet}
           title={`${weekLabel} 시트가 없습니다`}
           description={canCreateRound
-            ? `이전 주차에서 이월하거나 기본 시트(PMO·영업·품질·생산계획·조업·표준화 등 업무영역 ${WEEKLY_SECTIONS.length}개 구분)로 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
+            ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
             : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
           action={canCreateRound ? (
             <div className="flex gap-2">
@@ -661,8 +670,8 @@ export function WeeklySheetView({
               return true
             }}
           />
-          {/* 구분 1단(업무영역 11개) + 내용 4열. 모듈 열과 행 구조 편집은 없다 — 구분당 1행 고정. */}
-          {/* 열 폭: 구분 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
+          {/* 업무영역 1단(영역마다 1행) + 내용 4열. 행 구조 편집은 없다 — 영역 추가·비활성은 프로젝트 설정의 업무영역에서. */}
+          {/* 열 폭: 업무영역 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
               두지 않는다 — 공백 텍스트 노드가 colgroup 의 자식이 되면 hydration 오류가 난다. */}
           <table className="w-full table-fixed border-collapse bg-white text-[13px] text-black">
             <colgroup>
@@ -674,7 +683,7 @@ export function WeeklySheetView({
             </colgroup>
             <thead>
               <tr>
-                <th rowSpan={2} className={HDR}>구분</th>
+                <th rowSpan={2} className={HDR}>업무영역</th>
                 <th colSpan={2} className={HDR}>금주실적({thisRange})</th>
                 <th colSpan={2} className={HDR}>차주계획({nextRange})</th>
               </tr>
@@ -687,16 +696,12 @@ export function WeeklySheetView({
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                // 모듈이 적힌 행(구분 · 모듈)의 모듈명을 잃지 않게 구분 칸에 병기한다.
-                // 병기 여부는 rowSectionLabel이 정한 이름에서 되읽는다 — 규칙을 두 벌 두면
-                // 점검 패널 머리글(sectionKeyOf)과 이 칸의 표기가 조용히 갈라진다.
-                const rowName = rowSectionLabel(r)
-                const legacyModule = rowName === r.section.trim() ? '' : r.module.trim()
+                // 라벨은 영역 이름(비활성 영역은 표지) — 점검 패널 머리글(areaGroupOf)과 같은 규칙(rowLabel)이다.
+                const rowName = rowLabel(r, areas)
                 return (
                 <tr key={r.id}>
                   <td className="border border-neutral-500 px-1 py-1.5 text-center align-middle text-[13px] font-bold text-black">
-                    <div>{r.section}</div>
-                    {legacyModule && <div className="text-[11px] font-normal text-neutral-500">{legacyModule}</div>}
+                    <div>{rowName}</div>
                   </td>
                   {COLS.map((c, j) => {
                     const addr: CellAddr = { rowId: r.id, col: c.key }
@@ -767,7 +772,7 @@ export function WeeklySheetView({
       <WeeklyLintPanel
         open={lintOpen}
         rows={rows}
-        groupOf={row => { const key = sectionKeyOf(row); return { key, label: key } }}
+        groupOf={lintGroupOf}
         canApply={canEditCells}
         onClose={() => setLintOpen(false)}
         onApply={edits => runBatch(edits, { undoable: true })}

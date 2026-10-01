@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CONTENT_COLS, rectFromAddrs, valuesInRect, moveActive, advanceActive,
   pasteEdits, fillEdits, clearEdits, reconcileSelection,
-  type CellAddr, type GridRect, type SelectionState,
+  type CellAddr, type GridRect, type SelectionState, type SheetGridRow,
 } from '@/lib/domain/sheetSelection'
 import { serializeTsv, parseTsv } from '@/lib/domain/sheetClipboard'
 import { isNewlineChord } from '@/lib/domain/sheetChords'
-import { type WeeklyCellKey, type WeeklySheetRow, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
+import { type WeeklyCellKey, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
 
 /** aria-live 방송용 열 라벨(§7). */
 const COL_LABEL: Record<WeeklyCellKey, string> = {
@@ -60,7 +60,7 @@ export interface SheetGridApi {
 }
 
 interface UseSheetGridArgs {
-  rows: WeeklySheetRow[]
+  rows: readonly SheetGridRow[]
   enabled: boolean
   /**
    * 조회 전용 — 편집 진입(더블클릭·탭·Enter·F2·문자·IME)과 값 변이(지우기·붙여넣기·채우기·undo/redo)를
@@ -157,10 +157,9 @@ export function useSheetGrid({
     if (readOnly) return
     const values = parseTsv(text)
     const { edits, clippedRows, clippedCols } = pasteEdits(rowIdsRef.current, anchor, values)
-    // 시트는 업무영역 구분 행이 고정이라 행을 늘릴 수단이 없다 — 실행 가능한 대안(위쪽 행부터
-    // 붙여넣기 / 셀 안에서 줄바꿈)을 안내한다. '모듈 추가'를 안내하면 없는 버튼을 찾게 된다.
-    // 행 수는 실제 시트에서 읽는다 — 구분이 늘 때마다 안내문이 거짓말을 하지 않게.
-    const rowsMsg = `${clippedRows}개 행이 시트 범위를 넘어 붙여넣지 못했습니다. 시트는 구분 ${rowIdsRef.current.length}행 고정입니다 — 위쪽 행에서 시작하거나, 한 구분에 여러 항목을 넣으려면 셀 안에서 Alt+Enter로 줄을 나눠 주세요.`
+    // 시트는 업무영역마다 1행이라 행을 늘릴 수단이 없다 — 실행 가능한 대안(위쪽 행부터
+    // 붙여넣기 / 셀 안에서 줄바꿈)을 안내한다. 행 수는 실제 시트에서 읽는다 — 영역이 늘 때마다 안내문이 거짓말을 하지 않게.
+    const rowsMsg = `${clippedRows}개 행이 시트 범위를 넘어 붙여넣지 못했습니다. 시트는 업무영역 ${rowIdsRef.current.length}행입니다 — 위쪽 행에서 시작하거나, 한 업무영역에 여러 항목을 넣으려면 셀 안에서 Alt+Enter로 줄을 나눠 주세요.`
     if (clippedRows > 0 && clippedCols > 0) {
       toast({ title: '붙여넣기 일부 생략', variant: 'info',
         description: `${rowsMsg} 내용 4개 열을 넘는 오른쪽 데이터는 붙여넣지 않았습니다.` })

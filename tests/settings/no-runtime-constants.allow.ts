@@ -16,9 +16,6 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   // WEEKLY_*(주간 구분·팀 구분 — SP4 주간 영역 설정으로)
   'src/lib/ai/tools/weekly.ts': { patterns: ['WEEKLY_TEAM_SECTIONS'], removedBy: 'SP4' },
   'src/lib/domain/weeklySheet.ts': { patterns: ['WEEKLY_SECTIONS', 'WEEKLY_TEAM_SECTIONS'], removedBy: 'SP4' },
-  'src/components/weekly/WeeklySheetView.tsx': { patterns: ['WEEKLY_SECTIONS'], removedBy: 'SP4' },
-  'src/lib/data/weeklySheet.ts': { patterns: ['WEEKLY_SECTIONS'], removedBy: 'SP4' },
-  'src/lib/report/sheetNarrative.ts': { patterns: ['WEEKLY_SECTIONS'], removedBy: 'SP4' },
   // ISSUE_MEGA_AREAS(이슈 영역 — SP5 Phase B 가 project_areas(issue_area) 로)
   'src/components/dashboard/IssueStatusCard.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
   'src/components/issues/IssueAnalysisModal.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },

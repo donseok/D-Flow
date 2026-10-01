@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { sheetLineText, cellLines, rowLabel, buildSheetSections } from '@/lib/report/sheetNarrative'
-import { WEEKLY_SECTIONS, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import { sheetLineText, cellLines, buildSheetSections } from '@/lib/report/sheetNarrative'
+import type { WeeklyArea, WeeklyAreaRow } from '@/lib/domain/weeklySheet'
 
-const row = (over: Partial<WeeklySheetRow>): WeeklySheetRow => ({
-  id: 'r1', reportId: 'rep1', section: '영업', module: '', sortOrder: 1,
-  thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
+const area = (id: string, name: string, sortOrder: number, active = true): WeeklyArea =>
+  ({ id, code: id.toUpperCase(), name, sortOrder, active, teams: [] })
+const AREAS: WeeklyArea[] = [area('a-exp', '실험', 1), area('a-data', '데이터', 2), area('a-ops', '운영', 3)]
+const row = (id: string, areaId: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+  id, reportId: 'rep1', areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
 
 describe('sheetLineText', () => {
@@ -13,7 +15,7 @@ describe('sheetLineText', () => {
     expect(sheetLineText('프로세스 분석')).toBe('    프로세스 분석')
   })
   it("'-' 줄은 8칸, '.' 줄은 12칸", () => {
-    expect(sheetLineText('- 대상 : 영업팀')).toBe('        - 대상 : 영업팀')
+    expect(sheetLineText('- 대상 : 운영팀')).toBe('        - 대상 : 운영팀')
     expect(sheetLineText('. 세부 검토')).toBe('            . 세부 검토')
   })
   it('이미 들여쓴 입력도 시작 문자로 판정', () => {
@@ -33,121 +35,76 @@ describe('cellLines', () => {
 describe('상세 PPT 이슈·이벤트 원문 보존', () => {
   it("여러 줄 이슈는 마커·들여쓰기 구조 그대로, '외 N건' 캡 없이 전량 실린다", () => {
     const built = buildSheetSections([
-      row({
-        id: 'e', section: 'PMO',
-        thisIssue: '1. PI 변화관리 교육세션\n- 대상 : Acme TF\n- 일정 : 7/20(월)\n2. 인터뷰 지연\n- 원인 : 현업 일정\n- 대응 : 재조율',
-      }),
+      row('e', 'a-exp', { thisIssue: '1. 변화관리 교육세션\n- 대상 : Acme TF\n- 일정 : 7/20(월)\n2. 인터뷰 지연\n- 원인 : 일정 충돌\n- 대응 : 재조율' }),
+    ], AREAS)
+    expect(built.find(s => s.areaId === 'a-exp')!.thisIssue).toEqual([
+      '1. 변화관리 교육세션', '- 대상 : Acme TF', '- 일정 : 7/20(월)',
+      '2. 인터뷰 지연', '- 원인 : 일정 충돌', '- 대응 : 재조율',
     ])
-    expect(built[0].thisIssue).toEqual([
-      '1. PI 변화관리 교육세션', '- 대상 : Acme TF', '- 일정 : 7/20(월)',
-      '2. 인터뷰 지연', '- 원인 : 현업 일정', '- 대응 : 재조율',
-    ]) // 6줄이어도 잘리지 않고, '-' 마커(하위 들여쓰기 판정 기준)도 보존
   })
 
   it('주요이벤트도 작성한 줄 그대로 — 날짜 병합·재작성 없음', () => {
     const built = buildSheetSections([
-      row({ id: 'e', section: 'PMO', nextIssue: '• 7/13(월) MES 품질회의\n• 7/13(월) F-MES 벤치마킹\n• 7/15(수) 생산 인터뷰' }),
-    ])
-    expect(built[0].nextIssue).toEqual([
-      '• 7/13(월) MES 품질회의', '• 7/13(월) F-MES 벤치마킹', '• 7/15(수) 생산 인터뷰',
+      row('e', 'a-exp', { nextIssue: '• 7/13(월) 설계 검토회의\n• 7/13(월) 장비 벤치마킹\n• 7/15(수) 운영 인터뷰' }),
+    ], AREAS)
+    expect(built.find(s => s.areaId === 'a-exp')!.nextIssue).toEqual([
+      '• 7/13(월) 설계 검토회의', '• 7/13(월) 장비 벤치마킹', '• 7/15(수) 운영 인터뷰',
     ])
   })
 
   it('긴 줄도 절단("…") 없이 원문 유지 — 넘침은 PPT 페이지네이션이 처리', () => {
     const long = `1. ${'가'.repeat(100)}`
-    const built = buildSheetSections([row({ id: 'e', section: 'PMO', thisIssue: long })])
-    expect(built[0].thisIssue).toEqual([long])
+    const built = buildSheetSections([row('e', 'a-exp', { thisIssue: long })], AREAS)
+    expect(built.find(s => s.areaId === 'a-exp')!.thisIssue).toEqual([long])
   })
 })
 
-describe('rowLabel', () => {
-  it('신규 행(module 없음) — 구분명 단독', () => {
-    expect(rowLabel(row({ section: '영업', module: '' }))).toBe('영업')
-    expect(rowLabel(row({ section: '설비 및 Level2', module: '' }))).toBe('설비 및 Level2')
+describe('buildSheetSections — 페이지 = 보이는 영역(스펙 §4.1.4, D32)', () => {
+  it('페이지는 영역 순서(sortOrder)를 따른다 — 행 입력 순서와 무관하고 고정 구분 페이지가 없다', () => {
+    const built = buildSheetSections([row('o', 'a-ops'), row('d', 'a-data'), row('x', 'a-exp')], AREAS)
+    expect(built.map(s => [s.areaId, s.section])).toEqual([['a-exp', '실험'], ['a-data', '데이터'], ['a-ops', '운영']])
   })
-  it('레거시 행 — 구분 · 모듈 병기', () => {
-    expect(rowLabel(row({ section: 'ERP', module: '모듈A' }))).toBe('ERP · 모듈A')
-    expect(rowLabel(row({ section: '공통', module: '공통' }))).toBe('공통') // 같으면 중복 표기 안 함
-  })
-  it('구분 없는 행 — 모듈 폴백, 둘 다 없으면 기타', () => {
-    expect(rowLabel(row({ section: '', module: '물류' }))).toBe('물류')
-    expect(rowLabel(row({ section: '', module: '' }))).toBe('기타')
-  })
-})
 
-describe('보고 순서', () => {
-  it('시트 행 순서와 PPT 보고 순서는 WEEKLY_SECTIONS 하나로 정의된다(PMO 선두)', () => {
-    // 배열 리터럴을 그대로 적는다 — 구분 순서를 감시하는 곳이 여기뿐이라, 스프레드로 바꾸면
-    // 순서가 조용히 바뀌어도 아무도 모른다.
-    expect(WEEKLY_SECTIONS).toEqual([
-      'PMO', '영업', '구매', '관리회계', '품질', '생산계획', '조업', '표준화', '물류', '설비및L2', '가공',
-    ])
-    expect(WEEKLY_SECTIONS.indexOf('PMO')).toBeLessThan(WEEKLY_SECTIONS.indexOf('영업')) // PMO가 영업 위
-  })
-  it('표준화는 조업 바로 뒤, 물류 앞 — 현장 구분의 보고 순서', () => {
-    expect(WEEKLY_SECTIONS.indexOf('표준화')).toBe(WEEKLY_SECTIONS.indexOf('조업') + 1)
-    expect(WEEKLY_SECTIONS.indexOf('표준화')).toBeLessThan(WEEKLY_SECTIONS.indexOf('물류'))
-  })
-})
-
-describe('buildSheetSections', () => {
-  const rows = [
-    row({ id: 'a', sortOrder: 2, section: '품질', thisContent: '1. 인터뷰', nextContent: '' }),
-    row({ id: 'b', sortOrder: 1, section: '영업', thisContent: '1. CheckList\n- CBO', thisIssue: '지연 위험', nextContent: '1. 계획', nextIssue: '일정 협의 필요\n추가 인력' }),
-    row({ id: 'c', sortOrder: 3, section: '구매' }), // 4셀 모두 빈 행
-  ]
-  const secs = buildSheetSections(rows)
-  const byName = (name: string) => secs.find(s => s.section === name)!
-
-  it('표준 11구분을 전부 WEEKLY_SECTIONS 순서로 포함한다(내용 없는 구분 포함, PMO 선두)', () => {
-    expect(secs.map(s => s.section)).toEqual([...WEEKLY_SECTIONS])
-    expect(secs[0].section).toBe('PMO')
-  })
-  it('각 구분에 4셀(실적·계획·이슈·이벤트)이 함께 담긴다', () => {
-    const s = byName('영업')
-    expect(s.thisContent).toEqual(['1. CheckList', '- CBO'])
+  it('각 영역에 4셀(실적·계획·이슈·이벤트)이 함께 담긴다', () => {
+    const s = buildSheetSections([
+      row('x', 'a-exp', { thisContent: '1. 점검표\n- 범위', thisIssue: '지연 위험', nextContent: '1. 계획', nextIssue: '일정 협의 필요\n추가 인력' }),
+    ], AREAS)[0]
+    expect(s.thisContent).toEqual(['1. 점검표', '- 범위'])
     expect(s.nextContent).toEqual(['1. 계획'])
     expect(s.thisIssue).toEqual(['지연 위험'])
-    expect(s.nextIssue).toEqual(['일정 협의 필요', '추가 인력']) // 작성한 줄 그대로(병합·재작성 없음)
+    expect(s.nextIssue).toEqual(['일정 협의 필요', '추가 인력'])
   })
-  it('내용 없는 구분도 빈 4셀로 남는다(빈 페이지 소스)', () => {
-    const s = byName('구매')
-    expect(s.thisContent).toEqual([])
-    expect(s.nextContent).toEqual([])
-    expect(s.thisIssue).toEqual([])
-    expect(s.nextIssue).toEqual([])
+
+  it('활성 영역의 빈 행은 빈 4셀 페이지가 된다', () => {
+    const built = buildSheetSections([row('x', 'a-exp', { thisContent: '실적' }), row('d', 'a-data')], AREAS)
+    expect(built.find(s => s.areaId === 'a-data')).toEqual({
+      areaId: 'a-data', section: '데이터', thisContent: [], nextContent: [], thisIssue: [], nextIssue: [],
+    })
   })
-  it('구분명으로 정렬 — 행의 sortOrder가 뒤죽박죽이어도 보고 순서 유지', () => {
-    const shuffled = [...WEEKLY_SECTIONS].reverse().map((section, i) =>
-      row({ id: `r${i}`, sortOrder: i + 1, section, thisContent: `${section} 실적` }))
-    expect(buildSheetSections(shuffled).map(s => s.section)).toEqual([...WEEKLY_SECTIONS])
-  })
-  it('비표준 구분(레거시·자유 입력)은 표준 11구분 뒤에, 서로는 sortOrder 순', () => {
+
+  it('내용 있는 비활성 영역은 활성 영역 뒤 페이지(머리는 영역 이름 그대로), 내용 없는 비활성 영역은 페이지가 없다', () => {
+    const areas = [...AREAS, area('a-old', '구 영역', 0, false), area('a-gone', '닫힌 영역', 9, false)]
     const built = buildSheetSections([
-      row({ id: 'x', sortOrder: 1, section: 'ERP', module: '모듈A', thisContent: '레거시B' }),
-      row({ id: 'z', sortOrder: 0, section: '기타', module: '', thisContent: '레거시A' }),
-    ])
-    expect(built.slice(0, WEEKLY_SECTIONS.length).map(s => s.section)).toEqual([...WEEKLY_SECTIONS])
-    expect(built.slice(WEEKLY_SECTIONS.length).map(s => s.section)).toEqual(['기타', 'ERP · 모듈A'])
-    expect(built.find(s => s.section === 'ERP · 모듈A')!.thisContent).toEqual(['레거시B'])
+      row('old', 'a-old', { thisContent: '남은 실적' }), row('gone', 'a-gone'), row('x', 'a-exp'),
+    ], areas)
+    expect(built.map(s => [s.areaId, s.section])).toEqual([['a-exp', '실험'], ['a-old', '구 영역']])
   })
-  it('이관 전 조업및표준화 행은 표준 구분 뒤에 자기 페이지로 남는다 — 조업/표준화와 섞지 않는다', () => {
-    // 데이터 이관을 놓친 주차를 내보내도 PPT가 조용히 내용을 합치거나 버리지 않아야 한다.
-    const built = buildSheetSections([
-      row({ id: 'm', sortOrder: 7, section: '조업및표준화', module: '', thisContent: '옛 통합 내용' }),
-    ])
-    expect(built.slice(0, WEEKLY_SECTIONS.length).map(s => s.section)).toEqual([...WEEKLY_SECTIONS])
-    expect(built[WEEKLY_SECTIONS.length].section).toBe('조업및표준화')
-    expect(built[WEEKLY_SECTIONS.length].thisContent).toEqual(['옛 통합 내용'])
-    expect(built.find(s => s.section === '조업')!.thisContent).toEqual([])
+
+  it('행이 없는 영역은 페이지가 없다 — 문서 뒤에 더한 영역의 빈 페이지가 과거 주차에 생기지 않는다(W17·E31)', () => {
+    expect(buildSheetSections([row('x', 'a-exp')], AREAS).map(s => s.areaId)).toEqual(['a-exp'])
   })
-  it('같은 구분의 여러 행은 sortOrder 순으로 이어붙이고 사이에 빈 줄 1개', () => {
-    const built = buildSheetSections([
-      row({ id: 'p', sortOrder: 2, section: '관리회계', thisContent: 'CO 실적', thisIssue: 'CO 이슈' }),
-      row({ id: 'q', sortOrder: 1, section: '관리회계', thisContent: 'FI 실적', thisIssue: 'FI 이슈' }),
-    ])
-    const s = built.find(x => x.section === '관리회계')!
-    expect(s.thisContent).toEqual(['FI 실적', '', 'CO 실적']) // 빈 줄 구분
-    expect(s.thisIssue).toEqual(['FI 이슈', 'CO 이슈'])        // 이슈는 빈 줄 없이 flatten
+
+  it('개명하면 같은 영역이 새 이름으로 나간다(W14)', () => {
+    const renamed = AREAS.map(a => (a.id === 'a-exp' ? { ...a, name: '실험·검증' } : a))
+    expect(buildSheetSections([row('x', 'a-exp')], renamed)[0]).toMatchObject({ areaId: 'a-exp', section: '실험·검증' })
+  })
+
+  it('같은 영역의 여러 행(옛 데이터)은 입력 순으로 이어붙이고 사이에 빈 줄 1개, 이슈는 빈 줄 없이', () => {
+    const s = buildSheetSections([
+      row('p', 'a-ops', { thisContent: '1차 실적', thisIssue: '1차 이슈' }),
+      row('q', 'a-ops', { thisContent: '2차 실적', thisIssue: '2차 이슈' }),
+    ], AREAS)[0]
+    expect(s.thisContent).toEqual(['1차 실적', '', '2차 실적'])
+    expect(s.thisIssue).toEqual(['1차 이슈', '2차 이슈'])
   })
 })

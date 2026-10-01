@@ -1,6 +1,9 @@
 /* ── 시트 선택 기하(순수) — 사각 범위·이동·붙여넣기/채우기/삭제 edit 계산. I/O 없음. ── */
 
-import { WEEKLY_CELL_KEYS, CELL_FIELD, type WeeklyCellKey, type WeeklySheetRow, type WeeklyCellEdit } from './weeklySheet'
+import { WEEKLY_CELL_KEYS, CELL_FIELD, type WeeklyCellKey, type WeeklyCells, type WeeklyCellEdit } from './weeklySheet'
+
+/** 그리드가 다루는 행 — id 와 내용 4칸만 본다(행 모양이 영역 id 로 바뀌어도 셀 주소 rowId:col·선택 기하는 그대로 — 스펙 §1.4). */
+export type SheetGridRow = { id: string } & WeeklyCells
 
 /** 선택/편집이 다루는 열 — 4개 내용 열만(D1). 순서 고정. */
 export const CONTENT_COLS = WEEKLY_CELL_KEYS // ['this_content','this_issue','next_content','next_issue']
@@ -43,7 +46,7 @@ export function cellsInRect(rowIds: string[], rect: GridRect): CellAddr[] {
 }
 
 /** rect 안의 값 격자(복사용) — rows에서 CELL_FIELD로 추출. */
-export function valuesInRect(rows: WeeklySheetRow[], rect: GridRect): string[][] {
+export function valuesInRect(rows: readonly SheetGridRow[], rect: GridRect): string[][] {
   const out: string[][] = []
   for (let r = Math.max(0, rect.top); r <= Math.min(rows.length - 1, rect.bottom); r++) {
     const row = rows[r]
@@ -118,7 +121,7 @@ export function pasteEdits(
  * source 셀은 그대로 두고 target에서 source를 뺀 영역만 edits. 타일 원점은 source(위/왼쪽 드래그도 반복).
  */
 export function fillEdits(
-  rows: WeeklySheetRow[], rowIds: string[], source: GridRect, target: GridRect,
+  rows: readonly SheetGridRow[], rowIds: string[], source: GridRect, target: GridRect,
 ): WeeklyCellEdit[] {
   const sH = source.bottom - source.top + 1
   const sW = source.right - source.left + 1
@@ -141,7 +144,7 @@ export function fillEdits(
 }
 
 /** 범위 비우기: rect의 모든 셀을 ''로. 이미 빈 셀은 제외(불필요 저장 방지, AC5.4). */
-export function clearEdits(rows: WeeklySheetRow[], rowIds: string[], rect: GridRect): WeeklyCellEdit[] {
+export function clearEdits(rows: readonly SheetGridRow[], rowIds: string[], rect: GridRect): WeeklyCellEdit[] {
   const edits: WeeklyCellEdit[] = []
   for (let r = Math.max(0, rect.top); r <= Math.min(rows.length - 1, rect.bottom); r++) {
     const row = rows[r]
