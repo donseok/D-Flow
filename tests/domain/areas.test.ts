@@ -27,6 +27,11 @@ describe('validateArea', () => {
     expect(validateArea(base({ sortOrder: 1.5 }), []).ok).toBe(false)
     expect(validateArea(base({ sortOrder: NaN }), []).ok).toBe(false)
     expect(validateArea(base({ sortOrder: '1' as unknown as number }), [])).toEqual({ ok: false, error: '순서는 정수여야 합니다.' })
+    // RPC 형식(최대 아홉 자리)과 같은 한도 — 넘으면 결함 문구가 아니라 입력 문구로(A2 이월 Z5 F-3)
+    expect(validateArea(base({ sortOrder: 999_999_999 }), []).ok).toBe(true)
+    expect(validateArea(base({ sortOrder: -999_999_999 }), []).ok).toBe(true)
+    expect(validateArea(base({ sortOrder: 1e9 }), [])).toEqual({ ok: false, error: '순서는 -999999999~999999999 사이여야 합니다.' })
+    expect(validateArea(base({ sortOrder: -1e10 }), []).ok).toBe(false)
   })
 
   it('같은 kind 에 같은 code 가 있으면 거부 — 자기 자신(같은 id)은 제외, 다른 kind 는 허용', () => {

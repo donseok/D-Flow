@@ -18,6 +18,9 @@ export interface AreaInput {
   teams: AreaTeamInput[]
 }
 
+/** 영역 순서의 절댓값 상한 — RPC 의 정수 형식(최대 아홉 자리)과 같다 */
+export const AREA_SORT_ORDER_MAX = 999_999_999
+
 /** 저장 전 검증. existing 은 같은 프로젝트의 영역(중복 kind/code 대조용) — DB 유니크가 최종 판정이다(upsertArea 는 [] 를 넘기고 23505 로 판정). */
 export function validateArea(
   input: AreaInput,
@@ -29,6 +32,9 @@ export function validateArea(
   const name = input.name.trim()
   if (!name) return { ok: false, error: '영역 이름을 입력하세요.' }
   if (typeof input.sortOrder !== 'number' || !Number.isInteger(input.sortOrder)) return { ok: false, error: '순서는 정수여야 합니다.' }
+  // RPC(upsert_project_area)의 순서 형식 `^-?[0-9]{1,9}$` 과 같은 한도 — 넘으면 RPC 가 22023 AREA_INVALID_INPUT 을 내 "잠시 후 다시"류 결함
+  // 문구가 됐다(A1-4 권한 리뷰 P3 — A2 이월 Z5 F-3). 입력 단계에서 사람이 고칠 수 있는 문구로 막는다
+  if (Math.abs(input.sortOrder) > AREA_SORT_ORDER_MAX) return { ok: false, error: `순서는 -${AREA_SORT_ORDER_MAX}~${AREA_SORT_ORDER_MAX} 사이여야 합니다.` }
   if (existing.some(a => a.kind === input.kind && a.code === code && a.id !== input.id)) {
     return { ok: false, error: `'${code}' 코드가 이미 있습니다.` }
   }

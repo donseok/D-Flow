@@ -304,9 +304,14 @@ function branchProblems(key: string, bg: BranchGate, sf: ts.SourceFile, sites: r
     if (!b) out.push(`${key}: 조기 반환 목록 ${c} 가 핸들러에 없다(죽은 항목)`)
     else if (b.then === null || !singleReturn(b.then)) out.push(`${key}: 조기 반환 목록 ${c} 의 then 블록이 단일 return 문이 아니다 — 본문이 붙으면 관문 갈래다(사유: ${why})`)
     else {
-      // 단일 return 이라도 관문 없는 갈래다 — 대응 없는 RPC 를 부르면 실패(K4)
-      const unknown = unknownRpcsInNode(sf, b.then)
+      // 단일 return 이라도 관문 없는 갈래다 — 대응 없는 RPC·토글 모듈 표를 부르면 실패(K4). then 블록만이 아니라 조건식까지(if 전체 — A1-1 재리뷰
+      // P3: `if (!(await sb.rpc('x'))) return bad` 처럼 조건에 둔 호출을 놓쳤다). 조건 + 단일 return 이라 거짓 양성 위험이 거의 없다
+      const unknown = unknownRpcsInNode(sf, b.node)
       if (unknown.length) out.push(`${key}: 조기 반환 목록 ${c} 의 갈래가 ${unknownRpcTail(unknown)}`)
+      const hits = moduleTablesInNode(sf, b.node)
+      if (hits.length) {
+        out.push(`${key}: 조기 반환 목록 ${c} 의 갈래가 토글 모듈의 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 직접 만진다`)
+      }
     }
   }
   return out
@@ -606,6 +611,8 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
       `export async function POST(req) { if (!p) return await sb.rpc('touch_weekly_snapshot'); if (source === 'sheet') { ${G}; return sheet() } return core() }`,
       // (다) 대조 — 대응에 있고 토글 모듈 표를 쓰지 않는 RPC 는 자유다
       `export async function PUT(req) { if (!p) return bad; if (source === 'sheet') { ${G}; return sheet() } if (source === 'xlsx') { await sb.rpc('can_attach'); return x() } return core() }`,
+      // (라) 조기 반환 갈래의 **조건식**이 대응 없는 RPC 를 부른다(A1-1 재리뷰 P3 — then 블록만 보면 놓친다)
+      `export async function PATCH(req) { if (!(await sb.rpc('touch_weekly_snapshot'))) return bad; if (source === 'sheet') { ${G}; return sheet() } return core() }`,
     ].join('\n')
     const bf = parse('src/app/api/z/route.ts', bsrc)
     const p = (m: string) => branchProblems(`z#${m}`, bg, bf, gateSitesIn(bf, m, MODULE_ROUTE_GATES))
@@ -616,6 +623,10 @@ describe('deny — 라우트 판별기 민감도(합성 소스)', () => {
       'z#POST: 조기 반환 목록 !p 의 갈래가 소유 표를 모르는 RPC touch_weekly_snapshot 를 부른다 — tests/gates/_rpc-tables.ts 에 대응을 적는다',
     ])
     expect(p('PUT')).toEqual([])
+    const cond = "!(await sb.rpc('touch_weekly_snapshot'))"
+    expect(branchProblems('z#PATCH', { ...bg, ungated: { [cond]: '합성 조건 — 조기 반환' } }, bf, gateSitesIn(bf, 'PATCH', MODULE_ROUTE_GATES))).toEqual([
+      `z#PATCH: 조기 반환 목록 ${cond} 의 갈래가 소유 표를 모르는 RPC touch_weekly_snapshot 를 부른다 — tests/gates/_rpc-tables.ts 에 대응을 적는다`,
+    ])
   })
   it('BRANCH_GATE 위임: 갈래마다 그 표지만 품은 거부 단언, core 는 표지 없이 관문 비호출 단언 — 없거나 한 it 이 두 갈래를 섞으면 잡는다(과제 20)', () => {
     const bg: BranchGate = { reason: '합성', gated: { "source === 'sheet'": 'source=sheet', "mode === 'doc'": 'doc' }, core: '기본' }

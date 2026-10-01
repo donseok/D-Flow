@@ -12,8 +12,12 @@
 // 펼침이 p_actor 를 덮을 수 없게. 대상 = 마이그레이션에서 인자 이름이 정확히 p_actor 인 함수(자동 추출) ↔ P_ACTOR_RPCS(양방향 —
 // p_actor_id·p_actor_name 의 회의록 RPC 는 범위 밖). 첫날 실측(main 81deae9 — 스펙 §6.1): p_actor 자리 9곳 = 직접 3·한 단계 2·허용 목록 4.
 // 한계: 타입 검사기 없이 이름의 가장 가까운 선언을 찾는다. `g.ok` 확인은 타입 검사가 강제한다(GuardResult 유니온 — 좁히지 않으면 g.actor 가 형 오류).
+//  보지 못하는 것(A1-1 범위 재리뷰 P3 — A2 이월 Z5): 별칭을 거친 변이(`const a = g.actor; a.userId = x`·`const h = g; h.actor.userId = x`),
+//  다른 함수·호출 안의 변이(`mutate(g)`·`Reflect.set(g.actor, …)`) — 판정한 이름 그 자체의 쓰기만 센다.
+//  보수적 거짓 양성(실패 쪽): 가림(콜백이 같은 이름을 다시 선언하고 쓰는 꼴)과 같은 객체의 행위자가 아닌 필드 쓰기(`payload.note = …`)도 실패로 센다.
+//  도우미 호출부(K6)는 import 출처를 경로로 정규화해 센다(`./workflowEvent` 같은 상대 경로도 `@/lib/…` 와 같다). 동적 `import()`·재수출(barrel)은 보지 않는다.
 import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { hasModifier, parse } from './_ast'
@@ -453,9 +457,12 @@ function helperCallerProblems(files: readonly (readonly [string, ts.SourceFile])
   const usedExpr = new Map<string, number>()
   for (const [file, sf] of files) {
     let n = 0
+    // 상대 경로 import 도 같은 모듈이다(A1-1 재리뷰 P3 — 상대 경로로 부르면 호출 수 0 으로 조용히 빠졌다) — `@/` 꼴로 정규화해 견준다
+    const normalized = (source: string) => (source.startsWith('.')
+      ? `@/${posix.relative('src', posix.normalize(posix.join(posix.dirname(file), source))).replace(/\.(ts|tsx)$/, '')}` : source)
     const isHelperImport = (id: ts.Identifier, imported: string) => {
       const b = bindingOf(id)
-      return b?.kind === 'import' && b.source === spec.source && b.imported === imported
+      return b?.kind === 'import' && normalized(b.source) === spec.source && b.imported === imported
     }
     const onRef = (r: ts.Expression) => {
       const call = ts.isCallExpression(r.parent) && r.parent.expression === r ? r.parent : null
@@ -686,6 +693,12 @@ describe('판별기 민감도 — 합성 소스', () => {
     expect(helperCallerProblems(files(['r.ts', tok + '\n' + tok.replace('function r', 'function r2')]),
       spec({ 'r.ts': { count: 2, except: { expr: 'loaded.userId', count: 1, why } } }))).toEqual([
       'applyWorkflowEvent 호출부 r.ts: 값 식 loaded.userId 의 허용 호출 수 1 ≠ 실측 2',
+    ])
+    // 상대 경로 import 도 호출부로 센다(A1-1 재리뷰 P3) — 목록 밖 파일이면 실패한다
+    const rel = [['src/lib/agent/other.ts', HEAD + "import { applyWorkflowEvent } from './workflowEvent'\n" + bad.replace('function b', 'function o')]] as [string, string][]
+    expect(helperCallerProblems(rel.map(([f, t]) => [f, parse(f, t)] as const), spec({}))).toEqual([
+      'applyWorkflowEvent 호출부 src/lib/agent/other.ts: 닫힌 목록에 없는 파일이다(호출 1)',
+      expect.stringContaining('src/lib/agent/other.ts:4 applyWorkflowEvent 의 actorUserId(input.actorId) — '),
     ])
     const esc = "export function c() { return [1].map(applyWorkflowEvent) }"
     const spreadArg = "export async function d(args) { await applyWorkflowEvent(admin, { ...args }) }"
