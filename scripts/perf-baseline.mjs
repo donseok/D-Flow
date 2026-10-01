@@ -17,7 +17,8 @@
 //     node scripts/perf-baseline.mjs measure --base http://localhost:3101 --label sp2-phase-a --n 100
 //   SP4 A2: seed [--items <n>(기본 800 — 800 이 아니면 프로젝트 PERF-<n>)] [--weekly(주간 영역 셋·2026-01-05 문서 하나 — SP4 스키마 전용)],
 //           measure [--items <n>] [--routes dashboard,wbs,issues,export,weekly(기본 dashboard,wbs,issues)] [--personas admin|admin,member(기본 둘)]
-//           [--expect-items <n>(wbs 화면·export 본문의 서로 다른 시드 코드 수가 n 인지 — 다르면 실패)]. export 는 바이너리로 읽는다.
+//           [--expect-items <n>(wbs 화면·export 본문의 서로 다른 시드 항목 이름 수가 n 인지 — 다르면 실패. 표준 내보내기에는 코드 열이 없어
+//           이름으로 센다)]. export 는 바이너리로 읽는다.
 //   DSN 은 resolveTarget('local').dsn(LOCAL_DB_URL 우선 — 전용 스택에서 메인 스택 54322 로 새지 않는다).
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -26,7 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Pool } from 'pg'
 import { cookieHeader, localClientEnv, notFoundRendered } from './lib/e2e.mjs'
 import { localAdminEnv, resolveTarget } from './lib/targets.mjs'
-import { distinctWbsCodes, parseNameList, percentile, perfBaseUrl, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
+import { distinctSeedNames, parseNameList, percentile, perfBaseUrl, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
 import { zipTextParts } from './lib/sentinels.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
@@ -304,7 +305,7 @@ async function measure(argv) {
       for (const path of routes.filter((p) => p.endsWith('/wbs') || p.startsWith('/api/export'))) {
         const body = last.get(path)
         const text = Buffer.isBuffer(body) ? (await zipTextParts(body)).map((p) => p.text).join('\n') : body
-        counts[path] = distinctWbsCodes(text)
+        counts[path] = distinctSeedNames(text)
         if (counts[path] !== expectItems) fail(`${persona} ${path} 의 항목 수 ${counts[path]} ≠ ${expectItems}`)
       }
       result.personas[persona].items = counts

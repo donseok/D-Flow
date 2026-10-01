@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { judgeRegression, median, percentile, perfBaseUrl } from '../../scripts/lib/perf.mjs'
-import { distinctWbsCodes, parseNameList, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from '../../scripts/lib/perf.mjs'
+import { distinctSeedNames, distinctWbsCodes, parseNameList, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from '../../scripts/lib/perf.mjs'
 
 describe('percentile — 최근접 순위(표본 밖 보간 없음)', () => {
   it('p50 은 정렬된 가운데 관측값', () => {
@@ -89,5 +89,14 @@ describe('perf 도우미 — 시드·경로(SP4 §6.5)', () => {
     expect(distinctWbsCodes('P.1.1 P.1.12')).toBe(2)
     expect(distinctWbsCodes('xP.1.1 1P.2.2')).toBe(0)
     expect(distinctWbsCodes('')).toBe(0)
+  })
+  it('항목 이름 — 서로 다른 \'<n>단계 업무 <n>\' 의 개수(표준 내보내기는 코드 열이 없다), 더 긴 숫자의 앞부분을 세지 않는다', () => {
+    expect(distinctSeedNames('<t>1단계 업무 1</t><t>1단계 업무 1</t><t>1단계 업무 12</t><t>10단계 업무 80</t>')).toBe(3)
+    expect(distinctSeedNames('21단계 업무 1 · 21단계 업무 10')).toBe(2)
+    expect(distinctSeedNames('')).toBe(0)
+  })
+  it('측정의 항목 수 확인은 이름으로 센다 — 코드로 세면 표준 내보내기가 늘 0 이다', () => {
+    const src = readFileSync('scripts/perf-baseline.mjs', 'utf8')
+    expect(src).toMatch(/counts\[path\] = distinctSeedNames\(text\)/)
   })
 })

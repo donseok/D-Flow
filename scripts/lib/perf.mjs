@@ -78,3 +78,9 @@ export function parseNameList(value, allowed) {
 export function distinctWbsCodes(text) {
   return new Set(String(text).match(/(?<![A-Za-z0-9.])P\.\d+\.\d+(?![0-9])/g) ?? []).size
 }
+
+/** 본문의 서로 다른 시드 항목 이름('<단계>단계 업무 <번호>') 개수 — 표준 내보내기에는 코드 열이 없어(스펙 §4.3 표준 레이아웃) 코드가 아니라
+ *  이름으로 센다. 화면 HTML 도 같은 규칙으로 센다(한 확인이 두 경로에 같다). */
+export function distinctSeedNames(text) {
+  return new Set(String(text).match(/(?<![0-9])\d+단계 업무 \d+(?![0-9])/g) ?? []).size
+}
