@@ -283,3 +283,34 @@ main 반영 뒤 컨트롤러가 채울 두 줄:
 - 작은 머신에서 dev 서버가 메모리 감시로 재시작해(`Server is approaching the used memory threshold`) 두 번 실패했다 — 한 번은 요청 끊김, 한 번은 서버 액션
   매니페스트가 빔. 스크립트가 매니페스트를 다시 읽기 전에 그 페이지를 GET 해 복구하도록 고쳤다(`action()`). 마지막 실행에서도 재시작이 1회 있었지만 단계가 통과했다.
 - 명령은 Phase B 와 같다(`LOCAL_DB_URL` 로 전용 스택 지정, 공유 잠금 `heavy-lock.sh` 아래). 비밀번호·시크릿은 `openssl rand` 로 만든 셸 변수·스크래치 파일(mode 600)에만 두었고 커밋·출력하지 않았다.
+
+
+# Phase D — 체크포인트
+
+스펙 §6(권한 변경 이력의 서버 배선·읽기 화면)과 §7.3 의 **8단계**를 잰 기록이다. 트리는 `sp3a/phase-d`(측정일 2026-10-01, 시각은 KST). 이 Phase 는
+**마이그레이션이 없다**(DB 객체와 그 DB 테스트는 Phase A — `0012` 의 10번 절, `tests/rls/authz-events.test.ts`).
+
+**요약**
+
+- 깨끗한 DB 위에서 E2E **exit 0, 30단계 전부 ✓** — Phase C 의 29단계 + 새 `authz-events`. 전용 스택 `d-flow-sp3a-c-visual`(api 54521 · db 54522)에서만 돌렸다.
+- `settings:verify` exit 0 · `test:rls` 26 파일 · 282 통과(건너뜀 0) · `build` 초록 · `typecheck` 0 · `lint` 0 error(경고 4 — 기존) · `vitest` **679 파일 · 8698 통과**.
+- `git log --oneline main..HEAD -- supabase` 비어 있음 — 롤백 리허설 대상 없음.
+
+## 새 단계
+
+| # | 단계 | 판정값 |
+|---|---|---|
+| 8 | `authz-events` | 플랫폼 관리자가 화면과 같은 서버 액션 `setWorkspaceRole` 로 ana 를 멤버로 내렸다가 관리자로 되돌린다. DB 에서 `authz_events` 두 행: 최신 `{role: member} → {role: admin}`, 그 앞 `{role: admin} → {role: member}`, 둘 다 `cause = direct` · 행위자 = 그 플랫폼 관리자 · `command_id` 있음(서로 다름). 화면의 읽기 `listAuthzEvents` 가 같은 두 행을 요약('멤버 → 관리자'·'관리자 → 멤버')과 행위자·대상 이름과 함께 돌려준다 |
+
+## 배선
+
+- `setPlatformAdmin`·`setWorkspaceRole` 은 `platform_admins`·`workspace_members` 를 직접 쓰던 것을 `set_platform_admin`·`set_workspace_role` RPC 로, 명단 권한(계정 생성·명단 편집)은
+  `upsert_project_member` 대신 `upsert_project_member_cmd` 로 바꿨다. 행위자는 가드의 actor, 명령 id 는 호출마다 새로 만든다(권한이 안 바뀐 호출은 이력 행을 남기지 않아 재전송은 멱등 쓰기).
+- 계정 생성(`workspace_members` insert)과 초대 수락의 행위자는 여전히 null 이다(도장 값은 `after` 에 있다) — 스펙 §6 마지막 문단.
+- 읽기는 `listAuthzEvents(workspaceId, { limit, before })` — 워크스페이스 관리자 가드 뒤 세션 클라이언트(RLS 가 한 번 더 좁힌다). 플랫폼 관리자 지정·해제 행(워크스페이스가 없다)은 플랫폼 관리자에게만 같은 목록에 싣는다.
+  지워진 계정은 '삭제된 계정', 행위자 없음은 '시스템', 이름 조회 실패는 '이름 확인 불가', 이력 조회 실패는 빈 목록이 아니라 오류다.
+- 설정 표 읽기 허용 목록에 `src/lib/authz/events.ts`(select 한 곳)를 올렸고, 열거 게이트 매니페스트에 `listAuthzEvents`(워크스페이스 관리자)를 올렸다.
+
+## 실행 메모
+
+Phase C 와 같다 — `next dev -p 3101`(`--max-old-space-size=4096`), 공유 잠금 아래, 비밀번호·시크릿은 셸 변수·스크래치 파일에만. 이번 실행에서 dev 서버 재시작은 없었다.
