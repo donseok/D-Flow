@@ -197,6 +197,45 @@ describe('convert_inherited_teams — 전환', () => {
   })
 })
 
+// A2-1 리뷰 보안 P3 — team_ref_owned_scope 의 "잠금 뒤 면제·거부"는 잠금을 기다린 다음 문장이 새 스냅숏을 본다는 데(read committed) 기댄다.
+// 스냅숏이 고정된 수준에서는 잠금 뒤에도 전환 전의 옛 행이 보여 면제되므로, 공용 팀을 가리키는 쓰기만 25001 TEAM_SCOPE_ISOLATION 으로 거절한다
+// (H2 규칙 ③ — 짝인 convert_inherited_teams 의 TEAM_CONVERT_ISOLATION 과 같은 꼴). 케이스는 전용 워크스페이스(…aa50)를 만들고 rollback 한다.
+describe('team_ref_owned_scope 의 격리 수준 가드(A2-1 리뷰 보안 P3)', () => {
+  const WI = '00000000-0000-0000-7e57-00000000aa50'
+  const IDI = (nn: string) => `00000000-0000-0000-7e57-0000000019${nn}`
+  const PI = IDI('e0'), COMMON = IDI('e1'), ITEM = IDI('e2'), PO = IDI('e3'), OWN = IDI('e4'), ITEM_O = IDI('e5')
+  async function seed(c: PoolClient) {
+    await c.query(`insert into public.workspaces (id, slug, name) values ($1, 'rls-sp4-scope-iso', 'Acme 격리')`, [WI])
+    await c.query('insert into public.projects (id, name, workspace_id) values ($1, $2, $3), ($4, $5, $3)', [PI, 'RLS 격리 상속', WI, PO, 'RLS 격리 전용'])
+    await c.query(`insert into public.teams (id, workspace_id, project_id, code, name) values ($1, $3, null, 'RES', '연구'), ($2, $3, $4, 'OPS', '운영')`,
+      [COMMON, OWN, WI, PO])
+    await c.query(`insert into public.wbs_items (id, project_id, code, name) values ($1, $2, '1', 'RLS 격리 항목'), ($3, $4, '1', 'RLS 격리 전용 항목')`,
+      [ITEM, PI, ITEM_O, PO])
+  }
+  it('read committed 가 아니면 공용 팀 참조 쓰기는 25001 TEAM_SCOPE_ISOLATION(세 수준) — 전용 팀 참조는 수준과 무관하게 통과, read committed 는 통과', async () => {
+    const REFUSED = ['repeatable read', 'serializable', 'read uncommitted']
+    const results: Record<string, { common: unknown; own: unknown }> = {}
+    for (const level of [...REFUSED, 'read committed']) {
+      const c = await pool.connect()
+      try {
+        await c.query(`begin isolation level ${level}`)
+        await seed(c)
+        results[level] = {
+          common: await pgError(c, `insert into public.item_owners (wbs_item_id, team_id, kind) values ($1, $2, 'primary')`, [ITEM, COMMON]),
+          own: await pgError(c, `insert into public.item_owners (wbs_item_id, team_id, kind) values ($1, $2, 'primary')`, [ITEM_O, OWN]),
+        }
+      } finally {
+        await c.query('rollback').then(() => c.release(), (re: Error) => c.release(re))
+      }
+    }
+    for (const level of REFUSED) {
+      expect(results[level].common, level).toMatchObject({ code: '25001', message: 'TEAM_SCOPE_ISOLATION' })
+      expect(results[level].own, level).toBeNull()
+    }
+    expect(results['read committed']).toEqual({ common: null, own: null })
+  })
+})
+
 describe('전환 뒤 공용 팀 참조 쓰기 거부(D4·D54 — A1-3 리뷰 M1, team_ref_owned_scope)', () => {
   const OWNED = { code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' }
   const AREA_RPC = 'select public.upsert_project_area($1, $2, $3::jsonb, $4::jsonb, $5) as r'

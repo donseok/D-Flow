@@ -226,6 +226,20 @@
 | 0013~0017 | 연쇄 롤백(0017→0013) = `--version 0012`, 다시 다섯 적용 = 전체 | 2026-10-02 03:04 KST | 두 `diff` 모두 불일치 0 |
 | CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up` → `test:rls` | 2026-10-02 03:05 KST | max(version) 0017 · 30 파일 383 초록·건너뜀 0 |
 
+## 리허설 — `*_team_scope_lock_order` 격리 수준 가드(A2-1 리뷰 보안 P3 — Q2)
+
+0016 이 아직 main 밖(sp4/a2 에만, 적용된 곳은 전용 스택 `d-flow-sp4` 뿐)이라 새 번호(0018 — 레인 B 가 다음 번호를 쓴다) 대신 0016 을 그 자리에서 고쳤다
+(`e6122e9` — 마이그레이션 한 파일). 공용 팀을 가리키는 쓰기만 잠금 앞에서 read committed 가 아니면 25001 `TEAM_SCOPE_ISOLATION`, 사후검사
+`TEAM_SCOPE_LOCK_ORDER_POSTCHECK` 가 가드 문장·토큰이 잠금 앞에 있는지 본다. 롤백(0014 본문)은 그대로다. `tests/rls/team-convert.test.ts` 의 새 케이스
+(세 수준 거절·전용 팀 참조 통과·read committed 통과)는 고치기 전 DB 에서 **빨강**(repeatable read 의 공용 팀 참조 insert 가 성공)이었다.
+
+| 파일 | 리허설 | 일시 | 결과 |
+|---|---|---|---|
+| `*_team_scope_lock_order` | 사후검사 민감도(옛 0016 본문이 적용된 DB 에 새 ② 만) | 2026-10-02 04:13 KST | `TEAM_SCOPE_LOCK_ORDER_POSTCHECK: 격리 수준 가드(TEAM_SCOPE_ISOLATION)가 잠금 앞에 없다` 로 멈춤 |
+| `*_team_scope_lock_order` | R(카탈로그 — 옛 0016 위에 새 0016 → 0016 롤백 → 새 0016 재적용, `pg_dump --schema-only --schema=public`) | 2026-10-02 04:13 KST | 옛→새 차이는 가드 네 줄뿐 · 재적용 뒤 = 첫 적용(`\restrict` 토큰 줄 외 불일치 0) · 롤백 뒤 가드 없음 · 소유자 postgres·DEFINER·`search_path ""`·authenticated EXECUTE 없음 |
+| 전체 | `npm run db:reset`(기준선 + 0001~0017 + seed) | 2026-10-02 04:19 KST | 초록 · max(version) 0017 · 함수 본문에 가드 있음 |
+| CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up`(16개) → `test:rls` | 2026-10-02 04:20 KST | max(version) 0017 · 30 파일 384 초록·건너뜀 0 |
+
 ## 머지 체크리스트(A2 반영 때)
 
 - 번호를 공유했던 로컬 스택(레인 B 의 `0013_account_preferences` 를 적용한 DB 등)은 `db:reset` 으로 맞춘다 — `migration up` 은 같은 번호를 적용된 것으로 보고
