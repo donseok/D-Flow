@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { MyWorkList } from './MyWorkList'
 import { wsHref } from '@/lib/workspace/paths'
+import { LEGACY_PATHS } from '@/lib/nav/legacyPaths'
 import type { MyWorkRow, MyWorkKind } from '@/lib/portal/myWork'
 
 /** 로더 결과 — null 은 권한 정보를 읽지 못해(열화) 로더를 부르지 않은 섹션 */
@@ -36,7 +37,9 @@ export function HomeSections({ slug, work, projects, announcements }: {
       <Section id="work" title="지금 처리할 일" more={{ href: wsHref(slug, 'my-work'), label: '내 업무 전체' }}>
         {work?.ok ? <MyWorkList rows={work.rows} failedKinds={work.failedKinds} empty="지금 처리할 일이 없습니다" /> : failed(work)}
       </Section>
-      <Section id="projects" title="진행 중인 프로젝트" more={{ href: wsHref(slug, 'projects'), label: '전체 보기' }}>
+      {/* 전체 목록은 과제 25 가 /w/<slug>/projects 로 옮길 때까지 옛 경로다 — 없는 경로를 걸면 그 링크의 prefetch 가 끝나지 않는다.
+          과제 25 가 legacyPaths.ts 를 지우면 여기가 wsHref(slug, 'projects') 로 바뀐다 */}
+      <Section id="projects" title="진행 중인 프로젝트" more={{ href: LEGACY_PATHS.projects, label: '전체 보기' }}>
         {projects?.ok ? (projects.rows.length === 0 ? <StatusMessage kind="empty" compact title="진행 중인 프로젝트가 없습니다" /> : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {projects.rows.map((p) => (

@@ -30,6 +30,7 @@ describe('홈 v0(D20)', () => {
     for (const h2 of ['지금 처리할 일', '진행 중인 프로젝트', '공지']) expect(html).toMatch(new RegExp(`<h2[^>]*>${h2}</h2>`))
     expect(html).toContain('href="/p/p1/issues?focus=i1"')
     expect(html).toContain('href="/w/acme/my-work"')
+    expect(section(html, 'projects')).not.toContain('href="/w/acme/projects"')   // 과제 25 전에는 없는 경로 — 옛 목록으로
     expect(h.loadWorkspaceScope).toHaveBeenCalledWith('acme')
     expect(h.getMyWork).toHaveBeenCalledWith(WS.id, expect.anything(), { limit: 20 })
     expect(h.getProjectRows).toHaveBeenCalledWith(WS.id, expect.anything(), { status: 'active', limit: 20 })
