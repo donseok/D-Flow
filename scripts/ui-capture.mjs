@@ -392,11 +392,19 @@ export function seedPlan(ctx) {
   const attendance = [['work', -2], ['remote', -1], ['annual', 0]].map(([type, off], i) => ({ id: id(`att:${i}`), project_id: pid, member_id: ctx.memberIds.member, date: plusDays(today, off), type }))
   const dow = new Date(`${today}T00:00:00Z`).getUTCDay()
   const weeklyReport = { id: id('weekly:1'), project_id: pid, week_start: plusDays(today, -((dow + 6) % 7)) }
+  // SP4 A1(스펙 D53·§3.2) — 주간 행은 영역(project_areas kind='weekly_section') id 로 묶인다. 옛 구분 '구축'·'전환' 을 영역 code·name 으로,
+  // 옛 모듈 '화면'·'데이터' 는 내용이 있는 칸의 첫 줄 머리표 [모듈] 로 옮긴다(이관 규칙과 같은 꼴 — 캡처 화면의 정보가 줄지 않게).
+  const weeklyAreas = [['구축', 1], ['전환', 2]].map(([code, sort_order], i) => ({
+    id: id(`weekly-area:${i + 1}`), project_id: pid, kind: 'weekly_section', code, name: code, sort_order, active: true,
+  }))
   const weeklyRows = [
     // this_issue/next_issue 도 표가 NOT NULL 이다. PostgREST 다중 insert 는 빠진 키를 기본값이 아니라 명시적 NULL 로
     // 채운다(열 목록은 행들의 키 합집합이다) — 두 행의 키 집합이 달라지면 없는 쪽이 NOT NULL 위반으로 죽는다.
-    { id: id('weekly-row:1'), report_id: weeklyReport.id, section: '구축', module: '화면', sort_order: 1, this_content: '목록 화면 초안', this_issue: '', next_content: '상세 화면', next_issue: '' },
-    { id: id('weekly-row:2'), report_id: weeklyReport.id, section: '전환', module: '데이터', sort_order: 2, this_content: '이관 규칙 정리', this_issue: '원천 누락 3건', next_content: '시험 이관', next_issue: '' },
+    // area_kind 는 어느 행에도 싣지 않는다(합집합 밖이라 기본값 'weekly_section' 이 들어간다 — 영역 FK 의 셋째 열).
+    { id: id('weekly-row:1'), report_id: weeklyReport.id, project_id: pid, area_id: weeklyAreas[0].id,
+      this_content: '[화면]\n목록 화면 초안', this_issue: '', next_content: '[화면]\n상세 화면', next_issue: '' },
+    { id: id('weekly-row:2'), report_id: weeklyReport.id, project_id: pid, area_id: weeklyAreas[1].id,
+      this_content: '[데이터]\n이관 규칙 정리', this_issue: '[데이터]\n원천 누락 3건', next_content: '[데이터]\n시험 이관', next_issue: '' },
   ]
   const wikiBody = '# 배포 절차\n\n1. 변경 요약을 공유한다\n2. 점검 창에 배포한다\n'
   const wikiTopic = { id: ids.topicId, project_id: pid, title: '배포 절차', normalized_title: '배포 절차' }
@@ -412,7 +420,7 @@ export function seedPlan(ctx) {
     { id: ids.minuteId, date: plusDays(today, -1), team: 'DSG', title: '설계 검토 회의', body: body1 },
     { id: ids.minute2Id, date: plusDays(today, -8), team: 'PLN', title: '주간 점검 회의', body: body2 },
   ]
-  return { teams, wbs, owners, deps, issues, announcements, meetings, attendees, attendance, weeklyReport, weeklyRows, wikiTopic, wikiRevision, invite, runner, agentOrder, minutes }
+  return { teams, wbs, owners, deps, issues, announcements, meetings, attendees, attendance, weeklyAreas, weeklyReport, weeklyRows, wikiTopic, wikiRevision, invite, runner, agentOrder, minutes }
 }
 
 /** 비밀번호를 재설정할 계정 — 시드 계정 넷만. 부트스트랩 관리자면 throw(판정 Q4) */
@@ -740,6 +748,7 @@ async function cmdSeed() {
   await insertOnce('meetings', plan.meetings, (c) => db.from('meetings').upsert(c, once()))
   await insertOnce('meeting_attendees', plan.attendees, (c) => db.from('meeting_attendees').upsert(c, once('meeting_id,member_id')))
   await insertOnce('attendance_records', plan.attendance, (c) => db.from('attendance_records').upsert(c, once()))
+  await insertOnce('project_areas', plan.weeklyAreas, (c) => db.from('project_areas').upsert(c, once()))   // 주간 영역 — 문서·행보다 먼저(영역 FK, SP4 D53)
   await insertOnce('weekly_reports', [plan.weeklyReport], (c) => db.from('weekly_reports').upsert(c, once()))
   await insertOnce('weekly_report_rows', plan.weeklyRows, (c) => db.from('weekly_report_rows').upsert(c, once()))
   await insertOnce('wiki_topics', [plan.wikiTopic], (c) => db.from('wiki_topics').upsert(c, once()))

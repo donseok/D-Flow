@@ -144,6 +144,16 @@ describe('배선 — DB·세션 클라이언트와 앱 주소는 laneEnv 한 곳
     for (const i of at(UC, /(?<!function )\bresolveBase\(/g)) expect(inside(i, env)).toBe(true)
     expect(PG).not.toMatch(/\b(?:resolveBase|laneAppUrl)\b/)
   })
+  it('시드 순서 — 주간 영역(project_areas)을 주간 문서·행보다 먼저 넣고, 주간 행 리터럴에 지운 열이 없다(SP4 D53)', () => {
+    const posOf = (s: string) => UC.indexOf(s)
+    const areas = posOf("insertOnce('project_areas', plan.weeklyAreas")
+    const reports = posOf("insertOnce('weekly_reports', [plan.weeklyReport]")
+    const rows = posOf("insertOnce('weekly_report_rows', plan.weeklyRows")
+    expect(areas).toBeGreaterThan(-1)
+    expect(areas).toBeLessThan(reports)
+    expect(reports).toBeLessThan(rows)
+    expect(UC).not.toMatch(/\b(?:section|module):\s*'/)
+  })
 })
 
 describe('산출물 가림 — 값 기준(UI-0 안전 리뷰 P3-1)', () => {
@@ -575,6 +585,38 @@ describe('seedPlan — 결정적 표본(스펙 §3.4 시드 행)', () => {
   })
   it('fnv1a64 은 시드의 회의록 본문에서 SQL 실측값과 같다(본문 전체를 해시로 고정)', () => {
     expect(plan.minutes.map((m) => fnv1a64(m.body))).toEqual(['b78d8307b9571ce9', '88019ce70f34c6bc'])
+  })
+  // SP4 A1(스펙 D53·§3.2) — 주간 행은 구분 문자열이 아니라 영역(project_areas kind='weekly_section') id 로 묶인다. 시드는 영역을 먼저 두고
+  // 행에 area_id·project_id 를 싣는다 — 지운 열(section·module·sort_order)을 실으면 PostgREST 가 PGRST204 로 거부한다.
+  it('주간 영역 둘 — weekly_section·code 유일·이 프로젝트·순서 1·2·활성, id 는 pid 에서 결정적', () => {
+    const areas = plan.weeklyAreas
+    expect(areas.map((a) => [a.kind, a.code, a.name, a.sort_order, a.active])).toEqual([
+      ['weekly_section', '구축', '구축', 1, true],
+      ['weekly_section', '전환', '전환', 2, true],
+    ])
+    expect(new Set(areas.map((a) => a.code)).size).toBe(areas.length)
+    for (const a of areas) expect(a.project_id).toBe(CTX.projectId)
+    expect(areas.map((a) => a.id)).toEqual([1, 2].map((n) => deterministicId(`ui-capture:${CTX.projectId}:weekly-area:${n}`)))
+    const other = seedPlan({ ...CTX, projectId: '00000000-0000-0000-7e57-000000001599' })
+    expect(other.weeklyAreas.map((a) => a.id)).not.toEqual(areas.map((a) => a.id))
+  })
+  it('주간 행 — 영역 id·프로젝트·문서를 싣고 지운 열은 없다, 네 칸은 문자열(다중 insert 의 키 합집합 — NOT NULL)', () => {
+    const areaIds = plan.weeklyAreas.map((a) => a.id)
+    expect(plan.weeklyRows).toHaveLength(2)
+    for (const r of plan.weeklyRows) {
+      expect(Object.keys(r).sort()).toEqual(['area_id', 'id', 'next_content', 'next_issue', 'project_id', 'report_id', 'this_content', 'this_issue'])
+      expect(areaIds).toContain(r.area_id)
+      expect(r.project_id).toBe(CTX.projectId)
+      expect(r.report_id).toBe(plan.weeklyReport.id)
+      for (const k of ['this_content', 'this_issue', 'next_content', 'next_issue'] as const) expect(typeof r[k]).toBe('string')
+    }
+    expect(plan.weeklyRows.map((r) => r.area_id)).toEqual(areaIds)   // (report_id, area_id) 유일 — 영역마다 한 행, 영역 순
+  })
+  it('옛 모듈 이름은 내용이 있는 칸의 첫 줄 머리표 [모듈] 로 남는다 — 빈 칸에는 붙이지 않는다(이관 규칙과 같은 꼴, 계획 P3·스펙 D29)', () => {
+    expect(plan.weeklyRows.map((r) => [r.this_content, r.this_issue, r.next_content, r.next_issue])).toEqual([
+      ['[화면]\n목록 화면 초안', '', '[화면]\n상세 화면', ''],
+      ['[데이터]\n이관 규칙 정리', '[데이터]\n원천 누락 3건', '[데이터]\n시험 이관', ''],
+    ])
   })
 })
 
