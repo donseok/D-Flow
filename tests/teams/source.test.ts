@@ -160,7 +160,25 @@ describe('visibleTeams·teamCodesVisibleTo — 가시 범위(스펙 §4.2.1), �
     const got = await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: [P1] }, { client: client as never })
     expect(new Set(got)).toEqual(new Set(['A0', 'A1', 'A2', 'PX']))
     expect(read.every((r) => r.workspace_id === WA)).toBe(true)
-    expect(table.log[0].find((c) => c.method === 'or')?.args[0]).toBe(`and(project_id.is.null,workspace_id.in.(${WA})),project_id.in.(${P1})`)
+    // U1(A2-2 리뷰 보안 P2) — 질의는 워크스페이스로만 좁힌다. 프로젝트 id 는 URL 에 싣지 않는다(판정은 메모리)
+    expect(table.log[0].some((c) => c.method === 'or')).toBe(false)
+    expect(table.log[0].find((c) => c.method === 'in')?.args).toEqual(['workspace_id', [WA]])
+  })
+  it('[U1] 볼 수 있는 프로젝트가 200개여도 질의에 프로젝트 id 가 없다 — 숨김 프로젝트의 전용 팀은 메모리에서 거른다', async () => {
+    const pids = Array.from({ length: 200 }, (_, i) => `00000000-0000-0000-7e57-0000000${String(19000 + i).padStart(5, '0')}`)
+    const HIDDEN = '00000000-0000-0000-7e57-0000000019ff'
+    const table = keysetTable([trow('c1', 'RES', WA, null), trow('p1', 'MEP', WA, pids[150]), trow('h1', 'HID', WA, HIDDEN), trow('o1', 'CIV', WB, null)])
+    const got = await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: pids }, { client: { from: () => table.make() } as never })
+    expect(got).toEqual(['MEP', 'RES'])
+    const sent = JSON.stringify(table.log)
+    expect(pids.some((pid) => sent.includes(pid))).toBe(false)
+    expect(sent).not.toContain(HIDDEN)
+    expect(sent.length).toBeLessThan(2000)
+  })
+  it('[U1] 워크스페이스 없이 프로젝트만 있는 범위(워크스페이스를 모르는 범위)는 프로젝트 id 로 좁힌다', async () => {
+    const table = keysetTable([trow('p1', 'MEP', WA, P1), trow('c1', 'RES', WA, null)])
+    expect(await teamCodesVisibleTo({ all: false, workspaceIds: [], projectIds: [P1] }, { client: { from: () => table.make() } as never })).toEqual(['MEP'])
+    expect(table.log[0].find((c) => c.method === 'in')?.args).toEqual(['project_id', [P1]])
   })
   it('[Q6] 플랫폼 관리자(view.all)는 범위를 좁히지 않는다, 아무 범위도 없으면 질의 없이 빈 목록', async () => {
     const table = keysetTable([trow('t1', 'RES', WA, null), trow('t2', 'CIV', WB, null)])
