@@ -141,6 +141,22 @@ describe('weekly_areas ⑩ 세션 쓰기 — 구조 쓰기는 닫히고 주간 �
     })
   })
 
+  it('네 칸은 DB 에서도 20,000자까지다(weekly_report_rows_cells_len) — 세션의 직접 update 가 서버 액션의 상한을 건너뛰지 못한다', async () => {
+    const LEN = { code: '23514', constraint: 'weekly_report_rows_cells_len' }
+    await asUser(pool, F.users.dual, async (c) => {   // dana — c1 명단 member
+      for (const col of ['this_content', 'this_issue', 'next_content', 'next_issue']) {
+        expect(await pgError(c, `update public.weekly_report_rows set ${col} = $2 where id = $1`, [ROW, 'x'.repeat(20001)]), col)
+          .toMatchObject(LEN)
+      }
+      expect((await c.query('update public.weekly_report_rows set next_issue = $2 where id = $1', [ROW, '가'.repeat(20000)])).rowCount).toBe(1)
+    })
+    await asService(pool, async (c) => {
+      await c.query('delete from public.weekly_report_rows where id = $1', [ROW])
+      expect(await pgError(c, 'insert into public.weekly_report_rows (report_id, project_id, area_id, this_content) values ($1, $2, $3, $4)',
+        [REPORT, F.projects.a, AREA, 'x'.repeat(20001)])).toMatchObject(LEN)
+    })
+  })
+
   it('영역·영역-팀 쓰기는 프로젝트 관리자도 42501 — 쓰기는 upsert_project_area 뿐', async () => {
     await asUser(pool, F.users.member, async (c) => {
       expect(await pgError(c, `insert into public.project_areas (project_id, kind, code, name) values ($1, 'weekly_section', 'SESS', '세션 영역')`,
@@ -281,6 +297,7 @@ describe('weekly_areas ⑧ 삭제(Q10·D23) — 프로젝트 삭제는 RI 트리
   it.each([
     ['weekly_reports', 'weekly_reports_project_id_fkey'],
     ['project_areas', 'project_areas_project_id_fkey'],
+    ['weekly_report_rows', 'weekly_report_rows_project_id_fkey'],
   ])('② %s 의 projects FK(%s)를 다시 만들어 RI 트리거 이름 순서를 바꿔도 프로젝트 삭제가 통과한다', async (table, fk) => {
     // 다시 만든 FK 의 트리거 이름(새 OID)이 맨 앞·맨 뒤 어디로 가든 둘 중 하나는 영역 검사를 주간 캐스케이드보다 먼저 큐에 넣는다.
     // test:rls 는 파일 병렬이 꺼져 있어(vitest.config.rls.ts) 같은 트랜잭션의 alter table 이 다른 파일과 겹치지 않는다
@@ -365,6 +382,49 @@ describe('weekly_areas ⑪ RPC — 실행 권한·격리 수준', () => {
         c.release()
       }
     }
+  })
+})
+
+describe('weekly_areas ⑪ actor_is_project_admin — DEFINER RPC 넷의 등급 판정(표 구동)', () => {
+  // RLS 가 빠진 DEFINER RPC 넷(주간 둘·가져오기·전환)이 이 도우미 하나로 등급을 다시 본다(D28) — 경계 분기를 여기 한 곳에서 고정한다.
+  // 넓이는 TS roleIn·SQL is_project_admin(0009 F1)과 같다: 플랫폼 ∨ 그 워크스페이스 관리자 ∨ (워크스페이스 멤버 ∧ 활성 명단·활성 인물의 admin)
+  const NEW_P = id(0x20)   // A 워크스페이스의 새 프로젝트 — alice(c1 관리자)의 명단 행이 없다
+  const ADMIN = 'select public.actor_is_project_admin($1, $2) as ok'
+  it.each([
+    ['플랫폼 관리자', F.users.platform, F.projects.a, [], true],
+    ['A 워크스페이스 관리자(명단 없음)', F.users.wsAdmin, F.projects.a, [], true],
+    ['명단 admin(alice)', F.users.member, F.projects.a, [], true],
+    ['명단 member(dana)', F.users.dual, F.projects.a, [], false],
+    ['조회 전용 — 워크스페이스 멤버, 명단 없음(cy)', F.users.aLoose, F.projects.a, [], false],
+    ['다른 워크스페이스 관리자(bea)', F.users.bAdmin, F.projects.a, [], false],
+    ['같은 워크스페이스의 다른 프로젝트 관리자(alice → 명단 없는 새 프로젝트)', F.users.member, NEW_P, [], false],
+    ['같은 워크스페이스의 다른 프로젝트 관리자(alice → 명단 member 인 c2)', F.users.member, F.projects.b, [], false],
+    ['워크스페이스를 떠난 명단 admin', F.users.member, F.projects.a,
+      [`delete from public.workspace_members where workspace_id = '${F.ws}' and user_id = '${F.users.member}'`], false],
+    ['비활성 명단 행의 admin', F.users.member, F.projects.a,
+      [`update public.project_members set active = false where id = '${F.members.aliceA}'`], false],
+    ['비활성 인물의 admin', F.users.member, F.projects.a, [`update public.people set active = false where id = '${F.people.member}'`], false],
+    ['행위자 null', null, F.projects.a, [], false],
+    ['프로젝트 null(플랫폼 관리자도)', F.users.platform, null, [], false],
+  ] as const)('%s → %s', async (_label, actor, project, mutate, want) => {
+    await asService(pool, async (c) => {
+      await c.query(`insert into public.projects (id, name, workspace_id) values ($1, 'RLS 등급 새 프로젝트', $2)`, [NEW_P, F.ws])
+      for (const m of mutate) await c.query(m)
+      expect((await c.query<{ ok: boolean }>(ADMIN, [actor, project])).rows[0].ok).toBe(want)
+    })
+  })
+
+  it('도우미·RPC 둘은 DEFINER 이고 search_path 가 비어 있다(RPC 둘은 lock_timeout 15s 도) — §3.1 함수 규칙', async () => {
+    const { rows } = await pool.query<{ name: string; secdef: boolean; config: string[] }>(
+      `select p.proname::text as name, p.prosecdef as secdef, p.proconfig as config from pg_proc p
+        where p.oid in ('public.actor_is_project_admin(uuid, uuid)'::regprocedure, 'public.create_weekly_report(uuid, uuid, date, jsonb)'::regprocedure,
+                        'public.upsert_project_area(uuid, uuid, jsonb, jsonb, date)'::regprocedure)
+        order by p.proname`)
+    expect(rows).toEqual([
+      { name: 'actor_is_project_admin', secdef: true, config: ['search_path=""'] },
+      { name: 'create_weekly_report', secdef: true, config: ['search_path=""', 'lock_timeout=15s'] },
+      { name: 'upsert_project_area', secdef: true, config: ['search_path=""', 'lock_timeout=15s'] },
+    ])
   })
 })
 
@@ -704,6 +764,13 @@ describe('⑫ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
     expect(await runAfter([`create or replace function public.project_areas_guard() returns trigger
       language plpgsql security definer set search_path to '' as $f$ begin return new; end $f$`])).toMatchObject(POSTCHECK)
     expect(await runAfter(['alter publication supabase_realtime drop table public.weekly_report_rows'])).toMatchObject(POSTCHECK)
+  })
+
+  it('도우미·RPC 의 DEFINER·search_path 가 풀리면 멈춘다', async () => {
+    expect(await runAfter(['alter function public.actor_is_project_admin(uuid, uuid) reset search_path'])).toMatchObject(POSTCHECK)
+    expect(await runAfter(['alter function public.create_weekly_report(uuid, uuid, date, jsonb) security invoker'])).toMatchObject(POSTCHECK)
+    expect(await runAfter(['alter function public.upsert_project_area(uuid, uuid, jsonb, jsonb, date) set search_path to public']))
+      .toMatchObject(POSTCHECK)
   })
 
   it('FK 의 삭제 동작이 바뀌면 멈춘다(프로젝트 직접 FK 의 캐스케이드)', async () => {
