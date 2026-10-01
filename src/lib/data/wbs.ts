@@ -8,6 +8,7 @@ import type { WbsRow, ComputedItem, TeamCode, OwnerKind, TaskDependency } from '
 import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { seoulToday } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
+import { fetchAllPages } from '@/lib/data/paging'
 
 // 같은 요청 내 layout+page 중복 호출을 1회로 dedupe(React cache).
 export const getComputedWbs = cache(async (
@@ -24,15 +25,24 @@ export const getComputedWbs = cache(async (
   today: string
 }> => {
   const sb = await createServerClient()
+  // 데이터 손실 경로(SP4 D18·Q5) — 두 표는 끝까지 읽는다(fetchAllPages: 유일 키 정렬 + count 대조). 한 응답은 max_rows(1000)에서 조용히
+  // 잘리고, 잘린 item_owners 는 Excel 의 ●/△ 로 나가 replace 로 되돌아오면 담당이 영구히 사라진다. item_owners 는 이 프로젝트 항목의
+  // 담당만 읽는다(wbs_items!inner) — 전 프로젝트의 담당을 읽으면 1,000행에 먼저 닿는다. 정렬 키는 wbs_items (sort_order, id),
+  // item_owners 는 PK (wbs_item_id, team_id). 잘림·count 불일치·조회 오류는 throw — 아래 세 표의 오류와 같은 취급이다.
+  // 나머지 셋(holidays·task_dependencies 의 끝까지 읽기)과 팀 정렬 원천은 SP4 A2 가 바꾼다.
   const [
-    { data: items, error: itemsErr },
-    { data: ownerRows, error: ownersErr },
+    items,
+    ownerRows,
     { data: hol, error: holErr },
     { data: proj, error: projErr },
     { data: dependencyRows, error: dependenciesErr },
   ] = await Promise.all([
-    sb.from('wbs_items').select('*').eq('project_id', projectId),
-    sb.from('item_owners').select('wbs_item_id, kind, teams(code)'),
+    fetchAllPages<Record<string, unknown>>('[getComputedWbs] wbs_items', (from, to) => sb
+      .from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId)
+      .order('sort_order').order('id').range(from, to)),
+    fetchAllPages<Record<string, unknown>>('[getComputedWbs] item_owners', (from, to) => sb
+      .from('item_owners').select('wbs_item_id, team_id, kind, teams(code), wbs_items!inner(project_id)', { count: 'exact' })
+      .eq('wbs_items.project_id', projectId).order('wbs_item_id').order('team_id').range(from, to)),
     sb.from('holidays').select('date').eq('project_id', projectId),
     sb.from('projects').select('base_date').eq('id', projectId).maybeSingle(),
     sb.from('task_dependencies')
@@ -43,14 +53,13 @@ export const getComputedWbs = cache(async (
   // 핵심 조회 실패를 '없음'으로 폴백하면 화면이 비는 게 아니라 '조용히 틀린 화면/숫자'가 된다.
   // - wbs_items: 빈 트리 → 대시보드가 'WBS 데이터 없음' EmptyState를 띄워 운영 데이터 위 재임포트를 유도한다(최악).
   // - item_owners: 담당 배지·행 분리가 사라져 팀 편집 권한이 회수된 것처럼 보인다.
+  //   (이 둘은 위의 fetchAllPages 가 잘림·오류에서 throw 한다)
   // - holidays: 빈 배열이 '공휴일 없음'(정상)과 구분되지 않아, 영업일 기반 계획%가 틀어져도 아무도 감지할 수 없다.
   //   (정상적으로 0건인 경우와 달리 error는 명백한 실패이므로 여기서만 throw — 빈 결과는 그대로 통과시킨다.)
   // - projects.base_date: 기준일이 조용히 오늘로 바뀌어 전 지표(계획%·지연 판정·PPT·봇 답변)가 어긋난다.
   // - task_dependencies: 연결선·지연 전파·크리티컬 패스가 모두 사라져 "의존성 없음"으로 오인된다.
   // 계산 결과가 알림/리포트/임베딩 쓰기로도 흘러가므로, 에러 바운더리('문제가 발생했습니다')가 조용한 오염보다 안전하다.
   for (const [table, err] of [
-    ['wbs_items', itemsErr],
-    ['item_owners', ownersErr],
     ['holidays', holErr],
     ['projects', projErr],
     ['task_dependencies', dependenciesErr],
@@ -59,7 +68,7 @@ export const getComputedWbs = cache(async (
   }
 
   const ownerMap = new Map<string, { team: TeamCode; kind: OwnerKind }[]>()
-  ;(ownerRows ?? []).forEach((o: Record<string, unknown>) => {
+  ownerRows.forEach((o: Record<string, unknown>) => {
     const team = o.teams as { code: TeamCode } | { code: TeamCode }[] | null
     const code = (Array.isArray(team) ? team[0]?.code : team?.code) as TeamCode | undefined
     if (!code) return
@@ -78,7 +87,7 @@ export const getComputedWbs = cache(async (
     ),
   )
 
-  const rows: WbsRow[] = (items ?? []).map((r: Record<string, unknown>) => ({
+  const rows: WbsRow[] = items.map((r: Record<string, unknown>) => ({
     id: r.id as string,
     parentId: r.parent_id as string | null,
     code: r.code as string,
@@ -116,7 +125,7 @@ export const getComputedWbs = cache(async (
   const { dependencies, unresolvedDepends } = (() => {
     const merged = mergeSpecDepends(
       manualDependencies,
-      (items ?? []).map((r: Record<string, unknown>) => ({
+      items.map((r: Record<string, unknown>) => ({
         id: r.id as string,
         projectId: r.project_id as string,
         externalRef: (r.external_ref as string | null) ?? null,

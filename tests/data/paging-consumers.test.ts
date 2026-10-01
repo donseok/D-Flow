@@ -31,6 +31,7 @@ vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: m.writePr
 vi.mock('react', async () => ({ ...(await vi.importActual<typeof import('react')>('react')), cache: <T,>(fn: T) => fn }))
 
 import { POST } from '@/app/api/import/execute/route'
+import { getComputedWbs } from '@/lib/data/wbs'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { makeActor, WS } from '../fixtures/actor'
 
@@ -138,5 +139,60 @@ describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본�
     expect(text).not.toContain('permission denied')
     expect(JSON.parse(text)).toEqual({ error: ERR_BACKUP })
     expect(rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('getComputedWbs — 데이터 손실 경로를 끝까지(wbs_items·item_owners, D18·Q5)', () => {
+  const PID = '22222222-2222-4222-8222-222222222222'
+  const wbsRow = (i: number) => ({
+    id: `i${String(i).padStart(4, '0')}`, project_id: PID, parent_id: null, code: String(i), sort_order: i, name: `항목 ${i}`,
+    biz: null, deliverable: null, planned_start: null, planned_end: null, weight: null, actual_pct: 0, is_owner_split: false,
+    external_ref: null, depends: null, stage: null,
+  })
+  const ownerOf = (r: { id: string }) => ({ wbs_item_id: r.id, team_id: 't-res', kind: 'primary', teams: { code: 'RES' }, wbs_items: { project_id: PID } })
+  /** select·eq·maybeSingle 체인 하나로 끝나는 표(holidays·projects·task_dependencies — A2 가 끝까지 읽기로 바꾼다) */
+  const simple = (data: unknown) => {
+    const q: Record<string, unknown> = {}
+    for (const k of ['select', 'eq', 'maybeSingle']) q[k] = () => q
+    q.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res, rej)
+    return q
+  }
+  const client = (wbs: ReturnType<typeof pagedTable>, owners: ReturnType<typeof pagedTable>) => ({
+    from: (t: string) => t === 'wbs_items' ? wbs.make() : t === 'item_owners' ? owners.make()
+      : t === 'projects' ? simple({ base_date: '2026-09-01' }) : simple([]),
+  })
+  beforeEach(() => { m.teamsForProjectSync.mockReturnValue([]) })
+
+  it('두 표가 한 응답의 상한(여기서는 2행)을 넘어도 끝까지 읽힌다 — 담당이 빠지지 않는다', async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => wbsRow(i))
+    const wbs = pagedTable(rows, { maxRows: 2 })
+    const own = pagedTable(rows.map(ownerOf), { maxRows: 2 })
+    m.createServerClient.mockResolvedValue(client(wbs, own))
+    const { items } = await getComputedWbs(PID)
+    expect(items).toHaveLength(5)
+    expect(items.every((n) => n.owners.length === 1 && n.owners[0].team === 'RES')).toBe(true)
+    expect([wbs.log.length, own.log.length]).toEqual([3, 3])
+  })
+
+  it('item_owners 는 이 프로젝트 항목의 담당만 묻고(wbs_items!inner + 프로젝트 필터) 유일 키로 정렬한다', async () => {
+    const wbs = pagedTable([wbsRow(1)])
+    const own = pagedTable([])
+    m.createServerClient.mockResolvedValue(client(wbs, own))
+    await getComputedWbs(PID)
+    expect(own.log[0]).toEqual([
+      { method: 'select', args: ['wbs_item_id, team_id, kind, teams(code), wbs_items!inner(project_id)', { count: 'exact' }] },
+      { method: 'eq', args: ['wbs_items.project_id', PID] },
+      { method: 'order', args: ['wbs_item_id'] }, { method: 'order', args: ['team_id'] }, { method: 'range', args: [0, 999] },
+    ])
+    expect(wbs.log[0]).toEqual([
+      { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PID] },
+      { method: 'order', args: ['sort_order'] }, { method: 'order', args: ['id'] }, { method: 'range', args: [0, 999] },
+    ])
+  })
+
+  it('쪽 사이에 행 수가 바뀌면(count 불일치) throw — 잘린 담당을 데이터로 위장하지 않는다', async () => {
+    const rows = [wbsRow(1), wbsRow(2)]
+    m.createServerClient.mockResolvedValue(client(pagedTable(rows), pagedTable(rows.map(ownerOf), { count: 3 })))
+    await expect(getComputedWbs(PID)).rejects.toThrow('[getComputedWbs] item_owners 목록을 끝까지 읽지 못했습니다(2/3건)')
   })
 })
