@@ -5,7 +5,8 @@ import { srcFiles } from './lib/cssTokens'
 
 const FILL = /(?<![\w-])(?:[a-z-]+:)*bg-(?:action|brand|success|done|warning|danger|delayed|progress|today|critical|phasebar|pending|accent-secondary|accent-warning|team-[1-5]|category-[1-8])(?![\w-])/
 const WHITE = /(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])/
-/** 파일 → [허용 줄 수, 사유] — 과제 12·13 이 지운다 */
+/** 파일 → [허용 줄 수, 사유] — 남은 BrandMark 는 주인 C 의 UI-2b 이동 커밋이 지운다.
+ *  판정은 줄 단위다: 채움 유틸과 text-white 가 여러 줄 className 의 다른 줄에 있으면 못 잡는다(2026-10 현재 src 에 그런 곳 0 — U1b 리뷰 R3 P3) */
 export const ALLOW: Record<string, [number, string]> = {
   'src/components/ui/BrandMark.tsx': [1, '주인 C — UI-2b 이동 커밋'],
 }

@@ -10,7 +10,7 @@ const BARE_DISPLAY = new RegExp(`(?<![\\w:\\[-])(?:${DISPLAY})(?![\\w-])`, 'g')
 const ARBITRARY_BP = new RegExp(`(?:min|max)-\\[[^\\]]+\\]:(?:${DISPLAY})(?![\\w-])|\\[@media[^\\]]*\\]:(?:${DISPLAY})(?![\\w-])`)
 const ANY_DISPLAY = new RegExp(`(?<![\\w\\[-])(?:[a-z0-9-]+:)*(?:${DISPLAY})(?![\\w-])`)
 const OFF_VARIANT = new RegExp(
-  `(?<![\\w-])(?:aria-\\[[^\\]]+\\]|empty|not-[a-z-]+|in-[a-z-]+|pointer-[a-z]+|motion-[a-z]+|invalid|required|placeholder-shown|inert|starting|forced-colors|contrast-more):(?:${DISPLAY})(?![\\w-])|(?:^|[\\s"'\`])\\*{1,2}:(?:${DISPLAY})(?![\\w-])`, 'g')
+  `(?<![\\w-])(?:aria-\\[[^\\]]+\\]|empty|not-[a-z-]+|in-[a-z-]+|pointer-[a-z]+|motion-[a-z]+|invalid|required|placeholder-shown|inert|starting|forced-colors|contrast-more|(?:group|peer)-[a-z-]+(?:\\/[\\w-]+)?|portrait|landscape|nth-[\\w-]+|nth-[a-z-]*\\[[^\\]]+\\]|only|has-[a-z-]+):(?:${DISPLAY})(?![\\w-])|(?:^|[\\s"'\`])\\*{1,2}:(?:${DISPLAY})(?![\\w-])`, 'g')
 
 /** className={…}·className="…" 의 값 — 식인지(중괄호) 문자열인지와 함께 */
 export function classNameValues(text: string): { value: string; line: number; expr: boolean }[] {
@@ -118,6 +118,9 @@ describe('display 캐스케이드(D17)', () => {
     expect(conditionalDisplay("`hidden lg:flex ${collapsed ? 'w-16' : 'w-60'}`", true)).toEqual([])
     expect(ARBITRARY_BP.test('min-[900px]:hidden lg:flex') && SAFETY.test('min-[900px]:hidden lg:flex')).toBe(true)
     expect('not-first:hidden aria-[expanded=true]:flex *:block'.match(OFF_VARIANT)?.length).toBe(3)
+    // 이름 붙은 group/peer·방향 미디어·순서 변형도 레이어 안이라 안전망에 진다(U1b 리뷰 R2 P3)
+    expect('group-hover/row:flex peer-checked:grid portrait:hidden landscape:block nth-3:block nth-last-[2]:flex only:hidden has-checked:flex'.match(OFF_VARIANT)?.length).toBe(8)
+    expect('group-hover/row:w-4 portrait:text-sm lg:flex'.match(OFF_VARIANT)).toBeNull()
   })
   it('안전망 테스트 파일은 그대로다(D17 — 안전망 판정은 그 테스트가 한다)', () => {
     expect(readFileSync('tests/css/breakpoint-safety-net.test.ts', 'utf8')).toContain("const NET_MARKER = '반응형 display 안전망'")

@@ -22,6 +22,9 @@ describe('셸 색·층', () => {
       expect(t, f).toContain("bg: 'bg-warning text-warning-fg'")
     }
   })
+  it('스킵 링크는 가장 위 층(--z-skip)이다 — 사다리 값은 global-rule-layers 가 지키고 여기서는 쓰임을 고정한다(U1b 리뷰 R3 P3)', () => {
+    expect(read('src/app/(app)/layout.tsx')).toMatch(/href="#main-content"[^>]*\bz-\(--z-skip\)/)
+  })
   it('사이드바 상태 점은 상태 토큰(판정 Q18 — WBS STATUS 와 같은 의미)', () => {
     const t = read(FILES[0])
     for (const [k, tone] of [['ready', 'pending'], ['active', 'progress'], ['overdue', 'danger'], ['done', 'success'], ['unknown', 'warning']]) {

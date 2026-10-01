@@ -30,12 +30,21 @@ describe('ArchiveChatPanel 레이어/닫기', () => {
     ))
   }
 
-  it('앱 헤더(z-70)·AI 어시스턴트 패널(z-130)보다 위 레이어(--z-modal)에 뜬다', () => {
+  it('앱 헤더(--z-shell)·AI 어시스턴트 버튼·패널보다 위 레이어(--z-modal)에 뜬다 — 비교 상대는 숫자가 아니라 그 파일의 실제 층', () => {
     render()
     const dialog = container.querySelector('[role="dialog"]')!
     expect(dialog.className).toContain('z-(--z-modal)')
     const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8')
-    expect(Number(/--z-modal:\s*(\d+)/.exec(css)?.[1])).toBeGreaterThan(130)
+    const token = (name: string) => Number(new RegExp(`--${name}:\\s*(\\d+)`).exec(css)?.[1])
+    // AI 패널은 아직 임의 z(B 파일 — UI-2b 레일이 토큰으로 옮긴다). 리터럴 130 을 박아 두면 그때 낡은 값과 비교한 채 초록으로 남는다(U1b 리뷰 R3 P3)
+    const chat = readFileSync(join(process.cwd(), 'src/components/chat/AssistantChat.tsx'), 'utf8')
+    const layers = [
+      ...[...chat.matchAll(/\bz-\[(\d+)\]/g)].map((m) => Number(m[1])),
+      ...[...chat.matchAll(/\bz-\(--([\w-]+)\)/g)].map((m) => token(m[1])),
+    ]
+    expect(layers.length).toBeGreaterThan(0)
+    expect(layers.every(Number.isFinite)).toBe(true)
+    for (const z of [token('z-shell'), ...layers]) expect(token('z-modal')).toBeGreaterThan(z)
   })
 
   it('백드롭 클릭으로 닫힌다', () => {
