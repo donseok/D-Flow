@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { progressSignal } from '@/lib/domain/dashboard'
 import { scheduleModel } from '@/lib/domain/dashboard'
@@ -162,6 +163,14 @@ describe('riskModel', () => {
     const a = phase({ weight: null, status: 'delayed', children: [leaf({ status: 'in_progress' })] })
     expect(riskModel([a], today).topWeightDelayed).toBe(false)
     expect(riskModel([a], today).signal).toBe('green')
+  })
+  it('W11 — 위험 신호의 루트 가중치 해석은 그대로(null = 0): [A null·지연, B 0.5·정상] 이면 최상위 가중 루트는 B — 격상 없음', () => {
+    const A = phase({ id: 'A', weight: null, status: 'delayed', sortOrder: 0 })
+    const B = phase({ id: 'B', weight: 0.5, status: 'in_progress', sortOrder: 1 })
+    expect(riskModel([A, B], '2026-03-02').topWeightDelayed).toBe(false)
+  })
+  it('W11 — dashboard.ts 는 weightOf 를 import 하지 않는다(위험 모델은 사용자 결정 3 그대로)', () => {
+    expect(readFileSync('src/lib/domain/dashboard.ts', 'utf8')).not.toMatch(/\bweightOf\b/)
   })
 })
 

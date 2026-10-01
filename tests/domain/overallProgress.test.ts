@@ -33,12 +33,25 @@ describe('overallProgress', () => {
     expect(overallProgress([])).toEqual({ actual: 0, planned: 0 })
   })
 
-  it('weight가 일부만 있으면 null은 0으로 취급(균등 분기 아님)', () => {
+  it('weight 가 일부만 있으면 null 은 1 — 하위 롤업과 같은 규칙(SP4 D20, 사용자 결정 3 의 정합 수정)', () => {
     const r = overallProgress([
       root({ rolledActualPct: 100, plannedPct: 100, weight: 2 }),
       root({ rolledActualPct: 50, plannedPct: 50, weight: null }),
     ])
-    // allNull=false → eff(null)=0 → totalEff=2 → (100*2 + 50*0)/2 = 100
-    expect(r.actual).toBe(100)
+    // (100*2 + 50*1) / 3 = 83.3
+    expect(r.actual).toBe(83.3)
+    expect(r.planned).toBe(83.3)
+  })
+
+  it('W8 — [(100%, w=1), (0%, w=null)] 은 50(루트)', () => {
+    expect(overallProgress([root({ rolledActualPct: 100, plannedPct: 100, weight: 1 }), root({ rolledActualPct: 0, plannedPct: 0, weight: null })]))
+      .toEqual({ actual: 50, planned: 50 })
+  })
+
+  it('[RF4] 명시 0 은 0, null 은 1 — [0, null] 은 null 쪽 값, 전부 0 이면 합 0 → || 1 로 0(지금과 같다)', () => {
+    expect(overallProgress([root({ rolledActualPct: 100, plannedPct: 100, weight: 0 }), root({ rolledActualPct: 20, plannedPct: 30, weight: null })]))
+      .toEqual({ actual: 20, planned: 30 })
+    expect(overallProgress([root({ rolledActualPct: 100, plannedPct: 100, weight: 0 }), root({ rolledActualPct: 20, plannedPct: 30, weight: 0 })]))
+      .toEqual({ actual: 0, planned: 0 })
   })
 })

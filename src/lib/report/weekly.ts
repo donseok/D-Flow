@@ -2,7 +2,7 @@ import type {
   Announcement, AttendanceRecord, AttendanceType, ComputedItem, Meeting, MeetingException, MeetingOccurrence,
   ProjectMember, Status, TeamCode,
 } from '@/lib/domain/types'
-import { overallProgress } from '@/lib/domain/rollup'
+import { overallProgress, weightOf } from '@/lib/domain/rollup'
 import { round1 } from '@/lib/domain/format'
 import { expandMeetings, sortOccurrences } from '@/lib/domain/meetings'
 
@@ -370,7 +370,7 @@ export function buildWeeklyReportModel(
   }
 
   // ── Phase별 ── 점유율은 루트 가중치 정규화
-  const rootWeights = roots.map(r => (r.weight == null ? 1 : r.weight))
+  const rootWeights = roots.map(r => weightOf(r.weight))
   const weightPcts = normalizeWeights(rootWeights)
   const leavesUnderRoot = (rootName: string) => leaves.filter(l => l.rootName === rootName).map(l => l.node)
   const phases: WeeklyPhase[] = roots.map((r, i) => {

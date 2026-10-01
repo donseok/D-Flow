@@ -257,9 +257,7 @@ export function delayAging(leaves: ComputedItem[], today: string, limit = 8): Ag
 /* ── 데이터 위생 — 계획 데이터 품질(계획 데이터 거버넌스) ── */
 export interface HygieneModel { noOwner: number; noDates: number; mixedWeight: number; clean: boolean }
 
-/** mixedWeight: 형제 그룹에서 weight가 일부만 null이면 카운트.
- *  루트 그룹은 null→유효가중 0(overallProgress eff), 자식 그룹은 null→1(siblingWeight)로
- *  형제와 다른 의도치 않은 가중이 걸리는 실제 버그 소지다. */
+/** mixedWeight: 형제 그룹에서 weight 가 일부만 null 이면 카운트. 롤업 규칙은 하나다(rollup.ts 의 가중치 규칙 — null = 1) — 이 경고는 '가중치 미지정 N개'(rollup.unsetWeightCount) 표시의 근거다. */
 export function dataHygiene(items: ComputedItem[]): HygieneModel {
   const leaves = collectLeaves(items)
   const noOwner = leaves.filter(l => l.owners.length === 0).length

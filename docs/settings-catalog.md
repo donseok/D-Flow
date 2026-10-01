@@ -162,7 +162,7 @@
 | --- | --- | --- | --- |
 | WBS 단계 의미와 크레딧 키 | 에이전트 단계 전이 계약 | `src/lib/domain/stageCredits.ts` `CREDIT_KEYS` | 표시 라벨은 SP5b |
 | 에이전트 주문 상태·우선순위·좌석 TTL | 외부 러너와 좌석 상태 프로토콜 | `src/lib/domain/seatState.ts` `deriveSeatState` | SP3a: 유지 |
-| 진척 집계와 WBS 상태 | 업무 계산의 동일한 의미 | `src/lib/domain/progress.ts` `statusOf` | 가중치 정합은 SP4 |
+| 진척 집계와 WBS 상태 | 업무 계산의 동일한 의미 | `src/lib/domain/progress.ts` `statusOf`·`src/lib/domain/rollup.ts` `weightOf` | SP4: null 가중치 = 1(루트·하위 동일), 위험 신호는 유지 |
 | 위험 신호 임계값 | 한 제품 위험 모델 | `src/lib/domain/dashboard.ts` `riskModel` | SP3a: 유지 |
 | 프로젝트 생애 상태 | 시작일·종료일·완료율 공통 판정 | `src/lib/domain/project-status.ts` `projectLifecycleStatus` | SP3a: 유지 |
 | 주간 시트 핵심 열 | 보고서의 기본 구조 | `src/lib/domain/weeklySheet.ts` `WEEKLY_CELL_KEYS` | 사용자 필드는 SP5c |

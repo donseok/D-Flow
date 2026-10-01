@@ -10,22 +10,22 @@ export function computeTree(
   return tree.map(node => computeNode(node, today, holidays))
 }
 
-/**
- * 프로젝트 전체 공정율 — 루트(Phase) 가중 평균. weight가 모두 null이면 균등.
- * 대시보드·현황 보고서·기타 요약이 같은 값을 쓰도록 단일 출처로 공유한다.
- */
-export function overallProgress(roots: ComputedItem[]): { actual: number; planned: number } {
-  const allNull = roots.every(r => r.weight == null)
-  const eff = (r: ComputedItem) => (allNull ? 1 : r.weight ?? 0)
-  const totalEff = roots.reduce((s, r) => s + eff(r), 0) || 1
-  return {
-    actual: round1(roots.reduce((s, r) => s + eff(r) * r.rolledActualPct, 0) / totalEff),
-    planned: round1(roots.reduce((s, r) => s + eff(r) * r.plannedPct, 0) / totalEff),
-  }
+/** 가중치 규칙 하나(SP4 D20) — null(미지정) = 1, 명시 0 = 0. 루트 그룹(전체 공정율)·하위 그룹(롤업)·계획 곡선·주간 보고 점유율이 같은
+ *  규칙을 쓴다. 위험 신호의 최상위 가중 루트 판정(dashboard.ts topWeightPhaseDelayed — null = 0)은 사용자 결정 3 그대로라 이것을 쓰지 않는다. */
+export function weightOf(w: number | null): number {
+  return w ?? 1
 }
 
-function siblingWeight(w: number | null): number {
-  return w == null ? 1 : w
+/**
+ * 프로젝트 전체 공정율 — 루트(Phase) 가중 평균(weightOf — null = 1, 합이 0 이면 1 로 나눠 0).
+ * 대시보드·현황 보고서·기타 요약이 같은 값을 쓰도록 단일 출처로 공유한다. 가상 루트의 computeNode 와 같은 값이다(W9).
+ */
+export function overallProgress(roots: ComputedItem[]): { actual: number; planned: number } {
+  const totalEff = roots.reduce((s, r) => s + weightOf(r.weight), 0) || 1
+  return {
+    actual: round1(roots.reduce((s, r) => s + weightOf(r.weight) * r.rolledActualPct, 0) / totalEff),
+    planned: round1(roots.reduce((s, r) => s + weightOf(r.weight) * r.plannedPct, 0) / totalEff),
+  }
 }
 
 /**
@@ -42,12 +42,12 @@ export function computeNode(node: TreeNode, today: string, holidays: Set<string>
   if (children.length === 0) {
     rolledActual = node.actualPct ?? 0
   } else {
-    const totalW = children.reduce((s, c) => s + siblingWeight(c.weight), 0) || 1
+    const totalW = children.reduce((s, c) => s + weightOf(c.weight), 0) || 1
     rolledActual = round1(
-      children.reduce((s, c) => s + siblingWeight(c.weight) * c.rolledActualPct, 0) / totalW,
+      children.reduce((s, c) => s + weightOf(c.weight) * c.rolledActualPct, 0) / totalW,
     )
     rolledPlanned = round1(
-      children.reduce((s, c) => s + siblingWeight(c.weight) * c.plannedPct, 0) / totalW,
+      children.reduce((s, c) => s + weightOf(c.weight) * c.plannedPct, 0) / totalW,
     )
   }
 
@@ -60,4 +60,16 @@ export function computeNode(node: TreeNode, today: string, holidays: Set<string>
     children,
     depth: node.depth,
   }
+}
+
+/** "가중치 미지정 N개"(SP4 D20) — 값과 null 이 섞인 형제 그룹(루트 포함)의 null 항목 수. 전부 null 인 그룹은 균등 의도라 세지 않는다.
+ *  null 은 1 로 계산되므로(weightOf) 섞인 그룹의 null 은 사용자가 의도한 비중과 다를 수 있다 — 화면이 그 수를 알린다(B). */
+export function unsetWeightCount(roots: readonly ComputedItem[]): number {
+  let n = 0
+  const group = (g: readonly ComputedItem[]) => {
+    if (g.some((x) => x.weight != null)) n += g.filter((x) => x.weight == null).length
+    for (const x of g) if (x.children.length) group(x.children)
+  }
+  group(roots)
+  return n
 }

@@ -1,6 +1,6 @@
 import type { ComputedItem, WbsRow } from './types'
 import { round1 } from './format'
-import { computeTree, overallProgress } from './rollup'
+import { computeTree, overallProgress, weightOf } from './rollup'
 import { buildTree, collectLeaves, type BuildTreeOpts, type TreeNode } from './tree'
 import { isBusinessDay } from './dates'
 import { addDaysCal } from './dashboard'
@@ -97,19 +97,16 @@ export function plannedCurve(
     return Math.min(100, Math.max(0, round1((done / total) * 100)))
   }
   // computeNode 의 rolledPlanned 동치 — 형제 가중(null=1) 평균 + 단계별 round1
-  const sibW = (w: number | null) => (w == null ? 1 : w)
   const nodePlanned = (n: TreeNode, date: string): number => {
     if (n.children.length === 0) return ownPlanned(n, date)
-    const totalW = n.children.reduce((s, c) => s + sibW(c.weight), 0) || 1
-    return round1(n.children.reduce((s, c) => s + sibW(c.weight) * nodePlanned(c, date), 0) / totalW)
+    const totalW = n.children.reduce((s, c) => s + weightOf(c.weight), 0) || 1
+    return round1(n.children.reduce((s, c) => s + weightOf(c.weight) * nodePlanned(c, date), 0) / totalW)
   }
-  // overallProgress 동치 — 루트 가중치 전부 null 이면 균등
-  const allNull = tree.every(r => r.weight == null)
-  const eff = (r: TreeNode) => (allNull ? 1 : r.weight ?? 0)
-  const totalEff = tree.reduce((s, r) => s + eff(r), 0) || 1
+  // overallProgress 동치 — 루트도 weightOf(null = 1, 합 0 이면 1 로 나눔)
+  const totalEff = tree.reduce((s, r) => s + weightOf(r.weight), 0) || 1
   return dates.map(date => ({
     date,
-    pct: round1(tree.reduce((s, r) => s + eff(r) * nodePlanned(r, date), 0) / totalEff),
+    pct: round1(tree.reduce((s, r) => s + weightOf(r.weight) * nodePlanned(r, date), 0) / totalEff),
   }))
 }
 

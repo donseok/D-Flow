@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeTree } from '@/lib/domain/rollup'
+import { computeTree, overallProgress } from '@/lib/domain/rollup'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -75,6 +75,17 @@ describe('plannedCurve — plannedAt 등가성(성능 최적화의 정확성 계
       const slow = sampled.map(date => ({ date, pct: plannedAt(rows, date, holidays, OPTS) }))
       expect(fast).toEqual(slow)
     }
+  })
+
+  it('W10 — 루트 가중치가 섞인 트리에서 루트 계획 곡선 = 그 날짜의 overallProgress(planned)', () => {
+    const rows: WbsRow[] = [
+      row({ id: 'A', name: 'A', weight: 2, plannedStart: '2026-03-02', plannedEnd: '2026-03-13' }),
+      row({ id: 'B', name: 'B', weight: null, plannedStart: '2026-03-09', plannedEnd: '2026-03-20' }),
+      row({ id: 'C', name: 'C', weight: 0, plannedStart: '2026-03-02', plannedEnd: '2026-03-06' }),
+    ]
+    const dates = ['2026-03-04', '2026-03-11', '2026-03-18', '2026-03-25']
+    expect(plannedCurve(rows, dates, new Set(), OPTS).map((p) => p.pct))
+      .toEqual(dates.map((d) => overallProgress(computeTree(rows, d, new Set(), OPTS)).planned))
   })
 
   it('빈 rows·빈 dates 경계에서도 동일', () => {

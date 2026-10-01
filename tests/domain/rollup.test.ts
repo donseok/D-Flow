@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeTree } from '@/lib/domain/rollup'
+import { computeNode, computeTree, overallProgress, weightOf } from '@/lib/domain/rollup'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -47,5 +47,47 @@ describe('computeTree rollup', () => {
     const tree = computeTree([{ ...rows[0], parentId: null }], '2026-07-20', new Set(), OPTS)
     expect(tree[0].rolledActualPct).toBe(100)
     expect(tree[0].status).toBe('done')
+  })
+})
+
+const row = (over: Partial<WbsRow>): WbsRow => ({ id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x', biz: null, deliverable: null,
+  plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over })
+
+describe('weightOf — 루트·하위 같은 규칙(SP4 D20)', () => {
+  it('weightOf: null → 1, 명시 값은 그대로(0 포함)', () => {
+    expect([weightOf(null), weightOf(0), weightOf(0.5), weightOf(3)]).toEqual([1, 0, 0.5, 3])
+  })
+  it('W8 — 하위 [(100%, w=1), (0%, w=null)] 의 부모는 50', () => {
+    const [p] = computeTree([
+      row({ id: 'P', name: 'P' }),
+      row({ id: 'A', parentId: 'P', name: 'A', weight: 1, actualPct: 100 }),
+      row({ id: 'B', parentId: 'P', name: 'B', weight: null, actualPct: 0 }),
+    ], '2026-03-02', new Set(), OPTS)
+    expect(p.rolledActualPct).toBe(50)
+  })
+  it('[RF4] 하위 [0, null] 과 [0, 0] — 루트와 같은 결과', () => {
+    const tree = (wa: number | null, wb: number | null) => computeTree([
+      row({ id: 'P', name: 'P' }),
+      row({ id: 'A', parentId: 'P', name: 'A', weight: wa, actualPct: 100 }),
+      row({ id: 'B', parentId: 'P', name: 'B', weight: wb, actualPct: 20 }),
+    ], '2026-03-02', new Set(), OPTS)[0].rolledActualPct
+    expect(tree(0, null)).toBe(20)
+    expect(tree(0, 0)).toBe(0)
+  })
+  it('W9 — overallProgress(roots) = 가상 루트의 computeNode(무작위 트리 30종, 혼재 가중치 포함)', () => {
+    let seed = 7
+    const rand = () => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed / 2 ** 31 }
+    const pickW = () => { const x = rand(); return x < 0.3 ? null : x < 0.4 ? 0 : Math.round(rand() * 40) / 10 }
+    for (let n = 0; n < 30; n++) {
+      const rows: WbsRow[] = []
+      for (let i = 0; i < 12; i++) {
+        const parent = i < 3 ? null : `n${Math.floor(rand() * i)}`
+        rows.push(row({ id: `n${i}`, parentId: parent, name: `n${i}`, sortOrder: i, weight: pickW(), actualPct: Math.round(rand() * 100),
+          plannedStart: '2026-03-02', plannedEnd: `2026-03-${String(3 + Math.floor(rand() * 20)).padStart(2, '0')}` }))
+      }
+      const roots = computeTree(rows, '2026-03-10', new Set(), OPTS)
+      const virtual = computeNode({ ...roots[0], id: 'virtual', parentId: null, weight: null, plannedStart: null, plannedEnd: null, actualPct: null, children: roots, depth: -1 }, '2026-03-10', new Set())
+      expect(overallProgress(roots), `tree ${n}`).toEqual({ actual: virtual.rolledActualPct, planned: virtual.plannedPct })
+    }
   })
 })
