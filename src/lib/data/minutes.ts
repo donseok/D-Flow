@@ -488,12 +488,13 @@ export const getMinuteWikiImpact = cache(async (
   }
 })
 
-/** 내 즐겨찾기 회의록 id 목록(RLS 가 본인 행으로 한정). 실패 시 로깅 + null —
+/** 내 즐겨찾기 회의록 id 목록(RLS 가 본인 행으로 한정) 가운데 그 워크스페이스 회의록의 것만 — 회의록 모듈이 꺼진 다른 워크스페이스의 id 가
+ *  섞이지 않는다(모듈 관문은 그 모듈의 행을 돌려주지 않는다 — workspaceId 는 호출부가 소속·관문을 확인한 값). 실패 시 로깅 + null —
  *  빈 배열과 구분해 '즐겨찾기 없음'으로 위장되는 조용한 빈 화면을 방지한다.
  *  세션 없는 조회는 200+[] 로 돌아오므로(0039 RLS to authenticated) 호출측(page)이 세션 게이트를 건다. */
-export const getMinuteFavorites = cache(async (): Promise<string[] | null> => {
+export const getMinuteFavorites = cache(async (workspaceId: string): Promise<string[] | null> => {
   const sb = await createServerClient()
-  const { data, error } = await sb.from('minute_favorites').select('minute_id')
+  const { data, error } = await sb.from('minute_favorites').select('minute_id, minutes!inner(workspace_id)').eq('minutes.workspace_id', workspaceId)
   if (error) {
     console.error('[getMinuteFavorites] 조회 실패:', error.message)
     return null

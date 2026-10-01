@@ -6,7 +6,7 @@ import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { BRAND } from '@/lib/branding'
 import { UUID_RE } from '@/lib/domain/validate'
-import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInAnyWorkspace } from '@/lib/domain/authz'
+import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -55,7 +55,7 @@ export default async function MinutesPage({ params, searchParams }: {
   const [minutes, tree, favs, user, prefs, locale, myProjectIds] = await Promise.all([
     getMinutesPage(scope.ws.id, projectId, rs, re, null),
     getMinutesExplorer(scope.ws.id, projectId),
-    getMinuteFavorites(),
+    getMinuteFavorites(scope.ws.id),
     getSession(),
     getAccountPrefs(),
     getServerLocale(),
@@ -88,8 +88,8 @@ export default async function MinutesPage({ params, searchParams }: {
         <MinutesView scope={minutesScope} initialMinutes={minutes} initialTree={user ? tree : null} todayIso={today}
           initialFavorites={user ? favs : null}
           explorerLayout={prefs.minutesExplorerLayout === 'list' ? 'list' : 'grid'}
-          initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m)[0] ?? null}
-          currentUserId={user?.id ?? null} adminWorkspaceIds={adminWorkspaceIdList(m)} canEdit={hasProjectRoleInAnyWorkspace(m)}
+          initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m, scope.ws.id)[0] ?? null}
+          currentUserId={user?.id ?? null} adminWorkspaceIds={adminWorkspaceIdList(m)} canEdit={hasProjectRoleInWorkspace(m, scope.ws.id)}
           myProjectIds={myProjectIds}
           projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
           noProjectWorkspace={{ ok: true, workspaceId: scope.ws.id }}

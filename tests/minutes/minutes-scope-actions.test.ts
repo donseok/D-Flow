@@ -70,6 +70,7 @@ describe('목록 액션(scope 첫 인자)', () => {
     await fetchMinutesExplorer({ workspaceId: WA, projectId: PA })
     expect(h.getMinutesExplorer).toHaveBeenCalledWith(WA, PA)
     expect(await fetchMinuteFavorites(WA)).toEqual(['m1'])
+    expect(h.getMinuteFavorites).toHaveBeenCalledWith(WA)           // 인자 워크스페이스의 즐겨찾기만(FA3)
   })
   it('비소속 워크스페이스는 관문 전에 거부 값(존재 은닉) — 로더를 부르지 않는다', async () => {
     expect(await fetchMinutesRange({ workspaceId: WB, projectId: null }, '2026-09-01', '2026-09-30', null)).toEqual({ ok: true, rows: [] })
@@ -92,6 +93,24 @@ describe('목록 액션(scope 첫 인자)', () => {
       expect(await fetchMinutesExplorer(s as never)).toBeNull()
     }
     expect(h.getMinutesExplorer).not.toHaveBeenCalled()
+  })
+  it('플랫폼 관리자가 넣은 모양 밖(줄바꿈·공백·64자 초과) 워크스페이스 id 는 소속 판정·관문·로그에 닿기 전에 거부 값(FA3 — 그 값이 설정 조회 오류·로그에 실리지 않게)', async () => {
+    h.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map() }))
+    for (const w of ['x\nforged log line', 'a'.repeat(300), 'a b;c', '']) {
+      const scope = { workspaceId: w, projectId: null }
+      expect(await fetchMinutesRange(scope, '2026-09-01', '2026-09-30', null), w).toEqual({ ok: true, rows: [] })
+      expect(await fetchMinutesSearch(scope, 'acme', null), w).toEqual({ ok: true, rows: [] })
+      expect(await fetchMinutesExplorer(scope), w).toBeNull()
+      expect(await fetchMinuteFavorites(w), w).toBeNull()
+      expect(await fetchMinuteFoldersLite(w), w).toBeNull()
+    }
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(h.getMinutesPage).not.toHaveBeenCalled(); expect(h.getMinuteFavorites).not.toHaveBeenCalled()
+  })
+  it('플랫폼 관리자도 모양이 맞는 워크스페이스 id 면 그대로 판정한다(대조)', async () => {
+    h.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map() }))
+    await fetchMinutesRange({ workspaceId: WB, projectId: null }, '2026-09-01', '2026-09-30', null)
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WB }, 'minutes')
   })
   it('관문이 닫히면 로더를 부르지 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: '꺼짐' })

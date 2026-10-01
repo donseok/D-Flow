@@ -229,18 +229,6 @@ export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: stri
   return false
 }
 /**
- * 소속 워크스페이스 중 하나라도 역할이 있는가 — 워크스페이스 축 없는 화면(회의록 목록)의 업로드 어포던스.
- * createMinute 의 판정(프로젝트면 그 멤버 이상, 미지정이면 그 워크스페이스에 역할)을 소속 워크스페이스 단위로 미러한다.
- * hasAnyProjectRole 과 달리 소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다.
- */
-export function hasProjectRoleInAnyWorkspace(actor: Actor | null): boolean {
-  if (!actor) return false
-  if (actor.isSuperuser) return true
-  for (const wid of actor.workspaceRoles.keys()) if (hasProjectRoleInWorkspace(actor, wid)) return true
-  return false
-}
-
-/**
  * RSC 경계로 내릴 수 있는 직렬화 가능한 스냅샷 — Actor 의 Map 은 클라이언트 props 로
  * 직렬화되지 않는다. 프로젝트 화면은 자기 프로젝트 하나만 알면 되므로 평탄화해 내리고,
  * 클라이언트에서 actorFromView 로 복원한다.

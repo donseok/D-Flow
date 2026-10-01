@@ -28,6 +28,25 @@ describe('identityTeamCodes — 프로젝트마다 대표 팀(첫 원소) 하나
   })
 })
 
+describe('identityTeamCodes(actor, workspaceId) — 그 워크스페이스 프로젝트의 대표 팀만(FA3)', () => {
+  const actor = makeActor({
+    projectWorkspace: new Map([['p1', 'ws-1'], ['p2', 'ws-2'], ['p3', 'ws-2']]),
+    rosterTeams: new Map([
+      ['p1', { teamIds: ['t1'], teamCodes: ['품질'] }],
+      ['p2', { teamIds: ['t2'], teamCodes: ['ERP'] }],
+      ['p3', { teamIds: ['t3'], teamCodes: ['MES'] }],
+    ]),
+  })
+  it('워크스페이스를 주면 그 워크스페이스의 프로젝트만', () => {
+    expect(identityTeamCodes(actor, 'ws-1')).toEqual(['품질'])
+    expect(identityTeamCodes(actor, 'ws-2')).toEqual(['ERP', 'MES'])
+    expect(identityTeamCodes(actor, 'ws-none')).toEqual([])
+  })
+  it('인자가 없으면 전체(헤더 소속 표시) — 기존 동작', () => {
+    expect(identityTeamCodes(actor)).toEqual(['품질', 'ERP', 'MES'])
+  })
+})
+
 describe('identityTeamLabel — 0팀/1팀/n팀 표시', () => {
   it('0팀은 소속 미지정', () => expect(identityTeamLabel([])).toBe('소속 미지정'))
   it('1팀은 그 코드', () => expect(identityTeamLabel(['ERP'])).toBe('ERP'))

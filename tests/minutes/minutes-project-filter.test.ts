@@ -18,7 +18,7 @@ vi.mock('@/lib/data/members', () => ({ getMyProjectIds: h.getMyProjectIds }))
 vi.mock('@/components/minutes/MinutesView', () => ({ MinutesView: (p: unknown) => { h.viewProps(p); return null } }))
 
 import MinutesPage from '@/app/(app)/w/[slug]/minutes/page'
-import { makeMemberActor } from '../fixtures/actor'
+import { makeActor, makeMemberActor } from '../fixtures/actor'
 
 const WS = { id: '00000000-0000-0000-7e57-000000001671', slug: 'acme', name: 'Acme' }
 const P_IN = '00000000-0000-0000-7e57-000000001672', P_OTHER_WS = '00000000-0000-0000-7e57-000000001673', P_HIDDEN = '00000000-0000-0000-7e57-000000001674'
@@ -61,5 +61,30 @@ describe('?project= 거르기(D53)', () => {
     await render({ project: P_IN })
     expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, null, expect.any(String), expect.any(String), null)
     expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ noProjectWorkspace: { ok: true, workspaceId: WS.id } }))
+  })
+})
+
+describe('업로드 어포던스·기본 팀·즐겨찾기는 화면의 워크스페이스 기준(UI-2a 최종 수정 FA3)', () => {
+  const OTHER = '00000000-0000-0000-7e57-00000000167c', P_OTHER = '00000000-0000-0000-7e57-00000000167d'
+  /** 다른 워크스페이스(OTHER)에서만 프로젝트 역할·대표 팀이 있고 이 화면의 워크스페이스에서는 멤버일 뿐 */
+  const duoActor = (inWs = false) => makeActor({
+    workspaceRoles: new Map([[WS.id, 'member'], [OTHER, 'member']]),
+    projectWorkspace: new Map([[P_OTHER, OTHER], [P_IN, WS.id]]),
+    projectRoles: new Map<string, 'admin' | 'member'>([[P_OTHER, 'member'], ...(inWs ? [[P_IN, 'member'] as [string, 'member']] : [])]),
+    rosterTeams: new Map([[P_OTHER, { teamIds: ['t-erp'], teamCodes: ['ERP'] }], ...(inWs ? [[P_IN, { teamIds: ['t-mes'], teamCodes: ['MES'] }] as [string, { teamIds: string[]; teamCodes: string[] }]] : [])]),
+  })
+  it('다른 워크스페이스에서만 역할이 있으면 업로드 버튼(canEdit)이 없고 기본 팀도 그 워크스페이스의 것이 아니다', async () => {
+    h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: duoActor(), degraded: false, role: 'member' })
+    await render({})
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ canEdit: false, defaultTeam: null }))
+  })
+  it('이 워크스페이스에 역할이 있으면 canEdit, 기본 팀은 이 워크스페이스 프로젝트의 대표 팀', async () => {
+    h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: duoActor(true), degraded: false, role: 'member' })
+    await render({})
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ canEdit: true, defaultTeam: 'MES' }))
+  })
+  it('즐겨찾기 첫 적재도 화면의 워크스페이스로 읽는다', async () => {
+    await render({})
+    expect(h.getMinuteFavorites).toHaveBeenCalledWith(WS.id)
   })
 })

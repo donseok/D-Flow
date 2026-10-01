@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
 import { expandMeetings, MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { SAFE_ID_RE } from '@/lib/domain/validate'
 import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 
 export interface MeetingInput {
@@ -304,7 +305,8 @@ export async function fetchMyMeetings(
   if (!user) return { ok: true, meetings: [], exceptions: [] }
   let actor: Actor | null
   try { actor = await getActor() } catch { return { ok: false, error: ERR_MEETINGS_LOAD } }
-  if (typeof workspaceId !== 'string' || !workspaceId || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [] }
+  // 플랫폼 관리자는 소속과 무관하게 참이라 임의 문자열이 관문 로그·설정 조회 오류에 실린다 — 그 입력만 모양(SAFE_ID_RE)을 먼저 본다(FA3)
+  if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [] }
   const mod = await requireModule({ workspaceId }, 'meetings')
   if (!mod.ok) return { ok: true, meetings: [], exceptions: [] }
   return getMyMeetings(workspaceId, gridStartIso, gridEndIso)

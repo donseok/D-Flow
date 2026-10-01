@@ -33,6 +33,16 @@ describe('fetchMyMeetings(workspaceId, …)', () => {
     expect(requireModule).not.toHaveBeenCalled()
     expect(h.getMyMeetings).not.toHaveBeenCalled()
   })
+  it('플랫폼 관리자가 넣은 모양 밖 워크스페이스 id 는 관문·로더 전에 빈 달력(FA3 — 값이 로그·설정 조회 오류에 실리지 않게)', async () => {
+    h.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map() }))
+    for (const w of ['x\nforged', 'a'.repeat(300), 'a b;c']) {
+      await expect(fetchMyMeetings(w, '2026-09-01', '2026-10-11'), w).resolves.toEqual(EMPTY)
+    }
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(h.getMyMeetings).not.toHaveBeenCalled()
+    await fetchMyMeetings(WB, '2026-09-01', '2026-10-11')                   // 모양이 맞으면 판정 그대로
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WB }, 'meetings')
+  })
   it('관문이 닫히면 빈 달력 — 로더 미호출', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: '꺼짐' })
     await expect(fetchMyMeetings(WA, '2026-09-01', '2026-10-11')).resolves.toEqual(EMPTY)

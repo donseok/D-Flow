@@ -7,7 +7,7 @@ import { getActor, resolveProjectId, resolveScope } from '@/lib/authz'
 import {
   canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, isWorkspaceMember, type Actor,
 } from '@/lib/domain/authz'
-import { UUID_RE as ANY_UUID_RE } from '@/lib/domain/validate'
+import { SAFE_ID_RE, UUID_RE as ANY_UUID_RE } from '@/lib/domain/validate'
 import { parseMinutesScope, type MinutesScope } from '@/lib/minutes/scope'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
@@ -90,7 +90,8 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
  * 워크스페이스 범위 관문(D26, §5.8, 계획 V13) — 회의록 화면이 넘긴 범위(슬러그 워크스페이스 + 선택 프로젝트)로 판정한다.
  * 소속이 아니면 ERR_MISSING(존재 은닉), 소속이면 그 워크스페이스로 모듈 관문. 가드가 아니다 — 각 액션의 기존 가드(requireActor·getSession)
  * 다음, 입력 검증 앞에서 부른다(P17). projectId(?project=)는 그 워크스페이스의 아는 프로젝트일 때만(W11) — 아니면 비소속과 같은 ERR_MISSING.
- * 워크스페이스 id 는 형식으로 보지 않는다 — 소속 맵 조회가 판정이다.
+ * 워크스페이스 id 의 존재는 소속 맵 조회가 판정한다 — 단, 소속과 무관하게 참인 플랫폼 관리자의 입력만은 모양(SAFE_ID_RE)을 먼저 본다:
+ * 줄바꿈·임의 길이 문자열이 설정 조회 오류와 [requireModule] 로그에 통째로 실리지 않게(FA3, 비플랫폼은 어차피 소속 맵에서 걸린다).
  */
 async function minutesScopeGate(scope: unknown): Promise<{ ok: true; scope: MinutesScope; actor: Actor } | { ok: false; error: string }> {
   const s = parseMinutesScope(scope)
@@ -101,7 +102,7 @@ async function minutesScopeGate(scope: unknown): Promise<{ ok: true; scope: Minu
     console.error('[minutes] 권한 조회 실패:', e instanceof Error ? e.message : e)
     return { ok: false, error: ERR_LOOKUP }
   }
-  if (!actor || !isWorkspaceMember(actor, s.workspaceId)) return { ok: false, error: ERR_MISSING }
+  if (!actor || (actor.isSuperuser && !SAFE_ID_RE.test(s.workspaceId)) || !isWorkspaceMember(actor, s.workspaceId)) return { ok: false, error: ERR_MISSING }
   if (s.projectId !== null && actor.projectWorkspace.get(s.projectId) !== s.workspaceId) return { ok: false, error: ERR_MISSING }
   const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
   return mod.ok ? { ok: true, scope: s, actor } : { ok: false, error: mod.error }
@@ -1423,7 +1424,7 @@ export async function fetchMinuteFavorites(workspaceId: string): Promise<string[
   if (!user) return null
   const g = await workspaceGate(workspaceId)                                  // 화면의 워크스페이스(D26) — 소속 확인 뒤 관문
   if (!g.ok) return null
-  return getMinuteFavorites()
+  return getMinuteFavorites(g.scope.workspaceId)
 }
 
 /** 회의록 즐겨찾기 토글 — 성공 여부만 반환(실패 시 호출부가 낙관적 갱신 롤백 + 토스트). */

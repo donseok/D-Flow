@@ -3,7 +3,7 @@ import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
-  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute, hasProjectRoleInAnyWorkspace,
+  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute,
   isAnyWorkspaceAdmin,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
@@ -124,26 +124,6 @@ describe('isMinuteMember / canEditMinute — 회의록 범위(SP2 Task 16a)', ()
   it('무프로젝트 남의 회의록은 슈퍼유저만 — 워크스페이스 관리자도 아니다(SP1 §3.5 유지)', () => {
     expect(canEditMinute(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), noProject({ created_by: 'u9' }))).toBe(false)
     expect(canEditMinute(makeSuperuser(), noProject({ created_by: 'u9' }))).toBe(true)
-  })
-})
-describe('hasProjectRoleInAnyWorkspace — 회의록 목록의 업로드 어포던스', () => {
-  const W2 = 'ws-2', R = 'proj-in-w2'
-  it('소속 워크스페이스 중 하나라도 역할이 있으면 true — 둘 이상 소속이어도', () => {
-    const two = makeMemberActor(R, [], {
-      workspaceRoles: new Map([[W, 'member'], [W2, 'member']]), projectWorkspace: new Map([[R, W2]]),
-    })
-    expect(hasProjectRoleInAnyWorkspace(two)).toBe(true)
-    expect(hasProjectRoleInAnyWorkspace(makeActor({ workspaceRoles: new Map([[W2, 'admin']]) }))).toBe(true)
-  })
-  it('소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다(hasAnyProjectRole 과 다른 점)', () => {
-    const stray = makeMemberActor(R, [], { projectWorkspace: new Map() })   // R 의 워크스페이스에 소속 없음
-    expect(hasAnyProjectRole(stray)).toBe(true)
-    expect(hasProjectRoleInAnyWorkspace(stray)).toBe(false)
-  })
-  it('조회 전용·비로그인은 false, 플랫폼 관리자는 true', () => {
-    expect(hasProjectRoleInAnyWorkspace(makeActor())).toBe(false)
-    expect(hasProjectRoleInAnyWorkspace(null)).toBe(false)
-    expect(hasProjectRoleInAnyWorkspace(makeSuperuser({ workspaceRoles: new Map() }))).toBe(true)
   })
 })
 describe('ProjectActorView 왕복', () => {

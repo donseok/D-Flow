@@ -53,6 +53,7 @@ describe('fetchMinuteFavorites', () => {
     getSession.mockResolvedValue({ id: 'u1' })
     getMinuteFavorites.mockResolvedValue(['m1', 'm2'])
     expect(await fetchMinuteFavorites('ws-1')).toEqual(['m1', 'm2'])
+    expect(getMinuteFavorites).toHaveBeenCalledWith('ws-1')            // 인자 워크스페이스의 즐겨찾기만(FA3)
   })
   it('화면의 워크스페이스가 비소속이면 데이터 계층을 부르지 않고 null(D26)', async () => {
     getSession.mockResolvedValue({ id: 'u1' })
