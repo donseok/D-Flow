@@ -87,6 +87,8 @@ export function MinutesView({
   const [exportBusy, setExportBusy] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const reqRef = useRef(0)
+  // 마지막으로 **받은** (연·월·팀) — 실패하면 직전 머리가 아니라 이 값으로 되돌린다(빠른 연속 이동에서 첫 요청이 더 새 요청에 밀려 버려지면 직전 머리는 받지 못한 달이다)
+  const settledRef = useRef<{ y: number; m0: number; team: TeamKey }>({ y: initY, m0: (initM || 1) - 1, team: 'ALL' })
   // 서버가 트리를 실어 보냈으면 그대로 초기값으로 쓴다 — 아래 마운트 effect 와 changeView 는
   // 둘 다 'idle'/비객체일 때만 조회하므로 자동으로 no-op 이 되어 왕복이 사라진다.
   // 서버 조회가 실패해 null 이면 'idle' 로 떨어져 기존 클라이언트 폴백 경로가 그대로 산다.
@@ -159,7 +161,7 @@ export function MinutesView({
     const res = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
     if (reqRef.current !== gen) return null
     // 실패는 '이 달 회의록 없음'이 아니다 — 지난 목록을 두고 사유를 알린다(에러 처리 3원칙 ①)
-    if (res.ok) { setMinutes(res.rows); return true }
+    if (res.ok) { setMinutes(res.rows); settledRef.current = { y, m0, team: tk }; return true }
     toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
     return false
   }
@@ -167,17 +169,15 @@ export function MinutesView({
     if (isSearch) return
     const base = new Date(Date.UTC(year, month0 + delta, 1))
     const y = base.getUTCFullYear(); const m0 = base.getUTCMonth()
-    const prev = { y: year, m0: month0 }
     setYear(y); setMonth0(m0)
     setSelectedDate(null)
     // 실패면 머리(연·월)도 지난 목록에 맞춰 되돌린다 — 새 달 머리 아래 지난 달 목록이 남지 않게
-    void loadMonth(y, m0, team).then((ok) => { if (ok === false) { setYear(prev.y); setMonth0(prev.m0) } })
+    void loadMonth(y, m0, team).then((ok) => { if (ok === false) { setYear(settledRef.current.y); setMonth0(settledRef.current.m0) } })
   }
   function changeTeam(tk: TeamKey) {
-    const prevTeam = team
     setTeam(tk)
     setSelectedDate(null)
-    const revert = (ok: boolean | null) => { if (ok === false) setTeam(prevTeam) }   // 팀 칩과 목록이 어긋나지 않게
+    const revert = (ok: boolean | null) => { if (ok === false) setTeam(settledRef.current.team) }   // 팀 칩과 목록이 어긋나지 않게
     if (isSearch) void runSearch(query, tk).then(revert)
     else void loadMonth(year, month0, tk).then(revert)
   }
@@ -188,7 +188,7 @@ export function MinutesView({
     const res = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
     if (reqRef.current !== gen) return null
     setSearching(false)
-    if (res.ok) { setMinutes(res.rows); return true }
+    if (res.ok) { setMinutes(res.rows); settledRef.current = { ...settledRef.current, team: tk }; return true }
     toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
     return false
   }

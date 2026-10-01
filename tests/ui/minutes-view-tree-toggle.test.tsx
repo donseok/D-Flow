@@ -192,6 +192,19 @@ describe('MinutesView 트리 뷰 배선', () => {
     expect([last.from, last.to]).toEqual(['2026-07-01', '2026-07-31'])
   })
 
+  it('빠른 연속 월 이동 — 첫 요청이 더 새 요청에 밀려 버려지고 둘째가 실패하면 마지막으로 받은 달(7월)로 되돌린다(S4)', async () => {
+    let releaseFirst: (v: { ok: true; rows: unknown[] }) => void = () => {}
+    fetchMinutesRange.mockImplementationOnce(() => new Promise((r) => { releaseFirst = r as typeof releaseFirst }))   // 8월: 응답이 늦다
+    fetchMinutesRange.mockResolvedValueOnce({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })              // 9월: 실패
+    await mount('calendar')
+    const next = () => container.querySelector<HTMLButtonElement>('button[aria-label="next month"]')!
+    await act(async () => next().click())
+    await act(async () => next().click())
+    await act(async () => releaseFirst({ ok: true, rows: [] }))                                                      // 8월 응답은 이미 밀려 버려진다
+    const last = chatProps.mock.calls.at(-1)![0] as { from: string | null; to: string | null }
+    expect([last.from, last.to]).toEqual(['2026-07-01', '2026-07-31'])                                               // 직전 머리(8월)가 아니라 목록과 같은 7월
+  })
+
   it('팀 변경이 실패로 돌아오면 팀 선택도 되돌린다 — 필터 칩과 목록이 어긋나지 않게(U2a-4 T5)', async () => {
     await mount('calendar')
     fetchMinutesRange.mockResolvedValueOnce({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
