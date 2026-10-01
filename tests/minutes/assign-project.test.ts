@@ -101,34 +101,34 @@ describe('assignMinutesProject', () => {
   it('미로그인은 거부 — DB 접근 없이', async () => {
     getSession.mockResolvedValue(null)
     getActor.mockResolvedValue(null)
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
 
   it('멤버는 대상 프로젝트로의 일괄 지정이 거부된다 — 관리자 이상만(스펙 §4.3)', async () => {
     getActor.mockResolvedValue(memberActor)
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r.ok).toBe(false)
     expect(r.error).toBe('권한 없음')
     expect(createServerClient).not.toHaveBeenCalled()
   })
 
   it('빈 선택은 거부', async () => {
-    expect((await assignMinutesProject([], P1)).ok).toBe(false)
+    expect((await assignMinutesProject(WS, [], P1)).ok).toBe(false)
   })
 
   it(`상한(${MINUTES_PROJECT_BULK_MAX})을 넘으면 거부 — 위키 재적재가 뒤따르는 조작이다`, async () => {
     const many = Array.from({ length: MINUTES_PROJECT_BULK_MAX + 1 }, (_, i) =>
       `${String(i).padStart(8, '0')}-1111-4111-8111-111111111111`)
-    const r = await assignMinutesProject(many, P1)
+    const r = await assignMinutesProject(WS, many, P1)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
 
   it('없는 프로젝트로는 한 건도 건드리지 않는다', async () => {
     createServerClient.mockResolvedValue(fakeDb({ projects: { data: null, error: null } }))
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r.ok).toBe(false)
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -143,7 +143,7 @@ describe('assignMinutesProject', () => {
     }))
     adminMocks.createAdminClient.mockReturnValue(client)
 
-    const r = await assignMinutesProject([M1, M2], P1)
+    const r = await assignMinutesProject(WS, [M1, M2], P1)
     expect(r).toMatchObject({ ok: true, updated: 2, unchanged: 0, skipped: [] })
     // 부분 patch — project_id 외의 메타를 실어 보내면 나머지 필드가 덮인다
     expect(rpc.mock.calls[0][1]).toEqual({ p_minute_id: M1, p_metadata: { project_id: P1 } })
@@ -159,7 +159,7 @@ describe('assignMinutesProject', () => {
     }))
     const { client, rpc } = fakeAdmin(() => ({ old_project_id: null, new_project_id: P1, wiki_rebuild_required: false }))
     adminMocks.createAdminClient.mockReturnValue(client)
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r).toMatchObject({ ok: true, updated: 0, unchanged: 1 })
     expect(rpc).not.toHaveBeenCalled()
   })
@@ -174,7 +174,7 @@ describe('assignMinutesProject', () => {
     }))
     const { client, rpc } = fakeAdmin(() => ({ old_project_id: null, new_project_id: P1, wiki_rebuild_required: false }))
     adminMocks.createAdminClient.mockReturnValue(client)
-    const r = await assignMinutesProject([M1, M2], P1)
+    const r = await assignMinutesProject(WS, [M1, M2], P1)
     expect(r.updated).toBe(0)
     expect(r.skipped.map(s => s.id).sort()).toEqual([M1, M2].sort())
     expect(rpc).not.toHaveBeenCalled()
@@ -189,7 +189,7 @@ describe('assignMinutesProject', () => {
     adminMocks.createAdminClient.mockReturnValue(fakeAdmin(() => ({
       old_project_id: null, new_project_id: P1, wiki_rebuild_required: false,
     })).client)
-    expect((await assignMinutesProject([M1], P1)).updated).toBe(1)
+    expect((await assignMinutesProject(WS, [M1], P1)).updated).toBe(1)
   })
 
   it('회의에 연결된 회의록은 회의의 프로젝트와 다르면 거절 — 회의와 어긋난 상태를 만들지 않는다', async () => {
@@ -201,7 +201,7 @@ describe('assignMinutesProject', () => {
     }))
     const { client, rpc } = fakeAdmin(() => ({ old_project_id: null, new_project_id: P1, wiki_rebuild_required: false }))
     adminMocks.createAdminClient.mockReturnValue(client)
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r.updated).toBe(0)
     expect(r.skipped[0].reason).toContain('회의')
     expect(rpc).not.toHaveBeenCalled()
@@ -212,7 +212,7 @@ describe('assignMinutesProject', () => {
       projects: { data: { id: P1, workspace_id: WS }, error: null },
       minutes: { data: null, error: { message: 'boom' } },
     }))
-    const r = await assignMinutesProject([M1], P1)
+    const r = await assignMinutesProject(WS, [M1], P1)
     expect(r.ok).toBe(false)
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -227,7 +227,7 @@ describe('assignMinutesProject', () => {
       args.p_minute_id === M1 ? null : { old_project_id: null, new_project_id: P1, wiki_rebuild_required: false }
     ))
     adminMocks.createAdminClient.mockReturnValue(client)
-    const r = await assignMinutesProject([M1, M3], P1)
+    const r = await assignMinutesProject(WS, [M1, M3], P1)
     expect(r.ok).toBe(true)
     expect(r.updated).toBe(1)
     expect(r.skipped.map(s => s.id)).toEqual([M1])
@@ -241,7 +241,7 @@ describe('assignMinutesProject', () => {
     adminMocks.createAdminClient.mockReturnValue(fakeAdmin(() => ({
       old_project_id: P1, new_project_id: null, wiki_rebuild_required: false,
     })).client)
-    const r = await assignMinutesProject([M1], null)
+    const r = await assignMinutesProject(WS, [M1], null)
     expect(r).toMatchObject({ ok: true, updated: 1 })
     expect(rebuild.fn).toHaveBeenCalledWith(P1)
   })

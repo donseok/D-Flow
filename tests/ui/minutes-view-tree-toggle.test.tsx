@@ -82,7 +82,7 @@ describe('MinutesView 트리 뷰 배선', () => {
     perms: { canEdit: boolean } = { canEdit: true },
   ) {
     await act(async () => root.render(withTeams(
-      <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
+      <MinutesView scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
         projects={[]} currentUserId="u1" canEdit={perms.canEdit} />,
     )))
   }

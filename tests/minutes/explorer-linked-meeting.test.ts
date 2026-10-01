@@ -11,15 +11,17 @@ import { getMinutesExplorer } from '@/lib/data/minutes'
 /** 탐색기 조회는 minutes·minute_folders 두 쿼리를 Promise.all 로 던진다 — from() 을 테이블별로 갈라준다. */
 function client(minuteRows: Record<string, unknown>[]) {
   const minutes = {
-    select: vi.fn(), is: vi.fn(), order: vi.fn(),
+    select: vi.fn(), eq: vi.fn(), is: vi.fn(), order: vi.fn(),
     limit: vi.fn().mockResolvedValue({ data: minuteRows, error: null }),
   }
   minutes.select.mockReturnValue(minutes)
+  minutes.eq.mockReturnValue(minutes)
   minutes.is.mockReturnValue(minutes)
   minutes.order.mockReturnValue(minutes)
 
-  const folders = { select: vi.fn(), order: vi.fn() }
+  const folders = { select: vi.fn(), eq: vi.fn(), order: vi.fn() }
   folders.select.mockReturnValue(folders)
+  folders.eq.mockReturnValue(folders)
   folders.order.mockReturnValueOnce(folders).mockReturnValueOnce({ data: [], error: null })
 
   return { from: vi.fn((t: string) => (t === 'minutes' ? minutes : folders)) }
@@ -40,7 +42,7 @@ describe('getMinutesExplorer — 연결된 회의', () => {
 
   it('리프에 meetingId·meetingProjectId 를 실어 보낸다 — 탐색기가 회의 링크를 걸 수 있게', async () => {
     mocks.createServerClient.mockResolvedValue(client([row()]))
-    const res = await getMinutesExplorer()
+    const res = await getMinutesExplorer('ws-1', null)
     expect(res?.leaves[0].meetingId).toBe('mt1')
     expect(res?.leaves[0].meetingProjectId).toBe('p1')
   })
@@ -49,14 +51,14 @@ describe('getMinutesExplorer — 연결된 회의', () => {
     // meeting_id 는 남아 있는데 meetings 를 못 읽는 상황(권한·끊긴 참조). 회의록의 project_id 로
     // 링크를 만들면 엉뚱한 프로젝트의 회의 달력으로 보내게 된다 — 링크를 걸지 않는 쪽이 맞다.
     mocks.createServerClient.mockResolvedValue(client([row({ meetings: null, project_id: 'p2' })]))
-    const res = await getMinutesExplorer()
+    const res = await getMinutesExplorer('ws-1', null)
     expect(res?.leaves[0].meetingId).toBe('mt1')
     expect(res?.leaves[0].meetingProjectId).toBeNull()
   })
 
   it('회의 미연결 회의록은 둘 다 null', async () => {
     mocks.createServerClient.mockResolvedValue(client([row({ meeting_id: null, meetings: null })]))
-    const res = await getMinutesExplorer()
+    const res = await getMinutesExplorer('ws-1', null)
     expect(res?.leaves[0].meetingId).toBeNull()
     expect(res?.leaves[0].meetingProjectId).toBeNull()
   })

@@ -29,6 +29,7 @@ import { Modal } from '@/components/ui/Modal'
 import { FolderManageModal } from './FolderManageModal'
 import { FolderPickModal } from './FolderPickModal'
 import { MinuteMetaModal } from './MinuteMetaModal'
+import { useMinutesScope } from './MinutesScopeContext'
 
 export type ExplorerLayout = 'grid' | 'list'
 type Scope =
@@ -112,6 +113,8 @@ export function MinutesExplorer({
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
+  // 폴더·일괄 지정 액션의 범위 — 화면(페이지)이 내린 워크스페이스. 없으면 액션을 부르지 않는다(계획 V13)
+  const minutesScope = useMinutesScope()
   const [scopeRaw, setScopeRaw] = useState<Scope>({ kind: 'all' })
   // 기본 전체 펼침(부모 id 집합) — 시드 트리가 얕아(깊이 상한 5) 접힌 채 시작하면 하위 폴더 메뉴·이동이
   // 첫 렌더에 발견 불가능해진다. 최초 렌더 1회만 계산(폴더 추가/삭제는 토글로 사용자가 직접 관리).
@@ -305,9 +308,10 @@ export function MinutesExplorer({
   async function assignProject(projectId: string | null) {
     const ids = selectedIds
     if (ids.length === 0) return
+    if (!minutesScope) { toast({ title: t('min.err.noWorkspace'), variant: 'error' }); return }
     setAssignBusy(true)
     try {
-      const res = await assignMinutesProject(ids, projectId)
+      const res = await assignMinutesProject(minutesScope.workspaceId, ids, projectId)
       if (!res.ok) { toast({ title: res.error ?? t('min.fold.error'), variant: 'error' }); return }
       // 건너뛴 건이 있으면 '전부 됐다'로 읽히지 않게 건수를 함께 알린다
       if (res.skipped.length > 0) {
@@ -383,7 +387,8 @@ export function MinutesExplorer({
         toast({ title: t('min.fold.moved'), variant: 'info' })
       } else {
         const newParentId = target === ROOT_KEY ? null : target
-        const res = await moveMinuteFolder(item.id, newParentId)
+        if (!minutesScope) { toast({ title: t('min.err.noWorkspace'), variant: 'error' }); return }
+        const res = await moveMinuteFolder(minutesScope.workspaceId, item.id, newParentId)
         if (!res.ok) { toast({ title: res.error ?? t('min.fold.error'), variant: 'error' }); return }
         // expanded 는 최초 렌더 1회만 계산된다 — 지금까지 자식이 없던 폴더로 옮기면 그 부모가
         // 집합에 없어 옮긴 폴더가 접힌 채 사라져 보인다. 재조회로도 복구되지 않으므로 여기서 펼친다.

@@ -13,7 +13,7 @@
 // 라우트의 사유(닫힌 목록 — 지금은 v1 에이전트 11). adminBeforeGuard: 가드 앞에서 대상 행을 service_role 로 읽는 액션의 사유.
 // target: 모듈 판정의 대상(deny 하네스가 그 범위에서만 모듈을 끈다 — 틀린 범위의 관문은 통과해 FAIL). 기본은 sample 에서 파생한다 — 프로젝트 id(P)가
 // 있으면 project, 행 id(U)만 있으면 row(행의 프로젝트·워크스페이스), 둘 다 없으면 session(세션 유일 워크스페이스). 행 id 를 받지만 판정은 세션인
-// 항목만 적는다(회의록 폴더 넷·일괄 지정 — P13·P28).
+// 항목만 적는다. workspace 는 워크스페이스 인자(W)를 받는 액션 — 프로젝트 층 모듈도 W 에서 끈다(계획 V10 — 회의록 목록·폴더·일괄 지정, D26).
 // ownerBranch: '관리자 또는 작성자·주최자' 헬퍼를 지나는 모듈 액션의 작성자 판정 — deny 하네스가 관리자 거부(멤버 행위자, ROW.created_by 가 그
 // userId) 상태로 모듈을 꺼서 작성자 분기도 관문을 지나는지 본다(B5 F1-14·F1-15). note 의 '관리자 또는 작성자|주최자' 와 짝이다.
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -29,7 +29,7 @@ export interface GateEntry {
   delegatedTo?: string
   delegatedStatic?: string
   adminBeforeGuard?: string
-  target?: 'project' | 'row' | 'session'
+  target?: 'project' | 'row' | 'session' | 'workspace'
   ownerBranch?: string
 }
 export const NOTE_REQUIRED: ReadonlySet<Guard> = new Set<Guard>(['session', 'public', 'cronSecret', 'minutesSecret'])
@@ -37,6 +37,7 @@ export const NOTE_REQUIRED: ReadonlySet<Guard> = new Set<Guard>(['session', 'pub
 // 표본 id — tests/gates/_harness.ts 의 U·P 와 같은 값(가드 mock 이 P 를 자기 프로젝트로 본다)
 const U = '00000000-0000-0000-7e57-000000001431'
 const P = '00000000-0000-0000-7e57-000000001432'
+const W = 'ws-1'   // tests/gates/_harness.ts 의 W(fixtures/actor WS)와 같은 값
 const A = (f: string) => `src/app/actions/${f}.ts`
 const R = (p: string) => `src/app/api/${p}/route.ts`
 const nul = (guard: Guard, note?: string): GateEntry => ({ guard, module: null, ...(note ? { note } : {}) })
@@ -144,11 +145,11 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '전역 내 회의 — 세션 유일 워크스페이스, 행은 getMyMeetings 가 거른다', sample: ['2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [] } },
   [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: null },
   // ── minutes — 워크스페이스 모듈(행의 워크스페이스 / 새 회의록은 대상 / 행 없는 목록·폴더는 세션 유일 워크스페이스)
-  [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 세션 유일 워크스페이스', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }] },
+  [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 인자 워크스페이스(소속 확인 — D26)', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }, null, undefined, W], target: 'workspace' },
   [`${A('minutes')}#updateMinuteMeta`]: { guard: 'session', module: 'minutes', note: 'requireActor + checkOwner(행의 워크스페이스) — 관문이 입력 검증 뒤라 유효한 표본', sample: [U, { minuteDate: '2026-09-01', teamCode: 'PMO', title: 'Acme', meetingId: null }] },
-  [`${A('minutes')}#assignMinutesProject`]: { guard: 'session', module: 'minutes', note: 'requireActor — 일괄(회의록 화면 전용) 세션 유일 워크스페이스', sample: [[U], null], target: 'session' },
+  [`${A('minutes')}#assignMinutesProject`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스(소속 확인), 행의 워크스페이스가 다르면 그 행 실패', sample: [W, [U], null], target: 'workspace' },
   [`${A('minutes')}#resetMinuteExternalId`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
-  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: '로그인 — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 관문, 꺼진 곳의 행을 뺀다(P13 둘째 문장, Ruling B5 fix 우려 ②). 행이 있는 곳이 모두 꺼지면 null, 보이는 행이 없으면 세션 유일 워크스페이스 판정(꺼짐 null·켜짐 []). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 P28 폴더 조작과 다르다', sample: [], deny: null },
+  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: '로그인 — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 관문, 꺼진 곳의 행을 뺀다(P13 둘째 문장, Ruling B5 fix 우려 ②). 행이 있는 곳이 모두 꺼지면 null, 보이는 행이 없으면 인자 워크스페이스로 판정(소속 확인 — 꺼짐 null·켜짐 [], 인자 없으면 null). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 P28 폴더 조작과 다르다', sample: [W], deny: null, target: 'workspace' },
   [`${A('minutes')}#replaceMinuteBody`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, '# b', { fileName: 'a.md', filePath: 'x/a.md', size: 1, mime: 'text/markdown' }] },
   [`${A('minutes')}#recordMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, { role: 'attachment', fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }] },
   [`${A('minutes')}#removeMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 파일 행의 회의록', sample: [U] },
@@ -158,15 +159,15 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#getMinuteVersionFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, U] },
   [`${A('minutes')}#fetchProjectMeetingsLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 인자 프로젝트(회의록 폼의 회의 선택)', sample: [P], deny: { ok: true, meetings: [] } },
   [`${A('minutes')}#fetchMeetingMinutesLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: [] },
-  [`${A('minutes')}#fetchMinutesRange`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: ['2026-09-01', '2026-09-30', null], deny: [] },
-  [`${A('minutes')}#fetchMinutesSearch`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: ['acme', null], deny: [] },
-  [`${A('minutes')}#fetchMinutesExplorer`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: [], deny: null },
-  [`${A('minutes')}#createMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스', sample: ['폴더', null] },
-  [`${A('minutes')}#renameMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 그 화면이 유일 워크스페이스로 닫힌다, 판정 P28)', sample: [U, '폴더'], target: 'session' },
-  [`${A('minutes')}#deleteMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 그 화면이 유일 워크스페이스로 닫힌다, 판정 P28)', sample: [U], target: 'session' },
-  [`${A('minutes')}#moveMinuteFolder`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 판정 P28)', sample: [U, null], target: 'session' },
+  [`${A('minutes')}#fetchMinutesRange`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }, '2026-09-01', '2026-09-30', null], deny: [], target: 'workspace' },
+  [`${A('minutes')}#fetchMinutesSearch`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }, 'acme', null], deny: [], target: 'workspace' },
+  [`${A('minutes')}#fetchMinutesExplorer`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }], deny: null, target: 'workspace' },
+  [`${A('minutes')}#createMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스(소속 확인)', sample: [W, '폴더', null], target: 'workspace' },
+  [`${A('minutes')}#renameMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스, 폴더 행의 워크스페이스가 다르면 ERR_MISSING', sample: [W, U, '폴더'], target: 'workspace' },
+  [`${A('minutes')}#deleteMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스, 폴더 행 대조', sample: [W, U], target: 'workspace' },
+  [`${A('minutes')}#moveMinuteFolder`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스, 폴더 행 대조', sample: [W, U, null], target: 'workspace' },
   [`${A('minutes')}#moveMinuteToFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, null] },
-  [`${A('minutes')}#fetchMinuteFavorites`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: [], deny: null },
+  [`${A('minutes')}#fetchMinuteFavorites`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [W], deny: null, target: 'workspace' },
   [`${A('minutes')}#toggleMinuteFavorite`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, true], deny: false },
   [`${A('minutes')}#toggleMinuteHighlight`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, 0, 'h'] },
   [`${A('minutes')}#ensureMinuteInsightsAction`]: { guard: 'session', module: 'minutes', note: '행의 범위 멤버(requireMinuteMember)', sample: [U], deny: { status: 'unavailable', error: ERR_MODULE_DISABLED } },

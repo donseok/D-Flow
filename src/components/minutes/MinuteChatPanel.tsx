@@ -8,6 +8,7 @@ import { fetchMinuteFoldersLite } from '@/app/actions/minutes'
 import { teamChildFoldersOf } from '@/lib/domain/minutes'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import { linkifyMinutePaths } from './linkify'
+import { useMinutesScope } from './MinutesScopeContext'
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string }
 
@@ -123,10 +124,13 @@ type TeamKey = 'ALL' | TeamCode
 
 /** 문서 모드 패널 — 뷰어 우측(좁은 화면에선 아래). 범위 토글로 전체 보관함 질문 가능.
  *  projects 는 하위 구분 칩의 프로젝트 라벨용(0076). */
-export function MinuteChatPanel({ minuteId, projects = [] }: {
+export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
   minuteId: string
   projects?: { id: string; name: string }[]
+  /** 폴더 목록 판정의 워크스페이스 — 회의록 화면 범위가 있으면 그것, 없으면(상세 화면) 이 회의록의 워크스페이스(계획 V13) */
+  workspaceId?: string
 }) {
+  const folderWs = useMinutesScope()?.workspaceId ?? workspaceId
   const { t } = useLocale()
   const teamCodes = useTeamCodes()
   const [open, setOpen] = useState(true)
@@ -139,10 +143,10 @@ export function MinuteChatPanel({ minuteId, projects = [] }: {
   useEffect(() => {
     if (scope !== 'archive' || folders !== 'idle') return
     setFolders('loading')
-    fetchMinuteFoldersLite()
+    fetchMinuteFoldersLite(folderWs)
       .then(r => setFolders(r ?? 'error'))
       .catch(() => setFolders('error'))
-  }, [scope, folders])
+  }, [scope, folders, folderWs])
   // 범위별 독립 스레드 — 전환해도 각 대화가 보존되고 LLM 컨텍스트가 섞이지 않는다.
   const doc = useMinutesChat((message, history) => ({ mode: 'doc', minuteId, message, history }))
   const archive = useMinutesChat((message, history) => ({

@@ -76,7 +76,8 @@ export function MinuteMetaModal({
     if (!open) return
     let alive = true
     // null = 조회 실패. 빈 트리와 구분되지 않으므로 최소한 원인은 남긴다(조용한 빈 화면 금지).
-    void fetchMinuteFoldersLite()
+    // 보이는 폴더 행이 없을 때의 판정 워크스페이스 = 이 회의록의 것(상세·탐색기 어디서 열든 같은 값, 계획 V13)
+    void fetchMinuteFoldersLite(minute.workspaceId ?? undefined)
       .then(fs => {
         if (!alive) return
         if (fs === null) { console.error('[MinuteMetaModal] 폴더 목록 조회 실패'); return }
@@ -88,7 +89,7 @@ export function MinuteMetaModal({
         setFolders([])
       })
     return () => { alive = false }
-  }, [open])
+  }, [open, minute.workspaceId])
 
   // 담당(teamCode)은 선택 폴더에서 파생 — 시드 체인 밖(미분류·커스텀 폴더)이면 기존 담당 유지
   const team: TeamCode = useMemo(

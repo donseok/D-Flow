@@ -84,7 +84,7 @@ describe('createMinute 원본 경로 — scope 는 확정된 워크스페이스�
 
   it('무프로젝트 회의록: 소속 워크스페이스의 p/_ 경로는 통과한다', async () => {
     createServerClient.mockResolvedValue(fakeDb({}).client)
-    const res = await createMinute({ ...INPUT, projectId: null } as never, null, src(`ws/${W}/p/_/minutes/${M}/1-a.md`))
+    const res = await createMinute({ ...INPUT, projectId: null } as never, null, src(`ws/${W}/p/_/minutes/${M}/1-a.md`), W)
     expect(res).toMatchObject({ ok: false, error: ADMIN_REACHED })
   })
 
@@ -103,7 +103,7 @@ describe('createMinute 원본 경로 — scope 는 확정된 워크스페이스�
 
   it('무프로젝트 회의록에 프로젝트 경로는 거부', async () => {
     createServerClient.mockResolvedValue(fakeDb({}).client)
-    const res = await createMinute({ ...INPUT, projectId: null } as never, null, src(`ws/${W}/p/${P}/minutes/${M}/1-a.md`))
+    const res = await createMinute({ ...INPUT, projectId: null } as never, null, src(`ws/${W}/p/${P}/minutes/${M}/1-a.md`), W)
     expect(res).toEqual({ ok: false, error: '잘못된 원본 파일 경로입니다.' })
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })

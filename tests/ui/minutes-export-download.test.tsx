@@ -54,7 +54,7 @@ describe('MinutesView 전체 회의록 내려받기', () => {
     })
     mocks.toast.mockReset()
     await act(async () => root.render(
-      <MinutesView initialMinutes={[]} todayIso="2026-07-23" initialView="list"
+      <MinutesView scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-23" initialView="list"
         projects={[]} currentUserId="u1" canEdit />,
     ))
   })

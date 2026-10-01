@@ -844,7 +844,7 @@ export function MinuteViewer({
           <MarkdownView content={minute.bodyMd} marks={marks} />
         </div>
         {!focus && !historicalVersion && !minute.archivedAt && (
-          <MinuteChatPanel minuteId={minute.id} projects={projects} />
+          <MinuteChatPanel minuteId={minute.id} projects={projects} workspaceId={minute.workspaceId ?? undefined} />
         )}
       </div>
 

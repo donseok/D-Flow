@@ -21,6 +21,7 @@ import { MinuteUploadModal } from './MinuteUploadModal'
 import { ArchiveChatPanel } from './ArchiveChatPanel'
 import { MinutesExplorer, type ExplorerLayout } from './MinutesExplorer'
 import { filenameFromContentDisposition } from './download'
+import type { MinutesScope } from '@/lib/minutes/scope'
 
 type ViewKey = 'list' | 'calendar' | 'tree'
 type TreeState = 'idle' | 'loading' | 'error' | ExplorerData
@@ -33,10 +34,12 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 }
 
 export function MinutesView({
-  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
+  scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
   adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null,
 }: {
+  /** 화면의 범위(슬러그 워크스페이스 + ?project=, 계획 V13) — 월 이동·검색·탐색기·즐겨찾기 재조회에 그대로 넘긴다 */
+  scope: MinutesScope
   initialMinutes: Minute[]
   /** 서버에서 미리 실어 보낸 트리. null 이면(조회 실패 포함) 마운트 후 클라이언트가 직접 가져온다. */
   initialTree?: ExplorerData | null
@@ -61,7 +64,7 @@ export function MinutesView({
   myProjectIds?: string[] | null
   /** 업로드 저장 경로 scope — 프로젝트 → 워크스페이스(actor.projectWorkspace). */
   projectWorkspaces?: Record<string, string>
-  /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(resolveSoleWorkspaceId). */
+  /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(화면의 슬러그 워크스페이스, D26). */
   noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
 }) {
   const router = useRouter()
@@ -110,7 +113,7 @@ export function MinutesView({
   async function loadFavorites() {
     const gen = ++favReqRef.current
     setFavState('loading')
-    const res = await fetchMinuteFavorites()
+    const res = await fetchMinuteFavorites(scope.workspaceId)
     if (favReqRef.current !== gen) return
     setFavState(res ? new Set(res) : 'error')
   }
@@ -144,7 +147,7 @@ export function MinutesView({
     // 탐색기를 언마운트해 스코프·펼침·더 보기가 CRUD 때마다 리셋되는 문제를 막는다.
     // 최초 진입(idle)·에러 재시도는 기존대로 스켈레톤.
     if (typeof treeState !== 'object') setTreeState('loading')
-    const res = await fetchMinutesExplorer()
+    const res = await fetchMinutesExplorer(scope)
     if (treeReqRef.current !== gen) return
     setTreeState(res ?? 'error')
   }
@@ -152,7 +155,7 @@ export function MinutesView({
   async function loadMonth(y: number, m0: number, tk: TeamKey) {
     const gen = ++reqRef.current
     const [rs, re] = monthRangeOf(y, m0)
-    const rows = await fetchMinutesRange(rs, re, tk === 'ALL' ? null : tk)
+    const rows = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
     if (reqRef.current === gen) setMinutes(rows)
   }
   function shift(delta: number) {
@@ -173,7 +176,7 @@ export function MinutesView({
     const gen = ++reqRef.current
     if (!q.trim()) { void loadMonth(year, month0, tk); return }
     setSearching(true)
-    const rows = await fetchMinutesSearch(q, tk === 'ALL' ? null : tk)
+    const rows = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
     if (reqRef.current === gen) { setMinutes(rows); setSearching(false) }
   }
   function changeView(v: ViewKey) {

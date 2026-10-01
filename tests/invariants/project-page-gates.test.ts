@@ -13,6 +13,9 @@
 // `isHiddenProject(`(부정 없이), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
 // require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
 // 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
+// /w/[slug]/** 페이지는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
+// 않는 워크스페이스는 0행 → notFound(), 보여도 역할이 없으면 notFound() 를 그 함수 안에서 던진다. 열화(권한 조회 실패)여도 슬러그 조회는
+// RLS 로 했으므로 그 워크스페이스가 보이는 사람만 다음 줄로 간다. await 없이 부르면 흐름을 끊지 않으므로 게이트가 아니다.
 import { describe, it, expect } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,6 +37,8 @@ const ALLOWLIST: Record<string, string> = {}
 const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isHiddenProject\(/
 const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
+/** 그 호출 자체가 거부(notFound)를 던지는 범위 판정 — 끝까지 기다려야 게이트다 */
+const GATE_CALL = /\bawait\s+loadWorkspaceScope\(/
 const IMPORT_RE = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/gm
 /** re-export — `export { a, type B } from '…'`·`export * from '…'`·`export * as ns from '…'`. `export type { … } from` 은 값이 아니다. */
 const REEXPORT_RE = /^\s*export\s+(type\s+)?(\{[\s\S]*?\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/gm
@@ -123,6 +128,7 @@ function reachesServiceRole(abs: string, useSafe = true): boolean {
 function firstGateLine(lines: string[], bodyStart = 0): number {
   const vars: Array<{ name: string; kind: GateVarKind }> = []
   for (let i = bodyStart; i < lines.length; i++) {
+    if (GATE_CALL.test(lines[i])) return i
     const v = lines[i].match(GATE_VAR)
     if (v) vars.push({ name: v[1], kind: gateVarKind(v[2]) })
     const g = lines[i].match(GATE_IF)
@@ -224,6 +230,13 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(firstGateLine(src('const g = await requireProjectMember(pid)\nif (!g.ok) redirect(`/p/${pid}`)'))).toBe(1)
     expect(firstGateLine(src('const isAdmin = isProjectAdmin(actor, pid)\nif (!isAdmin) redirect(`/p/${pid}`)'))).toBe(1)
     expect(firstGateLine(src('if (!degraded && isHiddenProject(m, pid)) notFound()'))).toBe(0)
+  })
+
+  it('판정기 — /w/[slug] 의 await loadWorkspaceScope(…) 는 게이트, await 없는 호출·주석은 아니다', () => {
+    const src = (body: string) => codeLines(body)
+    expect(firstGateLine(src('const { slug } = await params\nconst scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(scope.ws.id)'))).toBe(1)
+    expect(firstGateLine(src('const p = loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
+    expect(firstGateLine(src('// const scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'))).toBe(-1)
   })
 
   it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {

@@ -160,17 +160,17 @@ describe('회의록 관문 — 행이 없는 경로', () => {
     expect(requireSessionModule).not.toHaveBeenCalled()
     expect(m.fromCalls).toEqual([])
   })
-  it('새 회의록 — 프로젝트가 없으면 세션 유일 워크스페이스로 판정한다', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue(OFF)
-    expect(await createMinute({ ...input, projectId: null })).toEqual(OFF)
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'minutes')
-    expect(requireModule).not.toHaveBeenCalled()
+  it('새 회의록 — 프로젝트가 없으면 화면의 워크스페이스(인자, 소속 확인)로 판정한다(D26)', async () => {
+    vi.mocked(requireModule).mockResolvedValue(OFF)
+    expect(await createMinute({ ...input, projectId: null }, null, undefined, WB)).toEqual(OFF)
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WB }, 'minutes')
+    expect(requireSessionModule).not.toHaveBeenCalled()
   })
-  it('폴더 조작은 세션 유일 워크스페이스로 판정하고(P28), 꺼지면 폴더를 읽지 않는다', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue(OFF)
-    expect(await renameMinuteFolder(M, '폴더')).toEqual(OFF)
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'minutes')
-    expect(requireModule).not.toHaveBeenCalled()
+  it('폴더 조작은 화면의 워크스페이스(인자)로 판정하고(P28·D26), 꺼지면 폴더를 읽지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue(OFF)
+    expect(await renameMinuteFolder(WB, M, '폴더')).toEqual(OFF)
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: WB }, 'minutes')
+    expect(requireSessionModule).not.toHaveBeenCalled()
     expect(m.fromCalls).toEqual([])
   })
   it('회의 → 연결 회의록은 회의 행의 프로젝트로 minutes·meetings 둘 다 판정하고, 꺼지면 빈 목록', async () => {
@@ -228,13 +228,16 @@ describe('폴더 목록(fetchMinuteFoldersLite) — 목록형: RLS 가 보여 �
     expect(requireModule).not.toHaveBeenCalled()
     spy.mockRestore()
   })
-  it('보이는 폴더 행이 없으면 판정할 워크스페이스가 없다 — 세션 판정으로 켜짐은 [](전과 같다), 꺼짐은 null', async () => {
+  it('보이는 폴더 행이 없으면 화면의 워크스페이스(인자, 소속 확인)로 판정한다 — 켜짐은 [], 꺼짐·인자 없음·비소속은 null(D26)', async () => {
     m.lists = { minute_folders: [] }
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: true })
-    expect(await fetchMinuteFoldersLite()).toEqual([])
-    expect(await fetchMinuteFoldersLite()).toBeNull()
-    expect(vi.mocked(requireSessionModule).mock.calls).toEqual([[null, 'minutes'], [null, 'minutes']])
-    expect(requireModule).not.toHaveBeenCalled()
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce(OFF)
+    expect(await fetchMinuteFoldersLite(WB)).toEqual([])
+    expect(await fetchMinuteFoldersLite(WB)).toBeNull()
+    expect(vi.mocked(requireModule).mock.calls).toEqual([[{ workspaceId: WB }, 'minutes'], [{ workspaceId: WB }, 'minutes']])
+    expect(await fetchMinuteFoldersLite()).toBeNull()       // 추측하지 않는다
+    expect(await fetchMinuteFoldersLite(WA)).toBeNull()     // 행위자는 WA 비소속 — 관문 전에 닫는다
+    expect(requireModule).toHaveBeenCalledTimes(2)
+    expect(requireSessionModule).not.toHaveBeenCalled()
   })
   it('세션이 없으면 null 이고 관문·폴더에 닿지 않는다', async () => {
     m.getSession.mockResolvedValue(null)

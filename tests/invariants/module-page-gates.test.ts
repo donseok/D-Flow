@@ -1,6 +1,7 @@
 // 페이지 관문 불변식(스펙 §4.2 끝 문단, D11, R14) — src/app 의 모든 page.tsx 는 자기 모듈로 관문을 부르거나 닫힌 제외 목록(사유)에 있다.
 // AST 로 본다: default export 함수 본문의 await 를 소스 순서로 모아 '첫 데이터 await' 가 관문이어야 한다(관문 앞에는 권한 redirect 재료·로케일만).
 // 관문의 모듈 인자는 routePrefixes(세그먼트 접두 일치)가 정하고, 첫 인자 모양은 페이지 종류가 정한다.
+// loadWorkspaceScope — 슬러그 판정(E19): /w/[slug]/** 의 첫 await 이고 관문은 그 다음 줄이다(스펙 §2.4 ①).
 import { existsSync, readFileSync } from 'node:fs'
 import { relative } from 'node:path'
 import ts from 'typescript'
@@ -28,9 +29,9 @@ const SPECIAL: Record<string, { module: ModuleId; why: string }> = {
   'src/app/share/minutes/[token]/page.tsx': { module: 'minutes', why: '익명 공유 링크 — 토큰 행의 워크스페이스로 admin 판정' },
 }
 /** 관문 앞에서 await 해도 되는 호출 — 권한 redirect 재료·로케일. 데이터 로더·Promise.all 은 관문 뒤다(notFound 뒤 로더가 돌지 않게) */
-const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'getServerLocale'])
+const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'getServerLocale', 'loadWorkspaceScope'])
 /** 관문 앞에서 await 없이 불러도 되는 동기 호출 — 권한 판정 술어와 Next 신호. await 없이 시작한 로더(프라미스)는 여기 없으므로 막힌다 */
-const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage'])
+const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage', 'wsHref'])
 /** 페이지별 관문 앞 허용(사유) — 대상 행에서 워크스페이스를 알아야 하는 페이지. selects 는 관문 앞 조회 체인이 고를 수 있는 열(그 밖의 열을 읽는 체인은 문제) */
 const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: string }> = {
   'src/app/(app)/minutes/[id]/page.tsx': { calls: ['getMinuteDetail'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다' },

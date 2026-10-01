@@ -107,18 +107,18 @@ describe('createMinuteFolder', () => {
   it('미로그인은 실패 + 클라이언트 미생성', async () => {
     getSession.mockResolvedValue(null)
     getActor.mockResolvedValue(null)
-    const r = await createMinuteFolder('새폴더', null)
+    const r = await createMinuteFolder('ws-1', '새폴더', null)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
   it('조회 전용(프로젝트 역할 없음)은 실패 + DB insert 미도달', async () => {
     getActor.mockResolvedValue(viewerActor)
-    const r = await createMinuteFolder('새폴더', null)
+    const r = await createMinuteFolder('ws-1', '새폴더', null)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
   it('이름 검증 실패(공백)는 DB 접근 없이 에러', async () => {
-    const r = await createMinuteFolder('   ', null)
+    const r = await createMinuteFolder('ws-1', '   ', null)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
@@ -132,7 +132,7 @@ describe('createMinuteFolder', () => {
     ]
     const { client } = fakeClient({ minute_folders: { data: chain, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('6단', 'd5')
+    const r = await createMinuteFolder('ws-1', '6단', 'd5')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('5')
   })
@@ -154,14 +154,14 @@ describe('createMinuteFolder', () => {
     })
     createServerClient.mockResolvedValue(client)
     // 루트 생성은 W18로 막히므로 팀 폴더 하위에서 중복 경로를 겨냥한다
-    const r = await createMinuteFolder('주간회의', 'f1')
+    const r = await createMinuteFolder('ws-1', '주간회의', 'f1')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('이미')
   })
   it('W18: 루트 폴더 생성은 이름과 무관하게 거부 — DB 접근 없이 (§6.3 불변식)', async () => {
     // 사용자 루트 폴더가 하나라도 생기면 그 서브트리 회의록의 team 파생이 끊긴다
     for (const name of ['ERP', '주간회의']) {
-      const r = await createMinuteFolder(name, null)
+      const r = await createMinuteFolder('ws-1', name, null)
       expect(r.ok).toBe(false)
       expect(r.error).toContain('담당 팀 폴더 안에만')
     }
@@ -170,7 +170,7 @@ describe('createMinuteFolder', () => {
   it('하위 레벨의 팀코드 동명은 허용 — 루트 예약어만 차단', async () => {
     const { client } = fakeClient({ minute_folders: { data: seedFolders, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('ERP', 'f1')
+    const r = await createMinuteFolder('ws-1', 'ERP', 'f1')
     expect(r.ok).toBe(true)
   })
   it('프로젝트 폴더 하위 생성 — 비멤버는 권한 없음, DB insert 미도달', async () => {
@@ -180,7 +180,7 @@ describe('createMinuteFolder', () => {
     const { client, calls } = fakeClient({ minute_folders: { data: projFolders, error: null } })
     createServerClient.mockResolvedValue(client)
     // memberActor 는 p1 멤버일 뿐 p2 멤버가 아니다
-    const r = await createMinuteFolder('하위', 'pf1')
+    const r = await createMinuteFolder('ws-1', '하위', 'pf1')
     expect(r.ok).toBe(false)
     expect(r.error).toBe('권한 없음')
     expect(calls['minute_folders']!.some(c => c.method === 'insert')).toBe(false)
@@ -191,7 +191,7 @@ describe('createMinuteFolder', () => {
     ]
     const { client, calls } = fakeClient({ minute_folders: { data: projFolders, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('하위', 'pf1')
+    const r = await createMinuteFolder('ws-1', '하위', 'pf1')
     expect(r.ok).toBe(true)
     const ins = calls['minute_folders']!.find(c => c.method === 'insert')!
     expect(ins.args[0]).toMatchObject({ project_id: 'p1' })
@@ -213,7 +213,7 @@ describe('createMinuteFolder', () => {
       return builder
     })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('새폴더', 'f1')
+    const r = await createMinuteFolder('ws-1', '새폴더', 'f1')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('삭제')
   })
@@ -229,7 +229,7 @@ describe('fetchMinuteFoldersLite', () => {
     const { client } = fakeClient({ minute_folders: { data: folders, error: null } })
     createServerClient.mockResolvedValue(client)
     getHiddenProjectIds.mockResolvedValue(new Set(['p-priv']))
-    const r = await fetchMinuteFoldersLite()
+    const r = await fetchMinuteFoldersLite('ws-1')
     expect(r).not.toBeNull()
     expect(r!.map(f => f.id)).toEqual(['f-pub', 'f-none'])
   })
@@ -239,21 +239,21 @@ describe('fetchMinuteFoldersLite', () => {
     ]
     const { client } = fakeClient({ minute_folders: { data: folders, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await fetchMinuteFoldersLite()
+    const r = await fetchMinuteFoldersLite('ws-1')
     expect(r!.map(f => f.id)).toEqual(['f1'])
   })
 })
 
 describe('renameMinuteFolder / deleteMinuteFolder', () => {
   it('rename: 이름 검증 실패는 DB 접근 없이 에러', async () => {
-    const r = await renameMinuteFolder('f2', '')
+    const r = await renameMinuteFolder('ws-1', 'f2', '')
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
   it('rename: 0행 갱신(권한 없음/미존재)은 실패로 판정', async () => {
     const { client } = fakeClient({ minute_folders: { data: [], error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await renameMinuteFolder('f1', '새이름')
+    const r = await renameMinuteFolder('ws-1', 'f1', '새이름')
     expect(r.ok).toBe(false)
   })
   it('delete: 0행 삭제는 실패, 1행 삭제는 성공', async () => {
@@ -264,10 +264,10 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [], error: null }, minutes: { data: [], error: null },
     })
     adminMocks.createAdminClient.mockReturnValue(admin)
-    expect((await deleteMinuteFolder('f2')).ok).toBe(true)
+    expect((await deleteMinuteFolder('ws-1', 'f2')).ok).toBe(true)
     const empty = fakeClient({ minute_folders: { data: [], error: null } })
     createServerClient.mockResolvedValue(empty.client)
-    expect((await deleteMinuteFolder('f2')).ok).toBe(false)   // 폴더 목록에 없음
+    expect((await deleteMinuteFolder('ws-1', 'f2')).ok).toBe(false)   // 폴더 목록에 없음
   })
 
   it('delete: 비우기 우선 — 하위 폴더·소속 회의록을 부모로 승격한 뒤 지운다(§6)', async () => {
@@ -282,7 +282,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [{ id: 'f3' }], error: null }, minutes: { data: [{ id: 'm1' }], error: null },
     })
     adminMocks.createAdminClient.mockReturnValue(admin)
-    expect((await deleteMinuteFolder('f2')).ok).toBe(true)
+    expect((await deleteMinuteFolder('ws-1', 'f2')).ok).toBe(true)
     // 자식 폴더 승격
     const folderUpd = adminCalls['minute_folders']!.find(c => c.method === 'update')!
     expect(folderUpd.args[0]).toMatchObject({ parent_id: 'f1' })
@@ -300,7 +300,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
     ]
     const { client, calls } = fakeClient({ minute_folders: { data: tree, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await deleteMinuteFolder('f2')
+    const r = await deleteMinuteFolder('ws-1', 'f2')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('겹침')
     expect(calls['minute_folders']!.some(c => c.method === 'delete')).toBe(false)
@@ -313,7 +313,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
     ]
     const { client } = fakeClient({ minute_folders: { data: tree, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await deleteMinuteFolder('f2')
+    const r = await deleteMinuteFolder('ws-1', 'f2')
     expect(r.ok).toBe(false)
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -322,7 +322,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [{ id: 'f-mes', name: 'MES', parent_id: null, sort: 2, created_by: null, workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
-    const r = await renameMinuteFolder('f-mes', '엠이에스')
+    const r = await renameMinuteFolder('ws-1', 'f-mes', '엠이에스')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('팀 기본 폴더')
   })
@@ -334,7 +334,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
     const { client } = fakeClient({ minute_folders: { data: seedTree, error: null } })
     createServerClient.mockResolvedValue(client)
     // fakeClient 는 갱신·삭제 결과로 테이블 데이터를 그대로 돌려주므로(비어있지 않음) 성공 경로에 도달
-    const r = await renameMinuteFolder('c-buy', '구매관리')
+    const r = await renameMinuteFolder('ws-1', 'c-buy', '구매관리')
     expect(r.ok).toBe(true)
     // 삭제는 '비우기 우선'이라 admin 으로 승격 후 지운다. created_by null 이라 관리자 이상이어야 한다.
     getActor.mockResolvedValue(superuserActor)
@@ -342,7 +342,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [], error: null }, minutes: { data: [], error: null },
     })
     adminMocks.createAdminClient.mockReturnValue(admin)
-    const d = await deleteMinuteFolder('c-buy')
+    const d = await deleteMinuteFolder('ws-1', 'c-buy')
     expect(d.ok).toBe(true)
   })
   it('rename: 일반 루트를 팀코드 동명(MDM)으로 바꾸는 것도 거부(앵커 사칭 방지)', async () => {
@@ -350,7 +350,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [{ id: 'f-mine', name: '내폴더', parent_id: null, sort: 100, created_by: 'u1', workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
-    const r = await renameMinuteFolder('f-mine', 'MDM')
+    const r = await renameMinuteFolder('ws-1', 'f-mine', 'MDM')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('팀 기본 폴더명')
   })
@@ -359,14 +359,14 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: [{ id: 'f-mine', name: '내폴더', parent_id: null, sort: 100, created_by: 'u1', workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
-    expect((await renameMinuteFolder('f-mine', '새이름')).ok).toBe(true)
+    expect((await renameMinuteFolder('ws-1', 'f-mine', '새이름')).ok).toBe(true)
   })
   it('delete: 시드 팀 루트(ERP)는 삭제 금지 — cascade 소실 방지(0043)', async () => {
     const { client, calls } = fakeClient({
       minute_folders: { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
-    const r = await deleteMinuteFolder('f-erp')
+    const r = await deleteMinuteFolder('ws-1', 'f-erp')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('삭제할 수 없습니다')
     expect(calls['minute_folders']!.some(c => c.method === 'delete')).toBe(false)
@@ -379,7 +379,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       },
     })
     createServerClient.mockResolvedValue(client)
-    const r = await renameMinuteFolder('pf2', '새이름')
+    const r = await renameMinuteFolder('ws-1', 'pf2', '새이름')
     expect(r.ok).toBe(false)
     expect(r.error).toBe('권한 없음')
   })
@@ -394,7 +394,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       },
     })
     createServerClient.mockResolvedValue(client)
-    const r = await deleteMinuteFolder('pf2')
+    const r = await deleteMinuteFolder('ws-1', 'pf2')
     expect(r.ok).toBe(false)
     expect(r.error).toBe('권한 없음')
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
@@ -404,8 +404,8 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
       minute_folders: { data: null, error: { message: 'db down' } },
     })
     createServerClient.mockResolvedValue(client)
-    expect((await renameMinuteFolder('f1', '새이름')).ok).toBe(false)
-    expect((await deleteMinuteFolder('f1')).ok).toBe(false)
+    expect((await renameMinuteFolder('ws-1', 'f1', '새이름')).ok).toBe(false)
+    expect((await deleteMinuteFolder('ws-1', 'f1')).ok).toBe(false)
   })
 })
 
@@ -532,26 +532,26 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
   it('미로그인은 실패 + 클라이언트 미생성', async () => {
     getSession.mockResolvedValue(null)
     getActor.mockResolvedValue(null)
-    const r = await moveMinuteFolder('f-b', null)
+    const r = await moveMinuteFolder('ws-1', 'f-b', null)
     expect(r.ok).toBe(false)
     expect(createServerClient).not.toHaveBeenCalled()
   })
   it('가드 선행조회 실패는 중단(쓰기 선행조회 원칙)', async () => {
     const { client } = fakeClient({ minute_folders: { data: null, error: { message: 'db down' } } })
     createServerClient.mockResolvedValue(client)
-    expect((await moveMinuteFolder('f-b', null)).ok).toBe(false)
+    expect((await moveMinuteFolder('ws-1', 'f-b', null)).ok).toBe(false)
   })
   it('없는 폴더는 실패', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('ghost', null)
+    const r = await moveMinuteFolder('ws-1', 'ghost', null)
     expect(r.ok).toBe(false)
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
   })
   it('팀 시드 루트는 이동 금지 — update 미도달', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-mes', 'f-a')
+    const r = await moveMinuteFolder('ws-1', 'f-mes', 'f-a')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('팀 기본 폴더')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
@@ -559,7 +559,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
   it('자손으로의 이동(순환)은 거부 — update 미도달', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-a', 'f-c')
+    const r = await moveMinuteFolder('ws-1', 'f-a', 'f-c')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('하위 폴더')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
@@ -567,7 +567,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
   it('없는 상위 폴더로의 이동은 거부', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-b', 'ghost')
+    const r = await moveMinuteFolder('ws-1', 'f-b', 'ghost')
     expect(r.ok).toBe(false)
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
   })
@@ -582,7 +582,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
     ]
     const { client, calls } = fakeClient({ minute_folders: { data: deep, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('s', 'd4')
+    const r = await moveMinuteFolder('ws-1', 's', 'd4')
     expect(r.ok).toBe(false)
     expect(r.error).toContain('5')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
@@ -594,7 +594,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
     ]
     const { client, calls } = fakeClient({ minute_folders: { data: squat, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('x', null)
+    const r = await moveMinuteFolder('ws-1', 'x', null)
     expect(r.ok).toBe(false)
     expect(r.error).toContain('팀 기본 폴더명')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
@@ -602,14 +602,14 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
   it('제자리(현재 부모) 드롭은 쓰기 없이 성공', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-b', 'f-a')
+    const r = await moveMinuteFolder('ws-1', 'f-b', 'f-a')
     expect(r.ok).toBe(true)
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
   })
   it('정상 이동은 parent_id 갱신', async () => {
     const { client, calls } = withTree()
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-c', null)
+    const r = await moveMinuteFolder('ws-1', 'f-c', null)
     expect(r.ok).toBe(true)
     const upd = calls['minute_folders']!.find(c => c.method === 'update')!
     expect(upd.args[0]).toMatchObject({ parent_id: null })
@@ -629,7 +629,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
       return builder
     })
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-c', null)
+    const r = await moveMinuteFolder('ws-1', 'f-c', null)
     expect(r.ok).toBe(false)
     expect(r.error).toContain('권한')
   })
@@ -649,7 +649,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
       return builder
     })
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('f-c', null)
+    const r = await moveMinuteFolder('ws-1', 'f-c', null)
     expect(r.ok).toBe(false)
     expect(r.error).toContain('이미')
   })
@@ -661,7 +661,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
     ]
     const { client, calls } = fakeClient({ minute_folders: { data: projTree, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await moveMinuteFolder('p1-a', 'p2-root')
+    const r = await moveMinuteFolder('ws-1', 'p1-a', 'p2-root')
     expect(r.ok).toBe(false)
     expect(r.error).toBe('다른 프로젝트 폴더로는 이동할 수 없습니다.')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
@@ -848,12 +848,12 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
     single: () => Promise.resolve({ data: { minute_id: 'm-new', version_id: 'v1', wiki_rebuild_required: false }, error: null }),
   }))
 
-  it('유일 소속 워크스페이스를 p_workspace_id 로 넘기고, 팀 루트도 그 워크스페이스의 미지정 루트에서 찾는다', async () => {
+  it('화면의 워크스페이스(인자)를 p_workspace_id 로 넘기고, 팀 루트도 그 워크스페이스의 미지정 루트에서 찾는다(D26)', async () => {
     const { client, calls } = fakeClient({ minute_folders: { data: { id: 'ws1-pmo' }, error: null } })
     createServerClient.mockResolvedValue(client)
     const rpc = rpcOk()
     adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
-    const r = await createMinute(input)
+    const r = await createMinute(input, null, undefined, 'ws-1')
     expect(r.ok).toBe(true)
     expect(rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
       p_project_id: null, p_workspace_id: 'ws-1', p_folder_id: 'ws1-pmo',
@@ -874,7 +874,7 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
     }))
   })
 
-  it('소속 워크스페이스가 둘이면 거부 — 어느 쪽인지 추측하지 않는다(RPC 미도달)', async () => {
+  it('워크스페이스 인자가 없으면 소속이 둘이어도 거부 — 어느 쪽인지 추측하지 않는다(RPC 미도달)', async () => {
     getActor.mockResolvedValue(makeMemberActor('p1', [], { workspaceRoles: new Map([['ws-1', 'member'], ['ws-2', 'member']]) }))
     createServerClient.mockResolvedValue(fakeClient({}).client)
     const r = await createMinute(input)
@@ -886,7 +886,7 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
   it('그 워크스페이스에 역할이 없으면(조회 전용) 거부 — RPC 미도달', async () => {
     getActor.mockResolvedValue(viewerActor)
     createServerClient.mockResolvedValue(fakeClient({}).client)
-    const r = await createMinute(input)
+    const r = await createMinute(input, null, undefined, 'ws-1')
     expect(r).toMatchObject({ ok: false, error: '권한 없음' })
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -894,7 +894,7 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
   it('다른 워크스페이스의 미지정 폴더를 명시하면 거부 — RPC 미도달', async () => {
     const tree = [{ id: 'ws2-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: 'ws-2' }]
     createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: tree, error: null } }).client)
-    const r = await createMinute(input, 'ws2-pmo')
+    const r = await createMinute(input, 'ws2-pmo', undefined, 'ws-1')
     expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -910,17 +910,19 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
     getActor.mockResolvedValue(viewerActor)
     const { client, calls } = fakeClient({ minute_folders: { data: seedFolders, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('하위', 'f1')
+    const r = await createMinuteFolder('ws-1', '하위', 'f1')
     expect(r).toMatchObject({ ok: false, error: '권한 없음' })
     expect(calls['minute_folders']!.some(c => c.method === 'insert')).toBe(false)
   })
 
   it('create: 다른 워크스페이스 프로젝트의 명단 권한으로는 이 워크스페이스 폴더를 못 만든다', async () => {
-    // memberActor 는 ws-1 의 p1 멤버 — 부모는 ws-2
+    // memberActor 는 ws-1 의 p1 멤버 — 부모는 ws-2. 그 화면(ws-2)은 비소속이라 존재 은닉(D26), ws-1 화면이면 부모 행이 다른 워크스페이스
     const { client, calls } = fakeClient({ minute_folders: { data: W2_TREE, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('하위', 'w2-root')
-    expect(r).toMatchObject({ ok: false, error: '권한 없음' })
+    const r = await createMinuteFolder('ws-2', '하위', 'w2-root')
+    expect(r).toMatchObject({ ok: false, error: '대상을 찾을 수 없습니다.' })
+    expect(calls['minute_folders']).toBeUndefined()
+    expect(await createMinuteFolder('ws-1', '하위', 'w2-root')).toMatchObject({ ok: false, error: '대상을 찾을 수 없습니다.' })
     expect(calls['minute_folders']!.some(c => c.method === 'insert')).toBe(false)
   })
 
@@ -928,7 +930,7 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
     getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([['ws-2', 'admin']]) }))
     const { client, calls } = fakeClient({ minute_folders: { data: W2_TREE, error: null } })
     createServerClient.mockResolvedValue(client)
-    const r = await createMinuteFolder('하위', 'w2-root')
+    const r = await createMinuteFolder('ws-2', '하위', 'w2-root')
     expect(r.ok).toBe(true)
     expect(calls['minute_folders']!.some(c => c.method === 'insert')).toBe(true)
   })
@@ -940,7 +942,7 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
     ]) {
       getActor.mockResolvedValue(actor)
       createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: W2_TREE, error: null } }).client)
-      const r = await deleteMinuteFolder('w2-sub')
+      const r = await deleteMinuteFolder('ws-2', 'w2-sub')
       expect(r.ok).toBe(false)
       expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
     }
@@ -953,7 +955,7 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
       minute_folders: { data: [], error: null }, minutes: { data: [], error: null },
     }).client)
     // 마지막 delete 는 세션 클라이언트 — W2_TREE 가 곧 1행 이상 응답이라 성공으로 판정된다
-    expect((await deleteMinuteFolder('w2-sub')).ok).toBe(true)
+    expect((await deleteMinuteFolder('ws-2', 'w2-sub')).ok).toBe(true)
   })
 })
 
@@ -1016,7 +1018,7 @@ describe('프로젝트 없는 회의록의 폴더 이동 — 워크스페이스 
     adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
     const r = await createMinute({
       minuteDate: '2026-09-26', teamCode: 'PMO', title: '제목', bodyMd: '본문', meetingId: null, projectId: null,
-    } as never)
+    } as never, null, undefined, 'ws-1')
     expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
   })
 

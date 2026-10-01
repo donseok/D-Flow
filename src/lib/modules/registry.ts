@@ -67,7 +67,7 @@ export const MODULES: readonly ModuleDef[] = [
     routePrefixes: ['/p/[projectId]/agents', '/agents'], apiPrefixes: ['/api/v1/agent', '/api/v1/wbs'] },
   { id: 'minutes', core: false, scope: 'workspace', requires: [], envAvailable: always, botDomains: ['minutes'], settings: settingsOf('minutes'),
     nav: { workspace: { id: 'ws.minutes', labelKey: 'nav.minutes', icon: 'FileText', segment: 'minutes', group: 'ws.shared', order: 20 } },
-    routePrefixes: ['/minutes'], apiPrefixes: ['/api/minutes'] },
+    routePrefixes: ['/w/[slug]/minutes', '/minutes'], apiPrefixes: ['/api/minutes'] },
   { id: 'minutes_integration', core: false, scope: 'workspace', requires: ['minutes'], envAvailable: () => minutesApiEnabled(), botDomains: [], settings: settingsOf('minutes_integration'),
     nav: null, routePrefixes: [], apiPrefixes: ['/api/v1/minutes'] },
   { id: 'chatbot', core: false, scope: 'both', requires: [], envAvailable: () => chatV2Enabled(), botDomains: [], settings: settingsOf('chatbot'),
@@ -90,7 +90,7 @@ export const CORE: ReadonlySet<ModuleId> = new Set(MODULES.filter((m) => m.core)
 
 /** 경로 이동(SP3b) 전의 전역 경로 — 페이지 관문이 워크스페이스 층 모듈을 찾는 표. SP3b 가 /w/[slug]/* 로 옮기며 지운다 */
 export const LEGACY_GLOBAL_PREFIXES = {
-  '/meetings': 'meetings', '/minutes': 'minutes', '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage',
+  '/meetings': 'meetings', '/agents': 'agents', '/portfolio': 'portfolio', '/usage': 'usage',
 } as const satisfies Record<string, ModuleId>
 
 /** 적재 단언(개정 §2.7.1) — 목록 = MODULE_IDS, core 는 requires: []·envAvailable 상수 true, requires 는 등록 id 이고 순환 없음,
