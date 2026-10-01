@@ -2,7 +2,7 @@
 // 모르는 영역의 INSERT(관리자가 방금 영역을 더해 RPC 가 이번 주 문서에 행을 넣은 경우)는 그리지 않고 새로고침을 알린다.
 import { describe, expect, it } from 'vitest'
 import {
-  applyServerRow, areaGroupOf, mergeRefreshedRows, mergeServerRow, type WeeklyArea, type WeeklyAreaRow,
+  applyServerRow, areaGroupOf, mergeRefreshedRows, mergeServerRow, type WeeklyArea, type WeeklySheetRow,
 } from '@/lib/domain/weeklySheet'
 
 const area = (id: string, name: string, sortOrder: number, active = true): WeeklyArea =>
@@ -10,7 +10,7 @@ const area = (id: string, name: string, sortOrder: number, active = true): Weekl
 const AREAS: WeeklyArea[] = [
   area('a-exp', '실험', 1), area('a-data', '데이터', 2), area('a-ops', '운영', 3), area('a-old', '구 영역', 0, false),
 ]
-const row = (id: string, areaId: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow => ({
+const row = (id: string, areaId: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
   id, reportId: 'rep', areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
 

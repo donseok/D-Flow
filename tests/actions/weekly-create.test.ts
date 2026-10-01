@@ -19,7 +19,7 @@ import { createWeeklyReport } from '@/app/actions/weekly'
 import { requireModule } from '@/lib/modules/gate'
 import { ERR_DENIED, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { ConfigUnavailableError, ERR_CONFIG_BUSY, ERR_CONFIG_UNAVAILABLE, mapDbError } from '@/lib/settings/errors'
-import { WEEKLY_CELL_MAX, type WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import { WEEKLY_CELL_MAX, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { makeAdminActor } from '../fixtures/actor'
@@ -36,9 +36,9 @@ const area = (id: string, code: string, name: string, sortOrder: number, active 
   ({ id, kind: 'weekly_section', code, name, sortOrder, active, teams: [] })
 const AREAS: ConfigArea[] = [area(A_EXP, 'EXP', '실험', 1), area(A_DATA, 'DATA', '데이터', 2), area(A_OPS, 'OPS', '운영', 3, false)]
 const cfgWith = (areas: ConfigArea[]) => makeProjectConfig({}, { projectId: P, areas: { weekly_section: areas, issue_area: [] } })
-const prev = (areaId: string, over: Partial<WeeklyAreaRow> = {}): WeeklyAreaRow =>
+const prev = (areaId: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow =>
   ({ id: `prev-${areaId}`, reportId: 'rep-prev', areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over })
-const source = (rows: WeeklyAreaRow[]) => ({ report: { id: 'rep-prev', projectId: P, weekStart: '2026-09-21', title: '' }, rows })
+const source = (rows: WeeklySheetRow[]) => ({ report: { id: 'rep-prev', projectId: P, weekStart: '2026-09-21', title: '' }, rows })
 const seedRow = (areaId: string, thisContent = '') =>
   ({ area_id: areaId, this_content: thisContent, this_issue: '', next_content: '', next_issue: '' })
 

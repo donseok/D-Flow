@@ -8,7 +8,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import {
   areaGroupOf, mergeRefreshedRows, mergeServerRow, orderAreas, rowLabel, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
   WEEKLY_CELL_LABEL, CELL_FIELD,
-  type WeeklyArea, type WeeklyAreaRow, type WeeklyCellKey, type WeeklyCellEdit,
+  type WeeklyArea, type WeeklySheetRow, type WeeklyCellKey, type WeeklyCellEdit,
 } from '@/lib/domain/weeklySheet'
 import { type CellAddr } from '@/lib/domain/sheetSelection'
 import { emptyUndo, pushUndo, undo as undoOp, redo as redoOp, type UndoState } from '@/lib/domain/sheetUndo'
@@ -41,8 +41,8 @@ const BATCH_MAX = 500    // 한 배치 최대 edit 수(BE와 동일) — 사전 
 const COLS: { key: WeeklyCellKey; label: string }[] =
   WEEKLY_CELL_KEYS.map(key => ({ key, label: WEEKLY_CELL_LABEL[key] }))
 
-/** DB 행 payload(snake) → WeeklyAreaRow. Realtime payload 매핑용(영역 id — 스펙 §4.1.7). */
-function fromRecord(r: Record<string, unknown>): WeeklyAreaRow {
+/** DB 행 payload(snake) → WeeklySheetRow. Realtime payload 매핑용(영역 id — 스펙 §4.1.7). */
+function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
   return {
     id: String(r.id), reportId: String(r.report_id), areaId: String(r.area_id ?? ''),
     thisContent: String(r.this_content ?? ''), thisIssue: String(r.this_issue ?? ''),
@@ -65,7 +65,7 @@ export function WeeklySheetView({
   /** 프로젝트의 주간 영역(비활성 포함) — 행 라벨·실시간 병합의 순서·빈 시트 설명이 쓴다. */
   areas: WeeklyArea[]
   /** 페이지가 visibleRows 로 정한 표시 집합과 순서(D32). */
-  initialRows: WeeklyAreaRow[]
+  initialRows: WeeklySheetRow[]
   hasCarrySource: boolean
   me: { id: string; name: string } | null // 프레즌스 신원 — 서버(getSession)에서 전달
   /** 셀·제목 편집 자격 = isProjectMember. saveWeeklyCell(s)·saveWeeklyTitle 의 requireProjectMember 미러. */
@@ -75,7 +75,7 @@ export function WeeklySheetView({
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [rows, setRows] = useState<WeeklyAreaRow[]>(initialRows)
+  const [rows, setRows] = useState<WeeklySheetRow[]>(initialRows)
   const [lintOpen, setLintOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiBusy, setAiBusy] = useState(false)

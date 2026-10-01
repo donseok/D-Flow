@@ -1,4 +1,4 @@
-import { UNKNOWN_AREA_LABEL, visibleRows, type WeeklyArea, type WeeklyAreaRow } from '@/lib/domain/weeklySheet'
+import { UNKNOWN_AREA_LABEL, visibleRows, type WeeklyArea, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 
 /* ============================================================================
  * 주간업무 시트 → PPT 변환(순수). 스펙 §6.
@@ -47,9 +47,9 @@ function joinCells(parts: string[][]): string[] {
 /** 시트 rows → 영역별 4셀 묶음(스펙 §4.1.4). 페이지 = 보이는 행(visibleRows — 활성 영역의 행(영역 순) → 내용 있는 비활성 영역의 행)의
  *  영역 묶음이다. 고정 구분 페이지·"시트에 없는 영역의 빈 페이지"는 없다 — 그 문서에 행이 있는 영역만(W17·E31).
  *  같은 영역에 여러 행이 있으면(옛 데이터) 입력 순으로 이어붙인다. 점검(weeklyLint)도 같은 키(영역 id)로 묶는다(D22). */
-export function buildSheetSections(rows: readonly WeeklyAreaRow[], areas: readonly WeeklyArea[]): SheetSectionCells[] {
+export function buildSheetSections(rows: readonly WeeklySheetRow[], areas: readonly WeeklyArea[]): SheetSectionCells[] {
   const order: string[] = []
-  const byArea = new Map<string, WeeklyAreaRow[]>()
+  const byArea = new Map<string, WeeklySheetRow[]>()
   for (const r of visibleRows(rows, areas)) {
     const own = byArea.get(r.areaId)
     if (own) own.push(r)

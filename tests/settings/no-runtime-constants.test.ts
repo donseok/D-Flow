@@ -27,4 +27,10 @@ describe('no-runtime-constants', () => {
   it('DEFAULT_TEAMS 는 이미 0건이다(tests/invariants/no-default-teams 와 겹치지만 재도입을 여기서도 막는다)', () => {
     expect([...actual.values()].some((h) => h.includes('DEFAULT_TEAMS'))).toBe(false)
   })
+
+  it('SP4 가 지운 주간 상수는 허용 항목 없는 영구 가드다 — 어느 파일에도 없고 목록에도 없다(스펙 §4.8)', () => {
+    const weekly: RuntimeConstantPattern[] = ['WEEKLY_SECTIONS', 'WEEKLY_TEAM_SECTIONS', 'FALLBACK_SECTION']
+    expect(Object.entries(ALLOW).filter(([, a]) => a.patterns.some((p) => weekly.includes(p))).map(([f]) => f)).toEqual([])
+    expect([...actual].filter(([, hits]) => hits.some((p) => weekly.includes(p))).map(([f]) => f)).toEqual([])
+  })
 })

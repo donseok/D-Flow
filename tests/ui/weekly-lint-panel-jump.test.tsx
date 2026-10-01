@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { WeeklyLintPanel } from '@/components/weekly/WeeklyLintPanel'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { LegacySectionRow } from '../helpers/legacySectionRows'
 import { legacyGroup } from '../helpers/weekly-legacy'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const row: WeeklySheetRow = {
+const row: LegacySectionRow = {
   id: 'r1', reportId: 'rep', section: 'PMO', module: '', sortOrder: 1,
   thisContent: '가\n가', thisIssue: '', nextContent: '', nextIssue: '',
 }

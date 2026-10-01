@@ -5,16 +5,17 @@ import {
   lintNumbering as lintNumberingBy, lintFormat as lintFormatBy, lintWeeklySheet as lintWeeklySheetBy,
   type LintGroupOf,
 } from '@/lib/domain/weeklyLint'
-import type { WeeklyCells, WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyCells } from '@/lib/domain/weeklySheet'
+import type { LegacySectionRow } from '../helpers/legacySectionRows'
 import { legacyGroup, legacyOrdered } from '../helpers/weekly-legacy'
 
-// 규칙은 묶음 함수(groupOf)를 받고 행을 입력 순서로 본다(SP4 과제 21). 아래 옛 구분 행 케이스는 옛 동작(sortWeeklyRows 순 +
-// sectionKeyOf 묶음)으로 그대로 돌린다 — 과제 25 가 영역 행·합성 이름으로 바꾸며 이 래퍼를 지운다.
-const lintDuplicates = (rows: WeeklySheetRow[]) => lintDuplicatesBy(legacyOrdered(rows), legacyGroup)
-const lintNearDuplicates = (rows: WeeklySheetRow[]) => lintNearDuplicatesBy(legacyOrdered(rows), legacyGroup)
-const lintNumbering = (rows: WeeklySheetRow[]) => lintNumberingBy(legacyOrdered(rows), legacyGroup)
-const lintFormat = (rows: WeeklySheetRow[]) => lintFormatBy(legacyOrdered(rows), legacyGroup)
-const lintWeeklySheet = (rows: WeeklySheetRow[]) => lintWeeklySheetBy(legacyOrdered(rows), legacyGroup)
+// 규칙은 묶음 함수(groupOf)를 받고 행을 입력 순서로 본다(SP4 과제 21). 아래 옛 구분 행 케이스는 옛 동작(legacySortRows 순 +
+// legacySectionKey 묶음 — 테스트 전용 사본 tests/helpers/legacySectionRows.ts)으로 그대로 돌린다. 런타임에는 이 규칙이 없다.
+const lintDuplicates = (rows: LegacySectionRow[]) => lintDuplicatesBy(legacyOrdered(rows), legacyGroup)
+const lintNearDuplicates = (rows: LegacySectionRow[]) => lintNearDuplicatesBy(legacyOrdered(rows), legacyGroup)
+const lintNumbering = (rows: LegacySectionRow[]) => lintNumberingBy(legacyOrdered(rows), legacyGroup)
+const lintFormat = (rows: LegacySectionRow[]) => lintFormatBy(legacyOrdered(rows), legacyGroup)
+const lintWeeklySheet = (rows: LegacySectionRow[]) => lintWeeklySheetBy(legacyOrdered(rows), legacyGroup)
 
 describe('normalizeForCompare', () => {
   it('앞뒤 공백·연속 공백을 정리한다', () => {
@@ -64,7 +65,7 @@ describe('normalizeForCompare', () => {
   })
 })
 
-const mkRow = (id: string, section: string, sortOrder: number, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow => ({
+const mkRow = (id: string, section: string, sortOrder: number, over: Partial<LegacySectionRow> = {}): LegacySectionRow => ({
   id, reportId: 'rep', section, module: '', sortOrder,
   thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over,
 })
