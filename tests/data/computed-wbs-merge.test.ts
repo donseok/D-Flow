@@ -1,21 +1,22 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-type QueryResponse = { data: unknown; error: unknown }
+type QueryResponse = { data: unknown; error: unknown; count?: number | null }
 
 const responses: Record<string, QueryResponse> = {}
 
 function queryBuilder(response: QueryResponse) {
   const builder: Record<string, unknown> = {}
-  for (const method of ['select', 'eq', 'in', 'order', 'maybeSingle']) {
+  for (const method of ['select', 'eq', 'in', 'order', 'range', 'maybeSingle']) {
     builder[method] = vi.fn(() => builder)
   }
   for (const method of ['insert', 'upsert', 'update', 'delete']) {
     builder[method] = vi.fn(() => { throw new Error(`write attempted: ${method}`) })
   }
+  const count = response.count !== undefined ? response.count : Array.isArray(response.data) ? response.data.length : null
   builder.then = (
     resolve: (value: QueryResponse) => unknown,
     reject: (reason: unknown) => unknown,
-  ) => Promise.resolve(response).then(resolve, reject)
+  ) => Promise.resolve({ ...response, count }).then(resolve, reject)
   return builder
 }
 
@@ -109,5 +110,20 @@ describe('getComputedWbs — 의존성 두 축 병합', () => {
     responses.task_dependencies = { data: null, error: { message: 'boom' } }
 
     await expect(getComputedWbs('p4')).rejects.toThrow('task_dependencies 조회 실패')
+  })
+
+  it('담당은 { team, kind }[] 이고 주관이 먼저다 — 끝까지 읽기로 바꿔도 WbsRow.owners 계약은 그대로(스펙 §4.8)', async () => {
+    responses.wbs_items = { data: [item({ id: 'i1', code: 'A' })], error: null }
+    responses.item_owners = {
+      data: [
+        { wbs_item_id: 'i1', team_id: 't-ops', kind: 'support', teams: { code: 'OPS' }, wbs_items: { project_id: 'p5' } },
+        { wbs_item_id: 'i1', team_id: 't-res', kind: 'primary', teams: { code: 'RES' }, wbs_items: { project_id: 'p5' } },
+      ],
+      error: null,
+    }
+
+    const { items } = await getComputedWbs('p5')
+
+    expect(items.find(i => i.id === 'i1')?.owners).toEqual([{ team: 'RES', kind: 'primary' }, { team: 'OPS', kind: 'support' }])
   })
 })
