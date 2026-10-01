@@ -41,6 +41,9 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
     const url = `/api/nav/switch-target?project=${encodeURIComponent(p.id)}&path=${encodeURIComponent(pathname)}&query=${encodeURIComponent(query)}`
     try {
       const res = await fetch(url, { cache: 'no-store' })
+      // 404 = 숨김·워크스페이스 밖(존재 은닉) — 설정 판독 실패로 알리지 않고 이동하지 않는다. 401 = 세션 만료 → 로그인(Z8)
+      if (res.status === 404) { toast({ title: '이 프로젝트를 열 수 없습니다', variant: 'info' }); return }
+      if (res.status === 401) { router.push('/login'); return }
       if (!res.ok) throw new Error(`switch-target ${res.status}`)
       const body = (await res.json()) as { href: string; fallbackModule: ModuleId | null; degraded?: true }
       router.push(body.href)
@@ -59,7 +62,7 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)) }
     else if (e.key === 'Home') { e.preventDefault(); setOpen(true); setActive(0) }
     else if (e.key === 'End') { e.preventDefault(); setOpen(true); setActive(last) }
-    else if (e.key === 'Enter') { e.preventDefault(); const hit = flat[open ? active : 0]; if (hit) void choose(hit.p) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!open) { setOpen(true); return } const hit = flat[active]; if (hit) void choose(hit.p) }
     else if (e.key === 'Escape') { if (open) e.stopPropagation(); setOpen(false) }
   }
   let n = -1

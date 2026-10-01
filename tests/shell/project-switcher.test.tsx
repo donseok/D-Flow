@@ -82,4 +82,24 @@ describe('ProjectSwitcher(★6, D41)', () => {
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(input.getAttribute('aria-expanded')).toBe('false')
   })
+  it('Z8 — 전환 라우트 404(숨김·워크스페이스 밖)면 이동하지 않고 "이 프로젝트를 열 수 없습니다", 401 이면 로그인으로', async () => {
+    fetchMock().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
+    render(<ProjectSwitcher currentProjectId="p1" projects={projects} favoriteIds={[]} recentIds={[]} />)
+    const input = screen.getByRole('combobox') as HTMLInputElement
+    fireEvent.focus(input); fireEvent.change(input, { target: { value: 'Bor' } }); fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: '이 프로젝트를 열 수 없습니다' })))
+    expect(h.push).not.toHaveBeenCalled()
+    fetchMock().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) })
+    fireEvent.focus(input); fireEvent.change(input, { target: { value: 'Bo' } }); fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(h.push).toHaveBeenCalledWith('/login'))
+  })
+  it('Z11 — 닫힌 상태의 Enter 는 목록을 열기만 한다(보이지 않는 첫 후보로 전환하지 않는다)', () => {
+    render(<ProjectSwitcher currentProjectId="p1" projects={projects} favoriteIds={['p3']} recentIds={[]} />)
+    const input = screen.getByRole('combobox') as HTMLInputElement
+    fireEvent.focus(input); fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(fetchMock()).not.toHaveBeenCalled(); expect(input.getAttribute('aria-expanded')).toBe('true')
+  })
 })
+
