@@ -92,7 +92,8 @@ async function main() {
   const admin = session('admin')
   const me = await admin.login(email, password)
   const svc = createClient(adminEnv.url, adminEnv.serviceRoleKey, { auth: { persistSession: false } })
-  const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12)
+  // 초 단위 + 무작위 꼬리 — 슬러그·계정 이메일이 같은 분에 다시 돌려도 겹치지 않는다
+  const stamp = `${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${randomUUID().slice(0, 4)}`
   step('login', { userId: me.id })
 
   // ── 워크스페이스 R·C·B — 행만 service_role(로컬 전용, 생성 화면은 SP3). 이름은 합성이고 실행마다 새 슬러그라 다시 돌려도 겹치지 않는다.
