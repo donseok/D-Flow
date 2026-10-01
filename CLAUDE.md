@@ -130,9 +130,12 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
-- **주간 영역·주간 문서 생성·WBS 가져오기·상속 공용 팀 전환도 RLS 쓰기 정책이 없다**(SP4). 쓰기는 service_role 만 실행하는 DEFINER RPC
-  (`upsert_project_area`·`create_weekly_report`·`import_wbs_cmd`·`convert_inherited_teams`)이고, RLS 대신 **RPC 안에서 행위자 등급을 다시
+- **주간 영역·주간 문서 생성·상속 공용 팀 전환은 RLS 쓰기 정책이 없다**(SP4). 쓰기는 service_role 만 실행하는 DEFINER RPC
+  (`upsert_project_area`·`create_weekly_report`·`convert_inherited_teams`)이고, RLS 대신 **RPC 안에서 행위자 등급을 다시
   판정한다**(`actor_is_project_admin(p_actor, …)` — 액션 가드와 두 관문). 세션의 영역·주간 구조 쓰기 길은 닫혀 있다(열 권한은 주간 행 네 칸·문서 제목뿐).
+  **WBS 가져오기**의 앱 경로도 같은 꼴의 `import_wbs_cmd`(DEFINER·service_role, 등급 재판정·영수증·멱등)지만, 옛 `import_wbs`·`replace_wbs` 는
+  INVOKER 로 **authenticated 실행권이 남아 있다** — 세션의 프로젝트 관리자는 PostgREST 로 직접 가져올 수 있고(RLS `wbs_items`·`item_owners`·
+  `holidays` 쓰기 정책이 관문, 영수증·사전 백업·전환 없음), 그 실행권 회수는 SP4 스펙 §9 의 이월(SP9 출시 점검)이다. "가져오기는 RPC 한 길"로 가정하지 않는다.
 - `p_actor` 를 받는 RPC 에는 **가드 결과의 `actor.userId` 만** 넘긴다(`const g = await require*(…)` → `g.actor.userId`, 같은 파일 도우미로
   넘기면 한 단계까지 추적). 그 밖의 출처(에이전트 토큰 행위자 등)는 `tests/invariants/rpc-actor-source.test.ts` 의 닫힌 목록에 사유와 함께 적는다.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
