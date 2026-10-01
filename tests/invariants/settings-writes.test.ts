@@ -72,6 +72,7 @@ const RUN_WBS_IMPORT_CALL = /\brunWbsImport\s*(?:\?\.)?\s*\(/g
 const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
+  'src/lib/modules/effectiveMany.ts': { tables: ['project_settings'], refs: 1, why: '여러 프로젝트의 모듈 판정(SP3b D39) — values 를 in() 끝까지 select 로 읽어 해석기의 resolveKeys 로 판정(쓰기 없음, effectiveModules 와 동치 테스트)' },
   'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC(머리 주석의 백틱 이름도 원문 검사라 센다)' },
   'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24·SP4 D48 의 latestKeyChange) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
