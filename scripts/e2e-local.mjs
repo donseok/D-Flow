@@ -13,6 +13,10 @@
 //   SP3a: A 의 설정을 updateProjectSettings 로 바꿔 이력(전·후·행위자)과 같은 명령 재전송의 duplicate 를 보고, A 를 원본으로 복사
 //        생성해 이력이 copy/copied_from 인지 본다(2a·2b). 워크스페이스 B 의 modules.allowed 는 만든 직후 비core 13개로 기록한다.
 //   SP3a B: render-pages 뒤 A 의 issues·agents·chatbot 과 워크스페이스의 minutes_integration 을 끄고 화면·액션·외부 API·색인 워커의 관문을 본다.
+//   SP4 A1: 기존 import 두 단계는 명령 id(commandId)를 싣고 replace 앞에 사전 백업(getWbsBackup)을 받는다. minutes-api-scope 뒤·render-pages 앞에서
+//        B 의 주간 영역 0개 → CONFIG_REQUIRED, 영역(실험·운영)·주차 셋·이월 대기 → 매핑·개명·추가(W17), B 의 시트 PPT·기본 보고서 둘의 센티널 0·
+//        임베드, A 의 등록 이름 영역, 새 프로젝트 I 의 가져오기 멱등(같은 명령 id 2회 = 1벌, 다른 내용 422), 상속 프로젝트 D 의 미등록 팀 →
+//        409 → 전환·등록. render-pages 는 B 의 주간·설정 화면을 더하고 B 주간 HTML 의 센티널을 기록한다(스펙 §6.3 — 단계는 이름으로 부른다).
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 npm run dev 가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
@@ -21,7 +25,7 @@
 //   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,6 +39,11 @@ import {
   notFoundRendered, pageProblems, presentTexts, redactInviteTokens, rosterPlan, rosterView, signupInput, teamIdsByCode, toCell,
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
+import {
+  E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso,
+  pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs,
+} from './lib/e2e.mjs'
+import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
@@ -89,6 +98,10 @@ const ACTIONS = {
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
   setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/admin/accounts/page' },
   listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
+  createWeeklyReport: { filename: 'src/app/actions/weekly.ts', exportedName: 'createWeeklyReport', worker: '/p/[projectId]/weekly/page' },
+  saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
+  upsertArea: { filename: 'src/app/actions/projectAreas.ts', exportedName: 'upsertArea', worker: '/p/[projectId]/settings/page' },
+  getWbsBackup: { filename: 'src/app/actions/importBackup.ts', exportedName: 'getWbsBackup', worker: '/p/[projectId]/import/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -128,8 +141,6 @@ function same(what, actual, expected) {
   }
 }
 
-const xlsxBlob = (buf) => new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-const seoulToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 const ROSTER_SELECT = 'id, access_role, people!inner(display_name, email, user_id), project_member_teams(is_primary, teams(code))'
 
 async function main() {
@@ -265,28 +276,22 @@ async function main() {
   writeFileSync(join(outDir, 'wbs-filled.xlsx'), filled)
   step('fill-template', { rows: wbsRows.length, team, file: join(outDir, 'wbs-filled.xlsx') })
 
-  const inspectForm = new FormData()
-  inspectForm.append('file', xlsxBlob(filled), 'wbs-filled.xlsx')
-  inspectForm.append('projectId', A.id)
-  const inspected = await (await admin.http('POST', '/api/import/inspect', { body: inspectForm })).json()
+  const inspected = await (await admin.http('POST', '/api/import/inspect', {
+    body: inspectForm({ file: filled, fileName: 'wbs-filled.xlsx', projectId: A.id }),
+  })).json()
   const profileDetected = inspected.detection.profile
   step('import-inspect', { hierarchy: profileDetected.hierarchy, teamColumns: profileDetected.teamColumns, warnings: inspected.detection.warnings })
 
-  const execute = async (mode) => {
-    const form = new FormData()
-    form.append('file', xlsxBlob(filled), 'wbs-filled.xlsx')
-    form.append('projectId', A.id)
-    form.append('profile', JSON.stringify(profileDetected))
-    form.append('mode', mode)
-    form.append('saveProfile', 'true')
-    form.append('registerTeams', 'false') // 3 단계에서 만든 프로젝트 팀이 이미 있어야 한다 — 409(needsTeams)면 실패
+  const execute = async (mode, commandId) => {
+    // ImportWizard 와 같은 폼 필드·기본값(append, saveProfile)에 명령 id(스펙 §4.4 #1 — SP4 A1). 3 단계에서 만든 프로젝트 팀이 이미 있어야 한다 — 409(needsTeams)면 실패
+    const form = importForm({ file: filled, fileName: 'wbs-filled.xlsx', projectId: A.id, profile: profileDetected, mode, commandId, saveProfile: true, registerTeams: false })
     try {
       return (await admin.http('POST', '/api/import/execute', { body: form })).json()
     } catch (e) {
-      // 팀 마스터 캐시(src/lib/teams/master.ts)는 모듈 인스턴스마다 따로이고 TTL(60초)이 지나면 첫 읽기가 옛 값을 돌려준다 —
-      // 임포트 라우트가 팀 생성 전에 이미 로드돼 있었으면(같은 dev 서버로 재실행) 방금 만든 프로젝트 팀을 못 본다. 재시도로 덮지 않는다.
+      // 가져오기 라우트의 팀 대조는 요청 범위 원천(src/lib/teams/source.ts — 캐시 없음, SP4 A1)이다. 3 단계에서 만든 팀을 못 봤다면 결함이다 —
+      // 재시도로 덮지 않는다.
       if (e instanceof Fail && e.message.includes('→ 409') && e.message.includes('needsTeams')) {
-        throw new Fail(`${e.message} — 임포트 라우트의 팀 캐시가 3 단계에서 만든 팀을 못 봤다(모듈 인스턴스별 캐시·TTL). dev 서버를 새로 띄워 처음부터 다시 돌린다`)
+        throw new Fail(`${e.message} — 가져오기 라우트가 3 단계에서 만든 프로젝트 팀을 못 봤다(요청 범위 팀 원천 — 캐시 없음). 결함으로 보고한다`)
       }
       throw e
     }
@@ -300,14 +305,23 @@ async function main() {
     if (owned.length !== expectOwned) throw new Fail(`팀 ${team} 담당 행이 ${owned.length}건(기대 ${expectOwned})`)
     return data
   }
-  const appended = await execute('append')
-  step('import-append', { response: appended, items: await importedItems() })
+  const appendCmd = randomUUID()
+  const appended = await execute('append', appendCmd)
+  if (appended.kind !== 'applied' || appended.commandId !== appendCmd) throw new Fail(`append 결과 종류·명령 id: ${JSON.stringify(importResultView(appended))}`)
+  step('import-append', { commandId: appendCmd, response: appended, items: await importedItems() })
 
-  // replace — 같은 파일로 트리를 통째로 갈아 끼운다. 백업은 교체 전 5행이어야 하고, 교체 뒤에도 5행이다(중복 없음).
-  const replaced = await execute('replace')
+  // replace — 마법사처럼 실행 전에 사전 백업을 받는다(getWbsBackup — D50). 같은 파일로 트리를 통째로 갈아 끼운다. 사전 백업과 라우트 응답의 백업은
+  // 교체 전 5행이어야 하고, 교체 뒤에도 5행이다(중복 없음). 명령 id 는 append 와 다른 새 의도다.
+  await admin.http('GET', `/p/${A.id}/import`)
+  const preBackup = mustOk('getWbsBackup', (await admin.action(`/p/${A.id}/import`, 'getWbsBackup', [A.id])).result).backup
+  if (preBackup.rows.length !== wbsRows.length) throw new Fail(`사전 백업이 ${preBackup.rows.length}행(기대 ${wbsRows.length})`)
+  const replaceCmd = randomUUID()
+  const replaced = await execute('replace', replaceCmd)
+  if (replaced.kind !== 'applied' || replaced.commandId !== replaceCmd) throw new Fail(`replace 결과 종류·명령 id: ${JSON.stringify(importResultView(replaced))}`)
   if (replaced.backup?.rows?.length !== wbsRows.length) throw new Fail(`replace 백업이 ${replaced.backup?.rows?.length}행(기대 ${wbsRows.length})`)
   const items = await importedItems()
   step('import-replace', {
+    commandId: replaceCmd, preBackup: { rows: preBackup.rows.length, generatedAt: preBackup.generatedAt },
     response: { ...replaced, backup: { rows: replaced.backup.rows.length, generatedAt: replaced.backup.generatedAt } },
     items,
   })
@@ -694,6 +708,239 @@ async function main() {
   const hiddenMeetings = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}&project_id=${A2.id}`, 404)
   step('minutes-api-scope', { ...api18, unknownUser: { status: 403, code: unknown.code }, beaMeetingsOfA2: { status: 404, body: hiddenMeetings } })
 
+  // ── 18b. SP4 A1(스펙 §6.3 — 단계는 이름으로 부른다, Q7). render-pages 앞이다 — 그 단계가 B 의 주간·설정 화면을 영역이 든 상태로 렌더한다.
+  //    주 키는 앱이 정한다(mondayIso — W30): 러너는 날짜(오늘·±7일)를 넘기고 week_start 는 DB 에서 다시 읽는다.
+  const today = seoulToday()
+  const { exp, run, fresh } = E2E_AREAS
+  const bTeam = { code: SP1_TEAMS.B[0], id: teamIds.B[0] }
+  const weeklyRowsOf = async (reportId) => rows('주간 행', await admin.sb.from('weekly_report_rows')
+    .select('id, area_id, this_content, this_issue, next_content, next_issue').eq('report_id', reportId).order('id'))
+  const weekStartOf = async (reportId) => rows('주간 문서', await admin.sb.from('weekly_reports').select('week_start').eq('id', reportId).single()).week_start
+  const rowFor = (list, areaId) => {
+    const r = list.find((x) => x.area_id === areaId)
+    if (!r) throw new Fail(`영역 ${areaId} 의 주간 행이 없다`)
+    return r
+  }
+  const createWeek = async (p, dateIso, carry, mapping) => (await admin.action(`/p/${p.id}/weekly`, 'createWeeklyReport',
+    mapping === undefined ? [p.id, dateIso, carry] : [p.id, dateIso, carry, mapping])).result
+  const saveCells = async (p, edits) => mustOk('saveWeeklyCells', (await admin.action(`/p/${p.id}/weekly`, 'saveWeeklyCells', [p.id, edits])).result)
+  const putArea = async (p, input) => mustOk(`upsertArea(${input.code})`, (await admin.action(`/p/${p.id}/settings`, 'upsertArea', [p.id, input])).result)
+  const fetchZip = async (path, file) => {
+    const buf = Buffer.from(await (await admin.http('GET', path)).arrayBuffer())
+    writeFileSync(join(outDir, file), buf)
+    return { path, file, bytes: buf.length, entries: await zipTextParts(buf) }
+  }
+
+  // weekly-areas-required — B(SP1 팀 하나, 사용자 정의 이름만)에 주간 영역이 0개면 문서를 만들지 않는다(W1·W14)
+  await admin.http('GET', `/p/${B.id}/weekly`)
+  const bAreas0 = rows('B 주간 영역', await admin.sb.from('project_areas').select('id').eq('project_id', B.id).eq('kind', 'weekly_section'))
+  const required = await createWeek(B, today, false)
+  const bDocs0 = rows('B 주간 문서', await admin.sb.from('weekly_reports').select('id').eq('project_id', B.id))
+  step('weekly-areas-required', { projectId: B.id, team: bTeam.code, areasBefore: bAreas0.length, result: required, documents: bDocs0.length },
+    bAreas0.length !== 0 || required?.ok !== false || required.code !== 'CONFIG_REQUIRED' || bDocs0.length !== 0
+      ? `영역 0개의 주간 생성: ${JSON.stringify({ areas: bAreas0.length, required, documents: bDocs0.length })}` : undefined)
+
+  // weekly-carry-mapping — 영역 '실험'(B 팀 주)·'운영' → W0(지난주)·W1(이번 주) → W1 차주 계획 → '운영' 비활성(내용 있음) → W2(다음 주) 이월은
+  // CARRY_PENDING(문서 없음) → 매핑 {운영 → 실험} 재요청 → '실험' 개명 → 새 영역 '신규'(이번 주 이후 문서 W1·W2 에만 행 — W17)
+  await admin.http('GET', `/p/${B.id}/settings`)
+  const bTeamIds = new Map([[bTeam.code, bTeam.id]])
+  const expDef = { ...exp, sortOrder: 1, teams: [[bTeam.code, 'primary']] }
+  const runDef = { ...run, sortOrder: 2, teams: [] }
+  const freshDef = { ...fresh, sortOrder: 3, teams: [] }
+  const expArea = await putArea(B, areaInput(expDef, bTeamIds))
+  const runArea = await putArea(B, areaInput(runDef, bTeamIds))
+  const w0 = mustOk('W0 생성', await createWeek(B, shiftDays(today, -7), false))
+  const w1 = mustOk('W1 생성', await createWeek(B, today, false))
+  const w1Initial = await weeklyRowsOf(w1.reportId)
+  const carryOwn = 'carry-own-1'
+  const carryMapped = 'carry-mapped-1'
+  const carryIssue = 'carry-mapped-issue'
+  await saveCells(B, [
+    { rowId: rowFor(w1Initial, expArea.id).id, cellKey: 'next_content', content: carryOwn },
+    { rowId: rowFor(w1Initial, runArea.id).id, cellKey: 'next_content', content: carryMapped },
+    { rowId: rowFor(w1Initial, runArea.id).id, cellKey: 'next_issue', content: carryIssue },
+  ])
+  const w1Saved = await weeklyRowsOf(w1.reportId)
+  const deactivated = await putArea(B, areaInput(runDef, bTeamIds, { id: runArea.id, active: false }))
+  const pending = await createWeek(B, shiftDays(today, 7), true)
+  const docsAfterPending = rows('B 주간 문서', await admin.sb.from('weekly_reports').select('id').eq('project_id', B.id)).length
+  const w2 = mustOk('W2 매핑 재요청', await createWeek(B, shiftDays(today, 7), true, { [runArea.id]: expArea.id }))
+  const w2Rows = await weeklyRowsOf(w2.reportId)
+  const w1AfterCarry = await weeklyRowsOf(w1.reportId)
+  const renamed = await putArea(B, areaInput(expDef, bTeamIds, { id: expArea.id, name: exp.renamed }))
+  const w2AfterRename = await weeklyRowsOf(w2.reportId)
+  const freshArea = await putArea(B, areaInput(freshDef, bTeamIds))
+  const freshRows = rows('신규 영역 행', await admin.sb.from('weekly_report_rows').select('report_id').eq('area_id', freshArea.id))
+  const bAreaRows = rows('B 영역', await admin.sb.from('project_areas').select('id, code, name, active').eq('project_id', B.id).eq('kind', 'weekly_section'))
+  const weeks = { w0: await weekStartOf(w0.reportId), w1: await weekStartOf(w1.reportId), w2: await weekStartOf(w2.reportId) }
+  const expW2 = rowFor(w2Rows, expArea.id)
+  const carryCheck = {
+    pending: pending?.ok === false && pending.code === 'CARRY_PENDING' && (pending.overflow ?? []).length === 0
+      && JSON.stringify((pending.pending ?? []).map((p) => [p.areaId, p.cells])) === JSON.stringify([[runArea.id, ['nextContent', 'nextIssue']]]),
+    noDocumentWhilePending: docsAfterPending === 2,
+    twoContents: expW2.this_content === carriedText(carryOwn, carryMapped) && expW2.this_issue === carriedText('', carryIssue)
+      && expW2.next_content === '' && expW2.next_issue === '',
+    w2ActiveOnly: w2Rows.length === 1,
+    w1Unchanged: JSON.stringify(w1AfterCarry) === JSON.stringify(w1Saved),
+    renameSameArea: renamed.id === expArea.id && renamed.status === 'updated'
+      && JSON.stringify(bAreaRows.filter((a) => a.code === exp.code).map((a) => [a.id, a.name])) === JSON.stringify([[expArea.id, exp.renamed]]),
+    renameSameCells: JSON.stringify(w2AfterRename) === JSON.stringify(w2Rows),
+    freshOnlyFromThisWeek: freshArea.status === 'created' && freshArea.rowsAdded === 2
+      && JSON.stringify(freshRows.map((r) => r.report_id).sort()) === JSON.stringify([w1.reportId, w2.reportId].sort()),
+    mondayKeys: isMondayIso(weeks.w0) && shiftDays(weeks.w0, 7) === weeks.w1 && shiftDays(weeks.w1, 7) === weeks.w2,
+  }
+  step('weekly-carry-mapping', {
+    projectId: B.id, areas: { exp: expArea.id, run: runArea.id, fresh: freshArea.id }, reports: { w0: w0.reportId, w1: w1.reportId, w2: w2.reportId },
+    weeks, deactivated: deactivated.status, pending: pending?.pending ?? null, w2Exp: { thisContent: expW2.this_content, thisIssue: expW2.this_issue },
+    freshRows: freshRows.length, checks: carryCheck,
+  }, Object.values(carryCheck).every(Boolean) ? undefined : `이월·매핑·개명·추가: ${JSON.stringify(carryCheck)}`)
+
+  // weekly-outputs — B 의 W2 시트 PPT·기본 갈래 주간 보고서 둘(xlsx·pptx)의 텍스트 파트에 SP4 센티널 0(부정 테스트 1 의 봇 밖 — §6.4 의 일치 규칙,
+  // 등록 이름은 같은 문자열만 뺀다), 시트 PPT 장 수 = 표지 + 보이는 영역, 임베드 PGRST201 0(W21 — 주간 행 → 문서 FK 는 하나다)
+  const bRegistered = [bTeam.code, ...[exp, run, fresh].flatMap((a) => [a.code, a.name]), exp.renamed]
+  const bSentinels = excludeRegistered(sp4Sentinels(), bRegistered)
+  const outputs = [
+    await fetchZip(`/api/report?projectId=${B.id}&source=sheet&format=pptx&week=${weeks.w2}`, 'weekly-b-w2.pptx'),
+    await fetchZip(`/api/report?projectId=${B.id}&format=xlsx`, 'report-b.xlsx'),
+    await fetchZip(`/api/report?projectId=${B.id}&format=pptx`, 'report-b.pptx'),
+  ]
+  const sheetEntries = outputs[0].entries
+  const embed = await admin.sb.from('weekly_reports').select('id, weekly_report_rows(count)').eq('project_id', B.id)
+  const rowCounts = Object.fromEntries((embed.data ?? []).map((r) => [r.id, r.weekly_report_rows?.[0]?.count ?? null]))
+  const outCheck = {
+    slides: slideCount(sheetEntries.map((e) => e.name)) === 1 + 2,   // 표지 + 보이는 영역 둘(개명한 실험·신규) — 운영은 W2 에 행이 없다
+    visibleNames: presentTexts(pptText(sheetEntries), [exp.renamed, fresh.name]).length === 2,
+    sentinels: outputs.every((o) => sentinelReport(o.entries, bSentinels).length === 0),
+    embed: !embed.error,
+    rowCounts: JSON.stringify([rowCounts[w0.reportId], rowCounts[w1.reportId], rowCounts[w2.reportId]]) === JSON.stringify([2, 3, 2]),
+  }
+  step('weekly-outputs', {
+    outputs: outputs.map((o) => ({ path: o.path, file: o.file, bytes: o.bytes, parts: o.entries.length, sentinelHits: sentinelReport(o.entries, bSentinels) })),
+    slides: slideCount(sheetEntries.map((e) => e.name)), embedError: embed.error?.code ?? null, rowCounts, checks: outCheck,
+  }, Object.values(outCheck).every(Boolean) ? undefined : `주간 출력: ${JSON.stringify(outCheck)}`)
+
+  // weekly-registered-names — A(SP1 팀 둘 — 옛 팀 코드와 같은 이름)에 옛 기본값과 같은 이름의 영역(첫 팀 주) → 주차·시트 PPT. 스스로 등록한 이름은
+  // 나와야 하고(부정 테스트 2) 다른 센티널은 0. 봇 필터 패리티는 단위 테스트(W18 — E2E 는 LLM 플래너에 기대지 않는다)
+  await admin.http('GET', `/p/${A.id}/settings`)
+  const aTeamIds = new Map(SP1_TEAMS.A.map((code, i) => [code, teamIds.A[i]]))
+  const sales = await putArea(A, areaInput({ ...REGISTERED_AREA, sortOrder: 1, teams: [[SP1_TEAMS.A[0], 'primary']] }, aTeamIds))
+  await admin.http('GET', `/p/${A.id}/weekly`)
+  const aWeek = mustOk('A 주차 생성', await createWeek(A, today, false))
+  const aRows = await weeklyRowsOf(aWeek.reportId)
+  await saveCells(A, [{ rowId: rowFor(aRows, sales.id).id, cellKey: 'this_content', content: 'registered-name check' }])
+  const aPpt = await fetchZip(`/api/report?projectId=${A.id}&source=sheet&format=pptx&week=${await weekStartOf(aWeek.reportId)}`, 'weekly-a.pptx')
+  const aRegistered = [...SP1_TEAMS.A, REGISTERED_AREA.code, REGISTERED_AREA.name]
+  const regCheck = {
+    created: sales.status === 'created' && aWeek.status === 'created' && aRows.length === 1,
+    nameShown: findSentinels(pptText(aPpt.entries), [REGISTERED_AREA.name]).length === 1,
+    otherSentinels: sentinelReport(aPpt.entries, excludeRegistered(sp4Sentinels(), aRegistered)).length === 0,
+    slides: slideCount(aPpt.entries.map((e) => e.name)) === 1 + 1,
+  }
+  step('weekly-registered-names', { projectId: A.id, areaId: sales.id, registered: aRegistered, reportId: aWeek.reportId, checks: regCheck },
+    Object.values(regCheck).every(Boolean) ? undefined : `등록 이름: ${JSON.stringify(regCheck)}`)
+
+  // import-idempotent — 새 프로젝트 I(팀 = A 의 첫 팀 code)에 같은 명령 id K 로 append 두 번 = 항목 1벌·두 번째 duplicate(W5), K 로 replace 는
+  // 422 COMMAND_REUSED(아무것도 바꾸지 않는다). 영수증은 세션 PostgREST 로 getImportReceipt 와 같은 술어(본인 RLS·command_id·kind·project_id)로
+  // 읽는다 — 그 액션은 A1 화면에 호출부가 없어 매니페스트에 없다(결과 화면은 B 의 #23). 액션의 프로젝트 필터 증거는 tests/actions/import-reads.test.ts
+  const I = await createProject(admin, wsA, 'I')
+  await admin.http('GET', `/p/${I.id}/settings`)
+  mustOk(`addProjectTeam(${team})`, (await admin.action(`/p/${I.id}/settings`, 'addProjectTeam', [I.id, team])).result)
+  const profI = (await (await admin.http('POST', '/api/import/inspect', {
+    body: inspectForm({ file: filled, fileName: 'wbs-filled.xlsx', projectId: I.id }),
+  })).json()).detection.profile
+  const K = randomUUID()
+  const sendI = async (mode, expect = 200) => (await admin.http('POST', '/api/import/execute', {
+    body: importForm({ file: filled, fileName: 'wbs-filled.xlsx', projectId: I.id, profile: profI, mode, commandId: K }), expect,
+  })).json()
+  const firstI = await sendI('append')
+  const secondI = await sendI('append')
+  const itemsI = rows('I 항목', await admin.sb.from('wbs_items').select('id').eq('project_id', I.id).order('id'))
+  const reusedI = await sendI('replace', 422)
+  const itemsIAfter = rows('I 항목', await admin.sb.from('wbs_items').select('id').eq('project_id', I.id).order('id'))
+  const receiptsOf = async (projectId) => rows('영수증', await admin.sb.from('command_receipts')
+    .select('command_id, project_id, result, created_at').eq('command_id', K).eq('kind', 'wbs_import').eq('project_id', projectId))
+  const receiptI = await receiptsOf(I.id)
+  const receiptOther = await receiptsOf(A.id)
+  const idemCheck = {
+    first: firstI.ok === true && firstI.kind === 'applied' && firstI.commandId === K && firstI.count === wbsRows.length,
+    second: secondI.ok === true && secondI.kind === 'duplicate' && secondI.commandId === K && secondI.count === wbsRows.length,
+    oneSet: itemsI.length === wbsRows.length,
+    reused: reusedI.ok === false && reusedI.code === 'COMMAND_REUSED',
+    untouched: JSON.stringify(itemsIAfter) === JSON.stringify(itemsI),
+    receipt: receiptI.length === 1 && receiptI[0].result?.mode === 'append' && Number(receiptI[0].result?.count) === wbsRows.length,
+    otherProject: receiptOther.length === 0,
+  }
+  step('import-idempotent', {
+    projectId: I.id, commandId: K, first: importResultView(firstI), second: importResultView(secondI), reused: importResultView(reusedI),
+    items: itemsI.length, receipt: receiptI.map((r) => ({ projectId: r.project_id, mode: r.result?.mode ?? null, count: r.result?.count ?? null, createdAt: r.created_at })),
+    otherProjectReceipts: receiptOther.length, receiptVia: 'PostgREST(세션) — getImportReceipt 와 같은 술어(본인 RLS·command_id·kind·project_id)',
+    checks: idemCheck,
+  }, Object.values(idemCheck).every(Boolean) ? undefined : `가져오기 멱등: ${JSON.stringify(idemCheck)}`)
+
+  // import-unregistered-teams — 공용 팀(단계 16 의 WS_TEAM)을 상속하는 새 프로젝트 D. 명단·영역·초대를 그 공용 팀으로 꾸린다 — 명단·초대 액션은
+  // 아직 팀 마스터 캐시로 팀을 고르고(A2 가 옮긴다) 새 프로젝트를 바로 못 볼 수 있어 배선은 service_role 로 한다(로컬 전용 픽스처). 미등록 팀이
+  // 든 파일로 registerTeams=false → 409(needsTeams·inheritsCommon·공용 팀 목록) → true(같은 명령 id — 409 는 영수증을 남기지 않는다) → 공용 팀이
+  // 같은 code·이름·색의 전용 팀으로 전환되고(그 프로젝트의 공용 팀 참조 0 — D54) 새 팀이 전용 팀, 팀 목록이 공용 팀 code 를 잃지 않는다
+  const D = await createProject(admin, wsA, 'D')
+  const commonTeams = rows('공용 팀', await svc.from('teams').select('id, code, name, color, sort_order, progress_visible, active')
+    .eq('workspace_id', wsA).is('project_id', null))
+  const ops = commonTeams.find((t) => t.code === WS_TEAM)
+  if (!ops) throw new Fail(`워크스페이스 A 의 공용 팀 ${WS_TEAM} 이 없다(단계 16)`)
+  const [selfPerson] = rows('본인 인물', await svc.from('people').select('id').eq('workspace_id', wsA).eq('user_id', me.id))
+  if (!selfPerson) throw new Fail('워크스페이스 A 에 본인 인물이 없다(단계 4)')
+  const [dMember] = rows('D 명단', await svc.from('project_members')
+    .insert({ project_id: D.id, person_id: selfPerson.id, access_role: 'member', active: true }).select('id'))
+  rows('D 명단 팀', await svc.from('project_member_teams').insert({ member_id: dMember.id, team_id: ops.id, is_primary: true }).select('member_id'))
+  const [dArea] = rows('D 영역', await svc.from('project_areas')
+    .insert({ project_id: D.id, kind: 'weekly_section', code: 'OPSA', name: '운영 지원', sort_order: 1, active: true }).select('id'))
+  rows('D 영역 팀', await svc.from('area_teams').insert({ area_id: dArea.id, team_id: ops.id, kind: 'primary' }).select('area_id'))
+  const [dInvite] = rows('D 초대', await svc.from('project_invites').insert({
+    workspace_id: wsA, project_id: D.id, email: 'e2e-dana@example.com', access_role: 'member', team_ids: [ops.id],
+    token_hash: createHash('sha256').update(randomUUID()).digest('hex'), created_by: me.id, expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+  }).select('id'))
+  const dRows = e2eRows(WS_TEAM, UNREGISTERED_TEAM)
+  const dFile = await fillWbsWorkbook(dRows, template)
+  const dFilePath = join(outDir, 'wbs-unregistered.xlsx')
+  writeFileSync(dFilePath, dFile)
+  const profD = (await (await admin.http('POST', '/api/import/inspect', {
+    body: inspectForm({ file: dFile, fileName: 'wbs-unregistered.xlsx', projectId: D.id }),
+  })).json()).detection.profile
+  const KD = randomUUID()
+  const sendD = async (registerTeams, expect) => (await admin.http('POST', '/api/import/execute', {
+    body: importForm({ file: dFile, fileName: 'wbs-unregistered.xlsx', projectId: D.id, profile: profD, mode: 'append', commandId: KD, registerTeams }), expect,
+  })).json()
+  const needs = await sendD(false, 409)
+  const ownBefore = rows('D 전용 팀', await svc.from('teams').select('id').eq('project_id', D.id))
+  const done = await sendD(true, 200)
+  const ownTeams = rows('D 전용 팀', await svc.from('teams').select('id, code, name, color, sort_order, progress_visible, active').eq('project_id', D.id))
+  const opsAfter = rows('공용 팀', await svc.from('teams').select('id, project_id, active').eq('id', ops.id))
+  const wiring = {
+    items: rows('D 항목 담당', await svc.from('wbs_items').select('id, item_owners(team_id)').eq('project_id', D.id)),
+    members: rows('D 명단 팀', await svc.from('project_members').select('id, project_member_teams(team_id)').eq('project_id', D.id)),
+    areas: rows('D 영역 팀', await svc.from('project_areas').select('id, area_teams(team_id)').eq('project_id', D.id)),
+    invites: rows('D 초대 팀', await svc.from('project_invites').select('id, team_ids').eq('project_id', D.id)),
+  }
+  const ownOps = ownTeams.find((t) => t.code === WS_TEAM)
+  const commonRefs = teamRefs(wiring, commonTeams.map((t) => t.id))
+  const ownOpsRefs = ownOps ? teamRefs(wiring, [ownOps.id]) : null
+  const teamCheck = {
+    needs: needs.ok === false && needs.code === 'NEEDS_TEAMS' && JSON.stringify(needs.needsTeams) === JSON.stringify([UNREGISTERED_TEAM])
+      && needs.inheritsCommon === true && (needs.commonTeams ?? []).some((t) => t.code === WS_TEAM),
+    nothingBeforeRegister: ownBefore.length === 0,
+    applied: done.ok === true && done.kind === 'applied' && done.commandId === KD && done.count === dRows.length,
+    convertedSameAsCommon: !!ownOps && JSON.stringify([ownOps.name, ownOps.color, ownOps.sort_order, ownOps.progress_visible, ownOps.active])
+      === JSON.stringify([ops.name, ops.color, ops.sort_order, ops.progress_visible, ops.active]),
+    codesKept: JSON.stringify(ownTeams.map((t) => t.code).sort()) === JSON.stringify([UNREGISTERED_TEAM, WS_TEAM].sort()),
+    noCommonRefs: Object.values(commonRefs).every((n) => n === 0),
+    refsMoved: JSON.stringify(ownOpsRefs) === JSON.stringify({ item_owners: 1, project_member_teams: 1, area_teams: 1, invites: 1 }),
+    commonIntact: opsAfter.length === 1 && opsAfter[0].project_id === null && opsAfter[0].active === ops.active,
+  }
+  step('import-unregistered-teams', {
+    projectId: D.id, commandId: KD, file: dFilePath, fixture: { member: dMember.id, area: dArea.id, invite: dInvite.id, commonTeam: ops.id },
+    needs: { code: needs.code, needsTeams: needs.needsTeams, inheritsCommon: needs.inheritsCommon, commonTeams: (needs.commonTeams ?? []).map((t) => t.code) },
+    applied: importResultView(done), ownTeams: ownTeams.map((t) => t.code), commonRefs, ownOpsRefs, checks: teamCheck,
+  }, Object.values(teamCheck).every(Boolean) ? undefined : `미등록 팀·전환: ${JSON.stringify(teamCheck)}`)
+
   // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
   // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
   // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
@@ -709,11 +956,18 @@ async function main() {
     [`/p/${A.id}/wbs`, [leaf.name]],
     [`/p/${A.id}/attendance`, []],
     ['/minutes', titles],
+    // SP4 A1 — B 의 주간(이번 주 W1: 개명한 실험·비활성 운영·신규)과 설정(주간 영역 편집기)
+    [`/p/${B.id}/weekly`, [exp.renamed, fresh.name]],
+    [`/p/${B.id}/settings`, [exp.renamed, fresh.name]],
   ]
   const rendered = []
   for (const [path, expectTexts] of pages) {
     const html = await (await admin.http('GET', path)).text()
-    rendered.push({ path, bytes: html.length, expect: expectTexts, problems: pageProblems(html, expectTexts) })
+    const entry = { path, bytes: html.length, expect: expectTexts, problems: pageProblems(html, expectTexts) }
+    // 기록용 — B 주간 화면의 서버 렌더 HTML(RSC 페이로드 포함)의 센티널(스펙 §6.3 render-pages, 재검토 반영 B P3-2). 실패로 세지 않는다 —
+    // 적중이 있으면 A2 의 S10 앞에서 K12 규칙으로 처리한다(실측 근거·존재 단언을 같은 커밋에, 옛 이름 자체는 마스크하지 않는다)
+    if (path === `/p/${B.id}/weekly`) Object.assign(entry, { sentinels: findSentinels(html, bSentinels), masks: [...SENTINEL_MASKS] })
+    rendered.push(entry)
   }
   const broken = rendered.filter((r) => r.problems.length)
   step('render-pages', { pages: rendered, problems: broken.length }, broken.length ? `화면 오류 표식: ${JSON.stringify(broken)}` : undefined)

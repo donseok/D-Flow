@@ -1,6 +1,7 @@
 // scripts/lib/e2e.mjs — e2e-local.mjs·e2e-synthetic.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
 // 러너는 로컬 스택만 두드린다 — 대상 판정은 targets.mjs 한 곳에서 한다.
 import ExcelJS from 'exceljs'
+import { findSentinels, sp4Sentinels } from './sentinels.mjs'
 import { classifySupabaseUrl, detectEnvTarget, parseEnvFile } from './targets.mjs'
 
 /** 새 프로젝트의 단계 라벨(SP0 done_when 1번). 행의 아웃라인 깊이와 같아야 한다. */
@@ -14,15 +15,16 @@ export const TEMPLATE_HEADER = ['코드', '업무명', '업무영역', '산출�
 /**
  * 양식에 채울 행 — 아웃라인 3층(LEVEL_LABELS 와 같은 깊이), 담당은 팀명 직접 방식으로 팀 하나(SP1: 프로젝트 A 의
  * 첫 팀 — 부트스트랩은 더 이상 팀을 만들지 않는다). 날짜는 ISO 로 두고 러너가 toCell 로 바꾼다. 빈 칸은 ''(toCell 이 null 로 바꾼다).
- * @param {string} team
+ * secondLeafTeam 을 주면 둘째 잎(1.2.1)만 그 팀이다(SP4 A1 의 미등록 팀 파일 — 첫 잎은 상속 공용 팀, 둘째 잎은 미등록 팀).
+ * @param {string} team @param {string} [secondLeafTeam]
  */
-export function e2eRows(team) {
+export function e2eRows(team, secondLeafTeam = team) {
   return [
     ['1',     '설계',          '공통', '',               '2026-09-21', '2026-10-16', 1,   '', ''],
     ['1.1',   '요구 분석',     '공통', '',               '2026-09-21', '2026-10-02', 0.5, '', ''],
     ['1.1.1', '요구사항 정리', '공통', '요구사항 정의서', '2026-09-21', '2026-10-02', 1,   '', team],
     ['1.2',   '화면 설계',     '공통', '',               '2026-10-05', '2026-10-16', 0.5, '', ''],
-    ['1.2.1', '화면 정의',     '공통', '화면 정의서',     '2026-10-05', '2026-10-16', 1,   '', team],
+    ['1.2.1', '화면 정의',     '공통', '화면 정의서',     '2026-10-05', '2026-10-16', 1,   '', secondLeafTeam],
   ]
 }
 
@@ -603,5 +605,70 @@ export function areaInput(def, teamIdByCode, { id, name, active = true } = {}) {
       if (!teamId) throw new Error(`팀 ${code} 가 이 프로젝트에 없다`)
       return { teamId, kind }
     }),
+  }
+}
+
+// ── SP4 A1 — 로컬 E2E 의 주간·가져오기 단계(스펙 §6.3) ─────────────────────────────────────────────────────────────
+
+/** 프로젝트 B(SP1 팀 하나)의 주간 영역 — 사용자 정의 이름만(스펙 §6.3). code 는 이름과 다르다(개명해도 code 는 그대로 — 트리거가 지킨다) */
+export const E2E_AREAS = Object.freeze({
+  exp: Object.freeze({ code: 'EXP', name: '실험', renamed: '실험 설계' }),
+  run: Object.freeze({ code: 'RUN', name: '운영' }),
+  fresh: Object.freeze({ code: 'NEW', name: '신규' }),
+})
+
+/** 프로젝트 A(SP1 팀 둘)에 등록하는 영역 — 이름이 옛 11구분명의 둘째와 같은 낱말이다(부정 테스트 2 — 스스로 등록한 이름은 나와야 한다).
+ *  평문은 센티널 픽스처 하나에 두므로(계획 P6) base64 사본에서 꺼낸다 — tests/scripts/e2e.test.ts 가 픽스처와 대조한다 */
+export const REGISTERED_AREA = Object.freeze({ code: 'SALES', name: sp4Sentinels()[1] })
+
+/** 상속 프로젝트에 들일 미등록 팀 code — 새 팀 코드 규칙을 통과하고 SP1 팀·공용 팀과 겹치지 않는다(테스트가 대조) */
+export const UNREGISTERED_TEAM = 'LAB'
+
+/** 이월 덧붙임의 기대값 — 붙일 값의 앞뒤 공백을 걷고 빈 값은 건너뛰어 '\n' 으로 잇는다(앱 weeklyCarry.ts 의 규칙 — 테스트가 그 함수와
+ *  대조한다). 순서는 부르는 쪽이 정한다: 그 영역 자신의 이월분 → 매핑된 영역(영역 순서) @param {...string} parts */
+export function carriedText(...parts) {
+  return parts.map((p) => String(p ?? '').trim()).filter((p) => p !== '').join('\n')
+}
+
+const SLIDE_PART = /^ppt\/slides\/slide(\d+)\.xml$/
+const XML_ENTITIES = Object.freeze({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" })
+
+/** pptx 텍스트 파트 이름 가운데 슬라이드 수 — ppt/slides/slideN.xml 만(레이아웃·마스터·노트·rels 제외) @param {readonly string[]} names */
+export function slideCount(names) {
+  return names.filter((n) => SLIDE_PART.test(n)).length
+}
+
+/** pptx 슬라이드의 글자 — 슬라이드 번호 순으로 <a:t> 내용을 잇는다(한 낱말이 여러 런으로 나뉘어도 찾게 — 슬라이드 안은 빈 문자 없이,
+ *  슬라이드 사이는 줄바꿈). XML 엔티티 다섯을 푼다 @param {ReadonlyArray<{ name: string, text: string }>} entries */
+export function pptText(entries) {
+  const num = (name) => Number(name.match(SLIDE_PART)?.[1] ?? 0)
+  return entries
+    .filter((e) => SLIDE_PART.test(e.name))
+    .sort((a, b) => num(a.name) - num(b.name))
+    .map((e) => [...e.text.matchAll(/<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>/g)]
+      .map((m) => m[1].replace(/&(?:amp|lt|gt|quot|apos);/g, (x) => XML_ENTITIES[x])).join(''))
+    .join('\n')
+}
+
+/** 텍스트 파트·HTML 의 센티널 적중 — 적중이 있는 항목만 [{ name, hits }](일치 규칙은 sentinels.mjs 의 findSentinels 하나 — 스펙 §6.4)
+ *  @param {ReadonlyArray<{ name: string, text: string }>} entries @param {readonly string[]} sentinels */
+export function sentinelReport(entries, sentinels) {
+  return entries.map((e) => ({ name: e.name, hits: findSentinels(e.text, sentinels) })).filter((e) => e.hits.length > 0)
+}
+
+/**
+ * 한 프로젝트 안에서 주어진 팀 id 를 가리키는 참조 수 — 전환 RPC 가 옮기는 네 곳(스펙 D54·§3.3 ⑤): 항목 담당(item_owners), 명단 팀
+ * (project_member_teams), 영역 팀(area_teams), 수락 전 초대의 team_ids. 입력은 그 프로젝트로 거른 PostgREST 임베드 조회 행이다.
+ * @param {{ items: ReadonlyArray<{ item_owners?: { team_id: string }[] }>, members: ReadonlyArray<{ project_member_teams?: { team_id: string }[] }>, areas: ReadonlyArray<{ area_teams?: { team_id: string }[] }>, invites: ReadonlyArray<{ team_ids?: string[] | null }> }} wiring
+ * @param {Iterable<string>} teamIds
+ */
+export function teamRefs({ items, members, areas, invites }, teamIds) {
+  const ids = new Set(teamIds)
+  const count = (list) => list.filter((id) => ids.has(id)).length
+  return {
+    item_owners: count(items.flatMap((i) => (i.item_owners ?? []).map((o) => o.team_id))),
+    project_member_teams: count(members.flatMap((m) => (m.project_member_teams ?? []).map((t) => t.team_id))),
+    area_teams: count(areas.flatMap((a) => (a.area_teams ?? []).map((t) => t.team_id))),
+    invites: count(invites.flatMap((v) => v.team_ids ?? [])),
   }
 }
