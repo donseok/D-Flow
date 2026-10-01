@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
-import { GRID_SHAPE, gridRows, gridTarget, mulberry32, rowCountVerdict, summarize } from '../../scripts/perf-grid.mjs'
+import { GRID_SHAPE, classifyRuns, gridProjectName, gridRowCount, gridRows, gridTarget, mulberry32, parsePhases, rowCountVerdict, summarize } from '../../scripts/perf-grid.mjs'
 import { median, percentile } from '../../scripts/lib/perf.mjs'
 
 const CTX = {
@@ -51,5 +52,52 @@ describe('측정 판정', () => {
   ])('대상 거부 — %s', (_n, over, re) => {
     const env = { LOCAL_DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54422/postgres', supabaseUrl: 'http://127.0.0.1:54421', appUrl: 'http://127.0.0.1:3201', ...over }
     expect(() => gridTarget(env)).toThrow(re)
+  })
+})
+
+describe('규모 인자 --phases(1·3·5·10)', () => {
+  it.each([[1, 1011], [3, 3033], [5, 5055], [10, 10110]])('phases %i → 시드 행 %i', (n, rows) => {
+    expect(gridRowCount(n)).toBe(rows)
+    const g = gridRows({ ...CTX, phases: n })
+    expect(g.wbs).toHaveLength(rows)
+    expect(g.owners).toHaveLength(n * 900)
+    expect(g.wbs.filter((r) => r.level_idx === 0)).toHaveLength(n)
+  })
+  it('phases 를 안 주거나 10 이면 출력이 바이트 단위로 이전과 같다(고정 해시)', () => {
+    const sha = (x: unknown) => createHash('sha256').update(JSON.stringify(x)).digest('hex')
+    const golden = '3d596b07977301f7ecee5fead9d45b1e5f295aebaa3249d859c63ea723809e8d'
+    expect(sha(gridRows(CTX))).toBe(golden)
+    expect(sha(gridRows({ ...CTX, phases: 10 }))).toBe(golden)
+  })
+  it('프로젝트 이름 — 10 은 PERF-GRID, 그 밖은 PERF-GRID-p<N>', () => {
+    expect(gridProjectName(10)).toBe('PERF-GRID')
+    expect(gridProjectName(1)).toBe('PERF-GRID-p1')
+    expect(gridProjectName(5)).toBe('PERF-GRID-p5')
+  })
+  it('parsePhases — 기본 10, 허용 밖은 거부', () => {
+    expect(parsePhases(undefined)).toBe(10)
+    expect(parsePhases('3')).toBe(3)
+    for (const bad of ['0', '2', '4', '11', '-1', 'abc', '', '3.5']) expect(() => parsePhases(bad)).toThrow(/--phases/)
+  })
+  it('gridRows 도 허용 밖 phases 를 거부', () => {
+    expect(() => gridRows({ ...CTX, phases: 2 })).toThrow(/phases/)
+  })
+})
+
+describe('응답 없음은 오류가 아니라 결과 — classifyRuns', () => {
+  const ok = { status: 'ok', firstRowMs: 900, longTaskMs: 0, frameAvgMs: 16, framesOver50: 0, htmlEndMs: 100, ttfbMs: 50, domRows: 1011 }
+  const dead = { status: 'unresponsive', timeoutMs: 60000, domRowsAt: [{ atMs: 5000, rows: 518 }, { atMs: 15000, rows: null }] }
+  it('응답한 run 만 있으면 exit 0, unresponsive 거짓', () => {
+    expect(classifyRuns([ok, ok])).toEqual({ unresponsive: false, exitCode: 0, statuses: ['ok', 'ok'], median: summarize([ok, ok]) })
+  })
+  it('한 run 이라도 응답 없음이면 exit 2 — 오류(1)와 구분, 응답한 run 의 중앙값은 남긴다', () => {
+    const r = classifyRuns([ok, dead, ok])
+    expect(r.unresponsive).toBe(true)
+    expect(r.exitCode).toBe(2)
+    expect(r.statuses).toEqual(['ok', 'unresponsive', 'ok'])
+    expect(r.median).toEqual(summarize([ok, ok]))
+  })
+  it('전부 응답 없음이면 median 은 null', () => {
+    expect(classifyRuns([dead])).toEqual({ unresponsive: true, exitCode: 2, statuses: ['unresponsive'], median: null })
   })
 })
