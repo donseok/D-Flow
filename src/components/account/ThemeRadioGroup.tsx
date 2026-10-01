@@ -6,6 +6,7 @@ import { useTheme } from '@/components/providers/ThemeProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { THEME_PREFS, THEME_UNSET_DEFAULT, type ThemePref } from '@/lib/theme/policy'
 import type { DictKey } from '@/lib/i18n/dict'
+import { rovingRadioIndex } from './rovingRadio'
 
 const LABEL: Record<ThemePref, DictKey> = { system: 'chrome.themeSystem', light: 'chrome.themeLight', dark: 'chrome.themeDark' }
 
@@ -23,10 +24,7 @@ export function ThemeRadioGroup({ compact = false }: { compact?: boolean }) {
   const focusIndex = shown ? THEME_PREFS.indexOf(shown) : 0
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
-    const n = THEME_PREFS.length
-    const next = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (i + 1) % n
-      : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (i - 1 + n) % n
-        : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : null
+    const next = rovingRadioIndex(e.key, i, THEME_PREFS.length)
     if (next === null) return
     e.preventDefault()
     setPreference(THEME_PREFS[next])

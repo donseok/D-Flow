@@ -6,6 +6,7 @@ import { PageHero } from '@/components/ui/PageHero'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
 import { MyTokensSection } from '@/components/account/MyTokensSection'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
+import { rovingRadioIndex } from '@/components/account/rovingRadio'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
@@ -18,6 +19,7 @@ export function AccountView({ email, displayName, projects }: {
   projects: { id: string; name: string }[]
 }) {
   const [pwOpen, setPwOpen] = useState(false)
+  const { t } = useLocale()
 
   return (
     <div className="space-y-6">
@@ -49,14 +51,14 @@ export function AccountView({ email, displayName, projects }: {
 
       <div data-account-display className="card p-5 sm:p-6">
         <div className="eyebrow">Display</div>
-        <h2 className="mt-0.5 text-sm font-semibold text-ink">화면</h2>
+        <h2 className="mt-0.5 text-sm font-semibold text-ink">{t('chrome.display')}</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <div className="mb-2 text-meta font-semibold text-fg-secondary">화면 테마</div>
+            <div data-account-label className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.theme')}</div>
             <ThemeRadioGroup />
           </div>
           <div>
-            <div className="mb-2 text-meta font-semibold text-fg-secondary">언어</div>
+            <div data-account-label className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.language')}</div>
             <LocaleRadioGroup />
           </div>
         </div>
@@ -73,17 +75,17 @@ const LOCALES = [['ko', '한국어'], ['en', 'English']] as const
 
 /** 언어 — 전역 바에서 뺀 언어 선택의 유일한 자리(스펙 §4.2). 서버가 쿠키로 언어를 알아 첫 렌더부터 선택을 그린다 */
 function LocaleRadioGroup() {
-  const { locale, setLocale } = useLocale()
+  const { locale, setLocale, t } = useLocale()
   const refs = useRef<(HTMLButtonElement | null)[]>([])
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
-    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const next = rovingRadioIndex(e.key, i, LOCALES.length)
+    if (next === null) return
     e.preventDefault()
-    const next = e.key === 'Home' ? 0 : e.key === 'End' ? LOCALES.length - 1 : (i + 1) % LOCALES.length
     setLocale(LOCALES[next][0])
     refs.current[next]?.focus()
   }
   return (
-    <div role="radiogroup" aria-label="언어" className="grid max-w-sm grid-cols-2 gap-1 rounded-(--radius-control) border border-border bg-surface-subtle p-1">
+    <div role="radiogroup" aria-label={t('chrome.language')} className="grid max-w-sm grid-cols-2 gap-1 rounded-(--radius-control) border border-border bg-surface-subtle p-1">
       {LOCALES.map(([value, label], i) => {
         const on = locale === value
         return (
