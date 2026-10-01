@@ -26,6 +26,12 @@ import { validateArea, type AreaInput } from '@/lib/domain/areas'
 import {
   XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, seoulToday, shiftDays,
 } from '../../scripts/lib/e2e.mjs'
+import { carryOverRows } from '@/lib/domain/weeklyCarry'
+import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
+import { excludeRegistered, findSentinels } from '../../scripts/lib/sentinels.mjs'
+import {
+  E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, carriedText, pptText, sentinelReport, slideCount, teamRefs,
+} from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
 
@@ -575,5 +581,118 @@ describe('SP4 A1 — 가져오기 파일·폼·영역 입력(스펙 §4.4 #1·§
     expect(areaInput(def, ids, { id: 'a1', name: '데이터 정리', active: false })).toMatchObject({ id: 'a1', code: 'DATA', name: '데이터 정리', active: false })
     expect(() => areaInput(def, new Map([['RES', 't-res']]))).toThrow(/OPS/)
     expect(() => encodeActionArgs(['p1', input])).not.toThrow()
+  })
+})
+
+describe('SP4 A1 — E2E 의 주간·가져오기 픽스처(스펙 §6.3)', () => {
+  it('B 의 영역은 사용자 정의 이름만 — 센티널 0, code 는 이름과 다르고 서로 다르며 앱 영역 검증을 통과한다', () => {
+    const all = Object.values(E2E_AREAS)
+    const words = all.flatMap((a) => [a.code, a.name, 'renamed' in a ? a.renamed : ''])
+    expect(findSentinels(words.join(' '), SENTINELS_BY_SP.SP4)).toEqual([])
+    expect(new Set(all.map((a) => a.code)).size).toBe(all.length)
+    for (const a of all) {
+      expect(a.code).not.toBe(a.name)
+      expect(validateArea({ kind: 'weekly_section', code: a.code, name: a.name, sortOrder: 1, active: true, teams: [] }, []).ok).toBe(true)
+    }
+  })
+  it('A 의 등록 영역 이름은 옛 11구분명의 둘째와 같은 낱말이다 — 평문은 센티널 픽스처 하나(계획 P6), code 는 센티널이 아니다', () => {
+    expect(REGISTERED_AREA.name).toBe(LEGACY_SENTINELS.weeklySections[1])
+    expect(SENTINELS_BY_SP.SP4).toContain(REGISTERED_AREA.name)
+    expect(findSentinels(REGISTERED_AREA.code, SENTINELS_BY_SP.SP4)).toEqual([])
+  })
+  it('미등록 팀 code — 새 팀 코드 규칙 통과, SP1 팀·공용 팀과 다르고 센티널이 아니다', () => {
+    expect(normalizeNewTeamCode(UNREGISTERED_TEAM)).toEqual({ ok: true, code: UNREGISTERED_TEAM })
+    expect([...SP1_TEAMS.A, ...SP1_TEAMS.B, WS_TEAM]).not.toContain(UNREGISTERED_TEAM)
+    expect(findSentinels(UNREGISTERED_TEAM, SENTINELS_BY_SP.SP4)).toEqual([])
+  })
+  it('e2eRows 의 둘째 잎 팀 — 첫 잎만 첫 팀, 둘째 잎만 둘째 팀, 나머지 칸은 한 팀 꼴과 같다', () => {
+    const one = e2eRows(WS_TEAM)
+    const two = e2eRows(WS_TEAM, UNREGISTERED_TEAM)
+    expect(two.map((r) => r[8])).toEqual(['', '', WS_TEAM, '', UNREGISTERED_TEAM])
+    expect(two.map((r) => r.slice(0, 8))).toEqual(one.map((r) => r.slice(0, 8)))
+  })
+})
+
+describe('SP4 A1 — E2E 의 판정 도우미', () => {
+  it('carriedText 는 앱 이월(carryOverRows)의 덧붙임과 같다 — 자기 이월분 → 매핑된 영역, 앞뒤 공백은 걷는다', () => {
+    const areas = [
+      { id: 'a-exp', code: 'EXP', name: '실험', sortOrder: 1, active: true, teams: [] },
+      { id: 'a-run', code: 'RUN', name: '운영', sortOrder: 2, active: false, teams: [] },
+    ]
+    const prev = [
+      { areaId: 'a-exp', thisContent: '', thisIssue: '', nextContent: ' carry-own-1 \n', nextIssue: '' },
+      { areaId: 'a-run', thisContent: '', thisIssue: '', nextContent: '\ncarry-mapped-1', nextIssue: 'carry-mapped-issue ' },
+    ]
+    const r = carryOverRows(prev, areas, { 'a-run': 'a-exp' })
+    if (!r.ok) throw new Error(`이월 거부: ${JSON.stringify(r)}`)
+    expect(r.rows[0].thisContent).toBe(carriedText(' carry-own-1 \n', '\ncarry-mapped-1'))
+    expect(r.rows[0].thisIssue).toBe(carriedText('', 'carry-mapped-issue '))
+    expect(carriedText('a', '', '  ', 'b')).toBe('a\nb')
+  })
+  it('slideCount·pptText — 슬라이드 파트만, 번호 순, 런으로 나뉜 낱말을 잇고 XML 엔티티를 푼다', () => {
+    const entries = [
+      { name: 'ppt/slides/slide10.xml', text: '<a:t>열</a:t>' },
+      { name: 'ppt/slides/slide2.xml', text: '<p:sp><a:t>실험</a:t><a:t xml:space="preserve"> 설계</a:t></p:sp><a:t>R&amp;D</a:t>' },
+      { name: 'ppt/slideLayouts/slideLayout1.xml', text: '<a:t>레이아웃</a:t>' },
+      { name: 'ppt/slides/_rels/slide2.xml.rels', text: '<Relationships/>' },
+    ]
+    expect(slideCount(entries.map((e) => e.name))).toBe(2)
+    expect(pptText(entries)).toBe('실험 설계R&D\n열')
+  })
+  it('sentinelReport — 적중이 있는 항목만, 일치 규칙은 findSentinels(마스크 복합어·영문 경계), 등록 이름은 같은 문자열만 뺀다', () => {
+    const [, sales] = LEGACY_SENTINELS.weeklySections
+    const [, code] = LEGACY_SENTINELS.teamCodes
+    const entries = [
+      { name: 'a.xml', text: `<a:t>${sales}일 기준</a:t>` },
+      { name: 'b.xml', text: `<a:t>Times New Roman · ${code}</a:t>` },
+      { name: 'c.xml', text: '<a:t>합성</a:t>' },
+    ]
+    expect(sentinelReport(entries, SENTINELS_BY_SP.SP4)).toEqual([{ name: 'b.xml', hits: [code] }])
+    expect(sentinelReport(entries, excludeRegistered(SENTINELS_BY_SP.SP4, [code]))).toEqual([])
+  })
+  it('teamRefs — 네 곳(항목 담당·명단 팀·영역 팀·수락 전 초대의 team_ids)에서 주어진 팀 id 를 센다', () => {
+    const wiring = {
+      items: [{ item_owners: [{ team_id: 'c1' }, { team_id: 'o1' }] }, { item_owners: [] }, {}],
+      members: [{ project_member_teams: [{ team_id: 'c1' }] }],
+      areas: [{ area_teams: [{ team_id: 'o1' }] }, { area_teams: [{ team_id: 'c1' }, { team_id: 'c2' }] }],
+      invites: [{ team_ids: ['c2', 'o1'] }, { team_ids: null }],
+    }
+    expect(teamRefs(wiring, ['c1', 'c2'])).toEqual({ item_owners: 1, project_member_teams: 1, area_teams: 2, invites: 1 })
+    expect(teamRefs(wiring, ['o1'])).toEqual({ item_owners: 1, project_member_teams: 0, area_teams: 1, invites: 1 })
+  })
+})
+
+describe('e2e-local.mjs — SP4 A1 단계(이름으로 부른다 — 스펙 §6.3·Q7)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  it('새 단계 여섯과 기존 가져오기·렌더 단계가 이름으로 있고, 새 단계는 minutes-api-scope 뒤·render-pages 앞이다', () => {
+    const at = (n: string) => src.indexOf(`step('${n}'`)
+    const added = ['weekly-areas-required', 'weekly-carry-mapping', 'weekly-outputs', 'weekly-registered-names', 'import-idempotent', 'import-unregistered-teams']
+    for (const n of [...added, 'import-append', 'import-replace', 'render-pages', 'minutes-api-scope']) expect(at(n), n).toBeGreaterThan(-1)
+    for (const n of added) {
+      expect(at(n), n).toBeLessThan(at('render-pages'))
+      expect(at(n), n).toBeGreaterThan(at('minutes-api-scope'))
+    }
+  })
+  it('가져오기 실행 폼은 importForm 한 곳 — 명령 id 없이 보내는 길이 없다(스펙 §4.4 #1)', () => {
+    expect(src).not.toMatch(/append\('mode'/)
+    expect(src.match(/importForm\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+  })
+  it('새 액션 넷은 그 액션을 쓰는 페이지(worker)에 묶고, A1 화면에 호출부가 없는 getImportReceipt 는 싣지 않는다', () => {
+    for (const [name, file, worker] of [
+      ['createWeeklyReport', 'weekly.ts', '/p/[projectId]/weekly/page'], ['saveWeeklyCells', 'weekly.ts', '/p/[projectId]/weekly/page'],
+      ['upsertArea', 'projectAreas.ts', '/p/[projectId]/settings/page'], ['getWbsBackup', 'importBackup.ts', '/p/[projectId]/import/page'],
+    ] as const) {
+      expect(src, name).toMatch(new RegExp(`${name}: \\{ filename: 'src/app/actions/${esc(file)}', exportedName: '${name}', worker: '${esc(worker)}' \\}`))
+    }
+    expect(src).not.toContain("exportedName: 'getImportReceipt'")
+  })
+  it('render-pages 가 B 의 주간·설정 화면을 렌더하고 B 주간 HTML 의 센티널을 기록한다(실패로 세지 않는다 — 스펙 §6.3·K12)', () => {
+    expect(src).toMatch(/\[`\/p\/\$\{B\.id\}\/weekly`, \[/)
+    expect(src).toMatch(/\[`\/p\/\$\{B\.id\}\/settings`, \[/)
+    expect(src).toMatch(/sentinels: findSentinels\(html, bSentinels\)/)
+  })
+  it('지역 seoulToday 가 없다 — 공용 도우미 하나(과제 34)', () => {
+    expect(src).not.toMatch(/const seoulToday\s*=/)
   })
 })
