@@ -5,14 +5,12 @@ import { LocaleProvider } from "@/components/providers/LocaleProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getServerLocale } from "@/lib/i18n/server";
 import { BRAND } from "@/lib/branding";
+import { noFlashScript } from "@/lib/theme/policy";
 
 export const metadata: Metadata = {
   title: `${BRAND.productName} — ${BRAND.tagline}`,
   description: "WBS · 일정 · 멤버를 하나의 흐름으로. 계획부터 완료까지 투명하게 관리하세요.",
 };
-
-// 다크모드 FOUC 방지: 페인트 전에 저장된 테마를 <html>에 반영
-const noFlash = `(function(){try{var t=localStorage.getItem('dflow-theme');if(!t){t=document.cookie.match(/(?:^|; )dflow-theme=([^;]+)/)?.[1];}if(t==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`;
 
 export default async function RootLayout({
   children,
@@ -22,7 +20,8 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: noFlash }} />
+        {/* 다크 FOUC 방지 — 페인트 전에 선호(localStorage → 쿠키 → 미설정 기본)를 <html> 에 반영한다(D10) */}
+        <script dangerouslySetInnerHTML={{ __html: noFlashScript() }} />
         {/* Pretendard(dynamic subset) — globals.css 의 @import 에서 옮겨왔다(2026-08-18 성능 감사).
             @import 는 globals.css 를 받은 뒤에야 CDN CSS 를 받는 직렬 차단 체인이지만, head 의
             link 는 HTML 파싱 즉시 globals.css 와 병렬로 내려받는다. preconnect 2건이 DNS+TLS 를
