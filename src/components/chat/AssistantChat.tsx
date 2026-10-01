@@ -1,8 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { RotateCcw, X, Send, Sparkles, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react'
+import { RightRail, useRailHost, useRightRailOptional } from '@/components/app/RightRail'
+import { useShellScope } from '@/components/app/ShellScope'
 import { RobotMascot } from './RobotMascot'
 import { ASSISTANT_NAME } from '@/lib/branding'
 import { useCurrentBotPageContext } from './BotPageContextProvider'
@@ -75,15 +77,89 @@ function welcomeText(ctx: BotContext | null, t: T): string {
   return lines.join('\n')
 }
 
-export function AssistantChat({ projects }: { projects: { id: string; name: string }[] }) {
+/** 미디어 쿼리(min-width) — SSR·첫 렌더는 false(레일·아이콘은 열린 채로 SSR 하지 않는다 — D55) */
+function useMinWidth(px: number): boolean {
+  const [hit, setHit] = useState(false)
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return   // 미디어 쿼리가 없는 환경 = 좁은 화면으로(옛 모양)
+    const mq = window.matchMedia(`(min-width: ${px}px)`)
+    const on = () => setHit(mq.matches)
+    on()
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [px])
+  return hit
+}
+
+/** 좁은 화면의 FAB 를 가릴 때 — 저장 바([data-save-bar])가 문서에 있거나 가상 키보드가 떠 있다(D33) */
+function useFabSuppressed(active: boolean): boolean {
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => {
+    if (!active) { setHidden(false); return }
+    const vv = window.visualViewport
+    const calc = () => setHidden(!!document.querySelector('[data-save-bar]') || (!!vv && vv.height < window.innerHeight * 0.75))
+    calc()
+    const mo = new MutationObserver(calc)
+    mo.observe(document.body, { subtree: true, childList: true })
+    vv?.addEventListener('resize', calc)
+    return () => { mo.disconnect(); vv?.removeEventListener('resize', calc) }
+  }, [active])
+  return hidden
+}
+
+/**
+ * 전역 바의 AI 아이콘(1024 이상 — D33). 탐침이 통과했을 때만 버튼을 내고, 누르면 레일 점유자를 'ai' 로 바꾼다.
+ * 탐침 결과는 AssistantChat 이 레일 공급자에 싣는다(모듈 수준 상태 없음). 공급자 밖(옛 셸)·탐침 실패·404 면 null.
+ */
+export function useAiRailButton(): ReactNode | null {
+  const rail = useRightRailOptional()
+  const { t } = useLocale()
+  if (!rail?.aiAvailable) return null
+  return (
+    <button type="button" data-ai-open aria-label={t('chat.open')} aria-expanded={rail.occupant === 'ai'} onClick={() => (rail.occupant === 'ai' ? rail.close('ai') : rail.open('ai'))}
+      className="flex h-9 w-9 items-center justify-center rounded-(--radius-control) text-fg-secondary hover:bg-surface-hover hover:text-fg">
+      <RobotMascot className="h-6 w-6" label={t('chat.open')} />
+    </button>
+  )
+}
+
+/**
+ * AI 도우미(D33·D56). 1024 이상이고 레일 공급자·레일 자리(#app-rail 또는 WBS 전체 화면 안 자리)가 있으면 우측 레일 점유자 'ai' 로 그리고
+ * FAB 를 그리지 않는다(진입은 전역 바 아이콘). 1024 미만이거나 레일 자리가 없으면(옛 셸) 지금의 FAB·떠 있는 패널 — FAB 는 저장 바·가상 키보드가
+ * 보이는 동안 그리지 않는다. 대화 상태는 레일 밖(이 컴포넌트)에 있어 레일을 닫았다 열어도, 범위를 바꿔도 남는다.
+ * projects 는 옛 (app)/layout 의 prop — 없으면 게시 저장소(현재 워크스페이스의 프로젝트 목록)를 쓴다(과제 31 이 prop 을 지운다).
+ */
+export function AssistantChat({ projects }: { projects?: { id: string; name: string }[] } = {}) {
   const { t, locale } = useLocale()
   const assistantName = ASSISTANT_NAME[locale]
   const router = useRouter()
   const pageContext = useCurrentBotPageContext()
   const currentProjectId = pageContext.projectId
-  const currentProjectName = projects.find(p => p.id === currentProjectId)?.name ?? null
+  const shellScope = useShellScope()
+  const projectList = projects ?? shellScope?.projects ?? []
+  const currentProjectName = projectList.find(p => p.id === currentProjectId)?.name ?? null
 
-  const [open, setOpen] = useState(false)
+  const rail = useRightRailOptional()
+  const railHost = useRailHost()
+  const wide = useMinWidth(1024)
+  const railActive = !!rail && !!railHost && wide
+  const [openLocal, setOpenLocal] = useState(false)
+  // 레일 모드의 열림 = 레일 점유자가 'ai'. 옛 모양의 열림 = 이 컴포넌트 상태. 둘은 setOpen 이 같이 맞춘다
+  const open = railActive ? rail.occupant === 'ai' : openLocal
+  const setOpen = useCallback((v: boolean) => {
+    setOpenLocal(v)
+    if (!rail) return
+    if (v) rail.open('ai')
+    else rail.close('ai')
+  }, [rail])
+  const setOpenRef = useRef(setOpen)
+  setOpenRef.current = setOpen
+  // 레일을 다른 점유자(인스펙터)가 가져가면 옛 모양 상태도 닫아 둔다 — 좁아졌을 때 패널이 혼자 다시 뜨지 않게
+  useEffect(() => {
+    if (railActive && rail.occupant !== 'ai') setOpenLocal(false)
+    if (railActive && rail.occupant === 'ai') setOpenLocal(true)
+  }, [railActive, rail?.occupant])
+  const fabHidden = useFabSuppressed(!railActive)
   const [collapsed, setCollapsed] = useState(false) // 접힘 = 알약 바만 표시. 대화·스트리밍은 그대로 유지
   const [ctx, setCtx] = useState<BotContext | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
@@ -147,7 +223,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
         if (!alive) return
         if (response.status === 404) {
           streamAbortRef.current?.abort()
-          setOpen(false)
+          setOpenRef.current(false)
           setAvailable(false)
         } else {
           setAvailable(true)
@@ -157,6 +233,10 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
     return () => { alive = false }
   }, [currentProjectId])
 
+  // 탐침 결과를 레일 공급자에 싣는다 — 전역 바 아이콘(useAiRailButton)이 읽는다. 레일로 그릴 수 있을 때만(좁으면 FAB 가 진입점)
+  const setAiAvailable = rail?.setAiAvailable
+  useEffect(() => { setAiAvailable?.(available === true && railActive) }, [setAiAvailable, available, railActive])
+
   // 완전 닫기 — 접힘 상태도 리셋해 다음에 열 때는 펼친 상태로 시작
   const close = useCallback(() => {
     streamAbortRef.current?.abort()
@@ -165,7 +245,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
     setCollapsed(false)
     setLoading(false)
     setStreamStatus(null)
-  }, [])
+  }, [setOpen])
 
   // 닫힘 시 포커스를 FAB 로 복귀 — 키보드/스크린리더 사용자가 포커스를 잃지 않게(a11y).
   // FAB 는 닫힌 뒤에야 다시 마운트되므로 렌더 커밋 후 시점(effect)에서 잡아야 한다.
@@ -484,52 +564,8 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
 
   if (available !== true) return null
 
-  return (
-    <>
-      {/* ── FAB ── */}
-      {!open && (
-        <button
-          ref={fabRef}
-          onClick={() => setOpen(true)}
-          aria-label={t('chat.open')}
-          aria-haspopup="dialog"
-          className="fixed bottom-16 right-5 z-[120] flex h-[52px] w-[52px] items-center justify-center rounded-full border border-border bg-surface-raised text-fg transition hover:scale-105 active:scale-95"
-          style={{ boxShadow: 'var(--shadow-popover)' }}
-        >
-          <RobotMascot className="h-9 w-9" label={assistantName} />
-          {ctx && ctx.weekStartCount > 0 && (
-            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-surface-raised bg-brand" />
-          )}
-        </button>
-      )}
-
-      {/* ── 접힌 바 ── 바 전체가 펼치기 버튼. 대화는 뒤에서 그대로 유지된다 */}
-      {open && collapsed && (
-        <button
-          onClick={() => setCollapsed(false)}
-          aria-label={t('chat.expand')}
-          className="fixed bottom-16 right-5 z-[130] flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 border border-border bg-surface-raised text-fg transition hover:bg-surface-hover active:scale-95"
-          style={{ boxShadow: 'var(--shadow-popover)' }}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-subtle ring-1 ring-border">
-            <RobotMascot className="h-6 w-6" label={assistantName} />
-          </span>
-          <span className="text-sm font-bold">{assistantName}</span>
-          {/* 응답 스트리밍 중 표시점 — 접혀 있어도 진행 상황을 알 수 있게 */}
-          {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-brand" />}
-          <ChevronUp className="h-4 w-4 text-fg-secondary" />
-        </button>
-      )}
-
-      {/* ── 패널 ── */}
-      {open && !collapsed && (
-        <div
-          role="dialog"
-          aria-label={t('chat.dialog')}
-          className="fixed bottom-16 right-5 z-[130] flex h-[min(720px,calc(100dvh-5.25rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface"
-          style={{ boxShadow: 'var(--shadow-xl)' }}
-        >
-          {/* 헤더 */}
+  // 머리 — 레일 모드에서는 접기(알약 바)가 없다(레일 닫기가 같은 일을 하고 대화는 남는다)
+  const panelHeader = (withCollapse: boolean) => (
           <header className="flex items-center gap-3 border-b border-border bg-surface-raised px-4 py-3.5 text-fg">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface-subtle ring-1 ring-border">
               <RobotMascot className="h-8 w-8" label={assistantName} />
@@ -538,13 +574,15 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
               <div className="text-[15px] font-bold leading-tight">{assistantName}</div>
               <div className="truncate text-xs text-fg-muted">{currentProjectName ?? t('nav.allProjects')}</div>
             </div>
-            <button
-              onClick={() => setCollapsed(true)}
-              aria-label={t('chat.collapse')}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </button>
+            {withCollapse && (
+              <button
+                onClick={() => setCollapsed(true)}
+                aria-label={t('chat.collapse')}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={reset}
               aria-label={t('chat.reset')}
@@ -560,7 +598,10 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
               <X className="h-4 w-4" />
             </button>
           </header>
+  )
 
+  const panelBody = (
+        <>
           {/* 본문 — aria-live: 새 봇 응답을 스크린리더가 낭독(polite = 사용자 발화 중 끼어들지 않음) */}
           <div ref={scrollRef} aria-live="polite" className="flex-1 space-y-3 overflow-y-auto bg-canvas px-4 py-4">
             {/* 프로액티브 인사이트 */}
@@ -654,6 +695,64 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
               </button>
             </div>
           </footer>
+        </>
+  )
+
+  if (railActive) {
+    return open ? (
+      <RightRail occupant="ai" title={t('chat.dialog')} onClose={close} header={panelHeader(false)}>
+        {panelBody}
+      </RightRail>
+    ) : null
+  }
+
+  return (
+    <>
+      {/* ── FAB ── 층은 레일(--z-rail): 오버레이·전체 화면·모달 아래(z 대응표 §1). 저장 바·가상 키보드가 보이면 그리지 않는다 */}
+      {!open && !fabHidden && (
+        <button
+          ref={fabRef}
+          onClick={() => setOpen(true)}
+          aria-label={t('chat.open')}
+          aria-haspopup="dialog"
+          className="fixed bottom-16 right-5 z-(--z-rail) flex h-[52px] w-[52px] items-center justify-center rounded-full border border-border bg-surface-raised text-fg transition hover:scale-105 active:scale-95"
+          style={{ boxShadow: 'var(--shadow-popover)' }}
+        >
+          <RobotMascot className="h-9 w-9" label={assistantName} />
+          {ctx && ctx.weekStartCount > 0 && (
+            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-surface-raised bg-brand" />
+          )}
+        </button>
+      )}
+
+      {/* ── 접힌 바 ── 바 전체가 펼치기 버튼. 대화는 뒤에서 그대로 유지된다 */}
+      {open && collapsed && (
+        <button
+          onClick={() => setCollapsed(false)}
+          aria-label={t('chat.expand')}
+          className="fixed bottom-16 right-5 z-(--z-rail) flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 border border-border bg-surface-raised text-fg transition hover:bg-surface-hover active:scale-95"
+          style={{ boxShadow: 'var(--shadow-popover)' }}
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-subtle ring-1 ring-border">
+            <RobotMascot className="h-6 w-6" label={assistantName} />
+          </span>
+          <span className="text-sm font-bold">{assistantName}</span>
+          {/* 응답 스트리밍 중 표시점 — 접혀 있어도 진행 상황을 알 수 있게 */}
+          {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-brand" />}
+          <ChevronUp className="h-4 w-4 text-fg-secondary" />
+        </button>
+      )}
+
+      {/* ── 패널 ── */}
+      {open && !collapsed && (
+        <div
+          role="dialog"
+          aria-label={t('chat.dialog')}
+          className="fixed bottom-16 right-5 z-(--z-rail) flex h-[min(720px,calc(100dvh-5.25rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface"
+          style={{ boxShadow: 'var(--shadow-xl)' }}
+        >
+          {panelHeader(true)}
+          {panelBody}
         </div>
       )}
     </>

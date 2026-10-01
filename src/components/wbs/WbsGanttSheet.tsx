@@ -1085,13 +1085,14 @@ export function WbsGanttSheet({
       data-wbs-font-scale={fontScale.scale}
       className={
         fullscreen
-          ? // AI 버튼(AssistantChat FAB, 층 120)과 같은 층이면 문서 순서로 FAB 가 위에 뜬다 — D56 표에 FAB 자리가 없어 과제 24(z 대응표)까지 한 칸 위
-            'fixed inset-0 z-[calc(var(--z-fullscreen)_+_1)] overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
+          ? // 층은 --z-fullscreen(120) — AI 버튼·패널은 --z-rail(90)로 내려가 그 아래다(z 대응표 §1). 우측 레일은 아래 레일 자리로 포털된다(D56)
+            'fixed inset-0 z-(--z-fullscreen) overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
           : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
       aria-modal={fullscreen || undefined}
       aria-label={fullscreen ? t('wbs.ariaFullscreen') : undefined}
+      data-wbs-fullscreen={fullscreen ? 'open' : undefined}
       style={
         {
           '--wbs-row-h': `${ROW_H}px`,
@@ -1101,6 +1102,8 @@ export function WbsGanttSheet({
         } as React.CSSProperties
       }
     >
+      {/* 전체 화면 안 레일 자리(D56) — 열린 동안 우측 레일(AI·인스펙터)이 전체 화면 층 아래로 숨지 않게 여기로 포털된다(RightRail 의 useRailHost) */}
+      {fullscreen && <div data-rail-host="fullscreen" className="fixed inset-y-0 right-0 z-10 flex" />}
       {/* ── 툴바 ── */}
       {/* 컴팩트: 툴바를 통째로 걷고 플로팅 버튼으로 연다 — 접힌 한 줄(검색+토글)조차 표 공간을
           먹는다는 피드백(2026-08-21). 분기는 JS(compact)로만 — CSS 반응형 display 유틸은
