@@ -8,7 +8,7 @@ import {
   rebuildProjectWikiFromActiveMinutes,
 } from '@/lib/ai/wiki-ingest'
 import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
-import { activeTeamCodesVisibleToSync } from '@/lib/teams/master'
+import { teamCodesVisibleTo } from '@/lib/teams/source'
 import { validateMinuteTeam } from '@/lib/domain/minutes'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, gateMinutesApi,
@@ -108,11 +108,11 @@ const CROSS_WORKSPACE_MSG = '다른 워크스페이스의 프로젝트(회의)�
  * 것이다 — 다른 워크스페이스 프로젝트로의 연결은 400(예전에는 상대 워크스페이스 트리에 폴더를 만든 뒤 0006 트리거
  * WORKSPACE_SCOPE_MISMATCH 로 500 이었다). 새 회의록이면 프로젝트의 것, 없으면 호출자의 유일 워크스페이스(전환 UI 는 SP3).
  * 담당 팀은 그 범위의 활성 팀이어야 한다 — 전 워크스페이스 공용 목록이면 다른 워크스페이스의 팀 코드가 통과한다. 목록은 팀
- * 마스터에서 읽는다(W1-b). 팀 캐시를 한 번도 못 채웠으면 throw → 라우트 catch 의 500(빈 목록으로 위장하지 않는다).
+ * 원천(SP4 A2 — 요청 범위, 세션이 없으므로 service_role)에서 읽는다. 팀 원천 실패는 throw → 라우트 catch 의 500(빈 목록으로 위장하지 않는다).
  */
-function resolveWriteTarget(
-  p: ExternalMinutePayload, ex: ExistingRow | null, meetingProjectId: string | null, authz: Actor,
-): { ok: true; target: WriteTarget } | { ok: false; response: NextResponse } {
+async function resolveWriteTarget(
+  p: ExternalMinutePayload, ex: ExistingRow | null, meetingProjectId: string | null, authz: Actor, admin: AdminClient,
+): Promise<{ ok: true; target: WriteTarget } | { ok: false; response: NextResponse }> {
   let scope: MinuteScope
   const linkProjectId = p.meeting ? p.meeting.projectId : p.meetingId ? meetingProjectId : null
   if (linkProjectId) {
@@ -143,7 +143,7 @@ function resolveWriteTarget(
     }
     scope = { projectId: null, workspaceId: w.workspaceId }
   }
-  const activeTeamCodes = activeTeamCodesForMinuteScope(scope)
+  const activeTeamCodes = await activeTeamCodesForMinuteScope(scope, { client: admin })
   const teamErr = validateMinuteTeam(p.teamCode, activeTeamCodes)
   if (teamErr) return { ok: false, response: apiBadRequest(teamErr) }
   return { ok: true, target: { scope, activeTeamCodes } }
@@ -419,7 +419,7 @@ async function insertNew(
         // 경합으로 생긴 행도 같은 편집 자격 판정을 거친다 — 남의 external_id 로의 우회 덮어쓰기 차단.
         if (!canEditMinute(authz, racedRow)) return minuteNotFound()
         // 범위도 그 행 기준으로 다시 정한다(워크스페이스는 그 행의 것).
-        const racedTarget = resolveWriteTarget(p, racedRow, meetingProjectId, authz)
+        const racedTarget = await resolveWriteTarget(p, racedRow, meetingProjectId, authz, admin)
         if (!racedTarget.ok) return racedTarget.response
         // 모듈 판정도 그 행의 워크스페이스로 다시 — 위에서 판정한 새 회의록 대상과 다를 수 있다(플랫폼 관리자의 다른 워크스페이스 행)
         const racedMod = await requireModule({ workspaceId: racedTarget.target.scope.workspaceId }, 'minutes_integration', { client: admin })
@@ -522,7 +522,7 @@ export async function POST(req: NextRequest) {
 
     // 쓰기 대상(범위·담당 팀) 확정 — 회의 확보·폴더 생성·RPC 어느 것보다 먼저다. 다른 워크스페이스 프로젝트로의 연결과
     // 그 범위에 없는 담당 팀은 여기서 400 이라 상대 워크스페이스에 회의·폴더가 생기지 않는다.
-    const resolved = resolveWriteTarget(p, ex, meetingProjectId, authz)
+    const resolved = await resolveWriteTarget(p, ex, meetingProjectId, authz, admin)
     if (!resolved.ok) return resolved.response
     const { target } = resolved
     // 쓰기 대상의 워크스페이스로 모듈 판정(스펙 §4.2) — 세션이 없으니 admin 으로. 담당 팀·교차 워크스페이스 400 은 위(resolveWriteTarget)가 먼저다.
@@ -624,9 +624,9 @@ export async function GET(req: NextRequest) {
     if (scope === 'error') return apiInternalError()
     // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 목록 범위에서 숨기지 않은 프로젝트의
     // 전용 팀, 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과하고, 공용 팀만
-    // 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 캐시를 한 번도 못 채웠으면 throw → 아래 catch 의 500.
+    // 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 원천 실패는 throw → 아래 catch 의 500(담당 필터를 버리지 않는다).
     const hiddenProjectIds = typeof scope === 'object' ? scope.hiddenProjectIds : []
-    if (team && !activeTeamCodesVisibleToSync(teamViewOf(authz, hiddenProjectIds)).includes(team)) {
+    if (team && !(await teamCodesVisibleTo(teamViewOf(authz, hiddenProjectIds), { client: admin })).includes(team)) {
       return apiBadRequest('잘못된 담당입니다.')
     }
     if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })

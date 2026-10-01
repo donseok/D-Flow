@@ -23,16 +23,24 @@ const mocks = vi.hoisted(() => ({
   activeTeamCodesForWorkspace: vi.fn<(workspaceId: string) => string[]>(),
   // SP2 Task 16b — GET 목록의 담당 필터는 호출자가 볼 수 있는 팀(teamViewOf). 기본 구현은 beforeEach 에서 건다.
   activeTeamCodesVisibleTo: vi.fn<(view: TeamView) => string[]>(),
+  // SP4 A2 — 원천 teamCodesVisibleTo 의 호출(둘째 인자 = 세션 없는 경로의 service_role)을 본다
+  visibleSpy: vi.fn(),
   // 0006 — 프로젝트 없는 신규 등록의 워크스페이스 해석(actorFromUser → resolveSoleWorkspaceId).
   actorFromUser: vi.fn(),
 }))
 // 소속은 fixture 로 준다 — 실구현(buildActor)은 이 스위트의 테이블 큐를 소비해 버린다.
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 
-vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
-  activeTeamCodesForWorkspaceSync: (workspaceId: string) => mocks.activeTeamCodesForWorkspace(workspaceId),
-  activeTeamCodesVisibleToSync: (view: TeamView) => mocks.activeTeamCodesVisibleTo(view),
+vi.mock('@/lib/minutes/teamScope', () => ({
+  activeTeamCodesForMinuteScope: async (scope: { projectId: string | null; workspaceId: string }) =>
+    scope.projectId ? mocks.activeTeamCodesForProject(scope.projectId) : mocks.activeTeamCodesForWorkspace(scope.workspaceId),
+  teamCodesForMinuteScope: async (scope: { projectId: string | null; workspaceId: string }) =>
+    scope.projectId ? mocks.activeTeamCodesForProject(scope.projectId) : mocks.activeTeamCodesForWorkspace(scope.workspaceId),
+}))
+vi.mock('@/lib/teams/source', () => ({
+  teamCodesVisibleTo: async (view: TeamView, opts?: unknown) => { mocks.visibleSpy(view, opts); return mocks.activeTeamCodesVisibleTo(view) },
+  workspaceTeams: async (workspaceId: string) => (mocks.activeTeamCodesForWorkspace(workspaceId) as string[]).map((code, i) => ({
+    id: `t-${code}`, code, name: code, color: '#6b7280', sortOrder: i, active: true, progressVisible: true, projectId: null, workspaceId })),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
@@ -1413,6 +1421,23 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
     expect(builders.minutes[0].is).not.toHaveBeenCalledWith('archived_at', null)
     // 또박또박이 '초기화됨'과 '보관됨'을 구분하는 근거 — 이게 없으면 복구 두 갈래가 둘 다 막힌다
     expect((await res.json()).items[0].archived).toBe(true)
+  })
+
+  it('GET 의 담당 필터는 service_role 클라이언트로 가시 팀을 읽는다(SP4 A2 — 세션이 없다)', async () => {
+    mocks.activeTeamCodes = ['OPS', 'RES']
+    const fake = useAdmin({ minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=OPS'))).status).toBe(200)
+    expect(mocks.activeTeamCodesVisibleTo).toHaveBeenCalled()
+    expect(mocks.visibleSpy).toHaveBeenCalledWith(expect.anything(), { client: fake.admin })
+  })
+
+  it('[RF2] GET 의 가시 팀 조회가 실패하면 500 — 담당 필터를 버리고 목록을 내지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.activeTeamCodesVisibleTo.mockImplementationOnce(() => { throw new Error('teams down') })
+    const fake = useAdmin({ minutes: [{ data: [], count: 0 }] })
+    expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=OPS'))).status).toBe(500)
+    expect(fake.builders.minutes).toBeUndefined()
+    err.mockRestore()
   })
 
   it('W24: include_archived 는 true/false 만 받는다', async () => {

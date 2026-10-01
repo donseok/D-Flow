@@ -26,10 +26,14 @@ vi.mock('@/lib/ai/answer', () => ({ sanitizeHistory: () => [] }))
 vi.mock('@/lib/ai/minutes-answer', () => ({
   streamArchiveAnswer: mocks.streamArchiveAnswer, streamDocAnswer: mocks.streamDocAnswer,
 }))
-vi.mock('@/lib/teams/master', async () => {
+const teamsFail = vi.hoisted(() => ({ on: false }))
+vi.mock('@/lib/teams/source', async () => {
   const { teamCodesVisibleTo } = await import('@/lib/domain/teams')
   return {
-    activeTeamCodesVisibleToSync: (view: Parameters<typeof teamCodesVisibleTo>[1]) => teamCodesVisibleTo(TEAMS, view),
+    teamCodesVisibleTo: async (view: Parameters<typeof teamCodesVisibleTo>[1]) => {
+      if (teamsFail.on) throw new Error('teams down')
+      return teamCodesVisibleTo(TEAMS, view)
+    },
   }
 })
 
@@ -114,6 +118,15 @@ describe('/api/minutes/chat archive — 담당 필터는 호출자 워크스페�
     expect((await POST(archive({ team: 'PMO' }))).status).toBe(500)
     expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
     spy.mockRestore()
+  })
+
+  it('[RF2] 담당 필터가 있는데 팀을 읽지 못하면 500 — 필터를 조용히 버리고 전 회의록으로 답하지 않는다', async () => {
+    teamsFail.on = true
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect((await POST(archive({ team: 'OPS' }))).status).toBe(500)
+      expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+    } finally { teamsFail.on = false; err.mockRestore() }
   })
 })
 

@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   MINUTE_ATTACHMENT_MAX, MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_BODY_MAX,
 } from '@/lib/domain/minutes'
-import { activeTeamCodesForWorkspaceSync } from '@/lib/teams/master'
+import { workspaceTeams } from '@/lib/teams/source'
+import { activeCodes } from '@/lib/domain/teams'
 import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
 import { fetchAllPages } from '@/lib/data/paging'
@@ -69,9 +70,11 @@ export async function GET(req: NextRequest) {
     // 회의 목록은 볼 수 있는 프로젝트일 때만 — 다른 워크스페이스·비공개 프로젝트는 존재를 드러내지 않는다(404).
     if (projectId && !projects.some(p => p.id === projectId)) return apiNotFound()
 
-    // 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(첫 등장 순서 유지). 팀 마스터를 한 번도 못 읽었으면
-    // 접근자가 throw 한다 → 500.
-    const teams = [...new Set([...actor.workspaceRoles.keys()].filter((w) => onWs.has(w)).flatMap(wid => activeTeamCodesForWorkspaceSync(wid)))]
+    // 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(첫 등장 순서 유지). 세션이 없으므로 service_role 로 읽는다.
+    // 팀 원천 실패는 throw → 500.
+    const wsIds = [...actor.workspaceRoles.keys()].filter((w) => onWs.has(w))
+    const perWs = await Promise.all(wsIds.map((wid) => workspaceTeams(wid, { client: admin })))
+    const teams = [...new Set(perWs.flatMap((rows) => activeCodes(rows)))]
 
     const body: Record<string, unknown> = {
       teams,

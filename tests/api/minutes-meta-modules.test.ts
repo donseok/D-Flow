@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ actorFromUser: vi.fn(), createAdminClient: vi.fn(), teams: vi.fn(), fetchAllPages: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ actorFromUser: m.actorFromUser }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.createAdminClient }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForWorkspaceSync: m.teams }))
+vi.mock('@/lib/teams/source', () => ({
+  workspaceTeams: async (workspaceId: string) => (m.teams(workspaceId) as string[]).map((code, i) => ({
+    id: `t-${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: i, active: true, progressVisible: true, projectId: null, workspaceId })),
+}))
 vi.mock('@/lib/data/paging', () => ({ fetchAllPages: m.fetchAllPages }))
 vi.mock('@/lib/minutes/externalApi', async (orig) => ({
   ...(await orig<typeof import('@/lib/minutes/externalApi')>()),

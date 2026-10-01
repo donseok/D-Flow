@@ -54,16 +54,11 @@ vi.mock('@/lib/minutes/project', () => ({
   resolveMinuteProject: vi.fn(async (_db: unknown, input: { meetingId: string | null; projectId?: string | null }) =>
     ({ projectId: input.meetingId === MEETING_B ? PB : input.projectId ?? null, error: null })),
 }))
-vi.mock('@/lib/teams/master', () => {
-  const team = (code: string, workspaceId: string, projectId: string | null = null) =>
-    ({ id: `t-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+vi.mock('@/lib/minutes/teamScope', () => {
   const byProject: Record<string, string> = { [PA]: WA, [PB]: WB }
-  return {
-    teamsForWorkspaceSync: (w: string) => mocks.workspaceTeams(w).map(c => team(c, w)),
-    activeTeamCodesForWorkspaceSync: (w: string) => mocks.workspaceTeams(w),
-    teamsForProjectSync: (p: string) => mocks.workspaceTeams(byProject[p]).map(c => team(c, byProject[p])),
-    activeTeamCodesForProjectSync: (p: string) => mocks.workspaceTeams(byProject[p]),
-  }
+  const codes = (s: { projectId: string | null; workspaceId: string }) => mocks.workspaceTeams(s.projectId ? byProject[s.projectId] : s.workspaceId)
+  return { activeTeamCodesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s),
+    teamCodesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s) }
 })
 
 import {

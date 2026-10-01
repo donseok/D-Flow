@@ -14,12 +14,15 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
-vi.mock('@/lib/teams/master', () => ({
-  activeTeamCodesForProjectSync: (projectId: string) => mocks.activeTeamCodesForProject(projectId),
-  activeTeamCodesForWorkspaceSync: (workspaceId: string) => mocks.activeTeamCodesForWorkspace(workspaceId),
+vi.mock('@/lib/minutes/teamScope', () => ({
+  activeTeamCodesForMinuteScope: vi.fn(async (scope: { projectId: string | null; workspaceId: string }) =>
+    scope.projectId ? mocks.activeTeamCodesForProject(scope.projectId) : mocks.activeTeamCodesForWorkspace(scope.workspaceId)),
+  teamCodesForMinuteScope: async (scope: { projectId: string | null; workspaceId: string }) =>
+    scope.projectId ? mocks.activeTeamCodesForProject(scope.projectId) : mocks.activeTeamCodesForWorkspace(scope.workspaceId),
 }))
 
 import { DELETE, GET, POST } from '@/app/api/v1/minutes/folder/route'
+import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
 import { profileRowFor, type FakeAccount } from '../fixtures/profiles'
 import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeSuperuser, WS } from '../fixtures/actor'
@@ -436,6 +439,16 @@ describe('건별 실패 사유 (요건 11 status 값 집합)', () => {
     expect(json.summary).toEqual({
       total: 3, moved: 1, already_correct: 0, skipped: 1, not_found: 1, failed: 0,
     })
+  })
+
+  it('같은 범위의 회의록이 여럿이어도 팀은 범위마다 한 번 읽는다(SP4 A2 — service_role 로)', async () => {
+    const { admin } = useBatch([minute(1, { folder_id: null }), minute(2, { folder_id: null }), minute(3, { folder_id: null })])
+    const r = await POST(post(body({
+      items: [1, 2, 3].map((n) => ({ external_id: EID(n), folder_path: ['MES', '품질'] })),
+    })))
+    expect(r.status).toBe(200)
+    expect(vi.mocked(activeTeamCodesForMinuteScope)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(activeTeamCodesForMinuteScope)).toHaveBeenCalledWith({ projectId: null, workspaceId: 'ws-1' }, { client: admin })
   })
 })
 

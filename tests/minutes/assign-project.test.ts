@@ -26,7 +26,7 @@ vi.mock('@/lib/ai/wiki-ingest', () => ({
   rebuildProjectWikiFromActiveMinutes: (...a: unknown[]) => rebuild.fn(...(a as [])),
 }))
 // 재편철 팀 목록(옮겨 간 범위의 팀) — 실 캐시는 콜드스타트에 DB 가 필요하다.
-vi.mock('@/lib/teams/master', async () => (await import('../helpers/teams-master-mock')).teamsMasterMock())
+vi.mock('@/lib/minutes/teamScope', async () => (await import('../helpers/team-scope-mock')).teamScopeMock())
 
 const createServerClient = vi.fn()
 vi.mock('@/lib/supabase/server', () => ({

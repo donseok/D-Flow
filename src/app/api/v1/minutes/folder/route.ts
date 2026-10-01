@@ -343,11 +343,15 @@ export async function POST(req: NextRequest) {
     const onTarget = new Set(await workspacesWithModule(targetWs, 'minutes_integration', { client: admin }))
     if (targetWs.some((w) => !onTarget.has(w))) return apiModuleDisabled()
     // 건별 편철의 팀 목록 — 그 회의록의 범위(프로젝트, 미지정이면 워크스페이스)의 것. 전 워크스페이스 공용 목록이면 다른
-    // 워크스페이스의 팀 루트가 활성으로 보인다. 첫 이동 전에 전부 확보한다 — 팀 캐시를 한 번도 못 채웠으면 throw → 아래
-    // catch 의 500 이고, 몇 건을 옮긴 뒤에 터져 결과 보고 없이 끝나는 일이 없다.
+    // 워크스페이스의 팀 루트가 활성으로 보인다. 첫 이동 전에 전부 확보한다 — 팀 원천 실패는 throw → 아래
+    // catch 의 500 이고, 몇 건을 옮긴 뒤에 터져 결과 보고 없이 끝나는 일이 없다. 같은 범위는 한 번만 읽는다(세션이 없어 service_role).
     const teamCodesByMinute = new Map<string, TeamCode[]>()
+    const byScope = new Map<string, Promise<TeamCode[]>>()
     for (const r of byExternalId.values()) {
-      teamCodesByMinute.set(r.id, activeTeamCodesForMinuteScope({ projectId: r.project_id, workspaceId: r.workspace_id }))
+      const scope = { projectId: r.project_id, workspaceId: r.workspace_id }
+      const key = `${scope.workspaceId}|${scope.projectId ?? ''}`
+      if (!byScope.has(key)) byScope.set(key, activeTeamCodesForMinuteScope(scope, { client: admin }))
+      teamCodesByMinute.set(r.id, await byScope.get(key)!)
     }
 
     const results: ItemResult[] = []

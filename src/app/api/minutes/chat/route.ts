@@ -11,7 +11,7 @@ import { folderSubtreeIds } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
 import { ancestorIdsOf, loadFolderSnapshot, seedRootIdOf } from '@/lib/minutes/folders'
 import { createServerClient } from '@/lib/supabase/server'
-import { activeTeamCodesVisibleToSync } from '@/lib/teams/master'
+import { teamCodesVisibleTo } from '@/lib/teams/source'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,11 +61,11 @@ export async function POST(req: NextRequest) {
       const f = body.filters ?? {}
       // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 볼 수 있는 프로젝트의 전용 팀,
       // 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과한다.
-      // 권한 조회·팀 캐시 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
+      // 권한 조회·팀 원천 실패는 throw → 아래 catch 의 500(필터를 버리지 않는다).
       const actor = await getActor()
       if (!actor) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
       const team = typeof f.team === 'string'
-        && activeTeamCodesVisibleToSync(teamViewOf(actor, await getHiddenProjectIds())).includes(f.team)
+        && (await teamCodesVisibleTo(teamViewOf(actor, await getHiddenProjectIds()))).includes(f.team)
         ? (f.team as TeamCode) : null
       const from = typeof f.from === 'string' && DATE_RE.test(f.from) ? f.from : null
       const to = typeof f.to === 'string' && DATE_RE.test(f.to) ? f.to : null

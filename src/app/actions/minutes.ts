@@ -91,10 +91,10 @@ const TEAMS_UNAVAILABLE_MSG = '팀 목록을 불러오지 못했습니다. 잠�
 const FILE_LOOKUP_FAILED_MSG = '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const VERSION_LOOKUP_FAILED_MSG = '버전 원본 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
-/** 팀 목록 조회를 결과로 감싼다 — 팀 캐시를 한 번도 못 채운 throw 는 오류 문구로(빈 목록으로 위장하지 않는다). */
-function teamsResult(read: () => TeamCode[]): { codes: TeamCode[] } | { error: string } {
+/** 팀 목록 조회를 결과로 감싼다 — 팀 원천 실패는 오류 문구로(빈 목록으로 위장하지 않는다). */
+async function teamsResult(read: () => Promise<TeamCode[]>): Promise<{ codes: TeamCode[] } | { error: string }> {
   try {
-    return { codes: read() }
+    return { codes: await read() }
   } catch (e) {
     console.error('[minutes] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
     return { error: TEAMS_UNAVAILABLE_MSG }
@@ -268,7 +268,7 @@ export async function createMinute(
     ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
   if (!targetWs) return { ok: false, error: ERR_MISSING }
   // 담당 팀은 그 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀이어야 한다 — 다른 워크스페이스의 팀 코드는 거부.
-  const teams = activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs })
+  const teams = await activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs })
   if ('error' in teams) return { ok: false, error: teams.error }
   const teamErr = validateMinuteTeam(input.teamCode, teams.codes)
   if (teamErr) return { ok: false, error: teamErr }
@@ -385,7 +385,7 @@ export async function updateMinuteMeta(
     return { ok: false, error: CROSS_WORKSPACE_MOVE_MSG }
   }
   // 담당 팀은 옮겨 갈 범위(새 프로젝트, 미지정이면 회의록의 워크스페이스)의 활성 팀이어야 한다.
-  const teams = activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: own.scope.workspaceId })
+  const teams = await activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: own.scope.workspaceId })
   if ('error' in teams) return { ok: false, error: teams.error }
   const teamErr = validateMinuteTeam(patch.teamCode, teams.codes)
   if (teamErr) return { ok: false, error: teamErr }
@@ -537,7 +537,7 @@ export async function assignMinutesProject(
   const refileTeams = new Map<string, TeamCode[]>()
   for (const r of byId.values()) {
     if (refileTeams.has(r.workspace_id)) continue
-    const teams = activeTeamsOr({ projectId, workspaceId: r.workspace_id })
+    const teams = await activeTeamsOr({ projectId, workspaceId: r.workspace_id })
     if ('error' in teams) return { ok: false, error: teams.error, ...empty }
     refileTeams.set(r.workspace_id, teams.codes)
   }
@@ -1114,7 +1114,7 @@ export async function renameMinuteFolder(
   // 루트에서 팀코드 동명으로의 개명도 차단(앵커 사칭 방지) — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의
   // 등록 팀(비활성 포함)으로 본다. 다른 워크스페이스 팀 이름은 이 트리의 앵커가 아니다.
   if (target.parentId === null) {
-    const teams = teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
+    const teams = await teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
     if ('error' in teams) return { ok: false, error: teams.error }
     if (isTeamRootName(name, teams.codes))
       return { ok: false, error: `팀 기본 폴더명(${teams.codes.join('·')})은 루트에 사용할 수 없습니다.` }
@@ -1251,7 +1251,7 @@ export async function moveMinuteFolder(
   // 루트 예약어(앵커 사칭)는 루트로 옮길 때만 본다 — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 등록 팀으로.
   let teamCodes: string[] = []
   if (newParentId === null) {
-    const teams = teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
+    const teams = await teamCodesOr({ projectId: target.projectId, workspaceId: target.workspaceId })
     if ('error' in teams) return { ok: false, error: teams.error }
     teamCodes = teams.codes
   }
