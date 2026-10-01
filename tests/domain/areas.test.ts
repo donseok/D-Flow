@@ -2,14 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { validateArea, type AreaInput } from '@/lib/domain/areas'
 
 const base = (over: Partial<AreaInput> = {}): AreaInput => ({
-  kind: 'weekly_section', code: 'PLAN', name: '생산계획', sortOrder: 0, active: true,
+  kind: 'weekly_section', code: 'PLAN', name: '수급계획', sortOrder: 0, active: true,
   teams: [{ teamId: 't-erp', kind: 'primary' }, { teamId: 't-mes', kind: 'support' }],
   ...over,
 })
 
 describe('validateArea', () => {
   it('정상 입력은 code·name 을 trim 해 돌려준다', () => {
-    const r = validateArea(base({ code: ' PLAN ', name: ' 생산계획 ' }), [])
+    const r = validateArea(base({ code: ' PLAN ', name: ' 수급계획 ' }), [])
     expect(r).toEqual({ ok: true, value: base() })
   })
 

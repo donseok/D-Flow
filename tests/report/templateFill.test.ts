@@ -69,28 +69,28 @@ describe('paginateGroups', () => {
     expect(pages2.flat().filter(x => x.items.length === 0)).toHaveLength(0)
   })
   it('담당 헤더("- X")가 페이지 끝에 홀로 남지 않고 상세와 함께 다음 페이지로 이월', () => {
-    // 헤더1 + 항목13 = 14줄 사용 → 15번째 줄에 '- MES' 헤더만 남는 상황
-    const items = [...Array.from({ length: 13 }, (_, i) => `항목${i + 1}`), '- MES', '. 상세A', '. 상세B']
+    // 헤더1 + 항목13 = 14줄 사용 → 15번째 줄에 '- FCT' 헤더만 남는 상황
+    const items = [...Array.from({ length: 13 }, (_, i) => `항목${i + 1}`), '- FCT', '. 상세A', '. 상세B']
     const pages = paginateGroups([{ phase: 'P', num: 1, items }], 15)
     expect(pages).toHaveLength(2)
     expect(pages[0][0].items.at(-1)).toBe('항목13')                 // 헤더가 끝에 홀로 남지 않음
-    expect(pages[1][0].items).toEqual(['- MES', '. 상세A', '. 상세B'])
+    expect(pages[1][0].items).toEqual(['- FCT', '. 상세A', '. 상세B'])
   })
   it('상세(".") 중간에서 끊기면 다음 페이지에 담당 헤더를 "(계속)"으로 반복', () => {
-    const items = ['- MES', ...Array.from({ length: 20 }, (_, i) => `. 상세${i + 1}`)]
+    const items = ['- FCT', ...Array.from({ length: 20 }, (_, i) => `. 상세${i + 1}`)]
     const pages = paginateGroups([{ phase: 'P', num: 1, items }], 15)
     expect(pages).toHaveLength(2)
-    expect(pages[1][0].items[0]).toBe('- MES (계속)')
+    expect(pages[1][0].items[0]).toBe('- FCT (계속)')
     // 원본 상세 20건 전부 보존
     const details = pages.flat().flatMap(x => x.items).filter(s => s.startsWith('. '))
     expect(details).toHaveLength(20)
   })
 
   it('시트 포매터(sheetLineText) 주입 시에도 분할 규칙이 동일하게 적용된다', () => {
-    const pages = paginateGroups([g('[ERP] 모듈A', 20)], 15, sheetLineText)
+    const pages = paginateGroups([g('[FIN] 모듈A', 20)], 15, sheetLineText)
     expect(pages).toHaveLength(2)
     expect(pages[0][0].items).toHaveLength(14)
-    expect(pages[1][0].phase).toBe('[ERP] 모듈A (계속)')
+    expect(pages[1][0].phase).toBe('[FIN] 모듈A (계속)')
     expect(pages[1][0].items).toHaveLength(6)
     const all = pages.flat().flatMap(x => x.items)
     expect(all).toHaveLength(20)
@@ -127,7 +127,7 @@ describe('paginateLines', () => {
 
 const narr: NarrativeModel = {
   prev: [{ phase: '설계', num: 1, items: ['R&R 확정'] }],
-  curr: [{ phase: '구축', num: 1, items: ['MDM 표준화'] }],
+  curr: [{ phase: '구축', num: 1, items: ['DIC 규격화'] }],
   issues: ['샘플 이슈'], events: ['Kick-Off (7/10)'],
 }
 const model = { meta: { prevWeekRange: '6/29~7/3', weekRange: '7/6~7/10' } } as unknown as WeeklyReportModel
@@ -172,7 +172,7 @@ describe('fillWeeklyTemplate (통합)', () => {
     expect(slide3).toContain('주요 리스크·제언')
     expect(slide3).toContain('지연 관리가 관건')
     expect(slide3).toContain('지연 누적')
-    expect(slide3).not.toContain('MDM 표준화')          // 본문 내용이 새 슬라이드로 새지 않음
+    expect(slide3).not.toContain('DIC 규격화')          // 본문 내용이 새 슬라이드로 새지 않음
   })
 
   it('extra 미지정이면 산출 바이트가 기존과 완전 동일(코드 경로 불변)', async () => {
@@ -194,7 +194,7 @@ describe('fillWeeklyTemplate (통합)', () => {
     const zip = await JSZip.loadAsync(buf)
     const slide2 = await zip.file('ppt/slides/slide2.xml')!.async('string')
     expect(slide2).toContain('7/6~7/10')       // 금주 날짜 헤더
-    expect(slide2).toContain('MDM 표준화')       // 금주 내용
+    expect(slide2).toContain('DIC 규격화')       // 금주 내용
     expect(slide2).toContain('R&amp;R 확정')     // 전주 내용(이스케이프)
     expect(slide2).toContain('Kick-Off (7/10)') // 이벤트
     expect(zip.file('ppt/slides/slide3.xml')).toBeNull() // 한 페이지면 슬라이드 추가 없음
@@ -249,8 +249,8 @@ describe('fillWeeklyTemplate (통합)', () => {
 
 describe('fillWeeklyTemplate 옵션 (시트 경로)', () => {
   const narr = {
-    prev: [{ phase: '[ERP] 모듈A', num: 1, items: ['1. 실적', '- 상세'] }],
-    curr: [{ phase: '[ERP] 모듈A', num: 1, items: ['1. 계획'] }],
+    prev: [{ phase: '[FIN] 모듈A', num: 1, items: ['1. 실적', '- 상세'] }],
+    curr: [{ phase: '[FIN] 모듈A', num: 1, items: ['1. 계획'] }],
     issues: ['[모듈A] 지연 위험'], events: ['특이 이슈 없음'],
   }
   const meta = { meta: { prevWeekRange: '7/6~7/10', weekRange: '7/13~7/17' } }
@@ -304,7 +304,7 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
   }
 
   it('이슈/이벤트는 콘텐츠 하위 줄과 동일 서식 — 그룹 불릿(점) 없이 마커 들여쓰기', async () => {
-    const sections = [sec('PMO', ['1. 착수'], ['1. 계획'],
+    const sections = [sec('HQ', ['1. 착수'], ['1. 계획'],
       ['1. PI 변화관리 교육세션', '-. 대상 : Acme TF'], ['1. 월간 보고'])]
     const zip = await JSZip.loadAsync(await fillSheetTemplate(sections, meta, { lineFormatter: sheetLineText }))
     const slide2 = await zip.file('ppt/slides/slide2.xml')!.async('string')
@@ -319,24 +319,24 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
 
   it('구분마다 한 슬라이드 + 이슈/이벤트도 그 구분 페이지에 실린다', async () => {
     const sections = [
-      sec('영업', ['수주 협의'], ['견적 발송'], ['가격 이견'], ['입찰 마감 7/15']),
-      sec('구매', ['자재 발주'], ['납기 조율'], ['공급사 지연'], ['공급사 미팅']),
+      sec('홍보', ['수주 협의'], ['견적 발송'], ['가격 이견'], ['입찰 마감 7/15']),
+      sec('조달', ['자재 발주'], ['납기 조율'], ['공급사 지연'], ['공급사 미팅']),
     ]
     const slides = await readSlides(await fillSheetTemplate(sections, meta, { lineFormatter: sheetLineText }))
     expect(slides).toHaveLength(2)
-    expect(slides[0]).toContain('영업')
+    expect(slides[0]).toContain('홍보')
     expect(slides[0]).toContain('수주 협의')      // 금주실적
     expect(slides[0]).toContain('견적 발송')      // 차주계획
     expect(slides[0]).toContain('가격 이견')      // 이슈사항 — 그 구분 페이지에
     expect(slides[0]).toContain('입찰 마감 7/15') // 주요이벤트 — 그 구분 페이지에
-    expect(slides[0]).not.toContain('구매')        // 다음 구분은 섞이지 않음
-    expect(slides[1]).toContain('구매')
+    expect(slides[0]).not.toContain('조달')        // 다음 구분은 섞이지 않음
+    expect(slides[1]).toContain('조달')
     expect(slides[1]).toContain('공급사 지연')
     expect(slides[1]).toContain('공급사 미팅')
   })
 
   it('내용이 없는 구분도 빈 페이지를 만들고 구분명만 표기(이슈/이벤트는 빈칸)', async () => {
-    const sections = [sec('영업', ['수주 협의'], ['견적 발송']), sec('품질')]
+    const sections = [sec('홍보', ['수주 협의'], ['견적 발송']), sec('품질')]
     const slides = await readSlides(await fillSheetTemplate(sections, meta, { lineFormatter: sheetLineText }))
     expect(slides).toHaveLength(2)                 // 품질도 페이지 생성
     expect(slides[1]).toContain('품질')            // 빈 구분도 라벨 표기
@@ -345,19 +345,19 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
   })
 
   it('한 구분이 셀 예산을 넘으면 그 구분 안에서만 연속 슬라이드, 이슈는 첫 페이지만', async () => {
-    const big = sec('영업', Array.from({ length: 20 }, (_, i) => `실적 ${i + 1}`), ['한 건'], ['핵심 이슈'], [])
-    const slides = await readSlides(await fillSheetTemplate([big, sec('구매', ['자재 발주'])], meta, { lineFormatter: sheetLineText }))
-    expect(slides).toHaveLength(3)                 // 영업 2p + 구매 1p
-    expect(slides[0]).toContain('영업')
-    expect(slides[1]).toContain('영업 (계속)')
+    const big = sec('홍보', Array.from({ length: 20 }, (_, i) => `실적 ${i + 1}`), ['한 건'], ['핵심 이슈'], [])
+    const slides = await readSlides(await fillSheetTemplate([big, sec('조달', ['자재 발주'])], meta, { lineFormatter: sheetLineText }))
+    expect(slides).toHaveLength(3)                 // 홍보 2p + 조달 1p
+    expect(slides[0]).toContain('홍보')
+    expect(slides[1]).toContain('홍보 (계속)')
     expect(slides[1]).not.toContain('핵심 이슈')   // 이슈는 그 구분 첫 페이지만
-    expect(slides[2]).toContain('구매')
+    expect(slides[2]).toContain('조달')
     const count = (s: string) => (s.match(/실적 \d/g) ?? []).length // '금주실적' 헤더 제외, 항목만
     expect(count(slides[0]) + count(slides[1])).toBe(20) // 유실 없음
   })
 
   it('기본 라벨은 금주실적/차주계획', async () => {
-    const slides = await readSlides(await fillSheetTemplate([sec('영업', ['x'])], meta))
+    const slides = await readSlides(await fillSheetTemplate([sec('홍보', ['x'])], meta))
     expect(slides[0]).toContain('금주실적 (7/6~7/10)')
     expect(slides[0]).toContain('차주계획 (7/13~7/17)')
   })
@@ -366,7 +366,7 @@ describe('fillSheetTemplate (구분당 1페이지 + 4셀)', () => {
     const issues = Array.from({ length: 15 }, (_, i) => `이슈사항${i + 1}`) // 예산 12 초과 → 2페이지
     const events = Array.from({ length: 14 }, (_, i) => `주요이벤트${i + 1}`)
     const slides = await readSlides(await fillSheetTemplate(
-      [sec('PMO', ['한 줄 실적'], ['한 줄 계획'], issues, events)], meta, { lineFormatter: sheetLineText },
+      [sec('HQ', ['한 줄 실적'], ['한 줄 계획'], issues, events)], meta, { lineFormatter: sheetLineText },
     ))
     const joined = slides.join('')
     expect(joined).not.toContain('외 ')                         // 캡 표기 없음

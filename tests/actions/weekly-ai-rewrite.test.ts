@@ -62,7 +62,7 @@ function weeklyClient({
 }
 
 const input = (over: Partial<WeeklyRewriteInput> = {}): WeeklyRewriteInput => ({
-  rowId: 'r1', cellKey: 'this_content', content: 'ERP-21 전환을 80% 완료함', ...over,
+  rowId: 'r1', cellKey: 'this_content', content: 'FIN-21 전환을 80% 완료함', ...over,
 })
 
 beforeEach(() => {
@@ -131,7 +131,7 @@ describe('prepareWeeklyCellRewrite', () => {
     const client = weeklyClient({ scopeRows: [{ id: 'r1', area_id: A_EXP }, { id: 'r2', area_id: A_DATA }] })
     mocks.createServerClient.mockResolvedValue(client as never)
     mocks.generateAnswer.mockResolvedValue(JSON.stringify({ cells: [
-      { id: 'c0', content: 'ERP-21 전환을 80% 완료했습니다.' },
+      { id: 'c0', content: 'FIN-21 전환을 80% 완료했습니다.' },
       { id: 'c1', content: 'MM-3 검증을 2건 완료했습니다.' },
     ] }))
     const inputs = [
@@ -142,7 +142,7 @@ describe('prepareWeeklyCellRewrite', () => {
     const result = await prepareWeeklyCellRewrite('p-success', inputs)
 
     expect(result).toEqual({ ok: true, edits: [
-      { ...inputs[0], original: inputs[0].content, content: 'ERP-21 전환을 80% 완료했습니다.' },
+      { ...inputs[0], original: inputs[0].content, content: 'FIN-21 전환을 80% 완료했습니다.' },
       { ...inputs[1], original: inputs[1].content, content: 'MM-3 검증을 2건 완료했습니다.' },
     ] })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(1)
@@ -171,11 +171,11 @@ describe('prepareWeeklyCellRewrite', () => {
   it('사용자·프로젝트별 연속 AI 호출을 짧게 제한한다', async () => {
     mocks.createServerClient.mockImplementation(async () => weeklyClient() as never)
     mocks.generateAnswer.mockResolvedValue(JSON.stringify({ cells: [
-      { id: 'c0', content: 'ERP-21 전환을 80% 완료했습니다.' },
+      { id: 'c0', content: 'FIN-21 전환을 80% 완료했습니다.' },
     ] }))
 
     expect((await prepareWeeklyCellRewrite('p-rate', [input()])).ok).toBe(true)
-    const limited = await prepareWeeklyCellRewrite('p-rate', [input({ content: 'ERP-21 전환을 80% 점검함' })])
+    const limited = await prepareWeeklyCellRewrite('p-rate', [input({ content: 'FIN-21 전환을 80% 점검함' })])
     expect(limited).toEqual({ ok: false, error: 'AI 요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.' })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(1)
   })
