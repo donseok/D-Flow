@@ -101,9 +101,18 @@ export interface WizardState {
   error: string | null
   errors: ImportError[] | null
   needsTeams: string[] | null
-  /** 409 응답의 등록 스코프(0071) — 팀 정의 프로젝트는 'project'(관리자 게이트로 충분),
-   *  전역 상속 프로젝트는 'global'(기존대로 슈퍼유저 게이트). needsTeams 와 함께 지운다. */
-  needsTeamsScope: 'project' | 'global' | null
+  /** 409 NEEDS_TEAMS 의 상속 여부(SP4 D54) — 참이면 등록이 이 프로젝트가 쓰던 공용 팀을 같은 code·이름·색의 이 프로젝트 팀으로
+   *  전환한 뒤 미등록 팀을 더한다(확인 창이 그 사실을 알린다). 등록은 늘 프로젝트 관리자 몫이다(D4 — 슈퍼유저 분기 없음). needsTeams 와 함께 지운다. */
+  inheritsCommon: boolean
+  /** 상속 중인 활성 공용 팀 — 전환 확인 창의 목록. needsTeams 와 함께 지운다. */
+  commonTeams: { code: string; name: string }[]
+  /** 실행 의도(intentKey)의 명령 id(SP4 §4.4 — 같은 id 2회 = 1벌). 같은 의도의 재시도·needsTeams 재실행은 이 id 를 다시 쓰고,
+   *  성공·확정 실패(isDefinitiveFailure·링크 오류) 뒤에는 null — 다음 실행은 새 id. 파일 재선택·처음부터 다시에도 남는다(RF3). */
+  commandId: string | null
+  /** commandId·preBackup 이 묶인 실행 의도(executionIntentKey). 컴포넌트가 실행·사전 백업 직전에 intentChanged 로 싣는다. */
+  intentKey: string | null
+  /** replace 사전 백업(D50) — intentKey 의 의도로 내려받기를 시작한 백업. 의도가 바뀌거나 실행이 성공하면 null. */
+  preBackup: { generatedAt: string } | null
   result: ExecuteResult | null
 }
 
@@ -121,7 +130,11 @@ export const initialWizardState: WizardState = {
   error: null,
   errors: null,
   needsTeams: null,
-  needsTeamsScope: null,
+  inheritsCommon: false,
+  commonTeams: [],
+  commandId: null,
+  intentKey: null,
+  preBackup: null,
   result: null,
 }
 
@@ -133,10 +146,12 @@ export type WizardAction =
   | { type: 'profileChanged'; profile: ExcelProfile }
   | { type: 'modeChanged'; mode: ImportMode }
   | { type: 'saveProfileChanged'; saveProfile: boolean }
+  | { type: 'intentChanged'; intentKey: string; commandId: string }
+  | { type: 'preBackupTaken'; generatedAt: string }
   | { type: 'executeStart' }
-  | { type: 'executeNeedsTeams'; teams: string[]; scope: 'project' | 'global' }
+  | { type: 'executeNeedsTeams'; teams: string[]; inheritsCommon: boolean; commonTeams: { code: string; name: string }[] }
   | { type: 'dismissNeedsTeams' }
-  | { type: 'executeFailure'; error: string }
+  | { type: 'executeFailure'; error: string; definitive: boolean }
   | { type: 'executeValidationFailure'; errors: ImportError[] }
   | { type: 'executeSuccess'; result: ExecuteResult }
   | { type: 'executeProfileMismatch'; error: string; profileMismatch: ProfileMismatch | null }
@@ -144,13 +159,55 @@ export type WizardAction =
   | { type: 'resetToDetected' }
   | { type: 'useSavedProfile' }
 
+/** 키 순서와 무관한 직렬화 — 같은 내용이면 같은 문자열(마크 사전 Record 의 편집 순서가 지문을 바꾸지 않게). 배열 순서는 의미라 그대로 둔다. */
+function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`
+  if (v !== null && typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    return `{${Object.keys(o).sort().map(k => `${JSON.stringify(k)}:${stableJson(o[k])}`).join(',')}}`
+  }
+  return JSON.stringify(v) ?? 'null'
+}
+
+/** 실행 의도의 지문(SP4 §4.4·RF3) — 파일(이름·크기·수정 시각)·프로파일(마크 사전 포함 — 서버에 보내는 그 값)·모드·양식 저장 여부.
+ *  이 값이 같은 동안의 실행은 한 명령(같은 명령 id)이다. registerTeams 는 넣지 않는다 — needsTeams 뒤 등록 재실행은 같은 명령이다. */
+export function executionIntentKey(input: {
+  fileName: string; fileSize: number; lastModified: number; profile: ExcelProfile | null; mode: ImportMode; saveProfile: boolean
+}): string {
+  return stableJson([input.fileName, input.fileSize, input.lastModified, input.profile, input.mode, input.saveProfile])
+}
+
+/** 이번 실행(·사전 백업)의 명령 id — 같은 의도에 id 가 있으면 그것, 아니면 mint()(컴포넌트는 newUuid). 고른 id 는 intentChanged 로 싣는다. */
+export function commandIdFor(state: Pick<WizardState, 'intentKey' | 'commandId'>, intentKey: string, mint: () => string): string {
+  return state.intentKey === intentKey && state.commandId !== null ? state.commandId : mint()
+}
+
+/** replace 실행을 열어도 되는가(D50) — 지금 의도로 사전 백업 내려받기를 시작했을 때만(브라우저는 내려받기 완료를 알리지 않는다 —
+ *  시작한 클릭이 기준이다). 의도를 모르면(파일·프로파일 없음) 닫힌다. */
+export function preBackupReady(state: Pick<WizardState, 'intentKey' | 'preBackup'>, intentKey: string | null): boolean {
+  return intentKey !== null && state.preBackup !== null && state.intentKey === intentKey
+}
+
+/** 서버가 "적용하지 않았다"고 확정한 응답인가 — 409 를 뺀 4xx(입력·권한·COMMAND_REUSED). 409(needsTeams·PROFILE_MISMATCH)는 확인 뒤
+ *  같은 명령을 다시 보내는 단계이고, 5xx·네트워크 실패·본문을 못 읽은 응답은 적용 여부를 모른다 — 같은 id 로 재시도해 duplicate 로 받는다. */
+export function isDefinitiveFailure(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 409
+}
+
+/** 409 확인 창을 닫은 상태 */
+const NO_TEAMS_PROMPT: Pick<WizardState, 'needsTeams' | 'inheritsCommon' | 'commonTeams'> = { needsTeams: null, inheritsCommon: false, commonTeams: [] }
+/** 화면을 처음으로 되돌려도 남기는 실행 의도 — 응답을 잃은 뒤 같은 파일·같은 입력으로 다시 실행하면 같은 id 여야 두 벌이 되지 않는다(RF3).
+ *  다른 파일·다른 입력이면 지문이 달라 새 id 다. */
+const keptIntent = (s: WizardState): Pick<WizardState, 'commandId' | 'intentKey' | 'preBackup'> =>
+  ({ commandId: s.commandId, intentKey: s.intentKey, preBackup: s.preBackup })
+
 /** 2단계 진입 기본값 계약(§6.2): 저장 양식이 파일 구조와 같을 때만 savedProfile, 아니면 detection.profile(Task 1b —
  *  다른 구조의 파일을 저장 양식으로 읽으면 오류 없이 틀린 값이 쓰인다). 저장 양식은 useSavedProfile 로만 고른다. */
 export function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case 'fileSelected':
-      // 파일을 바꾸면 이전 감지·편집 결과는 전부 무효 — 처음부터 다시 진행한다.
-      return { ...initialWizardState, fileName: action.fileName }
+      // 파일을 바꾸면 이전 감지·편집 결과는 전부 무효 — 처음부터 다시 진행한다. 실행 의도는 남긴다(keptIntent).
+      return { ...initialWizardState, ...keptIntent(state), fileName: action.fileName }
     case 'inspectStart':
       return { ...state, busy: true, error: null }
     case 'inspectSuccess': {
@@ -175,22 +232,38 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, mode: action.mode }
     case 'saveProfileChanged':
       return { ...state, saveProfile: action.saveProfile }
+    case 'intentChanged':
+      // 같은 의도 — id 가 있으면 그대로(재시도·등록 재실행), 확정 실패로 비웠으면 새 id 만 받는다(사전 백업은 그 의도의 것이라 남긴다).
+      // 다른 의도 — 새 id, 받아 둔 사전 백업은 다른 입력의 것이라 버린다.
+      if (state.intentKey === action.intentKey) return state.commandId !== null ? state : { ...state, commandId: action.commandId }
+      return { ...state, intentKey: action.intentKey, commandId: action.commandId, preBackup: null }
+    case 'preBackupTaken':
+      // 묶을 의도가 없으면 무시한다 — 컴포넌트는 백업을 받기 직전에 intentChanged 를 보낸다
+      return state.intentKey === null ? state : { ...state, preBackup: { generatedAt: action.generatedAt } }
     case 'executeStart':
-      return { ...state, busy: true, error: null, errors: null, needsTeams: null, needsTeamsScope: null }
+      return { ...state, busy: true, error: null, errors: null, ...NO_TEAMS_PROMPT }
     case 'executeNeedsTeams':
-      return { ...state, busy: false, needsTeams: action.teams, needsTeamsScope: action.scope }
+      // 409 는 영수증을 남기지 않는다 — 등록 재실행은 같은 의도·같은 id(commandId 를 지우지 않는다)
+      return { ...state, busy: false, needsTeams: action.teams, inheritsCommon: action.inheritsCommon, commonTeams: action.commonTeams }
     case 'dismissNeedsTeams':
-      return { ...state, needsTeams: null, needsTeamsScope: null }
+      return { ...state, ...NO_TEAMS_PROMPT }
     case 'executeFailure':
-      return { ...state, busy: false, error: action.error, needsTeams: null, needsTeamsScope: null }
+      // 확정 실패는 아무것도 적용되지 않았다 — 다음 실행은 새 id(같은 id 를 다시 쓰면 COMMAND_REUSED 일 수 있다). 그 밖은 같은 id 로 재시도
+      return { ...state, busy: false, error: action.error, ...NO_TEAMS_PROMPT, commandId: action.definitive ? null : state.commandId }
     case 'executeValidationFailure':
-      return { ...state, busy: false, errors: action.errors, needsTeams: null, needsTeamsScope: null }
+      // 링크 오류(400)도 확정 실패다
+      return { ...state, busy: false, errors: action.errors, ...NO_TEAMS_PROMPT, commandId: null }
     case 'executeProfileMismatch':
       return { ...state, busy: false, error: action.error, profileMismatch: action.profileMismatch ?? state.profileMismatch }
     case 'executeSuccess':
-      return { ...state, busy: false, step: 'done', result: action.result, error: null, errors: null, needsTeams: null, needsTeamsScope: null }
+      // 적용됐다(applied·duplicate) — 같은 입력으로 다시 실행하면 새 명령이다(옛 id 면 duplicate 만 받는다). 트리가 바뀌었으니 사전 백업도 버린다
+      return {
+        ...state, busy: false, step: 'done', result: action.result, error: null, errors: null, ...NO_TEAMS_PROMPT,
+        commandId: null, intentKey: null, preBackup: null,
+      }
     case 'reset':
-      return initialWizardState
+      // 처음부터 다시 — 화면은 초기로, 실행 의도는 남긴다(fileSelected 와 같은 이유)
+      return { ...initialWizardState, ...keptIntent(state) }
     // 리뷰 Important #2 — savedProfile 로 시작한 2단계에서도 업로드 파일이 실제로 감지한 프로파일로
     // 되돌릴 길이 있어야 한다(레거시 프로젝트가 새 양식 파일을 저장된 옛 프로파일로 잘못 해석해
     // 임포트를 막아버리는 사고 방지). detection 이 없으면(있을 수 없는 상태지만) 무변화.
@@ -203,6 +276,7 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
       return state
   }
 }
+
 
 /** 계층 방식 전환 — columns↔outline. 반대편에 없던 필드는 합리적 기본값으로 재구성한다.
  *  columns 로 돌아가면 name 은 다시 null(계층 열 자체가 이름의 출처 — profile.ts 규약). */

@@ -64,7 +64,14 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.replaceWarnDeleteCountSuffix': ' current WBS item(s), then refills from the file.',
   'importWizard.replaceWarnChangeLogs': 'Change history (change_logs) is deleted with them and is not included in the backup — it cannot be recovered.',
   'importWizard.replaceWarnHolidays': 'Holidays are not deleted, only updated.',
-  'importWizard.replaceWarnBackup': 'A backup of the current tree downloads automatically when you run this.',
+  'importWizard.replaceWarnBackup': 'Before running, download a backup of the current tree below. When the run finishes, a backup taken just before the replace downloads as well.',
+  'importWizard.preBackupTitle': 'Backup before running',
+  'importWizard.preBackupDesc': 'Download the current WBS tree as a backup file before running a full replace. Changing the file, layout, mode or the save-layout option requires a new backup.',
+  'importWizard.preBackupButton': 'Download backup first',
+  'importWizard.preBackupBusy': 'Preparing backup…',
+  'importWizard.preBackupDone': 'The backup download has started. Check the file, then run.',
+  'importWizard.preBackupFailed': 'Could not get the backup — the import will not run',
+  'importWizard.preBackupFileLabel': 'before-run',
 
   'importWizard.saveProfileLabel': 'Save this layout as the project default',
 
@@ -105,7 +112,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
 
   'importWizard.needsTeamsTitle': 'Some teams are not registered',
   'importWizard.needsTeamsDesc': 'Register these teams and continue the import?',
-  'importWizard.needsTeamsSuperuserOnly': 'Only superusers can register teams.',
+  'importWizard.needsTeamsConvert': "This project currently uses {n} shared team(s). Registering converts them into this project's own teams with the same code, name and color (owner, roster, work-area and invite links move with them) and adds {teams}. The conversion is not undone.",
+  'importWizard.needsTeamsCommonTitle': 'Shared teams to convert',
   'importWizard.needsTeamsProjectScope': 'These will be registered as teams for this project only (global teams are unaffected).',
   'importWizard.registerTeams': 'Register & continue',
   'importWizard.registering': 'Registering…',

@@ -62,7 +62,14 @@ export const importWizardKo = {
   'importWizard.replaceWarnDeleteCountSuffix': '개를 삭제한 뒤 파일 내용으로 다시 채웁니다.',
   'importWizard.replaceWarnChangeLogs': '변경 이력(change_logs)은 함께 삭제되며 백업에도 포함되지 않아 복구할 수 없습니다.',
   'importWizard.replaceWarnHolidays': '휴일은 삭제되지 않고 갱신만 됩니다.',
-  'importWizard.replaceWarnBackup': '실행하면 현재 트리 백업 파일이 자동으로 다운로드됩니다.',
+  'importWizard.replaceWarnBackup': '실행하기 전에 아래에서 지금 트리의 백업 파일을 먼저 내려받아야 합니다. 실행이 끝나면 교체 직전 백업도 한 번 더 내려받습니다.',
+  'importWizard.preBackupTitle': '실행 전 백업',
+  'importWizard.preBackupDesc': '지금 WBS 트리를 백업 파일로 내려받아야 전체 교체를 실행할 수 있습니다. 파일·양식·방식·양식 저장을 바꾸면 다시 받아야 합니다.',
+  'importWizard.preBackupButton': '실행 전 백업 받기',
+  'importWizard.preBackupBusy': '백업 받는 중…',
+  'importWizard.preBackupDone': '백업 파일 내려받기를 시작했습니다. 파일을 확인한 뒤 실행하세요.',
+  'importWizard.preBackupFailed': '백업을 받지 못해 실행할 수 없습니다',
+  'importWizard.preBackupFileLabel': '실행 전',
 
   'importWizard.saveProfileLabel': '이 양식을 프로젝트 기본값으로 저장',
 
@@ -103,7 +110,8 @@ export const importWizardKo = {
 
   'importWizard.needsTeamsTitle': '등록되지 않은 팀이 있습니다',
   'importWizard.needsTeamsDesc': '이 팀들을 등록하시겠습니까? 등록 후 가져오기를 계속 진행합니다.',
-  'importWizard.needsTeamsSuperuserOnly': '팀 등록은 슈퍼유저만 할 수 있습니다.',
+  'importWizard.needsTeamsConvert': '이 프로젝트는 지금 공용 팀 {n}개를 씁니다. 등록하면 그 팀들을 같은 코드·이름·색의 이 프로젝트 팀으로 전환하고(담당·명단·업무영역·초대의 팀 연결도 함께 옮깁니다) {teams} 을(를) 더합니다. 전환은 되돌리지 않습니다.',
+  'importWizard.needsTeamsCommonTitle': '전환되는 공용 팀',
   'importWizard.needsTeamsProjectScope': '이 프로젝트의 팀으로 등록됩니다(전역 팀에는 영향 없음).',
   'importWizard.registerTeams': '등록하고 계속',
   'importWizard.registering': '등록 중…',

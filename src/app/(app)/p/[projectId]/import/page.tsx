@@ -36,7 +36,6 @@ export default async function ImportWizardPage({ params }: { params: Promise<{ p
   const [projects, actor, locale] = await Promise.all([listProjects(), getActorForView(), getServerLocale()])
   const project = projects.find(p => p.id === projectId)
   const isAdmin = isProjectAdmin(actor, projectId)
-  const isSuperuser = actor?.isSuperuser === true
   const projectName = project?.name ?? t(locale, 'importWizard.projectFallback')
   // 비관리자는 위저드를 렌더하지 않으니(아래) 조회 자체를 건너뛴다 — 불필요한 쿼리 방지.
   const currentItemCount = isAdmin ? await fetchWbsItemCount(projectId) : null
@@ -53,7 +52,7 @@ export default async function ImportWizardPage({ params }: { params: Promise<{ p
       }
     >
       {isAdmin ? (
-        <ImportModes projectId={projectId} isSuperuser={isSuperuser} currentItemCount={currentItemCount} />
+        <ImportModes projectId={projectId} currentItemCount={currentItemCount} />
       ) : (
         <EmptyState
           icon={Shield}

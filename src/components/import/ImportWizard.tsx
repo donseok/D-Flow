@@ -4,19 +4,22 @@ import { useMemo, useReducer, useRef, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Upload, AlertTriangle, CheckCircle2, Trash2, Plus, ArrowRight, ShieldAlert, RotateCcw, Undo2, Download,
+  Upload, AlertTriangle, CheckCircle2, Trash2, Plus, ArrowRight, RotateCcw, Undo2, Download,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
 import { downloadWbsExport, exportFailureKey } from '@/components/import/downloadWbsExport'
+import { getWbsBackup } from '@/app/actions/importBackup'
+import { newUuid } from '@/lib/domain/uuid'
 import type { DictKey } from '@/lib/i18n/dict'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
-  recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, type MarkRow, type ExecuteResult,
+  recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, executionIntentKey, commandIdFor,
+  preBackupReady, isDefinitiveFailure, type MarkRow, type ExecuteResult,
   type PreviewColumnRole, type ProfileMismatch, type ProfileMismatchField,
 } from '@/lib/domain/importWizard'
 
@@ -58,13 +61,14 @@ function previewRoleLabel(role: PreviewColumnRole, t: (k: DictKey) => string): s
   return `${t('importWizard.previewRoleTeam')}: ${teamLabel}`
 }
 
-/** replace 성공 응답의 backup 을 파일로 내려받는다(§6.6-2 — 서버는 트리만 담아 보낸다, change_logs 는 대상 아님). */
-function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedAt: string }) {
+/** 백업을 파일로 내려받는다(§6.6-2 — 트리만, change_logs 는 대상 아님). 교체 직전 백업(성공 응답의 backup)과 실행 전 백업
+ *  (getWbsBackup — SP4 D50)이 같은 꼴이다. label 은 이름 끝에 붙는다(실행 전 백업 = '실행 전'). */
+function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedAt: string }, label?: string) {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `wbs-backup-${projectId}-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `wbs-backup-${projectId}-${new Date().toISOString().slice(0, 10)}${label ? `-${label}` : ''}.json`
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -114,12 +118,12 @@ function radioRowClass(active: boolean): string {
 /**
  * 임포트 마법사(§6.2) — 1단계 파일 선택+감지, 2단계 확인·편집 후 실행.
  * 파일은 클라이언트 메모리(fileRef)에만 있고 서버에 임시 저장되지 않는다(inspect/execute 매 요청 재업로드).
+ * 실행은 실행 의도의 명령 id 를 싣는다(SP4 §4.4) — 같은 의도의 재시도는 같은 id 라 서버가 이미 적용했으면 duplicate 로 받는다.
  */
 export function ImportWizard({
-  projectId, isSuperuser, currentItemCount,
+  projectId, currentItemCount,
 }: {
   projectId: string
-  isSuperuser: boolean
   /** replace 경고에 실제 삭제 건수를 싣기 위한 값(리뷰 Important #1) — 서버 조회 실패 시 null 로
    *  degrade 되어 온다(page.tsx 가 표시=로깅). null 이면 건수 없는 일반 경고 문구로 대체한다. */
   currentItemCount: number | null
@@ -131,6 +135,9 @@ export function ImportWizard({
   const [markRows, setMarkRows] = useState<MarkRow[]>([])
   const [exportBusy, setExportBusy] = useState(false)
   const fileRef = useRef<File | null>(null)
+  // 실행 의도의 지문 재료 — File 객체는 ref 에 두고, 지문에 드는 이름·크기·수정 시각만 상태로 둔다(렌더마다 키를 계산한다)
+  const [fileMeta, setFileMeta] = useState<{ name: string; size: number; lastModified: number } | null>(null)
+  const [backupBusy, setBackupBusy] = useState(false)
   const markIdRef = useRef(0)
 
   const headers = state.detection?.preview.headers ?? []
@@ -141,6 +148,18 @@ export function ImportWizard({
     () => (state.detection && profile ? deriveMappedPreview(state.detection.preview.headers, state.detection.preview.rows, profile) : null),
     [state.detection, profile],
   )
+  // 실행 의도(SP4 §4.4 — RF3): 파일·프로파일(마크 사전 포함 — 서버에 보내는 그 값)·모드·양식 저장 여부. 이 키가 같은 동안의 실행은 한 명령이다.
+  const intentKey = useMemo(
+    () => (fileMeta && profile
+      ? executionIntentKey({
+        fileName: fileMeta.name, fileSize: fileMeta.size, lastModified: fileMeta.lastModified,
+        profile: { ...profile, ownerMarks: rowsToRecord(markRows) }, mode: state.mode, saveProfile: state.saveProfile,
+      })
+      : null),
+    [fileMeta, profile, markRows, state.mode, state.saveProfile],
+  )
+  // replace 는 지금 의도로 사전 백업 내려받기를 시작한 뒤에만 실행한다(D50 — 브라우저는 내려받기 완료를 알리지 않는다)
+  const backupReady = state.mode !== 'replace' || preBackupReady(state, intentKey)
 
   function nextMarkId(): number {
     markIdRef.current += 1
@@ -154,11 +173,13 @@ export function ImportWizard({
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null
     fileRef.current = file
+    setFileMeta(file ? { name: file.name, size: file.size, lastModified: file.lastModified } : null)
     dispatch({ type: 'fileSelected', fileName: file?.name ?? '' })
   }
 
   function startOver() {
     fileRef.current = null
+    setFileMeta(null)
     markIdRef.current = 0
     setMarkRows([])
     dispatch({ type: 'reset' })
@@ -227,14 +248,46 @@ export function ImportWizard({
     }
   }
 
+  /** 이번 실행(·사전 백업)의 명령 id — 같은 의도면 그 id, 아니면 새로(newUuid). 상태에 실어 재시도가 같은 id 를 쓰게 한다. */
+  function beginIntent(key: string): string {
+    const commandId = commandIdFor(state, key, () => newUuid())
+    dispatch({ type: 'intentChanged', intentKey: key, commandId })
+    return commandId
+  }
+
+  /** replace 사전 백업(D50) — 지금 트리를 받아 '실행 전' 파일로 내려받기를 시작한다. 실패면 실행은 잠긴 채다. */
+  async function runPreBackup() {
+    if (intentKey === null) return
+    beginIntent(intentKey)
+    setBackupBusy(true)
+    try {
+      const r = await getWbsBackup(projectId)
+      if (!r.ok) {
+        toast({ title: t('importWizard.preBackupFailed'), description: r.error, variant: 'error' })
+        return
+      }
+      downloadBackup(projectId, r.backup, t('importWizard.preBackupFileLabel'))
+      dispatch({ type: 'preBackupTaken', generatedAt: r.backup.generatedAt })
+    } catch {
+      toast({ title: t('importWizard.preBackupFailed'), description: t('importWizard.networkError'), variant: 'error' })
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
   async function runExecute(registerTeams: boolean) {
     const file = fileRef.current
-    if (!file || !profile) return
+    if (!file || !profile || intentKey === null) return
+    // replace 는 지금 의도의 사전 백업 내려받기를 시작한 뒤에만(D50) — 버튼이 이미 잠겨 있다, 여기는 이중 안전
+    if (state.mode === 'replace' && !preBackupReady(state, intentKey)) return
+    const commandId = beginIntent(intentKey)
     dispatch({ type: 'executeStart' })
     try {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('projectId', projectId)
+      // 실행 의도의 명령 id(SP4 §4.4) — 서버가 이미 적용한 명령이면 다시 적용하지 않고 duplicate 로 답한다
+      fd.append('commandId', commandId)
       fd.append('profile', JSON.stringify({ ...profile, ownerMarks: rowsToRecord(markRows) }))
       fd.append('mode', state.mode)
       fd.append('saveProfile', String(state.saveProfile))
@@ -255,8 +308,9 @@ export function ImportWizard({
       }
 
       if (res.status === 409 && Array.isArray(data.needsTeams)) {
-        const scope = data.scope === 'project' ? 'project' : 'global'
-        dispatch({ type: 'executeNeedsTeams', teams: data.needsTeams as string[], scope })
+        // 등록은 늘 프로젝트 관리자 몫이다(D4 — 슈퍼유저 분기 없음). 상속 프로젝트면 확인 창이 공용 팀 전환을 알린다(D54).
+        const commonTeams = Array.isArray(data.commonTeams) ? (data.commonTeams as { code: string; name: string }[]) : []
+        dispatch({ type: 'executeNeedsTeams', teams: data.needsTeams as string[], inheritsCommon: data.inheritsCommon === true, commonTeams })
         return
       }
       if (res.ok && data.ok) {
@@ -271,15 +325,18 @@ export function ImportWizard({
         toast({ title: `${t('importWizard.linkErrorsPrefix')}${errs.length}${t('importWizard.linkErrorsSuffix')}`, variant: 'error' })
       } else {
         const msg = typeof data.error === 'string' ? data.error : t('importWizard.executeFailedHttp')
-        dispatch({ type: 'executeFailure', error: msg })
+        // 409 를 뺀 4xx 는 "적용하지 않았다"는 확정 — 다음 실행은 새 id. 5xx·본문을 못 읽은 응답은 적용 여부를 모른다 — 같은 id 로 재시도
+        dispatch({ type: 'executeFailure', error: msg, definitive: isDefinitiveFailure(res.status) })
         toast({ title: msg, variant: 'error' })
       }
     } catch {
+      // 응답 유실 — 서버가 적용했을 수 있다. 같은 id 로 재시도하면 duplicate 로 받는다
       const msg = t('importWizard.networkError')
-      dispatch({ type: 'executeFailure', error: msg })
+      dispatch({ type: 'executeFailure', error: msg, definitive: false })
       toast({ title: msg, variant: 'error' })
     }
   }
+
 
   return (
     <div className="space-y-5">
@@ -561,6 +618,24 @@ export function ImportWizard({
               </div>
             )}
 
+            {/* replace 사전 백업(D50) — 지금 트리를 '실행 전' 파일로 내려받기 시작해야 실행이 열린다. 입력(파일·양식·방식·양식 저장)이
+                바뀌면 다시 받아야 한다(백업은 그 실행 의도에 묶인다). 읽기에 실패하면 실행하지 않는다. */}
+            {state.mode === 'replace' && (
+              <div data-pre-backup className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-ink">{t('importWizard.preBackupTitle')}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-ink-muted">
+                    {preBackupReady(state, intentKey) ? t('importWizard.preBackupDone') : t('importWizard.preBackupDesc')}
+                  </p>
+                </div>
+                <button type="button" className="btn btn-ghost shrink-0" disabled={state.busy || backupBusy || intentKey === null}
+                  onClick={runPreBackup}>
+                  <Download className="h-4 w-4" />
+                  {backupBusy ? t('importWizard.preBackupBusy') : t('importWizard.preBackupButton')}
+                </button>
+              </div>
+            )}
+
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -637,7 +712,7 @@ export function ImportWizard({
             <button type="button" className="btn btn-ghost" disabled={state.busy} onClick={startOver}>
               <RotateCcw className="h-4 w-4" />{t('importWizard.startOver')}
             </button>
-            <button type="button" className="btn btn-primary" disabled={state.busy} onClick={() => runExecute(false)}>
+            <button type="button" className="btn btn-primary" disabled={state.busy || backupBusy || !backupReady} onClick={() => runExecute(false)}>
               {state.busy ? t('importWizard.executing') : t('importWizard.execute')}
             </button>
           </div>
@@ -734,12 +809,8 @@ export function ImportWizard({
         footer={
           <>
             <button type="button" className="btn btn-ghost" onClick={() => dispatch({ type: 'dismissNeedsTeams' })}>{t('common.cancel')}</button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={state.needsTeamsScope === 'project' ? state.busy : (!isSuperuser || state.busy)}
-              onClick={() => runExecute(true)}
-            >
+            {/* 등록은 프로젝트 관리자 몫이다(D4) — 이 화면에 온 사람은 이미 그 가드를 지났다. 같은 명령 id 로 다시 보낸다 */}
+            <button type="button" className="btn btn-primary" disabled={state.busy} onClick={() => runExecute(true)}>
               {state.busy ? t('importWizard.registering') : t('importWizard.registerTeams')}
             </button>
           </>
@@ -751,12 +822,29 @@ export function ImportWizard({
             <li key={team} className="badge bg-brand-weak px-2 py-1 text-brand">{team}</li>
           ))}
         </ul>
-        {state.needsTeamsScope === 'project' ? (
+        {state.inheritsCommon ? (
+          // 상속 프로젝트 — 등록이 공용 팀을 이 프로젝트 팀으로 전환한다(D54). 무엇이 바뀌는지 먼저 알린다
+          <div data-teams-convert className="mt-3 space-y-2">
+            <p className="text-xs leading-5 text-ink-muted">
+              {t('importWizard.needsTeamsConvert')
+                .replace('{n}', String(state.commonTeams.length))
+                .replace('{teams}', (state.needsTeams ?? []).join(', '))}
+            </p>
+            {state.commonTeams.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-ink-subtle">{t('importWizard.needsTeamsCommonTitle')}</p>
+                <ul className="flex flex-wrap gap-2">
+                  {state.commonTeams.map(team => (
+                    <li key={team.code} className="badge bg-surface-2 px-2 py-1 text-ink">
+                      {team.name === team.code ? team.code : `${team.code} · ${team.name}`}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        ) : (
           <p className="mt-3 text-xs leading-5 text-ink-subtle">{t('importWizard.needsTeamsProjectScope')}</p>
-        ) : !isSuperuser && (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-pending">
-            <ShieldAlert className="h-3.5 w-3.5" />{t('importWizard.needsTeamsSuperuserOnly')}
-          </p>
         )}
       </Modal>
     </div>
