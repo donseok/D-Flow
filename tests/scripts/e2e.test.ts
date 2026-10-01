@@ -19,6 +19,13 @@ import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { isInviteToken, validateSignupInput } from '@/lib/domain/invites'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { settingDef } from '@/lib/settings/registry'
+import ExcelJS from 'exceljs'
+import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
+import { mondayIso } from '@/lib/report/week'
+import { validateArea, type AreaInput } from '@/lib/domain/areas'
+import {
+  XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, seoulToday, shiftDays,
+} from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
 
@@ -488,5 +495,85 @@ describe('복사 생성 라벨(E2E 2b)', () => {
     expect(COPY_LEVEL_LABELS).not.toEqual(LEVEL_LABELS)
     expect(COPY_LEVEL_LABELS).toHaveLength(LEVEL_LABELS.length)
     expect(settingDef('project', 'core.level_labels')!.parse([...COPY_LEVEL_LABELS])).toEqual({ ok: true, value: [...COPY_LEVEL_LABELS] })
+  })
+})
+
+describe('SP4 A1 — 두 러너의 날짜 도우미(주 키는 만들지 않는다 — W30)', () => {
+  it('seoulToday 는 KST 달력 날짜 — UTC 15시가 다음 날의 0시다', () => {
+    expect(seoulToday(new Date('2026-10-04T14:59:59Z'))).toBe('2026-10-04')
+    expect(seoulToday(new Date('2026-10-04T15:00:00Z'))).toBe('2026-10-05')
+  })
+  it('shiftDays — 달·해·윤일 경계와 음수, 형식·정수가 아니면 throw', () => {
+    expect(shiftDays('2026-09-28', 7)).toBe('2026-10-05')
+    expect(shiftDays('2026-01-01', -1)).toBe('2025-12-31')
+    expect(shiftDays('2028-02-28', 1)).toBe('2028-02-29')
+    expect(() => shiftDays('2026-9-1', 1)).toThrow()
+    expect(() => shiftDays('2026-09-01', 1.5)).toThrow()
+  })
+  it('isMondayIso — 앱의 mondayIso 가 낸 값은 모두 참, 다른 요일·형식은 거짓(DB 가 돌려준 주 키 확인 전용)', () => {
+    for (const d of ['2026-09-27', '2026-09-28', '2026-10-01', '2026-10-04']) expect(isMondayIso(mondayIso(d)), d).toBe(true)
+    expect(isMondayIso('2026-10-04')).toBe(false)
+    expect(isMondayIso('2026-10-6')).toBe(false)
+  })
+})
+
+describe('SP4 A1 — 가져오기 파일·폼·영역 입력(스펙 §4.4 #1·§6.4 S2)', () => {
+  it('fillWbsWorkbook — 양식 없이: WBS 머리 + 행(4단 코드), 날짜는 UTC 정오, Holiday 머리', async () => {
+    const rows = [['1', '단계', '', '', '2026-10-05', '2026-10-30', 1, '', ''], ['1.1.1.1', '세부', '', '산출물', '2026-10-05', '2026-10-09', 1, '', 'RES']]
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(new Uint8Array(await fillWbsWorkbook(rows)).buffer)
+    const ws = wb.getWorksheet('WBS')!
+    expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual([...TEMPLATE_HEADER])
+    expect(ws.actualRowCount).toBe(3)
+    expect(ws.getRow(3).getCell(1).value).toBe('1.1.1.1')
+    expect(ws.getRow(3).getCell(9).value).toBe('RES')
+    expect((ws.getRow(2).getCell(5).value as Date).toISOString()).toBe('2026-10-05T12:00:00.000Z')
+    expect((wb.getWorksheet('Holiday')!.getRow(1).values as unknown[]).slice(1)).toEqual(['날짜', '이름'])
+  })
+  it('fillWbsWorkbook — 앱 양식 위: 예시 행 자리에 덮어쓰고 남는 예시 행은 비운다(E2E 단계 5 와 같은 방식)', async () => {
+    const rows = e2eRows('QA')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(new Uint8Array(await fillWbsWorkbook(rows, Buffer.from(buildWbsTemplateWorkbook('Acme')))).buffer)
+    const ws = wb.getWorksheet('WBS')!
+    expect(ws.actualRowCount).toBe(rows.length + 1)
+    expect(ws.getRow(2).getCell(1).value).toBe('1')
+    expect(ws.getRow(rows.length + 1).getCell(9).value).toBe('QA')
+  })
+  it('importForm — 마법사와 같은 필드에 commandId 를 싣는다. uuid 가 아니거나 모드가 아니면 throw(명령 id 없는 실행을 만들지 않는다)', () => {
+    const cmd = '11111111-2222-4333-8444-555555555555'
+    const f = importForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: { k: 1 }, mode: 'append', commandId: cmd })
+    expect([...f.keys()]).toEqual(['file', 'projectId', 'profile', 'mode', 'saveProfile', 'registerTeams', 'commandId'])
+    expect(['projectId', 'profile', 'mode', 'saveProfile', 'registerTeams', 'commandId'].map((k) => f.get(k)))
+      .toEqual(['p1', '{"k":1}', 'append', 'true', 'false', cmd])
+    const file = f.get('file') as File
+    expect([file.name, file.type]).toEqual(['a.xlsx', XLSX_MIME])
+    expect(importForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: {}, mode: 'replace', commandId: cmd,
+      saveProfile: false, registerTeams: true }).get('registerTeams')).toBe('true')
+    expect(() => importForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: {}, mode: 'append', commandId: 'k' })).toThrow(/uuid/)
+    expect(() => importForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1', profile: {}, mode: 'merge' as 'append', commandId: cmd }))
+      .toThrow(/모드/)
+  })
+  it('importForm 의 필드 이름은 실행 라우트가 읽는 이름이다 — commandId 포함(과제 29)', () => {
+    const route = readFileSync('src/app/api/import/execute/route.ts', 'utf8')
+    for (const k of ['file', 'projectId', 'profile', 'mode', 'saveProfile', 'registerTeams', 'commandId']) expect(route, k).toContain(`get('${k}')`)
+  })
+  it('inspectForm — 파일·프로젝트 둘', () => {
+    expect([...inspectForm({ file: Buffer.from('x'), fileName: 'a.xlsx', projectId: 'p1' }).keys()]).toEqual(['file', 'projectId'])
+  })
+  it('importResultView — 성공은 종류·명령 id·건수·모드·양식 저장, 실패는 code 만', () => {
+    expect(importResultView({ ok: true, kind: 'duplicate', commandId: 'k', count: 5, mode: 'append', profileSaved: true, backup: { rows: [] } }))
+      .toEqual({ ok: true, kind: 'duplicate', commandId: 'k', count: 5, mode: 'append', profileSaved: true })
+    expect(importResultView({ ok: false, code: 'COMMAND_REUSED', error: '같은 실행 ID 로 다른 내용' })).toEqual({ ok: false, code: 'COMMAND_REUSED' })
+  })
+  it('areaInput — 편집기와 같은 AreaInput(weekly_section, 담당 팀 code → 그 프로젝트 팀 id), 앱 검증 통과, 모르는 팀은 throw', () => {
+    const ids = new Map([['RES', 't-res'], ['OPS', 't-ops']])
+    const def = { code: 'DATA', name: '데이터', sortOrder: 2, teams: [['RES', 'primary'], ['OPS', 'support']] }
+    const input = areaInput(def, ids)
+    expect(input).toEqual({ kind: 'weekly_section', code: 'DATA', name: '데이터', sortOrder: 2, active: true,
+      teams: [{ teamId: 't-res', kind: 'primary' }, { teamId: 't-ops', kind: 'support' }] })
+    expect(validateArea(input as AreaInput, [])).toEqual({ ok: true, value: input })
+    expect(areaInput(def, ids, { id: 'a1', name: '데이터 정리', active: false })).toMatchObject({ id: 'a1', code: 'DATA', name: '데이터 정리', active: false })
+    expect(() => areaInput(def, new Map([['RES', 't-res']]))).toThrow(/OPS/)
+    expect(() => encodeActionArgs(['p1', input])).not.toThrow()
   })
 })

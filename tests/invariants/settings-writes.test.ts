@@ -78,7 +78,7 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
   'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 8, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳)' },
   'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인)의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
-  'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 20, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings' },
+  'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 21, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings. SP4 A1 S2 — wbs.excel_profile 이력 건수(project_settings_history 읽기 한 곳, readHistory 경유 select)' },
   'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
 }
 

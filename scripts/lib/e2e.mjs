@@ -1,5 +1,6 @@
-// scripts/lib/e2e.mjs — e2e-local.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
+// scripts/lib/e2e.mjs — e2e-local.mjs·e2e-synthetic.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
 // 러너는 로컬 스택만 두드린다 — 대상 판정은 targets.mjs 한 곳에서 한다.
+import ExcelJS from 'exceljs'
 import { classifySupabaseUrl, detectEnvTarget, parseEnvFile } from './targets.mjs'
 
 /** 새 프로젝트의 단계 라벨(SP0 done_when 1번). 행의 아웃라인 깊이와 같아야 한다. */
@@ -500,4 +501,107 @@ export function leakedIds(seen, forbidden) {
 export function presentTexts(html, texts) {
   const text = String(html)
   return texts.filter((t) => text.includes(t))
+}
+
+// ── SP4 A1 — 두 러너(e2e-local·e2e-synthetic)가 같이 쓰는 날짜·가져오기·영역 도우미 ──────────────────────────────────
+// 주 키는 만들지 않는다(W30) — 러너는 날짜를 액션에 넘기고 앱이 mondayIso 로 정한 week_start 를 DB 에서 다시 읽는다.
+
+/** KST 오늘 'YYYY-MM-DD'(앱 seoulToday 와 같은 관용구 — 러너는 TS 를 import 하지 못한다) @param {Date} [now] */
+export function seoulToday(now = new Date()) {
+  return now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+}
+
+/** 'YYYY-MM-DD' 에서 n 일 이동(UTC 달력 — 시간대와 무관). 형식·정수가 아니면 throw @param {string} iso @param {number} days */
+export function shiftDays(iso, days) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso)) || !Number.isInteger(days)) throw new Error(`날짜 이동 입력이 올바르지 않다: ${iso}, ${days}`)
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 검증 전용 — DB 가 돌려준 주 키('YYYY-MM-DD')가 월요일인가. 주 키를 만들지 않는다(W30) @param {string} iso */
+export function isMondayIso(iso) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) && new Date(`${iso}T00:00:00Z`).getUTCDay() === 1
+}
+
+export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+/**
+ * 가져오기 파일(xlsx) — rows(TEMPLATE_HEADER 순서의 값 배열)를 'WBS' 시트에 쓴다. 날짜는 toCell(UTC 정오).
+ * templateBuf 가 있으면 내려받은 양식을 열어 예시 행 자리에 덮어쓰고 남는 예시 행을 비운다(spliceRows 는 SheetJS 가 쓴 시트에서 행을 지우지
+ * 못했다 — 2026-09-24 실측, E2E 단계 5 와 같은 방식). 없으면 새 통합 문서에 'WBS'(머리 + 행)와 'Holiday'(머리만)를 만든다 — 양식의 예시는
+ * 3단이라 4단 파일은 이 길로 만든다(스펙 §6.4 S2).
+ * @param {ReadonlyArray<ReadonlyArray<string | number>>} rows @param {Uint8Array | null} [templateBuf] @returns {Promise<Uint8Array>}
+ */
+export async function fillWbsWorkbook(rows, templateBuf = null) {
+  const wb = new ExcelJS.Workbook()
+  if (templateBuf) {
+    await wb.xlsx.load(templateBuf)
+    const ws = wb.getWorksheet('WBS')
+    if (!ws) throw new Error("양식에 'WBS' 시트가 없다")
+    const header = ws.getRow(1).values.slice(1)
+    if (JSON.stringify(header) !== JSON.stringify(TEMPLATE_HEADER)) throw new Error(`양식 헤더가 다르다: ${JSON.stringify(header)}`)
+    const last = ws.rowCount
+    rows.forEach((r, i) => { ws.getRow(i + 2).values = r.map(toCell) })
+    for (let n = rows.length + 2; n <= last; n++) ws.getRow(n).values = []
+  } else {
+    const ws = wb.addWorksheet('WBS')
+    ws.addRow([...TEMPLATE_HEADER])
+    for (const r of rows) ws.addRow(r.map(toCell))
+    wb.addWorksheet('Holiday').addRow(['날짜', '이름'])
+  }
+  return Buffer.from(await wb.xlsx.writeBuffer())
+}
+
+/**
+ * 가져오기 실행 폼 — ImportWizard 와 같은 필드에 명령 id(스펙 §4.4 #1 — 없으면 라우트가 400 COMMAND_ID_REQUIRED). 명령 id 는 실행 의도마다
+ * 하나다: 같은 의도의 재전송·409(needsTeams) 뒤 등록 재실행은 같은 id, 파일·양식·모드·저장 여부가 바뀌면 새 id(D50·Review Focus 3).
+ * uuid 가 아니거나 모드가 아니면 throw — 명령 id 없는 실행을 만들지 않는다.
+ * @param {{ file: Uint8Array, fileName: string, projectId: string, profile: unknown, mode: 'append' | 'replace', commandId: string, saveProfile?: boolean, registerTeams?: boolean }} p
+ */
+export function importForm({ file, fileName, projectId, profile, mode, commandId, saveProfile = true, registerTeams = false }) {
+  if (!UUID_RE.test(String(commandId))) throw new Error(`commandId 가 uuid 가 아니다: ${commandId}`)
+  if (mode !== 'append' && mode !== 'replace') throw new Error(`가져오기 모드가 아니다: ${mode}`)
+  const form = new FormData()
+  form.append('file', new Blob([file], { type: XLSX_MIME }), fileName)
+  form.append('projectId', projectId)
+  form.append('profile', JSON.stringify(profile))
+  form.append('mode', mode)
+  form.append('saveProfile', String(saveProfile))
+  form.append('registerTeams', String(registerTeams))
+  form.append('commandId', commandId)
+  return form
+}
+
+/** 양식 분석 폼(/api/import/inspect) @param {{ file: Uint8Array, fileName: string, projectId: string }} p */
+export function inspectForm({ file, fileName, projectId }) {
+  const form = new FormData()
+  form.append('file', new Blob([file], { type: XLSX_MIME }), fileName)
+  form.append('projectId', projectId)
+  return form
+}
+
+/** 가져오기 응답의 비교 모양 — 성공은 결과 종류·명령 id·건수·모드·양식 저장, 실패는 code(스펙 §4.4 응답 모양) @param {Record<string, any>} body */
+export function importResultView(body) {
+  return body?.ok === true
+    ? { ok: true, kind: body.kind ?? null, commandId: body.commandId ?? null, count: body.count ?? null, mode: body.mode ?? null, profileSaved: body.profileSaved ?? null }
+    : { ok: false, code: body?.code ?? null }
+}
+
+/**
+ * upsertArea 입력(AreaInput — 설정 화면의 영역 편집기와 같은 모양, kind 는 weekly_section 고정 — D26). 담당 팀 [code, 종류] 를 그 프로젝트의
+ * 팀 id 로 바꾼다 — 없는 code 면 throw. opts 로 기존 영역 id·새 이름·활성을 준다(개명·비활성화 — code 는 그대로, 트리거가 불변을 지킨다).
+ * @param {{ code: string, name: string, sortOrder: number, teams: ReadonlyArray<ReadonlyArray<string>> }} def
+ * @param {ReadonlyMap<string, string>} teamIdByCode
+ * @param {{ id?: string, name?: string, active?: boolean }} [opts]
+ */
+export function areaInput(def, teamIdByCode, { id, name, active = true } = {}) {
+  return {
+    ...(id ? { id } : {}), kind: 'weekly_section', code: def.code, name: name ?? def.name, sortOrder: def.sortOrder, active,
+    teams: def.teams.map(([code, kind]) => {
+      const teamId = teamIdByCode.get(code)
+      if (!teamId) throw new Error(`팀 ${code} 가 이 프로젝트에 없다`)
+      return { teamId, kind }
+    }),
+  }
 }

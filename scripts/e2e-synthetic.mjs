@@ -4,8 +4,13 @@
 //   S1 생성: 워크스페이스 R·C 와 각 프로젝트를 빈 값으로 만들고(생성과 필수 설정이 한 트랜잭션 — createProject) SP3a 등록 키를 **화면과 같은 서버 액션**으로
 //        넣는다 — 워크스페이스(modules.allowed·ai.enabled)는 updateWorkspaceSettings, 프로젝트(단계 라벨·모듈 구성·마일스톤 키워드·크레딧 표)는
 //        updateProjectSettings. 다시 읽은 값이 넣은 값과 같고 설정 이력이 남는다(행위자 = 플랫폼 관리자, source = edit).
+//        SP4 A1(S1-teams-areas): 팀(addProjectTeam — R RES·OPS, C CIV·MEP·SAF)과 주간 영역·담당 팀(upsertArea — R 셋·C 넷,
+//        tests/fixtures/synthetic/areas.ts 와 같은 값)을 설정 화면과 같은 액션으로 더하고 다시 읽은 값이 같다(C 는 두 키에 weekly — D40).
 //   S9 격리: R 의 설정을 바꾼 뒤 C 의 설정 문서(전 키·revision)·이력이 그대로다. 다른 워크스페이스(B)의 관리자는 R·C 의 설정 두 표와 이력 두 표를 0건 읽는다.
-//   S2~S8·S10: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
+//   S2 WBS(SP4 A1): R 4단(exceljs 로 직접)·C 3단(양식 다운로드)을 양식 저장과 함께 가져오고, 같은 commandId 재전송이 항목 1벌·kind 'duplicate'·
+//        wbs.excel_profile 이력 1건이다.
+//   S4 주간(월)(SP4 A1): C 에서 연속 2주(월요일 키 — 앱이 정한다)와 이월, 영역 개명 뒤 같은 area_id·같은 셀. R 의 일요일 키는 SP5.
+//   S3·S5~S8·S10: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
@@ -15,9 +20,14 @@ import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { ERR_DENIED, e2eBaseUrl, localClientEnv, workspaceAdminAccountInput } from './lib/e2e.mjs'
+import {
+  ERR_DENIED, areaInput, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, localClientEnv, seoulToday, shiftDays,
+  workspaceAdminAccountInput,
+} from './lib/e2e.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
-import { SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B, PENDING_STEPS } from './lib/synthetic.mjs'
+import {
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, teamView, wbsRows,
+} from './lib/synthetic.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
@@ -50,6 +60,10 @@ const ACTIONS = {
   createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/admin/accounts/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   updateWorkspaceSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateWorkspaceSettings', worker: '/w/[slug]/settings/page' },
+  addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
+  upsertArea: { filename: 'src/app/actions/projectAreas.ts', exportedName: 'upsertArea', worker: '/p/[projectId]/settings/page' },
+  createWeeklyReport: { filename: 'src/app/actions/weekly.ts', exportedName: 'createWeeklyReport', worker: '/p/[projectId]/weekly/page' },
+  saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -176,6 +190,33 @@ async function main() {
     note: '생성(필수 설정 한 트랜잭션) → 서버 액션으로 등록 키 → 다시 읽은 값이 같고 이력(행위자·source=edit)이 남는다',
   })
 
+  // ── S1 추가(SP4 A1 — 스펙 §6.4 S1·D40) — 팀(addProjectTeam)·주간 영역과 담당 팀(upsertArea)을 설정 화면과 같은 액션으로 더하고 다시 읽는다.
+  //    팀 이름은 code 와 같다(addProjectTeam 은 이름을 받지 않는다 — 개명은 A2·B, D37). 픽스처의 팀 이름은 그 뒤 몫이다.
+  const teamsAndAreas = async (label, proj, def) => {
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    for (const code of def.teams) {
+      mustOk(`${label} addProjectTeam(${code})`, (await admin.action(`/p/${proj.id}/settings`, 'addProjectTeam', [proj.id, code])).result)
+    }
+    const teamRows = rows(`${label} 팀`, await admin.sb.from('teams').select('id, code, name, sort_order, active').eq('project_id', proj.id))
+    same(`${label} 팀(다시 읽기)`, teamView(teamRows), expectedTeams(def.teams))
+    const teamIdByCode = new Map(teamRows.map((t) => [t.code, t.id]))
+    for (const a of def.weeklyAreas) {
+      const r = mustOk(`${label} upsertArea(${a.code})`, (await admin.action(`/p/${proj.id}/settings`, 'upsertArea', [proj.id, areaInput(a, teamIdByCode)])).result)
+      if (r.status !== 'created') throw new Fail(`${label} 영역 ${a.code} 가 새로 만들어지지 않았다: ${JSON.stringify(r)}`)
+    }
+    const areaRows = rows(`${label} 주간 영역`, await admin.sb.from('project_areas')
+      .select('id, code, name, sort_order, active, area_teams(team_id, kind)').eq('project_id', proj.id).eq('kind', 'weekly_section'))
+    same(`${label} 주간 영역(다시 읽기)`, areaView(areaRows, new Map(teamRows.map((t) => [t.id, t.code]))), expectedAreas(def.weeklyAreas))
+    return { teamIdByCode, areaIdByCode: new Map(areaRows.map((a) => [a.code, a.id])) }
+  }
+  const rSetup = await teamsAndAreas('R', R, SYNTHETIC_R)
+  const cSetup = await teamsAndAreas('C', C, SYNTHETIC_C)
+  step('S1-teams-areas', {
+    R: { teams: [...SYNTHETIC_R.teams], areas: SYNTHETIC_R.weeklyAreas.map((a) => a.code), areaIds: Object.fromEntries(rSetup.areaIdByCode) },
+    C: { teams: [...SYNTHETIC_C.teams], areas: SYNTHETIC_C.weeklyAreas.map((a) => a.code), areaIds: Object.fromEntries(cSetup.areaIdByCode) },
+    note: '팀은 addProjectTeam, 주간 영역·담당 팀은 upsertArea(설정 화면의 편집기와 같은 액션) — 다시 읽은 code·이름·순서·활성·담당 팀이 넣은 값과 같다',
+  })
+
   // ── S9 — 격리
   const snapshot = async (proj) => ({
     project: await readDoc(admin.sb, 'project_settings', 'project_id', proj.id),
@@ -225,6 +266,73 @@ async function main() {
     rChanged: { before: rDoc.revision, after: rAfter.revision },
     bAdminVisibleRows: visible, controlRows: control.length, deniedWrite: { error: denied?.error ?? ERR_DENIED },
   })
+
+  // ── S2 — WBS 가져오기(스펙 §6.4 S2·§4.4, W5). R 4단(양식의 예시가 3단이라 fillWbsWorkbook 의 새 통합 문서 길로 직접 만든다)·C 3단(내려받은
+  //    양식에 채운다), 담당 = 그 프로젝트 팀(S1). 같은 commandId 재전송 → 항목 1벌·kind 'duplicate'·wbs.excel_profile 이력 1건(같은 값은 다시 쓰지 않는다).
+  const profileHistory = async (proj) =>
+    (await readHistory(admin.sb, 'project_settings_history', 'project_id', proj.id)).filter((h) => h.key === 'wbs.excel_profile')
+  const importTwice = async (label, proj, def, templateBuf) => {
+    const depth = def.config.project['core.level_labels'].length
+    const rowsIn = wbsRows(depth, def.teams)
+    const file = await fillWbsWorkbook(rowsIn, templateBuf)
+    const fileName = `synthetic-${def.config.id}.xlsx`
+    const inspected = await (await admin.http('POST', '/api/import/inspect', { body: inspectForm({ file, fileName, projectId: proj.id }) })).json()
+    const commandId = randomUUID()
+    const send = async () => (await admin.http('POST', '/api/import/execute', { body: importForm({
+      file, fileName, projectId: proj.id, profile: inspected.detection.profile, mode: 'append', commandId, saveProfile: true, registerTeams: false,
+    }) })).json()
+    const first = await send()
+    const second = await send()
+    const items = rows(`${label} 항목`, await admin.sb.from('wbs_items').select('id').eq('project_id', proj.id))
+    const history = await profileHistory(proj)
+    const view = {
+      commandId, depth, file: templateBuf ? '양식 다운로드에 채움' : 'exceljs 새 통합 문서', rows: rowsIn.length,
+      first: importResultView(first), second: importResultView(second), items: items.length, profileHistory: history.length,
+    }
+    const ok = first.ok === true && first.kind === 'applied' && first.commandId === commandId && first.count === rowsIn.length && first.profileSaved === true
+      && second.ok === true && second.kind === 'duplicate' && second.commandId === commandId && second.count === rowsIn.length
+      && items.length === rowsIn.length && history.length === 1
+    if (!ok) throw new Fail(`${label} S2: ${JSON.stringify(view)}`)
+    return view
+  }
+  const cTemplate = Buffer.from(await (await admin.http('GET', `/api/import/template?projectId=${C.id}`)).arrayBuffer())
+  step('S2-wbs-import', { R: await importTwice('R', R, SYNTHETIC_R, null), C: await importTwice('C', C, SYNTHETIC_C, cTemplate) })
+
+  // ── S4(월) — C 에서 연속 2주(월요일 키)와 이월, 영역 개명 뒤 같은 area_id·같은 셀(스펙 §6.4 S4·W14). 주 키는 앱이 정한다(mondayIso — W30):
+  //    러너는 오늘과 +7일을 넘기고 week_start 를 DB 에서 다시 읽어 월요일·7일 간격인지만 본다. R 의 일요일 키는 SP5 다(PENDING_STEPS).
+  await admin.http('GET', `/p/${C.id}/weekly`)
+  const today = seoulToday()
+  const createWeek = async (dateIso, carry) =>
+    mustOk(`C 주차(${dateIso}, 이월 ${carry})`, (await admin.action(`/p/${C.id}/weekly`, 'createWeeklyReport', [C.id, dateIso, carry])).result)
+  const weekRows = async (reportId) => rows('C 주간 행', await admin.sb.from('weekly_report_rows')
+    .select('id, area_id, this_content, this_issue, next_content, next_issue').eq('report_id', reportId).order('id'))
+  const weekStart = async (reportId) => rows('C 주간 문서', await admin.sb.from('weekly_reports').select('week_start').eq('id', reportId).single()).week_start
+  const codeOfArea = new Map([...cSetup.areaIdByCode].map(([code, id]) => [id, code]))
+  const w1 = await createWeek(today, false)
+  const w1Rows = await weekRows(w1.reportId)
+  mustOk('C 차주 계획 저장', (await admin.action(`/p/${C.id}/weekly`, 'saveWeeklyCells',
+    [C.id, w1Rows.map((r) => ({ rowId: r.id, cellKey: 'next_content', content: `S4 계획 ${codeOfArea.get(r.area_id)}` }))])).result)
+  const w2 = await createWeek(shiftDays(today, 7), true)
+  const weeks = { w1: await weekStart(w1.reportId), w2: await weekStart(w2.reportId) }
+  const before = { w1: await weekRows(w1.reportId), w2: await weekRows(w2.reportId) }
+  const workDef = SYNTHETIC_C.weeklyAreas[0]
+  const workId = cSetup.areaIdByCode.get(workDef.code)
+  const renamed = mustOk('C 영역 개명', (await admin.action(`/p/${C.id}/settings`, 'upsertArea',
+    [C.id, areaInput(workDef, cSetup.teamIdByCode, { id: workId, name: `${workDef.name} 관리` })])).result)
+  const [workRow] = rows('C 개명한 영역', await admin.sb.from('project_areas').select('id, code, name').eq('id', workId))
+  const after = { w1: await weekRows(w1.reportId), w2: await weekRows(w2.reportId) }
+  const s4 = {
+    created: [w1.status, w2.status],
+    mondayKeys: isMondayIso(weeks.w1) && shiftDays(weeks.w1, 7) === weeks.w2,
+    rowCounts: [before.w1.length, before.w2.length],
+    carried: before.w2.every((r) => r.this_content === `S4 계획 ${codeOfArea.get(r.area_id)}` && r.next_content === ''),
+    renamed: renamed.id === workId && renamed.status === 'updated' && workRow?.code === workDef.code && workRow?.name === `${workDef.name} 관리`,
+    sameCells: canonical(after) === canonical(before),
+  }
+  const areaCount = SYNTHETIC_C.weeklyAreas.length
+  step('S4-weekly-monday', { weeks, ...s4 },
+    s4.created.join() === 'created,created' && s4.mondayKeys && s4.rowCounts.join() === `${areaCount},${areaCount}` && s4.carried && s4.renamed && s4.sameCells
+      ? undefined : `C 주간(월): ${JSON.stringify({ weeks, ...s4 })}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 
