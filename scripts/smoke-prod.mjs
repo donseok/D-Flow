@@ -43,6 +43,14 @@ const FLOOR = {
   keyframes: 4,   // 2026-09 SP3b UI-1: 로그인 부유 장식 keyframes 넷을 지워 9 → 5(계획 판정 Q21). UI-2b 가 티커 keyframes 를 지우면 4
 }
 
+/**
+ * 테마 블록 존재(2026-10 SP3b UI-1 — U1b 리뷰 R2 P3). 셸·표면 색이 이제 .dark 재정의에만 기대므로 .dark·@media print 블록이
+ * 통째로 빠지면 다크·인쇄가 조용히 라이트가 된다 — 그 손실(블록당 ~70 선언)은 커스텀 프로퍼티 하한 아래로 내려가지 않는다.
+ * 존재만 본다(값은 tests/css/contrast-tokens 가 소스에서 본다).
+ */
+const DARK_BLOCK_RE = /\.dark\{[^}]*--color-surface:/
+const PRINT_BLOCK_RE = /@media print\{[^{}]*\{[^}]*--color-fg:/
+
 const C = process.stdout.isTTY
   ? { red: '\x1b[31m', grn: '\x1b[32m', yel: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' }
   : { red: '', grn: '', yel: '', dim: '', off: '' }
@@ -209,6 +217,12 @@ async function main() {
     if (css.includes(`@layer ${layer}{`) || css.includes(`@layer ${layer} {`)) ok(`@layer ${layer}`)
     else bad(`@layer ${layer}`, '레이어 블록 소실 — 해당 레이어 전량 무효')
   }
+
+  // 다크·인쇄 토큰 블록 — 빠지면 다크 선택 사용자가 라이트 표면 + color-scheme:dark 를 본다
+  if (DARK_BLOCK_RE.test(css)) ok('.dark 토큰 블록', '--color-surface 재정의 존재')
+  else bad('.dark 토큰 블록', '.dark{… --color-surface: …} 없음 — 다크 재정의 소실')
+  if (PRINT_BLOCK_RE.test(css)) ok('@media print 토큰 블록', '--color-fg 재정의 존재')
+  else bad('@media print 토큰 블록', '@media print{…{… --color-fg: …}} 없음 — 인쇄 라이트 값 소실')
 
   // ── 4. 레이아웃 급소 ────────────────────────────────────────────────
   console.log('\n레이아웃 급소')
