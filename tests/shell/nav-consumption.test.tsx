@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => `t:${k}`, locale: 'ko' }) }))
 import { WorkspaceNav } from '@/components/app/WorkspaceNav'
 import { ProjectNav } from '@/components/app/ProjectNav'
+import { MobileNavDrawer } from '@/components/app/MobileNavDrawer'
+import { navScreenLabel } from '@/components/app/ContextBreadcrumb'
 import { navFor, type NavCaps } from '@/lib/nav/registry'
 import { CORE_MODULES, NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import type { NavMenuSetting } from '@/lib/settings/registry'
@@ -30,6 +32,14 @@ describe('셸 소비 — navFor 결과와 같은 항목만(③)', () => {
       expect(hrefs(wHtml)).toEqual(expectOf(ws))
       expect(hrefs(pHtml)).toEqual(expectOf(pj))
       if (menuName === 'custom' && effective.has('minutes')) expect(wHtml).toContain('회의 기록')
+      // 드로어 — 같은 navFor 결과를 그대로(1024 미만의 유일한 내비)
+      const dHtml = renderToString(<MobileNavDrawer open onClose={() => {}} workspaceSwitcher={null} groups={pj} pathname="/p/p1/dashboard" workspaceHome="/w/acme" projectSwitcher={null} badges={{}} />)
+      expect(hrefs(dHtml)).toEqual(expectOf(pj))
+      // 브레드크럼의 화면 이름 = 활성 항목의 라벨(설정 라벨 포함), 활성 항목이 없으면 null
+      const t = (k: string) => `t:${k}`
+      const minutes = ws.flatMap((g) => g.items).find((i) => i.id === 'ws.minutes')
+      expect(navScreenLabel('/w/acme/minutes/m1', ws, t)).toBe(minutes ? (typeof minutes.label === 'string' ? minutes.label : t(minutes.label.key)) : null)
+      expect(navScreenLabel('/account', ws, t)).toBeNull()
     })
   }
   it('모듈을 끄면 그 항목이 사라진다(회의록·위키)', () => {
