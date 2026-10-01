@@ -234,16 +234,39 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 | 짝 비교(`--pair`) | 옮긴 여덟 화면의 새 경로 장이 기준 옛 경로 장과 같거나 이 Phase 가 의도한 차이뿐 | **통과** — compared 32 · same 6 · near 6 · diff 20 · problem 0 · missing 0. diff 의 원인은 아래 4종뿐(장마다 확인) | `diff-ui2a-base--ui2a-pair.md` |
 | 옛 경로 이동 | 옛 키 장의 최종 URL 이 `/w/<wsSlug>/…`, problem 0 | **통과** — root→`/w/default`, meetings·minutes·minute·agents·portfolio·usage·admin-accounts·admin-teams 모두 `/w/default/…`, 머리 80장 problems 0·idle 거짓 0. 기준 서버는 옛 경로가 최종(`baseFinal`) | `ui2a/meta.json` |
 | 홈 v0·내 업무 v0·리졸버 | 섹션 셋·종류 칩·빈 상태, `/` → `/w/<slug>` | **통과** — 홈 세 섹션(처리할 일·진행 중 프로젝트·공지), 내 업무 종류 칩·행, root 최종 `/w/default` | `ui2a/ws-home-*`·`ws-my-work-*`·`root-*` |
-| 회의록 칩·개요 | '프로젝트: …' 칩과 ×, 개요 회의 카드, '이 프로젝트 회의록' 링크 | **통과** — 칩 `프로젝트: UI-CAPTURE ×`, 프로젝트 회의 화면 머리의 '이 프로젝트 회의록' | `ui2a-chip/`·`ui2a-extra/` |
+| 회의록 칩·개요 | '프로젝트: …' 칩과 ×, 개요 회의 카드, '이 프로젝트 회의록' 링크 | **통과(일부는 단위 테스트 근거)** — 칩 `프로젝트: UI-CAPTURE ×`(`ui2a-chip/`), 프로젝트 회의 화면 머리의 '이 프로젝트 회의록'(`ui2a-extra/p-meetings-*`). **개요(`/p/<pid>/dashboard`) 회의 카드**: 뷰포트를 키운 전체 페이지 캡처(`ui2a-extra/p-dashboard-full-on-{1440x900,390x844}-light.png`)와 카드 확대(`p-dashboard-meeting-card-on-*-light.png`)에서 카드 머리 오른쪽에 '이 프로젝트 회의록'이 있고 `href=/w/default/minutes?project=<pid>`(1440·390 모두, 접히지 않음). 개요의 모듈 꺼짐 때 카드가 사라지는 것은 눈으로 보지 못했다 — 이슈를 끈 시드 프로젝트(`pOff`)는 WBS 0건이라 개요가 빈 상태('분석할 WBS 데이터가 없습니다', `…-off-*.png`)여서 카드 비교가 성립하지 않는다. 그 구현은 `dashboard-cross-module.test.tsx` 가 고정한다(꺼짐과 실패를 구분) | `ui2a-chip/`·`ui2a-extra/` |
 | 가시 h1 수 | 기록(판정은 UI-2b ④) | 기록 — 아래 | `ui2a-h1/meta.json` |
-| E2E | 일곱 단계 ✓ | **통과**(`sp3b-e2e.md`) | `e2e-ui2a.txt` |
+| E2E | 일곱 단계 ✓ | **통과**(`sp3b-e2e.md`) — 통과한 최종 표는 `e2e-sp3b-2026-10-01T19-20-39-631Z.md`. (`e2e-ui2a.txt` 는 E6 가 실패한 **첫 실행**의 출력이다 — 증거로 쓰지 않는다) | `qa/sp3b/e2e-sp3b-2026-10-01T19-20-39-631Z.md` |
 | 스모크 | exit 0 | **통과** | `smoke-ui2a.txt` |
 
 짝 비교 diff 의 원인(의도한 차이):
-1. **워크스페이스 한정(D21·D22)** — 포트폴리오 행 5→1(시드 프로젝트 하나, 다른 워크스페이스·rls 프로젝트 제외), 계정 12→5(그 워크스페이스 소속·명단), 좌석표 층 수 변화(ws-agents 0.4~0.6%).
+1. **워크스페이스 한정(D21·D22)** — 포트폴리오 행 5→1(시드 프로젝트 하나, 다른 워크스페이스·rls 프로젝트 제외), 계정 12→5(그 워크스페이스 소속·명단). 좌석표(`ws-agents`)는 여기에 속하지 않는다 — 시드에 프로젝트가 하나라 좌석표 층 수는 바뀌지 않았고(768·390 이 0.00%, 본문 같음) 한정 동작은 `tests/agents/seatmap-scope.test.tsx` 가 증명한다. `ws-agents` 의 1280·1440 차이(0.41~0.58%)는 사이드바 안(20,220 203×438)이며 원인은 3 이다.
 2. **사용 현황 범위 칩**(D21) — '플랫폼 전체(워크스페이스 구분은 SP8)'.
 3. **옛 셸의 경로 의존 표시가 사라짐** — 사이드바 활성 항목·프로젝트 메뉴·브레드크럼이 `/minutes`·`/p/…` 경로로 파생되어 새 경로(`/w/<slug>/…`)에서는 비어 보인다. 판정 W13 이 허용한 공백이며 UI-2b 의 셸 교체(과제 31)가 메운다 — **UI-2a 단독으로 main 에 넣지 않는 이유**.
 4. 회의록·회의 화면 좌측 약 600×640 영역(1.1~1.6%) — 위 3 의 사이드바 프로젝트 메뉴 부재(기준 장에는 이전 프로젝트의 메뉴가 있다). 768·390 의 near(0.13~0.15%)는 머리 영역(브레드크럼 칩)뿐.
+
+장별 차이율(라이트, `diff-ui2a-base--ui2a-pair.md` 에서 옮김 — 판정 수 same 6 · near 6 · diff 20, problem 0):
+
+| 라우트 | 1440 | 1280 | 768 | 390 | 원인(번호는 위 목록) |
+|---|---|---|---|---|---|
+| ws-admin-accounts | 2.85% | 3.30% | 5.12% | 11.43% | ① 워크스페이스 한정(행 12→5, 프로젝트 select 사라짐 — 후보 1개) |
+| ws-usage | 5.94% | 6.44% | 7.46% | 10.36% | ② 범위 칩(머리 아래 52px 밀림) + ③ 사이드바 |
+| ws-portfolio | 3.45% | 4.45% | 3.26% | 5.23% | ① 워크스페이스 한정(행 5→1·요약 수치) |
+| ws-meetings | 1.12% | 1.57% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-minutes | 1.10% | 1.55% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-minute | 1.10% | 1.55% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-agents | 0.41% | 0.58% | 0.00% | 0.00% | ③ 사이드바 `UI-CAPTURE 메뉴` 블록 부재(좌석표 본문은 같다 — 768·390 이 0.00%) |
+| ws-admin-teams | 0.00% | 0.00% | 0.00% | 0.00% | 차이 없음 |
+
+### 레인 A 알림(main 반영 때 충돌·확인 대상 — 원장 목록에 더한다)
+
+`merge-base 305a3b4` 이후 main(`54a202e`)과 양쪽이 바꾼 파일 아홉: `scripts/ui-capture.mjs`, `tests/gates/manifest.ts`, `tests/invariants/project-page-gates.test.ts`, `tests/invariants/settings-writes.test.ts`, `tests/minutes/external-api.test.ts`, `tests/rls/fixture-ws.sql`, `tests/rls/isolation-map.ts`(account_preferences 탐침 — 레인 A 소유), `tests/scripts/ui-capture.test.ts`, `tests/ui/app-layout-teams.test.tsx`. `git merge-tree` 3-way 충돌 표지는 0 이다. 앞의 원장 알림에는 `isolation-map.ts`·`external-api.test.ts`·`app-layout-teams.test.tsx` 가 없었다.
+
+### 이월(문구·표현)
+
+- 포트폴리오 화면 제목이 워크스페이스 한정(D21) 뒤에도 '전사 포트폴리오' 로 남아 있다(`ws-portfolio` 캡처) — 문구가 사실과 다르다. 화면 소유 SP 가 정리하며 UI-2b/UI-3 이월 목록에 한 줄 둔다.
+- 스펙 §5.3·§8.3 E1 의 "`Location` 은 요청 원점" 은 판정 W2(상대 `Location`)로 갈음했다 — §7 반영 때 스펙 문언을 정정한다.
+- 없는 `/w/<slug>/…` 경로의 RSC prefetch 가 끝나지 않는 관찰(U2a-5) — 과제 25 가 `/w/<slug>/projects` 를 만들어 홈의 '전체 보기'·시작 화면이 가리키던 임시 옛 경로를 새 경로로 돌렸다. 남은 없는 경로 링크는 과제 31·35 의 전수 점검 몫.
 
 ### 가시 h1 수(기록 — 1280×720·390, 44 라우트)
 
