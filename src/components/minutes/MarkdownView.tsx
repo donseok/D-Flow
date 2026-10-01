@@ -58,7 +58,7 @@ function MermaidBlock({ source, anchorProps }: { source: string; anchorProps: Re
   const [state, setState] = useState<MermaidState>({ status: 'loading' })
   // 또박또박(원본 앱)과 같은 내장 테마로 그린다 — 라이트 default, 다크 dark.
   // themeVariables 로 앱 팔레트를 덮으면 mindmap 섹션 색이 거기서 파생돼 원본과 달라진다.
-  const mermaidTheme = useTheme().theme === 'dark' ? 'dark' : 'default'
+  const mermaidTheme = useTheme().resolved === 'dark' ? 'dark' : 'default'   // 해석값 — system + OS 다크도 다크
 
   useEffect(() => {
     let cancelled = false

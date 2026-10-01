@@ -1,3 +1,5 @@
+import type { ThemePref } from '@/lib/theme/policy'
+
 /** DEPRECATED — 깊이 판정에 쓰지 않는다(진실은 parent_id 트리). 프로젝트별 레벨 라벨은 ProjectConfig.levelLabels. */
 export type Level = string
 /** 팀 코드 — 런타임 기준은 DB teams 마스터(관리자 화면에서 추가/비활성). 컴파일 타임 유니언 금지. */
@@ -199,7 +201,7 @@ export interface MeetingAttendeeInfo {
 export interface UiPrefs {
   heroCollapsed?: boolean
   sidebarCollapsed?: boolean
-  theme?: 'light' | 'dark'
+  theme?: ThemePref        // 선호 — 형식 밖 저장값은 읽는 쪽(isThemePref)이 '없음'으로 본다
   locale?: 'ko' | 'en'
   dashSections?: string[]   // 대시보드 상세 아코디언에서 펼쳐 둔 그룹 id
   minutesView?: 'list' | 'calendar' | 'tree'   // 회의록 보관함 뷰 토글

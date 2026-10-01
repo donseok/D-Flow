@@ -29,7 +29,7 @@ vi.mock('next/link', () => ({
   ),
 }))
 vi.mock('@/components/providers/ThemeProvider', () => ({
-  useTheme: () => ({ theme: 'light', toggle: vi.fn() }),
+  useTheme: () => ({ preference: null, resolved: 'light', ready: true, setPreference: vi.fn() }),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({ locale: 'ko', setLocale: vi.fn(), t: (key: string) => key }),

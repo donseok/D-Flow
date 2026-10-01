@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bell, ChevronRight, Cpu, Globe, KeyRound, LogOut, Menu, Moon, Sun, User, UserCog, Users, X,
+  Bell, ChevronRight, Cpu, KeyRound, LogOut, Menu, User, UserCog, Users, X,
 } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { canManageTeams } from '@/lib/authz/teamsAccess'
@@ -12,7 +12,6 @@ import { canManageLlmConfig } from '@/lib/authz/llmConfigAccess'
 import { markAllNotificationsRead } from '@/app/actions/notifications'
 import { markInboxSeen, markAllInboxRead, markInboxItemRead, type InboxItem } from '@/app/actions/inbox'
 import { useShellState } from './ShellStateProvider'
-import { useTheme } from '@/components/providers/ThemeProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { BrandMark } from '@/components/ui/BrandMark'
 import { BRAND } from '@/lib/branding'
@@ -48,8 +47,7 @@ export interface HeaderIdentity {
 export function HeaderChrome({ identity, projects, userName }: { identity: HeaderIdentity | null; projects: SidebarProject[]; userName?: string | null }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { theme, toggle } = useTheme()
-  const { locale, setLocale, t } = useLocale()
+  const { t } = useLocale()
   const [menuOpen, setMenuOpen] = useState(false)
   const [open, setOpen] = useState<null | 'notif' | 'profile'>(null)
   const [pwOpen, setPwOpen] = useState(false)
@@ -193,13 +191,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
 
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {/* 공정율 기준일 자동/수동 바로가기 버튼 — 사용자 요청으로 화면에서 제거(기능은 설정 페이지에 유지) */}
-            {/* 언어 전환·다크모드 토글 — 사용자 요청으로 화면에서 숨김(기능 코드는 유지) */}
-            <button onClick={() => setLocale(locale === 'ko' ? 'en' : 'ko')} className="chrome-btn hidden" title="Language">
-              <Globe className="h-3.5 w-3.5" />{locale.toUpperCase()}
-            </button>
-            <button onClick={toggle} className="chrome-icon hidden" aria-label={theme === 'dark' ? t('chrome.lightMode') : t('chrome.darkMode')}>
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+            {/* 언어·테마 선택은 계정 팝오버와 /account 에 있다(2026-09-29 사용자 결정 #21 — 전역 바 아이콘 토글은 두지 않는다) */}
 
             {/* 알림 */}
             <div className="relative">

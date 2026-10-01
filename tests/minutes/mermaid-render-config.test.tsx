@@ -17,13 +17,14 @@ import { createRoot, type Root } from 'react-dom/client'
 
 const mocks = vi.hoisted(() => ({
   theme: 'light' as 'light' | 'dark',
+  preference: null as 'system' | 'light' | 'dark' | null,
   initialize: vi.fn(),
   render: vi.fn(async () => ({ svg: '<svg data-testid="mmd"></svg>' })),
 }))
 
 vi.mock('mermaid', () => ({ default: { initialize: mocks.initialize, render: mocks.render } }))
 vi.mock('@/components/providers/ThemeProvider', () => ({
-  useTheme: () => ({ theme: mocks.theme, toggle: vi.fn(), setTheme: vi.fn() }),
+  useTheme: () => ({ resolved: mocks.theme, preference: mocks.preference, ready: true, setPreference: vi.fn() }),
 }))
 
 import { MarkdownView } from '@/components/minutes/MarkdownView'
@@ -35,6 +36,7 @@ let root: Root
 
 beforeEach(() => {
   mocks.theme = 'light'
+  mocks.preference = null
   mocks.initialize.mockClear()
   mocks.render.mockClear()
   container = document.createElement('div')
@@ -77,6 +79,13 @@ describe('회의록 Mermaid 렌더 설정', () => {
   })
 
   it('다크 모드는 또박또박과 같은 dark 테마', async () => {
+    mocks.theme = 'dark'
+    await renderView()
+    expect(lastConfig().theme).toBe('dark')
+  })
+
+  it('선호가 system 이고 OS 가 다크면(해석값 dark) dark 테마 — 선호가 아니라 해석값을 본다(D10)', async () => {
+    mocks.preference = 'system'
     mocks.theme = 'dark'
     await renderView()
     expect(lastConfig().theme).toBe('dark')
