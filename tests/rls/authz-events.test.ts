@@ -87,9 +87,9 @@ describe('0012 ⑩-1 기록 — 세 종류의 변경마다 1행', () => {
       await c.query('delete from public.project_members where project_id = $1 and person_id = $2', row)   // access_role null — 기록 없음
       const got = (await since(c, m)).filter((e) => e.kind === 'project_access')
       expect(got.map((e) => [e.cause, e.workspace_id, e.project_id, e.target_user_id, e.target_person_id, e.before, e.after])).toEqual([
-        ['direct', F.ws, F.projects.a, U, PERSON, null, { access_role: 'member', access_granted_by: null }],
-        ['direct', F.ws, F.projects.a, U, PERSON, { access_role: 'member' }, { access_role: 'admin' }],
-        ['direct', F.ws, F.projects.a, U, PERSON, { access_role: 'admin' }, { access_role: null }],
+        ['direct', F.ws, F.projects.a, U, PERSON, null, { access_role: 'member', access_granted_by: null, active: true }],
+        ['direct', F.ws, F.projects.a, U, PERSON, { access_role: 'member', active: true }, { access_role: 'admin', active: true }],
+        ['direct', F.ws, F.projects.a, U, PERSON, { access_role: 'admin', active: true }, { access_role: null, active: true }],
       ])
     })
   })
@@ -107,7 +107,7 @@ describe('0012 ⑩-1 행위자와 원인', () => {
       expect((await since(c, m)).map((e) => [e.kind, e.cause, e.before, e.after, e.actor_user_id])).toEqual([
         ['workspace_role', 'direct', { role: 'member' }, { role: 'admin' }, F.users.wsAdmin],
         ['workspace_role', 'direct', { role: 'admin' }, null, F.users.wsAdmin],
-        ['project_access', 'cascade', { access_role: 'member' }, { access_role: null }, F.users.wsAdmin],
+        ['project_access', 'cascade', { access_role: 'member', active: true }, { access_role: null, active: true }, F.users.wsAdmin],
       ])
     })
   })
@@ -155,7 +155,7 @@ describe('0012 ⑩-1 행위자와 원인', () => {
       const m = await mark(c)
       expect(await pgError(c, 'delete from public.projects where id = $1', [P])).toBeNull()
       expect((await since(c, m)).map((e) => [e.kind, e.cause, e.workspace_id, e.project_id, e.target_user_id, e.target_person_id, e.before, e.after]))
-        .toEqual([['project_access', 'parent_deleted', F.ws, P, F.users.dual, F.people.dualA, { access_role: 'member' }, null]])
+        .toEqual([['project_access', 'parent_deleted', F.ws, P, F.users.dual, F.people.dualA, { access_role: 'member', active: true }, null]])
       await toSession(c, F.users.wsAdmin)
       expect((await c.query('select 1 from public.authz_events where project_id = $1', [P])).rowCount).toBe(2)   // 부여 + 회수
       await toServer(c)
@@ -175,7 +175,7 @@ describe('0012 ⑩-1 행위자와 원인', () => {
       ])
       // 계정이 지워질 때 people.user_id 가 먼저 null 이 된다 — 명단의 회수 기록은 대상 계정이 비고 인물 id 로 남는다
       expect(got.filter((e) => e.kind === 'project_access').map((e) => [e.cause, e.target_person_id, e.before, e.after]))
-        .toEqual([['cascade', PERSON, { access_role: 'member' }, { access_role: null }]])
+        .toEqual([['cascade', PERSON, { access_role: 'member', active: true }, { access_role: null, active: true }]])
     })
   })
 
@@ -492,7 +492,7 @@ describe('0012 ⑩-2 권한 RPC', () => {
         .toMatchObject(REUSED)
       expect((await since(c, m)).map((e) => [e.kind, e.cause, e.workspace_id, e.project_id, e.target_user_id, e.target_person_id, e.before, e.after,
         e.actor_user_id, e.command_id])).toEqual([['project_access', 'direct', F.ws, F.projects.a, F.users.aLoose, F.people.aLoose, null,
-        { access_role: 'member', access_granted_by: F.users.member }, F.users.member, CMD(0xc0)]])
+        { access_role: 'member', access_granted_by: F.users.member, active: true }, F.users.member, CMD(0xc0)]])
       expect((await c.query('select id from public.project_members where project_id = $1 and person_id = $2', [F.projects.a, F.people.aLoose])).rows)
         .toEqual([{ id: first.member_id }])
     })

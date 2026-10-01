@@ -15,3 +15,7 @@
 | `*_command_receipts` | R(카탈로그) | 2026-10-01 19:57 KST | `diff r b` 불일치 0 · 기본 권한 diff 없음 · 재적용 `diff f a` 불일치 0 · ⑦ `COMMAND_RECEIPTS_POSTCHECK` 통과 |
 | `*_command_receipts` | 데이터 업그레이드(seed_wide 위, 전환 1회) | 2026-10-01 19:58 KST | 상속 프로젝트 `…5b04-000000000c03` · 스모크 2회 통과 · 전환 `{"moved": {"invites": 1, "area_teams": 1, "item_owners": 2, "project_member_teams": 2}, "teams": 3, "status": "converted"}` · 롤백·재적용 성공 · 재적용 뒤 그 프로젝트의 공용 팀 참조 0 |
 | `*_command_receipts` | 사후검사 민감도(트리거 끔·insert grant) | 2026-10-01 19:58 KST | 둘 다 `COMMAND_RECEIPTS_POSTCHECK` 로 멈춤 — `트리거가 없다: command_receipts_worm`·`표 권한이 남았다: authenticated:INSERT` |
+| `*_authz_carry` | R(카탈로그) | 2026-10-01 20:08 KST | `diff r b` 불일치 0 · 기본 권한 diff 없음 · 재적용 `diff f a` 불일치 0 · ④ `AUTHZ_CARRY_POSTCHECK` 통과 |
+| `*_authz_carry` | 데이터 업그레이드(seed_wide 위) | 2026-10-01 20:08 KST | 스모크 2회 통과 — 권한 있는 명단 행의 active 전환 기록 1·인물 기록 1(명령 id null)·person_id 변경 거부·modules.enabled unset 거부, 롤백·재적용 성공 |
+| `*_authz_carry` | 사후검사 민감도(인물 트리거 끔·email grant) | 2026-10-01 20:08 KST | 둘 다 `AUTHZ_CARRY_POSTCHECK` 로 멈춤 — `기록 트리거가 기대와 다르다: people.authz_events_record_people`·`authenticated 가 people.email 을 쓴다` |
+| CI 등가(부트스트랩 없음) | `db reset --version 0001` → `migration up` → `test:rls` | 2026-10-01 20:09 KST | 전체 초록(30 파일 357)·건너뜀 0 — HEAD `f758994` |
