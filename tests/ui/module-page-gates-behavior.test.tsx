@@ -12,6 +12,10 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: m.getComputedWbs }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: m.getSeatmap }))
 vi.mock('@/lib/authz', () => ({ getActorForView: m.getActorForView }))
+// 회의록 상세는 /w/[slug] 아래 — 슬러그 판정이 워크스페이스 w1 을 준다(행의 워크스페이스와 같아야 관문까지 간다)
+vi.mock('@/lib/authz/workspaceScope', () => ({
+  loadWorkspaceScope: vi.fn(async () => ({ ws: { id: 'w1', slug: 'acme', name: 'Acme' }, actor: await m.getActorForView(), degraded: false, role: 'member' })),
+}))
 vi.mock('@/lib/authz/agentsAccess', () => ({ canViewAgents: () => true }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
@@ -31,7 +35,7 @@ vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(), getMyProjectId
 vi.mock('@/components/minutes/MinuteViewer', () => ({ MinuteViewer: () => null }))
 import KanbanPage from '@/app/(app)/p/[projectId]/kanban/page'
 import AgentsPage from '@/app/(app)/agents/page'
-import MinuteDetailPage from '@/app/(app)/minutes/[id]/page'
+import MinuteDetailPage from '@/app/(app)/w/[slug]/minutes/[id]/page'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { makeMemberActor } from '../fixtures/actor'
@@ -58,8 +62,8 @@ describe('페이지 관문 — 거부면 로더가 돌지 않는다', () => {
     expect(requireSessionModule).toHaveBeenCalledWith(null, 'agents')
     expect(m.getSeatmap).not.toHaveBeenCalled()
   })
-  const openMinute = () => MinuteDetailPage({ params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}) })
-  it('대상 행 페이지(/minutes/[id]) — 행의 워크스페이스로 판정, 거부면 주석·버전 등 로더가 돌지 않는다', async () => {
+  const openMinute = () => MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: 'min-1' }), searchParams: Promise.resolve({}) })
+  it('대상 행 페이지(/w/[slug]/minutes/[id]) — 행의 워크스페이스로 판정, 거부면 주석·버전 등 로더가 돌지 않는다', async () => {
     m.getMinuteDetail.mockResolvedValue({ minute: { workspaceId: 'w1' } })
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     await expect(openMinute()).rejects.toThrow('NEXT_NOT_FOUND')

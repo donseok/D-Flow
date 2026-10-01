@@ -69,8 +69,8 @@ describe('목록', () => {
     expect(new Set(routes).size).toBe(routes.length); expect(new Set(apis).size).toBe(apis.length)
     expect([...byId.wbs.routePrefixes]).toEqual(['/p/[projectId]/wbs', '/p/[projectId]/gantt', '/p/[projectId]/import'])
     expect([...byId.wbs.apiPrefixes]).toEqual(['/api/export', '/api/import'])
-    // SP3b 과제 10 — 목록은 /w/[slug]/minutes, 옛 상세 /minutes/[id] 는 과제 11 이 옮길 때까지 남는다
-    expect([...byId.minutes.routePrefixes]).toEqual(['/w/[slug]/minutes', '/minutes'])
+    // SP3b 과제 10·11 — 목록·상세 모두 /w/[slug]/minutes 아래(옛 /minutes·/minutes/<id> 는 (legacy) 스텁)
+    expect([...byId.minutes.routePrefixes]).toEqual(['/w/[slug]/minutes'])
     expect([...byId.agents.apiPrefixes]).toEqual(['/api/v1/agent', '/api/v1/wbs'])
     expect([...byId.minutes_integration.apiPrefixes]).toEqual(['/api/v1/minutes'])
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])

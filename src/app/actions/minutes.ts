@@ -459,7 +459,7 @@ export async function updateMinuteMeta(
   }
   const projectChanged = updateResult.old_project_id !== updateResult.new_project_id
   const wikiRebuildRequired = projectChanged || updateResult.wiki_rebuild_required === true
-  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   if (updateResult.old_project_id) {
     revalidatePath(`/p/${updateResult.old_project_id}/wiki`)
   }
@@ -642,7 +642,7 @@ export async function assignMinutesProject(
     if (res.old_project_id) rebuildProjects.add(res.old_project_id)
     if (res.new_project_id) rebuildProjects.add(res.new_project_id)
     updated += 1
-    revalidatePath(`/minutes/${id}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   }
 
   revalidatePath('/(app)/w/[slug]/minutes', 'page')
@@ -675,7 +675,7 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
   // service_role 경로라 RLS 가 없다 — 소유자·관리자 판정은 checkOwner 가 먼저 했고, 0행은 회의록이 사라진 경우다.
   // 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 회의록이 없습니다.' }
-  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -762,7 +762,7 @@ export async function replaceMinuteBody(
         bodyMd: body,
       })
     : null
-  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   // ① 하이라이트 재매칭 → ② 검색/요약/Wiki 갱신. Wiki는 새 버전 ID를 근거로 보존한다.
   after(async () => {
     await rematchMinuteHighlights(id, body)
@@ -850,7 +850,7 @@ export async function recordMinuteFile(
         await processMinuteWikiJob(wikiJobId)
       }
     })
-    revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     return { ok: true }
   }
 
@@ -866,7 +866,7 @@ export async function recordMinuteFile(
     else if (ATTACHMENT_GUARD_LOGGED.has(known[0])) console.error(`${head} 첨부 확정 가드 거부: ${known[0]}`)
     return { ok: false, error: known?.[1] ?? '첨부 기록에 실패했습니다.' }
   }
-  revalidatePath(`/minutes/${minuteId}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -890,7 +890,7 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   // (can_manage_minute)와 같은 선이 됐다. 객체가 이미 없으면 행만 지운다(존재 확인 RPC).
   const r = await removeStoredAttachment(sb, { kind: 'minute', id: fileId, filePath: f.file_path as string, tag: 'removeMinuteFile' })
   if (!r.ok) return r
-  revalidatePath(`/minutes/${f.minute_id as string}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -915,7 +915,7 @@ export async function deleteMinute(id: string): Promise<MinuteActionResult> {
     return { ok: false, error: error.message }
   }
   revalidatePath('/(app)/w/[slug]/minutes', 'page')
-  revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   if (projectId) {
     revalidatePath(`/p/${projectId}/wiki`)
     after(async () => {
@@ -1387,7 +1387,7 @@ export async function moveMinuteToFolder(
       new_project_id: string | null
       wiki_rebuild_required: boolean
     }
-    revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     if (result.old_project_id) revalidatePath(`/p/${result.old_project_id}/wiki`)
     if (result.new_project_id) revalidatePath(`/p/${result.new_project_id}/wiki`)
     if (result.wiki_rebuild_required && result.new_project_id) {
@@ -1478,7 +1478,7 @@ export async function toggleMinuteHighlight(
     // 끄기
     const { error } = await sb.from('minute_highlights').delete().eq('id', existing.id as string)
     if (error) return { ok: false, error: error.message }
-    revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     return { ok: true, on: false }
   }
   if (existing) {
@@ -1497,7 +1497,7 @@ export async function toggleMinuteHighlight(
   })
   // 동시 토글 경합: unique 위반은 "이미 하이라이트됨"으로 멱등 처리
   if (error && error.code !== '23505') return { ok: false, error: error.message }
-  revalidatePath(`/minutes/${minuteId}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true, on: true }
 }
 
@@ -1528,7 +1528,7 @@ export async function ensureMinuteInsightsAction(
   const bodyMd = minute.body_md as string
   if (!bodyMd.trim()) return { status: 'ready' }
   const status = await ensureMinuteInsights(minuteId, bodyMd, fnv1a64(bodyMd))
-  if (status === 'generated') revalidatePath(`/minutes/${minuteId}`)
+  if (status === 'generated') revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { status }
 }
 

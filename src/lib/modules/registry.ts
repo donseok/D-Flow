@@ -67,7 +67,7 @@ export const MODULES: readonly ModuleDef[] = [
     routePrefixes: ['/p/[projectId]/agents', '/agents'], apiPrefixes: ['/api/v1/agent', '/api/v1/wbs'] },
   { id: 'minutes', core: false, scope: 'workspace', requires: [], envAvailable: always, botDomains: ['minutes'], settings: settingsOf('minutes'),
     nav: { workspace: { id: 'ws.minutes', labelKey: 'nav.minutes', icon: 'FileText', segment: 'minutes', group: 'ws.shared', order: 20 } },
-    routePrefixes: ['/w/[slug]/minutes', '/minutes'], apiPrefixes: ['/api/minutes'] },
+    routePrefixes: ['/w/[slug]/minutes'], apiPrefixes: ['/api/minutes'] },
   { id: 'minutes_integration', core: false, scope: 'workspace', requires: ['minutes'], envAvailable: () => minutesApiEnabled(), botDomains: [], settings: settingsOf('minutes_integration'),
     nav: null, routePrefixes: [], apiPrefixes: ['/api/v1/minutes'] },
   { id: 'chatbot', core: false, scope: 'both', requires: [], envAvailable: () => chatV2Enabled(), botDomains: [], settings: settingsOf('chatbot'),

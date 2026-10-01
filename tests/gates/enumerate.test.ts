@@ -182,7 +182,7 @@ describe('열거 — 민감도(합성 소스)', () => {
   it('메타데이터 파일의 모듈 경로 판정(F12)', () => {
     expect(metadataModule('src/app/icon.tsx')).toBeNull()
     expect(metadataModule('src/app/(app)/p/[projectId]/wiki/topics/[topicId]/opengraph-image.tsx')).toBe('wiki')
-    expect(metadataModule('src/app/(app)/minutes/[id]/twitter-image.tsx')).toBe('minutes')
+    expect(metadataModule('src/app/(app)/w/[slug]/minutes/[id]/twitter-image.tsx')).toBe('minutes')   // SP3b 과제 11 — 상세가 /w/[slug] 아래로
     expect(METADATA_FILE.test('opengraph-image2.tsx') && METADATA_FILE.test('sitemap.ts') && !METADATA_FILE.test('icon.png')).toBe(true)
   })
   it("이스케이프로 쓴 'use server' 지시문도 열거한다(T13-m2 — Next 는 익은 값으로 읽는다)", () => {

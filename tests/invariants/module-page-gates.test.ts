@@ -34,7 +34,7 @@ const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'ge
 const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage', 'wsHref'])
 /** 페이지별 관문 앞 허용(사유) — 대상 행에서 워크스페이스를 알아야 하는 페이지. selects 는 관문 앞 조회 체인이 고를 수 있는 열(그 밖의 열을 읽는 체인은 문제) */
 const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: string }> = {
-  'src/app/(app)/minutes/[id]/page.tsx': { calls: ['getMinuteDetail'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다' },
+  'src/app/(app)/w/[slug]/minutes/[id]/page.tsx': { calls: ['getMinuteDetail'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다' },
   'src/app/(app)/agents/page.tsx': { calls: ['resolveSoleWorkspaceId'], why: '권한 redirect 재료(순수·IO 없음) — canViewAgents 의 워크스페이스. SP3b 과제 13 이 /w/[slug]/agents 로 옮기며 지운다' },
   'src/app/share/minutes/[token]/page.tsx': {
     calls: ['isShareToken', 'serviceRoleConfigured', 'createAdminClient'], selects: ['workspace_id'],

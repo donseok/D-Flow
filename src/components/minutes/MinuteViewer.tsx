@@ -100,7 +100,8 @@ export function MinuteViewer({
   versions?: MinuteVersionListItem[]
   /** 버전 목록 조회 실패 사유 — 있으면 versions 는 [] 이고 버전 패널이 사유와 재시도를 띄운다('버전 없음'으로 보이지 않게). */
   versionsError?: string | null
-  wikiImpact?: MinuteWikiImpactCardProps
+  /** null = 위키 모듈이 꺼진 범위(P20) — 카드를 그리지 않는다 */
+  wikiImpact?: MinuteWikiImpactCardProps | null
   historicalVersion?: { id: string; versionNo: number } | null
   issueMembers?: ProjectMember[]
   /** 고정 프로젝트(issueMembers)의 명단 조회 실패 사유 — 있으면 빈 담당자 목록으로 이슈 폼을 열지 않는다. */
@@ -811,7 +812,7 @@ export function MinuteViewer({
                 onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
                 loadError={versionsError ? t('min.version.loadFailed') : null}
               />
-              <MinuteWikiImpactCard {...wikiImpact} embedded />
+              {wikiImpact && <MinuteWikiImpactCard {...wikiImpact} embedded />}
             </>
           }
         />

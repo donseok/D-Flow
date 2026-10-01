@@ -4,7 +4,8 @@ import {
   getMinuteVersionBody, getMinuteFolderPath,
 } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
-import { getActorForView } from '@/lib/authz'
+import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
+import { BRAND } from '@/lib/branding'
 import { canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -13,11 +14,14 @@ import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
 import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { moduleSetFor } from '@/lib/modules/gate'
+
+export const metadata = { title: `회의록 | ${BRAND.productName}` }   // V6 — C 레이아웃의 '설정' 제목을 덮는다
 
 export default async function MinuteDetailPage({
   params, searchParams,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ slug: string; id: string }>
   searchParams: Promise<{
     block?: string | string[]
     hash?: string | string[]
@@ -25,30 +29,35 @@ export default async function MinuteDetailPage({
     version?: string | string[]
   }>
 }) {
-  const [{ id }, query] = await Promise.all([params, searchParams])
+  const [{ slug, id }, query] = await Promise.all([params, searchParams])
+  const scope = await loadWorkspaceScope(slug)                              // 첫 await — 슬러그 판정(E19)
   // 대상 행의 워크스페이스로 판정(스펙 §4.2 2행). getMinuteDetail 은 react cache — 아래 묶음이 다시 읽지 않는다
   const head = await getMinuteDetail(id)
-  if (!head?.minute.workspaceId) notFound()
+  // 다른 워크스페이스의 행은 이 주소로 열지 않는다(D6 — 옛 /minutes/<id> 스텁이 행의 워크스페이스로 보낸다)
+  if (!head?.minute.workspaceId || head.minute.workspaceId !== scope.ws.id) notFound()
   await requireModulePage({ workspaceId: head.minute.workspaceId }, 'minutes')
   const sourceAnchor = parseMinuteSourceAnchor(query)
   const requestedVersionId = typeof query.version === 'string' ? query.version : null
+  // P20 — 연결 이슈·위키 영향은 그 회의록의 프로젝트(없으면 워크스페이스)에서 모듈이 켜졌을 때만. 판정 실패는 core 만(= 숨김, 로그는 moduleSetFor)
+  const modScope = head.minute.projectId ? { projectId: head.minute.projectId } : { workspaceId: head.minute.workspaceId }
   // prefs 는 기존 병렬 묶음에 합류 — 직렬 왕복 단수는 그대로다(스펙 §4.5)
-  const [detail, annotations, versions, requestedVersion, m, user, projects, prefs, linkedIssues] = await Promise.all([
+  const [detail, annotations, versions, requestedVersion, user, projects, prefs, linkedIssuesRaw, mods] = await Promise.all([
     getMinuteDetail(id), getMinuteAnnotations(id), getMinuteVersions(id),
     requestedVersionId ? getMinuteVersionBody(id, requestedVersionId) : Promise.resolve(null),
-    getActorForView(), getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id),
+    getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id),
+    moduleSetFor(modScope),
   ])
+  const m = scope.actor
+  const linkedIssues = mods.has('issues') ? linkedIssuesRaw : []
   if (!detail) notFound()
   if (requestedVersionId && !requestedVersion) notFound()
   const issueProjectId = detail.minute.projectId ?? detail.minute.meetingProjectId ?? null
   // folderPath 는 folderId 를 알아야 풀 수 있어 이 2단 묶음에 합류시킨다 — 위 Promise.all 로
   // 끌어올릴 수 없고, 단독으로 await 하면 직렬 왕복이 한 단 더 붙는다.
   const [wikiImpact, issueRoster, folderPath, myProjectIds] = await Promise.all([
-    getMinuteWikiImpact(
-      id,
-      detail.minute.projectId ?? null,
-      detail.minute.projectName ?? null,
-    ),
+    mods.has('wiki')
+      ? getMinuteWikiImpact(id, detail.minute.projectId ?? null, detail.minute.projectName ?? null)
+      : Promise.resolve(null),
     issueProjectId ? getProjectRoster(issueProjectId) : Promise.resolve(null),
     getMinuteFolderPath(detail.minute.folderId ?? null),
     getMyProjectIds(),
