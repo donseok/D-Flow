@@ -16,6 +16,36 @@ export function presenceColor(userId: string): string {
   return PRESENCE_COLORS[h % PRESENCE_COLORS.length]
 }
 
+/** 아바타·이름 칩 글자색 후보 — 흰색과 거의 검정. 배경 짝으로 고른다(흰 글자 고정은 밝은 팔레트에서 3:1 안팎 — UI-1 axe 위반) */
+const FG_LIGHT = '#ffffff'
+const FG_DARK = '#111111'
+
+function luminance(hex: string): number {
+  const n = Number.parseInt(hex.slice(1), 16)
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+}
+function contrast(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p)
+  return (x + 0.05) / (y + 0.05)
+}
+
+/** 배경 위 글자색 — 흰 글자가 본문 기준(4.5:1)을 넘으면 흰색, 아니면 대비가 큰 쪽(테마와 무관 — 배경이 테마와 무관하므로) */
+export function presenceForeground(bg: string): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(bg)) return FG_LIGHT
+  if (contrast(FG_LIGHT, bg) >= 4.5) return FG_LIGHT
+  return contrast(FG_DARK, bg) >= contrast(FG_LIGHT, bg) ? FG_DARK : FG_LIGHT
+}
+
+/** userId → 아바타 배경·글자색 짝(인라인 style) */
+export function presenceStyle(userId: string): { background: string; color: string } {
+  const background = presenceColor(userId)
+  return { background, color: presenceForeground(background) }
+}
+
 /** Realtime presence track/state로 오가는 최소 페이로드 + 연결 키. */
 export interface PresencePeer {
   connKey: string  // 연결(탭) 단위 presence 키 — 같은 사용자의 다중 탭 구분

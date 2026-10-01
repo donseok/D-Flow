@@ -26,7 +26,6 @@ export function countRaw(text: string): Counts {
 export const ALLOW: Record<string, Counts & { why: string }> = {
   'src/components/agents/RosterBoard.tsx': { hex: 13, z: 4, why: '좌석표 고유 색·층 — 화면 소유 SP(UI-5, 개정 §5.9.4)' },
   'src/components/agents/SeatSpeech.tsx': { hex: 1, why: '좌석표 말풍선 — 화면 소유 SP(UI-5)' },
-  'src/components/app/PresenceStrip.tsx': { palette: 1, why: '함께 보기 표시 — 셸, UI-2b 가 다시 쓴다' },
   'src/components/minutes/MinuteBlockPopover.tsx': { z: 2, why: '회의록 화면 내부 층 — SP5(화면 소유)' },
   'src/components/minutes/MinuteSelectionBubble.tsx': { z: 1, why: '회의록 화면 내부 층 — SP5(화면 소유)' },
   'src/components/ui/DayPopover.tsx': { z: 2, why: '날짜 팝오버 내부 층 — 화면 소유 SP(UI-5)' },
