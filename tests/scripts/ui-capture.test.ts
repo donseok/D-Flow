@@ -11,6 +11,7 @@ import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scr
 import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
 import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
   summarizeDiff } from '../../scripts/ui-capture.mjs'
+import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, flickerVerdict, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
 import { computePrefsSync } from '../../src/lib/prefs/sync'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
@@ -318,8 +319,11 @@ describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 �
     expect(fixedPrefs.length).toBe(1)   // (theme, pin = {}) — 지금 값을 받지 않는다
     for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs('light')).not.toHaveProperty(k)
   })
-  it('테마는 light|dark 만, pin 은 입력을 바꾸지 않는다', () => {
+  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5), pin 은 입력을 바꾸지 않는다', () => {
     expect(() => fixedPrefs('sepia')).toThrow(/테마/)
+    expect(fixedPrefs('system')).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'system' })
+    // system 선호 + 쿠키 system 이면 새 컨텍스트에서 PrefsSync 가 적용·백필할 것이 없다(로컬값 theme = 쿠키 system)
+    expect(computePrefsSync(fixedPrefs('system'), { heroCollapsed: true, sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
     const pin = { lastProjectId: 'p' }
     fixedPrefs('light', pin)
     expect(pin).toEqual({ lastProjectId: 'p' })
@@ -764,5 +768,108 @@ describe('촬영 쪽 판정 — 최종 경로·서버 빌드 id·서버 커밋·
     const pa = (routesDoc.routes as { key: string; mask?: string[]; hide?: string[] }[]).find((r) => r.key === 'p-agents')
     expect(pa?.mask).toEqual(['[data-hub-row] td span.tabular-nums'])
     expect(pa?.hide).toEqual(['[data-hub-stamp]'])
+  })
+})
+
+describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
+  it('parseRgb — rgb·rgba·공백 문법, 못 읽으면 null', () => {
+    expect(parseRgb('rgb(49, 92, 219)')).toEqual([49, 92, 219, 1])
+    expect(parseRgb('rgba(0, 0, 0, 0.5)')).toEqual([0, 0, 0, 0.5])
+    expect(parseRgb('rgb(1 2 3 / 50%)')).toEqual([1, 2, 3, 0.5])
+    expect(parseRgb('color(srgb 1 0 0)')).toBeNull()
+  })
+  it('contrastRgb 는 accent.ts 의 식과 같은 값(흰·검정 21, 코발트 on 흰 5.70)', () => {
+    expect(contrastRgb([255, 255, 255, 1], [0, 0, 0, 1])).toBeCloseTo(21, 5)
+    expect(contrastRgb([49, 92, 219, 1], [255, 255, 255, 1])).toBeCloseTo(5.7, 1)
+    expect(blend([0, 0, 0, 0.5], [255, 255, 255, 1])).toEqual([127.5, 127.5, 127.5, 1])
+  })
+  it('focusVerdict — 외곽선 없음·얇음·대비 부족은 실패, 코발트 2px 는 통과', () => {
+    expect(focusVerdict({ outlineStyle: 'none', outlineWidth: '0px', outlineColor: 'rgb(0, 0, 0)', background: 'rgb(255, 255, 255)' }).ok).toBe(false)
+    expect(focusVerdict({ outlineStyle: 'solid', outlineWidth: '0.5px', outlineColor: 'rgb(49, 92, 219)', background: 'rgb(255, 255, 255)' }).ok).toBe(false)
+    expect(focusVerdict({ outlineStyle: 'solid', outlineWidth: '2px', outlineColor: 'rgb(220, 226, 234)', background: 'rgb(255, 255, 255)' }).ok).toBe(false)
+    expect(focusVerdict({ outlineStyle: 'solid', outlineWidth: '2px', outlineColor: 'rgb(49, 92, 219)', background: 'rgb(255, 255, 255)' }).ok).toBe(true)
+  })
+  it('ringsOf — 계산된 box-shadow 에서 번짐 고리(x·y·흐림 0, 퍼짐 ≥ 1px)만, 괄호 안 쉼표로 쪼개지 않는다(포커스 ring 유틸)', () => {
+    expect(ringsOf('none')).toEqual([])
+    expect(ringsOf('rgb(255, 255, 255) 0px 0px 0px 2px, rgb(49, 92, 219) 0px 0px 0px 4px')).toEqual([
+      { color: 'rgb(255, 255, 255)', width: 2 }, { color: 'rgb(49, 92, 219)', width: 4 }])
+    expect(ringsOf('rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, oklab(0.5 0.01 -0.1 / 0.25) 0px 0px 0px 2px')).toEqual([{ color: 'oklab(0.5 0.01 -0.1 / 0.25)', width: 2 }])
+    expect(ringsOf('rgb(49, 92, 219) 0px 0px 0px 2px inset')).toEqual([{ color: 'rgb(49, 92, 219)', width: 2 }])
+  })
+  it('focusVerdict — 외곽선이 없어도 대비 3:1 고리(ring)가 있으면 통과, 고리가 옅으면 실패(D50 — outline-none + ring 유틸)', () => {
+    const none = { outlineStyle: 'none', outlineWidth: '0px', outlineColor: 'rgb(0, 0, 0)', background: 'rgb(255, 255, 255)' }
+    expect(focusVerdict({ ...none, rings: [{ color: 'rgb(255, 255, 255)', width: 2 }, { color: 'rgb(49, 92, 219)', width: 4 }] })).toMatchObject({ ok: true, via: 'ring' })
+    expect(focusVerdict({ ...none, rings: [{ color: 'rgba(49, 92, 219, 0.25)', width: 2 }] }).ok).toBe(false)
+    expect(focusVerdict({ ...none, rings: [] }).why).toMatch(/외곽선 없음/)
+  })
+  it('flickerVerdict — 첫 페인트와 하이드레이션 뒤가 같고 기대와 같아야', () => {
+    expect(flickerVerdict({ atDcl: 'dark', afterHydrate: 'dark', expected: 'dark' }).ok).toBe(true)
+    expect(flickerVerdict({ atDcl: 'light', afterHydrate: 'dark', expected: 'dark' }).why).toMatch(/첫 페인트/)
+    expect(flickerVerdict({ atDcl: 'light', afterHydrate: 'light', expected: 'dark' }).why).toMatch(/기대/)
+  })
+  it('escapeHtml·sheetRows — 차이율 큰 순, 차이·axe 가 없으면 new·null', () => {
+    expect(escapeHtml('<a href="x">&\'</a>')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;')
+    const head = { rows: [
+      { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
+      { key: 'b', width: 1440, height: 900, theme: 'light', file: 'b.png', h1Count: 0, problems: ['not-found'] },
+      { key: 'c', width: 390, height: 844, theme: 'dark', file: 'c.png', h1Count: 1, problems: [] },
+    ] }
+    const rows = sheetRows(head, [{ key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'same' }, { key: 'b', width: 1440, height: 900, theme: 'light', ratio: 0.2, verdict: 'diff' }],
+      [{ key: 'b', width: 1440, height: 900, theme: 'light', violations: 3 }])
+    expect(rows.map((r) => [r.key, r.verdict, r.axe])).toEqual([['b', 'diff', 3], ['a', 'same', null], ['c', 'new', null]])
+  })
+  it('sheetRows·sheetSummary — 판정 다섯(same·near·diff·problem·missing)+new, 기준에만 있는 장도 행으로, 볼 목록 = diff·near·problem·missing(ui1-addendum §2)', () => {
+    const head = { rows: [
+      { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
+      { key: 'n', width: 1440, height: 900, theme: 'light', file: 'n.png', h1Count: 1, problems: [] },
+      { key: 'p', width: 1440, height: 900, theme: 'dark', file: 'p.png', h1Count: 1, problems: ['click-failed'] },
+      { key: 's', width: 390, height: 844, theme: 'light', file: 's.png', h1Count: 1, problems: [] },
+    ] }
+    const diff = [
+      { key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0.01, verdict: 'diff', reasons: [] },
+      { key: 'n', width: 1440, height: 900, theme: 'light', ratio: 0.001, verdict: 'near', reasons: [] },
+      { key: 'p', width: 1440, height: 900, theme: 'dark', ratio: 0, verdict: 'problem', reasons: ['대상:click-failed'] },
+      { key: 's', width: 390, height: 844, theme: 'light', ratio: 0, verdict: 'same', reasons: [] },
+      { key: 'gone', width: 1440, height: 900, theme: 'light', file: 'gone.png', ratio: null, verdict: 'missing', reasons: [] },
+    ]
+    const rows = sheetRows(head, diff, [])
+    expect(rows.map((r) => [r.key, r.verdict])).toEqual([['a', 'diff'], ['n', 'near'], ['p', 'problem'], ['s', 'same'], ['gone', 'missing']])
+    const gone = rows.find((r) => r.key === 'gone')
+    expect(gone).toMatchObject({ file: 'gone.png', inHead: false, h1Count: null })
+    expect(rows.find((r) => r.key === 'p')?.reasons).toEqual(['대상:click-failed'])
+    const sum = sheetSummary(rows)
+    expect(sum).toMatchObject({ same: 1, near: 1, diff: 1, problem: 1, missing: 1, new: 0 })
+    expect(sum.look.map((r) => r.key)).toEqual(['p', 'a', 'gone', 'n'])
+  })
+  it('tabCoverage — 대상마다 닿은 걸음 수, 0 이면 unreached(판정 Q43)', () => {
+    const steps = [{ matched: ['aside a'] }, { matched: [] }, { matched: ['aside a', 'header button'] }]
+    expect(tabCoverage(steps, ['aside a', 'header button', 'tr[role="button"]'])).toEqual({ hits: { 'aside a': 2, 'header button': 1, 'tr[role="button"]': 0 }, unreached: ['tr[role="button"]'] })
+    expect(tabCoverage([], [])).toEqual({ hits: {}, unreached: [] })
+  })
+  it('axeTable — 모든 라벨·테마 행을 싣는다(다크 axe 행 보존 — 판정 Q45)', () => {
+    const rows = axeTable([
+      { label: 'ui1', key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 },
+      { label: 'ui1', key: 'a', width: 1440, height: 900, theme: 'dark', violations: 4 },
+      { label: 'ui1', key: 'b', width: 1440, height: 900, theme: 'dark', violations: 0 },
+    ])
+    expect(rows.map((r) => [r.theme, r.key, r.violations])).toEqual([['dark', 'a', 4], ['dark', 'b', 0], ['light', 'a', 1]])
+  })
+  it('sheetRows 를 추가 라벨 절에 — 기준 없이 new, axe 는 풀에서 테마로 찾는다(판정 Q45)', () => {
+    const extra = { rows: [{ key: 'a', width: 1440, height: 900, theme: 'dark', file: 'a-d.png', h1Count: 1, problems: [] }] }
+    const pool = [{ key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 }, { key: 'a', width: 1440, height: 900, theme: 'dark', violations: 4 }]
+    expect(sheetRows(extra, [], pool).map((r) => [r.verdict, r.axe])).toEqual([['new', 4]])
+  })
+  it('checksSummary — Tab 미도달·인쇄 글자 0·쇼케이스 불일치를 실패로(판정 Q43·Q45)', () => {
+    const s = checksSummary({
+      tab: { rows: [{ key: 'p-wbs', theme: 'dark', failed: 1, unreached: ['[data-row-id] button'] }, { key: 'p-dashboard', theme: 'light', failed: 0, unreached: [] }] },
+      print: { rows: [{ key: 'report-modal', theme: 'dark', texts: 0, lowContrast: 0 }] },
+      flicker: [{ key: 'account', pref: 'system', ok: true }],
+      showcase: [{ name: 'primary', equal: true }, { name: 'notify', equal: false }],
+    })
+    expect(s.tab?.map((r) => r.ok)).toEqual([false, true])
+    expect(s.print?.[0].ok).toBe(false)
+    expect(s.flicker?.[0].ok).toBe(true)
+    expect(s.showcase).toEqual({ pairs: 2, unequal: ['notify'] })
+    expect(checksSummary({})).toEqual({ tab: null, print: null, flicker: null, showcase: null })
   })
 })

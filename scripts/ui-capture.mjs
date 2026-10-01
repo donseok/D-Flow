@@ -1,5 +1,5 @@
 // scripts/ui-capture.mjs — SP3b 캡처·눈확인 도구(스펙 D48·§3.4, 계획 판정 Q2~Q5·Q8·Q33). 로컬 레인 B 전용
-// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202·3203 — C-port). 하위 명령: seed · shoot · diff · axe (UI-1 이 checks·sheet 를 더한다).
+// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202·3203 — C-port). 하위 명령: seed · shoot · diff · axe · checks · sheet(뒤 둘은 UI-1 이 이어 고침 — 판정 Q28).
 // 순수 함수는 export 해 tests/scripts/ui-capture.test.ts 가 import 한다 — 최상위에서 파일·네트워크·env 를 건드리지 않는다(isMain 가드).
 // Playwright 는 package.json 에 없다: `npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs …` 로 부르고 PATH 에서 찾는다.
 // 주석에 설정 표·설정 RPC 이름을 따옴표로 적지 않는다(settings-writes 게이트가 원문을 센다).
@@ -807,7 +807,8 @@ export const RUN_START_PREFS = Object.freeze({ heroCollapsed: true, sidebarColla
  * @param {string} theme @param {Record<string, unknown>} [pin] @returns {Record<string, unknown>}
  */
 export function fixedPrefs(theme, pin = {}) {
-  if (!['light', 'dark'].includes(theme)) throw new Error(`테마는 light|dark: ${theme}`)
+  // system 은 checks flicker 의 OS 다크 패스만 쓴다(ui1-addendum §5) — 그 패스의 컨텍스트 색 체계가 해석값을 정한다. shoot·axe 는 --theme 이 light|dark 로 막는다
+  if (!['light', 'dark', 'system'].includes(theme)) throw new Error(`테마는 light|dark|system: ${theme}`)
   return { ...RUN_START_PREFS, theme, ...pin }
 }
 
@@ -1126,6 +1127,385 @@ async function cmdAxe(opts) {
 COMMANDS.shoot = cmdShoot
 COMMANDS.diff = cmdDiff
 COMMANDS.axe = cmdAxe
+
+// ── UI-1 이 이어 고친다(계획 판정 Q28): checks(tab·print·flicker·showcase)·sheet ──────────────────────
+
+/** 'rgb(1, 2, 3)'·'rgba(1, 2, 3, 0.5)'·'rgb(1 2 3 / 50%)' → [r, g, b, a] (읽지 못하면 null) */
+export function parseRgb(s) {
+  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(String(s ?? '').trim())
+  if (!m) return null
+  const a = m[4] === undefined ? 1 : m[4].endsWith('%') ? Number(m[4].slice(0, -1)) / 100 : Number(m[4])
+  return [Number(m[1]), Number(m[2]), Number(m[3]), a]
+}
+const toLin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+const relLum = ([r, g, b]) => 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b)
+/** WCAG 대비 — src/lib/settings/accent.ts 의 contrastRatio 와 같은 식(.mjs 는 TS 를 import 하지 못해 옮겼다)
+ *  @param {number[]} a @param {number[]} b */
+export function contrastRgb(a, b) {
+  const x = relLum(a)
+  const y = relLum(b)
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+}
+/** 반투명 색을 불투명 배경 위에 합성 @param {number[]} fg [r, g, b, a] @param {number[]} bg [r, g, b, …] */
+export function blend(fg, bg) {
+  const a = fg[3] ?? 1
+  return [fg[0] * a + bg[0] * (1 - a), fg[1] * a + bg[1] * (1 - a), fg[2] * a + bg[2] * (1 - a), 1]
+}
+/**
+ * 계산된 box-shadow → 번짐 고리 목록(순수) — x·y·흐림 0 이고 퍼짐 ≥ 1px 인 그림자만(Tailwind ring·ring-offset 유틸이 이 모양이다).
+ * 색 함수 안의 쉼표로 쪼개지 않는다. 브라우저로 원문을 보내 같은 함수로 읽는다(checkTab)
+ * @param {string} shadow @returns {{ color: string, width: number }[]}
+ */
+export function ringsOf(shadow) {
+  const parts = []
+  let depth = 0
+  let cur = ''
+  for (const ch of String(shadow ?? '')) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+  }
+  parts.push(cur)
+  const out = []
+  for (const raw of parts) {
+    const p = raw.trim()
+    const m = /^([a-z-]+\([^)]*\)|#[0-9a-fA-F]+|[a-z]+)\s+(.*)$/.exec(p)
+    if (!m || m[1] === 'none') continue
+    const nums = m[2].split(/\s+/).filter((x) => x !== 'inset').map((x) => parseFloat(x))
+    if (nums.length < 4 || nums.some((n) => Number.isNaN(n))) continue
+    const [x, y, blur, spread] = nums
+    if (x === 0 && y === 0 && blur === 0 && spread >= 1) out.push({ color: m[1], width: spread })
+  }
+  return out
+}
+/** 포커스 한 걸음 — 외곽선(스타일 ≠ none, 폭 ≥ 1px) 또는 번짐 고리(ring) 가운데 하나가 바깥 배경과 3:1 이상(D50, WCAG 2.4.7·1.4.11).
+ *  색은 rgb()/rgba() 로 받는다(브라우저 쪽에서 캔버스로 정규화 — oklab 등은 parseRgb 가 읽지 못한다) */
+/** @param {{ outlineStyle: string, outlineWidth: string, outlineColor: string, background: string, rings?: { color: string, width: number }[] }} s */
+export function focusVerdict({ outlineStyle, outlineWidth, outlineColor, background, rings = [] }) {
+  const bg = parseRgb(background)
+  if (!bg) return { ok: false, why: `배경색을 읽지 못함(${background})` }
+  const ratioOf = (color) => { const c = parseRgb(color); return c ? contrastRgb(blend(c, bg), bg) : null }
+  const hasOutline = Boolean(outlineStyle) && outlineStyle !== 'none' && parseFloat(outlineWidth) >= 1
+  const tries = [...(hasOutline ? [{ via: 'outline', color: outlineColor }] : []), ...rings.filter((r) => r.width >= 1).map((r) => ({ via: 'ring', color: r.color }))]
+  if (!tries.length) return { ok: false, why: '외곽선 없음(고리도 없음)' }
+  let best = null
+  for (const t of tries) {
+    const ratio = ratioOf(t.color)
+    if (ratio === null) continue
+    if (ratio >= 3) return { ok: true, via: t.via, ratio }
+    if (!best || ratio > best.ratio) best = { via: t.via, ratio }
+  }
+  return best ? { ok: false, why: `대비 ${best.ratio.toFixed(2)} < 3(${best.via})`, ratio: best.ratio } : { ok: false, why: `색을 읽지 못함(${tries.map((t) => t.color).join(' / ')})` }
+}
+/** 깜빡임 — 페인트 전(DOMContentLoaded) 클래스 = 하이드레이션 뒤 클래스 = 기대값 */
+export function flickerVerdict({ atDcl, afterHydrate, expected }) {
+  if (atDcl !== afterHydrate) return { ok: false, why: `첫 페인트 ${atDcl} → 하이드레이션 뒤 ${afterHydrate}` }
+  if (afterHydrate !== expected) return { ok: false, why: `기대 ${expected} ≠ ${afterHydrate}` }
+  return { ok: true }
+}
+/**
+ * Tab 순회가 대상에 닿았는가(판정 Q43) — 대상 선택자마다 그 선택자에 맞은 걸음 수, 0 이면 unreached(판정 실패)
+ * @param {{ matched?: string[] }[]} steps @param {string[]} targets
+ */
+export function tabCoverage(steps, targets) {
+  const hits = Object.fromEntries(targets.map((t) => [t, steps.filter((s) => (s.matched ?? []).includes(t)).length]))
+  return { hits, unreached: targets.filter((t) => hits[t] === 0) }
+}
+export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+/**
+ * 대조표 행 — 머리 라벨의 장마다 diff 판정(same·near·diff·problem — 수정 라운드 뒤 판정, ui1-addendum §2)·axe 위반을 붙이고, diff 가 기준에만
+ * 있다고 본 장(missing)도 행으로 더한다(머리에 없으니 기준 이미지만 — 빠진 장을 표에서 숨기지 않는다). 차이율 큰 순, 차이가 없으면 new
+ * @param {{ rows: any[] }} head @param {any[]} [diff] @param {any[]} [axe]
+ * @returns {{ key: string, width: number, height: number, theme: string, file: string, ratio: number | null, verdict: string, reasons: string[], axe: number | null, h1Count: number | null, problems: string[], inHead: boolean }[]}
+ */
+export function sheetRows(head, diff = [], axe = []) {
+  const same = (x, r) => x.key === r.key && x.width === r.width && x.height === r.height && x.theme === r.theme
+  const fromHead = head.rows.map((r) => {
+    const d = diff.find((x) => same(x, r) && x.verdict !== 'missing')
+    const a = axe.find((x) => same(x, r))
+    return { key: r.key, width: r.width, height: r.height, theme: r.theme, file: r.file, ratio: d?.ratio ?? null, verdict: d?.verdict ?? 'new', reasons: d?.reasons ?? [],
+      axe: a ? a.violations : null, h1Count: r.h1Count, problems: r.problems ?? [], inHead: true }
+  })
+  const gone = diff.filter((d) => d.verdict === 'missing' && !head.rows.some((r) => same(d, r))).map((d) => ({ key: d.key, width: d.width, height: d.height,
+    theme: d.theme, file: d.file, ratio: null, verdict: 'missing', reasons: d.reasons ?? [], axe: null, h1Count: null, problems: [], inHead: false }))
+  return [...fromHead.sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1)), ...gone]
+}
+/** 대조표 '볼 목록' 순서 — 문제 → 다름 → 빠짐 → 근소(near 도 눈으로 본다 — ui1-addendum §2) */
+const SHEET_LOOK = ['problem', 'diff', 'missing', 'near']
+/**
+ * 대조표 절의 머리 요약(순수) — 판정별 수와 '볼 목록'(problem → diff → missing → near, 같은 판정 안에서는 차이율 큰 순)
+ * @template {{ verdict: string, ratio: number | null }} R @param {R[]} rows
+ */
+export function sheetSummary(rows) {
+  const count = (v) => rows.filter((r) => r.verdict === v).length
+  return { same: count('same'), near: count('near'), diff: count('diff'), problem: count('problem'), missing: count('missing'), new: count('new'),
+    look: rows.filter((r) => SHEET_LOOK.includes(r.verdict))
+      .sort((x, y) => SHEET_LOOK.indexOf(x.verdict) - SHEET_LOOK.indexOf(y.verdict) || (y.ratio ?? -1) - (x.ratio ?? -1)) }
+}
+/**
+ * axe 절(판정 Q45) — 머리·추가 라벨의 모든 테마 행(다크 포함)을 테마·위반 수 순으로
+ * @param {any[]} rows
+ * @returns {{ label: string | null, key: string, width: number, height: number, theme: string, violations: number }[]}
+ */
+export function axeTable(rows) {
+  return rows.map((r) => ({ label: r.label ?? null, key: r.key, width: r.width, height: r.height, theme: r.theme, violations: r.violations ?? 0 }))
+    .sort((a, b) => (a.theme === b.theme ? b.violations - a.violations : a.theme < b.theme ? -1 : 1))
+}
+/**
+ * checks 절(판정 Q43·Q45) — 머리 라벨 폴더의 tab·print·flicker·showcase JSON(없으면 null) → 대조표 요약
+ * @param {{ tab?: any, print?: any, flicker?: any, showcase?: any }} src
+ */
+export function checksSummary({ tab = null, print = null, flicker = null, showcase = null }) {
+  return {
+    /** @type {{ key: string, theme: string, failed: number, unreached: string[], ok: boolean }[] | null} */
+    tab: tab ? tab.rows.map((r) => ({ key: r.key, theme: r.theme, failed: r.failed ?? 0, unreached: r.unreached ?? [], ok: (r.failed ?? 0) === 0 })) : null,
+    /** @type {{ key: string, theme: string, texts: number, low: number, ok: boolean }[] | null} */
+    print: print ? print.rows.map((r) => ({ key: r.key, theme: r.theme, texts: r.texts, low: r.lowContrast, ok: r.texts > 0 && r.lowContrast === 0 })) : null,
+    /** @type {{ key: string, pref: string, ok: boolean, why: string }[] | null} */
+    flicker: flicker ? flicker.map((r) => ({ key: r.key, pref: r.pref, ok: Boolean(r.ok), why: r.why ?? '' })) : null,
+    /** @type {{ pairs: number, unequal: string[] } | null} */
+    showcase: showcase ? { pairs: showcase.length, unequal: showcase.filter((p) => !p.equal).map((p) => p.name) } : null,
+  }
+}
+
+async function checkTab(opts) {
+  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, theme, outDir }) => {
+    const dir = join(outDir, opts.label, 'tab')
+    mkdirSync(dir, { recursive: true })
+    /** @type {string[]} */
+    const targets = r.focusTargets ?? []
+    const steps = []
+    // 한 번 걷기 — 걸음마다 초점 요소의 외곽선·바깥 배경, 그리고 어느 대상 선택자에 맞는지(판정 Q43)
+    const walk = async (pass, count) => {
+      for (let i = 0; i < count; i++) {
+        await page.keyboard.press('Tab')
+        const s = await page.evaluate(({ tg, ringsSrc }) => {
+          const el = document.activeElement
+          if (!el || el === document.body || el === document.documentElement) return null
+          // 전환(transition)이 outline-color 를 currentColor 에서 옮기는 중이면 첫 값이 글자색이다 — 끝낸 뒤 읽는다
+          for (const a of el.getAnimations()) { try { a.finish() } catch { /* 끝낼 수 없는 애니메이션 */ } }
+          // 계산색을 rgba 로 — oklab·color-mix 결과도 캔버스 한 픽셀로 sRGB 에 내린다
+          const cv = document.createElement('canvas')
+          cv.width = 1
+          cv.height = 1
+          const ctx = cv.getContext('2d', { willReadFrequently: true })
+          const rgba = (c) => {
+            ctx.clearRect(0, 0, 1, 1)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0)'
+            ctx.fillStyle = c
+            ctx.fillRect(0, 0, 1, 1)
+            const d = ctx.getImageData(0, 0, 1, 1).data
+            return [d[0], d[1], d[2], d[3] / 255]
+          }
+          const str = (c) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${c[3]})`
+          // 바깥 배경 = 조상 배경을 불투명할 때까지 모아 아래부터 합성(반투명 머리 띠 등)
+          const layers = []
+          for (let node = el.parentElement; node; node = node.parentElement) {
+            const c = rgba(getComputedStyle(node).backgroundColor)
+            if (c[3] > 0) layers.push(c)
+            if (c[3] >= 0.999) break
+          }
+          let bg = [255, 255, 255, 1]
+          for (const c of layers.reverse()) bg = [c[0] * c[3] + bg[0] * (1 - c[3]), c[1] * c[3] + bg[1] * (1 - c[3]), c[2] * c[3] + bg[2] * (1 - c[3]), 1]
+          const cs = getComputedStyle(el)
+          const rings = new Function(`return (${ringsSrc})`)()(cs.boxShadow).map((r) => ({ color: str(rgba(r.color)), width: r.width }))
+          const rect = el.getBoundingClientRect()
+          return { tag: el.tagName.toLowerCase(), label: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40),
+            outlineStyle: cs.outlineStyle, outlineWidth: cs.outlineWidth, outlineColor: str(rgba(cs.outlineColor)), background: str(bg), rings,
+            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, matched: tg.filter((t) => el.matches(t)) }
+        }, { tg: targets, ringsSrc: ringsOf.toString() })
+        if (!s) continue
+        const v = focusVerdict(s)
+        const { x, y, width, height } = s.rect
+        if (i < 12 && width > 0 && height > 0 && x >= 0 && y >= 0 && x + width <= 1440 && y + height <= 900) {
+          await page.screenshot({ path: join(dir, `${r.key}-${theme}-${pass}-${String(i).padStart(2, '0')}.png`),
+            clip: { x: Math.max(0, x - 8), y: Math.max(0, y - 8), width: Math.min(1440 - Math.max(0, x - 8), width + 16), height: Math.min(900 - Math.max(0, y - 8), height + 16) } })
+        }
+        steps.push({ pass, i, tag: s.tag, label: s.label, outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor}`, rings: s.rings, background: s.background, matched: s.matched, ...v })
+      }
+    }
+    // ① 첫머리 25걸음 — click 행(모달·팝오버)은 모서리를 누르면 배경이 닫으므로 누르지 않는다. 초점만 문서로 되돌린다
+    if (!r.click) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
+    await walk('top', 25)
+    // ② focusStart 의 첫 요소에서 15걸음 — 비초점 요소면 임시 tabindex=-1 을 달아 시작점으로만 쓴다
+    const startProblems = []
+    if (r.focusStart) {
+      const started = await page.evaluate((sel) => {
+        const el = document.querySelector(sel)
+        if (!(el instanceof HTMLElement)) return false
+        if (el.tabIndex < 0 && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1')
+        el.focus()
+        return document.activeElement === el
+      }, r.focusStart)
+      if (started) await walk('start', 15)
+      else startProblems.push(`focus-start-missing:${r.focusStart}`)
+    }
+    const cov = tabCoverage(steps, targets)
+    return { steps, coverage: cov.hits, unreached: cov.unreached, startProblems,
+      failed: steps.filter((s) => !s.ok).length + cov.unreached.length + startProblems.length }
+  })
+  writeFileSync(join(res.outDir, opts.label, 'tab.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, kstDate: kstToday(), rows: res.rows }, null, 2))
+  console.log(JSON.stringify({ ok: true, kind: 'tab', pages: res.rows.length,
+    failedSteps: res.rows.flatMap((r) => r.steps.filter((s) => !s.ok).map((s) => `${r.key}/${r.theme}#${s.pass}${s.i} ${s.tag} ${s.label}: ${s.why}`)),
+    unreached: res.rows.flatMap((r) => [...r.unreached.map((x) => `${r.key}/${r.theme} target-unreached:${x}`), ...r.startProblems.map((x) => `${r.key}/${r.theme} ${x}`)]) }))
+}
+
+async function checkPrint(opts) {
+  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, theme, outDir }) => {
+    await page.emulateMedia({ media: 'print' })
+    await page.waitForTimeout(300)
+    mkdirSync(join(outDir, opts.label), { recursive: true })
+    const file = `print-${r.key}-${theme}.png`
+    await page.screenshot({ path: join(outDir, opts.label, file) })
+    const colors = await page.evaluate(() => [...document.querySelectorAll('.print-area *')]
+      .filter((e) => e.childElementCount === 0 && (e.textContent || '').trim()).slice(0, 300).map((e) => getComputedStyle(e).color))
+    const white = [255, 255, 255, 1]
+    const ratios = colors.map(parseRgb).filter(Boolean).map((c) => contrastRgb(blend(c, white), white))
+    return { file, texts: ratios.length, lowContrast: ratios.filter((x) => x < 4.5).length, minRatio: ratios.length ? Math.min(...ratios) : null }
+  })
+  writeFileSync(join(res.outDir, opts.label, 'print.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, rows: res.rows }, null, 2))
+  console.log(JSON.stringify({ ok: true, kind: 'print', rows: res.rows.map((r) => `${r.key}/${r.theme} texts ${r.texts} low ${r.lowContrast} min ${r.minRatio?.toFixed(2)}${r.problems.length ? ` problems ${r.problems.join('+')}` : ''}`) }))
+}
+
+/** 깜빡임 패스 — 서버 선호·쿠키 = pref, 컨텍스트 색 체계는 system 패스만 OS 다크(그 해석값이 기대값) */
+const FLICKER_PASSES = Object.freeze([['light', 'light'], ['dark', 'dark'], ['system', 'dark']])
+
+async function checkFlicker(opts) {
+  const env = laneEnv({ base: opts.base })
+  const { db, outDir, baseUrl } = env
+  const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
+  const routes = selectRoutes(doc, opts)
+  const seed = await resolveSeed(db)
+  const sessions = await freshSessions(env, [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))])
+  const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
+  const { chromium } = await loadPlaywright()
+  const browser = await chromium.launch()
+  const rows = []
+  try {
+    for (const [pref, scheme] of FLICKER_PASSES) {
+      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, { lastProjectId: seed.pid })
+      for (const r of routes) {
+        const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: scheme }))
+        try {
+          await routeCdn(context, join(outDir, 'cdn-cache'))
+          const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: pref }]
+          await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+          await context.addInitScript(() => {
+            document.addEventListener('DOMContentLoaded', () => { window.__themeAtDcl = document.documentElement.classList.contains('dark') }, { once: true })
+          })
+          const page = await context.newPage()
+          await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
+          try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { /* 폴링 화면 */ }
+          await page.waitForTimeout(800)
+          const seen = await page.evaluate(() => ({ atDcl: window.__themeAtDcl ? 'dark' : 'light', afterHydrate: document.documentElement.classList.contains('dark') ? 'dark' : 'light' }))
+          const problems = pageProblems(await page.content())
+          const v = problems.length ? { ok: false, why: `화면 문제 ${problems.join('+')}` } : flickerVerdict({ ...seen, expected: scheme })
+          rows.push({ key: r.key, pref, scheme, ...seen, expected: scheme, ...v })
+        } finally { await context.close() }
+      }
+    }
+  } finally { await browser.close() }
+  mkdirSync(join(outDir, opts.label), { recursive: true })
+  writeFileSync(join(outDir, opts.label, 'flicker.json'), JSON.stringify(rows, null, 2))
+  console.log(JSON.stringify({ ok: true, kind: 'flicker', rows: rows.map((r) => `${r.key}/${r.pref} ${r.atDcl}→${r.afterHydrate} ${r.ok ? 'ok' : r.why}`) }))
+}
+
+async function checkShowcase(opts) {
+  const pick = (page, column) => page.evaluate((col) => {
+    const SAMPLES = [['column', '', 'backgroundColor'], ['primary', '[data-sample="primary"]', 'backgroundColor'],
+      ['legacyPrimary', '[data-sample="legacy-btn-primary"]', 'backgroundColor'], ['notify', '[data-badge="notify"]', 'backgroundColor'],
+      ['review', '[data-badge="review"]', 'backgroundColor'], ['urgent', '[data-badge="urgent"]', 'backgroundColor'],
+      ['urgentText', '[data-badge="urgent"]', 'color'], ['errorIcon', '[data-status-kind="partial_error"] svg', 'color'],
+      ['selectedRow', '[data-sample="selected-error-focus-row"]', 'backgroundColor']]
+    const root = document.querySelector(`[data-showcase-column="${col}"]`)
+    return Object.fromEntries(SAMPLES.map(([name, sel, prop]) => {
+      const el = sel ? root?.querySelector(sel) : root
+      return [name, el ? getComputedStyle(el)[prop] : null]
+    }))
+  }, column)
+  // 라이트 페이지(html 에 dark 없음)의 다크 열 = 중첩 다크, 다크 페이지(html.dark)의 라이트 열 = 페이지 전체 다크를 상속한 같은 컴포넌트(판정 Q37)
+  const res = await forEachShot({ ...opts, routes: ['admin-ui-states'], theme: ['light', 'dark'], sizes: [[1440, 900]] },
+    async (page, { theme }) => ({ values: await pick(page, theme === 'light' ? 'dark' : 'light') }))
+  const bad = res.rows.filter((r) => r.problems.length).map((r) => `${r.theme}:${r.problems.join('+')}`)
+  if (bad.length) throw new Error(`쇼케이스 화면 문제 — ${bad.join('; ')}`)
+  const nested = res.rows.find((r) => r.theme === 'light')?.values ?? {}
+  const whole = res.rows.find((r) => r.theme === 'dark')?.values ?? {}
+  const pairs = Object.keys(nested).map((k) => ({ name: k, nestedDark: nested[k], pageDark: whole[k] ?? null, equal: nested[k] !== null && nested[k] === whole[k] }))
+  mkdirSync(join(res.outDir, opts.label), { recursive: true })
+  writeFileSync(join(res.outDir, opts.label, 'showcase.json'), JSON.stringify(pairs, null, 2))
+  console.log(JSON.stringify({ ok: true, kind: 'showcase', pairs: pairs.length, unequal: pairs.filter((p) => !p.equal) }))
+}
+
+async function cmdChecks(opts) {
+  if (!opts.label) throw new Error('--label 이 필요하다')
+  const kind = opts.positional[0]
+  const run = { tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase }[kind ?? '']
+  if (!run || opts.positional.length !== 1) throw new Error('사용: checks tab|print|flicker|showcase --label <l> [--routes …] [--theme …]')
+  await run(opts)
+}
+
+async function cmdSheet(opts) {
+  if (!opts.label) throw new Error('--label 이 필요하다(머리 라벨)')
+  // 위치 인자: <기준 라벨> [추가 라벨…] — 추가 라벨은 meta.json(이미지 절)이나 axe.json(axe 절)을 가진 라벨(판정 Q45). 형식은 parseArgs 가 본다
+  const [baseLabel, ...extras] = opts.positional
+  if (!baseLabel) throw new Error('사용: sheet <기준 라벨> [추가 라벨…] --label <머리 라벨>')
+  const { outDir } = laneEnv()
+  const readJson = (...p) => { const f = join(outDir, ...p); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null }
+  const head = readJson(opts.label, 'meta.json')
+  if (!head) throw new Error(`${opts.label}/meta.json 이 없다`)
+  const diff = readJson(`diff-${baseLabel}--${opts.label}.json`)
+  if (diff === null) throw new Error(`diff-${baseLabel}--${opts.label}.json 이 없다 — diff ${baseLabel} ${opts.label} 를 먼저(비교 절을 빈 채로 만들지 않는다)`)
+  const axePool = [opts.label, ...extras].flatMap((l) => (readJson(l, 'axe.json')?.rows ?? []).map((r) => ({ ...r, label: l })))
+  const sections = [{ label: opts.label, baseLabel, rows: sheetRows(head, diff, axePool) }]
+  for (const l of extras) {
+    const m = readJson(l, 'meta.json')
+    if (m) sections.push({ label: l, baseLabel: null, rows: sheetRows(m, [], axePool) })
+    else if (!readJson(l, 'axe.json')) throw new Error(`${l}: meta.json·axe.json 둘 다 없다`)
+  }
+  const checks = checksSummary({ tab: readJson(opts.label, 'tab.json'), print: readJson(opts.label, 'print.json'),
+    flicker: readJson(opts.label, 'flicker.json'), showcase: readJson(opts.label, 'showcase.json') })
+  const img = (label, file) => `<img loading="lazy" src="${escapeHtml(`${label}/${file}`)}" alt="">`
+  const okCell = (ok) => (ok ? '통과' : '<b>실패</b>')
+  const table = (cols, rows) => `<table><thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`
+  const where = (r) => `${r.key}@${r.width}x${r.height}/${r.theme}`
+  const sectionHtml = (s) => {
+    const sum = sheetSummary(s.rows)
+    const head2 = `<h2>${escapeHtml(s.label)}${s.baseLabel ? ` — 기준 ${escapeHtml(s.baseLabel)} 과 비교` : ''} · 장 ${s.rows.length}`
+      + (s.baseLabel ? ` · 다름 ${sum.diff} · 근소 ${sum.near} · 문제 ${sum.problem} · 빠짐 ${sum.missing} · 같음 ${sum.same} · 새 장 ${sum.new}` : '') + '</h2>'
+    const look = s.baseLabel ? `<p>볼 목록(문제·다름·빠짐·근소): ${sum.look.length ? sum.look.map((r) => `${escapeHtml(where(r))} ${escapeHtml(r.verdict)} ${pctOf(r.ratio)}`).join(' · ') : '없음'}</p>` : ''
+    const cols = ['라우트', '크기', '테마', '차이율', '판정', 'axe', 'h1', ...(s.baseLabel ? ['기준'] : []), '머리']
+    const rows = s.rows.map((r) => {
+      const notes = [...r.problems, ...r.reasons]
+      return `<tr class="${escapeHtml(r.verdict)}"><td>${escapeHtml(r.key)}${notes.length ? `<br><small>${escapeHtml(notes.join(' '))}</small>` : ''}</td><td>${r.width}×${r.height}</td>`
+        + `<td>${escapeHtml(r.theme)}</td><td>${pctOf(r.ratio)}</td><td>${escapeHtml(r.verdict)}</td><td>${r.axe ?? '—'}</td><td>${r.h1Count ?? '—'}</td>`
+        + (s.baseLabel ? `<td>${r.verdict !== 'new' ? img(s.baseLabel, r.file) : ''}</td>` : '') + `<td>${r.inHead ? img(s.label, r.file) : '(머리에 없음)'}</td></tr>`
+    })
+    return [head2, look, table(cols, rows)].join('\n')
+  }
+  const html = [
+    '<!doctype html><html lang="ko"><head><meta charset="utf-8">',
+    `<title>${escapeHtml(opts.label)} 대조표</title>`,
+    '<style>body{font:13px system-ui,sans-serif;margin:16px}table{border-collapse:collapse;width:100%;margin-bottom:24px}td,th{border:1px solid #ccc;padding:4px;vertical-align:top;text-align:left}img{max-width:360px;display:block}tr.diff,tr.problem,tr.missing{background:#fff3e0}tr.near{background:#fffde7}tr.same td{color:#555}</style>',
+    '</head><body>',
+    `<h1>${escapeHtml(opts.label)} 대조표</h1>`,
+    `<p>기준 ${escapeHtml(baseLabel ?? '—')} · 머리 커밋 ${escapeHtml(head.commit)} · 빌드 ${escapeHtml(head.buildId ?? '—')} · 브라우저 ${escapeHtml(head.browser)} · KST ${escapeHtml(head.kstDate)} · 추가 라벨 ${escapeHtml(extras.join(', ') || '—')} · 쇼케이스 두 열 대조는 라이트 장으로 본다(판정 Q37)</p>`,
+    ...sections.map(sectionHtml),
+    '<h2>axe 대비 위반 — 모든 라벨·테마(다크 포함)</h2>',
+    table(['라벨', '라우트', '크기', '테마', '위반'], axeTable(axePool).map((r) => `<tr><td>${escapeHtml(r.label ?? '—')}</td><td>${escapeHtml(r.key)}</td><td>${r.width}×${r.height}</td><td>${escapeHtml(r.theme)}</td><td>${r.violations}</td></tr>`)),
+    '<h2>checks</h2>',
+    checks.tab ? table(['Tab 라우트', '테마', '실패', '못 닿은 대상', '판정'], checks.tab.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.failed}</td><td>${escapeHtml(r.unreached.join(' · ') || '—')}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>tab.json 없음</p>',
+    checks.print ? table(['인쇄 라우트', '테마', '글자', '4.5 미만', '판정'], checks.print.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.texts}</td><td>${r.low}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>print.json 없음</p>',
+    checks.flicker ? table(['깜빡임 라우트', '선호', '판정', '이유'], checks.flicker.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.pref)}</td><td>${okCell(r.ok)}</td><td>${escapeHtml(r.why)}</td></tr>`)) : '<p>flicker.json 없음</p>',
+    checks.showcase ? `<p>쇼케이스 계산색 대조 ${checks.showcase.pairs}쌍 · 불일치 ${escapeHtml(checks.showcase.unequal.join(', ') || '없음')}</p>` : '<p>showcase.json 없음</p>',
+    '</body></html>',
+  ].join('\n')
+  writeFileSync(join(outDir, `${opts.label}-sheet.html`), html)
+  console.log(JSON.stringify({ ok: true, sheet: join(outDir, `${opts.label}-sheet.html`), sections: sections.map((s) => `${s.label}:${s.rows.length}`),
+    axeRows: axePool.length, checks: Object.fromEntries(Object.entries(checks).map(([k, v]) => [k, v !== null])) }))
+}
+
+COMMANDS.checks = cmdChecks
+COMMANDS.sheet = cmdSheet
 
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {

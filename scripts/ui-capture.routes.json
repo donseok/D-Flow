@@ -18,8 +18,8 @@
     { "key": "admin-teams", "path": "/admin/teams", "file": "(app)/admin/teams/page.tsx", "grade": "platformAdmin", "tags": ["W", "S"], "since": "b4283c0" },
     { "key": "llm-config", "path": "/admin/llm-config", "file": "(app)/admin/llm-config/page.tsx", "grade": "platformAdmin", "tags": [], "since": "b4283c0" },
     { "key": "account", "path": "/account", "file": "(app)/account/page.tsx", "grade": "member", "tags": [], "since": "b4283c0" },
-    { "key": "p-dashboard", "path": "/p/{pid}/dashboard", "file": "(app)/p/[projectId]/dashboard/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
-    { "key": "p-wbs", "path": "/p/{pid}/wbs", "file": "(app)/p/[projectId]/wbs/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0" },
+    { "key": "p-dashboard", "path": "/p/{pid}/dashboard", "file": "(app)/p/[projectId]/dashboard/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "focusStart": "header", "focusTargets": ["aside a, aside button, aside select", "header a, header button"] },
+    { "key": "p-wbs", "path": "/p/{pid}/wbs", "file": "(app)/p/[projectId]/wbs/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0", "focusStart": "[data-wbs-scroll-region]", "focusTargets": ["[data-row-id] button, [data-row-id] [tabindex=\"0\"]"] },
     { "key": "p-gantt", "path": "/p/{pid}/gantt", "file": "(app)/p/[projectId]/gantt/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "expectFinal": "/p/{pid}/wbs?view=timeline" },
     { "key": "p-kanban", "path": "/p/{pid}/kanban", "file": "(app)/p/[projectId]/kanban/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-import", "path": "/p/{pid}/import", "file": "(app)/p/[projectId]/import/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
@@ -44,6 +44,8 @@
     { "key": "account-popover", "path": "/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[data-profile-trigger]" },
     { "key": "p-wbs-fullscreen", "path": "/p/{pid}/wbs", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "[data-wbs-fullscreen-toggle]" },
     { "key": "inbox-popover", "path": "/p/{pid}/dashboard", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"알림\"]" },
-    { "key": "ws-settings", "path": "/w/{wsSlug}/settings", "file": "(app)/w/[slug]/settings/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" }
+    { "key": "ws-settings", "path": "/w/{wsSlug}/settings", "file": "(app)/w/[slug]/settings/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" },
+    { "key": "report-modal", "path": "/p/{pid}/dashboard", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "button:has-text(\"주간보고서 요약(PPT)\")", "focusStart": "[role=\"dialog\"]", "focusTargets": ["[role=\"dialog\"] button"] },
+    { "key": "p-meetings-list", "path": "/p/{pid}/meetings", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "[role=\"tab\"]:has-text(\"리스트\")", "focusStart": "table:has(tr[role=\"button\"])", "focusTargets": ["tr[role=\"button\"]"] }
   ]
 }
