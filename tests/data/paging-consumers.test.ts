@@ -1,0 +1,142 @@
+// 1,000행 넘는 읽기 경로의 끝까지 읽기(스펙 §4.6, D18·Q5) — A1 은 데이터 손실 경로(replace 백업, getComputedWbs 의 wbs_items·
+// item_owners), A2 가 나머지 경로(task_dependencies·holidays·스냅샷·getProjectsCompletion·결재 대기·봇 리포지토리)를 잇는다.
+// 서버는 한 응답을 max_rows 에서 조용히 자른다 — 작은 쪽 가짜(pagedTable)가 한 응답을 몇 행으로 잘라 그 경로가 끝까지 읽는지,
+// count 불일치(읽는 사이 행이 바뀜)·조회 오류를 데이터로 위장하지 않는지 본다.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const m = vi.hoisted(() => ({
+  requireProjectAdmin: vi.fn(), requireWorkspaceAdmin: vi.fn(),
+  parseWithProfile: vi.fn(), linkByDepth: vi.fn(), resolveLegacyLevelLabels: vi.fn(), splitLeafOwners: vi.fn(),
+  projectTeamRowsSync: vi.fn(), teamsForProjectSync: vi.fn(), addTeam: vi.fn(), addProjectTeam: vi.fn(),
+  createServerClient: vi.fn(), createAdminClient: vi.fn(),
+  recordProgressSnapshot: vi.fn(), ingestProject: vi.fn(), detectWorkbook: vi.fn(),
+  getProjectConfig: vi.fn(), writeProjectSettingsInternal: vi.fn(),
+}))
+vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin, requireWorkspaceAdmin: m.requireWorkspaceAdmin }))
+vi.mock('@/lib/excel/parseWithProfile', () => ({
+  parseWithProfile: m.parseWithProfile, linkByDepth: m.linkByDepth, resolveLegacyLevelLabels: m.resolveLegacyLevelLabels,
+}))
+vi.mock('@/lib/excel/validate', () => ({ splitLeafOwners: m.splitLeafOwners }))
+vi.mock('@/lib/teams/master', () => ({ projectTeamRowsSync: m.projectTeamRowsSync, teamsForProjectSync: m.teamsForProjectSync }))
+vi.mock('@/app/actions/teams', () => ({ addTeam: m.addTeam }))
+vi.mock('@/app/actions/projectTeams', () => ({ addProjectTeam: m.addProjectTeam }))
+vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.createAdminClient }))
+vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: m.recordProgressSnapshot }))
+vi.mock('@/lib/ai/ingest', () => ({ ingestProject: m.ingestProject }))
+vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: m.detectWorkbook }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
+vi.mock('@/lib/settings/write', () => ({ writeProjectSettingsInternal: m.writeProjectSettingsInternal }))
+// getComputedWbs(과제 3 의 describe)는 react cache() 로 감싸여 있다 — 케이스마다 새로 계산하게 항등으로
+vi.mock('react', async () => ({ ...(await vi.importActual<typeof import('react')>('react')), cache: <T,>(fn: T) => fn }))
+
+import { POST } from '@/app/api/import/execute/route'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { makeActor, WS } from '../fixtures/actor'
+
+type Call = { method: string; args: unknown[] }
+/** PostgREST 흉내 — 쿼리(make)마다 range(from, to) 를 기억하고 한 응답을 maxRows 에서 자르며 count 는 총합이다(count: 'exact').
+ *  log 는 쿼리별 호출 목록 — 필터·정렬이 실제로 걸렸는지 본다. error 를 주면 그 쿼리는 조회 오류다. */
+function pagedTable(rows: readonly unknown[], opts: { maxRows?: number; count?: number; error?: { message: string } } = {}) {
+  const log: Call[][] = []
+  const make = () => {
+    const calls: Call[] = []
+    log.push(calls)
+    let range: [number, number] = [0, Number.MAX_SAFE_INTEGER]
+    const q: Record<string, unknown> = {}
+    for (const method of ['select', 'eq', 'order', 'in', 'is', 'or', 'not']) {
+      q[method] = (...args: unknown[]) => { calls.push({ method, args }); return q }
+    }
+    q.range = (from: number, to: number) => { calls.push({ method: 'range', args: [from, to] }); range = [from, to]; return q }
+    q.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => Promise.resolve(opts.error
+      ? { data: null, error: opts.error, count: null }
+      : { data: rows.slice(range[0], Math.min(range[1] + 1, range[0] + (opts.maxRows ?? 1000))), error: null, count: opts.count ?? rows.length },
+    ).then(resolve, reject)
+    return q
+  }
+  return { make, log }
+}
+
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+// 합성 양식(계층 2열 + 팀 열 RES) — 옛 5팀 양식 상수를 쓰지 않는다(그 상수는 A2 가 fixture 로 옮긴다)
+const PROFILE = {
+  version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0, hierarchy: { kind: 'columns', columns: [0, 1] },
+  logical: { extraAxis: null, code: null, name: null, deliverable: null, start: null, end: null, weight: null, actualPct: null },
+  teamColumns: [[2, 'RES']], ownerMarks: { '●': 'primary', '△': 'support' },
+}
+const ROW = { depth: 0, code: null, name: 'x', extraAxis: null, deliverable: null, plannedStart: null, plannedEnd: null,
+  weight: null, actualPct: null, owners: [{ team: 'RES', kind: 'primary' as const }], excelRow: 2 }
+const ITEM = { tempId: 't0', parentTempId: null, level: 'activity' as const, code: '1', sortOrder: 0, name: 'x', biz: null,
+  deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
+  owners: [{ team: 'RES', kind: 'primary' as const }], isOwnerSplit: false }
+const ERR_BACKUP = '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
+
+function replaceRequest(): Parameters<typeof POST>[0] {
+  const form = new FormData()
+  for (const [k, v] of Object.entries({
+    file: new Blob(['x']), projectId: PROJECT_ID, profile: JSON.stringify(PROFILE), mode: 'replace', saveProfile: 'false', registerTeams: 'false',
+  })) form.append(k, v)
+  return { formData: async () => form } as unknown as Parameters<typeof POST>[0]
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) }) })
+  m.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [] })
+  m.resolveLegacyLevelLabels.mockReturnValue(false)
+  m.linkByDepth.mockReturnValue({ ok: true, items: [ITEM] })
+  m.splitLeafOwners.mockImplementation((items: unknown) => items)
+  m.projectTeamRowsSync.mockReturnValue([{ code: 'RES', projectId: PROJECT_ID }])
+  m.teamsForProjectSync.mockReturnValue([{ code: 'RES' }])
+  m.recordProgressSnapshot.mockResolvedValue(undefined)
+  m.ingestProject.mockResolvedValue({ count: 0 })
+  m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
+})
+afterEach(() => { vi.restoreAllMocks() })
+
+describe('가져오기 replace 백업 — 끝까지 읽는다(교체 전 원본의 유일한 사본, D18·Q5)', () => {
+  it('1,000행을 넘는 트리(서버가 한 응답을 3행으로 자른다)도 백업에 전부 실린다 — id 정렬·count 로 끝까지', async () => {
+    const tree = Array.from({ length: 1003 }, (_, i) => ({ id: `w${String(i).padStart(4, '0')}`, project_id: PROJECT_ID, name: `항목 ${i}` }))
+    const t = pagedTable(tree, { maxRows: 3 })
+    const rpc = vi.fn(async () => ({ data: 1, error: null }))
+    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    const res = await POST(replaceRequest())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.backup.rows).toHaveLength(1003)
+    expect(body.backup.rows[1002]).toEqual(tree[1002])
+    expect(t.log).toHaveLength(Math.ceil(1003 / 3))
+    expect(t.log[0]).toEqual([
+      { method: 'select', args: ['*', { count: 'exact' }] }, { method: 'eq', args: ['project_id', PROJECT_ID] },
+      { method: 'order', args: ['id'] }, { method: 'range', args: [0, 999] },
+    ])
+    expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('[RF5] 쪽을 읽는 사이 행 수가 바뀌면(count 불일치) 500 고정 문구 — 원문·건수를 싣지 않고 RPC 를 부르지 않는다', async () => {
+    const t = pagedTable([{ id: 'w1' }, { id: 'w2' }], { count: 3 })
+    const rpc = vi.fn()
+    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await POST(replaceRequest())
+    expect(res.status).toBe(500)
+    const text = await res.text()
+    expect(JSON.parse(text)).toEqual({ error: ERR_BACKUP })
+    expect(text).not.toMatch(/\d+\/\d+건/)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(err.mock.calls.some((c) => c.some((x) => String(x).includes('2/3건')))).toBe(true)   // 원문은 서버 로그로만
+  })
+
+  it('조회 오류도 같은 고정 문구 — PostgREST 원문을 응답에 싣지 않고 RPC 를 부르지 않는다', async () => {
+    const t = pagedTable([], { error: { message: 'permission denied for table wbs_items' } })
+    const rpc = vi.fn()
+    m.createServerClient.mockResolvedValue({ from: vi.fn(() => t.make()), rpc })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await POST(replaceRequest())
+    expect(res.status).toBe(500)
+    const text = await res.text()
+    expect(text).not.toContain('permission denied')
+    expect(JSON.parse(text)).toEqual({ error: ERR_BACKUP })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+})
