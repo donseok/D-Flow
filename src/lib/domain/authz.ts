@@ -138,6 +138,9 @@ export function canSeeProject(actor: Actor | null, project: { id: string; is_pri
  * 전 워크스페이스, 아니면 소속 워크스페이스들의 공용 팀과 볼 수 있는 프로젝트들의 전용 팀.
  * 만드는 곳은 아래 두 함수뿐이다 — 전부를 여는 뷰({ all: true })는 플랫폼 관리자 판정과 함께 이 파일에만 둔다
  * (tests/invariants/teams-scope.test.ts 가 검사한다).
+ * 호출 전제: projectIds 의 워크스페이스 ⊆ workspaceIds(workspaceIds 가 비어 있지 않을 때) — visibleTeams 는 질의를 workspace_id 로만
+ * 좁히므로 그 밖 프로젝트의 전용 팀은 빠진다(닫힘). 생산자 셋(teamViewOf·accessScope·gateChatTools 로 좁힌 봇 범위)이 이 전제를
+ * 지킨다 — gateChatTools 는 워크스페이스 모듈 설정을 못 읽으면 좁히지 않고 던진다(A2-3 리뷰 보안 P3 — X2).
  */
 export type TeamView =
   | { all: true }

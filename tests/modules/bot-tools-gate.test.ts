@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { moduleSetFor, moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { MODULE_IDS, type ModuleId } from '@/lib/modules/defaults'
 import { createChatToolRegistry, type ChatTool } from '@/lib/ai/chat/registry'
-import { gateChatTools } from '@/lib/ai/chat/tool-modules'
+import { ChatToolGateUnavailableError, gateChatTools } from '@/lib/ai/chat/tool-modules'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { BOT_READ_CAPABILITIES, type BotReadCapability } from '@/lib/ai/tools/types'
 
 const P1 = 'p-1', P2 = 'p-2', W = 'w-1'
@@ -86,6 +87,28 @@ describe('프로젝트 문맥이 없는 봇 도구', () => {
     vi.mocked(moduleSetFor).mockResolvedValue(ALL)
     await gateChatTools(registry(), input(null))
     expect(moduleSetFor).toHaveBeenCalledTimes(input(null).allowedProjectIds.length + input(null).workspaceIds.length)
+  })
+
+  it('[X2] 워크스페이스 모듈 설정을 못 읽으면 좁히지 않고 던진다 — 그 워크스페이스만 빠지고 그 안 프로젝트가 남으면 팀 가시 범위의 전제가 깨진다', async () => {
+    const down = new ConfigUnavailableError('down')
+    vi.mocked(moduleSetFor).mockImplementation(async (scope, opts) => {
+      if ('workspaceId' in scope) { expect(opts).toEqual({ strict: true }); throw down }
+      return ALL
+    })
+    const err = await gateChatTools(registry(), input(null)).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ChatToolGateUnavailableError)
+    expect((err as ChatToolGateUnavailableError).code).toBe('MODULES_UNAVAILABLE')
+    expect((err as Error).cause).toBe(down)
+  })
+
+  it('[X2] 프로젝트 설정 실패는 그대로 그 프로젝트만 닫는다(core) — 범위가 줄 뿐 전제는 깨지지 않는다', async () => {
+    vi.mocked(moduleSetFor).mockImplementation(async (scope) => (
+      'projectId' in scope && scope.projectId === P2 ? new Set<ModuleId>(['dashboard', 'wbs', 'members', 'settings']) : ALL
+    ))
+    const gated = await gateChatTools(registry(), input(null))
+    const wbs = await gated.registry.get('find_wbs_items')!.execute({}, { allowedProjectIds: [P1, P2] } as never)
+    expect(wbs).toMatchObject({ ok: true, result: { allowedProjectIds: [P1], workspaceIds: [W] } })
+    expect(moduleSetFor).toHaveBeenCalledWith({ projectId: P2 })
   })
 
   it('설정 판정이 실패하면(core 만 반환) 도구 0·capability 0 으로 닫힌다 — 챗봇이 꺼진 것과 같은 결론이다', async () => {

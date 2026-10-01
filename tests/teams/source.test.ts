@@ -175,6 +175,15 @@ describe('visibleTeams·teamCodesVisibleTo — 가시 범위(스펙 §4.2.1), �
     expect(sent).not.toContain(HIDDEN)
     expect(sent.length).toBeLessThan(2000)
   })
+  it('[X2] 전제(볼 수 있는 프로젝트 ⊆ 보이는 워크스페이스)가 깨진 범위는 그 밖 프로젝트의 전용 팀을 빼고 닫힌다 — 전제는 생산자가 지킨다', async () => {
+    // 워크스페이스 WA 만 보이는데 WB 의 프로젝트가 범위에 있으면(봇 도구 범위를 좁히다 WB 의 설정 읽기만 실패한 꼴) 질의가 workspace_id 로만
+    // 좁혀 그 전용 팀을 읽지 않는다. 열린 쪽(다른 테넌트 팀)으로는 새지 않는다. 그 꼴은 gateChatTools 가 만들지 않는다(던진다 —
+    // tests/modules/bot-tools-gate.test.ts [X2]) — 이 테스트는 원천의 동작을 고정해, 전제가 없어지면 어디가 닫히는지 보이게 한다
+    const POUT = '00000000-0000-0000-7e57-000000001905'
+    const table = keysetTable([trow('c1', 'RES', WA, null), trow('o1', 'OUT', WB, POUT), trow('o2', 'CIV', WB, null)])
+    expect(await teamCodesVisibleTo({ all: false, workspaceIds: [WA], projectIds: [P1, POUT] }, { client: { from: () => table.make() } as never })).toEqual(['RES'])
+    expect(table.log[0].find((c) => c.method === 'in')?.args).toEqual(['workspace_id', [WA]])
+  })
   it('[U1] 워크스페이스 없이 프로젝트만 있는 범위(워크스페이스를 모르는 범위)는 프로젝트 id 로 좁힌다', async () => {
     const table = keysetTable([trow('p1', 'MEP', WA, P1), trow('c1', 'RES', WA, null)])
     expect(await teamCodesVisibleTo({ all: false, workspaceIds: [], projectIds: [P1] }, { client: { from: () => table.make() } as never })).toEqual(['MEP'])

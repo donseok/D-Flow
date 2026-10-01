@@ -3,7 +3,7 @@ import { jsonError } from '@/lib/api/http'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
-import { gateChatTools } from '@/lib/ai/chat/tool-modules'
+import { ChatToolGateUnavailableError, gateChatTools } from '@/lib/ai/chat/tool-modules'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
 import { validateChatProjectScope } from '@/lib/ai/chat/access-scope'
 import { createChatNdjsonStream, orchestrateChatV2 } from '@/lib/ai/chat/orchestrator'
@@ -108,9 +108,17 @@ export async function POST(req: NextRequest) {
   }
 
   const id = requestId()
-  const gated = await gateChatTools(createDefaultChatToolRegistry(sb), {
-    projectId: scope.projectId, allowedProjectIds, workspaceIds, capabilities,
-  })
+  let gated: Awaited<ReturnType<typeof gateChatTools>>
+  try {
+    gated = await gateChatTools(createDefaultChatToolRegistry(sb), {
+      projectId: scope.projectId, allowedProjectIds, workspaceIds, capabilities,
+    })
+  } catch (e) {
+    // 워크스페이스 모듈 설정 조회 실패 — 그 워크스페이스만 빼고 답하면 팀 가시 범위의 전제가 깨져 담당 필터가 조용히 좁아진다(X2)
+    if (!(e instanceof ChatToolGateUnavailableError)) throw e
+    console.error('[chat-v2] 모듈 설정 조회 실패:', e.message, e.cause instanceof Error ? e.cause.message : e.cause)
+    return jsonError('봇 설정을 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'MODULES_UNAVAILABLE')
+  }
   const registry = gated.registry
 
   // 플래너 경로: 계획 생성·검증에 실패하면 어떤 오류도 노출하지 않고 기존 501 폴백으로 수렴한다(§7.3).

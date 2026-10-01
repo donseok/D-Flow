@@ -46,13 +46,15 @@ export async function requireModule(scope: ModuleScope, moduleId: ModuleId | rea
   }
 }
 
-/** 한 스코프의 유효 모듈을 한 번만 읽는다. 읽기 실패는 로그를 남기고 core 만 허용한다. */
-export async function moduleSetFor(scope: ModuleScope, opts?: { client?: ConfigReadClient }): Promise<ReadonlySet<ModuleId>> {
+/** 한 스코프의 유효 모듈을 한 번만 읽는다. 읽기 실패는 로그를 남기고 core 만 허용한다 — strict 면 로그 뒤 그 오류를 다시 던진다
+ *  (닫힘이 다른 범위의 전제를 조용히 깨는 호출부 — 봇 도구의 워크스페이스 범위, A2-3 리뷰 보안 P3·X2). */
+export async function moduleSetFor(scope: ModuleScope, opts?: { client?: ConfigReadClient; strict?: boolean }): Promise<ReadonlySet<ModuleId>> {
   try {
     return await effectiveFor(scope, opts?.client)
   } catch (error) {
     unstable_rethrow(error)
     console.error('[moduleSetFor]', error instanceof Error ? error.message : String(error))
+    if (opts?.strict) throw error
     return CORE
   }
 }

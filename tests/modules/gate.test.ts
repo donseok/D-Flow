@@ -157,6 +157,16 @@ describe('moduleSetFor — 한 스코프에서 여러 모듈을 볼 때 설정�
     error.mockRestore()
   })
 
+  it('[X2] strict 면 로그를 남긴 뒤 그 오류를 다시 던진다 — core 로 닫지 않는다(봇 도구의 워크스페이스 범위)', async () => {
+    const down = new ConfigUnavailableError('down')
+    m.effectiveModules.mockRejectedValue(down)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(moduleSetFor({ workspaceId: WID }, { strict: true })).rejects.toBe(down)
+    expect(error).toHaveBeenCalledWith('[moduleSetFor]', 'down')
+    expect(await moduleSetFor({ workspaceId: WID }, { strict: false })).toEqual(eff())
+    error.mockRestore()
+  })
+
   it('Next 제어 흐름 신호는 삼키지 않고 다시 던진다 — requireModule 과 같은 닫힘의 절반이다', async () => {
     // 신호(dynamic 사용·notFound·redirect)를 삼키면 core 만 허용한 뒤 **성공한 것처럼** 넘어간다 — 호출부가
     // 404 를 내야 할 자리에 도구 목록만 비어 있는 200 이 나온다.
