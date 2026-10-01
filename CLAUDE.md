@@ -103,6 +103,8 @@ unlayered 규칙은 특이성과 무관하게 모든 named layer 를 이긴다. 
 - 새 마이그레이션에는 `supabase/rollbacks/NNNN_<이름>_rollback.sql` 을 함께 만든다(`supabase/migrations/` 에 두면 CLI 가 같이 적용한다).
 - `supabase db push` 는 쓰지 않는다. 원격 적용은 `npm run db:apply -- <파일> --target staging|prod`(원격이 생긴 뒤).
 - 번호는 파일 단위로 유일(`tests/invariants/migration-files.test.ts`).
+- 테스트·리허설은 마이그레이션을 번호가 아니라 **접미로** 찾는다(`*_weekly_areas.sql` 꼴 — 머지 직전에 번호가 바뀌어도 rename 이 내용 변경 0 이
+  되게). 리허설 파일도 접미 이름(`supabase/rehearsal/<번호>_<이름>_*.sql`)이고 본문에 번호를 쓰지 않는다.
 - `atomic` 으로 끝나는 식별자는 따옴표로 감싸거나 그 접미사를 피한다 — CLI 2.75 의 문장 분할기가 BEGIN ATOMIC 으로 읽어 여러 문장을 한 번에 보낸다(42601).
 
 ## 권한
@@ -123,9 +125,16 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
   200 `skipped`, 회의록 업로드는 409 `module_disabled`). 페이지는 `requireModulePage`, 세션 없는 경로(워커·외부 API·
   공유 링크)는 `{ client: admin }` 을 넘긴다. 새 액션·라우트 핸들러는 `tests/gates/manifest.ts` 에 모듈 또는 `null` 을 적어야 열거 게이트를
   통과한다 — `null` 항목의 사유(note)는 가드가 `session`·`public`·`cronSecret`·`minutesSecret` 일 때만 강제된다.
+- `module: null` 항목(core 액션·라우트)이 새 RPC 를 부르면 같은 커밋에서 `tests/gates/_rpc-tables.ts` 에 그 RPC 가 쓰는 표를 더한다 —
+  열거 게이트(`tablesInNode`)가 `.rpc('x')` 를 그 표로 읽고, 대응이 없으면 `rpc?:x` 로 실패한다.
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
+- **주간 영역·주간 문서 생성·WBS 가져오기·상속 공용 팀 전환도 RLS 쓰기 정책이 없다**(SP4). 쓰기는 service_role 만 실행하는 DEFINER RPC
+  (`upsert_project_area`·`create_weekly_report`·`import_wbs_cmd`·`convert_inherited_teams`)이고, RLS 대신 **RPC 안에서 행위자 등급을 다시
+  판정한다**(`actor_is_project_admin(p_actor, …)` — 액션 가드와 두 관문). 세션의 영역·주간 구조 쓰기 길은 닫혀 있다(열 권한은 주간 행 네 칸·문서 제목뿐).
+- `p_actor` 를 받는 RPC 에는 **가드 결과의 `actor.userId` 만** 넘긴다(`const g = await require*(…)` → `g.actor.userId`, 같은 파일 도우미로
+  넘기면 한 단계까지 추적). 그 밖의 출처(에이전트 토큰 행위자 등)는 `tests/invariants/rpc-actor-source.test.ts` 의 닫힌 목록에 사유와 함께 적는다.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
 - **설정 쓰기는 RPC 한 길이다**(`apply_project_settings`·`apply_workspace_settings`·`create_project_with_settings`, 0012). 설정 4표(`project_settings`·`workspace_settings`·두 이력)와 `authz_events` 의 이름은 허용 파일에만 두고 그 접근은 읽기(select)뿐이다 — 읽기는 `src/lib/settings/{projectConfig,workspaceConfig}.ts`(해석기)·`src/lib/settings/history.ts`(이력), 쓰기는 `src/app/actions/settings.ts`·`src/app/actions/project.ts`(`createProject` 의 `create_project_with_settings`)·`src/lib/settings/write.ts`(가드 없는 내부 쓰기 — 호출자 닫힘). `tests/invariants/settings-writes.test.ts` 가 src·scripts 원문에서 허용 파일 밖의 표 이름(리터럴·조립 조각·scripts 의 SQL·REST), 허용 파일 안의 쓰기, 리터럴이 아닌 RPC 이름, 내부 쓰기 호출자를 잡는다(의도적 난독화는 못 잡는다). 액션 가드가 유일한 관문이다(RPC 는 등급을 보지 않는다).
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),

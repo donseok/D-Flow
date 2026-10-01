@@ -33,3 +33,20 @@ BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] LOCAL_DB_URL=… npm 
 - 워크스페이스 행 셋(R·C·B)과 그 허용 모듈 시드(`apply_workspace_settings`)만 로컬 픽스처다 — 생성 화면은 SP3 라 `service_role` 로 만든다. 슬러그·이메일은 실행마다 초 단위와 무작위 꼬리를 붙여 다시 돌려도 겹치지 않는다.
 - 계정 비밀번호(B 관리자)는 실행마다 새로 만들고 출력하지 않는다. 결과는 stdout 에 JSON 한 덩어리.
 - 첫 시도 세 번은 러너 결함으로 멈췄다(전용 스택 `config.toml` 을 미커밋 변경으로 봄 / 객체 값의 JSON 키 순서 비교 / 생성 때 이미 그 값인 키의 이력 기대) — 모두 러너를 고쳤고 앱 코드는 바뀌지 않았다.
+
+## SP4 A1 — S1 추가분·S2·S4(월)
+
+스펙 SP4 §6.4. 측정일·트리·스택은 `sp4-e2e.md` 의 A1 절과 같다(같은 DB 에서 로컬 E2E 뒤에 이어서 돌렸다 — 2026-10-02 00:59~01:03 KST, 트리 `70f2a7f`, 전용 스택 `d-flow-sp4`).
+
+**exit 0 — S1 ✓ · S1 추가 ✓ · S9 ✓ · S2 ✓ · S4(월) ✓ · 미활성 S3·S4(일 — SP5)·S5~S8·S10.** 활성 단계를 건너뛰지 않았다(D25).
+
+| 단계 | 판정 |
+|---|---|
+| S1 추가(`S1-teams-areas`) | C 구성에 `weekly`(프로젝트 `modules.enabled`·워크스페이스 `modules.allowed` 둘 다 — D40). 팀 R `RES`·`OPS`, C `CIV`·`MEP`·`SAF` 를 `addProjectTeam` 으로(이름 = code — 개명은 SP4 A2·B), 주간 영역 R 셋·C 넷과 담당 팀을 `upsertArea`(설정 화면의 편집기와 같은 액션)로 — 다시 읽은 code·이름·순서·활성·담당 팀이 넣은 값과 같다(R 영역 `EXP`·`DATA`·`RUN`, C 영역 `WORK`·`SAFE`·`QUAL`·`MATL`) |
+| S2(`S2-wbs-import`) | R 4단(양식 예시가 3단이라 러너가 exceljs 로 직접 만든 파일)·C 3단(양식 다운로드에 채운 파일)을 양식 저장과 함께 가져왔다. 같은 `commandId` 재전송은 `kind: 'duplicate'`·같은 건수, 항목은 한 벌, `wbs.excel_profile` 이력은 1건(R 5건·C 4건, 이력 각 1) |
+| S4(월)(`S4-weekly-monday`) | C 에서 이번 주·다음 주 문서를 만들었다 — DB 의 `week_start` 가 월요일이고 7일 간격(주 키는 앱의 `mondayIso` — W30). 1주 차 차주 계획이 2주 차 같은 영역의 금주 실적으로 이월됐고, 영역 하나를 개명한 뒤 `area_id`·두 주의 행·셀이 그대로다(`2026-09-28`·`2026-10-05`, 둘 다 `created`, 행 수 `[4,4]`) |
+
+`src`·`supabase` 의 미커밋 변경은 실행 전후 0 이고 diff 지문이 같다(`git diff --quiet -- src supabase` 참).
+
+같은 체크포인트의 첫 실행(트리 `9852c09`)은 S2 에서 409 `NEEDS_TEAMS`(`needsTeams: ['*']`)로 멈췄다 — 양식 저장 요청이 팀명 직접 방식의 표지 `'*'` 를 미등록 팀으로 센 앱 결함이었고
+`70f2a7f` 가 고쳤다(`sp4-e2e.md` A1 절 비고 ①). 러너는 바뀌지 않았다.
