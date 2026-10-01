@@ -4,7 +4,7 @@ import { teamViewOf, teamViewOfScope } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 const team = (code: string, projectId: string | null, active = true, workspaceId = 'ws-1', sortOrder = 0): Team =>
-  ({ id: `id-${code}-${projectId ?? workspaceId}`, code, sortOrder, active, progressVisible: true, projectId, workspaceId })
+  ({ id: `id-${code}-${projectId ?? workspaceId}`, code, name: code, color: '#6b7280', sortOrder, active, progressVisible: true, projectId, workspaceId })
 
 describe('resolveTeamsForProject — 프로젝트 행 있으면 그것만, 없으면 그 프로젝트 워크스페이스의 공용 팀', () => {
   const globals = [team('PMO', null), team('ERP', null)]

@@ -8,7 +8,7 @@ import { makeActor, makeSuperuser } from '../fixtures/actor'
 // 팀만 내린다(플랫폼 관리자도 자기 소속으로 한정 — 표시 목적). degraded(actor null)면 빈 목록이다.
 const TEAMS = vi.hoisted((): Team[] => {
   const t = (code: string, workspaceId: string, projectId: string | null = null, active = true): Team =>
-    ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active, progressVisible: true, projectId, workspaceId })
+    ({ id: `${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: 0, active, progressVisible: true, projectId, workspaceId })
   return [t('PMO', 'ws-a'), t('휴면', 'ws-a', null, false), t('A전용', 'ws-a', 'pa'), t('ERP', 'ws-b')]
 })
 const mocks = vi.hoisted(() => ({

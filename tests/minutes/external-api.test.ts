@@ -2216,7 +2216,7 @@ describe('SP2 Task 16a — 쓰기 대상의 워크스페이스·담당 팀을 �
   it('GET team 필터는 볼 수 있는 프로젝트의 전용 팀도 받고, 숨은 비공개 프로젝트의 전용 팀은 400(SP2 16b)', async () => {
     const PRIV = '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a'
     const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
-      ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+      ({ id: `${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
     const teams = [t('PMO', WS), t('ERP', 'ws-2'), t('MES', WS, PROJECT_UUID), t('QA', WS, PRIV)]
     mocks.activeTeamCodesVisibleTo.mockImplementation(view => teamCodesVisibleTo(teams, view))
     mocks.actorFromUser.mockResolvedValue(makeActor({

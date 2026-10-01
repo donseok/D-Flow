@@ -19,9 +19,9 @@ describe('TeamsProvider', () => {
 
   it('주입된 팀 목록을 정렬·활성 필터해 반환', () => {
     const teams: Team[] = [
-      { id: '2', code: '신팀', sortOrder: 5, active: true, progressVisible: false, projectId: null, workspaceId: 'ws-1' },
-      { id: '1', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-      { id: '3', code: '구팀', sortOrder: 9, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+      { id: '2', code: '신팀', name: '신팀', color: '#6b7280', sortOrder: 5, active: true, progressVisible: false, projectId: null, workspaceId: 'ws-1' },
+      { id: '1', code: 'PMO', name: 'PMO', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
+      { id: '3', code: '구팀', name: '구팀', color: '#6b7280', sortOrder: 9, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
     ]
     expect(renderToStaticMarkup(<TeamsProvider teams={teams}><Codes /></TeamsProvider>))
       .toContain('PMO,신팀')

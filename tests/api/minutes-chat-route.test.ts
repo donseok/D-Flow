@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }))
 const TEAMS = vi.hoisted((): Team[] => {
   const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
-    ({ id: `${workspaceId}-${code}`, code, sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
+    ({ id: `${workspaceId}-${code}`, code, name: code, color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId, workspaceId })
   return [t('PMO', 'ws-a'), t('ERP', 'ws-b'), t('MES', 'ws-a', 'pa'), t('QA', 'ws-a', 'pa-priv')]
 })
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
