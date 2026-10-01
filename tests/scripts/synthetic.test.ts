@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent,
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
 } from '../../scripts/lib/synthetic.mjs'
 import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
@@ -165,5 +165,28 @@ describe('e2e-synthetic.mjs — S10 ② 는 빈 주차를 앱의 400(내용 없�
     expect(src).toContain("{ expect: 400 }")
     expect(src).toContain("'해당 주차에 작성된 내용이 없습니다'")
     expect(src).toMatch(/emptyWeeks/)
+  })
+})
+
+describe('outlineExpandUnsupported — S10 ④ 펼침의 명시적 미지원(과제 24 둘째 실행에서 찾은 러너 결함)', () => {
+  const MSG = '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다'
+  it('저장 양식(saved)의 펼침이 400 과 그 문구일 때만 참', () => {
+    expect(outlineExpandUnsupported('saved', 400, { error: MSG })).toBe(true)
+  })
+  it('표준 양식·다른 상태·다른 문구는 거짓 — 출력 실패로 남는다', () => {
+    expect(outlineExpandUnsupported('standard', 400, { error: MSG })).toBe(false)
+    expect(outlineExpandUnsupported('saved', 500, { error: MSG })).toBe(false)
+    expect(outlineExpandUnsupported('saved', 400, { error: '양식보다 깊은 WBS' })).toBe(false)
+    expect(outlineExpandUnsupported(null, 400, { error: MSG })).toBe(false)
+  })
+})
+
+describe('e2e-synthetic.mjs — S10 ④ 펼침은 저장 아웃라인 양식이면 400 미지원을 확인해 기록한다', () => {
+  const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+  it('접기의 X-Excel-Layout 을 읽고, 펼침은 200 또는 400 을 받아 미지원이면 unsupportedExports 에 적는다', () => {
+    expect(src).toMatch(/headers\.get\('x-excel-layout'\)/)
+    expect(src).toContain("{ expect: [200, 400] }")
+    expect(src).toMatch(/outlineExpandUnsupported\(/)
+    expect(src).toMatch(/unsupportedExports/)
   })
 })

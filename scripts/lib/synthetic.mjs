@@ -101,6 +101,15 @@ export function weekRowsHaveContent(rows) {
   return rows.some((r) => ['this_content', 'this_issue', 'next_content', 'next_issue'].some((c) => String(r[c] ?? '').trim() !== ''))
 }
 
+/**
+ * WBS 엑셀 펼침(expand=1)의 명시적 미지원 — 저장 양식이 아웃라인이면 앱이 400 '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' 를 준다
+ * (src/lib/excel/exportWithProfile.ts, 가져오기 완료 화면도 같은 사유를 보인다 — U2). 접기 응답의 X-Excel-Layout 이 saved 이고 그 상태·문구일 때만
+ * 참 — 표준 양식의 400·다른 문구는 출력 실패로 남는다. @param {string | null} layout @param {number} status @param {{ error?: string }} body
+ */
+export function outlineExpandUnsupported(layout, status, body) {
+  return layout === 'saved' && status === 400 && body?.error === '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다'
+}
+
 /** addProjectTeam 이 만든 팀의 기대 모양 — 이름은 code 와 같고(개명은 A2·B — D37) 순서는 0부터 만든 순 @param {readonly string[]} codes */
 export function expectedTeams(codes) {
   return codes.map((code, i) => ({ code, name: code, sortOrder: i, active: true }))

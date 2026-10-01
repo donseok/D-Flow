@@ -29,7 +29,7 @@ import {
 import { excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
-  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent,
+  PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
 } from './lib/synthetic.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
@@ -394,10 +394,21 @@ async function main() {
     for (const path of [`/api/report?projectId=${proj.id}&format=xlsx`, `/api/report?projectId=${proj.id}&format=pptx`]) {
       out.push({ target: '③', path, text: await zipText(await admin.http('GET', path)) })
     }
-    // ④ WBS 엑셀 접기·펼침 — 접기 파일을 가져오기 감지에 다시 넣은 응답도 ①(라우트 응답 본문)로 센다
+    // ④ WBS 엑셀 접기·펼침 — 접기 파일을 가져오기 감지에 다시 넣은 응답도 ①(라우트 응답 본문)로 센다. 저장 양식이 아웃라인이면 펼침은 앱이
+    //    400 으로 명시적으로 거절한다(출력 없음 — U2) — 접기의 X-Excel-Layout 이 saved 이고 그 문구일 때만 unsupportedExports 에 적고 대상에서 뺀다
+    //    (과제 24 둘째 실행에서 찾은 러너 결함)
+    const unsupportedExports = []
+    let foldedLayout = null
     for (const expand of [false, true]) {
       const path = `/api/export?projectId=${proj.id}${expand ? '&expand=1' : ''}`
-      const res = await admin.http('GET', path)
+      const res = await admin.http('GET', path, expand ? { expect: [200, 400] } : undefined)
+      if (!expand) foldedLayout = res.headers.get('x-excel-layout')
+      if (res.status === 400) {
+        const body = await res.json()
+        if (!outlineExpandUnsupported(foldedLayout, res.status, body)) throw new Fail(`S10 ④ 펼침 400(${foldedLayout}): ${JSON.stringify(body)}`)
+        unsupportedExports.push({ path, layout: foldedLayout, status: 400, error: body.error })
+        continue
+      }
       const buf = Buffer.from(await res.arrayBuffer())
       out.push({ target: '④', path, text: (await zipTextParts(buf)).map((p) => p.text).join('\n') })
       if (!expand) {
@@ -413,17 +424,18 @@ async function main() {
       out.push({ target: '⑤', path, text, proof: renderedProof(text, proofNames[kind]) })
       shell.push({ path, text: await (await admin.http('GET', path)).text() })
     }
-    return { out, shell, emptyWeeks }
+    return { out, shell, emptyWeeks, unsupportedExports }
   }
   const s10 = {}
   const regR = await registeredOf(R)
   const regC = await registeredOf(C)
   for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
     const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
-    const { out: outs, shell, emptyWeeks } = await capture(proj, await viewerOf(label, proj.ws))
+    const { out: outs, shell, emptyWeeks, unsupportedExports } = await capture(proj, await viewerOf(label, proj.ws))
     s10[label] = {
       targets: outs.map((o) => `${o.target} ${o.path}`),
       emptyWeeks,
+      unsupportedExports,
       hits: outs.map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, sentinels) }))
         .filter((x) => x.words.length).map((x) => ({ ...x, at: around(outs.find((o) => o.path === x.path && o.target === x.target).text, x.words) })),
       cross: outs.filter((o) => o.target !== '⑤').map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, other.teamCodes) })).filter((x) => x.words.length),
