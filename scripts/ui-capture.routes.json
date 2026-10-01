@@ -8,6 +8,8 @@
     { "key": "share", "path": "/share/minutes/{shareToken}", "file": "share/minutes/[token]/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
     { "key": "projects", "path": "/projects", "file": "(app)/projects/page.tsx", "grade": "member", "tags": ["W"], "since": "b4283c0" },
     { "key": "meetings", "path": "/meetings", "file": "(app)/meetings/page.tsx", "grade": "member", "tags": ["W", "S"], "since": "b4283c0", "until": "UI-2a" },
+    { "key": "ws-home", "path": "/w/{wsSlug}", "file": "(app)/w/[slug]/page.tsx", "grade": "member", "tags": ["W"], "since": "UI-2a" },
+    { "key": "ws-my-work", "path": "/w/{wsSlug}/my-work", "file": "(app)/w/[slug]/my-work/page.tsx", "grade": "member", "tags": ["W"], "since": "UI-2a" },
     { "key": "ws-meetings", "path": "/w/{wsSlug}/meetings", "file": "(app)/w/[slug]/meetings/page.tsx", "grade": "member", "tags": ["W", "S"], "since": "UI-2a", "pair": "meetings" },
     { "key": "minutes", "path": "/minutes", "file": "(app)/minutes/page.tsx", "grade": "member", "tags": ["W", "S"], "since": "b4283c0", "until": "UI-2a" },
     { "key": "ws-minutes", "path": "/w/{wsSlug}/minutes", "file": "(app)/w/[slug]/minutes/page.tsx", "grade": "member", "tags": ["W", "S"], "since": "UI-2a", "pair": "minutes" },

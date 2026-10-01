@@ -23,6 +23,8 @@ const EXCLUDED: Record<string, string> = {
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
   'src/app/(app)/projects/page.tsx': '셸(프로젝트 목록)',
   'src/app/(app)/w/[slug]/settings/page.tsx': '워크스페이스 관리 화면 — 모듈을 허용하는 문이어서 자기 모듈 관문 밖(§5.2)',
+  'src/app/(app)/w/[slug]/page.tsx': '셸(워크스페이스 홈) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
+  'src/app/(app)/w/[slug]/my-work/page.tsx': '셸(내 업무) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
 }
 /** 경로 접두로 모듈을 정할 수 없는 페이지 — 세션 없는 공유 링크(과제 10). requireModule(…, { client: admin }) 를 부른다 */
 const SPECIAL: Record<string, { module: ModuleId; why: string }> = {
