@@ -17,7 +17,7 @@ export function SettingsShell({ items, children }: { items: SettingsNavItem[]; c
   }, [query, children])
 
   return <div className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-    <aside className="space-y-3 rounded-xl border border-line bg-surface p-4 lg:sticky lg:top-24" aria-label="설정 목차">
+    <aside className="space-y-3 rounded-xl border border-line bg-surface p-4 lg:sticky lg:top-(--frame-sticky-top)" aria-label="설정 목차">
       <label htmlFor="settings-search" className="block text-xs font-semibold text-ink">설정 검색</label>
       <input id="settings-search" type="search" className="app-input w-full text-sm" value={query}
         onChange={event => setQuery(event.target.value)} placeholder="이름·설명·설정 키" />

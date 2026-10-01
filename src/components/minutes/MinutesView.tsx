@@ -274,7 +274,7 @@ export function MinutesView({
         : 'space-y-4'}
     >
       {/* 필터 바 (스크롤 시 상단 고정) */}
-      <div className="sticky top-0 z-20 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+      <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<TeamKey>
             tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}

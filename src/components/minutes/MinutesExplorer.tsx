@@ -632,10 +632,11 @@ export function MinutesExplorer({
     onSelectToggle: () => toggleSelect(l.id),
   })
 
+  // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다
   return (
     <div
       data-minutes-explorer
-      className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
+      className="isolate flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
     >
       <nav
         data-minutes-navigation

@@ -52,6 +52,13 @@ describe('AppShell', () => {
     expect(document.getElementById('app-rail')).not.toBeNull()
     expect(main.querySelector('[data-body]')).not.toBeNull()
   })
+  it('main 은 위 패딩이 없고 첫 자식이 위 간격 자리다 — sticky 는 스크롤 상자 패딩 안쪽에 붙어 pt 만큼 위로 내용이 비친다(D54, 과제 33 측정)', () => {
+    shell(base())
+    const main = document.querySelector('main#main-content')!
+    expect(main.className).not.toMatch(/(?:^|\s)(?:\w+:)?(?:pt|py|p)-\d/)
+    expect(main.firstElementChild?.hasAttribute('data-main-top-gap')).toBe(true)
+    expect(main.firstElementChild?.getAttribute('aria-hidden')).toBe('true')
+  })
   it('③ degraded 면 열화 알림, ④ configDegraded 면 role=alert 설정 실패 알림(관리자만 설정 링크)', () => {
     shell(base({ degraded: true, configDegraded: true, canEditSettings: true }))
     expect(document.querySelector('[data-degraded-notice]')).not.toBeNull()

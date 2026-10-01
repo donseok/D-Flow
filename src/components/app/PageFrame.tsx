@@ -17,14 +17,18 @@ export function PageFrame({ header, toolbar, variant = 'document', width = 'full
   useEffect(() => {
     const root = rootRef.current, bar = barRef.current
     if (!root || !bar || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(([e]) => root.style.setProperty('--frame-sticky-top', `${Math.ceil(e.contentRect.height)}px`))
+    // 테두리 상자 높이 — contentRect 는 도구 줄의 py-2 를 빼서 고정 요소가 줄 아래 16px 에 숨는다
+    const ro = new ResizeObserver(([e]) => {
+      const h = e.borderBoxSize?.[0]?.blockSize ?? (e.target as HTMLElement).getBoundingClientRect().height
+      root.style.setProperty('--frame-sticky-top', `${Math.ceil(h)}px`)
+    })
     ro.observe(bar)
     return () => { ro.disconnect(); root.style.setProperty('--frame-sticky-top', '0px') }
   }, [hasToolbar])
   const base = { '--frame-sticky-top': '0px' } as CSSProperties
   if (variant === 'fill') {
     return (
-      <div ref={rootRef} data-frame="fill" style={base} className={`mx-auto flex h-full min-h-0 w-full flex-col ${WIDTH[width]}`}>
+      <div ref={rootRef} data-frame="fill" style={base} className={`mx-auto flex h-full min-h-0 w-full flex-1 flex-col ${WIDTH[width]}`}>
         <div className="shrink-0">{header}</div>
         {toolbar && <div ref={barRef} data-frame-toolbar className="shrink-0">{toolbar}</div>}
         <div data-frame-body className="min-h-0 flex-1">{children}</div>

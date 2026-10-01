@@ -121,6 +121,151 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
   const hits = state.kind === 'done' ? state.hits.slice(0, MAX_BULLETS) : []
   const selectedHit = selected !== null ? hits[selected] ?? null : null
 
+  // 결과 두 열(왼쪽 목록 · 오른쪽 읽기 패널) — idle 여부로 감싸개만 갈린다(아래 두 갈래)
+  const columns = (
+    <>
+      {/* ── 왼쪽: 결과 목록 ── */}
+      <div className="min-w-0" aria-live="polite">
+        {state.kind === 'idle' && (
+          <div className="rounded-2xl border border-dashed border-line-strong px-5 py-8 text-center text-sm text-ink-subtle">
+            {t(locale, 'wiki.pane.placeholder')}
+          </div>
+        )}
+
+        {state.kind === 'loading' && (
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
+            <p className="text-sm text-ink-muted">{t(locale, 'wiki.ask.working')}</p>
+          </div>
+        )}
+
+        {state.kind === 'error' && (
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
+            <p className="text-sm text-delayed">{t(locale, 'wiki.search2.error')}</p>
+          </div>
+        )}
+
+        {state.kind === 'done' && state.hits.length === 0 && (
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
+            {state.degraded && (
+              <p className="mb-2 text-sm text-ink-muted">{t(locale, 'wiki.search2.degraded')}</p>
+            )}
+            <p className="text-sm text-ink-muted">{t(locale, 'wiki.search2.empty')}</p>
+          </div>
+        )}
+
+        {state.kind === 'done' && state.hits.length > 0 && (
+          <ol className="flex flex-col gap-2">
+              {hits.map((hit, index) => {
+                const current = selected === index
+                return (
+                  <li key={`${hit.domain}:${hit.entityId}`} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(index)}
+                      aria-current={current}
+                      className={`w-full rounded-xl border bg-surface px-3.5 py-3 pr-20 text-left transition ${
+                        current
+                          ? 'border-brand-ring border-l-[3px] border-l-brand shadow-[var(--shadow-sm)]'
+                          : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-sm)]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="shrink-0 text-xs font-semibold text-ink-subtle">[{index + 1}]</span>
+                        <span className="chip bg-brand-weak text-brand">{sourceLabel(locale, hit.domain)}</span>
+                        {hit.occurredOn && (
+                          <span className="text-[11px] text-ink-subtle">{hit.occurredOn}</span>
+                        )}
+                      </span>
+                      <span className="mt-1 block truncate text-sm font-semibold text-ink">{hit.title}</span>
+                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-ink-muted">
+                        {marked(snippetOf(hit.content, 200, query), query)}
+                      </span>
+                    </button>
+                    {/* 버튼 안에 링크를 중첩할 수 없어 형제로 띄운다 — xl 미만에서 원문 이동의 유일한 통로(C6). */}
+                    <a
+                      href={hit.href}
+                      className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-brand transition hover:border-brand-ring"
+                    >
+                      {t(locale, 'wiki.pane.source')}
+                      <ArrowRight className="h-3 w-3" aria-hidden />
+                    </a>
+                  </li>
+                )
+              })}
+          </ol>
+        )}
+      </div>
+
+      {/* ── 오른쪽: 읽기 패널 (xl 전용, sticky) ── */}
+      {/* 검색 카드는 PageFrame 의 고정 도구 줄(pinned)이다 — 붙을 때 그 줄 바로 아래(--frame-sticky-top, D54)에 붙는다.
+          스크롤 전에는 왼쪽 첫 카드와 윗변이 정확히 맞는다. */}
+      <aside className="hidden min-w-0 self-start xl:sticky xl:top-(--frame-sticky-top) xl:block">
+        <div className="flex min-h-[380px] flex-col gap-3 rounded-2xl border border-line bg-surface p-5 text-ink shadow-[var(--shadow-md)]">
+          {selectedHit
+            ? (
+              <>
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  <BookOpen className="h-3.5 w-3.5" aria-hidden />
+                  {t(locale, 'wiki.pane.reading')}
+                </div>
+                <h3 className="text-base font-bold leading-6 text-ink">{selectedHit.title}</h3>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-subtle">
+                  <span>{sourceLabel(locale, selectedHit.domain)}</span>
+                  {selectedHit.occurredOn && <span>{selectedHit.occurredOn}</span>}
+                  {selectedHit.matchedBy.length > 0 && <span>{selectedHit.matchedBy.join(' · ')}</span>}
+                </div>
+                <div className="border-t border-line" />
+                <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-7 text-ink-muted">
+                  {marked(selectedHit.content, query)}
+                </div>
+                <div className="mt-auto pt-2">
+                  <a href={selectedHit.href} className="btn btn-primary h-9 px-4 text-sm">
+                    {t(locale, 'wiki.pane.open')}
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </a>
+                </div>
+              </>
+            )
+            : (
+              <>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                  {t(locale, 'wiki.pane.guide.eyebrow')}
+                </div>
+                {state.kind === 'done' && state.hits.length > 0 && (
+                  <p className="text-sm text-ink">{t(locale, 'wiki.pane.pick')}</p>
+                )}
+                <p className="text-sm leading-6 text-ink-muted">{t(locale, 'wiki.pane.guide.desc')}</p>
+                {corpus.kind === 'error' && (
+                  <p className="text-xs text-ink-subtle">{t(locale, 'wiki.pane.guide.statsFailed')}</p>
+                )}
+                {corpus.kind === 'done' && (
+                  <div className="mt-1 flex flex-col gap-2">
+                    {(() => {
+                      const max = Math.max(1, ...corpus.domains.map(row => row.docs))
+                      return corpus.domains.filter(row => row.docs > 0).map(row => (
+                        <div key={row.domain} className="flex items-center gap-2.5 text-[13px]">
+                          <span className="w-16 shrink-0 text-ink-muted">{sourceLabel(locale, row.domain)}</span>
+                          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2">
+                            <span
+                              className="block h-full rounded-full bg-brand"
+                              style={{ width: `${Math.max(4, Math.round((row.docs / max) * 100))}%` }}
+                            />
+                          </span>
+                          <span className="w-14 shrink-0 text-right text-xs tabular-nums text-ink-subtle">
+                            {t(locale, 'wiki.pane.guide.docs').replace('{n}', String(row.docs))}
+                          </span>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                )}
+              </>
+            )}
+        </div>
+      </aside>
+    </>
+  )
+
   return (
     <div className="mt-2 flex flex-col gap-2.5">
       {/* ── 상단 툴바·요약 — 두 열 위에 전폭으로 둔다 ──
@@ -165,148 +310,11 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
       )}
 
       {/* idle 일 때 xl 미만에서는 아무것도 그리지 않는다(히어로 안내가 그 역할) —
-          xl 에서만 오른쪽 안내 패널("무엇을 찾을 수 있나")을 보여준다(U2). */}
-      <div className={`items-start gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] ${state.kind === 'idle' ? 'hidden' : 'grid'}`}>
-        {/* ── 왼쪽: 결과 목록 ── */}
-        <div className="min-w-0" aria-live="polite">
-          {state.kind === 'idle' && (
-            <div className="rounded-2xl border border-dashed border-line-strong px-5 py-8 text-center text-sm text-ink-subtle">
-              {t(locale, 'wiki.pane.placeholder')}
-            </div>
-          )}
-
-          {state.kind === 'loading' && (
-            <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
-              <p className="text-sm text-ink-muted">{t(locale, 'wiki.ask.working')}</p>
-            </div>
-          )}
-
-          {state.kind === 'error' && (
-            <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
-              <p className="text-sm text-delayed">{t(locale, 'wiki.search2.error')}</p>
-            </div>
-          )}
-
-          {state.kind === 'done' && state.hits.length === 0 && (
-            <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
-              {state.degraded && (
-                <p className="mb-2 text-sm text-ink-muted">{t(locale, 'wiki.search2.degraded')}</p>
-              )}
-              <p className="text-sm text-ink-muted">{t(locale, 'wiki.search2.empty')}</p>
-            </div>
-          )}
-
-          {state.kind === 'done' && state.hits.length > 0 && (
-            <ol className="flex flex-col gap-2">
-                {hits.map((hit, index) => {
-                  const current = selected === index
-                  return (
-                    <li key={`${hit.domain}:${hit.entityId}`} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setSelected(index)}
-                        aria-current={current}
-                        className={`w-full rounded-xl border bg-surface px-3.5 py-3 pr-20 text-left transition ${
-                          current
-                            ? 'border-brand-ring border-l-[3px] border-l-brand shadow-[var(--shadow-sm)]'
-                            : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-sm)]'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="shrink-0 text-xs font-semibold text-ink-subtle">[{index + 1}]</span>
-                          <span className="chip bg-brand-weak text-brand">{sourceLabel(locale, hit.domain)}</span>
-                          {hit.occurredOn && (
-                            <span className="text-[11px] text-ink-subtle">{hit.occurredOn}</span>
-                          )}
-                        </span>
-                        <span className="mt-1 block truncate text-sm font-semibold text-ink">{hit.title}</span>
-                        <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-ink-muted">
-                          {marked(snippetOf(hit.content, 200, query), query)}
-                        </span>
-                      </button>
-                      {/* 버튼 안에 링크를 중첩할 수 없어 형제로 띄운다 — xl 미만에서 원문 이동의 유일한 통로(C6). */}
-                      <a
-                        href={hit.href}
-                        className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-brand transition hover:border-brand-ring"
-                      >
-                        {t(locale, 'wiki.pane.source')}
-                        <ArrowRight className="h-3 w-3" aria-hidden />
-                      </a>
-                    </li>
-                  )
-                })}
-            </ol>
-          )}
-        </div>
-
-        {/* ── 오른쪽: 읽기 패널 (xl 전용, sticky) ── */}
-        {/* 검색 카드가 ProjectPageShell 고정 히어로로 빠져 스크롤 영역 위엔 아무것도 없다 —
-            top-0 이면 왼쪽 첫 카드와 윗변이 정확히 맞는다. */}
-        <aside className="hidden min-w-0 self-start xl:sticky xl:top-0 xl:block">
-          <div className="flex min-h-[380px] flex-col gap-3 rounded-2xl border border-line bg-surface p-5 text-ink shadow-[var(--shadow-md)]">
-            {selectedHit
-              ? (
-                <>
-                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                    <BookOpen className="h-3.5 w-3.5" aria-hidden />
-                    {t(locale, 'wiki.pane.reading')}
-                  </div>
-                  <h3 className="text-base font-bold leading-6 text-ink">{selectedHit.title}</h3>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-subtle">
-                    <span>{sourceLabel(locale, selectedHit.domain)}</span>
-                    {selectedHit.occurredOn && <span>{selectedHit.occurredOn}</span>}
-                    {selectedHit.matchedBy.length > 0 && <span>{selectedHit.matchedBy.join(' · ')}</span>}
-                  </div>
-                  <div className="border-t border-line" />
-                  <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-7 text-ink-muted">
-                    {marked(selectedHit.content, query)}
-                  </div>
-                  <div className="mt-auto pt-2">
-                    <a href={selectedHit.href} className="btn btn-primary h-9 px-4 text-sm">
-                      {t(locale, 'wiki.pane.open')}
-                      <ArrowRight className="h-4 w-4" aria-hidden />
-                    </a>
-                  </div>
-                </>
-              )
-              : (
-                <>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                    {t(locale, 'wiki.pane.guide.eyebrow')}
-                  </div>
-                  {state.kind === 'done' && state.hits.length > 0 && (
-                    <p className="text-sm text-ink">{t(locale, 'wiki.pane.pick')}</p>
-                  )}
-                  <p className="text-sm leading-6 text-ink-muted">{t(locale, 'wiki.pane.guide.desc')}</p>
-                  {corpus.kind === 'error' && (
-                    <p className="text-xs text-ink-subtle">{t(locale, 'wiki.pane.guide.statsFailed')}</p>
-                  )}
-                  {corpus.kind === 'done' && (
-                    <div className="mt-1 flex flex-col gap-2">
-                      {(() => {
-                        const max = Math.max(1, ...corpus.domains.map(row => row.docs))
-                        return corpus.domains.filter(row => row.docs > 0).map(row => (
-                          <div key={row.domain} className="flex items-center gap-2.5 text-[13px]">
-                            <span className="w-16 shrink-0 text-ink-muted">{sourceLabel(locale, row.domain)}</span>
-                            <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2">
-                              <span
-                                className="block h-full rounded-full bg-brand"
-                                style={{ width: `${Math.max(4, Math.round((row.docs / max) * 100))}%` }}
-                              />
-                            </span>
-                            <span className="w-14 shrink-0 text-right text-xs tabular-nums text-ink-subtle">
-                              {t(locale, 'wiki.pane.guide.docs').replace('{n}', String(row.docs))}
-                            </span>
-                          </div>
-                        ))
-                      })()}
-                    </div>
-                  )}
-                </>
-              )}
-          </div>
-        </aside>
-      </div>
+          xl 에서만 오른쪽 안내 패널("무엇을 찾을 수 있나")을 보여준다(U2). 두 갈래 모두 정적 className 이다 — 안전망 클래스(xl:grid)와
+          조건부 display 를 한 className 에 섞으면 안전망에 진다(D17 ②). 같은 자리의 같은 요소라 갈래가 바뀌어도 자식은 다시 마운트되지 않는다. */}
+      {state.kind === 'idle'
+        ? <div className="hidden items-start gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">{columns}</div>
+        : <div className="grid items-start gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">{columns}</div>}
     </div>
   )
 }

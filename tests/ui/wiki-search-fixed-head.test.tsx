@@ -101,6 +101,15 @@ describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
     expect(columns[1].tagName).toBe('ASIDE')
   })
 
+  it('두 열 감싸개는 idle 이면 hidden(xl 에서만 안내), 그 밖에는 grid — 둘 다 정적 className(D17 ②)', async () => {
+    await render('')
+    expect(grid()!.className.split(' ')).toContain('hidden')
+    expect(grid()!.className.split(' ')).not.toContain('grid')
+    await render('보세공장')
+    expect(grid()!.className.split(' ')).toContain('grid')
+    expect(grid()!.className.split(' ')).not.toContain('hidden')
+  })
+
   it('결과는 본문 안에 있다 — 도구 줄은 고정이고 결과만 흐른다(main 스크롤)', async () => {
     await render('보세공장')
     expect(scrollRegion()?.contains(grid()!)).toBe(true)

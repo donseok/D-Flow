@@ -722,7 +722,7 @@ export function WeeklySheetView({
         aiRewriteDisabled={!hasFocusedCell}
         onLint={() => setLintOpen(true)}
       />
-      <div className="overflow-x-auto">
+      <div className="isolate overflow-x-auto">
         <div className={`min-w-[1240px] bg-white p-1.5 shadow-sm ring-1 ring-neutral-300 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
           {/* 제목 행 — 레퍼런스 시트의 B1. 자유 편집(''이면 기본 제목 합성). key로 주차 전환 시 초기화 */}
           <TitleEditor
@@ -871,8 +871,9 @@ function WeekNav({
 }) {
   const base = `/p/${projectId}/weekly`
   return (
-    // 근태현황·회의일정과 동일한 스크롤 상단 고정. z-40: 시트 셀 오버레이(배지/핸들 z-30)보다 위.
-    <div className="sticky top-0 z-40 -mx-1 flex items-center justify-between bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+    // 근태현황·회의일정과 동일한 스크롤 상단 고정 — 도구 줄 바로 아래(D54). 층은 z-10(도구 줄 --z-sticky 아래); 시트 셀 오버레이(배지/핸들 z-30)는
+    // 시트 감싸개의 isolate 안에 갇혀 이 줄을 넘지 못한다.
+    <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 flex items-center justify-between bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
       <div className="flex items-center gap-2">
         <Link href={`${base}?week=${shiftWeeks(weekStart, -1)}`} className="btn btn-ghost px-2" aria-label="이전 주">
           <ChevronLeft className="h-4 w-4" />

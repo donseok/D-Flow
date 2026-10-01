@@ -310,7 +310,7 @@ function Profile({ desk, host, nowMs }: { desk: RosterDesk; host: RosterHost; no
   const seat = desk.seat
   const owner = deskOwner(desk)
   return (
-    <aside data-roster-profile className="sticky top-0 flex min-w-0 flex-[0_1_340px] flex-col gap-4 rounded-3xl border border-line bg-surface p-5 shadow-sm">
+    <aside data-roster-profile className="sticky top-(--frame-sticky-top) flex min-w-0 flex-[0_1_340px] flex-col gap-4 rounded-3xl border border-line bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-4">
         <span className="grid shrink-0 place-items-center rounded-2xl"
           style={{ background: `color-mix(in srgb, ${tone.color} 16%, var(--color-surface))`, '--sm-cell-w': '102px', '--sm-cell-h': '93px' } as React.CSSProperties}>
