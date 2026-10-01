@@ -63,3 +63,30 @@ describe('ProjectNav', () => {
     expect(html).toContain('data-x')
   })
 })
+
+describe('접힘·접근성 세부(U2b-2 충실도 리뷰 Z2·Z3·Z11)', () => {
+  const links = (html: string) => [...html.matchAll(/<a [^>]*>/g)].map((m) => m[0])
+  it('Z2 — ProjectNav 선호 없음(null)이면 전환기를 정적 래퍼 hidden xl:block 으로 감싼다(1024~1279 의 64px 레일에 입력창을 그리지 않는다)', () => {
+    const auto = renderToString(<ProjectNav groups={pj} pathname="/p/p1/wbs" workspaceHome="/w/acme" projectSwitcher={<div data-x />} badges={{}} collapsed={null} />)
+    expect(auto).toMatch(/<div class="hidden xl:block"><div data-x/)
+    const open = renderToString(<ProjectNav groups={pj} pathname="/p/p1/wbs" workspaceHome="/w/acme" projectSwitcher={<div data-x />} badges={{}} collapsed={false} />)
+    expect(open).not.toContain('hidden xl:block"><div data-x')
+  })
+  it('Z3 — 접힘 상태와 무관하게 내비 링크·워크스페이스 홈은 접근 가능한 이름(aria-label)을 늘 갖는다', () => {
+    for (const collapsed of [null, true, false] as const) {
+      const w = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={collapsed} />)
+      for (const a of links(w).filter((l) => l.includes('data-nav-item'))) expect(a, `${collapsed}: ${a}`).toMatch(/aria-label="[^"]+"/)
+      const p = renderToString(<ProjectNav groups={pj} pathname="/p/p1/wbs" workspaceHome="/w/acme" projectSwitcher={null} badges={{}} collapsed={collapsed} />)
+      for (const a of links(p)) expect(a, `${collapsed}: ${a}`).toMatch(/aria-label="[^"]+"/)
+    }
+  })
+  it('Z11 — 사이드바는 nav 랜드마크를 갖고, 배지는 99+·tabular-nums, 접힘(true)이면 아이콘 모서리 점(숫자는 sr-only)', () => {
+    const open = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 120 }} collapsed={false} />)
+    expect(open).toMatch(/<nav aria-label="[^"]+"/)
+    expect(open).toMatch(/data-nav-badge[^>]*tabular-nums[^>]*>99\+</)
+    const closed = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 3 }} collapsed />)
+    expect(closed).toContain('data-nav-badge-dot'); expect(closed).not.toMatch(/data-nav-badge[^-]/)
+    expect(closed).toMatch(/<span class="sr-only">3<\/span>/)
+  })
+})
+

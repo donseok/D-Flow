@@ -41,15 +41,20 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
               const active = i.id === activeId
               const badge = badges[i.id]
               const label = labelOf(i.label)
+              const shown = typeof badge === 'number' && badge > 0 ? (badge > 99 ? '99+' : String(badge)) : null
+              const tone = BADGE_TONE[i.id] ?? BADGE_DEFAULT
+              const count = shown && <span data-nav-badge className={`rounded-full px-1.5 text-meta font-semibold tabular-nums ${tone}`}>{shown}</span>
+              // 접힘(64px)에서는 숫자 대신 아이콘 모서리 점(숫자는 sr-only). 선호 없음은 폭이 CSS 로 갈리므로 둘을 정적 래퍼로 함께 둔다
+              const dot = shown && <span data-nav-badge-dot className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ${tone}`}><span className="sr-only">{shown}</span></span>
               const link = (
                 <Link key={i.id} href={i.href} data-nav-item={i.id} aria-current={active ? 'page' : undefined}
-                  aria-label={collapsed === true ? label : undefined}
-                  className={`flex h-9 items-center gap-2.5 rounded-(--radius-control) px-3 text-control ${active ? 'bg-surface-selected font-semibold text-fg' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
+                  aria-label={shown ? `${label} ${shown}` : label}
+                  className={`relative flex h-9 items-center gap-2.5 rounded-(--radius-control) px-3 text-control ${active ? 'bg-surface-selected font-semibold text-fg' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
                   <Icon size={NAV_ICON_SIZE.menu} strokeWidth={NAV_ICON_STROKE} aria-hidden className="shrink-0" />
                   {collapsed !== true && <span className={`min-w-0 flex-1 truncate ${textCls}`}>{label}</span>}
-                  {typeof badge === 'number' && badge > 0 && (
-                    <span data-nav-badge className={`rounded-full px-1.5 text-meta font-semibold ${BADGE_TONE[i.id] ?? BADGE_DEFAULT}`}>{badge}</span>
-                  )}
+                  {collapsed === true && dot}
+                  {collapsed === false && count}
+                  {collapsed === null && shown && <><span className="hidden xl:inline-flex">{count}</span><span className="xl:hidden">{dot}</span></>}
                 </Link>
               )
               return collapsed === true ? <Tooltip key={i.id} label={label} side="right">{link}</Tooltip> : link
@@ -65,9 +70,9 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
 export function SideRail({ collapsed, children, label }: { collapsed: SidebarCollapsed; children: ReactNode; label: string }) {
   const width = collapsed === null ? 'lg:w-16 xl:w-58' : collapsed ? 'w-16' : 'w-58'
   return (
-    <aside aria-label={label} data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
+    <aside data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
       className={`hidden lg:flex ${width} shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-2 py-3`}>
-      {children}
+      <nav aria-label={label} className="flex flex-col">{children}</nav>
     </aside>
   )
 }

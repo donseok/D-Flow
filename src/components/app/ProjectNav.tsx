@@ -19,11 +19,13 @@ export function ProjectNav({ groups, pathname, workspaceHome, projectSwitcher, b
   return (
     <SideRail collapsed={collapsed} label={t('nav.project')}>
       {workspaceHome && (
-        <Link href={workspaceHome} aria-label={collapsed === true ? '워크스페이스 홈' : undefined} className="mb-2 flex h-9 items-center gap-2 px-3 text-control text-fg-secondary hover:text-fg">
+        <Link href={workspaceHome} aria-label="워크스페이스 홈" className="mb-2 flex h-9 items-center gap-2 px-3 text-control text-fg-secondary hover:text-fg">
           <ArrowLeft size={16} aria-hidden />{collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>워크스페이스 홈</span>}
         </Link>
       )}
-      {collapsed !== true && projectSwitcher}
+      {/* 선호 없음이면 1024~1279(64px 레일)에서 전환기를 숨긴다 — 그 폭은 브레드크럼·드로어의 전환기가 맡는다(정적 래퍼, D17 ②) */}
+      {collapsed === false && projectSwitcher}
+      {collapsed === null && projectSwitcher && <div className="hidden xl:block">{projectSwitcher}</div>}
       <NavList groups={groups} activeId={activeId} collapsed={collapsed} badges={badges} exclude={['p.settings']} />
       {settings.length > 0 && <div data-nav-divider className="my-2 border-t border-border" />}
       <NavList groups={settings} activeId={activeId} collapsed={collapsed} />
