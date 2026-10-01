@@ -4,7 +4,6 @@ import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
-import { LEGACY_PATHS } from '@/lib/nav/legacyPaths'
 import { wsHref } from '@/lib/workspace/paths'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -40,7 +39,7 @@ function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: Simp
 export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await workspacePageAccess(slug)
-  if (!access.isAdmin) redirect(LEGACY_PATHS.projects)
+  if (!access.isAdmin) redirect(wsHref(access.slug))
   const locale = await getServerLocale()
   let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
   try {

@@ -959,9 +959,9 @@ describe('baseFinal — 기준 서버에서 옛 경로가 기대하는 최종 �
     // baseFinal 이 없는 행은 기준 서버에서도 expectFinal
     expect(finalProblem({ path: '/', expectFinal: '/projects' }, v, new URL('http://x/projects'), { base: true })).toBeNull()
   })
-  it('routes.json — 옛 행 아홉(root 포함)이 baseFinal 을 갖고 expectFinal 은 새 경로, 형식은 validateRoutes 가 본다', () => {
+  it('routes.json — 옛 행 열(root 포함)이 baseFinal 을 갖고 expectFinal 은 새 경로, 형식은 validateRoutes 가 본다', () => {
     const old = (routesDoc.routes as { key: string; expectFinal?: string; baseFinal?: string }[]).filter((x) => x.baseFinal !== undefined)
-    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'portfolio', 'root', 'usage'])
+    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'portfolio', 'projects', 'root', 'usage'])
     for (const x of old) expect(x.expectFinal, x.key).toMatch(/^\/w\/\{wsSlug\}/)
     expect(validateRoutes({ version: 1, routes: [{ key: 'a', path: '/a', file: 'a/page.tsx', grade: 'member', since: 'b4283c0', baseFinal: 'x' }] }, ['a/page.tsx'])).toContain('a: baseFinal 경로')
   })

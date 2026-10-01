@@ -29,23 +29,16 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/components/agents/SeatmapView.tsx': { count: 1, why: CLIENT_LINK },
   'src/components/agents/OfficeNav.tsx': { count: 1, why: CLIENT_LINK },
   'src/components/admin/AccountsManager.tsx': { count: 1, why: CLIENT_LINK },
-  'src/components/ui/BrandMark.tsx': { count: 1, why: 'UI-2b: 과제 25 — C 파일 과제' },
-  'src/lib/nav/legacyPaths.ts': { count: 2, why: 'UI-2b: 과제 25 — C 파일 과제' },
   'src/lib/minutes/source.ts': { count: 1, why: '영구: base 기본값은 영구 링크 형식(D6) — 범위를 아는 호출부가 base 를 넘긴다' },
-  'src/app/actions/project.ts': { count: 3, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
-  'src/app/actions/inviteRedeem.ts': { count: 2, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
   'src/lib/domain/usageMenu.ts': { count: 8, why: '영구: 역사 키 — 옛 경로 사용 이벤트를 같은 키로 읽는다' },
   'src/lib/ai/chat/verifier.ts': { count: 5, why: PERMALINK },
   'src/lib/ai/chat/deep-links.ts': { count: 2, why: PERMALINK },
   'src/lib/ai/index/content.ts': { count: 1, why: PERMALINK },
   'src/lib/workspace/legacy.ts': { count: 9, why: '영구: 옛 경로 변환표' },
 }
-/** ① 임시 허용 — UI-2b 에서 0. createProject 계열 3·초대 합류 2 는 레이아웃 데이터라 UI-2b 의 범위 레이아웃 뒤에 바꾼다(§5.7).
- *  UI-2a 사유 항목은 그 화면을 옮기는 과제가 지운다 */
-export const TEMP_REVALIDATE: Record<string, { count: number; why: string }> = {
-  'src/app/actions/project.ts': { count: 3, why: "UI-2b: 과제 25 — ('/(app)/w/[slug]', 'layout') 로(전환기 목록이 레이아웃 데이터)" },
-  'src/app/actions/inviteRedeem.ts': { count: 2, why: "UI-2b: 과제 25 — ('/(app)/w/[slug]', 'layout') 로" },
-}
+/** ① 임시 허용 — UI-2b 의 과제 25 가 0 으로 만들었다(createProject 계열·초대 합류는 ('/(app)/w/[slug]', 'layout') 로 — 전환기 목록이 레이아웃 데이터, §5.7).
+ *  새 임시 허용을 더하지 않는다 */
+export const TEMP_REVALIDATE: Record<string, { count: number; why: string }> = {}
 
 const files = walk('src').filter((f) => !f.includes('/__tests__/'))
 const countOf = (lines: string[], re: RegExp) => lines.reduce((n, l) => n + (l.match(re)?.length ?? 0), 0)

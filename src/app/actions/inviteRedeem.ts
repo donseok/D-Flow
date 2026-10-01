@@ -327,7 +327,7 @@ export async function redeemInvite(
   const consumed = await consumeInvite(admin, token, sessionEmail, user.id)
   if (!consumed.ok) return consumed
 
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   return { ok: true, projectId: consumed.row.project_id, alreadyMember: false }
 }
 
@@ -395,6 +395,6 @@ export async function redeemInviteWithSignup(
     return consumed
   }
 
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   return { ok: true, projectId: consumed.row.project_id, email }
 }

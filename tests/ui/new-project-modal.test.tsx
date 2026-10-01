@@ -56,6 +56,14 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     act(() => trigger.click())
   }
 
+  it('defaultOpen 이면 첫 렌더에 열려 있고(?new=1), 아니면 닫혀 있다', () => {
+    root = createRoot(container)
+    act(() => root.render(<NewProjectModal workspaceId="ws-1" defaultOpen />))
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    act(() => root.render(<NewProjectModal key="closed" workspaceId="ws-1" />))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
   it('라벨이 중복되면 validateLevelSettings 의 에러를 그대로 보여주고 createProject 는 부르지 않는다', async () => {
     openModal()
     const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!

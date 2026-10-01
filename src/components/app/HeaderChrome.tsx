@@ -157,7 +157,7 @@ export function HeaderChrome({ identity, projects, userName }: { identity: Heade
             </span>
           )}
           <Link href="/projects" className="hidden items-center sm:flex" aria-label={`${BRAND.productName} 홈`}>
-            <BrandMark withWordmark tagline />
+            <BrandMark productName={BRAND.productName} hasMark={false} workspaceId={null} withWordmark tagline />
           </Link>
 
           {/* 브레드크럼 */}

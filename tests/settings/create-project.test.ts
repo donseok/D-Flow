@@ -53,7 +53,7 @@ describe('createProject', () => {
     expect(p.values).toEqual({ 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban', 'meetings', 'issues'] })   // wiki 는 minutes 미허용으로 빠진다
     expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(['create', 'create'])
     expect(db.rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_name: 'Acme 신규', p_copy_from: null, p_actor: 'u-admin', p_command_id: CMD, p_schema_version: 1 })
-    expect(h.refreshTeams).toHaveBeenCalledOnce(); expect(h.revalidatePath).toHaveBeenCalledWith('/projects')
+    expect(h.refreshTeams).toHaveBeenCalledOnce(); expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/w/[slug]', 'layout')
   })
   it('같은 commandId 재전송은 duplicate 이고 같은 프로젝트다', async () => {
     const a = await createProject(input()); const b = await createProject(input())

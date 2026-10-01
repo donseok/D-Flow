@@ -49,9 +49,9 @@ beforeEach(() => {
 })
 
 describe('/w/[slug]/settings 페이지', () => {
-  it('워크스페이스 관리자가 아니면 /projects 로 돌려보내고 설정을 읽지 않는다', async () => {
+  it('워크스페이스 관리자가 아니면 그 워크스페이스 홈으로 돌려보내고 설정을 읽지 않는다', async () => {
     h.access.mockResolvedValue(access({ isAdmin: false }))
-    await expect(render()).rejects.toThrow('NEXT_REDIRECT /projects')
+    await expect(render()).rejects.toThrow('NEXT_REDIRECT /w/alpha')
     expect(h.config).not.toHaveBeenCalled()
   })
 

@@ -5,16 +5,13 @@ import { srcFiles } from './lib/cssTokens'
 
 const FILL = /(?<![\w-])(?:[a-z-]+:)*bg-(?:action|brand|success|done|warning|danger|delayed|progress|today|critical|phasebar|pending|accent-secondary|accent-warning|team-[1-5]|category-[1-8])(?![\w-])/
 const WHITE = /(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])/
-/** 파일 → [허용 줄 수, 사유] — 남은 BrandMark 는 주인 C 의 UI-2b 이동 커밋이 지운다.
+/** 파일 → [허용 줄 수, 사유] — 비었다(주인 C 의 UI-2b 이동 커밋이 BrandMark 의 마지막 한 줄을 *-fg 전경으로 바꿨다).
  *  판정은 줄 단위다: 채움 유틸과 text-white 가 여러 줄 className 의 다른 줄에 있으면 못 잡는다(2026-10 현재 src 에 그런 곳 0 — U1b 리뷰 R3 P3) */
-export const ALLOW: Record<string, [number, string]> = {
-  'src/components/ui/BrandMark.tsx': [1, '주인 C — UI-2b 이동 커밋'],
-}
+export const ALLOW: Record<string, [number, string]> = {}
 
 describe('hover 이동 0 — 콘텐츠를 옮기지 않는다(개정 §5.5.6, 스펙 §4.1 끝)', () => {
-  it('src 에 hover:(-)translate 가 없다(C 소유 projects/page.tsx 는 UI-2b 이동 커밋 — 로그인은 과제 14 가 다시 썼다)', () => {
-    const LATER = ['src/app/(app)/projects/page.tsx']
-    expect(srcFiles(/\.tsx?$/).filter(([f, t]) => !LATER.includes(f) && /hover:-?translate/.test(t)).map(([f]) => f)).toEqual([])
+  it('src 에 hover:(-)translate 가 없다(전체 프로젝트 카드는 UI-2b 이동 커밋이 걷었다 — 로그인은 과제 14 가 다시 썼다)', () => {
+    expect(srcFiles(/\.tsx?$/).filter(([, t]) => /hover:-?translate/.test(t)).map(([f]) => f)).toEqual([])
   })
 })
 

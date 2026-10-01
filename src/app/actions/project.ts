@@ -211,7 +211,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   const r = data as { status: 'applied' | 'duplicate'; project_id: string }
   // 팀 캐시가 새 프로젝트의 워크스페이스를 바로 알게 한다(SP2 16b) — refreshTeams 는 throw 하지 않는다.
   await refreshTeams()
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   return { ok: true, projectId: r.project_id, status: r.status }
 }
 
@@ -246,7 +246,7 @@ export async function updateProject(
   }
   const { error } = await sb.from('projects').update(patch).eq('id', projectId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath(`/p/${projectId}`, 'layout')
   return { ok: true }
 }
@@ -264,7 +264,7 @@ export async function setProjectPrivacy(projectId: string, isPrivate: boolean): 
   const admin = createAdminClient()
   const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath(`/p/${projectId}`, 'layout')
   return { ok: true }
 }
