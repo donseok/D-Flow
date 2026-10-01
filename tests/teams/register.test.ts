@@ -16,10 +16,11 @@ const SCOPE = { projectId: P, workspaceId: W }
 const RESERVED = reservedTeamNames({ levelLabels: ['단계', '작업'], extraAxisLabel: null })
 
 type DbError = { code?: string; message: string }
-/** service_role 클라이언트 흉내 — teams 표 하나. select('code') 는 사전 조회(have), select('sort_order') 는 순번 조회(maxSort),
+/** service_role 클라이언트 흉내 — teams 표 하나. select('code, name') 는 사전 조회(have — 그 프로젝트 전용 팀 전부, 이름 = code 가 기본·names 로 개명),
+ *  select('sort_order') 는 순번 조회(maxSort),
  *  insert 는 차례 응답(inserts — null 이면 성공). 걸린 필터와 넣은 행을 기록한다 */
 function teamsAdmin(opts: {
-  have?: string[]; haveError?: string; maxSort?: number | null; maxError?: string; inserts?: Array<DbError | null>
+  have?: string[]; names?: Record<string, string>; haveError?: string; maxSort?: number | null; maxError?: string; inserts?: Array<DbError | null>
 } = {}) {
   const inserted: Array<Record<string, unknown>> = []
   const filters: Array<[string, string, unknown]> = []
@@ -38,9 +39,9 @@ function teamsAdmin(opts: {
         ? { data: null, error: { message: opts.maxError } }
         : { data: opts.maxSort == null ? null : { sort_order: opts.maxSort }, error: null }
       b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(
-        cols !== 'code' ? { data: null, error: { message: `unexpected select ${cols}` } }
+        cols !== 'code, name' ? { data: null, error: { message: `unexpected select ${cols}` } }
           : opts.haveError ? { data: null, error: { message: opts.haveError } }
-            : { data: (opts.have ?? []).map((code) => ({ code })), error: null },
+            : { data: (opts.have ?? []).map((code) => ({ code, name: opts.names?.[code] ?? code })), error: null },
       ).then(res, rej)
       b.insert = async (row: Record<string, unknown>) => { inserted.push(row); return { data: null, error: queue.shift() ?? null } }
       return b
@@ -64,8 +65,21 @@ describe('ensureProjectTeams — 늘 전용 팀, 이미 있으면 성공', () =>
       { code: 'OPS', name: 'OPS', sort_order: 5, project_id: P, workspace_id: W, color: pickTeamColor(5) },
       { code: 'QA', name: 'QA', sort_order: 6, project_id: P, workspace_id: W, color: pickTeamColor(6) },
     ])
-    expect(filters).toEqual(expect.arrayContaining([['eq', 'project_id', P], ['in', 'code', ['RES', 'OPS', 'QA']]]))
+    expect(filters).toEqual(expect.arrayContaining([['eq', 'project_id', P]]))   // 그 프로젝트 전용 팀 전부(겹침 판정 — A2-1 리뷰 정확성 P3)
     expect(h.adminFor).toHaveBeenCalledWith({ projectId: P })
+  })
+  it('[Q5] 같은 프로젝트 팀의 이름(개명)·code 와 대소문자·전각만 다른 새 code 는 만들지 않는다 — INVALID_TEAM_CODE, insert 없음(개명 규칙의 대칭)', async () => {
+    for (const [have, names, input, clash] of [
+      [['RES'], { RES: '운영' }, '운영', 'RES'],
+      [['OPS'], {}, 'ops', 'OPS'],
+      [['OPS'], {}, 'ＯＰＳ', 'OPS'],
+    ] as const) {
+      const { inserted } = teamsAdmin({ have: [...have], names })
+      const r = await ensureProjectTeams(SCOPE, [input], RESERVED)
+      expect(r, input).toMatchObject({ ok: false, code: 'INVALID_TEAM_CODE', team: normalizeNewTeamCode(input, RESERVED).ok ? (normalizeNewTeamCode(input, RESERVED) as { code: string }).code : input })
+      if (!r.ok) expect(r.error).toContain(`(${clash})`)
+      expect(inserted).toEqual([])
+    }
   })
   it('전용 팀이 0개면 순번 0 부터', async () => {
     const { inserted } = teamsAdmin({ maxSort: null })

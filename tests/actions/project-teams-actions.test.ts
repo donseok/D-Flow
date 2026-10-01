@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 프로젝트 팀은 이 프로젝트 관리자만 손댈 수 있다(0071 §4) — 전역 teams.ts(슈퍼유저 전용)와는
 // 가드가 다르고, 회의록 시드 폴더도 만들지 않는다(스펙 §5) — from('minute_folders') 호출 자체를
 // 차단해 그 계약을 무너뜨리는 회귀를 즉시 실패로 드러낸다.
-const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams } = vi.hoisted(() => {
+const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes } = vi.hoisted(() => {
   const db = {
     teams: [] as Array<Record<string, unknown>>,
     inserted: { teams: [] as Array<Record<string, unknown>> },
@@ -21,6 +21,9 @@ const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, wor
       eq: chain((col, v) => filters.push([String(col), v])),
       order: chain(),
       limit: chain(),
+      // 목록 조회(select … eq 뒤 바로 await — addProjectTeam 의 같은 프로젝트 팀 목록)
+      then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+        Promise.resolve({ data: rows().filter(r => filters.every(([c, v]) => (r[c] ?? null) === v)), error: null }).then(res, rej),
       maybeSingle: async () => {
         const found = rows().find(r => filters.every(([c, v]) => (r[c] ?? null) === v))
         return { data: found ?? (filters.length === 0 ? rows()[0] ?? null : null), error: null }
@@ -59,7 +62,8 @@ const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, wor
   const refreshTeams = vi.fn(async () => true)
   const requireProjectAdmin = vi.fn()
   const workspaceTeams = vi.fn()
-  return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams }
+  const referencedCommonTeamCodes = vi.fn(async (): Promise<Set<string>> => new Set())
+  return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
@@ -67,6 +71,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 // 공용 팀 복사의 원천(SP4 A2 — 요청 범위, service_role 로)
 vi.mock('@/lib/teams/source', () => ({ workspaceTeams }))
+// 이 프로젝트가 이미 쓰는 공용 팀 code(A2-1 리뷰 보안 P3 — 가져오기 Z4 와 같은 판정). service_role 판정 모듈이라 목으로 — teams 만 만지는 계약 밖
+vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes }))
 // 팀 예약어는 그 프로젝트의 단계 이름까지(SP4 D38) — 설정 해석기는 목이라 admin 의 "teams 만" 계약에 걸리지 않는다
 const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
@@ -88,6 +94,8 @@ describe('프로젝트 팀 관리 서버액션', () => {
     refreshTeams.mockClear()
     requireProjectAdmin.mockReset()
     workspaceTeams.mockReset()
+    referencedCommonTeamCodes.mockReset()
+    referencedCommonTeamCodes.mockResolvedValue(new Set())
     cfg.getProjectConfig.mockReset()
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
   })
@@ -108,7 +116,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
 
     it('동일 프로젝트 내 중복 코드는 거부', async () => {
       asAdmin()
-      db.teams = [{ id: 't-mine', code: 'ERP', project_id: 'p1', sort_order: 0 }]
+      db.teams = [{ id: 't-mine', code: 'ERP', name: 'ERP', project_id: 'p1', sort_order: 0 }]
       const r = await addProjectTeam('p1', 'ERP')
       expect(r.ok).toBe(false)
       expect(db.inserted.teams).toHaveLength(0)
@@ -117,12 +125,43 @@ describe('프로젝트 팀 관리 서버액션', () => {
     it('전역·타 프로젝트의 동명 팀은 막지 않는다(복합 유니크와 일치)', async () => {
       asAdmin()
       db.teams = [
-        { id: 't-global', code: 'ERP', project_id: null, sort_order: 0 },
-        { id: 't-other', code: 'ERP', project_id: 'p2', sort_order: 0 },
+        { id: 't-global', code: 'ERP', name: 'ERP', project_id: null, sort_order: 0 },
+        { id: 't-other', code: 'ERP', name: 'ERP', project_id: 'p2', sort_order: 0 },
       ]
       const r = await addProjectTeam('p1', 'ERP')
       expect(r.ok).toBe(true)
       expect(db.inserted.teams).toHaveLength(1)
+    })
+
+    it('[Q5] 같은 프로젝트 팀의 개명된 이름·대소문자만 다른 code 와 겹치는 새 code 는 거부(개명 규칙의 대칭)', async () => {
+      asAdmin()
+      db.teams = [{ id: 't-res', code: 'RES', name: '운영', project_id: 'p1', sort_order: 0 }]
+      for (const input of ['운영', 'res', 'ＲＥＳ']) {
+        const r = await addProjectTeam('p1', input)
+        expect(r, input).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(RES)') })
+      }
+      expect(db.inserted.teams).toHaveLength(0)
+      expect(referencedCommonTeamCodes).not.toHaveBeenCalled()
+    })
+
+    it('[Q4] 이 프로젝트가 이미 쓰는 공용 팀과 같은 code 의 전용 팀은 만들지 않는다 — 안내 문구, insert 없음(D4 분열 방지)', async () => {
+      asAdmin()
+      referencedCommonTeamCodes.mockResolvedValue(new Set(['QA']))
+      const r = await addProjectTeam('p1', 'QA')
+      expect(r).toEqual({ ok: false, error: expect.stringContaining("공용 팀 'QA'") })
+      expect(referencedCommonTeamCodes).toHaveBeenCalledWith({ projectId: 'p1', workspaceId: 'ws-1' }, ['QA'])
+      expect(db.inserted.teams).toHaveLength(0)
+    })
+
+    it('[Q4] 공용 팀 참조 판정 조회가 실패하면 만들지 않는다 — 고정 문구, 원문은 로그로만(3원칙 ②)', async () => {
+      asAdmin()
+      referencedCommonTeamCodes.mockRejectedValue(new Error('relation "item_owners" boom'))
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const r = await addProjectTeam('p1', 'QA')
+      expect(r).toEqual({ ok: false, error: '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.' })
+      expect(JSON.stringify(r)).not.toContain('boom')
+      expect(db.inserted.teams).toHaveLength(0)
+      err.mockRestore()
     })
 
     it('성공: teams insert(project_id·workspace_id·color 포함) + refreshTeams, 시드 폴더는 절대 만들지 않는다', async () => {

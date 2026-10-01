@@ -12,6 +12,7 @@ import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { reservedTeamNames, validateNewTeamCodes, type Team } from '@/lib/domain/teams'
+import { newTeamCodeClash } from '@/lib/domain/teamName'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
@@ -247,6 +248,10 @@ export async function POST(req: NextRequest) {
       // 되돌릴 수 없는 공용 팀 전환이 거절된 요청 뒤에 남지 않고, 409 확인 창에는 등록할 수 있는 이름만 오른다
       const named = validateNewTeamCodes(unknownTeams, reserved)
       if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: named.team })
+      // 이 프로젝트 팀(상속이면 전환이 복사할 공용 팀)의 code·이름(개명 포함)과 대소문자·전각만 다른 새 code 도 같은 자리에서 거부한다
+      // (개명 규칙의 대칭 — A2-1 리뷰 정확성 P3). 전환 앞이라 거절이 전환을 남기지 않는다
+      const clashing = named.codes.find((c) => newTeamCodeClash(c, teams) !== null)
+      if (clashing) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: clashing })
       const inheritsCommon = ownTeams.length === 0
       // 전환 동의 토큰(A1-5 R3) — 상속 프로젝트의 확인은 "등록해도 되나" 한 비트가 아니라 409 가 보여 준 전환 대상(공용 팀 전부 + 등록할 팀)에
       // 묶인다. 확인 사이에 대상이 바뀌었으면(토큰이 다르거나 없으면) 전환하지 않고 지금 대상으로 다시 409 를 낸다

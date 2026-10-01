@@ -264,6 +264,18 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(m.parseWithProfile.mock.calls[0][1].teamColumns).toEqual([[2, 'RES'], [3, 'QA']])
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['import_wbs_cmd'])
   })
+  it('[Q5] 이 프로젝트 팀의 이름(개명)·code 와 대소문자만 다른 새 팀은 409·전환 앞에서 400 — 전환·등록·가져오기 없음(개명 규칙의 대칭)', async () => {
+    teamsAre(COMMON, [])
+    for (const name of ['연구팀', 'res']) {
+      m.parseWithProfile.mockReturnValue({ ok: true, rows: [row(name)], holidays: [] })
+      const { rpc } = admin()
+      const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, [name]) }))
+      expect(res.status, name).toBe(400)
+      expect(await res.json()).toMatchObject({ code: 'INVALID_TEAM_CODE', team: name })
+      expect(rpc).not.toHaveBeenCalled()
+      expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+    }
+  })
   it('[Z4] 상속 프로젝트(전용 팀 0)는 참조 판정을 하지 않는다 — 전환이 공용 팀을 전부 옮긴다', async () => {
     teamsAre(COMMON, [])
     await POST(req())

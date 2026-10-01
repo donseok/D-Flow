@@ -9,6 +9,7 @@ import 'server-only'
 // DB 오류 원문은 결과에 싣지 않는다(failWith — 로그로만, 스펙 §4.7).
 import { adminFor } from '@/lib/supabase/adminFor'
 import { validateNewTeamCodes } from '@/lib/domain/teams'
+import { newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { failWith } from '@/lib/errors/dbFail'
 
@@ -31,9 +32,16 @@ export async function ensureProjectTeams(
 
   const { admin, projectId } = adminFor({ projectId: scope.projectId })
   // 쓰기 전 선행 조회 — 실패는 중단(3원칙 ②)
-  const have = await admin.from('teams').select('code').eq('project_id', projectId).in('code', wanted)
+  const have = await admin.from('teams').select('code, name').eq('project_id', projectId)
   if (have.error) {
     return { ok: false, code: 'TEAM_REGISTER_FAILED', error: failWith('teams/register 사전 조회', have.error, ERR_REGISTER_TEAMS), team: wanted[0] }
+  }
+  const siblings = (have.data ?? []) as { code: string; name: string }[]
+  // 같은 프로젝트 팀의 code·이름(개명 포함)과 대소문자·전각만 다른 새 code 는 만들지 않는다(개명 규칙의 대칭 — A2-1 리뷰 정확성 P3).
+  // 가져오기 라우트는 같은 판정을 전환·409 앞에서 했다 — 여기는 두 번째 방어선이다
+  for (const code of wanted) {
+    const clash = newTeamCodeClash(code, siblings)
+    if (clash) return { ok: false, code: 'INVALID_TEAM_CODE', error: teamCodeClashError(code, clash), team: code }
   }
   const max = await admin.from('teams').select('sort_order').eq('project_id', projectId)
     .order('sort_order', { ascending: false }).limit(1).maybeSingle()
@@ -41,7 +49,7 @@ export async function ensureProjectTeams(
     return { ok: false, code: 'TEAM_REGISTER_FAILED', error: failWith('teams/register 순번 조회', max.error, ERR_REGISTER_TEAMS), team: wanted[0] }
   }
 
-  const present = new Set(((have.data ?? []) as { code: string }[]).map((r) => r.code))
+  const present = new Set(siblings.map((r) => r.code))
   let next = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
   const created: string[] = []
   const existing: string[] = []

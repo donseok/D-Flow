@@ -29,6 +29,10 @@ const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin, getActor } =
         return { data: found ?? (filters.length === 0 ? rows()[0] ?? null : null), error: null }
       },
       insert: async (row: unknown) => { db.inserted[name].push(row); return { error: null } },
+      // 목록 조회(select … eq/is 뒤 바로 await — addTeam 의 같은 워크스페이스 공용 팀 목록)
+      then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(db.lookupError
+        ? { data: null, error: db.lookupError }
+        : { data: rows().filter(r => filters.every(([c, v]) => (r[c] ?? null) === v)), error: null }).then(res, rej),
       // update 체인도 eq/is 를 함께 받는다(updateTeam 의 .eq('id', id).is('project_id', null) 방어).
       // .select('id') 가 종결 — 실제로 매칭되는 행이 있어야 db.updated 에 반영된다(조용한 no-op
       // 을 성공으로 위장하지 않는 프로덕션 코드의 영향행 확인을 모의도 똑같이 강제한다).
@@ -142,6 +146,17 @@ describe('팀 관리 서버액션', () => {
     expect(await updateTeam('no-such-id', { active: false })).toEqual({ ok: false, error: ERR_MISSING })
     expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
     expect(db.updated).toHaveLength(0)
+  })
+
+  it('[Q5] addTeam: 같은 워크스페이스 공용 팀의 개명된 이름·대소문자만 다른 code 와 겹치면 거부(개명 규칙의 대칭)', async () => {
+    asAdmin()
+    db.teams = [{ id: 't-res', code: 'RES', name: '운영', project_id: null, workspace_id: WS },
+      { id: 't-other-ws', code: 'LAB', name: 'LAB', project_id: null, workspace_id: WS_B }]
+    for (const input of ['운영', 'res']) {
+      expect(await addTeam(WS, input), input).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(RES)') })
+    }
+    expect(await addTeam(WS, 'lab')).toEqual({ ok: true })   // 다른 워크스페이스의 팀과는 겹침을 보지 않는다
+    expect(db.inserted.teams).toHaveLength(1)
   })
 
   it('addTeam: 조회 실패는 고정 문구 — DB 원문을 싣지 않는다(SP4 D21)', async () => {

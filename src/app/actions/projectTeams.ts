@@ -13,7 +13,8 @@ import { valueOf } from '@/lib/settings/registry'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
 import { workspaceTeams } from '@/lib/teams/source'
-import { checkTeamRename } from '@/lib/domain/teamName'
+import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
 import { failWith } from '@/lib/errors/dbFail'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
@@ -23,6 +24,8 @@ const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 
 const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_COPY = '공용 팀을 복사하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_COMMON_IN_USE = (code: string) =>
+  `이 프로젝트가 공용 팀 '${code}'를 이미 쓰고 있어 같은 코드의 프로젝트 팀을 만들지 않았습니다 — 만들면 담당·명단이 두 팀으로 갈라집니다.`
 
 export async function addProjectTeam(projectId: string, input: string): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
@@ -45,10 +48,23 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   if (!workspaceId) return { ok: false, error: '프로젝트의 워크스페이스를 확인할 수 없습니다.' }
   const admin = createAdminClient()
 
-  // 중복은 동일 프로젝트 내에서만 거부 — 전역·타 프로젝트 동명은 허용(복합 유니크와 일치).
-  const dup = await admin.from('teams').select('id').eq('project_id', projectId).eq('code', norm.code).maybeSingle()
-  if (dup.error) return { ok: false, error: failWith('projectTeams.add', dup.error, ERR_TEAM_LOOKUP) }
-  if (dup.data) return { ok: false, error: `'${norm.code}' 팀이 이미 이 프로젝트에 있습니다.` }
+  // 중복은 동일 프로젝트 내에서만 거부 — 전역·타 프로젝트 동명은 허용(복합 유니크와 일치). 같은 프로젝트 팀의 code·이름(개명 포함)과
+  // 대소문자·전각만 다른 code 도 거부한다(개명 규칙 D37 의 대칭 — A2-1 리뷰 정확성 P3)
+  const sib = await admin.from('teams').select('id, code, name').eq('project_id', projectId)
+  if (sib.error) return { ok: false, error: failWith('projectTeams.add', sib.error, ERR_TEAM_LOOKUP) }
+  const siblings = (sib.data ?? []) as { id: string; code: string; name: string }[]
+  if (siblings.some((s) => s.code === norm.code)) return { ok: false, error: `'${norm.code}' 팀이 이미 이 프로젝트에 있습니다.` }
+  const clash = newTeamCodeClash(norm.code, siblings)
+  if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
+  // 이 프로젝트가 이미 쓰는 공용 팀과 같은 code 의 전용 팀은 만들지 않는다(A2-1 리뷰 보안 P3 — 가져오기 Z4 와 같은 판정). 만들면 기존 공용
+  // 참조(담당·명단·영역·초대)와 같은 code·다른 id 가 된다(D4 분열). 판정 조회 실패는 쓰기 전 선행 조회 실패라 중단한다(3원칙 ②)
+  let referenced: Set<string>
+  try {
+    referenced = await referencedCommonTeamCodes({ projectId, workspaceId }, [norm.code])
+  } catch (e) {
+    return { ok: false, error: failWith('projectTeams.add 공용 팀 참조 조회', e, ERR_TEAM_LOOKUP) }
+  }
+  if (referenced.has(norm.code)) return { ok: false, error: ERR_COMMON_IN_USE(norm.code) }
 
   const max = await admin.from('teams')
     .select('sort_order').eq('project_id', projectId)

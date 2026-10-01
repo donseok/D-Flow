@@ -39,7 +39,7 @@ vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: () => ({ admin: m.client }
 vi.mock('@/lib/teams/master', () => ({ refreshTeams: vi.fn(async () => true) }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 
-import { checkTeamRename } from '@/lib/domain/teamName'
+import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { updateProjectTeam } from '@/app/actions/projectTeams'
 import { updateTeam } from '@/app/actions/teams'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -129,5 +129,18 @@ describe('updateTeam — name(공용 팀, 머리 낱말만 예약어)', () => {
   it('공용 팀은 프로젝트 단계 이름을 보지 않는다(한계 K14) — 머리 낱말은 거부', async () => {
     expect(await updateTeam('g-civ', { name: '단계' })).toEqual({ ok: true })
     expect((await updateTeam('g-civ', { name: '담당' })).ok).toBe(false)
+  })
+})
+
+// 개명 규칙의 대칭(A2-1 리뷰 정확성 P3) — 새 팀 code 가 같은 범위 다른 팀의 code·이름(개명 포함)과 정규화 키로 겹치면 거부. 정확히 같은 code 는 호출부의 "이미 있음"
+describe('newTeamCodeClash — 생성 경로의 겹침', () => {
+  const sib = [{ code: 'RES', name: '운영' }, { code: 'LAB', name: 'LAB' }]
+  it.each([['운영', 'RES'], ['ＲＥＳ', 'RES'], ['res', 'RES'], ['lab', 'LAB'], [' 운영 ', 'RES']])('%s → %s', (code, clash) => {
+    expect(newTeamCodeClash(code, sib)).toBe(clash)
+  })
+  it('정확히 같은 code·겹치지 않는 code 는 null', () => {
+    expect(newTeamCodeClash('RES', sib)).toBeNull()
+    expect(newTeamCodeClash('OPS', sib)).toBeNull()
+    expect(teamCodeClashError('운영', 'RES')).toContain('다른 팀(RES)')
   })
 })

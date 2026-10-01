@@ -15,7 +15,7 @@ import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
-import { checkTeamRename } from '@/lib/domain/teamName'
+import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { failWith } from '@/lib/errors/dbFail'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
@@ -44,10 +44,13 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   // project_id is null 로 고정 — 안 고정하면 어느 프로젝트가 같은 code 를 쓰는 순간
   // "이미 존재합니다"로 전역 생성이 오차단된다(임의 행을 잡는 사례).
   // workspace_id 도 함께 건다(0003) — 다른 워크스페이스의 동명 전역 팀을 오탐하지 않는다.
-  const dup = await admin.from('teams').select('id').eq('code', norm.code).is('project_id', null)
-    .eq('workspace_id', workspaceId).maybeSingle()
-  if (dup.error) return { ok: false, error: failWith('teams.add', dup.error, ERR_TEAM_LOOKUP) }
-  if (dup.data) return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }
+  // 같은 워크스페이스 공용 팀의 code·이름(개명 포함)과 대소문자·전각만 다른 code 도 거부한다(개명 규칙 D37 의 대칭 — A2-1 리뷰 정확성 P3)
+  const sib = await admin.from('teams').select('id, code, name').is('project_id', null).eq('workspace_id', workspaceId)
+  if (sib.error) return { ok: false, error: failWith('teams.add', sib.error, ERR_TEAM_LOOKUP) }
+  const siblings = (sib.data ?? []) as { id: string; code: string; name: string }[]
+  if (siblings.some((s) => s.code === norm.code)) return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }
+  const clash = newTeamCodeClash(norm.code, siblings)
+  if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
 
   // 정렬 순번도 워크스페이스별로 잰다 — 안 그러면 다른 워크스페이스의 순번을 이어받는다.
   const max = await admin.from('teams')
