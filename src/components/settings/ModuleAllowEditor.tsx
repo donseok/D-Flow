@@ -5,15 +5,12 @@ import { useRouter } from 'next/navigation'
 import { previewSettingsImpact, type SettingsImpactResult } from '@/app/actions/settingsPreview'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
+import { MODULE_LABEL } from '@/lib/modules/labels'
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
-const LABEL: Record<Exclude<ModuleId, 'dashboard' | 'wbs' | 'members' | 'settings'>, string> = {
-  kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키',
-  announcements: '공지', attendance: '근태', agents: '에이전트', minutes: '회의록',
-  minutes_integration: '회의록 외부 연동', chatbot: '챗봇', portfolio: '포트폴리오', usage: '사용 현황',
-}
+const LABEL = MODULE_LABEL
 
 const sameIds = (a: readonly ModuleId[], b: readonly ModuleId[]) => a.length === b.length && a.every(id => b.includes(id))
 type Conflict = { revision: number; allowed: ModuleId[] | null }
