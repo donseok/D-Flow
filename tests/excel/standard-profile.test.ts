@@ -99,13 +99,14 @@ describe('펼침 — sub-act 는 깊이와 무관하게 insertAt(Q40), 접는 �
     const deep = aoa.slice(3).find((r) => (r as unknown[])[3] === '깊이4')
     expect(deep).toBeDefined()
   })
-  it('얕은 트리(sub-act 가 라벨 깊이 안)여도 sub-act 는 insertAt 에 — 계층 열에 섞이지 않는다', () => {
+  it('얕은 트리(sub-act 가 라벨 깊이 안)면 sub-act 는 제 깊이의 계층 열에 — insertAt 은 비어 있다(A2-2 리뷰 정정: 늘 insertAt 이면 깊이를 건너뛰어 왕복이 깨진다)', () => {
     const items = tree(0)   // 잎이 깊이 1, sub-act 가 깊이 2(< L=3)
     const aoa = standard(items, TEAMS, LABELS3, true)
     const insertAt = 1 + LABELS3.length
-    const sub = aoa.slice(3).filter((r) => (r as unknown[])[insertAt] !== '')
+    expect(aoa.slice(3).filter((r) => (r as unknown[])[insertAt] !== '')).toHaveLength(0)
+    const sub = aoa.slice(3).filter((r) => String((r as unknown[])[3]).includes('(') )
     expect(sub).toHaveLength(2)
-    for (const r of sub) expect((r as unknown[])[3]).toBe('')
+    for (const r of sub) expect((r as unknown[]).slice(1, 3)).toEqual(['', ''])
   })
 })
 

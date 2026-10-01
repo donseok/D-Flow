@@ -89,8 +89,9 @@ function collectTeams(items: ComputedItem[]): string[] {
  *
  *  ── 깊은 트리(SP4 D16) ──
  *  deep='reject'(저장 양식 — 기본)는 계층 열보다 깊은 일반 항목을 거부한다(문구는 '저장된 양식 비우기' 처방 — 저장 양식에만 맞다).
- *  deep='fold'(표준 레이아웃)는 그 항목의 이름을 마지막 계층 열에 쓴다(옛 export.ts 의 접기와 같다). 펼침의 sub-act 는 깊이와 무관하게
- *  insertAt 에 쓴다 — 접는 것은 일반 항목뿐이다(Q40). */
+ *  deep='fold'(표준 레이아웃)는 그 항목의 이름을 마지막 계층 열에 쓴다(옛 export.ts 의 접기와 같다). 펼침의 sub-act 는 계층 열이
+ *  모자랄 때(깊이 ≥ 계층 열 수 — 접힌 항목 아래 포함)만 insertAt 에 쓰고 얕으면 제 깊이의 계층 열에 쓴다 — 접는 것은 일반 항목뿐이다
+ *  (Q40, A2-2 리뷰 정정 — 늘 insertAt 이면 얕은 잎의 펼침 파일이 깊이를 건너뛰어 왕복이 깨졌다). */
 export function buildAoaWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,
@@ -203,7 +204,9 @@ export function buildAoaWithProfile(
     if (codeCol != null) row[codeCol] = item.code ?? ''
 
     if (hierColsOut) {
-      if (item.isOwnerSplit && insertAt != null) row[insertAt] = item.name               // 펼침의 sub-act — 깊이와 무관하게(Q40)
+      // 펼침의 sub-act — 계층 열이 모자랄 때(부모가 마지막 계층 열 깊이 이상 — 접힌 일반 항목 아래 포함)만 세부업무 열(insertAt). 얕으면
+      // 부모 다음 계층 열이다: 늘 insertAt 에 쓰면 얕은 잎의 sub-act 가 깊이를 건너뛰어 다시 가져올 때 거부된다(A2-2 리뷰 — Q40 정정)
+      if (item.isOwnerSplit && insertAt != null && depth >= hierColsOut.length) row[insertAt] = item.name
       else if (depth < hierColsOut.length) row[hierColsOut[depth]] = item.name
       else row[hierColsOut[hierColsOut.length - 1]] = item.name                          // deep='fold' — reject 는 위에서 거부했다
     } else if (outlineColOut != null) {
