@@ -10,7 +10,9 @@
 //   S2 WBS(SP4 A1): R 4단(exceljs 로 직접)·C 3단(양식 다운로드)을 양식 저장과 함께 가져오고, 같은 commandId 재전송이 항목 1벌·kind 'duplicate'·
 //        wbs.excel_profile 이력 1건이다.
 //   S4 주간(월)(SP4 A1): C 에서 연속 2주(월요일 키 — 앱이 정한다)와 이월, 영역 개명 뒤 같은 area_id·같은 셀. R 의 일요일 키는 SP5.
-//   S3·S5~S8·S10: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
+//   S10(SP4 부분, A2): R·C 의 주간·WBS 응답·출력(시트 PPT·기본 주간 보고서·WBS 엑셀)·화면 HTML 에 SP4 센티널 0 — 등록 이름과 같은 센티널만 뺀다(D8).
+//        교차 — R 의 출력에 C 의 팀 code 가 없고 그 반대도. 경계 행렬 SP4 행(W39): 설정 없음·비활성 유형·데이터 있는 개명.
+//   S3·S5~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
@@ -24,6 +26,7 @@ import {
   ERR_DENIED, areaInput, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, localClientEnv, seoulToday, shiftDays,
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, teamView, wbsRows,
@@ -64,6 +67,7 @@ const ACTIONS = {
   upsertArea: { filename: 'src/app/actions/projectAreas.ts', exportedName: 'upsertArea', worker: '/p/[projectId]/settings/page' },
   createWeeklyReport: { filename: 'src/app/actions/weekly.ts', exportedName: 'createWeeklyReport', worker: '/p/[projectId]/weekly/page' },
   saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
+  updateProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'updateProjectTeam', worker: '/p/[projectId]/settings/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -333,6 +337,149 @@ async function main() {
   step('S4-weekly-monday', { weeks, ...s4 },
     s4.created.join() === 'created,created' && s4.mondayKeys && s4.rowCounts.join() === `${areaCount},${areaCount}` && s4.carried && s4.renamed && s4.sameCells
       ? undefined : `C 주간(월): ${JSON.stringify({ weeks, ...s4 })}`)
+
+  // ── S10(SP4 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) SP4 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
+  //    sentinels.mjs 하나다. 등록 이름과 **같은** 센티널만 뺀다(C 의 영역 이름 하나가 11구분명과 같다 — D8). 교차: 팀 code 만(영역 이름은 일반어).
+  //    ⑤ 화면 HTML 은 R·C 각자의 워크스페이스 관리자(어느 명단에도 없는 계정)로 받는다 — 앱 셸은 보는 사람의 모든 프로젝트 명단 대표 팀
+  //    (identityTeamCodes)을 싣는다. 같은 스택에서 로컬 E2E 가 먼저 돌면 플랫폼 관리자는 프로젝트 A 명단에 옛 팀 코드와 같은 이름의 팀으로 들어 있어
+  //    R·C 화면에도 그 code 가 실린다(A1 최종 리뷰 F-1, A2 Z5 의 원인 확인 — 누출 아님). 마스크를 늘리지 않고(K12) 출처를 뺀 계정으로 본다.
+  //    플랫폼 관리자 세션의 같은 HTML 적중은 판정 없이 기록만 한다(adminShell — 원인 근거).
+  const zipText = async (res) => (await zipTextParts(Buffer.from(await res.arrayBuffer()))).map((p) => p.text).join('\n')
+  const around = (text, words) => words.map((w) => {
+    const at = text.indexOf(w)
+    return { word: w, around: at < 0 ? null : text.slice(Math.max(0, at - 40), at + w.length + 40) }
+  })
+  const registeredOf = async (proj) => {
+    const t = rows('등록 팀', await admin.sb.from('teams').select('code, name').eq('project_id', proj.id))
+    const a = rows('등록 영역', await admin.sb.from('project_areas').select('code, name').eq('project_id', proj.id))
+    return { teamCodes: t.map((x) => x.code), names: [...t, ...a].flatMap((x) => [x.code, x.name]) }
+  }
+  const viewerOf = async (label, ws) => {
+    const addr = `syn-${label.toLowerCase()}-view-${stamp}@example.com`
+    const pw = `Syn-${randomUUID()}`
+    await admin.http('GET', '/admin/accounts')
+    mustOk(`${label} 화면 확인 계정`, (await admin.action('/admin/accounts', 'createAccount',
+      [workspaceAdminAccountInput({ workspaceId: ws.id, email: addr, name: `합성 ${label} 화면 확인`, password: pw })])).result)
+    const viewer = session(`syn-${label.toLowerCase()}-view`)
+    await viewer.login(addr, pw)
+    return viewer
+  }
+  const s10Today = seoulToday()
+  const capture = async (proj, viewer) => {
+    const out = []
+    // ① 응답 본문 — 이번 주 주간 문서 생성(없으면 만들고, 있으면 exists — 쓰기 없이 같은 응답 꼴)
+    await admin.http('GET', `/p/${proj.id}/weekly`)
+    out.push({ target: '①', path: 'createWeeklyReport', text: JSON.stringify((await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, s10Today, false])).result) })
+    // ② 시트 PPT — 그 프로젝트의 주간 문서 전부
+    const weeks = rows('주차', await admin.sb.from('weekly_reports').select('week_start').eq('project_id', proj.id).order('week_start'))
+    for (const w of weeks) {
+      const path = `/api/report?projectId=${proj.id}&source=sheet&format=pptx&week=${w.week_start}`
+      out.push({ target: '②', path, text: await zipText(await admin.http('GET', path)) })
+    }
+    // ③ 기본 갈래 주간 보고서
+    for (const path of [`/api/report?projectId=${proj.id}&format=xlsx`, `/api/report?projectId=${proj.id}&format=pptx`]) {
+      out.push({ target: '③', path, text: await zipText(await admin.http('GET', path)) })
+    }
+    // ④ WBS 엑셀 접기·펼침 — 접기 파일을 가져오기 감지에 다시 넣은 응답도 ①(라우트 응답 본문)로 센다
+    for (const expand of [false, true]) {
+      const path = `/api/export?projectId=${proj.id}${expand ? '&expand=1' : ''}`
+      const res = await admin.http('GET', path)
+      const buf = Buffer.from(await res.arrayBuffer())
+      out.push({ target: '④', path, text: (await zipTextParts(buf)).map((p) => p.text).join('\n') })
+      if (!expand) {
+        const inspected = await (await admin.http('POST', '/api/import/inspect', { body: inspectForm({ file: buf, fileName: 'syn.xlsx', projectId: proj.id }) })).json()
+        out.push({ target: '①', path: '/api/import/inspect', text: JSON.stringify(inspected) })
+      }
+    }
+    // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
+    const shell = []
+    for (const path of [`/p/${proj.id}/weekly`, `/p/${proj.id}/wbs`]) {
+      out.push({ target: '⑤', path, text: await (await viewer.http('GET', path)).text() })
+      shell.push({ path, text: await (await admin.http('GET', path)).text() })
+    }
+    return { out, shell }
+  }
+  const s10 = {}
+  const regR = await registeredOf(R)
+  const regC = await registeredOf(C)
+  for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
+    const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
+    const { out: outs, shell } = await capture(proj, await viewerOf(label, proj.ws))
+    s10[label] = {
+      targets: outs.map((o) => `${o.target} ${o.path}`),
+      hits: outs.map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, sentinels) }))
+        .filter((x) => x.words.length).map((x) => ({ ...x, at: around(outs.find((o) => o.path === x.path && o.target === x.target).text, x.words) })),
+      cross: outs.filter((o) => o.target !== '⑤').map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, other.teamCodes) })).filter((x) => x.words.length),
+      adminShell: shell.map((h) => ({ path: h.path, words: findSentinels(h.text, sentinels) })).filter((x) => x.words.length)
+        .map((x) => ({ ...x, at: around(shell.find((h) => h.path === x.path).text, x.words) })),
+    }
+  }
+  const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].cross.length === 0)
+  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4 부분) 적중: ${JSON.stringify({ R: { hits: s10.R.hits, cross: s10.R.cross }, C: { hits: s10.C.hits, cross: s10.C.cross } })}`)
+
+  // ── 경계 행렬 SP4 행(W39) — R·C 각각. 설정 없음: 새 빈 프로젝트(단계 이름만)의 주간 생성 → CONFIG_REQUIRED·문서 0, 엑셀 → 표준과 그 표기.
+  //    비활성 유형: 둘째 주간 영역에 차주 계획을 적고 비활성화 → 다음 주 이월이 대기(CARRY_PENDING)에 그 영역을 싣고 활성 영역 목록에서 빠진다,
+  //    '옮기지 않음'으로 만들면 새 주차에 그 영역 행이 없고 과거 행(내용)은 남는다. 데이터 있는 개명: 영역 개명 → area_id·셀 그대로(S4 는 C 만 —
+  //    여기서 R·C 둘 다), 팀 개명 → 팀 id·code 그대로.
+  const boundary = {}
+  for (const [label, proj, cfg, ws, setup] of [['R', R, SYNTHETIC_R, wsR, rSetup], ['C', C, SYNTHETIC_C, wsC, cSetup]]) {
+    // 설정 없음
+    const emptyName = `합성 ${label} 경계 ${stamp}`
+    mustOk(`${label} 빈 프로젝트`, (await admin.action('/projects', 'createProject', [{
+      workspaceId: ws.id, name: emptyName, startDate: null, endDate: null, description: null, levelLabels: cfg.config.project['core.level_labels'], commandId: randomUUID(),
+    }])).result)
+    const E = rows(`${label} 빈 프로젝트`, await admin.sb.from('projects').select('id').eq('name', emptyName).single())
+    // 모듈은 그 구성과 같게(주간이 켜져 있어야 CONFIG_REQUIRED 가 관문보다 먼저 닿는다) — S1 의 config() 와 같은 액션 한 길
+    await admin.http('GET', `/p/${E.id}/settings`)
+    const eDoc = rows(`${label} 빈 프로젝트 설정`, await admin.sb.from('project_settings').select('revision').eq('project_id', E.id).single())
+    mustOk(`${label} 빈 프로젝트 모듈`, (await admin.action(`/p/${E.id}/settings`, 'updateProjectSettings',
+      [E.id, { expectedRevision: eDoc.revision, commandId: randomUUID(), set: { 'modules.enabled': cfg.config.project['modules.enabled'] }, unset: [] }])).result)
+    await admin.http('GET', `/p/${E.id}/weekly`)
+    const noAreas = (await admin.action(`/p/${E.id}/weekly`, 'createWeeklyReport', [E.id, s10Today, false])).result
+    const eDocs = rows(`${label} 빈 프로젝트 문서`, await admin.sb.from('weekly_reports').select('id').eq('project_id', E.id))
+    const eExport = await admin.http('GET', `/api/export?projectId=${E.id}`)
+    const eSettings = await (await admin.http('GET', `/p/${E.id}/settings`)).text()
+    const empty = {
+      configRequired: noAreas?.ok === false && noAreas.code === 'CONFIG_REQUIRED', noDocs: eDocs.length === 0,
+      standard: eExport.status === 200 && eExport.headers.get('x-excel-layout') === 'standard',
+      label: eSettings.includes('표준 양식(프로젝트 팀·단계로 생성)'),
+    }
+    // 비활성 유형 — 가장 늦은 주차의 둘째 영역 행에 차주 계획을 적고 비활성화
+    const def = cfg.weeklyAreas[1]
+    const areaId = setup.areaIdByCode.get(def.code)
+    const [latest] = rows(`${label} 최근 주차`, await admin.sb.from('weekly_reports').select('id, week_start').eq('project_id', proj.id).order('week_start', { ascending: false }).limit(1))
+    const [row2] = rows(`${label} 둘째 영역 행`, await admin.sb.from('weekly_report_rows').select('id').eq('report_id', latest.id).eq('area_id', areaId))
+    mustOk(`${label} 차주 계획`, (await admin.action(`/p/${proj.id}/weekly`, 'saveWeeklyCells', [proj.id, [{ rowId: row2.id, cellKey: 'next_content', content: `경계 ${def.code}` }]])).result)
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    mustOk(`${label} 영역 비활성`, (await admin.action(`/p/${proj.id}/settings`, 'upsertArea', [proj.id, areaInput(def, setup.teamIdByCode, { id: areaId, name: def.name, active: false })])).result)
+    const next = shiftDays(latest.week_start, 7)
+    const pending = (await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, next, true])).result
+    const activeAreas = rows(`${label} 활성 영역`, await admin.sb.from('project_areas').select('id').eq('project_id', proj.id).eq('kind', 'weekly_section').eq('active', true))
+    const made = mustOk(`${label} 옮기지 않음으로 생성`, (await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, next, true, { [areaId]: 'skip' }])).result)
+    const newRows = rows(`${label} 새 주차 행`, await admin.sb.from('weekly_report_rows').select('area_id').eq('report_id', made.reportId))
+    const [kept] = rows(`${label} 과거 행`, await admin.sb.from('weekly_report_rows').select('next_content').eq('id', row2.id))
+    const inactive = {
+      pending: pending?.ok === false && pending.code === 'CARRY_PENDING' && pending.pending.some((p) => p.areaId === areaId),
+      notSelectable: !activeAreas.some((a) => a.id === areaId),
+      noNewRow: !newRows.some((r) => r.area_id === areaId), pastKept: kept?.next_content === `경계 ${def.code}`,
+    }
+    // 데이터 있는 개명 — 영역(셋째 영역, 없으면 첫째)과 첫 팀
+    const rdef = cfg.weeklyAreas[2] ?? cfg.weeklyAreas[0]
+    const rid = setup.areaIdByCode.get(rdef.code)
+    const cellsBefore = rows('개명 전 셀', await admin.sb.from('weekly_report_rows').select('id, area_id, this_content, next_content').eq('area_id', rid).order('id'))
+    const renamedArea = mustOk(`${label} 영역 개명`, (await admin.action(`/p/${proj.id}/settings`, 'upsertArea', [proj.id, areaInput(rdef, setup.teamIdByCode, { id: rid, name: `${rdef.name} 개명` })])).result)
+    const cellsAfter = rows('개명 뒤 셀', await admin.sb.from('weekly_report_rows').select('id, area_id, this_content, next_content').eq('area_id', rid).order('id'))
+    const [teamCode, teamId] = [...setup.teamIdByCode][0]
+    mustOk(`${label} 팀 개명`, (await admin.action(`/p/${proj.id}/settings`, 'updateProjectTeam', [proj.id, teamId, { name: `${teamCode} 개명` }])).result)
+    const [teamAfter] = rows(`${label} 개명한 팀`, await admin.sb.from('teams').select('id, code, name').eq('id', teamId))
+    const rename = {
+      areaId: renamedArea.id === rid, cellRows: cellsBefore.length > 0, sameCells: canonical(cellsAfter) === canonical(cellsBefore),
+      teamId: teamAfter?.id === teamId && teamAfter?.code === teamCode && teamAfter?.name === `${teamCode} 개명`,
+    }
+    boundary[label] = { empty, inactive, rename }
+  }
+  const boundaryOk = ['R', 'C'].every((k) => [boundary[k].empty, boundary[k].inactive, boundary[k].rename].every((g) => Object.values(g).every(Boolean)))
+  step('boundary-sp4', boundary, boundaryOk ? undefined : `경계 행렬 SP4 행: ${JSON.stringify(boundary)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

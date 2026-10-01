@@ -56,9 +56,9 @@ export const SYNTHETIC_C = Object.freeze({
 export const SYNTHETIC_WORKSPACE_B = Object.freeze({ slug: 'syn-b', name: '합성 타 워크스페이스' })
 
 /** 아직 켜지지 않은 단계 → 켜는 SP(개정 §6.5.8, 스펙 D25·SP4 §6.4). 건너뜀으로 세지 않고 '미활성'으로 기록한다.
- *  SP4 A1 이 S2 와 S4 의 월요일 키를 켰다 — S4 에 남은 것은 R 의 일요일 키(SP5)다. S10 은 A2 가 부분을 켜며 고친다 */
+ *  SP4 A1 이 S2 와 S4 의 월요일 키를 켰다 — S4 에 남은 것은 R 의 일요일 키(SP5)다. S10 은 SP4 A2 가 SP4 부분(11구분명·5팀 코드)을 켰다 — 나머지 부분 집합은 SP5~SP8 */
 export const PENDING_STEPS = Object.freeze({
-  S3: 'SP5b·SP5c', S4: 'SP5(일)', S5: 'SP5', S6: 'SP5·SP5b', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP4~SP8',
+  S3: 'SP5b·SP5c', S4: 'SP5(일)', S5: 'SP5', S6: 'SP5·SP5b', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP5~SP8(나머지 부분 집합)',
 })
 
 /**

@@ -34,6 +34,7 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
   it('아직 켜지지 않은 단계는 S1·S2·S9 와 S4 의 월요일 키를 뺀 전부이고 담당 SP 가 적혀 있다(D25 — 건너뜀으로 세지 않는다)', () => {
     expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S10'])
     expect(PENDING_STEPS.S4).toBe('SP5(일)')
+    expect(PENDING_STEPS.S10).toBe('SP5~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
 })
@@ -92,11 +93,21 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
   const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
   it('새 단계가 이름으로 있고 S1 추가 → S9 → S2 → S4 순서다(S9 의 C 스냅샷은 S1 직후의 설정이다)', () => {
     const at = (n: string) => src.indexOf(`step('${n}'`)
-    for (const n of ['S1-create', 'S1-teams-areas', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday']) expect(at(n), n).toBeGreaterThan(-1)
+    for (const n of ['S1-create', 'S1-teams-areas', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S10-negative', 'boundary-sp4']) expect(at(n), n).toBeGreaterThan(-1)
     expect(at('S1-create')).toBeLessThan(at('S1-teams-areas'))
     expect(at('S1-teams-areas')).toBeLessThan(at('S9-isolation'))
     expect(at('S9-isolation')).toBeLessThan(at('S2-wbs-import'))
     expect(at('S2-wbs-import')).toBeLessThan(at('S4-weekly-monday'))
+    expect(at('S4-weekly-monday')).toBeLessThan(at('S10-negative'))
+    expect(at('S10-negative')).toBeLessThan(at('boundary-sp4'))
+    expect(at('boundary-sp4')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+  })
+  it('S10 은 다섯 대상과 교차 프로젝트를 본다 — 일치 규칙은 sentinels.mjs 하나(스펙 §6.4)', () => {
+    for (const needle of ["source=sheet&format=pptx", "format=xlsx", "format=pptx", "/api/export?projectId=", "&expand=1", "/api/import/inspect", "/weekly`", "/wbs`"]) {
+      expect(src, needle).toContain(needle)
+    }
+    expect(src).toMatch(/excludeRegistered\(sp4Sentinels\(\)/)
+    expect(src).not.toMatch(/function findSentinels|SENTINEL_MASKS\s*=/)   // 규칙을 러너에 다시 쓰지 않는다
   })
   it('팀·영역·주간 쓰기는 화면과 같은 서버 액션 넷 — worker 는 그 액션을 쓰는 페이지', () => {
     for (const [name, worker] of [
