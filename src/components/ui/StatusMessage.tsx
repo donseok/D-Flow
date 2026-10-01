@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { buttonClass } from './buttonStyles'
 import { AlertTriangle, Ban, CloudOff, Inbox, RefreshCw, Settings2, ShieldAlert, type LucideIcon } from 'lucide-react'
 
 /**
@@ -56,8 +57,8 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
         {action && (
           <div className={compact ? 'mt-1' : 'mt-3'}>
             {action.href !== undefined
-              ? <Link href={action.href} className="btn btn-ghost h-8 px-3 text-xs">{action.label}</Link>
-              : <button type="button" onClick={action.onSelect} className="btn btn-ghost h-8 px-3 text-xs">{action.label}</button>}
+              ? <Link href={action.href} className={buttonClass('ghost')}>{action.label}</Link>
+              : <button type="button" onClick={action.onSelect} className={buttonClass('ghost')}>{action.label}</button>}
           </div>
         )}
       </div>

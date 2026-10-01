@@ -55,6 +55,7 @@ describe('/admin/ui-states', () => {
   })
   it.each([
     ['워크스페이스 관리자', makeActor({ workspaceRoles: new Map([[WS, 'admin']]) })],
+    ['일반 멤버(워크스페이스 member·프로젝트 member)', makeActor({ projectRoles: new Map([['p-1', 'member']]), projectWorkspace: new Map([['p-1', WS]]) })],
     ['권한 조회 실패(null)', null],
   ])('%s → notFound(존재 은닉 — fail-closed)', async (_n, actor) => {
     mocks.getActorForView.mockResolvedValue(actor)
