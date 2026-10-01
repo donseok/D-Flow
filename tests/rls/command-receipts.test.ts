@@ -46,6 +46,23 @@ async function toServer(c: PoolClient) {
 }
 
 describe('command_receipts — 읽기는 본인 것만, 쓰기는 누구도', () => {
+  it('그 워크스페이스 멤버가 아닌 플랫폼 관리자도 자기 영수증을 세션으로 읽는다 — is_ws_member 가 is_superuser 를 품는다(A1-3 리뷰 M3)', async () => {
+    const CMD_PLATFORM = ID('46')
+    await asService(pool, async (c) => {
+      expect((await c.query('select 1 from public.workspace_members where workspace_id = $1 and user_id = $2', [F.wsB, F.users.platform])).rowCount,
+        '전제 — 플랫폼 관리자는 B 의 멤버가 아니다').toBe(0)
+      await c.query(RECEIPT_INSERT, [F.users.platform, CMD_PLATFORM, F.wsB, F.projects.bWs])
+      await toSession(c, F.users.platform)
+      expect((await c.query('select actor from public.command_receipts where command_id = $1', [CMD_PLATFORM])).rows)
+        .toEqual([{ actor: F.users.platform }])
+      await toServer(c)
+      // 대조 — 같은 행을 B 관리자(본인 아님)는 읽지 못한다
+      await toSession(c, F.users.bAdmin)
+      expect((await c.query('select 1 from public.command_receipts where command_id = $1', [CMD_PLATFORM])).rowCount).toBe(0)
+      await toServer(c)
+    })
+  })
+
   it('본인은 자기 영수증을 읽는다 — 다른 계정(플랫폼 관리자 포함)·B 계정·워크스페이스에서 빠진 본인은 0행', async () => {
     await asUser(pool, F.users.member, async (c) => {
       expect((await c.query('select actor from public.command_receipts where command_id = $1', [FIXTURE_CMD])).rows)
@@ -351,5 +368,11 @@ describe('⑦ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
     expect(await runAfter(['grant insert on public.command_receipts to authenticated'])).toMatchObject(POSTCHECK)
     expect(await runAfter(['grant execute on function public.convert_inherited_teams(uuid, uuid) to authenticated'])).toMatchObject(POSTCHECK)
     expect(await runAfter(['alter function public.import_wbs_cmd(uuid, uuid, text, jsonb, jsonb, uuid) reset lock_timeout'])).toMatchObject(POSTCHECK)
+  })
+
+  it('공용 팀 참조 거부(⑤′ — A1-3 리뷰 M1)의 트리거를 끄거나 지우거나, 함수를 INVOKER 로 바꾸면 멈춘다', async () => {
+    expect(await runAfter(['alter table public.area_teams disable trigger area_teams_owned_scope'])).toMatchObject(POSTCHECK)
+    expect(await runAfter(['drop trigger project_invites_owned_scope on public.project_invites'])).toMatchObject(POSTCHECK)
+    expect(await runAfter(['alter function public.team_ref_owned_scope() security invoker'])).toMatchObject(POSTCHECK)
   })
 })

@@ -197,6 +197,47 @@ describe('convert_inherited_teams — 전환', () => {
   })
 })
 
+describe('전환 뒤 공용 팀 참조 쓰기 거부(D4·D54 — A1-3 리뷰 M1, team_ref_owned_scope)', () => {
+  const OWNED = { code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' }
+  const AREA_RPC = 'select public.upsert_project_area($1, $2, $3::jsonb, $4::jsonb, $5) as r'
+
+  it('전환한 P 에 같은 code 의 전용 팀이 있는 공용 팀을 다시 붙이는 네 쓰기(담당·명단 팀·영역 팀·초대)는 거부되고, 전용 팀 참조·상속 중인 Q 의 공용 팀 참조·전용 짝이 없는 공용 팀은 통과한다', async () => {
+    await asService(pool, async (c) => {
+      await seedInherited(c)
+      await c.query(CONVERT, [F.users.platform, P])
+      const own = Object.fromEntries((await c.query<{ code: string; id: string }>('select code, id from public.teams where project_id = $1', [P]))
+        .rows.map((t) => [t.code, t.id]))
+      // 넷 — 공용 팀(OPS·RES) id 로 다시 쓰기
+      expect(await pgError(c, `insert into public.item_owners (wbs_item_id, team_id, kind) values ($1, $2, 'support')`, [ITEM_P, T.ops]), 'item_owners')
+        .toMatchObject(OWNED)
+      expect(await pgError(c, 'insert into public.project_member_teams (member_id, team_id, is_primary) values ($1, $2, false)', [MEMBER, T.ops]), '명단 팀')
+        .toMatchObject(OWNED)
+      expect(await pgError(c, `insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'support')`, [AREA_P, T.res]), '영역 팀')
+        .toMatchObject(OWNED)
+      expect(await pgError(c, `insert into public.project_invites (id, workspace_id, project_id, email, access_role, token_hash, created_by, expires_at, team_ids)
+        values ($1, $2, $3, 'rls-sp4-owned@example.com', 'member', 'rls-sp4-convert-owned', $4, now() + interval '1 day', array[$5]::uuid[])`,
+        [ID('75'), W, P, F.users.platform, T.res]), '초대 발급').toMatchObject(OWNED)
+      expect(await pgError(c, 'update public.project_invites set team_ids = array[$2]::uuid[] where id = $1', [INV_OPEN, T.ops]), '초대 팀 바꾸기')
+        .toMatchObject(OWNED)
+      // 이미 옮긴 참조를 공용 팀으로 되돌리는 갱신도 거부
+      expect(await pgError(c, 'update public.area_teams set team_id = $2 where area_id = $1', [AREA_P, T.ops]), '영역 팀 되돌리기')
+        .toMatchObject(OWNED)
+      // 서버 RPC 경로(오래된 영역 편집기의 저장) — upsert_project_area 도 같은 트리거에 막힌다
+      const area = JSON.stringify({ id: AREA_P, kind: 'weekly_section', code: 'LAB', name: '실험', sort_order: 0, active: true })
+      expect(await pgError(c, AREA_RPC, [F.users.platform, P, area, JSON.stringify([{ team_id: T.res, kind: 'primary' }]), '2026-09-28']), '영역 RPC')
+        .toMatchObject(OWNED)
+      // 통과 — P 의 전용 팀 참조, 상속 중인 Q 의 공용 팀 참조, 팀 열을 건드리지 않는 초대 갱신(수락 표시)
+      await c.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'support')`, [AREA_P, own.RES])
+      await c.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'support')`, [AREA_Q, T.res])
+      await c.query(`insert into public.item_owners (wbs_item_id, team_id, kind) values ($1, $2, 'support')`, [ITEM_Q, T.ops])
+      await c.query('update public.project_invites set revoked_at = now() where id = $1', [INV_DONE])   // 공용 팀을 든 수락한 초대 — 팀 열 무변경
+      // 전용 짝(같은 code)이 없는 공용 팀 — 전환이 복사하지 않은 비활성 NOP. 분열(같은 code·다른 id)이 아니라 DB 는 막지 않는다(표시는 앱 계층)
+      await c.query(`insert into public.item_owners (wbs_item_id, team_id, kind) values ($1, $2, 'support')`, [ITEM_P, T.nop])
+      expect(await refs(c, P)).toMatchObject({ area_teams: [own.OPS, own.RES].sort() })
+    })
+  })
+})
+
 describe('convert_inherited_teams — 두 연결(커밋)', () => {
   const P2 = ID('72')
   const AREA2 = ID('73')
@@ -253,6 +294,95 @@ describe('convert_inherited_teams — 두 연결(커밋)', () => {
               (select count(*) from public.teams where workspace_id = $1)::int as teams,
               (select count(*) from public.workspaces where id = $1)::int as workspaces`, [W])
     expect(rows[0]).toEqual({ projects: 0, teams: 0, workspaces: 0 })
+  })
+
+  /** 두 연결 시드 — 상속 프로젝트 P3(공용 RES 하나, 영역 하나 — 아직 담당 팀 없음). 커밋한다 */
+  const P3 = ID('76')
+  const AREA3 = ID('77')
+  const RES3 = ID('78')
+  async function seedRace() {
+    await cleanup()
+    await pool.query(`insert into public.workspaces (id, slug, name) values ($1, 'rls-sp4-convert-3', 'Acme 전환 3')`, [W])
+    await pool.query(`insert into public.teams (id, workspace_id, project_id, code, name) values ($1, $2, null, 'RES', '연구')`, [RES3, W])
+    await pool.query('insert into public.projects (id, name, workspace_id) values ($1, $2, $3)', [P3, 'RLS 전환 경합', W])
+    await pool.query(`insert into public.project_areas (id, project_id, kind, code, name) values ($1, $2, 'weekly_section', 'LAB', '실험')`, [AREA3, P3])
+  }
+  /** s 가 다른 연결에 막힐 때까지 기다린다 — 끝나 버리면 false */
+  async function waitBlocked(observer: PoolClient, pid: number, settled: () => boolean) {
+    for (let i = 0; i < 250 && !settled(); i++) {
+      if ((await observer.query<{ n: number }>('select cardinality(pg_blocking_pids($1)) as n', [pid])).rows[0].n > 0) return true
+      await new Promise((r) => setTimeout(r, 20))
+    }
+    return false
+  }
+  const assertCleaned = async () => {
+    const { rows } = await pool.query(
+      `select (select count(*) from public.projects where workspace_id = $1)::int as projects,
+              (select count(*) from public.teams where workspace_id = $1)::int as teams,
+              (select count(*) from public.workspaces where id = $1)::int as workspaces`, [W])
+    expect(rows[0]).toEqual({ projects: 0, teams: 0, workspaces: 0 })
+  }
+
+  it('M1 경합 ① — 공용 팀 참조 쓰기가 먼저 프로젝트 행을 잡으면 전환은 그 커밋을 기다렸다가 그 행까지 옮긴다', async () => {
+    let s1: PoolClient | undefined
+    let s2: PoolClient | undefined
+    try {
+      await seedRace()
+      s1 = await pool.connect()
+      s2 = await pool.connect()
+      const s2Pid = (await s2.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0].pid
+      await s1.query('begin')
+      await s2.query('begin')
+      await s1.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'primary')`, [AREA3, RES3])
+      let settled = false
+      const conv = s2.query(CONVERT, [F.users.platform, P3]).then(
+        (res) => res.rows[0].r as unknown, (e: unknown) => { if (e instanceof DatabaseError) return e; throw e },
+      ).finally(() => { settled = true })
+      expect(await waitBlocked(s1, s2Pid, () => settled), '전환이 프로젝트 행(for update)을 기다린다').toBe(true)
+      await s1.query('commit')
+      expect(await conv).toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0 } })
+      await s2.query('commit')
+      const { rows } = await s1.query<{ project_id: string | null }>(
+        'select t.project_id from public.area_teams art join public.teams t on t.id = art.team_id where art.area_id = $1', [AREA3])
+      expect(rows).toEqual([{ project_id: P3 }])   // 공용 팀 참조가 남지 않았다
+    } finally {
+      await s1?.query('rollback').catch(() => undefined)
+      await s2?.query('rollback').catch(() => undefined)
+      s1?.release()
+      s2?.release()
+      await cleanup()
+    }
+    await assertCleaned()
+  })
+
+  it('M1 경합 ② — 전환이 먼저 프로젝트 행을 잡으면 공용 팀 참조 쓰기는 그 커밋을 기다렸다가 TEAM_SCOPE_PROJECT_OWNED 로 거부된다', async () => {
+    let s1: PoolClient | undefined
+    let s2: PoolClient | undefined
+    try {
+      await seedRace()
+      s1 = await pool.connect()
+      s2 = await pool.connect()
+      const s2Pid = (await s2.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0].pid
+      await s1.query('begin')
+      await s2.query('begin')
+      expect((await s1.query(CONVERT, [F.users.platform, P3])).rows[0].r).toMatchObject({ status: 'converted', teams: 1 })
+      let settled = false
+      const write = s2.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'primary')`, [AREA3, RES3]).then(
+        () => null as unknown, (e: unknown) => { if (e instanceof DatabaseError) return e; throw e },
+      ).finally(() => { settled = true })
+      expect(await waitBlocked(s1, s2Pid, () => settled), '참조 쓰기가 프로젝트 행(for share)을 기다린다').toBe(true)
+      await s1.query('commit')
+      expect(await write).toMatchObject({ code: '23514', message: 'TEAM_SCOPE_PROJECT_OWNED' })
+      await s2.query('rollback')
+      expect((await s1.query('select 1 from public.area_teams where area_id = $1', [AREA3])).rowCount).toBe(0)
+    } finally {
+      await s1?.query('rollback').catch(() => undefined)
+      await s2?.query('rollback').catch(() => undefined)
+      s1?.release()
+      s2?.release()
+      await cleanup()
+    }
+    await assertCleaned()
   })
 })
 
