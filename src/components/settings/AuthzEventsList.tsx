@@ -35,7 +35,7 @@ export function AuthzEventsList({ workspaceId, initial }: { workspaceId: string;
           <strong className="text-sm text-ink">{row.targetName}{row.projectName ? ` · ${row.projectName}` : ''}</strong>
           <span className="text-xs text-ink-muted">{formatDate(row.createdAt)}</span>
         </div>
-        <p className="text-sm text-ink">{row.kindLabel} — {row.summary}</p>
+        <p className="text-sm text-ink">{row.kindLabel} · {row.summary}</p>
         <p className="text-xs text-ink-muted">{row.actorName} · {row.causeLabel}</p>
       </li>)}
     </ol>}

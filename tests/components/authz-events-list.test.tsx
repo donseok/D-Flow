@@ -22,7 +22,7 @@ describe('AuthzEventsList', () => {
   const click = async (text: string) => act(async () => { [...host.querySelectorAll('button')].find(b => b.textContent?.includes(text))!.click() })
 
   it('행위자·대상·요약·원인·시각을 보이고 지워진 계정은 그 이름 그대로 보인다', () => {
-    render({ ok: true, rows: [view(2), view(1, { actorName: '삭제된 계정', kind: 'project_access', kindLabel: '프로젝트 권한', projectName: '알파', summary: '권한 부여 — 멤버' })], nextBefore: null })
+    render({ ok: true, rows: [view(2), view(1, { actorName: '삭제된 계정', kind: 'project_access', kindLabel: '프로젝트 권한', projectName: '알파', summary: '부여 (멤버)' })], nextBefore: null })
     expect(host.textContent).toContain('김관리')
     expect(host.textContent).toContain('이멤버')
     expect(host.textContent).toContain('멤버 → 관리자')
@@ -42,16 +42,16 @@ describe('AuthzEventsList', () => {
 
   it('이전 기록 더 보기는 커서로 이어 붙이고, 새로고침은 처음부터 다시 읽는다', async () => {
     render({ ok: true, rows: [view(21)], nextBefore: 21 })
-    list.mockResolvedValueOnce({ ok: true, rows: [view(20, { summary: '소속 제거 — 멤버' })], nextBefore: null })
+    list.mockResolvedValueOnce({ ok: true, rows: [view(20, { summary: '소속 제거 (멤버)' })], nextBefore: null })
     await click('이전 기록')
     expect(list).toHaveBeenCalledWith('ws-1', { before: 21 })
     expect(host.textContent).toContain('멤버 → 관리자')
-    expect(host.textContent).toContain('소속 제거 — 멤버')
+    expect(host.textContent).toContain('소속 제거 (멤버)')
     expect(host.textContent).not.toContain('이전 기록 더 보기')
     list.mockResolvedValueOnce({ ok: true, rows: [view(30)], nextBefore: null })
     await click('새로고침')
     expect(list).toHaveBeenLastCalledWith('ws-1', undefined)
-    expect(host.textContent).not.toContain('소속 제거 — 멤버')
+    expect(host.textContent).not.toContain('소속 제거 (멤버)')
   })
 
   it('불러오기 중 오류가 나면 기존 목록을 지우지 않고 오류를 보인다', async () => {

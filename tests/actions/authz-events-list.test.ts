@@ -69,7 +69,7 @@ describe('listAuthzEvents — 워크스페이스 설정 \'기록\' 범주의 권
     const r = await listAuthzEvents(WS)
     expect(s.events.or).toHaveBeenCalledWith(`workspace_id.eq.${WS},kind.eq.platform_admin`)
     expect(s.events.eq).not.toHaveBeenCalled()
-    expect(r.ok && r.rows[0]).toMatchObject({ kind: 'platform_admin', kindLabel: '플랫폼 관리자', summary: '플랫폼 관리자 지정' })
+    expect(r.ok && r.rows[0]).toMatchObject({ kind: 'platform_admin', kindLabel: '플랫폼 관리자', summary: '지정' })
   })
 
   it('20건씩 끊고 다음 커서를 낸다 — limit+1 로 읽고 before 는 id 미만으로 좁힌다', async () => {
@@ -91,7 +91,7 @@ describe('listAuthzEvents — 워크스페이스 설정 \'기록\' 범주의 권
     })
     const r = await listAuthzEvents(WS)
     expect(r.ok && r.rows[0]).toMatchObject({ actorName: '시스템', targetName: '삭제된 계정' })
-    expect(r.ok && r.rows[1]).toMatchObject({ targetName: '외부 박', projectName: '알파', summary: '권한 부여 — 멤버' })
+    expect(r.ok && r.rows[1]).toMatchObject({ targetName: '외부 박', projectName: '알파', summary: '부여 (멤버)' })
   })
 
   it('이름 조회가 실패하면 "이름 확인 불가"로 표시하고 로그를 남긴다 — 삭제된 계정으로 위장하지 않는다', async () => {

@@ -23,8 +23,8 @@ export function describeAuthzChange(kind: AuthzEventKind, before: unknown, after
   const a = after === null ? null : obj(after)
   if ((before !== null && b === null) || (after !== null && a === null) || (b === null && a === null)) return UNREADABLE
   if (kind === 'platform_admin') {
-    if (b === null && a?.granted === true) return '플랫폼 관리자 지정'
-    if (a === null && b?.granted === true) return '플랫폼 관리자 해제'
+    if (b === null && a?.granted === true) return '지정'
+    if (a === null && b?.granted === true) return '해제'
     return UNREADABLE
   }
   const field = kind === 'workspace_role' ? 'role' : 'access_role'
@@ -32,11 +32,11 @@ export function describeAuthzChange(kind: AuthzEventKind, before: unknown, after
   const now = a === null ? null : roleText(a[field])
   if (b === null) {
     if (!now) return UNREADABLE
-    return kind === 'workspace_role' ? `소속 추가 — ${now}` : `권한 부여 — ${now}`
+    return kind === 'workspace_role' ? `소속 추가 (${now})` : `부여 (${now})`
   }
   if (a === null) {
     if (!was) return UNREADABLE
-    return kind === 'workspace_role' ? `소속 제거 — ${was}` : `권한 회수 — ${was}`
+    return kind === 'workspace_role' ? `소속 제거 (${was})` : `회수 (${was})`
   }
   if (!was || !now) return UNREADABLE
   return `${was} → ${now}`
