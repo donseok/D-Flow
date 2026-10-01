@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
+// 비공개 프로젝트 거르기(FA1)가 쓰는 보는 사람의 권한 — 기본은 명단이 없는 워크스페이스 멤버
+vi.mock('@/lib/authz', () => ({ getActorViewState: vi.fn() }))
 
 import { createServerClient } from '@/lib/supabase/server'
+import { getActorViewState } from '@/lib/authz'
+import { makeActor } from '../fixtures/actor'
 import { ERR_MEETINGS_LOAD, getProjectMeetingData, getMyMeetings } from '@/lib/data/meetings'
 /** 내 회의의 워크스페이스(D26 — 로더 첫 인자). 로그 tag 에 실린다 */
 const MWS = '00000000-0000-0000-7e57-000000001693'
@@ -92,7 +96,10 @@ const meetingRow = (id: string, extra: Record<string, unknown> = {}) => ({
 const exRow = (meetingId: string, date: string) =>
   ({ meeting_id: meetingId, occurrence_date: date, kind: 'cancelled' })
 
-beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}) })
+beforeEach(() => {
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  vi.mocked(getActorViewState).mockResolvedValue({ actor: makeActor(), degraded: false })
+})
 afterEach(() => { vi.restoreAllMocks() })
 // 관문 mock 값을 바꾸는 파일 — 남은 Once 값이 뒤 케이스로 새지 않게 통과 구현으로 되돌린다(공통 규칙 '전역 mock')
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
@@ -161,8 +168,51 @@ describe('getMyMeetings — 그 워크스페이스의 회의만(D26)', () => {
     const { selects, meetingEqs } = makeSb({ user: { id: 'u1', email: null }, meetings: () => OK([]) })
     await getMyMeetings(MWS, '2026-07-01', '2026-07-31')
     expect(selects.length).toBeGreaterThan(0)
-    for (const s of selects) expect(s).toContain('projects!inner(name, workspace_id)')
+    for (const s of selects) expect(s).toContain('projects!inner(name, workspace_id, is_private)')
     expect(meetingEqs).toContainEqual(['projects.workspace_id', MWS])
+  })
+})
+
+describe('getMyMeetings — 비공개 프로젝트의 회의는 명단 밖에서 숨긴다(FA1 — 포털과 같은 정본 규칙)', () => {
+  const PRIV = '00000000-0000-4000-8000-0000000000c1'
+  const rows = () => OK([
+    meetingRow('pub', { projects: { name: '공개', workspace_id: MWS, is_private: false } }),
+    meetingRow('priv', { project_id: PRIV, projects: { name: '비공개 프로젝트', workspace_id: MWS, is_private: true }, meeting_exceptions: [exRow('priv', '2026-07-27')] }),
+  ])
+  it('명단 밖 멤버 — 비공개 프로젝트의 회의·예외·프로젝트 이름이 없다', async () => {
+    makeSb({ user: { id: 'u1' }, meetings: rows })
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map((m) => m.id)).toEqual(['pub'])
+    expect(res.exceptions.map((x) => x.meetingId)).toEqual([])
+    expect(JSON.stringify(res)).not.toContain('비공개 프로젝트')
+  })
+  it('비공개 프로젝트의 명단 멤버·워크스페이스 관리자·플랫폼 관리자에게는 보인다', async () => {
+    for (const actor of [
+      makeActor({ projectWorkspace: new Map([[PRIV, MWS]]), projectRoles: new Map([[PRIV, 'member']]) }),
+      makeActor({ workspaceRoles: new Map([[MWS, 'admin']]), projectWorkspace: new Map([[PRIV, MWS]]) }),
+      makeActor({ isSuperuser: true, projectWorkspace: new Map([[PRIV, MWS]]) }),
+    ]) {
+      vi.mocked(getActorViewState).mockResolvedValue({ actor, degraded: false })
+      makeSb({ user: { id: 'u1' }, meetings: rows })
+      const res = await myMeetings('2026-07-01', '2026-07-31')
+      expect(res.meetings.map((m) => m.id).sort()).toEqual(['priv', 'pub'])
+    }
+  })
+  it('권한 조회가 열화면 막는다 — 숨길 것을 못 숨기느니 실패로 돌려준다(빈 달력으로 위장하지 않고 로그를 남긴다)', async () => {
+    vi.mocked(getActorViewState).mockResolvedValue({ actor: null, degraded: true })
+    makeSb({ user: { id: 'u1' }, meetings: rows })
+    expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31')).toEqual({ ok: false, error: ERR_MEETINGS_LOAD })
+    expect((console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('getMyMeetings'))).toBe(true)
+  })
+  it('임베드 폴백(예외 별도 조회)에서도 비공개 회의의 예외를 읽지 않는다', async () => {
+    const { exceptionIns } = makeSb({
+      user: { id: 'u1' },
+      meetings: (sel) => (sel.includes('meeting_exceptions') ? EMBED_ERR : rows()),
+      exceptions: OK([exRow('pub', '2026-07-27')]),
+    })
+    const res = await myMeetings('2026-07-01', '2026-07-31')
+    expect(res.meetings.map((m) => m.id)).toEqual(['pub'])
+    expect(exceptionIns).toEqual([['meeting_id', ['pub']]])
   })
 })
 

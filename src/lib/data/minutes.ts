@@ -17,6 +17,11 @@ import { getHiddenProjectIds } from '@/lib/authz/visibility'
 type Row = Record<string, unknown>
 
 /** 비공개 프로젝트(0070) 회의록을 목록 표면에서 뺀다. 미지정(projectId null)은 유지. */
+/** 비공개 프로젝트 숨김 집합 — 판정이 실패하면 null(fail-closed: 호출부가 목록을 열지 않고 자기 실패 관례로 돌려준다). 원인은 getHiddenProjectIds 가 로그로 남긴다 */
+async function hiddenOrNull(): Promise<ReadonlySet<string> | null> {
+  try { return await getHiddenProjectIds() } catch { return null }
+}
+
 export function dropHidden<T extends { projectId?: string | null }>(rows: T[], hidden: ReadonlySet<string>): T[] {
   if (hidden.size === 0) return rows
   return rows.filter(r => !r.projectId || !hidden.has(r.projectId))
@@ -94,9 +99,10 @@ export const getMinutesPage = cache(async (
     .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
   if (team) q = q.eq('team_code', team)
   if (projectId) q = q.eq('project_id', projectId)
-  const [{ data, error }, hidden] = await Promise.all([q, getHiddenProjectIds()])
+  const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 목록 — 실패를 삼키면 보관함이 '회의록 없음' 빈 화면으로 위장돼 재업로드를 유발한다. 최소한 원인은 남긴다.
   if (error) console.error('[getMinutesPage] 조회 실패:', error.message)
+  if (hidden === null) { console.error('[getMinutesPage] 비공개 프로젝트 판정 실패 — 목록을 열지 않는다(fail-closed)'); return [] }
   return dropHidden((data ?? []).map((r: Row) => mapMinute(r)), hidden)
 })
 
@@ -115,9 +121,10 @@ export const searchMinutes = cache(async (
     .order('minute_date', { ascending: false }).limit(limit)
   if (team) q = q.eq('team_code', team)
   if (projectId) q = q.eq('project_id', projectId)
-  const [{ data, error }, hidden] = await Promise.all([q, getHiddenProjectIds()])
+  const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 검색 — 실패를 '검색 결과 0건'으로 위장하면 사용자는 회의록이 없다고 오인한다. 폴백은 유지하되 로깅.
   if (error) console.error('[searchMinutes] 조회 실패:', error.message)
+  if (hidden === null) { console.error('[searchMinutes] 비공개 프로젝트 판정 실패 — 결과를 열지 않는다(fail-closed)'); return [] }
   return dropHidden((data ?? []).map((r: Row) => mapMinute(r)), hidden)
 })
 
@@ -135,12 +142,13 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
   const [mRes, fRes, hidden] = await Promise.all([
     mq.order('minute_date', { ascending: false }).order('created_at', { ascending: false }).limit(MINUTES_TREE_LIMIT),
     fq.order('sort').order('name'),
-    getHiddenProjectIds(),
+    hiddenOrNull(),
   ])
   if (mRes.error || fRes.error) {
     console.error('[getMinutesExplorer] 조회 실패:', mRes.error?.message ?? fRes.error?.message)
     return null
   }
+  if (hidden === null) { console.error('[getMinutesExplorer] 비공개 프로젝트 판정 실패 — 탐색기를 열지 않는다(fail-closed)'); return null }
   const rows = dropHidden((mRes.data ?? []).map((r: Row) => mapMinute(r)), hidden)
   const leaves: ExplorerLeaf[] = rows.map(mi => ({
     id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, title: mi.title,

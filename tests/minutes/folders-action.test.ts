@@ -233,6 +233,12 @@ describe('fetchMinuteFoldersLite', () => {
     expect(r).not.toBeNull()
     expect(r!.map(f => f.id)).toEqual(['f-pub', 'f-none'])
   })
+  it('숨김 판정이 실패하면 폴더를 열지 않는다 — null(fail-closed, 비공개 폴더명이 새지 않게)', async () => {
+    const { client } = fakeClient({ minute_folders: { data: [{ id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: 'p1', workspace_id: 'ws-1' }], error: null } })
+    createServerClient.mockResolvedValue(client)
+    getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    expect(await fetchMinuteFoldersLite('ws-1')).toBeNull()
+  })
   it('숨김 집합이 비면 전량 반환 — 기존 동작 무변경', async () => {
     const folders = [
       { id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: 'p1', workspace_id: 'ws-1' },

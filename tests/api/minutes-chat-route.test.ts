@@ -130,6 +130,16 @@ describe('/api/minutes/chat archive — 담당 필터는 호출자 워크스페�
   })
 })
 
+describe('/api/minutes/chat archive — 비공개 판정 실패는 막는다(FA1)', () => {
+  it('숨김 집합을 못 읽으면 500 — 비공개 프로젝트 팀을 걸러내지 못한 채 답하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    expect((await POST(archive({ team: 'PMO' }))).status).toBe(500)
+    expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+})
+
 describe('/api/minutes/chat archive — 폴더 필터의 담당 루트는 그 폴더 범위의 팀 시드 루트', () => {
   it('담당 팀 루트 아래 폴더면 그 하위 트리로 확장해 넘긴다', async () => {
     expect((await POST(archive({ team: 'PMO', folderId: 'a-sub' }))).status).toBe(200)

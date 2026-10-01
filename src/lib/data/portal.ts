@@ -123,7 +123,7 @@ async function approvalRows(client: Db, actor: Actor, pids: string[]): Promise<M
 }
 
 async function meetingRows(workspaceId: string, today: string, visible: ReadonlySet<string>): Promise<MyWorkRow[]> {
-  const res = await getMyMeetings(workspaceId, today, today)          // meetings 가 꺼진 프로젝트의 행은 로더가 뺀다
+  const res = await getMyMeetings(workspaceId, today, today)          // 꺼진 모듈·비공개(명단 밖) 프로젝트의 행은 로더가 뺀다(FA1) — 아래 visible 거르기는 방어로 남긴다
   if (!res.ok) throw new Error(res.error)
   return expandMeetings(res.meetings.filter((m) => m.isMine), res.exceptions, today, today).filter((o) => visible.has(o.projectId)).map((o) => ({
     kind: 'meeting', id: o.occurrenceId, title: o.title, projectId: o.projectId, projectName: o.projectName ?? '',

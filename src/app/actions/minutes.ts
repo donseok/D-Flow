@@ -694,8 +694,9 @@ export async function fetchMinuteFoldersLite(workspaceId?: string): Promise<Minu
   const user = await getSession()
   if (!user) return null
   const sb = await createServerClient()
-  const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds()])
-  if (!folders) return null
+  // 비공개 판정이 실패하면 폴더를 열지 않는다(fail-closed) — 비공개 프로젝트 폴더명이 이름만으로도 새지 않게. 원인은 getHiddenProjectIds 가 로그로 남긴다
+  const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds().catch(() => null)])
+  if (!folders || !hidden) return null
   const ids = [...new Set(folders.map(f => f.workspaceId))]
   // 보이는 행이 없으면 판정할 워크스페이스가 없다 — 화면이 넘긴 워크스페이스(소속 확인)로 '켜졌지만 폴더 없음'([])과 '꺼짐'(null)을 가른다.
   // 인자가 없으면 null — 추측하지 않는다(D26)
