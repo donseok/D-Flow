@@ -16,6 +16,10 @@ export const ALIASES: Record<string, string> = {
 export const TRANSITIONAL = ['sidebar', 'sidebar-2', 'sidebar-3', 'sidebar-line', 'sidebar-ink', 'sidebar-ink-muted', 'sidebar-ink-subtle']
 /** 지운 이름 — 유틸(접두 뒤)·var() 어디에도 없다. 과제마다 늘어난다(Review Focus 1) */
 export const DELETED_TOKENS = ['hero-from', 'hero-via', 'hero-to', 'sheet-gutter']
+/** 지운 클래스(globals.css 규칙과 src 의 사용 모두 0) — 과제 8·9·14 가 더한다 */
+export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile']
+/** 지운 비색 변수(선언과 var() 사용 모두 0) — 과제 8·9·13 이 더한다 */
+export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft']
 const UTIL = '(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|via|to|fill|stroke|divide|decoration|placeholder|shadow|accent|caret)'
 
 describe('별칭 표(@theme inline)', () => {
@@ -41,5 +45,17 @@ describe('지운 이름 0건', () => {
   it('src 에 지운 토큰의 유틸·var() 가 없다', () => {
     const re = new RegExp(`(?:${UTIL}-(?:${DELETED_TOKENS.join('|')})\\b|var\\(--color-(?:${DELETED_TOKENS.join('|')})\\))`)
     expect(srcFiles().filter(([, text]) => re.test(text)).map(([f]) => f)).toEqual([])
+  })
+})
+
+describe('지운 클래스·비색 변수 0건', () => {
+  const css = readGlobals()
+  it.each(DELETED_CLASSES)('.%s — globals.css 규칙과 src 사용이 없다', (c) => {
+    expect(css).not.toMatch(new RegExp(`\\.${c}\\b`))
+    expect(srcFiles().filter(([, t]) => new RegExp(`\\b${c}\\b`).test(t)).map(([f]) => f)).toEqual([])
+  })
+  it.each(DELETED_VARS)('%s — 선언과 var() 사용이 없다', (v) => {
+    expect(css).not.toContain(`${v}:`)
+    expect(srcFiles().filter(([, t]) => t.includes(`var(${v})`)).map(([f]) => f)).toEqual([])
   })
 })

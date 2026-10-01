@@ -6,7 +6,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 export default async function NotFound() {
   const locale = await getServerLocale()
   return (
-    <div className="app-backdrop flex min-h-screen items-center justify-center px-4 py-16">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-16">
       <div className="card relative w-full max-w-md overflow-hidden p-8 text-center sm:p-10">
         <span
           className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-[0.12] blur-xl"

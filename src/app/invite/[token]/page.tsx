@@ -23,7 +23,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const res = await getInvitePreview(token)
 
   return (
-    <div className="app-backdrop flex min-h-screen items-center justify-center px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <BrandGlyph size={48} />

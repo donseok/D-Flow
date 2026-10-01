@@ -187,24 +187,6 @@
   --color-sidebar-ink-subtle: #9a8f85;
 }
 
-/* 비-스케일 토큰(그라데이션/그림자) — 유틸은 var()로 참조 */
-:root {
-  color-scheme: light;
-  --gradient-primary: linear-gradient(135deg, #0f766e 0%, #155e75 48%, #173a63 100%);
-  --gradient-secondary: linear-gradient(135deg, #f2be83 0%, #cb6d37 100%);
-  /* accent 버튼용 — gradient-secondary는 밝은 stop에서 흰 글자 AA 미달이라 버튼엔 이 토큰을 쓴다 */
-  --gradient-accent: linear-gradient(135deg, #c2410c 0%, #a63a12 50%, #8f3414 100%);
-  --color-accent-fg: #ffffff;
-  --gradient-surface: linear-gradient(180deg, #ffffffd1, #fff8f19e);
-  --gradient-dark: linear-gradient(165deg, #1c2028 0%, #14181f 55%, #0d1014 100%);
-  --shadow-sm: 0 10px 24px -18px #12182538;
-  --shadow-md: 0 24px 44px -26px #12182538;
-  --shadow-lg: 0 36px 80px -42px #11182757;
-  --shadow-xl: 0 52px 120px -52px #11182761;
-  --shadow-glow: 0 28px 64px -30px #0f766e73;
-  --ring-soft: 0 0 0 1px #ffffff2e inset;
-}
-
 /* ------------------------------------------------------------------ */
 /*  다크 — 의미 토큰만 다시 정의한다(라이트 값을 반전하지 않는다)          */
 /* ------------------------------------------------------------------ */
@@ -287,21 +269,70 @@
   --color-category-8-weak: #0F2433;
   --color-critical-weak: #301C0E;
   --color-phasebar-fill: var(--p-ink-d50);
+}
 
-  /* 비색 — 과제 8 이 정리한다 */
-  --gradient-primary: linear-gradient(135deg, #18a79b 0%, #2d8ac8 50%, #475df1 100%);
-  --gradient-secondary: linear-gradient(135deg, #ffd091 0%, #f08a53 100%);
-  /* 다크는 brand-fg 패턴처럼 반전 — 밝은 앰버 채움 + 어두운 글자(최저 stop 대비 5.3:1) */
+/* ------------------------------------------------------------------ */
+/*  비색 토큰 — 층·그림자·반경·조작 높이·모션·아이콘(@layer 밖 :root)    */
+/*  유틸은 임의 변수 문법으로 쓴다: z-(--z-modal) · rounded-(--radius-control) */
+/*  · h-(--control-h) · duration-(--motion-fast) · shadow-(--shadow-popover)  */
+/* ------------------------------------------------------------------ */
+:root {
+  /* color-scheme: light 는 블록 2(원색 :root — .dark 앞)에 있다. 여기(.dark 뒤)에 두면 다크를 덮는다(판정 Q36) */
+
+  /* 층(D56) — 페이지 안 고정 요소는 z-10 이하, 전체 화면은 overlay 위·modal 아래 */
+  --z-sticky: 20;
+  --z-shell: 70;
+  --z-rail: 90;
+  --z-popover: 100;
+  --z-overlay: 110;
+  --z-fullscreen: 120;
+  --z-modal: 150;
+  --z-toast: 200;
+  --z-skip: 250;
+
+  /* 그림자 — 주 표면에는 없다. 떠 있는 층만(개정 §5.5.5) */
+  --shadow-popover: 0 8px 24px -8px rgb(17 21 28 / 0.18);
+  --shadow-modal: 0 24px 56px -16px rgb(17 21 28 / 0.28);
+
+  /* 반경·조작 높이(개정 §5.4.1·§5.5.6) — 상태 pill 만 rounded-full */
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --control-h: 36px;
+
+  /* 모션 — opacity·색·transform 만. prefers-reduced-motion 블록이 덮는다 */
+  --motion-fast: 110ms;
+  --motion-menu: 140ms;
+  --motion-panel: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 아이콘(개정 §5.4.1) — 적용은 UI-2b 의 navIcons.ts 한 곳 */
+  --icon-menu: 18px;
+  --icon-toolbar: 16px;
+  --icon-stroke: 1.75;
+
+  /* 옛 그림자 이름 — var(--shadow-*) 소비처에만 든다. Tailwind shadow-* 유틸은 값을 인라인해 영향이 없다(UI-5) */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: var(--shadow-popover);
+  --shadow-xl: var(--shadow-modal);
+
+  /* C 소유 (app)/projects/page.tsx 의 카드 이니셜 한 곳 — UI-2b 이동 커밋이 지운다(계획 판정 Q15) */
+  --gradient-primary: linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600));
+  /* 과제 9(.btn-accent)·13(AssistantChat)이 소비처와 함께 지운다 */
+  --gradient-accent: linear-gradient(135deg, #c2410c 0%, #a63a12 50%, #8f3414 100%);
+  --color-accent-fg: #ffffff;
+  --gradient-dark: linear-gradient(165deg, #1c2028 0%, #14181f 55%, #0d1014 100%);
+}
+
+/* 위 :root 와 같은 이름의 다크 값은 반드시 이 뒤에(같은 특이성은 뒤가 이긴다 — 판정 Q36) */
+.dark {
+  --shadow-popover: 0 8px 24px -8px rgb(0 0 0 / 0.55);
+  --shadow-modal: 0 24px 56px -16px rgb(0 0 0 / 0.65);
+
+  /* 비색 — 과제 9(.btn-accent)·13(AssistantChat)이 소비처와 함께 지운다 */
   --gradient-accent: linear-gradient(135deg, #f2a35f 0%, #e6853c 50%, #d76f22 100%);
   --color-accent-fg: #241206;
-  --gradient-surface: linear-gradient(180deg, #21262ff5, #14181feb);
   --gradient-dark: linear-gradient(165deg, #14181f 0%, #0e1116 55%, #090b0e 100%);
-  --shadow-sm: 0 14px 28px -22px #00000085;
-  --shadow-md: 0 28px 56px -34px #0000008f;
-  --shadow-lg: 0 44px 96px -48px #000000ad;
-  --shadow-xl: 0 64px 144px -64px #000000b8;
-  --shadow-glow: 0 28px 72px -28px #2bbfb266;
-  --ring-soft: 0 0 0 1px #ffffff14 inset;
 }
 
 html,
@@ -311,20 +342,24 @@ body {
 
 body {
   background: var(--color-canvas);
-  color: var(--color-ink);
+  color: var(--color-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 * {
-  scrollbar-color: color-mix(in srgb, var(--color-ink-subtle) 50%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-fg-muted) 50%, transparent) transparent;
   scrollbar-width: thin;
 }
 
 ::selection {
-  background: var(--color-brand-ring);
-  color: var(--color-ink);
+  background: color-mix(in oklab, var(--color-action) 24%, transparent);
+  color: var(--color-fg);
+}
+
+.dark ::selection {
+  background: color-mix(in oklab, var(--color-action) 30%, transparent);
 }
 
 button,
@@ -336,7 +371,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
 }
 
@@ -515,10 +550,6 @@ textarea {
     @apply rounded-2xl border border-line bg-surface p-5;
     box-shadow: var(--shadow-sm);
   }
-  /* 다크 히어로 위 KPI 타일 */
-  .kpi-tile {
-    @apply rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 backdrop-blur;
-  }
 
   /* 히어로 카드 — 평면 표면(D13). 어두운 그라데이션 위 밝은 글자 전제를 버렸다 */
   .hero-card {
@@ -538,14 +569,6 @@ textarea {
     border-right: 1.5px solid var(--color-grid-strong);
     box-shadow: 6px 0 8px -6px rgb(20 30 50 / 0.1);
   }
-}
-
-/* 배경 텍스처 */
-.app-backdrop {
-  background:
-    radial-gradient(circle at 82% -12%, color-mix(in srgb, var(--color-brand) 12%, transparent), transparent 32rem),
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--color-accent-secondary) 8%, transparent), transparent 26rem),
-    var(--color-canvas);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -26,7 +26,7 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
   const fs = useMinuteFontSize({ persist: false })
 
   return (
-    <div className="app-backdrop min-h-screen">
+    <div className="min-h-screen bg-canvas">
       <div className="flex w-full flex-col gap-4 px-4 py-6 sm:px-5 lg:px-7">
         <div className="card flex flex-wrap items-center gap-3 p-4">
           <BrandGlyph size={28} />

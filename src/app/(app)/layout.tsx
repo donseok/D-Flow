@@ -99,7 +99,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           initialLastProjectId={prefs.lastProjectId}
         >
           <ShellStateProvider>
-          <div className="app-backdrop flex h-dvh overflow-hidden">
+          <div className="flex h-dvh overflow-hidden bg-canvas">
             <PrefsSync server={prefs} />
             <UsageTracker />
             {process.env.STAGING === "1" && (

@@ -1082,7 +1082,7 @@ export function WbsGanttSheet({
       data-wbs-font-scale={fontScale.scale}
       className={
         fullscreen
-          ? 'fixed inset-0 z-[125] overflow-auto app-backdrop px-3 py-3 sm:px-6 sm:py-5'
+          ? 'fixed inset-0 z-(--z-fullscreen) overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
           : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
