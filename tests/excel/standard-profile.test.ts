@@ -88,7 +88,7 @@ describe('표준 레이아웃 ≡ 옛 빌더(셀 단위) — W23', () => {
   })
 })
 
-describe('펼침 — sub-act 는 깊이와 무관하게 insertAt(Q40), 접는 것은 일반 항목뿐', () => {
+describe('펼침 — sub-act 는 계층 열이 모자랄 때만 insertAt(Q40 정정 — U3), 얕으면 제 깊이의 계층 열, 접는 것은 일반 항목뿐', () => {
   it('깊은 트리 + 펼침: 일반 항목은 마지막 계층 열로 접히고 sub-act 는 insertAt(마지막 계층 열 + 1) 에', () => {
     const aoa = standard(tree(4), TEAMS, LABELS3, true)
     const insertAt = 1 + LABELS3.length   // 마지막 계층 열(3) + 1
