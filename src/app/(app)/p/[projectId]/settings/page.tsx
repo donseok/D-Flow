@@ -10,8 +10,10 @@ import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
-import { projectTeamRowsSync, workspaceTeamsForProjectSync } from '@/lib/teams/master'
+import { projectOwnTeams, projectTeams, workspaceTeams } from '@/lib/teams/source'
+import { areaTeamOptions } from '@/lib/domain/areas'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
+import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
@@ -104,6 +106,19 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** 팀 절·업무영역 편집기가 쓰는 팀(SP4 §4.2.1 — 요청 범위 원천, D19). 전용·노출 팀은 같은 요청의 설정 조회(getProjectConfig 캐시)와
+ *  왕복을 나누고 공용 팀만 한 번 더 읽는다. 조회 실패는 빈 목록으로 위장하지 않는다 — 원인은 로그, 화면은 고정 문구(에러 3원칙 ①). */
+async function loadTeams(projectId: string, workspaceId: string) {
+  try {
+    const [own, visible, common] = await Promise.all([projectOwnTeams(projectId), projectTeams(projectId), workspaceTeams(workspaceId)])
+    return { ok: true as const, own, visible, common }
+  } catch (e) {
+    console.error('[settings] 팀 원천 조회 실패 — 팀 절·업무영역 편집기 대신 안내:', e)
+    return { ok: false as const }
+  }
+}
+const ERR_TEAMS_UI = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+
 export default async function SettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
@@ -134,10 +149,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 이 조회의 실패가 페이지 본체(임포트·일정 등)를 막으면 안 된다(배지 degrade 로 흡수).
   // 권한·초대 관리는 팀 구성 페이지로 이동했다(2026-08-20 화면 통합).
   const llm = isSuperuser ? await llmBadge(locale) : null
-  const projectTeamRows = projectTeamRowsSync(projectId)
   // 단계·크레딧·양식 편집의 초기값 — 조회 실패면 세 편집기 대신 오류 상태 하나를 그린다(잘못된 초기값으로 저장하면 설정을 덮는다).
   // 나머지 절(팀·영역·일정·색인)은 그대로 그린다.
   const pc = await loadProjectConfigForPage(projectId)
+  // 팀 원천(D19) — 해석기와 같은 조회라 설정 조회가 실패하면 팀도 읽을 수 없다. 그때는 머리의 오류 상태와 팀 절의 안내만 그린다
+  const teams = pc.ok ? await loadTeams(projectId, pc.cfg.workspaceId) : { ok: false as const }
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
   // 에이전트 관문 상태는 크레딧 편집기 안내에만 쓴다. 켜기·중지는 위의 모듈 편집기가 맡는다.
@@ -155,7 +171,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
 
-  // 담당 영역 편집은 소비 화면이 열리는 SP4·SP5에서 다시 노출한다. 저장된 행은 유지한다.
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
 
@@ -422,12 +437,41 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 전역 팀을 상속합니다.'
                 : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits global teams until defined.'}
             </p>
-            <ProjectTeamsManager
-              projectId={projectId}
-              teams={projectTeamRows.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
-              inherited={projectTeamRows.length === 0}
-              hasGlobalTeams={workspaceTeamsForProjectSync(projectId).some(t => t.active)}
-            />
+            {teams.ok ? (
+              <ProjectTeamsManager
+                projectId={projectId}
+                teams={teams.own.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
+                inherited={teams.own.length === 0}
+                hasGlobalTeams={teams.common.some(t => t.active)}
+              />
+            ) : (
+              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{ERR_TEAMS_UI}</p>
+            )}
+          </SectionCard>
+        )}
+      {/* ── 업무영역(주간보고의 행) — kind 고정 편집기(SP4 D26). 이슈 영역은 SP5. 설정 조회가 실패하면 머리의 오류 상태 하나로 갈음한다 ── */}
+        {isAdmin && pc.ok && (
+          <SectionCard
+            searchText="업무영역 주간보고 영역 담당 팀 weekly areas"
+            eyebrow="WORK AREAS"
+            title={locale === 'ko' ? '업무영역' : 'Work areas'}
+            icon={ListTree}
+          >
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+              {locale === 'ko'
+                ? '주간보고 시트의 행이 이 영역입니다. 활성 영역을 저장하면 이번 주 이후 시트에 그 영역의 행이 생기고, 비활성으로 두면 이번 주 이후 시트에서 숨겨지며 쓴 내용은 남습니다.'
+                : 'Each work area is a row of the weekly report sheet. Saving an active area adds its row to this week’s and later sheets; an inactive area is hidden from this week on and its content is kept.'}
+            </p>
+            {teams.ok ? (
+              <ProjectAreasManager
+                projectId={projectId}
+                kind="weekly_section"
+                areas={pc.cfg.areas.weekly_section}
+                teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.weekly_section)}
+              />
+            ) : (
+              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{ERR_TEAMS_UI}</p>
+            )}
           </SectionCard>
         )}
         </div>

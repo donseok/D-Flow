@@ -12,11 +12,7 @@ const mocks = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
   ClearExcelProfileButton: vi.fn<(props: { projectId: string }) => null>(() => null),
 }))
-vi.mock('@/lib/teams/master', () => ({
-  projectTeamRowsSync: vi.fn(() => []),
-  teamsForProjectSync: vi.fn(() => []),
-  workspaceTeamsForProjectSync: vi.fn(() => []),
-}))
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({

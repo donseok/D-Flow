@@ -1,41 +1,51 @@
 'use client'
 
-// 담당 영역 관리 절 — kind 탭 2개(주간 구분·이슈 영역). 행 편집은 표 아래 폼 하나에서 한다(표 안 팝오버가 overflow 에 잘리지 않게).
-// 코드는 새 영역에서만 입력한다 — 기존 영역은 읽기 전용(트리거 project_areas_guard 와 같은 규칙). 삭제 없음: 비활성이 삭제다.
+// 주간 업무영역 편집기(SP4 §4.1.8·D26) — 설정 '팀·업무영역' 범주에 kind 고정(weekly_section)으로 붙는다. 이슈 영역은 SP5 가 같은
+// 편집기를 그 kind 로 다시 쓴다(여기에는 종류 탭이 없다). 행 편집은 표 아래 폼 하나에서 한다(표 안 팝오버가 overflow 에 잘리지 않게).
+// 저장은 upsertArea → RPC upsert_project_area — 활성 영역을 저장하면 이번 주 이후 주간 문서에 그 영역 행이 생긴다(rowsAdded).
+// 코드는 새 영역에서만 입력한다 — 이름으로 미리 채우고 고칠 수 있으며 저장 뒤 불변이다(트리거 project_areas_guard). 삭제 없음: 비활성이 삭제다.
+// SP3b 패턴 이행(상태 계약·빈 상태·글자 크기)은 SPU3 다(D52) — 지금 모양 그대로 기능만 붙인다.
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Plus } from 'lucide-react'
-import { upsertArea, type AreaRow } from '@/app/actions/projectAreas'
-import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
+import { upsertArea } from '@/app/actions/projectAreas'
+import { orderAreas } from '@/lib/domain/weeklySheet'
+import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
+import type { ConfigArea } from '@/lib/settings/projectConfig'
 import { useToast } from '@/components/ui/Toast'
 
-/** active=false 인 팀은 이미 배정된 영역에서만 보인다(해제할 수 있게) — 새로 고를 수는 없다. */
-export interface AreaTeamOption { id: string; code: string; active: boolean }
-
-const KIND_LABEL: Record<AreaKind, string> = { weekly_section: '주간 구분', issue_area: '이슈 영역' }
+const KIND_LABEL = { weekly_section: '업무영역' } as const
 const TEAM_KIND_LABEL: Record<AreaTeamKind, string> = { primary: '주', support: '보조' }
+const DEACTIVATE_NOTE = '비활성으로 두면 이번 주 이후 주간 시트에서 숨겨지고, 이미 쓴 내용은 남습니다.'
 
-type Draft = { id?: string; code: string; name: string; sortOrder: string; active: boolean; teams: Record<string, AreaTeamKind> }
+/** codeTouched — 새 영역의 코드를 사용자가 직접 고쳤는가. 고치기 전에는 이름을 따라 채운다(기존 영역은 늘 true — 코드 불변) */
+type Draft = {
+  id?: string; code: string; codeTouched: boolean; name: string; sortOrder: string; active: boolean
+  teams: Record<string, AreaTeamKind>
+}
 
-function toDraft(a: AreaRow): Draft {
+function toDraft(a: ConfigArea): Draft {
   return {
-    id: a.id, code: a.code, name: a.name, sortOrder: String(a.sortOrder), active: a.active,
+    id: a.id, code: a.code, codeTouched: true, name: a.name, sortOrder: String(a.sortOrder), active: a.active,
     teams: Object.fromEntries(a.teams.map(t => [t.teamId, t.kind])),
   }
 }
 
-export function ProjectAreasManager({ projectId, areas, teamOptions }: {
+export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
   projectId: string
-  areas: Record<AreaKind, AreaRow[]>
+  /** 영역 종류 — A1 은 주간 업무영역 하나다(이슈 영역은 SP5) */
+  kind: 'weekly_section'
+  areas: readonly ConfigArea[]
   teamOptions: readonly AreaTeamOption[]
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [kind, setKind] = useState<AreaKind>('weekly_section')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  const rows = areas[kind]
+  // 시트와 같은 순서(sortOrder, code, id) — 해석기는 sort_order 로만 정렬해 동률의 순서가 고정되지 않는다
+  const rows = orderAreas(areas.filter(a => a.kind === kind))
+  const label = KIND_LABEL[kind]
   const teamOf = new Map(teamOptions.map(t => [t.id, t]))
   const teamLabel = (id: string) => {
     const t = teamOf.get(id)
@@ -43,11 +53,15 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
     return t.active ? t.code : `${t.code}(비활성)`
   }
 
-  function switchKind(k: AreaKind) { setKind(k); setDraft(null); setError(null) }
   function startNew() {
     const next = rows.reduce((m, a) => Math.max(m, a.sortOrder), -1) + 1
     setError(null)
-    setDraft({ code: '', name: '', sortOrder: String(next), active: true, teams: {} })
+    setDraft({ code: '', codeTouched: false, name: '', sortOrder: String(next), active: true, teams: {} })
+  }
+
+  /** 이름 입력 — 새 영역은 코드를 직접 고치기 전까지 이름을 따라 채운다(스펙 §4.1.8). 기존 영역의 코드는 불변이라 건드리지 않는다 */
+  function setName(name: string) {
+    setDraft(d => (d ? { ...d, name, code: !d.id && !d.codeTouched ? name : d.code } : d))
   }
 
   function save() {
@@ -63,13 +77,18 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
         teams: Object.entries(draft.teams).map(([teamId, k]) => ({ teamId, kind: k })),
       })
       if (!r.ok) { setError(r.error); return }
-      toast({ title: `'${draft.code.trim()}' 영역을 저장했습니다.`, variant: 'success' })
+      toast({
+        title: `'${draft.code.trim()}' 영역을 저장했습니다.`,
+        // RPC 가 활성 영역을 이번 주 이후 주간 문서에 채운다 — 생긴 행이 있으면 알린다
+        description: r.rowsAdded > 0 ? `이번 주 이후 주간 시트 ${r.rowsAdded}곳에 이 영역 행을 더했습니다.` : undefined,
+        variant: 'success',
+      })
       setDraft(null)
       router.refresh()
     })
   }
 
-  // 폼의 팀: 활성 팀 + 이 영역에 이미 배정된 비활성 팀(해제용).
+  // 폼의 팀: 활성 팀 + 이 영역에 이미 배정된 비활성·목록 밖 팀(해제용).
   const formTeams = draft ? teamOptions.filter(t => t.active || draft.teams[t.id]) : []
 
   function setTeam(teamId: string, v: AreaTeamKind | '') {
@@ -83,17 +102,9 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
   }
 
   return (
-    <section className="card overflow-hidden">
+    <section className="card overflow-hidden" data-area-editor={kind}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
-        <div role="tablist" aria-label="영역 종류" className="flex gap-1">
-          {(Object.keys(KIND_LABEL) as AreaKind[]).map(k => (
-            <button key={k} type="button" role="tab" aria-selected={kind === k} data-area-kind={k}
-              onClick={() => switchKind(k)}
-              className={`btn btn-sm ${kind === k ? 'btn-primary' : 'btn-ghost'}`}>
-              {KIND_LABEL[k]}
-            </button>
-          ))}
-        </div>
+        <p className="text-sm font-semibold text-ink">{label} {rows.length}개</p>
         <button type="button" onClick={startNew} className="btn btn-primary" disabled={pending}>
           <Plus className="h-4 w-4" />새 영역
         </button>
@@ -101,7 +112,7 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
 
       <div className="p-5 sm:p-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-subtle">아직 {KIND_LABEL[kind]}이 없습니다.</p>
+          <p className="text-sm text-ink-subtle">아직 {label}이 없습니다. 영역을 하나 이상 저장해야 주간보고를 시작할 수 있습니다.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
@@ -150,21 +161,20 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
 
         {draft && (
           <form className="panel-soft mt-4 space-y-4 p-5" onSubmit={e => { e.preventDefault(); save() }}>
-            <p className="text-sm font-semibold text-ink">
-              {draft.id ? `${KIND_LABEL[kind]} 편집` : `새 ${KIND_LABEL[kind]}`}
-            </p>
+            <p className="text-sm font-semibold text-ink">{draft.id ? `${label} 편집` : `새 ${label}`}</p>
             {error && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{error}</p>}
             <div className="grid gap-3 sm:grid-cols-[10rem_1fr_6rem]">
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
                 코드
                 <input className={`app-input ${draft.id ? 'bg-surface-2 text-ink-muted' : ''}`} value={draft.code} readOnly={!!draft.id} aria-readonly={!!draft.id}
-                  data-area-code title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : undefined}
-                  onChange={e => setDraft({ ...draft, code: e.target.value })} disabled={pending} />
+                  data-area-code
+                  title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : '이름으로 미리 채웁니다. 저장한 뒤에는 바꿀 수 없습니다.'}
+                  onChange={e => setDraft({ ...draft, code: e.target.value, codeTouched: true })} disabled={pending} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
                 이름
                 <input className="app-input" value={draft.name} data-area-name
-                  onChange={e => setDraft({ ...draft, name: e.target.value })} disabled={pending} />
+                  onChange={e => setName(e.target.value)} disabled={pending} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
                 순서
@@ -198,6 +208,7 @@ export function ProjectAreasManager({ projectId, areas, teamOptions }: {
                 onChange={e => setDraft({ ...draft, active: e.target.checked })} disabled={pending} />
               활성
             </label>
+            {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-ink-muted">{DEACTIVATE_NOTE}</p>}
             <div className="flex gap-2">
               <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
               <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setDraft(null); setError(null) }}>취소</button>

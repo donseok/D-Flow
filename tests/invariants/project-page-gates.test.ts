@@ -173,7 +173,10 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
   it('분석이 알려진 원천을 잡는다 — 팀 캐시·admin 로더·서버 컴포넌트 경유', () => {
     const at = (p: string) => pageReport(join(PAGES_ROOT, p)).symbols
     expect(at('members/page.tsx')).toContain('teamsForProjectSync')
-    expect(at('settings/page.tsx')).toEqual(expect.arrayContaining(['assistantIndexStatus', 'workspaceTeamsForProjectSync', 'projectTeamRowsSync']))
+    expect(at('settings/page.tsx')).toContain('assistantIndexStatus')
+    // SP4 A1 과제 32 — 설정 페이지의 팀 절은 요청 범위 원천(세션 해석기)으로 옮겨 옛 service_role 팀 캐시를 더는 읽지 않는다
+    expect(at('settings/page.tsx')).not.toEqual(expect.arrayContaining(['projectTeamRowsSync']))
+    expect(at('settings/page.tsx')).not.toEqual(expect.arrayContaining(['workspaceTeamsForProjectSync']))
     expect(at('agents/office/page.tsx')).toContain('getProjectOffice')
     expect(at('agents/page.tsx')).toContain('getAgentHub')
     // DashboardView 는 서버 컴포넌트라 렌더 중에 팀 캐시를 읽는다 — 페이지 파일에 캐시 호출이 없어도 원천이다.
