@@ -27,6 +27,8 @@ import {
   WBS_CHANGE_LOGS,
   WBS_SNAPSHOTS,
   WEEKLY_SNAPSHOTS,
+  GOLDEN_CONFIG_TEAMS,
+  GOLDEN_WEEKLY_AREAS,
 } from './fixtures'
 import { FIXTURE_MILESTONE_KEYWORDS } from '../../fixtures/milestoneKeywords'
 import { makeProjectConfig } from '../../helpers/projectConfigFixture'
@@ -206,9 +208,12 @@ export function createFakeRepositories(options: FakeRepositoryOptions = {}): Cor
           return repositoryOk(snapshot ? clone(snapshot) : null)
         })
       },
-      async getProjectConfig() {
+      async getProjectConfig(projectId) {
         return guard('PROJECT_SETTINGS_READ_FAILED', true, () => repositoryOk(makeProjectConfig({
           'core.level_labels': ['Phase', 'Task', 'Activity'], 'core.milestone_keywords': [...FIXTURE_MILESTONE_KEYWORDS],
+        }, {
+          projectId, workspaceId: 'ws-golden', teams: clone(GOLDEN_CONFIG_TEAMS),
+          areas: { weekly_section: clone(GOLDEN_WEEKLY_AREAS), issue_area: [] },
         })))
       },
     },

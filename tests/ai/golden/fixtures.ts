@@ -20,6 +20,8 @@ import type {
   WikiKnowledgeRecord,
 } from '@/lib/repositories/types'
 import type { Meeting, OwnerKind, TeamCode } from '@/lib/domain/types'
+import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
+import { FIXTURE_TEAMS } from '../../fixtures/teams'
 
 export const NOW = '2026-07-19T09:00:00.000Z'
 export const KST_TODAY = '2026-07-19'
@@ -150,23 +152,37 @@ export const WBS_ATTACHMENTS: Record<string, WbsAttachmentMetadataSnapshot> = {
   },
 }
 
-// ── 주간업무 시트(현재 주·이전 주) ──
+// ── 주간업무 시트(현재 주·이전 주) ── 행은 영역 id 로 묶인다(SP4). 팀 ERP 는 '실험', MES 는 '데이터' 영역을 주로 맡는다
+// (골든 케이스 '팀 필터 ERP' → AS-IS 인터뷰 1건, 'MES' → 표준 미비 1건). 영역은 넷 다 활성이다.
+export const GOLDEN_WEEKLY_AREAS: ConfigArea[] = [
+  { id: 'g-area-ops', kind: 'weekly_section', code: 'G-OPS', name: '운영', sortOrder: 1, active: true, teams: [] },
+  { id: 'g-area-exp', kind: 'weekly_section', code: 'G-EXP', name: '실험', sortOrder: 2, active: true, teams: [{ teamId: 'default-erp', kind: 'primary' }] },
+  { id: 'g-area-data', kind: 'weekly_section', code: 'G-DATA', name: '데이터', sortOrder: 3, active: true, teams: [{ teamId: 'default-mes', kind: 'primary' }] },
+  { id: 'g-area-mat', kind: 'weekly_section', code: 'G-MAT', name: '자재', sortOrder: 4, active: true, teams: [] },
+]
+/** 설정 저장소가 내는 팀 — 라우터 목(teams-master-mock)과 같은 FIXTURE_TEAMS 를 공용 팀(projectId null)으로 */
+export const GOLDEN_CONFIG_TEAMS: ConfigTeam[] = FIXTURE_TEAMS.map(t => ({
+  id: t.id, code: t.code, name: t.code, sortOrder: t.sortOrder, active: t.active, color: '#6b7280', progressVisible: t.progressVisible, projectId: null,
+}))
+
 export const WEEKLY_SNAPSHOTS: Record<string, WeeklySheetSnapshot> = {
   [`${PROJECT_ALPHA}:${CURRENT_WEEK_START}`]: {
     report: { id: 'a-wr-0713', projectId: PROJECT_ALPHA, weekStart: CURRENT_WEEK_START, title: '2026-07-13 주간업무', updatedAt: '2026-07-17T08:00:00Z' },
     rows: [
-      { id: 'a-wrow-1', reportId: 'a-wr-0713', section: 'PMO', module: '', sortOrder: 1, thisContent: 'ERP 킥오프 준비 완료', thisIssue: '인력 배정 지연', nextContent: '마스터플랜 착수', nextIssue: '', updatedAt: '2026-07-17T08:00:00Z' },
-      { id: 'a-wrow-2', reportId: 'a-wr-0713', section: '영업', module: '', sortOrder: 2, thisContent: 'AS-IS 인터뷰 진행', thisIssue: '', nextContent: 'TO-BE 초안', nextIssue: '데이터 정합성 확인 필요', updatedAt: '2026-07-17T08:00:00Z' },
-      { id: 'a-wrow-3', reportId: 'a-wr-0713', section: '품질', module: '', sortOrder: 3, thisContent: 'MES 현황조사 실시', thisIssue: '표준 미비', nextContent: '', nextIssue: '', updatedAt: '2026-07-17T08:00:00Z' },
+      { id: 'a-wrow-1', reportId: 'a-wr-0713', areaId: 'g-area-ops', thisContent: 'ERP 킥오프 준비 완료', thisIssue: '인력 배정 지연', nextContent: '마스터플랜 착수', nextIssue: '', updatedAt: '2026-07-17T08:00:00Z' },
+      { id: 'a-wrow-2', reportId: 'a-wr-0713', areaId: 'g-area-exp', thisContent: 'AS-IS 인터뷰 진행', thisIssue: '', nextContent: 'TO-BE 초안', nextIssue: '데이터 정합성 확인 필요', updatedAt: '2026-07-17T08:00:00Z' },
+      { id: 'a-wrow-3', reportId: 'a-wr-0713', areaId: 'g-area-data', thisContent: 'MES 현황조사 실시', thisIssue: '표준 미비', nextContent: '', nextIssue: '', updatedAt: '2026-07-17T08:00:00Z' },
     ],
+    areas: GOLDEN_WEEKLY_AREAS,
   },
   [`${PROJECT_ALPHA}:${PRIOR_WEEK_START}`]: {
     report: { id: 'a-wr-0706', projectId: PROJECT_ALPHA, weekStart: PRIOR_WEEK_START, title: '2026-07-06 주간업무', updatedAt: '2026-07-10T08:00:00Z' },
     rows: [
-      { id: 'a-wrow-4', reportId: 'a-wr-0706', section: 'PMO', module: '', sortOrder: 1, thisContent: 'ERP 킥오프 준비 시작', thisIssue: '', nextContent: '킥오프 자료 작성', nextIssue: '', updatedAt: '2026-07-10T08:00:00Z' },
-      { id: 'a-wrow-5', reportId: 'a-wr-0706', section: '영업', module: '', sortOrder: 2, thisContent: 'AS-IS 인터뷰 진행', thisIssue: '', nextContent: 'TO-BE 초안', nextIssue: '데이터 정합성 확인 필요', updatedAt: '2026-07-10T08:00:00Z' },
-      { id: 'a-wrow-6', reportId: 'a-wr-0706', section: '구매', module: '', sortOrder: 3, thisContent: '구매 모듈 검토', thisIssue: '', nextContent: '', nextIssue: '', updatedAt: '2026-07-10T08:00:00Z' },
+      { id: 'a-wrow-4', reportId: 'a-wr-0706', areaId: 'g-area-ops', thisContent: 'ERP 킥오프 준비 시작', thisIssue: '', nextContent: '킥오프 자료 작성', nextIssue: '', updatedAt: '2026-07-10T08:00:00Z' },
+      { id: 'a-wrow-5', reportId: 'a-wr-0706', areaId: 'g-area-exp', thisContent: 'AS-IS 인터뷰 진행', thisIssue: '', nextContent: 'TO-BE 초안', nextIssue: '데이터 정합성 확인 필요', updatedAt: '2026-07-10T08:00:00Z' },
+      { id: 'a-wrow-6', reportId: 'a-wr-0706', areaId: 'g-area-mat', thisContent: '구매 모듈 검토', thisIssue: '', nextContent: '', nextIssue: '', updatedAt: '2026-07-10T08:00:00Z' },
     ],
+    areas: GOLDEN_WEEKLY_AREAS,
   },
 }
 

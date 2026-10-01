@@ -32,6 +32,11 @@ const context: ToolExecutionContext = {
   timezone: 'Asia/Seoul',
 }
 
+/** 주간 도구의 두 번째 인자 — team 인자가 없으면 읽지 않는다(읽으면 실패). */
+const weeklySettingsUnused = {
+  getProjectConfig: vi.fn(async () => { throw new Error('team 인자 없는 주간 조회가 설정을 읽었다') }),
+}
+
 const wbsSnapshot: WbsProjectSnapshot = {
   projectId: 'p1',
   baseDate: '2026-07-20',
@@ -97,6 +102,7 @@ describe('core read tools', () => {
           id: 'r1', projectId: 'p2', weekStart: '2026-07-20', title: '', updatedAt: null,
         },
         rows: [],
+        areas: [],
       })),
     }
     const rogueMeetings: MeetingRepository = {
@@ -120,7 +126,7 @@ describe('core read tools', () => {
 
     const results = await Promise.all([
       createFindWbsItemsTool(rogueWbs).execute({ projectId: 'p1' }, context),
-      createGetWeeklySheetTool(rogueWeekly).execute(
+      createGetWeeklySheetTool(rogueWeekly, weeklySettingsUnused).execute(
         { projectId: 'p1', weekStart: '2026-07-20' }, context,
       ),
       createListMeetingsTool(rogueMeetings).execute(
@@ -218,10 +224,10 @@ describe('core read tools', () => {
     }
     const args = { projectId: 'p1', weekStart: '2026-07-20' }
 
-    const empty = await createGetWeeklySheetTool(emptyRepository).execute(args, context)
+    const empty = await createGetWeeklySheetTool(emptyRepository, weeklySettingsUnused).execute(args, context)
     expect(empty).toMatchObject({ ok: true, result: { facts: { reportFound: false }, records: [] } })
 
-    const failed = await createGetWeeklySheetTool(failedRepository).execute(args, context)
+    const failed = await createGetWeeklySheetTool(failedRepository, weeklySettingsUnused).execute(args, context)
     expect(failed).toMatchObject({
       ok: false,
       error: { code: 'DATA_SOURCE_ERROR', repositoryErrorCode: 'WEEKLY_REPORT_READ_FAILED' },

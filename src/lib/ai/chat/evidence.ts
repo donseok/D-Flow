@@ -117,17 +117,15 @@ export function sourceIdsForRecord(
     if (matched.length) return [...new Set(matched)]
   }
 
-  // Comparison records aggregate multiple physical weekly rows and therefore do not carry row ids.
-  // Their section/module pair is the stable semantic key used by the weekly tool itself.
+  // 비교 레코드는 여러 물리 행을 묶어 행 id 가 없다 — 영역 id 가 의미 키다(개명해도 같은 영역, W14).
+  // 주간 행 출처는 qualifier.anchor = `area:<영역 id>` 를 싣는다(tools/weekly.ts). 제목 문자열로 찾지 않는다.
   if (tool === 'compare_weekly_sheets') {
-    const section = normalizeLabel(record.section)
-    const moduleName = normalizeLabel(record.module)
-    if (section || moduleName) {
+    const areaId = typeof record.areaId === 'string' ? record.areaId : ''
+    if (areaId) {
+      const anchor = `area:${areaId}`
       const matched = candidateIds.filter(id => {
         const source = sourceById.get(id)
-        if (!source || source.entityType !== 'weekly_row') return false
-        const title = normalizeLabel(source.title)
-        return (!section || title.includes(section)) && (!moduleName || title.includes(moduleName))
+        return !!source && source.entityType === 'weekly_row' && source.qualifier?.anchor === anchor
       })
       if (matched.length) return [...new Set(matched)]
     }

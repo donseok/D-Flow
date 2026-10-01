@@ -1,23 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-
-// 매핑(WEEKLY_TEAM_SECTIONS)에 없는 팀은 그 프로젝트의 등록 팀이면 동명 구분으로 본다 — 등록 판정은 프로젝트 스코프(SP2 16b).
-// p1 은 워크스페이스 A(공용 5팀), p2 는 전용 팀 'QA' 를 가진 프로젝트, 'B팀' 은 다른 워크스페이스 B 의 공용 팀이다.
-const PROJECT_TEAMS: Record<string, string[]> = {
-  p1: ['PMO', 'ERP', 'MES', '가공', 'MDM'],
-  p2: ['QA'],
-  'p-other-ws': ['B팀'],
-  // 팀 코드는 20자 자유 문자열이라 객체 프로토타입 키와 겹칠 수 있다(최종 리뷰 data m6).
-  'p-proto': ['constructor', '__proto__', 'toString'],
-}
-const isRegisteredTeamCodeForProject = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/teams/master', () => ({ isRegisteredTeamCodeForProject }))
-isRegisteredTeamCodeForProject.mockImplementation((code: string, projectId: string) => (PROJECT_TEAMS[projectId] ?? []).includes(code))
-
+// 주간업무 봇 도구의 팀 필터(D24) — 원천은 area_teams(주 ∪ 보조) 하나다. 하드코딩 구분 매핑·팀 캐시·동명 구분 폴백이 없다.
+// 팀 목록은 설정 저장소(getProjectConfig 의 teams — 그 워크스페이스 공용 ∪ 그 프로젝트 전용), 등록 판정은 프로젝트 화면과 같은 규칙
+// (resolveTeamsForProject — 전용 팀이 있으면 그것만, 비활성 포함). 합성 구성 R(팀 RES·OPS, 영역 실험·데이터·운영)을 쓴다.
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
+import { areasForTeam } from '@/lib/domain/weeklySheet'
+import { buildSheetSections } from '@/lib/report/sheetNarrative'
+import type { ConfigArea, ConfigTeam, ProjectConfig } from '@/lib/settings/projectConfig'
 import {
-  repositoryOk, type WeeklyRepository, type WeeklySheetSnapshot,
+  repositoryError, repositoryOk, type RepositoryResult, type WeeklyRepository, type WeeklySheetSnapshot,
 } from '@/lib/repositories/types'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
+import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -28,118 +23,180 @@ const context: ToolExecutionContext = {
   timezone: 'Asia/Seoul',
 }
 
-// 인자 검증 단계 테스트 — 저장소에 도달하면 안 된다.
-const repository: WeeklyRepository = {
-  getSheet: vi.fn(async () => {
-    throw new Error('검증 실패 인자가 저장소까지 내려왔다')
-  }),
+// p1 = 그 워크스페이스의 공용 팀(RES·OPS)을 상속하는 프로젝트
+const AREAS: ConfigArea[] = SYNTHETIC_WEEKLY_AREAS.research.map(a => ({ ...a }))
+const TEAMS: ConfigTeam[] = SYNTHETIC_TEAMS.research.map(t => ({ ...t, projectId: null }))
+const areaIdOf = (name: string, areas: readonly ConfigArea[] = AREAS): string => {
+  const area = areas.find(a => a.name === name)
+  if (!area) throw new Error(`합성 영역이 없다: ${name}`)
+  return area.id
 }
-
-describe('주간업무 봇 도구 team 필터 검증', () => {
-  it('MDM은 매핑된 구분이 없음을 명시적으로 안내한다 — 조용한 빈 결과 금지', async () => {
-    const result = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'MDM' }, context,
-    )
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
-    expect((result as { error: { message: string } }).error.message).toContain('구분')
-    expect(repository.getSheet).not.toHaveBeenCalled()
-  })
-
-  it('compare_weekly_sheets도 MDM을 동일하게 거절한다', async () => {
-    const result = await createCompareWeeklySheetsTool(repository).execute(
-      { projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'MDM' }, context,
-    )
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
-    expect((result as { error: { message: string } }).error.message).toContain('구분')
-  })
-
-  it('미지의 팀은 기존 문구로 거절한다', async () => {
-    const result = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'QA' }, context,
-    )
-    expect(result).toMatchObject({
-      ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' },
-    })
-  })
-
-  it('원본 구분 매핑이 있는 팀 코드라도 그 프로젝트에 미등록이면 알 수 없는 팀이다 — 매핑으로 거르지 않는다', async () => {
-    const result = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p2', weekStart: '2026-07-20', team: 'ERP' }, context,
-    )
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
-    expect(isRegisteredTeamCodeForProject).toHaveBeenCalledWith('ERP', 'p2')
-    expect(repository.getSheet).not.toHaveBeenCalled()
-  })
-
-  it('등록 판정은 그 프로젝트의 팀 — 다른 워크스페이스의 팀 코드는 알 수 없는 팀이다(SP2 16b)', async () => {
-    const result = await createGetWeeklySheetTool(repository).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'B팀' }, context,
-    )
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
-    expect(isRegisteredTeamCodeForProject).toHaveBeenCalledWith('B팀', 'p1')
-  })
-
-  it('접근 판정이 먼저다 — 볼 수 없는 프로젝트의 팀 구성은 검증 결과로 새지 않는다', async () => {
-    isRegisteredTeamCodeForProject.mockClear()
-    for (const tool of [createGetWeeklySheetTool(repository), createCompareWeeklySheetsTool(repository)]) {
-      const args = tool.name === 'get_weekly_sheet'
-        ? { projectId: 'p-other-ws', weekStart: '2026-07-20', team: 'B팀' }
-        : { projectId: 'p-other-ws', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'B팀' }
-      await expect(tool.execute(args, context)).resolves.toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
-    }
-    expect(isRegisteredTeamCodeForProject).not.toHaveBeenCalled()
-  })
+const team = (id: string, code: string, projectId: string | null, active = true): ConfigTeam => ({
+  id, code, name: code, sortOrder: 0, active, color: '#6b7280', progressVisible: true, projectId,
 })
 
-function snapshot(sections: string[]): WeeklySheetSnapshot {
+function config(projectId: string, teams: ConfigTeam[] = TEAMS, areas: ConfigArea[] = AREAS): ProjectConfig {
+  return makeProjectConfig({}, { projectId, workspaceId: 'ws-1', teams, areas: { weekly_section: areas, issue_area: [] } })
+}
+const settingsOf = (byProject: Record<string, ProjectConfig>) => ({
+  getProjectConfig: vi.fn(async (projectId: string): Promise<RepositoryResult<ProjectConfig>> => {
+    const cfg = byProject[projectId]
+    return cfg ? repositoryOk(cfg) : repositoryError<ProjectConfig>('PROJECT_SETTINGS_READ_FAILED', true)
+  }),
+})
+
+function sheet(projectId: string, rows: Array<{ id: string; area: string; thisContent?: string }>, areas: ConfigArea[] = AREAS): WeeklySheetSnapshot {
   return {
-    report: {
-      id: 'r1', projectId: 'p1', weekStart: '2026-07-20',
-      title: '2026-07-20 주간업무', updatedAt: '2026-07-20T01:00:00Z',
-    },
-    rows: sections.map((section, i) => ({
-      id: `row-${i}`, reportId: 'r1', section, module: '', sortOrder: i + 1,
-      thisContent: `${section} 업무`, thisIssue: '', nextContent: '', nextIssue: '',
+    report: { id: 'r1', projectId, weekStart: '2026-07-20', title: '2026-07-20 주간업무', updatedAt: '2026-07-20T01:00:00Z' },
+    rows: rows.map(r => ({
+      id: r.id, reportId: 'r1', areaId: areaIdOf(r.area, areas),
+      thisContent: r.thisContent ?? `${r.area} 업무`, thisIssue: '', nextContent: '', nextIssue: '',
       updatedAt: '2026-07-20T02:00:00Z',
     })),
+    areas,
   }
 }
+const FULL = (projectId: string) => sheet(projectId, [
+  { id: 'row-exp', area: '실험' }, { id: 'row-data', area: '데이터' }, { id: 'row-ops', area: '운영' },
+])
+const repoOf = (snapshot: WeeklySheetSnapshot): WeeklyRepository => ({ getSheet: vi.fn(async () => repositoryOk(snapshot)) })
+// 인자 검증 단계 테스트 — 저장소에 도달하면 안 된다
+const unreachable = (): WeeklyRepository => ({ getSheet: vi.fn(async () => { throw new Error('검증 실패 인자가 저장소까지 내려왔다') }) })
 
-describe('매핑 없는 프로젝트 전용 팀은 동명 구분으로 조회된다', () => {
-  it('p2 의 전용 팀 QA 는 QA 구분만 잡는다', async () => {
-    const sheet = snapshot(['PMO', 'QA'])
-    const repo: WeeklyRepository = {
-      getSheet: vi.fn(async () => repositoryOk({ ...sheet, report: { ...sheet.report, projectId: 'p2' } })),
-    }
-    const res = await createGetWeeklySheetTool(repo).execute({ projectId: 'p2', weekStart: '2026-07-20', team: 'QA' }, context)
-    expect(res.ok && res.result.records.map((r: { section: string }) => r.section)).toEqual(['QA'])
+describe('주간 봇 도구 — 팀 필터 = area_teams(주 ∪ 보조)', () => {
+  it('RES 는 실험·데이터(둘 다 주), OPS 는 데이터(보조)·운영(주)을 잡는다 — 영역 순서대로', async () => {
+    const settings = settingsOf({ p1: config('p1') })
+    const tool = createGetWeeklySheetTool(repoOf(FULL('p1')), settings)
+    const res = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', team: 'RES' }, context)
+    const ops = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', team: 'OPS' }, context)
+    expect(res.ok && res.result.records.map(r => r.section)).toEqual(['실험', '데이터'])
+    expect(ops.ok && ops.result.records.map(r => r.section)).toEqual(['데이터', '운영'])
+    expect(ops.ok && ops.result.records.map(r => r.areaId)).toEqual([areaIdOf('데이터'), areaIdOf('운영')])
   })
-})
 
-describe('MES 팀 필터가 조업·표준화를 모두 잡는다', () => {
-  // 매칭은 문자열 완전일치라, 구분을 쪼개고 팀 매핑을 안 고치면 오류가 아니라 '조회 건수 감소'로
-  // 나타난다 — 사람이 알아채기 가장 어려운 실패다. 매핑 집합에 없는 구분(폐지된 통합 구분)은 잡지 않는다.
-  it('조업·표준화는 MES 로 조회되고, 매핑에 없는 조업및표준화는 빠진다', async () => {
-    const sheet = snapshot(['PMO', '영업', '조업', '표준화', '조업및표준화', '물류'])
-    const repo: WeeklyRepository = { getSheet: vi.fn(async () => repositoryOk(sheet)) }
-
-    const mes = await createGetWeeklySheetTool(repo).execute(
-      { projectId: 'p1', weekStart: '2026-07-20', team: 'MES' }, context,
+  it('compare_weekly_sheets 도 같은 영역 집합으로 거른다', async () => {
+    const settings = settingsOf({ p1: config('p1') })
+    // 두 주차 각각의 스냅샷 — 같은 스냅샷(7/20)을 두 주에 돌려주면 범위 검사(isScopedWeeklySnapshot)가 막는다
+    const repo: WeeklyRepository = {
+      getSheet: vi.fn(async (_projectId: string, weekStart: string) => {
+        const snap = FULL('p1')
+        return repositoryOk({ ...snap, report: { ...snap.report, weekStart } })
+      }),
+    }
+    const res = await createCompareWeeklySheetsTool(repo, settings).execute(
+      { projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'RES' }, context,
     )
+    expect(res.ok && res.result.records.map(r => r.section)).toEqual(['실험', '데이터'])
+  })
 
-    expect(mes.ok && mes.result.records.map((r: { section: string }) => r.section))
-      .toEqual(['조업', '표준화', '물류'])
+  it('W18 패리티 — 도구의 팀 필터 결과 = 보고서(buildSheetSections)의 같은 팀 영역(같은 areasForTeam 입력)', async () => {
+    const snapshot = FULL('p1')
+    const tool = createGetWeeklySheetTool(repoOf(snapshot), settingsOf({ p1: config('p1') }))
+    for (const code of ['RES', 'OPS']) {
+      const res = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', team: code }, context)
+      const teamAreas = areasForTeam(AREAS, TEAMS, code)
+      const reportAreaIds = buildSheetSections(snapshot.rows, AREAS).map(s => s.areaId).filter(id => teamAreas.has(id))
+      expect(res.ok && res.result.records.map(r => r.areaId), code).toEqual(reportAreaIds)
+    }
+  })
+
+  it('등록되지 않은 팀은 알 수 없는 담당팀이다 — 저장소에 닿지 않는다', async () => {
+    const repo = unreachable()
+    const result = await createGetWeeklySheetTool(repo, settingsOf({ p1: config('p1') })).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'NOPE' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
+    expect(repo.getSheet).not.toHaveBeenCalled()
+  })
+
+  it('등록 팀인데 맡은 영역이 0 이면 영역 용어로 안내한다(조용한 빈 결과 금지) — 두 도구 모두', async () => {
+    const withQa = config('p1', [...TEAMS, team('t-qa', 'QA', null)])
+    const settings = settingsOf({ p1: withQa })
+    const get = await createGetWeeklySheetTool(unreachable(), settings).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'QA' }, context,
+    )
+    const compare = await createCompareWeeklySheetsTool(unreachable(), settings).execute(
+      { projectId: 'p1', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'QA' }, context,
+    )
+    const message = "'QA' 팀이 맡은 주간보고 영역이 없습니다 — 프로젝트 설정의 업무영역에서 담당 팀을 지정하세요."
+    expect(get).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message } })
+    expect(compare).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message } })
+  })
+
+  it('동명 영역 폴백이 없다 — 팀 code 와 같은 이름의 영역이 있어도 담당으로 지정하지 않았으면 영역 0 이다', async () => {
+    const qaArea: ConfigArea = { id: 'area-qa', kind: 'weekly_section', code: 'QA', name: 'QA', sortOrder: 9, active: true, teams: [] }
+    const settings = settingsOf({ p1: config('p1', [...TEAMS, team('t-qa', 'QA', null)], [...AREAS, qaArea]) })
+    const result = await createGetWeeklySheetTool(unreachable(), settings).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'QA' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    expect((result as { error: { message: string } }).error.message).toContain('맡은 주간보고 영역이 없습니다')
+  })
+
+  it('전용 팀이 하나라도 있으면 그것만 등록 팀이다 — 상속하던 공용 팀 code 는 알 수 없는 팀(프로젝트 화면과 같은 규칙)', async () => {
+    const p2 = config('p2', [...TEAMS, team('t-qa2', 'QA', 'p2')])
+    const result = await createGetWeeklySheetTool(unreachable(), settingsOf({ p2 })).execute(
+      { projectId: 'p2', weekStart: '2026-07-20', team: 'RES' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT', message: '알 수 없는 담당팀입니다.' } })
+  })
+
+  it('비활성 팀도 등록 팀이다(비활성 포함 판정) — 그 팀이 맡은 영역을 조회한다', async () => {
+    const inactiveOps = TEAMS.map(t => (t.code === 'OPS' ? { ...t, active: false } : t))
+    const res = await createGetWeeklySheetTool(repoOf(FULL('p1')), settingsOf({ p1: config('p1', inactiveOps) })).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'OPS' }, context,
+    )
+    expect(res.ok && res.result.records.map(r => r.section)).toEqual(['데이터', '운영'])
+  })
+
+  it('접근 판정이 먼저다 — 볼 수 없는 프로젝트는 설정·저장소를 읽지 않는다', async () => {
+    const settings = settingsOf({ 'p-other': config('p-other') })
+    for (const tool of [createGetWeeklySheetTool(unreachable(), settings), createCompareWeeklySheetsTool(unreachable(), settings)]) {
+      const args = tool.name === 'get_weekly_sheet'
+        ? { projectId: 'p-other', weekStart: '2026-07-20', team: 'RES' }
+        : { projectId: 'p-other', fromWeekStart: '2026-07-13', toWeekStart: '2026-07-20', team: 'RES' }
+      await expect(tool.execute(args, context)).resolves.toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
+    }
+    expect(settings.getProjectConfig).not.toHaveBeenCalled()
+  })
+
+  it('설정을 못 읽으면 도구 실패다 — 팀 없음으로 위장하지 않고 저장소에 닿지 않는다', async () => {
+    const repo = unreachable()
+    const result = await createGetWeeklySheetTool(repo, settingsOf({})).execute(
+      { projectId: 'p1', weekStart: '2026-07-20', team: 'RES' }, context,
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: 'DATA_SOURCE_ERROR', repositoryErrorCode: 'PROJECT_SETTINGS_READ_FAILED' } })
+    expect(repo.getSheet).not.toHaveBeenCalled()
+  })
+
+  it('team 인자가 없으면 설정을 읽지 않는다', async () => {
+    const settings = settingsOf({ p1: config('p1') })
+    const res = await createGetWeeklySheetTool(repoOf(FULL('p1')), settings).execute({ projectId: 'p1', weekStart: '2026-07-20' }, context)
+    expect(res.ok && res.result.records).toHaveLength(3)
+    expect(settings.getProjectConfig).not.toHaveBeenCalled()
+  })
+
+  it.each(['constructor', '__proto__', 'toString'])('프로토타입 키와 같은 팀 코드(%s)도 던지지 않고 그 팀의 영역만 잡는다', async (code) => {
+    const protoTeam = team(`t-${code}`, code, null)
+    const areas: ConfigArea[] = AREAS.map(a => (a.name === '운영' ? { ...a, teams: [{ teamId: protoTeam.id, kind: 'primary' }] } : { ...a, teams: [] }))
+    const snapshot = sheet('p-proto', [{ id: 'row-exp', area: '실험' }, { id: 'row-ops', area: '운영' }], areas)
+    const res = await createGetWeeklySheetTool(repoOf(snapshot), settingsOf({ 'p-proto': config('p-proto', [protoTeam], areas) })).execute(
+      { projectId: 'p-proto', weekStart: '2026-07-20', team: code }, context,
+    )
+    expect(res.ok).toBe(true)
+    expect(res.ok && res.result.records.map(r => r.section)).toEqual(['운영'])
   })
 })
 
-describe('프로토타입 키와 같은 팀 코드 — 매핑 없는 등록 팀(동명 구분)으로 본다', () => {
-  it.each(['constructor', '__proto__', 'toString'])('%s 팀은 던지지 않고 동명 구분만 잡는다', async (team) => {
-    const sheet = snapshot(['PMO', 'constructor', '__proto__', 'toString'])
-    const repo: WeeklyRepository = {
-      getSheet: vi.fn(async () => repositoryOk({ ...sheet, report: { ...sheet.report, projectId: 'p-proto' } })),
+describe('주간 봇 도구 — section 인자는 영역 이름 또는 code(앞뒤 공백·대소문자 무시)', () => {
+  it('이름·code 어느 쪽으로도 같은 영역을 잡고, 모르는 이름은 0건이다', async () => {
+    const tool = createGetWeeklySheetTool(repoOf(FULL('p1')), settingsOf({}))
+    const exp = AREAS.find(a => a.name === '실험')!
+    for (const section of [' 실험 ', exp.code.toLocaleLowerCase('ko-KR'), exp.code.toUpperCase()]) {
+      const res = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', section }, context)
+      expect(res.ok && res.result.records.map(r => r.areaId), section).toEqual([exp.id])
     }
-    const res = await createGetWeeklySheetTool(repo).execute({ projectId: 'p-proto', weekStart: '2026-07-20', team }, context)
-    expect(res.ok).toBe(true)
-    expect(res.ok && res.result.records.map((r: { section: string }) => r.section)).toEqual([team])
+    const none = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', section: '없는 영역' }, context)
+    expect(none.ok && none.result.records).toEqual([])
   })
 })

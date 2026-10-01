@@ -8,7 +8,7 @@ import type {
   TeamCode,
   WbsRow,
 } from '@/lib/domain/types'
-import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { WeeklyArea } from '@/lib/domain/weeklySheet'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 
 /**
@@ -34,6 +34,7 @@ export type RepositoryErrorCode =
   | 'WBS_ATTACHMENTS_READ_FAILED'
   | 'WEEKLY_REPORT_READ_FAILED'
   | 'WEEKLY_ROWS_READ_FAILED'
+  | 'WEEKLY_AREAS_READ_FAILED'
   | 'MEETINGS_READ_FAILED'
   | 'MEETING_EXCEPTIONS_READ_FAILED'
   | 'MEETING_DETAIL_READ_FAILED'
@@ -163,13 +164,24 @@ export interface WeeklyReportRecord {
   updatedAt: string | null
 }
 
-export interface WeeklyRepositoryRow extends WeeklySheetRow {
+/** 주간 행(SP4) — 구분 문자열이 아니라 영역 id 로 묶인다. 행 순서는 저장소가 시트와 같은 규칙(visibleRows)으로 정한다. */
+export interface WeeklyRepositoryRow {
+  id: string
+  reportId: string
+  areaId: string
+  thisContent: string
+  thisIssue: string
+  nextContent: string
+  nextIssue: string
   updatedAt: string | null
 }
 
 export interface WeeklySheetSnapshot {
   report: WeeklyReportRecord
+  /** visibleRows 순 — 활성 영역의 행(영역 순) → 내용 있는 비활성 영역의 행. 내용 없는 비활성 영역 행은 없다 */
   rows: WeeklyRepositoryRow[]
+  /** 그 프로젝트의 주간 영역 전부(활성·비활성, 담당 팀 포함) — 라벨·순서·section 인자 일치의 원천 */
+  areas: WeeklyArea[]
 }
 
 export interface WeeklyRepository {
