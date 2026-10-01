@@ -2,16 +2,21 @@ import { renderToString } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  loadWorkspaceScope: vi.fn(), listProjects: vi.fn(), listAccounts: vi.fn(), listTeamsAdmin: vi.fn<(w: string) => Promise<{ ok: boolean; rows: unknown[] }>>(async () => ({ ok: true, rows: [] })), managerProps: vi.fn(),
+  loadWorkspaceScope: vi.fn(), listProjectsWithState: vi.fn(), listAccounts: vi.fn(), listTeamsAdmin: vi.fn<(w: string) => Promise<{ ok: boolean; rows: unknown[] }>>(async () => ({ ok: true, rows: [] })), managerProps: vi.fn(),
   redirect: vi.fn((u: string) => { throw new Error(`NEXT_REDIRECT:${u}`) }), notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
-vi.mock('@/app/actions/project', () => ({ listProjects: h.listProjects }))
+vi.mock('@/app/actions/project', () => ({ listProjectsWithState: h.listProjectsWithState }))
 vi.mock('@/app/actions/accounts', () => ({ listAccounts: h.listAccounts }))
 vi.mock('@/app/actions/teams', () => ({ listTeamsAdmin: h.listTeamsAdmin }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: h.notFound }))
 vi.mock('@/components/admin/AccountsManager', () => ({ AccountsManager: (p: unknown) => { h.managerProps(p); return null } }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: () => null }))
+// PageHero 는 설명·KPI 를 클라이언트에서 펼친다 — 넘긴 값을 그대로 그려 단언이 공허하지 않게
+vi.mock('@/components/ui/PageHero', () => ({
+  PageHero: (p: { description?: React.ReactNode; heroKpis?: React.ReactNode }) => <div data-hero>{p.description}{p.heroKpis}</div>,
+  HeroBadge: () => null,
+}))
 
 import AccountsPage from '@/app/(app)/w/[slug]/admin/accounts/page'
 import TeamsPage from '@/app/(app)/w/[slug]/admin/teams/page'
@@ -27,7 +32,7 @@ const renderAccounts = async (q: Record<string, string> = {}) => renderToString(
 
 beforeEach(() => {
   vi.clearAllMocks()
-  h.listProjects.mockResolvedValue([{ id: P1, name: 'Apollo', workspace_id: WS.id }, { id: PB, name: 'Other', workspace_id: 'ws-b' }])
+  h.listProjectsWithState.mockResolvedValue({ projects: [{ id: P1, name: 'Apollo', workspace_id: WS.id }, { id: PB, name: 'Other', workspace_id: 'ws-b' }], degraded: false })
   h.listAccounts.mockResolvedValue({ ok: true, rows: [], workspaceId: WS.id })
 })
 
@@ -55,13 +60,33 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
     h.listAccounts.mockResolvedValue({ ok: true, rows: [], workspaceId: 'ws-b' })
     await expect(accounts()).rejects.toThrow('NEXT_NOT_FOUND')
-    h.listProjects.mockResolvedValue([])
+    h.listProjectsWithState.mockResolvedValue({ projects: [], degraded: false })
     expect(renderToString(await accounts())).toContain('관리할 프로젝트가 없습니다')
+  })
+  it('프로젝트 목록 조회 실패는 "관리할 프로젝트가 없습니다"로 위장하지 않는다 — 실패 표시, 명단 로더 미호출(U2a-4 T2)', async () => {
+    h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
+    h.listProjectsWithState.mockResolvedValue({ projects: [], degraded: true })
+    const html = renderToString(await accounts())
+    expect(html).not.toContain('관리할 프로젝트가 없습니다')
+    expect(html).toContain('data-status-kind="partial_error"')
+    expect(html).toContain('프로젝트 목록을 불러오지 못했습니다')
+    expect(h.listAccounts).not.toHaveBeenCalled()
+  })
+  it('플랫폼 관리자 흔적(SUPERUSER 타일·비밀번호 리셋 안내)은 플랫폼 관리자에게만(U2a-4 T5)', async () => {
+    h.listAccounts.mockResolvedValue({ ok: true, rows: [{ id: 'u1', email: 'a@example.com', name: 'a', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null, createdAt: 'x' }], workspaceId: WS.id })
+    h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
+    const ws = await renderAccounts()
+    expect(ws).not.toContain('SUPERUSER'); expect(ws).not.toContain('리셋')
+    expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ accounts: [expect.not.objectContaining({ isPlatformAdmin: true })] }))
+    h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeSuperuser({ projectWorkspace: new Map([[P1, WS.id]]) })))
+    const su = await renderAccounts()
+    expect(su).toContain('SUPERUSER'); expect(su).toContain('리셋')
+    expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ accounts: [expect.objectContaining({ isPlatformAdmin: true })] }))
   })
   it('열화(actor null)는 그 워크스페이스 홈 — 명단 로더를 부르지 않는다(fail-closed)', async () => {
     h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: null, degraded: true, role: null })
     await expect(accounts()).rejects.toThrow('NEXT_REDIRECT:/w/acme')
-    expect(h.listProjects).not.toHaveBeenCalled()
+    expect(h.listProjectsWithState).not.toHaveBeenCalled()
     expect(h.listAccounts).not.toHaveBeenCalled()
   })
 })

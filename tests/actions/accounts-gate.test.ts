@@ -673,4 +673,29 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
     expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1'])
     expect(res.ok && res.workspaceId).toBe(WS)
   })
+
+  it('플랫폼 관리자도 그 워크스페이스 소속·명단 계정만 — /w/<slug>/admin/accounts 는 그 워크스페이스 화면이다(U2a-4 T4, D21 과 같은 한정)', async () => {
+    signedInAs(SU)
+    createAdminClient.mockReturnValue({
+      from: vi.fn((t: string) => {
+        if (t === 'profiles') {
+          return chain({
+            data: [
+              { user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' },
+              { user_id: 'u-b', email: 'bob@example.com', display_name: '밥', created_at: '2026-09-03T00:00:00Z' },
+              { user_id: 'u-r', email: 'roster@example.com', display_name: '명단', created_at: '2026-09-04T00:00:00Z' },
+            ],
+            count: 3,
+            error: null,
+          })
+        }
+        if (t === 'platform_admins') return chain({ data: [{ user_id: 'u-b' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'project_members') return chain({ data: [{ access_role: 'member', active: true, people: { user_id: 'u-r', active: true } }], error: null })
+        throw new Error('예상치 못한 테이블 접근: ' + t)
+      }),
+    } as never)
+    const res = await listAccounts(P1)
+    expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1', 'u-r'])
+  })
 })

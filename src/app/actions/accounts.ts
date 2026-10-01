@@ -439,11 +439,9 @@ export async function listAccounts(
     if (pe?.user_id && r.access_role && r.active && pe.active) accessBy.set(pe.user_id, r.access_role)
   }
 
-  // profiles 는 플랫폼 전체다. 워크스페이스 관리자에게는 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 —
-  // 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리). 슈퍼유저는 전역 관리자라 전부 본다.
-  const visible = g.actor.isSuperuser
-    ? profiles
-    : profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
+  // profiles 는 플랫폼 전체다. 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 — 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리).
+  // 플랫폼 관리자도 같다: 이 목록은 /w/<slug>/admin/accounts(그 워크스페이스 화면)의 것이다(SP3b D21·D22, U2a-4 리뷰 T4).
+  const visible = profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
   const rows = visible
     .map<AccountRow>(p => ({
       id: p.userId,

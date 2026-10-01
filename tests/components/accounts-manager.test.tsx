@@ -56,10 +56,10 @@ describe('AccountsManager', () => {
     container.remove()
   })
 
-  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], canManageAdmins = true) {
+  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], platformOps = true) {
     act(() => {
       root.render(<AccountsManager accounts={rows} projectId="p-1" workspaceId="ws-1"
-        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} canPlatformOps={canManageAdmins} currentUserId="u-bob" />)
+        projects={[{ id: 'p-1', name: 'Acme' }]} canPlatformOps={platformOps} currentUserId="u-bob" />)
     })
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
@@ -152,6 +152,16 @@ describe('AccountsManager', () => {
     expect(cell.closest('a')?.getAttribute('href')).toBe('/p/p-1/members')
     expect(row('u-bob').querySelector('[data-access-role]')!.textContent).toContain('조회')
     expect(row('u-carol').querySelector('select')).toBeNull()
+  })
+
+  it('계정 추가의 프로젝트 관리자 옵션은 워크스페이스 관리자도 고를 수 있다 — 서버 규칙(requireWorkspaceAdmin)과 같다(U2a-4 T3)', async () => {
+    render(undefined, false)
+    const btn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('계정 추가'))!
+    await click(btn)
+    const admin = Array.from(document.body.querySelectorAll('option')).find(o => o.value === 'admin' && o.textContent?.includes('관리자'))!
+    expect(admin).toBeTruthy()
+    expect(admin.disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('슈퍼유저 전용')
   })
 
   it('일괄 등록 안내는 이메일, 권한, 초기비번[, 이름] 형식이다', async () => {
