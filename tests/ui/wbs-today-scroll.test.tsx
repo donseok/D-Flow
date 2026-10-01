@@ -98,7 +98,7 @@ describe('WBS 기준일 초기 스크롤', () => {
   ])('%s 모드 진입 즉시 기준일을 sticky 열 오른쪽 중앙에 배치한다', async (defaultView, expected) => {
     await act(async () => {
       root.render(
-        <WbsGanttSheet
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={[item('2026-06-01', '2026-08-31')]}
           holidays={[]}
           today="2026-07-15"
@@ -116,7 +116,7 @@ describe('WBS 기준일 초기 스크롤', () => {
   it('기준일이 프로젝트 일정 밖이어도 축과 첫 화면에 포함한다', async () => {
     await act(async () => {
       root.render(
-        <WbsGanttSheet
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={[item('2026-08-01', '2026-08-10')]}
           holidays={[]}
           today="2026-07-24"

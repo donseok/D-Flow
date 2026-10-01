@@ -58,7 +58,7 @@ describe('WbsGanttSheet — 담당~계획% 열 숨기기', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <WbsGanttSheet
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={[item]}
         holidays={[]}
         today="2026-07-03"

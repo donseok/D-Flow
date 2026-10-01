@@ -11,10 +11,6 @@ export const STATUS: Record<Status, { label: string; chip: string; bar: string; 
   done: { label: '완료', chip: 'bg-done-weak text-done', bar: 'bg-done', dot: 'bg-done' },
 }
 
-/** ProjectConfig 미주입(구 테스트·데모 등) 폴백 — 옛 로더의 폴백 3라벨과 같은 값. 새 해석기는 폴백이 없다(행 0건 = 오류) —
- * 이 상수는 config 를 주입받지 않는 데모·구 테스트만 쓴다. */
-export const DEFAULT_LEVEL_LABELS = ['Phase', 'Task', 'Activity']
-
 /** depth(0-based) 별 배지 색 팔레트 — 옛 LEVEL 상수의 cls 를 그대로 재활용(회귀 0). depth 3+ 는 pending 재사용. */
 const DEPTH_CLASS = [
   'bg-brand-weak text-brand',       // depth 0 (구 phase)
@@ -24,14 +20,10 @@ const DEPTH_CLASS = [
 const DEPTH_CLASS_FALLBACK = 'bg-surface-2 text-ink-muted' // depth 3+
 /* act 하위의 담당자별 분리 항목(임포트 시 자동 생성) 전용 표기 — 일반 배지와 시각 구분 */
 const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-2 text-ink-muted' }
-/** 레거시 3라벨(levelLabels=[Phase,Task,Activity]) 하위호환 축약 테이블 — 그 외 라벨은 원문 그대로(회귀 0). */
-const LEGACY_LABEL_ABBR: Record<string, string> = { Phase: 'PHASE', Task: 'TASK', Activity: 'ACT' }
-
-/** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 levelLabels[depth](레거시 축약 규칙 우선), 라벨 밖 깊이는 'N단'. */
+/** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제). */
 export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[]): string {
   if (isOwnerSplit) return SUB_ACT.label
-  const label = levelLabels[depth]
-  return LEGACY_LABEL_ABBR[label] ?? label ?? `${depth + 1}단`
+  return levelLabels[depth] ?? `${depth + 1}단`
 }
 
 /** 배지 색 — isOwnerSplit 이면 SUB-ACT 톤, 아니면 depth 기반 팔레트(depth 3+ 는 폴백 재사용). */

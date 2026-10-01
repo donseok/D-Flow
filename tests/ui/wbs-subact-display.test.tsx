@@ -87,7 +87,7 @@ describe('WBS sub-act 축약 표시 + 기본 접힘', () => {
   async function mount() {
     await act(async () =>
       root.render(
-        <WbsGanttSheet
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={fixture()}
           holidays={[]}
           today="2026-07-03"

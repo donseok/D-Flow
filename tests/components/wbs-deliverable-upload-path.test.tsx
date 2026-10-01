@@ -57,7 +57,7 @@ describe('RowDetailPanel 산출물 첨부 — 저장 경로 규약', () => {
 
   async function renderAndPick(workspaceId: string | null) {
     await act(async () => {
-      root.render(<RowDetailPanel item={item} allItems={[item]} dependencies={[]} projectId={PID}
+      root.render(<RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={item} allItems={[item]} dependencies={[]} projectId={PID}
         workspaceId={workspaceId} canAttach onClose={() => {}} />)
     })
     await act(async () => {})

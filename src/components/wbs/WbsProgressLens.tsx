@@ -6,14 +6,14 @@ import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { DEFAULT_LEVEL_LABELS, LevelBadge, OwnerBadges, STATUS, fmtDate } from './shared'
+import { LevelBadge, OwnerBadges, STATUS, fmtDate } from './shared'
 
 export function WbsProgressLens({
   item,
   parentPath,
   pinned,
   onTogglePin,
-  levelLabels = DEFAULT_LEVEL_LABELS,
+  levelLabels,
   dragHandleProps,
 }: {
   item: ComputedItem | null
@@ -21,7 +21,7 @@ export function WbsProgressLens({
   pinned: boolean
   onTogglePin: () => void
   /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 상위(WbsGanttSheet)가 서버 페이지에서 받아 전파. */
-  levelLabels?: string[]
+  levelLabels: string[]
   /** 창 이동 그립에 얹을 포인터 핸들러 — 위치 상태는 상위(WbsGanttSheet)가 소유한다. */
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
 }) {

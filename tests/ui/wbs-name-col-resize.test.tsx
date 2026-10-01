@@ -42,7 +42,7 @@ describe('WBS 작업명 컬럼 폭 드래그', () => {
 
   async function render() {
     await act(async () => root.render(
-      <WbsGanttSheet items={[item({ id: 'a1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'a1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
 

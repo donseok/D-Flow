@@ -72,7 +72,7 @@ describe('WbsGanttSheet — 단독 Task 실적% 입력', () => {
 
   const mount = (actorView: ProjectActorView | null, readOnly = false) =>
     act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={actorView} projectId="p1" readOnly={readOnly} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={actorView} projectId="p1" readOnly={readOnly} />,
     ))
 
   it('PMO에게는 단독 Task 의 실적% 셀만 편집 가능하고, 롤업 Task·Phase 는 아니다', async () => {
@@ -134,7 +134,7 @@ describe('WbsGanttSheet — 검증·저장 실패에서 입력 보존', () => {
 
   const mount = () =>
     act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={pmo} projectId="p1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={pmo} projectId="p1" />,
     ))
   const loneRow = () => [...container.querySelectorAll<HTMLElement>('.group.relative.z-10')][1]
   const actualInput = () => container.querySelector<HTMLInputElement>('input[aria-label="wbs.ariaEditActual"]')

@@ -62,7 +62,7 @@ describe('WbsGanttSheet — 가중치 헤더 합계', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <WbsGanttSheet
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={items}
         holidays={[]}
         today="2026-07-03"

@@ -141,7 +141,7 @@ describe('WbsGanttSheet — 표 글자 크기 3단계', () => {
 
   async function mount() {
     await act(async () => root.render(
-      <WbsGanttSheet
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={[itemA, itemB]}
         dependencies={dependencies}
         holidays={[]}

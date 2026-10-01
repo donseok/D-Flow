@@ -15,7 +15,7 @@ import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyV
 import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
-import { DEFAULT_LEVEL_LABELS, OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText, teamStyle } from './shared'
+import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText, teamStyle } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
 import { WbsProgressLens } from './WbsProgressLens'
 import { WbsFontSizeControl } from './WbsFontSizeControl'
@@ -201,7 +201,7 @@ export function WbsGanttSheet({
   initialOutline = false,
   initialGanttScale,
   focusId = null,
-  levelLabels = DEFAULT_LEVEL_LABELS,
+  levelLabels,
   maxDepth = null,
   milestoneKeywords = EMPTY_MILESTONE_KEYWORDS,
   members = EMPTY_MEMBERS,
@@ -239,8 +239,8 @@ export function WbsGanttSheet({
   initialGanttScale?: number
   /** 대시보드 액션 큐 등에서 ?focus= 로 진입한 항목 id — 조상을 펼치고 해당 행으로 스크롤+플래시 */
   focusId?: string | null
-  /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 서버 페이지가 getProjectConfig 로 로드해 주입. 없으면 레거시 기본값(Phase/Task/Activity). */
-  levelLabels?: string[]
+  /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 서버 페이지가 getProjectConfig 로 로드해 주입. */
+  levelLabels: string[]
   /** 프로젝트별 최대 깊이(§7.3 ProjectConfig, null=무제한) — RowDetailPanel 자식추가 어포던스 판정에 전파. */
   maxDepth?: number | null
   /** 프로젝트별 마일스톤 키워드(§7.4 ProjectConfig) — 빈 배열이면 마커 0건이 정답(설정 부재 신호, 폴백 금지). */

@@ -53,7 +53,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('기본 접힘에 숨은 항목을 focus하면 조상을 펼쳐 행을 드러내고 플래시+스크롤한다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     // 기본 접힘이면 3행(sub 숨김) — focus가 a1을 펼쳐 5행이 된다.
     expect(rowCount(container)).toBe(5)
@@ -70,14 +70,14 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('focus로 인한 펼침은 접힘 상태 저장(queueWbsCollapse)을 호출하지 않는다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     expect(queueWbsCollapse).not.toHaveBeenCalled()
   })
 
   it('focus로 펼쳐진 부모를 사용자가 다시 접으면 행이 숨고, 저장 상태와 같으므로 저장하지 않는다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     // 접기 전면 허용 후 phase/task 에도 토글이 생겼다 — focus 로 펼쳐진 부모(a1)의 버튼을 정확히 집는다.
     const toggle = container.querySelector<HTMLButtonElement>('[data-row-id="a1"] button[aria-label="wbs.collapse"]')
@@ -89,7 +89,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('트리에 없는 focusId면 펼치지 않되, 조용히 삼키지 않고 토스트로 알린다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="ghost" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="ghost" />,
     ))
     expect(rowCount(container)).toBe(3)
     expect(scrollIntoView).not.toHaveBeenCalled()
@@ -100,7 +100,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('플래시 행에는 hover 와 구분되는 도착 강조 마커(악센트)가 붙는다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     const row = container.querySelector<HTMLElement>('[data-row-id="s1"]')
     expect(row!.querySelector('[data-flash-accent]')).not.toBeNull()
@@ -108,7 +108,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('점프 후 키보드 포커스가 대상 행으로 이동한다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     const row = container.querySelector<HTMLElement>('[data-row-id="s1"]')
     expect(document.activeElement).toBe(row)
@@ -119,7 +119,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
   // 이상의 모든 부모를 담는다(깊은 층이 개별 펼침 때 한꺼번에 쏟아지지 않게).
   it('focus 중 레벨 1 접기는 phase만 남기고 저장한다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />,
     ))
     const btn = container.querySelector<HTMLButtonElement>('button[data-level-btn="1"]')
     expect(btn).not.toBeNull()
@@ -130,7 +130,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('레벨 1 은 phase만 남기고, 최대 레벨은 sub-act까지 모두 표시한다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     const levelBtns = [...container.querySelectorAll<HTMLButtonElement>('button[data-level-btn]')]
     expect(levelBtns.length).toBeGreaterThanOrEqual(2)
@@ -149,7 +149,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
   it('StrictMode 마운트에서도 focus 진입이 저장을 호출하지 않는다', async () => {
     await act(async () => root.render(
       <StrictMode>
-        <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly focusId="s1" />
       </StrictMode>,
     ))
     expect(rowCount(container)).toBe(5)
@@ -160,11 +160,11 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
     vi.useFakeTimers()
     try {
       const props = { items: fixture(), holidays: [] as string[], today: '2026-07-03', actorView: null, projectId: 'p1', readOnly: true }
-      await act(async () => root.render(<WbsGanttSheet {...props} focusId="s1" />))
+      await act(async () => root.render(<WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} {...props} focusId="s1" />))
       expect(scrollIntoView).toHaveBeenCalledTimes(1)
       await act(async () => { vi.advanceTimersByTime(2500) }) // 플래시 해제
-      await act(async () => root.render(<WbsGanttSheet {...props} focusId={null} />))
-      await act(async () => root.render(<WbsGanttSheet {...props} focusId="s1" />))
+      await act(async () => root.render(<WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} {...props} focusId={null} />))
+      await act(async () => root.render(<WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} {...props} focusId="s1" />))
       expect(scrollIntoView).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()
@@ -173,7 +173,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
 
   it('focusId가 없으면 기존 기본 접힘 그대로다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     expect(rowCount(container)).toBe(3)
     expect(scrollIntoView).not.toHaveBeenCalled()

@@ -38,7 +38,7 @@ describe('WBS 「단계」 컬럼', () => {
 
   async function render(items: ComputedItem[]) {
     await act(async () => root.render(
-      <WbsGanttSheet items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
   const header = () => container.querySelector<HTMLElement>('[data-wbs-col="stage"][data-wbs-col-kind="header"]')

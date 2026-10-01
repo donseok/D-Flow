@@ -19,7 +19,7 @@ import { makeStoragePath } from '@/lib/domain/storagePath'
 import { stampedFileName } from '@/lib/domain/minutes'
 import { formatWeightPct, formatPct1, fmtSize } from '@/lib/domain/format'
 import { DependencyEgoGraph, type EgoNode } from './DependencyEgoGraph'
-import { DEFAULT_LEVEL_LABELS, LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate, teamStyle } from './shared'
+import { LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate, teamStyle } from './shared'
 import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -33,7 +33,7 @@ const EMPTY_REFS: string[] = []
  *  + 관리자 편집(이름·일정·산출물 수정, 하위 추가, 순서 이동, 삭제). */
 export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
-  canEditDeliverable = false, projectId, workspaceId = null, levelLabels = DEFAULT_LEVEL_LABELS, maxDepth = null,
+  canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS,
 }: {
   item: ComputedItem
@@ -49,7 +49,7 @@ export function RowDetailPanel({
   /** 프로젝트의 워크스페이스(서버의 toProjectActorView) — 산출물 첨부 저장 경로 scope. null 이면 업로드하지 않는다. */
   workspaceId?: string | null
   /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 상위(WbsGanttSheet)가 서버 페이지에서 받아 전파. */
-  levelLabels?: string[]
+  levelLabels: string[]
   /** 프로젝트별 최대 깊이(§7.3 ProjectConfig, null=무제한) — 자식 추가 어포던스 판정(canAddChild)에 사용. */
   maxDepth?: number | null
   /** 프로젝트 로스터 — 담당·단계 섹션(WbsAssigneeStagePanel)의 담당자 셀렉트 데이터 소스(§2.5). */

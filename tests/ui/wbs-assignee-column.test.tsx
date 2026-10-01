@@ -45,7 +45,7 @@ describe('WBS 담당자 컬럼', () => {
 
   async function render(items: ComputedItem[], members: ProjectMember[] = []) {
     await act(async () => root.render(
-      <WbsGanttSheet items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} members={members} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} members={members} />,
     ))
   }
 

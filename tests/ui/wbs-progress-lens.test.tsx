@@ -80,7 +80,7 @@ describe('WbsGanttSheet — 진척 돋보기', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <WbsGanttSheet
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={[item, secondItem, subActItem]}
         holidays={[]}
         today="2026-07-03"

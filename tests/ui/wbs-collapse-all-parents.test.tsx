@@ -42,7 +42,7 @@ describe('WBS 접기 — 자식이 있는 모든 노드', () => {
 
   async function render(items: ComputedItem[]) {
     await act(async () => root.render(
-      <WbsGanttSheet items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
 

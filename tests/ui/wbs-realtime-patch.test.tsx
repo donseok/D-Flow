@@ -82,7 +82,7 @@ async function mount() {
   await act(async () => {
     root.render(
       <LocaleProvider initialLocale="ko">
-        <WbsGanttSheet
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={tree()} holidays={[]} today={TODAY} actorView={null}
           projectId="a1b2c3d4-0000-4000-8000-000000000001" readOnly initialCollapsed={[]}
         />

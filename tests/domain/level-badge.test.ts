@@ -3,11 +3,14 @@ import { levelBadgeText, levelBadgeClass } from '@/components/wbs/shared'
 
 const LEGACY_3 = ['Phase', 'Task', 'Activity']
 describe('levelBadge (§4.4 depth 기반)', () => {
-  it('레거시 3단 라벨(Phase·Task·Activity)에서 현행 배지 텍스트를 재현한다(회귀 0)', () => {
-    expect(levelBadgeText(0, false, LEGACY_3)).toBe('PHASE')   // 현행 대문자 표기 유지
-    expect(levelBadgeText(1, false, LEGACY_3)).toBe('TASK')
-    expect(levelBadgeText(2, false, LEGACY_3)).toBe('ACT')     // 'Activity'→'ACT' 축약 규칙 유지
+  it('단계 배지는 프로젝트 라벨 원문 — 옛 축약(PHASE·TASK·ACT)은 없다(SP4 §4.8)', () => {
+    expect(levelBadgeText(0, false, LEGACY_3)).toBe('Phase')
+    expect(levelBadgeText(1, false, LEGACY_3)).toBe('Task')
+    expect(levelBadgeText(2, false, LEGACY_3)).toBe('Activity')
     expect(levelBadgeText(2, true, LEGACY_3)).toBe('SUB-ACT')
+  })
+  it('라벨이 프로토타입 이름이어도 그 글자 그대로', () => {
+    expect(levelBadgeText(0, false, ['constructor', 'toString'])).toBe('constructor')
   })
   it('라벨 밖 깊이는 N단 폴백', () => {
     expect(levelBadgeText(3, false, LEGACY_3)).toBe('4단')

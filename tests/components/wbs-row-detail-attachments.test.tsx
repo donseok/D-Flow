@@ -68,7 +68,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
 
   async function render(canAttach = false) {
     await act(async () => {
-      root.render(<RowDetailPanel item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} canAttach={canAttach} />)
+      root.render(<RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} canAttach={canAttach} />)
     })
     await act(async () => {})
   }

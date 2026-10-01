@@ -52,7 +52,7 @@ describe('RowDetailPanel — 개요는 가로 2열', () => {
 
   async function render(item = computedItem()) {
     await act(async () => {
-      root.render(<RowDetailPanel item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} />)
+      root.render(<RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={item} allItems={[item]} dependencies={[]} projectId="p1" onClose={() => {}} />)
     })
     await act(async () => {})
   }

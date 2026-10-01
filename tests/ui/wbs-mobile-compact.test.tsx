@@ -50,7 +50,7 @@ describe('WBS 컴팩트 압축', () => {
 
   async function render() {
     await act(async () => root.render(
-      <WbsGanttSheet items={[item({ id: 'p1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
 

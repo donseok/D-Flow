@@ -46,7 +46,7 @@ describe('WBS 간트 작업 의존성 — 바 hover 로만 연결선을 그린�
 
   async function render() {
     await act(async () => root.render(
-      <WbsGanttSheet
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={items}
         dependencies={dependencies}
         holidays={[]}

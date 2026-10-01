@@ -35,7 +35,7 @@ describe('WBS 작업명 헤더 — 레벨 버튼 이동', () => {
 
   async function render(items: ComputedItem[], extra: Record<string, unknown> = {}) {
     await act(async () => root.render(
-      <WbsGanttSheet items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} {...extra} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} {...extra} />,
     ))
   }
 
@@ -75,7 +75,7 @@ describe('WBS 마일스톤 토글 — 개수 숫자 제거', () => {
     // singleDay 마일스톤 판정: plannedStart===plannedEnd && deliverable 존재(키워드 무관, dashboard.ts isMilestoneLeaf)
     const milestone = item({ id: 'm1', name: '킥오프', plannedStart: '2026-07-05', plannedEnd: '2026-07-05', deliverable: '킥오프 보고서' })
     await act(async () => root.render(
-      <WbsGanttSheet items={[milestone]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[milestone]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     const toggle = container.querySelector<HTMLButtonElement>('[data-wbs-milestones-toggle]')
     expect(toggle).not.toBeNull() // 마커가 1건 이상이라 버튼은 뜬다
