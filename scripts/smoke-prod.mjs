@@ -38,7 +38,8 @@ const RETRIES = 3
 const FLOOR = {
   cssBytes: 90_000,
   rules: 1_300,
-  customProps: 380,
+  // 2026-10 SP3b UI-1(최종 리뷰 N2): 실측 493 → 616(3층 토큰). 하한 380 그대로면 여유가 113 → 236 으로 두 배라 UI-0 비율(380/493 ≈ 0.77)에 맞춰 480
+  customProps: 480,
   atProperty: 50,
   keyframes: 4,   // 2026-09 SP3b UI-1: 로그인 부유 장식 keyframes 넷을 지워 9 → 5(계획 판정 Q21). UI-2b 가 티커 keyframes 를 지우면 4
 }
@@ -50,6 +51,13 @@ const FLOOR = {
  */
 const DARK_BLOCK_RE = /\.dark\{[^}]*--color-surface:/
 const PRINT_BLOCK_RE = /@media print\{[^{}]*\{[^}]*--color-fg:/
+/**
+ * 원색·비색 :root 블록 존재(2026-10 SP3b UI-1 최종 리뷰 N2). 라이트 의미 토큰은 전부 var(--p-*) 를 거치고 그 원색은 @layer 밖 :root 하나(~34 선언)에만,
+ * 층(--z-*)·조작 높이·반경·모션은 비색 :root 하나(~27 선언)에만 있다. 규칙 경계에서 깔끔하게 빠지면 하한(-34·-27)·.dark·print 검사를 모두
+ * 통과한 채 라이트·다크 색 전체(다크도 var(--p-night-*)) 또는 모달·토스트 겹침과 .btn 높이가 무너진다. 앞이 } 인 :root 만 본다(인쇄의 .dark,:root 제외).
+ */
+const ROOT_PRIMITIVE_RE = /\}\s*:root\{color-scheme:light;[^}]*--p-gray-0:/
+const ROOT_NONCOLOR_RE = /\}\s*:root\{[^}]*--z-modal:[^}]*--control-h:/
 
 const C = process.stdout.isTTY
   ? { red: '\x1b[31m', grn: '\x1b[32m', yel: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' }
@@ -223,6 +231,10 @@ async function main() {
   else bad('.dark 토큰 블록', '.dark{… --color-surface: …} 없음 — 다크 재정의 소실')
   if (PRINT_BLOCK_RE.test(css)) ok('@media print 토큰 블록', '--color-fg 재정의 존재')
   else bad('@media print 토큰 블록', '@media print{…{… --color-fg: …}} 없음 — 인쇄 라이트 값 소실')
+  if (ROOT_PRIMITIVE_RE.test(css)) ok('원색 :root 블록', '--p-gray-0 존재')
+  else bad('원색 :root 블록', ':root{color-scheme:light;… --p-gray-0: …} 없음 — 라이트·다크 의미 토큰 전체 무효')
+  if (ROOT_NONCOLOR_RE.test(css)) ok('비색 :root 블록', '--z-modal·--control-h 존재')
+  else bad('비색 :root 블록', ':root{… --z-modal: … --control-h: …} 없음 — 층·조작 높이 소실')
 
   // ── 4. 레이아웃 급소 ────────────────────────────────────────────────
   console.log('\n레이아웃 급소')
