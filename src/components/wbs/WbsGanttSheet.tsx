@@ -1082,7 +1082,8 @@ export function WbsGanttSheet({
       data-wbs-font-scale={fontScale.scale}
       className={
         fullscreen
-          ? 'fixed inset-0 z-(--z-fullscreen) overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
+          ? // AI 버튼(AssistantChat FAB z-[120])과 같은 층이면 문서 순서로 FAB 가 위에 뜬다 — D56 표에 FAB 자리가 없어 과제 24(z 대응표)까지 한 칸 위
+            'fixed inset-0 z-[calc(var(--z-fullscreen)_+_1)] overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
           : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
