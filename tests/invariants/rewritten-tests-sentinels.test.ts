@@ -32,6 +32,7 @@ const REWRITTEN_TESTS = [
   'tests/helpers/legacySectionRows.ts',
   'tests/invariants/rewritten-tests-sentinels.test.ts',
   'tests/invariants/weekly-row-columns.test.ts',
+  'tests/negative/weekly-outputs.test.ts',
   'tests/report/sheet-sections.test.ts',
   'tests/report/sheetNarrative.test.ts',
   'tests/report/templateFill.test.ts',
