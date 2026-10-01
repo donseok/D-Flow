@@ -53,11 +53,16 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
   const [a, t] = await Promise.all([
     sb.from('project_areas').select('id, kind, code, name, sort_order, active, area_teams(team_id, kind)')
       .eq('project_id', projectId).order('sort_order'),
-    sb.from('teams').select('id, code, name, sort_order, active, color, progress_visible, project_id')
+    sb.from('teams').select('id, code, name, sort_order, active, color, progress_visible, project_id', { count: 'exact' })
       .eq('workspace_id', workspaceId).or(`project_id.is.null,project_id.eq.${projectId}`).order('sort_order'),
   ])
   if (a.error) throw new ConfigUnavailableError(`영역 조회 실패: ${a.error.message}`, { cause: a.error })
   if (t.error) throw new ConfigUnavailableError(`팀 조회 실패: ${t.error.message}`, { cause: t.error })
+  // 한 응답은 max_rows(1000)에서 조용히 잘린다 — 공용 팀은 지워지지 않고 쌓이므로 잘린 목록이 "팀 없음"(거짓 미등록 409·상속 오판)으로 흐르지 않게
+  // 총합과 대조해 멈춘다(A1-5 R4, 3원칙 ①). PostgREST 는 count 를 요청하면 늘 돌려준다 — 없을 때(가짜 클라이언트)는 대조하지 않는다
+  if (typeof t.count === 'number' && t.count !== (t.data ?? []).length) {
+    throw new ConfigUnavailableError(`팀 목록이 잘렸습니다(${(t.data ?? []).length}/${t.count}건): ${projectId}`)
+  }
 
   const { keys, unknownKeys } = resolveKeys({ scope: 'project', id: projectId, values, defs: PROJECT_SETTINGS })
   const areas: ProjectConfig['areas'] = { weekly_section: [], issue_area: [] }

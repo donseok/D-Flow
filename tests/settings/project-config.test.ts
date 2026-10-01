@@ -9,15 +9,15 @@ import { DEFAULT_STAGE_CREDITS } from '@/lib/domain/stageCredits'
 
 const PID = '00000000-0000-4000-8000-00000000aa01'
 const WID = '00000000-0000-4000-8000-00000000bb01'
-type Res = { data: unknown; error: { message: string } | null }
+type Res = { data: unknown; error: { message: string } | null; count?: number | null }
 /** 표별 응답을 준다. 호출 순서와 select 문자열을 기록해 조회 셋을 단언한다 */
 function fakeClient(res: { settings: Res; areas: Res; teams: Res }) {
-  const calls: { table: string; select: string; filters: string[] }[] = []
+  const calls: { table: string; select: string; selectOpts?: unknown; filters: string[] }[] = []
   const chain = (table: string, r: Res) => {
-    const rec = { table, select: '', filters: [] as string[] }
+    const rec: { table: string; select: string; selectOpts?: unknown; filters: string[] } = { table, select: '', filters: [] as string[] }
     calls.push(rec)
     const b: Record<string, unknown> = {}
-    b.select = (s: string) => { rec.select = s; return b }
+    b.select = (s: string, o?: unknown) => { rec.select = s; rec.selectOpts = o; return b }
     b.eq = (c: string, v: unknown) => { rec.filters.push(`eq:${c}=${v}`); return b }
     b.or = (s: string) => { rec.filters.push(`or:${s}`); return b }
     b.order = () => Promise.resolve(r)
@@ -61,6 +61,14 @@ describe('getProjectConfig', () => {
     expect(calls.map((c) => c.table)).toEqual(['project_settings', 'project_areas', 'teams'])
     expect(calls[0].select).toContain('projects!inner(workspace_id)')
     expect(calls[2].filters).toEqual([`eq:workspace_id=${WID}`, `or:project_id.is.null,project_id.eq.${PID}`])
+  })
+  it('팀 조회는 행 수(count)를 함께 받고, 응답이 총합보다 짧으면(max_rows 에서 잘림) 목록을 돌려주지 않고 ConfigUnavailableError(A1-5 R4 — 잘린 팀 목록이 "팀 없음"으로 흐르지 않는다)', async () => {
+    const team = (i: number) => ({ id: `t${i}`, code: `T${i}`, name: `T${i}`, sort_order: i, active: true, color: '#6b7280', progress_visible: true, project_id: PID })
+    const full = fakeClient({ settings: row({}), areas: ok([]), teams: { data: [team(1), team(2)], error: null, count: 2 } })
+    await expect(getProjectConfig(PID, { client: full.client })).resolves.toMatchObject({ teams: [{ code: 'T1' }, { code: 'T2' }] })
+    expect(full.calls[2].selectOpts).toEqual({ count: 'exact' })
+    const cut = fakeClient({ settings: row({}), areas: ok([]), teams: { data: [team(1), team(2)], error: null, count: 1001 } })
+    await expect(getProjectConfig(PID, { client: cut.client })).rejects.toBeInstanceOf(ConfigUnavailableError)
   })
   it('손상 값은 그 키만 invalid 이고 로그 한 줄, 다른 키는 정상. 미등록 키는 unknownKeys', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
