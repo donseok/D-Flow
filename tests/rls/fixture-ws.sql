@@ -251,3 +251,10 @@ insert into public.authz_commands (actor_user_id, kind, scope_id, command_id, wo
   values ('00000000-0000-0000-7e57-0000000000a2', 'workspace_role', '00000000-0000-0000-7e57-00000000aa01',
           '00000000-0000-0000-7e57-000000001312', '00000000-0000-0000-7e57-00000000aa01', 'fixture', '{"status": "applied", "matched": 1}')
   on conflict do nothing;
+
+-- 명령 영수증(SP4 NNNN_command_receipts) — A 행 하나. 전수 교차 테스트의 A 행이자 command-receipts.test.ts 의 읽기·불변 탐침 대상
+insert into public.command_receipts (actor, command_id, kind, workspace_id, project_id, command_digest, result)
+  values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-0000000018f1', 'wbs_import',
+          '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'fixture',
+          '{"status": "applied", "mode": "append", "count": 0, "command_id": "00000000-0000-0000-7e57-0000000018f1"}')
+  on conflict do nothing;

@@ -21,9 +21,9 @@ import { walk } from './_walk'
 
 /** 마이그레이션에서 인자 이름이 정확히 p_actor 인 public 함수 — 닫힌 목록. 새 마이그레이션이 p_actor 함수를 만들면 그 과제가 같이 더한다 */
 const P_ACTOR_RPCS: ReadonlySet<string> = new Set([
-  'actor_is_project_admin', 'apply_project_settings', 'apply_workflow_event', 'apply_workspace_settings', 'create_project_with_settings',
-  'create_weekly_report', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role', 'upsert_project_area', 'upsert_project_member',
-  'upsert_project_member_cmd',
+  'actor_is_project_admin', 'apply_project_settings', 'apply_workflow_event', 'apply_workspace_settings', 'convert_inherited_teams',
+  'create_project_with_settings', 'create_weekly_report', 'import_wbs_cmd', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
+  'upsert_project_area', 'upsert_project_member', 'upsert_project_member_cmd',
 ])
 
 /** (c) 닫힌 허용 목록 — `<파일>#<rpc>` → 그 자리의 p_actor 값 식(공백 하나로 정규화)·그 식의 자리 수·사유. (a)·(b) 로 통과하는 자리를
