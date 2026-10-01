@@ -1,6 +1,7 @@
 // 팀 기준정보 순수 도메인 — I/O 없음. 런타임 원천은 요청 범위 lib/teams/source.ts(SP4 — 옛 캐시 lib/teams/master.ts 는 B 에서 지운다).
 import type { TeamView } from './authz'
 import type { TeamCode } from './types'
+import { EXCEL_HEADER_WORDS, isHeaderWordMatch } from '@/lib/excel/headerWords'
 
 export interface Team {
   id: string
@@ -33,35 +34,37 @@ export function teamOrderMap(codes: readonly TeamCode[]): Map<string, number> {
   return new Map(codes.map((c, i) => [c, i]))
 }
 
-/** 엑셀 헤더에서 팀 열 탐색에 쓰이는 이름들 — 팀명으로 쓰면 열 맵이 오염된다. */
-export const RESERVED_TEAM_NAMES: readonly string[] = [
-  'Biz', 'Phase', 'Task', 'Activity', '담당', '산출물', '계획',
-  '시작', '종료', '가중치', '실적%', '계획%', '계획대비%', '상태',
-]
+/** 팀 이름으로 쓸 수 없는 낱말(SP4 D38) — 엑셀 머리 낱말 ∪ 그 프로젝트의 단계 이름 ∪ 추가 축 이름. 감지기가 그 머리를 계층·논리 열로
+ *  읽으므로 같은 이름의 팀 열은 감지에서 사라진다. 공용 팀은 여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — 머리 낱말만 본다(K14). */
+export function reservedTeamNames(input: { levelLabels: readonly string[]; extraAxisLabel: string | null }): string[] {
+  return [...new Set([...EXCEL_HEADER_WORDS, ...input.levelLabels, ...(input.extraAxisLabel ? [input.extraAxisLabel] : [])])]
+}
 
 const TEAM_CODE_MAX = 20
 
-/** 관리 화면 팀 추가 입력 검증 — 중복 검사는 액션(DB 대조)에서. */
+/** 팀 추가 입력 검증 — 중복 검사는 액션(DB 대조)에서. reserved 는 호출부가 reservedTeamNames 로 파생해 넘긴다(공용 팀은 EXCEL_HEADER_WORDS).
+ *  예약어 비교는 감지기와 같게 대소문자·전각·공백을 무시한다. */
 export function normalizeNewTeamCode(
-  input: string,
+  input: string, reserved: readonly string[],
 ): { ok: true; code: string } | { ok: false; error: string } {
   const code = input.trim()
   if (!code) return { ok: false, error: '팀 이름을 입력하세요.' }
   if (code.length > TEAM_CODE_MAX) return { ok: false, error: `팀 이름은 ${TEAM_CODE_MAX}자 이하여야 합니다.` }
-  if ((RESERVED_TEAM_NAMES as readonly string[]).includes(code)) {
+  if (reserved.some((w) => isHeaderWordMatch(w, code))) {
     return { ok: false, error: `'${code}'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
   }
   return { ok: true, code }
 }
 
 /** 여러 팀 이름의 사전 검사(SP4 A1-5 R1) — 입력 순서대로 normalizeNewTeamCode 를 적용하고(중복은 한 번), 첫 불가 이름을 입력 그대로 돌려준다.
- *  가져오기 라우트가 되돌릴 수 없는 공용 팀 전환·409 확인 목록 앞에서 부른다 — 쓸 수 없는 이름이 든 요청은 아무 부수효과도 남기지 않는다. */
+ *  가져오기 라우트가 되돌릴 수 없는 공용 팀 전환·409 확인 목록 앞에서 부른다 — 쓸 수 없는 이름이 든 요청은 아무 부수효과도 남기지 않는다.
+ *  reserved 는 그 프로젝트의 예약어(reservedTeamNames — SP4 D38). */
 export function validateNewTeamCodes(
-  inputs: readonly string[],
+  inputs: readonly string[], reserved: readonly string[],
 ): { ok: true; codes: string[] } | { ok: false; team: string; error: string } {
   const codes: string[] = []
   for (const input of inputs) {
-    const n = normalizeNewTeamCode(input)
+    const n = normalizeNewTeamCode(input, reserved)
     if (!n.ok) return { ok: false, team: input, error: n.error }
     if (!codes.includes(n.code)) codes.push(n.code)
   }

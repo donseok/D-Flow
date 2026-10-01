@@ -4,6 +4,9 @@
 
 import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
+// 별칭 사전(논리·담당)은 엑셀 머리 낱말의 단일 출처에 있다(SP4 D38) — 팀 예약어가 같은 사전에서 파생한다. 기존 import 경로를 위해 재수출한다
+import { LOGICAL_ALIASES, TEAM_HEADER_ALIASES } from '@/lib/excel/headerWords'
+export { LOGICAL_ALIASES } from '@/lib/excel/headerWords'
 
 export interface DetectionResult {
   sheetNames: string[]
@@ -13,29 +16,10 @@ export interface DetectionResult {
   warnings: string[]             // '가중치 열을 찾지 못했습니다' 등 — 빈 매핑은 null 로 두고 경고
 }
 
-/** 헤더 별칭 사전 — 완전일치(trim, 대소문자 무시) 우선, 부분일치 차선(규칙 5). */
-export const LOGICAL_ALIASES: Record<keyof ExcelProfile['logical'], readonly string[]> = {
-  extraAxis: ['Biz', 'Biz.', '업무영역', '사업영역'],
-  code: ['코드', 'Code', 'No', 'No.', '번호'],
-  deliverable: ['산출물', '산출물명', 'Deliverable', '결과물'],
-  start: ['시작', '시작일', 'Start', 'Start Date', '착수일'],
-  end: ['종료', '종료일', 'End', 'End Date', '완료일'],
-  weight: ['가중치', 'Weight', '비중'],
-  actualPct: ['실적%', '실적', 'Actual', 'Actual%', '진척률', '진척율'],
-  // outline 계층 전용(규칙 5 물). columns 계층은 계층 열 자체가 이름의 출처라 이 별칭을 쓰지 않는다
-  // (detectWorkbook 조립부가 hierarchy.kind==='columns' 면 무조건 null 로 강제한다) — 맨 뒤에 둬서
-  // 기존 6개 필드의 열 선점 우선순위를 건드리지 않는다(리뷰 픽스: outline+1 무검증 관례 대체).
-  name: ['이름', '업무명', '작업명', '제목', '내용', 'Name', 'Title'],
-}
-
 /** 담당 마크 방식(규칙 6)의 기본 마크 사전. */
 export const DEFAULT_OWNER_MARKS: Record<string, 'primary' | 'support'> = {
   '●': 'primary', '△': 'support', '◎': 'primary', 'O': 'primary', 'o': 'primary',
 }
-
-/** '담당' 열에 팀명을 직접 적는 방식(규칙 6 대안)을 인식하기 위한 헤더 별칭. LOGICAL_ALIASES 밖 —
- *  팀은 ExcelProfile.logical 의 필드가 아니라 teamColumns 다. */
-const TEAM_HEADER_ALIASES = ['담당', '담당팀', '담당자', 'Owner', 'Team', '팀']
 
 const OUTLINE_RE = /^\d+([.\-]\d+)*$/
 

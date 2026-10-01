@@ -12,6 +12,7 @@ import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams } from '@/lib/teams/master'
 
@@ -26,7 +27,8 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
-  const norm = normalizeNewTeamCode(input)
+  // 공용 팀은 여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — 엑셀 머리 낱말만 예약어로 본다(SP4 D38·K14)
+  const norm = normalizeNewTeamCode(input, EXCEL_HEADER_WORDS)
   if (!norm.ok) return norm
   const admin = createAdminClient()
 

@@ -29,7 +29,7 @@ import { POST } from '@/app/api/import/execute/route'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
 import { ERR_MISSING } from '@/lib/authz/errors'
 import { convertConsentToken } from '@/lib/teams/convertConsent'
-import type { Team } from '@/lib/domain/teams'
+import { reservedTeamNames, type Team } from '@/lib/domain/teams'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ConfigTeam } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -66,6 +66,8 @@ const COMMON = [
 const TOKEN = convertConsentToken(COMMON, ['QA'])
 /** 상속 프로젝트의 등록 요청 — 409 가 준 토큰을 함께 보낸다 */
 const registerReq = (fields: Record<string, string> = {}) => req({ registerTeams: 'true', convertToken: TOKEN, ...fields })
+/** 라우트가 같은 설정(단계 이름 '단계'·'작업')으로 파생해 등록에 넘기는 예약어(SP4 D38) */
+const RESERVED = reservedTeamNames({ levelLabels: ['단계', '작업'], extraAxisLabel: null })
 /** 이 프로젝트가 쓰는 팀(원천 projectTeams)·전용 팀(projectOwnTeams)과, 같은 팀을 든 설정(#3 — 교차 검증 기준의 한쪽) */
 function teamsAre(teams: Team[], own: Team[]) {
   vi.mocked(projectTeams).mockResolvedValue(teams)
@@ -233,7 +235,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   it('전용 팀 프로젝트 + registerTeams=true → 전환 없이 ensureProjectTeams(가드의 워크스페이스) 뒤 가져오기', async () => {
     const { rpc } = admin()
     expect((await POST(req({ registerTeams: 'true' }))).status).toBe(200)
-    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'], RESERVED)
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['import_wbs_cmd'])
     expect(m.ensureProjectTeams.mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[0])
   })
@@ -277,6 +279,8 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   it.each([
     ['예약어', '산출물'],
     ['21자', 'a'.repeat(21)],
+    ['이 프로젝트의 단계 이름(SP4 D38)', '작업'],
+    ['대소문자만 다른 머리 낱말(SP4 D38)', 'START'],
   ])('[R1] 상속 프로젝트 + 쓸 수 없는 미등록 팀(%s) → registerTeams 와 무관하게 400 INVALID_TEAM_CODE(그 팀) — 409·전환·등록·가져오기 없음', async (_n, bad) => {
     teamsAre(COMMON, [])
     m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', bad)], holidays: [] })
@@ -305,7 +309,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))
     expect(res.status).toBe(200)
     expect(m.ensureProjectTeams).toHaveBeenCalledTimes(1)
-    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['RES', 'OLD', 'QA'])
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['RES', 'OLD', 'QA'], RESERVED)
     const [convertAt, importAt] = rpc.mock.invocationCallOrder
     expect(convertAt).toBeLessThan(m.ensureProjectTeams.mock.invocationCallOrder[0])
     expect(m.ensureProjectTeams.mock.invocationCallOrder[0]).toBeLessThan(importAt)
@@ -313,7 +317,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   it('[R2] 전용 팀 프로젝트의 등록은 그대로 — 미등록 팀만(이미 있는 팀을 다시 만들지 않는다)', async () => {
     admin()
     expect((await POST(req({ registerTeams: 'true' }))).status).toBe(200)
-    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'], RESERVED)
   })
 
   // ── R3 — 전환 동의는 1비트가 아니라 409 가 보여 준 대상에 묶인다 ─────────────────────────────────────────────────────
@@ -360,7 +364,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(rpc).not.toHaveBeenCalled()
     m.ensureProjectTeams.mockResolvedValue({ ok: true, created: ['QA'], existing: [] })
     const done = await (await POST(req({ saveProfile: 'true', registerTeams: 'true' }))).json()
-    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'])
+    expect(m.ensureProjectTeams).toHaveBeenCalledWith({ projectId: P, workspaceId: WS }, ['QA'], RESERVED)
     expect(done).toMatchObject({ ok: true, profileSaved: true })
     expect(done.profileSave).toBeUndefined()
   })

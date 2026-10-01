@@ -18,6 +18,7 @@ import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
 import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { isInviteToken, validateSignupInput } from '@/lib/domain/invites'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { settingDef } from '@/lib/settings/registry'
 import ExcelJS from 'exceljs'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
@@ -213,7 +214,7 @@ describe('SP1 팀', () => {
   it('A 는 두 팀(다중 팀 명단), B 는 한 팀이고 전부 새 팀 코드 규칙을 통과한다', () => {
     expect(SP1_TEAMS.A).toHaveLength(2)
     expect(SP1_TEAMS.B).toHaveLength(1)
-    for (const code of [...SP1_TEAMS.A, ...SP1_TEAMS.B]) expect(normalizeNewTeamCode(code)).toEqual({ ok: true, code })
+    for (const code of [...SP1_TEAMS.A, ...SP1_TEAMS.B]) expect(normalizeNewTeamCode(code, EXCEL_HEADER_WORDS)).toEqual({ ok: true, code })
   })
   it('teamIdsByCode — 그 프로젝트 행에서 코드 순서대로 id, 없거나 겹치면 throw', () => {
     const rows = [
@@ -387,7 +388,7 @@ describe('SP2 계정·팀 픽스처', () => {
     }
   })
   it('워크스페이스 공용 팀은 새 팀 코드 규칙을 통과하고 프로젝트 팀과 겹치지 않는다(담당 판정이 범위로만 갈린다)', () => {
-    expect(normalizeNewTeamCode(WS_TEAM)).toEqual({ ok: true, code: WS_TEAM })
+    expect(normalizeNewTeamCode(WS_TEAM, EXCEL_HEADER_WORDS)).toEqual({ ok: true, code: WS_TEAM })
     expect([...SP1_TEAMS.A, ...SP1_TEAMS.B]).not.toContain(WS_TEAM)
   })
   it('워크스페이스 B 는 부트스트랩 기본 슬러그가 아니다', () => {
@@ -609,7 +610,7 @@ describe('SP4 A1 — E2E 의 주간·가져오기 픽스처(스펙 §6.3)', () =
     expect(findSentinels(REGISTERED_AREA.code, SENTINELS_BY_SP.SP4)).toEqual([])
   })
   it('미등록 팀 code — 새 팀 코드 규칙 통과, SP1 팀·공용 팀과 다르고 센티널이 아니다', () => {
-    expect(normalizeNewTeamCode(UNREGISTERED_TEAM)).toEqual({ ok: true, code: UNREGISTERED_TEAM })
+    expect(normalizeNewTeamCode(UNREGISTERED_TEAM, EXCEL_HEADER_WORDS)).toEqual({ ok: true, code: UNREGISTERED_TEAM })
     expect([...SP1_TEAMS.A, ...SP1_TEAMS.B, WS_TEAM]).not.toContain(UNREGISTERED_TEAM)
     expect(findSentinels(UNREGISTERED_TEAM, SENTINELS_BY_SP.SP4)).toEqual([])
   })

@@ -2,8 +2,8 @@ import 'server-only'
 
 // 가져오기의 미등록 팀 등록(스펙 §4.4 #6 — D4·Q36). 늘 그 프로젝트의 전용 팀이고 "이미 있으면 성공"이다 — 사전 조회로 있는 팀을
 // 건너뛰고, insert 의 23505(같은 명령의 동시 재전송이 먼저 만든 팀)도 성공으로 본다. 그래서 같은 명령 id 재시도가 팀 단계에서 500 이
-// 되지 않고 RPC 의 duplicate 까지 간다. 정규화·예약어는 addProjectTeam 과 같은 normalizeNewTeamCode(A2 가 예약어를 프로젝트 설정까지
-// 넓힐 때 같이 바꾼다 — 스펙 §4.2.4). 공용 팀은 만들지 않는다 — 상속 공용 팀 전환은 RPC convert_inherited_teams 몫이고 라우트가 먼저
+// 되지 않고 RPC 의 duplicate 까지 간다. 정규화·예약어는 addProjectTeam 과 같은 normalizeNewTeamCode — 예약어(reservedTeamNames: 머리 낱말 ∪
+// 그 프로젝트의 단계 이름·추가 축 이름, SP4 D38)는 같은 요청에서 프로젝트 설정을 이미 읽은 호출부가 넘긴다(설정을 두 번 읽지 않는다). 공용 팀은 만들지 않는다 — 상속 공용 팀 전환은 RPC convert_inherited_teams 몫이고 라우트가 먼저
 // 부른다(D54). 팀 행은 각자 커밋된다(트랜잭션 밖 — 실패해도 앞서 만든 팀은 남는다, 지금과 같은 성질).
 // 호출부는 requireProjectAdmin(pid) 를 통과한 뒤 부르고 workspaceId 는 그 가드 결과다(teams_guard 가 프로젝트와의 일치를 다시 본다).
 // DB 오류 원문은 결과에 싣지 않는다(failWith — 로그로만, 스펙 §4.7).
@@ -20,11 +20,11 @@ export const ERR_REGISTER_TEAMS = '팀을 등록하지 못했습니다. 잠시 �
 
 /** codes 를 그 프로젝트의 전용 팀으로 — 이미 있으면 existing, 새로 만들면 created(정규화한 code, 입력 순·중복 없음) */
 export async function ensureProjectTeams(
-  scope: { projectId: string; workspaceId: string }, codes: readonly string[],
+  scope: { projectId: string; workspaceId: string }, codes: readonly string[], reserved: readonly string[],
 ): Promise<EnsureTeamsResult> {
   // 하나라도 이름이 틀리면 아무것도 만들지 않는다 — 정규화를 DB 보다 먼저 끝낸다. 가져오기 라우트는 같은 검사(validateNewTeamCodes)를
   // 전환·409 앞에서 이미 했다 — 여기는 두 번째 방어선이다(다른 호출부·경합)
-  const checked = validateNewTeamCodes(codes)
+  const checked = validateNewTeamCodes(codes, reserved)
   if (!checked.ok) return { ok: false, code: 'INVALID_TEAM_CODE', error: checked.error, team: checked.team }
   const wanted = checked.codes
   if (wanted.length === 0) return { ok: true, created: [], existing: [] }

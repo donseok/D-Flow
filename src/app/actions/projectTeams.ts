@@ -7,7 +7,9 @@
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { normalizeNewTeamCode } from '@/lib/domain/teams'
+import { normalizeNewTeamCode, reservedTeamNames } from '@/lib/domain/teams'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { valueOf } from '@/lib/settings/registry'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { refreshTeams, teamsForWorkspaceSync } from '@/lib/teams/master'
 
@@ -16,7 +18,16 @@ export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string 
 export async function addProjectTeam(projectId: string, input: string): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  const norm = normalizeNewTeamCode(input)
+  // 예약어는 그 프로젝트의 단계 이름·추가 축 이름까지(D38) — 설정을 못 읽으면 만들지 않는다(쓰기 전 선행 조회 실패는 중단, 3원칙 ②)
+  let reserved: string[]
+  try {
+    const cfg = await getProjectConfig(projectId)
+    reserved = reservedTeamNames({ levelLabels: valueOf(cfg, 'core.level_labels'), extraAxisLabel: valueOf(cfg, 'core.extra_axis_label') })
+  } catch (e) {
+    console.error('[projectTeams] 예약어 판정용 설정 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: '프로젝트 설정을 확인할 수 없어 팀을 만들지 않았습니다. 잠시 후 다시 시도하세요.' }
+  }
+  const norm = normalizeNewTeamCode(input, reserved)
   if (!norm.ok) return norm
   // requireProjectAdmin 이 통과했으면 roleIn 이 이미 projectWorkspace 에서 이 프로젝트를 찾은 뒤다
   // (domain/authz.ts roleIn ④) — 여기서 다시 없을 수 없다. projects 테이블을 별도 조회하지 않는다

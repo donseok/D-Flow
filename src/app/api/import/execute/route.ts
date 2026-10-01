@@ -11,12 +11,14 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
-import { validateNewTeamCodes, type Team } from '@/lib/domain/teams'
+import { reservedTeamNames, validateNewTeamCodes, type Team } from '@/lib/domain/teams'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
-  CONFIG_MESSAGES, ConfigUnavailableError, ERR_COMMAND_REUSED, ERR_CONFIG_UNAVAILABLE, type ConfigCode, type DbErrorLike,
+  CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_COMMAND_REUSED, ERR_CONFIG_UNAVAILABLE, configStatus, type ConfigCode,
+  type DbErrorLike,
 } from '@/lib/settings/errors'
+import { valueOf } from '@/lib/settings/registry'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { validateProjectConfig } from '@/lib/settings/validateConfig'
 import { writeProjectSettingsInternal } from '@/lib/settings/write'
@@ -211,9 +213,18 @@ export async function POST(req: NextRequest) {
     ])]
     const unknownTeams = fileTeams.filter((t) => !known.has(t))
     if (unknownTeams.length > 0) {
+      // 예약어 = 엑셀 머리 낱말 ∪ 이 프로젝트의 단계 이름·추가 축 이름(SP4 D38) — 위에서 읽은 같은 설정으로. 손상된 키는 그 키의 오류
+      // (예약어를 모르는 채 이름을 통과시키지 않는다 — 아래 전환·등록을 하지 않는다)
+      let reserved: string[]
+      try {
+        reserved = reservedTeamNames({ levelLabels: valueOf(cfg, 'core.level_labels'), extraAxisLabel: valueOf(cfg, 'core.extra_axis_label') })
+      } catch (e) {
+        if (e instanceof ConfigKeyError) return fail(configStatus(e.code), e.code, e.message)
+        throw e
+      }
       // 이름 검사는 409 판정·전환 앞이다(A1-5 R1) — 쓸 수 없는 이름이 든 요청은 registerTeams 와 무관하게 400 이고 부수효과가 없다.
       // 되돌릴 수 없는 공용 팀 전환이 거절된 요청 뒤에 남지 않고, 409 확인 창에는 등록할 수 있는 이름만 오른다
-      const named = validateNewTeamCodes(unknownTeams)
+      const named = validateNewTeamCodes(unknownTeams, reserved)
       if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: named.team })
       const inheritsCommon = ownTeams.length === 0
       // 전환 동의 토큰(A1-5 R3) — 상속 프로젝트의 확인은 "등록해도 되나" 한 비트가 아니라 409 가 보여 준 전환 대상(공용 팀 전부 + 등록할 팀)에
@@ -230,7 +241,7 @@ export async function POST(req: NextRequest) {
       if (!workspaceId) return fail(404, 'ERR_MISSING', ERR_MISSING)
       if (inheritsCommon) {
         // 전환 뒤에는 파일의 팀 전부를 전용 팀으로 맞추므로(아래 R2) 그 이름도 전환 앞에서 검사한다 — 검사 실패가 전환을 남기지 않는다
-        const all = validateNewTeamCodes(fileTeams)
+        const all = validateNewTeamCodes(fileTeams, reserved)
         if (!all.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: all.team })
         // 첫 전용 팀이 생기면 상속하던 공용 팀이 그 프로젝트 화면에서 사라진다 — 먼저 같은 code·이름·색의 전용 팀으로 바꾸고
         // 그 프로젝트 안의 참조(담당·명단 팀·영역 팀·수락 전 초대)를 옮긴다(D54). converted·already 모두 성공이다
@@ -244,7 +255,7 @@ export async function POST(req: NextRequest) {
       // R2 — 전환을 부른 요청은 대조를 전환 뒤 상태로 다시 한다: 파일의 팀 code 전부를 전용 팀으로 맞춘다(이미 있는 전용 팀은 existing).
       // 전환은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 팀만 복사하므로, 파일이 가리키는 "비활성·미참조 공용 팀"은 전용 팀으로 새로
       // 만들어야 import_wbs_cmd 가 그 담당을 공용 팀 id 로 넣지 않는다(전용·공용 혼재 = D4 분열 — DB 가 같은 code 의 공용 참조만 막는다)
-      const ensured = await ensureProjectTeams({ projectId, workspaceId }, inheritsCommon ? fileTeams : unknownTeams)
+      const ensured = await ensureProjectTeams({ projectId, workspaceId }, inheritsCommon ? fileTeams : unknownTeams, reserved)
       if (!ensured.ok) {
         if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: ensured.team })
         return fail(500, 'TEAM_REGISTER_FAILED', ERR_TEAM_REGISTER)

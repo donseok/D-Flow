@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
+import { HEADER } from '@/lib/excel/headerWords'
 
 const STATUS_LABEL: Record<ComputedItem['status'], string> = {
   not_started: '시작전', in_progress: '진행중', delayed: '지연', done: '완료',
@@ -170,9 +171,9 @@ export function buildAoaWithProfile(
   )
   const header2 = new Array(header2Bound + 1).fill('')
   if (hierColsOut) hierColsOut.forEach((c, i) => { header2[c] = hierarchyLabel(profile, i, levelLabels) })
-  if (teamCols.length > 0) header2[teamCols[0][0]] = '담당'
-  if (deliverableCol != null) header2[deliverableCol] = '산출물'
-  if (startCol != null) header2[startCol] = '계획'
+  if (teamCols.length > 0) header2[teamCols[0][0]] = HEADER.owner
+  if (deliverableCol != null) header2[deliverableCol] = HEADER.deliverable
+  if (startCol != null) header2[startCol] = HEADER.plan
 
   // ── 헤더 3행(라벨 행) ──
   // trailing 라벨은 3개뿐이다(계획%/계획대비%/진척) — 데이터 행의 4개(+성과율)와 폭이 다른 기존
@@ -180,20 +181,20 @@ export function buildAoaWithProfile(
   // 않는다 — 계약 (a) 참조).
   const header3 = new Array(maxCol + 4).fill('')
   if (hierColsOut) hierColsOut.forEach((c, i) => { header3[c] = hierarchyLabel(profile, i, levelLabels) })
-  else if (outlineColOut != null) header3[outlineColOut] = '코드'
-  if (extraAxisCol != null) header3[extraAxisCol] = 'Biz'
-  if (codeCol != null) header3[codeCol] = '코드'
-  if (nameCol != null) header3[nameCol] = '이름'
+  else if (outlineColOut != null) header3[outlineColOut] = HEADER.code
+  if (extraAxisCol != null) header3[extraAxisCol] = HEADER.extraAxis
+  if (codeCol != null) header3[codeCol] = HEADER.code
+  if (nameCol != null) header3[nameCol] = HEADER.name
   teamCols.forEach(([c, label]) => { header3[c] = label })
-  if (deliverableCol != null) header3[deliverableCol] = '산출물'
-  if (startCol != null) header3[startCol] = '시작'
-  if (endCol != null) header3[endCol] = '종료'
-  if (weightCol != null) header3[weightCol] = '가중치'
-  if (actualPctCol != null) header3[actualPctCol] = '실적%'
-  if (insertAt != null) header3[insertAt] = '세부업무' // 펼침 전용 — 접기 모드는 insertAt 자체가 null
-  header3[maxCol + 1] = '계획%'
-  header3[maxCol + 2] = '계획대비%'
-  header3[maxCol + 3] = '진척'
+  if (deliverableCol != null) header3[deliverableCol] = HEADER.deliverable
+  if (startCol != null) header3[startCol] = HEADER.start
+  if (endCol != null) header3[endCol] = HEADER.end
+  if (weightCol != null) header3[weightCol] = HEADER.weight
+  if (actualPctCol != null) header3[actualPctCol] = HEADER.actualPct
+  if (insertAt != null) header3[insertAt] = HEADER.subAct // 펼침 전용 — 접기 모드는 insertAt 자체가 null
+  header3[maxCol + 1] = HEADER.plannedPct
+  header3[maxCol + 2] = HEADER.vsPlan
+  header3[maxCol + 3] = HEADER.progress
 
   // 라벨 행(header3)은 profile.headerRow 위치에 둔다 — parseWithProfile 이 headerRow+1 부터 데이터를 읽는다.
   const rows: unknown[][] = [...headerRowsBeforeLabel(profile.headerRow, header1, header2, projectName), header3]

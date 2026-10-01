@@ -65,9 +65,13 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams, teamsForWorkspaceSync }))
+// 팀 예약어는 그 프로젝트의 단계 이름까지(SP4 D38) — 설정 해석기는 목이라 admin 의 "teams 만" 계약에 걸리지 않는다
+const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 
 import { addProjectTeam, updateProjectTeam, copyGlobalTeams } from '@/app/actions/projectTeams'
 import { makeAdminActor } from '../fixtures/actor'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const ADMIN_ACTOR = makeAdminActor('p1', { userId: 'u-admin' })
 const asAdmin = () => requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN_ACTOR })
@@ -82,6 +86,8 @@ describe('프로젝트 팀 관리 서버액션', () => {
     refreshTeams.mockClear()
     requireProjectAdmin.mockReset()
     teamsForWorkspaceSync.mockReset()
+    cfg.getProjectConfig.mockReset()
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
   })
 
   describe('addProjectTeam', () => {
@@ -232,5 +238,21 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(db.inserted.teams).toHaveLength(0)
       spy.mockRestore()
     })
+  })
+  it('프로젝트 단계 이름과 같은 팀 이름은 거부한다 — 대소문자를 무시한다(D38)', async () => {
+    asAdmin()
+    expect(await addProjectTeam('p1', '작업')).toEqual({ ok: false, error: "'작업'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
+    expect(await addProjectTeam('p1', 'START')).toEqual({ ok: false, error: "'START'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
+    expect(db.inserted.teams).toEqual([])
+  })
+  it('설정을 읽지 못하면 팀을 만들지 않는다 — 예약어를 모르는 채 통과시키지 않는다(3원칙 ②)', async () => {
+    asAdmin()
+    cfg.getProjectConfig.mockRejectedValueOnce(new Error('db down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await addProjectTeam('p1', '신팀')
+    expect(r.ok).toBe(false)
+    expect(db.inserted.teams).toEqual([])
+    expect(fromCalls).toEqual([])
+    err.mockRestore()
   })
 })
