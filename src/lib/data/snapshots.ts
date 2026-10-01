@@ -4,7 +4,8 @@ import type { SnapshotPoint } from '@/lib/domain/trend'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
 import { seoulToday } from '@/lib/domain/dates'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { fetchAllByKeyset } from '@/lib/data/paging'
+import { projectTeams } from '@/lib/teams/source'
 
 type Sb = Awaited<ReturnType<typeof createServerClient>>
 
@@ -14,28 +15,19 @@ export const ERR_SNAPSHOTS_LOAD = '진척 이력을 불러오지 못했습니다
 export async function getSnapshots(
   projectId: string,
 ): Promise<{ ok: true; rows: SnapshotPoint[] } | { ok: false; error: string }> {
-  const sb = await createServerClient()
-  const { data, error } = await sb
-    .from('wbs_progress_snapshots')
-    .select('snap_date, actual_pct, planned_pct')
-    .eq('project_id', projectId)
-    .order('snap_date', { ascending: true })
-
-  // 실패를 결과로 돌려준다 — 추세선을 합성하지 않게 화면이 이력 실패를 안다.
-  // ('이력 0건'으로 위장하면 buildTrend 가 (축 시작,0)→(오늘,실적) 선을 합성해 정상 차트처럼 보인다.
-  //  throw 하지 않는 이유: 같은 페이지의 다른 카드까지 동반 사망한다.)
-  if (error) {
-    console.error('[getSnapshots] 진척 스냅샷 조회 실패:', error.message)
+  // 끝까지 읽는다(SP4 A2) — 날짜 오름차순 한 번이면 1,000일 뒤의 최근 이력이 잘린다. 키는 PK 의 snap_date(프로젝트 안에서 유일).
+  // 실패를 결과로 돌려준다 — 추세선을 합성하지 않게 화면이 이력 실패를 안다. ('이력 0건'으로 위장하면 buildTrend 가 (축 시작,0)→(오늘,실적)
+  //  선을 합성해 정상 차트처럼 보인다. throw 하지 않는 이유: 같은 페이지의 다른 카드까지 동반 사망한다.)
+  try {
+    const sb = await createServerClient()
+    const data = await fetchAllByKeyset<Record<string, unknown>>('[getSnapshots] wbs_progress_snapshots', (r) => String(r.snap_date), (after, limit) => {
+      const q = sb.from('wbs_progress_snapshots').select('snap_date, actual_pct, planned_pct', { count: 'exact' }).eq('project_id', projectId)
+      return (after ? q.gt('snap_date', String(after.snap_date)) : q).order('snap_date').limit(limit)
+    })
+    return { ok: true, rows: data.map((r) => ({ date: r.snap_date as string, actual: Number(r.actual_pct), planned: Number(r.planned_pct) })) }
+  } catch (e) {
+    console.error('[getSnapshots] 진척 스냅샷 조회 실패:', e instanceof Error ? e.message : e)
     return { ok: false, error: ERR_SNAPSHOTS_LOAD }
-  }
-
-  return {
-    ok: true,
-    rows: (data ?? []).map((r: Record<string, unknown>) => ({
-      date: r.snap_date as string,
-      actual: Number(r.actual_pct),
-      planned: Number(r.planned_pct),
-    })),
   }
 }
 
@@ -71,18 +63,22 @@ export async function recordProgressSnapshot(
       await upsertSnapshot(sb, projectId, todayNow, actual, planned)
       return
     }
-    const [{ data: items, error: itemsErr }, { data: hol, error: holErr }] = await Promise.all([
-      sb.from('wbs_items')
-        .select('id, parent_id, code, sort_order, name, planned_start, planned_end, weight, actual_pct, is_owner_split')
-        .eq('project_id', projectId),
-      sb.from('holidays').select('date').eq('project_id', projectId),
+    // 재계산 경로도 끝까지(SP4 A2 §4.6 — 잘린 트리의 공정율을 오늘 값으로 남기지 않는다). 실패는 아래 catch 가 로그만(보험 기록).
+    // 팀 순서는 받은 클라이언트로 읽는다 — 에이전트 라우트는 service_role 을 넘긴다(세션이 없으면 cookies() 도 없다).
+    const [items, hol, teams] = await Promise.all([
+      fetchAllByKeyset<Record<string, unknown>>('[snapshot] wbs_items', (r) => String(r.id), (after, limit) => {
+        const q = sb.from('wbs_items')
+          .select('id, parent_id, code, sort_order, name, planned_start, planned_end, weight, actual_pct, is_owner_split', { count: 'exact' })
+          .eq('project_id', projectId)
+        return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+      }),
+      fetchAllByKeyset<{ date: string }>('[snapshot] holidays', (r) => r.date, (after, limit) => {
+        const q = sb.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
+        return (after ? q.gt('date', after.date) : q).order('date').limit(limit)
+      }),
+      projectTeams(projectId, { client: sb }),
     ])
-    if (itemsErr || holErr) {
-      // supabase-js는 RLS 거부·테이블 미존재를 throw하지 않고 {error}로 반환하므로 명시적으로 확인해 로그를 남긴다.
-      console.error('[snapshot] wbs_items/holidays 조회 실패(무시):', (itemsErr ?? holErr)!.message)
-      return
-    }
-    if (!items?.length) return
+    if (!items.length) return
     const rows: WbsRow[] = items.map((r: Record<string, unknown>) => ({
       id: r.id as string,
       parentId: (r.parent_id as string) ?? null,
@@ -98,8 +94,8 @@ export async function recordProgressSnapshot(
       owners: [],
       isOwnerSplit: r.is_owner_split === true,
     }))
-    const holidays = new Set((hol ?? []).map((h: { date: string }) => h.date))
-    const opts = { subActTeamOrder: teamOrderMap(activeCodes(teamsForProjectSync(projectId))) }
+    const holidays = new Set(hol.map((h) => h.date))
+    const opts = { subActTeamOrder: teamOrderMap(activeCodes(teams)) }
     const { actual, planned } = overallProgress(computeTree(rows, todayNow, holidays, opts))
     await upsertSnapshot(sb, projectId, todayNow, actual, planned)
   } catch (e) {

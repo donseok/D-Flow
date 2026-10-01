@@ -4,11 +4,14 @@ import { createSupabaseMeetingRepository } from '@/lib/repositories/supabase/mee
 import { createSupabaseWbsRepository } from '@/lib/repositories/supabase/wbs'
 import { createSupabaseWeeklyRepository } from '@/lib/repositories/supabase/weekly'
 
+// 봇 WBS 리포지토리는 팀 순서를 요청 범위 원천에서 읽는다(SP4 A2) — 이 파일은 순서와 무관한 단언이라 빈 팀
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
+
 type QueryResponse = { data: unknown; error: unknown }
 
 function queryBuilder(response: QueryResponse) {
   const builder: Record<string, unknown> = {}
-  for (const method of ['select', 'eq', 'gte', 'lte', 'in', 'or', 'order', 'maybeSingle']) {
+  for (const method of ['select', 'eq', 'gte', 'lte', 'in', 'or', 'order', 'gt', 'limit', 'maybeSingle']) {
     builder[method] = vi.fn(() => builder)
   }
   for (const method of ['insert', 'upsert', 'update', 'delete']) {
@@ -17,7 +20,7 @@ function queryBuilder(response: QueryResponse) {
   builder.then = (
     resolve: (value: QueryResponse) => unknown,
     reject: (reason: unknown) => unknown,
-  ) => Promise.resolve(response).then(resolve, reject)
+  ) => Promise.resolve({ ...response, count: Array.isArray(response.data) ? response.data.length : null }).then(resolve, reject)
   return builder
 }
 

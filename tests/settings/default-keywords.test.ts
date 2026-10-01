@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: vi.fn() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: vi.fn() }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: vi.fn() }))
 import { portfolioMilestoneKeywords } from '@/lib/data/portfolio'
 import { DEFAULT_MILESTONE_KEYWORDS } from '@/lib/settings/defs/project'
 

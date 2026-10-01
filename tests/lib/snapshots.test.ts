@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // 진척 스냅샷 조회 실패를 '이력 0건'으로 돌려주면 buildTrend 가 (축 시작,0)→(오늘,실적) 추세선을 합성해
 // 정상 차트처럼 보인다 — 로더는 실패를 결과로 돌려주고, 화면이 이력 실패를 알고 추세선을 그리지 않는다.
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 
 import { createServerClient } from '@/lib/supabase/server'
 import { ERR_SNAPSHOTS_LOAD, getSnapshots } from '@/lib/data/snapshots'
@@ -17,7 +17,10 @@ function makeSb(reply: Reply) {
   chain.select = () => chain
   chain.eq = (k: string, v: unknown) => { calls.eq.push([k, v]); return chain }
   chain.order = () => chain
-  chain.then = (res: unknown, rej: unknown) => Promise.resolve(reply).then(res as never, rej as never)
+  chain.gt = () => chain
+  chain.limit = () => chain
+  chain.then = (res: unknown, rej: unknown) =>
+    Promise.resolve({ ...reply, count: Array.isArray(reply.data) ? reply.data.length : null }).then(res as never, rej as never)
   const sb = { from: (t: string) => { calls.tables.push(t); return chain } }
   vi.mocked(createServerClient).mockResolvedValue(sb as never)
   return calls

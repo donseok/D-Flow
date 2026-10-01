@@ -24,10 +24,9 @@ const PAGES_ROOT = join(CWD, 'src/app/(app)/p/[projectId]')
 // 워크스페이스 설정 화면도 같은 이유로 본다(스펙 SP3a §7.1) — 레이아웃이 아니라 페이지가 자기 가드를 건다.
 const WORKSPACE_PAGES_ROOT = join(CWD, 'src/app/(app)/w/[slug]')
 
-/** service_role 에 닿지만 그 내용이 결과에 실리지 않는 로더 — 탐색을 여기서 끊는다. 한 줄 근거 필수. */
-const SAFE_LOADERS: Record<string, string> = {
-  'src/lib/data/snapshots.ts': '팀 캐시는 RLS 로 읽은 항목 롤업의 정렬 키(subActTeamOrder)로만 쓰고, 결과는 실적·계획 % 숫자다(쓰기도 세션 클라이언트)',
-}
+/** service_role 에 닿지만 그 내용이 결과에 실리지 않는 로더 — 탐색을 여기서 끊는다. 한 줄 근거 필수. 지금은 없다(SP4 A2 — 옛 팀 캐시를
+ *  쓰던 두 로더가 요청 범위 원천으로 옮겼다). */
+const SAFE_LOADERS: Record<string, string> = {}
 /** `<page>#<symbol>` — 로더가 자기 가드를 가져 페이지 게이트가 필요 없는 경우. 한 줄 근거 필수. 지금은 없다. */
 const ALLOWLIST: Record<string, string> = {}
 

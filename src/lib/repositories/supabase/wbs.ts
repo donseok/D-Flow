@@ -2,6 +2,7 @@ import type { OwnerKind, TaskDependency, TeamCode, WbsRow } from '@/lib/domain/t
 import {
   repositoryError,
   repositoryOk,
+  type RepositoryErrorCode,
   type RepositoryResult,
   type WbsAttachmentMetadataSnapshot,
   type WbsBotRepository,
@@ -15,7 +16,8 @@ import { isRetryableReadError, nestedOne, type SupabaseServerClient } from './co
 import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
+import { fetchAllByKeyset, type PageResult } from '@/lib/data/paging'
 
 type Row = Record<string, unknown>
 
@@ -39,7 +41,8 @@ interface WbsItemScope {
   updatedAt: string | null
 }
 
-function mapOwners(raw: unknown, projectId: string): WbsRow['owners'] {
+/** 표시 순서는 그 프로젝트 팀의 sort_order(비활성 포함, 호출부가 한 번 읽어 넘긴다). 미등록은 뒤로. */
+function mapOwners(raw: unknown, order: ReadonlyMap<string, number>): WbsRow['owners'] {
   if (!Array.isArray(raw)) return []
   // 팀 코드는 teams FK 조인 결과라 등록 팀만 온다 — 하드코딩 화이트리스트 불필요(신규 팀 자동 수용).
   const allowedKinds = new Set<OwnerKind>(['primary', 'support'])
@@ -54,8 +57,6 @@ function mapOwners(raw: unknown, projectId: string): WbsRow['owners'] {
       owners.push({ team: code, kind: kind as OwnerKind })
     }
   }
-  // 표시 순서는 팀 마스터 sort_order(비활성 포함 — 기존 데이터 정렬 안정). 미등록은 뒤로.
-  const order = teamOrderMap(teamsForProjectSync(projectId).map(t => t.code))
   const rank = (t: TeamCode) => order.get(t) ?? Number.MAX_SAFE_INTEGER
   return owners.sort((a, b) =>
     (a.kind === b.kind ? 0 : a.kind === 'primary' ? -1 : 1) || rank(a.team) - rank(b.team),
@@ -118,7 +119,7 @@ async function readItemScope(
   })
 }
 
-function mapItem(row: Row, projectId: string): WbsRepositoryItem {
+function mapItem(row: Row, order: ReadonlyMap<string, number>): WbsRepositoryItem {
   return {
     id: row.id as string,
     projectId: row.project_id as string,
@@ -132,7 +133,7 @@ function mapItem(row: Row, projectId: string): WbsRepositoryItem {
     plannedEnd: (row.planned_end as string | null) ?? null,
     weight: nullableNumber(row.weight),
     actualPct: nullableNumber(row.actual_pct),
-    owners: mapOwners(row.item_owners, projectId),
+    owners: mapOwners(row.item_owners, order),
     updatedAt: (row.updated_at as string | null) ?? null,
     isOwnerSplit: row.is_owner_split === true,
   }
@@ -154,41 +155,55 @@ function mapDependency(row: Row): TaskDependency {
 export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBotRepository {
   return {
     async getProjectSnapshot(projectId): Promise<RepositoryResult<WbsProjectSnapshot | null>> {
-      const [projectResult, itemsResult, holidaysResult, dependenciesResult] = await Promise.all([
+      // 세 표는 끝까지 읽는다(SP4 A2 §4.6 — 키는 id·date·id). 팀 순서는 한 번(받은 클라이언트로) — 항목마다 읽지 않는다.
+      const settle = async <T>(code: RepositoryErrorCode, read: () => Promise<T>): Promise<{ ok: true; data: T } | { ok: false; code: RepositoryErrorCode }> => {
+        try { return { ok: true, data: await read() } } catch (e) {
+          console.error(`[bot-wbs] ${code}:`, e instanceof Error ? e.message : e)
+          return { ok: false, code }
+        }
+      }
+      const [projectResult, items, holidays, deps, teams] = await Promise.all([
         client.from('projects').select('id, base_date').eq('id', projectId).maybeSingle(),
-        client.from('wbs_items').select(WBS_COLUMNS).eq('project_id', projectId).order('sort_order'),
-        client.from('holidays').select('date').eq('project_id', projectId).order('date'),
-        client.from('task_dependencies')
-          .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days')
-          .eq('project_id', projectId),
+        settle('WBS_ITEMS_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] wbs_items', (r) => String(r.id), (after, limit) => {
+          const q = client.from('wbs_items').select(WBS_COLUMNS, { count: 'exact' }).eq('project_id', projectId)
+          // WBS_COLUMNS 는 조립한 문자열이라 select 의 행 형을 추론하지 못한다(GenericStringError) — 행은 Row 로 읽는다
+          return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit) as unknown as PromiseLike<PageResult<Row>>
+        })),
+        settle('WBS_HOLIDAYS_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] holidays', (r) => String(r.date), (after, limit) => {
+          const q = client.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
+          return (after ? q.gt('date', String(after.date)) : q).order('date').limit(limit)
+        })),
+        settle('WBS_DEPENDENCIES_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] task_dependencies', (r) => String(r.id), (after, limit) => {
+          const q = client.from('task_dependencies')
+            .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days', { count: 'exact' }).eq('project_id', projectId)
+          return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
+        })),
+        settle('WBS_TEAMS_READ_FAILED', () => projectTeams(projectId, { client })),
       ])
 
       if (projectResult.error) {
         return repositoryError('WBS_PROJECT_READ_FAILED', isRetryableReadError(projectResult.error))
       }
-      if (itemsResult.error) {
-        return repositoryError('WBS_ITEMS_READ_FAILED', isRetryableReadError(itemsResult.error))
-      }
-      if (holidaysResult.error) {
-        return repositoryError('WBS_HOLIDAYS_READ_FAILED', isRetryableReadError(holidaysResult.error))
-      }
-      if (dependenciesResult.error) {
-        return repositoryError('WBS_DEPENDENCIES_READ_FAILED', isRetryableReadError(dependenciesResult.error))
-      }
+      // 끝까지 읽기의 실패(조회 오류·잘림·읽는 사이 변경)는 재시도할 만하다 — 원문은 위 로그에만
+      if (!items.ok) return repositoryError(items.code, true)
+      if (!holidays.ok) return repositoryError(holidays.code, true)
+      if (!deps.ok) return repositoryError(deps.code, true)
+      if (!teams.ok) return repositoryError(teams.code, true)
       if (!projectResult.data) return repositoryOk(null)
 
       const project = projectResult.data as Row
-      const itemRows = (itemsResult.data ?? []) as unknown as Row[]
+      const itemRows = items.data
+      const order = teamOrderMap(teams.data.map((t) => t.code))
       const snapshot: WbsProjectSnapshot = {
         projectId,
         baseDate: (project.base_date as string | null) ?? null,
-        items: itemRows.map(row => mapItem(row, projectId)),
-        holidays: ((holidaysResult.data ?? []) as Row[]).map(row => row.date as string),
+        items: itemRows.map(row => mapItem(row, order)),
+        holidays: holidays.data.map(row => row.date as string),
         // wbs_items.depends(import 선행)를 같은 배열로 합쳐 봇이 두 축을 한 번에 본다.
         // 해석 못 한 ref 는 여기서 빠진다 — 봇은 시작 게이트가 아니라 조회 도구이고,
         // 그 상태를 사용자에게 보이는 책임은 화면(RowDetailPanel)이 진다.
         dependencies: mergeSpecDepends(
-          ((dependenciesResult.data ?? []) as Row[]).map(mapDependency),
+          deps.data.map(mapDependency),
           itemRows.map(row => ({
             id: row.id as string,
             projectId: row.project_id as string,

@@ -35,10 +35,7 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/lib/ai/tools/minutes.ts',
   'src/lib/ai/tools/wbs.ts',
   'src/lib/ai/wiki-ingest.ts',
-  'src/lib/data/portfolio.ts',
-  'src/lib/data/snapshots.ts',
   'src/lib/minutes/teamScope.ts',
-  'src/lib/repositories/supabase/wbs.ts',
 ]
 /** 옛 캐시에서 refreshTeams 만 가져오는 파일 — 화면 팀 목록(레이아웃)의 갱신 신호라 B 까지 남는다(계획 P20) */
 export const REFRESH_ONLY: readonly string[] = ['src/app/actions/project.ts']

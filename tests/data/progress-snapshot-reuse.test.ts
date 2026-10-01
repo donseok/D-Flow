@@ -9,7 +9,7 @@ import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 
 type Row = Record<string, unknown>
 const reads: string[] = []
@@ -18,13 +18,13 @@ let upserted: Row | null = null
 function builder(table: string, data: unknown) {
   reads.push(table)
   const b: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'in', 'order', 'maybeSingle']) b[m] = vi.fn(() => b)
+  for (const m of ['select', 'eq', 'in', 'order', 'maybeSingle', 'gt', 'limit']) b[m] = vi.fn(() => b)
   b.upsert = vi.fn((row: Row) => {
     upserted = row
     return Promise.resolve({ error: null })
   })
   b.then = (res: (v: { data: unknown; error: unknown }) => unknown, rej: (r: unknown) => unknown) =>
-    Promise.resolve({ data, error: null }).then(res, rej)
+    Promise.resolve({ data, error: null, count: Array.isArray(data) ? data.length : null }).then(res, rej)
   return b
 }
 

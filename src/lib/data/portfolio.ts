@@ -5,7 +5,7 @@ import { listProjectsWithState } from '@/app/actions/project'
 import { seoulToday } from '@/lib/domain/dates'
 import { addDaysCal } from '@/lib/domain/dashboard'
 import { activeCodes } from '@/lib/domain/teams'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
 import type { PortfolioProjectInput } from '@/lib/domain/portfolio'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { getActor } from '@/lib/authz'
@@ -91,15 +91,16 @@ export async function getPortfolioInputs(): Promise<{
       baseDate: row.base_date ?? null,
       leaders: leadersByProject.get(p.id) ?? [],
       snapshots: snapshotsByProject.get(p.id) ?? [],
-      teams: activeCodes(teamsForProjectSync(p.id)),
       realToday,
     }
+    // 팀과 WBS 를 함께 격리한다(SP4 A2 P19) — 팀 읽기가 try 밖이면 한 프로젝트의 실패로 전사 화면이 멈춘다. 팀은 getComputedWbs 안의
+    // 팀 읽기와 같은 요청 캐시 키(projectTeams(pid) — 클라이언트 인자 없음)라 왕복이 늘지 않는다.
     try {
-      const wbs = await getComputedWbs(p.id)
-      return { ...base, today: wbs.today, items: wbs.items, milestoneKeywords: portfolioMilestoneKeywords() }
+      const [teams, wbs] = await Promise.all([projectTeams(p.id), getComputedWbs(p.id)])
+      return { ...base, teams: activeCodes(teams), today: wbs.today, items: wbs.items, milestoneKeywords: portfolioMilestoneKeywords() }
     } catch (e) {
       console.error(`[portfolio] 프로젝트 로드 실패 — 행을 degraded 로 표시: ${p.name}(${p.id})`, e)
-      return { ...base, today: realToday, items: null, milestoneKeywords: [] }
+      return { ...base, teams: [], today: realToday, items: null, milestoneKeywords: [] }
     }
   }))
 
