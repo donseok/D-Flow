@@ -90,6 +90,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('branding')}#uploadBrandLogo`]: { ...nul('workspaceAdmin', '비공개 브랜딩 버킷 — 관리자만 업로드'), sample: [U, 'mark', {}] },
   // ── chat
   [`${A('chat')}#reindexProjectAction`]: { guard: 'projectAdmin', module: 'chatbot', sample: [P] },
+  // ── importBackup·importReceipts — 가져오기 읽기(SP4 §4.4, core). 가드 앞에서 uuid 를 본다 — 표본이 그 검사를 통과한다
+  [`${A('importBackup')}#getWbsBackup`]: { ...nul('projectAdmin'), sample: [P] },
+  [`${A('importReceipts')}#getImportReceipt`]: { ...nul('projectAdmin'), sample: [P, U] },
   // ── inbox — 셸 알림함
   [`${A('inbox')}#getInboxFeed`]: nul('session', SESSION_SELF),
   [`${A('inbox')}#markInboxSeen`]: nul('session', SESSION_SELF),
