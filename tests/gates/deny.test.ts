@@ -1,7 +1,7 @@
 // deny — 액션(스펙 §4.3 deny 행, 판정 P15·P17). 모듈 항목: ① 모듈 하나를 기대 범위(target)에서 끄면 거부 값(목록형 module 은 원소마다), 관문이 그
 // 범위로 물어 거부했고, 관문 앞에서 쓰지 않았고, 거부 뒤 DB 에 닿지 않았다 ② 가드를 모두 거부시키면 관문을 부르지 않고 쓰지 않으며 admin 클라이언트도
 // 만들지 않는다(adminBeforeGuard 예외) ③ 관문 호출은 판정 모듈의 import 이고 결과를 조건으로 본다(AST). null 항목: 본문(+같은 파일 헬퍼)에 관문
-// 호출이 없고(AST), 가드 통과 실행에서도 관문을 부르지 않는다(다른 파일 헬퍼 경유), 토글되는 모듈의 데이터 표도 만들지 않는다(닫힌 목록).
+// 호출이 없고(AST), 가드 통과 실행에서도 관문을 부르지 않는다(다른 파일 헬퍼 경유), 토글되는 모듈의 데이터 표도 만들지 않는다(닫힌 목록 — RPC 로 만지는 표는 _rpc-tables.ts 대응으로 센다, SP4 D25).
 // 가드 등급 null 항목은 세션 없음·등급 거부 두 모드로, session
 // null 항목은 세션 없음으로 가드 거부 실행(가드에 닿았는지·거부 응답·쓰기 0 — 스펙 §4.3 deny 첫 줄은 전 항목이다).
 // 모듈 항목의 실행 검사는 매니페스트의 모든 모듈 항목을 덮는다.
@@ -20,6 +20,7 @@ vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn(async () => ({ ok:
 import { ERR_ANON, ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { MODULE_TABLE_OWNER } from './_tables'
+import { UNKNOWN_RPC_PREFIX } from './_rpc-tables'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { gateCallsIn, gateSitesIn, parse, siteProblems, tablesIn } from '../invariants/_ast'
 import { harness, P, U, type Target } from './_harness'
@@ -47,14 +48,18 @@ const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why
   'src/app/actions/wbsAssign.ts#setWbsDevWorkflow': { tables: ['agent_work_orders'], why: 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)' },
   'src/app/api/wiki/reindex/route.ts#POST': { tables: ['ai_documents', 'ai_index_jobs'], why: '플랫폼 진단 — ROUTE_MODULE_OVERRIDES 가 이 경로를 플랫폼 전용으로 뺐다' },
 }
-/** 목록 항목의 표 접촉 — 문제 목록. entry 의 note 를 먼저 읽어 사람이 맥락을 보게 하고(계층 서술일 수 있다), 없으면 표 이름으로 판정한다 */
+/** 목록 항목의 표 접촉 — 문제 목록. entry 의 note 를 먼저 읽어 사람이 맥락을 보게 하고(계층 서술일 수 있다), 없으면 표 이름으로 판정한다.
+ *  tables 는 tablesIn 의 결과라 RPC 로 만지는 표(tests/gates/_rpc-tables.ts 대응)가 이미 들어 있다. 대응 없는 RPC(rpc?:<이름>)는 그 RPC 가
+ *  무엇을 만지는지 모른다는 뜻이라 실패다 — module null 항목에서만(모듈 항목이 부르는 RPC 는 모듈 관문이 먼저 닫는다, SP4 D25) */
 function nullTableProblems(key: string, e: GateEntry, tables: readonly string[]): string[] {
+  const unknown = tables.filter((t) => t.startsWith(UNKNOWN_RPC_PREFIX))
+    .map((t) => `${key}: module null 항목이 부르는 RPC ${t.slice(UNKNOWN_RPC_PREFIX.length)} 의 소유 표를 모른다 — tests/gates/_rpc-tables.ts 에 그 RPC 가 만지는 표를 적는다(SP4 D25)`)
   const hits = tables.filter((t) => MODULE_TABLE_OWNER[t])
-  if (!hits.length) return []
+  if (!hits.length) return unknown
   const why = NULL_TABLE_ALLOW[key]
-  if (!why) return [`${key}: module null 인데 모듈 데이터 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 만진다 — 관문이 없으면 꺼진 뒤에도 그 표가 바뀐다(사유: ${e.note ?? 'note 없음'})`]
+  if (!why) return [...unknown, `${key}: module null 인데 모듈 데이터 표 ${hits.map((t) => `${t}(${MODULE_TABLE_OWNER[t]})`).join(', ')} 를 만진다 — 관문이 없으면 꺼진 뒤에도 그 표가 바뀐다(사유: ${e.note ?? 'note 없음'})`]
   const stale = why.tables.filter((t) => !hits.includes(t))
-  return stale.length ? [`${key}: 허용 목록의 표 ${stale.join(', ')} 를 더 이상 만나지 않는다(죽은 항목)`] : []
+  return [...unknown, ...(stale.length ? [`${key}: 허용 목록의 표 ${stale.join(', ')} 를 더 이상 만나지 않는다(죽은 항목)`] : [])]
 }
 /** 모듈 판정의 대상 — 매니페스트 target, 없으면 sample 에서(프로젝트 id → project, 행 id → row, 없으면 session) */
 const targetOf = (e: GateEntry): Target => e.target ?? (has(e.sample ?? [], P) ? 'project' : has(e.sample ?? [], U) ? 'row' : 'session')
@@ -207,6 +212,27 @@ describe('deny — null 항목(정적)', () => {
     ])
     expect(nullTableProblems('s.ts#b', nullE, tablesIn(sf, 'b')), '대조 — core(wbs) 표는 여기 없다').toEqual([])
     expect(nullTableProblems('s.ts#c', nullE, []), '대조 — 모듈 표 접촉이 없으면 조용하다').toEqual([])
+  })
+  it('판별기 민감도 — RPC 로 만지는 모듈 표와 대응 없는 RPC 도 실패다(합성 소스·합성 대응, SP4 D25)', () => {
+    const sf = parse('s.ts', [
+      "import { requireProjectAdmin } from '@/lib/authz'",
+      "const sync = async (sb) => { await sb.rpc('fake_area_rpc', { p_x: 1 }) }",
+      'export async function a(projectId) { const g = await requireProjectAdmin(projectId); if (!g.ok) return g; await sync(null); return { ok: true } }',
+      "export async function b(projectId) { const g = await requireProjectAdmin(projectId); if (!g.ok) return g; await sb.rpc('fake_core_rpc'); return { ok: true } }",
+      "export async function c(projectId) { const g = await requireProjectAdmin(projectId); if (!g.ok) return g; await sb.rpc('mystery_rpc'); return { ok: true } }",
+      'export async function d(projectId, name) { const g = await requireProjectAdmin(projectId); if (!g.ok) return g; await sb.rpc(name); return { ok: true } }',
+    ].join('\n'))
+    const map = { fake_area_rpc: ['project_areas', 'weekly_report_rows'], fake_core_rpc: ['wbs_items'] }
+    const nullE: GateEntry = { guard: 'projectAdmin', module: null }
+    expect(tablesIn(sf, 'a', map)).toEqual(['project_areas', 'weekly_report_rows'])
+    expect(nullTableProblems('s.ts#a', nullE, tablesIn(sf, 'a', map))).toEqual([
+      's.ts#a: module null 인데 모듈 데이터 표 weekly_report_rows(weekly) 를 만진다 — 관문이 없으면 꺼진 뒤에도 그 표가 바뀐다(사유: note 없음)',
+    ])
+    expect(nullTableProblems('s.ts#b', nullE, tablesIn(sf, 'b', map)), '대조 — core 표만 만지는 RPC 는 조용하다').toEqual([])
+    expect(nullTableProblems('s.ts#c', nullE, tablesIn(sf, 'c', map))).toEqual([
+      's.ts#c: module null 항목이 부르는 RPC mystery_rpc 의 소유 표를 모른다 — tests/gates/_rpc-tables.ts 에 그 RPC 가 만지는 표를 적는다(SP4 D25)',
+    ])
+    expect(tablesIn(sf, 'd', map), '대조 — 리터럴이 아닌 이름은 세지 않는다(.from 과 같은 한계)').toEqual([])
   })
   it('판별기 민감도 — 같은 파일의 함수 선언·const 화살표 헬퍼·별칭 import·네임스페이스 호출을 따라간다(합성 소스)', () => {
     const sf = parse('s.ts', [

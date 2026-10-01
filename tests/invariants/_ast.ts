@@ -1,5 +1,6 @@
 // 불변식·열거 게이트 공용 AST 판별기 — use-server-exports·tests/gates 가 같은 판정을 쓴다(과제 13 에서 옮김).
 import ts from 'typescript'
+import { RPC_TABLES, UNKNOWN_RPC_PREFIX } from '../gates/_rpc-tables'
 
 /** 파일별 parse 캐시 — deny.test 의 모듈 항목 89개가 같은 파일(issues.ts 등)을 89번 다시 파싱했다(B4 m-1·T25-m4).
  *  키에 원문까지 넣으므로 내용이 다른 같은 이름을 부르면 캐시를 타지 않는다. 구문 트리는 읽기만 하므로 재사용이 안전하다 */
@@ -99,14 +100,19 @@ export function gateCallsIn(sf: ts.SourceFile, exportName: string, names: Readon
   return found
 }
 
-/** 노드 안(자기 자신 포함)이 `.from('<표>')` 로 만지는 표 이름 — 문자열 리터럴 인자만 센다. 같은 파일 헬퍼는 따라가지 않는다 */
-export function tablesInNode(sf: ts.SourceFile, node: ts.Node): string[] {
+/** 노드 안(자기 자신 포함)이 만지는 표 이름 — 리터럴 `.from('<표>')` 의 표, 그리고 리터럴 `.rpc('<함수>')` 를 rpcTables(기본
+ *  tests/gates/_rpc-tables.ts 의 RPC_TABLES)로 바꾼 표(SP4 D25 — RPC 안의 쓰기는 .from 을 우회한다). 대응이 없는 RPC 는 `rpc?:<이름>`
+ *  표지로 낸다(판정은 호출부 — module null 항목만 실패). 문자열 리터럴 인자만 센다. 같은 파일 헬퍼는 따라가지 않는다 */
+export function tablesInNode(sf: ts.SourceFile, node: ts.Node, rpcTables: typeof RPC_TABLES = RPC_TABLES): string[] {
   const out = new Set<string>()
   const walk = (n: ts.Node): void => {
-    if (ts.isCallExpression(n)) {
-      if (ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'from') {
-        const arg = n.arguments[0]
-        if (arg && ts.isStringLiteralLike(arg)) out.add(arg.text)
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
+      const arg = n.arguments[0]
+      if (arg && ts.isStringLiteralLike(arg)) {
+        if (n.expression.name.text === 'from') out.add(arg.text)
+        else if (n.expression.name.text === 'rpc') {
+          for (const t of Object.hasOwn(rpcTables, arg.text) ? rpcTables[arg.text] : [`${UNKNOWN_RPC_PREFIX}${arg.text}`]) out.add(t)
+        }
       }
     }
     ts.forEachChild(n, walk)
@@ -115,15 +121,15 @@ export function tablesInNode(sf: ts.SourceFile, node: ts.Node): string[] {
   return [...out].sort()
 }
 
-/** exportName 본문(과 재귀적으로 부르는 같은 파일 최상위 함수)이 `.from('<표>')` 로 만지는 표 이름 — 문자열 리터럴 인자만 센다.
- *  다른 파일(임포트한 데이터 로더)이 만지는 표는 못 본다. 게이트는 그것을 한계로 적었다 — 표 이름 대조는 관리 목록의 감시 대상이다 */
-export function tablesIn(sf: ts.SourceFile, exportName: string): string[] {
+/** exportName 본문(과 재귀적으로 부르는 같은 파일 최상위 함수)이 `.from('<표>')`·`.rpc('<함수>')`(rpcTables 대응)로 만지는 표 이름 —
+ *  문자열 리터럴 인자만 센다. 다른 파일(임포트한 데이터 로더)이 만지는 표는 못 본다. 게이트는 그것을 한계로 적었다 — 표 이름 대조는 관리 목록의 감시 대상이다 */
+export function tablesIn(sf: ts.SourceFile, exportName: string, rpcTables: typeof RPC_TABLES = RPC_TABLES): string[] {
   const bodies = localBodies(sf)
   const out = new Set<string>()
   const seen = new Set<string>()
   const walk = (n: ts.Node): void => {
     if (ts.isCallExpression(n)) {
-      for (const t of tablesInNode(sf, n)) out.add(t)
+      for (const t of tablesInNode(sf, n, rpcTables)) out.add(t)
       if (ts.isIdentifier(n.expression) && bodies.has(n.expression.text) && !seen.has(n.expression.text)) {
         seen.add(n.expression.text)
         walk(bodies.get(n.expression.text) as ts.ConciseBody)
