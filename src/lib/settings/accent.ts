@@ -1,6 +1,7 @@
 // 강조색(branding.accent) 파생·검증 — 개정 §5.11.2 의 1~4 를 순수 함수로. 서버가 저장할 때 base 에서 라이트·다크 세트를 계산해 함께
 // 저장하고(edit.toStored), 저장값은 parseAccentValue 가 모양만 본다. 거부 응답은 실패한 쌍과 대비값을 싣는다.
-// 임계값(D30): 상태색과 hue 거리 20° 미만이면서 C > 0.08 이면 거부 — SP3b UI-1 이 표본 10종으로 조정한다.
+// 임계값(D30): 상태색과 hue 거리 20° 미만이면서 C > 0.08 이면 거부 — SP3b UI-1 이 표본 10종으로 20°·0.08 유지를 확정했다
+// (tests/settings/accent.test.ts 의 표: 흔한 초록 #2b8a3e 18.0° 거부 · 주황 #f76707 25.4° 통과가 경계, 실현 가능 구간 hue (18.0°, 25.4°]).
 // 다크 세트의 hover(+0.05)·pressed(+0.10)·soft(L 0.32·C 0.04)·fg 채도 상한(0.06)은 개정에 없어 이 파일이 정한 시작값이다.
 import { ACCENT_TOKENS } from './accentTokens'
 
@@ -8,7 +9,9 @@ export type Hex = string
 export interface AccentSet { bg: Hex; fg: Hex; hover: Hex; pressed: Hex; soft: Hex; focus: Hex }
 export interface AccentValue { base: Hex; light: AccentSet; dark: AccentSet }
 export interface AccentFailure { pair: string; contrast: number; min: number }
-export type AccentDerivation = { ok: true; value: AccentValue } | { ok: false; error: string; failures: AccentFailure[] }
+/** 상태색과 가까워 거부된 이유 — 대비 쌍이 아니라 hue 거리다(쇼케이스·설정 편집기가 '왜'를 보인다) */
+export interface AccentHueReject { status: 'danger' | 'success'; distance: number; min: number }
+export type AccentDerivation = { ok: true; value: AccentValue } | { ok: false; error: string; failures: AccentFailure[]; hue?: AccentHueReject }
 export const ACCENT_THRESHOLDS = { hueDistanceDeg: 20, chroma: 0.08 } as const
 type Thresholds = { hueDistanceDeg: number; chroma: number; minContrast?: number; minFocusContrast?: number }
 
@@ -86,8 +89,10 @@ export function deriveAccent(baseHex: string, thresholds: Thresholds = ACCENT_TH
   // 3. 상태색과의 거리 — 위험·성공과 헷갈리는 색은 받지 않는다(채도가 낮으면 무채색이라 봐 준다)
   for (const [name, hex] of [['danger', ACCENT_TOKENS.light.danger], ['success', ACCENT_TOKENS.light.success]] as const) {
     const t = hexToOklch(hex)!
-    if (base.C > thresholds.chroma && hueDistance(base.h, t.h) < thresholds.hueDistanceDeg) {
-      return { ok: false, error: `상태색(${name})과 색상이 가까워 강조색으로 쓸 수 없습니다.`, failures: [] }
+    const distance = hueDistance(base.h, t.h)
+    if (base.C > thresholds.chroma && distance < thresholds.hueDistanceDeg) {
+      return { ok: false, error: `상태색(${name})과 색상이 가까워 강조색으로 쓸 수 없습니다.`, failures: [],
+        hue: { status: name, distance: Math.round(distance * 10) / 10, min: thresholds.hueDistanceDeg } }
     }
   }
   // 1. 라이트 — 흰 글자 대비가 하한이 될 때까지 L 을 낮춘다
