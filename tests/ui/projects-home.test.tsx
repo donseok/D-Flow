@@ -8,15 +8,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { computeCompletionMap } from '@/lib/domain/project-status'
+import { t } from '@/lib/i18n/dict'
 
 const mocks = vi.hoisted(() => ({
   listProjects: vi.fn<() => Promise<unknown[]>>(),
+  degraded: false,
   loadWorkspaceScope: vi.fn<(slug: string) => Promise<unknown>>(),
   getProjectsCompletion: vi.fn<() => Promise<unknown>>(),
 }))
 
 vi.mock('@/app/actions/project', () => ({
-  listProjects: mocks.listProjects,
+  // 페이지는 listProjectsWithState(실패 사실을 같이 준다)를 쓴다 — 목록은 mocks.listProjects, 실패 여부는 mocks.degraded
+  listProjectsWithState: async () => ({ projects: await mocks.listProjects(), degraded: mocks.degraded }),
   createProject: vi.fn(), // NewProjectModal 의 import 바인딩용 — 이 테스트에서 렌더되지 않는다
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: mocks.loadWorkspaceScope }))
@@ -24,8 +27,8 @@ vi.mock('@/lib/data/wbs', () => ({ getProjectsCompletion: mocks.getProjectsCompl
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 // 생성 버튼은 워크스페이스 id·열림 여부만 확인한다 — 실물은 라우터·로케일 컨텍스트가 필요하다.
 vi.mock('@/components/home/NewProjectModal', () => ({
-  NewProjectModal: ({ workspaceId, defaultOpen }: { workspaceId: string; defaultOpen?: boolean }) =>
-    <button data-new-project={workspaceId} data-default-open={String(Boolean(defaultOpen))}>new</button>,
+  NewProjectModal: ({ workspaceId, defaultOpen, copyCandidates = [] }: { workspaceId: string; defaultOpen?: boolean; copyCandidates?: { id: string }[] }) =>
+    <button data-new-project={workspaceId} data-default-open={String(Boolean(defaultOpen))} data-copy={copyCandidates.map((c) => c.id).join(',')}>new</button>,
 }))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -64,6 +67,7 @@ async function renderPage(searchParams: { new?: string } = {}, slug = 'acme'): P
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 
 beforeEach(() => {
+  mocks.degraded = false
   mocks.listProjects.mockResolvedValue([...projectsInWs, projectInOther])
   mocks.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor()))
   mocks.getProjectsCompletion.mockResolvedValue(realCompletionMap())
@@ -153,9 +157,27 @@ describe('전체 프로젝트 — 생성은 그 워크스페이스의 관리자,
   })
   it('복사 원본 후보는 이 워크스페이스 프로젝트뿐이다', async () => {
     mocks.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor({ workspaceRoles: new Map([[WS, 'admin']]) })))
+    const markup = await renderPage()
+    expect(markup).toContain(`data-copy="${[P1, P2, P3].join(',')}"`)
+    expect(markup).not.toContain('Elsewhere')
+  })
+  it('이 워크스페이스에 프로젝트가 없어도(다른 곳에만 있어도) 빈 상태에서 시작 버튼, 후보는 비어 있다', async () => {
+    mocks.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor({ workspaceRoles: new Map([[WS, 'admin']]) })))
     mocks.listProjects.mockResolvedValue([projectInOther])
     const markup = await renderPage()
-    expect(markup).toContain(`data-new-project="${WS}"`)  // 빈 상태에서도 시작 버튼
+    expect(markup).toContain(`data-new-project="${WS}"`)
+    expect(markup).toContain('data-copy=""')
+  })
+  it('목록 조회 실패는 \'프로젝트 없음\'이 아니다 — 오류 상태, 빈 상태·생성 권유·개수 없음', async () => {
+    mocks.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor({ workspaceRoles: new Map([[WS, 'admin']]) })))
+    mocks.degraded = true
+    mocks.listProjects.mockResolvedValue([])
+    const markup = await renderPage({ new: '1' })
+    expect(markup).toContain('data-status-kind="partial_error"')
+    expect(markup).toContain('role="alert"')
+    expect(markup).not.toContain('data-new-project')
+    expect(markup).not.toContain(t('ko', 'home.emptyTitle'))
+    expect(markup).not.toContain(`0${t('ko', 'home.countUnit')}`)
   })
 })
 

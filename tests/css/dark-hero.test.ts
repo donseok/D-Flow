@@ -11,6 +11,7 @@ const FILES = [
   'src/components/agent-hub/AgentTabs.tsx', 'src/components/wiki/WikiSearch.tsx', 'src/components/wiki/WikiReindexButton.tsx',
   'src/components/chat/AssistantChat.tsx', 'src/app/not-found.tsx',
   'src/components/agent-hub/AgentHubView.tsx', 'src/components/report/ReportButton.tsx', 'src/components/ui/BrandMark.tsx',
+  'src/app/(app)/w/[slug]/projects/page.tsx',
 ]
 const DARK = /(?<![\w-])(?:[a-z-]+:)*(?:bg|border|ring)-white\/|(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])|-\[#[0-9a-fA-F]{3,8}\]|--gradient-(?:dark|primary)/
 
