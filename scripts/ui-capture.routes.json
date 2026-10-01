@@ -43,6 +43,7 @@
     { "key": "mobile-menu", "path": "/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"메뉴 열기\"]" },
     { "key": "account-popover", "path": "/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[data-profile-trigger]" },
     { "key": "p-wbs-fullscreen", "path": "/p/{pid}/wbs", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "[data-wbs-fullscreen-toggle]" },
+    { "key": "inbox-popover", "path": "/p/{pid}/dashboard", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"알림\"]" },
     { "key": "ws-settings", "path": "/w/{wsSlug}/settings", "file": "(app)/w/[slug]/settings/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" }
   ]
 }

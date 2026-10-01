@@ -33,8 +33,9 @@ export function ArchiveChatPanel({
 
   if (!open) return null
   return (
-    // z-[140]: 앱 헤더 70 / 헤더 드롭다운 95 / 모바일 메뉴 100 / AI 어시스턴트 120~130 위, 모달 150 아래.
-    <div className="fixed inset-0 z-[140]" role="dialog" aria-modal="true" aria-label={t('min.chat.archive.title')}>
+    // 층 --z-modal(150, D56 — '--z-modal 계열'): 셸 70·팝오버 100·오버레이 110·전체 화면 120·AI 어시스턴트 120~130 위.
+    // 이 패널 안에서 여는 모달은 body 끝에 포털되어 문서 순서로 이 패널 위에 온다(같은 층).
+    <div className="fixed inset-0 z-(--z-modal)" role="dialog" aria-modal="true" aria-label={t('min.chat.archive.title')}>
       <div data-backdrop className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={onClose} aria-hidden />
       <div className="absolute bottom-3 right-3 top-3 flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-[var(--shadow-xl)] animate-[slidein_.18s_ease-out]">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">

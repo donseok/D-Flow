@@ -30,7 +30,7 @@ export function InboxPanel({
         {unread > 0 && (
           <span className="flex items-center gap-2">
             <span className="chip bg-delayed-weak text-delayed">{unread}</span>
-            <button onClick={onMarkAllRead} className="text-[11px] font-medium text-ink-muted underline-offset-2 hover:text-ink hover:underline">
+            <button onClick={onMarkAllRead} className="text-xs font-medium text-ink-muted underline-offset-2 hover:text-ink hover:underline">
               {t('inbox.markAllRead')}
             </button>
           </span>
@@ -55,7 +55,7 @@ export function InboxPanel({
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-medium text-ink">{n.title}</span>
-                        {n.detail && <span className="block text-[11px] text-ink-muted">{n.detail}</span>}
+                        {n.detail && <span className="block text-xs text-ink-muted">{n.detail}</span>}
                       </span>
                     </button>
                   </li>
@@ -71,7 +71,7 @@ export function InboxPanel({
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[13px] font-medium text-ink">{unreadAnnouncements} {t('inbox.announceUnread')}</span>
-                      <span className="block text-[11px] text-ink-muted">{t('inbox.viewAnnouncements')}</span>
+                      <span className="block text-xs text-ink-muted">{t('inbox.viewAnnouncements')}</span>
                     </span>
                   </Link>
                 </li>
@@ -87,7 +87,7 @@ export function InboxPanel({
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-medium text-ink">{n.title}</span>
-                        <span className="block text-[11px] text-ink-muted">{n.detail}</span>
+                        <span className="block text-xs text-ink-muted">{n.detail}</span>
                       </span>
                     </Link>
                   </li>
@@ -104,7 +104,7 @@ export function InboxPanel({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="border-b border-line bg-surface-2/60 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">{label}</div>
+      <div className="border-b border-border bg-surface-subtle/60 px-4 py-1.5 text-meta font-semibold text-fg-muted">{label}</div>
       <ul className="divide-y divide-line">{children}</ul>
     </div>
   )

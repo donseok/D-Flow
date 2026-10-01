@@ -4,20 +4,20 @@ import type { LucideIcon } from 'lucide-react'
 type Tone = 'default' | 'brand' | 'success' | 'warning' | 'danger'
 
 const TONE: Record<Tone, { value: string; iconWrap: string }> = {
-  default: { value: 'text-ink', iconWrap: 'bg-surface-2 text-ink-muted' },
-  brand: { value: 'text-brand', iconWrap: 'bg-brand-weak text-brand' },
-  success: { value: 'text-done', iconWrap: 'bg-done-weak text-done' },
-  warning: { value: 'text-accent-warning', iconWrap: 'bg-pending-weak text-accent-warning' },
-  danger: { value: 'text-delayed', iconWrap: 'bg-delayed-weak text-delayed' },
+  default: { value: 'text-fg', iconWrap: 'bg-surface-subtle text-fg-secondary' },
+  brand: { value: 'text-action', iconWrap: 'bg-action-soft text-action' },
+  success: { value: 'text-success', iconWrap: 'bg-success-weak text-success' },
+  warning: { value: 'text-warning', iconWrap: 'bg-warning-weak text-warning' },
+  danger: { value: 'text-danger', iconWrap: 'bg-danger-weak text-danger' },
 }
 
-/** 다크 히어로 패널 안에서 쓰는 아이콘 색(밝은 톤) — 어두운 배경에서 또렷하게. */
+/** variant='hero' 의 아이콘 색 — 히어로가 밝은 표면이 된 뒤(SP3b UI-1)라 본색과 같다. 변형 삭제는 UI-2b 어댑터 몫 */
 const HERO_ICON: Record<Tone, string> = {
-  default: 'text-hero-ink-muted',
-  brand: 'text-[#3fd8c6]',
-  success: 'text-[#5fe39b]',
-  warning: 'text-[#fbbf24]',
-  danger: 'text-[#fb7185]',
+  default: 'text-fg-secondary',
+  brand: 'text-action',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
 }
 
 /** KPI 카드 — 히어로 우측 레일 또는 그리드에 사용. label 위, 큰 value, 보조 sub.
@@ -35,14 +35,14 @@ export function KpiCard({
 }) {
   if (variant === 'hero') {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur transition hover:bg-white/[0.09]">
+      <div className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-hero-ink-muted">{label}</div>
-            <div className="mt-1.5 text-[28px] font-bold leading-none tabular-nums tracking-tight text-hero-ink">{value}</div>
-            {sub && <div className="mt-1.5 text-xs text-hero-ink-muted">{sub}</div>}
+            <div className="text-meta font-semibold text-fg-secondary">{label}</div>
+            <div className="mt-1.5 text-kpi leading-none tabular-nums text-fg">{value}</div>
+            {sub && <div className="mt-1.5 text-xs text-fg-secondary">{sub}</div>}
           </div>
-          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
+          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) border border-border bg-surface ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
         </div>
         {children}
       </div>
@@ -54,9 +54,9 @@ export function KpiCard({
     <div className="kpi-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">{label}</div>
-          <div className={`mt-1.5 text-[28px] font-bold leading-none tabular-nums tracking-tight ${tw.value}`}>{value}</div>
-          {sub && <div className="mt-1.5 text-xs text-ink-muted">{sub}</div>}
+          <div className="text-meta font-semibold text-fg-muted">{label}</div>
+          <div className={`mt-1.5 text-kpi leading-none tabular-nums ${tw.value}`}>{value}</div>
+          {sub && <div className="mt-1.5 text-xs text-fg-secondary">{sub}</div>}
         </div>
         {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
       </div>

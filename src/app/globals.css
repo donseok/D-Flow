@@ -322,8 +322,8 @@
   /* 동결 컬럼 경계 그림자 — 다크는 아래 .dark 가 어두운 그림자로 다시 정의한다(fg 를 섞으면 다크에서 밝게 번진다) */
   --shadow-freeze-edge: 6px 0 8px -6px rgb(17 21 28 / 0.12);
 
-  /* 소비 넷 — C 소유 (app)/projects/page.tsx 카드 이니셜(UI-2b 이동 커밋)·not-found.tsx 둘(과제 13)·HeaderChrome 계정 아바타(UI-2b).
-     마지막 소비처를 고치는 커밋이 함께 지운다(계획 판정 Q15) */
+  /* 남은 소비 하나 — C 소유 (app)/projects/page.tsx 카드 이니셜(UI-2b 이동 커밋). not-found.tsx 둘은 과제 13,
+     HeaderChrome 계정 아바타는 과제 10 이 bg-action 으로 옮겼다. 마지막 소비처를 고치는 커밋이 함께 지운다(계획 판정 Q15) */
   --gradient-primary: linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600));
 }
 

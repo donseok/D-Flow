@@ -1966,11 +1966,12 @@ export function WbsGanttSheet({
                         data-wbs-milestone-chip
                         className={`pointer-events-auto sticky truncate rounded-sm px-1 py-0.5 font-bold leading-none ${MS_CHIP[m.status]}`}
                         style={{
-                          top: m.tier === 0 ? 'var(--wbs-head-h)' : 'calc(var(--wbs-head-h) + 14px)',
+                          // 글자 12px 하한(오늘 칩과 같음, 개정 §5.5.4) → 칩 높이 16 — 2단 칩은 그 아래로 2px 띄운다
+                          top: m.tier === 0 ? 'var(--wbs-head-h)' : 'calc(var(--wbs-head-h) + 18px)',
                           width: 'max-content',
                           maxWidth: 120,
                           transform: 'translateX(-50%)',
-                          fontSize: 'var(--wbs-day-font, 9px)',
+                          fontSize: 'max(12px, var(--wbs-day-font, 9px))',
                         }}
                         title={`${m.names.join(', ')} — ${fmtDate(m.date)}`}
                       >

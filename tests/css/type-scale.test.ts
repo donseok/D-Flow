@@ -10,8 +10,10 @@ export const SCALE: Record<string, [size: string, lineHeight: string, weight?: s
   control: ['0.875rem', '1.25rem'], meta: ['0.75rem', '1.125rem'], kpi: ['1.75rem', '2.125rem', '600'], doc: ['1rem', '1.625rem'],
 }
 const SMALL_OR_CAPS = /text-\[(?:9|10|10\.5|11)px\]|\buppercase\b|tracking-\[0\.1\d?em\]|tracking-wide(?:st|r)?\b/
-/** 공용 컴포넌트 다섯 — 과제 15 가 고친 뒤 이 목록을 채운다 */
-export const COMPONENTS: string[] = []
+/** 공용 컴포넌트 다섯(D14) */
+export const COMPONENTS: string[] = [
+  'src/components/ui/KpiCard.tsx', 'src/components/ui/SectionCard.tsx', 'src/components/ui/Modal.tsx', 'src/components/app/InboxPanel.tsx', 'src/components/ui/PageHero.tsx',
+]
 
 describe('글자 크기 8단계(@theme)', () => {
   const theme = tokenMaps().theme

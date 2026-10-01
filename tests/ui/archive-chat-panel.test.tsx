@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
@@ -28,11 +30,12 @@ describe('ArchiveChatPanel 레이어/닫기', () => {
     ))
   }
 
-  it('앱 헤더(z-70)·AI 어시스턴트 패널(z-130)보다 위 레이어에 뜬다', () => {
+  it('앱 헤더(z-70)·AI 어시스턴트 패널(z-130)보다 위 레이어(--z-modal)에 뜬다', () => {
     render()
     const dialog = container.querySelector('[role="dialog"]')!
-    const z = Number(/z-\[(\d+)\]/.exec(dialog.className)?.[1] ?? 0)
-    expect(z).toBeGreaterThan(130)
+    expect(dialog.className).toContain('z-(--z-modal)')
+    const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8')
+    expect(Number(/--z-modal:\s*(\d+)/.exec(css)?.[1])).toBeGreaterThan(130)
   })
 
   it('백드롭 클릭으로 닫힌다', () => {

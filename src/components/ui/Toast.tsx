@@ -56,7 +56,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       {children}
       <div
-        className="pointer-events-none fixed bottom-4 right-4 z-[200] flex w-[min(92vw,360px)] flex-col gap-2.5"
+        className="pointer-events-none fixed bottom-4 right-4 z-(--z-toast) flex w-[min(92vw,360px)] flex-col gap-2.5"
         role="region"
         aria-label={t('ui.toastRegion')}
       >

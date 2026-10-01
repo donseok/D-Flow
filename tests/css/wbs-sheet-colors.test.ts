@@ -9,6 +9,18 @@ describe('WbsGanttSheet 색', () => {
   it('임의 hex 클래스가 없다(행 틴트·이정표)', () => { expect(t).not.toMatch(/(?:bg|border|text)-\[#[0-9a-fA-F]{3,8}\]/) })
   it('흰 글자가 없다(오늘 칩·이정표·토스트·막대 라벨)', () => { expect(t).not.toMatch(/(?<![\w-])text-white(?![\w-])/) })
   it('오늘 칩 글자는 12px 이상(개정 §5.5.4)', () => { expect(t).toContain("fontSize: 'max(12px, var(--wbs-day-font, 9px))'") })
+  // 이정표 칩도 같은 하한(과제 12 눈확인 — 9px 그대로였다, 원장 CARRY). 칩 높이 = 글자 12 + 위아래 2·2(leading-none) = 16 —
+  // 2단(tier 1) 칩의 내림은 그보다 커야 1단 칩과 겹치지 않는다.
+  it('이정표 칩 글자는 12px 이상이고 2단 칩은 1단 칩 높이(16) 아래로 내린다', () => {
+    const start = t.indexOf('data-wbs-milestone-chip')
+    const block = t.slice(start, t.indexOf('</div>', start))
+    expect(start).toBeGreaterThan(0)
+    expect(block).toContain("fontSize: 'max(12px, var(--wbs-day-font, 9px))'")
+    expect(block).toContain('py-0.5')
+    expect(block).toContain('leading-none')
+    const drop = Number(/calc\(var\(--wbs-head-h\) \+ (\d+)px\)/.exec(block)?.[1] ?? 0)
+    expect(drop).toBeGreaterThan(16)
+  })
   // 이름·번호 칸은 sticky 라 그 아래로 가로 스크롤된 칸(진척·일자·막대)이 지나간다 — 반투명 배경색이면 비친다(과제 12 눈확인).
   // depth 1 틴트는 불투명 surface 위에 옅은 action-soft 층을 얹는다(라이트 합성 = 옛 #f8faff, 판정 Q19).
   it('행 배경(rowBg)은 불투명 — 배경색에 /NN 알파가 없다', () => {

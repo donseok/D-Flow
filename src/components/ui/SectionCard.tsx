@@ -20,7 +20,7 @@ export function SectionCard({
         <div className="flex items-start gap-3">
           {Icon && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-weak text-brand"><Icon className="h-4 w-4" /></span>}
           <div>
-            {eyebrow && <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">{eyebrow}</div>}
+            {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
             <h3 className="mt-0.5 text-sm font-semibold text-ink">{title}</h3>
           </div>
         </div>

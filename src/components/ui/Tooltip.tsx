@@ -97,7 +97,7 @@ export function Tooltip({ label, side = 'top', delay = 350, disabled = false, ch
           role="tooltip"
           id={id}
           style={{ left: pos.x, top: pos.y }}
-          className={`pointer-events-none fixed z-[200] ${ANCHOR[side]} max-w-[16rem] whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-semibold leading-tight text-surface shadow-lg ring-1 ring-black/10`}
+          className={`pointer-events-none fixed z-(--z-toast) ${ANCHOR[side]} max-w-[16rem] whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-semibold leading-tight text-surface shadow-lg ring-1 ring-black/10`}
         >
           {label}
         </span>,
