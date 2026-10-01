@@ -6,13 +6,13 @@
 //        updateProjectSettings. 다시 읽은 값이 넣은 값과 같고 설정 이력이 남는다(행위자 = 플랫폼 관리자, source = edit).
 //   S9 격리: R 의 설정을 바꾼 뒤 C 의 설정 문서(전 키·revision)·이력이 그대로다. 다른 워크스페이스(B)의 관리자는 R·C 의 설정 두 표와 이력 두 표를 0건 읽는다.
 //   S2~S8·S10: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
-// 설정은 service_role 로 넣지 않는다(워크스페이스 행 두 개만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 `git diff --quiet -- src supabase` 가 참이어야 한다 —
-// 합성 게이트는 소스를 고치지 않고 통과해야 한다.
+// 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
+// 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
 //   BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] [E2E_BASE_URL=http://localhost:3101(기본값)] node scripts/e2e-synthetic.mjs
 // 비밀번호는 env 로만 받고 출력하지 않는다(B 관리자 비밀번호는 실행마다 새로 만든다). 결과는 stdout 에 JSON 한 덩어리, 실패하면 그 자리에서 멈추고 exit 1.
 import { execFileSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import { ERR_DENIED, e2eBaseUrl, localClientEnv, workspaceAdminAccountInput } from './lib/e2e.mjs'
@@ -68,11 +68,21 @@ const mustOk = (what, result) => { if (!result || result.ok !== true) throw new 
 const same = (what, actual, expected) => {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Fail(`${what} 가 다르다: ${JSON.stringify(actual)} (기대 ${JSON.stringify(expected)})`)
 }
-/** 소스·마이그레이션이 깨끗한가 — 합성 게이트는 코드를 고치지 않고 통과해야 한다. */
+/**
+ * 소스·스키마가 깨끗한가 — 합성 게이트는 코드를 고치지 않고 통과해야 한다(스펙 §7.3: `git diff --quiet -- src supabase`).
+ * 검사 대상은 src 와 DB 스키마(supabase/migrations·rollbacks·seed)다. supabase/config.toml 은 뺀다 — 전용 로컬 스택(포트·project_id)을 쓰는
+ * 스크래치 워크트리는 그 파일만 환경에 맞게 바꿔 둔다(커밋하지 않는다). 대신 그 파일의 diff 도 실행 전후로 같아야 한다.
+ */
+const GUARDED = ['src', 'supabase/migrations', 'supabase/rollbacks', 'supabase/seed.sql']
+const gitOut = (args) => execFileSync('git', args, { encoding: 'utf8' })
+const fingerprint = () => createHash('sha256').update(gitOut(['diff', '--', 'src', 'supabase'])).digest('hex')
+let sourceFingerprint = null
 function assertSourceClean(when) {
-  try { execFileSync('git', ['diff', '--quiet', '--', 'src', 'supabase'], { stdio: 'ignore' }) } catch {
-    throw new Fail(`${when}: src·supabase 에 미커밋 변경이 있다 — 합성 게이트는 소스를 건드리지 않고 통과해야 한다`)
-  }
+  const dirty = gitOut(['status', '--porcelain', '--', ...GUARDED]).trim()
+  if (dirty) throw new Fail(`${when}: src·supabase 스키마에 미커밋 변경이 있다 — 합성 게이트는 소스를 건드리지 않고 통과해야 한다:\n${dirty}`)
+  const now = fingerprint()
+  if (sourceFingerprint !== null && now !== sourceFingerprint) throw new Fail(`${when}: 실행 중에 src·supabase 의 diff 가 바뀌었다`)
+  sourceFingerprint = now
 }
 
 async function main() {
