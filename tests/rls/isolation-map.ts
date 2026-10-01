@@ -49,7 +49,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   usage_events: `(${inAP} or t.user_id in ${A_ONLY})`,
   user_preferences: `t.user_id in ${A_ONLY}`,
   user_wbs_state: inAP, wbs_embeddings: inAP, wbs_items: inAP, wbs_progress_snapshots: inAP,
-  weekly_report_rows: `t.report_id in (select id from public.weekly_reports where project_id in ${AP})`,
+  weekly_report_rows: inAP,
   weekly_reports: inAP, wiki_change_events: inAP, wiki_feedback: inAP,
   wiki_item_relations: `t.from_item_id in (select id from public.wiki_items where project_id in ${AP})`,
   wiki_item_sources: `t.wiki_item_id in (select id from public.wiki_items where project_id in ${AP})`,
@@ -111,16 +111,16 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
 export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
 
 /**
- * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
+ * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
  * 벽이므로 42501(permission denied)이 기대값이다. 목록은 카탈로그(has_any_column_privilege)와 같아야 한다 — 표에 UPDATE 를 열면 여기서
  * 빼고(그때부터 탐침이 그 표의 정책을 태운다), 새 표가 UPDATE 없이 생기면 더한다.
  */
 export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
   'agent_lead_leases', 'agent_projects', 'agent_runners', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
-  'ai_documents', 'ai_index_jobs', 'authz_commands', 'authz_events', 'change_logs', 'deliverable_attachments', 'issue_analysis_runs',
+  'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'deliverable_attachments', 'issue_analysis_runs',
   'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_mega_areas', 'issue_number_counters',
   'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',
-  'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_invites',
+  'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_areas', 'project_invites',
   'project_settings', 'project_settings_history', 'usage_events', 'wbs_embeddings', 'wiki_change_events', 'wiki_feedback',
   'wiki_item_relations', 'wiki_item_sources', 'wiki_items', 'wiki_processing_jobs', 'wiki_project_rebuild_jobs',
   'wiki_questions', 'wiki_topic_revisions', 'wiki_topics', 'workspace_settings', 'workspace_settings_history', 'workspaces',

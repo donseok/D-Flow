@@ -147,8 +147,10 @@ insert into public.task_dependencies (id, project_id, predecessor_id, successor_
   on conflict do nothing;
 insert into public.wbs_embeddings (id, project_id, kind, content) values
   ('00000000-0000-0000-7e57-00000000111e', '00000000-0000-0000-7e57-0000000000c1', 'project', 'rls') on conflict do nothing;
-insert into public.weekly_report_rows (id, report_id) values
-  ('00000000-0000-0000-7e57-00000000111f', '00000000-0000-0000-7e57-000000001108') on conflict do nothing;
+-- 주간 행은 영역 id·프로젝트를 갖는다(*_weekly_areas — 스펙 §3.5). 영역 …110c(RLSA)는 위(project_areas)에서 먼저 들어간다
+insert into public.weekly_report_rows (id, report_id, project_id, area_id) values
+  ('00000000-0000-0000-7e57-00000000111f', '00000000-0000-0000-7e57-000000001108', '00000000-0000-0000-7e57-0000000000c1',
+   '00000000-0000-0000-7e57-00000000110c') on conflict do nothing;
 insert into public.wiki_change_events (id, project_id, change_type, wiki_item_id) values
   ('00000000-0000-0000-7e57-000000001120', '00000000-0000-0000-7e57-0000000000c1', 'new', '00000000-0000-0000-7e57-000000001106') on conflict do nothing;
 insert into public.wiki_feedback (id, project_id, topic_id, feedback_type, user_id) values
