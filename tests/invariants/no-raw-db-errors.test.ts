@@ -11,11 +11,12 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { parse } from './_ast'
 
-/** 가드 대상(파일 단위) — 가져오기 과제들이 §4.7 의 A1 나머지(가져오기 라우트·importReceipts·importBackup·teams/register)를,
- *  A2 가 actions/wbs.ts·팀 액션을 더한다 */
+/** 가드 대상(파일 단위) — 가져오기 과제들이 §4.7 의 A1 나머지(과제 28 이 teams/register.ts, 과제 29·30 이 가져오기 라우트·
+ *  importReceipts·importBackup)를, A2 가 actions/wbs.ts·팀 액션을 더한다 */
 const GUARDED_FILES: readonly string[] = [
   'src/app/actions/weekly.ts',
   'src/app/actions/projectAreas.ts',
+  'src/lib/teams/register.ts',
 ]
 
 /** `.error` 를 옮겨도 되는 결과의 출처 — 고정 문구만 낸다 */
