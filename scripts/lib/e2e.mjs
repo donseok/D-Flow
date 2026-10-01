@@ -558,10 +558,11 @@ export async function fillWbsWorkbook(rows, templateBuf = null) {
 /**
  * 가져오기 실행 폼 — ImportWizard 와 같은 필드에 명령 id(스펙 §4.4 #1 — 없으면 라우트가 400 COMMAND_ID_REQUIRED). 명령 id 는 실행 의도마다
  * 하나다: 같은 의도의 재전송·409(needsTeams) 뒤 등록 재실행은 같은 id, 파일·양식·모드·저장 여부가 바뀌면 새 id(D50·Review Focus 3).
- * uuid 가 아니거나 모드가 아니면 throw — 명령 id 없는 실행을 만들지 않는다.
- * @param {{ file: Uint8Array, fileName: string, projectId: string, profile: unknown, mode: 'append' | 'replace', commandId: string, saveProfile?: boolean, registerTeams?: boolean }} p
+ * uuid 가 아니거나 모드가 아니면 throw — 명령 id 없는 실행을 만들지 않는다. convertToken 은 상속 프로젝트의 등록 재요청이 409 가 준 전환 동의
+ * 토큰을 그대로 돌려보내는 필드다(A1-5 R3 — 주어졌을 때만 싣는다).
+ * @param {{ file: Uint8Array, fileName: string, projectId: string, profile: unknown, mode: 'append' | 'replace', commandId: string, saveProfile?: boolean, registerTeams?: boolean, convertToken?: string | null }} p
  */
-export function importForm({ file, fileName, projectId, profile, mode, commandId, saveProfile = true, registerTeams = false }) {
+export function importForm({ file, fileName, projectId, profile, mode, commandId, saveProfile = true, registerTeams = false, convertToken = null }) {
   if (!UUID_RE.test(String(commandId))) throw new Error(`commandId 가 uuid 가 아니다: ${commandId}`)
   if (mode !== 'append' && mode !== 'replace') throw new Error(`가져오기 모드가 아니다: ${mode}`)
   const form = new FormData()
@@ -572,6 +573,7 @@ export function importForm({ file, fileName, projectId, profile, mode, commandId
   form.append('saveProfile', String(saveProfile))
   form.append('registerTeams', String(registerTeams))
   form.append('commandId', commandId)
+  if (convertToken) form.append('convertToken', convertToken)
   return form
 }
 
