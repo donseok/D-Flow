@@ -193,6 +193,14 @@ export function preBackupReady(state: Pick<WizardState, 'intentKey' | 'preBackup
   return intentKey !== null && state.preBackup !== null && state.intentKey === intentKey
 }
 
+/** 완료 화면의 펼침 내보내기가 늘 거부되는가(A2-2 리뷰 정확성 P2) — 라우트는 저장 양식이 있으면 그 양식으로, 없으면 표준 양식으로 만들고,
+ *  아웃라인 저장 양식 + 펼침은 400(sub-act 는 부모 code 를 승계해 아웃라인 깊이를 늘릴 근거가 없다 — exportWithProfile 머리 주석)이다.
+ *  판정 양식 = 이번에 저장했으면 방금 보낸 양식, 아니면 2단계 진입 때 받은 프로젝트의 저장 양식. 근본 해결(아웃라인 펼침)은 스펙 §9 이월. */
+export function expandedExportBlocked(state: Pick<WizardState, 'profile' | 'savedProfile'>, profileSaved: boolean): boolean {
+  const layout = profileSaved ? state.profile : state.savedProfile
+  return layout?.hierarchy.kind === 'outline'
+}
+
 /** 서버가 "적용하지 않았다"고 확정한 응답인가 — 409 를 뺀 4xx(입력·권한·COMMAND_REUSED). 409(needsTeams·PROFILE_MISMATCH)는 확인 뒤
  *  같은 명령을 다시 보내는 단계이고, 5xx·네트워크 실패·본문을 못 읽은 응답은 적용 여부를 모른다 — 같은 id 로 재시도해 duplicate 로 받는다. */
 export function isDefinitiveFailure(status: number): boolean {

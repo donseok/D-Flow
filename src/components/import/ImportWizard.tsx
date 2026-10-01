@@ -20,7 +20,7 @@ import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
   recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, executionIntentKey, commandIdFor,
-  preBackupReady, isDefinitiveFailure, type MarkRow, type ExecuteResult,
+  preBackupReady, isDefinitiveFailure, expandedExportBlocked, type MarkRow, type ExecuteResult,
   type PreviewColumnRole, type ProfileMismatch, type ProfileMismatchField,
 } from '@/lib/domain/importWizard'
 
@@ -777,23 +777,33 @@ export function ImportWizard({
           {/* 리뷰 Important #1 — §6.5 프로파일 익스포트(펼침)가 UI 에서 도달 불가했다. 완료 화면이
               이 프로파일로 다시 내보낼 수 있는 유일하고 자연스러운 지점(방금 쓴 프로파일이 최신 상태).
               라우트는 저장 양식으로 만든다 — 이번에 저장했을 때만 "이 양식 그대로"(exportProfileDesc)가 참이다.
-              이번에 저장하지 않았으면 라우트가 프로젝트의 저장 양식(있으면) 또는 표준 양식으로 낸다 — 설명만 다르다(SP4 §4.3). */}
-          <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-sm font-semibold text-ink">{t('importWizard.exportProfileTitle')}</p>
-              <p className="mt-0.5 text-xs leading-5 text-ink-muted">{t(state.result.profileSaved ? 'importWizard.exportProfileDesc' : 'importWizard.exportLayoutDesc')}</p>
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost shrink-0"
-              disabled={exportBusy}
-              onClick={runExportProfile}
-              aria-label={t('importWizard.exportProfileButton')}
-            >
-              <Download className="h-4 w-4" />
-              {exportBusy ? t('importWizard.exportProfileBusy') : t('importWizard.exportProfileButton')}
-            </button>
-          </div>
+              이번에 저장하지 않았으면 라우트가 프로젝트의 저장 양식(있으면) 또는 표준 양식으로 낸다 — 설명만 다르다(SP4 §4.3).
+              그 양식이 아웃라인이면 펼침은 늘 거부되므로(400) 버튼 대신 사유를 보인다(A2-2 리뷰 — 근본 해결은 §9 이월). */}
+          {(() => {
+            const blocked = expandedExportBlocked(state, state.result.profileSaved)
+            return (
+              <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink">{t('importWizard.exportProfileTitle')}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-ink-muted">
+                    {t(blocked ? 'importWizard.exportProfileUnsupported' : state.result.profileSaved ? 'importWizard.exportProfileDesc' : 'importWizard.exportLayoutDesc')}
+                  </p>
+                </div>
+                {!blocked && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost shrink-0"
+                    disabled={exportBusy}
+                    onClick={runExportProfile}
+                    aria-label={t('importWizard.exportProfileButton')}
+                  >
+                    <Download className="h-4 w-4" />
+                    {exportBusy ? t('importWizard.exportProfileBusy') : t('importWizard.exportProfileButton')}
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           <div className="flex flex-wrap gap-2">
             <Link href={`/p/${projectId}/wbs`} className="btn btn-primary">
