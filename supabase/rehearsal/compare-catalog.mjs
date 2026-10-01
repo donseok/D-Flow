@@ -7,27 +7,33 @@
 //   node supabase/rehearsal/compare-catalog.mjs capture <prefix>      → <prefix>.catalog.json, <prefix>.dump.sql
 //   node supabase/rehearsal/compare-catalog.mjs diff <prefixA> <prefixB> → 불일치 0 이면 exit 0, 아니면 목록 + exit 1
 //
-// 예 — 0003 롤백 리허설(D 는 리포 밖 임시 폴더):
+// 예 — 0003 롤백 리허설(D 는 리포 밖 임시 폴더, 전용 스택이면 SUPABASE_DB_CONTAINER·LOCAL_DB_URL 을 함께 준다):
 //   D=$(mktemp -d)
 //   supabase db reset --version 0002 && node supabase/rehearsal/compare-catalog.mjs capture "$D/ref"
 //   npm run db:reset
-//   docker exec -i supabase_db_d-flow psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rollbacks/0003_org_core_rollback.sql
+//   docker exec -i "$SUPABASE_DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rollbacks/0003_org_core_rollback.sql
 //   node supabase/rehearsal/compare-catalog.mjs capture "$D/rolledback"
 //   node supabase/rehearsal/compare-catalog.mjs diff "$D/ref" "$D/rolledback"     # ✓ 불일치 0
 //
 // 대상: 로컬만. resolveTarget('local')(LOCAL_DB_URL 또는 기본 127.0.0.1:54322)의 DSN 이 금지 ref 를 담지 않고 호스트가
-// 127.0.0.1·localhost 여야 한다. 이 PC 에는 psql·pg_dump 가 없을 수 있어 그 DSN 을 소유한 로컬 컨테이너(supabase_db_d-flow)
-// 안에서 돌린다 — DSN 의 사용자·DB 이름을 그대로 쓴다.
+// 127.0.0.1·localhost 여야 한다. 이 PC 에는 psql·pg_dump 가 없을 수 있어 그 DSN 의 DB 를 가진 로컬 컨테이너 안에서 돌린다 — DSN 의
+// 사용자·DB 이름을 그대로 쓴다. 컨테이너는 dbContainer() 가 고른다: SUPABASE_DB_CONTAINER 가 있으면 그것, 없으면 DSN 이 메인
+// 스택(54322)일 때만 메인 컨테이너다. 전용 스택 DSN 에 메인 컨테이너를 짝지으면 사용자 DB 의 카탈로그를 뜨므로 멈춘다(SP4 D42·K2).
 // 비교가 보는 것: 정책(본문)·함수(이름·인자·secdef)·트리거 정의·RLS 표·버킷·발행 표·확장(카탈로그) + public 스키마 덤프
 // (표·컬럼 순서·제약·인덱스·함수 본문·search_path·ACL). 못 보는 것: 주석(--no-comments)·소유자(--no-owner)·public 밖 객체
 // (정책은 storage·realtime 까지 본다)·지운 컬럼의 pg_attribute 흔적·supabase_migrations 기록.
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { CATALOG_SQL, checkRoundTrip, diffCatalog, diffDumps } from '../../scripts/lib/baseline.mjs'
 import { DUMP_ARGS, catalogArgs } from '../../scripts/lib/baseline-cli.mjs'
 import { assertNotForbidden, resolveTarget } from '../../scripts/lib/targets.mjs'
 
-const CONTAINER = 'supabase_db_d-flow'
+/** 메인 스택(사용자 데이터)의 config.toml project_id — 컨테이너 이름은 supabase_db_<project_id> 다 */
+const MAIN_PROJECT_ID = 'd-flow'
+/** 메인 스택 — 컨테이너 env 없이는 DSN 포트가 이것일 때만 이 컨테이너를 쓴다 */
+export const MAIN_STACK = Object.freeze({ container: `supabase_db_${MAIN_PROJECT_ID}`, dbPort: '54322' })
+const CONTAINER_RE = /^supabase_db_[A-Za-z0-9_.-]+$/
 const USAGE = 'usage: compare-catalog.mjs capture <prefix> | diff <prefixA> <prefixB>'
 const DUMP_COMPLETE = /^-- PostgreSQL database dump complete$/m
 
@@ -42,19 +48,41 @@ function localTarget() {
   return { user: decodeURIComponent(url.username || 'postgres'), db: decodeURIComponent(url.pathname.replace(/^\//, '') || 'postgres') }
 }
 
-const docker = (argv) => execFileSync('docker', ['exec', CONTAINER, ...argv], {
+/**
+ * 카탈로그를 뜰 DB 컨테이너(SP4 계획 P10). SUPABASE_DB_CONTAINER 가 비어 있지 않으면 그것(supabase_db_<project_id> 꼴만), 없으면 로컬
+ * DSN(LOCAL_DB_URL, 없으면 기본 54322)이 메인 스택일 때만 메인 컨테이너. 그 밖은 throw — 전용 스택 DSN 에 메인 컨테이너를 짝짓지 않는다.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string}
+ */
+export function dbContainer(env = process.env) {
+  const named = env.SUPABASE_DB_CONTAINER
+  if (named !== undefined && named !== '') {
+    if (!CONTAINER_RE.test(named)) throw new Error(`SUPABASE_DB_CONTAINER 가 supabase_db_<project_id> 꼴이 아니다: ${JSON.stringify(named)}`)
+    return named
+  }
+  const { dsn } = resolveTarget('local', env)
+  assertNotForbidden(dsn)
+  let url
+  try { url = new URL(dsn) } catch { throw new Error(`로컬 DSN 이 URL 이 아니다: ${JSON.stringify(dsn)}`) }
+  if (url.port === MAIN_STACK.dbPort) return MAIN_STACK.container
+  throw new Error(`컨테이너를 정하지 못했다 — LOCAL_DB_URL 이 메인 스택(${MAIN_STACK.dbPort})이 아니다(포트 ${url.port || '없음'}). ` +
+    '전용 스택이면 SUPABASE_DB_CONTAINER 를 준다')
+}
+
+const docker = (container, argv) => execFileSync('docker', ['exec', container, ...argv], {
   encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
 })
 
 function capture(prefix) {
   const { user, db } = localTarget()
-  const catalog = JSON.parse(docker(['psql', '-U', user, '-d', db, ...catalogArgs(CATALOG_SQL)]).trim())
-  const dump = docker(['pg_dump', '-U', user, ...DUMP_ARGS, db])
+  const container = dbContainer()
+  const catalog = JSON.parse(docker(container, ['psql', '-U', user, '-d', db, ...catalogArgs(CATALOG_SQL)]).trim())
+  const dump = docker(container, ['pg_dump', '-U', user, ...DUMP_ARGS, db])
   if (!DUMP_COMPLETE.test(dump)) throw new Error('pg_dump 출력이 완결되지 않았다(끝 표식 없음)')
   writeFileSync(`${prefix}.catalog.json`, JSON.stringify(catalog, null, 1))
   writeFileSync(`${prefix}.dump.sql`, dump)
   const n = (k) => catalog[k].length
-  console.log(`captured ${prefix} — policies ${n('policies')} · functions ${n('functions')} · triggers ${n('triggers')} · ` +
+  console.log(`captured ${prefix} (${container}) — policies ${n('policies')} · functions ${n('functions')} · triggers ${n('triggers')} · ` +
     `rls_tables ${n('rls_tables')} · dump ${dump.split('\n').length} lines`)
   return 0
 }
@@ -78,12 +106,16 @@ function diff(a, b) {
   return 0
 }
 
-const [mode, ...rest] = process.argv.slice(2)
-try {
-  if (mode === 'capture' && rest.length === 1) process.exitCode = capture(rest[0])
-  else if (mode === 'diff' && rest.length === 2) process.exitCode = diff(rest[0], rest[1])
-  else { console.error(USAGE); process.exitCode = 2 }
-} catch (e) {
-  console.error(`✗ ${e.message}`)
-  process.exitCode = 1
+// import 될 때(테스트)는 돌지 않는다 — node 로 직접 실행할 때만(scripts/wiki-health.mjs 의 isMain 과 같은 판정, 경로는 URL 로 바꿔 비교)
+const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+if (isMain) {
+  const [mode, ...rest] = process.argv.slice(2)
+  try {
+    if (mode === 'capture' && rest.length === 1) process.exitCode = capture(rest[0])
+    else if (mode === 'diff' && rest.length === 2) process.exitCode = diff(rest[0], rest[1])
+    else { console.error(USAGE); process.exitCode = 2 }
+  } catch (e) {
+    console.error(`✗ ${e.message}`)
+    process.exitCode = 1
+  }
 }
