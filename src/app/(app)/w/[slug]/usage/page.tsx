@@ -1,8 +1,10 @@
 import { after } from 'next/server'
 import { redirect } from 'next/navigation'
-import { getActorForView } from '@/lib/authz'
+import { BRAND } from '@/lib/branding'
+import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { PageHero } from '@/components/ui/PageHero'
+import { UsageScopeChip } from '@/components/usage/UsageScopeChip'
 import { PeriodTabs } from '@/components/usage/PeriodTabs'
 import { UsageSummary } from '@/components/usage/UsageSummary'
 import { UsageTrendChart } from '@/components/usage/UsageTrendChart'
@@ -21,19 +23,22 @@ import {
 } from '@/lib/data/usage'
 import { seoulToday } from '@/lib/domain/dates'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
+export const metadata = { title: `사용 현황 | ${BRAND.productName}` }
 
 /** 접속 로그 표시 상한. 넘치면 화면이 그 사실을 밝힌다. */
 const EVENT_LIMIT = 200
 
-export default async function UsagePage({ searchParams }: {
-  searchParams: Promise<{ days?: string; user?: string; menu?: string }>
+export default async function UsagePage({ params, searchParams }: {
+  params: Promise<{ slug: string }>; searchParams: Promise<{ days?: string; user?: string; menu?: string }>
 }) {
-  // 슈퍼유저 전용 — 판정은 canViewUsage 한 곳에서. 어포던스(사이드바 링크)도 같은 판정을 쓴다.
-  const actor = await getActorForView()
-  if (!canViewUsage(actor)) redirect('/projects')
-  await requireModulePage(null, 'usage')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13)
+  const { slug } = await params
+  const scope = await loadWorkspaceScope(slug)                                  // 첫 await — 비소속 404
+  // 슈퍼유저 전용 — 판정은 canViewUsage 한 곳에서. 거부는 그 워크스페이스 홈(D7)
+  if (!canViewUsage(scope.actor)) redirect(wsHref(scope.ws.slug))
+  await requireModulePage({ workspaceId: scope.ws.id }, 'usage')
 
   const [{ days, user, menu }, locale] = await Promise.all([searchParams, getServerLocale()])
   const period = parsePeriodDays(days)
@@ -71,6 +76,8 @@ export default async function UsagePage({ searchParams }: {
   return (
     <div className="space-y-6">
       <PageHero eyebrow="OPERATIONS" title="사용 현황" />
+      {/* 수치는 플랫폼 전체다 — 워크스페이스 경로 아래지만 usage_events 에 워크스페이스 축이 없다(D21, SP8) */}
+      <UsageScopeChip />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-ink-muted">
           최근 {period}일 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.

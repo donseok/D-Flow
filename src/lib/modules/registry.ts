@@ -74,10 +74,10 @@ export const MODULES: readonly ModuleDef[] = [
     nav: null, routePrefixes: [], apiPrefixes: ['/api/chat', '/api/cron/ai-index'] },
   { id: 'portfolio', core: false, scope: 'workspace', requires: [], envAvailable: always, botDomains: [], settings: settingsOf('portfolio'),
     nav: { workspace: { id: 'ws.portfolio', labelKey: 'nav.portfolio', icon: 'Briefcase', segment: 'portfolio', group: 'ws.ops', order: 10 } },
-    routePrefixes: ['/portfolio'], apiPrefixes: [] },
+    routePrefixes: ['/w/[slug]/portfolio'], apiPrefixes: [] },
   { id: 'usage', core: false, scope: 'workspace', requires: [], envAvailable: always, botDomains: [], settings: settingsOf('usage'),
     nav: { workspace: { id: 'ws.usage', labelKey: 'nav.usage', icon: 'BarChart3', segment: 'usage', group: 'ws.ops', order: 20 } },
-    routePrefixes: ['/usage'], apiPrefixes: ['/api/track'] },
+    routePrefixes: ['/w/[slug]/usage'], apiPrefixes: ['/api/track'] },
 ]
 
 const BY_ID = new Map(MODULES.map((m) => [m.id, m]))
@@ -87,11 +87,6 @@ export function moduleDef(id: ModuleId): ModuleDef {
   return m
 }
 export const CORE: ReadonlySet<ModuleId> = new Set(MODULES.filter((m) => m.core).map((m) => m.id))
-
-/** 경로 이동(SP3b) 전의 전역 경로 — 페이지 관문이 워크스페이스 층 모듈을 찾는 표. SP3b 가 /w/[slug]/* 로 옮기며 지운다 */
-export const LEGACY_GLOBAL_PREFIXES = {
-  '/portfolio': 'portfolio', '/usage': 'usage',
-} as const satisfies Record<string, ModuleId>
 
 /** 적재 단언(개정 §2.7.1) — 목록 = MODULE_IDS, core 는 requires: []·envAvailable 상수 true, requires 는 등록 id 이고 순환 없음,
  *  nav 항목의 층이 scope 와 맞음, 설정 14키가 소유 모듈에 한 번씩. 설정 레지스트리의 모듈 소속도 여기서 본다(컨트롤러 판정). */

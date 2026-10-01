@@ -1,7 +1,7 @@
 // 모듈 레지스트리(정본 §3.2.1·§3.2.2, 개정 §2.7.1) — 17개 정적 목록, 적재 단언, import 방향, 설정 소유.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CORE, LEGACY_GLOBAL_PREFIXES, MODULES, assertModules, moduleDef } from '@/lib/modules/registry'
+import { CORE, MODULES, assertModules, moduleDef } from '@/lib/modules/registry'
 import { CORE_MODULES, MODULE_IDS, NON_CORE_MODULES, PROJECT_TOGGLABLE, WORKSPACE_SCOPED } from '@/lib/modules/defaults'
 import { closeRequires, missingRequires } from '@/lib/modules/closure'
 import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
@@ -78,7 +78,8 @@ describe('목록', () => {
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])
     expect([...byId.usage.apiPrefixes]).toEqual(['/api/track'])
     expect([...byId.issues.apiPrefixes]).toEqual(['/api/issue-analysis'])   // 스펙 E16 — issue_analysis 모듈은 SP5(과제 4)
-    expect(LEGACY_GLOBAL_PREFIXES).toEqual({ '/portfolio': 'portfolio', '/usage': 'usage' })   // 과제 14 가 상수째 지운다
+    expect([...byId.portfolio.routePrefixes]).toEqual(['/w/[slug]/portfolio'])   // 과제 14
+    expect([...byId.usage.routePrefixes]).toEqual(['/w/[slug]/usage'])
   })
   it('botDomains 는 BOT_DOMAINS 의 부분집합이고, projects·unknown 은 어느 모듈에도 없다', () => {
     const claimed = MODULES.flatMap((m) => [...m.botDomains])

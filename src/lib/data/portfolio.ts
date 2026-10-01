@@ -23,8 +23,9 @@ const SNAPSHOT_WINDOW_DAYS = 60
  * 전사 화면을 죽이지 않되, 실패를 '데이터 없음'으로 위장하지 않는다(3원칙).
  * 호출 전제: canViewPortfolio 통과(슈퍼유저) — listProjectsWithState 의 canSeeProject 는
  * 슈퍼유저에게 비공개(0070) 포함 전체를 반환한다.
+ * SP3b D21 — 슬러그 워크스페이스로 한정한다(다른 워크스페이스 프로젝트는 리더·스냅샷·WBS 조회에도 들어가지 않는다).
  */
-export async function getPortfolioInputs(): Promise<{
+export async function getPortfolioInputs(workspaceId: string): Promise<{
   inputs: PortfolioProjectInput[]
   leadersDegraded: boolean
   listDegraded: boolean
@@ -33,7 +34,8 @@ export async function getPortfolioInputs(): Promise<{
   if (!canViewPortfolio(await getActor())) {
     throw new Error('portfolio: 슈퍼유저 전용 조회입니다.')
   }
-  const { projects, degraded: listDegraded } = await listProjectsWithState()
+  const { projects: all, degraded: listDegraded } = await listProjectsWithState()
+  const projects = all.filter(p => (p as { workspace_id?: string }).workspace_id === workspaceId)
   const ids = projects.map(p => p.id)
 
   // PM(리더) = 명단의 프로젝트 관리자(access_role='admin', 활성 행·활성 인물 — 권한 축과 같다) — IN 한 방(getProjectsCompletion 선례).

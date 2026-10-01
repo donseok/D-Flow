@@ -7,7 +7,7 @@ import { relative } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import type { ModuleId } from '@/lib/modules/defaults'
-import { LEGACY_GLOBAL_PREFIXES, MODULES } from '@/lib/modules/registry'
+import { MODULES } from '@/lib/modules/registry'
 import { walk } from './_walk'
 
 const APP = 'src/app'
@@ -41,7 +41,7 @@ const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: strin
   },
 }
 
-type Kind = 'project' | 'global' | 'row' | 'special'
+type Kind = 'project' | 'row' | 'special'
 function routeOf(file: string): string {
   const segs = ('/' + relative(APP, file).replace(/\\/g, '/').replace(/\/?page\.(tsx|ts|jsx|js|mdx)$/, '')).split('/').filter((s) => s && !/^\(.*\)$/.test(s))
   return '/' + segs.join('/')
@@ -53,7 +53,7 @@ function modulesOf(route: string): ModuleId[] {
 function kindOf(file: string, route: string): Kind {
   if (SPECIAL[file]) return 'special'
   if (route.startsWith('/p/[projectId]')) return 'project'
-  return route in LEGACY_GLOBAL_PREFIXES ? 'global' : 'row'
+  return 'row'
 }
 
 function calleeOf(e: ts.Expression): string {
@@ -147,7 +147,6 @@ export function inspect(file: string, text: string, expected: readonly ModuleId[
   if (!ids || [...ids].sort().join(',') !== [...expected].sort().join(',')) problems.push(`관문 모듈이 ${JSON.stringify(ids)} — 기대 ${JSON.stringify(expected)}`)
   const scope = call.arguments[0]
   if (kind === 'project' && !hasShorthand(scope, 'projectId')) problems.push('프로젝트 페이지의 관문 범위는 { projectId }(경로 조각의 축약형)')
-  if (kind === 'global' && scope?.kind !== ts.SyntaxKind.NullKeyword) problems.push('전역 페이지의 관문 범위는 null(세션 유일 워크스페이스)')
   if ((kind === 'row' || kind === 'special') && !hasProp(scope, 'workspaceId')) problems.push('대상 행 페이지의 관문 범위는 { workspaceId: 행의 워크스페이스 }')
   if (kind === 'special' && !hasProp(call.arguments[2], 'client')) problems.push('세션 없는 페이지는 { client: admin } 을 넘긴다')
   return problems
@@ -179,9 +178,6 @@ describe('페이지 관문 — src/app 의 모든 page.tsx', () => {
       expect(modulesOf(routeOf(f)), `${f} 는 이제 모듈에 걸린다 — 제외에서 빼고 관문을 넣는다`).toEqual([])
     }
     for (const f of [...Object.keys(SPECIAL), ...Object.keys(PRE_GATE)]) expect(existsSync(f), f).toBe(true)
-  })
-  it('LEGACY_GLOBAL_PREFIXES 는 routePrefixes 와 같은 모듈을 가리킨다(SP3b 가 경로를 옮기며 함께 지운다)', () => {
-    for (const [p, mod] of Object.entries(LEGACY_GLOBAL_PREFIXES)) expect(modulesOf(p), p).toEqual([mod])
   })
 })
 
