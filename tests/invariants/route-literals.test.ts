@@ -37,11 +37,10 @@ export const ALLOW: Record<string, { count: number; why: string }> = {
   'src/lib/data/minutes.ts': { count: 1, why: BASE_ARG },
   'src/app/actions/project.ts': { count: 3, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
   'src/app/actions/inviteRedeem.ts': { count: 2, why: 'UI-2b: 과제 25 — revalidatePath(레이아웃 데이터)' },
-  'src/lib/domain/usageMenu.ts': { count: 11, why: '영구: 역사 키 — 옛 경로 사용 이벤트를 같은 키로 읽는다(과제 20 이 개수를 다시 정한다)' },
+  'src/lib/domain/usageMenu.ts': { count: 8, why: '영구: 역사 키 — 옛 경로 사용 이벤트를 같은 키로 읽는다' },
   'src/lib/ai/chat/verifier.ts': { count: 5, why: PERMALINK },
   'src/lib/ai/chat/deep-links.ts': { count: 2, why: PERMALINK },
   'src/lib/ai/index/content.ts': { count: 1, why: PERMALINK },
-  'src/components/chat/BotPageContextProvider.tsx': { count: 3, why: PERMALINK },
   'src/lib/workspace/legacy.ts': { count: 9, why: '영구: 옛 경로 변환표' },
 }
 /** ① 임시 허용 — UI-2b 에서 0. createProject 계열 3·초대 합류 2 는 레이아웃 데이터라 UI-2b 의 범위 레이아웃 뒤에 바꾼다(§5.7).

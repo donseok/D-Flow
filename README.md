@@ -21,7 +21,7 @@ npm run dev                                         # http://localhost:3000
 `dev:bootstrap` 은 이메일·비밀번호(8자 이상)를 프롬프트로 묻거나 `BOOTSTRAP_EMAIL`/`BOOTSTRAP_PASSWORD` env 로
 받는다 — 비밀번호는 파일에 남기지 않는다. 워크스페이스 하나를 만들고 그 관리자 겸 플랫폼 관리자로 계정을 연결한다
 (`BOOTSTRAP_WORKSPACE_SLUG`(기본 `default`)·`BOOTSTRAP_WORKSPACE_NAME`(기본 `기본 워크스페이스`), 프롬프트로는 묻지 않는다).
-팀은 만들지 않는다 — 프로젝트 팀은 프로젝트 설정 화면, 공용 팀은 `/admin/teams` 에서 만든다.
+팀은 만들지 않는다 — 프로젝트 팀은 프로젝트 설정 화면, 공용 팀은 `/w/<slug>/admin/teams` 에서 만든다.
 스키마를 바꿨거나 `db:reset`을 다시 돌렸으면 계정도 함께 지워지므로 `dev:bootstrap`을 다시 실행한다.
 
 그 외 로컬 개발 규칙(브랜치·커밋·pre-push 훅 G1~G5 등)은 `CLAUDE.md`가 정본이다.

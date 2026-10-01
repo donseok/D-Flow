@@ -12,9 +12,12 @@ import {
 } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import type { BotDomain, BotEntityRef, PageContextV1 } from '@/lib/ai/chat/protocol'
+import { parseScopePath, projectSegmentModule } from '@/lib/nav/active'
+import { MODULES, moduleDef } from '@/lib/modules/registry'
 
 const PROJECT_RE = /\/p\/([0-9a-fA-F-]{8,})/
-const MINUTE_RE = /^\/minutes\/([^/?#]+)/
+// 옛 /minutes/<id> 와 새 /w/<slug>/minutes/<id> 두 형식(D6)
+const MINUTE_RE = /^(?:\/w\/[^/]+)?\/minutes\/([^/?#]+)/
 const RESERVED_QUERY_KEYS = new Set(['date', 'from', 'q', 'query', 'search', 'to', 'view', 'week'])
 
 /**
@@ -46,25 +49,21 @@ interface BotPageRegistrationApi {
 const BotPageRegistrationContext = createContext<BotPageRegistrationApi | null>(null)
 const BotPageValueContext = createContext<PageContextV1 | null>(null)
 
-function inferDomain(pathname: string): BotDomain {
-  const projectMenu = pathname.match(/^\/p\/[^/]+\/([^/?#]+)/)?.[1]
-  switch (projectMenu) {
-    case 'dashboard':
-    case 'wbs':
-    case 'kanban':
-    case 'members':
-    case 'attendance':
-    case 'announcements':
-    case 'meetings':
-    case 'weekly':
-    case 'wiki':
-    case 'settings':
-      return projectMenu
+/** 워크스페이스 홈·내 업무·전체 프로젝트는 레지스트리 모듈이 아니라 셸 항목이라 'projects' 로 묶는다 */
+const PROJECTS_SEGMENTS = new Set(['', 'my-work', 'projects'])
+
+/** 경로 → 봇 도메인. 레지스트리(botDomains)에서 파생한다(D27) — 모르면 'unknown' */
+export function inferDomain(pathname: string): BotDomain {
+  const scope = parseScopePath(pathname)
+  if (scope?.scope === 'project') {
+    const owner = projectSegmentModule(scope.rest[0] ?? '')
+    return (owner && moduleDef(owner).botDomains[0]) || 'unknown'
   }
-  if (pathname === '/' || pathname.startsWith('/projects')) return 'projects'
-  if (pathname.startsWith('/minutes')) return 'minutes'
-  if (pathname.startsWith('/meetings')) return 'meetings'
-  return 'unknown'
+  const seg = scope?.scope === 'workspace' ? (scope.rest[0] ?? '') : (pathname.split('?')[0].split('#')[0].split('/')[1] ?? '')
+  if (scope?.scope === 'workspace' && PROJECTS_SEGMENTS.has(seg)) return 'projects'
+  if (!scope && (pathname === '/' || seg === 'projects')) return 'projects'
+  const owner = MODULES.find((m) => m.nav?.workspace?.segment.split('/')[0] === seg)
+  return (owner && owner.botDomains[0]) || 'unknown'
 }
 
 function queryFilters(searchParams: URLSearchParams): PageContextV1['filters'] {

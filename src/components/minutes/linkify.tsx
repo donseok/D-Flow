@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-const MINUTE_PATH_RE = /\/minutes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
+const MINUTE_PATH_RE = /(?:\/w\/[a-z0-9][a-z0-9-]{1,62})?\/minutes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
 
-/** 내부 /minutes/<uuid> 경로만 링크화 — 외부 URL·md 링크는 그대로 텍스트(피싱 표면 차단). */
+/** 내부 경로만 링크화 — 옛 /minutes/<uuid> 와 새 /w/<slug>/minutes/<uuid> 두 형식(D6). 외부 URL·md 링크는 그대로 텍스트(피싱 표면 차단). */
 export function linkifyMinutePaths(content: string): ReactNode {
   const parts: ReactNode[] = []
   let last = 0

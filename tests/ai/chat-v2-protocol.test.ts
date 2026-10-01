@@ -104,4 +104,19 @@ describe('chat v2 project scope hints', () => {
     expect(validateChatProjectScope(request, ['p1', 'p2']))
       .toMatchObject({ ok: true, projectId: 'p2' })
   })
+
+  it('페이지 문맥의 workspaceId 는 문자열 또는 null 만 통과한다(SP3b D27)', () => {
+    const ctx = (workspaceId: unknown) => {
+      const r = sanitizeChatRequestV2({
+        projectId: null, message: '질문', history: [],
+        pageContext: { contextVersion: 1, pathname: '/w/acme', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', workspaceId },
+      })
+      if (!r.ok) throw new Error('거절')
+      return r.value.pageContext
+    }
+    expect(ctx('w-1')).toMatchObject({ workspaceId: 'w-1' })
+    expect(ctx(null)).toMatchObject({ workspaceId: null })
+    expect(ctx(42)).not.toHaveProperty('workspaceId')
+    expect(ctx({ id: 'x' })).not.toHaveProperty('workspaceId')
+  })
 })

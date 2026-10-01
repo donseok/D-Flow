@@ -67,6 +67,8 @@ export interface PageContextV1 {
   pathname: string
   domain: BotDomain
   projectId: string | null
+  /** 셸 범위의 워크스페이스(SP3b D27) — 과제 34 가 ShellScope 에서 채운다. 서버는 이 값을 믿지 않고 소속 판정 뒤에만 쓴다 */
+  workspaceId?: string | null
   /**
    * 전역 화면(예: /meetings)에서 사용자가 고른 프로젝트. URL의 projectId와 달리
    * 목록 필터가 아니라 상세 힌트다. untyped filters 사이드채널(리뷰 M-4) 대신
@@ -272,6 +274,7 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     if (selectedProjectId === undefined || selectedProjectId === '') return null
   }
   const selectedEntity = value.selectedEntity === null ? null : sanitizeEntity(value.selectedEntity)
+  const workspaceId = nullableString(value.workspaceId, MAX_ID)
   const view = nullableString(value.view, 128)
   const date = validDate(value.date)
   const weekStart = validDate(value.weekStart)
@@ -289,6 +292,7 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     pathname,
     domain,
     projectId: projectId ?? null,
+    ...(workspaceId !== undefined ? { workspaceId } : {}),
     ...(selectedProjectId !== undefined ? { selectedProjectId } : {}),
     ...(value.selectedEntity !== undefined ? { selectedEntity } : {}),
     ...(view !== undefined ? { view } : {}),
