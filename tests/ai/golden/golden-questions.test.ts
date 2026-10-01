@@ -81,7 +81,7 @@ async function collect(events: AsyncIterable<ChatStreamEvent>): Promise<ChatStre
 
 const NOW_DATE = new Date(NOW)
 /** 팀을 단정하는 골든 케이스('ERP'·'MES'·'가공')를 지키는 픽스처 — 라우터는 등록된 팀 코드로만 팀을 뽑는다. */
-const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => FIXTURE_TEAM_CODES }
+const LEGACY_TEAMS: RouteChatOptions = { teamsFor: () => FIXTURE_TEAM_CODES.map((code) => ({ code, name: code })) }
 
 function contextFor(pageContext: ChatToolExecutionContext['pageContext']): ChatToolExecutionContext {
   return {

@@ -14,18 +14,15 @@ import {
   type ToolPlan,
 } from '@/lib/ai/chat/planner'
 import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
-import { planningSignals, routeChatRequest } from '@/lib/ai/chat/router'
+import { planningSignals, projectHint, routeChatRequest, type RouteTeam } from '@/lib/ai/chat/router'
 import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
 import { requireSessionModule } from '@/lib/modules/gate'
-import { activeTeamCodesForProjectSync, activeTeamCodesVisibleToSync } from '@/lib/teams/master'
+import { projectTeams, visibleTeams } from '@/lib/teams/source'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_REQUEST_BYTES = 262_144
-
-/** 재라우팅 중 팀 캐시 조회 실패 표지 — 이것만 503 TEAMS_UNAVAILABLE 로 바꾼다(라우터 결함을 '팀 정보 없음'으로 가리지 않게). */
-class TeamCodesUnavailableError extends Error {}
 
 function requestId(): string {
   return `req_${crypto.randomUUID().replace(/-/g, '')}`
@@ -91,28 +88,23 @@ export async function POST(req: NextRequest) {
   const scope = validateChatProjectScope(request, allowedProjectIds)
   if (!scope.ok) return jsonError(scope.message, scope.status, scope.code)
 
-  // 1차 라우팅(위)은 I/O 없는 게이트다 — 팀 코드는 스코프를 안 뒤에만 알 수 있다. 도구 경로일 때만 다시 라우팅해 등록된
-  // 팀으로 팀 인자를 뽑는다. 허용 밖 프로젝트(대화 상태의 옛 엔터티)는 팀 캐시를 읽지 않는다.
+  // 1차 라우팅(위)은 I/O 없는 게이트다 — 팀은 스코프를 안 뒤에만 알 수 있다. 도구 경로일 때만 팀(이름 포함 — 개명한 이름으로도
+  // 부른다, SP4 §4.2.2)을 요청 범위 원천에서 먼저 읽고 다시 라우팅한다. 허용 밖 프로젝트(대화 상태의 옛 엔터티)는 팀을 읽지 않는다.
   let route = plannedRoute
   if (plannedRoute.kind === 'tools') {
-    const allowed = new Set(allowedProjectIds)
-    const teamCodesFor = (pid: string | null): readonly string[] => {
-      try {
-        if (pid === null) return activeTeamCodesVisibleToSync(teamViewOfScope({ isSuperuser, workspaceIds, allowedProjectIds }))
-        return allowed.has(pid) ? activeTeamCodesForProjectSync(pid) : []
-      } catch (e) {
-        throw new TeamCodesUnavailableError(e instanceof Error ? e.message : String(e))
-      }
-    }
+    const pid = projectHint(request)
+    let teams: readonly RouteTeam[]
     try {
-      route = routeChatRequest(request, now, { teamCodesFor })
+      const rows = pid === null
+        ? await visibleTeams(teamViewOfScope({ isSuperuser, workspaceIds, allowedProjectIds }), { client: sb })
+        : new Set(allowedProjectIds).has(pid) ? (await projectTeams(pid, { client: sb })).filter((t) => t.active) : []
+      teams = rows.map((t) => ({ code: t.code, name: t.name }))
     } catch (e) {
-      // 라우터 자체 결함은 그대로 올린다 — 팀 조회 실패만 아래 503 이다.
-      if (!(e instanceof TeamCodesUnavailableError)) throw e
-      // 팀 마스터 cold(최초 로드 실패) — 빈 목록으로 폴백하면 팀 질문이 필터 없이 조용히 답해진다(3원칙).
-      console.error('[chat-v2] 팀 목록 조회 실패:', e.message)
+      // 팀 원천 실패 — 빈 목록으로 폴백하면 팀 질문이 필터 없이 조용히 답해진다(3원칙).
+      console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
       return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
     }
+    route = routeChatRequest(request, now, { teamsFor: () => teams })
   }
 
   const id = requestId()

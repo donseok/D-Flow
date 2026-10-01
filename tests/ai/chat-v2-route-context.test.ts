@@ -32,14 +32,14 @@ vi.mock('@/lib/ai/chat/default-registry', async () => {
     ] as unknown as ChatTool[]),
   }
 })
-// 라우트는 스코프 확인 뒤 등록된 팀 코드로 다시 라우팅한다 — master 를 그대로 import 하면 최상위 await refreshTeams() 가 DB 를
-// 부른다. 공유 목에 두 접근자만 vi.fn 으로 덮어 어떤 범위로 읽었는지 본다.
+// 라우트는 스코프 확인 뒤 요청 범위 팀 원천(SP4 A2)에서 팀(이름 포함)을 읽어 다시 라우팅한다. 공유 목에 두 접근자만 vi.fn 으로
+// 덮어 어떤 범위로 읽었는지 본다.
 const teams = vi.hoisted(() => ({
-  activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(),
-  activeTeamCodesVisibleToSync: vi.fn<(view: unknown) => string[]>(),
+  projectTeams: vi.fn(),
+  visibleTeams: vi.fn(),
 }))
-vi.mock('@/lib/teams/master', async () => ({
-  ...(await import('../helpers/teams-master-mock')).teamsMasterMock(),
+vi.mock('@/lib/teams/source', async () => ({
+  ...(await import('../helpers/teams-source-mock')).teamsSourceMock(),
   ...teams,
 }))
 vi.mock('@/lib/ai/chat/orchestrator', async (importOriginal) => ({
@@ -70,6 +70,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import { POST } from '@/app/api/chat/v2/stream/route'
+import { teamRows } from '../helpers/teams-source-mock'
 
 const post = (body: unknown) => {
   return POST(new NextRequest('http://localhost/api/chat/v2/stream', {
@@ -89,8 +90,8 @@ const depsOf = (index = 0) => mocks.orchestrateChatV2.mock.calls[index][1] as {
 describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    teams.activeTeamCodesForProjectSync.mockImplementation(() => ['Acme'])
-    teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['Acme'])
+    teams.projectTeams.mockResolvedValue(teamRows(['Acme']))
+    teams.visibleTeams.mockResolvedValue(teamRows(['Acme']))
   })
   // 관문 mock 값을 바꾼 케이스가 남은 Once 값을 새어 나가지 않게 되돌린다(공통 규칙 — 전역 mock 여섯 함수).
   afterEach(() => {
@@ -124,7 +125,7 @@ describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
     })
     expect(res.status).toBe(200)
     await res.text()
-    expect(teams.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
+    expect(teams.projectTeams).toHaveBeenCalledWith('p1', { client: expect.objectContaining({ from: expect.any(Function) }) })
     const { route } = mocks.orchestrateChatV2.mock.calls[0][1] as { route: DeterministicRoute }
     expect(route.kind).toBe('tools')
     expect(route.calls[0]).toMatchObject({ tool: 'find_wbs_items', args: { projectId: 'p1', team: 'Acme' } })
@@ -139,8 +140,8 @@ describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
     })
     expect(res.status).toBe(200)
     await res.text()
-    expect(teams.activeTeamCodesVisibleToSync).toHaveBeenCalledWith({ all: true })
-    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    expect(teams.visibleTeams).toHaveBeenCalledWith({ all: true }, { client: expect.objectContaining({ from: expect.any(Function) }) })
+    expect(teams.projectTeams).not.toHaveBeenCalled()
     const { route } = mocks.orchestrateChatV2.mock.calls[0][1] as { route: DeterministicRoute }
     expect(route.kind === 'tools' && route.calls[0]).toMatchObject({ tool: 'search_minutes', args: { team: 'Acme' } })
     vi.unstubAllEnvs()
@@ -162,8 +163,8 @@ describe('POST /api/chat/v2/stream — 모듈 관문 배선', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
-    teams.activeTeamCodesForProjectSync.mockImplementation(() => ['Acme'])
-    teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['Acme'])
+    teams.projectTeams.mockResolvedValue(teamRows(['Acme']))
+    teams.visibleTeams.mockResolvedValue(teamRows(['Acme']))
   })
   afterEach(() => {
     for (const fn of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule, moduleSetFor]) {

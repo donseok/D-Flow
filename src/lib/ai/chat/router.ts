@@ -18,9 +18,11 @@ export interface RoutedToolCall {
   args: Record<string, unknown>
 }
 
+/** 라우터가 대조하는 팀 — 식별 코드와 표시 이름(개명 — 스펙 D37). 둘 다 매칭 대상이고 결과는 code 다. */
+export type RouteTeam = { code: string; name: string }
 export type RouteChatOptions = {
-  /** 프로젝트(전역 회의·회의록이면 null)의 팀 코드. 호출부가 권한 범위로 좁혀 준다. 던지면 그대로 전파한다. */
-  teamCodesFor?: (projectId: string | null) => readonly string[]
+  /** 프로젝트(전역 회의·회의록이면 null)의 활성 팀. 호출부가 권한 범위로 좁혀 준다. 던지면 그대로 전파한다. */
+  teamsFor?: (projectId: string | null) => readonly RouteTeam[]
 }
 
 export type DeterministicRoute =
@@ -178,7 +180,7 @@ function directProjectHint(input: ChatRequestV2): string | null {
   return input.pageContext?.projectId ?? input.projectId ?? selectedProjectFilter(input)
 }
 
-function projectHint(input: ChatRequestV2): string | null {
+export function projectHint(input: ChatRequestV2): string | null {
   const direct = directProjectHint(input)
   if (direct) return direct
   const priorDomains = conversationDomains(input)
@@ -208,42 +210,47 @@ function wbsStatusFrom(message: string, context: PageContextV1 | undefined): str
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** 메시지에서 등록된 팀 코드 하나를 뽑는다. 뽑는 기준(엄격)은 양쪽 경계가 공백·문자열 끝이고 소비하지 않는다 — 'ERP MES' 에서
- *  둘 다 찾아 모호로 판정하기 위해서다(소비하는 경계면 MES 를 놓친다). 긴 코드부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저
- *  잡힌다. 대소문자는 무시해 찾되 저장된 정규 코드를 돌려준다. 서로 다른 코드가 둘 이상이거나, 대소문자만 다른 코드가 함께
- *  등록돼 어느 쪽인지 모르면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다 필터 없음이 정직하다.
- *  모호성은 느슨한 경계로 한 번 더 센다 — 엄격 경계만 보면 조사·구두점이 붙은 언급('ERP와 MES', 'ERP, MES', 'ERP 운영팀',
- *  '[MES]와 ERP', 'ERP 현황/MES')을 못 보고 남은 하나로 엉뚱한 부분집합을 거른다. 느슨한 경계의 왼쪽은 글자·숫자만 아니면
- *  (낱말 속 '추가공정' 의 '가공' 은 언급이 아니다), 오른쪽은 영숫자만 아니면(한글 조사는 붙어도 세고, 'MESSAGE' 의 'MES' 는
- *  세지 않는다) 된다. 느슨한 판정도 긴 코드부터라 같은 자리에서 엄격 일치보다 짧은 코드를 잡지 않는다('ERP 운영 현황' 은
- *  양쪽 다 'ERP 운영'). 조사 붙은 코드를 팀으로 뽑는 것('가공팀')은 SP8 몫이다. */
-export function teamFromCodes(message: string, codes: readonly string[]): string | undefined {
-  const uniq = [...new Set(codes.map(c => c.trim()).filter(Boolean))]
-  if (!uniq.length) return undefined
-  const byLower = new Map<string, string[]>()
-  for (const c of uniq) byLower.set(c.toLowerCase(), [...(byLower.get(c.toLowerCase()) ?? []), c])
-  const alt = [...uniq].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
-  /** 경계에 걸린 코드의 정규 코드 집합. 대소문자만 다른 중복에 걸리면 null(모호). */
-  const ownersOf = (leftBoundary: string, rightBoundary: string): Set<string> | null => {
+/** 메시지에서 등록된 팀 하나를 뽑는다 — 매칭 대상은 팀의 code ∪ name(SP4 §4.2.2 — 개명한 이름으로도 부른다), 결과는 code.
+ *  뽑는 기준(엄격)은 양쪽 경계가 공백·문자열 끝이고 소비하지 않는다 — 'ERP MES' 에서 둘 다 찾아 모호로 판정하기 위해서다.
+ *  긴 낱말부터 교대식에 넣어 'ERP 운영' 이 'ERP' 보다 먼저 잡힌다. 대소문자는 무시해 찾는다. 한 낱말(소문자 기준)이 서로 다른 팀의
+ *  code·name 에 걸리거나(대소문자만 다른 경우 포함), 서로 다른 팀이 둘 이상 걸리면 뽑지 않는다 — 엉뚱한 팀으로 거르는 것보다
+ *  필터 없음이 정직하다. 모호성은 느슨한 경계로 한 번 더 센다 — 조사·구두점이 붙은 언급('ERP와 MES', 'ERP, MES')을 엄격 경계만으로는
+ *  못 본다. 느슨한 경계의 왼쪽은 글자·숫자만 아니면, 오른쪽은 영숫자만 아니면 된다(한글 조사는 붙어도 센다). 별칭은 없다.
+ *  조사 붙은 이름을 팀으로 뽑는 것('가공팀')은 SP8 몫이다. */
+export function teamFromTeams(message: string, teams: readonly RouteTeam[]): string | undefined {
+  const owners = new Map<string, Set<string>>()   // 소문자 낱말 → 그 낱말을 code·name 으로 가진 팀의 code 집합
+  for (const t of teams) {
+    const code = t.code.trim()
+    if (!code) continue
+    for (const word of [code, t.name.trim()]) {
+      if (!word) continue
+      const key = word.toLowerCase()
+      owners.set(key, (owners.get(key) ?? new Set<string>()).add(code))
+    }
+  }
+  if (!owners.size) return undefined
+  const alt = [...owners.keys()].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
+  /** 경계에 걸린 낱말의 팀 code 집합. 한 낱말이 두 팀 이상에 걸리면 null(모호). */
+  const teamsAt = (leftBoundary: string, rightBoundary: string): Set<string> | null => {
     const found = new Set<string>()
     for (const m of message.matchAll(new RegExp(`${leftBoundary}(?:${alt})${rightBoundary}`, 'giu'))) {
-      const owners = byLower.get(m[0].toLowerCase()) ?? []
-      if (owners.length !== 1) return null
-      found.add(owners[0])
+      const hit = owners.get(m[0].toLowerCase())
+      if (!hit || hit.size !== 1) return null
+      found.add([...hit][0])
     }
     return found
   }
-  const strict = ownersOf('(?<=^|\\s)', '(?=\\s|$)')
+  const strict = teamsAt('(?<=^|\\s)', '(?=\\s|$)')
   if (strict?.size !== 1) return undefined
   const [team] = strict
-  const loose = ownersOf('(?<![\\p{L}\\p{N}])', '(?![A-Za-z0-9])')
-  return loose && [...loose].every(owner => owner === team) ? team : undefined
+  const loose = teamsAt('(?<![\\p{L}\\p{N}])', '(?![A-Za-z0-9])')
+  return loose && [...loose].every((c) => c === team) ? team : undefined
 }
 
-function teamFrom(message: string, context: PageContextV1 | undefined, teams: readonly string[]): string | undefined {
+function teamFrom(message: string, context: PageContextV1 | undefined, teams: readonly RouteTeam[]): string | undefined {
   const filtered = stringFilter(context, 'team')
   if (filtered) return filtered
-  return teamFromCodes(message, teams)
+  return teamFromTeams(message, teams)
 }
 
 function attendanceTypesFrom(message: string): string[] | undefined {
@@ -365,7 +372,7 @@ function referencedEntity(input: ChatRequestV2, types: BotEntityRef['type'][]): 
   return prior ?? null
 }
 
-function wbsCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
+function wbsCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
   const message = input.message
   const projectId = projectHint(input)
   const entity = referencedEntity(input, ['wbs_item'])
@@ -401,7 +408,7 @@ function wbsCall(input: ChatRequestV2, now: Date, teams: readonly string[]): Rou
   }
 }
 
-function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
+function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
   const today = seoulYmd(now)
   const currentWeekStart = mondayOf(today)
   const explicitWeekStarts = explicitDates(input.message, today).map(mondayOf)
@@ -494,7 +501,7 @@ function meetingsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function attendanceCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
+function attendanceCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
   const range = requestedRange(input.message, input.pageContext, now)
   const types = attendanceTypesFrom(input.message)
   return {
@@ -546,7 +553,7 @@ function announcementsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function minutesCall(input: ChatRequestV2, now: Date, teams: readonly string[]): RoutedToolCall {
+function minutesCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
   const entity = referencedEntity(input, ['minute', 'minute_block'])
   if (entity && /상세|자세히|세부|내용|본문|결정|액션|위험|요약/.test(input.message)) {
     return {
@@ -572,7 +579,7 @@ function minutesCall(input: ChatRequestV2, now: Date, teams: readonly string[]):
   }
 }
 
-function membersCall(input: ChatRequestV2, teams: readonly string[]): RoutedToolCall {
+function membersCall(input: ChatRequestV2, teams: readonly RouteTeam[]): RoutedToolCall {
   const projectId = projectHint(input)
   const team = teamFrom(input.message, input.pageContext, teams)
   // '멤버별/담당자별 업무'는 개인 담당 스키마가 없어 팀 단위 워크로드로 정직하게 답한다(설계 §9.1).
@@ -593,7 +600,7 @@ function membersCall(input: ChatRequestV2, teams: readonly string[]): RoutedTool
 
 const KANBAN_VIEWS = new Set(['phase', 'owner', 'status'])
 
-function kanbanCall(input: ChatRequestV2, teams: readonly string[]): RoutedToolCall {
+function kanbanCall(input: ChatRequestV2, teams: readonly RouteTeam[]): RoutedToolCall {
   const projectId = projectHint(input)
   const pageView = input.pageContext?.view
   const view = typeof pageView === 'string' && KANBAN_VIEWS.has(pageView)
@@ -766,8 +773,8 @@ export function routeChatRequest(input: ChatRequestV2, now = new Date(), opts: R
     }
   }
 
-  // 팀 코드는 도구 인자에만 쓴다 — 조기 반환(command·legacy·clarify)을 모두 지난 뒤 한 번만 읽는다.
-  const teams = opts.teamCodesFor?.(projectHint(input)) ?? []
+  // 팀은 도구 인자에만 쓴다 — 조기 반환(command·legacy·clarify)을 모두 지난 뒤 한 번만 읽는다.
+  const teams = opts.teamsFor?.(projectHint(input)) ?? []
   const calls = domains.map(domain => {
     if (domain === 'wbs') return wbsCall(input, now, teams)
     if (domain === 'weekly') return weeklyCall(input, now, teams)

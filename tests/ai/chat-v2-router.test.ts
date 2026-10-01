@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { routeChatRequest, teamFromCodes, type RouteChatOptions } from '@/lib/ai/chat/router'
+import { routeChatRequest, teamFromTeams, type RouteChatOptions, type RouteTeam } from '@/lib/ai/chat/router'
 import type { ChatRequestV2, PageContextV1 } from '@/lib/ai/chat/protocol'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const NOW = new Date('2026-07-19T00:00:00.000Z')
+/** 이름 = code 인 팀 목록(개명 전 모양) — 옛 코드 기반 케이스를 그대로 돌린다 */
+const asTeams = (codes: readonly string[]): RouteTeam[] => codes.map((code) => ({ code, name: code }))
+const teamFromCodes = (message: string, codes: readonly string[]) => teamFromTeams(message, asTeams(codes))
 /** 팀 인자 기대값('ERP')을 지키는 픽스처 — 라우터는 등록된 팀 코드로만 팀을 뽑는다. */
-const LEGACY_TEAMS: RouteChatOptions = { teamCodesFor: () => FIXTURE_TEAM_CODES }
+const LEGACY_TEAMS: RouteChatOptions = { teamsFor: () => asTeams(FIXTURE_TEAM_CODES) }
 
 function context(domain: PageContextV1['domain'], extra: Partial<PageContextV1> = {}): PageContextV1 {
   return {
@@ -476,7 +479,7 @@ describe('chat v2 router — Wiki 도메인 회귀 방지', () => {
 })
 
 describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
-  const withTeams = (codes: string[]) => ({ teamCodesFor: vi.fn<(projectId: string | null) => readonly string[]>(() => codes) })
+  const withTeams = (codes: string[]) => ({ teamsFor: vi.fn<(projectId: string | null) => readonly RouteTeam[]>(() => asTeams(codes)) })
 
   it.each([
     [['Research', 'R&D', 'C++'], 'R&D 작업 현황 알려줘', 'R&D'],
@@ -561,11 +564,11 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     expect(route.calls.find(call => call.tool === tool)?.args).toMatchObject({ team: 'Acme' })
   })
 
-  it('teamCodesFor 는 프로젝트 힌트로 부른다 — 프로젝트 화면은 그 pid, 전역 회의록은 null', () => {
+  it('teamsFor 는 프로젝트 힌트로 부른다 — 프로젝트 화면은 그 pid, 전역 회의록은 null', () => {
     const project = withTeams(['팀A'])
     routeChatRequest(request('팀A 작업 현황 알려줘', context('wbs')), NOW, project)
-    expect(project.teamCodesFor).toHaveBeenCalledTimes(1)
-    expect(project.teamCodesFor).toHaveBeenCalledWith('p1')
+    expect(project.teamsFor).toHaveBeenCalledTimes(1)
+    expect(project.teamsFor).toHaveBeenCalledWith('p1')
 
     const global = withTeams(['팀A'])
     const route = routeChatRequest({
@@ -573,12 +576,12 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
       pageContext: { ...context('minutes'), projectId: null, pathname: '/minutes' },
     }, NOW, global)
     if (route.kind !== 'tools') throw new Error(route.kind)
-    expect(global.teamCodesFor).toHaveBeenCalledTimes(1)
-    expect(global.teamCodesFor).toHaveBeenCalledWith(null)
+    expect(global.teamsFor).toHaveBeenCalledTimes(1)
+    expect(global.teamsFor).toHaveBeenCalledWith(null)
     expect(route.calls[0]).toMatchObject({ tool: 'search_minutes', args: { team: '팀A' } })
   })
 
-  it('command·legacy·clarify 경로에서는 teamCodesFor 를 부르지 않는다', () => {
+  it('command·legacy·clarify 경로에서는 teamsFor 를 부르지 않는다', () => {
     const opts = withTeams(['ERP'])
     const command = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW, opts)
     const legacy = routeChatRequest(
@@ -586,12 +589,40 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     )
     const clarify = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW, opts)
     expect([command.kind, legacy.kind, clarify.kind]).toEqual(['command', 'legacy', 'clarify'])
-    expect(opts.teamCodesFor).not.toHaveBeenCalled()
+    expect(opts.teamsFor).not.toHaveBeenCalled()
   })
 
   it('팀 목록 조회가 던지면 그대로 전파한다 — 빈 목록으로 삼키지 않는다', () => {
-    const opts: RouteChatOptions = { teamCodesFor: () => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') } }
+    const opts: RouteChatOptions = { teamsFor: () => { throw new Error('팀 목록을 불러오지 못했습니다.') } }
     expect(() => routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW, opts))
-      .toThrow('팀 마스터를 아직 불러오지 못했습니다.')
+      .toThrow('팀 목록을 불러오지 못했습니다.')
+  })
+
+  describe('teamFromTeams — code ∪ name(SP4 §4.2.2)', () => {
+    const RENAMED: RouteTeam[] = [{ code: 'OPS', name: '운영팀' }, { code: 'RES', name: '연구팀' }]
+    it.each([
+      ['운영팀 작업 현황 알려줘', 'OPS'],      // W27 — 새 이름으로
+      ['OPS 작업 현황 알려줘', 'OPS'],         // W27 — code 로도
+      ['ops 작업 현황 알려줘', 'OPS'],         // 대소문자 무시, 정규 code 를 돌려준다
+      ['연구팀 진척', 'RES'],
+    ])('"%s" → %s', (message, team) => {
+      expect(teamFromTeams(message, RENAMED)).toBe(team)
+    })
+    it.each([
+      [[{ code: 'OPS', name: '운영' }, { code: 'RUN', name: 'OPS' }], 'OPS 작업 현황 알려줘'],   // W28 — 한 팀의 code 가 다른 팀의 name
+      [[{ code: 'OPS', name: 'OPS' }, { code: 'SUP', name: 'ops' }], 'ops 작업 현황 알려줘'],   // [RF1] 대소문자만 다른 이름
+      [[{ code: 'A1', name: '데이터' }, { code: 'B2', name: '데이터' }], '데이터 작업 현황 알려줘'], // 같은 이름 두 팀
+      [RENAMED, '운영팀과 연구팀 작업'],                                                       // 서로 다른 둘(조사)
+    ])('%j 에서 "%s" 는 모호 — 뽑지 않는다', (teams, message) => {
+      expect(teamFromTeams(message, teams)).toBeUndefined()
+    })
+    it('자기 code 와 같은 이름(개명 전·되돌린 이름)은 한 팀이라 모호가 아니다', () => {
+      expect(teamFromTeams('OPS 현황', [{ code: 'OPS', name: 'OPS' }])).toBe('OPS')
+    })
+    it('라우터는 teamsFor 의 이름으로도 도구 인자를 채운다(W27)', () => {
+      const route = routeChatRequest(request('운영팀 작업 현황 알려줘', context('wbs')), NOW, { teamsFor: () => RENAMED })
+      if (route.kind !== 'tools') throw new Error(route.kind)
+      expect(route.calls[0].args).toMatchObject({ team: 'OPS' })
+    })
   })
 })

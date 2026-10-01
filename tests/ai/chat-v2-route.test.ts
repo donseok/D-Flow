@@ -17,14 +17,14 @@ const { withCount } = vi.hoisted(() => ({
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/chat/default-registry', () => ({ createDefaultChatToolRegistry: mocks.createDefaultRegistry }))
-// 라우트는 스코프 확인 뒤 등록된 팀 코드로 다시 라우팅한다 — master 를 그대로 import 하면 최상위 await refreshTeams() 가 DB 를
-// 부른다. 공유 목에 두 접근자만 vi.fn 으로 덮어 '던짐'·'호출 없음'을 개별 테스트에서 본다.
+// 라우트는 스코프 확인 뒤 요청 범위 팀 원천(SP4 A2)에서 팀(이름 포함)을 읽어 다시 라우팅한다. 공유 목에 두 접근자만 vi.fn 으로
+// 덮어 '던짐'·'호출 없음'을 개별 테스트에서 본다.
 const teams = vi.hoisted(() => ({
-  activeTeamCodesForProjectSync: vi.fn<(projectId: string) => string[]>(),
-  activeTeamCodesVisibleToSync: vi.fn<(view: unknown) => string[]>(),
+  projectTeams: vi.fn(),
+  visibleTeams: vi.fn(),
 }))
-vi.mock('@/lib/teams/master', async () => ({
-  ...(await import('../helpers/teams-master-mock')).teamsMasterMock(),
+vi.mock('@/lib/teams/source', async () => ({
+  ...(await import('../helpers/teams-source-mock')).teamsSourceMock(),
   ...teams,
 }))
 // 재라우팅의 503 범위(팀 조회 실패만)를 보려고 라우터를 감싼다 — 기본은 실제 라우터를 그대로 부른다(beforeEach).
@@ -38,6 +38,7 @@ vi.mock('@/lib/ai/chat/router', async (importOriginal) => ({
 const actualRouter = () => vi.importActual<typeof import('@/lib/ai/chat/router')>('@/lib/ai/chat/router')
 
 import { POST } from '@/app/api/chat/v2/stream/route'
+import { teamRows } from '../helpers/teams-source-mock'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
@@ -78,8 +79,8 @@ describe('POST /api/chat/v2/stream composition', () => {
     mocks.getSession.mockResolvedValue({ id: 'u1' })
     mocks.createServerClient.mockResolvedValue(client(['p1']))
     mocks.createDefaultRegistry.mockReturnValue(EMPTY_CHAT_TOOL_REGISTRY)
-    teams.activeTeamCodesForProjectSync.mockImplementation(() => ['ERP'])
-    teams.activeTeamCodesVisibleToSync.mockImplementation(() => ['ERP'])
+    teams.projectTeams.mockResolvedValue(teamRows(['ERP']))
+    teams.visibleTeams.mockResolvedValue(teamRows(['ERP']))
   })
   // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
   afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
@@ -126,7 +127,7 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ code: 'PROJECT_ACCESS_DENIED' })
     // 스코프 검증이 재라우팅보다 먼저다 — 허용 밖 프로젝트의 팀 구성을 읽지 않는다.
-    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
+    expect(teams.projectTeams).not.toHaveBeenCalled()
   })
 
   it('uses NDJSON for a valid stream and ends in one terminal event', async () => {
@@ -170,8 +171,8 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(await response.json()).toMatchObject({ code: 'PROJECT_ACCESS_DENIED' })
   })
 
-  it('팀 캐시가 cold 면 빈 목록으로 폴백하지 않고 503 TEAMS_UNAVAILABLE 로 닫는다 — 스트림 없음', async () => {
-    teams.activeTeamCodesForProjectSync.mockImplementationOnce(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
+  it('팀 원천 실패면 빈 목록으로 폴백하지 않고 503 TEAMS_UNAVAILABLE 로 닫는다 — 스트림 없음', async () => {
+    teams.projectTeams.mockRejectedValueOnce(new Error('팀 목록을 불러오지 못했습니다.'))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const response = await POST(request({
       projectId: 'p1', message: 'ERP 작업 현황 알려줘', history: [],
@@ -180,9 +181,9 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(response.status).toBe(503)
     expect(response.headers.get('content-type')).not.toContain('ndjson')
     expect(await response.json()).toMatchObject({ code: 'TEAMS_UNAVAILABLE' })
-    expect(teams.activeTeamCodesForProjectSync).toHaveBeenCalledWith('p1')
+    expect(teams.projectTeams).toHaveBeenCalledWith('p1', { client: expect.objectContaining({ from: expect.any(Function) }) })
     expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
-    expect(err).toHaveBeenCalledWith('[chat-v2] 팀 목록 조회 실패:', '팀 마스터를 아직 불러오지 못했습니다.')
+    expect(err).toHaveBeenCalledWith('[chat-v2] 팀 목록 조회 실패:', '팀 목록을 불러오지 못했습니다.')
     err.mockRestore()
   })
 
@@ -202,7 +203,7 @@ describe('POST /api/chat/v2/stream composition', () => {
     err.mockRestore()
   })
 
-  it('대화 상태의 옛 엔터티가 허용 밖 프로젝트를 가리키면 그 pid 로 팀 캐시를 읽지 않는다', async () => {
+  it('대화 상태의 옛 엔터티가 허용 밖 프로젝트를 가리키면 그 pid 로 팀을 읽지 않는다', async () => {
     const response = await POST(request({
       projectId: null, message: 'ERP 작업 현황 알려줘', history: [],
       conversationState: {
@@ -212,19 +213,19 @@ describe('POST /api/chat/v2/stream composition', () => {
     }))
     expect(response.status).toBe(200)
     await response.text()
-    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
-    expect(teams.activeTeamCodesVisibleToSync).not.toHaveBeenCalled()
+    expect(teams.projectTeams).not.toHaveBeenCalled()
+    expect(teams.visibleTeams).not.toHaveBeenCalled()
   })
 
-  it('1차 라우트가 legacy(501)면 팀 캐시를 읽지 않는다 — 스코프 조회 전 게이트 유지', async () => {
+  it('1차 라우트가 legacy(501)면 팀을 읽지 않는다 — 스코프 조회 전 게이트 유지', async () => {
     const response = await POST(request({
       projectId: null, message: '도와줘', history: [],
       pageContext: { contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul' },
     }))
     expect(response.status).toBe(501)
     expect(mocks.createServerClient).not.toHaveBeenCalled()
-    expect(teams.activeTeamCodesForProjectSync).not.toHaveBeenCalled()
-    expect(teams.activeTeamCodesVisibleToSync).not.toHaveBeenCalled()
+    expect(teams.projectTeams).not.toHaveBeenCalled()
+    expect(teams.visibleTeams).not.toHaveBeenCalled()
   })
 
   it('chatbot 모듈이 꺼지면 404 — 검증된 요청의 프로젝트로 판정하고 라우팅·스코프 조회 전에 멈춘다(과제 20)', async () => {

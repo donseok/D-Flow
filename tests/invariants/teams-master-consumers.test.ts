@@ -18,7 +18,6 @@ export const MASTER_CONSUMERS: readonly string[] = [
   'src/app/actions/projectInvites.ts',
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
-  'src/app/api/chat/v2/stream/route.ts',
   'src/app/api/export/route.ts',
   'src/components/dashboard/DashboardView.tsx',
 ]
