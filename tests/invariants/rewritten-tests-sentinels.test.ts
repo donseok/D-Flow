@@ -51,6 +51,10 @@ const REGISTERED = [
   ...Object.values(SYNTHETIC_WEEKLY_AREAS).flat().flatMap((a) => [a.code, a.name]),
 ]
 const WATCHED = sentinelsFor('SP4', REGISTERED)
+/** 등록 이름 면제는 합성 구성(C 의 영역 이름)을 실제로 쓰는 파일에만 — 나머지 목록 파일은 SP4 센티널 전부를 본다(스펙 D8 — A1-4 리뷰 P6) */
+const SYNTHETIC_FILES: ReadonlySet<string> = new Set(['tests/fixtures/synthetic/areas.ts', 'tests/negative/weekly-outputs.test.ts'])
+const STRICT = sentinelsFor('SP4', [])
+const watchedFor = (f: string) => (SYNTHETIC_FILES.has(f) ? WATCHED : STRICT)
 const listed: readonly string[] = REWRITTEN_TESTS
 
 describe('다시 쓴 주간 테스트 — SP4 센티널 0건(P13)', () => {
@@ -61,7 +65,7 @@ describe('다시 쓴 주간 테스트 — SP4 센티널 0건(P13)', () => {
 
   it('목록의 파일에 옛 구분명·팀 코드가 없다', () => {
     const offenders = listed.flatMap((f) => {
-      const hits = findSentinels(readFileSync(f, 'utf8'), WATCHED)
+      const hits = findSentinels(readFileSync(f, 'utf8'), watchedFor(f))
       return hits.length ? [`${f}: ${hits.join(', ')}`] : []
     })
     expect(offenders).toEqual([])
@@ -76,6 +80,8 @@ describe('다시 쓴 주간 테스트 — SP4 센티널 0건(P13)', () => {
   it('빼는 센티널은 합성 구성이 등록한 이름과 같은 것 하나뿐이고, 가드는 평범한 테스트 문장 속 옛 이름을 잡는다', () => {
     const [, sales, , , quality] = LEGACY_SENTINELS.weeklySections
     expect(SENTINELS_BY_SP.SP4.filter((w) => !WATCHED.includes(w))).toEqual([quality])
+    expect(STRICT).toContain(quality)                                   // 면제는 합성 구성 파일에만
+    for (const f of SYNTHETIC_FILES) expect(listed, f).toContain(f)      // 면제 대상도 목록 안이다(낡은 면제 금지)
     expect(findSentinels(`row({ section: '${sales}', module: '' })`, WATCHED)).toEqual([sales])
     // 원문 소스의 이스케이프 뒤 영문 코드(과제 25 치환 결함이 남긴 꼴 — A1-4 리뷰 P5)도 잡는다
     const [code] = LEGACY_SENTINELS.teamCodes   // 이 파일도 목록에 있다 — 평문으로 적지 않는다

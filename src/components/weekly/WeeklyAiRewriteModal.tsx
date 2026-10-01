@@ -68,7 +68,7 @@ export function WeeklyAiRewriteModal({
         <div className="flex gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
           <p>
-            선택한 내용과 구분 정보만 AI에 보내 보고서 문장으로 다듬습니다. 아래에서 원문과 제안을 비교한 뒤
+            선택한 내용과 업무영역 이름만 AI에 보내 보고서 문장으로 다듬습니다. 아래에서 원문과 제안을 비교한 뒤
             적용할 수 있으며, <b>적용 전에는 저장되지 않습니다.</b>
           </p>
         </div>

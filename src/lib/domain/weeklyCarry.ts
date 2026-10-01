@@ -1,7 +1,7 @@
 /* ── 주간 이월 계약(SP4 스펙 §4.1.1 이월 규칙 표, D31·D33·Q37) — 순수. 원본(가장 최근 이전 문서)의 차주계획이 새 문서의 금주실적
  *    초안이 된다. 영역 id 로 옮긴다 — 활성 영역은 자기 자리로, 지금 비활성인 영역의 대기 내용은 명시 매핑(다른 활성 영역 또는 'skip')
  *    으로만. 첫 영역·폴백 흡수·절단·원본 수정은 없다. 넘치면(20,000자) 거부한다 — 개정 §4.3.3 의 "상한에서 자름"과 다르다(E25).
- *    옛 구분 기반 이월(weeklySheet.ts 의 carryOverRows)은 SP4 계획 과제 25 가 지운다. ── */
+ *    옛 구분 기반 이월(weeklySheet.ts 의 carryOverRows)은 지웠다 — 이 모듈이 유일한 이월 규칙이다. ── */
 import {
   NEXT_CELLS, UNKNOWN_AREA_LABEL, WEEKLY_CELL_MAX, hasContent, orderAreas,
   type NewWeeklyRow, type WeeklyArea, type WeeklyCellKey, type WeeklyCells,

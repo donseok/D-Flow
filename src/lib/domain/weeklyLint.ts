@@ -458,7 +458,7 @@ export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupO
           }
 
           out.push({
-            // JSON 직렬화로 묶음한다 — 본문에 흔한 '~'(기간 표기) 같은 문자를 구분자로 쓰면
+            // JSON 직렬화로 id 를 만든다 — 본문에 흔한 '~'(기간 표기) 같은 문자를 구분자로 쓰면
             // 서로 다른 두 지적이 같은 id 로 뭉갤 수 있다. 구획 키(bk)도 함께 넣어야
             // 한 셀의 두 구획에 같은 군집이 생겨도 id 가 부딪히지 않는다.
             id: `nearDuplicate:${groupKey}:${cellKey}:${bk}:${JSON.stringify(ms.map(m => m.norm))}`,
