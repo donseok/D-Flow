@@ -12,7 +12,7 @@
 ## 1. z 대응표(D56)
 
 토큰(`globals.css` 비색 `:root`): `--z-sticky 20` · `--z-shell 70` · `--z-rail 90` · `--z-popover 100` · `--z-overlay 110` · `--z-fullscreen 120` · `--z-modal 150` · `--z-toast 200` · `--z-skip 250`.
-출처: `grep -rnoE "(^|[^a-z0-9-])-?z-(\[[^]]+\]|\(--z-[a-z]+\)|[0-9]+)" src --include='*.tsx' --include='*.ts'` — 과제 23 머리(`de21512`) 기준 78줄(토큰 10 · 임의값 17 · 이름 유틸 51 — 브리프 사본 실측의 토큰 11·임의값 16 과 하나 다른 것은 전체 화면 +1 이 임의값 `z-[calc(…)]` 이라서). '화면 내부' = 그 화면의 스태킹 컨텍스트 안에서만 겨루는 층(전역 층과 순서를 다투지 않는다).
+출처: `grep -rnoE "(^|[^a-z0-9-])-?z-(\[[^]]+\]|\(--z-[a-z]+\)|[0-9]+)" src --include='*.tsx' --include='*.ts'` + className 밖(최종 리뷰 N7): `grep -rn "z-index" src --include='*.module.css'` · `grep -rn "zIndex" src` — 과제 23 머리(`de21512`) 기준 78줄(토큰 10 · 임의값 17 · 이름 유틸 51 — 브리프 사본 실측의 토큰 11·임의값 16 과 하나 다른 것은 전체 화면 +1 이 임의값 `z-[calc(…)]` 이라서). '화면 내부' = 그 화면의 스태킹 컨텍스트 안에서만 겨루는 층(전역 층과 순서를 다투지 않는다).
 
 | 지금 값 | 파일:줄 | 새 값 | 비고 |
 |---|---|---|---|
@@ -40,9 +40,13 @@
 | `z-20` | `wbs/WbsGanttSheet.tsx:2154` · `wbs/AssigneeComboBox.tsx:142` · `weekly/SheetCell.tsx:91`·`:95`·`:101` · `attendance/AttendanceView.tsx:245` · `meetings/MeetingsView.tsx:123` · `meetings/MyMeetingsView.tsx:207` · `minutes/MinutesExplorer.tsx:489`·`:850`·`:872`·`:881` · `minutes/MinutesView.tsx:261` | 화면 내부(sticky 는 `--z-sticky` 와 같은 값) | sticky 머리·콤보 목록 |
 | `z-10` | `wbs/WbsGanttSheet.tsx:445`·`:1074`·`:1562`·`:1608`·`:1843`·`:1920` · `wbs/RowDetailPanel.tsx:314` · `ui/Modal.tsx:89`(패널 — 배경 위) · `app/Sidebar.tsx:181`(아이콘) · `members/MemberPicker.tsx:196` · `minutes/MinutesExplorer.tsx:488`·`:802`·`:916`·`:921` · `weekly/SheetCell.tsx:79`·`:101`·`:104` · `wiki/WikiSearch.tsx:97` · `wiki/WikiShared.tsx:438` · `agent-hub/AgentFrame.tsx`(위 행) | 화면 내부 | 형제 위 한 칸 |
 | `z-0` | `wbs/WbsGanttSheet.tsx:1345`·`:1839` | 화면 내부 | 바닥 층 |
+| **className 밖(최종 리뷰 N7 보충)** — 좌석 팝오버 `fixed` 140 | `agents/seatmap.module.css:153`(`.popWrap{position:fixed; inset:0; z-index:140}`) | 화면 SP 에서 `--z-modal`(또는 popover) | **전역 층** — AI 바·패널(130)·전체 화면(121) 위, 모달(150) 아래. UI-1 이 바꾼 값 아님(회귀 아님) |
+| 좌석표 내부 2·1·1 | `agents/seatmap.module.css:109`·`:156`·`:224` | 화면 내부 — SP7 | 위상 슬롯·팝오버 본문·선택 좌석 |
+| 위임표 3·1·4·6 | `agent-hub/delegationTable.module.css:48`·`:61`·`:62`·`:116` | 화면 내부 — SP7 | 고정 열·머리 |
+| 인라인 `zIndex` 50·`z` | `wbs/WbsGanttSheet.tsx:1038`·`:1552` | 화면 내부 → SPU2 | 동결 셀 sticky — 행(`z-10`) 스태킹 문맥 안 |
 
 새 층 둘: WBS 전체 화면 `--z-fullscreen: 120`(overlay 110 위·modal 150 아래), 보관 챗 = `--z-modal`(중첩 모달은 body 끝 포털의 문서 순서 — 판정 Q38). UI-2b: 전체 화면이 열린 동안 레일은 전체 화면 안 레일 자리로 포털(`useRailHost`).
-지금 겹침 순서(UI-1 끝, 위가 위): 스킵·STAGING 250 > 토스트 200 > 모달·보관 챗 150 > AI 바·패널 130 > 전체 화면 121 > AI 버튼 120 > 인스펙터·모바일 메뉴 110 > 팝오버 100 > 셸 70 > 툴바 토글 60 > 진척 렌즈 45. 알려진 어긋남 둘(회귀 아님 — 옛 값도 같은 순서): 모바일 메뉴 위에 AI 버튼, 전체 화면 위에 AI 바·패널 → 둘 다 UI-2b 레일 몫.
+지금 겹침 순서(UI-1 끝, 위가 위): 스킵·STAGING 250 > 토스트 200 > 모달·보관 챗 150 > 좌석 팝오버 140(CSS 모듈) > AI 바·패널 130 > 전체 화면 121 > AI 버튼 120 > 인스펙터·모바일 메뉴 110 > 팝오버 100 > 셸 70 > 툴바 토글 60 > 진척 렌즈 45. 알려진 어긋남 둘(회귀 아님 — 옛 값도 같은 순서): 모바일 메뉴 위에 AI 버튼, 전체 화면 위에 AI 바·패널 → 둘 다 UI-2b 레일 몫.
 
 ## 2. 파일 → 화면 대응표(UI-1 이 고친 파일이 렌더되는 화면 — 눈확인 (a) 의 필수 목록. 초안 = 착수 때, 과제 24 가 실제 diff 로 대조·보충)
 | 파일 | 라우트 키 |
@@ -69,9 +73,9 @@
 | `src/components/providers/ThemeProvider.tsx` · `src/lib/theme/policy.ts` · `src/lib/prefs/{sync,debouncedSave}.ts` · `src/lib/domain/types.ts` | 전 라우트(테마 해석·no-flash·선호 동기화) — 과제 25 `checks flicker` |
 | `src/lib/settings/{accent,catalog-meta}.ts` | `admin-ui-states`(강조색 표본) · 화면 무변경(설명 한 줄) |
 
-`DARK4`(판정 Q44 — 하드코딩 색 화면 12 ∪ 위 표에 이름으로 적힌 키, 과제 25 Step 6 이 `--routes` 로 쓴다. 대응표의 모든 파일이 UI-1 diff 에 있다 — "(무변경)" 행 없음):
+`DARK4`(판정 Q44 — 하드코딩 색 화면 12 ∪ 위 표에 이름으로 적힌 키, 과제 25 Step 6 이 `--routes` 로 쓴다. 대응표의 모든 파일이 UI-1 diff 에 있다 — "(무변경)" 행 없음. 최종 리뷰 N7: 좌석표 하드코딩 색 대부분이 있는 `p-office-lane`(supplement 행)을 더했다 — 스펙 §8.5 (b) 좌석표 네 크기):
 
-DARK4=p-weekly,p-attendance,agents,p-office,p-agents,p-wiki,p-wiki-topic,minute,p-dashboard,p-wbs,p-gantt,p-kanban,mobile-menu,account-popover,inbox-popover,login,not-found,invite,share,p-wbs-fullscreen,p-issues,p-meetings,p-announcements,p-members,p-import,p-import-admin,p-settings,meetings,minutes,portfolio,usage,admin-accounts,admin-teams,llm-config,account,projects,ws-settings,admin-ui-states,report-modal
+DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki-topic,minute,p-dashboard,p-wbs,p-gantt,p-kanban,mobile-menu,account-popover,inbox-popover,login,not-found,invite,share,p-wbs-fullscreen,p-issues,p-meetings,p-announcements,p-members,p-import,p-import-admin,p-settings,meetings,minutes,portfolio,usage,admin-accounts,admin-teams,llm-config,account,projects,ws-settings,admin-ui-states,report-modal
 
 ## 3. UI-1 눈확인(스펙 §8.5 UI-1 행)
 (과제 25 — (a) 전 라우트 라이트 회귀 차이율 표 · (b) 다크 · (c) axe · (d) 쇼케이스·지정 화면 · (e) Tab · (f) 인쇄 · 깜빡임 · 이월 목록. 쇼케이스 두 열 대조는 라이트 페이지 캡처로 본다 — 판정 Q37)
