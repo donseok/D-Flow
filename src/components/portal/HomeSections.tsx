@@ -30,7 +30,7 @@ export function HomeSections({ slug, work, projects, announcements }: {
   slug: string
   work: Res<{ rows: MyWorkRow[]; failedKinds: MyWorkKind[] }>
   projects: Res<{ rows: { id: string; name: string }[] }>
-  announcements: Res<{ rows: { id: string; title: string; projectId: string; projectName: string; isPinned: boolean }[] }>
+  announcements: Res<{ rows: { id: string; title: string; projectId: string; projectName: string; isPinned: boolean }[]; partial?: boolean }>
 }) {
   return (
     <div className="space-y-8 pb-8">
@@ -49,17 +49,23 @@ export function HomeSections({ slug, work, projects, announcements }: {
         )) : failed(projects)}
       </Section>
       <Section id="announcements" title="공지">
-        {announcements?.ok ? (announcements.rows.length === 0 ? <StatusMessage kind="empty" compact title="공지가 없습니다" /> : (
-          <ul className="divide-y divide-border rounded-(--radius-panel) border border-border bg-surface">
-            {announcements.rows.map((a) => (
-              <li key={a.id}><Link href={`/p/${a.projectId}/announcements`} className="flex min-h-12 items-center gap-3 px-4 py-3 hover:bg-surface-hover">
-                {a.isPinned && <span className="shrink-0 text-meta font-semibold text-action">고정</span>}
-                <span className="min-w-0 flex-1 truncate text-body text-fg">{a.title}</span>
-                <span className="shrink-0 text-meta text-fg-secondary">{a.projectName}</span>
-              </Link></li>
-            ))}
-          </ul>
-        )) : failed(announcements)}
+        {announcements?.ok ? (
+          <div className="space-y-2">
+            {/* 모듈 판정이 일부 프로젝트에서 실패하면 그 프로젝트의 공지가 빠졌을 수 있다 — 정상 목록·'공지가 없습니다' 로 위장하지 않는다 */}
+            {announcements.partial && <StatusMessage kind="partial_error" compact title="일부 프로젝트의 공지를 불러오지 못했을 수 있습니다" />}
+            {announcements.rows.length === 0 ? <StatusMessage kind="empty" compact title="공지가 없습니다" /> : (
+              <ul className="divide-y divide-border rounded-(--radius-panel) border border-border bg-surface">
+                {announcements.rows.map((a) => (
+                  <li key={a.id}><Link href={`/p/${a.projectId}/announcements`} className="flex min-h-12 items-center gap-3 px-4 py-3 hover:bg-surface-hover">
+                    {a.isPinned && <span className="shrink-0 text-meta font-semibold text-action">고정</span>}
+                    <span className="min-w-0 flex-1 truncate text-body text-fg">{a.title}</span>
+                    <span className="shrink-0 text-meta text-fg-secondary">{a.projectName}</span>
+                  </Link></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : failed(announcements)}
       </Section>
     </div>
   )

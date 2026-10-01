@@ -8,7 +8,7 @@ describe('resolveStartPath — D44', () => {
     expect(resolveStartPath(ws, {}, () => true)).toBe('/w/acme')
     expect(resolveStartPath(ws, { startPage: 'home' }, () => true)).toBe('/w/acme')
     expect(resolveStartPath(ws, { startPage: 'my_work' }, () => true)).toBe('/w/acme/my-work')
-    expect(resolveStartPath(ws, { startPage: 'projects' }, () => true)).toBe('/w/acme/projects')
+    expect(resolveStartPath(ws, { startPage: 'projects' }, () => true)).toBe('/projects')
     expect(resolveStartPath(ws, { startPage: 'last_project', recentProjects: [{ id: P1, at: 'x' }, { id: P2, at: 'y' }] }, (id) => id === P2)).toBe(`/p/${P2}/dashboard`)
   })
   it('최근 프로젝트가 모두 접근 불가·없음·모르는 값은 home', () => {

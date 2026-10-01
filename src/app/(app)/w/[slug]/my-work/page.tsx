@@ -34,7 +34,7 @@ export default async function MyWorkPage({ params, searchParams }: {
           <MyWorkList rows={res.rows} failedKinds={res.failedKinds} empty="처리할 일이 없습니다" />
           {res.nextCursor && <Link href={wsHref(scope.ws.slug, 'my-work', { kind, cursor: res.nextCursor })} className={buttonClass('ghost')}>더 보기</Link>}
         </div>
-      ) : <StatusMessage kind="partial_error" title="내 업무를 불러오지 못했습니다" detail={res ? '잠시 뒤 새로고침하세요.' : '권한 정보를 읽지 못했습니다.'} />}
+      ) : <StatusMessage kind="partial_error" blocking title="내 업무를 불러오지 못했습니다" detail={res ? '잠시 뒤 새로고침하세요.' : '권한 정보를 읽지 못했습니다.'} />}
     </PageFrame>
   )
 }

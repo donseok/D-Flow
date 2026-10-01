@@ -20,7 +20,7 @@ beforeEach(() => {
   h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: makeActor({ workspaceRoles: new Map([[WS.id, 'member']]) }), degraded: false, role: 'member' })
   h.getMyWork.mockResolvedValue({ ok: true, rows: [row], nextCursor: null, failedKinds: [] })
   h.getProjectRows.mockResolvedValue({ ok: true, rows: [], nextCursor: null })
-  h.getWorkspaceAnnouncements.mockResolvedValue({ ok: true, rows: [] })
+  h.getWorkspaceAnnouncements.mockResolvedValue({ ok: true, rows: [], partial: false })
 })
 
 describe('홈 v0(D20)', () => {
@@ -42,6 +42,16 @@ describe('홈 v0(D20)', () => {
     expect(section(html, 'work')).not.toContain('data-status-kind="partial_error"')
     expect(section(html, 'announcements')).toContain('data-status-kind="empty"')
     expect(section(html, 'announcements')).toContain('공지가 없습니다')
+  })
+  it('S2 공지 — 판정 일부 실패(partial)는 받은 행과 함께, 0건이어도 "공지가 없습니다" 만 보이지 않게 알린다', async () => {
+    h.getWorkspaceAnnouncements.mockResolvedValue({ ok: true, partial: true, rows: [{ id: 'a1', title: '고정 공지', projectId: 'p1', projectName: 'Apollo', isPinned: true }] })
+    let html = renderToString(await Home({ params: Promise.resolve({ slug: 'acme' }) }))
+    expect(section(html, 'announcements')).toContain('data-status-kind="partial_error"'); expect(section(html, 'announcements')).toContain('고정 공지')
+    h.getWorkspaceAnnouncements.mockResolvedValue({ ok: true, partial: true, rows: [] })
+    html = renderToString(await Home({ params: Promise.resolve({ slug: 'acme' }) }))
+    expect(section(html, 'announcements')).toContain('data-status-kind="partial_error"')
+    h.getWorkspaceAnnouncements.mockResolvedValue({ ok: true, partial: false, rows: [{ id: 'a1', title: '고정 공지', projectId: 'p1', projectName: 'Apollo', isPinned: true }] })
+    expect(section(renderToString(await Home({ params: Promise.resolve({ slug: 'acme' }) })), 'announcements')).not.toContain('data-status-kind="partial_error"')
   })
   it('원천 일부 실패는 받은 행과 함께 알린다(failedKinds)', async () => {
     h.getMyWork.mockResolvedValue({ ok: true, rows: [row], nextCursor: null, failedKinds: ['issue'] })
@@ -79,5 +89,10 @@ describe('내 업무 v0', () => {
     const html = renderToString(await MyWork({ params: Promise.resolve({ slug: 'acme' }), searchParams: Promise.resolve({}) }))
     expect(h.getMyWork).not.toHaveBeenCalled()
     expect(html).toContain('내 업무를 불러오지 못했습니다')
+    expect(html).toMatch(/role="alert"[^>]*data-status-kind="partial_error"|data-status-kind="partial_error"[^>]*role="alert"/)   // 화면 전체 실패는 막는 오류(S4 — 홈의 섹션 실패는 status)
+    vi.clearAllMocks()
+    h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: makeActor({ workspaceRoles: new Map([[WS.id, 'member']]) }), degraded: false, role: 'member' })
+    h.getMyWork.mockResolvedValue({ ok: false, error: 'x' })
+    expect(renderToString(await MyWork({ params: Promise.resolve({ slug: 'acme' }), searchParams: Promise.resolve({}) }))).toMatch(/role="alert"/)
   })
 })
