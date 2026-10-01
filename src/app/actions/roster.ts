@@ -1,11 +1,12 @@
 'use server'
 // 명단(project_members) 쓰기의 유일한 입구 — 앱은 project_members 에 직접 insert/update/upsert 하지 않는다(스펙 SP1 §4).
-// 추가·수정·권한 부여·팀 동기화는 전부 RPC upsert_project_member 한 번이다. 인물 확정(id → (워크스페이스, 이메일) → 신규)·
+// 추가·수정·권한 부여·팀 동기화는 전부 RPC upsert_project_member_cmd 한 번이다(행위자·명령 id 가 권한 변경 이력에 남는다). 인물 확정(id → (워크스페이스, 이메일) → 신규)·
 // 권한 규칙(관리자 슬롯·본인 강등·계정 없는 권한 금지)·팀 동기화가 한 트랜잭션에서 돈다. 여기서 쪼개 쓰면 반쪽 저장이 생긴다.
 // 행 삭제만 RPC 밖이다(스펙이 허용한 1곳) — 세션 클라이언트로 지워 RLS(관리자 행은 워크스페이스 관리자만)가 판정하게 한다.
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_MISSING } from '@/lib/authz/errors'
+import { newAuthzCommandId, parseAuthzResult } from '@/lib/authz/commands'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@/lib/supabase/server'
 import { isUuidLike } from '@/lib/domain/validate'
@@ -83,16 +84,17 @@ async function callUpsert(
   admin: AdminClient, actorId: string, projectId: string,
   person: Record<string, unknown>, member: Record<string, unknown>, teamIds: string[] | null,
 ): Promise<RosterActionResult> {
-  const { data, error } = await admin.rpc('upsert_project_member', {
-    p_actor: actorId, p_project_id: projectId, p_person: person, p_member: member, p_team_ids: teamIds,
+  const { data, error } = await admin.rpc('upsert_project_member_cmd', {
+    p_command_id: newAuthzCommandId(), p_actor: actorId, p_project_id: projectId, p_person: person, p_member: member, p_team_ids: teamIds,
   })
   if (error) return { ok: false, error: rosterWriteError(error) }
-  if (typeof data !== 'string') {
-    console.error('[roster] upsert_project_member 가 member_id 를 돌려주지 않았다:', data)
+  const result = parseAuthzResult(data)
+  if (!result?.memberId) {
+    console.error('[roster] upsert_project_member_cmd 가 member_id 를 돌려주지 않았다:', data)
     return { ok: false, error: ROSTER_WRITE_FAILED }
   }
   revalidatePath(`/p/${projectId}/members`)
-  return { ok: true, memberId: data }
+  return { ok: true, memberId: result.memberId }
 }
 
 export async function upsertRosterMember(projectId: string, input: RosterInput): Promise<RosterActionResult> {

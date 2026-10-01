@@ -52,7 +52,7 @@ beforeEach(() => {
   guards.resolveProjectId.mockResolvedValue({ ok: true, projectId: P1 })
 })
 
-describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
+describe('upsertRosterMember — RPC upsert_project_member_cmd 한 번', () => {
   it('(a) 가드 거부면 그대로 돌려주고 RPC 를 부르지 않는다', async () => {
     guards.requireProjectAdmin.mockResolvedValue(DENIED)
     expect(await upsertRosterMember(P1, INPUT)).toEqual(DENIED)
@@ -62,9 +62,10 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
 
   it('(b) 정상 — p_actor 는 가드의 actor, p_team_ids 는 입력 순서 그대로(첫 원소 = 대표 팀)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-9', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-9' }, error: null })
     expect(await upsertRosterMember(P1, INPUT)).toEqual({ ok: true, memberId: 'm-9' })
-    expect(admin.rpc).toHaveBeenCalledWith('upsert_project_member', {
+    expect(admin.rpc).toHaveBeenCalledWith('upsert_project_member_cmd', {
+      p_command_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
       p_actor: actor.userId,
       p_project_id: P1,
       p_person: { display_name: '홍길동', email: 'hong@example.com' },
@@ -76,7 +77,7 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
 
   it('기존 인물은 id 로 지목하고 이메일은 보내지 않는다 — id 분기의 RPC 는 email 을 쓰지 않는다(R2)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
     await upsertRosterMember(P1, { ...INPUT, personId: PE, name: '  홍길동 ', email: ' Hong@Example.COM ', roleLabel: ' PM ' })
     expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동' })
     expect(admin.rpc.mock.calls[0]![1].p_member.role_label).toBe('PM')
@@ -84,7 +85,7 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
 
   it('외부 인력(이메일 없음·권한 없음)도 명단에 올린다', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-2', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-2' }, error: null })
     const res = await upsertRosterMember(P1, { ...INPUT, email: null, accessRole: null, roleLabel: '  ', teamIds: [] })
     expect(res).toEqual({ ok: true, memberId: 'm-2' })
     const args = admin.rpc.mock.calls[0]![1]
@@ -95,7 +96,7 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
 
   it('active 를 주면 p_member.active 로 넘긴다(비활성 토글) — 안 주면 키 자체가 없다(기존 값 유지)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
     await upsertRosterMember(P1, { ...INPUT, active: false })
     expect(admin.rpc.mock.calls[0]![1].p_member).toEqual({ access_role: 'member', role_label: 'PM', title: null, active: false })
   })
@@ -117,21 +118,21 @@ describe('upsertRosterMember — RPC upsert_project_member 한 번', () => {
   // P-1 — 인물 이메일도 초대 행과 같은 정규형(local@ASCII 호스트). 다르면 수락 RPC 의 인물 매치가 빗나가 사람이 둘로 갈린다
   it.each([['kim@한글.kr', 'kim@xn--bj0bj06e.kr'], ['alice@example.com.', 'alice@example.com']])('명단 이메일 %s 는 %s 로 넘긴다(P-1)', async (raw, stored) => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
     await upsertRosterMember(P1, { ...INPUT, email: raw })
     expect(admin.rpc.mock.calls[0]![1].p_person.email).toBe(stored)
   })
 
   it('정규형이 안 되는 기존 이메일(x@acme.123)의 인물도 편집은 RPC 까지 간다(R2)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
     expect(await upsertRosterMember(P1, { ...INPUT, personId: PE, email: 'x@acme.123' })).toEqual({ ok: true, memberId: 'm-1' })
     expect(admin.rpc.mock.calls[0]![1].p_person).toEqual({ id: PE, display_name: '홍길동' })
   })
 
   it('한글 로컬 파트(홍길동@example.com)는 명단에 넣을 수 있다 — 초대보다 넓다(R3)', async () => {
     guards.requireProjectAdmin.mockResolvedValue({ ok: true, actor })
-    admin.rpc.mockResolvedValue({ data: 'm-1', error: null })
+    admin.rpc.mockResolvedValue({ data: { status: 'applied', member_id: 'm-1' }, error: null })
     await upsertRosterMember(P1, { ...INPUT, email: '홍길동@example.com' })
     expect(admin.rpc.mock.calls[0]![1].p_person.email).toBe('홍길동@example.com')
   })

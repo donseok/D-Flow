@@ -113,7 +113,7 @@ function accountClient(o: {
     }
     throw new Error('예상치 못한 테이블 접근: ' + t)
   })
-  const rpc = vi.fn(async () => o.rpc ?? { data: 'm-new', error: null })
+  const rpc = vi.fn(async () => o.rpc ?? { data: { status: 'applied', member_id: 'm-new' }, error: null })
   const createUser = vi.fn(async () => ({ data: { user: { id: 'u-new' } }, error: null }))
   const deleteUser = vi.fn(async () => ({ error: null }))
   createAdminClient.mockReturnValue({ from, rpc, auth: { admin: { createUser, deleteUser } } } as never)
@@ -281,7 +281,7 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(await createAccount(INPUT)).toEqual({ ok: true })
     expect(c.q.workspace_members.insert)
       .toHaveBeenCalledWith({ workspace_id: WS, user_id: 'u-new', role: 'member', invited_by: 'u-wsa' })
-    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_actor: 'u-wsa' }))
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member_cmd', expect.objectContaining({ p_actor: 'u-wsa', p_command_id: expect.any(String) }))
   })
 
   // 이미 있는 계정(이메일)은 createUser 가 거부한다 — 기존 계정의 비밀번호·표시 이름을 덮는 분기가 없다.
@@ -316,8 +316,8 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(c.q.peopleInsert.insert).toHaveBeenCalledWith({
       workspace_id: WS, display_name: '박민아', email: 'mina.park@example.com', user_id: 'u-new',
     })
-    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', {
-      p_actor: 'u-su', p_project_id: P1, p_person: { id: 'pe-new' }, p_member: { access_role: 'member' }, p_team_ids: null,
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member_cmd', {
+      p_command_id: expect.any(String), p_actor: 'u-su', p_project_id: P1, p_person: { id: 'pe-new' }, p_member: { access_role: 'member' }, p_team_ids: null,
     })
     expect(c.deleteUser).not.toHaveBeenCalled()
   })
@@ -354,7 +354,7 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
     expect(c.q.peopleLink.eq).toHaveBeenCalledWith('id', 'pe-old')
     expect(c.q.peopleLink.is).toHaveBeenCalledWith('user_id', null)
     expect(c.q.peopleInsert.insert).not.toHaveBeenCalled()
-    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_person: { id: 'pe-old' } }))
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member_cmd', expect.objectContaining({ p_person: { id: 'pe-old' } }))
   })
 
   // 비활성화는 관리자의 결정이라 계정 생성의 부수효과로 되살리지 않는다 — consume_project_invite 의 INVITE_INACTIVE(0008)와
@@ -406,7 +406,7 @@ describe('createAccount — 계정·프로필·워크스페이스·인물·명�
       existingPerson: { id: 'pe-old', user_id: null, active: true }, rosterRow: { data: { active: true }, error: null },
     })
     expect(await createAccount(INPUT)).toEqual({ ok: true })
-    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member', expect.objectContaining({ p_person: { id: 'pe-old' } }))
+    expect(c.rpc).toHaveBeenCalledWith('upsert_project_member_cmd', expect.objectContaining({ p_person: { id: 'pe-old' } }))
   })
 
   it('그 인물이 이미 다른 계정에 연결돼 있으면 거부하고 계정을 되돌린다', async () => {
@@ -480,26 +480,37 @@ describe('bulkCreateAccounts — 이메일, 권한, 초기비번[, 이름]', () 
   })
 })
 
-describe('setPlatformAdmin — 마지막 관리자 보호(DB 트리거 platform_admins_keep_last, 0011)', () => {
+const CMD = expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+/** RPC 한 개만 가진 admin client — 직접 표 쓰기는 없다(Phase D: 권한 변경은 RPC 한 길, 행위자·명령 id 가 이력에 남는다). */
+function rpcClient(result: Result) {
+  const rpc = vi.fn<(name: string, args: Record<string, string>) => Promise<Result>>(async () => result)
+  const from = vi.fn(() => { throw new Error('직접 표 접근 금지 — 권한 쓰기는 RPC 로만') })
+  createAdminClient.mockReturnValue({ rpc, from } as never)
+  return { rpc, from }
+}
+
+describe('setPlatformAdmin — RPC set_platform_admin(행위자·명령 id), 마지막 관리자 보호는 트리거(0011)', () => {
   beforeEach(() => { requireSuperuser.mockResolvedValue({ ok: true, actor: SU }) })
 
   it('마지막 슈퍼유저 해제는 트리거가 거부한다 — 사용자 문구로, 앱은 미리 세지 않는다', async () => {
-    const q = chain({ data: null, error: { code: '23514', message: 'PLATFORM_LAST_ADMIN' } })
-    createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
+    const c = rpcClient({ data: null, error: { code: '23514', message: 'PLATFORM_LAST_ADMIN' } })
     expect(await setPlatformAdmin('u1', false))
       .toEqual({ ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' })
-    expect(q.delete).toHaveBeenCalledTimes(1)
-    expect(q.eq).toHaveBeenCalledWith('user_id', 'u1')
-    // 사전 목록 조회(select 만 하고 delete 없는 체인)가 없다
-    expect(q.select).toHaveBeenCalledWith('user_id')
-    expect(q.select).toHaveBeenCalledTimes(1)
+    expect(c.rpc).toHaveBeenCalledTimes(1)
+    expect(c.from).not.toHaveBeenCalled()
   })
 
-  it('그 밖의 삭제 오류는 원문을 싣지 않는다 — 로그만', async () => {
+  it('RPC 거부(AUTHZ_FORBIDDEN — 그 사이 등급이 바뀜)는 가드와 같은 문구', async () => {
+    rpcClient({ data: null, error: { code: '42501', message: 'AUTHZ_FORBIDDEN' } })
+    expect(await setPlatformAdmin('u1', true)).toEqual({ ok: false, error: ERR_DENIED })
+  })
+
+  it('그 밖의 오류는 원문을 싣지 않는다 — 로그만', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: null, error: { message: 'boom' } })) } as never)
+    rpcClient({ data: null, error: { message: 'boom' } })
     expect(await setPlatformAdmin('u1', false)).toEqual({ ok: false, error: '슈퍼유저를 해제하지 못했습니다.' })
-    expect(spy).toHaveBeenCalled()
+    expect(await setPlatformAdmin('u1', true)).toEqual({ ok: false, error: '슈퍼유저로 지정하지 못했습니다.' })
+    expect(spy).toHaveBeenCalledTimes(2)
     spy.mockRestore()
   })
 
@@ -511,7 +522,7 @@ describe('setPlatformAdmin — 마지막 관리자 보호(DB 트리거 platform_
   ] as const)('%s 실패 로그에 대상 계정 id 를 싣는다 — UUID 꼴이 아니면 가린다', async (_name, value, what) => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const TARGET = '00000000-0000-4000-8000-0000000000c1'
-    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: null, error: { message: 'boom' } })) } as never)
+    rpcClient({ data: null, error: { message: 'boom' } })
     expect((await setPlatformAdmin(TARGET, value)).ok).toBe(false)
     expect((await setPlatformAdmin('u1\n[auth] login ok user=admin', value)).ok).toBe(false)
     expect(spy.mock.calls).toEqual([
@@ -521,55 +532,67 @@ describe('setPlatformAdmin — 마지막 관리자 보호(DB 트리거 platform_
     spy.mockRestore()
   })
 
-  it('0행(이미 슈퍼유저가 아님)은 성공으로 위장하지 않는다', async () => {
-    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: [], error: null })) } as never)
+  it('해제의 matched 0(이미 슈퍼유저가 아님)은 성공으로 위장하지 않는다', async () => {
+    rpcClient({ data: { status: 'applied', matched: 0 }, error: null })
     expect(await setPlatformAdmin('u9', false)).toEqual({ ok: false, error: '슈퍼유저가 아닌 계정입니다.' })
   })
 
-  it('본인 해제는 거부한다 — 조회·쓰기 없이(다른 슈퍼유저가 해야 한다)', async () => {
+  it('본인 해제는 거부한다 — RPC 호출 없이(다른 슈퍼유저가 해야 한다)', async () => {
     const res = await setPlatformAdmin('u-su', false)
     expect(res).toEqual({ ok: false, error: '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.' })
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('다른 사람 해제 — 지워진 행을 돌려받으면 성공', async () => {
-    const q = chain({ data: [{ user_id: 'u1' }], error: null })
-    createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
+  it('다른 사람 해제 — 행위자(가드의 actor)·대상·명령 id 를 RPC 에 넘긴다', async () => {
+    const c = rpcClient({ data: { status: 'applied', matched: 1 }, error: null })
     expect(await setPlatformAdmin('u1', false)).toEqual({ ok: true })
-    expect(q.delete).toHaveBeenCalled()
+    expect(c.rpc).toHaveBeenCalledWith('set_platform_admin', { p_actor: 'u-su', p_target: 'u1', p_grant: false, p_command_id: CMD })
   })
 
-  it('지정은 발급자를 남기고 이미 있으면 그대로 둔다', async () => {
-    const q = chain({ error: null })
-    createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
+  it('지정 — 이미 있어 matched 0 이어도 성공이다(멱등 지정), 호출마다 새 명령 id', async () => {
+    const c = rpcClient({ data: { status: 'applied', matched: 0 }, error: null })
     expect(await setPlatformAdmin('u2', true)).toEqual({ ok: true })
-    expect(q.upsert).toHaveBeenCalledWith({ user_id: 'u2', granted_by: 'u-su' }, { onConflict: 'user_id', ignoreDuplicates: true })
+    expect(await setPlatformAdmin('u2', true)).toEqual({ ok: true })
+    expect(c.rpc).toHaveBeenNthCalledWith(1, 'set_platform_admin', { p_actor: 'u-su', p_target: 'u2', p_grant: true, p_command_id: CMD })
+    expect(c.rpc.mock.calls[0]![1].p_command_id).not.toBe(c.rpc.mock.calls[1]![1].p_command_id)
+  })
+
+  it('RPC 가 모르는 모양을 돌려주면 성공으로 보지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rpcClient({ data: 'ok', error: null })
+    expect((await setPlatformAdmin('u2', true)).ok).toBe(false)
+    spy.mockRestore()
   })
 })
 
-describe('setWorkspaceRole', () => {
+describe('setWorkspaceRole — RPC set_workspace_role(행위자·명령 id)', () => {
   beforeEach(() => { signedInAs(WS_ADMIN) })
 
   it('마지막 관리자 강등은 트리거가 거부한다 — 사용자 문구로', async () => {
-    createAdminClient.mockReturnValue({
-      from: vi.fn(() => chain({ data: null, error: { code: '23514', message: 'WORKSPACE_LAST_ADMIN' } })),
-    } as never)
+    rpcClient({ data: null, error: { code: '23514', message: 'WORKSPACE_LAST_ADMIN' } })
     expect(await setWorkspaceRole(WS, 'u1', 'member'))
       .toEqual({ ok: false, error: '워크스페이스의 마지막 관리자는 강등할 수 없습니다. 다른 관리자를 먼저 지정하세요.' })
   })
 
-  it('소속이 아닌 계정(0행)은 성공으로 위장하지 않는다', async () => {
-    createAdminClient.mockReturnValue({ from: vi.fn(() => chain({ data: [], error: null })) } as never)
+  it('RPC 거부(AUTHZ_FORBIDDEN)는 가드와 같은 문구, 그 밖의 오류는 로그만', async () => {
+    rpcClient({ data: null, error: { code: '42501', message: 'AUTHZ_FORBIDDEN' } })
+    expect(await setWorkspaceRole(WS, 'u1', 'admin')).toEqual({ ok: false, error: ERR_DENIED })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rpcClient({ data: null, error: { message: 'boom' } })
+    expect(await setWorkspaceRole(WS, 'u1', 'admin')).toEqual({ ok: false, error: '워크스페이스 권한을 바꾸지 못했습니다.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('소속이 아닌 계정(matched 0)은 성공으로 위장하지 않는다', async () => {
+    rpcClient({ data: { status: 'applied', matched: 0 }, error: null })
     expect(await setWorkspaceRole(WS, 'u9', 'admin')).toEqual({ ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' })
   })
 
-  it('정상 — (workspace_id, user_id) 로 좁혀 role 만 바꾼다', async () => {
-    const q = chain({ data: [{ user_id: 'u1' }], error: null })
-    createAdminClient.mockReturnValue({ from: vi.fn(() => q) } as never)
+  it('정상 — 행위자·워크스페이스·대상·등급·명령 id 를 넘긴다', async () => {
+    const c = rpcClient({ data: { status: 'applied', matched: 1 }, error: null })
     expect(await setWorkspaceRole(WS, 'u1', 'admin')).toEqual({ ok: true })
-    expect(q.update).toHaveBeenCalledWith({ role: 'admin' })
-    expect(q.eq).toHaveBeenCalledWith('workspace_id', WS)
-    expect(q.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(c.rpc).toHaveBeenCalledWith('set_workspace_role', { p_actor: 'u-wsa', p_workspace_id: WS, p_target: 'u1', p_role: 'admin', p_command_id: CMD })
   })
 
   it('알 수 없는 등급은 거부', async () => {

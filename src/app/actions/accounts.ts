@@ -1,10 +1,11 @@
 'use server'
 // 계정 관리 — 생성·워크스페이스 등급·목록은 그 워크스페이스의 관리자, 비밀번호 초기화·플랫폼 관리자 지정은 슈퍼유저 전용
 // (SP2 §4.1·D1 — 계정 비밀번호는 여러 워크스페이스에 걸친 전역 자원). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
-// 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
+// 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member_cmd 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 import { revalidatePath } from 'next/cache'
 import { requireProjectMember, requireSuperuser, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_MISSING } from '@/lib/authz/errors'
+import { authzCommandError, newAuthzCommandId, parseAuthzResult } from '@/lib/authz/commands'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listProfiles } from '@/lib/data/accounts'
@@ -198,8 +199,8 @@ async function createOne(
       if (row && (row as { active: boolean }).active === false) return fail(ERR_INACTIVE)
     }
     // 권한 없는 계정을 '만들어졌다'고 보고하면 관리자는 권한이 있다고 믿는다 — 실패하면 전체를 되돌린다.
-    const { error: rpcErr } = await admin.rpc('upsert_project_member', {
-      p_actor: grantedBy, p_project_id: input.projectId, p_person: { id: person.personId },
+    const { error: rpcErr } = await admin.rpc('upsert_project_member_cmd', {
+      p_command_id: newAuthzCommandId(), p_actor: grantedBy, p_project_id: input.projectId, p_person: { id: person.personId },
       p_member: { access_role: accessRole }, p_team_ids: null,
     })
     if (rpcErr) return fail(rosterWriteError(rpcErr))
@@ -326,26 +327,26 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   // 실패 로그의 머리 — 어느 계정의 실패인지. userId 는 액션 인자라 형식이 보장되지 않는다: UUID 꼴일 때만 찍는다.
   const head = `[setPlatformAdmin user=${UUID_RE.test(userId) ? userId : '(id 아님)'}]`
 
-  if (!value) {
-    const { data, error: delErr } = await admin.from('platform_admins').delete().eq('user_id', userId).select('user_id')
-    if (delErr) {
-      if (delErr.message.includes('PLATFORM_LAST_ADMIN')) {
-        return { ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' }
-      }
-      console.error(`${head} 해제 실패:`, delErr.message)
-      return { ok: false, error: '슈퍼유저를 해제하지 못했습니다.' }
+  // 지정·해제 모두 RPC 한 번 — 행위자·명령 id 가 권한 변경 이력(authz_events)에 남는다. 마지막 한 명 보호는 그 안의 트리거가 한다.
+  const { data, error } = await admin.rpc('set_platform_admin', {
+    p_actor: g.actor.userId, p_target: userId, p_grant: value, p_command_id: newAuthzCommandId(),
+  })
+  if (error) {
+    if (error.message.includes('PLATFORM_LAST_ADMIN')) {
+      return { ok: false, error: '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.' }
     }
-    // 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다.
-    if (!data || data.length === 0) return { ok: false, error: '슈퍼유저가 아닌 계정입니다.' }
-  } else {
-    const { error: insErr } = await admin.from('platform_admins').upsert(
-      { user_id: userId, granted_by: g.actor.userId }, { onConflict: 'user_id', ignoreDuplicates: true },
-    )
-    if (insErr) {
-      console.error(`${head} 지정 실패:`, insErr.message)
-      return { ok: false, error: '슈퍼유저로 지정하지 못했습니다.' }
-    }
+    const denied = authzCommandError(error.message)
+    if (denied) return { ok: false, error: denied }
+    console.error(`${head} ${value ? '지정' : '해제'} 실패:`, error.message)
+    return { ok: false, error: value ? '슈퍼유저로 지정하지 못했습니다.' : '슈퍼유저를 해제하지 못했습니다.' }
   }
+  const result = parseAuthzResult(data)
+  if (!result) {
+    console.error(`${head} RPC 결과를 읽지 못했다:`, data)
+    return { ok: false, error: value ? '슈퍼유저로 지정하지 못했습니다.' : '슈퍼유저를 해제하지 못했습니다.' }
+  }
+  // 해제의 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다. (지정의 0행은 이미 지정된 것 — 멱등)
+  if (!value && result.matched === 0) return { ok: false, error: '슈퍼유저가 아닌 계정입니다.' }
   revalidatePath('/admin/accounts')
   return { ok: true }
 }
@@ -361,19 +362,25 @@ export async function setWorkspaceRole(
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!isWorkspaceRole(role)) return { ok: false, error: ERR_WS_ROLE }
-  const { data, error } = await createAdminClient()
-    .from('workspace_members').update({ role })
-    .eq('workspace_id', workspaceId).eq('user_id', userId)
-    .select('user_id')
+  const { data, error } = await createAdminClient().rpc('set_workspace_role', {
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_target: userId, p_role: role, p_command_id: newAuthzCommandId(),
+  })
   if (error) {
     if (error.message.includes('WORKSPACE_LAST_ADMIN')) {
       return { ok: false, error: '워크스페이스의 마지막 관리자는 강등할 수 없습니다. 다른 관리자를 먼저 지정하세요.' }
     }
+    const denied = authzCommandError(error.message)
+    if (denied) return { ok: false, error: denied }
     console.error('[setWorkspaceRole] 변경 실패:', error.message)
     return { ok: false, error: '워크스페이스 권한을 바꾸지 못했습니다.' }
   }
+  const result = parseAuthzResult(data)
+  if (!result) {
+    console.error('[setWorkspaceRole] RPC 결과를 읽지 못했다:', data)
+    return { ok: false, error: '워크스페이스 권한을 바꾸지 못했습니다.' }
+  }
   // 0행 = 소속 아님. 조용한 no-op 을 성공으로 보고하지 않는다.
-  if (!data || data.length === 0) return { ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' }
+  if (result.matched === 0) return { ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' }
   revalidatePath('/admin/accounts')
   return { ok: true }
 }
