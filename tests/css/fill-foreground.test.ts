@@ -11,8 +11,8 @@ export const ALLOW: Record<string, [number, string]> = {
 }
 
 describe('hover 이동 0 — 콘텐츠를 옮기지 않는다(개정 §5.5.6, 스펙 §4.1 끝)', () => {
-  it('src 에 hover:(-)translate 가 없다(C 소유 projects/page.tsx 는 UI-2b 이동 커밋, 로그인은 과제 14 가 다시 쓴다)', () => {
-    const LATER = ['src/app/(app)/projects/page.tsx', 'src/app/login/page.tsx']
+  it('src 에 hover:(-)translate 가 없다(C 소유 projects/page.tsx 는 UI-2b 이동 커밋 — 로그인은 과제 14 가 다시 썼다)', () => {
+    const LATER = ['src/app/(app)/projects/page.tsx']
     expect(srcFiles(/\.tsx?$/).filter(([f, t]) => !LATER.includes(f) && /hover:-?translate/.test(t)).map(([f]) => f)).toEqual([])
   })
 })

@@ -40,7 +40,7 @@ const FLOOR = {
   rules: 1_300,
   customProps: 380,
   atProperty: 50,
-  keyframes: 6,
+  keyframes: 4,   // 2026-09 SP3b UI-1: 로그인 부유 장식 keyframes 넷을 지워 9 → 5(계획 판정 Q21). UI-2b 가 티커 keyframes 를 지우면 4
 }
 
 const C = process.stdout.isTTY
