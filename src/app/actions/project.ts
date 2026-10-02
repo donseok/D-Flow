@@ -11,6 +11,7 @@ import { isUuidLike, isValidDateRange, isValidIsoDate } from '@/lib/domain/valid
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
+import { failWith } from '@/lib/errors/dbFail'
 import { refreshTeams } from '@/lib/teams/master'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -293,28 +294,37 @@ export async function setBaseDate(projectId: string, baseDate: string | null): P
   return { ok: true }
 }
 
-export async function addHoliday(projectId: string, date: string, name: string) {
+export type HolidayWriteResult = { ok: true } | { ok: false; error: string }
+const ERR_HOLIDAY_INPUT = '날짜와 종류(휴무·근무)를 확인하세요.'
+const ERR_HOLIDAY_SAVE = '날짜 예외를 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.'
+const ERR_HOLIDAY_REMOVE = '날짜 예외를 지우지 못했습니다. 잠시 뒤 다시 시도하세요.'
+
+/**
+ * 날짜 예외(스펙 D7) — kind 'off'(휴무)·'work'(비근무 요일의 근무). 쓰기 길은 지금처럼 세션 클라이언트 + RLS admin_write_holidays(관리자)이고
+ * 새 RPC 를 두지 않는다 — DB 의 kind check 가 값을 지킨다. 같은 날짜는 한 행이라(PK) 종류를 바꾸면 그 행이 갱신된다.
+ * 결과형이다(SP5 과제 25) — 예전의 throw 는 DB 원문을 화면 토스트까지 실었다(SP4 failWith 규칙).
+ */
+export async function addHoliday(projectId: string, date: string, name: string, kind: 'off' | 'work'): Promise<HolidayWriteResult> {
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) throw new Error(g.error)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (typeof date !== 'string' || !isValidIsoDate(date) || (kind !== 'off' && kind !== 'work')) return { ok: false, error: ERR_HOLIDAY_INPUT }
+  const label = typeof name === 'string' ? name.trim() : ''
   const sb = await createServerClient()
-  const { error } = await sb
-    .from('holidays')
-    .upsert({ project_id: projectId, date, name }, { onConflict: 'project_id,date' })
-  if (error) throw new Error(error.message)
+  const { error } = await sb.from('holidays').upsert({ project_id: projectId, date, name: label, kind }, { onConflict: 'project_id,date' })
+  if (error) return { ok: false, error: failWith('addHoliday', error, ERR_HOLIDAY_SAVE) }
   revalidatePath(`/p/${projectId}`, 'layout')
   after(() => recordProgressSnapshot(projectId))
+  return { ok: true }
 }
 
-export async function removeHoliday(projectId: string, date: string) {
+export async function removeHoliday(projectId: string, date: string): Promise<HolidayWriteResult> {
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) throw new Error(g.error)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (typeof date !== 'string' || !isValidIsoDate(date)) return { ok: false, error: ERR_HOLIDAY_INPUT }
   const sb = await createServerClient()
-  const { error } = await sb
-    .from('holidays')
-    .delete()
-    .eq('project_id', projectId)
-    .eq('date', date)
-  if (error) throw new Error(error.message)
+  const { error } = await sb.from('holidays').delete().eq('project_id', projectId).eq('date', date)
+  if (error) return { ok: false, error: failWith('removeHoliday', error, ERR_HOLIDAY_REMOVE) }
   revalidatePath(`/p/${projectId}`, 'layout')
   after(() => recordProgressSnapshot(projectId))
+  return { ok: true }
 }

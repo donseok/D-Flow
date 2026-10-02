@@ -43,6 +43,7 @@ vi.mock('@/components/settings/StageCreditSlider', () => ({ StageCreditSlider: (
 vi.mock('@/components/settings/ProjectInfoEditButton', () => ({ ProjectInfoEditButton: () => null }))
 vi.mock('@/components/settings/ProjectPrivacyToggle', () => ({ ProjectPrivacyToggle: () => null }))
 vi.mock('@/components/settings/ScheduleManager', () => ({ ScheduleManager: () => null }))
+vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettingsPanel: () => null }))
 vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => null }))
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: mocks.ExportExcelButton }))
 vi.mock('@/lib/settings/history', () => ({ latestKeyChange: mocks.latestKeyChange }))

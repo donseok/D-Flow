@@ -158,11 +158,11 @@ describe('프로젝트 액션', () => {
   })
 
   it.each([
-    ['addHoliday', () => addHoliday('p1', '2026-08-15', '광복절')],
-    ['removeHoliday', () => removeHoliday('p1', '2026-08-15')],
-  ] as const)('%s: 관리자 아니면 throw + DB 무접근', async (_name, run) => {
+    ['addHoliday', () => addHoliday('p1', '2026-10-05', '창립기념일', 'off')],
+    ['removeHoliday', () => removeHoliday('p1', '2026-10-05')],
+  ] as const)('%s: 관리자 아니면 ok:false(결과형 — SP5 과제 25) + DB 무접근', async (_name, run) => {
     requireProjectAdmin.mockResolvedValue(DENIED)
-    await expect(run()).rejects.toThrow('권한 없음')
+    expect(await run()).toEqual({ ok: false, error: '권한 없음' })
     expect(createServerClient).not.toHaveBeenCalled()
   })
 

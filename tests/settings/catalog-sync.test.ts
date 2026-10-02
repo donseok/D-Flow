@@ -17,9 +17,7 @@ const expectedStatus: Record<string, string> = {
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
  * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
-  TimezoneSelect: 'SP5 A 과제 25·26 — 달력 설정 절의 시간대 편집기',
-  WorkingDaysEditor: 'SP5 A 과제 25·26 — 달력 설정 절의 근무 요일 편집기',
-  WeekStartEditor: 'SP5 A 과제 25 — 프로젝트 주 시작 편집기(변경 내용 검토)',
+  // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
 }
 
 describe('설정 카탈로그 동기화', () => {

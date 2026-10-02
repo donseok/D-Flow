@@ -4,7 +4,9 @@ import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { isUuidLike } from '@/lib/domain/validate'
 import { adminFor } from '@/lib/supabase/adminFor'
-import { previewModuleAllowImpact, previewProjectModuleImpact, type ModuleAllowImpact, type ProjectModuleImpact } from '@/lib/settings/impactPreview'
+import { previewModuleAllowImpact, previewProjectModuleImpact, previewWeekStartImpact, type ModuleAllowImpact, type ProjectModuleImpact, type WeekStartPreview } from '@/lib/settings/impactPreview'
+import { parseWeekStartDay, type WeekStartDay } from '@/lib/domain/calendar'
+import { CONFIG_MESSAGES, ConfigKeyError } from '@/lib/settings/errors'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
@@ -56,6 +58,25 @@ export async function previewProjectSettingsImpact(projectId: string, next: Modu
       impact: before === null ? null : await previewProjectModuleImpact(admin, { projectId, before, next: parsed.value }) }
   } catch (error) {
     console.error('[settings] 프로젝트 모듈 영향 계산 실패:', error)
+    return { ok: false, error: '영향을 확인하지 못했습니다. 잠시 뒤 다시 시도하세요.' }
+  }
+}
+
+export type WeekStartPreviewResult = { ok: true; preview: WeekStartPreview } | { ok: false; error: string }
+
+/** 읽기 전용 — 저장 액션이 권한·CAS·RPC 안의 정확 판정(settings_ref_check)을 다시 한다. 화면의 '변경 내용 검토'가 부른다(D38) */
+export async function previewWeekStartChange(projectId: string, day: WeekStartDay): Promise<WeekStartPreviewResult> {
+  const guard = await requireProjectAdmin(projectId)
+  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!isUuidLike(projectId)) return { ok: false, error: '프로젝트 id가 올바르지 않습니다.' }
+  const parsed = parseWeekStartDay(day)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+  try {
+    const admin = adminFor({ projectId }).admin
+    return { ok: true, preview: await previewWeekStartImpact(admin, { projectId, day: parsed.value, now: new Date() }) }
+  } catch (error) {
+    console.error('[settings] 주 시작 변경 영향 계산 실패:', error)
+    if (error instanceof ConfigKeyError) return { ok: false, error: `${CONFIG_MESSAGES[error.code]} (${error.key})` }
     return { ok: false, error: '영향을 확인하지 못했습니다. 잠시 뒤 다시 시도하세요.' }
   }
 }

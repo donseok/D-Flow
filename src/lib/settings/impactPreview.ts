@@ -4,6 +4,9 @@ import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import type { AdminClient } from '@/lib/supabase/adminFor'
 import { getProjectConfig } from './projectConfig'
 import { valueOf } from './registry'
+import { listWeekKeys } from './weekKeys'
+import { requireCalendar } from '@/lib/calendar/load'
+import { previewWeekStart, todayIn, type WeekStartDay, type WeekStartPreview } from '@/lib/domain/calendar'
 
 export interface ModuleAllowImpact {
   removed: { moduleId: ModuleId; projectCount: number }[]
@@ -59,4 +62,18 @@ export async function previewModuleAllowImpact(
     for (const id of affected) counts.set(id, counts.get(id)! + 1)
   }
   return { removed: removed.map(moduleId => ({ moduleId, projectCount: counts.get(moduleId)! })), affectedProjects }
+}
+
+export type { WeekStartPreview } from '@/lib/domain/calendar'
+
+/**
+ * 주 시작 변경의 '변경 내용 검토'(스펙 D38) — 저장 때 edit.toStored(applyWeekStartChange)와 같은 함수(previewWeekStart 안)로 E·과도기 일수·
+ * 기존 문서 수·막는 주차(D53 — 새 규칙에서 키가 바뀌는 문서)를 낸다. '오늘'은 그 프로젝트 tz(설정 액션의 편집 문맥과 같다 — 과제 5).
+ * 문서 키는 끝까지 읽는다(listWeekKeys). 달력 키가 손상이면 requireCalendar 가 ConfigKeyError 를 던진다 — 기본값으로 계산하지 않는다.
+ */
+export async function previewWeekStartImpact(admin: AdminClient, args: { projectId: string; day: WeekStartDay; now: Date }): Promise<WeekStartPreview> {
+  const cfg = await getProjectConfig(args.projectId, { client: admin })
+  const cal = requireCalendar(cfg)
+  const keys = await listWeekKeys(admin, args.projectId)
+  return previewWeekStart(cal.weekStart, args.day, todayIn(cal.timezone, args.now), keys)
 }

@@ -6,13 +6,15 @@ import { CalendarClock, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { setBaseDate, addHoliday, removeHoliday } from '@/app/actions/project'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import type { HolidayRow } from '@/lib/calendar/load'
 
+/** 공정율 기준일 + 날짜 예외(휴무·근무 — 스펙 D7). 예외는 근무 요일 규칙과 다른 날만 적는다 */
 export function ScheduleManager({
   projectId, baseDate, holidays, canEdit,
 }: {
   projectId: string
   baseDate: string | null
-  holidays: string[]
+  holidays: readonly HolidayRow[]
   canEdit: boolean
 }) {
   const router = useRouter()
@@ -22,7 +24,8 @@ export function ScheduleManager({
   const [dateInput, setDateInput] = useState(baseDate ?? '')
   const [holDate, setHolDate] = useState('')
   const [holName, setHolName] = useState('')
-  const sorted = [...holidays].sort()
+  const [holKind, setHolKind] = useState<'off' | 'work'>('off')
+  const sorted = [...holidays].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
   const run = (fn: () => Promise<unknown>, msg: string) => start(async () => {
     try {
@@ -64,18 +67,22 @@ export function ScheduleManager({
         </div>
       </div>
 
-      {/* 공휴일 / 비근무일 */}
+      {/* 날짜 예외 — 휴무·근무 */}
       <div className="border-t border-line pt-5">
         <div className="text-sm font-semibold text-ink">{t('settings.holidaysHeading')}</div>
         <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysDesc')} {t('settings.holidaysTotalPrefix')}{sorted.length}{t('settings.holidaysTotalSuffix')}</p>
+        <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysNoOverlay')}</p>
 
         {sorted.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {sorted.map(d => (
-              <li key={d} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 py-1 pl-2.5 pr-1.5 text-xs tabular-nums text-ink">
-                {d}
+          <ul className="mt-3 flex flex-wrap gap-2" aria-label={t('settings.holidaysHeading')}>
+            {sorted.map(h => (
+              <li key={h.date} data-holiday={h.date} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 py-1 pl-2.5 pr-1.5 text-xs tabular-nums text-ink">
+                <span className={`chip ${h.kind === 'work' ? 'bg-brand-weak text-brand' : 'bg-weekend text-ink-muted'}`}>
+                  {h.kind === 'work' ? t('settings.holidayKindWork') : t('settings.holidayKindOff')}
+                </span>
+                {h.date}{h.name ? ` · ${h.name}` : ''}
                 {canEdit && (
-                  <button disabled={pending} onClick={() => run(() => removeHoliday(projectId, d), t('settings.holidayRemoved'))} className="flex h-5 w-5 items-center justify-center rounded text-ink-subtle transition hover:bg-delayed-weak hover:text-delayed" aria-label={`${t('settings.holidayRemoveAria')}: ${d}`}><Trash2 className="h-3 w-3" /></button>
+                  <button disabled={pending} onClick={() => run(() => removeHoliday(projectId, h.date), t('settings.holidayRemoved'))} className="flex h-5 w-5 items-center justify-center rounded text-ink-subtle transition hover:bg-delayed-weak hover:text-delayed" aria-label={`${t('settings.holidayRemoveAria')}: ${h.date}`}><Trash2 className="h-3 w-3" /></button>
                 )}
               </li>
             ))}
@@ -87,8 +94,14 @@ export function ScheduleManager({
         {canEdit && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.date')}</span><input type="date" value={holDate} onChange={e => setHolDate(e.target.value)} className="app-input h-9 w-40 px-2 text-xs" /></label>
+            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.holidayKind')}</span>
+              <select value={holKind} onChange={e => setHolKind(e.target.value === 'work' ? 'work' : 'off')} className="app-input h-9 w-28 text-xs" aria-label={t('settings.holidayKind')}>
+                <option value="off">{t('settings.holidayKindOff')}</option>
+                <option value="work">{t('settings.holidayKindWork')}</option>
+              </select>
+            </label>
             <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
-            <button disabled={pending || !holDate} onClick={() => { run(() => addHoliday(projectId, holDate, holName), t('settings.holidayAdded')); setHolDate(''); setHolName('') }} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
+            <button disabled={pending || !holDate} onClick={() => { run(() => addHoliday(projectId, holDate, holName, holKind), t('settings.holidayAdded')); setHolDate(''); setHolName('') }} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
           </div>
         )}
       </div>

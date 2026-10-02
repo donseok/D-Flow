@@ -32,7 +32,9 @@ import { ReindexButton } from '@/components/settings/ReindexButton'
 import { ExportExcelButton } from '@/components/settings/ExportExcelButton'
 import type { ExportLayout } from '@/components/settings/exportLayout'
 import { latestKeyChange } from '@/lib/settings/history'
-import { ymdIn } from '@/lib/domain/calendar'
+import { todayIn, ymdIn } from '@/lib/domain/calendar'
+import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPanel'
+import { calendarFieldOf } from '@/lib/settings/calendarField'
 import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
@@ -128,12 +130,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
   const [wbs, projects, actor] = await Promise.all([
-    // 이 페이지가 트리에서 쓰는 건 표시용 스탯(taskCount)과 공휴일 목록뿐이다.
+    // 이 페이지가 트리에서 쓰는 건 표시용 스탯(taskCount)뿐이다 — 날짜 예외는 설정 해석기(pc.cfg.holidays)가 읽는다.
     // WBS 조회 실패로 페이지 전체가 에러 바운더리로 떨어지면 복구 경로인 엑셀 임포트 UI까지 함께 막힌다 —
     // 정확성 이득 없이 가용성만 잃으므로 이 페이지에서만 degrade 한다.
     // (대시보드·WBS·칸반은 트리가 화면의 본체라 throw 를 그대로 둔다.)
     getComputedWbs(projectId).catch((e: unknown) => {
-      console.error('[settings] WBS 조회 실패 — 통계·공휴일만 degrade:', e)
+      console.error('[settings] WBS 조회 실패 — 통계만 degrade:', e)
       return null
     }),
     listProjects(),
@@ -189,6 +191,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   }
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
+  // 달력 편집기(스펙 §5.1 A) — 달력 키가 손상이어도 편집기는 그린다(복구 경로). '오늘'(예정 전환·현재 규칙)은 tz 가 유효할 때만
+  const calendarFields = pc.ok ? {
+    timezone: calendarFieldOf(pc.cfg.keys['calendar.timezone']),
+    workingDays: calendarFieldOf(pc.cfg.keys['calendar.working_days']),
+    weekStart: calendarFieldOf(pc.cfg.keys['calendar.week_start']),
+  } : null
+  const calendarToday = calendarFields?.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
 
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
@@ -570,22 +579,29 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         {/* ════ 달력 ════ */}
         <div id="project-calendar" className="scroll-mt-24 space-y-5">
-      {/* ── 일정 기준 및 공휴일 ── */}
+      {/* ── 달력: 주 시작·근무 요일·시간대 + 기준일·날짜 예외 ── */}
         <SectionCard
-        searchText="달력 기준일 공휴일 휴일"
+        searchText="calendar.working_days calendar.week_start calendar.timezone 달력 기준일 주 시작 근무 요일 시간대 휴무 근무 날짜 예외"
         eyebrow="CALENDAR"
         title={t(locale, 'settings.calendarTitle')}
         icon={CalendarDays}
       >
-        {wbs ? (
+        {calendarFields ? (
+          <CalendarSettingsPanel scope={{ projectId }} revision={revision} todayIso={calendarToday} locale={locale}
+            canEdit={canMutate} {...calendarFields} />
+        ) : (
+          <ConfigStateNotice kind="unavailable" locale={locale} />
+        )}
+        <div className="mt-6 border-t border-line pt-6">
+        {pc.ok ? (
           <ScheduleManager
             projectId={projectId}
             baseDate={project?.base_date ?? null}
-            holidays={wbs.holidays}
+            holidays={pc.cfg.holidays}
             canEdit={canMutate}
           />
         ) : (
-          // 공휴일을 빈 배열로 넘기면 '공휴일 0건'(정상)과 구분되지 않아 조용히 틀린 화면이 된다 —
+          // 날짜 예외를 빈 배열로 넘기면 '예외 0건'(정상)과 구분되지 않아 조용히 틀린 화면이 된다 —
           // 조회 실패는 안내로 드러내고, 임포트·기본 설정 등 나머지 카드는 그대로 쓰게 둔다.
           <div className="panel-soft flex items-center gap-4 p-5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pending-weak text-pending">
@@ -593,7 +609,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             </span>
             <div>
               <p className="text-sm font-semibold text-ink">
-                {locale === 'ko' ? '일정·공휴일 정보를 불러오지 못했습니다.' : 'Could not load schedule and holiday data.'}
+                {locale === 'ko' ? '기준일·날짜 예외 정보를 불러오지 못했습니다.' : 'Could not load base date and date exceptions.'}
               </p>
               <p className="mt-1 text-xs leading-5 text-ink-muted">
                 {locale === 'ko'
@@ -603,6 +619,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             </div>
           </div>
         )}
+        </div>
         </SectionCard>
         </div>
 
