@@ -23,6 +23,8 @@ const GUARDED_FILES: readonly string[] = [
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
   'src/app/actions/wbs.ts',
+  // SP4 B 최종 리뷰 관찰(merge 뒤 SP5 A 가 받음) — 프로젝트 액션이 DB 오류 원문을 그대로 돌려줬다
+  'src/app/actions/project.ts',
 ]
 
 /** `.error` 를 옮겨도 되는 결과의 출처 — 고정 문구만 낸다 */

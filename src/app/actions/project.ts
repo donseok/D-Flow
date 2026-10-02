@@ -73,8 +73,11 @@ export type CreateProjectResult =
   | { ok: true; projectId: string; status: 'applied' | 'duplicate' }
   | { ok: false; code: string; error: string; fieldErrors?: { key: string; message: string }[] }
 
-const invalidInput = (error: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
-  ({ ok: false, code: 'CONFIG_INVALID', error, ...(fieldErrors ? { fieldErrors } : {}) })
+const invalidInput = (message: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
+  ({ ok: false, code: 'CONFIG_INVALID', error: message, ...(fieldErrors ? { fieldErrors } : {}) })
+/** 프로젝트 관리 쓰기의 DB 오류 — 원문은 failWith 가 로그로만(SP4 B 최종 리뷰 관찰 — D21) */
+const ERR_PROJECT_LOOKUP = '프로젝트를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.'
+const ERR_PROJECT_SAVE = '프로젝트를 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.'
 const denied: CreateProjectResult = { ok: false, code: ERR_DENIED, error: ERR_DENIED }
 export type CopySourceResult =
   | { ok: true; levelLabels: string[] }
@@ -249,14 +252,15 @@ export async function updateProject(
     if (start === undefined || end === undefined) {
       const { data: cur, error: curErr } = await sb.from('projects').select('start_date,end_date').eq('id', projectId).single()
       // 현재값 조회 실패 시 검증 불가 — 통과시키지 않고 저장을 중단한다.
-      if (curErr || !cur) return { ok: false, error: curErr?.message || '프로젝트를 찾을 수 없습니다.' }
+      if (curErr) return { ok: false, error: failWith('updateProject', curErr, ERR_PROJECT_LOOKUP) }
+      if (!cur) return { ok: false, error: '프로젝트를 찾을 수 없습니다.' }
       if (start === undefined) start = (cur.start_date as string | null) ?? null
       if (end === undefined) end = (cur.end_date as string | null) ?? null
     }
     if (!isValidDateRange(start, end)) return { ok: false, error: '종료일은 시작일보다 빠를 수 없습니다.' }
   }
   const { error } = await sb.from('projects').update(patch).eq('id', projectId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('updateProject', error, ERR_PROJECT_SAVE) }
   revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
@@ -274,7 +278,7 @@ export async function setProjectPrivacy(projectId: string, isPrivate: boolean): 
   // 가드(프로젝트 관리자)가 유일한 관문임을 명시한다(fail-closed). id 는 가드가 판정한 그 프로젝트다.
   const admin = createAdminClient()
   const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('setProjectPrivacy', error, ERR_PROJECT_SAVE) }
   revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
@@ -286,7 +290,7 @@ export async function setBaseDate(projectId: string, baseDate: string | null): P
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { error } = await sb.from('projects').update({ base_date: baseDate || null }).eq('id', projectId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: failWith('setBaseDate', error, ERR_PROJECT_SAVE) }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
