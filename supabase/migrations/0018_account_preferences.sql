@@ -1,4 +1,4 @@
--- 0013_account_preferences — 계정 범위 개인 설정(SP3b D9·스펙 §5.6). 테마·언어·사이드바 등 계정 키가 워크스페이스마다 갈리지 않게
+-- *_account_preferences — 계정 범위 개인 설정(SP3b D9·스펙 §5.6). 테마·언어·사이드바 등 계정 키가 워크스페이스마다 갈리지 않게
 -- 자기 행 RLS 의 새 표로 옮긴다. profiles.ui_prefs(개정 권고)는 같은 워크스페이스 동료가 행 전체를 읽어(profiles_read) 쓰지 않는다(E32).
 -- 절 순서: ① 표 ② 정책·권한 ③ 이행(계정 키 이동, lastProjectId → recentProjects, notifRead 재배치, 계정 키·은퇴 키 삭제) ④ 사후검사.
 -- 배포·롤백 순서: 이 파일은 확장(표·이행)과 계약(3-3 삭제)을 한 번에 한다 — 새 코드(account_preferences 를 읽는 판)와 같은 창에서
@@ -7,7 +7,7 @@
 -- 새 함수·트리거는 없다(updated_at 은 앱이 쓴다 — user_preferences 와 같다). CLI 가 파일 하나를 한 트랜잭션으로 적용한다.
 -- 수동 적용은 `psql -1`(--single-transaction)만 — 자동커밋(문장 단위) 적용 금지: 3-0 의 set_config(…, true)·3-2b 의 temp 표(on commit drop)가
 -- 트랜잭션 범위라, 문장마다 커밋하면 notifRead 를 지운 뒤 재배치가 실패해 읽음 기록이 사라지고 부분 적용으로 남는다.
--- 롤백: supabase/rollbacks/0013_account_preferences_rollback.sql. 리허설: supabase/rehearsal/0013_account_preferences_{seed,smoke}.sql.
+-- 롤백: supabase/rollbacks/*_account_preferences_rollback.sql. 리허설: supabase/rehearsal/*_account_preferences_{seed,smoke}.sql.
 -- 번호는 개발 번호다 — main 반영 때 SP4 와 겹치면 접미를 지키며 rename 한다(테스트·코드는 접미로 찾는다).
 -- ACCOUNT_KEYS: theme, locale, sidebarCollapsed, dashSections, minutesView, minuteFontSize, minutesExplorerLayout, wbsHideDone, wbsOutline, wbsGanttScale, notif
 
