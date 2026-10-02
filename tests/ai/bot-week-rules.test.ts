@@ -112,9 +112,68 @@ describe('② 라우터·플래너 앵커 = 요청 범위 달력의 weekPeriodOf
     const cal = calendarOf({ timezone: 'UTC', workingDays: [1, 2, 3, 4, 5], weekStart: [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-11' }] })
     expect(inclusiveRange(dateAnchors(cal, new Date('2026-10-07T12:00:00Z')).thisWeek)).toEqual({ from: '2026-10-05', to: '2026-10-10' })
   })
-  it('주간 질문의 weekStart 는 앵커의 이번 주 시작(도구가 프로젝트 키로 다시 정규화한다)', () => {
+  it('주간 질문의 weekStart 는 앵커 이번 주의 기준일(시작 10-11 + 3일 — 도구가 그 날이 든 프로젝트의 주로 바꾼다, M1)', () => {
     const call = routeChatRequest(req('이번 주 주간업무 보여줘'), NOW, LA_SUN).calls.find(c => c.tool === 'get_weekly_sheet')
-    expect(call?.args).toMatchObject({ weekStart: '2026-10-11' })
+    expect(call?.args).toMatchObject({ weekStart: '2026-10-14' })
+  })
+})
+
+describe('①′ 요청 달력과 프로젝트의 주 시작이 다를 때 — 이번·지난·다음 주 = 그 프로젝트의 그 주(A-3 리뷰 P1, M1)', () => {
+  // 라우터·플래너는 요청 범위 달력의 주를 고르고, 주간 도구는 그 주의 기준일(시작 + 3일 — 라벨 규칙 D4 와 같은 기준)을 그 프로젝트 규칙의
+  // 키로 바꾼다. 첫날을 바꾸면 주 시작이 어긋날 때 겹침이 하루뿐인 앞 주를 고른다.
+  const repo = { getSheet: vi.fn() }
+  const settings = { getProjectConfig: vi.fn() }
+  const TRANSITION = { 'calendar.week_start': [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-11' }] } as const
+  const UTC_SUN: RequestCalendar = calendarOf({ timezone: 'UTC', workingDays: [1, 2, 3, 4, 5], weekStart: [{ day: 'sunday', from: null }] })
+  beforeEach(() => {
+    repo.getSheet.mockReset(); settings.getProjectConfig.mockReset()
+    repo.getSheet.mockImplementation(async (_p: string, w: string) => sheet(w))
+  })
+  /** 라우터가 고른 인자로 도구를 실행하고, 저장소가 받은 주 키(들)를 돌려준다 */
+  async function keysFor(message: string, reqCal: RequestCalendar, values: Record<string, unknown>, now = NOW): Promise<string[]> {
+    settings.getProjectConfig.mockResolvedValue(repositoryOk(makeProjectConfig(values, { projectId: P })))
+    const call = routeChatRequest(req(message), now, reqCal).calls.find(c => c.tool === 'get_weekly_sheet' || c.tool === 'compare_weekly_sheets')
+    if (!call) throw new Error(`주간 도구 호출 없음: ${message}`)
+    const tool = call.tool === 'get_weekly_sheet' ? createGetWeeklySheetTool(repo as never, settings) : createCompareWeeklySheetsTool(repo as never, settings)
+    const r = await tool.execute(call.args, ctx({ now: now.toISOString(), timezone: reqCal.timezone }))
+    expect(r.ok).toBe(true)
+    return repo.getSheet.mock.calls.map(c => c[1] as string).sort()
+  }
+
+  it('요청 일요일(LA, 오늘 10-13 화) × 프로젝트 월요일: 이번 주 10-12, 지난 주 10-05', async () => {
+    expect(await keysFor('이번 주 주간업무 보여줘', LA_SUN, monProjectValues)).toEqual(['2026-10-12'])
+    repo.getSheet.mockClear()
+    expect(await keysFor('지난주 주간업무 보여줘', LA_SUN, monProjectValues)).toEqual(['2026-10-05'])
+  })
+  it('요청 일요일 × 프로젝트 월요일: 지난주와 이번 주 비교 = 10-05 → 10-12', async () => {
+    expect(await keysFor('지난주랑 이번 주 주간업무 비교해줘', LA_SUN, monProjectValues)).toEqual(['2026-10-05', '2026-10-12'])
+  })
+  it('반대(요청 월요일 서울, 오늘 10-14 수) × 프로젝트 일요일: 이번 주 10-11, 지난 주 10-04', async () => {
+    expect(await keysFor('이번 주 주간업무 보여줘', SEOUL_MON, { 'calendar.timezone': 'Asia/Seoul' })).toEqual(['2026-10-11'])
+    repo.getSheet.mockClear()
+    expect(await keysFor('지난주 주간업무 보여줘', SEOUL_MON, { 'calendar.timezone': 'Asia/Seoul' })).toEqual(['2026-10-04'])
+  })
+  it('과도기 프로젝트(E = 10-11) × 일요일 워크스페이스 — E 전(10-07 수): 이번 주 = 과도기 키 10-05, 지난 주 = 09-28', async () => {
+    const before = new Date('2026-10-07T12:00:00Z')
+    expect(await keysFor('이번 주 주간업무 보여줘', UTC_SUN, TRANSITION, before)).toEqual(['2026-10-05'])
+    repo.getSheet.mockClear()
+    expect(await keysFor('지난주 주간업무 보여줘', UTC_SUN, TRANSITION, before)).toEqual(['2026-09-28'])
+  })
+  it('과도기 프로젝트 — E 뒤(10-14 수): 이번 주 10-11, 지난 주 = 과도기 키 10-05', async () => {
+    const after = new Date('2026-10-14T12:00:00Z')
+    expect(await keysFor('이번 주 주간업무 보여줘', UTC_SUN, TRANSITION, after)).toEqual(['2026-10-11'])
+    repo.getSheet.mockClear()
+    expect(await keysFor('지난주 주간업무 보여줘', UTC_SUN, TRANSITION, after)).toEqual(['2026-10-05'])
+  })
+  it('명시 날짜는 그 날짜가 든 프로젝트의 주 — 요청 키로 바꾸지 않는다(10월 14일 수 → 월요일 프로젝트 10-12)', async () => {
+    expect(await keysFor('10월 14일 주간업무 보여줘', LA_SUN, monProjectValues)).toEqual(['2026-10-12'])
+  })
+  it('플래너 앵커의 주 기준일 — 이번·지난·다음 주가 월요일 프로젝트의 10-12·10-05·10-19 로 간다', async () => {
+    settings.getProjectConfig.mockResolvedValue(repositoryOk(makeProjectConfig(monProjectValues, { projectId: P })))
+    const refs = plannerDateAnchors(LA_SUN, NOW.toISOString()).weekRefs
+    const tool = createGetWeeklySheetTool(repo as never, settings)
+    for (const ref of [refs.thisWeek, refs.lastWeek, refs.nextWeek]) await tool.execute({ projectId: P, weekStart: ref, limit: 10 }, ctx())
+    expect(repo.getSheet.mock.calls.map(c => c[1])).toEqual(['2026-10-12', '2026-10-05', '2026-10-19'])
   })
 })
 

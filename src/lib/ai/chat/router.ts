@@ -1,7 +1,7 @@
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
 import { addDaysIso } from '@/lib/domain/dates'
-import { prevWeekKey, todayIn, weekKeyOf, type RequestCalendar } from '@/lib/domain/calendar'
-import { dateAnchors, inclusiveRange } from './calendarAnchors'
+import { prevWeekKey, todayIn, weekKeyOf, weekReferenceDay, type RequestCalendar } from '@/lib/domain/calendar'
+import { dateAnchors, inclusiveRange, weekRefOf } from './calendarAnchors'
 import { classifyIntent } from '@/lib/ai/intent'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
 import type {
@@ -398,17 +398,19 @@ function wbsCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, tea
 }
 
 function weeklyCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
-  // 주는 요청 범위 달력의 키 — 주간 도구가 그 프로젝트 규칙의 키로 다시 정규화한다(요청 범위 달력이 그 프로젝트 달력이면 같은 키)
+  // 주 인자는 '그 주에 든 날짜' — 도구가 그 날이 든 그 프로젝트 규칙의 주로 바꾼다. 요청 범위 달력의 주(이번·지난 주)는 그 주의
+  // 기준일(시작 + 3일)을 넘긴다: 첫날을 넘기면 요청 달력과 프로젝트의 주 시작이 다를 때 겹침이 하루뿐인 앞 주가 된다(A-3 리뷰 P1).
+  // 명시 날짜는 요청 키로 바꾸지 않고 그 날짜 그대로(그 날이 든 프로젝트의 주), 화면의 주(pageContext.weekStart)는 그 프로젝트 키 그대로.
   const today = todayIn(calendar.timezone, now)
   const anchors = dateAnchors(calendar, now)
-  const currentWeekStart = anchors.thisWeek.start
-  const explicitWeekStarts = explicitDates(input.message, today).map(d => weekKeyOf(calendar.weekStart, d))
+  const currentWeekStart = weekRefOf(anchors.thisWeek)
+  const explicitWeekStarts = explicitDates(input.message, today)
   const contextualWeekStart = input.pageContext?.weekStart ?? currentWeekStart
   const mentionsCurrentWeek = /이번\s*주|금주/.test(input.message)
   const mentionsPriorWeek = /지난\s*주|전주/.test(input.message)
   const comparison = /비교|차이|달라|변화/.test(input.message)
   const weekStart = explicitWeekStarts[0] ?? (mentionsPriorWeek
-    ? anchors.lastWeek.start
+    ? weekRefOf(anchors.lastWeek)
     : mentionsCurrentWeek ? currentWeekStart : contextualWeekStart)
   const filters = {
     ...(teamFrom(input.message, input.pageContext, teams) ? { team: teamFrom(input.message, input.pageContext, teams) } : {}),
@@ -424,7 +426,7 @@ function weeklyCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, 
         ?? (mentionsCurrentWeek || mentionsPriorWeek ? currentWeekStart : contextualWeekStart)
     const fromWeekStart = explicitComparisonWeeks.length >= 2
       ? explicitComparisonWeeks[0]
-      : prevWeekKey(calendar.weekStart, toWeekStart)
+      : weekReferenceDay(prevWeekKey(calendar.weekStart, weekKeyOf(calendar.weekStart, toWeekStart)))   // 요청 달력의 앞 주 기준일
     return {
       id: 'call_weekly_compare',
       tool: 'compare_weekly_sheets',

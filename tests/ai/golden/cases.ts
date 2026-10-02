@@ -273,7 +273,7 @@ const WEEKLY_CASES: GoldenCase[] = [
     request: req('이번 주 주간업무 알려줘', { pageContext: weeklyPage() }),
     expect: {
       routeKind: 'tools', tools: ['get_weekly_sheet'],
-      argsSubset: { get_weekly_sheet: { projectId: PROJECT_ALPHA, weekStart: '2026-07-13' } },
+      argsSubset: { get_weekly_sheet: { projectId: PROJECT_ALPHA, weekStart: '2026-07-16' } },
       deltaIncludes: ['전체 행: 3행', '조회 건수: 3건', 'ERP 킥오프 준비 완료'],
       sourceHrefPrefixes: [WEEKLY_HREF],
     },
@@ -284,7 +284,7 @@ const WEEKLY_CASES: GoldenCase[] = [
     request: req('ERP 팀 이번 주 주간업무 알려줘', { pageContext: weeklyPage() }),
     expect: {
       routeKind: 'tools', tools: ['get_weekly_sheet'],
-      argsSubset: { get_weekly_sheet: { team: 'ERP', weekStart: '2026-07-13' } },
+      argsSubset: { get_weekly_sheet: { team: 'ERP', weekStart: '2026-07-16' } },
       deltaIncludes: ['조회 건수: 1건', 'AS-IS 인터뷰 진행'],
     },
   },
@@ -304,7 +304,7 @@ const WEEKLY_CASES: GoldenCase[] = [
     request: req('지난 주와 이번 주 주간업무 비교해줘', { pageContext: weeklyPage() }),
     expect: {
       routeKind: 'tools', tools: ['compare_weekly_sheets'],
-      argsSubset: { compare_weekly_sheets: { fromWeekStart: '2026-07-06', toWeekStart: '2026-07-13' } },
+      argsSubset: { compare_weekly_sheets: { fromWeekStart: '2026-07-09', toWeekStart: '2026-07-16' } },
       deltaIncludes: ['비교 항목: 4건', '추가: 1건', '삭제: 1건'],
       sourceHrefPrefixes: [WEEKLY_HREF],
     },
@@ -373,7 +373,7 @@ const WEEKLY_CASES: GoldenCase[] = [
     request: req('이번 주 주간업무 알려줘', { pageContext: weeklyPage({ weekStart: '2026-07-06' }) }),
     expect: {
       routeKind: 'tools', tools: ['get_weekly_sheet'],
-      argsSubset: { get_weekly_sheet: { weekStart: '2026-07-13' } },
+      argsSubset: { get_weekly_sheet: { weekStart: '2026-07-16' } },
       deltaIncludes: ['ERP 킥오프 준비 완료'],
     },
   },
@@ -1256,7 +1256,7 @@ const CROSS_CASES: GoldenCase[] = [
     }),
     expect: {
       routeKind: 'tools', tools: ['get_weekly_sheet'],
-      argsSubset: { get_weekly_sheet: { weekStart: '2026-07-13' } },
+      argsSubset: { get_weekly_sheet: { weekStart: '2026-07-16' } },
       deltaIncludes: ['ERP 킥오프 준비 완료'],
     },
   },

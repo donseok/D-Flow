@@ -301,12 +301,20 @@ export function weekDisplayDays(cal: Pick<WorkCalendar, 'workingDays' | 'offDate
   return working.length ? working : all
 }
 
-/** 주차 라벨(개정 §4.2.5) — 기준일 = 키 + 3일의 연·월, 주차 = 1 + 같은 달에 기준일이 떨어지는 앞선 키 수. 서식 문자열은 report/week.ts(P4) */
+/**
+ * 주의 기준일 = 주 시작 + 3일(개정 §4.2.5 — 라벨의 연·월을 정하는 날). 주 시작이 다른 달력의 주로 옮길 때도 이 날이 든 주를 고른다 —
+ * 주 시작이 하루~엿새 어긋나도(과도기 6·8일 주 포함) 기준일은 겹침이 큰 쪽 주에 든다(A-3 리뷰 P1 — 봇의 요청 달력 → 프로젝트 키).
+ */
+export function weekReferenceDay(key: string): string {
+  return addDaysIso(key, 3)
+}
+
+/** 주차 라벨(개정 §4.2.5) — 기준일(weekReferenceDay)의 연·월, 주차 = 1 + 같은 달에 기준일이 떨어지는 앞선 키 수. 서식 문자열은 report/week.ts(P4) */
 export function weekLabelOf(rules: readonly WeekStartRule[], key: string): { year: number; month: number; ordinal: number } {
-  const anchor = addDaysIso(key, 3)
+  const anchor = weekReferenceDay(key)
   const ym = anchor.slice(0, 7)
   let ordinal = 1
-  for (let k = prevWeekKey(rules, key); addDaysIso(k, 3).slice(0, 7) === ym; k = prevWeekKey(rules, k)) ordinal++
+  for (let k = prevWeekKey(rules, key); weekReferenceDay(k).slice(0, 7) === ym; k = prevWeekKey(rules, k)) ordinal++
   return { year: Number(anchor.slice(0, 4)), month: Number(anchor.slice(5, 7)), ordinal }
 }
 

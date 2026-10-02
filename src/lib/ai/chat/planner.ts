@@ -1,6 +1,6 @@
 import { generateAnswer, type ChatMessage } from '@/lib/ai/llm'
 import type { RequestCalendar } from '@/lib/domain/calendar'
-import { dateAnchors, inclusiveRange } from './calendarAnchors'
+import { dateAnchors, inclusiveRange, weekRefOf } from './calendarAnchors'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
 import type { SuccessfulToolEvidence } from './evidence'
 import type { BotDomain, ChatRequestV2 } from './protocol'
@@ -480,11 +480,16 @@ export function plannerDateAnchors(calendar: RequestCalendar, now: string): {
   thisWeek: { from: string; to: string }
   nextWeek: { from: string; to: string }
   lastWeek: { from: string; to: string }
+  /** 주간 도구(weekStart·fromWeekStart·toWeekStart)에 넘길 그 주의 기준일(시작 + 3일) — 도구가 그 날이 든 프로젝트의 주로 바꾼다(A-3 리뷰 P1) */
+  weekRefs: { thisWeek: string; nextWeek: string; lastWeek: string }
 } {
   const parsed = new Date(now)
   const safe = Number.isNaN(parsed.getTime()) ? new Date() : parsed
   const a = dateAnchors(calendar, safe)
-  return { today: a.today, thisWeek: inclusiveRange(a.thisWeek), nextWeek: inclusiveRange(a.nextWeek), lastWeek: inclusiveRange(a.lastWeek) }
+  return {
+    today: a.today, thisWeek: inclusiveRange(a.thisWeek), nextWeek: inclusiveRange(a.nextWeek), lastWeek: inclusiveRange(a.lastWeek),
+    weekRefs: { thisWeek: weekRefOf(a.thisWeek), nextWeek: weekRefOf(a.nextWeek), lastWeek: weekRefOf(a.lastWeek) },
+  }
 }
 
 function plannerSystemPrompt(allowedTools: readonly string[], now: string, calendar: RequestCalendar): string {
@@ -511,9 +516,9 @@ function plannerSystemPrompt(allowedTools: readonly string[], now: string, calen
     '',
     `날짜 앵커(${calendar.timezone}):`,
     `- 오늘: ${anchors.today}`,
-    `- 이번 주: ${anchors.thisWeek.from} ~ ${anchors.thisWeek.to}`,
-    `- 다음 주: ${anchors.nextWeek.from} ~ ${anchors.nextWeek.to}`,
-    `- 지난 주: ${anchors.lastWeek.from} ~ ${anchors.lastWeek.to}`,
+    `- 이번 주: ${anchors.thisWeek.from} ~ ${anchors.thisWeek.to} (주간 도구 기준일 ${anchors.weekRefs.thisWeek})`,
+    `- 다음 주: ${anchors.nextWeek.from} ~ ${anchors.nextWeek.to} (주간 도구 기준일 ${anchors.weekRefs.nextWeek})`,
+    `- 지난 주: ${anchors.lastWeek.from} ~ ${anchors.lastWeek.to} (주간 도구 기준일 ${anchors.weekRefs.lastWeek})`,
     '',
     '출력 스키마: {"reason":string,"stages":[{"calls":[{"id":string,"tool":string,"args":object,"bindings"?:{"인자키":{"fromCall":string,"resultPath":string}}}]}],"needsClarification":boolean,"clarification"?:string}',
   ].join('\n')

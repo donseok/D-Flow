@@ -43,7 +43,7 @@ describe('chat v2 deterministic router', () => {
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
       tool: 'get_weekly_sheet',
-      args: { projectId: 'p1', weekStart: '2026-07-13', team: 'ERP' },
+      args: { projectId: 'p1', weekStart: '2026-07-16', team: 'ERP' },   // 이번 주(07-13~) 의 기준일 — M1
     })
     expect(route.calls[0].args).not.toHaveProperty('query')
   })
@@ -182,11 +182,12 @@ describe('chat v2 deterministic router', () => {
     expect(prior.kind).toBe('tools')
     expect(compare.kind).toBe('tools')
     if (current.kind !== 'tools' || prior.kind !== 'tools' || compare.kind !== 'tools') return
-    expect(current.calls[0].args).toMatchObject({ weekStart: '2026-07-13' })
-    expect(prior.calls[0].args).toMatchObject({ weekStart: '2026-07-06' })
+    // 요청 달력 주의 기준일(시작 + 3일)을 넘긴다 — 도구가 그 날이 든 프로젝트의 주로 바꾼다(A-3 리뷰 P1, M1)
+    expect(current.calls[0].args).toMatchObject({ weekStart: '2026-07-16' })
+    expect(prior.calls[0].args).toMatchObject({ weekStart: '2026-07-09' })
     expect(compare.calls[0]).toMatchObject({
       tool: 'compare_weekly_sheets',
-      args: { fromWeekStart: '2026-07-06', toWeekStart: '2026-07-13' },
+      args: { fromWeekStart: '2026-07-09', toWeekStart: '2026-07-16' },
     })
   })
 

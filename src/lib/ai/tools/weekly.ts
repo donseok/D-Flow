@@ -166,7 +166,8 @@ export function createGetWeeklySheetTool(
       if (denied) return denied
       const wk = await projectWeekContext(settings, projectId)
       if (!wk.ok) return wk.result
-      // 기준일은 아무 날짜나 받아 그 프로젝트 규칙의 키로 정규화한다(SP5 D34 — 월요일 강제 삭제)
+      // 주 인자는 그 주에 든 날짜 — 그 날이 든 그 프로젝트 규칙의 주 키로 정규화한다(SP5 D34 — 월요일 강제 삭제). 봇의 라우터·플래너는
+      // 요청 달력 주의 기준일(시작 + 3일)을 넘긴다 — 주 시작이 다른 프로젝트에서도 겹침이 큰 쪽 주가 된다(A-3 리뷰 P1)
       const weekStart = weekKeyOf(wk.rules, rawWeekStart)
       const teamFilter = resolveTeamFilter(wk.cfg, projectId, team || undefined)
       if (!teamFilter.ok) return teamFilter.result
