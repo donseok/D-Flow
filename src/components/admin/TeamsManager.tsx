@@ -7,10 +7,14 @@ import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Power } from 'lucide-react'
 import { addTeam, updateTeam } from '@/app/actions/teams'
 import { useToast } from '@/components/ui/Toast'
+import { TeamNameCell } from '@/components/settings/TeamNameCell'
+import { teamSlot } from '@/lib/domain/teamColor'
 
 export interface AdminTeamRow {
   id: string
   code: string
+  name: string
+  color: string
   sortOrder: number
   active: boolean
   progressVisible: boolean
@@ -100,7 +104,7 @@ export function TeamsManager({ teams, workspaceId }: {
             </thead>
             <tbody>
               {teams.map((t, i) => (
-                <tr key={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
+                <tr key={t.id} data-team-row={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => move(i, -1)} disabled={pending || i === 0}
@@ -113,7 +117,14 @@ export function TeamsManager({ teams, workspaceId }: {
                       </button>
                     </div>
                   </td>
-                  <td className="py-2.5 pr-3 font-medium text-ink">{t.code}</td>
+                  <td className="py-2.5 pr-3">
+                    <TeamNameCell team={t} disabled={pending} chip={teamSlot(t).chip}
+                      onRename={async (name) => {
+                        const r = await updateTeam(t.id, { name })
+                        if (r.ok) { toast({ title: `'${t.code}' 팀 이름을 '${name}'(으)로 바꿨습니다.`, variant: 'success' }); router.refresh() }
+                        return r
+                      }} />
+                  </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
                       {t.active ? '활성' : '비활성'}
@@ -148,8 +159,8 @@ export function TeamsManager({ teams, workspaceId }: {
           </table>
         </div>
         <p className="mt-3 text-xs text-ink-subtle">
-          팀 추가 시 회의록 보관함에 같은 이름의 기본 폴더(자동 편철 앵커)가 함께 생성됩니다. 이름
-          변경(개명)은 편철·데이터 연쇄가 있어 지원하지 않습니다.
+          팀 추가 시 회의록 보관함에 같은 이름의 기본 폴더(자동 편철 앵커)가 함께 생성됩니다. 이름을
+          바꿔도 팀 코드(엑셀·필터·봇이 쓰는 식별자)와 회의록 기본 폴더 이름은 그대로입니다.
         </p>
       </div>
     </section>

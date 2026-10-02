@@ -138,7 +138,7 @@ export async function updateTeam(
 /** 관리 화면 목록(비활성 포함) — 페이지 서버 컴포넌트 전용. 그 워크스페이스의 공용 팀만.
  *  거부·조회 실패는 빈 목록이 아니라 오류다 — 빈 목록이면 화면이 'TEAMS 0' 을 사실처럼 그린다(표시 = 로깅). */
 export async function listTeamsAdmin(workspaceId: string): Promise<
-  | { ok: true; rows: Array<{ id: string; code: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
+  | { ok: true; rows: Array<{ id: string; code: string; name: string; color: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
   | { ok: false; error: string }
 > {
   // 대상 워크스페이스가 비면 가드 전에 거부한다(가드는 null 을 슈퍼유저에게 통과시킨다). g 는 가드 결과만 담는다 — 원문 가드(no-raw-db-errors)가
@@ -157,7 +157,7 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
   // 공용 팀 관리 화면 — project_id is null 로 고정해 프로젝트 팀(0071)이 섞여 들어오지 않게 하고,
   // workspace_id 로 좁혀 다른 워크스페이스의 공용 팀이 보이지 않게 한다(SP2 §4.2 — 종전엔 전 워크스페이스가 섞였다).
   const { data, error } = await admin.from('teams')
-    .select('id, code, sort_order, active, progress_visible')
+    .select('id, code, name, color, sort_order, active, progress_visible')
     .is('project_id', null)
     .eq('workspace_id', workspaceId)
     .order('sort_order').order('code')
@@ -170,6 +170,8 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
     rows: (data ?? []).map((r: Record<string, unknown>) => ({
       id: String(r.id),
       code: String(r.code),
+      name: String(r.name),
+      color: String(r.color),
       sortOrder: Number(r.sort_order ?? 0),
       active: r.active !== false,
       progressVisible: r.progress_visible !== false,

@@ -34,7 +34,7 @@ vi.mock('@/app/actions/projectTeams', () => ({
 import { ProjectTeamsManager, type AdminTeamRow } from '@/components/settings/ProjectTeamsManager'
 
 const ONE_TEAM: AdminTeamRow[] = [
-  { id: 't1', code: 'PMO', sortOrder: 0, active: true, progressVisible: true },
+  { id: 't1', code: 'PMO', name: 'PMO', color: '#4f46e5', sortOrder: 0, active: true, progressVisible: true },
 ]
 
 describe('ProjectTeamsManager', () => {

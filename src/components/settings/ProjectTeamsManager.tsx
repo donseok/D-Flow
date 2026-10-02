@@ -9,12 +9,15 @@ import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Plus, Power } from 'lucide-react
 import { addProjectTeam, copyGlobalTeams, updateProjectTeam } from '@/app/actions/projectTeams'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { TeamNameCell } from '@/components/settings/TeamNameCell'
 
 /** admin/TeamsManager.tsx 의 AdminTeamRow 와 형태가 같지만 별개 선언이다 — 액션·문구가
  *  프로젝트 스코프로 갈라져 있어 import 로 묶으면 오히려 결합이 생긴다(브리프 지시). */
 export interface AdminTeamRow {
   id: string
   code: string
+  name: string
+  color: string
   sortOrder: number
   active: boolean
   progressVisible: boolean
@@ -213,7 +216,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             </thead>
             <tbody>
               {teams.map((t, i) => (
-                <tr key={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
+                <tr key={t.id} data-team-row={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => move(i, -1)} disabled={pending || i === 0}
@@ -226,7 +229,15 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
                       </button>
                     </div>
                   </td>
-                  <td className="py-2.5 pr-3 font-medium text-ink">{t.code}</td>
+                  <td className="py-2.5 pr-3">
+                    {/* 팀 색 칩은 두지 않는다 — 명단·설정의 팀 칩은 SPU3(D52) */}
+                    <TeamNameCell team={t} disabled={pending}
+                      onRename={async (name) => {
+                        const r = await updateProjectTeam(projectId, t.id, { name })
+                        if (r.ok) { toast({ title: `'${t.code}' 팀 이름을 '${name}'(으)로 바꿨습니다.`, variant: 'success' }); router.refresh() }
+                        return r
+                      }} />
+                  </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
                       {t.active ? '활성' : '비활성'}

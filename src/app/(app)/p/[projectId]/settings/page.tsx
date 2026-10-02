@@ -455,7 +455,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             {teams.ok ? (
               <ProjectTeamsManager
                 projectId={projectId}
-                teams={teams.own.map(t => ({ id: t.id, code: t.code, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
+                teams={teams.own.map(t => ({ id: t.id, code: t.code, name: t.name, color: t.color, sortOrder: t.sortOrder, active: t.active, progressVisible: t.progressVisible }))}
                 inherited={teams.own.length === 0}
                 hasGlobalTeams={teams.common.some(t => t.active)}
               />
