@@ -114,6 +114,29 @@ describe('createMinute 원본 경로 — scope 는 확정된 워크스페이스�
   })
 })
 
+describe('createMinute — 녹취 보정 경고를 결과에 싣고 업로드는 성공한다(A-4 리뷰 N4, A-5 리뷰 O6)', () => {
+  const okAdmin = () => ({
+    rpc: vi.fn(() => ({ single: async () => ({ data: { minute_id: M, version_id: 'v1', wiki_rebuild_required: false }, error: null }) })),
+  })
+  it.each(['calendar_unavailable', 'invalid_time'] as const)('보정 도우미가 %s 경고를 내면 ok:true + timeFixWarning(원문 그대로 저장)', async (warning) => {
+    const { applyScopeTimeFix } = await import('@/lib/minutes/timeFix.server')
+    vi.mocked(applyScopeTimeFix).mockResolvedValueOnce({ fix: { corrected: false, body: '본문' }, warning } as never)
+    createServerClient.mockResolvedValue(fakeDb({}).client)
+    const admin = okAdmin()
+    adminMocks.createAdminClient.mockImplementation(() => admin)
+    const res = await createMinute({ ...INPUT, projectId: P } as never, null, src(`ws/${W}/p/${P}/minutes/${M}/1-a.md`))
+    expect(res).toMatchObject({ ok: true, id: M, timeFixWarning: warning })
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_body_md: '본문' }))
+  })
+  it('경고가 없으면 timeFixWarning 키가 없다', async () => {
+    createServerClient.mockResolvedValue(fakeDb({}).client)
+    adminMocks.createAdminClient.mockImplementation(() => okAdmin())
+    const res = await createMinute({ ...INPUT, projectId: P } as never, null, src(`ws/${W}/p/${P}/minutes/${M}/1-a.md`))
+    expect(res).toMatchObject({ ok: true, id: M })
+    expect('timeFixWarning' in res).toBe(false)
+  })
+})
+
 describe('recordMinuteFile — scope 는 DB 의 회의록 행', () => {
   const att = (filePath: string) => ({ role: 'attachment' as const, fileName: 'x.pdf', filePath, size: 1, mime: 'application/pdf' })
 

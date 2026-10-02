@@ -10,7 +10,8 @@ import { withTeams } from '../fixtures/teams'
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
 }))
-vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
+const toastSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: toastSpy }) }))
 const M = 'cccccccc-3333-4333-8333-333333333333'
 // 인자 시그니처를 제네릭으로 명시 — 인자 없는 vi.fn 은 mock.calls 가 빈 튜플로 추론돼 tsc(TS2493)가 깨진다
 const createMinute = vi.fn<(input: unknown, folderId: string | null) => Promise<{ ok: boolean; id: string }>>(
@@ -137,6 +138,27 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     await attachBodyFile()
     await clickSave()
     expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: 'PMO' })
+  })
+
+  it.each([
+    ['calendar_unavailable', 'min.timeFix.skippedCalendar'],
+    ['invalid_time', 'min.timeFix.skippedInvalidTime'],
+  ] as const)('업로드 결과의 timeFixWarning=%s 이면 경고 토스트(원문 시각 그대로라는 사실 — A-4 리뷰 N4, A-5 리뷰 O6)', async (warning, description) => {
+    toastSpy.mockClear()
+    createMinute.mockResolvedValueOnce({ ok: true, id: M, timeFixWarning: warning } as never)
+    await mount()
+    await attachBodyFile()
+    await clickSave()
+    expect(toastSpy).toHaveBeenCalledWith({ title: 'min.timeFix.skippedTitle', description, variant: 'info' })
+    expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('경고가 없으면 경고 토스트가 없다', async () => {
+    toastSpy.mockClear()
+    await mount()
+    await attachBodyFile()
+    await clickSave()
+    expect(toastSpy).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'min.timeFix.skippedTitle' }))
   })
 
   it('열림 시 재조회 응답의 새 폴더가 픽커에 반영된다', async () => {
