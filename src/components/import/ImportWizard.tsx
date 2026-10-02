@@ -96,18 +96,27 @@ async function downloadTemplate(toast: ReturnType<typeof useToast>['toast'], fai
   URL.revokeObjectURL(url)
 }
 
-function StepBadge({ n, total, label, active, done }: { n: number; total: number; label: string; active: boolean; done: boolean }) {
+/** 단계의 스크린리더 문구 — "3단계 중 1단계: 파일 선택(완료)". 완료 표지는 눈에는 체크 아이콘뿐이라 여기서 말한다(B-3 리뷰 P3) */
+export function stepSrText(t: (k: DictKey) => string, n: number, total: number, label: string, done: boolean): string {
+  return t(done ? 'importWizard.stepSrDone' : 'importWizard.stepSr')
+    .replace('{n}', String(n)).replace('{total}', String(total)).replace('{label}', label)
+}
+
+/** 눈에 보이는 원 안 숫자·n/3·라벨은 aria-hidden — 스크린리더는 srText 한 줄만 읽는다("1 1/3 파일 선택" 처럼 숫자를 두 번 읽지 않게) */
+export function StepBadge({ n, total, label, active, done, srText }: { n: number; total: number; label: string; active: boolean; done: boolean; srText: string }) {
   return (
     <div className="flex items-center gap-2">
       <span
+        aria-hidden="true"
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
           done ? 'bg-done text-success-fg' : active ? 'bg-brand text-action-fg' : 'bg-surface-2 text-ink-subtle'
         }`}
       >
         {done ? <CheckCircle2 className="h-4 w-4" /> : n}
       </span>
-      <span className="text-meta text-fg-muted tabular-nums">{n}/{total}</span>
-      <span className={`text-sm font-semibold ${active || done ? 'text-ink' : 'text-ink-subtle'}`}>{label}</span>
+      <span aria-hidden="true" className="text-meta text-fg-muted tabular-nums">{n}/{total}</span>
+      <span aria-hidden="true" className={`text-sm font-semibold ${active || done ? 'text-ink' : 'text-ink-subtle'}`}>{label}</span>
+      <span className="sr-only">{srText}</span>
     </div>
   )
 }
@@ -349,13 +358,14 @@ export function ImportWizard({
 
   return (
     <div className="space-y-5">
-      {/* 단계 표시(#23 — SP4 §5.2, 계획 P9): 순서 목록 하나, 활성 단계 aria-current="step", 각 단계 앞 n/3 */}
+      {/* 단계 표시(#23 — SP4 §5.2, 계획 P9): 순서 목록 하나, 활성 단계 aria-current="step", 각 단계 앞 n/3(눈에만 — 읽기는 StepBadge 의 srText) */}
       <ol className="card flex items-center gap-3 p-4" aria-label={t('importWizard.stepsAria')}>
         {([['select', 'importWizard.step1Label'], ['review', 'importWizard.step2Label'], ['done', 'importWizard.step3Label']] as const).map(([key, label], i, all) => {
           const at = all.findIndex(([k]) => k === state.step)
+          const done = i < at || state.step === 'done'
           return (
             <li key={key} className={`flex items-center gap-3 ${i < all.length - 1 ? 'flex-1' : 'flex-none'}`} aria-current={i === at ? 'step' : undefined}>
-              <StepBadge n={i + 1} total={all.length} label={t(label)} active={i === at} done={i < at || state.step === 'done'} />
+              <StepBadge n={i + 1} total={all.length} label={t(label)} active={i === at} done={done} srText={stepSrText(t, i + 1, all.length, t(label), done)} />
               {i < all.length - 1 && <span aria-hidden className="h-px flex-1 bg-line" />}
             </li>
           )

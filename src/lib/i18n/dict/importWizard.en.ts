@@ -142,6 +142,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   // #23 결과·실행 기록(SP4 §5.2·D52, 계획 P9)
   'importWizard.step3Label': 'Result',
   'importWizard.stepsAria': 'Import steps',
+  'importWizard.stepSr': 'Step {n} of {total}: {label}',
+  'importWizard.stepSrDone': 'Step {n} of {total}: {label} (done)',
   'importWizard.runId': 'Run ID',
   'importWizard.receiptLink': 'View run record',
   'importWizard.duplicateTitle': 'This run was already processed',

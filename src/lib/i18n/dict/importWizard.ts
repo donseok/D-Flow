@@ -141,6 +141,8 @@ export const importWizardKo = {
   // #23 결과·실행 기록(SP4 §5.2·D52, 계획 P9)
   'importWizard.step3Label': '결과',
   'importWizard.stepsAria': '가져오기 단계',
+  'importWizard.stepSr': '{total}단계 중 {n}단계: {label}',
+  'importWizard.stepSrDone': '{total}단계 중 {n}단계: {label}(완료)',
   'importWizard.runId': '실행 ID',
   'importWizard.receiptLink': '실행 기록 보기',
   'importWizard.duplicateTitle': '이미 처리된 실행입니다',
