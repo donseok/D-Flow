@@ -130,7 +130,9 @@ function sameRequestCalendar(a: RequestCalendar, b: RequestCalendar): boolean {
  * 소속 워크스페이스들로 정하는 요청·화면 달력(A-3 리뷰 P2, 컨트롤러 판정 M3) — 소속이 없으면 제품 기본값, 하나면 그 워크스페이스,
  * 여럿이면 달력(tz·주 시작·근무 요일)이 모두 같을 때 그 달력, 다르면 제품 기본값(UTC — 화면·봇 답이 기준 tz 이름을 적는다).
  * 이관 ⑨ 가 기존 워크스페이스 전부에 같은 tz 를 적으므로, 여러 곳에 속한 사람도 소속이 모두 같으면 UTC 로 떨어지지 않는다.
- * 판독 실패·손상은 던진다(fail-closed — 하나라도 못 읽으면 '같다'를 판정할 수 없다).
+ * 판독 실패·손상(A-4 리뷰 P2, 판정 N2 (a)): 하나뿐인 소속이면 던진다(그 사용자의 유일한 달력 — 대체하지 않는다). 여럿 중 하나라도 판독할 수
+ * 없으면 "같다를 판정할 수 없음 = 다름"으로 보고 제품 기본값 — 화면·봇이 '기준 (UTC)' 를 적으므로 위장이 아니고, 실패는 로그에 남긴다
+ * (3원칙 ① 표시 = 로깅). 다른 워크스페이스의 손상이 전역 화면 전부를 멈추지 않게 한다. 설정 오류가 아닌 예외(결함)는 그대로 던진다.
  */
 export async function resolveMemberWorkspacesCalendar(
   workspaceIds: readonly string[], opts?: { client?: ConfigReadClient },
@@ -139,10 +141,17 @@ export async function resolveMemberWorkspacesCalendar(
   if (workspaceIds.length === 1) return resolveRequestCalendar({ projectId: null, workspaceId: workspaceIds[0] }, opts)
   // 해석기는 한 번만 불러온다(순환 회피의 동적 import — resolveRequestCalendar 주석) — 그 뒤 워크스페이스마다 병렬로 판독
   const { getWorkspaceConfig } = await import('@/lib/settings/workspaceConfig')
-  const cals: RequestCalendar[] = await Promise.all(workspaceIds.map(async (id) => {
-    const cal = requireCalendar(await getWorkspaceConfig(id, opts))
-    return { timezone: cal.timezone, workingDays: cal.workingDays, weekStart: cal.weekStart }
+  const cals: (RequestCalendar | null)[] = await Promise.all(workspaceIds.map(async (id) => {
+    try {
+      const cal = requireCalendar(await getWorkspaceConfig(id, opts))
+      return { timezone: cal.timezone, workingDays: cal.workingDays, weekStart: cal.weekStart }
+    } catch (e) {
+      if (!(e instanceof ConfigKeyError) && !(e instanceof ConfigUnavailableError)) throw e
+      console.error('[calendar] 소속 워크스페이스 달력을 읽지 못해 기본값(UTC)으로 판정한다', { workspaceId: id, cause: e.message })
+      return null
+    }
   }))
-  const [first, ...rest] = cals
+  if (cals.some((c) => c === null)) return DEFAULT_REQUEST_CALENDAR
+  const [first, ...rest] = cals as RequestCalendar[]
   return rest.every((c) => sameRequestCalendar(first, c)) ? first : DEFAULT_REQUEST_CALENDAR
 }

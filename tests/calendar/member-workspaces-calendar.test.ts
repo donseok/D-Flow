@@ -1,5 +1,6 @@
 // 여러 워크스페이스 소속자의 전역 화면·봇 '오늘'(A-3 리뷰 P2, M3) — 소속 워크스페이스들의 달력(tz·주 시작·근무 요일)이 모두 같으면 그 달력,
-// 다르면 제품 기본값(UTC — 화면·봇 답이 기준 tz 이름을 적는다), 판독 실패·손상은 fail-closed(던진다 — 기본값으로 풀지 않는다).
+// 다르면 제품 기본값(UTC — 화면·봇 답이 기준 tz 이름을 적는다). 여럿 중 하나라도 판독 실패·손상이면 '다름'(UTC + 로그 — N2 판정 (a)),
+// 하나뿐인 소속의 실패는 던진다(그 사용자의 유일한 달력).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({ getWorkspaceConfig: vi.fn() }))
@@ -41,24 +42,42 @@ describe('resolveMemberWorkspacesCalendar', () => {
     byId({ a: ws('Asia/Seoul'), b: ws('Asia/Seoul', SUN, [1, 2, 3, 4, 5, 6]) })
     expect(await resolveMemberWorkspacesCalendar(['a', 'b'])).toBe(DEFAULT_REQUEST_CALENDAR)
   })
-  it('하나라도 손상이면 ConfigKeyError, 조회 실패면 ConfigUnavailableError — 기본값으로 풀지 않는다', async () => {
+  it('여럿 중 하나라도 판독할 수 없으면(손상·조회 실패) "같다를 판정할 수 없음 = 다름" — 기본값(UTC) + 로그(A-4 리뷰 P2 N2 판정 (a))', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     byId({ a: ws('Asia/Seoul'), b: broken('calendar.timezone') })
-    await expect(resolveMemberWorkspacesCalendar(['a', 'b'])).rejects.toBeInstanceOf(ConfigKeyError)
+    expect(await resolveMemberWorkspacesCalendar(['a', 'b'])).toBe(DEFAULT_REQUEST_CALENDAR)
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('[calendar]'), expect.objectContaining({ workspaceId: 'b' }))
+    err.mockClear()
     m.getWorkspaceConfig.mockImplementation(async (id: string) => {
       if (id === 'b') throw new ConfigUnavailableError('워크스페이스 설정 조회 실패')
       return ws('Asia/Seoul')
     })
-    await expect(resolveMemberWorkspacesCalendar(['a', 'b'])).rejects.toBeInstanceOf(ConfigUnavailableError)
+    expect(await resolveMemberWorkspacesCalendar(['a', 'b'])).toBe(DEFAULT_REQUEST_CALENDAR)
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
+  })
+  it('하나뿐인 소속의 손상·조회 실패는 그대로 던진다(그 사용자의 유일한 달력 — 대체하지 않는다)', async () => {
+    byId({ a: broken('calendar.timezone') })
+    await expect(resolveMemberWorkspacesCalendar(['a'])).rejects.toBeInstanceOf(ConfigKeyError)
+    m.getWorkspaceConfig.mockRejectedValue(new ConfigUnavailableError('조회 실패'))
+    await expect(resolveMemberWorkspacesCalendar(['a'])).rejects.toBeInstanceOf(ConfigUnavailableError)
+  })
+  it('설정 오류가 아닌 예외(결함)는 여럿이어도 그대로 던진다', async () => {
+    m.getWorkspaceConfig.mockImplementation(async (id: string) => { if (id === 'b') throw new TypeError('boom'); return ws('Asia/Seoul') })
+    await expect(resolveMemberWorkspacesCalendar(['a', 'b'])).rejects.toBeInstanceOf(TypeError)
   })
 })
 
 describe('viewTimezone — 여러 워크스페이스 소속(전역 화면)', () => {
-  it('모두 같으면 그 tz, 다르면 UTC, 손상이면 ok:false(그 키)', async () => {
+  it('모두 같으면 그 tz, 다르면 UTC, 여럿 중 하나가 손상이면 UTC(N2 — 하나뿐일 때만 ok:false)', async () => {
     byId({ a: ws('America/Los_Angeles'), b: ws('America/Los_Angeles') })
     await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'America/Los_Angeles' })
     byId({ a: ws('America/Los_Angeles'), b: ws('Asia/Seoul') })
     await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC' })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     byId({ a: ws('Asia/Seoul'), b: broken('calendar.week_start') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toMatchObject({ ok: false, key: 'calendar.week_start' })
+    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC' })
+    await expect(viewTimezone(actor(['b']))).resolves.toMatchObject({ ok: false, key: 'calendar.week_start' })
+    err.mockRestore()
   })
 })

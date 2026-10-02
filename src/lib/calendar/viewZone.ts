@@ -1,7 +1,8 @@
 // 전역 화면(세션 유일 워크스페이스 — requireModulePage(null, …) 경로)의 시간대(스펙 SP5 D36, 계획 D-21c, A-3 리뷰 수정 M3).
 // 소속 워크스페이스가 하나면 그 calendar.timezone, 여럿이면 달력이 모두 같을 때 그 tz, 다르거나 없으면 제품 기본값 UTC — 화면이 그
-// 이름을 적어 사실과 다르지 않게 한다(봇 스트림의 요청 범위 달력과 같은 resolveMemberWorkspacesCalendar). 워크스페이스 달력 손상은
-// ok:false(UTC 로 대체하지 않는다). 설정 조회 실패는 ConfigUnavailableError throw 그대로 — 페이지의 error 경계가 받는다.
+// 이름을 적어 사실과 다르지 않게 한다(봇 스트림의 요청 범위 달력과 같은 resolveMemberWorkspacesCalendar). 하나뿐인 소속의 달력 손상은
+// ok:false(UTC 로 대체하지 않는다)·설정 조회 실패는 ConfigUnavailableError throw 그대로(페이지의 error 경계). 여럿 중 하나의 실패는
+// '다름' — UTC + 로그(A-4 리뷰 N2).
 import 'server-only'
 import type { Actor } from '@/lib/domain/authz'
 import type { RequestCalendar } from '@/lib/domain/calendar'
