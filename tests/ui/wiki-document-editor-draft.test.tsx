@@ -199,6 +199,38 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
     expect(hasBanner()).toBe(true)
     expect(window.localStorage.getItem(A_OLD)).not.toBeNull()
   })
+  // U2b-5 리뷰 수정 CC5 — 두 번째 열기는 새 키에서 읽는다(옛 키 사본이 남아 있음). 그 자리의 결정도 옛 키를 지워야 버린 초안이 되살아나지 않는다
+  const reopen = async () => {
+    act(() => root.unmount()); root = createRoot(container)
+    await mount('uA')
+    await click('wiki.document.edit')
+  }
+  it('(g-4) 결정 없이 닫고 다시 열어 버리면 → 세 번째 열기에 배너 없음, 두 키 모두 없음', async () => {
+    window.localStorage.setItem(A_OLD, draftOf('옛 키 초안'))
+    await mount('uA')
+    await click('wiki.document.edit')
+    await reopen()
+    expect(hasBanner()).toBe(true)
+    await click('wiki.document.draftDiscard')
+    expect(window.localStorage.getItem(A_KEY)).toBeNull()
+    expect(window.localStorage.getItem(A_OLD)).toBeNull()
+    await reopen()
+    expect(hasBanner()).toBe(false)
+  })
+  it('(g-5) 두 번째 열기에서 이어서 쓰기·취소도 옛 키를 지운다', async () => {
+    window.localStorage.setItem(A_OLD, draftOf('옛 키 초안'))
+    await mount('uA')
+    await click('wiki.document.edit')
+    await reopen()
+    await click('wiki.document.draftRestore')
+    expect(textarea().value).toBe('옛 키 초안')
+    expect(window.localStorage.getItem(A_OLD)).toBeNull()
+    await click('wiki.document.cancel')
+    expect(window.localStorage.getItem(A_KEY)).toBeNull()
+    expect(window.localStorage.getItem(A_OLD)).toBeNull()
+    await reopen()
+    expect(hasBanner()).toBe(false)
+  })
   it('(h) 범위(워크스페이스)가 없으면 초안을 읽지도 쓰지도 않고 한 번 알린다 — 워크스페이스 없는 키를 만들지 않는다', async () => {
     window.localStorage.setItem(A_OLD, draftOf('옛 키 초안'))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -107,17 +107,14 @@ function parseDraft(raw: string | null): WikiDraft | null {
   }
 }
 
-/** 새 키(워크스페이스 포함) → 없으면 옛 사용자별 키에서 읽어 옮긴다(D52). from='old' 면 옛 키는 사람이 결정할 때까지 남는다 */
-function readDraft(key: string | null, legacyKey: string | null): { draft: WikiDraft | null; fromLegacy: boolean } {
-  if (!key) return { draft: null, fromLegacy: false }
+/** 새 키(워크스페이스 포함) → 없으면 옛 사용자별 키에서 읽어 옮긴다(D52). 옛 키는 사람이 결정할 때까지 남는다(settleLegacy) */
+function readDraft(key: string | null, legacyKey: string | null): WikiDraft | null {
+  if (!key) return null
   try {
-    const r = legacyKey
-      ? readDraftWithMigration(window.localStorage, key, legacyKey)
-      : { draft: window.localStorage.getItem(key), from: 'new' as const }
-    return { draft: parseDraft(r.draft), fromLegacy: r.from === 'old' }
+    return parseDraft(legacyKey ? readDraftWithMigration(window.localStorage, key, legacyKey).draft : window.localStorage.getItem(key))
   } catch {
     // 사파리 프라이빗 모드 등 localStorage 가 throw 하는 환경에서도 편집은 계속돼야 한다.
-    return { draft: null, fromLegacy: false }
+    return null
   }
 }
 
@@ -177,12 +174,12 @@ export function WikiDocumentEditor({
   const workspaceId = useScope()?.workspace?.id ?? null
   const storageKey = userId && workspaceId ? draftKey(userId, workspaceId, projectId, topic?.id ?? null) : null
   const legacyKey = userId && workspaceId ? legacyWikiDraftKey(userId, projectId, topic?.id ?? null) : null
-  // 옛 키에서 옮겨 온 초안이 아직 사람의 결정(복구·폐기·저장·새로 쓰기)을 기다리는가 — 결정하는 자리에서 옛 키를 지운다(복구 순서)
-  const legacyPending = useRef<string | null>(null)
+  // 옛 키는 사람의 결정(복구·폐기·저장·취소·새로 쓰기) 자리에서 지운다(복구 순서 — 결정 전에는 남긴다). 이번 열기가 옛 키에서
+  // 읽었는지와 무관하게 지운다 — 결정 없이 닫았다 다시 열면 새 키(옛 키의 사본)에서 읽는데, 그때의 결정이 옛 키를 남기면 다음 열기에
+  // 옛 키가 다시 옮겨져 버린 초안이 되살아난다(U2b-5 리뷰 수정 CC5). 없는 키를 지우는 것은 무해하다
   const settleLegacy = () => {
-    if (!legacyPending.current) return
-    try { settleLegacyDraft(window.localStorage, legacyPending.current) } catch { /* 저장소를 못 쓰는 환경 */ }
-    legacyPending.current = null
+    if (!legacyKey) return
+    try { settleLegacyDraft(window.localStorage, legacyKey) } catch { /* 저장소를 못 쓰는 환경 */ }
   }
   useEffect(() => { if (!workspaceId) console.error('[wiki] 범위 없음 — 초안 저장을 끈다') }, [workspaceId])
   // 손대지 않은 템플릿은 "쓴 것"이 아니다. 이걸 구분하지 않으면 새 문서를 열자마자
@@ -207,12 +204,11 @@ export function WikiDocumentEditor({
   // 보이지 않지만 draftSettled(ref)는 바로 보인다.
   useEffect(() => {
     if (!editing || !storageKey) { setDraft(null); return }
-    const { draft: found, fromLegacy } = readDraft(storageKey, legacyKey)
+    const found = readDraft(storageKey, legacyKey)
     const pending = found && found.bodyMd !== snapshot.bodyMd ? found : null
     draftSettled.current = pending === null
-    legacyPending.current = fromLegacy ? legacyKey : null
-    // 옮겨 온 초안이 서버 본문과 같으면 되살릴 것이 없다 — 옛 키를 바로 치운다
-    if (fromLegacy && pending === null) settleLegacy()
+    // 되살릴 초안이 없으면(서버 본문과 같음·없음) 결정 자리가 오지 않는다 — 옛 키를 바로 치운다(남기면 로그아웃까지 남는다)
+    if (pending === null) settleLegacy()
     setDraft(pending)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- legacyKey 는 storageKey 와 같은 입력에서 만든다
   }, [editing, storageKey, snapshot.bodyMd])
