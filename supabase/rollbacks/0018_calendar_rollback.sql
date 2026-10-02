@@ -1,7 +1,10 @@
 -- NNNN_calendar 롤백 — 정방향(supabase/migrations/*_calendar.sql)의 역순. 한 트랜잭션.
 -- 되돌리지 않는 데이터: 이관 ⑨⑩ 이 기록한 설정 값(calendar.timezone·calendar.week_start)과 그 이력(source='migration' — 이력은 WORM).
 --   값은 레지스트리 키라 옛 코드의 해석기가 unknownKeys 로 견딘다. 메인 스택(사용자 DB)에 적용한 뒤에는 §8 #2(주 시작 전환)를
---   덤프 복원 외에는 되돌릴 수 없다(스펙 E35·§8 #2). 재적용은 키가 있는 행을 건드리지 않는다(정방향 ⑨⑩ — 멱등).
+--   덤프 복원 외에는 되돌릴 수 없다(스펙 E35·§8 #2). 재적용은 키가 있는 행을 건드리지 않는다(정방향 ⑨⑩ — 멱등). 조건(L2): 롤백 기간에
+--   주 키 트리거가 없어 옛 코드가 남은 규칙의 전환일(E) 이후에도 월요일 키 주간보고를 만든다 — 그런 문서가 생기면 재적용이 ① 사전검사에서
+--   CALENDAR_PRECHECK(규칙 밖 키)로 멈춘다. 조치: 그 프로젝트의 project_settings."values" 에서 calendar.week_start 키를 지운다(이력은 남는다)
+--   → 재적용의 ①·⑩ 이 키 없는 프로젝트로 다시 판정하고 새 E 를 쓴다.
 -- 재생성하는 표 없음. 다시 쓴 함수는 이전 본문(바탕 = sp4-a2-done 시점)으로 되돌린다: 의존성 트리거 둘·사용현황 5종(0000_baseline 원문),
 --   settings_ref_check(0012 골격), import_wbs·replace_wbs(SP4 *_command_receipts.sql ③ 원문). modules.* 를 건드리지 않는다.
 -- holidays 에 kind = 'work' 행이 있으면 멈춘다 — 열을 지우면 그 행이 휴무로 오해된다(조치: 그 행을 지우고 다시).

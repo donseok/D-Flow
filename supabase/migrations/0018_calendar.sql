@@ -14,12 +14,34 @@
 
 -- ① 사전검사 --------------------------------------------------------------------------------------------------------
 -- 주 규칙 키가 아직 없는 프로젝트의 주차 문서는 모두 월요일 키여야 한다(옛 mondayIso 정규화 — 개정 §4.2.4 이관 3 의 raise).
--- 키가 이미 있는 프로젝트(SP5 A 의 픽스처 선기록 등)는 ⑪ 이 week_key_of 대조로 본다.
+-- 키가 이미 있는 프로젝트(SP5 A 의 픽스처 선기록·롤백 뒤 재적용 등)는 마지막 규칙 원소만 본다(L2 — 헬퍼가 아직 없다): 그 원소의 from
+-- (첫 원소면 처음부터) 이후 문서의 요일이 그 원소의 day 가 아니면 멈추고 조치를 적는다. 롤백 기간에 옛 코드가 전환일 뒤에 만든 월요일
+-- 문서가 이것이다(롤백 머리 주석). 과도기·앞 원소 구간의 정확 대조는 ⑪-b 가 week_key_of 로 본다.
 do $$
 declare
   v_n int;
   v_list text;
 begin
+  select pg_catalog.count(*)::int,
+         pg_catalog.left(pg_catalog.string_agg(pg_catalog.format('(프로젝트 %s, %s, isodow %s)', x.project_id, x.week_start, x.dow), ', '
+                                               order by x.project_id, x.week_start), 600)
+    into v_n, v_list
+    from (select r.project_id, r.week_start, extract(isodow from r.week_start)::int as dow,
+                 s."values" -> 'calendar.week_start' -> (pg_catalog.jsonb_array_length(s."values" -> 'calendar.week_start') - 1) as last_rule
+            from public.weekly_reports r
+            join public.project_settings s on s.project_id = r.project_id
+           where pg_catalog.jsonb_typeof(s."values" -> 'calendar.week_start') = 'array'
+             and pg_catalog.jsonb_array_length(s."values" -> 'calendar.week_start') > 0) x
+   where pg_catalog.jsonb_typeof(x.last_rule) = 'object'
+     and (x.last_rule ->> 'from' is null
+          or pg_catalog.to_char(x.week_start, 'YYYY-MM-DD') >= (x.last_rule ->> 'from'))   -- ISO 꼴 문자열 비교(손상 값에 캐스트하지 않는다)
+     and x.dow <> case x.last_rule ->> 'day' when 'sunday' then 7 when 'monday' then 1 else x.dow end;
+  if v_n > 0 then
+    raise exception using errcode = '23514',
+      message = pg_catalog.format('CALENDAR_PRECHECK: 주 규칙 키가 있는데 마지막 규칙 밖의 주 키 %s건 — %s. 롤백 기간에 만든 문서면 그 프로젝트 설정의 '
+                                  'calendar.week_start 키를 지운 뒤 다시 적용한다(이관이 다시 판정한다 — 롤백 머리 주석)', v_n, v_list);
+  end if;
+
   select pg_catalog.count(*)::int,
          pg_catalog.left(pg_catalog.string_agg(pg_catalog.format('(프로젝트 %s, %s, isodow %s)', r.project_id, r.week_start,
                                                                    extract(isodow from r.week_start)::int), ', '
@@ -44,7 +66,8 @@ alter table public.holidays add column kind text not null default 'off'
 -- ③ 헬퍼 ---------------------------------------------------------------------------------------------------------------
 -- week_rules_of: 설정 문서(values 객체)에서 calendar.week_start 를 꺼내 모양을 검사한다. 키 없음(SQL NULL) = 제품 기본값 일요일 한 원소,
 -- 손상(JSON null 포함) = 22023 CONFIG_INVALID:calendar.week_start(§2.4.1 — 기본값으로 풀지 않는다). TS parseWeekRules 와 같은 규칙:
--- 첫 원소 from null, 이후 from 은 'YYYY-MM-DD' 오름차순이고 그 날짜의 요일 = day, 이웃 원소의 day 는 다르다.
+-- 원소는 day·from 두 필드만, 첫 원소 from null, 이후 from 은 'YYYY-MM-DD' 오름차순이고 그 날짜의 요일 = day, 이웃 원소의 day 는 다르다,
+-- 셋째 원소부터는 그 전환의 Kp(직전 요일의 [from−10, from−4] 날짜)가 앞 전환의 from 이상(전환끼리 겹치지 않는다 — L3).
 create function public.week_rules_of(p_values jsonb) returns jsonb
 language plpgsql immutable set search_path to '' as $$
 declare
@@ -54,6 +77,7 @@ declare
   v_from date;
   v_prev_from date;
   v_prev_day text;
+  v_kp date;
 begin
   if v is null then
     return '[{"day": "sunday", "from": null}]'::jsonb;
@@ -68,6 +92,7 @@ begin
        or pg_catalog.jsonb_typeof(v_e -> 'day') is distinct from 'string'
        or (v_e ->> 'day') not in ('sunday', 'monday')
        or not (v_e ? 'from')
+       or exists (select 1 from pg_catalog.jsonb_object_keys(v_e) as k(k) where k.k not in ('day', 'from'))
        or (v_e ->> 'day') = v_prev_day then
       raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.week_start';
     end if;
@@ -89,6 +114,13 @@ begin
          or (v_prev_from is not null and v_from <= v_prev_from)
          or extract(isodow from v_from)::int <> (case v_e ->> 'day' when 'sunday' then 7 else 1 end) then
         raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.week_start';
+      end if;
+      if v_prev_from is not null then
+        -- Kp = 직전 요일로 시작하는 주 가운데 from−4 가 든 주의 첫날(TS transitionKey)
+        v_kp := (v_from - 4) - ((extract(isodow from v_from - 4)::int - (case v_prev_day when 'sunday' then 7 else 1 end) + 7) % 7);
+        if v_kp < v_prev_from then
+          raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.week_start';
+        end if;
       end if;
       v_prev_from := v_from;
     end if;
@@ -161,7 +193,8 @@ begin
        pg_catalog.jsonb_typeof(v_days) is distinct from 'array'
        or pg_catalog.jsonb_array_length(v_days) = 0
        or exists (select 1 from pg_catalog.jsonb_array_elements(v_days) as x(e)
-                   where pg_catalog.jsonb_typeof(x.e) is distinct from 'number' or (x.e #>> '{}') !~ '^[1-7]$')
+                   -- 숫자 값으로 판정한다(L4 — 1.0 도 1: TS 는 JSON 파싱 뒤 같은 정수다). case 로 순서를 고정한다(문자열에 numeric 캐스트를 하지 않게)
+                   where case when pg_catalog.jsonb_typeof(x.e) = 'number' then (x.e)::numeric not in (1, 2, 3, 4, 5, 6, 7) else true end)
        or (select pg_catalog.count(*) <> pg_catalog.count(distinct x.e) from pg_catalog.jsonb_array_elements(v_days) as x(e))) then
     raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.working_days';
   end if;
@@ -448,6 +481,12 @@ begin
     if pg_catalog.jsonb_typeof(p_new) is distinct from 'string' or (p_new #>> '{}') = '' then
       raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.timezone';
     end if;
+    -- '/' 없는 이름은 닫힌 허용 목록만(L1 — TS NO_SLASH_TIMEZONES 와 같다): PG 는 IST·NST·PST·CET·EST 같은 이름을 약어 표에서 먼저 읽어
+    -- ICU(TS)와 다른 오프셋이 된다 — 받으면 TS·SQL 이 다른 날짜를 낸다
+    if pg_catalog.strpos(p_new #>> '{}', '/') = 0
+       and (p_new #>> '{}') not in ('UTC', 'GMT', 'EST5EDT', 'CST6CDT', 'MST7MDT', 'PST8PDT') then
+      raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.timezone';
+    end if;
     begin
       perform pg_catalog.now() at time zone (p_new #>> '{}');
     exception when invalid_parameter_value then
@@ -613,16 +652,24 @@ $function$;
 --     **§8 #2 의 대안이 채택되면**(주간보고가 있는 프로젝트는 월요일 유지) 아래 proj_new 의 week_start 식 한 줄을 이것으로 바꾼다:
 --       || case when p.v0 ? 'calendar.week_start' or p.max_week is null then '{}'::jsonb
 --               else pg_catalog.jsonb_build_object('calendar.week_start', '[{"day": "monday", "from": null}]'::jsonb) end
+-- ⑩ 의 E 계산은 날짜 인자형 함수 하나다 — '오늘이 일요일'(E = K+6 ≤ T → K+13) 갈래를 단위 수준에서 밟게(A-2 리뷰 — tests/rls/
+-- week-start-transition.test.ts 가 이 블록을 그대로 다시 만들어 부른다). pg_temp — 이 적용 세션에만 있고 카탈로그에 남지 않는다(롤백·사후검사 대상 아님).
+-- ⑩ E 계산 블록 시작
+create function pg_temp.calendar_migrate_e(p_today date, p_max_week date) returns date
+language sql immutable as $$
+  select case when p_max_week >= y.e0 then p_max_week + 6 else y.e0 end
+    from (select case when x.k + 6 <= p_today then x.k + 13 else x.k + 6 end as e0
+            from (select p_today - (extract(isodow from p_today)::int - 1) as k) x) y
+$$;
+-- ⑩ E 계산 블록 끝
 with proj as (
   select s.project_id, s."values" as v0,
          coalesce(s."values" ->> 'calendar.timezone', 'Asia/Seoul') as tz,
          (select pg_catalog.max(r.week_start) from public.weekly_reports r where r.project_id = s.project_id) as max_week
     from public.project_settings s
-), proj_t as (
-  select p.*, t.today, t.today - (extract(isodow from t.today)::int - 1) as k
-    from proj p cross join lateral (select (pg_catalog.now() at time zone p.tz)::date as today) t
 ), proj_e as (
-  select p.*, case when p.k + 6 <= p.today then p.k + 13 else p.k + 6 end as e0 from proj_t p
+  select p.*, pg_temp.calendar_migrate_e((pg_catalog.now() at time zone p.tz)::date, p.max_week) as e
+    from proj p
 ), proj_new as (
   select p.project_id, p.v0,
          p.v0
@@ -631,8 +678,7 @@ with proj as (
          || case when p.v0 ? 'calendar.week_start' or p.max_week is null then '{}'::jsonb
                  else pg_catalog.jsonb_build_object('calendar.week_start', pg_catalog.jsonb_build_array(
                         pg_catalog.jsonb_build_object('day', 'monday', 'from', null),
-                        pg_catalog.jsonb_build_object('day', 'sunday', 'from',
-                          pg_catalog.to_char(case when p.max_week >= p.e0 then p.max_week + 6 else p.e0 end, 'YYYY-MM-DD')))) end
+                        pg_catalog.jsonb_build_object('day', 'sunday', 'from', pg_catalog.to_char(p.e, 'YYYY-MM-DD')))) end
            as v1
     from proj_e p
 ), upd as (
@@ -650,6 +696,26 @@ select c.project_id, c.new_rev, e.key, n.v0 -> e.key, e.value, 'migration', c.co
   join proj_new n on n.project_id = c.project_id
  cross join lateral pg_catalog.jsonb_each(n.v1) as e(key, value)
  where (n.v0 -> e.key) is distinct from e.value;
+
+-- ⑩ 알림(L6 — A-2 리뷰): 아주 먼 미래 주차 문서(오타 등) 하나가 E 를 그만큼 미루면 사용자 결정 #2(다음 주부터 일요일)가 조용히 무효가 된다.
+-- 이 적용이 쓴 규칙(이력의 changed_at = 이 트랜잭션의 now())의 E 가 그 프로젝트 오늘 + 8주를 넘으면 프로젝트·E·오늘을 알린다. 동작은 바꾸지 않는다.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select h.project_id, (h.new_value -> 1 ->> 'from')::date as e,
+           (pg_catalog.now() at time zone (s."values" ->> 'calendar.timezone'))::date as t
+      from public.project_settings_history h
+      join public.project_settings s on s.project_id = h.project_id
+     where h.source = 'migration' and h.key = 'calendar.week_start' and h.changed_at = pg_catalog.now()
+     order by h.project_id
+  loop
+    if r.e > r.t + 56 then
+      raise notice 'CALENDAR_MIGRATE: 일요일 전환이 8주 넘게 미뤄진 프로젝트 % — E %, 오늘 % (먼 미래 주차 문서를 확인한다)', r.project_id, r.e, r.t;
+    end if;
+  end loop;
+end $$;
 
 with ws_new as (
   select s.workspace_id, s."values" as v0,
