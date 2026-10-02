@@ -15,7 +15,8 @@ const CALL = new RegExp(`\\b(?:${REMOVED.join('|')})\\s*\\(`)
 /** 전 워크스페이스 가시 범위({ all: true })를 만들 수 있는 유일한 파일 — 플랫폼 관리자 판정(teamViewOfScope) */
 const ALL_VIEW_OWNER = 'src/lib/domain/authz.ts'
 const ALL_VIEW = /\ball\s*:\s*true\b/
-const codeFiles = (dir: string) => walk(join(CWD, dir)).filter((f) => /\.(ts|tsx|mjs)$/.test(f))
+/** walk 의 기본 확장자(.ts/.tsx)는 scripts 의 .mjs 를 미리 걸러 버린다 — 확장자를 walk 에 넘긴다(B-1 리뷰 F1) */
+const codeFiles = (dir: string) => walk(join(CWD, dir), undefined, /\.(ts|tsx|mjs)$/)
 const hits = (files: string[], re: RegExp) => files.flatMap((f) => codeLines(readFileSync(f, 'utf8'), f)
   .flatMap((l, i) => (re.test(l) ? [`${relative(CWD, f)}:${i + 1}: ${l.trim()}`] : [])))
 
@@ -30,6 +31,8 @@ describe('팀 원천 — 요청 범위 하나(SP4 B)', () => {
     const code = readFileSync(join(CWD, 'src/lib/teams/source.ts'), 'utf8')
     const names = [...code.matchAll(/^export\s+(?:async\s+)?(?:function|class|const)\s+(\w+)/gm)].map((m) => m[1]).sort()
     expect(names).toEqual([...SOURCE_EXPORTS].sort())
+    // 위 정규식이 세지 못하는 꼴(export { a } · export { a as b } from)으로 접근자를 늘리지 않는다(B-1 리뷰 P3)
+    expect(code.match(/^export\s*\{.*/gm) ?? []).toEqual([])
   })
   it('지운 접근자·캐시 갱신 이름을 src 가 부르지 않는다(주석 제외)', () => {
     expect(hits(codeFiles('src'), CALL)).toEqual([])
@@ -46,5 +49,7 @@ describe('팀 원천 — 요청 범위 하나(SP4 B)', () => {
     expect(CALL.test('teamsForWorkspaceSync(w)')).toBe(false)
     expect(ALL_VIEW.test('view = isSuperuser ? { all: true } : x')).toBe(true)
     expect(ALL_VIEW.test('{ overall: trueish }')).toBe(false)
+    // scripts 는 거의 .mjs 다 — 목록이 그것을 실제로 담아야 scripts 검사가 선다(B-1 리뷰 F1)
+    expect(codeFiles('scripts').some((f) => f.endsWith('.mjs'))).toBe(true)
   })
 })
