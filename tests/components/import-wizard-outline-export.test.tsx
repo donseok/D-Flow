@@ -74,7 +74,7 @@ describe('ImportWizard 완료 화면 — 아웃라인 양식이면 펼침 내보
   })
   const mount = () => act(async () => root.render(
     <LocaleProvider initialLocale="ko"><ToastProvider>
-      <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} />
+      <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
     </ToastProvider></LocaleProvider>,
   ))
 

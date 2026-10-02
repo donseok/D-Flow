@@ -101,7 +101,7 @@ describe('ImportWizard — 명령 id·전환 확인·사전 백업(SP4 §4.4·D5
     root = createRoot(container)
     await act(async () => root.render(
       <LocaleProvider initialLocale="ko"><ToastProvider>
-        <ImportWizard projectId={P} currentItemCount={3} />
+        <ImportWizard projectId={P} currentItemCount={3} timeZone="UTC" />
       </ToastProvider></LocaleProvider>,
     ))
   })

@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { downloadWbsExport, exportFailureKey } from '@/components/import/downloadWbsExport'
 import { ImportRunSummary } from '@/components/import/ImportRunSummary'
 import { getWbsBackup } from '@/app/actions/importBackup'
+import { backupFileName } from '@/components/import/backupFileName'
 import { newUuid } from '@/lib/domain/uuid'
 import type { DictKey } from '@/lib/i18n/dict'
 import type { ExcelProfile } from '@/lib/excel/profile'
@@ -66,12 +67,12 @@ function previewRoleLabel(role: PreviewColumnRole, t: (k: DictKey) => string): s
 
 /** 백업을 파일로 내려받는다(§6.6-2 — 트리만, change_logs 는 대상 아님). 교체 직전 백업(성공 응답의 backup)과 실행 전 백업
  *  (getWbsBackup — SP4 D50)이 같은 꼴이다. label 은 이름 끝에 붙는다(실행 전 백업 = '실행 전'). */
-function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedAt: string }, label?: string) {
+function downloadBackup(projectId: string, backup: { rows: unknown[]; generatedAt: string }, timeZone: string | null, label?: string) {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `wbs-backup-${projectId}-${new Date().toISOString().slice(0, 10)}${label ? `-${label}` : ''}.json`
+  a.download = backupFileName(projectId, backup.generatedAt, timeZone, label)   // 날짜 = 프로젝트 달력 tz(못 읽으면 날짜 없음)
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -134,9 +135,11 @@ function radioRowClass(active: boolean): string {
  * 실행은 실행 의도의 명령 id 를 싣는다(SP4 §4.4) — 같은 의도의 재시도는 같은 id 라 서버가 이미 적용했으면 duplicate 로 받는다.
  */
 export function ImportWizard({
-  projectId, currentItemCount,
+  projectId, currentItemCount, timeZone,
 }: {
   projectId: string
+  /** 그 프로젝트 달력의 tz(백업 파일 이름의 날짜 — SP5 P8: 서버가 내린다, 기본값 없음). null = 달력을 못 읽음(서버 로그) — 날짜 없는 이름 */
+  timeZone: string | null
   /** replace 경고에 실제 삭제 건수를 싣기 위한 값(리뷰 Important #1) — 서버 조회 실패 시 null 로
    *  degrade 되어 온다(page.tsx 가 표시=로깅). null 이면 건수 없는 일반 경고 문구로 대체한다. */
   currentItemCount: number | null
@@ -280,7 +283,7 @@ export function ImportWizard({
         toast({ title: t('importWizard.preBackupFailed'), description: r.error, variant: 'error' })
         return
       }
-      downloadBackup(projectId, r.backup, t('importWizard.preBackupFileLabel'))
+      downloadBackup(projectId, r.backup, timeZone, t('importWizard.preBackupFileLabel'))
       dispatch({ type: 'preBackupTaken', generatedAt: r.backup.generatedAt })
     } catch {
       toast({ title: t('importWizard.preBackupFailed'), description: t('importWizard.networkError'), variant: 'error' })
@@ -335,7 +338,7 @@ export function ImportWizard({
       }
       if (res.ok && data.ok) {
         const result = data as unknown as ExecuteResult
-        if (result.backup) downloadBackup(projectId, result.backup)
+        if (result.backup) downloadBackup(projectId, result.backup, timeZone)
         dispatch({ type: 'executeSuccess', result })
         toast({ title: t('importWizard.executeSuccessToast'), variant: 'success' })
         router.refresh()

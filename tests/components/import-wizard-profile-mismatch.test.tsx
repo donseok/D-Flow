@@ -82,7 +82,7 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     root = createRoot(container)
     await act(async () => root.render(
       <LocaleProvider initialLocale="ko"><ToastProvider>
-        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} />
+        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
       </ToastProvider></LocaleProvider>,
     ))
   })
@@ -163,7 +163,7 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     root = createRoot(container)
     await act(async () => root.render(
       <LocaleProvider initialLocale="en"><ToastProvider>
-        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} />
+        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
       </ToastProvider></LocaleProvider>,
     ))
     executeResponse = () => new Response(
