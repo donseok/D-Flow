@@ -36,7 +36,7 @@ const inspectBody = (detected: ExcelProfile, saved: ExcelProfile | null) => ({
   savedProfile: saved,
   profileMismatch: null,
 })
-const done = (profileSaved: boolean) => new Response(JSON.stringify({ ok: true, count: 2, mode: 'append', reindexed: 0, profileSaved }), { status: 200 })
+const done = (profileSaved: boolean) => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved }), { status: 200 })
 
 let inspect: ReturnType<typeof inspectBody>
 let executeResponse: () => Response
