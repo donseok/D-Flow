@@ -89,7 +89,13 @@ export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null):
   if (r === undefined) return 'missing'
   return r === 'admin' ? 'ok' : 'denied'
 }
-/** 실제 소속(workspace_members 행이 있다) — 플랫폼 관리자 승계 없음. 본인 기록(개인 설정·방문·현재 워크스페이스 쿠키)을 쓸지 정할 때(U2b-3 보안 리뷰 AA6) */
+/**
+ * 실제 소속(workspace_members 행이 있다) — 플랫폼 관리자 승계 없음. 본인 기록(개인 설정·방문·현재 워크스페이스 쿠키)을 쓸지 정할 때(U2b-3 보안 리뷰 AA6).
+ * 범위(UI-2b 최종 보안 리뷰 P3 → GG7): 이 규칙이 닫는 것은 **워크스페이스 단위 본인 기록**뿐이다 — 현재 워크스페이스 쿠키·최근 방문·워크스페이스
+ * 개인 설정(user_preferences)·알림 읽음. 프로젝트 단위 화면 상태(WBS 접힘 user_wbs_state·공지 읽음 워터마크 announcement_seen)와 사용 기록
+ * (usage_events)은 보기 축을 따른다 — 플랫폼 관리자가 비소속 워크스페이스의 프로젝트를 열어 접거나 공지를 보면 그 프로젝트 키의 본인 행이 생긴다
+ * (본인 행이라 누설은 없다). '비소속 보기는 아무것도 쓰지 않는다'가 아니다. 맞추려면 두 쓰기에 hasWorkspaceMembership(actor, 프로젝트의 워크스페이스).
+ */
 export function hasWorkspaceMembership(actor: Actor | null, workspaceId: string): boolean {
   return !!actor && actor.workspaceRoles.has(workspaceId)
 }
