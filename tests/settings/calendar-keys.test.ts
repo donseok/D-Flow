@@ -88,8 +88,8 @@ describe('카탈로그·사전(D44 — 들어가는 체크포인트에서 planne
     expect(sp5.length).toBe(10)
     for (const p of sp5) expect(p.sp, p.key).toMatch(/^SP5 B[1-4]$/)
   })
-  it.each(KEYS)('%s — 메타는 SP5 A·stored(과제 29 가 verified)', (key) => {
-    expect(CATALOG_META[key]).toMatchObject({ status: 'stored', sp: 'SP5 A' })
+  it.each(KEYS)('%s — 메타는 SP5 A·verified(과제 29 — 정의·편집·소비처·테스트 네 연결)', (key) => {
+    expect(CATALOG_META[key]).toMatchObject({ status: 'verified', sp: 'SP5 A' })
   })
   it('라벨·설명 사전이 ko·en 둘 다 있다', () => {
     for (const key of KEYS) for (const s of ['label', 'desc']) {
