@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { srcFiles } from './lib/cssTokens'
 
-const FILL = /(?<![\w-])(?:[a-z-]+:)*bg-(?:action|brand|success|done|warning|danger|delayed|progress|today|critical|phasebar|pending|accent-secondary|accent-warning|team-[1-5]|category-[1-8])(?![\w-])/
+const FILL = /(?<![\w-])(?:[a-z-]+:)*bg-(?:action|brand|success|done|warning|danger|delayed|progress|today|critical|phasebar|pending|accent-secondary|accent-warning|category-[1-8])(?![\w-])/
 const WHITE = /(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])/
 const SLOT_CALL = /\b(?:slotOf|teamSlotFor|teamSlot)\(/
 /** 파일 → [허용 줄 수, 사유] — 비었다(주인 C 의 UI-2b 이동 커밋이 BrandMark 의 마지막 한 줄을 *-fg 전경으로 바꿨다).

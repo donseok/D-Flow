@@ -1,5 +1,5 @@
 // 원색·임의 층 금지(SP3b 스펙 §8.1·E26, 개정 §5.5.7) — className 에 쓰는 유틸 모양만 본다(style 객체의 '#fff'·color-mix 는 모양이 달라 걸리지 않는다 —
-// 계산된 색은 style 로 넘긴다, 레인 A 알림 1). 상수(TEAM_SLOTS·MS_CHIP·STATUS_META·도메인 색 표)에 든 클래스도 잡으려고 모든 줄을 본다.
+// 계산된 색은 style 로 넘긴다, 레인 A 알림 1). 상수(CATEGORY_SLOTS·MS_CHIP·STATUS_META·도메인 색 표)에 든 클래스도 잡으려고 모든 줄을 본다.
 // 허용 목록 = UI-1 이 마지막으로 rebase 한 main 의 위반 파일(E26). 파일마다 종류별 최대 건수 — 목록은 줄기만 한다(건수가 늘면 실패).
 import { describe, expect, it } from 'vitest'
 import { srcFiles } from './lib/cssTokens'

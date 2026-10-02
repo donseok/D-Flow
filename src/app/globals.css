@@ -149,7 +149,7 @@
   --color-phasebar-fill: #97A3B6;
 }
 
-/* 옛 이름 → 새 의미 토큰(개정 §5.5.5 이행표, D13 히어로, D15 팀). 유틸은 대상 변수를 직접 참조한다 */
+/* 옛 이름 → 새 의미 토큰(개정 §5.5.5 이행표, D13 히어로 — D15 팀 별칭은 SP4 B 가 지웠다). 유틸은 대상 변수를 직접 참조한다 */
 @theme inline {
   --color-surface-2: var(--color-surface-subtle);
   --color-line: var(--color-border);
