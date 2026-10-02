@@ -3,7 +3,8 @@ import { getDisplayName } from '@/lib/auth'
 import { readCurrentWorkspace } from '@/lib/workspace/current'
 import { listMyWorkspaces } from '@/lib/workspace/list'
 import { loadShell, minimalShell } from '@/lib/shell/loadShell'
-import { activeTeamsForWorkspacesSync } from '@/lib/teams/master'
+import { workspaceTeams } from '@/lib/teams/source'
+import { activeTeamsForLayout } from '@/lib/teams/layoutTeams'
 import { AppShell } from '@/components/app/AppShell'
 import { ScopeProvider } from '@/components/app/ScopeContext'
 import { ShellScope } from '@/components/app/ShellScope'
@@ -32,12 +33,11 @@ export default async function GlobalLayout({ children }: { children: React.React
       </ScopeProvider>
     )
   }
-  const shell = await loadShell({ scope: 'global', ws: cur.ws, actor, degraded, viewingAsPlatformAdmin: false, workspaces: mine.rows, userName })
-  let teams: Team[] = []
-  if (actor) {
-    try { teams = activeTeamsForWorkspacesSync([cur.ws.id]) }
-    catch (e) { console.error('[global layout] 팀 조회 실패 — 팀 없이 그린다:', e instanceof Error ? e.message : e) }
-  }
+  const wsId = cur.ws.id
+  const [shell, teams] = await Promise.all([
+    loadShell({ scope: 'global', ws: cur.ws, actor, degraded, viewingAsPlatformAdmin: false, workspaces: mine.rows, userName }),
+    actor ? activeTeamsForLayout(() => workspaceTeams(wsId), 'global layout') : Promise.resolve<Team[]>([]),
+  ])
   return (
     <ScopeProvider value={{ workspace: cur.ws, projectId: null }}>
       <TeamsProvider teams={teams}>

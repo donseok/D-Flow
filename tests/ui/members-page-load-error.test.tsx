@@ -17,7 +17,7 @@ vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster, upsertRos
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme' }]) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/settings/ProjectInviteManager', () => ({ ProjectInviteManager: () => null }))

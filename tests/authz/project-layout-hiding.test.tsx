@@ -9,7 +9,7 @@ import { makeActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor
 const mocks = vi.hoisted(() => ({
   getActorViewState: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
-  teamsForProjectSync: vi.fn(() => []),
+  projectTeams: vi.fn(async () => []),
   teams: vi.fn(),
   workspaceRefById: vi.fn(),
   listMyWorkspaces: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
 // generateMetadata 는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 notFound 만 바꾼다
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), notFound: mocks.notFound }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: mocks.teamsForProjectSync }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams, workspaceTeams: vi.fn(async () => []) }))
 vi.mock('@/lib/workspace/resolve', () => ({ workspaceRefById: mocks.workspaceRefById }))
 vi.mock('@/lib/workspace/list', () => ({ listMyWorkspaces: mocks.listMyWorkspaces }))
 vi.mock('@/lib/shell/loadShell', () => ({ loadShell: mocks.loadShell, minimalShell: mocks.minimalShell }))
@@ -82,13 +82,13 @@ describe('ProjectLayout — 존재 은닉(notFound)', () => {
   it('degraded 면 가시성을 모르므로 service_role 팀 캐시를 읽지 않는다(SP2 16b)', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
     await render('p-elsewhere')
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.projectTeams).not.toHaveBeenCalled()
     for (const c of mocks.teams.mock.calls) expect(c[0]).toEqual([])
   })
   it('볼 수 있는 프로젝트면 그 프로젝트의 활성 팀을 내린다', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: makeMemberActor('p1'), degraded: false })
     await render('p1')
-    expect(mocks.teamsForProjectSync).toHaveBeenCalledWith('p1')
+    expect(mocks.projectTeams).toHaveBeenCalledWith('p1')
   })
   it('비로그인(actor null, 정상 조회)은 404 — 판정 대상이 없다', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: false })
@@ -108,7 +108,7 @@ describe('ProjectLayout — 명단 밖 비공개 프로젝트(GG1)', () => {
   it('같은 워크스페이스의 명단 밖 멤버는 404 — 셸 데이터를 조회하지 않는다', async () => {
     as(makeActor(inWs))
     await expect(render(PRIV)).rejects.toThrow('NEXT_NOT_FOUND')
-    expect(mocks.workspaceRefById).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled(); expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.workspaceRefById).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled(); expect(mocks.projectTeams).not.toHaveBeenCalled()
   })
   // HH5(GG 재리뷰 P3-5) — '명단 밖'의 실제 경계는 access_role 이다: 명단 행(memberIds)이 있어도 access_role 이 null 이면 buildActor 가
   // projectRoles 에 싣지 않으므로 canSeeProject 거짓 → 404. 정본(회의록·위키·AI·포털 목록)과 같은 축이다

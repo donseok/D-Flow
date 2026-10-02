@@ -15,8 +15,8 @@ vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: h.getWork
 vi.mock('@/lib/modules/effective', () => ({ effectiveModules: h.effectiveModules }))
 vi.mock('@/lib/data/portal', () => ({ listWorkspaceProjects: h.listWorkspaceProjects }))
 vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspacePrefs }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamsForWorkspacesSync: () => [] }))
-vi.mock('next/navigation', () => ({ notFound: h.notFound }))
+vi.mock('@/lib/teams/source', () => ({ workspaceTeams: async () => [], projectTeams: async () => [] }))
+vi.mock('next/navigation', () => ({ notFound: h.notFound, unstable_rethrow: () => {} }))
 vi.mock('@/components/app/AppShell', () => ({ AppShell: (p: { children: React.ReactNode }) => { h.shellProps(p); return <div data-shell>{p.children}</div> } }))
 
 import WorkspaceLayout from '@/app/(app)/w/[slug]/layout'

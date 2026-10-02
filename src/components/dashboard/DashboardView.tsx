@@ -13,7 +13,7 @@ import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
-import { teamsForProjectSync } from '@/lib/teams/master'
+import { projectTeams } from '@/lib/teams/source'
 import { ExecSummary } from './ExecSummary'
 import { AnnouncementStrip } from './AnnouncementStrip'
 import { TrendChart } from './TrendChart'
@@ -100,8 +100,9 @@ export async function DashboardView({
     return <EmptyState icon={BarChart3} title={tr('dash.emptyTitle')} description={tr('dash.emptyDesc')} />
   }
 
-  // 팀 캐시(service_role)는 WBS 가 있을 때만 읽는다 — 팀별 진척·하위 활동 정렬 키 외에는 쓰지 않는다.
-  const teams = hasWbs ? teamsForProjectSync(projectId) : []
+  // 팀(요청 범위 원천 — 페이지의 설정 조회와 같은 요청 캐시)은 WBS 가 있을 때만 읽는다 — 팀별 진척·하위 활동 정렬 키 외에는 쓰지 않는다.
+  // 실패는 던진다(대시보드 오류 경계) — 정렬 키 없이 그리면 하위 활동 순서가 조용히 바뀐다
+  const teams = hasWbs ? await projectTeams(projectId) : []
   const wbs = hasWbs ? (() => {
     const { actual, planned } = overallProgress(items)
     const trend = buildTrend({

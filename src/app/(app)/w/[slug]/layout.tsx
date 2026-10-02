@@ -9,7 +9,8 @@ import { listMyWorkspaces } from '@/lib/workspace/list'
 import { loadShell } from '@/lib/shell/loadShell'
 import { displayBranding, workspaceIconHref } from '@/lib/settings/displayBranding'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
-import { activeTeamsForWorkspacesSync } from '@/lib/teams/master'
+import { workspaceTeams } from '@/lib/teams/source'
+import { activeTeamsForLayout } from '@/lib/teams/layoutTeams'
 import { AppShell } from '@/components/app/AppShell'
 import { ScopeProvider } from '@/components/app/ScopeContext'
 import { ShellScope } from '@/components/app/ShellScope'
@@ -50,12 +51,10 @@ export default async function WorkspaceLayout({ children, params }: { children: 
   // 칩·비기록은 권한 조회와 무관한 실제 소속 목록으로 정한다(AA6) — 비소속인데 여기까지 왔으면 플랫폼 관리자 보기다(열화로 actor 가 없어도)
   const member = mine.rows.some((r) => r.id === ws.id)
   const viewingAsPlatformAdmin = !member
-  const shell = await loadShell({ scope: 'workspace', ws, actor, degraded, viewingAsPlatformAdmin, workspaces: mine.rows, userName })
-  let teams: Team[] = []
-  if (actor) {
-    try { teams = activeTeamsForWorkspacesSync([ws.id]) }
-    catch (e) { console.error('[workspace layout] 팀 조회 실패 — 팀 없이 그린다:', e instanceof Error ? e.message : e) }
-  }
+  const [shell, teams] = await Promise.all([
+    loadShell({ scope: 'workspace', ws, actor, degraded, viewingAsPlatformAdmin, workspaces: mine.rows, userName }),
+    actor ? activeTeamsForLayout(() => workspaceTeams(ws.id), 'workspace layout') : Promise.resolve<Team[]>([]),
+  ])
   return (
     <ScopeProvider value={{ workspace: ws, projectId: null }}>
       <TeamsProvider teams={teams}>
