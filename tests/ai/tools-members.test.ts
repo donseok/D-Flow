@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { calWithOff } from '../helpers/calendarFixture'
 import { createGetMemberWorkloadTool, createListMembersTool } from '@/lib/ai/tools/members'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import type {
@@ -61,6 +62,7 @@ const wbsSnapshot: WbsProjectSnapshot = {
   projectId: 'p1',
   baseDate: '2026-07-22',
   holidays: [],
+  calendar: calWithOff([]),
   dependencies: [],
   items: [
     {

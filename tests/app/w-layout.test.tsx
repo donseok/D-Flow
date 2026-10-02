@@ -6,6 +6,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClie
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: h.getWorkspaceConfig }))
 vi.mock('next/navigation', () => ({ notFound: h.notFound }))
 
+import { CAL_FIELDS_UTC_SUN } from '../helpers/calendarFixture'
 import WorkspaceLayout, { generateMetadata } from '@/app/(app)/w/[slug]/layout'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
@@ -15,7 +16,7 @@ import { makeActor, makeSuperuser } from '../fixtures/actor'
 const WID = '00000000-0000-4000-8000-00000000bb01'
 const access = (slug = 'alpha') => workspacePageAccess(slug)
 const config = (values: Record<string, unknown>) => ({
-  workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [],
+  workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], ...CAL_FIELDS_UTC_SUN,
   keys: resolveKeys({ scope: 'workspace', id: WID, values, defs: WORKSPACE_SETTINGS, env: { NODE_ENV: 'test' } }).keys,
 })
 

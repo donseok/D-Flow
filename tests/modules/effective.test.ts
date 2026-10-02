@@ -1,4 +1,5 @@
 // effectiveModules(개정 §2.7.1·§2.11 ③) — 세 구성으로 describe.each. 해석기는 mock, env 플래그는 켠 상태에서 시작한다.
+import { CAL_FIELDS_UTC_SUN } from '../helpers/calendarFixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ getWorkspaceConfig: vi.fn(), getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: mocks.getWorkspaceConfig }))
@@ -13,11 +14,11 @@ import { ConfigUnavailableError } from '@/lib/settings/errors'
 
 const WID = 'ws-a', PID = 'p-a'
 const wsCfg = (allowed: ModuleId[], ai = true) => ({
-  workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [],
+  workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], ...CAL_FIELDS_UTC_SUN,
   keys: { 'modules.allowed': { status: 'set', value: allowed }, 'ai.enabled': { status: 'set', value: ai } },
 })
 const pCfg = (enabled: ModuleId[]) => ({
-  projectId: PID, workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], areas: { weekly_section: [], issue_area: [] }, teams: [],
+  projectId: PID, workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], holidays: [], ...CAL_FIELDS_UTC_SUN, areas: { weekly_section: [], issue_area: [] }, teams: [],
   keys: { 'modules.enabled': { status: 'set', value: enabled } },
 })
 const saved = { ...process.env }

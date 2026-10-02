@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource) — 이 파일은 팀 축을 보지 않으므로 빈 팀 목록을 준다.
+import { calWithOff } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 const toolTeams = fixedToolTeams([])
 
@@ -36,6 +37,7 @@ const wbsSnapshot: WbsProjectSnapshot = {
   projectId: 'p1',
   baseDate: '2026-07-20',
   holidays: [],
+  calendar: calWithOff([]),
   dependencies: [],
   items: [
     {
@@ -204,7 +206,7 @@ describe('get_project_dashboard', () => {
 
   it('flags an overdue milestone with a negative D-day and links its WBS item', async () => {
     const snapshot: WbsProjectSnapshot = {
-      projectId: 'p1', baseDate: null, holidays: [], dependencies: [],
+      projectId: 'p1', baseDate: null, holidays: [], calendar: calWithOff([]), dependencies: [],
       items: [{
         id: 'ms-late', projectId: 'p1', parentId: null, code: '1', sortOrder: 1,
         name: '착수보고', biz: null, deliverable: '착수보고서', plannedStart: '2026-07-10', plannedEnd: '2026-07-10',
@@ -231,7 +233,7 @@ describe('get_project_dashboard', () => {
 
   it('degrades honestly when the WBS has no planned dates', async () => {
     const snapshot: WbsProjectSnapshot = {
-      projectId: 'p1', baseDate: null, holidays: [], dependencies: [],
+      projectId: 'p1', baseDate: null, holidays: [], calendar: calWithOff([]), dependencies: [],
       items: [{
         id: 'task-a', projectId: 'p1', parentId: null, code: '1', sortOrder: 1,
         name: '과업 정의', biz: null, deliverable: null, plannedStart: null, plannedEnd: null,

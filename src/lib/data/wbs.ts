@@ -10,6 +10,9 @@ import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { seoulToday } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { fetchAllByKeyset } from '@/lib/data/paging'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { requireCalendar } from '@/lib/calendar/load'
+import type { WorkCalendar } from '@/lib/domain/calendar'
 
 // 같은 요청 내 layout+page 중복 호출을 1회로 dedupe(React cache).
 export const getComputedWbs = cache(async (
@@ -22,7 +25,10 @@ export const getComputedWbs = cache(async (
    * Map 이 아니라 평범한 객체다 — 이 값은 RSC 경계를 넘어 클라이언트 컴포넌트로 간다.
    */
   unresolvedDepends: Record<string, string[]>
+  /** 휴무(kind='off') 날짜 오름차순 — 내보내기(off 만, D7)·옛 소비처용. 근무 예외는 calendar.workDates */
   holidays: string[]
+  /** 이 프로젝트의 달력(근무 요일·날짜 예외·주 규칙·tz) — 과제 16 이 계산에 쓴다 */
+  calendar: WorkCalendar
   today: string
 }> => {
   const sb = await createServerClient()
@@ -31,8 +37,8 @@ export const getComputedWbs = cache(async (
   // 항목의 담당만 읽는다(wbs_items!inner) — 전 프로젝트의 담당을 읽으면 1,000행에 먼저 닿는다. 쪽 키는 wbs_items id, item_owners 는 PK
   // (wbs_item_id, team_id) — sort_order 로 쪽을 나누면 쪽 사이의 형제 이동 한 번이 중복 1 + 누락 1 을 만들고 행 수가 같아 통과한다(K1).
   // 형제 정렬은 computeTree 가 sortOrder 로 한다(동률은 입력 순 = id 순). 잘림·count 불일치·조회 오류는 throw — 아래 세 표와 같은 취급.
-  // holidays·task_dependencies 도 끝까지(SP4 A2 — 키는 PK 의 date 와 id), 팀 정렬은 요청 범위 원천(projectTeams — 같은 요청의 설정 조회와 캐시를 나눈다).
-  const [items, ownerRows, hol, { data: proj, error: projErr }, dependencyRows, teams] = await Promise.all([
+  // task_dependencies 도 끝까지(SP4 A2 — 키는 PK 의 id), 휴일은 달력 로더(getProjectConfig — 같은 요청의 react cache)가 끝까지, 팀 정렬은 요청 범위 원천(projectTeams — 같은 요청의 설정 조회와 캐시를 나눈다).
+  const [items, ownerRows, cfg, { data: proj, error: projErr }, dependencyRows, teams] = await Promise.all([
     fetchAllByKeyset<Record<string, unknown>>('[getComputedWbs] wbs_items', (r) => String(r.id), (after, limit) => {
       const q = sb.from('wbs_items').select('*', { count: 'exact' }).eq('project_id', projectId)
       return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
@@ -44,10 +50,7 @@ export const getComputedWbs = cache(async (
       return (after ? q.or(`wbs_item_id.gt.${after.wbs_item_id},and(wbs_item_id.eq.${after.wbs_item_id},team_id.gt.${after.team_id})`) : q)
         .order('wbs_item_id').order('team_id').limit(limit)
     }),
-    fetchAllByKeyset<{ date: string }>('[getComputedWbs] holidays', (r) => r.date, (after, limit) => {
-      const q = sb.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
-      return (after ? q.gt('date', after.date) : q).order('date').limit(limit)
-    }),
+    getProjectConfig(projectId),
     sb.from('projects').select('base_date').eq('id', projectId).maybeSingle(),
     fetchAllByKeyset<Record<string, unknown>>('[getComputedWbs] task_dependencies', (r) => String(r.id), (after, limit) => {
       const q = sb.from('task_dependencies')
@@ -62,9 +65,8 @@ export const getComputedWbs = cache(async (
   // 핵심 조회 실패를 '없음'으로 폴백하면 화면이 비는 게 아니라 '조용히 틀린 화면/숫자'가 된다.
   // - wbs_items: 빈 트리 → 대시보드가 'WBS 데이터 없음' EmptyState를 띄워 운영 데이터 위 재임포트를 유도한다(최악).
   // - item_owners: 담당 배지·행 분리가 사라져 팀 편집 권한이 회수된 것처럼 보인다.
-  //   (wbs_items·item_owners·holidays·task_dependencies 는 위의 fetchAllByKeyset 이 잘림·오류에서 throw 한다)
-  // - holidays: 빈 배열이 '공휴일 없음'(정상)과 구분되지 않아, 영업일 기반 계획%가 틀어져도 아무도 감지할 수 없다.
-  //   (빈 결과는 정상 0건이다 — 오류·잘림만 throw.)
+  //   (wbs_items·item_owners·task_dependencies 는 위의 fetchAllByKeyset 이 잘림·오류에서 throw 한다)
+  // - holidays: 달력 로더(getProjectConfig)가 끝까지 읽고 실패면 ConfigUnavailableError 를 던진다 — '공휴일 없음'으로 위장하지 않는다.
   // - projects.base_date: 기준일이 조용히 오늘로 바뀌어 전 지표(계획%·지연 판정·PPT·봇 답변)가 어긋난다.
   // - task_dependencies: 연결선·지연 전파·크리티컬 패스가 모두 사라져 "의존성 없음"으로 오인된다.
   // 계산 결과가 알림/리포트/임베딩 쓰기로도 흘러가므로, 에러 바운더리('문제가 발생했습니다')가 조용한 오염보다 안전하다.
@@ -112,7 +114,10 @@ export const getComputedWbs = cache(async (
     agentDelegated: Array.isArray(r.tags) && (r.tags as unknown[]).includes(AGENT_TAG),
   }))
 
-  const holidays = new Set(hol.map((h) => h.date))
+  // 달력 키가 손상이면 ConfigKeyError — 에러 바운더리가 그 화면을 멈춘다(기본 달력으로 계획%를 내지 않는다, [RF4])
+  const calendar = requireCalendar(cfg)
+  // computeTree 는 과제 16 까지 휴무 집합을 받는다 — work 예외는 그때 계산에 든다(그 사이 work 행은 휴무로 보이지 않을 뿐 근무로도 세지 않는다)
+  const holidays = new Set(calendar.offDates)
   const manualDependencies: TaskDependency[] = dependencyRows.map((r: Record<string, unknown>) => ({
     id: r.id as string,
     projectId: r.project_id as string,
@@ -143,7 +148,8 @@ export const getComputedWbs = cache(async (
     items: computeTree(rows, today, holidays, { subActTeamOrder: teamOrder }),
     dependencies,
     unresolvedDepends,
-    holidays: [...holidays],
+    holidays: [...holidays].sort(),
+    calendar,
     today,
   }
 })

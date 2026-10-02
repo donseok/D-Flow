@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSupabaseAttendanceRepository } from '@/lib/repositories/supabase/attendance'
 import { createSupabaseMeetingRepository } from '@/lib/repositories/supabase/meetings'
 import { createSupabaseWbsRepository } from '@/lib/repositories/supabase/wbs'
 import { createSupabaseWeeklyRepository } from '@/lib/repositories/supabase/weekly'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 // 봇 WBS 리포지토리는 팀 순서를 요청 범위 원천에서 읽는다(SP4 A2) — 이 파일은 순서와 무관한 단언이라 빈 팀
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
+// 휴일·달력은 설정 해석기(달력 로더)가 싣는다(SP5 A 과제 13) — 이 파일의 WBS 단언은 달력과 무관하다
+const cfgMock = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfgMock.getProjectConfig }))
 
 type QueryResponse = { data: unknown; error: unknown }
 
@@ -25,6 +29,7 @@ function queryBuilder(response: QueryResponse) {
 }
 
 describe('strict Supabase repositories', () => {
+  beforeEach(() => { cfgMock.getProjectConfig.mockResolvedValue(makeProjectConfig()) })
   it('weekly: missing report is a successful null and performs SELECT only', async () => {
     const report = queryBuilder({ data: null, error: null })
     const from = vi.fn((table: string) => {
@@ -129,7 +134,6 @@ describe('strict Supabase repositories', () => {
     const responses: Record<string, QueryResponse> = {
       projects: { data: null, error: { code: '08006' } },
       wbs_items: { data: [], error: null },
-      holidays: { data: [], error: null },
       task_dependencies: { data: [], error: null },
     }
     const repository = createSupabaseWbsRepository({
@@ -154,7 +158,6 @@ describe('strict Supabase repositories', () => {
         ],
         error: null,
       },
-      holidays: { data: [], error: null },
       task_dependencies: { data: [], error: null },
     }
     const repository = createSupabaseWbsRepository({
@@ -181,7 +184,6 @@ describe('strict Supabase repositories', () => {
         ],
         error: null,
       },
-      holidays: { data: [], error: null },
       task_dependencies: { data: [], error: null },
     }
     const repository = createSupabaseWbsRepository({

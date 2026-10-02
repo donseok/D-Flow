@@ -6,6 +6,7 @@ import {
 } from '@/lib/repositories/types'
 import { getProjectConfig as loadProjectConfig } from '@/lib/settings/projectConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { loadProjectHolidays } from '@/lib/calendar/load'
 import { isRetryableReadError, type SupabaseServerClient } from './common'
 
 type Row = Record<string, unknown>
@@ -22,7 +23,8 @@ export function createSupabaseProjectSettingsRepository(
     async getSafeSettings(projectId) {
       const [projectResult, holidaysResult, wbsCountResult, memberCountResult] = await Promise.all([
         client.from('projects').select(PROJECT_COLUMNS).eq('id', projectId).maybeSingle(),
-        client.from('holidays').select('date').eq('project_id', projectId).order('date'),
+        // 휴일은 달력 로더(끝까지 + kind — SP5 D11). off 는 휴무, work 는 특정일 근무
+        loadProjectHolidays(client, projectId).then((rows) => ({ ok: true as const, rows }), (e: unknown) => ({ ok: false as const, e })),
         client.from('wbs_items').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
         client.from('project_members').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
       ])
@@ -30,8 +32,10 @@ export function createSupabaseProjectSettingsRepository(
       if (projectResult.error) {
         return repositoryError('PROJECT_SETTINGS_READ_FAILED', isRetryableReadError(projectResult.error))
       }
-      if (holidaysResult.error) {
-        return repositoryError('PROJECT_HOLIDAYS_READ_FAILED', isRetryableReadError(holidaysResult.error))
+      if (!holidaysResult.ok) {
+        if (!(holidaysResult.e instanceof ConfigUnavailableError)) throw holidaysResult.e
+        console.error('[settings-repo] 휴일 조회 실패:', holidaysResult.e.message)
+        return repositoryError('PROJECT_HOLIDAYS_READ_FAILED', true)
       }
       if (wbsCountResult.error) {
         return repositoryError('PROJECT_SETTINGS_COUNTS_READ_FAILED', isRetryableReadError(wbsCountResult.error))
@@ -59,7 +63,8 @@ export function createSupabaseProjectSettingsRepository(
         startDate: (project.start_date as string | null) ?? null,
         endDate: (project.end_date as string | null) ?? null,
         baseDate: (project.base_date as string | null) ?? null,
-        holidays: ((holidaysResult.data ?? []) as Row[]).map(row => row.date as string),
+        holidays: holidaysResult.rows.filter(h => h.kind === 'off').map(h => h.date),
+        workDates: holidaysResult.rows.filter(h => h.kind === 'work').map(h => h.date),
         wbsItemCount,
         memberCount,
       }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { CAL_FIELDS_UTC_SUN } from '../helpers/calendarFixture'
 import { BRAND } from '@/lib/branding'
 import { displayBranding, workspaceIconHref } from '@/lib/settings/displayBranding'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
@@ -8,7 +9,7 @@ import type { WorkspaceConfig } from '@/lib/settings/workspaceConfig'
 function config(values: Record<string, unknown>): WorkspaceConfig {
   const { keys } = resolveKeys({ scope: 'workspace', id: 'ws-1', values, defs: WORKSPACE_SETTINGS, env: { NODE_ENV: 'test' } })
   return { workspaceId: 'ws-1', revision: 1, schemaVersion: 1, schemaAhead: false,
-    keys: keys as WorkspaceConfig['keys'], unknownKeys: [] }
+    keys: keys as WorkspaceConfig['keys'], unknownKeys: [], ...CAL_FIELDS_UTC_SUN }
 }
 
 describe('displayBranding', () => {

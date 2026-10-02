@@ -145,7 +145,7 @@ const DISPLAY_LABELS: Readonly<Record<string, string>> = {
   milestoneOverdue: '마일스톤 기한 경과', todayMeetings: '오늘 회의', upcoming7dMeetings: '7일 내 회의',
   // 설정
   startDate: '프로젝트 시작일', endDate: '프로젝트 종료일', baseDate: '기준일',
-  holidayCount: '공휴일 수', indexFreshness: '색인 최신성', indexedDocuments: '색인 문서 수',
+  holidayCount: '공휴일 수', workDateCount: '특정일 근무 수', indexFreshness: '색인 최신성', indexedDocuments: '색인 문서 수',
 }
 
 const DISPLAY_ENUMS: Readonly<Record<string, string>> = {

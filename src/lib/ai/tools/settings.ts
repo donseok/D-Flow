@@ -82,6 +82,8 @@ export function createGetSafeProjectSettingsTool(
         endDate: snapshot.endDate,
         baseDate: snapshot.baseDate,
         holidayCount: snapshot.holidays.length,
+        // 특정일 근무(holidays.kind='work' — SP5 D11). 휴무 목록(records)과 섞지 않는다
+        workDateCount: snapshot.workDates.length,
         wbsItemCount: snapshot.wbsItemCount,
         memberCount: snapshot.memberCount,
       }

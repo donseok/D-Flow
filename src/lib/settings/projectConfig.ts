@@ -1,6 +1,6 @@
 /**
  * 프로젝트 설정 해석기(개정 §2.5, 스펙 §3.5) — 옛 데이터 계층 로더(data/projectConfig.ts, 과제 27 에서 삭제)의 후계.
- * 조회는 셋(설정 행 ⨝ projects, 영역 ⨝ 영역-팀, 팀). 설정 행 0행·조회 오류는 ConfigUnavailableError — 기본값으로 풀지 않는다.
+ * 조회는 넷(설정 행 ⨝ projects, 영역 ⨝ 영역-팀, 팀, 휴일 — 휴일은 달력 로더가 키셋으로 끝까지). 설정 행 0행·조회 오류는 ConfigUnavailableError — 기본값으로 풀지 않는다.
  * 세션 없는 경로(외부 API·워커·봇 잡)는 { client: adminFor({ projectId }).admin } 을 넘긴다 — 쿠키 없는 RLS 클라이언트는 0행을 받는다.
  * 캐시는 요청 범위의 react cache 하나(키 = projectId, client). 모듈 수준 Map·전역 캐시를 두지 않는다(project-isolation 테스트).
  * 이 파일은 @/lib/modules 의 값을 import 하지 않는다(타입만 — tests/modules/registry.test.ts).
@@ -10,7 +10,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type ProjectSettingValue } from './registry'
-import { ConfigUnavailableError } from './errors'
+import { ConfigUnavailableError, type ConfigKeyError } from './errors'
+import { calendarOrError, loadProjectHolidays, projectCalendarOf, type HolidayRow } from '@/lib/calendar/load'
+import type { WorkCalendar } from '@/lib/domain/calendar'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 
 export type ConfigReadClient = Pick<SupabaseClient, 'from'>
@@ -31,6 +33,11 @@ export interface ProjectConfig {
   unknownKeys: string[]                                          // 롤백 잔여 등. 읽기에서 무시, 진단에 노출
   areas: { weekly_section: ConfigArea[]; issue_area: ConfigArea[] }
   teams: ConfigTeam[]
+  /** 그 프로젝트의 날짜 예외(holidays — off·work). 달력 로더가 키셋으로 끝까지 읽는다(SP5 D11) */
+  holidays: HolidayRow[]
+  /** 세 키(calendar.*) + holidays 의 달력. 키가 손상이면 null 이고 calendarError 에 그 키 — 소비처는 requireCalendar 로만 꺼낸다 */
+  calendar: WorkCalendar | null
+  calendarError: ConfigKeyError | null
 }
 
 type SettingsRow = { project_id: string; values: unknown; revision: number | string; schema_version: number; projects: { workspace_id: string } | null }
@@ -50,11 +57,12 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
   if (!isRecord(row.values)) throw new ConfigUnavailableError(`프로젝트 설정 values 가 객체가 아닙니다: ${projectId}`)
   const values = row.values
   const workspaceId = row.projects.workspace_id
-  const [a, t] = await Promise.all([
+  const [a, t, holidays] = await Promise.all([
     sb.from('project_areas').select('id, kind, code, name, sort_order, active, area_teams(team_id, kind)')
       .eq('project_id', projectId).order('sort_order'),
     sb.from('teams').select('id, code, name, sort_order, active, color, progress_visible, project_id', { count: 'exact' })
       .eq('workspace_id', workspaceId).or(`project_id.is.null,project_id.eq.${projectId}`).order('sort_order'),
+    loadProjectHolidays(sb, projectId),            // 실패는 ConfigUnavailableError — 부분 기본값 없음
   ])
   if (a.error) throw new ConfigUnavailableError(`영역 조회 실패: ${a.error.message}`, { cause: a.error })
   if (t.error) throw new ConfigUnavailableError(`팀 조회 실패: ${t.error.message}`, { cause: t.error })
@@ -72,8 +80,10 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
     if (r.kind in areas) areas[r.kind].push(area)
   }
   const schemaVersion = Number(row.schema_version)
+  const { calendar, calendarError } = calendarOrError(() => projectCalendarOf(keys as ProjectConfig['keys'], holidays))
+  // 성능(D59): 프로젝트 화면 대부분이 이 해석기를 요청마다 한 번(react cache) 부른다 — 휴일 조회 하나가 늘었다. 과제 31b 가 p95 를 잰다.
   return {
-    projectId, workspaceId,
+    projectId, workspaceId, holidays, calendar, calendarError,
     revision: Number(row.revision), schemaVersion, schemaAhead: schemaVersion > SETTINGS_SCHEMA_VERSION,
     keys: keys as ProjectConfig['keys'], unknownKeys, areas,
     // code 는 앞뒤 공백을 걷고 빈 code 행은 팀이 아니다 — 팀 원천(teams/source.ts teamFromRow)·옛 팀 캐시와 같은 정리(A2-1 리뷰 정확성 P3)

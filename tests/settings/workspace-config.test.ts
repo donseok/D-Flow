@@ -1,5 +1,5 @@
 // 워크스페이스 해석기 — 배포 기본값(env) 셋, 명시 [] 는 set(D40), 0행 throw.
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -12,6 +12,7 @@ const client = (data: unknown, error: { message: string } | null = null) => {
   return b as unknown as { from: () => unknown }
 }
 const row = (values: Record<string, unknown>) => ({ workspace_id: WID, values, revision: 1, schema_version: 1 })
+const loadWith = (values: Record<string, unknown>) => getWorkspaceConfig(WID, { client: client(row(values)) as never })
 const saved = { ...process.env }
 afterEach(() => { process.env = { ...saved } })
 
@@ -47,5 +48,18 @@ describe('getWorkspaceConfig', () => {
     for (const values of [null, [], 'x', 3]) {
       await expect(getWorkspaceConfig(WID, { client: client({ ...row({}), values }) as never }), String(values)).rejects.toBeInstanceOf(ConfigUnavailableError)
     }
+  })
+  it('달력 — 세 키로 워크스페이스 달력(요일 하나 → 규칙 하나, 날짜 예외 없음)', async () => {
+    const cfg = await loadWith({ 'calendar.week_start': 'monday', 'calendar.timezone': 'America/Los_Angeles' })
+    expect(cfg.calendar?.weekStart).toEqual([{ day: 'monday', from: null }])
+    expect(cfg.calendar?.timezone).toBe('America/Los_Angeles')
+    expect(cfg.calendarError).toBeNull()
+  })
+  it('[RF4] 손상 근무 요일은 calendar=null·calendarError(calendar.working_days)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cfg = await loadWith({ 'calendar.working_days': [] })
+    err.mockRestore()
+    expect(cfg.calendar).toBeNull()
+    expect(cfg.calendarError).toMatchObject({ key: 'calendar.working_days' })
   })
 })

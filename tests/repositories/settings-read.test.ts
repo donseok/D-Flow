@@ -7,6 +7,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: resolver.getP
 import { createSupabaseProjectSettingsRepository } from '@/lib/repositories/supabase/settings'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { keysetTable } from '../helpers/keysetTable'
 
 type QueryResponse = { data: unknown; error: unknown; count?: number | null }
 
@@ -34,24 +35,30 @@ function healthyBuilders(overrides: Partial<Record<string, QueryResponse>> = {})
       },
       error: null,
     },
-    holidays: { data: [{ date: '2026-08-15' }, { date: '2026-10-03' }], error: null },
+    // 휴일은 달력 로더(키셋 끝까지 + kind — SP5 A 과제 13)가 읽는다 — 아래 from 이 keysetTable 로 흉내 낸다
+    holidays: { data: [{ date: '2026-08-15', name: null, kind: 'off' }, { date: '2026-10-03', name: null, kind: 'off' }], error: null },
     wbs_items: { data: null, error: null, count: 120 },
     project_members: { data: null, error: null, count: 14 },
     ...overrides,
   }
   const builders: Record<string, ReturnType<typeof queryBuilder>> = {}
+  const hr = responses.holidays as QueryResponse
+  const holidays = hr.error
+    ? keysetTable([], { error: { message: String((hr.error as { code?: string }).code ?? 'error') } })
+    : keysetTable(((hr.data ?? []) as Record<string, unknown>[]).map((r) => ({ project_id: 'p1', ...r })))
   const from = vi.fn((table: string) => {
+    if (table === 'holidays') return holidays.make()
     const response = responses[table]
     if (!response) throw new Error(`unexpected table: ${table}`)
     builders[table] ??= queryBuilder(response)
     return builders[table]
   })
-  return { from, builders }
+  return { from, builders, holidays }
 }
 
 describe('strict Supabase project settings repository', () => {
   it('maps project, holidays, and head counts without selecting any secret-shaped column', async () => {
-    const { from, builders } = healthyBuilders()
+    const { from, builders, holidays } = healthyBuilders()
     const repository = createSupabaseProjectSettingsRepository({ from } as never)
 
     const result = await repository.getSafeSettings('p1')
@@ -64,6 +71,7 @@ describe('strict Supabase project settings repository', () => {
         endDate: '2026-12-31',
         baseDate: '2026-07-18',
         holidays: ['2026-08-15', '2026-10-03'],
+        workDates: [],
         wbsItemCount: 120,
         memberCount: 14,
       },
@@ -77,7 +85,9 @@ describe('strict Supabase project settings repository', () => {
     expect(builders.project_members.select).toHaveBeenCalledWith('id', { count: 'exact', head: true })
     expect(builders.wbs_items.eq).toHaveBeenCalledWith('project_id', 'p1')
     expect(builders.project_members.eq).toHaveBeenCalledWith('project_id', 'p1')
-    expect(builders.holidays.eq).toHaveBeenCalledWith('project_id', 'p1')
+    expect(holidays.log[0]).toEqual(expect.arrayContaining([
+      { method: 'eq', args: ['project_id', 'p1'] }, { method: 'select', args: ['date, name, kind', { count: 'exact' }] },
+    ]))
     // 반환 계약에도 키·계정·환경변수 형태의 값이 존재하지 않는다.
     expect(JSON.stringify(result)).not.toMatch(/email|file_path|signed|secret|token|env/i)
     for (const builder of Object.values(builders)) {
@@ -120,13 +130,27 @@ describe('strict Supabase project settings repository', () => {
   })
 
   it('keeps a holiday query failure distinct from an empty holiday list', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { from } = healthyBuilders({ holidays: { data: null, error: { code: '42P01' } } })
     const repository = createSupabaseProjectSettingsRepository({ from } as never)
 
+    // 달력 로더의 실패(ConfigUnavailableError)는 재시도 가능으로 낸다 — 원문(코드)은 로그에만(SP5 A 과제 13)
     await expect(repository.getSafeSettings('p1')).resolves.toEqual({
       ok: false,
       errorCode: 'PROJECT_HOLIDAYS_READ_FAILED',
-      retryable: false,
+      retryable: true,
+    })
+    err.mockRestore()
+  })
+
+  it('splits off days from specific working days (kind) — a work row is not a holiday', async () => {
+    const { from } = healthyBuilders({ holidays: { data: [
+      { date: '2026-08-15', name: '휴무', kind: 'off' }, { date: '2026-08-22', name: null, kind: 'work' },
+    ], error: null } })
+    const repository = createSupabaseProjectSettingsRepository({ from } as never)
+
+    await expect(repository.getSafeSettings('p1')).resolves.toMatchObject({
+      ok: true, data: { holidays: ['2026-08-15'], workDates: ['2026-08-22'] },
     })
   })
 

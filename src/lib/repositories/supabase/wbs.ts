@@ -18,6 +18,9 @@ import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { projectTeams } from '@/lib/teams/source'
 import { fetchAllByKeyset, type PageResult } from '@/lib/data/paging'
+import { getProjectConfig as loadProjectConfig } from '@/lib/settings/projectConfig'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { calendarOrError, requireCalendar } from '@/lib/calendar/load'
 
 type Row = Record<string, unknown>
 
@@ -155,24 +158,21 @@ function mapDependency(row: Row): TaskDependency {
 export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBotRepository {
   return {
     async getProjectSnapshot(projectId): Promise<RepositoryResult<WbsProjectSnapshot | null>> {
-      // 세 표는 끝까지 읽는다(SP4 A2 §4.6 — 키는 id·date·id). 팀 순서는 한 번(받은 클라이언트로) — 항목마다 읽지 않는다.
+      // 두 표는 끝까지 읽는다(SP4 A2 §4.6 — 키는 id·id), 휴일은 달력 로더(설정 해석기 — 끝까지 + kind, SP5 D11). 팀 순서는 한 번(받은 클라이언트로) — 항목마다 읽지 않는다.
       const settle = async <T>(code: RepositoryErrorCode, read: () => Promise<T>): Promise<{ ok: true; data: T } | { ok: false; code: RepositoryErrorCode }> => {
         try { return { ok: true, data: await read() } } catch (e) {
           console.error(`[bot-wbs] ${code}:`, e instanceof Error ? e.message : e)
           return { ok: false, code }
         }
       }
-      const [projectResult, items, holidays, deps, teams] = await Promise.all([
+      const [projectResult, items, cfgResult, deps, teams] = await Promise.all([
         client.from('projects').select('id, base_date').eq('id', projectId).maybeSingle(),
         settle('WBS_ITEMS_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] wbs_items', (r) => String(r.id), (after, limit) => {
           const q = client.from('wbs_items').select(WBS_COLUMNS, { count: 'exact' }).eq('project_id', projectId)
           // WBS_COLUMNS 는 조립한 문자열이라 select 의 행 형을 추론하지 못한다(GenericStringError) — 행은 Row 로 읽는다
           return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit) as unknown as PromiseLike<PageResult<Row>>
         })),
-        settle('WBS_HOLIDAYS_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] holidays', (r) => String(r.date), (after, limit) => {
-          const q = client.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
-          return (after ? q.gt('date', String(after.date)) : q).order('date').limit(limit)
-        })),
+        loadProjectConfig(projectId, { client }).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
         settle('WBS_DEPENDENCIES_READ_FAILED', () => fetchAllByKeyset<Row>('[bot-wbs] task_dependencies', (r) => String(r.id), (after, limit) => {
           const q = client.from('task_dependencies')
             .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days', { count: 'exact' }).eq('project_id', projectId)
@@ -189,7 +189,16 @@ export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBo
       if (!projectResult.data) return repositoryOk(null)
       // 끝까지 읽기의 실패(조회 오류·잘림·읽는 사이 변경)는 재시도할 만하다 — 원문은 위 로그에만
       if (!items.ok) return repositoryError(items.code, true)
-      if (!holidays.ok) return repositoryError(holidays.code, true)
+      if (!cfgResult.ok) {
+        if (cfgResult.e instanceof ConfigUnavailableError) {
+          console.error('[bot-wbs] WBS_HOLIDAYS_READ_FAILED:', cfgResult.e.message)
+          return repositoryError('WBS_HOLIDAYS_READ_FAILED', true)
+        }
+        throw cfgResult.e
+      }
+      // 달력 키 손상은 재시도로 풀리지 않는다 — 기본 달력으로 계획%를 내지 않는다([RF4])
+      const calendarState = calendarOrError(() => requireCalendar(cfgResult.cfg))
+      if (!calendarState.calendar) return repositoryError('WBS_CALENDAR_INVALID', false)
       if (!deps.ok) return repositoryError(deps.code, true)
       if (!teams.ok) return repositoryError(teams.code, true)
 
@@ -200,7 +209,8 @@ export function createSupabaseWbsRepository(client: SupabaseServerClient): WbsBo
         projectId,
         baseDate: (project.base_date as string | null) ?? null,
         items: itemRows.map(row => mapItem(row, order)),
-        holidays: holidays.data.map(row => row.date as string),
+        holidays: [...calendarState.calendar.offDates].sort(),
+        calendar: calendarState.calendar,
         // wbs_items.depends(import 선행)를 같은 배열로 합쳐 봇이 두 축을 한 번에 본다.
         // 해석 못 한 ref 는 여기서 빠진다 — 봇은 시작 게이트가 아니라 조회 도구이고,
         // 그 상태를 사용자에게 보이는 책임은 화면(RowDetailPanel)이 진다.

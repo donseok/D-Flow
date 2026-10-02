@@ -19,6 +19,8 @@ export class FakeSettingsDb {
   wbsItems: Record<string, unknown>[] = []
   agentProjects: Record<string, unknown>[] = []
   weeklyReports: Record<string, unknown>[] = []
+  /** 날짜 예외(holidays — project_id·date·name·kind). 해석기의 달력 로더가 키셋으로 읽는다(SP5 A 과제 13) */
+  holidays: Record<string, unknown>[] = []
   /** apply_*_settings 의 ⑥ 참조 검사 흉내 — 값을 돌려주면 그 오류로 거부한다(SP5 — settings_ref_check 의 SETTINGS_CODE_IN_USE) */
   refCheck: ((scope: { projectId: string } | { workspaceId: string }, set: Record<string, unknown>, unset: string[]) => { code: string; message: string; details: string | null } | null) | null = null
   history: FakeHistoryRow[] = []
@@ -135,6 +137,7 @@ export class FakeSettingsDb {
       case 'wbs_items': return this.wbsItems
       case 'agent_projects': return this.agentProjects
       case 'weekly_reports': return this.weeklyReports
+      case 'holidays': return this.holidays
       case 'project_settings_history': return this.history.filter((h) => h.project_id) as unknown as Record<string, unknown>[]
       case 'workspace_settings_history': return this.history.filter((h) => h.workspace_id) as unknown as Record<string, unknown>[]
       default: throw new Error(`fake db: 모르는 표 ${table}`)

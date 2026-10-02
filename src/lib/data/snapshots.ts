@@ -5,6 +5,8 @@ import type { ComputedItem, WbsRow } from '@/lib/domain/types'
 import { seoulToday } from '@/lib/domain/dates'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
 import { fetchAllByKeyset } from '@/lib/data/paging'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { requireCalendar } from '@/lib/calendar/load'
 import { projectTeams } from '@/lib/teams/source'
 
 type Sb = Awaited<ReturnType<typeof createServerClient>>
@@ -65,17 +67,15 @@ export async function recordProgressSnapshot(
     }
     // 재계산 경로도 끝까지(SP4 A2 §4.6 — 잘린 트리의 공정율을 오늘 값으로 남기지 않는다). 실패는 아래 catch 가 로그만(보험 기록).
     // 팀 순서는 받은 클라이언트로 읽는다 — 에이전트 라우트는 service_role 을 넘긴다(세션이 없으면 cookies() 도 없다).
-    const [items, hol, teams] = await Promise.all([
+    // 휴일은 달력 로더(설정 해석기)가 끝까지 + kind — 실패·손상 키는 아래 catch 가 로그만.
+    const [items, cfg, teams] = await Promise.all([
       fetchAllByKeyset<Record<string, unknown>>('[snapshot] wbs_items', (r) => String(r.id), (after, limit) => {
         const q = sb.from('wbs_items')
           .select('id, parent_id, code, sort_order, name, planned_start, planned_end, weight, actual_pct, is_owner_split', { count: 'exact' })
           .eq('project_id', projectId)
         return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
       }),
-      fetchAllByKeyset<{ date: string }>('[snapshot] holidays', (r) => r.date, (after, limit) => {
-        const q = sb.from('holidays').select('date', { count: 'exact' }).eq('project_id', projectId)
-        return (after ? q.gt('date', after.date) : q).order('date').limit(limit)
-      }),
+      getProjectConfig(projectId, { client: sb }),
       projectTeams(projectId, { client: sb }),
     ])
     if (!items.length) return
@@ -94,7 +94,7 @@ export async function recordProgressSnapshot(
       owners: [],
       isOwnerSplit: r.is_owner_split === true,
     }))
-    const holidays = new Set(hol.map((h) => h.date))
+    const holidays = new Set(requireCalendar(cfg).offDates)
     const opts = { subActTeamOrder: teamOrderMap(activeCodes(teams)) }
     const { actual, planned } = overallProgress(computeTree(rows, todayNow, holidays, opts))
     await upsertSnapshot(sb, projectId, todayNow, actual, planned)

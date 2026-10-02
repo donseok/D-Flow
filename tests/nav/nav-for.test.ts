@@ -1,5 +1,6 @@
 // navFor(스펙 §4.5, 개정 §5.3.5) — 순수 함수의 조합 테스트. SP3b 가 셸 소비 케이스를 같은 파일에 덧붙인다(스펙 §10.1) —
 // 이 파일의 describe 는 '순수 함수' 로 묶어 둔다. effective 는 진짜 effectiveModules 를 해석기 mock 위에서 돌려 얻는다(effective.test 와 같은 꼴).
+import { CAL_FIELDS_UTC_SUN } from '../helpers/calendarFixture'
 import { readFileSync } from 'node:fs'
 import * as icons from 'lucide-react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -54,9 +55,9 @@ describe('navFor — 순수 함수: 레지스트리 전수 대조', () => {
 })
 
 describe.each(SYNTHETIC_CONFIGS)('navFor — 순수 함수: 합성 구성 $id', (c) => {
-  const wsCfg = { workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [],
+  const wsCfg = { workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], ...CAL_FIELDS_UTC_SUN,
     keys: { 'modules.allowed': { status: 'set', value: c.workspace['modules.allowed'] }, 'ai.enabled': { status: 'set', value: c.workspace['ai.enabled'] ?? true } } }
-  const pCfg = { projectId: PID, workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], areas: { weekly_section: [], issue_area: [] }, teams: [],
+  const pCfg = { projectId: PID, workspaceId: WID, revision: 1, schemaVersion: 1, schemaAhead: false, unknownKeys: [], holidays: [], ...CAL_FIELDS_UTC_SUN, areas: { weekly_section: [], issue_area: [] }, teams: [],
     keys: { 'modules.enabled': { status: 'set', value: c.project['modules.enabled'] } } }
   it('프로젝트 층 — 꺼진 모듈의 항목이 없고 core 항목은 늘 있다', async () => {
     mocks.getWorkspaceConfig.mockResolvedValue(wsCfg); mocks.getProjectConfig.mockResolvedValue(pCfg)

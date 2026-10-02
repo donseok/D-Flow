@@ -10,6 +10,10 @@ import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
+// 휴일·달력은 설정 해석기(달력 로더)가 싣는다(SP5 A 과제 13)
+const cfgMock = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfgMock.getProjectConfig }))
+const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
 
 type Row = Record<string, unknown>
 const reads: string[] = []
@@ -50,7 +54,8 @@ beforeEach(() => {
   reads.length = 0
   upserted = null
   TABLES.wbs_items = [dbRow('P', null, null), dbRow('a', 'P', 100), dbRow('b', 'P', 0)]
-  TABLES.holidays = []
+  cfgMock.getProjectConfig.mockReset()
+  cfgMock.getProjectConfig.mockResolvedValue(makeProjectConfig())
 })
 
 describe('recordProgressSnapshot — 이미 계산된 트리 재사용', () => {
@@ -68,6 +73,7 @@ describe('recordProgressSnapshot — 이미 계산된 트리 재사용', () => {
     await recordProgressSnapshot('p1', client as never, { roots, today: seoulToday() })
     expect(reads).not.toContain('wbs_items')
     expect(reads).not.toContain('holidays')
+    expect(cfgMock.getProjectConfig).not.toHaveBeenCalled()
   })
 
   it('재사용해도 기록되는 값이 같다', async () => {

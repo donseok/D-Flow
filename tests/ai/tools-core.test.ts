@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { calWithOff } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
@@ -41,6 +42,7 @@ const wbsSnapshot: WbsProjectSnapshot = {
   projectId: 'p1',
   baseDate: '2026-07-20',
   holidays: [],
+  calendar: calWithOff([]),
   items: [
     {
       id: 'phase-1', projectId: 'p1', parentId: null, code: '1', sortOrder: 1,

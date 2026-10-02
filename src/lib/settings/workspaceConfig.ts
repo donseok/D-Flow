@@ -3,7 +3,9 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { SETTINGS_SCHEMA_VERSION, WORKSPACE_SETTINGS, type WorkspaceSettingKey, type WorkspaceSettingValue } from './registry'
-import { ConfigUnavailableError } from './errors'
+import { ConfigUnavailableError, type ConfigKeyError } from './errors'
+import { calendarOrError, workspaceCalendarOf } from '@/lib/calendar/load'
+import type { WorkCalendar } from '@/lib/domain/calendar'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 import type { ConfigReadClient } from './projectConfig'
 
@@ -12,6 +14,10 @@ export interface WorkspaceConfig {
   revision: number; schemaVersion: number; schemaAhead: boolean
   keys: { [K in WorkspaceSettingKey]: KeyState<WorkspaceSettingValue<K>> }
   unknownKeys: string[]
+  /** 세 키(calendar.*)의 달력(날짜 예외 없음 — 워크스페이스에는 그 표가 없다). 키가 손상이면 null 이고 calendarError 에 그 키 —
+   *  소비처는 requireCalendar 로만 꺼낸다 */
+  calendar: WorkCalendar | null
+  calendarError: ConfigKeyError | null
 }
 type Row = { workspace_id: string; values: unknown; revision: number | string; schema_version: number }
 
@@ -27,8 +33,9 @@ async function load(workspaceId: string, client: ConfigReadClient | undefined): 
   const values = row.values
   const { keys, unknownKeys } = resolveKeys({ scope: 'workspace', id: workspaceId, values, defs: WORKSPACE_SETTINGS })
   const schemaVersion = Number(row.schema_version)
+  const { calendar, calendarError } = calendarOrError(() => workspaceCalendarOf(keys as WorkspaceConfig['keys']))
   return { workspaceId, revision: Number(row.revision), schemaVersion, schemaAhead: schemaVersion > SETTINGS_SCHEMA_VERSION,
-    keys: keys as WorkspaceConfig['keys'], unknownKeys }
+    keys: keys as WorkspaceConfig['keys'], unknownKeys, calendar, calendarError }
 }
 
 const loadCached = cache(load)

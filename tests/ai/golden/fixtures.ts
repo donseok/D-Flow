@@ -2,6 +2,7 @@
 // 고정 기준 시각: NOW=2026-07-19T09:00:00.000Z → KST 오늘=2026-07-19(일). 현재 주 월요일=2026-07-13.
 // proj-alpha = 허용 프로젝트, proj-beta = 허용 목록 밖(교차 프로젝트 차단 검증용).
 // 모든 파생 수치(공정율·상태·집계)는 실제 도메인 헬퍼 규칙으로 손계산해 cases.ts 기대값에 고정한다.
+import { calWithOff } from '../../helpers/calendarFixture'
 import type {
   AnnouncementRepositoryRecord,
   AttendanceRepositoryRecord,
@@ -108,6 +109,7 @@ export const WBS_SNAPSHOTS: Record<string, WbsProjectSnapshot> = {
     projectId: PROJECT_ALPHA,
     baseDate: KST_TODAY,
     holidays: ['2026-08-17', '2026-09-24'],
+    calendar: calWithOff(['2026-08-17', '2026-09-24']),
     items: ALPHA_WBS_ITEMS,
     dependencies: [
       { id: 'a-dep-1', projectId: PROJECT_ALPHA, predecessorId: 'a-s111', successorId: 'a-s112', type: 'FS', lagDays: 0, origin: 'manual' },
@@ -118,6 +120,7 @@ export const WBS_SNAPSHOTS: Record<string, WbsProjectSnapshot> = {
     projectId: PROJECT_BETA,
     baseDate: KST_TODAY,
     holidays: [],
+    calendar: calWithOff([]),
     items: BETA_WBS_ITEMS,
     dependencies: [],
   },
@@ -331,6 +334,7 @@ export const SETTINGS: Record<string, ProjectSettingsSnapshot> = {
     endDate: '2026-08-28',
     baseDate: KST_TODAY,
     holidays: ['2026-08-17', '2026-09-24'],
+    workDates: [],
     wbsItemCount: 13,
     memberCount: 6,
   },
@@ -341,6 +345,7 @@ export const SETTINGS: Record<string, ProjectSettingsSnapshot> = {
     endDate: '2026-09-30',
     baseDate: KST_TODAY,
     holidays: [],
+    workDates: [],
     wbsItemCount: 2,
     memberCount: 1,
   },

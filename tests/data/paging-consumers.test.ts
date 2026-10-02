@@ -36,6 +36,7 @@ import { getComputedWbs, getProjectsCompletion } from '@/lib/data/wbs'
 import { projectOwnTeams, projectTeams } from '@/lib/teams/source'
 import type { Team } from '@/lib/domain/teams'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { makeActor, WS } from '../fixtures/actor'
 
 type Call = { method: string; args: unknown[] }
@@ -215,14 +216,13 @@ const simple = (data: unknown) => {
   q.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res, rej)
   return q
 }
-/** getComputedWbs 의 다섯 표 — wbs_items·item_owners·holidays·task_dependencies 는 키셋 가짜, projects 는 단건 */
+/** getComputedWbs 의 네 표 — wbs_items·item_owners·task_dependencies 는 키셋 가짜, projects 는 단건. 휴일은 달력 로더(설정 해석기 목)가 싣는다(SP5 A 과제 13) */
 const client = (wbs: ReturnType<typeof pagedTable>, owners: ReturnType<typeof pagedTable>,
-  rest: { holidays?: ReturnType<typeof pagedTable>; deps?: ReturnType<typeof pagedTable> } = {}) => {
-  const holidays = rest.holidays ?? pagedTable([])
+  rest: { deps?: ReturnType<typeof pagedTable> } = {}) => {
   const deps = rest.deps ?? pagedTable([])
   return {
     from: (t: string) => t === 'wbs_items' ? wbs.make() : t === 'item_owners' ? owners.make()
-      : t === 'holidays' ? holidays.make() : t === 'task_dependencies' ? deps.make()
+      : t === 'task_dependencies' ? deps.make()
       : t === 'projects' ? simple({ base_date: '2026-09-01' }) : simple([]),
   }
 }
@@ -320,22 +320,32 @@ describe('getComputedWbs — 나머지 끝까지(holidays·task_dependencies)·�
     id, code, name: code, color: '#6b7280', sortOrder, active, progressVisible: true, projectId: PID, workspaceId: 'w' })
   beforeEach(() => { vi.mocked(projectTeams).mockResolvedValue([]) })
 
-  it('두 표가 한 응답의 상한(2행)을 넘어도 끝까지 — 영업일 계산의 휴일과 연결선이 빠지지 않는다, 키셋(date·id)', async () => {
-    const holidays = pagedTable(Array.from({ length: 5 }, (_, i) => ({ project_id: PID, date: day(i) })), { maxRows: 2 })
+  it('연결선이 한 응답의 상한(2행)을 넘어도 끝까지(키셋 id) — 휴일은 달력 로더의 휴무만(work 는 근무 예외로 calendar 에)', async () => {
+    // 휴일 쪽 나눔(키셋 date)은 달력 로더가 한다 — tests/calendar/load.test.ts
+    m.getProjectConfig.mockResolvedValue(makeProjectConfig({}, { holidays: [
+      ...Array.from({ length: 5 }, (_, i) => ({ date: day(i), name: '', kind: 'off' as const })),
+      { date: day(6), name: '', kind: 'work' as const },
+    ] }))
     const deps = pagedTable(Array.from({ length: 5 }, (_, i) => dep(i)), { maxRows: 2 })
-    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { holidays, deps }))
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { deps }))
     const got = await getComputedWbs(PID)
-    expect(got.holidays).toHaveLength(5)
+    expect(got.holidays).toEqual(Array.from({ length: 5 }, (_, i) => day(i)))
+    expect([...got.calendar.workDates]).toEqual([day(6)])
+    expect(m.getProjectConfig).toHaveBeenCalledWith(PID)
     expect(got.dependencies.filter((d) => d.origin === 'manual')).toHaveLength(5)
-    expect(holidays.log[0]).toEqual(expect.arrayContaining([{ method: 'order', args: ['date'] }]))
-    expect(holidays.log[1]).toEqual(expect.arrayContaining([{ method: 'gt', args: ['date', day(1)] }]))
     expect(deps.log[0]).toEqual(expect.arrayContaining([{ method: 'order', args: ['id'] }]))
   })
-  it('holidays 를 읽는 사이 행 수가 바뀌면 throw — 휴일이 빠진 계획%를 정상처럼 내지 않는다', async () => {
-    const holidays = pagedTable(Array.from({ length: 4 }, (_, i) => ({ project_id: PID, date: day(i) })), {
-      maxRows: 2, afterResponse: (n, rows) => (n === 1 ? [...rows, { project_id: PID, date: day(9) }] : undefined) })
-    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { holidays }))
-    await expect(getComputedWbs(PID)).rejects.toThrow(/holidays 목록을 끝까지 읽지 못했습니다/)
+  it('휴일(달력) 조회 실패는 throw — 휴일이 빠진 계획%를 정상처럼 내지 않는다', async () => {
+    m.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('휴일 조회 실패: holidays 목록을 끝까지 읽지 못했습니다'))
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([])))
+    await expect(getComputedWbs(PID)).rejects.toBeInstanceOf(ConfigUnavailableError)
+  })
+  it('[RF4] 달력 키가 손상이면 ConfigKeyError — 기본 달력으로 계획%를 내지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.timezone': 'Asia/Seol' }))
+    err.mockRestore()
+    m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([])))
+    await expect(getComputedWbs(PID)).rejects.toMatchObject({ code: 'CONFIG_INVALID', key: 'calendar.timezone' })
   })
   it('task_dependencies 조회 오류는 throw — "의존성 없음"으로 위장하지 않는다', async () => {
     m.createServerClient.mockResolvedValue(client(pagedTable([one]), pagedTable([]), { deps: pagedTable([], { error: { message: 'boom' } }) }))

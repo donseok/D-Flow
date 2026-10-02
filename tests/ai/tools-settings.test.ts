@@ -20,6 +20,7 @@ const snapshot: ProjectSettingsSnapshot = {
   endDate: '2026-12-31',
   baseDate: '2026-07-18',
   holidays: ['2026-05-05', '2026-08-15', '2026-10-03'],
+  workDates: [],
   wbsItemCount: 120,
   memberCount: 14,
 }
@@ -47,6 +48,7 @@ describe('get_safe_project_settings tool', () => {
           endDate: '2026-12-31',
           baseDate: '2026-07-18',
           holidayCount: 3,
+          workDateCount: 0,
           wbsItemCount: 120,
           memberCount: 14,
         },

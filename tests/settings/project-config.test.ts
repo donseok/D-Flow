@@ -6,12 +6,14 @@ import { getProjectConfig, levelDepthOf } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { DEFAULT_STAGE_CREDITS } from '@/lib/domain/stageCredits'
+import { keysetTable } from '../helpers/keysetTable'
 
 const PID = '00000000-0000-4000-8000-00000000aa01'
 const WID = '00000000-0000-4000-8000-00000000bb01'
 type Res = { data: unknown; error: { message: string } | null; count?: number | null }
 /** 표별 응답을 준다. 호출 순서와 select 문자열을 기록해 조회 셋을 단언한다 */
-function fakeClient(res: { settings: Res; areas: Res; teams: Res }) {
+function fakeClient(res: { settings: Res; areas: Res; teams: Res; holidays?: ReturnType<typeof keysetTable> }) {
+  const holidays = res.holidays ?? keysetTable([])
   const calls: { table: string; select: string; selectOpts?: unknown; filters: string[] }[] = []
   const chain = (table: string, r: Res) => {
     const rec: { table: string; select: string; selectOpts?: unknown; filters: string[] } = { table, select: '', filters: [] as string[] }
@@ -24,8 +26,9 @@ function fakeClient(res: { settings: Res; areas: Res; teams: Res }) {
     b.maybeSingle = () => Promise.resolve(r)
     return b
   }
-  const client = { from: (t: string) => chain(t, t === 'project_settings' ? res.settings : t === 'project_areas' ? res.areas : res.teams) }
-  return { client: client as never, calls }
+  const client = { from: (t: string) => t === 'holidays' ? holidays.make()
+    : chain(t, t === 'project_settings' ? res.settings : t === 'project_areas' ? res.areas : res.teams) }
+  return { client: client as never, calls, holidays }
 }
 const row = (values: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
   data: { project_id: PID, values, revision: 3, schema_version: 1, projects: { workspace_id: WID }, ...extra }, error: null,
@@ -134,5 +137,35 @@ describe('getProjectConfig', () => {
     const missing = await getProjectConfig(PID, { client: fakeClient({ settings: row({}), areas: ok([]), teams: ok([]) }).client })
     expect(() => valueOf(missing, 'core.level_labels')).toThrow(expect.objectContaining({ code: 'CONFIG_REQUIRED' }))
     expect(() => levelDepthOf(missing)).toThrow(ConfigKeyError)
+  })
+})
+
+describe('getProjectConfig — 달력(SP5 A 과제 13)', () => {
+  it('휴일을 키셋으로 읽어 holidays·calendar 에 싣는다(work 는 근무)', async () => {
+    const holidays = keysetTable([
+      { project_id: PID, date: '2026-10-05', name: '휴무', kind: 'off' },
+      { project_id: PID, date: '2026-10-10', name: null, kind: 'work' },
+    ])
+    const { client } = fakeClient({ settings: row({ 'calendar.week_start': [{ day: 'monday', from: null }] }), areas: ok([]), teams: ok([]), holidays })
+    const cfg = await getProjectConfig(PID, { client })
+    expect(cfg.holidays).toEqual([{ date: '2026-10-05', name: '휴무', kind: 'off' }, { date: '2026-10-10', name: '', kind: 'work' }])
+    expect(cfg.calendarError).toBeNull()
+    expect(cfg.calendar?.weekStart).toEqual([{ day: 'monday', from: null }])
+    expect([...(cfg.calendar?.offDates ?? [])]).toEqual(['2026-10-05'])
+    expect([...(cfg.calendar?.workDates ?? [])]).toEqual(['2026-10-10'])
+    expect(holidays.log).toHaveLength(1)
+  })
+  it('휴일 조회 실패는 ConfigUnavailableError — 부분 기본값 없음', async () => {
+    const { client } = fakeClient({ settings: row({}), areas: ok([]), teams: ok([]), holidays: keysetTable([], { error: { message: 'boom' } }) })
+    await expect(getProjectConfig(PID, { client })).rejects.toBeInstanceOf(ConfigUnavailableError)
+  })
+  it('[RF4] tz 손상은 로드를 멈추지 않는다 — calendar=null·calendarError, 다른 키는 그대로', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { client } = fakeClient({ settings: row({ 'calendar.timezone': '+09:00', 'core.milestone_keywords': ['오픈'] }), areas: ok([]), teams: ok([]) })
+    const cfg = await getProjectConfig(PID, { client })
+    err.mockRestore()
+    expect(cfg.calendar).toBeNull()
+    expect(cfg.calendarError).toMatchObject({ code: 'CONFIG_INVALID', key: 'calendar.timezone' })
+    expect(valueOf(cfg, 'core.milestone_keywords')).toEqual(['오픈'])
   })
 })

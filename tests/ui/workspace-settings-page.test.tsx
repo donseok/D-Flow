@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CAL_FIELDS_UTC_SUN } from '../helpers/calendarFixture'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 
@@ -34,7 +35,7 @@ import { resolveKeys } from '@/lib/settings/resolve'
 
 const WID = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
 const config = (values: Record<string, unknown> = {}) => ({
-  workspaceId: WID, revision: 7, schemaVersion: 1, schemaAhead: false, unknownKeys: [],
+  workspaceId: WID, revision: 7, schemaVersion: 1, schemaAhead: false, unknownKeys: [], ...CAL_FIELDS_UTC_SUN,
   keys: resolveKeys({ scope: 'workspace', id: WID, values, defs: WORKSPACE_SETTINGS, env: { NODE_ENV: 'test' } }).keys,
 })
 const access = (over: Record<string, unknown> = {}) => ({ id: WID, slug: 'alpha', name: 'Alpha', isSuperuser: false, isAdmin: true, ...over })

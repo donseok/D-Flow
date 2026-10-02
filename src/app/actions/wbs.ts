@@ -10,11 +10,13 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import type { DependencyType, OwnerKind, TeamCode } from '@/lib/domain/types'
 import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
 import { subActName } from '@/lib/domain/subact'
-import { businessDaysBetween } from '@/lib/domain/dates'
+import { workingDaysBetween, type WorkCalendar } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { failWith } from '@/lib/errors/dbFail'
-import { dbToken } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
 import { projectTeams } from '@/lib/teams/source'
 import { teamNameKey } from '@/lib/domain/teamName'
 
@@ -123,7 +125,7 @@ const ERR_SIBLING_LOOKUP = '형제 항목을 불러오지 못했습니다 — �
 const ERR_TEAM_LOOKUP = '담당 팀을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_DEP_LOOKUP = '의존성을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_TASK_LOOKUP = '작업을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_HOLIDAY_LOOKUP = '공휴일을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_CALENDAR_LOOKUP = '근무일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_SAVE = '저장하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_ADD = '추가하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_DELETE = '삭제하지 못했습니다 — 잠시 후 다시 시도하세요.'
@@ -538,11 +540,20 @@ export async function addTaskDependency(
   if (endpoints.some(item => item.planned_start > item.planned_end)) {
     return { ok: false, error: '시작일이 종료일보다 늦은 작업은 연결할 수 없습니다' }
   }
-  const { data: holidayRows, error: holidayErr } = await sb.from('holidays').select('date').eq('project_id', projectId)
-  if (holidayErr) return { ok: false, error: failWith('wbs.addTaskDependency', holidayErr, ERR_HOLIDAY_LOOKUP) }
-  const holidaySet = new Set((holidayRows ?? []).map(row => row.date as string))
-  if (endpoints.some(item => businessDaysBetween(item.planned_start, item.planned_end, holidaySet) === 0)) {
-    return { ok: false, error: '계획 기간에 영업일이 없는 작업은 연결할 수 없습니다' }
+  // 근무일 판정은 프로젝트 달력(근무 요일 + 휴무·특정일 근무 — SP5 D11). 손상 키·조회 실패는 기본 달력으로 잇지 않는다([RF4])
+  let calendar: WorkCalendar
+  try {
+    calendar = requireCalendar(await getProjectConfig(projectId))
+  } catch (e) {
+    if (e instanceof ConfigKeyError) return { ok: false, error: e.message }          // 손상 키 이름이 든 고정 문구(CONFIG_INVALID)
+    if (e instanceof ConfigUnavailableError) {
+      console.error('[wbs/dependency] 달력 조회 실패', { projectId, cause: e.message })
+      return { ok: false, error: ERR_CALENDAR_LOOKUP }
+    }
+    throw e
+  }
+  if (endpoints.some(item => workingDaysBetween(item.planned_start, item.planned_end, calendar) === 0)) {
+    return { ok: false, error: '계획 기간에 근무일이 없는 작업은 연결할 수 없습니다' }
   }
 
   // 앱에서도 순환을 선제 차단해 DB 제약의 원문 오류 대신 사용자가 이해할 메시지를 준다.

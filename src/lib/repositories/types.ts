@@ -10,6 +10,7 @@ import type {
 } from '@/lib/domain/types'
 import type { WeeklyArea } from '@/lib/domain/weeklySheet'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
+import type { WorkCalendar } from '@/lib/domain/calendar'
 
 /**
  * Repository callers must be able to distinguish a valid empty result from a
@@ -27,6 +28,7 @@ export type RepositoryErrorCode =
   | 'WBS_PROJECT_READ_FAILED'
   | 'WBS_ITEMS_READ_FAILED'
   | 'WBS_HOLIDAYS_READ_FAILED'
+  | 'WBS_CALENDAR_INVALID'
   | 'WBS_DEPENDENCIES_READ_FAILED'
   | 'WBS_TEAMS_READ_FAILED'
   | 'WBS_ITEM_SCOPE_READ_FAILED'
@@ -76,7 +78,10 @@ export interface WbsProjectSnapshot {
   projectId: string
   baseDate: string | null
   items: WbsRepositoryItem[]
+  /** 휴무(kind='off') 날짜만 오름차순 — 근무 예외는 calendar.workDates */
   holidays: string[]
+  /** 그 프로젝트 달력 — 봇 계산(과제 16)이 쓴다 */
+  calendar: WorkCalendar
   dependencies: TaskDependency[]
 }
 
@@ -365,7 +370,10 @@ export interface ProjectSettingsSnapshot {
   startDate: string | null
   endDate: string | null
   baseDate: string | null
+  /** 휴무(kind='off') 날짜 */
   holidays: string[]
+  /** 특정일 근무(kind='work') 날짜 */
+  workDates: string[]
   wbsItemCount: number
   memberCount: number
 }

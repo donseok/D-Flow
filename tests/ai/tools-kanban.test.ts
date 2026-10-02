@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
+import { calWithOff } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 const toolTeams = fixedToolTeams()
 import { createGetKanbanViewTool, type KanbanColumnRecord } from '@/lib/ai/tools/kanban'
@@ -36,6 +37,7 @@ const snapshot: WbsProjectSnapshot = {
   projectId: 'p1',
   baseDate: '2026-07-20',
   holidays: [],
+  calendar: calWithOff([]),
   items: [
     item({ id: 'phase-1', code: '1', name: '구축' }),
     item({
@@ -193,7 +195,7 @@ describe('get_kanban_view', () => {
 
   it('clamps cardLimit above the maximum to 10', async () => {
     const manyTasks: WbsProjectSnapshot = {
-      projectId: 'p1', baseDate: '2026-07-20', holidays: [], dependencies: [],
+      projectId: 'p1', baseDate: '2026-07-20', holidays: [], calendar: calWithOff([]), dependencies: [],
       items: [
         item({ id: 'phase-1', code: '1', name: '구축' }),
         ...Array.from({ length: 12 }, (_, index) => item({
@@ -213,7 +215,7 @@ describe('get_kanban_view', () => {
 
   it('treats an empty project as a valid empty board', async () => {
     const empty: WbsProjectSnapshot = {
-      projectId: 'p1', baseDate: null, holidays: [], items: [], dependencies: [],
+      projectId: 'p1', baseDate: null, holidays: [], calendar: calWithOff([]), items: [], dependencies: [],
     }
     const result = await createGetKanbanViewTool(botRepository(repositoryOk(empty)), toolTeams).execute(
       { projectId: 'p1' }, context,

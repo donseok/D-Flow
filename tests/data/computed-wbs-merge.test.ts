@@ -26,6 +26,9 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
+// 휴일·달력은 설정 해석기가 싣는다(SP5 A 과제 13) — 이 파일은 의존성 병합만 본다
+const cfgMock = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfgMock.getProjectConfig }))
 // React cache() 는 같은 인자로 두 번째 호출을 재사용한다 — 케이스마다 projectId 를 달리해 피한다.
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react')
@@ -33,6 +36,7 @@ vi.mock('react', async () => {
 })
 
 import { getComputedWbs } from '@/lib/data/wbs'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 function item(over: Record<string, unknown>) {
   return {
@@ -47,8 +51,8 @@ function item(over: Record<string, unknown>) {
 describe('getComputedWbs — 의존성 두 축 병합', () => {
   beforeEach(() => {
     for (const k of Object.keys(responses)) delete responses[k]
+    cfgMock.getProjectConfig.mockResolvedValue(makeProjectConfig())
     responses.item_owners = { data: [], error: null }
-    responses.holidays = { data: [], error: null }
     responses.projects = { data: { base_date: '2026-08-28' }, error: null }
     responses.task_dependencies = { data: [], error: null }
   })
