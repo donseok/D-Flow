@@ -64,6 +64,16 @@ describe('updateProjectSettings — calendar.week_start', () => {
     expect(r).toMatchObject({ ok: false, kind: 'invalid', fieldErrors: [{ key: 'calendar.week_start', message: expect.stringContaining('시간대') }] })
     expect(await updateProjectSettings(PID, patch({ set: { 'core.extra_axis_label': 'Track' } }))).toMatchObject({ ok: true })
   })
+  it('시간대 저장 — 별칭 이름(Europe/Kyiv)은 고른 그대로 저장하고, 그 tz 의 오늘로 주 시작을 바꾼다(판정 J2)', async () => {
+    vi.useFakeTimers({ now: new Date('2026-09-26T22:30:00Z'), toFake: ['Date'] })     // 키이우(UTC+3) 09-27(일) 01:30
+    project({ 'calendar.week_start': MON0 })
+    expect(await updateProjectSettings(PID, patch({ set: { 'calendar.timezone': 'Europe/Kyiv' } }))).toMatchObject({ ok: true })
+    expect(db.projects.get(PID)!.values['calendar.timezone']).toBe('Europe/Kyiv')
+    db.weeklyReports.push({ project_id: PID, week_start: '2026-09-21' })
+    const rev = db.projects.get(PID)!.revision
+    expect(await updateProjectSettings(PID, patch({ expectedRevision: rev, commandId: '00000000-0000-4000-8000-0000000019a3', set: { 'calendar.week_start': 'sunday' } }))).toMatchObject({ ok: true })
+    expect(db.projects.get(PID)!.values['calendar.week_start']).toEqual([{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }])
+  })
   it('[RF3] unset(기본값으로) 이 월요일 문서에 막히면 CONFIG_IN_USE — 막는 주차가 키 오류 문구에 있다', async () => {
     project({ 'calendar.week_start': MON0 })
     db.weeklyReports.push({ project_id: PID, week_start: '2026-09-21' })

@@ -54,13 +54,13 @@ describe('createProject — calendar.* 생성 시 복사', () => {
     const v = db.projects.get(r.projectId)!.values
     expect([v['calendar.timezone'], v['calendar.working_days'], v['calendar.week_start']]).toEqual(['Europe/Berlin', [1, 2, 3, 4], [{ day: 'sunday', from: null }]])
   })
-  it('복사 — 원본에 달력 키가 없으면 tz·근무 요일은 워크스페이스에서, 주 시작은 원본의 기본(일요일) 하나', async () => {
-    ws({ 'calendar.timezone': 'Asia/Tokyo', 'calendar.week_start': 'monday' })
+  it('복사 — 원본에 달력 키가 없으면 tz·근무 요일은 워크스페이스에서, 주 시작은 원본의 기본(일요일) 하나 — 별칭 tz 는 그 이름 그대로(J2)', async () => {
+    ws({ 'calendar.timezone': 'Asia/Kolkata', 'calendar.week_start': 'monday' })
     db.addProject({ id: SRC, workspaceId: WID, values: { 'core.level_labels': ['S'], 'modules.enabled': ['weekly'] } })
     const r = await createProject(input({ copyFromProjectId: SRC }))
     if (!r.ok) throw new Error('복사 실패')
     const v = db.projects.get(r.projectId)!.values
-    expect([v['calendar.timezone'], v['calendar.working_days'], v['calendar.week_start']]).toEqual(['Asia/Tokyo', [1, 2, 3, 4, 5], [{ day: 'sunday', from: null }]])
+    expect([v['calendar.timezone'], v['calendar.working_days'], v['calendar.week_start']]).toEqual(['Asia/Kolkata', [1, 2, 3, 4, 5], [{ day: 'sunday', from: null }]])
   })
   it('워크스페이스 달력 값이 손상이면 결과(CONFIG_INVALID)로 거부하고 아무것도 만들지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

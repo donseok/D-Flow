@@ -98,7 +98,25 @@ export function zonedMidnightUtc(dateIso: string, tz: string): Date {
   return new Date(t)
 }
 
-/** calendar.timezone 의 검증·정규화(D54) — 생성 성공이 기준(목록 포함이 아니다 — 'UTC' 를 받는다), 오프셋 꼴 거부, 폴백 없음 */
+/** Intl 이 아는 tz 이름의 소문자 → 표기(대소문자 정규화용). 엔진이 supportedValuesOf 를 모르면 빈 표 — resolvedOptions 후보만 쓴다 */
+let tzSpellings: ReadonlyMap<string, string> | null = null
+function tzSpellingOf(lower: string): string | undefined {
+  if (!tzSpellings) {
+    const m = new Map<string, string>()
+    try {
+      for (const n of Intl.supportedValuesOf('timeZone')) m.set(n.toLowerCase(), n)
+    } catch { /* 표 없이 resolvedOptions 후보만 */ }
+    tzSpellings = m
+  }
+  return tzSpellings.get(lower)
+}
+
+/**
+ * calendar.timezone 의 검증·정규화(D54 — 판정 J2 정정) — ① 오프셋 꼴 사전 거부 ② `Intl.DateTimeFormat` 생성 성공이 유효성(목록 포함이 아니다 —
+ * 'UTC' 를 받는다) ③ 저장 값 = 입력(trim)의 **대소문자만** 정규화한 이름: Intl 목록·`resolvedOptions().timeZone` 후보 중 대소문자 무시로 같은
+ * 것의 표기, 없으면 입력이 IANA 이름 꼴일 때 입력 그대로. ICU 의 별칭 치환(Asia/Kolkata → Asia/Calcutta)은 비교에만 쓰고 저장하지 않는다 —
+ * 사용자가 고른 이름을 옛 이름으로 바꾸지 않는다. 폴백 없음.
+ */
 export function parseTimezone(raw: unknown): CalendarResult<string> {
   if (typeof raw !== 'string') return fail('시간대는 문자열이어야 합니다.')
   const v = raw.trim()
@@ -110,8 +128,10 @@ export function parseTimezone(raw: unknown): CalendarResult<string> {
   } catch {
     return fail(`모르는 시간대입니다: ${v}`)
   }
-  if (!IANA_NAME.test(resolved)) return fail(`IANA 이름 꼴이 아닌 시간대입니다(오프셋 꼴 포함): ${v}`)
-  return { ok: true, value: resolved }
+  const lower = v.toLowerCase()
+  const spelled = resolved.toLowerCase() === lower ? resolved : (tzSpellingOf(lower) ?? v)
+  if (!IANA_NAME.test(spelled)) return fail(`IANA 이름 꼴이 아닌 시간대입니다(오프셋 꼴 포함): ${v}`)
+  return { ok: true, value: spelled }
 }
 
 /** calendar.working_days 의 검증 — 길이 ≥1, 1..7 정수, 유일. 저장은 오름차순 */
