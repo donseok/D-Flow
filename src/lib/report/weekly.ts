@@ -35,7 +35,7 @@ export interface WeeklyMeta {
   nextWeekRange: string      // 차주 표시 요일 범위
   weekStart: string          // 그 주 키(프로젝트 규칙 — 월요일 고정이 아니다)
   weekEnd: string            // 그 주 기간의 마지막 날(과도기 주는 6·8일 기간의 끝)
-  weekDays: string[]         // 표시 요일(기간 안 근무일, 0이면 기간 전체 — 1~7칸)
+  weekDays: string[]         // 표시 요일(기간 안 근무일, 0이면 기간 전체 — 1~8칸: 일→월 과도기 주는 8일이라 같은 요일이 두 번 나올 수 있다)
   weekDayLabels: string[]    // weekDays 의 요일 라벨('월'…)
   nextWeekStart: string
   nextWeekDays: string[]
@@ -96,7 +96,7 @@ export interface PhasePlanActual {
 
 export interface WorkloadRow {
   name: string               // 팀
-  perDay: number[]           // 월~금 (5)
+  perDay: number[]           // weekDays 와 같은 칸(표시 요일마다 하나)
   total: number
   note: string               // 여유/적정/과부하
 }
@@ -109,7 +109,7 @@ export interface IssueRow {
 
 export interface AttendanceRow {
   memberName: string
-  perDay: (string | null)[]  // 월~금 근태 약칭 또는 null(정상)
+  perDay: (string | null)[]  // weekDays 와 같은 칸의 근태 약칭 또는 null(정상)
   count: number              // 특이 근태 일수
 }
 

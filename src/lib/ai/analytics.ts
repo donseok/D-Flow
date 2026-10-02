@@ -37,6 +37,8 @@ export interface ProjectAnalysis extends ProjectSummary {
   weekStart: string
   weekEnd: string
   weekRange: string
+  /** 봇 문장의 '이번 주(…)' 범위 — 거르는 기간 [weekStart, weekEnd] 그대로 'M/D~M/D'(weekRange 는 보고서 라벨의 표시 요일 범위 — A-3 리뷰 P3) */
+  periodRange: string
   weekly: WeeklyReportModel
   leaves: LeafCtx[]
   delayed_: LeafCtx[]
@@ -60,6 +62,8 @@ function overlaps(aStart: string | null, aEnd: string | null, bStart: string, bE
   return s <= bEnd && e >= bStart
 }
 const dd = (s: string | null): string => s ?? '미정'
+/** 'YYYY-MM-DD' → 'M/D' */
+const mdOf = (s: string): string => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`
 
 function ownersText(owners: ComputedItem['owners']): string {
   if (!owners.length) return '미배정'
@@ -104,7 +108,7 @@ export function analyzeProject(
   const overall = overallProgress(items)
   const actual = Math.round(overall.actual)
   const planned = Math.round(overall.planned)
-  // '이번 주' = 그 프로젝트 규칙의 주 기간(과도기 주는 6·8일 — SP5 A). weekRange 는 표시 요일 범위
+  // '이번 주' = 그 프로젝트 규칙의 주 기간(과도기 주는 6·8일 — SP5 A). weekRange 는 표시 요일 범위(보고서 라벨), 봇 문장은 periodRange
   const { weekStart, weekEnd, weekRange } = weekly.meta
 
   const delayed_ = leaves.filter(l => l.node.status === 'delayed')
@@ -128,6 +132,7 @@ export function analyzeProject(
     weekStart,
     weekEnd,
     weekRange,
+    periodRange: `${mdOf(weekStart)}~${mdOf(weekEnd)}`,
     weekly,
     leaves,
     delayed_,
@@ -167,7 +172,7 @@ export function answerProjectStatus(a: ProjectAnalysis): string {
     `• 전체 작업: ${a.taskCount}건 (${statusBreakdown(a.statusCount)})`,
     `• 공정률(실적): ${a.donePct}%${gapText}`,
     // 주차 라벨 아래에는 주차-스코프 수치만 둔다(지연/완료 누계는 위 '전체 작업'에 표기).
-    `• 이번 주(${a.weekRange}) 시작 예정 ${a.startingThisWeek.length}건 · 이번 주 완료 ${a.weekly.kpi.doneThisWeek}건`,
+    `• 이번 주(${a.periodRange}) 시작 예정 ${a.startingThisWeek.length}건 · 이번 주 완료 ${a.weekly.kpi.doneThisWeek}건`,
   ].join('\n')
 }
 
@@ -192,21 +197,21 @@ export function answerCompleted(a: ProjectAnalysis): string {
 }
 
 export function answerThisWeekStart(a: ProjectAnalysis): string {
-  if (a.startingThisWeek.length === 0) return `이번 주(${a.weekRange})에 시작 예정인 작업이 없습니다.`
+  if (a.startingThisWeek.length === 0) return `이번 주(${a.periodRange})에 시작 예정인 작업이 없습니다.`
   const rows = a.startingThisWeek
     .slice()
     .sort((x, y) => (x.node.plannedStart ?? '').localeCompare(y.node.plannedStart ?? ''))
     .map(l => bulletLeaf(l, n => `시작 ${dd(n.plannedStart)} · 마감 ${dd(n.plannedEnd)}`))
-  return [`이번 주(${a.weekRange}) 시작 예정 작업 ${a.startingThisWeek.length}건입니다.`, listWithCap(rows, 12)].join('\n')
+  return [`이번 주(${a.periodRange}) 시작 예정 작업 ${a.startingThisWeek.length}건입니다.`, listWithCap(rows, 12)].join('\n')
 }
 
 export function answerThisWeek(a: ProjectAnalysis): string {
-  if (a.activeThisWeek.length === 0) return `이번 주(${a.weekRange})에 진행/예정인 작업이 없습니다.`
+  if (a.activeThisWeek.length === 0) return `이번 주(${a.periodRange})에 진행/예정인 작업이 없습니다.`
   const rows = a.activeThisWeek
     .slice()
     .sort((x, y) => (x.node.plannedStart ?? '').localeCompare(y.node.plannedStart ?? ''))
     .map(l => bulletLeaf(l, n => `${dd(n.plannedStart)}~${dd(n.plannedEnd)} · ${STATUS_KO[n.status]} · 실적 ${Math.round(n.rolledActualPct)}%`))
-  return [`이번 주(${a.weekRange}) 진행·예정 작업 ${a.activeThisWeek.length}건입니다.`, listWithCap(rows, 12)].join('\n')
+  return [`이번 주(${a.periodRange}) 진행·예정 작업 ${a.activeThisWeek.length}건입니다.`, listWithCap(rows, 12)].join('\n')
 }
 
 export function answerByTeam(

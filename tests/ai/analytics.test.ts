@@ -122,9 +122,9 @@ describe('의도별 답변 포매터', () => {
     expect(answerCompleted(a)).toContain('아직 완료된 작업이 없습니다')
   })
 
-  it('answerThisWeekStart — 주차 범위 표기', () => {
+  it('answerThisWeekStart — 봇 문장의 범위는 거르는 기간 그대로(6/29~7/5 — 표시 요일 범위가 아니다, A-3 리뷰 P3·M5)', () => {
     const a = analyzeProject([phase([leaf({ status: 'not_started', plannedStart: '2026-06-30' })])], 'P', TODAY)
-    expect(answerThisWeekStart(a)).toContain('이번 주(6/29~7/3) 시작 예정 작업 1건')
+    expect(answerThisWeekStart(a)).toContain('이번 주(6/29~7/5) 시작 예정 작업 1건')
   })
 
   it('answerByTeam — 팀별 + 멤버 표기', () => {
@@ -216,6 +216,8 @@ describe('analyzeProject — "이번 주" 끝은 그 주 기간의 마지막 날
     const tree = [phase([leaf({ name: '토요 점검', status: 'not_started', plannedStart: '2026-07-04', plannedEnd: '2026-07-04' })])]
     const a = analyzeProjectReal(tree, 'P', '2026-06-30', calUtcSun, TEST_TEAMS)
     expect(a.startingThisWeek.map(l => l.node.name)).toEqual(['토요 점검'])
-    expect(a.weekRange).toBe('6/29~7/3')
+    expect(a.weekRange).toBe('6/29~7/3')            // 보고서 라벨의 표시 요일 범위(D4) — 그대로
+    expect(a.periodRange).toBe('6/28~7/4')          // 봇 문장은 거르는 기간(7/4 토요 작업이 든 범위)과 같은 표기(M5)
+    expect(answerThisWeekStart(a)).toContain('이번 주(6/28~7/4) 시작 예정 작업 1건')
   })
 })

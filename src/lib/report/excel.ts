@@ -144,7 +144,7 @@ function buildProcessSheet(ws: Worksheet, model: WeeklyReportModel) {
 
   // ── 4) 담당자별 워크로드 ──
   sectionBar(ws, r, LAST, '4) 담당자별 워크로드'); r++
-  // 요일 칸은 표시 요일(근무일)이다(SP5 A — 5칸 고정 폐기). 칸 수 n(1~7) 뒤에 합계·비고. LAST(12) 안에 든다(최대 2+7+2=11열)
+  // 요일 칸은 표시 요일(근무일)이다(SP5 A — 5칸 고정 폐기). 칸 수 n(1~8 — 일→월 과도기 주는 8일) 뒤에 합계·비고. LAST(12) 안에 든다(최대 2+8+2=12열)
   const days = model.meta.weekDayLabels
   headerRow(ws, r, [{ t: '#' }, { t: '담당자', align: 'left' }, ...days.map(t => ({ t })), { t: '합계' }, { t: '비고', align: 'left' }])
   r++
