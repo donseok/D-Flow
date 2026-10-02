@@ -922,6 +922,8 @@ describe('seedProjectValues — 캡처 프로젝트는 월요일 주 시작 규�
     const v = seedProjectValues()
     expect(v['calendar.week_start']).toEqual([{ day: 'monday', from: null }])
     expect(v['core.level_labels']).toEqual([...LEVEL_LABELS_4])
+    // 시드는 KST 날짜로 이번 주 키를 만든다 — 프로젝트 tz 가 없으면 제품 기본 UTC 라 월요일 00~09시 KST 캡처에서 앱의 '이번 주'가 어긋난다(K6)
+    expect(v['calendar.timezone']).toBe('Asia/Seoul')
     const plan = seedPlan(CTX)
     expect(weekKeyOf(v['calendar.week_start'], plan.weeklyReport.week_start)).toBe(plan.weeklyReport.week_start)
   })
