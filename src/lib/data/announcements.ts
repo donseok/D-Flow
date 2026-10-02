@@ -1,7 +1,10 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Announcement, AnnouncementCategory, AnnouncementSummary } from '@/lib/domain/types'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 
 export const ERR_ANNOUNCEMENTS_LOAD = '공지를 불러오지 못했습니다.'
 
@@ -47,7 +50,13 @@ export const getTopAnnouncements = cache(async (
   limit = 5,
 ): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
-  const today = seoulToday()
+  // '오늘' = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d — 같은 요청의 getProjectConfig 캐시). 못 읽거나 손상이면 조회 실패로 돌려준다
+  let today: string
+  try { today = todayIn(requireCalendar(await getProjectConfig(projectId)).timezone, new Date()) } catch (e) {
+    if (!(e instanceof ConfigUnavailableError || e instanceof ConfigKeyError)) throw e
+    console.error('[getTopAnnouncements] 프로젝트 달력 판독 실패:', { projectId, cause: e.message })
+    return { ok: false, error: ERR_ANNOUNCEMENTS_LOAD }
+  }
   // 게시중만: (from is null 또는 from<=today) AND (to is null 또는 to>=today).
   // .or() 는 서로 AND 결합 — 각 경계를 별도 .or() 로 건다.
   const { data, error } = await sb

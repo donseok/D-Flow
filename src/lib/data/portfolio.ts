@@ -3,7 +3,6 @@ import { fetchAllByKeyset, type PageResult } from '@/lib/data/paging'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { DEFAULT_MILESTONE_KEYWORDS } from '@/lib/settings/defs/project'
 import { listProjectsWithState } from '@/app/actions/project'
-import { seoulToday } from '@/lib/domain/dates'
 import { addDaysCal } from '@/lib/domain/dashboard'
 import { activeCodes } from '@/lib/domain/teams'
 import { projectTeams } from '@/lib/teams/source'
@@ -23,8 +22,9 @@ const SNAPSHOT_WINDOW_DAYS = 60
  * 전사 화면을 죽이지 않되, 실패를 '데이터 없음'으로 위장하지 않는다(3원칙).
  * 호출 전제: canViewPortfolio 통과(슈퍼유저) — listProjectsWithState 의 canSeeProject 는
  * 슈퍼유저에게 비공개(0070) 포함 전체를 반환한다.
+ * realToday = 화면 tz 의 실제 오늘 — 여러 프로젝트를 걸치므로 화면(세션 유일 워크스페이스의 tz)이 정해 넘긴다(SP5 계획 D-22d).
  */
-export async function getPortfolioInputs(): Promise<{
+export async function getPortfolioInputs(realToday: string): Promise<{
   inputs: PortfolioProjectInput[]
   leadersDegraded: boolean
   listDegraded: boolean
@@ -68,7 +68,6 @@ export async function getPortfolioInputs(): Promise<{
   // 1000)을 넘는다 — 잘리면 최근 날짜가 빠진 채 추세 화살표가 조용히 낡은 시점으로 계산된다. 키는 PK (project_id, snap_date) 복합 키셋
   // (getComputedWbs 의 item_owners 와 같은 꼴 — 계획 P15). 실패·잘림·읽는 사이 변경은 로그만: 추세 화살표·지연 추세 신호가 비표기될 뿐
   // 합성되지 않는다(getSnapshots 의 '조용한 거짓 차트 금지' 관례와 같은 결). 일부만 읽은 행은 쓰지 않는다.
-  const realToday = seoulToday()
   const snapshotsByProject = new Map<string, SnapshotPoint[]>()
   if (ids.length) {
     type SnapRow = { project_id: string; snap_date: string; actual_pct: unknown; planned_pct: unknown }

@@ -27,7 +27,6 @@ import { TeamProgress } from './TeamProgress'
 import { IssueStatusCard } from './IssueStatusCard'
 import { IssueTrendCard } from './IssueTrendCard'
 import { IssueQueueCard } from './IssueQueueCard'
-import { seoulToday } from '@/lib/domain/dates'
 
 /** 경영진·관리자 대시보드 — 읽기 순서(2026-08-28 재배치): 어디까지 왔나(요약·마일스톤·S-Curve·팀별)
  *  → 앞으로 뭐가 있나(회의) → 이슈가 어떤 상태인가(현황·추이) → 맨 아래 조치 큐(WBS 큐·이슈 큐, 사용자 요청).
@@ -41,7 +40,8 @@ export async function DashboardView({
   projectDescription = null,
   startDate = null,
   endDate = null,
-  today = seoulToday(),
+  today,
+  realToday,
   calendar,
   snapshots,
   historyFailed,
@@ -60,7 +60,10 @@ export async function DashboardView({
   projectDescription?: string | null
   startDate?: string | null
   endDate?: string | null
-  today?: string
+  /** 공정율 기준일(base_date 우선 — getComputedWbs 의 today). 서버 컴포넌트가 스스로 '오늘'을 만들지 않는다(SP5 계획 D-22c) */
+  today: string
+  /** 실제 오늘(그 프로젝트 tz 의 todayIn) — 회의·이슈의 시계 */
+  realToday: string
   /** 프로젝트 달력(직렬화 꼴) — 계획 곡선의 근무일·이슈 추이의 주 시작(SP5 A) */
   calendar: CalendarInput
   snapshots: SnapshotPoint[]
@@ -113,8 +116,7 @@ export async function DashboardView({
     hasWbs ? milestoneTimeline(items, today, milestoneKeywords) : [],
     announcements ? announcementMilestones(announcements, today) : [],
   )
-  // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(섹션 D~F 주석).
-  const realToday = seoulToday()
+  // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(realToday — 페이지가 프로젝트 tz 로 내린다, 섹션 D~F 주석).
   // 사유는 사전 문구 — 로더의 ERR_* 한국어 상수는 로그용이라 영어 화면에 그대로 싣지 않는다.
   const issuesError = <LoadErrorNotice message={tr('common.loadFailed.issues')} />
 
@@ -171,11 +173,11 @@ export async function DashboardView({
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
       {issues === null ? issuesError : issues.length === 0 ? (
-        <IssueStatusCard issues={issues} projectId={projectId} today={realToday} locale={locale} />
+        <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <IssueStatusCard issues={issues} projectId={projectId} today={realToday} locale={locale} />
-          <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} locale={locale} />
+          <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+          <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} locale={locale} />
         </div>
       )}
 

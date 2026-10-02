@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactElement, ReactNode } from 'react'
 import { makeMemberActor } from '../fixtures/actor'
 
@@ -22,10 +22,8 @@ vi.mock('@/lib/data/meetings', async (importOriginal) => ({
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1', email: 'alice@example.com' })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
-vi.mock('@/lib/domain/dates', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/domain/dates')>()),
-  seoulToday: () => '2026-07-19',
-}))
+// 전역 화면의 '오늘' = viewTimezone(세션 유일 워크스페이스 — SP5 과제 22). UTC 로 주고 시스템 시각을 07-19 정오(UTC)로 고정한다(Date 만)
+vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: async () => ({ ok: true, timeZone: 'UTC' }) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: mocks.ProjectPageShell }))
 vi.mock('@/components/meetings/MyMeetingsView', () => ({ MyMeetingsView: mocks.MyMeetingsView }))
 
@@ -54,6 +52,8 @@ const todayMeeting: Meeting = {
   projectName: 'Acme', isMine: true,
 }
 
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-07-19T12:00:00Z')) })
+afterEach(() => { vi.useRealTimers() })
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getActorForView.mockResolvedValue(makeMemberActor('p1'))

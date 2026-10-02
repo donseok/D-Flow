@@ -7,6 +7,7 @@ import { getAnnouncements } from '@/lib/data/announcements'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getIssuesForDashboard } from '@/lib/data/issues'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { todayIn } from '@/lib/domain/calendar'
 import { pick } from '@/lib/settings/pick'
 import { listProjects } from '@/app/actions/project'
 import { getSession } from '@/lib/auth'
@@ -52,7 +53,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   // supabase 클라이언트를 미리 만들어 넘긴다(서버 액션 훅과 달리 이 경로만 client 인자 사용).
   // 방금 계산한 트리를 함께 넘긴다 — 안 넘기면 같은 요청에서 wbs_items 전량을
   // 다시 읽고 computeTree 를 한 번 더 돌린다. 실시간 재조회가 잦아지면 그 중복이 배수로 커진다.
-  after(() => recordProgressSnapshot(projectId, sb, { roots: items, today }))
+  after(() => recordProgressSnapshot(projectId, sb, { roots: items, today, timeZone: calendar.timezone }))
 
   const project = projects.find(p => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'dash.heroProjectFallback')
@@ -63,6 +64,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
+  // 실제 오늘(회의·이슈의 시계) = 프로젝트 tz 의 오늘 — getComputedWbs 가 이미 판독한 달력(손상이면 그 로더가 던졌다, 계획 D-22c)
+  const realToday = todayIn(calendar.timezone, new Date())
 
   return (
     <ProjectPageShell hero={hero}>
@@ -76,6 +79,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         startDate={project?.start_date ?? null}
         endDate={project?.end_date ?? null}
         today={today}
+        realToday={realToday}
         calendar={toCalendarInput(calendar)}
         snapshots={snapRes.ok ? snapRes.rows : []}
         historyFailed={!snapRes.ok}

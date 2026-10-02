@@ -66,7 +66,7 @@ const FORMATTERS = new Map<string, Intl.DateTimeFormat>()
 function partsIn(tz: string, at: Date): { y: number; mo: number; d: number; h: number; mi: number; s: number } {
   let f = FORMATTERS.get(tz)
   if (!f) {
-    // hourCycle 하나만 준다 — hour12 와 같이 주면 서로 덮어써 결과가 환경 의존이 된다(dates.ts seoulStamp 의 주석)
+    // hourCycle 하나만 준다 — hour12 와 같이 주면 서로 덮어써 결과가 환경 의존이 된다(옛 서울 고정 시각 포맷에서 확인한 함정)
     f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
     FORMATTERS.set(tz, f)
   }
@@ -75,16 +75,16 @@ function partsIn(tz: string, at: Date): { y: number; mo: number; d: number; h: n
   return { y: Number(p.year), mo: Number(p.month), d: Number(p.day), h: Number(p.hour) % 24, mi: Number(p.minute), s: Number(p.second) }
 }
 
-/** 임의 instant 의 그 tz 'YYYY-MM-DD' — seoulYmd 대체 */
+/** 임의 instant 의 그 tz 'YYYY-MM-DD' */
 export function ymdIn(tz: string, at: Date): string {
   const p = partsIn(tz, at)
   return `${String(p.y).padStart(4, '0')}-${pad2(p.mo)}-${pad2(p.d)}`
 }
-/** 그 tz 의 오늘 — seoulToday 대체. now 는 서버 진입점이 한 번 만든 값(계획 P8) */
+/** 그 tz 의 오늘. now 는 서버 진입점이 한 번 만든 값(계획 P8) */
 export function todayIn(tz: string, now: Date): string {
   return ymdIn(tz, now)
 }
-/** 그 tz 의 'YYYY-MM-DD HH:mm' — seoulStamp 대체. 접미("(Asia/Seoul)" 등)는 호출부가 붙인다 */
+/** 그 tz 의 'YYYY-MM-DD HH:mm'. 접미("(Asia/Seoul)" 등)는 호출부가 붙인다 */
 export function stampIn(tz: string, at: Date | string): string {
   const p = partsIn(tz, typeof at === 'string' ? new Date(at) : at)
   return `${String(p.y).padStart(4, '0')}-${pad2(p.mo)}-${pad2(p.d)} ${pad2(p.h)}:${pad2(p.mi)}`
@@ -179,7 +179,7 @@ export function isWorkingDay(date: string, cal: DayRules): boolean {
   return cal.workingDays.has(isoDowOf(date))
 }
 
-/** start~end 양끝 포함 근무일 수. end < start 면 0 — businessDaysBetween 대체 */
+/** start~end 양끝 포함 근무일 수. end < start 면 0 */
 export function workingDaysBetween(start: string, end: string, cal: DayRules): number {
   if (end < start) return 0
   let n = 0

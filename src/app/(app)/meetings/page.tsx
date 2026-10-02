@@ -10,7 +10,9 @@ import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { viewTimezone } from '@/lib/calendar/viewZone'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 function monthGrid(todayIso: string): [string, string] {
@@ -23,7 +25,10 @@ function monthGrid(todayIso: string): [string, string] {
 
 export default async function MyMeetingsPage() {
   await requireModulePage(null, 'meetings')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13). 목록의 행 거르기는 로더(getMyMeetings)
-  const today = seoulToday()
+  // '오늘'의 tz = 세션 유일 워크스페이스, 없거나 여럿이면 UTC(계획 D-22b). 아래 Promise.all 의 getActorForView 는 요청 캐시라 같은 값
+  const vz = await viewTimezone(await getActorForView())
+  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={await getServerLocale()} />
+  const today = todayIn(vz.timeZone, new Date())
   const [gs, ge] = monthGrid(today)
   const [res, m, user, locale] = await Promise.all([
     getMyMeetings(gs, ge),

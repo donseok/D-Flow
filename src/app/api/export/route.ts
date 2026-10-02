@@ -7,7 +7,7 @@ import { deriveStandardExcelProfile, resolveTeamColumns } from '@/lib/excel/stan
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { activeCodes } from '@/lib/domain/teams'
 import { projectTeams, TeamsUnavailableError } from '@/lib/teams/source'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
@@ -94,7 +94,8 @@ export async function GET(req: NextRequest) {
     // 저장 양식의 명시적 미지원(아웃라인+펼침)·양식보다 깊은 WBS — 무증상 오파싱 대신 400 과 사유.
     return NextResponse.json({ error: built.error }, { status: 400 })
   }
-  const today = seoulToday()
+  // 파일명 날짜 = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d) — getComputedWbs 가 이미 판독한 달력
+  const today = todayIn(wbs.calendar.timezone, new Date())
   const filename = `WBS_${name}_${today}.xlsx`.replace(/[^\w가-힣.\-]+/g, '_')
 
   return new NextResponse(built.buffer, {

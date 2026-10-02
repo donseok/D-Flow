@@ -223,7 +223,7 @@ describe('chat v2 source and answer verifier', () => {
       ['S3'],
       ['S4'],
     ])
-    const answer = deterministicEvidenceAnswer(pack)
+    const answer = deterministicEvidenceAnswer(pack, 'Asia/Seoul')
     const citedLine = answer.split('\n').find(line => line.includes('[S1]')) ?? ''
     expect(citedLine).toContain('[S1][S2][S3]')
     expect(citedLine).not.toContain('[S4]')
@@ -314,7 +314,7 @@ describe('deterministic answer — 권한 표시 어휘(0003: 명단 access_role
     const answer = deterministicEvidenceAnswer(recordPack('list_members', [
       { name: '박관리', accessRole: 'admin', hasAccount: true },
       { name: '김멤버', accessRole: 'member', hasAccount: true },
-    ]))
+    ]), 'Asia/Seoul')
     expect(answer).toContain('박관리 · 권한: 관리자')
     expect(answer).toContain('김멤버 · 권한: 멤버')
     expect(answer).not.toMatch(/리더|실무|PMO 관리자|팀 편집자|accessRole/)
@@ -324,8 +324,15 @@ describe('deterministic answer — 권한 표시 어휘(0003: 명단 access_role
     const answer = deterministicEvidenceAnswer(recordPack('get_wbs_change_log', [
       { itemName: '설계', actorLabel: 'ERP 관리자', actorRole: 'admin' },
       { itemName: '구현', actorLabel: '조회', actorRole: 'viewer' },
-    ]))
+    ]), 'Asia/Seoul')
     expect(answer).toContain('변경자 역할: 관리자')
     expect(answer).toContain('변경자 역할: 조회')
   })
+
+  it('시각 값은 요청 범위 tz 로 찍는다 — 서울 고정이 아니다(SP5 과제 22)', () => {
+    const pack = recordPack('get_wbs_change_log', [{ itemName: '설계', changedAt: '2026-10-03T23:30:00Z' }])
+    expect(deterministicEvidenceAnswer(pack, 'Asia/Seoul')).toContain('2026-10-04 08:30')
+    expect(deterministicEvidenceAnswer(pack, 'America/Los_Angeles')).toContain('2026-10-03 16:30')
+  })
+
 })

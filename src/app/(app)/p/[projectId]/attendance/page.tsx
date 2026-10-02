@@ -11,22 +11,30 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { pickCalendar } from '@/lib/settings/pick'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function AttendancePage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'attendance')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [records, roster, m] = await Promise.all([
+  const [records, roster, m, pc, locale] = await Promise.all([
     getAttendanceRecords(projectId),
     getProjectRoster(projectId),
     getActorForView(),
+    loadProjectConfigForPage(projectId),
+    getServerLocale(),
   ])
   // 명단은 인원 선택·이름 표시용 곁가지 — 실패해도 기록은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[attendance] 명단 조회 실패(project=${projectId}) — 인원 목록 없이 그리고 경고를 띄운다`)
   const members = roster.ok ? roster.rows : []
-  const locale = await getServerLocale()
-  const today = seoulToday()
+  // '오늘'의 tz = 프로젝트 달력(계획 D-22·D-21a) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
+  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  const cal = pickCalendar(pc.cfg)
+  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  const today = todayIn(cal.calendar.timezone, new Date())
   const s = summarize(records)
 
   return (

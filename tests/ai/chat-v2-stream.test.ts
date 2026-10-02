@@ -414,7 +414,7 @@ describe('chat v2 orchestrator', () => {
         .map(item => item.type === 'delta' ? item.text : '').join('')
       const { stripCitationMarkers } = await import('@/lib/ai/chat/orchestrator')
       const expected = stripCitationMarkers(deterministicEvidenceAnswer(
-        buildEvidencePack([{ callId: 'c1', tool: 'find_wbs_items', result }]),
+        buildEvidencePack([{ callId: 'c1', tool: 'find_wbs_items', result }]), 'Asia/Seoul',
       ))
       expect(text).toBe(expected)
       expect(text).not.toContain('999')

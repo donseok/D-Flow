@@ -30,7 +30,6 @@ export const WEEK_CALC_ALLOW: Readonly<Record<string, WeekCalcAllow>> = {
 
 /** 옛 사본 — 지우는 과제가 같은 커밋에서 항목을 지운다. 과제 29 가 빈 객체를 단언한다 */
 export const LEGACY_WEEK_COPIES: Readonly<Record<string, WeekCalcAllow>> = {
-  'src/lib/domain/dates.ts|getUTCDay()': { why: 'SP5 A 과제 22 — isBusinessDay 삭제', count: 1 },
   'src/lib/domain/attendance.ts|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthMatrix(year, month, firstDay)', count: 1 },
   'src/app/(app)/meetings/page.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthGrid(…, firstDay)', count: 1 },
   'src/app/(app)/p/[projectId]/meetings/page.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthGrid(…, firstDay)', count: 1 },

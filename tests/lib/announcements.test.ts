@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // 공지 조회 실패를 '공지 0건'으로 돌려주면 대시보드·공지 화면·보고서·헤더 티커가 공지가 없는 것처럼 보인다 —
 // 로더는 실패를 결과로 돌려준다(members.ts 의 getProjectRoster 관례).
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
+// 게시 판정의 '오늘' = 프로젝트 tz(SP5 과제 22) — 해석기만 바꿔 끼운다
+vi.mock('@/lib/settings/projectConfig', async () => {
+  const { calUtcSun } = await import('../helpers/calendarFixture')
+  return { getProjectConfig: vi.fn(async () => ({ calendar: calUtcSun, calendarError: null })) }
+})
 
 import { createServerClient } from '@/lib/supabase/server'
 import { ERR_ANNOUNCEMENTS_LOAD, getAnnouncements, getTopAnnouncements } from '@/lib/data/announcements'

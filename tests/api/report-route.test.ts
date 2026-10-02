@@ -46,7 +46,7 @@ vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 
 import { GET } from '@/app/api/report/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
-import { monProjectValues } from '../helpers/calendarFixture'
+import { calUtcSun, monProjectValues } from '../helpers/calendarFixture'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
@@ -60,7 +60,7 @@ const sheetReq = (pid = PROJECT_ID) =>
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getSession.mockResolvedValue({ userId: 'u1' })
-  mocks.getComputedWbs.mockResolvedValue({ items: [], today: '2026-09-26' })
+  mocks.getComputedWbs.mockResolvedValue({ items: [], today: '2026-09-26', calendar: calUtcSun })
   mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [] })
   mocks.getAttendanceRecords.mockResolvedValue([])
   mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })

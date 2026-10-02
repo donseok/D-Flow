@@ -12,6 +12,11 @@ vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor }))
 vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
+// 파일명 날짜의 tz = 세션 유일 워크스페이스 달력(SP5 과제 22) — 해석기만 서울로 바꿔 끼운다(옛 기대값의 날짜가 서울 기준)
+vi.mock('@/lib/calendar/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/calendar/load')>()),
+  resolveRequestCalendar: vi.fn(async () => ({ timezone: 'Asia/Seoul', workingDays: new Set([1, 2, 3, 4, 5]), weekStart: [{ day: 'sunday', from: null }] })),
+}))
 
 import { GET } from '@/app/api/minutes/export/route'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'

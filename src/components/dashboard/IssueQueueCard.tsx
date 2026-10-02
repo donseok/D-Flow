@@ -19,7 +19,7 @@ const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
 export function IssueQueueCard({ issues, projectId, today, locale }: {
   issues: DashboardIssue[]
   projectId: string
-  /** 실제 오늘(seoulToday). */
+  /** 실제 오늘(그 프로젝트 tz 의 todayIn). */
   today: string
   locale: Locale
 }) {

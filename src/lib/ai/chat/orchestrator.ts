@@ -30,8 +30,7 @@ import {
   type ToolPlanCall,
 } from './planner'
 import { verifyBotSources, verifySynthesizedAnswer } from './verifier'
-import { seoulStamp } from '@/lib/domain/dates'
-import type { RequestCalendar } from '@/lib/domain/calendar'
+import { stampIn, type RequestCalendar } from '@/lib/domain/calendar'
 
 /** route 도 calendar 도 없는 호출은 결함이다 — 요청 범위 달력 없이 라우팅하지 않는다(기본 tz 로 '이번 주'를 정하지 않는다) */
 function missingCalendar(): never {
@@ -194,28 +193,28 @@ function displayNumber(value: number, key?: string): string {
 }
 
 /**
- * 원시 ISO 타임스탬프(마이크로초·오프셋 포함)를 KST 'YYYY-MM-DD HH:MM'으로 줄인다.
- * 여기 입력은 DB·도구 결과에서 온 문자열이라 깨진 값이 섞일 수 있다 — 정본 seoulStamp 는
- * 유효 시각을 전제하므로 NaN 가드를 먼저 두고 원문을 그대로 흘린다(표시가 'Invalid Date' 가 되지 않게).
+ * 원시 ISO 타임스탬프(마이크로초·오프셋 포함)를 요청 범위 tz 의 'YYYY-MM-DD HH:MM'으로 줄인다(SP5 D13 ③ — 같은 요청의 '오늘'과 같은 tz,
+ * done 이벤트가 그 tz 이름을 실어 화면이 '기준' 줄에 적는다). 여기 입력은 DB·도구 결과에서 온 문자열이라 깨진 값이 섞일 수 있다 —
+ * stampIn 은 유효 시각을 전제하므로 NaN 가드를 먼저 두고 원문을 그대로 흘린다(표시가 'Invalid Date' 가 되지 않게).
  */
-function displayTimestamp(value: string): string {
+function displayTimestamp(value: string, timeZone: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return seoulStamp(parsed)
+  return stampIn(timeZone, parsed)
 }
 
 /** 제목 성격의 필드는 라벨 없이 문두에 그대로 노출한다 — "작업명: X" 반복을 없앤다. */
 const RECORD_TITLE_KEYS = ['title', 'name', 'itemName', 'memberName', 'fileName', 'columnTitle'] as const
 
-function displayValue(value: unknown, key?: string): string {
+function displayValue(value: unknown, timeZone: string, key?: string): string {
   if (value === null) return '없음'
   if (typeof value === 'boolean') return value ? '예' : '아니요'
   if (typeof value === 'number') return displayNumber(value, key)
   if (typeof value === 'string') {
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return displayTimestamp(value)
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return displayTimestamp(value, timeZone)
     return DISPLAY_ENUMS[value] ?? value
   }
-  if (Array.isArray(value)) return value.map(item => displayValue(item, key)).join(', ')
+  if (Array.isArray(value)) return value.map(item => displayValue(item, timeZone, key)).join(', ')
   if (typeof value === 'object' && value) {
     // 레코드 표시는 정보가 있는 필드만: null·false·내부 갱신시각은 나열 노이즈다.
     const entries = Object.entries(value as Record<string, unknown>)
@@ -228,8 +227,8 @@ function displayValue(value: unknown, key?: string): string {
     const rest = entries
       .filter(([field]) => field !== titleKey)
       .slice(0, 12)
-      .map(([field, v]) => `${DISPLAY_LABELS[field] ?? field}: ${displayValue(v, field)}`)
-    return [...(title ? [displayValue(title[1], title[0])] : []), ...rest].join(' · ')
+      .map(([field, v]) => `${DISPLAY_LABELS[field] ?? field}: ${displayValue(v, timeZone, field)}`)
+    return [...(title ? [displayValue(title[1], timeZone, title[0])] : []), ...rest].join(' · ')
   }
   return String(value)
 }
@@ -261,8 +260,9 @@ const HIDDEN_FACT_KEYS = new Set([
   'fromReportFound', 'toReportFound', 'defaultRangeApplied', 'bodyTruncated',
 ])
 
-/** Truthful provider-independent answer used when no LLM is configured or synthesis verification fails. */
-export function deterministicEvidenceAnswer(pack: EvidencePack, failedTools: string[] = []): string {
+/** Truthful provider-independent answer used when no LLM is configured or synthesis verification fails.
+ *  timeZone = 요청 범위 달력의 tz(context.timezone) — 시각 값을 그 tz 로 찍는다. */
+export function deterministicEvidenceAnswer(pack: EvidencePack, timeZone: string, failedTools: string[] = []): string {
   const lines: string[] = []
   const visible = pack.facts.filter(fact => !HIDDEN_FACT_KEYS.has(fact.key))
   if (visible.length) {
@@ -271,17 +271,17 @@ export function deterministicEvidenceAnswer(pack: EvidencePack, failedTools: str
     for (const fact of visible.filter(f => f.key !== 'rangeTo').slice(0, 8)) {
       // 조회 시작/종료 두 줄 대신 "기간: A ~ B" 한 줄로 합친다.
       if (fact.key === 'rangeFrom' && rangeTo.has(fact.tool)) {
-        lines.push(`• 기간: ${displayValue(fact.value)} ~ ${displayValue(rangeTo.get(fact.tool)!.value)}`)
+        lines.push(`• 기간: ${displayValue(fact.value, timeZone)} ~ ${displayValue(rangeTo.get(fact.tool)!.value, timeZone)}`)
         continue
       }
-      lines.push(`• ${DISPLAY_LABELS[fact.key] ?? fact.key}: ${displayValue(fact.value, fact.key)}${citations(fact.sourceIds)}`)
+      lines.push(`• ${DISPLAY_LABELS[fact.key] ?? fact.key}: ${displayValue(fact.value, timeZone, fact.key)}${citations(fact.sourceIds)}`)
     }
   }
   if (pack.records.length) {
     if (visible.length) lines.push('')
     lines.push('상세 항목')
     for (const record of pack.records.slice(0, 12)) {
-      lines.push(`• ${displayValue(record.value).slice(0, 800)}${citations(record.sourceIds)}`)
+      lines.push(`• ${displayValue(record.value, timeZone).slice(0, 800)}${citations(record.sourceIds)}`)
     }
   }
   if (!visible.length && !pack.records.length) {
@@ -486,7 +486,7 @@ async function* finishWithEvidence(
   const pack = buildEvidencePack(successes, now.toISOString())
   const prompt = buildEvidencePrompt(pack)
   const failedTools = [...new Set(failures.map(f => f.tool))]
-  let answer = deterministicEvidenceAnswer(pack, failedTools)
+  let answer = deterministicEvidenceAnswer(pack, deps.context.timezone, failedTools)
   const synthesizer = deps.synthesize
     ?? (chatLlmSynthesisEnabled() ? synthesizeWithConfiguredLlm : null)
   // 취소된 요청에 LLM 합성을 시작하지 않는다(리뷰 M-7). 전송을 시작한 호출은 중단해도

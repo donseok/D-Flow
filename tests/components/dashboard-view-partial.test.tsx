@@ -81,7 +81,7 @@ const MEETING: Meeting = {
 
 type Props = Parameters<typeof DashboardView>[0]
 const base: Props = {
-  items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY,
+  items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY, realToday: TODAY,
   calendar: calInputUtcMon, snapshots: [], historyFailed: false, announcements: [ANN], meetings: [MEETING], meetingExceptions: [],
   issues: [ISSUE], milestoneKeywords: [],
 }
@@ -90,6 +90,13 @@ const view = async (over: Partial<Props> = {}) => (await DashboardView({ ...base
 beforeEach(() => vi.clearAllMocks())
 
 describe('DashboardView — WBS 가 비어도 회의·이슈·공지는 그린다', () => {
+  it('realToday 는 필수 prop — 서버 컴포넌트가 스스로 오늘을 만들지 않는다(D-22c)', () => {
+    const { realToday: _omit, ...rest } = base
+    void _omit
+    // @ts-expect-error realToday 가 없다
+    const el = <DashboardView {...rest} />
+    expect(el).toBeTruthy()
+  })
   it('(a) WBS 0건 + 이슈 1건: 빈 상태 없이 이슈·마일스톤·공지 스트립을 그리고, WBS 카드와 팀 캐시는 건너뛴다', async () => {
     const tree = await view({ items: [], announcements: [], meetings: [] })
     const types = typesIn(tree)

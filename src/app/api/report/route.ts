@@ -29,13 +29,10 @@ import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/sett
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { valueOf } from '@/lib/settings/registry'
-import { seoulStamp } from '@/lib/domain/dates'
+import { stampIn } from '@/lib/domain/calendar'
 
 // exceljs·템플릿 zip 읽기(fs)는 Node 전용 → Edge 런타임 금지.
 export const runtime = 'nodejs'
-
-/** 현재 시각(Asia/Seoul). 포맷 정본은 domain/dates.seoulStamp. */
-const seoulNow = (): string => seoulStamp(new Date())
 
 const FORMATS = {
   xlsx: {
@@ -169,9 +166,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: annRes.error }, { status: 503 })
   }
   const members = roster.rows
+  // 생성 시각·브리핑 시각의 tz = 그 프로젝트 달력(getComputedWbs 가 판독한 것 — SP5 계획 D-22). now 는 이 요청에서 한 번
+  const now = new Date()
+  const stamp = (at: Date | string) => stampIn(calendar.timezone, at)
 
   const model = buildWeeklyReportModel(items, project, today, {
-    members, attendance, generatedAt: seoulNow(),
+    members, attendance, generatedAt: stamp(now),
     meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
     teams: activeCodes(teamsRes.teams), levelLabels, calendar,
   })
@@ -202,7 +202,7 @@ export async function GET(req: NextRequest) {
     }
     extra = briefToExtraSlide(
       { headline: row.headline, bodyMd: row.bodyMd },
-      row.updatedAt ? seoulStamp(row.updatedAt) : seoulNow(),
+      stamp(row.updatedAt || now),
     )
   }
 

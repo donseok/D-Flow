@@ -7,12 +7,11 @@ import { teamOrderMap } from '@/lib/domain/teams'
 import { projectTeams } from '@/lib/teams/source'
 import type { WbsRow, ComputedItem, TeamCode, OwnerKind, TaskDependency } from '@/lib/domain/types'
 import { mergeSpecDepends } from '@/lib/domain/mergeDependencies'
-import { seoulToday } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { requireCalendar } from '@/lib/calendar/load'
-import type { WorkCalendar } from '@/lib/domain/calendar'
+import { todayIn, type WorkCalendar } from '@/lib/domain/calendar'
 
 // 같은 요청 내 layout+page 중복 호출을 1회로 dedupe(React cache).
 export const getComputedWbs = cache(async (
@@ -140,8 +139,8 @@ export const getComputedWbs = cache(async (
     )
     return { dependencies: merged.dependencies, unresolvedDepends: Object.fromEntries(merged.unresolvedBySuccessorId) }
   })()
-  // base_date(공정율 기준일)가 설정돼 있으면 그 날짜로, 없으면 오늘(자동)로 산정
-  const today = (proj as { base_date: string | null } | null)?.base_date ?? seoulToday()
+  // base_date(공정율 기준일)가 설정돼 있으면 그 날짜로, 없으면 그 프로젝트 tz 의 오늘(자동)로 산정(SP5 계획 D-22d)
+  const today = (proj as { base_date: string | null } | null)?.base_date ?? todayIn(calendar.timezone, new Date())
   return {
     items: computeTree(rows, today, calendar, { subActTeamOrder: teamOrder }),
     dependencies,

@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { computeTree, overallProgress } from '@/lib/domain/rollup'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
@@ -54,16 +54,20 @@ export async function recordProgressSnapshot(
    * 한 번씩 사라진다 — 대시보드는 지금까지 같은 계산을 요청마다 두 번 했다.
    * `today` 는 그 트리를 계산한 기준일이다. 스냅샷은 '오늘'의 기록이므로 기준일이 오늘과
    * 다르면(프로젝트에 base_date 가 설정된 경우) 재사용하지 않고 종전 경로로 직접 계산한다.
+   * `timeZone` 은 그 트리를 계산한 프로젝트 달력의 tz(getComputedWbs 의 calendar.timezone) — '오늘'을 그 tz 로 정한다(SP5 과제 22).
+   * 재사용 경로는 설정을 다시 읽지 않는다.
    */
-  precomputed?: { roots: ComputedItem[]; today: string },
+  precomputed?: { roots: ComputedItem[]; today: string; timeZone: string },
 ): Promise<void> {
   try {
     const sb = client ?? (await createServerClient())
-    const todayNow = seoulToday()
-    if (precomputed && precomputed.today === todayNow) {
-      const { actual, planned } = overallProgress(precomputed.roots)
-      await upsertSnapshot(sb, projectId, todayNow, actual, planned)
-      return
+    if (precomputed) {
+      const todayNow = todayIn(precomputed.timeZone, new Date())
+      if (precomputed.today === todayNow) {
+        const { actual, planned } = overallProgress(precomputed.roots)
+        await upsertSnapshot(sb, projectId, todayNow, actual, planned)
+        return
+      }
     }
     // 재계산 경로도 끝까지(SP4 A2 §4.6 — 잘린 트리의 공정율을 오늘 값으로 남기지 않는다). 실패는 아래 catch 가 로그만(보험 기록).
     // 팀 순서는 받은 클라이언트로 읽는다 — 에이전트 라우트는 service_role 을 넘긴다(세션이 없으면 cookies() 도 없다).
@@ -78,6 +82,9 @@ export async function recordProgressSnapshot(
       getProjectConfig(projectId, { client: sb }),
       projectTeams(projectId, { client: sb }),
     ])
+    // '오늘' = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d). 달력 손상은 아래 catch 가 로그만(보험 기록 — 기본 tz 로 대체하지 않는다)
+    const calendar = requireCalendar(cfg)
+    const todayNow = todayIn(calendar.timezone, new Date())
     if (!items.length) return
     const rows: WbsRow[] = items.map((r: Record<string, unknown>) => ({
       id: r.id as string,
@@ -95,7 +102,7 @@ export async function recordProgressSnapshot(
       isOwnerSplit: r.is_owner_split === true,
     }))
     const opts = { subActTeamOrder: teamOrderMap(activeCodes(teams)) }
-    const { actual, planned } = overallProgress(computeTree(rows, todayNow, requireCalendar(cfg), opts))
+    const { actual, planned } = overallProgress(computeTree(rows, todayNow, calendar, opts))
     await upsertSnapshot(sb, projectId, todayNow, actual, planned)
   } catch (e) {
     console.error('[snapshot] 진척 스냅샷 기록 실패(무시):', e)

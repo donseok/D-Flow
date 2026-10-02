@@ -11,7 +11,11 @@ const mocks = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
   projectTeams: vi.fn(),
 }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
+// 실제 오늘의 tz = getComputedWbs 가 판독한 프로젝트 달력(SP5 과제 22)
+vi.mock('@/lib/data/wbs', async () => {
+  const { calUtcSun } = await import('../helpers/calendarFixture')
+  return { getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26', calendar: calUtcSun })) }
+})
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
 vi.mock('@/lib/data/minutes', () => ({ getProjectMinuteSignals: vi.fn(async () => []) }))

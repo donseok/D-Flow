@@ -7,7 +7,7 @@
  * 기존 도메인 함수를 재사용하고 신규 임계값(팀 과부하·액션 경과일)은 이 모듈에만 둔다.
  *
  * '오늘' 이원화: WBS 신호는 getComputedWbs의 today(base_date 우선 — ExecSummary와 동일 판정),
- * 회의 액션 경과일은 realToday(seoulToday) — base_date가 과거로 고정된 프로젝트에서
+ * 회의 액션 경과일은 realToday(그 범위 tz 의 todayIn) — base_date가 과거로 고정된 프로젝트에서
  * 경과일이 왜곡되지 않게 한다.
  *
  * fingerprint: AI 해설 캐시(project_ai_briefs) 재생성 키. 소수점 노이즈·단순 날짜 경과로
@@ -73,7 +73,7 @@ export interface MinuteActionSignal {
 export interface RiskSignalInput {
   items: ComputedItem[]
   today: string        // getComputedWbs 기준일(base_date 우선) — WBS 신호 전용
-  realToday: string    // seoulToday() — 회의 액션 경과일 전용(base_date 왜곡 차단)
+  realToday: string    // 그 범위 tz 의 todayIn — 회의 액션 경과일 전용(base_date 왜곡 차단)
   snapshots: SnapshotPoint[]
   startDate: string | null   // 설계 시그니처 유지(일정 문맥 확장 예약) — 현 탐지기는 미사용
   endDate: string | null

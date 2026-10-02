@@ -32,7 +32,7 @@ import { ReindexButton } from '@/components/settings/ReindexButton'
 import { ExportExcelButton } from '@/components/settings/ExportExcelButton'
 import type { ExportLayout } from '@/components/settings/exportLayout'
 import { latestKeyChange } from '@/lib/settings/history'
-import { seoulYmd } from '@/lib/domain/dates'
+import { ymdIn } from '@/lib/domain/calendar'
 import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
@@ -174,12 +174,16 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const hasProfile = profileState !== null && (profileState.status === 'invalid' || (profileState.status === 'set' && profileState.value !== null))
   // 내보내기 표기(SP4 D48) — 저장 양식이 있으면 그 키의 최신 저장 날짜, 없으면 표준. 손상·설정 조회 실패면 표기하지 않는다(모르는 것을
   // 말하지 않는다 — 손상은 아래 '저장된 양식 비우기'가 안내한다). 이력 조회 실패는 날짜 미상 + 로그(표준으로 위장하지 않는다).
+  // 프로젝트 달력(이력 시각·저장 날짜의 tz). 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지라 전체를 막지 않는다(계획 D-21a)
+  const historyCal = pc.ok ? pickCalendar(pc.cfg) : null
   let exportLayout: ExportLayout | null = null
   if (profileState?.status === 'set' && profileState.value !== null) {
     const h = await latestKeyChange(await createServerClient(), { projectId }, 'wbs.excel_profile')
     if (!h.ok) console.error('[settings] 저장 양식 이력 조회 실패:', h.error)
     // 출처 — 엑셀 양식을 설정 내부 쓰기('internal')로 저장하는 길은 가져오기 마법사뿐이다(api/import/execute #10). 복사·이행·모름이면 출처를 적지 않는다
-    exportLayout = { kind: 'saved', savedAt: h.ok && h.changedAt ? seoulYmd(new Date(h.changedAt)) : null, viaWizard: h.ok && h.source === 'internal' }
+    // 저장 날짜 = 프로젝트 tz 의 날짜 — 달력이 손상이면 날짜 미상(null, 사유는 이력 칸이 보인다)
+    const savedTz = historyCal?.ok ? historyCal.calendar.timezone : null
+    exportLayout = { kind: 'saved', savedAt: h.ok && h.changedAt && savedTz ? ymdIn(savedTz, new Date(h.changedAt)) : null, viaWizard: h.ok && h.source === 'internal' }
   } else if (profileState !== null && profileState.status !== 'invalid') {
     exportLayout = { kind: 'standard' }
   }
@@ -188,8 +192,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
-  // 이력 시각의 tz = 프로젝트 달력. 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지라 전체를 막지 않는다(계획 D-21a)
-  const historyCal = pc.ok ? pickCalendar(pc.cfg) : null
 
   const scheduleLabel =
     project?.start_date || project?.end_date

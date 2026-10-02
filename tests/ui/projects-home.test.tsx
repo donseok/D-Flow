@@ -13,7 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { computeTree } from '@/lib/domain/rollup'
 import { aggregateTaskStats } from '@/lib/domain/workspace'
 import { computeCompletionMap } from '@/lib/domain/project-status'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 import type { WbsRow } from '@/lib/domain/types'
 
 const mocks = vi.hoisted(() => ({
@@ -32,6 +32,8 @@ vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/data/wbs', () => ({ getProjectsCompletion: mocks.getProjectsCompletion }))
 vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: mocks.workspaceLinks }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
+// 상태 배지의 '오늘' = viewTimezone(세션 유일 워크스페이스 — SP5 과제 22). UTC 로 준다
+vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: async () => ({ ok: true, timeZone: 'UTC' }) }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({ from: () => ({ select: mocks.select }) }),
 }))
@@ -104,7 +106,7 @@ function legacyHeroStats() {
     owners: [],
     isOwnerSplit: false,
   })
-  const today = seoulToday()
+  const today = todayIn('UTC', new Date())
   // 구 코드는 "목록에 있는" 프로젝트만 프로젝트별로 트리를 로드했다
   const trees = visibleProjects.map(p =>
     computeTree(dbRows.filter(r => r.project_id === p.id).map(toWbsRow), today, calUtcSun, {

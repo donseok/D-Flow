@@ -1,11 +1,11 @@
 // 대시보드 이슈 현황 도메인 — 순수 함수만(I/O 없음). 카드 3종(현황·추이·조치 대기)이 소비한다.
-// 기준일(today)은 호출부가 **실제 오늘**(seoulToday)을 내려준다 — 공정율 base_date 가 아니다.
+// 기준일(today)은 호출부가 **실제 오늘**(그 프로젝트 tz 의 todayIn)을 내려준다 — 공정율 base_date 가 아니다.
 // 이슈 기한은 실제 달력이라 회의·근태 카드와 같은 시계를 쓴다(DashboardView 섹션 D 주석).
 import type { Issue, IssueSeverity, IssueStatus } from './issues'
 import { ISSUE_STATUSES, isOverdue } from './issues'
 import { ISSUE_MEGA_AREAS, type IssueMegaCode } from './issueAnalysis'
-import { addDaysIso, seoulYmd } from './dates'
-import { currentRuleDay, startOfWeek, type WeekStartRule } from './calendar'
+import { addDaysIso } from './dates'
+import { currentRuleDay, startOfWeek, ymdIn, type WeekStartRule } from './calendar'
 import { diffDaysCal } from './dashboard'
 
 /** 대시보드가 쓰는 이슈 슬라이스 — getIssuesForDashboard(1쿼리)와 getIssues(전체) 둘 다 만족한다. */
@@ -25,11 +25,11 @@ export const QUEUE_LIMIT = 5
 
 const SEVERITY_ORDER: Record<IssueSeverity, number> = { high: 0, medium: 1, low: 2 }
 const isUnresolved = (i: Pick<DashboardIssue, 'status'>) => i.status !== 'resolved'
-/** ISO 타임스탬프 → 서울 'YYYY-MM-DD'. 이미 날짜 문자열이면 그대로. */
-const seoulDate = (iso: string) => (iso.length === 10 ? iso : seoulYmd(new Date(iso)))
+/** ISO 타임스탬프 → 그 프로젝트 tz 의 'YYYY-MM-DD'. 이미 날짜 문자열(date-only)이면 그대로 — 변환하지 않는다. */
+const zonedDate = (iso: string, timeZone: string) => (iso.length === 10 ? iso : ymdIn(timeZone, new Date(iso)))
 /** 해결일 — status 가 resolved 일 때만 인정(재오픈 시 resolvedAt 이 남아 있어도 해결로 세지 않는다). */
-const resolvedDate = (i: Pick<DashboardIssue, 'status' | 'resolvedAt'>) =>
-  i.status === 'resolved' && i.resolvedAt ? seoulDate(i.resolvedAt) : null
+const resolvedDate = (i: Pick<DashboardIssue, 'status' | 'resolvedAt'>, timeZone: string) =>
+  i.status === 'resolved' && i.resolvedAt ? zonedDate(i.resolvedAt, timeZone) : null
 
 export interface IssueKpis {
   total: number
@@ -43,7 +43,8 @@ export interface IssueKpis {
   resolved7d: number
 }
 
-export function issueKpis(issues: DashboardIssue[], today: string): IssueKpis {
+/** timeZone = 그 프로젝트 calendar.timezone — 해결 시각(instant)을 날짜로 바꿀 때만 쓴다 */
+export function issueKpis(issues: DashboardIssue[], today: string, timeZone: string): IssueKpis {
   const windowStart = addDaysIso(today, -(RESOLVED_WINDOW_DAYS - 1))
   let unresolved = 0, overdue = 0, highUnresolved = 0, resolved7d = 0
   for (const i of issues) {
@@ -52,7 +53,7 @@ export function issueKpis(issues: DashboardIssue[], today: string): IssueKpis {
       if (i.severity === 'high') highUnresolved += 1
     }
     if (isOverdue(i, today)) overdue += 1
-    const rd = resolvedDate(i)
+    const rd = resolvedDate(i, timeZone)
     if (rd && rd >= windowStart && rd <= today) resolved7d += 1
   }
   return { total: issues.length, unresolved, overdue, highUnresolved, resolved7d }
@@ -111,10 +112,12 @@ export interface IssueTrendModel {
 
 /** 최근 N주 등록·해결 누적. 주는 현재 규칙(오늘에 적용되는 규칙)의 시작 요일, 마지막 주는 오늘이 속한 주.
  *  과거 전환은 보지 않는다 — 표시 전용 집계라 12주를 같은 길이로 센다(SP5 §4.4). */
-export function issueTrend(issues: DashboardIssue[], rules: readonly WeekStartRule[], today: string, weeks = TREND_WEEKS): IssueTrendModel {
+export function issueTrend(
+  issues: DashboardIssue[], rules: readonly WeekStartRule[], today: string, timeZone: string, weeks = TREND_WEEKS,
+): IssueTrendModel {
   const thisWeekStart = startOfWeek(today, currentRuleDay(rules, today))
-  const created = issues.map(i => seoulDate(i.createdAt))
-  const resolved = issues.map(resolvedDate).filter((d): d is string => d !== null)
+  const created = issues.map(i => zonedDate(i.createdAt, timeZone))
+  const resolved = issues.map(i => resolvedDate(i, timeZone)).filter((d): d is string => d !== null)
   const points: IssueTrendPoint[] = []
   for (let w = weeks - 1; w >= 0; w -= 1) {
     const weekStart = addDaysIso(thisWeekStart, -7 * w)

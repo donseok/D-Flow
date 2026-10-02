@@ -7,7 +7,9 @@ import {
 import { MON_RULES } from '../helpers/calendarFixture'
 
 // 과제 16 — 규칙은 둘째 인자. 이 파일의 기존 기대값은 월요일 주(D28 월요일 회귀)
-const issueTrend = (issues: Parameters<typeof issueTrendReal>[0], today: string, weeks?: number) => issueTrendReal(issues, MON_RULES, today, weeks)
+/** 기존 기대값의 tz — 서울(옛 서울 고정 버킷팅과 같다). tz 일반화는 아래 describe 가 본다 */
+const SEOUL = 'Asia/Seoul'
+const issueTrend = (issues: Parameters<typeof issueTrendReal>[0], today: string, weeks?: number) => issueTrendReal(issues, MON_RULES, today, SEOUL, weeks)
 import { ISSUE_MEGA_AREAS } from '@/lib/domain/issueAnalysis'
 
 const TODAY = '2026-08-28' // 금요일 — 주 시작(월)은 08-24
@@ -26,7 +28,7 @@ describe('issueKpis', () => {
   it('미해결 = 열림+진행중+보류, 해결은 제외', () => {
     const k = issueKpis([
       issue({ status: 'open' }), issue({ status: 'in_progress' }), issue({ status: 'on_hold' }), issue({ status: 'resolved' }),
-    ], TODAY)
+    ], TODAY, SEOUL)
     expect(k.total).toBe(4)
     expect(k.unresolved).toBe(3)
   })
@@ -37,7 +39,7 @@ describe('issueKpis', () => {
       issue({ dueDate: '2026-08-28' }),                        // 오늘 → 지연 아님
       issue({ dueDate: '2026-08-01', status: 'resolved', resolvedAt: '2026-08-02T00:00:00+00:00' }),
       issue({ dueDate: null }),
-    ], TODAY)
+    ], TODAY, SEOUL)
     expect(k.overdue).toBe(1)
   })
 
@@ -45,7 +47,7 @@ describe('issueKpis', () => {
     const k = issueKpis([
       issue({ severity: 'high' }), issue({ severity: 'high', status: 'on_hold' }),
       issue({ severity: 'high', status: 'resolved', resolvedAt: '2026-08-20T00:00:00+00:00' }), issue({ severity: 'medium' }),
-    ], TODAY)
+    ], TODAY, SEOUL)
     expect(k.highUnresolved).toBe(2)
   })
 
@@ -56,7 +58,7 @@ describe('issueKpis', () => {
       issue({ status: 'resolved', resolvedAt: '2026-08-21T14:59:00+00:00' }), // = 08-21 KST → 제외
       issue({ status: 'resolved', resolvedAt: '2026-08-28T05:00:00+00:00' }), // 오늘 → 포함
       issue({ status: 'resolved', resolvedAt: null }),                        // 결측 → 제외
-    ], TODAY)
+    ], TODAY, SEOUL)
     expect(k.resolved7d).toBe(2)
   })
 })
@@ -201,5 +203,19 @@ describe('issueQueue', () => {
     expect(q.rows).toHaveLength(5)
     expect(q.hiddenCount).toBe(2)
     expect(issueQueue(many, TODAY, 10).hiddenCount).toBe(0)
+  })
+})
+
+describe('issueKpis·issueTrend — 시각을 날짜로 바꾸는 tz 는 그 프로젝트의 것(SP5 과제 22)', () => {
+  it('같은 해결 시각이 서울에서는 창 안, LA 에서는 창 밖(하루 앞)', () => {
+    const resolved = [issue({ status: 'resolved', resolvedAt: '2026-08-21T16:00:00Z' })]   // 서울 08-22 01:00 / LA 08-21 09:00
+    expect(issueKpis(resolved, TODAY, 'Asia/Seoul').resolved7d).toBe(1)
+    expect(issueKpis(resolved, TODAY, 'America/Los_Angeles').resolved7d).toBe(0)
+  })
+  it('등록 버킷 — UTC 일요일 15:30 은 서울 월요일 주, LA 일요일(앞 주)', () => {
+    const at = (tz: string, weekStart: string) => issueTrendReal([issue({ createdAt: '2026-08-23T15:30:00Z' })], MON_RULES, TODAY, tz)
+      .points.find(p => p.weekStart === weekStart)!.createdNew
+    expect(at('Asia/Seoul', '2026-08-24')).toBe(1)
+    expect(at('America/Los_Angeles', '2026-08-17')).toBe(1)
   })
 })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { keysetTable } from '../helpers/keysetTable'
 
 const m = vi.hoisted(() => ({ createServerClient: vi.fn(), projectTeams: vi.fn(), getProjectConfig: vi.fn() }))
@@ -6,7 +6,6 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClie
 // 휴일은 달력 로더(설정 해석기 — 끝까지 + kind)가 읽는다(SP5 A 과제 13). 휴일 쪽 나눔은 tests/calendar/load.test.ts 가 본다
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: m.projectTeams }))
-vi.mock('@/lib/domain/dates', async () => ({ ...(await vi.importActual<typeof import('@/lib/domain/dates')>('@/lib/domain/dates')), seoulToday: () => '2026-03-02' }))
 
 import { getSnapshots, recordProgressSnapshot } from '@/lib/data/snapshots'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -37,6 +36,9 @@ describe('getSnapshots — 이력을 끝까지(스펙 §4.6 의 같은 결함, S
 })
 
 describe('recordProgressSnapshot — 재계산 경로를 끝까지·팀 순서는 요청 범위 원천(받은 클라이언트로)', () => {
+  // '오늘' = 프로젝트 tz(픽스처 기본 UTC)의 오늘(SP5 과제 22) — 시스템 시각을 2026-03-02 정오(UTC)로 고정한다(Date 만 — 타이머는 그대로)
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-03-02T12:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
   const item = (i: number) => ({ id: `i${String(i).padStart(4, '0')}`, project_id: PID, parent_id: null, code: String(i), sort_order: i, name: `항목 ${i}`,
     planned_start: '2026-03-02', planned_end: '2026-03-02', weight: null, actual_pct: i < 2 ? 100 : 0, is_owner_split: false })
   it('wbs_items(키 id)가 상한(2행)을 넘어도 전부로 계산한다 — 받은 클라이언트로 팀·달력(휴일)을 읽는다', async () => {

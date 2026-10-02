@@ -17,7 +17,7 @@ import { projectTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
 import type { ComputedItem, Meeting, MeetingException, MinuteSignal, TeamCode } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 
 /** 위험 신호 탐지(회의 액션 경과)용 회의록 인사이트 창 — PPT 브리핑 팩트 전용 값(대시보드는 2026-08-28 이후 인사이트를 읽지 않는다). */
 export const MINUTE_SIGNAL_FETCH = 30
@@ -32,7 +32,7 @@ export interface ProjectFactsSource {
   calendar: WorkCalendar
   /** getComputedWbs 의 '오늘'(projects.base_date 우선) — 진척·리스크 판정 기준일. */
   todayWbs: string
-  /** 실제 오늘(Asia/Seoul) — 회의·회의록 경과일 기준(이중 시계 계약). */
+  /** 실제 오늘(그 프로젝트 tz 의 todayIn) — 회의·회의록 경과일 기준(이중 시계 계약). */
   realToday: string
   snapshots: SnapshotPoint[]
   minuteSignals: MinuteSignal[]
@@ -72,7 +72,7 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     items,
     calendar,
     todayWbs: today,
-    realToday: seoulToday(),
+    realToday: todayIn(calendar.timezone, new Date()),
     snapshots: snapRes.rows,
     minuteSignals,
     meetings: meetRes.meetings,

@@ -14,7 +14,10 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { MeetingsView } from '@/components/meetings/MeetingsView'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { pickCalendar } from '@/lib/settings/pick'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 function monthGrid(todayIso: string): [string, string] {
@@ -28,15 +31,20 @@ function monthGrid(todayIso: string): [string, string] {
 export default async function MeetingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'meetings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const today = seoulToday()
-  const [meetRes, roster, m, user, projects, locale] = await Promise.all([
+  const [meetRes, roster, m, user, projects, locale, pc] = await Promise.all([
     getProjectMeetingData(projectId),
     getProjectRoster(projectId),
     getActorForView(),
     getSession(),
     listProjects(),
     getServerLocale(),
+    loadProjectConfigForPage(projectId),
   ])
+  // '오늘'의 tz = 프로젝트 달력(계획 D-22·D-21a) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
+  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  const cal = pickCalendar(pc.cfg)
+  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 참석자 선택·이름 표시용 곁가지 — 실패해도 일정은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[meetings] 명단 조회 실패(project=${projectId}) — 참석자 목록 없이 그리고 경고를 띄운다`)
   const members = roster.ok ? roster.rows : []

@@ -10,7 +10,10 @@ import type { AnnouncementSummary } from '@/lib/domain/types'
 import { expandMeetings } from '@/lib/domain/meetings'
 import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
 import type { MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 
 // 입력 타입·검증은 도메인(순수)이 정본 — 폼과 액션이 같은 규칙을 쓴다(0091 마일스톤 일자 포함).
 export type { AnnouncementInput }
@@ -202,7 +205,11 @@ export async function getUnreadAnnouncementCount(projectId: string): Promise<num
     .eq('project_id', projectId)
     .maybeSingle()
 
-  const today = seoulToday()
+  // '오늘' = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d). 달력을 못 읽으면 배지를 0 으로 둔다(이 함수는 수만 돌려준다 —
+  // 셸 배지라 실패를 화면에 올릴 자리가 없다) — 원인은 로그로(표시 = 로깅)
+  const pt = await projectToday(projectId)
+  if (!pt.ok) return 0
+  const today = pt.today
   // 게시중만: (from is null 또는 from<=today) AND (to is null 또는 to>=today).
   // .or() 는 서로 AND 결합 — 각 경계를 별도 .or() 로 건다.
   let query = sb
@@ -256,6 +263,9 @@ export async function createAnnouncementFromMeeting(
   if (!occ.some(o => o.occurrenceDate === occurrenceDate)) {
     return { ok: false, error: '해당 날짜는 이 회의의 회차가 아닙니다.' }
   }
+  // 게시 시작일 = 그 프로젝트 tz 의 오늘 — 달력을 못 읽으면 쓰기 전에 멈춘다(3원칙 ②)
+  const pt = await projectToday(r.project_id as string)
+  if (!pt.ok) return { ok: false, error: pt.error }
 
   const input = composeAnnouncementFromMeeting({
     title: r.title as string,
@@ -264,7 +274,7 @@ export async function createAnnouncementFromMeeting(
     endTime: (r.end_time as string | null) ?? null,
     location: (r.location as string | null) ?? null,
     body: (r.body as string | null) ?? '',
-  }, seoulToday())
+  }, pt.today)
 
   const projectId = r.project_id as string
   const { data, error } = await sb
@@ -287,4 +297,21 @@ export async function createAnnouncementFromMeeting(
   }
   revalidateAnnouncements(projectId)
   return { ok: true }
+}
+
+/** 그 프로젝트 tz 의 오늘(SP5 계획 D-22d) — 설정 조회 실패·달력 손상은 고정 문구 + 로그(원문은 응답에 싣지 않는다) */
+async function projectToday(projectId: string): Promise<{ ok: true; today: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, today: todayIn(requireCalendar(await getProjectConfig(projectId)).timezone, new Date()) }
+  } catch (e) {
+    if (e instanceof ConfigUnavailableError) {
+      console.error('[announcements] 프로젝트 설정 조회 실패:', { projectId, cause: e.message })
+      return { ok: false, error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+    }
+    if (e instanceof ConfigKeyError) {
+      console.error('[announcements] 프로젝트 달력 손상:', { projectId, key: e.key })
+      return { ok: false, error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }
+    }
+    throw e
+  }
 }

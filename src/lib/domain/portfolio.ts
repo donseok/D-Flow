@@ -27,7 +27,7 @@ export interface PortfolioProjectInput {
   snapshots: SnapshotPoint[]
   /** 활성 팀 코드(팀 마스터 주입) — 담당 과부하 신호용. */
   teams: readonly TeamCode[]
-  /** 실제 오늘(seoulToday) — 위험 신호 엔진의 realToday 계약(base_date 왜곡 차단). */
+  /** 실제 오늘(화면 tz 의 todayIn) — 위험 신호 엔진의 realToday 계약(base_date 왜곡 차단). */
   realToday: string
 }
 

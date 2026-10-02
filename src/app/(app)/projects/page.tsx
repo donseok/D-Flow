@@ -12,7 +12,9 @@ import { NewProjectModal } from '@/components/home/NewProjectModal'
 import { fmtDate } from '@/components/wbs/shared'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { viewTimezone } from '@/lib/calendar/viewZone'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { BRAND } from '@/lib/branding'
 import { BrandGlyph } from '@/components/ui/BrandMark'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
@@ -155,7 +157,11 @@ export default async function ProjectsHome() {
     fetchTaskRows(),
   ])
   const projects = rawProjects as ProjectRow[]
-  const today = seoulToday()
+  // 상태 배지의 '오늘' = 세션 유일 워크스페이스의 tz, 없거나 여럿이면 UTC(계획 D-22b). 달력 손상이면 그 사유를 그린다
+  const now = new Date()
+  const vz = await viewTimezone(actor)
+  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={locale} />
+  const today = todayIn(vz.timeZone, now)
 
   // 히어로 집계 — 실패(null)면 0 으로 위장하지 않고 '–' 를 그린다(아래 heroStats).
   const taskStats = taskRows === null ? null : heroTaskStats(taskRows, new Set(projects.map(p => p.id)))

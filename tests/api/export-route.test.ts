@@ -57,7 +57,7 @@ beforeEach(async () => {
   mocks.buildWorkbookWithProfile.mockImplementation(actual.buildWorkbookWithProfile)
   mocks.state = { projects: [{ id: 'p-mine', name: 'Acme' }], degraded: false }
   mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
-  mocks.getComputedWbs.mockResolvedValue({ items: [], holidays: [] })
+  mocks.getComputedWbs.mockResolvedValue({ items: [], holidays: [], calendar: calUtcSun })
   mocks.projectTeams.mockResolvedValue([...teamRows(['RES']), ...teamRows(['OLD'], { active: false, id: 't-OLD2' })])
 })
 
@@ -89,12 +89,12 @@ describe('GET /api/export — 저장 양식 없음 → 표준(W22)', () => {
     expect(name).toBe('Acme')
   })
   it('비활성 팀이라도 담당이 있으면 열이 뒤에 붙는다(옛 빌더와 같은 규칙)', async () => {
-    mocks.getComputedWbs.mockResolvedValue({ items: computeTree([row({ id: 'a', name: '잎', owners: [{ team: 'OLD', kind: 'primary' }] })], '2026-03-02', calUtcSun, { subActTeamOrder: new Map() }), holidays: [] })
+    mocks.getComputedWbs.mockResolvedValue({ items: computeTree([row({ id: 'a', name: '잎', owners: [{ team: 'OLD', kind: 'primary' }] })], '2026-03-02', calUtcSun, { subActTeamOrder: new Map() }), holidays: [], calendar: calUtcSun })
     await get('p-mine')
     expect(mocks.buildWorkbookWithProfile.mock.calls[0][1].teamColumns.map(([, c]: [number, string]) => c)).toEqual(['RES', 'OLD'])
   })
   it('깊은 트리 — 표준은 접어 200, 펼침의 sub-act 는 세부업무 열에(Q40)', async () => {
-    mocks.getComputedWbs.mockResolvedValue({ items: DEEP, holidays: [] })
+    mocks.getComputedWbs.mockResolvedValue({ items: DEEP, holidays: [], calendar: calUtcSun })
     const res = await get('p-mine', true)
     expect(res.status).toBe(200)
     const wb = XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer' })
@@ -146,7 +146,7 @@ describe('GET /api/export — 저장 양식·손상', () => {
   })
   it('저장 양식 + 깊은 트리는 400 과 그 사유(저장 양식에는 맞는 처방)', async () => {
     mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'], 'wbs.excel_profile': SAVED }))
-    mocks.getComputedWbs.mockResolvedValue({ items: DEEP, holidays: [] })
+    mocks.getComputedWbs.mockResolvedValue({ items: DEEP, holidays: [], calendar: calUtcSun })
     const res = await get('p-mine')
     expect(res.status).toBe(400)
     expect((await res.json()).error).toContain('저장된 양식 비우기')

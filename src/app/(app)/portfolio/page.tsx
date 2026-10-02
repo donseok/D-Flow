@@ -12,7 +12,9 @@ import { PortfolioTable } from '@/components/portfolio/PortfolioTable'
 import { PortfolioMilestoneBoard } from '@/components/portfolio/PortfolioMilestoneBoard'
 import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { viewTimezone } from '@/lib/calendar/viewZone'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 전사 비교 화면은 항상 최신이어야 한다
@@ -23,9 +25,11 @@ export default async function PortfolioPage() {
   if (!canViewPortfolio(actor)) redirect('/projects')
   await requireModulePage(null, 'portfolio')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13)
 
-  const [{ inputs, leadersDegraded, listDegraded }, locale] = await Promise.all([
-    getPortfolioInputs(), getServerLocale(),
-  ])
+  // 실제 오늘의 tz = 세션 유일 워크스페이스, 없거나 여럿이면 UTC(계획 D-22b·D-22d). 달력 손상이면 그 사유를 그린다
+  const [vz, locale] = await Promise.all([viewTimezone(actor), getServerLocale()])
+  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={locale} />
+  const realToday = todayIn(vz.timeZone, new Date())
+  const { inputs, leadersDegraded, listDegraded } = await getPortfolioInputs(realToday)
   const model = buildPortfolio(inputs)
 
   // 포트폴리오 조회를 스냅샷 기회로 — 아무도 열지 않는 프로젝트의 이력 공백을 메운다.
@@ -50,7 +54,7 @@ export default async function PortfolioPage() {
       <PortfolioKpis totals={model.totals} locale={locale} />
       <PortfolioTable rows={model.rows} leadersDegraded={leadersDegraded} locale={locale} />
       {/* 통합 축의 오늘 마커는 실제 오늘 — 행별 마일스톤 상태(dday)는 각 프로젝트 today 로 이미 판정됨 */}
-      <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={seoulToday()} locale={locale} />
+      <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={realToday} locale={locale} />
     </div>
   )
 }

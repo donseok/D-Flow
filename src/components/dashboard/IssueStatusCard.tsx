@@ -36,11 +36,13 @@ function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: numbe
   )
 }
 
-export function IssueStatusCard({ issues, projectId, today, locale }: {
+export function IssueStatusCard({ issues, projectId, today, timeZone, locale }: {
   issues: DashboardIssue[]
   projectId: string
-  /** 실제 오늘(seoulToday) — 공정율 base_date 가 아니다. */
+  /** 실제 오늘(그 프로젝트 tz 의 todayIn) — 공정율 base_date 가 아니다. */
   today: string
+  /** 프로젝트 calendar.timezone — 해결 시각을 날짜로 바꾼다 */
+  timeZone: string
   locale: Locale
 }) {
   const tr = (k: DictKey) => t(locale, k)
@@ -49,7 +51,7 @@ export function IssueStatusCard({ issues, projectId, today, locale }: {
   const countsText = (c: IssueStatusCounts) =>
     ISSUE_STATUSES.filter(s => c[s] > 0).map(s => `${statusLabel(s)} ${c[s]}`).join(' · ')
 
-  const kpi = issueKpis(issues, today)
+  const kpi = issueKpis(issues, today, timeZone)
   const all = issueStatusCounts(issues)
   const rows = issueMegaBreakdown(issues)
   const resolvedPct = kpi.total ? Math.round((all.resolved / kpi.total) * 100) : 0

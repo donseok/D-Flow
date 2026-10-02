@@ -3,7 +3,9 @@ import { getSession } from '@/lib/auth'
 import { jsonError } from '@/lib/api/http'
 import { denyStatus } from '@/lib/authz/errors'
 import { requireSessionModule } from '@/lib/modules/gate'
-import { seoulYmd } from '@/lib/domain/dates'
+import { ymdIn } from '@/lib/domain/calendar'
+import { resolveRequestCalendar } from '@/lib/calendar/load'
+import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { createServerClient } from '@/lib/supabase/server'
 import { getActor } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
@@ -110,6 +112,18 @@ export async function GET() {
   const sole = actor ? resolveSoleWorkspaceId(actor) : null
   if (!sole?.ok) return jsonError('워크스페이스를 확인할 수 없습니다.', 403)
   const { productName } = await loadDisplayBranding(sole.workspaceId)
+  // 파일명 날짜의 tz = 내보내기 범위(전역 — 세션 유일 워크스페이스)의 달력(SP5 계획 D-22d). 못 읽거나 손상이면 고정 문구로 멈춘다
+  let timeZone: string
+  try {
+    timeZone = (await resolveRequestCalendar({ projectId: null, workspaceId: sole.workspaceId })).timezone
+  } catch (e) {
+    if (e instanceof ConfigUnavailableError) {
+      console.error('[minutes-export] 워크스페이스 설정 조회 실패:', e.message)
+      return jsonError('워크스페이스 설정을 확인할 수 없습니다.', 503)
+    }
+    if (e instanceof ConfigKeyError) return jsonError(e.message, configStatus(e.code), e.code)
+    throw e
+  }
 
   const exportedAt = new Date()
   try {
@@ -126,7 +140,7 @@ export async function GET() {
       platform: 'UNIX',
     })
     const stream = Readable.toWeb(nodeStream as unknown as Readable) as ReadableStream<Uint8Array>
-    const { utf8Name, fallbackName } = minutesExportFileNames(seoulYmd(exportedAt), productName)
+    const { utf8Name, fallbackName } = minutesExportFileNames(ymdIn(timeZone, exportedAt), productName)
 
     return new Response(stream as unknown as BodyInit, {
       headers: {

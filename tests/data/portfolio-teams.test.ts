@@ -10,7 +10,10 @@ vi.mock('@/lib/authz/portfolioAccess', () => ({ canViewPortfolio: () => true }))
 
 import { getPortfolioInputs } from '@/lib/data/portfolio'
 import { keysetTable } from '../helpers/keysetTable'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+
+/** 화면이 넘기는 실제 오늘(SP5 과제 22 — getPortfolioInputs(realToday)) */
+const REAL_TODAY = todayIn('UTC', new Date())
 import { addDaysCal } from '@/lib/domain/dashboard'
 
 describe('getPortfolioInputs — 팀 원천 실패는 그 행만 degraded(SP4 A2 P19)', () => {
@@ -26,7 +29,7 @@ describe('getPortfolioInputs — 팀 원천 실패는 그 행만 degraded(SP4 A2
       if (pid === 'pB') throw new Error('teams down')
       return [{ id: 't', code: 'RES', name: 'RES', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: 'pA', workspaceId: 'w' }]
     })
-    const { inputs } = await getPortfolioInputs()
+    const { inputs } = await getPortfolioInputs(REAL_TODAY)
     const byId = new Map(inputs.map((i) => [i.projectId, i]))
     expect(byId.get('pA')).toMatchObject({ teams: ['RES'], items: [] })
     expect(byId.get('pB')).toMatchObject({ teams: [], items: null })
@@ -39,7 +42,7 @@ describe('getPortfolioInputs — 팀 원천 실패는 그 행만 degraded(SP4 A2
 // (project_id, snap_date) 복합 키셋으로 끝까지 읽고, 실패·읽는 사이 변경은 로그 + 추세 비표기(일부만 쓰지 않는다).
 describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
   const pids = Array.from({ length: 17 }, (_, i) => `00000000-0000-0000-7e57-0000000019${i.toString(16).padStart(2, '0')}`)   // …1900~…1910
-  const today = seoulToday()
+  const today = REAL_TODAY
   const days = Array.from({ length: 61 }, (_, i) => addDaysCal(today, -60 + i))   // 창 안 61일(gte 포함)
   const snaps = pids.flatMap((pid, pi) => days.map((d, di) => ({ project_id: pid, snap_date: d, actual_pct: pi + di / 100, planned_pct: 50 })))
   const setup = (table: ReturnType<typeof keysetTable>) => {
@@ -56,7 +59,7 @@ describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
     expect(snaps.length).toBeGreaterThan(1000)
     const table = keysetTable(snaps)
     setup(table)
-    const { inputs } = await getPortfolioInputs()
+    const { inputs } = await getPortfolioInputs(REAL_TODAY)
     for (const i of inputs) {
       expect(i.snapshots, i.projectId).toHaveLength(61)
       expect(i.snapshots.at(-1)?.date, i.projectId).toBe(today)
@@ -74,7 +77,7 @@ describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
     ]) {
       const err = vi.spyOn(console, 'error').mockImplementation(() => {})
       setup(table)
-      const { inputs } = await getPortfolioInputs()
+      const { inputs } = await getPortfolioInputs(REAL_TODAY)
       expect(inputs).toHaveLength(17)
       for (const i of inputs) expect(i.snapshots, i.projectId).toEqual([])
       expect(inputs.every((i) => Array.isArray(i.items))).toBe(true)
