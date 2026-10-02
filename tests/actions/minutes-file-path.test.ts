@@ -237,3 +237,27 @@ describe('replaceMinuteBody — scope 는 DB 의 회의록 행', () => {
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
 })
+
+describe('replaceMinuteBody — 녹취 보정 경고를 결과에 싣고 새 판은 저장된다(a6 리뷰 Q2 — O6 의 나머지 반쪽)', () => {
+  const file = (filePath: string) => ({ fileName: 'a.md', filePath, size: 1, mime: 'text/markdown' })
+  const okAdmin = () => ({
+    rpc: vi.fn(() => ({ single: async () => ({ data: { version_id: 'v2', wiki_rebuild_required: false }, error: null }) })),
+  })
+  it.each(['calendar_unavailable', 'invalid_time'] as const)('보정 도우미가 %s 경고를 내면 ok:true + timeFixWarning(원문 그대로 새 판)', async (warning) => {
+    const { applyScopeTimeFix } = await import('@/lib/minutes/timeFix.server')
+    vi.mocked(applyScopeTimeFix).mockResolvedValueOnce({ fix: { corrected: false, body: '새 본문' }, warning } as never)
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }).client)
+    const admin = okAdmin()
+    adminMocks.createAdminClient.mockImplementation(() => admin)
+    const res = await replaceMinuteBody(M, '새 본문', file(`ws/${W}/p/${P}/minutes/${M}/2-a.md`))
+    expect(res).toMatchObject({ ok: true, timeFixWarning: warning })
+    expect(admin.rpc).toHaveBeenCalledWith('commit_minute_body_version', expect.objectContaining({ p_body_md: '새 본문' }))
+  })
+  it('경고가 없으면 timeFixWarning 키가 없다', async () => {
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }).client)
+    adminMocks.createAdminClient.mockImplementation(() => okAdmin())
+    const res = await replaceMinuteBody(M, '새 본문', file(`ws/${W}/p/${P}/minutes/${M}/2-a.md`))
+    expect(res).toMatchObject({ ok: true })
+    expect('timeFixWarning' in res).toBe(false)
+  })
+})
