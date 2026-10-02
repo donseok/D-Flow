@@ -47,8 +47,8 @@ describe('화면 안 링크 — 범위 컨텍스트로 새 형식(D38 ①)', () 
       id: 'c1', projectId: 'p', wikiItemId: 'i', minuteId: 'minute-1', minuteVersionId: 'v-2', changeType: 'new',
       beforeSnapshot: null, afterSnapshot: { statement: 's' }, reason: null, createdAt: '2026-07-25T01:00:00.000Z', minuteTitle: 't', minuteDate: '2026-07-25',
     } as const
-    expect(renderToStaticMarkup(<WikiChangeList locale="ko" changes={[change]} minutesBase="/w/acme/minutes" />)).toContain('href="/w/acme/minutes/minute-1?version=v-2"')
-    expect(renderToStaticMarkup(<WikiChangeList locale="ko" changes={[change]} />)).toContain('href="/minutes/minute-1?version=v-2"')
+    expect(renderToStaticMarkup(<WikiChangeList locale="ko" timeZone="UTC" changes={[change]} minutesBase="/w/acme/minutes" />)).toContain('href="/w/acme/minutes/minute-1?version=v-2"')
+    expect(renderToStaticMarkup(<WikiChangeList locale="ko" timeZone="UTC" changes={[change]} />)).toContain('href="/minutes/minute-1?version=v-2"')
   })
 
   // U2b-5 리뷰 수정 CC6 — 위키 근거 링크(WikiItemCard → WikiSourceLinks)도 기준 경로를 따른다. 블록 앵커가 있으면 원문 블록 링크, 없으면 회의록(판) 링크
@@ -66,11 +66,11 @@ describe('화면 안 링크 — 범위 컨텍스트로 새 형식(D38 ①)', () 
         src({ id: 's2', minuteId: 'minute-2', minuteVersionId: null }),
       ],
     } as unknown as WikiItem
-    const scoped = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" showEvidence minutesBase="/w/acme/minutes" />)
+    const scoped = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" timeZone="UTC" showEvidence minutesBase="/w/acme/minutes" />)
     expect(scoped).toContain('href="/w/acme/minutes/minute-1?block=2&amp;hash=fedcba9876543210&amp;body=0123456789abcdef&amp;version=v-2"')
     expect(scoped).toContain('href="/w/acme/minutes/minute-2"')
     expect(scoped).not.toMatch(/href="\/minutes\//)
-    const fallback = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" showEvidence />)
+    const fallback = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" timeZone="UTC" showEvidence />)
     expect(fallback).toContain('href="/minutes/minute-2"')
   })
 })
@@ -102,7 +102,7 @@ describe('화면 안 링크 — 클라이언트(jsdom)', () => {
     const minute: Minute = { id: 'm1', minuteDate: '2026-07-16', teamCode: 'PMO', title: '주간회의', bodyMd: '본문', meetingId: null, createdBy: 'u1', createdByName: '작성자', createdAt: '2026-07-16T00:00:00Z', updatedAt: '2026-07-16T00:00:00Z' }
     act(() => root.render(
       <ScopeProvider value={ACME}>
-        <MinuteViewer minute={minute} files={[]} canManage={false} annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]} initialFontSize={null} />
+        <MinuteViewer minute={minute} files={[]} canManage={false} annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]} initialFontSize={null} timeZone="UTC" />
       </ScopeProvider>,
     ))
     const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'))

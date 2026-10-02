@@ -64,7 +64,7 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
     addWbsItem.mockResolvedValue({ ok: false, error })
     await act(async () =>
       root.render(withTeams(
-        <RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={phase} onClose={() => {}} projectId="p1" editable />,
+        <RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={phase} onClose={() => {}} projectId="p1" editable timeZone="UTC" />,
       )),
     )
     const open = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(t(locale, 'wbs.addChild')))!

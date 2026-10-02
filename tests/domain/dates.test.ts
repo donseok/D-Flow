@@ -10,10 +10,11 @@ describe('dates.ts 의 남는 표면(스펙 §4.1 — 날짜 산술만, seoul* �
   it('export 는 addDaysIso 와 과제 32 까지의 seoulToday 뿐', () => {
     expect(Object.keys(dates).sort()).toEqual(['addDaysIso', 'seoulToday'])
   })
-  it('seoulToday( 호출은 UI 위험 파일(layout) 한 곳뿐 — 새 호출 금지(D-22a, 과제 32 가 지운다)', () => {
+  // UI-2(레인 B)가 셸의 '오늘'을 (app)/layout.tsx 에서 포털 로더로 옮겼다 — 과제 32 의 새 자리(UI 위험 파일이 아니다, merge 뒤 기록)
+  it('seoulToday( 호출은 포털 로더(src/lib/data/portal.ts) 한 곳뿐 — 새 호출 금지(D-22a, 과제 32 가 지운다)', () => {
     const callers = walk('src').filter((f) => /\.(ts|tsx)$/.test(f) && f !== 'src/lib/domain/dates.ts')
       .filter((f) => /\bseoulToday\(/.test(readFileSync(f, 'utf8')))
-    expect(callers).toEqual(['src/app/(app)/layout.tsx'])
+    expect(callers).toEqual(['src/lib/data/portal.ts'])
   })
 })
 

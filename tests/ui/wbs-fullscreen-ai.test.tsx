@@ -14,6 +14,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 import { RightRailProvider, useRightRail } from '@/components/app/RightRail'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
@@ -40,7 +41,7 @@ describe('WBS 전체 화면 툴바의 AI 토글(AA3)', () => {
   const toggle = () => container.querySelector<HTMLButtonElement>('[data-wbs-ai-toggle]')
   async function show(ai: boolean) {
     await act(async () => root.render(
-      <RightRailProvider><RailApi ai={ai} /><WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} /></RightRailProvider>,
+      <RightRailProvider><RailApi ai={ai} /><WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} /></RightRailProvider>,
     ))
     await act(async () => { await Promise.resolve() })
   }

@@ -164,22 +164,22 @@ describe('/api/shell — 명단 밖 비공개 프로젝트(GG1)', () => {
 })
 
 describe('공지 배지 — 모름은 null(레인 B SP3b D34 계약 — 0 으로 위장하지 않고 별도 표지도 두지 않는다, A-5 리뷰 O5)', () => {
-  it('액션이 null(달력·조회 실패)이면 unreadAnnouncements null, 실패 표지 필드는 없다', async () => {
-    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(null)
-    const body = await (await GET(req('?route=p1&menu=p1'))).json()
-    expect(body.unreadAnnouncements).toBeNull()
+  it('액션이 null(달력·조회 실패 — 액션이 로그)이면 projectUnreadAnnouncements null, 실패 표지 필드는 없다', async () => {
+    h.getUnreadAnnouncementCount.mockResolvedValue(null)
+    const body = await (await get(`ws=${WA}&project=${P}`)).json()
+    expect(body.badges.projectUnreadAnnouncements).toBeNull()
     expect('unreadAnnouncementsFailed' in body).toBe(false)
+    expect('unreadAnnouncementsFailed' in body.badges).toBe(false)
   })
   it('액션이 throw 해도 null + 로그', async () => {
-    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockRejectedValueOnce(new Error('boom'))
-    const body = await (await GET(req('?route=p1&menu=p1'))).json()
-    expect(body.unreadAnnouncements).toBeNull()
-    expect(errSpy).toHaveBeenCalledWith('[shell] 공지 배지 조회 실패:', 'boom')
+    h.getUnreadAnnouncementCount.mockRejectedValueOnce(new Error('boom'))
+    const body = await (await get(`ws=${WA}&project=${P}`)).json()
+    expect(body.badges.projectUnreadAnnouncements).toBeNull()
+    expect(errSpy).toHaveBeenCalledWith('[shell] 공지 안읽음 수 실패:', 'boom')
   })
   it('정상이면 그 수', async () => {
-    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(2)
-    const body = await (await GET(req('?route=p1&menu=p1'))).json()
-    expect(body.unreadAnnouncements).toBe(2)
-    expect('unreadAnnouncementsFailed' in body).toBe(false)
+    h.getUnreadAnnouncementCount.mockResolvedValue(3)
+    const body = await (await get(`ws=${WA}&project=${P}`)).json()
+    expect(body.badges.projectUnreadAnnouncements).toBe(3)
   })
 })

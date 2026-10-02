@@ -30,9 +30,9 @@ beforeEach(() => {
   h.createServerClient.mockResolvedValue({ from: () => chain })
 })
 
-describe('getPortfolioInputs(workspaceId) — 그 워크스페이스로 한정(D21)', () => {
+describe('getPortfolioInputs(workspaceId, realToday) — 그 워크스페이스로 한정(D21)', () => {
   it('다른 워크스페이스 프로젝트는 입력에 없다', async () => {
-    const r = await getPortfolioInputs(WA)
+    const r = await getPortfolioInputs(WA, '2026-10-03')
     expect(r.inputs.map((x) => x.projectId)).toEqual(['p-a'])
     // 리더·스냅샷 IN 조회도 그 워크스페이스 프로젝트만
     expect(ins).toEqual([['p-a'], ['p-a']])
@@ -40,7 +40,7 @@ describe('getPortfolioInputs(workspaceId) — 그 워크스페이스로 한정(D
     expect(h.getComputedWbs).toHaveBeenCalledWith('p-a')
   })
   it('그 워크스페이스에 프로젝트가 없으면 빈 입력(다른 워크스페이스로 넓히지 않는다)', async () => {
-    const r = await getPortfolioInputs('00000000-0000-0000-7e57-0000000016b7')
+    const r = await getPortfolioInputs('00000000-0000-0000-7e57-0000000016b7', '2026-10-03')
     expect(r.inputs).toEqual([])
     expect(h.getComputedWbs).not.toHaveBeenCalled()
   })

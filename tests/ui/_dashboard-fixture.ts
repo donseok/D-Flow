@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react'
 import type { DashboardView } from '@/components/dashboard/DashboardView'
 import type { Announcement, Meeting } from '@/lib/domain/types'
 import type { DashboardIssue } from '@/lib/domain/issueDashboard'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 type Props = ComponentProps<typeof DashboardView>
 export const DASH_ISSUE: DashboardIssue = {
@@ -20,7 +21,7 @@ export const DASH_MEETING: Meeting = {
 }
 export function dashboardProps(over: Partial<Props> = {}): Props {
   return {
-    items: [], projectId: 'p1', projectName: 'Acme', today: '2026-09-27', snapshots: [], historyFailed: false,
+    items: [], projectId: 'p1', projectName: 'Acme', today: '2026-09-27', realToday: '2026-09-27', calendar: calInputUtcMon, snapshots: [], historyFailed: false,
     announcements: [DASH_ANN], meetings: [DASH_MEETING], meetingExceptions: [], issues: [DASH_ISSUE], milestoneKeywords: [],
     modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
     ...over,

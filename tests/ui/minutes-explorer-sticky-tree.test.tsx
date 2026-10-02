@@ -25,6 +25,7 @@ vi.mock('@/app/actions/minutes', () => ({
 import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
 import { MinutesView } from '@/components/minutes/MinutesView'
 import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 const folders: MinuteFolder[] = [{ id: 'f-a', name: 'A', parentId: null, sort: 0, createdBy: 'u1', projectId: null }, { id: 'f-b', name: 'B', parentId: null, sort: 1, createdBy: 'u1', projectId: null }]
 const leaves: ExplorerLeaf[] = [{ id: 'm1', minuteDate: '2026-07-22', teamCode: 'MES', title: '회의', fileCount: 0, createdBy: 'u1', createdByName: 'u', bodyPreview: '', meetingCategory: null, folderId: 'f-a' }]
@@ -75,7 +76,7 @@ describe('MinutesView — 필터 바 높이를 --minutes-bar-h 로 내린다(BB2
     let cb: ((entries: unknown[]) => void) | null = null
     vi.stubGlobal('ResizeObserver', class { constructor(f: (e: unknown[]) => void) { cb = f } observe() {} disconnect() {} })
     await act(async () => root.render(
-      <MinutesView scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-23" initialView="list" projects={[]} currentUserId="u1" canEdit />,
+      <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-23" initialView="list" projects={[]} currentUserId="u1" canEdit />,
     ))
     const view = container.querySelector('[data-minutes-view]') as HTMLElement
     expect(view.style.getPropertyValue('--minutes-bar-h')).toBe('0px')

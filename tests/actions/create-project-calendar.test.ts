@@ -10,7 +10,6 @@ vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => { throw new Error('adminFor 를 쓴다') }) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => { throw new Error('세션 클라이언트를 쓰지 않는다') }) }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams: vi.fn(async () => true) }))
 import { createProject, type CreateProjectInput } from '@/app/actions/project'
 import { makeActor } from '../fixtures/actor'
 

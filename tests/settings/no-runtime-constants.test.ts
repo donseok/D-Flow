@@ -39,7 +39,7 @@ describe('no-runtime-constants', () => {
     expect([...actual].filter(([, hits]) => hits.some((p) => team.includes(p))).map(([f]) => f)).toEqual([])
   })
 
-  // 스펙 D45 — SP5 A 의 몫(시간대 세 패턴)은 체크포인트 A 에서 허용 목록에도 코드에도 없다. 예외는 UI 위험 파일(layout) 한 줄을
+  // 스펙 D45 — SP5 A 의 몫(시간대 세 패턴)은 체크포인트 A 에서 허용 목록에도 코드에도 없다. 예외는 포털 로더(portal.ts — UI-2 가 layout 에서 옮김)의 호출을
   // 과제 32(ui/sp5-calendar)가 바꿀 때까지 seoulToday 를 쥔 dates.ts 하나뿐이다 — 과제 32 가 이 배열을 비운다.
   const UNTIL_TASK_32: readonly string[] = ['src/lib/domain/dates.ts']
   it('SP5 A 의 시간대 패턴(Asia/Seoul·+09:00·9 * 3600_000)이 허용 목록에 없다(스펙 D45 — 예외는 UNTIL_TASK_32 뿐)', () => {

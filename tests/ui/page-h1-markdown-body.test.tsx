@@ -38,7 +38,7 @@ const count = (html: string, tag: string) => (html.match(new RegExp(`<${tag}[\\s
 describe('page-h1 — 본문 마크다운의 머리는 화면 h1 을 늘리지 않는다', () => {
   it('회의록 상세(워크스페이스 경로·옛 경로 스텁이 307 로 닿는 곳) — h1 은 제목 하나', () => {
     const html = renderToStaticMarkup(
-      <MinuteViewer minute={minute} files={[]} canManage={false} annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]} />,
+      <MinuteViewer minute={minute} files={[]} canManage={false} annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]} timeZone="UTC" />,
     )
     expect(count(html, 'h1')).toBe(1)
     expect(html).toContain('본문 첫 제목')

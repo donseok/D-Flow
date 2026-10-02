@@ -40,7 +40,7 @@ vi.mock('@/app/actions/project', () => ({
     degraded: false,
   })),
 }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-10-02' })) }))
+vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], calendar: (await import('../helpers/calendarFixture')).calUtcSun, today: '2026-10-02' })) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
 // 팀은 요청 범위 원천(SP4 A2 — knowledge.ts 가 projectTeams 를 읽는다). 이 파일은 팀 축을 보지 않는다 — 빈 목록
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock([]))

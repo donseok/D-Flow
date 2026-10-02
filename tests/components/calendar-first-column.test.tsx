@@ -143,7 +143,7 @@ describe('회의 뷰 둘 — 그리드 범위가 같은 규칙(사본 gridRange 
 
   it('MyMeetingsView — 일요일 규칙이면 범위가 monthGridRange(…, sunday)', async () => {
     const { MyMeetingsView } = await import('@/components/meetings/MyMeetingsView')
-    await render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso={TODAY} currentUserId="u1" calendar={SUNDAY_CAL} />)
+    await render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} todayIso={TODAY} currentUserId="u1" calendar={SUNDAY_CAL} />)
     const [from, to] = monthGridRange(2026, 9, 'sunday')
     expect(mocks.botCtx).toHaveBeenLastCalledWith(expect.objectContaining({ range: { from, to } }))
   })

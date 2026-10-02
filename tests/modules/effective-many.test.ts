@@ -6,7 +6,8 @@ import type { ConfigReadClient } from '@/lib/settings/projectConfig'
 const WS = '00000000-0000-0000-7e57-000000001631', WS2 = '00000000-0000-0000-7e57-000000001632'
 const P1 = '00000000-0000-0000-7e57-000000001633', P2 = '00000000-0000-0000-7e57-000000001634', P3 = '00000000-0000-0000-7e57-000000001635'
 type Row = Record<string, unknown>
-/** 해석기 셋(workspace_settings·project_settings·project_areas·teams)이 쓰는 체인만 — eq/in/or/order/range/maybeSingle/select(count) */
+/** 해석기 셋(workspace_settings·project_settings·project_areas·teams)이 쓰는 체인만 — eq/in/or/order/range/maybeSingle/select(count).
+ *  SP5 — 프로젝트 해석기가 holidays 를 키셋(gt·order·limit)으로 읽는다(달력 로더) */
 function fakeClient(tables: Record<string, Row[]>, calls: string[]): ConfigReadClient {
   return {
     from(table: string) {
@@ -16,7 +17,8 @@ function fakeClient(tables: Record<string, Row[]>, calls: string[]): ConfigReadC
         select: (_c: string, o?: { count?: string }) => { counted = !!o?.count; calls.push(`${table}.select`); return q },
         eq: (c: string, v: unknown) => { rows = rows.filter((r) => (c.includes('.') ? (r[c.split('.')[0]] as Row)?.[c.split('.')[1]] : r[c]) === v); return q },
         in: (c: string, vs: unknown[]) => { calls.push(`${table}.in:${vs.length}`); rows = rows.filter((r) => vs.includes(r[c])); return q },
-        or: () => q, order: () => q,
+        or: () => q, order: () => q, gt: () => q,
+        limit: (n: number) => Promise.resolve({ data: rows.slice(0, n), error: null, count: counted ? rows.length : null }),
         range: (a: number, b: number) => Promise.resolve({ data: rows.slice(a, b + 1), error: null, count: counted ? rows.length : null }),
         maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
         then: (r: (v: unknown) => unknown) => Promise.resolve({ data: rows, error: null }).then(r),
