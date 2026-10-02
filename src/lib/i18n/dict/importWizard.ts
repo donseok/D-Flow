@@ -23,6 +23,8 @@ export const importWizardKo = {
   'importWizard.networkError': '네트워크 오류가 발생했습니다. 잠시 후 다시 시도하세요.',
 
   'importWizard.detectionWarningsTitle': '자동 감지 확인이 필요합니다',
+  'importWizard.holidaySkippedTitle': '건너뜀(특정일 근무와 충돌)',
+  'importWizard.holidaySkippedDesc': '이 날짜는 프로젝트 설정에 근무일로 등록돼 있어 Holiday 시트의 휴일로 바꾸지 않습니다. 쉬는 날로 바꾸려면 설정의 날짜 예외에서 종류를 휴무로 고치세요.',
 
   'importWizard.hierarchyLegend': '계층 방식',
   'importWizard.hierarchyColumns': '열 = 계층',

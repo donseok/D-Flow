@@ -5,6 +5,7 @@ import { requireProjectAdmin } from '@/lib/authz'
 import { denyStatus, ERR_ANON, ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
+import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
 import { splitLeafOwners } from '@/lib/excel/validate'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
@@ -187,6 +188,9 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return fail(400, 'INVALID_INPUT', parsed.error)
   const linked = linkByDepth(parsed.rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
   if (!linked.ok) return fail(400, 'LINK_ERRORS', ERR_LINK, { errors: linked.errors })
+  // 휴일 충돌(SP5 D7·개정 §4.2.3) — RPC 는 그대로 받는다(갱신절이 work 행을 덮지 않는다 — 반환 형태 불변). 결과 화면이 그 날짜를 '건너뜀'으로
+  // 보인다. 원천은 이미 읽은 해석기의 날짜 예외(cfg.holidays — 로더가 끝까지 읽었다)
+  const skippedHolidays = skippedHolidaysOf(parsed.holidays, cfg.holidays)
 
   // #5 영수증 선확인 — 관문이 아니라 최적화다. 같은 명령이 이미 적용됐으면(RLS 본인 행) 팀 등록·백업을 건너뛰고 RPC 의 판정을 받는다.
   // 거짓 양성(다른 내용으로 쓴 같은 id)은 RPC 가 COMMAND_REUSED, 거짓 음성(동시 재전송)은 RPC 가 duplicate 로 판정한다.
@@ -397,6 +401,7 @@ export async function POST(req: NextRequest) {
     ...(backup ? { backup } : {}),
     profileSaved,
     ...(profileSave ? { profileSave } : {}),
+    ...(skippedHolidays.length > 0 ? { skippedHolidays } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   })
 }

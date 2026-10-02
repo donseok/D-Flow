@@ -194,3 +194,13 @@ describe('GET /api/export — 저장 양식·손상', () => {
     err.mockRestore()
   })
 })
+
+describe('GET /api/export — Holiday 시트(SP5 D7)', () => {
+  it('휴무만 — 근무 예외는 내보내지 않고 이름을 싣는다(해석기의 날짜 예외가 원천)', async () => {
+    mocks.getProjectConfig.mockResolvedValue({ ...makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }), holidays: [
+      { date: '2026-10-05', name: '창립기념일', kind: 'off' }, { date: '2026-10-10', name: '대체 근무', kind: 'work' },
+    ] })
+    expect((await get('p-mine')).status).toBe(200)
+    expect(mocks.buildWorkbookWithProfile.mock.calls[0][2]).toEqual([{ date: '2026-10-05', name: '창립기념일' }])
+  })
+})

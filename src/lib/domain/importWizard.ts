@@ -5,6 +5,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
+import type { SkippedHoliday } from './holidayImport'
 
 export type ImportMode = 'append' | 'replace'
 
@@ -21,6 +22,8 @@ export interface ExecuteResult {
   profileSaved: boolean
   /** 양식 저장 실패 사유(W5) — 가져오기 자체는 성공. 완료 화면이 경고로 보인다. error 는 코드의 고정 문구다. */
   profileSave?: { ok: false; code: string; error: string }
+  /** 근무 예외와 겹쳐 휴무로 덮지 않은 날짜(SP5 D7) — 있을 때만 */
+  skippedHolidays?: SkippedHoliday[]
   warnings?: string[]
 }
 
@@ -117,6 +120,8 @@ export interface WizardState {
   intentKey: string | null
   /** replace 사전 백업(D50) — intentKey 의 의도로 내려받기를 시작한 백업. 의도가 바뀌거나 실행이 성공하면 null. */
   preBackup: { generatedAt: string } | null
+  /** 미리보기 — 감지 라우트의 휴일 충돌(SP5 D7). 파일을 바꾸면 비운다 */
+  skippedHolidays: SkippedHoliday[]
   result: ExecuteResult | null
 }
 
@@ -140,13 +145,14 @@ export const initialWizardState: WizardState = {
   commandId: null,
   intentKey: null,
   preBackup: null,
+  skippedHolidays: [],
   result: null,
 }
 
 export type WizardAction =
   | { type: 'fileSelected'; fileName: string }
   | { type: 'inspectStart' }
-  | { type: 'inspectSuccess'; detection: DetectionResult; savedProfile: ExcelProfile | null }
+  | { type: 'inspectSuccess'; detection: DetectionResult; savedProfile: ExcelProfile | null; skippedHolidays?: SkippedHoliday[] }
   | { type: 'inspectFailure'; error: string }
   | { type: 'profileChanged'; profile: ExcelProfile }
   | { type: 'modeChanged'; mode: ImportMode }
@@ -235,6 +241,7 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         ...choice,
         // 불일치면 양식 저장은 기본 꺼짐 — 켜 둔 채 실행하면 감지 양식이 저장 양식을 조용히 덮어쓴다. 사용자가 켜면 저장한다.
         saveProfile: choice.profileMismatch === null,
+        skippedHolidays: action.skippedHolidays ?? [],
         error: null,
       }
     }

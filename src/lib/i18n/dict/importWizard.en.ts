@@ -25,6 +25,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.networkError': 'A network error occurred. Please try again shortly.',
 
   'importWizard.detectionWarningsTitle': 'Please review the automatic detection',
+  'importWizard.holidaySkippedTitle': 'Skipped (conflicts with a work-day exception)',
+  'importWizard.holidaySkippedDesc': 'These dates are registered as work days in the project settings, so the Holiday sheet does not turn them into days off. To make them days off, change the exception type to Off in the settings.',
 
   'importWizard.hierarchyLegend': 'Hierarchy method',
   'importWizard.hierarchyColumns': 'Columns = levels',

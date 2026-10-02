@@ -11,6 +11,7 @@ import { todayIn } from '@/lib/domain/calendar'
 import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
+import { exportHolidayRows } from '@/lib/domain/holidayImport'
 
 // 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
 const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.`
@@ -68,8 +69,8 @@ export async function GET(req: NextRequest) {
     console.error('[export] 프로젝트 팀 조회 실패(WBS):', e.message, e.cause)
     return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
   }
-  const { items, holidays } = wbs
-  const hol = holidays.map(d => ({ date: d, name: '' }))
+  const { items } = wbs
+  const hol = exportHolidayRows(cfg.holidays)    // 휴무만·이름 유지(SP5 D7 — Excel 왕복은 off 만). 원천은 해석기의 날짜 예외
   let profile: ExcelProfile
   let layout: 'standard' | 'saved'
   if (saved) {

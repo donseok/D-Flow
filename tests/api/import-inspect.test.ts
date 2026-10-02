@@ -161,3 +161,22 @@ describe('POST /api/import/inspect', () => {
     err.mockRestore()
   })
 })
+
+describe('POST /api/import/inspect — 휴일 충돌 미리보기(SP5 D7·W16)', () => {
+  it('감지된 Holiday 시트의 날짜가 프로젝트의 근무 예외와 겹치면 skippedHolidays 로 미리 보인다', async () => {
+    const XLSX = await import('xlsx')
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['코드']]), 'WBS')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['날짜', '이름'], ['2026-10-10', '회사 휴일'], ['2026-10-12', '회사 휴일 2']]), 'Holiday')
+    const file = new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer])
+    mocks.detectWorkbook.mockReturnValue({ ok: true, result: detectionResult({ sheetNames: ['WBS', 'Holiday'], profile: { ...LEGACY_EXCEL_PROFILE_V1, holidaySheetName: 'Holiday' } }) })
+    mocks.getProjectConfig.mockResolvedValue({ ...makeProjectConfig({ 'core.level_labels': ['단계'] }), holidays: [{ date: '2026-10-10', name: '대체 근무', kind: 'work' }] })
+    const res = await POST(req({ file, projectId: PROJECT_ID }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).skippedHolidays).toEqual([{ date: '2026-10-10', name: '회사 휴일', reason: 'work_exception' }])
+  })
+  it('겹치지 않으면 빈 목록', async () => {
+    const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
+    expect((await res.json()).skippedHolidays).toEqual([])
+  })
+})

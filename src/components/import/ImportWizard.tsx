@@ -17,6 +17,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 import type { DetectionResult } from '@/lib/excel/detect'
 import type { ImportError } from '@/lib/excel/validate'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
+import type { SkippedHoliday } from '@/lib/domain/holidayImport'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
   recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, executionIntentKey, commandIdFor,
@@ -232,7 +233,8 @@ export function ImportWizard({
       if (res.ok && data.ok) {
         const detection = data.detection as DetectionResult
         const savedProfile = (data.savedProfile ?? null) as ExcelProfile | null
-        dispatch({ type: 'inspectSuccess', detection, savedProfile })
+        const skippedHolidays = Array.isArray(data.skippedHolidays) ? (data.skippedHolidays as SkippedHoliday[]) : []
+        dispatch({ type: 'inspectSuccess', detection, savedProfile, skippedHolidays })
         // 마크 행은 reducer 가 고른 출발 프로파일의 사전으로 — 불일치면 감지 결과다(Task 1b).
         const rows = recordToRows(initialProfileChoice(detection, savedProfile).profile.ownerMarks)
         setMarkRows(rows)
@@ -433,6 +435,7 @@ export function ImportWizard({
               </ul>
             </div>
           )}
+          <SkippedHolidaysNotice items={state.skippedHolidays} t={t} />
 
           <div className="card space-y-6 p-6">
             {/* 리뷰 Important #2 — savedProfile 을 기본값으로 시작한 경우에도(레거시 프로젝트 +
@@ -773,6 +776,7 @@ export function ImportWizard({
               </ul>
             </div>
           )}
+          <SkippedHolidaysNotice items={state.result.skippedHolidays ?? []} t={t} />
 
           {/* 리뷰 Important #1 — §6.5 프로파일 익스포트(펼침)가 UI 에서 도달 불가했다. 완료 화면이
               이 프로파일로 다시 내보낼 수 있는 유일하고 자연스러운 지점(방금 쓴 프로파일이 최신 상태).
@@ -860,6 +864,22 @@ export function ImportWizard({
           <p className="mt-3 text-xs leading-5 text-ink-subtle">{t('importWizard.needsTeamsProjectScope')}</p>
         )}
       </Modal>
+    </div>
+  )
+}
+
+/** 가져오기 휴일 충돌(SP5 D7) — Holiday 시트의 날짜가 프로젝트의 근무 예외와 겹쳐 휴무로 바꾸지 않은 날짜. 검토(미리보기)·완료(결과) 두 자리 */
+function SkippedHolidaysNotice({ items, t }: { items: readonly SkippedHoliday[]; t: (k: DictKey) => string }) {
+  if (items.length === 0) return null
+  return (
+    <div role="status" className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5" data-skipped-holidays>
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
+        <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.holidaySkippedTitle')}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-ink-muted">{t('importWizard.holidaySkippedDesc')}</p>
+      <ul className="mt-2 space-y-1 text-xs leading-5 text-ink-muted">
+        {items.map(h => <li key={h.date} className="tabular-nums">{h.date}{h.name ? ` · ${h.name}` : ''}</li>)}
+      </ul>
     </div>
   )
 }

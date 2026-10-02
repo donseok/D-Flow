@@ -7,6 +7,8 @@ import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
+import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
+import { readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
@@ -26,7 +28,8 @@ export async function POST(req: NextRequest) {
   // 가드 실패 → 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500(재시도 가능).
   if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g.error) })
 
-  const detected = detectWorkbook(await file.arrayBuffer())
+  const buf = await file.arrayBuffer()
+  const detected = detectWorkbook(buf)
   if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
 
   let cfg: ProjectConfig
@@ -53,5 +56,10 @@ export async function POST(req: NextRequest) {
   // 마법사는 같은 판정(compareProfiles)으로 감지 결과를 기본 선택으로 둔다. 저장 양식이 없거나 손상이면 null.
   const profileMismatch = savedProfile ? compareProfiles(savedProfile, detection.profile) : null
 
-  return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch })
+  // 휴일 충돌 미리보기(SP5 D7) — 감지된 Holiday 시트를 실행과 같은 규칙으로 읽고, 프로젝트의 근무 예외(cfg.holidays — 해석기가 끝까지 읽었다)와
+  // 겹치는 날짜를 '건너뜀'으로 미리 보인다. 실행은 사용자가 고른 양식으로 다시 읽으므로 결과 화면(실행 응답)이 최종이다.
+  const fileHolidays = readHolidaysFromBuffer(buf, detection.profile.holidaySheetName) ?? []
+  const skippedHolidays = skippedHolidaysOf(fileHolidays, cfg.holidays)
+
+  return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch, skippedHolidays })
 }

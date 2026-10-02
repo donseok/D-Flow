@@ -159,19 +159,29 @@ export function parseWithProfile(
     })
   }
 
-  const holidays: { date: string; name: string }[] = []
-  if (profile.holidaySheetName) {
-    const hs = wb.Sheets[profile.holidaySheetName]
-    if (hs) {
-      const haoa = XLSX.utils.sheet_to_json<unknown[]>(hs, { header: 1, blankrows: false })
-      for (const r of haoa) {
-        const iso = toIso(r[0])
-        if (iso) holidays.push({ date: iso, name: String(r[1] ?? '').trim() })
-      }
-    }
-  }
+  const holidays = readHolidaySheet(wb, profile.holidaySheetName)
 
   return { ok: true, rows, holidays }
+}
+
+/** Holiday 시트 — 첫 열이 날짜인 행만(toIso 가 날짜로 읽는 것). 시트 이름이 없거나 시트가 없으면 [] */
+export function readHolidaySheet(wb: XLSX.WorkBook, sheetName: string | null): { date: string; name: string }[] {
+  const holidays: { date: string; name: string }[] = []
+  if (!sheetName) return holidays
+  const hs = wb.Sheets[sheetName]
+  if (!hs) return holidays
+  for (const r of XLSX.utils.sheet_to_json<unknown[]>(hs, { header: 1, blankrows: false })) {
+    const iso = toIso(r[0])
+    if (iso) holidays.push({ date: iso, name: String(r[1] ?? '').trim() })
+  }
+  return holidays
+}
+
+/** 미리보기용(가져오기 감지 — SP5 D7) — 실행과 같은 읽기 규칙(cellDates:false). 워크북을 못 읽으면 null */
+export function readHolidaysFromBuffer(buf: ArrayBuffer, sheetName: string | null): { date: string; name: string }[] | null {
+  let wb: XLSX.WorkBook
+  try { wb = XLSX.read(buf, { type: 'array', cellDates: false }) } catch { return null }
+  return readHolidaySheet(wb, sheetName)
 }
 
 /** hierarchy 가 columns 이고 정확히 3열이면 레거시(phase/task/activity) 라벨을 쓴다(레거시 호환).

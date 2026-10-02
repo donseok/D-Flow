@@ -419,3 +419,22 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/import/execute — 휴일 충돌(SP5 D7·W16)', () => {
+  it('파일 휴일이 프로젝트의 근무 예외와 겹치면 결과에 skippedHolidays — RPC 에는 그대로 넘긴다(DB 갱신절이 work 행을 덮지 않는다)', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [{ date: '2026-10-10', name: '회사 휴일' }, { date: '2026-10-12', name: '회사 휴일 2' }] })
+    mocks.getProjectConfig.mockResolvedValue({ ...cfgWith(), holidays: [{ date: '2026-10-10', name: '대체 근무', kind: 'work' }] })
+    const admin = makeAdminClient()
+    mocks.createAdminClient.mockImplementation(() => admin)
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, skippedHolidays: [{ date: '2026-10-10', name: '회사 휴일', reason: 'work_exception' }] })
+    expect(admin.rpc).toHaveBeenCalledWith('import_wbs_cmd', expect.objectContaining({
+      p_holidays: [{ date: '2026-10-10', name: '회사 휴일' }, { date: '2026-10-12', name: '회사 휴일 2' }],
+    }))
+  })
+  it('겹치지 않으면 응답에 skippedHolidays 가 없다', async () => {
+    const res = await POST(req(baseFields()))
+    expect(await res.json()).not.toHaveProperty('skippedHolidays')
+  })
+})
