@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { BadgeCheck, FilePlus2, Pencil, RotateCcw, Save, X } from 'lucide-react'
 import { createWikiDocument, updateWikiDocument, verifyWikiDocument } from '@/app/actions/wiki'
 import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
-import { clearLegacyWikiDrafts, wikiDraftKey } from '@/lib/drafts/wikiDrafts'
+import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
+import { useScope } from '@/components/app/ScopeContext'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { formatWikiDate } from './WikiShared'
@@ -89,11 +90,10 @@ interface WikiDraft {
   savedAt: string
 }
 
-function readDraft(key: string | null): WikiDraft | null {
-  if (!key) return null
+/** 초안 문자열 → 초안(모양이 틀리면 null). 새 키·옛 키 이행(readDraftWithMigration)이 같이 쓴다 */
+function parseDraft(raw: string | null): WikiDraft | null {
+  if (!raw) return null
   try {
-    const raw = window.localStorage.getItem(key)
-    if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<WikiDraft>
     if (typeof parsed.bodyMd !== 'string' || typeof parsed.title !== 'string') return null
     return {
@@ -103,8 +103,21 @@ function readDraft(key: string | null): WikiDraft | null {
       savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : '',
     }
   } catch {
-    // 사파리 프라이빗 모드 등 localStorage 가 throw 하는 환경에서도 편집은 계속돼야 한다.
     return null
+  }
+}
+
+/** 새 키(워크스페이스 포함) → 없으면 옛 사용자별 키에서 읽어 옮긴다(D52). from='old' 면 옛 키는 사람이 결정할 때까지 남는다 */
+function readDraft(key: string | null, legacyKey: string | null): { draft: WikiDraft | null; fromLegacy: boolean } {
+  if (!key) return { draft: null, fromLegacy: false }
+  try {
+    const r = legacyKey
+      ? readDraftWithMigration(window.localStorage, key, legacyKey)
+      : { draft: window.localStorage.getItem(key), from: 'new' as const }
+    return { draft: parseDraft(r.draft), fromLegacy: r.from === 'old' }
+  } catch {
+    // 사파리 프라이빗 모드 등 localStorage 가 throw 하는 환경에서도 편집은 계속돼야 한다.
+    return { draft: null, fromLegacy: false }
   }
 }
 
@@ -160,7 +173,18 @@ export function WikiDocumentEditor({
     ? `/p/${projectId}/wiki/topics/${topic.id}`
     : `/p/${projectId}/wiki`
 
-  const storageKey = userId ? wikiDraftKey(userId, projectId, topic?.id ?? null) : null
+  // 초안 키(D52, 개정 §5.8.5) — 워크스페이스는 범위 컨텍스트(SSR 에도 값)에서. 범위를 모르면 워크스페이스 없는 키를 만들지 않고 초안을 끈다
+  const workspaceId = useScope()?.workspace?.id ?? null
+  const storageKey = userId && workspaceId ? draftKey(userId, workspaceId, projectId, topic?.id ?? null) : null
+  const legacyKey = userId && workspaceId ? legacyWikiDraftKey(userId, projectId, topic?.id ?? null) : null
+  // 옛 키에서 옮겨 온 초안이 아직 사람의 결정(복구·폐기·저장·새로 쓰기)을 기다리는가 — 결정하는 자리에서 옛 키를 지운다(복구 순서)
+  const legacyPending = useRef<string | null>(null)
+  const settleLegacy = () => {
+    if (!legacyPending.current) return
+    try { settleLegacyDraft(window.localStorage, legacyPending.current) } catch { /* 저장소를 못 쓰는 환경 */ }
+    legacyPending.current = null
+  }
+  useEffect(() => { if (!workspaceId) console.error('[wiki] 범위 없음 — 초안 저장을 끈다') }, [workspaceId])
   // 손대지 않은 템플릿은 "쓴 것"이 아니다. 이걸 구분하지 않으면 새 문서를 열자마자
   // 초안이 쌓이고, 유형을 바꿔도 템플릿이 갈리지 않는다.
   const untouchedTemplate = !topic
@@ -183,10 +207,14 @@ export function WikiDocumentEditor({
   // 보이지 않지만 draftSettled(ref)는 바로 보인다.
   useEffect(() => {
     if (!editing || !storageKey) { setDraft(null); return }
-    const found = readDraft(storageKey)
+    const { draft: found, fromLegacy } = readDraft(storageKey, legacyKey)
     const pending = found && found.bodyMd !== snapshot.bodyMd ? found : null
     draftSettled.current = pending === null
+    legacyPending.current = fromLegacy ? legacyKey : null
+    // 옮겨 온 초안이 서버 본문과 같으면 되살릴 것이 없다 — 옛 키를 바로 치운다
+    if (fromLegacy && pending === null) settleLegacy()
     setDraft(pending)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- legacyKey 는 storageKey 와 같은 입력에서 만든다
   }, [editing, storageKey, snapshot.bodyMd])
 
   // 초안 저장 — 타이핑마다 쓰지 않도록 debounce 한다.
@@ -194,6 +222,7 @@ export function WikiDocumentEditor({
     if (!editing || !storageKey) return
     if (!dirty) { if (draftSettled.current) clearDraft(storageKey); return }
     draftSettled.current = true // 새로 쓰기 시작했다 — 이제 이 세션의 입력이 초안의 정본이다
+    settleLegacy()
     const timer = window.setTimeout(() => {
       writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
     }, DRAFT_DEBOUNCE_MS)
@@ -230,6 +259,7 @@ export function WikiDocumentEditor({
   function restoreDraft() {
     if (!draft) return
     draftSettled.current = true
+    settleLegacy()   // 새 키가 정본이 된다
     setTitle(draft.title)
     setBodyMd(draft.bodyMd)
     setKind(draft.kind)
@@ -239,6 +269,7 @@ export function WikiDocumentEditor({
   function discardDraft() {
     draftSettled.current = true
     clearDraft(storageKey)
+    settleLegacy()
     setDraft(null)
   }
 
@@ -246,6 +277,7 @@ export function WikiDocumentEditor({
     // 취소는 명시적 폐기다 — 초안을 남기면 다음에 열 때 방금 버린 내용이 되살아난다.
     draftSettled.current = true
     clearDraft(storageKey)
+    settleLegacy()
     setDraft(null)
     if (!topic) { onDone?.(); return }
     setTitle(snapshot.title)
@@ -291,6 +323,7 @@ export function WikiDocumentEditor({
 
     draftSettled.current = true
     clearDraft(storageKey)
+    settleLegacy()
     setDraft(null)
     trackWikiEvent(topic ? 'wiki_document_saved' : 'wiki_document_created', path, { document_kind: kind })
     if (!topic && result.topicId) {

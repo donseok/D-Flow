@@ -1,6 +1,6 @@
 'use client'
 import { createBrowserClient } from '@/lib/supabase/client'
-import { clearAllWikiDrafts } from '@/lib/drafts/wikiDrafts'
+import { clearAllDrafts } from '@/lib/drafts/wikiDrafts'
 import { WS_COOKIE } from '@/lib/workspace/constants'
 
 /**
@@ -10,7 +10,7 @@ import { WS_COOKIE } from '@/lib/workspace/constants'
  * 반드시 지운 뒤 이동한다(U2b-2 권한 리뷰 Y2 — 로그인 화면인데 세션이 살아 있는 상태를 만들지 않는다). 현재 워크스페이스 쿠키(dflow-ws)도 지운다.
  */
 export async function signOutAndClear(router: { replace: (href: string) => void; refresh: () => void }): Promise<void> {
-  try { clearAllWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
+  try { clearAllDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
   await endSession()
   try { document.cookie = `${WS_COOKIE}=; path=/; max-age=0; samesite=lax` } catch { /* 쿠키를 못 쓰는 환경 */ }
   router.replace('/login')

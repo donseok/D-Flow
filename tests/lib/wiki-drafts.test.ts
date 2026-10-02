@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clearAllWikiDrafts, clearLegacyWikiDrafts, wikiDraftKey } from '@/lib/drafts/wikiDrafts'
+import { clearAllDrafts, clearLegacyWikiDrafts, wikiDraftKey } from '@/lib/drafts/wikiDrafts'
 
 /** Map 기반 가짜 Storage — 삭제하면 뒤 키의 인덱스가 당겨지는 것까지 진짜 localStorage 와 같다. */
 function memoryStorage(keys: string[]) {
@@ -38,10 +38,10 @@ describe('clearLegacyWikiDrafts', () => {
   })
 })
 
-describe('clearAllWikiDrafts', () => {
-  it('옛 키와 v2 키를 모두 지우고 다른 키는 남긴다', () => {
-    const s = memoryStorage(['wiki-draft:p1:t1', 'wiki-draft:v2:u1:p1:t1', 'wiki-draft:v2:u2:p1:new', 'other-key'])
-    expect(clearAllWikiDrafts(s)).toBe(3)
+describe('clearAllDrafts(로그아웃 — D52 뒤 clearAllWikiDrafts 를 대신한다)', () => {
+  it('옛 키·v2 키·새 draft:v2 키를 모두 지우고 다른 키는 남긴다', () => {
+    const s = memoryStorage(['wiki-draft:p1:t1', 'wiki-draft:v2:u1:p1:t1', 'wiki-draft:v2:u2:p1:new', 'draft:v2:u1:w1:p1:wiki:t1', 'other-key'])
+    expect(clearAllDrafts(s)).toBe(4)
     expect(s.keys()).toEqual(['other-key'])
   })
 })
