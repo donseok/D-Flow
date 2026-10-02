@@ -764,6 +764,10 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
     expect(block).toMatch(/finally \{\s*await setWorkspaceTz\(wsTzBefore\)/)
     expect(block).toMatch(/finally \{\s*await svc\.from\('usage_events'\)\.delete\(\)\.eq\('id', ev\.id\)/)
   })
+  it("'UTC 기준' 판정은 SSR 의 텍스트 노드 구분(<!-- -->)을 걷어 낸 HTML 로 한다 — 화면은 '{timezone} 기준' 보간이다", () => {
+    expect(src).toContain("usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준')")
+    expect(readFileSync('src/app/(app)/usage/page.tsx', 'utf8')).toContain('{timezone} 기준')
+  })
 })
 
 describe('SP4 A2 — E2E 새 단계(스펙 §6.3)', () => {

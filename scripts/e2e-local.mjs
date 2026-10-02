@@ -1169,7 +1169,7 @@ async function main() {
       }
       const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
       const usageHtml = await (await admin.http('GET', '/usage')).text()
-      usage = { la: await day(LA), utc: await day('UTC'), invalidCode: bad.error?.code ?? null, utcNote: usageHtml.includes('UTC 기준') }
+      usage = { la: await day(LA), utc: await day('UTC'), invalidCode: bad.error?.code ?? null, utcNote: usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준') }   // '{timezone} 기준' 은 JSX 보간 — SSR 이 텍스트 노드 사이에 <!-- --> 를 넣는다
     } finally {
       await svc.from('usage_events').delete().eq('id', ev.id)
     }
