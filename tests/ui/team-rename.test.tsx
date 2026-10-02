@@ -123,6 +123,38 @@ describe('개명 입력의 세부(B-2 리뷰 P3 — 붙여넣기 자름·IME·�
     await save()
     expect(document.activeElement).toBe(q(`[data-team-rename="${RES.id}"]`))
   })
+  it('[RF5] 저장 중 입력은 disabled 가 아니라 readOnly+aria-busy — 포커스를 잃지 않고, 서버가 거부하면 입력에 포커스가 있다(B-4 리뷰 I2)', async () => {
+    let resolve!: (v: { ok: boolean; error?: string }) => void
+    h.updateTeam.mockImplementation(() => new Promise((r) => { resolve = r }))
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    const input = q<HTMLInputElement>('[data-team-rename-input]')!
+    type(input, 'ops')
+    input.focus()
+    await key(input, { key: 'Enter' })
+    // disabled 면 브라우저가 포커스를 body 로 옮긴다(focus fixup) — 저장 중에도 입력은 켜진 채 잠근다
+    expect(input.disabled).toBe(false)
+    expect(input.readOnly).toBe(true)
+    expect(input.getAttribute('aria-busy')).toBe('true')
+    await key(input, { key: 'Escape' })                       // 저장 중 Esc 는 결과를 버리지 않는다(응답이 닫힌 칸에 떨어지지 않게)
+    expect(q('[data-team-rename-input]')).toBe(input)
+    await act(async () => { resolve({ ok: false, error: '같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다.' }) })
+    expect(q(`[data-team-row="${RES.id}"] [role="alert"]`)!.textContent).toContain('겹칩니다')
+    expect(input.readOnly).toBe(false)
+    expect(input.hasAttribute('aria-busy')).toBe(false)
+    expect(document.activeElement).toBe(input)
+    await key(input, { key: 'Escape' })                       // 거부 뒤에는 키보드로 바로 취소할 수 있다
+    expect(document.activeElement).toBe(q(`[data-team-rename="${RES.id}"]`))
+  })
+  it('[RF5] 저장 버튼으로 저장했다가 서버가 거부해도 포커스는 입력으로 돌아온다 — 꺼진 버튼에 남지 않는다', async () => {
+    h.updateTeam.mockResolvedValue({ ok: false, error: '같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다.' })
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    type(q<HTMLInputElement>('[data-team-rename-input]')!, 'ops')
+    q<HTMLButtonElement>('[data-team-rename-save]')!.focus()
+    await save()
+    expect(document.activeElement).toBe(q('[data-team-rename-input]'))
+  })
   it('오류 문구는 입력과 aria-describedby·aria-invalid 로 이어진다', async () => {
     h.updateTeam.mockResolvedValue({ ok: false, error: '같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다.' })
     await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)

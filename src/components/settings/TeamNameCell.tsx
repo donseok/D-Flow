@@ -19,6 +19,7 @@ export function TeamNameCell({ team, disabled, onRename, chip }: {
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)          // 렌더 전에 같은 틱으로 두 번 오는 Enter·클릭의 재진입 가드(state 는 다음 렌더에야 보인다)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const returnFocus = useRef(false)
   const errorId = useId()
 
@@ -35,7 +36,8 @@ export function TeamNameCell({ team, disabled, onRename, chip }: {
     savingRef.current = true; setSaving(true); setError(null)
     try {
       const r = await onRename(name)
-      if (!r.ok) { setError(r.error ?? '이름을 바꾸지 못했습니다.'); return }
+      // 거부되면 고쳐 입력하도록 입력에 포커스를 둔다 — 저장 버튼으로 저장했다면 꺼진 버튼에 남은 포커스를 데려온다(B-4 리뷰 I2)
+      if (!r.ok) { setError(r.error ?? '이름을 바꾸지 못했습니다.'); inputRef.current?.focus(); return }
       finish()
     } finally {
       savingRef.current = false; setSaving(false)
@@ -60,14 +62,15 @@ export function TeamNameCell({ team, disabled, onRename, chip }: {
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
         {chip && codeLabel}
-        <input data-team-rename-input className="app-input w-40" value={value} autoFocus disabled={saving}
-          aria-label={`${team.code} 팀 새 이름`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
+        {/* 저장 중 잠금은 disabled 가 아니라 readOnly+aria-busy — disabled 는 포커스를 body 로 떨어뜨린다(focus fixup, B-4 리뷰 I2) */}
+        <input ref={inputRef} data-team-rename-input className="app-input w-40" value={value} autoFocus readOnly={saving}
+          aria-busy={saving || undefined} aria-label={`${team.code} 팀 새 이름`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             // 한글 IME 조합을 끝내는 Enter 는 저장이 아니다(브라우저에 따라 keydown 이 두 번 온다 — Safari 는 keyCode 229)
             if (e.nativeEvent.isComposing || e.keyCode === 229) return
             if (e.key === 'Enter') void save()
-            if (e.key === 'Escape') finish()
+            if (e.key === 'Escape' && !savingRef.current) finish()   // 저장 중 Esc 는 무시 — 응답이 닫힌 칸에 떨어지지 않게
           }} />
         <button type="button" className="btn btn-primary btn-sm" data-team-rename-save disabled={saving} onClick={() => void save()} aria-label="이름 저장">
           <Check className="h-3.5 w-3.5" />
