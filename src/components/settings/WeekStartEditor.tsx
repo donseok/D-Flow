@@ -32,7 +32,11 @@ export function WeekStartEditor({ value, onChange, disabled, scheduled = null, c
           {currentDay && currentDay !== scheduled.day ? ` — ${WEEK_DAY_LABEL[currentDay]}을 고르고 저장하면 예정을 취소합니다.` : ''}
         </p>
       )}
-      {review && <WeekStartReview state={review} nextDay={value} />}
+      {/* 검토 결과를 보조기기에 알린다 — 상태 요소가 바뀌어 끼워져도 읽히게 처음부터 있는 polite 래퍼 안에서 바꾼다(A-5 리뷰 O3).
+          저장 버튼의 aria-describedby 가 이 id 를 가리킨다 */}
+      <div id="calendar-week-start-review" aria-live="polite" aria-atomic="true">
+        {review && <WeekStartReview state={review} nextDay={value} />}
+      </div>
     </div>
   )
 }

@@ -139,6 +139,40 @@ describe('CalendarSettingsPanel — 주 시작', () => {
   })
 })
 
+describe('CalendarSettingsPanel — 검토 결과 전달(접근성, A-5 리뷰 O3)', () => {
+  const region = () => container.querySelector<HTMLElement>('#calendar-week-start-review')!
+  it('검토 영역은 처음부터 있는 aria-live="polite" 래퍼이고, 요일을 바꾸면 그 안에서 내용이 바뀐다', async () => {
+    await render()
+    expect(region()).not.toBeNull()
+    expect(region().getAttribute('aria-live')).toBe('polite')
+    expect(region().textContent).toBe('')
+    await click(radio('sunday'))
+    expect(region().textContent).toContain('2026-10-04 부터 일요일 시작')
+  })
+  it('검토가 저장을 막으면 저장 버튼의 aria-describedby 가 사유 문구와 검토 영역을 가리킨다', async () => {
+    m.previewWeekStartChange.mockResolvedValue({ ok: true, preview: { effectiveFrom: '2026-10-04', transitionDays: 6, keptDocs: 4, blockingWeeks: ['2026-10-05'] } })
+    await render()
+    await click(radio('sunday'))
+    expect(saveButton().disabled).toBe(true)
+    const ids = (saveButton().getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean)
+    expect(ids).toContain('calendar-week-start-review')
+    expect(ids).toContain('calendar-save-reason')
+    expect(container.querySelector('#calendar-save-reason')!.textContent).toContain('검토')
+  })
+  it('입력 오류로 막히면 사유 문구가 그 사실을 말한다', async () => {
+    await render()
+    await type(tzInput(), 'Asia/Seol')
+    expect(saveButton().getAttribute('aria-describedby')).toContain('calendar-save-reason')
+    expect(container.querySelector('#calendar-save-reason')!.textContent).toContain('입력')
+  })
+  it('막는 사유가 없으면 describedby 가 없다', async () => {
+    await render()
+    await click(container.querySelector<HTMLInputElement>('input[name="calendar-working-day"][value="6"]')!)
+    expect(saveButton().disabled).toBe(false)
+    expect(saveButton().getAttribute('aria-describedby')).toBeNull()
+  })
+})
+
 describe('CalendarSettingsPanel — 근무 요일·시간대', () => {
   it('근무 요일을 다 끄면 오류이고 저장하지 않는다', async () => {
     await render()

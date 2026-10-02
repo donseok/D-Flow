@@ -88,6 +88,13 @@ export function CalendarSettingsPanel(props: {
   const reviewBlocks = isProject && weekChanged && reviewBlocksSave(review)
   const invalidInput = !tzCheck.ok || !wdCheck.ok
   const saveDisabled = !canEdit || pending || !!conflict || invalidInput || reviewBlocks || (changed.length === 0 && !uncertainPatch)
+  // 저장이 막힌 이유(변경 없음·권한·진행 중은 제외) — 저장 버튼의 aria-describedby 로 잇는다(A-5 리뷰 O3)
+  const saveReason = !canEdit ? null
+    : conflict ? '다른 사람이 먼저 저장했습니다 — 아래에서 내 값과 최신 값 중 하나를 고르세요.'
+    : invalidInput ? '입력값을 확인하세요 — 시간대·근무 요일 오류를 고치면 저장할 수 있습니다.'
+    : reviewBlocks ? '주 시작 변경 내용 검토가 끝나지 않았거나, 검토 결과 저장할 수 없는 변경입니다(위 변경 내용 검토 참고).'
+    : null
+  const saveDescribedBy = [saveReason ? 'calendar-save-reason' : null, reviewBlocks ? 'calendar-week-start-review' : null].filter(Boolean).join(' ') || undefined
 
   // 주 시작을 바꾸면 서버 미리보기 — 마지막 요청의 응답만 쓴다. 의존성은 문자열 id(페이지가 scope 를 리터럴로 넘겨도 재요청하지 않게)
   const projectId = 'projectId' in scope ? scope.projectId : null
@@ -211,7 +218,8 @@ export function CalendarSettingsPanel(props: {
       {notice && <p role="status" className="text-sm text-done">{notice}</p>}
       <div data-save-bar className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3 shadow-sm">
         <span className="text-xs text-fg-muted">변경 {changed.length}개</span>
-        <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save}>
+        {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
+        <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>
           {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
         </button>
       </div>
