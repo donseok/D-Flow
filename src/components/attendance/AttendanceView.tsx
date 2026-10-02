@@ -327,13 +327,13 @@ export function AttendanceView({
               const specialName = special ? t(`hol.${special.name}` as DictKey) : null
               return (
                 <div key={cell} className={`min-h-[96px] bg-surface p-1.5 ${inMonth ? '' : 'opacity-40'}`}>
-                  <div className="flex items-center justify-between gap-1 px-0.5">
+                  <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
                     <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
                       {dayNum}
                     </span>
                     {specialName && (
                       <span
-                        className={`min-w-0 truncate text-[10px] font-medium ${isRestDay ? 'text-delayed' : 'text-ink-subtle'}`}
+                        className={`basis-full break-all text-[10px] font-medium leading-tight sm:min-w-0 sm:basis-auto sm:truncate ${isRestDay ? 'text-delayed' : 'text-ink-subtle'}`}
                         title={specialName}
                       >
                         {specialName}
