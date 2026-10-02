@@ -38,9 +38,9 @@ function canRevoke(s: InviteStatus): boolean {
   return s === 'active' || s === 'expired'
 }
 
-function fmtDateTime(iso: string, timeZone: string, locale = 'ko-KR'): string {
+function fmtDateTime(iso: string, timeZone: string | null, locale = 'ko-KR'): string {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
+  if (timeZone === null || Number.isNaN(d.getTime())) return '—'
   return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(d)
 }
 
@@ -53,15 +53,18 @@ function fmtDateTime(iso: string, timeZone: string, locale = 'ko-KR'): string {
  * 목록 조회가 실패했으면 loadError 로 받아 그 사실을 드러낸다: '초대 0건'으로 보이면
  * 관리자가 같은 주소로 다시 발급하다 중복 제약에 이유 없이 막힌다.
  */
-export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, locale }: {
+export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, timeZoneError = null, locale }: {
   projectId: string
   rows: InviteRow[]
   loadError: string | null
   /** 이 프로젝트에서 고를 수 있는 활성 팀 — 초대는 팀 id 로 저장한다. */
   teamOptions: readonly TeamOption[]
   actorView: ProjectActorView | null
-  /** 만료·합류 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
-  timeZone: string
+  /** 만료·합류 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다. null 이면 달력을 읽지 못한 것 —
+   *  발급·취소는 달력과 무관하게 그대로 쓰고 시각 칸만 '—' + timeZoneError 사유(A-4 리뷰 N6) */
+  timeZone: string | null
+  /** timeZone 이 null 인 까닭(설정 손상 키·조회 실패 문구) */
+  timeZoneError?: string | null
   /** 시각 포맷의 locale — 없으면 'ko-KR' */
   locale?: string
 }) {
@@ -246,6 +249,11 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
         </div>
       )}
 
+      {timeZone === null && (
+        <p role="status" data-invite-time-unavailable className="text-xs text-ink-muted">
+          만료·합류 시각을 표시하지 못했습니다 — {timeZoneError ?? '프로젝트 달력 설정을 읽지 못했습니다.'} 초대 발급·취소는 그대로 됩니다.
+        </p>
+      )}
       {loadError ? (
         <p role="alert" className="text-sm font-medium text-delayed">{loadError}</p>
       ) : rows.length === 0 ? (

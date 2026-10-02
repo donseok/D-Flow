@@ -136,6 +136,15 @@ describe('ProjectInviteManager', () => {
     expect(container.querySelector('[data-issued-invite]')).toBeNull()
   })
 
+  it('시간대를 모르면(달력 손상) 만료·합류 시각은 — 이고 사유 한 줄, 발급은 그대로(A-4 리뷰 N6)', () => {
+    act(() => {
+      root.render(<ProjectInviteManager projectId="p-1" rows={[invite()]} loadError={null} teamOptions={TEAMS} actorView={WS_ADMIN}
+        timeZone={null} timeZoneError="설정 값이 올바르지 않습니다. (calendar.timezone)" />)
+    })
+    expect(container.querySelector('[data-invite-time-unavailable]')?.textContent).toContain('calendar.timezone')
+    expect(container.querySelector('tbody')?.textContent).not.toMatch(/\d{1,2}:\d{2}/)
+    expect(byLabel<HTMLSelectElement>('초대 권한')).not.toBeNull()
+  })
   it('목록 행에는 링크 복사가 없고 상태·권한만 보인다', () => {
     render([
       invite(),

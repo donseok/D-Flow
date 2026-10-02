@@ -14,7 +14,6 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { RosterManager } from '@/components/roster/RosterManager'
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
-import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
@@ -42,7 +41,10 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
     canEdit ? listProjectInvites(projectId) : null,
     canEdit ? loadProjectConfigForPage(projectId) : null,
   ])
+  // 초대 발급·취소는 달력과 무관하다 — 달력 손상·설정 조회 실패는 시각 칸만 사유로 둔다(A-4 리뷰 N6)
   const inviteCal = pc?.ok ? pickCalendar(pc.cfg) : null
+  const inviteTz = inviteCal?.ok ? inviteCal.calendar.timezone : null
+  const inviteTzError = inviteCal ? (inviteCal.ok ? null : inviteCal.error) : pc && !pc.ok ? pc.error : null
   const rows = roster.ok ? roster.rows : []
   // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용). 편집(명단 행·초대)에만 쓰므로
   // 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
@@ -88,20 +90,15 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
           )}
           {canEdit && (
             <div className="mt-6 border-t border-line pt-5">
-              {inviteCal?.ok ? (
-                <ProjectInviteManager
-                  projectId={projectId}
-                  rows={invites?.ok ? invites.rows : []}
-                  loadError={invites && !invites.ok ? invites.error : null}
-                  teamOptions={teamOptions}
-                  actorView={toProjectActorView(m, projectId)}
-                  timeZone={inviteCal.calendar.timezone}
-                />
-              ) : inviteCal ? (
-                <ConfigLoadError error={inviteCal.error} keyName={inviteCal.key} kind={inviteCal.kind} locale={locale} />
-              ) : (
-                <ConfigLoadError error={pc && !pc.ok ? pc.error : ''} locale={locale} />
-              )}
+              <ProjectInviteManager
+                projectId={projectId}
+                rows={invites?.ok ? invites.rows : []}
+                loadError={invites && !invites.ok ? invites.error : null}
+                teamOptions={teamOptions}
+                actorView={toProjectActorView(m, projectId)}
+                timeZone={inviteTz}
+                timeZoneError={inviteTzError}
+              />
             </div>
           )}
         </SectionCard>
