@@ -282,6 +282,25 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-1' }, 'chatbot')
     expect(requireSessionModule).not.toHaveBeenCalled()
   })
+  // merge 리뷰 P3 — 요청 범위 달력의 워크스페이스는 관문(requireScopedSessionModule)이 판정한 그 워크스페이스다. 화면 경로의 /w/<slug> 를 다시 읽지 않는다
+  // (관문·달력이 서로 다른 클라이언트 입력을 보면 전역 화면(/account)의 셸 범위 질문이 소속 목록 판정(UTC 폴백)으로 떨어지고, 경로를 조작하면 관문과 다른 달력을 고른다).
+  it.each([
+    ['전역 화면(/account) — 경로에 슬러그 없음', '/account'],
+    ['경로의 슬러그가 셸 범위와 다름', '/w/other-ws/meetings'],
+  ])('프로젝트 없는 질문의 달력 = 관문이 낸 워크스페이스 — %s', async (_n, pathname) => {
+    const load = await import('@/lib/calendar/load')
+    const res = await POST(request({
+      projectId: null, message: '이번 주 회의 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname, domain: 'meetings', projectId: null, timezone: 'Asia/Seoul', workspaceId: 'ws-1' },
+    }))
+    expect(res.status).toBe(200)
+    await res.text()
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-1' }, 'chatbot')
+    expect(load.resolveRequestCalendar).toHaveBeenCalledWith({ projectId: null, workspaceId: 'ws-1' }, expect.anything())
+    expect(load.resolveMemberWorkspacesCalendar).not.toHaveBeenCalled()
+    const sb = await mocks.createServerClient.mock.results.at(-1)!.value as ReturnType<typeof client>
+    expect(sb.from.mock.calls.map(([t]) => t)).not.toContain('workspaces')            // 슬러그 조회 없음
+  })
   it('프로젝트도 워크스페이스도 없으면 400 WORKSPACE_REQUIRED — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
     const res = await POST(request({
       projectId: null, message: '도와줘', history: [],

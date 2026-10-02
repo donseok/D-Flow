@@ -31,20 +31,15 @@ const MAX_REQUEST_BYTES = 262_144
 const SCOPE_CODE: Readonly<Record<number, string>> = { 400: 'WORKSPACE_REQUIRED', 401: 'UNAUTHENTICATED', 404: 'SCOPE_NOT_FOUND', 503: 'SCOPE_UNAVAILABLE' }
 
 /**
- * 요청 범위 달력(SP5 D13 ③) — 프로젝트(스코프 검증을 지난 것)가 있으면 그 프로젝트, 없으면 화면 경로의 워크스페이스(/w/<slug> — 소속일 때만),
- * 그것도 없으면 소속 워크스페이스가 하나일 때 그것, 아니면 제품 기본값. 설정 조회 실패·손상은 던진다(아래에서 503·422).
+ * 요청 범위 달력(SP5 D13 ③) — 프로젝트(스코프 검증을 지난 것)가 있으면 그 프로젝트, 없으면 범위 관문(requireScopedSessionModule)이 판정한
+ * 워크스페이스(소속 확인·플랫폼 관리자의 실재 확인을 지난 id — 화면 경로의 /w/<slug> 를 다시 읽지 않는다: 관문과 달력이 같은 워크스페이스를 본다,
+ * merge 리뷰 P3), 그것도 없으면(프로젝트 힌트로 통과했으나 스코프의 프로젝트가 없는 요청) 소속 워크스페이스 판정. 설정 조회 실패·손상은 던진다(아래에서 503·422).
  */
 async function chatCalendar(sb: Awaited<ReturnType<typeof createServerClient>>, input: {
-  projectId: string | null; pathname: string | null; workspaceIds: readonly string[]; isSuperuser: boolean
+  projectId: string | null; gateWorkspaceId: string | null; workspaceIds: readonly string[]
 }): Promise<RequestCalendar> {
   if (input.projectId) return resolveRequestCalendar({ projectId: input.projectId, workspaceId: null }, { client: sb })
-  const slug = input.pathname?.match(/^\/w\/([a-z0-9][a-z0-9-]{1,62})(?:\/|$)/)?.[1] ?? null
-  if (slug) {
-    const { data, error } = await sb.from('workspaces').select('id').eq('slug', slug).maybeSingle()
-    if (error) throw new ConfigUnavailableError(`워크스페이스 조회 실패: ${error.message}`, { cause: error })
-    const id = (data as { id: string } | null)?.id ?? null
-    if (id && (input.isSuperuser || input.workspaceIds.includes(id))) return resolveRequestCalendar({ projectId: null, workspaceId: id }, { client: sb })
-  }
+  if (input.gateWorkspaceId) return resolveRequestCalendar({ projectId: null, workspaceId: input.gateWorkspaceId }, { client: sb })
   // 소속 워크스페이스로 — 하나면 그것, 여럿이면 달력이 모두 같을 때 그것, 다르면 제품 기본값(답의 '기준' 줄이 그 tz 를 적는다 — M3)
   return resolveMemberWorkspacesCalendar(input.workspaceIds, { client: sb })
 }
@@ -123,7 +118,7 @@ export async function POST(req: NextRequest) {
   // 요청 범위 달력 한 벌 — '오늘'·'이번 주'를 이것 하나로 정한다(도구는 자기 tz 로 다시 계산하지 않는다, SP5 D13 ③)
   let calendar: RequestCalendar
   try {
-    calendar = await chatCalendar(sb, { projectId: scope.projectId, pathname: request.pageContext?.pathname ?? null, workspaceIds, isSuperuser })
+    calendar = await chatCalendar(sb, { projectId: scope.projectId, gateWorkspaceId: mod.workspaceId, workspaceIds })
   } catch (e) {
     if (e instanceof ConfigKeyError) return jsonError(e.message, 422, 'CALENDAR_INVALID')
     if (e instanceof ConfigUnavailableError) {
