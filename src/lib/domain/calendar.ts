@@ -101,10 +101,11 @@ export function zonedMidnightUtc(dateIso: string, tz: string): Date {
   const c2 = guess - offsetMs(tz, c1)
   const cands = c1 <= c2 ? [c1, c2] : [c2, c1]
   const dayOf = (t: number) => ymdIn(tz, new Date(t))
-  let t = cands.find((c) => dayOf(c) === dateIso)
-  if (t === undefined) return new Date(cands.find((c) => dayOf(c) > dateIso) ?? c2)
+  const found = cands.find((c) => dayOf(c) === dateIso)
+  if (found === undefined) return new Date(cands.find((c) => dayOf(c) > dateIso) ?? c2)
+  let t: number = found
   for (let i = 0; i < 2; i++) {
-    const earlier = guess - offsetMs(tz, t - 1000)
+    const earlier: number = guess - offsetMs(tz, t - 1000)
     if (earlier < t && dayOf(earlier) === dateIso) t = earlier
     else break
   }
