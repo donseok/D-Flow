@@ -376,3 +376,50 @@ describe('⑦ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
     expect(await runAfter(['alter function public.team_ref_owned_scope() security invoker'])).toMatchObject(POSTCHECK)
   })
 })
+
+describe('SP5 — 가져오기의 휴일은 kind=off 로만 쓰고 특정일 근무(work)를 덮지 않는다(스펙 D7·D12)', () => {
+  const ID19 = (nn: string) => `00000000-0000-0000-7e57-0000000019${nn}`
+  const P5 = ID19('80')
+  const [C1, C2, C3] = [ID19('81'), ID19('82'), ID19('83')]
+  const HOL = JSON.stringify([{ date: '2026-10-03', name: '시트 휴일' }, { date: '2026-10-09', name: '새 이름' }, { date: '2026-10-10', name: '추가 휴일' }])
+  const holidaysOf = async (c: PoolClient) =>
+    (await c.query('select date::text as d, name, kind from public.holidays where project_id = $1 order by date', [P5])).rows
+  async function scene(c: PoolClient) {
+    await newProject(c, P5)
+    await c.query(`insert into public.holidays (project_id, date, name, kind) values
+      ($1, '2026-10-03', '토요 근무', 'work'), ($1, '2026-10-09', '옛 이름', 'off')`, [P5])
+  }
+  const EXPECTED = [
+    { d: '2026-10-03', name: '토요 근무', kind: 'work' },      // work 행은 이름까지 그대로 — 건너뛴다
+    { d: '2026-10-09', name: '새 이름', kind: 'off' },         // off 행은 지금처럼 이름을 갱신
+    { d: '2026-10-10', name: '추가 휴일', kind: 'off' },       // 새 날짜는 off 로
+  ]
+
+  it('append: 같은 날짜의 work 행은 건너뛰고, off 행은 이름 갱신, 새 날짜는 off — 반환 형태는 그대로', async () => {
+    await asService(pool, async (c) => {
+      await scene(c)
+      expect(await call(c, [F.users.wsAdmin, P5, 'append', items('가'), HOL, C1]))
+        .toEqual({ status: 'applied', mode: 'append', count: 1, command_id: C1 })
+      expect(await holidaysOf(c)).toEqual(EXPECTED)
+    })
+  })
+
+  it('replace 도 같다 — 항목은 갈아끼우고 work 행은 남는다', async () => {
+    await asService(pool, async (c) => {
+      await scene(c)
+      expect(await call(c, [F.users.wsAdmin, P5, 'replace', items('나', '다'), HOL, C2]))
+        .toEqual({ status: 'applied', mode: 'replace', count: 2, command_id: C2 })
+      expect(await holidaysOf(c)).toEqual(EXPECTED)
+    })
+  })
+
+  it('같은 명령 재전송(duplicate)은 저장한 결과를 그대로 돌려주고 휴일을 다시 쓰지 않는다 — 그사이 바꾼 work 행도 그대로', async () => {
+    await asService(pool, async (c) => {
+      await scene(c)
+      const first = await call(c, [F.users.wsAdmin, P5, 'append', items('라'), HOL, C3])
+      await c.query(`update public.holidays set name = '바뀐 근무' where project_id = $1 and date = '2026-10-03'`, [P5])
+      expect(await call(c, [F.users.wsAdmin, P5, 'append', items('라'), HOL, C3])).toEqual({ ...first, status: 'duplicate' })
+      expect(await holidaysOf(c)).toEqual([{ ...EXPECTED[0], name: '바뀐 근무' }, EXPECTED[1], EXPECTED[2]])
+    })
+  })
+})
