@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, unstable_rethrow } from 'next/navigation'
 import { getActorViewState } from '@/lib/authz'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { getDisplayName } from '@/lib/auth'
@@ -18,9 +18,17 @@ import type { Team } from '@/lib/domain/teams'
 
 type Params = Promise<{ projectId: string }>
 
-/** /p/* 는 그 프로젝트의 워크스페이스 마크(★8). 숨김 프로젝트(명단 밖 비공개 포함)는 아이콘도 내지 않는다(존재 은닉). 비공개 판정 실패도 내지 않는다(로그는 판정자) */
+/**
+ * /p/* 는 그 프로젝트의 워크스페이스 마크(★8). 숨김 프로젝트(명단 밖 비공개 포함)는 아이콘도 내지 않는다(존재 은닉). 비공개 판정 실패도 내지 않는다 —
+ * 판정자는 쿼리 오류만 로그하므로 여기서도 남기고(원칙 ①), Next 제어 신호는 삼키지 않는다(HH3)
+ */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const [{ projectId }, { actor }, hidden] = await Promise.all([params, getActorViewState(), getHiddenProjectIds().catch(() => null)])
+  const hiddenOrNull = getHiddenProjectIds().catch((e: unknown) => {
+    unstable_rethrow(e)
+    console.error('[project layout] 비공개 판정 실패 — 아이콘을 내지 않는다:', e instanceof Error ? e.message : e)
+    return null
+  })
+  const [{ projectId }, { actor }, hidden] = await Promise.all([params, getActorViewState(), hiddenOrNull])
   if (!actor || !hidden || isHiddenProject(actor, projectId, hidden)) return {}
   const wid = actor.projectWorkspace.get(projectId)
   if (!wid) return {}

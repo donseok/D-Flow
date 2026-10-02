@@ -7,6 +7,7 @@
  * (레이아웃이) 자기 판정을 한다. 비공개 판정은 권한 조회와 병렬(요청 캐시)이다.
  */
 import { type NextRequest, NextResponse } from 'next/server'
+import { unstable_rethrow } from 'next/navigation'
 import { getActorViewState } from '@/lib/authz'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isHiddenProject } from '@/lib/domain/authz'
@@ -24,11 +25,17 @@ export async function GET(req: NextRequest) {
   const path = sp.get('path') ?? ''
   const query = sp.get('query') ?? ''
   if (!UUID_RE.test(pid) || !path.startsWith('/') || path.length > 512 || query.length > 1024) return json({ error: 'bad_request' }, 400)
-  const [{ actor, degraded }, hidden] = await Promise.all([getActorViewState(), getHiddenProjectIds().catch(() => null)])
+  // 판정자는 쿼리 오류만 로그한다 — 그 밖의 실패도 여기서 남기고(원칙 ①), Next 제어 신호는 삼키지 않는다(HH3)
+  const hiddenOrNull = getHiddenProjectIds().catch((e: unknown) => {
+    unstable_rethrow(e)
+    console.error('[switch-target] 비공개 판정 실패 — 개요로:', e instanceof Error ? e.message : e)
+    return null
+  })
+  const [{ actor, degraded }, hidden] = await Promise.all([getActorViewState(), hiddenOrNull])
   const overview = { href: `/p/${pid}/dashboard`, fallbackModule: null, degraded: true as const }
   if (degraded) return json(overview)
   if (!actor) return json({ error: 'unauthorized' }, 401)
-  if (!hidden) return json(overview)   // 비공개 판정 실패(로그는 판정자) — 열화와 같이
+  if (!hidden) return json(overview)   // 비공개 판정 실패(로그는 위) — 열화와 같이
   const workspaceId = actor.projectWorkspace.get(pid)
   if (!workspaceId || isHiddenProject(actor, pid, hidden)) return json({ error: 'not_found' }, 404)
   try {

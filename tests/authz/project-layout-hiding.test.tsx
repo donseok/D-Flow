@@ -20,7 +20,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
-vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
+// generateMetadata 는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 notFound 만 바꾼다
+vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), notFound: mocks.notFound }))
 vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: mocks.teamsForProjectSync }))
 vi.mock('@/lib/workspace/resolve', () => ({ workspaceRefById: mocks.workspaceRefById }))
 vi.mock('@/lib/workspace/list', () => ({ listMyWorkspaces: mocks.listMyWorkspaces }))
@@ -30,7 +31,7 @@ vi.mock('@/components/app/TeamsProvider', () => ({ TeamsProvider: ({ teams, chil
 vi.mock('@/components/app/AppShell', () => ({ AppShell: ({ children }: { children: ReactNode }) => <div data-shell>{children}</div> }))
 vi.mock('@/components/app/ShellScope', () => ({ ShellScope: () => null }))
 
-import ProjectLayout from '@/app/(app)/p/[projectId]/layout'
+import ProjectLayout, { generateMetadata } from '@/app/(app)/p/[projectId]/layout'
 import { canSeeProject, type Actor } from '@/lib/domain/authz'
 
 const render = async (projectId: string) => renderToString(await ProjectLayout({ children: 'page', params: Promise.resolve({ projectId }) }))
@@ -109,6 +110,13 @@ describe('ProjectLayout — 명단 밖 비공개 프로젝트(GG1)', () => {
     await expect(render(PRIV)).rejects.toThrow('NEXT_NOT_FOUND')
     expect(mocks.workspaceRefById).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled(); expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
   })
+  // HH5(GG 재리뷰 P3-5) — '명단 밖'의 실제 경계는 access_role 이다: 명단 행(memberIds)이 있어도 access_role 이 null 이면 buildActor 가
+  // projectRoles 에 싣지 않으므로 canSeeProject 거짓 → 404. 정본(회의록·위키·AI·포털 목록)과 같은 축이다
+  it('명단 행은 있지만 access_role 이 null 인 사람도 404 — 명단 권한 없는 사람은 명단 밖과 같다', async () => {
+    as(makeActor({ ...inWs, memberIds: new Map([[PRIV, 'm-priv']]) }))
+    await expect(render(PRIV)).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.loadShell).not.toHaveBeenCalled()
+  })
   it('명단 멤버·워크스페이스 관리자·플랫폼 관리자는 통과한다', async () => {
     for (const actor of [
       makeMemberActor(PRIV),
@@ -135,5 +143,24 @@ describe('ProjectLayout — 명단 밖 비공개 프로젝트(GG1)', () => {
     as(null, true)
     expect(await render('p1')).toContain('page')
     expect(mocks.minimalShell).toHaveBeenCalledWith(expect.objectContaining({ degraded: true }))
+  })
+})
+
+// HH3(GG 재리뷰 P3-3) — 아이콘 메타데이터의 비공개 판정 실패는 아이콘 없음이지만 로그 없이 삼키지 않고, Next 제어 신호는 다시 던진다
+describe('ProjectLayout generateMetadata — 비공개 판정 실패', () => {
+  const meta = () => generateMetadata({ params: Promise.resolve({ projectId: 'p1' }) })
+  it('판정 실패는 아이콘 없음({}) + 로그', async () => {
+    mocks.getActorViewState.mockResolvedValue({ actor: makeMemberActor('p1'), degraded: false })
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await meta()).toEqual({})
+    expect(err.mock.calls.some((c) => String(c[0]).includes('[project layout]'))).toBe(true)
+    err.mockRestore()
+  })
+  it('Next 제어 신호(동적 사용)는 삼키지 않고 다시 던진다', async () => {
+    mocks.getActorViewState.mockResolvedValue({ actor: makeMemberActor('p1'), degraded: false })
+    const signal = Object.assign(new Error('signal'), { digest: 'DYNAMIC_SERVER_USAGE' })
+    mocks.getHiddenProjectIds.mockRejectedValue(signal)
+    await expect(meta()).rejects.toBe(signal)
   })
 })

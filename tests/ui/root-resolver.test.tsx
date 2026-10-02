@@ -6,7 +6,8 @@ vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.readCurrentW
 vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspacePrefs }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
-vi.mock('next/navigation', () => ({ redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
+// 루트는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 redirect·useRouter 만 바꾼다
+vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
 
 import Root from '@/app/page'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
@@ -39,7 +40,17 @@ describe('루트 리졸버', () => {
     h.getActorViewState.mockResolvedValue({ actor: makeActor({ workspaceRoles: new Map([[WID, 'member']]), projectWorkspace: new Map([[P1, WID]]) }), degraded: false })
     h.getHiddenProjectIds.mockRejectedValue(new Error('x'))
     h.getWorkspacePrefs.mockResolvedValue({ startPage: 'last_project', recentProjects: [{ id: P1, at: 'c' }] })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(Root()).rejects.toThrow('NEXT_REDIRECT:/w/acme')
+    // HH3 — 판정자는 쿼리 오류만 로그한다. 그 밖의 실패(클라이언트 생성 등)도 여기서 남긴다(3원칙 ① 표시 = 로깅)
+    expect(err.mock.calls.some((c) => String(c[0]).includes('[root]'))).toBe(true)
+    err.mockRestore()
+  })
+  it('HH3 — 비공개 판정 중 Next 제어 신호(동적 사용)는 삼키지 않고 다시 던진다', async () => {
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: { id: WID, slug: 'acme', name: 'Acme' } })
+    const signal = Object.assign(new Error('signal'), { digest: 'DYNAMIC_SERVER_USAGE' })
+    h.getHiddenProjectIds.mockRejectedValueOnce(signal)
+    await expect(Root()).rejects.toBe(signal)
   })
   it('권한 조회 열화 — 최근 프로젝트를 판정할 수 없으니 홈으로', async () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: { id: WID, slug: 'acme', name: 'Acme' } })

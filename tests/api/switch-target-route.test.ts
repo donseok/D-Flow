@@ -95,9 +95,18 @@ describe('/api/nav/switch-target — 명단 밖 비공개(GG1)', () => {
   })
   it('비공개 판정 실패는 숨김을 판정할 수 없다 — 열화와 같이 개요(모듈 미판독)', async () => {
     h.getHiddenProjectIds.mockRejectedValue(new Error('x'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await get(`project=${B}&path=/p/A/wbs`)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ href: `/p/${B}/dashboard`, fallbackModule: null, degraded: true })
     expect(h.effectiveModules).not.toHaveBeenCalled()
+    // HH3 — 판정자 밖 실패도 로그 없이 null 이 되지 않는다(3원칙 ①)
+    expect(err.mock.calls.some((c) => String(c[0]).includes('[switch-target]'))).toBe(true)
+    err.mockRestore()
+  })
+  it('HH3 — 비공개 판정 중 Next 제어 신호(동적 사용)는 삼키지 않고 다시 던진다', async () => {
+    const signal = Object.assign(new Error('signal'), { digest: 'DYNAMIC_SERVER_USAGE' })
+    h.getHiddenProjectIds.mockRejectedValue(signal)
+    await expect(get(`project=${B}&path=/p/A/wbs`)).rejects.toBe(signal)
   })
 })
