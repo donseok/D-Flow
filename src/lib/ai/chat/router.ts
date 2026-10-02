@@ -1,6 +1,6 @@
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
 import { addDaysIso } from '@/lib/domain/dates'
-import { prevWeekKey, todayIn, weekKeyOf, weekReferenceDay, type RequestCalendar } from '@/lib/domain/calendar'
+import { todayIn, type RequestCalendar } from '@/lib/domain/calendar'
 import { dateAnchors, inclusiveRange, weekRefOf } from './calendarAnchors'
 import { classifyIntent } from '@/lib/ai/intent'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
@@ -426,7 +426,9 @@ function weeklyCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, 
         ?? (mentionsCurrentWeek || mentionsPriorWeek ? currentWeekStart : contextualWeekStart)
     const fromWeekStart = explicitComparisonWeeks.length >= 2
       ? explicitComparisonWeeks[0]
-      : weekReferenceDay(prevWeekKey(calendar.weekStart, weekKeyOf(calendar.weekStart, toWeekStart)))   // 요청 달력의 앞 주 기준일
+      // 앞 주 = 그 주에 든 날짜에서 7일 앞(A-4 리뷰 P2 N1) — 도구가 프로젝트 규칙의 주로 바꾼다. 요청 달력으로 다시 접으면(옛 식) 명시 날짜가
+      // 두 달력의 주 시작이 어긋나는 요일일 때 한 주를 건너뛰거나 두 주가 같아진다. 앵커 경로(to = 기준일)에서는 옛 식과 같은 값이다.
+      : addDaysIso(toWeekStart, -7)
     return {
       id: 'call_weekly_compare',
       tool: 'compare_weekly_sheets',

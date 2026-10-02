@@ -171,6 +171,12 @@ describe('①′ 요청 달력과 프로젝트의 주 시작이 다를 때 — �
   it('명시 날짜는 그 날짜가 든 프로젝트의 주 — 요청 키로 바꾸지 않는다(10월 14일 수 → 월요일 프로젝트 10-12)', async () => {
     expect(await keysFor('10월 14일 주간업무 보여줘', LA_SUN, monProjectValues)).toEqual(['2026-10-12'])
   })
+  it('명시 날짜 + 비교 — 앞 주는 그 날이 든 프로젝트 주의 앞 주(요청 월요일 × 일요일 프로젝트, 10-11 → 10-04·10-11, A-4 리뷰 P2 N1)', async () => {
+    expect(await keysFor('10월 11일 주간업무 지난주랑 비교해줘', SEOUL_MON, { 'calendar.timezone': 'Asia/Seoul' })).toEqual(['2026-10-04', '2026-10-11'])
+  })
+  it('명시 날짜 + 비교 — 반대 방향(요청 일요일 × 월요일 프로젝트)에서 두 주가 같아지지 않는다(10-11 → 09-28·10-05)', async () => {
+    expect(await keysFor('10월 11일 주간업무 지난주랑 비교해줘', LA_SUN, monProjectValues)).toEqual(['2026-09-28', '2026-10-05'])
+  })
   it('플래너 앵커의 주 기준일 — 이번·지난·다음 주가 월요일 프로젝트의 10-12·10-05·10-19 로 간다', async () => {
     settings.getProjectConfig.mockResolvedValue(repositoryOk(makeProjectConfig(monProjectValues, { projectId: P })))
     const refs = plannerDateAnchors(LA_SUN, NOW.toISOString()).weekRefs
