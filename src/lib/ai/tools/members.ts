@@ -18,7 +18,7 @@ import {
   readRequiredString,
   repositoryFailure,
   repositoryScopeViolation,
-  todayInSeoul,
+  requestToday,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -177,7 +177,7 @@ export function createGetMemberWorkloadTool(
         || wbsResult.data.items.some(item => item.projectId !== projectId)
       ) return repositoryScopeViolation()
 
-      const today = wbsResult.data.baseDate ?? todayInSeoul(context.now)
+      const today = wbsResult.data.baseDate ?? requestToday(context.now, context.timezone)
       const teamCodes = await teams.projectTeamCodes(projectId)
       const computed = computeTree(wbsResult.data.items, today, wbsResult.data.calendar, {
         subActTeamOrder: teamOrderMap(teamCodes),

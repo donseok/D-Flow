@@ -14,6 +14,11 @@ const { withCount } = vi.hoisted(() => ({
     return Array.isArray(x.data) ? { ...(r as object), count: x.data.length } : r
   },
 }))
+// 요청 범위 달력(SP5 D13 ③) — 해석기 대신 서울·월요일 달력(옛 동작)을 준다. 해석 규칙은 tests/calendar/load.test.ts·bot-week-rules 가 본다
+vi.mock('@/lib/calendar/load', async (orig) => ({
+  ...(await orig<object>()),
+  resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+}))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/chat/default-registry', () => ({ createDefaultChatToolRegistry: mocks.createDefaultRegistry }))
@@ -189,9 +194,9 @@ describe('POST /api/chat/v2/stream composition', () => {
 
   it('팀 조회가 아닌 재라우팅 결함은 TEAMS_UNAVAILABLE 로 덮지 않고 그대로 올린다', async () => {
     const { routeChatRequest } = await actualRouter()
-    router.routeChatRequest.mockImplementation((input, now, opts) => {
+    router.routeChatRequest.mockImplementation((input, now, calendar, opts) => {
       if (opts) throw new Error('라우터 결함')
-      return routeChatRequest(input, now)
+      return routeChatRequest(input, now, calendar)
     })
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(POST(request({

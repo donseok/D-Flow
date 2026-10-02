@@ -7,7 +7,7 @@ import {
   readRequiredString,
   repositoryFailure,
   repositoryScopeViolation,
-  todayInSeoul,
+  requestToday,
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
 
@@ -92,7 +92,7 @@ export function createGetSafeProjectSettingsTool(
         facts.indexedDocuments = indexInfo.indexed
       }
 
-      const today = todayInSeoul(context.now)
+      const today = requestToday(context.now, context.timezone)
       const records: ProjectSettingsHolidayRecord[] = selectHolidays(snapshot.holidays, today)
         .map(date => ({ date }))
       const truncated = snapshot.holidays.length > records.length

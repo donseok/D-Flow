@@ -8,6 +8,8 @@ import type {
 import { resolveTeamsForProject, type Team } from '@/lib/domain/teams'
 import { areasForTeam, orderAreas, rowLabel, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
+import { calendarOrError, requireCalendar } from '@/lib/calendar/load'
+import { weekKeyOf, type WeekStartRule } from '@/lib/domain/calendar'
 import {
   checkProjectAccess,
   invalidArgument,
@@ -42,17 +44,25 @@ type TeamFilter =
 
 /** team 인자 → 그 팀이 주·보조로 든 영역 id 집합(D24). 영역 대응은 그 code 의 팀 전부(공용·전용 — area_teams_guard 가 허용하는 넓이)와
  *  설정의 주간 영역으로 정하고 보고서와 같은 areasForTeam 을 쓴다(W18). 미등록 팀과 '맡은 영역 0' 을 구분해 명시 거부한다(조용한 빈 결과
- *  금지). 동명 구분 폴백은 없다. 프로젝트 접근 판정 뒤에 부른다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다.
- *  설정을 못 읽으면 도구 실패다(팀 없음으로 위장하지 않는다). */
-async function resolveTeamFilter(settings: SettingsReader, projectId: string, team: string | undefined): Promise<TeamFilter> {
+ *  금지). 동명 구분 폴백은 없다. 설정은 호출부가 프로젝트 접근 판정 뒤에 한 번 읽는다(projectWeekContext) — 먼저 보면 볼 수 없는
+ *  프로젝트의 팀 구성이 검증 결과로 샌다. */
+function resolveTeamFilter(cfg: ProjectConfig, projectId: string, team: string | undefined): TeamFilter {
   if (!team) return { ok: true, areaIds: null }
-  const configResult = await settings.getProjectConfig(projectId)
-  if (!configResult.ok) return { ok: false, result: repositoryFailure(configResult) }
-  const cfg = configResult.data
   if (!registeredTeamCodes(cfg, projectId).has(team)) return { ok: false, result: invalidArgument(ERR_UNKNOWN_TEAM) }
   const areaIds = areasForTeam(cfg.areas.weekly_section, cfg.teams, team)
   if (areaIds.size === 0) return { ok: false, result: invalidArgument(errNoAreasForTeam(team)) }
   return { ok: true, areaIds }
+}
+
+/** 프로젝트 설정(팀·영역·주 규칙) — 접근 판정 뒤에 한 번 읽는다. 설정을 못 읽으면 도구 실패(팀 없음으로 위장하지 않는다),
+ *  달력 키가 손상이면 도구 실패(기본 규칙으로 다른 주를 읽지 않는다 — [RF4]) */
+async function projectWeekContext(settings: SettingsReader, projectId: string):
+  Promise<{ ok: true; cfg: ProjectConfig; rules: readonly WeekStartRule[] } | { ok: false; result: ToolExecutionResult<never> }> {
+  const configResult = await settings.getProjectConfig(projectId)
+  if (!configResult.ok) return { ok: false, result: repositoryFailure(configResult) }
+  const cal = calendarOrError(() => requireCalendar(configResult.data))
+  if (!cal.calendar) return { ok: false, result: invalidArgument('프로젝트의 달력 설정이 손상되어 주간업무를 조회할 수 없습니다.') }
+  return { ok: true, cfg: configResult.data, rules: cal.calendar.weekStart }
 }
 
 const norm = (value: string): string => value.trim().toLocaleLowerCase('ko-KR')
@@ -141,24 +151,24 @@ export function createGetWeeklySheetTool(
     async execute(args, context) {
       if (!isRecord(args)) return invalidArgument()
       const projectId = readRequiredString(args.projectId)
-      const weekStart = isIsoDate(args.weekStart) ? args.weekStart : null
+      const rawWeekStart = isIsoDate(args.weekStart) ? args.weekStart : null
       const section = readOptionalString(args.section, 100)
       const team = readOptionalString(args.team, 30)
       const query = readOptionalString(args.query)
       const limit = readLimit(args.limit)
       if (
-        !projectId || !weekStart || section === null || team === null
+        !projectId || !rawWeekStart || section === null || team === null
         || query === null || limit === null
       ) {
         return invalidArgument()
       }
-      // 주 시작 규칙(월요일)은 SP5 가 바꾼다 — 지금은 그대로
-      if (new Date(`${weekStart}T00:00:00Z`).getUTCDay() !== 1) {
-        return invalidArgument('주간업무 기준일은 월요일이어야 합니다.')
-      }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
-      const teamFilter = await resolveTeamFilter(settings, projectId, team || undefined)
+      const wk = await projectWeekContext(settings, projectId)
+      if (!wk.ok) return wk.result
+      // 기준일은 아무 날짜나 받아 그 프로젝트 규칙의 키로 정규화한다(SP5 D34 — 월요일 강제 삭제)
+      const weekStart = weekKeyOf(wk.rules, rawWeekStart)
+      const teamFilter = resolveTeamFilter(wk.cfg, projectId, team || undefined)
       if (!teamFilter.ok) return teamFilter.result
 
       const repoResult = await repository.getSheet(projectId, weekStart)
@@ -230,10 +240,6 @@ export function createGetWeeklySheetTool(
       }
     },
   }
-}
-
-function monday(value: string): boolean {
-  return new Date(`${value}T00:00:00Z`).getUTCDay() === 1
 }
 
 /** 영역마다 하나로 묶는다(키 = 영역 id). 같은 영역 행이 여럿이면(유일 인덱스 앞의 옛 데이터) 저장소의 표시 순서대로 잇는다. */
@@ -327,22 +333,27 @@ export function createCompareWeeklySheetsTool(
     async execute(args, context) {
       if (!isRecord(args)) return invalidArgument()
       const projectId = readRequiredString(args.projectId)
-      const fromWeekStart = isIsoDate(args.fromWeekStart) ? args.fromWeekStart : null
-      const toWeekStart = isIsoDate(args.toWeekStart) ? args.toWeekStart : null
+      const rawFrom = isIsoDate(args.fromWeekStart) ? args.fromWeekStart : null
+      const rawTo = isIsoDate(args.toWeekStart) ? args.toWeekStart : null
       const section = readOptionalString(args.section, 100)
       const team = readOptionalString(args.team, 30)
       const query = readOptionalString(args.query)
       const limit = readLimit(args.limit)
       if (
-        !projectId || !fromWeekStart || !toWeekStart || section === null || team === null
+        !projectId || !rawFrom || !rawTo || section === null || team === null
         || query === null || limit === null
       ) return invalidArgument()
-      if (!monday(fromWeekStart) || !monday(toWeekStart) || fromWeekStart >= toWeekStart) {
-        return invalidArgument('비교할 두 주차는 서로 다른 월요일이며 과거 주차부터 입력해야 합니다.')
-      }
       const denied = checkProjectAccess(context, projectId, WEEKLY_CAPABILITY)
       if (denied) return denied
-      const teamFilter = await resolveTeamFilter(settings, projectId, team || undefined)
+      const wk = await projectWeekContext(settings, projectId)
+      if (!wk.ok) return wk.result
+      // 두 날짜를 그 프로젝트 규칙의 키로 바꾼 뒤 비교한다(SP5 D34 — 월요일 강제 삭제)
+      const fromWeekStart = weekKeyOf(wk.rules, rawFrom)
+      const toWeekStart = weekKeyOf(wk.rules, rawTo)
+      if (fromWeekStart >= toWeekStart) {
+        return invalidArgument('비교할 두 주차는 서로 다른 주이며 과거 주차부터 입력해야 합니다.')
+      }
+      const teamFilter = resolveTeamFilter(wk.cfg, projectId, team || undefined)
       if (!teamFilter.ok) return teamFilter.result
 
       const [fromResult, toResult] = await Promise.all([

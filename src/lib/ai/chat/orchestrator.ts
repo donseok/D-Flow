@@ -31,6 +31,12 @@ import {
 } from './planner'
 import { verifyBotSources, verifySynthesizedAnswer } from './verifier'
 import { seoulStamp } from '@/lib/domain/dates'
+import type { RequestCalendar } from '@/lib/domain/calendar'
+
+/** route 도 calendar 도 없는 호출은 결함이다 — 요청 범위 달력 없이 라우팅하지 않는다(기본 tz 로 '이번 주'를 정하지 않는다) */
+function missingCalendar(): never {
+  throw new Error('[chat-v2] route 도 calendar 도 없다 — 요청 범위 달력 없이 라우팅하지 않는다')
+}
 import { BRAND } from '@/lib/branding'
 import { chatLlmSynthesisEnabled } from '@/lib/modules/flags'
 
@@ -51,6 +57,8 @@ export interface ChatOrchestratorDependencies {
   route?: DeterministicRoute
   /** route 가 없을 때 결정형 라우팅에 넘기는 옵션(등록된 팀 코드) — 그대로 통과시킨다. */
   routeOptions?: RouteChatOptions
+  /** route 가 없을 때 결정형 라우팅이 쓰는 요청 범위 달력(SP5 D13 ③) — 스트림 라우트는 늘 route 를 넘긴다 */
+  calendar?: RequestCalendar
   /** 검증을 통과한 제한된 도구 계획(설계 §7.3). 지정되면 결정형 라우트 대신 실행한다. */
   plan?: ToolPlan
   synthesize?: ChatSynthesizer
@@ -602,7 +610,7 @@ export async function* orchestrateChatV2(
     return
   }
 
-  const route = deps.route ?? routeChatRequest(request, now, deps.routeOptions)
+  const route = deps.route ?? routeChatRequest(request, now, deps.calendar ?? missingCalendar(), deps.routeOptions)
   if (route.kind === 'command' || route.kind === 'clarify' || route.kind === 'legacy') {
     yield event(requestId, { type: 'delta', text: route.message })
     const prior = request.conversationState ?? { version: 1 as const, lastEntities: [], lastDomains: [] }

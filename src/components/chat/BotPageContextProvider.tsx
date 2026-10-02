@@ -103,7 +103,6 @@ function buildUrlContext(pathname: string, searchParams: URLSearchParams): PageC
     range: from || to ? { from, to } : null,
     filters: queryFilters(searchParams),
     search: searchParams.get('search') ?? searchParams.get('q') ?? searchParams.get('query'),
-    timezone: 'Asia/Seoul',
   }
 }
 
@@ -127,7 +126,6 @@ function mergeContext(base: PageContextV1, entries: RegistrationEntry[]): PageCo
     filters: filters && Object.keys(filters).length ? filters : undefined,
     contextVersion: 1,
     pathname: base.pathname,
-    timezone: 'Asia/Seoul',
   }
 }
 

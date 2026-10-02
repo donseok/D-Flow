@@ -1,5 +1,7 @@
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
-import { addDaysIso, seoulYmd } from '@/lib/domain/dates'
+import { addDaysIso } from '@/lib/domain/dates'
+import { prevWeekKey, todayIn, weekKeyOf, type RequestCalendar } from '@/lib/domain/calendar'
+import { dateAnchors, inclusiveRange } from './calendarAnchors'
 import { classifyIntent } from '@/lib/ai/intent'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
 import type {
@@ -107,12 +109,6 @@ const DOMAIN_TERMS: ReadonlyArray<{ domain: BotDomain; pattern: RegExp }> = [
 
 function uniq<T>(values: T[]): T[] {
   return [...new Set(values)]
-}
-
-function mondayOf(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
-  return addDaysIso(iso, -(day === 0 ? 6 : day - 1))
 }
 
 function validIsoDate(year: number, month: number, day: number): string | null {
@@ -278,8 +274,8 @@ function explicitSearchQuery(input: ChatRequestV2): string | undefined {
   return named || undefined
 }
 
-function requestedRange(message: string, context: PageContextV1 | undefined, now: Date): { from: string; to: string } {
-  const today = seoulYmd(now)
+function requestedRange(message: string, context: PageContextV1 | undefined, now: Date, calendar: RequestCalendar): { from: string; to: string } {
+  const today = todayIn(calendar.timezone, now)
   const dates = explicitDates(message, today)
   if (dates.length >= 2) {
     const [left, right] = dates
@@ -297,18 +293,11 @@ function requestedRange(message: string, context: PageContextV1 | undefined, now
     return { from: yesterday, to: yesterday }
   }
   if (/오늘/.test(message)) return { from: today, to: today }
-  if (/지난\s*주|전주/.test(message)) {
-    const monday = addDaysIso(mondayOf(today), -7)
-    return { from: monday, to: addDaysIso(monday, 6) }
-  }
-  if (/다음\s*주|차주/.test(message)) {
-    const monday = addDaysIso(mondayOf(today), 7)
-    return { from: monday, to: addDaysIso(monday, 6) }
-  }
-  if (/이번\s*주|금주|주간/.test(message)) {
-    const monday = mondayOf(today)
-    return { from: monday, to: addDaysIso(monday, 6) }
-  }
+  // 주 범위는 요청 범위 달력의 주 기간(SP5 D13 ③ — 과도기 주는 6·8일)
+  const anchors = dateAnchors(calendar, now)
+  if (/지난\s*주|전주/.test(message)) return inclusiveRange(anchors.lastWeek)
+  if (/다음\s*주|차주/.test(message)) return inclusiveRange(anchors.nextWeek)
+  if (/이번\s*주|금주|주간/.test(message)) return inclusiveRange(anchors.thisWeek)
   if (/지난\s*달|전월/.test(message)) return shiftedMonthRange(today, -1)
   if (/다음\s*달|익월/.test(message)) return shiftedMonthRange(today, 1)
   if (/이번\s*달|금월/.test(message)) {
@@ -321,8 +310,8 @@ function requestedRange(message: string, context: PageContextV1 | undefined, now
   return { from: base, to: base }
 }
 
-function hasRequestedRangeCue(message: string, now: Date): boolean {
-  const today = seoulYmd(now)
+function hasRequestedRangeCue(message: string, now: Date, calendar: RequestCalendar): boolean {
+  const today = todayIn(calendar.timezone, now)
   return explicitDates(message, today).length > 0
     || explicitMonthRange(message, today) !== null
     || /오늘|내일|어제|지난\s*주|전주|다음\s*주|차주|이번\s*주|금주|지난\s*달|전월|다음\s*달|익월|이번\s*달|금월/.test(message)
@@ -372,7 +361,7 @@ function referencedEntity(input: ChatRequestV2, types: BotEntityRef['type'][]): 
   return prior ?? null
 }
 
-function wbsCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
+function wbsCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
   const message = input.message
   const projectId = projectHint(input)
   const entity = referencedEntity(input, ['wbs_item'])
@@ -390,8 +379,8 @@ function wbsCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): 
   if (entity && /이\s*작업|이\s*항목|상세|자세히|세부|내용|일정|담당|상태|실적|산출물/.test(message)) {
     return { id: 'call_wbs_detail', tool: 'get_wbs_item_detail', domain: 'wbs', args: { ...common, itemId: entity.id } }
   }
-  const range = hasRequestedRangeCue(message, now)
-    ? requestedRange(message, input.pageContext, now)
+  const range = hasRequestedRangeCue(message, now, calendar)
+    ? requestedRange(message, input.pageContext, now, calendar)
     : null
   return {
     id: 'call_wbs_find',
@@ -408,16 +397,18 @@ function wbsCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): 
   }
 }
 
-function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
-  const today = seoulYmd(now)
-  const currentWeekStart = mondayOf(today)
-  const explicitWeekStarts = explicitDates(input.message, today).map(mondayOf)
+function weeklyCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
+  // 주는 요청 범위 달력의 키 — 주간 도구가 그 프로젝트 규칙의 키로 다시 정규화한다(요청 범위 달력이 그 프로젝트 달력이면 같은 키)
+  const today = todayIn(calendar.timezone, now)
+  const anchors = dateAnchors(calendar, now)
+  const currentWeekStart = anchors.thisWeek.start
+  const explicitWeekStarts = explicitDates(input.message, today).map(d => weekKeyOf(calendar.weekStart, d))
   const contextualWeekStart = input.pageContext?.weekStart ?? currentWeekStart
   const mentionsCurrentWeek = /이번\s*주|금주/.test(input.message)
   const mentionsPriorWeek = /지난\s*주|전주/.test(input.message)
   const comparison = /비교|차이|달라|변화/.test(input.message)
   const weekStart = explicitWeekStarts[0] ?? (mentionsPriorWeek
-    ? addDaysIso(currentWeekStart, -7)
+    ? anchors.lastWeek.start
     : mentionsCurrentWeek ? currentWeekStart : contextualWeekStart)
   const filters = {
     ...(teamFrom(input.message, input.pageContext, teams) ? { team: teamFrom(input.message, input.pageContext, teams) } : {}),
@@ -433,7 +424,7 @@ function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]
         ?? (mentionsCurrentWeek || mentionsPriorWeek ? currentWeekStart : contextualWeekStart)
     const fromWeekStart = explicitComparisonWeeks.length >= 2
       ? explicitComparisonWeeks[0]
-      : addDaysIso(toWeekStart, -7)
+      : prevWeekKey(calendar.weekStart, toWeekStart)
     return {
       id: 'call_weekly_compare',
       tool: 'compare_weekly_sheets',
@@ -458,7 +449,7 @@ function weeklyCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]
   }
 }
 
-function meetingsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function meetingsCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar): RoutedToolCall {
   const entity = referencedEntity(input, ['meeting', 'meeting_occurrence'])
   if (entity && /이\s*회의|그\s*회의|상세|자세히|세부|내용|참석자|장소|어디/.test(input.message)) {
     return {
@@ -472,7 +463,7 @@ function meetingsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
       },
     }
   }
-  const range = requestedRange(input.message, input.pageContext, now)
+  const range = requestedRange(input.message, input.pageContext, now, calendar)
   const globalMeetings = input.pageContext?.domain === 'meetings' && !input.pageContext.projectId
   if (globalMeetings || /내\s*회의/.test(input.message) || !projectHint(input)) {
     // A selected global-meeting project is an entity-detail hint, not a sticky list filter.
@@ -501,8 +492,8 @@ function meetingsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function attendanceCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
-  const range = requestedRange(input.message, input.pageContext, now)
+function attendanceCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
+  const range = requestedRange(input.message, input.pageContext, now, calendar)
   const types = attendanceTypesFrom(input.message)
   return {
     id: 'call_attendance',
@@ -529,7 +520,7 @@ function announcementCategoryFrom(message: string, context: PageContextV1 | unde
   return undefined
 }
 
-function announcementsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
+function announcementsCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar): RoutedToolCall {
   const projectId = projectHint(input)
   const query = explicitSearchQuery(input)
   const category = announcementCategoryFrom(input.message, input.pageContext)
@@ -540,7 +531,7 @@ function announcementsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
     }
   }
   const pinnedOnly = /고정|필독/.test(input.message)
-  const activeOn = /게시\s*중|현재|오늘/.test(input.message) ? seoulYmd(now) : undefined
+  const activeOn = /게시\s*중|현재|오늘/.test(input.message) ? todayIn(calendar.timezone, now) : undefined
   return {
     id: 'call_announcements', tool: 'list_announcements', domain: 'announcements',
     args: {
@@ -553,7 +544,7 @@ function announcementsCall(input: ChatRequestV2, now: Date): RoutedToolCall {
   }
 }
 
-function minutesCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[]): RoutedToolCall {
+function minutesCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
   const entity = referencedEntity(input, ['minute', 'minute_block'])
   if (entity && /상세|자세히|세부|내용|본문|결정|액션|위험|요약/.test(input.message)) {
     return {
@@ -563,8 +554,8 @@ function minutesCall(input: ChatRequestV2, now: Date, teams: readonly RouteTeam[
   }
   const projectId = projectHint(input)
   const team = teamFrom(input.message, input.pageContext, teams)
-  const range = hasRequestedRangeCue(input.message, now)
-    ? requestedRange(input.message, input.pageContext, now)
+  const range = hasRequestedRangeCue(input.message, now, calendar)
+    ? requestedRange(input.message, input.pageContext, now, calendar)
     : null
   const query = explicitSearchQuery(input)
   return {
@@ -667,7 +658,7 @@ function statusFor(domains: BotDomain[]): string {
  * Phase 1 routing is deliberately deterministic: explicit domain nouns win over generic words such as
  * "현황" or "이번 주", then the current page is used only as a tie-breaker.
  */
-export function routeChatRequest(input: ChatRequestV2, now = new Date(), opts: RouteChatOptions = {}): DeterministicRoute {
+export function routeChatRequest(input: ChatRequestV2, now: Date, calendar: RequestCalendar, opts: RouteChatOptions = {}): DeterministicRoute {
   if (isCommandUtterance(input.message)) {
     return {
       kind: 'command', domains: [], calls: [], reason: 'write_command',
@@ -776,12 +767,12 @@ export function routeChatRequest(input: ChatRequestV2, now = new Date(), opts: R
   // 팀은 도구 인자에만 쓴다 — 조기 반환(command·legacy·clarify)을 모두 지난 뒤 한 번만 읽는다.
   const teams = opts.teamsFor?.(projectHint(input)) ?? []
   const calls = domains.map(domain => {
-    if (domain === 'wbs') return wbsCall(input, now, teams)
-    if (domain === 'weekly') return weeklyCall(input, now, teams)
-    if (domain === 'meetings') return meetingsCall(input, now)
-    if (domain === 'attendance') return attendanceCall(input, now, teams)
-    if (domain === 'announcements') return announcementsCall(input, now)
-    if (domain === 'minutes') return minutesCall(input, now, teams)
+    if (domain === 'wbs') return wbsCall(input, now, calendar, teams)
+    if (domain === 'weekly') return weeklyCall(input, now, calendar, teams)
+    if (domain === 'meetings') return meetingsCall(input, now, calendar)
+    if (domain === 'attendance') return attendanceCall(input, now, calendar, teams)
+    if (domain === 'announcements') return announcementsCall(input, now, calendar)
+    if (domain === 'minutes') return minutesCall(input, now, calendar, teams)
     if (domain === 'wiki') return wikiCall(input)
     if (domain === 'members') return membersCall(input, teams)
     if (domain === 'kanban') return kanbanCall(input, teams)

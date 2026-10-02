@@ -5,7 +5,7 @@
 // 레코드·출처·사실 — LLM 없이 결정적. LLM 의 답은 SP8). 그 구성이 스스로 등록한 이름과 **같은** 센티널만 뺀다(sentinelsFor — 스펙 D8).
 // 대조: 옛 이름을 스스로 등록한 구성은 그 이름이 출력에 나오고 정상 동작한다 — 같은 실행에서 탐지가 공허하지 않음을 보인다.
 // 옛 이름의 평문은 tests/fixtures/legacy-sentinels.ts 에만 있다(계획 P6) — 이 파일은 그 목록에서 자리로 꺼낸다.
-import { calUtcSun } from '../helpers/calendarFixture'
+import { calUtcSun, monProjectValues } from '../helpers/calendarFixture'
 import { describe, expect, it, vi } from 'vitest'
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
@@ -100,7 +100,7 @@ function botFixture(s: Setup) {
       repositoryOk<WeeklySheetSnapshot | null>(sheets.get(weekStart) ?? null)),
   }
   const settings = {
-    getProjectConfig: vi.fn(async (): Promise<RepositoryResult<ProjectConfig>> => repositoryOk(makeProjectConfig({}, {
+    getProjectConfig: vi.fn(async (): Promise<RepositoryResult<ProjectConfig>> => repositoryOk(makeProjectConfig(monProjectValues, {
       projectId: s.projectId, workspaceId: 'ws-negative', teams: [...s.teams], areas: { weekly_section: [...s.areas], issue_area: [] },
     }))),
   }

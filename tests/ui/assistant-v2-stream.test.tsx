@@ -149,10 +149,10 @@ describe('AssistantChat v2 스트림', () => {
         domain: 'weekly',
         projectId: PROJECT_ID,
         weekStart: '2026-07-13',
-        timezone: 'Asia/Seoul',
       },
       conversationState: { version: 1, lastEntities: [], lastDomains: [] },
     })
+    expect(body.pageContext).not.toHaveProperty('timezone')   // 서버가 요청 범위 달력을 해석한다(SP5 D13 ③)
 
     const assistantBubbles = [...container.querySelectorAll<HTMLElement>('[data-chat-role="assistant"]')]
     expect(assistantBubbles.some(node => node.textContent?.includes('확인된 부분 답변'))).toBe(true)

@@ -79,7 +79,6 @@ describe('BotPageContextProvider', () => {
       search: 'interface',
       selectedEntity: { type: 'weekly_row', id: 'row-7' },
       filters: { status: 'issue' },
-      timezone: 'Asia/Seoul',
     })
   })
 

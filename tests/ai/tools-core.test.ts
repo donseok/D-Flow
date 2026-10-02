@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
-import { calWithOff } from '../helpers/calendarFixture'
+import { calWithOff, monProjectValues } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
@@ -23,6 +23,7 @@ import type {
   WeeklySheetSnapshot,
 } from '@/lib/repositories/types'
 import { repositoryError, repositoryOk } from '@/lib/repositories/types'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const context: ToolExecutionContext = {
   userId: 'user-1',
@@ -33,9 +34,10 @@ const context: ToolExecutionContext = {
   timezone: 'Asia/Seoul',
 }
 
-/** 주간 도구의 두 번째 인자 — team 인자가 없으면 읽지 않는다(읽으면 실패). */
+/** 주간 도구의 두 번째 인자 — 접근 판정 뒤에 주 규칙(월요일 — D28 월요일 회귀)을 읽으려고 한 번 부른다(SP5 과제 17).
+ *  team 인자가 없으면 팀 판정에는 쓰지 않는다 */
 const weeklySettingsUnused = {
-  getProjectConfig: vi.fn(async () => { throw new Error('team 인자 없는 주간 조회가 설정을 읽었다') }),
+  getProjectConfig: vi.fn(async () => repositoryOk(makeProjectConfig(monProjectValues, { projectId: 'p1' }))),
 }
 
 const wbsSnapshot: WbsProjectSnapshot = {

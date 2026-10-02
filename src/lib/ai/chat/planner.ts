@@ -1,5 +1,6 @@
 import { generateAnswer, type ChatMessage } from '@/lib/ai/llm'
-import { addDaysIso, seoulYmd } from '@/lib/domain/dates'
+import type { RequestCalendar } from '@/lib/domain/calendar'
+import { dateAnchors, inclusiveRange } from './calendarAnchors'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
 import type { SuccessfulToolEvidence } from './evidence'
 import type { BotDomain, ChatRequestV2 } from './protocol'
@@ -473,8 +474,8 @@ export function shouldAttemptPlan(input: {
   return input.explicitDomainCount === 0 && !input.pageDomainSupported
 }
 
-/** KST 기준 날짜 앵커 — 플래너가 기간 인자를 계산하지 않고 복사하게 해 형식·산술 실수를 없앤다. */
-export function plannerDateAnchors(now: string): {
+/** 요청 범위 달력의 날짜 앵커 — 플래너가 기간 인자를 계산하지 않고 복사하게 해 형식·산술 실수를 없앤다(SP5 D13 ③) */
+export function plannerDateAnchors(calendar: RequestCalendar, now: string): {
   today: string
   thisWeek: { from: string; to: string }
   nextWeek: { from: string; to: string }
@@ -482,26 +483,18 @@ export function plannerDateAnchors(now: string): {
 } {
   const parsed = new Date(now)
   const safe = Number.isNaN(parsed.getTime()) ? new Date() : parsed
-  const today = seoulYmd(safe)
-  const [y, m, d] = today.split('-').map(Number)
-  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
-  const monday = addDaysIso(today, -(day === 0 ? 6 : day - 1))
-  return {
-    today,
-    thisWeek: { from: monday, to: addDaysIso(monday, 6) },
-    nextWeek: { from: addDaysIso(monday, 7), to: addDaysIso(monday, 13) },
-    lastWeek: { from: addDaysIso(monday, -7), to: addDaysIso(monday, -1) },
-  }
+  const a = dateAnchors(calendar, safe)
+  return { today: a.today, thisWeek: inclusiveRange(a.thisWeek), nextWeek: inclusiveRange(a.nextWeek), lastWeek: inclusiveRange(a.lastWeek) }
 }
 
-function plannerSystemPrompt(allowedTools: readonly string[], now: string): string {
+function plannerSystemPrompt(allowedTools: readonly string[], now: string, calendar: RequestCalendar): string {
   const catalog = allowedTools
     .filter((tool): tool is CoreBotToolName => tool in PLANNER_TOOL_CATALOG)
     .map(tool => {
       const spec = PLANNER_TOOL_CATALOG[tool]
       return `- ${tool} | ${spec.argKeys.join(', ')} | ${spec.purpose}${spec.argHints ? ` | ${spec.argHints}` : ''}`
     })
-  const anchors = plannerDateAnchors(now)
+  const anchors = plannerDateAnchors(calendar, now)
   return [
     '당신은 프로젝트 운영 봇의 읽기 전용 조회 플래너다. 아래 카탈로그의 도구만 사용해 조회 계획을 세운다.',
     '',
@@ -516,7 +509,7 @@ function plannerSystemPrompt(allowedTools: readonly string[], now: string): stri
     '- 인자 형식 열에 "필수"로 표시된 인자는 반드시 채운다. 기간(from/to)은 아래 날짜 앵커에서 그대로 복사하고 직접 계산하지 않는다.',
     '- 무엇을 조회해야 할지 모르면 needsClarification=true와 clarification(300자 이내)만 채운다.',
     '',
-    '날짜 앵커(Asia/Seoul):',
+    `날짜 앵커(${calendar.timezone}):`,
     `- 오늘: ${anchors.today}`,
     `- 이번 주: ${anchors.thisWeek.from} ~ ${anchors.thisWeek.to}`,
     `- 다음 주: ${anchors.nextWeek.from} ~ ${anchors.nextWeek.to}`,
@@ -556,13 +549,13 @@ function plannerUserMessage(request: ChatRequestV2): string {
  */
 export async function planWithConfiguredLlm(
   request: ChatRequestV2,
-  options: { allowedTools: readonly string[]; now: string },
+  options: { allowedTools: readonly string[]; now: string; calendar: RequestCalendar },
 ): Promise<unknown | null> {
   const messages: ChatMessage[] = [
     ...request.history.slice(-4),
     { role: 'user', content: plannerUserMessage(request) },
   ]
-  const text = await generateAnswer(plannerSystemPrompt(options.allowedTools, options.now), messages)
+  const text = await generateAnswer(plannerSystemPrompt(options.allowedTools, options.now, options.calendar), messages)
   if (!text) return null
   return parseToolPlanJson(text)
 }

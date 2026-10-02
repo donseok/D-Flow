@@ -1,5 +1,5 @@
 import type { RepositoryResult } from '@/lib/repositories/types'
-import { seoulYmd } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 import type {
   BotReadCapability,
   ToolExecutionContext,
@@ -50,11 +50,11 @@ export function validDateRange(from: string, to: string, maxDays = 366): boolean
   return (end - start) / 86_400_000 <= maxDays
 }
 
-export function todayInSeoul(now: string): string {
+/** 요청 범위의 '오늘'(SP5 D13 ③) — 도구는 자기 tz 로 다시 계산하지 않고 문맥의 tz 를 쓴다. 잘못된 now 는 서버 현재 시각으로 */
+export function requestToday(now: string, timezone: string): string {
   const parsed = new Date(now)
-  // 잘못된 now 문자열이면 서버 현재 시각으로 폴백 — 이 가드는 호출부 계약이라 유지하고 포맷만 정본에 위임.
   const safe = Number.isNaN(parsed.getTime()) ? new Date() : parsed
-  return seoulYmd(safe)
+  return todayIn(timezone, safe)
 }
 
 export function internalProjectHref(projectId: string, suffix: string): string {

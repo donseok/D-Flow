@@ -20,6 +20,11 @@ const { withCount } = vi.hoisted(() => ({
     return Array.isArray(x.data) ? { ...(r as object), count: x.data.length } : r
   },
 }))
+// 요청 범위 달력(SP5 D13 ③) — 해석기 대신 서울·월요일 달력(옛 동작)을 준다. 해석 규칙은 tests/calendar/load.test.ts·bot-week-rules 가 본다
+vi.mock('@/lib/calendar/load', async (orig) => ({
+  ...(await orig<object>()),
+  resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+}))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1' })) }))
 // 기본 레지스트리를 **빈 껍데기**로 두면 `gateChatTools` 가 아무리 잘 걸러도 관측할 도구가 없다 —
 // 라우트 배선을 보려면 도구가 들어 있는 목이 필요하다(wbs 는 항상 켜진 채 남고, weekly 는 모듈로 끄고 켠다).

@@ -32,6 +32,7 @@ import {
 } from './fixtures'
 import { FIXTURE_MILESTONE_KEYWORDS } from '../../fixtures/milestoneKeywords'
 import { makeProjectConfig } from '../../helpers/projectConfigFixture'
+import { monProjectValues } from '../../helpers/calendarFixture'
 
 export interface FakeRepositoryOptions {
   /** 지정한 에러 코드를 관련 메서드가 강제 반환한다(조회 실패 주입). */
@@ -211,6 +212,7 @@ export function createFakeRepositories(options: FakeRepositoryOptions = {}): Cor
       async getProjectConfig(projectId) {
         return guard('PROJECT_SETTINGS_READ_FAILED', true, () => repositoryOk(makeProjectConfig({
           'core.level_labels': ['Phase', 'Task', 'Activity'], 'core.milestone_keywords': [...FIXTURE_MILESTONE_KEYWORDS],
+          ...monProjectValues,   // 골든의 주간 시트는 월요일 키(D28 월요일 회귀 — 주간 도구가 프로젝트 규칙의 키로 정규화한다, SP5 과제 17)
         }, {
           projectId, workspaceId: 'ws-golden', teams: clone(GOLDEN_CONFIG_TEAMS),
           areas: { weekly_section: clone(GOLDEN_WEEKLY_AREAS), issue_area: [] },

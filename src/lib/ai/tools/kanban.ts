@@ -11,7 +11,7 @@ import {
   readRequiredString,
   repositoryFailure,
   repositoryScopeViolation,
-  todayInSeoul,
+  requestToday,
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -122,7 +122,7 @@ export function createGetKanbanViewTool(repository: WbsBotRepository, teams: Too
       }
       if (!isScopedWbsSnapshot(repoResult.data, projectId)) return repositoryScopeViolation()
 
-      const today = repoResult.data.baseDate ?? todayInSeoul(context.now)
+      const today = repoResult.data.baseDate ?? requestToday(context.now, context.timezone)
       const computed = computeTree(repoResult.data.items, today, repoResult.data.calendar, {
         subActTeamOrder: teamOrderMap(teamCodes),
       })

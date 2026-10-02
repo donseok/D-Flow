@@ -19,10 +19,32 @@ import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
 import { requireSessionModule } from '@/lib/modules/gate'
 import { projectTeams, visibleTeams } from '@/lib/teams/source'
+import { DEFAULT_REQUEST_CALENDAR, resolveRequestCalendar } from '@/lib/calendar/load'
+import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
+import type { RequestCalendar } from '@/lib/domain/calendar'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_REQUEST_BYTES = 262_144
+
+/**
+ * 요청 범위 달력(SP5 D13 ③) — 프로젝트(스코프 검증을 지난 것)가 있으면 그 프로젝트, 없으면 화면 경로의 워크스페이스(/w/<slug> — 소속일 때만),
+ * 그것도 없으면 소속 워크스페이스가 하나일 때 그것, 아니면 제품 기본값. 설정 조회 실패·손상은 던진다(아래에서 503·422).
+ */
+async function chatCalendar(sb: Awaited<ReturnType<typeof createServerClient>>, input: {
+  projectId: string | null; pathname: string | null; workspaceIds: readonly string[]; isSuperuser: boolean
+}): Promise<RequestCalendar> {
+  if (input.projectId) return resolveRequestCalendar({ projectId: input.projectId, workspaceId: null }, { client: sb })
+  const slug = input.pathname?.match(/^\/w\/([a-z0-9][a-z0-9-]{1,62})(?:\/|$)/)?.[1] ?? null
+  if (slug) {
+    const { data, error } = await sb.from('workspaces').select('id').eq('slug', slug).maybeSingle()
+    if (error) throw new ConfigUnavailableError(`워크스페이스 조회 실패: ${error.message}`, { cause: error })
+    const id = (data as { id: string } | null)?.id ?? null
+    if (id && (input.isSuperuser || input.workspaceIds.includes(id))) return resolveRequestCalendar({ projectId: null, workspaceId: id }, { client: sb })
+  }
+  if (input.workspaceIds.length === 1) return resolveRequestCalendar({ projectId: null, workspaceId: input.workspaceIds[0] }, { client: sb })
+  return DEFAULT_REQUEST_CALENDAR
+}
 
 function requestId(): string {
   return `req_${crypto.randomUUID().replace(/-/g, '')}`
@@ -63,7 +85,8 @@ export async function POST(req: NextRequest) {
   const mod = await requireSessionModule(request.pageContext?.projectId ?? request.projectId, 'chatbot')
   if (!mod.ok) return jsonError(mod.error, 404, 'MODULE_DISABLED')
   const now = new Date()
-  const plannedRoute = routeChatRequest(request, now)
+  // 종류(tools·legacy·command) 판정 전용 — 인자는 쓰지 않는다. 도구 경로는 아래에서 요청 범위 달력으로 다시 라우팅한다
+  const plannedRoute = routeChatRequest(request, now, DEFAULT_REQUEST_CALENDAR)
   // Unsupported questions contain no v2 data and immediately fall back to the legacy bot. Keep this
   // before membership and project-scope I/O so an intentional fallback never touches Supabase
   // (위 모듈 관문의 설정 조회 하나만 앞선다 — P23).
@@ -88,6 +111,19 @@ export async function POST(req: NextRequest) {
   const scope = validateChatProjectScope(request, allowedProjectIds)
   if (!scope.ok) return jsonError(scope.message, scope.status, scope.code)
 
+  // 요청 범위 달력 한 벌 — '오늘'·'이번 주'를 이것 하나로 정한다(도구는 자기 tz 로 다시 계산하지 않는다, SP5 D13 ③)
+  let calendar: RequestCalendar
+  try {
+    calendar = await chatCalendar(sb, { projectId: scope.projectId, pathname: request.pageContext?.pathname ?? null, workspaceIds, isSuperuser })
+  } catch (e) {
+    if (e instanceof ConfigKeyError) return jsonError(e.message, 422, 'CALENDAR_INVALID')
+    if (e instanceof ConfigUnavailableError) {
+      console.error('[chat-v2] 요청 범위 달력 조회 실패:', e.message)
+      return jsonError('프로젝트 달력을 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'CALENDAR_UNAVAILABLE')
+    }
+    throw e
+  }
+
   // 1차 라우팅(위)은 I/O 없는 게이트다 — 팀은 스코프를 안 뒤에만 알 수 있다. 도구 경로일 때만 팀(이름 포함 — 개명한 이름으로도
   // 부른다, SP4 §4.2.2)을 요청 범위 원천에서 먼저 읽고 다시 라우팅한다. 허용 밖 프로젝트(대화 상태의 옛 엔터티)는 팀을 읽지 않는다.
   let route = plannedRoute
@@ -104,7 +140,7 @@ export async function POST(req: NextRequest) {
       console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
       return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
     }
-    route = routeChatRequest(request, now, { teamsFor: () => teams })
+    route = routeChatRequest(request, now, calendar, { teamsFor: () => teams })
   }
 
   const id = requestId()
@@ -125,7 +161,7 @@ export async function POST(req: NextRequest) {
   let plan: ToolPlan | undefined
   if (plannerEligible) {
     const allowedTools = registry.names()
-    const rawPlan = await planWithConfiguredLlm(request, { allowedTools, now: now.toISOString() })
+    const rawPlan = await planWithConfiguredLlm(request, { allowedTools, now: now.toISOString(), calendar })
     const validated = validateToolPlan(rawPlan, { allowedTools, allowedProjectIds })
     if (!validated.ok) {
       console.warn('[chat-v2] 플래너 계획 기각 → 레거시 폴백:', validated.code)
@@ -148,7 +184,7 @@ export async function POST(req: NextRequest) {
       isSuperuser,
       pageContext: request.pageContext ?? null,
       now: now.toISOString(),
-      timezone: 'Asia/Seoul',
+      timezone: calendar.timezone,
       signal: req.signal,
     },
   })

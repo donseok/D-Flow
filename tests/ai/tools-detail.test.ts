@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { monProjectValues } from '../helpers/calendarFixture'
 import {
   createGetWbsChangeLogTool,
   createListWbsAttachmentsTool,
@@ -43,7 +44,7 @@ const areaIdOf = (name: string): string => {
   return area.id
 }
 const weeklySettings = {
-  getProjectConfig: vi.fn(async (projectId: string): Promise<RepositoryResult<ProjectConfig>> => repositoryOk(makeProjectConfig({}, {
+  getProjectConfig: vi.fn(async (projectId: string): Promise<RepositoryResult<ProjectConfig>> => repositoryOk(makeProjectConfig(monProjectValues, {
     projectId, workspaceId: 'ws-1', teams: R_TEAMS, areas: { weekly_section: R_AREAS, issue_area: [] },
   }))),
 }

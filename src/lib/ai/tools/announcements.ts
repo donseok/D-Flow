@@ -16,7 +16,7 @@ import {
   repositoryFailure,
   repositoryScopeViolation,
   shortExcerpt,
-  todayInSeoul,
+  requestToday,
 } from './common'
 import type {
   BotSource,
@@ -169,7 +169,7 @@ export function createListAnnouncementsTool(
       })
       return finishAnnouncements(
         context, projectId, matched, limit,
-        activeOn ?? todayInSeoul(context.now), scanTruncated,
+        activeOn ?? requestToday(context.now, context.timezone), scanTruncated,
         record => shortExcerpt(record.body) ?? null,
       )
     },
@@ -209,7 +209,7 @@ export function createSearchAnnouncementsTool(
       })
       return finishAnnouncements(
         context, projectId, matched, limit,
-        todayInSeoul(context.now), scanTruncated,
+        requestToday(context.now, context.timezone), scanTruncated,
         record => matchExcerpt(record.body, query),
       )
     },

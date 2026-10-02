@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { routeChatRequest, teamFromTeams, type RouteChatOptions, type RouteTeam } from '@/lib/ai/chat/router'
 import type { ChatRequestV2, PageContextV1 } from '@/lib/ai/chat/protocol'
+import { calendarOf } from '@/lib/domain/calendar'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 const NOW = new Date('2026-07-19T00:00:00.000Z')
+// 요청 범위 달력(SP5 D13 ③) — 이 파일의 기대값은 옛 동작(서울·월요일)이다
+const SEOUL_MON = calendarOf({ timezone: 'Asia/Seoul', workingDays: [1, 2, 3, 4, 5], weekStart: [{ day: 'monday', from: null }] })
 /** 이름 = code 인 팀 목록(개명 전 모양) — 옛 코드 기반 케이스를 그대로 돌린다 */
 const asTeams = (codes: readonly string[]): RouteTeam[] => codes.map((code) => ({ code, name: code }))
 const teamFromCodes = (message: string, codes: readonly string[]) => teamFromTeams(message, asTeams(codes))
@@ -27,7 +30,7 @@ function request(message: string, pageContext?: PageContextV1): ChatRequestV2 {
 
 describe('chat v2 deterministic router', () => {
   it('lets explicit attendance nouns win over generic status words', () => {
-    const route = routeChatRequest(request('근태 현황 알려줘', context('dashboard')), NOW)
+    const route = routeChatRequest(request('근태 현황 알려줘', context('dashboard')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.domains).toEqual(['attendance'])
@@ -35,7 +38,7 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('routes ERP weekly issues without using the whole question as a search needle', () => {
-    const route = routeChatRequest(request('ERP 금주 이슈 정리해줘', context('weekly')), NOW, LEGACY_TEAMS)
+    const route = routeChatRequest(request('ERP 금주 이슈 정리해줘', context('weekly')), NOW, SEOUL_MON, LEGACY_TEAMS)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
@@ -46,7 +49,7 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('resolves relative meeting dates deterministically', () => {
-    const route = routeChatRequest(request('내일 회의 알려줘', context('meetings')), NOW)
+    const route = routeChatRequest(request('내일 회의 알려줘', context('meetings')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
@@ -56,8 +59,8 @@ describe('chat v2 deterministic router', () => {
 
   it('lets explicit relative dates override a page month range', () => {
     const monthly = context('meetings', { range: { from: '2026-07-01', to: '2026-07-31' } })
-    const today = routeChatRequest(request('오늘 회의 알려줘', monthly), NOW)
-    const thisWeek = routeChatRequest(request('이번 주 회의 알려줘', monthly), NOW)
+    const today = routeChatRequest(request('오늘 회의 알려줘', monthly), NOW, SEOUL_MON)
+    const thisWeek = routeChatRequest(request('이번 주 회의 알려줘', monthly), NOW, SEOUL_MON)
     expect(today.kind).toBe('tools')
     expect(thisWeek.kind).toBe('tools')
     if (today.kind !== 'tools' || thisWeek.kind !== 'tools') return
@@ -67,9 +70,9 @@ describe('chat v2 deterministic router', () => {
 
   it('parses explicit ISO, Korean dates, and this month before page defaults', () => {
     const monthly = context('meetings', { range: { from: '2026-06-01', to: '2026-06-30' } })
-    const iso = routeChatRequest(request('2026-08-03 회의', monthly), NOW)
-    const korean = routeChatRequest(request('8월 4일 회의', monthly), NOW)
-    const month = routeChatRequest(request('이번 달 회의', monthly), NOW)
+    const iso = routeChatRequest(request('2026-08-03 회의', monthly), NOW, SEOUL_MON)
+    const korean = routeChatRequest(request('8월 4일 회의', monthly), NOW, SEOUL_MON)
+    const month = routeChatRequest(request('이번 달 회의', monthly), NOW, SEOUL_MON)
     expect(iso.kind).toBe('tools')
     expect(korean.kind).toBe('tools')
     expect(month.kind).toBe('tools')
@@ -81,12 +84,12 @@ describe('chat v2 deterministic router', () => {
 
   it('parses explicit ranges, named months, and adjacent relative periods', () => {
     const page = context('meetings', { range: { from: '2026-05-01', to: '2026-05-31' } })
-    const range = routeChatRequest(request('8월 3일부터 8월 5일까지 회의', page), NOW)
-    const namedMonth = routeChatRequest(request('2026년 8월 회의', page), NOW)
-    const priorWeek = routeChatRequest(request('지난주 회의', page), NOW)
-    const nextWeek = routeChatRequest(request('차주 회의', page), NOW)
-    const priorMonth = routeChatRequest(request('전월 회의', page), NOW)
-    const nextMonth = routeChatRequest(request('익월 회의', page), NOW)
+    const range = routeChatRequest(request('8월 3일부터 8월 5일까지 회의', page), NOW, SEOUL_MON)
+    const namedMonth = routeChatRequest(request('2026년 8월 회의', page), NOW, SEOUL_MON)
+    const priorWeek = routeChatRequest(request('지난주 회의', page), NOW, SEOUL_MON)
+    const nextWeek = routeChatRequest(request('차주 회의', page), NOW, SEOUL_MON)
+    const priorMonth = routeChatRequest(request('전월 회의', page), NOW, SEOUL_MON)
+    const nextMonth = routeChatRequest(request('익월 회의', page), NOW, SEOUL_MON)
     const routes = [range, namedMonth, priorWeek, nextWeek, priorMonth, nextMonth]
     expect(routes.every(route => route.kind === 'tools')).toBe(true)
     if (routes.some(route => route.kind !== 'tools')) return
@@ -101,9 +104,9 @@ describe('chat v2 deterministic router', () => {
   it('does not pass all filters and only forwards allowed natural WBS statuses', () => {
     const all = routeChatRequest(request('작업 알려줘', context('kanban', {
       filters: { status: 'all', team: 'all' },
-    })), NOW)
-    const progress = routeChatRequest(request('진행 중 작업', context('wbs')), NOW)
-    const notStarted = routeChatRequest(request('미착수 작업', context('wbs')), NOW)
+    })), NOW, SEOUL_MON)
+    const progress = routeChatRequest(request('진행 중 작업', context('wbs')), NOW, SEOUL_MON)
+    const notStarted = routeChatRequest(request('미착수 작업', context('wbs')), NOW, SEOUL_MON)
     expect(all.kind).toBe('tools')
     expect(progress.kind).toBe('tools')
     expect(notStarted.kind).toBe('tools')
@@ -115,17 +118,17 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('does not interpret 미완료 as the done filter', () => {
-    const route = routeChatRequest(request('미완료 작업 알려줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('미완료 작업 알려줘', context('wbs')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0].args).not.toHaveProperty('status')
   })
 
   it('passes explicit WBS schedule ranges with overlap or boundary semantics', () => {
-    const overlap = routeChatRequest(request('이번 주 작업 알려줘', context('wbs')), NOW)
-    const starts = routeChatRequest(request('이번 주 시작 작업 알려줘', context('wbs')), NOW)
-    const ends = routeChatRequest(request('이번 주 완료 예정 작업 알려줘', context('wbs')), NOW)
-    const explicit = routeChatRequest(request('2026-06-01 작업 알려줘', context('wbs')), NOW)
+    const overlap = routeChatRequest(request('이번 주 작업 알려줘', context('wbs')), NOW, SEOUL_MON)
+    const starts = routeChatRequest(request('이번 주 시작 작업 알려줘', context('wbs')), NOW, SEOUL_MON)
+    const ends = routeChatRequest(request('이번 주 완료 예정 작업 알려줘', context('wbs')), NOW, SEOUL_MON)
+    const explicit = routeChatRequest(request('2026-06-01 작업 알려줘', context('wbs')), NOW, SEOUL_MON)
     expect(overlap.kind).toBe('tools')
     expect(starts.kind).toBe('tools')
     expect(ends.kind).toBe('tools')
@@ -153,7 +156,7 @@ describe('chat v2 deterministic router', () => {
   it('uses the selected WBS entity for dependency questions', () => {
     const route = routeChatRequest(request('이 작업의 선행 작업 알려줘', context('wbs', {
       selectedEntity: { type: 'wbs_item', id: 'item-1' },
-    })), NOW)
+    })), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'get_wbs_dependencies', args: { itemId: 'item-1' } })
@@ -161,8 +164,8 @@ describe('chat v2 deterministic router', () => {
 
   it('routes selected WBS audit and attachment questions to metadata-only read tools', () => {
     const page = context('wbs', { selectedEntity: { type: 'wbs_item', id: 'item-1' } })
-    const audit = routeChatRequest(request('이 작업 최근 변경 이력', page), NOW)
-    const files = routeChatRequest(request('이 작업 첨부파일', page), NOW)
+    const audit = routeChatRequest(request('이 작업 최근 변경 이력', page), NOW, SEOUL_MON)
+    const files = routeChatRequest(request('이 작업 첨부파일', page), NOW, SEOUL_MON)
     expect(audit.kind).toBe('tools')
     expect(files.kind).toBe('tools')
     if (audit.kind !== 'tools' || files.kind !== 'tools') return
@@ -172,9 +175,9 @@ describe('chat v2 deterministic router', () => {
 
   it('uses current KST week for explicit weekly words instead of a stale page week', () => {
     const page = context('weekly', { weekStart: '2026-06-01' })
-    const current = routeChatRequest(request('금주 업무 알려줘', page), NOW)
-    const prior = routeChatRequest(request('지난주 업무 알려줘', page), NOW)
-    const compare = routeChatRequest(request('지난주와 이번 주 주간업무 비교', page), NOW)
+    const current = routeChatRequest(request('금주 업무 알려줘', page), NOW, SEOUL_MON)
+    const prior = routeChatRequest(request('지난주 업무 알려줘', page), NOW, SEOUL_MON)
+    const compare = routeChatRequest(request('지난주와 이번 주 주간업무 비교', page), NOW, SEOUL_MON)
     expect(current.kind).toBe('tools')
     expect(prior.kind).toBe('tools')
     expect(compare.kind).toBe('tools')
@@ -189,10 +192,10 @@ describe('chat v2 deterministic router', () => {
 
   it('maps explicit weekly dates to their ordered Monday anchors', () => {
     const page = context('weekly', { weekStart: '2026-07-13' })
-    const sheet = routeChatRequest(request('2026-06-01 주간업무 알려줘', page), NOW)
+    const sheet = routeChatRequest(request('2026-06-01 주간업무 알려줘', page), NOW, SEOUL_MON)
     const compare = routeChatRequest(request(
       '2026년 6월 15일과 2026년 6월 1일 주간업무 비교', page,
-    ), NOW)
+    ), NOW, SEOUL_MON)
     expect(sheet.kind).toBe('tools')
     expect(compare.kind).toBe('tools')
     if (sheet.kind !== 'tools' || compare.kind !== 'tools') return
@@ -206,8 +209,8 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('lets explicit weekly menu nouns win over the legacy weekly-summary intent', () => {
-    const route = routeChatRequest(request('주간업무 정리해줘', context('weekly')), NOW)
-    const performance = routeChatRequest(request('금주 실적 알려줘', context('weekly')), NOW)
+    const route = routeChatRequest(request('주간업무 정리해줘', context('weekly')), NOW, SEOUL_MON)
+    const performance = routeChatRequest(request('금주 실적 알려줘', context('weekly')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     expect(performance.kind).toBe('tools')
     if (route.kind !== 'tools' || performance.kind !== 'tools') return
@@ -216,7 +219,7 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('never routes a write command to a read tool', () => {
-    const route = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW, SEOUL_MON)
     expect(route).toMatchObject({ kind: 'command', calls: [] })
   })
 
@@ -224,7 +227,7 @@ describe('chat v2 deterministic router', () => {
     const route = routeChatRequest({
       projectId: null, message: '오늘 연차인 사람', history: [],
       pageContext: { ...context('attendance'), projectId: null, pathname: '/attendance' },
-    }, NOW)
+    }, NOW, SEOUL_MON)
     expect(route).toMatchObject({ kind: 'clarify', reason: 'project_required', calls: [] })
   })
 
@@ -239,7 +242,7 @@ describe('chat v2 deterministic router', () => {
         lastDomains: ['wbs'],
         lastEntities: [{ type: 'wbs_item', id: 'item-1', ref: 'S1', projectId: 'p1', title: '설계' }],
       },
-    }, NOW)
+    }, NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route).toMatchObject({ reason: 'conversation_state' })
@@ -258,8 +261,8 @@ describe('chat v2 deterministic router', () => {
         version: 1, lastDomains: ['meetings'],
         lastEntities: [{ type: 'meeting', id: 'm1', ref: 'S1', projectId: 'p1', title: '주간회의' }],
       },
-    }, NOW)
-    const detail = routeChatRequest({ projectId: null, message: '그 회의 상세', history: [], pageContext: globalPage }, NOW)
+    }, NOW, SEOUL_MON)
+    const detail = routeChatRequest({ projectId: null, message: '그 회의 상세', history: [], pageContext: globalPage }, NOW, SEOUL_MON)
     expect(list.kind).toBe('tools')
     expect(detail.kind).toBe('tools')
     if (list.kind !== 'tools' || detail.kind !== 'tools') return
@@ -269,10 +272,10 @@ describe('chat v2 deterministic router', () => {
   })
 
   it('requires a selected meeting before reading attendee or detail-only fields', () => {
-    const missing = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW)
+    const missing = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW, SEOUL_MON)
     const selected = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings', {
       selectedEntity: { type: 'meeting', id: 'meeting-1' },
-    })), NOW)
+    })), NOW, SEOUL_MON)
     expect(missing).toMatchObject({
       kind: 'clarify', reason: 'meeting_selection_required', calls: [],
     })
@@ -286,10 +289,10 @@ describe('chat v2 deterministic router', () => {
   it('omits all member filters and maps attendance leave terms precisely', () => {
     const all = routeChatRequest(request('오늘 휴가인 사람', context('attendance', {
       filters: { memberId: 'all' }, range: { from: '2026-07-01', to: '2026-07-31' },
-    })), NOW)
+    })), NOW, SEOUL_MON)
     const member = routeChatRequest(request('오늘 반반차', context('attendance', {
       filters: { memberId: 'member-1' },
-    })), NOW)
+    })), NOW, SEOUL_MON)
     expect(all.kind).toBe('tools')
     expect(member.kind).toBe('tools')
     if (all.kind !== 'tools' || member.kind !== 'tools') return
@@ -305,19 +308,19 @@ describe('chat v2 deterministic router', () => {
     ['주간 요약', context('dashboard')],
     ['도와줘', context('projects', { projectId: null, pathname: '/projects' })],
   ])('preserves the legacy bot for unsupported intent/page: %s', (message, page) => {
-    const route = routeChatRequest(request(message, page), NOW)
+    const route = routeChatRequest(request(message, page), NOW, SEOUL_MON)
     expect(route.kind).toBe('legacy')
   })
 
   it('routes 멤버별 업무 to the honest team-level workload tool instead of legacy', () => {
-    const route = routeChatRequest(request('멤버별 업무 정리해줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('멤버별 업무 정리해줘', context('wbs')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'get_member_workload', args: { projectId: 'p1' } })
   })
 
   it('falls back before streaming for unsupported meeting-attendance intersections', () => {
-    const route = routeChatRequest(request('내일 회의 참석자 중 휴가인 사람이 있나?', context('meetings')), NOW)
+    const route = routeChatRequest(request('내일 회의 참석자 중 휴가인 사람이 있나?', context('meetings')), NOW, SEOUL_MON)
     expect(route).toMatchObject({
       kind: 'legacy',
       domains: ['attendance', 'meetings'],
@@ -329,7 +332,7 @@ describe('chat v2 deterministic router', () => {
 
 describe('chat v2 router — Phase 2 신규 도메인', () => {
   it('routes 고정 공지 to list_announcements with pinnedOnly', () => {
-    const route = routeChatRequest(request('고정 공지 알려줘', context('announcements')), NOW)
+    const route = routeChatRequest(request('고정 공지 알려줘', context('announcements')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.domains).toEqual(['announcements'])
@@ -339,7 +342,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('routes a quoted announcement search to search_announcements', () => {
-    const route = routeChatRequest(request("'배포 일정' 공지 찾아줘", context('announcements')), NOW)
+    const route = routeChatRequest(request("'배포 일정' 공지 찾아줘", context('announcements')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
@@ -348,7 +351,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('routes 완료된 공지 to announcements, not to a WBS status query', () => {
-    const route = routeChatRequest(request('완료된 공지 알려줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('완료된 공지 알려줘', context('wbs')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.domains).toEqual(['announcements'])
@@ -358,7 +361,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
     const page = context('minutes', { projectId: null, pathname: '/minutes' })
     const route = routeChatRequest(
       { projectId: null, message: "'ERP 인터페이스' 회의록 찾아줘", history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
@@ -373,7 +376,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
     })
     const route = routeChatRequest(
       { projectId: null, message: '이 회의록 결정사항 정리해줘', history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
@@ -384,7 +387,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
     const page = context('minutes', { projectId: null, pathname: '/minutes' })
     const route = routeChatRequest(
       { projectId: null, message: '그 회의록 상세 내용 알려줘', history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.kind).toBe('clarify')
     if (route.kind !== 'clarify') return
@@ -392,7 +395,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('routes the kanban page view mode into get_kanban_view', () => {
-    const route = routeChatRequest(request('카드 현황 알려줘', context('kanban', { view: 'owner' })), NOW)
+    const route = routeChatRequest(request('카드 현황 알려줘', context('kanban', { view: 'owner' })), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({
@@ -401,7 +404,7 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('pairs a delayed-card question with both kanban and wbs evidence', () => {
-    const route = routeChatRequest(request('지연된 카드 알려줘', context('kanban')), NOW)
+    const route = routeChatRequest(request('지연된 카드 알려줘', context('kanban')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     const tools = route.calls.map(call => call.tool)
@@ -410,28 +413,28 @@ describe('chat v2 router — Phase 2 신규 도메인', () => {
   })
 
   it('routes 대시보드 요약 to get_project_dashboard even with an overview-like phrasing', () => {
-    const route = routeChatRequest(request('대시보드 현황 요약해줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('대시보드 현황 요약해줘', context('wbs')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'get_project_dashboard', args: { projectId: 'p1' } })
   })
 
   it('routes ERP 팀 멤버 to list_members with the team filter', () => {
-    const route = routeChatRequest(request('ERP 팀 구성원 알려줘', context('members')), NOW, LEGACY_TEAMS)
+    const route = routeChatRequest(request('ERP 팀 구성원 알려줘', context('members')), NOW, SEOUL_MON, LEGACY_TEAMS)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'list_members', args: { projectId: 'p1', team: 'ERP' } })
   })
 
   it('routes 프로젝트 설정 to get_safe_project_settings', () => {
-    const route = routeChatRequest(request('프로젝트 설정이랑 공휴일 알려줘', context('settings')), NOW)
+    const route = routeChatRequest(request('프로젝트 설정이랑 공휴일 알려줘', context('settings')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.calls[0]).toMatchObject({ tool: 'get_safe_project_settings', args: { projectId: 'p1' } })
   })
 
   it('keeps generic questions on a supported page routed by page context', () => {
-    const route = routeChatRequest(request('여기 뭐가 있어?', context('announcements')), NOW)
+    const route = routeChatRequest(request('여기 뭐가 있어?', context('announcements')), NOW, SEOUL_MON)
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
     expect(route.domains).toEqual(['announcements'])
@@ -443,7 +446,7 @@ describe('chat v2 router — Wiki 도메인', () => {
     const page = context('wiki', { projectId: 'p1', pathname: '/p/p1/wiki' })
     const route = routeChatRequest(
       { projectId: 'p1', message: '연계 방식 어떻게 하기로 했지?', history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
@@ -457,7 +460,7 @@ describe('chat v2 router — Wiki 도메인', () => {
     })
     const route = routeChatRequest(
       { projectId: null, message: '이 회의록 결정사항 정리해줘', history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.kind).toBe('tools')
     if (route.kind !== 'tools') return
@@ -470,7 +473,7 @@ describe('chat v2 router — Wiki 도메인 회귀 방지', () => {
     const page = context('minutes', { projectId: null, pathname: '/minutes' })
     const route = routeChatRequest(
       { projectId: null, message: '이번 달 결정 사항 정리해줘', history: [], pageContext: page },
-      NOW,
+      NOW, SEOUL_MON,
     )
     expect(route.domains).not.toContain('wiki')
     // 예전처럼 회의록 전역 검색으로 답해야 한다 — 프로젝트 선택 요구로 막히면 회귀다.
@@ -487,7 +490,7 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     [['Research'], 'research 작업 현황 알려줘', 'Research'], // 대소문자 무시, 저장된 코드로 돌려준다
     [['ERP', 'ERP 운영'], 'ERP 운영 작업 현황 알려줘', 'ERP 운영'], // 최장 일치
   ])('%j 에서 %s → team=%s', (codes, message, team) => {
-    const route = routeChatRequest(request(message, context('wbs')), NOW, withTeams(codes))
+    const route = routeChatRequest(request(message, context('wbs')), NOW, SEOUL_MON, withTeams(codes))
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls[0].args).toMatchObject({ team })
   })
@@ -501,7 +504,7 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     [['ERP', 'MES'], 'ERP, MES 작업 알려줘'], // 구두점이 붙은 코드도
     [['ERP', 'ERP 운영'], 'ERP 운영팀 작업 현황 알려줘'], // 'ERP' 만 엄격 일치하지만 더 긴 'ERP 운영' 이 걸쳐 있다
   ])('%j 에서 "%s" 는 팀을 뽑지 않는다', (codes, message) => {
-    const route = routeChatRequest(request(message, context('wbs')), NOW, withTeams(codes))
+    const route = routeChatRequest(request(message, context('wbs')), NOW, SEOUL_MON, withTeams(codes))
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls[0].args).not.toHaveProperty('team')
   })
@@ -538,14 +541,14 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
   })
 
   it('옵션이 없으면 팀을 뽑지 않는다 — 원본 5팀을 기본값으로 되살리지 않는다', () => {
-    const route = routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW)
+    const route = routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW, SEOUL_MON)
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls[0].args).not.toHaveProperty('team')
   })
 
   it('페이지 필터가 메시지보다 우선이다(현행)', () => {
     const route = routeChatRequest(
-      request('ERP 작업 현황 알려줘', context('wbs', { filters: { team: 'ZULU' } })), NOW, withTeams(['ERP']),
+      request('ERP 작업 현황 알려줘', context('wbs', { filters: { team: 'ZULU' } })), NOW, SEOUL_MON, withTeams(['ERP']),
     )
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls[0].args).toMatchObject({ team: 'ZULU' })
@@ -559,14 +562,14 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     ['members', 'Acme 워크로드 알려줘', 'get_member_workload'],
     ['kanban', 'Acme 칸반 보여줘', 'get_kanban_view'],
   ] as const)('%s 화면 "%s" 도 등록된 팀으로 뽑는다(%s)', (domain, message, tool) => {
-    const route = routeChatRequest(request(message, context(domain)), NOW, withTeams(['Acme']))
+    const route = routeChatRequest(request(message, context(domain)), NOW, SEOUL_MON, withTeams(['Acme']))
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(route.calls.find(call => call.tool === tool)?.args).toMatchObject({ team: 'Acme' })
   })
 
   it('teamsFor 는 프로젝트 힌트로 부른다 — 프로젝트 화면은 그 pid, 전역 회의록은 null', () => {
     const project = withTeams(['팀A'])
-    routeChatRequest(request('팀A 작업 현황 알려줘', context('wbs')), NOW, project)
+    routeChatRequest(request('팀A 작업 현황 알려줘', context('wbs')), NOW, SEOUL_MON, project)
     expect(project.teamsFor).toHaveBeenCalledTimes(1)
     expect(project.teamsFor).toHaveBeenCalledWith('p1')
 
@@ -574,7 +577,7 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
     const route = routeChatRequest({
       projectId: null, message: '팀A 회의록 찾아줘', history: [],
       pageContext: { ...context('minutes'), projectId: null, pathname: '/minutes' },
-    }, NOW, global)
+    }, NOW, SEOUL_MON, global)
     if (route.kind !== 'tools') throw new Error(route.kind)
     expect(global.teamsFor).toHaveBeenCalledTimes(1)
     expect(global.teamsFor).toHaveBeenCalledWith(null)
@@ -583,18 +586,18 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
 
   it('command·legacy·clarify 경로에서는 teamsFor 를 부르지 않는다', () => {
     const opts = withTeams(['ERP'])
-    const command = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW, opts)
+    const command = routeChatRequest(request('이 작업 실적 80으로 올려줘', context('wbs')), NOW, SEOUL_MON, opts)
     const legacy = routeChatRequest(
-      request('도와줘', context('projects', { projectId: null, pathname: '/projects' })), NOW, opts,
+      request('도와줘', context('projects', { projectId: null, pathname: '/projects' })), NOW, SEOUL_MON, opts,
     )
-    const clarify = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW, opts)
+    const clarify = routeChatRequest(request('ERP 주간회의 참석자 알려줘', context('meetings')), NOW, SEOUL_MON, opts)
     expect([command.kind, legacy.kind, clarify.kind]).toEqual(['command', 'legacy', 'clarify'])
     expect(opts.teamsFor).not.toHaveBeenCalled()
   })
 
   it('팀 목록 조회가 던지면 그대로 전파한다 — 빈 목록으로 삼키지 않는다', () => {
     const opts: RouteChatOptions = { teamsFor: () => { throw new Error('팀 목록을 불러오지 못했습니다.') } }
-    expect(() => routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW, opts))
+    expect(() => routeChatRequest(request('ERP 작업 현황 알려줘', context('wbs')), NOW, SEOUL_MON, opts))
       .toThrow('팀 목록을 불러오지 못했습니다.')
   })
 
@@ -620,7 +623,7 @@ describe('chat v2 router — 팀 추출은 등록된 팀 코드로만', () => {
       expect(teamFromTeams('OPS 현황', [{ code: 'OPS', name: 'OPS' }])).toBe('OPS')
     })
     it('라우터는 teamsFor 의 이름으로도 도구 인자를 채운다(W27)', () => {
-      const route = routeChatRequest(request('운영팀 작업 현황 알려줘', context('wbs')), NOW, { teamsFor: () => RENAMED })
+      const route = routeChatRequest(request('운영팀 작업 현황 알려줘', context('wbs')), NOW, SEOUL_MON, { teamsFor: () => RENAMED })
       if (route.kind !== 'tools') throw new Error(route.kind)
       expect(route.calls[0].args).toMatchObject({ team: 'OPS' })
     })

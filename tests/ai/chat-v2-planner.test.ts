@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { calSeoulMon as SEOUL_MON } from '../helpers/calendarFixture'
 import { generateAnswer } from '@/lib/ai/llm'
 import {
   PLANNER_TOOL_CATALOG,
@@ -359,6 +360,7 @@ describe('planWithConfiguredLlm', () => {
     const result = await planWithConfiguredLlm(request, {
       allowedTools: ['find_wbs_items', 'search_minutes'],
       now: '2026-07-19',
+      calendar: SEOUL_MON,
     })
     expect(result).toEqual({ reason: 'r', needsClarification: true, clarification: '어떤 작업인가요?' })
 
@@ -368,6 +370,7 @@ describe('planWithConfiguredLlm', () => {
     expect(system).not.toContain('get_minute_detail')
     expect(system).toContain('JSON 오브젝트 하나만 출력')
     expect(system).toContain('2026-07-19')
+    expect(system).toContain('날짜 앵커(Asia/Seoul):')   // 요청 범위 달력의 tz(SP5 D13 ③)
 
     // 대화 이력은 최근 4개만 + 질문 1개
     expect(messages).toHaveLength(5)
@@ -383,28 +386,28 @@ describe('planWithConfiguredLlm', () => {
 
   it('returns null when the llm is unavailable or returns unparseable text', async () => {
     vi.mocked(generateAnswer).mockResolvedValueOnce(null)
-    expect(await planWithConfiguredLlm(request, { allowedTools: ALL_TOOLS, now: '2026-07-19' })).toBeNull()
+    expect(await planWithConfiguredLlm(request, { allowedTools: ALL_TOOLS, now: '2026-07-19', calendar: SEOUL_MON })).toBeNull()
 
     vi.mocked(generateAnswer).mockResolvedValueOnce('JSON이 아닌 답변입니다.')
-    expect(await planWithConfiguredLlm(request, { allowedTools: ALL_TOOLS, now: '2026-07-19' })).toBeNull()
+    expect(await planWithConfiguredLlm(request, { allowedTools: ALL_TOOLS, now: '2026-07-19', calendar: SEOUL_MON })).toBeNull()
   })
 })
 
 describe('plannerDateAnchors — 기간 인자 앵커', () => {
-  it('computes KST week anchors around a Sunday correctly', async () => {
+  it('서울·월요일 달력: 일요일 앵커 주변의 주를 맞게 계산한다', async () => {
     const { plannerDateAnchors } = await import('@/lib/ai/chat/planner')
-    // 2026-07-19은 KST 일요일 — 이번 주는 07-13(월)~07-19(일)이어야 한다.
-    const anchors = plannerDateAnchors('2026-07-19T09:00:00.000Z')
+    // 2026-07-19은 서울 일요일 — 월요일 규칙이면 이번 주는 07-13(월)~07-19(일)이어야 한다.
+    const anchors = plannerDateAnchors(SEOUL_MON, '2026-07-19T09:00:00.000Z')
     expect(anchors.today).toBe('2026-07-19')
     expect(anchors.thisWeek).toEqual({ from: '2026-07-13', to: '2026-07-19' })
     expect(anchors.nextWeek).toEqual({ from: '2026-07-20', to: '2026-07-26' })
     expect(anchors.lastWeek).toEqual({ from: '2026-07-06', to: '2026-07-12' })
   })
 
-  it('rolls today forward across the KST midnight boundary', async () => {
+  it('서울·월요일 달력: 서울 자정을 넘기면 오늘이 다음 날로 넘어간다', async () => {
     const { plannerDateAnchors } = await import('@/lib/ai/chat/planner')
-    // UTC 15:30 = KST 다음날 00:30
-    const anchors = plannerDateAnchors('2026-07-19T15:30:00.000Z')
+    // UTC 15:30 = 서울 다음날 00:30
+    const anchors = plannerDateAnchors(SEOUL_MON, '2026-07-19T15:30:00.000Z')
     expect(anchors.today).toBe('2026-07-20')
     expect(anchors.thisWeek).toEqual({ from: '2026-07-20', to: '2026-07-26' })
   })

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { calSeoulMon as SEOUL_MON } from '../helpers/calendarFixture'
 import { generateAnswer } from '@/lib/ai/llm'
 import {
   createChatNdjsonStream,
@@ -85,6 +86,7 @@ describe('chat v2 orchestrator', () => {
           requestId: base.requestId,
           registry: createChatToolRegistry([tool]),
           now: new Date('2026-07-19T00:00:00.000Z'),
+          calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
           context: {
             userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
             pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -119,6 +121,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1', capabilities: ['attendance:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -153,6 +156,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry([attendance]),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1',
           capabilities: ['attendance:read', 'meetings:read'], allowedProjectIds: ['p1'],
@@ -207,6 +211,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -248,6 +253,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -332,6 +338,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry(tools),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -390,6 +397,7 @@ describe('chat v2 orchestrator', () => {
           requestId: base.requestId,
           registry: createChatToolRegistry([tool]),
           now: new Date('2026-07-19T00:00:00.000Z'),
+          calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
           context: {
             userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
             pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',
@@ -442,6 +450,7 @@ describe('chat v2 orchestrator', () => {
         requestId: base.requestId,
         registry: createChatToolRegistry([tool]),
         now: new Date('2026-07-19T00:00:00.000Z'),
+        calendar: SEOUL_MON,   // 요청 범위 달력(SP5 D13 ③ — route 없이 라우팅하면 필수)
         context: {
           userId: 'u1', capabilities: ['wbs:read'], allowedProjectIds: ['p1'],
           pageContext: null, now: '2026-07-19T00:00:00.000Z', timezone: 'Asia/Seoul',

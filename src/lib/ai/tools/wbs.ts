@@ -21,7 +21,7 @@ import {
   repositoryFailure,
   repositoryScopeViolation,
   shortExcerpt,
-  todayInSeoul,
+  requestToday,
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
@@ -127,7 +127,7 @@ function computedSnapshot(
   context: ToolExecutionContext,
   teamCodes: readonly string[],
 ): { flat: FlatItem[]; updatedAtById: Map<string, string | null>; today: string } {
-  const today = baseDate ?? todayInSeoul(context.now)
+  const today = baseDate ?? requestToday(context.now, context.timezone)
   const computed = computeTree(rows, today, calendar, {
     subActTeamOrder: teamOrderMap(teamCodes),
   })

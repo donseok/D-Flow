@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const m = vi.hoisted(() => ({ gate: vi.fn(), orchestrate: vi.fn() }))
+// 요청 범위 달력(SP5 D13 ③) — 해석기 대신 서울·월요일 달력(옛 동작)을 준다. 해석 규칙은 tests/calendar/load.test.ts·bot-week-rules 가 본다
+vi.mock('@/lib/calendar/load', async (orig) => ({
+  ...(await orig<object>()),
+  resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+}))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1' })) }))
 vi.mock('@/lib/ai/chat/tool-modules', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/chat/tool-modules')>()),

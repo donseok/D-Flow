@@ -1,7 +1,6 @@
 import type { ChatMessage } from '@/lib/ai/llm'
 
 export const CHAT_PROTOCOL_VERSION = 1 as const
-export const CHAT_TIMEZONE = 'Asia/Seoul' as const
 
 /**
  * 도메인·엔티티 어휘의 단일 원천. protocol/verifier/pgvector가 전부 이 배열에서
@@ -80,7 +79,8 @@ export interface PageContextV1 {
   range?: { from: string | null; to: string | null } | null
   filters?: Record<string, BotFilterValue>
   search?: string | null
-  timezone: typeof CHAT_TIMEZONE
+  /** 옛 클라이언트의 참고값 — 서버는 쓰지 않는다(요청 범위 달력은 서버가 해석한다 — SP5 D13 ③). 정화기가 버린다 */
+  timezone?: string
 }
 
 export interface ConversationEntityV1 extends BotEntityRef {
@@ -259,7 +259,6 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     || !pathname.startsWith('/')
     || pathname.startsWith('//')
     || /[\\\u0000-\u001f\u007f]/.test(pathname)
-    || value.timezone !== CHAT_TIMEZONE
   ) return null
   const domain = DOMAINS.has(value.domain as BotDomain) ? value.domain as BotDomain : 'unknown'
   const projectId = value.projectId === null ? null : clippedString(value.projectId, MAX_ID)?.trim()
@@ -297,7 +296,6 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     ...(range !== undefined ? { range } : {}),
     ...(filters ? { filters } : {}),
     ...(search !== undefined ? { search } : {}),
-    timezone: CHAT_TIMEZONE,
   }
 }
 

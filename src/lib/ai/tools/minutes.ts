@@ -16,7 +16,7 @@ import {
   repositoryFailure,
   repositoryScopeViolation,
   shortExcerpt,
-  todayInSeoul,
+  requestToday,
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionResult } from './types'
@@ -87,8 +87,8 @@ function accessDenied(message: string): ToolExecutionResult<never> {
   return { ok: false, error: { code: 'ACCESS_DENIED', message, retryable: false } }
 }
 
-function seoulDateMinusDays(now: string, days: number): string {
-  const base = new Date(`${todayInSeoul(now)}T00:00:00Z`)
+function requestDateMinusDays(now: string, timezone: string, days: number): string {
+  const base = new Date(`${requestToday(now, timezone)}T00:00:00Z`)
   base.setUTCDate(base.getUTCDate() - days)
   return base.toISOString().slice(0, 10)
 }
@@ -141,8 +141,8 @@ export function createSearchMinutesTool(
 
       const defaultRangeApplied = !query && from === undefined
       const rangeFrom = from
-        ?? (defaultRangeApplied ? seoulDateMinusDays(context.now, DEFAULT_SEARCH_WINDOW_DAYS) : null)
-      const rangeTo = to ?? (defaultRangeApplied ? todayInSeoul(context.now) : null)
+        ?? (defaultRangeApplied ? requestDateMinusDays(context.now, context.timezone, DEFAULT_SEARCH_WINDOW_DAYS) : null)
+      const rangeTo = to ?? (defaultRangeApplied ? requestToday(context.now, context.timezone) : null)
 
       const repoResult = await repository.searchMinutes({
         query: query ?? null,

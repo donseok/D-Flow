@@ -5,6 +5,7 @@
 //  3) orchestrateChatV2 이벤트 수집(LLM 합성 없음) → done.tools 정확 일치·argsSubset 부분 일치·
 //     delta 결합 문자열 includes/excludes·sources href prefix·terminal 이벤트 정확히 1개
 // 실제 DB·네트워크·LLM 접근 없음. 전체 실행 5초 이내(단일 파일).
+import { calSeoulMon } from '../../helpers/calendarFixture'
 import { describe, expect, it } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
 import { fixedToolTeams } from '../../helpers/tool-team-source'
@@ -107,7 +108,7 @@ describe('golden question set', () => {
 
   it.each(GOLDEN_CASES)('$menu · $name', async testCase => {
     const registry = buildRegistry({ fail: testCase.inject?.failRepository })
-    const route = routeChatRequest(testCase.request, NOW_DATE, LEGACY_TEAMS)
+    const route = routeChatRequest(testCase.request, NOW_DATE, calSeoulMon, LEGACY_TEAMS)
     expect(route.kind, 'routeKind').toBe(testCase.expect.routeKind)
 
     const deps: ChatOrchestratorDependencies = {

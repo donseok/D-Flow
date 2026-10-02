@@ -26,7 +26,7 @@ import {
   readRequiredString,
   repositoryFailure,
   repositoryScopeViolation,
-  todayInSeoul,
+  requestToday,
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
 
@@ -87,7 +87,7 @@ export function createGetProjectDashboardTool(
 
       const snapshot = wbsResult.data
       // WBS 신호는 기준일(base_date 우선), 회의 신호는 실제 오늘 — 대시보드 화면의 이중 시계 관례.
-      const realToday = todayInSeoul(context.now)
+      const realToday = requestToday(context.now, context.timezone)
       const calculationDate = snapshot.baseDate ?? realToday
       const roots = computeTree(snapshot.items, calculationDate, snapshot.calendar, {
         subActTeamOrder: teamOrderMap(await teams.projectTeamCodes(projectId)),

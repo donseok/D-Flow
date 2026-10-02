@@ -57,7 +57,8 @@ export interface ToolExecutionContext {
   isSuperuser?: boolean
   pageContext: PageContextV1 | null
   now: string
-  timezone: 'Asia/Seoul'
+  /** 요청 범위 달력의 IANA 시간대(SP5 D13 ③) — 도구의 '오늘'은 이것 하나다 */
+  timezone: string
 }
 
 export interface ToolResult<T> {

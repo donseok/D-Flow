@@ -17,7 +17,7 @@ import {
   repositoryFailure,
   repositoryScopeViolation,
   shortExcerpt,
-  todayInSeoul,
+  requestToday,
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
@@ -135,7 +135,7 @@ export function createListMeetingsTool(
         })
       const records: MeetingOccurrenceToolRecord[] = all.slice(0, limit)
       const truncated = all.length > records.length
-      const summary = summarizeMeetings(all, todayInSeoul(context.now))
+      const summary = summarizeMeetings(all, requestToday(context.now, context.timezone))
       return {
         ok: true,
         result: {
@@ -358,7 +358,7 @@ export function createListMyMeetingsTool(
         }]
       })
       const truncated = all.length > records.length
-      const summary = summarizeMeetings(all, todayInSeoul(context.now))
+      const summary = summarizeMeetings(all, requestToday(context.now, context.timezone))
       return {
         ok: true,
         result: {

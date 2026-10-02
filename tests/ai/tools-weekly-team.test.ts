@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 // 주간업무 봇 도구의 팀 필터(D24) — 원천은 area_teams(주 ∪ 보조) 하나다. 하드코딩 구분 매핑·팀 캐시·동명 구분 폴백이 없다.
 // 팀 목록은 설정 저장소(getProjectConfig 의 teams — 그 워크스페이스 공용 ∪ 그 프로젝트 전용), 등록 판정은 프로젝트 화면과 같은 규칙
 // (resolveTeamsForProject — 전용 팀이 있으면 그것만, 비활성 포함). 합성 구성 R(팀 RES·OPS, 영역 실험·데이터·운영)을 쓴다.
+import { monProjectValues } from '../helpers/calendarFixture'
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
 import { areasForTeam } from '@/lib/domain/weeklySheet'
@@ -36,7 +37,8 @@ const team = (id: string, code: string, projectId: string | null, active = true)
 })
 
 function config(projectId: string, teams: ConfigTeam[] = TEAMS, areas: ConfigArea[] = AREAS): ProjectConfig {
-  return makeProjectConfig({}, { projectId, workspaceId: 'ws-1', teams, areas: { weekly_section: areas, issue_area: [] } })
+  // 월요일 규칙(D28 월요일 회귀 — 주간 도구가 기준일을 프로젝트 규칙의 키로 정규화한다, SP5 과제 17)
+  return makeProjectConfig(monProjectValues, { projectId, workspaceId: 'ws-1', teams, areas: { weekly_section: areas, issue_area: [] } })
 }
 const settingsOf = (byProject: Record<string, ProjectConfig>) => ({
   getProjectConfig: vi.fn(async (projectId: string): Promise<RepositoryResult<ProjectConfig>> => {
@@ -169,11 +171,11 @@ describe('주간 봇 도구 — 팀 필터 = area_teams(주 ∪ 보조)', () => 
     expect(repo.getSheet).not.toHaveBeenCalled()
   })
 
-  it('team 인자가 없으면 설정을 읽지 않는다', async () => {
+  it('team 인자가 없어도 설정은 접근 판정 뒤에 한 번 읽는다 — 주 규칙(SP5 과제 17), 팀 필터는 걸지 않는다', async () => {
     const settings = settingsOf({ p1: config('p1') })
     const res = await createGetWeeklySheetTool(repoOf(FULL('p1')), settings).execute({ projectId: 'p1', weekStart: '2026-07-20' }, context)
     expect(res.ok && res.result.records).toHaveLength(3)
-    expect(settings.getProjectConfig).not.toHaveBeenCalled()
+    expect(settings.getProjectConfig).toHaveBeenCalledTimes(1)
   })
 
   it.each(['constructor', '__proto__', 'toString'])('프로토타입 키와 같은 팀 코드(%s)도 던지지 않고 그 팀의 영역만 잡는다', async (code) => {
@@ -190,7 +192,8 @@ describe('주간 봇 도구 — 팀 필터 = area_teams(주 ∪ 보조)', () => 
 
 describe('주간 봇 도구 — section 인자는 영역 이름 또는 code(앞뒤 공백·대소문자 무시)', () => {
   it('이름·code 어느 쪽으로도 같은 영역을 잡고, 모르는 이름은 0건이다', async () => {
-    const tool = createGetWeeklySheetTool(repoOf(FULL('p1')), settingsOf({}))
+    // 설정은 주 규칙 때문에 늘 읽는다(SP5 과제 17) — 팀 인자가 없으니 팀 판정에는 쓰지 않는다
+    const tool = createGetWeeklySheetTool(repoOf(FULL('p1')), settingsOf({ p1: config('p1') }))
     const exp = AREAS.find(a => a.name === '실험')!
     for (const section of [' 실험 ', exp.code.toLocaleLowerCase('ko-KR'), exp.code.toUpperCase()]) {
       const res = await tool.execute({ projectId: 'p1', weekStart: '2026-07-20', section }, context)
