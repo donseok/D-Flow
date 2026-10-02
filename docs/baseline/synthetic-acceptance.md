@@ -108,3 +108,13 @@ SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 �
 | 미활성 | `S3`(SP5b·SP5c)·`S4`(일 — SP5)·`S5`(SP5)·`S6`(SP5·SP5b)·`S7`(SP8 봇·SPU1 알림)·`S8`(SP6)·`S10`(SP5~SP8 나머지 부분 집합) |
 
 `src`·`supabase` 의 미커밋 변경은 실행 전후 0(`git diff --quiet -- src supabase` 참 — 실행 전·뒤 둘 다). 실행 뒤 `settings:verify` exit 0(프로젝트 12·워크스페이스 5·문제 0).
+
+## SP5 A — 2026-10-03
+
+- 러너 `scripts/e2e-synthetic.mjs`, 서버 3101(스크래치 `next start`), 체크포인트 HEAD `5d207d06` — `sp5-e2e.md` A 체크포인트 절의 로컬 E2E(54단계) 바로 뒤 같은 DB(08:20 KST). 실행 전후 `git diff --quiet -- src supabase` 참.
+- **exit 0·`ok: true` — 실패 0, 빠진 필수 0.**
+- 켠 단계: `S1-calendar`(R LA·월~금·일요일 / C 베를린·월~토·월요일 + 10/10 휴무·10/25 근무 — 설정·일정 화면과 같은 액션) ✓, `S4-weekly-sunday`(R 연속 2주·이월·영역 개명 — 일요일 키) ✓,
+  `S5-calendar` ✓(계획% R 10-12 A 60 · 10-26 B 60 / C 10-12 A 60 · 10-26 B 67 — 기대 60·60 / 60·67, 판별적 시각 R 아니오·C 예 — 서버 tz 경로 근거로 쓰지 않는다), `S10-negative` ✓(시간대 센티널 `Asia/Seoul`·`+09:00` 적중 R·C 0, 내용 적중 0·교차 0).
+- 기존 단계 ✓: `S1-create`·`S1-teams-areas`·`S9-isolation`·`S2-wbs-import`·`S4-weekly-monday`·`boundary-sp4`.
+- 미활성(건너뜀 아님): `S3`(SP5b·SP5c)·`S6`(SP5 B1·SP5b)·`S7`(SP8·SPU1)·`S8`(SP6)·`S10` 나머지(SP5 B1·B4~SP8).
+- 1회차(`0431001e`, 08:16)도 ok — E2E 의 `calendar-tz` 러너 결함과 무관하게 같은 판정이었다. 실행 뒤 `settings:verify` exit 0(프로젝트 17·워크스페이스 5·문제 0).
