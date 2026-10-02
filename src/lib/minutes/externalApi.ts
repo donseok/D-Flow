@@ -235,7 +235,7 @@ export function parseFolderPathValue(raw: unknown): FolderPathParse {
  * POST /minutes 페이로드 검증 — 수동 타입가드(레포 관례) + validateMinuteFields 재사용.
  * 담당 팀(team)은 여기서 보지 않는다 — 회의록이 속할 범위(연결할 회의의 프로젝트·기존 행·호출자 워크스페이스)가
  * 정해져야 그 범위의 팀으로 판정할 수 있어서, 라우트가 범위를 확정한 뒤 validateMinuteTeam 으로 본다(같은 400).
- * §0 D4: 이 경로는 correctMinuteBodyTime(+9h)을 적용하지 않는다 — 또박또박이 이미 KST를
+ * §0 D4: 이 경로는 correctMinuteBodyTime(UTC → 회의록 범위 tz 보정)을 적용하지 않는다 — 또박또박이 이미 현지 시각을
  * 보내므로 기존 UI 경로의 보정을 재사용하면 이중 보정으로 시간이 밀린다(§1.4).
  */
 export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePayload } | { error: string } {

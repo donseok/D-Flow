@@ -41,7 +41,7 @@ export function splitBriefSections(bodyMd: string): Section[] {
 }
 
 /**
- * 캐시된 브리핑 → PPT 추가 슬라이드 셀 구성. generatedAt 은 표시용 문자열(호출측 KST 포맷).
+ * 캐시된 브리핑 → PPT 추가 슬라이드 셀 구성. generatedAt 은 표시용 문자열(호출측이 프로젝트 시간대로 포맷).
  * 헤드라인이 비어 있으면(수치 검증기가 제거한 경우 등) 좌셀 헤더는 '이번 주 요약'으로 폴백.
  */
 export function briefToExtraSlide(

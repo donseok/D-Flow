@@ -39,7 +39,7 @@ export const ANNOUNCEMENT_STATUS_META: Record<
 }
 
 /**
- * 게시 기간 대비 오늘(todayIso, 'YYYY-MM-DD' KST) 위치.
+ * 게시 기간 대비 오늘(todayIso, 'YYYY-MM-DD' — 그 프로젝트 시간대의 날짜) 위치.
  * date 문자열은 'YYYY-MM-DD' 사전식 비교가 시간순과 일치한다. from/to null = 무기한 경계.
  */
 export function announcementStatus(a: Announcement, todayIso: string): AnnouncementStatus {
@@ -146,8 +146,8 @@ export interface AnnouncementInput {
   body: string
   category: AnnouncementCategory
   isPinned: boolean
-  publishFrom: string // 'YYYY-MM-DD' (KST) 게시 시작일 · 필수
-  publishTo: string   // 'YYYY-MM-DD' (KST) 게시 종료일(포함) · 필수
+  publishFrom: string // 'YYYY-MM-DD'(프로젝트 시간대의 날짜) 게시 시작일 · 필수
+  publishTo: string   // 'YYYY-MM-DD'(프로젝트 시간대의 날짜) 게시 종료일(포함) · 필수
   /** 마일스톤 타임라인 날짜 — null = 표시 안 함. '' 은 "체크했는데 날짜 없음"이라 거부한다. */
   milestoneDate: string | null
 }

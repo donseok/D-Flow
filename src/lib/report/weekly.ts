@@ -137,7 +137,7 @@ export interface WeeklyMeetings {
 export const NO_ISSUE_TEXT = '특이 이슈 없음 — 계획대로 진행 중'
 
 export interface AnnouncementRow {
-  date: string               // 게시일 'YYYY-MM-DD' (KST)
+  date: string               // 게시일 'YYYY-MM-DD'(그 프로젝트 시간대의 날짜)
   title: string
 }
 export interface WeeklyAnnouncements {
