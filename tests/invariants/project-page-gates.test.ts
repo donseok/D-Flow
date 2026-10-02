@@ -176,7 +176,7 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(pages().map(rel)).toContain('src/app/(app)/p/[projectId]/settings/page.tsx')
   })
 
-  it('분석이 알려진 원천을 잡는다 — 팀 캐시·admin 로더·서버 컴포넌트 경유', () => {
+  it('분석이 알려진 원천(admin 로더)을 잡고, 세션 해석기로 옮긴 팀 원천은 잡지 않는다', () => {
     const at = (p: string) => pageReport(join(PAGES_ROOT, p)).symbols
     // SP4 B — 명단의 팀 후보는 요청 범위 원천(세션 해석기)이다
     expect(at('members/page.tsx')).not.toContain('teamsForProjectSync')

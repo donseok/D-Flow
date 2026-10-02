@@ -55,12 +55,11 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
     getHiddenProjectIds(),
   ])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지를 멈추지
-  // 않는다. DashboardView 는 service_role 팀 캐시로 팀별 진척을 그리므로 숨은 프로젝트에서는 그리기 전에 끊는다
-  // (뷰는 RLS 로 읽은 WBS 항목이 있을 때만 팀 캐시를 읽지만, 그 조건에 기대지 않는다). 스냅샷 기록도 걸지 않는다.
-  // 권한 조회 실패(degraded)는 레이아웃처럼 404 로 위장하지 않는다 — 그때 팀 캐시는 RLS 로 읽힌 항목이 있을 때만 쓰인다.
-  // WBS 가 비어도 회의·이슈·공지는 그린다 — 팀 캐시(teamsForProjectSync)는 WBS 가 있을 때만 읽는다(DashboardView).
+  // 않는다. 숨은 프로젝트에서는 뷰를 그리기 전에 끊고 스냅샷 기록도 걸지 않는다 — 존재 은닉·스냅샷 때문이다(뷰의 팀은
+  // 세션 해석기 projectTeams 라 service_role 에 닿지 않는다 — SP4 B). 권한 조회 실패(degraded)는 레이아웃처럼 404 로 위장하지 않는다.
+  // WBS 가 비어도 회의·이슈·공지는 그린다(팀은 WBS 가 있을 때만 읽는다 — DashboardView).
   // 이슈·공지·회의·진척 이력 조회 실패는 결과로 받아 뷰에 넘긴다 — 뷰가 '0건'·합성 추세선 대신 사유를 보인다.
-  // GG1 — 명단 밖 비공개도 숨긴다. 열화에 비공개면 명단을 모르므로 404 로 위장하지 않고 던진다(뷰·팀 캐시·스냅샷 전에)
+  // GG1 — 명단 밖 비공개도 숨긴다. 열화에 비공개면 명단을 모르므로 404 로 위장하지 않고 던진다(뷰·스냅샷 전에)
   if (degraded && hidden.has(projectId)) throw new Error('권한 조회가 실패해 비공개 프로젝트의 명단을 판정하지 못했습니다')
   if (!degraded && isHiddenProject(membership, projectId, hidden)) notFound()
   // 보험 스냅샷 — 응답 전송 후 실행. 페이지의 after() 안에서는 cookies() 호출이 불가하므로

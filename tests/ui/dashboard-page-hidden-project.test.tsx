@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
 import { makeActor, makeMemberActor } from '../fixtures/actor'
 
-// 대시보드는 DashboardView(서버 컴포넌트)가 service_role 팀 캐시(teamsForProjectSync)로 팀별 진척을 그린다.
+// 대시보드는 DashboardView(서버 컴포넌트)가 팀별 진척·WBS·회의·이슈를 그린다(팀은 세션 해석기 — SP4 B).
 // 레이아웃의 notFound 는 병렬 렌더되는 이 페이지를 멈추지 않으므로, 숨은 프로젝트에서는 페이지가 스스로 404 로 끊어
 // 뷰를 그리지 않는다(스냅샷 기록 after() 도 걸지 않는다) — members 와 같은 결함 계열(SP2 T15 리뷰).
 const mocks = vi.hoisted(() => ({

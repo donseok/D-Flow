@@ -40,9 +40,9 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
     canEdit ? listProjectInvites(projectId) : null,
   ])
   const rows = roster.ok ? roster.rows : []
-  // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용). 편집(명단 행·초대)에만 쓰므로
-  // 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
-  // 팀 후보 — 요청 범위 원천(세션 RLS, 레이아웃과 같은 요청 캐시). 읽기 실패는 던진다(오류 경계) — 빈 후보로 명단 편집을 열면 저장이 팀을 지운다
+  // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용) — 요청 범위 원천(세션 RLS, 레이아웃과 같은
+  // 요청 캐시). 편집(명단 행·초대)에만 쓰므로 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
+  // 읽기 실패는 던진다(오류 경계) — 빈 후보로 명단 편집을 열면 저장이 팀을 지운다
   const teamOptions = canEdit ? (await projectTeams(projectId)).filter(x => x.active).map(x => ({ id: x.id, code: x.code })) : []
 
   const active = rows.filter(x => x.active)
