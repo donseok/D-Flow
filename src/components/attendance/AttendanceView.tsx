@@ -24,6 +24,7 @@ import { compareKoreanName } from '@/lib/domain/nameSort'
 import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberPicker'
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
+import { RestDayMark } from '@/components/calendar/RestDayMark'
 
 type ViewKey = 'calendar' | 'list'
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -308,7 +309,7 @@ export function AttendanceView({
         <div className="card overflow-hidden p-0">
           <div className="grid grid-cols-7 gap-px bg-line">
             {columns.map(c => (
-              <div key={c.key} data-cal-head className={`py-2 text-center text-[11px] font-semibold text-ink-muted ${calendar.workingDays.has(c.iso) ? 'bg-surface-2' : 'bg-weekend'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
+              <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
             ))}
             {matrix.flat().map(cell => {
               const inMonth = cell.startsWith(ym)
@@ -329,6 +330,7 @@ export function AttendanceView({
                         {info.name}
                       </span>
                     )}
+                    {!info.working && <RestDayMark named={!!info.name} mark={t('att.restMark')} label={t('att.restDay')} />}
                   </div>
                   <div className="mt-1 space-y-1">
                     {dayRecs.slice(0, 3).map(r => renderRecChip(r))}

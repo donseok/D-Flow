@@ -42,6 +42,8 @@ export const attendanceEn: Record<keyof typeof attendanceKo, string> = {
   'att.err.selectDate': 'Select a date.',
   'att.err.saveFailed': 'Failed to save.',
   'att.err.deleteFailed': 'Failed to delete.',
+  'att.restMark': 'Off',
+  'att.restDay': 'Non-working day',
   'att.weekday.sun': 'Sun',
   'att.weekday.mon': 'Mon',
   'att.weekday.tue': 'Tue',

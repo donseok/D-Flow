@@ -8,6 +8,7 @@ import { calendarDayInfo, monthMatrix, weekdayColumns, type CalendarView } from 
 import { currentRuleDay } from '@/lib/domain/calendar'
 import { occurrencesByDate, sortOccurrences, MEETING_META } from '@/lib/domain/meetings'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
+import { RestDayMark } from '@/components/calendar/RestDayMark'
 
 function OccurrenceChip({ o, onSelect, t, projectDotClass }: {
   o: MeetingOccurrence
@@ -61,7 +62,7 @@ export function MeetingCalendar({
     <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 gap-px bg-line">
         {columns.map(c => (
-          <div key={c.key} data-cal-head className={`py-2 text-center text-[11px] font-semibold text-ink-muted ${calendar.workingDays.has(c.iso) ? 'bg-surface-2' : 'bg-weekend'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -83,6 +84,7 @@ export function MeetingCalendar({
                     {info.name}
                   </span>
                 )}
+                {!info.working && <RestDayMark named={!!info.name} mark={t('att.restMark')} label={t('att.restDay')} />}
               </div>
               <div className="mt-1 space-y-1">
                 {dayOcc.slice(0, 3).map(o => (

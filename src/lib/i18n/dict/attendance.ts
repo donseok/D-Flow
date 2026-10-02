@@ -41,6 +41,9 @@ export const attendanceKo = {
   'att.err.selectDate': '날짜를 선택하세요.',
   'att.err.saveFailed': '저장에 실패했습니다.',
   'att.err.deleteFailed': '삭제에 실패했습니다.',
+  // 달력 칸의 쉬는 날 보조 단서(색 말고 — A-5 리뷰 O4): 이름 없는 쉬는 날의 작은 표지·보조기기 문구
+  'att.restMark': '쉼',
+  'att.restDay': '쉬는 날',
   'att.weekday.sun': '일',
   'att.weekday.mon': '월',
   'att.weekday.tue': '화',

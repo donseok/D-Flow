@@ -6,6 +6,7 @@ import { currentRuleDay } from '@/lib/domain/calendar'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { teamStyle } from '@/components/wbs/shared'
+import { RestDayMark } from '@/components/calendar/RestDayMark'
 
 export function MinutesCalendar({
   year, month0, todayIso, minutes, onSelectDate, selectedDate, calendar,
@@ -38,7 +39,7 @@ export function MinutesCalendar({
     <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 gap-px bg-line">
         {columns.map(c => (
-          <div key={c.key} data-cal-head className={`py-2 text-center text-[11px] font-semibold text-ink-muted ${calendar.workingDays.has(c.iso) ? 'bg-surface-2' : 'bg-weekend'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -55,6 +56,7 @@ export function MinutesCalendar({
               <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : working ? 'text-ink' : 'text-ink-muted'}`}>
                 {dayNum}
               </span>
+              {!working && <RestDayMark named={false} mark={t('att.restMark')} label={t('att.restDay')} />}
               <div className="mt-1 flex flex-wrap gap-1">
                 {rows.slice(0, 4).map(mi => (
                   <span key={mi.id}

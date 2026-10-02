@@ -88,6 +88,30 @@ describe.each(Object.entries(CALENDARS))('%s 달력', (_name, make) => {
     }
   })
 
+  it('쉬는 날은 색 말고도 단서가 있다 — 이름 없는 쉬는 날은 작은 표지(att.restMark)와 sr-only 문구, 이름 있는 휴무는 sr-only 문구(A-5 리뷰 O4)', async () => {
+    await render(make(MONDAY_CAL, HOLIDAY_NAMES))
+    const sun = cell('2026-10-11')
+    expect(sun.querySelector('[data-rest-mark]')?.textContent).toContain('att.restMark')
+    expect(sun.querySelector('.sr-only')?.textContent).toBe('att.restDay')
+    expect(sun.querySelector('[data-rest-mark] [aria-hidden="true"]')?.textContent).toBe('att.restMark')
+    for (const d of ['2026-10-06', '2026-10-10', '2026-10-09']) {   // 근무일·근무 예외 토요일·금(오버레이 0)
+      expect(cell(d).textContent, d).not.toContain('att.restDay')
+      expect(cell(d).textContent, d).not.toContain('att.restMark')
+    }
+  })
+
+  it('머리 줄은 배경으로 비근무 요일을 가르지 않고(라이트 1.01:1 — 보이지 않는 장식) 글자 굵기·색으로 가른다(A-5 리뷰 O9)', async () => {
+    await render(make(MONDAY_CAL))
+    const heads = [...container.querySelectorAll<HTMLElement>('[data-cal-head]')]
+    for (const h of heads) expect(h.className).not.toContain('bg-weekend')
+    const sat = heads[5]
+    const tue = heads[1]
+    expect(sat.dataset.working).toBe('false')
+    expect(tue.dataset.working).toBe('true')
+    expect(sat.className).toContain('font-normal')
+    expect(tue.className).toContain('font-semibold')
+  })
+
   it('워크스페이스 달력(요일만, 일~목 근무) — 금·토가 비근무, 일요일은 근무', async () => {
     await render(make(WORKSPACE_CAL))
     expect(cell('2026-10-09').className).toContain('bg-weekend')       // 금
@@ -97,10 +121,12 @@ describe.each(Object.entries(CALENDARS))('%s 달력', (_name, make) => {
 })
 
 describe('휴무 이름 — 프로젝트 holidays.name 만(특일 사전 0)', () => {
-  it('근태·회의 달력은 휴무 이름을 칸에 보인다', async () => {
+  it('근태·회의 달력은 휴무 이름을 칸에 보인다 — 이름이 있으면 작은 표지는 없고 sr-only 문구만', async () => {
     for (const make of [CALENDARS.attendance, CALENDARS.meeting]) {
       await render(make(MONDAY_CAL, HOLIDAY_NAMES))
       expect(cell('2026-10-05').textContent).toContain('창립기념일')
+      expect(cell('2026-10-05').querySelector('[data-rest-mark]')).toBeNull()
+      expect(cell('2026-10-05').querySelector('.sr-only')?.textContent).toBe('att.restDay')
       expect(container.textContent).not.toMatch(/hol\./)
     }
   })
