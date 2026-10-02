@@ -173,6 +173,26 @@ describe('CalendarSettingsPanel — 검토 결과 전달(접근성, A-5 리뷰 O
   })
 })
 
+describe('CalendarSettingsPanel — 손상 키는 그 키만 막는다(A-5 리뷰 O7)', () => {
+  const brokenWeek = () => props({ weekStart: calendarFieldOf({ status: 'invalid', error: '주 시작 규칙이 올바르지 않습니다.' }) })
+  it('손상된 주 시작은 자동 저장 대상이 아니다 — 시간대·근무 요일만 바꿔 저장하면 그 키만 보낸다', async () => {
+    await render(brokenWeek())
+    expect(radio('sunday').checked).toBe(false)
+    expect(radio('monday').checked).toBe(false)
+    await click(container.querySelector<HTMLInputElement>('input[name="calendar-working-day"][value="6"]')!)
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.working_days': [1, 2, 3, 4, 5, 6] } }))
+    expect(m.previewWeekStartChange).not.toHaveBeenCalled()
+  })
+  it('손상된 주 시작은 요일을 골라야 저장 대상이 되고, 그때 미리보기를 받는다(서버 판정과 같은 길)', async () => {
+    await render(brokenWeek())
+    await click(radio('sunday'))
+    expect(m.previewWeekStartChange).toHaveBeenCalledWith(PID, 'sunday')
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.week_start': 'sunday' } }))
+  })
+})
+
 describe('CalendarSettingsPanel — 근무 요일·시간대', () => {
   it('근무 요일을 다 끄면 오류이고 저장하지 않는다', async () => {
     await render()

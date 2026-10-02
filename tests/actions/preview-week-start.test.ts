@@ -20,7 +20,16 @@ const MONDAY = [{ day: 'monday' as const, from: null }]
 const cfgWith = (weekStart = MONDAY) => ({
   projectId: PID, calendarError: null,
   calendar: calendarOf({ timezone: TZ, workingDays: [1, 2, 3, 4, 5], weekStart }),
+  keys: {
+    'calendar.timezone': { status: 'set', value: TZ }, 'calendar.week_start': { status: 'set', value: weekStart },
+    'calendar.working_days': { status: 'set', value: [1, 2, 3, 4, 5] },
+  },
 })
+/** 키 하나만 손상(해석기의 상태 넷 — 손상 키가 있으면 calendar 는 null, calendarError 는 그 키) */
+const brokenCfg = (key: string) => {
+  const base = cfgWith()
+  return { ...base, calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', key), keys: { ...base.keys, [key]: { status: 'invalid', error: 'x' } } }
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -79,11 +88,31 @@ describe('previewWeekStartChange — 가드·입력·실패 문구', () => {
     expect(m.getProjectConfig).not.toHaveBeenCalled()
   })
 
-  it('달력 키가 손상이면 그 키를 밝힌 고정 문구 — 기본값으로 계산하지 않는다', async () => {
-    m.getProjectConfig.mockResolvedValue({ projectId: PID, calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.week_start') })
+  it('시간대가 손상이면 그 키를 밝힌 고정 문구 — 오늘을 정할 수 없다(서버 toStored 도 거부)', async () => {
+    m.getProjectConfig.mockResolvedValue(brokenCfg('calendar.timezone'))
     const r = await previewWeekStartChange(PID, 'sunday')
     expect(r).toMatchObject({ ok: false })
-    expect(r.ok ? '' : r.error).toContain('calendar.week_start')
+    expect(r.ok ? '' : r.error).toContain('calendar.timezone')
+  })
+  it('근무 요일만 손상이면 주 시작 미리보기는 그대로 계산한다 — 서버 판정이 받는 변경을 막지 않는다(A-5 리뷰 O7)', async () => {
+    m.getProjectConfig.mockResolvedValue(brokenCfg('calendar.working_days'))
+    const r = await previewWeekStartChange(PID, 'sunday')
+    expect(r).toMatchObject({ ok: true, preview: { error: null } })
+  })
+  it('주 시작이 손상이고 주간보고가 있으면 미리보기 error(저장 막힘) — 서버 toStored 와 같은 문구', async () => {
+    m.getProjectConfig.mockResolvedValue(brokenCfg('calendar.week_start'))
+    const r = await previewWeekStartChange(PID, 'sunday')
+    expect(r).toMatchObject({ ok: true, preview: { effectiveFrom: null, keptDocs: 2 } })
+    const { weekStartToStored } = await import('@/lib/settings/defs/project')
+    const server = await weekStartToStored(undefined, 'sunday', { scope: 'project', projectId: PID, today: '2026-09-23', loadWeekKeys: async () => ['2026-09-14', '2026-09-21'] })
+    expect(server.ok).toBe(false)
+    expect(r.ok && r.preview.error).toBe(server.ok ? null : server.error)
+  })
+  it('주 시작이 손상이고 주간보고가 0건이면 요일 하나로 교체 — 미리보기도 막지 않는다(서버 판정과 같다)', async () => {
+    m.getProjectConfig.mockResolvedValue(brokenCfg('calendar.week_start'))
+    m.listWeekKeys.mockResolvedValue([])
+    const r = await previewWeekStartChange(PID, 'monday')
+    expect(r).toMatchObject({ ok: true, preview: { effectiveFrom: null, keptDocs: 0, blockingWeeks: [], error: null } })
   })
 
   it('조회 실패는 고정 문구(원문 0)', async () => {

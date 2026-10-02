@@ -5,8 +5,10 @@ import type { AdminClient } from '@/lib/supabase/adminFor'
 import { getProjectConfig } from './projectConfig'
 import { valueOf } from './registry'
 import { listWeekKeys } from './weekKeys'
-import { requireCalendar } from '@/lib/calendar/load'
-import { previewWeekStart, todayIn, type WeekStartDay, type WeekStartPreview } from '@/lib/domain/calendar'
+import { DEFAULT_WEEK_RULES, previewWeekStart, todayIn, type WeekStartDay, type WeekStartPreview, type WeekStartRule } from '@/lib/domain/calendar'
+import { corruptWeekStartError } from './defs/project'
+import { ConfigKeyError } from './errors'
+import type { KeyState } from './resolve'
 
 export interface ModuleAllowImpact {
   removed: { moduleId: ModuleId; projectCount: number }[]
@@ -69,11 +71,26 @@ export type { WeekStartPreview } from '@/lib/domain/calendar'
 /**
  * 주 시작 변경의 '변경 내용 검토'(스펙 D38) — 저장 때 edit.toStored(applyWeekStartChange)와 같은 함수(previewWeekStart 안)로 E·과도기 일수·
  * 기존 문서 수·막는 주차(D53 — 새 규칙에서 키가 바뀌는 문서)를 낸다. '오늘'은 그 프로젝트 tz(설정 액션의 편집 문맥과 같다 — 과제 5).
- * 문서 키는 끝까지 읽는다(listWeekKeys). 달력 키가 손상이면 requireCalendar 가 ConfigKeyError 를 던진다 — 기본값으로 계산하지 않는다.
+ * 문서 키는 끝까지 읽는다(listWeekKeys).
+ * 판정은 저장(edit.toStored = weekStartToStored)과 같은 입력만 본다(A-5 리뷰 O7): 오늘을 정하는 시간대와 저장된 주 시작 규칙.
+ * 근무 요일이 손상돼도 주 시작 변경은 서버가 받으므로 막지 않는다. 시간대가 손상이면 오늘을 정할 수 없어 그 키의 ConfigKeyError(서버도 거부).
+ * 주 시작이 손상이면 주간보고가 있을 때 저장과 같은 문구의 error(저장 막힘), 0건이면 요일 하나로 교체하는 미리보기.
  */
 export async function previewWeekStartImpact(admin: AdminClient, args: { projectId: string; day: WeekStartDay; now: Date }): Promise<WeekStartPreview> {
   const cfg = await getProjectConfig(args.projectId, { client: admin })
-  const cal = requireCalendar(cfg)
+  const tz = usable(cfg.keys['calendar.timezone'])
+  if (typeof tz !== 'string') throw new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone')
+  const today = todayIn(tz, args.now)
   const keys = await listWeekKeys(admin, args.projectId)
-  return previewWeekStart(cal.weekStart, args.day, todayIn(cal.timezone, args.now), keys)
+  const rules = usable(cfg.keys['calendar.week_start']) as WeekStartRule[] | undefined
+  if (rules === undefined) {
+    if (keys.length > 0) return { effectiveFrom: null, transitionDays: null, keptDocs: keys.length, blockingWeeks: [], error: corruptWeekStartError(keys.length), cancelled: null }
+    return previewWeekStart(DEFAULT_WEEK_RULES, args.day, today, keys)
+  }
+  return previewWeekStart(rules, args.day, today, keys)
+}
+
+/** 해석기 키 상태에서 쓸 수 있는 값(set·default) — 손상·필수 누락은 undefined */
+function usable(state: KeyState<unknown> | undefined): unknown {
+  return state && (state.status === 'set' || state.status === 'default') ? state.value : undefined
 }

@@ -21,7 +21,8 @@ import { WorkingDaysEditor } from './WorkingDaysEditor'
 
 export type CalendarScope = { projectId: string } | { workspaceId: string }
 type Key = 'calendar.timezone' | 'calendar.working_days' | 'calendar.week_start'
-type Draft = { timezone: string; workingDays: IsoDow[]; weekDay: WeekStartDay }
+/** weekDay '' = 저장된 주 시작이 손상돼 고른 요일이 없다(사용자가 골라야 저장 대상 — A-5 리뷰 O7) */
+type Draft = { timezone: string; workingDays: IsoDow[]; weekDay: WeekStartDay | '' }
 type Conflict = { revision: number; values: Partial<Record<string, unknown>>; invalidKeys: string[] }
 
 const LABEL: Readonly<Record<Key, string>> = { 'calendar.week_start': '주 시작', 'calendar.working_days': '근무 요일', 'calendar.timezone': '시간대' }
@@ -34,8 +35,8 @@ function sourceLabel(scope: CalendarScope, s: CalendarFieldState<unknown>): stri
 }
 /** 편집 요일 = 마지막 원소의 요일(예정 전환이 있으면 그 요일 — 직전 요일을 고르는 것이 곧 예정 취소다, A-5 리뷰 P2·O1),
  *  오늘 적용되는 요일, 아직 적용 전인 전환(마지막 원소의 from > 오늘). 저장 직후(baseline = 보낸 요일)와 새로고침 뒤가 같은 요일이다 */
-function weekState(rules: readonly WeekStartRule[] | null, todayIso: string | null): { day: WeekStartDay; current: WeekStartDay; scheduled: WeekStartRule | null } {
-  if (!rules || rules.length === 0) return { day: 'sunday', current: 'sunday', scheduled: null }
+function weekState(rules: readonly WeekStartRule[] | null, todayIso: string | null): { day: WeekStartDay | ''; current: WeekStartDay | null; scheduled: WeekStartRule | null } {
+  if (!rules || rules.length === 0) return { day: '', current: null, scheduled: null }   // 손상 — 기본 요일을 고른 것처럼 보이지 않는다
   const last = rules[rules.length - 1]
   if (!todayIso) return { day: last.day, current: last.day, scheduled: null }
   const scheduled = last.from !== null && last.from > todayIso ? last : null
@@ -80,7 +81,9 @@ export function CalendarSettingsPanel(props: {
     'calendar.timezone': props.timezone.source === 'invalid', 'calendar.working_days': props.workingDays.source === 'invalid',
     'calendar.week_start': props.weekStart.source === 'invalid',
   }
-  const changed = KEYS.filter(k => !same(draft, baseline, k) || (corrupted[k] && !repaired.includes(k)))
+  // 손상 키 자동 포함은 시간대·근무 요일만(복구 경로 — 그 값을 그대로 다시 저장해 고친다). 손상된 주 시작은 요일을 골랐을 때만 보낸다 —
+  // 주간보고가 있으면 서버가 거부해 다른 두 키 저장까지 막혔다(A-5 리뷰 O7 — 서버 판정과 같게 키 단위로)
+  const changed = KEYS.filter(k => !same(draft, baseline, k) || (k !== 'calendar.week_start' && corrupted[k] && !repaired.includes(k)))
   const tzCheck = parseTimezone(draft.timezone.trim())
   const wdCheck = parseWorkingDays(draft.workingDays)
   const weekChanged = draft.weekDay !== baseline.weekDay
@@ -99,7 +102,7 @@ export function CalendarSettingsPanel(props: {
   // 주 시작을 바꾸면 서버 미리보기 — 마지막 요청의 응답만 쓴다. 의존성은 문자열 id(페이지가 scope 를 리터럴로 넘겨도 재요청하지 않게)
   const projectId = 'projectId' in scope ? scope.projectId : null
   useEffect(() => {
-    if (!projectId || !weekChanged) { setReview(null); return }
+    if (!projectId || !weekChanged || !draft.weekDay) { setReview(null); return }
     const seq = ++reviewSeq.current
     setReview({ kind: 'loading' })
     previewWeekStartChange(projectId, draft.weekDay).then(
@@ -189,7 +192,7 @@ export function CalendarSettingsPanel(props: {
         {head('calendar.week_start', props.weekStart, isProject ? '다음 주부터 적용' : '새 프로젝트의 초기값')}
         {corruptNotice('calendar.week_start', props.weekStart, '#calendar-week-start')}
         <WeekStartEditor value={draft.weekDay} onChange={day => edit({ weekDay: day }, 'calendar.week_start')} disabled={inputsLocked}
-          scheduled={isProject ? scheduled : null} currentDay={currentDay} review={isProject && weekChanged ? review : null} />
+          scheduled={isProject ? scheduled : null} currentDay={currentDay ?? undefined} review={isProject && weekChanged ? review : null} />
         {fieldNotice('calendar.week_start')}
         {keyLine('calendar.week_start')}
       </section>

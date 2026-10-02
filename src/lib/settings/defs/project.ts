@@ -65,6 +65,11 @@ export function parseStageCredits(raw: unknown, policy: { step: number; min_gap:
  * 문서 수는 ctx.loadWeekKeys 가 준다(과제 5 의 설정 액션). 둘 중 하나라도 없으면 fail-closed. 판독 오류는 삼키지 않고 던진다(액션이 unavailable 로).
  * E 이후 문서가 있으면 거부하는 판정은 DB(settings_ref_check — D53)가 설정 행 FOR UPDATE 아래에서 한다.
  */
+/** 손상된 주 시작 + 주간보고가 있을 때의 거부 문구 — 저장(weekStartToStored)과 미리보기(previewWeekStartImpact)가 같은 문구(A-5 리뷰 O7) */
+export function corruptWeekStartError(docCount: number): string {
+  return `저장된 주 시작 규칙이 손상되어 바꿀 수 없습니다 — 주간보고 ${docCount}건의 주차가 그 규칙을 따릅니다. 저장 값을 먼저 복구하세요.`
+}
+
 export async function weekStartToStored(prev: WeekStartRule[] | undefined, day: WeekStartDay, ctx: EditCtx): Promise<Parsed<WeekStartRule[]>> {
   if (ctx.scope !== 'project') return fail('주 시작 규칙은 프로젝트 설정에서만 바꿀 수 있습니다.')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ctx.today)) return fail('프로젝트 시간대 설정을 읽지 못해 주 시작을 바꿀 수 없습니다. 시간대를 먼저 확인하세요.')
@@ -72,9 +77,7 @@ export async function weekStartToStored(prev: WeekStartRule[] | undefined, day: 
   const keys = await ctx.loadWeekKeys()
   // prev 없음 = 저장 값 손상(invalid — 이 키는 기본값이 있어 미설정이면 기본값이 실린다). 주간보고가 있으면 그 문서의 키를 정한 과거 규칙을
   // 기본값으로 덮을 수 없다(fail-closed — K2). 문서가 0건이면 지킬 과거가 없어 요일 하나로 교체한다.
-  if (prev === undefined && keys.length > 0) {
-    return fail(`저장된 주 시작 규칙이 손상되어 바꿀 수 없습니다 — 주간보고 ${keys.length}건의 주차가 그 규칙을 따릅니다. 저장 값을 먼저 복구하세요.`)
-  }
+  if (prev === undefined && keys.length > 0) return fail(corruptWeekStartError(keys.length))
   const r = applyWeekStartChange(prev ?? DEFAULT_WEEK_RULES, day, ctx.today, keys.length)
   return r.ok ? { ok: true, value: r.rules } : fail(r.error)
 }

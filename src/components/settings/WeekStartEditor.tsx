@@ -5,7 +5,8 @@ import { WEEK_START_DAYS, type WeekStartDay, type WeekStartRule } from '@/lib/do
 import { WEEK_DAY_LABEL, WeekStartReview, type WeekStartReviewState } from './WeekStartReview'
 
 export function WeekStartEditor({ value, onChange, disabled, scheduled = null, currentDay, review = null }: {
-  value: WeekStartDay
+  /** '' = 저장값 손상으로 고른 요일 없음 */
+  value: WeekStartDay | ''
   onChange: (day: WeekStartDay) => void
   disabled: boolean
   /** 아직 적용 전인 전환(마지막 원소의 from > 오늘) — 프로젝트만 */
@@ -35,7 +36,7 @@ export function WeekStartEditor({ value, onChange, disabled, scheduled = null, c
       {/* 검토 결과를 보조기기에 알린다 — 상태 요소가 바뀌어 끼워져도 읽히게 처음부터 있는 polite 래퍼 안에서 바꾼다(A-5 리뷰 O3).
           저장 버튼의 aria-describedby 가 이 id 를 가리킨다 */}
       <div id="calendar-week-start-review" aria-live="polite" aria-atomic="true">
-        {review && <WeekStartReview state={review} nextDay={value} />}
+        {review && value && <WeekStartReview state={review} nextDay={value} />}
       </div>
     </div>
   )
