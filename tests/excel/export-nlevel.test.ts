@@ -5,12 +5,12 @@ import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { teamOrderMap } from '@/lib/domain/teams'
-import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+// 팀은 합성 기본 구성의 code(PLN·DEV — tests/fixtures/synthetic/teams.ts), 이름은 합성 낱말 — SP4 다시 쓴 테스트 목록에 든다(A2 최종 리뷰 P3-2, FF6)
 
 // N단 프로젝트의 엑셀 export — 계층 열 수 = levelLabels.length.
 // 3라벨 호출의 바이트 불변(레거시 3단 회귀 기준)은 tests/excel/export.test.ts 가 잠근다.
 
-const OPTS = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
+const OPTS = { subActTeamOrder: teamOrderMap(['PLN', 'DEV']) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x',
   biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null,
@@ -20,13 +20,13 @@ const row = (over: Partial<WbsRow>): WbsRow => ({
 /** 6단 체인: Phase > System > Subsystem > WP > Activity > Task */
 const SRC6: WbsRow[] = [
   row({ id: 'p', code: '1', name: '구축' }),
-  row({ id: 's', parentId: 'p', code: '1.1', name: '조업' }),
+  row({ id: 's', parentId: 'p', code: '1.1', name: '운전' }),
   row({ id: 'b', parentId: 's', code: '1.1.1', name: '입측' }),
   row({ id: 'w', parentId: 'b', code: '1.1.1.1', name: '프로세스' }),
   row({ id: 'a', parentId: 'w', code: '1.1.1.1.1', name: '실적 관리' }),
   row({
     id: 't', parentId: 'a', code: '1.1.1.1.1.1', name: '입측 실적 수집',
-    actualPct: 50, owners: [{ team: 'PMO', kind: 'primary' }],
+    actualPct: 50, owners: [{ team: 'PLN', kind: 'primary' }],
   }),
 ]
 
@@ -34,13 +34,13 @@ const LABELS6 = ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task'] as co
 
 describe('buildWbsAoa — N단 라벨이면 계층 열이 라벨 수만큼 늘어난다', () => {
   const items = computeTree(SRC6, '2026-09-15', new Set(), OPTS)
-  const aoa = buildWbsAoa(items, 'MES', ['PMO', 'ERP'], LABELS6)
+  const aoa = buildWbsAoa(items, 'N단 프로젝트', ['PLN', 'DEV'], LABELS6)
 
   it('header3: Biz + 계층 6열 + 스페이서 2 + 팀 열', () => {
     const h3 = aoa[2] as string[]
     expect(h3.slice(0, 7)).toEqual(['Biz', ...LABELS6])
     expect(h3.slice(7, 9)).toEqual(['', ''])
-    expect(h3.slice(9, 11)).toEqual(['PMO', 'ERP'])
+    expect(h3.slice(9, 11)).toEqual(['PLN', 'DEV'])
     expect(h3[11]).toBe('산출물')
     expect(h3[h3.length - 1]).toBe('상태')
   })
@@ -53,7 +53,7 @@ describe('buildWbsAoa — N단 라벨이면 계층 열이 라벨 수만큼 늘�
 
   it('데이터행: depth d 의 이름이 열 1+d 에 실린다 — 접기 없음', () => {
     const data = aoa.slice(3)
-    expect(data.map((r, i) => r[1 + i])).toEqual(['구축', '조업', '입측', '프로세스', '실적 관리', '입측 실적 수집'])
+    expect(data.map((r, i) => r[1 + i])).toEqual(['구축', '운전', '입측', '프로세스', '실적 관리', '입측 실적 수집'])
   })
 
   it('라벨 수를 넘는 깊이는 마지막 계층 열로 접힌다 (기존 3열 접기 규칙의 일반화)', () => {
@@ -62,14 +62,14 @@ describe('buildWbsAoa — N단 라벨이면 계층 열이 라벨 수만큼 늘�
       row({ id: 'x1', parentId: 't', code: 'x1', name: '초과 깊이' }),
     ]
     const items7 = computeTree(deep, '2026-09-15', new Set(), OPTS)
-    const aoa7 = buildWbsAoa(items7, 'MES', ['PMO'], LABELS6)
+    const aoa7 = buildWbsAoa(items7, 'N단 프로젝트', ['PLN'], LABELS6)
     const last = aoa7[aoa7.length - 1]
     expect(last[6]).toBe('초과 깊이') // 열 1+min(6, 5)=6
   })
 
   it('팀 표기·산출물 열이 계층 확장만큼 뒤로 밀려도 값은 유지된다', () => {
     const taskRow = aoa[8] // header 3 + depth0..5 중 마지막
-    expect(taskRow[9]).toBe('●') // PMO primary — 팀 첫 열(9)
+    expect(taskRow[9]).toBe('●') // PLN primary — 팀 첫 열(9)
   })
 })
 

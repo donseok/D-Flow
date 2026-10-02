@@ -71,6 +71,7 @@ BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] LOCAL_DB_URL=… npm 
 - ⑤ 그려짐(W1): R 주간 '실험'·'데이터'·'운영', WBS '합성 1' / C 주간 '공정 관리'(S4 개명 뒤)·'안전'·'품질'·'자재', WBS '합성 1' — 모두 있음.
 - 판정 밖 기록(`adminShell`): 플랫폼 관리자 세션의 같은 네 화면에 'ERP' — 위치는 모두 셸의 `"teamCodes":["ERP","OPS","QA"]`(그 계정의 E2E 명단 대표 팀). F-1 의 원인 확정(`sp4-e2e.md` A2 절).
 - 계획의 기대 "대상 수 R·C 각각 ≥ 8" 과 다르다(R 7) — 앱이 낼 출력이 없는 대상 둘(빈 주차·아웃라인 펼침) 때문이다(`sp4-e2e.md` A2 비고 ②).
+- R 의 ② 시트 PPT 는 0장이다 — R 시트 PPT(영역 실험·데이터·운영)의 센티널 0 증거는 이 게이트에 없고 A1 E2E `weekly-outputs`(B 프로젝트) 하나뿐이다. R 에 내용 있는 주차를 만드는 S10 R 시트 PPT 는 SP5 의 일요일 키 합성(S4 일)에서 채운다(A2 최종 리뷰 완료 P3-4).
 
 ### 경계 행렬 SP4 행(W39)
 
@@ -78,6 +79,10 @@ BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] LOCAL_DB_URL=… npm 
 |---|---|---|---|
 | R | 주간 생성 `CONFIG_REQUIRED` ✓ · 문서 0 ✓ · 엑셀 표준 ✓ · 설정 화면 표기 ✓ | 이월 대기(CARRY_PENDING)에 그 영역 ✓ · 활성 목록에서 빠짐 ✓ · '옮기지 않음' 뒤 새 주차에 행 없음 ✓ · 과거 행 남음 ✓ | 영역 `area_id` 그대로 ✓ · 셀 행 있음 ✓ · 같은 셀 ✓ · 팀 id·code 그대로 ✓ |
 | C | ✓ · ✓ · ✓ · ✓ | ✓ · ✓ · ✓ · ✓ | ✓ · ✓ · ✓ · ✓ |
+
+스펙 §6.4 행의 "팀 개명 → 팀 id 불변·**봇 이름 매칭**" 가운데 이 게이트는 앞 절반(팀 id·영역·셀 불변)만 본다. 봇 이름 매칭(개명한 이름으로 그 팀을 찾는다 — W27)은
+단위 `tests/ai/chat-v2-router.test.ts` 로 갈음한다: 합성 러너는 챗 라우트를 부르지 않는다(`scripts/e2e-synthetic.mjs` 에 챗 호출 없음) — 봇의 end-to-end 는
+SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 과제 22 가 이 절반을 이미 뺐다).
 
 `src`·`supabase` 의 미커밋 변경은 실행 전후 0 이고 diff 지문이 같다(`git diff --quiet -- src supabase` 참).
 
