@@ -18,7 +18,7 @@ vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requi
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u-session' })) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
-vi.mock('@/lib/data/announcements', () => ({ getTopAnnouncements: vi.fn(async () => []) }))
+vi.mock('@/lib/data/announcements', () => ({}))
 vi.mock('@/lib/teams/master', () => ({ refreshTeams: vi.fn(async () => true) }))
 vi.mock('@/lib/ai/ingest', () => ({ ingestProject: vi.fn(async () => ({ count: 0 })) }))
 vi.mock('@/lib/ai/llm-override', () => ({ refreshLlmOverride }))

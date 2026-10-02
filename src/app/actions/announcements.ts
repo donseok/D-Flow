@@ -174,7 +174,7 @@ export async function markAnnouncementsSeen(
  * 셸 배지용 안읽음 공지 수(/api/shell — 프로젝트 내비 '공지'·벨) — 워터마크 이후 생성된 "오늘 게시중" 공지 count.
  * 조회 오류는 던진다 — 셸 라우트가 null(모름)로 바꾼다. 0 으로 위장하지 않는다(3원칙 ①, D34). 모듈 꺼짐은 오류가 아니라 0.
  * 게시기간 필터가 없으면 만료 공지가 영구 안읽음으로 남는다(일반 사용자는 만료 공지를
- * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). getTopAnnouncements와 같은 조건.
+ * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). 게시중 조건은 publish_from·publish_to 두 경계(옛 티커의 상위 공지 조회와 같았다).
  */
 export async function getUnreadAnnouncementCount(projectId: string): Promise<number> {
   const user = await getSession()
