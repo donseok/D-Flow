@@ -745,6 +745,14 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
     }
     for (let i = 1; i < cal.length; i++) expect(at(cal[i - 1])).toBeLessThan(at(cal[i]))
   })
+  it('달력 단계는 UI-2 의 경로·셸 계약을 쓴다 — 워크스페이스 화면은 /w/<slug>(wsPath), 공지 게시 판정은 셸 배지(?ws=&project=)', () => {
+    const block = src.slice(src.indexOf('const newCalProject'), at('calendar-workday'))
+    expect(block).toContain("admin.action(wsPath(wsA, 'projects'), 'createProject'")
+    expect(block).toContain("admin.http('GET', wsPath(wsA, 'usage'))")
+    expect(block).toContain('/api/shell?ws=${wsA}&project=${calL.id}')
+    expect(block).toContain('badge: unreadBadge === 1')
+    expect(block).not.toMatch(/http\('GET', '\/(projects|usage|meetings|minutes|portfolio|agents)'\)|action\('\/projects'|\?route=|headerAnnouncements/)
+  })
   it('달력 쓰기는 화면과 같은 서버 액션 — worker 는 그 액션을 쓰는 페이지', () => {
     for (const [name, file, worker] of [
       ['updateWorkspaceSettings', 'settings.ts', '/w/[slug]/settings/page'], ['previewWeekStartChange', 'settingsPreview.ts', '/p/[projectId]/settings/page'],
