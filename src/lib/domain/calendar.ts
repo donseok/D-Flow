@@ -28,8 +28,15 @@ export const DEFAULT_WORKING_DAYS: readonly IsoDow[] = [1, 2, 3, 4, 5]
 export const DEFAULT_WEEK_RULES: readonly WeekStartRule[] = [{ day: 'sunday', from: null }]
 /** 다음 근무일 탐색 상한(약 10년) — 긴 off 예외가 근무 요일을 다 덮어도 루프가 끝난다(개정 §4.2.3) */
 export const WORKDAY_SEARCH_LIMIT = 3660
-/** IANA 이름 꼴(영문 마디) — 참고용 패턴. parseTimezone 은 쓰지 않는다(K8 — EST5EDT·GMT0 같은 실재 이름을 받는다. 오프셋 꼴은 OFFSET_FORM 이 막는다) */
+/** IANA 이름 꼴(영문 마디) — 참고용 패턴. parseTimezone 은 쓰지 않는다(K8 — 오프셋 꼴은 OFFSET_FORM 이, '/' 없는 이름은 NO_SLASH_TIMEZONES 가 막는다) */
 export const IANA_NAME = /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/
+/**
+ * '/' 없는 시간대 이름의 닫힌 허용 목록(L1 — A-2 리뷰 P2). ICU 는 IST·NST·PST·CET 같은 옛 약칭·GMT0 를 받아 지역 tz 로 풀지만, PG 의
+ * `at time zone` 은 이름을 약어 표(pg_timezone_abbrevs)에서 먼저 찾아 다른 오프셋(IST = 이스라엘, NST = 뉴펀들랜드, PST = −08 고정 …)으로
+ * 읽는다 — 그런 이름은 TS·PG 가 다른 날짜를 낸다. 여기 이름만 두 쪽이 같은 뜻이다(tests/rls/calendar-parity 가 현지 시각으로 대조).
+ * SQL settings_ref_check 의 calendar.timezone 분기가 같은 목록을 쓴다.
+ */
+export const NO_SLASH_TIMEZONES: readonly string[] = ['UTC', 'GMT', 'EST5EDT', 'CST6CDT', 'MST7MDT', 'PST8PDT']
 /** 오프셋 꼴 사전 거부 — Intl 의 수용 여부(엔진 판에 따라 다르다)에 기대지 않는다. 유니코드 마이너스(U+2212)도 Intl 이 받으므로 같이 막는다 */
 const OFFSET_FORM = /^(?:[+\-\u2212]\d|(?:GMT|UTC|UT)\s*[+\-\u2212]\s*\d)/i
 
@@ -94,6 +101,9 @@ function offsetMs(tz: string, t: number): number {
  * - 자정에 시계가 앞으로 가는 날(America/Santiago 2026-09-06 — 00:00~00:59 없음)은 그 뒤 첫 유효 시각(01:00)이다 — 전날 23:00 이 아니다.
  * - 자정이 두 번인 날(Asia/Amman 2010-10-29 — 01:00 에 00:00 으로 돌아간다)은 첫 자정이다.
  * - 그 tz 에 없는 날짜(날짜선 이동 — Pacific/Apia 2011-12-30)는 다음 날의 시작이다(그날의 범위는 빈 구간).
+ * PG 와 다른 점(L5): PG `'<날짜>'::timestamp at time zone tz` 는 모호한 지역 시각에 전환 **뒤** 오프셋을 붙여 둘째 자정을 낸다
+ * (Amman 2010-10-29 — 여기 21:00Z, PG 22:00Z). 자정이 두 번인 날의 경계는 TS·SQL 이 1시간 다를 수 있다 — 지금 두 경계를 한 판정에
+ * 섞는 곳은 없다. SQL 쪽 자정 계산과 대조할 곳이 생기면 그때 한쪽(TS 의 첫 자정)으로 맞춘다(스펙 §9 — 받는 SP: SP5 B 마감).
  */
 export function zonedMidnightUtc(dateIso: string, tz: string): Date {
   const guess = utcOf(dateIso)
@@ -126,8 +136,8 @@ function tzSpellingOf(lower: string): string | undefined {
 }
 
 /**
- * calendar.timezone 의 검증·정규화(D54 — 판정 J2·K8 정정). 유효성 = ① 오프셋 꼴 사전 거부 ② `Intl.DateTimeFormat` 생성 성공(목록 포함이
- * 아니다 — 'UTC'·EST5EDT·GMT0 같은 실재 이름을 받는다. 이름 꼴 정규식은 쓰지 않는다). 저장 값 = `Intl.supportedValuesOf('timeZone')` 에서
+ * calendar.timezone 의 검증·정규화(D54 — 판정 J2·K8·L1 정정). 유효성 = ① 오프셋 꼴 사전 거부 ② '/' 없는 이름은 NO_SLASH_TIMEZONES 만
+ * (대소문자 무시 — 그 목록의 표기로 저장) ③ `Intl.DateTimeFormat` 생성 성공(목록 포함이 아니다. 이름 꼴 정규식은 쓰지 않는다). 저장 값 = `Intl.supportedValuesOf('timeZone')` 에서
  * 대소문자 무시로 같은 이름이 있으면 그 표기, 없으면 입력(trim) 그대로 — ICU 의 별칭 치환(Asia/Kolkata → Asia/Calcutta)은 저장하지 않는다
  * (사용자가 고른 이름을 옛 이름으로 바꾸지 않는다). 화면 입력은 목록 선택이라 표기가 정규다. 폴백 없음.
  */
@@ -136,6 +146,10 @@ export function parseTimezone(raw: unknown): CalendarResult<string> {
   const v = raw.trim()
   if (!v) return fail('시간대가 비어 있습니다.')
   if (OFFSET_FORM.test(v)) return fail(`오프셋 꼴 시간대는 쓸 수 없습니다 — 'Europe/Berlin' 같은 IANA 이름을 쓰세요: ${v}`)
+  const noSlash = v.includes('/') ? null : NO_SLASH_TIMEZONES.find((n) => n.toLowerCase() === v.toLowerCase())
+  if (noSlash === undefined) {
+    return fail(`'/' 없는 시간대 이름은 ${NO_SLASH_TIMEZONES.join('·')} 만 쓸 수 있습니다 — 'Europe/Berlin' 같은 IANA 이름을 쓰세요: ${v}`)
+  }
   let resolved: string
   try {
     resolved = new Intl.DateTimeFormat('en', { timeZone: v }).resolvedOptions().timeZone
@@ -144,7 +158,7 @@ export function parseTimezone(raw: unknown): CalendarResult<string> {
   }
   // 엔진이 사전 거부 밖의 오프셋 꼴을 받아 오프셋으로 풀었으면(판마다 다르다) 같이 막는다
   if (OFFSET_FORM.test(resolved)) return fail(`오프셋 꼴 시간대는 쓸 수 없습니다 — 'Europe/Berlin' 같은 IANA 이름을 쓰세요: ${v}`)
-  return { ok: true, value: tzSpellingOf(v.toLowerCase()) ?? v }
+  return { ok: true, value: noSlash ?? tzSpellingOf(v.toLowerCase()) ?? v }
 }
 
 /** calendar.working_days 의 검증 — 길이 ≥1, 1..7 정수, 유일. 저장은 오름차순 */

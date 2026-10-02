@@ -139,9 +139,14 @@ describe('parseTimezone — 생성 성공 + 정규화 + 이름 꼴(D54·R5). 폴
     expect(parseTimezone('asia/tokyo')).toEqual({ ok: true, value: 'Asia/Tokyo' })
     expect(parseTimezone('EUROPE/BERLIN')).toEqual({ ok: true, value: 'Europe/Berlin' })
   })
-  it.each(['EST5EDT', 'PST8PDT', 'CST6CDT', 'GMT0'])('숫자가 든 실재 IANA 이름 %s 을 받아 그대로 저장한다 — 이름 꼴 정규식을 쓰지 않는다(K8)', (tz) => {
+  it.each(['UTC', 'GMT', 'EST5EDT', 'CST6CDT', 'MST7MDT', 'PST8PDT'])("'/' 없는 이름은 닫힌 허용 목록만 — %s 은 받아 그 표기로 저장한다(L1)", (tz) => {
     expect(parseTimezone(tz)).toEqual({ ok: true, value: tz })
+    expect(parseTimezone(` ${tz.toLowerCase()} `)).toEqual({ ok: true, value: tz })
   })
+  it.each(['NST', 'IST', 'AST', 'PST', 'CET', 'EST', 'GMT0', 'BST', 'CST', 'EET', 'MET', 'WET', 'Japan', 'Zulu', 'UCT'])(
+    "'/' 없는 그 밖의 이름 %s 은 거부한다 — ICU 와 PG(약어 표 우선)가 다른 오프셋으로 읽는다(L1 — A-2 리뷰 P2)", (tz) => {
+      expect(parseTimezone(tz)).toMatchObject({ ok: false, error: expect.stringContaining("'/' 없는 시간대") })
+    })
   it.each(['−09:00', '−0900', 'GMT−1'])('유니코드 마이너스 오프셋 %j 도 거부한다(Intl 은 −09:00 을 받는다)', (tz) => {
     expect(parseTimezone(tz).ok).toBe(false)
   })
@@ -155,10 +160,6 @@ describe('parseTimezone — 생성 성공 + 정규화 + 이름 꼴(D54·R5). 폴
   })
   it.each(['Asia/Seol', 'Mars/Olympus', ''])('모르는 이름·빈 값 %j 은 거부한다', (tz) => {
     expect(parseTimezone(tz).ok).toBe(false)
-  })
-  it('EST 처럼 이름 꼴을 지나는 약칭은 받으면 이름 꼴 그대로다(PG 대조는 tests/rls/calendar-parity)', () => {
-    const r = parseTimezone('EST')
-    if (r.ok) expect(r.value).toMatch(IANA_NAME)
   })
   it('문자열이 아니면 거부한다', () => {
     for (const raw of [null, 9, ['UTC'], { tz: 'UTC' }]) expect(parseTimezone(raw).ok, JSON.stringify(raw)).toBe(false)
