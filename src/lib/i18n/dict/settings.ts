@@ -76,7 +76,7 @@ export const settingsKo = {
   'settings.llmDesc2':
     '배포 환경변수를 그대로 쓰거나, 등록해 둔 LLM 프로필로 재배포 없이 전환할 수 있습니다. 프로필 등록·연결 테스트는 관리 화면에서 합니다.',
   'settings.llmOpenAdmin': '관리 화면 열기',
-  // 일정 기준 및 공휴일
+  // 달력 절(기준일·주 시작·근무 요일·날짜 예외)
   'settings.calendarTitle': '달력 — 기준일·주 시작·근무 요일·날짜 예외',
   // 프로젝트 상태 관리
   'settings.statusPolicyTitle': '프로젝트 상태 관리',
@@ -88,7 +88,7 @@ export const settingsKo = {
   'settings.manualFixed': '수동 고정',
   'settings.autoTodayShort': '자동 · 오늘',
   'settings.baseDatePolicyDesc':
-    '위 ‘일정 기준 및 공휴일’에서 기준일을 고정하면 그 날짜로 상태를 계산하고, 비워두면 매일 오늘 기준으로 자동 갱신됩니다.',
+    '위 ‘달력’ 절에서 기준일을 고정하면 그 날짜로 상태를 계산하고, 비워두면 매일 오늘 기준으로 자동 갱신됩니다.',
   // ScheduleManager — 공정율 기준일
   'settings.baseDateHeading': '공정율 기준일 (Base date)',
   'settings.baseDateDesc1': '계획 공정율을 산정하는 기준 날짜입니다. 비워두면 ',
@@ -105,6 +105,7 @@ export const settingsKo = {
   'settings.holidaysHeading': '날짜 예외 · 휴무와 근무',
   'settings.holidaysDesc': '근무 요일 규칙과 다른 날만 적습니다 — 휴무는 쉬는 날, 근무는 비근무 요일에 일하는 날입니다. 계획 공정율·간트·의존성 일정이 이 날짜를 따릅니다.',
   'settings.holidaysNoOverlay': '국가 공휴일은 자동으로 들어가지 않습니다. 쉬는 공휴일은 여기에 휴무로 등록하세요.',
+  'settings.holidaysExportNote': 'WBS 엑셀 내보내기에는 휴무만 실리고 근무 예외는 빠집니다. 그 파일을 다시 가져와도 이 화면의 근무 예외는 그대로 남습니다.',
   'settings.holidaysTotalPrefix': '총 ',
   'settings.holidaysTotalSuffix': '일.',
   'settings.holidayRemoved': '날짜 예외를 지웠습니다.',

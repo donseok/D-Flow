@@ -90,7 +90,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.manualFixed': 'Manually fixed',
   'settings.autoTodayShort': 'Auto · today',
   'settings.baseDatePolicyDesc':
-    'Fix the base date in ‘Schedule baseline and holidays’ above to compute status as of that date; leave it empty to refresh daily as of today.',
+    'Fix the base date in the ‘Calendar’ section above to compute status as of that date; leave it empty to refresh daily as of today.',
   // ScheduleManager — base date
   'settings.baseDateHeading': 'Progress base date',
   'settings.baseDateDesc1': 'Reference date for computing planned progress. Leave it empty to use ',
@@ -107,6 +107,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.holidaysHeading': 'Date exceptions · off and work days',
   'settings.holidaysDesc': 'List only days that differ from the working-day rule — off days are rest days, work days are working days on a non-working weekday. Planned progress, the Gantt chart and dependency scheduling follow these dates.',
   'settings.holidaysNoOverlay': 'National holidays are not added automatically. Register the holidays you observe here as off days.',
+  'settings.holidaysExportNote': 'WBS Excel exports include off days only — work exceptions are left out. Re-importing that file keeps the work exceptions on this screen.',
   'settings.holidaysTotalPrefix': 'Total ',
   'settings.holidaysTotalSuffix': ' days.',
   'settings.holidayRemoved': 'Date exception removed.',

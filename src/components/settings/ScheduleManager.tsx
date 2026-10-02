@@ -27,13 +27,15 @@ export function ScheduleManager({
   const [holKind, setHolKind] = useState<'off' | 'work'>('off')
   const sorted = [...holidays].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
-  const run = (fn: () => Promise<unknown>, msg: string) => start(async () => {
+  // onOk 는 성공했을 때만 — 실패(결과형 ok:false·throw)면 입력을 지우지 않는다(A-5 리뷰 O9)
+  const run = (fn: () => Promise<unknown>, msg: string, onOk?: () => void) => start(async () => {
     try {
       const res = await fn()
       if (res && typeof res === 'object' && 'ok' in res && (res as { ok: boolean }).ok === false) {
         toast({ title: (res as { error?: string }).error ?? t('settings.actionFailed'), variant: 'error' })
         return
       }
+      onOk?.()
       router.refresh()
       toast({ title: msg, variant: 'success' })
     } catch {
@@ -72,6 +74,7 @@ export function ScheduleManager({
         <div className="text-sm font-semibold text-ink">{t('settings.holidaysHeading')}</div>
         <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysDesc')} {t('settings.holidaysTotalPrefix')}{sorted.length}{t('settings.holidaysTotalSuffix')}</p>
         <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysNoOverlay')}</p>
+        <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysExportNote')}</p>
 
         {sorted.length > 0 ? (
           <ul className="mt-3 flex flex-wrap gap-2" aria-label={t('settings.holidaysHeading')}>
@@ -101,7 +104,7 @@ export function ScheduleManager({
               </select>
             </label>
             <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
-            <button disabled={pending || !holDate} onClick={() => { run(() => addHoliday(projectId, holDate, holName, holKind), t('settings.holidayAdded')); setHolDate(''); setHolName('') }} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
+            <button disabled={pending || !holDate} onClick={() => run(() => addHoliday(projectId, holDate, holName, holKind), t('settings.holidayAdded'), () => { setHolDate(''); setHolName('') })} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
           </div>
         )}
       </div>
