@@ -48,10 +48,9 @@ describe('프로젝트 격리', () => {
 
 describe('정적 — 캐시와 개인 설정', () => {
   const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [] })
-  // 팀 원천도 요청 범위 캐시만 둔다(스펙 §4.2.1). A1 은 source.ts 하나 — 옛 팀 캐시 master.ts 는 B 까지 프로세스 전역 캐시라
-  // src/lib/teams/** 로 걸면 바로 빨갛다. B 가 master.ts 를 지운 뒤 walk('src/lib/teams') 로 넓힌다(재검토 B P3-7)
-  const TEAM_SOURCE = 'src/lib/teams/source.ts'
-  const files = [...walk('src/lib/settings'), ...walk('src/lib/modules'), TEAM_SOURCE]
+  // 팀 원천은 요청 범위 캐시만 둔다(스펙 §4.2.1) — SP4 B 가 옛 프로세스 캐시를 지워 src/lib/teams/** 전체에 건다(재검토 B P3-7)
+  const TEAM_FILES = walk('src/lib/teams')
+  const files = [...walk('src/lib/settings'), ...walk('src/lib/modules'), ...TEAM_FILES]
   it('모듈 수준 Map·Set 캐시와 globalThis 가 없다(요청 밖 캐시 금지 — 스펙 §3.5)', () => {
     for (const f of files) {
       const src = readFileSync(f, 'utf8')
@@ -68,7 +67,10 @@ describe('정적 — 캐시와 개인 설정', () => {
     }
   })
   it('팀 원천에는 모듈 수준 let·var 상태가 없다(요청 범위 cache 하나 — 스펙 §4.2.1)', () => {
-    const lines = readFileSync(TEAM_SOURCE, 'utf8').split('\n').filter((l) => /^(export )?(let|var) /.test(l))
-    expect(lines).toEqual([])
+    expect(TEAM_FILES.length).toBeGreaterThan(0)
+    for (const f of TEAM_FILES) {
+      const lines = readFileSync(f, 'utf8').split('\n').filter((l) => /^(export )?(let|var) /.test(l))
+      expect(lines, f).toEqual([])
+    }
   })
 })

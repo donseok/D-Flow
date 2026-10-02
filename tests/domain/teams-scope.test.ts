@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeTeamsForWorkspaces, resolveTeamsForProject, teamCodesVisibleTo, teamsVisibleTo, type Team } from '@/lib/domain/teams'
+import { resolveTeamsForProject, teamCodesVisibleTo, teamsVisibleTo, type Team } from '@/lib/domain/teams'
 import { teamViewOf, teamViewOfScope } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
@@ -36,24 +36,6 @@ describe('resolveTeamsForProject — 프로젝트 행 있으면 그것만, 없�
   })
   it('워크스페이스를 모르는 프로젝트(미존재)는 빈 목록 — 아무 워크스페이스의 공용 팀으로도 폴백하지 않는다', () => {
     expect(resolveTeamsForProject([...globals, team('B팀', null, true, 'ws-2')], 'p-none', null)).toEqual([])
-  })
-})
-
-describe('activeTeamsForWorkspaces — 앱 레이아웃이 내릴 공용 활성 팀', () => {
-  const all = [
-    team('PMO', null, true, 'ws-1', 1), team('휴면', null, false, 'ws-1'), team('ERP', null, true, 'ws-1', 0),
-    team('PMO', null, true, 'ws-2', 0), team('B팀', null, true, 'ws-2', 2),
-    team('C팀', null, true, 'ws-3'), team('개발', 'p1', true, 'ws-1'),
-  ]
-  it('주어진 워크스페이스들의 활성 공용 팀만 — 다른 워크스페이스·프로젝트 팀·비활성은 없다', () => {
-    expect(activeTeamsForWorkspaces(all, ['ws-1']).map(t => `${t.workspaceId}:${t.code}`)).toEqual(['ws-1:ERP', 'ws-1:PMO'])
-  })
-  it('여러 워크스페이스는 코드가 겹치면 첫 것만(탭 중복 금지), 정렬은 sortOrder·코드 순', () => {
-    expect(activeTeamsForWorkspaces(all, new Map([['ws-1', 'member'], ['ws-2', 'admin']]).keys()).map(t => t.code))
-      .toEqual(['ERP', 'PMO', 'B팀'])
-  })
-  it('워크스페이스가 없으면 빈 목록', () => {
-    expect(activeTeamsForWorkspaces(all, [])).toEqual([])
   })
 })
 

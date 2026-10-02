@@ -36,7 +36,6 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin, requireWorkspaceAdmin: m.requireWorkspaceAdmin, getActor: m.getActor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => m.client }))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: () => ({ admin: m.client }) }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams: vi.fn(async () => true) }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 
 import { checkTeamRename, firstNewCodeClash, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'

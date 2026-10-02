@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // next/cache · authz 가드 · admin 클라이언트 · 팀 마스터 캐시를 모킹해 게이트·검증·시드 폴더 생성만 본다.
 // 공용 팀은 워크스페이스 기준정보라 그 워크스페이스의 관리자가 손댄다(SP2 §4.1) — 가드 모킹은 순수 판정에 위임한다.
-const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin, getActor } = vi.hoisted(() => {
+const { db, createAdminClient, requireWorkspaceAdmin, getActor } = vi.hoisted(() => {
   const db = {
     teams: [] as Array<Record<string, unknown>>,
     folders: [] as Array<Record<string, unknown>>,
@@ -57,13 +57,11 @@ const { db, createAdminClient, refreshTeams, requireWorkspaceAdmin, getActor } =
     return q
   }
   const createAdminClient = vi.fn(() => ({ from: (n: 'teams' | 'minute_folders') => table(n) }))
-  const refreshTeams = vi.fn(async () => true)
-  return { db, createAdminClient, refreshTeams, requireWorkspaceAdmin: vi.fn(), getActor: vi.fn() }
+  return { db, createAdminClient, requireWorkspaceAdmin: vi.fn(), getActor: vi.fn() }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin, getActor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 
 import { addTeam, updateTeam, listTeamsAdmin } from '@/app/actions/teams'
 import { workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
@@ -93,7 +91,6 @@ describe('팀 관리 서버액션', () => {
     db.updated = []
     db.lookupError = null
     createAdminClient.mockClear()
-    refreshTeams.mockClear()
     requireWorkspaceAdmin.mockReset()
     getActor.mockReset()
   })
@@ -267,14 +264,13 @@ describe('팀 관리 서버액션', () => {
     expect(db.inserted.teams).toHaveLength(1)
   })
 
-  it('성공: teams insert(workspace_id·color 포함) + 시드 루트 폴더 insert + refreshTeams', async () => {
+  it('성공: teams insert(workspace_id·color 포함) + 시드 루트 폴더 insert', async () => {
     asAdmin()
     const r = await addTeam(WS, ' 신팀 ')
     expect(r.ok).toBe(true)
     expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', workspace_id: 'ws-1' })
     expect((db.inserted.teams[0] as { color: string }).color).toMatch(/^#[0-9a-fA-F]{6}$/)
     expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, created_by: null })
-    expect(refreshTeams).toHaveBeenCalled()
   })
 
   it('동명 시드 폴더가 이미 있으면 폴더 insert 는 생략하고 성공', async () => {
@@ -314,6 +310,5 @@ describe('팀 관리 서버액션', () => {
     const r = await updateTeam('t1', { active: false, progressVisible: true, sortOrder: 3 })
     expect(r.ok).toBe(true)
     expect(db.updated[0]).toMatchObject({ id: 't1', patch: { active: false, progress_visible: true, sort_order: 3 } })
-    expect(refreshTeams).toHaveBeenCalled()
   })
 })

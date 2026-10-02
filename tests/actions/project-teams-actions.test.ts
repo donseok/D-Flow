@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 프로젝트 팀은 이 프로젝트 관리자만 손댈 수 있다(0071 §4) — 전역 teams.ts(슈퍼유저 전용)와는
 // 가드가 다르고, 회의록 시드 폴더도 만들지 않는다(스펙 §5) — from('minute_folders') 호출 자체를
 // 차단해 그 계약을 무너뜨리는 회귀를 즉시 실패로 드러낸다.
-const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes } = vi.hoisted(() => {
+const { db, fromCalls, createAdminClient, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes } = vi.hoisted(() => {
   const db = {
     teams: [] as Array<Record<string, unknown>>,
     inserted: { teams: [] as Array<Record<string, unknown>> },
@@ -59,16 +59,14 @@ const { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, wor
       return table()
     },
   }))
-  const refreshTeams = vi.fn(async () => true)
   const requireProjectAdmin = vi.fn()
   const workspaceTeams = vi.fn()
   const referencedCommonTeamCodes = vi.fn(async (): Promise<Map<string, string>> => new Map())
-  return { db, fromCalls, createAdminClient, refreshTeams, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes }
+  return { db, fromCalls, createAdminClient, requireProjectAdmin, workspaceTeams, referencedCommonTeamCodes }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 // 공용 팀 복사의 원천(SP4 A2 — 요청 범위, service_role 로)
 vi.mock('@/lib/teams/source', () => ({ workspaceTeams }))
 // 이 프로젝트가 이미 쓰는 공용 팀 code(A2-1 리뷰 보안 P3 — 가져오기 Z4 와 같은 판정). service_role 판정 모듈이라 목으로 — teams 만 만지는 계약 밖
@@ -92,7 +90,6 @@ describe('프로젝트 팀 관리 서버액션', () => {
     db.updated = []
     fromCalls.length = 0
     createAdminClient.mockClear()
-    refreshTeams.mockClear()
     vi.mocked(revalidatePath).mockClear()
     requireProjectAdmin.mockReset()
     workspaceTeams.mockReset()
@@ -176,14 +173,13 @@ describe('프로젝트 팀 관리 서버액션', () => {
       err.mockRestore()
     })
 
-    it('성공: teams insert(project_id·workspace_id·color 포함) + refreshTeams, 시드 폴더는 절대 만들지 않는다', async () => {
+    it('성공: teams insert(project_id·workspace_id·color 포함), 시드 폴더는 절대 만들지 않는다', async () => {
       asAdmin()
       const r = await addProjectTeam('p1', ' 신팀 ')
       expect(r.ok).toBe(true)
       // workspace_id 는 projects 를 다시 조회하지 않고 g.actor.projectWorkspace(fixtures 의 WS='ws-1')에서 얻는다.
       expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', project_id: 'p1', workspace_id: 'ws-1' })
       expect(db.inserted.teams[0].color).toMatch(/^#[0-9a-fA-F]{6}$/)
-      expect(refreshTeams).toHaveBeenCalled()
       expect(fromCalls).not.toContain('minute_folders')
       expect(fromCalls).not.toContain('projects')
       // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
@@ -218,7 +214,6 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(await updateProjectTeam('p1', 'no-such-id', { active: false }))
         .toEqual({ ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' })
       expect(db.updated).toHaveLength(0)
-      expect(refreshTeams).not.toHaveBeenCalled()
     })
 
     it('성공: 이 프로젝트 소속 행만 스네이크케이스로 update', async () => {
@@ -227,7 +222,6 @@ describe('프로젝트 팀 관리 서버액션', () => {
       const r = await updateProjectTeam('p1', 't-mine', { active: false, progressVisible: true, sortOrder: 3 })
       expect(r.ok).toBe(true)
       expect(db.updated[0]).toMatchObject({ id: 't-mine', patch: { active: false, progress_visible: true, sort_order: 3 } })
-      expect(refreshTeams).toHaveBeenCalled()
       // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
       expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
       expect(revalidatePath).not.toHaveBeenCalledWith('/p/p1', 'layout')
@@ -254,7 +248,6 @@ describe('프로젝트 팀 관리 서버액션', () => {
       const r = await copyGlobalTeams('p1')
       expect(r).toEqual({ ok: false, error: '복사할 전역 팀이 없습니다.' })
       expect(db.inserted.teams).toHaveLength(0)
-      expect(refreshTeams).not.toHaveBeenCalled()
     })
 
     it('전역 팀이 전부 비활성이어도 거부(활성 0건과 동치)', async () => {
@@ -283,7 +276,6 @@ describe('프로젝트 팀 관리 서버액션', () => {
       ]))
       expect(db.inserted.teams.every(t => typeof t.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.color as string))).toBe(true)
       expect(db.inserted.teams.some(t => t.code === 'OLD')).toBe(false)
-      expect(refreshTeams).toHaveBeenCalled()
       // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀 — 다른 워크스페이스의 공용 팀을 끌어오지 않는다(SP2 §4.2).
       expect(workspaceTeams).toHaveBeenCalledWith('ws-1', { client: expect.objectContaining({ from: expect.any(Function) }) })
       // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다

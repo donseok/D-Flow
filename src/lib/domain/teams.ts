@@ -1,4 +1,4 @@
-// 팀 기준정보 순수 도메인 — I/O 없음. 런타임 원천은 요청 범위 lib/teams/source.ts(SP4 — 옛 캐시 lib/teams/master.ts 는 B 에서 지운다).
+// 팀 기준정보 순수 도메인 — I/O 없음. 런타임 원천은 요청 범위 lib/teams/source.ts 하나(SP4).
 import type { TeamView } from './authz'
 import type { TeamCode } from './types'
 import { EXCEL_HEADER_WORDS, isHeaderWordMatch } from '@/lib/excel/headerWords'
@@ -80,21 +80,6 @@ export function resolveTeamsForProject(all: readonly Team[], projectId: string, 
   if (own.length > 0) return own
   if (workspaceId === null) return []
   return all.filter(t => t.projectId === null && t.workspaceId === workspaceId)
-}
-
-/** 여러 워크스페이스의 활성 공용 팀(activeCodes 순, 코드가 겹치면 첫 것만) — 앱 레이아웃이 TeamsProvider 로 내리는 목록.
- *  워크스페이스마다 같은 코드가 있을 수 있다 — 겹친 채 내리면 탭·필터가 같은 팀을 두 번 그린다. */
-export function activeTeamsForWorkspaces(all: readonly Team[], workspaceIds: Iterable<string>): Team[] {
-  const ws = new Set(workspaceIds)
-  const seen = new Set<string>()
-  return [...all]
-    .filter(t => t.active && t.projectId === null && ws.has(t.workspaceId))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code, 'ko'))
-    .filter(t => {
-      if (seen.has(t.code)) return false
-      seen.add(t.code)
-      return true
-    })
 }
 
 /** 조회자가 볼 수 있는 활성 팀(activeCodes 순, 같은 code 는 첫 것만) — 회의록 담당 필터·검증(채팅·외부 GET·봇)과 봇 이름 매칭의 단일 판정.

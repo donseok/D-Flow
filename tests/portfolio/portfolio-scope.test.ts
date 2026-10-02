@@ -6,7 +6,7 @@ vi.mock('@/app/actions/project', () => ({ listProjectsWithState: h.listProjectsW
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 // 프로젝트별 로더 — WBS 계산·팀 캐시는 입력의 프로젝트 목록과 무관하다(단언은 프로젝트 id 목록 하나)
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: h.getComputedWbs }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock([]))
 
 import { getPortfolioInputs } from '@/lib/data/portfolio'
 import { makeSuperuser } from '../fixtures/actor'

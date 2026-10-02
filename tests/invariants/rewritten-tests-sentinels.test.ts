@@ -49,7 +49,7 @@ const REWRITTEN_TESTS = [
   'tests/helpers/team-scope-mock.ts',
   'tests/helpers/tool-team-source.ts',
   'tests/invariants/rewritten-tests-sentinels.test.ts',
-  'tests/invariants/teams-master-consumers.test.ts',
+  'tests/invariants/teams-source.test.ts',   // SP4 B 과제 5 — 지운 teams-master-consumers 의 후계(스펙 §6.1)
   'tests/invariants/weekly-row-columns.test.ts',
   'tests/minutes/team-scope.test.ts',
   'tests/negative/wbs-outputs.test.ts',

@@ -3,7 +3,6 @@
 // 공용 팀 기준정보 관리 — 추가/활성 토글/정렬/진척표시. 공용 팀은 그 워크스페이스의 전 프로젝트가 공유하는
 // 기준정보라 프로젝트 관리자가 아니라 그 워크스페이스의 관리자가 손댄다(SP2 §4.1 — SP1 까지는 슈퍼유저 전용).
 // 삭제는 없다: 비활성화(active=false)가 삭제다(데이터 보존, 사용자 결정 2026-07-24).
-// 쓰기 후 refreshTeams()로 인메모리 캐시를 즉시 갱신한다(LLM 설정 액션과 동일 관례).
 
 import { revalidatePath } from 'next/cache'
 import { getActor, requireWorkspaceAdmin } from '@/lib/authz'
@@ -14,7 +13,6 @@ import { adminFor } from '@/lib/supabase/adminFor'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
-import { refreshTeams } from '@/lib/teams/master'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { failWith } from '@/lib/errors/dbFail'
 
@@ -79,7 +77,6 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
     if (folder.error) seedError = folder.error
   }
 
-  await refreshTeams()
   revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   if (seedError) return { ok: false, error: failWith('teams.seedFolder', seedError, ERR_SEED_FOLDER) }
   return { ok: true }
@@ -134,7 +131,6 @@ export async function updateTeam(
     .eq('workspace_id', target.workspace_id).select('id')
   if (upd.error) return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
-  await refreshTeams()
   revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   return { ok: true }
 }

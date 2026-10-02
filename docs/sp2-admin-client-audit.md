@@ -80,7 +80,6 @@
 | src/lib/minutes/folders.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. 호출부가 넘긴 클라이언트로 teamCode·projectId·workspaceId 필터를 건다 |
 | src/lib/notify/emit.ts | 세션 가드 뒤 id 스코프 | 발행 액션(가드 뒤)이 넘긴 recipientMemberIds·UserIds 로만 수신자 행을 만든다 |
 | src/lib/supabase/adminFor.ts | adminFor 정의 | uuid 스코프(workspaceId 또는 projectId)를 검사한 뒤 createAdminClient 로 service_role 클라이언트를 돌려준다 |
-| src/lib/teams/master.ts | 플랫폼 | 전 워크스페이스 팀과 프로젝트→워크스페이스 매핑의 읽기 전용 캐시다. 워크스페이스·프로젝트·가시 범위 접근자만 있고(워크스페이스를 가리지 않는 전역 접근자는 Task 16b 가 지웠다 — tests/invariants/teams-scope.test.ts), 프로젝트 폴백은 그 프로젝트 워크스페이스의 공용 팀뿐이다 |
 <!-- audit:end -->
 
 표 밖의 service_role 설정 쓰기(SP3a): `src/app/actions/settings.ts` 는 requireProjectAdmin(pid)·requireWorkspaceAdmin(wid) 뒤
@@ -99,7 +98,7 @@
 | src/app/api/v1/agent/me/route.ts | enabled 인 `agent_projects` 를 전 워크스페이스에서 훑었다 | PAT 소유자 스냅샷 키로 in 을 건다. 응답 행도 그 키로 다시 거른다 |
 | src/app/actions/projectTeams.ts | `copyGlobalTeams` 가 `teamsSync()`(전 워크스페이스의 공용 팀)를 복사했다 | `teamsForWorkspaceSync(프로젝트의 wid)` 에서 복사한다. 팀 마스터를 한 번도 읽지 못했으면 오류를 낸다("복사할 팀 없음"으로 위장하지 않는다) |
 | src/app/actions/teams.ts | `listTeamsAdmin` 의 workspace_id 필터는 Task 11 이 넣었다 | admin 클라이언트 생성을 `adminFor({ workspaceId })` 로 바꿨다. addTeam·updateTeam 이 아직 직접 만들기 때문에 파일은 표에 남는다 |
-| src/lib/teams/master.ts | 캐시에 워크스페이스가 없었다(`Team` 에 `workspaceId` 가 없었다) | `workspace_id` 를 select 하고 `Team.workspaceId` 에 싣는다. `teamsForWorkspaceSync`·`activeTeamCodesForWorkspaceSync` 를 추가했다(한 번도 로드하지 못했으면 throw) |
+| src/lib/teams/master.ts | 캐시에 워크스페이스가 없었다(`Team` 에 `workspaceId` 가 없었다) | `workspace_id` 를 select 하고 `Team.workspaceId` 에 싣는다. `teamsForWorkspaceSync`·`activeTeamCodesForWorkspaceSync` 를 추가했다(한 번도 로드하지 못했으면 throw) — SP4 B 가 파일을 지웠다(요청 범위 원천 `src/lib/teams/source.ts`) |
 
 바꾸지 않은 것:
 - `api/v1/agent/watch`: 스펙이 짚은 누설은 `agent_watchers.workspace_id` 가 없다는 것이었고, 0006·Task 3 이 채웠다. 필터 없는 쿼리로는 7일 GC 하나가 남는데, 행 내용을 읽지 않는 전역 정리라서 그대로 둔다. 본문 project_id 의 멤버십 판정 누락은 별개 문제로 "남은 경계" 3 에 적었고 Task 13 이 닫았다.

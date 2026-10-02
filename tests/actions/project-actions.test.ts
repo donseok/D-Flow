@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // 프로젝트 관리 액션의 가드. createProject 는 tests/settings/create-project.test.ts 가 새 계약(RPC·결과 반환)으로 본다.
 // SP2: 비공개 전환 가드는 requireProjectAdmin(대상 프로젝트) — 판정은 순수 계층(isProjectAdmin)에 위임한다.
-const { db, createAdminClient, requireWorkspaceAdmin, requireProjectAdmin, refreshTeams } = vi.hoisted(() => {
+const { db, createAdminClient, requireWorkspaceAdmin, requireProjectAdmin } = vi.hoisted(() => {
   const db = {
     updatedProject: null as Record<string, unknown> | null,
   }
@@ -23,7 +23,6 @@ const { db, createAdminClient, requireWorkspaceAdmin, requireProjectAdmin, refre
   }))
   return {
     db, createAdminClient, requireWorkspaceAdmin: vi.fn(), requireProjectAdmin: vi.fn(),
-    refreshTeams: vi.fn(async () => true),
   }
 })
 
@@ -32,7 +31,6 @@ vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin, requireProjectAdmin }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams }))
 
 import { setProjectPrivacy } from '@/app/actions/project'
 import { workspaceAdminVerdict, isProjectAdmin, type Actor } from '@/lib/domain/authz'
@@ -54,7 +52,6 @@ function signedInAs(a: Actor) {
 beforeEach(() => {
   db.updatedProject = null
   createAdminClient.mockClear()
-  refreshTeams.mockClear()
   requireWorkspaceAdmin.mockReset()
   requireProjectAdmin.mockReset()
   signedInAs(WS_ADMIN)

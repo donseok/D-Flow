@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// teams/master 는 모듈 초기화에서 createAdminClient 를 부른다(실패하면 빈 목록으로 기동).
+// service_role 모듈 초기화 부작용 차단.
 // 이 스위트는 활성 팀 목록을 **인자로 주입**하므로 캐시를 건드리지 않는다 — 모킹은 소음 제거용.
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => ({})) }))
 

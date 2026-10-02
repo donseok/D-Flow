@@ -274,12 +274,12 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
   it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {
     const dir = mkdtempSync(join(tmpdir(), 'page-gates-'))
     try {
-      const master = relative(dir, join(CWD, 'src/lib/teams/master'))
+      const adminModule = relative(dir, join(CWD, 'src/lib/supabase/admin'))
       const write = (name: string, body: string) => { writeFileSync(join(dir, name), body); return join(dir, name) }
-      expect(reachesServiceRole(write('named.ts', `export { teamsForProjectSync } from '${master}'\n`))).toBe(true)
-      expect(reachesServiceRole(write('star.ts', `export * from '${master}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('named.ts', `export { createAdminClient } from '${adminModule}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('star.ts', `export * from '${adminModule}'\n`))).toBe(true)
       expect(reachesServiceRole(write('nested.ts', `export * from './named'\n`))).toBe(true)
-      expect(reachesServiceRole(write('types.ts', `export type { TeamCode } from '${master}'\nexport { type Team } from '${master}'\n`))).toBe(false)
+      expect(reachesServiceRole(write('types.ts', `export type { TeamCode } from '${adminModule}'\nexport { type Team } from '${adminModule}'\n`))).toBe(false)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

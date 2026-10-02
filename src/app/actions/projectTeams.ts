@@ -11,7 +11,6 @@ import { normalizeNewTeamCode, reservedTeamNames } from '@/lib/domain/teams'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { pickTeamColor } from '@/lib/domain/teamColor'
-import { refreshTeams } from '@/lib/teams/master'
 import { workspaceTeams } from '@/lib/teams/source'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
@@ -79,7 +78,6 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
     .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, project_id: projectId, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
   if (ins.error) return { ok: false, error: failWith('projectTeams.add', ins.error, ERR_TEAM_CREATE) }
 
-  await refreshTeams()
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
@@ -120,7 +118,6 @@ export async function updateProjectTeam(
   const upd = await admin.from('teams').update(row).eq('id', teamId).eq('project_id', projectId).select('id')
   if (upd.error) return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' }
-  await refreshTeams()
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
@@ -155,7 +152,6 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
     workspace_id: workspaceId, color: pickTeamColor(t.sortOrder),
   })))
   if (ins.error) return { ok: false, error: failWith('projectTeams.copy', ins.error, ERR_TEAM_COPY) }
-  await refreshTeams()
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
