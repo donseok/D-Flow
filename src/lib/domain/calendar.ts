@@ -172,3 +172,161 @@ export function isCalendarDate(raw: unknown): raw is string {
 }
 
 // ── 주(과제 3 이 이 아래에 더한다) ────────────────────────────────────────────────────────────────
+const DOW_OF: Readonly<Record<WeekStartDay, IsoDow>> = { sunday: 7, monday: 1 }
+
+/** 편집 입력 — 요일 하나(개정 §2.8.7: 클라이언트 patch 는 목록을 쓸 수 없다) */
+export function parseWeekStartDay(raw: unknown): CalendarResult<WeekStartDay> {
+  return raw === 'sunday' || raw === 'monday' ? { ok: true, value: raw } : fail('주 시작 요일은 sunday·monday 중 하나입니다.')
+}
+
+/** date 가 속한, day 요일로 시작하는 주의 첫날(전환을 보지 않는다) */
+export function startOfWeek(date: string, day: WeekStartDay): string {
+  return addDaysIso(date, -((isoDowOf(date) - DOW_OF[day] + 7) % 7))
+}
+
+/** 전환 from 의 직전 규칙(prevDay)의 마지막 주 키 = [from−10, from−4] 안의 prevDay 요일(창 7일이라 유일 — 개정 §4.2.4) */
+function transitionKey(prevDay: WeekStartDay, from: string): string {
+  return startOfWeek(addDaysIso(from, -4), prevDay)
+}
+
+/** 저장 형태 검증 — 첫 원소 from null, 이후 from 오름차순·그 날짜 요일 = day, 이웃 day 다름, 전환끼리 겹치지 않음 */
+export function parseWeekRules(raw: unknown): CalendarResult<WeekStartRule[]> {
+  if (!Array.isArray(raw) || raw.length === 0) return fail('주 시작 규칙은 하나 이상의 목록이어야 합니다.')
+  const out: WeekStartRule[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i] as unknown
+    if (typeof r !== 'object' || r === null || Array.isArray(r)) return fail(`${i + 1}번째 규칙이 객체가 아닙니다.`)
+    const o = r as Record<string, unknown>
+    if (Object.keys(o).some((k) => k !== 'day' && k !== 'from')) return fail(`${i + 1}번째 규칙에 모르는 필드가 있습니다.`)
+    const day = parseWeekStartDay(o.day)
+    if (!day.ok) return fail(`${i + 1}번째 규칙: ${day.error}`)
+    if (i === 0) {
+      if (o.from !== null) return fail('첫 규칙의 from 은 null 이어야 합니다.')
+      out.push({ day: day.value, from: null })
+      continue
+    }
+    const from = o.from
+    if (!isCalendarDate(from)) return fail(`${i + 1}번째 규칙의 from 이 날짜가 아닙니다.`)
+    if (isoDowOf(from) !== DOW_OF[day.value]) return fail(`${i + 1}번째 규칙의 from(${from}) 요일이 ${day.value} 가 아닙니다.`)
+    const prev = out[i - 1]
+    if (prev.day === day.value) return fail(`${i + 1}번째 규칙이 앞 규칙과 같은 요일입니다.`)
+    if (prev.from !== null && from <= prev.from) return fail('규칙의 from 은 오름차순이어야 합니다.')
+    if (prev.from !== null && transitionKey(prev.day, from) < prev.from) return fail(`${i + 1}번째 전환이 앞 전환(${prev.from})과 너무 가깝습니다.`)
+    out.push({ day: day.value, from })
+  }
+  return { ok: true, value: out }
+}
+
+/** 날짜 → 주 키(개정 §4.2.4 키 함수). 규칙이 먼저다(인터페이스 일람 — SQL week_key_from_rules 와 같은 순서) */
+export function weekKeyOf(rules: readonly WeekStartRule[], date: string): string {
+  for (let i = rules.length - 1; i >= 1; i--) {
+    const from = rules[i].from as string
+    if (date >= from) return startOfWeek(date, rules[i].day)
+    const kp = transitionKey(rules[i - 1].day, from)
+    if (date >= kp) return kp                                   // 과도기 주 [Kp, E)
+  }
+  return startOfWeek(date, rules[0].day)
+}
+
+/** 키 → 주 기간 [start, endExclusive). 과도기 키면 [Kp, E), 아니면 7일 */
+export function weekPeriodOf(rules: readonly WeekStartRule[], key: string): { start: string; endExclusive: string } {
+  for (let i = 1; i < rules.length; i++) {
+    const from = rules[i].from as string
+    if (key === transitionKey(rules[i - 1].day, from)) return { start: key, endExclusive: from }
+  }
+  return { start: key, endExclusive: addDaysIso(key, 7) }
+}
+
+/** 이웃 키(D35) — ±7일이 아니다(과도기 주는 6·8일) */
+export function prevWeekKey(rules: readonly WeekStartRule[], key: string): string {
+  return weekKeyOf(rules, addDaysIso(key, -1))
+}
+export function nextWeekKey(rules: readonly WeekStartRule[], key: string): string {
+  return weekPeriodOf(rules, key).endExclusive
+}
+
+/** 표시 요일(D4) — 기간 안 근무일(주 순서). 근무일이 0이면 기간 전체(5칸 고정 폐기) */
+export function weekDisplayDays(cal: Pick<WorkCalendar, 'workingDays' | 'offDates' | 'workDates' | 'weekStart'>, key: string): string[] {
+  const { start, endExclusive } = weekPeriodOf(cal.weekStart, key)
+  const all: string[] = []
+  for (let d = start; d < endExclusive; d = addDaysIso(d, 1)) all.push(d)
+  const working = all.filter((d) => isWorkingDay(d, cal))
+  return working.length ? working : all
+}
+
+/** 주차 라벨(개정 §4.2.5) — 기준일 = 키 + 3일의 연·월, 주차 = 1 + 같은 달에 기준일이 떨어지는 앞선 키 수. 서식 문자열은 report/week.ts(P4) */
+export function weekLabelOf(rules: readonly WeekStartRule[], key: string): { year: number; month: number; ordinal: number } {
+  const anchor = addDaysIso(key, 3)
+  const ym = anchor.slice(0, 7)
+  let ordinal = 1
+  for (let k = prevWeekKey(rules, key); addDaysIso(k, 3).slice(0, 7) === ym; k = prevWeekKey(rules, k)) ordinal++
+  return { year: Number(anchor.slice(0, 4)), month: Number(anchor.slice(5, 7)), ordinal }
+}
+
+/** 그 날짜에 적용되는 규칙의 요일(달력 첫 열·이슈 추이 — 과도기 키는 보지 않는다) */
+export function currentRuleDay(rules: readonly WeekStartRule[], date: string): WeekStartDay {
+  let day = rules[0].day
+  for (const r of rules) if (r.from !== null && r.from <= date) day = r.day
+  return day
+}
+
+const ERR_PAST_RULE = '저장된 주 시작 규칙이 손상되어 바꿀 수 없습니다 — 이미 적용된(과거) 규칙은 고칠 수 없습니다.'
+
+/** 과거 원소(from ≤ T 와 첫 원소)가 같은 자리에 그대로인가 — 정상 입력에서는 늘 참(도달 불가 방어, 계획 P7) */
+function pastRulesPreserved(prev: readonly WeekStartRule[], next: readonly WeekStartRule[], today: string): boolean {
+  return prev.every((r, i) => (r.from !== null && r.from > today) || (next[i]?.day === r.day && next[i]?.from === r.from))
+}
+
+/**
+ * 변경 연산(개정 §4.2.4 표) — 입력은 새 요일 하나, 목록은 서버가 만든다. T = 프로젝트 tz 의 오늘.
+ * 문서 0건 → 교체 / 마지막 전환이 아직 적용 전(from > T) → 그 원소 교체·삭제 / 그 밖 → 다음 주부터의 전환을 덧붙인다(E ≤ T 면 +7).
+ * E 이후 문서가 있으면 거부하는 판정은 DB(settings_ref_check — D53)다. 이 함수는 throw 하지 않는다(P7).
+ */
+export function applyWeekStartChange(rules: readonly WeekStartRule[], newDay: WeekStartDay, today: string, docCount: number)
+  : { ok: true; rules: WeekStartRule[] } | { ok: false; code: 'CALENDAR_PAST_RULE'; error: string } {
+  if (docCount === 0) return { ok: true, rules: [{ day: newDay, from: null }] }
+  const valid = parseWeekRules(rules)
+  if (!valid.ok) return { ok: false, code: 'CALENDAR_PAST_RULE', error: `${ERR_PAST_RULE} (${valid.error})` }
+  const cur = valid.value
+  const last = cur[cur.length - 1]
+  let next: WeekStartRule[]
+  if (last.from !== null && last.from > today) {
+    if (newDay === last.day) next = cur
+    else next = cur.slice(0, -1)                              // 직전 규칙의 요일로 되돌림 = 아직 적용 전 전환을 지운다(요일이 둘뿐)
+  } else if (newDay === last.day) {
+    next = cur                                                // 지금 규칙과 같은 요일 — 바꿀 것이 없다
+  } else {
+    const n0 = addDaysIso(weekKeyOf(cur, today), 7)
+    let e = startOfWeek(addDaysIso(n0, 3), newDay)            // [N0−3, N0+3] 안의 newDay 요일
+    if (e <= today) e = addDaysIso(e, 7)                      // 다음 주부터 보장
+    next = [...cur, { day: newDay, from: e }]
+  }
+  if (!pastRulesPreserved(cur, next, today)) return { ok: false, code: 'CALENDAR_PAST_RULE', error: ERR_PAST_RULE }
+  return { ok: true, rules: next.map((r) => ({ ...r })) }
+}
+
+export interface WeekStartPreview {
+  effectiveFrom: string | null                // 새로 생기는 전환일 E(교체·되돌림·같은 요일이면 null)
+  transitionDays: 6 | 8 | null                // 과도기 주 길이
+  keptDocs: number                            // 그대로 남는 기존 주간보고 수
+  blockingWeeks: string[]                     // 새 규칙에서 키가 바뀌는 문서 = 저장 거부 예정(최대 20 — D53 과 같은 정의)
+  error: string | null                        // 손상된 저장 규칙(CALENDAR_PAST_RULE)의 문구
+}
+
+/** 설정 화면 '변경 내용 검토'(D38) — applyWeekStartChange 와 같은 함수로 E·과도기·N건·거부 예정 문서를 낸다 */
+export function previewWeekStart(rules: readonly WeekStartRule[], newDay: WeekStartDay, today: string, docKeys: readonly string[]): WeekStartPreview {
+  const r = applyWeekStartChange(rules, newDay, today, docKeys.length)
+  if (!r.ok) return { effectiveFrom: null, transitionDays: null, keptDocs: docKeys.length, blockingWeeks: [], error: r.error }
+  const prevLast = rules[rules.length - 1]
+  const nextLast = r.rules[r.rules.length - 1]
+  const added = r.rules.length > 1 && nextLast.from !== null && (prevLast.from !== nextLast.from || prevLast.day !== nextLast.day)
+  const effectiveFrom = added ? nextLast.from : null
+  let transitionDays: 6 | 8 | null = null
+  if (effectiveFrom) {
+    const kp = transitionKey(r.rules[r.rules.length - 2].day, effectiveFrom)
+    const len = Math.round((Date.parse(`${effectiveFrom}T00:00:00Z`) - Date.parse(`${kp}T00:00:00Z`)) / 86_400_000)
+    transitionDays = len === 6 || len === 8 ? len : null
+  }
+  const blocking = [...docKeys].filter((d) => weekKeyOf(r.rules, d) !== d).sort()
+  return { effectiveFrom, transitionDays, keptDocs: docKeys.length - blocking.length, blockingWeeks: blocking.slice(0, 20), error: null }
+}
