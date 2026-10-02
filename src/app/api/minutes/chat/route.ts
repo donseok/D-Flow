@@ -49,6 +49,11 @@ export async function POST(req: NextRequest) {
       // 회의록 행의 워크스페이스로 minutes 관문(스펙 §4.2) — 볼 수 없는 행은 404, 조회 실패는 500(없는 회의록으로 위장하지 않는다)
       const s = await resolveScope('minutes', minuteId)
       if (!s.ok) return NextResponse.json({ error: s.error === ERR_MISSING ? '회의록을 찾을 수 없습니다.' : s.error }, { status: denyStatus(s.error) })
+      // 명단 밖 비공개 프로젝트의 회의록은 없는 회의록과 같은 404 — 본문을 답의 근거로 내보내지 않는다(FA1, 보관함 Q&A 와 같은 숨김).
+      // 모듈 판정 전에 본다(꺼짐 404 와 구별되지 않게). 판정 실패는 던져 아래 catch 의 500(fail-closed)
+      if (s.projectId && (await getHiddenProjectIds()).has(s.projectId)) {
+        return NextResponse.json({ error: '회의록을 찾을 수 없습니다.' }, { status: 404 })
+      }
       const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
       if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
       const stream = await streamDocAnswer({ minuteId, message, history })

@@ -8,8 +8,10 @@ const h = vi.hoisted(() => ({
   getMinuteDetail: vi.fn(), getMinuteLinkedIssues: vi.fn(async () => [{ id: 'i1' }]), getMinuteWikiImpact: vi.fn(async () => ({ topics: [] })),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }), viewerProps: vi.fn(), getMinuteVersionBody: vi.fn(async (): Promise<unknown> => null),
   getMinuteVersions: vi.fn(async () => ({ ok: true, rows: [] })),
+  getHiddenProjectIds: vi.fn(async (): Promise<ReadonlySet<string>> => new Set()),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
 vi.mock('@/lib/modules/gate', () => ({ moduleSetFor: h.moduleSetFor }))
 vi.mock('next/navigation', () => ({ notFound: h.notFound }))
@@ -42,6 +44,7 @@ beforeEach(() => {
   h.loadWorkspaceScope.mockResolvedValue({ ws: WA, actor: makeActor({ workspaceRoles: new Map([[WA.id, 'member']]) }), degraded: false, role: 'member' })
   h.getMinuteDetail.mockResolvedValue(detail(WA.id))
   h.moduleSetFor.mockResolvedValue(new Set(ALL))
+  h.getHiddenProjectIds.mockResolvedValue(new Set())
 })
 
 describe('/w/[slug]/minutes/[id]', () => {
@@ -102,5 +105,38 @@ describe('/w/[slug]/minutes/[id]', () => {
     h.getMinuteDetail.mockResolvedValue(detail(WA.id, null))
     await run()
     expect(h.moduleSetFor).toHaveBeenCalledWith({ workspaceId: WA.id })
+  })
+  // DD1(CC 재리뷰 P3-1) — 화면 숨김(FA1)의 상세 표면. 목록·검색·내보내기가 거르는 명단 밖 비공개 프로젝트 회의록을 id(북마크·알림·출처 링크)로도 열지 않는다
+  it('행의 프로젝트(minutes.project_id)가 명단 밖 비공개면 404 — 모듈 관문 바로 뒤, 본문·판·주석 로더 미호출', async () => {
+    h.getHiddenProjectIds.mockResolvedValue(new Set([PID]))
+    await expect(run()).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(h.requireModulePage).toHaveBeenCalledWith({ workspaceId: WA.id }, 'minutes')
+    expect(h.moduleSetFor).not.toHaveBeenCalled()
+    expect(h.getMinuteVersions).not.toHaveBeenCalled()
+    expect(h.getMinuteLinkedIssues).not.toHaveBeenCalled()
+    expect(h.viewerProps).not.toHaveBeenCalled()
+  })
+  it('비공개 판정 실패는 던진다(fail-closed — 범위 오류 경계) — 숨김을 모른 채 본문을 그리지 않는다', async () => {
+    h.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    await expect(run()).rejects.toThrow('hidden down')
+    expect(h.getMinuteVersions).not.toHaveBeenCalled()
+    expect(h.viewerProps).not.toHaveBeenCalled()
+  })
+  it('대조 — 다른 프로젝트가 숨었거나(명단 안) 프로젝트 없는 회의록이면 그대로 연다', async () => {
+    h.getHiddenProjectIds.mockResolvedValue(new Set(['00000000-0000-0000-7e57-000000001685']))
+    await run()
+    expect(h.viewerProps).toHaveBeenCalledTimes(1)
+    vi.clearAllMocks()
+    h.getHiddenProjectIds.mockResolvedValue(new Set([PID]))
+    h.getMinuteDetail.mockResolvedValue(detail(WA.id, null))
+    h.moduleSetFor.mockResolvedValue(new Set(ALL))
+    await run()
+    expect(h.viewerProps).toHaveBeenCalledTimes(1)
+  })
+  it('숨김 기준은 행 자신의 project_id(ownProjectId) — 회의 폴백 projectId 가 아니다', async () => {
+    const d = detail(WA.id)
+    h.getMinuteDetail.mockResolvedValue({ ...d, minute: { ...d.minute, projectId: '00000000-0000-0000-7e57-000000001686', ownProjectId: PID } })
+    h.getHiddenProjectIds.mockResolvedValue(new Set([PID]))
+    await expect(run()).rejects.toThrow('NEXT_NOT_FOUND')
   })
 })

@@ -244,6 +244,28 @@ describe('/api/minutes/chat — minutes 모듈 관문(과제 20)', () => {
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-a' }, 'minutes')
     expect(mocks.streamDocAnswer).toHaveBeenCalledWith(expect.objectContaining({ minuteId: 'm-1' }))
   })
+  // DD1(CC 재리뷰 P3-1) — 명단 밖 비공개 프로젝트의 회의록 본문을 문서 Q&A 근거로 내보내지 않는다(목록·보관함과 같은 숨김 — FA1)
+  it('문서 모드: 행의 프로젝트가 명단 밖 비공개면 모듈 판정 전에 404(없는 회의록과 같은 응답) — 답을 만들지 않는다', async () => {
+    mocks.resolveScope.mockResolvedValue({ ok: true, projectId: 'pa-priv', workspaceId: 'ws-a' })
+    const res = await POST(doc('m-priv'))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: '회의록을 찾을 수 없습니다.' })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.streamDocAnswer).not.toHaveBeenCalled()
+  })
+  it('문서 모드: 비공개 판정 실패는 500 — 숨김을 모른 채 본문을 근거로 쓰지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.resolveScope.mockResolvedValue({ ok: true, projectId: 'pa', workspaceId: 'ws-a' })
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    expect((await POST(doc('m-pa'))).status).toBe(500)
+    expect(mocks.streamDocAnswer).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('문서 모드 대조: 볼 수 있는 프로젝트의 회의록은 답한다', async () => {
+    mocks.resolveScope.mockResolvedValue({ ok: true, projectId: 'pa', workspaceId: 'ws-a' })
+    expect((await POST(doc('m-pa'))).status).toBe(200)
+    expect(mocks.streamDocAnswer).toHaveBeenCalledWith(expect.objectContaining({ minuteId: 'm-pa' }))
+  })
   it('문서 모드: 볼 수 없는 회의록은 모듈 판정 전에 404, 행 조회 실패는 500 — 없는 회의록으로 위장하지 않는다', async () => {
     mocks.resolveScope.mockResolvedValueOnce({ ok: false, error: ERR_MISSING })
     expect((await POST(doc('m-x'))).status).toBe(404)

@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster, getMyProjectIds: vi.fn(async () => []) }))
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+// 회의록 상세의 비공개 숨김(DD1) — 이 파일은 명단·첨부·판 실패 표시를 본다, 숨김은 tests/minutes/minute-detail-scope 가 본다
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: vi.fn(async () => new Set()) }))
 // 회의록 상세(/w/[slug]/minutes/[id])의 행위자는 슬러그 판정(loadWorkspaceScope)이 준다 — 같은 행위자 mock 을 싣는다
 vi.mock('@/lib/authz/workspaceScope', () => ({
   loadWorkspaceScope: vi.fn(async () => ({ ws: { id: (await import('../fixtures/actor')).WS, slug: 'acme', name: 'Acme' }, actor: await mocks.getActorForView(), degraded: false, role: 'member' })),

@@ -5,6 +5,7 @@ import {
 } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -42,6 +43,10 @@ export default async function MinuteDetailPage({
   // 다른 워크스페이스의 행은 이 주소로 열지 않는다(D6 — 옛 /minutes/<id> 스텁이 행의 워크스페이스로 보낸다)
   if (!head?.minute.workspaceId || head.minute.workspaceId !== scope.ws.id) notFound()
   await requireModulePage({ workspaceId: head.minute.workspaceId }, 'minutes')
+  // 명단 밖 비공개 프로젝트의 회의록은 id(북마크·알림·출처 링크)로도 열지 않는다 — 목록·검색·내보내기와 같은 화면 숨김(FA1).
+  // 기준은 행 자신의 project_id(목록의 거르기와 같다 — 회의 폴백 projectId 아님). 판정 실패는 던져 범위 오류 경계로(fail-closed).
+  // 모듈 관문 바로 뒤·본문/판/주석 로더 앞(페이지 관문 불변식 — 첫 데이터 await 는 관문, 꺼짐도 같은 404 라 존재가 갈리지 않는다)
+  if (head.minute.ownProjectId && (await getHiddenProjectIds()).has(head.minute.ownProjectId)) notFound()
   const sourceAnchor = parseMinuteSourceAnchor(query)
   const requestedVersionId = typeof query.version === 'string' ? query.version : null
   // P20 — 연결 이슈·위키 영향은 그 회의록의 프로젝트(없으면 워크스페이스)에서 모듈이 켜졌을 때만. 판정 실패는 core 만(= 숨김, 로그는 moduleSetFor)
