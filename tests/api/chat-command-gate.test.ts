@@ -1,7 +1,9 @@
 // /api/chat/command 의 chatbot 관문(과제 20) — 프로젝트 화면 전용 명령. 꺼지면 404 이고 WBS 를 읽지 않는다.
 import { NextRequest } from 'next/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-const m = vi.hoisted(() => ({ getSession: vi.fn(), getComputedWbs: vi.fn(), run: vi.fn(), getActor: vi.fn() }))
+const m = vi.hoisted(() => ({ getSession: vi.fn(), getComputedWbs: vi.fn(), run: vi.fn(), getActor: vi.fn(), listProjectsWithState: vi.fn() }))
+// 볼 수 있는 프로젝트 목록(RLS + 비공개 명단) — 명단 밖 비공개 프로젝트는 없다(U2b-5 리뷰 수정 CC6, legacyChatProjectGate)
+vi.mock('@/app/actions/project', () => ({ listProjectsWithState: m.listProjectsWithState }))
 vi.mock('@/lib/auth', () => ({ getSession: m.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: m.getComputedWbs }))
@@ -15,6 +17,7 @@ const post = (body: unknown) => new NextRequest('http://l/api/chat/command', { m
 beforeEach(() => {
   vi.clearAllMocks()
   m.getSession.mockResolvedValue({ id: 'u1' }); m.getComputedWbs.mockResolvedValue({ items: [] }); m.run.mockResolvedValue({ kind: 'noop' })
+  m.listProjectsWithState.mockResolvedValue({ projects: [{ id: 'p1' }], degraded: false })
 })
 // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
@@ -51,5 +54,16 @@ describe('/api/chat/command — chatbot 관문', () => {
     expect(requireModule).not.toHaveBeenCalled()
     expect(m.getComputedWbs).not.toHaveBeenCalled(); expect(m.run).not.toHaveBeenCalled()
     expect((await POST(post({ projectId: 'p1', workspaceId: 'ws-a', message: '실적 80' }))).status).toBe(200)
+  })
+  it('명단 밖 비공개 프로젝트(볼 수 없는 프로젝트)는 404 — 그 작업 이름이 후보로 나가지 않는다, 관문·WBS 없음(CC6)', async () => {
+    const res = await POST(post({ projectId: 'p-priv', message: '실적 80' }))
+    expect(res.status).toBe(404)
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(m.getComputedWbs).not.toHaveBeenCalled(); expect(m.run).not.toHaveBeenCalled()
+  })
+  it('프로젝트 목록을 못 읽었으면 500 — 없는 프로젝트로 위장하지 않고 WBS 를 읽지 않는다(CC6)', async () => {
+    m.listProjectsWithState.mockResolvedValue({ projects: [], degraded: true })
+    expect((await POST(post({ projectId: 'p1', message: '실적 80' }))).status).toBe(500)
+    expect(m.getComputedWbs).not.toHaveBeenCalled()
   })
 })

@@ -160,7 +160,10 @@ describe('POST /api/chat/v2/stream composition', () => {
     expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
   })
 
-  it('rejects an out-of-scope selected global meeting project before routing', async () => {
+  // U2b-5 리뷰 수정 CC6 — selectedProjectId 도 관문의 프로젝트 입력이다(스코프 검증과 같은 우선순위). 함께 실은 워크스페이스와 다른(또는 볼 수 없는)
+  // 프로젝트면 관문에서 404 SCOPE_NOT_FOUND — "프로젝트와 다른 워크스페이스는 404" 불변식이 이 힌트로 우회되지 않는다. 전에는 관문이 워크스페이스로
+  // 통과하고 스코프 검증의 403 에서 멈췄다(누설은 아니나 조합 판정이 빠졌다)
+  it('rejects an out-of-scope selected global meeting project at the scope gate — 404, before module gate and routing', async () => {
     const response = await POST(request({
       projectId: null, message: '그 회의 상세', history: [],
       pageContext: {
@@ -169,8 +172,21 @@ describe('POST /api/chat/v2/stream composition', () => {
         selectedProjectId: 'p2', timezone: 'Asia/Seoul',
       },
     }))
-    expect(response.status).toBe(403)
-    expect(await response.json()).toMatchObject({ code: 'PROJECT_ACCESS_DENIED' })
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ code: 'SCOPE_NOT_FOUND' })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(router.routeChatRequest).not.toHaveBeenCalled()
+  })
+  it('대조 — 같은 워크스페이스의 선택 프로젝트는 그 프로젝트로 관문을 판정한다', async () => {
+    await POST(request({
+      projectId: null, message: '그 회의 상세', history: [],
+      pageContext: {
+        contextVersion: 1, pathname: '/w/acme/meetings', domain: 'meetings', projectId: null, workspaceId: 'ws-1',
+        selectedEntity: { type: 'meeting', id: 'm1' },
+        selectedProjectId: 'p1', timezone: 'Asia/Seoul',
+      },
+    }))
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'chatbot')
   })
 
   it('팀 원천 실패면 빈 목록으로 폴백하지 않고 503 TEAMS_UNAVAILABLE 로 닫는다 — 스트림 없음', async () => {

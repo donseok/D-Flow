@@ -27,6 +27,9 @@ const ARCHIVE_SYSTEM = `너는 ${BRAND.productName} 의 회의록 보관함 어�
 const DEGRADED_NOTICE = '⚠ AI 응답이 잠시 원활하지 않아 검색 결과만 알려드려요. 잠시 후 다시 물어보세요.\n\n'
 
 const trimHistory = (h: ChatMessage[]) => h.slice(-8)
+/** 보관함 벡터 근거 — 거른 뒤 남기는 개수와, 거르기 전에 받는 개수(범위 밖이 상위를 차지해도 근거가 0 이 되지 않게) */
+const ARCHIVE_VECTOR_KEEP = 8
+const ARCHIVE_VECTOR_FETCH = 24
 
 interface MinuteMatch {
   minuteId: string; content: string; minuteDate: string; teamCode: string; title: string; similarity: number
@@ -125,7 +128,8 @@ export async function streamArchiveAnswer(input: {
     const vecs = await embedTexts([input.message], 'RETRIEVAL_QUERY')
     if (vecs?.[0]?.length) {
       const { data, error } = await sb.rpc('match_minute_documents', {
-        query_embedding: vecs[0], match_count: 8,
+        // RPC 에 워크스페이스 인자가 없어(마이그레이션 — 이월) 다른 워크스페이스·숨김 회의록이 상위를 차지할 수 있다 — 넉넉히 받아 거른 뒤 자른다(CC6)
+        query_embedding: vecs[0], match_count: ARCHIVE_VECTOR_FETCH,
         p_team: input.filters.team ?? null,
         p_date_from: input.filters.from ?? null,
         p_date_to: input.filters.to ?? null,
@@ -147,7 +151,7 @@ export async function streamArchiveAnswer(input: {
         if (own.error) console.error('[minutes] 보관함 검색 워크스페이스 확인 실패 — 벡터 결과를 버린다:', own.error.message)
         const keep = new Set(own.error ? [] : ((own.data ?? []) as { id: string; project_id: unknown }[])
           .filter(r => visible(r.project_id)).map(r => r.id))
-        matches = found.filter(m => keep.has(m.minuteId))
+        matches = found.filter(m => keep.has(m.minuteId)).slice(0, ARCHIVE_VECTOR_KEEP)
       }
     }
   }

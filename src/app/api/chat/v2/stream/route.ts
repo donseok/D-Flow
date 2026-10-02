@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
 import { ChatToolGateUnavailableError, gateChatTools } from '@/lib/ai/chat/tool-modules'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
-import { validateChatProjectScope } from '@/lib/ai/chat/access-scope'
+import { chatProjectHint, validateChatProjectScope } from '@/lib/ai/chat/access-scope'
 import { createChatNdjsonStream, orchestrateChatV2 } from '@/lib/ai/chat/orchestrator'
 import {
   planWithConfiguredLlm,
@@ -65,8 +65,9 @@ export async function POST(req: NextRequest) {
   // 404 MODULE_DISABLED 가 된다(은닉 쪽 — 볼 수 없는 프로젝트의 설정은 0행이라 닫힌다). 과제 28 보고에 적는다.
   // 프로젝트 없는 질문은 요청의 워크스페이스(화면 문맥 우선 — 셸 범위, 소속 확인, D26)로, 둘 다 없으면 400 WORKSPACE_REQUIRED(추측하지 않는다).
   // 비소속·형식 밖·프로젝트와 다른 워크스페이스는 404 SCOPE_NOT_FOUND, 권한 조회 실패는 503.
+  // 프로젝트 입력은 스코프 검증과 같은 우선순위(선택 프로젝트 포함 — chatProjectHint, CC6)
   const mod = await requireScopedSessionModule({
-    projectId: request.pageContext?.projectId ?? request.projectId,
+    projectId: chatProjectHint(request),
     workspaceId: request.pageContext?.workspaceId ?? request.workspaceId,
   }, 'chatbot')
   if (!mod.ok) return jsonError(mod.error, mod.status, mod.error === ERR_MODULE_DISABLED ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')

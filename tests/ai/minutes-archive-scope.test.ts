@@ -103,4 +103,13 @@ describe('streamArchiveAnswer — 명단 밖 비공개 프로젝트의 회의록
     m.createServerClient.mockResolvedValue(fake.client)
     await expect(streamArchiveAnswer({ workspaceId: W, message: '결정 단어가 들어간 회의록', history: [], filters: {} })).rejects.toThrow()
   })
+  it('벡터는 넉넉히(24) 받아 거른 뒤 8 개로 자른다 — 범위 밖이 상위를 차지해도 근거가 0 이 되지 않는다(CC6)', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ minute_id: `m-${i}`, content: `결정 ${i}`, minute_date: '2026-09-01', team_code: 'PMO', title: `회의 ${i}`, similarity: 0.9 }))
+    const fake = client({ ownIds: many.map((r) => r.minute_id), vector: many })
+    m.createServerClient.mockResolvedValue(fake.client)
+    const out = await readAll(await streamArchiveAnswer({ workspaceId: W, message: '결정 사항 알려줘', history: [], filters: {} }))
+    expect(fake.client.rpc).toHaveBeenCalledWith('match_minute_documents', expect.objectContaining({ match_count: 24 }))
+    expect(out).toContain('회의 7')
+    expect(out).not.toContain('회의 8')
+  })
 })
