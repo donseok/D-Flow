@@ -198,7 +198,15 @@ export function MinutesExplorer({
     // 스코프를 옮기면 고른 것도 버린다 — 화면에서 사라진 선택을 들고 다니면 다음 실행이
     // 보이지 않는 건을 건드린다. 모드는 유지한다(폴더를 옮겨 가며 정리하는 동선이라).
     setSelected(new Set())
-    if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0
+    const r = resultsScrollRef.current
+    if (r) {
+      r.scrollTop = 0
+      // 문서형 화면(main 하나가 스크롤 — D19)에서는 위가 효과가 없다. 결과 머리가 필터 바 위로 지나가 있으면 결과로 스크롤한다
+      // (scroll-mt 가 필터 바 아래에 맞춘다, BB2)
+      const main = r.closest('main')
+      const mt = parseFloat(getComputedStyle(r).scrollMarginTop) || 0
+      if (main && r.getBoundingClientRect().top < main.getBoundingClientRect().top + mt) r.scrollIntoView({ block: 'start' })
+    }
     onFolderSelect?.(next.kind === 'folder' ? next.id : null)
   }
   function toggleExpand(id: string) {
@@ -633,7 +641,8 @@ export function MinutesExplorer({
     onSelectToggle: () => toggleSelect(l.id),
   })
 
-  // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다
+  // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다.
+  // 폴더 트리(nav)는 lg 에서 고정 — 문서형 main 스크롤에서 목록과 함께 사라지지 않게 필터 바(--minutes-bar-h) 아래에 붙고, 결과보다 길면 안에서 스크롤(BB2)
   return (
     <div
       data-minutes-explorer
@@ -641,7 +650,7 @@ export function MinutesExplorer({
     >
       <nav
         data-minutes-navigation
-        className="card hidden w-[250px] shrink-0 p-2 lg:block lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain"
+        className="card hidden w-[250px] shrink-0 p-2 lg:block lg:sticky lg:top-[calc(var(--frame-sticky-top)+var(--minutes-bar-h,0px))] lg:self-start lg:max-h-[calc(100dvh-3rem-var(--frame-sticky-top)-var(--minutes-bar-h,0px)-1rem)] lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain"
       >
         {rail()}
       </nav>
@@ -659,7 +668,7 @@ export function MinutesExplorer({
       <section
         ref={resultsScrollRef}
         data-minutes-results-scroll-region
-        className="min-w-0 flex-1 lg:-mr-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pb-1 lg:pr-1"
+        className="min-w-0 flex-1 scroll-mt-[calc(var(--frame-sticky-top)+var(--minutes-bar-h,0px)+0.5rem)] lg:-mr-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pb-1 lg:pr-1"
       >
         <div data-minutes-content-body className="space-y-4">
           {/* 선택 액션바 — 선택 모드일 때만. 평소에는 결과 위에 아무 것도 두지 않는다(진입은 카드 '...').

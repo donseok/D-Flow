@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
@@ -72,6 +72,19 @@ export function MinutesView({
   const { t, locale } = useLocale()
   const { toast } = useToast()
   const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 상세
+  // 고정 필터 바의 테두리 상자 높이 → 루트의 --minutes-bar-h(탐색기 폴더 트리의 고정 위치·결과 scroll-mt, BB2). PageFrame 의 --frame-sticky-top 과 같은 꼴
+  const viewRef = useRef<HTMLDivElement>(null)
+  const filterBarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const view = viewRef.current, bar = filterBarRef.current
+    if (!view || !bar || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => {
+      const h = e.borderBoxSize?.[0]?.blockSize ?? (e.target as HTMLElement).getBoundingClientRect().height
+      view.style.setProperty('--minutes-bar-h', `${Math.ceil(h)}px`)
+    })
+    ro.observe(bar)
+    return () => { ro.disconnect(); view.style.setProperty('--minutes-bar-h', '0px') }
+  }, [])
   const teamCodes = useTeamCodes()
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
@@ -271,13 +284,15 @@ export function MinutesView({
 
   return (
     <div
+      ref={viewRef}
       data-minutes-view
+      style={{ '--minutes-bar-h': '0px' } as CSSProperties}
       className={isTreeExplorer
         ? 'space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0'
         : 'space-y-4'}
     >
-      {/* 필터 바 (스크롤 시 상단 고정) */}
-      <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+      {/* 필터 바 (스크롤 시 상단 고정) — 자기 높이를 --minutes-bar-h 로 내려 탐색기의 폴더 트리가 그 아래에 붙는다(BB2) */}
+      <div ref={filterBarRef} className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<TeamKey>
             tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
