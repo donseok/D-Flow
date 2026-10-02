@@ -6,6 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { collectLeaves } from '@/components/wbs/shared'
 import type { ComputedItem, UiPrefs } from '@/lib/domain/types'
 import { getActor } from '@/lib/authz'
+import { hasWorkspaceMembership } from '@/lib/domain/authz'
 
 export type NotificationItem = {
   id: string
@@ -22,10 +23,13 @@ function readNotifRead(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-/** 프로젝트의 워크스페이스(actor 의 소속 프로젝트 맵 — 조회 없음). 비로그인·소속 밖·형식 밖 projectId 는 null. 권한 조회 실패는 throw */
-async function projectWorkspaceOf(projectId: string): Promise<string | null> {
+/** 프로젝트의 워크스페이스(actor 의 소속 프로젝트 맵 — 조회 없음). 비로그인·소속 밖·형식 밖 projectId 는 null. 권한 조회 실패는 throw.
+ *  writable: 그 워크스페이스의 실제 소속(workspace_members)인가 — 플랫폼 관리자는 buildActor 가 전 프로젝트를 싣지만 본인 기록은 실제 소속에만 쓴다(AA6·BB3) */
+async function projectWorkspaceOf(projectId: string): Promise<{ ws: string; writable: boolean } | null> {
   if (typeof projectId !== 'string') return null
-  return (await getActor())?.projectWorkspace.get(projectId) ?? null
+  const actor = await getActor()
+  const ws = actor?.projectWorkspace.get(projectId)
+  return ws ? { ws, writable: hasWorkspaceMembership(actor, ws) } : null
 }
 
 function diffDays(from: string, to: string): number {
@@ -70,11 +74,11 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
   const sb = await createServerClient()
   let prefRow: { prefs: unknown } | null = null
   try {
-    const ws = await projectWorkspaceOf(projectId)
-    if (!ws) console.error('[notifications] 프로젝트의 워크스페이스를 모른다 — 읽음 상태 생략')
+    const target = await projectWorkspaceOf(projectId)
+    if (!target) console.error('[notifications] 프로젝트의 워크스페이스를 모른다 — 읽음 상태 생략')
     else {
       const { data, error } = await sb
-        .from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', ws).maybeSingle()
+        .from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', target.ws).maybeSingle()
       if (error) console.error('[notifications] 읽음 상태 조회 실패:', error.message)
       prefRow = data
     }
@@ -96,12 +100,15 @@ export async function markAllNotificationsRead(projectId: string, ids: string[])
     return { ok: false }
   }
   // 그 프로젝트의 워크스페이스 행에 쓴다(SP3b D9) — 소속 워크스페이스의 프로젝트가 아니면 actor 에 없어 거부(없는 프로젝트와 같은 응답).
-  // 쓰기 전 선행 조회(권한)가 실패하면 중단한다.
-  let ws: string | null
-  try { ws = await projectWorkspaceOf(projectId) } catch (e) {
+  // 플랫폼 관리자가 비소속 워크스페이스를 보는 중이면 그 행을 만들지 않는다(실제 소속만 — AA6 의 본인 기록 축, BB3). 같은 거부 응답이라
+  // 벨은 낙관 반영을 되돌린다(읽음이 저장되지 않음이 화면에 보인다). 쓰기 전 선행 조회(권한)가 실패하면 중단한다.
+  let target: Awaited<ReturnType<typeof projectWorkspaceOf>>
+  try { target = await projectWorkspaceOf(projectId) } catch (e) {
     console.error('[markAllNotificationsRead] 권한 조회 실패:', e instanceof Error ? e.message : e); return { ok: false }
   }
-  if (!ws) return { ok: false }
+  if (!target) return { ok: false }
+  if (!target.writable) { console.error('[markAllNotificationsRead] 실제 소속이 아닌 워크스페이스 — 저장하지 않는다:', target.ws); return { ok: false } }
+  const ws = target.ws
   const sb = await createServerClient()
   const { data: existing, error: readErr } = await sb
     .from('user_preferences').select('prefs').eq('user_id', user.id).eq('workspace_id', ws).maybeSingle()

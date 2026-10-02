@@ -102,6 +102,18 @@ describe('markAllNotificationsRead — 그 프로젝트의 워크스페이스 �
     expect(await markAllNotificationsRead('p1', ['n1'])).toEqual({ ok: false })
     expect(c.upserts).toHaveLength(0)
   })
+  it('플랫폼 관리자가 비소속 워크스페이스의 프로젝트에서 눌러도 개인 설정 행을 만들지 않는다 — 실제 소속만(BB3, AA6 와 같은 축)', async () => {
+    // buildActor 는 플랫폼 관리자에게 전 프로젝트를 싣는다 — projectWorkspace 에 비소속 ws-9 의 프로젝트가 있다
+    mocks.getActor.mockResolvedValue(makeActor({ isSuperuser: true, workspaceRoles: new Map([['ws-1', 'admin']]), projectWorkspace: new Map([['p9', 'ws-9'], ['p1', 'ws-1']]) }))
+    const c = client({})
+    expect(await markAllNotificationsRead('p9', ['n1'])).toEqual({ ok: false })
+    expect(c.upserts).toHaveLength(0)
+    expect(c.tables).not.toContain('user_preferences')   // 선행 조회도 하지 않는다
+    // 대조 — 소속 워크스페이스의 프로젝트는 그대로 쓴다
+    const c2 = client({ user_preferences: [{ data: { prefs: {} } }] })
+    expect(await markAllNotificationsRead('p1', ['n1'])).toEqual({ ok: true })
+    expect(c2.upserts).toHaveLength(1)
+  })
 })
 
 describe('getNotifications — 저장된 읽음 값이 손상돼도 피드가 죽지 않는다(Y4)', () => {
