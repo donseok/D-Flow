@@ -207,6 +207,7 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 | UI-0 끝(`sp3b/ui0` 수정 라운드 머리 = main 반영 트리, 과제 6 수정) | `qa/sp3b/smoke-t6fix.txt`(2026-10-01 15:50) | 0(통과) | 130,834 B | 1,931 | 493 | 71 | 9 | 1 |
 | UI-1 머리(`680c5d0`, 과제 25) | `qa/sp3b/t25-r1/smoke-ui1.txt`(2026-10-01 21:39) | 0(통과) | 124,966 B | 1,795 | 616 | 71 | 5 | 1 |
 | UI-1 최종 리뷰 수정 뒤(`03e0e30`, 과제 25 재실행) | `qa/sp3b/smoke-ui1.txt`(2026-10-01 22:28) | 0(통과 — 원색·비색 `:root` 검사 포함, 커스텀 프로퍼티 하한 480) | 125,369 B | 1,800 | 618 | 71 | 5 | 1 |
+| UI-2b 최종 수정 뒤(`bffd64e` 와 같은 src — 3203 스크래치 빌드, GG3) | `qa/sp3b/smoke-ui2g.txt`(2026-10-02 15:46) | 0(통과) | 124,922 B | 1,799 | 619 | 71 | 5 | 1 |
 
 (UI-0 은 창 ① rebase 없이 main 에 들어갔다(ui1-addendum §1) — 계획의 델타 행 `smoke-ui0-delta.txt`(과제 6 Step 4)는 해당 없음이라 수정 라운드 끝 기록을 둘째 행으로 둔다. UI-0 은 `src/**` 무수정이라 두 행이 같다. UI-1 행은 과제 25.)
 
@@ -276,7 +277,9 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 
 - `ui2a-h1` 의 `withProblems`: `mobile-menu@1280x720`·`p-wbs-fullscreen@1280x720·390`(클릭 대상이 그 크기에 없음 — UI-1 부터 같은 행의 알려진 한계, 화면 문제 아님).
 
-## 7. UI-2b 눈확인(에이전트 — 과제 38, 사용자 확인 전)
+## 7. UI-2b 눈확인(에이전트 — 과제 38, 최종 리뷰 수정 GG3 로 재생성)
+
+> **GG3 재생성(2026-10-02 15:46~16:29 — 아래 'GG 뒤 재생성' 절이 최신 판정이다).** 이 절의 첫 판(머리 `256652a`)에서 미해결이던 셋 — 가시 h1 = 1(회의록 상세·스텁·share 2), 390 달력 공휴일 라벨 잘림, UI 위험 목록 — 은 각각 `8aada02`(본문 머리 강등)·`9ce4f5c`(라벨 줄바꿈)·`87102b7`(CLAUDE.md)로 **해결**됐다. 대조표 `ui2b-sheet.html` 은 GG 뒤 판으로 바뀌었다(첫 판은 `ui2b-sheet-1237.html`).
 
 - 기준 = UI-2 착수점 `8a84269`(스크래치 `lane-b-base` · 3202 · 빌드 `T1Ky7IAqYrNJRQwZejnI5`), 머리 = `256652a`(DD1 — 캡처 서버 빌드 `oEi0sF6IIoXxcl7s6FMIo`) · 키보드 재측정 `40c4127`(캡처 행 선택자 한 줄 — 앱 코드 같음). 시드 2026-10-02. 증거 폴더 `qa/sp3b/ui2b-base`·`ui2b`·`ui2b-shell`·`ui2b-accent-{default,bright,dark}`·`ui2b-scrolled`·`ui2b-settings-bottom`·`ui2b-nojs`·`ui2b-nojs-ref`·`ui2b-fs-ai`·`ui2b-h1`·`ui2b-broken`·`ui2b-base-axe`·`ui2b-tab2`, 비교표 `diff-ui2b-base--ui2b-pair.md`·`diff-ui2b-base--ui2b.md`, 대조표 `ui2b-sheet.html`(섹션 11 · axe 174행 · tab).
 - 스모크: `smoke:prod`(3201) 통과(`smoke-ui2b.txt`). 서버(3201·3202)는 묶음마다 내려갔다.
@@ -298,7 +301,7 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 | 항목 | 통과 조건 | 결과 | 산출 |
 |---|---|---|---|
 | (a) 셸 행렬 | 범위마다 그 범위 내비, 접힘·펼침, duo 전환, 드로어, 브레드크럼 '워크스페이스 전체' 칩, 에이전트 세 화면, 설정 저장 바, 에이전트 보기 전환, WBS 스크롤 하나, AI 레일 병치·오버레이, 로고·accent·파비콘, 홈·내 업무 v0 | **통과** — 176장(22행 × 네 크기 × 라이트·다크), problems 은 그 크기에 UI 가 없는 click-failed 뿐(전환기·AI 버튼은 390 에 없음, 드로어·햄버거는 lg 미만 전용). 열어 본 장: ws-switcher-open 1440 다크(두 워크스페이스·체크), drawer-project 390 다크(프로젝트 내비·닫기), ws-home-collapsed 1280(64px 아이콘 레일), p-wbs 1280(채움형 — 그리드만 스크롤), rail-ai-1280 → 1440 병치·1280 오버레이, ws-agents 1440(브레드크럼 '워크스페이스 전체' + 에이전트 현황 활성). accent 셋 24장 problems 0 — 밝은 `#ffd43b` 은 라이트 세트 `#8c7316` 로 어두워져 링크·아바타·활성 칩에, 어두운 `#1c1c6b` 다크는 `#7181d8` 계열(열어 봄). 설정 바닥 6장 — 저장 바(변경 0개)가 마지막 입력을 가리지 않음 | `ui2b-shell/`·`ui2b-accent-*/`·`ui2b-settings-bottom/` |
-| 가시 h1 = 1 | 모든 라우트 × 1280×720·390 | **미충족 3라우트(기존)** — 66행 132장 중 `ws-minute`·`minute`(스텁 최종)·`share` 가 두 크기 모두 2. 둘째 h1 은 회의록 본문 마크다운의 `# 제목`(시드 본문 첫 줄)을 `MarkdownView` 가 h1 로 그린 것 — UI-2a 기록(§6)에도 같은 2. 셸·프레임의 h1 은 모든 장에서 1. 처리는 컨트롤러 판정(본문 제목 강등은 회의록·위키 공용 렌더러 변경) | `ui2b-h1/meta.json` |
+| 가시 h1 = 1 | 모든 라우트 × 1280×720·390 | **해결(GG3 재측정: 66행 132장 모두 1)** — 첫 판(`256652a`)에서는 `ws-minute`·`minute`(스텁 최종)·`share` 가 2(본문 마크다운 `# 제목` 을 `MarkdownView` 가 h1 로 그림, UI-2a 부터 같음). 판정 R-h1 로 `8aada02` 가 본문 머리를 한 단계 강등(`demoteHeadings` — 시각 클래스 그대로)했고, `ui2g-h1` 이 전 행 1 을 확인했다 | `ui2b-h1/meta.json`(첫 판)·`ui2g-h1/meta.json`(재측정) |
 | (b) 전 라우트 회귀 | diff 장이 의도한 차이(셸 교체)뿐 | **통과** — 짝 36: diff 36·problem 0(옮긴 화면 전부 — 전역 바·브레드크럼·워크스페이스 내비·접기·main 여백 16px 이 원인, 본문 같음: agents⇔ws-agents 1440·meetings⇔ws-meetings 390 열어 봄). 옛 키 264: same 17·diff 140·new 96·problem 11 = 모두 click-failed(기준 서버에 `/w/<s>/projects` 가 없어 mobile-menu·account-popover 행이 클릭 대상 없음, p-wbs-fullscreen·mobile-menu 의 크기 한계는 UI-1 부터). 옛 키 최종 URL 전부 `/w/default/…`(p-gantt → `/p/<pid>/…`) | `diff-ui2b-base--ui2b*.md` |
 | (c) 스크롤 상태 | 고정 요소가 도구 줄을 덮지 않음 | **통과** — 28장 problems 0(p-weekly 1280 열어 봄 — 도구 줄 위 고정 요소 없음) | `ui2b-scrolled/` |
 | JS 끈 첫 페인트 | 사이드바 유무·폭·머리 높이가 JS 켬과 같다(D55) | **통과** — p-dashboard 1280·ws-home 390 비교(사이드바 232px·전역 바 48px 같음, 본문만 스켈레톤) | `ui2b-nojs`·`ui2b-nojs-ref` |
@@ -310,10 +313,34 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 
 ### 관찰(이월 후보)
 
-- 390 회의 달력(`ws-meetings`·`p-meetings`): main 좌우 여백이 16px 로 늘어 칸이 좁아져 공휴일 표지 글자가 잘린다('개'·'대'·'한' 이 반쪽) — 기준(여백 6px)에서는 보였다.
+- ~~390 회의 달력(`ws-meetings`·`p-meetings`): main 좌우 여백이 16px 로 늘어 칸이 좁아져 공휴일 표지 글자가 잘린다~~ — **해결**(판정 R-390, `9ce4f5c` — 좁은 화면에서 라벨이 칸 너비로 줄바꿈, `title` 유지). GG3 재캡처 `ui2g/ws-meetings-390x844-light.png` 에서 개천절·대체공휴일(두 줄)·한글날이 읽힌다(열어 봄).
 - 개요 이슈 카드의 대비(위 axe 행) — 이슈 없는 영역 카드의 흐림(`opacity-60`)과 `text-ink-subtle` 겹침. 화면 소유 SP 몫.
-- 회의록 본문 `# 제목` 의 h1(위 h1 행).
+- ~~회의록 본문 `# 제목` 의 h1(위 h1 행)~~ — 해결(`8aada02`).
+- 개요 이슈 카드 대비 24 는 UI-3 입력(`plan-ui3.md` Step 1b — GG6).
 
-### UI 위험 목록(CLAUDE.md — 컨트롤러 반영 몫)
+### UI 위험 목록(CLAUDE.md)
 
-`.githooks/pre-push` 의 `UI_RE` 는 과제 31 에서 범위 레이아웃 셋을 더했다. `CLAUDE.md` '브랜치' 절의 UI 위험 파일 목록에 같은 셋 — `src/app/(app)/w/[slug]/layout.tsx`·`src/app/(app)/p/[projectId]/layout.tsx`·`src/app/(app)/(global)/layout.tsx` — 을 더한다(이 과제는 CLAUDE.md 를 고치지 않았다).
+`.githooks/pre-push` 의 `UI_RE` 는 과제 31 에서 범위 레이아웃 셋을 더했다. `CLAUDE.md` '브랜치' 절의 UI 위험 파일 목록에 같은 셋 — `src/app/(app)/w/[slug]/layout.tsx`·`src/app/(app)/p/[projectId]/layout.tsx`·`src/app/(app)/(global)/layout.tsx` — 을 **컨트롤러가 `87102b7` 로 더했다(해결)**. 스펙 §9 의 "같은 커밋"과는 다르다(`UI_RE` 는 `3d58967`) — 내용은 일치, 의도된 편차로 기록(완료 리뷰 F-9).
+
+### GG 뒤 재생성(UI-2b 최종 리뷰 수정 GG3 — 2026-10-02 15:46~16:29)
+
+- 머리: 레인 B `bffd64e`(GG1 `087fd53`·GG2 `ed94da2`·GG7 `eb45e2b`·GG4 `a227187`·GG5 `bffd64e` — EE 의 `8aada02`·`9ce4f5c` 포함). 사용자 확인 서버 3201 을 건드리지 않으려 **스크래치 워크트리 `lane-b-gg`(src 가 머리와 같음)** 를 3203 에서 빌드(`e9Mp7lg1TEsyp9zGqU73L`)해 찍었다. 기준 = `lane-b-base`(`8a84269`, 3202, `T1Ky7IAqYrNJRQwZejnI5`). 시드 2026-10-02(EE 의 `db:reset` 뒤 캡처 시드 — 첫 판과 시드 프로젝트 id 가 달라 기준도 다시 찍었다). 라벨 `ui2g*`, 대조표 `ui2b-sheet.html`(= `ui2g-sheet.html`, 섹션 11 · axe 174행 · tab).
+- 스모크(3203) 통과(위 §4 행). E2E E1·E2·E4~E11 **10/10 ✓**(16:28~16:29, `sp3b-e2e.md`).
+- (b) 짝 36: same 0·near 0·**diff 36**·problem 0 — 첫 판과 같다(셸 교체가 원인). 옛 키 264: same 17·diff 100·new 96·problem 51 = click-failed 11(첫 판과 같은 기준 서버 클릭 대상 없음·크기 한계) + **도구 산물 40**: 머리를 `--base http://127.0.0.1:3203` 로 찍으면 캡처 도구가 그 서버를 '기준 서버'로 보고 옛 경로 행의 기대 최종 경로를 옛 페이지(`baseFinal`)로 잡는다 — 실제 최종 경로는 모두 `/w/default/…`(첫 판의 기대와 같음)라 화면 문제가 아니다.
+- (a) 셸 행렬 176장·accent 셋 24장·스크롤 28장·설정 바닥 6장·JS 끔/켬 18장·전체 화면 AI 20장·설정 손상 8장: problems 은 그 크기에 UI 가 없는 click-failed 뿐(첫 판과 같은 행).
+- 가시 h1: **132장 모두 1**(`ui2g-h1`).
+- 키보드: ws-home·p-dashboard·p-wbs × 라이트·다크 실패 0·미도달 0.
+- axe: 기준 라이트 42쪽 44건, 머리 라이트 189·다크 122 — **첫 판과 키마다 같다**(같은 키 변화는 p-dashboard·inbox-popover 0→24 = 개요 이슈 카드 기존 결함, UI-3 입력). 셸 요소 위반 노드 0.
+- 열어 본 장: `ui2g/ws-meetings-390x844-light`(공휴일 라벨 줄바꿈), `ui2g/ws-minute-390x844-light`(본문 제목 '설계 검토 회의' 가 h2 크기 그대로·페이지 h1 하나), `ui2g-shell/ws-home-1440x900-dark`(셸·홈 v0), `ui2g-broken/ws-settings-broken-1440x900-light`(설정 손상 알림·'설정 열기'·저장 바). GG1 의 비공개 숨김은 `qa/sp3b/gg1/`(6장 — 명단 밖 404·명단·워크스페이스 관리자·플랫폼 관리자 정상).
+- 계정 처리: 캡처·E2E 는 시드 계정 비밀번호를 실행마다 재설정한다 — 사용자 확인 계정(ui-* 넷)의 비밀번호 해시·개인 설정·공지/알림 읽음을 묶음 전에 백업하고 끝에 되돌렸다(대조 일치). E2E 픽스처(bea·B 공용 팀·두 프로젝트·회의록 둘)는 지워 캡처 시드 상태로 돌렸다.
+
+## UI-2b 사용자 확인(D29)
+
+| 항목 | 값 |
+|---|---|
+| 일시 | 2026-10-02 14시대 KST(사용자 응답 "어 괜찮아 계속 진행해") |
+| 확인 대상 | 3201 `next start`(머리 `8150307` — EE 반영 빌드), 대조표 `ui2b-sheet.html`(12:37 판 — 지금은 `ui2b-sheet-1237.html`, GG3 에서 재생성) |
+| 표본 | 과제 38 Step 9 의 여섯 — ① 워크스페이스 홈 → 회의록 → 회의록 하나(브레드크럼·사이드바 활성) ② 프로젝트 전환기(이슈 꺼진 프로젝트 → 개요 + 토스트) ③ duo 워크스페이스 전환·옛 `/minutes` ④ 1280×720 AI 레일 오버레이·Esc, 1440 병치 ⑤ 390 햄버거 → 드로어 → Esc → 초점 ⑥ 다크 작업 계획(스크롤 하나·전체 화면 + AI)·주간보고(스크롤 뒤 도구 줄) |
+| 계정 | 시드 `ui-member`·`ui-wsadmin`·`ui-duo`·`ui-platform`(비밀번호는 대화에만) |
+| 사용자 판정 | 지적 없음. 같은 자리에서 GG1(명단 밖 비공개 프로젝트 화면 404) 동작 변경에 동의 |
+| 처리 | 수정 없음. **확인 뒤 커밋**: 최종 리뷰 수정 GG1(`087fd53` — 비공개 숨김 판정자 하나, 프로젝트 화면 404)·GG2(`ed94da2` 불변식)·GG7(`eb45e2b` 주석)·GG4·GG5(성능 문서)와 이 문서 갱신은 사용자 확인 뒤의 커밋이다 — 화면 변화는 GG1 의 명단 밖 비공개 404 하나(사용자가 동의한 변경) |

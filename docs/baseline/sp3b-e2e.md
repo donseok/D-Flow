@@ -38,6 +38,15 @@
 
 E3 은 UI-3 몫(건너뜀).
 
+### UI-2b 최종 리뷰 수정 뒤 재실행(GG3)
+
+서버 = 스크래치 `lane-b-gg`(레인 B 머리 `bffd64e` 와 같은 src) · 3203 · 빌드 `e9Mp7lg1TEsyp9zGqU73L` — 사용자 확인 서버 3201 을 건드리지 않으려 따로 띄웠다. 서버 액션 manifest 를 그 빌드의 것으로 읽게 스크래치에서 돌렸다(`E2E_BASE_URL=http://127.0.0.1:3203`).
+증거 `qa/sp3b/e2e-sp3b-2026-10-02T07-29-11-653Z.md`, 출력 `qa/sp3b/e2e-ui2g.txt`. 끝에 픽스처(bea·B 공용 팀·두 프로젝트·회의록 둘)를 지우고 시드 계정 비밀번호 해시를 되돌렸다.
+
+| 단계 | 결과 | 시각(KST) | 커밋(src) |
+|---|---|---|---|
+| E1·E2·E4·E6·E8·E9·E11·E5·E7·E10 | 10/10 ✓(E4 세 경로 404 + notFound digest) | 2026-10-02 16:28~16:29 | bffd64e |
+
 ### `e2e-local`(레인 A — 참고, 판정 아님)
 
 깨끗한 DB(`db:reset` → `dev:bootstrap`, 13:38)에서 3201(`INVITE_ALLOWED_DOMAINS`·`MINUTES_API_ENABLED`·시크릿 env)로 돌렸다 — **첫 단계에서 멈춤**: `[admin] GET /projects → 307(기대 200)`(`qa/sp3b/e2e-local-ui2b.txt`). `e2e-local.mjs` 는 아직 옛 경로(`/projects`·`/minutes`·`/admin/accounts`·`/admin/teams`)를 화면 GET 과 서버 액션 worker(`/projects/page` 등) 양쪽에 쓴다 — 그 화면은 스텁(307 GET)뿐이라 첫 화면 GET 에서 끊긴다. 처리: 과제 39 Step 2(e2e-sp3b 단계를 합치고 옛 경로 호출 15~19곳을 `/w/${slug}/…` 로).
