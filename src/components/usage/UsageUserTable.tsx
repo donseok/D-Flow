@@ -6,9 +6,9 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import type { UsageUserRow } from '@/lib/domain/usage'
 import { WORKSPACE_ROLE_LABEL } from '@/lib/domain/authz'
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null, timeZone: string): string {
   if (!iso) return '—'
-  return new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium' }).format(new Date(iso))
+  return new Intl.DateTimeFormat('ko-KR', { timeZone, dateStyle: 'medium' }).format(new Date(iso))
 }
 
 const USER_PAGE_SIZE = 15
@@ -17,7 +17,7 @@ const USER_PAGE_SIZE = 15
  * 사용자 현황 — 계정 기준이라 활동이 0인 휴면 계정도 표시된다.
  * last_sign_in_at 은 수집 시작 이전까지 소급되므로 배포 첫날부터 채워진다.
  */
-export function UsageUserTable({ rows, days }: { rows: UsageUserRow[]; days: number }) {
+export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[]; days: number; timeZone: string }) {
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(rows.length / USER_PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -53,9 +53,9 @@ export function UsageUserTable({ rows, days }: { rows: UsageUserRow[]; days: num
                 <td className="py-2 pr-3 text-ink-muted">{r.email}</td>
                 <td className="py-2 pr-3 text-ink-muted">{r.teamCode ?? '—'}</td>
                 <td className="py-2 pr-3 text-ink-muted">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.createdAt)}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastSignInAt)}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastActivityAt)}</td>
+                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.createdAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastSignInAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastActivityAt, timeZone)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums text-ink">{r.events.toLocaleString('ko-KR')}</td>
                 <td className="py-2 pr-3 text-right tabular-nums text-ink">{r.activeDays}</td>
               </tr>

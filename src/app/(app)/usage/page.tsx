@@ -12,14 +12,14 @@ import { UsageEventLog } from '@/components/usage/UsageEventLog'
 import { getServerLocale } from '@/lib/i18n/server'
 import {
   SESSION_GAP_MINUTES, USAGE_RETAIN_DAYS, addDaysIso, fillDailySeries, mergeUserRows,
-  parsePeriodDays, pickAllowed,
+  parsePeriodDays, pickAllowed, usageTimezone,
 } from '@/lib/domain/usage'
 import { USAGE_MENUS } from '@/lib/domain/usageMenu'
 import {
   getDailyActives, getMenuRanking, getRecentUsageEvents, getUsageDirectory,
   getUsageSessions, getUsageSummary, getUserRollup, purgeOldUsageEvents,
 } from '@/lib/data/usage'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
@@ -37,26 +37,28 @@ export default async function UsagePage({ searchParams }: {
 
   const [{ days, user, menu }, locale] = await Promise.all([searchParams, getServerLocale()])
   const period = parsePeriodDays(days)
-  const today = seoulToday()
+  // 워크스페이스 필터가 없다 — 전체 합산이라 UTC 를 명시한다(스펙 D14). 필터는 SP8(p_workspace_id)
+  const timezone = usageTimezone(null)
+  const today = todayIn(timezone, new Date())
   const from = addDaysIso(today, -(period - 1))
   // 메뉴 필터는 여기서 검증 가능하지만 사용자 필터는 계정 목록을 받아야 한다(아래 2단계).
   const menuFilter = pickAllowed(menu, USAGE_MENUS.map(x => x.key))
 
   // 단일 왕복 — 직렬 2단째를 만들지 않는다(대시보드 관례).
   const [summary, daily, ranks, rollup, directory, sessions] = await Promise.all([
-    getUsageSummary(from, today, today),
-    getDailyActives(from, today),
-    getMenuRanking(from, today),
-    getUserRollup(from, today),
+    getUsageSummary(from, today, today, timezone),
+    getDailyActives(from, today, timezone),
+    getMenuRanking(from, today, timezone),
+    getUserRollup(from, today, timezone),
     getUsageDirectory(),
-    getUsageSessions(from, today, SESSION_GAP_MINUTES),
+    getUsageSessions(from, today, SESSION_GAP_MINUTES, timezone),
   ])
 
   // 사용자 필터는 실재하는 계정 id 만 허용한다 — 검증 없이 넘기면 존재하지 않는 id 로
   // 영원히 빈 표가 나오고 그게 '기록 없음'과 구별되지 않는다.
   const userFilter = pickAllowed(user, directory.map(a => a.id))
   const events = await getRecentUsageEvents({
-    from, to: today, limit: EVENT_LIMIT, userId: userFilter, menuKey: menuFilter,
+    from, to: today, limit: EVENT_LIMIT, userId: userFilter, menuKey: menuFilter, timezone,
   })
 
   const series = fillDailySeries(daily, from, today)
@@ -73,18 +75,18 @@ export default async function UsagePage({ searchParams }: {
       <PageHero eyebrow="OPERATIONS" title="사용 현황" />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-ink-muted">
-          최근 {period}일 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.
+          최근 {period}일 · {timezone} 기준 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.
         </p>
         <PeriodTabs filter={filter} />
       </div>
-      <UsageSummary summary={summary} days={period} sessions={sessions} />
+      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} />
       <div className="grid gap-5 lg:grid-cols-2">
         <UsageTrendChart series={series} />
         <MenuRankingCard ranks={ranks} locale={locale} />
       </div>
-      <UsageUserTable rows={userRows} days={period} />
+      <UsageUserTable rows={userRows} days={period} timeZone={timezone} />
       <UsageEventLog events={events} names={names} limit={EVENT_LIMIT} locale={locale}
-        menus={ranks.map(r => r.menuKey)} filter={filter} />
+        menus={ranks.map(r => r.menuKey)} filter={filter} timeZone={timezone} />
     </div>
   )
 }

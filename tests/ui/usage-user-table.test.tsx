@@ -12,7 +12,7 @@ const cells = (html: string) => [...html.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map(
 describe('UsageUserTable — 역할 열(워크스페이스 역할 어휘)', () => {
   it('admin 은 관리자, member 는 멤버, 역할 없음은 —', () => {
     const html = renderToStaticMarkup(
-      <UsageUserTable rows={[row('alice', 'admin'), row('bob', 'member'), row('carol', null)]} days={30} />,
+      <UsageUserTable rows={[row('alice', 'admin'), row('bob', 'member'), row('carol', null)]} days={30} timeZone="Asia/Seoul" />,
     )
     const c = cells(html)
     // 행마다 이름·이메일·팀·역할 순 — 역할은 네 번째 칸

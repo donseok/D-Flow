@@ -119,3 +119,27 @@ export function mergeUserRows(accounts: AccountRecord[], rollups: UserRollup[]):
 export function barPct(value: number, max: number): number {
   return max <= 0 ? 0 : round1((value / max) * 100)
 }
+
+/** /usage 의 기준 tz(스펙 D14) — 워크스페이스 필터가 있으면 그 tz, 전체 합산은 UTC 를 명시한다(화면에 "UTC 기준").
+ *  필터는 SP8(p_workspace_id)이 붙인다 — 그때 이 함수의 인자만 채운다. */
+export function usageTimezone(filterTz: string | null): string {
+  return filterTz ?? 'UTC'
+}
+
+/** 사용현황 조회 실패 — 0·빈 배열로 위장하지 않고 던진다(error 경계가 받는다). 문구에 DB 원문을 싣지 않는다 */
+export class UsageQueryError extends Error {
+  readonly code: 'USAGE_TIMEZONE_INVALID' | 'USAGE_QUERY_FAILED'
+  constructor(code: 'USAGE_TIMEZONE_INVALID' | 'USAGE_QUERY_FAILED', message: string) {
+    super(message)
+    this.name = 'UsageQueryError'
+    this.code = code
+  }
+}
+
+/** RPC 오류 → UsageQueryError. 22023(invalid_parameter_value — `at time zone` 이 모르는 tz)만 시간대 오류로 가른다(fail-closed) */
+export function usageRpcError(what: string, error: { code?: string | null; message?: string | null }): UsageQueryError {
+  console.error(`[usage] ${what} 조회 실패`, { code: error.code ?? null, message: error.message ?? null })
+  return error.code === '22023'
+    ? new UsageQueryError('USAGE_TIMEZONE_INVALID', `${what}을(를) 불러오지 못했습니다 — 시간대 설정이 올바르지 않습니다.`)
+    : new UsageQueryError('USAGE_QUERY_FAILED', `${what}을(를) 불러오지 못했습니다.`)
+}

@@ -43,7 +43,7 @@ describe('사용 로그 0079 이전 호환', () => {
       from: vi.fn(() => builder(results[call], eqCalls[call++])),
     })
 
-    const rows = await getRecentUsageEvents({ from: '2026-08-13', to: '2026-08-13', limit: 20 })
+    const rows = await getRecentUsageEvents({ from: '2026-08-13', to: '2026-08-13', limit: 20, timezone: 'UTC' })
 
     expect(rows).toEqual([{
       id: 7, userId: 'user-1', menuKey: 'wiki', path: '/p/:id/wiki',

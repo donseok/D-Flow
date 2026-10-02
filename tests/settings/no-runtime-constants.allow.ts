@@ -49,13 +49,9 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/components/agents/SeatmapView.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/components/chat/AssistantChat.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/components/settings/ProjectInviteManager.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/usage/UsageEventLog.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/usage/UsageSummary.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/usage/UsageUserTable.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/components/wiki/WikiShared.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/lib/domain/announcements.ts': { patterns: ['+09:00'], removedBy: 'SP5' },
   'src/lib/domain/dates.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/lib/report/issues/deckPlan.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/lib/data/usage.ts': { patterns: ['+09:00'], removedBy: 'SP5' },
   'src/lib/domain/officeChatter.ts': { patterns: ['9 * 3600_000'], removedBy: 'SP5' },
 }

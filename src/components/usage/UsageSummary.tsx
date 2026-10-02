@@ -2,9 +2,9 @@ import { Activity, CalendarCheck, MousePointerClick, Users } from 'lucide-react'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { SESSION_GAP_MINUTES, type UsageSummary as Summary } from '@/lib/domain/usage'
 
-function fmtDateTime(iso: string): string {
+function fmtDateTime(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short',
+    timeZone, dateStyle: 'medium', timeStyle: 'short',
   }).format(new Date(iso))
 }
 
@@ -13,8 +13,8 @@ function fmtDateTime(iso: string): string {
  * '수집 상태'가 이 화면의 자기진단이다 — 비콘이 조용히 끊겨도 마지막 이벤트 시각이
  * 멈춘 채로 보이므로 "데이터 0"과 "수집 중단"이 구별된다.
  */
-export function UsageSummary({ summary, days, sessions }: {
-  summary: Summary; days: number; sessions: number
+export function UsageSummary({ summary, days, sessions, timeZone }: {
+  summary: Summary; days: number; sessions: number; timeZone: string
 }) {
   return (
     <div className="space-y-3">
@@ -26,7 +26,7 @@ export function UsageSummary({ summary, days, sessions }: {
       </div>
       <p className="text-[11px] text-ink-subtle">
         {summary.lastEventAt
-          ? `수집 상태 · 마지막 기록 ${fmtDateTime(summary.lastEventAt)}`
+          ? `수집 상태 · 마지막 기록 ${fmtDateTime(summary.lastEventAt, timeZone)}`
           : '수집 상태 · 아직 기록이 없습니다. 수집은 프로덕션 배포 환경에서만 동작합니다.'}
       </p>
     </div>

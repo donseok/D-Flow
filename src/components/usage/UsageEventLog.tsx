@@ -10,9 +10,9 @@ import { usageHref } from '@/lib/domain/usage'
 import type { UsageEventRow } from '@/lib/data/usage'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
-function fmtDateTime(iso: string): string {
+function fmtDateTime(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul', dateStyle: 'short', timeStyle: 'medium',
+    timeZone, dateStyle: 'short', timeStyle: 'medium',
   }).format(new Date(iso))
 }
 
@@ -22,7 +22,7 @@ const EVENT_PAGE_SIZE = 20
  * 접속 로그 — 최신순. 상한에 걸리면 그 사실을 화면에 밝힌다(잘린 목록을 전부처럼 보이지 않게).
  * 필터는 searchParams 기반 링크로 유지하고, 긴 목록의 페이지 이동만 클라이언트 상태로 처리한다.
  */
-export function UsageEventLog({ events, names, limit, locale, menus, filter }: {
+export function UsageEventLog({ events, names, limit, locale, menus, filter, timeZone }: {
   events: UsageEventRow[]
   names: Map<string, string>
   limit: number
@@ -30,6 +30,8 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter }: {
   /** 이 기간에 실제로 기록이 있는 메뉴 키(사용량 순) — 없는 메뉴로 필터를 걸 수 없게 한다. */
   menus: string[]
   filter: { days: number; user?: string; menu?: string }
+  /** 시각을 찍을 시간대(IANA) — 서버가 내려준다(기본값 없음) */
+  timeZone: string
 }) {
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(events.length / EVENT_PAGE_SIZE))
@@ -82,7 +84,7 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter }: {
             <tbody>
               {visibleEvents.map(e => (
                 <tr key={e.id} className="border-b border-line/60">
-                  <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDateTime(e.occurredAt)}</td>
+                  <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDateTime(e.occurredAt, timeZone)}</td>
                   {/* 계정 목록에 없는 id 는 이름을 지어내지 않는다. 이름 클릭 = 그 사용자로 필터. */}
                   <td className="py-2 pr-3 text-ink">
                     <Link href={usageHref(filter, { user: e.userId })} className="transition hover:text-brand hover:underline">
