@@ -249,6 +249,25 @@
   옛 0016 을 적용한 스택은 `schema_migrations` 에 0016 이 있어 `migration up` 이 새 본문을 건너뛴다 — `db:reset`(또는 0016 롤백 → 재적용)으로 맞춘다.
   확인: `select prosrc like '%TEAM_SCOPE_ISOLATION%' from pg_proc where proname = 'team_ref_owned_scope'` 가 참. 옛 본문 위에서는 0016 의 사후검사(②)를
   다시 돌려야 잡힌다(리허설 첫 줄 — 민감도 확인과 같은 절차). 원격·태그에 옛 0016 은 없다(A2-2 리뷰 보안 P3 확인 — sp4/a2 로컬 브랜치뿐).
+- **성능 판정이 먼저다(스펙 §6.5 — A2 최종 리뷰 완료 P2-1).** `docs/baseline/sp4-perf.md` 의 800행 p95 비율 ≤ 1.20 판정이 커밋되기 전에는
+  `sp4-a2-done` 태그·main 반영·push 를 하지 않는다(순서: 성능 판정 → `sp4-perf.md` 커밋 → 태그 → main). 넘으면 왕복을 줄인 뒤 다시 잰다 —
+  넘은 채 머지하지 않는다. 1,500행은 기록만.
+- **레인 B(`ui/sp3-menu` b9ad041, 베이스 305a3b4)와 겹치는 파일 19개** — 받는 쪽은 레인 B 과제 39(A2 반영 뒤 rebase). `git diff --name-only
+  54a202e...ui/sp3-menu` ∩ A2(`54a202e..69f8508`):
+  - 텍스트 충돌 1 — `src/app/actions/teams.ts`(B 의 `revalidatePath('/(app)/w/[slug]/admin/teams','page')` 두 줄 ↔ A2 의 `failWith`·개명으로 다시 쓴
+    같은 함수). B 의 경로 꼴을 A2 본문 위에 다시 얹는다.
+  - 자동 병합되나 의미를 볼 것 — `src/lib/data/portfolio.ts`(B `getPortfolioInputs(workspaceId)` ↔ A2 팀 원천·키셋), `docs/settings-catalog.md`·
+    `src/lib/settings/catalog-meta.ts`(자동 생성 절 — `CATALOG_WRITE=1` 로 재생성 뒤 `catalog-sync`), `src/lib/data/agentApprovals.ts`,
+    `src/components/wbs/WbsGanttSheet.tsx`(눈확인), `src/app/actions/minutes.ts`, `src/lib/domain/authz.ts`.
+  - 테스트 — `tests/actions/minutes-{file-path,workspace-scope}.test.ts`·`tests/api/minutes-chat-route.test.ts`·`tests/minutes/{assign-project,external-api,
+    folders-action}.test.ts`(B 쪽의 `@/lib/teams/master` 목이 A2 뒤 소비처 `@/lib/teams/source` 와 어긋날 수 있다)·`tests/api/shell-route.test.ts`·
+    `tests/invariants/{project-page-gates,settings-writes}.test.ts`·`tests/scripts/e2e.test.ts`·`tests/ui/wbs-mobile-compact.test.tsx`.
+- **병합 뒤 깨질 것으로 아는 테스트 셋**(B 과제 39 가 손으로 고친다):
+  ① `tests/data/portfolio-teams.test.ts`(A2 새) — 무인자 `getPortfolioInputs()` 호출이고 목 행에 `workspace_id` 가 없어 B 의 워크스페이스 필터가 모두
+  거른다 → 인자·목 행을 B 의 꼴로. ② `tests/portfolio/portfolio-scope.test.ts`(B 새) — `@/lib/teams/master` 를 목으로 거는데 A2 뒤 `portfolio.ts` 는
+  `@/lib/teams/source` 를 쓴다 → 목 대상을 바꾼다. ③ `tests/invariants/teams-master-consumers.test.ts`(A2 새, 옛 캐시 소비처 닫힌 목록 7) — B 가
+  `(app)/layout.tsx` 를 `(app)/(global)/layout.tsx`·`w/[slug]/layout.tsx` 로 나눴으므로 목록을 새 경로로 고친다.
+  병합 뒤 `npm run test` 전체와 `catalog-sync` 를 B 와 같이 돌린다.
 
 ## render-pages 센티널 `ERP` 의 원인(Z5 F-1 — A2 S10 앞, 정적 확인)
 
