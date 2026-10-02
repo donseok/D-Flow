@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { RotateCcw, X, Send, Sparkles, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react'
 import { RightRail, useRailHost, useRightRailOptional } from '@/components/app/RightRail'
@@ -143,6 +144,8 @@ export function AssistantChat() {
   const railHost = useRailHost()
   const wide = useMinWidth(1024)
   const railActive = !!rail && !!railHost && wide
+  // 좁은 화면(레일 아님)에서 WBS 전체 화면이 열려 있으면 그 안의 레일 자리 — 떠 있는 패널을 거기로 포털해 전체 화면(120) 아래로 숨지 않게(AA3, D56)
+  const fsHost = !railActive && railHost?.getAttribute('data-rail-host') === 'fullscreen' ? railHost : null
   const [openLocal, setOpenLocal] = useState(false)
   // 레일 모드의 열림 = 레일 점유자가 'ai'. 옛 모양의 열림 = 이 컴포넌트 상태. 둘은 setOpen 이 같이 맞춘다
   const open = railActive ? rail.occupant === 'ai' : openLocal
@@ -159,7 +162,11 @@ export function AssistantChat() {
     if (railActive && rail.occupant !== 'ai') setOpenLocal(false)
     if (railActive && rail.occupant === 'ai') setOpenLocal(true)
   }, [railActive, rail?.occupant])
-  const fabHidden = useFabSuppressed(!railActive)
+  // 전체 화면 안(좁은 화면)에서는 툴바 토글이 레일 API 로 연다·닫는다 — 점유자를 따라간다(AA3)
+  useEffect(() => {
+    if (fsHost && rail) setOpenLocal(rail.occupant === 'ai')
+  }, [fsHost, rail, rail?.occupant])
+  const fabHidden = useFabSuppressed(!railActive && !fsHost)
   const [collapsed, setCollapsed] = useState(false) // 접힘 = 알약 바만 표시. 대화·스트리밍은 그대로 유지
   const [ctx, setCtx] = useState<BotContext | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
@@ -233,9 +240,11 @@ export function AssistantChat() {
     return () => { alive = false }
   }, [currentProjectId])
 
-  // 탐침 결과를 레일 공급자에 싣는다 — 전역 바 아이콘(useAiRailButton)이 읽는다. 레일로 그릴 수 있을 때만(좁으면 FAB 가 진입점)
+  // 탐침 결과를 레일 공급자에 싣는다 — 전역 바 아이콘(useAiRailButton)·WBS 전체 화면 툴바 토글이 읽는다. 레일 API 로 열 수 있을 때만
+  // (레일로 그리거나, 좁아도 전체 화면 안 자리가 있을 때 — AA3). 그 밖의 좁은 화면은 FAB 가 진입점
   const setAiAvailable = rail?.setAiAvailable
-  useEffect(() => { setAiAvailable?.(available === true && railActive) }, [setAiAvailable, available, railActive])
+  const viaRailApi = railActive || !!fsHost
+  useEffect(() => { setAiAvailable?.(available === true && viaRailApi) }, [setAiAvailable, available, viaRailApi])
 
   // 완전 닫기 — 접힘 상태도 리셋해 다음에 열 때는 펼친 상태로 시작
   const close = useCallback(() => {
@@ -707,10 +716,11 @@ export function AssistantChat() {
     ) : null
   }
 
-  return (
+  const floating = (
     <>
-      {/* ── FAB ── 층은 레일(--z-rail): 오버레이·전체 화면·모달 아래(z 대응표 §1). 저장 바·가상 키보드가 보이면 그리지 않는다 */}
-      {!open && !fabHidden && (
+      {/* ── FAB ── 층은 레일(--z-rail): 오버레이·전체 화면·모달 아래(z 대응표 §1). 저장 바·가상 키보드가 보이면 그리지 않는다.
+          전체 화면 안에서는 그리지 않는다 — 진입점은 전체 화면 툴바의 AI 토글(AA3) */}
+      {!open && !fabHidden && !fsHost && (
         <button
           ref={fabRef}
           onClick={() => setOpen(true)}
@@ -758,6 +768,8 @@ export function AssistantChat() {
       )}
     </>
   )
+  // 전체 화면이 열려 있으면 그 안의 레일 자리(스태킹 맥락 안 --z-rail)에 그린다 — 밖에 두면 전체 화면 층 아래로 숨는다(AA3)
+  return fsHost ? createPortal(floating, fsHost) : floating
 }
 
 function Bubble({

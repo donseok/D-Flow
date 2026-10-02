@@ -12,7 +12,7 @@ import { computeHideDone } from '@/lib/domain/hideDone'
 import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
-import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText, teamStyle } from './shared'
@@ -26,6 +26,7 @@ import { PresenceStrip } from '@/components/app/PresenceStrip'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
+import { useRightRailOptional } from '@/components/app/RightRail'
 import type { DictKey } from '@/lib/i18n/dict'
 import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
@@ -350,6 +351,9 @@ export function WbsGanttSheet({
   // 툴바 토글 버튼은 제거됨 — 값은 defaultView에서 파생.
   const timelineFocus = defaultView === 'timeline'
   const [fullscreen, setFullscreen] = useState(false) // 팝업(전체화면 모달)로 크게 보기
+  // 전체 화면은 전역 바(AI 아이콘)를 덮는다 — 전체 화면 툴바의 AI 토글이 레일 API 로 연다(AA3, D56). aiAvailable = 탐침 통과 + 레일 API 로 열 수 있음
+  const aiRail = useRightRailOptional()
+  const aiOpen = aiRail?.occupant === 'ai'
   const [reportOpen, setReportOpen] = useState(false) // 주간 보고서 모달
   // 의존성 연결선은 상시 표시하지 않는다 — 두 축을 합치면서 선이 너무 많아졌다(2026-08-28).
   // 간트 바에 마우스를 올린 동안 그 작업에 걸린 선만 그린다. 툴바 토글은 제거했다.
@@ -523,6 +527,7 @@ export function WbsGanttSheet({
         || reportOpen
         || addPhase !== null
         || edit
+        || aiOpen   // 전체 화면 안에서 연 AI — 첫 Esc 는 AI 를 닫는다(AA3)
       ) return
       setFullscreen(false)
     }
@@ -534,6 +539,7 @@ export function WbsGanttSheet({
     }
   }, [
     addPhase,
+    aiOpen,
     edit,
     fullscreen,
     progressLensEnabled,
@@ -1261,6 +1267,13 @@ export function WbsGanttSheet({
         <button data-wbs-fullscreen-toggle onClick={() => setFullscreen(v => !v)} aria-pressed={fullscreen} title={fullscreen ? t('wbs.exitFullscreenTitle') : t('wbs.enterFullscreenTitle')} className={`btn h-9 px-3 text-xs ${fullscreen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
           {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {showLabels && <span data-btn-label>{fullscreen ? t('wbs.viewSmaller') : t('wbs.viewLarger')}</span>}
         </button>
+        {fullscreen && aiRail?.aiAvailable && (
+          <button type="button" data-wbs-ai-toggle onClick={() => (aiOpen ? aiRail.close('ai') : aiRail.open('ai'))} aria-pressed={aiOpen}
+            aria-label={t('chat.open')} title={t('chat.open')}
+            className={`btn h-9 px-3 text-xs ${aiOpen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />{showLabels && <span data-btn-label>AI</span>}
+          </button>
+        )}
         {/* 종전 '작업 의존성' 토글 버튼과 그 안의 크리티컬·지연 요약 칩이 있던 자리.
             선이 상시로 그려져 난잡하다는 판단으로 둘 다 제거했다(2026-08-28) —
             연결선은 간트 바에 마우스를 올린 동안만 그린다. 크리티컬 여부는 행의 붉은 점으로 남는다. */}

@@ -79,3 +79,41 @@ describe('AssistantChat — 레일 이관(D33·D56)', () => {
     await waitFor(() => expect(document.querySelector('[role="dialog"][aria-label="chat.dialog"]')).not.toBeNull())
   })
 })
+
+// AA3 — WBS 전체 화면 안에서 AI 를 여는 길(스펙 §5.5·§8.5(c), D56). 전체 화면 툴바의 토글이 레일 API(open('ai'))를 부른다.
+// 1024 미만은 레일이 아니라 떠 있는 패널이라 그대로면 전체 화면(120) 아래(--z-rail 90)로 숨는다 — 전체 화면 안 레일 자리로 포털한다.
+describe('AssistantChat — 전체 화면 안 AI(AA3)', () => {
+  const openFs = async () => {
+    const fs = document.createElement('div'); fs.setAttribute('data-wbs-fullscreen', 'open')
+    const slot = document.createElement('div'); slot.setAttribute('data-rail-host', 'fullscreen'); fs.appendChild(slot)
+    await act(async () => { document.body.appendChild(fs); await Promise.resolve() })
+    return { fs, slot }
+  }
+  it('1024 미만 + 전체 화면 열림: aiAvailable 이 켜지고(툴바 토글이 보인다), open("ai") 면 패널이 전체 화면 안 자리에 뜬다 — FAB 는 없다', async () => {
+    h.wide = false
+    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    await waitFor(() => expect(fab()).not.toBeNull())
+    expect(rail!.aiAvailable).toBe(false)                 // 전체 화면 밖 좁은 화면의 진입점은 FAB
+    const { slot } = await openFs()
+    await waitFor(() => expect(rail!.aiAvailable).toBe(true))
+    expect(fab()).toBeNull()
+    act(() => rail!.open('ai'))
+    await waitFor(() => expect(slot.querySelector('[role="dialog"][aria-label="chat.dialog"]')).not.toBeNull())
+    act(() => rail!.close('ai'))
+    await waitFor(() => expect(slot.querySelector('[role="dialog"]')).toBeNull())
+  })
+  it('1024 이상 + 전체 화면: open("ai") 면 레일이 전체 화면 안 자리로 간다(기존 D56)', async () => {
+    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    await waitFor(() => expect(rail!.aiAvailable).toBe(true))
+    const { slot } = await openFs()
+    act(() => rail!.open('ai'))
+    await waitFor(() => expect(slot.querySelector('[aria-label="chat.dialog"]')).not.toBeNull())
+  })
+  it('탐침 404 면 전체 화면에서도 aiAvailable 은 꺼진다', async () => {
+    h.wide = false; h.probe = 404
+    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    await openFs()
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+    expect(rail!.aiAvailable).toBe(false)
+  })
+})
