@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { calSeoulMon } from '../helpers/calendarFixture'
 import ExcelJS from 'exceljs'
 import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { buildReportWorkbook } from '@/lib/report/excel'
@@ -27,7 +28,7 @@ const items: ComputedItem[] = [
 const project = { name: 'Acme Project', description: null, start_date: null, end_date: null }
 
 async function loadWorkbook(): Promise<ExcelJS.Workbook> {
-  const model = buildWeeklyReportModel(items, project, '2026-06-30', { teams: TEST_TEAMS })
+  const model = buildWeeklyReportModel(items, project, '2026-06-30', { teams: TEST_TEAMS, calendar: calSeoulMon })
   const buf = await buildReportWorkbook(model)
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buf)
@@ -86,7 +87,7 @@ describe('buildReportWorkbook — WBS 시트 Lv 열·행 배경/볼드는 depth 
   ]
 
   it('Lv 라벨은 depth 클램프(Phase/Task/Activity/Activity), 볼드는 depth<=1(T/T/F/F)', async () => {
-    const model = buildWeeklyReportModel(deepItems, project, '2026-06-30', { teams: TEST_TEAMS })
+    const model = buildWeeklyReportModel(deepItems, project, '2026-06-30', { teams: TEST_TEAMS, calendar: calSeoulMon })
     const buf = await buildReportWorkbook(model)
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(buf)

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { calSeoulMon } from '../helpers/calendarFixture'
 import { extractSearchKeywords, classifyIntent } from '@/lib/ai/intent'
 import { keywordMatchLines, analyzeProject as analyzeProjectReal } from '@/lib/ai/analytics'
 import type { ComputedItem, TeamCode } from '@/lib/domain/types'
@@ -10,7 +11,7 @@ function analyzeProject(
   projectName: Parameters<typeof analyzeProjectReal>[1],
   today: Parameters<typeof analyzeProjectReal>[2],
 ) {
-  return analyzeProjectReal(items, projectName, today, TEST_TEAMS)
+  return analyzeProjectReal(items, projectName, today, calSeoulMon, TEST_TEAMS)
 }
 
 describe('extractSearchKeywords — 키워드 검색 질문 감지', () => {

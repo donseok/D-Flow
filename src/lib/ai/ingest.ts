@@ -29,7 +29,7 @@ export async function ingestProject(projectId: string): Promise<IngestResult> {
   // RLS 관문 — 호출자가 볼 수 없는 프로젝트(다른 워크스페이스·없는 pid)면 throw. 아래 팀 읽기(세션)와 admin upsert 는
   // 이 뒤에만 간다(자가 치유 색인이 다른 워크스페이스의 wbs_embeddings 에 쓰던 경로 — SP2 최종 리뷰 ISO-1).
   const name = await getProjectName(projectId)
-  const [{ items, today }, roster, config, teams] = await Promise.all([
+  const [{ items, today, calendar }, roster, config, teams] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
     getProjectConfig(projectId),
@@ -38,7 +38,7 @@ export async function ingestProject(projectId: string): Promise<IngestResult> {
   // 명단을 못 읽었으면 여기서 멈춘다 — 빈 명단으로 진행하면 아래 stale 삭제가 기존 member 임베딩을 지운다(3원칙 ①·②).
   if (!roster.ok) throw new Error(roster.error)
   // 팀 축은 그 프로젝트의 팀 — 전 워크스페이스 공용 목록이면 남의 워크스페이스 팀 코드가 색인 문서에 실린다.
-  const docs = buildDocuments(items, name, today, activeCodes(teams), roster.rows, valueOf(config, 'core.level_labels'))
+  const docs = buildDocuments(items, name, today, calendar, activeCodes(teams), roster.rows, valueOf(config, 'core.level_labels'))
   if (docs.length === 0) return { count: 0 }
 
   const vectors = await embedDocuments(

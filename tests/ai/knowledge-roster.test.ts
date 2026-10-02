@@ -15,6 +15,7 @@ vi.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
+import { calUtcSun } from '../helpers/calendarFixture'
 import { gatherKnowledge, loadProjectAnalysis } from '@/lib/ai/knowledge'
 
 const ALICE = { id: 'm1', name: 'alice', teams: [{ id: 't1', code: 'PMO' }] }
@@ -23,7 +24,7 @@ let errSpy: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
   vi.clearAllMocks()
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-  mocks.getComputedWbs.mockResolvedValue({ items: [], today: '2026-09-26' })
+  mocks.getComputedWbs.mockResolvedValue({ items: [], today: '2026-09-26', calendar: calUtcSun })
 })
 afterEach(() => errSpy.mockRestore())
 

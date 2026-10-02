@@ -14,6 +14,7 @@ vi.mock('@/lib/teams/source', async () => {
   return { projectTeams: vi.fn(async (pid: string) => teamRows(pid === 'p1' ? ['A팀'] : ['B팀'])) }
 })
 
+import { calUtcSun } from '../helpers/calendarFixture'
 import { hasEmbeddings } from '@/lib/ai/provider'
 import { embedDocuments } from '@/lib/ai/embeddings'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -51,7 +52,7 @@ describe('ingestProject — 재색인(전체 교체)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mWbs.mockResolvedValue({ items: [], today: '2026-01-01' } as never)
+    mWbs.mockResolvedValue({ items: [], today: '2026-01-01', calendar: calUtcSun } as never)
     mRoster.mockResolvedValue({ ok: true, rows: [] })
     mName.mockResolvedValue('프로젝트 A')
     mConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
@@ -153,8 +154,9 @@ describe('ingestProject — 재색인(전체 교체)', () => {
     mDocs.mockReturnValue([])
 
     expect(await ingestProject('p1')).toEqual({ count: 0 })
-    expect(mDocs.mock.calls[0][4]).toBe(rows)
-    expect(mDocs.mock.calls[0][3]).toEqual(['A팀'])
+    expect(mDocs.mock.calls[0][5]).toBe(rows)
+    expect(mDocs.mock.calls[0][4]).toEqual(['A팀'])
+    expect(mDocs.mock.calls[0][3]).toBe(calUtcSun)   // 넷째 인자 = 그 프로젝트 달력(SP5 A 과제 15)
   })
 
   it('팀 원천 실패는 색인을 멈춘다(빈 팀 축으로 문서를 쓰지 않는다 — SP4 A2)', async () => {

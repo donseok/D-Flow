@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { calSeoulMon } from '../helpers/calendarFixture'
 import ExcelJS from 'exceljs'
 import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { buildReportWorkbook } from '@/lib/report/excel'
@@ -27,8 +28,8 @@ const sampleItems: ComputedItem[] = [
   ], { weight: 1, plannedPct: 50, rolledActualPct: 45, status: 'delayed' }),
 ]
 const project = { name: 'Acme Project', description: 'PI Master Plan', start_date: '2026-01-01', end_date: '2026-12-31' }
-const model = buildWeeklyReportModel(sampleItems, project, '2026-06-30', { generatedAt: '2026-06-30 13:20', teams: TEST_TEAMS })
-const emptyModel = buildWeeklyReportModel([], { name: '빈 프로젝트' }, '2026-06-30', { teams: TEST_TEAMS })
+const model = buildWeeklyReportModel(sampleItems, project, '2026-06-30', { generatedAt: '2026-06-30 13:20', teams: TEST_TEAMS, calendar: calSeoulMon })
+const emptyModel = buildWeeklyReportModel([], { name: '빈 프로젝트' }, '2026-06-30', { teams: TEST_TEAMS, calendar: calSeoulMon })
 
 describe('buildReportWorkbook (보라 공정보고 2시트)', () => {
   it('워크스페이스 제품명을 작성자로 기록한다', async () => {
@@ -50,7 +51,7 @@ describe('buildReportWorkbook (보라 공정보고 2시트)', () => {
     const ws = wb.getWorksheet('1.공정보고')!
     expect(String(ws.getCell('A2').value)).toContain('Acme Project')
     expect(String(ws.getCell('A2').value)).toContain('공정보고')
-    expect(String(ws.getCell('B3').value)).toContain('6월 5주차')
+    expect(String(ws.getCell('B3').value)).toContain('7월 1주차')   // 개정 §4.2.5 — 옛 '6월 5주차'
   })
 
   it('WBS 시트에 전체 노드가 들어감(지연 항목명 포함)', async () => {

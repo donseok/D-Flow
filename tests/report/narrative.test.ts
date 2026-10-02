@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { calSeoulMon } from '../helpers/calendarFixture'
 import { buildWeeklyReportModel as buildWeeklyReportModelReal, NO_ISSUE_TEXT } from '@/lib/report/weekly'
 import { buildWeeklyNarrative, mergeDuplicateLines } from '@/lib/report/narrative'
 import type { Announcement, ComputedItem, Meeting, TeamCode } from '@/lib/domain/types'
@@ -11,7 +12,8 @@ function buildWeeklyReportModel(
   today: Parameters<typeof buildWeeklyReportModelReal>[2],
   opts: Partial<Parameters<typeof buildWeeklyReportModelReal>[3]> = {},
 ) {
-  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, ...opts })
+  // 월요일·서울 달력(D28 월요일 회귀 — 기존 기대값 그대로)
+  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, calendar: calSeoulMon, ...opts })
 }
 
 const node = (over: Partial<ComputedItem>): ComputedItem =>

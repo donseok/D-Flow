@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // SP2 Task 16b — 챗봇 근거(knowledge)의 팀 축은 대상 프로젝트의 팀이다. 옛 전역 접근자는 전 워크스페이스의 공용 팀
 // 합집합이라, 팀별 답변에 다른 워크스페이스의 팀 이름이 행으로 나왔다.
 const mocks = vi.hoisted(() => ({
-  getComputedWbs: vi.fn(async () => ({ items: [], today: '2026-09-26' })),
+  getComputedWbs: vi.fn(async () => ({ items: [], today: '2026-09-26', calendar: (await import('../helpers/calendarFixture')).calUtcSun })),
   activeTeamCodesForProjectSync: vi.fn((pid: string) => (pid === 'p1' ? ['A팀'] : pid === 'p2' ? ['B팀'] : [])),
   projectTeams: vi.fn(),
 }))

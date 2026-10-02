@@ -144,15 +144,17 @@ function buildProcessSheet(ws: Worksheet, model: WeeklyReportModel) {
 
   // ── 4) 담당자별 워크로드 ──
   sectionBar(ws, r, LAST, '4) 담당자별 워크로드'); r++
-  headerRow(ws, r, [{ t: '#' }, { t: '담당자', align: 'left' }, { t: '월' }, { t: '화' }, { t: '수' }, { t: '목' }, { t: '금' }, { t: '합계' }, { t: '비고', align: 'left' }])
+  // 요일 칸은 표시 요일(근무일)이다(SP5 A — 5칸 고정 폐기). 칸 수 n(1~7) 뒤에 합계·비고. LAST(12) 안에 든다(최대 2+7+2=11열)
+  const days = model.meta.weekDayLabels
+  headerRow(ws, r, [{ t: '#' }, { t: '담당자', align: 'left' }, ...days.map(t => ({ t })), { t: '합계' }, { t: '비고', align: 'left' }])
   r++
   model.workload.forEach((w, i) => {
     const zebra = i % 2 === 1 ? PX.zebra : PX.white
     setCell(ws.getCell(r, 1), i + 1, { bg: zebra, align: 'center' })
     setCell(ws.getCell(r, 2), w.name, { bg: zebra })
     w.perDay.forEach((v, d) => setCell(ws.getCell(r, 3 + d), v, { bg: PX.workload, color: PX.ink, bold: true, align: 'center' }))
-    setCell(ws.getCell(r, 8), w.total, { bg: zebra, bold: true, align: 'center' })
-    setCell(ws.getCell(r, 9), w.note, { bg: zebra })
+    setCell(ws.getCell(r, 3 + days.length), w.total, { bg: zebra, bold: true, align: 'center' })
+    setCell(ws.getCell(r, 4 + days.length), w.note, { bg: zebra })
     r++
   })
   r++

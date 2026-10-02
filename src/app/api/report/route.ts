@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
   const { project } = target
 
   // 설정 조회는 같은 배치에서 돌리되 결과로 받는다 — throw 하면 Promise.all 전체가 500 이 되어 '설정 확인 불가'(503)와 구분되지 않는다.
-  const [{ items, today }, roster, attendance, meetRes, annRes, cfgRes, teamsRes] = await Promise.all([
+  const [{ items, today, calendar }, roster, attendance, meetRes, annRes, cfgRes, teamsRes] = await Promise.all([
     getComputedWbs(projectId), getProjectRoster(projectId), getAttendanceRecords(projectId),
     getProjectMeetingData(projectId), getAnnouncements(projectId),
     getProjectConfig(projectId).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
@@ -173,7 +173,7 @@ export async function GET(req: NextRequest) {
   const model = buildWeeklyReportModel(items, project, today, {
     members, attendance, generatedAt: seoulNow(),
     meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
-    teams: activeCodes(teamsRes.teams), levelLabels,
+    teams: activeCodes(teamsRes.teams), levelLabels, calendar,
   })
   const meta = FORMATS[format]
 

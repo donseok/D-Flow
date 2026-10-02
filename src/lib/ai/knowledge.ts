@@ -49,7 +49,7 @@ export interface LoadedProject {
 
 export const loadProjectAnalysis = cache(async (projectId: string): Promise<LoadedProject> => {
   const name = await getProjectName(projectId)   // RLS 관문 — 볼 수 없는 프로젝트면 여기서 throw(아래 팀을 읽지 않는다)
-  const [{ items, today }, roster, teams] = await Promise.all([
+  const [{ items, today, calendar }, roster, teams] = await Promise.all([
     getComputedWbs(projectId),
     getProjectRoster(projectId),
     projectTeams(projectId),
@@ -59,7 +59,7 @@ export const loadProjectAnalysis = cache(async (projectId: string): Promise<Load
   const teamCodes = activeCodes(teams)
   // 팀 축은 그 프로젝트의 팀(전용 팀, 없으면 그 워크스페이스의 공용 팀) — 전 워크스페이스 공용 목록이면 남의 팀이 근거에 섞인다.
   return {
-    analysis: analyzeProject(items, name, today, teamCodes, members),
+    analysis: analyzeProject(items, name, today, calendar, teamCodes, members),
     members, rosterError: roster.ok ? null : roster.error, name, teamCodes,
   }
 })
@@ -69,8 +69,8 @@ async function allProjectSummaries(): Promise<{ summaries: ProjectSummary[]; exc
   const results = await Promise.all(
     projects.map(async p => {
       try {
-        const [{ items, today }, teams] = await Promise.all([getComputedWbs(p.id), projectTeams(p.id)])
-        return summarizeProject(analyzeProject(items, p.name, today, activeCodes(teams)))
+        const [{ items, today, calendar }, teams] = await Promise.all([getComputedWbs(p.id), projectTeams(p.id)])
+        return summarizeProject(analyzeProject(items, p.name, today, calendar, activeCodes(teams)))
       } catch (e) {
         console.error(`[assistant] 전사 요약 — 프로젝트 "${p.name}" 분석 실패(제외):`, e instanceof Error ? e.message : e)
         return null

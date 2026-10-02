@@ -5,6 +5,11 @@ import type {
 import { overallProgress, weightOf } from '@/lib/domain/rollup'
 import { round1 } from '@/lib/domain/format'
 import { expandMeetings, sortOccurrences } from '@/lib/domain/meetings'
+import {
+  isoDowOf, nextWeekKey, prevWeekKey, weekDisplayDays, weekKeyOf, weekPeriodOf, ymdIn, type WorkCalendar,
+} from '@/lib/domain/calendar'
+import { addDaysIso } from '@/lib/domain/dates'
+import { mdOf, weekLabelTexts } from './week'
 
 /* ============================================================================
  * 주간 공정보고 모델 — 주간보고(PPT)·공정보고(Excel)가 공유하는 단일 출처.
@@ -13,7 +18,9 @@ import { expandMeetings, sortOccurrences } from '@/lib/domain/meetings'
  * 금주 실적=진행중 leaf, 차주 계획=차주 기간과 겹치는 미완료 leaf, 워크로드=팀별, 근태=members+attendance.
  * ========================================================================== */
 
-const WEEKDAY_LABELS = ['월', '화', '수', '목', '금'] as const
+/** ISO 요일(1=월…7=일) → 한 글자 라벨(보고서 서식 — 한국어 고정, 지원 제한 §2.9.2) */
+const DOW_LABEL = ['월', '화', '수', '목', '금', '토', '일'] as const
+const dayLabelsOf = (days: readonly string[]): string[] => days.map(d => DOW_LABEL[isoDowOf(d) - 1])
 
 export interface WeeklyMeta {
   projectName: string
@@ -22,17 +29,20 @@ export interface WeeklyMeta {
   today: string              // 'YYYY-MM-DD'
   isoYear: number
   isoWeek: number            // 27 (ISO 주차 — 메타 보존용)
-  weekTag: string            // '7월1주차' (파일명용 · 월기준 몇째주)
-  weekLabel: string          // '2026년 7월 1주차 (6/29~7/5)' (월기준)
-  weekRange: string          // '6/29~7/5'
-  nextWeekRange: string      // '7/6~7/12'
-  weekStart: string          // 월요일 'YYYY-MM-DD'
-  weekDays: string[]         // 월~금 5개
+  weekTag: string            // '7월1주차' (파일명용 — weekLabelTexts)
+  weekLabel: string          // '2026년 7월 1주차 (6/29~7/3)' (보고서 — weekLabelTexts.reportLabel)
+  weekRange: string          // 표시 요일 범위 '6/29~7/3'
+  nextWeekRange: string      // 차주 표시 요일 범위
+  weekStart: string          // 그 주 키(프로젝트 규칙 — 월요일 고정이 아니다)
+  weekEnd: string            // 그 주 기간의 마지막 날(과도기 주는 6·8일 기간의 끝)
+  weekDays: string[]         // 표시 요일(기간 안 근무일, 0이면 기간 전체 — 1~7칸)
+  weekDayLabels: string[]    // weekDays 의 요일 라벨('월'…)
   nextWeekStart: string
-  nextWeekDays: string[]     // 차주 월~금 5개
-  prevWeekStart: string      // 지난주 월요일 'YYYY-MM-DD'
-  prevWeekDays: string[]     // 지난주 월~금 5개
-  prevWeekRange: string      // '6/29~7/5'
+  nextWeekDays: string[]
+  nextWeekDayLabels: string[]
+  prevWeekStart: string      // 지난 주 키
+  prevWeekDays: string[]
+  prevWeekRange: string
   totalLeaves: number
   phaseCount: number
 }
@@ -205,16 +215,12 @@ export function addDays(d: Date, n: number): Date {
   x.setUTCDate(x.getUTCDate() + n)
   return x
 }
-/** 공지 게시일 'YYYY-MM-DD'(KST). publishFrom은 이미 KST date, 없으면 createdAt(ISO timestamptz)을 +9h로 환산.
- *  UTC 슬라이스로 자르면 KST 자정~09시 공지가 하루 앞 주차로 오분류된다. */
-function announcedOn(a: Announcement): string {
+/** 공지 게시일 'YYYY-MM-DD'(프로젝트 tz). publishFrom 은 이미 그 날짜(date-only), 없으면 createdAt(instant)을 프로젝트 tz 로 날짜화한다.
+ *  UTC 슬라이스로 자르면 tz 자정 전후 공지가 하루 앞 주차로 오분류된다. */
+function announcedOn(a: Announcement, timezone: string): string {
   if (a.publishFrom) return a.publishFrom.slice(0, 10)
   const t = Date.parse(a.createdAt)
-  return Number.isNaN(t) ? '' : fmtUTC(new Date(t + 9 * 3600_000))
-}
-export function mondayOf(d: Date): Date {
-  const dow = d.getUTCDay() || 7 // 1=월 … 7=일
-  return addDays(d, -(dow - 1))
+  return Number.isNaN(t) ? '' : ymdIn(timezone, new Date(t))
 }
 /** ISO-8601 주차 번호. */
 function isoWeek(d: Date): { year: number; week: number } {
@@ -226,9 +232,6 @@ function isoWeek(d: Date): { year: number; week: number } {
   firstThu.setUTCDate(firstThu.getUTCDate() - firstDayNr + 3)
   const week = 1 + Math.round((t.getTime() - firstThu.getTime()) / (7 * 86_400_000))
   return { year: t.getUTCFullYear(), week }
-}
-export function md(d: Date): string {
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
 }
 const DOW_KR = ['일', '월', '화', '수', '목', '금', '토'] as const
 /** 'YYYY-MM-DD' → 'M/D(요일)' (회의일정·공지 표기용 — narrative의 이벤트 목록이 공유). */
@@ -289,6 +292,8 @@ export function buildWeeklyReportModel(
     teams: readonly TeamCode[]
     /** depth→라벨 매핑(프로젝트 설정). 기본은 기존 3레벨 표기와 동일 — 무인자 호출은 바이트 불변. */
     levelLabels?: readonly string[]
+    /** 그 프로젝트의 달력(SP5 A — 필수) — 주 키·기간·표시 요일·공지 날짜의 tz. 호출처가 getComputedWbs(…).calendar 를 넘긴다 */
+    calendar: WorkCalendar
   },
 ): WeeklyReportModel {
   const reportTeams = opts.teams
@@ -297,32 +302,25 @@ export function buildWeeklyReportModel(
   const members = opts.members ?? []
   const attendance = opts.attendance ?? []
 
-  // ── 주차 ──
+  // ── 주차(SP5 A — 키·기간·이웃은 달력 모듈, 서식은 weekLabelTexts) ──
+  const cal = opts.calendar
   const todayD = parseUTC(today)
-  const weekStartD = mondayOf(todayD)
-  const weekEndD = addDays(weekStartD, 6)
-  const nextStartD = addDays(weekStartD, 7)
-  const nextEndD = addDays(weekStartD, 13)
-  const prevStartD = addDays(weekStartD, -7)
-  const prevEndD = addDays(weekStartD, -1)
-  const { year: isoYear, week: isoWeekNum } = isoWeek(todayD)
-  // 월기준 몇째주 = ceil(오늘 일자/7). 파일명·본문 라벨에 사용(사용자 요청).
-  const calYear = todayD.getUTCFullYear()
-  const calMonth = todayD.getUTCMonth() + 1
-  const weekOfMonth = Math.ceil(todayD.getUTCDate() / 7)
-  const weekTag = `${calMonth}월${weekOfMonth}주차`
-  const weekStart = fmtUTC(weekStartD)
-  const weekEnd = fmtUTC(weekEndD)
-  const nextWeekStart = fmtUTC(nextStartD)
-  const nextWeekEnd = fmtUTC(nextEndD)
-  const prevWeekStart = fmtUTC(prevStartD)
-  const prevWeekEnd = fmtUTC(prevEndD)
-  const weekDays = Array.from({ length: 5 }, (_, i) => fmtUTC(addDays(weekStartD, i)))
-  const nextWeekDays = Array.from({ length: 5 }, (_, i) => fmtUTC(addDays(nextStartD, i)))
-  const weekRange = `${md(weekStartD)}~${md(weekEndD)}`
-  const nextWeekRange = `${md(nextStartD)}~${md(nextEndD)}`
-  const prevWeekDays = Array.from({ length: 5 }, (_, i) => fmtUTC(addDays(prevStartD, i)))
-  const prevWeekRange = `${md(prevStartD)}~${md(prevEndD)}`
+  const { year: isoYear, week: isoWeekNum } = isoWeek(todayD)        // ISO 주차 — 메타 보존용(월요일 정의 그대로)
+  const weekStart = weekKeyOf(cal.weekStart, today)
+  const weekEnd = addDaysIso(weekPeriodOf(cal.weekStart, weekStart).endExclusive, -1)
+  const nextWeekStart = nextWeekKey(cal.weekStart, weekStart)
+  const nextWeekEnd = addDaysIso(weekPeriodOf(cal.weekStart, nextWeekStart).endExclusive, -1)
+  const prevWeekStart = prevWeekKey(cal.weekStart, weekStart)
+  const prevWeekEnd = addDaysIso(weekStart, -1)
+  const texts = weekLabelTexts(cal, weekStart)
+  const weekTag = texts.weekTag
+  const weekDays = weekDisplayDays(cal, weekStart)
+  const nextWeekDays = weekDisplayDays(cal, nextWeekStart)
+  const prevWeekDays = weekDisplayDays(cal, prevWeekStart)
+  const rangeOf = (days: readonly string[]) => `${mdOf(days[0])}~${mdOf(days[days.length - 1])}`
+  const weekRange = texts.range
+  const nextWeekRange = rangeOf(nextWeekDays)
+  const prevWeekRange = rangeOf(prevWeekDays)
 
   // ── leaf 수집(루트/부모 문맥 포함) ──
   const leaves: LeafCtx[] = []
@@ -464,7 +462,7 @@ export function buildWeeklyReportModel(
 
   // ── 공지 (게시일 기준 전주/금주 분류, 날짜 오름차순) ──
   const annRows: AnnouncementRow[] = (opts.announcements ?? [])
-    .map(a => ({ date: announcedOn(a), title: a.title }))
+    .map(a => ({ date: announcedOn(a, cal.timezone), title: a.title }))
     .filter(r => r.date !== '')
     .sort((x, y) => x.date.localeCompare(y.date))
   const annIn = (from: string, to: string) => annRows.filter(r => r.date >= from && r.date <= to)
@@ -519,8 +517,9 @@ export function buildWeeklyReportModel(
       projectName: project.name, description: project.description ?? null,
       generatedAt: opts.generatedAt ?? `${today} 00:00`, today,
       isoYear, isoWeek: isoWeekNum, weekTag,
-      weekLabel: `${calYear}년 ${calMonth}월 ${weekOfMonth}주차 (${weekRange})`,
-      weekRange, nextWeekRange, weekStart, weekDays, nextWeekStart, nextWeekDays,
+      weekLabel: texts.reportLabel,
+      weekRange, nextWeekRange, weekStart, weekEnd, weekDays, weekDayLabels: dayLabelsOf(weekDays),
+      nextWeekStart, nextWeekDays, nextWeekDayLabels: dayLabelsOf(nextWeekDays),
       prevWeekStart, prevWeekDays, prevWeekRange,
       totalLeaves: total, phaseCount: roots.length,
     },
@@ -533,4 +532,3 @@ const ATT_SHORT: Record<AttendanceType, string> = {
   work: '근무', remote: '재택', annual: '연차', half: '반차', quarter: '반반차', sick: '병가', trip: '출장', official: '공가', absent: '결근',
 }
 
-export { WEEKDAY_LABELS }

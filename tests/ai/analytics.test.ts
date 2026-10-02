@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { calSeoulMon, calUtcSun } from '../helpers/calendarFixture'
 import {
   analyzeProject as analyzeProjectReal,
   summarizeProject,
@@ -19,17 +20,17 @@ function analyzeProject(
   items: Parameters<typeof analyzeProjectReal>[0],
   projectName: Parameters<typeof analyzeProjectReal>[1],
   today: Parameters<typeof analyzeProjectReal>[2],
-  members?: Parameters<typeof analyzeProjectReal>[4],
+  members?: Parameters<typeof analyzeProjectReal>[5],
 ) {
-  return analyzeProjectReal(items, projectName, today, TEST_TEAMS, members)
+  return analyzeProjectReal(items, projectName, today, calSeoulMon, TEST_TEAMS, members)
 }
 function buildDocuments(
   items: Parameters<typeof buildDocumentsReal>[0],
   projectName: Parameters<typeof buildDocumentsReal>[1],
   today: Parameters<typeof buildDocumentsReal>[2],
-  members?: Parameters<typeof buildDocumentsReal>[4],
+  members?: Parameters<typeof buildDocumentsReal>[5],
 ) {
-  return buildDocumentsReal(items, projectName, today, TEST_TEAMS, members)
+  return buildDocumentsReal(items, projectName, today, calSeoulMon, TEST_TEAMS, members)
 }
 
 const leaf = (over: Partial<ComputedItem>): ComputedItem => ({
@@ -61,7 +62,7 @@ const phase = (children: ComputedItem[], over: Partial<ComputedItem> = {}): Comp
   ...over,
 })
 
-const TODAY = '2026-06-30' // 화요일 → 그 주 월 6/29, 일 7/5
+const TODAY = '2026-06-30' // 화요일 → 그 주 월 6/29, 일 7/5(서울·월요일 달력 — 표시 범위는 근무일 6/29~7/3)
 
 describe('analyzeProject', () => {
   const tree = [
@@ -99,7 +100,7 @@ describe('analyzeProject', () => {
 
   it('공정률 = 루트 가중 실적', () => {
     expect(a.donePct).toBe(20)
-    expect(a.weekRange).toBe('6/29~7/5')
+    expect(a.weekRange).toBe('6/29~7/3')   // 표시 요일 범위(SP5 A — 옛 월~일 7일 범위)
   })
 })
 
@@ -123,7 +124,7 @@ describe('의도별 답변 포매터', () => {
 
   it('answerThisWeekStart — 주차 범위 표기', () => {
     const a = analyzeProject([phase([leaf({ status: 'not_started', plannedStart: '2026-06-30' })])], 'P', TODAY)
-    expect(answerThisWeekStart(a)).toContain('이번 주(6/29~7/5) 시작 예정 작업 1건')
+    expect(answerThisWeekStart(a)).toContain('이번 주(6/29~7/3) 시작 예정 작업 1건')
   })
 
   it('answerByTeam — 팀별 + 멤버 표기', () => {
@@ -202,10 +203,19 @@ describe('buildDocuments — 임베딩 문서', () => {
     const activity = leaf({ id: 'act1', name: 'Activity X', depth: 2, children: [subAct] })
     const task = leaf({ id: 'task1', name: 'Task X', depth: 1, children: [activity] })
     const ph = phase([task])
-    const docs = buildDocumentsReal([ph], 'P', TODAY, ['PMO'], [], ['Phase', 'Task', 'Activity'])
+    const docs = buildDocumentsReal([ph], 'P', TODAY, calSeoulMon, ['PMO'], [], ['Phase', 'Task', 'Activity'])
     const subActDoc = docs.find(d => d.content.includes('sub-act 리프명'))
     expect(subActDoc).toBeDefined()
     // levelLabels[min(3, 3-1)] = levelLabels[2] = 'Activity' — 클램프가 없으면 undefined.
     expect(subActDoc!.content).toContain('구분 Activity')
+  })
+})
+
+describe('analyzeProject — "이번 주" 끝은 그 주 기간의 마지막 날(SP5 A)', () => {
+  it('일요일 규칙: 6/30 의 이번 주는 6/28~7/4 — 7/4(토) 시작 작업이 이번 주 시작 예정에 든다', () => {
+    const tree = [phase([leaf({ name: '토요 점검', status: 'not_started', plannedStart: '2026-07-04', plannedEnd: '2026-07-04' })])]
+    const a = analyzeProjectReal(tree, 'P', '2026-06-30', calUtcSun, TEST_TEAMS)
+    expect(a.startingThisWeek.map(l => l.node.name)).toEqual(['토요 점검'])
+    expect(a.weekRange).toBe('6/29~7/3')
   })
 })

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { buildWeeklyReportModel as buildWeeklyReportModelReal } from '@/lib/report/weekly'
 import type { Announcement, AttendanceRecord, ComputedItem, Meeting, ProjectMember, TeamCode } from '@/lib/domain/types'
 import { makeRosterMember } from '../fixtures/rosterMember'
+import { calSeoulMon, calUtcSun } from '../helpers/calendarFixture'
+import { calendarOf } from '@/lib/domain/calendar'
 
 /** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — FIXTURE_TEAM_CODES 미러).
  *  buildWeeklyReportModel 은 teams 를 필수로 받으므로, 팀 목록에 무관한 기존 테스트는 이 래퍼로 주입한다. */
@@ -12,7 +14,8 @@ function buildWeeklyReportModel(
   today: Parameters<typeof buildWeeklyReportModelReal>[2],
   opts: Partial<Parameters<typeof buildWeeklyReportModelReal>[3]> = {},
 ) {
-  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, ...opts })
+  // 월요일·서울 — 이 파일의 기존 기대값(월~금 칸·KST 공지 경계)을 그대로 덮는다(D28 월요일 회귀). 일요일·UTC 는 아래 describe 가 따로 본다
+  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, calendar: calSeoulMon, ...opts })
 }
 
 const meeting = (over: Partial<Meeting>): Meeting => ({
@@ -45,22 +48,46 @@ const items: ComputedItem[] = [
 ]
 const project = { name: 'Acme Project', description: 'PI', start_date: '2026-04-20', end_date: '2026-12-31' }
 
-describe('buildWeeklyReportModel — 주차', () => {
+describe('buildWeeklyReportModel — 주차(개정 §4.2.5 — 키 + 3일이 속한 달의 몇 번째 주)', () => {
   const m = buildWeeklyReportModel(items, project, '2026-06-30')
-  it('월기준 주차(6월 5주차) + 주 범위', () => {
-    // 월기준 주차 = ceil(오늘 일자/7): 6/30 → ceil(30/7)=5
-    expect(m.meta.weekTag).toBe('6월5주차')
-    expect(m.meta.weekLabel).toBe('2026년 6월 5주차 (6/29~7/5)')
+  it('6/30 생성분은 7월 1주차(옛 규칙 6월 5주차) — 범위는 표시 요일(월~금)', () => {
+    expect(m.meta.weekTag).toBe('7월1주차')
+    expect(m.meta.weekLabel).toBe('2026년 7월 1주차 (6/29~7/3)')
     expect(m.meta.isoWeek).toBe(27) // ISO 주차는 메타로 계속 보존
-    expect(m.meta.weekRange).toBe('6/29~7/5')
-    expect(m.meta.nextWeekRange).toBe('7/6~7/12')
+    expect(m.meta.weekRange).toBe('6/29~7/3')
+    expect(m.meta.nextWeekRange).toBe('7/6~7/10')
     expect(m.meta.weekStart).toBe('2026-06-29')
+    expect(m.meta.weekEnd).toBe('2026-07-05')
     expect(m.meta.weekDays).toEqual(['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03'])
+    expect(m.meta.weekDayLabels).toEqual(['월', '화', '수', '목', '금'])
   })
-  it('월초 날짜는 1주차(7/4 → 7월1주차)', () => {
+  it('7/4 생성분과 라벨이 같다(같은 주가 생성일에 따라 갈리지 않는다)', () => {
     const j = buildWeeklyReportModel(items, project, '2026-07-04')
     expect(j.meta.weekTag).toBe('7월1주차')
-    expect(j.meta.weekLabel).toContain('2026년 7월 1주차')
+    expect(j.meta.weekLabel).toBe(m.meta.weekLabel)
+  })
+})
+
+describe('buildWeeklyReportModel — 일요일 규칙·근무 요일(SP5 A)', () => {
+  it('일요일 규칙: 6/30 의 주는 6/28(일) 키, 기간은 6/28~7/4, 표시 요일은 근무일(월~금)', () => {
+    const s = buildWeeklyReportModel(items, project, '2026-06-30', { calendar: calUtcSun })
+    expect(s.meta.weekStart).toBe('2026-06-28')
+    expect(s.meta.weekEnd).toBe('2026-07-04')
+    expect(s.meta.weekLabel).toBe('2026년 7월 1주차 (6/29~7/3)')
+    expect(s.meta.weekDays).toEqual(['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03'])
+    expect(s.meta.nextWeekStart).toBe('2026-07-05')
+    expect(s.meta.prevWeekStart).toBe('2026-06-21')
+  })
+  it('근무 [1..6] 이면 워크로드·근태 칸이 6칸이고 요일 라벨이 따라온다', () => {
+    const sixDay = calendarOf({ timezone: 'Asia/Seoul', workingDays: [1, 2, 3, 4, 5, 6], weekStart: [{ day: 'monday', from: null }] })
+    const s = buildWeeklyReportModel(items, project, '2026-06-30', { calendar: sixDay })
+    expect(s.meta.weekDayLabels).toEqual(['월', '화', '수', '목', '금', '토'])
+    expect(s.workload.length).toBeGreaterThan(0)
+    expect(s.workload.every(w => w.perDay.length === 6)).toBe(true)
+  })
+  it('특정일 근무(일요일 work)는 그 주 표시 요일에 든다', () => {
+    const cal = calendarOf({ timezone: 'Asia/Seoul', workingDays: [1, 2, 3, 4, 5], weekStart: [{ day: 'monday', from: null }], holidays: [{ date: '2026-07-05', kind: 'work' }] })
+    expect(buildWeeklyReportModel(items, project, '2026-06-30', { calendar: cal }).meta.weekDayLabels).toEqual(['월', '화', '수', '목', '금', '일'])
   })
 })
 
@@ -190,7 +217,7 @@ describe('buildWeeklyReportModel — 워크로드/근태', () => {
   it('주입 팀이 결과에 반영된다 — 팀 마스터가 바뀌면 워크로드도 따라온다(하드코딩 폴백 없음)', () => {
     // 기본 5팀에 없는 팀을 주입하면 워크로드 행에 그대로 나타나야 한다(내부 상수로 되돌아가지 않음).
     const injected = buildWeeklyReportModelReal(items, project, '2026-06-30', {
-      members, attendance, teams: ['신규팀', 'PMO'],
+      members, attendance, teams: ['신규팀', 'PMO'], calendar: calSeoulMon,
     })
     expect(injected.workload.map(w => w.name)).toEqual(['신규팀', 'PMO'])
   })
@@ -238,7 +265,7 @@ describe('prevWeek — 전주 주요활동', () => {
   const m = buildWeeklyReportModel(items, project, '2026-07-07')
 
   it('meta에 전주 범위/기간이 있다', () => {
-    expect(m.meta.prevWeekRange).toBe('6/29~7/5')
+    expect(m.meta.prevWeekRange).toBe('6/29~7/3')   // 표시 요일 범위(SP5 A — 옛 월~일 7일 범위 '6/29~7/5')
     expect(m.meta.prevWeekStart).toBe('2026-06-29')
     expect(m.meta.prevWeekDays).toHaveLength(5)
     expect(m.meta.prevWeekDays[0]).toBe('2026-06-29')
@@ -311,6 +338,16 @@ describe('buildWeeklyReportModel — 공지', () => {
     })
     expect(m.announcements.thisWeek.map(a => a.title)).toEqual(['경계공지'])
     expect(m.announcements.prevWeek).toEqual([])
+  })
+
+  it('공지 게시일은 그 달력의 tz 로 날짜화 — 같은 instant 가 UTC 프로젝트에서는 전날(전주)', () => {
+    const at = ann({ title: '경계', createdAt: '2026-07-05T15:30:00Z' })
+    const seoul = buildWeeklyReportModel(items, project, '2026-07-07', { announcements: [at] })
+    const utc = buildWeeklyReportModel(items, project, '2026-07-07', {
+      announcements: [at], calendar: calendarOf({ timezone: 'UTC', workingDays: [1, 2, 3, 4, 5], weekStart: [{ day: 'monday', from: null }] }),
+    })
+    expect(seoul.announcements.thisWeek.map(a => a.date)).toEqual(['2026-07-06'])
+    expect(utc.announcements.prevWeek.map(a => a.date)).toEqual(['2026-07-05'])
   })
 
   it('공지 날짜 오름차순 정렬 + 옵션 미전달 시 빈 목록', () => {

@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { buildWeeklyReportModel, type WeeklyReportModel } from '@/lib/report/weekly'
-import { addDaysIso } from '@/lib/domain/dates'
 import { overallProgress } from '@/lib/domain/rollup'
 import type { ComputedItem, ProjectMember, Status, TeamCode } from '@/lib/domain/types'
+import type { WorkCalendar } from '@/lib/domain/calendar'
 
 const STATUS_KO: Record<Status, string> = {
   not_started: '시작 전',
@@ -91,10 +91,11 @@ export function analyzeProject(
   items: ComputedItem[],
   projectName: string,
   today: string,
+  calendar: WorkCalendar,
   teams: readonly TeamCode[],
   members: ProjectMember[] = [],
 ): ProjectAnalysis {
-  const weekly = buildWeeklyReportModel(items, { name: projectName }, today, { members, teams })
+  const weekly = buildWeeklyReportModel(items, { name: projectName }, today, { members, teams, calendar })
   const leaves = collectLeaves(items)
   const statusCount = emptyStatusCount()
   for (const l of leaves) statusCount[l.node.status]++
@@ -103,8 +104,8 @@ export function analyzeProject(
   const overall = overallProgress(items)
   const actual = Math.round(overall.actual)
   const planned = Math.round(overall.planned)
-  const { weekStart, weekRange } = weekly.meta
-  const weekEnd = addDaysIso(weekStart, 6) // 일요일(주 종료). WeeklyMeta 는 weekStart/weekDays(월~금)만 노출
+  // '이번 주' = 그 프로젝트 규칙의 주 기간(과도기 주는 6·8일 — SP5 A). weekRange 는 표시 요일 범위
+  const { weekStart, weekEnd, weekRange } = weekly.meta
 
   const delayed_ = leaves.filter(l => l.node.status === 'delayed')
   const completed_ = leaves.filter(l => l.node.status === 'done')
@@ -357,11 +358,12 @@ export function buildDocuments(
   items: ComputedItem[],
   projectName: string,
   today: string,
+  calendar: WorkCalendar,
   teams: readonly TeamCode[],
   members: ProjectMember[] = [],
   levelLabels: readonly string[] = ['Phase', 'Task', 'Activity'],
 ): EmbedDoc[] {
-  const analysis = analyzeProject(items, projectName, today, teams, members)
+  const analysis = analyzeProject(items, projectName, today, calendar, teams, members)
   const docs: EmbedDoc[] = []
 
   // 1) 프로젝트 요약 문서

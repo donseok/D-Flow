@@ -63,5 +63,4 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/lib/report/issues/deckPlan.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/lib/data/usage.ts': { patterns: ['+09:00'], removedBy: 'SP5' },
   'src/lib/domain/officeChatter.ts': { patterns: ['9 * 3600_000'], removedBy: 'SP5' },
-  'src/lib/report/weekly.ts': { patterns: ['9 * 3600_000'], removedBy: 'SP5' },
 }

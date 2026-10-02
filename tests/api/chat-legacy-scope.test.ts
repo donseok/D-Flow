@@ -52,7 +52,9 @@ vi.mock('@/lib/ai/provider', () => ({ hasLLM: () => false, hasEmbeddings: () => 
 vi.mock('@/lib/ai/embeddings', () => ({ embedDocuments: mocks.embedDocuments }))
 vi.mock('@/lib/ai/retrieve', () => ({ retrieveContext: vi.fn(async () => []) }))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn(async () => null), generateAnswerStream: vi.fn(async () => null) }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
+vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({
+  items: [], holidays: [], today: '2026-09-26', calendar: (await import('../helpers/calendarFixture')).calUtcSun,
+})) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/settings/projectConfig', async () => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')

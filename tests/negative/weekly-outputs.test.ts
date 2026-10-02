@@ -5,6 +5,7 @@
 // 레코드·출처·사실 — LLM 없이 결정적. LLM 의 답은 SP8). 그 구성이 스스로 등록한 이름과 **같은** 센티널만 뺀다(sentinelsFor — 스펙 D8).
 // 대조: 옛 이름을 스스로 등록한 구성은 그 이름이 출력에 나오고 정상 동작한다 — 같은 실행에서 탐지가 공허하지 않음을 보인다.
 // 옛 이름의 평문은 tests/fixtures/legacy-sentinels.ts 에만 있다(계획 P6) — 이 파일은 그 목록에서 자리로 꺼낸다.
+import { calUtcSun } from '../helpers/calendarFixture'
 import { describe, expect, it, vi } from 'vitest'
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
 import type { ToolExecutionContext } from '@/lib/ai/tools/types'
@@ -153,7 +154,7 @@ async function reportOutputs(s: Setup): Promise<{ pptx: string; xlsx: string; le
   const items = wbsOf(s)
   const model = buildWeeklyReportModel(
     items, { name: `Acme ${s.label}`, description: null, start_date: '2026-09-01', end_date: '2026-12-31' }, TODAY,
-    { teams: s.teams.map((t) => t.code), levelLabels: s.levelLabels, generatedAt: '2026-09-30 09:00' },
+    { teams: s.teams.map((t) => t.code), levelLabels: s.levelLabels, generatedAt: '2026-09-30 09:00', calendar: calUtcSun },
   )
   return {
     pptx: await zipText(await fillWeeklyTemplate(buildWeeklyNarrative(model), model)),
