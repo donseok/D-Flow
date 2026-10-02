@@ -192,7 +192,8 @@ export async function getUnreadAnnouncementCount(projectId: string): Promise<num
     .eq('user_id', user.id)
     .eq('project_id', projectId)
     .maybeSingle()
-  // 실패는 null(모름 — A-4 리뷰 N9): '읽지 않은 공지 0'으로 위장하지 않는다. 셸은 배지를 숨기고 실패 표지를 싣는다. 원인은 로그(표시 = 로깅)
+  // 실패는 null(모름 — A-4 리뷰 N9): '읽지 않은 공지 0'으로 위장하지 않는다. 셸은 null 을 그대로 싣고(D34 — 받는 쪽이 '모름'으로 그린다,
+  // 별도 실패 표지 없음 — A-5 리뷰 O5). 원인은 로그(표시 = 로깅)
   if (seenError) {
     console.error('[announcements] 배지 — 읽음 워터마크 조회 실패:', { projectId, cause: seenError.message })
     return null

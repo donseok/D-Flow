@@ -1,5 +1,7 @@
 // no-runtime-constants 허용 목록(정본 §6.5.2) — 파일마다 걸린 패턴과 지우는 SP. SP4(양식·주간·팀)·SP5(어휘·달력·이슈 영역)가 항목을 지우고
 // SP5 done_when 에서 이 목록이 빈다. 새 파일은 여기 오르지 못한다 — 설정 레지스트리를 읽어야 한다.
+// 한계(a6 리뷰 Q4 — 기록 시점 잔여 0, 스펙 §9 한 행): 시간대 세 패턴은 그 리터럴 꼴만 잡는다 — `9 * 60 * 60 * 1000`·`32400000`·공백 없는
+// `9*3600_000`·다른 나라의 고정 IANA 리터럴(`'Asia/Tokyo'`)·조립(`'Asia/' + 'Seoul'`)은 통과한다(instant-format-zone 은 timeZone 의 유무만 본다).
 export type RuntimeConstantPattern =
   | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000' | 'RESERVED_TEAM_NAMES'
