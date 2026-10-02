@@ -3,7 +3,7 @@
 export type RuntimeConstantPattern =
   | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000' | 'RESERVED_TEAM_NAMES'
-  | 'fixtures/excel/legacyBuild' | 'DEFAULT_LEVEL_LABELS'
+  | 'fixtures/excel/legacyBuild' | 'DEFAULT_LEVEL_LABELS' | 'teamStyle' | 'team-[1-5]'
 
 // SP4 A1 이 지운 주간 상수(WEEKLY_SECTIONS·WEEKLY_TEAM_SECTIONS·FALLBACK_SECTION)는 허용 항목 없이 패턴만 남는다 — 재도입을 막는 영구 가드(스펙 §4.8)
 export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
@@ -18,10 +18,13 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
   'fixtures/excel/legacyBuild': /fixtures\/excel\/legacyBuild/,
   // SP4 A2 가 지운 WBS 화면의 옛 3단 라벨 기본값 — levelLabels 는 필수 prop(설정값). 허용 항목 없음 = 영구 가드(§4.8)
   DEFAULT_LEVEL_LABELS: /\bDEFAULT_LEVEL_LABELS\b/,
+  // SP4 B 가 지운 팀 색 — 코드 해시 슬롯 함수와 옛 팀 토큰 클래스. 화면 색은 teamColor.ts 의 teamSlot·teamSlotFor(category-N). 허용 항목 없음 = 영구 가드(§4.8)
+  teamStyle: /\bteamStyle\b/,
+  'team-[1-5]': /\b(?:text|bg)-team-[1-5]\b/,
 }
 
 /** 파일 → { patterns, removedBy } */
-export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP4' | 'SP5' | 'SP5b' | 'SP6' }> = {
+export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' }> = {
   // ISSUE_MEGA_AREAS(이슈 영역 — SP5 Phase B 가 project_areas(issue_area) 로)
   'src/components/dashboard/IssueStatusCard.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
   'src/components/issues/IssueAnalysisModal.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },

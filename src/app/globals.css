@@ -176,16 +176,6 @@
   --color-hero-ink: var(--color-fg);
   --color-hero-ink-muted: var(--color-fg-secondary);
   --color-hero-line: var(--color-border);
-  --color-team-1: var(--color-category-1);
-  --color-team-2: var(--color-category-2);
-  --color-team-3: var(--color-category-3);
-  --color-team-4: var(--color-category-4);
-  --color-team-5: var(--color-category-5);
-  --color-team-1-weak: var(--color-category-1-weak);
-  --color-team-2-weak: var(--color-category-2-weak);
-  --color-team-3-weak: var(--color-category-3-weak);
-  --color-team-4-weak: var(--color-category-4-weak);
-  --color-team-5-weak: var(--color-category-5-weak);
 }
 
 /* ------------------------------------------------------------------ */

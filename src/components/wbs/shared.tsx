@@ -1,8 +1,5 @@
 import type { Status } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
-import { teamStyle } from '@/lib/domain/teamColor'
-
-export { teamStyle }
 
 export const STATUS: Record<Status, { label: string; chip: string; bar: string; dot: string }> = {
   not_started: { label: '시작전', chip: 'bg-pending-weak text-pending', bar: 'bg-pending', dot: 'bg-pending' },
