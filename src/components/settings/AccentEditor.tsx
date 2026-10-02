@@ -75,7 +75,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
   return <div className="space-y-4 border-t border-line pt-5">
     <div>
       <h3 className="text-sm font-semibold text-ink">강조색</h3>
-      <p className="mt-1 text-xs text-ink-muted">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 화면 전체 반영은 다음 셸 갱신부터 적용됩니다.</p>
+      <p className="mt-1 text-xs text-ink-muted">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.</p>
     </div>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">

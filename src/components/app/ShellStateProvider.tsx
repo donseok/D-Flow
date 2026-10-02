@@ -3,6 +3,7 @@
 //
 // /api/shell GET 1왕복(이동당 1회 — R25)으로 합쳐 컨텍스트로 나눠준다. 범위는 게시 저장소(useShellScope — 범위 레이아웃의 <ShellScope>)에서 읽는다:
 //  - ?ws=<워크스페이스 id>&project=<프로젝트 id>. 범위가 없으면(첫 게시 전·(global)) 쿼리 없이 인박스만 읽고 배지는 null(모름)이다
+//    (global) 화면(계정·플랫폼 운영)은 쿠키 워크스페이스의 내비를 그리지만 '내 업무' 배지도 없다 — 의도다(Z7: 직전 범위를 지금 범위로 오인하지 않게. AA5)
 //  - 배지 셋(myWorkReview·projectApprovals·projectUnreadAnnouncements)은 서버가 실패를 null 로 낸다 — 0 으로 바꾸지 않는다(3원칙 ①)
 //  - 프로젝트를 벗어나면 파생 알림을 비우고 로딩 플래그를 리셋한다(공유 게이트 loading = inboxLoading || notifLoading 이 갇히지 않게)
 //  - 응답 실패는 알림함만 failed 로 표시하고 나머지는 직전 값을 유지(옛 catch 시맨틱). 늦게 온 옛 응답은 시퀀스로 버린다
