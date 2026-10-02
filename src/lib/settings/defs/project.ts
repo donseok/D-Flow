@@ -75,7 +75,7 @@ export const PROJECT_DEFS = [
   defineSetting<'wbs.excel_profile', ExcelProfile | null>({
     key: 'wbs.excel_profile', scope: 'project', module: 'wbs', default: null,
     parse: parseExcelProfile,
-    widget: { kind: 'custom', component: 'ExcelProfilePanel' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
+    widget: { kind: 'custom', component: 'ClearExcelProfileButton' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
   defineSetting<'modules.enabled', ModulesList>({
     key: 'modules.enabled', scope: 'project', module: 'settings', explicit: true,   // 생성 때 늘 명시 기록 — 미설정이면 기본값(토글 전부)이 켜진 것으로 풀린다

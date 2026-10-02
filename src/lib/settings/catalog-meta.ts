@@ -20,7 +20,9 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'core.extra_axis_label': A('stored', ['src/app/actions/projectTeams.ts', 'src/app/api/import/execute/route.ts'], ['tests/settings/registry.test.ts', 'tests/actions/project-teams-actions.test.ts']),
   'core.milestone_keywords': A('verified', ['src/app/(app)/p/[projectId]/dashboard/page.tsx', 'src/lib/ai/tools/dashboard.ts'], ['tests/settings/default-keywords.test.ts', 'tests/settings/project-config.test.ts']),
   // SP4 — 표준 레이아웃(저장하지 않는다)·한 경로 내보내기·표기(D48)로 네 연결이 실물이다(개정 §6.1-3): ① 정의·이 행 ② 편집 = 임포트 마법사의
-  // 저장·설정 화면의 '저장된 양식 비우기'·내보내기 표기 ③ 소비 = 내보내기·inspect·execute ④ 테스트(동등성·라우트)
+  // 저장(execute 의 양식 저장)·설정 화면의 '저장된 양식 비우기'(ClearExcelProfileButton — 레지스트리 widget, updateProjectSettings)·내보내기 표기
+  // ③ 소비 = 내보내기·inspect·execute ④ 테스트(동등성·라우트). 편집 UI 칸은 실재 컴포넌트를 가리킨다(A2 최종 리뷰 완료 P2-3 — 옛 이름
+  // ExcelProfilePanel 은 만들어진 적이 없다. catalog-sync 가 custom 컴포넌트의 실재를 본다)
   'wbs.excel_profile': {
     status: 'verified', sp: 'SP4',
     consumers: ['src/app/api/import/inspect/route.ts', 'src/app/api/export/route.ts', 'src/app/api/import/execute/route.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'],

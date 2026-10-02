@@ -39,7 +39,7 @@ export const settingsKo = {
   'settings.clearExcelProfileDesc': '저장된 엑셀 양식이 있습니다 — 가져오기 마법사와 Excel 내보내기가 이 양식을 씁니다. 양식이 손상됐거나 WBS 단계와 맞지 않아 내보내기가 막히면 비우세요.',
   'settings.clearExcelProfileButton': '저장된 양식 비우기',
   'settings.clearExcelProfileConfirmTitle': '저장된 엑셀 양식을 비울까요?',
-  'settings.clearExcelProfileConfirmBody': '비우면 다음 가져오기는 파일에서 감지한 구조로 시작하고, Excel 내보내기는 프로젝트 기본 레이아웃으로 만듭니다. WBS 데이터는 바뀌지 않습니다.',
+  'settings.clearExcelProfileConfirmBody': '비우면 다음 가져오기는 파일에서 감지한 구조로 시작하고, Excel 내보내기는 표준 양식(프로젝트 팀·단계로 생성)으로 만듭니다. WBS 데이터는 바뀌지 않습니다.',
   'settings.clearExcelProfileConfirm': '비우기',
   'settings.clearing': '비우는 중…',
   'settings.clearExcelProfileDone': '저장된 양식을 비웠습니다',

@@ -26,6 +26,16 @@ describe('설정 카탈로그 동기화', () => {
     }
   })
 
+  it('custom 편집 UI(widget.component)는 src/components/settings 에 실재하는 컴포넌트다 — 카탈로그의 편집 UI 칸이 상태(verified)를 반박하지 않게', () => {
+    // A2 최종 리뷰 완료 P2-3(FF5): wbs.excel_profile 이 존재하지 않는 'ExcelProfilePanel' 을 가리킨 채 verified 였다
+    for (const def of [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]) {
+      if (def.widget.kind !== 'custom') continue
+      const path = `src/components/settings/${def.widget.component}.tsx`
+      expect(existsSync(path), `${def.key}: ${path}`).toBe(true)
+      expect(readFileSync(path, 'utf8'), `${def.key}: export ${def.widget.component}`).toMatch(new RegExp(`export (function|const) ${def.widget.component}\\b`))
+    }
+  })
+
   it('운영 설정 이름은 유일하고 소유 파일이 존재한다', () => {
     expect(new Set(OPERATIONAL_SETTINGS.map(def => def.name)).size).toBe(OPERATIONAL_SETTINGS.length)
     for (const def of OPERATIONAL_SETTINGS) for (const path of def.owner) expect(existsSync(path), `${def.name}: ${path}`).toBe(true)
