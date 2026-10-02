@@ -779,6 +779,26 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
     expect(block).toMatch(/finally \{\s*await setWorkspaceTz\(wsTzBefore\)/)
     expect(block).toMatch(/finally \{\s*await svc\.from\('usage_events'\)\.delete\(\)\.eq\('id', ev\.id\)/)
   })
+  // 체크포인트 A 첫 실행(2026-10-03)의 빨강 둘 — 러너 결함이다(단언은 그대로).
+  it('calendar-tz 의 사용현황 일자 판독은 /usage GET 보다 먼저다 — 그 화면의 after()(purgeOldUsageEvents)가 보존 기간(90일) 밖인 픽스처를 지운다', () => {
+    const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
+    const read = block.indexOf("const utc = await day('UTC')")
+    expect(read).toBeGreaterThan(0)
+    expect(block.indexOf("admin.http('GET', wsPath(wsA, 'usage'))")).toBeGreaterThan(read)
+    expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain('purgeOldUsageEvents')
+  })
+  it('calendar-tz 의 안읽음 배지는 작성자 읽음 표시를 걷은 뒤 센다 — createAnnouncement 가 작성자 워터마크를 방금 만든 공지로 올린다', () => {
+    const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
+    const reset = block.search(/svc\.from\('announcement_seen'\)\.delete\(\)\.eq\('user_id', me\.id\)\.eq\('project_id', calL\.id\)/)
+    expect(reset).toBeGreaterThan(0)
+    expect(block.indexOf('/api/shell?ws=${wsA}&project=${calL.id}')).toBeGreaterThan(reset)
+    expect(readFileSync('src/app/actions/announcements.ts', 'utf8')).toMatch(/advanceSeenWatermark\(projectId, g\.actor\.userId, data\.created_at/)
+  })
+  it('calendar-tz 는 포털 홈 공지 카드도 본다 — 프로젝트 tz 의 오늘 게시만, 내일 게시는 없다(과제 32 — 셸 배지와 같은 판정)', () => {
+    const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
+    expect(block).toContain("admin.http('GET', wsPath(wsA, ''))")
+    expect(block).toContain('portal: homeHtml.includes(annNow) && !homeHtml.includes(annLater)')
+  })
   it("'UTC 기준' 판정은 SSR 의 텍스트 노드 구분(<!-- -->)을 걷어 낸 HTML 로 한다 — 화면은 '{timezone} 기준' 보간이다", () => {
     expect(src).toContain("usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준')")
     expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain('{timezone} 기준')

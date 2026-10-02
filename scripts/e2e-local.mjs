@@ -1176,10 +1176,14 @@ async function main() {
         title, body: '시간대 확인용', category: 'general', isPinned: false, publishFrom: from, publishTo: shiftDays(lToday, 1), milestoneDate: null,
       }])).result)
     }
-    // 공지 '오늘 게시중' 판정 = 프로젝트 tz 의 오늘 — 헤더 티커는 UI-2 가 지웠으므로 셸의 안읽음 배지(같은 판정)로 본다. 관리자는 공지 화면을
-    // HTTP 로만 열어 읽음 표시(클라이언트 효과)가 없다 — 새 프로젝트 L 의 안읽음 = 오늘 게시중인 annNow 하나(annLater 는 내일부터)
+    // 공지 '오늘 게시중' 판정 = 프로젝트 tz 의 오늘 — 헤더 티커는 UI-2 가 지웠으므로 셸의 안읽음 배지(같은 판정)로 본다. createAnnouncement 는 작성자의
+    // 읽음 표시를 방금 만든 공지로 올린다(자기 공지는 읽음 — 앱 의도) — 그대로 세면 0 이라 판정을 못 본다(체크포인트 A 첫 실행의 빨강). 작성자 워터마크를
+    // 걷고 세면 안읽음 = 오늘 게시중인 공지 수 = annNow 하나(annLater 는 내일부터). 관리자는 공지 화면을 HTTP 로만 열어 다시 읽음 표시되지 않는다
+    rows('작성자 읽음 표시 걷기', await svc.from('announcement_seen').delete().eq('user_id', me.id).eq('project_id', calL.id).select('project_id'))
     const shell = await (await admin.http('GET', `/api/shell?ws=${wsA}&project=${calL.id}`)).json()
     const unreadBadge = shell?.badges?.projectUnreadAnnouncements ?? null
+    // 포털 홈 공지 카드도 같은 판정(과제 32 — 프로젝트마다 그 tz 의 오늘): 오늘 게시만 있고 내일 게시는 없다
+    const homeHtml = await (await admin.http('GET', wsPath(wsA, ''))).text()
     const instant = '2026-01-15T03:30:00Z'
     const ev = rows('사용 이벤트 픽스처', await svc.from('usage_events').insert({
       user_id: me.id, menu_key: 'weekly', path: '/e2e-calendar-tz', project_id: null, occurred_at: instant, event_name: 'page_view',
@@ -1191,21 +1195,26 @@ async function main() {
         if (error) throw new Fail(`usage_daily_actives(${tz}): ${error.message}`)
         return (data ?? []).filter((r) => r.events > 0).map((r) => String(r.d))
       }
+      // 일자 판독을 /usage GET 보다 먼저 — 그 화면의 after()(purgeOldUsageEvents)가 보존 기간(90일) 밖인 이 픽스처를 지운다(체크포인트 A 첫 실행에서
+      // LA 판독 뒤 UTC 판독이 빈 배열이었다 — 경합)
+      const la = await day(LA)
+      const utc = await day('UTC')
       const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
       const usageHtml = await (await admin.http('GET', wsPath(wsA, 'usage'))).text()
-      usage = { la: await day(LA), utc: await day('UTC'), invalidCode: bad.error?.code ?? null, utcNote: usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준') }   // '{timezone} 기준' 은 JSX 보간 — SSR 이 텍스트 노드 사이에 <!-- --> 를 넣는다
+      usage = { la, utc, invalidCode: bad.error?.code ?? null, utcNote: usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준') }   // '{timezone} 기준' 은 JSX 보간 — SSR 이 텍스트 노드 사이에 <!-- --> 를 넣는다
     } finally {
       await svc.from('usage_events').delete().eq('id', ev.id)
     }
     tzStep = {
       projectId: calL.id, seeded: { timezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] }, today: lToday,
-      reportOnPage: lHtml.includes(lDoc.reportId) || lToday !== lAfter, unreadBadge, usage,
+      reportOnPage: lHtml.includes(lDoc.reportId) || lToday !== lAfter, unreadBadge, portalHome: { now: homeHtml.includes(annNow), later: homeHtml.includes(annLater) }, usage,
       discriminating: todayInTz('UTC') !== lToday,
       checks: {
         seeded: lStored['calendar.timezone'] === LA && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
         // 자정을 넘긴 순간이면 다음 키 화면이 정답이다 — 그때는 이 항목을 판정하지 않는다(lToday !== lAfter)
         today: lHtml.includes(lDoc.reportId) || lToday !== lAfter,
         badge: unreadBadge === 1,
+        portal: homeHtml.includes(annNow) && !homeHtml.includes(annLater),
         usageDays: usage.la.includes('2026-01-14') && !usage.la.includes('2026-01-15') && usage.utc.includes('2026-01-15') && !usage.utc.includes('2026-01-14'),
         usageInvalid: usage.invalidCode === '22023',
         utcNote: usage.utcNote,
