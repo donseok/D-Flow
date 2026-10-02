@@ -130,8 +130,9 @@ export async function GET(req: NextRequest) {
   const { project } = target
 
   // 설정 조회는 같은 배치에서 돌리되 결과로 받는다 — throw 하면 Promise.all 전체가 500 이 되어 '설정 확인 불가'(503)와 구분되지 않는다.
-  const [{ items, today, calendar }, roster, attendance, meetRes, annRes, cfgRes, teamsRes] = await Promise.all([
-    getComputedWbs(projectId), getProjectRoster(projectId), getAttendanceRecords(projectId),
+  const [wbsRes, roster, attendance, meetRes, annRes, cfgRes, teamsRes] = await Promise.all([
+    // WBS 도 결과로 받는다 — 달력 손상(ConfigKeyError)이 일반 500 이 아니라 시트 갈래처럼 configStatus 로 나가게(A-3 리뷰 P3)
+    getComputedWbs(projectId).then((w) => ({ ok: true as const, w }), (e: unknown) => ({ ok: false as const, e })), getProjectRoster(projectId), getAttendanceRecords(projectId),
     getProjectMeetingData(projectId), getAnnouncements(projectId),
     getProjectConfig(projectId).then((cfg) => ({ ok: true as const, cfg }), (e: unknown) => ({ ok: false as const, e })),
     projectTeams(projectId).then((teams) => ({ ok: true as const, teams }), (e: unknown) => ({ ok: false as const, e })),
@@ -143,6 +144,15 @@ export async function GET(req: NextRequest) {
     }
     throw cfgRes.e
   }
+  if (!wbsRes.ok) {
+    if (wbsRes.e instanceof ConfigKeyError) return NextResponse.json({ error: wbsRes.e.message }, { status: configStatus(wbsRes.e.code) })
+    if (wbsRes.e instanceof ConfigUnavailableError) {
+      console.error('[report] 프로젝트 설정 조회 실패(WBS):', wbsRes.e.message)
+      return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
+    }
+    throw wbsRes.e
+  }
+  const { items, today, calendar } = wbsRes.w
   if (!teamsRes.ok) {
     console.error('[report] 프로젝트 팀 조회 실패:', { projectId }, teamsRes.e)
     return NextResponse.json({ error: '프로젝트 팀을 확인할 수 없습니다.' }, { status: 503 })

@@ -26,7 +26,7 @@ vi.mock('@/lib/excel/exportWithProfile', () => ({ buildWorkbookWithProfile: mock
 import { GET } from '@/app/api/export/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { teamRows } from '../helpers/teams-source-mock'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { deriveStandardExcelProfile } from '@/lib/excel/standardProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import { TeamsUnavailableError } from '@/lib/teams/source'
@@ -121,6 +121,13 @@ describe('GET /api/export — 저장 양식 없음 → 표준(W22)', () => {
     expect(await res.json()).toEqual({ error: '프로젝트 팀을 확인할 수 없습니다.', code: 'TEAMS_UNAVAILABLE' })
     expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
     err.mockRestore()
+  })
+  it('WBS 달력 손상(getComputedWbs 의 ConfigKeyError)은 configStatus 와 키 — 일반 500 이 아니다(A-3 리뷰 P3, M5)', async () => {
+    mocks.getComputedWbs.mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone'))
+    const res = await get('p-mine')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.timezone)`, code: 'CONFIG_INVALID', key: 'calendar.timezone' })
+    expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
   })
   it('표준 경로의 빌더 거부는 결함 — 500 고정 문구와 로그(거부 문구 "저장된 양식 비우기"가 표준의 처방으로 나가지 않는다)', async () => {
     mocks.buildWorkbookWithProfile.mockReturnValueOnce({ ok: false, error: '저장된 엑셀 양식의 계층 열(2개)보다 WBS가 깊습니다 — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요' })

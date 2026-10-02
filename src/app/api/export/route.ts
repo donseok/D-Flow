@@ -62,6 +62,8 @@ export async function GET(req: NextRequest) {
   try {
     wbs = await getComputedWbs(projectId)
   } catch (e) {
+    // 달력 손상은 설정 키 오류로 — 일반 500 이 아니라 core.level_labels 와 같은 configStatus·키(A-3 리뷰 P3)
+    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message, code: e.code, key: e.key }, { status: configStatus(e.code) })
     if (!(e instanceof TeamsUnavailableError)) throw e
     console.error('[export] 프로젝트 팀 조회 실패(WBS):', e.message, e.cause)
     return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })

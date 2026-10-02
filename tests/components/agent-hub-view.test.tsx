@@ -195,3 +195,17 @@ describe('AgentHubView', () => {
     for (const f of readdirSync(dir)) expect(readFileSync(join(dir, f), 'utf8')).not.toContain('router.refresh')
   })
 })
+
+describe('[RF5] 허브 상세 — 근무일을 찾지 못하면 그 사유를 보인다(A-3 리뷰 P3, M5)', () => {
+  it('일정 계산이 CALENDAR_NO_WORKDAY 면 상세 패널 옆에 근무일 없음 문구(간트와 같은 wbs.noWorkday)', async () => {
+    // 2026-01-05(월) 뒤 3,700일이 전부 휴무 — 후행 시작 탐색이 상한에 닿는다
+    const off = Array.from({ length: 3700 }, (_, i) => new Date(Date.UTC(2026, 0, 6 + i)).toISOString().slice(0, 10))
+    const items = [citem({ id: 'a1', plannedStart: '2026-01-05', plannedEnd: '2026-01-05' }), citem({ id: 'b1', name: '리프2', plannedStart: '2026-01-05', plannedEnd: '2026-01-05' })]
+    const dependencies = [{ id: 'ab', projectId: 'p1', predecessorId: 'a1', successorId: 'b1', type: 'FS', lagDays: 0, origin: 'manual' }] as never
+    const calendar = { ...calInputUtcMon, holidays: off.map(date => ({ date, kind: 'off' as const })) }
+    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs({ items, dependencies, calendar, today: '2026-01-05' })} timeZone="Asia/Seoul" />) })
+    expect(host.querySelector('[data-hub-no-workday]')).toBeNull()                     // 상세를 열기 전에는 없다
+    await act(async () => { (host.querySelector('[data-hub-open="a1"]') as HTMLButtonElement).click() })
+    expect(host.querySelector('[data-hub-no-workday]')?.textContent).toBe('wbs.noWorkday')   // 이 파일의 useLocale 목은 키를 그대로 돌려준다
+  })
+})

@@ -47,7 +47,7 @@ vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 import { GET } from '@/app/api/report/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { calUtcSun, monProjectValues } from '../helpers/calendarFixture'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
@@ -113,6 +113,13 @@ describe('GET /api/report — 프로젝트 설정', () => {
     const res = await GET(req())
     expect(res.status).toBe(503)
     expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
+  })
+  it('WBS 달력 손상(getComputedWbs 의 ConfigKeyError)은 시트 갈래처럼 configStatus — 일반 500 이 아니다(A-3 리뷰 P3, M5)', async () => {
+    mocks.getComputedWbs.mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.week_start'))
+    const res = await GET(req())
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.week_start)` })
     expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
   })
   it('팀 원천 실패는 503 고정 문구 — 보고서를 빈 팀 축으로 만들지 않는다(SP4 A2)', async () => {

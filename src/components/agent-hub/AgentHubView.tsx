@@ -60,7 +60,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
   /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B). 화면 사전 locale(useLocale)과는 다른 값이다 */
   locale?: string
 }) {
-  const { locale } = useLocale()
+  const { locale, t } = useLocale()
   const [hub, setHub] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   // 관리자는 프로젝트 전체를 관리하니 all, 멤버는 자기 담당부터.
@@ -173,6 +173,8 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
             <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} locale={locale} />
           </div>
         )}
+        {/* [RF5] 근무일을 찾지 못하면 일정 계산을 건너뛴다 — 간트와 같은 문구로 그 사유를 보인다(A-3 리뷰 P3) */}
+        {selectedItem && schedule.calendarError && <p role="status" data-hub-no-workday className="text-[12px] text-delayed">{t('wbs.noWorkday')}</p>}
         {selectedItem && wbs.levelLabels !== null && (
           <RowDetailPanel
             item={selectedItem}
