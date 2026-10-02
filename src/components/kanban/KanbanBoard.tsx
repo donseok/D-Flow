@@ -18,6 +18,7 @@ import {
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
 import { updateActual } from '@/app/actions/wbs'
+import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeams } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -195,10 +196,10 @@ export function KanbanBoard({
         setOverride(o => { const n = { ...o }; delete n[card.id]; return n }) // 롤백
         toast({
           title: t('kanban.saveFailedTitle'),
-          // 잠금 거부는 사유 코드로 사전 문구를 고른다 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+          // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
           description: res.conflict ? t('kanban.conflict')
             : res.code === 'actual_locked' ? t('wbs.actualLocked')
-              : (res.error ?? t('kanban.errChange')),
+              : wbsToastText(t, res.error, 'kanban.errChange'),
           variant: 'error',
         })
         if (res.conflict) router.refresh()

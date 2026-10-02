@@ -188,7 +188,8 @@ describe('WbsGanttSheet — 검증·저장 실패에서 입력 보존', () => {
     expect(updateActual).toHaveBeenCalledTimes(1)
     expect(actualInput()).not.toBeNull()
     expect(actualInput()!.value).toBe('60')
-    expect(alerts()).toContain('99%까지')
+    // 표 밖 문구는 받은 문구를 싣지 않고 화면의 일반 키로(SP4 D21 — src/lib/wbs/actionErrors.ts)
+    expect(alerts()).toContain('wbs.toastSaveFail')
   })
 
   // 잠금 거부는 액션의 한국어 문구가 아니라 사전 문구로 — 영어 화면에 한국어 안내가 뜨지 않게(사유는 code 로 고른다).

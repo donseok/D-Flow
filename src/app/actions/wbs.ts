@@ -14,6 +14,7 @@ import { businessDaysBetween } from '@/lib/domain/dates'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { failWith } from '@/lib/errors/dbFail'
+import { WBS_ACTION_ERRORS as E } from '@/lib/wbs/actionErrors'
 import { dbToken } from '@/lib/settings/errors'
 import { projectTeams } from '@/lib/teams/source'
 import { teamNameKey } from '@/lib/domain/teamName'
@@ -114,18 +115,19 @@ const ACTUAL_LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에
  *  문구를 그대로 그리면 영어 화면에 한국어 토스트가 뜬다. 문구는 챗봇 등 code 를 모르는 호출부를 위해 그대로 싣는다. */
 const ACTUAL_LOCKED = { ok: false, error: ACTUAL_LOCKED_MSG, code: 'actual_locked' } as const
 
-// DB 원문은 로그로만(SP4 D21) — 응답에는 기능별 고정 문구. 화면의 사전 매핑(토스트)은 B 몫이라 그 전까지 영어 화면에도 이 한국어가 뜬다.
-const ERR_ITEM_LOOKUP = '항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_CHILD_LOOKUP = '하위 항목을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_OWNER_LOOKUP = '담당을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_ORDER_LOOKUP = '에이전트 주문을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_SIBLING_LOOKUP = '형제 항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
+// DB 원문은 로그로만(SP4 D21) — 응답에는 기능별 고정 문구. 실적·가중치·Phase 추가(updateActual·updateWeight·addWbsItem)가 쓰는 문구는
+// src/lib/wbs/actionErrors.ts 의 상수이고 화면(WBS 시트·칸반 토스트)이 사전 키로 바꿔 그린다(SP4 B — D21·D52). 나머지 상수는 아직 사전 매핑 밖이다.
+const ERR_ITEM_LOOKUP = E.itemLookup
+const ERR_CHILD_LOOKUP = E.childLookup
+const ERR_OWNER_LOOKUP = E.ownerLookup
+const ERR_ORDER_LOOKUP = E.orderLookup
+const ERR_SIBLING_LOOKUP = E.siblingLookup
 const ERR_TEAM_LOOKUP = '담당 팀을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_DEP_LOOKUP = '의존성을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_TASK_LOOKUP = '작업을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_HOLIDAY_LOOKUP = '공휴일을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_SAVE = '저장하지 못했습니다 — 잠시 후 다시 시도하세요.'
-const ERR_ADD = '추가하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_SAVE = E.save
+const ERR_ADD = E.add
 const ERR_DELETE = '삭제하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_MOVE = '순서를 바꾸지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_MOVE_DENIED = '순서 변경 실패: 저장 권한이 없습니다(관리자만 가능)'
@@ -138,7 +140,7 @@ export async function updateActual(
   newPct: number,
   expectedCurrent?: number | null,
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }> {
-  if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: '0~100 범위' }
+  if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: E.range }
   // projectId 를 인자로 받지 않으므로 판정 전에 대상 행에서 읽는다 — 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('wbs_items', itemId)
   if (!found.ok) return { ok: false, error: found.error }
@@ -148,22 +150,22 @@ export async function updateActual(
   // PGRST116 = 0행(항목 없음). 그 외 에러는 진성 조회 실패이므로 '항목 없음'으로 위장하지 않고 그대로 알린다.
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, actual_pct, project_id, dev_workflow, tags').eq('id', itemId).single()
   if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateActual', itemErr, ERR_ITEM_LOOKUP) }
-  if (!item) return { ok: false, error: '항목 없음' }
+  if (!item) return { ok: false, error: E.itemMissing }
   // 자식이 있으면 롤업 부모 — 직접 입력한 값은 화면에도 엑셀에도 안 나오므로 거부한다.
   // 조회 실패를 '자식 없음'으로 오인하면 롤업 부모에 실적%가 박혀 화면엔 안 보이는 유령 값이 남는다 → 실패는 거부.
   const { data: child, error: childErr } = await sb.from('wbs_items').select('id').eq('parent_id', itemId).limit(1).maybeSingle()
   if (childErr) return { ok: false, error: failWith('wbs.updateActual', childErr, ERR_CHILD_LOOKUP) }
-  if (child) return { ok: false, error: '하위 항목이 있어 롤업으로 계산됩니다' }
+  if (child) return { ok: false, error: E.hasChildren }
 
   // 관리자 이상은 담당 무관 전체 허용. 멤버는 자기 팀이 담당인 항목만.
   if (!isProjectAdmin(g.actor, found.projectId)) {
     // 팀이 없는 멤버는 item_owners 에 걸릴 수 없다 — 조회 없이 거부(fail-closed).
     const myTeamIds = actorTeamIdsFor(g.actor, found.projectId!)
-    if (myTeamIds.length === 0) return { ok: false, error: '담당 작업이 아님' }
+    if (myTeamIds.length === 0) return { ok: false, error: E.notOwner }
     // 권한 가드 — 조회 실패를 '담당 아님'이 아니라 통과로 흘려보내면 안 된다. 실패 = 거부(fail-closed).
     const { data: owner, error: ownerErr } = await sb.from('item_owners').select('team_id').eq('wbs_item_id', itemId).in('team_id', myTeamIds).limit(1).maybeSingle()
     if (ownerErr) return { ok: false, error: failWith('wbs.updateActual', ownerErr, ERR_OWNER_LOOKUP) }
-    if (!owner) return { ok: false, error: '담당 작업이 아님' }
+    if (!owner) return { ok: false, error: E.notOwner }
   }
 
   // D7(스펙 2026-09-15 §3.6) — 에이전트 관할 작업(잠금: 위임됨 ∨ 주문 claimed·reported)의 100 은 승인 버튼으로만.
@@ -187,7 +189,7 @@ export async function updateActual(
   const old = item.actual_pct
   // 낙관적 잠금: 편집 시작 시 본 값과 DB 현재값이 다르면 그새 다른 사용자가 바꾼 것.
   if (expectedCurrent !== undefined && Number(old ?? 0) !== Number(expectedCurrent ?? 0)) {
-    return { ok: false, conflict: true, error: '다른 사용자가 먼저 수정했습니다. 최신 값으로 새로고침합니다.' }
+    return { ok: false, conflict: true, error: E.conflict }
   }
   if (Number(old) === newPct) return { ok: true }
   // .select() 필수 — RLS 가 행을 가리면 supabase-js 는 error 없이 0행을 돌려준다.
@@ -203,7 +205,7 @@ export async function updateActual(
     if (dbToken(upErr.message) === 'WORKFLOW_ACTUAL_LOCKED') return ACTUAL_LOCKED
     return { ok: false, error: failWith('wbs.updateActual', upErr, ERR_SAVE) }
   }
-  if (!updated?.length) return { ok: false, error: '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)' }
+  if (!updated?.length) return { ok: false, error: E.noWritePermission }
 
   // 본 저장은 이미 성공했다 — 이력 기록 실패로 되돌리지는 않되, 조용히 삼키지도 않는다(감사 추적 유실 원인 기록).
   const { error: logInsErr } = await sb.from('change_logs').insert({
@@ -223,7 +225,7 @@ export async function updateWeight(
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
   // isFinite: Infinity는 JSON 직렬화에서 null(균등)로 둔갑해 이력과 어긋나므로 차단
   if (weight != null && (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0)) {
-    return { ok: false, error: '가중치는 0 이상이어야 함' }
+    return { ok: false, error: E.weightMin }
   }
   // 가중치는 구조/롤업에 영향 → 프로젝트 관리자 이상만 허용
   const found = await resolveProjectId('wbs_items', itemId)
@@ -234,14 +236,14 @@ export async function updateWeight(
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, weight, project_id').eq('id', itemId).single()
   if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateWeight', itemErr, ERR_ITEM_LOOKUP) } // 실패를 '항목 없음'으로 위장 금지
-  if (!item) return { ok: false, error: '항목 없음' }
+  if (!item) return { ok: false, error: E.itemMissing }
 
   const old = item.weight
   // 낙관적 잠금: 편집 시작 시 값과 DB 현재값이 다르면 충돌(null=균등도 구분).
   if (expectedCurrent !== undefined) {
     const a = old == null ? null : Number(old)
     const b = expectedCurrent == null ? null : Number(expectedCurrent)
-    if (a !== b) return { ok: false, conflict: true, error: '다른 사용자가 먼저 수정했습니다. 최신 값으로 새로고침합니다.' }
+    if (a !== b) return { ok: false, conflict: true, error: E.conflict }
   }
   if (Number(old ?? NaN) === Number(weight ?? NaN) && (old == null) === (weight == null)) return { ok: true }
   const { error: upErr } = await sb.from('wbs_items').update({ weight, updated_at: new Date().toISOString() }).eq('id', itemId)
@@ -305,7 +307,7 @@ export async function addWbsItem(
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (!name.trim()) return { ok: false, error: '이름을 입력하세요' }
+  if (!name.trim()) return { ok: false, error: E.nameRequired }
   const sb = await createServerClient()
   let q = sb.from('wbs_items').select('sort_order, is_owner_split').eq('project_id', projectId)
   q = parentId ? q.eq('parent_id', parentId) : q.is('parent_id', null)
@@ -317,7 +319,7 @@ export async function addWbsItem(
   // 혼재 형제 집합은 tree.ts 의 팀 정렬 분기(형제 중 isOwnerSplit 존재)와 엑셀 라운드트립(sub-act 접기)
   // 계약을 둘 다 깬다(Task 9 리뷰 발견). 기존 자식이 전부 일반 항목이거나 없으면 영향 없음.
   if (parentId && sibs.some(s => s.is_owner_split === true)) {
-    return { ok: false, error: 'SUB-ACT 형제로는 일반 항목을 추가할 수 없습니다' }
+    return { ok: false, error: E.subActSibling }
   }
   const nextOrder = sibs.reduce((mx, r) => Math.max(mx, Number(r.sort_order) || 0), 0) + 1
   const trimmedName = name.trim()

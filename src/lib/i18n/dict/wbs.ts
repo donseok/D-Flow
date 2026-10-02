@@ -322,4 +322,26 @@ export const wbsKo = {
   // 변경 이력(RowDetailPanel) 표시용 — change_logs.new_value 는 로케일 중립 토큰(spec:updated)만
   // 저장하고 이 키로 변환해 보여준다(리뷰 라운드 1 — 리터럴 한국어 저장 금지).
   'wbs.specUpdatedLogValue': '명세 갱신',
+  // 실적·가중치·Phase 추가 액션 문구의 사전(SP4 D21·D52 — src/lib/wbs/actionErrors.ts). ko 는 액션 문구 그대로
+  'wbs.err.range': '0~100 범위',
+  'wbs.err.itemMissing': '항목 없음',
+  'wbs.err.hasChildren': '하위 항목이 있어 롤업으로 계산됩니다',
+  'wbs.err.notOwner': '담당 작업이 아님',
+  'wbs.err.conflict': '다른 사용자가 먼저 수정했습니다. 최신 값으로 새로고침합니다.',
+  'wbs.err.noWritePermission': '저장 권한이 없습니다(담당 팀·관리자만 입력 가능)',
+  'wbs.err.weightMin': '가중치는 0 이상이어야 함',
+  'wbs.err.nameRequired': '이름을 입력하세요',
+  'wbs.err.subActSibling': 'SUB-ACT 형제로는 일반 항목을 추가할 수 없습니다',
+  'wbs.err.itemLookup': '항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.childLookup': '하위 항목을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.ownerLookup': '담당을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.orderLookup': '에이전트 주문을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.siblingLookup': '형제 항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.save': '저장하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.add': '추가하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.anon': '로그인 필요',
+  'wbs.err.denied': '권한 없음',
+  'wbs.err.lookup': '권한을 확인할 수 없어 중단했습니다.',
+  'wbs.err.missing': '대상을 찾을 수 없습니다.',
+  'wbs.err.moduleOff': '이 기능은 지금 사용할 수 없습니다.',
 } as const
