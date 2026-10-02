@@ -397,22 +397,31 @@ describe('applyWeekStartChange — 개정 §4.2.4 변경 연산 표(계획 P7 �
 describe('previewWeekStart — 미리보기 = 저장 판정과 같은 정의(D38·D53)', () => {
   it('월→일 — E·과도기 6일·기존 문서 그대로', () => {
     expect(previewWeekStart(MON0, 'sunday', '2026-09-23', ['2026-09-07', '2026-09-14', '2026-09-21']))
-      .toEqual({ effectiveFrom: '2026-09-27', transitionDays: 6, keptDocs: 3, blockingWeeks: [], error: null })
+      .toEqual({ effectiveFrom: '2026-09-27', transitionDays: 6, keptDocs: 3, blockingWeeks: [], error: null, cancelled: null })
   })
   it('일→월 — 과도기 8일', () => {
     expect(previewWeekStart(SUN0, 'monday', '2026-09-23', ['2026-09-20'])).toMatchObject({ effectiveFrom: '2026-09-28', transitionDays: 8, keptDocs: 1 })
   })
   it('E 뒤 미리 만든 문서는 거부 예정 목록 — 새 규칙에서 키가 바뀌는 문서', () => {
     expect(previewWeekStart(MON0, 'sunday', '2026-09-23', ['2026-09-21', '2026-09-28', '2026-10-05']))
-      .toEqual({ effectiveFrom: '2026-09-27', transitionDays: 6, keptDocs: 1, blockingWeeks: ['2026-09-28', '2026-10-05'], error: null })
+      .toEqual({ effectiveFrom: '2026-09-27', transitionDays: 6, keptDocs: 1, blockingWeeks: ['2026-09-28', '2026-10-05'], error: null, cancelled: null })
   })
   it('전환을 두 번 한 프로젝트에서 대기 전환을 되돌리면 새 적용일이 없다 — 앞선 과거 전환(09-27)을 새 적용일로 보이지 않는다(K3)', () => {
     const r3: WeekStartRule[] = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-09-27' }, { day: 'monday', from: '2026-10-12' }]
     expect(previewWeekStart(r3, 'sunday', '2026-10-07', ['2026-09-21', '2026-09-27', '2026-10-04']))
-      .toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 3, blockingWeeks: [], error: null })
+      .toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 3, blockingWeeks: [], error: null, cancelled: { from: '2026-10-12', day: 'monday' } })
+  })
+  it('이관 ⑩ 꼴 [{monday,null},{sunday,E}] 에서 E 전에 월요일을 고르면 예정 전환 취소 — 적용일 없음·취소 표지(A-5 리뷰 P2, O1)', () => {
+    const r10: WeekStartRule[] = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }]
+    expect(previewWeekStart(r10, 'monday', '2026-09-30', ['2026-09-21', '2026-09-28']))
+      .toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 2, blockingWeeks: [], error: null, cancelled: { from: '2026-10-04', day: 'sunday' } })
+    expect(applyWeekStartChange(r10, 'monday', '2026-09-30', 2)).toEqual({ ok: true, rules: [{ day: 'monday', from: null }] })
+    // 예정 요일을 다시 고르면 바뀌는 것이 없다(취소 아님). 문서 0건이면 목록 교체라 취소가 아니다(바로 그 요일)
+    expect(previewWeekStart(r10, 'sunday', '2026-09-30', ['2026-09-21', '2026-09-28']).cancelled).toBeNull()
+    expect(previewWeekStart(r10, 'monday', '2026-09-30', []).cancelled).toBeNull()
   })
   it('문서 0건 — 교체라 적용일·과도기가 없다', () => {
-    expect(previewWeekStart(MON0, 'sunday', '2026-09-23', [])).toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 0, blockingWeeks: [], error: null })
+    expect(previewWeekStart(MON0, 'sunday', '2026-09-23', [])).toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 0, blockingWeeks: [], error: null, cancelled: null })
   })
   it('거부 예정 목록은 최대 20', () => {
     const keys = Array.from({ length: 30 }, (_, i) => days(7 * i)('2026-09-28'))

@@ -366,16 +366,19 @@ export interface WeekStartPreview {
   keptDocs: number                            // 그대로 남는 기존 주간보고 수
   blockingWeeks: string[]                     // 새 규칙에서 키가 바뀌는 문서 = 저장 거부 예정(최대 20 — D53 과 같은 정의)
   error: string | null                        // 손상된 저장 규칙(CALENDAR_PAST_RULE)의 문구
+  cancelled: WeekStartRule | null             // 지워지는 예정 전환(되돌림 갈래 — 직전 요일을 골라 아직 적용 전 원소를 지운다, A-5 리뷰 P2)
 }
 
 /** 설정 화면 '변경 내용 검토'(D38) — applyWeekStartChange 와 같은 함수로 E·과도기·N건·거부 예정 문서를 낸다 */
 export function previewWeekStart(rules: readonly WeekStartRule[], newDay: WeekStartDay, today: string, docKeys: readonly string[]): WeekStartPreview {
   const r = applyWeekStartChange(rules, newDay, today, docKeys.length)
-  if (!r.ok) return { effectiveFrom: null, transitionDays: null, keptDocs: docKeys.length, blockingWeeks: [], error: r.error }
+  if (!r.ok) return { effectiveFrom: null, transitionDays: null, keptDocs: docKeys.length, blockingWeeks: [], error: r.error, cancelled: null }
   const nextLast = r.rules[r.rules.length - 1]
   // 새 원소는 덧붙임 갈래에서만 생긴다 — 교체·되돌림·같은 요일은 길이가 같거나 준다(되돌림 뒤 마지막 원소는 이미 지난 전환이다 — K3)
   const added = r.rules.length > rules.length
   const effectiveFrom = added ? nextLast.from : null
+  // 문서가 있을 때 길이가 주는 것은 되돌림 갈래뿐이다(문서 0건은 목록 교체 — 취소가 아니라 바로 그 요일). 지워진 원소 = 원래 마지막(예정 전환)
+  const cancelled = docKeys.length > 0 && r.rules.length < rules.length ? { ...rules[rules.length - 1] } : null
   let transitionDays: 6 | 8 | null = null
   if (effectiveFrom) {
     const kp = transitionKey(r.rules[r.rules.length - 2].day, effectiveFrom)
@@ -383,5 +386,5 @@ export function previewWeekStart(rules: readonly WeekStartRule[], newDay: WeekSt
     transitionDays = len === 6 || len === 8 ? len : null
   }
   const blocking = [...docKeys].filter((d) => weekKeyOf(r.rules, d) !== d).sort()
-  return { effectiveFrom, transitionDays, keptDocs: docKeys.length - blocking.length, blockingWeeks: blocking.slice(0, 20), error: null }
+  return { effectiveFrom, transitionDays, keptDocs: docKeys.length - blocking.length, blockingWeeks: blocking.slice(0, 20), error: null, cancelled }
 }

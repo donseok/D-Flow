@@ -15,6 +15,10 @@ export function reviewBlocksSave(state: WeekStartReviewState | null): boolean {
 
 export function weekStartReviewText(preview: WeekStartPreview, nextDay: WeekStartDay): string {
   const label = WEEK_DAY_LABEL[nextDay]
+  // 예정 전환 취소(되돌림 갈래 — 도메인이 아직 적용 전 원소를 지운다). '바뀌는 내용이 없습니다' 로 말하지 않는다(A-5 리뷰 P2, O1)
+  if (preview.cancelled?.from) {
+    return `예정된 ${preview.cancelled.from} 의 ${WEEK_DAY_LABEL[preview.cancelled.day]} 시작 전환을 취소합니다. 지금처럼 ${label} 시작이 이어지고 기존 주간보고 ${preview.keptDocs}건은 그대로입니다.`
+  }
   if (preview.effectiveFrom === null) {
     return preview.keptDocs === 0 && preview.blockingWeeks.length === 0
       ? `주간보고가 아직 없어 저장하면 바로 ${label} 시작으로 바뀝니다.`

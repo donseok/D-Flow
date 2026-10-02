@@ -4,12 +4,14 @@
 import { WEEK_START_DAYS, type WeekStartDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { WEEK_DAY_LABEL, WeekStartReview, type WeekStartReviewState } from './WeekStartReview'
 
-export function WeekStartEditor({ value, onChange, disabled, scheduled = null, review = null }: {
+export function WeekStartEditor({ value, onChange, disabled, scheduled = null, currentDay, review = null }: {
   value: WeekStartDay
   onChange: (day: WeekStartDay) => void
   disabled: boolean
   /** 아직 적용 전인 전환(마지막 원소의 from > 오늘) — 프로젝트만 */
   scheduled?: WeekStartRule | null
+  /** 오늘 적용되는 요일 — 예정 전환이 있을 때 '지금은 X 시작' 과 취소 방법을 같이 보인다 */
+  currentDay?: WeekStartDay
   /** 바꾼 요일의 서버 검토 — 프로젝트에서 요일을 바꿨을 때만 */
   review?: WeekStartReviewState | null
 }) {
@@ -24,7 +26,12 @@ export function WeekStartEditor({ value, onChange, disabled, scheduled = null, r
           </label>
         ))}
       </div>
-      {scheduled?.from && <p className="text-xs text-fg-muted">예정: {scheduled.from} 부터 {WEEK_DAY_LABEL[scheduled.day]} 시작</p>}
+      {scheduled?.from && (
+        <p className="text-xs text-fg-muted">
+          {currentDay ? `지금은 ${WEEK_DAY_LABEL[currentDay]} 시작 · ` : ''}예정: {scheduled.from} 부터 {WEEK_DAY_LABEL[scheduled.day]} 시작
+          {currentDay && currentDay !== scheduled.day ? ` — ${WEEK_DAY_LABEL[currentDay]}을 고르고 저장하면 예정을 취소합니다.` : ''}
+        </p>
+      )}
       {review && <WeekStartReview state={review} nextDay={value} />}
     </div>
   )

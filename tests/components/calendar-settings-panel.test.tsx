@@ -106,10 +106,36 @@ describe('CalendarSettingsPanel — 주 시작', () => {
     expect(container.textContent).not.toContain('비활성으로 두세요')
   })
 
-  it('예정된 전환(아직 적용 전)을 보인다', async () => {
+  it('예정된 전환(아직 적용 전)이 있으면 그 요일이 선택돼 있고, 지금 요일과 예정을 함께 보인다(A-5 리뷰 P2, O1)', async () => {
     await render(props({ weekStart: calendarFieldOf({ status: 'set', value: [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }] }) }))
-    expect(radio('monday').checked).toBe(true)
+    expect(radio('sunday').checked).toBe(true)
+    expect(container.textContent).toContain('지금은 월요일 시작')
     expect(container.textContent).toContain('예정: 2026-10-04 부터 일요일 시작')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('이관 ⑩ 꼴 [{monday,null},{sunday,E}] — E 전에 월요일을 고르면 "예정 전환 취소" 검토를 보이고, 저장은 월요일 하나(서버가 예정 원소를 지운다)', async () => {
+    m.previewWeekStartChange.mockResolvedValue({ ok: true, preview: {
+      effectiveFrom: null, transitionDays: null, keptDocs: 2, blockingWeeks: [], error: null, cancelled: { from: '2026-10-04', day: 'sunday' } } })
+    await render(props({ weekStart: calendarFieldOf({ status: 'set', value: [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }] }) }))
+    await click(radio('monday'))
+    expect(m.previewWeekStartChange).toHaveBeenCalledWith(PID, 'monday')
+    expect(container.textContent).toContain('예정된 2026-10-04 의 일요일 시작 전환을 취소합니다')
+    expect(container.textContent).not.toContain('바뀌는 내용이 없습니다')
+    expect(saveButton().disabled).toBe(false)
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.week_start': 'monday' } }))
+  })
+
+  it('저장 직후 직전 요일로 되돌리면(예약 취소) 같은 취소 문구다 — "바뀌는 내용이 없습니다" 가 아니다', async () => {
+    await render()
+    await click(radio('sunday'))
+    await click(saveButton())
+    m.previewWeekStartChange.mockResolvedValue({ ok: true, preview: {
+      effectiveFrom: null, transitionDays: null, keptDocs: 3, blockingWeeks: [], error: null, cancelled: { from: '2026-10-04', day: 'sunday' } } })
+    await click(radio('monday'))
+    expect(container.textContent).toContain('예정된 2026-10-04 의 일요일 시작 전환을 취소합니다')
+    expect(container.textContent).not.toContain('바뀌는 내용이 없습니다')
   })
 })
 

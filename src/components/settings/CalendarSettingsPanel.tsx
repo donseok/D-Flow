@@ -32,13 +32,14 @@ function sourceLabel(scope: CalendarScope, s: CalendarFieldState<unknown>): stri
   if (s.source === 'default') return '제품 기본값'
   return 'projectId' in scope ? '프로젝트 설정' : '워크스페이스 설정'
 }
-/** 오늘 적용되는 요일과 아직 적용 전인 전환(마지막 원소의 from > 오늘) */
-function weekState(rules: readonly WeekStartRule[] | null, todayIso: string | null): { day: WeekStartDay; scheduled: WeekStartRule | null } {
-  if (!rules || rules.length === 0) return { day: 'sunday', scheduled: null }
+/** 편집 요일 = 마지막 원소의 요일(예정 전환이 있으면 그 요일 — 직전 요일을 고르는 것이 곧 예정 취소다, A-5 리뷰 P2·O1),
+ *  오늘 적용되는 요일, 아직 적용 전인 전환(마지막 원소의 from > 오늘). 저장 직후(baseline = 보낸 요일)와 새로고침 뒤가 같은 요일이다 */
+function weekState(rules: readonly WeekStartRule[] | null, todayIso: string | null): { day: WeekStartDay; current: WeekStartDay; scheduled: WeekStartRule | null } {
+  if (!rules || rules.length === 0) return { day: 'sunday', current: 'sunday', scheduled: null }
   const last = rules[rules.length - 1]
-  if (!todayIso) return { day: last.day, scheduled: null }
+  if (!todayIso) return { day: last.day, current: last.day, scheduled: null }
   const scheduled = last.from !== null && last.from > todayIso ? last : null
-  return { day: currentRuleDay(rules, todayIso), scheduled }
+  return { day: last.day, current: currentRuleDay(rules, todayIso), scheduled }
 }
 function draftOf(p: { timezone: CalendarFieldState<string>; workingDays: CalendarFieldState<IsoDow[]>; weekStart: CalendarFieldState<WeekStartRule[]>; todayIso: string | null }): Draft {
   return { timezone: p.timezone.value ?? '', workingDays: [...(p.workingDays.value ?? [])].sort((a, b) => a - b), weekDay: weekState(p.weekStart.value, p.todayIso).day }
@@ -83,7 +84,7 @@ export function CalendarSettingsPanel(props: {
   const tzCheck = parseTimezone(draft.timezone.trim())
   const wdCheck = parseWorkingDays(draft.workingDays)
   const weekChanged = draft.weekDay !== baseline.weekDay
-  const { scheduled } = weekState(props.weekStart.value, props.todayIso)
+  const { scheduled, current: currentDay } = weekState(props.weekStart.value, props.todayIso)
   const reviewBlocks = isProject && weekChanged && reviewBlocksSave(review)
   const invalidInput = !tzCheck.ok || !wdCheck.ok
   const saveDisabled = !canEdit || pending || !!conflict || invalidInput || reviewBlocks || (changed.length === 0 && !uncertainPatch)
@@ -181,7 +182,7 @@ export function CalendarSettingsPanel(props: {
         {head('calendar.week_start', props.weekStart, isProject ? '다음 주부터 적용' : '새 프로젝트의 초기값')}
         {corruptNotice('calendar.week_start', props.weekStart, '#calendar-week-start')}
         <WeekStartEditor value={draft.weekDay} onChange={day => edit({ weekDay: day }, 'calendar.week_start')} disabled={inputsLocked}
-          scheduled={isProject ? scheduled : null} review={isProject && weekChanged ? review : null} />
+          scheduled={isProject ? scheduled : null} currentDay={currentDay} review={isProject && weekChanged ? review : null} />
         {fieldNotice('calendar.week_start')}
         {keyLine('calendar.week_start')}
       </section>
