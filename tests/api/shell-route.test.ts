@@ -124,14 +124,15 @@ describe('/api/shell — 적대적(E10, fail-closed)', () => {
     const body = await (await get(`ws=${WB}&project=${PB}`)).json()
     expect(body.badges).toEqual({ myWorkReview: 4, projectApprovals: 1, projectUnreadAnnouncements: 2 })
   })
-  it('[RF5] 결재 대기 조회가 throw 하면 배지 0 + 로그 — 셸의 나머지(받은편지함·공지)는 그대로', async () => {
-    mocks.getPendingApprovalCount.mockRejectedValueOnce(new Error('[approvals] 결재 대기 목록을 끝까지 읽지 못했습니다(2/3건)'))
-    const res = await GET(req())
+  // SP4 A2 RF5(main 4994d40)를 새 계약으로 옮김 — 끝까지 읽지 못하면 throw 하는 결재 대기 조회는 그 배지만 null + 로그(새 계약: 실패는 0 이 아니라 null)
+  it('[RF5] 결재 대기 조회가 throw 하면 그 배지만 null + 로그 — 셸의 나머지(받은편지함·다른 배지)는 그대로', async () => {
+    h.getPendingApprovalCount.mockRejectedValueOnce(new Error('[approvals] 결재 대기 목록을 끝까지 읽지 못했습니다(2/3건)'))
+    const res = await get(`ws=${WA}&project=${P}`)
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.pendingApprovals).toBe(0)
-    expect(body).toMatchObject({ inbox: [], unreadAnnouncements: 0, headerAnnouncements: ROWS, headerAnnouncementsFailed: false })
-    expect(errSpy).toHaveBeenCalledWith('[shell] 결재 대기 수 조회 실패:', expect.stringContaining('끝까지 읽지 못했습니다'))
+    expect(body.badges).toEqual({ myWorkReview: 4, projectApprovals: null, projectUnreadAnnouncements: 2 })
+    expect(body.inbox).toEqual({ items: [], unseen: 0 })
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[shell] 결재 대기 수'), expect.stringContaining('끝까지 읽지 못했습니다'))
   })
 })
 

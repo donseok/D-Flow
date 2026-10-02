@@ -13,11 +13,14 @@ import { keysetTable } from '../helpers/keysetTable'
 import { seoulToday } from '@/lib/domain/dates'
 import { addDaysCal } from '@/lib/domain/dashboard'
 
+// SP3b D21 — getPortfolioInputs 는 슬러그 워크스페이스로 한정한다(레인 B). 이 파일의 프로젝트는 모두 그 워크스페이스
+const WS = '00000000-0000-0000-7e57-0000000019ff'
+
 describe('getPortfolioInputs — 팀 원천 실패는 그 행만 degraded(SP4 A2 P19)', () => {
   it('한 프로젝트의 팀 읽기가 실패해도 화면 전체가 멈추지 않는다 — 그 행만 items null·팀 빈 목록, 나머지 행은 정상', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     m.getActor.mockResolvedValue({ isSuperuser: true })
-    m.listProjectsWithState.mockResolvedValue({ projects: [{ id: 'pA', name: 'A' }, { id: 'pB', name: 'B' }], degraded: false })
+    m.listProjectsWithState.mockResolvedValue({ projects: [{ id: 'pA', name: 'A', workspace_id: WS }, { id: 'pB', name: 'B', workspace_id: WS }], degraded: false })
     const empty: Record<string, unknown> = { then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(r) }
     for (const k of ['select', 'in', 'eq', 'gte', 'order']) empty[k] = () => empty
     m.createServerClient.mockResolvedValue({ from: () => empty })
@@ -26,7 +29,7 @@ describe('getPortfolioInputs — 팀 원천 실패는 그 행만 degraded(SP4 A2
       if (pid === 'pB') throw new Error('teams down')
       return [{ id: 't', code: 'RES', name: 'RES', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: 'pA', workspaceId: 'w' }]
     })
-    const { inputs } = await getPortfolioInputs()
+    const { inputs } = await getPortfolioInputs(WS)
     const byId = new Map(inputs.map((i) => [i.projectId, i]))
     expect(byId.get('pA')).toMatchObject({ teams: ['RES'], items: [] })
     expect(byId.get('pB')).toMatchObject({ teams: [], items: null })
@@ -44,7 +47,7 @@ describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
   const snaps = pids.flatMap((pid, pi) => days.map((d, di) => ({ project_id: pid, snap_date: d, actual_pct: pi + di / 100, planned_pct: 50 })))
   const setup = (table: ReturnType<typeof keysetTable>) => {
     m.getActor.mockResolvedValue({ isSuperuser: true })
-    m.listProjectsWithState.mockResolvedValue({ projects: pids.map((id, i) => ({ id, name: `P${i}` })), degraded: false })
+    m.listProjectsWithState.mockResolvedValue({ projects: pids.map((id, i) => ({ id, name: `P${i}`, workspace_id: WS })), degraded: false })
     const empty: Record<string, unknown> = { then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(r) }
     for (const k of ['select', 'in', 'eq', 'gte', 'order']) empty[k] = () => empty
     m.createServerClient.mockResolvedValue({ from: (t: string) => (t === 'wbs_progress_snapshots' ? table.make() : empty) })
@@ -56,7 +59,7 @@ describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
     expect(snaps.length).toBeGreaterThan(1000)
     const table = keysetTable(snaps)
     setup(table)
-    const { inputs } = await getPortfolioInputs()
+    const { inputs } = await getPortfolioInputs(WS)
     for (const i of inputs) {
       expect(i.snapshots, i.projectId).toHaveLength(61)
       expect(i.snapshots.at(-1)?.date, i.projectId).toBe(today)
@@ -74,7 +77,7 @@ describe('getPortfolioInputs — 스냅샷 60일 끝까지 읽기', () => {
     ]) {
       const err = vi.spyOn(console, 'error').mockImplementation(() => {})
       setup(table)
-      const { inputs } = await getPortfolioInputs()
+      const { inputs } = await getPortfolioInputs(WS)
       expect(inputs).toHaveLength(17)
       for (const i of inputs) expect(i.snapshots, i.projectId).toEqual([])
       expect(inputs.every((i) => Array.isArray(i.items))).toBe(true)

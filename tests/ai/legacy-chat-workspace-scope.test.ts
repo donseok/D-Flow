@@ -42,7 +42,8 @@ vi.mock('@/app/actions/project', () => ({
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-10-02' })) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
-vi.mock('@/lib/teams/master', () => ({ activeTeamCodesForProjectSync: () => [] }))
+// 팀은 요청 범위 원천(SP4 A2 — knowledge.ts 가 projectTeams 를 읽는다). 이 파일은 팀 축을 보지 않는다 — 빈 목록
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock([]))
 // AI 판정은 진짜(전역 셋업의 mock 을 이 파일에서 되돌린다) — 설정 해석기만 흉내 낸다
 vi.mock('@/lib/modules/aiAvailable', async () => vi.importActual('@/lib/modules/aiAvailable'))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))

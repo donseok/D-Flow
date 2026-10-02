@@ -2,6 +2,8 @@
 // A2 의 과제가 소비처를 요청 범위 원천(src/lib/teams/source.ts)으로 옮길 때마다 같은 커밋에서 이 목록에서 지운다 — 목록이 줄어드는 것이 진척이다.
 // A2 끝의 목록 = B 의 화면 넷(레이아웃 둘·명단 페이지·DashboardView) + refreshTeams 를 쓰는 액션 셋(project·teams·projectTeams). B 가 master.ts 를
 // 지우며 이 파일을 tests/invariants/teams-source.test.ts 로 바꾼다(스펙 §6.1).
+// SP3b UI-2(V16)가 (app)/layout 의 팀 주입을 범위 레이아웃 셋((global)·w/[slug]·p/[projectId])으로 내렸다 — 화면은 다섯(범위 레이아웃 셋·명단
+// 페이지·DashboardView)이 되고, 셋 다 SP4 B 가 요청 범위 원천으로 옮긴다(이월 — 셸 레이아웃이라 원천 교체는 성능 R25 재측정과 함께).
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -11,9 +13,10 @@ const CWD = process.cwd()
 const IMPORT = /from\s+['"]@\/lib\/teams\/master['"]/
 
 export const MASTER_CONSUMERS: readonly string[] = [
-  'src/app/(app)/layout.tsx',
+  'src/app/(app)/(global)/layout.tsx',
   'src/app/(app)/p/[projectId]/layout.tsx',
   'src/app/(app)/p/[projectId]/members/page.tsx',
+  'src/app/(app)/w/[slug]/layout.tsx',
   'src/app/actions/project.ts',
   'src/app/actions/projectTeams.ts',
   'src/app/actions/teams.ts',
@@ -39,9 +42,10 @@ describe('옛 팀 캐시 소비처 — 닫힌 목록(SP4 A2 P2)', () => {
       expect(names, f).toEqual(['refreshTeams'])
     }
   })
-  it('A2 끝 — 남은 소비처는 B 의 화면 넷 + refreshTeams 액션 셋뿐(스펙 §7 A2)', () => {
+  it('A2 끝(+ SP3b UI-2 의 범위 레이아웃) — 남은 소비처는 B 의 화면 다섯 + refreshTeams 액션 셋뿐(스펙 §7 A2)', () => {
     expect([...MASTER_CONSUMERS].sort()).toEqual([
-      'src/app/(app)/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/p/[projectId]/members/page.tsx',
+      'src/app/(app)/(global)/layout.tsx', 'src/app/(app)/w/[slug]/layout.tsx',
+      'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/p/[projectId]/members/page.tsx',
       'src/app/actions/project.ts', 'src/app/actions/projectTeams.ts', 'src/app/actions/teams.ts',
       'src/components/dashboard/DashboardView.tsx',
     ].sort())
