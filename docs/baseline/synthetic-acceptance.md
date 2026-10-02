@@ -82,7 +82,7 @@ BOOTSTRAP_PASSWORD=… [BOOTSTRAP_EMAIL=admin@example.com] LOCAL_DB_URL=… npm 
 
 스펙 §6.4 행의 "팀 개명 → 팀 id 불변·**봇 이름 매칭**" 가운데 이 게이트는 앞 절반(팀 id·영역·셀 불변)만 본다. 봇 이름 매칭(개명한 이름으로 그 팀을 찾는다 — W27)은
 단위 `tests/ai/chat-v2-router.test.ts` 로 갈음한다: 합성 러너는 챗 라우트를 부르지 않는다(`scripts/e2e-synthetic.mjs` 에 챗 호출 없음) — 봇의 end-to-end 는
-SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 과제 22 가 이 절반을 이미 뺐다).
+SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 과제 22 는 이 절반을 구현 대상에 넣지 않았다 — 스펙 §6.4 행에 정오표).
 
 `src`·`supabase` 의 미커밋 변경은 실행 전후 0 이고 diff 지문이 같다(`git diff --quiet -- src supabase` 참).
 
