@@ -5,6 +5,7 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
+import { ROW_PREF_KEYS, scrollMain, setServerTheme } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
@@ -996,5 +997,106 @@ describe('clicks — 여러 단계 클릭', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
     expect(src).toMatch(/for \(const sel of clickSteps\(r\)\)/)
     expect(src).not.toMatch(/if \(!r\.click\)/)
+  })
+})
+
+describe('contextOptions·parseArgs — JS 끈 첫 페인트와 스크롤 상태(D54·D55)', () => {
+  it('javaScript:false 면 javaScriptEnabled false, 그 밖에는 키를 더하지 않는다(기본 조건 그대로)', () => {
+    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: false })).toMatchObject({ javaScriptEnabled: false })
+    expect(contextOptions({ width: 390, height: 844, theme: 'light' })).not.toHaveProperty('javaScriptEnabled')
+    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: true })).not.toHaveProperty('javaScriptEnabled')
+  })
+  it('--scroll·--js 값과 기본(0·켬), 값 밖은 throw', () => {
+    expect(parseArgs(['shoot', '--label', 'x', '--scroll', '600', '--js', 'off'])).toMatchObject({ scroll: 600, javaScript: false })
+    expect(parseArgs([])).toMatchObject({ scroll: 0, javaScript: true })
+    expect(parseArgs(['--js', 'on'])).toMatchObject({ javaScript: true })
+    for (const bad of ['-1', '1.5', 'abc', '']) expect(() => parseArgs(['--scroll', bad]), bad).toThrow(/--scroll/)
+    expect(() => parseArgs(['--js', 'maybe'])).toThrow(/--js/)
+    expect(() => parseArgs(['--scroll'])).toThrow(/값이 없다/)
+  })
+  it('촬영 루프가 두 옵션을 쓴다 — JS 옵션은 컨텍스트로, 스크롤은 클릭 뒤 main 을 내린다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/contextOptions\(\{ width, height, theme, javaScript: opts\.javaScript \}\)/)
+    expect(src).toMatch(/if \(opts\.scroll > 0\) await scrollMain\(page, opts\.scroll\)/)
+  })
+  it('scrollMain — main#main-content 를 y 로 내리고 한 프레임 기다린다', async () => {
+    const calls: unknown[] = []
+    const page = {
+      evaluate: async (fn: (to: number) => unknown, arg: number) => {
+        const scrollTo = (x: number, y: number) => calls.push(['scrollTo', x, y])
+        const doc = { querySelector: (sel: string) => { calls.push(['q', sel]); return { scrollTo } } }
+        const g = globalThis as unknown as { document?: unknown }
+        const prev = g.document
+        g.document = doc
+        try { return fn(arg) } finally { g.document = prev }
+      },
+      waitForTimeout: async (ms: number) => { calls.push(['wait', ms]) },
+    }
+    await scrollMain(page, 600)
+    expect(calls).toEqual([['q', 'main#main-content'], ['scrollTo', 0, 600], ['wait', 200]])
+  })
+})
+
+describe('행 선택·행 prefs — manual 행과 접힘 선호(과제 37)', () => {
+  it("tags 에 'manual' 인 행은 since 집합 선택에서 빠지고 키로 지정할 때만 찍힌다", () => {
+    const doc = { routes: [{ key: 'a', since: 'UI-2b', tags: ['W'] }, { key: 'b', since: 'UI-2b', tags: ['S', 'manual'] }] }
+    expect(selectRoutes(doc, { routes: null, since: ['UI-2b'] }).map((r) => r.key)).toEqual(['a'])
+    expect(selectRoutes(doc, { routes: ['b'], since: ['b4283c0'] }).map((r) => r.key)).toEqual(['b'])
+  })
+  it('validateRoutes — prefs 는 허용 키의 불리언 객체뿐', () => {
+    expect(ROW_PREF_KEYS).toEqual(['sidebarCollapsed'])
+    const doc = { version: 1, commonMask: [], routes: [
+      { key: 'a', path: '/a', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: true } },
+      { key: 'b', path: '/b', grade: 'member', since: 'UI-2b', prefs: { theme: 'dark' } },
+      { key: 'c', path: '/c', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: 'yes' } },
+      { key: 'd', path: '/d', grade: 'member', since: 'UI-2b', prefs: ['sidebarCollapsed'] },
+    ] }
+    const p = validateRoutes(doc, [])
+    expect(p.filter((x) => x.startsWith('a:'))).toEqual([])
+    expect(p.map((x) => x.split(':')[0]).sort()).toEqual(['b', 'c', 'd'])
+  })
+  it('setServerTheme — extra 가 고정 객체 위에 얹히고, extra 없이 부르면 고정 객체 그대로(되돌림)', async () => {
+    const upserts: { table: string; row: Record<string, unknown> }[] = []
+    const db = { from: (table: string) => ({
+      upsert: async (row: Record<string, unknown>) => { upserts.push({ table, row }); return { data: null, error: null } },
+      select: () => ({ eq: async () => ({ data: [], error: null }) }),
+    }) }
+    await setServerTheme(db, ['u1'], 'dark', {}, { sidebarCollapsed: true })
+    await setServerTheme(db, ['u1'], 'dark', {})
+    const prefs = upserts.filter((u) => u.table === 'account_preferences').map((u) => u.row.prefs)
+    expect(prefs).toEqual([{ ...fixedPrefs('dark'), sidebarCollapsed: true }, fixedPrefs('dark')])
+    expect(fixedPrefs('dark').sidebarCollapsed).toBe(false)
+  })
+  it('촬영 루프는 행 prefs 를 그 행을 찍는 동안만 덮고 finally 에서 되돌린다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\), r\.prefs\)/)
+    expect(src).toMatch(/\} finally \{\s+if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\)\)\s+\}/)
+  })
+})
+
+describe('UI-2b 셸 상태 캡처 행(과제 37)', () => {
+  type Row = { key: string; path: string; grade: string; since: string; tags?: string[]; click?: string; clicks?: string[]; expect?: string[]; prefs?: Record<string, boolean>; supplement?: boolean }
+  const byKey = (k: string) => (routesDoc.routes as Row[]).find((r) => r.key === k)
+  it('행 여덟이 셸 상태를 찍는다 — 클릭 선택자·기대 선택자·등급', () => {
+    expect(byKey('ws-home-collapsed')).toMatchObject({ path: '/w/{wsSlug}', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: true } })
+    expect(byKey('ws-switcher-open')).toMatchObject({ path: '/w/{wsSlug}', grade: 'duo', click: '[data-ws-switcher="list"]' })
+    expect(byKey('project-switcher-open')).toMatchObject({ path: '/p/{pid}/dashboard', click: '[role="combobox"][aria-label="프로젝트 전환"]' })
+    expect(byKey('drawer-project')).toMatchObject({ path: '/p/{pid}/dashboard', click: '[data-drawer-trigger]' })
+    for (const k of ['rail-ai-1440', 'rail-ai-1280']) expect(byKey(k)).toMatchObject({ since: 'UI-2b', click: '[data-ai-open]' })
+    expect(byKey('p-wbs-fullscreen-ai')?.clicks).toEqual(['[data-wbs-fullscreen-toggle]', '[data-wbs-ai-toggle]'])
+    expect(byKey('ws-agents-switch')).toMatchObject({ path: '/w/{wsSlug}/agents', click: 'button[data-view="lane"]' })
+    for (const k of ['ws-home-collapsed', 'ws-switcher-open', 'project-switcher-open', 'drawer-project', 'rail-ai-1440', 'rail-ai-1280', 'ws-agents-switch', 'ws-settings-broken']) {
+      expect(byKey(k)?.since, k).toBe('UI-2b')
+      expect(byKey(k)?.expect?.length, `${k} 기대 선택자`).toBeGreaterThan(0)
+    }
+  })
+  it('ws-settings-broken 은 손상 상태가 있어야 의미가 있다 — manual 이라 since 선택에서 빠진다', () => {
+    const r = byKey('ws-settings-broken')
+    expect(r).toMatchObject({ path: '/w/{wsSlug}/settings', grade: 'wsAdmin', supplement: true, expect: ['[role="alert"]'] })
+    expect(r?.tags).toContain('manual')
+    const picked = selectRoutes(routesDoc, { routes: null, since: ['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'C'] }).map((x) => x.key)
+    expect(picked).not.toContain('ws-settings-broken')
+    expect(picked).toContain('ws-switcher-open')
+    expect(selectRoutes(routesDoc, { routes: ['ws-settings-broken'], since: [] }).map((x) => x.key)).toEqual(['ws-settings-broken'])
   })
 })

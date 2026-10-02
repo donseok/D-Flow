@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { judgeRegression, median, percentile, perfBaseUrl, perfDsn } from '../../scripts/lib/perf.mjs'
+import { IA_KINDS, iaRoutes, judgeRegression, median, percentile, perfBaseUrl, perfDsn } from '../../scripts/lib/perf.mjs'
 import { distinctSeedNames, distinctWbsCodes, parseNameList, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from '../../scripts/lib/perf.mjs'
 
 describe('percentile — 최근접 순위(표본 밖 보간 없음)', () => {
@@ -116,5 +116,26 @@ describe('perf 도우미 — 시드·경로(SP4 §6.5)', () => {
   it('측정의 항목 수 확인은 이름으로 센다 — 코드로 세면 표준 내보내기가 늘 0 이다', () => {
     const src = readFileSync('scripts/perf-baseline.mjs', 'utf8')
     expect(src).toMatch(/counts\[path\] = distinctSeedNames\(text\)/)
+  })
+})
+
+describe('iaRoutes — IA 별로 경로 셋에 더할 경로(SP3b 과제 37, D32)', () => {
+  const ids = { slug: 'acme', wid: 'w-1', pid: 'p-1' }
+  it('legacy = 옛 목록 화면과 옛 셸 계약(route·menu)', () => {
+    expect(iaRoutes('legacy', ids)).toEqual(['/projects', '/api/shell?route=p-1&menu=p-1'])
+  })
+  it('ws = 새 홈·프로젝트 목록·새 셸 계약(ws·project)', () => {
+    expect(iaRoutes('ws', ids)).toEqual(['/w/acme', '/w/acme/projects', '/api/shell?ws=w-1&project=p-1'])
+  })
+  it('없으면 더할 것이 없다(경로 이름 셋만 — 레인 A 의 쓰임 그대로), 모르는 값은 throw', () => {
+    expect(iaRoutes(null, ids)).toEqual([])
+    expect(iaRoutes(undefined, ids)).toEqual([])
+    expect(() => iaRoutes('both', ids)).toThrow(/legacy\|ws/)
+    expect(IA_KINDS).toEqual(['legacy', 'ws'])
+  })
+  it('perf-baseline.mjs 배선 — measure 가 --ia 를 받아 perfRoutes 뒤에 iaRoutes 를 더한다(원문 확인 — 스크립트는 import 하면 바로 돈다)', () => {
+    const src = readFileSync('scripts/perf-baseline.mjs', 'utf8')
+    expect(src).toMatch(/a === '--ia'/)
+    expect(src).toMatch(/\[\.\.\.perfRoutes\(project\.id, routeNames\), \.\.\.iaRoutes\(ia,/)
   })
 })

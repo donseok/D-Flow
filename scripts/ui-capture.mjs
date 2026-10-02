@@ -21,6 +21,8 @@ export const GRADES = Object.freeze(['public', 'member', 'wsAdmin', 'platformAdm
 export const SINCE = Object.freeze(['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'UI-3', 'C'])
 export const TEMPLATE_VARS = Object.freeze(['pid', 'minuteId', 'topicId', 'inviteToken', 'shareToken', 'wsSlug'])
 export const DIFF_THRESHOLD = 16
+/** 행의 prefs 로 덮을 수 있는 계정 키 — 서버값이 이겨서 화면 조작·init 으로 못 만드는 상태만(과제 37) */
+export const ROW_PREF_KEYS = Object.freeze(['sidebarCollapsed'])
 export const SAME_RATIO = 0.002
 export const KEY_RE = /^[a-z0-9][a-z0-9-]*$/
 
@@ -172,8 +174,8 @@ export function parseSize(s) {
 
 /** 하위 명령 뒤 argv → 옵션. 모르는 인자·값 밖은 throw @param {string[]} argv */
 export function parseArgs(argv) {
-  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, positional: string[] }} */
-  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, positional: [] }
+  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, scroll: number, javaScript: boolean, positional: string[] }} */
+  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, scroll: 0, javaScript: true, positional: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} 뒤에 값이 없다`); return v }
@@ -186,6 +188,15 @@ export function parseArgs(argv) {
     else if (a === '--server-commit') out.serverCommit = next()     // --base 서버를 띄운 트리(D3)
     else if (a === '--pair') out.pair = true                       // diff — 머리 라벨의 pair 행을 기준 라벨의 짝 행과 비교(옛 경로 ↔ 새 경로)
     else if (a === '--allow-cross') out.allowCross = true           // diff — 판·시드가 다른 라벨의 참고 대조(D3)
+    else if (a === '--scroll') {                                    // shoot — main 을 그만큼 스크롤한 뒤 찍는다(고정 요소 확인, D54)
+      const v = next()
+      if (!/^\d+$/.test(v)) throw new Error(`--scroll 은 0 이상의 정수(px): ${v}`)
+      out.scroll = Number(v)
+    } else if (a === '--js') {                                      // shoot — off 면 JS 를 끈 컨텍스트(첫 페인트 — D55)
+      const v = next()
+      if (v !== 'on' && v !== 'off') throw new Error(`--js 는 on|off: ${v}`)
+      out.javaScript = v === 'on'
+    }
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
   }
@@ -243,6 +254,7 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
     if (r?.clicks !== undefined && (!Array.isArray(r.clicks) || r.clicks.length === 0 || r.clicks.some((s) => typeof s !== 'string' || !s || /[{}<]/.test(s)))) p.push(`${id}: clicks 선택자`)
     if (r?.clicks !== undefined && r?.click !== undefined) p.push(`${id}: click 과 clicks 를 같이 쓰지 않는다`)
+    if (r?.prefs !== undefined && (typeof r.prefs !== 'object' || r.prefs === null || Array.isArray(r.prefs) || Object.entries(r.prefs).some(([k, v]) => !ROW_PREF_KEYS.includes(k) || typeof v !== 'boolean'))) p.push(`${id}: prefs 는 ${ROW_PREF_KEYS.join('·')} 의 불리언 객체`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
     for (const f of ['expect', 'focusTargets', 'hide']) {
@@ -472,9 +484,10 @@ export function inviteDomainPatch(values, domain = SEED_INVITE_DOMAIN) {
   return norm.includes(want) ? null : { [key]: [...cur, want] }
 }
 
-/** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값 @param {{ width: number, height: number, theme: string }} s */
-export function contextOptions({ width, height, theme }) {
-  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme }
+/** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값. javaScript === false 만 JS 를 끈다(D55 첫 페인트 — 그 밖에는 키를 더하지 않아 기본 조건 그대로)
+ *  @param {{ width: number, height: number, theme: string, javaScript?: boolean }} s */
+export function contextOptions({ width, height, theme, javaScript }) {
+  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme, ...(javaScript === false ? { javaScriptEnabled: false } : {}) }
 }
 
 /** 비교 조건 — 늘 같아야 하는 것(날짜·브라우저)과 판·시드의 정체(--allow-cross 참고 대조로만 다를 수 있다, D3) */
@@ -501,7 +514,7 @@ export function compareMeta(a, b, { allowCross = false } = {}) {
 /**
  * 라우트 고르기 — --routes 가 있으면 그 키만, 없으면 since 집합 안의 행(until 이 집합에 들면 뺀다).
  * JSDoc 이 없으면 TS 호출부의 콜백 인자가 암묵 any 가 된다(allowJs, checkJs 없음).
- * @template {{ key: string, since: string, until?: string }} R
+ * @template {{ key: string, since: string, until?: string, tags?: string[] }} R
  * @param {{ routes: R[] }} doc @param {{ routes: string[] | null, since: string[] }} sel @returns {R[]}
  */
 export function selectRoutes(doc, { routes, since }) {
@@ -510,7 +523,8 @@ export function selectRoutes(doc, { routes, since }) {
     if (miss.length) throw new Error(`routes.json 에 없는 키: ${miss.join(',')}`)
     return doc.routes.filter((r) => routes.includes(r.key))
   }
-  return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)))
+  // tags 에 'manual' 이 든 행은 키로 지정할 때만 찍는다 — 앞선 손질(설정 손상 등)이 있어야 의미가 있는 장
+  return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)) && !(Array.isArray(r.tags) && r.tags.includes('manual')))
 }
 
 /** 한 장의 픽셀 판정(D1) — 글꼴 무효는 비교 제외, 크기 다름, 0 이면 same, SAME_RATIO(판정 Q33 의 0.2%) 이하는 near(볼 목록에 오른다 —
@@ -874,10 +888,11 @@ export function fixedPrefs(theme) {
  * 모든 소속 워크스페이스 행(user_preferences) = pin(워크스페이스 키만 — shoot 는 startPin(시드 프로젝트))(SP3b D9). 두 행 모두 병합이 아니라
  * 덮는다 — 앞 실행이 남긴 계정 키·알림 읽음·즐겨찾기가 다음 실행의 시작 상태를 바꾸지 않게. seed 가 아니라 실행 시작에서 덮는 이유:
  * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
- * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin]
+ * extra(행의 prefs — 허용 키만, validateRoutes) 는 고정 객체 위에 얹는다 — 그 행을 찍는 동안만이고 끝나면 extra 없이 다시 덮는다.
+ * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin] @param {Record<string, unknown>} [extra]
  */
-export async function setServerTheme(db, userIds, theme, pin = {}) {
-  const prefs = fixedPrefs(theme)
+export async function setServerTheme(db, userIds, theme, pin = {}, extra = {}) {
+  const prefs = { ...fixedPrefs(theme), ...extra }
   for (const userId of userIds) {
     must('계정 선호 쓰기', await db.from('account_preferences').upsert(
       { user_id: userId, prefs, updated_at: new Date().toISOString() },
@@ -1022,6 +1037,12 @@ async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId,
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
  *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·워크스페이스 행 pin·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
+/** main 의 스크롤 주체(D19)를 y px 만큼 내리고 한 프레임 기다린다 — 짧은 화면은 브라우저가 끝에서 멈춘다(그만큼만 내려간 장이 찍힌다) */
+export async function scrollMain(page, y) {
+  await page.evaluate((to) => document.querySelector('main#main-content')?.scrollTo(0, to), y)
+  await page.waitForTimeout(200)
+}
+
 export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
   const { db, outDir, baseUrl } = env
   const routesText = readFileSync('scripts/ui-capture.routes.json', 'utf8')
@@ -1052,34 +1073,42 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
       await passStart(db, { theme, userIds: captureIds, projectId: seed.pid })
       warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], theme, projectId: seed.pid, outDir }))
       for (const r of routes) {
-        for (const [width, height] of opts.sizes) {
-          const context = await browser.newContext(contextOptions({ width, height, theme }))
-          try {
-            await routeCdn(context, join(outDir, 'cdn-cache'))
-            const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
-            await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
-            await context.addInitScript((entries) => {
-              try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
-            }, r.init ?? {})
-            const page = await context.newPage()
-            await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
-            let idle = true
-            try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false }
-            await page.evaluate(() => document.fonts.ready.then(() => true))
-            await page.waitForTimeout(500)
-            let clickFailed = false
-            for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
-              try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
-            }
-            const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
-            for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
-            const u = new URL(page.url())
-            const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
-            const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
-            const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
-            const v = await visit(page, { r, width, height, theme, doc, outDir })
-            rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
-          } finally { await context.close() }
+        // 행의 계정 선호(prefs — 서버값이 이기는 키라 클릭·init 으로는 못 정한다)는 그 행을 찍는 동안만 덮고, 끝나면 시작 상태로 되돌려 뒤 행을 바꾸지 않게 한다
+        if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid), r.prefs)
+        try {
+          for (const [width, height] of opts.sizes) {
+            const context = await browser.newContext(contextOptions({ width, height, theme, javaScript: opts.javaScript }))
+            try {
+              await routeCdn(context, join(outDir, 'cdn-cache'))
+              const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
+              await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+              await context.addInitScript((entries) => {
+                try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
+              }, r.init ?? {})
+              const page = await context.newPage()
+              await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
+              let idle = true
+              // JS 를 끈 장(--js off, D55 첫 페인트)은 스크립트가 없어 네트워크 유휴를 기다릴 것이 없다 — 글꼴만 확정하고 찍는다
+              if (opts.javaScript !== false) { try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false } }
+              await page.evaluate(() => document.fonts.ready.then(() => true))
+              await page.waitForTimeout(500)
+              let clickFailed = false
+              for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
+                try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
+              }
+              if (opts.scroll > 0) await scrollMain(page, opts.scroll)   // 클릭 뒤 — 고정 요소가 스크롤된 main 위에서 어디 붙는지(D54)
+              const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
+              for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
+              const u = new URL(page.url())
+              const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
+              const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
+              const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
+              const v = await visit(page, { r, width, height, theme, doc, outDir })
+              rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
+            } finally { await context.close() }
+          }
+        } finally {
+          if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid))
         }
       }
     }
@@ -1113,7 +1142,7 @@ async function cmdShoot(opts) {
   const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}/${x.theme}: ${s}`))
   const meta = { label: opts.label, commit: server.commit, commitSource: server.source, scriptCommit: head, buildId: res.buildId, browser: res.browserVersion,
     kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
-    themes: opts.theme, sizes: opts.sizes, warmups: res.warmups, maskWarnings, rows: res.rows }
+    themes: opts.theme, sizes: opts.sizes, scroll: opts.scroll, javaScript: opts.javaScript, warmups: res.warmups, maskWarnings, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, buildId: res.buildId, commit: `${server.commit}(${server.source})`,
     warmups: res.warmups.map((w) => `${w.theme} ${w.elapsedMs}ms`),

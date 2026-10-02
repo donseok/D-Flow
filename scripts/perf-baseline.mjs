@@ -14,7 +14,8 @@
 // 사용:
 //   PERF_MEMBER_PASSWORD=… node scripts/perf-baseline.mjs seed
 //   BOOTSTRAP_EMAIL=admin@example.com BOOTSTRAP_PASSWORD=… PERF_MEMBER_PASSWORD=… \
-//     node scripts/perf-baseline.mjs measure --base http://localhost:3101 --label sp2-phase-a --n 100
+//     node scripts/perf-baseline.mjs measure --base http://localhost:3101 --label sp2-phase-a --n 100 [--ia legacy|ws]
+//   --ia(SP3b): 경로 셋에 IA 별 경로를 더한다(없으면 그 셋만) — legacy = /projects·/api/shell?route&menu, ws = /w/<slug>·/w/<slug>/projects·/api/shell?ws&project
 //   SP4 A2: seed [--items <n>(기본 800 — 800 이 아니면 프로젝트 PERF-<n>)] [--weekly(주간 영역 셋·2026-01-05 문서 하나 — SP4 스키마 전용)],
 //           measure [--items <n>] [--routes dashboard,wbs,issues,export,weekly(기본 dashboard,wbs,issues)] [--personas admin|admin,member(기본 둘)]
 //           [--expect-items <n>(wbs 화면·export 본문의 서로 다른 시드 항목 이름 수가 n 인지 — 다르면 실패. 표준 내보내기에는 코드 열이 없어
@@ -27,7 +28,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Pool } from 'pg'
 import { cookieHeader, localClientEnv, notFoundRendered } from './lib/e2e.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
-import { distinctSeedNames, parseNameList, percentile, perfBaseUrl, perfDsn, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
+import { distinctSeedNames, IA_KINDS, iaRoutes, parseNameList, percentile, perfBaseUrl, perfDsn, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
 import { zipTextParts } from './lib/sentinels.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
@@ -220,7 +221,7 @@ async function seed(argv) {
 }
 
 function parseMeasureArgs(argv) {
-  const out = { base: null, label: null, n: DEFAULT_N, items: 800, routes: ['dashboard', 'wbs', 'issues'], personas: ['admin', 'member'], expectItems: null }
+  const out = { base: null, label: null, n: DEFAULT_N, items: 800, routes: ['dashboard', 'wbs', 'issues'], personas: ['admin', 'member'], expectItems: null, ia: null }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--base') out.base = argv[++i]
@@ -230,6 +231,7 @@ function parseMeasureArgs(argv) {
     else if (a === '--routes') out.routes = (() => { try { return parseNameList(argv[++i], PERF_ROUTE_NAMES) } catch (e) { return fail(e.message) } })()
     else if (a === '--personas') out.personas = (() => { try { return parseNameList(argv[++i], ['admin', 'member']) } catch (e) { return fail(e.message) } })()
     else if (a === '--expect-items') out.expectItems = Number(argv[++i])
+    else if (a === '--ia') out.ia = argv[++i]
     else fail(`알 수 없는 인자: ${a}`)
   }
   if (!out.base) fail('measure 는 --base <url> 이 필요하다')
@@ -237,6 +239,7 @@ function parseMeasureArgs(argv) {
   if (!Number.isInteger(out.n) || out.n <= 0) fail('--n 은 양의 정수여야 한다')
   try { perfProjectName(out.items) } catch (e) { fail(e.message) }
   if (out.expectItems !== null && (!Number.isInteger(out.expectItems) || out.expectItems <= 0)) fail('--expect-items 는 양의 정수여야 한다')
+  if (out.ia !== null && !IA_KINDS.includes(out.ia)) fail(`--ia 는 ${IA_KINDS.join('|')} 여야 한다`)
   return out
 }
 
@@ -280,7 +283,7 @@ async function measureRoutes(base, cookie, routes, n) {
 }
 
 async function measure(argv) {
-  const { base: rawBase, label, n, items, routes: routeNames, personas, expectItems } = parseMeasureArgs(argv)
+  const { base: rawBase, label, n, items, routes: routeNames, personas, expectItems, ia } = parseMeasureArgs(argv)
   const base = (() => { try { return perfBaseUrl(rawBase) } catch (e) { return fail(e.message) } })()
   const env = localClientEnv(envText())
   const projectName = perfProjectName(items)
@@ -292,12 +295,20 @@ async function measure(argv) {
 
   // 프로젝트 id 는 어드민 세션으로 확정한다(권한이 가장 넓어 항상 보인다) — 페르소나들이 같은 pid 의 같은 경로를 잰다.
   const adminSession = await login(env, adminEmail, adminPassword)
-  const { data: project, error: projErr } = await adminSession.sb.from('projects').select('id').eq('name', projectName).maybeSingle()
+  const { data: project, error: projErr } = await adminSession.sb.from('projects').select('id, workspace_id').eq('name', projectName).maybeSingle()
   if (projErr) fail(`${projectName} 프로젝트 조회 실패: ${projErr.message}`)
   if (!project) fail(`${projectName} 프로젝트가 없다 — 'node scripts/perf-baseline.mjs seed --items ${items}' 를 먼저 돌린다`)
-  const routes = perfRoutes(project.id, routeNames)
+  // --ia ws 의 경로는 측정 프로젝트가 속한 워크스페이스의 slug·id 로 만든다(옛 IA 는 그 값이 필요 없다)
+  let slug = ''
+  if (ia === 'ws') {
+    const { data: ws, error: wsErr } = await adminSession.sb.from('workspaces').select('slug').eq('id', project.workspace_id).maybeSingle()
+    if (wsErr) fail(`워크스페이스 조회 실패: ${wsErr.message}`)
+    if (!ws) fail(`${projectName} 프로젝트의 워크스페이스를 읽지 못했다(${project.workspace_id})`)
+    slug = ws.slug
+  }
+  const routes = [...perfRoutes(project.id, routeNames), ...iaRoutes(ia, { slug, wid: project.workspace_id, pid: project.id })]
 
-  const result = { label, n, items, personas: {} }
+  const result = { label, n, items, ...(ia ? { ia } : {}), personas: {} }
   for (const persona of personas) {
     const cookie = persona === 'admin' ? adminSession.cookie : (await login(env, MEMBER_EMAIL, memberPassword)).cookie
     const { routeStats, last } = await measureRoutes(base, cookie, routes, n)
@@ -319,4 +330,4 @@ async function measure(argv) {
 const [cmd, ...rest] = process.argv.slice(2)
 if (cmd === 'seed') await seed(rest)
 else if (cmd === 'measure') await measure(rest)
-else fail("사용: node scripts/perf-baseline.mjs seed [--items n] [--weekly] | measure --base <url> --label <이름> [--n 100] [--items n] [--routes a,b] [--personas admin] [--expect-items n]")
+else fail("사용: node scripts/perf-baseline.mjs seed [--items n] [--weekly] | measure --base <url> --label <이름> [--n 100] [--items n] [--routes a,b] [--personas admin] [--expect-items n] [--ia legacy|ws]")
