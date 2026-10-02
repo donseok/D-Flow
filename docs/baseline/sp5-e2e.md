@@ -54,3 +54,4 @@
   ⑧ 이름 있는 테스트 18 files·461 통과 · ⑨ 달력 키 셋 `S5A('verified'` 3 · ⑩ 라벨 커밋 `907df97e`·`1992edbf` 의도 변화 ✓ · ⑪ `0019_calendar` > main 의 마지막 `0018_account_preferences`(rename 불필요)
 - 메인 스택(사용자 DB): 적용하지 않았다(D48 — §8 #13 은 main 반영 뒤 컨트롤러가 사용자에게 묻는다. #1·#2 의 답 상태: 10-02 05시 답 받음 — #1 통일·#2 전환)
 - 커밋 위생(bisect): `90ead30` → `6b36cae`, `ebea4cd` → `ce69c55`, `bafc051`·`1992edb`·`907df97`·`5a64a13` → `a9bab86` 로 건너뛴다. O2(`153d06c8`)의 `Preview-checked` 시각 19:12 는 실제 19:08~09(amend 금지 — 기록으로 정정).
+- merge 커밋 `5e5e82c1` 은 0018 번호가 둘이고(`0018_calendar`·`0018_account_preferences`) 테스트도 빨갛다 — bisect 때 `f9ad12ae` 로 건너뛴다(A 최종 리뷰 P3).

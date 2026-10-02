@@ -841,6 +841,21 @@ D31 — 에이전트가 헤드리스 브라우저(라이트·다크)로 찍고 `
 | 공지의 '오늘'이 달력 세 키를 모두 요구한다 — `getUnreadAnnouncementCount`·`createAnnouncementFromMeeting` 의 `projectToday` 가 `requireCalendar(...).timezone` 이라 주 시작·근무 요일만 손상돼도 셸 공지 배지가 '모름'(null)·회의→공지 등록이 실패한다(fail-closed + 로그라 위장은 아니다). '오늘'에는 tz 키만 필요하다. 헤더 티커(`getTopAnnouncements`)는 UI-2 가 지워 이 꼴에서 빠졌다(a6 리뷰 Q6) | SP5 B1(화면 커밋) — 늦어지면 SP8 | tz 키 상태만 보는 좁은 판독(`projectTimezone(cfg)`)을 두고 '오늘'만 필요한 곳(공지 둘·봇의 날짜 앵커 등)이 그것을 쓴다 |
 | 사용현황 표 직접 조회(`getRecentUsageEvents`)의 tz 오류 갈래 — RPC 다섯은 PG 22023 을 `USAGE_TIMEZONE_INVALID` 로 가르지만 표 직접 조회는 경계를 TS `zonedMidnightUtc` 로 만들어 모르는 tz 에 `RangeError` 를 그대로 던진다(둘 다 fail-closed). 지금은 tz 가 상수 `'UTC'` 라 도달하지 않는다(A-4 리뷰 P3, N9) | SP8(사용현황 필터 tz 를 넣는 SP) | SP8 블록에 한 줄 — 필터 tz 를 넣을 때 경계 계산을 감싸 같은 `UsageQueryError('USAGE_TIMEZONE_INVALID')` 로 던진다 |
 | 워크스페이스 달력 손상의 과차단 — `/w/<slug>/projects`·`/w/<slug>/agents` 는 그 워크스페이스 달력(`viewTimezone`)이 손상이면 상태 배지·시각만을 위해 목록·좌석표 전체를 `ConfigLoadError` 로 바꾼다(fail-closed + 사유 표시라 위장은 아니다). 포털 로더(과제 32)는 같은 경우 상태만 '모름'으로 두고 목록을 그린다 — 결은 다르지만 날짜를 지어내지 않는 점은 같다. 기록 시점(merge 보안 재리뷰 — 범위 밖 관찰)의 코드 변경 없음 | SPU3(상태 계약 — 칸 단위 실패 표시) | SPU3 블록에 한 줄(§8 #10 의 화면 패턴 이행과 함께) |
+| A 마감 최종 리뷰 이월(P3-1) ① 간트의 주 띠('W01 10/2')가 축 시작일부터의 7일 묶음이라 프로젝트 주 시작과 맞지 않는다(기존 동작 — SP5 A 범위 밖) ② `replaceMinuteBody` 가 RPC 실패 때 DB 오류 원문을 그대로 돌려준다(기존 — 원문 가드 대상 밖) | ① SPU3(간트 눈금 이행) ② SP5 B3(회의록 첨부 가드와 같은 파일을 만질 때) 또는 SP9 출시 점검 | SPU3·SP9 블록에 한 줄 |
+| ③ 에이전트 허브의 킬스위치 자리를 달력이 손상된 **에이전트 등록 상태**에서 눈으로 못 봤다(E2E 프로젝트에 에이전트가 없어 '첫 위임 때 켜집니다'만 보임 — 단위 테스트가 근거) ④ 계획 과제 12 Step 5 의 롤백 확인 명령 `position('kind')` 줄은 SP4 원문의 `item_owners.kind` 때문에 0 이 아니다(롤백 본문이 0018 과 같다는 근거는 리허설 R 의 diff 0) — 계획 정오표 | ③ SP5 B 체크포인트 눈확인(에이전트 등록 상태에서) ④ 문서 정오표(이 행) | 레인 A 원장 |
+| ⑤ 성능 일괄 측정 — SP5 A 과제 31b(p95 비율 ≤ 1.20: 대시보드·WBS·이슈·내보내기 800행)와 SP3b R25(교대 재측정)·SP4 B 과제 14 를 한 번에. 사용자 지시(2026-10-02)로 전체 구현 뒤 일괄(방법: n 100·ABBA 4라운드·load ≤ 6) ⑥ `BOOTSTRAP_TIMEZONE` 설명(CLAUDE.md `dev:bootstrap` env 목록에 "IANA 이름 — 워크스페이스 `calendar.timezone`. 주지 않으면 쓰지 않는다: 새 워크스페이스는 제품 기본값 UTC 그대로이고 설정 화면이 브라우저 시간대를 제안한다. 이미 값이 있는 워크스페이스는 명시했을 때만 덮는다") — 계획 과제 28 에 있었으나 빠졌다 | ⑤ 일괄 성능 측정 패스(SP5 완료 뒤) ⑥ 사용자 확인(CLAUDE.md 는 사용자 문서) | 레인 A·B 원장 |
+| ⑦ 레인 B 의 `match_minute_documents`(p_workspace_id·p_exclude_project_ids)·`match_wbs_documents`(p_project_ids) 시그니처 확장 — 보안 영향 없음, 여러 워크스페이스 소속자의 벡터 회수율(drop/create·권한·롤백 포함 한 마이그레이션) | SP5 B3(회의록 첨부 — 같은 의미검색 경로) 또는 별도 DB 묶음 | SP5 B3 계획 입력 |
+| ⑧ **포털의 '오늘'(과제 32 판정)** — 스펙 §4.3 은 포털을 워크스페이스 tz 로 적었으나 구현은 데이터 소속의 tz 다(작업·이슈 기한·오늘 회의·공지 게시 기간 = 프로젝트 tz, 프로젝트 상태 = 워크스페이스 tz). 홈의 '오늘 회의'와 `/w/<slug>/meetings` 의 TODAY 가 서로 다른 tz 일 수 있고, 한 홈 안에서도 둘이 섞인다. 판정: 구현 유지(데이터 소속의 tz 가 그 데이터의 '오늘'이다) — §4.3 정오표 행(§9.1). 이 선택을 가르는 런타임 증거가 없다(검증 시각에 LA·UTC 날짜가 같았다) → B 체크포인트 검증은 UTC+14 와 UTC−11 처럼 날짜가 늘 다른 tz 짝으로 | SP5 B 체크포인트 | 레인 A 원장 |
+
+### 9.1 구현이 정정한 스펙 문장(A 마감 최종 리뷰 P2-2 — 정정의 근거는 이 표와 `.superpowers/sp5/a-rulings-1.md`·`a1-fix-brief.md` K8·`a2-fix-brief.md` L1)
+
+| 위치 | 스펙 원문 | 구현(정본) |
+|---|---|---|
+| D54 | 별칭 정규화(`resolvedOptions().timeZone`)·IANA 이름 꼴 정규식 검사 | **별칭을 보존한다**(`Asia/Kolkata`·`Europe/Kyiv` 를 옛 별칭으로 바꾸지 않는다) — 저장 값 = `Intl.supportedValuesOf('timeZone')` 에서 대소문자 무시 일치가 있으면 그 표기, 없으면 입력(trim). 이름 꼴 정규식은 쓰지 않는다(`EST5EDT`·`PST8PDT` 같은 실재 이름 수용). 오프셋 꼴(`+09:00`·유니코드 마이너스 포함)은 사전 거부, `/` 없는 이름은 닫힌 목록(`UTC`·`GMT`·`EST5EDT`·`CST6CDT`·`MST7MDT`·`PST8PDT`)만 — TS·PG 가 같은 규칙(`EST`·`GMT0`·`IST`·`NST` 는 거부: ICU 와 PG 약어 표가 다른 시간대로 읽는다). B1 채번의 TS·SQL 패리티는 이 정본을 따른다 |
+| D13 ② | `dev:bootstrap` 이 `BOOTSTRAP_TIMEZONE`(기본 `'UTC'`)을 받는다 | **주지 않으면 쓰지 않는다**(새 워크스페이스는 레지스트리 기본값 UTC 그대로, 설정 화면이 브라우저 시간대를 제안). 이미 값이 있는 워크스페이스는 명시했을 때만 덮는다 |
+| D32·§7 A | `(app)/layout.tsx` 의 `seoulToday` 한 줄을 `ui/sp5-calendar` 브랜치에서 | UI-2 로 그 호출이 `src/lib/data/portal.ts` 네 줄로 옮겨 갔다(UI 위험 파일 아님) — 범위 tz 로 교체하고 `seoulToday`·`UNTIL_TASK_32` 를 지웠다. 체크포인트 빈 커밋 `aac37d78` |
+| D3 | rebase | main 이 UI-2·SP4 B 로 크게 움직여(충돌 51파일) rebase 대신 `git merge main`(merge 커밋 `5e5e82c1`) — 커밋 해시 보존·충돌 한 번. 이 브랜치는 main 을 조상으로 갖게 되어 ff 가 가능하다 |
+| §4.3 포털 | 포털의 '오늘'은 워크스페이스 tz | 데이터 소속의 tz(위 §9 ⑧ 판정) |
 
 ## 10. 리스크
 
