@@ -19,6 +19,7 @@ const { db, resetDb, createServerClient, requireProjectAdmin, resolveProjectId }
       wbs_items: [], item_owners: [], change_logs: [],
     } as Partial<Record<TableName, Array<Record<string, unknown>>>>,
     nextId: 1,
+    fromCalls: [] as string[],
   }
   const resetDb = () => {
     tables.wbs_items = []
@@ -29,6 +30,7 @@ const { db, resetDb, createServerClient, requireProjectAdmin, resolveProjectId }
     db.inserted.item_owners = []
     db.inserted.change_logs = []
     db.nextId = 1
+    db.fromCalls = []
   }
 
   /** 체이너블 최소 모의 — select/eq/in/is/limit 는 자기 자신, single/maybeSingle 은 필터 매칭 결과.
@@ -103,7 +105,7 @@ const { db, resetDb, createServerClient, requireProjectAdmin, resolveProjectId }
   }
 
   const createServerClient = vi.fn(async () => ({
-    from: (n: TableName) => table(n),
+    from: (n: TableName) => { db.fromCalls.push(n); return table(n) },
   }))
   const requireProjectAdmin = vi.fn()
   const resolveProjectId = vi.fn()
@@ -119,12 +121,17 @@ vi.mock('next/server', async (importOriginal) => {
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin, resolveProjectId }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
+// 담당 팀의 원천 — 이 프로젝트에서 고를 수 있는 팀(projectTeams, A2 최종 리뷰 보안 P3 — FF1). 케이스마다 값을 건다
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock([]))
 
 import { addSubAct, addWbsItem } from '@/app/actions/wbs'
+import { projectTeams } from '@/lib/teams/source'
 import { makeAdminActor, WS } from '../fixtures/actor'
+import { teamRows } from '../helpers/teams-source-mock'
 
-// p1 은 워크스페이스 WS 의 프로젝트 — 담당 팀 해석은 그 워크스페이스의 팀만 본다(SP2 최종 리뷰 F9)
 const ADMIN = { ok: true as const, actor: makeAdminActor('p1', { userId: 'u-admin' }) }
+/** projectTeams 가 돌려줄 팀(활성, 워크스페이스 WS) */
+const offer = (...rows: ReturnType<typeof teamRows>) => vi.mocked(projectTeams).mockResolvedValue(rows)
 
 beforeEach(() => {
   resetDb()
@@ -133,6 +140,8 @@ beforeEach(() => {
   resolveProjectId.mockReset()
   requireProjectAdmin.mockResolvedValue(ADMIN)
   resolveProjectId.mockResolvedValue({ ok: true, projectId: 'p1' })
+  vi.mocked(projectTeams).mockReset()
+  vi.mocked(projectTeams).mockResolvedValue([])
 })
 
 describe('addSubAct 가드 ① — 대상은 리프여야 한다', () => {
@@ -154,57 +163,54 @@ describe('addSubAct 가드 ① — 대상은 리프여야 한다', () => {
         planned_start: '2026-01-01', planned_end: '2026-01-10', is_owner_split: false },
       { id: 'sub-1', parent_id: 'act-2', sort_order: 1, is_owner_split: true },
     ]
-    db.teams = [{ id: 'team-erp', code: 'ERP', workspace_id: WS }]
+    offer(...teamRows(['ERP'], { id: 'team-erp', workspaceId: WS }))
     const r = await addSubAct('act-2', 'ERP', 'primary')
     expect(r.ok).toBe(true)
   })
 })
 
-describe('addSubAct — 0071 회귀: 동명 2행(전역+프로젝트) 우선순위', () => {
-  // 이 태스크(스코프 소탕)의 존재 이유 자체 — 복합 유니크로 같은 code 의 전역 행과
-  // 이 프로젝트(p1) 행이 동시에 존재해도 프로젝트 행을 담당으로 골라야 한다.
-  it('같은 code 로 전역+프로젝트 팀 2행이 있으면 프로젝트 팀을 item_owners 에 넣는다', async () => {
-    db.wbs_items = [
-      { id: 'act-5', project_id: 'p1', code: '5', name: '스코프 우선순위 작업', biz: null, deliverable: null,
-        planned_start: null, planned_end: null, is_owner_split: false },
-    ]
-    db.teams = [
-      { id: 't-global', code: 'ERP', project_id: null, workspace_id: WS },
-      { id: 't-proj', code: 'ERP', project_id: 'p1', workspace_id: WS },
-    ]
+describe('addSubAct — 담당 팀은 이 프로젝트에서 고를 수 있는 팀만(A2 최종 리뷰 보안 P3 — FF1)', () => {
+  // 명단(X1)·초대·영역과 같은 원천 projectTeams(전용 팀이 있으면 그것만 — 전용 우선·워크스페이스 좁히기는 원천의 몫)의 활성 팀으로만 고른다.
+  // 예전에는 정확한 code 로 teams 를 읽고 공용 팀으로 폴백해, 전용 'QA' 가 있는 프로젝트에 공용 'qa' 나 목록 밖 공용 팀을 붙일 수 있었다
+  const act = (id: string) => ({ id, project_id: 'p1', code: '5', name: '팀 선택 작업', biz: null, deliverable: null,
+    planned_start: null, planned_end: null, is_owner_split: false })
+
+  it('projectTeams(그 항목의 프로젝트)가 돌려준 팀 id 로 담당을 넣고, teams 표를 직접 읽지 않는다', async () => {
+    db.wbs_items = [act('act-5')]
+    offer(...teamRows(['ERP'], { id: 't-proj', projectId: 'p1', workspaceId: WS }))
     const r = await addSubAct('act-5', 'ERP', 'primary')
     expect(r.ok).toBe(true)
-    const owner = db.inserted.item_owners?.find(row => row.wbs_item_id === r.id)
-    expect(owner).toMatchObject({ team_id: 't-proj' })
-  })
-})
-
-describe('addSubAct — 같은 코드의 공용 팀이 두 워크스페이스에 있을 때(SP2 최종 리뷰 F9)', () => {
-  // 공용 팀 코드는 워크스페이스마다 따로다(teams_ws_project_code_key). 여러 워크스페이스를 보는 호출자에게는 RLS 가 둘 다 보여 준다.
-  it('대상 프로젝트 워크스페이스의 팀을 담당으로 — 다른 워크스페이스의 같은 코드 팀이 먼저 와도', async () => {
-    db.wbs_items = [
-      { id: 'act-6', project_id: 'p1', code: '6', name: '두 워크스페이스 작업', biz: null, deliverable: null,
-        planned_start: null, planned_end: null, is_owner_split: false },
-    ]
-    db.teams = [
-      { id: 't-other-ws', code: 'ERP', project_id: null, workspace_id: 'ws-other' },
-      { id: 't-my-ws', code: 'ERP', project_id: null, workspace_id: WS },
-    ]
-    const r = await addSubAct('act-6', 'ERP', 'primary')
-    expect(r.ok).toBe(true)
-    expect(db.inserted.item_owners?.find(row => row.wbs_item_id === r.id)).toMatchObject({ team_id: 't-my-ws' })
+    expect(projectTeams).toHaveBeenCalledWith('p1')
+    expect(db.inserted.item_owners?.find(row => row.wbs_item_id === r.id)).toMatchObject({ team_id: 't-proj' })
+    expect(db.fromCalls).not.toContain('teams')
   })
 
-  it('프로젝트의 워크스페이스를 모르면(스냅샷에 없음) 쓰기 전에 거부 — 아무 팀이나 고르지 않는다', async () => {
-    requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeAdminActor('p-other', { userId: 'u-admin' }) })
-    db.wbs_items = [
-      { id: 'act-7', project_id: 'p1', code: '7', name: '작업', biz: null, deliverable: null,
-        planned_start: null, planned_end: null, is_owner_split: false },
-    ]
-    db.teams = [{ id: 't-my-ws', code: 'ERP', project_id: null, workspace_id: WS }]
-    const r = await addSubAct('act-7', 'ERP', 'primary')
-    expect(r.ok).toBe(false)
+  it('전용 팀 QA 가 있는 프로젝트에 정규화 키만 같은 qa 를 넣으면 쓰기 전에 거절하고 고를 팀을 알려 준다', async () => {
+    db.wbs_items = [act('act-6')]
+    offer(...teamRows(['QA'], { id: 't-qa', projectId: 'p1', workspaceId: WS }))
+    expect(await addSubAct('act-6', 'qa', 'primary')).toEqual({ ok: false, error: "'QA' 팀과 같은 낱말입니다 — 그 팀을 고르세요." })
+    expect(await addSubAct('act-6', 'ＱＡ', 'primary')).toMatchObject({ ok: false })
     expect(db.inserted.wbs_items).toEqual([])
+    expect(db.inserted.item_owners).toEqual([])
+  })
+
+  it('목록 밖 code(같은 워크스페이스 공용 팀이라도)·비활성 팀은 거절한다', async () => {
+    db.wbs_items = [act('act-7')]
+    offer(...teamRows(['QA'], { id: 't-qa', projectId: 'p1', workspaceId: WS }), ...teamRows(['OLD'], { id: 't-old', projectId: 'p1', workspaceId: WS, active: false }))
+    expect(await addSubAct('act-7', 'MES', 'primary')).toEqual({ ok: false, error: '이 프로젝트에서 고를 수 있는 담당 팀이 아닙니다' })
+    expect(await addSubAct('act-7', 'OLD', 'primary')).toEqual({ ok: false, error: '이 프로젝트에서 고를 수 있는 담당 팀이 아닙니다' })
+    expect(db.inserted.wbs_items).toEqual([])
+  })
+
+  it('팀 원천 조회 실패는 팀 없음으로 위장하지 않고 쓰기 전에 고정 문구로 중단한다(원문은 로그로만)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.wbs_items = [act('act-8')]
+    vi.mocked(projectTeams).mockRejectedValue(new Error('pg: relation teams timeout'))
+    const r = await addSubAct('act-8', 'ERP', 'primary')
+    expect(r).toEqual({ ok: false, error: '담당 팀을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.' })
+    expect(JSON.stringify(r)).not.toContain('timeout')
+    expect(db.inserted.wbs_items).toEqual([])
+    err.mockRestore()
   })
 })
 
@@ -227,7 +233,7 @@ describe('addSubAct 가드 ③ — insert 페이로드', () => {
         planned_start: '2026-02-01', planned_end: '2026-02-10', is_owner_split: false },
       { id: 'sub-4a', parent_id: 'act-4', sort_order: 1, is_owner_split: true },
     ]
-    db.teams = [{ id: 'team-mes', code: 'MES', workspace_id: WS }]
+    offer(...teamRows(['MES'], { id: 'team-mes', workspaceId: WS }))
     const r = await addSubAct('act-4', 'MES', 'support')
     expect(r.ok).toBe(true)
     const inserted = db.inserted.wbs_items?.find(row => row.parent_id === 'act-4')

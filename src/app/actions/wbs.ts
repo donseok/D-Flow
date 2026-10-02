@@ -15,6 +15,8 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { failWith } from '@/lib/errors/dbFail'
 import { dbToken } from '@/lib/settings/errors'
+import { projectTeams } from '@/lib/teams/source'
+import { teamNameKey } from '@/lib/domain/teamName'
 
 /** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role, 활성 명단 행이 없으면 viewer. */
 export type ChangeActorRole = 'admin' | 'member' | 'viewer'
@@ -372,18 +374,26 @@ export async function addSubAct(
     return { ok: false, error: 'SUB-ACT가 아닌 하위 항목이 있는 곳에는 추가할 수 없습니다' }
   }
 
-  // 팀 코드 → teams.id — 프로젝트 행 우선, 그 프로젝트 워크스페이스의 공용 팀 폴백(0071 스코프. import RPC 와 같은 규칙).
-  // 공용 팀 코드는 워크스페이스마다 따로라, 여러 워크스페이스를 보는 호출자(플랫폼 관리자·두 워크스페이스 사용자)에게 RLS 가
-  // 다른 워크스페이스의 같은 코드 팀까지 보여 준다 — 워크스페이스로 좁힌다(0009 item_owners_guard 가 DB 에서도 막는다).
-  const projectWs = g.actor.projectWorkspace.get(act.project_id as string)
-  if (!projectWs) return { ok: false, error: '항목의 워크스페이스를 확인하지 못했습니다.' }
-  const { data: teamRows, error: teamErr } = await sb.from('teams')
-    .select('id, project_id').eq('code', team).eq('workspace_id', projectWs)
-    .or(`project_id.eq.${act.project_id},project_id.is.null`)
-  if (teamErr) return { ok: false, error: failWith('wbs.addSubAct', teamErr, ERR_TEAM_LOOKUP) } // 실패를 '팀 없음'으로 위장 금지
-  const teamRow = (teamRows ?? []).find(r => r.project_id !== null) ?? (teamRows ?? [])[0]
-  if (!teamRow) return { ok: false, error: '담당 팀을 찾을 수 없습니다' }
-  const teamId = teamRow.id as string
+  // 팀 코드 → teams.id — 이 프로젝트에서 고를 수 있는 팀(projectTeams 의 활성 팀: 전용 팀이 하나라도 있으면 그것만, 없으면 그 워크스페이스의
+  // 공용 팀)에서만 고른다. 명단(checkRosterTeams)·초대·영역과 같은 원천이고 화면의 선택지(useTeamCodes — 같은 팀의 활성 code)와도 같다(A2 최종
+  // 리뷰 보안 P3 — FF1). 예전에는 정확한 code 로 teams 를 읽고 전용 팀이 없으면 공용 팀으로 폴백해, 전용 팀 'QA' 가 있는 프로젝트에 서버 액션을
+  // 직접 불러 공용 'qa'(같은 낱말의 두 팀)나 목록 밖 공용 팀을 담당으로 붙일 수 있었다 — DB(0016 M1)는 정확히 같은 code 의 전용 팀만 막고 범위
+  // 가드(0009)는 같은 워크스페이스 공용 팀을 허용한다. 가져오기 RPC 의 공용 폴백은 라우트가 참조 판정(Z4)·등록으로 먼저 거른 뒤라 이 길과 다르다.
+  // 워크스페이스는 원천이 그 프로젝트의 설정 행에서 정한다(다른 워크스페이스의 같은 code 팀은 후보가 아니다). 조회 실패는 '팀 없음'으로 위장하지 않는다.
+  let choices: Awaited<ReturnType<typeof projectTeams>>
+  try {
+    choices = (await projectTeams(act.project_id as string)).filter(t => t.active)
+  } catch (e) {
+    return { ok: false, error: failWith('wbs.addSubAct', e, ERR_TEAM_LOOKUP) }
+  }
+  const teamRow = choices.find(t => t.code === team)
+  if (!teamRow) {
+    // 정규화 키(NFKC·소문자)만 같은 낱말은 그 팀으로 바꿔 쓰지 않고 거절한다 — 고를 팀을 알려 준다
+    const key = typeof team === 'string' ? teamNameKey(team) : ''
+    const near = key ? choices.find(t => teamNameKey(t.code) === key || teamNameKey(t.name) === key) : undefined
+    return { ok: false, error: near ? `'${near.code}' 팀과 같은 낱말입니다 — 그 팀을 고르세요.` : '이 프로젝트에서 고를 수 있는 담당 팀이 아닙니다' }
+  }
+  const teamId = teamRow.id
 
   const sibIds = sibs.map(s => s.id as string)
   if (sibIds.length) {
