@@ -23,11 +23,13 @@ type Props = {
   timeZone: string
   /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B) */
   locale?: string
+  /** 시각 뒤에 시간대 이름 — 프로젝트 달력을 못 읽어 UTC 로 찍을 때(허브 머리와 같은 표기, A-4 리뷰 N3·A-5 리뷰 O6) */
+  showTimeZone?: boolean
 }
 
 const when = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleString(locale, { timeZone, hour12: false })
 
-function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
+function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, showTimeZone = false }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
   const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -60,7 +62,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale }
           <span className="font-mono text-[11px] text-ink-muted">{q.code}</span>
           <span className="ml-2 text-sm font-semibold text-ink">{q.name}</span>
         </div>
-        <span className="text-[11px] text-ink-subtle">{q.agent} · {when(q.reportedAt, timeZone, locale)} · {q.percent}%</span>
+        <span className="text-[11px] text-ink-subtle">{q.agent} · {when(q.reportedAt, timeZone, locale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
       </div>
       {q.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-ink">{q.summary}</p>}
       {q.links.length > 0 && (

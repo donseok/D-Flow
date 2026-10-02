@@ -45,6 +45,16 @@ describe('승인 큐 — 보고 시각이 프로젝트 tz 를 따른다', () => 
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="America/Los_Angeles" locale="en-US" />)
     expect(host.textContent).toContain('10/3/2026')
   })
+  it('showTimeZone — 달력 손상으로 UTC 로 찍을 때 카드 시각 꼬리에 tz 이름(허브 머리와 같은 표기, A-5 리뷰 O6/N3)', () => {
+    render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="UTC" showTimeZone />)
+    expect(host.querySelector('[data-queue-card]')!.textContent).toContain('(UTC)')
+    render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="UTC" />)
+    expect(host.querySelector('[data-queue-card]')!.textContent).not.toContain('(UTC)')
+  })
+  it('허브가 showTimeZone 을 큐에도 넘긴다', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('src/components/agent-hub/AgentHubView.tsx', 'utf8')).toMatch(/<ApprovalQueue [^>]*showTimeZone=\{showTimeZone\}/)
+  })
 })
 
 describe('설정 이력 — stampIn(tz)', () => {

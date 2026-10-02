@@ -172,7 +172,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
         {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
-        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} locale={timeLocale} />
+        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} locale={timeLocale} showTimeZone={showTimeZone} />
         {selectedId && wbs.calendarError && (
           <div data-hub-detail-unavailable>
             <ConfigLoadError error={wbs.calendarError.error} keyName={wbs.calendarError.key} locale={locale} />
