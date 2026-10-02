@@ -63,6 +63,7 @@ vi.mock('@/app/actions/minutes', () => ({
 
 import { MinutesView } from '@/components/minutes/MinutesView'
 import { withTeams } from '../fixtures/teams'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 describe('MinutesView 트리 뷰 배선', () => {
   let container: HTMLDivElement, root: Root
@@ -82,7 +83,7 @@ describe('MinutesView 트리 뷰 배선', () => {
     perms: { canEdit: boolean } = { canEdit: true },
   ) {
     await act(async () => root.render(withTeams(
-      <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
+      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
         projects={[]} currentUserId="u1" canEdit={perms.canEdit} />,
     )))
   }

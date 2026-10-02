@@ -4,18 +4,10 @@ import { useMemo, useState } from 'react'
 import type { MeetingOccurrence } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { monthMatrix } from '@/lib/domain/attendance'
+import { calendarDayInfo, monthMatrix, weekdayColumns, type CalendarView } from '@/lib/domain/attendance'
+import { currentRuleDay } from '@/lib/domain/calendar'
 import { occurrencesByDate, sortOccurrences, MEETING_META } from '@/lib/domain/meetings'
-import { krSpecialDayMap } from '@/lib/domain/holidays'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
-
-const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
-
-function dowClass(dow: number, base = 'text-ink') {
-  if (dow === 0) return 'text-delayed'
-  if (dow === 6) return 'text-progress'
-  return base
-}
 
 function OccurrenceChip({ o, onSelect, t, projectDotClass }: {
   o: MeetingOccurrence
@@ -41,7 +33,7 @@ function OccurrenceChip({ o, onSelect, t, projectDotClass }: {
 }
 
 export function MeetingCalendar({
-  year, month0, todayIso, occurrences, onSelectOccurrence, projectDotClass,
+  year, month0, todayIso, occurrences, onSelectOccurrence, projectDotClass, calendar, holidayNames,
 }: {
   year: number
   month0: number
@@ -50,44 +42,45 @@ export function MeetingCalendar({
   onSelectOccurrence: (o: MeetingOccurrence) => void
   /** 내 회의 뷰(여러 프로젝트 혼재)에서만 전달 — 프로젝트별 색점. 프로젝트별 달력(/p/[id]/meetings)은 미전달로 무변경. */
   projectDotClass?: (projectId: string) => string | null
+  /** 첫 열·쉬는 날의 원천 — 프로젝트 달력이면 그 프로젝트, 내 회의는 워크스페이스 달력(날짜 예외 없음, D36) */
+  calendar: CalendarView
+  /** 휴무 이름(프로젝트 holidays.name) — 워크스페이스 달력은 없다 */
+  holidayNames?: Readonly<Record<string, string>>
 }) {
   const { t } = useLocale()
   const [more, setMore] = useState<DayPopoverAnchor | null>(null)
-  const matrix = useMemo(() => monthMatrix(year, month0), [year, month0])
+  // 첫 열 = 오늘 적용되는 규칙의 시작 요일(SP5 §4.4) — 보는 달과 무관하다. 페이지의 조회 범위도 같은 규칙이다
+  const firstDay = currentRuleDay(calendar.weekStart, todayIso)
+  const columns = useMemo(() => weekdayColumns(firstDay), [firstDay])
+  const matrix = useMemo(() => monthMatrix(year, month0, firstDay), [year, month0, firstDay])
   const byDate = useMemo(() => occurrencesByDate(occurrences), [occurrences])
-  const specialDays = useMemo(
-    () => krSpecialDayMap(matrix.flat().map(cell => Number(cell.slice(0, 4)))),
-    [matrix],
-  )
   const ym = `${year}-${String(month0 + 1).padStart(2, '0')}`
   const moreOcc = more ? sortOccurrences(byDate[more.date] ?? []) : []
 
   return (
     <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 gap-px bg-line">
-        {WEEKDAY_KEYS.map((w, i) => (
-          <div key={w} className={`bg-surface-2 py-2 text-center text-[11px] font-semibold ${dowClass(i, 'text-ink-muted')}`}>
-            {t(`att.weekday.${w}` as DictKey)}
+        {columns.map(c => (
+          <div key={c.key} data-cal-head className={`py-2 text-center text-[11px] font-semibold text-ink-muted ${calendar.workingDays.has(c.iso) ? 'bg-surface-2' : 'bg-weekend'}`}>
+            {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
-        {matrix.flat().map((cell, idx) => {
-          const dow = idx % 7
+        {matrix.flat().map(cell => {
           const inMonth = cell.startsWith(ym)
           const isToday = cell === todayIso
           const dayNum = Number(cell.slice(8, 10))
           const dayOcc = sortOccurrences(byDate[cell] ?? [])
-          const special = specialDays.get(cell)
-          const isRestDay = !!special && special.kind !== 'anniversary'
-          const specialName = special ? t(`hol.${special.name}` as DictKey) : null
+          const info = calendarDayInfo(cell, calendar, holidayNames)
           return (
-            <div key={cell} className={`min-h-[104px] bg-surface p-1.5 ${inMonth ? '' : 'opacity-40'}`}>
-              <div className="flex items-center justify-between gap-1 px-0.5">
-                <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
+            <div key={cell} data-date={cell} className={`min-h-[104px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
+              {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
+              <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
+                <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : info.working ? 'text-ink' : 'text-ink-muted'}`}>
                   {dayNum}
                 </span>
-                {specialName && (
-                  <span className={`min-w-0 truncate text-[10px] font-medium ${isRestDay ? 'text-delayed' : 'text-ink-subtle'}`} title={specialName}>
-                    {specialName}
+                {info.name && (
+                  <span className="basis-full break-all text-[10px] font-medium leading-tight text-ink-subtle sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                    {info.name}
                   </span>
                 )}
               </div>

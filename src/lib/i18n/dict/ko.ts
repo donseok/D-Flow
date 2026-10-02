@@ -12,7 +12,6 @@ import { wbsKo } from './wbs'
 import { homeKo } from './home'
 import { chatKo } from './chat'
 import { uiKo } from './ui'
-import { holidaysKo } from './holidays'
 import { minutesKo } from './minutes'
 import { issuesKo } from './issues'
 import { wikiKo } from './wiki'
@@ -34,7 +33,6 @@ export const KO = {
   ...homeKo,
   ...chatKo,
   ...uiKo,
-  ...holidaysKo,
   ...minutesKo,
   ...issuesKo,
   ...wikiKo,

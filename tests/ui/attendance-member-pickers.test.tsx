@@ -33,6 +33,7 @@ vi.mock('@/app/actions/attendance', () => ({
 import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { makeRosterMember } from '../fixtures/rosterMember'
 import { withTeams } from '../fixtures/teams'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 const MEMBERS: ProjectMember[] = [
   member('member-mes', '나메스', 'MES'),
@@ -94,7 +95,7 @@ describe('AttendanceView 멤버 선택 보기 방식', () => {
   async function renderAttendance() {
     await act(async () => {
       root.render(withTeams(
-        <AttendanceView
+        <AttendanceView calendar={SUNDAY_CAL}
           projectId="project-1"
           records={[]}
           members={MEMBERS}

@@ -35,7 +35,7 @@ vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id:
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/settings/pageConfig', async () => {
   const { calSeoulMon } = await import('../helpers/calendarFixture')
-  return { loadProjectConfigForPage: vi.fn(async () => ({ ok: true, cfg: { calendar: calSeoulMon, calendarError: null } })) }
+  return { loadProjectConfigForPage: vi.fn(async () => ({ ok: true, cfg: { calendar: calSeoulMon, calendarError: null, holidays: [] } })) }
 })
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: mocks.ProjectPageShell }))

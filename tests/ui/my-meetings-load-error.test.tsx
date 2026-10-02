@@ -29,6 +29,7 @@ vi.mock('@/app/actions/minutes', () => ({ fetchMeetingMinutesLite: vi.fn(async (
 vi.mock('@/app/actions/announcements', () => ({ createAnnouncementFromMeeting: vi.fn(async () => ({ ok: true })) }))
 
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 function meeting(overrides: Partial<Meeting> = {}): Meeting {
   return {
@@ -73,7 +74,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   }
   async function mount(props: Partial<Parameters<typeof MyMeetingsView>[0]> = {}) {
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
+      root.render(<MyMeetingsView calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
       await Promise.resolve()
     })
   }
@@ -85,7 +86,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   it('initialFailed 면 경고와 재시도, 재시도가 성공하면 경고가 사라진다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} />)
       await Promise.resolve()
     })
     const alert = container.querySelector('[role="alert"]')
@@ -99,7 +100,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   it('달을 옮겨 다시 읽다가 실패하면 경고가 뜬다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
     await act(async () => {
-      root.render(<MyMeetingsView initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />)
       await Promise.resolve()
     })
     expect(container.querySelector('[role="alert"]')).toBeNull()

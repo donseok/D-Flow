@@ -13,6 +13,8 @@ import { fmtDate } from '@/components/wbs/shared'
 import { expandMeetings, sortOccurrences, MEETING_META, meetingEditHref } from '@/lib/domain/meetings'
 import { projectColorClass } from '@/lib/domain/projectColors'
 import { MeetingCalendar } from './MeetingCalendar'
+import { monthGridRange, type CalendarView } from '@/lib/domain/attendance'
+import { currentRuleDay } from '@/lib/domain/calendar'
 import { MeetingDetailModal } from './MeetingDetailModal'
 import { fetchMyMeetings } from '@/app/actions/meetings'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
@@ -21,16 +23,9 @@ type ViewKey = 'calendar' | 'list'
 type MyMeetingsFetch = Awaited<ReturnType<typeof fetchMyMeetings>>
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
-function gridRange(year: number, month0: number): [string, string] {
-  const first = new Date(Date.UTC(year, month0, 1)); const dow = first.getUTCDay()
-  const s = new Date(Date.UTC(year, month0, 1 - dow)); const e = new Date(Date.UTC(year, month0, 1 - dow + 41))
-  const f = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-  return [f(s), f(e)]
-}
-
 export function MyMeetingsView({
   initialMeetings, initialExceptions, initialFailed = false, todayIso, currentUserId,
-  adminProjectIds = [], isSuperuser = false,
+  adminProjectIds = [], isSuperuser = false, calendar,
 }: {
   initialMeetings: Meeting[]
   initialExceptions: MeetingException[]
@@ -46,6 +41,8 @@ export function MyMeetingsView({
   adminProjectIds?: string[]
   /** 슈퍼유저는 모든 프로젝트의 관리자 — 목록으로 표현되지 않으므로 별도로 받아 OR 로 결합한다. */
   isSuperuser?: boolean
+  /** 워크스페이스 달력 — 요일만(날짜 예외 없음, D36). 첫 열·쉬는 날·조회 그리드 범위 */
+  calendar: CalendarView
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -66,7 +63,9 @@ export function MyMeetingsView({
   const [onlyMine, setOnlyMine] = useState(true)
   // 프로젝트 필터 — 저장 안 함(스펙 §5), 세션 로컬 상태.
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
-  const initialRange = useMemo(() => gridRange(initY, (initM || 1) - 1).join('|'), [initY, initM])
+  // 조회 범위 = 달력 그리드(첫 열 = 오늘 적용되는 규칙의 시작 요일) — 페이지의 첫 조회도 같은 규칙이다
+  const firstDay = currentRuleDay(calendar.weekStart, todayIso)
+  const initialRange = useMemo(() => monthGridRange(initY, (initM || 1) - 1, firstDay).join('|'), [initY, initM, firstDay])
   // failed 는 range 와 한 덩어리다 — '그 범위의 조회가 실패했다'. 따로 두면 다른 달을 읽는 동안 앞 달의 실패가 남는다.
   const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; range: string; failed: boolean }>(
     { meetings: initialMeetings, exceptions: initialExceptions, range: initialRange, failed: initialFailed },
@@ -75,7 +74,7 @@ export function MyMeetingsView({
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(null)
   const [pending, startTransition] = useTransition()
 
-  const [gridStart, gridEnd] = useMemo(() => gridRange(year, month0), [year, month0])
+  const [gridStart, gridEnd] = useMemo(() => monthGridRange(year, month0, firstDay), [year, month0, firstDay])
   const currentRange = `${gridStart}|${gridEnd}`
   // 그리드 범위가 바뀌었는데 그 범위 데이터가 아직 도착하지 않았으면(stale) 회차를 비워
   // 이전 달 데이터가 새 달 그리드에 잘못 겹쳐 보이는 깜빡임을 막는다.
@@ -258,7 +257,7 @@ export function MyMeetingsView({
       {view === 'calendar' ? (
         // 못 읽은 달은 빈 달력으로도 그리지 않는다 — 격자를 걷으면 내용이 툴바와 경고로 줄어 스크롤이 맨 위로 돌아오므로,
         // 아래로 내려 보던 화면에서 실패해도 경고가 고정 툴바 뒤에 가려지지 않는다.
-        failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} />
+        failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} calendar={calendar} />
       ) : listRows.length === 0 ? (
         // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다.
         failed || isStale ? null : <EmptyState icon={CalendarX2}

@@ -22,8 +22,11 @@ vi.mock('@/lib/data/meetings', async (importOriginal) => ({
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1', email: 'alice@example.com' })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
-// 전역 화면의 '오늘' = viewTimezone(세션 유일 워크스페이스 — SP5 과제 22). UTC 로 주고 시스템 시각을 07-19 정오(UTC)로 고정한다(Date 만)
-vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: async () => ({ ok: true, timeZone: 'UTC' }) }))
+// 전역 화면의 '오늘'·첫 열 = viewCalendar(소속 워크스페이스 달력 — SP5 과제 22·24). UTC·일요일로 주고 시스템 시각을 07-19 정오(UTC)로 고정한다(Date 만)
+vi.mock('@/lib/calendar/viewZone', async () => {
+  const { calUtcSun } = await import('../helpers/calendarFixture')
+  return { viewCalendar: async () => ({ ok: true, calendar: calUtcSun }) }
+})
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: mocks.ProjectPageShell }))
 vi.mock('@/components/meetings/MyMeetingsView', () => ({ MyMeetingsView: mocks.MyMeetingsView }))
 

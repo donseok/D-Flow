@@ -31,6 +31,7 @@ vi.mock('@/app/actions/minutes', () => ({
 }))
 
 import { MinutesView } from '@/components/minutes/MinutesView'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 const serverTree: ExplorerData = {
   folders: [{ id: 'f1', name: '생산계획', parentId: null, sort: 5, createdBy: null, projectId: null }],
@@ -65,7 +66,7 @@ describe('MinutesView initialTree 서버 프리페치', () => {
     initialFavorites: string[] | null = [],
   ) {
     await act(async () => root.render(
-      <MinutesView initialMinutes={[]} initialTree={initialTree} todayIso="2026-07-17"
+      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} initialTree={initialTree} todayIso="2026-07-17"
         initialView={initialView} projects={[]} currentUserId="u1" canEdit
         initialFavorites={initialFavorites} />,
     ))
@@ -115,7 +116,7 @@ describe('MinutesView initialTree 서버 프리페치', () => {
 
   it('initialTree 미전달(기본값)도 기존 동작을 유지한다 — 하위 호환', async () => {
     await act(async () => root.render(
-      <MinutesView initialMinutes={[]} todayIso="2026-07-17" initialView="tree"
+      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} todayIso="2026-07-17" initialView="tree"
         projects={[]} currentUserId="u1" canEdit />,
     ))
     expect(fetchMinutesExplorer).toHaveBeenCalledTimes(1)

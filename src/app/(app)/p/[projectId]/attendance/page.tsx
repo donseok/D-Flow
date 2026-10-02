@@ -3,7 +3,7 @@ import { getAttendanceRecords } from '@/lib/data/attendance'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorForView } from '@/lib/authz'
 import { isProjectMember } from '@/lib/domain/authz'
-import { summarize } from '@/lib/domain/attendance'
+import { calendarViewOf, holidayNamesOf, summarize } from '@/lib/domain/attendance'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
@@ -60,6 +60,8 @@ export default async function AttendancePage({ params }: { params: Promise<{ pro
         members={members}
         initialDate={today}
         canEdit={isProjectMember(m, projectId)}
+        calendar={calendarViewOf(cal.calendar)}
+        holidayNames={holidayNamesOf(pc.cfg.holidays)}
       />
     </ProjectPageShell>
   )

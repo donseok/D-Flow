@@ -17,23 +17,16 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
 import { fmtDate } from '@/components/wbs/shared'
 import {
-  ATTENDANCE_META, ATTENDANCE_TYPES, monthMatrix, recordsByDate,
+  ATTENDANCE_META, ATTENDANCE_TYPES, calendarDayInfo, monthMatrix, recordsByDate, weekdayColumns, type CalendarView,
 } from '@/lib/domain/attendance'
+import { currentRuleDay } from '@/lib/domain/calendar'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberPicker'
-import { krSpecialDayMap } from '@/lib/domain/holidays'
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 
-const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 type ViewKey = 'calendar' | 'list'
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
-
-function dowClass(dow: number, base = 'text-ink') {
-  if (dow === 0) return 'text-delayed'
-  if (dow === 6) return 'text-progress'
-  return base
-}
 
 interface BotDeepLinkFilter {
   from: string | null
@@ -62,13 +55,17 @@ function readBotFilter(params: { get(name: string): string | null }, teamCodes: 
 }
 
 export function AttendanceView({
-  projectId, records, members, initialDate, canEdit,
+  projectId, records, members, initialDate, canEdit, calendar, holidayNames,
 }: {
   projectId: string
   records: AttendanceRecord[]
   members: ProjectMember[]
-  initialDate: string // 'YYYY-MM-DD' (오늘, Asia/Seoul)
+  initialDate: string // 'YYYY-MM-DD' (오늘 — 프로젝트 시간대, 서버가 계산)
   canEdit: boolean
+  /** 첫 열·쉬는 날의 원천 — 이 프로젝트의 달력(requireCalendar(cfg)) */
+  calendar: CalendarView
+  /** 휴무·근무 예외의 이름(holidays.name) */
+  holidayNames?: Readonly<Record<string, string>>
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -132,12 +129,10 @@ export function AttendanceView({
     }
     return map
   }, [filtered, memberMap])
-  const matrix = useMemo(() => monthMatrix(year, month0), [year, month0])
-  // 법정 공휴일·국경일 조회 맵 — 그리드가 연도 경계를 넘을 수 있어 셀에 등장하는 모든 연도를 모은다.
-  const specialDays = useMemo(
-    () => krSpecialDayMap(matrix.flat().map(cell => Number(cell.slice(0, 4)))),
-    [matrix],
-  )
+  // 첫 열 = 오늘 적용되는 규칙의 시작 요일(SP5 §4.4) — 보는 달과 무관하다
+  const firstDay = currentRuleDay(calendar.weekStart, initialDate)
+  const columns = useMemo(() => weekdayColumns(firstDay), [firstDay])
+  const matrix = useMemo(() => monthMatrix(year, month0, firstDay), [year, month0, firstDay])
   const ym = `${year}-${String(month0 + 1).padStart(2, '0')}`
   const monthEnd = `${ym}-${String(new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate()).padStart(2, '0')}`
   useBotPageContext({
@@ -312,31 +307,26 @@ export function AttendanceView({
       {view === 'calendar' ? (
         <div className="card overflow-hidden p-0">
           <div className="grid grid-cols-7 gap-px bg-line">
-            {WEEKDAY_KEYS.map((w, i) => (
-              <div key={w} className={`bg-surface-2 py-2 text-center text-[11px] font-semibold ${dowClass(i, 'text-ink-muted')}`}>{t(`att.weekday.${w}` as DictKey)}</div>
+            {columns.map(c => (
+              <div key={c.key} data-cal-head className={`py-2 text-center text-[11px] font-semibold text-ink-muted ${calendar.workingDays.has(c.iso) ? 'bg-surface-2' : 'bg-weekend'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
             ))}
-            {matrix.flat().map((cell, idx) => {
-              const dow = idx % 7
+            {matrix.flat().map(cell => {
               const inMonth = cell.startsWith(ym)
               const isToday = cell === initialDate
               const dayNum = Number(cell.slice(8, 10))
               const dayRecs = byDate[cell] ?? []
-              const special = specialDays.get(cell)
-              // 쉬는 날(공휴일·대체공휴일)만 날짜를 빨간색으로 — 제헌절·근로자의날(anniversary)은 이름만 표시
-              const isRestDay = !!special && special.kind !== 'anniversary'
-              const specialName = special ? t(`hol.${special.name}` as DictKey) : null
+              // 쉬는 날 = 근무 요일 + 날짜 예외에서만(한국 특일 오버레이 없음 — 사용자 결정 5), 이름은 holidays.name
+              const info = calendarDayInfo(cell, calendar, holidayNames)
               return (
-                <div key={cell} className={`min-h-[96px] bg-surface p-1.5 ${inMonth ? '' : 'opacity-40'}`}>
-                  <div className="flex items-center justify-between gap-1 px-0.5">
-                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : isRestDay ? 'text-delayed' : dowClass(dow)}`}>
+                <div key={cell} data-date={cell} className={`min-h-[96px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
+                  {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
+                  <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
+                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : info.working ? 'text-ink' : 'text-ink-muted'}`}>
                       {dayNum}
                     </span>
-                    {specialName && (
-                      <span
-                        className={`min-w-0 truncate text-[10px] font-medium ${isRestDay ? 'text-delayed' : 'text-ink-subtle'}`}
-                        title={specialName}
-                      >
-                        {specialName}
+                    {info.name && (
+                      <span className="basis-full break-all text-[10px] font-medium leading-tight text-ink-subtle sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                        {info.name}
                       </span>
                     )}
                   </div>

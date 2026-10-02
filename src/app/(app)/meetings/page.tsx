@@ -10,26 +10,21 @@ import { PageHero, HeroBadge } from '@/components/ui/PageHero'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
-import { todayIn } from '@/lib/domain/calendar'
-import { viewTimezone } from '@/lib/calendar/viewZone'
+import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
+import { calendarViewOf, monthGridRange } from '@/lib/domain/attendance'
+import { viewCalendar } from '@/lib/calendar/viewZone'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
-function monthGrid(todayIso: string): [string, string] {
-  const [y, m] = todayIso.split('-').map(Number)
-  const first = new Date(Date.UTC(y, m - 1, 1)); const dow = first.getUTCDay()
-  const s = new Date(Date.UTC(y, m - 1, 1 - dow)); const e = new Date(Date.UTC(y, m - 1, 1 - dow + 41))
-  const f = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-  return [f(s), f(e)]
-}
-
 export default async function MyMeetingsPage() {
   await requireModulePage(null, 'meetings')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13). 목록의 행 거르기는 로더(getMyMeetings)
-  // '오늘'의 tz = 세션 유일 워크스페이스, 없거나 여럿이면 UTC(계획 D-22b). 아래 Promise.all 의 getActorForView 는 요청 캐시라 같은 값
-  const vz = await viewTimezone(await getActorForView())
-  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={await getServerLocale()} />
-  const today = todayIn(vz.timeZone, new Date())
-  const [gs, ge] = monthGrid(today)
+  // '오늘'·첫 열·쉬는 날 = 소속 워크스페이스 달력(viewTimezone 과 같은 판정 — 다르거나 없으면 제품 기본값, 계획 D-22b·M3).
+  // 아래 Promise.all 의 getActorForView 는 요청 캐시라 같은 값
+  const vc = await viewCalendar(await getActorForView())
+  if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" locale={await getServerLocale()} />
+  const today = todayIn(vc.calendar.timezone, new Date())
+  const [ty, tm] = today.split('-').map(Number)
+  const [gs, ge] = monthGridRange(ty, tm - 1, currentRuleDay(vc.calendar.weekStart, today))
   const [res, m, user, locale] = await Promise.all([
     getMyMeetings(gs, ge),
     getActorForView(),
@@ -65,7 +60,8 @@ export default async function MyMeetingsPage() {
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
       <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}
         todayIso={today} currentUserId={user?.id ?? null}
-        adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
+        adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false}
+        calendar={calendarViewOf(vc.calendar)} />
     </ProjectPageShell>
   )
 }

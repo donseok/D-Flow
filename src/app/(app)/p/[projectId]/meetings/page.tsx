@@ -14,19 +14,12 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { MeetingsView } from '@/components/meetings/MeetingsView'
-import { todayIn } from '@/lib/domain/calendar'
+import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
+import { calendarViewOf, holidayNamesOf, monthGridRange } from '@/lib/domain/attendance'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
-
-function monthGrid(todayIso: string): [string, string] {
-  const [y, m] = todayIso.split('-').map(Number)
-  const first = new Date(Date.UTC(y, m - 1, 1)); const dow = first.getUTCDay()
-  const s = new Date(Date.UTC(y, m - 1, 1 - dow)); const e = new Date(Date.UTC(y, m - 1, 1 - dow + 41))
-  const f = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-  return [f(s), f(e)]
-}
 
 export default async function MeetingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
@@ -53,7 +46,9 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
   const exceptions = meetRes.ok ? meetRes.exceptions : []
   const project = projects.find(p => p.id === projectId)
   const projectName = project?.name ?? ''
-  const [gs, ge] = monthGrid(today)
+  // KPI 의 달 = 달력 그리드(첫 열 = 오늘 적용되는 규칙의 시작 요일 — 뷰의 조회 범위와 같은 규칙)
+  const [ty, tm] = today.split('-').map(Number)
+  const [gs, ge] = monthGridRange(ty, tm - 1, currentRuleDay(cal.calendar.weekStart, today))
   const monthOcc = expandMeetings(meetings, exceptions, gs, ge)
   const { today: todayN, upcoming7d, total } = summarizeMeetings(monthOcc, today)
   const kpi = (n: number) => (meetRes.ok ? n : '—')
@@ -82,7 +77,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     >
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
         loadFailed={!meetRes.ok} todayIso={today} currentUserId={user?.id ?? null}
-        canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} />
+        canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)}
+        calendar={calendarViewOf(cal.calendar)} holidayNames={holidayNamesOf(pc.cfg.holidays)} />
     </ProjectPageShell>
   )
 }

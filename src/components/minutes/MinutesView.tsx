@@ -17,6 +17,7 @@ import { CardSkeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { teamStyle } from '@/components/wbs/shared'
 import { MinutesCalendar } from './MinutesCalendar'
+import type { CalendarView } from '@/lib/domain/attendance'
 import { MinuteUploadModal } from './MinuteUploadModal'
 import { ArchiveChatPanel } from './ArchiveChatPanel'
 import { MinutesExplorer, type ExplorerLayout } from './MinutesExplorer'
@@ -35,7 +36,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 export function MinutesView({
   initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
-  adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null,
+  adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
 }: {
   initialMinutes: Minute[]
   /** 서버에서 미리 실어 보낸 트리. null 이면(조회 실패 포함) 마운트 후 클라이언트가 직접 가져온다. */
@@ -63,6 +64,8 @@ export function MinutesView({
   projectWorkspaces?: Record<string, string>
   /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(resolveSoleWorkspaceId). */
   noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
+  /** 워크스페이스 달력 — 요일만(날짜 예외 없음, D36). 달력 보기의 첫 열·쉬는 날 */
+  calendar: CalendarView
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -353,7 +356,7 @@ export function MinutesView({
         <div className="space-y-3">
           <MinutesCalendar year={year} month0={month0} todayIso={todayIso}
             minutes={minutes} onSelectDate={d => setSelectedDate(prev => (prev === d ? null : d))}
-            selectedDate={selectedDate} />
+            selectedDate={selectedDate} calendar={calendar} />
           {selectedDate && (
             <section className="card p-3">
               <h3 className="mb-2 px-1 text-sm font-semibold text-ink-muted">{selectedDate}</h3>

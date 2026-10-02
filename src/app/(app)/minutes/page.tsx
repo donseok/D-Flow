@@ -15,7 +15,8 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MinutesView } from '@/components/minutes/MinutesView'
 import { todayIn } from '@/lib/domain/calendar'
-import { viewTimezone } from '@/lib/calendar/viewZone'
+import { viewCalendar } from '@/lib/calendar/viewZone'
+import { calendarViewOf } from '@/lib/domain/attendance'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -29,10 +30,11 @@ function monthRange(todayIso: string): [string, string] {
 
 export default async function MinutesPage() {
   await requireModulePage(null, 'minutes')   // 전역 경로 — 세션 유일 워크스페이스(스펙 §4.2 2행, P13)
-  // '오늘'(이번 달 목록)의 tz = 세션 유일 워크스페이스, 없거나 여럿이면 UTC(계획 D-22b). 아래 Promise.all 의 getActorForView 는 요청 캐시라 같은 값
-  const vz = await viewTimezone(await getActorForView())
-  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={await getServerLocale()} />
-  const today = todayIn(vz.timeZone, new Date())
+  // '오늘'(이번 달 목록)·달력 첫 열·쉬는 날 = 소속 워크스페이스 달력(viewTimezone 과 같은 판정 — 다르거나 없으면 제품 기본값,
+  // 계획 D-22b·M3). 아래 Promise.all 의 getActorForView 는 요청 캐시라 같은 값
+  const vc = await viewCalendar(await getActorForView())
+  if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" locale={await getServerLocale()} />
+  const today = todayIn(vc.calendar.timezone, new Date())
   const [rs, re] = monthRange(today)
   // 트리는 기본 뷰라 거의 항상 필요하다 — 예전에는 MinutesView 가 마운트 뒤 서버액션으로 따로
   // 가져와서 "화면이 뜨고 나서 또 로딩이 도는" 왕복이 한 번 더 붙었다. 여기서 함께 싣는다.
@@ -79,7 +81,8 @@ export default async function MinutesPage() {
         myProjectIds={myProjectIds}
         projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
         noProjectWorkspace={m ? resolveSoleWorkspaceId(m) : null}
-        adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false} />
+        adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false}
+        calendar={calendarViewOf(vc.calendar)} />
     </ProjectPageShell>
   )
 }

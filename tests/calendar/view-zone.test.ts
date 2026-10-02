@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ getWorkspaceConfig: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: m.getWorkspaceConfig }))
-import { viewTimezone } from '@/lib/calendar/viewZone'
+import { viewCalendar, viewTimezone } from '@/lib/calendar/viewZone'
 import { pickCalendar } from '@/lib/settings/pick'
 import { ConfigKeyError } from '@/lib/settings/errors'
 
@@ -26,6 +26,24 @@ describe('viewTimezone — 전역 화면의 tz(D-21c)', () => {
     m.getWorkspaceConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
     const r = await viewTimezone(actor(['ws-1']))
     expect(r).toMatchObject({ ok: false, key: 'calendar.timezone' })
+  })
+})
+
+describe('viewCalendar — 전역 달력 화면(내 회의·회의록)의 달력 한 벌(과제 24) — viewTimezone 과 같은 판정', () => {
+  it('세션 유일 워크스페이스의 근무 요일·주 규칙까지 넘긴다', async () => {
+    const mon = { ...cal('Asia/Seoul'), weekStart: [{ day: 'monday', from: null }] }
+    m.getWorkspaceConfig.mockResolvedValue({ calendar: mon, calendarError: null })
+    const r = await viewCalendar(actor(['ws-1']))
+    expect(r).toMatchObject({ ok: true, calendar: { timezone: 'Asia/Seoul', weekStart: [{ day: 'monday', from: null }] } })
+  })
+  it('세션이 없으면 제품 기본값(UTC·일요일) — 조회하지 않는다', async () => {
+    const r = await viewCalendar(null)
+    expect(r).toMatchObject({ ok: true, calendar: { timezone: 'UTC', weekStart: [{ day: 'sunday', from: null }] } })
+    expect(m.getWorkspaceConfig).not.toHaveBeenCalled()
+  })
+  it('손상은 ok:false(키 포함)', async () => {
+    m.getWorkspaceConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.week_start') })
+    expect(await viewCalendar(actor(['ws-1']))).toMatchObject({ ok: false, key: 'calendar.week_start' })
   })
 })
 

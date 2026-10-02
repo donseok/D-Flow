@@ -4,17 +4,26 @@
 // ok:false(UTC 로 대체하지 않는다). 설정 조회 실패는 ConfigUnavailableError throw 그대로 — 페이지의 error 경계가 받는다.
 import 'server-only'
 import type { Actor } from '@/lib/domain/authz'
-import { DEFAULT_TIMEZONE } from '@/lib/domain/calendar'
-import { resolveMemberWorkspacesCalendar } from '@/lib/calendar/load'
+import type { RequestCalendar } from '@/lib/domain/calendar'
+import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar } from '@/lib/calendar/load'
 import { ConfigKeyError } from '@/lib/settings/errors'
 import type { ConfigReadClient } from '@/lib/settings/projectConfig'
 
 export async function viewTimezone(
   actor: Actor | null, opts?: { client?: ConfigReadClient },
 ): Promise<{ ok: true; timeZone: string } | { ok: false; error: string; key: string }> {
-  if (!actor) return { ok: true, timeZone: DEFAULT_TIMEZONE }
+  const r = await viewCalendar(actor, opts)
+  return r.ok ? { ok: true, timeZone: r.calendar.timezone } : r
+}
+
+/** viewTimezone 과 같은 판정의 달력 한 벌(tz·근무 요일·주 규칙) — 전역 달력 화면(내 회의·회의록)의 첫 열·쉬는 날(과제 24).
+ *  워크스페이스 달력에는 날짜 예외가 없다(D36) */
+export async function viewCalendar(
+  actor: Actor | null, opts?: { client?: ConfigReadClient },
+): Promise<{ ok: true; calendar: RequestCalendar } | { ok: false; error: string; key: string }> {
+  if (!actor) return { ok: true, calendar: DEFAULT_REQUEST_CALENDAR }
   try {
-    return { ok: true, timeZone: (await resolveMemberWorkspacesCalendar([...actor.workspaceRoles.keys()], opts)).timezone }
+    return { ok: true, calendar: await resolveMemberWorkspacesCalendar([...actor.workspaceRoles.keys()], opts) }
   } catch (e) {
     if (e instanceof ConfigKeyError) return { ok: false, error: e.message, key: e.key }
     throw e

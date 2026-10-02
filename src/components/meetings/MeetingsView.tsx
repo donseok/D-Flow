@@ -11,11 +11,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { fmtDate } from '@/components/wbs/shared'
 import { expandMeetings, sortOccurrences, MEETING_META, canEditMeeting } from '@/lib/domain/meetings'
 import { MeetingCalendar } from './MeetingCalendar'
+import { monthGridRange, type CalendarView } from '@/lib/domain/attendance'
+import { currentRuleDay } from '@/lib/domain/calendar'
 import { MeetingFormModal } from './MeetingFormModal'
 import { MeetingDetailModal } from './MeetingDetailModal'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 
-const MATRIX_ROWS = 6
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 type ViewKey = 'calendar' | 'list'
 
@@ -40,17 +41,8 @@ function resolveFocusOccurrence(
   return null
 }
 
-function gridRange(year: number, month0: number): [string, string] {
-  const first = new Date(Date.UTC(year, month0, 1))
-  const startDow = first.getUTCDay()
-  const start = new Date(Date.UTC(year, month0, 1 - startDow))
-  const end = new Date(Date.UTC(year, month0, 1 - startDow + MATRIX_ROWS * 7 - 1))
-  const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-  return [fmt(start), fmt(end)]
-}
-
 export function MeetingsView({
-  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit,
+  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, calendar, holidayNames,
 }: {
   projectId: string
   meetings: Meeting[]
@@ -64,6 +56,10 @@ export function MeetingsView({
   canManage: boolean
   /** 이 프로젝트 멤버 이상(isProjectMember) — 회의 등록. */
   canEdit: boolean
+  /** 이 프로젝트의 달력 — 첫 열·쉬는 날·조회 그리드 범위(requireCalendar(cfg)) */
+  calendar: CalendarView
+  /** 이 프로젝트의 휴무 이름(holidays.name) */
+  holidayNames?: Readonly<Record<string, string>>
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -92,7 +88,9 @@ export function MeetingsView({
   const [editing, setEditing] = useState<Meeting | null>(initialEdit)
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(initialEdit ? null : initialFocus)
 
-  const [gridStart, gridEnd] = useMemo(() => gridRange(year, month0), [year, month0])
+  // 조회 범위 = 달력 그리드(첫 열 = 오늘 적용되는 규칙의 시작 요일) — 페이지의 첫 조회도 같은 규칙이다
+  const firstDay = currentRuleDay(calendar.weekStart, todayIso)
+  const [gridStart, gridEnd] = useMemo(() => monthGridRange(year, month0, firstDay), [year, month0, firstDay])
   useBotPageContext({
     domain: 'meetings',
     projectId,
@@ -142,7 +140,7 @@ export function MeetingsView({
       </div>
 
       {view === 'calendar' ? (
-        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} />
+        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} calendar={calendar} holidayNames={holidayNames} />
       ) : listRows.length === 0 ? (
         loadFailed ? null : <EmptyState icon={CalendarX2} title={t('meet.empty.title')} description={t('meet.empty.desc')} />
       ) : (

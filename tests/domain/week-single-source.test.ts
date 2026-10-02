@@ -25,17 +25,12 @@ export const WEEK_CALC_ALLOW: Readonly<Record<string, WeekCalcAllow>> = {
   'src/components/dashboard/bits.tsx|WEEKDAYS[new Date(': { why: '대시보드 요일 사전 키(att.weekday.*) 색인 — 주 계산이 아니다', count: 1 },
   'scripts/ui-capture.mjs|const dow = new Date(': { why: '캡처 시드 — 월요일 규칙을 생성 때 기록한 프로젝트의 이번 주 월요일 키(SP5 D28). .mjs 라 calendar.ts 를 import 하지 못한다', count: 1 },
   'scripts/ui-capture.mjs|-((dow + 6) % 7)': { why: '캡처 시드 — 위와 같은 줄의 월요일 키(SP5 D28)', count: 1 },
+  'scripts/wbs/validate.mjs|.getUTCDay()': { why: 'WBS 초안 검증 CLI 의 입력 규칙(주말 = 토·일 고정, 개정 §4.2.7) — .mjs 라 calendar.ts 를 import 하지 못하고 프로젝트 달력과 무관하다', count: 1 },
   'scripts/lib/e2e.mjs|getUTCDay() === 1': { why: 'E2E 검증 전용 isMondayIso — DB 가 돌려준 월요일 규칙 프로젝트의 키를 확인한다(키를 만들지 않는다, SP4 W30)', count: 1 },
 }
 
 /** 옛 사본 — 지우는 과제가 같은 커밋에서 항목을 지운다. 과제 29 가 빈 객체를 단언한다 */
 export const LEGACY_WEEK_COPIES: Readonly<Record<string, WeekCalcAllow>> = {
-  'src/lib/domain/attendance.ts|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthMatrix(year, month, firstDay)', count: 1 },
-  'src/app/(app)/meetings/page.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthGrid(…, firstDay)', count: 1 },
-  'src/app/(app)/p/[projectId]/meetings/page.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — monthGrid(…, firstDay)', count: 1 },
-  'src/components/meetings/MeetingsView.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — 첫 열 = 규칙 시작 요일', count: 1 },
-  'src/components/meetings/MyMeetingsView.tsx|first.getUTCDay()': { why: 'SP5 A 과제 24 — 첫 열 = 워크스페이스 규칙 시작 요일', count: 1 },
-  'scripts/wbs/validate.mjs|getDay()': { why: "SP5 A 과제 24 — UTC 판정(getUTCDay)으로 바꾸고 '주말(토·일)' 문구와 함께 WEEK_CALC_ALLOW 로 옮긴다(CLI 입력 규칙)", count: 1 },
 }
 
 /** 주석을 걷은 코드 줄 가운데 금지 꼴이 있는 줄(1부터)과 그 줄의 금지 꼴 호출 수. fileName 은 파서(TS/TSX/JS) 선택용 */

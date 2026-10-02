@@ -29,6 +29,7 @@ vi.mock('@/app/actions/minutes', () => ({
 }))
 
 import { MinutesView } from '@/components/minutes/MinutesView'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 describe('MinutesView 전체 회의록 내려받기', () => {
   let container: HTMLDivElement
@@ -54,7 +55,7 @@ describe('MinutesView 전체 회의록 내려받기', () => {
     })
     mocks.toast.mockReset()
     await act(async () => root.render(
-      <MinutesView initialMinutes={[]} todayIso="2026-07-23" initialView="list"
+      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} todayIso="2026-07-23" initialView="list"
         projects={[]} currentUserId="u1" canEdit />,
     ))
   })

@@ -83,6 +83,7 @@ import { AnnouncementsView } from '@/components/announcements/AnnouncementsView'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { IssuesView } from '@/components/issues/IssuesView'
 import type { Issue } from '@/lib/domain/issues'
+import { SUNDAY_CAL } from '../fixtures/calendarView'
 
 function meeting(overrides: Partial<Meeting> = {}): Meeting {
   return {
@@ -172,7 +173,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('MeetingsView: ?focus=&date= 로 해당 회차 상세를 열고 그 달로 이동한다', async () => {
     currentSearch = 'focus=m1&date=2026-09-15'
     await mount(
-      <MeetingsView projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
+      <MeetingsView calendar={SUNDAY_CAL} projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
         todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} />,
     )
     expect(dialog()).not.toBeNull()
@@ -183,7 +184,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('MeetingsView: 존재하지 않는 회의 focus 는 조용히 무시한다', async () => {
     currentSearch = 'focus=ghost&date=2026-09-15'
     await mount(
-      <MeetingsView projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
+      <MeetingsView calendar={SUNDAY_CAL} projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
         todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} />,
     )
     expect(dialog()).toBeNull()
@@ -193,7 +194,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('MyMeetingsView: /meetings?focus= 로 초기 데이터에서 상세를 연다', async () => {
     currentSearch = 'focus=m1'
     await mount(
-      <MyMeetingsView
+      <MyMeetingsView calendar={SUNDAY_CAL}
         initialMeetings={[meeting({ meetingDate: '2026-07-21', projectName: '프로젝트 1', isMine: true })]}
         initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />,
     )
@@ -213,7 +214,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
       attendance({ id: 'a3', memberId: 'mem-erp', date: '2026-07-02', type: 'annual' }),
     ]
     await mount(
-      <AttendanceView projectId="p1" records={records} members={members}
+      <AttendanceView calendar={SUNDAY_CAL} projectId="p1" records={records} members={members}
         initialDate="2026-07-19" canEdit={false} />,
     )
     // from 의 달(6월)로 이동 + ERP·annual·기간 내 기록 칩만 남는다(멤버 셀렉트 옵션은 제외하고 판정).
@@ -230,7 +231,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('AttendanceView: 무효 파라미터는 조용히 무시한다', async () => {
     currentSearch = 'from=bad&to=2026-06-30&team=QA&type=nope'
     await mount(
-      <AttendanceView projectId="p1" records={[attendance()]} members={[member()]}
+      <AttendanceView calendar={SUNDAY_CAL} projectId="p1" records={[attendance()]} members={[member()]}
         initialDate="2026-07-19" canEdit={false} />,
     )
     expect(container.textContent).toContain('2026. 7.')

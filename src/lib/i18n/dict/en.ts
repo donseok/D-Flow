@@ -14,7 +14,6 @@ import { wbsEn } from './wbs.en'
 import { homeEn } from './home.en'
 import { chatEn } from './chat.en'
 import { uiEn } from './ui.en'
-import { holidaysEn } from './holidays.en'
 import { minutesEn } from './minutes.en'
 import { issuesEn } from './issues.en'
 import { wikiEn } from './wiki.en'
@@ -36,7 +35,6 @@ export const EN: Record<DictKey, string> = {
   ...homeEn,
   ...chatEn,
   ...uiEn,
-  ...holidaysEn,
   ...minutesEn,
   ...issuesEn,
   ...wikiEn,
