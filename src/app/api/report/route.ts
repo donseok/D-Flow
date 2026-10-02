@@ -12,7 +12,10 @@ import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { buildReportWorkbook } from '@/lib/report/excel'
 import { buildWeeklyNarrative } from '@/lib/report/narrative'
 import { fillWeeklyTemplate, fillSheetTemplate } from '@/lib/report/templateFill'
-import { mondayIso, sheetWeekMeta } from '@/lib/report/week'
+import { sheetWeekMeta } from '@/lib/report/week'
+import { weekKeyOf, type WorkCalendar } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
+import { isValidIsoDate } from '@/lib/domain/validate'
 import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
 import { getWeeklySheet } from '@/lib/data/weeklySheet'
 import { ALL_CELLS, hasContent, type WeeklyArea } from '@/lib/domain/weeklySheet'
@@ -78,30 +81,37 @@ export async function GET(req: NextRequest) {
   if (source === 'sheet') {
     if (format !== 'pptx') return NextResponse.json({ error: '시트 보고서는 pptx만 지원합니다' }, { status: 400 })
     const week = req.nextUrl.searchParams.get('week')
-    if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+    if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week) || !isValidIsoDate(week)) {
       return NextResponse.json({ error: 'week(YYYY-MM-DD)가 필요합니다' }, { status: 400 })
     }
-    const weekStart = mondayIso(week) // 임의 날짜 → 월요일 정규화(스펙 §7)
     const target = await resolveReportProject(projectId)
     if (!target.ok) return target.res
     // 주간업무 시트만 weekly 관문(P4) — 기본 갈래(WBS 화면의 현황 보고서)는 core 라 부르지 않는다
     const mod = await requireModule({ projectId }, 'weekly')
     if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
     const { project } = target
-    // 페이지·머리는 프로젝트의 주간 영역이 정한다 — 설정 조회 실패는 기본 갈래와 같은 503(영역 없이 시트를 그리지 않는다)
+    // 페이지·머리는 프로젝트의 주간 영역이, 주 키는 그 프로젝트의 주 규칙이 정한다 — 설정 조회 실패는 기본 갈래와 같은 503
+    // (영역 없이 시트를 그리지 않는다), 달력 키 손상은 그 상태 코드(기본 규칙으로 다른 주를 읽지 않는다)
     let areas: WeeklyArea[]
-    try { areas = (await getProjectConfig(projectId)).areas.weekly_section } catch (e) {
+    let cal: WorkCalendar
+    try {
+      const cfg = await getProjectConfig(projectId)
+      areas = cfg.areas.weekly_section
+      cal = requireCalendar(cfg)
+    } catch (e) {
       if (e instanceof ConfigUnavailableError) {
         console.error('[report] 프로젝트 설정 조회 실패(시트 갈래):', e.message)
         return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
       }
+      if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message }, { status: configStatus(e.code) })
       throw e
     }
+    const weekStart = weekKeyOf(cal.weekStart, week)                 // 임의 날짜 → 그 프로젝트 규칙의 키(SP5 P9)
     const sheet = await getWeeklySheet(projectId, weekStart)   // 읽기만 한다(W16)
     if (!sheet || !sheet.rows.some(r => hasContent(r, ALL_CELLS))) {
       return NextResponse.json({ error: '해당 주차에 작성된 내용이 없습니다' }, { status: 400 })
     }
-    const wk = sheetWeekMeta(weekStart)
+    const wk = sheetWeekMeta(cal, weekStart)
     // 보이는 영역마다 1페이지(활성 영역 → 내용 있는 비활성 영역, D32) — 각 페이지에 그 영역의 실적·계획·이슈·이벤트를 함께 싣는다.
     const body = await fillSheetTemplate(
       buildSheetSections(sheet.rows, areas),

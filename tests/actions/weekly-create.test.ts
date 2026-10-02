@@ -25,6 +25,7 @@ import { ConfigUnavailableError, ERR_CONFIG_BUSY, ERR_CONFIG_UNAVAILABLE, mapDbE
 import { WEEKLY_CELL_MAX, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { monProjectValues } from '../helpers/calendarFixture'
 import { makeAdminActor } from '../fixtures/actor'
 
 // 단위 테스트 id — RLS 구간(1800~189f·18f0~18ff)과 겹치지 않는 18b0~18bf
@@ -38,7 +39,8 @@ const ACTOR = makeAdminActor(P, { userId: 'u-guard' })
 const area = (id: string, code: string, name: string, sortOrder: number, active = true): ConfigArea =>
   ({ id, kind: 'weekly_section', code, name, sortOrder, active, teams: [] })
 const AREAS: ConfigArea[] = [area(A_EXP, 'EXP', '실험', 1), area(A_DATA, 'DATA', '데이터', 2), area(A_OPS, 'OPS', '운영', 3, false)]
-const cfgWith = (areas: ConfigArea[]) => makeProjectConfig({}, { projectId: P, areas: { weekly_section: areas, issue_area: [] } })
+// 월요일 규칙 프로젝트(D28 월요일 회귀 — 기존 p_week_start 기대값 그대로). 일요일 규칙은 아래 케이스가 따로 본다
+const cfgWith = (areas: ConfigArea[]) => makeProjectConfig(monProjectValues, { projectId: P, areas: { weekly_section: areas, issue_area: [] } })
 const prev = (areaId: string, over: Partial<WeeklySheetRow> = {}): WeeklySheetRow =>
   ({ id: `prev-${areaId}`, reportId: 'rep-prev', areaId, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', ...over })
 const source = (rows: WeeklySheetRow[]) => ({ report: { id: 'rep-prev', projectId: P, weekStart: '2026-09-21', title: '' }, rows })
@@ -134,6 +136,20 @@ describe('RPC 한 길(D22·D43·D51)', () => {
     expect(h.findCarryOverSource).not.toHaveBeenCalled()
     expect(h.createServerClient).not.toHaveBeenCalled()
     expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]/weekly', 'page')
+  })
+
+  it('일요일 규칙 프로젝트 — 요청 날짜를 그 프로젝트의 키(일요일)로 정규화해 RPC 에 넘긴다', async () => {
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({}, { projectId: P, areas: { weekly_section: AREAS, issue_area: [] } }))
+    await createWeeklyReport(P, '2026-10-01', false)
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_week_start: '2026-09-27' })
+  })
+  it('달력 키가 손상이면 RPC 를 부르지 않고 CONFIG_INVALID — 기본 규칙으로 키를 만들지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.week_start': 'sunday' }, { projectId: P, areas: { weekly_section: AREAS, issue_area: [] } }))
+    err.mockRestore()
+    const r = await createWeeklyReport(P, '2026-10-01', false)
+    expect(r).toMatchObject({ ok: false, code: 'CONFIG_INVALID' })
+    expect(h.rpc).not.toHaveBeenCalled()
   })
 
   it('같은 주 문서가 이미 있으면 exists — 실패가 아니다(D33)', async () => {

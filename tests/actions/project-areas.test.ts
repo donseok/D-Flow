@@ -17,6 +17,7 @@ import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { ConfigUnavailableError, ERR_CONFIG_BUSY, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { monProjectValues } from '../helpers/calendarFixture'
 import { makeAdminActor } from '../fixtures/actor'
 
 const { upsertArea } = areaActions
@@ -42,7 +43,8 @@ const EXP_AREA: ConfigArea = {
   id: A_EXP, kind: 'weekly_section', code: 'EXP', name: '실험', sortOrder: 1, active: true,
   teams: [{ teamId: T_MEP, kind: 'support' }],
 }
-const cfgWith = (teams: ConfigTeam[]) => makeProjectConfig({}, {
+// 서울·월요일 규칙 프로젝트(D28 월요일 회귀 — 기존 p_from_week 기대값 그대로)
+const cfgWith = (teams: ConfigTeam[]) => makeProjectConfig({ ...monProjectValues, 'calendar.timezone': 'Asia/Seoul' }, {
   projectId: P, workspaceId: 'ws-synthetic', teams, areas: { weekly_section: [EXP_AREA], issue_area: [] },
 })
 const NEW_AREA: AreaInput = {
@@ -162,7 +164,7 @@ describe('가드 → 입력 → 팀 범위 — RPC 앞에서 거른다', () => {
 })
 
 describe('RPC 한 길(D22·D51)', () => {
-  it('새 영역 — p_actor 는 가드 결과, p_area 는 다듬은 값(id 없음), p_from_week 는 서울 기준 이번 주 월요일', async () => {
+  it('새 영역 — p_actor 는 가드 결과, p_area 는 다듬은 값(id 없음), p_from_week 는 프로젝트 규칙(서울·월요일)의 이번 주 키', async () => {
     expect(await upsertArea(P, NEW_AREA)).toEqual({ ok: true, id: NEW_ID, status: 'created', rowsAdded: 3 })
     expect(h.adminFor).toHaveBeenCalledWith({ projectId: P })
     expect(h.rpc).toHaveBeenCalledWith('upsert_project_area', {
@@ -192,6 +194,14 @@ describe('RPC 한 길(D22·D51)', () => {
     vi.setSystemTime(new Date(now))
     await upsertArea(P, NEW_AREA)
     expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_from_week: monday })
+  })
+  it('p_from_week 는 그 프로젝트의 tz·규칙의 키 — LA·일요일 프로젝트(UTC 2026-10-04 06:00 = LA 10-03(토) → 키 09-27)', async () => {
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.timezone': 'America/Los_Angeles' }, {
+      projectId: P, workspaceId: 'ws-synthetic', teams: [...OWN, ...COMMON], areas: { weekly_section: [EXP_AREA], issue_area: [] },
+    }))
+    vi.setSystemTime(new Date('2026-10-04T06:00:00Z'))
+    await upsertArea(P, NEW_AREA)
+    expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_from_week: '2026-09-27' })
   })
 })
 

@@ -58,6 +58,7 @@ function show(p: { areas: WeeklyArea[]; report?: { id: string; title: string } |
   act(() => root.render(
     <WeeklySheetView
       projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"
+      prevWeek="2026-09-14" nextWeek="2026-09-28"
       thisRange="9/21~9/25" nextRange="9/28~10/2" projectName="Acme"
       report={p.report ?? null} areas={p.areas} initialRows={p.rows ?? []} hasCarrySource
       me={{ id: 'u1', name: 'alice' }} canEditCells canCreateRound={p.admin ?? true}
@@ -140,5 +141,21 @@ describe('[RF4] 문서는 있는데 보일 행이 0개', () => {
     show({ areas: [EXP], report: REPORT, rows: [], admin: false })
     expect(text()).toContain('프로젝트 관리자가 업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다')
     expect(settingsLink()).toBeNull()
+  })
+})
+
+describe('[RF2] 이웃 주 링크', () => {
+  it('이전/다음 주 링크는 서버가 준 키 — 클라이언트가 ±7일로 다시 계산하지 않는다', () => {
+    act(() => root.render(
+      <WeeklySheetView
+        projectId="p1" weekStart="2026-10-05" weekLabel="10월 2주차" weekTitle="10월 2주차"
+        prevWeek="2026-09-28" nextWeek="2026-10-11"
+        thisRange="10/5~10/9" nextRange="10/12~10/16" projectName="Acme"
+        report={null} areas={[]} initialRows={[]} hasCarrySource
+        me={{ id: 'u1', name: 'alice' }} canEditCells canCreateRound
+      />,
+    ))
+    expect(container.querySelector('a[aria-label="이전 주"]')?.getAttribute('href')).toBe('/p/p1/weekly?week=2026-09-28')
+    expect(container.querySelector('a[aria-label="다음 주"]')?.getAttribute('href')).toBe('/p/p1/weekly?week=2026-10-11')
   })
 })

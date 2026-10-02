@@ -22,7 +22,7 @@ import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { settingDef } from '@/lib/settings/registry'
 import ExcelJS from 'exceljs'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
-import { mondayIso } from '@/lib/report/week'
+import { weekKeyOf } from '@/lib/domain/calendar'
 import { validateArea, type AreaInput } from '@/lib/domain/areas'
 import {
   XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, seoulToday, shiftDays,
@@ -517,8 +517,8 @@ describe('SP4 A1 — 두 러너의 날짜 도우미(주 키는 만들지 않는�
     expect(() => shiftDays('2026-9-1', 1)).toThrow()
     expect(() => shiftDays('2026-09-01', 1.5)).toThrow()
   })
-  it('isMondayIso — 앱의 mondayIso 가 낸 값은 모두 참, 다른 요일·형식은 거짓(DB 가 돌려준 주 키 확인 전용)', () => {
-    for (const d of ['2026-09-27', '2026-09-28', '2026-10-01', '2026-10-04']) expect(isMondayIso(mondayIso(d)), d).toBe(true)
+  it('isMondayIso — 월요일 규칙의 weekKeyOf 가 낸 값은 모두 참, 다른 요일·형식은 거짓(DB 가 돌려준 주 키 확인 전용)', () => {
+    for (const d of ['2026-09-27', '2026-09-28', '2026-10-01', '2026-10-04']) expect(isMondayIso(weekKeyOf([{ day: 'monday', from: null }], d)), d).toBe(true)
     expect(isMondayIso('2026-10-04')).toBe(false)
     expect(isMondayIso('2026-10-6')).toBe(false)
   })

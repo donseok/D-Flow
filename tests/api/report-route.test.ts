@@ -46,6 +46,7 @@ vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 
 import { GET } from '@/app/api/report/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { monProjectValues } from '../helpers/calendarFixture'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
@@ -66,7 +67,8 @@ beforeEach(() => {
   mocks.getAnnouncements.mockResolvedValue({ ok: true, rows: [] })
   mocks.listProjectsWithState.mockResolvedValue({ projects: [{ id: PROJECT_ID, name: 'Acme' }], degraded: false })
   mocks.getWeeklySheet.mockResolvedValue(null)
-  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
+  // 월요일 규칙 프로젝트(SP5 D28 월요일 회귀 — 시트 갈래의 week=2026-09-21(월) 기대값 그대로)
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'], ...monProjectValues }))
   mocks.buildWeeklyReportModel.mockReturnValue({ meta: { weekTag: '9월4주차' } })
   mocks.buildReportWorkbook.mockResolvedValue(new ArrayBuffer(1))
   mocks.loadDisplayBranding.mockResolvedValue({ productName: '한빛 플로우', mailFromName: '한빛 플로우' })
@@ -246,7 +248,8 @@ describe('GET /api/report — 시트 갈래(source=sheet) 의 영역 기준(스�
   const area = (id: string, name: string, sortOrder: number, active = true) =>
     ({ id, kind: 'weekly_section' as const, code: id.toUpperCase(), name, sortOrder, active, teams: [] })
   const AREAS = [area('a-exp', '실험', 1), area('a-ops', '운영', 2), area('a-old', '구 영역', 0, false)]
-  const withAreas = () => makeProjectConfig({ 'core.level_labels': ['Phase'] }, { areas: { weekly_section: AREAS, issue_area: [] } })
+  const withAreas = (values: Record<string, unknown> = monProjectValues) =>
+    makeProjectConfig({ 'core.level_labels': ['Phase'], ...values }, { areas: { weekly_section: AREAS, issue_area: [] } })
   const sheetRow = (id: string, areaId: string, thisContent = '') =>
     ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
   const sheetOf = (rows: ReturnType<typeof sheetRow>[]) =>
@@ -280,6 +283,31 @@ describe('GET /api/report — 시트 갈래(source=sheet) 의 영역 기준(스�
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: '해당 주차에 작성된 내용이 없습니다' })
     expect(mocks.fillSheetTemplate).not.toHaveBeenCalled()
+  })
+
+  it('주 키는 그 프로젝트 규칙의 키 — 일요일 규칙이면 week=2026-09-21(월)은 2026-09-20 문서, 파일명 주차도 그 키(SP5 P9)', async () => {
+    mocks.getProjectConfig.mockResolvedValue(withAreas({}))
+    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '실적')]))
+    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(200)
+    expect(mocks.getWeeklySheet).toHaveBeenCalledWith(PROJECT_ID, '2026-09-20')
+    expect(decodeURIComponent(res.headers.get('Content-Disposition') ?? '')).toContain('_2026-09-20.pptx')
+  })
+
+  it('[RF4] 달력 키가 손상이면 그 상태 코드(422)로 멈추고 시트를 읽지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getProjectConfig.mockResolvedValue(withAreas({ 'calendar.week_start': 'monday' }))
+    err.mockRestore()
+    const res = await GET(sheetReq())
+    expect(res.status).toBe(422)
+    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
+  })
+
+  it('없는 날짜(2026-02-30)는 400 — 정규화하지 않는다', async () => {
+    const res = await GET(new NextRequest(`http://localhost/api/report?projectId=${PROJECT_ID}&format=pptx&source=sheet&week=2026-02-30`))
+    expect(res.status).toBe(400)
+    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
   })
 
   it('시트 갈래는 WBS 모델·명단·회의·공지를 읽지 않는다 — 시트 하나만 읽는다(쓰기 0)', async () => {

@@ -51,6 +51,7 @@ describe('WeeklySheetView — colgroup', () => {
     act(() => root.render(
       <WeeklySheetView
         projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"
+        prevWeek="2026-09-14" nextWeek="2026-09-28"
         thisRange="9/21~9/25" nextRange="9/28~10/2" projectName="Acme"
         report={{ id: 'rep', title: '' }} areas={AREAS} initialRows={[row]} hasCarrySource={false}
         me={{ id: 'u1', name: 'alice' }} canEditCells canCreateRound

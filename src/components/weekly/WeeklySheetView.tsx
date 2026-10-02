@@ -16,7 +16,6 @@ import {
   createWeeklyReport, prepareWeeklyCellRewrite, saveWeeklyCell, saveWeeklyCells, saveWeeklyTitle,
   type WeeklyActionResult, type WeeklyBatchResult, type WeeklyRewriteInput,
 } from '@/app/actions/weekly'
-import { shiftWeeks } from '@/lib/report/week'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { buildPresenceMap, onlinePeers } from '@/lib/domain/sheetPresence'
@@ -51,11 +50,14 @@ function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
 }
 
 export function WeeklySheetView({
-  projectId, weekStart, weekLabel, weekTitle, thisRange, nextRange, projectName,
+  projectId, weekStart, prevWeek, nextWeek, weekLabel, weekTitle, thisRange, nextRange, projectName,
   report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound,
 }: {
   projectId: string
   weekStart: string
+  /** 이전·다음 주 키 — 서버가 프로젝트 규칙의 키 함수로 계산한다(과도기 주 6·8일, D35). 클라이언트는 ±7일로 다시 계산하지 않는다 */
+  prevWeek: string
+  nextWeek: string
   weekLabel: string
   weekTitle: string   // '7월 2주차' — 시트 제목 행용
   thisRange: string   // '7/6~7/10' — 금주실적 헤더
@@ -628,7 +630,7 @@ export function WeeklySheetView({
     const activeAreaNames = orderAreas(areas.filter(a => a.active)).map(a => a.name)
     return (
       <div className="space-y-4">
-        <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
+        <WeekNav projectId={projectId} weekStart={weekStart} prevWeek={prevWeek} nextWeek={nextWeek} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         {activeAreaNames.length === 0 ? (
           <EmptyState
             icon={FileSpreadsheet}
@@ -684,7 +686,7 @@ export function WeeklySheetView({
   if (rows.length === 0) {
     return (
       <div className="space-y-4">
-        <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
+        <WeekNav projectId={projectId} weekStart={weekStart} prevWeek={prevWeek} nextWeek={nextWeek} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         <EmptyState
           icon={FileSpreadsheet}
           title={`${weekLabel} 시트에 업무영역 행이 없습니다`}
@@ -714,6 +716,8 @@ export function WeeklySheetView({
       <WeekNav
         projectId={projectId}
         weekStart={weekStart}
+        prevWeek={prevWeek}
+        nextWeek={nextWeek}
         weekLabel={weekLabel}
         exportDisabled={false}
         onBeforeExport={flushPendingSaves}
@@ -859,10 +863,10 @@ export function WeeklySheetView({
 }
 
 function WeekNav({
-  projectId, weekStart, weekLabel, exportDisabled, onBeforeExport, presence,
+  projectId, weekStart, prevWeek, nextWeek, weekLabel, exportDisabled, onBeforeExport, presence,
   onAiRewrite, aiRewriteDisabled = false, onLint,
 }: {
-  projectId: string; weekStart: string; weekLabel: string; exportDisabled: boolean
+  projectId: string; weekStart: string; prevWeek: string; nextWeek: string; weekLabel: string; exportDisabled: boolean
   onBeforeExport: () => Promise<boolean>
   presence?: React.ReactNode // 온라인 사용자 스트립(프레즌스) — 내보내기 버튼 왼쪽
   onAiRewrite?: () => void   // 현재 선택 셀 AI 미리보기. 조회 전용·빈 시트에서는 넘기지 않는다.
@@ -874,11 +878,11 @@ function WeekNav({
     // 근태현황·회의일정과 동일한 스크롤 상단 고정. z-40: 시트 셀 오버레이(배지/핸들 z-30)보다 위.
     <div className="sticky top-0 z-40 -mx-1 flex items-center justify-between bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
       <div className="flex items-center gap-2">
-        <Link href={`${base}?week=${shiftWeeks(weekStart, -1)}`} className="btn btn-ghost px-2" aria-label="이전 주">
+        <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost px-2" aria-label="이전 주">
           <ChevronLeft className="h-4 w-4" />
         </Link>
         <span className="min-w-40 text-center text-sm font-semibold text-ink">{weekLabel}</span>
-        <Link href={`${base}?week=${shiftWeeks(weekStart, 1)}`} className="btn btn-ghost px-2" aria-label="다음 주">
+        <Link href={`${base}?week=${nextWeek}`} className="btn btn-ghost px-2" aria-label="다음 주">
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>

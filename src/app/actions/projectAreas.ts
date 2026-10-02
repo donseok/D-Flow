@@ -10,15 +10,15 @@ import { requireProjectAdmin } from '@/lib/authz'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { isUuidLike } from '@/lib/domain/validate'
-import { seoulToday } from '@/lib/domain/dates'
-import { mondayIso } from '@/lib/report/week'
+import { todayIn, weekKeyOf } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
 import { resolveTeamsForProject } from '@/lib/domain/teams'
 import {
   ERR_AREA_CODE_IMMUTABLE, validateArea,
   type AreaInput,
 } from '@/lib/domain/areas'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
-import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
@@ -67,8 +67,8 @@ function assignableTeamIds(cfg: ProjectConfig, areaId: string | undefined): Set<
 
 /**
  * 추가·수정(비활성화 포함) 한 입구 — RPC upsert_project_area(스펙 §3.2·§4.1.3). 순서: 가드 → 입력 모양 → validateArea → 팀 범위(선행 조회)
- * → RPC. code 중복은 DB 유일 제약(23505)이 판정한다 — 다른 창이 먼저 만든 경합도 같은 문구다. p_from_week = 서울 기준 이번 주 월요일
- * (SP4 는 주 계산 사본을 새로 만들지 않는다 — W30). 이슈 영역(kind issue_area)도 같은 길이다(SP5 — RPC 가 그 종류에는 행을 만들지 않는다).
+ * → RPC. code 중복은 DB 유일 제약(23505)이 판정한다 — 다른 창이 먼저 만든 경합도 같은 문구다. p_from_week = 그 프로젝트 tz·주 규칙의
+ * 이번 주 키(SP5 D34). 이슈 영역(kind issue_area)도 같은 길이다(SP5 — RPC 가 그 종류에는 행을 만들지 않는다).
  */
 export async function upsertArea(projectId: string, input: AreaInput): Promise<UpsertAreaResult> {
   const g = await requireProjectAdmin(projectId)
@@ -93,6 +93,15 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     }
     throw e
   }
+  let fromWeek: string
+  try {
+    // 이번 주 이후 문서에 행을 만든다 — '이번 주'는 그 프로젝트의 tz·주 규칙으로(SP5 D34, 옛 '서울 기준 이번 주 월요일')
+    const cal = requireCalendar(cfg)
+    fromWeek = weekKeyOf(cal.weekStart, todayIn(cal.timezone, new Date()))
+  } catch (e) {
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: e.message }
+    throw e
+  }
   const allowed = assignableTeamIds(cfg, a.id)
   if (a.teams.some(t => !allowed.has(t.teamId))) return { ok: false, code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE }
 
@@ -102,7 +111,7 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     p_project_id: projectId,
     p_area: { ...(a.id ? { id: a.id } : {}), kind: a.kind, code: a.code, name: a.name, sort_order: a.sortOrder, active: a.active },
     p_teams: a.teams.map(t => ({ team_id: t.teamId, kind: t.kind })),
-    p_from_week: mondayIso(seoulToday()),
+    p_from_week: fromWeek,
   })
   if (error) {
     const f = rpcFailure(error, AREA_TOKENS)

@@ -150,6 +150,7 @@ describe('시트 화면의 이월 흐름(스펙 §5.1)', () => {
     act(() => root.render(
       <WeeklySheetView
         projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"
+        prevWeek="2026-09-14" nextWeek="2026-09-28"
         thisRange="9/21~9/25" nextRange="9/28~10/2" projectName="Acme"
         report={null} areas={AREAS} initialRows={[]} hasCarrySource
         me={{ id: 'u1', name: 'alice' }} canEditCells canCreateRound

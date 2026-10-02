@@ -4,7 +4,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { requireProjectAdmin, requireProjectMember } from '@/lib/authz'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
-import { mondayIso } from '@/lib/report/week'
+import { weekKeyOf } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
 import {
   isWeeklyCellKey, rowLabel, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX,
   type WeeklyCellEdit, type WeeklyCellKey,
@@ -16,7 +17,7 @@ import {
 import { isUuidLike, isValidIsoDate } from '@/lib/domain/validate'
 import { findCarryOverSource, findWeeklyReportId } from '@/lib/data/weeklySheet'
 import { getProjectConfig, type ConfigArea } from '@/lib/settings/projectConfig'
-import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
@@ -127,17 +128,25 @@ export async function createWeeklyReport(
   if (!mod.ok) return { ok: false, code: mod.error, error: mod.error }
   if (typeof weekStartIso !== 'string' || !isValidIsoDate(weekStartIso)) return { ok: false, code: 'INVALID_INPUT', error: ERR_WEEK_INPUT }
   if (mapping !== undefined && !isCarryMappingShape(mapping)) return { ok: false, code: 'INVALID_INPUT', error: ERR_MAPPING_INPUT }
-  const weekStart = mondayIso(weekStartIso)                                    // SP4 는 주 계산 사본을 새로 만들지 않는다(W30)
 
-  let areas: ConfigArea[]
+  let cfg: Awaited<ReturnType<typeof getProjectConfig>>
   try {
-    areas = (await getProjectConfig(projectId)).areas.weekly_section
+    cfg = await getProjectConfig(projectId)
   } catch (e) {
     if (e instanceof ConfigUnavailableError) {
       return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CONFIG_UNAVAILABLE), retryable: true }
     }
     throw e
   }
+  let weekStart: string
+  try {
+    // 주 키는 그 프로젝트 규칙의 키(SP5 P9) — 트리거(WEEK_KEY_INVALID)는 마지막 방어다(D8)
+    weekStart = weekKeyOf(requireCalendar(cfg).weekStart, weekStartIso)
+  } catch (e) {
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: e.message }
+    throw e
+  }
+  const areas: ConfigArea[] = cfg.areas.weekly_section
   // 활성 영역 0개 — RPC 도 WEEKLY_AREAS_REQUIRED 로 막지만 부르기 전에 같은 문구로 답한다(임의 구분을 만들지 않는다, W1)
   if (!areas.some(a => a.active)) return { ok: false, code: 'CONFIG_REQUIRED', error: ERR_AREAS_REQUIRED }
 
