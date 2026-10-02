@@ -39,16 +39,18 @@ export interface IssueUpdatesProps {
   isProjectAdmin: boolean
   /** @멘션 후보. 계정이 없으면 알림이 갈 수 없으므로 hasAccount 로 여기서 걸러 쓴다. */
   members: ProjectMember[]
+  /** 이력 시각을 찍을 시간대 — 서버가 내려준 프로젝트 calendar.timezone(계획 P8 — 브라우저 tz 가 아니다, A-4 리뷰 N7) */
+  timeZone: string
 }
 
-function fmtAt(iso: string, locale: string): string {
+function fmtAt(iso: string, locale: string, timeZone: string): string {
   const d = new Date(iso)
   return d.toLocaleString(locale === 'en' ? 'en-US' : 'ko-KR', {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone,
   })
 }
 
-export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin, members }: IssueUpdatesProps) {
+export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin, members, timeZone }: IssueUpdatesProps) {
   const { t, locale } = useLocale()
   const [list, setList] = useState<IssueUpdate[] | null>(null)
   // 실패 '여부'만 담는다 — 번역문을 state 에 넣으면 load 가 t 에 의존해 무한 루프가 된다.
@@ -196,7 +198,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
                     <span className="font-medium text-ink-muted">{u.authorName}</span>
                     <span aria-hidden>·</span>
-                    <time dateTime={u.createdAt}>{fmtAt(u.createdAt, locale)}</time>
+                    <time dateTime={u.createdAt}>{fmtAt(u.createdAt, locale, timeZone)}</time>
                     {u.authorName === MIGRATED_AUTHOR_NAME && (
                       <span className="text-[11px] text-ink-subtle">{t('issue.update.migrated')}</span>
                     )}

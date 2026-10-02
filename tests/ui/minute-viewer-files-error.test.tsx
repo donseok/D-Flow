@@ -60,7 +60,7 @@ describe('MinuteViewer — 첨부 목록 조회 실패', () => {
   function render(props: { filesError?: string | null; historicalVersion?: { id: string; versionNo: number } | null }) {
     act(() => {
       root.render(
-        <MinuteViewer minute={minute} files={[]} canManage={false}
+        <MinuteViewer timeZone="Asia/Seoul" minute={minute} files={[]} canManage={false}
           annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
           {...props} />,
       )

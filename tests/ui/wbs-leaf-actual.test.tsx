@@ -56,7 +56,7 @@ describe('RowDetailPanel — 하위 추가 시 실적% 폐기 경고', () => {
 
   async function mount(node: ComputedItem) {
     await act(async () =>
-      root.render(<RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={node} onClose={() => {}} projectId="p1" editable />),
+      root.render(<RowDetailPanel timeZone="Asia/Seoul" levelLabels={['Phase', 'Task', 'Activity']} item={node} onClose={() => {}} projectId="p1" editable />),
     )
   }
   const buttons = () => [...container.querySelectorAll<HTMLButtonElement>('button')]

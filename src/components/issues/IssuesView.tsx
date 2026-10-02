@@ -28,7 +28,7 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone,
 }: {
   issues: Issue[]
   members: ProjectMember[]
@@ -42,6 +42,8 @@ export function IssuesView({
   isProjectAdmin: boolean
   myMemberIds: string[]
   today: string
+  /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
+  timeZone: string
 }) {
   const { locale, t } = useLocale()
   const { toast } = useToast()
@@ -406,6 +408,7 @@ export function IssuesView({
         currentUserId={currentUserId}
         isProjectAdmin={isProjectAdmin}
         today={today}
+        timeZone={timeZone}
         onClose={() => {
           setViewingId(null)
           // 파라미터가 남아 있으면 다음 소프트 내비게이션에서 같은 이슈가 다시 열린다.

@@ -97,7 +97,7 @@ describe('MinuteViewer 원문 최초 점프', () => {
   async function render(sourceAnchor: { blockIndex: number; blockHash: string; bodyHash: string }) {
     await act(async () => root.render(
       <StrictMode>
-        <MinuteViewer
+        <MinuteViewer timeZone="Asia/Seoul"
           minute={minute} files={[]} canManage={false}
           annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
           sourceAnchor={sourceAnchor}

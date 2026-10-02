@@ -18,6 +18,8 @@ import { ApprovalQueue } from '@/components/agent-hub/ApprovalQueue'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { formatWikiDate } from '@/components/wiki/WikiShared'
 import { DayPopover } from '@/components/ui/DayPopover'
+import { ChangeHistoryList } from '@/components/wbs/ChangeHistoryList'
+import { MinuteVersionPanel } from '@/components/minutes/MinuteVersionPanel'
 import type { HubQueueEntry } from '@/lib/domain/agentHub'
 
 // 2026-10-03T23:30:00Z = 서울 10-04 08:30 / LA 10-03 16:30
@@ -96,4 +98,26 @@ describe('[RF1] DayPopover — date-only 의 요일은 브라우저 tz 와 무�
       expect(host.textContent).toMatch(/\(일\)/)
     })
   }
+})
+
+describe('A-4 리뷰 N7 — 브라우저 tz 로 찍던 표시 넷이 서버 tz 를 따른다', () => {
+  it('WBS 변경 이력 — 서울 2026.10.04 08:30 / LA 2026.10.03 16:30', () => {
+    const log = { id: 'l1', field: 'name', oldValue: 'a', newValue: 'b', at: AT, actorTeam: null, actorRole: null } as never
+    render(<ChangeHistoryList logs={[log]} timeZone="Asia/Seoul" />)
+    expect(host.textContent).toContain('2026.10.04 08:30')
+    render(<ChangeHistoryList logs={[log]} timeZone="America/Los_Angeles" />)
+    expect(host.textContent).toContain('2026.10.03 16:30')
+  })
+  it('회의록 버전 — LA 면 10월 3일, 범위 달력을 못 읽으면(null) 시각 대신 —', () => {
+    const v = { id: 'v1', versionNo: 1, createdAt: AT, createdByName: 'alice', fileName: 'a.md', title: null, bodyHash: 'h' } as never
+    const expand = () => act(() => { [...host.querySelectorAll('button')].find(b => b.textContent?.includes('펼치기'))?.click() })
+    render(<MinuteVersionPanel versions={[v]} currentVersionNo={1} timeZone="America/Los_Angeles" />)
+    expand()
+    expect(host.textContent).toMatch(/10월 3일/)
+    act(() => root.unmount()); root = createRoot(host)
+    render(<MinuteVersionPanel versions={[v]} currentVersionNo={1} timeZone={null} />)
+    expand()
+    expect(host.textContent).not.toMatch(/10월 [34]일/)
+    expect(host.textContent).toContain('—')
+  })
 })

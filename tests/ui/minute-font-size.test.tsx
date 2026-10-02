@@ -76,7 +76,7 @@ describe('회의록 뷰어 글자크기 조절', () => {
   function mountViewer(initialFontSize: number | null = null) {
     act(() => root.render(
       <StrictMode>
-        <MinuteViewer
+        <MinuteViewer timeZone="Asia/Seoul"
           minute={minute} files={[]} canManage={false}
           annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
           initialFontSize={initialFontSize}
@@ -193,7 +193,7 @@ describe('글자크기 SSR/CSR 파리티', () => {
   it('서버 초기값이 SSR HTML 에 그대로 들어간다 — 하이드레이션 불일치 없음', async () => {
     const { renderToString } = await import('react-dom/server')
     const html = renderToString(
-      <MinuteViewer
+      <MinuteViewer timeZone="Asia/Seoul"
         minute={minute} files={[]} canManage={false}
         annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
         initialFontSize={22}
@@ -207,7 +207,7 @@ describe('글자크기 SSR/CSR 파리티', () => {
     const { renderToString } = await import('react-dom/server')
     localStorage.setItem(MINUTE_FS_STORAGE_KEY, '26')
     const html = renderToString(
-      <MinuteViewer
+      <MinuteViewer timeZone="Asia/Seoul"
         minute={minute} files={[]} canManage={false}
         annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
         initialFontSize={null}

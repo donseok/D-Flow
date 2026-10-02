@@ -58,7 +58,7 @@ describe('RowDetailPanel — SUB-ACT 추가 어포던스', () => {
   async function mount(node: ComputedItem, opts: { editable?: boolean } = {}) {
     await act(async () =>
       root.render(withTeams(
-        <RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={node} onClose={() => {}} projectId="p1" editable={opts.editable ?? true} />,
+        <RowDetailPanel timeZone="Asia/Seoul" levelLabels={['Phase', 'Task', 'Activity']} item={node} onClose={() => {}} projectId="p1" editable={opts.editable ?? true} />,
       )),
     )
   }

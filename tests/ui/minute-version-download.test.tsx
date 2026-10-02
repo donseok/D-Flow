@@ -40,7 +40,7 @@ describe('MinuteVersionPanel 원본 받기 — 클릭 때 발급', () => {
   // embedded 는 항상 펼친 상태라 항목이 바로 보인다.
   function render(versions: MinuteVersionListItem[], onDownload?: OnDownload) {
     act(() => root.render(
-      <MinuteVersionPanel versions={versions} currentVersionNo={2} embedded onDownload={onDownload} />,
+      <MinuteVersionPanel timeZone="Asia/Seoul" versions={versions} currentVersionNo={2} embedded onDownload={onDownload} />,
     ))
   }
   const downloadButton = () =>

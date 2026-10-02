@@ -2101,6 +2101,7 @@ export function WbsGanttSheet({
       {selectedItem && (
         <RowDetailPanel
           item={selectedItem}
+          timeZone={cal.timezone}
           allItems={allFlatItems}
           dependencies={dependencies}
           schedule={dependencySchedule.byId.get(selectedItem.id)}

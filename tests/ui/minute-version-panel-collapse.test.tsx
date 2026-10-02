@@ -30,7 +30,7 @@ describe('MinuteVersionPanel 접기 — 과거 버전 열람 화면이 본문을
 
   function render(embedded: boolean) {
     act(() => root.render(
-      <MinuteVersionPanel
+      <MinuteVersionPanel timeZone="Asia/Seoul"
         versions={VERSIONS} currentVersionNo={2} selectedVersionNo={embedded ? null : 1}
         embedded={embedded}
       />,
@@ -83,7 +83,7 @@ describe('MinuteVersionPanel 접기 — 과거 버전 열람 화면이 본문을
 
   it('버전 1건이면 이전 버전 구획 없이 현재 버전만 — 접기는 그대로 동작', () => {
     act(() => root.render(
-      <MinuteVersionPanel versions={[VERSIONS[0]]} currentVersionNo={2} selectedVersionNo={null} />,
+      <MinuteVersionPanel timeZone="Asia/Seoul" versions={[VERSIONS[0]]} currentVersionNo={2} selectedVersionNo={null} />,
     ))
     expect(container.textContent).toContain('min.version.total')
     // selectedVersionNo 가 없으면 접힘 헤더 칩도 없다
@@ -111,7 +111,7 @@ describe('MinuteVersionPanel 접기 — 과거 버전 열람 화면이 본문을
     expect(container.querySelector('button[aria-expanded]')!.className).toContain('ml-auto')
 
     act(() => root.render(
-      <MinuteVersionPanel versions={VERSIONS} currentVersionNo={2} embedded />,
+      <MinuteVersionPanel timeZone="Asia/Seoul" versions={VERSIONS} currentVersionNo={2} embedded />,
     ))
     const embeddedCount = [...container.querySelectorAll('span')]
       .find(el => el.textContent === 'min.version.total')!

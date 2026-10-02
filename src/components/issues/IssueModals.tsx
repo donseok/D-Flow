@@ -178,7 +178,7 @@ function megaAreaName(code: IssueMegaCode, locale: 'ko' | 'en' | undefined): str
 }
 
 export function IssueDetailModal({
-  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, onClose, onEdit, onDelete,
+  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, onClose, onEdit, onDelete,
 }: {
   issue: Issue | null
   members: ProjectMember[]
@@ -191,6 +191,8 @@ export function IssueDetailModal({
   currentUserId: string | null
   isProjectAdmin: boolean
   today: string
+  /** 이력 시각의 시간대(프로젝트 calendar.timezone — 서버가 내려준다) */
+  timeZone: string
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
@@ -439,6 +441,7 @@ export function IssueDetailModal({
             currentUserId={currentUserId}
             isProjectAdmin={isProjectAdmin}
             members={members}
+            timeZone={timeZone}
           />
 
           <div className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">

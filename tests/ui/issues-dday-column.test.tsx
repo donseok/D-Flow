@@ -51,7 +51,7 @@ describe('IssuesView 시작일자·남은일수 열', () => {
     issue({ title: '기한 없음', startDate: null }),
   ]
   const render = () => act(async () => root.render(
-    <IssuesView issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} />,
+    <IssuesView timeZone="Asia/Seoul" issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} />,
   ))
   const cellOf = (text: string) => [...container.querySelectorAll('td')].find(td => td.textContent === text)
 

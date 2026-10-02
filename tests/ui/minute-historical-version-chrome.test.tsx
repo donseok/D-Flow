@@ -91,7 +91,7 @@ describe('과거 버전 열람 화면 — 배너와 접힘 패널', () => {
   async function mount() {
     await act(async () => {
       root.render(
-        <MinuteViewer
+        <MinuteViewer timeZone="Asia/Seoul"
           minute={minute} files={[]} canManage={false}
           annotations={{ highlights: [], insights: [] }}
           userId="user-1" projects={[]} versions={versions}

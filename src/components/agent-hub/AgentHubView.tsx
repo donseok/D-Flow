@@ -188,6 +188,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
         {selectedItem && wbs.levelLabels !== null && (
           <RowDetailPanel
             item={selectedItem}
+            timeZone={timeZone}
             allItems={allFlat}
             dependencies={wbs.dependencies}
             schedule={schedule.byId.get(selectedItem.id)}

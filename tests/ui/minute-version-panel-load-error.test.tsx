@@ -56,7 +56,7 @@ const notice = () => container.querySelector('[data-load-error]')
 
 describe('MinuteVersionPanel — loadError', () => {
   it.each([true, false])('embedded=%s: 제목과 LoadErrorNotice(사유·재시도)를 보이고 목록은 없다', (embedded) => {
-    act(() => root.render(<MinuteVersionPanel versions={[]} embedded={embedded} loadError="버전 목록 실패" />))
+    act(() => root.render(<MinuteVersionPanel timeZone="Asia/Seoul" versions={[]} embedded={embedded} loadError="버전 목록 실패" />))
     expect(container.textContent).toContain('min.version.title')
     expect(notice()?.getAttribute('role')).toBe('alert')
     expect(notice()?.textContent).toContain('버전 목록 실패')
@@ -66,7 +66,7 @@ describe('MinuteVersionPanel — loadError', () => {
   })
 
   it('대조: loadError 가 없고 버전도 없으면 아무것도 그리지 않는다', () => {
-    act(() => root.render(<MinuteVersionPanel versions={[]} embedded />))
+    act(() => root.render(<MinuteVersionPanel timeZone="Asia/Seoul" versions={[]} embedded />))
     expect(container.innerHTML).toBe('')
   })
 })
@@ -74,7 +74,7 @@ describe('MinuteVersionPanel — loadError', () => {
 describe('MinuteViewer — versionsError', () => {
   function render(props: { versionsError?: string | null; historicalVersion?: { id: string; versionNo: number } | null }) {
     act(() => root.render(
-      <MinuteViewer minute={minute} files={[]} canManage={false}
+      <MinuteViewer timeZone="Asia/Seoul" minute={minute} files={[]} canManage={false}
         annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]} versions={[]}
         {...props} />,
     ))

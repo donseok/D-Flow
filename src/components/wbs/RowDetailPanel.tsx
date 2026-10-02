@@ -34,7 +34,7 @@ const EMPTY_REFS: string[] = []
 export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
-  members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS,
+  members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
 }: {
   item: ComputedItem
   allItems?: ComputedItem[]
@@ -61,6 +61,8 @@ export function RowDetailPanel({
    * claim 게이트는 이것을 미충족으로 보고 409 를 내므로 목록에서 빼면 화면이 위장한다.
    */
   unresolvedRefs?: string[]
+  /** 변경 이력 시각의 시간대 — 서버가 내려준 프로젝트 calendar.timezone(계획 P8, A-4 리뷰 N7) */
+  timeZone: string
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -700,7 +702,7 @@ export function RowDetailPanel({
           <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />
 
           {/* 변경 이력 */}
-          <ChangeHistoryList logs={logs} />
+          <ChangeHistoryList logs={logs} timeZone={timeZone} />
         </div>
       </aside>
     </div>

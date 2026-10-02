@@ -180,7 +180,7 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
   async function mountAndOpenPopover(minuteValue: Minute = minute, issueMembersError: string | null = null) {
     await act(async () => {
       root.render(
-        <MinuteViewer
+        <MinuteViewer timeZone="Asia/Seoul"
           minute={minuteValue}
           files={[]}
           canManage={false}
@@ -391,7 +391,7 @@ describe('MinuteViewer 드래그 선택 → 이슈 등록', () => {
   async function mountViewer(extraProps: Partial<Parameters<typeof MinuteViewer>[0]> = {}) {
     await act(async () => {
       root.render(
-        <MinuteViewer
+        <MinuteViewer timeZone="Asia/Seoul"
           minute={selectionMinute}
           files={[]}
           canManage={false}

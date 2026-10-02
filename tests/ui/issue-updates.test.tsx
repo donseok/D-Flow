@@ -80,14 +80,14 @@ describe('IssueUpdates', () => {
 
   describe('목록', () => {
     it('비어 있으면 안내 문구를 보여준다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, 'issue.update.empty')).not.toBeNull()
     })
 
     it('조회 실패를 빈 목록으로 위장하지 않는다', async () => {
       listIssueUpdates.mockResolvedValue({ ok: false, error: 'boom' })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, 'issue.err.updateLoadFailed')).not.toBeNull()
     })
@@ -97,7 +97,7 @@ describe('IssueUpdates', () => {
         ok: true,
         items: [entry({ body: '철회된 조치', archivedAt: '2026-08-19T02:00:00.000Z', archivedByName: '나' })],
       })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       const body = textNode(container, '철회된 조치')
       expect(body).not.toBeNull()
@@ -109,7 +109,7 @@ describe('IssueUpdates', () => {
         ok: true,
         items: Array.from({ length: 7 }, (_, i) => entry({ id: `u${i}`, body: `내용${i}` })),
       })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, '내용6')).not.toBeNull()
       expect(textNode(container, '내용0')).toBeNull()
@@ -122,7 +122,7 @@ describe('IssueUpdates', () => {
       listIssueUpdates.mockResolvedValue({
         ok: true, items: [entry({ kind: 'status', category: null, body: 'open>resolved' })],
       })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       // 원문 'open>resolved' 가 그대로 노출되면 안 된다.
       expect(textNode(container, 'issue.update.statusChange')).not.toBeNull()
@@ -133,14 +133,14 @@ describe('IssueUpdates', () => {
       listIssueUpdates.mockResolvedValue({
         ok: true, items: [entry({ authorName: MIGRATED_AUTHOR_NAME })],
       })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, 'issue.update.migrated')).not.toBeNull()
     })
 
     it('일반 행은 이관 안내를 보여주지 않는다', async () => {
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry()] })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, 'issue.update.migrated')).toBeNull()
     })
@@ -148,21 +148,21 @@ describe('IssueUpdates', () => {
 
   describe('권한 어포던스', () => {
     it('조회 전용에게는 입력창이 없다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} canWrite={false} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} canWrite={false} />))
       await flush()
       expect(textNode(container, 'issue.update.empty')).not.toBeNull()
       expect(container.querySelector('textarea')).toBeNull()
     })
 
     it('멤버에게는 입력창이 있다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(container.querySelector('textarea')).not.toBeNull()
     })
 
     it('남의 이력에는 취소선 버튼이 없다', async () => {
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry({ authorUserId: 'other' })] })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, '첫 조치')).not.toBeNull()
       expect(buttonBy(container, 'issue.update.archive')).toBeNull()
@@ -170,7 +170,7 @@ describe('IssueUpdates', () => {
 
     it('관리자에게는 남의 이력에도 취소선·완전삭제가 보인다', async () => {
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry({ authorUserId: 'other' })] })
-      act(() => root.render(<IssueUpdates {...BASE} isProjectAdmin />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} isProjectAdmin />))
       await flush()
       expect(textNode(container, '첫 조치')).not.toBeNull()
       expect(buttonBy(container, 'issue.update.archive')).not.toBeNull()
@@ -179,7 +179,7 @@ describe('IssueUpdates', () => {
 
     it('멤버에게는 자기 이력에도 완전삭제가 없다', async () => {
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry()] })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(textNode(container, '첫 조치')).not.toBeNull()
       expect(buttonBy(container, 'issue.update.purge')).toBeNull()
@@ -195,7 +195,7 @@ describe('IssueUpdates', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
       purgeIssueUpdate.mockResolvedValue({ ok: true })
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry({ id: 'u9' })] })
-      act(() => root.render(<IssueUpdates {...BASE} isProjectAdmin />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} isProjectAdmin />))
       await flush()
       click(buttonBy(container, 'issue.update.purge')!)
       await flush()
@@ -206,7 +206,7 @@ describe('IssueUpdates', () => {
     it('확인을 거부하면 완전삭제를 호출하지 않는다', async () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry({ id: 'u9' })] })
-      act(() => root.render(<IssueUpdates {...BASE} isProjectAdmin />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} isProjectAdmin />))
       await flush()
       click(buttonBy(container, 'issue.update.purge')!)
       await flush()
@@ -217,7 +217,7 @@ describe('IssueUpdates', () => {
     it('confirm 에 넘기는 문구는 번역 키다 — 한국어 리터럴을 하드코딩하지 않는다', async () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
       listIssueUpdates.mockResolvedValue({ ok: true, items: [entry({ id: 'u9' })] })
-      act(() => root.render(<IssueUpdates {...BASE} isProjectAdmin />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} isProjectAdmin />))
       await flush()
       click(buttonBy(container, 'issue.update.purge')!)
       // 이 화면의 useLocale mock 은 t(k) => k 다 — 번역기를 거쳤다면 키 문자열 그대로
@@ -230,7 +230,7 @@ describe('IssueUpdates', () => {
   describe('등록', () => {
     it('등록 성공 후 입력창을 비우고 목록을 다시 읽는다', async () => {
       addIssueUpdate.mockResolvedValue({ ok: true })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, '새 조치')
@@ -245,7 +245,7 @@ describe('IssueUpdates', () => {
 
     it('부분 실패를 성공으로 뭉개지 않는다', async () => {
       addIssueUpdate.mockResolvedValue({ ok: true, partial: '요약 반영 실패' })
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, 'x')
@@ -255,14 +255,14 @@ describe('IssueUpdates', () => {
     })
 
     it('빈 본문으로는 등록 버튼이 눌리지 않는다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       expect(buttonBy(container, 'issue.update.add')!.disabled).toBe(true)
     })
 
     it('액션 호출이 거부되면 아무 일도 없었던 것처럼 삼키지 않는다', async () => {
       addIssueUpdate.mockRejectedValue(new Error('boom'))
-      act(() => root.render(<IssueUpdates {...BASE} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, '새 조치')
@@ -280,7 +280,7 @@ describe('IssueUpdates', () => {
     ] as never[]
 
     it('@ 를 치면 계정이 연결된 멤버만 후보로 뜬다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} members={MEMBERS} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} members={MEMBERS} />))
       await flush()
       typeInto(container.querySelector('textarea')!, '@')
       expect(buttonBy(container, '김준기')).not.toBeNull()
@@ -290,7 +290,7 @@ describe('IssueUpdates', () => {
 
     it('후보를 고르면 본문에 이름이 들어가고 등록 시 member id 로 전송된다', async () => {
       addIssueUpdate.mockResolvedValue({ ok: true })
-      act(() => root.render(<IssueUpdates {...BASE} members={MEMBERS} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} members={MEMBERS} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, '@김준')
@@ -306,7 +306,7 @@ describe('IssueUpdates', () => {
 
     it('골랐다가 본문에서 지운 멘션은 전송되지 않는다', async () => {
       addIssueUpdate.mockResolvedValue({ ok: true })
-      act(() => root.render(<IssueUpdates {...BASE} members={MEMBERS} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} members={MEMBERS} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, '@김준')
@@ -320,7 +320,7 @@ describe('IssueUpdates', () => {
     })
 
     it('후보는 입력한 검색어로 걸러진다', async () => {
-      act(() => root.render(<IssueUpdates {...BASE} members={MEMBERS} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} members={MEMBERS} />))
       await flush()
       typeInto(container.querySelector('textarea')!, '@남')
       expect(buttonBy(container, '남순혁')).not.toBeNull()
@@ -329,7 +329,7 @@ describe('IssueUpdates', () => {
 
     it('등록에 성공하면 고른 멘션도 비워진다 — 다음 글에 손으로 같은 이름을 써도 전송되지 않는다', async () => {
       addIssueUpdate.mockResolvedValue({ ok: true })
-      act(() => root.render(<IssueUpdates {...BASE} members={MEMBERS} />))
+      act(() => root.render(<IssueUpdates timeZone="Asia/Seoul" {...BASE} members={MEMBERS} />))
       await flush()
       const box = container.querySelector('textarea')!
       typeInto(box, '@김준')

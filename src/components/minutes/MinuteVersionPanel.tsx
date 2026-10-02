@@ -29,17 +29,21 @@ export type MinuteVersionPanelProps = {
   onDownload?: (versionId: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>
   /** 버전 목록 조회 실패 문구(화면 언어로) — 있으면 목록 대신 사유와 재시도를 보인다. 접힘과 무관하게 보인다. */
   loadError?: string | null
+  /** 버전 시각의 시간대 — 서버가 내려준 회의록 범위 tz(계획 P8, A-4 리뷰 N7). null 이면 범위 달력을 읽지 못한 것 — 시각은 '—' */
+  timeZone: string | null
 }
 
-function versionDate(value: string, locale: 'ko' | 'en') {
+function versionDate(value: string, locale: 'ko' | 'en', timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
+  if (timeZone === null) return '—'
   return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(date)
 }
 
@@ -50,6 +54,7 @@ export function MinuteVersionPanel({
   embedded = false,
   onDownload,
   loadError = null,
+  timeZone,
 }: MinuteVersionPanelProps) {
   const { locale, t } = useLocale()
   // 발급 중에는 받기 버튼을 모두 잠근다 — 한 번의 클릭에 URL 하나. 실패 사유는 그 버전 항목 아래에 둔다.
@@ -134,7 +139,7 @@ export function MinuteVersionPanel({
           <span className="chip bg-brand-weak text-brand">{t('min.version.viewing')}</span>
         )}
         <span className="text-xs tabular-nums text-ink-subtle">
-          {versionDate(version.createdAt, locale)}
+          {versionDate(version.createdAt, locale, timeZone)}
         </span>
         {version.createdByName && (
           <span className="text-xs text-ink-muted">{version.createdByName}</span>

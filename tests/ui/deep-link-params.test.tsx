@@ -300,7 +300,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('IssuesView: ?focus= 로 해당 이슈 상세를 연다', async () => {
     currentSearch = 'focus=iss-2'
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={[issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]} />,
     )
     expect(dialog()).not.toBeNull()
@@ -310,7 +310,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
   it('IssuesView: 무효 focus id 는 조용히 무시한다', async () => {
     currentSearch = 'focus=iss-없음'
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={[issueFx()]} />,
     )
     expect(dialog()).toBeNull()
@@ -325,14 +325,14 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     const issues = [issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]
     currentSearch = ''
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).toBeNull()
 
     currentSearch = 'focus=iss-2'
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).not.toBeNull()
@@ -343,7 +343,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=iss-2&tab=board'
     const issues = [issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).not.toBeNull()
@@ -365,7 +365,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     // 같은 root 에 다시 render(= 다음 소프트 내비게이션)해도 재오픈 가드가 없으면 여기서
     // 다시 열린다 — 그게 무한 재오픈 버그다.
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).toBeNull()
@@ -385,7 +385,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=iss-2'
     const issues = [issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).not.toBeNull()
@@ -398,12 +398,12 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     // 파라미터가 여전히 존재하는 상태. 같은 값으로 두 번 더 재렌더해도(추가 소프트 내비게이션
     // 흉내) 닫힌 채로 남아야 한다.
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).toBeNull()
     await mount(
-      <IssuesView projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
+      <IssuesView timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
         members={[]} issues={issues} />,
     )
     expect(dialog()).toBeNull()

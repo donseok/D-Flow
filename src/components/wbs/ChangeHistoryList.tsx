@@ -7,6 +7,7 @@ import { formatWeightPct } from '@/lib/domain/format'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import type { DictKey } from '@/lib/i18n/dict'
+import { stampIn } from '@/lib/domain/calendar'
 
 /** 접기 전 기본 노출 건수 — 이력은 항목당 수십 건까지 쌓이는데 패널의 주인공이 아니다. */
 export const HISTORY_COLLAPSED_COUNT = 3
@@ -33,11 +34,11 @@ function fmtValue(field: string, v: string | null, t: Tr): string {
   return field === 'actual_pct' ? `${v}%` : v
 }
 
-function fmtAt(iso: string): string {
+/** 'YYYY.MM.DD HH:mm' — 서버가 내려준 프로젝트 tz 의 벽시계(브라우저 tz 가 아니다 — 계획 P8, A-4 리뷰 N7) */
+function fmtAt(iso: string, timeZone: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return stampIn(timeZone, d).replace(/-/g, '.')
 }
 
 function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr): string {
@@ -51,7 +52,7 @@ function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr):
  * 쌓여 상세 패널의 절반 이상을 먹었다. RowDetailPanel 에서 떼어낸 이유는 두 가지다:
  * 그 파일이 700줄을 넘었고, 이 블록만 따로 테스트하려면 패널 전체를 모킹해야 했다.
  */
-export function ChangeHistoryList({ logs }: { logs: ChangeLogEntry[] | null }) {
+export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] | null; timeZone: string }) {
   const { t } = useLocale()
   const [expanded, setExpanded] = useState(false)
   // 다른 항목을 열면 접힌 상태로 돌아간다 — 앞 항목에서 펼친 게 따라오면 "왜 다 보이지"가 된다.
@@ -75,7 +76,7 @@ export function ChangeHistoryList({ logs }: { logs: ChangeLogEntry[] | null }) {
             {shown.map(log => (
               <li key={log.id} data-history-row
                 className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 py-1 text-[12px] sm:grid-cols-[8.5rem_1fr_auto]">
-                <span className="tabular-nums text-[11px] text-ink-subtle">{fmtAt(log.at)}</span>
+                <span className="tabular-nums text-[11px] text-ink-subtle">{fmtAt(log.at, timeZone)}</span>
                 <span className="min-w-0 truncate">
                   <span className="font-semibold text-ink">{FIELD_KEY[log.field] ? t(FIELD_KEY[log.field]) : log.field}</span>
                   <span className="mx-1 text-ink-muted line-through decoration-ink-subtle/50">{fmtValue(log.field, log.oldValue, t)}</span>

@@ -84,7 +84,7 @@ type IssueOrigin =
 export function MinuteViewer({
   minute, files, filesError = null, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], versionsError = null, wikiImpact = EMPTY_WIKI_IMPACT,
-  historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null,
+  historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null, timeZone,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
@@ -108,6 +108,8 @@ export function MinuteViewer({
   linkedIssues?: MinuteLinkedIssue[]
   /** 소속 폴더의 root-first 경로명. null = 미분류이거나 경로 해석 실패(둘은 렌더에서 구분). */
   folderPath?: string[] | null
+  /** 버전·처리 시각의 시간대 — 회의록 범위 tz(서버가 정한다, 계획 P8). null 이면 범위 달력을 읽지 못한 것(시각 '—') */
+  timeZone: string | null
   /** 내가 멤버로 등록된 프로젝트 id — 수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
   /** 프로젝트 → 워크스페이스(서버의 actor.projectWorkspace) — 블록에서 만드는 이슈의 첨부 경로 scope. */
@@ -818,8 +820,9 @@ export function MinuteViewer({
                 embedded
                 onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
                 loadError={versionsError ? t('min.version.loadFailed') : null}
+                timeZone={timeZone}
               />
-              <MinuteWikiImpactCard {...wikiImpact} embedded />
+              <MinuteWikiImpactCard {...wikiImpact} embedded timeZone={timeZone} />
             </>
           }
         />
@@ -833,6 +836,7 @@ export function MinuteViewer({
           selectedVersionNo={historicalVersion?.versionNo ?? null}
           onDownload={versionId => getMinuteVersionFileUrl(minute.id, versionId)}
           loadError={versionsError ? t('min.version.loadFailed') : null}
+          timeZone={timeZone}
         />
       )}
 

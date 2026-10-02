@@ -57,7 +57,7 @@ describe('MinuteViewer 편철 경로 breadcrumb', () => {
   function render(minute: Minute, folderPath: string[] | null) {
     act(() => {
       root.render(
-        <MinuteViewer minute={minute} files={[]} canManage={false}
+        <MinuteViewer timeZone="Asia/Seoul" minute={minute} files={[]} canManage={false}
           annotations={{ highlights: [], insights: [] }} userId="u1" projects={[]}
           folderPath={folderPath} />,
       )

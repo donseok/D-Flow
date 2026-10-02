@@ -72,7 +72,7 @@ describe('RowDetailPanel — 선행/후속 섹션', () => {
   }) {
     await act(async () =>
       root.render(
-        <RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']}
+        <RowDetailPanel timeZone="Asia/Seoul" levelLabels={['Phase', 'Task', 'Activity']}
           item={opts.item}
           allItems={opts.allItems}
           dependencies={opts.dependencies}

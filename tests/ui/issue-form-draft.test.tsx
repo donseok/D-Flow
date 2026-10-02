@@ -441,7 +441,7 @@ describe('IssueFormModal 회의록 초안', () => {
 
     await act(async () => {
       root.render(
-        <IssueDetailModal
+        <IssueDetailModal timeZone="Asia/Seoul"
           issue={current}
           members={[]}
           memberName={() => null}

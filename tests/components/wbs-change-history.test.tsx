@@ -39,7 +39,7 @@ describe('ChangeHistoryList — 한 줄 표시 + 최근 3건', () => {
   })
 
   function render(logs: ChangeLogEntry[] | null) {
-    act(() => { root.render(<ChangeHistoryList logs={logs} />) })
+    act(() => { root.render(<ChangeHistoryList timeZone="Asia/Seoul" logs={logs} />) })
   }
   const rows = () => container.querySelectorAll('[data-history-row]')
   const more = () => container.querySelector<HTMLButtonElement>('[data-history-more]')

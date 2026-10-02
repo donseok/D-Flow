@@ -72,6 +72,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
         isProjectAdmin={isProjectAdmin(m, projectId)}
         myMemberIds={myMemberIds}
         today={today}
+        timeZone={cal.calendar.timezone}
       />
     </ProjectPageShell>
   )

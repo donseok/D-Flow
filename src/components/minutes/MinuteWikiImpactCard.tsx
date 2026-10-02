@@ -110,15 +110,17 @@ function statusDescription(status: MinuteWikiSyncStatus) {
   }
 }
 
-function processedDate(value: string, locale: 'ko' | 'en') {
+function processedDate(value: string, locale: 'ko' | 'en', timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
+  if (timeZone === null) return '—'
   return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(date)
 }
 
@@ -130,7 +132,11 @@ export function MinuteWikiImpactCard({
   projectName,
   processedAt,
   embedded = false,
-}: MinuteWikiImpactCardProps) {
+  timeZone,
+}: MinuteWikiImpactCardProps & {
+  /** 처리 시각의 시간대 — 서버가 내려준 회의록 범위 tz(계획 P8, A-4 리뷰 N7). null 이면 범위 달력을 읽지 못한 것 — 시각은 '—' */
+  timeZone: string | null
+}) {
   const { locale, t } = useLocale()
   const meta = statusStyle(status)
   const StatusIcon = meta.icon
@@ -207,7 +213,7 @@ export function MinuteWikiImpactCard({
 
       {processedAt && (
         <p className="mt-2 text-right text-[11px] tabular-nums text-ink-subtle">
-          {t('min.wiki.processedAt')} {processedDate(processedAt, locale)}
+          {t('min.wiki.processedAt')} {processedDate(processedAt, locale, timeZone)}
         </p>
       )}
     </section>

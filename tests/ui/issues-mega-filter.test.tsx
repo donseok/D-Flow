@@ -81,7 +81,7 @@ describe('IssuesView Mega 필터', () => {
   it('Mega 전체에서는 분석서 모달을 열지 않고 한 가지 선택 경고를 표시한다', async () => {
     await act(async () => {
       root.render(
-        <IssuesView
+        <IssuesView timeZone="Asia/Seoul"
           projectId="project-1"
           currentUserId="user-1"
           canEdit
@@ -108,7 +108,7 @@ describe('IssuesView Mega 필터', () => {
   it('선택 Mega로 목록을 좁히고 같은 범위를 분석서 모달에 전달한다', async () => {
     await act(async () => {
       root.render(
-        <IssuesView
+        <IssuesView timeZone="Asia/Seoul"
           projectId="project-1"
           currentUserId="user-1"
           canEdit

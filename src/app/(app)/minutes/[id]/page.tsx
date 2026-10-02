@@ -13,6 +13,7 @@ import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
 import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { minuteScopeTimezone } from '@/lib/minutes/timeFix.server'
 
 export default async function MinuteDetailPage({
   params, searchParams,
@@ -86,6 +87,9 @@ export default async function MinuteDetailPage({
       project_id: detail.minute.ownProjectId ?? null,
       workspace_id: detail.minute.workspaceId,
     })
+  // 버전·위키 처리 시각의 tz = 회의록 범위(녹취 보정과 같은 판정 — 계획 P8, A-4 리뷰 N7). 못 읽으면 시각만 '—'(로그) — 회의록 화면 전체를 막지 않는다
+  const timeZone = await minuteScopeTimezone({ projectId: detail.minute.ownProjectId ?? null, workspaceId: head.minute.workspaceId })
+    .catch((e: unknown) => { console.error('[minutes] 회의록 범위 달력 판독 실패 — 시각 표시 생략', { id, cause: String(e) }); return null })
   return (
     <MinuteViewer
       minute={displayMinute} canManage={canManage}
@@ -98,6 +102,7 @@ export default async function MinuteDetailPage({
       issueMembers={issueMembers} issueMembersError={issueMembersError} linkedIssues={linkedIssues}
       folderPath={folderPath} myProjectIds={myProjectIds}
       projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
+      timeZone={timeZone}
     />
   )
 }
