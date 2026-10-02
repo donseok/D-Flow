@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ getWorkspaceConfig: vi.fn() }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: m.getWorkspaceConfig }))
 
-import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar } from '@/lib/calendar/load'
+import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar, resolveMemberWorkspacesCalendarBasis } from '@/lib/calendar/load'
 import { viewTimezone } from '@/lib/calendar/viewZone'
 import { calendarOf, type WeekStartRule } from '@/lib/domain/calendar'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
@@ -71,13 +71,29 @@ describe('resolveMemberWorkspacesCalendar', () => {
 describe('viewTimezone — 여러 워크스페이스 소속(전역 화면)', () => {
   it('모두 같으면 그 tz, 다르면 UTC, 여럿 중 하나가 손상이면 UTC(N2 — 하나뿐일 때만 ok:false)', async () => {
     byId({ a: ws('America/Los_Angeles'), b: ws('America/Los_Angeles') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'America/Los_Angeles' })
+    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'America/Los_Angeles', basis: 'member' })
     byId({ a: ws('America/Los_Angeles'), b: ws('Asia/Seoul') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC' })
+    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC', basis: 'differs' })
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     byId({ a: ws('Asia/Seoul'), b: broken('calendar.week_start') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC' })
+    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC', basis: 'unreadable' })
     await expect(viewTimezone(actor(['b']))).resolves.toMatchObject({ ok: false, key: 'calendar.week_start' })
+    err.mockRestore()
+  })
+})
+
+describe('resolveMemberWorkspacesCalendarBasis — 기본값으로 계산한 근거(A-5 리뷰 O2 — 화면이 그 사실을 적는다)', () => {
+  it('none·member·differs·unreadable', async () => {
+    expect((await resolveMemberWorkspacesCalendarBasis([])).basis).toBe('none')
+    byId({ a: ws('Asia/Seoul') })
+    expect((await resolveMemberWorkspacesCalendarBasis(['a'])).basis).toBe('member')
+    byId({ a: ws('Asia/Seoul'), b: ws('Asia/Seoul') })
+    expect((await resolveMemberWorkspacesCalendarBasis(['a', 'b'])).basis).toBe('member')
+    byId({ a: ws('Asia/Seoul'), b: ws('America/Los_Angeles') })
+    expect(await resolveMemberWorkspacesCalendarBasis(['a', 'b'])).toEqual({ calendar: DEFAULT_REQUEST_CALENDAR, basis: 'differs' })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    byId({ a: ws('Asia/Seoul'), b: broken('calendar.timezone') })
+    expect(await resolveMemberWorkspacesCalendarBasis(['a', 'b'])).toEqual({ calendar: DEFAULT_REQUEST_CALENDAR, basis: 'unreadable' })
     err.mockRestore()
   })
 })

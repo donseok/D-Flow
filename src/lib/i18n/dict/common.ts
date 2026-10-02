@@ -82,4 +82,7 @@ export const commonKo = {
   'status.in_progress': '진행중',
   'status.delayed': '지연',
   'status.done': '완료',
+  // 전역 화면의 기준 시간대(SP5 A — 다중 소속에서 소속 달력을 쓰지 못해 제품 기본값으로 계산할 때, A-5 리뷰 O2)
+  'calendar.basisDiffers': '기준 시간대: {tz}(소속 워크스페이스의 달력이 서로 달라 제품 기본값으로 계산)',
+  'calendar.basisUnreadable': '기준 시간대: {tz}(일부 워크스페이스 달력을 읽지 못함)',
 } as const

@@ -13,6 +13,7 @@ import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
 import { calendarViewOf, monthGridRange } from '@/lib/domain/attendance'
 import { viewCalendar } from '@/lib/calendar/viewZone'
+import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -56,6 +57,7 @@ export default async function MyMeetingsPage() {
         }
       />}
     >
+      <ViewBasisNotice basis={vc.basis} timeZone={vc.calendar.timezone} locale={locale} />
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
       <MyMeetingsView initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}

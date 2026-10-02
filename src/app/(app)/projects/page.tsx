@@ -14,6 +14,7 @@ import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewTimezone } from '@/lib/calendar/viewZone'
+import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { BRAND } from '@/lib/branding'
 import { BrandGlyph } from '@/components/ui/BrandMark'
@@ -272,6 +273,8 @@ export default async function ProjectsHome() {
           </div>
           {total > 0 && <span className="text-xs text-ink-subtle tabular-nums">{total}{t(locale, 'home.countUnit')} · {t(locale, 'home.sortRecent')}</span>}
         </div>
+        {/* 상태 배지의 '오늘'을 제품 기본값으로 계산했으면 그 사실(A-5 리뷰 O2) */}
+        <ViewBasisNotice basis={vz.basis} timeZone={vz.timeZone} locale={locale} className="mb-3" />
 
         {total === 0 ? (
           <EmptyState

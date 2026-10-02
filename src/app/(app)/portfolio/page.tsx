@@ -14,6 +14,7 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewTimezone } from '@/lib/calendar/viewZone'
+import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -46,6 +47,7 @@ export default async function PortfolioPage() {
   return (
     <div className="space-y-6 pb-10">
       <PageHero title={t(locale, 'pf.title')} />
+      <ViewBasisNotice basis={vz.basis} timeZone={vz.timeZone} locale={locale} />
       {listDegraded && (
         <div className="rounded-xl border border-delayed/40 bg-delayed-weak px-4 py-3 text-xs font-medium text-delayed">
           {t(locale, 'pf.listDegraded')}

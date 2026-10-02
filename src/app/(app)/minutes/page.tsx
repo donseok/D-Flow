@@ -16,6 +16,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MinutesView } from '@/components/minutes/MinutesView'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewCalendar } from '@/lib/calendar/viewZone'
+import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { calendarViewOf } from '@/lib/domain/attendance'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
@@ -73,6 +74,7 @@ export default async function MinutesPage() {
           fetchMinutesExplorer(actions/minutes.ts)가 가진 세션 게이트를 서버 경로에도 맞춘 것.
           user 는 위 Promise.all 에서 이미 받았으므로 추가 왕복은 없다.
           (대가: GoTrue 일시 실패 시 멀쩡한 프리페치를 버려 왕복 1회 손해 — 정확성 우선.) */}
+      <ViewBasisNotice basis={vc.basis} timeZone={vc.calendar.timezone} locale={locale} />
       <MinutesView initialMinutes={minutes} initialTree={user ? tree : null} todayIso={today}
         initialFavorites={user ? favs : null}
         explorerLayout={prefs.minutesExplorerLayout === 'list' ? 'list' : 'grid'}
