@@ -29,7 +29,7 @@ const items = computeTree([
 ], '2026-07-03', new Set(), OPTS)
 
 describe('상태 열 머리(스펙 §4.3 ①)', () => {
-  it('옛 빌더 — 라벨 행 마지막이 상태, 라벨 행 길이 = 데이터 행 길이', () => {
+  it('표준 경로(옛 빌더 자리 — standardAoa) — 라벨 행 마지막이 상태, 라벨 행 길이 = 데이터 행 길이', () => {
     const aoa = buildWbsAoa(items, 'Acme', TEAMS)
     const label = aoa[2] as unknown[]
     expect(label[label.length - 1]).toBe('상태')

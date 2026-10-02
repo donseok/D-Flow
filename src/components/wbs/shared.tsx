@@ -120,7 +120,7 @@ export { collectLeaves } from '@/lib/domain/tree'
  *
  * 글자는 코드 두 자만 찍고 전체 라벨은 title 로 뺀다 — 단계 컬럼 칸에 전체 라벨이
  * 들어갈 자리가 없고, 짧은 한국어로 줄이면 stage ip('작업 중')가 StatusChip 의 '진행중'과 같은 행에서
- * 충돌한다. 코드 표기는 LevelBadge 의 PHASE/TASK/ACT 어법과 같은 결이다.
+ * 충돌한다. (LevelBadge 는 SP4 A2 부터 설정의 단계 이름을 그대로 찍는다 — 옛 PHASE/TASK/ACT 축약 어법은 없다.)
  */
 const STAGE_META: Record<string, { key: DictKey; cls: string }> = {
   as: { key: 'wbs.stageAs', cls: 'bg-pending-weak text-pending' },

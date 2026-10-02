@@ -9,7 +9,7 @@ const STATUS_LABEL: Record<ComputedItem['status'], string> = {
   not_started: '시작전', in_progress: '진행중', delayed: '지연', done: '완료',
 }
 
-// export.ts 의 isoToDate 와 동일(중복 — export.ts 무접촉 원칙이라 공유하지 않는다).
+// 날짜 문자열 → Date(옛 빌더 export.ts 의 isoToDate 와 같다 — 그 파일은 SP4 A2 에서 지웠고 원문은 tests/fixtures/excel 의 옛 빌더 사본(동등성 오라클)에 있다).
 function isoToDate(iso: string | null): Date | '' {
   if (!iso) return ''
   return new Date(iso + 'T00:00:00Z')
@@ -23,7 +23,7 @@ function hierarchyLabel(depth: number, levelLabels: readonly string[]): string {
 /** 트리를 (항목, 깊이) 페어로 평탄화. sub-act(isOwnerSplit) 자식 여부로만 판단한다 — level 문자열은
  *  N단 프로파일에서 전부 'activity'로 뭉개져 있어(parseWithProfile.linkByDepth) 판별 근거가 될 수 없다
  *  (스펙 §5.2 와 동일 원칙을 익스포트에도 적용).
- *  - expandSubActs=false: sub-act 자식은 숨긴다(부모 행이 대표 — export.ts flatten 과 동일 결과).
+ *  - expandSubActs=false: sub-act 자식은 숨긴다(부모 행이 대표 — 옛 빌더의 flatten 과 동일 결과, tests/fixtures/excel 의 옛 빌더 사본).
  *  - expandSubActs=true : sub-act 자식도 깊이+1 로 펼쳐 낸다.
  *  한 항목의 자식은 전부 isOwnerSplit 이거나 전부 아니다(splitLeafOwners 가 리프만 분리하므로 섞이지
  *  않는다) — 그래서 children[0] 하나만 봐도 충분하다. */
@@ -41,7 +41,7 @@ function flattenWithDepth(items: ComputedItem[], expandSubActs: boolean): { item
   return out
 }
 
-/** 트리 전체에서 등장하는 팀 코드를 최초 등장 순으로 수집(export.ts resolveTeamColumns 와 동일 의미 —
+/** 트리 전체에서 등장하는 팀 코드를 최초 등장 순으로 수집(옛 빌더의 resolveTeamColumns 와 동일 의미 —
  *  collapse/expand 무관하게 항상 전체 트리를 본다. 접힌 sub-act 의 담당도 열 후보에 포함되던 기존
  *  동작을 그대로 계승한다). */
 function collectTeams(items: ComputedItem[]): string[] {
@@ -56,7 +56,7 @@ function collectTeams(items: ComputedItem[]): string[] {
 }
 
 /** WBS 시트의 AOA(행 배열) 생성 — 프로파일이 열 배치를 결정한다(§6.5).
- *  expandSubActs=false 면 기존 buildWbsAoa 의 flatten 접기와 셀 단위로 동일(라운드트립 계약 (a),
+ *  expandSubActs=false 면 옛 buildWbsAoa(tests/fixtures/excel 의 옛 빌더 사본)의 flatten 접기와 셀 단위로 동일(라운드트립 계약 (a),
  *  시프트가 전혀 없다). expandSubActs=true 면 sub-act 를 계층 열 하나를 "삽입"해 실제 행으로 펼친다.
  *
  *  ── 삽입-시프트 설계(리뷰 픽스, Important #1) ──
@@ -77,7 +77,7 @@ function collectTeams(items: ComputedItem[]): string[] {
  *  프로파일에 같은 규칙을 균일하게 적용한 결과다.
  *
  *  ── 프로파일 밖 팀 동적 확장(리뷰 픽스, Important #2) ──
- *  트리에 등장하지만 profile.teamColumns 에 없는 팀은 조용히 유실시키지 않는다(export.ts
+ *  트리에 등장하지만 profile.teamColumns 에 없는 팀은 조용히 유실시키지 않는다(옛 빌더의
  *  resolveTeamColumns 와 동일 원칙, "조용한 유실 금지"). 시프트가 끝난 좌표계의 맨 끝(선언된 모든 열
  *  다음, 계산 전용 trailing 열보다는 앞)에 열을 추가한다 — collapse/expand 모두 적용.
  *
@@ -89,7 +89,7 @@ function collectTeams(items: ComputedItem[]): string[] {
  *
  *  ── 깊은 트리(SP4 D16) ──
  *  deep='reject'(저장 양식 — 기본)는 계층 열보다 깊은 일반 항목을 거부한다(문구는 '저장된 양식 비우기' 처방 — 저장 양식에만 맞다).
- *  deep='fold'(표준 레이아웃)는 그 항목의 이름을 마지막 계층 열에 쓴다(옛 export.ts 의 접기와 같다). 펼침의 sub-act 는 계층 열이
+ *  deep='fold'(표준 레이아웃)는 그 항목의 이름을 마지막 계층 열에 쓴다(옛 빌더의 접기와 같다 — tests/fixtures/excel 의 옛 빌더 사본). 펼침의 sub-act 는 계층 열이
  *  모자랄 때(깊이 ≥ 계층 열 수 — 접힌 항목 아래 포함)만 insertAt 에 쓰고 얕으면 제 깊이의 계층 열에 쓴다 — 접는 것은 일반 항목뿐이다
  *  (Q40, A2-2 리뷰 정정 — 늘 insertAt 이면 얕은 잎의 펼침 파일이 깊이를 건너뛰어 왕복이 깨졌다). */
 export function buildAoaWithProfile(
@@ -157,7 +157,7 @@ export function buildAoaWithProfile(
   // ── 헤더 1행: 프로젝트명 ──
   const header1: unknown[] = [projectName]
 
-  // ── 헤더 2행: 병합 타이틀(담당/산출물/계획) — 기존 buildWbsAoa 의 시각 관례를 그대로 재현.
+  // ── 헤더 2행: 병합 타이틀(담당/산출물/계획) — 옛 buildWbsAoa 의 시각 관례를 그대로 재현.
   // 폭은 계층 열·팀 열·산출물/시작 위치 중 가장 오른쪽까지만(원본이 'end' 위치에서 멈추는 것과 동일). ──
   const header2Bound = Math.max(
     ...(hierColsOut ?? []),
@@ -235,11 +235,11 @@ export function buildAoaWithProfile(
         item.children.length === 0
           ? (item.actualPct ?? '')
           : (!expandSubActs && childrenAreSubActs)
-            ? Math.round(item.rolledActualPct) // 접기 모드에서 sub-act 를 대표하는 롤업값(export.ts 와 동일 규약)
+            ? Math.round(item.rolledActualPct) // 접기 모드에서 sub-act 를 대표하는 롤업값(옛 빌더와 동일 규약)
             : ''
     }
 
-    // 읽기용 계산 컬럼 — 모든 행에 무조건(리프/상위/sub-act 구분 없이) 싣는다. export.ts 와 동일 규약.
+    // 읽기용 계산 컬럼 — 모든 행에 무조건(리프/상위/sub-act 구분 없이) 싣는다. 옛 빌더와 동일 규약.
     row[maxCol + 1] = Math.round(item.plannedPct)
     row[maxCol + 2] = Math.round(item.rolledActualPct)
     row[maxCol + 3] = item.achievement == null ? '' : item.achievement
@@ -262,7 +262,7 @@ function headerRowsBeforeLabel(headerRow: number, header1: unknown[], header2: u
   return [header1, ...fillers, title2]
 }
 
-/** WBS + Holiday 시트를 가진 xlsx ArrayBuffer 생성 — buildWbsWorkbook(export.ts)의 프로파일 버전.
+/** WBS + Holiday 시트를 가진 xlsx ArrayBuffer 생성 — 옛 buildWbsWorkbook(지운 export.ts)의 프로파일 버전. 지금은 표준 양식도 이 함수로 낸다(스펙 §4.3 경로 하나).
  *  시트명은 profile.sheetName/profile.holidaySheetName 을 그대로 쓴다(재임포트 시 프로파일이 찾는
  *  이름과 일치해야 하므로). holidaySheetName 이 null 이면 Holiday 시트를 만들지 않는다.
  *  buildAoaWithProfile 이 실패(outline+펼침, 계층 열보다 깊은 WBS)하면 그대로 전파한다.

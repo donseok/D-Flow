@@ -8,7 +8,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 export const STANDARD_OWNER_MARKS: Readonly<Record<string, 'primary' | 'support'>> = Object.freeze({ '●': 'primary', '△': 'support' })
 
 /** 팀 열 목록 확정 — 주입된 목록(활성 프로젝트 팀 코드) ∪ 트리 담당에 실제로 등장하는 팀(비활성·sub-act·목록 밖 공용 팀).
- *  주입 목록 뒤에 등장 순으로 덧붙인다 — 비활성 팀 담당이 열 부재로 조용히 유실되지 않게(옛 export.ts 와 같은 규칙). */
+ *  주입 목록 뒤에 등장 순으로 덧붙인다 — 비활성 팀 담당이 열 부재로 조용히 유실되지 않게(옛 빌더 — 지운 export.ts, tests/fixtures/excel 의 옛 빌더 사본(동등성 오라클) — 와 같은 규칙). */
 export function resolveTeamColumns(items: readonly ComputedItem[], teamCodes: readonly string[]): string[] {
   const cols = [...teamCodes]
   const seen = new Set(cols)

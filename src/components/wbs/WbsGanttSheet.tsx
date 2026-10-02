@@ -1656,7 +1656,7 @@ export function WbsGanttSheet({
                       }}
                       className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-brand hover:underline`}
                       title={`${n.name} · ${
-                        // 툴팁은 지면 제약이 없어 축약(PHASE)이 아닌 원 라벨(Phase) — 라벨 밖 깊이·sub-act 만 배지 규칙 재사용
+                        // 툴팁은 그 깊이의 단계 이름(설정값 levelLabels) 그대로 — 라벨 밖 깊이·sub-act 만 배지 규칙(levelBadgeText) 재사용
                         n.isOwnerSplit ? levelBadgeText(n.depth, true, levelLabels) : levelLabels[n.depth] ?? levelBadgeText(n.depth, false, levelLabels)
                       } · ${t('wbs.rowDetailTitle')}${isCritical ? ` · ${t('wbs.criticalPath')}` : ''}`}
                     >

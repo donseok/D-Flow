@@ -381,4 +381,13 @@ describe('getProjectsCompletion — 볼 수 있는 프로젝트의 wbs_items 를
     expect(err).toHaveBeenCalledWith(expect.stringContaining('[getProjectsCompletion]'), expect.anything())
     err.mockRestore()
   })
+  it('Next 의 동적 사용 신호(정적 생성 때 cookies)는 삼키지 않고 다시 던진다 — 빌드 로그에 거짓 "조회 실패"를 남기지 않는다(FF4)', async () => {
+    const { DynamicServerError } = await import('next/dist/client/components/hooks-server-context')
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const signal = new DynamicServerError("Route /projects couldn't be rendered statically because it used `cookies`.")
+    m.createServerClient.mockRejectedValueOnce(signal)
+    await expect(getProjectsCompletion()).rejects.toBe(signal)
+    expect(err).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
 })

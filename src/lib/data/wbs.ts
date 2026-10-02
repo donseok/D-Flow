@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { unstable_rethrow } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { computeTree } from '@/lib/domain/rollup'
 import { computeCompletionMap, type ProjectCompletion } from '@/lib/domain/project-status'
@@ -170,6 +171,9 @@ export const getProjectsCompletion = cache(
         actualPct: (r.actual_pct as number | null) ?? null,
       })))
     } catch (e) {
+      // Next 의 제어 신호(정적 생성 시도에서 cookies() 가 던지는 동적 사용 신호 등)는 실패가 아니다 — 다시 던져 Next 가 라우트를 동적으로
+      // 판정하게 둔다. 삼키면 빌드 로그에 거짓 "조회 실패"가 남았다(클라이언트 생성이 try 안으로 들어온 뒤 — A2 최종 리뷰 완료 P2-2, FF4)
+      unstable_rethrow(e)
       // 표시 전용이라 throw하지 않는다 — 앱 루트 layout에서 호출되므로 throw하면 배지 하나 때문에 모든 페이지가 에러 화면이 된다.
       console.error('[getProjectsCompletion] 조회 실패:', e instanceof Error ? e.message : e)
       return null
