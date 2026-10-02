@@ -25,4 +25,13 @@ describe('activeTeamsForLayout', () => {
     await expect(activeTeamsForLayout(async () => { throw signal }, 't')).rejects.toBe(signal)
     expect(err).not.toHaveBeenCalled()
   })
+  it('[RF2] 원천이 Next 신호를 TeamsUnavailableError 의 cause 로 감싸 던져도 그 신호를 다시 던진다 — 로그·빈 목록으로 삼키지 않는다', async () => {
+    const { DynamicServerError } = await import('next/dist/client/components/hooks-server-context')
+    const { TeamsUnavailableError } = await import('@/lib/teams/source')
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const signal = new DynamicServerError("Route /p/x couldn't be rendered statically because it used `cookies`.")
+    const wrapped = new TeamsUnavailableError(undefined, { cause: signal })
+    await expect(activeTeamsForLayout(async () => { throw wrapped }, 't')).rejects.toBe(signal)
+    expect(err).not.toHaveBeenCalled()
+  })
 })

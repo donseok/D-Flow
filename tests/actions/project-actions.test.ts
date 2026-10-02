@@ -32,6 +32,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 
+import { revalidatePath } from 'next/cache'
 import { setProjectPrivacy } from '@/app/actions/project'
 import { workspaceAdminVerdict, isProjectAdmin, type Actor } from '@/lib/domain/authz'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
@@ -52,6 +53,7 @@ function signedInAs(a: Actor) {
 beforeEach(() => {
   db.updatedProject = null
   createAdminClient.mockClear()
+  vi.mocked(revalidatePath).mockClear()
   requireWorkspaceAdmin.mockReset()
   requireProjectAdmin.mockReset()
   signedInAs(WS_ADMIN)
@@ -64,6 +66,7 @@ describe('setProjectPrivacy — 프로젝트 관리자 가드(SP2)', () => {
     expect(await setProjectPrivacy(PID, true)).toEqual({ ok: true })
     expect(requireProjectAdmin).toHaveBeenCalledWith(PID)
     expect(db.updatedProject).toEqual({ id: PID, is_private: true })
+    expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
   })
 
   it('멤버는 거부되고 DB 를 건드리지 않는다', async () => {
