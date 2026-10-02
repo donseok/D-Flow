@@ -181,5 +181,6 @@ describe('공지 배지 — 모름은 null(레인 B SP3b D34 계약 — 0 으로
     h.getUnreadAnnouncementCount.mockResolvedValue(3)
     const body = await (await get(`ws=${WA}&project=${P}`)).json()
     expect(body.badges.projectUnreadAnnouncements).toBe(3)
+    expect('unreadAnnouncementsFailed' in body.badges).toBe(false)              // 정상 응답에도 실패 표지 필드는 없다(merge 리뷰 P3 — merge 전 단언 복원)
   })
 })
