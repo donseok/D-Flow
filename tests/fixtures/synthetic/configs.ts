@@ -12,6 +12,13 @@ export interface SyntheticConfig {
     'workflow.stage_credits'?: StageCredits
   }
   workspace: { 'modules.allowed': ModuleId[]; 'ai.enabled'?: boolean }
+  /** SP5 A 달력(개정 §6.5.8) — 설정 화면 입력 꼴(week_start 는 요일 하나). default 구성은 없다(제품 기본값) */
+  calendar?: {
+    workspace: { 'calendar.timezone': string; 'calendar.working_days': number[]; 'calendar.week_start': 'sunday' | 'monday' }
+    project: { 'calendar.timezone': string; 'calendar.working_days': number[]; 'calendar.week_start': 'sunday' | 'monday' }
+    holidays: { date: string; name: string; kind: 'off' | 'work' }[]
+    plannedPct: Record<string, Record<string, number>>
+  }
 }
 
 export const SYNTHETIC_CONFIGS: readonly [SyntheticConfig, SyntheticConfig, SyntheticConfig] = [
@@ -29,6 +36,12 @@ export const SYNTHETIC_CONFIGS: readonly [SyntheticConfig, SyntheticConfig, Synt
       'workflow.stage_credits': { default: { as: 0, ip: 20, rw: 30, im: 90, xx: 100 } },
     },
     workspace: { 'modules.allowed': ['meetings', 'weekly', 'issues', 'wiki', 'minutes', 'portfolio'] },
+    calendar: {
+      workspace: { 'calendar.timezone': 'America/Los_Angeles', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': 'sunday' },
+      project: { 'calendar.timezone': 'America/Los_Angeles', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': 'sunday' },
+      holidays: [],
+      plannedPct: { '2026-10-12': { A: 60 }, '2026-10-26': { B: 60 } },
+    },
   },
   {
     id: 'construction', name: 'C — 건설 현장(근태·공지 중심, AI 끔)',
@@ -39,5 +52,11 @@ export const SYNTHETIC_CONFIGS: readonly [SyntheticConfig, SyntheticConfig, Synt
       'workflow.stage_credits': { default: { as: 0, ip: 10, rw: 20, im: 80, xx: 100 } },
     },
     workspace: { 'modules.allowed': ['kanban', 'weekly', 'announcements', 'attendance', 'issues', 'wiki', 'minutes', 'usage'], 'ai.enabled': false },
+    calendar: {
+      workspace: { 'calendar.timezone': 'Europe/Berlin', 'calendar.working_days': [1, 2, 3, 4, 5, 6], 'calendar.week_start': 'monday' },
+      project: { 'calendar.timezone': 'Europe/Berlin', 'calendar.working_days': [1, 2, 3, 4, 5, 6], 'calendar.week_start': 'monday' },
+      holidays: [{ date: '2026-10-10', name: '합성 휴무', kind: 'off' }, { date: '2026-10-25', name: '합성 근무', kind: 'work' }],
+      plannedPct: { '2026-10-12': { A: 60 }, '2026-10-26': { B: 67 } },
+    },
   },
 ]

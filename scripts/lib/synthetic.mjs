@@ -10,6 +10,21 @@ const QUALITY = sp4Sentinels()[4]
 const area = (code, name, sortOrder, teams) =>
   Object.freeze({ code, name, sortOrder, teams: Object.freeze(teams.map((t) => Object.freeze([...t]))) })
 
+/** 날짜 예외 한 줄(일정 화면의 addHoliday 입력과 같은 모양) @param {string} date @param {string} name @param {'off'|'work'} kind */
+const holiday = (date, name, kind) => Object.freeze({ date, name, kind })
+/**
+ * 달력 구성(개정 §6.5.8 R·C 구성표) — 워크스페이스·프로젝트 키는 설정 화면 입력(week_start 는 요일 하나). 기대 계획%는 S2 잎 둘
+ * (10/05~10/16·10/19~10/30)의 기준일별 값을 근무일 수로 손으로 센 것이다(내보내기가 정수로 반올림).
+ * @param {string} tz @param {number[]} days @param {'sunday'|'monday'} start
+ * @param {ReadonlyArray<{ date: string, name: string, kind: 'off'|'work' }>} holidays @param {Record<string, Record<string, number>>} plannedPct
+ */
+const calendarOf = (tz, days, start, holidays, plannedPct) => Object.freeze({
+  workspace: Object.freeze({ 'calendar.timezone': tz, 'calendar.working_days': Object.freeze([...days]), 'calendar.week_start': start }),
+  project: Object.freeze({ 'calendar.timezone': tz, 'calendar.working_days': Object.freeze([...days]), 'calendar.week_start': start }),
+  holidays: Object.freeze([...holidays]),
+  plannedPct: Object.freeze(plannedPct),
+})
+
 export const SYNTHETIC_R = Object.freeze({
   slug: 'syn-r', name: '합성 연구 과제',
   config: Object.freeze({
@@ -29,6 +44,9 @@ export const SYNTHETIC_R = Object.freeze({
     area('DATA', '데이터', 2, [['RES', 'primary'], ['OPS', 'support']]),
     area('RUN', '운영', 3, [['OPS', 'primary']]),
   ]),
+  // SP5 A(스펙 D43·S1·S5) — LA·월~금·일요일(기본). 잎 A 기준일 10/12 = 6/10, 잎 B 기준일 10/26 = 6/10
+  calendar: calendarOf('America/Los_Angeles', [1, 2, 3, 4, 5], 'sunday', [],
+    { '2026-10-12': Object.freeze({ A: 60 }), '2026-10-26': Object.freeze({ B: 60 }) }),
 })
 
 export const SYNTHETIC_C = Object.freeze({
@@ -50,18 +68,21 @@ export const SYNTHETIC_C = Object.freeze({
     area('QUAL', QUALITY, 3, [['MEP', 'primary']]),
     area('MATL', '자재', 4, [['MEP', 'support']]),
   ]),
-  // SP5 A(스펙 D28·D43) — C 는 월요일 주 시작 규칙(SP4 S4(월) 회귀를 계속 덮는다). S1 이 주차 문서보다 먼저 설정 액션으로 쓴다(입력은 요일 하나 — 문서 0건이라
-  // 서버가 [{ day: 'monday', from: null }] 로 교체한다). R 은 키를 쓰지 않는다(제품 기본값 일요일 — S4 의 R, 과제 30)
-  weekStart: 'monday',
+  // SP5 A(스펙 D28·D43) — 베를린·월~토·월요일(SP4 S4(월) 회귀를 계속 덮는다 — S1-calendar 가 주차 문서(S4(월)) 전에 설정 액션으로 쓴다:
+  // 입력은 요일 하나, 문서 0건이라 서버가 [{ day: 'monday', from: null }] 로 교체). 10/10(토) 휴무 → 잎 A 10/12 = 6/10(무시하면 7/11 = 64),
+  // 10/25(일 — 베를린 DST 종료일) 근무 → 잎 B 10/26 = 8/12 = 67(토요일 근무나 일요일 근무를 하나라도 무시하면 7/11 = 64)
+  calendar: calendarOf('Europe/Berlin', [1, 2, 3, 4, 5, 6], 'monday',
+    [holiday('2026-10-10', '합성 휴무', 'off'), holiday('2026-10-25', '합성 근무', 'work')],
+    { '2026-10-12': Object.freeze({ A: 60 }), '2026-10-26': Object.freeze({ B: 67 }) }),
 })
 
 /** 격리 시험의 '다른 워크스페이스' — R·C 의 설정을 읽을 수 없어야 한다 */
 export const SYNTHETIC_WORKSPACE_B = Object.freeze({ slug: 'syn-b', name: '합성 타 워크스페이스' })
 
-/** 아직 켜지지 않은 단계 → 켜는 SP(개정 §6.5.8, 스펙 D25·SP4 §6.4). 건너뜀으로 세지 않고 '미활성'으로 기록한다.
- *  SP4 A1 이 S2 와 S4 의 월요일 키를 켰다 — S4 에 남은 것은 R 의 일요일 키(SP5)다. S10 은 SP4 A2 가 SP4 부분(11구분명·5팀 코드)을 켰다 — 나머지 부분 집합은 SP5~SP8 */
+/** 아직 켜지지 않은 단계 → 켜는 SP(개정 §6.5.8, 스펙 D25·SP4 §6.4·SP5 D43). 건너뜀으로 세지 않고 '미활성'으로 기록한다.
+ *  SP4 A1 이 S2·S4(월)를, SP4 A2 가 S10 의 SP4 부분을, SP5 A 가 S4(일)·S5·S1 의 달력 키·S10 의 시간대 부분을 켰다 */
 export const PENDING_STEPS = Object.freeze({
-  S3: 'SP5b·SP5c', S4: 'SP5(일)', S5: 'SP5', S6: 'SP5·SP5b', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP5~SP8(나머지 부분 집합)',
+  S3: 'SP5b·SP5c', S6: 'SP5 B1·SP5b', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP5 B1·B4~SP8(나머지 부분 집합)',
 })
 
 /**
@@ -141,4 +162,19 @@ export function areaView(rows, teamCodeById) {
       code: a.code, name: a.name, sortOrder: a.sort_order, active: a.active,
       teams: (a.area_teams ?? []).map((t) => [teamCodeById.get(t.team_id) ?? `?${t.team_id}`, t.kind]).sort(byFirst),
     }))
+}
+
+/** 설정 액션이 저장한 뒤 다시 읽을 값 — 프로젝트 week_start 만 요일 입력 → 규칙 목록(문서 0건이라 변경 연산이 목록을 교체한다, 개정 §4.2.4 첫 경우)
+ *  @param {'workspace'|'project'} scope @param {Record<string, unknown>} input */
+export function expectedStoredCalendar(scope, input) {
+  const out = JSON.parse(JSON.stringify(input))
+  if (scope === 'project' && typeof out['calendar.week_start'] === 'string') out['calendar.week_start'] = [{ day: out['calendar.week_start'], from: null }]
+  return out
+}
+
+/** S2 가 가져온 잎 둘의 업무명 — wbsRows 와 같은 규칙(가중치 0.5 인 두 행) @param {number} depth @returns {[string, string]} */
+export function leafNamesOf(depth) {
+  const leaves = wbsRows(depth, ['X']).filter((r) => r[6] === 0.5).map((r) => String(r[1]))
+  if (leaves.length !== 2) throw new Error(`잎이 둘이 아니다: ${leaves.length}`)
+  return [leaves[0], leaves[1]]
 }

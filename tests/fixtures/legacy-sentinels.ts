@@ -17,6 +17,8 @@ export const LEGACY_SENTINELS = {
 /** SP 별 부분 집합 — 그 SP 가 걷어 낸 기본값만. 뒤 SP 가 자기 줄을 더한다(SP5: 이슈 영역·ID 접두·시간대) */
 export const SENTINELS_BY_SP = {
   SP4: [...new Set<string>([...LEGACY_SENTINELS.weeklySections, ...LEGACY_SENTINELS.teamCodes])],
+  // SP5 A — 시간대(스펙 D43·§6.4 S10 A 몫). .mjs 사본은 scripts/lib/sentinels.mjs 의 SP5A_SENTINELS(평문 — 고객 문자열이 아니다)
+  SP5A: Object.freeze([...LEGACY_SENTINELS.timezone]),
 } as const satisfies Record<string, readonly string[]>
 
 /** 그 프로젝트가 스스로 등록한 영역·팀의 code·name 과 **같은** 센티널만 뺀다(포함 관계로는 빼지 않는다 — 스펙 D8) */

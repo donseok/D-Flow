@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { SP4_SENTINELS_B64, sp4Sentinels } from '../../scripts/lib/sentinels.mjs'
+import { SP4_SENTINELS_B64, SP5A_SENTINELS, sp4Sentinels, sp5aSentinels } from '../../scripts/lib/sentinels.mjs'
 import {
   LEGACY_SENTINELS, SENTINEL_MASKS, SENTINELS_BY_SP, findSentinels, isZipTextPart, sentinelsFor, zipTextParts,
 } from '../fixtures/legacy-sentinels'
@@ -109,5 +109,17 @@ describe('zipTextParts — 텍스트 파트만(미디어·이진 제외)', () =>
     expect(parts.flatMap((p) => findSentinels(p.text, SP4))).toEqual(['ERP'])
     expect(isZipTextPart('ppt/media/image1.png')).toBe(false)
     expect(isZipTextPart('xl/sharedStrings.xml')).toBe(true)
+  })
+})
+
+describe('SP5 A 의 시간대 센티널 — .mjs 사본 = 픽스처(드리프트 0)', () => {
+  it('SP5A_SENTINELS 는 LEGACY_SENTINELS.timezone 과 같고 SENTINELS_BY_SP.SP5A 도 같다', () => {
+    expect([...SP5A_SENTINELS]).toEqual([...LEGACY_SENTINELS.timezone])
+    expect(sp5aSentinels()).toEqual([...LEGACY_SENTINELS.timezone])
+    expect([...SENTINELS_BY_SP.SP5A]).toEqual([...LEGACY_SENTINELS.timezone])
+  })
+  it('일치 규칙은 sentinels.mjs 하나 — +09:00 은 부분 문자열, Asia/Seoul 은 대소문자 구분', () => {
+    expect(findSentinels('at 2026-10-02T09:00:00+09:00', sp5aSentinels())).toEqual(['+09:00'])
+    expect(findSentinels('tz=asia/seoul', sp5aSentinels())).toEqual([])
   })
 })

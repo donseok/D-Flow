@@ -526,6 +526,57 @@ export function isMondayIso(iso) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) && new Date(`${iso}T00:00:00Z`).getUTCDay() === 1
 }
 
+// ── SP5 A — 러너의 날짜·시간대(러너는 TS 를 import 하지 못한다 — 앱의 todayIn 과 같은 Intl 관용구). 주 키는 만들지 않는다(W30).
+
+/** 그 시간대의 오늘 'YYYY-MM-DD' @param {string} tz IANA 이름 @param {Date} [now] */
+export function todayInTz(tz, now = new Date()) {
+  if (typeof tz !== 'string' || !tz) throw new Error(`시간대가 없다: ${String(tz)}`)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
+/** 검증 전용 요일 판독 — DB 가 돌려준 날짜의 요일(0=일 … 6=토). 주 키를 만들지 않는다 @param {string} iso */
+export function dowOfIso(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) throw new Error(`날짜 형식이 아니다: ${String(iso)}`)
+  return new Date(`${iso}T00:00:00Z`).getUTCDay()
+}
+
+/** 설정 values 의 calendar.timezone — 키가 없거나 문자열이 아니면 제품 기본값 'UTC'(H2 규칙 ⑤ — 부트스트랩 밖 워크스페이스는 키가 없다) */
+export function storedTimezone(values) {
+  const v = values && typeof values === 'object' ? values['calendar.timezone'] : undefined
+  return typeof v === 'string' && v ? v : 'UTC'
+}
+
+/**
+ * WBS 엑셀 내보내기에서 업무명 → '계획%' 값. 머리 셀 '계획%' 가 있는 첫 시트의 그 열을 읽는다(표준·저장 양식 둘 다 그 머리를 쓴다 —
+ * src/lib/excel/exportWithProfile.ts·headerWords.ts). 업무명은 앞뒤 공백을 무시하고 같은 칸 문자열로 찾는다(들여쓰기 양식 대비).
+ * @param {ArrayBuffer | Uint8Array} buf @param {readonly string[]} names @returns {Promise<Record<string, number>>}
+ */
+export async function plannedPctByName(buf, names) {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buf)
+  const text = (v) => {
+    if (v && typeof v === 'object' && Array.isArray(v.richText)) return v.richText.map((r) => r.text).join('')
+    if (v && typeof v === 'object' && 'result' in v) return v.result
+    return v
+  }
+  for (const ws of wb.worksheets) {
+    let col = null
+    ws.eachRow((row) => {
+      if (col !== null) return
+      row.eachCell((cell, n) => { if (col === null && String(text(cell.value) ?? '').trim() === '계획%') col = n })
+    })
+    if (col === null) continue
+    const out = {}
+    ws.eachRow((row) => {
+      const cells = []
+      row.eachCell((cell) => cells.push(String(text(cell.value) ?? '').trim()))
+      for (const name of names) if (cells.includes(name)) out[name] = Number(text(row.getCell(col).value))
+    })
+    return out
+  }
+  throw new Error("내보내기에 '계획%' 열이 없다")
+}
+
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 /**

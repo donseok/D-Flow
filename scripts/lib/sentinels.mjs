@@ -70,3 +70,11 @@ export const SP4_SENTINELS_B64 =
 export function sp4Sentinels() {
   return Buffer.from(SP4_SENTINELS_B64, 'base64').toString('utf8').split('\n')
 }
+
+/** SP5 A 의 시간대 센티널(스펙 D43·§6.4 S10 A 몫). 평문 정본은 tests/fixtures/legacy-sentinels.ts 의 LEGACY_SENTINELS.timezone —
+ *  고객 문자열이 아니라 base64 로 감추지 않는다. tests/negative/sentinels.test.ts 가 두 사본을 대조한다 */
+export const SP5A_SENTINELS = Object.freeze(['Asia/Seoul', '+09:00'])
+/** @returns {string[]} */
+export function sp5aSentinels() {
+  return [...SP5A_SENTINELS]
+}

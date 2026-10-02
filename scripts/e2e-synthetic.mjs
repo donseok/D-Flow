@@ -9,10 +9,14 @@
 //   S9 격리: R 의 설정을 바꾼 뒤 C 의 설정 문서(전 키·revision)·이력이 그대로다. 다른 워크스페이스(B)의 관리자는 R·C 의 설정 두 표와 이력 두 표를 0건 읽는다.
 //   S2 WBS(SP4 A1): R 4단(exceljs 로 직접)·C 3단(양식 다운로드)을 양식 저장과 함께 가져오고, 같은 commandId 재전송이 항목 1벌·kind 'duplicate'·
 //        wbs.excel_profile 이력 1건이다.
-//   S4 주간(월)(SP4 A1): C 에서 연속 2주(월요일 키 — 앱이 정한다)와 이월, 영역 개명 뒤 같은 area_id·같은 셀. R 의 일요일 키는 SP5.
+//   S4 주간(월)(SP4 A1): C 에서 연속 2주(월요일 키 — 앱이 정한다)와 이월, 영역 개명 뒤 같은 area_id·같은 셀. R 의 일요일 키는 SP5 A(S4-weekly-sunday).
 //   S10(SP4 부분, A2): R·C 의 주간·WBS 응답·출력(시트 PPT·기본 주간 보고서·WBS 엑셀)·화면 HTML 에 SP4 센티널 0 — 등록 이름과 같은 센티널만 뺀다(D8).
 //        교차 — R 의 출력에 C 의 팀 code 가 없고 그 반대도. 경계 행렬 SP4 행(W39): 설정 없음·비활성 유형·데이터 있는 개명.
-//   S3·S5~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
+//   SP5 A(스펙 D43): S1-calendar — R·C 의 워크스페이스·프로젝트에 calendar.*(R LA·월~금·일요일, C 베를린·월~토·월요일)를 설정 화면과 같은 액션으로,
+//        C 의 날짜 예외 둘(10/10 토 휴무·10/25 일 근무)을 일정 화면과 같은 액션(addHoliday)으로. S4-weekly-sunday — R 에서 연속 2주(일요일 키)·이월·
+//        영역 개명. S5-calendar — 기준일 고정(setBaseDate) 뒤 WBS 엑셀의 계획%(R 60·60, C 60·67)와 '오늘'(프로젝트 tz 의 이번 주 문서가 화면에 실린다).
+//        S10-negative 에 시간대 센티널(Asia/Seoul·+09:00)을 더한다. 러너의 '오늘'은 저장된 tz 의 todayInTz 다.
+//   S3·S6~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
@@ -23,13 +27,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
-  ERR_DENIED, areaInput, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, localClientEnv, seoulToday, shiftDays,
-  workspaceAdminAccountInput,
+  ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, localClientEnv, plannedPctByName, shiftDays,
+  storedTimezone, todayInTz, workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
-import { excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
+  expectedStoredCalendar, leafNamesOf,
 } from './lib/synthetic.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
@@ -68,6 +73,8 @@ const ACTIONS = {
   createWeeklyReport: { filename: 'src/app/actions/weekly.ts', exportedName: 'createWeeklyReport', worker: '/p/[projectId]/weekly/page' },
   saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
   updateProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'updateProjectTeam', worker: '/p/[projectId]/settings/page' },
+  addHoliday: { filename: 'src/app/actions/project.ts', exportedName: 'addHoliday', worker: '/p/[projectId]/settings/page' },
+  setBaseDate: { filename: 'src/app/actions/project.ts', exportedName: 'setBaseDate', worker: '/p/[projectId]/settings/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -87,6 +94,12 @@ const mustOk = (what, result) => { if (!result || result.ok !== true) throw new 
 const canonical = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x))
 const same = (what, actual, expected) => {
   if (canonical(actual) !== canonical(expected)) throw new Fail(`${what} 가 다르다: ${canonical(actual)} (기대 ${canonical(expected)})`)
+}
+/** 그 프로젝트의 저장된 tz 의 오늘 — 키가 없으면 제품 기본값 UTC(SP5 A — 러너는 주 키를 만들지 않는다, W30) */
+async function projectToday(client, projectId) {
+  const values = rows('프로젝트 설정', await client.from('project_settings').select('values').eq('project_id', projectId).single()).values
+  const tz = storedTimezone(values)
+  return { tz, today: todayInTz(tz) }
 }
 /**
  * 소스·스키마가 깨끗한가 — 합성 게이트는 코드를 고치지 않고 통과해야 한다(스펙 §7.3: `git diff --quiet -- src supabase`).
@@ -135,7 +148,7 @@ async function main() {
   // ── S1 — 생성(빈 값) + 등록 키(서버 액션)
   await admin.http('GET', '/projects')
   const wsSettingsPage = (ws) => `/w/${encodeURIComponent(ws.slug)}/settings`
-  const config = async (cfg, ws, weekStart = null) => {
+  const config = async (cfg, ws) => {
     // 1) 워크스페이스 키 — modules.allowed·ai.enabled (플랫폼 관리자 전용 구역의 키)
     await admin.http('GET', wsSettingsPage(ws))
     const wsDoc = rows(`${cfg.id} 워크스페이스 설정`, await admin.sb.from('workspace_settings').select('revision, values').eq('workspace_id', ws.id).single())
@@ -158,15 +171,14 @@ async function main() {
       'modules.enabled': cfg.project['modules.enabled'],
       ...(cfg.project['core.milestone_keywords'] !== undefined ? { 'core.milestone_keywords': cfg.project['core.milestone_keywords'] } : {}),
       ...(cfg.project['workflow.stage_credits'] !== undefined ? { 'workflow.stage_credits': cfg.project['workflow.stage_credits'] } : {}),
-      ...(weekStart ? { 'calendar.week_start': weekStart } : {}),   // SP5 A(D28) — 주차 문서보다 먼저, 설정 화면과 같은 액션(요일 하나 → 서버가 규칙 목록)
     }
     const pr = (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings', [proj.id, { expectedRevision: doc.revision, commandId: randomUUID(), set: pset, unset: [] }])).result
     mustOk(`${cfg.id} 프로젝트 설정`, pr)
-    // 저장 형태는 입력(요일)이 아니라 규칙 목록이다 — 다시 읽은 값과 이력의 비교는 저장 형태로
-    return { id: proj.id, ws, name, expected: { ...cfg.project, ...pset, ...(weekStart ? { 'calendar.week_start': [{ day: weekStart, from: null }] } : {}) } }
+    // 달력 키(SP5 A)는 S1-calendar 가 따로 넣는다 — week_start 는 입력(요일)과 저장(규칙 목록)이 달라 이 비교에 넣지 않는다
+    return { id: proj.id, ws, name, expected: { ...cfg.project, ...pset } }
   }
   const R = await config(SYNTHETIC_R.config, wsR)
-  const C = await config(SYNTHETIC_C.config, wsC, SYNTHETIC_C.weekStart)
+  const C = await config(SYNTHETIC_C.config, wsC)
 
   const readDoc = async (client, table, col, id) => rows(`${table} ${id}`, await client.from(table).select('values, revision, schema_version').eq(col, id).single())
   const readHistory = async (client, table, col, id) => rows(`${table} 이력 ${id}`, await client.from(table).select('id, revision, key, new_value, source, changed_by').eq(col, id).order('id', { ascending: true }))
@@ -222,6 +234,33 @@ async function main() {
     C: { teams: [...SYNTHETIC_C.teams], areas: SYNTHETIC_C.weeklyAreas.map((a) => a.code), areaIds: Object.fromEntries(cSetup.areaIdByCode) },
     note: '팀은 addProjectTeam, 주간 영역·담당 팀은 upsertArea(설정 화면의 편집기와 같은 액션) — 다시 읽은 code·이름·순서·활성·담당 팀이 넣은 값과 같다',
   })
+
+  // ── S1(SP5 A) — 달력 키·날짜 예외(스펙 D43). 워크스페이스 먼저(새 프로젝트 기본값 — 이미 만든 R·C 에는 영향 없음), 프로젝트는 요일 입력 →
+  //    서버가 규칙 목록을 만든다(문서 0건 — 교체). 다시 읽은 저장값 = expectedStoredCalendar. 날짜 예외는 일정 화면의 addHoliday.
+  //    C 의 월요일 규칙은 주차 문서(S4(월))보다 먼저다(SP5 D28 — SP4 S4(월) 회귀를 계속 덮는다).
+  const calendarKeys = ['calendar.timezone', 'calendar.working_days', 'calendar.week_start']
+  const pickCalendar = (values) => Object.fromEntries(calendarKeys.map((k) => [k, values?.[k]]))
+  const applyCalendar = async (label, ws, proj, def) => {
+    await admin.http('GET', wsSettingsPage(ws))
+    const wsDoc = rows(`${label} 워크스페이스 설정`, await admin.sb.from('workspace_settings').select('revision').eq('workspace_id', ws.id).single())
+    mustOk(`${label} 워크스페이스 달력`, (await admin.action(wsSettingsPage(ws), 'updateWorkspaceSettings',
+      [ws.id, { expectedRevision: wsDoc.revision, commandId: randomUUID(), set: { ...def.calendar.workspace }, unset: [] }])).result)
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const pDoc = rows(`${label} 프로젝트 설정`, await admin.sb.from('project_settings').select('revision').eq('project_id', proj.id).single())
+    mustOk(`${label} 프로젝트 달력`, (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings',
+      [proj.id, { expectedRevision: pDoc.revision, commandId: randomUUID(), set: { ...def.calendar.project }, unset: [] }])).result)
+    for (const h of def.calendar.holidays) {
+      mustOk(`${label} 날짜 예외 ${h.date}`, (await admin.action(`/p/${proj.id}/settings`, 'addHoliday', [proj.id, h.date, h.name, h.kind])).result)
+    }
+    const wsValues = rows(`${label} 워크스페이스 설정(다시 읽기)`, await admin.sb.from('workspace_settings').select('values').eq('workspace_id', ws.id).single()).values
+    const pValues = rows(`${label} 프로젝트 설정(다시 읽기)`, await admin.sb.from('project_settings').select('values').eq('project_id', proj.id).single()).values
+    const holidays = rows(`${label} 날짜 예외`, await admin.sb.from('holidays').select('date, name, kind').eq('project_id', proj.id).order('date'))
+    same(`${label} 워크스페이스 달력`, pickCalendar(wsValues), expectedStoredCalendar('workspace', def.calendar.workspace))
+    same(`${label} 프로젝트 달력`, pickCalendar(pValues), expectedStoredCalendar('project', def.calendar.project))
+    same(`${label} 날짜 예외`, holidays, def.calendar.holidays)
+    return { workspace: pickCalendar(wsValues), project: pickCalendar(pValues), holidays }
+  }
+  step('S1-calendar', { R: await applyCalendar('R', wsR, R, SYNTHETIC_R), C: await applyCalendar('C', wsC, C, SYNTHETIC_C) })
 
   // ── S9 — 격리
   const snapshot = async (proj) => ({
@@ -304,10 +343,10 @@ async function main() {
   const cTemplate = Buffer.from(await (await admin.http('GET', `/api/import/template?projectId=${C.id}`)).arrayBuffer())
   step('S2-wbs-import', { R: await importTwice('R', R, SYNTHETIC_R, null), C: await importTwice('C', C, SYNTHETIC_C, cTemplate) })
 
-  // ── S4(월) — C 에서 연속 2주(월요일 키)와 이월, 영역 개명 뒤 같은 area_id·같은 셀(스펙 §6.4 S4·W14). 주 키는 앱이 정한다(mondayIso — W30):
-  //    러너는 오늘과 +7일을 넘기고 week_start 를 DB 에서 다시 읽어 월요일·7일 간격인지만 본다. R 의 일요일 키는 SP5 다(PENDING_STEPS).
+  // ── S4(월) — C 에서 연속 2주(월요일 키)와 이월, 영역 개명 뒤 같은 area_id·같은 셀(스펙 §6.4 S4·W14). 주 키는 앱이 정한다(weekKeyOf — W30):
+  //    러너는 C 의 저장된 tz 의 오늘과 +7일을 넘기고 week_start 를 DB 에서 다시 읽어 월요일·7일 간격인지만 본다. R 의 일요일 키는 아래 S4(일).
   await admin.http('GET', `/p/${C.id}/weekly`)
-  const today = seoulToday()
+  const { today } = await projectToday(admin.sb, C.id)
   const createWeek = async (dateIso, carry) =>
     mustOk(`C 주차(${dateIso}, 이월 ${carry})`, (await admin.action(`/p/${C.id}/weekly`, 'createWeeklyReport', [C.id, dateIso, carry])).result)
   const weekRows = async (reportId) => rows('C 주간 행', await admin.sb.from('weekly_report_rows')
@@ -329,7 +368,7 @@ async function main() {
   const after = { w1: await weekRows(w1.reportId), w2: await weekRows(w2.reportId) }
   const s4 = {
     created: [w1.status, w2.status],
-    mondayKeys: isMondayIso(weeks.w1) && shiftDays(weeks.w1, 7) === weeks.w2,
+    mondayKeys: dowOfIso(weeks.w1) === 1 && shiftDays(weeks.w1, 7) === weeks.w2,
     rowCounts: [before.w1.length, before.w2.length],
     carried: before.w2.every((r) => r.this_content === `S4 계획 ${codeOfArea.get(r.area_id)}` && r.next_content === ''),
     renamed: renamed.id === workId && renamed.status === 'updated' && workRow?.code === workDef.code && workRow?.name === `${workDef.name} 관리`,
@@ -339,6 +378,76 @@ async function main() {
   step('S4-weekly-monday', { weeks, ...s4 },
     s4.created.join() === 'created,created' && s4.mondayKeys && s4.rowCounts.join() === `${areaCount},${areaCount}` && s4.carried && s4.renamed && s4.sameCells
       ? undefined : `C 주간(월): ${JSON.stringify({ weeks, ...s4 })}`)
+
+  // ── S4(일)(SP5 A) — R 에서 연속 2주(일요일 키 — 기본 규칙)와 이월, 영역 개명 뒤 같은 area_id·같은 셀. 주 키는 앱이 정한다(W30)
+  await admin.http('GET', `/p/${R.id}/weekly`)
+  const { tz: rTz, today: rToday } = await projectToday(admin.sb, R.id)
+  const rCreate = async (dateIso, carry) =>
+    mustOk(`R 주차(${dateIso}, 이월 ${carry})`, (await admin.action(`/p/${R.id}/weekly`, 'createWeeklyReport', [R.id, dateIso, carry])).result)
+  const rRows = async (reportId) => rows('R 주간 행', await admin.sb.from('weekly_report_rows')
+    .select('id, area_id, this_content, this_issue, next_content, next_issue').eq('report_id', reportId).order('id'))
+  const rWeekStart = async (reportId) => rows('R 주간 문서', await admin.sb.from('weekly_reports').select('week_start').eq('id', reportId).single()).week_start
+  const rCodeOfArea = new Map([...rSetup.areaIdByCode].map(([code, id]) => [id, code]))
+  const r1 = await rCreate(rToday, false)
+  const r1Rows = await rRows(r1.reportId)
+  mustOk('R 차주 계획 저장', (await admin.action(`/p/${R.id}/weekly`, 'saveWeeklyCells',
+    [R.id, r1Rows.map((r) => ({ rowId: r.id, cellKey: 'next_content', content: `S4 계획 ${rCodeOfArea.get(r.area_id)}` }))])).result)
+  const r2 = await rCreate(shiftDays(rToday, 7), true)
+  const rWeeks = { w1: await rWeekStart(r1.reportId), w2: await rWeekStart(r2.reportId) }
+  const rRowsBefore = { w1: await rRows(r1.reportId), w2: await rRows(r2.reportId) }
+  const rFirst = SYNTHETIC_R.weeklyAreas[0]
+  const rFirstId = rSetup.areaIdByCode.get(rFirst.code)
+  const rRenamed = mustOk('R 영역 개명', (await admin.action(`/p/${R.id}/settings`, 'upsertArea',
+    [R.id, areaInput(rFirst, rSetup.teamIdByCode, { id: rFirstId, name: `${rFirst.name} 관리` })])).result)
+  const [rFirstRow] = rows('R 개명한 영역', await admin.sb.from('project_areas').select('id, code, name').eq('id', rFirstId))
+  const rRowsAfter = { w1: await rRows(r1.reportId), w2: await rRows(r2.reportId) }
+  const s4r = {
+    created: [r1.status, r2.status],
+    sundayKeys: dowOfIso(rWeeks.w1) === 0 && shiftDays(rWeeks.w1, 7) === rWeeks.w2 && rWeeks.w1 <= rToday && shiftDays(rWeeks.w1, 6) >= rToday,
+    rowCounts: [rRowsBefore.w1.length, rRowsBefore.w2.length],
+    carried: rRowsBefore.w2.every((r) => r.this_content === `S4 계획 ${rCodeOfArea.get(r.area_id)}` && r.next_content === ''),
+    renamed: rRenamed.id === rFirstId && rRenamed.status === 'updated' && rFirstRow?.code === rFirst.code && rFirstRow?.name === `${rFirst.name} 관리`,
+    sameCells: canonical(rRowsAfter) === canonical(rRowsBefore),
+  }
+  const rAreaCount = SYNTHETIC_R.weeklyAreas.length
+  step('S4-weekly-sunday', { tz: rTz, today: rToday, weeks: rWeeks, ...s4r },
+    s4r.created.join() === 'created,created' && s4r.sundayKeys && s4r.rowCounts.join() === `${rAreaCount},${rAreaCount}`
+      && s4r.carried && s4r.renamed && s4r.sameCells ? undefined : `R 주간(일): ${JSON.stringify({ weeks: rWeeks, ...s4r })}`)
+
+  // ── S5(SP5 A) — 달력 집계(개정 §6.5.8 S5). 계획%: 기준일을 일정 화면의 setBaseDate 로 고정하고 WBS 엑셀의 '계획%'(화면과 같은 getComputedWbs)를
+  //    읽는다 — 기대값은 SYNTHETIC_*.calendar.plannedPct(근무일 수를 손으로 센 값). '오늘': 프로젝트 tz 의 오늘로 이번 주 문서를 얻고(S4 가 만들었으면
+  //    exists) 그 키가 오늘을 덮으며 요일이 규칙이고, 매개변수 없는 주간 화면이 그 문서를 연다(서버가 같은 tz 의 오늘로 키를 정했다).
+  const s5 = {}
+  for (const [label, proj, def] of [['R', R, SYNTHETIC_R], ['C', C, SYNTHETIC_C]]) {
+    const depth = def.config.project['core.level_labels'].length
+    const [leafA, leafB] = leafNamesOf(depth)
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const planned = {}
+    for (const [baseDate, expect] of Object.entries(def.calendar.plannedPct)) {
+      mustOk(`${label} 기준일 ${baseDate}`, (await admin.action(`/p/${proj.id}/settings`, 'setBaseDate', [proj.id, baseDate])).result)
+      const res = await admin.http('GET', `/api/export?projectId=${proj.id}`)
+      const got = await plannedPctByName(Buffer.from(await res.arrayBuffer()), [leafA, leafB])
+      planned[baseDate] = { A: got[leafA], B: got[leafB], expect }
+    }
+    mustOk(`${label} 기준일 자동 복귀`, (await admin.action(`/p/${proj.id}/settings`, 'setBaseDate', [proj.id, null])).result)
+    const { tz, today: before } = await projectToday(admin.sb, proj.id)
+    await admin.http('GET', `/p/${proj.id}/weekly`)
+    const doc = mustOk(`${label} 이번 주`, (await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, before, false])).result)
+    const weekStart = rows(`${label} 이번 주 문서`, await admin.sb.from('weekly_reports').select('week_start').eq('id', doc.reportId).single()).week_start
+    const html = await (await admin.http('GET', `/p/${proj.id}/weekly`)).text()
+    const after = todayInTz(tz)
+    s5[label] = {
+      tz, today: before, weekStart, ruleDow: dowOfIso(weekStart),
+      covers: weekStart <= before && shiftDays(weekStart, 6) >= before,
+      // 자정을 넘긴 순간이면 다음 키 화면이 정답이다 — 그때는 이 항목을 판정하지 않는다(before !== after)
+      reportOnPage: html.includes(doc.reportId) || before !== after,
+      plannedPct: planned,
+      discriminating: todayInTz('UTC') !== before,
+    }
+  }
+  const plannedOk = (p) => Object.values(p).every((x) => Object.entries(x.expect).every(([leaf, want]) => x[leaf] === want))
+  const s5Ok = ['R', 'C'].every((k) => s5[k].covers && s5[k].reportOnPage && plannedOk(s5[k].plannedPct)) && s5.R.ruleDow === 0 && s5.C.ruleDow === 1
+  step('S5-calendar', s5, s5Ok ? undefined : `S5 달력 집계: ${JSON.stringify(s5)}`)
 
   // ── S10(SP4 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) SP4 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
   //    sentinels.mjs 하나다. 등록 이름과 **같은** 센티널만 뺀다(C 의 영역 이름 하나가 11구분명과 같다 — D8). 교차: 팀 code 만(영역 이름은 일반어).
@@ -371,9 +480,9 @@ async function main() {
     weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('active', true)).map((x) => x.name),
     wbs: rows('S10 루트 항목 이름', await admin.sb.from('wbs_items').select('name').eq('project_id', proj.id).is('parent_id', null)).map((x) => x.name),
   })
-  const s10Today = seoulToday()
   const capture = async (proj, viewer) => {
     const out = []
+    const { today: s10Today } = await projectToday(admin.sb, proj.id)   // SP5 A — 그 프로젝트의 저장된 tz 의 오늘
     // ① 응답 본문 — 이번 주 주간 문서 생성(없으면 만들고, 있으면 exists — 쓰기 없이 같은 응답 꼴)
     await admin.http('GET', `/p/${proj.id}/weekly`)
     out.push({ target: '①', path: 'createWeeklyReport', text: JSON.stringify((await admin.action(`/p/${proj.id}/weekly`, 'createWeeklyReport', [proj.id, s10Today, false])).result) })
@@ -431,6 +540,7 @@ async function main() {
   const s10 = {}
   const regR = await registeredOf(R)
   const regC = await registeredOf(C)
+  const tzSentinels = sp5aSentinels()   // SP5 A — 시간대 센티널(등록 이름 제외 없음 — 시간대 이름은 R·C 가 등록하지 않는다)
   for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
     const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
     const { out: outs, shell, emptyWeeks, unsupportedExports } = await capture(proj, await viewerOf(label, proj.ws))
@@ -440,14 +550,16 @@ async function main() {
       unsupportedExports,
       hits: outs.map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, sentinels) }))
         .filter((x) => x.words.length).map((x) => ({ ...x, at: around(outs.find((o) => o.path === x.path && o.target === x.target).text, x.words) })),
+      tz: outs.map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, tzSentinels) }))
+        .filter((x) => x.words.length).map((x) => ({ ...x, at: around(outs.find((o) => o.path === x.path && o.target === x.target).text, x.words) })),
       cross: outs.filter((o) => o.target !== '⑤').map((o) => ({ target: o.target, path: o.path, words: findSentinels(o.text, other.teamCodes) })).filter((x) => x.words.length),
       adminShell: shell.map((h) => ({ path: h.path, words: findSentinels(h.text, sentinels) })).filter((x) => x.words.length)
         .map((x) => ({ ...x, at: around(shell.find((h) => h.path === x.path).text, x.words) })),
       rendered: outs.filter((o) => o.target === '⑤').map((o) => ({ path: o.path, ...o.proof })),
     }
   }
-  const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].cross.length === 0 && s10[k].rendered.every((r) => r.ok))
-  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
+  const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].tz.length === 0 && s10[k].cross.length === 0 && s10[k].rendered.every((r) => r.ok))
+  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4·SP5 A 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, tz: s10.R.tz, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, tz: s10.C.tz, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
 
   // ── 경계 행렬 SP4 행(W39) — R·C 각각. 설정 없음: 새 빈 프로젝트(단계 이름만)의 주간 생성 → CONFIG_REQUIRED·문서 0, 엑셀 → 표준과 그 표기.
   //    비활성 유형: 둘째 주간 영역에 차주 계획을 적고 비활성화 → 다음 주 이월이 대기(CARRY_PENDING)에 그 영역을 싣고 활성 영역 목록에서 빠진다,
@@ -467,7 +579,8 @@ async function main() {
     mustOk(`${label} 빈 프로젝트 모듈`, (await admin.action(`/p/${E.id}/settings`, 'updateProjectSettings',
       [E.id, { expectedRevision: eDoc.revision, commandId: randomUUID(), set: { 'modules.enabled': cfg.config.project['modules.enabled'] }, unset: [] }])).result)
     await admin.http('GET', `/p/${E.id}/weekly`)
-    const noAreas = (await admin.action(`/p/${E.id}/weekly`, 'createWeeklyReport', [E.id, s10Today, false])).result
+    const { today: eToday } = await projectToday(admin.sb, E.id)   // SP5 A — E 의 오늘(워크스페이스 tz 를 복사했다)
+    const noAreas = (await admin.action(`/p/${E.id}/weekly`, 'createWeeklyReport', [E.id, eToday, false])).result
     const eDocs = rows(`${label} 빈 프로젝트 문서`, await admin.sb.from('weekly_reports').select('id').eq('project_id', E.id))
     const eExport = await admin.http('GET', `/api/export?projectId=${E.id}`)
     const eSettings = await (await admin.http('GET', `/p/${E.id}/settings`)).text()

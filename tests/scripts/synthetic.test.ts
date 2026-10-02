@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
+  expectedStoredCalendar, leafNamesOf,
 } from '../../scripts/lib/synthetic.mjs'
 import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
@@ -21,6 +22,8 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(plain(SYNTHETIC_C.config.workspace)).toEqual(plain(construction.workspace))
     expect(SYNTHETIC_R.config.id).toBe(research.id)
     expect(SYNTHETIC_C.config.id).toBe(construction.id)
+    expect(plain(SYNTHETIC_R.calendar)).toEqual(plain(research.calendar))
+    expect(plain(SYNTHETIC_C.calendar)).toEqual(plain(construction.calendar))
   })
   it('C 는 프로젝트 modules.enabled 와 워크스페이스 modules.allowed 둘 다에 weekly 가 있다(스펙 D40·E10 — 한쪽만이면 허용 밖 모듈로 저장이 거부된다)', () => {
     expect(construction.project['modules.enabled']).toContain('weekly')
@@ -31,20 +34,19 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(new Set(slugs).size).toBe(3)
     for (const ws of [SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B]) expect(String(ws.name)).toMatch(/^합성 /)
   })
-  it('아직 켜지지 않은 단계는 S1·S2·S9 와 S4 의 월요일 키를 뺀 전부이고 담당 SP 가 적혀 있다(D25 — 건너뜀으로 세지 않는다)', () => {
-    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S10'])
-    expect(PENDING_STEPS.S4).toBe('SP5(일)')
-    expect(PENDING_STEPS.S10).toBe('SP5~SP8(나머지 부분 집합)')
+  it('아직 켜지지 않은 단계는 S3·S6·S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를 켰다(D43)', () => {
+    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S6', 'S7', 'S8', 'S10'])
+    expect(PENDING_STEPS.S6).toBe('SP5 B1·SP5b')
+    expect(PENDING_STEPS.S10).toBe('SP5 B1·B4~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
-  it('C 만 월요일 주 시작 규칙(SP5 D28) — S1 의 설정 액션으로 주차 문서보다 먼저 쓴다', () => {
-    expect(SYNTHETIC_C.weekStart).toBe('monday')
-    expect('weekStart' in SYNTHETIC_R).toBe(false)
+  it('C 만 월요일 주 시작 규칙(SP5 D28) — S1-calendar 가 설정 액션으로 주차 문서(S4(월))보다 먼저 쓴다(과제 30 이 calendar 블록으로 옮겼다)', () => {
+    expect('weekStart' in SYNTHETIC_C).toBe(false)
+    expect(SYNTHETIC_C.calendar.project['calendar.week_start']).toBe('monday')
+    expect(SYNTHETIC_R.calendar.project['calendar.week_start']).toBe('sunday')
     const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
-    const call = 'config(SYNTHETIC_C.config, wsC, SYNTHETIC_C.weekStart)'
-    expect(src).toContain(call)
-    expect(src.indexOf(call)).toBeLessThan(src.indexOf("'createWeeklyReport', [C.id"))
-    expect(src).toContain("'calendar.week_start': [{ day: weekStart, from: null }]")
+    expect(src).not.toContain('SYNTHETIC_C.weekStart')
+    expect(src.indexOf("step('S1-calendar'")).toBeLessThan(src.indexOf("'createWeeklyReport', [C.id"))
   })
 })
 
@@ -100,16 +102,21 @@ describe('wbsRows — S2 가져오기 행(R 4단·C 3단, 담당 = 그 프로젝
 
 describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
   const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
-  it('새 단계가 이름으로 있고 S1 추가 → S9 → S2 → S4 순서다(S9 의 C 스냅샷은 S1 직후의 설정이다)', () => {
+  it('단계 순서 — S1-create → S1-teams-areas → S1-calendar → S9 → S2 → S4(월) → S4(일) → S5 → S10 → 경계', () => {
     const at = (n: string) => src.indexOf(`step('${n}'`)
-    for (const n of ['S1-create', 'S1-teams-areas', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S10-negative', 'boundary-sp4']) expect(at(n), n).toBeGreaterThan(-1)
-    expect(at('S1-create')).toBeLessThan(at('S1-teams-areas'))
-    expect(at('S1-teams-areas')).toBeLessThan(at('S9-isolation'))
-    expect(at('S9-isolation')).toBeLessThan(at('S2-wbs-import'))
-    expect(at('S2-wbs-import')).toBeLessThan(at('S4-weekly-monday'))
-    expect(at('S4-weekly-monday')).toBeLessThan(at('S10-negative'))
-    expect(at('S10-negative')).toBeLessThan(at('boundary-sp4'))
+    const order = ['S1-create', 'S1-teams-areas', 'S1-calendar', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S4-weekly-sunday',
+      'S5-calendar', 'S10-negative', 'boundary-sp4']
+    for (const n of order) expect(at(n), n).toBeGreaterThan(-1)
+    for (let i = 1; i < order.length; i++) expect(at(order[i - 1]), `${order[i - 1]} < ${order[i]}`).toBeLessThan(at(order[i]))
     expect(at('boundary-sp4')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+  })
+  it('달력 쓰기는 화면과 같은 서버 액션 — 일정 화면 둘(addHoliday·setBaseDate), 달력·설정 표를 service_role 로 쓰지 않는다, 서울 관용구 0', () => {
+    for (const [name, worker] of [['addHoliday', '/p/[projectId]/settings/page'], ['setBaseDate', '/p/[projectId]/settings/page']] as const) {
+      expect(src, name).toMatch(new RegExp(`${name}: \\{[^}]*exportedName: '${name}', worker: '${esc(worker)}'`))
+    }
+    expect(src).not.toMatch(/svc\.from\('(?:holidays|project_settings|workspace_settings|projects)'\)\.(?:insert|update|upsert)/)
+    expect(src).not.toMatch(/seoulToday|isMondayIso/)
+    expect(src).toMatch(/sp5aSentinels\(\)/)
   })
   it('S10 은 다섯 대상과 교차 프로젝트를 본다 — 일치 규칙은 sentinels.mjs 하나(스펙 §6.4)', () => {
     for (const needle of ["source=sheet&format=pptx", "format=xlsx", "format=pptx", "/api/export?projectId=", "&expand=1", "/api/import/inspect", "/weekly`", "/wbs`"]) {
@@ -197,5 +204,36 @@ describe('e2e-synthetic.mjs — S10 ④ 펼침은 저장 아웃라인 양식이�
     expect(src).toContain("{ expect: [200, 400] }")
     expect(src).toMatch(/outlineExpandUnsupported\(/)
     expect(src).toMatch(/unsupportedExports/)
+  })
+})
+
+describe('S1·S5 달력(SP5 A — 개정 §6.5.8 R·C 구성표)', () => {
+  it('R 은 LA·월~금·일요일, C 는 베를린·월~토·월요일 + 토요일 휴무 하나·일요일 근무 하나', () => {
+    expect(plain(SYNTHETIC_R.calendar.project)).toEqual({ 'calendar.timezone': 'America/Los_Angeles', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': 'sunday' })
+    expect(plain(SYNTHETIC_C.calendar.project)).toEqual({ 'calendar.timezone': 'Europe/Berlin', 'calendar.working_days': [1, 2, 3, 4, 5, 6], 'calendar.week_start': 'monday' })
+    expect(SYNTHETIC_C.calendar.holidays.map((h: { date: string; kind: string }) => [h.date, h.kind])).toEqual([['2026-10-10', 'off'], ['2026-10-25', 'work']])
+    expect(new Date('2026-10-10T00:00:00Z').getUTCDay()).toBe(6)
+    expect(new Date('2026-10-25T00:00:00Z').getUTCDay()).toBe(0)
+  })
+  it('예외 날짜가 S2 잎의 기간 안에 있다 — 잎 A 10/05~10/16 에 휴무, 잎 B 10/19~10/30 에 근무', () => {
+    const [off, work] = SYNTHETIC_C.calendar.holidays
+    expect(off.date >= '2026-10-05' && off.date <= '2026-10-16').toBe(true)
+    expect(work.date >= '2026-10-19' && work.date <= '2026-10-30').toBe(true)
+    const leaves = wbsRows(3, ['CIV', 'MEP']).filter((r) => r[6] === 0.5)
+    expect(leaves.map((r) => [r[4], r[5]])).toEqual([['2026-10-05', '2026-10-16'], ['2026-10-19', '2026-10-30']])
+  })
+  it('기대 계획% — R 60·60, C 60·67(근무일 수를 손으로 센 값)', () => {
+    expect(plain(SYNTHETIC_R.calendar.plannedPct)).toEqual({ '2026-10-12': { A: 60 }, '2026-10-26': { B: 60 } })
+    expect(plain(SYNTHETIC_C.calendar.plannedPct)).toEqual({ '2026-10-12': { A: 60 }, '2026-10-26': { B: 67 } })
+  })
+  it('expectedStoredCalendar — 프로젝트 week_start 만 규칙 목록으로(문서 0건이라 교체), 나머지는 입력 그대로', () => {
+    expect(expectedStoredCalendar('project', SYNTHETIC_C.calendar.project)).toEqual({
+      'calendar.timezone': 'Europe/Berlin', 'calendar.working_days': [1, 2, 3, 4, 5, 6], 'calendar.week_start': [{ day: 'monday', from: null }],
+    })
+    expect(expectedStoredCalendar('workspace', SYNTHETIC_C.calendar.workspace)).toEqual(plain(SYNTHETIC_C.calendar.workspace))
+  })
+  it('leafNamesOf — wbsRows 의 잎 둘 이름(R 4단·C 3단)', () => {
+    expect(leafNamesOf(4)).toEqual(['합성 1.1.1.1', '합성 1.1.1.2'])
+    expect(leafNamesOf(3)).toEqual(['합성 1.1.1', '합성 1.1.2'])
   })
 })

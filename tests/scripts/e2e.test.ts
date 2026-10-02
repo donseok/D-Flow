@@ -26,6 +26,7 @@ import { weekKeyOf } from '@/lib/domain/calendar'
 import { validateArea, type AreaInput } from '@/lib/domain/areas'
 import {
   XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, seoulToday, shiftDays,
+  dowOfIso, plannedPctByName, storedTimezone, todayInTz,
 } from '../../scripts/lib/e2e.mjs'
 import { carryOverRows } from '@/lib/domain/weeklyCarry'
 import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
@@ -740,5 +741,39 @@ describe('nextServerMode — HTML 로 next start 와 next dev 를 가른다(W3)'
   })
   it('어느 쪽 흔적도 없으면 unknown(통과로 세지 않는다)', () => {
     expect(nextServerMode('<html><body>권한 없음</body></html>')).toBe('unknown')
+  })
+})
+
+describe('러너 날짜·시간대 도우미(SP5 A — 러너는 주 키를 만들지 않는다, W30)', () => {
+  it('todayInTz — 같은 순간이 LA·베를린·UTC 에서 다른 날짜(경계 2026-10-02T03:30Z)', () => {
+    const at = new Date('2026-10-02T03:30:00Z')
+    expect(todayInTz('UTC', at)).toBe('2026-10-02')
+    expect(todayInTz('America/Los_Angeles', at)).toBe('2026-10-01')
+    expect(todayInTz('Europe/Berlin', at)).toBe('2026-10-02')
+    expect(() => todayInTz('', at)).toThrow()
+  })
+  it('dowOfIso — 0=일 … 6=토, 형식이 아니면 throw', () => {
+    expect(dowOfIso('2026-10-04')).toBe(0)
+    expect(dowOfIso('2026-10-05')).toBe(1)
+    expect(dowOfIso('2026-10-10')).toBe(6)
+    expect(() => dowOfIso('2026/10/04')).toThrow()
+  })
+  it('storedTimezone — 키가 없으면 제품 기본값 UTC(H2 규칙 ⑤), 문자열이 아니면 UTC', () => {
+    expect(storedTimezone({ 'calendar.timezone': 'Europe/Berlin' })).toBe('Europe/Berlin')
+    expect(storedTimezone({})).toBe('UTC')
+    expect(storedTimezone(null)).toBe('UTC')
+    expect(storedTimezone({ 'calendar.timezone': 9 })).toBe('UTC')
+  })
+  it("plannedPctByName — 머리 '계획%' 열에서 업무명(앞뒤 공백 무시)의 값, 머리가 없으면 throw", async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('WBS')
+    ws.addRow(['코드', '업무명', '시작', '종료', '실적%', '계획%'])
+    ws.addRow(['1.1', '  합성 1.1', '2026-10-05', '2026-10-16', 0, 60])
+    ws.addRow(['1.2', '합성 1.2', '2026-10-19', '2026-10-30', 0, { formula: 'A1', result: 67 }])
+    const buf = await wb.xlsx.writeBuffer()
+    expect(await plannedPctByName(buf, ['합성 1.1', '합성 1.2'])).toEqual({ '합성 1.1': 60, '합성 1.2': 67 })
+    const none = new ExcelJS.Workbook()
+    none.addWorksheet('X').addRow(['a'])
+    await expect(plannedPctByName(await none.xlsx.writeBuffer(), ['합성 1.1'])).rejects.toThrow('계획%')
   })
 })
