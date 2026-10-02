@@ -9,6 +9,7 @@ import { milestoneTimeline, type MilestoneStatus } from '@/lib/domain/dashboard'
 import { isWeekendDow } from '@/lib/domain/dates'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
+import { unsetWeightCount } from '@/lib/domain/rollup'
 import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
@@ -675,6 +676,8 @@ export function WbsGanttSheet({
     if (weighted.length === 0) return null
     return Number(weighted.reduce((sum, n) => sum + weightToPct(n.weight as number), 0).toFixed(2))
   }, [items])
+  // 가중치를 비운 항목 수(SP4 D20) — 가중치를 가진 형제가 있는 그룹의 null 만 센다(그 그룹에서 1 = 같은 몫으로 계산된다). 모두 비운 그룹은 뜻이 같아 세지 않는다
+  const unsetWeights = useMemo(() => unsetWeightCount(items), [items])
   const dependencySchedule = useMemo(
     () => computeDependencySchedule(
       allFlatItems.map(item => ({
@@ -1027,7 +1030,7 @@ export function WbsGanttSheet({
     align = 'justify-start',
     extra = '',
     sub?: { text: string; title: string; warn?: boolean },
-    /** 라벨 아래 두 번째 줄에 얹는 컨트롤(§항목2 — 레벨 펼침 버튼을 작업명 헤더 셀 안으로). */
+    /** 라벨 아래 두 번째 줄에 얹는 컨트롤(§항목2 — 레벨 펼침 버튼을 작업명 헤더 셀 안으로). sub 와 함께 오면 sub 아래 줄(가중치 미지정 N개 — SP4 D20) */
     actions?: React.ReactNode,
   ) => {
     const frozen = col.frozen
@@ -1046,7 +1049,7 @@ export function WbsGanttSheet({
         }}
         title={sub ? `${label} — ${sub.title}` : label}
       >
-        {actions ? (
+        {actions && !sub ? (
           <div className="flex h-full min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
             <span className="truncate">{label}</span>
             {actions}
@@ -1062,6 +1065,7 @@ export function WbsGanttSheet({
             >
               {sub.text}
             </span>
+            {actions}
           </span>
         ) : (
           label
@@ -1451,6 +1455,9 @@ export function WbsGanttSheet({
                     title: t('wbs.weightTotalTitle'),
                     warn: Math.abs(rootWeightTotalPct - 100) > 0.01,
                   },
+              unsetWeights > 0
+                ? <span data-unset-weight className="truncate font-semibold normal-case tabular-nums tracking-normal text-warning" title={t('wbs.unsetWeightTitle')}>{t('wbs.unsetWeight').replace('{n}', String(unsetWeights))}</span>
+                : undefined,
             )}
             {showCol('pplan') && headCell(colOf('pplan'), t('wbs.colPlannedPct'), 'justify-end')}
             {showCol('pactual') && headCell(colOf('pactual'), t('wbs.colActualPct'), 'justify-end')}

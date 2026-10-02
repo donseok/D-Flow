@@ -87,6 +87,8 @@ export const wbsKo = {
   'wbs.colPlannedEnd': '계획종료',
   'wbs.colWeight': '가중치',
   'wbs.weightTotalTitle': '1레벨(Phase) 가중치 합계 — 100%가 아니면 배분 확인 필요',
+  'wbs.unsetWeight': '미지정 {n}개',
+  'wbs.unsetWeightTitle': '가중치를 비운 항목 — 같은 형제 그룹 안에서 1(같은 몫)로 계산합니다',
   'wbs.colPlannedPct': '계획%',
   'wbs.colActualPct': '실적%',
   'wbs.colAchievement': '계획대비',

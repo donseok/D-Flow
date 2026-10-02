@@ -80,6 +80,8 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.colPlannedEnd': 'Plan end',
   'wbs.colWeight': 'Weight',
   'wbs.weightTotalTitle': 'Sum of level-1 (phase) weights — check allocation if not 100%',
+  'wbs.unsetWeight': '{n} unset',
+  'wbs.unsetWeightTitle': 'Items without a weight count as 1 (an equal share) within their sibling group',
   'wbs.colPlannedPct': 'Plan %',
   'wbs.colActualPct': 'Actual %',
   'wbs.colAchievement': 'Vs plan',
