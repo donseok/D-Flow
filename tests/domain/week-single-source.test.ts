@@ -26,7 +26,7 @@ export const WEEK_CALC_ALLOW: Readonly<Record<string, WeekCalcAllow>> = {
   'scripts/ui-capture.mjs|const dow = new Date(': { why: '캡처 시드 — 월요일 규칙을 생성 때 기록한 프로젝트의 이번 주 월요일 키(SP5 D28). .mjs 라 calendar.ts 를 import 하지 못한다', count: 1 },
   'scripts/ui-capture.mjs|-((dow + 6) % 7)': { why: '캡처 시드 — 위와 같은 줄의 월요일 키(SP5 D28)', count: 1 },
   'scripts/wbs/validate.mjs|.getUTCDay()': { why: 'WBS 초안 검증 CLI 의 입력 규칙(주말 = 토·일 고정, 개정 §4.2.7) — .mjs 라 calendar.ts 를 import 하지 못하고 프로젝트 달력과 무관하다', count: 1 },
-  'scripts/lib/e2e.mjs|getUTCDay()': { why: '러너 검증 전용 요일 판독(isMondayIso·dowOfIso — 과제 31 이 isMondayIso 를 지운다) — DB 가 돌려준 주 키의 요일만 본다, 주 키를 만들지 않는다(SP4 W30)', count: 2 },
+  'scripts/lib/e2e.mjs|getUTCDay()': { why: '러너 검증 전용 요일 판독(dowOfIso — 과제 31 이 isMondayIso 를 지웠다) — DB 가 돌려준 주 키의 요일만 본다, 주 키를 만들지 않는다(SP4 W30)', count: 1 },
 }
 
 /** 옛 사본 — 지우는 과제가 같은 커밋에서 항목을 지운다. 과제 29 가 빈 객체를 단언한다 */

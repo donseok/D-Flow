@@ -22,11 +22,11 @@ import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { settingDef } from '@/lib/settings/registry'
 import ExcelJS from 'exceljs'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
-import { weekKeyOf } from '@/lib/domain/calendar'
+import { weekKeyOf, weekLabelOf } from '@/lib/domain/calendar'
 import { validateArea, type AreaInput } from '@/lib/domain/areas'
 import {
-  XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, seoulToday, shiftDays,
-  dowOfIso, plannedPctByName, storedTimezone, todayInTz,
+  XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, shiftDays,
+  dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
 } from '../../scripts/lib/e2e.mjs'
 import { carryOverRows } from '@/lib/domain/weeklyCarry'
 import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
@@ -507,10 +507,6 @@ describe('복사 생성 라벨(E2E 2b)', () => {
 })
 
 describe('SP4 A1 — 두 러너의 날짜 도우미(주 키는 만들지 않는다 — W30)', () => {
-  it('seoulToday 는 KST 달력 날짜 — UTC 15시가 다음 날의 0시다', () => {
-    expect(seoulToday(new Date('2026-10-04T14:59:59Z'))).toBe('2026-10-04')
-    expect(seoulToday(new Date('2026-10-04T15:00:00Z'))).toBe('2026-10-05')
-  })
   it('shiftDays — 달·해·윤일 경계와 음수, 형식·정수가 아니면 throw', () => {
     expect(shiftDays('2026-09-28', 7)).toBe('2026-10-05')
     expect(shiftDays('2026-01-01', -1)).toBe('2025-12-31')
@@ -518,10 +514,32 @@ describe('SP4 A1 — 두 러너의 날짜 도우미(주 키는 만들지 않는�
     expect(() => shiftDays('2026-9-1', 1)).toThrow()
     expect(() => shiftDays('2026-09-01', 1.5)).toThrow()
   })
-  it('isMondayIso — 월요일 규칙의 weekKeyOf 가 낸 값은 모두 참, 다른 요일·형식은 거짓(DB 가 돌려준 주 키 확인 전용)', () => {
-    for (const d of ['2026-09-27', '2026-09-28', '2026-10-01', '2026-10-04']) expect(isMondayIso(weekKeyOf([{ day: 'monday', from: null }], d)), d).toBe(true)
-    expect(isMondayIso('2026-10-04')).toBe(false)
-    expect(isMondayIso('2026-10-6')).toBe(false)
+  it('plainWeekLabel — 전환 없는 키의 라벨(기준일 = 키 + 3일, 주차 = ⌊(일 − 1)/7⌋ + 1 — 개정 §4.2.5 표)', () => {
+    expect(plainWeekLabel('2026-06-28')).toEqual({ year: 2026, month: 7, ordinal: 1, label: '7월 1주차' })
+    expect(plainWeekLabel('2026-06-21')).toEqual({ year: 2026, month: 6, ordinal: 4, label: '6월 4주차' })
+    expect(plainWeekLabel('2026-06-29')).toEqual({ year: 2026, month: 7, ordinal: 1, label: '7월 1주차' })
+    expect(plainWeekLabel('2026-09-21')).toEqual({ year: 2026, month: 9, ordinal: 4, label: '9월 4주차' })
+    expect(plainWeekLabel('2026-12-27')).toEqual({ year: 2026, month: 12, ordinal: 5, label: '12월 5주차' })
+    expect(() => plainWeekLabel('2026/06/28')).toThrow()
+  })
+  it('plainWeekLabel 은 전환 없는 규칙에서 앱의 weekLabelOf 와 같다(러너 사본의 드리프트 0 — 일요일·월요일, 한 해의 모든 키)', () => {
+    for (const day of ['sunday', 'monday'] as const) {
+      const rules = [{ day, from: null }]
+      for (let key = weekKeyOf(rules, '2026-01-01'); key < '2027-01-01'; key = shiftDays(key, 7)) {
+        const { year, month, ordinal } = plainWeekLabel(key)
+        expect({ year, month, ordinal }, `${day} ${key}`).toEqual(weekLabelOf(rules, key))
+      }
+    }
+  })
+  it('rangeText — M/D~M/D(앞 0 없음)', () => {
+    expect(rangeText('2026-06-29', '2026-07-03')).toBe('6/29~7/3')
+    expect(rangeText('2026-09-21', '2026-09-26')).toBe('9/21~9/26')
+  })
+  it('nextDowOnOrAfter — 그날 포함 다음 그 요일', () => {
+    expect(nextDowOnOrAfter('2026-10-02', 6)).toBe('2026-10-03')
+    expect(nextDowOnOrAfter('2026-10-03', 6)).toBe('2026-10-03')
+    expect(nextDowOnOrAfter('2026-10-04', 6)).toBe('2026-10-10')
+    expect(() => nextDowOnOrAfter('2026-10-02', 7)).toThrow()
   })
 })
 
@@ -704,6 +722,47 @@ describe('e2e-local.mjs — SP4 A1 단계(이름으로 부른다 — 스펙 §6.
   })
   it('지역 seoulToday 가 없다 — 공용 도우미 하나(과제 34)', () => {
     expect(src).not.toMatch(/const seoulToday\s*=/)
+  })
+})
+
+describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  const at = (n: string) => src.indexOf(`step('${n}'`)
+  it('단계 넷이 이름으로 있고 import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞, 이 순서다', () => {
+    const cal = ['calendar-week-sunday', 'calendar-week-transition', 'calendar-tz', 'calendar-workday']
+    for (const n of cal) {
+      expect(at(n), n).toBeGreaterThan(at('import-unregistered-teams'))
+      expect(at(n), n).toBeGreaterThan(at('export-standard'))
+      expect(at(n), n).toBeLessThan(at('render-pages'))
+    }
+    for (let i = 1; i < cal.length; i++) expect(at(cal[i - 1])).toBeLessThan(at(cal[i]))
+  })
+  it('달력 쓰기는 화면과 같은 서버 액션 — worker 는 그 액션을 쓰는 페이지', () => {
+    for (const [name, file, worker] of [
+      ['updateWorkspaceSettings', 'settings.ts', '/w/[slug]/settings/page'], ['previewWeekStartChange', 'settingsPreview.ts', '/p/[projectId]/settings/page'],
+      ['addHoliday', 'project.ts', '/p/[projectId]/settings/page'], ['setBaseDate', 'project.ts', '/p/[projectId]/settings/page'],
+      ['createAnnouncement', 'announcements.ts', '/p/[projectId]/announcements/page'],
+      ['addWbsItem', 'wbs.ts', '/p/[projectId]/wbs/page'], ['updateWbsFields', 'wbs.ts', '/p/[projectId]/wbs/page'], ['addTaskDependency', 'wbs.ts', '/p/[projectId]/wbs/page'],
+    ] as const) {
+      expect(src, name).toMatch(new RegExp(`${name}: \\{ filename: 'src/app/actions/${esc(file)}', exportedName: '${name}', worker: '${esc(worker)}' \\}`))
+    }
+    expect(src).not.toMatch(/svc\.from\('(?:holidays|project_settings|workspace_settings|task_dependencies|wbs_items)'\)\.(?:insert|update|upsert)/)
+  })
+  it('서울 관용구·러너의 주 키 계산이 없다 — 오늘은 저장된 tz, 요일은 dowOfIso(검증 전용)', () => {
+    expect(src).not.toMatch(/seoulToday|isMondayIso|mondayKeys|\(dow \+ 6\) % 7|mondayOf/)
+    expect(src).toMatch(/sundayKeys: dowOfIso\(weeks\.w0\) === 0/)
+    expect(src).toMatch(/todayInTz\(/)
+  })
+  it('render-pages 가 달력 화면 셋을 렌더한다', () => {
+    expect(src).toMatch(/\[`\/p\/\$\{calS\.id\}\/weekly\?week=\$\{/)
+    expect(src).toMatch(/\[`\/p\/\$\{calT\.id\}\/weekly\?week=\$\{/)
+    expect(src).toMatch(/\[`\/p\/\$\{calL\.id\}\/settings`, \[/)
+  })
+  it('calendar-tz 는 워크스페이스 tz 를 finally 에서 되돌리고, 사용 이벤트 픽스처도 finally 에서 지운다', () => {
+    const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
+    expect(block).toMatch(/finally \{\s*await setWorkspaceTz\(wsTzBefore\)/)
+    expect(block).toMatch(/finally \{\s*await svc\.from\('usage_events'\)\.delete\(\)\.eq\('id', ev\.id\)/)
   })
 })
 

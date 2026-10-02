@@ -506,12 +506,7 @@ export function presentTexts(html, texts) {
 }
 
 // ── SP4 A1 — 두 러너(e2e-local·e2e-synthetic)가 같이 쓰는 날짜·가져오기·영역 도우미 ──────────────────────────────────
-// 주 키는 만들지 않는다(W30) — 러너는 날짜를 액션에 넘기고 앱이 mondayIso 로 정한 week_start 를 DB 에서 다시 읽는다.
-
-/** KST 오늘 'YYYY-MM-DD'(앱 seoulToday 와 같은 관용구 — 러너는 TS 를 import 하지 못한다) @param {Date} [now] */
-export function seoulToday(now = new Date()) {
-  return now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
-}
+// 주 키는 만들지 않는다(W30) — 러너는 날짜를 액션에 넘기고 앱이 프로젝트 규칙(weekKeyOf)으로 정한 week_start 를 DB 에서 다시 읽는다.
 
 /** 'YYYY-MM-DD' 에서 n 일 이동(UTC 달력 — 시간대와 무관). 형식·정수가 아니면 throw @param {string} iso @param {number} days */
 export function shiftDays(iso, days) {
@@ -519,11 +514,6 @@ export function shiftDays(iso, days) {
   const d = new Date(`${iso}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
-}
-
-/** 검증 전용 — DB 가 돌려준 주 키('YYYY-MM-DD')가 월요일인가. 주 키를 만들지 않는다(W30) @param {string} iso */
-export function isMondayIso(iso) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) && new Date(`${iso}T00:00:00Z`).getUTCDay() === 1
 }
 
 // ── SP5 A — 러너의 날짜·시간대(러너는 TS 를 import 하지 못한다 — 앱의 todayIn 과 같은 Intl 관용구). 주 키는 만들지 않는다(W30).
@@ -575,6 +565,34 @@ export async function plannedPctByName(buf, names) {
     return out
   }
   throw new Error("내보내기에 '계획%' 열이 없다")
+}
+
+const ymdParts = (iso) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) throw new Error(`날짜 형식이 아니다: ${String(iso)}`)
+  const [y, m, d] = iso.split('-').map(Number)
+  return { y, m, d }
+}
+
+/** 전환이 없는 주 키의 라벨 — 기준일 = 키 + 3일의 연·월, 주차 = ⌊(일 − 1)/7⌋ + 1(개정 §4.2.5 "전환이 없으면" 식). 과도기 키에 쓰지 않는다 @param {string} key */
+export function plainWeekLabel(key) {
+  const { y, m, d } = ymdParts(shiftDays(key, 3))
+  const ordinal = Math.floor((d - 1) / 7) + 1
+  return { year: y, month: m, ordinal, label: `${m}월 ${ordinal}주차` }
+}
+
+/** 'M/D~M/D'(앞 0 없음 — 화면·보고서 범위 표기) @param {string} first @param {string} last */
+export function rangeText(first, last) {
+  const a = ymdParts(first)
+  const b = ymdParts(last)
+  return `${a.m}/${a.d}~${b.m}/${b.d}`
+}
+
+/** 그날 포함 다음 그 요일(0=일 … 6=토) — 테스트 날짜를 고르는 데만 쓴다(주 키가 아니다) @param {string} iso @param {number} dow */
+export function nextDowOnOrAfter(iso, dow) {
+  if (!Number.isInteger(dow) || dow < 0 || dow > 6) throw new Error(`요일이 올바르지 않다: ${dow}`)
+  let cur = iso
+  for (let i = 0; i < 7; i++, cur = shiftDays(cur, 1)) if (dowOfIso(cur) === dow) return cur
+  throw new Error('도달 불가')
 }
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

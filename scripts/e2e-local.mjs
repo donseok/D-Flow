@@ -20,6 +20,11 @@
 //   SP4 A2: next build + next start -p 3101 에서 돈다(과제 24 — 팀 원천에 프로세스 전역 캐시가 없음을 본다). import-unregistered-teams 뒤·render-pages 앞에서
 //        새 프로젝트 N 에 팀을 만든 직후 그 팀이 든 파일을 가져오고(409 없음 — KLC:56 해제), 저장 양식 없는 N 의 엑셀 내보내기 접기·펼침이 표준 양식
 //        (X-Excel-Layout: standard)이고 텍스트 파트에 SP4 센티널이 0 이다(스펙 §6.3).
+//   SP5 A: import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞에서 달력 넷 — calendar-week-sunday(일요일 프로젝트 S 와 월요일·월~토
+//        프로젝트 M 의 연속 2주·이월·라벨·범위·기본 보고서 라벨), calendar-week-transition(월요일 T 를 일요일로 전환 — 미리보기 E = 저장 E, 과도기 6일,
+//        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 tz 를 LA 로 바꾼 뒤 만든 L 의 시드·오늘·공지 게시 판정·사용현황 일자, 끝에 tz 복귀),
+//        calendar-workday(토요일 근무 예외 → 의존성 연결·계획%, 예외 없는 토요일로 옮기면 거부). 기존 주간 단계의 키는 일요일(워크스페이스 기본값 복사 —
+//        SP5 D5)이고 러너의 '오늘'은 그 범위에 저장된 tz 다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
@@ -43,8 +48,9 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, nextServerMode,
-  pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs,
+  A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, nextServerMode,
+  pptText, sentinelReport, shiftDays, slideCount, teamRefs,
+  dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
@@ -105,6 +111,15 @@ const ACTIONS = {
   saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
   upsertArea: { filename: 'src/app/actions/projectAreas.ts', exportedName: 'upsertArea', worker: '/p/[projectId]/settings/page' },
   getWbsBackup: { filename: 'src/app/actions/importBackup.ts', exportedName: 'getWbsBackup', worker: '/p/[projectId]/import/page' },
+  // SP5 A 달력 단계(스펙 §6.3) — 화면이 부르는 액션과 그 액션을 쓰는 페이지
+  updateWorkspaceSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateWorkspaceSettings', worker: '/w/[slug]/settings/page' },
+  previewWeekStartChange: { filename: 'src/app/actions/settingsPreview.ts', exportedName: 'previewWeekStartChange', worker: '/p/[projectId]/settings/page' },
+  addHoliday: { filename: 'src/app/actions/project.ts', exportedName: 'addHoliday', worker: '/p/[projectId]/settings/page' },
+  setBaseDate: { filename: 'src/app/actions/project.ts', exportedName: 'setBaseDate', worker: '/p/[projectId]/settings/page' },
+  createAnnouncement: { filename: 'src/app/actions/announcements.ts', exportedName: 'createAnnouncement', worker: '/p/[projectId]/announcements/page' },
+  addWbsItem: { filename: 'src/app/actions/wbs.ts', exportedName: 'addWbsItem', worker: '/p/[projectId]/wbs/page' },
+  updateWbsFields: { filename: 'src/app/actions/wbs.ts', exportedName: 'updateWbsFields', worker: '/p/[projectId]/wbs/page' },
+  addTaskDependency: { filename: 'src/app/actions/wbs.ts', exportedName: 'addTaskDependency', worker: '/p/[projectId]/wbs/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -169,6 +184,11 @@ async function main() {
   if (myWs.length !== 1 || myWs[0].role !== 'admin') throw new Fail(`부트스트랩 계정의 워크스페이스 소속이 ${JSON.stringify(myWs)}(관리자 1건이어야 한다)`)
   const wsA = myWs[0].workspace_id
   step('login', { userId: me.id, workspaceId: wsA, cookieNames: [...admin.jar.keys()] })
+  // SP5 A — 러너의 '오늘'은 그 범위에 저장된 tz(없으면 제품 기본값 UTC). 판독은 service_role(설정 표 읽기만 — 쓰기는 늘 설정 액션)
+  const tzOfProject = async (projectId) =>
+    storedTimezone(rows('프로젝트 설정', await svc.from('project_settings').select('values').eq('project_id', projectId).single()).values)
+  const tzOfWorkspace = async (workspaceId) =>
+    storedTimezone(rows('워크스페이스 설정', await svc.from('workspace_settings').select('values').eq('workspace_id', workspaceId).single()).values)
 
   // ── 2. 프로젝트 A·B — 화면(NewProjectModal)이 부르는 createProject({ workspaceId, … }). 결과는 그 세션으로 DB 에서 확인한다
   // (같은 이름 1건 + 지정한 워크스페이스 + 라벨 그대로).
@@ -341,7 +361,7 @@ async function main() {
 
   // ── 7. 회의 + 참석자 bob — 회의 화면(MeetingFormModal)의 createMeeting.
   await admin.http('GET', `/p/${A.id}/meetings`)
-  const meetingDate = seoulToday()
+  const meetingDate = todayInTz(await tzOfProject(A.id))   // SP5 A — 프로젝트에 저장된 tz 의 오늘
   const meeting = mustOk('createMeeting', (await admin.action(`/p/${A.id}/meetings`, 'createMeeting', [A.id, meetingInput({ date: meetingDate, attendeeIds: [bobId] })])).result)
   const attendees = rows('참석자', await admin.sb.from('meeting_attendees').select('member_id,project_id').eq('meeting_id', meeting.id))
   same('회의 참석자', attendees, [{ member_id: bobId, project_id: A.id }])
@@ -712,8 +732,8 @@ async function main() {
   step('minutes-api-scope', { ...api18, unknownUser: { status: 403, code: unknown.code }, beaMeetingsOfA2: { status: 404, body: hiddenMeetings } })
 
   // ── 18b. SP4 A1(스펙 §6.3 — 단계는 이름으로 부른다, Q7). render-pages 앞이다 — 그 단계가 B 의 주간·설정 화면을 영역이 든 상태로 렌더한다.
-  //    주 키는 앱이 정한다(mondayIso — W30): 러너는 날짜(오늘·±7일)를 넘기고 week_start 는 DB 에서 다시 읽는다.
-  const today = seoulToday()
+  //    주 키는 앱이 정한다(weekKeyOf — W30): 러너는 날짜(오늘·±7일)를 넘기고 week_start 는 DB 에서 다시 읽는다. 오늘은 B 에 저장된 tz 다(SP5 A).
+  const today = todayInTz(await tzOfProject(B.id))
   const { exp, run, fresh } = E2E_AREAS
   const bTeam = { code: SP1_TEAMS.B[0], id: teamIds.B[0] }
   const weeklyRowsOf = async (reportId) => rows('주간 행', await admin.sb.from('weekly_report_rows')
@@ -790,7 +810,8 @@ async function main() {
     renameSameCells: JSON.stringify(w2AfterRename) === JSON.stringify(w2Rows),
     freshOnlyFromThisWeek: freshArea.status === 'created' && freshArea.rowsAdded === 2
       && JSON.stringify(freshRows.map((r) => r.report_id).sort()) === JSON.stringify([w1.reportId, w2.reportId].sort()),
-    mondayKeys: isMondayIso(weeks.w0) && shiftDays(weeks.w0, 7) === weeks.w1 && shiftDays(weeks.w1, 7) === weeks.w2,
+    // SP5 D5 — 새 프로젝트는 워크스페이스 기본값(일요일)을 복사한다. 키는 앱이 정하고 러너는 요일·간격만 본다(W30)
+    sundayKeys: dowOfIso(weeks.w0) === 0 && shiftDays(weeks.w0, 7) === weeks.w1 && shiftDays(weeks.w1, 7) === weeks.w2,
   }
   step('weekly-carry-mapping', {
     projectId: B.id, areas: { exp: expArea.id, run: runArea.id, fresh: freshArea.id }, reports: { w0: w0.reportId, w1: w1.reportId, w2: w2.reportId },
@@ -1003,6 +1024,215 @@ async function main() {
   step('export-standard', { projectId: N.id, exports: nExports, checks: exportCheck },
     Object.values(exportCheck).every(Boolean) ? undefined : `표준 내보내기: ${JSON.stringify(exportCheck)}`)
 
+  // ── 18d. SP5 A 달력(스펙 §6.3 — 단계는 이름으로 부른다). 프로젝트는 단계마다 새로(기존 A·B 의 주간·WBS 를 건드리지 않는다). 주간 문서는 영역이 있어야
+  //    하므로(SP4 W1) 영역 하나(CAL)를 둔다. 라벨은 전환 없는 키에서만 러너가 계산한다(plainWeekLabel — 과도기 라벨은 단위 테스트가 정본).
+  const calTag = randomUUID().slice(0, 6)
+  const calArea = { code: 'CAL', name: '달력 영역', sortOrder: 1, teams: [] }
+  const newCalProject = async (label) => {
+    const name = `E2E 달력 ${label} ${calTag}`
+    await admin.http('GET', '/projects')
+    mustOk(`${label} createProject`, (await admin.action('/projects', 'createProject', [{
+      workspaceId: wsA, name, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+    }])).result)
+    return rows(`${label} 프로젝트`, await admin.sb.from('projects').select('id, workspace_id').eq('name', name).single())
+  }
+  const setProject = async (p, set) => {
+    await admin.http('GET', `/p/${p.id}/settings`)
+    const doc = rows('프로젝트 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', p.id).single())
+    return mustOk('updateProjectSettings', (await admin.action(`/p/${p.id}/settings`, 'updateProjectSettings',
+      [p.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset: [] }])).result)
+  }
+  const storedOf = async (p) => rows('프로젝트 설정', await admin.sb.from('project_settings').select('values').eq('project_id', p.id).single()).values
+  const withArea = async (p) => {
+    await admin.http('GET', `/p/${p.id}/settings`)
+    return putArea(p, areaInput(calArea, new Map()))
+  }
+
+  // calendar-week-sunday — S(일요일 기본, 월~금)와 M(월요일, 월~토 — 문서 전에 설정)에 같은 2주(오늘·+7, 이월). 키 요일·간격, 화면 라벨·범위,
+  // 기본 보고서(xlsx) 라벨 'YYYY년 M월 N주차 (범위)'(개정 §4.2.9 셋째 — P2-§5-accept 일요일 시작 보고)
+  const calS = await newCalProject('S')
+  const calM = await newCalProject('M')
+  await setProject(calM, { 'calendar.week_start': 'monday', 'calendar.working_days': [1, 2, 3, 4, 5, 6] })
+  const sundayWeek = {}
+  for (const [label, p, ruleDow, firstOffset, displayLen] of [['S', calS, 0, 1, 5], ['M', calM, 1, 0, 6]]) {
+    const area = await withArea(p)
+    const pToday = todayInTz(await tzOfProject(p.id))
+    await admin.http('GET', `/p/${p.id}/weekly`)
+    const w1 = mustOk(`${label} W1`, await createWeek(p, pToday, false))
+    const w1Rows = await weeklyRowsOf(w1.reportId)
+    await saveCells(p, [{ rowId: rowFor(w1Rows, area.id).id, cellKey: 'next_content', content: `달력 이월 ${label}` }])
+    const w2 = mustOk(`${label} W2`, await createWeek(p, shiftDays(pToday, 7), true))
+    const weeks = { w1: await weekStartOf(w1.reportId), w2: await weekStartOf(w2.reportId) }
+    const w2Rows = await weeklyRowsOf(w2.reportId)
+    const labels = { w1: plainWeekLabel(weeks.w1).label, w2: plainWeekLabel(weeks.w2).label }
+    // 표시 요일 = 기간 안 근무일 — S 는 키 + 1(월)~+5(금), M 은 키(월)~+5(토)
+    const ranges = { w1: rangeText(shiftDays(weeks.w1, firstOffset), shiftDays(weeks.w1, firstOffset + displayLen - 1)) }
+    const html = await (await admin.http('GET', `/p/${p.id}/weekly?week=${weeks.w1}`)).text()
+    const report = await fetchZip(`/api/report?projectId=${p.id}&format=xlsx`, `calendar-${label}-report.xlsx`)
+    const reportText = report.entries.map((x) => x.text).join('\n')
+    const { year } = plainWeekLabel(weeks.w1)
+    const reportLabel = `${year}년 ${labels.w1} (${ranges.w1})`
+    sundayWeek[label] = {
+      projectId: p.id, weeks, dows: [dowOfIso(weeks.w1), dowOfIso(weeks.w2)], labels, ranges, reportLabel,
+      checks: {
+        ruleKeys: dowOfIso(weeks.w1) === ruleDow && shiftDays(weeks.w1, 7) === weeks.w2 && weeks.w1 <= pToday && shiftDays(weeks.w1, 6) >= pToday,
+        carried: rowFor(w2Rows, area.id).this_content === `달력 이월 ${label}`,
+        pageLabel: presentTexts(html, [labels.w1, ranges.w1]).length === 2,
+        reportLabel: reportText.includes(reportLabel),
+      },
+    }
+  }
+  const sundayOk = ['S', 'M'].every((k) => Object.values(sundayWeek[k].checks).every(Boolean))
+  step('calendar-week-sunday', sundayWeek, sundayOk ? undefined : `일요일·월요일 주: ${JSON.stringify(sundayWeek)}`)
+
+  // calendar-week-transition — T 를 월요일로 시작해 지난주·이번 주 문서를 만든 뒤 일요일로 전환(D5·D38). 미리보기의 E = 저장된 규칙의 E,
+  // 과도기 6일(월~토), 기존 문서 그대로, E 앞날의 키 = 과도기 키(월요일), E 의 키 = E(일요일). 과거 URL(옛 월요일)·과도기 안 날짜 URL 이 같은 문서를 연다
+  const calT = await newCalProject('T')
+  await setProject(calT, { 'calendar.week_start': 'monday' })
+  await withArea(calT)
+  const tToday = todayInTz(await tzOfProject(calT.id))
+  await admin.http('GET', `/p/${calT.id}/weekly`)
+  const tPast = mustOk('T 지난주', await createWeek(calT, shiftDays(tToday, -7), false))
+  const tNow = mustOk('T 이번 주', await createWeek(calT, tToday, false))
+  const tPastKey = await weekStartOf(tPast.reportId)
+  await admin.http('GET', `/p/${calT.id}/settings`)
+  const preview = mustOk('T 미리보기', (await admin.action(`/p/${calT.id}/settings`, 'previewWeekStartChange', [calT.id, 'sunday'])).result).preview
+  await setProject(calT, { 'calendar.week_start': 'sunday' })
+  const tStored = (await storedOf(calT))['calendar.week_start']
+  const e = preview.effectiveFrom
+  await admin.http('GET', `/p/${calT.id}/weekly`)
+  const kpDoc = mustOk('T 과도기 주', await createWeek(calT, shiftDays(e, -1), false))
+  const kp = await weekStartOf(kpDoc.reportId)
+  const eDoc = mustOk('T 전환 뒤 첫 주', await createWeek(calT, e, false))
+  const eKey = await weekStartOf(eDoc.reportId)
+  const pastHtml = await (await admin.http('GET', `/p/${calT.id}/weekly?week=${tPastKey}`)).text()
+  const midHtml = await (await admin.http('GET', `/p/${calT.id}/weekly?week=${shiftDays(kp, 2)}`)).text()
+  const transition = {
+    projectId: calT.id, preview, stored: tStored, kp, e, docs: { past: tPastKey, now: await weekStartOf(tNow.reportId), kp, e: eKey },
+    checks: {
+      previewMatchesStored: JSON.stringify(tStored) === JSON.stringify([{ day: 'monday', from: null }, { day: 'sunday', from: e }]),
+      effectiveSunday: typeof e === 'string' && dowOfIso(e) === 0 && e > tToday,
+      sixDays: preview.transitionDays === 6 && dowOfIso(kp) === 1 && shiftDays(kp, 6) === e,
+      keptDocs: preview.keptDocs === 2 && Array.isArray(preview.blockingWeeks) && preview.blockingWeeks.length === 0,
+      eKey: eKey === e,
+      pastUrl: pastHtml.includes(tPast.reportId),
+      midTransitionUrl: midHtml.includes(kpDoc.reportId),
+    },
+  }
+  step('calendar-week-transition', { ...transition, pastUrl: `/p/${calT.id}/weekly?week=${tPastKey}`, midTransitionUrl: `/p/${calT.id}/weekly?week=${shiftDays(kp, 2)}` },
+    Object.values(transition.checks).every(Boolean) ? undefined : `주 시작 전환: ${JSON.stringify(transition)}`)
+
+  // calendar-tz — 워크스페이스 A 의 tz 를 LA 로 바꾼 뒤 만든 L 은 그 tz 를 복사한다(seedFrom — 상속 아님). L 의 '오늘'은 LA: 이번 주 문서가 매개변수 없는
+  // 주간 화면에 실리고, 오늘 게시(시작 = 종료 = LA 오늘) 공지는 헤더 티커에 있고 내일 시작 공지는 없다. 사용현황 일자는 결정적 순간
+  // (2026-01-15T03:30Z — LA 01-14·UTC 01-15)의 이벤트 한 행으로 두 tz 를 비교한다(행은 로컬 픽스처 — 끝에 지운다). 끝에 워크스페이스 tz 를 되돌린다
+  // (키가 없던 워크스페이스면 unset — 뒤 단계의 '오늘'이 원래 tz 를 전제한다).
+  const wsPage = `/w/${encodeURIComponent(wsARow.slug)}/settings`   // wsARow — 단계 16 이 읽은 워크스페이스 A 의 슬러그
+  const wsTzBefore = rows('워크스페이스 A 설정', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values['calendar.timezone']
+  const setWorkspaceTz = async (tz) => {
+    await admin.http('GET', wsPage)
+    const doc = rows('워크스페이스 설정', await admin.sb.from('workspace_settings').select('revision').eq('workspace_id', wsA).single())
+    const patch = tz === undefined ? { set: {}, unset: ['calendar.timezone'] } : { set: { 'calendar.timezone': tz }, unset: [] }
+    return mustOk('updateWorkspaceSettings', (await admin.action(wsPage, 'updateWorkspaceSettings', [wsA, { expectedRevision: doc.revision, commandId: randomUUID(), ...patch }])).result)
+  }
+  const LA = 'America/Los_Angeles'
+  let tzStep
+  await setWorkspaceTz(LA)
+  try {
+    const calL = await newCalProject('L')
+    const lStored = await storedOf(calL)
+    await withArea(calL)
+    const lToday = todayInTz(LA)
+    await admin.http('GET', `/p/${calL.id}/weekly`)
+    const lDoc = mustOk('L 이번 주', await createWeek(calL, lToday, false))
+    const lHtml = await (await admin.http('GET', `/p/${calL.id}/weekly`)).text()
+    const lAfter = todayInTz(LA)
+    await admin.http('GET', `/p/${calL.id}/announcements`)
+    const annNow = `E2E 오늘 게시 ${calTag}`
+    const annLater = `E2E 내일 게시 ${calTag}`
+    for (const [title, from] of [[annNow, lToday], [annLater, shiftDays(lToday, 1)]]) {
+      mustOk(`공지 ${title}`, (await admin.action(`/p/${calL.id}/announcements`, 'createAnnouncement', [calL.id, {
+        title, body: '시간대 확인용', category: 'general', isPinned: false, publishFrom: from, publishTo: shiftDays(lToday, 1), milestoneDate: null,
+      }])).result)
+    }
+    const shell = await (await admin.http('GET', `/api/shell?route=${calL.id}`)).json()
+    const tickerTitles = (shell.headerAnnouncements ?? []).map((a) => a.title)
+    const instant = '2026-01-15T03:30:00Z'
+    const ev = rows('사용 이벤트 픽스처', await svc.from('usage_events').insert({
+      user_id: me.id, menu_key: 'weekly', path: '/e2e-calendar-tz', project_id: null, occurred_at: instant, event_name: 'page_view',
+    }).select('id').single())
+    let usage
+    try {
+      const day = async (tz) => {
+        const { data, error } = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: tz })
+        if (error) throw new Fail(`usage_daily_actives(${tz}): ${error.message}`)
+        return (data ?? []).filter((r) => r.events > 0).map((r) => String(r.d))
+      }
+      const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
+      const usageHtml = await (await admin.http('GET', '/usage')).text()
+      usage = { la: await day(LA), utc: await day('UTC'), invalidCode: bad.error?.code ?? null, utcNote: usageHtml.includes('UTC 기준') }
+    } finally {
+      await svc.from('usage_events').delete().eq('id', ev.id)
+    }
+    tzStep = {
+      projectId: calL.id, seeded: { timezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] }, today: lToday,
+      reportOnPage: lHtml.includes(lDoc.reportId) || lToday !== lAfter, announcements: tickerTitles.filter((t) => t === annNow || t === annLater), usage,
+      discriminating: todayInTz('UTC') !== lToday,
+      checks: {
+        seeded: lStored['calendar.timezone'] === LA && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
+        // 자정을 넘긴 순간이면 다음 키 화면이 정답이다 — 그때는 이 항목을 판정하지 않는다(lToday !== lAfter)
+        today: lHtml.includes(lDoc.reportId) || lToday !== lAfter,
+        ticker: tickerTitles.includes(annNow) && !tickerTitles.includes(annLater),
+        usageDays: usage.la.includes('2026-01-14') && !usage.la.includes('2026-01-15') && usage.utc.includes('2026-01-15') && !usage.utc.includes('2026-01-14'),
+        usageInvalid: usage.invalidCode === '22023',
+        utcNote: usage.utcNote,
+      },
+    }
+  } finally {
+    await setWorkspaceTz(wsTzBefore)
+  }
+  const wsTzAfter = rows('워크스페이스 A 설정(복귀)', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values['calendar.timezone']
+  tzStep.restored = wsTzAfter === wsTzBefore
+  step('calendar-tz', tzStep, Object.values(tzStep.checks).every(Boolean) && tzStep.restored ? undefined : `시간대: ${JSON.stringify(tzStep)}`)
+  const calL = { id: tzStep.projectId }
+
+  // calendar-workday — W(월~금)에서 계획 기간이 토요일 하루인 작업은 근무일이 없어 의존성을 걸 수 없다 → 그 토요일을 'work' 예외로 등록하면 걸린다
+  // (앱 검사·DB 트리거가 같은 판정 — D37). 예외 없는 토요일로 옮기면 DB 의존성 트리거가 거부한다. 기준일 = 그 토요일이면 계획% 100(1/1 근무일)
+  const calW = await newCalProject('W')
+  const wToday = todayInTz(await tzOfProject(calW.id))
+  const sat = nextDowOnOrAfter(shiftDays(wToday, 7), 6)
+  const fri = shiftDays(sat, -1)
+  await admin.http('GET', `/p/${calW.id}/wbs`)
+  const pred = mustOk('W 선행', (await admin.action(`/p/${calW.id}/wbs`, 'addWbsItem', [calW.id, null, 'E2E 선행'])).result)
+  const succ = mustOk('W 후행', (await admin.action(`/p/${calW.id}/wbs`, 'addWbsItem', [calW.id, null, 'E2E 후행'])).result)
+  mustOk('W 선행 기간', (await admin.action(`/p/${calW.id}/wbs`, 'updateWbsFields', [pred.id, { plannedStart: fri, plannedEnd: fri }])).result)
+  mustOk('W 후행 기간', (await admin.action(`/p/${calW.id}/wbs`, 'updateWbsFields', [succ.id, { plannedStart: sat, plannedEnd: sat }])).result)
+  const link = async () => (await admin.action(`/p/${calW.id}/wbs`, 'addTaskDependency', [calW.id, pred.id, succ.id, 'FS', 0])).result
+  const beforeWork = await link()
+  await admin.http('GET', `/p/${calW.id}/settings`)
+  await admin.action(`/p/${calW.id}/settings`, 'addHoliday', [calW.id, sat, 'E2E 토요 근무', 'work'])
+  const holidayRow = rows('W 날짜 예외', await admin.sb.from('holidays').select('date, kind').eq('project_id', calW.id).eq('date', sat))
+  const afterWork = await link()
+  const plainSat = shiftDays(sat, 7)
+  await admin.http('GET', `/p/${calW.id}/wbs`)
+  const moved = (await admin.action(`/p/${calW.id}/wbs`, 'updateWbsFields', [succ.id, { plannedStart: plainSat, plannedEnd: plainSat }])).result
+  const succNow = rows('W 후행(다시 읽기)', await admin.sb.from('wbs_items').select('planned_start, planned_end').eq('id', succ.id).single())
+  await admin.http('GET', `/p/${calW.id}/settings`)
+  mustOk('W 기준일', (await admin.action(`/p/${calW.id}/settings`, 'setBaseDate', [calW.id, sat])).result)
+  const wExport = await admin.http('GET', `/api/export?projectId=${calW.id}`)
+  const wPct = await plannedPctByName(Buffer.from(await wExport.arrayBuffer()), ['E2E 후행'])
+  mustOk('W 기준일 자동', (await admin.action(`/p/${calW.id}/settings`, 'setBaseDate', [calW.id, null])).result)
+  const workday = {
+    projectId: calW.id, saturday: sat, beforeWork, afterWork, plainSaturday: { result: moved, item: succNow }, plannedPct: wPct['E2E 후행'], holiday: holidayRow,
+    checks: {
+      beforeRejected: beforeWork?.ok === false,
+      holidayWork: holidayRow.length === 1 && holidayRow[0].kind === 'work',
+      afterLinked: afterWork?.ok === true,
+      plainSaturdayRejected: moved?.ok === false && succNow.planned_start === sat && succNow.planned_end === sat,
+      planned100: wPct['E2E 후행'] === 100,
+    },
+  }
+  step('calendar-workday', workday, Object.values(workday.checks).every(Boolean) ? undefined : `근무 예외: ${JSON.stringify(workday)}`)
+
   // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
   // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
   // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
@@ -1021,6 +1251,10 @@ async function main() {
     // SP4 A1 — B 의 주간(이번 주 W1: 개명한 실험·비활성 운영·신규)과 설정(주간 영역 편집기)
     [`/p/${B.id}/weekly`, [exp.renamed, fresh.name]],
     [`/p/${B.id}/settings`, [exp.renamed, fresh.name]],
+    // SP5 A — 일요일 프로젝트의 주간(라벨·범위), 전환 프로젝트의 과거 URL(옛 월요일 키 — 같은 문서), LA 프로젝트 설정(달력 절)
+    [`/p/${calS.id}/weekly?week=${sundayWeek.S.weeks.w1}`, [sundayWeek.S.labels.w1]],
+    [`/p/${calT.id}/weekly?week=${transition.docs.past}`, []],
+    [`/p/${calL.id}/settings`, ['America/Los_Angeles']],
   ]
   const rendered = []
   for (const [path, expectTexts] of pages) {
@@ -1117,10 +1351,11 @@ async function main() {
   })
   if (allowErr) throw new Fail(`A modules.allowed 기록 실패: ${allowErr.message}`)
   const externalId = `e2e:${randomUUID()}`
+  const wsToday = todayInTz(await tzOfWorkspace(wsA))   // SP5 A — 외부 회의록 날짜는 워크스페이스에 저장된 tz 의 오늘
   const uploadOff = await fetch(`${base}/api/v1/minutes`, {
     method: 'POST', redirect: 'manual',
     headers: { authorization: `Bearer ${minutesApiSecret}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ user_email: A_ADMIN.email, date: seoulToday(), team: WS_TEAM, title: 'E2E 관문', body_markdown: '# 관문', external_id: externalId }),
+    body: JSON.stringify({ user_email: A_ADMIN.email, date: wsToday, team: WS_TEAM, title: 'E2E 관문', body_markdown: '# 관문', external_id: externalId }),
   })
   const integration = {
     allowedBefore: allowedA.includes('minutes_integration'),
