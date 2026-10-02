@@ -183,7 +183,10 @@ export function ownersVerdict(count, maxRows) {
  *  @param {{ workspace_id: string, prefs: unknown }[]} rows @param {Record<string, unknown>} want */
 export function prefsMismatch(rows, want) {
   if (!rows.length) return ['(소속 없음)']
-  const norm = (o) => JSON.stringify(Object.fromEntries(Object.entries(o ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))))
+  // 깊이까지 키를 정렬해 비교한다 — jsonb 는 키를 길이·사전순으로 되돌려 주므로(최근 방문 {id, at} → {at, id}) 쓴 순서와 읽은 순서가 다르다. 배열 순서는 의미가 있어 그대로
+  const canon = (v) => Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => (x < y ? -1 : 1)).map(([k, x]) => [k, canon(x)])) : v
+  const norm = (o) => JSON.stringify(canon(o ?? {}))
   return rows.filter((r) => norm(r.prefs) !== norm(want)).map((r) => r.workspace_id)
 }
 

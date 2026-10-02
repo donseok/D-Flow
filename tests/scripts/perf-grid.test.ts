@@ -204,6 +204,16 @@ describe('측정 시작 상태·run 격리(UI-0 결정성 리뷰 P2 — D6·D7)'
     expect(prefsMismatch([{ workspace_id: 'wA', prefs: { ...want, wbsGanttScale: 48 } }, { workspace_id: 'wB', prefs: { ...want, theme: 'dark' } }], want)).toEqual(['wA', 'wB'])
     expect(prefsMismatch([], want)).toEqual(['(소속 없음)'])
   })
+  it('중첩 객체의 키 순서는 같은 값이다 — jsonb 는 키를 길이·사전순으로 되돌려 주므로 쓴 순서와 읽은 순서가 달라도 일치(R-grid)', () => {
+    const pin = { recentProjects: [{ id: 'p1', at: '2026-01-01T00:00:00Z' }] }
+    // 데이터베이스가 돌려주는 모양: 같은 길이의 키는 사전순(at, id) — 쓴 쪽은 (id, at)
+    const stored = { recentProjects: [{ at: '2026-01-01T00:00:00Z', id: 'p1' }] }
+    expect(prefsMismatch([{ workspace_id: 'wA', prefs: stored }], pin)).toEqual([])
+    // 값이 다르면 여전히 불일치, 배열 순서는 의미가 있다
+    expect(prefsMismatch([{ workspace_id: 'wA', prefs: { recentProjects: [{ at: 'x', id: 'p1' }] } }], pin)).toEqual(['wA'])
+    const two = { recentProjects: [{ id: 'a', at: 't' }, { id: 'b', at: 't' }] }
+    expect(prefsMismatch([{ workspace_id: 'wA', prefs: { recentProjects: [{ at: 't', id: 'b' }, { at: 't', id: 'a' }] } }], two)).toEqual(['wA'])
+  })
   it('닫기 소요·시간 초과를 run 표본에 — 단계마다 상한, 앞 단계가 넘어도 다음 단계(브라우저 닫기)를 부른다, 닫기 오류는 삼킨다', async () => {
     const fast = () => Promise.resolve()
     const never = () => new Promise<void>(() => {})
