@@ -242,6 +242,17 @@ describe('saveUiPrefs — 방문 기록(visits, Y1)', () => {
     expect(await saveUiPrefs({}, { workspaceId: WS, visits: [PA] })).toEqual({ ok: true })        // 실제 소속이면 그대로 쓴다
     expect(h.ops.map((o) => o[0])).toEqual(['user_preferences']); err.mockRestore()
   })
+  it('AA7 — prefs.recentProjects 는 클라이언트 쓰기 키가 아니다(쓰기 주체는 visits 하나) — 행을 바꾸지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.createServerClient.mockResolvedValue(db({ user_preferences: { recentProjects: [{ id: PX, at: '2026-09-01T00:00:00.000Z' }] } }))
+    expect(await saveUiPrefs({ recentProjects: [{ id: PO, at: '2999-01-01T00:00:00.000Z' }] }, { workspaceId: WS })).toEqual({ ok: true })
+    expect(h.ops).toEqual([])
+    expect((await post({ workspaceId: WS, prefs: { recentProjects: [{ id: PO, at: '2999-01-01T00:00:00.000Z' }] } })).status).toBe(200)
+    expect(h.ops).toEqual([])
+    // 즐겨찾기와 섞여 와도 recentProjects 만 빠진다
+    expect(await saveUiPrefs({ favoriteProjectIds: [PA], recentProjects: [{ id: PO, at: '2999-01-01T00:00:00.000Z' }] }, { workspaceId: WS })).toEqual({ ok: true })
+    expect(h.ops[0][1]).toEqual({ recentProjects: [{ id: PX, at: '2026-09-01T00:00:00.000Z' }], favoriteProjectIds: [PA] }); err.mockRestore()
+  })
   it('/api/prefs — prefs 없이 visits 만 담은 본문도 받는다', async () => {
     h.createServerClient.mockResolvedValue(db({}))
     expect((await post({ workspaceId: WS, visits: [PA] })).status).toBe(200)

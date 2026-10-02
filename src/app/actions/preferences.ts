@@ -52,7 +52,7 @@ async function mergeUpsert(
 /**
  * 개인 설정 부분 병합 저장. 계정 키 → account_preferences, 워크스페이스 키 → opts.workspaceId 행(실제 소속일 때만 — 플랫폼 관리자 승계로 비소속
  * 워크스페이스에 본인 행을 만들지 않는다(AA6). 쿠키를 읽지 않는다). 워크스페이스 판정이 거부면 같은 요청의 계정 키도 쓰지 않는다(전부 아니면 전무).
- * 값 검사·상한은 splitPrefs(notifRead 는 받지 않는다).
+ * 값 검사·상한은 splitPrefs(notifRead 는 받지 않는다). recentProjects 도 클라이언트 쓰기 키가 아니다 — 쓰기 주체는 visits 하나(AA7).
  * 결과는 `{ ok }` 하나뿐이다(W10): 비로그인·workspaceId 없음·형식 밖·없는 워크스페이스·비소속·권한 조회 실패·저장 실패가 모두 같은
  * `{ ok: false }` 라 응답으로 워크스페이스의 존재를 가늠할 수 없다(사유는 서버 로그에만). 은퇴 키만 담긴 요청은 조용히 버리고 ok.
  */
@@ -60,6 +60,11 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
   const u = await getSession()
   if (!u) return { ok: false }
   const { account, workspace, dropped } = splitPrefs(patch)
+  // 최근 방문은 서버가 거른 visits 로만 쓴다 — 클라이언트 목록으로 서버 목록을 덮지 않는다(Y1·AA7). 읽기·병합 목록에는 남는다
+  if (workspace.recentProjects !== undefined) {
+    delete workspace.recentProjects
+    console.error('[saveUiPrefs] 클라이언트가 보낸 recentProjects — 버린다(쓰기 주체는 visits)')
+  }
   const unknown = dropped.filter((k) => !(RETIRED_PREF_KEYS as readonly string[]).includes(k))
   // 키 이름은 요청자가 정한다 — 개수와 앞 몇 개(길이 절단)만 남긴다(로그 범람 방지, Y4)
   if (unknown.length) {
