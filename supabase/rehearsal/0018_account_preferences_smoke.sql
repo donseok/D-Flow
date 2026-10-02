@@ -1,4 +1,4 @@
--- 0013_account_preferences 리허설 스모크 — seed 를 심고 0013 을 적용한 DB 에서. 결과 열이 전부 t 여야 한다. begin…rollback.
+-- *_account_preferences 리허설 스모크 — seed 를 심고 이 마이그레이션을 적용한 DB 에서. 결과 열이 전부 t 여야 한다. begin…rollback.
 begin;
 select
   -- u1: 첫 소속(A) 행의 계정 키만 계정 행으로(B 행의 light 는 버려짐), notifRead 의 형식 밖 키 "p" 는 고아라 버림(3-2b)

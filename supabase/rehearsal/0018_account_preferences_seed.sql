@@ -1,8 +1,8 @@
--- 0013_account_preferences 이행 리허설 — 0012 스키마 위에 계정 키·lastProjectId·두 소속을 가진 사용자 셋을 **커밋**한다.
---   lane-b-run.sh supabase db reset --version 0012 --local
---   lane-b-run.sh bash -c "docker exec -i supabase_db_d-flow-lane-b psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0013_account_preferences_seed.sql"
+-- *_account_preferences 이행 리허설 — 직전 마이그레이션까지 적용한 스키마 위에 계정 키·lastProjectId·두 소속을 가진 사용자 셋을 **커밋**한다.
+--   lane-b-run.sh supabase db reset --version <직전 번호> --local
+--   lane-b-run.sh bash -c "docker exec -i supabase_db_d-flow-lane-b psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/<이 번호>_account_preferences_seed.sql"
 --   lane-b-run.sh supabase migration up --local
---   lane-b-run.sh bash -c "docker exec -i supabase_db_d-flow-lane-b psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/0013_account_preferences_smoke.sql"
+--   lane-b-run.sh bash -c "docker exec -i supabase_db_d-flow-lane-b psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/rehearsal/<이 번호>_account_preferences_smoke.sql"
 -- 사용자 셋(uuid …7e57-0000000016a1..a3): u1 = A 먼저·B 나중(A 행에 계정 키, B 행에 다른 테마 — A 가 이긴다, lastProjectId = B 프로젝트),
 --   u2 = B 만(lastProjectId = 없는 프로젝트 → 버림, heroCollapsed), u3 = A 에서 탈퇴(B 만 남음, A 행에 lastProjectId = A 프로젝트 → 버림).
 -- U2a-2 수정(Y2·Y3): u4 = A 먼저·B 나중이고 B 행이 **없다** — A 행의 notifRead 에 A·B 프로젝트·없는 프로젝트·형식 밖 키, lastProjectId = B 프로젝트
