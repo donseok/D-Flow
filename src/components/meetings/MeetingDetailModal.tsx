@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from '@/components/minutes/minuteLinks'
 import { CalendarDays, Clock4, MapPin, Repeat, Trash2, Pencil, Ban, User, AlertTriangle, NotebookText, Megaphone, Check } from 'lucide-react'
 import type { DictKey } from '@/lib/i18n/dict'
 import type { Meeting, MeetingAttendeeInfo, MeetingOccurrence } from '@/lib/domain/types'
@@ -29,6 +30,7 @@ export function MeetingDetailModal({
   onChanged: () => void
 }) {
   const { t } = useLocale()
+  const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 행의 워크스페이스로, D6)
   const [detail, setDetail] = useState<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null>(null)
   const [minutes, setMinutes] = useState<LinkedMinute[]>([])
   const [loading, setLoading] = useState(false)
@@ -144,7 +146,7 @@ export function MeetingDetailModal({
               <ul className="space-y-1">
                 {minutes.map(mn => (
                   <li key={mn.id}>
-                    <Link href={`/minutes/${mn.id}`} onClick={onClose}
+                    <Link href={minuteLinks.minute(mn.id)} onClick={onClose}
                       className="flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink transition hover:border-line-strong hover:bg-surface-2">
                       <NotebookText className="h-4 w-4 shrink-0 text-brand" />
                       <span className="shrink-0 tabular-nums text-xs text-ink-subtle">{mn.minuteDate}</span>

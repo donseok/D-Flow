@@ -4,9 +4,12 @@
 // 층이 없을 때를 위해 프로젝트 목록 링크를 늘 둔다.
 import Link from 'next/link'
 import { TAB_TONE, type TabTone } from '@/components/agent-hub/AgentTabs'
+import { useScope } from '@/components/app/ScopeContext'
+import { wsHref } from '@/lib/workspace/paths'
 
 export function OfficeNav({ floors, tone }: { floors: ReadonlyArray<{ id: string; name: string }>; tone: TabTone }) {
   const t = TAB_TONE[tone]
+  const scope = useScope()   // 범위가 없으면(셸 밖) 옛 형식 — 스텁이 해석한다(D5)
   return (
     <nav aria-label="다른 스튜디오" className="flex flex-wrap items-center gap-1.5">
       <span data-office-nav="all" aria-current="page" className={`chip ${t.on}`}>전체 스튜디오</span>
@@ -15,7 +18,7 @@ export function OfficeNav({ floors, tone }: { floors: ReadonlyArray<{ id: string
           title={`${f.name} 의 에이전트 스튜디오로 — 거기서 위임·승인 탭으로 갈 수 있습니다`}
           className={`chip ${t.off}`}>{f.name}</Link>
       ))}
-      <Link href="/projects" data-office-nav="projects" className={`chip ${t.off}`}>프로젝트 목록</Link>
+      <Link href={scope?.workspace ? wsHref(scope.workspace.slug, 'projects') : '/projects'} data-office-nav="projects" className={`chip ${t.off}`}>프로젝트 목록</Link>
     </nav>
   )
 }

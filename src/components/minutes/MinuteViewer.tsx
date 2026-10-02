@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ChevronRight, Download, ExternalLink, FolderOpen, History, Maximize2, Minimize2,
@@ -115,6 +116,10 @@ export function MinuteViewer({
   projectWorkspaces?: Record<string, string>
 }) {
   const router = useRouter()
+  // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 목록·상세(범위가 없으면 옛 형식 — minuteLinks)
+  const links = useMinuteLinks()
+  const listHref = links.list
+  const currentHref = links.minute(minute.id)
   const { t } = useLocale()
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
@@ -665,7 +670,7 @@ export function MinuteViewer({
     const res = await deleteMinute(minute.id)
     setBusy(false)
     if (!res.ok) { setErr(res.error ?? 'error'); return }
-    router.push('/minutes')
+    router.push(listHref)
   }
 
   // 같은 문장을 하이라이트한 사람 명단 — 하이라이트를 누른 시각순이 아니라 가나다순으로 보여준다.
@@ -687,7 +692,7 @@ export function MinuteViewer({
       {/* 메타 헤더 — 메타·액션 단일 행(접기 없음). 좁은 폭에서만 wrap */}
       <div className="card shrink-0 space-y-2 px-4 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Link href="/minutes" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
+          <Link href={listHref} className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
             <ArrowLeft className="h-4 w-4" />{t('min.detail.back')}
           </Link>
           {/* 편철 위치 — 팀 배지와 경로를 테두리 있는 한 덩어리 칩으로 묶어 메타 행 맨 앞에 둔다.
@@ -786,7 +791,7 @@ export function MinuteViewer({
           <p className="text-sm font-medium text-ink">
             {t('min.version.viewingBanner').replace('{n}', String(historicalVersion.versionNo))}
           </p>
-          <Link href={`/minutes/${minute.id}`} className="ml-auto text-xs font-medium text-brand hover:text-brand-hover">
+          <Link href={currentHref} className="ml-auto text-xs font-medium text-brand hover:text-brand-hover">
             {t('min.version.backCurrent')}
           </Link>
         </div>

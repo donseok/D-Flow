@@ -156,7 +156,7 @@ function TrustPanel({
   )
 }
 
-function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, canAnswer }: { items: WikiItem[]; questions: NonNullable<MemoryTopicDetailData['questions']>; locale: Locale; projectId: string; topicId: string; canCurate: boolean; canAnswer: boolean }) {
+function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, canAnswer, minutesBase }: { items: WikiItem[]; questions: NonNullable<MemoryTopicDetailData['questions']>; locale: Locale; projectId: string; topicId: string; canCurate: boolean; canAnswer: boolean; minutesBase?: string }) {
   if (items.length === 0 && questions.length === 0) return <p className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink-muted">{t(locale, 'wiki.topic.noOpen')}</p>
   return (
     <div className="space-y-3">
@@ -168,12 +168,12 @@ function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, ca
           {canAnswer && <WikiQuestionAnswerForm projectId={projectId} topicId={topicId} questionId={question.id} locale={locale} />}
         </article>
       ))}
-      {items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} />)}
+      {items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} minutesBase={minutesBase} />)}
     </div>
   )
 }
 
-function EvidenceAccordion({ items, locale, projectId, canCurate }: { items: WikiItem[]; locale: Locale; projectId: string; canCurate: boolean }) {
+function EvidenceAccordion({ items, locale, projectId, canCurate, minutesBase }: { items: WikiItem[]; locale: Locale; projectId: string; canCurate: boolean; minutesBase?: string }) {
   return (
     <details className="card group overflow-hidden">
       <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden sm:px-6">
@@ -188,7 +188,7 @@ function EvidenceAccordion({ items, locale, projectId, canCurate }: { items: Wik
       <div className="border-t border-line px-5 py-5 sm:px-6">
         <p className="mb-3 text-xs leading-5 text-ink-muted">{t(locale, 'wiki.evidence.desc')}</p>
         {items.length > 0
-          ? <div className="space-y-3">{items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} />)}</div>
+          ? <div className="space-y-3">{items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} minutesBase={minutesBase} />)}</div>
           : <p className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-muted">{t(locale, 'wiki.noItems')}</p>}
       </div>
     </details>
@@ -203,6 +203,7 @@ export function WikiTopicDetail({
   canEditDocuments = canCurate,
   canVerifyDocuments = canEditDocuments,
   userId,
+  minutesBase,
 }: {
   projectId: string
   data: WikiTopicDetailData
@@ -212,6 +213,8 @@ export function WikiTopicDetail({
   canVerifyDocuments?: boolean
   /** 편집기 로컬 초안의 주인. null 이면 초안 기능이 꺼진다. 필수 — 빠뜨리면 초안이 조용히 꺼지므로 호출부가 명시한다. */
   userId: string | null
+  /** 근거·변경의 회의록 링크 기준 경로 — 페이지가 슬러그 워크스페이스로 만든 '/w/<s>/minutes'(D38 ①, 과제 35). 없으면 영구 링크 형식 */
+  minutesBase?: string
 }) {
   const data = rawData as MemoryTopicDetailData
   if (!data.topic) {
@@ -312,7 +315,7 @@ export function WikiTopicDetail({
               <div className="space-y-3">
                 {proposals.map((item) => (
                   <div key={item.id}>
-                    <WikiItemCard item={item} locale={locale} showEvidence />
+                    <WikiItemCard item={item} locale={locale} showEvidence minutesBase={minutesBase} />
                     {canReviewMemory && <WikiProposalActions projectId={projectId} topicId={item.topicId} itemId={item.id} locale={locale} />}
                   </div>
                 ))}
@@ -320,14 +323,14 @@ export function WikiTopicDetail({
             </SectionCard>
           )}
 
-          <EvidenceAccordion items={evidenceItems} locale={locale} projectId={projectId} canCurate={canCurateLegacy} />
+          <EvidenceAccordion items={evidenceItems} locale={locale} projectId={projectId} canCurate={canCurateLegacy} minutesBase={minutesBase} />
         </div>
 
         <div className="space-y-5 xl:sticky xl:top-(--frame-sticky-top)">
           <TrustPanel projectId={projectId} topic={topic} items={items} locale={locale} canContribute={canWriteMemory} trustState={trustState} />
           <SectionCard eyebrow={t(locale, 'wiki.section.open.eyebrow')} title={t(locale, 'wiki.section.open.memoryTitle')} icon={ShieldAlert} actions={<span className="chip bg-pending-weak text-pending">{openItems.length + questions.length}</span>}>
             <p className="-mt-2 mb-3 text-xs text-ink-muted">{t(locale, 'wiki.section.open.memoryDesc')}</p>
-            <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} />
+            <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} minutesBase={minutesBase} />
           </SectionCard>
         </div>
       </div>
@@ -365,7 +368,7 @@ export function WikiTopicDetail({
               </ol>
             </div>
           )}
-          <WikiChangeList changes={data.changes} locale={locale} />
+          <WikiChangeList changes={data.changes} locale={locale} minutesBase={minutesBase} />
           {(data.changesTruncated || data.dataTruncated) && <p className="mt-3 rounded-lg bg-pending-weak px-3 py-2 text-xs text-pending">{t(locale, 'wiki.changes.truncated')}</p>}
         </div>
       </details>

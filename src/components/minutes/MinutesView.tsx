@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   Bot, CalendarDays, ChevronLeft, ChevronRight, Download, LayoutGrid, List, ListTree, Plus, Search,
@@ -70,6 +71,7 @@ export function MinutesView({
   const router = useRouter()
   const { t, locale } = useLocale()
   const { toast } = useToast()
+  const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 상세
   const teamCodes = useTeamCodes()
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
@@ -348,7 +350,7 @@ export function MinutesView({
                 <ul className="divide-y divide-line/70">
                   {rows.map(mi => (
                     <li key={mi.id}>
-                      <Link href={`/minutes/${mi.id}`}
+                      <Link href={minuteLinks.minute(mi.id)}
                         className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
                         <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
                           {mi.teamCode}
@@ -377,7 +379,7 @@ export function MinutesView({
               <ul className="divide-y divide-line/70">
                 {minutes.filter(mi => mi.minuteDate === selectedDate).map(mi => (
                   <li key={mi.id}>
-                    <Link href={`/minutes/${mi.id}`}
+                    <Link href={minuteLinks.minute(mi.id)}
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
                       <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
                         {mi.teamCode}

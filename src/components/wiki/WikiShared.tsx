@@ -35,11 +35,15 @@ import { WikiTrackedLink } from './WikiTrackedLink'
  * 그래프에 들어간다. minutes/source는 blocks.ts를 값으로 가져오고 blocks.ts는 unified·remark-parse·
  * remark-gfm을 끌어오므로, 링크 문자열 몇 줄 때문에 마크다운 파서 100KB가 Wiki 홈 번들에 실린다.
  * 형식이 갈리지 않도록 tests/ui/wiki-safety.test.tsx가 두 구현의 결과를 대조한다.
+ * base 는 minuteSourceHref 와 같다 — 기본은 영구 링크 형식(스텁이 행의 워크스페이스로, D6). 이 파일은 서버 컴포넌트(위키 주제)로도
+ * 그려져 useScope 를 읽을 수 없으므로, 페이지가 슬러그 워크스페이스의 회의록 경로를 minutesBase 로 내려 준다(D38 ①, 과제 35).
  */
+const MINUTES_PERMALINK_BASE = '/minutes'
 export function wikiMinuteSourceHref(
   minuteId: string,
   source: { blockIndex: number; blockHash: string; bodyHash: string },
   minuteVersionId?: string | null,
+  base: string = MINUTES_PERMALINK_BASE,
 ): string {
   const params = new URLSearchParams({
     block: String(source.blockIndex),
@@ -47,7 +51,7 @@ export function wikiMinuteSourceHref(
     body: source.bodyHash,
   })
   if (minuteVersionId) params.set('version', minuteVersionId)
-  return `/minutes/${minuteId}?${params.toString()}`
+  return `${base}/${minuteId}?${params.toString()}`
 }
 
 interface KindMeta {
@@ -230,7 +234,7 @@ export function formatWikiDate(
   }).format(parsed)
 }
 
-function sourceHref(source: WikiSource): string {
+function sourceHref(source: WikiSource, base: string): string {
   if (
     source.bodyHash
     && source.blockHash
@@ -240,14 +244,14 @@ function sourceHref(source: WikiSource): string {
       blockIndex: source.blockIndex,
       blockHash: source.blockHash,
       bodyHash: source.bodyHash,
-    }, source.minuteVersionId)
+    }, source.minuteVersionId, base)
   }
   return source.minuteVersionId
-    ? `/minutes/${source.minuteId}?version=${encodeURIComponent(source.minuteVersionId)}`
-    : `/minutes/${source.minuteId}`
+    ? `${base}/${source.minuteId}?version=${encodeURIComponent(source.minuteVersionId)}`
+    : `${base}/${source.minuteId}`
 }
 
-function changeSourceHref(change: WikiChangeEvent): string {
+function changeSourceHref(change: WikiChangeEvent, base: string): string {
   if (
     change.minuteId
     && change.sourceBodyHash
@@ -259,21 +263,24 @@ function changeSourceHref(change: WikiChangeEvent): string {
       blockIndex: change.sourceBlockIndex,
       blockHash: change.sourceBlockHash,
       bodyHash: change.sourceBodyHash,
-    }, change.minuteVersionId)
+    }, change.minuteVersionId, base)
   }
   return change.minuteVersionId
-    ? `/minutes/${change.minuteId}?version=${encodeURIComponent(change.minuteVersionId)}`
-    : `/minutes/${change.minuteId}`
+    ? `${base}/${change.minuteId}?version=${encodeURIComponent(change.minuteVersionId)}`
+    : `${base}/${change.minuteId}`
 }
 
 export function WikiSourceLinks({
   sources,
   locale,
   showEvidence = false,
+  minutesBase = MINUTES_PERMALINK_BASE,
 }: {
   sources: WikiSource[]
   locale: Locale
   showEvidence?: boolean
+  /** 회의록 링크의 기준 경로 — 슬러그 워크스페이스의 '/w/<s>/minutes'. 없으면 영구 링크 형식 */
+  minutesBase?: string
 }) {
   if (sources.length === 0) return null
   return (
@@ -281,7 +288,7 @@ export function WikiSourceLinks({
       {sources.slice(0, showEvidence ? 4 : 2).map((source, index) => (
         <div key={source.id || `${source.minuteId}-${source.blockIndex ?? index}`}>
           <WikiTrackedLink
-            href={sourceHref(source)}
+            href={sourceHref(source, minutesBase)}
             domain="minutes"
             className="group/source inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-brand hover:text-brand-hover"
             ariaLabel={`${source.minuteTitle ?? t(locale, 'wiki.viewSource')} ${t(locale, 'wiki.viewSource')}`}
@@ -314,10 +321,13 @@ export function WikiItemCard({
   locale,
   showEvidence = false,
   curateProjectId,
+  minutesBase,
 }: {
   item: WikiItem
   locale: Locale
   showEvidence?: boolean
+  /** 근거 회의록 링크의 기준 경로(WikiSourceLinks) */
+  minutesBase?: string
   /** 넘기면 큐레이션 버튼이 붙는다. 읽기 전용 문맥(회의록 영향 카드 등)에서는 생략한다. */
   curateProjectId?: string
 }) {
@@ -360,7 +370,7 @@ export function WikiItemCard({
               )}
             </div>
           )}
-          <WikiSourceLinks sources={item.sources} locale={locale} showEvidence={showEvidence} />
+          <WikiSourceLinks sources={item.sources} locale={locale} showEvidence={showEvidence} minutesBase={minutesBase} />
           {curateProjectId && (
             <WikiItemActions item={item} projectId={curateProjectId} locale={locale} />
           )}
@@ -416,11 +426,14 @@ export function WikiChangeList({
   locale,
   limit,
   emptyText,
+  minutesBase = MINUTES_PERMALINK_BASE,
 }: {
   changes: WikiChangeEvent[]
   locale: Locale
   limit?: number
   emptyText?: string
+  /** 회의록 링크의 기준 경로 — 슬러그 워크스페이스의 '/w/<s>/minutes'. 없으면 영구 링크 형식 */
+  minutesBase?: string
 }) {
   const visible = typeof limit === 'number' ? changes.slice(0, limit) : changes
   if (visible.length === 0) {
@@ -452,7 +465,7 @@ export function WikiChangeList({
               </p>
               {change.minuteId && (
                 <WikiTrackedLink
-                  href={changeSourceHref(change)}
+                  href={changeSourceHref(change, minutesBase)}
                   domain="minutes"
                   className="mt-2 inline-flex max-w-full items-center gap-1.5 text-[11px] font-medium text-brand hover:text-brand-hover"
                 >

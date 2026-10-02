@@ -1,6 +1,7 @@
 'use client'
 import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import {
   BookOpenText, CheckSquare, ChevronDown, ChevronRight, ExternalLink, FileText, Folder, FolderOpen,
   FolderPlus, MoreHorizontal, Paperclip, Square, Star,
@@ -956,6 +957,7 @@ function MinuteCard({
   selecting = false, selected = false, onSelectToggle,
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
+  const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
   return (
     <article {...dragProps}
       className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
@@ -963,7 +965,7 @@ function MinuteCard({
       {/* 선택 모드에서는 링크를 렌더하지 않는다 — 고르려다 상세로 튕겨 나가면 선택 자체가 불가능하다.
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 카드 대신 링크(href)가 끌린다 */}
       {!selecting && (
-        <Link draggable={false} href={`/minutes/${l.id}`} aria-label={l.title} className="absolute inset-0 rounded-2xl" />
+        <Link draggable={false} href={minuteHref(l.id)} aria-label={l.title} className="absolute inset-0 rounded-2xl" />
       )}
       {selecting && (
         <button aria-hidden tabIndex={-1} onClick={onSelectToggle}
@@ -1017,12 +1019,13 @@ function MinuteRow({
   selecting = false, selected = false, onSelectToggle,
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
+  const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
   return (
     <li {...dragProps} className={`relative ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다(카드와 같은 이유).
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 행 대신 링크(href)가 끌린다 */}
       {!selecting && (
-        <Link draggable={false} href={`/minutes/${l.id}`} aria-label={l.title} className="absolute inset-0 rounded-lg" />
+        <Link draggable={false} href={minuteHref(l.id)} aria-label={l.title} className="absolute inset-0 rounded-lg" />
       )}
       {selecting && (
         <button aria-hidden tabIndex={-1} onClick={onSelectToggle}

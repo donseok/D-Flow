@@ -1,6 +1,8 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useScope } from '@/components/app/ScopeContext'
+import { wsHref } from '@/lib/workspace/paths'
 import type { Seat, Seatmap, SeatmapScope } from '@/lib/domain/seatmap'
 import { seatmapChannelProjectIds } from '@/lib/domain/seatmap'
 import { refreshSeatmap } from '@/app/actions/agentSeatmap'
@@ -190,9 +192,10 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
 
   // 에이전트 보기 재료 — 훅이라 보기와 무관하게 늘 부른다(좌석표가 바뀔 때만 다시 묶는다).
   const roster = useRoster(map)
+  const range = useScope()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 해석, D5)
   const tools = (
     <>
-      {projectId !== undefined && <Link href="/agents" data-office-all-link className={css.allLink}>전체 스튜디오</Link>}
+      {projectId !== undefined && <Link href={range?.workspace ? wsHref(range.workspace.slug, 'agents') : '/agents'} data-office-all-link className={css.allLink}>전체 스튜디오</Link>}
       <div className={css.viewSeg} role="group" aria-label="보기">
         <button type="button" data-view="agent" aria-pressed={view === 'agent'} onClick={() => pickView('agent')}><IconAgentView />에이전트</button>
         <button type="button" data-view="floor" aria-pressed={view === 'floor'} onClick={() => pickView('floor')}><IconFloorView />평면도</button>

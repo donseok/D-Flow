@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useScope } from '@/components/app/ScopeContext'
+import { wsHref } from '@/lib/workspace/paths'
 import { UserPlus, Upload, KeyRound, UserCog, ShieldCheck, UserRound, Wand2, Copy, Check, Eye } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -50,6 +52,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   currentUserId: string
 }) {
   const router = useRouter()
+  const scope = useScope()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 해석, D5)
   const [addOpen, setAddOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [resetting, setResetting] = useState<AccountRow | null>(null)
@@ -66,7 +69,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
             <select
               className="app-input h-9 w-auto text-xs"
               value={projectId}
-              onChange={(e) => router.push(`/admin/accounts?project=${e.target.value}`)}
+              onChange={(e) => router.push(scope?.workspace
+                ? wsHref(scope.workspace.slug, 'admin/accounts', { project: e.target.value })
+                : `/admin/accounts?project=${encodeURIComponent(e.target.value)}`)}
               title="권한 표시·부여 대상 프로젝트"
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
