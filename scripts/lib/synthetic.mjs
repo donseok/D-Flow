@@ -50,6 +50,9 @@ export const SYNTHETIC_C = Object.freeze({
     area('QUAL', QUALITY, 3, [['MEP', 'primary']]),
     area('MATL', '자재', 4, [['MEP', 'support']]),
   ]),
+  // SP5 A(스펙 D28·D43) — C 는 월요일 주 시작 규칙(SP4 S4(월) 회귀를 계속 덮는다). S1 이 주차 문서보다 먼저 설정 액션으로 쓴다(입력은 요일 하나 — 문서 0건이라
+  // 서버가 [{ day: 'monday', from: null }] 로 교체한다). R 은 키를 쓰지 않는다(제품 기본값 일요일 — S4 의 R, 과제 30)
+  weekStart: 'monday',
 })
 
 /** 격리 시험의 '다른 워크스페이스' — R·C 의 설정을 읽을 수 없어야 한다 */

@@ -5,7 +5,7 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
-import { LEVEL_LABELS_4, SEED_ACCOUNTS, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
+import { LEVEL_LABELS_4, SEED_ACCOUNTS, seedProjectValues, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
@@ -19,6 +19,7 @@ import { computeTree } from '../../src/lib/domain/rollup'
 import { milestoneTimeline } from '../../src/lib/domain/dashboard'
 import { DEFAULT_MILESTONE_KEYWORDS } from '../../src/lib/settings/defs/project'
 import type { ComputedItem } from '../../src/lib/domain/types'
+import { weekKeyOf } from '../../src/lib/domain/calendar'
 
 const root = process.cwd()
 const pageFiles = (() => {
@@ -913,5 +914,20 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
     expect(s.flicker?.[0].ok).toBe(true)
     expect(s.showcase).toEqual({ pairs: 2, unequal: ['notify'] })
     expect(checksSummary({})).toEqual({ tab: null, print: null, flicker: null, showcase: null })
+  })
+})
+
+describe('seedProjectValues — 캡처 프로젝트는 월요일 주 시작 규칙을 생성 때 기록한다(SP5 D28)', () => {
+  it('생성 값에 월요일 규칙 하나 — 주간 시드의 week_start 는 그 규칙의 키다', () => {
+    const v = seedProjectValues()
+    expect(v['calendar.week_start']).toEqual([{ day: 'monday', from: null }])
+    expect(v['core.level_labels']).toEqual([...LEVEL_LABELS_4])
+    const plan = seedPlan(CTX)
+    expect(weekKeyOf(v['calendar.week_start'], plan.weeklyReport.week_start)).toBe(plan.weeklyReport.week_start)
+  })
+  it('cmdSeed 는 프로젝트를 seedProjectValues() 로 만들고, 그 생성이 주간 문서 insert 보다 앞이다', () => {
+    const src = readFileSync('scripts/ui-capture.mjs', 'utf8')
+    expect(src).toContain('p_values: seedProjectValues(),')
+    expect(src.indexOf('p_values: seedProjectValues(),')).toBeLessThan(src.indexOf("insertOnce('weekly_reports', [plan.weeklyReport]"))
   })
 })

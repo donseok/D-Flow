@@ -37,6 +37,15 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(PENDING_STEPS.S10).toBe('SP5~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
+  it('C 만 월요일 주 시작 규칙(SP5 D28) — S1 의 설정 액션으로 주차 문서보다 먼저 쓴다', () => {
+    expect(SYNTHETIC_C.weekStart).toBe('monday')
+    expect('weekStart' in SYNTHETIC_R).toBe(false)
+    const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+    const call = 'config(SYNTHETIC_C.config, wsC, SYNTHETIC_C.weekStart)'
+    expect(src).toContain(call)
+    expect(src.indexOf(call)).toBeLessThan(src.indexOf("'createWeeklyReport', [C.id"))
+    expect(src).toContain("'calendar.week_start': [{ day: weekStart, from: null }]")
+  })
 })
 
 describe('S1 추가분 — 팀·주간 영역(스펙 §6.4 S1)', () => {

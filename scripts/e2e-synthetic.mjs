@@ -135,7 +135,7 @@ async function main() {
   // ── S1 — 생성(빈 값) + 등록 키(서버 액션)
   await admin.http('GET', '/projects')
   const wsSettingsPage = (ws) => `/w/${encodeURIComponent(ws.slug)}/settings`
-  const config = async (cfg, ws) => {
+  const config = async (cfg, ws, weekStart = null) => {
     // 1) 워크스페이스 키 — modules.allowed·ai.enabled (플랫폼 관리자 전용 구역의 키)
     await admin.http('GET', wsSettingsPage(ws))
     const wsDoc = rows(`${cfg.id} 워크스페이스 설정`, await admin.sb.from('workspace_settings').select('revision, values').eq('workspace_id', ws.id).single())
@@ -158,13 +158,15 @@ async function main() {
       'modules.enabled': cfg.project['modules.enabled'],
       ...(cfg.project['core.milestone_keywords'] !== undefined ? { 'core.milestone_keywords': cfg.project['core.milestone_keywords'] } : {}),
       ...(cfg.project['workflow.stage_credits'] !== undefined ? { 'workflow.stage_credits': cfg.project['workflow.stage_credits'] } : {}),
+      ...(weekStart ? { 'calendar.week_start': weekStart } : {}),   // SP5 A(D28) — 주차 문서보다 먼저, 설정 화면과 같은 액션(요일 하나 → 서버가 규칙 목록)
     }
     const pr = (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings', [proj.id, { expectedRevision: doc.revision, commandId: randomUUID(), set: pset, unset: [] }])).result
     mustOk(`${cfg.id} 프로젝트 설정`, pr)
-    return { id: proj.id, ws, name, expected: { ...cfg.project, ...pset } }
+    // 저장 형태는 입력(요일)이 아니라 규칙 목록이다 — 다시 읽은 값과 이력의 비교는 저장 형태로
+    return { id: proj.id, ws, name, expected: { ...cfg.project, ...pset, ...(weekStart ? { 'calendar.week_start': [{ day: weekStart, from: null }] } : {}) } }
   }
   const R = await config(SYNTHETIC_R.config, wsR)
-  const C = await config(SYNTHETIC_C.config, wsC)
+  const C = await config(SYNTHETIC_C.config, wsC, SYNTHETIC_C.weekStart)
 
   const readDoc = async (client, table, col, id) => rows(`${table} ${id}`, await client.from(table).select('values, revision, schema_version').eq(col, id).single())
   const readHistory = async (client, table, col, id) => rows(`${table} 이력 ${id}`, await client.from(table).select('id, revision, key, new_value, source, changed_by').eq(col, id).order('id', { ascending: true }))

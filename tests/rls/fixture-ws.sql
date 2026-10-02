@@ -95,6 +95,13 @@ insert into public.wiki_items (id, project_id, topic_id, kind, statement, statem
   ('00000000-0000-0000-7e57-000000001106', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001105', 'fact', 'RLS 사실 1', 'rls-s1', 'rls-k1', 'explicit'),
   ('00000000-0000-0000-7e57-000000001107', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001105', 'fact', 'RLS 사실 2', 'rls-s2', 'rls-k2', 'explicit')
   on conflict do nothing;
+-- SP5 A(스펙 D28) — 주간 문서가 있는 프로젝트는 월요일 주 시작 규칙을 문서보다 먼저 기록한다. 제품 기본값이 일요일이 되고(NNNN_calendar)
+-- 주 키 트리거가 규칙 밖 키를 거부해도 이 픽스처의 월요일 키(2026-08-31)와 그 위의 테스트가 그대로 돈다(월요일 회귀를 계속 덮는다).
+-- 마이그레이션 전에는 모르는 키라 무해하다(values 의 제약은 jsonb_typeof='object' 뿐, 해석기는 unknownKeys 로 견딘다). fixture.sql 이 values 를
+-- 통째로 쓴 뒤라 매 적재에 다시 더한다(멱등 — || 는 같은 키를 덮는다). revision 은 올리지 않는다(이력 없는 픽스처 값)
+update public.project_settings
+   set "values" = "values" || '{"calendar.week_start": [{"day": "monday", "from": null}]}'::jsonb
+ where project_id = '00000000-0000-0000-7e57-0000000000c1';
 insert into public.weekly_reports (id, project_id, week_start) values
   ('00000000-0000-0000-7e57-000000001108', '00000000-0000-0000-7e57-0000000000c1', '2026-08-31') on conflict do nothing;
 -- audience='global' — 0005 까지는 전원에게 열린 분기(§2.1). 0006 뒤에는 누구에게도 안 보여야 한다(수신자 행 없음)

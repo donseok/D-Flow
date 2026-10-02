@@ -17,6 +17,11 @@ const ROW = '00000000-0000-0000-7e57-00000000111f'
 const AREA = '00000000-0000-0000-7e57-00000000110c'
 /** 이 파일의 고정 id — …1800~…183f */
 const id = (n: number) => `00000000-0000-0000-7e57-0000000018${n.toString(16).padStart(2, '0')}`
+/** SP5 A(스펙 D28) — 주간 문서를 넣는 임시 프로젝트는 월요일 주 시작 규칙을 먼저 기록한다(기본 일요일·주 키 트리거 뒤에도 월요일 키 케이스가 그대로).
+ *  c1 은 fixture-ws.sql 이 기록한다. 마이그레이션 전에는 모르는 키라 무해하다 */
+const MONDAY_RULE = JSON.stringify({ 'calendar.week_start': [{ day: 'monday', from: null }] })
+const mondayRule = (run: (sql: string, params: unknown[]) => Promise<unknown>, projectId: string) =>
+  run(`update public.project_settings set "values" = "values" || $2::jsonb where project_id = $1`, [projectId, MONDAY_RULE])
 /** 표·열 권한 벽 — 정책이 아니라 권한에서 막힌다 */
 const DENIED = { code: '42501', message: expect.stringContaining('permission denied') }
 /** c2 의 주간 영역(픽스처 영역과 같은 code)과 c1 의 이슈 영역 — 케이스의 트랜잭션 안에서 만든다 */
@@ -267,6 +272,7 @@ describe('weekly_areas ⑧ 삭제(Q10·D23) — 프로젝트 삭제는 RI 트리
     await c.query(`insert into public.workspaces (id, slug, name) values ($1, 'rls-wa-del', 'RLS 주간 삭제')`, [DEL.ws])
     await c.query(`insert into public.projects (id, name, workspace_id) values ($1, 'RLS 삭제 P', $3), ($2, 'RLS 삭제 P2', $3)`,
       [DEL.p, DEL.p2, DEL.ws])
+    await mondayRule((s, p) => c.query(s, p), DEL.p)
     await c.query(`insert into public.teams (id, workspace_id, project_id, code, name) values ($1, $2, null, 'RLSD', 'RLS 삭제 공용 팀')`,
       [DEL.team, DEL.ws])
     await c.query(`insert into public.project_areas (id, project_id, kind, code, name) values ($1, $2, 'weekly_section', 'DEL', 'RLS 삭제 영역')`,
@@ -675,6 +681,7 @@ describe('weekly_areas ⑪ 두 연결 — 문서 생성과 영역 추가는 같�
       await cleanup()
       await pool.query(`insert into public.workspaces (id, slug, name) values ($1, 'rls-wa-lock', 'RLS 주간 잠금')`, [W])
       await pool.query(`insert into public.projects (id, name, workspace_id) values ($1, 'RLS 주간 잠금 P', $2)`, [P, W])
+      await mondayRule((s, p) => pool.query(s, p), P)
       await pool.query(`insert into public.project_areas (id, project_id, kind, code, name) values ($1, $2, 'weekly_section', 'BASE', '기본 영역')`,
         [BASE, P])
       s1 = await pool.connect()

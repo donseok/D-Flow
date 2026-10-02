@@ -271,6 +271,12 @@ export const SEED_WS_B = Object.freeze({ slug: 'ui-capture-b', name: '캡처 B �
 /** 시드 초대(seedPlan 의 invite.email)의 도메인 — 워크스페이스 A 의 초대 허용 도메인에 있어야 초대 화면이 수락 가능한 카드다(과제 5b) */
 export const SEED_INVITE_DOMAIN = 'example.com'
 export const LEVEL_LABELS_4 = Object.freeze(['단계', '작업', '활동', '세부'])
+/** 캡처 프로젝트의 생성 시 설정 — 주간 시드(seedPlan 의 이번 주 월요일 키)보다 먼저 월요일 주 시작 규칙을 기록한다(SP5 스펙 D28).
+ *  설정 표 직접 쓰기 대신 생성 RPC 의 값으로 넣는다(설정 쓰기는 RPC 한 길 — tests/invariants/settings-writes 의 이 파일 RPC 수는 그대로)
+ *  @returns {{ 'core.level_labels': string[]; 'modules.enabled': string[]; 'calendar.week_start': { day: 'monday'; from: null }[] }} */
+export function seedProjectValues() {
+  return { 'core.level_labels': [...LEVEL_LABELS_4], 'modules.enabled': [...PROJECT_TOGGLE_IDS], 'calendar.week_start': [{ day: 'monday', from: null }] }
+}
 const TEAM_DEFS = [['PLN', '기획', '#4f46e5'], ['DSG', '설계', '#0276a8'], ['DEV', '개발', '#7c3aed'], ['QAS', '품질', '#a65b00'], ['OPS', '운영', '#0f766e']]
 const FENCE = '`'.repeat(3)
 const sha256 = (s) => createHash('sha256').update(s, 'utf8').digest('hex')
@@ -717,7 +723,7 @@ async function cmdSeed() {
   if (!project) {
     const created = must('프로젝트 생성', await db.rpc('create_project_with_settings', {
       p_workspace_id: wsA.id, p_name: SEED_PROJECT, p_start_date: plusDays(today, -40), p_end_date: plusDays(today, 60), p_description: marker,
-      p_values: { 'core.level_labels': [...LEVEL_LABELS_4], 'modules.enabled': [...PROJECT_TOGGLE_IDS] },
+      p_values: seedProjectValues(),
       p_copy_from: null, p_actor: users.wsAdmin, p_command_id: randomUUID(), p_schema_version: SCRIPT_SCHEMA_VERSION,
     }))
     project = { id: created.project_id }
