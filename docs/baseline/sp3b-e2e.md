@@ -1,7 +1,10 @@
 # SP3b E2E 기록
 
-서버 = 레인 B 프로덕션 빌드(`next start -p 3201 -H 127.0.0.1`), 스택 `d-flow-lane-b`(api 54421·db 54422), 래퍼 `lane-b-run.sh`. 계정: 캡처 시드의 `ui-wsadmin`(= ana, A 관리자·플랫폼 관리자 아님)·`ui-duo`(A·B 멤버), 이 스크립트가 만드는 `e2e-bea`(B 전용 관리자). 비밀번호는 실행마다 새로 만들어 메모리에만 둔다.
-스크립트 `scripts/e2e-sp3b.mjs` 는 **브랜치 전용**이다 — 창 직전(과제 39)에 `scripts/e2e-local.mjs` 로 합치고 지운다(main 에 들어가지 않는다).
+서버 = 레인 B 프로덕션 빌드(`next start -p 3201 -H 127.0.0.1`), 스택 `d-flow-lane-b`(api 54421·db 54422), 래퍼 `lane-b-run.sh`. 비밀번호는 실행마다 새로 만들어 메모리에만 둔다.
+
+**지금의 기준은 맨 아래 '과제 39 — rebase 뒤' 절이다.** 그 위 UI-2a·UI-2b 절은 rebase 전(merge-base `305a3b4`) 기록으로, 브랜치 전용 스크립트
+`scripts/e2e-sp3b.mjs`(계정: 캡처 시드의 `ui-wsadmin`(= ana)·`ui-duo`(A·B 멤버), 스크립트가 만든 `e2e-bea`)로 쟀다. 과제 39 가 그 단계를
+`scripts/e2e-local.mjs` 의 `sp3b-` 단계로 합치고 스크립트를 지웠다(V15 — main 에 들어가지 않는다).
 
 ## UI-2a
 
@@ -49,4 +52,31 @@ E3 은 UI-3 몫(건너뜀).
 
 ### `e2e-local`(레인 A — 참고, 판정 아님)
 
-깨끗한 DB(`db:reset` → `dev:bootstrap`, 13:38)에서 3201(`INVITE_ALLOWED_DOMAINS`·`MINUTES_API_ENABLED`·시크릿 env)로 돌렸다 — **첫 단계에서 멈춤**: `[admin] GET /projects → 307(기대 200)`(`qa/sp3b/e2e-local-ui2b.txt`). `e2e-local.mjs` 는 아직 옛 경로(`/projects`·`/minutes`·`/admin/accounts`·`/admin/teams`)를 화면 GET 과 서버 액션 worker(`/projects/page` 등) 양쪽에 쓴다 — 그 화면은 스텁(307 GET)뿐이라 첫 화면 GET 에서 끊긴다. 처리: 과제 39 Step 2(e2e-sp3b 단계를 합치고 옛 경로 호출 15~19곳을 `/w/${slug}/…` 로).
+깨끗한 DB(`db:reset` → `dev:bootstrap`, 13:38)에서 3201(`INVITE_ALLOWED_DOMAINS`·`MINUTES_API_ENABLED`·시크릿 env)로 돌렸다 — **첫 단계에서 멈춤**: `[admin] GET /projects → 307(기대 200)`(`qa/sp3b/e2e-local-ui2b.txt`). `e2e-local.mjs` 는 아직 옛 경로(`/projects`·`/minutes`·`/admin/accounts`·`/admin/teams`)를 화면 GET 과 서버 액션 worker(`/projects/page` 등) 양쪽에 쓴다 — 그 화면은 스텁(307 GET)뿐이라 첫 화면 GET 에서 끊긴다. 처리: 과제 39 Step 2(e2e-sp3b 단계를 합치고 옛 경로 호출 15~19곳을 `/w/${slug}/…` 로) — **해결, 아래 절**.
+
+## 과제 39 — rebase 뒤(main `7768830` 위, 창 직전)
+
+`ui/sp3-menu` 를 main `7768830`(SP4 A1·A2 포함)으로 rebase 한 머리에서, 합친 러너 `scripts/e2e-local.mjs`(커밋 `bed4f396`)로 돌렸다.
+서버 = 머리 프로덕션 빌드 `X-MQ3--9xTyN8LUHPzg9-`(src = `bed4f396` 와 같음) · `next start` 3201 · `INVITE_ALLOWED_DOMAINS=example.com`·`MINUTES_API_ENABLED=true`·
+시크릿 env(실행마다 새 값). 깨끗한 DB(`db:reset` → `dev:bootstrap`) — 캡처 시드를 쓰지 않는다. 계정은 러너가 만든다: ana(A 관리자·플랫폼 관리자 아님)·
+bea(B = `e2e-other` 관리자)·duo(A·B 멤버 — B 는 createAccount, A 소속은 service_role 행)·플랫폼 관리자 = 부트스트랩 계정(소속 A 하나).
+증거: `qa/sp3b/t39/s2b-e2e-local.json`(단계별 기록)·`s2b-e2e-local.err`(진행 줄)·`s2b-smoke.txt`. 첫 실행(`s2-*`, 19:24)은 SP3a C 의 설정 화면 경계 단계에서
+멈췄다 — 열린 화면 표지가 옛 레이아웃 제목(`<워크스페이스> 설정`)이었다(UI-2 가 제목 틀을 `<페이지> · <워크스페이스>` 로 바꿈, V6). 표지를 새 제목으로 고친 뒤 통과.
+
+| 단계(`sp3b-`) | 내용 | 결과 | 시각(KST) |
+|---|---|---|---|
+| E1 | 옛 경로 여섯 × 쿼리 + 중복 키·인코딩·`/admin/accounts?project=`·`/minutes/<id>?…` 16건 → 새 경로 307, 상대 `Location`·쿼리 보존 | ✓ | 2026-10-02 19:26 |
+| E2 | 회의록 영구 링크 → 행의 워크스페이스로 307 → 200·제목, 타 워크스페이스 계정(bea)은 404(제목 없음) | ✓ | 19:26 |
+| E4 | 비소속(bea): `/w/A`·`/w/A/minutes`·`/w/A/agents` — 세 경로 모두 HTTP 404 + notFound digest, 본문에 A 프로젝트·회의록 이름 없음 | ✓ | 19:26 |
+| E6 | duo: A·B 회의록 목록이 각자의 것만, 프로젝트 없는 회의록 생성이 인자 워크스페이스(B)에 | ✓ | 19:26 |
+| E8 | 루트 리졸버: 쿠키 없음→`/w/default`, 쿠키=B→`/w/e2e-other`, 위조 쿠키(ana)→`/w/default` | ✓ | 19:26 |
+| E9 | 전환 대상: 이슈를 끈 A 로 → 개요 + `fallbackModule: issues`, 비소속 404 | ✓ | 19:26 |
+| E11 | 소프트 이동: B 회의록 목록 카드의 링크 → 새 상세(문서 요청 0·페이지 오류 0·오류 경계 없음·`_rsc` 없음) | ✓ | 19:26 |
+| E5 | 전환기: 소속 2(duo)만 트리거, 1(ana·플랫폼 관리자)은 이름만, 플랫폼 관리자가 B 를 볼 때 '플랫폼 관리자로 보는 중' | ✓ | 19:26 |
+| E7 | 모듈 끈 메뉴: A 의 이슈를 켜면 내비 링크 생김 → 되돌리면 사라짐 | ✓ | 19:26 |
+| E10 | 비소속 배지: bea 의 A 범위 `/api/shell` 세 배지 null, 자기 B 는 숫자 | ✓ | 19:26 |
+
+- UI-2a 판정 단계(E1·E2·E4·E6·E8·E9·E11)와 UI-2b 판정 단계(+E5·E7·E10)가 모두 이 한 실행이다. E3 은 UI-3 몫(러너에 없다).
+- 같은 실행에서 앞 단계(SP0·SP1·SP2·SP3a B·C·D·SP4 A1·A2 — 38 단계)도 전부 ✓ — 픽스처 한 단계를 더해 합계 **49 단계**. 합성 게이트 `e2e-synthetic.mjs`(옛 경로 다섯 곳을 같은 커밋에서 고침)도
+  깨끗한 DB 에서 15 단계 ✓(`qa/sp3b/t39/s2-synthetic.json`, 19:24). 스모크 통과.
+
