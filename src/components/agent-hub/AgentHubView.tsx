@@ -38,6 +38,8 @@ export type HubWbsBundle = {
   /** 단계 이름 — null 이면 손상·부재다. 상세 패널만 쓰므로 허브는 그리고 패널 자리에 levelsError 를 띄운다(개정 §2.5) */
   levelLabels: string[] | null
   levelsError: { error: string; key: string } | null
+  /** 달력 손상(A-4 리뷰 N3) — 상세 패널 데이터를 계산할 수 없다. 허브는 그리고 패널 자리에 이 사유를 띄운다(FN-8). 정상이면 null */
+  calendarError: { error: string; key: string } | null
   maxDepth: number | null
   members: ProjectMember[]
   /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있고 표 위에 사유를 띄운다(0명으로 위장하지 않는다). */
@@ -53,12 +55,14 @@ function flattenComputed(items: ComputedItem[]): ComputedItem[] {
   return out
 }
 
-export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
+export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showTimeZone = false }: {
   initial: AgentHub; wbs: HubWbsBundle
   /** 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
   timeZone: string
   /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B). 화면 사전 locale(useLocale)과는 다른 값이다 */
   locale?: string
+  /** 시각 뒤에 시간대 이름을 붙인다 — 프로젝트 달력을 못 읽어 기준 UTC 로 찍을 때(A-4 리뷰 N3, 라벨이 사실이게) */
+  showTimeZone?: boolean
 }) {
   const { locale, t } = useLocale()
   const [hub, setHub] = useState(initial)
@@ -132,6 +136,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
   const actor = useMemo(() => actorFromView(wbs.actorView, hub.projectId), [wbs.actorView, hub.projectId])
   const isAdmin = isProjectAdmin(actor, hub.projectId)
   const selectedItem = selectedId ? itemById.get(selectedId) ?? null : null
+  const tzTag = showTimeZone ? ` (${timeZone})` : ''
 
   const c = hub.counters
   const tiles: HeroTile[] = [
@@ -154,7 +159,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
         watchers={hub.watchers} isAdmin={hub.viewer.isAdmin} />
       <div className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
         <span data-hub-stamp className={error ? 'text-accent-warning' : ''}>
-          {error ? `갱신 실패 ${hhmmss(error.at, timeZone, timeLocale)} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt, timeZone, timeLocale)}`}
+          {error ? `갱신 실패 ${hhmmss(error.at, timeZone, timeLocale)}${tzTag} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt, timeZone, timeLocale)}${tzTag}`}
         </span>
         <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>새로고침</button>
       </div>
@@ -168,6 +173,11 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
         <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} locale={timeLocale} />
+        {selectedId && wbs.calendarError && (
+          <div data-hub-detail-unavailable>
+            <ConfigLoadError error={wbs.calendarError.error} keyName={wbs.calendarError.key} locale={locale} />
+          </div>
+        )}
         {selectedItem && wbs.levelLabels === null && (
           <div data-hub-detail-unavailable>
             <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} locale={locale} />

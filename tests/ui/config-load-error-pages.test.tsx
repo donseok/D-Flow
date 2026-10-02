@@ -123,6 +123,23 @@ describe('agents 페이지 — 단계 이름 손상은 허브를 막지 않는�
       wbs: { levelLabels: null, maxDepth: null, levelsError: { key: 'core.level_labels', error: expect.stringContaining('core.level_labels') } },
     })
   })
+  it('달력 손상(getComputedWbs 의 ConfigKeyError)도 허브를 막지 않는다 — 상세 패널만 사유, 시각은 UTC 로 그 이름을 적는다(A-4 리뷰 N3)', async () => {
+    const { getComputedWbs } = await import('@/lib/data/wbs')
+    const { ConfigKeyError } = await import('@/lib/settings/errors')
+    vi.mocked(getComputedWbs).mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone'))
+    const out = await pages[2].render()
+    expect(out).not.toContain(LOAD_FAILED)
+    expect(mocks.AgentHubView.mock.calls.at(-1)![0]).toMatchObject({
+      timeZone: 'UTC', showTimeZone: true,
+      wbs: { items: [], calendarError: { key: 'calendar.timezone', error: expect.stringContaining('calendar.timezone') } },
+    })
+  })
+  it('달력이 아닌 실패(조회 실패 등)는 그대로 던진다 — 빈 허브로 위장하지 않는다', async () => {
+    const { getComputedWbs } = await import('@/lib/data/wbs')
+    const { ConfigUnavailableError } = await import('@/lib/settings/errors')
+    vi.mocked(getComputedWbs).mockRejectedValueOnce(new ConfigUnavailableError('조회 실패'))
+    await expect(pages[2].render()).rejects.toBeInstanceOf(ConfigUnavailableError)
+  })
   it('정상이면 라벨·깊이를 넘기고 levelsError 는 null', async () => {
     await pages[2].render()
     expect(mocks.AgentHubView.mock.calls.at(-1)![0]).toMatchObject({ wbs: { levelLabels: ['Phase', 'Task'], maxDepth: 2, levelsError: null } })
