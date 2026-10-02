@@ -12,6 +12,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(id: string, start: string, end: string, sortOrder: number): ComputedItem {
   return {
@@ -49,7 +50,7 @@ describe('WBS 간트 작업 의존성 — 바 hover 로만 연결선을 그린�
       <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={items}
         dependencies={dependencies}
-        holidays={[]}
+        calendar={calInputUtcMon}
         today="2026-07-01"
         actorView={null}
         projectId="p1"

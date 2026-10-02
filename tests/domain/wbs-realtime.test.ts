@@ -5,10 +5,11 @@ import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const TODAY = '2026-09-17'
-const HOLIDAYS = new Set<string>()
+const CAL = calUtcSun
 
 const row = (over: Partial<WbsRow> & Pick<WbsRow, 'id'>): WbsRow => ({
   parentId: null, code: over.id, sortOrder: 1, name: over.id,
@@ -23,7 +24,7 @@ function tree(aPct: number, bPct: number, aUpdatedAt = '2026-09-17T00:00:00.000Z
     row({ id: 'P' }),
     row({ id: 'a', parentId: 'P', actualPct: aPct, stage: 'ip', updatedAt: aUpdatedAt }),
     row({ id: 'b', parentId: 'P', actualPct: bPct, stage: 'ip', updatedAt: '2026-09-17T00:00:00.000Z' }),
-  ], TODAY, HOLIDAYS, OPTS)
+  ], TODAY, CAL, OPTS)
 }
 
 const findNode = (ns: ComputedItem[], id: string): ComputedItem => {
@@ -82,7 +83,7 @@ describe('applyWbsChange — 순서 판정', () => {
       id: 'a', project_id: 'p1', stage: 'as', actual_pct: 0,
       updated_at: '2026-09-17T01:00:00.000Z', // 보유 행(02:00)보다 과거
     })!
-    expect(applyWbsChange(before, stale, { today: TODAY, holidays: HOLIDAYS })).toBeNull()
+    expect(applyWbsChange(before, stale, { today: TODAY, calendar: CAL })).toBeNull()
   })
 
   it('같은 updated_at 도 버린다 — 이미 반영된 값이다', () => {
@@ -91,17 +92,17 @@ describe('applyWbsChange — 순서 판정', () => {
       id: 'a', project_id: 'p1', stage: 'xx', actual_pct: 100,
       updated_at: '2026-09-17T02:00:00.000Z',
     })!
-    expect(applyWbsChange(before, same, { today: TODAY, holidays: HOLIDAYS })).toBeNull()
+    expect(applyWbsChange(before, same, { today: TODAY, calendar: CAL })).toBeNull()
   })
 
   it('보유 행에 updatedAt 이 없으면 최신으로 보고 반영한다 — fail-open 이 아니라 SSR 직후의 정상 경로다', () => {
     const before = computeTree([
       row({ id: 'P' }),
       row({ id: 'a', parentId: 'P', actualPct: 0, stage: 'as' }), // updatedAt 없음
-    ], TODAY, HOLIDAYS, OPTS)
+    ], TODAY, CAL, OPTS)
     const next = applyWbsChange(before, parseWbsPayload({
       id: 'a', project_id: 'p1', stage: 'xx', actual_pct: 100, updated_at: '2026-09-17T03:00:00.000Z',
-    })!, { today: TODAY, holidays: HOLIDAYS })
+    })!, { today: TODAY, calendar: CAL })
     expect(next).not.toBeNull()
     expect(findNode(next!, 'a').actualPct).toBe(100)
   })
@@ -111,7 +112,7 @@ describe('applyWbsChange — 순서 판정', () => {
     const other = parseWbsPayload({
       id: 'zzz', project_id: 'p1', stage: 'xx', actual_pct: 100, updated_at: '2026-09-17T09:00:00.000Z',
     })!
-    expect(applyWbsChange(before, other, { today: TODAY, holidays: HOLIDAYS })).toBeNull()
+    expect(applyWbsChange(before, other, { today: TODAY, calendar: CAL })).toBeNull()
   })
 })
 
@@ -122,7 +123,7 @@ describe('applyWbsChange — 부분 패치와 롤업', () => {
 
     const next = applyWbsChange(before, parseWbsPayload({
       id: 'a', project_id: 'p1', stage: 'xx', actual_pct: 100, updated_at: '2026-09-17T09:00:00.000Z',
-    })!, { today: TODAY, holidays: HOLIDAYS })
+    })!, { today: TODAY, calendar: CAL })
 
     expect(next).not.toBeNull()
     expect(findNode(next!, 'a').actualPct).toBe(100)
@@ -134,7 +135,7 @@ describe('applyWbsChange — 부분 패치와 롤업', () => {
   it('패치된 행의 updatedAt 이 페이로드 값으로 올라간다 — 다음 순서 판정의 기준이 된다', () => {
     const next = applyWbsChange(tree(0, 0), parseWbsPayload({
       id: 'a', project_id: 'p1', stage: 'xx', actual_pct: 100, updated_at: '2026-09-17T09:00:00.000Z',
-    })!, { today: TODAY, holidays: HOLIDAYS })!
+    })!, { today: TODAY, calendar: CAL })!
     expect(findNode(next, 'a').updatedAt).toBe('2026-09-17T09:00:00.000Z')
   })
 
@@ -142,7 +143,7 @@ describe('applyWbsChange — 부분 패치와 롤업', () => {
     const before = tree(0, 0)
     applyWbsChange(before, parseWbsPayload({
       id: 'a', project_id: 'p1', stage: 'xx', actual_pct: 100, updated_at: '2026-09-17T09:00:00.000Z',
-    })!, { today: TODAY, holidays: HOLIDAYS })
+    })!, { today: TODAY, calendar: CAL })
     expect(findNode(before, 'a').actualPct).toBe(0)
     expect(findNode(before, 'P').rolledActualPct).toBe(0)
   })
@@ -150,7 +151,7 @@ describe('applyWbsChange — 부분 패치와 롤업', () => {
   it('단계 해제(null)도 반영한다', () => {
     const next = applyWbsChange(tree(40, 0), parseWbsPayload({
       id: 'a', project_id: 'p1', stage: null, actual_pct: 40, updated_at: '2026-09-17T09:00:00.000Z',
-    })!, { today: TODAY, holidays: HOLIDAYS })!
+    })!, { today: TODAY, calendar: CAL })!
     expect(findNode(next, 'a').stage).toBeNull()
   })
 })

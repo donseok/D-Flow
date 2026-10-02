@@ -8,8 +8,17 @@ import { ensureAgentProject } from '@/lib/agent/ensureOrder'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
-import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
+import { requireCalendar } from '@/lib/calendar/load'
+import { CalendarError } from '@/lib/domain/calendar'
+
+/** 달력 실패의 사용자 문구 — 손상 키(키 이름이 든 고정 문구)·근무일 없음(3,660일 상한 — 고정 문구). 그 밖은 null(호출부의 고정 문구) */
+function calendarFailureText(e: unknown): string | null {
+  if (e instanceof ConfigKeyError) return e.message
+  if (e instanceof CalendarError) return '근무일을 찾지 못해 시작일을 계산할 수 없습니다 — 프로젝트 설정의 근무 요일·휴무 예외를 확인하세요.'
+  return null
+}
 
 /**
  * wbs.md 웹 업로드 — 스펙 §업로드 경로 2개의 "웹 경로(자동 부착 + 확인)".
@@ -89,8 +98,11 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
     // levels 정합 (PL: 정본 대조 / 골격: 시드 예정)
     let levelsStatus: WbsUploadPreview['levelsStatus'] = 'seed'
     let serverLevels: string[] | null = null
+    // 설정은 한 번 — 단계 정본(PL)과 시작일 파생의 근무일 달력(SP5 — 손상 키는 ConfigKeyError, 아래 catch). 실패는 throw — 아래 catch 가 고정 문구로
+    const cfg = await getProjectConfig(projectId, { client: admin })
+    const cal = requireCalendar(cfg)
     if (role === 'pl') {
-      const state = (await getProjectConfig(projectId, { client: admin })).keys['core.level_labels']   // 실패는 throw — 아래 catch 가 고정 문구로
+      const state = cfg.keys['core.level_labels']
       serverLevels = state.status === 'set' ? state.value : null
       const fileLabels = doc.levels.map(l => l.name)
       levelsStatus = serverLevels && JSON.stringify(serverLevels) === JSON.stringify(fileLabels) ? 'match' : 'mismatch'
@@ -103,7 +115,7 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
 
     // 신규/갱신 분류 — 업로드될 노드의 external_ref 존재 조회
     const module_ = doc.front.module ?? ''
-    const nodes = toImportNodes(doc)
+    const nodes = toImportNodes(doc, cal)
     const refs = nodes.map(n => `${module_}/${n.id}`)
     const existing = new Set<string>()
     for (const refChunk of chunked(refs, 200)) {
@@ -137,7 +149,7 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
   } catch (e) {
     // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
     console.error('[wbs-md] 미리보기 실패:', e)
-    return { ok: false, error: e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '미리보기에 실패했습니다.' }
+    return { ok: false, error: calendarFailureText(e) ?? (e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '미리보기에 실패했습니다.') }
   }
 }
 
@@ -172,7 +184,9 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
       attachRef = r.ref
     }
 
-    const nodes = toImportNodes(doc)
+    // 선행 종료 다음 근무일은 대상 프로젝트의 달력으로(SP5 — 손상 키·근무일 없음은 아래 catch 가 그 문구로)
+    const cal = requireCalendar(await getProjectConfig(projectId, { client: admin }))
+    const nodes = toImportNodes(doc, cal)
     const taskCount = nodes.filter(n => n.kind === 'task').length
     // 프로젝트 자동 활성(2026-08-24) — task 가 있는 업로드는 dev_workflow 를 심으므로 "에이전트에게 일을 시키는
     // 행위"다. 업로드 전에 활성해야 runWbsImport 안의 주문 보장이 첫 업로드부터 발행한다(종전엔 /agent-ops
@@ -197,6 +211,6 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
   } catch (e) {
     // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
     console.error('[wbs-md] 적용 실패:', e)
-    return { ok: false, error: e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '업로드에 실패했습니다.' }
+    return { ok: false, error: calendarFailureText(e) ?? (e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '업로드에 실패했습니다.') }
   }
 }

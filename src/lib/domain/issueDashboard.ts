@@ -5,6 +5,7 @@ import type { Issue, IssueSeverity, IssueStatus } from './issues'
 import { ISSUE_STATUSES, isOverdue } from './issues'
 import { ISSUE_MEGA_AREAS, type IssueMegaCode } from './issueAnalysis'
 import { addDaysIso, seoulYmd } from './dates'
+import { currentRuleDay, startOfWeek, type WeekStartRule } from './calendar'
 import { diffDaysCal } from './dashboard'
 
 /** 대시보드가 쓰는 이슈 슬라이스 — getIssuesForDashboard(1쿼리)와 getIssues(전체) 둘 다 만족한다. */
@@ -108,15 +109,15 @@ export interface IssueTrendModel {
   empty: boolean
 }
 
-/** 최근 N주 등록·해결 누적. 주는 월요일 시작, 마지막 주는 오늘이 속한 주. */
-export function issueTrend(issues: DashboardIssue[], today: string, weeks = TREND_WEEKS): IssueTrendModel {
-  const dow = new Date(`${today}T00:00:00Z`).getUTCDay()       // 0=일
-  const monday = addDaysIso(today, -((dow + 6) % 7))
+/** 최근 N주 등록·해결 누적. 주는 현재 규칙(오늘에 적용되는 규칙)의 시작 요일, 마지막 주는 오늘이 속한 주.
+ *  과거 전환은 보지 않는다 — 표시 전용 집계라 12주를 같은 길이로 센다(SP5 §4.4). */
+export function issueTrend(issues: DashboardIssue[], rules: readonly WeekStartRule[], today: string, weeks = TREND_WEEKS): IssueTrendModel {
+  const thisWeekStart = startOfWeek(today, currentRuleDay(rules, today))
   const created = issues.map(i => seoulDate(i.createdAt))
   const resolved = issues.map(resolvedDate).filter((d): d is string => d !== null)
   const points: IssueTrendPoint[] = []
   for (let w = weeks - 1; w >= 0; w -= 1) {
-    const weekStart = addDaysIso(monday, -7 * w)
+    const weekStart = addDaysIso(thisWeekStart, -7 * w)
     const weekEnd = addDaysIso(weekStart, 6)
     const c = created.filter(d => d <= weekEnd).length
     const r = resolved.filter(d => d <= weekEnd).length

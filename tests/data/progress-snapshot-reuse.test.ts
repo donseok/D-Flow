@@ -8,6 +8,7 @@ import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 // 휴일·달력은 설정 해석기(달력 로더)가 싣는다(SP5 A 과제 13)
@@ -68,7 +69,7 @@ describe('recordProgressSnapshot — 이미 계산된 트리 재사용', () => {
   it('트리를 넘기면 wbs_items 를 다시 읽지 않는다', async () => {
     const roots = computeTree(
       [wbsRow('P', null, null), wbsRow('a', 'P', 100), wbsRow('b', 'P', 0)],
-      seoulToday(), new Set(), OPTS,
+      seoulToday(), calUtcSun, OPTS,
     )
     await recordProgressSnapshot('p1', client as never, { roots, today: seoulToday() })
     expect(reads).not.toContain('wbs_items')
@@ -83,7 +84,7 @@ describe('recordProgressSnapshot — 이미 계산된 트리 재사용', () => {
     upserted = null
     const roots = computeTree(
       [wbsRow('P', null, null), wbsRow('a', 'P', 100), wbsRow('b', 'P', 0)],
-      seoulToday(), new Set(), OPTS,
+      seoulToday(), calUtcSun, OPTS,
     )
     await recordProgressSnapshot('p1', client as never, { roots, today: seoulToday() })
 
@@ -99,7 +100,7 @@ describe('recordProgressSnapshot — 이미 계산된 트리 재사용', () => {
     // 대시보드는 base_date 로 계산한다. 스냅샷은 '오늘'의 기록이라 기준일이 다르면
     // 같은 트리를 쓸 수 없다. 그 경우엔 종전대로 직접 읽어 계산해야 한다.
     return recordProgressSnapshot('p1', client as never, {
-      roots: computeTree([wbsRow('P', null, null)], '2020-01-01', new Set(), OPTS),
+      roots: computeTree([wbsRow('P', null, null)], '2020-01-01', calUtcSun, OPTS),
       today: '2020-01-01',
     }).then(() => {
       expect(reads).toContain('wbs_items')

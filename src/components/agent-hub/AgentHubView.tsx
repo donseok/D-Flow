@@ -9,6 +9,8 @@ import type { AgentHub } from '@/lib/domain/agentHub'
 import type { ComputedItem, ProjectMember, TaskDependency } from '@/lib/domain/types'
 import { actorFromView, isProjectAdmin, type ProjectActorView } from '@/lib/domain/authz'
 import { computeDependencySchedule } from '@/lib/domain/dependencySchedule'
+import { calendarOf } from '@/lib/domain/calendar'
+import type { CalendarInput } from '@/lib/calendar/load'
 import { canAttachDeliverable, canEditDeliverable } from '@/lib/domain/permissions'
 import { refreshAgentHub } from '@/app/actions/agentHub'
 import { useWbsRealtimeBurst } from '@/lib/hooks/useWbsRealtimeBurst'
@@ -30,7 +32,8 @@ export type HubWbsBundle = {
   items: ComputedItem[]
   dependencies: TaskDependency[]
   unresolvedDepends: Record<string, string[]>
-  holidays: string[]
+  /** 프로젝트 달력(직렬화 꼴 — RSC 경계) — 실시간 재계산·의존성 일정의 근무일 판정 */
+  calendar: CalendarInput
   today: string
   /** 단계 이름 — null 이면 손상·부재다. 상세 패널만 쓰므로 허브는 그리고 패널 자리에 levelsError 를 띄운다(개정 §2.5) */
   levelLabels: string[] | null
@@ -99,12 +102,13 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
   // 상세 패널 데이터(wbs.items)는 서버 페이지가 실어 준 값이라 refreshAgentHub 로 갱신되지 않는다.
   // 허브만 바뀌고 패널이 낡으면 같은 화면이 서로 다른 숫자를 보여준다. 그쪽은 행 정체성이 있으니
   // 같은 구독에서 즉시 부분 패치한다(채널은 하나만 연다).
+  const cal = useMemo(() => calendarOf(wbs.calendar), [wbs.calendar])
   useWbsRealtimeBurst({
     projectId: hub.projectId,
     run: () => { void refresh() },
     delayMs: 1_000, maxWaitMs: 5_000, jitterMs: 2_000,
     onChange: payload => setWbsItems(cur =>
-      applyWbsChange(cur, payload, { today: wbs.today, holidays: new Set(wbs.holidays) }) ?? cur),
+      applyWbsChange(cur, payload, { today: wbs.today, calendar: cal }) ?? cur),
   })
   // 경과 시간 표시만 1초마다 — 데이터는 건드리지 않는다.
   useEffect(() => { const t = window.setInterval(() => setNowMs(n => n + 1000), 1000); return () => window.clearInterval(t) }, [])
@@ -115,9 +119,9 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
   const schedule = useMemo(
     () => computeDependencySchedule(
       allFlat.map(i => ({ id: i.id, plannedStart: i.plannedStart, plannedEnd: i.plannedEnd, actualPct: i.rolledActualPct })),
-      wbs.dependencies, wbs.today, wbs.holidays,
+      wbs.dependencies, wbs.today, cal,
     ),
-    [allFlat, wbs.dependencies, wbs.today, wbs.holidays],
+    [allFlat, wbs.dependencies, wbs.today, cal],
   )
   const actor = useMemo(() => actorFromView(wbs.actorView, hub.projectId), [wbs.actorView, hub.projectId])
   const isAdmin = isProjectAdmin(actor, hub.projectId)

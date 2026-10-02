@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDependencySchedule, shiftBusinessDays, type ScheduleTask } from '@/lib/domain/dependencySchedule'
 import type { DependencyType, TaskDependency } from '@/lib/domain/types'
+import { calUtcSun, calWithOff } from '../helpers/calendarFixture'
 
 const task = (
   id: string,
@@ -19,7 +20,7 @@ const dep = (
 
 describe('shiftBusinessDays', () => {
   it('주말·공휴일을 건너 양방향으로 이동한다', () => {
-    const holidays = new Set(['2026-07-17']) // 금요일 제헌절
+    const holidays = calWithOff(['2026-07-17']) // 금요일 휴무
     expect(shiftBusinessDays('2026-07-16', 1, holidays)).toBe('2026-07-20')
     expect(shiftBusinessDays('2026-07-20', -1, holidays)).toBe('2026-07-16')
     expect(shiftBusinessDays('2026-07-18', 0, holidays)).toBe('2026-07-20')
@@ -30,19 +31,19 @@ describe('computeDependencySchedule', () => {
   it('FS는 선행 종료 다음 영업일, lag는 추가 영업일로 계산한다', () => {
     const holidays = ['2026-07-17']
     const tasks = [task('A', '2026-07-13', '2026-07-16'), task('B', '2026-07-13', '2026-07-14')]
-    const fs0 = computeDependencySchedule(tasks, [dep('d0', 'A', 'B')], '2026-07-01', holidays)
+    const fs0 = computeDependencySchedule(tasks, [dep('d0', 'A', 'B')], '2026-07-01', calWithOff(holidays))
     expect(fs0.byId.get('B')?.forecastStart).toBe('2026-07-20')
 
-    const fs1 = computeDependencySchedule(tasks, [dep('d1', 'A', 'B', 'FS', 1)], '2026-07-01', holidays)
+    const fs1 = computeDependencySchedule(tasks, [dep('d1', 'A', 'B', 'FS', 1)], '2026-07-01', calWithOff(holidays))
     expect(fs1.byId.get('B')?.forecastStart).toBe('2026-07-21')
   })
 
   it('SS는 시작일을 기준으로 동시 또는 lag 시작한다', () => {
     const holidays = ['2026-07-17']
     const tasks = [task('A', '2026-07-16', '2026-07-21'), task('B', '2026-07-13', '2026-07-14')]
-    const ss0 = computeDependencySchedule(tasks, [dep('d0', 'A', 'B', 'SS')], '2026-07-01', holidays)
+    const ss0 = computeDependencySchedule(tasks, [dep('d0', 'A', 'B', 'SS')], '2026-07-01', calWithOff(holidays))
     expect(ss0.byId.get('B')?.forecastStart).toBe('2026-07-16')
-    const ss1 = computeDependencySchedule(tasks, [dep('d1', 'A', 'B', 'SS', 1)], '2026-07-01', holidays)
+    const ss1 = computeDependencySchedule(tasks, [dep('d1', 'A', 'B', 'SS', 1)], '2026-07-01', calWithOff(holidays))
     expect(ss1.byId.get('B')?.forecastStart).toBe('2026-07-20')
   })
 
@@ -50,7 +51,7 @@ describe('computeDependencySchedule', () => {
     const result = computeDependencySchedule([
       task('A', '2026-07-18', '2026-07-21'), // 토~화: 월/화 2영업일
       task('B', '2026-07-18', '2026-07-19'), // 주말만
-    ], [], '2026-07-01')
+    ], [], '2026-07-01', calUtcSun)
     expect(result.byId.get('A')?.forecastStart).toBe('2026-07-20')
     expect(result.byId.get('A')?.forecastEnd).toBe('2026-07-21')
     expect(result.unscheduledTaskIds.has('B')).toBe(true)
@@ -63,7 +64,7 @@ describe('computeDependencySchedule', () => {
       task('X', '2026-07-13', '2026-07-16'),
       task('B', '2026-07-20', '2026-07-21'),
     ]
-    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B'), dep('xb', 'X', 'B')], '2026-07-01')
+    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B'), dep('xb', 'X', 'B')], '2026-07-01', calUtcSun)
     expect(result.byId.get('B')?.forecastStart).toBe('2026-07-20')
     expect(result.byId.get('B')?.drivenBy).toEqual([]) // 계획 시작 하한이 더 늦다
     expect(result.byId.get('A')?.critical).toBe(false)
@@ -77,7 +78,7 @@ describe('computeDependencySchedule', () => {
       task('B', '2026-07-16', '2026-07-17'),
       task('C', '2026-07-13', '2026-07-13'), // 연결 없는 요약/작업은 CP 판정 대상 아님
     ]
-    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B')], '2026-07-01')
+    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B')], '2026-07-01', calUtcSun)
     expect(result.criticalTaskIds).toEqual(new Set(['A', 'B']))
     expect(result.criticalDependencyIds).toEqual(new Set(['ab']))
     expect(result.byId.get('C')?.critical).toBe(false)
@@ -85,7 +86,7 @@ describe('computeDependencySchedule', () => {
 
   it('SS에서는 종단이 아닌 장기 선행의 종료를 프로젝트 종료로 사용한다', () => {
     const tasks = [task('A', '2026-07-13', '2026-07-24'), task('B', '2026-07-13', '2026-07-13')]
-    const result = computeDependencySchedule(tasks, [dep('ss', 'A', 'B', 'SS')], '2026-07-01')
+    const result = computeDependencySchedule(tasks, [dep('ss', 'A', 'B', 'SS')], '2026-07-01', calUtcSun)
     expect(result.projectForecastEnd).toBe('2026-07-24')
     expect(result.byId.get('A')?.critical).toBe(true)
     expect(result.byId.get('B')?.critical).toBe(false)
@@ -96,7 +97,7 @@ describe('computeDependencySchedule', () => {
       task('A', '2026-07-13', '2026-07-17', 40), // 5일 중 3일 잔여
       task('B', '2026-07-20', '2026-07-21', 0),
     ]
-    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B')], '2026-07-15')
+    const result = computeDependencySchedule(tasks, [dep('ab', 'A', 'B')], '2026-07-15', calUtcSun)
     expect(result.byId.get('A')?.forecastEnd).toBe('2026-07-20') // 목·금·월
     expect(result.byId.get('A')?.forecastConfidence).toBe('estimated')
     expect(result.byId.get('B')?.forecastStart).toBe('2026-07-21')
@@ -106,7 +107,7 @@ describe('computeDependencySchedule', () => {
     const tasks = ['A', 'B', 'C', 'D', 'E'].map(id => task(id, '2026-07-13', '2026-07-14'))
     const result = computeDependencySchedule(tasks, [
       dep('ab', 'A', 'B'), dep('bc', 'B', 'C'), dep('ca', 'C', 'A'), dep('cd', 'C', 'D'),
-    ], '2026-07-01')
+    ], '2026-07-01', calUtcSun)
     expect(result.cycleTaskIds).toEqual(new Set(['A', 'B', 'C']))
     expect(result.blockedTaskIds).toEqual(new Set(['D']))
     expect(result.byId.has('D')).toBe(false)
@@ -121,7 +122,7 @@ describe('computeDependencySchedule', () => {
     ]
     const result = computeDependencySchedule(tasks, [
       dep('ac', 'A', 'C'), dep('bc', 'B', 'C'), dep('cc', 'C', 'C'), dep('ghost', 'ghost', 'C'),
-    ], '2026-07-01')
+    ], '2026-07-01', calUtcSun)
     expect(result.unscheduledTaskIds).toEqual(new Set(['A', 'B']))
     expect(result.invalidDependencyIds).toEqual(new Set(['ac', 'bc', 'cc', 'ghost']))
     expect(result.criticalTaskIds.size).toBe(0)
@@ -140,7 +141,7 @@ describe('합성 의존성(origin=spec)과 날짜 없는 선행', () => {
       type: 'FS', lagDays: 0, origin: 'spec',
     }
 
-    const r = computeDependencySchedule([P, S], [link], '2026-08-03')
+    const r = computeDependencySchedule([P, S], [link], '2026-08-03', calUtcSun)
 
     expect(r.byId.has('S')).toBe(true)
     expect(r.byId.get('S')?.plannedStart).toBe('2026-08-03')
@@ -157,7 +158,7 @@ describe('합성 의존성(origin=spec)과 날짜 없는 선행', () => {
       type: 'FS', lagDays: 0, origin: 'spec',
     }
 
-    const r = computeDependencySchedule([P, S], [link], '2026-08-03')
+    const r = computeDependencySchedule([P, S], [link], '2026-08-03', calUtcSun)
 
     // 선행이 8/14 에 끝나므로 후행 최이른 시작이 계획(8/3)보다 뒤로 밀린다.
     expect(r.byId.get('S')!.earliestStart > '2026-08-14').toBe(true)

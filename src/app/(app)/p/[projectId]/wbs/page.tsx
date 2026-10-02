@@ -1,4 +1,5 @@
 import { getComputedWbs } from '@/lib/data/wbs'
+import { toCalendarInput } from '@/lib/calendar/load'
 import { getProjectRoster } from '@/lib/data/members'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
@@ -31,7 +32,7 @@ export default async function WbsPage({
   await requireModulePage({ projectId }, 'wbs')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const { view, focus } = await searchParams
   const locale = await getServerLocale()
-  const [{ items, dependencies, unresolvedDepends, holidays, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster] = await Promise.all([
+  const [{ items, dependencies, unresolvedDepends, calendar, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster] = await Promise.all([
     getComputedWbs(projectId),
     getActorForView(),
     listProjects(),
@@ -77,7 +78,7 @@ export default async function WbsPage({
         items={items}
         dependencies={dependencies}
         unresolvedDepends={unresolvedDepends}
-        holidays={holidays}
+        calendar={toCalendarInput(calendar)}
         today={today}
         actorView={toProjectActorView(actor, projectId)}
         me={me}

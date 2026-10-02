@@ -7,6 +7,7 @@ import type { ComputedItem, WbsRow } from '@/lib/domain/types'
 import { standardWorkbook } from '../fixtures/excel/standardAoa'
 import { LEGACY_SENTINELS, findSentinels, sentinelsFor, zipTextParts } from '../fixtures/legacy-sentinels'
 import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // 부정 테스트 2(SP4 D7·D8, W20·W24) — WBS 표준 엑셀 출력. 사용자 정의 팀만 있는 구성의 파일에는 옛 기본값(5팀 코드·11구분명)이 0건이고,
 // 같은 이름을 실제로 등록한 구성은 그 이름이 나오고 정상 왕복한다(단어 전역 금지로 통과시키지 않는다). 봇 부분은 SP8.
@@ -22,7 +23,7 @@ function treeFor(teams: readonly string[], L: number): ComputedItem[] {
     owners: [{ team: teams[0], kind: 'primary' }, ...(teams[1] ? [{ team: teams[1], kind: 'support' as const }] : [])] }))
   rows.push(row({ id: 'L2', parentId: parent, code: 'l2', sortOrder: 91, name: '잎2', plannedStart: '2026-03-09', plannedEnd: '2026-03-13',
     owners: [{ team: teams[teams.length - 1], kind: 'primary' }] }))
-  return computeTree(rows, '2026-03-04', new Set(), { subActTeamOrder: teamOrderMap(teams) })
+  return computeTree(rows, '2026-03-04', calUtcSun, { subActTeamOrder: teamOrderMap(teams) })
 }
 const LABELS: Record<keyof typeof SYNTHETIC_TEAMS, string[]> = {
   default: ['단계', '작업', '세부'], research: ['과제', '연구', '실험', '측정'], construction: ['공구', '공종', '작업'],

@@ -22,6 +22,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return {
@@ -89,7 +90,7 @@ describe('WBS sub-act 축약 표시 + 기본 접힘', () => {
       root.render(
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={fixture()}
-          holidays={[]}
+          calendar={calInputUtcMon}
           today="2026-07-03"
           actorView={null}
           projectId="p1"

@@ -30,11 +30,6 @@ export const WEEK_CALC_ALLOW: Readonly<Record<string, WeekCalcAllow>> = {
 
 /** 옛 사본 — 지우는 과제가 같은 커밋에서 항목을 지운다. 과제 29 가 빈 객체를 단언한다 */
 export const LEGACY_WEEK_COPIES: Readonly<Record<string, WeekCalcAllow>> = {
-  'src/components/wbs/WbsGanttSheet.tsx|getUTCDay()': { why: 'SP5 A 과제 16 — 주 끝 = weekPeriodOf(현재 키).endExclusive − 1, 음영 = isWorkingDay', count: 2 },
-  'src/lib/domain/ganttScale.ts|getUTCDay()': { why: 'SP5 A 과제 16 — isWorkingDay', count: 1 },
-  'src/lib/domain/issueDashboard.ts|getUTCDay()': { why: 'SP5 A 과제 16 — 현재 규칙의 weekKeyOf', count: 1 },
-  'src/lib/domain/issueDashboard.ts|(dow + 6) % 7': { why: 'SP5 A 과제 16 — 현재 규칙의 weekKeyOf', count: 1 },
-  'src/lib/wbsmd/parse.ts|getUTCDay()': { why: 'SP5 A 과제 16 — nextWorkingDay(date, cal)', count: 2 },
   'src/lib/ai/tools/weekly.ts|getUTCDay()': { why: 'SP5 A 과제 17 — 프로젝트 규칙의 키로 정규화(월요일 강제 삭제)', count: 2 },
   'src/lib/ai/chat/router.ts|mondayOf': { why: 'SP5 A 과제 17 — weekPeriodOf(weekKeyOf(today))', count: 6 },
   'src/lib/ai/chat/router.ts|getUTCDay()': { why: 'SP5 A 과제 17 — mondayOf 본문', count: 1 },

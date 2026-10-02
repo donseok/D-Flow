@@ -15,6 +15,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -30,7 +31,7 @@ describe('간트 날짜 축 여백', () => {
   it('축은 시작날짜(07-01)에서 시작하고 끝은 다음 주 일요일(07-19)까지 이어진다', async () => {
     // 완료 항목으로 고정 — 진행 0% 항목은 forecast(지연 전망)가 축 끝을 더 늘려 주 수가 달라진다.
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0, actualPct: 100, rolledActualPct: 100, status: 'done' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0, actualPct: 100, rolledActualPct: 100, status: 'done' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     // 시작주는 시작날짜로 시작(피드백) — 앞쪽 패딩 없음: W01 부제 = 7/1, 6월 주 없음.
     expect(container.textContent).toContain('W017/1W')
@@ -49,7 +50,7 @@ describe('간트 날짜 축 여백', () => {
   it('간트 배율 슬라이더는 축소(4px)를 확대(36px)보다 넓게 허용하고 계정에 저장한다', async () => {
     const { queueUiPref } = await import('@/lib/prefs/debouncedSave')
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     const region = container.firstElementChild as HTMLElement
     expect(region.style.getPropertyValue('--gantt-day')).toBe('24px')
@@ -69,7 +70,7 @@ describe('간트 날짜 축 여백', () => {
   it('슬라이더 양끝 −/+ 버튼으로 한 단계씩 조절하고 경계에서 clamp·저장한다', async () => {
     const { queueUiPref } = await import('@/lib/prefs/debouncedSave')
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={6} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={6} />,
     ))
     const region = container.firstElementChild as HTMLElement
     const out = container.querySelector<HTMLButtonElement>('button[data-gantt-zoom-out]')!
@@ -90,20 +91,20 @@ describe('간트 날짜 축 여백', () => {
 
   it('저장된 initialGanttScale 로 시작하고 범위 밖 저장값은 clamp 된다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={32} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={32} />,
     ))
     expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--gantt-day')).toBe('32px')
     act(() => root.unmount())
     root = createRoot(container)
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={999} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} initialGanttScale={999} />,
     ))
     expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--gantt-day')).toBe('36px')
   })
 
   it('강한 축소(12px 미만)에서는 일 격자 대신 주 격자를 그린다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1', depth: 0 })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     // 기본 24px: 일 격자
     expect(container.querySelectorAll('[data-gantt-grid="day"]').length).toBeGreaterThan(0)

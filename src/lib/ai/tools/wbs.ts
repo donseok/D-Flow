@@ -1,4 +1,5 @@
 import { wbsItemHref } from '@/lib/ai/chat/deep-links'
+import type { DayCal } from '@/lib/domain/progress'
 import { computeDependencySchedule } from '@/lib/domain/dependencySchedule'
 import { computeTree } from '@/lib/domain/rollup'
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
@@ -122,12 +123,12 @@ function flatten(items: ComputedItem[]): FlatItem[] {
 function computedSnapshot(
   rows: WbsRepositoryItem[],
   baseDate: string | null,
-  holidays: string[],
+  calendar: DayCal,
   context: ToolExecutionContext,
   teamCodes: readonly string[],
 ): { flat: FlatItem[]; updatedAtById: Map<string, string | null>; today: string } {
   const today = baseDate ?? todayInSeoul(context.now)
-  const computed = computeTree(rows, today, new Set(holidays), {
+  const computed = computeTree(rows, today, calendar, {
     subActTeamOrder: teamOrderMap(teamCodes),
   })
   return {
@@ -239,7 +240,7 @@ export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTea
       const snapshot = computedSnapshot(
         repoResult.data.items,
         repoResult.data.baseDate,
-        repoResult.data.holidays,
+        repoResult.data.calendar,
         context,
         teamCodes,
       )
@@ -306,7 +307,7 @@ export function createGetWbsItemDetailTool(repository: WbsRepository, teams: Too
       if (!repoResult.data) return emptyWbsDetail(context, false)
       if (!isScopedWbsSnapshot(repoResult.data, parsed.projectId)) return repositoryScopeViolation()
       const snapshot = computedSnapshot(
-        repoResult.data.items, repoResult.data.baseDate, repoResult.data.holidays, context,
+        repoResult.data.items, repoResult.data.baseDate, repoResult.data.calendar, context,
         await teams.projectTeamCodes(parsed.projectId),
       )
       const flat = snapshot.flat.find(value => value.item.id === itemId)
@@ -361,7 +362,7 @@ export function createGetWbsDependenciesTool(
       if (!repoResult.data) return emptyDependencies(context, false, false)
       if (!isScopedWbsSnapshot(repoResult.data, parsed.projectId)) return repositoryScopeViolation()
       const snapshot = computedSnapshot(
-        repoResult.data.items, repoResult.data.baseDate, repoResult.data.holidays, context,
+        repoResult.data.items, repoResult.data.baseDate, repoResult.data.calendar, context,
         await teams.projectTeamCodes(parsed.projectId),
       )
       const byId = new Map(snapshot.flat.map(value => [value.item.id, value]))
@@ -376,7 +377,7 @@ export function createGetWbsDependenciesTool(
         })),
         repoResult.data.dependencies,
         snapshot.today,
-        repoResult.data.holidays,
+        repoResult.data.calendar,
       )
       const relevant = itemId
         ? repoResult.data.dependencies.filter(dep => dep.predecessorId === itemId || dep.successorId === itemId)
@@ -415,6 +416,8 @@ export function createGetWbsDependenciesTool(
       if (schedule.cycleTaskIds.size) warnings.push('순환 의존성이 있어 일부 예상 일정을 계산하지 못했습니다.')
       if (schedule.invalidDependencyIds.size) warnings.push('유효하지 않은 의존성은 일정 계산에서 제외했습니다.')
       if (relevant.length > selected.length) warnings.push(`의존성 ${relevant.length}건 중 50건만 반환했습니다.`)
+      // [RF5] 근무일 탐색 상한 — 일정 계산만 건너뛰고 답은 계속한다(데이터는 바뀌지 않는다)
+      if (schedule.calendarError) warnings.push('근무일을 찾지 못해 일정 계산을 건너뛰었습니다 — 프로젝트 설정의 근무 요일·휴무 예외를 확인하세요.')
       const truncated = relevant.length > selected.length
       return {
         ok: true,

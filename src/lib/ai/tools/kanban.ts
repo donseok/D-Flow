@@ -123,7 +123,7 @@ export function createGetKanbanViewTool(repository: WbsBotRepository, teams: Too
       if (!isScopedWbsSnapshot(repoResult.data, projectId)) return repositoryScopeViolation()
 
       const today = repoResult.data.baseDate ?? todayInSeoul(context.now)
-      const computed = computeTree(repoResult.data.items, today, new Set(repoResult.data.holidays), {
+      const computed = computeTree(repoResult.data.items, today, repoResult.data.calendar, {
         subActTeamOrder: teamOrderMap(teamCodes),
       })
       const effectiveView = (view ?? 'status') as KanbanView

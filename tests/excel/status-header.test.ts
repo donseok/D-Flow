@@ -7,6 +7,7 @@ import { LEGACY_EXCEL_PROFILE_V1 } from '../fixtures/excel/legacy-3row-profile'
 import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
 import type { WbsRow } from '@/lib/domain/types'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // 스펙 §4.3 ① — 두 빌더가 데이터 행 끝에 쓰는 상태 칸(시작전·진행중·지연·완료)에 머리 '상태' 를 단다.
 // 뒤 계산 열 머리(계획%·계획대비%·진척)의 어긋남은 감지 낱말 호환 때문에 그대로다(D16) — 여기서는 상태 한 칸만 본다.
@@ -26,7 +27,7 @@ const items = computeTree([
   // 실적 60·뒤 잎은 아직 시작 전 — 루트가 계획(30)을 따라가 '진행중' 이다(실적이 계획보다 낮으면 '지연').
   row({ id: 'B', parentId: 'T', code: '1.1.2', sortOrder: 3, name: '검토', plannedStart: '2026-07-06', plannedEnd: '2026-07-10',
     owners: [{ team: 'Ops', kind: 'primary' }] }),
-], '2026-07-03', new Set(), OPTS)
+], '2026-07-03', calUtcSun, OPTS)
 
 describe('상태 열 머리(스펙 §4.3 ①)', () => {
   it('표준 경로(옛 빌더 자리 — standardAoa) — 라벨 행 마지막이 상태, 라벨 행 길이 = 데이터 행 길이', () => {

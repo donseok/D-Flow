@@ -1,16 +1,19 @@
-import { businessDaysBetween } from './dates'
+import { workingDaysBetween, type WorkCalendar } from './calendar'
 import { round1 } from './format'
 import type { Status } from './types'
 
+/** 근무일 판정에 필요한 셋(SP5 A) — 계획%·추세·의존성 일정이 받는 달력의 형 */
+export type DayCal = Pick<WorkCalendar, 'workingDays' | 'offDates' | 'workDates'>
+
 export function plannedPct(
-  start: string | null, end: string | null, today: string, holidays: Set<string>,
+  start: string | null, end: string | null, today: string, cal: DayCal,
 ): number {
   if (!start || !end) return 0
   if (today < start) return 0
-  const total = businessDaysBetween(start, end, holidays)
+  const total = workingDaysBetween(start, end, cal)
   if (total === 0) return 0
   const cappedToday = today > end ? end : today
-  const done = businessDaysBetween(start, cappedToday, holidays)
+  const done = workingDaysBetween(start, cappedToday, cal)
   const pct = (done / total) * 100
   return Math.min(100, Math.max(0, round1(pct)))
 }

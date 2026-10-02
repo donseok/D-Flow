@@ -5,6 +5,7 @@ import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { teamOrderMap } from '@/lib/domain/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 // 팀은 합성 기본 구성의 code(PLN·DEV — tests/fixtures/synthetic/teams.ts), 이름은 합성 낱말 — SP4 다시 쓴 테스트 목록에 든다(A2 최종 리뷰 P3-2, FF6)
 
 // N단 프로젝트의 엑셀 export — 계층 열 수 = levelLabels.length.
@@ -33,7 +34,7 @@ const SRC6: WbsRow[] = [
 const LABELS6 = ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task'] as const
 
 describe('buildWbsAoa — N단 라벨이면 계층 열이 라벨 수만큼 늘어난다', () => {
-  const items = computeTree(SRC6, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC6, '2026-09-15', calUtcSun, OPTS)
   const aoa = buildWbsAoa(items, 'N단 프로젝트', ['PLN', 'DEV'], LABELS6)
 
   it('header3: Biz + 계층 6열 + 스페이서 2 + 팀 열', () => {
@@ -61,7 +62,7 @@ describe('buildWbsAoa — N단 라벨이면 계층 열이 라벨 수만큼 늘�
       ...SRC6,
       row({ id: 'x1', parentId: 't', code: 'x1', name: '초과 깊이' }),
     ]
-    const items7 = computeTree(deep, '2026-09-15', new Set(), OPTS)
+    const items7 = computeTree(deep, '2026-09-15', calUtcSun, OPTS)
     const aoa7 = buildWbsAoa(items7, 'N단 프로젝트', ['PLN'], LABELS6)
     const last = aoa7[aoa7.length - 1]
     expect(last[6]).toBe('초과 깊이') // 열 1+min(6, 5)=6
@@ -82,7 +83,7 @@ const PROFILE4: ExcelProfile = {
 }
 
 describe('buildAoaWithProfile — levelLabels 주입 시 Level{N} 대신 프로젝트 라벨', () => {
-  const items = computeTree(SRC6.slice(0, 4), '2026-09-15', new Set(), OPTS) // 4단만
+  const items = computeTree(SRC6.slice(0, 4), '2026-09-15', calUtcSun, OPTS) // 4단만
 
   it('주입하면 header3 계층 라벨이 프로젝트 라벨이 된다', () => {
     const r = buildAoaWithProfile(items, PROFILE4, { expandSubActs: false, levelLabels: ['Phase', 'System', 'Subsystem', 'WP'] })

@@ -13,6 +13,7 @@ const queueWbsCollapse = vi.fn()
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: (...a: unknown[]) => queueWbsCollapse(...(a as [])) }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -72,7 +73,7 @@ describe('WBS initialCollapsed', () => {
 
   it('initialCollapsed=[] 이면 기본 접힘을 무시하고 복수담당 부모가 펼쳐진 채 렌더된다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     // 기본값이면 phase+task+act=3행(sub 숨김). initialCollapsed=[] 이면 sub 2개까지 5행.
     expect(rowCount(container)).toBe(5)
@@ -80,14 +81,14 @@ describe('WBS initialCollapsed', () => {
 
   it('initialCollapsed 미지정이면 기존 기본값(복수담당 부모 접힘)을 유지한다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     expect(rowCount(container)).toBe(3)
   })
 
   it('4단+ 깊이(중간 실 계층 하나 더)에서도 기본 접힘이 복수담당 부모를 찾는다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureDeep()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureDeep()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     // 기본값이면 phase+task+세부작업+act=4행(sub 숨김). 얕은 fixture 의 3행보다 중간 계층만큼 늘었을 뿐,
     // multi 는 여전히 접혀야 한다.
@@ -96,14 +97,14 @@ describe('WBS initialCollapsed', () => {
 
   it('4단+ 깊이에서 initialCollapsed=[] 이면 그대로 전부 펼쳐진다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureDeep()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureDeep()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     expect(rowCount(container)).toBe(6)
   })
 
   it('level 문자열이 activity/phase/task 관례를 따르지 않아도 isOwnerSplit 자식을 가진 노드가 기본 접힘 대상이다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureLevelAgnostic()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureLevelAgnostic()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     // 기본값이면 root+task+중간계층+multi=4행(sub 2개 숨김).
     expect(rowCount(container)).toBe(4)
@@ -111,7 +112,7 @@ describe('WBS initialCollapsed', () => {
 
   it('level 문자열이 관례를 따르지 않아도 initialCollapsed=[] 이면 그대로 전부 펼쳐진다', async () => {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureLevelAgnostic()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureLevelAgnostic()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
     expect(rowCount(container)).toBe(6)
   })
@@ -122,7 +123,7 @@ describe('WBS initialCollapsed', () => {
     // vs bg-plan-track(얇은 진행 바)는 육안으로 색·굵기 차이가 나는 스타일이라 최종 확인은 T8 배포 육안
     // 체크리스트 대상 — 이 테스트는 클래스명 수준의 코드 회귀만 잡는다.
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureBarDepth()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixtureBarDepth()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />,
     ))
     const phaseRow = container.querySelector('[data-row-id="p1"]')!
     const taskRow = container.querySelector('[data-row-id="t1"]')!
@@ -137,7 +138,7 @@ describe('WBS initialCollapsed', () => {
     // 참조 비교 가드는 두 번째 setup에서도 collapsed 가 초기 참조 그대로이므로 저장을 건너뛴다.
     await act(async () => root.render(
       <StrictMode>
-        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />
       </StrictMode>,
     ))
     expect(queueWbsCollapse).not.toHaveBeenCalled()
@@ -146,7 +147,7 @@ describe('WBS initialCollapsed', () => {
   it('사용자가 접힘 토글을 누르면 저장을 정확히 1회 호출한다', async () => {
     await act(async () => root.render(
       <StrictMode>
-        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly />
+        <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={fixture()} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly />
       </StrictMode>,
     ))
     expect(queueWbsCollapse).not.toHaveBeenCalled()

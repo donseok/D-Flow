@@ -2,7 +2,8 @@ import type { ComputedItem, WbsRow } from './types'
 import { round1 } from './format'
 import { computeTree, overallProgress, weightOf } from './rollup'
 import { buildTree, collectLeaves, type BuildTreeOpts, type TreeNode } from './tree'
-import { isBusinessDay } from './dates'
+import { isWorkingDay } from './calendar'
+import type { DayCal } from './progress'
 import { addDaysCal } from './dashboard'
 
 /** wbs_progress_snapshots 1행 (camelCase, 숫자 변환 완료 상태) */
@@ -46,8 +47,8 @@ export function flattenRows(items: ComputedItem[]): WbsRow[] {
 
 /** 임의 날짜의 전체 계획% — computeTree를 해당 날짜로 재실행(주말·공휴일 규칙 재사용).
  *  단일 시점 조회용. 여러 날짜를 평가할 때는 plannedCurve 를 쓸 것(동일 수치, 큰 비용 차). */
-export function plannedAt(rows: WbsRow[], date: string, holidays: Set<string>, opts: BuildTreeOpts): number {
-  return overallProgress(computeTree(rows, date, holidays, opts)).planned
+export function plannedAt(rows: WbsRow[], date: string, cal: DayCal, opts: BuildTreeOpts): number {
+  return overallProgress(computeTree(rows, date, cal, opts)).planned
 }
 
 /**
@@ -59,7 +60,7 @@ export function plannedAt(rows: WbsRow[], date: string, holidays: Set<string>, o
  * (대시보드 fast-follow 2026-07-09: 71행 ~104ms/요청 실측, 600 leaf 외삽 ~1.3s 해소)
  */
 export function plannedCurve(
-  rows: WbsRow[], dates: string[], holidays: Set<string>, opts: BuildTreeOpts,
+  rows: WbsRow[], dates: string[], cal: DayCal, opts: BuildTreeOpts,
 ): TrendPoint[] {
   if (dates.length === 0) return []
   const tree = buildTree(rows, opts)
@@ -76,14 +77,14 @@ export function plannedCurve(
   if (rangeLo !== null && rangeHi !== null) {
     let acc = 0
     for (let d = rangeLo; d <= rangeHi; d = addDaysCal(d, 1)) {
-      if (isBusinessDay(d, holidays)) acc++
+      if (isWorkingDay(d, cal)) acc++
       cum.set(d, acc)
     }
   }
-  // businessDaysBetween(a,b) 동치: 양끝 포함, b<a 는 0 (진입 날짜는 모두 feed 되어 cum 에 존재)
+  // workingDaysBetween(a,b) 동치: 양끝 포함, b<a 는 0 (진입 날짜는 모두 feed 되어 cum 에 존재)
   const bizBetween = (a: string, b: string): number => {
     if (b < a) return 0
-    return (cum.get(b) ?? 0) - (cum.get(a) ?? 0) + (isBusinessDay(a, holidays) ? 1 : 0)
+    return (cum.get(b) ?? 0) - (cum.get(a) ?? 0) + (isWorkingDay(a, cal) ? 1 : 0)
   }
 
   // plannedPct 동치(자기 날짜 기준 계획%) — progress.ts 의 가드·캡·round1 순서 유지
@@ -123,13 +124,14 @@ function actualAt(sorted: SnapshotPoint[], date: string): number | null {
 export function buildTrend(input: {
   items: ComputedItem[]
   snapshots: SnapshotPoint[]
-  holidays: Set<string>
+  /** 근무일 판정 달력(SP5 A — 요일 규칙·휴무·특정일 근무) */
+  calendar: DayCal
   startDate: string | null
   endDate: string | null
   today: string
   opts: BuildTreeOpts
 }): TrendModel {
-  const { items, holidays, startDate, endDate, today, opts } = input
+  const { items, calendar, startDate, endDate, today, opts } = input
 
   // 축 — 프로젝트 기간 우선, 없으면 WBS leaf 날짜 min/max
   const leafDates = collectLeaves(items)
@@ -145,7 +147,7 @@ export function buildTrend(input: {
   for (let d = axisStart; d <= axisEnd; d = addDaysCal(d, 7)) sampleDates.add(d)
   sampleDates.add(axisEnd)
   if (today >= axisStart && today <= axisEnd) sampleDates.add(today)
-  const plannedSeries = plannedCurve(rows, [...sampleDates].sort(), holidays, opts)
+  const plannedSeries = plannedCurve(rows, [...sampleDates].sort(), calendar, opts)
 
   // 실적 이력 — 오늘 이후 제외, carry-forward로 오늘까지 연장.
   // '실적선은 항상 보인다' 불변식: 이력이 축 시작 이후에야 시작되면 (축 시작, 0)에서 직선 보간으로

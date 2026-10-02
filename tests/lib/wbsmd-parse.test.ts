@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { parseWbsMarkdown, validateWbsDoc, toImportNodes, nextBusinessDay } from '@/lib/wbsmd/parse'
+import { parseWbsMarkdown, validateWbsDoc, toImportNodes, nextWorkingDayAfter } from '@/lib/wbsmd/parse'
+import { calendarOf } from '@/lib/domain/calendar'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 /** N단 wbs.md TS 파서 — 스킬 파서(wbs-nlevel-parse.py)와 동일 계약(스펙 §import 계약 v2.2).
  *  웹 업로드 경로(미리보기+적용)가 이 파서를 쓴다. 케이스는 python 테스트에서 포팅. */
@@ -113,7 +115,7 @@ describe('validateWbsDoc', () => {
 })
 
 describe('toImportNodes — v2.2 payload 노드', () => {
-  const nodes = toImportNodes(parseWbsMarkdown(PL_MD))
+  const nodes = toImportNodes(parseWbsMarkdown(PL_MD), calUtcSun)
   const byId = new Map(nodes.map(n => [n.id, n]))
   it('fold — STK 는 노드로 안 나가고 부모 acceptance 로', () => {
     expect(byId.has('STK-QA-JD-PR-01-1')).toBe(false)
@@ -153,7 +155,7 @@ levels:
 - [ ] TSK-06: 날짜 없음
 - [M] TSK-07: 마일스톤 ~2026-09-30
 `
-    const byId = Object.fromEntries(toImportNodes(parseWbsMarkdown(md)).map(n => [n.id, n.schedule]))
+    const byId = Object.fromEntries(toImportNodes(parseWbsMarkdown(md), calUtcSun).map(n => [n.id, n.schedule]))
     expect(byId['TSK-01']).toBe('2026-09-01 ~ 2026-09-03')     // 범위 토큰 그대로
     expect(byId['TSK-02']).toBe('2026-08-31 ~ 2026-09-05')     // 선행 없음 → start_date
     expect(byId['TSK-03']).toBe('2026-09-04 ~ 2026-09-10')     // 선행 종료 09-03(목) → 09-04(금)
@@ -163,13 +165,18 @@ levels:
     expect(byId['TSK-07']).toBe('~ 2026-09-30')                // 마일스톤은 파생 안 함
   })
 
-  it('nextBusinessDay — 금요일 다음은 월요일', () => {
-    expect(nextBusinessDay('2026-09-04')).toBe('2026-09-07')
-    expect(nextBusinessDay('2026-09-05')).toBe('2026-09-07')
-    expect(nextBusinessDay('2026-09-07')).toBe('2026-09-08')
+  it('선행 종료 다음 근무일은 프로젝트 달력 — 일~목 프로젝트에서 목요일 종료 → 일요일 시작', () => {
+    const sunToThu = calendarOf({ timezone: 'UTC', workingDays: [7, 1, 2, 3, 4], weekStart: [{ day: 'sunday', from: null }] })
+    expect(nextWorkingDayAfter('2026-10-08', sunToThu)).toBe('2026-10-11')
+    expect(nextWorkingDayAfter('2026-10-08', calUtcSun)).toBe('2026-10-09')
+  })
+  it('nextWorkingDayAfter — 월~금 달력에서 금요일 다음은 월요일', () => {
+    expect(nextWorkingDayAfter('2026-09-04', calUtcSun)).toBe('2026-09-07')
+    expect(nextWorkingDayAfter('2026-09-05', calUtcSun)).toBe('2026-09-07')
+    expect(nextWorkingDayAfter('2026-09-07', calUtcSun)).toBe('2026-09-08')
   })
 
   it('결정적 — 재파싱 = 동일 출력', () => {
-    expect(toImportNodes(parseWbsMarkdown(PL_MD))).toEqual(nodes)
+    expect(toImportNodes(parseWbsMarkdown(PL_MD), calUtcSun)).toEqual(nodes)
   })
 })

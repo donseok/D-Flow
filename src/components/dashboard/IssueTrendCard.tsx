@@ -1,5 +1,6 @@
 import { TrendingUp } from 'lucide-react'
 import { issueTrend, type DashboardIssue, type IssueTrendPoint } from '@/lib/domain/issueDashboard'
+import { currentRuleDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
@@ -33,14 +34,18 @@ function smoothPath(pts: IssueTrendPoint[], key: 'created' | 'resolved' | 'backl
  * 맥락으로 얇게. 차트 + 범례 + 캡션뿐 — 이번 주 타일·주간 표는 사용자 요청으로 뺐다(같은 날, "최대한 깔끔하게").
  * 값은 끝점 라벨·y축 눈금·aria-label 이 나른다. 해결 누적은 현재 해결 상태의 해결일 기준(재오픈은 빠짐) — 캡션이 명시.
  */
-export function IssueTrendCard({ issues, today, locale }: {
+export function IssueTrendCard({ issues, today, weekStart, locale }: {
   issues: DashboardIssue[]
   /** 실제 오늘(seoulToday). */
   today: string
+  /** 프로젝트 주 시작 규칙 — 추이는 현재 규칙의 시작 요일로 센다(SP5 §4.4) */
+  weekStart: readonly WeekStartRule[]
   locale: Locale
 }) {
   const tr = (k: DictKey) => t(locale, k)
-  const model = issueTrend(issues, today)
+  const model = issueTrend(issues, weekStart, today)
+  const caption = tr('dash.issues.trendCaption').replace('{day}',
+    tr(currentRuleDay(weekStart, today) === 'sunday' ? 'dash.issues.weekStartSunday' : 'dash.issues.weekStartMonday'))
 
   // 범례는 차트 아래 — SectionCard actions(shrink-0) 안에 두면 좁은 폭에서 줄바꿈 없이 헤더를 넘친다.
   const legend = (
@@ -111,7 +116,7 @@ export function IssueTrendCard({ issues, today, locale }: {
         </svg>
         </div>
         {legend}
-        <div className="mt-auto text-[11px] leading-4 text-ink-subtle">{tr('dash.issues.trendCaption')}</div>
+        <div className="mt-auto text-[11px] leading-4 text-ink-subtle">{caption}</div>
       </div>
     </SectionCard>
   )

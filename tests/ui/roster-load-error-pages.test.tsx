@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
 }))
 vi.mock('@/lib/data/wbs', () => ({
-  getComputedWbs: vi.fn(async () => ({ items: [], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-26' })),
+  getComputedWbs: vi.fn(async () => ({ items: [], dependencies: [], unresolvedDepends: {}, holidays: [], calendar: (await import('../helpers/calendarFixture')).calUtcSun, today: '2026-09-26' })),
 }))
 vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { toCalendarInput } from '@/lib/calendar/load'
 import { after } from 'next/server'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getSnapshots, recordProgressSnapshot } from '@/lib/data/snapshots'
@@ -25,7 +26,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   const { projectId } = await params
   await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
-  const [{ items, holidays, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc] = await Promise.all([
+  const [{ items, calendar, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc] = await Promise.all([
     getComputedWbs(projectId),
     listProjects(),
     getAnnouncements(projectId),
@@ -75,7 +76,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         startDate={project?.start_date ?? null}
         endDate={project?.end_date ?? null}
         today={today}
-        holidays={holidays}
+        calendar={toCalendarInput(calendar)}
         snapshots={snapRes.ok ? snapRes.rows : []}
         historyFailed={!snapRes.ok}
         announcements={annRes.ok ? annRes.rows : null}

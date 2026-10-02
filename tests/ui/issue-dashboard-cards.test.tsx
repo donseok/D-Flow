@@ -14,6 +14,7 @@ import { IssueStatusCard } from '@/components/dashboard/IssueStatusCard'
 registerEn(EN)
 import { IssueTrendCard } from '@/components/dashboard/IssueTrendCard'
 import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
+import { MON_RULES } from '../helpers/calendarFixture'
 
 const TODAY = '2026-08-28'
 /** 태그를 벗긴 텍스트 — 클래스명 안의 숫자(text-[10px] 등)가 단언을 오염시키지 않게. */
@@ -117,7 +118,7 @@ describe('IssueStatusCard', () => {
 
 describe('IssueTrendCard', () => {
   it('SVG 접근성 라벨에 등록·해결·미해결 끝값을 담고, 끝점 라벨은 미해결 잔량 하나', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     expect(html).toContain('<svg')
     expect(html).toMatch(/aria-label="[^"]*등록 누적 6[^"]*해결 누적 1[^"]*미해결 5/)
     // 끝점 라벨은 svg text 로(aria 가 아니라) 그려진다
@@ -128,7 +129,7 @@ describe('IssueTrendCard', () => {
   })
 
   it('차트만 남긴다 — 이번 주 타일·주간 표는 없다(2026-08-28 사용자 요청: 깔끔하게)', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     expect(html).not.toContain('<table')
     expect(textOf(html)).not.toMatch(/이번 주 등록|최근 6주/)
     // 값은 svg 라벨·범례·aria 가 나른다
@@ -136,21 +137,21 @@ describe('IssueTrendCard', () => {
   })
 
   it('x축에 첫 주와 마지막 주 시작일을 표기한다(12주)', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     expect(html).toContain('26.06.08')
     expect(html).toContain('26.08.24')
   })
 
   it('전량 해결(백로그 0)이어도 미해결 라벨은 축 위에 남고 면은 그려지지 않는다', () => {
     const allResolved = Array.from({ length: 10 }, () => issue({ status: 'resolved', resolvedAt: '2026-08-20T00:00:00+00:00' }))
-    const html = renderToStaticMarkup(<IssueTrendCard issues={allResolved} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={allResolved} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     expect(html).toContain('미해결 0')
     expect(html).toContain('<linearGradient')
   })
 
   it('건수가 커도 y축 눈금은 8개를 넘지 않는다(눈금 겹침 방지)', () => {
     const many = Array.from({ length: 1000 }, () => issue())
-    const html = renderToStaticMarkup(<IssueTrendCard issues={many} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={many} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     const ticks = (html.match(/text-anchor="end" font-size="10"/g) ?? []).length // y축 눈금 = 오른쪽 정렬 10px
     expect(ticks).toBeLessThanOrEqual(8)
     expect(ticks).toBeGreaterThanOrEqual(3)
@@ -158,7 +159,7 @@ describe('IssueTrendCard', () => {
 
 
   it('이슈 0건이면 차트 대신 빈 상태', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={[]} today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={[]} today={TODAY} weekStart={MON_RULES} locale="ko" />)
     expect(html).not.toContain('viewBox="0 0 640')  // 헤더 아이콘도 svg 라 차트 svg 만 본다
     expect(html).toContain('등록된 이슈가 없습니다')
   })

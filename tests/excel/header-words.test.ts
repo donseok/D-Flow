@@ -10,6 +10,7 @@ import { teamOrderMap } from '@/lib/domain/teams'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { WbsRow } from '@/lib/domain/types'
 import { codeLines } from '../invariants/_walk'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // 엑셀 머리 낱말의 단일 출처(SP4 D38·E30) — 빌더가 쓰는 낱말·감지기의 논리 별칭·담당 별칭. 팀 예약어는 여기서 파생한다.
 describe('EXCEL_HEADER_WORDS', () => {
@@ -37,7 +38,7 @@ describe('EXCEL_HEADER_WORDS', () => {
     const row = (over: Partial<WbsRow>): WbsRow => ({ id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x', biz: null, deliverable: null,
       plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over })
     const items = computeTree([row({ id: 'P', name: '준비' }), row({ id: 'A', parentId: 'P', name: '초안', owners: [{ team: 'RES', kind: 'primary' }] })],
-      '2026-03-02', new Set(), { subActTeamOrder: teamOrderMap(['RES']) })
+      '2026-03-02', calUtcSun, { subActTeamOrder: teamOrderMap(['RES']) })
     const profile: ExcelProfile = { version: 1, sheetName: 'WBS', holidaySheetName: 'Holiday', headerRow: 2,
       hierarchy: { kind: 'columns', columns: [1, 2] },
       logical: { extraAxis: 0, code: null, name: null, deliverable: 6, start: 7, end: 8, weight: 9, actualPct: 11 },

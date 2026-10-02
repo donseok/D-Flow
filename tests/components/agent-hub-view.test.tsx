@@ -43,6 +43,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({
   ),
 }))
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const hub = (over: Partial<AgentHub> = {}): AgentHub => ({
@@ -55,7 +56,7 @@ const hub = (over: Partial<AgentHub> = {}): AgentHub => ({
 const citem = (over: Partial<ComputedItem> = {}): ComputedItem =>
   ({ id: 'a1', name: '리프1', children: [], plannedStart: null, plannedEnd: null, rolledActualPct: 0, ...over }) as unknown as ComputedItem
 const wbs = (over: Partial<HubWbsBundle> = {}): HubWbsBundle =>
-  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-14', levelLabels: [], levelsError: null, maxDepth: null, members: [], membersError: null, actorView: null, ...over })
+  ({ items: [citem()], dependencies: [], unresolvedDepends: {}, calendar: calInputUtcMon, today: '2026-09-14', levelLabels: [], levelsError: null, maxDepth: null, members: [], membersError: null, actorView: null, ...over })
 
 let host: HTMLDivElement, root: Root
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); refresh.mockReset(); apply.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })

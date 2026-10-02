@@ -46,6 +46,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ImportItem } from '@/lib/excel/validate'
 import type { WbsRow } from '@/lib/domain/types'
 import { makeActor, WS } from '../fixtures/actor'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const COMMAND_ID = '55555555-5555-4555-8555-555555555555'
@@ -69,7 +70,7 @@ const items = computeTree([
   row({ id: 'T', parentId: 'P', code: '1.1', sortOrder: 1, name: '착수', deliverable: '계획서',
     plannedStart: '2026-07-01', plannedEnd: '2026-07-03', actualPct: 40,
     owners: [{ team: '팀A', kind: 'primary' }, { team: '팀B', kind: 'support' }] }),
-], '2026-07-02', new Set(), { subActTeamOrder: teamOrderMap(['팀A', '팀B']) })
+], '2026-07-02', calUtcSun, { subActTeamOrder: teamOrderMap(['팀A', '팀B']) })
 
 const built = buildWorkbookWithProfile(items, SAVED, [], { expandSubActs: true, levelLabels: [] }, 'Acme')
 if (!built.ok) throw new Error(built.error)

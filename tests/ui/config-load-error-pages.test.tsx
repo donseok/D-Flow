@@ -34,7 +34,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/data/wbs', () => ({
-  getComputedWbs: vi.fn(async () => ({ items: [], dependencies: [], unresolvedDepends: {}, holidays: [], today: '2026-09-26' })),
+  getComputedWbs: vi.fn(async () => ({ items: [], dependencies: [], unresolvedDepends: {}, holidays: [], calendar: (await import('../helpers/calendarFixture')).calUtcSun, today: '2026-09-26' })),
 }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: vi.fn(async () => ({ ok: true, rows: [] })), recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: vi.fn(async () => ({ ok: true, rows: [] })) }))

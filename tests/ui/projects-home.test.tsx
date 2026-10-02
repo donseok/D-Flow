@@ -47,6 +47,7 @@ vi.mock('next/link', () => ({
 
 import ProjectsHome from '@/app/(app)/projects/page'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // ── 픽스처 ──────────────────────────────────────────────────────────────────
 // P1: 전 리프 완료(루트 1 + 리프 2) / P2: 미완 리프 2(50, 99.5 — 원시값 done 판정 확인)
@@ -106,7 +107,7 @@ function legacyHeroStats() {
   const today = seoulToday()
   // 구 코드는 "목록에 있는" 프로젝트만 프로젝트별로 트리를 로드했다
   const trees = visibleProjects.map(p =>
-    computeTree(dbRows.filter(r => r.project_id === p.id).map(toWbsRow), today, new Set(), {
+    computeTree(dbRows.filter(r => r.project_id === p.id).map(toWbsRow), today, calUtcSun, {
       subActTeamOrder: new Map(),
     }),
   )

@@ -25,6 +25,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({
 }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 const HIDEABLE_COLS = ['owners', 'status', 'deliverable', 'pstart', 'pend', 'weight', 'pplan']
 
@@ -60,7 +61,7 @@ describe('WbsGanttSheet — 담당~계획% 열 숨기기', () => {
     await act(async () => root.render(
       <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={[item]}
-        holidays={[]}
+        calendar={calInputUtcMon}
         today="2026-07-03"
         actorView={null}
         projectId="p1"

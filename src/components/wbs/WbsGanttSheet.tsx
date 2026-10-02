@@ -6,7 +6,8 @@ import { actorFromView, isProjectAdmin, type ProjectActorView } from '@/lib/doma
 import { computeDependencySchedule, type TaskSchedule } from '@/lib/domain/dependencySchedule'
 import { centeredTimelineScrollLeft, groupGanttMilestones } from '@/lib/domain/ganttScale'
 import { milestoneTimeline, type MilestoneStatus } from '@/lib/domain/dashboard'
-import { isWeekendDow } from '@/lib/domain/dates'
+import { calendarOf, isoDowOf, isWorkingDay, nextWeekKey, weekKeyOf, weekPeriodOf } from '@/lib/domain/calendar'
+import type { CalendarInput } from '@/lib/calendar/load'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
 import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
@@ -185,7 +186,7 @@ export function WbsGanttSheet({
   items: serverItems,
   dependencies = EMPTY_DEPENDENCIES,
   unresolvedDepends = EMPTY_UNRESOLVED,
-  holidays,
+  calendar,
   today,
   actorView,
   me = null,
@@ -213,7 +214,8 @@ export function WbsGanttSheet({
    * 빈 값으로 두면 claim 이 409 를 내는 작업이 '선행 없음 → 시작 가능'으로 보인다.
    */
   unresolvedDepends?: Record<string, string[]>
-  holidays: string[]
+  /** 프로젝트 달력(직렬화 꼴) — 비근무일 띠·실시간 재계산·의존성 일정이 쓴다 */
+  calendar: CalendarInput
   today: string
   /** 이 프로젝트 스코프의 직렬화 가능한 권한 스냅샷 — Actor(Map)는 RSC 경계를 못 넘는다. */
   actorView: ProjectActorView | null
@@ -251,6 +253,7 @@ export function WbsGanttSheet({
   const router = useRouter()
   const { t } = useLocale()
   const legendTeams = useTeamCodes()
+  const cal = useMemo(() => calendarOf(calendar), [calendar])
   /* 실시간 반영(0098) — 서버가 준 트리를 상태로 미러링하고 broadcast 가 오면 그 행만 갈아끼운다.
      조상 롤업은 applyWbsChange 가 computeNode 를 다시 돌려 낸다: 리프만 고치면 공정율·달성률·
      상태가 낡은 채 남아 화면이 조용히 틀린 숫자를 보여준다.
@@ -265,7 +268,7 @@ export function WbsGanttSheet({
   useWbsRealtime({
     projectId,
     onChange: payload => setItems(cur =>
-      applyWbsChange(cur, payload, { today, holidays: new Set(holidays) }) ?? cur),
+      applyWbsChange(cur, payload, { today, calendar: cal }) ?? cur),
     // 끊긴 사이의 변경은 페이로드가 오지 않았다 — 재연결에서 한 번 받아 메운다(설계 §6-2).
     onReconnect: () => router.refresh(),
   })
@@ -678,9 +681,9 @@ export function WbsGanttSheet({
       })),
       dependencies,
       today,
-      holidays,
+      cal,
     ),
-    [allFlatItems, dependencies, holidays, today],
+    [allFlatItems, dependencies, cal, today],
   )
   // hover 중인 작업에 걸린 선만 그린다. 선행·후행 양쪽을 다 잡아야 그 작업의 문맥이 보인다.
   const hoveredDependencies = useMemo(
@@ -842,17 +845,18 @@ export function WbsGanttSheet({
   const rangeStart = axisDates.reduce((a, b) => (a < b ? a : b))
   const rangeEnd = axisDates.reduce((a, b) => (a > b ? a : b))
   // 축 여백 — 계획 최댓값에서 축이 뚝 끊기면 마지막 주의 마일스톤 라벨이 잘리고 "끊긴
-  // 느낌"이 든다(2026-08-21 피드백). 끝은 다음 달력 주 일요일까지 덧대되, 시작주는
-  // 시작날짜 그대로 시작한다(같은 날 후속 피드백 — 앞쪽 여백은 두지 않는다).
+  // 느낌"이 든다(2026-08-21 피드백). 끝은 마지막 날이 속한 주의 다음 주 끝까지 덧대되(주 끝 = 그 프로젝트 규칙의 다음 키
+  // 기간의 마지막 날, SP5 §4.4), 시작주는 시작날짜 그대로 시작한다(같은 날 후속 피드백 — 앞쪽 여백은 두지 않는다).
   const start = new Date(rangeStart + 'T00:00:00Z')
-  const end = new Date(rangeEnd + 'T00:00:00Z')
-  end.setUTCDate(end.getUTCDate() + (6 - ((end.getUTCDay() + 6) % 7)) + 7) // 다음 주 일요일
+  const nextKey = nextWeekKey(cal.weekStart, weekKeyOf(cal.weekStart, rangeEnd))
+  const end = new Date(weekPeriodOf(cal.weekStart, nextKey).endExclusive + 'T00:00:00Z')
+  end.setUTCDate(end.getUTCDate() - 1)
   const days: string[] = []
   for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) days.push(iso(d))
-  const holSet = new Set(holidays)
+  const holSet = cal.offDates                    // 휴무 예외 띠 — 특정일 근무 날은 isWorkingDay 가 근무로 본다
   const xOf = (date: string) =>
     ((new Date(date + 'T00:00:00Z').getTime() - start.getTime()) / 86400000) * dayPx
-  const isWeekend = (d: string) => isWeekendDow(new Date(d + 'T00:00:00Z').getUTCDay())
+  const isOffDow = (d: string) => !cal.workingDays.has(isoDowOf(d))
   const ganttW = days.length * dayPx
 
   const months: { ym: string; label: string; left: number; width: number }[] = []
@@ -1347,8 +1351,9 @@ export function WbsGanttSheet({
           >
             {dayPx >= GANTT_WEEK_VIEW_PX
               ? days.map((d, i) => {
+                  const workException = cal.workDates.has(d)
                   const hol = holSet.has(d)
-                  const off = hol || isWeekend(d)
+                  const off = !workException && (hol || isOffDow(d))
                   return (
                     <div
                       key={d}
@@ -1473,7 +1478,7 @@ export function WbsGanttSheet({
                   <div
                     key={d}
                     className={`absolute box-border overflow-hidden border-r border-grid text-center leading-[18px] ${
-                      holSet.has(d) || isWeekend(d) ? 'font-semibold text-ink-subtle' : 'text-ink-subtle'
+                      !isWorkingDay(d, cal) ? 'font-semibold text-ink-subtle' : 'text-ink-subtle'
                     }`}
                     style={{
                       top: 39,
@@ -1483,7 +1488,7 @@ export function WbsGanttSheet({
                       fontSize: 'var(--wbs-day-font, 9px)',
                       background: holSet.has(d)
                         ? 'var(--color-holiday-band)'
-                        : isWeekend(d)
+                        : isOffDow(d) && !cal.workDates.has(d)
                           ? 'var(--color-weekend)'
                           : undefined,
                     }}
@@ -2070,6 +2075,8 @@ export function WbsGanttSheet({
           <span className="ml-1 h-3 w-3 rounded-sm" style={{ background: 'var(--color-holiday-band)' }} />
           {t('wbs.legendHoliday')}
         </span>
+        {/* [RF5] 근무일 탐색 상한 — 일정 계산만 건너뛰었다(데이터는 그대로) */}
+        {dependencySchedule.calendarError && <p role="status" className="text-[12px] text-delayed">{t('wbs.noWorkday')}</p>}
         <span className="text-ink-muted">
           {timelineFocus
             ? t('wbs.legendHintTimeline')

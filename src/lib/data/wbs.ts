@@ -116,8 +116,6 @@ export const getComputedWbs = cache(async (
 
   // 달력 키가 손상이면 ConfigKeyError — 에러 바운더리가 그 화면을 멈춘다(기본 달력으로 계획%를 내지 않는다, [RF4])
   const calendar = requireCalendar(cfg)
-  // computeTree 는 과제 16 까지 휴무 집합을 받는다 — work 예외는 그때 계산에 든다(그 사이 work 행은 휴무로 보이지 않을 뿐 근무로도 세지 않는다)
-  const holidays = new Set(calendar.offDates)
   const manualDependencies: TaskDependency[] = dependencyRows.map((r: Record<string, unknown>) => ({
     id: r.id as string,
     projectId: r.project_id as string,
@@ -145,10 +143,10 @@ export const getComputedWbs = cache(async (
   // base_date(공정율 기준일)가 설정돼 있으면 그 날짜로, 없으면 오늘(자동)로 산정
   const today = (proj as { base_date: string | null } | null)?.base_date ?? seoulToday()
   return {
-    items: computeTree(rows, today, holidays, { subActTeamOrder: teamOrder }),
+    items: computeTree(rows, today, calendar, { subActTeamOrder: teamOrder }),
     dependencies,
     unresolvedDepends,
-    holidays: [...holidays].sort(),
+    holidays: [...calendar.offDates].sort(),
     calendar,
     today,
   }

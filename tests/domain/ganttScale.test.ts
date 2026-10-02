@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { buildGanttScale, centeredTimelineScrollLeft, collectPlannedDates, groupGanttMilestones } from '@/lib/domain/ganttScale'
+import { buildGanttScale as buildGanttScaleReal, centeredTimelineScrollLeft, collectPlannedDates, groupGanttMilestones } from '@/lib/domain/ganttScale'
+import { calUtcSun } from '../helpers/calendarFixture'
+
+// 과제 16 — 달력은 넷째 인자(필수). 이 파일의 기존 단언은 월~금 근무(UTC·일요일 규칙) 달력으로 같다
+const buildGanttScale = (dates: string[], today: string, dayPx: number) => buildGanttScaleReal(dates, today, dayPx, calUtcSun)
 
 describe('buildGanttScale', () => {
   it('양끝 일자 포함하여 day 배열 생성', () => {
@@ -16,11 +20,11 @@ describe('buildGanttScale', () => {
     expect(s.xOf('2026-07-08')).toBe(2 * 24)
   })
 
-  it('주말 판정', () => {
+  it('비근무일 판정(월~금 달력 — 토·일)', () => {
     const s = buildGanttScale(['2026-07-06', '2026-07-12'], '2026-07-06', 24)
-    expect(s.isWeekend('2026-07-11')).toBe(true) // 토
-    expect(s.isWeekend('2026-07-12')).toBe(true) // 일
-    expect(s.isWeekend('2026-07-10')).toBe(false) // 금
+    expect(s.isOffDay('2026-07-11')).toBe(true) // 토
+    expect(s.isOffDay('2026-07-12')).toBe(true) // 일
+    expect(s.isOffDay('2026-07-10')).toBe(false) // 금
   })
 
   it('기준일이 일정 밖이어도 축에 포함해 todayX를 항상 계산', () => {

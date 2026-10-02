@@ -10,6 +10,7 @@ import { computeTree } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const OPTS = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 const row = (over: Partial<WbsRow>): WbsRow => ({
@@ -39,7 +40,7 @@ describe('buildAoaWithProfile — (a) LEGACY_EXCEL_PROFILE_V1 접기는 기존 b
       owners: [{ team: 'ERP', kind: 'primary' }],
     }),
   ]
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
 
   const legacyAoa = buildWbsAoa(items, '테스트 프로젝트', FIXTURE_TEAM_CODES)
   const profileAoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: false, levelLabels: ['Phase', 'Task', 'Activity'] }, '테스트 프로젝트'))
@@ -77,7 +78,7 @@ describe('buildAoaWithProfile — (b) expandSubActs:true 는 sub-act 를 4번째
       actualPct: 40, owners: [{ team: '가공', kind: 'support' }], isOwnerSplit: true,
     }),
   ]
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
   const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, '테스트'))
   const header3 = aoa[2] as unknown[]
   const TEAM_LABELS = ['PMO', 'ERP', 'MES', '가공', 'MDM']
@@ -145,7 +146,7 @@ describe('buildAoaWithProfile — (b-2) 삽입-시프트: 계층 다음 열 충�
       owners: [{ team: 'PMO', kind: 'primary' }], isOwnerSplit: true,
     }),
   ]
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
   const aoa = unwrap(buildAoaWithProfile(items, CONFLICT_PROFILE, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'C'))
   const rows = aoa.slice(3) as unknown[][]
   const subAct = rows.find(r => r[3] === 'A1 (PMO 주관)')
@@ -186,7 +187,7 @@ describe('buildAoaWithProfile — 프로파일 밖 팀은 말미에 열을 추�
       owners: [{ team: 'PMO', kind: 'primary' }, { team: '신팀6', kind: 'support' }], actualPct: 30,
     }),
   ]
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
 
   it('펼침 모드 — 6번째 팀 라벨이 헤더 말미에 추가되고, 데이터 행에 마크가 실재한다', () => {
     const aoa = unwrap(buildAoaWithProfile(items, LEGACY_EXCEL_PROFILE_V1, { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'T'))
@@ -239,7 +240,7 @@ describe('buildAoaWithProfile — (c) 펼침 산출물의 detect→parseWithProf
       owners: [{ team: 'ERP', kind: 'primary' }],
     }),
   ]
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
   const built = buildWorkbookWithProfile(items, LEGACY_EXCEL_PROFILE_V1, [], { expandSubActs: true, levelLabels: ['Phase', 'Task', 'Activity'] }, 'RT')
   if (!built.ok) throw new Error(`setup failed: ${built.error}`)
   const buf = built.buffer
@@ -286,7 +287,7 @@ describe('buildAoaWithProfile — outline 계층 + 펼침은 명시적으로 거
   }
   const items = computeTree(
     [row({ id: 'A', parentId: null, code: '1', sortOrder: 0, name: 'A' })],
-    '2026-09-15', new Set(), OPTS,
+    '2026-09-15', calUtcSun, OPTS,
   )
 
   it('outline + expandSubActs:true 는 ok:false 로 거부한다', () => {
@@ -312,7 +313,7 @@ describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', ()
     row({ id: 'T', parentId: 'P', code: '1.1', sortOrder: 1, name: '착수', plannedStart: '2026-07-01', plannedEnd: '2026-07-03',
       owners: [{ team: '팀A', kind: 'primary' }] }),
   ]
-  const items = computeTree(SRC, '2026-07-02', new Set(), { subActTeamOrder: teamOrderMap(['팀A']) })
+  const items = computeTree(SRC, '2026-07-02', calUtcSun, { subActTeamOrder: teamOrderMap(['팀A']) })
   const COLUMNS = (headerRow: number): ExcelProfile => ({
     version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow,
     hierarchy: { kind: 'columns', columns: [0, 1] },
@@ -352,7 +353,7 @@ describe('buildWorkbookWithProfile — headerRow 0·1·2·3 라운드트립', ()
       row({ id: 'A', parentId: null, code: '1', sortOrder: 0, name: 'A' }),
       row({ id: 'B', parentId: 'A', code: '1.1', sortOrder: 1, name: 'B' }),
       row({ id: 'C', parentId: 'B', code: '1.1.1', sortOrder: 2, name: 'C' }),
-    ], '2026-07-02', new Set(), OPTS)
+    ], '2026-07-02', calUtcSun, OPTS)
     for (const expandSubActs of [false, true]) {
       const r = buildAoaWithProfile(deep, COLUMNS(2), { expandSubActs, levelLabels: [] })
       expect(r.ok).toBe(false)

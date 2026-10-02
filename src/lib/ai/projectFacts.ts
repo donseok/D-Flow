@@ -5,6 +5,7 @@
 // getComputedWbs 는 부분 구조분해로만 소비한다(dependencies 등 확장 필드 비결합).
 // 실패는 여기서 삼키지 않는다 — 호출측(액션)이 잡아 로깅 + 'unavailable' 강등한다.
 // ============================================================================
+import type { WorkCalendar } from '@/lib/domain/calendar'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getSnapshots } from '@/lib/data/snapshots'
 import { getProjectMeetingData } from '@/lib/data/meetings'
@@ -27,7 +28,8 @@ export interface ProjectFactsSource {
   startDate: string | null
   endDate: string | null
   items: ComputedItem[]
-  holidays: string[]
+  /** 그 프로젝트 달력(SP5) — 추세의 근무일 판정 */
+  calendar: WorkCalendar
   /** getComputedWbs 의 '오늘'(projects.base_date 우선) — 진척·리스크 판정 기준일. */
   todayWbs: string
   /** 실제 오늘(Asia/Seoul) — 회의·회의록 경과일 기준(이중 시계 계약). */
@@ -45,7 +47,7 @@ export interface ProjectFactsSource {
 /** 대시보드와 동일 소스 1회 병렬 로드. 프로젝트 행이 없으면(비멤버 RLS 포함) null. */
 export async function loadProjectFacts(projectId: string): Promise<ProjectFactsSource | null> {
   const sb = await createServerClient()
-  const [{ items, holidays, today }, snapRes, meetRes, minuteSignals, project, config] = await Promise.all([
+  const [{ items, calendar, today }, snapRes, meetRes, minuteSignals, project, config] = await Promise.all([
     getComputedWbs(projectId),
     getSnapshots(projectId),
     getProjectMeetingData(projectId),
@@ -68,7 +70,7 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     startDate: (project.data.start_date as string | null) ?? null,
     endDate: (project.data.end_date as string | null) ?? null,
     items,
-    holidays,
+    calendar,
     todayWbs: today,
     realToday: seoulToday(),
     snapshots: snapRes.rows,

@@ -25,6 +25,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({
 }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(plannedStart: string, plannedEnd: string): ComputedItem {
   return {
@@ -100,7 +101,7 @@ describe('WBS 기준일 초기 스크롤', () => {
       root.render(
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={[item('2026-06-01', '2026-08-31')]}
-          holidays={[]}
+          calendar={calInputUtcMon}
           today="2026-07-15"
           actorView={null}
           projectId="p1"
@@ -118,7 +119,7 @@ describe('WBS 기준일 초기 스크롤', () => {
       root.render(
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={[item('2026-08-01', '2026-08-10')]}
-          holidays={[]}
+          calendar={calInputUtcMon}
           today="2026-07-24"
           actorView={null}
           projectId="p1"

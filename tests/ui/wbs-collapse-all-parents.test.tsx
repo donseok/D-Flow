@@ -16,6 +16,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -42,7 +43,7 @@ describe('WBS 접기 — 자식이 있는 모든 노드', () => {
 
   async function render(items: ComputedItem[]) {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
 

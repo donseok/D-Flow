@@ -89,7 +89,7 @@ export function createGetProjectDashboardTool(
       // WBS 신호는 기준일(base_date 우선), 회의 신호는 실제 오늘 — 대시보드 화면의 이중 시계 관례.
       const realToday = todayInSeoul(context.now)
       const calculationDate = snapshot.baseDate ?? realToday
-      const roots = computeTree(snapshot.items, calculationDate, new Set(snapshot.holidays), {
+      const roots = computeTree(snapshot.items, calculationDate, snapshot.calendar, {
         subActTeamOrder: teamOrderMap(await teams.projectTeamCodes(projectId)),
       })
       const leaves = collectLeaves(roots)

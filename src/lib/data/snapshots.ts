@@ -94,9 +94,8 @@ export async function recordProgressSnapshot(
       owners: [],
       isOwnerSplit: r.is_owner_split === true,
     }))
-    const holidays = new Set(requireCalendar(cfg).offDates)
     const opts = { subActTeamOrder: teamOrderMap(activeCodes(teams)) }
-    const { actual, planned } = overallProgress(computeTree(rows, todayNow, holidays, opts))
+    const { actual, planned } = overallProgress(computeTree(rows, todayNow, requireCalendar(cfg), opts))
     await upsertSnapshot(sb, projectId, todayNow, actual, planned)
   } catch (e) {
     console.error('[snapshot] 진척 스냅샷 기록 실패(무시):', e)

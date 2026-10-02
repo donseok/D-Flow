@@ -25,6 +25,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({
 }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 /** 루트(Phase) 한 건 — weight는 1기준 저장값(0.4 = 40%) */
 const phase = (id: string, weight: number | null, children: ComputedItem[] = []): ComputedItem => ({
@@ -64,7 +65,7 @@ describe('WbsGanttSheet — 가중치 헤더 합계', () => {
     await act(async () => root.render(
       <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={items}
-        holidays={[]}
+        calendar={calInputUtcMon}
         today="2026-07-03"
         actorView={null}
         projectId="p1"

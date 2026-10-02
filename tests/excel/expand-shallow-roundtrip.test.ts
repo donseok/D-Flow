@@ -6,6 +6,7 @@ import { linkByDepth, parseWithProfile } from '@/lib/excel/parseWithProfile'
 import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
 import type { WbsRow } from '@/lib/domain/types'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // A2-2 리뷰 정확성 P2(U3) — 펼침의 sub-act 를 깊이와 무관하게 '세부업무' 열(insertAt)에 쓰면, 잎이 마지막 계층 열보다 얕은 트리에서
 // sub-act 가 깊이를 건너뛰어(1단 → 3단) 다시 가져올 때 linkByDepth 가 거부했다. insertAt 은 부모가 마지막 계층 열 깊이 이상일 때
@@ -25,7 +26,7 @@ const ROWS: WbsRow[] = [
   row({ id: 'S0', code: '1', sortOrder: 0, name: '얕은 단계' }), S1, ...split(S1, 2),
   row({ id: 'D0', code: '2', sortOrder: 10, name: '깊은 단계' }), row({ id: 'D1', parentId: 'D0', code: '2.1', sortOrder: 11, name: '깊은 작업' }), D2, ...split(D2, 13),
 ]
-const items = computeTree(ROWS, '2026-03-04', new Set(), { subActTeamOrder: teamOrderMap(TEAMS) })
+const items = computeTree(ROWS, '2026-03-04', calUtcSun, { subActTeamOrder: teamOrderMap(TEAMS) })
 const profile = deriveStandardExcelProfile(resolveTeamColumns(items, TEAMS), LABELS)
 const opts = { expandSubActs: true, levelLabels: LABELS, deep: 'fold' as const }
 

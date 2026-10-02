@@ -34,7 +34,7 @@ const SRC: WbsRow[] = [
 ]
 
 describe('buildWbsWorkbook round-trip', () => {
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
   const buf = buildWbsWorkbook(items, [{ date: '2026-07-17', name: '제헌절' }], '테스트 프로젝트', FIXTURE_TEAM_CODES)
   const parsed = parseWbsWorkbook(buf)
 
@@ -87,7 +87,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
       row({ id: 'A', parentId: 'T', code: 'a', name: 'Activity', isOwnerSplit: false }),
       row({ id: 'SA', parentId: 'A', code: 'a-1', name: 'sub-act', isOwnerSplit: true }),
     ]
-    const items = computeTree(srcRows, '2026-09-15', new Set(), OPTS)
+    const items = computeTree(srcRows, '2026-09-15', calUtcSun, OPTS)
     const aoa = buildWbsAoa(items, 'WBS', FIXTURE_TEAM_CODES)
     // header 3줄 + data rows
     const dataRows = aoa.slice(3)
@@ -105,7 +105,7 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
       row({ id: 'S', parentId: 'A', code: 'a-1', name: 'SubActivity', isOwnerSplit: false }),
       row({ id: 'SS', parentId: 'S', code: 'a-1-1', name: 'SubSubActivity', isOwnerSplit: false }),
     ]
-    const items = computeTree(srcRows, '2026-09-15', new Set(), OPTS)
+    const items = computeTree(srcRows, '2026-09-15', calUtcSun, OPTS)
     const aoa = buildWbsAoa(items, 'WBS', FIXTURE_TEAM_CODES)
     const dataRows = aoa.slice(3)
     expect(dataRows.length).toBe(5) // 모든 5개 행 출력
@@ -117,9 +117,10 @@ describe('flatten isOwnerSplit 기준 재귀', () => {
 import { buildWbsColumnMap } from '../fixtures/excel/legacyParse'
 import { standardAoa as buildWbsAoa } from '../fixtures/excel/standardAoa'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 describe('buildWbsAoa: 계층 열은 depth로 배치, levelLabels로 헤더 커스터마이즈', () => {
-  const items = computeTree(SRC, '2026-09-15', new Set(), OPTS)
+  const items = computeTree(SRC, '2026-09-15', calUtcSun, OPTS)
 
   it('무인자 호출은 기존과 바이트 동일 — 헤더는 기본 Phase/Task/Activity, 데이터행은 row[1+depth]', () => {
     const aoa = buildWbsAoa(items, 'P', ['PMO', 'ERP', 'MES', '가공', 'MDM'])

@@ -179,7 +179,7 @@ export function createGetMemberWorkloadTool(
 
       const today = wbsResult.data.baseDate ?? todayInSeoul(context.now)
       const teamCodes = await teams.projectTeamCodes(projectId)
-      const computed = computeTree(wbsResult.data.items, today, new Set(wbsResult.data.holidays), {
+      const computed = computeTree(wbsResult.data.items, today, wbsResult.data.calendar, {
         subActTeamOrder: teamOrderMap(teamCodes),
       })
       const leaves = collectLeaves(computed)

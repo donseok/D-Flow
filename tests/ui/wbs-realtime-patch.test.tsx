@@ -45,6 +45,7 @@ import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
 import type { WbsRow } from '@/lib/domain/types'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calInputUtcMon, calUtcSun } from '../helpers/calendarFixture'
 
 const TODAY = '2026-09-17'
 const row = (id: string, parentId: string | null, actualPct: number | null, updatedAt?: string): WbsRow => ({
@@ -59,7 +60,7 @@ const tree = () => computeTree(
     row('a', 'P', 0, '2026-09-17T01:00:00.000Z'),
     row('b', 'P', 0, '2026-09-17T01:00:00.000Z'),
   ],
-  TODAY, new Set(), { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) },
+  TODAY, calUtcSun, { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) },
 )
 
 let host: HTMLDivElement
@@ -83,7 +84,7 @@ async function mount() {
     root.render(
       <LocaleProvider initialLocale="ko">
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
-          items={tree()} holidays={[]} today={TODAY} actorView={null}
+          items={tree()} calendar={calInputUtcMon} today={TODAY} actorView={null}
           projectId="a1b2c3d4-0000-4000-8000-000000000001" readOnly initialCollapsed={[]}
         />
       </LocaleProvider>,

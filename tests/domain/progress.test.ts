@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { plannedPct, achievementOf, statusOf } from '@/lib/domain/progress'
+import { calUtcSun } from '../helpers/calendarFixture'
 
-const H = new Set<string>()
+const H = calUtcSun
 
 describe('plannedPct', () => {
   it('일정 절반 경과 시 약 50%', () => {

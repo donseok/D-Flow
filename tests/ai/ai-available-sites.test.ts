@@ -27,6 +27,7 @@ import { buildBriefFacts, ensureWeeklyBrief, type BriefFactsInput } from '@/lib/
 import { ensureIssueAnalysis } from '@/lib/ai/issue-analysis'
 import { streamArchiveAnswer, streamDocAnswer } from '@/lib/ai/minutes-answer'
 import { FIXTURE_MILESTONE_KEYWORDS } from '../fixtures/milestoneKeywords'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const PID = '00000000-0000-0000-7e57-000000001482', MID = '00000000-0000-0000-7e57-000000001481'
 const AI_OFF = 'AI 를 사용할 수 없어 이슈 분석서를 생성할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.'
@@ -79,7 +80,7 @@ describe('옛 챗(answer.ts) — chatbot, 프로젝트 없으면 null(세션 유
 describe('주간 브리핑(brief.ts) — 모듈 없음(대시보드 core 카드의 AI, P9)', () => {
   const input: BriefFactsInput = {
     projectName: '테스트 프로젝트', items: [], startDate: '2026-01-01', endDate: '2026-12-31',
-    todayWbs: '2026-07-15', realToday: '2026-07-19', holidays: [], snapshots: [],
+    todayWbs: '2026-07-15', realToday: '2026-07-19', calendar: calUtcSun, snapshots: [],
     minuteSignals: [], meetings: [], meetingExceptions: [],
     milestoneKeywords: [...FIXTURE_MILESTONE_KEYWORDS], teams: ['PMO', 'ERP'],
   }

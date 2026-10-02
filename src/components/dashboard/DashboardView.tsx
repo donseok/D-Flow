@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { calendarOf } from '@/lib/domain/calendar'
+import type { CalendarInput } from '@/lib/calendar/load'
 import { ArrowRight, BarChart3 } from 'lucide-react'
 import type { Announcement, ComputedItem, Meeting, MeetingException } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
@@ -40,7 +42,7 @@ export async function DashboardView({
   startDate = null,
   endDate = null,
   today = seoulToday(),
-  holidays = [],
+  calendar,
   snapshots,
   historyFailed,
   announcements,
@@ -59,7 +61,8 @@ export async function DashboardView({
   startDate?: string | null
   endDate?: string | null
   today?: string
-  holidays?: string[]
+  /** 프로젝트 달력(직렬화 꼴) — 계획 곡선의 근무일·이슈 추이의 주 시작(SP5 A) */
+  calendar: CalendarInput
   snapshots: SnapshotPoint[]
   /** 진척 이력(getSnapshots) 조회 실패 — S-Curve 가 이력 0건으로 추세선을 합성하지 않게 한다. */
   historyFailed: boolean
@@ -84,6 +87,7 @@ export async function DashboardView({
   const tr = (k: DictKey) => t(locale, k)
 
   const hasWbs = items.length > 0
+  const cal = calendarOf(calendar)
   // 전부 비었을 때만 화면 전체 빈 상태 — 실패한 데이터셋(null)은 '빈 것'이 아니다(그 자리에 오류가 보여야 한다).
   if (
     !hasWbs && issues !== null && announcements !== null && meetings !== null
@@ -97,7 +101,7 @@ export async function DashboardView({
   const wbs = hasWbs ? (() => {
     const { actual, planned } = overallProgress(items)
     const trend = buildTrend({
-      items, snapshots, holidays: new Set(holidays), startDate, endDate, today,
+      items, snapshots, calendar: cal, startDate, endDate, today,
       opts: { subActTeamOrder: teamOrderMap(activeCodes(teams)) },
     })
     return { variance: round1(actual - planned), trend }
@@ -171,7 +175,7 @@ export async function DashboardView({
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           <IssueStatusCard issues={issues} projectId={projectId} today={realToday} locale={locale} />
-          <IssueTrendCard issues={issues} today={realToday} locale={locale} />
+          <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} locale={locale} />
         </div>
       )}
 

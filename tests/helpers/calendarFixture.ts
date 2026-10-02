@@ -21,3 +21,14 @@ export function calWithOff(off: readonly string[], base: { timezone?: string; we
     holidays: off.map((date) => ({ date, kind: 'off' as const })),
   })
 }
+
+/** 클라이언트 컴포넌트 props 용 직렬화 꼴(CalendarInput 과 같은 모양 — RSC 경계, 과제 16).
+ *  간트 축 끝을 단언하는 옛 테스트는 월요일 규칙이면 옛 "다음 주 일요일"과 같은 끝이다 — 기본을 월요일로 둔다 */
+export type CalendarInputLike = Parameters<typeof calendarOf>[0]
+export function calInputOf(off: readonly string[] = [], base: { timezone?: string; weekStart?: WeekStartRule[] } = {}): CalendarInputLike {
+  return {
+    timezone: base.timezone ?? 'UTC', workingDays: [...WEEKDAYS], weekStart: base.weekStart ?? MON_RULES,
+    holidays: off.map((date) => ({ date, kind: 'off' as const })),
+  }
+}
+export const calInputUtcMon: CalendarInputLike = calInputOf()

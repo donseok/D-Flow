@@ -18,6 +18,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUi
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import { PageHero } from '@/components/ui/PageHero'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -50,7 +51,7 @@ describe('WBS 컴팩트 압축', () => {
 
   async function render() {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} />,
     ))
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource) — 이 파일은 팀 축을 보지 않으므로 빈 팀 목록을 준다.
-import { calWithOff } from '../helpers/calendarFixture'
+import { calUtcSun, calWithOff } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 const toolTeams = fixedToolTeams([])
 
@@ -116,7 +116,7 @@ describe('get_project_dashboard — 마일스톤 키워드는 프로젝트 설�
     const tool = createGetProjectDashboardTool(wbsRepository(repositoryOk(snap)), meetingRepository(repositoryOk(meetingSnapshot)), settingsRepository(['논문 제출']), toolTeams)
     const result = await tool.execute({ projectId: 'p1' }, context)
     if (!result.ok) throw new Error('도구가 실패했다')
-    const screen = detectMilestones(computeTree(snap.items, '2026-07-20', new Set(), { subActTeamOrder: new Map() }), '2026-07-20', ['논문 제출'])
+    const screen = detectMilestones(computeTree(snap.items, '2026-07-20', calUtcSun, { subActTeamOrder: new Map() }), '2026-07-20', ['논문 제출'])
     expect(result.result.facts).toMatchObject({ milestoneName: '논문 제출', milestoneDate: screen.date, milestoneDday: screen.dday })
   })
   it("createProject 기본 키워드에서 '승인' 리프는 마일스톤이 아니다 — 옛 원본 키워드 목록을 쓰지 않는다", async () => {

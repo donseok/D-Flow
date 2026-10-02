@@ -1,5 +1,7 @@
 import type { ImportNode, LevelDecl } from '@/lib/agent/wbsImport'
 import { BRAND } from '@/lib/branding'
+import { nextWorkingDay } from '@/lib/domain/calendar'
+import type { DayCal } from '@/lib/domain/progress'
 
 /**
  * N단 wbs.md 파서(TS) — 웹 업로드 경로(미리보기+적용)용.
@@ -284,14 +286,13 @@ export function validateWbsDoc(doc: WbsDoc, role: 'pl' | 'skeleton'): WbsValidat
 
 // ── import 노드 변환 (v2.2) ──────────────────────────────────────────────
 
-/** 다음 영업일(토·일 건너뜀) — 공휴일은 모른다. UTC 기준 날짜 산술이라 타임존 영향 없음. */
-export function nextBusinessDay(ymd: string): string {
-  const d = new Date(`${ymd}T00:00:00Z`)
-  do { d.setUTCDate(d.getUTCDate() + 1) } while (d.getUTCDay() === 0 || d.getUTCDay() === 6)
-  return d.toISOString().slice(0, 10)
+/** 선행 종료 다음 근무일 — 가져오기 대상 프로젝트의 달력(요일·휴무·특정일 근무)으로. 날짜 산술은 UTC date-only(시간대 무관).
+ *  근무일을 3,660일 안에 못 찾으면 CalendarError(호출 액션이 문구로) */
+export function nextWorkingDayAfter(ymd: string, cal: DayCal): string {
+  return nextWorkingDay(ymd, cal)
 }
 
-export function toImportNodes(doc: WbsDoc): ImportNode[] {
+export function toImportNodes(doc: WbsDoc, cal: DayCal): ImportNode[] {
   const { levels } = doc
   const byId = new Map(doc.nodes.map(n => [n.id, n] as const))
   const out: RawNode[] = []
@@ -305,7 +306,7 @@ export function toImportNodes(doc: WbsDoc): ImportNode[] {
     }
     out.push(n)
   }
-  // 시작일 파생 — 종료만 적힌 노드(마일스톤 제외)는 선행(depends) 종료 다음 영업일, 선행이 없거나
+  // 시작일 파생 — 종료만 적힌 노드(마일스톤 제외)는 선행(depends) 종료 다음 근무일(프로젝트 달력), 선행이 없거나
   // 선행에 종료가 없으면 frontmatter start_date. 둘 다 없으면 null(간트 막대 없음 — 사람이 채운다).
   const endOf = new Map(doc.nodes.map(n => [n.id, n.tokens.end] as const))
   const derivedStart = (n: RawNode): string | null => {
@@ -314,7 +315,7 @@ export function toImportNodes(doc: WbsDoc): ImportNode[] {
     const deps = (n.fields.depends ?? '').split(',').map(s => s.trim()).filter(Boolean)
     const ends = deps.map(d => endOf.get(d)).filter((v): v is string => !!v)
     let start: string | null = null
-    if (deps.length > 0 && ends.length === deps.length) start = nextBusinessDay(ends.reduce((a, b) => (a > b ? a : b)))
+    if (deps.length > 0 && ends.length === deps.length) start = nextWorkingDayAfter(ends.reduce((a, b) => (a > b ? a : b)), cal)
     else if (doc.front.start_date) start = doc.front.start_date
     if (start && start > n.tokens.end) start = n.tokens.end // 선행이 더 늦게 끝나는 계획 오류 — 막대는 그리되 0일로
     return start

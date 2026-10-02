@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { toCalendarInput } from '@/lib/calendar/load'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember, toProjectActorView } from '@/lib/domain/authz'
 import { getAgentHub } from '@/lib/data/agentHub'
@@ -43,7 +44,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     items: wbsData.items,
     dependencies: wbsData.dependencies,
     unresolvedDepends: wbsData.unresolvedDepends,
-    holidays: wbsData.holidays,
+    calendar: toCalendarInput(wbsData.calendar),
     today: wbsData.today,
     levelLabels: labels.ok ? labels.value : null,
     levelsError: labels.ok ? null : { error: labels.error, key: labels.key },

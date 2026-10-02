@@ -32,6 +32,7 @@ import { computeTree } from '@/lib/domain/rollup'
 import { TeamsUnavailableError } from '@/lib/teams/source'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const get = (projectId: string, expand = false) => GET(new NextRequest(`http://localhost/api/export?projectId=${projectId}${expand ? '&expand=1' : ''}`))
 const SAVED: ExcelProfile = {
@@ -48,7 +49,7 @@ const DEEP: ComputedItem[] = computeTree([
   row({ id: 'd', parentId: 'c', name: '깊은 잎', owners: [{ team: 'RES', kind: 'primary' }, { team: 'OPS', kind: 'support' }] }),
   row({ id: 'd0', parentId: 'd', name: '깊은 잎 (RES)', owners: [{ team: 'RES', kind: 'primary' }], isOwnerSplit: true }),
   row({ id: 'd1', parentId: 'd', name: '깊은 잎 (OPS)', owners: [{ team: 'OPS', kind: 'support' }], isOwnerSplit: true }),
-], '2026-03-02', new Set(), { subActTeamOrder: new Map([['RES', 0], ['OPS', 1]]) })
+], '2026-03-02', calUtcSun, { subActTeamOrder: new Map([['RES', 0], ['OPS', 1]]) })
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -88,7 +89,7 @@ describe('GET /api/export — 저장 양식 없음 → 표준(W22)', () => {
     expect(name).toBe('Acme')
   })
   it('비활성 팀이라도 담당이 있으면 열이 뒤에 붙는다(옛 빌더와 같은 규칙)', async () => {
-    mocks.getComputedWbs.mockResolvedValue({ items: computeTree([row({ id: 'a', name: '잎', owners: [{ team: 'OLD', kind: 'primary' }] })], '2026-03-02', new Set(), { subActTeamOrder: new Map() }), holidays: [] })
+    mocks.getComputedWbs.mockResolvedValue({ items: computeTree([row({ id: 'a', name: '잎', owners: [{ team: 'OLD', kind: 'primary' }] })], '2026-03-02', calUtcSun, { subActTeamOrder: new Map() }), holidays: [] })
     await get('p-mine')
     expect(mocks.buildWorkbookWithProfile.mock.calls[0][1].teamColumns.map(([, c]: [number, string]) => c)).toEqual(['RES', 'OLD'])
   })

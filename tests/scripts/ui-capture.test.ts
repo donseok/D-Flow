@@ -20,6 +20,7 @@ import { milestoneTimeline } from '../../src/lib/domain/dashboard'
 import { DEFAULT_MILESTONE_KEYWORDS } from '../../src/lib/settings/defs/project'
 import type { ComputedItem } from '../../src/lib/domain/types'
 import { weekKeyOf } from '../../src/lib/domain/calendar'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const root = process.cwd()
 const pageFiles = (() => {
@@ -470,7 +471,7 @@ const computedOf = (rows: SeedRow[], today: string): ComputedItem[] => computeTr
   id: r.id, parentId: r.parent_id, code: r.code, sortOrder: r.sort_order, name: r.name, biz: null, deliverable: r.deliverable,
   plannedStart: r.planned_start, plannedEnd: r.planned_end, weight: r.weight, actualPct: r.actual_pct, owners: [], isOwnerSplit: r.is_owner_split,
   assigneeMemberId: r.assignee_member_id, agentDelegated: (r.tags ?? []).includes('agent'),
-})), today, new Set(), { subActTeamOrder: new Map() })
+})), today, calUtcSun, { subActTeamOrder: new Map() })
 /** 간트 첫 화면의 행 순서 — 트리 전위 순회, 분리 부모(isOwnerSplit 자식을 가진 노드)는 기본 접힘(WbsGanttSheet 의 splitParentIds 와 같은 규칙) */
 const displayRows = (items: ComputedItem[]): ComputedItem[] => {
   const out: ComputedItem[] = []

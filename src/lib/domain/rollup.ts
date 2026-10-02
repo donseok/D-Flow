@@ -1,13 +1,13 @@
 import { buildTree, type BuildTreeOpts, type TreeNode } from './tree'
 import { round1 } from './format'
-import { plannedPct, achievementOf, statusOf } from './progress'
+import { plannedPct, achievementOf, statusOf, type DayCal } from './progress'
 import type { ComputedItem, WbsRow } from './types'
 
 export function computeTree(
-  rows: WbsRow[], today: string, holidays: Set<string>, opts: BuildTreeOpts,
+  rows: WbsRow[], today: string, cal: DayCal, opts: BuildTreeOpts,
 ): ComputedItem[] {
   const tree = buildTree(rows, opts)
-  return tree.map(node => computeNode(node, today, holidays))
+  return tree.map(node => computeNode(node, today, cal))
 }
 
 /** 가중치 규칙 하나(SP4 D20) — null(미지정) = 1, 명시 0 = 0. 루트 그룹(전체 공정율)·하위 그룹(롤업)·계획 곡선·주간 보고 점유율이 같은
@@ -33,9 +33,9 @@ export function overallProgress(roots: ComputedItem[]): { actual: number; planne
  * **이미 계산된 트리에 다시 돌려도 안전하다** — 스프레드 뒤에 계산값을 덮어쓰므로 멱등이다.
  * 실시간 부분 패치(`applyWbsChange`)가 리프를 고친 뒤 조상 롤업을 다시 내는 데 쓴다.
  */
-export function computeNode(node: TreeNode, today: string, holidays: Set<string>): ComputedItem {
-  const children = node.children.map(c => computeNode(c, today, holidays))
-  const planned = plannedPct(node.plannedStart, node.plannedEnd, today, holidays)
+export function computeNode(node: TreeNode, today: string, cal: DayCal): ComputedItem {
+  const children = node.children.map(c => computeNode(c, today, cal))
+  const planned = plannedPct(node.plannedStart, node.plannedEnd, today, cal)
 
   let rolledActual: number
   let rolledPlanned = planned

@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
-  issueKpis, issueStatusCounts, issueMegaBreakdown, issueTrend, issueQueue,
+  issueKpis, issueStatusCounts, issueMegaBreakdown, issueTrend as issueTrendReal, issueQueue,
   DUE_SOON_DAYS, RESOLVED_WINDOW_DAYS, TREND_WEEKS, QUEUE_LIMIT,
   type DashboardIssue,
 } from '@/lib/domain/issueDashboard'
+import { MON_RULES } from '../helpers/calendarFixture'
+
+// 과제 16 — 규칙은 둘째 인자. 이 파일의 기존 기대값은 월요일 주(D28 월요일 회귀)
+const issueTrend = (issues: Parameters<typeof issueTrendReal>[0], today: string, weeks?: number) => issueTrendReal(issues, MON_RULES, today, weeks)
 import { ISSUE_MEGA_AREAS } from '@/lib/domain/issueAnalysis'
 
 const TODAY = '2026-08-28' // 금요일 — 주 시작(월)은 08-24

@@ -5,6 +5,7 @@ import {
   buildBriefFacts, briefFactsHash, factsToPrompt, parseBrief, verifyBriefNumbers,
   type BriefFactsInput,
 } from '@/lib/ai/brief'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 /* ── 픽스처 — riskSignals.test 의 leaf 관례 재사용 ── */
 let seq = 0
@@ -17,7 +18,7 @@ const leaf = (over: Partial<ComputedItem> = {}): ComputedItem => ({
 const TODAY = '2026-07-15'
 const input = (over: Partial<BriefFactsInput> = {}): BriefFactsInput => ({
   projectName: '테스트 프로젝트', items: [], startDate: '2026-01-01', endDate: '2026-12-31',
-  todayWbs: TODAY, realToday: '2026-07-19', holidays: [], snapshots: [],
+  todayWbs: TODAY, realToday: '2026-07-19', calendar: calUtcSun, snapshots: [],
   minuteSignals: [], meetings: [], meetingExceptions: [],
   milestoneKeywords: [...FIXTURE_MILESTONE_KEYWORDS], teams: ['PMO', 'ERP'], ...over,
 })

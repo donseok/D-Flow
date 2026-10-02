@@ -1,5 +1,6 @@
 // WBS 실시간 반영의 순수 계층 — 채널 토픽·페이로드 해석·부분 패치. React 도 Supabase 도 모른다.
 // 구독 자체는 src/lib/hooks/useWbsRealtime.ts, DB 송신은 0098_wbs_realtime.sql.
+import type { DayCal } from './progress'
 import { computeNode } from './rollup'
 import type { ComputedItem } from './types'
 
@@ -89,7 +90,7 @@ function replaceNode(ns: readonly ComputedItem[], p: WbsChangePayload): Computed
 export function applyWbsChange(
   tree: readonly ComputedItem[],
   payload: WbsChangePayload,
-  opts: { today: string; holidays: Set<string> },
+  opts: { today: string; calendar: DayCal },
 ): ComputedItem[] | null {
   const target = findNode(tree, payload.id)
   if (target === null) return null
@@ -101,5 +102,5 @@ export function applyWbsChange(
 
   const replaced = replaceNode(tree, payload)
   if (replaced === null) return null
-  return replaced.map(n => computeNode(n, opts.today, opts.holidays))
+  return replaced.map(n => computeNode(n, opts.today, opts.calendar))
 }

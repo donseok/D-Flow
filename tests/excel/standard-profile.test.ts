@@ -6,6 +6,7 @@ import { deriveStandardExcelProfile, resolveTeamColumns } from '@/lib/excel/stan
 import { computeTree } from '@/lib/domain/rollup'
 import { teamOrderMap } from '@/lib/domain/teams'
 import type { ComputedItem, WbsRow } from '@/lib/domain/types'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 // 표준 레이아웃(SP4 D16) — 저장 양식이 없을 때 내보낼 때마다 트리에서 계산한다. 옛 빌더(상태 머리를 고친 뒤 — 과제 9)와 셀 단위로 같다(W23).
 const LABELS3 = ['Phase', 'Task', 'Activity']
@@ -33,7 +34,7 @@ function tree(depth: number): ComputedItem[] {
     plannedStart: '2026-03-09', plannedEnd: '2026-03-13' }))
   rows.push(row({ id: 'S1', parentId: 'L2', code: 'l2', sortOrder: 93, name: '잎2 (R&D 지원)', actualPct: 50, owners: [{ team: 'R&D', kind: 'support' }], isOwnerSplit: true,
     plannedStart: '2026-03-09', plannedEnd: '2026-03-13' }))
-  return computeTree(rows, '2026-03-11', new Set(), OPTS)
+  return computeTree(rows, '2026-03-11', calUtcSun, OPTS)
 }
 function standard(items: ComputedItem[], codes: readonly string[], labels: readonly string[], expandSubActs = false): unknown[][] {
   const r = buildAoaWithProfile(items, deriveStandardExcelProfile(resolveTeamColumns(items, codes), labels),
@@ -77,7 +78,7 @@ describe('표준 레이아웃 ≡ 옛 빌더(셀 단위) — W23', () => {
     expect(standard(items, TEAMS, labels)).toEqual(buildWbsAoa(items, 'Acme', TEAMS, labels))
   })
   it('팀 0개·담당 없음 — 둘째 머리 행에 담당 칸이 없다, 옛 빌더와 같다', () => {
-    const items = computeTree([row({ id: 'A', name: '단독' })], '2026-03-11', new Set(), { subActTeamOrder: new Map() })
+    const items = computeTree([row({ id: 'A', name: '단독' })], '2026-03-11', calUtcSun, { subActTeamOrder: new Map() })
     const aoa = standard(items, [], LABELS3)
     expect(aoa).toEqual(buildWbsAoa(items, 'Acme', [], LABELS3))
     expect(aoa[1]).not.toContain('담당')

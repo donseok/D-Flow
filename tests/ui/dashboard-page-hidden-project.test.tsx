@@ -23,7 +23,7 @@ vi.mock('@/lib/authz', () => ({
 }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
 vi.mock('next/server', () => ({ after: mocks.after }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], today: '2026-09-26' })) }))
+vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [], calendar: (await import('../helpers/calendarFixture')).calUtcSun, today: '2026-09-26' })) }))
 vi.mock('@/lib/data/snapshots', () => ({ getSnapshots: mocks.getSnapshots, recordProgressSnapshot: vi.fn() }))
 vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))

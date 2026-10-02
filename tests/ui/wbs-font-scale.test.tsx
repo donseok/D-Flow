@@ -26,6 +26,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({
 }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 const itemA: ComputedItem = {
   id: 'A',
@@ -144,7 +145,7 @@ describe('WbsGanttSheet — 표 글자 크기 3단계', () => {
       <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
         items={[itemA, itemB]}
         dependencies={dependencies}
-        holidays={[]}
+        calendar={calInputUtcMon}
         today="2026-07-03"
         actorView={null}
         projectId="p1"

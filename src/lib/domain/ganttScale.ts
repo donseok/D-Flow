@@ -2,7 +2,8 @@
  * 간트 타임라인 스케일 계산 (순수 함수). WBS·간트 통합 시트와 전용 간트 뷰가 공유한다.
  * 입력은 계획 일자 목록(ISO 'YYYY-MM-DD')과 기준일·일당 픽셀. DB/DOM 의존 없음.
  */
-import { isWeekendDow } from './dates'
+import { isWorkingDay } from './calendar'
+import type { DayCal } from './progress'
 import type { MilestonePoint, MilestoneStatus } from './dashboard'
 
 export interface GanttScale {
@@ -14,7 +15,8 @@ export interface GanttScale {
   ganttW: number
   /** 날짜 → 타임라인 좌측 오프셋(px) */
   xOf: (date: string) => number
-  isWeekend: (date: string) => boolean
+  /** 비근무일(요일 규칙·휴무 예외 — 특정일 근무는 근무일) */
+  isOffDay: (date: string) => boolean
   /** 기준일 세로선 위치(px). 날짜 범위가 기준일을 항상 포함하므로 정상 입력이면 항상 존재한다. */
   todayX: number | null
 }
@@ -23,7 +25,7 @@ function iso(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildGanttScale(dates: string[], today: string, dayPx: number): GanttScale {
+export function buildGanttScale(dates: string[], today: string, dayPx: number, cal: DayCal): GanttScale {
   const valid = dates.filter(Boolean)
   // WBS 첫 화면에서 기준일을 항상 보여 줄 수 있도록 일정 밖이어도 축에 포함한다.
   const axisDates = [...valid, today]
@@ -37,7 +39,7 @@ export function buildGanttScale(dates: string[], today: string, dayPx: number): 
 
   const xOf = (date: string) =>
     ((new Date(date + 'T00:00:00Z').getTime() - start.getTime()) / 86_400_000) * dayPx
-  const isWeekend = (d: string) => isWeekendDow(new Date(d + 'T00:00:00Z').getUTCDay())
+  const isOffDay = (d: string) => !isWorkingDay(d, cal)
   const ganttW = days.length * dayPx
 
   const months: GanttScale['months'] = []
@@ -63,7 +65,7 @@ export function buildGanttScale(dates: string[], today: string, dayPx: number): 
   const todayX =
     days.length && today >= rangeStart && today <= rangeEnd ? xOf(today) + dayPx / 2 : null
 
-  return { days, rangeStart, rangeEnd, months, weeks, ganttW, xOf, isWeekend, todayX }
+  return { days, rangeStart, rangeEnd, months, weeks, ganttW, xOf, isOffDay, todayX }
 }
 
 /**

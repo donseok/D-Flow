@@ -4,6 +4,7 @@ import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
 
@@ -20,7 +21,7 @@ describe('computeTree rollup', () => {
         biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false },
       leaf('a', 'P', 100), leaf('b', 'P', 0),
     ]
-    const tree = computeTree(rows, '2026-07-20', new Set(), OPTS)
+    const tree = computeTree(rows, '2026-07-20', calUtcSun, OPTS)
     expect(tree[0].rolledActualPct).toBe(50)
   })
   it('가중치 반영 롤업', () => {
@@ -29,7 +30,7 @@ describe('computeTree rollup', () => {
         biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false },
       leaf('a', 'P', 100, 3), leaf('b', 'P', 0, 1),
     ]
-    const tree = computeTree(rows, '2026-07-20', new Set(), OPTS)
+    const tree = computeTree(rows, '2026-07-20', calUtcSun, OPTS)
     expect(tree[0].rolledActualPct).toBe(75) // (100*3+0*1)/4
   })
   it('나누어떨어지지 않는 롤업은 소수 1자리 유지(정수로 뭉개지 않음)', () => {
@@ -38,13 +39,13 @@ describe('computeTree rollup', () => {
         biz: null, deliverable: null, plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false },
       leaf('a', 'P', 100), leaf('b', 'P', 0), leaf('c', 'P', 0),
     ]
-    const tree = computeTree(rows, '2026-07-20', new Set(), OPTS)
+    const tree = computeTree(rows, '2026-07-20', calUtcSun, OPTS)
     expect(tree[0].rolledActualPct).toBe(33.3) // 100/3 = 33.333…
   })
   it('leaf는 자기 actualPct, status 계산', () => {
     const rows: WbsRow[] = [leaf('a', 'ROOTLESS', 100)]
     // parent 없는 leaf는 root로 취급
-    const tree = computeTree([{ ...rows[0], parentId: null }], '2026-07-20', new Set(), OPTS)
+    const tree = computeTree([{ ...rows[0], parentId: null }], '2026-07-20', calUtcSun, OPTS)
     expect(tree[0].rolledActualPct).toBe(100)
     expect(tree[0].status).toBe('done')
   })
@@ -62,7 +63,7 @@ describe('weightOf — 루트·하위 같은 규칙(SP4 D20)', () => {
       row({ id: 'P', name: 'P' }),
       row({ id: 'A', parentId: 'P', name: 'A', weight: 1, actualPct: 100 }),
       row({ id: 'B', parentId: 'P', name: 'B', weight: null, actualPct: 0 }),
-    ], '2026-03-02', new Set(), OPTS)
+    ], '2026-03-02', calUtcSun, OPTS)
     expect(p.rolledActualPct).toBe(50)
   })
   it('[RF4] 하위 [0, null] 과 [0, 0] — 루트와 같은 결과', () => {
@@ -70,7 +71,7 @@ describe('weightOf — 루트·하위 같은 규칙(SP4 D20)', () => {
       row({ id: 'P', name: 'P' }),
       row({ id: 'A', parentId: 'P', name: 'A', weight: wa, actualPct: 100 }),
       row({ id: 'B', parentId: 'P', name: 'B', weight: wb, actualPct: 20 }),
-    ], '2026-03-02', new Set(), OPTS)[0].rolledActualPct
+    ], '2026-03-02', calUtcSun, OPTS)[0].rolledActualPct
     expect(tree(0, null)).toBe(20)
     expect(tree(0, 0)).toBe(0)
   })
@@ -85,8 +86,8 @@ describe('weightOf — 루트·하위 같은 규칙(SP4 D20)', () => {
         rows.push(row({ id: `n${i}`, parentId: parent, name: `n${i}`, sortOrder: i, weight: pickW(), actualPct: Math.round(rand() * 100),
           plannedStart: '2026-03-02', plannedEnd: `2026-03-${String(3 + Math.floor(rand() * 20)).padStart(2, '0')}` }))
       }
-      const roots = computeTree(rows, '2026-03-10', new Set(), OPTS)
-      const virtual = computeNode({ ...roots[0], id: 'virtual', parentId: null, weight: null, plannedStart: null, plannedEnd: null, actualPct: null, children: roots, depth: -1 }, '2026-03-10', new Set())
+      const roots = computeTree(rows, '2026-03-10', calUtcSun, OPTS)
+      const virtual = computeNode({ ...roots[0], id: 'virtual', parentId: null, weight: null, plannedStart: null, plannedEnd: null, actualPct: null, children: roots, depth: -1 }, '2026-03-10', calUtcSun)
       expect(overallProgress(roots), `tree ${n}`).toEqual({ actual: virtual.rolledActualPct, planned: virtual.plannedPct })
     }
   })

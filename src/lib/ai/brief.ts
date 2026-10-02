@@ -17,6 +17,7 @@
 // 수치 재계산 금지 강제 ③ verifyBriefNumbers 가 %/%p/건 토큰을 팩트 화이트리스트와
 // 대조해 불일치 줄을 제거+로깅한다.
 // ============================================================================
+import type { DayCal } from '@/lib/domain/progress'
 import type { ComputedItem, Meeting, MeetingException, TeamCode } from '@/lib/domain/types'
 import type { ExecSummary } from '@/lib/domain/dashboard'
 import { addDaysCal, buildExecSummary, dueSoonLeaves } from '@/lib/domain/dashboard'
@@ -64,7 +65,8 @@ export interface BriefFactsInput {
   endDate: string | null
   todayWbs: string
   realToday: string
-  holidays: string[]
+  /** 근무일 판정 달력(SP5 — 요일 규칙·휴무·특정일 근무) */
+  calendar: DayCal
   snapshots: SnapshotPoint[]
   minuteSignals: MinuteActionSignal[]
   meetings: Meeting[]
@@ -80,11 +82,11 @@ export interface BriefFactsInput {
 export function buildBriefFacts(input: BriefFactsInput): BriefFacts {
   const {
     projectName, items, startDate, endDate, todayWbs, realToday,
-    holidays, snapshots, minuteSignals, meetings, meetingExceptions, milestoneKeywords, teams,
+    calendar, snapshots, minuteSignals, meetings, meetingExceptions, milestoneKeywords, teams,
   } = input
   const exec = buildExecSummary(items, { startDate, endDate, today: todayWbs }, milestoneKeywords)
   const trendModel = buildTrend({
-    items, snapshots, holidays: new Set(holidays), startDate, endDate, today: todayWbs,
+    items, snapshots, calendar, startDate, endDate, today: todayWbs,
     opts: { subActTeamOrder: teamOrderMap(teams) },
   })
   const riskReport = detectRiskSignals({

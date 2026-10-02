@@ -36,6 +36,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import type { ComputedItem } from '@/lib/domain/types'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 const leaf = (over: Partial<ComputedItem>): ComputedItem => ({
   id: Math.random().toString(36).slice(2), parentId: 'p', code: 'x', sortOrder: 0,
@@ -75,7 +76,7 @@ describe('간트 오버레이 동결 열 클리핑', () => {
       <LocaleProvider initialLocale="ko">
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={items}
-          holidays={[]}
+          calendar={calInputUtcMon}
           today="2026-08-10"
           actorView={null}
           projectId="p1"

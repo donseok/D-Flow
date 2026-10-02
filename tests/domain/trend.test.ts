@@ -5,6 +5,7 @@ import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
 import { buildTrend, plannedAt, plannedCurve, flattenRows, type SnapshotPoint } from '@/lib/domain/trend'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
+import { calUtcSun, calWithOff } from '../helpers/calendarFixture'
 
 const row = (over: Partial<WbsRow>): WbsRow => ({
   id: over.id ?? Math.random().toString(36).slice(2), parentId: null, code: 'x', sortOrder: 0,
@@ -13,7 +14,7 @@ const row = (over: Partial<WbsRow>): WbsRow => ({
 })
 const TODAY = '2026-02-20'
 const OPTS: BuildTreeOpts = { subActTeamOrder: teamOrderMap(FIXTURE_TEAM_CODES) }
-const items = (rows: WbsRow[]) => computeTree(rows, TODAY, new Set(), OPTS)
+const items = (rows: WbsRow[]) => computeTree(rows, TODAY, calUtcSun, OPTS)
 const snap = (date: string, actual: number, planned: number): SnapshotPoint => ({ date, actual, planned })
 
 const baseRows = [row({ plannedStart: '2026-01-01', plannedEnd: '2026-04-10', actualPct: 30 })]
@@ -21,13 +22,13 @@ const baseRows = [row({ plannedStart: '2026-01-01', plannedEnd: '2026-04-10', ac
 describe('plannedAt', () => {
   const rows = flattenRows(items(baseRows))
   it('시작 전 = 0, 종료 후 = 100', () => {
-    expect(plannedAt(rows, '2025-12-31', new Set(), OPTS)).toBe(0)
-    expect(plannedAt(rows, '2026-05-01', new Set(), OPTS)).toBe(100)
+    expect(plannedAt(rows, '2025-12-31', calUtcSun, OPTS)).toBe(0)
+    expect(plannedAt(rows, '2026-05-01', calUtcSun, OPTS)).toBe(100)
   })
   it('구간 내 단조 비감소, 0 < 중간값 < 100', () => {
-    const mid = plannedAt(rows, '2026-02-20', new Set(), OPTS)
+    const mid = plannedAt(rows, '2026-02-20', calUtcSun, OPTS)
     expect(mid).toBeGreaterThan(0); expect(mid).toBeLessThan(100)
-    expect(plannedAt(rows, '2026-03-20', new Set(), OPTS)).toBeGreaterThanOrEqual(mid)
+    expect(plannedAt(rows, '2026-03-20', calUtcSun, OPTS)).toBeGreaterThanOrEqual(mid)
   })
 })
 
@@ -63,7 +64,7 @@ describe('plannedCurve — plannedAt 등가성(성능 최적화의 정확성 계
           }
         }
       }
-      const holidays = new Set(['2026-01-01', '2026-03-02', '2026-05-05'].filter(() => rnd() < 0.7))
+      const holidays = calWithOff(['2026-01-01', '2026-03-02', '2026-05-05'].filter(() => rnd() < 0.7))
       const addDays = (d: string, n: number) => {
         const dt = new Date(`${d}T00:00:00Z`)
         dt.setUTCDate(dt.getUTCDate() + n)
@@ -84,28 +85,28 @@ describe('plannedCurve — plannedAt 등가성(성능 최적화의 정확성 계
       row({ id: 'C', name: 'C', weight: 0, plannedStart: '2026-03-02', plannedEnd: '2026-03-06' }),
     ]
     const dates = ['2026-03-04', '2026-03-11', '2026-03-18', '2026-03-25']
-    expect(plannedCurve(rows, dates, new Set(), OPTS).map((p) => p.pct))
-      .toEqual(dates.map((d) => overallProgress(computeTree(rows, d, new Set(), OPTS)).planned))
+    expect(plannedCurve(rows, dates, calUtcSun, OPTS).map((p) => p.pct))
+      .toEqual(dates.map((d) => overallProgress(computeTree(rows, d, calUtcSun, OPTS)).planned))
   })
 
   it('빈 rows·빈 dates 경계에서도 동일', () => {
-    expect(plannedCurve([], ['2026-01-01'], new Set(), OPTS)).toEqual([{ date: '2026-01-01', pct: plannedAt([], '2026-01-01', new Set(), OPTS) }])
-    expect(plannedCurve([row({})], [], new Set(), OPTS)).toEqual([])
+    expect(plannedCurve([], ['2026-01-01'], calUtcSun, OPTS)).toEqual([{ date: '2026-01-01', pct: plannedAt([], '2026-01-01', calUtcSun, OPTS) }])
+    expect(plannedCurve([row({})], [], calUtcSun, OPTS)).toEqual([])
   })
 })
 
 describe('buildTrend — 축/빈 상태', () => {
   it('기간도 WBS 날짜도 없으면 empty', () => {
-    const m = buildTrend({ items: items([row({})]), snapshots: [], holidays: new Set(), startDate: null, endDate: null, today: TODAY, opts: OPTS })
+    const m = buildTrend({ items: items([row({})]), snapshots: [], calendar: calUtcSun, startDate: null, endDate: null, today: TODAY, opts: OPTS })
     expect(m.empty).toBe(true)
   })
   it('프로젝트 기간 null이면 WBS 날짜 min/max로 축 대체', () => {
-    const m = buildTrend({ items: items(baseRows), snapshots: [], holidays: new Set(), startDate: null, endDate: null, today: TODAY, opts: OPTS })
+    const m = buildTrend({ items: items(baseRows), snapshots: [], calendar: calUtcSun, startDate: null, endDate: null, today: TODAY, opts: OPTS })
     expect(m.empty).toBe(false)
     expect(m.axisStart).toBe('2026-01-01'); expect(m.axisEnd).toBe('2026-04-10')
   })
   it('계획 곡선은 시작~종료 전 구간 + 오늘 포함, 마지막 점 100%', () => {
-    const m = buildTrend({ items: items(baseRows), snapshots: [], holidays: new Set(), startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
+    const m = buildTrend({ items: items(baseRows), snapshots: [], calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
     const dates = m.plannedSeries.map(p => p.date)
     expect(dates[0]).toBe('2026-01-01')
     expect(dates[dates.length - 1]).toBe('2026-04-10')
@@ -117,7 +118,7 @@ describe('buildTrend — 축/빈 상태', () => {
 
 describe('buildTrend — 실적 이력', () => {
   const mk = (snaps: SnapshotPoint[]) =>
-    buildTrend({ items: items(baseRows), snapshots: snaps, holidays: new Set(), startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
+    buildTrend({ items: items(baseRows), snapshots: snaps, calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
 
   it('carry-forward: 마지막 스냅샷 이후 오늘까지 직전 값 유지 + 축 시작(0%)에서 보간 시작', () => {
     const m = mk([snap('2026-02-10', 10, 40), snap('2026-02-17', 20, 50)])
@@ -143,14 +144,14 @@ describe('buildTrend — 실적 이력', () => {
   })
   it('스냅샷 0건 + 오늘이 종료 이후면 합성 선의 끝은 축 종료일', () => {
     const m = buildTrend({
-      items: items(baseRows), snapshots: [], holidays: new Set(),
+      items: items(baseRows), snapshots: [], calendar: calUtcSun,
       startDate: '2026-01-01', endDate: '2026-02-01', today: TODAY, opts: OPTS, // TODAY(02-20) > 종료(02-01)
     })
     expect(m.actualSeries[m.actualSeries.length - 1].date).toBe('2026-02-01')
   })
   it('스냅샷 0건 + 오늘이 시작 이전이면 실적선 없음', () => {
     const m = buildTrend({
-      items: items(baseRows), snapshots: [], holidays: new Set(),
+      items: items(baseRows), snapshots: [], calendar: calUtcSun,
       startDate: '2026-03-01', endDate: '2026-04-10', today: TODAY, opts: OPTS, // TODAY(02-20) < 시작(03-01)
     })
     expect(m.actualSeries).toEqual([])
@@ -159,7 +160,7 @@ describe('buildTrend — 실적 이력', () => {
 
 describe('buildTrend — SPI / velocity', () => {
   const mk = (snaps: SnapshotPoint[]) =>
-    buildTrend({ items: items(baseRows), snapshots: snaps, holidays: new Set(), startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
+    buildTrend({ items: items(baseRows), snapshots: snaps, calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
 
   it('SPI = actual/planned (소수 2자리), planned<5 시점은 제외', () => {
     const m = mk([snap('2026-01-05', 1, 3), snap('2026-02-10', 10, 40), snap('2026-02-17', 20, 50)])

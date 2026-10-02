@@ -18,6 +18,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUi
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import { makeRosterMember } from '../fixtures/rosterMember'
+import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
   return { id: 'x', parentId: null, code: '1', sortOrder: 0, name: '항목', biz: null,
@@ -45,7 +46,7 @@ describe('WBS 담당자 컬럼', () => {
 
   async function render(items: ComputedItem[], members: ProjectMember[] = []) {
     await act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} holidays={[]} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} members={members} />,
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={items} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} members={members} />,
     ))
   }
 

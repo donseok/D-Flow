@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { computeTree, unsetWeightCount } from '@/lib/domain/rollup'
 import type { WbsRow } from '@/lib/domain/types'
+import { calUtcSun } from '../helpers/calendarFixture'
 
 const row = (over: Partial<WbsRow>): WbsRow => ({ id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x', biz: null, deliverable: null,
   plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over })
-const tree = (rows: WbsRow[]) => computeTree(rows, '2026-03-02', new Set(), { subActTeamOrder: new Map() })
+const tree = (rows: WbsRow[]) => computeTree(rows, '2026-03-02', calUtcSun, { subActTeamOrder: new Map() })
 
 describe('unsetWeightCount — "가중치 미지정 N개"(SP4 D20 — 화면 표시는 B)', () => {
   it('값과 null 이 섞인 형제 그룹의 null 만 센다 — 루트·하위 모두', () => {

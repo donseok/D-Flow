@@ -1,4 +1,5 @@
-import { businessDaysBetween, isBusinessDay } from './dates'
+import { CalendarError, isWorkingDay, nextWorkingDay, workingDaysBetween } from './calendar'
+import type { DayCal } from './progress'
 import type { TaskDependency } from './types'
 
 export type { DependencyType, TaskDependency } from './types'
@@ -47,6 +48,8 @@ export interface DependencySchedule {
   projectForecastEnd: string | null
   projectDelayDays: number
   projectDelayBusinessDays: number
+  /** 근무일 탐색이 상한(3,660일)에 닿아 일정을 계산하지 못했다 — 그때 모든 작업이 unscheduled(SP5 [RF5]) */
+  calendarError: 'CALENDAR_NO_WORKDAY' | null
 }
 
 const DAY_MS = 86_400_000
@@ -63,37 +66,34 @@ function calendarDaysBetween(start: string, end: string): number {
   return Math.max(0, Math.round((parse(end).getTime() - parse(start).getTime()) / DAY_MS))
 }
 
-/** 두 날짜 사이 영업일 이동량. 같은 날=0, start 뒤의 영업일부터 센다. */
-function businessDayDistance(start: string, end: string, holidays: Set<string>): number {
+/** 두 날짜 사이 근무일 이동량. 같은 날=0, start 뒤의 근무일부터 센다(두 날짜 사이라 유한하다). */
+function businessDayDistance(start: string, end: string, cal: DayCal): number {
   if (start === end) return 0
-  if (start > end) return -businessDayDistance(end, start, holidays)
+  if (start > end) return -businessDayDistance(end, start, cal)
   const cursor = parse(start)
   let count = 0
   while (iso(cursor) < end) {
     cursor.setUTCDate(cursor.getUTCDate() + 1)
-    if (isBusinessDay(iso(cursor), holidays)) count++
+    if (isWorkingDay(iso(cursor), cal)) count++
   }
   return count
 }
 
 /**
- * date에서 영업일 기준 amount만큼 이동한다. 양수는 미래, 음수는 과거.
- * amount=0이고 date가 휴일이면 다음 영업일로 정규화한다.
+ * date 에서 근무일 기준 amount 만큼 이동한다. 양수는 미래, 음수는 과거. amount=0 이고 date 가 비근무일이면 다음 근무일로 정규화한다.
+ * 한 걸음은 nextWorkingDay(3,660일 상한 — 넘으면 CalendarError('CALENDAR_NO_WORKDAY'), SP5 §4.1)다.
  */
-export function shiftBusinessDays(date: string, amount: number, holidays: Set<string>): string {
-  const cursor = parse(date)
-  let left = Math.abs(Math.trunc(amount))
+export function shiftBusinessDays(date: string, amount: number, cal: DayCal): string {
+  const steps = Math.abs(Math.trunc(amount))
+  if (steps === 0) return nextWorkingDay(date, cal, { inclusive: true })
   const direction = amount < 0 ? -1 : 1
-  if (left === 0 && isBusinessDay(iso(cursor), holidays)) return iso(cursor)
-  do {
-    cursor.setUTCDate(cursor.getUTCDate() + direction)
-    if (isBusinessDay(iso(cursor), holidays) && left > 0) left--
-  } while (left > 0 || !isBusinessDay(iso(cursor), holidays))
-  return iso(cursor)
+  let cursor = date
+  for (let i = 0; i < steps; i++) cursor = nextWorkingDay(cursor, cal, { direction })
+  return cursor
 }
 
-function endFromStart(start: string, duration: number, holidays: Set<string>): string {
-  return duration <= 1 ? shiftBusinessDays(start, 0, holidays) : shiftBusinessDays(start, duration - 1, holidays)
+function endFromStart(start: string, duration: number, cal: DayCal): string {
+  return duration <= 1 ? shiftBusinessDays(start, 0, cal) : shiftBusinessDays(start, duration - 1, cal)
 }
 
 function later(a: string, b: string): string {
@@ -109,12 +109,26 @@ function earlier(a: string, b: string): string {
  * 패스를 구한다. 계획일은 기준선으로만 사용하며 절대 변경하지 않는다.
  */
 export function computeDependencySchedule(
-  tasks: ScheduleTask[],
-  dependencies: TaskDependency[],
-  today: string,
-  holidays: Iterable<string> = [],
+  tasks: ScheduleTask[], dependencies: TaskDependency[], today: string, cal: DayCal,
 ): DependencySchedule {
-  const holidaySet = new Set(holidays)
+  try {
+    return computeScheduleUnchecked(tasks, dependencies, today, cal)
+  } catch (e) {
+    // 근무일을 3,660일 안에 못 찾는 달력(긴 휴무 예외) — 화면·봇 계산을 멈추지 않고 '일정 없음'으로 돌려준다([RF5]).
+    // 저장은 없다(이 함수는 표시 전용) — 호출부가 calendarError 를 문구로 보인다.
+    if (!(e instanceof CalendarError)) throw e
+    return {
+      byId: new Map(), criticalTaskIds: new Set(), criticalDependencyIds: new Set(), cycleTaskIds: new Set(), blockedTaskIds: new Set(),
+      unscheduledTaskIds: new Set(tasks.map(t => t.id)), invalidDependencyIds: new Set(),
+      projectPlannedEnd: null, projectForecastEnd: null, projectDelayDays: 0, projectDelayBusinessDays: 0,
+      calendarError: 'CALENDAR_NO_WORKDAY',
+    }
+  }
+}
+
+function computeScheduleUnchecked(
+  tasks: ScheduleTask[], dependencies: TaskDependency[], today: string, cal: DayCal,
+): DependencySchedule {
   const taskMap = new Map(tasks.map(task => [task.id, task]))
   const durationById = new Map<string, number>()
   const normalizedStartById = new Map<string, string>()
@@ -125,13 +139,13 @@ export function computeDependencySchedule(
       unscheduledTaskIds.add(task.id)
       continue
     }
-    const duration = businessDaysBetween(task.plannedStart, task.plannedEnd, holidaySet)
+    const duration = workingDaysBetween(task.plannedStart, task.plannedEnd, cal)
     if (duration <= 0) {
       unscheduledTaskIds.add(task.id)
       continue
     }
     durationById.set(task.id, duration)
-    normalizedStartById.set(task.id, shiftBusinessDays(task.plannedStart, 0, holidaySet))
+    normalizedStartById.set(task.id, shiftBusinessDays(task.plannedStart, 0, cal))
   }
   const validTaskIds = new Set(durationById.keys())
   const invalidDependencyIds = new Set<string>()
@@ -247,8 +261,8 @@ export function computeDependencySchedule(
       const predecessor = byId.get(dep.predecessorId)
       if (!predecessor) continue
       const constraint = dep.type === 'FS'
-        ? shiftBusinessDays(predecessor.forecastEnd, dep.lagDays + 1, holidaySet)
-        : shiftBusinessDays(predecessor.forecastStart, dep.lagDays, holidaySet)
+        ? shiftBusinessDays(predecessor.forecastEnd, dep.lagDays + 1, cal)
+        : shiftBusinessDays(predecessor.forecastStart, dep.lagDays, cal)
       if (constraint > earliestStart) {
         earliestStart = constraint
         drivenBy = [dep.predecessorId]
@@ -257,14 +271,14 @@ export function computeDependencySchedule(
       }
     }
 
-    const earliestEnd = endFromStart(earliestStart, duration, holidaySet)
+    const earliestEnd = endFromStart(earliestStart, duration, cal)
     let forecastEnd = earliestEnd
     let forecastConfidence: TaskSchedule['forecastConfidence'] = 'baseline'
     const actualPct = Math.min(100, Math.max(0, Number(task.actualPct) || 0))
     if (actualPct < 100 && earliestStart <= today) {
       const remainingDays = Math.max(1, Math.ceil(duration * (100 - actualPct) / 100))
-      const resume = shiftBusinessDays(today, 1, holidaySet)
-      const progressForecastEnd = endFromStart(resume, remainingDays, holidaySet)
+      const resume = shiftBusinessDays(today, 1, cal)
+      const progressForecastEnd = endFromStart(resume, remainingDays, cal)
       forecastEnd = later(forecastEnd, progressForecastEnd)
       forecastConfidence = 'estimated'
     }
@@ -280,7 +294,7 @@ export function computeDependencySchedule(
       latestEnd: forecastEnd,
       durationBusinessDays: duration,
       delayDays: calendarDaysBetween(plannedEnd, forecastEnd),
-      delayBusinessDays: Math.max(0, businessDayDistance(plannedEnd, forecastEnd, holidaySet)),
+      delayBusinessDays: Math.max(0, businessDayDistance(plannedEnd, forecastEnd, cal)),
       dependencyDelayDays: calendarDaysBetween(plannedStart, earliestStart),
       totalFloatBusinessDays: 0,
       overdue: actualPct < 100 && plannedEnd < today,
@@ -307,24 +321,24 @@ export function computeDependencySchedule(
     for (const id of graphIds) {
       const schedule = byId.get(id)
       if (!schedule) continue
-      const effectiveDuration = Math.max(1, businessDaysBetween(schedule.forecastStart, schedule.forecastEnd, holidaySet))
-      schedule.latestStart = shiftBusinessDays(projectForecastEnd, -(effectiveDuration - 1), holidaySet)
+      const effectiveDuration = Math.max(1, workingDaysBetween(schedule.forecastStart, schedule.forecastEnd, cal))
+      schedule.latestStart = shiftBusinessDays(projectForecastEnd, -(effectiveDuration - 1), cal)
       schedule.latestEnd = projectForecastEnd
     }
     for (let i = order.length - 1; i >= 0; i--) {
       const predecessorId = order[i]
       const predecessor = byId.get(predecessorId)
       if (!predecessor || !graphIds.has(predecessorId)) continue
-      const predecessorDuration = Math.max(1, businessDaysBetween(predecessor.forecastStart, predecessor.forecastEnd, holidaySet))
+      const predecessorDuration = Math.max(1, workingDaysBetween(predecessor.forecastStart, predecessor.forecastEnd, cal))
       for (const dep of usableOutgoing.get(predecessorId) ?? []) {
         const successor = byId.get(dep.successorId)
         if (!successor) continue
         const bound = dep.type === 'FS'
-          ? shiftBusinessDays(successor.latestStart, -(dep.lagDays + predecessorDuration), holidaySet)
-          : shiftBusinessDays(successor.latestStart, -dep.lagDays, holidaySet)
+          ? shiftBusinessDays(successor.latestStart, -(dep.lagDays + predecessorDuration), cal)
+          : shiftBusinessDays(successor.latestStart, -dep.lagDays, cal)
         predecessor.latestStart = earlier(predecessor.latestStart, bound)
       }
-      predecessor.latestEnd = endFromStart(predecessor.latestStart, predecessorDuration, holidaySet)
+      predecessor.latestEnd = endFromStart(predecessor.latestStart, predecessorDuration, cal)
     }
   }
 
@@ -334,7 +348,7 @@ export function computeDependencySchedule(
     if (!schedule) continue
     schedule.totalFloatBusinessDays = Math.max(
       0,
-      businessDayDistance(schedule.forecastStart, schedule.latestStart, holidaySet),
+      businessDayDistance(schedule.forecastStart, schedule.latestStart, cal),
     )
     schedule.critical = schedule.totalFloatBusinessDays === 0
     if (schedule.critical) criticalTaskIds.add(id)
@@ -345,8 +359,8 @@ export function computeDependencySchedule(
     const predecessor = byId.get(dep.predecessorId)!
     const successor = byId.get(dep.successorId)!
     const constraint = dep.type === 'FS'
-      ? shiftBusinessDays(predecessor.forecastEnd, dep.lagDays + 1, holidaySet)
-      : shiftBusinessDays(predecessor.forecastStart, dep.lagDays, holidaySet)
+      ? shiftBusinessDays(predecessor.forecastEnd, dep.lagDays + 1, cal)
+      : shiftBusinessDays(predecessor.forecastStart, dep.lagDays, cal)
     if (constraint === successor.forecastStart) criticalDependencyIds.add(dep.id)
   }
 
@@ -364,7 +378,8 @@ export function computeDependencySchedule(
       ? calendarDaysBetween(projectPlannedEnd, projectForecastEnd)
       : 0,
     projectDelayBusinessDays: projectPlannedEnd && projectForecastEnd
-      ? Math.max(0, businessDayDistance(projectPlannedEnd, projectForecastEnd, holidaySet))
+      ? Math.max(0, businessDayDistance(projectPlannedEnd, projectForecastEnd, cal))
       : 0,
+    calendarError: null,
   }
 }
