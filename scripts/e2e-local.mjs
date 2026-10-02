@@ -53,7 +53,7 @@ import {
 } from './lib/e2e.mjs'
 import {
   A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, isMondayIso, nextServerMode,
-  pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs,
+  pptText, seoulToday, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
@@ -1055,6 +1055,40 @@ async function main() {
   }
   const broken = rendered.filter((r) => r.problems.length)
   step('render-pages', { pages: rendered, problems: broken.length }, broken.length ? `화면 오류 표식: ${JSON.stringify(broken)}` : undefined)
+
+  // ── SP4 B — 팀 색 렌더(스펙 §6.3 teams-color-render, 재검토 반영 T12). UI 위험 파일(TeamsProvider·범위 레이아웃 셋)의 깨짐은 빌드·테스트로
+  // 잡히지 않는다(CLAUDE.md) — 팀이 있는 프로젝트 A 의 화면이 팀 슬롯 클래스를 그리고 옛 team-N 클래스가 없음을 본다. 회의록은 워크스페이스
+  // 범위(공용 팀 WS_TEAM 담당). 보고서는 모달이라 서버 HTML 에 없다 — Playwright 로 WBS 도구 줄의 보고서 버튼을 눌러 그 DOM 을 본다.
+  {
+    const seen = []
+    for (const path of [`/p/${A.id}/wbs`, `/p/${A.id}/kanban`, `/p/${A.id}/dashboard`, wsPath(wsA, 'minutes')]) {
+      const html = await (await admin.http('GET', path)).text()
+      seen.push({ path, serverMode: nextServerMode(html), problems: pageProblems(html), ...teamSlotVerdict(html) })
+    }
+    const reportPath = `/p/${A.id}/wbs#report`
+    try {
+      const { loadPlaywright } = await import('./ui-capture.mjs')
+      const { chromium } = await loadPlaywright()
+      const browser = await chromium.launch()
+      try {
+        const origin = new URL(base).origin
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+        await ctx.addCookies([...admin.jar].map(([name, value]) => ({ name, value, url: origin })))
+        const page = await ctx.newPage()
+        const errs = []
+        page.on('pageerror', (e) => errs.push(String(e)))
+        await page.goto(`${origin}/p/${A.id}/wbs`, { waitUntil: 'networkidle' })
+        await page.locator('[data-wbs-weekly-report]').first().click()
+        const dialog = page.locator('[role="dialog"]').first()
+        await dialog.waitFor({ timeout: 15_000 })
+        seen.push({ path: reportPath, problems: errs, ...teamSlotVerdict(await dialog.innerHTML()) })
+      } finally { await browser.close() }
+    } catch (e) {
+      seen.push({ path: reportPath, problems: [`playwright: ${String(e?.message ?? e).slice(0, 200)}`], slots: [], legacy: [], neutral: 0 })
+    }
+    const bad = seen.filter((s) => s.problems.length || !s.slots.length || s.legacy.length || (s.serverMode !== undefined && s.serverMode !== 'production'))
+    step('teams-color-render', { pages: seen }, bad.length ? `팀 색 렌더 실패: ${JSON.stringify(bad)}` : undefined)
+  }
 
   // ── 20~23. SP3a B 모듈 관문 — 설정 화면의 액션으로 프로젝트 모듈을 바꾸고, 워크스페이스 허용과 시드만 로컬 service_role 로 쓴다.
   const projectModules = async () => {

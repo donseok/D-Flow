@@ -825,3 +825,22 @@ describe('SP3b E2E 픽스처 상수', () => {
     expect(readFileSync('src/components/app/WorkspaceSwitcher.tsx', 'utf8')).toContain(SWITCHER_MARK)
   })
 })
+
+describe('teamSlotVerdict(SP4 B — teams-color-render)', () => {
+  it('category 슬롯(중복 없이)·옛 team 클래스·중립 수를 가른다 — category-fg·-weak 는 슬롯으로 세지 않는다', async () => {
+    const { teamSlotVerdict } = await import('../../scripts/lib/e2e.mjs')
+    const html = '<i class="h-2 w-2 bg-category-3"></i><b class="text-category-3 text-category-fg bg-category-3-weak"></b><s class="text-team-2 bg-team-4-weak bg-neutral"></s><u class="text-category-3"></u>'
+    expect(teamSlotVerdict(html)).toEqual({ slots: ['bg-category-3', 'text-category-3'], legacy: ['bg-team-4-weak', 'text-team-2'], neutral: 1 })
+  })
+})
+
+describe('SP4 B — E2E teams-color-render 단계(스펙 §6.3)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const at = (n: string) => src.indexOf(`step('${n}'`)
+  it('teams-color-render 는 render-pages 뒤·모듈을 끄는 단계 앞이고, 보고서 모달을 Playwright 로 연다', () => {
+    expect(at('teams-color-render')).toBeGreaterThan(at('render-pages'))
+    expect(at('teams-color-render')).toBeLessThan(at('module-issues-off'))
+    expect(src).toContain('[data-wbs-weekly-report]')
+    expect(src).toMatch(/step\('teams-color-render', \{ pages: seen \}/)
+  })
+})

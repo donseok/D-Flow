@@ -773,3 +773,18 @@ export function shellBadgeVerdict(res, kind) {
   if (kind === 'hidden') return ['myWorkReview', 'projectApprovals', 'projectUnreadAnnouncements'].filter((k) => b[k] !== null).map((k) => `${k} = ${JSON.stringify(b[k])} (null 이어야 한다)`)
   return typeof b.myWorkReview === 'number' ? [] : [`myWorkReview = ${JSON.stringify(b.myWorkReview)} (자기 워크스페이스는 숫자여야 한다)`]
 }
+
+/**
+ * SP4 B — 화면 HTML 의 팀 색 클래스(teams-color-render, 스펙 §6.3). slots = category-1..8 의 text·bg(중복 없이 — 채움 위 글자 category-fg 와
+ * -weak 배경은 세지 않는다), legacy = 옛 team-1..5 클래스(-weak 포함 — 0 이어야 한다), neutral = 목록 밖 팀의 중립 슬롯 수(기록만).
+ * @param {string} html @returns {{ slots: string[], legacy: string[], neutral: number }}
+ */
+export function teamSlotVerdict(html) {
+  const text = String(html)
+  const uniq = (re) => [...new Set([...text.matchAll(re)].map((m) => m[0]))].sort()
+  return {
+    slots: uniq(/(?<![\w-])(?:text|bg)-category-[1-8](?![\w-])/g),
+    legacy: uniq(/(?<![\w-])(?:text|bg)-team-[1-5](?:-weak)?(?![\w-])/g),
+    neutral: (text.match(/(?<![\w-])(?:text|bg)-neutral(?![\w-])/g) ?? []).length,
+  }
+}
