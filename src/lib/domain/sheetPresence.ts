@@ -3,10 +3,12 @@
 import { compareKoreanName } from './nameSort'
 import type { WeeklyCellKey } from './weeklySheet'
 
-/** 타 사용자 프레즌스 팔레트 — 흰 문서 배경에서 판독 가능한 진한 색.
- *  자기 선택 링(#1a73e8)·저장 상태색(#188038/#d93025)과 겹치지 않게 구성. */
+/** 타 사용자 프레즌스 팔레트 — 셀 위치 링(SheetCell border-2)·아바타·이름 칩 배경. 시트는 테마를 따르므로(SP4 B) 링은 다크 종이
+ *  (surface = night-900) 위에서 비텍스트 대비 3:1 이상이어야 한다(tests/domain/presence-contrast — 옛 갈색 #7b5e57 은 2.8:1 이라 #a1887f 로).
+ *  라이트 흰 종이 위에서는 #24c1e0·#f9ab00 이 3:1 아래다(시트가 늘 흰색이던 때부터 — 이월 관찰).
+ *  자기 선택 링(border-focus)·저장 상태색(success·danger 토큰)과 겹치지 않게 구성. 칩 글자는 presenceForeground 가 배경 짝으로 고른다. */
 export const PRESENCE_COLORS = [
-  '#e8710a', '#34a853', '#a142f4', '#f538a0', '#24c1e0', '#ea4335', '#f9ab00', '#7b5e57',
+  '#e8710a', '#34a853', '#a142f4', '#f538a0', '#24c1e0', '#ea4335', '#f9ab00', '#a1887f',
 ] as const
 
 /** userId → 결정적 색상. 같은 사용자는 어느 세션·어느 셀에서든 항상 같은 색. */
