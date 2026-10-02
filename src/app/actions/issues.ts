@@ -933,7 +933,7 @@ export async function createIssueFromMinuteBlock(
     dedupeKey: `issue.assigned:${row.issue_id}:init`,
   })
   revalidateIssues(projectId)
-  revalidatePath(`/minutes/${source.minuteId}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return {
     ok: true,
     id: row.issue_id,

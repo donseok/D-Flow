@@ -14,16 +14,17 @@ import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
 import { listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
+import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import { stampedFileName } from '@/lib/domain/minutes'
 import { formatWeightPct, formatPct1, fmtSize } from '@/lib/domain/format'
 import { DependencyEgoGraph, type EgoNode } from './DependencyEgoGraph'
-import { LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate, teamStyle } from './shared'
+import { LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate } from './shared'
 import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 const EMPTY_MEMBERS: ProjectMember[] = []
 // 매 렌더 새 리터럴이면 readiness useMemo 가 매번 다시 돈다 — 모듈 상수로 고정.
@@ -67,6 +68,7 @@ export function RowDetailPanel({
   const router = useRouter()
   const { t } = useLocale()
   const allTeamCodes = useTeamCodes()
+  const slotOf = useTeamSlot()
   const [logs, setLogs] = useState<ChangeLogEntry[] | null>(null)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -195,11 +197,12 @@ export function RowDetailPanel({
     if (subOpen && !subTeam && subTeams.length === 1) setSubTeam(subTeams[0])
   }, [subOpen, subTeam, subTeams])
 
-  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
+  /** dictFallback 이 있으면 액션 문구를 사전으로 바꿔 그린다(표 밖이면 그 키) — 표(actionErrors)의 문구를 돌려주는 액션만 넘긴다 */
+  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void, dictFallback?: DictKey) {
     setBusy(true); setErr(null)
     const res = await fn()
     setBusy(false)
-    if (!res.ok) { setErr(res.error ?? t('wbs.errGeneric')); return }
+    if (!res.ok) { setErr(dictFallback ? wbsToastText(t, res.error, dictFallback) : (res.error ?? t('wbs.errGeneric'))); return }
     after?.()
     router.refresh()
   }
@@ -224,7 +227,8 @@ export function RowDetailPanel({
 
   const addChild = () => {
     if (!canChild || !addName?.trim()) return
-    run(() => addWbsItem(projectId, item.id, addName.trim()), () => setAddName(null))
+    // addWbsItem 은 사전 표의 문구만 돌려준다(SP4 D52 — 받은 한국어를 그리면 영어 화면에 샌다)
+    run(() => addWbsItem(projectId, item.id, addName.trim()), () => setAddName(null), 'wbs.toastAddFail')
   }
   const addSub = () => {
     if (!subTeam) return
@@ -665,7 +669,7 @@ export function RowDetailPanel({
                             return (
                               <button key={tm} onClick={() => setSubTeam(tm)}
                                 className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-brand bg-brand-weak text-brand' : 'border-line text-ink-muted hover:bg-surface-2'}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${teamStyle(tm).bar}`} />{tm}
+                                <span className={`h-1.5 w-1.5 rounded-full ${slotOf(tm).bar}`} />{tm}
                               </button>
                             )
                           })}

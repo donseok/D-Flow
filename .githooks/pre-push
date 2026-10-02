@@ -80,7 +80,7 @@ fi
 # ^src/ 앵커가 빗나가고 가드가 조용히 fail-open 한다. 이 리포는 한국어를 쓴다.
 GIT='git -c core.quotePath=false'
 
-UI_RE='^(src/app/globals\.css|src/app/layout\.tsx|src/app/\(app\)/layout\.tsx|src/components/app/)'
+UI_RE='^(src/app/globals\.css|src/app/layout\.tsx|src/app/\(app\)/layout\.tsx|src/app/\(app\)/w/\[slug\]/layout\.tsx|src/app/\(app\)/p/\[projectId\]/layout\.tsx|src/app/\(app\)/\(global\)/layout\.tsx|src/components/app/)'
 
 # 머지 커밋의 **자체 변경**(이른바 evil merge) — 충돌을 해결하며 어느 부모에도 없던 내용을
 # 끼워 넣은 것. `git log --no-merges` 로는 **보이지 않고**(파일 0건), 평범한 diff-tree 도

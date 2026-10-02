@@ -3,11 +3,13 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
-import { requireModule, requireSessionModule } from '@/lib/modules/gate'
+import { requireModule } from '@/lib/modules/gate'
+import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { revalidatePath } from 'next/cache'
-import { getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
+import { ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
 import { expandMeetings, MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { displayNameFrom } from '@/lib/domain/display-name'
+import { SAFE_ID_RE } from '@/lib/domain/validate'
 import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 
 export interface MeetingInput {
@@ -72,7 +74,7 @@ function toRow(input: MeetingInput) {
 
 function revalidateMeetings(projectId: string) {
   revalidatePath(`/p/${projectId}/meetings`)
-  revalidatePath('/meetings')
+  revalidatePath('/(app)/w/[slug]/meetings', 'page')
 }
 
 /**
@@ -293,16 +295,21 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
 
 /** 클라이언트(내 회의 뷰)에서 월 이동 시 호출하는 얇은 래퍼. 로더의 실패(ok:false)는 그대로 넘긴다 —
  *  뷰가 빈 달 대신 사유와 재시도를 보인다(에러 처리 3원칙 ①). 모듈 관문 거부(설정 조회 실패 포함)는 빈 값 — 로그는 관문이 남긴다
- *  (P13·Ruling B3 F1). */
+ *  (P13·Ruling B3 F1). 범위는 화면의 워크스페이스(인자) — 소속이 아니면 빈 달력(존재 은닉, D26). 관문은 소속 확인 뒤·입력 검증 앞(P17). */
 export async function fetchMyMeetings(
+  workspaceId: string,
   gridStartIso: string,
   gridEndIso: string,
 ): Promise<MyMeetingsResult> {
   const user = await getSession()
   if (!user) return { ok: true, meetings: [], exceptions: [] }
-  const mod = await requireSessionModule(null, 'meetings')                   // 전역 내 회의 — 세션 유일 워크스페이스(P13). 행은 getMyMeetings 가 거른다
+  let actor: Actor | null
+  try { actor = await getActor() } catch { return { ok: false, error: ERR_MEETINGS_LOAD } }
+  // 플랫폼 관리자는 소속과 무관하게 참이라 임의 문자열이 관문 로그·설정 조회 오류에 실린다 — 그 입력만 모양(SAFE_ID_RE)을 먼저 본다(FA3)
+  if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [] }
+  const mod = await requireModule({ workspaceId }, 'meetings')
   if (!mod.ok) return { ok: true, meetings: [], exceptions: [] }
-  return getMyMeetings(gridStartIso, gridEndIso)
+  return getMyMeetings(workspaceId, gridStartIso, gridEndIso)
 }
 
 /** 상세 모달에서 호출하는 얇은 래퍼 — getMeetingDetail(서버 전용)을 세션 게이트 후 위임. */

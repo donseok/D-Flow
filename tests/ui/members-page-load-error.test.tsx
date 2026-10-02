@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   loadProjectConfigForPage: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster, upsertRosterMember: vi.fn(), removeRosterMember: vi.fn() }))
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
@@ -19,7 +21,7 @@ vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id:
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 // 초대 칸의 tz = 프로젝트 달력(SP5 과제 21) — 해석기만 바꿔 끼운다
 vi.mock('@/lib/settings/pageConfig', () => ({ loadProjectConfigForPage: mocks.loadProjectConfigForPage }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: () => [] }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/settings/ProjectInviteManager', () => ({ ProjectInviteManager: (p: Record<string, unknown>) => mocks.inviteManager(p) }))

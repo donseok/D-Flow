@@ -3,11 +3,13 @@
 import type { Actor } from './authz'
 import { compareKoreanName } from './nameSort'
 
-/** 내 모든 프로젝트의 대표 팀 code — 중복 제거, 가나다순. 명단 팀이 없으면(플랫폼 관리자 포함) 빈 목록. */
-export function identityTeamCodes(actor: Actor | null): string[] {
+/** 내 모든 프로젝트의 대표 팀 code — 중복 제거, 가나다순. 명단 팀이 없으면(플랫폼 관리자 포함) 빈 목록.
+ *  workspaceId 를 주면 그 워크스페이스의 프로젝트만 센다(화면이 한 워크스페이스로 닫힌 곳의 기본 팀 — 다른 워크스페이스의 팀 코드가 기본값이 되지 않게). */
+export function identityTeamCodes(actor: Actor | null, workspaceId?: string): string[] {
   if (!actor) return []
   const codes = new Set<string>()
-  for (const { teamCodes } of actor.rosterTeams.values()) {
+  for (const [projectId, { teamCodes }] of actor.rosterTeams) {
+    if (workspaceId !== undefined && actor.projectWorkspace.get(projectId) !== workspaceId) continue
     const primary = teamCodes[0]
     if (primary) codes.add(primary)
   }

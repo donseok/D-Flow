@@ -1,16 +1,19 @@
 'use client'
-// 에이전트 두 화면(위임·승인 · 에이전트 스튜디오)의 공통 틀 — 같은 다크 헤더 띠에 탭·제목·한 문장 요약·
-// 상태 누적 막대·타일을 얹고, 화면마다 다른 조작부(tools)는 띠 아래 고정 줄로 뺀다(2026-09-18 사용자 결정).
+// 에이전트 두 화면(위임·승인 · 에이전트 스튜디오)의 공통 틀 — 머리(AgentHero)에 제목·한 문장 요약·상태 누적 막대·타일을 얹고,
+// 탭과 화면마다 다른 조작부(tools)는 머리 아래 고정 도구 줄 한 곳에 둔다(2026-09-18 사용자 결정, D18 — 과제 32 에서 탭이 머리에서 내려왔다).
 //
-// 헤더는 ProjectPageShell 의 hero(장식) 슬롯이라 컴팩트 뷰포트에선 걷힌다. 탭과 조작부는 화면의 유일한
-// 조작 수단이므로 pinned 슬롯에 둔다 — 컴팩트에선 탭이 헤더와 함께 사라지지 않도록 pinned 줄로 내려온다.
-// 분기는 useCompactViewport 로만 한다(반응형 display 유틸 금지 — globals.css 안전망).
+// 탭과 조작부는 화면의 유일한 조작 수단이라 늘 pinned(PageFrame 의 고정 도구 줄) 한 곳에 둔다 — 머리와 도구 줄에 탭이 두 번
+// 나오지 않는다(D18 예외). 컴팩트에선 큰 다크 띠(AgentHero) 대신 PageHero 제목만 그린다 — 모든 뷰포트에 h1 하나(조건부 렌더).
+// 분기는 useCompactViewport 로만 한다(반응형 display 유틸 금지 — globals.css 안전망). 첫 렌더는 데스크톱이라(D55) 컴팩트 기기의
+// 첫 페인트에 AgentHero 가 잠깐 그려진다 — 스펙 D18 이 받아들인 예외다.
 import type { ReactNode } from 'react'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
+import { PageHero } from '@/components/ui/PageHero'
 import { useCompactViewport } from '@/lib/hooks/useCompactViewport'
 import { AgentTabs, type TabTone } from './AgentTabs'
 
-/** 헤더 띠 위(dark)·컴팩트 고정 줄(light)에 얹는 내비게이션. 기본은 프로젝트의 위임·승인|에이전트 스튜디오 탭이다. */
+/** 고정 도구 줄(늘 light 톤)에 얹는 내비게이션. 기본은 프로젝트의 위임·승인|에이전트 스튜디오 탭이다.
+ *  톤 인자는 남아 있지만 지금 호출은 'light' 하나다 — TAB_TONE.dark 갈래는 쓰이지 않는다(정리는 UI-3 이월, BB4) */
 export type HeroNav = (tone: TabTone) => ReactNode
 
 /** 헤더 타일 하나. bar=false 면 누적 막대에서 뺀다(합계가 다른 축의 숫자). */
@@ -60,18 +63,11 @@ export function AgentFrame({ projectId, nav, projectName, title, lede, tiles, to
 }) {
   const compact = useCompactViewport()
   const navFor: HeroNav = nav ?? (tone => projectId === undefined ? null : <AgentTabs projectId={projectId} tone={tone} />)
-  const pinned = compact || tools
-    ? (
-      <div data-agent-tools className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {compact && navFor('light')}
-        {tools}
-      </div>
-    )
-    : undefined
+  // 탭은 pinned 한 곳에만 — 컴팩트에서 AgentHero 대신 PageHero 제목만(타일·막대는 조건부 렌더). 머리와 도구 줄에 탭이 두 번 나오지 않는다
+  const tabs = navFor('light')
+  const pinned = tabs || tools ? <div data-agent-tools className="flex flex-wrap items-center gap-x-3 gap-y-2">{tabs}{tools}</div> : undefined
   return (
-    <ProjectPageShell
-      hero={<AgentHero nav={navFor('dark')} projectName={projectName} title={title} lede={lede} tiles={tiles} />}
-      pinned={pinned}>
+    <ProjectPageShell hero={compact ? <PageHero title={title} /> : <AgentHero nav={null} projectName={projectName} title={title} lede={lede} tiles={tiles} />} pinned={pinned}>
       {children}
     </ProjectPageShell>
   )

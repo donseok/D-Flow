@@ -77,7 +77,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
   })
 
   it('profileSave 실패가 경고(role=status)로 보이고 사유 코드를 싣는다 — 펼침 버튼은 그대로 있고 설명은 저장/표준 양식 안내(SP4 §4.3)', async () => {
-    executeResponse = () => new Response(JSON.stringify({ ok: true, count: 2, mode: 'append', reindexed: 0, profileSaved: false,
+    executeResponse = () => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved: false,
       profileSave: { ok: false, code: 'CONFIG_UNAVAILABLE', error: 'x' } }), { status: 200 })
     await runToDone()
     const status = statusWith(t('ko', 'importWizard.profileSaveFailedTitle'))
@@ -95,7 +95,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
   })
 
   it('저장하지 않았을 뿐(profileSave 없음)이면 경고가 없다', async () => {
-    executeResponse = () => new Response(JSON.stringify({ ok: true, count: 2, mode: 'append', reindexed: 0, profileSaved: false }), { status: 200 })
+    executeResponse = () => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved: false }), { status: 200 })
     await runToDone()
     expect(container.textContent).toContain(t('ko', 'importWizard.doneCountSuffix'))   // 완료 화면까지 왔다
     expect(statusWith(t('ko', 'importWizard.profileSaveFailedTitle'))).toBeUndefined()

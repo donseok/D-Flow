@@ -64,8 +64,9 @@ export function pickAllowed(raw: string | undefined, allowed: Iterable<string>):
   return undefined
 }
 
-/** 현재 쿼리를 유지한 채 일부만 바꾼 /usage 링크. 값이 undefined 면 그 파라미터를 뺀다. */
+/** 현재 쿼리를 유지한 채 일부만 바꾼 사용 현황 링크(base = 범위의 경로, 예: /w/<slug>/usage). 값이 undefined 면 그 파라미터를 뺀다. */
 export function usageHref(
+  base: string,
   current: { days: number; user?: string; menu?: string },
   patch: Partial<{ days: number; user?: string; menu?: string }>,
 ): string {
@@ -75,7 +76,7 @@ export function usageHref(
   if (next.user) q.set('user', next.user)
   if (next.menu) q.set('menu', next.menu)
   const s = q.toString()
-  return s ? `/usage?${s}` : '/usage'
+  return s ? `${base}?${s}` : base
 }
 
 /**

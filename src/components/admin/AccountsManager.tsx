@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useScope } from '@/components/app/ScopeContext'
+import { wsHref } from '@/lib/workspace/paths'
 import { UserPlus, Upload, KeyRound, UserCog, ShieldCheck, UserRound, Wand2, Copy, Check, Eye } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -36,19 +38,21 @@ function randomPassword(): string {
   return Array.from(arr, (n) => chars[n % chars.length]).join('')
 }
 
-export function AccountsManager({ accounts, projectId, workspaceId, projects, canManageAdmins, currentUserId }: {
+export function AccountsManager({ accounts, projectId, workspaceId, projects, canPlatformOps, currentUserId }: {
   accounts: AccountRow[]
   /** 역할 열·역할 변경이 대상으로 삼는 프로젝트 */
   projectId: string
   /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경과 새 계정(단건·일괄) 소속의 대상 */
   workspaceId: string
   projects: { id: string; name: string }[]
-  /** 슈퍼유저만 true — 관리자 슬롯·슈퍼유저 토글 조작 가능 여부 */
-  canManageAdmins: boolean
+  /** 플랫폼 관리자만 true — 플랫폼 전용 조작(비밀번호 재설정·플랫폼 관리자 지정)을 그린다(SP3b D22). 액션 가드는 그대로 requireSuperuser.
+   *  워크스페이스 관리자가 이 화면을 열게 되며, 눌러도 거부될 버튼을 보이지 않게 한다 */
+  canPlatformOps: boolean
   /** 보는 사람 — 본인 행의 플랫폼 관리자 해제를 막는다(서버 액션도 거부). */
   currentUserId: string
 }) {
   const router = useRouter()
+  const scope = useScope()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 해석, D5)
   const [addOpen, setAddOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [resetting, setResetting] = useState<AccountRow | null>(null)
@@ -65,7 +69,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
             <select
               className="app-input h-9 w-auto text-xs"
               value={projectId}
-              onChange={(e) => router.push(`/admin/accounts?project=${e.target.value}`)}
+              onChange={(e) => router.push(scope?.workspace
+                ? wsHref(scope.workspace.slug, 'admin/accounts', { project: e.target.value })
+                : `/admin/accounts?project=${encodeURIComponent(e.target.value)}`)}
               title="권한 표시·부여 대상 프로젝트"
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -97,9 +103,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                   <th className="py-2 pr-3">이름</th>
                   <th className="py-2 pr-3">워크스페이스 역할</th>
                   <th className="py-2 pr-3">이 프로젝트 권한</th>
-                  {canManageAdmins && <th className="py-2 pr-3">플랫폼 관리자</th>}
+                  {canPlatformOps && <th className="py-2 pr-3">플랫폼 관리자</th>}
                   <th className="py-2 pr-3">생성일</th>
-                  <th className="py-2 pr-3 text-right">작업</th>
+                  {canPlatformOps && <th className="py-2 pr-3 text-right">작업</th>}
                 </tr>
               </thead>
               <tbody>
@@ -121,19 +127,21 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                         {ROLE_LABEL[accountRole(a)]}
                       </Link>
                     </td>
-                    {canManageAdmins && (
+                    {canPlatformOps && (
                       <td className="py-2.5 pr-3">
                         <PlatformAdminCell account={a} isSelf={a.id === currentUserId} />
                       </td>
                     )}
                     <td className="py-2.5 pr-3 text-ink-subtle">{a.createdAt.slice(0, 10)}</td>
-                    <td className="py-2.5 pr-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
-                          <KeyRound className="h-3.5 w-3.5" />비번 리셋
-                        </button>
-                      </div>
-                    </td>
+                    {canPlatformOps && (
+                      <td className="py-2.5 pr-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
+                            <KeyRound className="h-3.5 w-3.5" />비번 리셋
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -142,9 +150,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
         )}
       </div>
 
-      <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} workspaceId={workspaceId} canManageAdmins={canManageAdmins} />
+      <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} workspaceId={workspaceId} />
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} workspaceId={workspaceId} />
-      <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />
+      {canPlatformOps && <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />}
     </div>
   )
 }
@@ -229,24 +237,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-/** 역할 select(계정 추가) — 관리자 옵션은 canManageAdmins(슈퍼유저)일 때만 고를 수 있다. */
-function RoleSelect({ value, onChange, canManageAdmins }: {
+/** 역할 select(계정 추가) — 세 값 모두 고를 수 있다. 계정 추가는 워크스페이스 관리자 이상(createAccount 의 requireWorkspaceAdmin)이고
+ *  그 등급은 그 워크스페이스 모든 프로젝트의 관리자를 승계하므로 프로젝트 관리자 부여도 서버가 허용한다(일괄 추가와 같은 규칙). */
+function RoleSelect({ value, onChange }: {
   value: AccountRole
   onChange: (r: AccountRole) => void
-  canManageAdmins: boolean
 }) {
   return (
     <select className="app-input" value={value} onChange={(e) => onChange(e.target.value as AccountRole)}>
-      {ACCOUNT_ROLES.map((r) => (
-        <option key={r} value={r} disabled={r === 'admin' && !canManageAdmins}>
-          {ROLE_LABEL[r]}{r === 'admin' && !canManageAdmins ? ' (슈퍼유저 전용)' : ''}
-        </option>
-      ))}
+      {ACCOUNT_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
     </select>
   )
 }
 
-/** 워크스페이스 등급 select — 계정 관리 자체가 슈퍼유저 전용이라 두 값 모두 고를 수 있다. */
+/** 워크스페이스 등급 select — 계정 관리는 워크스페이스 관리자 이상이라(setWorkspaceRole 과 같은 가드) 두 값 모두 고를 수 있다. */
 function WorkspaceRoleSelect({ value, onChange }: {
   value: WorkspaceRole
   onChange: (r: WorkspaceRole) => void
@@ -258,8 +262,8 @@ function WorkspaceRoleSelect({ value, onChange }: {
   )
 }
 
-function AddAccountModal({ open, onClose, projectId, workspaceId, canManageAdmins }: {
-  open: boolean; onClose: () => void; projectId: string; workspaceId: string; canManageAdmins: boolean
+function AddAccountModal({ open, onClose, projectId, workspaceId }: {
+  open: boolean; onClose: () => void; projectId: string; workspaceId: string
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -321,7 +325,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId, canManageAdmin
             <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} />
           </Field>
           <Field label="이 프로젝트 권한">
-            <RoleSelect value={role} onChange={setRole} canManageAdmins={canManageAdmins} />
+            <RoleSelect value={role} onChange={setRole} />
           </Field>
         </div>
         <Field label="초기 비밀번호 (8자 이상)">

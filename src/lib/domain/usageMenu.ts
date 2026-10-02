@@ -1,4 +1,7 @@
 import type { DictKey } from '@/lib/i18n/dict'
+import type { NavItemId } from '@/lib/nav/ids'
+import { parseScopePath, projectSegmentModule } from '@/lib/nav/active'
+import { MODULES } from '@/lib/modules/registry'
 
 /**
  * 사용 현황 집계의 메뉴 정본 목록.
@@ -8,6 +11,8 @@ import type { DictKey } from '@/lib/i18n/dict'
  * 여기 없는 경로는 'unknown' 으로
  * 모이며 가까운 메뉴로 추측해 붙이지 않는다(리포의 "모르면 unknown" 관례).
  * labelKey 가 null 인 항목은 i18n 사전이 없는 /admin/* 이다 — 관리자 화면은 한국어 하드코딩.
+ * 경로 → 키 판정은 내비 레지스트리·모듈 레지스트리에서 파생한다(SP3b D27 — 경로 표를 손으로 늘리지 않는다).
+ * 'projects' 키의 옛 의미('/projects = 홈')는 라벨만 '전체 프로젝트' 로 바뀌었다 — 홈은 새 키 'ws-home'.
  */
 export interface UsageMenu {
   key: string
@@ -16,6 +21,8 @@ export interface UsageMenu {
 }
 
 export const USAGE_MENUS: readonly UsageMenu[] = [
+  { key: 'ws-home', labelKey: 'nav.home', fallback: '홈' },
+  { key: 'my-work', labelKey: 'nav.myWork', fallback: '내 업무' },
   { key: 'dashboard', labelKey: 'nav.dashboard', fallback: '대시보드' },
   { key: 'wbs', labelKey: 'nav.wbsGantt', fallback: 'WBS · 간트' },
   { key: 'kanban', labelKey: 'nav.kanban', fallback: '칸반 보드' },
@@ -30,7 +37,7 @@ export const USAGE_MENUS: readonly UsageMenu[] = [
   { key: 'settings', labelKey: 'nav.settings', fallback: '설정' },
   { key: 'my-meetings', labelKey: 'nav.myMeetings', fallback: '내 회의' },
   { key: 'minutes', labelKey: 'nav.minutes', fallback: '회의록' },
-  { key: 'projects', labelKey: 'nav.home', fallback: '홈' },
+  { key: 'projects', labelKey: 'nav.allProjects', fallback: '전체 프로젝트' },
   { key: 'usage', labelKey: 'nav.usage', fallback: '사용 현황' },
   { key: 'portfolio', labelKey: 'nav.portfolio', fallback: '포트폴리오' },
   { key: 'seatmap', labelKey: 'nav.agents', fallback: '전체 스튜디오' },
@@ -40,11 +47,26 @@ export const USAGE_MENUS: readonly UsageMenu[] = [
   { key: 'unknown', labelKey: null, fallback: '기타' },
 ] as const
 
-/** /p/<id>/<seg> 의 seg 로 그대로 쓰는 프로젝트 스코프 키. */
-const PROJECT_SEGMENT_KEYS = new Set([
-  'dashboard', 'wbs', 'kanban', 'meetings', 'weekly',
-  'issues', 'wiki', 'announcements', 'members', 'attendance', 'settings', 'agents',
+/** 항목 id → 사용 현황 키(D27) — 기존 키를 그대로 써 과거 집계와 이어진다. 새 키는 ws-home·my-work 둘. 표에 없는 id 는 타입 오류 */
+export const USAGE_KEY_OF: Readonly<Record<NavItemId, string>> = {
+  'ws.home': 'ws-home', 'ws.my_work': 'my-work', 'ws.projects': 'projects',
+  'ws.meetings': 'my-meetings', 'ws.minutes': 'minutes', 'ws.agents': 'seatmap',
+  'ws.portfolio': 'portfolio', 'ws.usage': 'usage', 'ws.members': 'admin-accounts', 'ws.teams': 'admin-teams', 'ws.settings': 'settings',
+  'ws.llm': 'admin-llm', 'ws.ui_states': 'unknown',                  // 플랫폼 진단 화면 — 집계 키를 늘리지 않는다(새 키는 둘뿐, 스펙 §5.7)
+  'p.dashboard': 'dashboard', 'p.wbs': 'wbs', 'p.issues': 'issues', 'p.weekly': 'weekly',
+  'p.meetings': 'meetings', 'p.wiki': 'wiki', 'p.announcements': 'announcements',
+  'p.members': 'members', 'p.attendance': 'attendance', 'p.agents': 'agents', 'p.settings': 'settings',
+}
+/** 워크스페이스 경로의 첫 조각 → 항목 id(SHELL_NAV·모듈 nav.workspace 의 segment 에서 파생) */
+const WS_SEGMENT: ReadonlyMap<string, NavItemId> = new Map<string, NavItemId>([
+  ['', 'ws.home'], ['my-work', 'ws.my_work'], ['projects', 'ws.projects'], ['settings', 'ws.settings'],
+  ...MODULES.flatMap((m) => (m.nav?.workspace ? [[m.nav.workspace.segment.split('/')[0], m.nav.workspace.id] as [string, NavItemId]] : [])),
 ])
+/** 옛 전역 경로(역사 데이터) — 새 경로와 같은 키를 낸다. 영구 표(route-literals 영구 항목) */
+const LEGACY_KEY: ReadonlyArray<readonly [string, string]> = [
+  ['/projects', 'projects'], ['/meetings', 'my-meetings'], ['/minutes', 'minutes'], ['/usage', 'usage'], ['/portfolio', 'portfolio'],
+  ['/agents', 'seatmap'], ['/admin/accounts', 'admin-accounts'], ['/admin/teams', 'admin-teams'], ['/admin/llm-config', 'admin-llm'],
+]
 
 /** 쿼리스트링·해시·끝 슬래시를 제거한 경로. */
 function bare(pathname: string): string {
@@ -53,22 +75,26 @@ function bare(pathname: string): string {
 }
 
 /**
- * 경로 → 메뉴 키. 모르면 'unknown'(추측 금지).
- * 신규 메뉴를 사이드바에 추가하고 여기를 안 고치면 tests/domain/usage-menu.test.ts 가 깨진다.
+ * 경로 → 메뉴 키. 모르면 'unknown'(추측 금지). 새 경로(/w/<s>/…·/p/<id>/…)는 레지스트리에서 파생하고, 옛 전역 경로는 역사 표로 읽는다.
+ * 내비 항목을 더하고 USAGE_KEY_OF 를 안 고치면 타입이 깨진다.
  */
 export function resolveMenuKey(pathname: string): string {
   const p = bare(pathname)
-  const proj = p.match(/^\/p\/[^/]+\/([^/]+)/)
-  if (proj) return PROJECT_SEGMENT_KEYS.has(proj[1]) ? proj[1] : 'unknown'
-  if (p === '/projects' || p.startsWith('/projects/')) return 'projects'
-  if (p === '/meetings' || p.startsWith('/meetings/')) return 'my-meetings'
-  if (p === '/minutes' || p.startsWith('/minutes/')) return 'minutes'
-  if (p === '/usage') return 'usage'
-  if (p === '/portfolio') return 'portfolio'
-  if (p === '/agents') return 'seatmap'
-  if (p === '/admin/accounts') return 'admin-accounts'
-  if (p === '/admin/teams') return 'admin-teams'
-  if (p === '/admin/llm-config') return 'admin-llm'
+  const scope = parseScopePath(p)
+  if (scope?.scope === 'project') {
+    const owner = projectSegmentModule(scope.rest[0] ?? '')
+    if (!owner) return 'unknown'
+    const navId = MODULES.find((m) => m.id === owner)?.nav?.project?.id
+    return navId ? USAGE_KEY_OF[navId] : USAGE_MENUS.some((m) => m.key === owner) ? owner : 'unknown'   // nav 없는 칸반 = 'kanban'
+  }
+  if (scope?.scope === 'workspace') {
+    const seg = scope.rest[0] ?? ''
+    const id = seg === 'admin'
+      ? (scope.rest[1] === 'teams' ? 'ws.teams' : scope.rest[1] === 'accounts' ? 'ws.members' : undefined)
+      : WS_SEGMENT.get(seg)
+    return id ? USAGE_KEY_OF[id] : 'unknown'
+  }
+  for (const [prefix, key] of LEGACY_KEY) if (p === prefix || p.startsWith(prefix + '/')) return key
   return 'unknown'
 }
 

@@ -6,26 +6,26 @@ import { makeSuperuser, WS } from '../fixtures/actor'
 // 팀 관리 화면의 조회 실패는 오류 카드로 보인다 — 'TEAMS 0 / ACTIVE 0' 과 빈 관리자를 사실처럼 그리지 않는다
 // (SP2 최종 리뷰 ERR-7, 에러 처리 3원칙 ①). 그 화면을 믿은 관리자는 '없는' 팀을 다시 추가하다 중복 오류를 만난다.
 const mocks = vi.hoisted(() => ({
-  getActorForView: vi.fn(),
+  loadWorkspaceScope: vi.fn(),
   listTeamsAdmin: vi.fn(),
   redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }),
   TeamsManager: vi.fn<(props: Record<string, unknown>) => null>(() => null),
 }))
-vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: mocks.loadWorkspaceScope }))
 vi.mock('@/app/actions/teams', () => ({ listTeamsAdmin: mocks.listTeamsAdmin }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: mocks.TeamsManager }))
 
-import TeamsAdminPage from '@/app/(app)/admin/teams/page'
+import TeamsAdminPage from '@/app/(app)/w/[slug]/admin/teams/page'
 
-const render = async () => renderToStaticMarkup((await TeamsAdminPage()) as ReactElement)
+const render = async () => renderToStaticMarkup((await TeamsAdminPage({ params: Promise.resolve({ slug: 'acme' }) })) as ReactElement)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.getActorForView.mockResolvedValue(makeSuperuser({ workspaceRoles: new Map([[WS, 'admin']]) }))
+  mocks.loadWorkspaceScope.mockResolvedValue({ ws: { id: WS, slug: 'acme', name: 'Acme' }, actor: makeSuperuser({ workspaceRoles: new Map([[WS, 'admin']]) }), degraded: false, role: 'superuser' })
 })
 
-describe('/admin/teams — 조회 실패 표시', () => {
+describe('/w/[slug]/admin/teams — 조회 실패 표시', () => {
   it('목록 조회가 실패하면 오류 카드 — TEAMS 0 과 빈 관리자를 그리지 않는다', async () => {
     mocks.listTeamsAdmin.mockResolvedValue({ ok: false, error: '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
     const out = await render()

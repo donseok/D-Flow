@@ -20,7 +20,7 @@ type BulkResult = {
   ok: boolean; error?: string; updated: number; unchanged: number
   skipped: { id: string; reason: string }[]
 }
-const assignMinutesProject = vi.fn<(ids: string[], p: string | null) => Promise<BulkResult>>()
+const assignMinutesProject = vi.fn<(ws: string, ids: string[], p: string | null) => Promise<BulkResult>>()
 vi.mock('@/app/actions/minutes', () => ({
   createMinuteFolder: vi.fn(async () => ({ ok: true })),
   renameMinuteFolder: vi.fn(async () => ({ ok: true })),
@@ -28,11 +28,12 @@ vi.mock('@/app/actions/minutes', () => ({
   moveMinuteToFolder: vi.fn(async () => ({ ok: true })),
   moveMinuteFolder: vi.fn(async () => ({ ok: true })),
   fetchMinuteDetail: vi.fn(async () => null),
-  assignMinutesProject: (ids: string[], p: string | null) => assignMinutesProject(ids, p),
+  assignMinutesProject: (ws: string, ids: string[], p: string | null) => assignMinutesProject(ws, ids, p),
 }))
 vi.mock('@/components/minutes/MinuteMetaModal', () => ({ MinuteMetaModal: () => null }))
 
 import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
+import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const folders: MinuteFolder[] = [{ id: 'f1', name: 'MES', parentId: null, sort: 0, createdBy: null, projectId: null }]
 const leaf = (id: string, createdBy: string | null, folderId = 'f1', projectId: string | null = null): ExplorerLeaf => ({
@@ -57,9 +58,11 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
 
   async function mount(over: Partial<Parameters<typeof MinutesExplorer>[0]> = {}) {
     await act(async () => root.render(
-      <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set()}
-        onToggleFavorite={vi.fn()} onRetryFavorites={vi.fn()} layout="grid"
-        currentUserId="u1" onChanged={onChanged} projects={projects} {...over} />,
+      <MinutesScopeProvider scope={{ workspaceId: 'ws-1', projectId: null }}>
+        <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set()}
+          onToggleFavorite={vi.fn()} onRetryFavorites={vi.fn()} layout="grid"
+          currentUserId="u1" onChanged={onChanged} projects={projects} {...over} />
+      </MinutesScopeProvider>,
     ))
   }
   const byText = (text: string) =>
@@ -97,7 +100,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await enterSelect()
     await act(async () => byText('min.exp.assignProject')!.click())
     await act(async () => dialogButton('Acme 프로젝트')!.click())
-    expect(assignMinutesProject).toHaveBeenCalledWith(['m1'], 'p1')
+    expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1'], 'p1')
   })
 
   it('선택 모드에서는 메뉴가 진입 항목을 다시 내놓지 않는다', async () => {
@@ -141,7 +144,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await act(async () => checkboxes()[1].click())   // m2 를 더한다(m1 은 진입으로 이미 선택)
     await act(async () => byText('min.exp.assignProject')!.click())
     await act(async () => dialogButton('Acme 프로젝트')!.click())
-    expect(assignMinutesProject).toHaveBeenCalledWith(['m1', 'm2'], 'p1')
+    expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1', 'm2'], 'p1')
     expect(onChanged).toHaveBeenCalled()
   })
 
@@ -151,7 +154,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await act(async () => byText('min.exp.selectAll')!.click())
     await act(async () => byText('min.exp.assignProject')!.click())
     await act(async () => dialogButton('Acme 프로젝트')!.click())
-    expect(assignMinutesProject).toHaveBeenCalledWith(['m1', 'm2'], 'p1')
+    expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1', 'm2'], 'p1')
   })
 
   it("'연결 없음' 으로 해제도 된다", async () => {
@@ -159,7 +162,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await enterSelect()
     await act(async () => byText('min.exp.assignProject')!.click())
     await act(async () => dialogButton('min.exp.assignNone')!.click())
-    expect(assignMinutesProject).toHaveBeenCalledWith(['m1'], null)
+    expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1'], null)
   })
 
   it('건너뛴 건이 있으면 건수를 알린다 — 전부 됐다로 읽히지 않게', async () => {

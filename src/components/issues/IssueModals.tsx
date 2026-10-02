@@ -37,6 +37,7 @@ import { sortByKoreanName } from '@/lib/domain/nameSort'
 import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
 import { minuteSourceHref } from '@/lib/minutes/source'
+import { useMinuteLinks } from '@/components/minutes/minuteLinks'
 import { uploadIssueAttachments } from '@/lib/issues/uploadIssueAttachments'
 import { IssueAssigneePicker } from './IssueAssigneePicker'
 import { IssueAttachments } from './IssueAttachments'
@@ -198,6 +199,7 @@ export function IssueDetailModal({
   onDelete: () => void
 }) {
   const { t, locale } = useLocale()
+  const minutesBase = useMinuteLinks().list   // 원문 링크의 기준 경로 — 슬러그 워크스페이스(D38 ①), 범위가 없으면 영구 링크 형식
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [status, setStatus] = useState<IssueStatus>('open')
@@ -414,7 +416,7 @@ export function IssueDetailModal({
                           blockIndex: source.blockIndex,
                           blockHash: source.blockHash,
                           bodyHash: source.bodyHash,
-                        }, source.minuteVersionId)}
+                        }, source.minuteVersionId, minutesBase)}
                         className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover"
                       >
                         {t('issue.source.open')}<ExternalLink className="h-3.5 w-3.5" aria-hidden />

@@ -31,7 +31,14 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster, getMyProjectIds: vi.fn(async () => []) }))
-vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView, getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
+// 회의록 상세의 비공개 숨김(DD1) — 이 파일은 명단·첨부·판 실패 표시를 본다, 숨김은 tests/minutes/minute-detail-scope 가 본다
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: vi.fn(async () => new Set()) }))
+// 회의록 상세(/w/[slug]/minutes/[id])의 행위자는 슬러그 판정(loadWorkspaceScope)이 준다 — 같은 행위자 mock 을 싣는다
+vi.mock('@/lib/authz/workspaceScope', () => ({
+  loadWorkspaceScope: vi.fn(async () => ({ ws: { id: (await import('../fixtures/actor')).WS, slug: 'acme', name: 'Acme' }, actor: await mocks.getActorForView(), degraded: false, role: 'member' })),
+}))
 vi.mock('next/navigation', () => ({
   redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
@@ -62,7 +69,7 @@ vi.mock('@/lib/data/minutes', () => ({
   getMinuteFolderPath: vi.fn(async () => null),
 }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
-vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getUiPrefs: vi.fn(async () => ({})) }))
+vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
@@ -81,7 +88,7 @@ import AttendancePage from '@/app/(app)/p/[projectId]/attendance/page'
 import MeetingsPage from '@/app/(app)/p/[projectId]/meetings/page'
 import IssuesPage from '@/app/(app)/p/[projectId]/issues/page'
 import ProjectAgentsPage from '@/app/(app)/p/[projectId]/agents/page'
-import MinuteDetailPage from '@/app/(app)/minutes/[id]/page'
+import MinuteDetailPage from '@/app/(app)/w/[slug]/minutes/[id]/page'
 
 const params = Promise.resolve({ projectId: PID })
 // 회의록 상세 로더 반환 — projectId 는 회의 폴백이 섞인 값, ownProjectId·workspaceId 가 행의 값이다.
@@ -90,7 +97,7 @@ const minuteDetail = (
   files: { ok: true; rows: unknown[] } | { ok: false; error: string } = { ok: true, rows: [] },
 ) => ({
   minute: {
-    id: 'min-1', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null,
+    id: '00000000-0000-0000-7e57-0000000016fa', title: 't', projectId: PID, meetingProjectId: null, folderId: null, createdBy: 'u1', archivedAt: null,
     workspaceId: WS, ownProjectId: PID, ...over,
   },
   files,
@@ -155,7 +162,7 @@ describe('agents 페이지 — 명단 조회 실패', () => {
 
 describe('회의록 상세 — 이슈 담당자 명단 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   it('실패 사유를 뷰어(issueMembersError)로 넘기고 로그를 남긴다', async () => {
     mocks.getProjectRoster.mockResolvedValue({ ok: false, error: ERR })
@@ -178,7 +185,7 @@ describe('회의록 상세 — 이슈 담당자 명단 조회 실패', () => {
 
 describe('회의록 상세 — 첨부 목록 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
   it('실패는 빈 목록과 사유(filesError)로 넘긴다 — 뷰어가 경고를 띄운다', async () => {
@@ -189,7 +196,7 @@ describe('회의록 상세 — 첨부 목록 조회 실패', () => {
     expect(props.filesError).toBe(FILES_ERR)
   })
   it('정상은 행을 그대로 넘기고 filesError=null', async () => {
-    const row = { id: 'f1', minuteId: 'min-1', role: 'attachment', fileName: 'a.pdf' }
+    const row = { id: 'f1', minuteId: '00000000-0000-0000-7e57-0000000016fa', role: 'attachment', fileName: 'a.pdf' }
     mocks.getMinuteDetail.mockResolvedValue(minuteDetail({}, { ok: true, rows: [row] }))
     await render()
     const props = lastProps(mocks.MinuteViewer)
@@ -200,7 +207,7 @@ describe('회의록 상세 — 첨부 목록 조회 실패', () => {
 
 describe('회의록 상세 — 버전 목록 조회 실패', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   beforeEach(() => { mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] }) })
   it('실패는 빈 목록과 사유(versionsError)로 넘긴다 — 버전 패널이 LoadErrorNotice 를 띄운다', async () => {
@@ -222,7 +229,7 @@ describe('회의록 상세 — 버전 목록 조회 실패', () => {
 
 describe('회의록 상세 — 관리 어포던스(canManage)는 서버 checkOwner 와 같다', () => {
   const render = async () => renderToStaticMarkup((await MinuteDetailPage({
-    params: Promise.resolve({ id: 'min-1' }), searchParams: Promise.resolve({}),
+    params: Promise.resolve({ slug: 'acme', id: '00000000-0000-0000-7e57-0000000016fa' }), searchParams: Promise.resolve({}),
   })) as ReactElement)
   const canManage = async () => { await render(); return lastProps(mocks.MinuteViewer).canManage }
   beforeEach(() => {

@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
   latestKeyChange: vi.fn(async (): Promise<{ ok: true; changedAt: string | null; source: string | null } | { ok: false; error: string }> => ({ ok: true, changedAt: null, source: null })),
 }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
-vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')) }))
+vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')), getActorViewState: async () => ({ actor: makeAdminActor('p1'), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({
   listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]),

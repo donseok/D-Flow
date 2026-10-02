@@ -60,8 +60,7 @@ describe('로고는 <img> 로만 그린다(스펙 §5.4)', () => {
   it.each([
     'src/components/settings/LogoEditor.tsx',
     'src/components/ui/BrandMark.tsx',
-    'src/app/(app)/projects/page.tsx',
-  ])('%s 에 dangerouslySetInnerHTML 이 없다', (file) => {
+      ])('%s 에 dangerouslySetInnerHTML 이 없다', (file) => {
     expect(readFileSync(file, 'utf8')).not.toContain('dangerouslySetInnerHTML')
   })
 })

@@ -10,8 +10,8 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.noPermissionTitle': 'No import permission',
   'importWizard.noPermissionDesc': 'Only project admins can use the import wizard.',
 
-  'importWizard.step1Label': '1. Choose file',
-  'importWizard.step2Label': '2. Review & run',
+  'importWizard.step1Label': 'Choose file',
+  'importWizard.step2Label': 'Review & run',
 
   'importWizard.chooseExcel': 'Choose an Excel file',
   'importWizard.xlsxOnly': 'Only .xlsx files are supported',
@@ -140,6 +140,23 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.exportProfileFailedHttp': 'Export failed',
   'importWizard.exportLayoutDesc': "Exports with sub-tasks expanded, using the project's saved layout if there is one, otherwise the standard layout built from the project's teams and levels.",
   'importWizard.exportProfileUnsupported': 'The expanded export cannot be built from the saved layout — it is an outline layout, or the WBS is deeper than its hierarchy columns.',
+
+  // #23 결과·실행 기록(SP4 §5.2·D52, 계획 P9)
+  'importWizard.step3Label': 'Result',
+  'importWizard.stepsAria': 'Import steps',
+  'importWizard.stepSr': 'Step {n} of {total}: {label}',
+  'importWizard.stepSrDone': 'Step {n} of {total}: {label} (done)',
+  'importWizard.runId': 'Run ID',
+  'importWizard.receiptLink': 'View run record',
+  'importWizard.duplicateTitle': 'This run was already processed',
+  'importWizard.duplicateDesc': "The same run was sent again — showing the first run's result (count and mode). For the pre-replace backup, use the file you downloaded before running.",
+  'importWizard.receiptTitle': 'Run record',
+  'importWizard.receiptCount': 'Items',
+  'importWizard.receiptAt': 'Run at',
+  'importWizard.receiptInvalid': 'This run record link is not valid',
+  'importWizard.receiptMissing': 'No such run record in this project',
+  'importWizard.receiptMissingDesc': 'A run record is visible only to the admin who ran it, in the project where it ran.',
+  'importWizard.receiptError': 'Could not load the run record — try again shortly',
 
   'importWizard.linkFromOldForm': 'New import wizard (auto layout detection) →',
 }

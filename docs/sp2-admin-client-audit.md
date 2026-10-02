@@ -29,7 +29,7 @@
 | src/app/actions/minutes.ts | 세션 가드 뒤 id 스코프 | 회의록 id 를 받는 액션은 resolveScope('minutes', id) 로 대상 행의 프로젝트·워크스페이스를 확정한 뒤 그 범위의 isMinuteMember(requireMinuteMember) 또는 canEditMinute(checkOwner)로 판정하고(Task 16a), 그 회의록·폴더 id 로 하이라이트·폴더 이동·공유 토큰을 읽고 쓴다(0011 뒤 세션은 share_token 열을 읽지 못한다) |
 | src/app/actions/project.ts | 세션 가드 뒤 id 스코프 | createProject 는 requireWorkspaceAdmin(wid) 뒤 adminFor({ workspaceId }) 로 create_project_with_settings 를 부른다(복사 원본은 그 wid 소속인지 먼저 확인). 비공개는 requireProjectAdmin(pid) 뒤 그 pid 로 projects 를 쓴다. 설정 쓰기는 이 파일에 없다(SP3a — settings.ts·write.ts 로 옮겼다) |
 | src/app/actions/projectInvites.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid)(관리자 슬롯이면 requireWorkspaceAdmin 도) 뒤에 project_invites 를 pid 로 읽고 쓴다. 허용 도메인은 해석기(getWorkspaceConfig)로 그 프로젝트의 워크스페이스 설정을 읽기만 한다(설정 표를 직접 만지지 않는다 — SP3a) |
-| src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 의 원본은 그 프로젝트 워크스페이스의 공용 팀(workspaceTeams(wid) — 요청 범위 원천, service_role)이다. addProjectTeam 은 그 pid 가 이미 쓰는 공용 팀과 code·이름 키(NFKC·소문자)가 같은지 referencedCommonTeamCodes(adminFor({ projectId }) — 그 pid 의 담당·명단 팀·영역 팀·수락 전 초대, 후보는 그 워크스페이스 공용 팀만 — workspaceTeams)로 본 뒤에만 만든다(SP4 A2-1·A2-2 리뷰) |
+| src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 는 전환 RPC convert_inherited_teams 를 부른다 — 행위자 등급을 RPC 가 다시 판정한다(아래 'DEFINER RPC 가 등급을 다시 판정하는 경로'). addProjectTeam 은 그 pid 가 이미 쓰는 공용 팀과 code·이름 키(NFKC·소문자)가 같은지 referencedCommonTeamCodes(adminFor({ projectId }) — 그 pid 의 담당·명단 팀·영역 팀·수락 전 초대, 후보는 그 워크스페이스 공용 팀만 — workspaceTeams)로 본 뒤에만 만든다(SP4 A2-1·A2-2 리뷰) |
 | src/app/actions/roster.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin 또는 Member(pid) 뒤에 project_members 를 pid·memberId 로 읽고, upsert RPC 에 pid 를 넘긴다 |
 | src/app/actions/teams.ts | 세션 가드 뒤 id 스코프 | addTeam 은 requireWorkspaceAdmin(wid) 뒤에 wid 로 필터한다. updateTeam 은 행의 workspace_id 로 가드한 뒤 eq(workspace_id) 로 쓴다. listTeamsAdmin 은 adminFor({ workspaceId }) 를 쓴다 |
 | src/app/actions/wbsAssign.ts | 세션 가드 뒤 id 스코프 | resolveItemProjectId 로 항목의 pid 를 구해 가드한 뒤, 항목 id 와 멤버의 project_id 일치를 확인하고 쓴다 |
@@ -80,7 +80,6 @@
 | src/lib/minutes/folders.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. 호출부가 넘긴 클라이언트로 teamCode·projectId·workspaceId 필터를 건다 |
 | src/lib/notify/emit.ts | 세션 가드 뒤 id 스코프 | 발행 액션(가드 뒤)이 넘긴 recipientMemberIds·UserIds 로만 수신자 행을 만든다 |
 | src/lib/supabase/adminFor.ts | adminFor 정의 | uuid 스코프(workspaceId 또는 projectId)를 검사한 뒤 createAdminClient 로 service_role 클라이언트를 돌려준다 |
-| src/lib/teams/master.ts | 플랫폼 | 전 워크스페이스 팀과 프로젝트→워크스페이스 매핑의 읽기 전용 캐시다. 워크스페이스·프로젝트·가시 범위 접근자만 있고(워크스페이스를 가리지 않는 전역 접근자는 Task 16b 가 지웠다 — tests/invariants/teams-scope.test.ts), 프로젝트 폴백은 그 프로젝트 워크스페이스의 공용 팀뿐이다 |
 <!-- audit:end -->
 
 표 밖의 service_role 설정 쓰기(SP3a): `src/app/actions/settings.ts` 는 requireProjectAdmin(pid)·requireWorkspaceAdmin(wid) 뒤
@@ -99,7 +98,7 @@
 | src/app/api/v1/agent/me/route.ts | enabled 인 `agent_projects` 를 전 워크스페이스에서 훑었다 | PAT 소유자 스냅샷 키로 in 을 건다. 응답 행도 그 키로 다시 거른다 |
 | src/app/actions/projectTeams.ts | `copyGlobalTeams` 가 `teamsSync()`(전 워크스페이스의 공용 팀)를 복사했다 | `teamsForWorkspaceSync(프로젝트의 wid)` 에서 복사한다. 팀 마스터를 한 번도 읽지 못했으면 오류를 낸다("복사할 팀 없음"으로 위장하지 않는다) |
 | src/app/actions/teams.ts | `listTeamsAdmin` 의 workspace_id 필터는 Task 11 이 넣었다 | admin 클라이언트 생성을 `adminFor({ workspaceId })` 로 바꿨다. addTeam·updateTeam 이 아직 직접 만들기 때문에 파일은 표에 남는다 |
-| src/lib/teams/master.ts | 캐시에 워크스페이스가 없었다(`Team` 에 `workspaceId` 가 없었다) | `workspace_id` 를 select 하고 `Team.workspaceId` 에 싣는다. `teamsForWorkspaceSync`·`activeTeamCodesForWorkspaceSync` 를 추가했다(한 번도 로드하지 못했으면 throw) |
+| src/lib/teams/master.ts | 캐시에 워크스페이스가 없었다(`Team` 에 `workspaceId` 가 없었다) | `workspace_id` 를 select 하고 `Team.workspaceId` 에 싣는다. `teamsForWorkspaceSync`·`activeTeamCodesForWorkspaceSync` 를 추가했다(한 번도 로드하지 못했으면 throw) — SP4 B 가 파일을 지웠다(요청 범위 원천 `src/lib/teams/source.ts`) |
 
 바꾸지 않은 것:
 - `api/v1/agent/watch`: 스펙이 짚은 누설은 `agent_watchers.workspace_id` 가 없다는 것이었고, 0006·Task 3 이 채웠다. 필터 없는 쿼리로는 7일 GC 하나가 남는데, 행 내용을 읽지 않는 전역 정리라서 그대로 둔다. 본문 project_id 의 멤버십 판정 누락은 별개 문제로 "남은 경계" 3 에 적었고 Task 13 이 닫았다.
@@ -140,7 +139,8 @@ service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 
 | `src/app/actions/weekly.ts#createWeeklyReport` | `create_weekly_report` | `requireProjectAdmin(pid)` → `requireModule weekly` | 관리자 아님 `42501 WEEKLY_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
 | `src/app/actions/projectAreas.ts#upsertArea` | `upsert_project_area` | `requireProjectAdmin(pid)`(모듈 관문 없음 — D25) | 관리자 아님 `42501 AREA_FORBIDDEN`, 영역은 `project_id = p_project_id` 로만 찾아 다른 프로젝트의 영역 id 는 `P0002 AREA_NOT_FOUND`(아무것도 바꾸지 않는다) |
 | `src/app/api/import/execute/route.ts#POST` | `import_wbs_cmd` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 IMPORT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND`, 같은 명령 id·다른 요약 `23505 COMMAND_REUSED` |
-| `src/app/api/import/execute/route.ts#POST`(상속 프로젝트의 미등록 팀 등록 앞) — '공용 팀 복사로 시작'(`copyGlobalTeams`)은 SP4 B 에서 잇는다 | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
+| `src/app/api/import/execute/route.ts#POST`(상속 프로젝트의 미등록 팀 등록 앞) | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
+| `src/app/actions/projectTeams.ts#copyGlobalTeams`('공용 팀 전환으로 시작' — SP4 B, T14) | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
 
 가져오기 라우트는 `createAdminClient` 를 직접 부르므로 위 감사표에도 행이 있다(이 절은 클라이언트와 무관하게 RPC 쪽 판정을 적는다).
 넷 모두 실행권은 service_role 만이고(anon·authenticated 는 EXECUTE 가 없다 — 각 마이그레이션의 사후검사), 등급은 도우미

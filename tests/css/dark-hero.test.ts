@@ -1,5 +1,5 @@
 // 어두운 히어로 전제 마크업 제거(SP3b 스펙 §4.4·D13·E8, 계획 판정 Q20) — 히어로가 밝은 표면이 된 뒤
-// 흰 반투명 배경·흰 글자·어두운 기준 hex 가 남으면 흰 위 흰으로 사라진다. C 소유 두 파일은 UI-2b(여기 없음).
+// 흰 반투명 배경·흰 글자·어두운 기준 hex 가 남으면 흰 위 흰으로 사라진다. C 소유 BrandMark 는 UI-2b 이동 커밋(과제 25)이 이 목록에 넣었다.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -10,7 +10,8 @@ const FILES = [
   'src/components/ui/PageHero.tsx', 'src/components/home/NewProjectModal.tsx', 'src/components/agent-hub/AgentFrame.tsx',
   'src/components/agent-hub/AgentTabs.tsx', 'src/components/wiki/WikiSearch.tsx', 'src/components/wiki/WikiReindexButton.tsx',
   'src/components/chat/AssistantChat.tsx', 'src/app/not-found.tsx',
-  'src/components/agent-hub/AgentHubView.tsx', 'src/components/report/ReportButton.tsx',
+  'src/components/agent-hub/AgentHubView.tsx', 'src/components/report/ReportButton.tsx', 'src/components/ui/BrandMark.tsx',
+  'src/app/(app)/w/[slug]/projects/page.tsx',
 ]
 const DARK = /(?<![\w-])(?:[a-z-]+:)*(?:bg|border|ring)-white\/|(?<![\w-])(?:[a-z-]+:)*text-white(?![\w-])|-\[#[0-9a-fA-F]{3,8}\]|--gradient-(?:dark|primary)/
 
@@ -32,8 +33,8 @@ describe('어두운 히어로 전제 0', () => {
     expect(hero).toContain("key: 'empty'")
     expect(hero).not.toMatch(/'#[0-9a-fA-F]{3,8}'/)
   })
-  it('hero-glow — 규칙 0, C 소유 projects/page.tsx 밖 사용 0(C 파일은 UI-2b — 사전 점검 실행 minor 3)', () => {
+  it('hero-glow — 규칙 0, 사용 0(전체 프로젝트의 어두운 히어로는 UI-2b 이동 커밋이 걷었다)', () => {
     expect(read('src/app/globals.css')).not.toMatch(/\.hero-glow\b/)
-    expect(srcFiles(/\.tsx$/).filter(([f, t]) => f !== 'src/app/(app)/projects/page.tsx' && /\bhero-glow\b/.test(t)).map(([f]) => f)).toEqual([])
+    expect(srcFiles(/\.tsx$/).filter(([, t]) => /\bhero-glow\b/.test(t)).map(([f]) => f)).toEqual([])
   })
 })

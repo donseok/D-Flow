@@ -20,17 +20,20 @@ export function NewProjectModal({
   copyCandidates = [],
   label,
   className = 'btn btn-primary',
+  defaultOpen = false,
 }: {
-  /** 만들 워크스페이스 — SP3 전까지 서버 컴포넌트가 유일 소속(resolveSoleWorkspaceId)으로 정해 넘긴다. */
+  /** 만들 워크스페이스 — 슬러그 워크스페이스(SP3b D26). 서버 컴포넌트가 loadWorkspaceScope 결과로 정해 넘긴다. */
   workspaceId: string
   copyCandidates?: { id: string; name: string }[]
   label?: string
   className?: string
+  /** 첫 렌더에 열려 있다 — `?new=1` 로 들어온 화면(시작 화면·전환기의 '새 프로젝트' 링크) */
+  defaultOpen?: boolean
 }) {
   const { t } = useLocale()
   const router = useRouter()
   const levelsHintId = useId()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [start, setStart] = useState('')
@@ -92,10 +95,20 @@ export function NewProjectModal({
     }
   }
 
+  /** `?new=1` 로 열린 모달을 닫으면 주소에서 그 쿼리를 뺀다 — 새로고침·뒤로 가기에 다시 열리지 않게(나머지 쿼리는 그대로) */
+  function dropNewQuery() {
+    if (!defaultOpen || typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    if (!u.searchParams.has('new')) return
+    u.searchParams.delete('new')
+    router.replace(`${u.pathname}${u.search}${u.hash}`, { scroll: false })
+  }
+
   function close() {
     if (busy) return
     setOpen(false)
     reset()
+    dropNewQuery()
   }
 
   async function submit() {
@@ -131,6 +144,7 @@ export function NewProjectModal({
       router.refresh()
       setOpen(false)
       reset()
+      dropNewQuery()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('home.errCreateFailed'))
     } finally {

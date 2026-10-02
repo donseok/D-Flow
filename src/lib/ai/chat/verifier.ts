@@ -53,11 +53,13 @@ function isInternalHref(source: BotSource): boolean {
     return false
   }
   if (url.origin !== 'https://dflow.invalid') return false
+  // 새 형식 /w/<s>/… 는 머리를 떼고 옛 뿌리로 본다 — 두 형식 허용(D6). 형식 밖 슬러그나 머리 뒤 /p/ 는 떼지 않는다(없는 경로로 뿌리를 흉내 내지 못하게)
+  const path = url.pathname.replace(/^\/w\/[a-z0-9][a-z0-9-]{1,62}(?=\/(?!p\/))/, '')
   const roots = DOMAIN_PATH[source.domain]?.(source.projectId) ?? []
-  if (!roots.some(root => url.pathname === root || url.pathname.startsWith(`${root}/`))) return false
+  if (!roots.some(root => path === root || path.startsWith(`${root}/`))) return false
 
   if (source.projectId) {
-    const projectMatch = /^\/p\/([^/]+)\//.exec(url.pathname)
+    const projectMatch = /^\/p\/([^/]+)\//.exec(path)
     if (projectMatch) {
       try {
         if (decodeURIComponent(projectMatch[1]) !== source.projectId) return false
@@ -67,10 +69,10 @@ function isInternalHref(source: BotSource): boolean {
     }
   }
   if (source.domain === 'wbs' && source.entityType === 'wbs_item') {
-    if (url.pathname.endsWith('/wbs') && url.searchParams.get('focus') !== source.entityId) return false
+    if (path.endsWith('/wbs') && url.searchParams.get('focus') !== source.entityId) return false
   }
   if (source.domain === 'minutes' && source.entityType === 'minute') {
-    if (url.pathname !== `/minutes/${encodeURIComponent(source.entityId)}`) return false
+    if (path !== `/minutes/${encodeURIComponent(source.entityId)}`) return false
   }
   return true
 }

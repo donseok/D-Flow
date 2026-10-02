@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Sparkles } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import {
   areaGroupOf, mergeRefreshedRows, mergeServerRow, orderAreas, rowLabel, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
@@ -16,7 +16,7 @@ import {
   createWeeklyReport, prepareWeeklyCellRewrite, saveWeeklyCell, saveWeeklyCells, saveWeeklyTitle,
   type WeeklyActionResult, type WeeklyBatchResult, type WeeklyRewriteInput,
 } from '@/app/actions/weekly'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { useToast } from '@/components/ui/Toast'
 import { buildPresenceMap, onlinePeers } from '@/lib/domain/sheetPresence'
 import { PresenceStrip } from '@/components/app/PresenceStrip'
@@ -597,7 +597,7 @@ export function WeeklySheetView({
   }, [closeAiRewrite, runBatch, toast])
 
   // 프레즌스 — 같은 주차 문서를 보는 다른 사용자의 위치/편집 상태(구글시트의 색상 커서 대응).
-  // 훅 규칙: 아래 EmptyState 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
+  // 훅 규칙: 아래 빈 상태(StatusMessage) 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
   const presencePeers = usePresence({
     projectId, reportId, me,
     active: rows.length ? grid.sel.active : null,
@@ -615,7 +615,7 @@ export function WeeklySheetView({
   }, [presencePeers, me?.id, me?.name]) // eslint-disable-line react-hooks/exhaustive-deps -- me는 원시값으로 구독(객체 참조는 렌더마다 새것)
 
   // 언마운트 시 디바운스/재시도 타이머 정리 — 정리 안 하면 사라진 컴포넌트에 setState 호출됨.
-  // 훅 규칙: 아래 EmptyState 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
+  // 훅 규칙: 아래 빈 상태(StatusMessage) 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
   useEffect(() => () => {
     aiRequestRef.current += 1
     for (const t of timersRef.current.values()) clearTimeout(t)
@@ -623,33 +623,38 @@ export function WeeklySheetView({
     if (batchShowTimerRef.current) clearTimeout(batchShowTimerRef.current)
   }, [])
 
-  // ── 문서 없음: EmptyState + 시작 버튼 2종(스펙 §3 — 자동 생성 금지). 활성 영역이 없으면 시작할 수 없다(W1 — 액션도 CONFIG_REQUIRED) ──
+  // ── 문서 없음: StatusMessage + 시작 버튼 2종(스펙 §3 — 자동 생성 금지). 활성 영역이 없으면 시작할 수 없다(W1 — 액션도 CONFIG_REQUIRED) ──
   // 설정의 팀·업무영역 절(#project-team)은 관리자에게만 보인다 — 생성 자격(canCreateRound = isProjectAdmin)과 같은 술어라 그때만 링크를 둔다.
+  // 상태 두 갈래(문서 없음·행 없음)는 시트 상자가 없다 — 채움형에서 main 이 닫히므로 짧은 높이(확대·가로 폰)에서 아래 버튼에
+  // 닿게 루트가 스스로 세로 스크롤한다(B-4 리뷰 I1). 본문 갈래는 시트 상자가 유일한 스크롤 상자라 루트에 두지 않는다.
   const areaSettingsHref = `/p/${projectId}/settings#project-team`
   if (!report) {
     const activeAreaNames = orderAreas(areas.filter(a => a.active)).map(a => a.name)
     return (
-      <div className="space-y-4">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         <WeekNav projectId={projectId} weekStart={weekStart} prevWeek={prevWeek} nextWeek={nextWeek} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         {activeAreaNames.length === 0 ? (
-          <EmptyState
-            icon={FileSpreadsheet}
+          <StatusMessage
+            kind="needs_setup"
             title="주간보고 영역을 먼저 설정하세요"
-            description={canCreateRound
+            detail={canCreateRound
               ? '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 설정의 팀·업무영역에서 주간보고 영역을 추가하세요.'
               : '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 관리자에게 주간보고 영역 설정을 요청하세요.'}
-            action={canCreateRound ? <Link className="btn btn-primary" href={areaSettingsHref}>업무영역 설정으로</Link> : undefined}
+            action={canCreateRound ? { label: '업무영역 설정으로', href: areaSettingsHref } : undefined}
           />
         ) : (
           // 회차 생성은 시트의 구조를 만드는 일이라 관리자 몫(createWeeklyReport=requireProjectAdmin).
           // 권한이 없으면 버튼 대신 '누가 만들어야 하는지'를 알린다 — 눌러서 거부당해 알게 하지 않는다.
-          <EmptyState
-            icon={FileSpreadsheet}
-            title={`${weekLabel} 시트가 없습니다`}
-            description={canCreateRound
-              ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
-              : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
-            action={canCreateRound ? (
+          // StatusMessage 의 다음 행동은 하나뿐이라 두 시작 버튼은 그 아래 줄에 둔다(계획 P10).
+          <div className="space-y-3">
+            <StatusMessage
+              kind="empty"
+              title={`${weekLabel} 시트가 없습니다`}
+              detail={canCreateRound
+                ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
+                : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
+            />
+            {canCreateRound && (
               <div className="flex gap-2">
                 {hasCarrySource && (
                   <button className="btn btn-primary" disabled={isPending} onClick={() => startReport(true)}>
@@ -660,8 +665,8 @@ export function WeeklySheetView({
                   기본 시트로 시작
                 </button>
               </div>
-            ) : undefined}
-          />
+            )}
+          </div>
         )}
         {carry && carry.weekStart === weekStart && (
           <CarryMappingModal
@@ -685,23 +690,23 @@ export function WeeklySheetView({
   //    문서에 행을 넣고(§3.2) 실시간으로 이 화면에 들어온다(mergeServerRow — 그때 표가 나타난다).
   if (rows.length === 0) {
     return (
-      <div className="space-y-4">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         <WeekNav projectId={projectId} weekStart={weekStart} prevWeek={prevWeek} nextWeek={nextWeek} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
-        <EmptyState
-          icon={FileSpreadsheet}
+        <StatusMessage
+          kind="needs_setup"
           title={`${weekLabel} 시트에 업무영역 행이 없습니다`}
-          description={canCreateRound
+          detail={canCreateRound
             ? '프로젝트 설정의 팀·업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'
             : '프로젝트 관리자가 업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'}
-          action={canCreateRound ? <Link className="btn btn-primary" href={areaSettingsHref}>업무영역 설정으로</Link> : undefined}
+          action={canCreateRound ? { label: '업무영역 설정으로', href: areaSettingsHref } : undefined}
         />
       </div>
     )
   }
 
-  // ── 구글시트 복제 룩: 흰 종이 + 검정 얇은 테두리 + 회색 2단 헤더 + 병합 셀.
-  //    시트는 '문서'라 다크모드에서도 항상 밝게(고정 색상, 앱 토큰 미사용).
-  const HDR = 'border border-neutral-500 bg-[#d9d9d9] px-1 py-1.5 text-center text-[13px] font-bold text-black'
+  // ── 구글시트 복제 룩: 종이(surface) + 얇은 테두리 + 옅은 2단 헤더 + 병합 셀.
+  //    시트도 테마 토큰을 따른다 — 다크 대비는 토큰이 진다(SP4 B, D52).
+  const HDR = 'border border-border-input bg-surface-subtle px-1 py-1.5 text-center text-[13px] font-bold text-fg'
 
   // 선택/채우기 사각 — 셀 단위 틴트·외곽선·핸들을 선언적으로 그린다(측정 없음, 회귀 #7).
   const gr = grid.rect
@@ -712,7 +717,7 @@ export function WeeklySheetView({
   const presenceStrip = <PresenceStrip online={online} meId={me?.id} />
 
   return (
-    <div className="space-y-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <WeekNav
         projectId={projectId}
         weekStart={weekStart}
@@ -726,8 +731,8 @@ export function WeeklySheetView({
         aiRewriteDisabled={!hasFocusedCell}
         onLint={() => setLintOpen(true)}
       />
-      <div className="overflow-x-auto">
-        <div className={`min-w-[1240px] bg-white p-1.5 shadow-sm ring-1 ring-neutral-300 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
+      <div className="isolate min-h-0 flex-1 overflow-auto">
+        <div className={`min-w-[1240px] bg-surface p-1.5 shadow-sm ring-1 ring-border ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
           {/* 제목 행 — 레퍼런스 시트의 B1. 자유 편집(''이면 기본 제목 합성). key로 주차 전환 시 초기화 */}
           <TitleEditor
             key={report.id}
@@ -744,7 +749,7 @@ export function WeeklySheetView({
           {/* 업무영역 1단(영역마다 1행) + 내용 4열. 행 구조 편집은 없다 — 영역 추가·비활성은 프로젝트 설정의 업무영역에서. */}
           {/* 열 폭: 업무영역 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
               두지 않는다 — 공백 텍스트 노드가 colgroup 의 자식이 되면 hydration 오류가 난다. */}
-          <table className="w-full table-fixed border-collapse bg-white text-[13px] text-black">
+          <table className="w-full table-fixed border-collapse bg-surface text-[13px] text-fg">
             <colgroup>
               <col className="w-[10%]" />
               <col className="w-[27%]" />
@@ -771,7 +776,7 @@ export function WeeklySheetView({
                 const rowName = rowLabel(r, areas)
                 return (
                 <tr key={r.id}>
-                  <td className="border border-neutral-500 px-1 py-1.5 text-center align-middle text-[13px] font-bold text-black">
+                  <td className="border border-border-input px-1 py-1.5 text-center align-middle text-[13px] font-bold text-fg">
                     <div>{rowName}</div>
                   </td>
                   {COLS.map((c, j) => {
@@ -779,12 +784,12 @@ export function WeeklySheetView({
                     const active = grid.sel.active.rowId === r.id && grid.sel.active.col === c.key
                     const inRange = !!gr && i >= gr.top && i <= gr.bottom && j >= gr.left && j <= gr.right
                     const inFill = !!fp && i >= fp.top && i <= fp.bottom && j >= fp.left && j <= fp.right
-                    const bg = fp && inFill && !inRange ? 'bg-[#e8f0fe]/60'
-                      : isMulti && inRange && !active ? 'bg-[#e8f0fe]' : 'bg-white'
+                    const bg = fp && inFill && !inRange ? 'bg-surface-selected/60'
+                      : isMulti && inRange && !active ? 'bg-surface-selected' : 'bg-surface'
                     return (
                       // h-px: td에 명시 높이를 줘야 내부 h-full/min-h-full이 행 실제 높이로 해석된다(표 셀 스트레치 관례).
                       // 없으면 입력창이 자기 내용만큼만 높아져, 옆 셀이 큰 행에서 포커스 링이 셀 일부만 감싼다.
-                      <td key={c.key} className={`h-px border border-neutral-500 p-0 align-top ${bg}`}>
+                      <td key={c.key} className={`h-px border border-border-input p-0 align-top ${bg}`}>
                         <SheetCell
                           addr={addr}
                           value={r[CELL_FIELD[c.key]]}
@@ -829,12 +834,12 @@ export function WeeklySheetView({
             </tbody>
           </table>
           {/* 단축키 안내 — 셀 내 줄바꿈은 눌러보기 전엔 알 수 없어서 표에 붙여 노출한다. */}
-          <p className="pt-1.5 text-[11px] text-neutral-500">
-            셀 안에서 줄을 바꾸려면 <kbd className="rounded border border-neutral-300 px-1 font-sans">Alt</kbd>
+          <p className="pt-1.5 text-xs text-fg-secondary">
+            셀 안에서 줄을 바꾸려면 <kbd className="rounded border border-border px-1 font-sans">Alt</kbd>
             <span className="px-0.5">+</span>
-            <kbd className="rounded border border-neutral-300 px-1 font-sans">Enter</kbd>
-            <span className="px-1 text-neutral-400">(Mac: ⌥ 또는 ⌘ + Enter)</span>
-            — 그냥 <kbd className="rounded border border-neutral-300 px-1 font-sans">Enter</kbd>를 누르면 저장하고 아래 칸으로 넘어갑니다.
+            <kbd className="rounded border border-border px-1 font-sans">Enter</kbd>
+            <span className="px-1 text-fg-muted">(Mac: ⌥ 또는 ⌘ + Enter)</span>
+            — 그냥 <kbd className="rounded border border-border px-1 font-sans">Enter</kbd>를 누르면 저장하고 아래 칸으로 넘어갑니다.
           </p>
           {/* 선택/배치 결과 방송(§7) — 시각적 숨김 */}
           <div aria-live="polite" className="sr-only">{grid.live}</div>
@@ -875,8 +880,9 @@ function WeekNav({
 }) {
   const base = `/p/${projectId}/weekly`
   return (
-    // 근태현황·회의일정과 동일한 스크롤 상단 고정. z-40: 시트 셀 오버레이(배지/핸들 z-30)보다 위.
-    <div className="sticky top-0 z-40 -mx-1 flex items-center justify-between bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+    // 채움형(SP4 B) — main 은 스크롤하지 않고 시트 상자가 스크롤한다. 이 줄은 늘 보이고, 셀 오버레이(배지·핸들 z-30)는
+    // 시트 상자의 isolate 안에 갇힌다. 좁은 화면(390)에서는 줄을 바꿔 감싼다 — main 이 닫혀 옆으로 넘친 내보내기 버튼에 닿을 길이 없다.
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-1 pt-1">
       <div className="flex items-center gap-2">
         <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost px-2" aria-label="이전 주">
           <ChevronLeft className="h-4 w-4" />
@@ -886,9 +892,9 @@ function WeekNav({
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {presence}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* 내보내기 전에 점검하는 순서가 자연스러워 왼쪽에 둔다. */}
           {onAiRewrite && (
             <button
@@ -899,7 +905,7 @@ function WeekNav({
               title={aiRewriteDisabled ? '시트에서 다듬을 셀을 먼저 선택해 주세요.' : undefined}
               data-weekly-ai-rewrite
             >
-              <Sparkles className="mr-1 h-4 w-4 text-violet-600" />AI로 다시 작성
+              <Sparkles className="mr-1 h-4 w-4 text-action" />AI로 다시 작성
             </button>
           )}
           {onLint && <button type="button" className="btn btn-ghost" onClick={onLint}>주간보고 점검</button>}
@@ -1006,7 +1012,7 @@ function TitleEditor({ initial, fallback, readOnly, onSave }: {
       value={v} onChange={e => setV(e.target.value)} onBlur={onBlur}
       onFocus={() => { focusedRef.current = true }}
       readOnly={readOnly} maxLength={200} aria-label="시트 제목"
-      className="w-full border-0 bg-white px-0.5 pb-1.5 pt-0.5 text-[15px] font-extrabold text-black outline-none placeholder:text-neutral-400 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-[#1a73e8]"
+      className="w-full border-0 bg-surface px-0.5 pb-1.5 pt-0.5 text-[15px] font-extrabold text-fg outline-none placeholder:text-fg-muted focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus"
     />
   )
 }

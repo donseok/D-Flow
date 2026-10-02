@@ -1,6 +1,8 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useScope } from '@/components/app/ScopeContext'
+import { wsHref } from '@/lib/workspace/paths'
 import type { Seat, Seatmap, SeatmapScope } from '@/lib/domain/seatmap'
 import { seatmapChannelProjectIds } from '@/lib/domain/seatmap'
 import { refreshSeatmap } from '@/app/actions/agentSeatmap'
@@ -38,9 +40,10 @@ const CHATTER_KEY = 'dflow.office.chatter'
 
 /** 좌석표 클라이언트 루트. 30초 폴링, 숨긴 탭은 쉬고 다시 보이면 즉시 1회. 실패는 마지막 데이터 유지 + 표시.
  *  projectId 가 있으면 프로젝트 스튜디오(/p/[id]/agents/office): 재조회를 그 층으로 좁히고 전체 스튜디오 링크를 보인다.
+ *  없으면 전체 좌석표(/w/[slug]/agents) — workspaceId 가 재조회 범위다(없으면 액션이 권한 없음으로 거절한다 — 넓히지 않는다).
  *  보기는 셋이다 — 에이전트(기본)·평면도(지켜보는 화면)·상태 레인(처리하는 화면). 결재는 평면도·상태 레인의 좌석에 붙는다. */
-export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, timeZone, locale }: {
-  initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string
+export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, workspaceId = null, timeZone, locale }: {
+  initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string; workspaceId?: string | null
   /** 시각·사무실 대사(계절·점심)의 시간대 — 프로젝트 스튜디오는 프로젝트, 전역은 세션 유일 워크스페이스(viewTimezone) */
   timeZone: string
   /** 시각 포맷의 locale — 없으면 'ko-KR' */
@@ -110,13 +113,13 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
     }
     inflight.current = true
     try {
-      const r = projectId === undefined ? await refreshSeatmap(scopeRef.current) : await refreshSeatmap(scopeRef.current, projectId)
+      const r = projectId === undefined ? await refreshSeatmap(scopeRef.current, undefined, workspaceId ?? undefined) : await refreshSeatmap(scopeRef.current, projectId)
       if (r.ok) { setMap(r.seatmap); setNowMs(Date.parse(r.seatmap.fetchedAt)); setError(null) }
       else setError({ at: new Date().toISOString(), message: r.error })
     } catch (e) {
       setError({ at: new Date().toISOString(), message: e instanceof Error ? e.message : String(e) })
     } finally { inflight.current = false }
-  }, [projectId])
+  }, [projectId, workspaceId])
 
   /** 결재 실행 — 실패는 삼키지 않고 상세 패널에 그대로 띄운다(에러 3원칙). 성공하면 좌석표를 다시 읽는다. */
   const runOp = useCallback(async (seat: Seat, kind: SeatOpKind, text: string) => {
@@ -195,9 +198,10 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
 
   // 에이전트 보기 재료 — 훅이라 보기와 무관하게 늘 부른다(좌석표가 바뀔 때만 다시 묶는다).
   const roster = useRoster(map)
+  const range = useScope()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 해석, D5)
   const tools = (
     <>
-      {projectId !== undefined && <Link href="/agents" data-office-all-link className={css.allLink}>전체 스튜디오</Link>}
+      {projectId !== undefined && <Link href={range?.workspace ? wsHref(range.workspace.slug, 'agents') : '/agents'} data-office-all-link className={css.allLink}>전체 스튜디오</Link>}
       <div className={css.viewSeg} role="group" aria-label="보기">
         <button type="button" data-view="agent" aria-pressed={view === 'agent'} onClick={() => pickView('agent')}><IconAgentView />에이전트</button>
         <button type="button" data-view="floor" aria-pressed={view === 'floor'} onClick={() => pickView('floor')}><IconFloorView />평면도</button>

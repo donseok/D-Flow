@@ -5,11 +5,13 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor, resolveProjectId, resolveScope } from '@/lib/authz'
 import {
-  canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, type Actor,
+  canEditMinute, isMinuteMember, isProjectAdmin, isProjectMember, hasProjectRoleInWorkspace, isWorkspaceAdmin, isWorkspaceMember, type Actor,
 } from '@/lib/domain/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
+import { SAFE_ID_RE, UUID_RE as ANY_UUID_RE } from '@/lib/domain/validate'
+import { parseMinutesScope, type MinutesScope } from '@/lib/minutes/scope'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
-import { requireModule, requireSessionModule } from '@/lib/modules/gate'
+import { requireModule } from '@/lib/modules/gate'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
@@ -85,6 +87,30 @@ async function requireActor(): Promise<{ ok: true; actor: Actor } | { ok: false;
   if (!actor) return { ok: false, error: '로그인 필요' }
   return { ok: true, actor }
 }
+
+/**
+ * 워크스페이스 범위 관문(D26, §5.8, 계획 V13) — 회의록 화면이 넘긴 범위(슬러그 워크스페이스 + 선택 프로젝트)로 판정한다.
+ * 소속이 아니면 ERR_MISSING(존재 은닉), 소속이면 그 워크스페이스로 모듈 관문. 가드가 아니다 — 각 액션의 기존 가드(requireActor·getSession)
+ * 다음, 입력 검증 앞에서 부른다(P17). projectId(?project=)는 그 워크스페이스의 아는 프로젝트일 때만(W11) — 아니면 비소속과 같은 ERR_MISSING.
+ * 워크스페이스 id 의 존재는 소속 맵 조회가 판정한다 — 단, 소속과 무관하게 참인 플랫폼 관리자의 입력만은 모양(SAFE_ID_RE)을 먼저 본다:
+ * 줄바꿈·임의 길이 문자열이 설정 조회 오류와 [requireModule] 로그에 통째로 실리지 않게(FA3, 비플랫폼은 어차피 소속 맵에서 걸린다).
+ */
+async function minutesScopeGate(scope: unknown): Promise<{ ok: true; scope: MinutesScope; actor: Actor } | { ok: false; error: string }> {
+  const s = parseMinutesScope(scope)
+  if (!s || (s.projectId !== null && !ANY_UUID_RE.test(s.projectId))) return { ok: false, error: ERR_MISSING }
+  let actor: Actor | null
+  try { actor = await getActor() } catch (e) {
+    // 권한 조회 실패는 '없음'이 아니다 — 원인을 남기고 ERR_LOOKUP 으로 구분한다(목록 액션은 실패로 돌려준다, U2a-3 리뷰 V5)
+    console.error('[minutes] 권한 조회 실패:', e instanceof Error ? e.message : e)
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  if (!actor || (actor.isSuperuser && !SAFE_ID_RE.test(s.workspaceId)) || !isWorkspaceMember(actor, s.workspaceId)) return { ok: false, error: ERR_MISSING }
+  if (s.projectId !== null && actor.projectWorkspace.get(s.projectId) !== s.workspaceId) return { ok: false, error: ERR_MISSING }
+  const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
+  return mod.ok ? { ok: true, scope: s, actor } : { ok: false, error: mod.error }
+}
+/** 워크스페이스만 받는 액션(폴더·즐겨찾기·일괄 지정·새 회의록)의 범위 관문 */
+const workspaceGate = (workspaceId: unknown) => minutesScopeGate({ workspaceId, projectId: null })
 
 /** 회의록을 다른 워크스페이스로 보내는 이동의 거부 문구 — 회의록의 워크스페이스는 바뀌지 않는다(0006 트리거
  *  WORKSPACE_SCOPE_MISMATCH 가 막는다). 트리거까지 가지 않도록 쓰기 전에 같은 판정을 한다. */
@@ -218,7 +244,7 @@ async function deriveTeamFromFolder(
 }
 
 export async function createMinute(
-  input: MinuteInput, folderId: string | null = null, source?: MinuteCreateSource,
+  input: MinuteInput, folderId: string | null = null, source?: MinuteCreateSource, workspaceId?: string,
 ): Promise<MinuteActionResult> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
@@ -226,15 +252,24 @@ export async function createMinute(
   if (!user) return { ok: false, error: '로그인 필요' }
   // 모듈 관문(스펙 §4.2) — 쓰기 대상의 범위로: 프로젝트를 고르면 그 프로젝트(워크스페이스 모듈이라 곧 그 워크스페이스의 판정), 회의만 고르면
   // 그 회의의 프로젝트(쓰기 대상을 resolveMinuteProject 가 회의의 프로젝트로 정한다 — fetchMeetingMinutesLite 와 같은 해석), 둘 다 없으면
-  // 세션 유일 워크스페이스. 프로젝트 id 의 형식·소속은 뒤의 기존 검증이 본다 — 관문은 없는 프로젝트를 설정 0행 → 닫힘으로 판정한다
+  // 인자 워크스페이스(화면의 슬러그 워크스페이스 — 소속 확인, D26). 프로젝트가 있으면 workspaceId 인자는 보지 않는다(§5.8).
+  // 프로젝트 id 의 형식·소속은 뒤의 기존 검증이 본다 — 관문은 없는 프로젝트를 설정 0행 → 닫힘으로 판정한다
   let gateProjectId = input?.projectId ?? null
   if (!gateProjectId && input?.meetingId) {
     const found = await resolveProjectId('meetings', input.meetingId)
     if (!found.ok || !found.projectId) return { ok: false, error: found.ok ? ERR_LOOKUP : found.error }
     gateProjectId = found.projectId
   }
-  const mod = gateProjectId ? await requireModule({ projectId: gateProjectId }, 'minutes') : await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  let argWorkspaceId: string | null = null
+  if (gateProjectId) {
+    const mod = await requireModule({ projectId: gateProjectId }, 'minutes')
+    if (!mod.ok) return { ok: false, error: mod.error }
+  } else {
+    if (workspaceId === undefined || workspaceId === null) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+    const wg = await workspaceGate(workspaceId)
+    if (!wg.ok) return { ok: false, error: wg.error }
+    argWorkspaceId = wg.scope.workspaceId
+  }
   // 담당 팀은 쓰기 대상 범위가 정해진 뒤(아래 targetWs) 그 범위의 팀으로 본다.
   const err = validateMinuteFields(input)
   if (err) return { ok: false, error: err }
@@ -255,18 +290,18 @@ export async function createMinute(
   if (resolvedProject.error) return { ok: false, error: resolvedProject.error }
   // 회의록 생성은 멤버 이상(스펙 D8). 프로젝트가 정해지면 그 프로젝트의 멤버여야 하고,
   // 미지정이면 쓰기 대상 워크스페이스에 역할이 있어야 한다(0006 에서 폐기된 옛 전역 역할 판정의 워크스페이스판).
-  let workspaceId: string | null = null
+  let noProjectWs: string | null = null
   if (!resolvedProject.projectId) {
-    const w = resolveSoleWorkspaceId(g.actor)
-    if (!w.ok) return { ok: false, error: w.error }
-    workspaceId = w.workspaceId
+    // 프로젝트가 정해지지 않았으면 관문을 지난 인자 워크스페이스(위 — 프로젝트를 고른 경로는 resolveMinuteProject 가 늘 프로젝트를 낸다)
+    if (!argWorkspaceId) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+    noProjectWs = argWorkspaceId
   }
   if (resolvedProject.projectId
     ? !isProjectMember(g.actor, resolvedProject.projectId)
-    : !hasProjectRoleInWorkspace(g.actor, workspaceId)) return { ok: false, error: '권한 없음' }
+    : !hasProjectRoleInWorkspace(g.actor, noProjectWs)) return { ok: false, error: '권한 없음' }
   // 폴더 해석에 넘길 워크스페이스 — 프로젝트가 있으면 그 프로젝트의 것(가드를 통과했으니 projectWorkspace 에 있다;
   // 플랫폼 관리자는 buildActor 가 전 프로젝트를 싣는다).
-  const targetWs = workspaceId
+  const targetWs = noProjectWs
     ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
   if (!targetWs) return { ok: false, error: ERR_MISSING }
   // 담당 팀은 그 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀이어야 한다 — 다른 워크스페이스의 팀 코드는 거부.
@@ -323,7 +358,7 @@ export async function createMinute(
     p_file_size: source?.file.size ?? null,
     p_file_mime: source?.file.mime ?? null,
     // 프로젝트가 있으면 null — RPC 가 프로젝트에서 얻는다(0006).
-    p_workspace_id: workspaceId,
+    p_workspace_id: noProjectWs,
   }).single()
   if (createError || !createdRaw) {
     // RPC 영문 상수(0006 MINUTE_FOLDER_WORKSPACE_MISMATCH 등)는 사용자 문구로, 그 밖은 종전처럼 원문 그대로.
@@ -342,7 +377,7 @@ export async function createMinute(
     minuteVersionId: versionId,
     bodyMd,
   })
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   if (resolvedProject.projectId) revalidatePath(`/p/${resolvedProject.projectId}/wiki`)
   after(async () => {
     await Promise.all([
@@ -432,7 +467,7 @@ export async function updateMinuteMeta(
   }
   const projectChanged = updateResult.old_project_id !== updateResult.new_project_id
   const wikiRebuildRequired = projectChanged || updateResult.wiki_rebuild_required === true
-  revalidatePath('/minutes'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   if (updateResult.old_project_id) {
     revalidatePath(`/p/${updateResult.old_project_id}/wiki`)
   }
@@ -493,15 +528,17 @@ type BulkProjectResult = {
  * 위키 재적재는 프로젝트 단위로 **한 번씩만** 돈다(건별로 돌리면 200건이 200회 재적재가 된다).
  */
 export async function assignMinutesProject(
-  ids: string[], projectId: string | null,
+  workspaceId: string, ids: string[], projectId: string | null,
 ): Promise<BulkProjectResult> {
   const empty = { updated: 0, unchanged: 0, skipped: [] as { id: string; reason: string }[] }
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error, ...empty }
   // 대상 프로젝트로 지정하는 것은 그 프로젝트의 관리자 이상(스펙 §4.3). 해제(null)는 건별 판정만.
   if (projectId && !isProjectAdmin(g.actor, projectId)) return { ok: false, error: '권한 없음', ...empty }
-  const mod = await requireSessionModule(null, 'minutes')                    // 일괄 지정은 회의록 화면 전용 — 화면과 같은 유일 워크스페이스(P13)
-  if (!mod.ok) return { ok: false, error: mod.error, ...empty }
+  // 일괄 지정은 회의록 화면 전용 — 화면의 워크스페이스(인자, 소속 확인 — D26). 행의 워크스페이스가 다르면 그 행은 없는 것으로 센다
+  const wg = await workspaceGate(workspaceId)
+  if (!wg.ok) return { ok: false, error: wg.error, ...empty }
+  const scopeWs = wg.scope.workspaceId
   const targets = [...new Set(ids)].filter(id => UUID_RE.test(id))
   if (targets.length === 0) return { ok: false, error: '선택된 회의록이 없습니다.', ...empty }
   if (targets.length > MINUTES_PROJECT_BULK_MAX) {
@@ -534,7 +571,8 @@ export async function assignMinutesProject(
     project_id: string | null; workspace_id: string; meeting_id: string | null
     team_code: TeamCode; folder_id: string | null
   }
-  const byId = new Map((rows ?? []).map(r => [(r as MinuteRow).id, r as MinuteRow]))
+  // 화면의 워크스페이스 밖 행은 버린다 — 아래 루프에서 '찾을 수 없음'으로 센다(다른 워크스페이스 회의록을 이 화면에서 조작하지 않는다)
+  const byId = new Map((rows ?? []).map(r => r as MinuteRow).filter(r => r.workspace_id === scopeWs).map(r => [r.id, r]))
   // 재편철 팀 목록 — 옮겨 간 범위(대상 프로젝트, 해제면 각 회의록의 워크스페이스)의 것. 쓰기 전에 전부 확보한다 —
   // 팀 캐시 실패가 몇 건을 쓴 뒤에 터지면 일부만 바뀐 채 결과를 돌려주지 못한다.
   const refileTeams = new Map<string, TeamCode[]>()
@@ -612,10 +650,10 @@ export async function assignMinutesProject(
     if (res.old_project_id) rebuildProjects.add(res.old_project_id)
     if (res.new_project_id) rebuildProjects.add(res.new_project_id)
     updated += 1
-    revalidatePath(`/minutes/${id}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   }
 
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   for (const pid of rebuildProjects) revalidatePath(`/p/${pid}/wiki`)
   if (updated > 0 && rebuildProjects.size > 0) {
     const projects = [...rebuildProjects]
@@ -645,7 +683,7 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
   // service_role 경로라 RLS 가 없다 — 소유자·관리자 판정은 checkOwner 가 먼저 했고, 0행은 회의록이 사라진 경우다.
   // 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 회의록이 없습니다.' }
-  revalidatePath('/minutes'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -656,15 +694,17 @@ export async function resetMinuteExternalId(id: string): Promise<{ ok: boolean; 
  *  행위자 소속이 아니라 행으로 보므로 여러 워크스페이스 사용자도, 소속 밖 워크스페이스 회의록을 /minutes/[id] 로 연 플랫폼 관리자도
  *  켜진 곳의 폴더를 잃지 않는다(메타 모달·업로드 모달·챗 패널이 부른다 — 탐색기 전용이 아니다). 행이 있는 곳이 모두 꺼지면 null.
  *  폴더 읽기는 관문 앞이지만 읽기뿐이다(getMyMeetings 의 행 거르기와 같은 모양, 쓰기 0). */
-export async function fetchMinuteFoldersLite(): Promise<MinuteFolder[] | null> {
+export async function fetchMinuteFoldersLite(workspaceId?: string): Promise<MinuteFolder[] | null> {
   const user = await getSession()
   if (!user) return null
   const sb = await createServerClient()
-  const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds()])
-  if (!folders) return null
+  // 비공개 판정이 실패하면 폴더를 열지 않는다(fail-closed) — 비공개 프로젝트 폴더명이 이름만으로도 새지 않게. 원인은 getHiddenProjectIds 가 로그로 남긴다
+  const [folders, hidden] = await Promise.all([loadFolders(sb), getHiddenProjectIds().catch(() => null)])
+  if (!folders || !hidden) return null
   const ids = [...new Set(folders.map(f => f.workspaceId))]
-  // 보이는 행이 없으면 판정할 워크스페이스가 없다 — 세션 판정으로 '켜졌지만 폴더 없음'([], 전과 같다)과 '꺼짐'(null)을 가른다
-  if (ids.length === 0) return (await requireSessionModule(null, 'minutes')).ok ? [] : null
+  // 보이는 행이 없으면 판정할 워크스페이스가 없다 — 화면이 넘긴 워크스페이스(소속 확인)로 '켜졌지만 폴더 없음'([])과 '꺼짐'(null)을 가른다.
+  // 인자가 없으면 null — 추측하지 않는다(D26)
+  if (ids.length === 0) return workspaceId !== undefined && (await workspaceGate(workspaceId)).ok ? [] : null
   // 워크스페이스마다 관문(workspacesWithModule 과 같은 판정) — 액션의 관문은 판정 결과를 조건으로 보는 requireModule 로 부른다(deny 정적 검사)
   const verdicts = await Promise.all(ids.map(async (workspaceId) => (await requireModule({ workspaceId }, 'minutes')).ok))
   const on = new Set(ids.filter((_, i) => verdicts[i]))
@@ -738,7 +778,7 @@ export async function replaceMinuteBody(
         bodyMd: body,
       })
     : null
-  revalidatePath('/minutes'); revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   // ① 하이라이트 재매칭 → ② 검색/요약/Wiki 갱신. Wiki는 새 버전 ID를 근거로 보존한다.
   after(async () => {
     await rematchMinuteHighlights(id, body)
@@ -826,7 +866,7 @@ export async function recordMinuteFile(
         await processMinuteWikiJob(wikiJobId)
       }
     })
-    revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     return { ok: true }
   }
 
@@ -842,7 +882,7 @@ export async function recordMinuteFile(
     else if (ATTACHMENT_GUARD_LOGGED.has(known[0])) console.error(`${head} 첨부 확정 가드 거부: ${known[0]}`)
     return { ok: false, error: known?.[1] ?? '첨부 기록에 실패했습니다.' }
   }
-  revalidatePath(`/minutes/${minuteId}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -866,7 +906,7 @@ export async function removeMinuteFile(fileId: string): Promise<MinuteActionResu
   // (can_manage_minute)와 같은 선이 됐다. 객체가 이미 없으면 행만 지운다(존재 확인 RPC).
   const r = await removeStoredAttachment(sb, { kind: 'minute', id: fileId, filePath: f.file_path as string, tag: 'removeMinuteFile' })
   if (!r.ok) return r
-  revalidatePath(`/minutes/${f.minute_id as string}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true }
 }
 
@@ -890,8 +930,8 @@ export async function deleteMinute(id: string): Promise<MinuteActionResult> {
     console.error('[deleteMinute] 보관 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  revalidatePath('/minutes')
-  revalidatePath(`/minutes/${id}`)
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   if (projectId) {
     revalidatePath(`/p/${projectId}/wiki`)
     after(async () => {
@@ -1002,36 +1042,42 @@ export async function fetchMeetingMinutesLite(
   }))
 }
 
-/** 월 이동 시 클라이언트 호출용. */
+/** 월 이동 시 클라이언트 호출용. 범위는 화면의 워크스페이스·?project=(계획 V13) — 소속·프로젝트 확인 뒤 관문(minutesScopeGate). */
+/** 회의록 목록(월 이동·검색) 결과 — 권한 조회 실패는 빈 목록이 아니라 실패다(fetchMyMeetings 와 같은 꼴, U2a-3 리뷰 V5).
+ *  비소속·남의 프로젝트·꺼진 모듈은 존재를 드러내지 않고 빈 목록(ok). */
+export type MinutesListResult = { ok: true; rows: Minute[] } | { ok: false; error: string }
+const listOrFail = (g: { ok: false; error: string }): MinutesListResult =>
+  g.error === ERR_LOOKUP ? { ok: false, error: g.error } : { ok: true, rows: [] }
+
 export async function fetchMinutesRange(
-  rangeStart: string, rangeEnd: string, team: TeamCode | null,
-): Promise<Minute[]> {
+  scope: MinutesScope, rangeStart: string, rangeEnd: string, team: TeamCode | null,
+): Promise<MinutesListResult> {
   const user = await getSession()
-  if (!user) return []
-  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
-  if (!mod.ok) return []
-  return getMinutesPage(rangeStart, rangeEnd, team)
+  if (!user) return { ok: true, rows: [] }
+  const g = await minutesScopeGate(scope)
+  if (!g.ok) return listOrFail(g)
+  return { ok: true, rows: await getMinutesPage(g.scope.workspaceId, g.scope.projectId, rangeStart, rangeEnd, team) }
 }
 
 /** 검색 입력 시 클라이언트 호출용(전 기간, 100건 캡). */
-export async function fetchMinutesSearch(q: string, team: TeamCode | null): Promise<Minute[]> {
+export async function fetchMinutesSearch(scope: MinutesScope, q: string, team: TeamCode | null): Promise<MinutesListResult> {
   const user = await getSession()
-  if (!user) return []
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return []
-  return searchMinutes(q, team, 100)
+  if (!user) return { ok: true, rows: [] }
+  const g = await minutesScopeGate(scope)
+  if (!g.ok) return listOrFail(g)
+  return { ok: true, rows: await searchMinutes(g.scope.workspaceId, g.scope.projectId, q, team, 100) }
 }
 
 /** 탐색기 진입/재시도/업로드 후 클라이언트 호출용.
  *  기존 액션들의 [] 폴백과 달리 에러 상태를 UI까지 전달하기 위해 null을 반환한다(의도적 관례 이탈).
  *  미로그인/세션 만료도 v1에서는 구분하지 않는다 — 이 페이지는 인증 하에 있어 실사용상 만료 엣지뿐이며
  *  에러 카드+재시도로 수용(스펙 '서버 액션' 절). */
-export async function fetchMinutesExplorer(): Promise<ExplorerData | null> {
+export async function fetchMinutesExplorer(scope: MinutesScope): Promise<ExplorerData | null> {
   const user = await getSession()
   if (!user) return null
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return null
-  return getMinutesExplorer()
+  const g = await minutesScopeGate(scope)
+  if (!g.ok) return null
+  return getMinutesExplorer(g.scope.workspaceId, g.scope.projectId)
 }
 
 /** 액션 내부용 폴더 행 — 가드가 RLS 와 같은 워크스페이스 판정을 하도록 workspace_id 를 싣는다(0006). */
@@ -1053,12 +1099,13 @@ async function loadFolders(sb: Awaited<ReturnType<typeof createServerClient>>): 
 const FOLDER_DUP_MSG = '같은 폴더에 같은 이름이 이미 있습니다.'
 
 export async function createMinuteFolder(
-  name: string, parentId: string | null,
+  workspaceId: string, name: string, parentId: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  const mod = await requireSessionModule(null, 'minutes')                    // 폴더 조작은 /minutes 탐색기 전용 — 화면과 같은 유일 워크스페이스(P28)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  // 폴더 조작은 회의록 탐색기 전용 — 화면의 워크스페이스(인자, 소속 확인 — D26·P28). 부모 폴더 행이 그 워크스페이스여야 한다
+  const wg = await workspaceGate(workspaceId)
+  if (!wg.ok) return { ok: false, error: wg.error }
   const nameErr = validateFolderName(name)
   if (nameErr) return { ok: false, error: nameErr }
   // W18(§6.3) — 루트 폴더 생성 금지. 회의록의 team_code 를 폴더에서 파생하려면 "모든 폴더는
@@ -1073,6 +1120,7 @@ export async function createMinuteFolder(
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const parent = folders.find(f => f.id === parentId)
   if (!parent) return { ok: false, error: '상위 폴더를 찾을 수 없습니다.' }
+  if (parent.workspaceId !== wg.scope.workspaceId) return { ok: false, error: ERR_MISSING }
   // 폴더는 부모의 워크스페이스에 생긴다(트리거가 채운다) — 그 워크스페이스에 역할(조회 전용 차단)이 있어야 한다.
   // RLS insert_own_minute_folders(0006)와 같은 판정.
   if (!hasProjectRoleInWorkspace(g.actor, parent.workspaceId)) return { ok: false, error: '권한 없음' }
@@ -1093,17 +1141,17 @@ export async function createMinuteFolder(
     console.error('[createMinuteFolder] 실패:', error.message)
     return { ok: false, error: error.message }
   }
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   return { ok: true }
 }
 
 export async function renameMinuteFolder(
-  id: string, name: string,
+  workspaceId: string, id: string, name: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  const wg = await workspaceGate(workspaceId)                                 // 화면의 워크스페이스(D26·P28) — 폴더 행과 대조한다
+  if (!wg.ok) return { ok: false, error: wg.error }
   const nameErr = validateFolderName(name)
   if (nameErr) return { ok: false, error: nameErr }
   const sb = await createServerClient()
@@ -1112,6 +1160,7 @@ export async function renameMinuteFolder(
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const target = folders.find(f => f.id === id)
   if (!target) return { ok: false, error: '폴더가 없습니다.' }
+  if (target.workspaceId !== wg.scope.workspaceId) return { ok: false, error: ERR_MISSING }
   // 팀 루트 시드만 개명 금지(팀명=자동 편철 앵커) — 하위 구분은 실폴더에서 동적 유도되므로
   // 하위 폴더 개명은 곧 옵션 변경으로 반영된다(허용)
   if (isTeamRootFolder(target))
@@ -1139,7 +1188,7 @@ export async function renameMinuteFolder(
   }
   // RLS 의 관리자 판정(작성자 ∨ 그 워크스페이스 관리자, 0006)이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   return { ok: true }
 }
 
@@ -1153,16 +1202,17 @@ export async function renameMinuteFolder(
  *
  * → 삭제 전에 자식 폴더와 소속 회의록을 **부모로 승격**시킨다. 스키마 변경 없이 UX 유지.
  */
-export async function deleteMinuteFolder(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function deleteMinuteFolder(workspaceId: string, id: string): Promise<{ ok: boolean; error?: string }> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  const wg = await workspaceGate(workspaceId)                                 // 화면의 워크스페이스(D26·P28) — 폴더 행과 대조한다
+  if (!wg.ok) return { ok: false, error: wg.error }
   const sb = await createServerClient()
   const folders = await loadFolders(sb)
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const target = folders.find(f => f.id === id)
   if (!target) return { ok: false, error: '폴더가 없습니다.' }
+  if (target.workspaceId !== wg.scope.workspaceId) return { ok: false, error: ERR_MISSING }
   if (isTeamRootFolder(target))
     return { ok: false, error: '팀 기본 폴더는 삭제할 수 없습니다.' }
   // 자식=부모 프로젝트 불변식 — 프로젝트 폴더는 그 프로젝트 멤버만 삭제할 수 있다. 승격(비우기)
@@ -1209,7 +1259,7 @@ export async function deleteMinuteFolder(id: string): Promise<{ ok: boolean; err
   const { data, error } = await sb.from('minute_folders').delete().eq('id', id).select('id')
   if (error) { console.error('[deleteMinuteFolder] 실패:', error.message); return { ok: false, error: error.message } }
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   return { ok: true }
 }
 
@@ -1246,18 +1296,19 @@ const FOLDER_MOVE_REJECT_MSG: Record<MinuteDropReject, string> = {
  *  클라이언트가 이미 같은 규칙으로 걸렀더라도 서버에서 전부 다시 판정한다(fail-closed).
  *  teamCodes 는 비활성 포함 전체 등록 팀 — 활성 팀만 아는 클라이언트보다 넓다. */
 export async function moveMinuteFolder(
-  id: string, newParentId: string | null,
+  workspaceId: string, id: string, newParentId: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  const wg = await workspaceGate(workspaceId)                                 // 화면의 워크스페이스(D26·P28) — 폴더 행과 대조한다
+  if (!wg.ok) return { ok: false, error: wg.error }
   const sb = await createServerClient()
   // 이동 가드 선행조회 — 실패하면 판정 불가이므로 중단(쓰기 선행조회 원칙)
   const folders = await loadFolders(sb)
   if (!folders) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
   const target = folders.find(f => f.id === id)
   if (!target) return { ok: false, error: '폴더가 없습니다.' }
+  if (target.workspaceId !== wg.scope.workspaceId) return { ok: false, error: ERR_MISSING }
   // 루트 예약어(앵커 사칭)는 루트로 옮길 때만 본다 — 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 등록 팀으로.
   let teamCodes: string[] = []
   if (newParentId === null) {
@@ -1284,7 +1335,7 @@ export async function moveMinuteFolder(
   }
   // RLS 의 관리자 판정(작성자 ∨ 그 워크스페이스 관리자, 0006)이 아니면 0행 — 조용한 no-op 을 성공으로 위장하지 않는다
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 폴더가 없습니다.' }
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   return { ok: true }
 }
 
@@ -1358,7 +1409,7 @@ export async function moveMinuteToFolder(
       new_project_id: string | null
       wiki_rebuild_required: boolean
     }
-    revalidatePath('/minutes'); revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes', 'page'); revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     if (result.old_project_id) revalidatePath(`/p/${result.old_project_id}/wiki`)
     if (result.new_project_id) revalidatePath(`/p/${result.new_project_id}/wiki`)
     if (result.wiki_rebuild_required && result.new_project_id) {
@@ -1373,17 +1424,17 @@ export async function moveMinuteToFolder(
     .eq('id', minuteId).select('id')
   if (error) { console.error('[moveMinuteToFolder] 실패:', error.message); return { ok: false, error: error.message } }
   if (!data || data.length === 0) return { ok: false, error: '권한이 없거나 회의록이 없습니다.' }
-  revalidatePath('/minutes')
+  revalidatePath('/(app)/w/[slug]/minutes', 'page')
   return { ok: true }
 }
 
 /** 탐색기 즐겨찾기 목록 — 미로그인/실패 null (fetchMinutesExplorer 관례와 동일). */
-export async function fetchMinuteFavorites(): Promise<string[] | null> {
+export async function fetchMinuteFavorites(workspaceId: string): Promise<string[] | null> {
   const user = await getSession()
   if (!user) return null
-  const mod = await requireSessionModule(null, 'minutes')                    // 행이 없는 목록 — 세션 유일 워크스페이스(P13)
-  if (!mod.ok) return null
-  return getMinuteFavorites()
+  const g = await workspaceGate(workspaceId)                                  // 화면의 워크스페이스(D26) — 소속 확인 뒤 관문
+  if (!g.ok) return null
+  return getMinuteFavorites(g.scope.workspaceId)
 }
 
 /** 회의록 즐겨찾기 토글 — 성공 여부만 반환(실패 시 호출부가 낙관적 갱신 롤백 + 토스트). */
@@ -1449,7 +1500,7 @@ export async function toggleMinuteHighlight(
     // 끄기
     const { error } = await sb.from('minute_highlights').delete().eq('id', existing.id as string)
     if (error) return { ok: false, error: error.message }
-    revalidatePath(`/minutes/${minuteId}`)
+    revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
     return { ok: true, on: false }
   }
   if (existing) {
@@ -1468,7 +1519,7 @@ export async function toggleMinuteHighlight(
   })
   // 동시 토글 경합: unique 위반은 "이미 하이라이트됨"으로 멱등 처리
   if (error && error.code !== '23505') return { ok: false, error: error.message }
-  revalidatePath(`/minutes/${minuteId}`)
+  revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { ok: true, on: true }
 }
 
@@ -1499,7 +1550,7 @@ export async function ensureMinuteInsightsAction(
   const bodyMd = minute.body_md as string
   if (!bodyMd.trim()) return { status: 'ready' }
   const status = await ensureMinuteInsights(minuteId, bodyMd, fnv1a64(bodyMd))
-  if (status === 'generated') revalidatePath(`/minutes/${minuteId}`)
+  if (status === 'generated') revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return { status }
 }
 

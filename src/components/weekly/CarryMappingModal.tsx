@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { orderAreas, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { CARRY_SKIP, type CarryMapping, type CarryOverflow, type CarryPending } from '@/lib/domain/weeklyCarry'
 
@@ -56,15 +57,23 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
         옮기지 않아도 이전 주차 시트의 내용은 그대로 남습니다.
       </p>
       {overflow.length > 0 && (
-        <div role="alert" className="mt-4 rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">
-          <p>옮긴 내용이 칸 상한({WEEKLY_CELL_MAX.toLocaleString('ko-KR')}자)을 넘어 시트를 만들지 않았습니다 — 다른 영역이나 &lsquo;옮기지 않음&rsquo;을 고르세요.</p>
-          <ul className="mt-1 list-disc pl-5">
-            {overflow.map(o => (
-              <li key={`${o.areaId}:${o.cell}`} data-carry-overflow={o.areaId}>
-                {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {o.length.toLocaleString('ko-KR')}자
-              </li>
-            ))}
-          </ul>
+        // 창의 실행(이월)이 막혔다 — blocking 이라 StatusMessage 가 경고(alert) 영역으로 알린다. 넘친 칸 목록은 detail 에 그대로 둔다.
+        <div className="mt-4">
+          <StatusMessage
+            kind="partial_error"
+            blocking
+            compact
+            title={`옮긴 내용이 칸 상한(${WEEKLY_CELL_MAX.toLocaleString('ko-KR')}자)을 넘어 시트를 만들지 않았습니다 — 다른 영역이나 ‘옮기지 않음’을 고르세요.`}
+            detail={
+              <ul className="mt-1 list-disc pl-5">
+                {overflow.map(o => (
+                  <li key={`${o.areaId}:${o.cell}`} data-carry-overflow={o.areaId}>
+                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {o.length.toLocaleString('ko-KR')}자
+                  </li>
+                ))}
+              </ul>
+            }
+          />
         </div>
       )}
       <ul className="mt-4 space-y-3">

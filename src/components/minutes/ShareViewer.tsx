@@ -4,7 +4,7 @@ import { splitMinuteBlocks } from '@/lib/minutes/blocks'
 import type { TeamCode } from '@/lib/domain/types'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { BrandGlyph } from '@/components/ui/BrandMark'
-import { teamStyle } from '@/components/wbs/shared'
+import { useTeamSlot } from '@/components/app/TeamsProvider'
 import { MarkdownView } from './MarkdownView'
 import { MinuteToc } from './MinuteToc'
 import { useMinuteTocSpy } from './useMinuteTocSpy'
@@ -19,6 +19,8 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
   bodyMd: string
 }) {
   const { t } = useLocale()
+  // 공유 열람은 (app) 밖이라 팀 공급자가 없다 — 팀 칩은 늘 중립(SP4 P2, 공개 경로의 조회를 늘리지 않는다)
+  const slotOf = useTeamSlot()
   const bodyRef = useRef<HTMLDivElement>(null)
   const blocks = useMemo(() => splitMinuteBlocks(bodyMd), [bodyMd])
   const { activeToc, jumpTo } = useMinuteTocSpy(blocks, bodyRef)
@@ -31,7 +33,7 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
         <div className="card flex flex-wrap items-center gap-3 p-4">
           <BrandGlyph size={28} />
           <span className="text-sm tabular-nums text-ink-muted">{minuteDate}</span>
-          <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(teamCode).bar}`}>
+          <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(teamCode).bar}`}>
             {teamCode}
           </span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-ink">{title}</h1>
@@ -45,7 +47,7 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
           <MinuteToc blocks={blocks} insights={[]} highlights={[]} onJump={jumpTo} activeIndex={activeToc} />
           <div ref={bodyRef} className="card min-w-0 flex-1 p-5"
             style={{ '--minutes-fs': `${fs.size}px` } as React.CSSProperties}>
-            <MarkdownView content={bodyMd} />
+            <MarkdownView content={bodyMd} demoteHeadings />
           </div>
         </div>
       </div>

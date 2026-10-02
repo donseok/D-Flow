@@ -35,7 +35,7 @@ export default function Login() {
       setError('이메일 또는 비밀번호가 올바르지 않습니다.')
       setLoading(false)
     } else {
-      router.push('/projects')
+      router.push('/')
       // 클라이언트 라우터 캐시(staleTimes.dynamic 30초)에 같은 브라우저 직전 사용자의 RSC 페이로드가 남아 있을 수 있다.
       router.refresh()
     }

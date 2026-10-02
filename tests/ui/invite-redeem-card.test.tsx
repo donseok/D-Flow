@@ -120,8 +120,8 @@ describe('InviteRedeemCard 세션 분기', () => {
 
     await act(async () => button.click())
     expect(mocks.redeemInvite).toHaveBeenCalledWith(TOKEN)
-    expect(mocks.push).toHaveBeenCalledWith('/projects')
-    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
+    expect(mocks.push).toHaveBeenCalledWith('/p/p1/dashboard')
+    expect(mocks.nav).toEqual(['push:/p/p1/dashboard', 'refresh'])
     // 일치 경로에서는 세션을 건드리지 않는다.
     expect(mocks.signOut).not.toHaveBeenCalled()
   })
@@ -172,6 +172,25 @@ describe('InviteRedeemCard 세션 분기', () => {
     expect(container.textContent).toContain('초대받은 계정으로 로그인해 주세요')
   })
 
+  it('AA8 — 되돌리는 서버 로그아웃이 오류·던짐이면 로컬 로그아웃으로 세션을 지운다(합류 실패 + 로그인 상태를 남기지 않는다)', async () => {
+    mocks.getInviteSessionState.mockResolvedValue({ ok: true, authed: false, emailMatches: false })
+    mocks.redeemInvite.mockResolvedValue({ ok: false, error: E_OTHER_ACCOUNT })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const fail of [async () => ({ error: { message: '503', status: 503 } }), async () => { throw new Error('offline') }]) {
+      mocks.signOut.mockReset()
+      mocks.signOut.mockImplementationOnce(fail).mockResolvedValue({ error: null })
+      await render({ ...PREVIEW, accountExists: true })
+      await act(async () => {
+        setValue(container.querySelector<HTMLInputElement>('#invite-email')!, 'hong.gs@example.com')
+        setValue(container.querySelector<HTMLInputElement>('#invite-password')!, 'password123')
+      })
+      await act(async () => { container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+      expect(mocks.signOut.mock.calls.map((c) => (c[0] as { scope?: string } | undefined)?.scope ?? 'global')).toEqual(['global', 'local'])
+      expect(container.textContent).toContain('초대받은 계정으로 로그인해 주세요')
+    }
+    err.mockRestore()
+  })
+
   it('로그인 후 합류가 성공하면 세션을 되돌리지 않는다', async () => {
     mocks.getInviteSessionState.mockResolvedValue({ ok: true, authed: false, emailMatches: false })
     mocks.redeemInvite.mockResolvedValue({ ok: true, projectId: 'p1', alreadyMember: false })
@@ -188,8 +207,8 @@ describe('InviteRedeemCard 세션 분기', () => {
     })
 
     expect(mocks.signOut).not.toHaveBeenCalled()
-    expect(mocks.push).toHaveBeenCalledWith('/projects')
-    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
+    expect(mocks.push).toHaveBeenCalledWith('/p/p1/dashboard')
+    expect(mocks.nav).toEqual(['push:/p/p1/dashboard', 'refresh'])
   })
 
   it('로그인 폼에서 비밀번호가 틀리면 이동·refresh 없이 오류만 보인다', async () => {
@@ -223,16 +242,16 @@ describe('InviteRedeemCard 세션 분기', () => {
     })
   }
 
-  it('가입·합류 뒤 자동 로그인이 성공하면 /projects 로 이동한 뒤 refresh 한다', async () => {
-    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, email: 'hong.gd@example.com' })
+  it('가입·합류 뒤 자동 로그인이 성공하면 합류한 프로젝트 개요로 이동한 뒤 refresh 한다(D7)', async () => {
+    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, projectId: 'p1', email: 'hong.gd@example.com' })
     await submitSignup()
 
     expect(mocks.signInWithPassword).toHaveBeenCalledWith({ email: 'hong.gd@example.com', password: 'password123' })
-    expect(mocks.nav).toEqual(['push:/projects', 'refresh'])
+    expect(mocks.nav).toEqual(['push:/p/p1/dashboard', 'refresh'])
   })
 
   it('가입 뒤 자동 로그인만 실패하면 /login 으로 보내고 refresh 하지 않는다', async () => {
-    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, email: 'hong.gd@example.com' })
+    mocks.redeemInviteWithSignup.mockResolvedValue({ ok: true, projectId: 'p1', email: 'hong.gd@example.com' })
     mocks.signInWithPassword.mockResolvedValue({ error: { message: 'boom' } })
     await submitSignup()
 

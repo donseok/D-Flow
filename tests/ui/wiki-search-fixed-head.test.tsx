@@ -12,7 +12,7 @@ const HITS = [
 ]
 
 // 질문을 던진 뒤에도 검색 카드(PROJECT MEMORY 히어로)가 그대로 남아야 한다 —
-// ProjectPageShell 의 고정 히어로 슬롯에 얹어 스크롤 영역에서 아예 빼는 방식이다.
+// ProjectPageShell(PageFrame 어댑터)의 고정 도구 줄(pinned → data-frame-toolbar, main 안 sticky)에 얹어 본문(data-frame-body) 밖에 둔다(D19).
 // 또 결과 툴바(요약·건수)는 왼쪽 열 밖으로 올려, 왼쪽 첫 카드와 오른쪽 읽기 패널의
 // 윗변이 같은 높이에서 시작하게 한다(어긋나면 화면이 흔들려 보인다는 사용자 지적).
 describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
@@ -53,7 +53,8 @@ describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
     })
   }
 
-  const scrollRegion = () => container.querySelector('[data-project-scroll-region]')
+  const scrollRegion = () => container.querySelector('[data-frame-body]')
+  const toolbar = () => container.querySelector('[data-frame-toolbar]')
   const grid = () => container.querySelector('[class*="xl:grid-cols-"]')
   const summarizeButton = () =>
     Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('요약')) ?? null
@@ -63,15 +64,17 @@ describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
     const card = container.querySelector('#wiki-search-title')
     expect(card).not.toBeNull()
     expect(scrollRegion()?.contains(card!)).toBe(false)
+    expect(toolbar()?.contains(card!)).toBe(true)
 
     await render('보세공장')
     const after = container.querySelector('#wiki-search-title')
     // 질문을 던져도 카드가 사라지지 않는다 — 이 화면의 머리 부분은 항상 같은 자리다.
     expect(after).not.toBeNull()
     expect(scrollRegion()?.contains(after!)).toBe(false)
+    expect(toolbar()?.contains(after!)).toBe(true)
   })
 
-  it('페이지 히어로도 같은 고정 영역에 함께 얹힌다', async () => {
+  it('페이지 히어로(h1)는 본문 밖 머리 자리에 있다', async () => {
     await render('보세공장')
     const hero = container.querySelector('[data-testid="page-hero"]')
     expect(hero).not.toBeNull()
@@ -98,7 +101,16 @@ describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
     expect(columns[1].tagName).toBe('ASIDE')
   })
 
-  it('결과는 스크롤 영역 안에 있다 — 머리는 고정이고 결과만 흐른다', async () => {
+  it('두 열 감싸개는 idle 이면 hidden(xl 에서만 안내), 그 밖에는 grid — 둘 다 정적 className(D17 ②)', async () => {
+    await render('')
+    expect(grid()!.className.split(' ')).toContain('hidden')
+    expect(grid()!.className.split(' ')).not.toContain('grid')
+    await render('보세공장')
+    expect(grid()!.className.split(' ')).toContain('grid')
+    expect(grid()!.className.split(' ')).not.toContain('hidden')
+  })
+
+  it('결과는 본문 안에 있다 — 도구 줄은 고정이고 결과만 흐른다(main 스크롤)', async () => {
     await render('보세공장')
     expect(scrollRegion()?.contains(grid()!)).toBe(true)
   })
@@ -122,7 +134,7 @@ function stubViewport(width: number, height: number) {
 // 회귀: 검색창·칩이 통째로 사라졌다. 원인은 08-21 컴팩트 판정 확대 —
 // ProjectPageShell 이 폭<1280 또는 높이<800 에서 히어로 슬롯을 언마운트하는데, 이 화면은
 // 08-19 부터 검색 카드를 그 슬롯에 얹어 두었다. 검색 카드는 이 화면의 유일한 조작부라
-// 화면 크기와 무관하게 남아야 한다. 페이지 제목(PageHero)은 다른 화면과 같이 걷혀도 된다.
+// 화면 크기와 무관하게 남아야 한다. 페이지 제목(PageHero h1)도 이제 모든 뷰포트에서 남는다(D18·스펙 §9 ④).
 describe('WikiSearch — 컴팩트 뷰포트에서도 검색 카드는 남는다', () => {
   let container: HTMLDivElement
   let root: Root
@@ -157,9 +169,9 @@ describe('WikiSearch — 컴팩트 뷰포트에서도 검색 카드는 남는다
   }
 
   const searchInput = () => container.querySelector('input[type="search"]')
-  const scrollRegion = () => container.querySelector('[data-project-scroll-region]')
+  const scrollRegion = () => container.querySelector('[data-frame-body]')
 
-  it('1366×768 랩탑(높이<800 → 컴팩트)에서 검색창·칩·관리 슬롯이 스크롤 영역 밖에 남는다', async () => {
+  it('1366×768 랩탑(높이<800 → 컴팩트)에서 검색창·칩·관리 슬롯이 본문 밖(고정 도구 줄)에 남는다', async () => {
     await renderAt(1366, 768)
     expect(searchInput()).not.toBeNull()
     expect(scrollRegion()?.contains(searchInput()!)).toBe(false)
@@ -173,12 +185,14 @@ describe('WikiSearch — 컴팩트 뷰포트에서도 검색 카드는 남는다
     expect(searchInput()).not.toBeNull()
   })
 
-  it('컴팩트에서 페이지 제목 히어로는 다른 화면과 같이 걷힌다 — 헤더가 위치를 보여준다', async () => {
+  it('컴팩트에서도 페이지 제목(h1)이 남는다 — 모든 뷰포트에 h1 하나(D18)', async () => {
     await renderAt(1366, 768)
-    expect(container.querySelector('[data-testid="page-hero"]')).toBeNull()
+    expect(container.querySelector('[data-testid="page-hero"]')).not.toBeNull()
+    await renderAt(390, 844)
+    expect(container.querySelector('[data-testid="page-hero"]')).not.toBeNull()
   })
 
-  it('데스크톱(1920×1080)에서는 제목 히어로와 검색 카드가 둘 다 고정 영역에 있다', async () => {
+  it('데스크톱(1920×1080)에서는 제목 히어로와 검색 카드가 둘 다 본문 밖에 있다', async () => {
     await renderAt(1920, 1080)
     expect(container.querySelector('[data-testid="page-hero"]')).not.toBeNull()
     expect(searchInput()).not.toBeNull()

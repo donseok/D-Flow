@@ -80,9 +80,7 @@ export function conditionalDisplay(value: string, expr: boolean): string[] {
 }
 
 /** ② 의 기존 위반 — 사유 'UI-2b'(스펙 §9: UI-2b 에서 0) */
-export const ALLOW_CONDITIONAL: Record<string, [number, string]> = {
-  'src/components/wiki/WikiSearchResults.tsx': [1, 'UI-2b — 조건부 렌더로 바꾼다(D17 ②, 스펙 §2.3 UI-2b 행)'],
-}
+export const ALLOW_CONDITIONAL: Record<string, [number, string]> = {}   // UI-2b 과제 33 에서 0(WikiSearchResults — 두 갈래 정적 className)
 
 const files = srcFiles(/\.tsx?$/)
 

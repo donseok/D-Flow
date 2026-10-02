@@ -62,7 +62,7 @@ describe('getMinuteVersions — 서명하지 않는다', () => {
     const from = vi.fn(() => queryBuilder({ data: VERSION_ROWS, error: null }))
     mocks.createServerClient.mockResolvedValue({ from })
 
-    const res = await getMinuteVersions('min-1')
+    const res = await getMinuteVersions('min-1', '/w/acme/minutes')
     if (!res.ok) throw new Error('성공해야 한다')
     const versions = res.rows
 
@@ -73,7 +73,7 @@ describe('getMinuteVersions — 서명하지 않는다', () => {
       ['v-1', false, null],
     ])
     for (const v of versions) expect(v).not.toHaveProperty('downloadHref')
-    expect(versions[0].viewHref).toBe('/minutes/min-1?version=v-2')
+    expect(versions[0].viewHref).toBe('/w/acme/minutes/min-1?version=v-2')
     expect(consoleError).not.toHaveBeenCalled()
   })
 })
@@ -84,7 +84,7 @@ describe('getMinuteVersions — 조회 실패', () => {
     const from = vi.fn(() => queryBuilder({ data: null, error: { message: 'relation does not exist' } }))
     mocks.createServerClient.mockResolvedValue({ from })
 
-    const res = await getMinuteVersions('min-1')
+    const res = await getMinuteVersions('min-1', '/w/acme/minutes')
 
     expect(res).toEqual({ ok: false, error: ERR_MINUTE_VERSIONS_LOAD })
     expect(JSON.stringify(res)).not.toContain('relation does not exist')

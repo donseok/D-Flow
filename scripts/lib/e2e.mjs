@@ -758,3 +758,102 @@ export function teamRefs({ items, members, areas, invites }, teamIds) {
     invites: count(invites.flatMap((v) => v.team_ids ?? [])),
   }
 }
+
+// ── SP3b UI-2 흐름(스펙 §8.3 E1·E2·E4~E11 — 브랜치 전용 e2e-sp3b.mjs 를 과제 39 가 e2e-local.mjs 로 합쳤다, V15) ────────────
+// 워크스페이스 A·B·ana·bea·플랫폼 관리자는 위 SP2 흐름의 것 그대로, 두 워크스페이스에 속한 계정 duo 와 B 의 공용 팀·회의록만 더한다.
+
+/** 두 워크스페이스(A·B) 멤버 — B 는 createAccount(프로젝트 C 멤버), A 소속은 service_role 행(워크스페이스 멤버 추가 화면은 아직 없다 — 로컬 전용). */
+export const DUO = Object.freeze({ email: 'e2e-duo@example.com', name: 'duo' })
+/** 워크스페이스 B 의 공용 팀 — B 의 프로젝트 없는 회의록 담당. A 의 WS_TEAM 과 다른 코드(SP2 흐름의 'bea meta 팀에 A 공용 팀이 없다' 단언과 섞이지 않게). */
+export const SP3B_B_TEAM = 'BOPS'
+/** bea 가 만드는 워크스페이스 B 의 회의록(프로젝트 없음) — 두 워크스페이스 목록·소프트 이동의 대상 */
+export const SP3B_MINUTE_B = 'E2E SP3b B 회의록'
+/** 워크스페이스 전환기 트리거 표지(D4) — 소속이 둘 이상일 때만 SSR HTML 에 있다 */
+export const SWITCHER_MARK = 'data-ws-switcher="list"'
+
+/** 옛 경로 × 쿼리 → 기대 대상(순수, E1) @param {string} slug @param {{ minuteId: string, projectId: string }} ids */
+export function legacyCases(slug, ids) {
+  const W = `/w/${slug}`
+  const base = [['/meetings', 'meetings'], ['/minutes', 'minutes'], ['/agents', 'agents'], ['/portfolio', 'portfolio'], ['/usage', 'usage'], ['/admin/teams', 'admin/teams']]
+  const out = []
+  for (const [from, seg] of base) {
+    out.push({ from, to: `${W}/${seg}` })
+    out.push({ from: `${from}?view=calendar`, to: `${W}/${seg}?view=calendar` })
+  }
+  out.push({ from: '/usage?days=7&menu=a&menu=b', to: `${W}/usage?days=7&menu=a&menu=b` })
+  out.push({ from: '/minutes?q=%ED%95%9C%20%26', to: `${W}/minutes?q=%ED%95%9C%20%26` })
+  out.push({ from: `/admin/accounts?project=${ids.projectId}`, to: `${W}/admin/accounts?project=${ids.projectId}` })
+  out.push({ from: `/minutes/${ids.minuteId}?block=2&version=v`, to: `${W}/minutes/${ids.minuteId}?block=2&version=v` })
+  return out
+}
+
+/** 307·요청 원점·경로·쿼리(순수) — Location 은 절대 주소든 상대 경로든 origin 에 풀어 본다(스텁은 상대 경로를 낸다 — 판정 W2).
+ *  쿼리는 디코드한 (키, 값) 목록의 순서까지 같아야 한다(%20 과 + 같은 인코딩 차이는 같은 값, 중복 키 순서는 다른 값)
+ *  @param {{ status: number, headers: Headers }} res @param {string} origin @param {string} path @returns {string[]} 문제 목록 */
+export function expectLocation(res, origin, path) {
+  const p = []
+  if (res.status !== 307) p.push(`상태 ${res.status} ≠ 307`)
+  const loc = res.headers.get('location') ?? ''
+  let got, want
+  try { got = new URL(loc, origin); want = new URL(path, origin) } catch { return [...p, `Location 을 읽을 수 없다: ${loc}`] }
+  if (got.origin !== new URL(origin).origin) p.push(`Location 원점 ${got.origin} ≠ ${origin}`)
+  if (got.pathname !== want.pathname) p.push(`Location 경로 ${got.pathname} ≠ ${want.pathname}`)
+  if (JSON.stringify([...got.searchParams]) !== JSON.stringify([...want.searchParams])) p.push(`Location 쿼리 ${got.search} ≠ ${want.search}`)
+  return p
+}
+
+/** notFound 판정(순수) — HTTP 404 또는 로딩 경계 안 스트리밍 notFound() 의 digest. 센티널(보이면 안 되는 글자)이 본문에 실렸는지도 함께
+ *  @param {{ status: number, html: string }} res @param {readonly string[]} [sentinels] @returns {string[]} */
+export function hiddenVerdict({ status, html }, sentinels = []) {
+  const p = []
+  if (!(status === 404 || notFoundRendered(html))) p.push(`404 가 아니다(상태 ${status}, notFound digest 없음)`)
+  for (const s of sentinels) if (html.includes(s)) p.push(`본문에 숨겨야 할 글자 '${s}' 가 있다`)
+  return p
+}
+
+/** 워크스페이스 전환기 트리거 판정(순수, E5·D4) — 소속 둘 이상이면 SSR HTML 에 트리거 표지가 있고, 하나면 이름만(표지 없음).
+ *  개수는 보지 않는다 — 768~1023 에서 드로어를 연 상태는 같은 전환기를 한 번 더 마운트한다(U2b-4 이월)
+ *  @param {string} html @param {boolean} expectList @returns {string[]} 문제 목록 */
+export function switcherVerdict(html, expectList) {
+  const has = html.includes(SWITCHER_MARK)
+  if (expectList && !has) return [`전환기 트리거(${SWITCHER_MARK})가 없다 — 소속이 둘 이상이면 있어야 한다`]
+  if (!expectList && has) return [`전환기 트리거(${SWITCHER_MARK})가 있다 — 소속이 하나면 이름만 보여야 한다`]
+  return []
+}
+
+/** 프로젝트 내비의 이슈 링크 판정(순수, E7) — 같은 화면의 다른 내비 링크(WBS)를 대조로 본다(내비가 안 그려진 화면을 '없음'으로 읽지 않는다)
+ *  @param {string} html @param {string} pid @param {boolean} expectPresent @returns {string[]} 문제 목록 */
+export function issuesLinkVerdict(html, pid, expectPresent) {
+  const p = []
+  if (!html.includes(`href="/p/${pid}/wbs"`)) p.push('내비가 그려지지 않았다(WBS 링크 없음 — 대조 실패)')
+  const has = html.includes(`href="/p/${pid}/issues"`)
+  if (expectPresent && !has) p.push('이슈 링크가 없다(모듈을 켰는데)')
+  if (!expectPresent && has) p.push('이슈 링크가 있다(모듈을 껐는데)')
+  return p
+}
+
+/** /api/shell 배지 판정(순수, E10) — hidden = 소속이 아닌 워크스페이스·볼 수 없는 프로젝트의 범위라 세 배지 모두 null(남의 수를 흘리지 않는다),
+ *  own = 자기 워크스페이스의 검토 대기 수는 숫자(대조 — 같은 경로가 숫자를 낸다는 것)
+ *  @param {{ status: number, body: any }} res @param {'hidden' | 'own'} kind @returns {string[]} */
+export function shellBadgeVerdict(res, kind) {
+  if (res.status !== 200) return [`상태 ${res.status} ≠ 200`]
+  const b = res.body?.badges
+  if (!b || typeof b !== 'object') return ['응답에 badges 가 없다']
+  if (kind === 'hidden') return ['myWorkReview', 'projectApprovals', 'projectUnreadAnnouncements'].filter((k) => b[k] !== null).map((k) => `${k} = ${JSON.stringify(b[k])} (null 이어야 한다)`)
+  return typeof b.myWorkReview === 'number' ? [] : [`myWorkReview = ${JSON.stringify(b.myWorkReview)} (자기 워크스페이스는 숫자여야 한다)`]
+}
+
+/**
+ * SP4 B — 화면 HTML 의 팀 색 클래스(teams-color-render, 스펙 §6.3). slots = category-1..8 의 text·bg(중복 없이 — 채움 위 글자 category-fg 와
+ * -weak 배경은 세지 않는다), legacy = 옛 team-1..5 클래스(-weak 포함 — 0 이어야 한다), neutral = 목록 밖 팀의 중립 슬롯 수(기록만).
+ * @param {string} html @returns {{ slots: string[], legacy: string[], neutral: number }}
+ */
+export function teamSlotVerdict(html) {
+  const text = String(html)
+  const uniq = (re) => [...new Set([...text.matchAll(re)].map((m) => m[0]))].sort()
+  return {
+    slots: uniq(/(?<![\w-])(?:text|bg)-category-[1-8](?![\w-])/g),
+    legacy: uniq(/(?<![\w-])(?:text|bg)-team-[1-5](?:-weak)?(?![\w-])/g),
+    neutral: (text.match(/(?<![\w-])(?:text|bg)-neutral(?![\w-])/g) ?? []).length,
+  }
+}

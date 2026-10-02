@@ -56,13 +56,26 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
   if (actor.workspaceRoles.get(wid) === 'admin') return 'admin'  // ⑤ 워크스페이스 관리자 승계(Q2) — 명단 행보다 먼저
   return actor.projectRoles.get(projectId) ?? 'viewer'           // ⑥ 명단 행
 }
+declare const HIDDEN_PROJECT_IDS: unique symbol
 /**
- * 레이아웃 404 판정 — 타 워크스페이스·미존재(roleIn null) 또는 플랫폼 관리자가 없는 pid 로 들어온 경우.
+ * 명단 밖 비공개 프로젝트 id 집합 — 만드는 곳은 getHiddenProjectIds(src/lib/authz/visibility.ts) 하나다(HH2). 브랜드라 `new Set()`·임의 집합을
+ * isHiddenProject 의 셋째 인자로 넘기면 typecheck 가 실패한다 — 병합 때 두 인자 호출을 빈 집합으로 메우면 명단 밖 비공개가 조용히 열리기 때문이다.
+ * 테스트는 tests/fixtures/actor.ts 의 hiddenIds() 로 만든다. tests/invariants/hidden-project-ids-brand.test.ts 가 고정한다.
+ */
+export type HiddenProjectIds = ReadonlySet<string> & { readonly [HIDDEN_PROJECT_IDS]: true }
+/**
+ * 프로젝트 화면 숨김의 한 판정자(UI-2b 최종 리뷰 GG1) — 레이아웃·페이지 재판정·`/api/shell` 프로젝트 배지·전환 대상·최근 방문·루트 시작
+ * 화면이 모두 이것으로 가른다. 숨김 = ① 타 워크스페이스·미존재(roleIn null), 플랫폼 관리자는 없는 pid ② 명단 밖 비공개 — 셋째 인자
+ * `hiddenPrivate` 는 getHiddenProjectIds()(비공개 ∧ canSeeProject 거짓, 회의록·위키·AI·포털 목록과 같은 정본)의 결과다. 필수 인자이고
+ * 브랜드 타입(HiddenProjectIds)이라 비공개 축을 빠뜨린 호출도, 다른 출처의 집합(빈 집합 포함)을 넘긴 호출도 컴파일되지 않는다(HH2).
+ * '명단 밖'의 경계는 access_role 이다 — 명단 행이 있어도 access_role 이 null 이면 projectRoles 에 없으므로 숨는다(canSeeProject 와 같은 축, HH5).
+ * 그 집합을 못 읽었으면(던짐) 호출부가 404 로 위장하지 않고 자기 실패 관례로 돌린다.
  * roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 그것만으로는 미존재를 가리지 못한다.
  * buildActor 는 플랫폼 관리자에게 전 프로젝트를 싣으므로 projectWorkspace 에 없으면 미존재다.
  */
-export function isHiddenProject(actor: Actor | null, projectId: string): boolean {
+export function isHiddenProject(actor: Actor | null, projectId: string, hiddenPrivate: HiddenProjectIds): boolean {
   if (!actor) return true
+  if (hiddenPrivate.has(projectId)) return true
   if (actor.isSuperuser) return !actor.projectWorkspace.has(projectId)
   return roleIn(actor, projectId) === null
 }
@@ -84,6 +97,16 @@ export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null):
   const r = actor.workspaceRoles.get(workspaceId)
   if (r === undefined) return 'missing'
   return r === 'admin' ? 'ok' : 'denied'
+}
+/**
+ * 실제 소속(workspace_members 행이 있다) — 플랫폼 관리자 승계 없음. 본인 기록(개인 설정·방문·현재 워크스페이스 쿠키)을 쓸지 정할 때(U2b-3 보안 리뷰 AA6).
+ * 범위(UI-2b 최종 보안 리뷰 P3 → GG7): 이 규칙이 닫는 것은 **워크스페이스 단위 본인 기록**뿐이다 — 현재 워크스페이스 쿠키·최근 방문·워크스페이스
+ * 개인 설정(user_preferences)·알림 읽음. 프로젝트 단위 화면 상태(WBS 접힘 user_wbs_state·공지 읽음 워터마크 announcement_seen)와 사용 기록
+ * (usage_events)은 보기 축을 따른다 — 플랫폼 관리자가 비소속 워크스페이스의 프로젝트를 열어 접거나 공지를 보면 그 프로젝트 키의 본인 행이 생긴다
+ * (본인 행이라 누설은 없다). '비소속 보기는 아무것도 쓰지 않는다'가 아니다. 맞추려면 두 쓰기에 hasWorkspaceMembership(actor, 프로젝트의 워크스페이스).
+ */
+export function hasWorkspaceMembership(actor: Actor | null, workspaceId: string): boolean {
+  return !!actor && actor.workspaceRoles.has(workspaceId)
 }
 export function isWorkspaceMember(actor: Actor | null, workspaceId: string | null | undefined): boolean {
   if (!workspaceId) return Boolean(actor?.isSuperuser)
@@ -137,7 +160,7 @@ export function canSeeProject(actor: Actor | null, project: { id: string; is_pri
  * 조회자에게 보이는 팀의 범위 — 회의록 담당 필터·검증(domain/teams 의 teamCodesVisibleTo)이 쓴다. 플랫폼 관리자(all)는
  * 전 워크스페이스, 아니면 소속 워크스페이스들의 공용 팀과 볼 수 있는 프로젝트들의 전용 팀.
  * 만드는 곳은 아래 두 함수뿐이다 — 전부를 여는 뷰({ all: true })는 플랫폼 관리자 판정과 함께 이 파일에만 둔다
- * (tests/invariants/teams-scope.test.ts 가 검사한다).
+ * (tests/invariants/teams-source.test.ts 가 검사한다).
  * 호출 전제: projectIds 의 워크스페이스 ⊆ workspaceIds(workspaceIds 가 비어 있지 않을 때) — visibleTeams 는 질의를 workspace_id 로만
  * 좁히므로 그 밖 프로젝트의 전용 팀은 빠진다(닫힘). 생산자 셋(teamViewOf·accessScope·gateChatTools 로 좁힌 봇 범위)이 이 전제를
  * 지킨다 — gateChatTools 는 워크스페이스 모듈 설정을 못 읽으면 좁히지 않고 던진다(A2-3 리뷰 보안 P3 — X2).
@@ -228,18 +251,6 @@ export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: stri
   for (const pid of actor.projectRoles.keys()) if (actor.projectWorkspace.get(pid) === workspaceId) return true
   return false
 }
-/**
- * 소속 워크스페이스 중 하나라도 역할이 있는가 — 워크스페이스 축 없는 화면(회의록 목록)의 업로드 어포던스.
- * createMinute 의 판정(프로젝트면 그 멤버 이상, 미지정이면 그 워크스페이스에 역할)을 소속 워크스페이스 단위로 미러한다.
- * hasAnyProjectRole 과 달리 소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다.
- */
-export function hasProjectRoleInAnyWorkspace(actor: Actor | null): boolean {
-  if (!actor) return false
-  if (actor.isSuperuser) return true
-  for (const wid of actor.workspaceRoles.keys()) if (hasProjectRoleInWorkspace(actor, wid)) return true
-  return false
-}
-
 /**
  * RSC 경계로 내릴 수 있는 직렬화 가능한 스냅샷 — Actor 의 Map 은 클라이언트 props 로
  * 직렬화되지 않는다. 프로젝트 화면은 자기 프로젝트 하나만 알면 되므로 평탄화해 내리고,

@@ -74,8 +74,9 @@ describe('보관된 회의록 노출 차단', () => {
       }),
     })
 
-    await expect(searchMinutes('보관 대상', null, 20)).resolves.toEqual([])
+    await expect(searchMinutes('ws-1', null, '보관 대상', null, 20)).resolves.toEqual([])
 
+    expect(query.eq).toHaveBeenCalledWith('workspace_id', 'ws-1')
     expect(query.is).toHaveBeenCalledWith('archived_at', null)
     expect(query.or).toHaveBeenCalledWith(
       'title.ilike."%보관 대상%",body_md.ilike."%보관 대상%"',

@@ -24,9 +24,11 @@ type MyMeetingsFetch = Awaited<ReturnType<typeof fetchMyMeetings>>
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export function MyMeetingsView({
-  initialMeetings, initialExceptions, initialFailed = false, todayIso, currentUserId,
+  workspaceId, initialMeetings, initialExceptions, initialFailed = false, todayIso, currentUserId,
   adminProjectIds = [], isSuperuser = false, calendar,
 }: {
+  /** 화면의 워크스페이스(/w/[slug]) — 월 이동 재조회가 이 워크스페이스의 회의만 읽는다(D26) */
+  workspaceId: string
   initialMeetings: Meeting[]
   initialExceptions: MeetingException[]
   /** 서버 첫 조회 실패 — 빈 달력 대신 경고와 재시도(M5) */
@@ -111,7 +113,7 @@ export function MyMeetingsView({
     let alive = true
     startTransition(async () => {
       // 호출 자체가 던진 것(네트워크 등)도 같은 실패다 — 화면 문구는 사전의 한 문구, 원인은 로그로.
-      const res = await fetchMyMeetings(gridStart, gridEnd).catch((e: unknown): MyMeetingsFetch => {
+      const res = await fetchMyMeetings(workspaceId, gridStart, gridEnd).catch((e: unknown): MyMeetingsFetch => {
         console.error('[MyMeetingsView] 내 회의 호출 실패:', e)
         return { ok: false, error: 'threw' }
       })
@@ -122,7 +124,7 @@ export function MyMeetingsView({
       else setData({ meetings: [], exceptions: [], range, failed: true })
     })
     return () => { alive = false }
-  }, [gridStart, gridEnd, reloadKey])
+  }, [workspaceId, gridStart, gridEnd, reloadKey])
 
   // 서버 조회는 실패했는데 클라이언트 조회가 성공했으면 서버 렌더를 한 번 다시 읽힌다. 화면을 바꾸려는 것이 아니다 —
   // 이 뷰는 initial* 를 첫 상태로만 쓰고, 히어로 KPI('—')는 PageHero 가 heroKpis 를 그리지 않아 화면에 없다.
@@ -203,7 +205,7 @@ export function MyMeetingsView({
   return (
     <div className="space-y-4">
       {/* 툴바 (스크롤 시 상단 고정) */}
-      <div className="sticky top-0 z-20 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+      <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
           <div ref={monthLabelRef} tabIndex={-1} className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">

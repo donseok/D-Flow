@@ -52,9 +52,9 @@ beforeEach(() => {
 })
 
 describe('/w/[slug]/settings 페이지', () => {
-  it('워크스페이스 관리자가 아니면 /projects 로 돌려보내고 설정을 읽지 않는다', async () => {
+  it('워크스페이스 관리자가 아니면 그 워크스페이스 홈으로 돌려보내고 설정을 읽지 않는다', async () => {
     h.access.mockResolvedValue(access({ isAdmin: false }))
-    await expect(render()).rejects.toThrow('NEXT_REDIRECT /projects')
+    await expect(render()).rejects.toThrow('NEXT_REDIRECT /w/alpha')
     expect(h.config).not.toHaveBeenCalled()
   })
 
@@ -96,10 +96,12 @@ describe('/w/[slug]/settings 페이지', () => {
     expect(h.allowEditor.mock.calls[0][0]).toMatchObject({ workspaceId: WID, revision: 7 })
   })
 
-  it('공용 팀 링크는 플랫폼 관리자에게만 — 그 밖에는 눌러서 튕기는 링크 없이 안내만', async () => {
-    expect(await render()).not.toContain('href="/admin/teams"')
+  it('공용 팀 링크는 그 워크스페이스의 관리 화면으로 — 워크스페이스 관리자에게도 연다(SP3b D22)', async () => {
+    const html = await render()
+    expect(html).toContain('href="/w/alpha/admin/teams"')
+    expect(html).not.toContain('href="/admin/teams"')
     h.access.mockResolvedValue(access({ isSuperuser: true }))
-    expect(await render()).toContain('href="/admin/teams"')
+    expect(await render()).toContain('href="/w/alpha/admin/teams"')
   })
 
   it('설정 조회 실패는 404 나 빈 화면이 아니라 오류 화면이고 로그를 남긴다', async () => {

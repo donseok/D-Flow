@@ -9,7 +9,7 @@ import { getSession } from '@/lib/auth'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
-import { getWbsCollapse, getUiPrefs } from '@/app/actions/preferences'
+import { getWbsCollapse, getAccountPrefs } from '@/app/actions/preferences'
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import { PageHero } from '@/components/ui/PageHero'
 import { t } from '@/lib/i18n/dict'
@@ -39,7 +39,7 @@ export default async function WbsPage({
     getWbsCollapse(projectId),
     getSession(),
     loadProjectConfigForPage(projectId),
-    getUiPrefs(),
+    getAccountPrefs(),
     getProjectRoster(projectId),
   ])
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 간트는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
@@ -69,6 +69,7 @@ export default async function WbsPage({
   )
   return (
     <ProjectPageShell
+      variant="fill"
       flush
       pinned={pinned}
       hero={hero}

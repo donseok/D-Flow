@@ -9,8 +9,9 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
+// 전사 요약은 요청 범위의 워크스페이스 프로젝트만(CC2) — 두 프로젝트 모두 ws-1
 vi.mock('@/app/actions/project', () => ({
-  listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme' }, { id: 'p2', name: 'Beta' }]),
+  listProjectsWithState: vi.fn(async () => ({ projects: [{ id: 'p1', name: 'Acme', workspace_id: 'ws-1' }, { id: 'p2', name: 'Beta', workspace_id: 'ws-1' }], degraded: false })),
 }))
 // 팀 원천(SP4 A2 — 요청 범위). 코드는 위 함수가 정하고 행으로 바꿔 돌려준다
 vi.mock('@/lib/teams/source', async () => {
@@ -38,7 +39,7 @@ describe('knowledge — 팀 축은 대상 프로젝트의 팀', () => {
   })
 
   it('전사 요약은 프로젝트마다 그 프로젝트의 팀으로 분석한다', async () => {
-    await gatherKnowledge('overview', null)
+    await gatherKnowledge('overview', null, '', 'ws-1')
     expect(mocks.projectTeams.mock.calls.map(c => c[0]).sort()).toEqual(['p1', 'p2'])
   })
 })

@@ -5,11 +5,12 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
+import { ROW_PREF_KEYS, scrollMain, setServerTheme } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, seedProjectValues, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
-import { WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, warmupFailure } from '../../scripts/ui-capture.mjs'
-import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
+import { PIN_AT, WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, startPin, warmupFailure } from '../../scripts/ui-capture.mjs'
+import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, pairPlan, pairRows, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
   summarizeDiff } from '../../scripts/ui-capture.mjs'
 import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, flickerVerdict, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
 import { computePrefsSync } from '../../src/lib/prefs/sync'
@@ -242,7 +243,8 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
   })
   it('--server-commit(서버 커밋)·--allow-cross(시드·판이 다른 참고 대조) — 기본값은 없음·거짓', () => {
-    expect(parseArgs([])).toMatchObject({ serverCommit: null, allowCross: false })
+    expect(parseArgs([])).toMatchObject({ serverCommit: null, allowCross: false, pair: false })
+    expect(parseArgs(['ui2a-base', 'ui2a', '--pair'])).toMatchObject({ pair: true, positional: ['ui2a-base', 'ui2a'] })
     expect(parseArgs(['ui0', 'ui0b', '--allow-cross'])).toMatchObject({ allowCross: true, positional: ['ui0', 'ui0b'] })
     expect(parseArgs(['--server-commit', 'b4283c0', '--base', 'http://127.0.0.1:3202'])).toMatchObject({ serverCommit: 'b4283c0', base: 'http://127.0.0.1:3202' })
   })
@@ -316,29 +318,31 @@ describe('ui-capture.routes.json', () => {
 })
 
 describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 객체로 덮는다(UI-0 결정성 리뷰 P2 — D4)', () => {
-  it('PrefsSync 가 맞추는 키(새 컨텍스트의 로컬값) + 테마 + pin, 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
-    expect(fixedPrefs('light', { lastProjectId: 'p' })).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'light', lastProjectId: 'p' })
-    expect(Object.keys(fixedPrefs('dark'))).toEqual(['heroCollapsed', 'sidebarCollapsed', 'locale', 'theme'])
+  it('계정 키만 — 히어로 접힘·마지막 프로젝트는 은퇴 키(D9), 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
+    expect(fixedPrefs('light')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'light' })
+    expect(Object.keys(fixedPrefs('dark'))).toEqual(['sidebarCollapsed', 'locale', 'theme'])
+  })
+  it('워크스페이스 행 pin — 최근 방문 = 그 프로젝트, 고정 시각(결정적), 빈 id 는 멈춘다', () => {
+    expect(startPin('p1')).toEqual({ recentProjects: [{ id: 'p1', at: PIN_AT }] })
+    expect(PIN_AT).toBe('2026-01-01T00:00:00Z')
+    expect(() => startPin('')).toThrow(/pin/)
   })
   it('새 컨텍스트에서 앱의 PrefsSync 가 적용·백필할 것이 없다 — 키 목록은 앱의 동기화 키(computePrefsSync)가 정한다', () => {
     for (const theme of ['light', 'dark'] as const) {
-      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 히어로 접힘 상수 true · 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
-      expect(computePrefsSync(fixedPrefs(theme, { lastProjectId: 'p' }), { heroCollapsed: true, sidebarCollapsed: false, theme, locale: 'ko' }))
+      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
+      expect(computePrefsSync(fixedPrefs(theme), { sidebarCollapsed: false, theme, locale: 'ko' }))
         .toEqual({ apply: {}, backfill: {} })
     }
   })
   it('지난 실행·수동 확인이 남긴 키(간트 일 폭·개요 번호·완료 숨김·대시보드 펼침 등)를 이어받지 않는다 — 입력에 지금 값이 없다', () => {
-    expect(fixedPrefs.length).toBe(1)   // (theme, pin = {}) — 지금 값을 받지 않는다
+    expect(fixedPrefs.length).toBe(1)   // (theme) — 지금 값을 받지 않는다
     for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs('light')).not.toHaveProperty(k)
   })
-  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5), pin 은 입력을 바꾸지 않는다', () => {
+  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5)', () => {
     expect(() => fixedPrefs('sepia')).toThrow(/테마/)
-    expect(fixedPrefs('system')).toEqual({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko', theme: 'system' })
+    expect(fixedPrefs('system')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'system' })
     // system 선호 + 쿠키 system 이면 새 컨텍스트에서 PrefsSync 가 적용·백필할 것이 없다(로컬값 theme = 쿠키 system)
-    expect(computePrefsSync(fixedPrefs('system'), { heroCollapsed: true, sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
-    const pin = { lastProjectId: 'p' }
-    fixedPrefs('light', pin)
-    expect(pin).toEqual({ lastProjectId: 'p' })
+    expect(computePrefsSync(fixedPrefs('system'), { sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
   })
 })
 
@@ -373,8 +377,8 @@ const fakeDb = (fail?: string, memberships: Record<string, string[]> = {}) => {
       calls.push(`${t} select ${cols} ${c} = ${v}`)
       return res(t, (memberships[v] ?? []).map((workspace_id) => ({ workspace_id })))
     } }),
-    upsert: async (row: { user_id: string; workspace_id: string; prefs: unknown }, o: { onConflict: string }) => {
-      calls.push(`${t} upsert ${row.user_id}/${row.workspace_id} ${JSON.stringify(row.prefs)} on ${o.onConflict}`)
+    upsert: async (row: { user_id: string; workspace_id?: string; prefs: unknown }, o: { onConflict: string }) => {
+      calls.push(`${t} upsert ${row.user_id}${row.workspace_id ? `/${row.workspace_id}` : ''} ${JSON.stringify(row.prefs)} on ${o.onConflict}`)
       return res(t)
     },
   }) }
@@ -406,25 +410,30 @@ describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실�
 })
 
 describe('passStart — 테마 패스의 시작(조립 — UI-0 결정성 리뷰 P3, D15)', () => {
-  it('캡처 계정의 선호값을 모든 소속에서 고정 객체로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정', async () => {
+  it('캡처 계정의 계정 행을 고정 객체로, 모든 소속 워크스페이스 행을 pin 으로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정(SP3b D9)', async () => {
     const { db, calls } = fakeDb(undefined, { u1: ['wA'], u2: ['wA', 'wB'] })
     await passStart(db, { theme: 'dark', userIds: ['u1', 'u2'], projectId: 'p1' })
-    const prefs = JSON.stringify(fixedPrefs('dark', { lastProjectId: 'p1' }))
+    const prefs = JSON.stringify(fixedPrefs('dark'))
+    const pin = JSON.stringify(startPin('p1'))
     expect(calls).toEqual([
+      `account_preferences upsert u1 ${prefs} on user_id`,
       'workspace_members select workspace_id user_id = u1',
-      `user_preferences upsert u1/wA ${prefs} on user_id,workspace_id`,
+      `user_preferences upsert u1/wA ${pin} on user_id,workspace_id`,
+      `account_preferences upsert u2 ${prefs} on user_id`,
       'workspace_members select workspace_id user_id = u2',
-      `user_preferences upsert u2/wA ${prefs} on user_id,workspace_id`,
-      `user_preferences upsert u2/wB ${prefs} on user_id,workspace_id`,
+      `user_preferences upsert u2/wA ${pin} on user_id,workspace_id`,
+      `user_preferences upsert u2/wB ${pin} on user_id,workspace_id`,
       'announcement_seen delete user_id in u1,u2',
       'notification_recipients update {"seen_at":null,"read_at":null} user_id in u1,u2',
       'wbs_progress_snapshots delete project_id = p1',
     ])
   })
-  it('선호 쓰기가 실패하면 되돌리기로 넘어가지 않는다', async () => {
-    const { db, calls } = fakeDb('user_preferences', { u1: ['wA'] })
-    await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
-    expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
+  it('선호 쓰기(계정 행·워크스페이스 행)가 실패하면 되돌리기로 넘어가지 않는다', async () => {
+    for (const t of ['account_preferences', 'user_preferences']) {
+      const { db, calls } = fakeDb(t, { u1: ['wA'] })
+      await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
+      expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
+    }
   })
 })
 
@@ -932,5 +941,181 @@ describe('seedProjectValues — 캡처 프로젝트는 월요일 주 시작 규�
     const src = readFileSync('scripts/ui-capture.mjs', 'utf8')
     expect(src).toContain('p_values: seedProjectValues(),')
     expect(src.indexOf('p_values: seedProjectValues(),')).toBeLessThan(src.indexOf("insertOnce('weekly_reports', [plan.weeklyReport]"))
+  })
+})
+
+describe('pairPlan·pairRows — 옛 경로 캡처와 새 경로 캡처를 짝짓는다(UI-0·1 판정 Q35, 스펙 §8.5 UI-2a)', () => {
+  it('pair 가 있는 행만, 짝 행 키와 함께', () => {
+    const doc = { routes: [{ key: 'minutes', since: 'b4283c0', until: 'UI-2a' }, { key: 'ws-minutes', since: 'UI-2a', pair: 'minutes' }, { key: 'login', since: 'b4283c0' }] }
+    expect(pairPlan(doc.routes, doc)).toEqual([{ key: 'ws-minutes', pairKey: 'minutes' }])
+    // 짝 행이 목록에 없으면 계획에 올리지 않는다
+    expect(pairPlan([{ key: 'x', pair: 'zz' }], doc)).toEqual([])
+  })
+  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true, problems: [] as string[], finalPath: `/${key}`, ...extra })
+  it('같은 크기·테마의 짝만 잇고, 짝 장이 없으면 unmatched(같음으로 숨기지 않는다)', () => {
+    const A = [row('minutes'), row('minutes', { theme: 'dark' }), row('meetings')]
+    const B = [row('ws-minutes'), row('ws-minutes', { width: 390, height: 844 }), row('ws-home')]
+    const r = pairRows(A, B, [{ key: 'ws-minutes', pairKey: 'minutes' }])
+    expect(r.pairs.map((p) => [p.label, p.a.key, p.b.key])).toEqual([['ws-minutes⇐minutes', 'minutes', 'ws-minutes']])
+    expect(r.unmatched.map((u) => `${u.label}@${u.b.width}`)).toEqual(['ws-minutes⇐minutes@390'])
+  })
+  it('최종 경로가 다른 것이 기대인 쌍은 ignoreFinal 로 건너뛴다 — 문제·idle 은 그대로 본다', () => {
+    const a = row('minutes', { finalPath: '/minutes' }), b = row('ws-minutes', { finalPath: '/w/acme/minutes' })
+    const zero = { ratio: 0, diffPixels: 0, bbox: null }
+    expect(rowVerdict({ a, b, stats: zero })).toMatchObject({ verdict: 'problem' })
+    expect(rowVerdict({ a, b, stats: zero }, { ignoreFinal: true })).toMatchObject({ verdict: 'same' })
+    expect(rowVerdict({ a: { ...a, idle: false }, b, stats: zero }, { ignoreFinal: true })).toMatchObject({ verdict: 'problem', reasons: ['기준:idle=false'] })
+  })
+})
+
+describe('baseFinal — 기준 서버에서 옛 경로가 기대하는 최종 경로(UI-2a)', () => {
+  const v = { wsSlug: 'acme', minuteId: 'm1' }
+  const r = { path: '/minutes/{minuteId}', expectFinal: '/w/{wsSlug}/minutes/{minuteId}', baseFinal: '/minutes/{minuteId}' }
+  it('머리 서버는 expectFinal, 기준 서버(base)는 baseFinal', () => {
+    expect(finalProblem(r, v, new URL('http://x/w/acme/minutes/m1'))).toBeNull()
+    expect(finalProblem(r, v, new URL('http://x/minutes/m1'))).toBe('final:/minutes/m1')
+    expect(finalProblem(r, v, new URL('http://x/minutes/m1'), { base: true })).toBeNull()
+    expect(finalProblem(r, v, new URL('http://x/w/acme/minutes/m1'), { base: true })).toBe('final:/w/acme/minutes/m1')
+    // baseFinal 이 없는 행은 기준 서버에서도 expectFinal
+    expect(finalProblem({ path: '/', expectFinal: '/projects' }, v, new URL('http://x/projects'), { base: true })).toBeNull()
+  })
+  it('routes.json — 옛 행 열(root 포함)이 baseFinal 을 갖고 expectFinal 은 새 경로, 형식은 validateRoutes 가 본다', () => {
+    const old = (routesDoc.routes as { key: string; expectFinal?: string; baseFinal?: string }[]).filter((x) => x.baseFinal !== undefined)
+    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'portfolio', 'projects', 'root', 'usage'])
+    for (const x of old) expect(x.expectFinal, x.key).toMatch(/^\/w\/\{wsSlug\}/)
+    expect(validateRoutes({ version: 1, routes: [{ key: 'a', path: '/a', file: 'a/page.tsx', grade: 'member', since: 'b4283c0', baseFinal: 'x' }] }, ['a/page.tsx'])).toContain('a: baseFinal 경로')
+  })
+  it('워크스페이스 관리자 등급 행 — 같은 페이지 파일의 보충 행', () => {
+    const x = (routesDoc.routes as { key: string; file: string; grade: string; supplement?: boolean }[]).find((r) => r.key === 'ws-admin-accounts-wsadmin')
+    expect(x).toMatchObject({ grade: 'wsAdmin', supplement: true })
+    expect(x?.file).toBe((routesDoc.routes as { key: string; file: string }[]).find((r) => r.key === 'ws-admin-accounts')?.file)
+  })
+})
+
+// 컨트롤러 보충 1(UI-2 계획 끝) — 여러 단계 클릭(clicks). click 하나는 하위 호환으로 남긴다
+import { clickSteps } from '../../scripts/ui-capture.mjs'
+describe('clicks — 여러 단계 클릭', () => {
+  it('clickSteps: clicks 가 있으면 그 순서, 없으면 click 하나, 둘 다 없으면 빈 배열', () => {
+    expect(clickSteps({ clicks: ['[a]', '[b]'] })).toEqual(['[a]', '[b]'])
+    expect(clickSteps({ click: '[a]' })).toEqual(['[a]'])
+    expect(clickSteps({})).toEqual([])
+  })
+  it('validateRoutes: clicks 는 비지 않은 선택자 배열, click 과 같이 쓰지 않는다', () => {
+    const doc = { version: 1, commonMask: [], routes: [
+      { key: 'a', path: '/a', grade: 'member', since: 'UI-2b', clicks: ['[x]', '[y]'] },
+      { key: 'b', path: '/b', grade: 'member', since: 'UI-2b', clicks: [] },
+      { key: 'c', path: '/c', grade: 'member', since: 'UI-2b', clicks: ['<x'] },
+      { key: 'd', path: '/d', grade: 'member', since: 'UI-2b', clicks: ['[x]'], click: '[y]' },
+      { key: 'e', path: '/e', grade: 'member', since: 'UI-2b', clicks: '[x]' },
+    ] }
+    const p = validateRoutes(doc, [])
+    expect(p.filter((x) => x.startsWith('a:'))).toEqual([])
+    expect(p).toEqual(expect.arrayContaining(['b: clicks 선택자', 'c: clicks 선택자', 'd: click 과 clicks 를 같이 쓰지 않는다', 'e: clicks 선택자']))
+  })
+  it('촬영 루프는 clickSteps 를 차례로 누르고, 초점 순회의 click 행 판정도 같은 함수로 한다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/for \(const sel of clickSteps\(r\)\)/)
+    expect(src).not.toMatch(/if \(!r\.click\)/)
+  })
+})
+
+describe('contextOptions·parseArgs — JS 끈 첫 페인트와 스크롤 상태(D54·D55)', () => {
+  it('javaScript:false 면 javaScriptEnabled false, 그 밖에는 키를 더하지 않는다(기본 조건 그대로)', () => {
+    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: false })).toMatchObject({ javaScriptEnabled: false })
+    expect(contextOptions({ width: 390, height: 844, theme: 'light' })).not.toHaveProperty('javaScriptEnabled')
+    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: true })).not.toHaveProperty('javaScriptEnabled')
+  })
+  it('--scroll·--js 값과 기본(0·켬), 값 밖은 throw', () => {
+    expect(parseArgs(['shoot', '--label', 'x', '--scroll', '600', '--js', 'off'])).toMatchObject({ scroll: 600, javaScript: false })
+    expect(parseArgs([])).toMatchObject({ scroll: 0, javaScript: true })
+    expect(parseArgs(['--js', 'on'])).toMatchObject({ javaScript: true })
+    for (const bad of ['-1', '1.5', 'abc', '']) expect(() => parseArgs(['--scroll', bad]), bad).toThrow(/--scroll/)
+    expect(() => parseArgs(['--js', 'maybe'])).toThrow(/--js/)
+    expect(() => parseArgs(['--scroll'])).toThrow(/값이 없다/)
+  })
+  it('촬영 루프가 두 옵션을 쓴다 — JS 옵션은 컨텍스트로, 스크롤은 클릭 뒤 main 을 내린다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/contextOptions\(\{ width, height, theme, javaScript: opts\.javaScript \}\)/)
+    expect(src).toMatch(/if \(opts\.scroll > 0\) await scrollMain\(page, opts\.scroll\)/)
+  })
+  it('scrollMain — main#main-content 를 y 로 내리고 한 프레임 기다린다', async () => {
+    const calls: unknown[] = []
+    const page = {
+      evaluate: async (fn: (to: number) => unknown, arg: number) => {
+        const scrollTo = (x: number, y: number) => calls.push(['scrollTo', x, y])
+        const doc = { querySelector: (sel: string) => { calls.push(['q', sel]); return { scrollTo } } }
+        const g = globalThis as unknown as { document?: unknown }
+        const prev = g.document
+        g.document = doc
+        try { return fn(arg) } finally { g.document = prev }
+      },
+      waitForTimeout: async (ms: number) => { calls.push(['wait', ms]) },
+    }
+    await scrollMain(page, 600)
+    expect(calls).toEqual([['q', 'main#main-content'], ['scrollTo', 0, 600], ['wait', 200]])
+  })
+})
+
+describe('행 선택·행 prefs — manual 행과 접힘 선호(과제 37)', () => {
+  it("tags 에 'manual' 인 행은 since 집합 선택에서 빠지고 키로 지정할 때만 찍힌다", () => {
+    const doc = { routes: [{ key: 'a', since: 'UI-2b', tags: ['W'] }, { key: 'b', since: 'UI-2b', tags: ['S', 'manual'] }] }
+    expect(selectRoutes(doc, { routes: null, since: ['UI-2b'] }).map((r) => r.key)).toEqual(['a'])
+    expect(selectRoutes(doc, { routes: ['b'], since: ['b4283c0'] }).map((r) => r.key)).toEqual(['b'])
+  })
+  it('validateRoutes — prefs 는 허용 키의 불리언 객체뿐', () => {
+    expect(ROW_PREF_KEYS).toEqual(['sidebarCollapsed'])
+    const doc = { version: 1, commonMask: [], routes: [
+      { key: 'a', path: '/a', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: true } },
+      { key: 'b', path: '/b', grade: 'member', since: 'UI-2b', prefs: { theme: 'dark' } },
+      { key: 'c', path: '/c', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: 'yes' } },
+      { key: 'd', path: '/d', grade: 'member', since: 'UI-2b', prefs: ['sidebarCollapsed'] },
+    ] }
+    const p = validateRoutes(doc, [])
+    expect(p.filter((x) => x.startsWith('a:'))).toEqual([])
+    expect(p.map((x) => x.split(':')[0]).sort()).toEqual(['b', 'c', 'd'])
+  })
+  it('setServerTheme — extra 가 고정 객체 위에 얹히고, extra 없이 부르면 고정 객체 그대로(되돌림)', async () => {
+    const upserts: { table: string; row: Record<string, unknown> }[] = []
+    const db = { from: (table: string) => ({
+      upsert: async (row: Record<string, unknown>) => { upserts.push({ table, row }); return { data: null, error: null } },
+      select: () => ({ eq: async () => ({ data: [], error: null }) }),
+    }) }
+    await setServerTheme(db, ['u1'], 'dark', {}, { sidebarCollapsed: true })
+    await setServerTheme(db, ['u1'], 'dark', {})
+    const prefs = upserts.filter((u) => u.table === 'account_preferences').map((u) => u.row.prefs)
+    expect(prefs).toEqual([{ ...fixedPrefs('dark'), sidebarCollapsed: true }, fixedPrefs('dark')])
+    expect(fixedPrefs('dark').sidebarCollapsed).toBe(false)
+  })
+  it('촬영 루프는 행 prefs 를 그 행을 찍는 동안만 덮고 finally 에서 되돌린다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\), r\.prefs\)/)
+    expect(src).toMatch(/\} finally \{\s+if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\)\)\s+\}/)
+  })
+})
+
+describe('UI-2b 셸 상태 캡처 행(과제 37)', () => {
+  type Row = { key: string; path: string; grade: string; since: string; tags?: string[]; click?: string; clicks?: string[]; expect?: string[]; prefs?: Record<string, boolean>; supplement?: boolean }
+  const byKey = (k: string) => (routesDoc.routes as Row[]).find((r) => r.key === k)
+  it('행 여덟이 셸 상태를 찍는다 — 클릭 선택자·기대 선택자·등급', () => {
+    expect(byKey('ws-home-collapsed')).toMatchObject({ path: '/w/{wsSlug}', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: true } })
+    expect(byKey('ws-switcher-open')).toMatchObject({ path: '/w/{wsSlug}', grade: 'duo', click: '[data-ws-switcher="list"]' })
+    expect(byKey('project-switcher-open')).toMatchObject({ path: '/p/{pid}/dashboard', click: '[role="combobox"][aria-label="프로젝트 전환"]' })
+    expect(byKey('drawer-project')).toMatchObject({ path: '/p/{pid}/dashboard', click: '[data-drawer-trigger]' })
+    for (const k of ['rail-ai-1440', 'rail-ai-1280']) expect(byKey(k)).toMatchObject({ since: 'UI-2b', click: '[data-ai-open]' })
+    expect(byKey('p-wbs-fullscreen-ai')?.clicks).toEqual(['[data-wbs-fullscreen-toggle]', '[data-wbs-ai-toggle]'])
+    expect(byKey('ws-agents-switch')).toMatchObject({ path: '/w/{wsSlug}/agents', click: 'button[data-view="lane"]' })
+    for (const k of ['ws-home-collapsed', 'ws-switcher-open', 'project-switcher-open', 'drawer-project', 'rail-ai-1440', 'rail-ai-1280', 'ws-agents-switch', 'ws-settings-broken']) {
+      expect(byKey(k)?.since, k).toBe('UI-2b')
+      expect(byKey(k)?.expect?.length, `${k} 기대 선택자`).toBeGreaterThan(0)
+    }
+  })
+  it('ws-settings-broken 은 손상 상태가 있어야 의미가 있다 — manual 이라 since 선택에서 빠진다', () => {
+    const r = byKey('ws-settings-broken')
+    expect(r).toMatchObject({ path: '/w/{wsSlug}/settings', grade: 'wsAdmin', supplement: true, expect: ['[role="alert"]'] })
+    expect(r?.tags).toContain('manual')
+    const picked = selectRoutes(routesDoc, { routes: null, since: ['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'C'] }).map((x) => x.key)
+    expect(picked).not.toContain('ws-settings-broken')
+    expect(picked).toContain('ws-switcher-open')
+    expect(selectRoutes(routesDoc, { routes: ['ws-settings-broken'], since: [] }).map((x) => x.key)).toEqual(['ws-settings-broken'])
   })
 })

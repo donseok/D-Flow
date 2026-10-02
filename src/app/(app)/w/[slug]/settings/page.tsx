@@ -4,7 +4,7 @@ import { Settings2, Palette, Mail, Menu, History, CalendarDays } from 'lucide-re
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
-import { LEGACY_PATHS } from '@/lib/nav/legacyPaths'
+import { wsHref } from '@/lib/workspace/paths'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -22,6 +22,8 @@ import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPan
 import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
 import { todayIn } from '@/lib/domain/calendar'
 import { getServerLocale } from '@/lib/i18n/server'
+
+export const metadata = { title: '설정' }   // 레이아웃 템플릿이 '설정 · {워크스페이스} | {제품}' 을 만든다(V6)
 
 const SIMPLE: Record<SimpleWorkspaceKey, Omit<WorkspaceField, 'key' | 'value' | 'source' | 'error'>> = {
   'branding.product_name': { label: '제품 이름', description: '워크스페이스의 제품 이름입니다.', kind: 'text' },
@@ -43,7 +45,7 @@ function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: Simp
 export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const access = await workspacePageAccess(slug)
-  if (!access.isAdmin) redirect(LEGACY_PATHS.projects)
+  if (!access.isAdmin) redirect(wsHref(access.slug))
   const locale = await getServerLocale()
   let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
   try {
@@ -101,10 +103,8 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
         <div className="space-y-4">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
-          {/* /admin/teams 는 플랫폼 관리자 전용(canManageTeams)이라 그 밖에는 링크 대신 안내만 둔다 — 눌러서 튕기는 링크를 만들지 않는다. */}
-          {access.isSuperuser
-            ? <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href={LEGACY_PATHS.adminTeams} className="font-medium text-brand underline">팀 관리</Link>에서 편집합니다.</p>
-            : <p className="text-sm text-ink-muted">공용 팀 기준정보는 플랫폼 관리자가 팀 관리에서 편집합니다.</p>}
+          {/* 공용 팀은 그 워크스페이스 관리자가 연다(SP3b D22) — 이 화면은 관리자만 들어오므로(위 redirect) 링크가 튕기지 않는다. */}
+          <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href={wsHref(access.slug, 'admin/teams')} className="font-medium text-brand underline">공용 팀 관리</Link>에서 편집합니다.</p>
         </div>
       </SectionCard>
       <SectionCard id="workspace-calendar" searchText="calendar.working_days calendar.timezone calendar.week_start 달력 시간대 근무 요일 주 시작"

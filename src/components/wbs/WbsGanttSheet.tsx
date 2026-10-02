@@ -10,13 +10,15 @@ import { calendarOf, isoDowOf, isWorkingDay, nextWeekKey, weekKeyOf, weekPeriodO
 import type { CalendarInput } from '@/lib/calendar/load'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
+import { unsetWeightCount } from '@/lib/domain/rollup'
 import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
+import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
-import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
-import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText, teamStyle } from './shared'
+import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
 import { WbsProgressLens } from './WbsProgressLens'
 import { WbsFontSizeControl } from './WbsFontSizeControl'
@@ -25,8 +27,9 @@ import { ReportModal } from '@/components/report/ReportModal'
 import { usePagePresence } from '@/components/app/usePagePresence'
 import { PresenceStrip } from '@/components/app/PresenceStrip'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
+import { useRightRailOptional } from '@/components/app/RightRail'
 import type { DictKey } from '@/lib/i18n/dict'
 import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
@@ -254,6 +257,7 @@ export function WbsGanttSheet({
   const { t } = useLocale()
   const legendTeams = useTeamCodes()
   const cal = useMemo(() => calendarOf(calendar), [calendar])
+  const slotOf = useTeamSlot()
   /* 실시간 반영(0098) — 서버가 준 트리를 상태로 미러링하고 broadcast 가 오면 그 행만 갈아끼운다.
      조상 롤업은 applyWbsChange 가 computeNode 를 다시 돌려 낸다: 리프만 고치면 공정율·달성률·
      상태가 낡은 채 남아 화면이 조용히 틀린 숫자를 보여준다.
@@ -353,6 +357,9 @@ export function WbsGanttSheet({
   // 툴바 토글 버튼은 제거됨 — 값은 defaultView에서 파생.
   const timelineFocus = defaultView === 'timeline'
   const [fullscreen, setFullscreen] = useState(false) // 팝업(전체화면 모달)로 크게 보기
+  // 전체 화면은 전역 바(AI 아이콘)를 덮는다 — 전체 화면 툴바의 AI 토글이 레일 API 로 연다(AA3, D56). aiAvailable = 탐침 통과 + 레일 API 로 열 수 있음
+  const aiRail = useRightRailOptional()
+  const aiOpen = aiRail?.occupant === 'ai'
   const [reportOpen, setReportOpen] = useState(false) // 주간 보고서 모달
   // 의존성 연결선은 상시 표시하지 않는다 — 두 축을 합치면서 선이 너무 많아졌다(2026-08-28).
   // 간트 바에 마우스를 올린 동안 그 작업에 걸린 선만 그린다. 툴바 토글은 제거했다.
@@ -526,6 +533,7 @@ export function WbsGanttSheet({
         || reportOpen
         || addPhase !== null
         || edit
+        || aiOpen   // 전체 화면 안에서 연 AI — 첫 Esc 는 AI 를 닫는다(AA3)
       ) return
       setFullscreen(false)
     }
@@ -537,6 +545,7 @@ export function WbsGanttSheet({
     }
   }, [
     addPhase,
+    aiOpen,
     edit,
     fullscreen,
     progressLensEnabled,
@@ -671,6 +680,8 @@ export function WbsGanttSheet({
     if (weighted.length === 0) return null
     return Number(weighted.reduce((sum, n) => sum + weightToPct(n.weight as number), 0).toFixed(2))
   }, [items])
+  // 가중치를 비운 항목 수(SP4 D20) — 가중치를 가진 형제가 있는 그룹의 null 만 센다(그 그룹에서 1 = 같은 몫으로 계산된다). 모두 비운 그룹은 뜻이 같아 세지 않는다
+  const unsetWeights = useMemo(() => unsetWeightCount(items), [items])
   const dependencySchedule = useMemo(
     () => computeDependencySchedule(
       allFlatItems.map(item => ({
@@ -966,12 +977,12 @@ export function WbsGanttSheet({
         cancel()
       } else if (res.conflict) {
         // 충돌: 최신 값으로 새로고침하고 안내. 닫히는 입력은 안내에 남겨 다시 칠 수 있게 한다.
-        setToast({ kind: 'err', msg: `${res.error ?? t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` })
+        setToast({ kind: 'err', msg: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` })
         router.refresh()
         cancel()
       } else {
-        // 잠금 거부는 사유 코드로 사전 문구를 고른다 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
-        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : (res.error ?? t('wbs.toastSaveFail')) })
+        // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
         if (via === 'enter') inputRef.current?.focus()
       }
     } finally {
@@ -984,7 +995,7 @@ export function WbsGanttSheet({
     const res = await addWbsItem(projectId, null, addPhase.trim())
     setAddBusy(false)
     if (res.ok) { setAddPhase(null); setToast({ kind: 'ok', msg: t('wbs.toastPhaseAdded') }); router.refresh() }
-    else setToast({ kind: 'err', msg: res.error ?? t('wbs.toastAddFail') })
+    else setToast({ kind: 'err', msg: wbsToastText(t, res.error, 'wbs.toastAddFail') })
   }
 
   const editInput = (current: string, field: 'weight' | 'actual') => (
@@ -1024,7 +1035,7 @@ export function WbsGanttSheet({
     align = 'justify-start',
     extra = '',
     sub?: { text: string; title: string; warn?: boolean },
-    /** 라벨 아래 두 번째 줄에 얹는 컨트롤(§항목2 — 레벨 펼침 버튼을 작업명 헤더 셀 안으로). */
+    /** 라벨 아래 두 번째 줄에 얹는 컨트롤(§항목2 — 레벨 펼침 버튼을 작업명 헤더 셀 안으로). sub 와 함께 오면 sub 아래 줄(가중치 미지정 N개 — SP4 D20) */
     actions?: React.ReactNode,
   ) => {
     const frozen = col.frozen
@@ -1043,7 +1054,7 @@ export function WbsGanttSheet({
         }}
         title={sub ? `${label} — ${sub.title}` : label}
       >
-        {actions ? (
+        {actions && !sub ? (
           <div className="flex h-full min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
             <span className="truncate">{label}</span>
             {actions}
@@ -1059,6 +1070,7 @@ export function WbsGanttSheet({
             >
               {sub.text}
             </span>
+            {actions}
           </span>
         ) : (
           label
@@ -1089,13 +1101,14 @@ export function WbsGanttSheet({
       data-wbs-font-scale={fontScale.scale}
       className={
         fullscreen
-          ? // AI 버튼(AssistantChat FAB, 층 120)과 같은 층이면 문서 순서로 FAB 가 위에 뜬다 — D56 표에 FAB 자리가 없어 과제 24(z 대응표)까지 한 칸 위
-            'fixed inset-0 z-[calc(var(--z-fullscreen)_+_1)] overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
+          ? // 층은 --z-fullscreen(120) — AI 버튼·패널은 --z-rail(90)로 내려가 그 아래다(z 대응표 §1). 우측 레일은 아래 레일 자리로 포털된다(D56)
+            'fixed inset-0 z-(--z-fullscreen) overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
           : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
       aria-modal={fullscreen || undefined}
       aria-label={fullscreen ? t('wbs.ariaFullscreen') : undefined}
+      data-wbs-fullscreen={fullscreen ? 'open' : undefined}
       style={
         {
           '--wbs-row-h': `${ROW_H}px`,
@@ -1105,6 +1118,8 @@ export function WbsGanttSheet({
         } as React.CSSProperties
       }
     >
+      {/* 전체 화면 안 레일 자리(D56) — 열린 동안 우측 레일(AI·인스펙터)이 전체 화면 층 아래로 숨지 않게 여기로 포털된다(RightRail 의 useRailHost) */}
+      {fullscreen && <div data-rail-host="fullscreen" className="fixed inset-y-0 right-0 z-(--z-rail) flex" />}
       {/* ── 툴바 ── */}
       {/* 컴팩트: 툴바를 통째로 걷고 플로팅 버튼으로 연다 — 접힌 한 줄(검색+토글)조차 표 공간을
           먹는다는 피드백(2026-08-21). 분기는 JS(compact)로만 — CSS 반응형 display 유틸은
@@ -1262,6 +1277,13 @@ export function WbsGanttSheet({
         <button data-wbs-fullscreen-toggle onClick={() => setFullscreen(v => !v)} aria-pressed={fullscreen} title={fullscreen ? t('wbs.exitFullscreenTitle') : t('wbs.enterFullscreenTitle')} className={`btn h-9 px-3 text-xs ${fullscreen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
           {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {showLabels && <span data-btn-label>{fullscreen ? t('wbs.viewSmaller') : t('wbs.viewLarger')}</span>}
         </button>
+        {fullscreen && aiRail?.aiAvailable && (
+          <button type="button" data-wbs-ai-toggle onClick={() => (aiOpen ? aiRail.close('ai') : aiRail.open('ai'))} aria-pressed={aiOpen}
+            aria-label={t('chat.open')} title={t('chat.open')}
+            className={`btn h-9 px-3 text-xs ${aiOpen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />{showLabels && <span data-btn-label>AI</span>}
+          </button>
+        )}
         {/* 종전 '작업 의존성' 토글 버튼과 그 안의 크리티컬·지연 요약 칩이 있던 자리.
             선이 상시로 그려져 난잡하다는 판단으로 둘 다 제거했다(2026-08-28) —
             연결선은 간트 바에 마우스를 올린 동안만 그린다. 크리티컬 여부는 행의 붉은 점으로 남는다. */}
@@ -1439,6 +1461,9 @@ export function WbsGanttSheet({
                     title: t('wbs.weightTotalTitle'),
                     warn: Math.abs(rootWeightTotalPct - 100) > 0.01,
                   },
+              unsetWeights > 0
+                ? <span data-unset-weight className="truncate font-semibold normal-case tabular-nums tracking-normal text-warning" title={t('wbs.unsetWeightTitle')}>{t('wbs.unsetWeight').replace('{n}', String(unsetWeights))}</span>
+                : undefined,
             )}
             {showCol('pplan') && headCell(colOf('pplan'), t('wbs.colPlannedPct'), 'justify-end')}
             {showCol('pactual') && headCell(colOf('pactual'), t('wbs.colActualPct'), 'justify-end')}
@@ -2041,7 +2066,7 @@ export function WbsGanttSheet({
         <span className="inline-flex items-center gap-2">
           {legendTeams.map(t => (
             <span key={t} className="inline-flex items-center gap-0.5">
-              <span className={`${teamStyle(t).fg} text-[9px]`}>●</span>
+              <span className={`${slotOf(t).fg} text-[9px]`}>●</span>
               {t}
             </span>
           ))}

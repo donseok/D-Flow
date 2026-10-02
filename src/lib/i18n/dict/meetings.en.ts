@@ -16,6 +16,7 @@ export const meetingsEn: Record<keyof typeof meetingsKo, string> = {
   'meet.view.calendar': 'Calendar',
   'meet.view.list': 'List',
   'meet.addMeeting': 'New meeting',
+  'meet.projectMinutes': 'Minutes for this project',
   'meet.editMeeting': 'Edit meeting',
   'meet.today': 'Today',
   'meet.prevMonth': 'Previous month',

@@ -11,11 +11,10 @@ import { normalizeNewTeamCode, reservedTeamNames } from '@/lib/domain/teams'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { pickTeamColor } from '@/lib/domain/teamColor'
-import { refreshTeams } from '@/lib/teams/master'
-import { workspaceTeams } from '@/lib/teams/source'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
-import { failWith } from '@/lib/errors/dbFail'
+import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
 
@@ -23,7 +22,7 @@ export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string 
 const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_TEAM_COPY = '공용 팀을 복사하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TEAM_COPY = '공용 팀을 전환하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_COMMON_IN_USE = (code: string) =>
   `이 프로젝트가 공용 팀 '${code}'를 이미 쓰고 있어 같은 코드의 프로젝트 팀을 만들지 않았습니다 — 만들면 담당·명단이 두 팀으로 갈라집니다.`
 
@@ -79,7 +78,6 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
     .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, project_id: projectId, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
   if (ins.error) return { ok: false, error: failWith('projectTeams.add', ins.error, ERR_TEAM_CREATE) }
 
-  await refreshTeams()
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
@@ -120,42 +118,37 @@ export async function updateProjectTeam(
   const upd = await admin.from('teams').update(row).eq('id', teamId).eq('project_id', projectId).select('id')
   if (upd.error) return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' }
-  await refreshTeams()
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
-/** 전역 활성 팀을 프로젝트 팀으로 복사해 시작 — 프로젝트 팀 0개일 때만(1회성 시작 도구). */
+const ERR_ALREADY = '이미 프로젝트 팀이 정의되어 있습니다.'
+const ERR_NO_COMMON = '복사할 전역 팀이 없습니다.'   // 스펙 §3.3 ⑦ "지금 문구" 그대로(액션 계약)
+/** 전환 RPC 의 자기 토큰(SP4 D45 — 호출부 자기 매핑). 55P03(잠금 대기 상한)·40P01 은 rpcFailure 가 재시도 문구로 */
+const CONVERT_TOKENS: OwnTokenTable = {
+  TEAM_CONVERT_FORBIDDEN: { status: 403, code: 'ERR_DENIED', message: ERR_DENIED },
+  PROJECT_NOT_FOUND: { status: 404, code: 'ERR_MISSING', message: ERR_MISSING },
+}
+
+/** '공용 팀 전환으로 시작' — 이 프로젝트가 상속하던 공용 팀을 같은 code·이름·색·순서·활성의 전용 팀으로 바꾸고, 그 프로젝트 안의 팀 연결
+ *  (작업 담당·명단 팀·업무영역 팀·수락 전 초대)을 새 팀으로 옮긴다(전환 RPC — SP4 D54·T14). 되돌리지 않는다. 옛 '복사만'은 같은 code·다른 id
+ *  두 벌을 만들어 담당 팀 멤버의 실적 저장이 서버에서 거부됐다(D4). 결과 계약 { ok, error } 그대로(§3.3 ⑦) */
 export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  // addProjectTeam 과 같은 근거(roleIn ④) — projects 테이블을 따로 조회하지 않는다.
-  const workspaceId = g.actor.projectWorkspace.get(projectId)
-  if (!workspaceId) return { ok: false, error: '프로젝트의 워크스페이스를 확인할 수 없습니다.' }
-  const admin = createAdminClient()
-  const existing = await admin.from('teams').select('id').eq('project_id', projectId).limit(1).maybeSingle()
-  if (existing.error) return { ok: false, error: failWith('projectTeams.copy', existing.error, ERR_TEAM_LOOKUP) }
-  if (existing.data) return { ok: false, error: '이미 프로젝트 팀이 정의되어 있습니다.' }
-  // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀뿐이다 — 옛 teamsSync() 는 전 워크스페이스의 공용 팀을
-  // 섞어 돌려줘 다른 워크스페이스의 팀 이름까지 이 프로젝트로 복사했다(SP2 §4.2).
-  // 팀 원천 실패는 throw 한다 — '복사할 것이 없다'로 위장하지 않는다(요청 범위 원천, service_role 로 — SP4 A2).
-  let globals
-  try {
-    globals = (await workspaceTeams(workspaceId, { client: admin })).filter(t => t.active)
-  } catch (e) {
-    console.error('[projectTeams] 공용 팀 조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: '팀 기준정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.' }
+  const { data, error } = await createAdminClient().rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
+  if (error) {
+    const f = rpcFailure(error, CONVERT_TOKENS)
+    if (!f) return { ok: false, error: failWith('projectTeams.convert', error, ERR_TEAM_COPY) }
+    console.error('[projectTeams.convert] 전환 거부:', f.token)
+    return { ok: false, error: f.message }
   }
-  // 공용 활성 팀 0개는 빈 DB 출발이면 '복사할 것이 없다' — 빈 insert 를
-  // 성공으로 위장하지 않는다(호출부 토스트가 '복사했습니다'를 잘못 보여주는 사고 방지).
-  if (globals.length === 0) return { ok: false, error: '복사할 전역 팀이 없습니다.' }
-  const ins = await admin.from('teams').insert(globals.map(t => ({
-    code: t.code, name: t.code, sort_order: t.sortOrder,
-    progress_visible: t.progressVisible, project_id: projectId,
-    workspace_id: workspaceId, color: pickTeamColor(t.sortOrder),
-  })))
-  if (ins.error) return { ok: false, error: failWith('projectTeams.copy', ins.error, ERR_TEAM_COPY) }
-  await refreshTeams()
+  const r = (data ?? null) as { status?: unknown; teams?: unknown } | null
+  if (r?.status === 'already') return { ok: false, error: ERR_ALREADY }
+  if (r?.status !== 'converted' || typeof r.teams !== 'number') {
+    return { ok: false, error: failWith('projectTeams.convert', new Error(`전환 결과의 모양이 기대와 다릅니다: ${JSON.stringify(data)}`), ERR_TEAM_COPY) }
+  }
+  if (r.teams === 0) return { ok: false, error: ERR_NO_COMMON }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }

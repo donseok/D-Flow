@@ -60,8 +60,11 @@ vi.mock('@/lib/supabase/server', () => ({
       workspace_members: { data: [], error: null },
       project_members: { data: [], error: null },
       projects: { data: [{ id: 'p1', workspace_id: 'ws-9', is_private: false }], error: null },
+      // 비소속 워크스페이스의 존재 확인(과제 34 — 플랫폼 관리자 보기 축)
+      workspaces: { data: { id: '00000000-0000-0000-7e57-000000001773', slug: 'acme', name: 'Acme' }, error: null },
     }
     return {
+      auth: { getClaims: async () => ({ data: { claims: { sub: 'u1' } } }) },   // 범위 관문(과제 34)의 행위자 조회
       from: (table: string) => {
         const r = tables[table] ?? { data: null, error: { message: `unexpected table ${table}` } }
         const b: Record<string, unknown> = {}
@@ -142,7 +145,7 @@ describe('POST /api/chat/v2/stream — 도구 컨텍스트', () => {
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
     const res = await post({
       projectId: null, message: 'Acme 회의록 찾아줘', history: [],
-      pageContext: { contextVersion: 1, pathname: '/minutes', domain: 'minutes', projectId: null, timezone: 'Asia/Seoul' },
+      pageContext: { contextVersion: 1, pathname: '/w/acme/minutes', domain: 'minutes', projectId: null, timezone: 'Asia/Seoul', workspaceId: '00000000-0000-0000-7e57-000000001773' },
     })
     expect(res.status).toBe(200)
     await res.text()

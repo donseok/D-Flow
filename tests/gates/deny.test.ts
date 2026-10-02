@@ -167,6 +167,20 @@ describe('deny — 모듈 항목(정적)', () => {
     expect(probs('logged')).toEqual([':9 requireModule 의 결과를 조건으로 보지 않는다'])
     expect(probs('fake')).toEqual([':10 requireModule 가 @/lib/modules/gate 의 import 바인딩이 아니다', ':10 requireModule 의 결과를 버린다'])
   })
+  it('판별기 민감도 — 세션 라우트의 범위 관문(requireScopedSessionModule, 과제 34)도 원천·결과 사용을 본다(합성 소스)', () => {
+    const sf = parse('r.ts', [
+      "import { requireScopedSessionModule } from '@/lib/modules/scopedSession'",
+      "import { requireScopedSessionModule as wrong } from '@/lib/modules/gate'",
+      "export async function ok(p, w) { const g = await requireScopedSessionModule({ projectId: p, workspaceId: w }, 'chatbot'); if (!g.ok) return g; return 1 }",
+      "export async function dropped(p, w) { await requireScopedSessionModule({ projectId: p, workspaceId: w }, 'chatbot'); return 1 }",
+      "export async function source(p, w) { const g = await wrong({ projectId: p, workspaceId: w }, 'chatbot'); if (!g.ok) return g }",
+    ].join('\n'))
+    const names = new Set(['requireScopedSessionModule'])
+    const probs = (n: string) => gateSitesIn(sf, n, names).flatMap(siteProblems)
+    expect(probs('ok')).toEqual([])
+    expect(probs('dropped')).toEqual([':4 requireScopedSessionModule 의 결과를 버린다'])
+    expect(probs('source')).toEqual([':5 requireScopedSessionModule 가 @/lib/modules/scopedSession 의 import 바인딩이 아니다'])
+  })
 })
 
 describe('deny — null 항목(정적)', () => {

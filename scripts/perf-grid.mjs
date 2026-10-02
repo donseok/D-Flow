@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   KEY_RE, LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, fixedPrefs, freshSessions, kstToday, laneEnv, laneTarget,
-  loadPlaywright, must, plusDays, setServerTheme, userIdByEmail,
+  loadPlaywright, must, plusDays, setServerTheme, startPin, userIdByEmail,
 } from './ui-capture.mjs'
 import { median } from './lib/perf.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
@@ -183,7 +183,10 @@ export function ownersVerdict(count, maxRows) {
  *  @param {{ workspace_id: string, prefs: unknown }[]} rows @param {Record<string, unknown>} want */
 export function prefsMismatch(rows, want) {
   if (!rows.length) return ['(소속 없음)']
-  const norm = (o) => JSON.stringify(Object.fromEntries(Object.entries(o ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))))
+  // 깊이까지 키를 정렬해 비교한다 — jsonb 는 키를 길이·사전순으로 되돌려 주므로(최근 방문 {id, at} → {at, id}) 쓴 순서와 읽은 순서가 다르다. 배열 순서는 의미가 있어 그대로
+  const canon = (v) => Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => (x < y ? -1 : 1)).map(([k, x]) => [k, canon(x)])) : v
+  const norm = (o) => JSON.stringify(canon(o ?? {}))
   return rows.filter((r) => norm(r.prefs) !== norm(want)).map((r) => r.workspace_id)
 }
 
@@ -383,11 +386,16 @@ async function cmdMeasure(argv) {
   const { count: stateRows, error: sErr } = await db.from('user_wbs_state').select('project_id', { count: 'exact', head: true }).eq('user_id', uid).eq('project_id', project.id)
   if (sErr) throw new Error(`user_wbs_state 조회: ${sErr.message}`)
   if (stateRows !== 0) throw new Error('측정 계정에 user_wbs_state 가 있다 — 접힘이 행 수를 바꾼다(판정 Q9)')
-  // D6 — 측정 시작 상태: 측정 계정의 서버 선호를 shoot 와 같은 고정 객체(라이트·lastProjectId = 측정 프로젝트)로 덮고 읽어 확인한다.
+  // D6 — 측정 시작 상태: 측정 계정의 서버 선호를 shoot 와 같은 고정 객체(계정 행 = 라이트, 워크스페이스 행 = 최근 방문 측정 프로젝트 — SP3b D9)로 덮고 읽어 확인한다.
   // 캡처의 다크 패스가 남긴 테마·간트 일 폭·개요 번호·완료 숨김(판정 Q9)이 측정 조건을 바꾸지 않게. 쿠키 dflow-theme=light 는 run 마다
-  const startPrefs = fixedPrefs('light', { lastProjectId: project.id })
-  await setServerTheme(db, [uid], 'light', { lastProjectId: project.id })
-  const bad = prefsMismatch(must('선호 확인', await db.from('user_preferences').select('workspace_id, prefs').eq('user_id', uid)), startPrefs)
+  const startPrefs = fixedPrefs('light')
+  const pin = startPin(project.id)
+  await setServerTheme(db, [uid], 'light', pin)
+  const accountRows = must('계정 선호 확인', await db.from('account_preferences').select('prefs').eq('user_id', uid))
+  const bad = [
+    ...prefsMismatch(accountRows.map((r) => ({ workspace_id: '(계정 행)', prefs: r.prefs })), startPrefs).map((x) => (x === '(소속 없음)' ? '(계정 행 없음)' : x)),
+    ...prefsMismatch(must('선호 확인', await db.from('user_preferences').select('workspace_id, prefs').eq('user_id', uid)), pin),
+  ]
   if (bad.length) throw new Error(`측정 계정의 선호값이 고정 객체와 다르다(${bad.join(', ')}) — 측정 시작 상태를 확인한다`)
   const sessions = await freshSessions(env, ['wsAdmin'])
   const { chromium } = await loadPlaywright()

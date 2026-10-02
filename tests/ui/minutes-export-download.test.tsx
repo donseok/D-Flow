@@ -21,8 +21,8 @@ vi.mock('@/components/minutes/MinutesCalendar', () => ({ MinutesCalendar: () => 
 vi.mock('@/components/minutes/MinuteUploadModal', () => ({ MinuteUploadModal: () => null }))
 vi.mock('@/components/minutes/ArchiveChatPanel', () => ({ ArchiveChatPanel: () => null }))
 vi.mock('@/app/actions/minutes', () => ({
-  fetchMinutesRange: vi.fn(async () => []),
-  fetchMinutesSearch: vi.fn(async () => []),
+  fetchMinutesRange: vi.fn(async () => ({ ok: true, rows: [] })),
+  fetchMinutesSearch: vi.fn(async () => ({ ok: true, rows: [] })),
   fetchMinutesExplorer: vi.fn(async () => ({ folders: [], leaves: [], total: 0, truncated: false })),
   fetchMinuteFavorites: vi.fn(async () => []),
   toggleMinuteFavorite: vi.fn(async () => true),
@@ -55,7 +55,7 @@ describe('MinutesView 전체 회의록 내려받기', () => {
     })
     mocks.toast.mockReset()
     await act(async () => root.render(
-      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} todayIso="2026-07-23" initialView="list"
+      <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-23" initialView="list"
         projects={[]} currentUserId="u1" canEdit />,
     ))
   })
@@ -93,7 +93,7 @@ describe('MinutesView 전체 회의록 내려받기', () => {
 
     await flushClick(exportButton())
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/minutes/export')
+    expect(fetchMock).toHaveBeenCalledWith('/api/minutes/export?workspaceId=ws-1')   // 화면의 워크스페이스(과제 34)
     expect(createObjectUrl).toHaveBeenCalledWith(blob)
     expect(downloadedName).toBe('회의록_전체.zip')
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:minutes-export')

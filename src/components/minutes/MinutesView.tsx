@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   Bot, CalendarDays, ChevronLeft, ChevronRight, Download, LayoutGrid, List, ListTree, Plus, Search,
@@ -10,18 +11,18 @@ import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
-import { teamStyle } from '@/components/wbs/shared'
 import { MinutesCalendar } from './MinutesCalendar'
 import type { CalendarView } from '@/lib/domain/attendance'
 import { MinuteUploadModal } from './MinuteUploadModal'
 import { ArchiveChatPanel } from './ArchiveChatPanel'
 import { MinutesExplorer, type ExplorerLayout } from './MinutesExplorer'
 import { filenameFromContentDisposition } from './download'
+import type { MinutesScope } from '@/lib/minutes/scope'
 
 type ViewKey = 'list' | 'calendar' | 'tree'
 type TreeState = 'idle' | 'loading' | 'error' | ExplorerData
@@ -34,10 +35,12 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 }
 
 export function MinutesView({
-  initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
+  scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
   adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
 }: {
+  /** 화면의 범위(슬러그 워크스페이스 + ?project=, 계획 V13) — 월 이동·검색·탐색기·즐겨찾기 재조회에 그대로 넘긴다 */
+  scope: MinutesScope
   initialMinutes: Minute[]
   /** 서버에서 미리 실어 보낸 트리. null 이면(조회 실패 포함) 마운트 후 클라이언트가 직접 가져온다. */
   initialTree?: ExplorerData | null
@@ -48,7 +51,7 @@ export function MinutesView({
   /** 관리자인 워크스페이스 id — **폴더 조작**(개명·이동·삭제)의 폴더별 판정 근거(서버: 작성자 ∨ 그 폴더
    *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
   adminWorkspaceIds?: string[]
-  /** 소속 워크스페이스 중 하나라도 역할이 있음(hasProjectRoleInAnyWorkspace) — 업로드 자격. */
+  /** 이 화면의 워크스페이스에 역할이 있음(hasProjectRoleInWorkspace) — 업로드 자격. */
   canEdit: boolean
   /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
   adminProjectIds?: string[]
@@ -62,7 +65,7 @@ export function MinutesView({
   myProjectIds?: string[] | null
   /** 업로드 저장 경로 scope — 프로젝트 → 워크스페이스(actor.projectWorkspace). */
   projectWorkspaces?: Record<string, string>
-  /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(resolveSoleWorkspaceId). */
+  /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(화면의 슬러그 워크스페이스, D26). */
   noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
   /** 워크스페이스 달력 — 요일만(날짜 예외 없음, D36). 달력 보기의 첫 열·쉬는 날 */
   calendar: CalendarView
@@ -70,7 +73,22 @@ export function MinutesView({
   const router = useRouter()
   const { t, locale } = useLocale()
   const { toast } = useToast()
+  const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 상세
+  // 고정 필터 바의 테두리 상자 높이 → 루트의 --minutes-bar-h(탐색기 폴더 트리의 고정 위치·결과 scroll-mt, BB2). PageFrame 의 --frame-sticky-top 과 같은 꼴
+  const viewRef = useRef<HTMLDivElement>(null)
+  const filterBarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const view = viewRef.current, bar = filterBarRef.current
+    if (!view || !bar || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => {
+      const h = e.borderBoxSize?.[0]?.blockSize ?? (e.target as HTMLElement).getBoundingClientRect().height
+      view.style.setProperty('--minutes-bar-h', `${Math.ceil(h)}px`)
+    })
+    ro.observe(bar)
+    return () => { ro.disconnect(); view.style.setProperty('--minutes-bar-h', '0px') }
+  }, [])
   const teamCodes = useTeamCodes()
+  const slotOf = useTeamSlot()
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
   const [month0, setMonth0] = useState((initM || 1) - 1)
@@ -87,6 +105,8 @@ export function MinutesView({
   const [exportBusy, setExportBusy] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const reqRef = useRef(0)
+  // 마지막으로 **받은** (연·월·팀) — 실패하면 직전 머리가 아니라 이 값으로 되돌린다(빠른 연속 이동에서 첫 요청이 더 새 요청에 밀려 버려지면 직전 머리는 받지 못한 달이다)
+  const settledRef = useRef<{ y: number; m0: number; team: TeamKey }>({ y: initY, m0: (initM || 1) - 1, team: 'ALL' })
   // 서버가 트리를 실어 보냈으면 그대로 초기값으로 쓴다 — 아래 마운트 effect 와 changeView 는
   // 둘 다 'idle'/비객체일 때만 조회하므로 자동으로 no-op 이 되어 왕복이 사라진다.
   // 서버 조회가 실패해 null 이면 'idle' 로 떨어져 기존 클라이언트 폴백 경로가 그대로 산다.
@@ -113,7 +133,7 @@ export function MinutesView({
   async function loadFavorites() {
     const gen = ++favReqRef.current
     setFavState('loading')
-    const res = await fetchMinuteFavorites()
+    const res = await fetchMinuteFavorites(scope.workspaceId)
     if (favReqRef.current !== gen) return
     setFavState(res ? new Set(res) : 'error')
   }
@@ -147,16 +167,21 @@ export function MinutesView({
     // 탐색기를 언마운트해 스코프·펼침·더 보기가 CRUD 때마다 리셋되는 문제를 막는다.
     // 최초 진입(idle)·에러 재시도는 기존대로 스켈레톤.
     if (typeof treeState !== 'object') setTreeState('loading')
-    const res = await fetchMinutesExplorer()
+    const res = await fetchMinutesExplorer(scope)
     if (treeReqRef.current !== gen) return
     setTreeState(res ?? 'error')
   }
 
-  async function loadMonth(y: number, m0: number, tk: TeamKey) {
+  /** 반환: 참 = 받음, 거짓 = 실패(지난 목록을 두고 토스트), null = 더 새 요청이 있어 버림 */
+  async function loadMonth(y: number, m0: number, tk: TeamKey): Promise<boolean | null> {
     const gen = ++reqRef.current
     const [rs, re] = monthRangeOf(y, m0)
-    const rows = await fetchMinutesRange(rs, re, tk === 'ALL' ? null : tk)
-    if (reqRef.current === gen) setMinutes(rows)
+    const res = await fetchMinutesRange(scope, rs, re, tk === 'ALL' ? null : tk)
+    if (reqRef.current !== gen) return null
+    // 실패는 '이 달 회의록 없음'이 아니다 — 지난 목록을 두고 사유를 알린다(에러 처리 3원칙 ①)
+    if (res.ok) { setMinutes(res.rows); settledRef.current = { y, m0, team: tk }; return true }
+    toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    return false
   }
   function shift(delta: number) {
     if (isSearch) return
@@ -164,20 +189,26 @@ export function MinutesView({
     const y = base.getUTCFullYear(); const m0 = base.getUTCMonth()
     setYear(y); setMonth0(m0)
     setSelectedDate(null)
-    void loadMonth(y, m0, team)
+    // 실패면 머리(연·월)도 지난 목록에 맞춰 되돌린다 — 새 달 머리 아래 지난 달 목록이 남지 않게
+    void loadMonth(y, m0, team).then((ok) => { if (ok === false) { setYear(settledRef.current.y); setMonth0(settledRef.current.m0) } })
   }
   function changeTeam(tk: TeamKey) {
     setTeam(tk)
     setSelectedDate(null)
-    if (isSearch) void runSearch(query, tk)
-    else void loadMonth(year, month0, tk)
+    const revert = (ok: boolean | null) => { if (ok === false) setTeam(settledRef.current.team) }   // 팀 칩과 목록이 어긋나지 않게
+    if (isSearch) void runSearch(query, tk).then(revert)
+    else void loadMonth(year, month0, tk).then(revert)
   }
-  async function runSearch(q: string, tk: TeamKey) {
+  async function runSearch(q: string, tk: TeamKey): Promise<boolean | null> {
     const gen = ++reqRef.current
-    if (!q.trim()) { void loadMonth(year, month0, tk); return }
+    if (!q.trim()) return loadMonth(year, month0, tk)
     setSearching(true)
-    const rows = await fetchMinutesSearch(q, tk === 'ALL' ? null : tk)
-    if (reqRef.current === gen) { setMinutes(rows); setSearching(false) }
+    const res = await fetchMinutesSearch(scope, q, tk === 'ALL' ? null : tk)
+    if (reqRef.current !== gen) return null
+    setSearching(false)
+    if (res.ok) { setMinutes(res.rows); settledRef.current = { ...settledRef.current, team: tk }; return true }
+    toast({ title: t('min.list.loadError'), description: res.error, variant: 'error' })
+    return false
   }
   function changeView(v: ViewKey) {
     setView(v)
@@ -189,7 +220,8 @@ export function MinutesView({
   async function downloadAllMinutes() {
     setExportBusy(true)
     try {
-      const res = await fetch('/api/minutes/export')
+      // 그 워크스페이스의 회의록만(D26, 과제 34) — 서버가 소속을 확인한다
+      const res = await fetch(`/api/minutes/export?workspaceId=${encodeURIComponent(scope.workspaceId)}`)
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null
         toast({
@@ -255,13 +287,15 @@ export function MinutesView({
 
   return (
     <div
+      ref={viewRef}
       data-minutes-view
+      style={{ '--minutes-bar-h': '0px' } as CSSProperties}
       className={isTreeExplorer
         ? 'space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0'
         : 'space-y-4'}
     >
-      {/* 필터 바 (스크롤 시 상단 고정) */}
-      <div className="sticky top-0 z-20 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
+      {/* 필터 바 (스크롤 시 상단 고정) — 자기 높이를 --minutes-bar-h 로 내려 탐색기의 폴더 트리가 그 아래에 붙는다(BB2) */}
+      <div ref={filterBarRef} className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<TeamKey>
             tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
@@ -308,7 +342,7 @@ export function MinutesView({
               <Bot className="h-4 w-4" />{t('min.chat.archive.title')}
             </button>
             {/* 조회 전용에게는 숨긴다 — 서버 createMinute 의 최소 자격이 '그 프로젝트의 멤버 이상, 미지정이면 그
-                워크스페이스에 역할'이고, canEdit 가 그것을 소속 워크스페이스 단위로 미러한다(hasProjectRoleInAnyWorkspace). */}
+                워크스페이스에 역할'이고, canEdit 가 그것을 이 화면의 워크스페이스 단위로 미러한다(hasProjectRoleInWorkspace). */}
             {canUpload && (
               <button onClick={() => setUploadOpen(true)} className="btn btn-primary">
                 <Plus className="h-4 w-4" />{t('min.upload.short')}
@@ -334,9 +368,9 @@ export function MinutesView({
                 <ul className="divide-y divide-line/70">
                   {rows.map(mi => (
                     <li key={mi.id}>
-                      <Link href={`/minutes/${mi.id}`}
+                      <Link href={minuteLinks.minute(mi.id)}
                         className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
+                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
                           {mi.teamCode}
                         </span>
                         <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
@@ -363,9 +397,9 @@ export function MinutesView({
               <ul className="divide-y divide-line/70">
                 {minutes.filter(mi => mi.minuteDate === selectedDate).map(mi => (
                   <li key={mi.id}>
-                    <Link href={`/minutes/${mi.id}`}
+                    <Link href={minuteLinks.minute(mi.id)}
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
+                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
                         {mi.teamCode}
                       </span>
                       <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
@@ -427,6 +461,7 @@ export function MinutesView({
       )}
       {/* 트리 뷰는 화면이 전 기간이므로 챗 범위도 전 기간으로 일치시킨다(월 라벨 '전체 기간'과 정합) */}
       <ArchiveChatPanel open={chatOpen} onClose={() => setChatOpen(false)}
+        workspaceId={scope.workspaceId}
         team={teamOrNull}
         from={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[0]}
         to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />

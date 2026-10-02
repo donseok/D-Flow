@@ -19,6 +19,7 @@ export const minutesKo = {
   'min.tree.allPeriod': '전체 기간',
   'min.tree.truncated': '최근 {n}건 기준으로 표시·집계됩니다',
   'min.tree.error': '트리를 불러오지 못했습니다',
+  'min.list.loadError': '회의록 목록을 불러오지 못했습니다',
   'min.tree.retry': '다시 시도',
   // 탐색기 (스펙 2026-07-23-minutes-explorer-design.md)
   'min.exp.favorites': '즐겨찾기',

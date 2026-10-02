@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(),
   getActor: vi.fn(),
   loadDisplayBranding: vi.fn(),
+  getHiddenProjectIds: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
@@ -17,13 +18,23 @@ vi.mock('@/lib/calendar/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/calendar/load')>()),
   resolveRequestCalendar: vi.fn(async () => ({ timezone: 'Asia/Seoul', workingDays: new Set([1, 2, 3, 4, 5]), weekStart: [{ day: 'sunday', from: null }] })),
 }))
+// 비공개 프로젝트 숨김(FA1) — 명단 밖 비공개 프로젝트의 회의록은 ZIP 에 싣지 않는다(U2b-5 리뷰 수정 CC1)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
 
-import { GET } from '@/app/api/minutes/export/route'
-import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { NextRequest } from 'next/server'
+import { GET as exportGET } from '@/app/api/minutes/export/route'
+import { ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
+import { makeActor } from '../fixtures/actor'
+
+const W = '00000000-0000-0000-7e57-000000001791', WX = '00000000-0000-0000-7e57-000000001792'
+/** 회의록 화면이 싣는 워크스페이스(과제 34) — 기본은 소속 W */
+const GET = (q: string = `workspaceId=${W}`) => exportGET(new NextRequest(`http://l/api/minutes/export${q ? `?${q}` : ''}`))
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
 type MinuteRow = {
   id: string
+  project_id?: string | null
   minute_date: string
   team_code: string
   title: string
@@ -62,7 +73,7 @@ function fakeClient(pageFactory: PageFactory) {
     if (table !== 'minutes') throw new Error(`unexpected table: ${table}`)
 
     const builder = {} as QueryBuilder
-    for (const method of ['select', 'is', 'lte', 'gt', 'order', 'limit']) {
+    for (const method of ['select', 'eq', 'is', 'lte', 'gt', 'order', 'limit']) {
       builder[method] = vi.fn(() => builder)
     }
     builder.then = (resolve, reject) => {
@@ -102,26 +113,99 @@ describe('GET /api/minutes/export', () => {
     vi.clearAllMocks()
     vi.useRealTimers()
     mocks.getSession.mockResolvedValue({ id: 'user-1' })
-    mocks.getActor.mockResolvedValue({ workspaceRoles: new Map([['ws-1', 'member']]) })
+    mocks.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[W, 'member']]) }))
     mocks.loadDisplayBranding.mockResolvedValue({ productName: 'Acme PM', mailFromName: 'Acme PM' })
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set())
   })
   // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
   afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
-  it('minutes 모듈이 꺼지면 404 JSON 이고 DB 에 접근하지 않는다 — 세션 유일 워크스페이스로 판정(과제 20)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+  it('minutes 모듈이 꺼지면 404 JSON 이고 DB 에 접근하지 않는다 — 요청의 워크스페이스로 판정(과제 20·34)', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await GET()
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toContain('application/json')
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'minutes')
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: W }, 'minutes')
+    expect(requireSessionModule).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
 
   it('로그인하지 않았으면 모듈 판정 전에 401(과제 20)', async () => {
     mocks.getSession.mockResolvedValue(null)
     expect((await GET()).status).toBe(401)
-    expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(requireModule).not.toHaveBeenCalled()
+  })
+
+  it('워크스페이스가 없으면 400 — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
+    for (const q of ['', 'workspaceId=']) {
+      const res = await GET(q)
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: ERR_WORKSPACE_REQUIRED })
+    }
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['비소속(존재하는 남의 워크스페이스)', `workspaceId=${WX}`],
+    ['형식 밖(대문자 변형)', `workspaceId=${W.toUpperCase()}`],
+    ['형식 밖(인코딩된 줄바꿈)', `workspaceId=${W}%0A`],
+    ['형식 밖(중복 키 — 첫 값이 남의 것)', `workspaceId=${WX}&workspaceId=${W}`],
+  ])('적대 — %s 는 404 이고 브랜딩·DB 에 접근하지 않는다(과제 34)', async (_n, q) => {
+    const res = await GET(q)
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: ERR_MISSING })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.loadDisplayBranding).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('행 거르기·브랜딩은 그 워크스페이스로 — 다른 워크스페이스 회의록이 ZIP 에 섞이지 않는다(과제 34)', async () => {
+    const fake = fakeClient(() => ({ data: [row()], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    expect((await GET()).status).toBe(200)
+    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith(W)
+    for (const b of fake.builders) expect(b.eq).toHaveBeenCalledWith('workspace_id', W)
+  })
+
+  it('명단 밖 비공개 프로젝트의 회의록은 ZIP 에 없다 — 회의록 화면에서 숨는 행은 내려받기에도 없다(CC1, FA1)', async () => {
+    const pub = row({ id: '10000000-0000-0000-0000-0000000000a1', title: '공개회의_260721', project_id: 'p-open' })
+    const loose = row({ id: '10000000-0000-0000-0000-0000000000a2', title: '미지정회의_260721', project_id: null })
+    const priv = row({ id: '10000000-0000-0000-0000-0000000000a3', title: '비공개회의_260721', body_md: '숨은 결정 본문', project_id: 'p-priv' })
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set(['p-priv']))
+    const fake = fakeClient(() => ({ data: [pub, loose, priv], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    const res = await GET()
+    expect(res.status).toBe(200)
+    for (const b of fake.builders) expect(b.select).toHaveBeenCalledWith(expect.stringContaining('project_id'))
+    const archive = await JSZip.loadAsync(await res.arrayBuffer())
+    const names = Object.keys(archive.files)
+    expect(names.some(n => n.includes(pub.id))).toBe(true)
+    expect(names.some(n => n.includes(loose.id))).toBe(true)
+    expect(names.some(n => n.includes(priv.id))).toBe(false)
+    const manifest = await archive.file('_manifest.csv')!.async('string')
+    expect(manifest).not.toContain(priv.id)
+    expect(manifest).not.toContain('비공개회의')
+  })
+
+  it('숨김 행만 있으면 내려받을 것이 없다(404) — 숨긴 행이 ZIP 의 빈 껍데기로도 드러나지 않는다(CC1)', async () => {
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set(['p-priv']))
+    const fake = fakeClient(() => ({ data: [row({ project_id: 'p-priv' })], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    expect((await GET()).status).toBe(404)
+  })
+
+  it('비공개 판정이 실패하면 ZIP 을 만들지 않는다 — 503, 행을 읽지 않는다(CC1, fail-closed)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    const fake = fakeClient(() => ({ data: [row({ project_id: 'p-priv' })], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    const res = await GET()
+    expect(res.status).toBe(503)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(fake.from).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('로그인하지 않은 요청은 JSON 401이며 DB에 접근하지 않는다', async () => {
@@ -229,7 +313,7 @@ describe('GET /api/minutes/export', () => {
     expect(archive.file('_README.txt')).not.toBeNull()
     expect(decodeURIComponent(disposition)).toContain('Acme_PM_회의록_전체')
     expect(await archive.file('_README.txt')!.async('string')).toContain('Acme PM 회의록 전체 내보내기')
-    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith('ws-1')
+    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith(W)
 
     const manifest = await archive.file('_manifest.csv')!.async('string')
     expect(manifest).toContain(source.id)

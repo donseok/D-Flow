@@ -12,7 +12,6 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { failWith } from '@/lib/errors/dbFail'
-import { refreshTeams } from '@/lib/teams/master'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, settingDef, valueOf, type WorkspaceSettingKey } from '@/lib/settings/registry'
@@ -223,9 +222,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       : { ok: false, code: mapped.code, error: mapped.message }
   }
   const r = data as { status: 'applied' | 'duplicate'; project_id: string }
-  // 팀 캐시가 새 프로젝트의 워크스페이스를 바로 알게 한다(SP2 16b) — refreshTeams 는 throw 하지 않는다.
-  await refreshTeams()
-  revalidatePath('/projects')
+  revalidatePath('/(app)/w/[slug]', 'layout')
   return { ok: true, projectId: r.project_id, status: r.status }
 }
 
@@ -260,8 +257,8 @@ export async function updateProject(
   }
   const { error } = await sb.from('projects').update(patch).eq('id', projectId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/projects')
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/w/[slug]', 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -278,8 +275,8 @@ export async function setProjectPrivacy(projectId: string, isPrivate: boolean): 
   const admin = createAdminClient()
   const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/projects')
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/w/[slug]', 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -290,7 +287,7 @@ export async function setBaseDate(projectId: string, baseDate: string | null): P
   const sb = await createServerClient()
   const { error } = await sb.from('projects').update({ base_date: baseDate || null }).eq('id', projectId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -312,7 +309,7 @@ export async function addHoliday(projectId: string, date: string, name: string, 
   const sb = await createServerClient()
   const { error } = await sb.from('holidays').upsert({ project_id: projectId, date, name: label, kind }, { onConflict: 'project_id,date' })
   if (error) return { ok: false, error: failWith('addHoliday', error, ERR_HOLIDAY_SAVE) }
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }
 }
@@ -324,7 +321,7 @@ export async function removeHoliday(projectId: string, date: string): Promise<Ho
   const sb = await createServerClient()
   const { error } = await sb.from('holidays').delete().eq('project_id', projectId).eq('date', date)
   if (error) return { ok: false, error: failWith('removeHoliday', error, ERR_HOLIDAY_REMOVE) }
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }
 }

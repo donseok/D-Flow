@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
-vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => ['PMO', 'ERP'] }))
+vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => ['PMO', 'ERP'], useTeams: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: () => {} }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: toastFn }) }))
 
@@ -77,7 +77,8 @@ describe('KanbanBoard — 진행 모드 기본', () => {
   })
 
   // 잠금 거부는 액션의 한국어 문구가 아니라 사전 문구로 — 영어 화면에 한국어 토스트가 뜨지 않게(사유는 code 로 고른다).
-  it('잠금 거부(code=actual_locked)의 토스트는 사전 문구다 — 그 밖의 실패는 액션 문구 그대로', async () => {
+  // 그 밖의 실패도 액션 문구를 사전 키로 바꿔 그린다(SP4 D21 — src/lib/wbs/actionErrors.ts, tests/ui/wbs-toast-dict.test.tsx).
+  it('잠금 거부(code=actual_locked)의 토스트는 사전 문구다 — 그 밖의 실패도 액션 문구의 사전 키', async () => {
     await act(async () => root.render(
       <KanbanBoard projectId="p1" items={tree()} actorView={ADMIN} today="2026-07-25" />,
     ))
@@ -87,7 +88,7 @@ describe('KanbanBoard — 진행 모드 기본', () => {
     expect(toastFn).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'wbs.actualLocked', variant: 'error' }))
     updateActual.mockResolvedValueOnce({ ok: false, error: '담당 작업이 아님' })
     await act(async () => inc.click())
-    expect(toastFn).toHaveBeenLastCalledWith(expect.objectContaining({ description: '담당 작업이 아님', variant: 'error' }))
+    expect(toastFn).toHaveBeenLastCalledWith(expect.objectContaining({ description: 'wbs.err.notOwner', variant: 'error' }))
   })
 
   it('같은 카드에 대한 재진입(빠른 연속 클릭)은 updateActual을 한 번만 부른다', async () => {

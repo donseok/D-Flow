@@ -26,6 +26,7 @@ vi.mock('@/app/actions/minutes', () => ({
 }))
 
 import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
+import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const folder = (id: string, name: string, parentId: string | null = null, sort = 100, createdBy: string | null = null): MinuteFolder =>
   ({ id, name, parentId, sort, createdBy, projectId: null })
@@ -60,12 +61,14 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
 
   async function mount(over: Partial<Parameters<typeof MinutesExplorer>[0]> = {}) {
     await act(async () => root.render(
-      <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set(['m1'])}
-        onToggleFavorite={onToggle} onRetryFavorites={onRetry}
-        layout="grid"
-        currentUserId="u1" onChanged={onChanged} onFolderSelect={onFolderSelect}
-        teamCodes={['PMO', 'MES', 'ERP']}
-        {...over} />,
+      <MinutesScopeProvider scope={{ workspaceId: 'ws-1', projectId: null }}>
+        <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set(['m1'])}
+          onToggleFavorite={onToggle} onRetryFavorites={onRetry}
+          layout="grid"
+          currentUserId="u1" onChanged={onChanged} onFolderSelect={onFolderSelect}
+          teamCodes={['PMO', 'MES', 'ERP']}
+          {...over} />
+      </MinutesScopeProvider>,
     ))
   }
 
@@ -326,7 +329,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     // f-pmo 는 처음에 자식이 없어 expanded 에 없다 — 펼치지 않으면 옮긴 폴더가 사라져 보인다
     await mount({ isSuperuser: true })
     await dragTo(dropTarget('f-aps'), dropTarget('f-pmo'))
-    expect(moveMinuteFolder).toHaveBeenCalledWith('f-aps', 'f-pmo')
+    expect(moveMinuteFolder).toHaveBeenCalledWith('ws-1', 'f-aps', 'f-pmo')
     // 재조회 결과(부모가 바뀐 트리)로 다시 렌더 — expanded 상태는 유지된다
     await mount({
       isSuperuser: true,
@@ -340,7 +343,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   it('폴더를 전체(루트) 행에 드롭하면 부모 null 로 이동', async () => {
     await mount()
     await dragTo(dropTarget('f-aps'), dropTarget('__root__'))
-    expect(moveMinuteFolder).toHaveBeenCalledWith('f-aps', null)
+    expect(moveMinuteFolder).toHaveBeenCalledWith('ws-1', 'f-aps', null)
   })
 
   it('폴더를 자기 자손에 드롭하면 서버 호출 없이 거부(순환)', async () => {

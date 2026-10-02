@@ -6,7 +6,7 @@ import type { UiPrefs } from '@/lib/domain/types'
 // 무효화했다(2026-08-18 실측). keepalive 라 페이지 이탈 직전 저장도 유실되지 않는다.
 // 실패는 로컬 적용을 되돌리지 않는다(로컬 캐시가 진실) — 다만 경고 한 줄을 남긴다(SP3b 스펙 §4.8 "로컬 적용 유지 + 로그").
 // 4xx·5xx 도 실패다: 세션 만료(401)로 서버값이 옛 값에 머물면 다음 로그인 때 PrefsSync 가 그 값으로 덮는다 — 원인 기록이 있어야 한다.
-function postPrefs(body: { prefs?: Partial<UiPrefs>; wbsCollapse?: { projectId: string; ids: string[] } }): void {
+function postPrefs(body: { prefs?: Partial<UiPrefs>; workspaceId?: string; visits?: string[]; wbsCollapse?: { projectId: string; ids: string[] } }): void {
   void fetch('/api/prefs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -21,7 +21,7 @@ function postPrefs(body: { prefs?: Partial<UiPrefs>; wbsCollapse?: { projectId: 
 let pendingPrefs: Partial<UiPrefs> = {}
 let prefsTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 전역 설정 변경을 병합해 debounce 저장. 실패는 경고만(로컬 캐시가 진실). */
+/** 계정 범위 설정(테마·언어·사이드바 등 — SP3b D9) 변경을 병합해 debounce 저장. 실패는 경고만(로컬 캐시가 진실). */
 export function queueUiPref(patch: Partial<UiPrefs>, delay = 600): void {
   pendingPrefs = { ...pendingPrefs, ...patch }
   if (prefsTimer) clearTimeout(prefsTimer)
@@ -31,6 +31,34 @@ export function queueUiPref(patch: Partial<UiPrefs>, delay = 600): void {
     prefsTimer = null
     postPrefs({ prefs: p })
   }, delay)
+}
+
+const wsPending = new Map<string, Partial<UiPrefs>>()
+const wsVisits = new Map<string, string[]>()
+const wsPrefTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleWorkspace(workspaceId: string, delay: number): void {
+  const t = wsPrefTimers.get(workspaceId)
+  if (t) clearTimeout(t)
+  wsPrefTimers.set(workspaceId, setTimeout(() => {
+    const p = wsPending.get(workspaceId)
+    const visits = wsVisits.get(workspaceId)
+    wsPending.delete(workspaceId); wsVisits.delete(workspaceId); wsPrefTimers.delete(workspaceId)
+    postPrefs({ ...(p && Object.keys(p).length ? { prefs: p } : {}), workspaceId, ...(visits?.length ? { visits } : {}) })
+  }, delay))
+}
+
+/** 워크스페이스 키(즐겨찾기·시작 화면) — 워크스페이스마다 따로 병합·디바운스. 그 화면의 워크스페이스 id 를 넘긴다(쿠키 아님) */
+export function queueWorkspacePref(workspaceId: string, patch: Partial<UiPrefs>, delay = 600): void {
+  wsPending.set(workspaceId, { ...(wsPending.get(workspaceId) ?? {}), ...patch })
+  scheduleWorkspace(workspaceId, delay)
+}
+
+/** 프로젝트 방문(최근 방문 — U2b-2 권한 리뷰 Y1) — 목록이 아니라 방문한 id 만 차례로 모아 같은 워크스페이스의 대기 패치와 한 요청으로 보낸다.
+ *  서버가 자기 행을 읽어 앞에 넣는다(조회 실패·옛 목록으로 덮지 않고, 창 안의 연속 방문이 서로 지우지 않는다) */
+export function queueProjectVisit(workspaceId: string, projectId: string, delay = 600): void {
+  wsVisits.set(workspaceId, [...(wsVisits.get(workspaceId) ?? []), projectId])
+  scheduleWorkspace(workspaceId, delay)
 }
 
 const wbsPending = new Map<string, string[]>()

@@ -1,5 +1,5 @@
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
-import { teamStyle } from '@/lib/domain/teamColor'
+import { teamSlotFor, type TeamColorRef } from '@/lib/domain/teamColor'
 
 /** 칸반 컬럼 — leaf(말단) 작업 카드 묶음. */
 export type KanbanColumn = {
@@ -37,8 +37,9 @@ export function groupByPhase(items: ComputedItem[]): KanbanColumn[] {
 }
 
 /** 담당자별 — 활성 팀 컬럼 + 미배정. leaf는 primary 담당팀마다 들어가고,
- *  primary가 없거나 전부 컬럼 밖 팀(비활성 등)이면 미배정으로 흡수한다(카드 유실 금지). */
-export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[]): KanbanColumn[] {
+ *  primary가 없거나 전부 컬럼 밖 팀(비활성 등)이면 미배정으로 흡수한다(카드 유실 금지).
+ *  colorTeams = 화면 색 슬롯을 정할 팀(SP4 D3 — 화면은 그 범위의 활성 팀, 봇 도구는 넘기지 않는다 = 중립) */
+export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[], colorTeams: readonly TeamColorRef[] = []): KanbanColumn[] {
   const leaves = leavesOf(items)
   const buckets: Record<string, ComputedItem[]> = { 미배정: [] }
   for (const team of teams) buckets[team] = []
@@ -49,7 +50,7 @@ export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[]):
     else known.forEach(team => buckets[team].push(leaf))
   }
   const cols: KanbanColumn[] = teams.map(team => ({
-    key: team, title: team, count: buckets[team].length, cards: buckets[team], accentDot: teamStyle(team).bar,
+    key: team, title: team, count: buckets[team].length, cards: buckets[team], accentDot: teamSlotFor(team, colorTeams).bar,
   }))
   cols.push({ key: '미배정', title: '미배정', count: buckets['미배정'].length, cards: buckets['미배정'], accentDot: 'bg-pending' })
   return cols

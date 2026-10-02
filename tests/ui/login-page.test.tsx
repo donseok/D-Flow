@@ -59,11 +59,11 @@ describe('로그인 화면 제출', () => {
     })
   }
 
-  it('성공하면 /projects 로 이동한 뒤 라우터 캐시를 새로 고친다', async () => {
+  it('성공하면 / (루트 리졸버 — 현재 워크스페이스의 시작 화면)로 이동한 뒤 라우터 캐시를 새로 고친다', async () => {
     mocks.signInWithPassword.mockResolvedValue({ error: null })
     await submit()
     expect(mocks.signInWithPassword).toHaveBeenCalledWith({ email: 'alice@example.com', password: 'pw' })
-    expect(mocks.calls).toEqual(['push:/projects', 'refresh'])
+    expect(mocks.calls).toEqual(['push:/', 'refresh'])
   })
 
   it('실패하면 이동·새로 고침 없이 오류를 보인다', async () => {

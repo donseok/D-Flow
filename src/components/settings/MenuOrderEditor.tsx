@@ -109,7 +109,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
   }
 
   return <div className="space-y-5">
-    <p className="text-xs leading-5 text-ink-muted">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다. 실제 메뉴 반영은 다음 셸 갱신부터 적용됩니다.</p>
+    <p className="text-xs leading-5 text-ink-muted">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다.</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-line p-3">
       <h3 className="mb-3 text-sm font-semibold text-ink">{group.label}</h3>

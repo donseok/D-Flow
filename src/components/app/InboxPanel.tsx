@@ -1,4 +1,4 @@
-// src/components/app/InboxPanel.tsx — 벨 패널 본문. 데이터는 HeaderChrome 이 내려준다(패널은 표현만).
+// src/components/app/InboxPanel.tsx — 벨 패널 본문. 데이터는 NotificationBell 이 내려준다(패널은 표현만).
 'use client'
 
 import Link from 'next/link'
@@ -12,7 +12,8 @@ export function InboxPanel({
 }: {
   items: InboxItem[]
   derived: NotificationItem[]           // 기존 파생 피드(지연·마감) — 이벤트가 아니라 구획 유지
-  unreadAnnouncements: number
+  /** 프로젝트 공지 안읽음 — null 은 모름(조회 실패). 0 으로 바꿔 '알림 없음'을 주장하지 않는다 */
+  unreadAnnouncements: number | null
   projectId: string | null
   loading: boolean
   failed: boolean
@@ -21,7 +22,8 @@ export function InboxPanel({
 }) {
   const { t } = useLocale()
   const unread = items.filter(i => !i.read).length + derived.length
-  const empty = items.length === 0 && derived.length === 0 && unreadAnnouncements === 0
+  const annUnknown = !!projectId && unreadAnnouncements === null
+  const empty = items.length === 0 && derived.length === 0 && !annUnknown && !unreadAnnouncements
 
   return (
     <>
@@ -62,7 +64,12 @@ export function InboxPanel({
                 ))}
               </Section>
             )}
-            {projectId && unreadAnnouncements > 0 && (
+            {annUnknown && (
+              <Section label={t('inbox.announcements')}>
+                <li data-announcements-unknown className="px-4 py-3 text-xs text-ink-muted">{t('inbox.announcementsUnknown')}</li>
+              </Section>
+            )}
+            {projectId && !!unreadAnnouncements && unreadAnnouncements > 0 && (
               <Section label={t('inbox.announcements')}>
                 <li>
                   <Link href={`/p/${projectId}/announcements`} className="flex gap-3 px-4 py-3 transition hover:bg-surface-2">

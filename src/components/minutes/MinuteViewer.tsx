@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ChevronRight, Download, ExternalLink, FolderOpen, History, Maximize2, Minimize2,
@@ -43,7 +44,7 @@ import { MinuteFontSizeControl } from './MinuteFontSizeControl'
 import { useMinuteFontSize } from './useMinuteFontSize'
 import { MinuteVersionPanel, type MinuteVersionListItem } from './MinuteVersionPanel'
 import { MinuteWikiImpactCard, type MinuteWikiImpactCardProps } from './MinuteWikiImpactCard'
-import { teamStyle } from '@/components/wbs/shared'
+import { useTeamSlot } from '@/components/app/TeamsProvider'
 import {
   type IssueMinuteSourceKind,
   type MinuteLinkedIssue,
@@ -100,7 +101,8 @@ export function MinuteViewer({
   versions?: MinuteVersionListItem[]
   /** 버전 목록 조회 실패 사유 — 있으면 versions 는 [] 이고 버전 패널이 사유와 재시도를 띄운다('버전 없음'으로 보이지 않게). */
   versionsError?: string | null
-  wikiImpact?: MinuteWikiImpactCardProps
+  /** null = 위키 모듈이 꺼진 범위(P20) — 카드를 그리지 않는다 */
+  wikiImpact?: MinuteWikiImpactCardProps | null
   historicalVersion?: { id: string; versionNo: number } | null
   issueMembers?: ProjectMember[]
   /** 고정 프로젝트(issueMembers)의 명단 조회 실패 사유 — 있으면 빈 담당자 목록으로 이슈 폼을 열지 않는다. */
@@ -116,8 +118,13 @@ export function MinuteViewer({
   projectWorkspaces?: Record<string, string>
 }) {
   const router = useRouter()
+  // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 목록·상세(범위가 없으면 옛 형식 — minuteLinks)
+  const links = useMinuteLinks()
+  const listHref = links.list
+  const currentHref = links.minute(minute.id)
   const { t } = useLocale()
   const { toast } = useToast()
+  const slotOf = useTeamSlot()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
@@ -674,7 +681,7 @@ export function MinuteViewer({
     const res = await deleteMinute(minute.id)
     setBusy(false)
     if (!res.ok) { setErr(res.error ?? 'error'); return }
-    router.push('/minutes')
+    router.push(listHref)
   }
 
   // 같은 문장을 하이라이트한 사람 명단 — 하이라이트를 누른 시각순이 아니라 가나다순으로 보여준다.
@@ -696,7 +703,7 @@ export function MinuteViewer({
       {/* 메타 헤더 — 메타·액션 단일 행(접기 없음). 좁은 폭에서만 wrap */}
       <div className="card shrink-0 space-y-2 px-4 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Link href="/minutes" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
+          <Link href={listHref} className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
             <ArrowLeft className="h-4 w-4" />{t('min.detail.back')}
           </Link>
           {/* 편철 위치 — 팀 배지와 경로를 테두리 있는 한 덩어리 칩으로 묶어 메타 행 맨 앞에 둔다.
@@ -705,7 +712,7 @@ export function MinuteViewer({
               표시 전용 링크 아님 — 탐색기가 아직 폴더 딥링크(?folder=)를 받지 않는다. */}
           <div className={`inline-flex min-w-0 max-w-[22rem] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 shadow-sm ${
             pathSegments ? 'border-line-strong bg-surface' : 'border-dashed border-line-strong bg-surface/60'}`}>
-            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(minute.teamCode).bar}`}>
+            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(minute.teamCode).bar}`}>
               {minute.teamCode}
             </span>
             <nav aria-label={t('min.detail.pathAria')} title={pathTitle}
@@ -795,7 +802,7 @@ export function MinuteViewer({
           <p className="text-sm font-medium text-ink">
             {t('min.version.viewingBanner').replace('{n}', String(historicalVersion.versionNo))}
           </p>
-          <Link href={`/minutes/${minute.id}`} className="ml-auto text-xs font-medium text-brand hover:text-brand-hover">
+          <Link href={currentHref} className="ml-auto text-xs font-medium text-brand hover:text-brand-hover">
             {t('min.version.backCurrent')}
           </Link>
         </div>
@@ -822,7 +829,7 @@ export function MinuteViewer({
                 loadError={versionsError ? t('min.version.loadFailed') : null}
                 timeZone={timeZone}
               />
-              <MinuteWikiImpactCard {...wikiImpact} embedded timeZone={timeZone} />
+              {wikiImpact && <MinuteWikiImpactCard {...wikiImpact} embedded timeZone={timeZone} />}
             </>
           }
         />
@@ -853,10 +860,10 @@ export function MinuteViewer({
         {/* 글자크기는 CSS 변수로만 내려보낸다 — MarkdownView props 가 그대로여야 재파싱이 없다(스펙 §3) */}
         <div ref={bodyRef} onClick={historicalVersion || minute.archivedAt ? undefined : onBodyClick} className="card min-w-0 flex-1 p-4 xl:overflow-y-auto"
           style={{ '--minutes-fs': `${fs.size}px` } as React.CSSProperties}>
-          <MarkdownView content={minute.bodyMd} marks={marks} />
+          <MarkdownView content={minute.bodyMd} marks={marks} demoteHeadings />
         </div>
         {!focus && !historicalVersion && !minute.archivedAt && (
-          <MinuteChatPanel minuteId={minute.id} projects={projects} />
+          <MinuteChatPanel minuteId={minute.id} projects={projects} workspaceId={minute.workspaceId ?? undefined} />
         )}
       </div>
 

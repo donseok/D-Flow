@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-// teams/master 모듈 초기화 부작용 차단 — folder-path.test.ts 와 동일 관례.
+// service_role 모듈 초기화 부작용 차단 — folder-path.test.ts 와 동일 관례.
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => ({})) }))
 
 import { refileMinuteAfterProjectChange, buildFolderSnapshot } from '@/lib/minutes/folders'

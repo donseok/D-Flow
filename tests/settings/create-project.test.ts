@@ -2,7 +2,7 @@
 // 같은 commandId 재전송은 같은 프로젝트, 결과 반환(throw 없음), 팀 캐시 갱신.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSettingsDb } from '../helpers/fakeSettingsDb'
-const h = vi.hoisted(() => ({ requireWorkspaceAdmin: vi.fn(), requireProjectAdmin: vi.fn(), adminFor: vi.fn(), refreshTeams: vi.fn(async () => true), revalidatePath: vi.fn() }))
+const h = vi.hoisted(() => ({ requireWorkspaceAdmin: vi.fn(), requireProjectAdmin: vi.fn(), adminFor: vi.fn(), revalidatePath: vi.fn() }))
 vi.mock('next/cache', () => ({ revalidatePath: h.revalidatePath }))
 vi.mock('next/server', () => ({ after: (f: () => unknown) => f() }))
 vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin: h.requireWorkspaceAdmin, requireProjectAdmin: h.requireProjectAdmin, getActorViewState: vi.fn() }))
@@ -10,7 +10,6 @@ vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => { throw new Error('createProject 는 adminFor 를 쓴다') }) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => { throw new Error('createProject 는 세션 클라이언트를 쓰지 않는다') }) }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
-vi.mock('@/lib/teams/master', () => ({ refreshTeams: h.refreshTeams }))
 import { createProject, getProjectCopySource, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
@@ -33,7 +32,7 @@ beforeEach(() => {
     .addProject({ id: FOREIGN, workspaceId: OTHER, values: { 'core.level_labels': ['F1'], 'modules.enabled': [] } })
   h.adminFor.mockImplementation((s: Record<string, string>) => ({ ...s, admin: db.client() }))
   h.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: makeActor({ userId: 'u-admin', workspaceRoles: new Map([[WID, 'admin']]) }) })
-  h.refreshTeams.mockClear(); h.revalidatePath.mockClear()
+  h.revalidatePath.mockClear()
   process.env.WIKI_SERVICE_ENABLED = 'true'
 })
 
@@ -54,7 +53,7 @@ describe('createProject', () => {
       'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
     expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(5).fill('create'))
     expect(db.rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_name: 'Acme 신규', p_copy_from: null, p_actor: 'u-admin', p_command_id: CMD, p_schema_version: 1 })
-    expect(h.refreshTeams).toHaveBeenCalledOnce(); expect(h.revalidatePath).toHaveBeenCalledWith('/projects')
+    expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/w/[slug]', 'layout')
   })
   it('같은 commandId 재전송은 duplicate 이고 같은 프로젝트다', async () => {
     const a = await createProject(input()); const b = await createProject(input())
@@ -145,7 +144,6 @@ describe('createProject', () => {
     expect(await createProject(input({ commandId: 'nope' }))).toMatchObject({ ok: false, code: 'CONFIG_INVALID' })
     db.workspaces.delete(WID)
     expect(await createProject(input())).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
-    expect(h.refreshTeams).not.toHaveBeenCalled()
   })
 })
 
@@ -176,7 +174,6 @@ describe('createProject — DB 원문은 응답에 싣지 않는다(로그로)·
     const r = await createProject(input())
     expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE })
     expect(err.mock.calls.some((c) => JSON.stringify(c).includes('secret_tbl'))).toBe(true)
-    expect(h.refreshTeams).not.toHaveBeenCalled()
   })
   it('표에 있는 DB 거부 중 재시도 가능·세대 앞섬은 결과와 함께 로그를 남긴다 — 표시 = 로깅(FM-12)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})

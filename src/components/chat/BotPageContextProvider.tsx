@@ -12,9 +12,14 @@ import {
 } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import type { BotDomain, BotEntityRef, PageContextV1 } from '@/lib/ai/chat/protocol'
+import { parseScopePath, projectSegmentModule } from '@/lib/nav/active'
+import { MODULES, moduleDef } from '@/lib/modules/registry'
+import { requestWorkspaceId } from '@/lib/workspace/requestScope'
+import { useShellScope } from '@/components/app/ShellScope'
 
 const PROJECT_RE = /\/p\/([0-9a-fA-F-]{8,})/
-const MINUTE_RE = /^\/minutes\/([^/?#]+)/
+// 옛 /minutes/<id> 와 새 /w/<slug>/minutes/<id> 두 형식(D6)
+const MINUTE_RE = /^(?:\/w\/[^/]+)?\/minutes\/([^/?#]+)/
 const RESERVED_QUERY_KEYS = new Set(['date', 'from', 'q', 'query', 'search', 'to', 'view', 'week'])
 
 /**
@@ -46,25 +51,21 @@ interface BotPageRegistrationApi {
 const BotPageRegistrationContext = createContext<BotPageRegistrationApi | null>(null)
 const BotPageValueContext = createContext<PageContextV1 | null>(null)
 
-function inferDomain(pathname: string): BotDomain {
-  const projectMenu = pathname.match(/^\/p\/[^/]+\/([^/?#]+)/)?.[1]
-  switch (projectMenu) {
-    case 'dashboard':
-    case 'wbs':
-    case 'kanban':
-    case 'members':
-    case 'attendance':
-    case 'announcements':
-    case 'meetings':
-    case 'weekly':
-    case 'wiki':
-    case 'settings':
-      return projectMenu
+/** 워크스페이스 홈·내 업무·전체 프로젝트는 레지스트리 모듈이 아니라 셸 항목이라 'projects' 로 묶는다 */
+const PROJECTS_SEGMENTS = new Set(['', 'my-work', 'projects'])
+
+/** 경로 → 봇 도메인. 레지스트리(botDomains)에서 파생한다(D27) — 모르면 'unknown' */
+export function inferDomain(pathname: string): BotDomain {
+  const scope = parseScopePath(pathname)
+  if (scope?.scope === 'project') {
+    const owner = projectSegmentModule(scope.rest[0] ?? '')
+    return (owner && moduleDef(owner).botDomains[0]) || 'unknown'
   }
-  if (pathname === '/' || pathname.startsWith('/projects')) return 'projects'
-  if (pathname.startsWith('/minutes')) return 'minutes'
-  if (pathname.startsWith('/meetings')) return 'meetings'
-  return 'unknown'
+  const seg = scope?.scope === 'workspace' ? (scope.rest[0] ?? '') : (pathname.split('?')[0].split('#')[0].split('/')[1] ?? '')
+  if (scope?.scope === 'workspace' && PROJECTS_SEGMENTS.has(seg)) return 'projects'
+  if (!scope && (pathname === '/' || seg === 'projects')) return 'projects'
+  const owner = MODULES.find((m) => m.nav?.workspace?.segment.split('/')[0] === seg)
+  return (owner && owner.botDomains[0]) || 'unknown'
 }
 
 function queryFilters(searchParams: URLSearchParams): PageContextV1['filters'] {
@@ -87,15 +88,18 @@ function inferSelectedEntity(pathname: string, domain: BotDomain, searchParams: 
   return null
 }
 
-function buildUrlContext(pathname: string, searchParams: URLSearchParams): PageContextV1 {
+/** URL 문맥 + 셸 범위의 워크스페이스(D27·D26) — 프로젝트 화면은 null(프로젝트가 판정), 그 밖은 경로 슬러그와 맞는 게시 범위만(requestWorkspaceId) */
+function buildUrlContext(pathname: string, searchParams: URLSearchParams, workspaceId: string | null): PageContextV1 {
   const domain = inferDomain(pathname)
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const projectId = pathname.match(PROJECT_RE)?.[1] ?? null
   return {
     contextVersion: 1,
     pathname,
     domain,
-    projectId: pathname.match(PROJECT_RE)?.[1] ?? null,
+    projectId,
+    workspaceId: projectId ? null : workspaceId,
     selectedEntity: inferSelectedEntity(pathname, domain, searchParams),
     view: searchParams.get('view'),
     date: searchParams.get('date'),
@@ -118,9 +122,12 @@ function mergeContext(base: PageContextV1, entries: RegistrationEntry[]): PageCo
     }), {})
 
   const filters = override.filters === undefined ? base.filters : override.filters
+  const projectId = override.projectId === undefined ? base.projectId : override.projectId
   return {
     ...base,
     ...override,
+    // 프로젝트가 정해지면 워크스페이스를 싣지 않는다 — 판정은 프로젝트가 하고, 섞이면 서버가 조합 불일치(404)로 닫는다(과제 34)
+    workspaceId: projectId ? null : (override.workspaceId === undefined ? base.workspaceId : override.workspaceId),
     // Once a mounted page registers filters, its live UI state is authoritative.
     // In particular `{}` must clear stale query-string filters after an "전체" selection.
     filters: filters && Object.keys(filters).length ? filters : undefined,
@@ -133,6 +140,7 @@ export function BotPageContextProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/'
   const searchParams = useSearchParams()
   const searchKey = searchParams.toString()
+  const workspaceId = requestWorkspaceId(pathname, useShellScope())
   const registrations = useRef(new Map<symbol, RegistrationEntry>())
   const orderRef = useRef(0)
   const [revision, setRevision] = useState(0)
@@ -153,10 +161,10 @@ export function BotPageContextProvider({ children }: { children: ReactNode }) {
 
   const pageContext = useMemo(() => {
     const params = new URLSearchParams(searchKey)
-    return mergeContext(buildUrlContext(pathname, params), [...registrations.current.values()])
+    return mergeContext(buildUrlContext(pathname, params, workspaceId), [...registrations.current.values()])
     // revision invalidates memo when a registration changes; the value itself lives in a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchKey, revision])
+  }, [pathname, searchKey, revision, workspaceId])
 
   // register/unregister는 deps 없는 useCallback이라 API 객체는 마운트 동안 불변이다.
   const registrationApi = useMemo(() => ({ register, unregister }), [register, unregister])

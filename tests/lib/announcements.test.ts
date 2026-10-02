@@ -10,7 +10,7 @@ vi.mock('@/lib/settings/projectConfig', async () => {
 })
 
 import { createServerClient } from '@/lib/supabase/server'
-import { ERR_ANNOUNCEMENTS_LOAD, getAnnouncements, getTopAnnouncements } from '@/lib/data/announcements'
+import { ERR_ANNOUNCEMENTS_LOAD, getAnnouncements } from '@/lib/data/announcements'
 
 type Reply = { data: unknown[] | null; error: { message: string } | null }
 
@@ -62,25 +62,6 @@ describe('getAnnouncements — 실패를 결과로 돌려준다', () => {
     makeSb({ data: null, error: { message: 'boom' } })
     expect(ERR_ANNOUNCEMENTS_LOAD).toBe('공지를 불러오지 못했습니다.')
     expect(await getAnnouncements('p1')).toEqual({ ok: false, error: '공지를 불러오지 못했습니다.' })
-    expect(errSpy).toHaveBeenCalledTimes(1)
-    expect(errSpy.mock.calls[0].join(' ')).toContain('boom')
-  })
-})
-
-describe('getTopAnnouncements — 실패를 결과로 돌려준다', () => {
-  it('성공은 { ok: true, rows } — 표시 컬럼만, limit 은 DB 에서', async () => {
-    const calls = makeSb({ data: [{ id: 'a1', title: '킥오프 안내', category: 'event', is_pinned: null }], error: null })
-    expect(await getTopAnnouncements('p1', 3)).toEqual({
-      ok: true,
-      rows: [{ id: 'a1', title: '킥오프 안내', category: 'event', isPinned: false }],
-    })
-    expect(calls.limit).toBe(3)
-    expect(errSpy).not.toHaveBeenCalled()
-  })
-
-  it('조회 실패는 로그 후 { ok: false, error: ERR_ANNOUNCEMENTS_LOAD }', async () => {
-    makeSb({ data: null, error: { message: 'boom' } })
-    expect(await getTopAnnouncements('p1')).toEqual({ ok: false, error: '공지를 불러오지 못했습니다.' })
     expect(errSpy).toHaveBeenCalledTimes(1)
     expect(errSpy.mock.calls[0].join(' ')).toContain('boom')
   })

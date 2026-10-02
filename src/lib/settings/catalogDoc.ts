@@ -47,7 +47,8 @@ function operationalSection(): string {
 
 function personalSection(): string {
   return [row(cols), row(cols.map(() => '---')), ...PERSONAL_PREFS.map(pref => row([
-    code(pref.key), '개인', '본인', '계정·화면', '개인 선호 저장소', pref.desc, '개인 설정 API',
+    code(pref.key), `개인·${pref.scope}`, '본인', '계정·화면',
+    pref.scope === '계정' ? '계정 개인 설정(자기 행)' : '워크스페이스 개인 설정(그 워크스페이스 행)', pref.desc, '개인 설정 API',
     '사용자 화면', 'immediate', '표시만', '—', 'stored', 'SP3b / SPU1',
   ]))].join('\n')
 }

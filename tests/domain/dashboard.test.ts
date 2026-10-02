@@ -230,31 +230,8 @@ describe('보강 — 경계·필드 검증', () => {
 })
 
 import {
-  progressMatrix, varianceRanking, milestoneTimeline, delayAging, dataHygiene,
+  varianceRanking, milestoneTimeline, delayAging, dataHygiene,
 } from '@/lib/domain/dashboard'
-
-describe('progressMatrix (Phase × 팀)', () => {
-  const TEAMS = ['PMO', 'ERP', 'MES', '가공'] as const
-  const phase = leaf({
-    name: 'Phase1', rolledActualPct: 40, plannedPct: 50,
-    children: [
-      leaf({ owners: [{ team: 'ERP', kind: 'primary' }], rolledActualPct: 60, plannedPct: 70 }),
-      leaf({ owners: [{ team: 'ERP', kind: 'support' }, { team: 'MES', kind: 'primary' }], rolledActualPct: 20, plannedPct: 30 }),
-    ],
-  })
-  it('셀 = 담당 leaf 평균(primary+support 모두), 무배정 팀은 null', () => {
-    const rows = progressMatrix([phase], TEAMS)
-    expect(rows).toHaveLength(1)
-    expect(rows[0].cells[0]).toBeNull()                                    // PMO
-    expect(rows[0].cells[1]).toEqual({ pct: 40, planned: 50, count: 2 })   // ERP: (60+20)/2
-    expect(rows[0].cells[2]).toEqual({ pct: 20, planned: 30, count: 1 })   // MES
-    expect(rows[0].cells[3]).toBeNull()                                    // 가공
-  })
-  it('행 요약 = Phase 롤업값과 편차', () => {
-    const r = progressMatrix([phase], TEAMS)[0]
-    expect(r.overall).toBe(40); expect(r.planned).toBe(50); expect(r.variance).toBe(-10)
-  })
-})
 
 describe('varianceRanking (마감 전 따라잡기 후보)', () => {
   const today = '2026-07-09'

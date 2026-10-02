@@ -17,10 +17,8 @@ export function PageHero({
   heroKpis?: ReactNode
 }) {
   return (
-    // 컴팩트 화면에선 숨김 — 헤더가 현재 위치를 보여줘 세로 공간을 아낀다(2026-08-21).
-    // 기준은 크롬 압축(useCompactViewport COMPACT_MQ)과 동일: 폭≥1280 그리고 높이≥800 일 때만 표시.
-    // lg: 같은 폭 전용 유틸을 쓰면 낮은 랩탑 화면에서 새 나온다(높이 조건이 없어서).
-    <section className="hidden gap-4 [@media(min-width:1280px)_and_(min-height:800px)]:grid">
+    // 모든 뷰포트에서 보이는 h1(D18, 스펙 §9 ④) — 컴팩트에서 숨기던 분기(2026-08-21)를 지웠다. 제목 문구 정리는 화면 소유 SP
+    <section className="grid gap-4">
       <div className="flex flex-col border-b border-border bg-surface px-6 py-3 sm:px-8">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">

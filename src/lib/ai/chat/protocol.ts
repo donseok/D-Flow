@@ -66,6 +66,8 @@ export interface PageContextV1 {
   pathname: string
   domain: BotDomain
   projectId: string | null
+  /** 셸 범위의 워크스페이스(SP3b D27) — 과제 34 가 ShellScope 에서 채운다. 서버는 이 값을 믿지 않고 소속 판정 뒤에만 쓴다 */
+  workspaceId?: string | null
   /**
    * 전역 화면(예: /meetings)에서 사용자가 고른 프로젝트. URL의 projectId와 달리
    * 목록 필터가 아니라 상세 힌트다. untyped filters 사이드채널(리뷰 M-4) 대신
@@ -97,6 +99,8 @@ export interface ConversationStateV1 {
 
 export interface ChatRequestV2 {
   projectId: string | null
+  /** 프로젝트 없는 질문의 워크스페이스(셸 범위, D26) — 화면 문맥의 workspaceId 가 우선한다. 서버는 소속 판정 뒤에만 쓴다 */
+  workspaceId?: string | null
   message: string
   history: ChatMessage[]
   pageContext?: PageContextV1
@@ -273,6 +277,7 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     if (selectedProjectId === undefined || selectedProjectId === '') return null
   }
   const selectedEntity = value.selectedEntity === null ? null : sanitizeEntity(value.selectedEntity)
+  const workspaceId = nullableString(value.workspaceId, MAX_ID)
   const view = nullableString(value.view, 128)
   const date = validDate(value.date)
   const weekStart = validDate(value.weekStart)
@@ -290,6 +295,7 @@ function sanitizePageContext(value: unknown): PageContextV1 | null | 'unsupporte
     pathname,
     domain,
     projectId: projectId ?? null,
+    ...(workspaceId !== undefined ? { workspaceId } : {}),
     ...(selectedProjectId !== undefined ? { selectedProjectId } : {}),
     ...(value.selectedEntity !== undefined ? { selectedEntity } : {}),
     ...(view !== undefined ? { view } : {}),
@@ -368,10 +374,13 @@ export function sanitizeChatRequestV2(raw: unknown): ChatRequestValidationResult
   if (pageContext === null || conversationState === null) {
     return { ok: false, error: { code: 'INVALID_REQUEST', message: '문맥 형식이 잘못되었습니다.', status: 400 } }
   }
+  // 프로젝트 없는 질문의 워크스페이스(D26) — 페이지 문맥의 workspaceId 와 같은 규칙(문자열·null 만, 그 밖은 버린다). 소속·형식 판정은 라우트의 관문
+  const workspaceId = nullableString(raw.workspaceId, MAX_ID)
   return {
     ok: true,
     value: {
       projectId: projectId ?? null,
+      ...(workspaceId !== undefined ? { workspaceId } : {}),
       message,
       history: sanitizeHistory(raw.history),
       ...(pageContext ? { pageContext } : {}),

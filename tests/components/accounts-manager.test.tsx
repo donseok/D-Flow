@@ -56,10 +56,10 @@ describe('AccountsManager', () => {
     container.remove()
   })
 
-  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], canManageAdmins = true) {
+  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], platformOps = true) {
     act(() => {
       root.render(<AccountsManager accounts={rows} projectId="p-1" workspaceId="ws-1"
-        projects={[{ id: 'p-1', name: 'Acme' }]} canManageAdmins={canManageAdmins} currentUserId="u-bob" />)
+        projects={[{ id: 'p-1', name: 'Acme' }]} canPlatformOps={platformOps} currentUserId="u-bob" />)
     })
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
@@ -75,10 +75,16 @@ describe('AccountsManager', () => {
     expect(hs.some(h => h.includes('팀'))).toBe(false)
   })
 
-  it('플랫폼 관리자 열은 슈퍼유저에게만 보인다', () => {
+  it('플랫폼 조작(플랫폼 관리자 열·비번 리셋)은 플랫폼 관리자에게만 그린다 — 워크스페이스 관리자에게는 거부될 버튼을 보이지 않는다(D22)', () => {
     render(undefined, false)
     expect(headers()).not.toContain('플랫폼 관리자')
+    expect(headers()).not.toContain('작업')
     expect(container.querySelector('[data-platform-admin-toggle]')).toBeNull()
+    expect(container.textContent).not.toContain('비번 리셋')
+    act(() => root.unmount()); root = createRoot(container)
+    render()
+    expect(headers()).toContain('작업')
+    expect(row('u-alice').textContent).toContain('비번 리셋')
   })
 
   it('워크스페이스 역할 토글은 반대 등급으로 setWorkspaceRole(workspaceId, userId, role) 을 부른다', async () => {
@@ -146,6 +152,16 @@ describe('AccountsManager', () => {
     expect(cell.closest('a')?.getAttribute('href')).toBe('/p/p-1/members')
     expect(row('u-bob').querySelector('[data-access-role]')!.textContent).toContain('조회')
     expect(row('u-carol').querySelector('select')).toBeNull()
+  })
+
+  it('계정 추가의 프로젝트 관리자 옵션은 워크스페이스 관리자도 고를 수 있다 — 서버 규칙(requireWorkspaceAdmin)과 같다(U2a-4 T3)', async () => {
+    render(undefined, false)
+    const btn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('계정 추가'))!
+    await click(btn)
+    const admin = Array.from(document.body.querySelectorAll('option')).find(o => o.value === 'admin' && o.textContent?.includes('관리자'))!
+    expect(admin).toBeTruthy()
+    expect(admin.disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('슈퍼유저 전용')
   })
 
   it('일괄 등록 안내는 이메일, 권한, 초기비번[, 이름] 형식이다', async () => {

@@ -48,6 +48,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   task_dependencies: inAP,
   teams: `t.workspace_id = ${A}`,
   usage_events: `(${inAP} or t.user_id in ${A_ONLY})`,
+  account_preferences: `t.user_id in ${A_ONLY}`,
   user_preferences: `t.user_id in ${A_ONLY}`,
   user_wbs_state: inAP, wbs_embeddings: inAP, wbs_items: inAP, wbs_progress_snapshots: inAP,
   weekly_report_rows: inAP,
@@ -94,6 +95,9 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   // WITH CHECK 가 소유자 비교로 시작하는 표 — 자기 이름으로 넣어 뒤의 프로젝트·워크스페이스 판정을 태운다
   { table: 'issues', sql: `insert into public.issues (project_id, title, created_by) values ('${F.projects.a}', 'RLS 침입', $1)` },
   { table: 'meetings', sql: `insert into public.meetings (project_id, title, meeting_date, created_by) values ('${F.projects.a}', 'RLS 침입', '2026-09-01', $1)` },
+  // account_preferences 는 워크스페이스 열이 없다 — 소유자 비교가 곧 스코프 전부라 자기 이름 insert 는 정당한 쓰기다. 그래서 탐침은 B 계정이
+  // A 계정(행 없는 wsAdmin — 고유 위반이 RLS 보다 먼저 나지 않게)의 행을 쓰는 것이고, RLS 거부여야 한다(SP3b D9)
+  { table: 'account_preferences', sql: `insert into public.account_preferences (user_id, prefs) values ('${F.users.wsAdmin}', jsonb_build_object('probe', $1::text))` },
   { table: 'user_preferences', sql: `insert into public.user_preferences (user_id, workspace_id, prefs) values ($1, '${F.ws}', '{}')` },
   { table: 'issue_updates', sql: `insert into public.issue_updates (issue_id, project_id, body, author_name, author_user_id) values ('${F.rows.issue}', '${F.projects.a}', 'RLS 침입', 'rls', $1)` },
   // user_id·asked_by 는 컬럼 권한이 없고 기본값이 auth.uid() 다 — 열린 컬럼만 넣는다

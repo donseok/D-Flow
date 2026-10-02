@@ -89,7 +89,7 @@ const actorWith = (roles: Array<[string, ProjectRole]>, over: Partial<Actor> = {
 const onlyInB = actorWith([[PB, 'member']])
 const inA = actorWith([[PA, 'member']])
 const inBoth = actorWith([[PA, 'member'], [PB, 'member']])
-/** WA 에만 소속 — 무프로젝트 생성은 유일 워크스페이스가 필요하다. */
+/** WA 에만 소속 — 무프로젝트 생성은 화면의 워크스페이스(인자 WA)로 쓴다(D26). */
 const soloA = makeActor({
   workspaceRoles: new Map([[WA, 'member']]), projectWorkspace: new Map([[PA, WA]]),
   projectRoles: new Map<string, ProjectRole>([[PA, 'member']]),
@@ -265,10 +265,10 @@ describe('담당 팀 — 대상 범위(프로젝트, 미지정이면 워크스�
   it('createMinute 무프로젝트(WA): WB 의 팀 코드는 거부, WA 의 팀은 쓰기 단계로 간다', async () => {
     seedDb()
     getActor.mockResolvedValue(soloA)
-    expect(await createMinute({ ...input, teamCode: 'ERP', projectId: null } as never))
+    expect(await createMinute({ ...input, teamCode: 'ERP', projectId: null } as never, null, undefined, WA))
       .toEqual({ ok: false, error: '잘못된 담당입니다.' })
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
-    expect(await createMinute({ ...input, teamCode: 'PMO', projectId: null } as never))
+    expect(await createMinute({ ...input, teamCode: 'PMO', projectId: null } as never, null, undefined, WA))
       .toMatchObject({ ok: false, error: ADMIN_REACHED })
   })
 
@@ -293,7 +293,7 @@ describe('담당 팀 — 대상 범위(프로젝트, 미지정이면 워크스�
     mocks.workspaceTeams.mockImplementation(() => { throw new Error('팀 마스터를 아직 불러오지 못했습니다.') })
     seedDb()
     getActor.mockResolvedValue(soloA)
-    expect(await createMinute({ ...input, teamCode: 'PMO', projectId: null } as never))
+    expect(await createMinute({ ...input, teamCode: 'PMO', projectId: null } as never, null, undefined, WA))
       .toEqual({ ok: false, error: '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
     spy.mockRestore()
@@ -302,9 +302,9 @@ describe('담당 팀 — 대상 범위(프로젝트, 미지정이면 워크스�
   it('renameMinuteFolder: 루트 예약어는 그 폴더 워크스페이스의 팀만 — WB 팀 이름은 WA 의 앵커가 아니다', async () => {
     const db = seedDb()
     getActor.mockResolvedValue(inA)
-    expect(await renameMinuteFolder('wa-legacy', 'PMO')).toMatchObject({ ok: false })
+    expect(await renameMinuteFolder(WA, 'wa-legacy', 'PMO')).toMatchObject({ ok: false })
     expect(db.calls.minute_folders).not.toContain('update')
-    expect((await renameMinuteFolder('wa-legacy', 'ERP')).ok).toBe(true)
+    expect((await renameMinuteFolder(WA, 'wa-legacy', 'ERP')).ok).toBe(true)
     expect(db.calls.minute_folders).toContain('update')
   })
 })
@@ -341,7 +341,7 @@ describe('교차 워크스페이스 이동 — 트리거까지 가지 않고 쓰
     const rpc = vi.fn()
     mocks.createAdminClient.mockReset()
     mocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
-    const r = await assignMinutesProject([M], PB)
+    const r = await assignMinutesProject(WA, [M], PB)
     expect(r).toMatchObject({ ok: true, updated: 0, skipped: [{ id: M, reason: CROSS_WS }] })
     expect(rpc).not.toHaveBeenCalled()
   })
@@ -349,7 +349,7 @@ describe('교차 워크스페이스 이동 — 트리거까지 가지 않고 쓰
   it('moveMinuteFolder: WA 폴더를 WB 폴더 아래로 — update 미도달', async () => {
     const db = seedDb()
     getActor.mockResolvedValue(inBoth)
-    expect(await moveMinuteFolder('wa-free', 'wb-sub'))
+    expect(await moveMinuteFolder(WA, 'wa-free', 'wb-sub'))
       .toEqual({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
     expect(db.calls.minute_folders).not.toContain('update')
   })
@@ -365,7 +365,7 @@ describe('팀 목록 조회 실패 — 폴더 루트 예약어 판정도 빈 목
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const db = seedDb()
     getActor.mockResolvedValue(inA)
-    expect(await renameMinuteFolder('wa-legacy', 'PMO')).toEqual({ ok: false, error: TEAMS_DOWN })
+    expect(await renameMinuteFolder(WA, 'wa-legacy', 'PMO')).toEqual({ ok: false, error: TEAMS_DOWN })
     expect(db.calls.minute_folders).not.toContain('update')
     spy.mockRestore()
   })
@@ -374,7 +374,7 @@ describe('팀 목록 조회 실패 — 폴더 루트 예약어 판정도 빈 목
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const db = seedDb()
     getActor.mockResolvedValue(inA)
-    expect(await moveMinuteFolder('wa-free', null)).toEqual({ ok: false, error: TEAMS_DOWN })
+    expect(await moveMinuteFolder(WA, 'wa-free', null)).toEqual({ ok: false, error: TEAMS_DOWN })
     expect(db.calls.minute_folders).not.toContain('update')
     spy.mockRestore()
   })

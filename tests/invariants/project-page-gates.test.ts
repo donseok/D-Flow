@@ -12,11 +12,15 @@
 // 게이트 = `if (…) notFound()|redirect(…)` 한 줄 중 조건이 거부형·은닉형인 것만: `!isProjectMember(`·`!isProjectAdmin(`·`!roleIn(`,
 // `isHiddenProject(`(부정 없이), 또는 그 판정을 담은 변수를 같은 방향으로 쓴 것(허용 판정 변수는 `!v`, 은닉 판정 변수는 `v`,
 // require* 결과는 `!v.ok`). 역전된 조건(`if (isProjectAdmin(…)) redirect`)은 권한 있는 사람을 돌려보내고 없는 사람을 통과시키므로
-// 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다).
+// 게이트가 아니다. 위치는 줄 번호로만 본다(흐름 분석은 하지 않는다). `!canViewAgents(` 같은 워크스페이스 단위 판정은 프로젝트 하나의 가시성이
+// 아니므로 게이트로 세지 않는다(U2a-4 리뷰 T1) — /w/[slug]/agents 는 그 앞의 `await loadWorkspaceScope` 가 게이트다.
+// /w/[slug]/** 페이지(그 루트 아래 파일만 — /p/[projectId] 는 숨김 프로젝트 게이트가 따로 있어야 한다, U2a-3 리뷰 V3)는 `await loadWorkspaceScope(slug)` 한 줄도 게이트다(SP3b E19) — 슬러그 조회가 세션 RLS(workspaces_read)라 보이지
+// 않는 워크스페이스는 0행 → notFound(), 보여도 역할이 없으면 notFound() 를 그 함수 안에서 던진다. 열화(권한 조회 실패)여도 슬러그 조회는
+// RLS 로 했으므로 그 워크스페이스가 보이는 사람만 다음 줄로 간다. await 없이 부르면 흐름을 끊지 않으므로 게이트가 아니다.
 import { describe, it, expect } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { codeLines, walk } from './_walk'
 
 const CWD = process.cwd()
@@ -34,6 +38,8 @@ const ALLOWLIST: Record<string, string> = {}
 const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isHiddenProject\(/
 const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
+/** 그 호출 자체가 거부(notFound)를 던지는 범위 판정 — 끝까지 기다려야 게이트다 */
+const GATE_CALL = /\bawait\s+loadWorkspaceScope\(/
 const IMPORT_RE = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/gm
 /** re-export — `export { a, type B } from '…'`·`export * from '…'`·`export * as ns from '…'`. `export type { … } from` 은 값이 아니다. */
 const REEXPORT_RE = /^\s*export\s+(type\s+)?(\{[\s\S]*?\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/gm
@@ -119,10 +125,12 @@ function reachesServiceRole(abs: string, useSafe = true): boolean {
   return hit
 }
 
-/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. 조건이 거부형·은닉형일 때만 게이트로 센다. */
-function firstGateLine(lines: string[], bodyStart = 0): number {
+/** 게이트 줄 번호(없으면 -1) — bodyStart 이후만 본다. 조건이 거부형·은닉형일 때만 게이트로 센다.
+ *  scopeCall — 범위 판정 호출(GATE_CALL)을 게이트로 셀지. /w/[slug] 루트 아래 페이지만 참이다(기본 거짓 — fail-closed) */
+function firstGateLine(lines: string[], bodyStart = 0, { scopeCall = false }: { scopeCall?: boolean } = {}): number {
   const vars: Array<{ name: string; kind: GateVarKind }> = []
   for (let i = bodyStart; i < lines.length; i++) {
+    if (scopeCall && GATE_CALL.test(lines[i])) return i
     const v = lines[i].match(GATE_VAR)
     if (v) vars.push({ name: v[1], kind: gateVarKind(v[2]) })
     const g = lines[i].match(GATE_IF)
@@ -142,7 +150,7 @@ function pageReport(abs: string) {
   const imports = valueImports(lines, abs)
   const bodyStart = imports.length ? Math.max(...imports.map((i) => i.endLine)) + 1 : 0
   const symbols = imports.filter((i) => i.module !== null && reachesServiceRole(i.module)).flatMap((i) => i.names)
-  const gate = firstGateLine(lines, bodyStart)
+  const gate = firstGateLine(lines, bodyStart, { scopeCall: abs.startsWith(WORKSPACE_PAGES_ROOT + sep) })
   const uses = symbols.map((s) => ({ symbol: s, line: firstUseLine(lines, [s], bodyStart) })).filter((u) => u.line >= 0)
   return { symbols, gate, uses }
 }
@@ -168,17 +176,18 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(pages().map(rel)).toContain('src/app/(app)/p/[projectId]/settings/page.tsx')
   })
 
-  it('분석이 알려진 원천을 잡는다 — 팀 캐시·admin 로더·서버 컴포넌트 경유', () => {
+  it('분석이 알려진 원천(admin 로더)을 잡고, 세션 해석기로 옮긴 팀 원천은 잡지 않는다', () => {
     const at = (p: string) => pageReport(join(PAGES_ROOT, p)).symbols
-    expect(at('members/page.tsx')).toContain('teamsForProjectSync')
+    // SP4 B — 명단의 팀 후보는 요청 범위 원천(세션 해석기)이다
+    expect(at('members/page.tsx')).not.toContain('teamsForProjectSync')
     expect(at('settings/page.tsx')).toContain('assistantIndexStatus')
     // SP4 A1 과제 32 — 설정 페이지의 팀 절은 요청 범위 원천(세션 해석기)으로 옮겨 옛 service_role 팀 캐시를 더는 읽지 않는다
     expect(at('settings/page.tsx')).not.toEqual(expect.arrayContaining(['projectTeamRowsSync']))
     expect(at('settings/page.tsx')).not.toEqual(expect.arrayContaining(['workspaceTeamsForProjectSync']))
     expect(at('agents/office/page.tsx')).toContain('getProjectOffice')
     expect(at('agents/page.tsx')).toContain('getAgentHub')
-    // DashboardView 는 서버 컴포넌트라 렌더 중에 팀 캐시를 읽는다 — 페이지 파일에 캐시 호출이 없어도 원천이다.
-    expect(at('dashboard/page.tsx')).toContain('DashboardView')
+    // SP4 B — 개요의 팀은 세션 해석기라 원천이 아니다
+    expect(at('dashboard/page.tsx')).not.toContain('DashboardView')
     // 'use server' 경계 — 서버 액션은 자기 가드를 건다.
     expect(at('members/page.tsx')).not.toContain('listRoster')
   })
@@ -226,15 +235,51 @@ describe('프로젝트 화면 — service_role 원천 앞의 가시성 게이트
     expect(firstGateLine(src('if (!degraded && isHiddenProject(m, pid)) notFound()'))).toBe(0)
   })
 
+  it('판정기 — /w/[slug] 의 await loadWorkspaceScope(…) 는 게이트, await 없는 호출·주석은 아니다', () => {
+    const src = (body: string) => codeLines(body)
+    const ws = { scopeCall: true }
+    expect(firstGateLine(src('const { slug } = await params\nconst scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(scope.ws.id)'), 0, ws)).toBe(1)
+    expect(firstGateLine(src('const p = loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'), 0, ws)).toBe(-1)
+    expect(firstGateLine(src('// const scope = await loadWorkspaceScope(slug)\nconst x = await getMinutesPage(w)'), 0, ws)).toBe(-1)
+  })
+  it('판정기 — /p/[projectId] 페이지(scopeCall 거짓)에서는 loadWorkspaceScope 가 게이트가 아니다 — 숨김 프로젝트 게이트가 따로 있어야 한다(V3)', () => {
+    const src = (body: string) => codeLines(body)
+    expect(firstGateLine(src('const scope = await loadWorkspaceScope(slug)\nconst x = await getAgentHub(pid)'))).toBe(-1)
+    // 실제 분석 — 프로젝트 루트 파일은 scopeCall 없이, 워크스페이스 루트 파일은 scopeCall 로 본다
+    const dir = mkdtempSync(join(tmpdir(), 'page-gates-root-'))
+    try {
+      const f = join(dir, 'page.tsx')
+      writeFileSync(f, "import { getAgentHub } from '@/lib/data/agentHub'\nexport default async function P() {\n  const scope = await loadWorkspaceScope(slug)\n  return getAgentHub(scope.ws.id)\n}\n")
+      expect(pageReport(f).gate).toBe(-1)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+    expect(pageReport(join(WORKSPACE_PAGES_ROOT, 'agents/page.tsx')).gate).toBeGreaterThan(-1)
+  })
+
+  it('워크스페이스 단위 판정(!canViewAgents()은 게이트가 아니다 — 프로젝트 하나의 가시성이 아니다(T1). /w/[slug]/agents 는 loadWorkspaceScope 가 게이트', () => {
+    expect(firstGateLine(["  if (!scope.actor || !canViewAgents(scope.actor, scope.ws.id)) redirect(wsHref(slug))"])).toBe(-1)
+    expect(firstGateLine(["  if (!canViewAgents(actor, w)) redirect('/x')"], 0, { scopeCall: true })).toBe(-1)
+    // 실제 분석 — /p 꼴 파일에서 canViewAgents 거부 뒤 service_role 로더는 게이트 없음으로 잡힌다
+    const dir = mkdtempSync(join(tmpdir(), 'page-gates-agents-'))
+    try {
+      const f = join(dir, 'page.tsx')
+      writeFileSync(f, "import { getAgentHub } from '@/lib/data/agentHub'\nexport default async function P() {\n  if (!canViewAgents(actor, actor.projectWorkspace.get(pid))) redirect('/')\n  return getAgentHub(pid)\n}\n")
+      expect(pageReport(f).gate).toBe(-1)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+    // 좌석표 페이지는 첫 줄(loadWorkspaceScope)이 게이트다 — canViewAgents 줄보다 앞
+    const agents = join(WORKSPACE_PAGES_ROOT, 'agents/page.tsx')
+    const lines = code(agents)
+    expect(pageReport(agents).gate).toBe(lines.findIndex((l) => /await loadWorkspaceScope\(/.test(l)))
+  })
+
   it('분석 — re-export 배럴(`export { x } from`·`export * from`)도 간선으로 따라가고, type 만 내보내는 배럴은 따라가지 않는다', () => {
     const dir = mkdtempSync(join(tmpdir(), 'page-gates-'))
     try {
-      const master = relative(dir, join(CWD, 'src/lib/teams/master'))
+      const adminModule = relative(dir, join(CWD, 'src/lib/supabase/admin'))
       const write = (name: string, body: string) => { writeFileSync(join(dir, name), body); return join(dir, name) }
-      expect(reachesServiceRole(write('named.ts', `export { teamsForProjectSync } from '${master}'\n`))).toBe(true)
-      expect(reachesServiceRole(write('star.ts', `export * from '${master}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('named.ts', `export { createAdminClient } from '${adminModule}'\n`))).toBe(true)
+      expect(reachesServiceRole(write('star.ts', `export * from '${adminModule}'\n`))).toBe(true)
       expect(reachesServiceRole(write('nested.ts', `export * from './named'\n`))).toBe(true)
-      expect(reachesServiceRole(write('types.ts', `export type { TeamCode } from '${master}'\nexport { type Team } from '${master}'\n`))).toBe(false)
+      expect(reachesServiceRole(write('types.ts', `export type { TeamCode } from '${adminModule}'\nexport { type Team } from '${adminModule}'\n`))).toBe(false)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

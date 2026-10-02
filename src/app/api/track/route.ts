@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireModule, requireSessionModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { trackingEnabled, usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
 import { extractProjectId, normalizeUsagePath, resolveMenuKey } from '@/lib/domain/usageMenu'
 import {
@@ -18,8 +19,8 @@ const MAX_PATH_LEN = 512
  * 사용 기록 수집 — 라우트 전환 1건당 1행.
  *
  * /api/** 는 middleware matcher 밖이라 여기서 직접 인증한다.
- * 본문은 경로만 받는다: 사용자 id·메뉴 키·프로젝트 id 는 전부 서버가 판정한다.
- * 클라이언트가 보낸 식별자를 그대로 쓰면 남의 이름으로 기록을 남길 수 있다.
+ * 본문은 경로(와 프로젝트 밖 화면의 워크스페이스)만 받는다: 사용자 id·메뉴 키·프로젝트 id 는 전부 서버가 판정한다.
+ * 클라이언트가 보낸 식별자를 그대로 쓰면 남의 이름으로 기록을 남길 수 있다. 워크스페이스는 기록하지 않고 usage 관문에만 쓴다(소속 확인 뒤).
  */
 export async function POST(req: NextRequest) {
   if (!trackingEnabled(process.env)) {
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     path?: unknown
     eventName?: unknown
     metadata?: unknown
+    workspaceId?: unknown
   } | null
   const path = typeof body?.path === 'string' ? body.path : null
   if (!path || !path.startsWith('/') || path.length > MAX_PATH_LEN) {
@@ -49,11 +51,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad event path' }, { status: 400 })
   }
 
-  // usage 모듈(P19) — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 기록하지 않고 200(404 면 트래커가 화면 전환마다 오류를 남긴다).
+  // usage 모듈(P19, D26) — 경로의 프로젝트, 없으면 요청의 워크스페이스(소속 확인). 둘 다 없으면 400(추측하지 않는다 — 트래커는 범위가 없으면
+  // 보내지 않는다). 꺼지면 기록하지 않고 200(404 면 트래커가 화면 전환마다 오류를 남긴다). 비소속·형식 밖·조합 불일치는 그 상태 그대로.
   // service_role 클라이언트는 관문 뒤에 만든다(이 파일 테스트의 "게이트 전 admin 미생성" 규칙)
   const projectId = extractProjectId(path)
-  const mod = projectId ? await requireModule({ projectId }, 'usage') : await requireSessionModule(null, 'usage')
-  if (!mod.ok) return NextResponse.json({ ok: true, skipped: 'module_disabled' })
+  const mod = await requireScopedSessionModule({ projectId, workspaceId: body?.workspaceId }, 'usage')
+  if (!mod.ok) {
+    return mod.error === ERR_MODULE_DISABLED
+      ? NextResponse.json({ ok: true, skipped: 'module_disabled' })
+      : NextResponse.json({ error: mod.error }, { status: mod.status })
+  }
 
   const admin = createAdminClient()
   const legacyRow = {

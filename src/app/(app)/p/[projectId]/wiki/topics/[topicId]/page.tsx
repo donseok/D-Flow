@@ -11,6 +11,8 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
+import { wsHref } from '@/lib/workspace/paths'
+import { workspaceRefById } from '@/lib/workspace/resolve'
 
 export default async function WikiTopicPage({
   params,
@@ -42,6 +44,11 @@ export default async function WikiTopicPage({
       </ProjectPageShell>
     )
   }
+  // 근거·변경의 회의록 링크를 슬러그 형식으로(D38 ①, 과제 35) — 레이아웃이 같은 요청에서 부른 workspaceRefById(React cache)를 다시 쓴다.
+  // 열화·조회 실패면 영구 링크 형식(스텁이 행의 워크스페이스로 보낸다, D6) — 링크가 틀리지 않고 한 번 더 돈다
+  const wid = membership?.projectWorkspace.get(projectId)
+  const wsRef = wid ? await workspaceRefById(wid) : null
+  const minutesBase = wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes') : undefined
 
   return (
     <ProjectPageShell hero={<PageHero title={title} />}>
@@ -54,6 +61,7 @@ export default async function WikiTopicPage({
         canVerifyDocuments={canEditDocuments}
         userId={membership?.userId ?? null}
         timeZone={cal.calendar.timezone}
+        minutesBase={minutesBase}
       />
     </ProjectPageShell>
   )

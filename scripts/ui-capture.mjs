@@ -21,6 +21,8 @@ export const GRADES = Object.freeze(['public', 'member', 'wsAdmin', 'platformAdm
 export const SINCE = Object.freeze(['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'UI-3', 'C'])
 export const TEMPLATE_VARS = Object.freeze(['pid', 'minuteId', 'topicId', 'inviteToken', 'shareToken', 'wsSlug'])
 export const DIFF_THRESHOLD = 16
+/** 행의 prefs 로 덮을 수 있는 계정 키 — 서버값이 이겨서 화면 조작·init 으로 못 만드는 상태만(과제 37) */
+export const ROW_PREF_KEYS = Object.freeze(['sidebarCollapsed'])
 export const SAME_RATIO = 0.002
 export const KEY_RE = /^[a-z0-9][a-z0-9-]*$/
 
@@ -172,8 +174,8 @@ export function parseSize(s) {
 
 /** 하위 명령 뒤 argv → 옵션. 모르는 인자·값 밖은 throw @param {string[]} argv */
 export function parseArgs(argv) {
-  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, positional: string[] }} */
-  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, positional: [] }
+  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, scroll: number, javaScript: boolean, positional: string[] }} */
+  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, scroll: 0, javaScript: true, positional: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} 뒤에 값이 없다`); return v }
@@ -184,7 +186,17 @@ export function parseArgs(argv) {
     else if (a === '--since') out.since = next().split(',')
     else if (a === '--base') out.base = next()
     else if (a === '--server-commit') out.serverCommit = next()     // --base 서버를 띄운 트리(D3)
+    else if (a === '--pair') out.pair = true                       // diff — 머리 라벨의 pair 행을 기준 라벨의 짝 행과 비교(옛 경로 ↔ 새 경로)
     else if (a === '--allow-cross') out.allowCross = true           // diff — 판·시드가 다른 라벨의 참고 대조(D3)
+    else if (a === '--scroll') {                                    // shoot — main 을 그만큼 스크롤한 뒤 찍는다(고정 요소 확인, D54)
+      const v = next()
+      if (!/^\d+$/.test(v)) throw new Error(`--scroll 은 0 이상의 정수(px): ${v}`)
+      out.scroll = Number(v)
+    } else if (a === '--js') {                                      // shoot — off 면 JS 를 끈 컨텍스트(첫 페인트 — D55)
+      const v = next()
+      if (v !== 'on' && v !== 'off') throw new Error(`--js 는 on|off: ${v}`)
+      out.javaScript = v === 'on'
+    }
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
   }
@@ -206,10 +218,17 @@ export function fillPath(template, values) {
   })
 }
 
+/** 행의 클릭 단계 — clicks(여러 단계, 컨트롤러 보충 1)가 있으면 그 순서, 없으면 click 하나(하위 호환) */
+export function clickSteps(r) {
+  if (Array.isArray(r?.clicks)) return [...r.clicks]
+  return typeof r?.click === 'string' && r.click ? [r.click] : []
+}
+
 /**
  * routes.json 형식 검사 → 문제 목록(빈 배열이면 통과). pageFiles = src/app 아래 page.tsx 의 상대 경로.
  * 규칙: 모든 page.tsx 는 어떤 행의 file 이다 / 기준선 행(since b4283c0, until 없음)의 file 은 존재한다 / 값은 닫힌 집합 /
  * 선택 필드(판정 Q35) pair = 다른 행의 키, expect·focusTargets = 비지 않은 선택자 배열, focusStart = 선택자.
+ * baseFinal(UI-2a) = 기준 서버(--base, 옛 경로가 아직 페이지인 착수점)에서 그 행이 기대하는 최종 경로 — expectFinal 은 머리(스텁을 거친 새 경로)의 값이다.
  * hide(과제 5) = 비지 않은 선택자 배열 — 폭이 실행마다 바뀌는 표시를 레이아웃에서 뺀다(mask 는 자리를 남기고 가린다).
  * 뒤 Phase 가 페이지를 옮기면 옛 행에 until 을, 새 행에 since 를 적는다(보충 행은 supplement: true).
  * @param {any} doc @param {string[]} pageFiles
@@ -231,7 +250,11 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.since === 'b4283c0' && !r?.until && !pageFiles.includes(r?.file)) p.push(`${id}: 없는 페이지 파일 ${r?.file}`)
     for (const s of r?.mask ?? []) if (/[{}<]/.test(s)) p.push(`${id}: 가림 선택자 ${s}`)
     if (r?.init !== undefined && (typeof r.init !== 'object' || Object.values(r.init).some((v) => typeof v !== 'string'))) p.push(`${id}: init 은 문자열 값 객체`)
+    if (r?.baseFinal !== undefined && (typeof r.baseFinal !== 'string' || !r.baseFinal.startsWith('/') || /[<]/.test(r.baseFinal))) p.push(`${id}: baseFinal 경로`)
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
+    if (r?.clicks !== undefined && (!Array.isArray(r.clicks) || r.clicks.length === 0 || r.clicks.some((s) => typeof s !== 'string' || !s || /[{}<]/.test(s)))) p.push(`${id}: clicks 선택자`)
+    if (r?.clicks !== undefined && r?.click !== undefined) p.push(`${id}: click 과 clicks 를 같이 쓰지 않는다`)
+    if (r?.prefs !== undefined && (typeof r.prefs !== 'object' || r.prefs === null || Array.isArray(r.prefs) || Object.entries(r.prefs).some(([k, v]) => !ROW_PREF_KEYS.includes(k) || typeof v !== 'boolean'))) p.push(`${id}: prefs 는 ${ROW_PREF_KEYS.join('·')} 의 불리언 객체`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
     for (const f of ['expect', 'focusTargets', 'hide']) {
@@ -470,9 +493,10 @@ export function inviteDomainPatch(values, domain = SEED_INVITE_DOMAIN) {
   return norm.includes(want) ? null : { [key]: [...cur, want] }
 }
 
-/** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값 @param {{ width: number, height: number, theme: string }} s */
-export function contextOptions({ width, height, theme }) {
-  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme }
+/** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값. javaScript === false 만 JS 를 끈다(D55 첫 페인트 — 그 밖에는 키를 더하지 않아 기본 조건 그대로)
+ *  @param {{ width: number, height: number, theme: string, javaScript?: boolean }} s */
+export function contextOptions({ width, height, theme, javaScript }) {
+  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme, ...(javaScript === false ? { javaScriptEnabled: false } : {}) }
 }
 
 /** 비교 조건 — 늘 같아야 하는 것(날짜·브라우저)과 판·시드의 정체(--allow-cross 참고 대조로만 다를 수 있다, D3) */
@@ -499,7 +523,7 @@ export function compareMeta(a, b, { allowCross = false } = {}) {
 /**
  * 라우트 고르기 — --routes 가 있으면 그 키만, 없으면 since 집합 안의 행(until 이 집합에 들면 뺀다).
  * JSDoc 이 없으면 TS 호출부의 콜백 인자가 암묵 any 가 된다(allowJs, checkJs 없음).
- * @template {{ key: string, since: string, until?: string }} R
+ * @template {{ key: string, since: string, until?: string, tags?: string[] }} R
  * @param {{ routes: R[] }} doc @param {{ routes: string[] | null, since: string[] }} sel @returns {R[]}
  */
 export function selectRoutes(doc, { routes, since }) {
@@ -508,7 +532,8 @@ export function selectRoutes(doc, { routes, since }) {
     if (miss.length) throw new Error(`routes.json 에 없는 키: ${miss.join(',')}`)
     return doc.routes.filter((r) => routes.includes(r.key))
   }
-  return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)))
+  // tags 에 'manual' 이 든 행은 키로 지정할 때만 찍는다 — 앞선 손질(설정 손상 등)이 있어야 의미가 있는 장
+  return doc.routes.filter((r) => since.includes(r.since) && !(r.until && since.includes(r.until)) && !(Array.isArray(r.tags) && r.tags.includes('manual')))
 }
 
 /** 한 장의 픽셀 판정(D1) — 글꼴 무효는 비교 제외, 크기 다름, 0 이면 same, SAME_RATIO(판정 Q33 의 0.2%) 이하는 near(볼 목록에 오른다 —
@@ -543,17 +568,42 @@ export function diffRows(A, B) {
 /**
  * 한 쌍의 판정(순수, D2) — 어느 쪽이든 problems·idle 거짓·최종 경로(모양) 다름이면 'problem'(사유와 함께 — 같은 이유로 둘 다 엉뚱한 화면이면
  * 픽셀이 같아도 같음이 아니다), 아니면 픽셀 판정(diffVerdict). 알려진 잡음은 near·diff 에 표시만 한다.
- * @param {{ a: any, b: any, stats: { ratio: number, diffPixels: number, bbox: any } | null }} p
+ * ignoreFinal(UI-2a) = 최종 경로 비교를 건너뛴다 — 옛 경로 ↔ 새 경로 짝 비교, 또는 기준 서버(옛 경로가 페이지)와 머리(스텁을 거친 새 경로)처럼 다름이 기대인 쌍.
+ * 각자의 기대 최종 경로는 찍을 때 finalProblem(expectFinal·baseFinal)이 이미 판정해 problems 에 남는다.
+ * @param {{ a: any, b: any, stats: { ratio: number, diffPixels: number, bbox: any } | null }} p @param {{ ignoreFinal?: boolean }} [opt]
  */
-export function rowVerdict({ a, b, stats }) {
+export function rowVerdict({ a, b, stats }, { ignoreFinal = false } = {}) {
   const reasons = [...(a.problems ?? []).map((x) => `기준:${x}`), ...(b.problems ?? []).map((x) => `대상:${x}`),
     ...(a.idle === false ? ['기준:idle=false'] : []), ...(b.idle === false ? ['대상:idle=false'] : []),
-    ...(finalShape(a.finalPath) !== finalShape(b.finalPath) ? [`finalPath 다름: ${a.finalPath} ≠ ${b.finalPath}`] : [])]
+    ...(!ignoreFinal && finalShape(a.finalPath) !== finalShape(b.finalPath) ? [`finalPath 다름: ${a.finalPath} ≠ ${b.finalPath}`] : [])]
   const ratio = stats?.ratio ?? null
   const verdict = reasons.length ? 'problem' : diffVerdict({ ratio, fontA: a.font, fontB: b.font })
   const noise = KNOWN_NOISE.find((k) => k.key === b.key && k.width === b.width && k.height === b.height)
   return { ...shotAt(b), file: b.file, ratio, diffPixels: stats?.diffPixels ?? null, bbox: stats?.bbox ?? null, verdict, reasons,
     ...(noise && (verdict === 'near' || verdict === 'diff') ? { known: noise.note } : {}) }
+}
+
+/** 짝 비교 계획(순수) — pair 를 가진 행과 그 짝 행 키. diff --pair 가 머리 라벨의 행 장을 기준 라벨의 짝 행 장과 비교한다(옛 경로 ↔ 새 경로)
+ *  @param {{ key: string, pair?: string }[]} rows @param {{ routes: { key: string }[] }} doc */
+export function pairPlan(rows, doc) {
+  const keys = new Set(doc.routes.map((r) => r.key))
+  return rows.flatMap((r) => (r.pair && keys.has(r.pair) ? [{ key: r.key, pairKey: r.pair }] : []))
+}
+
+/** diff --pair 의 행 매칭(순수) — 머리 라벨의 pair 행마다 기준 라벨의 짝 행(같은 크기·테마)을 찾는다. 짝 장이 없으면 unmatched(볼 목록에 new 로 오른다 —
+ *  짝이 빠진 채 같음처럼 숨기지 않는다). pair 가 없는 머리 행은 이 비교의 대상이 아니다
+ *  @param {any[]} A @param {any[]} B @param {{ key: string, pairKey: string }[]} plan */
+export function pairRows(A, B, plan) {
+  const pairs = []
+  const unmatched = []
+  for (const { key, pairKey } of plan) {
+    for (const b of B.filter((x) => x.key === key)) {
+      const a = A.find((x) => x.key === pairKey && x.width === b.width && x.height === b.height && x.theme === b.theme)
+      if (a) pairs.push({ label: `${key}⇐${pairKey}`, a, b })
+      else unmatched.push({ label: `${key}⇐${pairKey}`, b })
+    }
+  }
+  return { pairs, unmatched }
 }
 
 const LOOK_ORDER = ['problem', 'diff', 'missing', 'new', 'near']
@@ -571,9 +621,11 @@ export function summarizeDiff(rows) {
 
 /** 최종 경로 판정(순수, D2) — expectFinal 이 있으면 경로+검색어가 그 값, 없으면 채운 경로의 pathname 이 기대값. 다르면 'final:<실제>'.
  *  권한 거부 리디렉션(agents → /projects 등)·로그인 튕김(세션 만료)이 문제로 남지 않던 것을 잡는다 @param {URL} actual */
-export function finalProblem(r, values, actual) {
-  const got = r.expectFinal ? actual.pathname + actual.search : actual.pathname
-  const want = r.expectFinal ? fillPath(r.expectFinal, values) : new URL(fillPath(r.path, values), 'http://x').pathname
+export function finalProblem(r, values, actual, { base = false } = {}) {
+  // base = 기준 서버(--base) 실행 — 그 서버는 옛 경로가 아직 페이지라 baseFinal 이 있으면 그 값이 기대(없으면 expectFinal 과 같다)
+  const expectFinal = base && r.baseFinal ? r.baseFinal : r.expectFinal
+  const got = expectFinal ? actual.pathname + actual.search : actual.pathname
+  const want = expectFinal ? fillPath(expectFinal, values) : new URL(fillPath(r.path, values), 'http://x').pathname
   return got === want ? null : `final:${actual.pathname + actual.search}`
 }
 
@@ -813,36 +865,52 @@ export async function freshSessions(env, grades) {
   return sessions
 }
 
-/** 실행 시작 선호값의 고정 키 — PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새 컨텍스트의 로컬값으로: 히어로 접힘은
- *  상수 true(PrefsSync.readLocal), 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
-export const RUN_START_PREFS = Object.freeze({ heroCollapsed: true, sidebarCollapsed: false, locale: 'ko' })
+/** 실행 시작 선호값의 고정 키 — 계정 키(account_preferences, SP3b D9). PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새
+ *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
+export const RUN_START_PREFS = Object.freeze({ sidebarCollapsed: false, locale: 'ko' })
+
+/** 워크스페이스 행 pin 의 고정 시각 — 결정적이어야 한다(실행 시각을 쓰면 행이 실행마다 바뀐다) */
+export const PIN_AT = '2026-01-01T00:00:00Z'
+/** 실행 시작의 워크스페이스 행(워크스페이스 키만, SP3b D9) — 최근 방문 = 시드 프로젝트. 은퇴 키 lastProjectId 를 대신한다
+ *  @param {string} projectId @returns {Record<string, unknown>} */
+export function startPin(projectId) {
+  if (!projectId) throw new Error('실행 시작 pin: 프로젝트 id 가 비었다')
+  return { recentProjects: [{ id: projectId, at: PIN_AT }] }
+}
 
 /**
  * 실행 시작 선호값(순수, UI-0 결정성 리뷰 P2 — D4) — 지금 값과 병합하지 않고 이 객체로 **덮는다**. 그 밖의 UiPrefs 키(간트 일 폭·개요 번호·
  * 완료 숨김·대시보드 펼침·회의록 보기·알림 읽음·알림 설정 …)는 없음 = 제품 기본값이라 db:reset 뒤 첫 실행(빈 prefs + 고정 키)과 같은
  * 화면이다. 병합하면 지난 실행·수동 확인·perf-grid 가 남긴 키가 다음 실행의 시작 상태를 바꿨다. 새 컨텍스트에서 PrefsSync 가 적용·백필할
  * 것이 없어 실행 중 선호 쓰기도 생기지 않는다(테스트가 앱의 computePrefsSync 로 확인).
- * @param {string} theme @param {Record<string, unknown>} [pin] @returns {Record<string, unknown>}
+ * 계정 키만이다 — 워크스페이스 키(최근 방문 등)는 setServerTheme 의 pin 이 워크스페이스 행에 쓴다(SP3b D9).
+ * @param {string} theme @returns {Record<string, unknown>}
  */
-export function fixedPrefs(theme, pin = {}) {
+export function fixedPrefs(theme) {
   // system 은 checks flicker 의 OS 다크 패스만 쓴다(ui1-addendum §5) — 그 패스의 컨텍스트 색 체계가 해석값을 정한다. shoot·axe 는 --theme 이 light|dark 로 막는다
   if (!['light', 'dark', 'system'].includes(theme)) throw new Error(`테마는 light|dark|system: ${theme}`)
-  return { ...RUN_START_PREFS, theme, ...pin }
+  return { ...RUN_START_PREFS, theme }
 }
 
 /**
- * 캡처 계정의 서버 선호값을 고정 객체(fixedPrefs)로 덮는다 — 그 계정의 모든 소속 행(판정 Q8). PrefsSync 는 서버값이 이긴다.
- * pin(shoot 는 lastProjectId = 시드 프로젝트)도 같이: 첫 shoot 가 /p/… 방문으로 lastProjectId 를 써서 전역 브리지 화면(사이드바)이 다음
- * 실행과 달라졌다(과제 3 보고 §4-2). seed 가 아니라 실행 시작에서 덮는 이유: perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
- * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin]
+ * 캡처 계정의 서버 선호값을 고정 객체로 덮는다(판정 Q8 — PrefsSync 는 서버값이 이긴다). 계정 행(account_preferences) = fixedPrefs(theme),
+ * 모든 소속 워크스페이스 행(user_preferences) = pin(워크스페이스 키만 — shoot 는 startPin(시드 프로젝트))(SP3b D9). 두 행 모두 병합이 아니라
+ * 덮는다 — 앞 실행이 남긴 계정 키·알림 읽음·즐겨찾기가 다음 실행의 시작 상태를 바꾸지 않게. seed 가 아니라 실행 시작에서 덮는 이유:
+ * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
+ * extra(행의 prefs — 허용 키만, validateRoutes) 는 고정 객체 위에 얹는다 — 그 행을 찍는 동안만이고 끝나면 extra 없이 다시 덮는다.
+ * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin] @param {Record<string, unknown>} [extra]
  */
-export async function setServerTheme(db, userIds, theme, pin = {}) {
-  const prefs = fixedPrefs(theme, pin)
+export async function setServerTheme(db, userIds, theme, pin = {}, extra = {}) {
+  const prefs = { ...fixedPrefs(theme), ...extra }
   for (const userId of userIds) {
+    must('계정 선호 쓰기', await db.from('account_preferences').upsert(
+      { user_id: userId, prefs, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    ))
     const rows = must('소속 조회', await db.from('workspace_members').select('workspace_id').eq('user_id', userId))
     for (const { workspace_id } of rows) {
       must('선호 쓰기', await db.from('user_preferences').upsert(
-        { user_id: userId, workspace_id, prefs, updated_at: new Date().toISOString() },
+        { user_id: userId, workspace_id, prefs: pin, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,workspace_id' },
       ))
     }
@@ -870,12 +938,12 @@ export async function resetRunStart(db, { userIds, projectId }) {
 }
 
 /**
- * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(lastProjectId = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
+ * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(워크스페이스 행 최근 방문 = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
  * 순서가 계약이다: 선호 → 워터마크 → 알림 → 스냅샷(그 뒤 사전 방문). 앞 단계가 실패하면 멈춘다.
  * @param {any} db @param {{ theme: string, userIds: string[], projectId: string }} pass
  */
 export async function passStart(db, { theme, userIds, projectId }) {
-  await setServerTheme(db, userIds, theme, { lastProjectId: projectId })
+  await setServerTheme(db, userIds, theme, startPin(projectId))
   await resetRunStart(db, { userIds, projectId })
 }
 
@@ -976,8 +1044,14 @@ async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId,
 }
 
 /** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·lastProjectId·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
+ *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·워크스페이스 행 pin·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
+/** main 의 스크롤 주체(D19)를 y px 만큼 내리고 한 프레임 기다린다 — 짧은 화면은 브라우저가 끝에서 멈춘다(그만큼만 내려간 장이 찍힌다) */
+export async function scrollMain(page, y) {
+  await page.evaluate((to) => document.querySelector('main#main-content')?.scrollTo(0, to), y)
+  await page.waitForTimeout(200)
+}
+
 export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base })) {
   const { db, outDir, baseUrl } = env
   const routesText = readFileSync('scripts/ui-capture.routes.json', 'utf8')
@@ -1008,34 +1082,42 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
       await passStart(db, { theme, userIds: captureIds, projectId: seed.pid })
       warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], theme, projectId: seed.pid, outDir }))
       for (const r of routes) {
-        for (const [width, height] of opts.sizes) {
-          const context = await browser.newContext(contextOptions({ width, height, theme }))
-          try {
-            await routeCdn(context, join(outDir, 'cdn-cache'))
-            const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
-            await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
-            await context.addInitScript((entries) => {
-              try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
-            }, r.init ?? {})
-            const page = await context.newPage()
-            await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
-            let idle = true
-            try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false }
-            await page.evaluate(() => document.fonts.ready.then(() => true))
-            await page.waitForTimeout(500)
-            let clickFailed = false
-            if (r.click) {
-              try { await page.locator(r.click).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true }
-            }
-            const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
-            for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
-            const u = new URL(page.url())
-            const final = finalProblem(r, values, u)   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
-            const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
-            const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
-            const v = await visit(page, { r, width, height, theme, doc, outDir })
-            rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
-          } finally { await context.close() }
+        // 행의 계정 선호(prefs — 서버값이 이기는 키라 클릭·init 으로는 못 정한다)는 그 행을 찍는 동안만 덮고, 끝나면 시작 상태로 되돌려 뒤 행을 바꾸지 않게 한다
+        if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid), r.prefs)
+        try {
+          for (const [width, height] of opts.sizes) {
+            const context = await browser.newContext(contextOptions({ width, height, theme, javaScript: opts.javaScript }))
+            try {
+              await routeCdn(context, join(outDir, 'cdn-cache'))
+              const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
+              await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+              await context.addInitScript((entries) => {
+                try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
+              }, r.init ?? {})
+              const page = await context.newPage()
+              await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
+              let idle = true
+              // JS 를 끈 장(--js off, D55 첫 페인트)은 스크립트가 없어 네트워크 유휴를 기다릴 것이 없다 — 글꼴만 확정하고 찍는다
+              if (opts.javaScript !== false) { try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false } }
+              await page.evaluate(() => document.fonts.ready.then(() => true))
+              await page.waitForTimeout(500)
+              let clickFailed = false
+              for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
+                try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
+              }
+              if (opts.scroll > 0) await scrollMain(page, opts.scroll)   // 클릭 뒤 — 고정 요소가 스크롤된 main 위에서 어디 붙는지(D54)
+              const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
+              for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
+              const u = new URL(page.url())
+              const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
+              const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
+              const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
+              const v = await visit(page, { r, width, height, theme, doc, outDir })
+              rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
+            } finally { await context.close() }
+          }
+        } finally {
+          if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid))
         }
       }
     }
@@ -1069,7 +1151,7 @@ async function cmdShoot(opts) {
   const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}/${x.theme}: ${s}`))
   const meta = { label: opts.label, commit: server.commit, commitSource: server.source, scriptCommit: head, buildId: res.buildId, browser: res.browserVersion,
     kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
-    themes: opts.theme, sizes: opts.sizes, warmups: res.warmups, maskWarnings, rows: res.rows }
+    themes: opts.theme, sizes: opts.sizes, scroll: opts.scroll, javaScript: opts.javaScript, warmups: res.warmups, maskWarnings, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, buildId: res.buildId, commit: `${server.commit}(${server.source})`,
     warmups: res.warmups.map((w) => `${w.theme} ${w.elapsedMs}ms`),
@@ -1079,20 +1161,34 @@ async function cmdShoot(opts) {
 
 async function cmdDiff(opts) {
   const [baseLabel, headLabel] = opts.positional
-  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label> [--allow-cross]')
+  if (!baseLabel || !headLabel || opts.positional.length !== 2) throw new Error('사용: diff <기준 label> <대상 label> [--allow-cross] [--pair]')
   const { outDir } = laneEnv()
   const A = JSON.parse(readFileSync(join(outDir, baseLabel, 'meta.json'), 'utf8'))
   const B = JSON.parse(readFileSync(join(outDir, headLabel, 'meta.json'), 'utf8'))
   const cmp = compareMeta(A, B, { allowCross: opts.allowCross })
   if (cmp.problems.length) throw new Error(`비교할 수 없다 — ${cmp.problems.join('; ')}(판·시드가 다른 참고 대조는 같은 KST 날짜에서 --allow-cross)`)
-  const plan = diffRows(A.rows, B.rows)
+  // 비교 쌍 — 기본은 같은 키끼리, --pair 는 머리의 pair 행 ↔ 기준의 짝 행(옛 경로 캡처 ↔ 새 경로 캡처). 최종 경로가 다른 것이 기대인 쌍은 그 비교를 건너뛴다
+  const routesDoc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
+  const baseFinalKeys = new Set(routesDoc.routes.filter((r) => r.baseFinal !== undefined).map((r) => r.key))
+  let jobs, added, missing
+  if (opts.pair) {
+    const pp = pairRows(A.rows, B.rows, pairPlan(routesDoc.routes.filter((r) => B.rows.some((x) => x.key === r.key)), routesDoc))
+    jobs = pp.pairs.map((p) => ({ a: p.a, b: p.b, label: p.label, ignoreFinal: true }))
+    added = pp.unmatched.map((u) => ({ ...u.b, key: u.label, reasons: ['기준에 짝 장 없음'] }))
+    missing = []
+  } else {
+    const plan = diffRows(A.rows, B.rows)
+    jobs = plan.pairs.map(({ a, b }) => ({ a, b, label: b.key, ignoreFinal: baseFinalKeys.has(b.key) }))
+    added = plan.added
+    missing = plan.missing
+  }
   const { chromium } = await loadPlaywright()
   const browser = await chromium.launch()
   const out = []
   try {
     const page = await browser.newPage()
     const fnSrc = pixelDiffStats.toString()
-    for (const { a, b } of plan.pairs) {
+    for (const { a, b, label, ignoreFinal } of jobs) {
       const stats = await page.evaluate(async ({ pa, pb, src }) => {
         const load = async (b64) => {
           const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob())
@@ -1103,23 +1199,24 @@ async function cmdDiff(opts) {
         }
         return new Function(`return (${src})`)()(await load(pa), await load(pb))
       }, { pa: readFileSync(join(outDir, baseLabel, a.file)).toString('base64'), pb: readFileSync(join(outDir, headLabel, b.file)).toString('base64'), src: fnSrc })
-      out.push(rowVerdict({ a, b, stats }))
+      out.push({ ...rowVerdict({ a, b, stats }, { ignoreFinal }), key: label })
     }
   } finally { await browser.close() }
-  for (const b of plan.added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: [] })
-  for (const a of plan.missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
+  for (const b of added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: b.reasons ?? [] })
+  for (const a of missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
   const sorted = [...out].sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1))
   const sum = summarizeDiff(sorted)
   const box = (r) => (r.bbox ? `${r.bbox.x},${r.bbox.y} ${r.bbox.w}×${r.bbox.h}` : '—')
   const head = (m) => `${m.label} — 서버 ${m.commit}${m.commitSource ? `(${m.commitSource})` : ''} · 빌드 ${m.buildId ?? '—'} · 스크립트 ${m.scriptCommit} · 시드 ${m.seedDate}`
-  const md = [`# diff ${baseLabel} → ${headLabel}`, '', `- 기준: ${head(A)}`, `- 대상: ${head(B)}`,
+  const suffix = opts.pair ? '-pair' : ''
+  const md = [`# diff ${baseLabel} → ${headLabel}${opts.pair ? ' (--pair: 머리의 pair 행 ⇐ 기준의 짝 행)' : ''}`, '', `- 기준: ${head(A)}`, `- 대상: ${head(B)}`,
     `- 판정 수: same ${sum.same} · near ${sum.near} · diff ${sum.diff} · problem ${sum.problem} · missing ${sum.missing} · new ${sum.new} · skip ${sum.skipped}(판정 Q33 문턱 0.2%, near = 0 초과 문턱 이하)`,
     ...(cmp.warnings.length ? ['', '## 경고', ...cmp.warnings.map((w) => `- ${w}`)] : []),
     '', '## 볼 목록', ...(sum.look.length ? sum.look.map((l) => `- ${l}`) : ['- (없음 — 전부 same 또는 skip)']),
     '', '## 전체', '', '| 라우트 | 크기 | 테마 | 차이율 | 다른 픽셀 | 차이 영역(x,y w×h) | 판정 |', '|---|---|---|---|---|---|---|',
     ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pctOf(r.ratio)} | ${r.diffPixels ?? '—'} | ${box(r)} | ${r.verdict}${r.known ? ' (알려진 잡음)' : ''} |`)].join('\n')
-  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.json`), JSON.stringify(sorted, null, 2))
-  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}.md`), `${md}\n`)
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.json`), JSON.stringify(sorted, null, 2))
+  writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.md`), `${md}\n`)
   console.log(JSON.stringify({ ok: true, compared: sum.compared, same: sum.same, near: sum.near, diff: sum.diff, problem: sum.problem, missing: sum.missing, new: sum.new,
     skipped: sum.skipped, warnings: cmp.warnings, look: sum.look.slice(0, 20) }))
 }
@@ -1343,7 +1440,7 @@ async function checkTab(opts) {
       }
     }
     // ① 첫머리 25걸음 — click 행(모달·팝오버)은 모서리를 누르면 배경이 닫으므로 누르지 않는다. 초점만 문서로 되돌린다
-    if (!r.click) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
+    if (!clickSteps(r).length) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
     await walk('top', 25)
     // ② focusStart 의 첫 요소에서 15걸음 — 비초점 요소면 임시 tabindex=-1 을 달아 시작점으로만 쓴다
     const startProblems = []
@@ -1401,7 +1498,7 @@ async function checkFlicker(opts) {
   const rows = []
   try {
     for (const [pref, scheme] of FLICKER_PASSES) {
-      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, { lastProjectId: seed.pid })
+      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, startPin(seed.pid))
       for (const r of routes) {
         const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: scheme }))
         try {

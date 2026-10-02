@@ -148,9 +148,13 @@ describe('열거 — 민감도(합성 소스)', () => {
     ])
   })
   it('라우트 파일의 자리·확장자를 잡는다(api 아래 route.tsx 는 열거한다 — F10)', () => {
-    expect(routeFileProblems(['src/app/api/x/route.ts', 'src/app/api/route.ts', 'src/app/(app)/p/[projectId]/x/route.ts', 'src/app/api/y/route.tsx', 'src/app/api/z/route.js'])).toEqual([
-      'src/app/(app)/p/[projectId]/x/route.ts: 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다',
-      'src/app/api/z/route.js: 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다',
+    const MSG = ': 라우트 파일은 src/app/api/**/route.{ts,tsx} 에만 둔다(옛 경로 스텁은 src/app/(legacy)/**/route.ts)'
+    expect(routeFileProblems(['src/app/api/x/route.ts', 'src/app/api/route.ts', 'src/app/(app)/p/[projectId]/x/route.ts', 'src/app/api/y/route.tsx', 'src/app/api/z/route.js',
+      'src/app/(legacy)/minutes/route.ts', 'src/app/(legacy)/p/[projectId]/gantt/route.ts', 'src/app/(legacy)/x/route.tsx', 'src/app/(app)/(legacy)/x/route.ts'])).toEqual([
+      `src/app/(app)/p/[projectId]/x/route.ts${MSG}`,
+      `src/app/api/z/route.js${MSG}`,
+      `src/app/(legacy)/x/route.tsx${MSG}`,
+      `src/app/(app)/(legacy)/x/route.ts${MSG}`,
     ])
     expect(routePath('src/app/api/og/route.tsx')).toBe('/api/og')
   })
@@ -178,7 +182,7 @@ describe('열거 — 민감도(합성 소스)', () => {
   it('메타데이터 파일의 모듈 경로 판정(F12)', () => {
     expect(metadataModule('src/app/icon.tsx')).toBeNull()
     expect(metadataModule('src/app/(app)/p/[projectId]/wiki/topics/[topicId]/opengraph-image.tsx')).toBe('wiki')
-    expect(metadataModule('src/app/(app)/minutes/[id]/twitter-image.tsx')).toBe('minutes')
+    expect(metadataModule('src/app/(app)/w/[slug]/minutes/[id]/twitter-image.tsx')).toBe('minutes')   // SP3b 과제 11 — 상세가 /w/[slug] 아래로
     expect(METADATA_FILE.test('opengraph-image2.tsx') && METADATA_FILE.test('sitemap.ts') && !METADATA_FILE.test('icon.png')).toBe(true)
   })
   it("이스케이프로 쓴 'use server' 지시문도 열거한다(T13-m2 — Next 는 익은 값으로 읽는다)", () => {

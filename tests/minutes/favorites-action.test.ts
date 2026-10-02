@@ -12,7 +12,7 @@ vi.mock('@/lib/ai/minutes-ingest', () => ({ ingestMinute: vi.fn() }))
 vi.mock('@/lib/ai/minutes-insights', () => ({ ensureMinuteInsights: vi.fn(), generateMinuteInsights: vi.fn() }))
 vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: vi.fn() }))
 // toggleMinuteFavorite 가 행의 워크스페이스로 모듈 관문을 판정한다(resolveScope) — 관문 자체는 전역 mock 이 통과시킨다
-vi.mock('@/lib/authz', () => ({ getActor: vi.fn(), resolveProjectId: vi.fn(), resolveScope: vi.fn(async () => ({ ok: true, projectId: null, workspaceId: 'ws-1' })) }))
+vi.mock('@/lib/authz', () => ({ getActor: vi.fn(async () => (await import('../fixtures/actor')).makeActor()), resolveProjectId: vi.fn(), resolveScope: vi.fn(async () => ({ ok: true, projectId: null, workspaceId: 'ws-1' })) }))
 
 const getMinuteFavorites = vi.fn()
 vi.mock('@/lib/data/minutes', () => ({
@@ -46,13 +46,19 @@ beforeEach(() => {
 describe('fetchMinuteFavorites', () => {
   it('미로그인은 데이터 계층을 부르지 않고 null', async () => {
     getSession.mockResolvedValue(null)
-    expect(await fetchMinuteFavorites()).toBeNull()
+    expect(await fetchMinuteFavorites('ws-1')).toBeNull()
     expect(getMinuteFavorites).not.toHaveBeenCalled()
   })
   it('로그인 시 데이터 계층 결과를 그대로 반환', async () => {
     getSession.mockResolvedValue({ id: 'u1' })
     getMinuteFavorites.mockResolvedValue(['m1', 'm2'])
-    expect(await fetchMinuteFavorites()).toEqual(['m1', 'm2'])
+    expect(await fetchMinuteFavorites('ws-1')).toEqual(['m1', 'm2'])
+    expect(getMinuteFavorites).toHaveBeenCalledWith('ws-1')            // 인자 워크스페이스의 즐겨찾기만(FA3)
+  })
+  it('화면의 워크스페이스가 비소속이면 데이터 계층을 부르지 않고 null(D26)', async () => {
+    getSession.mockResolvedValue({ id: 'u1' })
+    expect(await fetchMinuteFavorites('ws-other')).toBeNull()
+    expect(getMinuteFavorites).not.toHaveBeenCalled()
   })
 })
 

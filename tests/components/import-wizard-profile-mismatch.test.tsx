@@ -75,7 +75,7 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
 
   beforeEach(async () => {
     executeForms.length = 0
-    executeResponse = () => new Response(JSON.stringify({ ok: true, count: 2, mode: 'append', reindexed: 0, profileSaved: false }), { status: 200 })
+    executeResponse = () => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved: false }), { status: 200 })
     stubFetch()
     container = document.createElement('div')
     document.body.appendChild(container)

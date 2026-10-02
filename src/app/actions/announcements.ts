@@ -5,8 +5,6 @@ import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
-import { getTopAnnouncements } from '@/lib/data/announcements'
-import type { AnnouncementSummary } from '@/lib/domain/types'
 import { expandMeetings } from '@/lib/domain/meetings'
 import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
 import type { MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
@@ -175,22 +173,12 @@ export async function markAnnouncementsSeen(
   return advanceSeenWatermark(projectId, user.id, clamped)
 }
 
-/** 헤더 티커용 상위 공지(고정 우선 → 최신순 5건) — 세션 확인 후 경량 조회에 위임. 조회 실패는 결과 그대로(비로그인은 빈 목록).
- *  모듈 관문 거부(설정 조회 실패 포함)는 빈 값 — 로그는 관문이 남긴다(P13·Ruling B3 F1). */
-export async function getHeaderAnnouncements(
-  projectId: string,
-): Promise<{ ok: true; rows: AnnouncementSummary[] } | { ok: false; error: string }> {
-  const user = await getSession()
-  if (!user) return { ok: true, rows: [] }
-  const mod = await requireModule({ projectId }, 'announcements')            // 셸 티커 — 꺼지면 그 항목만 비운다(§4.2 셸 행)
-  if (!mod.ok) return { ok: true, rows: [] }
-  return getTopAnnouncements(projectId)
-}
-
 /**
- * 사이드바 배지용 안읽음 공지 수 — 워터마크 이후 생성된 "오늘 게시중" 공지 count. 조회·달력 실패는 null(모름 — 셸이 배지를 숨긴다).
+ * 셸 배지용 안읽음 공지 수(/api/shell — 프로젝트 내비 '공지'·벨) — 워터마크 이후 생성된 "오늘 게시중" 공지 count.
+ * 조회·달력 실패는 null(모름 + 로그 — 0 으로 위장하지 않는다, 3원칙 ①, D34·A-4 리뷰 N9). 그 밖의 예외는 셸 라우트가 null 로 바꾼다.
+ * 모듈 꺼짐은 오류가 아니라 0.
  * 게시기간 필터가 없으면 만료 공지가 영구 안읽음으로 남는다(일반 사용자는 만료 공지를
- * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). getTopAnnouncements와 같은 조건.
+ * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). 게시중 조건은 publish_from·publish_to 두 경계(옛 티커의 상위 공지 조회와 같았다).
  */
 export async function getUnreadAnnouncementCount(projectId: string): Promise<number | null> {
   const user = await getSession()

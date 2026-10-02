@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, List, Plus, CalendarX2 } from 'lucide-react'
 import type { Meeting, MeetingException, MeetingOccurrence, ProjectMember } from '@/lib/domain/types'
@@ -42,7 +43,7 @@ function resolveFocusOccurrence(
 }
 
 export function MeetingsView({
-  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, calendar, holidayNames,
+  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, minutesHref = null, calendar, holidayNames,
 }: {
   projectId: string
   meetings: Meeting[]
@@ -56,6 +57,8 @@ export function MeetingsView({
   canManage: boolean
   /** 이 프로젝트 멤버 이상(isProjectMember) — 회의 등록. */
   canEdit: boolean
+  /** '이 프로젝트 회의록'(D53) — /w/<slug>/minutes?project=<pid>. 회의록 모듈이 꺼졌거나 슬러그를 모르면 null */
+  minutesHref?: string | null
   /** 이 프로젝트의 달력 — 첫 열·쉬는 날·조회 그리드 범위(requireCalendar(cfg)) */
   calendar: CalendarView
   /** 이 프로젝트의 휴무 이름(holidays.name) */
@@ -118,7 +121,7 @@ export function MeetingsView({
   return (
     <div className="space-y-4">
       {/* 툴바 (스크롤 시 상단 고정) */}
-      <div className="sticky top-0 z-20 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+      <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
           <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
@@ -128,6 +131,9 @@ export function MeetingsView({
           <button onClick={() => { setYear(initY); setMonth0((initM || 1) - 1) }} className="btn btn-ghost h-10">{t('meet.today')}</button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {minutesHref && (
+            <Link href={minutesHref} className="px-2 text-meta font-semibold text-action hover:underline">{t('meet.projectMinutes')}</Link>
+          )}
           <SegmentedTabs<ViewKey>
             tabs={[{ key: 'calendar', label: t('meet.view.calendar'), icon: CalendarDays }, { key: 'list', label: t('meet.view.list'), icon: List }]}
             value={view} onChange={setView} size="sm"

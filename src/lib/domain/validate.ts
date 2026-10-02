@@ -28,6 +28,10 @@ export function isValidIsoDate(v: string): boolean {
 /** UUID 형태 검증의 단일 출처(사본 5벌 정리). 버전 니블까지 좁힌 변형이 필요하면 호출부에 사유를 남길 것. */
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** 식별자 인자의 안전한 모양 — 영숫자·밑줄·하이픈 1~64자. 소속 판정이 참을 돌려주는 호출자(플랫폼 관리자)의 입력이 줄바꿈·임의 길이로
+ *  로그·설정 조회 오류에 실리지 않게 하는 입구 검사다(uuid 인지는 보지 않는다 — 테스트 픽스처의 'ws-1' 같은 값도 받는다). */
+export const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+
 export function isUuidLike(v: string): boolean {
   return UUID_RE.test(v)
 }

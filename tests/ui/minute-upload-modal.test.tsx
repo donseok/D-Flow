@@ -32,6 +32,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }))
 
 import { MinuteUploadModal } from '@/components/minutes/MinuteUploadModal'
+import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const WS = 'aaaaaaaa-1111-4111-8111-111111111111'
 const P1 = 'bbbbbbbb-1111-4111-8111-111111111111'
@@ -166,6 +167,25 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     await mount()
     await openPicker()
     expect([...pickerDialog().querySelectorAll('button')].some(b => b.textContent === '신규폴더')).toBe(true)
+  })
+
+  it('회의록 화면 범위가 있으면 재조회 결과를 그 워크스페이스 폴더로 거른다 — 다른 소속 워크스페이스 폴더를 고를 수 없다(D26, V5)', async () => {
+    const WB = 'aaaaaaaa-2222-4222-8222-222222222222'
+    const inWs = (f: MinuteFolder, w: string): MinuteFolder => ({ ...f, workspaceId: w })
+    fetchMinuteFoldersLite.mockImplementation(async () => [
+      ...tree.map(f => inWs(f, WS)), inWs(F('u-mine', '이워크스페이스폴더', 'r-mes', 'u1', 100), WS), inWs(F('u-other', '다른워크스페이스폴더', null, 'u1', 101), WB),
+    ])
+    await act(async () => root.render(withTeams(
+      <MinutesScopeProvider scope={{ workspaceId: WS, projectId: null }}>
+        <MinuteUploadModal open onClose={() => {}} onSaved={onSaved} todayIso="2026-07-24"
+          projects={[]} folders={tree} defaultFolderId={null}
+          projectWorkspaces={{ [P1]: WS }} noProjectWorkspace={{ ok: true, workspaceId: WS }} />
+      </MinutesScopeProvider>,
+    )))
+    await openPicker()
+    const labels = [...pickerDialog().querySelectorAll('button')].map(b => b.textContent)
+    expect(labels).toContain('이워크스페이스폴더')
+    expect(labels).not.toContain('다른워크스페이스폴더')
   })
 
   it('프로젝트가 하나뿐이면 기본 선택 — 고르지 않아 미연결로 쌓이는 것을 막는다', async () => {

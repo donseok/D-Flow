@@ -13,7 +13,7 @@
 // 라우트의 사유(닫힌 목록 — 지금은 v1 에이전트 11). adminBeforeGuard: 가드 앞에서 대상 행을 service_role 로 읽는 액션의 사유.
 // target: 모듈 판정의 대상(deny 하네스가 그 범위에서만 모듈을 끈다 — 틀린 범위의 관문은 통과해 FAIL). 기본은 sample 에서 파생한다 — 프로젝트 id(P)가
 // 있으면 project, 행 id(U)만 있으면 row(행의 프로젝트·워크스페이스), 둘 다 없으면 session(세션 유일 워크스페이스). 행 id 를 받지만 판정은 세션인
-// 항목만 적는다(회의록 폴더 넷·일괄 지정 — P13·P28).
+// 항목만 적는다. workspace 는 워크스페이스 인자(W)를 받는 액션 — 프로젝트 층 모듈도 W 에서 끈다(계획 V10 — 회의록 목록·폴더·일괄 지정, D26).
 // ownerBranch: '관리자 또는 작성자·주최자' 헬퍼를 지나는 모듈 액션의 작성자 판정 — deny 하네스가 관리자 거부(멤버 행위자, ROW.created_by 가 그
 // userId) 상태로 모듈을 꺼서 작성자 분기도 관문을 지나는지 본다(B5 F1-14·F1-15). note 의 '관리자 또는 작성자|주최자' 와 짝이다.
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -29,7 +29,7 @@ export interface GateEntry {
   delegatedTo?: string
   delegatedStatic?: string
   adminBeforeGuard?: string
-  target?: 'project' | 'row' | 'session'
+  target?: 'project' | 'row' | 'session' | 'workspace'
   ownerBranch?: string
 }
 export const NOTE_REQUIRED: ReadonlySet<Guard> = new Set<Guard>(['session', 'public', 'cronSecret', 'minutesSecret'])
@@ -37,6 +37,7 @@ export const NOTE_REQUIRED: ReadonlySet<Guard> = new Set<Guard>(['session', 'pub
 // 표본 id — tests/gates/_harness.ts 의 U·P 와 같은 값(가드 mock 이 P 를 자기 프로젝트로 본다)
 const U = '00000000-0000-0000-7e57-000000001431'
 const P = '00000000-0000-0000-7e57-000000001432'
+const W = 'ws-1'   // tests/gates/_harness.ts 의 W(fixtures/actor WS)와 같은 값
 const A = (f: string) => `src/app/actions/${f}.ts`
 const R = (p: string) => `src/app/api/${p}/route.ts`
 const nul = (guard: Guard, note?: string): GateEntry => ({ guard, module: null, ...(note ? { note } : {}) })
@@ -56,8 +57,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('agentHub')}#refreshAgentHub`]: { guard: 'projectMember', module: 'agents', sample: [P] },
   [`${A('agentHub')}#applyHubDelegations`]: { guard: 'projectMember', module: 'agents', sample: [P, [{ itemId: U, delegated: true }]] },   // 길이 0 은 가드 앞 검증에서 막힌다
   [`${A('agentHub')}#runHubProcessOp`]: { guard: 'projectMember', module: 'agents', sample: [P, { kind: 'stop', orderId: U }] },   // isProcessOp 가 가드 앞에서 본다. 내부 관문이 없는 갈래(stop)로 외곽 관문을 문다 — unapprove 는 loadOrderForReview 의 내부 관문이 대신 거부해 외곽 관문을 증명하지 못한다(B5 T17-I1)
-  // ── agentSeatmap — 전역 좌석표(projectId 가 없으면 세션 유일 워크스페이스)
-  [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents — 층은 getSeatmap 이 거른다', sample: ['all'] },
+  // ── agentSeatmap — 좌석표(projectId 가 없으면 인자 워크스페이스 — D26)
+  [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents(인자 워크스페이스) — 층은 getSeatmap 이 그 워크스페이스로 거른다', sample: ['all', undefined, W], target: 'workspace' },
   // ── agentTokens — 계정 단위 PAT(P19)
   [`${A('agentTokens')}#createAgentToken`]: nul('session', '계정 단위 PAT — 대상 프로젝트가 없다. API 표면은 v1 라우트 관문이 닫는다'),
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
@@ -73,7 +74,6 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('announcements')}#updateAnnouncement`]: { guard: 'projectAdmin', module: 'announcements', sample: [U, {}] },
   [`${A('announcements')}#deleteAnnouncement`]: { guard: 'projectAdmin', module: 'announcements', sample: [U] },
   [`${A('announcements')}#markAnnouncementsSeen`]: { guard: 'session', module: 'announcements', note: '로그인만 — 자기 읽음 시각', sample: [P, '2026-09-01T00:00:00Z'] },
-  [`${A('announcements')}#getHeaderAnnouncements`]: { guard: 'session', module: 'announcements', note: '셸 티커 — 꺼지면 빈 목록(§4.2 셸 행)', sample: [P], deny: { ok: true, rows: [] } },
   [`${A('announcements')}#getUnreadAnnouncementCount`]: { guard: 'session', module: 'announcements', note: '셸 배지 — 꺼지면 0', sample: [P], deny: 0 },
   [`${A('announcements')}#createAnnouncementFromMeeting`]: { guard: 'projectAdmin', module: ['announcements', 'meetings'], sample: [U, '2026-09-01'] },
   // ── attachments — WBS 산출물(core)
@@ -141,14 +141,14 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('meetings')}#deleteMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'], ownerBranch: 'occurrenceGate → adminOrOwnerGate' },
-  [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '전역 내 회의 — 세션 유일 워크스페이스, 행은 getMyMeetings 가 거른다', sample: ['2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [] } },
+  [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '내 회의 — 인자 워크스페이스(소속 확인), 행은 getMyMeetings 가 그 워크스페이스로 거른다', sample: [W, '2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [] }, target: 'workspace' },
   [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: null },
   // ── minutes — 워크스페이스 모듈(행의 워크스페이스 / 새 회의록은 대상 / 행 없는 목록·폴더는 세션 유일 워크스페이스)
-  [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 세션 유일 워크스페이스', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }] },
+  [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 인자 워크스페이스(소속 확인 — D26)', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }, null, undefined, W], target: 'workspace' },
   [`${A('minutes')}#updateMinuteMeta`]: { guard: 'session', module: 'minutes', note: 'requireActor + checkOwner(행의 워크스페이스) — 관문이 입력 검증 뒤라 유효한 표본', sample: [U, { minuteDate: '2026-09-01', teamCode: 'PMO', title: 'Acme', meetingId: null }] },
-  [`${A('minutes')}#assignMinutesProject`]: { guard: 'session', module: 'minutes', note: 'requireActor — 일괄(회의록 화면 전용) 세션 유일 워크스페이스', sample: [[U], null], target: 'session' },
+  [`${A('minutes')}#assignMinutesProject`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스(소속 확인), 행의 워크스페이스가 다르면 그 행 실패', sample: [W, [U], null], target: 'workspace' },
   [`${A('minutes')}#resetMinuteExternalId`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
-  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: '로그인 — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 관문, 꺼진 곳의 행을 뺀다(P13 둘째 문장, Ruling B5 fix 우려 ②). 행이 있는 곳이 모두 꺼지면 null, 보이는 행이 없으면 세션 유일 워크스페이스 판정(꺼짐 null·켜짐 []). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 P28 폴더 조작과 다르다', sample: [], deny: null },
+  [`${A('minutes')}#fetchMinuteFoldersLite`]: { guard: 'session', module: 'minutes', note: '로그인 — 목록형: RLS 가 보여 준 폴더 행의 워크스페이스마다 관문, 꺼진 곳의 행을 뺀다(P13 둘째 문장, Ruling B5 fix 우려 ②). 행이 있는 곳이 모두 꺼지면 null, 보이는 행이 없으면 인자 워크스페이스로 판정(소속 확인 — 꺼짐 null·켜짐 [], 인자 없으면 null). /minutes/[id] 메타 모달·업로드 모달·챗 패널도 불러 P28 폴더 조작과 다르다', sample: [W], deny: null, target: 'workspace' },
   [`${A('minutes')}#replaceMinuteBody`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, '# b', { fileName: 'a.md', filePath: 'x/a.md', size: 1, mime: 'text/markdown' }] },
   [`${A('minutes')}#recordMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, { role: 'attachment', fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }] },
   [`${A('minutes')}#removeMinuteFile`]: { guard: 'session', module: 'minutes', note: 'requireActor + 파일 행의 회의록', sample: [U] },
@@ -158,15 +158,15 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#getMinuteVersionFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, U] },
   [`${A('minutes')}#fetchProjectMeetingsLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 인자 프로젝트(회의록 폼의 회의 선택)', sample: [P], deny: { ok: true, meetings: [] } },
   [`${A('minutes')}#fetchMeetingMinutesLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: [] },
-  [`${A('minutes')}#fetchMinutesRange`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: ['2026-09-01', '2026-09-30', null], deny: [] },
-  [`${A('minutes')}#fetchMinutesSearch`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: ['acme', null], deny: [] },
-  [`${A('minutes')}#fetchMinutesExplorer`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: [], deny: null },
-  [`${A('minutes')}#createMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스', sample: ['폴더', null] },
-  [`${A('minutes')}#renameMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 그 화면이 유일 워크스페이스로 닫힌다, 판정 P28)', sample: [U, '폴더'], target: 'session' },
-  [`${A('minutes')}#deleteMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 그 화면이 유일 워크스페이스로 닫힌다, 판정 P28)', sample: [U], target: 'session' },
-  [`${A('minutes')}#moveMinuteFolder`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스(폴더 조작은 /minutes 탐색기 전용 — 판정 P28)', sample: [U, null], target: 'session' },
+  [`${A('minutes')}#fetchMinutesRange`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }, '2026-09-01', '2026-09-30', null], deny: { ok: true, rows: [] }, target: 'workspace' },
+  [`${A('minutes')}#fetchMinutesSearch`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }, 'acme', null], deny: { ok: true, rows: [] }, target: 'workspace' },
+  [`${A('minutes')}#fetchMinutesExplorer`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [{ workspaceId: W, projectId: null }], deny: null, target: 'workspace' },
+  [`${A('minutes')}#createMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스(소속 확인)', sample: [W, '폴더', null], target: 'workspace' },
+  [`${A('minutes')}#renameMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스, 폴더 행의 워크스페이스가 다르면 ERR_MISSING', sample: [W, U, '폴더'], target: 'workspace' },
+  [`${A('minutes')}#deleteMinuteFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor — 인자 워크스페이스, 폴더 행 대조', sample: [W, U], target: 'workspace' },
+  [`${A('minutes')}#moveMinuteFolder`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스, 폴더 행 대조', sample: [W, U, null], target: 'workspace' },
   [`${A('minutes')}#moveMinuteToFolder`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, null] },
-  [`${A('minutes')}#fetchMinuteFavorites`]: { guard: 'session', module: 'minutes', note: '로그인 — 세션 유일 워크스페이스', sample: [], deny: null },
+  [`${A('minutes')}#fetchMinuteFavorites`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 워크스페이스(소속 확인)', sample: [W], deny: null, target: 'workspace' },
   [`${A('minutes')}#toggleMinuteFavorite`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, true], deny: false },
   [`${A('minutes')}#toggleMinuteHighlight`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, 0, 'h'] },
   [`${A('minutes')}#ensureMinuteInsightsAction`]: { guard: 'session', module: 'minutes', note: '행의 범위 멤버(requireMinuteMember)', sample: [U], deny: { status: 'unavailable', error: ERR_MODULE_DISABLED } },
@@ -175,7 +175,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── notifications·preferences — 셸
   [`${A('notifications')}#getNotifications`]: nul('session', '셸 파생 알림 — 로그인 + RLS'),
   [`${A('notifications')}#markAllNotificationsRead`]: nul('session', SESSION_SELF),
-  [`${A('preferences')}#getUiPrefs`]: nul('session', SESSION_SELF),
+  [`${A('preferences')}#getAccountPrefs`]: nul('session', SESSION_SELF),
+  [`${A('preferences')}#getWorkspacePrefs`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#saveUiPrefs`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#getWbsCollapse`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#saveWbsCollapse`]: nul('session', SESSION_SELF),
@@ -256,7 +257,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
 }
 
 // 모듈 라우트의 실행 확인(P15)은 그 라우트의 기존 테스트 파일이 맡는다 — 과제 14·18·20·21 이 모듈 거부 케이스를 더한다
-const sess = (module: ModuleId, delegatedTo: string, note = '로그인 세션 — 프로젝트면 그 프로젝트, 없으면 세션 유일 워크스페이스'): GateEntry => ({ guard: 'session', module, note, delegatedTo })
+const sess = (module: ModuleId, delegatedTo: string, note = '로그인 세션 — 프로젝트면 그 프로젝트(함께 실은 workspaceId 는 그 프로젝트의 것이어야), 아니면 요청의 workspaceId(소속 확인 — 플랫폼 관리자는 실재 확인), 둘 다 없으면 400(D26, 과제 34)'): GateEntry => ({ guard: 'session', module, note, delegatedTo })
 const agent = (): GateEntry => ({
   guard: 'agentPrincipal', module: 'agents', delegatedTo: 'tests/modules/agents-gate.test.ts',
   delegatedStatic: '두 원천 AND — agents-gate 가 경로 문자열로 핸들러의 판정 호출을 보고, 실행은 tests/agent/{wbs-structure,me-route,watch-route} 가 본다(과제 18)',
@@ -267,14 +268,14 @@ const MINUTES_EXT = 'tests/minutes/external-api.test.ts'
 
 export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('brand/[workspaceId]/[slot]')}#GET`]: nul('session', '로그인·워크스페이스 소속 확인 뒤 현재 로고만 RLS 읽기'),
-  [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문)'),
-  [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트 문맥이면 그 프로젝트, 없으면 세션 유일 워크스페이스. ?probe=1 은 관문만(P12)'),
+  [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문). 함께 실은 workspaceId 는 그 프로젝트의 것이어야(과제 34)'),
+  [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트면 그 프로젝트(함께 실은 workspaceId 는 그 프로젝트의 것이어야), 아니면 요청의 workspaceId(소속 확인 — 플랫폼 관리자는 실재 확인), 둘 다 없으면 400(D26, 과제 34). ?probe=1 은 관문만(P12)'),
   [`${R('chat/health')}#GET`]: nul('superuser'),
   [`${R('chat/index/worker')}#POST`]: nul('cronSecret', 'x-cron-secret — 잡마다 moduleState(과제 22)'),
   [`${R('chat/reindex')}#POST`]: { guard: 'projectAdmin', module: 'chatbot', delegatedTo: 'tests/api/chat-reindex.test.ts' },
   [`${R('chat')}#POST`]: sess('chatbot', LEGACY_CHAT),
   [`${R('chat/stream')}#POST`]: sess('chatbot', LEGACY_CHAT),
-  [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 세션 유일 워크스페이스. env 501 은 관문 앞, 강등 501 은 관문 뒤'),
+  [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 요청의 workspaceId(pageContext 우선, 소속 확인), 둘 다 없으면 400(D26, 과제 34). env 501 은 관문 앞, 강등 501 은 관문 뒤'),
   [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: nul('session', '로그인 + 목록 — WBS 내보내기(core)'),
@@ -282,12 +283,13 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),
   [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issues', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
-  [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 세션 유일 워크스페이스'),
-  [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — 세션 유일 워크스페이스(전 회의록 ZIP)'),
+  [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 요청의 workspaceId(소속 확인, 없으면 400 — D26, 과제 34). 검색도 그 워크스페이스로, 명단 밖 비공개 프로젝트 회의록·폴더는 뺀다(FA1, CC1)'),
+  [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — ?workspaceId=(소속 확인, 없으면 400 — D26, 과제 34). 그 워크스페이스 회의록 ZIP, 명단 밖 비공개 프로젝트 회의록은 뺀다(판정 실패 503 — FA1, CC1)'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
   [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
-  [`${R('shell')}#GET`]: nul('session', '셸 — 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
-  [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 200 skipped(P19)'),
+  [`${R('shell')}#GET`]: nul('session', '셸 — 범위(ws 소속·볼 수 있는 프로젝트)를 먼저 거르고 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
+  [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
+  [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 본문 workspaceId(소속 확인), 둘 다 없으면 400(D26, 과제 34). 꺼지면 200 skipped(P19)'),
   [`${R('v1/agent/me')}#GET`]: agent(),
   [`${R('v1/agent/watch')}#POST`]: agent(),
   [`${R('v1/agent/work/[id]/claim')}#POST`]: agent(),
@@ -326,7 +328,8 @@ export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
 export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
   '/api/prefs': '셸 — 개인 UI 설정',
-  '/api/shell': '셸 — 알림함·파생 알림·공지 배지·티커·결재 배지 통합 조회',
+  '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
+  '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
 }
 

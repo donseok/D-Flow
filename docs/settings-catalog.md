@@ -14,11 +14,11 @@
 | `modules.allowed`<br>허용 모듈 | 워크스페이스 | 플랫폼 관리자 | `ModuleAllowEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `[]` (제품 기본값) | parse · validateWorkspaceConfig | `src/lib/modules/effective.ts`, `src/lib/settings/validateConfig.ts` | immediate | 파생 보기 재계산 | `tests/modules/effective.test.ts`, `tests/settings/config-lifecycle.test.ts` | verified | SP3a |
 | `ai.enabled`<br>AI 기능 | 워크스페이스 | 워크스페이스 관리자 | `boolean` / `updateWorkspaceSettings` | 설정 JSON 문서 | `true` (제품 기본값) | parse · validateWorkspaceConfig | `src/lib/modules/aiAvailable.ts` | immediate | 없음 | `tests/modules/effective.test.ts` | verified | SP3a |
 | `invites.allowed_domains`<br>초대 허용 도메인 | 워크스페이스 | 워크스페이스 관리자 | `text_list` / `updateWorkspaceSettings` | 설정 JSON 문서 | `[]` (배포 `INVITE_ALLOWED_DOMAINS` → 제품 기본값) | parse · validateWorkspaceConfig | `src/lib/data/inviteDomains.ts` | immediate | 없음 | `tests/settings/workspace-config.test.ts`, `tests/domain/invites.test.ts` | verified | SP3a |
-| `branding.product_name`<br>제품 이름 | 워크스페이스 | 워크스페이스 관리자 | `text` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"D-Flow"` (배포 `NEXT_PUBLIC_BRAND_NAME` → 제품 기본값) | parse · validateWorkspaceConfig | `src/lib/settings/displayBranding.ts`, `src/app/(app)/projects/page.tsx` | immediate | 없음 | `tests/settings/display-branding.test.ts` | stored | SP3a |
-| `branding.logo`<br>로고 | 워크스페이스 | 워크스페이스 관리자 | `LogoEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `{"full":null,"full_dark":null,"mark":null}` (제품 기본값) | parse · validateWorkspaceConfig | `src/app/api/brand/[workspaceId]/[slot]/route.ts`, `src/app/(app)/projects/page.tsx` | immediate | 없음 | `tests/settings/logo-upload.test.ts`, `tests/api/brand-route.test.ts` | stored | SP3a |
-| `branding.accent`<br>강조색 | 워크스페이스 | 워크스페이스 관리자 | `AccentEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `null` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/AccentEditor.tsx` | immediate | 없음 | `tests/settings/accent.test.ts` | stored | SP3a |
+| `branding.product_name`<br>제품 이름 | 워크스페이스 | 워크스페이스 관리자 | `text` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"D-Flow"` (배포 `NEXT_PUBLIC_BRAND_NAME` → 제품 기본값) | parse · validateWorkspaceConfig | `src/lib/settings/displayBranding.ts`, `src/lib/shell/loadShell.ts`, `src/components/app/BrandSlot.tsx`, `src/components/ui/BrandMark.tsx` | immediate | 없음 | `tests/settings/display-branding.test.ts`, `tests/shell/scope-layouts.test.tsx` | stored | SP3a |
+| `branding.logo`<br>로고 | 워크스페이스 | 워크스페이스 관리자 | `LogoEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `{"full":null,"full_dark":null,"mark":null}` (제품 기본값) | parse · validateWorkspaceConfig | `src/app/api/brand/[workspaceId]/[slot]/route.ts`, `src/lib/shell/loadShell.ts`, `src/components/app/BrandSlot.tsx`, `src/components/ui/BrandMark.tsx` | immediate | 없음 | `tests/settings/logo-upload.test.ts`, `tests/api/brand-route.test.ts`, `tests/shell/scope-layouts.test.tsx`, `tests/shell/brand.test.tsx` | stored | SP3a |
+| `branding.accent`<br>강조색 | 워크스페이스 | 워크스페이스 관리자 | `AccentEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `null` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/AccentEditor.tsx`, `src/lib/shell/loadShell.ts`, `src/lib/settings/accentCss.ts` | immediate | 없음 | `tests/settings/accent.test.ts`, `tests/shell/brand.test.tsx` | stored | SP3a |
 | `branding.mail_from_name`<br>메일 발신 표시명 | 워크스페이스 | 워크스페이스 관리자 | `text` / `updateWorkspaceSettings` | 설정 JSON 문서 | `null` (배포 `MAIL_FROM_NAME` → 제품 기본값) | parse · validateWorkspaceConfig | `src/lib/mail/fromName.ts`, `src/lib/settings/displayBranding.ts` | immediate | 없음 | `tests/settings/display-branding.test.ts` | verified | SP3a |
-| `navigation.menu`<br>메뉴 순서·이름 | 워크스페이스 | 워크스페이스 관리자 | `MenuOrderEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `{"order":[],"labels":{}}` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/MenuOrderEditor.tsx` | immediate | 없음 | `tests/settings/registry.test.ts` | stored | SP3a |
+| `navigation.menu`<br>메뉴 순서·이름 | 워크스페이스 | 워크스페이스 관리자 | `MenuOrderEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `{"order":[],"labels":{}}` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/MenuOrderEditor.tsx`, `src/lib/shell/loadShell.ts` | immediate | 없음 | `tests/settings/registry.test.ts`, `tests/shell/scope-layouts.test.tsx` | stored | SP3a |
 | `calendar.timezone`<br>시간대 | 워크스페이스 | 워크스페이스 관리자 | `TimezoneSelect` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"UTC"` (제품 기본값) | parse · validateWorkspaceConfig | `src/lib/calendar/load.ts`, `src/lib/settings/workspaceConfig.ts`, `src/app/(app)/p/[projectId]/weekly/page.tsx`, `src/lib/data/usage.ts` | immediate | 파생 보기 재계산 | `tests/domain/calendar.test.ts`, `tests/rls/calendar-parity.test.ts`, `tests/calendar/load.test.ts`, `tests/components/time-display-zone.test.tsx`, `tests/scripts/bootstrap-timezone.test.ts` | verified | SP5 A |
 | `calendar.working_days`<br>근무 요일 | 워크스페이스 | 워크스페이스 관리자 | `WorkingDaysEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `[1,2,3,4,5]` (제품 기본값) | parse · validateWorkspaceConfig | `src/lib/domain/calendar.ts`, `src/lib/calendar/load.ts`, `src/lib/domain/progress.ts` | immediate | 파생 보기 재계산 | `tests/domain/calendar.test.ts`, `tests/rls/calendar-parity.test.ts`, `tests/components/calendar-first-column.test.tsx`, `tests/settings/calendar-keys.test.ts` | verified | SP5 A |
 | `calendar.week_start`<br>주 시작 요일 | 워크스페이스 | 워크스페이스 관리자 | `select` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"sunday"` (제품 기본값) | parse · validateWorkspaceConfig | `src/lib/report/week.ts`, `src/app/actions/weekly.ts`, `src/lib/ai/tools/weekly.ts`, `src/lib/settings/defs/project.ts` | immediate | 파생 보기 재계산 | `tests/rls/week-start-transition.test.ts`, `tests/report/week.test.ts`, `tests/ai/bot-week-rules.test.ts`, `tests/actions/settings-week-start.test.ts` | verified | SP5 A |
@@ -138,20 +138,21 @@
 <!-- catalog:auto:5:start -->
 | 설정 키 | 스코프 | 편집 주체 | 편집 UI/API | 저장소 | 기본값(출처) | 검증기 | 소비처 | 적용 시점 | 기존 데이터 영향 | 테스트 | 현재 상태 | 담당 SP |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `theme` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `locale` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `heroCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 머리 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `sidebarCollapsed` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `dashSections` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 대시보드 구역 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minutesView` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 보기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minuteFontSize` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 글자 크기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `minutesExplorerLayout` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 회의록 탐색기 배치 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `notifRead` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 읽은 알림 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `lastProjectId` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 마지막 프로젝트 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsHideDone` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | WBS 완료 숨김 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsOutline` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | WBS 아웃라인 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `wbsGanttScale` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 간트 축척 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `notif` | 개인 | 본인 | 계정·화면 | 개인 선호 저장소 | 알림 토글 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `theme` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `locale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `sidebarCollapsed` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `dashSections` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 대시보드 구역 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minutesView` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 보기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minuteFontSize` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 글자 크기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `minutesExplorerLayout` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 탐색기 배치 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsHideDone` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | WBS 완료 숨김 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsOutline` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | WBS 아웃라인 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `wbsGanttScale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 간트 축척 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `notif` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 알림 토글 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `startPage` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 시작 화면 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `favoriteProjectIds` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 즐겨찾기 프로젝트(최대 20) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `recentProjects` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 최근 방문 프로젝트(최대 10) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `notifRead` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 읽은 알림 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 <!-- catalog:auto:5:end -->
 
 ## 6. 제품 고정

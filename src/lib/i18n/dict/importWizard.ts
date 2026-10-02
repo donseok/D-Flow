@@ -8,8 +8,8 @@ export const importWizardKo = {
   'importWizard.noPermissionTitle': '임포트 권한이 없습니다',
   'importWizard.noPermissionDesc': '프로젝트 관리자만 임포트 마법사를 사용할 수 있습니다.',
 
-  'importWizard.step1Label': '1. 파일 선택',
-  'importWizard.step2Label': '2. 확인 및 실행',
+  'importWizard.step1Label': '파일 선택',
+  'importWizard.step2Label': '확인 및 실행',
 
   'importWizard.chooseExcel': '엑셀 파일 선택',
   'importWizard.xlsxOnly': '.xlsx 파일만 지원합니다',
@@ -139,6 +139,23 @@ export const importWizardKo = {
   'importWizard.exportProfileFailedHttp': '내보내기에 실패했습니다',
   'importWizard.exportLayoutDesc': '프로젝트에 저장된 양식이 있으면 그 양식으로, 없으면 표준 양식(프로젝트 팀·단계로 생성)으로 세부 업무까지 펼쳐 내보냅니다.',
   'importWizard.exportProfileUnsupported': '저장된 양식으로는 펼침 내보내기를 만들 수 없습니다 — 아웃라인 양식이거나 WBS가 양식의 계층 열보다 깊습니다.',
+
+  // #23 결과·실행 기록(SP4 §5.2·D52, 계획 P9)
+  'importWizard.step3Label': '결과',
+  'importWizard.stepsAria': '가져오기 단계',
+  'importWizard.stepSr': '{total}단계 중 {n}단계: {label}',
+  'importWizard.stepSrDone': '{total}단계 중 {n}단계: {label}(완료)',
+  'importWizard.runId': '실행 ID',
+  'importWizard.receiptLink': '실행 기록 보기',
+  'importWizard.duplicateTitle': '이미 처리된 실행입니다',
+  'importWizard.duplicateDesc': '같은 실행을 다시 보냈습니다 — 처음 실행의 결과(건수·모드)를 보여 줍니다. 교체 전 백업은 실행 전에 받은 파일을 쓰세요.',
+  'importWizard.receiptTitle': '실행 기록',
+  'importWizard.receiptCount': '처리 건수',
+  'importWizard.receiptAt': '실행 시각',
+  'importWizard.receiptInvalid': '실행 기록 주소가 올바르지 않습니다',
+  'importWizard.receiptMissing': '이 프로젝트에서 그 실행 기록을 찾지 못했습니다',
+  'importWizard.receiptMissingDesc': '실행 기록은 그 실행을 한 관리자에게만, 실행한 프로젝트에서만 보입니다.',
+  'importWizard.receiptError': '실행 기록을 불러오지 못했습니다 — 잠시 후 다시 시도하세요',
 
   'importWizard.linkFromOldForm': '새 임포트 마법사(양식 자동 감지) →',
 } as const

@@ -28,7 +28,7 @@ export default async function NotFound() {
           {t(locale, 'home.nfDesc')}
         </p>
 
-        <Link href="/projects" className="btn btn-primary mt-7 w-full">
+        <Link href="/" className="btn btn-primary mt-7 w-full">
           <Home className="h-4 w-4" />
           {t(locale, 'home.nfHome')}
         </Link>

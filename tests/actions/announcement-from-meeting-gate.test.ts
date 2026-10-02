@@ -13,7 +13,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin, resolveProjectId }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
-vi.mock('@/lib/data/announcements', () => ({ getTopAnnouncements: vi.fn() }))
+vi.mock('@/lib/data/announcements', () => ({}))
 
 import { createAnnouncementFromMeeting } from '@/app/actions/announcements'
 

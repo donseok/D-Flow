@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { RefreshCw } from 'lucide-react'
 import type { CellAddr } from '@/lib/domain/sheetSelection'
-import { CELL_PEERS_MAX, presenceColor, type PresencePeer } from '@/lib/domain/sheetPresence'
+import { CELL_PEERS_MAX, presenceColor, presenceStyle, type PresencePeer } from '@/lib/domain/sheetPresence'
 
 export type CellStatus = 'saving' | 'saved' | 'error'
 /** 배치 변이 중 활성 셀에 뜨는 집계 칩(§5) — 개별 배지 대신 하나만. */
@@ -75,8 +75,8 @@ export function SheetCell(p: SheetCellProps) {
       <textarea
         ref={ref} value={p.value} rows={3} aria-label={p.ariaLabel} data-sheet-cell="1"
         readOnly={p.readOnly}
-        style={{ caretColor: p.editing && !p.readOnly ? '#000' : 'transparent' }}
-        className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-1.5 text-[13px] leading-[1.5] text-black outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-[#1a73e8] ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-[0_2px_6px_rgba(60,64,67,0.28)]' : ''}`}
+        style={{ caretColor: p.editing && !p.readOnly ? 'var(--color-fg)' : 'transparent' }}
+        className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-1.5 text-[13px] leading-[1.5] text-fg outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-md' : ''}`}
         onChange={e => p.onChange(e.target.value)}
         onBlur={p.onBlur}
         onFocus={p.onFocus}
@@ -88,11 +88,11 @@ export function SheetCell(p: SheetCellProps) {
         onCompositionEnd={p.onCompositionEnd}
       />
       {p.showBorder && (
-        <div className="pointer-events-none absolute inset-0 z-20 border-solid border-[#1a73e8]"
+        <div className="pointer-events-none absolute inset-0 z-20 border-solid border-border-focus"
           style={{ borderTopWidth: p.edgeTop ? 2 : 0, borderRightWidth: p.edgeRight ? 2 : 0, borderBottomWidth: p.edgeBottom ? 2 : 0, borderLeftWidth: p.edgeLeft ? 2 : 0 }} />
       )}
       {p.showFillBorder && (
-        <div className="pointer-events-none absolute inset-0 z-20 border-dashed border-[#1a73e8]"
+        <div className="pointer-events-none absolute inset-0 z-20 border-dashed border-border-focus"
           style={{ borderTopWidth: p.fillTop ? 2 : 0, borderRightWidth: p.fillRight ? 2 : 0, borderBottomWidth: p.fillBottom ? 2 : 0, borderLeftWidth: p.fillLeft ? 2 : 0 }} />
       )}
       {/* 프레즌스 — 타 사용자 위치 링(이름 가나다순 첫 사용자 색) + 셀 상단에 이름 칩(구글시트 룩).
@@ -106,14 +106,14 @@ export function SheetCell(p: SheetCellProps) {
           <span className="pointer-events-none absolute left-0 top-0 z-30 flex max-w-full -translate-y-1/2 gap-0.5">
             {p.peers.slice(0, CELL_PEERS_MAX).map(peer => (
               <span key={peer.connKey}
-                className="truncate rounded-sm px-1 text-[9px] font-bold leading-4 text-white"
-                style={{ background: presenceColor(peer.userId) }}
+                className="truncate rounded-sm px-1 text-xs font-bold leading-4"
+                style={presenceStyle(peer.userId)}
                 title={peer.editing ? `${peer.name} · 입력 중` : peer.name}>
                 {peer.name}{peer.editing ? ' ✎' : ''}
               </span>
             ))}
             {p.peers.length > CELL_PEERS_MAX && (
-              <span className="rounded-sm bg-neutral-500 px-1 text-[9px] font-bold leading-4 text-white">
+              <span className="rounded-sm bg-neutral-weak px-1 text-xs font-bold leading-4 text-neutral">
                 +{p.peers.length - CELL_PEERS_MAX}
               </span>
             )}
@@ -126,20 +126,20 @@ export function SheetCell(p: SheetCellProps) {
           onMouseDown={p.onFillHandleMouseDown}
           aria-hidden
         >
-          <div className="h-1.5 w-1.5 border border-white bg-[#1a73e8]" />
+          <div className="h-1.5 w-1.5 border border-surface bg-border-focus" />
         </div>
       )}
-      <span className="absolute right-1 top-0.5 z-30 text-[10px]">
+      <span className="absolute right-1 top-0.5 z-30 text-xs">
         {p.chip ? (
-          p.chip.phase === 'saving' ? <span className="text-[#9aa0a6]">{p.chip.count}개 셀 저장 중…</span>
-            : p.chip.phase === 'saved' ? <span className="text-[#188038]">저장됨</span>
-              : <button className="flex items-center gap-0.5 text-[#d93025]" onClick={p.onChipRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />{p.chip.count}개 셀 저장 실패 · 재시도</button>
+          p.chip.phase === 'saving' ? <span className="text-fg-muted">{p.chip.count}개 셀 저장 중…</span>
+            : p.chip.phase === 'saved' ? <span className="text-success">저장됨</span>
+              : <button className="flex items-center gap-0.5 text-danger" onClick={p.onChipRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />{p.chip.count}개 셀 저장 실패 · 재시도</button>
         ) : (!p.batchActive && (
           <>
-            {p.status === 'saving' && <span className="text-[#9aa0a6]">저장 중…</span>}
-            {p.status === 'saved' && <span className="text-[#188038]">저장됨</span>}
+            {p.status === 'saving' && <span className="text-fg-muted">저장 중…</span>}
+            {p.status === 'saved' && <span className="text-success">저장됨</span>}
             {p.status === 'error' && (
-              <button className="flex items-center gap-0.5 text-[#d93025]" onClick={p.onRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />재시도</button>
+              <button className="flex items-center gap-0.5 text-danger" onClick={p.onRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />재시도</button>
             )}
           </>
         ))}

@@ -20,7 +20,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({ locale: 'ko', t: (k: string) => realT('ko', k as Parameters<typeof realT>[1]) }),
 }))
-vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => [] }))
+vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
 
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'

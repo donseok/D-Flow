@@ -207,6 +207,7 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 | UI-0 끝(`sp3b/ui0` 수정 라운드 머리 = main 반영 트리, 과제 6 수정) | `qa/sp3b/smoke-t6fix.txt`(2026-10-01 15:50) | 0(통과) | 130,834 B | 1,931 | 493 | 71 | 9 | 1 |
 | UI-1 머리(`680c5d0`, 과제 25) | `qa/sp3b/t25-r1/smoke-ui1.txt`(2026-10-01 21:39) | 0(통과) | 124,966 B | 1,795 | 616 | 71 | 5 | 1 |
 | UI-1 최종 리뷰 수정 뒤(`03e0e30`, 과제 25 재실행) | `qa/sp3b/smoke-ui1.txt`(2026-10-01 22:28) | 0(통과 — 원색·비색 `:root` 검사 포함, 커스텀 프로퍼티 하한 480) | 125,369 B | 1,800 | 618 | 71 | 5 | 1 |
+| UI-2b 최종 수정 뒤(`bffd64e` 와 같은 src — 3203 스크래치 빌드, GG3) | `qa/sp3b/smoke-ui2g.txt`(2026-10-02 15:46) | 0(통과) | 124,922 B | 1,799 | 619 | 71 | 5 | 1 |
 
 (UI-0 은 창 ① rebase 없이 main 에 들어갔다(ui1-addendum §1) — 계획의 델타 행 `smoke-ui0-delta.txt`(과제 6 Step 4)는 해당 없음이라 수정 라운드 끝 기록을 둘째 행으로 둔다. UI-0 은 `src/**` 무수정이라 두 행이 같다. UI-1 행은 과제 25.)
 
@@ -220,3 +221,190 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 | 계정 | 시드 `ui-member`·`ui-platform`(확인 동안만 임시 비밀번호 — 대화에만, 확인 뒤 다시 임의 값) |
 | 사용자 판정 | "제대로 봤어. 많은 부분이 개선되었네. 괜찮아." — 지적 없음 |
 | 처리 | 수정 없음. 이월은 §3 이월표 그대로 |
+
+## 6. UI-2a 눈확인(에이전트 — D29)
+
+> **rebase 전(merge-base `305a3b4`) 기록이다 — main `7768830` 위로 rebase 한 뒤의 판정은 §8(과제 39)이 최신이다.**
+
+- 착수점 `8a84269`(옛 경로가 아직 페이지 — 기준 서버 3202 로 별도 워크트리에서 빌드), 머리 `4e3d43c`(캡처는 `03f07b2` 서버, 이후 변경은 E2E 스크립트 한 파일). 시드 2026-10-02, 라이트, 네 크기(1440×900·1280×720·768×1024·390×844). 증거 폴더 `qa/sp3b/ui2a-base`·`ui2a`·`ui2a-extra`·`ui2a-chip`·`ui2a-h1`, 비교표 `diff-ui2a-base--ui2a-pair.md`·`diff-ui2a-base--ui2a.md`.
+- 스모크: `smoke:prod`(3201) 통과(`smoke-ui2a.txt`). 서버 두 개(3201·3202)는 묶음 뒤 모두 내려갔다.
+- 스파이크 요약(`spike-ui2.md`): S-1 ② 스텁 307·no-store 통과(원점 주의 → 상대 `Location`, 판정 W2), S-1 ① 간트 200(로딩 경계 안 meta refresh) → 간트를 `(legacy)` 로 옮겨 307(판정 W1), S-5 `.app-main` 스크롤 통과, S-8 ①② 소프트 이동이 스텁을 지나도 전체 새로고침·오류 경계 없음(통과).
+
+### 판정표(스펙 §8.5 UI-2a 행)
+
+| 항목 | 통과 조건 | 결과 | 산출 |
+|---|---|---|---|
+| 짝 비교(`--pair`) | 옮긴 여덟 화면의 새 경로 장이 기준 옛 경로 장과 같거나 이 Phase 가 의도한 차이뿐 | **통과** — compared 32 · same 6 · near 6 · diff 20 · problem 0 · missing 0. diff 의 원인은 아래 4종뿐(장마다 확인) | `diff-ui2a-base--ui2a-pair.md` |
+| 옛 경로 이동 | 옛 키 장의 최종 URL 이 `/w/<wsSlug>/…`, problem 0 | **통과** — root→`/w/default`, meetings·minutes·minute·agents·portfolio·usage·admin-accounts·admin-teams 모두 `/w/default/…`, 머리 80장 problems 0·idle 거짓 0. 기준 서버는 옛 경로가 최종(`baseFinal`) | `ui2a/meta.json` |
+| 홈 v0·내 업무 v0·리졸버 | 섹션 셋·종류 칩·빈 상태, `/` → `/w/<slug>` | **통과** — 홈 세 섹션(처리할 일·진행 중 프로젝트·공지), 내 업무 종류 칩·행, root 최종 `/w/default` | `ui2a/ws-home-*`·`ws-my-work-*`·`root-*` |
+| 회의록 칩·개요 | '프로젝트: …' 칩과 ×, 개요 회의 카드, '이 프로젝트 회의록' 링크 | **통과(일부는 단위 테스트 근거)** — 칩 `프로젝트: UI-CAPTURE ×`(`ui2a-chip/`), 프로젝트 회의 화면 머리의 '이 프로젝트 회의록'(`ui2a-extra/p-meetings-*`). **개요(`/p/<pid>/dashboard`) 회의 카드**: 뷰포트를 키운 전체 페이지 캡처(`ui2a-extra/p-dashboard-full-on-{1440x900,390x844}-light.png`)와 카드 확대(`p-dashboard-meeting-card-on-*-light.png`)에서 카드 머리 오른쪽에 '이 프로젝트 회의록'이 있고 `href=/w/default/minutes?project=<pid>`(1440·390 모두, 접히지 않음). 개요의 모듈 꺼짐 때 카드가 사라지는 것은 눈으로 보지 못했다 — 이슈를 끈 시드 프로젝트(`pOff`)는 WBS 0건이라 개요가 빈 상태('분석할 WBS 데이터가 없습니다', `…-off-*.png`)여서 카드 비교가 성립하지 않는다. 그 구현은 `dashboard-cross-module.test.tsx` 가 고정한다(꺼짐과 실패를 구분) | `ui2a-chip/`·`ui2a-extra/` |
+| 가시 h1 수 | 기록(판정은 UI-2b ④) | 기록 — 아래 | `ui2a-h1/meta.json` |
+| E2E | 일곱 단계 ✓ | **통과**(`sp3b-e2e.md`) — 통과한 최종 표는 `e2e-sp3b-2026-10-01T19-20-39-631Z.md`. (`e2e-ui2a.txt` 는 E6 가 실패한 **첫 실행**의 출력이다 — 증거로 쓰지 않는다) | `qa/sp3b/e2e-sp3b-2026-10-01T19-20-39-631Z.md` |
+| 스모크 | exit 0 | **통과** | `smoke-ui2a.txt` |
+
+짝 비교 diff 의 원인(의도한 차이):
+1. **워크스페이스 한정(D21·D22)** — 포트폴리오 행 5→1(시드 프로젝트 하나, 다른 워크스페이스·rls 프로젝트 제외), 계정 12→5(그 워크스페이스 소속·명단). 좌석표(`ws-agents`)는 여기에 속하지 않는다 — 시드에 프로젝트가 하나라 좌석표 층 수는 바뀌지 않았고(768·390 이 0.00%, 본문 같음) 한정 동작은 `tests/agents/seatmap-scope.test.tsx` 가 증명한다. `ws-agents` 의 1280·1440 차이(0.41~0.58%)는 사이드바 안(20,220 203×438)이며 원인은 3 이다.
+2. **사용 현황 범위 칩**(D21) — '플랫폼 전체(워크스페이스 구분은 SP8)'.
+3. **옛 셸의 경로 의존 표시가 사라짐** — 사이드바 활성 항목·프로젝트 메뉴·브레드크럼이 `/minutes`·`/p/…` 경로로 파생되어 새 경로(`/w/<slug>/…`)에서는 비어 보인다. 판정 W13 이 허용한 공백이며 UI-2b 의 셸 교체(과제 31)가 메운다 — **UI-2a 단독으로 main 에 넣지 않는 이유**.
+4. 회의록·회의 화면 좌측 약 600×640 영역(1.1~1.6%) — 위 3 의 사이드바 프로젝트 메뉴 부재(기준 장에는 이전 프로젝트의 메뉴가 있다). 768·390 의 near(0.13~0.15%)는 머리 영역(브레드크럼 칩)뿐.
+
+장별 차이율(라이트, `diff-ui2a-base--ui2a-pair.md` 에서 옮김 — 판정 수 same 6 · near 6 · diff 20, problem 0):
+
+| 라우트 | 1440 | 1280 | 768 | 390 | 원인(번호는 위 목록) |
+|---|---|---|---|---|---|
+| ws-admin-accounts | 2.85% | 3.30% | 5.12% | 11.43% | ① 워크스페이스 한정(행 12→5, 프로젝트 select 사라짐 — 후보 1개) |
+| ws-usage | 5.94% | 6.44% | 7.46% | 10.36% | ② 범위 칩(머리 아래 52px 밀림) + ③ 사이드바 |
+| ws-portfolio | 3.45% | 4.45% | 3.26% | 5.23% | ① 워크스페이스 한정(행 5→1·요약 수치) |
+| ws-meetings | 1.12% | 1.57% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-minutes | 1.10% | 1.55% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-minute | 1.10% | 1.55% | 0.15% | 0.13% | ③·④ 사이드바 프로젝트 메뉴·활성 항목 부재(768·390 은 브레드크럼 칩) |
+| ws-agents | 0.41% | 0.58% | 0.00% | 0.00% | ③ 사이드바 `UI-CAPTURE 메뉴` 블록 부재(좌석표 본문은 같다 — 768·390 이 0.00%) |
+| ws-admin-teams | 0.00% | 0.00% | 0.00% | 0.00% | 차이 없음 |
+
+### 레인 A 알림(main 반영 때 충돌·확인 대상 — 원장 목록에 더한다)
+
+`merge-base 305a3b4` 이후 main(`54a202e`)과 양쪽이 바꾼 파일 아홉: `scripts/ui-capture.mjs`, `tests/gates/manifest.ts`, `tests/invariants/project-page-gates.test.ts`, `tests/invariants/settings-writes.test.ts`, `tests/minutes/external-api.test.ts`, `tests/rls/fixture-ws.sql`, `tests/rls/isolation-map.ts`(account_preferences 탐침 — 레인 A 소유), `tests/scripts/ui-capture.test.ts`, `tests/ui/app-layout-teams.test.tsx`. `git merge-tree` 3-way 충돌 표지는 0 이다. 앞의 원장 알림에는 `isolation-map.ts`·`external-api.test.ts`·`app-layout-teams.test.tsx` 가 없었다.
+
+### 이월(문구·표현)
+
+- 포트폴리오 화면 제목이 워크스페이스 한정(D21) 뒤에도 '전사 포트폴리오' 로 남아 있다(`ws-portfolio` 캡처) — 문구가 사실과 다르다. 화면 소유 SP 가 정리하며 UI-2b/UI-3 이월 목록에 한 줄 둔다.
+- 스펙 §5.3·§8.3 E1 의 "`Location` 은 요청 원점" 은 판정 W2(상대 `Location`)로 갈음했다 — §7 반영 때 스펙 문언을 정정한다.
+- 없는 `/w/<slug>/…` 경로의 RSC prefetch 가 끝나지 않는 관찰(U2a-5) — 과제 25 가 `/w/<slug>/projects` 를 만들어 홈의 '전체 보기'·시작 화면이 가리키던 임시 옛 경로를 새 경로로 돌렸다. 남은 없는 경로 링크는 과제 31·35 의 전수 점검 몫.
+
+### 가시 h1 수(기록 — 1280×720·390, 44 라우트)
+
+대부분의 옛 셸 화면이 가시 h1 이 **0** 이다(`PageHero` 는 접힌 머리만 그린다 — 공유 `share`·`ws-minute` 는 2). 홈·내 업무는 세 크기 모두 1. UI-2b 과제 32 가 모든 뷰포트 h1 을 판정한다.
+
+### 알려진 도구 상태
+
+- `ui2a-h1` 의 `withProblems`: `mobile-menu@1280x720`·`p-wbs-fullscreen@1280x720·390`(클릭 대상이 그 크기에 없음 — UI-1 부터 같은 행의 알려진 한계, 화면 문제 아님).
+
+## 7. UI-2b 눈확인(에이전트 — 과제 38, 최종 리뷰 수정 GG3 로 재생성)
+
+> **rebase 전 기록이다 — rebase 뒤 재생성은 §8(과제 39).** 아래 '사용자 확인(D29)' 절은 rebase 전 머리(`8150307`)에 대한 것이다(§8 의 'D48 — 섞임' 참고).
+
+> **GG3 재생성(2026-10-02 15:46~16:29 — 아래 'GG 뒤 재생성' 절이 최신 판정이다).** 이 절의 첫 판(머리 `256652a`)에서 미해결이던 셋 — 가시 h1 = 1(회의록 상세·스텁·share 2), 390 달력 공휴일 라벨 잘림, UI 위험 목록 — 은 각각 `8aada02`(본문 머리 강등)·`9ce4f5c`(라벨 줄바꿈)·`87102b7`(CLAUDE.md)로 **해결**됐다. 대조표 `ui2b-sheet.html` 은 GG 뒤 판으로 바뀌었다(첫 판은 `ui2b-sheet-1237.html`).
+
+- 기준 = UI-2 착수점 `8a84269`(스크래치 `lane-b-base` · 3202 · 빌드 `T1Ky7IAqYrNJRQwZejnI5`), 머리 = `256652a`(DD1 — 캡처 서버 빌드 `oEi0sF6IIoXxcl7s6FMIo`) · 키보드 재측정 `40c4127`(캡처 행 선택자 한 줄 — 앱 코드 같음). 시드 2026-10-02. 증거 폴더 `qa/sp3b/ui2b-base`·`ui2b`·`ui2b-shell`·`ui2b-accent-{default,bright,dark}`·`ui2b-scrolled`·`ui2b-settings-bottom`·`ui2b-nojs`·`ui2b-nojs-ref`·`ui2b-fs-ai`·`ui2b-h1`·`ui2b-broken`·`ui2b-base-axe`·`ui2b-tab2`, 비교표 `diff-ui2b-base--ui2b-pair.md`·`diff-ui2b-base--ui2b.md`, 대조표 `ui2b-sheet.html`(섹션 11 · axe 174행 · tab).
+- 스모크: `smoke:prod`(3201) 통과(`smoke-ui2b.txt`). 서버(3201·3202)는 묶음마다 내려갔다.
+- 공통 묶음: vitest 784 files · 9,992 tests(실패 1 = 알려진 `baseline-cli`), lint 0 errors(경고 4 기존), typecheck 0, build 통과. `breakpoint-safety-net`·`platform-guards`·`guard-signatures` 무수정 초록, `globals.css` 안전망 블록 sha1 이 `b4283c0`·`305a3b4`·머리에서 같다. 임시 허용(`'UI-2b: '`·`'UI-2b — '`) 0·0·0, 브리지·`ProjectTabs`·`SECTION_LABEL` 잔재 0, `(legacy)` route 10(스텁 9 + 간트 — 판정 W1).
+- DB 묶음: `db:reset` → `dev:bootstrap` → `test:rls` 28 files · 289 tests(건너뜀 0) → `settings:verify` 초록 → 캡처 시드.
+
+### 스파이크 결과(`.superpowers/sp3b/spike-ui2.md`)
+
+| # | 판정 |
+|---|---|
+| S-2 | 혼합 — 범위 레이아웃이 던지는 404 는 HTTP 404, 로딩 경계 안 페이지 404 는 200 + notFound digest. E2E E4 는 '404 또는 digest'(실측: 세 경로 모두 404 + digest) |
+| S-3 | 통과 — 대안(`scopeMatchesPath` 로 게시 기다림) 뒤 `/w↔/p` 이동당 `/api/shell` 1회·소켓 1·URL 커밋 p95 83ms, `/w↔(global)` AI 입력·레일 보존 |
+| S-6 | 통과 — 범위 레이아웃 `generateMetadata` 의 icons 가 루트 파일 아이콘을 덮는다(C `3cae800`), `icon.tsx`·`apple-icon.tsx` 무변경 |
+| S-7 | 회의록 탐색기 문서형 유지 + 트리만 lg 고정(BB2 `0a8538a` — 26건 재측정에서 트리 이탈 수정) |
+| S-8 ③ | 통과 — 전환기 B 뒤 65ms 안에 사이드바 '전체 보기'가 B 경로(`router.refresh()` 불필요) |
+
+### 판정표(스펙 §8.5 UI-2b 행)
+
+| 항목 | 통과 조건 | 결과 | 산출 |
+|---|---|---|---|
+| (a) 셸 행렬 | 범위마다 그 범위 내비, 접힘·펼침, duo 전환, 드로어, 브레드크럼 '워크스페이스 전체' 칩, 에이전트 세 화면, 설정 저장 바, 에이전트 보기 전환, WBS 스크롤 하나, AI 레일 병치·오버레이, 로고·accent·파비콘, 홈·내 업무 v0 | **통과** — 176장(22행 × 네 크기 × 라이트·다크), problems 은 그 크기에 UI 가 없는 click-failed 뿐(전환기·AI 버튼은 390 에 없음, 드로어·햄버거는 lg 미만 전용). 열어 본 장: ws-switcher-open 1440 다크(두 워크스페이스·체크), drawer-project 390 다크(프로젝트 내비·닫기), ws-home-collapsed 1280(64px 아이콘 레일), p-wbs 1280(채움형 — 그리드만 스크롤), rail-ai-1280 → 1440 병치·1280 오버레이, ws-agents 1440(브레드크럼 '워크스페이스 전체' + 에이전트 현황 활성). accent 셋 24장 problems 0 — 밝은 `#ffd43b` 은 라이트 세트 `#8c7316` 로 어두워져 링크·아바타·활성 칩에, 어두운 `#1c1c6b` 다크는 `#7181d8` 계열(열어 봄). 설정 바닥 6장 — 저장 바(변경 0개)가 마지막 입력을 가리지 않음 | `ui2b-shell/`·`ui2b-accent-*/`·`ui2b-settings-bottom/` |
+| 가시 h1 = 1 | 모든 라우트 × 1280×720·390 | **해결(GG3 재측정: 66행 132장 모두 1)** — 첫 판(`256652a`)에서는 `ws-minute`·`minute`(스텁 최종)·`share` 가 2(본문 마크다운 `# 제목` 을 `MarkdownView` 가 h1 로 그림, UI-2a 부터 같음). 판정 R-h1 로 `8aada02` 가 본문 머리를 한 단계 강등(`demoteHeadings` — 시각 클래스 그대로)했고, `ui2g-h1` 이 전 행 1 을 확인했다 | `ui2b-h1/meta.json`(첫 판)·`ui2g-h1/meta.json`(재측정) |
+| (b) 전 라우트 회귀 | diff 장이 의도한 차이(셸 교체)뿐 | **통과** — 짝 36: diff 36·problem 0(옮긴 화면 전부 — 전역 바·브레드크럼·워크스페이스 내비·접기·main 여백 16px 이 원인, 본문 같음: agents⇔ws-agents 1440·meetings⇔ws-meetings 390 열어 봄). 옛 키 264: same 17·diff 140·new 96·problem 11 = 모두 click-failed(기준 서버에 `/w/<s>/projects` 가 없어 mobile-menu·account-popover 행이 클릭 대상 없음, p-wbs-fullscreen·mobile-menu 의 크기 한계는 UI-1 부터). 옛 키 최종 URL 전부 `/w/default/…`(p-gantt → `/p/<pid>/…`) | `diff-ui2b-base--ui2b*.md` |
+| (c) 스크롤 상태 | 고정 요소가 도구 줄을 덮지 않음 | **통과** — 28장 problems 0(p-weekly 1280 열어 봄 — 도구 줄 위 고정 요소 없음) | `ui2b-scrolled/` |
+| JS 끈 첫 페인트 | 사이드바 유무·폭·머리 높이가 JS 켬과 같다(D55) | **통과** — p-dashboard 1280·ws-home 390 비교(사이드바 232px·전역 바 48px 같음, 본문만 스켈레톤) | `ui2b-nojs`·`ui2b-nojs-ref` |
+| 전체 화면 AI | 레일이 전체 화면 안에 열리고 숨지 않는다(D56) | **통과** — p-wbs-fullscreen-ai 1440 라이트·다크(전체 화면 오른쪽 레일). 390·compact 행의 click-failed 는 크기 한계 | `ui2b-fs-ai/` |
+| 키보드 | Tab 순회 실패 0·미도달 0 | **통과(재측정)** — 첫 측정은 p-dashboard 미도달 `aside a…`(도구 행이 옛 셸 `<aside>` 를 가리킴 — 새 셸 내비는 `[data-side-rail] nav`) → `40c4127` 로 선택자를 고쳐 ws-home·p-dashboard·p-wbs × 라이트·다크 실패 0·미도달 0 | `ui2b-tab2/tab.json` |
+| axe | 머리 위반 ≤ 기준(라이트), 다크는 새 셸 파일에서 온 위반 0 | **조건부 통과** — 같은 키 라이트: agents·meetings·p-attendance·p-office·p-office-lane·p-weekly 같음, **p-dashboard 0→24**(같은 경로의 행 넷도 24). 24 는 개요 이슈 카드(`IssueStatusCard` — 이슈 없는 영역 카드 `opacity-60` + `text-ink-subtle`, 2.39·4.33)의 기존 결함: 컴포넌트·색 토큰이 UI-2 범위에서 바뀌지 않았고 기준은 같은 노드를 `incomplete`(15)로 남겼다(스크롤 주체가 main 하나로 바뀌어 접힘 밖 노드가 측정됨 — UI-1 의 p-office-lane 판정과 같은 부류). 라이트·다크 모두 셸 요소(header·nav·`data-side-rail`·`#app-rail`·브레드크럼·전환기·계정) 위반 노드 0 | `ui2b/axe.json`·`ui2b-base-axe/axe.json` |
+| 설정 손상 | 셸이 열리고 머리 알림, 설정 화면 열림, 개요 정상(D49) | **통과** — `navigation.menu:"oops"` 상태 8장 problems 0: 알림 '설정을 불러오지 못해 메뉴 일부를 숨겼습니다.'·'설정 열기', `/w/<s>/settings` 열림, 개요 정상(열어 봄). 묶음 안에서 원래 values 로 복원·대조 | `ui2b-broken/` |
+| E2E·스모크·성능 | Step 3·4 | E2E E1·E2·E4~E11 10/10 ✓·스모크 통과(`sp3b-e2e.md`) · 성능은 `sp3b-perf.md`(시리즈 1·2 초과, 시리즈 3·9회 합 통과 — 잡음 기록) | 기록 문서 |
+
+### 관찰(이월 후보)
+
+- ~~390 회의 달력(`ws-meetings`·`p-meetings`): main 좌우 여백이 16px 로 늘어 칸이 좁아져 공휴일 표지 글자가 잘린다~~ — **해결**(판정 R-390, `9ce4f5c` — 좁은 화면에서 라벨이 칸 너비로 줄바꿈, `title` 유지). GG3 재캡처 `ui2g/ws-meetings-390x844-light.png` 에서 개천절·대체공휴일(두 줄)·한글날이 읽힌다(열어 봄).
+- 개요 이슈 카드의 대비(위 axe 행) — 이슈 없는 영역 카드의 흐림(`opacity-60`)과 `text-ink-subtle` 겹침. 화면 소유 SP 몫.
+- ~~회의록 본문 `# 제목` 의 h1(위 h1 행)~~ — 해결(`8aada02`).
+- 개요 이슈 카드 대비 24 는 UI-3 입력(`plan-ui3.md` Step 1b — GG6).
+
+### UI 위험 목록(CLAUDE.md)
+
+`.githooks/pre-push` 의 `UI_RE` 는 과제 31 에서 범위 레이아웃 셋을 더했다. `CLAUDE.md` '브랜치' 절의 UI 위험 파일 목록에 같은 셋 — `src/app/(app)/w/[slug]/layout.tsx`·`src/app/(app)/p/[projectId]/layout.tsx`·`src/app/(app)/(global)/layout.tsx` — 을 **컨트롤러가 `87102b7` 로 더했다(해결)**. 스펙 §9 의 "같은 커밋"과는 다르다(`UI_RE` 는 `3d58967`) — 내용은 일치, 의도된 편차로 기록(완료 리뷰 F-9).
+
+### GG 뒤 재생성(UI-2b 최종 리뷰 수정 GG3 — 2026-10-02 15:46~16:29)
+
+- 머리: 레인 B `bffd64e`(GG1 `087fd53`·GG2 `ed94da2`·GG7 `eb45e2b`·GG4 `a227187`·GG5 `bffd64e` — EE 의 `8aada02`·`9ce4f5c` 포함). 사용자 확인 서버 3201 을 건드리지 않으려 **스크래치 워크트리 `lane-b-gg`(src 가 머리와 같음)** 를 3203 에서 빌드(`e9Mp7lg1TEsyp9zGqU73L`)해 찍었다. 기준 = `lane-b-base`(`8a84269`, 3202, `T1Ky7IAqYrNJRQwZejnI5`). 시드 2026-10-02(EE 의 `db:reset` 뒤 캡처 시드 — 첫 판과 시드 프로젝트 id 가 달라 기준도 다시 찍었다). 라벨 `ui2g*`, 대조표 `ui2b-sheet.html`(= `ui2g-sheet.html`, 섹션 11 · axe 174행 · tab).
+- 스모크(3203) 통과(위 §4 행). E2E E1·E2·E4~E11 **10/10 ✓**(16:28~16:29, `sp3b-e2e.md`).
+- (b) 짝 36: same 0·near 0·**diff 36**·problem 0 — 첫 판과 같다(셸 교체가 원인). 옛 키 264: same 17·diff 100·new 96·problem 51 = click-failed 11(첫 판과 같은 기준 서버 클릭 대상 없음·크기 한계) + **도구 산물 40**: 머리를 `--base http://127.0.0.1:3203` 로 찍으면 캡처 도구가 그 서버를 '기준 서버'로 보고 옛 경로 행의 기대 최종 경로를 옛 페이지(`baseFinal`)로 잡는다 — 실제 최종 경로는 모두 `/w/default/…`(첫 판의 기대와 같음)라 화면 문제가 아니다.
+- (a) 셸 행렬 176장·accent 셋 24장·스크롤 28장·설정 바닥 6장·JS 끔/켬 18장·전체 화면 AI 20장·설정 손상 8장: problems 은 그 크기에 UI 가 없는 click-failed 뿐(첫 판과 같은 행).
+- 가시 h1: **132장 모두 1**(`ui2g-h1`).
+- 키보드: ws-home·p-dashboard·p-wbs × 라이트·다크 실패 0·미도달 0.
+- axe: 기준 라이트 42쪽 44건, 머리 라이트 189·다크 122 — **첫 판과 키마다 같다**(같은 키 변화는 p-dashboard·inbox-popover 0→24 = 개요 이슈 카드 기존 결함, UI-3 입력). 셸 요소 위반 노드 0.
+- 열어 본 장: `ui2g/ws-meetings-390x844-light`(공휴일 라벨 줄바꿈), `ui2g/ws-minute-390x844-light`(본문 제목 '설계 검토 회의' 가 h2 크기 그대로·페이지 h1 하나), `ui2g-shell/ws-home-1440x900-dark`(셸·홈 v0), `ui2g-broken/ws-settings-broken-1440x900-light`(설정 손상 알림·'설정 열기'·저장 바). GG1 의 비공개 숨김은 `qa/sp3b/gg1/`(6장 — 명단 밖 404·명단·워크스페이스 관리자·플랫폼 관리자 정상).
+- 계정 처리: 캡처·E2E 는 시드 계정 비밀번호를 실행마다 재설정한다 — 사용자 확인 계정(ui-* 넷)의 비밀번호 해시·개인 설정·공지/알림 읽음을 묶음 전에 백업하고 끝에 되돌렸다(대조 일치). E2E 픽스처(bea·B 공용 팀·두 프로젝트·회의록 둘)는 지워 캡처 시드 상태로 돌렸다.
+
+## UI-2b 사용자 확인(D29)
+
+| 항목 | 값 |
+|---|---|
+| 일시 | 2026-10-02 15:27 무렵 KST — 레인 B 원장 `progress.md` 기록 시각(사용자 응답 "어 괜찮아 계속 진행해"는 그 직전). 앞 판의 '14시대'는 원장과 어긋나 고쳤다(같은 날 14시대의 사용자 판단은 R25 — 최종 수정 지시서가 적은 것, HH4) |
+| 확인 대상 | 3201 `next start`(머리 `8150307` — EE 반영 빌드), 대조표 `ui2b-sheet.html`(12:37 판 — 지금은 `ui2b-sheet-1237.html`, GG3 에서 재생성) |
+| 표본 | 과제 38 Step 9 의 여섯 — ① 워크스페이스 홈 → 회의록 → 회의록 하나(브레드크럼·사이드바 활성) ② 프로젝트 전환기(이슈 꺼진 프로젝트 → 개요 + 토스트) ③ duo 워크스페이스 전환·옛 `/minutes` ④ 1280×720 AI 레일 오버레이·Esc, 1440 병치 ⑤ 390 햄버거 → 드로어 → Esc → 초점 ⑥ 다크 작업 계획(스크롤 하나·전체 화면 + AI)·주간보고(스크롤 뒤 도구 줄) |
+| 계정 | 시드 `ui-member`·`ui-wsadmin`·`ui-duo`·`ui-platform`(비밀번호는 대화에만) |
+| 사용자 판정 | 지적 없음. 같은 자리에서 GG1(명단 밖 비공개 프로젝트 화면 404) 동작 변경에 동의. **'명단 밖'의 실제 경계는 명단 권한(access_role)이다** — 명단 행이 있어도 access_role 이 null 인 사람도 404 다(정본 canSeeProject — 회의록·위키·AI·포털 목록과 같은 축, `tests/authz/project-layout-hiding.test.tsx` 가 고정, HH5). 동의 문구는 이 집단을 적지 않았으므로 컨트롤러가 사용자에게 알린다 |
+| 처리 | 수정 없음. 커밋 시각(git)과 확인(15:27 무렵)의 순서 — **확인 전**: GG2(`ed94da2` 15:21 불변식 — 테스트뿐, 화면 영향 없음). **확인 뒤**: GG1(`087fd53` 15:37 — 비공개 숨김 판정자 하나, 프로젝트 화면 404)·GG7(`eb45e2b` 15:37 주석)·GG4·GG5(`a227187`·`bffd64e` 15:38 성능 문서)와 이 문서 갱신(`8f5f332`). 화면 변화는 GG1 의 명단 밖 비공개 404 하나이고 확인 뒤 커밋이다(사용자가 동의한 변경) |
+
+## 8. 과제 39 — rebase 뒤 재생성(main `7768830` 위, 창 직전 — D46·D48)
+
+- `ui/sp3-menu` 를 main `7768830`(SP4 A1·A2 — 0013~0017) 위로 rebase(18:50~19:05, 충돌 15파일 — 해소 기록은 리포 밖 과제 39 보고).
+  `account_preferences` 는 `0018` 로 옮기고 재리허설(`Staging-verified` 빈 커밋 19:04).
+- 기준 = rebase 뒤 merge-base `7768830`(main 그대로 — 스크래치 `lane-b-base` 를 다시 detach, 3202, 빌드 `0uWOUOlD1k-5hNOXOMd3X`),
+  머리 = `bed4f396`(3201, 빌드 `ptEThFX2MLV1RSL6OyB9k` — 머리를 `--base` 없이 찍어 GG3 의 도구 산물 40 이 없다). 시드 2026-10-02(캡처 시드, 같은 날).
+  라벨 `ui2rb*`(UI-2b 묶음 — 전 라우트·셸 행렬 등)·`ui2ra-extra`·`ui2ra-chip`(UI-2a 고유 장), 대조표 `qa/sp3b/ui2rb-sheet.html`, 비교표 `diff-ui2rb-base--ui2rb{,-pair}.md`.
+- **D48 대로 UI-2a 행도 rebase 된 머리(UI-2a + UI-2b)에서 다시 찍었다** — 그래서 UI-2a 의 짝 비교 차이에는 UI-2b 의 셸 교체가 함께 들어 있다(UI-2a 지점만의 빌드는 찍지 않았다).
+- 공통 묶음: vitest 832 files · 10,792 tests(실패 1 = 알려진 `baseline-cli` firmlink), lint 0 errors(경고 4 기존), typecheck 0, build 통과.
+  `breakpoint-safety-net`(merge-base·`b4283c0` 대비)·`platform-guards`·`guard-signatures` 무수정 초록.
+- DB 묶음: `db:reset` → `dev:bootstrap` → `test:rls` 32 files · 391 tests(건너뜀 0) → `settings:verify` 초록 → 캡처 시드. 스모크(3201) 통과.
+- E2E: 합친 `e2e-local` 의 `sp3b-` 열 단계 ✓(19:26 — `sp3b-e2e.md` '과제 39' 절). 같은 실행의 앞 38 단계와 합성 게이트 15 단계도 ✓.
+
+### UI-2a 행(스펙 §8.5)
+
+| 항목 | 결과 | 산출 |
+|---|---|---|
+| 짝 비교(`--pair`) | **통과** — 36: diff 36 · problem 0(같은 판정 수가 rebase 전 GG3 와 같다). 장별 차이율도 GG3 와 ±3.6%p 안(가장 큰 변화: `ws-admin-accounts` 390 10.78→14.38% — 기준 화면이 계정 12행(테스트 픽스처 포함)·머리 5행인 D22 한정 차이, 열어 봄) | `diff-ui2rb-base--ui2rb-pair.md` |
+| 옛 경로 이동 | **통과** — 옛 키 264: same 17 · diff 140 · new 96 · problem 11(전부 click-failed — 기준 서버에 `/w/<s>/projects` 가 없는 mobile-menu·account-popover, 크기 한계 p-wbs-fullscreen — t38 판과 같다). 옛 키 최종 URL 모두 `/w/default/…`(경로 문제 0) | `diff-ui2rb-base--ui2rb.md`·`ui2rb/meta.json` |
+| 홈 v0·내 업무 v0·리졸버 | **통과** — `ws-home`·`ws-my-work`·`root` 장(root 최종 `/w/default`), 셸 행렬의 ws-home 다크 1440(duo — 처리할 일·진행 중 프로젝트·공지 세 섹션, 열어 봄) | `ui2rb/`·`ui2rb-shell/` |
+| 회의록 칩·개요 | **통과** — `/w/default/minutes?project=<시드>` 에 '프로젝트: UI-CAPTURE ×' 칩(열어 봄), 프로젝트 회의 화면 머리의 '이 프로젝트 회의록'(1440 열어 봄). 개요 카드 링크는 §6 판정 그대로(`dashboard-cross-module.test.tsx`) | `ui2ra-chip/`·`ui2ra-extra/` |
+| 가시 h1 | 132장 모두 1(아래 UI-2b 행) | `ui2rb-h1/meta.json` |
+| E2E | E1·E2·E4·E6·E8·E9·E11 ✓ | `sp3b-e2e.md` |
+| 스모크 | 통과 | `qa/sp3b/t39/smoke.txt` |
+
+### UI-2b 행(스펙 §8.5)
+
+| 항목 | 결과 | 산출 |
+|---|---|---|
+| (a) 셸 행렬 | **통과** — 176장, problems 16 = GG3 판과 **같은 목록**(그 크기에 UI 가 없는 click-failed). accent 셋 24장 problems 0(기본·`#ffd43b`·`#1c1c6b` — 끝에 기본으로 복원), 설정 바닥 6장 0. 열어 봄: ws-switcher-open 1440 다크(두 워크스페이스·체크), drawer-project 390 다크(프로젝트 내비·닫기) | `ui2rb-shell/`·`ui2rb-accent-*/`·`ui2rb-settings-bottom/` |
+| 가시 h1 = 1 | **통과** — 66행 × 1280×720·390 = 132장 모두 1 | `ui2rb-h1/meta.json` |
+| (b) 전 라우트 회귀 | **통과** — 위 UI-2a 행의 짝·옛 키 비교와 같다(셸 교체가 원인). SP4 가 바꾼 화면(주간·설정·가져오기·WBS·개요·이슈·명단)의 기준↔머리 차이율이 rebase 전과 ±0.3%p 안 — SP4 변경과 셸 교체가 서로 화면을 바꾸지 않았다. 열어 봄: p-weekly 1440, p-wbs 1280, p-import-admin 1440(새 셸 안) | `diff-ui2rb-base--ui2rb.md` |
+| (c) 스크롤 상태 | **통과** — 28장 problems 0(p-weekly 1280 열어 봄) | `ui2rb-scrolled/` |
+| JS 끈 첫 페인트 | **통과** — p-dashboard 1280 JS 끔: 사이드바 232px·전역 바 48px 그대로, 본문 스켈레톤(열어 봄), 9·9장 problems 0 | `ui2rb-nojs`·`ui2rb-nojs-ref` |
+| 전체 화면 AI | **통과** — p-wbs-fullscreen-ai 1440 다크: 레일이 전체 화면 안 오른쪽(열어 봄), problems 10 = GG3 와 같은 크기 한계 | `ui2rb-fs-ai/` |
+| 키보드 | **통과** — ws-home·p-dashboard·p-wbs × 라이트·다크 실패 0·미도달 0 | `ui2rb/tab.json` |
+| axe | **조건부 통과(GG3 와 동일)** — 기준 라이트 42쪽 44건, 머리 132쪽 311건(라이트 189·다크 122) — **쪽마다 GG3 판과 같은 수**(달라진 쪽 0). 같은 키 변화는 개요 이슈 카드 기존 결함(UI-3 입력)뿐 | `ui2rb/axe.json`·`ui2rb-base-axe/axe.json` |
+| 설정 손상 | **통과** — `navigation.menu:"oops"` 8장 problems 0: 머리 알림 '설정을 불러오지 못해 메뉴 일부를 숨겼습니다.'·'설정 열기', 설정 화면 열림(1440 열어 봄). 묶음 안에서 원래 values 로 복원·대조 | `ui2rb-broken/` |
+| E2E·스모크·성능 | E2E 10 단계 ✓·스모크 통과. 성능은 재측정 생략(사용자 지시 — 전체 완료 뒤 일괄, `sp3b-perf.md`) | 기록 문서 |
+
+### D48 — 다른 레인의 화면 파일이 섞였다
+
+rebase 로 main 의 SP4 A1·A2 화면 파일 **18개**(`p/[projectId]/{import,settings,weekly}/page.tsx`, `components/import/*` 3, `components/settings/*` 3,
+`components/wbs/{RowDetailPanel,WbsGanttSheet,WbsProgressLens,shared}`, `components/weekly/*` 5)가 머리에 들어왔다 — UI-2 가 함께 고친 파일은
+`WbsGanttSheet.tsx`·`WeeklySheetView.tsx` 둘(자동 병합 — sticky·전체 화면 AI 줄이 그대로, `sticky-offset` 초록). §7 의 사용자 확인(D29, 15:27)은 이 파일들이 없던
+머리(`8150307`)였고 표본 ⑥(다크 작업 계획·주간보고)이 바로 이 화면이다. 에이전트 재캡처는 셸 교체의 차이가 rebase 전과 같음을 보였지만, 사용자 확인은 계획(과제 39 Step 5)대로
+컨트롤러가 다시 받는다.
+
+
+### D48 사용자 재확인(과제 39 — 컨트롤러)
+
+| 항목 | 값 |
+|---|---|
+| 일시 | 2026-10-02 20:28 KST |
+| 확인 대상 | 3201 `next start`(머리 `57b01dd7` — 빌드 `ptEThFX2MLV1RSL6OyB9k`, 그 뒤 src 변경 없음), 레인 B 스택은 `db:reset` → `dev:bootstrap` → 캡처 시드로 새로 만든 상태(2026-10-02) |
+| 표본 | 다크 작업 계획(WBS — 스크롤 하나·전체 화면 + AI)·주간보고(스크롤 뒤 도구 줄)(표본 ⑥ — SP4 A1·A2 화면이 섞인 곳), 가능하면 프로젝트 가져오기 화면, 나머지 표본은 rebase 전과 같은 장으로 에이전트가 비교(§8) |
+| 계정 | 시드 `ui-member`·`ui-wsadmin`·`ui-duo`·`ui-platform`(비밀번호는 대화에만) |
+| 사용자 판정 | "이상없음 계속 진행해" — 지적 없음 |
+| 처리 | 수정 없음. 이 확인으로 UI-2b 체크포인트(빈 커밋)를 만든다. 성능(R25)은 사용자 지시로 전체 구현 완료 뒤 일괄 측정 |

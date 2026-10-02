@@ -163,7 +163,7 @@ export const GOLDEN_WEEKLY_AREAS: ConfigArea[] = [
   { id: 'g-area-data', kind: 'weekly_section', code: 'G-DATA', name: '데이터', sortOrder: 3, active: true, teams: [{ teamId: 'default-mes', kind: 'primary' }] },
   { id: 'g-area-mat', kind: 'weekly_section', code: 'G-MAT', name: '자재', sortOrder: 4, active: true, teams: [] },
 ]
-/** 설정 저장소가 내는 팀 — 라우터 목(teams-master-mock)과 같은 FIXTURE_TEAMS 를 공용 팀(projectId null)으로 */
+/** 설정 저장소가 내는 팀 — 라우터 목과 같은 FIXTURE_TEAMS 를 공용 팀(projectId null)으로 */
 export const GOLDEN_CONFIG_TEAMS: ConfigTeam[] = FIXTURE_TEAMS.map(t => ({
   id: t.id, code: t.code, name: t.code, sortOrder: t.sortOrder, active: t.active, color: '#6b7280', progressVisible: t.progressVisible, projectId: null,
 }))

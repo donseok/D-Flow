@@ -3,13 +3,12 @@ import { isThemePref, type ThemePref } from '@/lib/theme/policy'
 
 /** 로컬 캐시 값(서버 UiPrefs 는 부분적일 수 있음). theme 은 **선호**다 — 고른 적 없으면 null(DOM 클래스의 해석값이 아니다, D10). */
 export type LocalPrefs = {
-  heroCollapsed: boolean
   sidebarCollapsed: boolean
   theme: ThemePref | null
   locale: 'ko' | 'en'
 }
 
-const KEYS: (keyof LocalPrefs)[] = ['heroCollapsed', 'sidebarCollapsed', 'theme', 'locale']
+const KEYS: (keyof LocalPrefs)[] = ['sidebarCollapsed', 'theme', 'locale']
 
 /**
  * 서버 값과 로컬 현재값을 비교해 UI에 적용할 것(apply)과 서버에 백필할 것(backfill)을 계산한다.

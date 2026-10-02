@@ -404,7 +404,7 @@
 ## 운영 메모(스펙 D20·P12 ②)
 
 - **null 가중치** — 진척 집계의 가중치 미입력(null)은 이제 어디서나 1 로 센다. 바뀐 곳은 루트 항목 가운데 일부만 가중치가 비어 있는 프로젝트뿐이다(전에는 루트의 null 을 0 으로 세어 그 루트가 전체 진척에서 빠졌다). 가중치를 일부러 비워 '집계 제외'로 쓰던 프로젝트는 그 루트에 0 을 넣어야 한다. 대시보드·AI 도구의 '가중치 미입력 N건'(`unsetWeightCount`)으로 그런 행을 찾는다.
-- **팀 60초 지연** — A2 뒤 비화면 경로(가져오기·내보내기·AI 도구·회의록·보고서·라우터)는 팀을 요청마다 읽는다(`teams-source-next-start` 가 `next start` 에서 확인). 옛 프로세스 캐시(모듈 인스턴스마다 60초 TTL)를 읽는 곳은 화면 넷(앱·프로젝트 레이아웃·명단·대시보드)뿐이라, 팀을 더하거나 바꾼 직후 그 화면의 팀 목록만 최대 60초 늦을 수 있다(같은 프로세스의 `refreshTeams` 를 탄 요청은 즉시). B 가 캐시를 지운다.
+- **팀 60초 지연** — A2 뒤 비화면 경로(가져오기·내보내기·AI 도구·회의록·보고서·라우터)는 팀을 요청마다 읽는다(`teams-source-next-start` 가 `next start` 에서 확인). 옛 프로세스 캐시(모듈 인스턴스마다 60초 TTL)를 읽는 곳은 화면 넷(앱·프로젝트 레이아웃·명단·대시보드)뿐이라, 팀을 더하거나 바꾼 직후 그 화면의 팀 목록만 최대 60초 늦을 수 있다(같은 프로세스의 `refreshTeams` 를 탄 요청은 즉시). B 가 캐시를 지운다. — **B 에서 해소**: 화면 다섯도 요청 범위 원천을 읽는다(과제 4·5).
 
 ## A2 실측 노력
 
@@ -422,3 +422,84 @@
 
 비율(A1 절과 같은 식): 스펙 추정 A2 1.4~1.95주 + 고정 0.2~0.3주 = 1.6~2.25주(8~11.25일). 경과 약 6.6시간 = 0.28일 → **0.024~0.034**(A1 0.021~0.029 와 비슷).
 성능 판정(스펙 §6.5)이 아직 열려 있어 A2 의 끝은 그 재측정까지다 — 이 경과에 들지 않는다.
+
+# B — 성능(보류 — 일괄 측정)
+
+**상태: 보류 — 일괄 측정**(사용자 지시 2026-10-02: 성능은 전체 구현 뒤 한 번에 잰다 — SP4 B 는 재지 않는다, 계획 판정 P15).
+스펙 §7 B 에는 성능 줄이 없지만, 과제 4 가 범위 레이아웃 셋의 팀 원천을 프로세스 캐시에서 요청 범위 조회(세션 RLS)로 바꿨고 레인 B 가
+그 교체를 "성능 R25 재측정과 함께"로 넘겼다(옛 `tests/invariants/teams-master-consumers.test.ts` 머리). 아래는 그때 같은 조건으로 재기 위한 입력이다.
+받는 곳: 레인 A 원장의 "일괄 측정" 목록(과제 16 의 알림 문안).
+
+- **바뀐 경로**: 범위 레이아웃 셋(`(global)`·`w/[slug]`·`p/[projectId]`)이 요청마다 `workspaceTeams`·`projectTeams` 를 읽는다 —
+  `activeTeamsForLayout` 로 `loadShell` 과 **병렬**(`Promise.all([loadShell(…), activeTeamsForLayout(…)])` — 새 직렬 왕복 없음, 과제 4).
+  `p/[projectId]` 의 `projectTeams` 는 같은 요청의 설정 조회(`getProjectConfig(pid).teams`)와 캐시를 나눈다(`src/lib/teams/source.ts`).
+  명단(`/p/<pid>/members`)·`DashboardView` 도 같은 원천. 열화(actor null)면 읽지 않는다.
+- **잴 대상**(admin 페르소나, 800행 시드 — SP4 §6.5 와 같은 시드): `/w/<slug>`(홈) · `/w/<slug>/minutes` · `/p/<pid>/dashboard` · `/p/<pid>/wbs` · `/p/<pid>/members`.
+- **방법**: `docs/baseline/sp4-perf.md`(A2 재측정)와 같다 — `next start -H 127.0.0.1`, 편마다 `db:reset`(자기 트리)·`dev:bootstrap`·800행 시드·
+  `vacuum analyze`·서버 새로 띄움, 경로별 워밍업 3 + 표본 n 100(러너 `scripts/perf-baseline.mjs measure --personas admin` — 대상 경로를 위 다섯으로),
+  라운드 순서 ABBA 교대(라운드 1·3 기준선 → 후보, 2·4 후보 → 기준선 — `.superpowers/sp4/perf-a2/abab.sh` 꼴), `heavy-lock.sh` 안에서만,
+  편마다 측정 앞 1분 load·vm_stat free 기록. 기준선 = B 를 자르기 직전의 main(UI-2 반영 뒤 — `ui/sp4-teams` 의 부모) 스크래치 워크트리 3102,
+  후보 = `sp4-done` 3101.
+  - 계획 과제 14 의 괄호("순차 30회를 3회", "시작 load1 < 3")는 A2 첫 측정의 꼴이다 — A2 재측정이 n 30 의 p95 가 이상치 하나에 흔들려
+    (`sp4-perf.md` "③ n 30 의 p95 는…") n 100·ABBA 4라운드·load ≤ 6 대기로 바꿨으므로 "sp4-perf.md 와 같다"를 따른다(일괄 측정 때 다시 정해도 된다).
+- **판정식**: 대상별 라운드 p95 중앙값의 비율(후보 / 기준선) ≤ 1.20(SP3a·SP4 §6.5 기준, `judgeRegression`). 레인 B 의 R25 누적 한도
+  (`docs/baseline/sp3b-perf.md` — SP2 기준선 대비 p95 +20%, 재조정은 사용자 판단 대기)와 함께 본다.
+
+# B — 체크포인트(과제 15)
+
+트리 `ui/sp4-screens` 의 **`170b7edf`**(main `f5435c75` 위 27커밋 — 계획 1 + 과제 1~14 + 묶음 수정 라운드 B-1·B-2·B-3·B-4(F·G·H·I)).
+측정일 2026-10-03 05:58 ~ 06:39(KST). 전용 스택 `d-flow-sp4`(api 54521 · db 54522)에서만 돌렸고 메인·레인 B 스택은 건드리지 않았다.
+모든 DB·무거운 명령은 레인 A 래퍼(`lane-a-run.sh`)와 공유 잠금(`heavy-lock.sh`) 아래였다. 서버는 A2 와 같이 스크래치 워크트리(`sp4-b-scratch`)의
+`next build` → `next start -p 3101`. 마이그레이션 최대 번호는 `0018`(main 의 `_account_preferences` — B 는 마이그레이션이 없다).
+
+## 요약
+
+- **공통 묶음** — `db:reset` 뒤 `max(version)` = `0018`, `dev:bootstrap` ✓, `settings:verify` exit 0(프로젝트 0·워크스페이스 1·문제 0), `test:rls` **32 파일 391 통과·건너뜀 0**.
+  HEAD `170b7edf` 에서 `typecheck` 0, `lint` 0 error(경고 4 — 기존), vitest **841 파일 중 840 · 10,872 중 10,871 통과** — 실패 1 은 `tests/scripts/baseline-cli.test.ts` 의
+  macOS firmlink(알려진 1건). 스크래치 `build` ✓(정적 16페이지, 경고 = Edge 런타임 supabase-js 1 — 기존, `DynamicServerError` 거짓 로그 0).
+- **E2E(`next start`)** — exit 0·`ok: true`, **50단계 전부 ✓**(실패 0·빠진 필수 0), SP3b 단계 11 모두 ✓. B 새 단계 `teams-color-render` ✓.
+- **합성** — exit 0·`ok: true`: S1-create·S1-teams-areas·S9-isolation·S2-wbs-import·S4-weekly-monday·S10-negative·boundary-sp4 ✓, 미활성 7(S3·S4(일)·S5~S8·S10 나머지). `synthetic-acceptance.md` SP4 B 절.
+- **눈확인 B** — `eye-b.mjs` 60장(실패 0·오류 0·옛 클래스 0·테마 어긋남 0) + `eye-b2.mjs` 상호작용(개명 거부 포커스·전환 실행·중복 안내·칸반 토스트·프레즌스 두 계정·가중치 미지정·`(global)` 셸). 판정과 근거는 `docs/baseline/sp4-ui.md`.
+- **성능** — 재지 않았다(과제 14 — 보류, 일괄 측정).
+
+## 리허설 없음
+
+B 는 마이그레이션이 없다(계획 D3 — `teams.color` 그대로, 전환 RPC 는 A1 의 것). `git diff --name-only f5435c75..HEAD -- supabase tests/rls` 빈 출력(검사 ①) — CI 등가(`db reset --version 0001` → `migration up`)는 다시 돌리지 않았다.
+
+## 순서와 명령
+
+1. (05:58 · `170b7edf`) Step 0 착수 확인 — `ui/sp4-screens`, status 빈 출력, merge-base = main = `f5435c75`, `sp4-done` 없음. env 이름은 계획 목록 + `BOOTSTRAP_EMAIL`(비밀 아님 — 기본값).
+2. (05:58~05:59) Step 1 `db:reset`(0018) → `dev:bootstrap` → `settings:verify` → `test:rls`(391·건너뜀 0). (05:59~06:01) Step 2 typecheck·lint·vitest. Step 3 스크래치 `build`(`NEXT_PUBLIC_APP_URL=http://localhost:3101` — `NEXT_PUBLIC_*` 는 빌드 때 박힌다, 초대 링크 origin 을 러너의 `E2E_BASE_URL` 기본값과 같게).
+3. (06:02~06:05) Step 5 공식 — `db:reset`(0018) → `dev:bootstrap` → 실행 전 `git diff --quiet -- src supabase` 참 → `next start -p 3101` → `npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs`(50단계) → `npm run accept:synthetic` → 실행 뒤 diff 없음 → `settings:verify` exit 0(프로젝트 12·워크스페이스 5·문제 0).
+4. (06:07~06:39) 눈확인 — 같은 서버·DB. 셸마다 관리자 비밀번호를 `openssl rand` → service_role 로 바꿔 env 로만 넘겼다. `eye-b.mjs` 세 번(비고 ①), `eye-b2.mjs` 여러 번(실행마다 단계 일부 — 비고 ②).
+5. Step 6 검사 묶음 → Step 7 기록 → Step 8 눈확인 빈 커밋 → Step 9 서버 종료·스크래치 제거.
+
+## E2E 단계표(`next start`)
+
+| # | 단계 | 판정 |
+|---|---|---|
+| 1~31 | `login` … `import-unregistered-teams`(A2 표와 같은 31단계 — A1 25 + A1 새 여섯) | ✓ |
+| 32 | `teams-source-next-start` | ✓ `serverMode: production`, `checks` 넷(applied·items·owned·nextStart) 참, 5건 |
+| 33 | `export-standard` | ✓ 접기·펼침 200·`standard`, 센티널 0 |
+| 34 | `render-pages` | ✓ 12쪽 문제 0(워크스페이스 프로젝트 목록·회의록, A 의 개요·멤버·회의·이슈·공지·주간·WBS·근태, B 의 주간·설정) |
+| 35 | **`teams-color-render`**(B 새 단계) | ✓ 다섯 화면 모두 `serverMode: production`·`problems []`·`legacy []` — WBS `text-category-1·2`, 칸반 `text-category-1`, 대시보드 `bg-category-1·2`, 회의록 `bg-category-1`(중립 1 — 워크스페이스 화면의 프로젝트 전용 팀), 보고서 모달(Playwright) `bg-category-1·2`·`text-category-1` |
+| 36~39 | `module-issues-off`·`module-agents-off`·`module-minutes-integration-off`·`module-index-skip` | ✓ |
+| 40~50 | `sp3b-fixture`·`sp3b-E1`·`E2`·`E4`·`E6`·`E8`·`E9`·`E11`·`E5`·`E7`·`E10`(UI-2 가 합친 SP3b 단계) | ✓ |
+
+과제 13 보고의 사전 확인 넷: ① A 의 kanban 모듈이 켜져 있다(`create-projects` 설정 `modules.enabled` 에 kanban — 칸반 화면 problems 0) ② 대시보드·회의록 HTML 에 슬롯이 실렸다(위 35행) ③ 보고서 버튼이 A 의 WBS 도구 줄에 있다(모달 단계 ✓) ④ e2e-local 을 `npx --yes -p playwright@1.58.2` 로 불렀다.
+
+## 검사 묶음(Step 6)
+
+- ① `f5435c75..HEAD -- supabase tests/rls` 빈 출력(마이그레이션 없음).
+- ② `teams/master` src·tests·scripts 0건(exit 1). ③ W2 정본 grep 0(exit 1). ④ D13 현재 식별자(`teamStyle`·`TEAM_SLOTS`·`text|bg-team-[1-5]` 포함) 0(exit 1). ⑤ `--color-team-` 0(exit 1), `removedBy: 'SP4'` 0.
+- ⑥ UI 위험 파일 커밋 = 과제 1 `70e3c499`·과제 3 `8288184b`·과제 4 `fd7e21cc` + B-1 수정 `1951e2ed`(globals.css 머리 주석 한 줄 — 렌더 무영향, `Preview-checked: n/a`). 계획 기대 "셋"과 다른 하나는 묶음 수정 라운드 몫이다. 반응형 안전망(globals.css 703행~) 무수정.
+- ⑦ 화면 커밋의 `Preview-checked` — `✗` 하나: `bbeb6bc6`(B-1 수정 — 개요·명단 `page.tsx` 의 **주석만** 고쳤다, 화면 변화 0). 트레일러를 빠뜨린 묶음 수정 커밋이고 amend 는 금지라 그대로 두고 이 체크포인트의 빈 커밋 트레일러(개요·멤버 화면 포함)가 받는다. 두 파일은 훅 G2 의 UI 위험 목록 밖이다.
+- ⑧ 화면 파일 = 계획 File Structure 목록 + `p/[projectId]/dashboard/page.tsx`(위 ⑦ 의 주석 커밋). SPU3 몫(#19 위젯·#30 명단 컴포넌트·`ProjectAreasManager`) 0.
+- ⑨ W30 — `src` diff 의 추가 줄에 새 주 계산(`getUTCDay(`·`getDay()`·`startOfWeek`·`7 * 24 * 3600`·`604800000`) 0(exit 1).
+
+## 비고
+
+- ① `eye-b.mjs` 1회차는 다크 샷이 라이트로 찍혔다 — 계정 선호(`account_preferences.prefs.theme = 'light'`, E2E 의 sp3b 단계가 남김)가 로컬 선호를 이긴다(PrefsSync). 2회차는 쿠키·localStorage 만 맞춰 같았고, 3회차에 맥락마다 계정 선호를 그 테마로 맞추고 끝에 되돌려 60/60 이 맞았다. 같은 회차에 390 의 보고서 버튼이 compact 도구 버튼 안이라 그것을 먼저 열게 했다.
+- ② `eye-b2.mjs` — 공용 팀이 OPS 하나라 공용 팀 관리에서 겹치는 이름을 만들 수 없어 개명 거부는 같은 `TeamNameCell` 을 쓰는 A 설정 팀 절에서 봤다. 중복 안내는 첫 실행 응답을 끊고 같은 명령 id 로 재시도해 만들었다 — Chromium 은 가로챈 multipart 본문에 파일 바이트를 싣지 않아(`route.fetch` 재전송 = 빈 파일 → 서버 409 `PROFILE_MISMATCH`) 첫 요청은 같은 xlsx 를 `page.request` 로 다시 보냈다. 가중치 미지정은 형제 중 가중치가 있는 그룹에서만 센다(`unsetWeightCount`) — 외동 항목을 비운 첫 시도는 표시가 없었다(앱 동작이 맞다). 토스트·모달은 페이드 뒤 찍게 기다림을 더했다.
+- ③ 눈확인이 남긴 쓰기(E2E·합성 판정 뒤): A2 를 공용 팀 전환(되돌릴 수 없다), A 에 가져오기 append 여러 번·가중치 하나 비움·항목 둘 삭제(칸반 '사라진 항목')·실적 변경, 팀 이름은 되돌림, 임시 계정 삭제, 관리자 비밀번호·계정 선호 원복(비밀번호는 임의 값으로 버림). 다음 체크포인트는 늘 하듯 `db:reset` + `dev:bootstrap` 부터.
+- ④ 공식 셸은 nohup 서버가 출력 파이프를 쥐고 있어 서버를 내릴 때(Step 9)까지 끝나지 않았다 — 그 뒤 받은 출력: `e2e exit 0`·`accept:synthetic exit 0`·실행 전후 diff 없음·`settings:verify` exit 0. 판정은 그 전에 두 JSON 의 `ok: true`·단계로 했다.

@@ -61,7 +61,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
       setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '로고 설정을 저장했습니다. 화면 반영은 다음 셸 갱신부터 적용됩니다.'); router.refresh(); return
+      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '로고 설정을 저장했습니다. 화면에 바로 반영됩니다.'); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       const value = result.latest.values['branding.logo']
@@ -94,7 +94,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   }
 
   return <div className="space-y-4">
-    <p className="text-xs leading-5 text-ink-muted">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장해야 적용되며, 화면 반영은 다음 셸 갱신부터입니다. 이전 파일은 삭제되지 않습니다.</p>
+    <p className="text-xs leading-5 text-ink-muted">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장하면 화면에 바로 반영됩니다. 이전 파일은 삭제되지 않습니다.</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
     <div className="grid gap-3 sm:grid-cols-3">
       {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-line p-3">

@@ -16,8 +16,6 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
-import { PageHero } from '@/components/ui/PageHero'
-import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { calInputUtcMon } from '../helpers/calendarFixture'
 
 function item(over: Partial<ComputedItem>): ComputedItem {
@@ -183,49 +181,4 @@ describe('WBS 컴팩트 압축', () => {
   })
 })
 
-describe('히어로 컴팩트 숨김', () => {
-  let container: HTMLDivElement, root: Root
-  beforeEach(() => { container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container) })
-  afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals() })
-
-  it('PageHero CSS 기준선 = 크롬 압축과 동일(폭≥1024 그리고 높이≥800에서만 표시) — SSR 플래시 방지', async () => {
-    await act(async () => root.render(<PageHero title="Acme 프로젝트 WBS · 간트" />))
-    const section = container.querySelector('section')
-    expect(section).not.toBeNull()
-    expect(section!.className).toContain('hidden')
-    // 폭 전용 유틸(lg:grid)이면 1024×768 랩탑에서 새 나온다 — 높이 조건 포함 미디어 변형이어야 한다
-    expect(section!.className).toContain('[@media(min-width:1280px)_and_(min-height:800px)]:grid')
-    expect(section!.className).not.toMatch(/\b(md|lg|xl):grid\b/)
-  })
-
-  it('ProjectPageShell 은 컴팩트에서 히어로 래퍼 자체를 렌더하지 않는다(가로 폰 포함)', async () => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-    await act(async () => root.render(
-      <ProjectPageShell hero={<PageHero title="타이틀" />}><div>본문</div></ProjectPageShell>,
-    ))
-    expect(container.querySelector('section')).toBeNull()
-    expect(container.textContent).toContain('본문')
-  })
-
-  it('ProjectPageShell flush 는 스크롤 영역 하단 여백을 없앤다 — WBS 처럼 h-full 로 꽉 찬 화면용', async () => {
-    stubMq(false)
-    const region = () => container.querySelector('[data-project-scroll-region]') as HTMLElement
-    await act(async () => root.render(
-      <ProjectPageShell hero={<PageHero title="타이틀" />}><div>본문</div></ProjectPageShell>,
-    ))
-    expect(region().className).toContain('pb-6')
-    await act(async () => root.render(
-      <ProjectPageShell flush hero={<PageHero title="타이틀" />}><div>본문</div></ProjectPageShell>,
-    ))
-    expect(region().className).toContain('pb-0')
-    expect(region().className).not.toContain('pb-6')
-  })
-
-  it('ProjectPageShell 은 일반 뷰포트에서 히어로를 렌더한다', async () => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
-    await act(async () => root.render(
-      <ProjectPageShell hero={<PageHero title="타이틀" />}><div>본문</div></ProjectPageShell>,
-    ))
-    expect(container.querySelector('section')).not.toBeNull()
-  })
-})
+// 히어로 컴팩트 숨김 단언(2026-08-21)은 D18·④(모든 뷰포트 h1)로 뒤집혔다 — tests/ui/project-page-shell.test.tsx 가 새 계약을 본다.

@@ -9,10 +9,10 @@ const KIND_LABEL: Record<LintKind, string> = {
   duplicate: '완전 중복', nearDuplicate: '유사 중복', numbering: '체번', format: '정리',
 }
 const KIND_TONE: Record<LintKind, string> = {
-  duplicate: 'bg-amber-100 text-amber-800',
-  nearDuplicate: 'bg-orange-100 text-orange-800',
-  numbering: 'bg-amber-100 text-amber-800',
-  format: 'bg-sky-100 text-sky-800',
+  duplicate: 'bg-warning-weak text-warning',
+  nearDuplicate: 'bg-critical-weak text-critical',
+  numbering: 'bg-warning-weak text-warning',
+  format: 'bg-progress-weak text-progress',
 }
 
 /** 묶음별 목록. lintWeeklySheet 가 묶음 순서(입력에서 처음 나온 순서)를 먼저 세워 내주므로, 처음 나온 순서를 그대로 쓴다.
@@ -105,7 +105,7 @@ function LintItem({ finding, canApply, onApply, onGo }: {
 }) {
   return (
     <li className="flex items-start gap-3 py-3">
-      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_TONE[finding.kind]}`}>
+      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${KIND_TONE[finding.kind]}`}>
         {KIND_LABEL[finding.kind]}
       </span>
       <div className="min-w-0 flex-1">

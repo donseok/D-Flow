@@ -4,6 +4,7 @@ import type { MinuteFolder } from '@/lib/domain/types'
 import { createMinuteFolder, deleteMinuteFolder, renameMinuteFolder } from '@/app/actions/minutes'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
+import { useMinutesScope } from './MinutesScopeContext'
 
 /** 폴더 생성/이름 변경/삭제 확인 공용 모달. 성공 시 onDone(재조회는 호출부 책임). */
 export function FolderManageModal({
@@ -17,18 +18,21 @@ export function FolderManageModal({
   onDone: () => void
 }) {
   const { t } = useLocale()
+  const scope = useMinutesScope()
   const [name, setName] = useState(mode === 'rename' ? folder?.name ?? '' : '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   async function submit() {
+    // 범위(화면의 워크스페이스)가 없으면 액션을 부르지 않는다 — 추측하지 않는다(계획 V13)
+    if (!scope) { setErr(t('min.err.noWorkspace')); return }
     setBusy(true); setErr(null)
     try {
       const res = mode === 'create'
-        ? await createMinuteFolder(name, parentId)
+        ? await createMinuteFolder(scope.workspaceId, name, parentId)
         : mode === 'rename'
-          ? await renameMinuteFolder(folder!.id, name)
-          : await deleteMinuteFolder(folder!.id)
+          ? await renameMinuteFolder(scope.workspaceId, folder!.id, name)
+          : await deleteMinuteFolder(scope.workspaceId, folder!.id)
       if (!res.ok) { setErr(res.error ?? t('min.fold.error')); return }
       onDone()
     } finally { setBusy(false) }

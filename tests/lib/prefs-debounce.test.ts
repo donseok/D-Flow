@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // 클라이언트 라우터 캐시를 비워 staleTimes 재방문 캐시를 무효화했기 때문(라우트는 무관).
 const fetchMock = vi.fn(async () => ({ ok: true }) as Response)
 
-import { queueUiPref, queueWbsCollapse } from '@/lib/prefs/debouncedSave'
+import { queueUiPref, queueWbsCollapse, queueWorkspacePref } from '@/lib/prefs/debouncedSave'
 
 function sentBodies(): unknown[] {
   return fetchMock.mock.calls.map(c => JSON.parse((c as unknown as [string, RequestInit])[1].body as string))
@@ -33,6 +33,22 @@ describe('queueUiPref', () => {
     // keepalive: 페이지 이탈 직전의 저장도 유실되지 않는 계약
     expect((init as { keepalive?: boolean }).keepalive).toBe(true)
     expect(JSON.parse(init.body as string)).toEqual({ prefs: { theme: 'dark', locale: 'en' } })
+  })
+})
+
+describe('queueWorkspacePref — 워크스페이스 키는 그 화면의 워크스페이스 id 와 함께(SP3b D9)', () => {
+  it('워크스페이스마다 따로 병합·디바운스 — 본문에 workspaceId, 계정 키 큐와 섞이지 않는다', () => {
+    queueWorkspacePref('w1', { startPage: 'home' })
+    queueWorkspacePref('w1', { favoriteProjectIds: ['p'] })
+    queueWorkspacePref('w2', { startPage: 'my_work' })
+    queueUiPref({ theme: 'dark' })
+    vi.advanceTimersByTime(600)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(sentBodies()).toEqual(expect.arrayContaining([
+      { prefs: { startPage: 'home', favoriteProjectIds: ['p'] }, workspaceId: 'w1' },
+      { prefs: { startPage: 'my_work' }, workspaceId: 'w2' },
+      { prefs: { theme: 'dark' } },
+    ]))
   })
 })
 

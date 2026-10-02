@@ -139,11 +139,32 @@ const components: Components = {
   },
 }
 
+/**
+ * 본문 머리 강등(demoteHeadings) — 페이지가 자기 h1 을 가진 곳(회의록 상세·공유·위키)에서 본문 `#` 이 둘째 h1 이 되지 않게 한 칸씩 내린다.
+ * `#`→h2 … `#####`→h6, `######` 은 h6 에 머문다. 시각은 원래 수준 그대로 — 한 칸 내린 수준 1~3 은 globals.css 의
+ * `.md-h1`~`.md-h3`(원래 h1~h3 규칙과 같은 선언)을 달고, 4~6 은 h4~h6 이 같은 모양이라 클래스가 없다. data-mblock 같은 앵커는 rest 로 그대로.
+ */
+const DEMOTE_TAG = { h1: 'h2', h2: 'h3', h3: 'h4', h4: 'h5', h5: 'h6', h6: 'h6' } as const
+const DEMOTE_CLASS: Partial<Record<keyof typeof DEMOTE_TAG, string>> = { h1: 'md-h1', h2: 'md-h2', h3: 'md-h3' }
+function demotedHeading(level: keyof typeof DEMOTE_TAG): Components['h1'] {
+  const Tag = DEMOTE_TAG[level]
+  const cls = DEMOTE_CLASS[level]
+  return function DemotedHeading({ node, children, className, ...rest }) {
+    void node
+    return <Tag {...rest} className={[className, cls].filter(Boolean).join(' ') || undefined}>{children}</Tag>
+  }
+}
+const demotedComponents: Components = {
+  ...components,
+  h1: demotedHeading('h1'), h2: demotedHeading('h2'), h3: demotedHeading('h3'),
+  h4: demotedHeading('h4'), h5: demotedHeading('h5'), h6: demotedHeading('h6'),
+}
+
 /** 회의록 md 렌더 — raw HTML 은 렌더하지 않음(rehype-raw 미사용, XSS 차단).
  *  marks 실변경 시에만 재파싱되도록 memo — 팝오버 개폐 등이 100k 재파싱을 유발하지 않게(스펙 §2.3). */
 export const MarkdownView = memo(function MarkdownView({
-  content, marks,
-}: { content: string; marks?: BlockMarks }) {
+  content, marks, demoteHeadings = false,
+}: { content: string; marks?: BlockMarks; demoteHeadings?: boolean }) {
   // remarkAnnotateBlocks 는 unified 어태처 시그니처(marks 를 옵션으로 받는다) —
   // 여기서 미리 호출해 트랜스포머를 넘기면 unified.freeze() 가 그 트랜스포머를
   // 인자 없이 어태처로서 재호출해 tree 가 undefined 로 들어가 터진다(런타임 버그, 브리프
@@ -156,7 +177,7 @@ export const MarkdownView = memo(function MarkdownView({
     <div className="minutes-md">
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        components={components}
+        components={demoteHeadings ? demotedComponents : components}
       >
         {content}
       </ReactMarkdown>

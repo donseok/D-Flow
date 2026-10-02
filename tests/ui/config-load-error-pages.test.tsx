@@ -28,6 +28,8 @@ vi.mock('@/lib/settings/projectConfig', async (importOriginal) => ({
   getProjectConfig: mocks.getProjectConfig,
 }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState, getActorForView: mocks.getActorForView }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
   redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }),
@@ -43,7 +45,7 @@ vi.mock('@/lib/data/issues', () => ({ getIssuesForDashboard: vi.fn(async () => (
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: vi.fn(async () => ({})) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
-vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getUiPrefs: vi.fn(async () => ({})) }))
+vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({})) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))

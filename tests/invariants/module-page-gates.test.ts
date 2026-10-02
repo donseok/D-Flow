@@ -1,12 +1,13 @@
 // 페이지 관문 불변식(스펙 §4.2 끝 문단, D11, R14) — src/app 의 모든 page.tsx 는 자기 모듈로 관문을 부르거나 닫힌 제외 목록(사유)에 있다.
 // AST 로 본다: default export 함수 본문의 await 를 소스 순서로 모아 '첫 데이터 await' 가 관문이어야 한다(관문 앞에는 권한 redirect 재료·로케일만).
 // 관문의 모듈 인자는 routePrefixes(세그먼트 접두 일치)가 정하고, 첫 인자 모양은 페이지 종류가 정한다.
+// loadWorkspaceScope — 슬러그 판정(E19): /w/[slug]/** 의 첫 await 이고 관문은 그 다음 줄이다(스펙 §2.4 ①).
 import { existsSync, readFileSync } from 'node:fs'
 import { relative } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import type { ModuleId } from '@/lib/modules/defaults'
-import { LEGACY_GLOBAL_PREFIXES, MODULES } from '@/lib/modules/registry'
+import { MODULES } from '@/lib/modules/registry'
 import { walk } from './_walk'
 
 const APP = 'src/app'
@@ -14,33 +15,35 @@ const APP = 'src/app'
 const EXCLUDED: Record<string, string> = {
   'src/app/login/page.tsx': '로그인 전 — 워크스페이스 미확정',
   'src/app/invite/[token]/page.tsx': '초대 토큰 — 로그인 전·워크스페이스 미확정',
-  'src/app/page.tsx': '/projects 로 redirect 만',
-  'src/app/(app)/account/page.tsx': '계정 단위(개인 토큰 포함) — 모듈 밖',
-  'src/app/(app)/admin/accounts/page.tsx': '플랫폼·워크스페이스 관리 — 모듈 밖(정본 §3.2.2 끝 문단)',
-  'src/app/(app)/admin/llm-config/page.tsx': '플랫폼 관리 — 모듈 밖',
-  'src/app/(app)/admin/teams/page.tsx': '워크스페이스 관리 — 모듈 밖',
+  'src/app/page.tsx': '리졸버 — 쿠키·소속으로 redirect',
+  'src/app/(app)/(global)/account/page.tsx': '계정 단위(개인 토큰 포함) — 모듈 밖',
+  'src/app/(app)/w/[slug]/admin/accounts/page.tsx': '셸 — 모듈 밖(워크스페이스 관리, 정본 §3.2.2 끝 문단)',
+  'src/app/(app)/(global)/admin/llm-config/page.tsx': '플랫폼 관리 — 모듈 밖',
+  'src/app/(app)/w/[slug]/admin/teams/page.tsx': '셸 — 모듈 밖(워크스페이스 관리)',
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
-  'src/app/(app)/projects/page.tsx': '셸(프로젝트 목록)',
+  'src/app/(app)/w/[slug]/projects/page.tsx': '셸(프로젝트 목록)',
   'src/app/(app)/w/[slug]/settings/page.tsx': '워크스페이스 관리 화면 — 모듈을 허용하는 문이어서 자기 모듈 관문 밖(§5.2)',
+  'src/app/(app)/w/[slug]/page.tsx': '셸(워크스페이스 홈) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
+  'src/app/(app)/w/[slug]/my-work/page.tsx': '셸(내 업무) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
 }
 /** 경로 접두로 모듈을 정할 수 없는 페이지 — 세션 없는 공유 링크(과제 10). requireModule(…, { client: admin }) 를 부른다 */
 const SPECIAL: Record<string, { module: ModuleId; why: string }> = {
   'src/app/share/minutes/[token]/page.tsx': { module: 'minutes', why: '익명 공유 링크 — 토큰 행의 워크스페이스로 admin 판정' },
 }
 /** 관문 앞에서 await 해도 되는 호출 — 권한 redirect 재료·로케일. 데이터 로더·Promise.all 은 관문 뒤다(notFound 뒤 로더가 돌지 않게) */
-const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'getServerLocale'])
+const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'getServerLocale', 'loadWorkspaceScope'])
 /** 관문 앞에서 await 없이 불러도 되는 동기 호출 — 권한 판정 술어와 Next 신호. await 없이 시작한 로더(프라미스)는 여기 없으므로 막힌다 */
-const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage'])
+const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage', 'wsHref'])
 /** 페이지별 관문 앞 허용(사유) — 대상 행에서 워크스페이스를 알아야 하는 페이지. selects 는 관문 앞 조회 체인이 고를 수 있는 열(그 밖의 열을 읽는 체인은 문제) */
 const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: string }> = {
-  'src/app/(app)/minutes/[id]/page.tsx': { calls: ['getMinuteDetail'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다' },
+  'src/app/(app)/w/[slug]/minutes/[id]/page.tsx': { calls: ['getMinuteDetail', 'test'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다. test 는 형식 밖 id 를 조회 전에 404 로 보내는 UUID_RE.test(순수, U2a-3 리뷰 V1)' },
   'src/app/share/minutes/[token]/page.tsx': {
     calls: ['isShareToken', 'serviceRoleConfigured', 'createAdminClient'], selects: ['workspace_id'],
     why: '토큰 형식·env 가드 뒤 토큰 행의 workspace_id 한 열(본문은 관문 뒤)',
   },
 }
 
-type Kind = 'project' | 'global' | 'row' | 'special'
+type Kind = 'project' | 'row' | 'special'
 function routeOf(file: string): string {
   const segs = ('/' + relative(APP, file).replace(/\\/g, '/').replace(/\/?page\.(tsx|ts|jsx|js|mdx)$/, '')).split('/').filter((s) => s && !/^\(.*\)$/.test(s))
   return '/' + segs.join('/')
@@ -52,7 +55,7 @@ function modulesOf(route: string): ModuleId[] {
 function kindOf(file: string, route: string): Kind {
   if (SPECIAL[file]) return 'special'
   if (route.startsWith('/p/[projectId]')) return 'project'
-  return route in LEGACY_GLOBAL_PREFIXES ? 'global' : 'row'
+  return 'row'
 }
 
 function calleeOf(e: ts.Expression): string {
@@ -146,9 +149,46 @@ export function inspect(file: string, text: string, expected: readonly ModuleId[
   if (!ids || [...ids].sort().join(',') !== [...expected].sort().join(',')) problems.push(`관문 모듈이 ${JSON.stringify(ids)} — 기대 ${JSON.stringify(expected)}`)
   const scope = call.arguments[0]
   if (kind === 'project' && !hasShorthand(scope, 'projectId')) problems.push('프로젝트 페이지의 관문 범위는 { projectId }(경로 조각의 축약형)')
-  if (kind === 'global' && scope?.kind !== ts.SyntaxKind.NullKeyword) problems.push('전역 페이지의 관문 범위는 null(세션 유일 워크스페이스)')
   if ((kind === 'row' || kind === 'special') && !hasProp(scope, 'workspaceId')) problems.push('대상 행 페이지의 관문 범위는 { workspaceId: 행의 워크스페이스 }')
   if (kind === 'special' && !hasProp(call.arguments[2], 'client')) problems.push('세션 없는 페이지는 { client: admin } 을 넘긴다')
+  return problems
+}
+
+/** `/w/[slug]/**` 페이지의 슬러그 판정 — 첫 데이터 await 가 loadWorkspaceScope(설정 페이지만 workspacePageAccess)여야 한다(스펙 §5.2, E19).
+ *  레이아웃의 notFound() 는 페이지 로더를 멈추지 못한다(병렬로 도는 로더·after() 쓰기가 비소속에게도 실행된다) — 페이지가 스스로 판정한다.
+ *  params·searchParams 를 기다리는 것만 그 앞에 올 수 있다. 판정은 함수 본문 최상위 문이고, 인자는 경로 조각에서 꺼낸 식별자다(UI-2a 최종 수정 FA2). */
+const SCOPE_ROOT = 'src/app/(app)/w/[slug]/'
+const SCOPE_GATE_BY_FILE: Record<string, string> = { 'src/app/(app)/w/[slug]/settings/page.tsx': 'workspacePageAccess' }
+export function inspectScopeFirst(file: string, text: string): string[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const fn = sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s)
+    && (ts.getModifiers(s) ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
+  if (!fn?.body) return ['export default function 이 없다']
+  const awaits: ts.AwaitExpression[] = []
+  const calls: ts.CallExpression[] = []
+  const visit = (n: ts.Node): void => {
+    if (ts.isAwaitExpression(n)) awaits.push(n)
+    if (ts.isCallExpression(n)) calls.push(n)
+    if (ts.isFunctionLike(n) && n !== fn) return
+    ts.forEachChild(n, visit)
+  }
+  ts.forEachChild(fn.body, visit)
+  const want = SCOPE_GATE_BY_FILE[file] ?? 'loadWorkspaceScope'
+  const isParamsWait = (a: ts.AwaitExpression) => (ts.isIdentifier(a.expression) && (a.expression.text === 'params' || a.expression.text === 'searchParams')) || isParamsAll(a.expression)
+  const first = awaits.find((a) => !isParamsWait(a))
+  const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1
+  if (!first) return [`await ${want}(…) 가 없다`]
+  if (!(ts.isCallExpression(first.expression) && calleeOf(first.expression) === want)) {
+    return [`첫 데이터 await(:${lineOf(first)}) 가 ${want} 가 아니다 — 슬러그 판정이 먼저`]
+  }
+  const problems: string[] = []
+  if (!isTopLevel(first, fn.body)) problems.push(`슬러그 판정(:${lineOf(first)})이 조건·try·단락 평가 안에 있다 — 함수 본문 최상위 문으로`)
+  const arg = (first.expression as ts.CallExpression).arguments[0]
+  if (!arg || !ts.isIdentifier(arg)) problems.push('슬러그 판정의 인자는 경로 조각에서 꺼낸 식별자(slug)')
+  // 판정 앞에서 await 없이 시작한 로더도 안 된다 — params·searchParams 를 모으는 Promise.all 말고는 호출이 없어야 한다
+  for (const c of calls.filter((x) => x.getStart() < first.getStart() && !isChainInner(x))) {
+    if (!isParamsAll(c)) problems.push(`슬러그 판정 앞의 ${calleeOf(c)}(:${lineOf(c)}) — 호출은 판정 뒤로`)
+  }
   return problems
 }
 
@@ -179,8 +219,36 @@ describe('페이지 관문 — src/app 의 모든 page.tsx', () => {
     }
     for (const f of [...Object.keys(SPECIAL), ...Object.keys(PRE_GATE)]) expect(existsSync(f), f).toBe(true)
   })
-  it('LEGACY_GLOBAL_PREFIXES 는 routePrefixes 와 같은 모듈을 가리킨다(SP3b 가 경로를 옮기며 함께 지운다)', () => {
-    for (const [p, mod] of Object.entries(LEGACY_GLOBAL_PREFIXES)) expect(modulesOf(p), p).toEqual([mod])
+})
+
+describe('워크스페이스 범위 페이지 — 첫 await 는 슬러그 판정(E19, FA2)', () => {
+  const scoped = pages.filter((f) => f.startsWith(SCOPE_ROOT))
+  it('/w/[slug]/** 의 모든 페이지가 첫 데이터 await 로 슬러그를 판정한다', () => {
+    expect(scoped.length).toBeGreaterThanOrEqual(10)                       // 홈·내 업무·프로젝트·회의·회의록 둘·좌석표·포트폴리오·사용 현황·계정·공용 팀·설정
+    expect(scoped.flatMap((f) => inspectScopeFirst(f, readFileSync(f, 'utf8')).map((p) => `${f}: ${p}`))).toEqual([])
+  })
+  it('설정 페이지만 workspacePageAccess 를 쓴다(관리자 판정이 그 안에 있다) — 목록의 항목은 파일이 있다', () => {
+    for (const f of Object.keys(SCOPE_GATE_BY_FILE)) expect(existsSync(f), f).toBe(true)
+  })
+  const S = 'src/app/(app)/w/[slug]/x/page.tsx'
+  const page = (body: string) => `export default async function X({ params }) {\n${body}\n}`
+  it('민감도 — 판정이 없거나 로더 뒤이거나 try·조건 안이거나 앞에서 로더를 시작하거나 인자가 식별자가 아니면 잡는다', () => {
+    const pre = 'const { slug } = await params\n'
+    expect(inspectScopeFirst(S, page(`${pre}const scope = await loadWorkspaceScope(slug)`))).toEqual([])
+    expect(inspectScopeFirst(S, page(`${pre}const [a] = await Promise.all([load()])\nconst scope = await loadWorkspaceScope(slug)`))[0]).toMatch(/첫 데이터 await/)
+    expect(inspectScopeFirst(S, page(`${pre}const d = await listThings()`))[0]).toMatch(/loadWorkspaceScope 가 아니다/)
+    expect(inspectScopeFirst(S, page(pre))[0]).toMatch(/가 없다/)
+    expect(inspectScopeFirst(S, page(`${pre}try { await loadWorkspaceScope(slug) } catch {}`))[0]).toMatch(/최상위/)
+    expect(inspectScopeFirst(S, page(`${pre}if (x) await loadWorkspaceScope(slug)`))[0]).toMatch(/최상위/)
+    expect(inspectScopeFirst(S, page(`${pre}const early = getThings()\nawait loadWorkspaceScope(slug)\nawait early`))[0]).toMatch(/판정 앞의 getThings/)
+    expect(inspectScopeFirst(S, page(`${pre}await loadWorkspaceScope('acme')`))[0]).toMatch(/식별자/)
+    // params 와 searchParams 를 함께 기다리는 것은 판정 앞이어도 된다
+    expect(inspectScopeFirst(S, page(`const [{ slug }, q] = await Promise.all([params, searchParams])\nawait loadWorkspaceScope(slug)`))).toEqual([])
+    // 설정 페이지는 workspacePageAccess, 그 밖의 페이지에서는 그 이름이 판정이 아니다
+    const SET = 'src/app/(app)/w/[slug]/settings/page.tsx'
+    expect(inspectScopeFirst(SET, page(`${pre}await workspacePageAccess(slug)`))).toEqual([])
+    expect(inspectScopeFirst(SET, page(`${pre}await loadWorkspaceScope(slug)`))[0]).toMatch(/workspacePageAccess 가 아니다/)
+    expect(inspectScopeFirst(S, page(`${pre}await workspacePageAccess(slug)`))[0]).toMatch(/loadWorkspaceScope 가 아니다/)
   })
 })
 

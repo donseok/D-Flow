@@ -41,7 +41,8 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 
 - 일반 작업은 `main` 직행으로 해도 된다.
 - **UI 위험 파일을 건드리면 브랜치를 쓴다** — `src/app/globals.css`, `src/app/layout.tsx`,
-  `src/app/(app)/layout.tsx`, `src/components/app/*`.
+  `src/app/(app)/layout.tsx`, 범위 레이아웃 셋(`src/app/(app)/w/[slug]/layout.tsx`·`src/app/(app)/p/[projectId]/layout.tsx`·
+  `src/app/(app)/(global)/layout.tsx` — SP3b UI-2b, pre-push `UI_RE` 와 같은 목록), `src/components/app/*`.
   이 파일들은 전 화면에 영향을 주는데 **빌드·린트·타입체크·테스트로 깨짐이 잡히지 않는다**
   (2026-07-27 사고 때 vitest 2438건이 전부 통과했다). Vercel Preview 에서 눈으로 봐야 한다.
   ```bash

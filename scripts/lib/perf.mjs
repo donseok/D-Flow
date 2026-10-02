@@ -101,3 +101,17 @@ export function distinctWbsCodes(text) {
 export function distinctSeedNames(text) {
   return new Set(String(text).match(/(?<![0-9])\d+단계 업무 \d+(?![0-9])/g) ?? []).size
 }
+
+/** 측정 대상 IA(SP3b 과제 37 — 옛 경로·새 경로 비교용). null = 경로 이름 셋(perfRoutes)만 — 레인 A 의 쓰임 그대로 */
+export const IA_KINDS = Object.freeze(['legacy', 'ws'])
+
+/**
+ * 경로 이름 셋에 더할 IA 별 경로(순수). legacy = 옛 IA 의 목록 화면·옛 셸 계약(route·menu), ws = 새 IA 의 홈·프로젝트 목록·새 셸 계약(ws·project).
+ * @param {string | null | undefined} ia @param {{ slug: string, wid: string, pid: string }} ids @returns {string[]}
+ */
+export function iaRoutes(ia, { slug, wid, pid }) {
+  if (ia === null || ia === undefined) return []
+  if (ia === 'legacy') return ['/projects', `/api/shell?route=${pid}&menu=${pid}`]
+  if (ia === 'ws') return [`/w/${encodeURIComponent(slug)}`, `/w/${encodeURIComponent(slug)}/projects`, `/api/shell?ws=${wid}&project=${pid}`]
+  throw new Error(`--ia 는 ${IA_KINDS.join('|')}: ${ia}`)
+}

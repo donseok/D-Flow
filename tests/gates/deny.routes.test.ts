@@ -25,7 +25,7 @@ afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleSt
 /** 거부 단언의 흔적 — 오류 상수·기계 코드만(무관한 문자열 'off' 는 세지 않는다). 주석은 세지 않는다(AST 의 식별자·문자열만) */
 const DENY_TOKENS = ['ERR_MODULE_DISABLED', 'module_disabled', 'MODULE_DISABLED']
 /** 모듈 라우트 핸들러가 부르는 판정 — 관문 둘 + 목록형 둘 + 에이전트 두 원천 AND 헬퍼(과제 18). 원천은 _ast.GATE_SOURCES */
-const MODULE_ROUTE_GATES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'projectsWithModule', 'workspacesWithModule',
+const MODULE_ROUTE_GATES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'projectsWithModule', 'workspacesWithModule',
   'requireAgentProject', 'loadGatedOrder', 'loadGatedOrderForUser', 'accessibleProjectIds'])
 /** 세션 없는 라우트(쿠키 없음) — 판정 호출마다 { client: admin } 을 넘겨야 켜진 모듈이 닫히지 않는다(map-gates R-G3, F8) */
 const SESSIONLESS: ReadonlySet<GateEntry['guard']> = new Set(['agentPrincipal', 'minutesSecret', 'cronSecret', 'public'])
@@ -145,7 +145,7 @@ function handlerProblems(key: string, sites: readonly GateSite[]): string[] {
 /** 세션 없는 라우트의 판정 호출 — requireSessionModule 금지, 나머지는 옵션 인자에 client */
 function clientProblems(key: string, sites: readonly GateSite[]): string[] {
   return sites.flatMap((s) => {
-    if (s.name === 'requireSessionModule') return [`${key}:${s.line} 세션 없는 라우트가 requireSessionModule 을 부른다`]
+    if (s.name === 'requireSessionModule' || s.name === 'requireScopedSessionModule') return [`${key}:${s.line} 세션 없는 라우트가 ${s.name} 을 부른다`]
     const opts = s.call.arguments[2]
     const ok = !!opts && ts.isObjectLiteralExpression(opts) && opts.properties.some((p) => (ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) && ts.isIdentifier(p.name) && p.name.text === 'client')
     return ok ? [] : [`${key}:${s.line} ${s.name} 에 { client } 가 없다(쿠키 없는 세션 클라이언트는 설정 0행 — 켜진 모듈이 닫힌다)`]
@@ -170,7 +170,7 @@ const BRANCH_GATE: Readonly<Record<string, BranchGate>> = {
     core: '기본 갈래 — WBS 현황 보고서(xlsx·pptx)',
   },
   'src/app/api/minutes/chat/route.ts#POST': {
-    reason: '두 모드의 판정 범위가 다르다 — 문서 모드는 회의록 행의 워크스페이스(resolveScope 뒤), 보관함 모드는 세션 유일 워크스페이스(P13). 모드 밖 요청은 400 뿐이라 core 갈래가 없다',
+    reason: '두 모드의 판정 범위가 다르다 — 문서 모드는 회의록 행의 워크스페이스(resolveScope 뒤), 보관함 모드는 요청의 워크스페이스(소속 확인 — D26, 과제 34). 모드 밖 요청은 400 뿐이라 core 갈래가 없다',
     gated: { "body.mode === 'doc'": 'doc', "body.mode === 'archive'": 'archive' },
     ungated: {
       '!(await getSession())': '로그인 가드',

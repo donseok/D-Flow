@@ -1,55 +1,56 @@
-// 앱 셸 상태(알림함·파생 알림·공지 배지·헤더 티커) 통합 조회 — 2026-08-18 성능 감사 P0.
-//
-// 종전에는 HeaderChrome/Sidebar/HeaderAnnouncementTicker/PrefsSync 가 마운트·내비게이션마다
-// 서버 액션 4~6개를 각자 POST 했다. 서버 액션은 클라이언트당 직렬 큐로 실행되므로
-// (React 사양) 사용자 RTT 가 큰 환경에서 내비게이션마다 0.6s × N 이 순차로 쌓였고,
-// 사용자가 그 직후 누른 실제 액션도 같은 큐 뒤에서 대기했다.
-//
-// 이 라우트는 그 전부를 GET 1왕복으로 합친다. GET 이므로 액션 큐와 경쟁하지 않는다.
-// 각 조회 함수가 내부에서 세션을 스스로 확인하므로(비로그인 = 빈 값) 별도 가드가 필요 없고,
-// 응답은 개인화 데이터라 no-store 다. 공지 두 항목은 액션이 모듈 꺼짐에 빈 값을 돌려준다(과제 15).
+// 앱 셸 상태 통합 조회(D34, 스펙 §5.4.7) — ?ws=<wid>&project=<pid>(둘 다 ShellScope 에서). 이동당 GET 1회(R25) — GET 이라 서버 액션 큐와 경쟁하지 않는다.
+// 응답 = { inbox, notifications, badges: { myWorkReview, projectApprovals, projectUnreadAnnouncements } }. 티커 필드는 없다(D28). 개인화라 no-store.
+// 배지 실패는 0 이 아니라 null + 로그(3원칙 ①). 모듈이 꺼진 항목은 실패가 아니다(결재 배지 0 — §4.2 셸 행, 공지는 액션이 0).
+// 범위 판정은 fail-closed(E10 — 남의 수를 흘리지 않는다): ws 는 uuid 이고 그 워크스페이스에 역할이 있을 때만(플랫폼 관리자 포함 — 그 워크스페이스를 보는
+// 화면과 같은 축) 센다. project 는 uuid 이고 볼 수 있는 프로젝트(isHiddenProject 아님 — 프로젝트 화면과 같은 판정자라 명단 밖 비공개도 숨김, GG1)이며
+// ws 를 같이 보냈으면 그 워크스페이스의 프로젝트일 때만 조회한다. 비공개 판정이 실패하면 프로젝트 배지·파생 알림은 null(로그) — 숨길 것을 못 숨기느니 세지 않는다.
+// 비공개 판정은 권한 조회와 병렬이다(요청 캐시 — 직렬 왕복을 늘리지 않는다, project 가 있을 때만).
+// 권한 조회가 실패하면(열화) 범위 배지는 모두 null 이고 인박스만 낸다. 안의 조회 함수들도 각자 세션·관문을 다시 지난다.
 import { type NextRequest, NextResponse } from 'next/server'
 import { getInboxFeed } from '@/app/actions/inbox'
 import { getNotifications } from '@/app/actions/notifications'
-import { getHeaderAnnouncements, getUnreadAnnouncementCount } from '@/app/actions/announcements'
+import { getUnreadAnnouncementCount } from '@/app/actions/announcements'
 import { getPendingApprovalCount } from '@/lib/data/agentApprovals'
 import { projectsWithModule } from '@/lib/modules/gate'
+import { countMyReview } from '@/lib/data/portal'
+import { getActorViewState } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
+import { isHiddenProject, isWorkspaceMember, type Actor } from '@/lib/domain/authz'
+import { UUID_RE } from '@/lib/domain/validate'
+
+const nullOnFail = <T,>(label: string, p: Promise<T>): Promise<T | null> =>
+  p.catch((e: unknown) => { console.error(`[shell] ${label} 실패:`, e instanceof Error ? e.message : e); return null })
+const uuidOrNull = (v: string | null) => (v && UUID_RE.test(v) ? v.toLowerCase() : null)
+
+async function actorOrNull(): Promise<Actor | null> {
+  try { return (await getActorViewState()).actor } catch (e) {
+    console.error('[shell] 권한 조회 실패 — 범위 배지 없이 응답한다:', e instanceof Error ? e.message : e)
+    return null
+  }
+}
 
 export async function GET(req: NextRequest) {
-  // route = 현재 URL 의 프로젝트(파생 알림·티커 기준), menu = 메뉴 문맥 프로젝트(공지 배지 기준 —
-  // 전역 화면에서도 사이드바가 최근 프로젝트의 배지를 유지하는 기존 시맨틱을 따른다).
-  const route = req.nextUrl.searchParams.get('route') || null
-  const menu = req.nextUrl.searchParams.get('menu') || null
-
-  const [inbox, notifications, unreadAnnouncements, header, pendingApprovals] = await Promise.all([
-    getInboxFeed(),
-    // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(기존 HeaderChrome catch(() => {}) 시맨틱).
-    route ? getNotifications(route).catch(() => null) : Promise.resolve(null),
-    // 공지 배지 — 모름(달력·조회 실패, 액션이 로그)은 null 그대로 싣는다(레인 B SP3b D34 계약 — 0 으로 위장하지 않는다, A-4 리뷰 N9·A-5 리뷰 O5).
-    // 받는 쪽(셸 배지·알림함)이 null 을 '모름'으로 그린다 — 레인 B UI-2b(D34). 이 브랜치의 옛 셸은 null 을 0 처럼 숨긴다
-    menu ? getUnreadAnnouncementCount(menu).catch((e: unknown) => {
-      console.error('[shell] 공지 배지 조회 실패:', e instanceof Error ? e.message : e)
-      return null
-    }) : Promise.resolve(0),
-    // 헤더 티커 — 실패를 '공지 0건'으로 위장하지 않고 headerAnnouncementsFailed 로 알린다(표시는 ShellStateProvider·티커).
-    route ? getHeaderAnnouncements(route).catch((e: unknown) => {
-      console.error('[shell] 헤더 공지 조회 실패:', e instanceof Error ? e.message : e)
-      return { ok: false as const, error: '' }
-    }) : Promise.resolve({ ok: true as const, rows: [] }),
-    // 에이전트 메뉴의 결재 대기 배지 — 공지 배지처럼 메뉴 문맥 기준. 배지 하나 때문에 셸 전체를 죽이지 않되 로그는 남긴다.
-    // 결재 배지는 액션이 아니라(열거 게이트 밖) 여기서 agents 판정 — 꺼진 메뉴 문맥이면 그 항목만 비운다(§4.2 셸 행)
-    menu ? projectsWithModule([menu], 'agents').then((on) => (on.length ? getPendingApprovalCount(menu) : 0)).catch((e: unknown) => {
-      console.error('[shell] 결재 대기 수 조회 실패:', e instanceof Error ? e.message : e)
-      return 0
-    }) : Promise.resolve(0),
+  const q = req.nextUrl.searchParams
+  const wsRaw = uuidOrNull(q.get('ws'))
+  const projectRaw = uuidOrNull(q.get('project'))
+  const [actor, hidden] = await Promise.all([
+    actorOrNull(),
+    projectRaw ? nullOnFail('비공개 판정', getHiddenProjectIds()) : Promise.resolve(null),
   ])
-
+  const ws = actor && wsRaw && isWorkspaceMember(actor, wsRaw) ? wsRaw : null
+  const project = actor && projectRaw && hidden && !isHiddenProject(actor, projectRaw, hidden) && (!wsRaw || actor.projectWorkspace.get(projectRaw) === wsRaw) ? projectRaw : null
+  const [inbox, notifications, myWorkReview, projectApprovals, projectUnreadAnnouncements] = await Promise.all([
+    getInboxFeed(),
+    // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(옛 HeaderChrome catch 시맨틱 — 클라이언트는 직전 값을 유지)
+    project ? nullOnFail('파생 알림', getNotifications(project)) : Promise.resolve(null),
+    ws && actor ? nullOnFail('검토 대기 수', countMyReview(ws, actor)) : Promise.resolve(null),
+    // 결재 배지는 액션이 아니라(열거 게이트 밖) 여기서 agents 판정 — 꺼진 프로젝트면 0(꺼짐은 실패가 아니다)
+    project ? nullOnFail('결재 대기 수', projectsWithModule([project], 'agents').then((on) => (on.length ? getPendingApprovalCount(project) : 0))) : Promise.resolve(null),
+    // 공지 배지 — 액션이 달력·조회 실패를 null(모름 + 로그)로 돌려준다(A-4 리뷰 N9·A-5 리뷰 O5). 그 밖의 예외는 nullOnFail 이 null 로
+    project ? nullOnFail('공지 안읽음 수', getUnreadAnnouncementCount(project)) : Promise.resolve(null),
+  ])
   return NextResponse.json(
-    {
-      inbox, notifications, unreadAnnouncements, pendingApprovals,
-      headerAnnouncements: header.ok ? header.rows : [],
-      headerAnnouncementsFailed: !header.ok,
-    },
+    { inbox, notifications, badges: { myWorkReview, projectApprovals, projectUnreadAnnouncements } },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }

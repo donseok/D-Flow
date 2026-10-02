@@ -33,12 +33,14 @@ const PID = '00000000-0000-0000-7e57-000000001482', MID = '00000000-0000-0000-7e
 const AI_OFF = 'AI 를 사용할 수 없어 이슈 분석서를 생성할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.'
 const calls = () => vi.mocked(aiAvailable).mock.calls
 
-/** 어떤 체인이든 같은 결과로 끝나는 조회 흉내(select·eq·is·or·order·limit·in → maybeSingle 또는 await) */
+/** 어떤 체인이든 같은 결과로 끝나는 조회 흉내(select·eq·is·or·order·limit·in·range → maybeSingle 또는 await).
+ *  배열 결과는 count 를 싣는다 — getHiddenProjectIds 가 쪽 나눔 + count 대조로 읽는다(HH1) */
 function query(result: { data: unknown; error: null }) {
   const c: Record<string, unknown> = {}
-  for (const k of ['select', 'eq', 'is', 'or', 'order', 'limit', 'in']) c[k] = () => c
+  for (const k of ['select', 'eq', 'is', 'or', 'order', 'limit', 'in', 'range']) c[k] = () => c
   c.maybeSingle = async () => result
-  c.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej)
+  const awaited = Array.isArray(result.data) ? { ...result, count: result.data.length } : result
+  c.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(awaited).then(res, rej)
   return c
 }
 async function readAll(stream: ReadableStream<Uint8Array> | null): Promise<string> {
@@ -57,21 +59,23 @@ beforeEach(() => {
 })
 afterEach(() => { vi.mocked(aiAvailable).mockReset() })   // 전역 mock 의 hasLLM 따르기로 되돌린다
 
-describe('옛 챗(answer.ts) — chatbot, 프로젝트 없으면 null(세션 유일 워크스페이스, P13)', () => {
+// 프로젝트 없는 질문은 관문이 확인한 워크스페이스(D26) — 세션 유일 워크스페이스(null) 판정은 없앴다(U2b-5 리뷰 수정 CC3)
+const WID = '00000000-0000-0000-7e57-000000001483'
+describe('옛 챗(answer.ts) — chatbot, 프로젝트 없으면 요청의 워크스페이스(CC3)', () => {
   it.each([
-    ['{ projectId }', PID, { projectId: PID }],
-    ['null', null, null],
-  ] as const)('answerQuestion: %s — 거짓이면 결정형, LLM 미호출', async (_n, projectId, scope) => {
-    const r = await answerQuestion({ projectId, message: '지연된 작업 알려줘', history: [] })
+    ['{ projectId }', PID, null, { projectId: PID }],
+    ['{ workspaceId }', null, WID, { workspaceId: WID }],
+  ] as const)('answerQuestion: %s — 거짓이면 결정형, LLM 미호출', async (_n, projectId, workspaceId, scope) => {
+    const r = await answerQuestion({ projectId, workspaceId, message: '지연된 작업 알려줘', history: [] })
     expect(r.usedLLM).toBe(false)
     expect(calls()).toStrictEqual([[scope, { module: 'chatbot' }]])
     expect(m.generateAnswer).not.toHaveBeenCalled()
   })
   it.each([
-    ['{ projectId }', PID, { projectId: PID }],
-    ['null', null, null],
-  ] as const)('streamAnswer: %s — 거짓이면 결정형 한 덩이, LLM 스트림 미호출', async (_n, projectId, scope) => {
-    expect(await readAll(await streamAnswer({ projectId, message: '지연된 작업 알려줘', history: [] }))).toContain('KNOWLEDGE')
+    ['{ projectId }', PID, null, { projectId: PID }],
+    ['{ workspaceId }', null, WID, { workspaceId: WID }],
+  ] as const)('streamAnswer: %s — 거짓이면 결정형 한 덩이, LLM 스트림 미호출', async (_n, projectId, workspaceId, scope) => {
+    expect(await readAll(await streamAnswer({ projectId, workspaceId, message: '지연된 작업 알려줘', history: [] }))).toContain('KNOWLEDGE')
     expect(calls()).toStrictEqual([[scope, { module: 'chatbot' }]])
     expect(m.generateAnswerStream).not.toHaveBeenCalled()
   })
@@ -125,10 +129,10 @@ describe('회의록 Q&A(minutes-answer.ts) — minutes', () => {
     expect(m.generateAnswerStream).not.toHaveBeenCalled()
     expect(m.createAdminClient).not.toHaveBeenCalled()
   })
-  it('streamArchiveAnswer: (null, { module: minutes }) — 보관함은 세션 유일 워크스페이스(P13), 거짓이면 결정형, LLM 스트림·admin 미호출', async () => {
+  it('streamArchiveAnswer: ({ workspaceId }, { module: minutes }) — 보관함은 라우트가 소속을 확인한 워크스페이스(과제 34, D26), 거짓이면 결정형, LLM 스트림·admin 미호출', async () => {
     m.createServerClient.mockResolvedValue({ from: vi.fn(() => query({ data: [], error: null })), rpc: vi.fn() })
-    expect(await readAll(await streamArchiveAnswer({ message: '요약해 줘', history: [], filters: {} }))).toContain('관련 회의록을 찾지 못했어요')
-    expect(calls()).toStrictEqual([[null, { module: 'minutes' }]])
+    expect(await readAll(await streamArchiveAnswer({ workspaceId: 'ws-a', message: '요약해 줘', history: [], filters: {} }))).toContain('관련 회의록을 찾지 못했어요')
+    expect(calls()).toStrictEqual([[{ workspaceId: 'ws-a' }, { module: 'minutes' }]])
     expect(m.generateAnswerStream).not.toHaveBeenCalled()
     expect(m.createAdminClient).not.toHaveBeenCalled()
   })

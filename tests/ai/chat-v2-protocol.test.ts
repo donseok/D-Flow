@@ -105,4 +105,31 @@ describe('chat v2 project scope hints', () => {
     expect(validateChatProjectScope(request, ['p1', 'p2']))
       .toMatchObject({ ok: true, projectId: 'p2' })
   })
+
+  it('페이지 문맥의 workspaceId 는 문자열 또는 null 만 통과한다(SP3b D27)', () => {
+    const ctx = (workspaceId: unknown) => {
+      const r = sanitizeChatRequestV2({
+        projectId: null, message: '질문', history: [],
+        pageContext: { contextVersion: 1, pathname: '/w/acme', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', workspaceId },
+      })
+      if (!r.ok) throw new Error('거절')
+      return r.value.pageContext
+    }
+    expect(ctx('w-1')).toMatchObject({ workspaceId: 'w-1' })
+    expect(ctx(null)).toMatchObject({ workspaceId: null })
+    expect(ctx(42)).not.toHaveProperty('workspaceId')
+    expect(ctx({ id: 'x' })).not.toHaveProperty('workspaceId')
+  })
+
+  it('요청 바깥의 workspaceId 도 같은 규칙 — 문자열·null 만, 그 밖은 버린다(판정은 라우트 관문, 과제 34)', () => {
+    const top = (workspaceId: unknown) => {
+      const r = sanitizeChatRequestV2({ projectId: null, message: '질문', history: [], workspaceId })
+      if (!r.ok) throw new Error('거절')
+      return r.value
+    }
+    expect(top('w-1')).toMatchObject({ workspaceId: 'w-1' })
+    expect(top(null)).toMatchObject({ workspaceId: null })
+    expect(top(42)).not.toHaveProperty('workspaceId')
+    expect(top(undefined)).not.toHaveProperty('workspaceId')
+  })
 })

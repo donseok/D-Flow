@@ -231,7 +231,7 @@ export async function createAccount(input: AccountInput & { workspaceId: string 
   if (input.projectId && !projectInWorkspace(g.actor, input.projectId, workspaceId)) return { ok: false, error: ERR_MISSING }
   const res = await createOne(createAdminClient(), workspaceId, input, g.actor.userId)
   if (res.ok) {
-    revalidatePath('/admin/accounts')
+    revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
     if (input.projectId) revalidatePath(`/p/${input.projectId}/members`)
   }
   return res
@@ -261,7 +261,7 @@ export async function bulkCreateAccounts(
     }, g.actor.userId)
     results.push({ lineNo: line.lineNo, email: line.email!, ok: res.ok, error: res.error })
   }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true, results }
 }
@@ -347,7 +347,7 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   }
   // 해제의 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다. (지정의 0행은 이미 지정된 것 — 멱등)
   if (!value && result.matched === 0) return { ok: false, error: '슈퍼유저가 아닌 계정입니다.' }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   return { ok: true }
 }
 
@@ -381,7 +381,7 @@ export async function setWorkspaceRole(
   }
   // 0행 = 소속 아님. 조용한 no-op 을 성공으로 보고하지 않는다.
   if (result.matched === 0) return { ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' }
-  revalidatePath('/admin/accounts')
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
   return { ok: true }
 }
 
@@ -439,18 +439,17 @@ export async function listAccounts(
     if (pe?.user_id && r.access_role && r.active && pe.active) accessBy.set(pe.user_id, r.access_role)
   }
 
-  // profiles 는 플랫폼 전체다. 워크스페이스 관리자에게는 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 —
-  // 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리). 슈퍼유저는 전역 관리자라 전부 본다.
-  const visible = g.actor.isSuperuser
-    ? profiles
-    : profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
+  // profiles 는 플랫폼 전체다. 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 — 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리).
+  // 플랫폼 관리자도 같다: 이 목록은 /w/<slug>/admin/accounts(그 워크스페이스 화면)의 것이다(SP3b D21·D22, U2a-4 리뷰 T4).
+  const visible = profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
   const rows = visible
     .map<AccountRow>(p => ({
       id: p.userId,
       email: p.email,
       name: p.displayName,
       workspaceRole: wsRoleBy.get(p.userId) ?? null,
-      isPlatformAdmin: platformIds.has(p.userId),
+      // 플랫폼 관리자 여부는 플랫폼 관리자에게만 낸다 — 워크스페이스 관리자가 이 액션을 직접 불러도 행별 플래그를 받지 않는다(U2a-5 S4)
+      isPlatformAdmin: g.actor.isSuperuser && platformIds.has(p.userId),
       accessRole: accessBy.get(p.userId) ?? null,
       createdAt: p.createdAt,
     }))

@@ -22,7 +22,9 @@ const EVENT_PAGE_SIZE = 20
  * 접속 로그 — 최신순. 상한에 걸리면 그 사실을 화면에 밝힌다(잘린 목록을 전부처럼 보이지 않게).
  * 필터는 searchParams 기반 링크로 유지하고, 긴 목록의 페이지 이동만 클라이언트 상태로 처리한다.
  */
-export function UsageEventLog({ events, names, limit, locale, menus, filter, timeZone }: {
+export function UsageEventLog({ base, events, names, limit, locale, menus, filter, timeZone }: {
+  /** 필터 링크의 경로 — 범위의 사용 현황 주소(/w/<slug>/usage) */
+  base: string
   events: UsageEventRow[]
   names: Map<string, string>
   limit: number
@@ -53,14 +55,14 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter, tim
         ? <span className="badge bg-pending-weak text-pending">최근 {limit}건만 표시</span>
         : <span className="badge bg-brand-weak text-brand">{events.length}건</span>}>
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        <Link href={usageHref(filter, { menu: undefined })} className={chip(!filter.menu)}>전체 메뉴</Link>
+        <Link href={usageHref(base, filter, { menu: undefined })} className={chip(!filter.menu)}>전체 메뉴</Link>
         {menus.map(k => (
-          <Link key={k} href={usageHref(filter, { menu: k })} className={chip(filter.menu === k)}>
+          <Link key={k} href={usageHref(base, filter, { menu: k })} className={chip(filter.menu === k)}>
             {menuLabel(k, translate)}
           </Link>
         ))}
         {filter.user && (
-          <Link href={usageHref(filter, { user: undefined })}
+          <Link href={usageHref(base, filter, { user: undefined })}
             className="chip ml-auto bg-brand-weak text-brand transition hover:bg-brand hover:text-action-fg">
             {names.get(filter.user) ?? '확인 불가'} <X className="ml-1 h-3 w-3" />
           </Link>
@@ -87,7 +89,7 @@ export function UsageEventLog({ events, names, limit, locale, menus, filter, tim
                   <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDateTime(e.occurredAt, timeZone)}</td>
                   {/* 계정 목록에 없는 id 는 이름을 지어내지 않는다. 이름 클릭 = 그 사용자로 필터. */}
                   <td className="py-2 pr-3 text-ink">
-                    <Link href={usageHref(filter, { user: e.userId })} className="transition hover:text-brand hover:underline">
+                    <Link href={usageHref(base, filter, { user: e.userId })} className="transition hover:text-brand hover:underline">
                       {names.get(e.userId) ?? '확인 불가'}
                     </Link>
                   </td>

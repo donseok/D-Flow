@@ -33,6 +33,11 @@ describe('no-runtime-constants', () => {
     expect(Object.entries(ALLOW).filter(([, a]) => a.patterns.some((p) => weekly.includes(p))).map(([f]) => f)).toEqual([])
     expect([...actual].filter(([, hits]) => hits.some((p) => weekly.includes(p))).map(([f]) => f)).toEqual([])
   })
+  it('SP4 B 가 지운 팀 색 이름은 허용 항목 없는 영구 가드다 — 어느 파일에도 없고 목록에도 없다(스펙 §4.8)', () => {
+    const team: RuntimeConstantPattern[] = ['teamStyle', 'team-[1-5]']
+    expect(Object.entries(ALLOW).filter(([, a]) => a.patterns.some((p) => team.includes(p))).map(([f]) => f)).toEqual([])
+    expect([...actual].filter(([, hits]) => hits.some((p) => team.includes(p))).map(([f]) => f)).toEqual([])
+  })
 
   // 스펙 D45 — SP5 A 의 몫(시간대 세 패턴)은 체크포인트 A 에서 허용 목록에도 코드에도 없다. 예외는 UI 위험 파일(layout) 한 줄을
   // 과제 32(ui/sp5-calendar)가 바꿀 때까지 seoulToday 를 쥔 dates.ts 하나뿐이다 — 과제 32 가 이 배열을 비운다.

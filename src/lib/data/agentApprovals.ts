@@ -15,34 +15,18 @@ import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/agentWork'
-import { canApproveCompletion, isSubtreeManagerOf } from '@/lib/domain/seatmap'
+import { filterApprovable, type ApprovalItemRow } from '@/lib/domain/approvable'
 import { myMemberIds } from '@/lib/agent/assignee'
 
-type ItemRow = { id: string; parent_id: string | null; assignee_member_id: string | null }
+type ItemRow = ApprovalItemRow
 
-/**
- * 순수 판정 — 관리자면 전부, 아니면 내가 조상 담당자인(서브트리 관리자) 항목의 주문 중 리프 담당자가 나도 아니고
- * 내가 claim 하지도 않은 것만. 리프가 트리에 없으면 세지 않는다(서버의 leafFound 거부와 같다).
- */
+/** 승인 가능한 주문 수 — 판정은 domain/approvable 의 filterApprovable(포털 '검토' 원천과 같은 함수) */
 export function countApprovable(
   orders: ReadonlyArray<{ wbs_item_id: string | null; claimed_by_user_id: string | null }>,
   items: ReadonlyArray<ItemRow>,
   viewer: { isAdmin: boolean; memberIds: readonly string[]; userId: string },
 ): number {
-  if (viewer.isAdmin) return orders.length
-  if (viewer.memberIds.length === 0) return 0
-  const itemById = new Map(items.map(i => [i.id, i]))
-  const mine = new Set(viewer.memberIds)
-  return orders.filter(o => {
-    const leaf = o.wbs_item_id !== null ? itemById.get(o.wbs_item_id) : undefined
-    if (!leaf) return false
-    return canApproveCompletion({
-      isAdmin: false,
-      subtreeManager: isSubtreeManagerOf(leaf.id, itemById, mine),
-      assigneeMine: leaf.assignee_member_id !== null && mine.has(leaf.assignee_member_id),
-      claimedByMe: o.claimed_by_user_id === viewer.userId,
-    })
-  }).length
+  return filterApprovable(orders, items, viewer).length
 }
 
 /** 이 프로젝트에서 내가 승인할 수 있는 결재 대기 수. 비로그인·잘못된 id 는 0. 조회 실패·잘림은 throw(호출부 — 셸 — 가 로그 + 배지 0). */

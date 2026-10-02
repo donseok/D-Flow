@@ -9,9 +9,9 @@ import type { TrendModel } from '@/lib/domain/trend'
 
 // 대시보드 부분 표시 — WBS 가 비어도 회의·이슈·공지는 그리고, 조회 실패한 위젯은 '0건'·'데이터 없음' 대신 사유를 둔다.
 // DashboardView 는 async 서버 컴포넌트라 renderToStaticMarkup 을 바로 쓸 수 없다 — 돌려준 요소 트리를 순회해
-// 자식 컴포넌트의 타입(함수 참조)을 모은다. 자식은 실행되지 않는다(팀 캐시 호출 여부는 뷰 자신의 것만 잡힌다).
-const mocks = vi.hoisted(() => ({ teamsForProjectSync: vi.fn(() => []), getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
-vi.mock('@/lib/teams/master', () => ({ teamsForProjectSync: mocks.teamsForProjectSync }))
+// 자식 컴포넌트의 타입(함수 참조)을 모은다. 자식은 실행되지 않는다(팀 원천 호출 여부는 뷰 자신의 것만 잡힌다).
+const mocks = vi.hoisted(() => ({ projectTeams: vi.fn(async () => []), getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
@@ -83,7 +83,7 @@ type Props = Parameters<typeof DashboardView>[0]
 const base: Props = {
   items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY, realToday: TODAY,
   calendar: calInputUtcMon, snapshots: [], historyFailed: false, announcements: [ANN], meetings: [MEETING], meetingExceptions: [],
-  issues: [ISSUE], milestoneKeywords: [],
+  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
 }
 const view = async (over: Partial<Props> = {}) => (await DashboardView({ ...base, ...over })) as ReactElement
 
@@ -97,13 +97,13 @@ describe('DashboardView — WBS 가 비어도 회의·이슈·공지는 그린�
     const el = <DashboardView {...rest} />
     expect(el).toBeTruthy()
   })
-  it('(a) WBS 0건 + 이슈 1건: 빈 상태 없이 이슈·마일스톤·공지 스트립을 그리고, WBS 카드와 팀 캐시는 건너뛴다', async () => {
+  it('(a) WBS 0건 + 이슈 1건: 빈 상태 없이 이슈·마일스톤·공지 스트립을 그리고, WBS 카드와 팀 원천은 건너뛴다', async () => {
     const tree = await view({ items: [], announcements: [], meetings: [] })
     const types = typesIn(tree)
     expect(types.has(EmptyState)).toBe(false)
     for (const t of [IssueStatusCard, MilestoneTimeline, AnnouncementStrip, IssueQueueCard, MeetingSchedule]) expect(types.has(t)).toBe(true)
     for (const t of [ExecSummary, TrendChart, SpiPanel, TeamProgress, RiskWorklist]) expect(types.has(t)).toBe(false)
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.projectTeams).not.toHaveBeenCalled()
     // WBS 자리에는 WBS 화면으로 가는 인라인 빈 카드
     expect(elsOf(tree, Link).some(l => l.props.href === '/p/p1/wbs')).toBe(true)
   })
@@ -115,7 +115,7 @@ describe('DashboardView — WBS 가 비어도 회의·이슈·공지는 그린�
       const tree = await view({ items: [], issues: [], announcements: [], meetings: [], ...over })
       expect(typesIn(tree).has(EmptyState)).toBe(false)
     }
-    expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+    expect(mocks.projectTeams).not.toHaveBeenCalled()
   })
 
   it('(c) 정상 회귀: 기존 카드가 모두 있다', async () => {
@@ -127,7 +127,7 @@ describe('DashboardView — WBS 가 비어도 회의·이슈·공지는 그린�
     ]) expect(types.has(t)).toBe(true)
     expect(types.has(EmptyState)).toBe(false)
     expect(types.has(LoadErrorNotice)).toBe(false)
-    expect(mocks.teamsForProjectSync).toHaveBeenCalledWith('p1')
+    expect(mocks.projectTeams).toHaveBeenCalledWith('p1')
     expect(elsOf(tree, TrendChart)[0].props.historyFailed).toBe(false)
   })
 })

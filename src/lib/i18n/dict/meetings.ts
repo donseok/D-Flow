@@ -12,6 +12,7 @@ export const meetingsKo = {
   'meet.view.calendar': '달력',
   'meet.view.list': '리스트',
   'meet.addMeeting': '새 회의',
+  'meet.projectMinutes': '이 프로젝트 회의록',
   'meet.editMeeting': '회의 수정',
   'meet.today': '오늘',
   'meet.prevMonth': '이전 달',

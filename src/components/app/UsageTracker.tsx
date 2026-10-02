@@ -1,6 +1,9 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef } from 'react'
+import { useShellScope } from '@/components/app/ShellScope'
+import { parseScopePath } from '@/lib/nav/active'
+import { requestWorkspaceId } from '@/lib/workspace/requestScope'
 
 /** 같은 경로 재전송 억제(ms) — StrictMode 이중 실행과 리렌더 중복을 함께 막는다. */
 const REPEAT_COOLDOWN_MS = 10_000
@@ -12,23 +15,30 @@ const REPEAT_COOLDOWN_MS = 10_000
  * 아끼는 성능 급소이고 /api/**·/share/** 를 matcher 에서 제외해 커버리지도 반쪽이다.
  * keepalive 로 보내 라우트 전환·탭 종료 중에도 전송이 끊기지 않는다.
  * 실패는 삼키되 사용자 이동을 막지 않는다 — 수집 중단은 /usage 의 '수집 상태'에 드러난다.
+ * 범위(D26, 과제 34): 프로젝트 경로는 서버가 경로에서 프로젝트를 뽑는다. 그 밖은 셸 범위의 워크스페이스를 싣는다 — 게시가 경로보다 한 커밋
+ * 늦어 슬러그가 다르면 기다리고(범위가 바뀌면 다시 돈다), 범위가 없는 화면(소속 0 등)은 보내지 않는다(서버는 400 — 전환마다 쌓지 않는다).
+ * (global) 화면은 레이아웃이 게시한 쿠키 워크스페이스로 보낸다(CC4 — /account·/admin/llm-config 방문이 집계에서 빠지지 않게).
  */
 export function UsageTracker() {
   const pathname = usePathname()
+  const scope = useShellScope()
+  const workspaceId = pathname ? requestWorkspaceId(pathname, scope) : null
   const last = useRef<{ path: string; at: number } | null>(null)
 
   useEffect(() => {
     if (!pathname) return
+    const isProject = parseScopePath(pathname)?.scope === 'project'
+    if (!isProject && !workspaceId) return
     const now = Date.now()
     if (last.current && last.current.path === pathname && now - last.current.at < REPEAT_COOLDOWN_MS) return
     last.current = { path: pathname, at: now }
     void fetch('/api/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: pathname }),
+      body: JSON.stringify(isProject ? { path: pathname } : { path: pathname, workspaceId }),
       keepalive: true,
     }).catch(() => {})
-  }, [pathname])
+  }, [pathname, workspaceId])
 
   return null
 }

@@ -22,6 +22,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.tree.allPeriod': 'All time',
   'min.tree.truncated': 'Showing and counting the most recent {n} only',
   'min.tree.error': 'Failed to load the tree',
+  'min.list.loadError': 'Failed to load minutes',
   'min.tree.retry': 'Retry',
   'min.exp.favorites': 'Favorites',
   'min.exp.all': 'All',

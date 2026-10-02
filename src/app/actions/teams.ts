@@ -3,7 +3,6 @@
 // 공용 팀 기준정보 관리 — 추가/활성 토글/정렬/진척표시. 공용 팀은 그 워크스페이스의 전 프로젝트가 공유하는
 // 기준정보라 프로젝트 관리자가 아니라 그 워크스페이스의 관리자가 손댄다(SP2 §4.1 — SP1 까지는 슈퍼유저 전용).
 // 삭제는 없다: 비활성화(active=false)가 삭제다(데이터 보존, 사용자 결정 2026-07-24).
-// 쓰기 후 refreshTeams()로 인메모리 캐시를 즉시 갱신한다(LLM 설정 액션과 동일 관례).
 
 import { revalidatePath } from 'next/cache'
 import { getActor, requireWorkspaceAdmin } from '@/lib/authz'
@@ -14,7 +13,6 @@ import { adminFor } from '@/lib/supabase/adminFor'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
-import { refreshTeams } from '@/lib/teams/master'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { failWith } from '@/lib/errors/dbFail'
 
@@ -79,8 +77,7 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
     if (folder.error) seedError = folder.error
   }
 
-  await refreshTeams()
-  revalidatePath('/admin/teams')
+  revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   if (seedError) return { ok: false, error: failWith('teams.seedFolder', seedError, ERR_SEED_FOLDER) }
   return { ok: true }
 }
@@ -134,15 +131,14 @@ export async function updateTeam(
     .eq('workspace_id', target.workspace_id).select('id')
   if (upd.error) return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
-  await refreshTeams()
-  revalidatePath('/admin/teams')
+  revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   return { ok: true }
 }
 
 /** 관리 화면 목록(비활성 포함) — 페이지 서버 컴포넌트 전용. 그 워크스페이스의 공용 팀만.
  *  거부·조회 실패는 빈 목록이 아니라 오류다 — 빈 목록이면 화면이 'TEAMS 0' 을 사실처럼 그린다(표시 = 로깅). */
 export async function listTeamsAdmin(workspaceId: string): Promise<
-  | { ok: true; rows: Array<{ id: string; code: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
+  | { ok: true; rows: Array<{ id: string; code: string; name: string; color: string; sortOrder: number; active: boolean; progressVisible: boolean }> }
   | { ok: false; error: string }
 > {
   // 대상 워크스페이스가 비면 가드 전에 거부한다(가드는 null 을 슈퍼유저에게 통과시킨다). g 는 가드 결과만 담는다 — 원문 가드(no-raw-db-errors)가
@@ -161,7 +157,7 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
   // 공용 팀 관리 화면 — project_id is null 로 고정해 프로젝트 팀(0071)이 섞여 들어오지 않게 하고,
   // workspace_id 로 좁혀 다른 워크스페이스의 공용 팀이 보이지 않게 한다(SP2 §4.2 — 종전엔 전 워크스페이스가 섞였다).
   const { data, error } = await admin.from('teams')
-    .select('id, code, sort_order, active, progress_visible')
+    .select('id, code, name, color, sort_order, active, progress_visible')
     .is('project_id', null)
     .eq('workspace_id', workspaceId)
     .order('sort_order').order('code')
@@ -174,6 +170,8 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
     rows: (data ?? []).map((r: Record<string, unknown>) => ({
       id: String(r.id),
       code: String(r.code),
+      name: String(r.name),
+      color: String(r.color),
       sortOrder: Number(r.sort_order ?? 0),
       active: r.active !== false,
       progressVisible: r.progress_visible !== false,

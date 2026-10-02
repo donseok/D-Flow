@@ -1264,7 +1264,7 @@ describe('inline meeting — 회의 생성+연결 (v2.5 §4.2·§4.3)', () => {
     }))
     // 내부 회의 화면 캐시 갱신 — revalidateMeetings 와 동일 경로
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/p/${PROJECT_UUID}/meetings`)
-    expect(mocks.revalidatePath).toHaveBeenCalledWith('/meetings')
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/(app)/w/[slug]/meetings', 'page')   // SP3b 과제 12 — 라우트 그룹 경로(D8)
   })
 
   it('같은 (project, date, title) 회의는 재사용 — meeting_created: false, insert 없음 (dedup 멱등)', async () => {

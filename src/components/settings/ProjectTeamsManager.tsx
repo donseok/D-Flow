@@ -1,28 +1,34 @@
 'use client'
 
 // 프로젝트 스코프 팀 관리(0071) — admin/TeamsManager 를 본뜨되 가드·액션·문구가 다르다.
-// 회의록은 전역 팀 축이라 여기서 시드 폴더를 만들지 않는다(addProjectTeam/copyGlobalTeams 계약).
-// 삭제 버튼은 없다: 비활성화가 삭제(전역 팀과 동일 관례).
+// 회의록은 공용 팀 축이라 여기서 시드 폴더를 만들지 않는다(addProjectTeam·전환 RPC 계약).
+// 삭제 버튼은 없다: 비활성화가 삭제(공용 팀과 동일 관례).
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Plus, Power } from 'lucide-react'
 import { addProjectTeam, copyGlobalTeams, updateProjectTeam } from '@/app/actions/projectTeams'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { TeamNameCell } from '@/components/settings/TeamNameCell'
 
 /** admin/TeamsManager.tsx 의 AdminTeamRow 와 형태가 같지만 별개 선언이다 — 액션·문구가
  *  프로젝트 스코프로 갈라져 있어 import 로 묶으면 오히려 결합이 생긴다(브리프 지시). */
 export interface AdminTeamRow {
   id: string
   code: string
+  name: string
+  color: string
   sortOrder: number
   active: boolean
   progressVisible: boolean
 }
 
-/** 상속 중(프로젝트 팀 0개) 상태에서 첫 추가/복사를 실행하기 전에만 뜨는 경고. */
+/** 상속 중(프로젝트 팀 0개) 상태에서 '빈 목록에서 시작'의 첫 추가를 실행하기 전에만 뜨는 경고. */
 const INHERITANCE_WARNING =
-  '이 프로젝트는 더 이상 전역 팀을 따르지 않습니다. 기존 WBS 담당이 전역 팀에 걸려 있으면 화면에서 \'목록 밖 팀\'으로 처리됩니다(칸반 미배정·엑셀 열 덧붙임). 계속할까요?'
+  '이 프로젝트는 더 이상 공용 팀을 따르지 않습니다. 기존 WBS 담당이 공용 팀에 걸려 있으면 화면에서 \'목록 밖 팀\'으로 처리됩니다(칸반 미배정·엑셀 열 덧붙임). 계속할까요?'
+/** '공용 팀 전환으로 시작'의 확인 문구 — 전환 RPC 의 실제 결과(SP4 D54·T14) */
+const CONVERT_WARNING =
+  '이 프로젝트가 쓰던 워크스페이스 공용 팀을 같은 코드·이름·색의 이 프로젝트 팀으로 바꿉니다. 작업 담당·명단의 팀·업무영역 담당·수락 전 초대의 팀 연결도 새 팀으로 함께 옮깁니다. 이후 공용 팀의 이름 바꾸기·추가·비활성은 이 프로젝트에 반영되지 않으며, 전환은 되돌릴 수 없습니다. 계속할까요?'
 
 type PendingAction = { type: 'add'; code: string } | { type: 'copy' }
 
@@ -30,7 +36,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
   projectId: string
   teams: AdminTeamRow[]
   inherited: boolean
-  /** 전역 활성 팀이 1개 이상 있는가 — 없으면 '전역 팀 복사로 시작'은 지어낼 것이 없어 막는다. */
+  /** 공용 활성 팀이 1개 이상 있는가 — 없으면 '공용 팀 전환으로 시작'은 지어낼 것이 없어 막는다. */
   hasGlobalTeams: boolean
 }) {
   const router = useRouter()
@@ -62,7 +68,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
   function doCopy() {
     run(async () => {
       const r = await copyGlobalTeams(projectId)
-      if (r.ok) toast({ title: '전역 팀을 복사했습니다.', variant: 'success' })
+      if (r.ok) toast({ title: '공용 팀을 이 프로젝트 팀으로 전환했습니다 — 담당·명단·업무영역·초대의 팀 연결도 옮겼습니다.', variant: 'success' })
       return r
     })
   }
@@ -99,7 +105,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
       open={!!confirming}
       onClose={() => { if (!pending) setConfirming(null) }}
       eyebrow="Teams"
-      title="전역 팀 상속 종료"
+      title={confirming?.type === 'copy' ? '공용 팀을 이 프로젝트 팀으로 전환' : '공용 팀 상속 종료'}
       size="sm"
       footer={
         <>
@@ -107,12 +113,12 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             취소
           </button>
           <button type="button" className="btn btn-primary" disabled={pending} onClick={confirmProceed}>
-            {pending ? '처리 중…' : '계속'}
+            {pending ? '처리 중…' : confirming?.type === 'copy' ? '전환하기' : '계속'}
           </button>
         </>
       }
     >
-      <p className="text-sm leading-6 text-ink-muted">{INHERITANCE_WARNING}</p>
+      <p className="text-sm leading-6 text-ink-muted">{confirming?.type === 'copy' ? CONVERT_WARNING : INHERITANCE_WARNING}</p>
     </Modal>
   )
 
@@ -125,13 +131,13 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
           )}
           <div className="panel-soft flex flex-col gap-4 p-5">
             <p className="text-sm leading-6 text-ink">
-              현재 전역 팀을 상속 중입니다. 이 프로젝트만의 팀을 정의하면 상속이 끊깁니다.
+              현재 워크스페이스 공용 팀을 상속 중입니다. 이 프로젝트만의 팀을 정의하면 상속이 끊깁니다.
             </p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setConfirming({ type: 'copy' })} className="btn btn-primary"
                 disabled={pending || !hasGlobalTeams}
-                title={hasGlobalTeams ? undefined : '전역 팀이 없습니다. 먼저 /admin/teams 에서 전역 팀을 등록하세요.'}>
-                <Copy className="h-4 w-4" />전역 팀 복사로 시작
+                title={hasGlobalTeams ? undefined : '공용 팀이 없습니다. 워크스페이스 관리의 팀 관리에서 먼저 공용 팀을 등록하세요.'}>
+                <Copy className="h-4 w-4" />공용 팀 전환으로 시작
               </button>
               <button type="button" onClick={() => setShowAddInput(true)} className="btn btn-ghost" disabled={pending || showAddInput}>
                 <Plus className="h-4 w-4" />빈 목록에서 시작
@@ -159,7 +165,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             )}
           </div>
           <p className="mt-4 text-xs leading-5 text-ink-subtle">
-            이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 전역 팀 기준을 유지합니다.
+            이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 공용 팀 기준을 유지합니다.
           </p>
         </div>
         {warningModal}
@@ -210,7 +216,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             </thead>
             <tbody>
               {teams.map((t, i) => (
-                <tr key={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
+                <tr key={t.id} data-team-row={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => move(i, -1)} disabled={pending || i === 0}
@@ -223,7 +229,15 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
                       </button>
                     </div>
                   </td>
-                  <td className="py-2.5 pr-3 font-medium text-ink">{t.code}</td>
+                  <td className="py-2.5 pr-3">
+                    {/* 팀 색 칩은 두지 않는다 — 명단·설정의 팀 칩은 SPU3(D52) */}
+                    <TeamNameCell team={t} disabled={pending}
+                      onRename={async (name) => {
+                        const r = await updateProjectTeam(projectId, t.id, { name })
+                        if (r.ok) { toast({ title: `'${t.code}' 팀 이름을 '${name}'(으)로 바꿨습니다.`, variant: 'success' }); router.refresh() }
+                        return r
+                      }} />
+                  </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
                       {t.active ? '활성' : '비활성'}
@@ -258,7 +272,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
           </table>
         </div>
         <p className="mt-3 text-xs leading-5 text-ink-subtle">
-          이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 전역 팀 기준을 유지합니다.
+          이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 공용 팀 기준을 유지합니다.
         </p>
       </div>
     </section>

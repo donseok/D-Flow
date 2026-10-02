@@ -1,6 +1,7 @@
 'use client'
 import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useMinuteLinks } from './minuteLinks'
 import {
   BookOpenText, CheckSquare, ChevronDown, ChevronRight, ExternalLink, FileText, Folder, FolderOpen,
   FolderPlus, MoreHorizontal, Paperclip, Square, Star,
@@ -24,11 +25,12 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
-import { teamStyle } from '@/components/wbs/shared'
+import { useTeamSlot } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
 import { FolderManageModal } from './FolderManageModal'
 import { FolderPickModal } from './FolderPickModal'
 import { MinuteMetaModal } from './MinuteMetaModal'
+import { useMinutesScope } from './MinutesScopeContext'
 
 export type ExplorerLayout = 'grid' | 'list'
 type Scope =
@@ -112,6 +114,8 @@ export function MinutesExplorer({
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
+  // 폴더·일괄 지정 액션의 범위 — 화면(페이지)이 내린 워크스페이스. 없으면 액션을 부르지 않는다(계획 V13)
+  const minutesScope = useMinutesScope()
   const [scopeRaw, setScopeRaw] = useState<Scope>({ kind: 'all' })
   // 기본 전체 펼침(부모 id 집합) — 시드 트리가 얕아(깊이 상한 5) 접힌 채 시작하면 하위 폴더 메뉴·이동이
   // 첫 렌더에 발견 불가능해진다. 최초 렌더 1회만 계산(폴더 추가/삭제는 토글로 사용자가 직접 관리).
@@ -194,7 +198,15 @@ export function MinutesExplorer({
     // 스코프를 옮기면 고른 것도 버린다 — 화면에서 사라진 선택을 들고 다니면 다음 실행이
     // 보이지 않는 건을 건드린다. 모드는 유지한다(폴더를 옮겨 가며 정리하는 동선이라).
     setSelected(new Set())
-    if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0
+    const r = resultsScrollRef.current
+    if (r) {
+      r.scrollTop = 0
+      // 문서형 화면(main 하나가 스크롤 — D19)에서는 위가 효과가 없다. 결과 머리가 필터 바 위로 지나가 있으면 결과로 스크롤한다
+      // (scroll-mt 가 필터 바 아래에 맞춘다, BB2)
+      const main = r.closest('main')
+      const mt = parseFloat(getComputedStyle(r).scrollMarginTop) || 0
+      if (main && r.getBoundingClientRect().top < main.getBoundingClientRect().top + mt) r.scrollIntoView({ block: 'start' })
+    }
     onFolderSelect?.(next.kind === 'folder' ? next.id : null)
   }
   function toggleExpand(id: string) {
@@ -305,9 +317,10 @@ export function MinutesExplorer({
   async function assignProject(projectId: string | null) {
     const ids = selectedIds
     if (ids.length === 0) return
+    if (!minutesScope) { toast({ title: t('min.err.noWorkspace'), variant: 'error' }); return }
     setAssignBusy(true)
     try {
-      const res = await assignMinutesProject(ids, projectId)
+      const res = await assignMinutesProject(minutesScope.workspaceId, ids, projectId)
       if (!res.ok) { toast({ title: res.error ?? t('min.fold.error'), variant: 'error' }); return }
       // 건너뛴 건이 있으면 '전부 됐다'로 읽히지 않게 건수를 함께 알린다
       if (res.skipped.length > 0) {
@@ -383,7 +396,8 @@ export function MinutesExplorer({
         toast({ title: t('min.fold.moved'), variant: 'info' })
       } else {
         const newParentId = target === ROOT_KEY ? null : target
-        const res = await moveMinuteFolder(item.id, newParentId)
+        if (!minutesScope) { toast({ title: t('min.err.noWorkspace'), variant: 'error' }); return }
+        const res = await moveMinuteFolder(minutesScope.workspaceId, item.id, newParentId)
         if (!res.ok) { toast({ title: res.error ?? t('min.fold.error'), variant: 'error' }); return }
         // expanded 는 최초 렌더 1회만 계산된다 — 지금까지 자식이 없던 폴더로 옮기면 그 부모가
         // 집합에 없어 옮긴 폴더가 접힌 채 사라져 보인다. 재조회로도 복구되지 않으므로 여기서 펼친다.
@@ -627,14 +641,16 @@ export function MinutesExplorer({
     onSelectToggle: () => toggleSelect(l.id),
   })
 
+  // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다.
+  // 폴더 트리(nav)는 lg 에서 고정 — 문서형 main 스크롤에서 목록과 함께 사라지지 않게 필터 바(--minutes-bar-h) 아래에 붙고, 결과보다 길면 안에서 스크롤(BB2)
   return (
     <div
       data-minutes-explorer
-      className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
+      className="isolate flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
     >
       <nav
         data-minutes-navigation
-        className="card hidden w-[250px] shrink-0 p-2 lg:block lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain"
+        className="card hidden w-[250px] shrink-0 p-2 lg:block lg:sticky lg:top-[calc(var(--frame-sticky-top)+var(--minutes-bar-h,0px))] lg:self-start lg:max-h-[calc(100dvh-3rem-var(--frame-sticky-top)-var(--minutes-bar-h,0px)-1rem)] lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain"
       >
         {rail()}
       </nav>
@@ -652,7 +668,7 @@ export function MinutesExplorer({
       <section
         ref={resultsScrollRef}
         data-minutes-results-scroll-region
-        className="min-w-0 flex-1 lg:-mr-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pb-1 lg:pr-1"
+        className="min-w-0 flex-1 scroll-mt-[calc(var(--frame-sticky-top)+var(--minutes-bar-h,0px)+0.5rem)] lg:-mr-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pb-1 lg:pr-1"
       >
         <div data-minutes-content-body className="space-y-4">
           {/* 선택 액션바 — 선택 모드일 때만. 평소에는 결과 위에 아무 것도 두지 않는다(진입은 카드 '...').
@@ -950,6 +966,8 @@ function MinuteCard({
   selecting = false, selected = false, onSelectToggle,
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
+  const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
+  const slotOf = useTeamSlot()
   return (
     <article {...dragProps}
       className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
@@ -957,7 +975,7 @@ function MinuteCard({
       {/* 선택 모드에서는 링크를 렌더하지 않는다 — 고르려다 상세로 튕겨 나가면 선택 자체가 불가능하다.
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 카드 대신 링크(href)가 끌린다 */}
       {!selecting && (
-        <Link draggable={false} href={`/minutes/${l.id}`} aria-label={l.title} className="absolute inset-0 rounded-2xl" />
+        <Link draggable={false} href={minuteHref(l.id)} aria-label={l.title} className="absolute inset-0 rounded-2xl" />
       )}
       {selecting && (
         <button aria-hidden tabIndex={-1} onClick={onSelectToggle}
@@ -971,7 +989,7 @@ function MinuteCard({
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
       </div>
@@ -1011,12 +1029,14 @@ function MinuteRow({
   selecting = false, selected = false, onSelectToggle,
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
+  const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
+  const slotOf = useTeamSlot()
   return (
     <li {...dragProps} className={`relative ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다(카드와 같은 이유).
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 행 대신 링크(href)가 끌린다 */}
       {!selecting && (
-        <Link draggable={false} href={`/minutes/${l.id}`} aria-label={l.title} className="absolute inset-0 rounded-lg" />
+        <Link draggable={false} href={minuteHref(l.id)} aria-label={l.title} className="absolute inset-0 rounded-lg" />
       )}
       {selecting && (
         <button aria-hidden tabIndex={-1} onClick={onSelectToggle}
@@ -1027,7 +1047,7 @@ function MinuteRow({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
         <span className="min-w-0 flex-1">

@@ -51,7 +51,7 @@ export function mayHaveUseServer(text: string): boolean {
 export const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
   ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some((m) => m.kind === kind)
 
-export const GATE_CALLS: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireModulePage'])
+export const GATE_CALLS: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'requireModulePage'])
 
 /** 최상위 함수(선언·`const f = () => …`·`const f = function …`)의 이름 → 몸 */
 function localBodies(sf: ts.SourceFile): Map<string, ts.ConciseBody> {
@@ -157,12 +157,13 @@ export function tablesIn(sf: ts.SourceFile, exportName: string, rpcTables: typeo
 /** 판정 함수의 원천 — 이 모듈에서 import 한 바인딩이라야 판정 호출로 센다(같은 이름의 지역 함수·아무 객체의 메서드는 판정이 아니다) */
 export const GATE_SOURCES: Readonly<Record<string, string>> = {
   requireModule: '@/lib/modules/gate', requireSessionModule: '@/lib/modules/gate', moduleState: '@/lib/modules/gate',
+  requireScopedSessionModule: '@/lib/modules/scopedSession',
   projectsWithModule: '@/lib/modules/gate', workspacesWithModule: '@/lib/modules/gate', requireModulePage: '@/lib/modules/pageGate',
   requireAgentProject: '@/lib/agent/externalApi', accessibleProjectIds: '@/lib/agent/mineShared',
   loadGatedOrder: '@/lib/agent/routeShared', loadGatedOrderForUser: '@/lib/agent/routeShared',
 }
 /** 결과가 판정(통과/거부)이라 조건으로 봐야 하는 것 — 목록형(projectsWithModule·accessibleProjectIds)은 결과를 쓰기만 하면 된다 */
-const MUST_CHECK: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'moduleState', 'requireAgentProject', 'loadGatedOrder', 'loadGatedOrderForUser'])
+const MUST_CHECK: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'moduleState', 'requireAgentProject', 'loadGatedOrder', 'loadGatedOrderForUser'])
 
 export type GateSite = {
   name: string

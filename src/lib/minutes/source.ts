@@ -11,11 +11,15 @@ type SearchValue = string | string[] | undefined
 const BLOCK_HASH_RE = /^[0-9a-f]{16}$/i
 const BLOCK_INDEX_RE = /^(0|[1-9]\d*)$/
 
-/** 대시보드/이슈 출처에서 회의록 원문 블록으로 이동하는 내부 링크. 버전이 있으면 불변 원본을 연다. */
+/**
+ * 대시보드/이슈 출처에서 회의록 원문 블록으로 이동하는 내부 링크. 버전이 있으면 불변 원본을 연다.
+ * base 는 필수다 — 슬러그를 아는 호출부는 wsHref(slug, 'minutes'), 범위를 모르면 MINUTES_PERMALINK_BASE(영구 링크 형식, D6)를 명시한다(CC6).
+ */
 export function minuteSourceHref(
   minuteId: string,
   source: MinuteSourceAnchor,
-  minuteVersionId?: string | null,
+  minuteVersionId: string | null | undefined,
+  base: string,
 ): string {
   const params = new URLSearchParams({
     block: String(source.blockIndex),
@@ -23,7 +27,7 @@ export function minuteSourceHref(
     body: source.bodyHash,
   })
   if (minuteVersionId) params.set('version', minuteVersionId)
-  return `/minutes/${minuteId}?${params.toString()}`
+  return `${base}/${minuteId}?${params.toString()}`
 }
 
 /** Next searchParams의 반복값·음수·과대 정수·잘못된 해시를 클라이언트로 넘기지 않는다. */

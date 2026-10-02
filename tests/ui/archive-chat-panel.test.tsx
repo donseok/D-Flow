@@ -26,7 +26,7 @@ describe('ArchiveChatPanel 레이어/닫기', () => {
 
   function render(open = true) {
     act(() => root.render(
-      <ArchiveChatPanel open={open} onClose={onClose} team={null} from={null} to={null} />,
+      <ArchiveChatPanel open={open} onClose={onClose} workspaceId="ws-1" team={null} from={null} to={null} />,
     ))
   }
 

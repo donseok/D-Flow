@@ -17,6 +17,7 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWbsFields: vi
 
 import { BotPageContextProvider } from '@/components/chat/BotPageContextProvider'
 import { AssistantChat } from '@/components/chat/AssistantChat'
+import { ShellScope, ShellScopeProvider } from '@/components/app/ShellScope'
 
 const ON = '12345678-1234-1234-1234-123456789abc'
 const OFF = '87654321-4321-4321-4321-cba987654321'
@@ -26,7 +27,9 @@ let probeStatus = 200
 let container: HTMLDivElement
 let root: Root
 const tree = () => (
-  <BotPageContextProvider><AssistantChat projects={[{ id: ON, name: 'ERP' }, { id: OFF, name: 'MES' }]} /></BotPageContextProvider>
+  // 프로젝트 목록은 게시 저장소에서(과제 31 — AssistantChat 의 projects prop 삭제)
+  <ShellScopeProvider><ShellScope workspace={null} projectId={null} projects={[{ id: ON, name: 'ERP' }, { id: OFF, name: 'MES' }]} />
+    <BotPageContextProvider><AssistantChat /></BotPageContextProvider></ShellScopeProvider>
 )
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 const fab = () => container.querySelector('button[aria-label="chat.open"]')
@@ -220,5 +223,91 @@ describe('AssistantChat — 404 가 아닌 오류는 숨기지 않는다', () =>
     nav.pathname = `/p/${OFF}/wbs`
     await act(async () => { root.render(tree()); await settle() })
     expect(fab()).not.toBeNull()
+  })
+})
+
+/**
+ * 세션 라우트의 범위(과제 34, D26) — 프로젝트 없는 화면의 챗 요청은 셸 범위의 워크스페이스를 싣는다. 프로젝트 화면은 싣지 않는다 —
+ * 게시가 경로보다 한 커밋 늦어 이전 워크스페이스가 실리면 서버가 조합 불일치(404)로 닫아 위젯이 꺼진다(적대 ③ 의 클라이언트 쪽).
+ */
+describe('AssistantChat — 요청의 워크스페이스(과제 34)', () => {
+  const WA = { id: '00000000-0000-0000-7e57-000000001795', slug: 'acme', name: 'Acme' }
+  const WB = { id: '00000000-0000-0000-7e57-000000001796', slug: 'beta', name: 'Beta' }
+  const scoped = (workspace: typeof WA | null) => (
+    <ShellScopeProvider><ShellScope workspace={workspace} projectId={null} projects={[{ id: ON, name: 'ERP' }]} />
+      <BotPageContextProvider><AssistantChat /></BotPageContextProvider></ShellScopeProvider>
+  )
+  const probes = () => fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('probe=1'))
+
+  it('워크스페이스 화면 — 탐침·문맥·스트림 요청에 게시 범위의 워크스페이스를 싣는다', async () => {
+    nav.pathname = '/w/acme/minutes'
+    const bodies: unknown[] = []
+    fetchMock.mockImplementation(async (request: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(request)
+      if (url.includes('probe=1')) return Response.json({ ok: true })
+      if (url.startsWith('/api/chat/context')) return Response.json({ currentProject: null, totalProjects: 2, weekStartCount: 0 })
+      if (url.startsWith('/api/chat/v2/stream')) { bodies.push(JSON.parse(String(init?.body))); return new Promise<Response>(() => {}) }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(probes().at(-1)).toBe(`/api/chat/context?projectId=&workspaceId=${WA.id}&probe=1`)
+    await openPanel()
+    expect(fetchMock).toHaveBeenCalledWith(`/api/chat/context?projectId=&workspaceId=${WA.id}`, { cache: 'no-store' })
+    await type('이번 주 작업 알려줘')
+    await send()
+    expect(bodies[0]).toMatchObject({ projectId: null, workspaceId: WA.id, pageContext: { projectId: null, workspaceId: WA.id } })
+  })
+
+  it('프로젝트 화면 — 게시 범위가 남아 있어도 워크스페이스를 싣지 않는다(프로젝트가 판정)', async () => {
+    nav.pathname = `/p/${ON}/wbs`
+    await act(async () => { root.render(scoped(WB)); await settle() })
+    expect(probes()).toEqual([`/api/chat/context?projectId=${ON}&probe=1`])
+  })
+
+  it('경로 슬러그와 다른 게시 범위(한 커밋 늦은 게시)는 묻지 않고, 범위가 맞춰지면 그 워크스페이스로 탐침한다', async () => {
+    nav.pathname = '/w/beta'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(probes()).toEqual([])
+    await act(async () => { root.render(scoped(WB)); await settle() })
+    expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WB.id}&probe=1`])
+  })
+
+  // U2b-5 리뷰 수정 CC4 — (global) 은 검증된 쿠키 워크스페이스를 게시한다(레이아웃). 그래도 범위가 없는 화면(소속 0 등)은 보낼 수 있는 요청이
+  // 없으므로 진입점을 닫는다 — 직전 판정을 남겨 두면 새 질문이 서버 400 문구('워크스페이스를 지정해야 합니다')로 말풍선에 뜬다
+  it('범위가 없는 화면은 묻지 않고(서버 400 을 쌓지 않는다) 진입점을 닫는다 — 범위 화면에서 넘어와도 닫고, 범위가 돌아오면 다시 연다', async () => {
+    nav.pathname = '/account'
+    await act(async () => { root.render(scoped(null)); await settle() })
+    expect(probes()).toEqual([])
+    expect(fab()).toBeNull()
+    act(() => root.unmount()); root = createRoot(container)
+    nav.pathname = '/w/acme'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(fab()).not.toBeNull()
+    nav.pathname = '/account'
+    await act(async () => { root.render(scoped(null)); await settle() })
+    expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WA.id}&probe=1`])
+    expect(fab()).toBeNull()
+    nav.pathname = '/w/acme'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(fab()).not.toBeNull()
+  })
+  it('(global) 이 게시한 범위로 프로젝트 없는 질문을 보낸다 — 400 이 아니다', async () => {
+    nav.pathname = '/account'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WA.id}&probe=1`])
+    expect(fab()).not.toBeNull()
+  })
+  it('범위가 비는 순간(게시가 한 커밋 늦은 범위 경로)에 보내면 서버로 가지 않고 안내 문장을 낸다 — 서버 400 문구를 말풍선에 싣지 않는다', async () => {
+    nav.pathname = '/w/acme'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    await openPanel()
+    nav.pathname = '/w/beta'   // 경로는 B, 게시는 아직 A — 요청 워크스페이스 없음(requestWorkspaceId)
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(input()).not.toBeNull()
+    const before = fetchMock.mock.calls.length
+    await type('이번 주 작업 알려줘')
+    await send()
+    expect(fetchMock.mock.calls.slice(before).map(([u]) => String(u)).filter((u) => !u.includes('probe=1'))).toEqual([])
+    expect(container.textContent).toContain('chat.error.noScope')
   })
 })

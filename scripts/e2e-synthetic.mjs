@@ -64,8 +64,8 @@ if (!password) { console.error('✗ BOOTSTRAP_PASSWORD 가 없다 — dev:bootst
 
 const MANIFEST = '.next/server/server-reference-manifest.json'
 const ACTIONS = {
-  createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/projects/page' },
-  createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/admin/accounts/page' },
+  createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/w/[slug]/projects/page' },
+  createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/w/[slug]/admin/accounts/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   updateWorkspaceSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateWorkspaceSettings', worker: '/w/[slug]/settings/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
@@ -145,9 +145,10 @@ async function main() {
   }
   for (const ws of [wsR, wsC, wsB]) await seedAllowed(ws)
 
-  // ── S1 — 생성(빈 값) + 등록 키(서버 액션)
-  await admin.http('GET', '/projects')
-  const wsSettingsPage = (ws) => `/w/${encodeURIComponent(ws.slug)}/settings`
+  // ── S1 — 생성(빈 값) + 등록 키(서버 액션). 화면 경로는 워크스페이스 범위(SP3b UI-2 — 옛 /projects·/admin/accounts 는 스텁 307)
+  const wsHref = (ws, seg) => `/w/${encodeURIComponent(ws.slug)}/${seg}`
+  await admin.http('GET', wsHref(wsR, 'projects'))
+  const wsSettingsPage = (ws) => wsHref(ws, 'settings')
   const config = async (cfg, ws) => {
     // 1) 워크스페이스 키 — modules.allowed·ai.enabled (플랫폼 관리자 전용 구역의 키)
     await admin.http('GET', wsSettingsPage(ws))
@@ -157,7 +158,7 @@ async function main() {
     mustOk(`${cfg.id} 워크스페이스 설정`, wr)
     // 2) 프로젝트 — 필수 설정(단계 라벨)과 함께 한 트랜잭션으로 생성
     const name = `합성 ${cfg.id} ${stamp}`
-    const created = (await admin.action('/projects', 'createProject', [{
+    const created = (await admin.action(wsHref(ws, 'projects'), 'createProject', [{
       workspaceId: ws.id, name, startDate: null, endDate: null, description: null, levelLabels: cfg.project['core.level_labels'], commandId: randomUUID(),
     }])).result
     mustOk(`${cfg.id} createProject`, created)
@@ -285,8 +286,8 @@ async function main() {
   // 다른 워크스페이스(B) 관리자는 R·C 의 설정 두 표와 이력 두 표를 0건 읽는다 — 같은 서버 액션 경로의 계정 생성으로 만든다
   const bEmail = `syn-b-${stamp}@example.com`
   const bPassword = `Syn-${randomUUID()}`
-  await admin.http('GET', '/admin/accounts')
-  mustOk('B 관리자 계정', (await admin.action('/admin/accounts', 'createAccount',
+  await admin.http('GET', wsHref(wsB, 'admin/accounts'))
+  mustOk('B 관리자 계정', (await admin.action(wsHref(wsB, 'admin/accounts'), 'createAccount',
     [workspaceAdminAccountInput({ workspaceId: wsB.id, email: bEmail, name: '합성 B 관리자', password: bPassword })])).result)
   const bAdmin = session('syn-b')
   await bAdmin.login(bEmail, bPassword)
@@ -468,8 +469,8 @@ async function main() {
   const viewerOf = async (label, ws) => {
     const addr = `syn-${label.toLowerCase()}-view-${stamp}@example.com`
     const pw = `Syn-${randomUUID()}`
-    await admin.http('GET', '/admin/accounts')
-    mustOk(`${label} 화면 확인 계정`, (await admin.action('/admin/accounts', 'createAccount',
+    await admin.http('GET', wsHref(ws, 'admin/accounts'))
+    mustOk(`${label} 화면 확인 계정`, (await admin.action(wsHref(ws, 'admin/accounts'), 'createAccount',
       [workspaceAdminAccountInput({ workspaceId: ws.id, email: addr, name: `합성 ${label} 화면 확인`, password: pw })])).result)
     const viewer = session(`syn-${label.toLowerCase()}-view`)
     await viewer.login(addr, pw)
@@ -569,7 +570,7 @@ async function main() {
   for (const [label, proj, cfg, ws, setup] of [['R', R, SYNTHETIC_R, wsR, rSetup], ['C', C, SYNTHETIC_C, wsC, cSetup]]) {
     // 설정 없음
     const emptyName = `합성 ${label} 경계 ${stamp}`
-    mustOk(`${label} 빈 프로젝트`, (await admin.action('/projects', 'createProject', [{
+    mustOk(`${label} 빈 프로젝트`, (await admin.action(wsHref(ws, 'projects'), 'createProject', [{
       workspaceId: ws.id, name: emptyName, startDate: null, endDate: null, description: null, levelLabels: cfg.config.project['core.level_labels'], commandId: randomUUID(),
     }])).result)
     const E = rows(`${label} 빈 프로젝트`, await admin.sb.from('projects').select('id').eq('name', emptyName).single())

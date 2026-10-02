@@ -23,8 +23,8 @@ vi.mock('@/components/minutes/ArchiveChatPanel', () => ({ ArchiveChatPanel: () =
 const fetchMinutesExplorer = vi.fn()
 const fetchMinuteFavorites = vi.fn()
 vi.mock('@/app/actions/minutes', () => ({
-  fetchMinutesRange: vi.fn(async () => []),
-  fetchMinutesSearch: vi.fn(async () => []),
+  fetchMinutesRange: vi.fn(async () => ({ ok: true, rows: [] })),
+  fetchMinutesSearch: vi.fn(async () => ({ ok: true, rows: [] })),
   fetchMinutesExplorer: (...a: unknown[]) => fetchMinutesExplorer(...(a as [])),
   fetchMinuteFavorites: (...a: unknown[]) => fetchMinuteFavorites(...(a as [])),
   toggleMinuteFavorite: vi.fn(async () => true),
@@ -66,7 +66,7 @@ describe('MinutesView initialTree 서버 프리페치', () => {
     initialFavorites: string[] | null = [],
   ) {
     await act(async () => root.render(
-      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} initialTree={initialTree} todayIso="2026-07-17"
+      <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} initialTree={initialTree} todayIso="2026-07-17"
         initialView={initialView} projects={[]} currentUserId="u1" canEdit
         initialFavorites={initialFavorites} />,
     ))
@@ -116,7 +116,7 @@ describe('MinutesView initialTree 서버 프리페치', () => {
 
   it('initialTree 미전달(기본값)도 기존 동작을 유지한다 — 하위 호환', async () => {
     await act(async () => root.render(
-      <MinutesView calendar={SUNDAY_CAL} initialMinutes={[]} todayIso="2026-07-17" initialView="tree"
+      <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-17" initialView="tree"
         projects={[]} currentUserId="u1" canEdit />,
     ))
     expect(fetchMinutesExplorer).toHaveBeenCalledTimes(1)

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
-import { denyStatus } from '@/lib/authz/errors'
-import { requireSessionModule } from '@/lib/modules/gate'
+import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { answerQuestion, sanitizeHistory } from '@/lib/ai/answer'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   if (!(await getSession())) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
 
-  let body: { projectId?: unknown; message?: unknown; history?: unknown }
+  let body: { projectId?: unknown; workspaceId?: unknown; message?: unknown; history?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -26,12 +25,12 @@ export async function POST(req: NextRequest) {
   // 볼 수 없는 프로젝트면 파이프라인(service_role 팀 캐시·자가 치유 색인)에 들이지 않는다.
   const gate = await legacyChatProjectGate(projectId)
   if (gate) return gate
-  // 옛 챗도 chatbot 관문(스펙 §4.2 챗 위젯 행) — 프로젝트 없는 전체 질문은 세션 유일 워크스페이스(P13)
-  const mod = await requireSessionModule(projectId, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
+  // 옛 챗도 chatbot 관문(스펙 §4.2 챗 위젯 행) — 프로젝트 없는 전체 질문은 요청의 워크스페이스(셸 범위, 소속 확인 — D26). 둘 다 없으면 400
+  const mod = await requireScopedSessionModule({ projectId, workspaceId: body.workspaceId }, 'chatbot')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
 
   try {
-    const result = await answerQuestion({ projectId, message, history })
+    const result = await answerQuestion({ projectId, workspaceId: mod.workspaceId, message, history })   // 답의 원천·AI 판정도 그 범위(CC2·CC3)
     return NextResponse.json(result)
   } catch (e) {
     console.error('[assistant] /api/chat 오류:', e)

@@ -88,8 +88,9 @@ const rankMocks = () => [authzMock.requireSuperuser, authzMock.requireWorkspaceA
 /** 권한 판정의 흔적 — 가드 넷·행위자 조회·세션 조회. null 항목의 가드 거부 실행이 "가드에 닿았다"를 확인한다 */
 const guardMocks = () => [...rankMocks(), authzMock.getActor, authzMock.getActorForView, authzMock.getActorViewState, authMock.getSession]
 
-/** 모듈 판정의 대상 — project: 인자의 프로젝트 P, row: 대상 행(행의 프로젝트 P·워크스페이스 W), session: 행 없는 세션 판정(유일 워크스페이스 W) */
-export type Target = 'project' | 'row' | 'session'
+/** 모듈 판정의 대상 — project: 인자의 프로젝트 P, row: 대상 행(행의 프로젝트 P·워크스페이스 W), session: 행 없는 세션 판정(유일 워크스페이스 W),
+ *  workspace: 워크스페이스 인자를 받는 액션(인자 W — 프로젝트 층 모듈도 그 워크스페이스 W 에서 꺼진다, 계획 V10) */
+export type Target = 'project' | 'row' | 'session' | 'workspace'
 type Scope = { projectId: string } | { workspaceId: string }
 type GateCall = { fn: string; scope: Scope | string | null; modules: ModuleId[]; denied: boolean }
 /**
@@ -102,6 +103,7 @@ type Off = { module: ModuleId; projects: ReadonlySet<string>; workspaces: Readon
 function offFor(module: ModuleId, target: Target): Off {
   const workspaceLayer = moduleDef(module).scope === 'workspace'
   if (target === 'session') return { module, projects: new Set([P]), workspaces: new Set([W]), session: true }
+  if (target === 'workspace') return { module, projects: new Set([P]), workspaces: new Set([W]), session: false }
   return workspaceLayer ? { module, projects: new Set([P]), workspaces: new Set([W]), session: false } : { module, projects: new Set([P]), workspaces: new Set(), session: false }
 }
 const log: GateCall[] = []

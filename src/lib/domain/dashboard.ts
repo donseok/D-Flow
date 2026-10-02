@@ -165,32 +165,6 @@ export function buildExecSummary(
 
 /* ═══════════════ 본문 재구성(2026-07-09) 신규 모델 ═══════════════ */
 
-/* ── Phase × 팀 진척 매트릭스 ── */
-export interface MatrixCell { pct: number; planned: number; count: number }
-export interface MatrixRow {
-  id: string; name: string
-  cells: (MatrixCell | null)[]
-  overall: number; planned: number; variance: number
-}
-
-/** 셀 = 해당 팀이 담당(primary·support 모두)인 leaf들의 단순 평균. 무배정이면 null. */
-export function progressMatrix(roots: ComputedItem[], teams: readonly TeamCode[]): MatrixRow[] {
-  const avg = (ns: number[]) => Math.round(ns.reduce((a, b) => a + b, 0) / ns.length)
-  return roots.map(phase => {
-    const leaves = collectLeaves([phase])
-    const cells = teams.map(team => {
-      const owned = leaves.filter(l => l.owners.some(o => o.team === team))
-      if (!owned.length) return null
-      return { pct: avg(owned.map(l => l.rolledActualPct)), planned: avg(owned.map(l => l.plannedPct)), count: owned.length }
-    })
-    return {
-      id: phase.id, name: phase.name, cells,
-      overall: phase.rolledActualPct, planned: phase.plannedPct,
-      variance: phase.rolledActualPct - phase.plannedPct,
-    }
-  })
-}
-
 /* ── 팀별 진척 — 대시보드 카드와 주간 보고서 모달(By owner)이 공유하는 단일 정의 ── */
 export interface TeamProgressEntry { team: TeamCode; count: number; pct: number | null }
 

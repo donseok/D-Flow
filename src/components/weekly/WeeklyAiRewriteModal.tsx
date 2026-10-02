@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Sparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { WEEKLY_CELL_MAX } from '@/lib/domain/weeklySheet'
 import type { WeeklyRewriteCandidate } from '@/lib/domain/weeklyRewrite'
 
@@ -65,8 +66,8 @@ export function WeeklyAiRewriteModal({
       )}
     >
       <div className="space-y-4">
-        <div className="flex gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+        <div className="flex gap-3 rounded-2xl border border-border bg-action-soft px-4 py-3 text-sm text-fg">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-action" />
           <p>
             선택한 내용과 업무영역 이름만 AI에 보내 보고서 문장으로 다듬습니다. 아래에서 원문과 제안을 비교한 뒤
             적용할 수 있으며, <b>적용 전에는 저장되지 않습니다.</b>
@@ -74,14 +75,12 @@ export function WeeklyAiRewriteModal({
         </div>
 
         {error && (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <StatusMessage kind="partial_error" blocking compact title={error} />
         )}
 
         {busy && items.length === 0 && (
           <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-sm text-ink-muted" aria-live="polite">
-            <LoaderCircle className="h-7 w-7 animate-spin text-violet-600" />
+            <LoaderCircle className="h-7 w-7 animate-spin text-action" />
             선택한 내용을 깔끔하게 다듬고 있습니다…
           </div>
         )}
@@ -119,7 +118,7 @@ export function WeeklyAiRewriteModal({
                       </div>
                     </div>
                     <label>
-                      <span className="mb-1 block text-xs font-semibold text-violet-700">AI 제안 · 수정 가능</span>
+                      <span className="mb-1 block text-xs font-semibold text-action">AI 제안 · 수정 가능</span>
                       <textarea
                         value={draft}
                         maxLength={WEEKLY_CELL_MAX}
@@ -130,7 +129,7 @@ export function WeeklyAiRewriteModal({
                           setChecked(current => ({ ...current, [key]: content !== item.original }))
                         }}
                         aria-label={`${item.section} ${item.label} AI 제안`}
-                        className="min-h-28 w-full resize-y rounded-xl border border-violet-200 bg-surface px-3 py-2.5 text-sm text-ink outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                        className="min-h-28 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none transition focus:border-action focus:ring-2 focus:ring-border-focus"
                       />
                     </label>
                   </div>

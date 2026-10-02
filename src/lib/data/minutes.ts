@@ -16,6 +16,11 @@ import { getHiddenProjectIds } from '@/lib/authz/visibility'
 
 type Row = Record<string, unknown>
 
+/** 비공개 프로젝트 숨김 집합 — 판정이 실패하면 null(fail-closed: 호출부가 목록을 열지 않고 자기 실패 관례로 돌려준다). 원인은 getHiddenProjectIds 가 로그로 남긴다 */
+async function hiddenOrNull(): Promise<ReadonlySet<string> | null> {
+  try { return await getHiddenProjectIds() } catch { return null }
+}
+
 /** 비공개 프로젝트(0070) 회의록을 목록 표면에서 뺀다. 미지정(projectId null)은 유지. */
 export function dropHidden<T extends { projectId?: string | null }>(rows: T[], hidden: ReadonlySet<string>): T[] {
   if (hidden.size === 0) return rows
@@ -81,59 +86,69 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
   }
 }
 
-/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열. */
+/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열.
+ *  범위(계획 V13) — 그 워크스페이스의 회의록만, projectId 가 있으면 그 프로젝트의 것만(?project=, D53). */
 export const getMinutesPage = cache(async (
-  rangeStart: string, rangeEnd: string, team: TeamCode | null,
+  workspaceId: string, projectId: string | null, rangeStart: string, rangeEnd: string, team: TeamCode | null,
 ): Promise<Minute[]> => {
   const sb = await createServerClient()
   let q = sb.from('minutes').select(LIST_COLS)
+    .eq('workspace_id', workspaceId)
     .is('archived_at', null)
     .gte('minute_date', rangeStart).lte('minute_date', rangeEnd)
     .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
   if (team) q = q.eq('team_code', team)
-  const [{ data, error }, hidden] = await Promise.all([q, getHiddenProjectIds()])
+  if (projectId) q = q.eq('project_id', projectId)
+  const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 목록 — 실패를 삼키면 보관함이 '회의록 없음' 빈 화면으로 위장돼 재업로드를 유발한다. 최소한 원인은 남긴다.
   if (error) console.error('[getMinutesPage] 조회 실패:', error.message)
+  if (hidden === null) { console.error('[getMinutesPage] 비공개 프로젝트 판정 실패 — 목록을 열지 않는다(fail-closed)'); return [] }
   return dropHidden((data ?? []).map((r: Row) => mapMinute(r)), hidden)
 })
 
 /** 전 기간 제목/본문 ILIKE 검색 — minute_date desc, 최대 limit건. */
 export const searchMinutes = cache(async (
-  qtext: string, team: TeamCode | null, limit = 100,
+  workspaceId: string, projectId: string | null, qtext: string, team: TeamCode | null, limit = 100,
 ): Promise<Minute[]> => {
   const needle = qtext.trim()
   if (!needle) return []
   const sb = await createServerClient()
   const pat = ilikeOrPattern(needle)
   let q = sb.from('minutes').select(LIST_COLS)
+    .eq('workspace_id', workspaceId)
     .is('archived_at', null)
     .or(`title.ilike.${pat},body_md.ilike.${pat}`)
     .order('minute_date', { ascending: false }).limit(limit)
   if (team) q = q.eq('team_code', team)
-  const [{ data, error }, hidden] = await Promise.all([q, getHiddenProjectIds()])
+  if (projectId) q = q.eq('project_id', projectId)
+  const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 검색 — 실패를 '검색 결과 0건'으로 위장하면 사용자는 회의록이 없다고 오인한다. 폴백은 유지하되 로깅.
   if (error) console.error('[searchMinutes] 조회 실패:', error.message)
+  if (hidden === null) { console.error('[searchMinutes] 비공개 프로젝트 판정 실패 — 결과를 열지 않는다(fail-closed)'); return [] }
   return dropHidden((data ?? []).map((r: Row) => mapMinute(r)), hidden)
 })
 
 /** 탐색기 v2 — 전 기간 리프 + 폴더 전량. 실패 시 로깅 + null(빈 결과 객체와 구분 —
  *  조용한 빈 화면 방지). 트리 조립은 클라이언트(buildFolderTree) — 팀 탭 필터를 리프에
  *  먼저 적용해야 하므로 서버 조립은 성립하지 않는다. */
-export const getMinutesExplorer = cache(async (): Promise<ExplorerData | null> => {
+export const getMinutesExplorer = cache(async (workspaceId: string, projectId: string | null): Promise<ExplorerData | null> => {
   const sb = await createServerClient()
+  let mq = sb.from('minutes').select(LIST_COLS).eq('workspace_id', workspaceId).is('archived_at', null)
+  if (projectId) mq = mq.eq('project_id', projectId)
+  // 폴더 — 그 워크스페이스의 것, 프로젝트로 거를 때는 워크스페이스 폴더(팀 루트)와 그 프로젝트 폴더(트리의 뼈대가 끊기지 않게).
+  // projectId 는 페이지(UUID_RE·권한 맵)·액션 관문(UUID_RE·권한 맵)을 지난 값만 온다 — .or 문자열에 그대로 싣는다
+  let fq = sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id').eq('workspace_id', workspaceId)
+  if (projectId) fq = fq.or(`project_id.is.null,project_id.eq.${projectId}`)
   const [mRes, fRes, hidden] = await Promise.all([
-    sb.from('minutes').select(LIST_COLS)
-      .is('archived_at', null)
-      .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
-      .limit(MINUTES_TREE_LIMIT),
-    sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id')
-      .order('sort').order('name'),
-    getHiddenProjectIds(),
+    mq.order('minute_date', { ascending: false }).order('created_at', { ascending: false }).limit(MINUTES_TREE_LIMIT),
+    fq.order('sort').order('name'),
+    hiddenOrNull(),
   ])
   if (mRes.error || fRes.error) {
     console.error('[getMinutesExplorer] 조회 실패:', mRes.error?.message ?? fRes.error?.message)
     return null
   }
+  if (hidden === null) { console.error('[getMinutesExplorer] 비공개 프로젝트 판정 실패 — 탐색기를 열지 않는다(fail-closed)'); return null }
   const rows = dropHidden((mRes.data ?? []).map((r: Row) => mapMinute(r)), hidden)
   const leaves: ExplorerLeaf[] = rows.map(mi => ({
     id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, title: mi.title,
@@ -262,9 +277,13 @@ export const ERR_MINUTE_VERSIONS_LOAD = '버전 목록을 불러오지 못했습
 /** 버전 목록 결과 — 실패를 빈 목록('버전 없음')과 구분한다(MinuteFilesResult 와 같은 관례). */
 export type MinuteVersionsResult = { ok: true; rows: MinuteVersionListItem[] } | { ok: false; error: string }
 
-/** 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC). */
+/**
+ * 불변 원본 버전 목록. 서명하지 않는다 — 원본 파일은 클릭할 때 getMinuteVersionFileUrl 로 발급한다(TTL MINUTE_FILE_URL_TTL_SEC).
+ * base = '이 판 보기' 링크의 경로(범위의 회의록 주소, 예: /w/<slug>/minutes) — 호출부가 슬러그를 안다.
+ */
 export const getMinuteVersions = cache(async (
   id: string,
+  base: string,
 ): Promise<MinuteVersionsResult> => {
   const sb = await createServerClient()
   const { data, error } = await sb.from('minute_versions')
@@ -285,7 +304,7 @@ export const getMinuteVersions = cache(async (
     createdByName: (row.created_by_name as string | null) ?? null,
     fileName: (row.file_name as string | null) ?? null,
     hasFile: Boolean(row.file_path),
-    viewHref: `/minutes/${id}?version=${encodeURIComponent(row.id as string)}`,
+    viewHref: `${base}/${id}?version=${encodeURIComponent(row.id as string)}`,
   }))
   return { ok: true, rows }
 })
@@ -469,12 +488,13 @@ export const getMinuteWikiImpact = cache(async (
   }
 })
 
-/** 내 즐겨찾기 회의록 id 목록(RLS 가 본인 행으로 한정). 실패 시 로깅 + null —
+/** 내 즐겨찾기 회의록 id 목록(RLS 가 본인 행으로 한정) 가운데 그 워크스페이스 회의록의 것만 — 회의록 모듈이 꺼진 다른 워크스페이스의 id 가
+ *  섞이지 않는다(모듈 관문은 그 모듈의 행을 돌려주지 않는다 — workspaceId 는 호출부가 소속·관문을 확인한 값). 실패 시 로깅 + null —
  *  빈 배열과 구분해 '즐겨찾기 없음'으로 위장되는 조용한 빈 화면을 방지한다.
  *  세션 없는 조회는 200+[] 로 돌아오므로(0039 RLS to authenticated) 호출측(page)이 세션 게이트를 건다. */
-export const getMinuteFavorites = cache(async (): Promise<string[] | null> => {
+export const getMinuteFavorites = cache(async (workspaceId: string): Promise<string[] | null> => {
   const sb = await createServerClient()
-  const { data, error } = await sb.from('minute_favorites').select('minute_id')
+  const { data, error } = await sb.from('minute_favorites').select('minute_id, minutes!inner(workspace_id)').eq('minutes.workspace_id', workspaceId)
   if (error) {
     console.error('[getMinuteFavorites] 조회 실패:', error.message)
     return null

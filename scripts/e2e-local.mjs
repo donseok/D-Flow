@@ -20,6 +20,11 @@
 //   SP4 A2: next build + next start -p 3101 에서 돈다(과제 24 — 팀 원천에 프로세스 전역 캐시가 없음을 본다). import-unregistered-teams 뒤·render-pages 앞에서
 //        새 프로젝트 N 에 팀을 만든 직후 그 팀이 든 파일을 가져오고(409 없음 — KLC:56 해제), 저장 양식 없는 N 의 엑셀 내보내기 접기·펼침이 표준 양식
 //        (X-Excel-Layout: standard)이고 텍스트 파트에 SP4 센티널이 0 이다(스펙 §6.3).
+//   SP3b UI-2(스펙 §8.3 — 브랜치 전용 e2e-sp3b.mjs 를 과제 39 가 합쳤다, V15): 화면 경로는 워크스페이스 범위(/w/<slug>/…)다 — 옛 경로(/projects·
+//        /minutes·/admin/…)는 스텁 307 이라 이 러너는 새 경로를 부른다(서버 액션 매니페스트 키도 /w/[slug]/…/page). module-index-skip 뒤에
+//        sp3b- 단계: 두 워크스페이스 계정 duo·B 의 공용 팀·회의록을 더하고 E1 옛 경로 307(쿼리 보존)·E2 회의록 영구 링크·E4 비소속 404·
+//        E6 두 워크스페이스 목록과 인자 워크스페이스 생성·E8 루트 리졸버·E9 전환 대상·E11 소프트 이동(Playwright)·E5 전환기·E7 모듈 끈 메뉴·
+//        E10 비소속 배지. E3 은 UI-3 몫이라 없다.
 //   SP5 A: import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞에서 달력 넷 — calendar-week-sunday(일요일 프로젝트 S 와 월요일·월~토
 //        프로젝트 M 의 연속 2주·이월·라벨·범위·기본 보고서 라벨), calendar-week-transition(월요일 T 를 일요일로 전환 — 미리보기 E = 저장 E, 과도기 6일,
 //        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 tz 를 LA 로 바꾼 뒤 만든 L 의 시드·오늘·공지 게시 판정·사용현황 일자, 끝에 tz 복귀),
@@ -30,7 +35,8 @@
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
 //   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> CRON_SECRET=<시크릿> npm run dev -- -p 3101
 //   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
-//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] node scripts/e2e-local.mjs
+//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
+//   (sp3b-E11 이 브라우저로 소프트 이동을 본다 — Playwright 1.58.2 를 npx 로 PATH 에 싣는다. 없으면 그 단계가 실패한다)
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
 import { createHash, randomUUID } from 'node:crypto'
@@ -48,8 +54,11 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
+  DUO, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, legacyCases, shellBadgeVerdict, switcherVerdict,
+} from './lib/e2e.mjs'
+import {
   A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, nextServerMode,
-  pptText, sentinelReport, shiftDays, slideCount, teamRefs,
+  pptText, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict,
   dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
@@ -92,10 +101,10 @@ if (!cronSecret) { console.error('✗ CRON_SECRET 가 없다 — dev 서버에 �
 
 const MANIFEST = '.next/server/server-reference-manifest.json'
 const ACTIONS = {
-  createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/projects/page' },
-  createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/admin/accounts/page' },
-  addTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'addTeam', worker: '/admin/teams/page' },
-  createMinute: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinute', worker: '/minutes/page' },
+  createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/w/[slug]/projects/page' },
+  createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/w/[slug]/admin/accounts/page' },
+  addTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'addTeam', worker: '/w/[slug]/admin/teams/page' },
+  createMinute: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinute', worker: '/w/[slug]/minutes/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
   upsertRosterMember: { filename: 'src/app/actions/roster.ts', exportedName: 'upsertRosterMember', worker: '/p/[projectId]/members/page' },
   setWbsAssignee: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsAssignee', worker: '/p/[projectId]/wbs/page' },
@@ -105,7 +114,7 @@ const ACTIONS = {
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
-  setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/admin/accounts/page' },
+  setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/w/[slug]/admin/accounts/page' },
   listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
   createWeeklyReport: { filename: 'src/app/actions/weekly.ts', exportedName: 'createWeeklyReport', worker: '/p/[projectId]/weekly/page' },
   saveWeeklyCells: { filename: 'src/app/actions/weekly.ts', exportedName: 'saveWeeklyCells', worker: '/p/[projectId]/weekly/page' },
@@ -177,13 +186,21 @@ async function main() {
   }
 
   // ── 1. 로그인 — 미들웨어가 /login 으로 돌려보내지 않아야 한다(302/307 이면 실패). 부트스트랩 계정의 워크스페이스(= A)는
-  // 정확히 하나·관리자여야 한다 — 화면(/projects)도 유일 소속일 때만 그 워크스페이스로 프로젝트를 만든다.
+  // 정확히 하나·관리자여야 한다(SP3b 의 두 워크스페이스 흐름은 끝의 duo 가 맡는다). 화면 경로는 워크스페이스 범위다(/w/<slug>/…).
   const me = await admin.login(email, password)
-  await admin.http('GET', '/projects')
   const myWs = rows('워크스페이스 소속', await admin.sb.from('workspace_members').select('workspace_id,role').eq('user_id', me.id))
   if (myWs.length !== 1 || myWs[0].role !== 'admin') throw new Fail(`부트스트랩 계정의 워크스페이스 소속이 ${JSON.stringify(myWs)}(관리자 1건이어야 한다)`)
   const wsA = myWs[0].workspace_id
-  step('login', { userId: me.id, workspaceId: wsA, cookieNames: [...admin.jar.keys()] })
+  const [{ slug: slugA }] = rows('워크스페이스 A 슬러그', await admin.sb.from('workspaces').select('slug').eq('id', wsA))
+  /** 워크스페이스 id → 화면 경로의 슬러그(A 는 여기서, B 는 단계 12 에서 더한다) */
+  const slugOf = new Map([[wsA, slugA]])
+  const wsPath = (workspaceId, seg) => {
+    const slug = slugOf.get(workspaceId)
+    if (!slug) throw new Fail(`워크스페이스 ${workspaceId} 의 슬러그를 모른다`)
+    return `/w/${encodeURIComponent(slug)}${seg ? `/${seg}` : ''}`
+  }
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  step('login', { userId: me.id, workspaceId: wsA, slug: slugA, cookieNames: [...admin.jar.keys()] })
   // SP5 A — 러너의 '오늘'은 그 범위에 저장된 tz(없으면 제품 기본값 UTC). 판독은 service_role(설정 표 읽기만 — 쓰기는 늘 설정 액션)
   const tzOfProject = async (projectId) =>
     storedTimezone(rows('프로젝트 설정', await svc.from('project_settings').select('values').eq('project_id', projectId).single()).values)
@@ -195,7 +212,7 @@ async function main() {
   const stamp = new Date().toISOString().slice(0, 16).replace(/\D/g, '')
   const createProject = async (who, workspaceId, label) => {
     const name = `E2E ${label} ${stamp}`
-    const { actionId, result } = await who.action('/projects', 'createProject', [{
+    const { actionId, result } = await who.action(wsPath(workspaceId, 'projects'), 'createProject', [{
       workspaceId, name, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
     }])
     if (!result?.ok) throw new Fail(`createProject(${label}) 실패: ${JSON.stringify(result)}`)
@@ -212,7 +229,7 @@ async function main() {
   const A = await createProject(admin, wsA, 'A')
   const B = await createProject(admin, wsA, 'B')
   step('create-projects', {
-    path: `server action createProject(${A.actionId.slice(0, 12)}…) via POST /projects`,
+    path: `server action createProject(${A.actionId.slice(0, 12)}…) via POST ${wsPath(wsA, 'projects')}`,
     projects: [A, B].map(({ id, name, settings }) => ({ id, name, settings })), workspaceId: A.workspaceId, rows: 2,
   })
 
@@ -234,7 +251,7 @@ async function main() {
   // ── 2b. 복사 생성(스펙 §7.3 #2) — A 를 원본으로. 복사본 이력은 source copy·copied_from A·행위자 본인·revision 1 이다. 라벨은 입력값 —
   // A 와 다른 라벨(COPY_LEVEL_LABELS)을 넣어 원본에서 복사된 것이 아님을 가른다. 키워드는 원본에서 복사된다.
   const copyName = `E2E A-copy ${stamp}`
-  const cp = await admin.action('/projects', 'createProject', [{ workspaceId: wsA, name: copyName, startDate: null, endDate: null, description: null,
+  const cp = await admin.action(wsPath(wsA, 'projects'), 'createProject', [{ workspaceId: wsA, name: copyName, startDate: null, endDate: null, description: null,
     levelLabels: COPY_LEVEL_LABELS, copyFromProjectId: A.id, commandId: randomUUID() }])
   if (!cp.result?.ok) throw new Fail(`복사 생성 실패: ${JSON.stringify(cp.result)}`)
   const cpHist = rows('복사 이력', await admin.sb.from('project_settings_history').select('key,source,copied_from,changed_by,revision').eq('project_id', cp.result.projectId))
@@ -435,6 +452,7 @@ async function main() {
     .upsert({ slug: OTHER_WORKSPACE.slug, name: OTHER_WORKSPACE.name }, { onConflict: 'slug' }).select('id').single()
   if (owErr) throw new Fail(`타 워크스페이스 픽스처 실패: ${owErr.message}`)
   const wsB = otherWs.id
+  slugOf.set(wsB, OTHER_WORKSPACE.slug)
   // B 의 허용 모듈 — 생성 화면(Phase C)이 없어 service_role RPC 로 기록한다(Phase C 가 updateWorkspaceSettings 로 바꾼다). 없으면 B 에서 모듈이 전부 닫힌다(Phase B 뒤).
   {
     const { data: wsRow, error: wsErr } = await svc.from('workspace_settings').select('revision').eq('workspace_id', wsB).single()
@@ -445,9 +463,9 @@ async function main() {
     if (aErr) throw new Fail(`B modules.allowed 기록 실패: ${aErr.message}`)
   }
   const C = await createProject(admin, wsB, 'C')
-  await admin.http('GET', '/admin/accounts')
   const createWorkspaceAdmin = async (workspaceId, who, pass) => {
-    mustOk(`createAccount(${who.name})`, (await admin.action('/admin/accounts', 'createAccount',
+    await admin.http('GET', wsPath(workspaceId, 'admin/accounts'))
+    mustOk(`createAccount(${who.name})`, (await admin.action(wsPath(workspaceId, 'admin/accounts'), 'createAccount',
       [workspaceAdminAccountInput({ workspaceId, email: who.email, name: who.name, password: pass })])).result)
     return membershipOf(who.email)
   }
@@ -507,11 +525,11 @@ async function main() {
   if (anaWs.platformAdmin) throw new Fail('ana 가 플랫폼 관리자다 — 워크스페이스 관리 가드를 우회한다')
   const ana = session('ana')
   await ana.login(A_ADMIN.email, anaPassword)
-  await ana.http('GET', '/projects')
+  await ana.http('GET', wsPath(wsA, 'projects'))
   const A2 = await createProject(ana, wsA, 'A2')
   step('workspace-admin-project', {
     aAdmin: { email: A_ADMIN.email, userId: anaWs.userId, memberships: anaWs.memberships, platformAdmin: anaWs.platformAdmin },
-    path: `server action createProject(${A2.actionId.slice(0, 12)}…) via POST /projects as ana`,
+    path: `server action createProject(${A2.actionId.slice(0, 12)}…) via POST ${wsPath(wsA, 'projects')} as ana`,
     projectId: A2.id, projectName: A2.name, workspaceId: A2.workspaceId,
   })
 
@@ -546,10 +564,11 @@ async function main() {
   // ── 16. 회의록 업로드(프로젝트 지정·미지정 각 1건) — 화면(MinuteUploadModal)과 같은 순서: 회의록 id 선발급 → 본문 .md 를 세션으로
   // Storage 에 올림(스토리지 RLS 가 판정) → createMinute(입력, 폴더 null, source). 올린 사람은 ana(플랫폼 관리자 아님).
   // 미지정 회의록의 담당은 그 워크스페이스의 공용 팀이어야 한다 — 부트스트랩은 팀을 만들지 않으므로 공용 팀 하나를 addTeam(A, …) 으로
-  // 만든다(팀 관리 화면은 아직 플랫폼 관리자 전용 — ws 관리자 화면은 SP3). Storage 객체 이름이 전부 ws/<A>/p/… 여야 한다.
-  await admin.http('GET', '/admin/teams')
-  mustOk(`addTeam(${WS_TEAM})`, (await admin.action('/admin/teams', 'addTeam', [wsA, WS_TEAM])).result)
-  await ana.http('GET', '/minutes')
+  // 만든다(워크스페이스 관리 화면 /w/<slug>/admin/teams). Storage 객체 이름이 전부 ws/<A>/p/… 여야 한다.
+  // 회의록 화면은 워크스페이스 범위다 — createMinute 의 넷째 인자는 화면의 슬러그 워크스페이스(프로젝트 없는 회의록의 범위, SP3b D26).
+  await admin.http('GET', wsPath(wsA, 'admin/teams'))
+  mustOk(`addTeam(${WS_TEAM})`, (await admin.action(wsPath(wsA, 'admin/teams'), 'addTeam', [wsA, WS_TEAM])).result)
+  await ana.http('GET', wsPath(wsA, 'minutes'))
   const upload = async (label, projectId, teamCode) => {
     const minuteId = randomUUID()
     const title = `E2E-MIN-${label}-${stamp}`
@@ -559,8 +578,8 @@ async function main() {
     const body = Buffer.from(bodyMd, 'utf8')
     const up = await ana.sb.storage.from('minutes').upload(filePath, body, { contentType: 'text/markdown', upsert: false })
     if (up.error) throw new Fail(`회의록 본문 업로드 실패(${label}): ${up.error.message}`)
-    const created = mustOk(`createMinute(${label})`, (await ana.action('/minutes', 'createMinute', [
-      minuteInput({ date: meetingDate, teamCode, title, bodyMd, projectId }), null, minuteSource({ minuteId, fileName, filePath, size: body.length }),
+    const created = mustOk(`createMinute(${label})`, (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+      minuteInput({ date: meetingDate, teamCode, title, bodyMd, projectId }), null, minuteSource({ minuteId, fileName, filePath, size: body.length }), wsA,
     ])).result)
     same(`createMinute(${label}) id`, created.id, minuteId)
     return { label, minuteId, title, projectId, teamCode, filePath, fileName }
@@ -591,7 +610,8 @@ async function main() {
   step('minutes-upload', { uploader: 'ana', workspaceTeam: WS_TEAM, minutes: storageChecks, bucketTop: ['ws'], rows: minutes.length })
 
   // ── 17. bea(워크스페이스 B 관리자) 로그인 — A 의 프로젝트 URL 은 not-found(존재 은닉), 자기 워크스페이스의 C 는 열린다.
-  // 회의록 목록·프로젝트 목록 HTML(SSR·RSC 페이로드)에 A 의 회의록 제목·프로젝트 이름이 없다(대조: ana 의 회의록 목록에는 있다).
+  // 자기 워크스페이스(B)의 회의록 목록·프로젝트 목록 HTML(SSR·RSC 페이로드)에 A 의 회의록 제목·프로젝트 이름이 없다(대조: ana 의 A 회의록 목록에는 있다).
+  // A 범위 화면(/w/<A>/…) 자체가 bea 에게 404 인 것은 sp3b-E4 가 본다.
   // A 경로로의 Storage 쓰기·A 객체 읽기는 스토리지 RLS 가 거부한다.
   const bea = session('bea')
   await bea.login(B_ADMIN.email, bPassword)
@@ -602,9 +622,9 @@ async function main() {
   ]
   const titles = minutes.map((m) => m.title)
   const aNames = [A.name, B.name, A2.name]
-  const beaMinutesHtml = await (await bea.http('GET', '/minutes')).text()
-  const anaMinutesHtml = await (await ana.http('GET', '/minutes')).text()
-  const beaProjectsHtml = await (await bea.http('GET', '/projects')).text()
+  const beaMinutesHtml = await (await bea.http('GET', wsPath(wsB, 'minutes'))).text()
+  const anaMinutesHtml = await (await ana.http('GET', wsPath(wsA, 'minutes'))).text()
+  const beaProjectsHtml = await (await bea.http('GET', wsPath(wsB, 'projects'))).text()
   const lists = {
     beaMinutes: { problems: pageProblems(beaMinutesHtml), aTitles: presentTexts(beaMinutesHtml, titles), aProjectNames: presentTexts(beaMinutesHtml, aNames) },
     anaMinutes: { problems: pageProblems(anaMinutesHtml), aTitles: presentTexts(anaMinutesHtml, titles) },
@@ -644,7 +664,9 @@ async function main() {
       nameInHtml: html.includes(wsName),
       // 구역의 유무는 편집기 전용 문구로 본다 — 키 이름은 '기록' 범주의 변경 이력에도 나온다(부트스트랩이 modules.allowed 를 썼다).
       modulesAllowedInHtml: html.includes('프로젝트 관리자가 켤 수 있는 모듈을 고릅니다'),
-      ...(hidden ? {} : { problems: pageProblems(html, [`${wsName} 설정`]) }),
+      // 열린 화면의 표지 = 문서 제목. SP3b(V6)부터 워크스페이스 레이아웃의 제목 틀이 '<페이지> · <워크스페이스> | <제품>' 이다(전엔 '<워크스페이스> 설정 | …').
+      // 본문 h1 '{이름} 설정' 은 SSR 이 두 텍스트 노드 사이에 주석을 끼워 한 문자열로 찾을 수 없다
+      ...(hidden ? {} : { problems: pageProblems(html, [`<title>설정 · ${wsName} |`]) }),
     }
     if (entry.notFound !== hidden) throw new Fail(`${who.label} ${path}: notFound=${entry.notFound}(기대 ${hidden})`)
     if (hidden && entry.nameInHtml) throw new Fail(`${who.label} ${path}: 은닉된 워크스페이스 이름이 HTML 에 실렸다`)
@@ -664,9 +686,9 @@ async function main() {
   // ── 17c. SP3a D — 관리 화면의 권한 변경이 행위자·명령 id 와 함께 이력에 남고 관리자가 읽는다(스펙 §7.3 의 8단계).
   // 플랫폼 관리자(admin)가 setWorkspaceRole(A, ana, member) → 다시 admin 으로 되돌린다. 화면이 부르는 같은 서버 액션이다.
   // 이력은 DB(권한 RPC 안의 트리거가 쓴다)와 listAuthzEvents(화면의 읽기)로 둘 다 본다. 직접 쓰기 길은 없다.
-  await admin.http('GET', `/admin/accounts?project=${A.id}`, { expect: [200, 404] })
+  await admin.http('GET', `${wsPath(wsA, 'admin/accounts')}?project=${A.id}`, { expect: [200, 404] })
   await admin.http('GET', `/w/${encodeURIComponent(wsARow.slug)}/settings`)
-  const flip = async (role) => mustOk(`setWorkspaceRole(${role})`, (await admin.action('/admin/accounts', 'setWorkspaceRole', [wsA, anaWs.userId, role])).result)
+  const flip = async (role) => mustOk(`setWorkspaceRole(${role})`, (await admin.action(wsPath(wsA, 'admin/accounts'), 'setWorkspaceRole', [wsA, anaWs.userId, role])).result)
   await flip('member'); await flip('admin')
   const events = rows('권한 이력', await svc.from('authz_events').select('id, kind, workspace_id, target_user_id, before, after, cause, actor_user_id, command_id')
     .eq('kind', 'workspace_role').eq('workspace_id', wsA).eq('target_user_id', anaWs.userId).eq('actor_user_id', me.id).order('id', { ascending: false }).limit(2))
@@ -1234,11 +1256,11 @@ async function main() {
   step('calendar-workday', workday, Object.values(workday.checks).every(Boolean) ? undefined : `근무 예외: ${JSON.stringify(workday)}`)
 
   // ── 19. 관리자 세션으로 주요 화면 렌더(눈확인의 기계 부분) — 스트리밍된 오류 digest·notFound·열화 표시가 없고, 흐름에서 만든
-  // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). /projects 는 프로젝트
-  // 이름이 사이드바에도 있으므로 카드 링크(`/p/<id>/dashboard` — 사이드바는 /projects 에서 프로젝트 메뉴를 그리지 않는다)로 본다.
+  // 데이터가 그 페이지 세그먼트에 실려 있어야 한다(조회 실패를 빈 목록으로 그리는 화면은 오류 표식이 없다). 프로젝트 목록(/w/<A>/projects)은
+  // 프로젝트 이름이 셸(전환기)에도 있으므로 카드 링크(`/p/<id>/dashboard`)로 본다.
   // B 단계(20~23) 앞이다 — 모듈을 끄기 전에 켜진 화면이 열려야 한다.
   const pages = [
-    ['/projects', [`/p/${A.id}/dashboard`, `/p/${B.id}/dashboard`]],
+    [wsPath(wsA, 'projects'), [`/p/${A.id}/dashboard`, `/p/${B.id}/dashboard`]],
     [`/p/${A.id}/dashboard`, []],
     [`/p/${A.id}/members`, ['bob', INVITEE.name]],
     [`/p/${A.id}/meetings`, [meetingInput({ date: meetingDate, attendeeIds: [] }).title]],
@@ -1247,7 +1269,7 @@ async function main() {
     [`/p/${A.id}/weekly`, []],
     [`/p/${A.id}/wbs`, [leaf.name]],
     [`/p/${A.id}/attendance`, []],
-    ['/minutes', titles],
+    [wsPath(wsA, 'minutes'), titles],
     // SP4 A1 — B 의 주간(이번 주 W1: 개명한 실험·비활성 운영·신규)과 설정(주간 영역 편집기)
     [`/p/${B.id}/weekly`, [exp.renamed, fresh.name]],
     [`/p/${B.id}/settings`, [exp.renamed, fresh.name]],
@@ -1267,6 +1289,40 @@ async function main() {
   }
   const broken = rendered.filter((r) => r.problems.length)
   step('render-pages', { pages: rendered, problems: broken.length }, broken.length ? `화면 오류 표식: ${JSON.stringify(broken)}` : undefined)
+
+  // ── SP4 B — 팀 색 렌더(스펙 §6.3 teams-color-render, 재검토 반영 T12). UI 위험 파일(TeamsProvider·범위 레이아웃 셋)의 깨짐은 빌드·테스트로
+  // 잡히지 않는다(CLAUDE.md) — 팀이 있는 프로젝트 A 의 화면이 팀 슬롯 클래스를 그리고 옛 team-N 클래스가 없음을 본다. 회의록은 워크스페이스
+  // 범위(공용 팀 WS_TEAM 담당). 보고서는 모달이라 서버 HTML 에 없다 — Playwright 로 WBS 도구 줄의 보고서 버튼을 눌러 그 DOM 을 본다.
+  {
+    const seen = []
+    for (const path of [`/p/${A.id}/wbs`, `/p/${A.id}/kanban`, `/p/${A.id}/dashboard`, wsPath(wsA, 'minutes')]) {
+      const html = await (await admin.http('GET', path)).text()
+      seen.push({ path, serverMode: nextServerMode(html), problems: pageProblems(html), ...teamSlotVerdict(html) })
+    }
+    const reportPath = `/p/${A.id}/wbs#report`
+    try {
+      const { loadPlaywright } = await import('./ui-capture.mjs')
+      const { chromium } = await loadPlaywright()
+      const browser = await chromium.launch()
+      try {
+        const origin = new URL(base).origin
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+        await ctx.addCookies([...admin.jar].map(([name, value]) => ({ name, value, url: origin })))
+        const page = await ctx.newPage()
+        const errs = []
+        page.on('pageerror', (e) => errs.push(String(e)))
+        await page.goto(`${origin}/p/${A.id}/wbs`, { waitUntil: 'networkidle' })
+        await page.locator('[data-wbs-weekly-report]').first().click()
+        const dialog = page.locator('[role="dialog"]').first()
+        await dialog.waitFor({ timeout: 15_000 })
+        seen.push({ path: reportPath, problems: errs, ...teamSlotVerdict(await dialog.innerHTML()) })
+      } finally { await browser.close() }
+    } catch (e) {
+      seen.push({ path: reportPath, problems: [`playwright: ${String(e?.message ?? e).slice(0, 200)}`], slots: [], legacy: [], neutral: 0 })
+    }
+    const bad = seen.filter((s) => s.problems.length || !s.slots.length || s.legacy.length || (s.serverMode !== undefined && s.serverMode !== 'production'))
+    step('teams-color-render', { pages: seen }, bad.length ? `팀 색 렌더 실패: ${JSON.stringify(bad)}` : undefined)
+  }
 
   // ── 20~23. SP3a B 모듈 관문 — 설정 화면의 액션으로 프로젝트 모듈을 바꾸고, 워크스페이스 허용과 시드만 로컬 service_role 로 쓴다.
   const projectModules = async () => {
@@ -1386,6 +1442,202 @@ async function main() {
   step('module-index-skip', indexSkip,
     enabledNoChat.includes('chatbot') || cron.status !== 200 || !(cronBody?.skipped >= 1) || after.status !== 'skipped' || after.last_error !== 'module_disabled'
       ? `색인 크론: ${JSON.stringify(indexSkip)}` : undefined)
+
+  // ── 24. SP3b UI-2(스펙 §8.3) — 워크스페이스 범위 IA. 단계 이름은 sp3b-<스펙 번호>. 앞 단계의 A(이슈·agents·chatbot 꺼짐)·B·C·ana·bea·
+  //    플랫폼 관리자(부트스트랩 계정 — 소속 A 하나)를 그대로 쓰고, 두 워크스페이스 계정 duo 와 B 의 공용 팀·회의록만 더한다.
+  //    픽스처: duo 는 createAccount(B, 멤버, 프로젝트 C 멤버 — B 에서 프로젝트 없는 회의록을 쓸 역할), A 소속만 service_role 행(로컬 전용 —
+  //    기존 계정을 다른 워크스페이스에 더하는 화면이 아직 없다). B 의 공용 팀은 addTeam(B), 회의록은 bea 의 createMinute(B, 프로젝트 없음).
+  //    B 의 공용 팀은 단계 18 의 'bea meta 팀에 A 공용 팀이 없다' 단언 뒤에 만든다(코드도 A 의 WS_TEAM 과 다르다 — SP3B_B_TEAM).
+  const origin = new URL(base).origin
+  const duoPassword = `E2E-${randomUUID()}`
+  await admin.http('GET', wsPath(wsB, 'admin/accounts'))
+  mustOk(`createAccount(${DUO.name})`, (await admin.action(wsPath(wsB, 'admin/accounts'), 'createAccount', [{
+    workspaceId: wsB, email: DUO.email, password: duoPassword, name: DUO.name, workspaceRole: 'member', projectId: C.id, accessRole: 'member',
+  }])).result)
+  const duoB = await membershipOf(DUO.email)
+  rows('duo@A 소속', await svc.from('workspace_members').insert({ workspace_id: wsA, user_id: duoB.userId, role: 'member', invited_by: me.id }).select('user_id'))
+  const duoWs = await membershipOf(DUO.email)
+  same('duo 의 워크스페이스 소속', duoWs.memberships.map((m) => [m.workspace_id, m.role]).sort(), [[wsA, 'member'], [wsB, 'member']].sort())
+  await admin.http('GET', wsPath(wsB, 'admin/teams'))
+  mustOk(`addTeam(${SP3B_B_TEAM})`, (await admin.action(wsPath(wsB, 'admin/teams'), 'addTeam', [wsB, SP3B_B_TEAM])).result)
+  await bea.http('GET', wsPath(wsB, 'minutes'))
+  const minuteB = mustOk('createMinute(B)', (await bea.action(wsPath(wsB, 'minutes'), 'createMinute', [
+    minuteInput({ date: meetingDate, teamCode: SP3B_B_TEAM, title: SP3B_MINUTE_B, bodyMd: `# ${SP3B_MINUTE_B}\n`, projectId: null }), null, null, wsB,
+  ])).result).id
+  const duo = session('duo')
+  await duo.login(DUO.email, duoPassword)
+  step('sp3b-fixture', {
+    via: 'duo = createAccount(B, 멤버, C 멤버) + A 소속 service_role 행(로컬 전용), B 공용 팀 = addTeam(B), B 회의록 = bea 의 createMinute(B)',
+    duo: { userId: duoWs.userId, memberships: duoWs.memberships }, bTeam: SP3B_B_TEAM, minuteB,
+  })
+
+  // 쿠키 항아리로 직접 GET(리다이렉트는 따르지 않는 것이 기본) — 상태 코드를 판정하는 단계라 session.http 의 기대 상태 검사 대신 쓴다
+  const raw = async (who, path, { extra = {}, follow = false } = {}) => {
+    const cookie = cookieHeader([...[...who.jar].map(([name, value]) => ({ name, value })), ...Object.entries(extra).map(([name, value]) => ({ name, value }))])
+    const res = await fetch(origin + path, { redirect: follow ? 'follow' : 'manual', headers: { cookie } })
+    return { status: res.status, headers: res.headers, html: res.status === 307 || res.status === 308 ? '' : await res.text(), url: res.url }
+  }
+  const minuteA = minutes[0]   // A 의 프로젝트 회의록(단계 16) — ana 는 A 관리자
+  const wsMinuteA = minutes[1] // A 의 프로젝트 없는 회의록 — A 의 모든 멤버가 본다(duo 는 A 의 프로젝트 명단에 없다)
+  const sp3b = (name, detail, problems) => step(`sp3b-${name}`, { ...detail, problems }, problems.length ? problems.join(' · ') : undefined)
+
+  {
+    const p = []
+    const cases = legacyCases(slugA, { minuteId: minuteA.minuteId, projectId: A.id })
+    for (const c of cases) for (const x of expectLocation(await raw(ana, c.from), origin, c.to)) p.push(`${c.from}: ${x}`)
+    sp3b('E1', { what: '옛 경로 → 새 경로 307(쿼리 보존·요청 원점)', cases: cases.length }, p)
+  }
+  {
+    const p = []
+    const ok = await raw(ana, `/minutes/${minuteA.minuteId}`)
+    for (const x of expectLocation(ok, origin, `${wsPath(wsA, 'minutes')}/${minuteA.minuteId}`)) p.push(`ana: ${x}`)
+    const page = await raw(ana, `${wsPath(wsA, 'minutes')}/${minuteA.minuteId}`)
+    if (page.status !== 200 || !page.html.includes(minuteA.title)) p.push(`ana 상세 상태 ${page.status}·제목 ${page.html.includes(minuteA.title)}`)
+    p.push(...hiddenVerdict(await raw(bea, `/minutes/${minuteA.minuteId}`, { follow: true }), [minuteA.title]).map((x) => `bea: ${x}`))
+    sp3b('E2', { what: '회의록 영구 링크 — 행의 워크스페이스로, 타 워크스페이스 계정은 404' }, p)
+  }
+  {
+    const p = [], statuses = {}
+    for (const path of [wsPath(wsA), wsPath(wsA, 'minutes'), wsPath(wsA, 'agents')]) {
+      const res = await raw(bea, path)
+      statuses[path] = `${res.status}${notFoundRendered(res.html) ? '+digest' : ''}`   // 판정은 S-2 대로 '404 또는 digest' — 실제 상태를 남긴다
+      p.push(...hiddenVerdict(res, [A.name, minuteA.title, wsMinuteA.title]).map((x) => `${path}: ${x}`))
+    }
+    sp3b('E4', { what: '비소속(bea) — 워크스페이스 A 화면 404·A 의 이름이 본문에 없다', statuses }, p)
+  }
+  {
+    const p = []
+    const a = await raw(duo, wsPath(wsA, 'minutes')), b = await raw(duo, wsPath(wsB, 'minutes'))
+    if (a.status !== 200 || b.status !== 200) p.push(`상태 A ${a.status} · B ${b.status}`)
+    if (!a.html.includes(wsMinuteA.title)) p.push('A 목록에 A 회의록이 없다')
+    if (a.html.includes(SP3B_MINUTE_B)) p.push('A 목록에 B 회의록이 샌다')
+    if (!b.html.includes(SP3B_MINUTE_B)) p.push('B 목록에 B 회의록이 없다')
+    if (b.html.includes(wsMinuteA.title) || b.html.includes(minuteA.title)) p.push('B 목록에 A 회의록이 샌다')
+    await duo.http('GET', wsPath(wsB, 'minutes'))
+    const title = `E2E SP3b 생성 ${stamp}`
+    const result = (await duo.action(wsPath(wsB, 'minutes'), 'createMinute', [
+      minuteInput({ date: meetingDate, teamCode: SP3B_B_TEAM, title, bodyMd: '# 생성\n', projectId: null }), null, null, wsB,
+    ])).result
+    let createdIn = null
+    if (!result?.ok) p.push(`createMinute 실패: ${JSON.stringify(result)}`)
+    else {
+      createdIn = rows('생성 행', await svc.from('minutes').select('workspace_id').eq('id', result.id))[0]?.workspace_id ?? null
+      if (createdIn !== wsB) p.push(`새 행의 워크스페이스 ${createdIn} ≠ B`)
+    }
+    sp3b('E6', { what: '두 워크스페이스(duo) — 각자의 회의록만, 프로젝트 없는 회의록 생성은 인자 워크스페이스에', createdIn }, p)
+  }
+  {
+    const p = []
+    const to = (res) => new URL(res.headers.get('location') ?? '', origin).pathname
+    const r1 = await raw(ana, '/'); if (r1.status !== 307 || !to(r1).startsWith(wsPath(wsA))) p.push(`ana: ${r1.status} ${to(r1)}`)
+    const r2 = await raw(duo, '/', { extra: { 'dflow-ws': OTHER_WORKSPACE.slug } }); if (r2.status !== 307 || !to(r2).startsWith(wsPath(wsB))) p.push(`duo+B: ${r2.status} ${to(r2)}`)
+    const r3 = await raw(ana, '/', { extra: { 'dflow-ws': OTHER_WORKSPACE.slug } }); if (r3.status !== 307 || !to(r3).startsWith(wsPath(wsA))) p.push(`ana+위조: ${r3.status} ${to(r3)}`)
+    sp3b('E8', { what: '루트 리졸버 — 쿠키 없음→첫 소속, 쿠키=B→B, 위조 쿠키→첫 소속', to: [to(r1), to(r2), to(r3)] }, p)
+  }
+  {
+    // A 는 단계 20 에서 이슈를 껐다 — B(이슈 켜짐)의 이슈 화면에서 A 로 전환하면 개요 + fallback
+    const p = []
+    const q = `/api/nav/switch-target?project=${A.id}&path=${encodeURIComponent(`/p/${B.id}/issues`)}`
+    const ok = await raw(ana, q)
+    let body = null
+    try { body = JSON.parse(ok.html) } catch { /* 아래에서 문제로 */ }
+    if (ok.status !== 200 || body?.href !== `/p/${A.id}/dashboard` || body?.fallbackModule !== 'issues') p.push(`ana: ${ok.status} ${ok.html.slice(0, 120)}`)
+    const no = await raw(bea, q)
+    if (no.status !== 404) p.push(`bea: 상태 ${no.status} ≠ 404`)
+    sp3b('E9', { what: '전환 대상 — 이슈가 꺼진 프로젝트는 개요 + fallback, 비소속은 404', body }, p)
+  }
+  {
+    const p = []
+    let docs = [], errs = []
+    try {
+      const { loadPlaywright } = await import('./ui-capture.mjs')
+      const { chromium } = await loadPlaywright()
+      const browser = await chromium.launch()
+      try {
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+        await ctx.addCookies([...duo.jar].map(([name, value]) => ({ name, value, url: origin })))
+        const page = await ctx.newPage()
+        page.on('request', (r) => { if (r.resourceType() === 'document') docs.push(r.url()) })
+        page.on('pageerror', (e) => errs.push(String(e)))
+        const startPath = wsPath(wsB, 'minutes')
+        await page.goto(origin + startPath, { waitUntil: 'networkidle' })
+        const link = page.locator(`a[href$="/minutes/${minuteB}"]`).first()
+        if ((await link.count()) === 0) p.push(`${startPath} 에 회의록 링크가 없다`)
+        else {
+          docs = []
+          await link.click()
+          try { await page.waitForURL((u) => u.pathname === `${wsPath(wsB, 'minutes')}/${minuteB}`, { timeout: 15_000 }) } catch { p.push(`최종 경로 ${new URL(page.url()).pathname}`) }
+          if (docs.length) p.push(`전체 새로고침(문서 요청 ${docs.length})`)
+          if (errs.length) p.push(`페이지 오류 ${errs.length}`)
+          if ((await page.getByText('화면을 불러오지 못했습니다').count()) > 0) p.push('오류 경계가 보인다')
+          if (new URL(page.url()).search.includes('_rsc')) p.push('주소에 _rsc 가 샌다')
+        }
+      } finally { await browser.close() }
+    } catch (e) { p.push(`브라우저: ${e instanceof Error ? e.message : String(e)}`) }
+    sp3b('E11', { what: '소프트 이동 — 회의록 카드의 영구 링크가 새 상세로(전체 새로고침·오류 경계 없음)', documents: docs.length, pageErrors: errs.length }, p)
+  }
+  {
+    const p = [], seen = {}
+    for (const [who, s, uid, mustList] of [['duo', duo, duoWs.userId, true], ['ana', ana, anaWs.userId, false], ['admin', admin, me.id, false]]) {
+      const n = rows('소속 수', await svc.from('workspace_members').select('workspace_id').eq('user_id', uid)).length
+      seen[who] = n
+      if ((n >= 2) !== mustList) { p.push(`${who}: 소속 ${n}곳 — 픽스처가 기대와 다르다`); continue }
+      const res = await raw(s, wsPath(wsA))
+      if (res.status !== 200) { p.push(`${who}: 상태 ${res.status}`); continue }
+      p.push(...switcherVerdict(res.html, mustList).map((x) => `${who}(소속 ${n}): ${x}`))
+    }
+    // 플랫폼 관리자가 소속 아닌 B 를 볼 때 — 전환기 목록은 소속만(트리거 없음)이고 보는 중 배지가 뜬다
+    const viewB = await raw(admin, wsPath(wsB))
+    if (viewB.status !== 200) p.push(`admin 이 B 를 볼 때 상태 ${viewB.status}`)
+    else {
+      p.push(...switcherVerdict(viewB.html, false).map((x) => `admin@B: ${x}`))
+      if (!viewB.html.includes('플랫폼 관리자로 보는 중')) p.push('admin@B: 보는 중 배지가 없다')
+    }
+    sp3b('E5', { what: '전환기 — 소속이 둘 이상(duo)일 때만 트리거, 하나(ana·플랫폼 관리자)면 이름만, 비소속 보기엔 배지', memberships: seen }, p)
+  }
+  {
+    // A 의 이슈(단계 20 에서 끔)를 ana 가 켜면 내비에 링크가 생기고, 끝에 원래 값으로 되돌린다
+    const p = []
+    const readCfg = async () => {
+      const [row] = rows('A 설정', await svc.from('project_settings').select('revision, values').eq('project_id', A.id))
+      return { revision: Number(row.revision), enabled: row.values['modules.enabled'] }
+    }
+    const setModules = async (enabled) => {
+      const cur = await readCfg()
+      const r = await ana.action(`/p/${A.id}/settings`, 'updateProjectSettings', [A.id, { expectedRevision: cur.revision, commandId: randomUUID(), set: { 'modules.enabled': enabled }, unset: [] }])
+      if (!r.result?.ok || r.result.kind !== 'applied') throw new Fail(`sp3b-E7 updateProjectSettings 결과: ${JSON.stringify(r.result)}`)
+    }
+    const nav = async (expectPresent, what) => {
+      const res = await raw(ana, `/p/${A.id}/dashboard`)
+      if (res.status !== 200) return [`${what}: 개요 상태 ${res.status}`]
+      return issuesLinkVerdict(res.html, A.id, expectPresent).map((x) => `${what}: ${x}`)
+    }
+    await ana.http('GET', `/p/${A.id}/settings`)
+    const original = (await readCfg()).enabled
+    if (!Array.isArray(original)) throw new Fail('A 의 modules.enabled 가 배열이 아니다')
+    try {
+      p.push(...(await nav(original.includes('issues'), '시작')))
+      await setModules(original.includes('issues') ? original.filter((m) => m !== 'issues') : [...original, 'issues'])
+      p.push(...(await nav(!original.includes('issues'), '바꾼 뒤')))
+    } finally {
+      const now = (await readCfg()).enabled
+      if (JSON.stringify(now) !== JSON.stringify(original)) await setModules(original)
+    }
+    p.push(...(await nav(original.includes('issues'), '되돌린 뒤')))
+    sp3b('E7', { what: '모듈 끈 메뉴 — 프로젝트의 이슈를 켜면 내비에 링크가 생기고 끄면 사라진다(끝에 원래 값으로)', original }, p)
+  }
+  {
+    const p = []
+    const shell = async (who, q) => {
+      const res = await raw(who, `/api/shell?${q}`)
+      let body = null
+      try { body = JSON.parse(res.html) } catch { /* 아래에서 상태·badges 문제로 */ }
+      return { status: res.status, body }
+    }
+    p.push(...shellBadgeVerdict(await shell(bea, `ws=${wsA}&project=${A.id}`), 'hidden').map((x) => `bea@A: ${x}`))
+    p.push(...shellBadgeVerdict(await shell(bea, `ws=${wsB}&project=${C.id}`), 'own').map((x) => `bea@B: ${x}`))
+    sp3b('E10', { what: '비소속 배지 — bea 의 A 범위 /api/shell 은 세 배지 모두 null, 자기 B 는 숫자' }, p)
+  }
 }
 
 try {

@@ -34,7 +34,7 @@ vi.mock('@/app/actions/projectTeams', () => ({
 import { ProjectTeamsManager, type AdminTeamRow } from '@/components/settings/ProjectTeamsManager'
 
 const ONE_TEAM: AdminTeamRow[] = [
-  { id: 't1', code: 'PMO', sortOrder: 0, active: true, progressVisible: true },
+  { id: 't1', code: 'PMO', name: 'PMO', color: '#4f46e5', sortOrder: 0, active: true, progressVisible: true },
 ]
 
 describe('ProjectTeamsManager', () => {
@@ -63,17 +63,17 @@ describe('ProjectTeamsManager', () => {
   it('inherited=true 이면 팀 표 대신 상속 안내 패널을 보여준다', async () => {
     await render({ teams: [], inherited: true })
 
-    expect(container.textContent).toContain('현재 전역 팀을 상속 중입니다')
+    expect(container.textContent).toContain('현재 워크스페이스 공용 팀을 상속 중입니다')
     expect(container.querySelector('table')).toBeNull()
-    expect(container.textContent).toContain('전역 팀 복사로 시작')
+    expect(container.textContent).toContain('공용 팀 전환으로 시작')
     expect(container.textContent).toContain('빈 목록에서 시작')
   })
 
-  it('전역 활성 팀이 0개면 복사 버튼을 막는다(지어낼 팀이 없음)', async () => {
+  it('공용 활성 팀이 0개면 전환 버튼을 막는다(지어낼 팀이 없음)', async () => {
     await render({ teams: [], inherited: true, hasGlobalTeams: false })
 
     const copyBtn = Array.from(container.querySelectorAll('button'))
-      .find(b => b.textContent?.includes('전역 팀 복사로 시작'))!
+      .find(b => b.textContent?.includes('공용 팀 전환으로 시작'))!
     expect(copyBtn.disabled).toBe(true)
   })
 
@@ -96,7 +96,7 @@ describe('ProjectTeamsManager', () => {
 
     // 확인 없이는 아직 서버 액션이 불리지 않는다 — 경고가 실행을 가로막는다.
     expect(mocks.addProjectTeam).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('전역 팀 상속 종료')
+    expect(document.body.textContent).toContain('공용 팀 상속 종료')
     expect(document.body.textContent).toContain('목록 밖 팀')
 
     const continueBtn = Array.from(document.querySelectorAll('button'))
@@ -113,7 +113,7 @@ describe('ProjectTeamsManager', () => {
     await render({ teams: ONE_TEAM, inherited: false })
 
     expect(container.querySelector('table')).not.toBeNull()
-    expect(container.textContent).not.toContain('현재 전역 팀을 상속 중입니다')
+    expect(container.textContent).not.toContain('현재 워크스페이스 공용 팀을 상속 중입니다')
 
     const input = container.querySelector<HTMLInputElement>('input')!
     await act(async () => {
@@ -126,7 +126,7 @@ describe('ProjectTeamsManager', () => {
     await act(async () => addBtn.click())
 
     // 경고 모달 없이 즉시 호출된다.
-    expect(document.body.textContent).not.toContain('전역 팀 상속 종료')
+    expect(document.body.textContent).not.toContain('공용 팀 상속 종료')
     expect(mocks.addProjectTeam).toHaveBeenCalledWith('p1', '추가팀')
   })
 })

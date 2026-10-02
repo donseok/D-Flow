@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ComputedItem, OwnerKind, Status, TeamCode } from '@/lib/domain/types'
 import { groupByPhase, groupByOwner, groupByStatus, groupByProgress, bucketOf, leafPaths, dueSignal, lensCards, applyQuickFilters, sortCards } from '@/lib/domain/kanban'
-import { teamStyle } from '@/lib/domain/teamColor'
+import { CATEGORY_SLOTS, NEUTRAL_SLOT, TEAM_PALETTE } from '@/lib/domain/teamColor'
 import { FIXTURE_TEAM_CODES } from '../fixtures/teams'
 
 type Owner = { team: TeamCode; kind: OwnerKind }
@@ -107,9 +107,12 @@ describe('groupByOwner', () => {
     expect(unassigned.cards.map(c => c.id)).toEqual(['B1'])
   })
 
-  it('팀 컬럼 점 색은 팀 코드 해시 슬롯 — 기본 5팀 밖 코드도 회색으로 떨어지지 않는다', () => {
+  it('팀 컬럼 점 색은 그 범위 팀의 슬롯(팔레트 자리) — 색 팀 목록이 없으면(봇 도구) 중립', () => {
     const cols = groupByOwner([], ['운영', 'Alpha'])
-    expect(cols.map(c => c.accentDot)).toEqual([teamStyle('운영').bar, teamStyle('Alpha').bar, 'bg-pending'])
+    // 색 팀 목록을 받으면 그 팀 슬롯, 없으면 중립(봇 도구 — 색을 그리지 않는다, 계획 P4)
+    const colorTeams = [{ id: 'k1', code: '운영', color: TEAM_PALETTE[3] }, { id: 'k2', code: 'Alpha', color: TEAM_PALETTE[4] }]
+    expect(groupByOwner([], ['운영', 'Alpha'], colorTeams).map(c => c.accentDot)).toEqual([CATEGORY_SLOTS[3].bar, CATEGORY_SLOTS[4].bar, 'bg-pending'])
+    expect(cols.map(c => c.accentDot)).toEqual([NEUTRAL_SLOT.bar, NEUTRAL_SLOT.bar, 'bg-pending'])
   })
 })
 

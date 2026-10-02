@@ -72,11 +72,12 @@ const RUN_WBS_IMPORT_CALL = /\brunWbsImport\s*(?:\?\.)?\s*\(/g
 const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
+  'src/lib/modules/effectiveMany.ts': { tables: ['project_settings'], refs: 1, why: '여러 프로젝트의 모듈 판정(SP3b D39) — values 를 in() 끝까지 select 로 읽어 해석기의 resolveKeys 로 판정(쓰기 없음, effectiveModules 와 동치 테스트)' },
   'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC(머리 주석의 백틱 이름도 원문 검사라 센다)' },
   'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24·SP4 D48 의 latestKeyChange) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
-  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 15, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션)' },
+  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 16, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳), SP3b E7 의 모듈 토글 expectedRevision 판독(읽기 한 곳 — 쓰기는 updateProjectSettings 액션, 브랜치 전용 e2e-sp3b 에서 과제 39 가 옮김). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션)' },
   'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인)의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
   'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 27, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings. SP4 A1 S2 — wbs.excel_profile 이력 건수(project_settings_history 읽기 한 곳, readHistory 경유 select)·S10 경계 행렬의 빈 프로젝트 모듈. SP5 A 과제 30 — S1-calendar 의 revision 판독·다시 읽기 넷(두 설정 표 각 둘)·projectToday 의 저장된 tz 읽기 하나(모두 select)' },
   'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
@@ -395,7 +396,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
   it('G1 허용 파일의 표 참조 수 — 모양과 무관하게 새 사용은 목록 갱신을 강제한다(attack m-B)', () => {
     const write = "// `project_settings`\nconst { data } = await admin.from('project_settings').select('revision')\nawait casUpdate(admin, 'project_settings', id, rev)"
     expect(judge([[WRITE_FILE, write]]).G1refs).toContain(`${WRITE_FILE}: 실측 3 / 목록 2`)
-    // e2e-local 의 참조(목록 수 — SP5 A 과제 31 에서 8 → 15) + 새 헬퍼 한 줄 → 수가 올라 실패한다. 기준 줄 수는 목록에서 읽는다(목록을 고칠 때 이 표본이 따라온다)
+    // e2e-local 의 참조(목록 수 — SP5 A 과제 31 에서 +7, SP3b E7 판독 +1) + 새 헬퍼 한 줄 → 수가 올라 실패한다. 기준 줄 수는 목록에서 읽는다(목록을 고칠 때 이 표본이 따라온다)
     const e2eN = ALLOW['scripts/e2e-local.mjs'].refs
     const e2eTables = ["'project_settings'", "'project_settings_history'", "'workspace_settings'", "'authz_events'"]
     const e2eBase = Array.from({ length: e2eN }, (_, i) => `await read(admin, ${e2eTables[i % e2eTables.length]})`).join('\n')

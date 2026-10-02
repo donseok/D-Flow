@@ -17,6 +17,7 @@ import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
 import { FolderPickModal } from './FolderPickModal'
+import { useMinutesScope } from './MinutesScopeContext'
 
 const BUCKET = 'minutes'
 
@@ -39,12 +40,14 @@ export function MinuteUploadModal({
   myProjectIds?: string[] | null
   /** 프로젝트 → 워크스페이스(서버의 actor.projectWorkspace) — 프로젝트 회의록의 저장 경로 scope. */
   projectWorkspaces?: Record<string, string>
-  /** 프로젝트 미지정 회의록의 워크스페이스(서버의 resolveSoleWorkspaceId). 실패면 사유를 보이고 저장을 막는다. */
+  /** 프로젝트 미지정 회의록의 워크스페이스(화면의 슬러그 워크스페이스, D26). 실패면 사유를 보이고 저장을 막는다. */
   noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
   const teamCodes = useTeamCodes()
+  // 화면의 범위(계획 V13) — 폴더 재조회와 프로젝트 없는 새 회의록의 워크스페이스. 없으면 서버가 null·ERR_WORKSPACE_REQUIRED 로 닫는다
+  const minutesScope = useMinutesScope()
   // 팀 목록이 비어 있으면(SP4 이전 콜드스타트·신규 프로젝트) 지어낼 팀이 없다 — 빈 문자열로
   // 두고 저장 버튼을 막는다(아래 !team 가드).
   const fallbackTeam = teamCodes[0] ?? ''
@@ -83,15 +86,19 @@ export function MinuteUploadModal({
 
   useEffect(() => {
     let alive = true
-    void fetchMinuteFoldersLite().then(fs => {
+    void fetchMinuteFoldersLite(minutesScope?.workspaceId).then(fs => {
       // null = 조회 실패. 빈 배열('고를 폴더가 없다')과 구분해 로깅하고 prop 목록을 유지한다.
       if (!alive) return
       if (fs === null) { console.error('[MinuteUploadModal] 폴더 재조회 실패(프리페치 목록 사용)'); return }
-      if (fs.length === 0) return
-      setLiveFolders(fs)
+      // 재조회는 모든 소속 워크스페이스의 폴더를 준다 — 이 화면의 워크스페이스 것만 고르게 한다(D26 — 다른 워크스페이스 폴더는
+      // 저장 때 MINUTE_FOLDER_WORKSPACE_MISMATCH 로 거절된다, U2a-3 리뷰 V5). 범위가 없는 호출부(메타 모달 등)는 행 기준 그대로
+      const ws = minutesScope?.workspaceId
+      const inScope = ws ? fs.filter(f => f.workspaceId === ws) : fs
+      if (inScope.length === 0) return
+      setLiveFolders(inScope)
     }).catch(err => console.error('[MinuteUploadModal] 폴더 재조회 실패(프리페치 목록 사용):', err))
     return () => { alive = false }
-  }, [])
+  }, [minutesScope?.workspaceId])
 
   // 프로젝트가 기본 선택된 채로 열리면 회의 셀렉트는 활성인데 목록이 비어 있다 — 사용자는
   // '연결할 회의가 없다'고 오인한다. 기본값일 때만 도는 1회 조회(사용자 변경은 onProject 담당).
@@ -194,7 +201,7 @@ export function MinuteUploadModal({
         size: body.size,
         mime: body.type || 'text/markdown',
       },
-    })
+    }, minutesScope?.workspaceId)
     if (!res.ok || !res.id) {
       await sb.storage.from(BUCKET).remove([bodyPath])
       setErr(res.error ?? t('min.err.upload'))

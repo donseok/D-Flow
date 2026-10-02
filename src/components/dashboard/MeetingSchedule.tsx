@@ -15,7 +15,7 @@ const MAX_ROWS = 10
 const WINDOW_DAYS = 14
 
 /** 향후 2주 회의 일정 — 날짜순 리스트. */
-export async function MeetingSchedule({ projectId, meetings, exceptions, today, currentUserId = null, canManage = false }: {
+export async function MeetingSchedule({ projectId, meetings, exceptions, today, currentUserId = null, canManage = false, minutesHref = null }: {
   projectId: string
   meetings: Meeting[]
   exceptions: MeetingException[]
@@ -24,6 +24,8 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
   currentUserId?: string | null
   /** 이 프로젝트 관리자 이상(isProjectAdmin). 기본 false = fail-closed. */
   canManage?: boolean
+  /** '이 프로젝트 회의록'(D53) — /w/<slug>/minutes?project=<pid>. 회의록 모듈이 꺼졌거나 슬러그를 모르면 null(링크 없음) */
+  minutesHref?: string | null
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
@@ -47,7 +49,14 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
   return (
     <SectionCard
       eyebrow="MEETINGS" title={tr('dash.meet.title')} icon={CalendarDays}
-      actions={<CountBadge n={s.total} unit={tr('dash.unitCount')} />}
+      actions={
+        <div className="flex items-center gap-3">
+          {minutesHref && (
+            <Link href={minutesHref} className="text-meta font-semibold text-action hover:underline">{tr('meet.projectMinutes')}</Link>
+          )}
+          <CountBadge n={s.total} unit={tr('dash.unitCount')} />
+        </div>
+      }
     >
       <div className="space-y-4">
         {rows.length === 0 ? (

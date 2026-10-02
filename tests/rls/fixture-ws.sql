@@ -3,15 +3,23 @@
 -- 통과하지 않게. 새 id: 계정 …a6~a9 · 인물 …b6~ba · 프로젝트 …c3~c4 · 팀 …d0·d5 · 명단 …e4~e7 · 리프 …f4~f6 · A 엔터티 …11NN.
 -- bigint identity 표는 7057001 을 명시 id 로 쓴다(시퀀스를 건드리지 않는다).
 
-insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, aud, role, instance_id, created_at, updated_at)
+insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, aud, role, instance_id, created_at, updated_at,
+                        confirmation_token, recovery_token, email_change_token_new, email_change)
 select v.id, v.email, '', now(), '{"provider":"email","providers":["email"]}', '{}', 'authenticated', 'authenticated',
-       '00000000-0000-0000-0000-000000000000', now(), now()
+       '00000000-0000-0000-0000-000000000000', now(), now(), '', '', '', ''
   from (values
     ('00000000-0000-0000-7e57-0000000000a6'::uuid, 'rls-bea@example.com'),
     ('00000000-0000-0000-7e57-0000000000a7'::uuid, 'rls-ben@example.com'),
     ('00000000-0000-0000-7e57-0000000000a8'::uuid, 'rls-cy@example.com'),
     ('00000000-0000-0000-7e57-0000000000a9'::uuid, 'rls-dana@example.com')) as v(id, email)
-on conflict do nothing;
+-- 같은 이메일이 다른 id 로 이미 있으면(누가 GoTrue 로 만든 경우 — 이메일 부분 유일 인덱스) 그 행만 건너뛴다. 예전 `on conflict do nothing` 이 모든 유일 위반을 건너뛰던 동작을 id 충돌 처리(do update)와 함께 잇는다.
+  where not exists (select 1 from auth.users u where lower(u.email) = lower(v.email) and u.id <> v.id)
+-- 기본값이 없는 GoTrue 문자열 열 넷은 '' 로 — NULL 이면 GoTrue admin/users 가 500 이다. 예전 픽스처가 NULL 로 남긴 행만 고친다.
+on conflict (id) do update set
+  confirmation_token = coalesce(auth.users.confirmation_token, ''), recovery_token = coalesce(auth.users.recovery_token, ''),
+  email_change_token_new = coalesce(auth.users.email_change_token_new, ''), email_change = coalesce(auth.users.email_change, '')
+  where auth.users.confirmation_token is null or auth.users.recovery_token is null
+     or auth.users.email_change_token_new is null or auth.users.email_change is null;
 
 insert into public.profiles (user_id, email, display_name) values
   ('00000000-0000-0000-7e57-0000000000a6', 'rls-bea@example.com', 'bea'),
@@ -207,6 +215,7 @@ insert into public.minute_favorites (user_id, minute_id) values
   ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-000000001103'),
   ('00000000-0000-0000-7e57-0000000000a9', '00000000-0000-0000-7e57-000000001103') on conflict do nothing;
 insert into public.user_preferences (user_id, workspace_id, prefs) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-00000000aa01', '{}') on conflict do nothing;
+insert into public.account_preferences (user_id, prefs) values ('00000000-0000-0000-7e57-0000000000a8', '{}') on conflict do nothing;
 insert into public.user_wbs_state (user_id, project_id) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.wbs_progress_snapshots (project_id, snap_date, actual_pct, planned_pct) values ('00000000-0000-0000-7e57-0000000000c1', '2026-09-01', 10, 20) on conflict do nothing;
 insert into public.wiki_project_rebuild_jobs (project_id) values ('00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;

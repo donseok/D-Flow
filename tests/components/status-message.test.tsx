@@ -24,6 +24,10 @@ describe('StatusMessage', () => {
     expect(el(html('partial_error')).getAttribute('role')).toBe('status')
     expect(el(html('empty', { blocking: true })).getAttribute('role')).toBe('status')
   })
+  it('announce=false 는 알림 영역을 만들지 않는다 — 감싸는 영역이 이미 알릴 때(범위 오류 화면, CC6). 기본은 알린다', () => {
+    expect(el(html('partial_error', { blocking: true, announce: false })).hasAttribute('role')).toBe(false)
+    expect(el(html('partial_error', { blocking: true, announce: true })).getAttribute('role')).toBe('alert')
+  })
   it('loading 은 높이를 지키는 skeleton — 숫자 0 을 그리지 않고 aria-busy, 제목은 스크린리더에만', () => {
     const e = el(html('loading', { title: '불러오는 중' }))
     expect(e.getAttribute('aria-busy')).toBe('true')

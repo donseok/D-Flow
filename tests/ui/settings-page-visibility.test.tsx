@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement, ReactNode } from 'react'
-import { makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
+import { makeAdminActor, makeMemberActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const h = vi.hoisted(() => ({
   editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
 }))
 // 팀 원천은 요청 범위 원천(SP4 §4.2.1) — 기본 픽스처 팀이면 팀 절·업무영역 편집기가 그려진다
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
-vi.mock('@/lib/authz', () => ({ getActorForView: () => h.actor() }))
+vi.mock('@/lib/authz', () => ({ getActorForView: () => h.actor(), getActorViewState: async () => ({ actor: await h.actor(), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]) }))
 vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ error: 'x' })) }))
@@ -72,13 +74,13 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
   it('공개 범위 스위치는 플랫폼 관리자에게만 보인다(#9 — 서버 권한은 SP2 대로)', async () => {
     await render()
     expect(h.privacy).not.toHaveBeenCalled()
-    h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]) }))
+    h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]), projectWorkspace: new Map([['p1', WS]]) }))
     await render()
     expect(h.privacy).toHaveBeenCalledTimes(1)
     expect(h.privacy.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
   })
   it('주간 영역 편집기는 있고 kind 는 weekly_section 고정 — 이슈 영역은 넘기지 않는다(SP4 D26). 추가 축 이름은 화면에 없다(#8)', async () => {
-    h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]) }))
+    h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]), projectWorkspace: new Map([['p1', WS]]) }))
     const html = await render()
     expect(h.areas).toHaveBeenCalledTimes(1)
     const props = h.areas.mock.calls[0][0]

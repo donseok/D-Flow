@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
-  toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
+  toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember, hasWorkspaceMembership,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
-  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute, hasProjectRoleInAnyWorkspace,
+  isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute,
   isAnyWorkspaceAdmin,
 } from '@/lib/domain/authz'
-import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser } from '../fixtures/actor'
+import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser, hiddenIds } from '../fixtures/actor'
 
 const W = 'ws-1', P = 'proj-1', Q = 'proj-2', X = 'proj-other-ws'
 const inWs = { projectWorkspace: new Map([[P, W], [Q, W]]) }
@@ -124,26 +124,6 @@ describe('isMinuteMember / canEditMinute — 회의록 범위(SP2 Task 16a)', ()
   it('무프로젝트 남의 회의록은 슈퍼유저만 — 워크스페이스 관리자도 아니다(SP1 §3.5 유지)', () => {
     expect(canEditMinute(makeActor({ workspaceRoles: new Map([[W, 'admin']]) }), noProject({ created_by: 'u9' }))).toBe(false)
     expect(canEditMinute(makeSuperuser(), noProject({ created_by: 'u9' }))).toBe(true)
-  })
-})
-describe('hasProjectRoleInAnyWorkspace — 회의록 목록의 업로드 어포던스', () => {
-  const W2 = 'ws-2', R = 'proj-in-w2'
-  it('소속 워크스페이스 중 하나라도 역할이 있으면 true — 둘 이상 소속이어도', () => {
-    const two = makeMemberActor(R, [], {
-      workspaceRoles: new Map([[W, 'member'], [W2, 'member']]), projectWorkspace: new Map([[R, W2]]),
-    })
-    expect(hasProjectRoleInAnyWorkspace(two)).toBe(true)
-    expect(hasProjectRoleInAnyWorkspace(makeActor({ workspaceRoles: new Map([[W2, 'admin']]) }))).toBe(true)
-  })
-  it('소속 밖 워크스페이스 프로젝트의 명단 행은 세지 않는다(hasAnyProjectRole 과 다른 점)', () => {
-    const stray = makeMemberActor(R, [], { projectWorkspace: new Map() })   // R 의 워크스페이스에 소속 없음
-    expect(hasAnyProjectRole(stray)).toBe(true)
-    expect(hasProjectRoleInAnyWorkspace(stray)).toBe(false)
-  })
-  it('조회 전용·비로그인은 false, 플랫폼 관리자는 true', () => {
-    expect(hasProjectRoleInAnyWorkspace(makeActor())).toBe(false)
-    expect(hasProjectRoleInAnyWorkspace(null)).toBe(false)
-    expect(hasProjectRoleInAnyWorkspace(makeSuperuser({ workspaceRoles: new Map() }))).toBe(true)
   })
 })
 describe('ProjectActorView 왕복', () => {
@@ -366,21 +346,27 @@ describe('Q2 — 두 워크스페이스·비공개(Review Focus 2)', () => {
 
 // 레이아웃 404 판정(T11 C3) — roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 미존재 pid 가 빈 화면으로 샜다.
 describe('isHiddenProject', () => {
+  const NONE = hiddenIds()
   it('타 워크스페이스·미존재 프로젝트는 숨긴다', () => {
-    expect(isHiddenProject(makeAdminActor(P, inWs), X)).toBe(true)
+    expect(isHiddenProject(makeAdminActor(P, inWs), X, NONE)).toBe(true)
   })
   it('같은 워크스페이스의 조회 전용(viewer)은 숨기지 않는다', () => {
-    expect(isHiddenProject(makeActor(inWs), Q)).toBe(false)
+    expect(isHiddenProject(makeActor(inWs), Q, NONE)).toBe(false)
   })
   it('플랫폼 관리자라도 projectWorkspace 에 없는 pid 는 숨긴다 — buildActor 가 전 프로젝트를 싣으므로 없으면 미존재', () => {
-    expect(isHiddenProject(makeSuperuser(), P)).toBe(true)
-    expect(isHiddenProject(makeSuperuser(inWs), X)).toBe(true)
+    expect(isHiddenProject(makeSuperuser(), P, NONE)).toBe(true)
+    expect(isHiddenProject(makeSuperuser(inWs), X, NONE)).toBe(true)
   })
   it('플랫폼 관리자 + 있는 pid 는 숨기지 않는다(워크스페이스 소속과 무관)', () => {
-    expect(isHiddenProject(makeSuperuser({ workspaceRoles: new Map(), ...inWs }), P)).toBe(false)
+    expect(isHiddenProject(makeSuperuser({ workspaceRoles: new Map(), ...inWs }), P, NONE)).toBe(false)
   })
   it('actor=null 은 숨긴다 — 판정 대상이 없다', () => {
-    expect(isHiddenProject(null, P)).toBe(true)
+    expect(isHiddenProject(null, P, NONE)).toBe(true)
+  })
+  // GG1 — 비공개 축은 getHiddenProjectIds(canSeeProject 정본)의 집합으로 받는다: 같은 워크스페이스의 명단 밖 멤버(viewer)도 숨긴다
+  it('숨김 집합(명단 밖 비공개)에 있으면 같은 워크스페이스의 viewer 라도 숨긴다', () => {
+    expect(isHiddenProject(makeActor(inWs), Q, hiddenIds(Q))).toBe(true)
+    expect(isHiddenProject(makeActor(inWs), Q, hiddenIds(P))).toBe(false)
   })
 })
 
@@ -389,5 +375,15 @@ describe('ACCESS_ROLE / WORKSPACE_ROLE', () => {
   it('DB 값(project_members.access_role · workspace_members.role)과 같은 문자열이다', () => {
     expect(ACCESS_ROLE).toEqual({ admin: 'admin', member: 'member' })
     expect(WORKSPACE_ROLE).toEqual({ admin: 'admin', member: 'member' })
+  })
+})
+
+describe('hasWorkspaceMembership — 실제 소속만(플랫폼 관리자 승계 없음, AA6)', () => {
+  const W = '00000000-0000-0000-7e57-0000000016e1', X = '00000000-0000-0000-7e57-0000000016e2'
+  it('소속 행이 있으면 true, 플랫폼 관리자라도 행이 없으면 false, null 이면 false', () => {
+    expect(hasWorkspaceMembership(makeActor({ workspaceRoles: new Map([[W, 'member']]) }), W)).toBe(true)
+    expect(hasWorkspaceMembership(makeSuperuser({ workspaceRoles: new Map([[W, 'admin']]) }), X)).toBe(false)
+    expect(isWorkspaceMember(makeSuperuser({ workspaceRoles: new Map([[W, 'admin']]) }), X)).toBe(true)   // 화면 판정은 승계 — 두 함수가 다른 이유
+    expect(hasWorkspaceMembership(null, W)).toBe(false)
   })
 })
