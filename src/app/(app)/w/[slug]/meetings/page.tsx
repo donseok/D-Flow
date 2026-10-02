@@ -13,7 +13,6 @@ import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
 import { calendarViewOf, monthGridRange } from '@/lib/domain/attendance'
 import { viewCalendar } from '@/lib/calendar/viewZone'
-import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -23,8 +22,8 @@ export default async function MyMeetingsPage({ params }: { params: Promise<{ slu
   const { slug } = await params
   const scope = await loadWorkspaceScope(slug)                             // 첫 await — 비소속 404(E19)
   await requireModulePage({ workspaceId: scope.ws.id }, 'meetings')       // 슬러그 워크스페이스로 판정(D26). 목록의 행 거르기는 로더(getMyMeetings)
-  // '오늘'·첫 열·쉬는 날 = 소속 워크스페이스 달력(viewTimezone 과 같은 판정 — 다르거나 없으면 제품 기본값, 계획 D-22b·M3)
-  const vc = await viewCalendar(scope.actor)
+  // '오늘'·첫 열·쉬는 날 = 이 워크스페이스의 달력(계획 D-22b — 화면이 워크스페이스 하나로 거르므로 소속 목록으로 정하지 않는다)
+  const vc = await viewCalendar(scope.ws.id)
   if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" locale={await getServerLocale()} />
   const today = todayIn(vc.calendar.timezone, new Date())
   const [ty, tm] = today.split('-').map(Number)
@@ -60,7 +59,6 @@ export default async function MyMeetingsPage({ params }: { params: Promise<{ slu
         }
       />}
     >
-      <ViewBasisNotice basis={vc.basis} timeZone={vc.calendar.timezone} locale={locale} />
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
       <MyMeetingsView workspaceId={scope.ws.id} initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}

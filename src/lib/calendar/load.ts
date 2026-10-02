@@ -127,14 +127,14 @@ function sameRequestCalendar(a: RequestCalendar, b: RequestCalendar): boolean {
 }
 
 /**
- * 소속 워크스페이스들로 정하는 요청·화면 달력(A-3 리뷰 P2, 컨트롤러 판정 M3) — 소속이 없으면 제품 기본값, 하나면 그 워크스페이스,
- * 여럿이면 달력(tz·주 시작·근무 요일)이 모두 같을 때 그 달력, 다르면 제품 기본값(UTC — 전역 화면은 basis 로 '기준 시간대' 한 줄
- * (ViewBasisNotice), 봇 답은 기준 tz 이름을 적는다).
+ * 소속 워크스페이스들로 정하는 요청 달력(A-3 리뷰 P2, 컨트롤러 판정 M3) — 봇 스트림이 프로젝트도 화면 워크스페이스(/w/<slug>)도 없을 때만 쓴다.
+ * 소속이 없으면 제품 기본값, 하나면 그 워크스페이스, 여럿이면 달력(tz·주 시작·근무 요일)이 모두 같을 때 그 달력, 다르면 제품 기본값
+ * (UTC — 봇 답은 기준 tz 이름을 적는다). 화면은 이것을 쓰지 않는다 — UI-2 뒤 날짜 화면은 모두 워크스페이스 하나로 거르므로
+ * 그 슬러그 워크스페이스의 달력이다(viewZone.ts, merge 뒤 판정 — 그래서 화면의 '기준 시간대' 폴백 줄 ViewBasisNotice 도 걷었다).
  * 이관 ⑨ 가 기존 워크스페이스 전부에 같은 tz 를 적으므로, 여러 곳에 속한 사람도 소속이 모두 같으면 UTC 로 떨어지지 않는다.
  * 판독 실패·손상(A-4 리뷰 P2, 판정 N2 (a)): 하나뿐인 소속이면 던진다(그 사용자의 유일한 달력 — 대체하지 않는다). 여럿 중 하나라도 판독할 수
- * 없으면 "같다를 판정할 수 없음 = 다름"으로 보고 제품 기본값 — 전역 화면 넷이 basis 'unreadable' 로 그 사실을 적고(A-5 리뷰 O2) 봇은 기준 tz 를
- * 적으므로 위장이 아니고, 실패는 로그에 남긴다
- * (3원칙 ① 표시 = 로깅). 다른 워크스페이스의 손상이 전역 화면 전부를 멈추지 않게 한다. 설정 오류가 아닌 예외(결함)는 그대로 던진다.
+ * 없으면 "같다를 판정할 수 없음 = 다름"으로 보고 제품 기본값 — 봇은 기준 tz 를 적으므로 위장이 아니고, 실패는 로그에 남긴다
+ * (3원칙 ① 표시 = 로깅). 다른 워크스페이스의 손상이 봇 답 전부를 멈추지 않게 한다. 설정 오류가 아닌 예외(결함)는 그대로 던진다.
  */
 export async function resolveMemberWorkspacesCalendar(
   workspaceIds: readonly string[], opts?: { client?: ConfigReadClient },
@@ -142,8 +142,8 @@ export async function resolveMemberWorkspacesCalendar(
   return (await resolveMemberWorkspacesCalendarBasis(workspaceIds, opts)).calendar
 }
 
-/** 전역 화면의 달력이 어디서 왔나 — member(소속 달력)·none(소속 없음)·differs(여럿이 서로 다름)·unreadable(여럿 중 판독 실패).
- *  뒤 둘은 제품 기본값으로 계산한 것이라 화면이 그 사실을 한 줄로 적는다(A-5 리뷰 O2 — 표시 = 로깅) */
+/** 소속 달력 판정이 어디서 왔나 — member(소속 달력)·none(소속 없음)·differs(여럿이 서로 다름)·unreadable(여럿 중 판독 실패).
+ *  뒤 둘은 제품 기본값으로 계산한 것이다(테스트가 판정 근거를 본다 — 화면 소비처는 merge 뒤 없다) */
 export type MemberCalendarBasis = 'member' | 'none' | 'differs' | 'unreadable'
 
 /** resolveMemberWorkspacesCalendar 와 같은 판정 + 그 근거(basis) */

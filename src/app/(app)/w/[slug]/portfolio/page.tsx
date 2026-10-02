@@ -14,7 +14,6 @@ import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewTimezone } from '@/lib/calendar/viewZone'
-import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
@@ -29,8 +28,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   if (!canViewPortfolio(scope.actor)) redirect(wsHref(scope.ws.slug))
   await requireModulePage({ workspaceId: scope.ws.id }, 'portfolio')
 
-  // 실제 오늘의 tz = 세션 유일 워크스페이스, 없거나 여럿이면 UTC(계획 D-22b·D-22d). 달력 손상이면 그 사유를 그린다
-  const [vz, locale] = await Promise.all([viewTimezone(scope.actor), getServerLocale()])
+  // 실제 오늘의 tz = 이 워크스페이스의 달력(계획 D-22b·D-22d). 달력 손상이면 그 사유를 그린다
+  const [vz, locale] = await Promise.all([viewTimezone(scope.ws.id), getServerLocale()])
   if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={locale} />
   const realToday = todayIn(vz.timeZone, new Date())
   // 입력은 슬러그 워크스페이스의 프로젝트만(D21)
@@ -51,7 +50,6 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   return (
     <div className="space-y-6 pb-10">
       <PageHero title={t(locale, 'pf.title')} />
-      <ViewBasisNotice basis={vz.basis} timeZone={vz.timeZone} locale={locale} />
       {listDegraded && (
         <div className="rounded-xl border border-delayed/40 bg-delayed-weak px-4 py-3 text-xs font-medium text-delayed">
           {t(locale, 'pf.listDegraded')}

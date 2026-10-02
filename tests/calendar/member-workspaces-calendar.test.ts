@@ -17,7 +17,6 @@ const ws = (timezone: string, weekStart = SUN, workingDays: number[] = [1, 2, 3,
   ({ calendar: calendarOf({ timezone, workingDays: workingDays as never, weekStart }), calendarError: null })
 const broken = (key: string) => ({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', key) })
 const byId = (map: Record<string, unknown>) => m.getWorkspaceConfig.mockImplementation(async (id: string) => map[id])
-const actor = (ids: string[]) => ({ userId: 'u1', workspaceRoles: new Map(ids.map((id) => [id, 'member'])) }) as never
 
 beforeEach(() => { m.getWorkspaceConfig.mockReset() })
 
@@ -68,21 +67,18 @@ describe('resolveMemberWorkspacesCalendar', () => {
   })
 })
 
-describe('viewTimezone — 여러 워크스페이스 소속(전역 화면)', () => {
-  it('모두 같으면 그 tz, 다르면 UTC, 여럿 중 하나가 손상이면 UTC(N2 — 하나뿐일 때만 ok:false)', async () => {
-    byId({ a: ws('America/Los_Angeles'), b: ws('America/Los_Angeles') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'America/Los_Angeles', basis: 'member' })
+describe('viewTimezone — 화면 워크스페이스 하나(merge 뒤 — 소속 목록 폴백을 쓰지 않는다)', () => {
+  it('소속 달력이 서로 달라도·다른 소속이 손상이어도 그 워크스페이스의 tz, 그 워크스페이스 손상만 ok:false', async () => {
     byId({ a: ws('America/Los_Angeles'), b: ws('Asia/Seoul') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC', basis: 'differs' })
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(viewTimezone('a')).resolves.toEqual({ ok: true, timeZone: 'America/Los_Angeles' })
+    await expect(viewTimezone('b')).resolves.toEqual({ ok: true, timeZone: 'Asia/Seoul' })
     byId({ a: ws('Asia/Seoul'), b: broken('calendar.week_start') })
-    await expect(viewTimezone(actor(['a', 'b']))).resolves.toEqual({ ok: true, timeZone: 'UTC', basis: 'unreadable' })
-    await expect(viewTimezone(actor(['b']))).resolves.toMatchObject({ ok: false, key: 'calendar.week_start' })
-    err.mockRestore()
+    await expect(viewTimezone('a')).resolves.toEqual({ ok: true, timeZone: 'Asia/Seoul' })
+    await expect(viewTimezone('b')).resolves.toMatchObject({ ok: false, key: 'calendar.week_start' })
   })
 })
 
-describe('resolveMemberWorkspacesCalendarBasis — 기본값으로 계산한 근거(A-5 리뷰 O2 — 화면이 그 사실을 적는다)', () => {
+describe('resolveMemberWorkspacesCalendarBasis — 기본값으로 계산한 근거(A-5 리뷰 O2)', () => {
   it('none·member·differs·unreadable', async () => {
     expect((await resolveMemberWorkspacesCalendarBasis([])).basis).toBe('none')
     byId({ a: ws('Asia/Seoul') })

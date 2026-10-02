@@ -16,6 +16,8 @@ vi.mock('@/app/actions/project', () => ({ listProjects: h.listProjects }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: h.getServerLocale }))
 vi.mock('@/lib/data/members', () => ({ getMyProjectIds: h.getMyProjectIds }))
 vi.mock('@/components/minutes/MinutesView', () => ({ MinutesView: (p: unknown) => { h.viewProps(p); return null } }))
+// '오늘'·첫 열 = 그 워크스페이스 달력(SP5 — merge 뒤 슬러그 워크스페이스). 이 파일은 달력 축을 보지 않는다
+vi.mock('@/lib/calendar/viewZone', async () => ({ viewCalendar: async () => ({ ok: true, calendar: (await import('../helpers/calendarFixture')).calUtcSun }) }))
 
 import MinutesPage from '@/app/(app)/w/[slug]/minutes/page'
 import { makeActor, makeMemberActor } from '../fixtures/actor'

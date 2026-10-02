@@ -15,7 +15,6 @@ import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewTimezone } from '@/lib/calendar/viewZone'
-import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 
 type ProjectRow = {
@@ -105,9 +104,9 @@ export default async function ProjectsPage({ params, searchParams }: {
   // 목록 조회 실패(degraded)는 '프로젝트 없음'이 아니다 — 빈 상태·생성 권유를 그리지 않고 오류를 말한다(에러 3원칙 ①, 스펙 §5.9)
   const listFailed = listed.degraded
   const projects = (listed.projects as ProjectRow[]).filter(p => p.workspace_id === scope.ws.id)   // 슬러그 워크스페이스만
-  // 상태 배지의 '오늘' = 세션 유일 워크스페이스의 tz, 없거나 여럿이면 UTC(계획 D-22b). 달력 손상이면 그 사유를 그린다
+  // 상태 배지의 '오늘' = 이 워크스페이스의 tz(계획 D-22b). 달력 손상이면 그 사유를 그린다
   const now = new Date()
-  const vz = await viewTimezone(scope.actor)
+  const vz = await viewTimezone(scope.ws.id)
   if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={locale} />
   const today = todayIn(vz.timeZone, now)
 
@@ -132,8 +131,6 @@ export default async function ProjectsPage({ params, searchParams }: {
     <PageFrame width="portal" header={
       <PageHeader title={t(locale, 'nav.allProjects')} meta={listFailed ? undefined : `${withStatus.length}${t(locale, 'home.countUnit')}`} primaryAction={create} />
     }>
-      {/* 상태 배지의 '오늘'을 제품 기본값으로 계산했으면 그 사실(A-5 리뷰 O2) */}
-      <ViewBasisNotice basis={vz.basis} timeZone={vz.timeZone} locale={locale} className="mb-3" />
       {listFailed ? (
         <StatusMessage kind="partial_error" blocking title="프로젝트 목록을 불러오지 못했습니다" detail="잠시 뒤 새로고침하세요." />
       ) : withStatus.length === 0 ? (

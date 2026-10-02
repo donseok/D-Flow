@@ -23,7 +23,7 @@ const SNAPSHOT_WINDOW_DAYS = 60
  * 호출 전제: canViewPortfolio 통과(슈퍼유저) — listProjectsWithState 의 canSeeProject 는
  * 슈퍼유저에게 비공개(0070) 포함 전체를 반환한다.
  * SP3b D21 — 슬러그 워크스페이스로 한정한다(다른 워크스페이스 프로젝트는 리더·스냅샷·WBS 조회에도 들어가지 않는다).
- * realToday = 화면 tz 의 실제 오늘 — 여러 프로젝트를 걸치므로 화면(세션 유일 워크스페이스의 tz)이 정해 넘긴다(SP5 계획 D-22d).
+ * realToday = 화면 tz 의 실제 오늘 — 여러 프로젝트를 걸치므로 화면(그 워크스페이스의 tz)이 정해 넘긴다(SP5 계획 D-22d).
  */
 export async function getPortfolioInputs(workspaceId: string, realToday: string): Promise<{
   inputs: PortfolioProjectInput[]

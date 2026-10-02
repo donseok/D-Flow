@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), getSeatmap: vi.fn(async () => ({ floors: [] })),
   redirect: vi.fn((u: string) => { throw new Error(`NEXT_REDIRECT:${u}`) }),
+  viewTimezone: vi.fn<(wid: string) => Promise<{ ok: true; timeZone: string }>>(async () => ({ ok: true, timeZone: 'UTC' })),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: h.getSeatmap }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: vi.fn() }))
 vi.mock('@/components/agents/SeatmapView', () => ({ SeatmapView: () => null }))
+// 화면의 tz = 그 워크스페이스 달력(SP5 — merge 뒤 슬러그 워크스페이스)
+vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: h.viewTimezone }))
 
 import AgentsPage from '@/app/(app)/w/[slug]/agents/page'
 import { makeActor, makeMemberActor } from '../fixtures/actor'
@@ -25,6 +28,7 @@ describe('/w/[slug]/agents — 그 워크스페이스 좌석표', () => {
     await run()
     expect(h.requireModulePage).toHaveBeenCalledWith({ workspaceId: WS.id }, 'agents')
     expect(h.getSeatmap).toHaveBeenCalledWith(actor, expect.any(Number), 'all', { workspaceId: WS.id })
+    expect(h.viewTimezone).toHaveBeenCalledWith(WS.id)
   })
   it('소속이지만 역할 없음 → /w/<slug>(D7), service_role 로더 미호출', async () => {
     h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: makeActor({ workspaceRoles: new Map([[WS.id, 'member']]) }), degraded: false, role: 'member' })

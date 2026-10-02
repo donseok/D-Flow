@@ -18,7 +18,6 @@ import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 import { MinutesProjectChip } from '@/components/minutes/MinutesProjectChip'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewCalendar } from '@/lib/calendar/viewZone'
-import { ViewBasisNotice } from '@/components/calendar/ViewBasisNotice'
 import { calendarViewOf } from '@/lib/domain/attendance'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
@@ -40,9 +39,8 @@ export default async function MinutesPage({ params, searchParams }: {
   const scope = await loadWorkspaceScope(slug)                           // 첫 await — 비소속 404(E19)
   await requireModulePage({ workspaceId: scope.ws.id }, 'minutes')     // 슬러그 워크스페이스로 판정(D26)
   const q = await searchParams
-  // '오늘'(이번 달 목록)·달력 첫 열·쉬는 날 = 소속 워크스페이스 달력(viewTimezone 과 같은 판정 — 다르거나 없으면 제품 기본값,
-  // 계획 D-22b·M3)
-  const vc = await viewCalendar(scope.actor)
+  // '오늘'(이번 달 목록)·달력 첫 열·쉬는 날 = 이 워크스페이스의 달력(계획 D-22b — 소속 목록으로 정하지 않는다)
+  const vc = await viewCalendar(scope.ws.id)
   if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" locale={await getServerLocale()} />
   const today = todayIn(vc.calendar.timezone, new Date())
   const [rs, re] = monthRange(today)
@@ -92,7 +90,6 @@ export default async function MinutesPage({ params, searchParams }: {
             fetchMinutesExplorer(actions/minutes.ts)가 가진 세션 게이트를 서버 경로에도 맞춘 것.
             user 는 위 Promise.all 에서 이미 받았으므로 추가 왕복은 없다.
             (대가: GoTrue 일시 실패 시 멀쩡한 프리페치를 버려 왕복 1회 손해 — 정확성 우선.) */}
-        <ViewBasisNotice basis={vc.basis} timeZone={vc.calendar.timezone} locale={locale} />
         <MinutesView scope={minutesScope} initialMinutes={minutes} initialTree={user ? tree : null} todayIso={today}
           initialFavorites={user ? favs : null}
           explorerLayout={prefs.minutesExplorerLayout === 'list' ? 'list' : 'grid'}
