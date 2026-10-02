@@ -173,6 +173,18 @@ describe('레거시 챗 라우트 — 볼 수 없는 projectId 는 404, service_
     expect(ctx.status).toBe(404)
     expect(await ctx.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
   })
+  it('프로젝트 없는 질문의 문맥·답은 요청 워크스페이스의 프로젝트만 센다 — 볼 수 있는 다른 워크스페이스 프로젝트가 섞이지 않는다(CC2)', async () => {
+    mocks.getActor.mockResolvedValue(makeActor({ userId: 'user-b', workspaceRoles: new Map([[W_A, 'member'], [W_B, 'member']]), projectWorkspace: new Map([[A_PID, W_A], [B_PID, W_B]]) }))
+    mocks.listProjectsWithState.mockResolvedValue({ projects: [{ id: A_PID, name: 'A 프로젝트', workspace_id: W_A }, { id: B_PID, name: 'B 프로젝트', workspace_id: W_B }], degraded: false })
+    const ctx = await contextGET(new NextRequest(`http://l/api/chat/context?workspaceId=${W_B}`))
+    expect(ctx.status).toBe(200)
+    expect(await ctx.json()).toMatchObject({ totalProjects: 1, currentProject: null })
+    const res = await chatPOST(post('http://l/api/chat', { message: '전체 프로젝트 현황 알려줘', workspaceId: W_B }))
+    expect(res.status).toBe(200)
+    const body = await res.json() as { answer: string }
+    expect(body.answer).toContain('B 프로젝트')
+    expect(body.answer).not.toContain('A 프로젝트')
+  })
   it('프로젝트도 워크스페이스도 없으면 세 라우트 모두 400 — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
     for (const res of [
       await chatPOST(post('http://l/api/chat', { message: '진행 상황' })),

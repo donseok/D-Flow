@@ -2,13 +2,13 @@
  * AI 사용 가능 판정(정본 §5.4.5, 스펙 §4.1 끝 줄·D17, 판정 P9) — hasLLM() ∧ 워크스페이스 ai.enabled ∧ (module 을 주면) 그 모듈이 effective.
  * 이것이 없으면 ai.enabled 를 꺼도 AI 모듈 둘(wiki·chatbot)만 꺼지고 주간 AI·이슈 분석·브리핑·회의록 인사이트는 계속 LLM 을 부른다.
  * hasLLM() 이 거짓이면 설정을 읽지 않는다(키 없는 배포의 비용 0). 판정 실패는 [aiAvailable] 로그 뒤 false — 호출부는 결정형 폴백을 탄다.
- * 스코프: { workspaceId, projectId? }(스펙) · { projectId } · { minuteId }(회의록 행) · null(세션 행위자의 유일 워크스페이스).
+ * 스코프: { workspaceId, projectId? }(스펙) · { projectId } · { minuteId }(회의록 행). 세션 유일 워크스페이스(null) 범위는 없앴다 —
+ * 마지막 호출부(옛 챗 answer.ts)가 요청 범위로 판정한다(D26, U2b-5 리뷰 수정 CC3). 다중 소속자는 늘 거짓, 한 곳 소속 플랫폼 관리자는
+ * 비소속 워크스페이스의 질문을 자기 워크스페이스 설정으로 판정하던 갈래다.
  * hasLLM() 을 직접 부르는 곳은 provider.ts(정의)·health.ts(배포 진단)·이 파일 셋뿐이다(tests/ai/ai-available.test.ts 정적 검사).
  */
 import { unstable_rethrow } from 'next/navigation'
 import { hasLLM } from '@/lib/ai/provider'
-import { getActor } from '@/lib/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { getProjectConfig, type ConfigReadClient, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -16,18 +16,12 @@ import { createServerClient } from '@/lib/supabase/server'
 import { WORKSPACE_SCOPED, type ModuleId } from './defaults'
 import { effectiveModules } from './effective'
 
-export type AiScope = { workspaceId: string; projectId?: string } | { projectId: string } | { minuteId: string } | null
+export type AiScope = { workspaceId: string; projectId?: string } | { projectId: string } | { minuteId: string }
 
 /** 범위 해석 — { projectId } 는 프로젝트 설정을 읽어 워크스페이스를 얻고, 읽은 설정을 effectiveModules 에 넘긴다(P27 — 라우트·액션·after() 는
  *  React cache 밖이라 넘기지 않으면 같은 설정을 두 번 읽는다) */
 type Resolved = { scope: { workspaceId: string; projectId?: string }; projectConfig?: ProjectConfig }
 async function resolveScope(scope: AiScope, client: ConfigReadClient | undefined): Promise<Resolved | null> {
-  if (scope === null) {
-    const actor = await getActor()
-    if (!actor) return null
-    const sole = resolveSoleWorkspaceId(actor)
-    return sole.ok ? { scope: { workspaceId: sole.workspaceId } } : null
-  }
   if ('minuteId' in scope) {
     const sb = client ?? (await createServerClient())
     const { data, error } = await sb.from('minutes').select('workspace_id, project_id').eq('id', scope.minuteId).maybeSingle()

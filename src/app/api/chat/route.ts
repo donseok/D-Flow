@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
 
   try {
-    const result = await answerQuestion({ projectId, message, history })
+    const result = await answerQuestion({ projectId, workspaceId: mod.workspaceId, message, history })   // 답의 원천·AI 판정도 그 범위(CC2·CC3)
     return NextResponse.json(result)
   } catch (e) {
     console.error('[assistant] /api/chat 오류:', e)

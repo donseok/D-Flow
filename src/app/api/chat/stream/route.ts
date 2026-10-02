@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
 
   try {
-    const stream = await streamAnswer({ projectId, message, history })
+    const stream = await streamAnswer({ projectId, workspaceId: mod.workspaceId, message, history })   // 답의 원천·AI 판정도 그 범위(CC2·CC3)
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',

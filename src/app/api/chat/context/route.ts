@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('probe') === '1') return NextResponse.json({ ok: true })
 
   try {
-    const ctx = await buildBotContext(projectId)
+    const ctx = await buildBotContext(projectId, mod.workspaceId)   // 프로젝트 개수도 답의 원천과 같은 범위(CC2)
     return NextResponse.json(ctx)
   } catch (e) {
     console.error('[assistant] /api/chat/context 오류:', e)

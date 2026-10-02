@@ -1,13 +1,16 @@
 import { classifyIntent, needsSemantic, isCrossProject } from './intent'
-import { gatherKnowledge, type Knowledge } from './knowledge'
+import { chatProjectsIn, gatherKnowledge, type Knowledge } from './knowledge'
 import { retrieveContext, type Match } from './retrieve'
 import { ensureProjectIndexed } from './ensure-index'
 import { generateAnswer, generateAnswerStream, type ChatMessage } from './llm'
-import { aiAvailable } from '@/lib/modules/aiAvailable'
+import { aiAvailable, type AiScope } from '@/lib/modules/aiAvailable'
 import { ASSISTANT_NAME, BRAND } from '@/lib/branding'
 
 export interface AnswerInput {
   projectId: string | null
+  /** 프로젝트 없는 질문의 범위 — 라우트 관문(requireScopedSessionModule)이 소속을 확인한 워크스페이스(D26, CC2·CC3).
+   *  프로젝트 질문이면 무시한다(그 프로젝트로 판정). 둘 다 없으면 답을 만들지 않는다(던짐 — 라우트의 500). */
+  workspaceId: string | null
   message: string
   history: ChatMessage[]
 }
@@ -44,17 +47,34 @@ const SYSTEM = `너는 프로젝트 관리 도구 ${BRAND.productName}의 ${ASSI
 // 조용히 품질만 떨어뜨리면 사용자는 '봇이 멍청해졌다'고 느낀다 — 원인을 한 줄로 밝힌다.
 const DEGRADED_NOTICE = '⚠ AI 응답이 잠시 원활하지 않아 기본 답변으로 알려드려요. 잠시 후 다시 물어보시면 더 자세히 답해드릴게요.\n\n'
 
-export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> {
-  const message = input.message.trim()
-  const intent = classifyIntent(message)
-  const knowledge = await gatherKnowledge(intent, input.projectId, message)
+/** AI 사용 판정 범위 — 요청 범위(프로젝트면 그 프로젝트, 아니면 관문이 확인한 워크스페이스). 세션 유일 워크스페이스로 추측하지 않는다(CC3) */
+function aiScopeOf(input: AnswerInput): AiScope {
+  if (input.projectId) return { projectId: input.projectId }
+  if (input.workspaceId) return { workspaceId: input.workspaceId }
+  throw new Error('옛 챗 범위가 없다 — 프로젝트나 워크스페이스가 있어야 한다')
+}
 
+/** 근거 모으기(두 파이프라인 공용) — 구조화 사실 + 의미검색. 프로젝트를 넘는 원천은 요청 범위의 프로젝트만(chatProjectsIn, CC2) */
+async function gatherSources(input: AnswerInput, message: string, intent: ReturnType<typeof classifyIntent>) {
+  aiScopeOf(input)   // 범위 없음은 어떤 원천도 읽기 전에 던진다(fail-closed)
+  const knowledge = await gatherKnowledge(intent, input.projectId, message, input.workspaceId)
   let matches: Match[] = []
   if (needsSemantic(intent)) {
     const scope = isCrossProject(intent) ? null : knowledge.scopeProjectId
     await ensureProjectIndexed(scope) // 색인이 비어 있으면 이 질문에서 자동 채움(자가 치유)
-    matches = await retrieveContext(message, scope, 8)
+    matches = await retrieveContext(
+      message,
+      scope ?? { projectIds: new Set((await chatProjectsIn(input.projectId, input.workspaceId)).map(p => p.id)) },
+      8,
+    )
   }
+  return { knowledge, matches }
+}
+
+export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> {
+  const message = input.message.trim()
+  const intent = classifyIntent(message)
+  const { knowledge, matches } = await gatherSources(input, message, intent)
 
   const sources = matches.map(m => ({
     kind: m.kind,
@@ -62,7 +82,7 @@ export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> 
     similarity: Math.round(m.similarity * 100) / 100,
   }))
 
-  const llmConfigured = await aiAvailable(input.projectId ? { projectId: input.projectId } : null, { module: 'chatbot' })
+  const llmConfigured = await aiAvailable(aiScopeOf(input), { module: 'chatbot' })
   if (llmConfigured) {
     const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const llm = await generateAnswer(system, [...trimHistory(input.history), { role: 'user', content: message }])
@@ -131,19 +151,12 @@ function trimHistory(history: ChatMessage[]): ChatMessage[] {
 export async function streamAnswer(input: AnswerInput): Promise<ReadableStream<Uint8Array>> {
   const message = input.message.trim()
   const intent = classifyIntent(message)
-  const knowledge = await gatherKnowledge(intent, input.projectId, message)
-
-  let matches: Match[] = []
-  if (needsSemantic(intent)) {
-    const scope = isCrossProject(intent) ? null : knowledge.scopeProjectId
-    await ensureProjectIndexed(scope) // 색인이 비어 있으면 이 질문에서 자동 채움(자가 치유)
-    matches = await retrieveContext(message, scope, 8)
-  }
+  const { knowledge, matches } = await gatherSources(input, message, intent)
 
   const enc = new TextEncoder()
   const fallback = (degraded = false) => deterministicAnswer(knowledge, matches, intent, degraded)
 
-  if (await aiAvailable(input.projectId ? { projectId: input.projectId } : null, { module: 'chatbot' })) {
+  if (await aiAvailable(aiScopeOf(input), { module: 'chatbot' })) {
     const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const iter = await generateAnswerStream(system, [...trimHistory(input.history), { role: 'user', content: message }])
     if (iter) {

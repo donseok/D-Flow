@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { getProjectRoster } from '@/lib/data/members'
-import { listProjects } from '@/app/actions/project'
+import { listProjectsWithState } from '@/app/actions/project'
 import {
   analyzeProject,
   summarizeProject,
@@ -23,6 +23,7 @@ import { extractSearchKeywords, type ChatIntent } from './intent'
 import type { ProjectMember, TeamCode } from '@/lib/domain/types'
 import { projectTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
+import { projectsWithModule } from '@/lib/modules/gate'
 
 /**
  * 프로젝트 이름 — 동시에 RLS 관문이다. 세션으로 프로젝트 행을 읽어 없으면(다른 워크스페이스·없는 프로젝트) throw 한다.
@@ -64,8 +65,29 @@ export const loadProjectAnalysis = cache(async (projectId: string): Promise<Load
   }
 })
 
-async function allProjectSummaries(): Promise<{ summaries: ProjectSummary[]; excludedCount: number }> {
-  const projects = (await listProjects()) as { id: string; name: string }[]
+/**
+ * 옛 챗의 프로젝트를 넘는 원천(전사 요약·프로젝트 없는 의미검색 거르기·패널 문맥 개수) — 요청 범위의 워크스페이스에서
+ * 볼 수 있고(listProjects — RLS + 비공개 명단, canSeeProject) chatbot 이 켜진 프로젝트(U2b-5 리뷰 수정 CC2).
+ * 관문은 그 워크스페이스의 chatbot 만 본다 — 원천을 좁히지 않으면 다른 워크스페이스·chatbot 을 끈 프로젝트의 요약이 섞이고(모듈 끔 우회),
+ * 의미검색 RPC(SECURITY INVOKER — RLS 는 워크스페이스 소속만)는 명단 밖 비공개 프로젝트의 청크까지 준다. RLS 에만 기대지 않는다.
+ * 범위: 프로젝트 질문이면 그 프로젝트의 워크스페이스, 프로젝트 없는 질문이면 관문이 확인한 워크스페이스. 둘 다 없으면 던진다 —
+ * 전 프로젝트로 넓히지 않는다(fail-closed). 목록 조회 실패도 던진다 — '등록된 프로젝트가 없습니다'로 위장하지 않는다(라우트의 500).
+ * 모듈 판정 실패는 그 프로젝트를 뺀다(닫는 쪽, 원인은 관문이 로그).
+ */
+export const chatProjectsIn = cache(async (projectId: string | null, workspaceId: string | null): Promise<{ id: string; name: string }[]> => {
+  if (!projectId && !workspaceId) throw new Error('옛 챗 범위가 없다 — 프로젝트나 워크스페이스가 있어야 한다')
+  const listed = await listProjectsWithState()
+  if (listed.degraded) throw new Error('프로젝트 목록 조회 실패 — 옛 챗 원천을 정하지 못했다')
+  const projects = listed.projects as { id: string; name: string; workspace_id?: string | null }[]
+  const wid = projectId ? projects.find(p => p.id === projectId)?.workspace_id ?? null : workspaceId
+  if (!wid) return []
+  const inWorkspace = projects.filter(p => p.workspace_id === wid)
+  const on = new Set(await projectsWithModule(inWorkspace.map(p => p.id), 'chatbot'))
+  return inWorkspace.filter(p => on.has(p.id)).map(p => ({ id: p.id, name: p.name }))
+})
+
+async function allProjectSummaries(projectId: string | null, workspaceId: string | null): Promise<{ summaries: ProjectSummary[]; excludedCount: number }> {
+  const projects = await chatProjectsIn(projectId, workspaceId)
   const results = await Promise.all(
     projects.map(async p => {
       try {
@@ -102,11 +124,12 @@ function withRosterFailure(k: Knowledge): Knowledge {
 }
 
 /** 의도 + 프로젝트 컨텍스트 → 구조화 사실/답변 문장(LLM 근거 또는 결정형 답변).
- *  message 는 freeform 키워드 검색 감지에만 쓰인다(생략 시 감지 안 함). */
-export async function gatherKnowledge(intent: ChatIntent, projectId: string | null, message = ''): Promise<Knowledge> {
-  // 전사 의도이거나 현재 선택된 프로젝트가 없으면 전체 프로젝트 요약을 컨텍스트로.
+ *  message 는 freeform 키워드 검색 감지에만 쓰인다(생략 시 감지 안 함).
+ *  workspaceId — 프로젝트 없는 질문의 범위(관문이 확인한 값, CC2). 전사 요약은 그 범위의 프로젝트만(chatProjectsIn). */
+export async function gatherKnowledge(intent: ChatIntent, projectId: string | null, message = '', workspaceId: string | null = null): Promise<Knowledge> {
+  // 전사 의도이거나 현재 선택된 프로젝트가 없으면 범위 안 프로젝트 요약을 컨텍스트로.
   if (intent === 'overview' || !projectId) {
-    const { summaries, excludedCount } = await allProjectSummaries()
+    const { summaries, excludedCount } = await allProjectSummaries(projectId, workspaceId)
     const text = answerOverview(summaries, excludedCount)
     return { text, facts: text, scopeProjectId: null }
   }
@@ -158,10 +181,9 @@ export interface BotContext {
   weekStartCount: number
 }
 
-/** 패널 부트스트랩 — 환영 메시지/프로액티브 인사이트 렌더용 컨텍스트. */
-export async function buildBotContext(projectId: string | null): Promise<BotContext> {
-  const projects = await listProjects()
-  const totalProjects = projects.length
+/** 패널 부트스트랩 — 환영 메시지/프로액티브 인사이트 렌더용 컨텍스트. 프로젝트 개수는 답의 원천과 같은 범위(chatProjectsIn, CC2). */
+export async function buildBotContext(projectId: string | null, workspaceId: string | null): Promise<BotContext> {
+  const totalProjects = (await chatProjectsIn(projectId, workspaceId)).length
   if (!projectId) return { currentProject: null, totalProjects, weekStartCount: 0 }
   try {
     const { analysis, name } = await loadProjectAnalysis(projectId)

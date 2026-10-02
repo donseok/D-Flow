@@ -6,7 +6,8 @@ import { walk } from './_walk'
 
 const PATTERN = /resolveSoleWorkspaceId|requireSessionModule\(null|requireModulePage\(null|aiAvailable\(null/g
 const ROOTS = ['src/app', 'src/components', 'src/lib']
-const EXCLUDE = new Set(['src/lib/modules/gate.ts', 'src/lib/modules/pageGate.ts', 'src/lib/modules/aiAvailable.ts', 'src/lib/authz/workspace.ts'])
+// aiAvailable.ts 는 null 범위를 없애 감시 대상으로 돌렸다(CC3) — 다시 유일 워크스페이스 판정을 들이면 여기서 잡힌다
+const EXCLUDE = new Set(['src/lib/modules/gate.ts', 'src/lib/modules/pageGate.ts', 'src/lib/authz/workspace.ts'])
 const isV1 = (f: string) => f.startsWith('src/app/api/v1/')
 
 // UI-2b 과제 34 로 세션 라우트·minutes-answer 가 요청의 워크스페이스로 판정한다 — 임시 허용 0(V19)

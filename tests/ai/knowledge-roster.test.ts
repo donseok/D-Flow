@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
-vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
+vi.mock('@/app/actions/project', () => ({ listProjectsWithState: vi.fn(async () => ({ projects: [], degraded: false })) }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: vi.fn(async () => ({
@@ -58,7 +58,7 @@ describe('knowledge — 명단 조회 실패', () => {
     expect(errSpy).not.toHaveBeenCalled()
   })
   it('프로젝트 없는 전사 요약은 명단을 읽지 않는다', async () => {
-    const k = await gatherKnowledge('overview', null)
+    const k = await gatherKnowledge('overview', null, '', 'ws-1')
     expect(mocks.getProjectRoster).not.toHaveBeenCalled()
     expect(k.facts).not.toContain('명단 조회 실패')
   })

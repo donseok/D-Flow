@@ -11,7 +11,6 @@ vi.mock('@/lib/modules/effective', () => ({ effectiveModules: m.effectiveModules
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
 import { codeLines, walk } from '../invariants/_walk'
-import { makeActor } from '../fixtures/actor'
 const { aiAvailable } = await vi.importActual<typeof import('@/lib/modules/aiAvailable')>('@/lib/modules/aiAvailable')
 
 const WID = '00000000-0000-0000-7e57-000000001411', PID = '00000000-0000-0000-7e57-000000001412', MID = '00000000-0000-0000-7e57-000000001413'
@@ -59,12 +58,12 @@ describe('aiAvailable — 조합', () => {
     ['동적 사용', { digest: 'DYNAMIC_SERVER_USAGE' }],
     ['notFound', { digest: 'NEXT_HTTP_ERROR_FALLBACK;404' }],
     ['redirect', { digest: 'NEXT_REDIRECT;replace;/login;307;' }],
-  ])('Next 제어 흐름 신호(%s)는 false 로 삼키지 않고 다시 던진다 — 설정 조회에서도, 행위자 조회에서도', async (_n, sig) => {
+  ])('Next 제어 흐름 신호(%s)는 false 로 삼키지 않고 다시 던진다 — 워크스페이스 설정 조회에서도, 프로젝트 설정 조회에서도', async (_n, sig) => {
     const signal = Object.assign(new Error('signal'), sig)
     m.getWorkspaceConfig.mockRejectedValueOnce(signal)
     await expect(aiAvailable({ workspaceId: WID }, { module: 'weekly' })).rejects.toBe(signal)
-    m.getActor.mockRejectedValueOnce(signal)
-    await expect(aiAvailable(null, { module: 'chatbot' })).rejects.toBe(signal)
+    m.getProjectConfig.mockRejectedValueOnce(signal)
+    await expect(aiAvailable({ projectId: PID }, { module: 'chatbot' })).rejects.toBe(signal)
   })
 })
 
@@ -112,23 +111,13 @@ describe('aiAvailable — 스코프 네 모양', () => {
     expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID }, { client: c })
     expect(m.getProjectConfig).not.toHaveBeenCalled()
   })
-  it('null — 세션 행위자의 유일 워크스페이스, 없으면 false 와 [aiAvailable] 로그', async () => {
-    m.getActor.mockResolvedValueOnce(makeActor({ userId: 'u', workspaceRoles: new Map([[WID, 'member']]) }))
+  it('범위는 요청이 정한다 — 행위자의 소속으로 추측하지 않는다(null 범위 없음, CC3): 두 워크스페이스는 각자의 설정으로 판정', async () => {
     m.effectiveModules.mockResolvedValue(new Set(['chatbot']))
-    expect(await aiAvailable(null, { module: 'chatbot' })).toBe(true)
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    m.getActor.mockResolvedValueOnce(makeActor({ userId: 'u', workspaceRoles: new Map() }))
-    expect(await aiAvailable(null, { module: 'chatbot' })).toBe(false)
-    expect(err.mock.calls[0][0]).toBe('[aiAvailable]')
-  })
-  it('null — 소속이 둘 이상이면 false, 어느 워크스페이스의 설정도 읽지 않는다(첫 워크스페이스로 판정하면 AI 를 끈 곳의 데이터가 LLM 으로 간다, P13)', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    m.getActor.mockResolvedValueOnce(makeActor({ userId: 'u', workspaceRoles: new Map([[WID2, 'member'], [WID, 'admin']]) }))
-    m.effectiveModules.mockResolvedValue(new Set(['chatbot']))
-    expect(await aiAvailable(null, { module: 'chatbot' })).toBe(false)
-    expect(m.getWorkspaceConfig).not.toHaveBeenCalled()
-    expect(m.effectiveModules).not.toHaveBeenCalled()
-    expect(err.mock.calls[0][0]).toBe('[aiAvailable]')
+    m.getWorkspaceConfig.mockImplementation(async (wid: string) => ({ workspaceId: wid, keys: { 'ai.enabled': { status: 'set', value: wid === WID } } }))
+    expect(await aiAvailable({ workspaceId: WID }, { module: 'chatbot' })).toBe(true)
+    expect(await aiAvailable({ workspaceId: WID2 }, { module: 'chatbot' })).toBe(false)
+    expect(m.getWorkspaceConfig.mock.calls.map((c) => c[0])).toEqual([WID, WID2])
+    expect(m.getActor).not.toHaveBeenCalled()
   })
 })
 
