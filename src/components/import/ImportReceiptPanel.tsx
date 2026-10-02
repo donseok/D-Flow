@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { ImportReceiptResult, ImportReceiptView } from '@/app/actions/importReceipts'
 import { isUuidLike } from '@/lib/domain/validate'
-import { seoulStamp } from '@/lib/domain/dates'
+import { stampIn } from '@/lib/domain/calendar'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 export type ReceiptPanelState = { kind: 'found'; receipt: ImportReceiptView } | { kind: 'missing' } | { kind: 'invalid' } | { kind: 'error' }
@@ -21,7 +21,8 @@ export async function receiptStateOf(
   return r.receipt ? { kind: 'found', receipt: r.receipt } : { kind: 'missing' }
 }
 
-export function ImportReceiptPanel({ state, locale }: { state: ReceiptPanelState; locale: Locale }) {
+/** timeZone = 그 프로젝트 달력의 tz(SP5 — 서울 고정 아님). null 은 달력을 못 읽음 — 시각만 '—'(다른 tz 로 잇지 않는다, 원인은 페이지가 로그) */
+export function ImportReceiptPanel({ state, locale, timeZone }: { state: ReceiptPanelState; locale: Locale; timeZone: string | null }) {
   const tr = (k: DictKey) => t(locale, k)
   if (state.kind === 'invalid') return <StatusMessage kind="empty" title={tr('importWizard.receiptInvalid')} />
   if (state.kind === 'missing') return <StatusMessage kind="empty" title={tr('importWizard.receiptMissing')} detail={tr('importWizard.receiptMissingDesc')} />
@@ -37,7 +38,7 @@ export function ImportReceiptPanel({ state, locale }: { state: ReceiptPanelState
         {cell('importWizard.runId', <span title={r.commandId}>{r.commandId.slice(0, 8)}</span>, 'font-mono')}
         {cell('importWizard.doneMode', tr(r.mode === 'append' ? 'importWizard.modeAppend' : 'importWizard.modeReplace'))}
         {cell('importWizard.receiptCount', r.count, 'tabular-nums')}
-        {cell('importWizard.receiptAt', seoulStamp(r.createdAt), 'tabular-nums')}
+        {cell('importWizard.receiptAt', timeZone ? stampIn(timeZone, r.createdAt) : '—', 'tabular-nums')}
       </dl>
     </section>
   )

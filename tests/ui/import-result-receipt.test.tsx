@@ -31,17 +31,23 @@ describe('ImportRunSummary — 결과 카드의 실행 ID·영수증 링크·중
 })
 
 describe('?receipt= 패널', () => {
-  it('찾음 — 실행 ID 8자·모드·건수·시각(서울)', () => {
-    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" />)
+  it('찾음 — 실행 ID 8자·모드·건수·시각(프로젝트 달력의 tz — SP5, 서울 고정 아님)', () => {
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone="Asia/Seoul" />)
     expect(html).toContain('data-import-receipt')
     expect(html).toContain('>00000000<')
     expect(html).toContain('42')
     expect(html).toContain('2026-10-02 10:02')
     expect(html).toContain(tKo('importWizard.modeReplace'))
+    expect(renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone="America/Los_Angeles" />)).toContain('2026-10-01 18:02')
+  })
+  it('달력을 못 읽었으면(timeZone null) 시각만 \'—\' — 다른 tz 로 잇지 않는다', () => {
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone={null} />)
+    expect(html).toContain('>—<')
+    expect(html).not.toContain('2026-10-02 10:02')
   })
   it('영어 화면 — 네 상태 모두 한글 0자(SP3a CR-13 꼴)', () => {
     for (const state of [{ kind: 'found', receipt }, { kind: 'missing' }, { kind: 'invalid' }, { kind: 'error' }] as const) {
-      const html = renderToString(<ImportReceiptPanel state={state} locale="en" />)
+      const html = renderToString(<ImportReceiptPanel state={state} locale="en" timeZone="UTC" />)
       expect(HANGUL.test(html.replace(/<[^>]*>/g, '')), state.kind).toBe(false)
     }
   })
@@ -56,7 +62,7 @@ describe('?receipt= 패널', () => {
     expect(await receiptStateOf(CMD, async () => ({ ok: true, receipt: null }))).toEqual({ kind: 'missing' })
     expect(await receiptStateOf(CMD, async () => ({ ok: false, error: '실행 기록을 불러오지 못했습니다.' }))).toEqual({ kind: 'error' })
     expect(await receiptStateOf(CMD, async () => ({ ok: true, receipt }))).toEqual({ kind: 'found', receipt })
-    const html = renderToString(<ImportReceiptPanel state={{ kind: 'error' }} locale="ko" />)
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'error' }} locale="ko" timeZone="UTC" />)
     expect(html).toContain(tKo('importWizard.receiptError'))
   })
 })
