@@ -275,3 +275,45 @@ DARK4=p-weekly,p-attendance,agents,p-office,p-office-lane,p-agents,p-wiki,p-wiki
 ### 알려진 도구 상태
 
 - `ui2a-h1` 의 `withProblems`: `mobile-menu@1280x720`·`p-wbs-fullscreen@1280x720·390`(클릭 대상이 그 크기에 없음 — UI-1 부터 같은 행의 알려진 한계, 화면 문제 아님).
+
+## 7. UI-2b 눈확인(에이전트 — 과제 38, 사용자 확인 전)
+
+- 기준 = UI-2 착수점 `8a84269`(스크래치 `lane-b-base` · 3202 · 빌드 `T1Ky7IAqYrNJRQwZejnI5`), 머리 = `256652a`(DD1 — 캡처 서버 빌드 `oEi0sF6IIoXxcl7s6FMIo`) · 키보드 재측정 `40c4127`(캡처 행 선택자 한 줄 — 앱 코드 같음). 시드 2026-10-02. 증거 폴더 `qa/sp3b/ui2b-base`·`ui2b`·`ui2b-shell`·`ui2b-accent-{default,bright,dark}`·`ui2b-scrolled`·`ui2b-settings-bottom`·`ui2b-nojs`·`ui2b-nojs-ref`·`ui2b-fs-ai`·`ui2b-h1`·`ui2b-broken`·`ui2b-base-axe`·`ui2b-tab2`, 비교표 `diff-ui2b-base--ui2b-pair.md`·`diff-ui2b-base--ui2b.md`, 대조표 `ui2b-sheet.html`(섹션 11 · axe 174행 · tab).
+- 스모크: `smoke:prod`(3201) 통과(`smoke-ui2b.txt`). 서버(3201·3202)는 묶음마다 내려갔다.
+- 공통 묶음: vitest 784 files · 9,992 tests(실패 1 = 알려진 `baseline-cli`), lint 0 errors(경고 4 기존), typecheck 0, build 통과. `breakpoint-safety-net`·`platform-guards`·`guard-signatures` 무수정 초록, `globals.css` 안전망 블록 sha1 이 `b4283c0`·`305a3b4`·머리에서 같다. 임시 허용(`'UI-2b: '`·`'UI-2b — '`) 0·0·0, 브리지·`ProjectTabs`·`SECTION_LABEL` 잔재 0, `(legacy)` route 10(스텁 9 + 간트 — 판정 W1).
+- DB 묶음: `db:reset` → `dev:bootstrap` → `test:rls` 28 files · 289 tests(건너뜀 0) → `settings:verify` 초록 → 캡처 시드.
+
+### 스파이크 결과(`.superpowers/sp3b/spike-ui2.md`)
+
+| # | 판정 |
+|---|---|
+| S-2 | 혼합 — 범위 레이아웃이 던지는 404 는 HTTP 404, 로딩 경계 안 페이지 404 는 200 + notFound digest. E2E E4 는 '404 또는 digest'(실측: 세 경로 모두 404 + digest) |
+| S-3 | 통과 — 대안(`scopeMatchesPath` 로 게시 기다림) 뒤 `/w↔/p` 이동당 `/api/shell` 1회·소켓 1·URL 커밋 p95 83ms, `/w↔(global)` AI 입력·레일 보존 |
+| S-6 | 통과 — 범위 레이아웃 `generateMetadata` 의 icons 가 루트 파일 아이콘을 덮는다(C `3cae800`), `icon.tsx`·`apple-icon.tsx` 무변경 |
+| S-7 | 회의록 탐색기 문서형 유지 + 트리만 lg 고정(BB2 `0a8538a` — 26건 재측정에서 트리 이탈 수정) |
+| S-8 ③ | 통과 — 전환기 B 뒤 65ms 안에 사이드바 '전체 보기'가 B 경로(`router.refresh()` 불필요) |
+
+### 판정표(스펙 §8.5 UI-2b 행)
+
+| 항목 | 통과 조건 | 결과 | 산출 |
+|---|---|---|---|
+| (a) 셸 행렬 | 범위마다 그 범위 내비, 접힘·펼침, duo 전환, 드로어, 브레드크럼 '워크스페이스 전체' 칩, 에이전트 세 화면, 설정 저장 바, 에이전트 보기 전환, WBS 스크롤 하나, AI 레일 병치·오버레이, 로고·accent·파비콘, 홈·내 업무 v0 | **통과** — 176장(22행 × 네 크기 × 라이트·다크), problems 은 그 크기에 UI 가 없는 click-failed 뿐(전환기·AI 버튼은 390 에 없음, 드로어·햄버거는 lg 미만 전용). 열어 본 장: ws-switcher-open 1440 다크(두 워크스페이스·체크), drawer-project 390 다크(프로젝트 내비·닫기), ws-home-collapsed 1280(64px 아이콘 레일), p-wbs 1280(채움형 — 그리드만 스크롤), rail-ai-1280 → 1440 병치·1280 오버레이, ws-agents 1440(브레드크럼 '워크스페이스 전체' + 에이전트 현황 활성). accent 셋 24장 problems 0 — 밝은 `#ffd43b` 은 라이트 세트 `#8c7316` 로 어두워져 링크·아바타·활성 칩에, 어두운 `#1c1c6b` 다크는 `#7181d8` 계열(열어 봄). 설정 바닥 6장 — 저장 바(변경 0개)가 마지막 입력을 가리지 않음 | `ui2b-shell/`·`ui2b-accent-*/`·`ui2b-settings-bottom/` |
+| 가시 h1 = 1 | 모든 라우트 × 1280×720·390 | **미충족 3라우트(기존)** — 66행 132장 중 `ws-minute`·`minute`(스텁 최종)·`share` 가 두 크기 모두 2. 둘째 h1 은 회의록 본문 마크다운의 `# 제목`(시드 본문 첫 줄)을 `MarkdownView` 가 h1 로 그린 것 — UI-2a 기록(§6)에도 같은 2. 셸·프레임의 h1 은 모든 장에서 1. 처리는 컨트롤러 판정(본문 제목 강등은 회의록·위키 공용 렌더러 변경) | `ui2b-h1/meta.json` |
+| (b) 전 라우트 회귀 | diff 장이 의도한 차이(셸 교체)뿐 | **통과** — 짝 36: diff 36·problem 0(옮긴 화면 전부 — 전역 바·브레드크럼·워크스페이스 내비·접기·main 여백 16px 이 원인, 본문 같음: agents⇔ws-agents 1440·meetings⇔ws-meetings 390 열어 봄). 옛 키 264: same 17·diff 140·new 96·problem 11 = 모두 click-failed(기준 서버에 `/w/<s>/projects` 가 없어 mobile-menu·account-popover 행이 클릭 대상 없음, p-wbs-fullscreen·mobile-menu 의 크기 한계는 UI-1 부터). 옛 키 최종 URL 전부 `/w/default/…`(p-gantt → `/p/<pid>/…`) | `diff-ui2b-base--ui2b*.md` |
+| (c) 스크롤 상태 | 고정 요소가 도구 줄을 덮지 않음 | **통과** — 28장 problems 0(p-weekly 1280 열어 봄 — 도구 줄 위 고정 요소 없음) | `ui2b-scrolled/` |
+| JS 끈 첫 페인트 | 사이드바 유무·폭·머리 높이가 JS 켬과 같다(D55) | **통과** — p-dashboard 1280·ws-home 390 비교(사이드바 232px·전역 바 48px 같음, 본문만 스켈레톤) | `ui2b-nojs`·`ui2b-nojs-ref` |
+| 전체 화면 AI | 레일이 전체 화면 안에 열리고 숨지 않는다(D56) | **통과** — p-wbs-fullscreen-ai 1440 라이트·다크(전체 화면 오른쪽 레일). 390·compact 행의 click-failed 는 크기 한계 | `ui2b-fs-ai/` |
+| 키보드 | Tab 순회 실패 0·미도달 0 | **통과(재측정)** — 첫 측정은 p-dashboard 미도달 `aside a…`(도구 행이 옛 셸 `<aside>` 를 가리킴 — 새 셸 내비는 `[data-side-rail] nav`) → `40c4127` 로 선택자를 고쳐 ws-home·p-dashboard·p-wbs × 라이트·다크 실패 0·미도달 0 | `ui2b-tab2/tab.json` |
+| axe | 머리 위반 ≤ 기준(라이트), 다크는 새 셸 파일에서 온 위반 0 | **조건부 통과** — 같은 키 라이트: agents·meetings·p-attendance·p-office·p-office-lane·p-weekly 같음, **p-dashboard 0→24**(같은 경로의 행 넷도 24). 24 는 개요 이슈 카드(`IssueStatusCard` — 이슈 없는 영역 카드 `opacity-60` + `text-ink-subtle`, 2.39·4.33)의 기존 결함: 컴포넌트·색 토큰이 UI-2 범위에서 바뀌지 않았고 기준은 같은 노드를 `incomplete`(15)로 남겼다(스크롤 주체가 main 하나로 바뀌어 접힘 밖 노드가 측정됨 — UI-1 의 p-office-lane 판정과 같은 부류). 라이트·다크 모두 셸 요소(header·nav·`data-side-rail`·`#app-rail`·브레드크럼·전환기·계정) 위반 노드 0 | `ui2b/axe.json`·`ui2b-base-axe/axe.json` |
+| 설정 손상 | 셸이 열리고 머리 알림, 설정 화면 열림, 개요 정상(D49) | **통과** — `navigation.menu:"oops"` 상태 8장 problems 0: 알림 '설정을 불러오지 못해 메뉴 일부를 숨겼습니다.'·'설정 열기', `/w/<s>/settings` 열림, 개요 정상(열어 봄). 묶음 안에서 원래 values 로 복원·대조 | `ui2b-broken/` |
+| E2E·스모크·성능 | Step 3·4 | E2E E1·E2·E4~E11 10/10 ✓·스모크 통과(`sp3b-e2e.md`) · 성능은 `sp3b-perf.md`(시리즈 1·2 초과, 시리즈 3·9회 합 통과 — 잡음 기록) | 기록 문서 |
+
+### 관찰(이월 후보)
+
+- 390 회의 달력(`ws-meetings`·`p-meetings`): main 좌우 여백이 16px 로 늘어 칸이 좁아져 공휴일 표지 글자가 잘린다('개'·'대'·'한' 이 반쪽) — 기준(여백 6px)에서는 보였다.
+- 개요 이슈 카드의 대비(위 axe 행) — 이슈 없는 영역 카드의 흐림(`opacity-60`)과 `text-ink-subtle` 겹침. 화면 소유 SP 몫.
+- 회의록 본문 `# 제목` 의 h1(위 h1 행).
+
+### UI 위험 목록(CLAUDE.md — 컨트롤러 반영 몫)
+
+`.githooks/pre-push` 의 `UI_RE` 는 과제 31 에서 범위 레이아웃 셋을 더했다. `CLAUDE.md` '브랜치' 절의 UI 위험 파일 목록에 같은 셋 — `src/app/(app)/w/[slug]/layout.tsx`·`src/app/(app)/p/[projectId]/layout.tsx`·`src/app/(app)/(global)/layout.tsx` — 을 더한다(이 과제는 CLAUDE.md 를 고치지 않았다).
