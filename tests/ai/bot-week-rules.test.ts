@@ -1,6 +1,6 @@
 // 봇의 주 규칙(SP5 A 과제 17 — 스펙 D13 ③·D34·§6.1 A) — ① 일요일 규칙 프로젝트에서 주간 도구가 일요일 기준일을 거부하지 않고 아무 날짜를
 // 그 프로젝트의 키로 정규화한다 ② 라우터 '지난/이번/다음 주'·플래너 앵커가 요청 범위 달력의 weekPeriodOf 와 같은 기간이다
-// ③ 워크스페이스 질문에서 도구들이 같은 '이번 주'를 받는다 ④ upsertArea 의 p_from_week 가 그 프로젝트 규칙의 키다(월요일 규칙이면 월요일).
+// ③ 한 요청(플래너 계획)의 여러 도구·주 시작이 다른 여러 프로젝트가 같은 '이번 주'를 받는다 ④ upsertArea 의 p_from_week 가 그 프로젝트 규칙의 키다(월요일 규칙이면 월요일).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ④ 의 목(파일 최상위로 끌어올려진다 — ①~③ 은 이 모듈들을 쓰지 않는다)
@@ -11,6 +11,9 @@ vi.mock('@/lib/settings/projectConfig', async (orig) => ({ ...(await orig<object
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: () => ({ admin: { rpc: h.rpc } }) }))
 
 import { routeChatRequest } from '@/lib/ai/chat/router'
+import { orchestrateChatV2 } from '@/lib/ai/chat/orchestrator'
+import { createChatToolRegistry, type ChatToolExecutionContext } from '@/lib/ai/chat/registry'
+import type { ToolPlan } from '@/lib/ai/chat/planner'
 import { plannerDateAnchors } from '@/lib/ai/chat/planner'
 import { dateAnchors, inclusiveRange } from '@/lib/ai/chat/calendarAnchors'
 import { createCompareWeeklySheetsTool, createGetWeeklySheetTool } from '@/lib/ai/tools/weekly'
@@ -177,16 +180,50 @@ describe('①′ 요청 달력과 프로젝트의 주 시작이 다를 때 — �
   })
 })
 
-describe('③ 워크스페이스 질문 — 도구들이 같은 "이번 주"', () => {
-  // 프로젝트 없는 복수 도메인 질문은 지금 라우터에서 레거시로 간다(legacy_project_scope) — 결정형 도구 경로(내 회의)와 플래너 앵커가
-  // 같은 요청 범위 달력의 '이번 주'를 받는지로 본다
-  it('프로젝트 없는 질문의 범위 인자 = 플래너 앵커의 이번 주(요청 범위 달력 하나)', () => {
-    const r = routeChatRequest(req('이번 주 회의 알려줘', null), NOW, LA_SUN)
-    const ranges = r.calls.map(c => c.args as { from?: string; to?: string }).filter(a => a.from && a.to).map(a => `${a.from}~${a.to}`)
-    expect(r.calls.map(c => c.tool)).toEqual(['list_my_meetings'])
-    const week = plannerDateAnchors(LA_SUN, NOW.toISOString()).thisWeek
-    expect(week).toEqual(inclusiveRange(dateAnchors(LA_SUN, NOW).thisWeek))
-    expect(new Set(ranges)).toEqual(new Set([`${week.from}~${week.to}`]))
+describe('③ 한 요청의 여러 도구·여러 프로젝트가 같은 "이번 주"를 받는다(스펙 §6.1 A ③ — D13 ③·E19, M2)', () => {
+  // 라우터는 프로젝트 없는 복수 도메인 질문을 레거시로 보낸다(legacy_project_scope) — 이 성질은 플래너 계획 경로로 본다. 검증된 계획에
+  // 주 시작이 다른 두 프로젝트의 주간 시트와 내 회의를 넣고 orchestrateChatV2 로 실행한다.
+  const PA = '00000000-0000-0000-7e57-0000000019b1'   // 월요일 규칙(서울)
+  const PB = '00000000-0000-0000-7e57-0000000019b2'   // 일요일 규칙(LA)
+  it('(i) 도구 문맥의 timezone·now 가 하나 (ii) 각 프로젝트의 이번 주 키 (iii) 회의 범위 = 앵커', async () => {
+    const repo = { getSheet: vi.fn(async (pid: string, w: string) => repositoryOk({ report: { id: `r-${pid}-${w}`, projectId: pid, weekStart: w, title: '', updatedAt: null }, rows: [], areas: [] })) }
+    const settings = { getProjectConfig: vi.fn(async (pid: string) => repositoryOk(pid === PA
+      ? makeProjectConfig({ ...monProjectValues, 'calendar.timezone': 'Asia/Seoul' }, { projectId: PA })
+      : makeProjectConfig({ 'calendar.timezone': 'America/Los_Angeles' }, { projectId: PB }))) }
+    const contexts: ToolExecutionContext[] = []
+    const meetingArgs: unknown[] = []
+    const weekly = createGetWeeklySheetTool(repo as never, settings)
+    const registry = createChatToolRegistry([
+      { ...weekly, execute: (args, c) => { contexts.push(c); return weekly.execute(args, c) } },
+      {
+        name: 'list_my_meetings', requiredCapability: 'meetings:read',
+        async execute(args, c) {
+          contexts.push(c); meetingArgs.push(args)
+          return { ok: true, result: { status: 'ok', facts: {}, records: [], sources: [], asOf: c.now, truncated: false, warnings: [] } }
+        },
+      },
+    ])
+    const a = plannerDateAnchors(LA_SUN, NOW.toISOString())
+    const plan: ToolPlan = {
+      reason: '두 프로젝트의 이번 주 주간업무와 내 회의', needsClarification: false,
+      stages: [{ calls: [
+        { id: 'c1', tool: 'get_weekly_sheet', args: { projectId: PA, weekStart: a.weekRefs.thisWeek, limit: 10 } },
+        { id: 'c2', tool: 'get_weekly_sheet', args: { projectId: PB, weekStart: a.weekRefs.thisWeek, limit: 10 } },
+        { id: 'c3', tool: 'list_my_meetings', args: { from: a.thisWeek.from, to: a.thisWeek.to, limit: 50 } },
+      ] }],
+    }
+    const context: ChatToolExecutionContext = ctx({ capabilities: ['weekly:read', 'meetings:read'], allowedProjectIds: [PA, PB] })
+    for await (const _e of orchestrateChatV2({ projectId: null, message: '이번 주 두 프로젝트 주간업무와 내 회의', history: [] } as never, {
+      requestId: 'req_m2', registry, context, plan, now: NOW,
+    })) void _e
+    // (i) 한 요청 범위 달력 — 도구마다 '오늘'의 tz·now 가 같다
+    expect(contexts).toHaveLength(3)
+    expect(new Set(contexts.map(c => `${c.timezone}|${c.now}`))).toEqual(new Set([`America/Los_Angeles|${NOW.toISOString()}`]))
+    // (ii) 같은 기준일이 각 프로젝트 규칙의 이번 주 키로 — 월요일 프로젝트 10-12, 일요일 프로젝트 10-11
+    expect(Object.fromEntries(repo.getSheet.mock.calls.map(([pid, w]) => [pid, w]))).toEqual({ [PA]: '2026-10-12', [PB]: '2026-10-11' })
+    // (iii) 회의 범위 = 요청 범위 달력의 이번 주 앵커
+    expect(meetingArgs[0]).toMatchObject({ from: a.thisWeek.from, to: a.thisWeek.to })
+    expect(a.thisWeek).toEqual(inclusiveRange(dateAnchors(LA_SUN, NOW).thisWeek))
   })
 })
 

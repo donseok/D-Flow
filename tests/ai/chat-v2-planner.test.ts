@@ -384,6 +384,16 @@ describe('planWithConfiguredLlm', () => {
     expect(last?.content).toContain('2026-07-13 ~ 2026-07-19')
   })
 
+  it('주간 도구의 인자 힌트는 월요일을 요구하지 않고 날짜 앵커의 기준일을 복사하라고 한다(A-3 리뷰 P2, M2)', async () => {
+    vi.mocked(generateAnswer).mockResolvedValue('{"reason":"r","needsClarification":true,"clarification":"?"}')
+    await planWithConfiguredLlm(request, { allowedTools: ['get_weekly_sheet', 'compare_weekly_sheets'], now: '2026-07-19', calendar: SEOUL_MON })
+    const [system] = vi.mocked(generateAnswer).mock.calls[0]
+    expect(system).not.toContain('월요일')
+    expect(system).toMatch(/weekStart[^\n]*기준일/)
+    expect(system).toMatch(/fromWeekStart\/toWeekStart[^\n]*기준일/)
+    expect(system).toContain('(주간 도구 기준일 2026-07-16)')   // 이번 주 07-13 + 3일
+  })
+
   it('returns null when the llm is unavailable or returns unparseable text', async () => {
     vi.mocked(generateAnswer).mockResolvedValueOnce(null)
     expect(await planWithConfiguredLlm(request, { allowedTools: ALL_TOOLS, now: '2026-07-19', calendar: SEOUL_MON })).toBeNull()

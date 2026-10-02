@@ -112,14 +112,14 @@ export const PLANNER_TOOL_CATALOG: Record<CoreBotToolName, PlannerToolSpec> = {
     argKeys: ['projectId', 'weekStart', 'team', 'section', 'query', 'limit'],
     requiresProjectId: true,
     purpose: '한 주의 주간업무 시트 조회',
-    argHints: 'weekStart는 해당 주 월요일 YYYY-MM-DD 필수',
+    argHints: 'weekStart는 그 주에 든 날짜 YYYY-MM-DD 필수 — 날짜 앵커의 주간 도구 기준일을 그대로 복사(도구가 그 프로젝트의 주로 맞춘다)',
   },
   compare_weekly_sheets: {
     domain: 'weekly',
     argKeys: ['projectId', 'fromWeekStart', 'toWeekStart', 'team', 'section', 'query', 'limit'],
     requiresProjectId: true,
     purpose: '두 주의 주간업무 시트 비교',
-    argHints: 'fromWeekStart/toWeekStart는 각각 월요일 YYYY-MM-DD 필수',
+    argHints: 'fromWeekStart/toWeekStart는 각각 그 주에 든 날짜 YYYY-MM-DD 필수 — 날짜 앵커의 주간 도구 기준일을 그대로 복사(과거 주 → 최근 주)',
   },
   list_meetings: {
     domain: 'meetings',
