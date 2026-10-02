@@ -28,7 +28,8 @@ import { ScopeProvider, type ScopeValue } from '@/components/app/ScopeContext'
 import { OfficeNav } from '@/components/agents/OfficeNav'
 import { MeetingDetailModal } from '@/components/meetings/MeetingDetailModal'
 import { MinuteViewer } from '@/components/minutes/MinuteViewer'
-import { WikiChangeList } from '@/components/wiki/WikiShared'
+import { WikiChangeList, WikiItemCard } from '@/components/wiki/WikiShared'
+import type { WikiItem, WikiSource } from '@/lib/data/wiki'
 import type { Minute } from '@/lib/domain/types'
 
 const ACME: ScopeValue = { workspace: { id: 'w', slug: 'acme', name: 'Acme' }, projectId: null }
@@ -48,6 +49,29 @@ describe('화면 안 링크 — 범위 컨텍스트로 새 형식(D38 ①)', () 
     } as const
     expect(renderToStaticMarkup(<WikiChangeList locale="ko" changes={[change]} minutesBase="/w/acme/minutes" />)).toContain('href="/w/acme/minutes/minute-1?version=v-2"')
     expect(renderToStaticMarkup(<WikiChangeList locale="ko" changes={[change]} />)).toContain('href="/minutes/minute-1?version=v-2"')
+  })
+
+  // U2b-5 리뷰 수정 CC6 — 위키 근거 링크(WikiItemCard → WikiSourceLinks)도 기준 경로를 따른다. 블록 앵커가 있으면 원문 블록 링크, 없으면 회의록(판) 링크
+  it('위키 근거 링크는 페이지가 넘긴 기준 경로로 — 블록 앵커·판 링크 둘 다, 없으면 영구 링크 형식', () => {
+    const src = (o: Partial<WikiSource>): WikiSource => ({
+      id: 's', wikiItemId: 'i', minuteId: 'minute-1', minuteVersionId: 'v-2', bodyHash: null, blockIndex: null, blockHash: null,
+      evidenceExcerpt: null, relation: 'supports', createdAt: null, minuteTitle: '근거 회의', minuteDate: '2026-07-25', ...o,
+    } as WikiSource)
+    const item = {
+      id: 'i', projectId: 'p', topicId: 't', kind: 'fact', statement: '사실', lifecycleState: 'active', certainty: 'explicit',
+      decisionState: null, ownerTeam: null, ownerMemberId: null, dueDate: null, observedAt: null, validFrom: null, validTo: null,
+      origin: 'ai', autoUpdateLocked: false, reviewState: 'accepted', structuredData: {}, createdAt: '2026-07-25T00:00:00.000Z', updatedAt: '2026-07-25T00:00:00.000Z',
+      sources: [
+        src({ id: 's1', bodyHash: '0123456789abcdef', blockIndex: 2, blockHash: 'fedcba9876543210' }),
+        src({ id: 's2', minuteId: 'minute-2', minuteVersionId: null }),
+      ],
+    } as unknown as WikiItem
+    const scoped = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" showEvidence minutesBase="/w/acme/minutes" />)
+    expect(scoped).toContain('href="/w/acme/minutes/minute-1?block=2&amp;hash=fedcba9876543210&amp;body=0123456789abcdef&amp;version=v-2"')
+    expect(scoped).toContain('href="/w/acme/minutes/minute-2"')
+    expect(scoped).not.toMatch(/href="\/minutes\//)
+    const fallback = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" showEvidence />)
+    expect(fallback).toContain('href="/minutes/minute-2"')
   })
 })
 

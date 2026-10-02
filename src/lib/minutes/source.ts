@@ -13,13 +13,13 @@ const BLOCK_INDEX_RE = /^(0|[1-9]\d*)$/
 
 /**
  * 대시보드/이슈 출처에서 회의록 원문 블록으로 이동하는 내부 링크. 버전이 있으면 불변 원본을 연다.
- * base 의 기본값은 영구 링크 형식('/minutes' — 스텁이 행의 워크스페이스로 보낸다, D6). 슬러그를 아는 호출부는 wsHref(slug, 'minutes') 를 넘긴다.
+ * base 는 필수다 — 슬러그를 아는 호출부는 wsHref(slug, 'minutes'), 범위를 모르면 MINUTES_PERMALINK_BASE(영구 링크 형식, D6)를 명시한다(CC6).
  */
 export function minuteSourceHref(
   minuteId: string,
   source: MinuteSourceAnchor,
-  minuteVersionId?: string | null,
-  base: string = '/minutes',
+  minuteVersionId: string | null | undefined,
+  base: string,
 ): string {
   const params = new URLSearchParams({
     block: String(source.blockIndex),

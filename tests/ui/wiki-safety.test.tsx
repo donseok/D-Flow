@@ -21,6 +21,7 @@ vi.mock('next/navigation', () => ({
 
 import { WikiChangeList, WikiItemCard, wikiMinuteSourceHref } from '@/components/wiki/WikiShared'
 import { minuteSourceHref } from '@/lib/minutes/source'
+import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
 import { WikiTopicDetail } from '@/components/wiki/WikiTopicDetail'
 
 function item(overrides: Partial<WikiItem> = {}): WikiItem {
@@ -376,10 +377,10 @@ describe('Wiki 상태 표시 안전성', () => {
 describe('Wiki 클라이언트 번들 격리', () => {
   it('자체 원문 링크 빌더가 lib/minutes/source와 같은 URL을 만든다', () => {
     const anchor = { blockIndex: 12, blockHash: 'fedcba9876543210', bodyHash: '0123456789abcdef' }
-    expect(wikiMinuteSourceHref('minute-1', anchor))
-      .toBe(minuteSourceHref('minute-1', anchor))
-    expect(wikiMinuteSourceHref('minute-1', anchor, 'version-9'))
-      .toBe(minuteSourceHref('minute-1', anchor, 'version-9'))
+    expect(wikiMinuteSourceHref('minute-1', anchor, null, MINUTES_PERMALINK_BASE))
+      .toBe(minuteSourceHref('minute-1', anchor, null, MINUTES_PERMALINK_BASE))
+    expect(wikiMinuteSourceHref('minute-1', anchor, 'version-9', '/w/acme/minutes'))
+      .toBe(minuteSourceHref('minute-1', anchor, 'version-9', '/w/acme/minutes'))
   })
 })
 

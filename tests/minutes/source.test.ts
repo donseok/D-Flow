@@ -3,6 +3,7 @@ import { fnv1a64, splitMinuteBlocks } from '@/lib/minutes/blocks'
 import {
   minuteSourceHref, parseMinuteSourceAnchor, resolveMinuteSourceBlock,
 } from '@/lib/minutes/source'
+import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
 
 const bodyMd = '# 제목\n\n첫 문단\n\n둘째 문단'
 const blocks = splitMinuteBlocks(bodyMd)
@@ -10,7 +11,7 @@ const bodyHash = fnv1a64(bodyMd)
 
 describe('minute source deep link', () => {
   it('블록 인덱스와 해시를 URL에 보존한다', () => {
-    expect(minuteSourceHref('m1', { blockIndex: 2, blockHash: blocks[2].hash, bodyHash }))
+    expect(minuteSourceHref('m1', { blockIndex: 2, blockHash: blocks[2].hash, bodyHash }, null, MINUTES_PERMALINK_BASE))
       .toBe(`/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}`)
   })
 
@@ -19,10 +20,11 @@ describe('minute source deep link', () => {
       'm1',
       { blockIndex: 2, blockHash: blocks[2].hash, bodyHash },
       'version-1',
+      MINUTES_PERMALINK_BASE,
     )).toBe(`/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}&version=version-1`)
   })
 
-  it('base 를 주면 그 경로 아래로 — 범위를 아는 호출부가 새 형식을 넘긴다(기본값은 영구 링크 형식)', () => {
+  it('base 아래로 — 범위를 아는 호출부가 새 형식을 넘긴다(기본값 없음 — 영구 링크 형식도 명시, CC6)', () => {
     const a = { blockIndex: 2, blockHash: blocks[2].hash, bodyHash }
     expect(minuteSourceHref('m1', a, 'v1', '/w/acme/minutes'))
       .toBe(`/w/acme/minutes/m1?block=2&hash=${blocks[2].hash}&body=${bodyHash}&version=v1`)

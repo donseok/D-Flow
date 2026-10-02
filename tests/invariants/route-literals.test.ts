@@ -18,12 +18,11 @@ const PERMALINK = '영구: 영구 링크(D6) — 옛 형식을 내거나 두 형
 
 /** ③ 허용 목록 — 과제 9 의 생성 스크립트가 초안을 만들고 사유는 계획 과제 9 Step 3 의 규칙표로 달았다 */
 export const ALLOW: Record<string, { count: number; why: string }> = {
-  'src/components/wiki/WikiShared.tsx': { count: 1, why: '영구: base 기본값은 영구 링크 형식(D6) — 서버 컴포넌트라 페이지가 슬러그 경로(minutesBase)를 넘긴다' },
   'src/components/minutes/minuteLinks.ts': { count: 2, why: NO_SCOPE },
   'src/components/agents/SeatmapView.tsx': { count: 1, why: NO_SCOPE },
   'src/components/agents/OfficeNav.tsx': { count: 1, why: NO_SCOPE },
   'src/components/admin/AccountsManager.tsx': { count: 1, why: NO_SCOPE },
-  'src/lib/minutes/source.ts': { count: 1, why: '영구: base 기본값은 영구 링크 형식(D6) — 범위를 아는 호출부가 base 를 넘긴다' },
+  'src/lib/minutes/permalink.ts': { count: 1, why: '영구: 영구 링크 형식의 기준 경로 상수 하나(D6) — 링크 함수는 기준 경로를 필수로 받는다(CC6)' },
   'src/lib/domain/usageMenu.ts': { count: 8, why: '영구: 역사 키 — 옛 경로 사용 이벤트를 같은 키로 읽는다' },
   'src/lib/ai/chat/verifier.ts': { count: 5, why: PERMALINK },
   'src/lib/ai/chat/deep-links.ts': { count: 2, why: PERMALINK },

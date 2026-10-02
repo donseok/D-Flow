@@ -27,6 +27,7 @@ import type {
 } from '@/lib/data/wiki'
 import { WikiItemActions } from './WikiItemActions'
 import { WikiTrackedLink } from './WikiTrackedLink'
+import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
 
 /**
  * 회의록 원문 블록 링크. lib/minutes/source의 minuteSourceHref와 같은 형식이지만 직접 만든다.
@@ -35,15 +36,15 @@ import { WikiTrackedLink } from './WikiTrackedLink'
  * 그래프에 들어간다. minutes/source는 blocks.ts를 값으로 가져오고 blocks.ts는 unified·remark-parse·
  * remark-gfm을 끌어오므로, 링크 문자열 몇 줄 때문에 마크다운 파서 100KB가 Wiki 홈 번들에 실린다.
  * 형식이 갈리지 않도록 tests/ui/wiki-safety.test.tsx가 두 구현의 결과를 대조한다.
- * base 는 minuteSourceHref 와 같다 — 기본은 영구 링크 형식(스텁이 행의 워크스페이스로, D6). 이 파일은 서버 컴포넌트(위키 주제)로도
- * 그려져 useScope 를 읽을 수 없으므로, 페이지가 슬러그 워크스페이스의 회의록 경로를 minutesBase 로 내려 준다(D38 ①, 과제 35).
+ * base 는 minuteSourceHref 와 같이 필수다(CC6). 이 파일은 서버 컴포넌트(위키 주제)로도 그려져 useScope 를 읽을 수 없으므로, 페이지가
+ * 슬러그 워크스페이스의 회의록 경로를 minutesBase 로 내려 준다(D38 ①, 과제 35). 컴포넌트의 minutesBase 를 받지 못하면(범위 조회 실패) 영구 링크
+ * 형식(MINUTES_PERMALINK_BASE — 스텁이 행의 워크스페이스로, D6)이다.
  */
-const MINUTES_PERMALINK_BASE = '/minutes'
 export function wikiMinuteSourceHref(
   minuteId: string,
   source: { blockIndex: number; blockHash: string; bodyHash: string },
-  minuteVersionId?: string | null,
-  base: string = MINUTES_PERMALINK_BASE,
+  minuteVersionId: string | null | undefined,
+  base: string,
 ): string {
   const params = new URLSearchParams({
     block: String(source.blockIndex),
