@@ -106,14 +106,14 @@ export function SheetCell(p: SheetCellProps) {
           <span className="pointer-events-none absolute left-0 top-0 z-30 flex max-w-full -translate-y-1/2 gap-0.5">
             {p.peers.slice(0, CELL_PEERS_MAX).map(peer => (
               <span key={peer.connKey}
-                className="truncate rounded-sm px-1 text-[9px] font-bold leading-4"
+                className="truncate rounded-sm px-1 text-xs font-bold leading-4"
                 style={presenceStyle(peer.userId)}
                 title={peer.editing ? `${peer.name} · 입력 중` : peer.name}>
                 {peer.name}{peer.editing ? ' ✎' : ''}
               </span>
             ))}
             {p.peers.length > CELL_PEERS_MAX && (
-              <span className="rounded-sm bg-neutral-weak px-1 text-[9px] font-bold leading-4 text-neutral">
+              <span className="rounded-sm bg-neutral-weak px-1 text-xs font-bold leading-4 text-neutral">
                 +{p.peers.length - CELL_PEERS_MAX}
               </span>
             )}
@@ -129,7 +129,7 @@ export function SheetCell(p: SheetCellProps) {
           <div className="h-1.5 w-1.5 border border-surface bg-border-focus" />
         </div>
       )}
-      <span className="absolute right-1 top-0.5 z-30 text-[10px]">
+      <span className="absolute right-1 top-0.5 z-30 text-xs">
         {p.chip ? (
           p.chip.phase === 'saving' ? <span className="text-fg-muted">{p.chip.count}개 셀 저장 중…</span>
             : p.chip.phase === 'saved' ? <span className="text-success">저장됨</span>

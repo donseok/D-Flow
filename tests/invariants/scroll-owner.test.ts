@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { codeLines, walk } from './_walk'
 
-export const FILL_PAGES = ['src/app/(app)/p/[projectId]/wbs/page.tsx']       // S-7 이 '아니면'이면 w/[slug]/minutes/page.tsx 를 더한다
+export const FILL_PAGES = [
+  'src/app/(app)/p/[projectId]/wbs/page.tsx',       // S-7 이 '아니면'이면 w/[slug]/minutes/page.tsx 를 더한다
+  'src/app/(app)/p/[projectId]/weekly/page.tsx',    // 주간 시트(SP4 B #25 — 시트 상자가 스크롤 주인)
+]
 describe('scroll-owner', () => {
   it('page.tsx 에 세로 overflow-(y-)auto 가 없다', () => {
     const bad = walk('src/app').filter((f) => f.endsWith('page.tsx') && /overflow-(?:y-)?auto/.test(readFileSync(f, 'utf8')))

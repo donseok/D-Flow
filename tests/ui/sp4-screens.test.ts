@@ -43,3 +43,35 @@ describe('#25 주간 — 색 토큰', () => {
     expect(src).not.toContain('background: presenceColor(peer.userId)')
   })
 })
+
+const WEEKLY_FILES = [...WEEKLY_COLOR_FILES, 'src/components/weekly/CarryMappingModal.tsx', 'src/app/(app)/p/[projectId]/weekly/page.tsx']
+
+describe('#25 주간 — 채움형·상태·글자', () => {
+  it.each(WEEKLY_FILES)('%s — 12px 미만·uppercase·넓은 자간 0', (f) => { expect(read(f)).not.toMatch(SMALL_OR_CAPS) })
+  it('채움형 — 페이지는 variant="fill" 이고 스크롤 계약의 닫힌 목록에 있다(SP3b D19)', () => {
+    expect(read('src/app/(app)/p/[projectId]/weekly/page.tsx')).toContain('variant="fill"')
+    expect(read('tests/invariants/scroll-owner.test.ts')).toContain("'src/app/(app)/p/[projectId]/weekly/page.tsx'")
+  })
+  it('[RF3] 시트 상자가 스스로 스크롤한다(main 이 닫혀도 아래 행·채우기 핸들에 닿는다), 주 이동 줄은 sticky 가 아니다', () => {
+    const src = read('src/components/weekly/WeeklySheetView.tsx')
+    expect(src).toContain('<div className="isolate min-h-0 flex-1 overflow-auto">')
+    expect(src).not.toContain('top-(--frame-sticky-top)')
+    expect(src.match(/className="flex h-full min-h-0 flex-col gap-3"/g)?.length).toBe(3)
+  })
+  it('상태는 StatusMessage — 설정 필요·빈 시트, 매핑 창·AI 다시 쓰기의 오류', () => {
+    const view = read('src/components/weekly/WeeklySheetView.tsx')
+    expect(view).toContain('kind="needs_setup"')
+    expect(view).toContain('kind="empty"')
+    expect(view).not.toContain('<EmptyState')
+    for (const f of ['src/components/weekly/CarryMappingModal.tsx', 'src/components/weekly/WeeklyAiRewriteModal.tsx']) {
+      expect(read(f), f).toContain('kind="partial_error"')
+      expect(read(f), f).not.toContain('role="alert"')
+    }
+  })
+})
+
+describe('#25 주간 — 좁은 화면의 주 이동 줄', () => {
+  it('[RF3] 주 이동 줄은 줄을 바꿔 감싼다 — 채움형에서 main 이 닫혀 옆으로 넘친 내보내기 버튼에 닿을 길이 없다(390 눈확인)', () => {
+    expect(read('src/components/weekly/WeeklySheetView.tsx')).toContain('<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-1 pt-1">')
+  })
+})

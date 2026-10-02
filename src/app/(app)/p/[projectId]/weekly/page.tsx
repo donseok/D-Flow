@@ -49,7 +49,7 @@ export default async function WeeklyPage({
   const areas = pc.cfg.areas.weekly_section
 
   return (
-    <ProjectPageShell hero={hero}>
+    <ProjectPageShell hero={hero} variant="fill">
       <WeeklySheetView
         projectId={projectId}
         weekStart={weekStart}

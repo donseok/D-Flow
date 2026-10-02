@@ -105,7 +105,7 @@ function LintItem({ finding, canApply, onApply, onGo }: {
 }) {
   return (
     <li className="flex items-start gap-3 py-3">
-      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_TONE[finding.kind]}`}>
+      <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${KIND_TONE[finding.kind]}`}>
         {KIND_LABEL[finding.kind]}
       </span>
       <div className="min-w-0 flex-1">

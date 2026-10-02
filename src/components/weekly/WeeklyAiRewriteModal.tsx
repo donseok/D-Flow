@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Sparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { WEEKLY_CELL_MAX } from '@/lib/domain/weeklySheet'
 import type { WeeklyRewriteCandidate } from '@/lib/domain/weeklyRewrite'
 
@@ -74,9 +75,7 @@ export function WeeklyAiRewriteModal({
         </div>
 
         {error && (
-          <div role="alert" className="rounded-xl border border-danger/30 bg-danger-weak px-4 py-3 text-sm text-danger">
-            {error}
-          </div>
+          <StatusMessage kind="partial_error" blocking compact title={error} />
         )}
 
         {busy && items.length === 0 && (
