@@ -70,6 +70,11 @@ export async function weekStartToStored(prev: WeekStartRule[] | undefined, day: 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ctx.today)) return fail('프로젝트 시간대 설정을 읽지 못해 주 시작을 바꿀 수 없습니다. 시간대를 먼저 확인하세요.')
   if (!ctx.loadWeekKeys) return fail('주간보고 목록을 확인할 수 없어 주 시작을 바꿀 수 없습니다.')
   const keys = await ctx.loadWeekKeys()
+  // prev 없음 = 저장 값 손상(invalid — 이 키는 기본값이 있어 미설정이면 기본값이 실린다). 주간보고가 있으면 그 문서의 키를 정한 과거 규칙을
+  // 기본값으로 덮을 수 없다(fail-closed — K2). 문서가 0건이면 지킬 과거가 없어 요일 하나로 교체한다.
+  if (prev === undefined && keys.length > 0) {
+    return fail(`저장된 주 시작 규칙이 손상되어 바꿀 수 없습니다 — 주간보고 ${keys.length}건의 주차가 그 규칙을 따릅니다. 저장 값을 먼저 복구하세요.`)
+  }
   const r = applyWeekStartChange(prev ?? DEFAULT_WEEK_RULES, day, ctx.today, keys.length)
   return r.ok ? { ok: true, value: r.rules } : fail(r.error)
 }

@@ -74,6 +74,20 @@ describe('updateProjectSettings — calendar.week_start', () => {
     expect(await updateProjectSettings(PID, patch({ expectedRevision: rev, commandId: '00000000-0000-4000-8000-0000000019a3', set: { 'calendar.week_start': 'sunday' } }))).toMatchObject({ ok: true })
     expect(db.projects.get(PID)!.values['calendar.week_start']).toEqual([{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }])
   })
+  it('저장된 주 시작 규칙이 손상이고 주간보고가 있으면 기본값 위에서 계산하지 않고 거부한다 — RPC 미호출(K2)', async () => {
+    project({ 'calendar.week_start': 'monday' })      // 목록이 아니다 — 해석기가 invalid 로 둔다
+    db.weeklyReports.push({ project_id: PID, week_start: '2026-09-21' })
+    const r = await updateProjectSettings(PID, patch({ set: { 'calendar.week_start': 'sunday' } }))
+    expect(r).toMatchObject({ ok: false, kind: 'invalid', code: 'CONFIG_INVALID',
+      fieldErrors: [{ key: 'calendar.week_start', message: expect.stringContaining('손상') }] })
+    expect(db.rpcCalls).toHaveLength(0)
+    expect(db.projects.get(PID)!.values['calendar.week_start']).toBe('monday')
+  })
+  it('저장된 규칙이 손상이어도 주간보고가 0건이면 요일 하나로 교체한다(K2 — 지킬 과거 문서가 없다)', async () => {
+    project({ 'calendar.week_start': [{ day: 'sunday', from: '2026-09-27' }] })   // 첫 원소의 from 이 null 이 아니다 — 손상
+    expect(await updateProjectSettings(PID, patch({ set: { 'calendar.week_start': 'monday' } }))).toMatchObject({ ok: true })
+    expect(db.projects.get(PID)!.values['calendar.week_start']).toEqual(MON0)
+  })
   it('[RF3] unset(기본값으로) 이 월요일 문서에 막히면 CONFIG_IN_USE — 막는 주차가 키 오류 문구에 있다', async () => {
     project({ 'calendar.week_start': MON0 })
     db.weeklyReports.push({ project_id: PID, week_start: '2026-09-21' })
