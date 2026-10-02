@@ -31,8 +31,7 @@ import { nextShareState, type ShareOp, type ShareState } from '@/lib/minutes/sha
 import { createAdminClient } from '@/lib/supabase/admin'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
-import { correctMinuteBodyTime } from '@/lib/minutes/timeFix'
-import { minuteScopeTimezone } from '@/lib/minutes/timeFix.server'
+import { applyScopeTimeFix, type TimeFixWarning } from '@/lib/minutes/timeFix.server'
 import { resolveTeamRootFolderId, refileMinuteAfterProjectChange, loadFolderSnapshot } from '@/lib/minutes/folders'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { activeTeamCodesForMinuteScope, teamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
@@ -53,6 +52,8 @@ export interface MinuteActionResult {
   id?: string
   /** 녹취툴 시간대 보정이 적용됐으면 보정 전/후 시각과 옮겨 간 tz. UI 토스트용. */
   timeFix?: { from: string; to: string; tz: string }
+  /** 보정 대상이었는데 건너뛴 사유(A-4 리뷰 N4) — 업로드는 됐고 시간 줄은 원문 그대로다. UI 경고 토스트용 */
+  timeFixWarning?: TimeFixWarning
 }
 
 type Sb = Awaited<ReturnType<typeof createServerClient>>
@@ -290,14 +291,9 @@ export async function createMinute(
   // sb 는 사용자 세션 클라이언트라(admin 아님) resolveTeamRootFolderId 는 읽기만 한다 —
   // 프로젝트 루트가 아직 없으면(지연 생성 미적용) null → 미분류 폴백으로 등록 자체는 막지 않는다.
   const effectiveFolderId = folderId ?? await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId, targetWs)
-  // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·다운스트림 전부 보정본 사용(스펙 D13 ④)
-  // 범위 달력을 못 읽으면 쓰기 전 선행 조회 실패 — 중단한다(서울·UTC 로 대체하지 않는다)
-  let scopeTz: string
-  try { scopeTz = await minuteScopeTimezone({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs }) } catch (e) {
-    console.error('[minutes] 회의록 범위 달력 판독 실패', { workspaceId: targetWs, projectId: resolvedProject.projectId ?? null, cause: String(e) })
-    return { ok: false, error: ERR_LOOKUP }
-  }
-  const fix = correctMinuteBodyTime(input.bodyMd, { timeZone: scopeTz, fallbackDate: input.minuteDate })
+  // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·다운스트림 전부 보정본 사용(스펙 D13 ④).
+  // 보정은 업로드를 막지 않는다(A-4 리뷰 N4) — 범위 달력은 보정 대상일 때만 읽고, 못 읽거나 시각이 범위 밖이면 원문 그대로 + 경고
+  const { fix, warning: timeFixWarning } = await applyScopeTimeFix(input.bodyMd, { projectId: resolvedProject.projectId ?? null, workspaceId: targetWs }, input.minuteDate)
   if (fix.corrected) console.info(`[minutes] 시간 보정 적용: ${fix.from} → ${fix.to} (${fix.tz}, ${input.title.trim()})`)
   const bodyMd = fix.body
   const createdByName = displayNameFrom(user.user_metadata, user.email)
@@ -357,7 +353,7 @@ export async function createMinute(
         : wikiJobId === null ? Promise.resolve(null) : processMinuteWikiJob(wikiJobId),
     ])
   })
-  return { ok: true, id: minuteId, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined }
+  return { ok: true, id: minuteId, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined, ...(timeFixWarning ? { timeFixWarning } : {}) }
 }
 
 export async function updateMinuteMeta(
@@ -704,12 +700,8 @@ export async function replaceMinuteBody(
     console.error('[replaceMinuteBody] 회의록 날짜를 읽지 못했다', { id })
     return { ok: false, error: ERR_LOOKUP }
   }
-  let scopeTz: string
-  try { scopeTz = await minuteScopeTimezone({ projectId: own.scope.projectId, workspaceId: own.scope.workspaceId }) } catch (e) {
-    console.error('[replaceMinuteBody] 회의록 범위 달력 판독 실패', { id, workspaceId: own.scope.workspaceId, projectId: own.scope.projectId, cause: String(e) })
-    return { ok: false, error: ERR_LOOKUP }
-  }
-  const fix = correctMinuteBodyTime(bodyMd, { timeZone: scopeTz, fallbackDate: minuteDate })
+  // 보정은 업로드를 막지 않는다(A-4 리뷰 N4) — 보정 대상일 때만 범위 달력을 읽고, 못 읽거나 시각이 범위 밖이면 원문 그대로 + 경고
+  const { fix, warning: timeFixWarning } = await applyScopeTimeFix(bodyMd, { projectId: own.scope.projectId, workspaceId: own.scope.workspaceId }, minuteDate)
   if (fix.corrected) console.info(`[minutes] 본문 교체 시간 보정 적용: ${fix.from} → ${fix.to} (${fix.tz}, id=${id})`)
   const body = fix.body
 
@@ -758,7 +750,7 @@ export async function replaceMinuteBody(
         : wikiJobId === null ? Promise.resolve(null) : processMinuteWikiJob(wikiJobId),
     ])
   })
-  return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined }
+  return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined, ...(timeFixWarning ? { timeFixWarning } : {}) }
 }
 
 /** 첨부 확정 가드(0011 minute_files_attachment_guard)의 거부 사유 → 사용자 문구. 모르는 사유는 원문을 싣지 않는다. */

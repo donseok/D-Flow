@@ -203,6 +203,14 @@ export function MinuteUploadModal({
     // body는 createMinute가 메타와 v1까지 함께 기록했으므로 첨부 루프에서는 건너뛴다.
     const progress = { id: res.id, done: 1, scope }
     progressRef.current = progress
+    // 보정 대상이었는데 건너뛰었으면(업로드는 됐다) 경고 — 원문 시각 그대로라는 사실을 알린다(A-4 리뷰 N4)
+    if (res.timeFixWarning) {
+      toast({
+        title: t('min.timeFix.skippedTitle'),
+        description: t(res.timeFixWarning === 'invalid_time' ? 'min.timeFix.skippedInvalidTime' : 'min.timeFix.skippedCalendar'),
+        variant: 'info',
+      })
+    }
     if (res.timeFix) {
       toast({
         title: t('min.timeFix.title'),

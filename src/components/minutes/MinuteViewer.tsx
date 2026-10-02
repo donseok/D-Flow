@@ -644,6 +644,14 @@ export function MinuteViewer({
         fileName: f.name, filePath: path, size: f.size, mime: f.type || 'text/markdown',
       })
       if (!res.ok) { await sb.storage.from('minutes').remove([path]); setErr(res.error ?? t('min.err.upload')); return }
+      // 보정 대상이었는데 건너뛰었으면(업로드는 됐다) 경고 — 원문 시각 그대로라는 사실을 알린다(A-4 리뷰 N4)
+      if (res.timeFixWarning) {
+        toast({
+          title: t('min.timeFix.skippedTitle'),
+          description: t(res.timeFixWarning === 'invalid_time' ? 'min.timeFix.skippedInvalidTime' : 'min.timeFix.skippedCalendar'),
+          variant: 'info',
+        })
+      }
       if (res.timeFix) {
         toast({
           title: t('min.timeFix.title'),

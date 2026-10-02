@@ -26,9 +26,18 @@ function isRealDate(ymd: string): boolean {
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === ymd
 }
 
-/** UTC 의 그 날짜 HH:MM 을 tz 의 벽시계 HH:MM 으로(날짜가 넘어가도 시·분만 — 옛 % 24 와 같다) */
-function shiftTime(hhmm: string, date: string, timeZone: string): string {
-  return stampIn(timeZone, new Date(`${date}T${hhmm}:00Z`)).slice(11, 16)
+/** UTC 의 그 날짜 HH:MM 을 tz 의 벽시계 HH:MM 으로(날짜가 넘어가도 시·분만 — 옛 % 24 와 같다). 24:00 은 다음 날 00:00.
+ *  시각이 범위를 벗어나면(25:00·12:60 — Invalid Date) null — 보정하지 않는다(A-4 리뷰 N4: 예외로 업로드를 막지 않는다) */
+function shiftTime(hhmm: string, date: string, timeZone: string): string | null {
+  const at = new Date(`${date}T${hhmm}:00Z`)
+  if (Number.isNaN(at.getTime())) return null
+  return stampIn(timeZone, at).slice(11, 16)
+}
+
+/** 보정 대상인가 — 녹취툴 서명(4-마커)과 시간 줄이 모두 있을 때만. 액션은 이것이 참일 때만 범위 달력을 읽는다(손글 md 는 달력과 무관) */
+export function needsTimeFix(bodyMd: string): boolean {
+  const body = bodyMd ?? ''
+  return SIGNATURE_MARKERS.every(mk => body.includes(mk)) && TIME_LINE_RE.test(body)
 }
 
 export interface MinuteTimeFix {
@@ -40,6 +49,8 @@ export interface MinuteTimeFix {
   to?: string
   /** 보정된 경우 옮겨 간 시간대(IANA). 토스트가 꼬리에 적는다 */
   tz?: string
+  /** 보정 대상인데 건너뛴 사유 — 시각이 범위 밖(25:00 등). 원문 그대로 두고 화면이 경고한다 */
+  skipped?: 'invalid_time'
 }
 
 /** 녹취툴 산출물이면 `**시간**:` 줄을 UTC → 범위 tz 로 보정. 그 외·UTC 범위는 원본 그대로. */
@@ -55,6 +66,7 @@ export function correctMinuteBodyTime(bodyMd: string, opts: { timeZone: string; 
   const [, prefix, start, mid, end, tail] = match
   const s = shiftTime(start, date, opts.timeZone)
   const e = shiftTime(end, date, opts.timeZone)
+  if (s === null || e === null) return { body, corrected: false, skipped: 'invalid_time' }
   const next = body.replace(TIME_LINE_RE, `${prefix}${s}${mid}${e}${tail}`)
   return { body: next, corrected: true, from: `${start} ~ ${end}`, to: `${s} ~ ${e}`, tz: opts.timeZone }
 }

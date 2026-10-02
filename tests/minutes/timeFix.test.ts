@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { correctMinuteBodyTime } from '@/lib/minutes/timeFix'
+import { correctMinuteBodyTime, needsTimeFix } from '@/lib/minutes/timeFix'
 
 /** 기존 기대값의 범위 — 2026-07 서울은 +9 */
 const SEOUL = { timeZone: 'Asia/Seoul', fallbackDate: '2026-07-15' }
@@ -86,5 +86,21 @@ describe('correctMinuteBodyTime — 회의록 범위 tz 로 일반화(스펙 D13
   })
   it('자정을 넘는 시각은 시·분만(지금의 % 24 와 같다) — 서울 20:30 UTC → 05:30', () => {
     expect(correctMinuteBodyTime(toolBody('20:30 ~ 21:00'), SEOUL).to).toBe('05:30 ~ 06:00')
+  })
+})
+
+describe('범위를 벗어난 시각·보정 대상 판정(A-4 리뷰 N4)', () => {
+  it.each(['25:00 ~ 26:00', '12:60 ~ 13:00', '99:99 ~ 10:00'])('%s — throw 하지 않고 원문 그대로 + skipped invalid_time', (line) => {
+    const body = toolBody(line)
+    expect(correctMinuteBodyTime(body, SEOUL)).toEqual({ body, corrected: false, skipped: 'invalid_time' })
+  })
+  it('24:00 은 다음 날 00:00 으로 받는다(옛 % 24 와 같다) — 서울 09:00', () => {
+    expect(correctMinuteBodyTime(toolBody('24:00 ~ 24:00'), SEOUL).to).toBe('09:00 ~ 09:00')
+  })
+  it('needsTimeFix — 서명 넷 + 시간 줄이 있을 때만 참(범위 달력 판독도 그때만)', () => {
+    expect(needsTimeFix(toolBody('10:00 ~ 11:00'))).toBe(true)
+    expect(needsTimeFix('# 손으로 쓴 회의록\n- **시간**: 10:00 ~ 11:00')).toBe(false)
+    expect(needsTimeFix(toolBody('10:00 ~ 11:00').replace(/- \*\*시간\*\*:.*\n/, ''))).toBe(false)
+    expect(needsTimeFix('')).toBe(false)
   })
 })
