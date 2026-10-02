@@ -191,6 +191,40 @@ describe('CalendarSettingsPanel — 손상 키는 그 키만 막는다(A-5 리�
     await click(saveButton())
     expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.week_start': 'sunday' } }))
   })
+  // a6 리뷰 P3(Q1) — 키 단위 판정을 시간대·근무 요일에도. 손상 키는 건드렸을 때만 보내고, 건드리지 않은 손상 키가 저장 전체를 끄지 않는다
+  it('근무 요일이 손상돼도 주 시작만 바꿔 저장할 수 있다 — 보낸 set 은 주 시작 하나', async () => {
+    await render(props({ workingDays: calendarFieldOf({ status: 'invalid', error: '근무 요일이 올바르지 않습니다.' }) }))
+    expect(container.textContent).toContain('설정이 손상되었습니다')
+    await click(radio('sunday'))
+    expect(saveButton().disabled).toBe(false)
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.week_start': 'sunday' } }))
+  })
+  it('시간대가 손상돼도 근무 요일만 바꿔 저장할 수 있다 — 손상 시간대는 보내지 않는다', async () => {
+    await render(props({ timezone: calendarFieldOf({ status: 'invalid', error: '시간대 이름이 아닙니다.' }) }))
+    expect(container.textContent).toContain('변경 0개')
+    await click(container.querySelector<HTMLInputElement>('input[name="calendar-working-day"][value="6"]')!)
+    expect(saveButton().disabled).toBe(false)
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.working_days': [1, 2, 3, 4, 5, 6] } }))
+  })
+  it('손상된 주 시작에서 고른 요일은 "선택 취소"로 되돌릴 수 있다 — 막힌 미리보기가 다른 키 저장을 붙잡지 않는다', async () => {
+    m.previewWeekStartChange.mockResolvedValue({ ok: true, preview: { effectiveFrom: null, transitionDays: null, keptDocs: 2, blockingWeeks: [], error: '과거 전환을 바꿀 수 없습니다.' } })
+    await render(brokenWeek())
+    await click(radio('sunday'))
+    expect(saveButton().disabled).toBe(true)
+    await click(container.querySelector<HTMLButtonElement>('[data-week-start-clear]')!)
+    expect(radio('sunday').checked).toBe(false)
+    await click(container.querySelector<HTMLInputElement>('input[name="calendar-working-day"][value="6"]')!)
+    expect(saveButton().disabled).toBe(false)
+    await click(saveButton())
+    expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.working_days': [1, 2, 3, 4, 5, 6] } }))
+  })
+  it('손상되지 않은 주 시작에는 선택 취소가 없다(되돌리기는 원래 요일을 다시 고르는 것)', async () => {
+    await render()
+    await click(radio('sunday'))
+    expect(container.querySelector('[data-week-start-clear]')).toBeNull()
+  })
 })
 
 describe('CalendarSettingsPanel — 근무 요일·시간대', () => {
@@ -222,7 +256,7 @@ describe('CalendarSettingsPanel — 근무 요일·시간대', () => {
     expect(m.updateProjectSettings).toHaveBeenCalledWith(PID, expect.objectContaining({ set: { 'calendar.timezone': 'UTC' } }))
   })
 
-  it('손상된 키는 경고를 보이고, 고치지 않아도 저장 대상이다(복구 경로)', async () => {
+  it('손상된 키는 경고를 보이고, 고쳐 넣으면 그 키를 보낸다(복구 경로 — 건드리지 않으면 보내지 않는다, Q1)', async () => {
     await render(props({ timezone: calendarFieldOf({ status: 'invalid', error: '시간대 이름이 아닙니다.' }) }))
     expect(container.textContent).toContain('설정이 손상되었습니다')
     await type(tzInput(), 'America/Los_Angeles')

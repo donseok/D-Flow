@@ -4,10 +4,12 @@
 import { WEEK_START_DAYS, type WeekStartDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { WEEK_DAY_LABEL, WeekStartReview, type WeekStartReviewState } from './WeekStartReview'
 
-export function WeekStartEditor({ value, onChange, disabled, scheduled = null, currentDay, review = null }: {
+export function WeekStartEditor({ value, onChange, disabled, scheduled = null, currentDay, review = null, onClear }: {
   /** '' = 저장값 손상으로 고른 요일 없음 */
   value: WeekStartDay | ''
   onChange: (day: WeekStartDay) => void
+  /** 저장된 주 시작이 손상됐을 때 고른 요일을 되돌린다('' — 저장 대상에서 빠진다, a6 리뷰 Q1). 라디오는 '없음'으로 돌아갈 수 없어서다 */
+  onClear?: () => void
   disabled: boolean
   /** 아직 적용 전인 전환(마지막 원소의 from > 오늘) — 프로젝트만 */
   scheduled?: WeekStartRule | null
@@ -27,6 +29,11 @@ export function WeekStartEditor({ value, onChange, disabled, scheduled = null, c
           </label>
         ))}
       </div>
+      {onClear && (
+        <button type="button" data-week-start-clear className="btn btn-ghost px-2 text-xs" disabled={disabled} onClick={onClear}>
+          선택 취소(주 시작은 저장하지 않음)
+        </button>
+      )}
       {scheduled?.from && (
         <p className="text-xs text-fg-muted">
           {currentDay ? `지금은 ${WEEK_DAY_LABEL[currentDay]} 시작 · ` : ''}예정: {scheduled.from} 부터 {WEEK_DAY_LABEL[scheduled.day]} 시작

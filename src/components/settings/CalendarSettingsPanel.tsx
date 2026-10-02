@@ -77,19 +77,17 @@ export function CalendarSettingsPanel(props: {
     if (props.suggestBrowserTimezone && props.timezone.source === 'default') setSuggestion(browserTimezoneSuggestion())
   }, [props.suggestBrowserTimezone, props.timezone.source])
 
-  const corrupted: Record<Key, boolean> = {
-    'calendar.timezone': props.timezone.source === 'invalid', 'calendar.working_days': props.workingDays.source === 'invalid',
-    'calendar.week_start': props.weekStart.source === 'invalid',
-  }
-  // 손상 키 자동 포함은 시간대·근무 요일만(복구 경로 — 그 값을 그대로 다시 저장해 고친다). 손상된 주 시작은 요일을 골랐을 때만 보낸다 —
-  // 주간보고가 있으면 서버가 거부해 다른 두 키 저장까지 막혔다(A-5 리뷰 O7 — 서버 판정과 같게 키 단위로)
-  const changed = KEYS.filter(k => !same(draft, baseline, k) || (k !== 'calendar.week_start' && corrupted[k] && !repaired.includes(k)))
+  // 키 단위 판정(A-5 리뷰 O7 → a6 리뷰 Q1 — 세 키 모두): 바꾼 키만 보낸다. 손상 키도 자동으로 포함하지 않는다 — 손상 키의 초안은 빈 값이라
+  // (calendarFieldOf 의 value null) 다시 저장할 값이 없고, 그 빈 값 검증이 다른 키 저장까지 막았다. 서버(buildStored·settings_ref_check)도
+  // set 의 키만 판정한다. 손상 키를 고치려면 그 키에 값을 넣는다 — 손상 표지(corruptNotice)가 그 자리를 가리킨다.
+  const changed = KEYS.filter(k => !same(draft, baseline, k))
   const tzCheck = parseTimezone(draft.timezone.trim())
   const wdCheck = parseWorkingDays(draft.workingDays)
   const weekChanged = draft.weekDay !== baseline.weekDay
   const { scheduled, current: currentDay } = weekState(props.weekStart.value, props.todayIso)
   const reviewBlocks = isProject && weekChanged && reviewBlocksSave(review)
-  const invalidInput = !tzCheck.ok || !wdCheck.ok
+  // 입력 오류는 보낼 키에서만 — 건드리지 않은 손상 키의 빈 초안이 저장 버튼 전체를 끄지 않게
+  const invalidInput = (changed.includes('calendar.timezone') && !tzCheck.ok) || (changed.includes('calendar.working_days') && !wdCheck.ok)
   const saveDisabled = !canEdit || pending || !!conflict || invalidInput || reviewBlocks || (changed.length === 0 && !uncertainPatch)
   // 저장이 막힌 이유(변경 없음·권한·진행 중은 제외) — 저장 버튼의 aria-describedby 로 잇는다(A-5 리뷰 O3)
   const saveReason = !canEdit ? null
@@ -192,7 +190,8 @@ export function CalendarSettingsPanel(props: {
         {head('calendar.week_start', props.weekStart, isProject ? '다음 주부터 적용' : '새 프로젝트의 초기값')}
         {corruptNotice('calendar.week_start', props.weekStart, '#calendar-week-start')}
         <WeekStartEditor value={draft.weekDay} onChange={day => edit({ weekDay: day }, 'calendar.week_start')} disabled={inputsLocked}
-          scheduled={isProject ? scheduled : null} currentDay={currentDay ?? undefined} review={isProject && weekChanged ? review : null} />
+          scheduled={isProject ? scheduled : null} currentDay={currentDay ?? undefined} review={isProject && weekChanged ? review : null}
+          onClear={baseline.weekDay === '' && draft.weekDay !== '' ? () => edit({ weekDay: '' }, 'calendar.week_start') : undefined} />
         {fieldNotice('calendar.week_start')}
         {keyLine('calendar.week_start')}
       </section>
