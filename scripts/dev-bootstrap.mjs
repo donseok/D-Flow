@@ -42,7 +42,8 @@ if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) fail('워크스페이스 slug 형�
 // 여기서 멈춘다(오타로 만든 계정을 지우는 일이 없게) — 파싱은 lib/bootstrap-modules.mjs.
 const parsed = parseBootstrapModules(process.env.BOOTSTRAP_MODULES)
 if (!parsed.ok) fail(`BOOTSTRAP_MODULES 에 모르는 모듈 ${parsed.unknown.join(', ')} — 허용: ${parsed.allowed.join(', ')}`)
-// 시간대(스펙 D13 ②)는 BOOTSTRAP_TIMEZONE(IANA 이름, 기본 UTC). 형식이 틀리면 계정을 만들기 전에 멈춘다 — 판정은 lib/bootstrap-timezone.mjs.
+// 시간대(스펙 D13 ②)는 BOOTSTRAP_TIMEZONE(IANA 이름) — 줬을 때만 쓴다(없으면 제품 기본값 UTC 그대로 — 설정 화면이 브라우저 시간대를 제안한다).
+// 형식이 틀리면 계정을 만들기 전에 멈춘다 — 판정은 lib/bootstrap-timezone.mjs.
 const tzParsed = parseBootstrapTimezone(process.env.BOOTSTRAP_TIMEZONE)
 if (!tzParsed.ok) fail(`BOOTSTRAP_TIMEZONE — ${tzParsed.error}`)
 
@@ -105,7 +106,11 @@ for (const [name, run] of steps) {
   const tz = bootstrapTimezonePlan({ envValue: process.env.BOOTSTRAP_TIMEZONE, existingValues: row.values })
   if (!tz.ok) await rollback('calendar.timezone', new Error(tz.error))       // 위에서 이미 걸렀다 — 방어
   if (tz.write) set['calendar.timezone'] = tz.value
-  else console.log(`· 시간대는 그대로 둔다 — 워크스페이스 ${slug} 에 이미 ${JSON.stringify(row.values['calendar.timezone'])} 가 있다. 바꾸려면 BOOTSTRAP_TIMEZONE 을 준다`)
+  else if (Object.prototype.hasOwnProperty.call(row.values ?? {}, 'calendar.timezone')) {
+    console.log(`· 시간대는 그대로 둔다 — 워크스페이스 ${slug} 에 이미 ${JSON.stringify(row.values['calendar.timezone'])} 가 있다. 바꾸려면 BOOTSTRAP_TIMEZONE 을 준다`)
+  } else {
+    console.log(`· 시간대는 쓰지 않는다 — 제품 기본값(${tz.value}). 워크스페이스 설정 화면이 브라우저 시간대를 제안한다. 고정하려면 BOOTSTRAP_TIMEZONE 을 준다`)
+  }
   if (Object.keys(set).length > 0) {
     const { data: applied, error: aErr } = await admin.rpc('apply_workspace_settings', {
       p_workspace_id: ws.id, p_expected_revision: row.revision, p_command_id: randomUUID(),

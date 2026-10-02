@@ -3,7 +3,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_BOOTSTRAP_TIMEZONE, bootstrapTimezonePlan, parseBootstrapTimezone } from '../../scripts/lib/bootstrap-timezone.mjs'
-import { parseTimezone } from '@/lib/domain/calendar'
+import { DEFAULT_TIMEZONE, parseTimezone } from '@/lib/domain/calendar'
+import { settingDef } from '@/lib/settings/registry'
 import { GOLDEN_TZ_NAMES, GOLDEN_TZ_REJECT } from '../fixtures/calendar-golden'
 
 describe('parseBootstrapTimezone', () => {
@@ -39,9 +40,16 @@ describe('parseTimezone 과 같은 판정(사본 대조)', () => {
 })
 
 describe('bootstrapTimezonePlan — 재실행 규칙', () => {
-  it('새 워크스페이스(값 없음)는 env 가 없어도 기본값을 기록한다', () => {
-    expect(bootstrapTimezonePlan({ envValue: undefined, existingValues: {} })).toEqual({ ok: true, write: true, value: 'UTC' })
-    expect(bootstrapTimezonePlan({ envValue: undefined, existingValues: null })).toEqual({ ok: true, write: true, value: 'UTC' })
+  it('env 가 없으면 값이 없어도 쓰지 않는다 — 제품 기본값(UTC)과 같은 결과이고 키 상태가 default 로 남아 설정 화면의 브라우저 시간대 제안이 뜬다(A-5 리뷰 O8)', () => {
+    expect(bootstrapTimezonePlan({ envValue: undefined, existingValues: {} })).toEqual({ ok: true, write: false, value: 'UTC' })
+    expect(bootstrapTimezonePlan({ envValue: undefined, existingValues: null })).toEqual({ ok: true, write: false, value: 'UTC' })
+  })
+  it('부트스트랩 기본값 = 레지스트리의 워크스페이스 calendar.timezone 기본값(쓰지 않아도 같은 결과라는 전제)', () => {
+    expect(DEFAULT_BOOTSTRAP_TIMEZONE).toBe(DEFAULT_TIMEZONE)
+    expect(settingDef('workspace', 'calendar.timezone')!.default).toBe(DEFAULT_BOOTSTRAP_TIMEZONE)
+  })
+  it('env 를 명시하면 값이 없는 새 워크스페이스에도 쓴다(UTC 를 명시해도 쓴다 — 키 상태 set)', () => {
+    expect(bootstrapTimezonePlan({ envValue: 'UTC', existingValues: {} })).toEqual({ ok: true, write: true, value: 'UTC' })
   })
   it('기존 값이 있고 env 를 주지 않았으면 그대로 둔다(설정 화면에서 바꾼 값을 되돌리지 않는다)', () => {
     expect(bootstrapTimezonePlan({ envValue: undefined, existingValues: { 'calendar.timezone': 'Europe/Berlin' } }))

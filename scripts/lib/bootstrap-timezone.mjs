@@ -33,14 +33,13 @@ export function parseBootstrapTimezone(raw) {
 }
 
 /**
- * 재실행 판단 — BOOTSTRAP_TIMEZONE 을 env 로 명시했으면 덮는다. 명시하지 않았고 워크스페이스에 이미 calendar.timezone 이 있으면 그대로 둔다
- * (설정 화면에서 바꾼 값을 기본값으로 되돌리지 않게). db:reset 뒤 첫 실행은 값이 없어 기본값(UTC)을 기록한다.
+ * 쓰기 판단 — BOOTSTRAP_TIMEZONE 을 env 로 명시했을 때만 쓴다(기존 값도 덮는다). 명시하지 않으면 값이 없어도 쓰지 않는다(A-5 리뷰 O8):
+ * 레지스트리 기본값이 같은 UTC 라 결과는 같고, 키 상태가 default 로 남아야 설정 화면이 브라우저 시간대를 제안한다(스펙 D13 ② — 과제 26).
+ * 기존 값(설정 화면에서 바꾼 값)도 그대로 둔다. existingValues 는 판단에 쓰지 않지만 호출부의 안내 문구가 읽는다.
  * @param {{ envValue: string | undefined, existingValues: Record<string, unknown> | null | undefined }} input
  */
-export function bootstrapTimezonePlan({ envValue, existingValues }) {
+export function bootstrapTimezonePlan({ envValue }) {
   const parsed = parseBootstrapTimezone(envValue)
   if (!parsed.ok) return parsed
-  const explicit = envValue !== undefined
-  const has = Object.prototype.hasOwnProperty.call(existingValues ?? {}, 'calendar.timezone')
-  return { ok: true, write: explicit || !has, value: parsed.value }
+  return { ok: true, write: envValue !== undefined, value: parsed.value }
 }
