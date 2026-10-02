@@ -40,6 +40,22 @@ describe('PageFrame', () => {
     act(() => cb!([{ target: bar, contentRect: { height: 34 } as DOMRectReadOnly } as unknown as ResizeObserverEntry], {} as ResizeObserver))
     expect(root.style.getPropertyValue('--frame-sticky-top')).toBe('50px')
   })
+  // BB4 — 초점이 도구 줄 뒤로 숨지 않게: 스크롤 상자(main)의 scroll-padding-top 이 도구 줄 높이 + 8 을 따른다. 요소의 scroll-margin 은
+  // 크로미움의 초점 스크롤이 따르지 않았다(실측 — qa/sp3b/u2-bb/measure-bb4.json)
+  it('도구 줄이 있으면 감싼 main 에 --main-scroll-pad(테두리 높이 + 8px)를 쓰고, 사라지면 지운다', () => {
+    let cb: ResizeObserverCallback | null = null
+    vi.stubGlobal('ResizeObserver', class { constructor(c: ResizeObserverCallback) { cb = c } observe() {} disconnect() {} unobserve() {} })
+    cleanups.push(() => vi.unstubAllGlobals())
+    const main = document.createElement('main'); document.body.appendChild(main)
+    const root = createRoot(main)
+    act(() => root.render(<PageFrame header={<h1>t</h1>} toolbar={<div>도구</div>}>본문</PageFrame>))
+    const bar = main.querySelector('[data-frame-toolbar]') as HTMLElement
+    act(() => cb!([{ target: bar, contentRect: { height: 27 } as DOMRectReadOnly, borderBoxSize: [{ blockSize: 42.4, inlineSize: 800 }] } as unknown as ResizeObserverEntry], {} as ResizeObserver))
+    expect(main.style.getPropertyValue('--main-scroll-pad')).toBe('51px')
+    act(() => root.unmount())
+    expect(main.style.getPropertyValue('--main-scroll-pad')).toBe('')
+    main.remove()
+  })
   it('채움형 — data-frame="fill", 본문 min-h-0 flex-1', () => {
     const container = render(<PageFrame variant="fill" header={<h1>t</h1>}>본문</PageFrame>)
     const root = container.firstElementChild as HTMLElement

@@ -590,6 +590,11 @@ textarea {
     overflow: hidden;
     scrollbar-gutter: auto;
   }
+  /* 고정 도구 줄 아래로 키보드 초점이 숨지 않게(WCAG 2.2 2.4.11, BB4) — 스크롤 상자(main)의 위 여백을 PageFrame 이 도구 줄 높이 + 8 로 쓴다.
+     요소의 scroll-margin 은 크로미움의 초점 스크롤이 따르지 않았다(실측). 일부만 가려진 요소는 브라우저가 보인다고 보고 움직이지 않는다 — 이월 */
+  .app-main {
+    scroll-padding-top: var(--main-scroll-pad, 0px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -18,12 +18,15 @@ export function PageFrame({ header, toolbar, variant = 'document', width = 'full
     const root = rootRef.current, bar = barRef.current
     if (!root || !bar || typeof ResizeObserver === 'undefined') return
     // 테두리 상자 높이 — contentRect 는 도구 줄의 py-2 를 빼서 고정 요소가 줄 아래 16px 에 숨는다
+    // 감싼 main(유일한 스크롤 상자 — D19)의 scroll-padding-top 도 맞춘다: 초점·앵커 스크롤이 도구 줄 뒤로 숨지 않게(BB4, globals.css .app-main)
+    const main = root.closest('main')
     const ro = new ResizeObserver(([e]) => {
       const h = e.borderBoxSize?.[0]?.blockSize ?? (e.target as HTMLElement).getBoundingClientRect().height
       root.style.setProperty('--frame-sticky-top', `${Math.ceil(h)}px`)
+      main?.style.setProperty('--main-scroll-pad', `${Math.ceil(h) + 8}px`)
     })
     ro.observe(bar)
-    return () => { ro.disconnect(); root.style.setProperty('--frame-sticky-top', '0px') }
+    return () => { ro.disconnect(); root.style.setProperty('--frame-sticky-top', '0px'); main?.style.removeProperty('--main-scroll-pad') }
   }, [hasToolbar])
   const base = { '--frame-sticky-top': '0px' } as CSSProperties
   if (variant === 'fill') {

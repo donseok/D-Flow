@@ -67,10 +67,9 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
   )
 }
 
-/** 사이드바 틀 — 폭 232/64(§5.4.2). 1024 미만은 숨김(드로어 — D55), 선호 없음은 폭 유틸로 1024~1279 접힘 */
-/** 1280 이상인가(선호 없음일 때 지금 보이는 상태) — SSR·첫 렌더는 false(D55), 효과에서 맞춘다 */
-function useXl(): boolean {
-  const [hit, setHit] = useState(false)
+/** 1280 이상인가(선호 없음일 때 지금 보이는 상태) — SSR·첫 렌더는 모름(null, D55), 효과에서 맞춘다 */
+function useXl(): boolean | null {
+  const [hit, setHit] = useState<boolean | null>(null)
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(min-width: 1280px)')
@@ -82,24 +81,27 @@ function useXl(): boolean {
 }
 
 /**
- * 사이드바 틀 — 바깥은 div(이름 없는 complementary 랜드마크를 만들지 않는다, AA5), 랜드마크는 이름 있는 nav 하나.
+ * 사이드바 틀 — 폭 232/64(§5.4.2). 1024 미만은 숨김(드로어 — D55), 선호 없음은 폭 유틸로 1024~1279 접힘.
+ * 바깥은 div(이름 없는 complementary 랜드마크를 만들지 않는다, AA5), 랜드마크는 이름 있는 nav 하나.
  * onToggleCollapsed 를 받으면 아래에 접기 토글(AA2 — 옛 Sidebar 의 PanelLeft 복구)을 둔다: 지금 보이는 상태의 반대를 계정 키 sidebarCollapsed 로 쓴다
  * (선호 없음이면 1280 이상 = 펼침으로 본다). 표시 전환은 조건부 렌더와 정적 래퍼만(D17).
+ * 선호 없음의 SSR·첫 렌더는 지금 상태를 모른다 — aria-expanded 를 내지 않고 중립 이름을 단다(1280 이상에서 틀린 false 를 읽히지 않게, BB4).
  */
 export function SideRail({ collapsed, children, label, onToggleCollapsed }: {
   collapsed: SidebarCollapsed; children: ReactNode; label: string; onToggleCollapsed?: (next: boolean) => void
 }) {
   const width = collapsed === null ? 'lg:w-16 xl:w-58' : collapsed ? 'w-16' : 'w-58'
   const xl = useXl()
-  const expanded = collapsed === null ? xl : !collapsed
+  const known: boolean | null = collapsed === null ? xl : !collapsed
+  const expanded = known === true
   const navId = useId()
-  const toggleLabel = expanded ? '사이드바 접기' : '사이드바 펼치기'
+  const toggleLabel = known === null ? '사이드바 접기·펼치기' : expanded ? '사이드바 접기' : '사이드바 펼치기'
   return (
     <div data-side-rail data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
       className={`hidden lg:flex ${width} shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-2 py-3`}>
       <nav id={navId} aria-label={label} className="flex flex-col">{children}</nav>
       {onToggleCollapsed && (
-        <button type="button" data-sidebar-toggle aria-controls={navId} aria-expanded={expanded} aria-label={toggleLabel} title={toggleLabel}
+        <button type="button" data-sidebar-toggle aria-controls={navId} aria-expanded={known === null ? undefined : expanded} aria-label={toggleLabel} title={toggleLabel}
           onClick={() => onToggleCollapsed(expanded)}
           className="mt-auto flex h-9 shrink-0 items-center gap-2 rounded-(--radius-control) px-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
           {expanded ? <PanelLeftClose size={16} aria-hidden /> : <PanelLeftOpen size={16} aria-hidden />}

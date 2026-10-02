@@ -37,4 +37,12 @@ describe('scroll-owner', () => {
     const css = readFileSync('src/app/globals.css', 'utf8')
     expect(css).toMatch(/--frame-sticky-top:\s*0px;/)
   })
+  it('BB4 — main 의 scroll-padding-top 이 --main-scroll-pad(PageFrame 이 도구 줄 높이 + 8 로 쓴다)를 따른다 — @layer components 안·안전망 앞', () => {
+    const css = readFileSync('src/app/globals.css', 'utf8').replace(/\s+/g, ' ')
+    const rule = css.indexOf('.app-main { scroll-padding-top: var(--main-scroll-pad, 0px); }')
+    expect(rule).toBeGreaterThan(css.indexOf('.app-main:has([data-frame="fill"])'))
+    expect(rule).toBeLessThan(css.indexOf('반응형 display 안전망'))
+    expect(rule).toBeGreaterThan(css.indexOf('@layer components'))
+    expect(css).not.toContain('[data-frame-body] :focus-visible')   // 요소 scroll-margin 은 크로미움 초점 스크롤이 따르지 않았다(실측)
+  })
 })
