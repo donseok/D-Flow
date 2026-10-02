@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({ gate: vi.fn(), orchestrate: vi.fn() }))
 vi.mock('@/lib/calendar/load', async (orig) => ({
   ...(await orig<object>()),
   resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+  resolveMemberWorkspacesCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),   // 소속 워크스페이스 판정(M3)도 같은 달력
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1' })) }))
 vi.mock('@/lib/ai/chat/tool-modules', async (importOriginal) => ({

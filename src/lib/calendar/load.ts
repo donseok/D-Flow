@@ -119,3 +119,30 @@ export async function resolveRequestCalendar(
   } else return DEFAULT_REQUEST_CALENDAR
   return { timezone: cal.timezone, workingDays: cal.workingDays, weekStart: cal.weekStart }
 }
+
+/** 두 달력이 '오늘'·주 계산에서 같은가 — tz·주 규칙·근무 요일(워크스페이스에는 날짜 예외가 없다) */
+function sameRequestCalendar(a: RequestCalendar, b: RequestCalendar): boolean {
+  const days = (c: RequestCalendar) => [...c.workingDays].sort((x, y) => x - y).join(',')
+  return a.timezone === b.timezone && JSON.stringify(a.weekStart) === JSON.stringify(b.weekStart) && days(a) === days(b)
+}
+
+/**
+ * 소속 워크스페이스들로 정하는 요청·화면 달력(A-3 리뷰 P2, 컨트롤러 판정 M3) — 소속이 없으면 제품 기본값, 하나면 그 워크스페이스,
+ * 여럿이면 달력(tz·주 시작·근무 요일)이 모두 같을 때 그 달력, 다르면 제품 기본값(UTC — 화면·봇 답이 기준 tz 이름을 적는다).
+ * 이관 ⑨ 가 기존 워크스페이스 전부에 같은 tz 를 적으므로, 여러 곳에 속한 사람도 소속이 모두 같으면 UTC 로 떨어지지 않는다.
+ * 판독 실패·손상은 던진다(fail-closed — 하나라도 못 읽으면 '같다'를 판정할 수 없다).
+ */
+export async function resolveMemberWorkspacesCalendar(
+  workspaceIds: readonly string[], opts?: { client?: ConfigReadClient },
+): Promise<RequestCalendar> {
+  if (workspaceIds.length === 0) return DEFAULT_REQUEST_CALENDAR
+  if (workspaceIds.length === 1) return resolveRequestCalendar({ projectId: null, workspaceId: workspaceIds[0] }, opts)
+  // 해석기는 한 번만 불러온다(순환 회피의 동적 import — resolveRequestCalendar 주석) — 그 뒤 워크스페이스마다 병렬로 판독
+  const { getWorkspaceConfig } = await import('@/lib/settings/workspaceConfig')
+  const cals: RequestCalendar[] = await Promise.all(workspaceIds.map(async (id) => {
+    const cal = requireCalendar(await getWorkspaceConfig(id, opts))
+    return { timezone: cal.timezone, workingDays: cal.workingDays, weekStart: cal.weekStart }
+  }))
+  const [first, ...rest] = cals
+  return rest.every((c) => sameRequestCalendar(first, c)) ? first : DEFAULT_REQUEST_CALENDAR
+}

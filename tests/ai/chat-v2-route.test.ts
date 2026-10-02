@@ -18,6 +18,7 @@ const { withCount } = vi.hoisted(() => ({
 vi.mock('@/lib/calendar/load', async (orig) => ({
   ...(await orig<object>()),
   resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+  resolveMemberWorkspacesCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),   // 소속 워크스페이스 판정(M3)도 같은 달력
 }))
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))

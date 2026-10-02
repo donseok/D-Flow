@@ -24,6 +24,7 @@ const { withCount } = vi.hoisted(() => ({
 vi.mock('@/lib/calendar/load', async (orig) => ({
   ...(await orig<object>()),
   resolveRequestCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),
+  resolveMemberWorkspacesCalendar: vi.fn(async () => (await import('../helpers/calendarFixture')).calSeoulMon),   // 소속 워크스페이스 판정(M3)도 같은 달력
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1' })) }))
 // 기본 레지스트리를 **빈 껍데기**로 두면 `gateChatTools` 가 아무리 잘 걸러도 관측할 도구가 없다 —

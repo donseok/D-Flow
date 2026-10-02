@@ -19,7 +19,7 @@ import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
 import { requireSessionModule } from '@/lib/modules/gate'
 import { projectTeams, visibleTeams } from '@/lib/teams/source'
-import { DEFAULT_REQUEST_CALENDAR, resolveRequestCalendar } from '@/lib/calendar/load'
+import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar, resolveRequestCalendar } from '@/lib/calendar/load'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { RequestCalendar } from '@/lib/domain/calendar'
 
@@ -42,8 +42,8 @@ async function chatCalendar(sb: Awaited<ReturnType<typeof createServerClient>>, 
     const id = (data as { id: string } | null)?.id ?? null
     if (id && (input.isSuperuser || input.workspaceIds.includes(id))) return resolveRequestCalendar({ projectId: null, workspaceId: id }, { client: sb })
   }
-  if (input.workspaceIds.length === 1) return resolveRequestCalendar({ projectId: null, workspaceId: input.workspaceIds[0] }, { client: sb })
-  return DEFAULT_REQUEST_CALENDAR
+  // 소속 워크스페이스로 — 하나면 그것, 여럿이면 달력이 모두 같을 때 그것, 다르면 제품 기본값(답의 '기준' 줄이 그 tz 를 적는다 — M3)
+  return resolveMemberWorkspacesCalendar(input.workspaceIds, { client: sb })
 }
 
 function requestId(): string {
