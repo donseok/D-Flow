@@ -78,6 +78,7 @@ const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 
 import { addProjectTeam, updateProjectTeam, copyGlobalTeams } from '@/app/actions/projectTeams'
+import { revalidatePath } from 'next/cache'
 import { makeAdminActor } from '../fixtures/actor'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
@@ -92,6 +93,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
     fromCalls.length = 0
     createAdminClient.mockClear()
     refreshTeams.mockClear()
+    vi.mocked(revalidatePath).mockClear()
     requireProjectAdmin.mockReset()
     workspaceTeams.mockReset()
     referencedCommonTeamCodes.mockReset()
@@ -184,6 +186,9 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(refreshTeams).toHaveBeenCalled()
       expect(fromCalls).not.toContain('minute_folders')
       expect(fromCalls).not.toContain('projects')
+      // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
+      expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
+      expect(revalidatePath).not.toHaveBeenCalledWith('/p/p1', 'layout')
     })
   })
 
@@ -223,6 +228,9 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(r.ok).toBe(true)
       expect(db.updated[0]).toMatchObject({ id: 't-mine', patch: { active: false, progress_visible: true, sort_order: 3 } })
       expect(refreshTeams).toHaveBeenCalled()
+      // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
+      expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
+      expect(revalidatePath).not.toHaveBeenCalledWith('/p/p1', 'layout')
     })
   })
 
@@ -278,6 +286,9 @@ describe('프로젝트 팀 관리 서버액션', () => {
       expect(refreshTeams).toHaveBeenCalled()
       // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀 — 다른 워크스페이스의 공용 팀을 끌어오지 않는다(SP2 §4.2).
       expect(workspaceTeams).toHaveBeenCalledWith('ws-1', { client: expect.objectContaining({ from: expect.any(Function) }) })
+      // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
+      expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
+      expect(revalidatePath).not.toHaveBeenCalledWith('/p/p1', 'layout')
     })
 
     it('팀 원천 실패는 오류 — "복사할 팀 없음" 으로 위장하지 않는다', async () => {

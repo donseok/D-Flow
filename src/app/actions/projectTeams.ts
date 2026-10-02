@@ -80,7 +80,7 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   if (ins.error) return { ok: false, error: failWith('projectTeams.add', ins.error, ERR_TEAM_CREATE) }
 
   await refreshTeams()
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -121,7 +121,7 @@ export async function updateProjectTeam(
   if (upd.error) return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' }
   await refreshTeams()
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
@@ -156,6 +156,6 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
   })))
   if (ins.error) return { ok: false, error: failWith('projectTeams.copy', ins.error, ERR_TEAM_COPY) }
   await refreshTeams()
-  revalidatePath(`/p/${projectId}`, 'layout')
+  revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
