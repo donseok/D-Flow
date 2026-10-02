@@ -8,6 +8,7 @@
 import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
+import { fetchAllPages, type PageResult } from '@/lib/data/paging'
 import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type ProjectSettingValue } from './registry'
 import { ConfigUnavailableError, type ConfigKeyError } from './errors'
@@ -96,6 +97,44 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
 const loadCached = cache(load)
 export function getProjectConfig(projectId: string, opts?: { client?: ConfigReadClient }): Promise<ProjectConfig> {
   return loadCached(projectId, opts?.client)
+}
+
+/** in() 한 번에 실을 프로젝트 id 수(요청 URL 길이 — effectiveMany 와 같은 값) */
+const TZ_ID_CHUNK = 200
+type TzRow = { project_id: string; values: unknown }
+
+/**
+ * 여러 프로젝트의 달력 시간대(SP5 과제 32 — 포털 로더의 프로젝트별 '오늘'). 설정 행만 in() 으로 끝까지 읽는다(프로젝트마다 getProjectConfig 의
+ * 네 조회를 부르지 않는다). 판정은 getProjectConfig → requireCalendar 와 같다 — 달력 세 키 중 하나라도 손상이면 그 프로젝트는 null(셸 공지 배지의
+ * '오늘'과 같은 규칙). 휴일 판독만 빠진다(시간대와 무관). 행 없음(권한 밖)·values 손상도 null — 로그를 남긴다(3원칙 ①).
+ * 조회 오류는 ConfigUnavailableError throw — 호출부가 원천 실패로 받는다.
+ */
+export async function getProjectTimezones(projectIds: readonly string[], opts?: { client?: ConfigReadClient }): Promise<Map<string, string | null>> {
+  const ids = [...new Set(projectIds)]
+  const out = new Map<string, string | null>()
+  if (!ids.length) return out
+  const sb = opts?.client ?? (await createServerClient())
+  let rows: TzRow[]
+  try {
+    rows = (await Promise.all(Array.from({ length: Math.ceil(ids.length / TZ_ID_CHUNK) }, (_, i) => ids.slice(i * TZ_ID_CHUNK, (i + 1) * TZ_ID_CHUNK)).map((part) =>
+      fetchAllPages<TzRow>('프로젝트 설정(시간대)', (from, to) => sb.from('project_settings').select('project_id, values', { count: 'exact' })
+        .in('project_id', part).order('project_id').range(from, to) as unknown as PromiseLike<PageResult<TzRow>>)))).flat()
+  } catch (e) {
+    throw new ConfigUnavailableError(`프로젝트 설정(시간대) 조회 실패: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+  }
+  const byId = new Map(rows.map((r) => [r.project_id, r]))
+  for (const id of ids) {
+    const r = byId.get(id)
+    if (!r || !isRecord(r.values)) {
+      console.error('[projectConfig] 프로젝트 시간대를 판정하지 못했다', { projectId: id, reason: !r ? 'no-row' : 'values' })
+      out.set(id, null); continue
+    }
+    const { keys } = resolveKeys({ scope: 'project', id, values: r.values, defs: PROJECT_SETTINGS })
+    const { calendar, calendarError } = calendarOrError(() => projectCalendarOf(keys as ProjectConfig['keys'], []))
+    if (!calendar) console.error('[projectConfig] 프로젝트 달력 손상 — 그 프로젝트의 오늘은 모름', { projectId: id, key: calendarError?.key })
+    out.set(id, calendar ? calendar.timezone : null)
+  }
+  return out
 }
 
 /** 옛 maxDepth 의 후계 — 최대 깊이 = 단계 이름 수(§9 #1 기본값). 대안(제한 없음)을 고르면 이 함수 하나만 바뀐다 */

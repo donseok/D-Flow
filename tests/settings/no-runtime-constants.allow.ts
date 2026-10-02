@@ -48,6 +48,5 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/lib/minutes/externalApi.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
   'src/app/actions/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   'src/lib/domain/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  // 시간대·고정 오프셋(SP5 Phase A calendar.timezone)
-  'src/lib/domain/dates.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
+  // 시간대·고정 오프셋(SP5 Phase A calendar.timezone) — 과제 32 로 0(허용 항목 없음 — 영구 가드, no-runtime-constants.test.ts)
 }

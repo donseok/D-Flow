@@ -5,16 +5,17 @@ import { addDaysIso } from '@/lib/domain/dates'
 import { walk } from '../invariants/_walk'
 
 // 영업일 셋·seoul* 의 계약은 tests/domain/calendar.test.ts 의 isWorkingDay·workingDaysBetween·todayIn·ymdIn·stampIn 이 넘겨받았다
-// (SP5 과제 2 — 자정 h23 경계 포함). 이 파일은 남는 표면(tz 무관 산술 + 과제 32 까지의 seoulToday)만 본다.
+// (SP5 과제 2 — 자정 h23 경계 포함). 이 파일은 남는 표면(tz 무관 산술)만 본다.
 describe('dates.ts 의 남는 표면(스펙 §4.1 — 날짜 산술만, seoul* 는 calendar.ts 로)', () => {
-  it('export 는 addDaysIso 와 과제 32 까지의 seoulToday 뿐', () => {
-    expect(Object.keys(dates).sort()).toEqual(['addDaysIso', 'seoulToday'])
+  it('export 는 addDaysIso 뿐 — seoulToday 는 과제 32 가 지웠다', () => {
+    expect(Object.keys(dates).sort()).toEqual(['addDaysIso'])
   })
-  // UI-2(레인 B)가 셸의 '오늘'을 (app)/layout.tsx 에서 포털 로더로 옮겼다 — 과제 32 의 새 자리(UI 위험 파일이 아니다, merge 뒤 기록)
-  it('seoulToday( 호출은 포털 로더(src/lib/data/portal.ts) 한 곳뿐 — 새 호출 금지(D-22a, 과제 32 가 지운다)', () => {
-    const callers = walk('src').filter((f) => /\.(ts|tsx)$/.test(f) && f !== 'src/lib/domain/dates.ts')
-      .filter((f) => /\bseoulToday\(/.test(readFileSync(f, 'utf8')))
-    expect(callers).toEqual(['src/lib/data/portal.ts'])
+  // 옛 가드는 호출 "파일"만 셌다 — UI-2 가 포털 로더 한 파일에 호출 넷을 넣어도 초록이었다(merge 리뷰 P2). 이름이 나온 자리 수를 센다:
+  // 파일이 하나든 여럿이든, 호출이든 정의·import·주석이든 seoul* 이름은 src·scripts 어디에도 0 이다(오늘은 calendar.ts 의 todayIn(tz, now) 하나).
+  it('seoul* 이름(seoulToday·seoulYmd·seoulStamp …)이 src·scripts 에 0 자리 — 파일 수가 아니라 나온 수를 센다', () => {
+    const files = [...walk('src'), ...walk('scripts', undefined, /\.(ts|tsx|mjs|js)$/)]
+    const hits = files.flatMap((f) => (readFileSync(f, 'utf8').match(/\bseoul[A-Z]\w*/g) ?? []).map((m) => `${f}: ${m}`))
+    expect(hits).toEqual([])
   })
 })
 

@@ -32,8 +32,11 @@ describe('홈 v0(D20)', () => {
     expect(html).toContain('href="/w/acme/my-work"')
     expect(section(html, 'projects')).toContain('href="/w/acme/projects"')   // 과제 25 가 옮긴 경로
     expect(h.loadWorkspaceScope).toHaveBeenCalledWith('acme')
-    expect(h.getMyWork).toHaveBeenCalledWith(WS.id, expect.anything(), { limit: 20 })
-    expect(h.getProjectRows).toHaveBeenCalledWith(WS.id, expect.anything(), { status: 'active', limit: 20 })
+    expect(h.getMyWork).toHaveBeenCalledWith(WS.id, expect.anything(), { limit: 20, now: expect.any(Date) })
+    expect(h.getProjectRows).toHaveBeenCalledWith(WS.id, expect.anything(), { status: 'active', limit: 20, now: expect.any(Date) })
+    // 세 섹션의 '오늘'이 한 순간(계획 P8) — 범위 tz 는 로더가 정하고 순간은 페이지가 한 번 만든다
+    const nows = [h.getMyWork, h.getProjectRows, h.getWorkspaceAnnouncements].map((f) => (f.mock.calls[0] as unknown[])[2] as { now: Date })
+    expect(new Set(nows.map((o) => o.now)).size).toBe(1)
   })
   it('섹션 하나의 실패는 그 섹션만 부분 실패, 0건은 빈 상태 문구', async () => {
     h.getProjectRows.mockResolvedValue({ ok: false, error: 'x' })

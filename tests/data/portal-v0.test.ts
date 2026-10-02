@@ -1,14 +1,19 @@
 // 포털 로더 v0(§5.9) — 꺼진 모듈의 원천은 조회하지 않음(D39), 원천 하나의 실패는 failedKinds, 워크스페이스 한정, 여러 프로젝트 조회는 끝까지(1,000행 넘는 픽스처).
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ effectiveModulesMany: vi.fn(), getMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })), seoulToday: vi.fn(() => '2026-10-01'), getProjectsCompletion: vi.fn(async () => null) }))
+const h = vi.hoisted(() => ({ effectiveModulesMany: vi.fn(), getMyMeetings: vi.fn<(...args: unknown[]) => Promise<{ ok: boolean; meetings: unknown[]; exceptions: unknown[] }>>(async () => ({ ok: true, meetings: [], exceptions: [] })), getProjectsCompletion: vi.fn(async () => null),
+  // '오늘'의 범위 tz(SP5 과제 32) — 기본은 모든 프로젝트·워크스페이스가 UTC(아래 beforeEach 의 시계와 함께 옛 기대값 '2026-10-01' 을 지킨다)
+  getProjectTimezones: vi.fn(async (ids: readonly string[]) => new Map<string, string | null>(ids.map((id) => [id, 'UTC']))),
+  getWorkspaceConfig: vi.fn<(id: string, opts?: unknown) => Promise<unknown>>(async () => ({ calendar: { timezone: 'UTC' }, calendarError: null })) }))
 vi.mock('@/lib/modules/effectiveMany', () => ({ effectiveModulesMany: h.effectiveModulesMany }))
 vi.mock('@/lib/data/meetings', () => ({ getMyMeetings: h.getMyMeetings }))
 vi.mock('@/lib/data/wbs', () => ({ getProjectsCompletion: h.getProjectsCompletion }))
-vi.mock('@/lib/domain/dates', async (orig) => ({ ...(await orig<object>()), seoulToday: h.seoulToday }))
+vi.mock('@/lib/settings/projectConfig', async (orig) => ({ ...(await orig<object>()), getProjectTimezones: h.getProjectTimezones }))
+vi.mock('@/lib/settings/workspaceConfig', async (orig) => ({ ...(await orig<object>()), getWorkspaceConfig: h.getWorkspaceConfig }))
 
 import { countMyReview, getMyWork, getProjectRows, getWorkspaceAnnouncements, listWorkspaceProjects } from '@/lib/data/portal'
 import { makeActor } from '../fixtures/actor'
+import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 
 const WA = '00000000-0000-0000-7e57-0000000016d1', WB = '00000000-0000-0000-7e57-0000000016d2'
@@ -19,10 +24,12 @@ const actor = makeActor({ workspaceRoles: new Map([[WA, 'member'], [WB, 'member'
 
 type Row = Record<string, unknown>
 /** 표마다 행 — eq/in/neq/is/or/order/range/select(count) 를 흉내 낸다. fail 이면 그 표 조회 오류. calls 에 표 이름, ins 에 in() 인자 */
-function fake(tables: Record<string, Row[]>, opts: { fail?: string; calls?: string[]; ins?: [string, string, unknown[]][] } = {}) {
+function fake(tables: Record<string, Row[]>, opts: { fail?: string; calls?: string[]; ins?: [string, string, unknown[]][]; queries?: { table: string; ins: unknown[][]; ors: string[] }[] } = {}) {
   return {
     from(table: string) {
       opts.calls?.push(table)
+      const rec = { table, ins: [] as unknown[][], ors: [] as string[] }
+      opts.queries?.push(rec)
       // 가시성 조회(projects)는 표를 안 준 테스트에서도 같은 기본 행(비공개 PS 포함)을 읽는다
       let rows = [...(tables[table] ?? (table === 'projects' ? PROJECT_ROWS : []))]; let counted = false; let cap = Infinity
       const keys: [string, boolean][] = []
@@ -36,8 +43,8 @@ function fake(tables: Record<string, Row[]>, opts: { fail?: string; calls?: stri
         select: (_c: string, o?: { count?: string }) => { counted = !!o?.count; return q },
         eq: (c: string, v: unknown) => { rows = rows.filter((r) => get(r, c) === v); return q },
         neq: (c: string, v: unknown) => { rows = rows.filter((r) => get(r, c) !== v); return q },
-        in: (c: string, vs: unknown[]) => { opts.ins?.push([table, c, vs]); rows = rows.filter((r) => vs.includes(get(r, c))); return q },
-        is: () => q, or: () => q, order: (c: string, o?: { ascending?: boolean }) => { keys.push([c, o?.ascending !== false]); return q }, limit: (n: number) => { cap = n; return q }, lte: () => q, gte: () => q, ilike: () => q,
+        in: (c: string, vs: unknown[]) => { opts.ins?.push([table, c, vs]); rec.ins.push(vs); rows = rows.filter((r) => vs.includes(get(r, c))); return q },
+        is: () => q, or: (f: string) => { rec.ors.push(f); return q }, order: (c: string, o?: { ascending?: boolean }) => { keys.push([c, o?.ascending !== false]); return q }, limit: (n: number) => { cap = n; return q }, lte: () => q, gte: () => q, ilike: () => q,
         range: (a: number, b: number) => Promise.resolve(opts.fail === table ? { data: null, error: { message: 'down' }, count: null } : { data: out().slice(a, b + 1), error: null, count: counted ? rows.length : null }),
         then: (res: (v: unknown) => unknown) => Promise.resolve(opts.fail === table ? { data: null, error: { message: 'down' } } : { data: out(), error: null }).then(res),
       }
@@ -46,7 +53,12 @@ function fake(tables: Record<string, Row[]>, opts: { fail?: string; calls?: stri
   }
 }
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-01T12:00:00Z'))                         // UTC 의 오늘 2026-10-01(옛 seoulToday 목과 같은 날)
+})
+afterEach(() => { vi.useRealTimers() })
 
 describe('getMyWork', () => {
   it('어떤 프로젝트에서도 effective 가 아닌 모듈의 원천은 조회하지 않는다(D39)', async () => {
@@ -253,5 +265,79 @@ describe('프로젝트가 많은 워크스페이스 — in() 목록을 나눠 �
     expect(a.ok && a.rows.map((x) => x.id).sort()).toEqual(['a0', 'a1', 'a2'])
     expect(ins.length).toBeGreaterThan(3)
     expect(Math.max(...ins.map(([, , vs]) => vs.length))).toBeLessThanOrEqual(200)
+  })
+})
+
+// ── SP5 과제 32 — 포털의 '오늘'은 그 데이터가 속한 범위의 tz(merge 리뷰 P2). 옛 판은 서울 고정 네 줄이라 LA 프로젝트에서 셸 공지 배지(프로젝트 tz)·
+// 전체 프로젝트 화면의 상태 배지(워크스페이스 tz)와 같은 순간에 다른 판정을 냈다. 프로젝트 데이터(작업·이슈 기한·회의·공지 게시 기간) = 프로젝트 tz,
+// 프로젝트 상태(셸 전환기·홈의 프로젝트 행) = 워크스페이스 tz. 달력을 못 읽은 범위는 오늘을 지어내지 않는다(3원칙 ①).
+describe("포털의 '오늘' = 범위 tz(SP5 과제 32)", () => {
+  // 2026-10-02T23:00Z — LA 10-02(16:00 PDT)·서울 10-03(08:00 KST)·UTC 10-02. 서울 고정이면 LA 프로젝트가 하루 앞당겨진다
+  const NOW = new Date('2026-10-02T23:00:00Z')
+  const PL = '00000000-0000-0000-7e57-0000000019a1', PK = '00000000-0000-0000-7e57-0000000019a2', PX = '00000000-0000-0000-7e57-0000000019a3'
+  const two = makeActor({ workspaceRoles: new Map([[WA, 'member']]), projectWorkspace: new Map([[PL, WA], [PK, WA], [PX, WA]]),
+    projectRoles: new Map([[PL, 'member'], [PK, 'member'], [PX, 'member']]), memberIds: new Map([[PL, 'ml'], [PK, 'mk'], [PX, 'mx']]) })
+  const ROWS = [PL, PK, PX].map((id) => ({ id, name: id, start_date: '2026-09-01', end_date: '2026-10-02', is_private: false, workspace_id: WA }))
+  const tzs = (m: Record<string, string | null>) => h.getProjectTimezones.mockImplementation(async (ids: readonly string[]) => new Map(ids.map((id) => [id, id in m ? m[id] : 'UTC'])))
+
+  it('공지 게시 기간 — 프로젝트마다 그 tz 의 오늘로 묻는다(셸 공지 배지와 같은 판정), tz 를 못 읽은 프로젝트는 빼고 partial', async () => {
+    h.effectiveModulesMany.mockResolvedValue({ sets: ALL_ON(PL, PK, PX), failed: [] })
+    tzs({ [PL]: 'America/Los_Angeles', [PK]: 'Asia/Seoul', [PX]: null })
+    const queries: { table: string; ins: unknown[][]; ors: string[] }[] = []
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await getWorkspaceAnnouncements(WA, two, { now: NOW, client: fake({ projects: ROWS, announcements: [ANN('a1', PL, 'L'), ANN('a2', PK, 'K'), ANN('a3', PX, 'X')] }, { queries }) as never })
+    const ann = queries.filter((q) => q.table === 'announcements').map((q) => ({ ids: q.ins[0], ors: q.ors }))
+    expect(ann).toEqual(expect.arrayContaining([
+      { ids: [PL], ors: ['publish_from.is.null,publish_from.lte.2026-10-02', 'publish_to.is.null,publish_to.gte.2026-10-02'] },
+      { ids: [PK], ors: ['publish_from.is.null,publish_from.lte.2026-10-03', 'publish_to.is.null,publish_to.gte.2026-10-03'] },
+    ]))
+    expect(ann).toHaveLength(2)                                                      // PX(tz 모름)는 묻지 않는다
+    expect(r).toMatchObject({ ok: true, partial: true })
+    expect(r.ok && r.rows.map((x) => x.id).sort()).toEqual(['a1', 'a2'])
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
+  })
+
+  it('내 업무 — 지연 일수는 프로젝트 tz 의 오늘, 오늘 회의는 프로젝트마다 그 날짜만, tz 를 못 읽은 프로젝트의 원천은 failedKinds', async () => {
+    h.effectiveModulesMany.mockResolvedValue({ sets: new Map([PL, PK, PX].map((p) => [p, new Set([...CORE, 'meetings'] as ModuleId[])])), failed: [] })
+    tzs({ [PL]: 'America/Los_Angeles', [PK]: 'Asia/Seoul', [PX]: null })
+    const mtg = (id: string, projectId: string, meetingDate: string) => ({ id, projectId, projectName: projectId, title: id, meetingDate, startTime: '10:00', endTime: null, location: null,
+      category: 'general', body: '', recurrence: 'none', recurrenceUntil: null, createdBy: null, createdByName: null, createdAt: '', updatedAt: '', attendeeIds: [], isMine: true })
+    h.getMyMeetings.mockResolvedValue({ ok: true, meetings: [mtg('m-l2', PL, '2026-10-02'), mtg('m-l3', PL, '2026-10-03'), mtg('m-k3', PK, '2026-10-03'), mtg('m-x2', PX, '2026-10-02')], exceptions: [] })
+    const wbs = (id: string, pid: string, member: string) => ({ id, name: id, project_id: pid, planned_end: '2026-10-01', actual_pct: null, parent_id: null, assignee_member_id: member, projects: { name: pid } })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const r = await getMyWork(WA, two, { now: NOW, client: fake({ projects: ROWS, wbs_items: [wbs('w-l', PL, 'ml'), wbs('w-k', PK, 'mk'), wbs('w-x', PX, 'mx')] }) as never })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const by = Object.fromEntries(r.rows.map((x) => [x.id, x]))
+    expect(by['w-l'].overdueDays).toBe(1)                                           // LA 오늘 10-02 − 기한 10-01
+    expect(by['w-k'].overdueDays).toBe(2)                                           // 서울 오늘 10-03 − 기한 10-01
+    expect(by['w-x']).toBeUndefined()                                               // tz 모름 — 지연 일수를 지어내지 않는다
+    expect(h.getMyMeetings).toHaveBeenCalledWith(WA, '2026-10-02', '2026-10-03')    // 범위 = 아는 오늘들의 최소·최대
+    expect(r.rows.filter((x) => x.kind === 'meeting').map((x) => x.id).sort()).toEqual(['m-k3:2026-10-03', 'm-l2:2026-10-02'])
+    expect([...r.failedKinds].sort()).toEqual(['meeting', 'wbs'])
+    err.mockRestore()
+  })
+
+  it('프로젝트 상태 — 워크스페이스 tz 의 오늘(전체 프로젝트 화면의 상태 배지와 같은 판정): 종료일 10-02 가 LA 에서는 진행, 서울에서는 아니다', async () => {
+    const one = [ROWS[0]]
+    h.getWorkspaceConfig.mockResolvedValue({ calendar: { timezone: 'America/Los_Angeles' }, calendarError: null })
+    expect((await getProjectRows(WA, two, { now: NOW, status: 'active', client: fake({ projects: one }) as never }))).toMatchObject({ ok: true, rows: [{ id: PL, status: 'active' }] })
+    expect(await listWorkspaceProjects(WA, two, { now: NOW, client: fake({ projects: one }) as never })).toMatchObject({ ok: true, rows: [{ id: PL, status: 'active' }] })
+    h.getWorkspaceConfig.mockResolvedValue({ calendar: { timezone: 'Asia/Seoul' }, calendarError: null })
+    expect((await getProjectRows(WA, two, { now: NOW, status: 'active', client: fake({ projects: one }) as never }))).toEqual({ ok: true, rows: [], nextCursor: null })
+    expect(h.getWorkspaceConfig).toHaveBeenCalledWith(WA, expect.anything())
+  })
+
+  it('워크스페이스 달력을 못 읽으면 상태는 모름 — 셸 목록은 unknown, 상태로 거르는 홈 행은 빈 목록이 아니라 ok:false(3원칙 ①)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getWorkspaceConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+    expect(await listWorkspaceProjects(WA, two, { now: NOW, client: fake({ projects: [ROWS[0]] }) as never })).toMatchObject({ ok: true, rows: [{ id: PL, status: 'unknown' }] })
+    expect(await getProjectRows(WA, two, { now: NOW, status: 'active', client: fake({ projects: [ROWS[0]] }) as never })).toMatchObject({ ok: false })
+    expect(await getProjectRows(WA, two, { now: NOW, client: fake({ projects: [ROWS[0]] }) as never })).toMatchObject({ ok: true, rows: [{ id: PL, status: 'unknown' }] })
+    h.getWorkspaceConfig.mockRejectedValue(new ConfigUnavailableError('설정 조회 실패'))
+    expect(await listWorkspaceProjects(WA, two, { now: NOW, client: fake({ projects: [ROWS[0]] }) as never })).toMatchObject({ ok: true, rows: [{ id: PL, status: 'unknown' }] })
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
   })
 })

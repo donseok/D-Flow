@@ -6,11 +6,3 @@ export function addDaysIso(dateIso: string, days: number): string {
   const pad2 = (n: number) => String(n).padStart(2, '0')
   return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`
 }
-
-/**
- * @deprecated 포털 로더 src/lib/data/portal.ts 의 두 줄만 쓴다(UI-2 가 (app)/layout.tsx 에서 옮겼다) — SP5 과제 32 가 그 호출을 워크스페이스 tz 의
- * todayIn 으로 바꾸며 이 함수를 지운다. 새 호출 금지(tests/domain/dates.test.ts 가 호출 파일을 하나로 고정한다).
- */
-export function seoulToday(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date())
-}

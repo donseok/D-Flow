@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ createServerClient: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
-import { getProjectConfig, levelDepthOf } from '@/lib/settings/projectConfig'
+import { getProjectConfig, getProjectTimezones, levelDepthOf } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { DEFAULT_STAGE_CREDITS } from '@/lib/domain/stageCredits'
@@ -167,5 +167,52 @@ describe('getProjectConfig — 달력(SP5 A 과제 13)', () => {
     expect(cfg.calendar).toBeNull()
     expect(cfg.calendarError).toMatchObject({ code: 'CONFIG_INVALID', key: 'calendar.timezone' })
     expect(valueOf(cfg, 'core.milestone_keywords')).toEqual(['오픈'])
+  })
+})
+
+// SP5 과제 32 — 포털 로더의 프로젝트별 '오늘'. 설정 행만 in() 으로 끝까지 읽고, 판정은 getProjectConfig → requireCalendar 와 같다(달력 세 키 중 하나라도 손상이면 null).
+describe('getProjectTimezones', () => {
+  const P = (n: number) => `00000000-0000-0000-7e57-0000000019b${n}`
+  function tzClient(rows: { project_id: string; values: unknown }[], fail = false) {
+    const ins: unknown[][] = []
+    const client = { from: (t: string) => {
+      expect(t).toBe('project_settings')
+      let got = rows
+      const b: Record<string, unknown> = {
+        select: () => b, order: () => b,
+        in: (_c: string, vs: string[]) => { ins.push(vs); got = rows.filter((r) => vs.includes(r.project_id)); return b },
+        range: (a: number, z: number) => Promise.resolve(fail ? { data: null, error: { message: 'down' }, count: null } : { data: got.slice(a, z + 1), error: null, count: got.length }),
+      }
+      return b
+    } }
+    return { client: client as never, ins }
+  }
+  it('프로젝트마다 그 tz — 값 없음은 제품 기본값 UTC, 달력 키 손상(주 시작 포함)·행 없음·values 손상은 null 과 로그', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { client } = tzClient([
+      { project_id: P(1), values: { 'calendar.timezone': 'America/Los_Angeles' } },
+      { project_id: P(2), values: {} },
+      { project_id: P(3), values: { 'calendar.timezone': 'Asia/Seol' } },
+      { project_id: P(4), values: { 'calendar.timezone': 'Europe/Berlin', 'calendar.week_start': 'tuesday-ish' } },
+      { project_id: P(6), values: 'broken' },
+    ])
+    const got = await getProjectTimezones([P(1), P(2), P(3), P(4), P(5), P(6), P(1)], { client })
+    expect(Object.fromEntries(got)).toEqual({ [P(1)]: 'America/Los_Angeles', [P(2)]: 'UTC', [P(3)]: null, [P(4)]: null, [P(5)]: null, [P(6)]: null })
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    const logged = err.mock.calls.map((c) => JSON.stringify(c))
+    for (const id of [P(3), P(4), P(5), P(6)]) expect(logged.some((l) => l.includes(id))).toBe(true)
+    err.mockRestore()
+  })
+  it('조회 오류는 빈 결과가 아니라 ConfigUnavailableError, 빈 입력은 조회하지 않는다, id 는 200 개씩 나눠 묻는다', async () => {
+    await expect(getProjectTimezones([P(1)], { client: tzClient([], true).client })).rejects.toBeInstanceOf(ConfigUnavailableError)
+    const none = tzClient([])
+    expect((await getProjectTimezones([], { client: none.client })).size).toBe(0)
+    expect(none.ins).toEqual([])
+    const ids = Array.from({ length: 450 }, (_, i) => `00000000-0000-0000-7e57-${String(900000 + i).padStart(12, '0')}`)
+    const many = tzClient(ids.map((project_id) => ({ project_id, values: {} })))
+    const got = await getProjectTimezones(ids, { client: many.client })
+    expect(got.size).toBe(450)
+    expect([...got.values()].every((v) => v === 'UTC')).toBe(true)
+    expect(many.ins.map((x) => x.length)).toEqual([200, 200, 50])
   })
 })
