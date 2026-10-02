@@ -449,8 +449,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           >
             <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
               {locale === 'ko'
-                ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 전역 팀을 상속합니다.'
-                : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits global teams until defined.'}
+                ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 워크스페이스 공용 팀을 상속합니다.'
+                : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits the workspace’s shared teams until defined.'}
             </p>
             {teams.ok ? (
               <ProjectTeamsManager

@@ -75,7 +75,7 @@ vi.mock('@/lib/teams/referencedCommon', () => ({ referencedCommonTeamCodes }))
 const cfg = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: cfg.getProjectConfig }))
 
-import { addProjectTeam, updateProjectTeam, copyGlobalTeams } from '@/app/actions/projectTeams'
+import { addProjectTeam, updateProjectTeam } from '@/app/actions/projectTeams'
 import { revalidatePath } from 'next/cache'
 import { makeAdminActor } from '../fixtures/actor'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -228,71 +228,7 @@ describe('프로젝트 팀 관리 서버액션', () => {
     })
   })
 
-  describe('copyGlobalTeams', () => {
-    it('프로젝트 관리자가 아니면 거부', async () => {
-      requireProjectAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
-      expect(await copyGlobalTeams('p1')).toEqual({ ok: false, error: '권한 없음' })
-    })
-
-    it('이미 프로젝트 팀이 정의되어 있으면 거부', async () => {
-      asAdmin()
-      db.teams = [{ id: 't-mine', code: 'ERP', project_id: 'p1', sort_order: 0 }]
-      const r = await copyGlobalTeams('p1')
-      expect(r.ok).toBe(false)
-      expect(db.inserted.teams).toHaveLength(0)
-    })
-
-    it('전역 활성 팀이 0개면 거부(복사할 것이 없음) — 빈 insert 를 성공으로 위장하지 않는다', async () => {
-      asAdmin()
-      workspaceTeams.mockResolvedValue([])
-      const r = await copyGlobalTeams('p1')
-      expect(r).toEqual({ ok: false, error: '복사할 전역 팀이 없습니다.' })
-      expect(db.inserted.teams).toHaveLength(0)
-    })
-
-    it('전역 팀이 전부 비활성이어도 거부(활성 0건과 동치)', async () => {
-      asAdmin()
-      workspaceTeams.mockResolvedValue([
-        { id: 'g-old', code: 'OLD', sortOrder: 0, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-      ])
-      const r = await copyGlobalTeams('p1')
-      expect(r).toEqual({ ok: false, error: '복사할 전역 팀이 없습니다.' })
-      expect(db.inserted.teams).toHaveLength(0)
-    })
-
-    it('성공: 전역 활성 팀만 복사하고 MDM 의 progressVisible=false 를 보존한다', async () => {
-      asAdmin()
-      workspaceTeams.mockResolvedValue([
-        { id: 'g-pmo', code: 'PMO', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-        { id: 'g-mdm', code: 'MDM', sortOrder: 4, active: true, progressVisible: false, projectId: null, workspaceId: 'ws-1' },
-        { id: 'g-old', code: 'OLD', sortOrder: 5, active: false, progressVisible: true, projectId: null, workspaceId: 'ws-1' },
-      ])
-      const r = await copyGlobalTeams('p1')
-      expect(r.ok).toBe(true)
-      expect(db.inserted.teams).toHaveLength(2)
-      expect(db.inserted.teams).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: 'PMO', project_id: 'p1', progress_visible: true, workspace_id: 'ws-1' }),
-        expect.objectContaining({ code: 'MDM', project_id: 'p1', progress_visible: false, workspace_id: 'ws-1' }),
-      ]))
-      expect(db.inserted.teams.every(t => typeof t.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.color as string))).toBe(true)
-      expect(db.inserted.teams.some(t => t.code === 'OLD')).toBe(false)
-      // 복사 원본은 이 프로젝트 워크스페이스의 공용 팀 — 다른 워크스페이스의 공용 팀을 끌어오지 않는다(SP2 §4.2).
-      expect(workspaceTeams).toHaveBeenCalledWith('ws-1', { client: expect.objectContaining({ from: expect.any(Function) }) })
-      // 라우트 패턴 꼴(스펙 §4.7·SP3b D8 — wbs.ts 와 같은 꼴, A2 최종 리뷰 P3 FF2). '/p/<id>' 꼴은 (app) 그룹 레이아웃을 다시 그리지 못했다
-      expect(revalidatePath).toHaveBeenCalledWith('/(app)/p/[projectId]', 'layout')
-      expect(revalidatePath).not.toHaveBeenCalledWith('/p/p1', 'layout')
-    })
-
-    it('팀 원천 실패는 오류 — "복사할 팀 없음" 으로 위장하지 않는다', async () => {
-      asAdmin()
-      workspaceTeams.mockRejectedValue(new Error('팀 목록을 불러오지 못했습니다.'))
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const r = await copyGlobalTeams('p1')
-      expect(r).toEqual({ ok: false, error: '팀 기준정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.' })
-      expect(db.inserted.teams).toHaveLength(0)
-      spy.mockRestore()
-    })
-  })
+  // copyGlobalTeams 는 전환 RPC 를 부른다 — 결과 매핑·권한·원문은 tests/actions/team-convert.test.ts(T14)
   it('프로젝트 단계 이름과 같은 팀 이름은 거부한다 — 대소문자를 무시한다(D38)', async () => {
     asAdmin()
     expect(await addProjectTeam('p1', '작업')).toEqual({ ok: false, error: "'작업'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
