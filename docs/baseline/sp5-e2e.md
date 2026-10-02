@@ -16,7 +16,13 @@
 | `*_calendar` | 사용현황 RPC 언어(계획 P5) | 2026-10-02 10:51 | sql — `explain` 의 `One-Time Filter: ((now() AT TIME ZONE 'UTC'::text) IS NOT NULL)` · 빈 표 22023 케이스 초록(plpgsql 대안 불필요) |
 | 공통 | `db:reset`·`dev:bootstrap`·`settings:verify`·`test:rls` | 2026-10-02 10:46 | `test:rls` 33파일·436 통과·건너뜀 0 · `settings:verify` 문제 0 |
 | 공통 | CI 등가(부트스트랩 없이 `db reset --version 0001` → `migration up` → `test:rls`) | 2026-10-02 10:47~10:48 | 계정 0 · `test:rls` 33파일·436 통과·건너뜀 0 |
+| `*_calendar`(A-2 리뷰 수정 L1~L6 — 그 자리 수정) | R(카탈로그) | 2026-10-02 13:13~13:14 | `diff r b` 불일치 0(함수 143·트리거 66·정책 138) · 기본 권한 diff 없음 · `diff f a` 불일치 0(함수 148·트리거 67 — ⑩ 의 E 계산 함수는 pg_temp 라 카탈로그에 없다) |
+| `*_calendar`(L) | 데이터 ①②③ + P5 + **P6 먼 미래 문서(K+70)** — 적용 → check·smoke → 롤백 → 롤백 확인 → 재적용 → check·smoke | 2026-10-02 13:14~13:15 | 첫 적용·재적용 `CALENDAR_WEEK_START_REHEARSAL: 15 항목 통과`·`CALENDAR_SMOKE: 9 항목 통과` · 롤백 확인 `0`·`0`·`t`·`0`·`Asia/Seoul` · revision P1~P3·P6 = 1, P5 = 3 · L6 알림 `CALENDAR_MIGRATE: 일요일 전환이 8주 넘게 미뤄진 프로젝트 …0c06 — E 2026-12-13, 오늘 2026-10-02`(P6 한 줄 — P2·P3 는 없음) |
+| `*_calendar`(L) | 음성 ④ | 2026-10-02 13:15~13:16 | `CALENDAR_PRECHECK: 월요일이 아닌 주 키 1건 — (…0c04, 2026-09-29, isodow 2) …` 로 멈춤, 버전 0017. 키 있는 프로젝트 갈래(L2)는 `week-start-transition` 의 블록 재실행 케이스가 본다 |
+| 공통(L) | `db:reset`·`dev:bootstrap`·`settings:verify`·`test:rls` + CI 등가 | 2026-10-02 13:16~13:17 | `settings:verify` 0 · `test:rls` 33파일·441 통과·건너뜀 0 · CI 등가(계정 0) 441 통과·건너뜀 0 · 끝에 전체 적용 + 부트스트랩 |
 
 비고:
 - 리허설 seed(`*_calendar_week_start.sql` mode=seed)는 생성 RPC 를 거치지 않아 필수 키 `core.level_labels` 가 없다 — `settings:verify` 의 `required_missing` 이 이관 판정을 가리지 않게 seed 가 그 키를 직접 쓴다(revision 무변경).
+- ⑩ '오늘이 일요일' 갈래(E = K+13)는 리허설 실행일(금요일)이 밟지 않는다 — ⑩ 의 E 계산을 날짜 인자형 `pg_temp.calendar_migrate_e` 로 떼어
+  `week-start-transition` 이 그 블록을 그대로 만들어 일요일·월요일·토요일·미래 문서 경우를 단위로 본다(A-2 리뷰 — L 수정).
 - 롤백 확인의 가져오기 본문 검사는 휴일 갱신절의 `kind`(`public.holidays.kind`·`name, kind)`)만 센다 — SP4 원문에도 `item_owners.kind` 가 있다.

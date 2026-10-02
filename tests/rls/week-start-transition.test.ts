@@ -231,11 +231,13 @@ describe('⑦ settings_ref_check(calendar.timezone) — PG 가 모르는 이름�
   it('오타·숫자·빈 문자열 → 22023 CONFIG_INVALID:calendar.timezone, IANA 이름은 저장, unset 은 늘 통과', async () => {
     await asService(pool, async (c) => {
       await scene(c, null)
-      for (const [i, bad] of (['Asia/Seol', 7, '', 'Mars/Olympus'] as unknown[]).entries()) {
+      // NST·GMT0·EST — '/' 없는 이름은 닫힌 허용 목록만(L1 — PG 가 약어 표로 다른 오프셋을 읽는다)
+      for (const [i, bad] of (['Asia/Seol', 7, '', 'Mars/Olympus', 'NST', 'GMT0', 'EST', 'utc'] as unknown[]).entries()) {
         expect(await applyError(c, { set: { 'calendar.timezone': bad }, cmd: 10 + i }), JSON.stringify(bad))
           .toMatchObject({ code: '22023', message: 'CONFIG_INVALID:calendar.timezone' })
       }
       expect((await apply(c, { set: { 'calendar.timezone': 'America/Los_Angeles' }, cmd: 20 })).rows[0].r).toMatchObject({ status: 'applied' })
+      expect((await apply(c, { set: { 'calendar.timezone': 'EST5EDT' }, cmd: 22 })).rows[0].r).toMatchObject({ status: 'applied' })
       expect((await apply(c, { unset: ['calendar.timezone'], cmd: 21 })).rows[0].r).toMatchObject({ status: 'applied' })
     })
   })
@@ -360,5 +362,79 @@ describe('⑪-a 사후검사 — 마이그레이션의 카탈로그 블록을 �
     expect(await runAfter([`create or replace function public.settings_ref_check(p_project_id uuid, p_key text, p_old jsonb, p_new jsonb)
       returns void language plpgsql set search_path to '' as $f$ begin return; end $f$`])).toMatchObject(POSTCHECK)
     expect(await runAfter(['revoke execute on function public.import_wbs(uuid, jsonb, jsonb) from authenticated'])).toMatchObject(POSTCHECK)
+  })
+})
+
+describe('마이그레이션 블록을 그대로 다시 돌린다 — ① 사전검사(키 있는 프로젝트, L2)·⑩ E 계산(오늘이 일요일 갈래)·⑩ 알림(L6)', () => {
+  // 번호를 쓰지 않는다 — 접미로 찾는다(D2). 블록은 표를 바꾸지 않는다(① 은 읽기, E 계산은 pg_temp 함수, 알림은 NOTICE 만)
+  const dir = fileURLToPath(new URL('../../supabase/migrations/', import.meta.url))
+  const text = () => readFileSync(dir + readdirSync(dir).filter((f) => f.endsWith('_calendar.sql'))[0], 'utf8')
+  const doBlock = (needle: string) => {
+    const found = (text().match(/^do \$\$\n[\s\S]*?^end \$\$;$/gm) ?? []).filter((b) => b.includes(needle))
+    expect(found, needle).toHaveLength(1)
+    return found[0]
+  }
+  const eBlock = () => {
+    const m = text().match(/-- ⑩ E 계산 블록 시작\n([\s\S]*?)-- ⑩ E 계산 블록 끝/)
+    expect(m).not.toBeNull()
+    return m![1]
+  }
+
+  it('① 키가 있는 프로젝트도 마지막 규칙 밖의 주 키를 조치 문구와 함께 막는다 — 롤백 기간에 E 뒤에 만든 월요일 문서(L2)', async () => {
+    const block = doBlock('CALENDAR_PRECHECK')
+    await asService(pool, async (c) => {
+      await scene(c, null)
+      expect(await pgError(c, block), '지금 데이터는 통과').toBeNull()
+      // 롤백 상태 흉내 — 규칙 [{monday},{sunday@10-11}] 이 남았고 트리거가 없는 동안 옛 코드가 E 뒤에 월요일 키를 만들었다
+      await c.query('alter table public.weekly_reports disable trigger weekly_reports_week_key_guard')
+      await setRules(c, [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-11' }])
+      await c.query('insert into public.weekly_reports (project_id, week_start) values ($1, $2), ($1, $3)', [P, '2026-10-05', '2026-10-12'])
+      const e = await pgError(c, block)
+      expect(e).toMatchObject({ code: '23514', message: expect.stringContaining('CALENDAR_PRECHECK') })
+      expect(e?.message).toContain('2026-10-12')
+      expect(e?.message).not.toContain('2026-10-05')                       // 과도기 키(Kp)는 마지막 원소 앞 — 걸지 않는다
+      expect(e?.message).toContain('calendar.week_start 키를 지운')          // 조치
+    })
+  })
+
+  it('⑩ E 계산 — 오늘이 일요일이면 다음 주 일요일, 그 밖에는 이번 주 일요일, 미래 문서가 있으면 그 뒤(사용자 결정 #2)', async () => {
+    await asService(pool, async (c) => {
+      await c.query(eBlock())
+      const e = async (today: string, maxWeek: string | null) =>
+        (await c.query<{ e: string }>('select pg_temp.calendar_migrate_e($1::date, $2::date)::text as e', [today, maxWeek])).rows[0].e
+      expect(await e('2026-10-04', null)).toBe('2026-10-11')              // 일 — K = 09-28, K+6 = 10-04 ≤ T → K+13
+      expect(await e('2026-10-04', '2026-09-28')).toBe('2026-10-11')
+      expect(await e('2026-10-05', null)).toBe('2026-10-11')              // 월
+      expect(await e('2026-10-10', '2026-10-05')).toBe('2026-10-11')      // 토 — 이번 주 문서는 E 앞
+      expect(await e('2026-10-07', '2026-10-12')).toBe('2026-10-18')      // 미래 문서(10-12) ≥ E → max + 6
+      expect(await e('2026-10-07', '2026-12-14')).toBe('2026-12-20')
+    })
+  })
+
+  it('⑩ 알림 — 이 적용이 쓴 규칙의 E 가 오늘 + 8주를 넘으면 CALENDAR_MIGRATE NOTICE(동작은 바꾸지 않는다, L6)', async () => {
+    const block = doBlock('CALENDAR_MIGRATE')
+    await asService(pool, async (c) => {
+      await scene(c, null)
+      await c.query(`update public.project_settings set "values" = "values" || '{"calendar.timezone": "UTC"}'::jsonb where project_id = $1`, [P])
+      const today = (await c.query<{ t: string }>(`select (now() at time zone 'UTC')::date::text as t`)).rows[0].t
+      const hist = (n: number, from: string) => c.query(
+        `insert into public.project_settings_history (project_id, revision, key, old_value, new_value, source, command_id)
+         values ($1, $2, 'calendar.week_start', null, $3::jsonb, 'migration', gen_random_uuid())`,
+        [P, 900 + n, JSON.stringify([{ day: 'monday', from: null }, { day: 'sunday', from }])])
+      const notices: string[] = []
+      const on = (m: { message?: string }) => { if (m.message?.includes('CALENDAR_MIGRATE')) notices.push(m.message) }
+      c.on('notice', on)
+      try {
+        const sundayAfter = async (days: number) =>
+          (await c.query<{ d: string }>(`select ($1::date + $2::int + (7 - extract(isodow from $1::date + $2::int)::int))::text as d`, [today, days])).rows[0].d
+        await hist(1, await sundayAfter(14))
+        expect(await pgError(c, block)).toBeNull()
+        expect(notices).toEqual([])
+        await hist(2, await sundayAfter(70))
+        expect(await pgError(c, block)).toBeNull()
+        expect(notices).toHaveLength(1)
+        expect(notices[0]).toContain(P)
+      } finally { c.off('notice', on) }
+    })
   })
 })

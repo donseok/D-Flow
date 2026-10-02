@@ -5,7 +5,8 @@
 import { type Pool, type PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_WEEK_RULES, calendarOf, isWorkingDay, parseTimezone, stampIn, weekKeyOf, type IsoDow, type WeekStartRule,
+  DEFAULT_WEEK_RULES, NO_SLASH_TIMEZONES, calendarOf, isWorkingDay, parseTimezone, parseWeekRules, parseWorkingDays, stampIn, weekKeyOf,
+  type IsoDow, type WeekStartRule,
 } from '@/lib/domain/calendar'
 import { GOLDEN_TZ_NAMES, GOLDEN_TZ_REJECT, GOLDEN_WEEK_CASES, GOLDEN_WORKDAY_CASES } from '../fixtures/calendar-golden'
 import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
@@ -86,6 +87,10 @@ describe('③ week_rules_of — 설정 문서에서 규칙을 꺼내 모양을 �
       expect(await rulesOf({ 'calendar.week_start': two })).toEqual(two)
       const three = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-09-27' }, { day: 'monday', from: '2027-03-01' }]
       expect(await rulesOf({ 'calendar.week_start': three })).toEqual(three)
+      // 가장 가까운 허용 간격 — 셋째 전환의 Kp(10-12 의 직전 일요일 주 = 10-04)가 곧 앞 전환의 from 인 경우(TS 도 받는다, L3 경계)
+      const tight = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }, { day: 'monday', from: '2026-10-12' }]
+      expect(parseWeekRules(tight).ok).toBe(true)
+      expect(await rulesOf({ 'calendar.week_start': tight })).toEqual(tight)
     })
   })
 
@@ -105,7 +110,13 @@ describe('③ week_rules_of — 설정 문서에서 규칙을 꺼내 모양을 �
       ['from 의 요일이 day 와 다르다', [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-09-28' }]],
       ['이웃 원소의 요일이 같다', [{ day: 'sunday', from: null }, { day: 'sunday', from: '2026-09-27' }]],
       ['from 이 오름차순이 아니다', [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }, { day: 'monday', from: '2026-09-28' }]],
+      // L3 — TS parseWeekRules 와 같은 거부(A-2 리뷰 P3): 모르는 필드, 전환끼리 너무 가까움(Kp < 앞 전환의 from)
+      ['모르는 필드(첫 원소)', [{ day: 'sunday', from: null, note: 'x' }]],
+      ['모르는 필드(둘째 원소)', [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04', by: 'u' }]],
+      ['전환끼리 너무 가깝다(월→일 10-04, 일→월 10-05)', [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-04' }, { day: 'monday', from: '2026-10-05' }]],
+      ['전환끼리 너무 가깝다(월→일 10-11, 일→월 10-12)', [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-11' }, { day: 'monday', from: '2026-10-12' }]],
     ]
+    for (const [why, v] of bad) expect(parseWeekRules(v).ok, `TS ${why}`).toBe(false)          // TS·SQL 같은 거부
     await asService(pool, async (c) => {
       for (const [why, v] of bad) {
         expect(await pgError(c, 'select public.week_rules_of($1::jsonb)', [JSON.stringify({ 'calendar.week_start': v })]), why)
@@ -176,6 +187,7 @@ describe('③ is_workday — 골든 근무일 행렬에서 TS isWorkingDay 와 �
       ['JSON null', null], ['배열이 아니다', '1,2,3'], ['빈 배열', []], ['0', [0, 1]], ['8', [1, 8]],
       ['중복', [1, 1, 2]], ['문자열 원소', ['1']], ['소수', [1.5]],
     ]
+    for (const [why, v] of bad) expect(parseWorkingDays(v).ok, `TS ${why}`).toBe(false)
     await asService(pool, async (c) => {
       await newProject(c)
       await c.query(`insert into public.holidays (project_id, date, name, kind) values ($1, '2026-10-03', '근무', 'work')`, [P])
@@ -184,6 +196,20 @@ describe('③ is_workday — 골든 근무일 행렬에서 TS isWorkingDay 와 �
         expect(await pgError(c, 'select public.is_workday($1, $2::date)', [P, '2026-10-03']), why).toMatchObject(INVALID_DAYS)
       }
       expect(await pgError(c, 'select public.is_workday($1, $2::date)', [MISSING, '2026-10-03'])).toMatchObject(ROW_MISSING)
+    })
+  })
+
+  it('소수부가 0 인 숫자(1.0)는 그 정수다 — JSON 파싱 뒤 같은 값을 받는 TS 와 같다(L4 — A-2 리뷰 P3)', async () => {
+    expect(parseWorkingDays(JSON.parse('[1.0, 2, 3, 4, 5.00]')).ok).toBe(true)
+    await asService(pool, async (c) => {
+      await newProject(c)
+      // JSON.stringify 는 1.0 을 1 로 쓴다 — jsonb 리터럴로 표기를 보존해 넣는다
+      await c.query(`update public.project_settings set "values" = "values" || '{"calendar.working_days": [1.0, 2, 3, 4, 5.00]}'::jsonb where project_id = $1`, [P])
+      const { rows } = await c.query<{ w: boolean }>(
+        `select public.is_workday($1, g.d::date) as w from pg_catalog.generate_series('2026-09-28'::date, '2026-10-04'::date, interval '1 day') as g(d) order by g.d`, [P])
+      expect(rows.map((r) => r.w)).toEqual([true, true, true, true, true, false, false])
+      await c.query(`update public.project_settings set "values" = "values" || '{"calendar.working_days": [1.0, 1]}'::jsonb where project_id = $1`, [P])
+      expect(await pgError(c, 'select public.is_workday($1, $2::date)', [P, '2026-10-01'])).toMatchObject(INVALID_DAYS)   // 1.0 = 1 — 중복
     })
   })
 
@@ -235,8 +261,8 @@ describe('tz 허용 집합 — TS ⊂ PG(D54·E29)', () => {
     })
   })
 
-  it('골든 이름(과 TS 가 받는다면 EST)은 같은 instant 를 TS·PG 가 같은 현지 시각으로 바꾼다 — 같은 뜻(R5)', async () => {
-    const names = [...GOLDEN_TZ_NAMES, ...(parseTimezone('EST').ok ? ['EST'] : [])]
+  it("골든 이름과 '/' 없는 허용 목록 전부는 같은 instant 를 TS·PG 가 같은 현지 시각으로 바꾼다 — 같은 뜻(R5·L1)", async () => {
+    const names = [...GOLDEN_TZ_NAMES, ...NO_SLASH_TIMEZONES]
     const instants = ['2026-01-15T12:00:00Z', '2026-07-15T12:00:00Z', '2026-03-08T07:30:00Z', '2026-11-01T06:30:00Z']
     await asService(pool, async (c) => {
       for (const n of names) {
@@ -261,6 +287,24 @@ describe('tz 허용 집합 — TS ⊂ PG(D54·E29)', () => {
       // 새 이름과 옛 이름은 같은 tz — 같은 오프셋
       const off = new Map(rows.map((r) => [r.name, r.utc_offset]))
       for (const [name, old] of ALIASES) expect(off.get(name), name).toBe(off.get(old))
+    })
+  })
+
+  it("'/' 없는 옛 약칭(NST·IST·AST·PST·CET·EST·GMT0)은 TS 가 거부하고 PG 의 설정 판정(settings_ref_check)도 거부한다 — PG 는 약어 표로 다른 오프셋을 읽는다(L1)", async () => {
+    const LEGACY = ['NST', 'IST', 'AST', 'PST', 'CET', 'EST', 'GMT0']
+    for (const n of LEGACY) expect(parseTimezone(n).ok, n).toBe(false)
+    await asService(pool, async (c) => {
+      await newProject(c)
+      for (const n of LEGACY) {
+        expect(await pgError(c, `select public.settings_ref_check($1, 'calendar.timezone', null, to_jsonb($2::text))`, [P, n]), n)
+          .toMatchObject({ code: '22023', message: 'CONFIG_INVALID:calendar.timezone' })
+      }
+      for (const n of [...NO_SLASH_TIMEZONES, ...GOLDEN_TZ_NAMES]) {
+        expect(await pgError(c, `select public.settings_ref_check($1, 'calendar.timezone', null, to_jsonb($2::text))`, [P, n]), n).toBeNull()
+      }
+      // 근거 — 받았다면 PG 가 다른 시각으로 읽었을 것(예: NST = 뉴펀들랜드 −03:30, ICU 는 오클랜드)
+      const { rows } = await c.query<{ s: string }>(`select to_char(timestamptz '2026-07-01 12:00Z' at time zone 'NST', 'MM-DD HH24:MI') as s`)
+      expect(rows[0].s).not.toBe(stampIn('Pacific/Auckland', '2026-07-01T12:00:00Z').slice(5))
     })
   })
 
