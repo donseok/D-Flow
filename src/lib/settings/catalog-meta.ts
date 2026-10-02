@@ -31,10 +31,20 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   },
   'modules.enabled': A('verified', ['src/lib/modules/effective.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'workflow.stage_credits': A('wired', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0012_settings.sql'], ['tests/settings/registry.test.ts']),
-  // SP5 A — 같은 이름이 두 스코프에 있다(메타는 키 이름 하나). 소비처는 과제 13~28 이 배선하고 과제 29 가 verified 로 올린다
-  'calendar.timezone': S5A('stored', ['src/app/actions/project.ts'], ['tests/settings/calendar-keys.test.ts']),
-  'calendar.working_days': S5A('stored', ['src/app/actions/project.ts'], ['tests/settings/calendar-keys.test.ts']),
-  'calendar.week_start': S5A('stored', ['src/app/actions/project.ts', 'src/lib/settings/defs/project.ts'], ['tests/settings/calendar-keys.test.ts', 'tests/domain/calendar.test.ts']),
+  // SP5 A(스펙 D44) — 두 스코프 공용 키 이름(메타는 키 이름 하나). 워크스페이스 값은 새 프로젝트의 초기값(seedFrom — 상속 아님),
+  // 프로젝트 값이 소비처의 원천이다. 과제 29 가 정의·편집(설정 화면 달력 절)·소비처·테스트 네 연결을 확인하고 verified 로 올렸다
+  'calendar.timezone': S5A('verified',
+    ['src/lib/calendar/load.ts', 'src/lib/settings/workspaceConfig.ts', 'src/app/(app)/p/[projectId]/weekly/page.tsx', 'src/lib/data/usage.ts'],
+    ['tests/domain/calendar.test.ts', 'tests/rls/calendar-parity.test.ts', 'tests/calendar/load.test.ts', 'tests/components/time-display-zone.test.tsx', 'tests/scripts/bootstrap-timezone.test.ts'],
+  ),
+  'calendar.working_days': S5A('verified',
+    ['src/lib/domain/calendar.ts', 'src/lib/calendar/load.ts', 'src/lib/domain/progress.ts'],
+    ['tests/domain/calendar.test.ts', 'tests/rls/calendar-parity.test.ts', 'tests/components/calendar-first-column.test.tsx', 'tests/settings/calendar-keys.test.ts'],
+  ),
+  'calendar.week_start': S5A('verified',
+    ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/settings/defs/project.ts'],
+    ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
+  ),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */

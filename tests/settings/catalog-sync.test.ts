@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CATALOG_META } from '@/lib/settings/catalog-meta'
+import { CATALOG_META, PLANNED_KEYS } from '@/lib/settings/catalog-meta'
 import { catalogAutoSections, replaceCatalogAutoSections } from '@/lib/settings/catalogDoc'
 import { OPERATIONAL_SETTINGS } from '@/lib/settings/operational'
 import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
@@ -11,7 +11,8 @@ const expectedStatus: Record<string, string> = {
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
   'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
-  'calendar.timezone': 'stored', 'calendar.working_days': 'stored', 'calendar.week_start': 'stored',
+  // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
+  'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
@@ -76,5 +77,22 @@ describe('설정 카탈로그 동기화', () => {
       // 식별자 경계로 본다 — 부분 문자열이면 GET·Locale 같은 짧은 이름이 파일 어디에든 걸린다.
       if (symbol) expect(new RegExp(`(?<![\\w$])${symbol.replace(/\$/g, '\\$')}(?![\\w$])`).test(readFileSync(path, 'utf8')), `${path}: ${symbol}`).toBe(true)
     }
+  })
+})
+
+describe('PLANNED_KEYS — SP5 의 남은 키는 체크포인트 이름으로(스펙 §1.1 정본 결정 9 행)', () => {
+  it('달력 셋은 등록돼 목록에 없고, SP5 행은 B1~B4 체크포인트를 적는다', () => {
+    expect(PLANNED_KEYS.filter((k) => k.key.startsWith('calendar.'))).toEqual([])
+    const sp5 = PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))
+    expect(sp5.length).toBeGreaterThan(0)
+    for (const k of sp5) expect(k.sp, k.key).toMatch(/^SP5 B[1-4]$/)
+    const where = Object.fromEntries(sp5.map((k) => [`${k.scope}/${k.key}`, k.sp]))
+    expect(where).toMatchObject({
+      'project/issues.id_policy': 'SP5 B1', 'project/issues.analysis': 'SP5 B1',
+      'workspace/minutes.attachments': 'SP5 B3', 'project/minutes.attachments': 'SP5 B3',
+      'workspace/minutes.root_folders': 'SP5 B2',
+      'project/issues.severities': 'SP5 B4', 'project/issues.cause_categories': 'SP5 B4', 'project/issues.sources': 'SP5 B4',
+      'project/attendance.types': 'SP5 B4', 'project/meetings.categories': 'SP5 B4',
+    })
   })
 })
