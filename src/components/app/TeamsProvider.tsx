@@ -1,8 +1,9 @@
 'use client'
 
-// 활성 팀 목록 컨텍스트 — 미제공 시 빈 목록. 팀은 (app)/layout 이 서버에서 1회 주입한다.
-import { createContext, useContext, useMemo } from 'react'
+// 활성 팀 목록 컨텍스트 — 미제공 시 빈 목록. 팀은 범위 레이아웃 셋((global)·w/[slug]·p/[projectId])이 요청 범위 원천으로 주입한다(SP4 B).
+import { createContext, useCallback, useContext, useMemo } from 'react'
 import { activeCodes, type Team } from '@/lib/domain/teams'
+import { teamSlotFor, type TeamSlotStyle } from '@/lib/domain/teamColor'
 import type { TeamCode } from '@/lib/domain/types'
 
 const TeamsContext = createContext<readonly Team[]>([])
@@ -24,4 +25,10 @@ export function useTeams(): readonly Team[] {
 export function useTeamCodes(): readonly TeamCode[] {
   const teams = useContext(TeamsContext)
   return useMemo(() => activeCodes(teams), [teams])
+}
+
+/** 팀 code → 화면 색 슬롯(SP4 D3) — 이 범위의 활성 팀으로 찾고 없으면 중립(공급자가 없는 화면도 중립) */
+export function useTeamSlot(): (code: string) => TeamSlotStyle {
+  const teams = useTeams()
+  return useCallback((code: string) => teamSlotFor(code, teams), [teams])
 }
