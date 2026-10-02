@@ -15,7 +15,7 @@ import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyV
 import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
-import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText, teamStyle } from './shared'
+import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
 import { WbsProgressLens } from './WbsProgressLens'
 import { WbsFontSizeControl } from './WbsFontSizeControl'
@@ -24,7 +24,7 @@ import { ReportModal } from '@/components/report/ReportModal'
 import { usePagePresence } from '@/components/app/usePagePresence'
 import { PresenceStrip } from '@/components/app/PresenceStrip'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { useRightRailOptional } from '@/components/app/RightRail'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -252,6 +252,7 @@ export function WbsGanttSheet({
   const router = useRouter()
   const { t } = useLocale()
   const legendTeams = useTeamCodes()
+  const slotOf = useTeamSlot()
   /* 실시간 반영(0098) — 서버가 준 트리를 상태로 미러링하고 broadcast 가 오면 그 행만 갈아끼운다.
      조상 롤업은 applyWbsChange 가 computeNode 를 다시 돌려 낸다: 리프만 고치면 공정율·달성률·
      상태가 낡은 채 남아 화면이 조용히 틀린 숫자를 보여준다.
@@ -2052,7 +2053,7 @@ export function WbsGanttSheet({
         <span className="inline-flex items-center gap-2">
           {legendTeams.map(t => (
             <span key={t} className="inline-flex items-center gap-0.5">
-              <span className={`${teamStyle(t).fg} text-[9px]`}>●</span>
+              <span className={`${slotOf(t).fg} text-[9px]`}>●</span>
               {t}
             </span>
           ))}

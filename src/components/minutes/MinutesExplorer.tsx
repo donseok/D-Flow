@@ -25,7 +25,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
-import { teamStyle } from '@/components/wbs/shared'
+import { useTeamSlot } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
 import { FolderManageModal } from './FolderManageModal'
 import { FolderPickModal } from './FolderPickModal'
@@ -967,6 +967,7 @@ function MinuteCard({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
+  const slotOf = useTeamSlot()
   return (
     <article {...dragProps}
       className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
@@ -988,7 +989,7 @@ function MinuteCard({
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
       </div>
@@ -1029,6 +1030,7 @@ function MinuteRow({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
+  const slotOf = useTeamSlot()
   return (
     <li {...dragProps} className={`relative ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다(카드와 같은 이유).
@@ -1045,7 +1047,7 @@ function MinuteRow({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(l.teamCode).bar}`}>
+        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
           {l.teamCode}
         </span>
         <span className="min-w-0 flex-1">

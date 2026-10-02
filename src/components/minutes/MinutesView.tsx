@@ -11,12 +11,11 @@ import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
-import { teamStyle } from '@/components/wbs/shared'
 import { MinutesCalendar } from './MinutesCalendar'
 import { MinuteUploadModal } from './MinuteUploadModal'
 import { ArchiveChatPanel } from './ArchiveChatPanel'
@@ -86,6 +85,7 @@ export function MinutesView({
     return () => { ro.disconnect(); view.style.setProperty('--minutes-bar-h', '0px') }
   }, [])
   const teamCodes = useTeamCodes()
+  const slotOf = useTeamSlot()
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
   const [month0, setMonth0] = useState((initM || 1) - 1)
@@ -367,7 +367,7 @@ export function MinutesView({
                     <li key={mi.id}>
                       <Link href={minuteLinks.minute(mi.id)}
                         className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
+                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
                           {mi.teamCode}
                         </span>
                         <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
@@ -396,7 +396,7 @@ export function MinutesView({
                   <li key={mi.id}>
                     <Link href={minuteLinks.minute(mi.id)}
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
+                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
                         {mi.teamCode}
                       </span>
                       <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>

@@ -5,7 +5,7 @@ import { monthMatrix } from '@/lib/domain/attendance'
 import { krSpecialDayMap } from '@/lib/domain/holidays'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
-import { teamStyle } from '@/components/wbs/shared'
+import { useTeamSlot } from '@/components/app/TeamsProvider'
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
@@ -26,6 +26,7 @@ export function MinutesCalendar({
   selectedDate: string | null
 }) {
   const { t } = useLocale()
+  const slotOf = useTeamSlot()
   const matrix = useMemo(() => monthMatrix(year, month0), [year, month0])
   const byDate = useMemo(() => {
     const map = new Map<string, Minute[]>()
@@ -67,7 +68,7 @@ export function MinutesCalendar({
               <div className="mt-1 flex flex-wrap gap-1">
                 {rows.slice(0, 4).map(mi => (
                   <span key={mi.id}
-                    className={`inline-flex items-center rounded px-1 py-px text-[10px] font-bold text-category-fg ${teamStyle(mi.teamCode).bar}`}>
+                    className={`inline-flex items-center rounded px-1 py-px text-[10px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
                     {mi.teamCode}
                   </span>
                 ))}

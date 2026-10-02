@@ -19,7 +19,7 @@ import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
 import { updateActual } from '@/app/actions/wbs'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeams } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { KanbanCard } from './KanbanCard'
 import { ProgressPopover } from './ProgressPopover'
@@ -56,6 +56,7 @@ export function KanbanBoard({
   const { t } = useLocale()
   const { toast } = useToast()
   const teamCodes = useTeamCodes()
+  const teams = useTeams()
   const searchParams = useSearchParams()
   // 챗봇 딥링크 ?view= 초기 모드 — 레거시 'status' 딥링크는 'progress'로 흡수, 무효 값은 조용히 무시(기본 progress).
   const [mode, setMode] = useState<Mode>(() => {
@@ -159,10 +160,10 @@ export function KanbanBoard({
   const pathById = useMemo(() => leafPaths(viewItems), [viewItems])
 
   const baseColumns = useMemo<KanbanColumn[]>(() => {
-    if (mode === 'owner') return groupByOwner(viewItems, teamCodes)
+    if (mode === 'owner') return groupByOwner(viewItems, teamCodes, teams)
     if (mode === 'phase') return groupByPhase(viewItems)
     return groupByProgress(viewItems)
-  }, [mode, viewItems, teamCodes])
+  }, [mode, viewItems, teamCodes, teams])
 
   const columns = useMemo<KanbanColumn[]>(() => {
     const q = query.trim().toLowerCase()
