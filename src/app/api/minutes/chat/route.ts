@@ -90,8 +90,11 @@ export async function POST(req: NextRequest) {
         // 담당 루트는 그 폴더 범위(프로젝트, 미지정이면 워크스페이스)의 팀 시드 루트다 — 시드 루트 키가 범위를 품으므로
         // 팀 코드만으로는 찾을 수 없다.
         // 그 워크스페이스의 폴더만 — 다른 워크스페이스 폴더는 담당 범위 밖과 같은 400(검색이 그 워크스페이스로 걸려 조용히 0건이 되지 않게)
+        // 명단 밖 비공개 프로젝트의 폴더도 같은 400 — 폴더 id 를 알아도 그 폴더만 골라 묻지 못한다(FA1, CC1). 숨김 판정 실패는 던져 아래 500
         const folder = snap.byId.get(folderIdRaw)
-        const rootId = folder && folder.workspaceId === workspaceId ? seedRootIdOf(snap, folder, team) : null
+        const hidden = await getHiddenProjectIds()
+        const inScope = !!folder && folder.workspaceId === workspaceId && (folder.projectId === null || !hidden.has(folder.projectId))
+        const rootId = folder && inScope ? seedRootIdOf(snap, folder, team) : null
         if (!folder || !rootId || !ancestorIdsOf(snap, folderIdRaw).has(rootId)) {
           return NextResponse.json({ error: '선택한 폴더가 담당 범위에 없습니다. 폴더를 다시 선택해 주세요.' }, { status: 400 })
         }

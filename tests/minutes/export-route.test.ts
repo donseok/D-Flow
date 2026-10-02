@@ -6,12 +6,15 @@ const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(),
   getActor: vi.fn(),
   loadDisplayBranding: vi.fn(),
+  getHiddenProjectIds: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor }))
 vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
+// 비공개 프로젝트 숨김(FA1) — 명단 밖 비공개 프로젝트의 회의록은 ZIP 에 싣지 않는다(U2b-5 리뷰 수정 CC1)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
 
 import { NextRequest } from 'next/server'
 import { GET as exportGET } from '@/app/api/minutes/export/route'
@@ -26,6 +29,7 @@ import { moduleState, projectsWithModule, requireModule, requireSessionModule, w
 
 type MinuteRow = {
   id: string
+  project_id?: string | null
   minute_date: string
   team_code: string
   title: string
@@ -106,6 +110,7 @@ describe('GET /api/minutes/export', () => {
     mocks.getSession.mockResolvedValue({ id: 'user-1' })
     mocks.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[W, 'member']]) }))
     mocks.loadDisplayBranding.mockResolvedValue({ productName: 'Acme PM', mailFromName: 'Acme PM' })
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set())
   })
   // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
   afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
@@ -157,6 +162,45 @@ describe('GET /api/minutes/export', () => {
     expect((await GET()).status).toBe(200)
     expect(mocks.loadDisplayBranding).toHaveBeenCalledWith(W)
     for (const b of fake.builders) expect(b.eq).toHaveBeenCalledWith('workspace_id', W)
+  })
+
+  it('명단 밖 비공개 프로젝트의 회의록은 ZIP 에 없다 — 회의록 화면에서 숨는 행은 내려받기에도 없다(CC1, FA1)', async () => {
+    const pub = row({ id: '10000000-0000-0000-0000-0000000000a1', title: '공개회의_260721', project_id: 'p-open' })
+    const loose = row({ id: '10000000-0000-0000-0000-0000000000a2', title: '미지정회의_260721', project_id: null })
+    const priv = row({ id: '10000000-0000-0000-0000-0000000000a3', title: '비공개회의_260721', body_md: '숨은 결정 본문', project_id: 'p-priv' })
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set(['p-priv']))
+    const fake = fakeClient(() => ({ data: [pub, loose, priv], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    const res = await GET()
+    expect(res.status).toBe(200)
+    for (const b of fake.builders) expect(b.select).toHaveBeenCalledWith(expect.stringContaining('project_id'))
+    const archive = await JSZip.loadAsync(await res.arrayBuffer())
+    const names = Object.keys(archive.files)
+    expect(names.some(n => n.includes(pub.id))).toBe(true)
+    expect(names.some(n => n.includes(loose.id))).toBe(true)
+    expect(names.some(n => n.includes(priv.id))).toBe(false)
+    const manifest = await archive.file('_manifest.csv')!.async('string')
+    expect(manifest).not.toContain(priv.id)
+    expect(manifest).not.toContain('비공개회의')
+  })
+
+  it('숨김 행만 있으면 내려받을 것이 없다(404) — 숨긴 행이 ZIP 의 빈 껍데기로도 드러나지 않는다(CC1)', async () => {
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set(['p-priv']))
+    const fake = fakeClient(() => ({ data: [row({ project_id: 'p-priv' })], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    expect((await GET()).status).toBe(404)
+  })
+
+  it('비공개 판정이 실패하면 ZIP 을 만들지 않는다 — 503, 행을 읽지 않는다(CC1, fail-closed)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+    const fake = fakeClient(() => ({ data: [row({ project_id: 'p-priv' })], error: null }))
+    mocks.createServerClient.mockResolvedValue(fake.client)
+    const res = await GET()
+    expect(res.status).toBe(503)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(fake.from).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('로그인하지 않은 요청은 JSON 401이며 DB에 접근하지 않는다', async () => {

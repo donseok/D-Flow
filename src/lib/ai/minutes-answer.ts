@@ -6,6 +6,7 @@ import { extractSearchKeywords } from './intent'
 import { healMissingMinuteEmbeddings } from './minutes-ingest'
 import { createServerClient } from '@/lib/supabase/server'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { ilikeOrPattern } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
 import { BRAND } from '@/lib/branding'
@@ -103,7 +104,9 @@ export async function streamDocAnswer(input: {
   return llmOrFallbackStream(system, input.history, input.message, fallback, '', await aiAvailable({ minuteId: input.minuteId }, { module: 'minutes' }))
 }
 
-/** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. 검색·AI 판정은 그 워크스페이스로(D26 — 라우트가 소속을 확인한 값) */
+/** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. 검색·AI 판정은 그 워크스페이스로(D26 — 라우트가 소속을 확인한 값).
+ *  명단 밖 비공개 프로젝트의 회의록은 두 갈래 모두 버린다(FA1, CC1 — 회의록 목록·검색과 같은 규칙). 숨김 판정 실패는 던진다
+ *  (라우트의 500 — 숨길 것을 못 숨긴 근거로 답하지 않는다). */
 export async function streamArchiveAnswer(input: {
   workspaceId: string
   message: string; history: ChatMessage[]
@@ -111,6 +114,9 @@ export async function streamArchiveAnswer(input: {
   filters: { team?: TeamCode | null; from?: string | null; to?: string | null; folderIds?: string[] | null }
 }): Promise<ReadableStream<Uint8Array>> {
   const sb = await createServerClient()
+  // 숨김 판정을 검색 전에 — 실패면 여기서 던져 아무 근거도 읽지 않는다(fail-closed)
+  const hidden = await getHiddenProjectIds()
+  const visible = (projectId: unknown) => projectId == null || (typeof projectId === 'string' && !hidden.has(projectId))
   await healMissingMinuteEmbeddings() // 회의록 단위 갭 회수(쿨다운·dedupe 내장, 절대 throw 안 함)
 
   // 1) 벡터 검색
@@ -133,12 +139,14 @@ export async function streamArchiveAnswer(input: {
           minuteDate: m.minute_date as string, teamCode: m.team_code as string,
           title: m.title as string, similarity: m.similarity as number,
         }))
-      // 벡터 RPC 는 워크스페이스 인자가 없다 — 찾은 회의록이 그 워크스페이스의 것인지 한 번 더 읽어 거른다(조회 실패면 버린다 — fail-closed)
+      // 벡터 RPC 는 워크스페이스 인자가 없다 — 찾은 회의록이 그 워크스페이스의 것인지 한 번 더 읽어 거른다(조회 실패면 버린다 — fail-closed).
+      // 같은 조회로 프로젝트를 받아 명단 밖 비공개 프로젝트의 회의록도 버린다(CC1)
       if (found.length) {
         const ids = [...new Set(found.map(m => m.minuteId))]
-        const own = await sb.from('minutes').select('id').in('id', ids).eq('workspace_id', input.workspaceId)
+        const own = await sb.from('minutes').select('id, project_id').in('id', ids).eq('workspace_id', input.workspaceId)
         if (own.error) console.error('[minutes] 보관함 검색 워크스페이스 확인 실패 — 벡터 결과를 버린다:', own.error.message)
-        const keep = new Set(own.error ? [] : ((own.data ?? []) as { id: string }[]).map(r => r.id))
+        const keep = new Set(own.error ? [] : ((own.data ?? []) as { id: string; project_id: unknown }[])
+          .filter(r => visible(r.project_id)).map(r => r.id))
         matches = found.filter(m => keep.has(m.minuteId))
       }
     }
@@ -149,15 +157,17 @@ export async function streamArchiveAnswer(input: {
   let keywordRows: { minuteId: string; minuteDate: string; teamCode: string; title: string }[] = []
   if (keywords.length) {
     const pat = ilikeOrPattern(keywords[0])
-    let q = sb.from('minutes').select('id, minute_date, team_code, title')
+    let q = sb.from('minutes').select('id, minute_date, team_code, title, project_id')
       .eq('workspace_id', input.workspaceId)
       .is('archived_at', null)
       .or(`title.ilike.${pat},body_md.ilike.${pat}`)
       .order('minute_date', { ascending: false }).limit(10)
     if (input.filters.team) q = q.eq('team_code', input.filters.team)
     if (input.filters.folderIds) q = q.in('folder_id', input.filters.folderIds)
-    const { data } = await q
-    keywordRows = (data ?? []).map(r => ({
+    const { data, error } = await q
+    // 근거 하나가 빠진 답은 낼 수 있다 — 대신 '일치 없음'으로 위장하지 않게 원인을 남긴다(3원칙)
+    if (error) console.error('[minutes] 보관함 키워드 조회 실패 — 키워드 근거 없이 답한다:', error.message)
+    keywordRows = (data ?? []).filter(r => visible(r.project_id)).map(r => ({
       minuteId: r.id as string, minuteDate: r.minute_date as string,
       teamCode: r.team_code as string, title: r.title as string,
     }))

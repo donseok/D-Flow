@@ -6,6 +6,7 @@ import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { seoulYmd } from '@/lib/domain/dates'
 import { createServerClient } from '@/lib/supabase/server'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import {
   createMinutesExportArchive,
   MINUTES_EXPORT_SOURCE_MAX_BYTES,
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 500
 const SELECT_COLUMNS = [
-  'id', 'minute_date', 'team_code', 'title', 'body_md', 'meeting_id',
+  'id', 'project_id', 'minute_date', 'team_code', 'title', 'body_md', 'meeting_id',
   'created_by_name', 'created_at', 'updated_at',
 ].join(', ')
 
@@ -57,8 +58,10 @@ function mapRow(row: DbRow): MinuteExportRow {
 /**
  * UUID PK keyset으로 전 건을 읽는다. UI 트리의 1,000건 cap/offset pagination을 재사용하지 않는다.
  * 시작 시각 이후 생성된 행은 다음 export로 넘겨 한 번의 ZIP 범위를 고정한다.
+ * hidden — 명단 밖 비공개 프로젝트(FA1). 비공개는 RLS 경계가 아니라 회의록 목록·검색·탐색기처럼 행마다 거른다(CC1).
+ * 숨긴 행은 용량 합계에도 넣지 않는다(413 판정이 숨은 본문의 크기를 드러내지 않게).
  */
-async function loadAllMinutes(cutoffIso: string, workspaceId: string): Promise<MinuteExportRow[]> {
+async function loadAllMinutes(cutoffIso: string, workspaceId: string, hidden: ReadonlySet<string>): Promise<MinuteExportRow[]> {
   const sb = await createServerClient()
   const rows: MinuteExportRow[] = []
   let cursor: string | null = null
@@ -79,6 +82,9 @@ async function loadAllMinutes(cutoffIso: string, workspaceId: string): Promise<M
     const page = (data ?? []) as unknown as DbRow[]
 
     for (const raw of page) {
+      const projectId = raw.project_id ?? null
+      if (projectId !== null && typeof projectId !== 'string') throw new Error('회의록 export 행의 project_id 값이 올바르지 않습니다.')
+      if (projectId !== null && hidden.has(projectId)) continue
       const mapped = mapRow(raw)
       sourceBytes += utf8ByteLength(mapped.bodyMd)
       if (sourceBytes > MINUTES_EXPORT_SOURCE_MAX_BYTES) {
@@ -99,7 +105,8 @@ async function loadAllMinutes(cutoffIso: string, workspaceId: string): Promise<M
 }
 
 
-/** 로그인 사용자가 현재 열람 가능한 그 워크스페이스의 회의록 본문을 분석용 ZIP으로 받는다(?workspaceId= — 회의록 화면의 슬러그 워크스페이스). */
+/** 로그인 사용자가 그 워크스페이스의 회의록 화면에서 볼 수 있는 회의록 본문을 분석용 ZIP으로 받는다(?workspaceId= — 회의록 화면의 슬러그 워크스페이스).
+ *  명단 밖 비공개 프로젝트의 회의록은 회의록 목록·검색과 같이 뺀다(FA1, CC1) — 그 판정이 실패하면 ZIP 을 만들지 않는다(503). */
 export async function GET(req: NextRequest) {
   if (!(await getSession())) return jsonError('인증이 필요합니다.', 401)
   // 대상 행이 없는 ZIP — 요청의 워크스페이스(소속 확인, D26)로 minutes 관문. 없으면 400(추측하지 않는다). 첫 DB 접근 앞.
@@ -110,9 +117,15 @@ export async function GET(req: NextRequest) {
   if (!workspaceId) return jsonError('워크스페이스를 확인할 수 없습니다.', 400)   // 프로젝트 없는 판정의 통과는 늘 워크스페이스를 낸다
   const { productName } = await loadDisplayBranding(workspaceId)
 
+  // 비공개 숨김 판정 — 실패하면 막는다(fail-closed, FA1). 숨길 것을 못 숨긴 ZIP 을 내보내느니 내려받기를 닫는다. 원인은 getHiddenProjectIds 가 로그로 남긴다
+  let hidden: ReadonlySet<string>
+  try { hidden = await getHiddenProjectIds() } catch {
+    return jsonError('비공개 프로젝트 판정을 하지 못해 내려받기를 멈췄습니다. 잠시 후 다시 시도해 주세요.', 503)
+  }
+
   const exportedAt = new Date()
   try {
-    const rows = await loadAllMinutes(exportedAt.toISOString(), workspaceId)
+    const rows = await loadAllMinutes(exportedAt.toISOString(), workspaceId, hidden)
     if (rows.length === 0) return jsonError('내려받을 회의록이 없습니다.', 404)
 
     const { zip } = createMinutesExportArchive(rows, exportedAt, productName)

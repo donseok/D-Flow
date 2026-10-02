@@ -54,6 +54,12 @@ const FOLDERS = [
   { id: 'a-leaf', name: '정례', parent_id: 'a-sub', created_by: 'u1', project_id: null, workspace_id: 'ws-a' },
   { id: 'a-erp', name: 'ERP', parent_id: null, created_by: null, project_id: null, workspace_id: 'ws-a' },
   { id: 'a-erp-sub', name: '물류', parent_id: 'a-erp', created_by: 'u1', project_id: null, workspace_id: 'ws-a' },
+  // 명단 밖 비공개 프로젝트(pa-priv)의 전용 트리 — 같은 워크스페이스·같은 담당(PMO) 루트(CC1)
+  { id: 'priv-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: 'pa-priv', workspace_id: 'ws-a' },
+  { id: 'priv-sub', name: '비공개 정례', parent_id: 'priv-pmo', created_by: 'u1', project_id: 'pa-priv', workspace_id: 'ws-a' },
+  // 볼 수 있는 프로젝트(pa)의 전용 트리(대조)
+  { id: 'pa-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: 'pa', workspace_id: 'ws-a' },
+  { id: 'pa-sub', name: '프로젝트 정례', parent_id: 'pa-pmo', created_by: 'u1', project_id: 'pa', workspace_id: 'ws-a' },
 ]
 
 function folderClient() {
@@ -159,6 +165,19 @@ describe('/api/minutes/chat archive — 폴더 필터의 담당 루트는 그 �
     const res = await POST(archive({ team: 'PMO', folderId: 'a-sub' }, 'ws-b'))
     expect(res.status).toBe(400)
     expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+
+  it('명단 밖 비공개 프로젝트의 폴더는 400 — 폴더 id 를 알아도 그 폴더만 골라 묻지 못한다(CC1, FA1)', async () => {
+    for (const folderId of ['priv-sub', 'priv-pmo']) {
+      const res = await POST(archive({ team: 'PMO', folderId }))
+      expect(res.status).toBe(400)
+    }
+    expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+
+  it('볼 수 있는 프로젝트의 폴더는 그대로 통과한다(대조)', async () => {
+    expect((await POST(archive({ team: 'PMO', folderId: 'pa-sub' }))).status).toBe(200)
+    expect(passedFilters().folderIds).toEqual(['pa-sub'])
   })
 
   it('다른 팀 루트 아래 폴더는 400 — 필터를 넓히지 않는다', async () => {
