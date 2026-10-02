@@ -69,6 +69,57 @@ describe('zonedMidnightUtc — 그 tz 의 자정 instant(DST 전환일 포함, �
       for (const d of ['2026-03-08', '2026-03-29', '2026-10-25', '2026-11-01', '2026-12-31']) expect(ymdIn(tz, zonedMidnightUtc(d, tz)), `${tz} ${d}`).toBe(d)
     }
   })
+  it.each([
+    // 음(−)오프셋 tz 가 자정에 시계를 앞으로 돌린다 — 00:00~00:59 가 없어 그날의 첫 시각은 01:00 이다(전날 23:00 이 아니다 — 리뷰 K1)
+    ['2026-09-06', 'America/Santiago', '2026-09-06T04:00:00.000Z'],
+    ['2026-03-08', 'America/Havana', '2026-03-08T05:00:00.000Z'],
+    ['2026-03-29', 'Atlantic/Azores', '2026-03-29T01:00:00.000Z'],
+    // 양(+)오프셋 tz 가 01:00 에 시계를 00:00 으로 돌린다 — 자정이 두 번이면 그날의 시작은 첫 자정이다
+    ['2010-10-29', 'Asia/Amman', '2010-10-28T21:00:00.000Z'],
+  ] as const)('자정 전환일 %s @ %s → 그날의 첫 시각 %s', (date, tz, iso) => {
+    const r = zonedMidnightUtc(date, tz)
+    expect(r.toISOString()).toBe(iso)
+    expect(ymdIn(tz, r)).toBe(date)
+    expect(ymdIn(tz, new Date(r.getTime() - 1000)) < date).toBe(true)
+  })
+  it('그 tz 에 없는 날짜(날짜선 이동 — Pacific/Apia·Fakaofo 2011-12-30)는 다음 날의 시작 — [d, d+1) 범위가 빈 구간이 된다', () => {
+    for (const [tz, iso] of [['Pacific/Apia', '2011-12-30T10:00:00.000Z'], ['Pacific/Fakaofo', '2011-12-30T11:00:00.000Z']] as const) {
+      const r = zonedMidnightUtc('2011-12-30', tz)
+      expect(r.toISOString(), tz).toBe(iso)
+      expect(ymdIn(tz, r), tz).toBe('2011-12-31')
+      expect(zonedMidnightUtc('2011-12-31', tz).getTime(), tz).toBe(r.getTime())
+      expect(ymdIn(tz, new Date(r.getTime() - 1000)), tz).toBe('2011-12-29')
+    }
+  })
+  it('전수(느림) — 모든 IANA tz × 2010~2026 의 오프셋이 바뀌는 날 ±1일: 그날의 첫 시각이다(없는 날 둘 제외)', () => {
+    const DAY = 86_400_000
+    const zones = [...Intl.supportedValuesOf('timeZone'), 'UTC']
+    const offsetAtNoon = (tz: string, t: number) => {
+      const s = stampIn(tz, new Date(t))
+      return Date.parse(`${s.replace(' ', 'T')}:00Z`) - t
+    }
+    const missing = new Set(['Pacific/Apia 2011-12-30', 'Pacific/Fakaofo 2011-12-30'])
+    const bad: string[] = []
+    let checked = 0
+    for (const tz of zones) {
+      let prev = offsetAtNoon(tz, Date.UTC(2010, 0, 1, 12))
+      for (let t = Date.UTC(2010, 0, 2, 12); t <= Date.UTC(2026, 11, 31, 12); t += DAY) {
+        const o = offsetAtNoon(tz, t)
+        if (o === prev) continue
+        prev = o
+        for (const k of [-1, 0, 1]) {
+          const d = new Date(t + k * DAY).toISOString().slice(0, 10)
+          if (missing.has(`${tz} ${d}`)) continue
+          checked++
+          const r = zonedMidnightUtc(d, tz)
+          const before = ymdIn(tz, new Date(r.getTime() - 1000))
+          if (ymdIn(tz, r) !== d || before >= d) bad.push(`${tz} ${d} → ${r.toISOString()}`)
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10_000)
+    expect(bad).toEqual([])
+  }, 120_000)
 })
 
 describe('parseTimezone — 생성 성공 + 정규화 + 이름 꼴(D54·R5). 폴백 없이 거부', () => {

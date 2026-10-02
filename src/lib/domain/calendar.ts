@@ -88,13 +88,26 @@ function offsetMs(tz: string, t: number): number {
   return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(t / 1000) * 1000
 }
 /**
- * 그 tz 에서 dateIso 의 자정 instant — `${d}T00:00:00+09:00` 리터럴 대체. 첫 추정의 오프셋이 그 시각의 오프셋과 다르면(DST) 한 번 더 맞춘다.
- * 자정이 없는 날(자정에 시계가 앞으로 가는 tz)은 그 뒤 첫 유효 시각이다.
+ * 그 tz 에서 dateIso 가 시작하는 instant(그날의 첫 시각) — `${d}T00:00:00+09:00` 리터럴 대체. [zonedMidnightUtc(d), zonedMidnightUtc(d+1)) 이
+ * 그날의 범위다. 후보 둘(추정 시각의 오프셋·첫 후보의 오프셋으로 맞춘 값) 가운데 그 tz 에서 같은 날짜인 이른 것을 고르고, 그 직전 1초의
+ * 오프셋으로 한 번 더 당겨 같은 날이면 그것을 쓴다(K1):
+ * - 자정에 시계가 앞으로 가는 날(America/Santiago 2026-09-06 — 00:00~00:59 없음)은 그 뒤 첫 유효 시각(01:00)이다 — 전날 23:00 이 아니다.
+ * - 자정이 두 번인 날(Asia/Amman 2010-10-29 — 01:00 에 00:00 으로 돌아간다)은 첫 자정이다.
+ * - 그 tz 에 없는 날짜(날짜선 이동 — Pacific/Apia 2011-12-30)는 다음 날의 시작이다(그날의 범위는 빈 구간).
  */
 export function zonedMidnightUtc(dateIso: string, tz: string): Date {
   const guess = utcOf(dateIso)
-  let t = guess - offsetMs(tz, guess)
-  t = guess - offsetMs(tz, t)
+  const c1 = guess - offsetMs(tz, guess)
+  const c2 = guess - offsetMs(tz, c1)
+  const cands = c1 <= c2 ? [c1, c2] : [c2, c1]
+  const dayOf = (t: number) => ymdIn(tz, new Date(t))
+  let t = cands.find((c) => dayOf(c) === dateIso)
+  if (t === undefined) return new Date(cands.find((c) => dayOf(c) > dateIso) ?? c2)
+  for (let i = 0; i < 2; i++) {
+    const earlier = guess - offsetMs(tz, t - 1000)
+    if (earlier < t && dayOf(earlier) === dateIso) t = earlier
+    else break
+  }
   return new Date(t)
 }
 
