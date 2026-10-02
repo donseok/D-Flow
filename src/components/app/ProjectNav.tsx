@@ -9,15 +9,17 @@ import { NavList, SideRail } from './NavList'
 import type { SidebarCollapsed } from './sidebarState'
 
 /** 프로젝트 내비(§5.4.2) — 머리 = ← 워크스페이스 홈 + 프로젝트 전환기, p.settings 는 그룹 목록 아래 구분선 뒤 */
-export function ProjectNav({ groups, pathname, workspaceHome, projectSwitcher, badges, collapsed }: {
+export function ProjectNav({ groups, pathname, workspaceHome, projectSwitcher, badges, collapsed, onToggleCollapsed }: {
   groups: readonly NavGroup[]; pathname: string; workspaceHome: string | null; projectSwitcher: ReactNode
   badges: Partial<Record<NavItemId, number | null>>; collapsed: SidebarCollapsed
+  /** 접기 토글(AA2) — 계정 키 sidebarCollapsed 저장 */
+  onToggleCollapsed?: (next: boolean) => void
 }) {
   const { t } = useLocale()
   const activeId = activeNavItem(pathname, groups)
   const settings = groups.filter((g) => g.group === 'p.settings')
   return (
-    <SideRail collapsed={collapsed} label={t('nav.project')}>
+    <SideRail collapsed={collapsed} label={t('nav.project')} onToggleCollapsed={onToggleCollapsed}>
       {workspaceHome && (
         <Link href={workspaceHome} aria-label="워크스페이스 홈" className="mb-2 flex h-9 items-center gap-2 px-3 text-control text-fg-secondary hover:text-fg">
           <ArrowLeft size={16} aria-hidden />{collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>워크스페이스 홈</span>}

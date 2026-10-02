@@ -82,7 +82,7 @@ describe('접힘·접근성 세부(U2b-2 충실도 리뷰 Z2·Z3·Z11)', () => {
   })
   it('Z11 — 사이드바는 nav 랜드마크를 갖고, 배지는 99+·tabular-nums, 접힘(true)이면 아이콘 모서리 점(숫자는 sr-only)', () => {
     const open = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 120 }} collapsed={false} />)
-    expect(open).toMatch(/<nav aria-label="[^"]+"/)
+    expect(open).toMatch(/<nav [^>]*aria-label="[^"]+"/)
     expect(open).toMatch(/data-nav-badge[^>]*tabular-nums[^>]*>99\+</)
     const closed = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 3 }} collapsed />)
     expect(closed).toContain('data-nav-badge-dot'); expect(closed).not.toMatch(/data-nav-badge[^-]/)

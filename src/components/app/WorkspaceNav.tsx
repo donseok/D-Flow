@@ -18,10 +18,12 @@ const ROW = 'block truncate rounded-(--radius-control) px-3 py-1.5 text-control 
  * 즐겨찾기·최근은 id 로 받아 projects(현재 워크스페이스의 가시 프로젝트 — 셸 목록)로만 해석한다 — 목록에 없는 id 는 이름도 링크도 내지 않는다(W14,
  * 전환기와 같은 꼴). 목록 조회가 실패했으면 그 자리에 실패 한 줄(빈 목록으로 위장하지 않는다 — 3원칙 ①).
  */
-export function WorkspaceNav({ groups, pathname, slug, projects, favoriteIds, recentIds, projectsFailed, canCreateProject, badges, collapsed }: {
+export function WorkspaceNav({ groups, pathname, slug, projects, favoriteIds, recentIds, projectsFailed, canCreateProject, badges, collapsed, onToggleCollapsed }: {
   groups: readonly NavGroup[]; pathname: string; slug: string
   projects: readonly ShellProject[]; favoriteIds: readonly string[]; recentIds: readonly string[]; projectsFailed: boolean
   canCreateProject: boolean; badges: Partial<Record<NavItemId, number | null>>; collapsed: SidebarCollapsed
+  /** 접기 토글(AA2) — 계정 키 sidebarCollapsed 저장 */
+  onToggleCollapsed?: (next: boolean) => void
 }) {
   const { t } = useLocale()
   const byId = new Map(projects.map((p) => [p.id, p]))
@@ -42,7 +44,7 @@ export function WorkspaceNav({ groups, pathname, slug, projects, favoriteIds, re
     </div>
   ) : null
   return (
-    <SideRail collapsed={collapsed} label={t('nav.workspace')}>
+    <SideRail collapsed={collapsed} label={t('nav.workspace')} onToggleCollapsed={onToggleCollapsed}>
       <NavList groups={groups} activeId={activeNavItem(pathname, groups)} collapsed={collapsed} badges={badges} />
       {/* 선호 없음이면 1024~1279 접힌 폭에서 숨긴다 — 표시 토큰은 감싸는 요소의 정적 리터럴(D17 ②) */}
       {shortcuts && (collapsed === null ? <div className="hidden xl:block">{shortcuts}</div> : shortcuts)}

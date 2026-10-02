@@ -27,7 +27,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const pathname = usePathname()
   const { t } = useLocale()
   const env = useShellEnv()
-  const [collapsed] = useSidebarCollapsed(env.sidebarCollapsed)
+  const [collapsed, setCollapsed] = useSidebarCollapsed(env.sidebarCollapsed)
   const { badges } = useShellState()
   const aiButton = useAiRailButton()
   const [drawer, setDrawer] = useState(false)
@@ -57,9 +57,9 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
         crumbs={{ scope: p.scope, workspace: known ? { name: p.workspace.name, href: home } : null, project: p.project && projectName ? { name: projectName, href: `/p/${p.project.id}/dashboard` } : null, screen: screenName }} />
       <div className="flex min-h-0 flex-1">
         {p.groups.length > 0 && (p.scope === 'project'
-          ? <ProjectNav groups={p.groups} pathname={pathname} workspaceHome={known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} collapsed={collapsed} />
+          ? <ProjectNav groups={p.groups} pathname={pathname} workspaceHome={known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />
           : <WorkspaceNav groups={p.groups} pathname={p.scope === 'global' ? '' : pathname} slug={p.workspace.slug} projects={p.projects} favoriteIds={p.favoriteIds}
-              recentIds={p.recentIds} projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} />)}
+              recentIds={p.recentIds} projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />)}
         <main id="main-content" className="app-main flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
           {/* 위 간격은 패딩이 아니라 자리로 — sticky 는 스크롤 상자의 패딩 안쪽에 붙어 pt 만큼 위로 내용이 비친다(D54) */}
           <div aria-hidden="true" data-main-top-gap className="h-4 shrink-0" />

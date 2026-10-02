@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Tooltip } from '@/components/ui/Tooltip'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -67,12 +68,44 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
 }
 
 /** 사이드바 틀 — 폭 232/64(§5.4.2). 1024 미만은 숨김(드로어 — D55), 선호 없음은 폭 유틸로 1024~1279 접힘 */
-export function SideRail({ collapsed, children, label }: { collapsed: SidebarCollapsed; children: ReactNode; label: string }) {
+/** 1280 이상인가(선호 없음일 때 지금 보이는 상태) — SSR·첫 렌더는 false(D55), 효과에서 맞춘다 */
+function useXl(): boolean {
+  const [hit, setHit] = useState(false)
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(min-width: 1280px)')
+    const on = () => setHit(mq.matches)
+    on(); mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  return hit
+}
+
+/**
+ * 사이드바 틀 — 바깥은 div(이름 없는 complementary 랜드마크를 만들지 않는다, AA5), 랜드마크는 이름 있는 nav 하나.
+ * onToggleCollapsed 를 받으면 아래에 접기 토글(AA2 — 옛 Sidebar 의 PanelLeft 복구)을 둔다: 지금 보이는 상태의 반대를 계정 키 sidebarCollapsed 로 쓴다
+ * (선호 없음이면 1280 이상 = 펼침으로 본다). 표시 전환은 조건부 렌더와 정적 래퍼만(D17).
+ */
+export function SideRail({ collapsed, children, label, onToggleCollapsed }: {
+  collapsed: SidebarCollapsed; children: ReactNode; label: string; onToggleCollapsed?: (next: boolean) => void
+}) {
   const width = collapsed === null ? 'lg:w-16 xl:w-58' : collapsed ? 'w-16' : 'w-58'
+  const xl = useXl()
+  const expanded = collapsed === null ? xl : !collapsed
+  const navId = useId()
+  const toggleLabel = expanded ? '사이드바 접기' : '사이드바 펼치기'
   return (
-    <aside data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
+    <div data-side-rail data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
       className={`hidden lg:flex ${width} shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-2 py-3`}>
-      <nav aria-label={label} className="flex flex-col">{children}</nav>
-    </aside>
+      <nav id={navId} aria-label={label} className="flex flex-col">{children}</nav>
+      {onToggleCollapsed && (
+        <button type="button" data-sidebar-toggle aria-controls={navId} aria-expanded={expanded} aria-label={toggleLabel} title={toggleLabel}
+          onClick={() => onToggleCollapsed(expanded)}
+          className="mt-auto flex h-9 shrink-0 items-center gap-2 rounded-(--radius-control) px-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
+          {expanded ? <PanelLeftClose size={16} aria-hidden /> : <PanelLeftOpen size={16} aria-hidden />}
+          {collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>접기</span>}
+        </button>
+      )}
+    </div>
   )
 }

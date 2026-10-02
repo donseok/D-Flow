@@ -96,6 +96,7 @@ describe('AppShell', () => {
     expect(last(h.pSwitcher)).toEqual(expect.objectContaining({ currentProjectId: P1, favoriteIds: [P2], recentIds: [P1], projectsFailed: false }))
     expect(last(h.globalBar).crumbs).toEqual({ scope: 'project', workspace: { name: 'Acme', href: '/w/acme' }, project: { name: '하나', href: `/p/${P1}/dashboard` }, screen: 't:nav.dashboard' })
     expect(last(h.globalBar).projectSwitcher).toBeTruthy()          // AA1 — 브레드크럼 프로젝트 칸의 전환기
+    expect(typeof last(h.pNav).onToggleCollapsed).toBe('function')     // AA2 — 접기 토글이 계정 키 setter 를 받는다
   })
   it('⑤ global — 워크스페이스 내비이되 활성 항목 없음(pathname 빈 값)·브레드크럼 화면 이름 없음', () => {
     h.pathname = '/account'
