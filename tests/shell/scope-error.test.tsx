@@ -16,4 +16,13 @@ describe('ScopeError', () => {
     fireEvent.click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('다시 시도'))!)
     expect(reset).toHaveBeenCalledOnce()
   })
+  // U2b-5 리뷰 수정 CC6 — 알림 영역은 하나다. h1 영역과 안내(StatusMessage) 영역이 따로 alert 면 오류 순간에 두 번 연달아 낭독된다
+  it('알림 영역은 하나 — 실패 문구(h1)와 안내·다시 시도가 같은 영역 안에 있다', () => {
+    const { container } = render(<ScopeError reset={vi.fn()} />)
+    const regions = container.querySelectorAll('[role="alert"], [role="status"]')
+    expect(regions).toHaveLength(1)
+    expect(regions[0].getAttribute('role')).toBe('alert')
+    expect(regions[0].querySelector('h1')).not.toBeNull()
+    expect(regions[0].textContent).toContain('잠시 후 다시 시도해 주세요.')
+  })
 })
