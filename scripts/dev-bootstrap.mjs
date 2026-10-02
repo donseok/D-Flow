@@ -2,13 +2,14 @@
 // 0003(조직 코어) 이후: memberships.team_id 전역 팀 대신 workspaces 한 개를 만들고, 그 관리자로
 // platform_admins·profiles·workspace_members·people 을 함께 채운다. 워크스페이스 선택 UI 는 SP2 몫이라
 // 여기서 만든 워크스페이스 하나가 resolveSoleWorkspaceId(§5.3)가 요구하는 "소속 정확히 1개"의 근거가 된다.
-// 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people → 허용 모듈(apply_workspace_settings).
+// 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people → 워크스페이스 설정(허용 모듈·시간대 — apply_workspace_settings 한 번).
 // 중간 단계가 실패하면 만든 계정을 지운다 — 고아 계정이 재실행을 막지 않게(워크스페이스는 멱등이라 그대로 둔다).
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 import { createClient } from '@supabase/supabase-js'
 import { bootstrapModulesAction, parseBootstrapModules } from './lib/bootstrap-modules.mjs'
+import { bootstrapTimezonePlan, parseBootstrapTimezone } from './lib/bootstrap-timezone.mjs'
 import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 
@@ -41,6 +42,9 @@ if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) fail('워크스페이스 slug 형�
 // 여기서 멈춘다(오타로 만든 계정을 지우는 일이 없게) — 파싱은 lib/bootstrap-modules.mjs.
 const parsed = parseBootstrapModules(process.env.BOOTSTRAP_MODULES)
 if (!parsed.ok) fail(`BOOTSTRAP_MODULES 에 모르는 모듈 ${parsed.unknown.join(', ')} — 허용: ${parsed.allowed.join(', ')}`)
+// 시간대(스펙 D13 ②)는 BOOTSTRAP_TIMEZONE(IANA 이름, 기본 UTC). 형식이 틀리면 계정을 만들기 전에 멈춘다 — 판정은 lib/bootstrap-timezone.mjs.
+const tzParsed = parseBootstrapTimezone(process.env.BOOTSTRAP_TIMEZONE)
+if (!tzParsed.ok) fail(`BOOTSTRAP_TIMEZONE — ${tzParsed.error}`)
 
 const admin = createClient(target.url, target.serviceRoleKey, { auth: { persistSession: false } })
 
@@ -86,21 +90,30 @@ for (const [name, run] of steps) {
   // existing.user_id 가 이미 있으면(동일 이메일의 외부 인력이 이미 계정과 연결됨) 손대지 않는다 — 덮어쓰면 다른 계정의 연결이 끊긴다.
 }
 
-// 허용 모듈 — 계정을 만든 뒤 그 계정을 행위자로 apply_workspace_settings 를 부른다(설정 행은 워크스페이스 트리거가 만들었다).
-// 기존 워크스페이스에 다시 돌릴 때 BOOTSTRAP_MODULES 를 명시하지 않았고 값이 이미 있으면 덮지 않고 알린다(bootstrapModulesAction).
+// 워크스페이스 설정 — 계정을 만든 뒤 그 계정을 행위자로 apply_workspace_settings 를 한 번 부른다(설정 행은 워크스페이스 트리거가 만들었다).
+// 허용 모듈·시간대 둘 다: 기존 워크스페이스에 다시 돌릴 때 env 를 명시하지 않았고 값이 이미 있으면 덮지 않고 알린다(같은 revision 에서 CAS 한 번).
 {
   const { data: row, error: rErr } = await admin.from('workspace_settings').select('revision, values').eq('workspace_id', ws.id).maybeSingle()
   if (rErr || !row) await rollback('workspace_settings(조회)', rErr ?? new Error('설정 행이 없다 — 0012 가 적용됐는지 확인'))
+  const set = {}
   if (bootstrapModulesAction({ explicit: process.env.BOOTSTRAP_MODULES !== undefined, existingValues: row.values }) === 'keep') {
     const cur = row.values['modules.allowed']
     console.log(`· 허용 모듈은 그대로 둔다 — 워크스페이스 ${slug} 에 이미 ${Array.isArray(cur) ? `${cur.length}개` : '값(형식 이상 — npm run settings:verify 로 확인)'}가 있다. 바꾸려면 BOOTSTRAP_MODULES 를 준다`)
   } else {
+    set['modules.allowed'] = parsed.modules
+  }
+  const tz = bootstrapTimezonePlan({ envValue: process.env.BOOTSTRAP_TIMEZONE, existingValues: row.values })
+  if (!tz.ok) await rollback('calendar.timezone', new Error(tz.error))       // 위에서 이미 걸렀다 — 방어
+  if (tz.write) set['calendar.timezone'] = tz.value
+  else console.log(`· 시간대는 그대로 둔다 — 워크스페이스 ${slug} 에 이미 ${JSON.stringify(row.values['calendar.timezone'])} 가 있다. 바꾸려면 BOOTSTRAP_TIMEZONE 을 준다`)
+  if (Object.keys(set).length > 0) {
     const { data: applied, error: aErr } = await admin.rpc('apply_workspace_settings', {
       p_workspace_id: ws.id, p_expected_revision: row.revision, p_command_id: randomUUID(),
-      p_set: { 'modules.allowed': parsed.modules }, p_unset: [], p_actor: uid, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
+      p_set: set, p_unset: [], p_actor: uid, p_schema_version: SCRIPT_SCHEMA_VERSION, p_source: 'internal',
     })
-    if (aErr) await rollback('modules.allowed', aErr)
-    console.log(`✓ 허용 모듈 ${parsed.modules.length}개 (revision ${applied.revision})`)
+    if (aErr) await rollback(Object.keys(set).join('·'), aErr)
+    if ('modules.allowed' in set) console.log(`✓ 허용 모듈 ${parsed.modules.length}개 (revision ${applied.revision})`)
+    if ('calendar.timezone' in set) console.log(`✓ 시간대 ${set['calendar.timezone']} (revision ${applied.revision})`)
   }
 }
 
