@@ -458,7 +458,7 @@ export function WikiDocumentEditor({
           style={{ '--minutes-fs': '15px' } as CSSProperties}
         >
           <div className="max-w-[46rem]">
-            <MarkdownView content={snapshot.bodyMd} />
+            <MarkdownView content={snapshot.bodyMd} demoteHeadings />
           </div>
         </div>
       ) : (

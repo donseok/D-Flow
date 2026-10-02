@@ -45,7 +45,7 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
           <MinuteToc blocks={blocks} insights={[]} highlights={[]} onJump={jumpTo} activeIndex={activeToc} />
           <div ref={bodyRef} className="card min-w-0 flex-1 p-5"
             style={{ '--minutes-fs': `${fs.size}px` } as React.CSSProperties}>
-            <MarkdownView content={bodyMd} />
+            <MarkdownView content={bodyMd} demoteHeadings />
           </div>
         </div>
       </div>

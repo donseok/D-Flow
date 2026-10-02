@@ -414,6 +414,10 @@ textarea {
   .minutes-md h2 { @apply font-bold text-ink first:mt-0; font-size: 1.3em; margin: 1.45em 0 0.6em; }
   .minutes-md h3 { @apply font-semibold text-ink; font-size: 1.15em; margin: 1.15em 0 0.6em; }
   .minutes-md h4, .minutes-md h5, .minutes-md h6 { @apply font-semibold text-ink; font-size: 1em; margin: 0.85em 0 0.45em; }
+  /* 본문 머리 강등(MarkdownView demoteHeadings — 본문 # 이 h2 …로 내려가도 원래 수준의 모양). 위 h1~h3 규칙과 선언이 같다 — tests/css/minutes-md-demoted-headings */
+  .minutes-md .md-h1 { @apply font-bold text-ink first:mt-0; font-size: 1.4em; margin: 1.7em 0 0.85em; }
+  .minutes-md .md-h2 { @apply font-bold text-ink first:mt-0; font-size: 1.3em; margin: 1.45em 0 0.6em; }
+  .minutes-md .md-h3 { @apply font-semibold text-ink; font-size: 1.15em; margin: 1.15em 0 0.6em; }
   .minutes-md p { margin: 0.6em 0; }
   .minutes-md ul { @apply list-disc; margin: 0.6em 0; --list-indent: 1.45em; padding-left: var(--list-indent); }
   /* 번호 폭은 자릿수마다 약 0.6em 늘어난다(Pretendard 실측 "9. " 1.09em · "35. " 1.69em).

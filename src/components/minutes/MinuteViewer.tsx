@@ -847,7 +847,7 @@ export function MinuteViewer({
         {/* 글자크기는 CSS 변수로만 내려보낸다 — MarkdownView props 가 그대로여야 재파싱이 없다(스펙 §3) */}
         <div ref={bodyRef} onClick={historicalVersion || minute.archivedAt ? undefined : onBodyClick} className="card min-w-0 flex-1 p-4 xl:overflow-y-auto"
           style={{ '--minutes-fs': `${fs.size}px` } as React.CSSProperties}>
-          <MarkdownView content={minute.bodyMd} marks={marks} />
+          <MarkdownView content={minute.bodyMd} marks={marks} demoteHeadings />
         </div>
         {!focus && !historicalVersion && !minute.archivedAt && (
           <MinuteChatPanel minuteId={minute.id} projects={projects} workspaceId={minute.workspaceId ?? undefined} />
