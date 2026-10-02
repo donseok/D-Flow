@@ -457,8 +457,8 @@
 - **공통 묶음** — `db:reset` 뒤 `max(version)` = `0018`, `dev:bootstrap` ✓, `settings:verify` exit 0(프로젝트 0·워크스페이스 1·문제 0), `test:rls` **32 파일 391 통과·건너뜀 0**.
   HEAD `170b7edf` 에서 `typecheck` 0, `lint` 0 error(경고 4 — 기존), vitest **841 파일 중 840 · 10,872 중 10,871 통과** — 실패 1 은 `tests/scripts/baseline-cli.test.ts` 의
   macOS firmlink(알려진 1건). 스크래치 `build` ✓(정적 16페이지, 경고 = Edge 런타임 supabase-js 1 — 기존, `DynamicServerError` 거짓 로그 0).
-- **E2E(`next start`)** — `ok: true`, **50단계 전부 ✓**(실패 0·빠진 필수 0), SP3b 단계 11 모두 ✓. B 새 단계 `teams-color-render` ✓.
-- **합성** — `ok: true`: S1-create·S1-teams-areas·S9-isolation·S2-wbs-import·S4-weekly-monday·S10-negative·boundary-sp4 ✓, 미활성 7(S3·S4(일)·S5~S8·S10 나머지). `synthetic-acceptance.md` SP4 B 절.
+- **E2E(`next start`)** — exit 0·`ok: true`, **50단계 전부 ✓**(실패 0·빠진 필수 0), SP3b 단계 11 모두 ✓. B 새 단계 `teams-color-render` ✓.
+- **합성** — exit 0·`ok: true`: S1-create·S1-teams-areas·S9-isolation·S2-wbs-import·S4-weekly-monday·S10-negative·boundary-sp4 ✓, 미활성 7(S3·S4(일)·S5~S8·S10 나머지). `synthetic-acceptance.md` SP4 B 절.
 - **눈확인 B** — `eye-b.mjs` 60장(실패 0·오류 0·옛 클래스 0·테마 어긋남 0) + `eye-b2.mjs` 상호작용(개명 거부 포커스·전환 실행·중복 안내·칸반 토스트·프레즌스 두 계정·가중치 미지정·`(global)` 셸). 판정과 근거는 `docs/baseline/sp4-ui.md`.
 - **성능** — 재지 않았다(과제 14 — 보류, 일괄 측정).
 
@@ -502,4 +502,4 @@ B 는 마이그레이션이 없다(계획 D3 — `teams.color` 그대로, 전환
 - ① `eye-b.mjs` 1회차는 다크 샷이 라이트로 찍혔다 — 계정 선호(`account_preferences.prefs.theme = 'light'`, E2E 의 sp3b 단계가 남김)가 로컬 선호를 이긴다(PrefsSync). 2회차는 쿠키·localStorage 만 맞춰 같았고, 3회차에 맥락마다 계정 선호를 그 테마로 맞추고 끝에 되돌려 60/60 이 맞았다. 같은 회차에 390 의 보고서 버튼이 compact 도구 버튼 안이라 그것을 먼저 열게 했다.
 - ② `eye-b2.mjs` — 공용 팀이 OPS 하나라 공용 팀 관리에서 겹치는 이름을 만들 수 없어 개명 거부는 같은 `TeamNameCell` 을 쓰는 A 설정 팀 절에서 봤다. 중복 안내는 첫 실행 응답을 끊고 같은 명령 id 로 재시도해 만들었다 — Chromium 은 가로챈 multipart 본문에 파일 바이트를 싣지 않아(`route.fetch` 재전송 = 빈 파일 → 서버 409 `PROFILE_MISMATCH`) 첫 요청은 같은 xlsx 를 `page.request` 로 다시 보냈다. 가중치 미지정은 형제 중 가중치가 있는 그룹에서만 센다(`unsetWeightCount`) — 외동 항목을 비운 첫 시도는 표시가 없었다(앱 동작이 맞다). 토스트·모달은 페이드 뒤 찍게 기다림을 더했다.
 - ③ 눈확인이 남긴 쓰기(E2E·합성 판정 뒤): A2 를 공용 팀 전환(되돌릴 수 없다), A 에 가져오기 append 여러 번·가중치 하나 비움·항목 둘 삭제(칸반 '사라진 항목')·실적 변경, 팀 이름은 되돌림, 임시 계정 삭제, 관리자 비밀번호·계정 선호 원복(비밀번호는 임의 값으로 버림). 다음 체크포인트는 늘 하듯 `db:reset` + `dev:bootstrap` 부터.
-- ④ 셸의 `| tail` 이 nohup 서버가 쥔 파이프 때문에 끝나지 않아 공식 셸의 `e2e exit`·`accept:synthetic exit` 줄은 받지 못했다 — 판정은 두 JSON 의 `ok: true`·단계로 했다.
+- ④ 공식 셸은 nohup 서버가 출력 파이프를 쥐고 있어 서버를 내릴 때(Step 9)까지 끝나지 않았다 — 그 뒤 받은 출력: `e2e exit 0`·`accept:synthetic exit 0`·실행 전후 diff 없음·`settings:verify` exit 0. 판정은 그 전에 두 JSON 의 `ok: true`·단계로 했다.
