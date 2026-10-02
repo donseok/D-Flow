@@ -79,13 +79,20 @@ describe('parseTimezone — 생성 성공 + 정규화 + 이름 꼴(D54·R5). 폴
     expect(parseTimezone(' asia/seoul ')).toEqual({ ok: true, value: 'Asia/Seoul' })
     expect(parseTimezone('America/Los_Angeles')).toEqual({ ok: true, value: 'America/Los_Angeles' })
   })
-  it('별칭은 고른 이름 그대로 저장한다 — ICU 의 옛 이름(Asia/Calcutta·Europe/Kiev)으로 바꾸지 않는다(판정 J2)', () => {
+  it('별칭은 고른 이름 그대로 저장한다 — ICU 의 옛 이름(Asia/Calcutta·Europe/Kiev)으로 바꾸지 않는다(판정 J2·K8)', () => {
     expect(parseTimezone('Asia/Kolkata')).toEqual({ ok: true, value: 'Asia/Kolkata' })
     expect(parseTimezone(' Europe/Kyiv ')).toEqual({ ok: true, value: 'Europe/Kyiv' })
     expect(parseTimezone('Asia/Calcutta')).toEqual({ ok: true, value: 'Asia/Calcutta' })
-    // 목록·resolvedOptions 와 대소문자만 다르면 그 표기로 — 별칭 이름은 목록에 없어 입력 그대로다
-    expect(parseTimezone('europe/berlin')).toEqual({ ok: true, value: 'Europe/Berlin' })
-    expect(parseTimezone('utc')).toEqual({ ok: true, value: 'UTC' })
+  })
+  it('Intl 목록과 대소문자만 다르면 목록의 표기로 저장한다(K8)', () => {
+    expect(parseTimezone('asia/tokyo')).toEqual({ ok: true, value: 'Asia/Tokyo' })
+    expect(parseTimezone('EUROPE/BERLIN')).toEqual({ ok: true, value: 'Europe/Berlin' })
+  })
+  it.each(['EST5EDT', 'PST8PDT', 'CST6CDT', 'GMT0'])('숫자가 든 실재 IANA 이름 %s 을 받아 그대로 저장한다 — 이름 꼴 정규식을 쓰지 않는다(K8)', (tz) => {
+    expect(parseTimezone(tz)).toEqual({ ok: true, value: tz })
+  })
+  it.each(['−09:00', '−0900', 'GMT−1'])('유니코드 마이너스 오프셋 %j 도 거부한다(Intl 은 −09:00 을 받는다)', (tz) => {
+    expect(parseTimezone(tz).ok).toBe(false)
   })
   it('Etc/UTC 는 받고 정규화 값이 이름 꼴이다', () => {
     const r = parseTimezone('Etc/UTC')

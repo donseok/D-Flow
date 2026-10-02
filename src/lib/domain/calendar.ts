@@ -28,10 +28,10 @@ export const DEFAULT_WORKING_DAYS: readonly IsoDow[] = [1, 2, 3, 4, 5]
 export const DEFAULT_WEEK_RULES: readonly WeekStartRule[] = [{ day: 'sunday', from: null }]
 /** 다음 근무일 탐색 상한(약 10년) — 긴 off 예외가 근무 요일을 다 덮어도 루프가 끝난다(개정 §4.2.3) */
 export const WORKDAY_SEARCH_LIMIT = 3660
-/** 정규화한 tz 가 IANA 이름 꼴이어야 한다 — 오프셋 문자열이 저장되면 PG 가 부호를 반대로 읽는다(D54·R5) */
+/** IANA 이름 꼴(영문 마디) — 참고용 패턴. parseTimezone 은 쓰지 않는다(K8 — EST5EDT·GMT0 같은 실재 이름을 받는다. 오프셋 꼴은 OFFSET_FORM 이 막는다) */
 export const IANA_NAME = /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/
-/** 오프셋 꼴 사전 거부 — Intl 의 수용 여부(엔진 판에 따라 다르다)에 기대지 않는다 */
-const OFFSET_FORM = /^(?:[+-]\d|(?:GMT|UTC|UT)\s*[+-]\s*\d)/i
+/** 오프셋 꼴 사전 거부 — Intl 의 수용 여부(엔진 판에 따라 다르다)에 기대지 않는다. 유니코드 마이너스(U+2212)도 Intl 이 받으므로 같이 막는다 */
+const OFFSET_FORM = /^(?:[+\-\u2212]\d|(?:GMT|UTC|UT)\s*[+\-\u2212]\s*\d)/i
 
 export class CalendarError extends Error {
   readonly code = 'CALENDAR_NO_WORKDAY' as const
@@ -98,24 +98,24 @@ export function zonedMidnightUtc(dateIso: string, tz: string): Date {
   return new Date(t)
 }
 
-/** Intl 이 아는 tz 이름의 소문자 → 표기(대소문자 정규화용). 엔진이 supportedValuesOf 를 모르면 빈 표 — resolvedOptions 후보만 쓴다 */
+/** Intl.supportedValuesOf('timeZone') 의 소문자 → 표기(대소문자 정규화용). 엔진이 목록을 모르면 빈 표 — 입력 그대로 저장한다 */
 let tzSpellings: ReadonlyMap<string, string> | null = null
 function tzSpellingOf(lower: string): string | undefined {
   if (!tzSpellings) {
     const m = new Map<string, string>()
     try {
       for (const n of Intl.supportedValuesOf('timeZone')) m.set(n.toLowerCase(), n)
-    } catch { /* 표 없이 resolvedOptions 후보만 */ }
+    } catch { /* 목록 없음 — 입력 그대로 */ }
     tzSpellings = m
   }
   return tzSpellings.get(lower)
 }
 
 /**
- * calendar.timezone 의 검증·정규화(D54 — 판정 J2 정정) — ① 오프셋 꼴 사전 거부 ② `Intl.DateTimeFormat` 생성 성공이 유효성(목록 포함이 아니다 —
- * 'UTC' 를 받는다) ③ 저장 값 = 입력(trim)의 **대소문자만** 정규화한 이름: Intl 목록·`resolvedOptions().timeZone` 후보 중 대소문자 무시로 같은
- * 것의 표기, 없으면 입력이 IANA 이름 꼴일 때 입력 그대로. ICU 의 별칭 치환(Asia/Kolkata → Asia/Calcutta)은 비교에만 쓰고 저장하지 않는다 —
- * 사용자가 고른 이름을 옛 이름으로 바꾸지 않는다. 폴백 없음.
+ * calendar.timezone 의 검증·정규화(D54 — 판정 J2·K8 정정). 유효성 = ① 오프셋 꼴 사전 거부 ② `Intl.DateTimeFormat` 생성 성공(목록 포함이
+ * 아니다 — 'UTC'·EST5EDT·GMT0 같은 실재 이름을 받는다. 이름 꼴 정규식은 쓰지 않는다). 저장 값 = `Intl.supportedValuesOf('timeZone')` 에서
+ * 대소문자 무시로 같은 이름이 있으면 그 표기, 없으면 입력(trim) 그대로 — ICU 의 별칭 치환(Asia/Kolkata → Asia/Calcutta)은 저장하지 않는다
+ * (사용자가 고른 이름을 옛 이름으로 바꾸지 않는다). 화면 입력은 목록 선택이라 표기가 정규다. 폴백 없음.
  */
 export function parseTimezone(raw: unknown): CalendarResult<string> {
   if (typeof raw !== 'string') return fail('시간대는 문자열이어야 합니다.')
@@ -128,10 +128,9 @@ export function parseTimezone(raw: unknown): CalendarResult<string> {
   } catch {
     return fail(`모르는 시간대입니다: ${v}`)
   }
-  const lower = v.toLowerCase()
-  const spelled = resolved.toLowerCase() === lower ? resolved : (tzSpellingOf(lower) ?? v)
-  if (!IANA_NAME.test(spelled)) return fail(`IANA 이름 꼴이 아닌 시간대입니다(오프셋 꼴 포함): ${v}`)
-  return { ok: true, value: spelled }
+  // 엔진이 사전 거부 밖의 오프셋 꼴을 받아 오프셋으로 풀었으면(판마다 다르다) 같이 막는다
+  if (OFFSET_FORM.test(resolved)) return fail(`오프셋 꼴 시간대는 쓸 수 없습니다 — 'Europe/Berlin' 같은 IANA 이름을 쓰세요: ${v}`)
+  return { ok: true, value: tzSpellingOf(v.toLowerCase()) ?? v }
 }
 
 /** calendar.working_days 의 검증 — 길이 ≥1, 1..7 정수, 유일. 저장은 오름차순 */
