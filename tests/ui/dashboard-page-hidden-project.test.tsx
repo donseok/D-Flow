@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   getAnnouncements: vi.fn(async (): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> => ({ ok: true, rows: [] })),
   getProjectMeetingData: vi.fn(async (): Promise<{ ok: true; meetings: unknown[]; exceptions: unknown[] } | { ok: false; error: string }> =>
     ({ ok: true, meetings: [], exceptions: [] })),
+  hidden: new Set<string>() as ReadonlySet<string>,
 }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: vi.fn(async () => mocks.hidden) }))
 vi.mock('@/lib/authz', () => ({
   getActorViewState: vi.fn(async () => mocks.state),
   getActorForView: vi.fn(async () => mocks.state.actor),
@@ -45,7 +47,7 @@ import Dashboard from '@/app/(app)/p/[projectId]/dashboard/page'
 const render = async () =>
   renderToStaticMarkup((await Dashboard({ params: Promise.resolve({ projectId: 'p1' }) })) as ReactElement)
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); mocks.hidden = new Set() })
 
 describe('dashboard 페이지 — 숨은 프로젝트', () => {
   it('타 워크스페이스·미존재: 404 이고 뷰(팀 캐시)를 그리지 않으며 스냅샷 기록도 걸지 않는다', async () => {
@@ -69,6 +71,22 @@ describe('dashboard 페이지 — 숨은 프로젝트', () => {
     expect(mocks.DashboardView.mock.calls[0][0]).toMatchObject({
       issues: [], snapshots: [], historyFailed: false, announcements: [], meetings: [], meetingExceptions: [],
     })
+  })
+})
+
+// GG1 — 명단 밖 비공개 프로젝트도 레이아웃과 같은 판정자(canSeeProject 축)로 페이지가 다시 끊는다
+describe('dashboard 페이지 — 명단 밖 비공개 프로젝트(GG1)', () => {
+  it('같은 워크스페이스의 명단 밖 멤버: 404 이고 뷰·스냅샷 기록을 걸지 않는다', async () => {
+    mocks.state = { actor: makeActor({ projectWorkspace: new Map([['p1', 'ws-1']]) }), degraded: false }
+    mocks.hidden = new Set(['p1'])
+    await expect(render()).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.DashboardView).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled()
+  })
+  it('degraded 에 비공개면 명단을 모른다 — 404 로 위장하지 않고 던지며 뷰를 그리지 않는다', async () => {
+    mocks.state = { actor: null, degraded: true }
+    mocks.hidden = new Set(['p1'])
+    await expect(render()).rejects.toThrow()
+    expect(mocks.notFound).not.toHaveBeenCalled(); expect(mocks.DashboardView).not.toHaveBeenCalled()
   })
 })
 

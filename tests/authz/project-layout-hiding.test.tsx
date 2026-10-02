@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
   listMyWorkspaces: vi.fn(),
   loadShell: vi.fn(async () => ({ projects: [] })),
   minimalShell: vi.fn(() => ({ projects: [] })),
+  getHiddenProjectIds: vi.fn(async (): Promise<ReadonlySet<string>> => new Set()),
 }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
@@ -29,6 +31,7 @@ vi.mock('@/components/app/AppShell', () => ({ AppShell: ({ children }: { childre
 vi.mock('@/components/app/ShellScope', () => ({ ShellScope: () => null }))
 
 import ProjectLayout from '@/app/(app)/p/[projectId]/layout'
+import { canSeeProject, type Actor } from '@/lib/domain/authz'
 
 const render = async (projectId: string) => renderToString(await ProjectLayout({ children: 'page', params: Promise.resolve({ projectId }) }))
 
@@ -89,5 +92,48 @@ describe('ProjectLayout — 존재 은닉(notFound)', () => {
   it('비로그인(actor null, 정상 조회)은 404 — 판정 대상이 없다', async () => {
     mocks.getActorViewState.mockResolvedValue({ actor: null, degraded: false })
     await expect(render('p1')).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+})
+
+// GG1(UI-2b 최종 보안 리뷰 P2-2) — 비공개 숨김의 판정자는 하나다: 프로젝트 화면도 canSeeProject(명단 밖 비공개 → 숨김)를 따른다.
+// 숨김 집합은 getHiddenProjectIds 의 정본 규칙(비공개 ∧ canSeeProject 거짓)으로 흉내 낸다. 판정 실패는 404 가 아니라 오류(범위 오류 경계).
+describe('ProjectLayout — 명단 밖 비공개 프로젝트(GG1)', () => {
+  const PRIV = 'p-priv'
+  const as = (actor: Actor | null, degraded = false) => {
+    mocks.getActorViewState.mockResolvedValue({ actor, degraded })
+    mocks.getHiddenProjectIds.mockResolvedValue(new Set([PRIV].filter((id) => !canSeeProject(actor, { id, is_private: true }))))
+  }
+  const inWs = { projectWorkspace: new Map([[PRIV, WS]]) }
+  it('같은 워크스페이스의 명단 밖 멤버는 404 — 셸 데이터를 조회하지 않는다', async () => {
+    as(makeActor(inWs))
+    await expect(render(PRIV)).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.workspaceRefById).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled(); expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+  })
+  it('명단 멤버·워크스페이스 관리자·플랫폼 관리자는 통과한다', async () => {
+    for (const actor of [
+      makeMemberActor(PRIV),
+      makeActor({ ...inWs, workspaceRoles: new Map([[WS, 'admin']]) }),
+      makeSuperuser({ workspaceRoles: new Map(), ...inWs }),
+    ]) {
+      vi.clearAllMocks(); as(actor)
+      expect(await render(PRIV)).toContain('page')
+      expect(mocks.notFound).not.toHaveBeenCalled()
+    }
+  })
+  it('비공개 판정이 실패하면 404 로 위장하지 않고 던진다(오류 경계) — 셸 데이터도 조회하지 않는다', async () => {
+    as(makeMemberActor(PRIV))
+    mocks.getHiddenProjectIds.mockRejectedValue(new Error('비공개 프로젝트 판정을 하지 못했습니다'))
+    await expect(render(PRIV)).rejects.toThrow('비공개 프로젝트 판정을 하지 못했습니다')
+    expect(mocks.notFound).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled()
+  })
+  it('권한 조회 실패(degraded)에 비공개 프로젝트면 명단을 모른다 — 404 도 최소 셸도 아닌 오류(fail-closed)', async () => {
+    as(null, true)
+    await expect(render(PRIV)).rejects.toThrow()
+    expect(mocks.notFound).not.toHaveBeenCalled(); expect(mocks.minimalShell).not.toHaveBeenCalled(); expect(mocks.loadShell).not.toHaveBeenCalled()
+  })
+  it('degraded 라도 비공개가 아니면 종전대로 최소 셸', async () => {
+    as(null, true)
+    expect(await render('p1')).toContain('page')
+    expect(mocks.minimalShell).toHaveBeenCalledWith(expect.objectContaining({ degraded: true }))
   })
 })

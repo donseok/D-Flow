@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   listRoster: vi.fn(),
   RosterManager: vi.fn<(props: Record<string, unknown>) => null>(() => null),
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
+  hidden: new Set<string>() as ReadonlySet<string>,
 }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: vi.fn(async () => mocks.hidden) }))
 vi.mock('@/lib/authz', () => ({
   getActorViewState: vi.fn(async () => mocks.state),
   getActorForView: vi.fn(async () => mocks.state.actor),
@@ -37,6 +39,7 @@ const render = async () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.hidden = new Set()
   mocks.teamsForProjectSync.mockReturnValue([TEAM])
   mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [] })   // RLS — 타 워크스페이스 명단은 0행으로 읽힌다
   mocks.listRoster.mockResolvedValue({ ok: true, rows: [] })
@@ -68,5 +71,21 @@ describe('members 페이지 — 숨은 프로젝트에서 service_role 팀 캐�
     await render()
     expect(mocks.teamsForProjectSync).toHaveBeenCalledWith('p1')
     expect(mocks.RosterManager.mock.calls.at(-1)![0]).toMatchObject({ canEdit: true, teamOptions: [{ id: 'team-a', code: 'ERP' }] })
+  })
+})
+
+// GG1 — 명단 밖 비공개 프로젝트도 레이아웃과 같은 판정자로 페이지가 다시 끊는다(팀 캐시·명단 표 전에)
+describe('members 페이지 — 명단 밖 비공개 프로젝트(GG1)', () => {
+  it('같은 워크스페이스의 명단 밖 멤버: 404 이고 명단·팀 캐시를 읽지 않는다', async () => {
+    mocks.state = { actor: makeActor({ projectWorkspace: new Map([['p1', WS]]) }), degraded: false }
+    mocks.hidden = new Set(['p1'])
+    await expect(render()).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(mocks.getProjectRoster).not.toHaveBeenCalled(); expect(mocks.teamsForProjectSync).not.toHaveBeenCalled()
+  })
+  it('degraded 에 비공개면 404 로 위장하지 않고 던진다', async () => {
+    mocks.state = { actor: null, degraded: true }
+    mocks.hidden = new Set(['p1'])
+    await expect(render()).rejects.toThrow()
+    expect(mocks.notFound).not.toHaveBeenCalled(); expect(mocks.RosterManager).not.toHaveBeenCalled()
   })
 })

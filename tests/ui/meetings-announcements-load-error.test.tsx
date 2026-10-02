@@ -29,7 +29,9 @@ vi.mock('@/lib/data/announcements', async (importOriginal) => ({
   getAnnouncements: mocks.getAnnouncements,
   getAnnouncementSeenAt: vi.fn(async () => null),
 }))
-vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView, getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))

@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/teams/master', () => ({ activeTeamsForWorkspacesSync: h.activeTeamsForWorkspacesSync, teamsForProjectSync: h.teamsForProjectSync }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: vi.fn(async () => h.state) }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
 vi.mock('@/lib/workspace/resolve', () => ({
   resolveWorkspaceBySlug: vi.fn(async () => ({ ok: true, ws: { id: WA, slug: 'acme', name: 'Acme' } })),

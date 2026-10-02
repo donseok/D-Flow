@@ -47,6 +47,8 @@ function fakeClient() {
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: async () => fakeClient() }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (n: string) => (n === 'dflow-ws' && h.cookie !== undefined ? { name: n, value: h.cookie } : undefined) }) }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: async () => 'alice' }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: vi.fn() }))
 vi.mock('@/lib/teams/master', () => ({ activeTeamsForWorkspacesSync: () => [], teamsForProjectSync: () => [] }))

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getActorViewState } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isHiddenProject } from '@/lib/domain/authz'
 import { BRAND } from '@/lib/branding'
 import { readCurrentWorkspace } from '@/lib/workspace/current'
@@ -21,7 +22,9 @@ export default async function Root() {
   }
   if (!cur.ws) return <NoWorkspaceView isPlatformAdmin={actor?.isSuperuser === true} />
   const ws = cur.ws
-  const prefs = await getWorkspacePrefs(ws.id)
-  // 그 워크스페이스의 프로젝트 중 레이아웃이 404 로 숨기지 않는 것(조회 전용 포함 — isHiddenProject 와 같은 축). 열화면 판정 불가 → 홈
-  redirect(resolveStartPath(ws, prefs, (pid) => !!actor && actor.projectWorkspace.get(pid) === ws.id && !isHiddenProject(actor, pid)))
+  // 비공개 판정 실패는 '숨김 판정 불가'다 — 최근 프로젝트를 고르지 않는다(로그는 판정자). 선호 조회와 병렬(직렬 왕복 없음)
+  const [prefs, hidden] = await Promise.all([getWorkspacePrefs(ws.id), getHiddenProjectIds().catch(() => null)])
+  // 그 워크스페이스의 프로젝트 중 레이아웃이 404 로 숨기지 않는 것(조회 전용 포함 — 같은 판정자 isHiddenProject, 명단 밖 비공개 제외 GG1).
+  // 열화·비공개 판정 실패면 판정 불가 → 홈
+  redirect(resolveStartPath(ws, prefs, (pid) => !!actor && !!hidden && actor.projectWorkspace.get(pid) === ws.id && !isHiddenProject(actor, pid, hidden)))
 }

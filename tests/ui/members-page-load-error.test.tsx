@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   listRoster: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster, upsertRosterMember: vi.fn(), removeRosterMember: vi.fn() }))
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))

@@ -2,7 +2,8 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ getActorViewState: vi.fn(), effectiveModules: vi.fn() }))
+const h = vi.hoisted(() => ({ getActorViewState: vi.fn(), effectiveModules: vi.fn(), getHiddenProjectIds: vi.fn() }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
 vi.mock('@/lib/modules/effective', () => ({ effectiveModules: h.effectiveModules }))
 
@@ -16,6 +17,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.getActorViewState.mockResolvedValue({ actor: makeMemberActor(B, [], { projectWorkspace: new Map([[B, WS]]) }), degraded: false })
   h.effectiveModules.mockResolvedValue(new Set(['dashboard', 'wbs', 'members', 'settings']))
+  h.getHiddenProjectIds.mockResolvedValue(new Set())
 })
 
 describe('/api/nav/switch-target', () => {
@@ -76,6 +78,26 @@ describe('/api/nav/switch-target', () => {
   it('권한 조회 실패(열화)는 숨김 판정을 할 수 없다 — 503 이 아니라 degraded 개요(쓰기 없음, 이동만), 모듈을 읽지 않는다', async () => {
     h.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
     expect(await (await get(`project=${B}&path=/p/A/issues`)).json()).toEqual({ href: `/p/${B}/dashboard`, fallbackModule: null, degraded: true })
+    expect(h.effectiveModules).not.toHaveBeenCalled()
+  })
+})
+
+// GG1 — 전환 대상도 레이아웃과 같은 판정자: 명단 밖 비공개는 같은 404, 판정 실패는 열화와 같이 개요(모듈을 읽지 않는다)
+describe('/api/nav/switch-target — 명단 밖 비공개(GG1)', () => {
+  it('명단 밖 비공개 프로젝트는 다른 숨김과 같은 404 — 모듈을 읽지 않는다', async () => {
+    h.getActorViewState.mockResolvedValue({ actor: makeActor({ projectWorkspace: new Map([[B, WS]]) }), degraded: false })
+    h.getHiddenProjectIds.mockResolvedValue(new Set([B]))
+    const r1 = await get(`project=${B}&path=/p/A/wbs`)
+    const r2 = await get(`project=${OTHER}&path=/p/A/wbs`)
+    expect([r1.status, r2.status]).toEqual([404, 404])
+    expect(await r1.json()).toEqual(await r2.json())
+    expect(h.effectiveModules).not.toHaveBeenCalled()
+  })
+  it('비공개 판정 실패는 숨김을 판정할 수 없다 — 열화와 같이 개요(모듈 미판독)', async () => {
+    h.getHiddenProjectIds.mockRejectedValue(new Error('x'))
+    const res = await get(`project=${B}&path=/p/A/wbs`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ href: `/p/${B}/dashboard`, fallbackModule: null, degraded: true })
     expect(h.effectiveModules).not.toHaveBeenCalled()
   })
 })

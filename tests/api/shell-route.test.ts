@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   getInboxFeed: vi.fn(), getNotifications: vi.fn(), getUnreadAnnouncementCount: vi.fn(), getPendingApprovalCount: vi.fn(),
-  countMyReview: vi.fn(), getActorViewState: vi.fn(),
+  countMyReview: vi.fn(), getActorViewState: vi.fn(), getHiddenProjectIds: vi.fn(),
 }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('@/app/actions/inbox', () => ({ getInboxFeed: h.getInboxFeed }))
 vi.mock('@/app/actions/notifications', () => ({ getNotifications: h.getNotifications }))
 vi.mock('@/app/actions/announcements', () => ({ getUnreadAnnouncementCount: h.getUnreadAnnouncementCount }))
@@ -33,6 +34,7 @@ beforeEach(() => {
   h.getUnreadAnnouncementCount.mockResolvedValue(2)
   h.getPendingApprovalCount.mockResolvedValue(1)
   h.countMyReview.mockResolvedValue(4)
+  h.getHiddenProjectIds.mockResolvedValue(new Set())
 })
 afterEach(() => errSpy.mockRestore())
 // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
@@ -130,5 +132,32 @@ describe('/api/shell — 적대적(E10, fail-closed)', () => {
     expect(body.pendingApprovals).toBe(0)
     expect(body).toMatchObject({ inbox: [], unreadAnnouncements: 0, headerAnnouncements: ROWS, headerAnnouncementsFailed: false })
     expect(errSpy).toHaveBeenCalledWith('[shell] 결재 대기 수 조회 실패:', expect.stringContaining('끝까지 읽지 못했습니다'))
+  })
+})
+
+// GG1 — 프로젝트 배지는 프로젝트 화면과 같은 판정자로 거른다: 명단 밖 비공개면 조회하지 않고, 판정이 실패해도 조회하지 않는다(null + 로그)
+describe('/api/shell — 명단 밖 비공개 프로젝트(GG1)', () => {
+  const offRoster = () => makeActor({ workspaceRoles: new Map([[WA, 'member']]), projectWorkspace: new Map([[P, WA]]) })
+  it('명단 밖 비공개 프로젝트의 배지·파생 알림을 계산하지 않는다(워크스페이스 배지는 그대로)', async () => {
+    h.getActorViewState.mockResolvedValue({ actor: offRoster(), degraded: false })
+    h.getHiddenProjectIds.mockResolvedValue(new Set([P]))
+    const body = await (await get(`ws=${WA}&project=${P}`)).json()
+    expect(body.badges).toEqual({ myWorkReview: 4, projectApprovals: null, projectUnreadAnnouncements: null })
+    expect(body.notifications).toBeNull()
+    expect(h.getNotifications).not.toHaveBeenCalled(); expect(h.getUnreadAnnouncementCount).not.toHaveBeenCalled(); expect(h.getPendingApprovalCount).not.toHaveBeenCalled()
+  })
+  it('비공개 판정이 실패하면 프로젝트 배지를 계산하지 않는다(fail-closed, 로그)', async () => {
+    h.getHiddenProjectIds.mockRejectedValue(new Error('hidden-boom'))
+    const res = await get(`ws=${WA}&project=${P}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.badges.projectApprovals).toBeNull(); expect(body.badges.projectUnreadAnnouncements).toBeNull()
+    expect(h.getNotifications).not.toHaveBeenCalled()
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[shell]'), 'hidden-boom')
+  })
+  it('대조 — 명단 멤버는 비공개 프로젝트여도 센다(숨김 집합에 없다)', async () => {
+    h.getHiddenProjectIds.mockResolvedValue(new Set())
+    const body = await (await get(`ws=${WA}&project=${P}`)).json()
+    expect(body.badges.projectUnreadAnnouncements).toBe(2)
   })
 })

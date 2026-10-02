@@ -31,7 +31,8 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster, getMyProjectIds: vi.fn(async () => []) }))
-vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
+vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView, getActorViewState: async () => ({ actor: await mocks.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
 // 회의록 상세의 비공개 숨김(DD1) — 이 파일은 명단·첨부·판 실패 표시를 본다, 숨김은 tests/minutes/minute-detail-scope 가 본다
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: vi.fn(async () => new Set()) }))
 // 회의록 상세(/w/[slug]/minutes/[id])의 행위자는 슬러그 판정(loadWorkspaceScope)이 준다 — 같은 행위자 mock 을 싣는다

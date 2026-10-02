@@ -346,21 +346,27 @@ describe('Q2 — 두 워크스페이스·비공개(Review Focus 2)', () => {
 
 // 레이아웃 404 판정(T11 C3) — roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 미존재 pid 가 빈 화면으로 샜다.
 describe('isHiddenProject', () => {
+  const NONE: ReadonlySet<string> = new Set()
   it('타 워크스페이스·미존재 프로젝트는 숨긴다', () => {
-    expect(isHiddenProject(makeAdminActor(P, inWs), X)).toBe(true)
+    expect(isHiddenProject(makeAdminActor(P, inWs), X, NONE)).toBe(true)
   })
   it('같은 워크스페이스의 조회 전용(viewer)은 숨기지 않는다', () => {
-    expect(isHiddenProject(makeActor(inWs), Q)).toBe(false)
+    expect(isHiddenProject(makeActor(inWs), Q, NONE)).toBe(false)
   })
   it('플랫폼 관리자라도 projectWorkspace 에 없는 pid 는 숨긴다 — buildActor 가 전 프로젝트를 싣으므로 없으면 미존재', () => {
-    expect(isHiddenProject(makeSuperuser(), P)).toBe(true)
-    expect(isHiddenProject(makeSuperuser(inWs), X)).toBe(true)
+    expect(isHiddenProject(makeSuperuser(), P, NONE)).toBe(true)
+    expect(isHiddenProject(makeSuperuser(inWs), X, NONE)).toBe(true)
   })
   it('플랫폼 관리자 + 있는 pid 는 숨기지 않는다(워크스페이스 소속과 무관)', () => {
-    expect(isHiddenProject(makeSuperuser({ workspaceRoles: new Map(), ...inWs }), P)).toBe(false)
+    expect(isHiddenProject(makeSuperuser({ workspaceRoles: new Map(), ...inWs }), P, NONE)).toBe(false)
   })
   it('actor=null 은 숨긴다 — 판정 대상이 없다', () => {
-    expect(isHiddenProject(null, P)).toBe(true)
+    expect(isHiddenProject(null, P, NONE)).toBe(true)
+  })
+  // GG1 — 비공개 축은 getHiddenProjectIds(canSeeProject 정본)의 집합으로 받는다: 같은 워크스페이스의 명단 밖 멤버(viewer)도 숨긴다
+  it('숨김 집합(명단 밖 비공개)에 있으면 같은 워크스페이스의 viewer 라도 숨긴다', () => {
+    expect(isHiddenProject(makeActor(inWs), Q, new Set([Q]))).toBe(true)
+    expect(isHiddenProject(makeActor(inWs), Q, new Set([P]))).toBe(false)
   })
 })
 

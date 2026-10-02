@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getActorViewState } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { getDisplayName } from '@/lib/auth'
 import { isHiddenProject } from '@/lib/domain/authz'
 import { workspaceRefById } from '@/lib/workspace/resolve'
@@ -17,10 +18,10 @@ import type { Team } from '@/lib/domain/teams'
 
 type Params = Promise<{ projectId: string }>
 
-/** /p/* 는 그 프로젝트의 워크스페이스 마크(★8). 숨김 프로젝트는 아이콘도 내지 않는다(존재 은닉) */
+/** /p/* 는 그 프로젝트의 워크스페이스 마크(★8). 숨김 프로젝트(명단 밖 비공개 포함)는 아이콘도 내지 않는다(존재 은닉). 비공개 판정 실패도 내지 않는다(로그는 판정자) */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const [{ projectId }, { actor }] = await Promise.all([params, getActorViewState()])
-  if (!actor || isHiddenProject(actor, projectId)) return {}
+  const [{ projectId }, { actor }, hidden] = await Promise.all([params, getActorViewState(), getHiddenProjectIds().catch(() => null)])
+  if (!actor || !hidden || isHiddenProject(actor, projectId, hidden)) return {}
   const wid = actor.projectWorkspace.get(projectId)
   if (!wid) return {}
   try { const icon = workspaceIconHref(await getWorkspaceConfig(wid)); return icon ? { icons: { icon } } : {} }
@@ -28,14 +29,21 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 /**
- * 프로젝트 범위 셸(스펙 §5.4.1). 존재 은닉(스펙 §3.2) — 내 워크스페이스에 없는 프로젝트(타 워크스페이스·미존재)는 404 이고, 그때는 셸 데이터
- * (워크스페이스 이름·프로젝트 목록·브랜드)도 조회하지 않는다. 같은 워크스페이스의 조회 전용(viewer)은 통과한다. 플랫폼 관리자도 없는 pid 는 404.
+ * 프로젝트 범위 셸(스펙 §5.4.1). 존재 은닉(스펙 §3.2) — 내 워크스페이스에 없는 프로젝트(타 워크스페이스·미존재)와 명단 밖 비공개 프로젝트
+ * (GG1 — 사용자 결정 2026-08-10 "비공개 = 화면 숨김"을 회의록·위키·AI·포털과 같은 판정자로)는 404 이고, 그때는 셸 데이터
+ * (워크스페이스 이름·프로젝트 목록·브랜드)도 조회하지 않는다. 같은 워크스페이스의 조회 전용(viewer)은 공개 프로젝트면 통과한다. 플랫폼 관리자도 없는 pid 는 404.
+ * 비공개 판정(getHiddenProjectIds)이 실패하면 404 로 위장하지 않고 던진다(오류 경계). 요청 캐시라 페이지 재판정과 왕복을 나눈다.
  * 권한 조회 실패(degraded)는 404 가 아니다 — 워크스페이스를 모르므로 내비 없는 최소 셸(열화 알림)로 그리고 service_role 팀 캐시를 읽지 않는다(fail-closed).
+ * 단 그 프로젝트가 비공개면 명단을 판정할 수 없으므로 최소 셸로도 열지 않고 던진다(GG1).
  * 워크스페이스 id 는 actor.projectWorkspace(조회 없음, D38), 슬러그·이름은 workspaceRefById(세션 RLS). 그 행이 안 보이면 최소 셸, 조회 오류는 오류 경계.
  */
 export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Params }) {
-  const [{ projectId }, { actor, degraded }, mine, userName] = await Promise.all([params, getActorViewState(), listMyWorkspaces(), getDisplayName()])
-  if (!degraded && isHiddenProject(actor, projectId)) notFound()
+  const [{ projectId }, { actor, degraded }, mine, userName, hidden] = await Promise.all([
+    params, getActorViewState(), listMyWorkspaces(), getDisplayName(), getHiddenProjectIds(),
+  ])
+  // 열화면 판정자의 actor 도 null 이라 숨김 집합 = 비공개 전부 — 명단을 모르는 비공개는 오류로 닫는다(404 로 위장하지 않는다)
+  if (degraded && hidden.has(projectId)) throw new Error('권한 조회가 실패해 비공개 프로젝트의 명단을 판정하지 못했습니다')
+  if (!degraded && isHiddenProject(actor, projectId, hidden)) notFound()
   if (!mine.ok) throw new Error(`소속 목록을 불러오지 못했습니다: ${mine.error}`)
   const wid = actor?.projectWorkspace.get(projectId) ?? null
   const ref = wid ? await workspaceRefById(wid) : null

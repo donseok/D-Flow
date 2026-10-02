@@ -28,6 +28,8 @@ vi.mock('@/lib/settings/projectConfig', async (importOriginal) => ({
   getProjectConfig: mocks.getProjectConfig,
 }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: mocks.getActorViewState, getActorForView: mocks.getActorForView }))
+// GG1 — 프로젝트 레이아웃·페이지가 명단 밖 비공개 숨김 집합을 읽는다(이 파일은 비공개를 다루지 않는다 — 빈 집합)
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }),
   redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }),

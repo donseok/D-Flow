@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ getSession: vi.fn(), getActor: vi.fn(), createServerClient: vi.fn(), ops: [] as unknown[][], eqs: {} as Record<string, unknown[][]> }))
+const h = vi.hoisted(() => ({ getHiddenProjectIds: vi.fn(async (): Promise<ReadonlySet<string>> => new Set()), getSession: vi.fn(), getActor: vi.fn(), createServerClient: vi.fn(), ops: [] as unknown[][], eqs: {} as Record<string, unknown[][]> }))
 vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: h.getActor }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 
 import { saveUiPrefs } from '@/app/actions/preferences'
@@ -30,6 +31,7 @@ function db(existing: Record<string, unknown>, opts: { readFail?: string; writeF
 }
 beforeEach(() => {
   vi.clearAllMocks(); h.ops.length = 0; h.eqs = {}
+  h.getHiddenProjectIds.mockResolvedValue(new Set())
   h.getSession.mockResolvedValue({ id: 'u1' })
   h.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WS, 'member']]) }))
 })
@@ -252,6 +254,21 @@ describe('saveUiPrefs — 방문 기록(visits, Y1)', () => {
     // 즐겨찾기와 섞여 와도 recentProjects 만 빠진다
     expect(await saveUiPrefs({ favoriteProjectIds: [PA], recentProjects: [{ id: PO, at: '2999-01-01T00:00:00.000Z' }] }, { workspaceId: WS })).toEqual({ ok: true })
     expect(h.ops[0][1]).toEqual({ recentProjects: [{ id: PX, at: '2026-09-01T00:00:00.000Z' }], favoriteProjectIds: [PA] }); err.mockRestore()
+  })
+  it('GG1 — 명단 밖 비공개 프로젝트 방문은 버린다(프로젝트 화면과 같은 판정자, 로그)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getHiddenProjectIds.mockResolvedValue(new Set([PB]))
+    h.createServerClient.mockResolvedValue(db({}))
+    expect(await saveUiPrefs({}, { workspaceId: WS, visits: [PA, PB] })).toEqual({ ok: true })
+    expect((h.ops[0][1] as { recentProjects: { id: string }[] }).recentProjects.map((r) => r.id)).toEqual([PA])
+    expect(err).toHaveBeenCalled(); err.mockRestore()
+  })
+  it('GG1 — 비공개 판정이 실패하면 쓰지 않는다(쓰기 전 선행 판정 실패 → 중단, 같은 요청의 워크스페이스 키도)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getHiddenProjectIds.mockRejectedValue(new Error('x'))
+    h.createServerClient.mockResolvedValue(db({}))
+    expect(await saveUiPrefs({ favoriteProjectIds: [PA] }, { workspaceId: WS, visits: [PA] })).toEqual({ ok: false })
+    expect(h.ops).toEqual([]); err.mockRestore()
   })
   it('/api/prefs — prefs 없이 visits 만 담은 본문도 받는다', async () => {
     h.createServerClient.mockResolvedValue(db({}))

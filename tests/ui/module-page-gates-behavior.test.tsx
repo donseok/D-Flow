@@ -11,7 +11,9 @@ const m = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: m.getComputedWbs }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ getSeatmap: m.getSeatmap }))
-vi.mock('@/lib/authz', () => ({ getActorForView: m.getActorForView }))
+vi.mock('@/lib/authz', () => ({ getActorForView: m.getActorForView, getActorViewState: async () => ({ actor: await m.getActorForView(), degraded: false }) }))
+// GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 // 좌석표·회의록 상세는 /w/[slug] 아래 — 슬러그 판정이 워크스페이스 w1 을 준다(회의록은 행의 워크스페이스와 같아야 관문까지 간다)
 vi.mock('@/lib/authz/workspaceScope', () => ({
   loadWorkspaceScope: vi.fn(async () => ({ ws: { id: 'w1', slug: 'acme', name: 'Acme' }, actor: await m.getActorForView(), degraded: false, role: 'member' })),

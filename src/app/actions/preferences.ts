@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { hasWorkspaceMembership, isHiddenProject, type Actor } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 import type { UiPrefs } from '@/lib/domain/types'
@@ -92,7 +93,15 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
       return { ok: false }
     }
     if (!hasWorkspaceMembership(actor, wid)) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 저장하지 않는다:', wid); return { ok: false } }
-    visits = visitsIn(actor, wid, rawVisits)
+    // 방문은 프로젝트 화면과 같은 판정자로 거른다(GG1 — 명단 밖 비공개 포함). 그 판정이 실패하면 쓰기 전 선행 판정 실패 — 중단한다(원칙 ②)
+    let hidden: ReadonlySet<string> = new Set()
+    if (rawVisits.length) {
+      try { hidden = await getHiddenProjectIds() } catch {
+        console.error('[saveUiPrefs] 비공개 판정 실패 — 저장하지 않는다')
+        return { ok: false }
+      }
+    }
+    visits = visitsIn(actor, wid, rawVisits, hidden)
   }
   const sb = await createServerClient()
   let ok = true
@@ -109,13 +118,13 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
   return { ok }
 }
 
-/** 방문 id 중 그 워크스페이스에서 볼 수 있는 프로젝트만(소문자 uuid) — 다른 워크스페이스·숨김·모르는 id·형식 밖은 버리고 개수만 로그 */
-function visitsIn(actor: Actor | null, wid: string, raw: unknown[]): string[] {
+/** 방문 id 중 그 워크스페이스에서 볼 수 있는 프로젝트만(소문자 uuid) — 다른 워크스페이스·숨김(명단 밖 비공개 포함)·모르는 id·형식 밖은 버리고 개수만 로그 */
+function visitsIn(actor: Actor | null, wid: string, raw: unknown[], hidden: ReadonlySet<string>): string[] {
   const out: string[] = []
   let dropped = 0
   for (const v of raw) {
     const id = typeof v === 'string' && UUID_RE.test(v) ? v.toLowerCase() : null
-    if (id && actor && !isHiddenProject(actor, id) && actor.projectWorkspace.get(id) === wid) out.push(id); else dropped += 1
+    if (id && actor && !isHiddenProject(actor, id, hidden) && actor.projectWorkspace.get(id) === wid) out.push(id); else dropped += 1
   }
   if (dropped) console.error(`[saveUiPrefs] 그 워크스페이스에서 볼 수 없는 방문 — 버린다(${dropped}개)`)
   return out

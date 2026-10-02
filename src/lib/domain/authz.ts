@@ -57,12 +57,16 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
   return actor.projectRoles.get(projectId) ?? 'viewer'           // ⑥ 명단 행
 }
 /**
- * 레이아웃 404 판정 — 타 워크스페이스·미존재(roleIn null) 또는 플랫폼 관리자가 없는 pid 로 들어온 경우.
+ * 프로젝트 화면 숨김의 한 판정자(UI-2b 최종 리뷰 GG1) — 레이아웃·페이지 재판정·`/api/shell` 프로젝트 배지·전환 대상·최근 방문·루트 시작
+ * 화면이 모두 이것으로 가른다. 숨김 = ① 타 워크스페이스·미존재(roleIn null), 플랫폼 관리자는 없는 pid ② 명단 밖 비공개 — 셋째 인자
+ * `hiddenPrivate` 는 getHiddenProjectIds()(비공개 ∧ canSeeProject 거짓, 회의록·위키·AI·포털 목록과 같은 정본)의 결과다. 필수 인자라
+ * 비공개 축을 빠뜨린 호출이 컴파일되지 않는다. 그 집합을 못 읽었으면(던짐) 호출부가 404 로 위장하지 않고 자기 실패 관례로 돌린다.
  * roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 그것만으로는 미존재를 가리지 못한다.
  * buildActor 는 플랫폼 관리자에게 전 프로젝트를 싣으므로 projectWorkspace 에 없으면 미존재다.
  */
-export function isHiddenProject(actor: Actor | null, projectId: string): boolean {
+export function isHiddenProject(actor: Actor | null, projectId: string, hiddenPrivate: ReadonlySet<string>): boolean {
   if (!actor) return true
+  if (hiddenPrivate.has(projectId)) return true
   if (actor.isSuperuser) return !actor.projectWorkspace.has(projectId)
   return roleIn(actor, projectId) === null
 }

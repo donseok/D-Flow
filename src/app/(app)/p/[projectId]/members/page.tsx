@@ -4,6 +4,7 @@ import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorViewState } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isAdminAccessRole, isHiddenProject, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { teamsForProjectSync } from '@/lib/teams/master'
 import { listProjects } from '@/app/actions/project'
@@ -20,12 +21,14 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'members')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [{ actor: m, degraded }, projects, locale] = await Promise.all([getActorViewState(), listProjects(), getServerLocale()])
+  const [{ actor: m, degraded }, projects, locale, hidden] = await Promise.all([getActorViewState(), listProjects(), getServerLocale(), getHiddenProjectIds()])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지의 조회를 멈추지
   // 않고, 여기서 만든 RSC 페이로드는 404 digest 옆에 그대로 실린다. 아래 팀 후보는 전 워크스페이스를 담은 service_role
   // 캐시라, 게이트 없이 읽으면 타 워크스페이스 팀 id·코드와 프로젝트 존재 여부가 샌다. 권한 조회 실패(degraded)는
   // 레이아웃처럼 404 로 위장하지 않는다(actor 가 null 이라 canEdit 도 거짓 — 캐시를 읽지 않는다).
-  if (!degraded && isHiddenProject(m, projectId)) notFound()
+  // GG1 — 명단 밖 비공개도 레이아웃과 같은 판정자로 숨긴다. 열화에 비공개면 명단을 모르므로 던진다(404 위장 금지). 판정 실패도 던진다(위 Promise.all)
+  if (degraded && hidden.has(projectId)) throw new Error('권한 조회가 실패해 비공개 프로젝트의 명단을 판정하지 못했습니다')
+  if (!degraded && isHiddenProject(m, projectId, hidden)) notFound()
 
   const project = projects.find((p) => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'members.projectFallback')

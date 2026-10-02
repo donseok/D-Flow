@@ -2,7 +2,9 @@
 // 응답 = { inbox, notifications, badges: { myWorkReview, projectApprovals, projectUnreadAnnouncements } }. 티커 필드는 없다(D28). 개인화라 no-store.
 // 배지 실패는 0 이 아니라 null + 로그(3원칙 ①). 모듈이 꺼진 항목은 실패가 아니다(결재 배지 0 — §4.2 셸 행, 공지는 액션이 0).
 // 범위 판정은 fail-closed(E10 — 남의 수를 흘리지 않는다): ws 는 uuid 이고 그 워크스페이스에 역할이 있을 때만(플랫폼 관리자 포함 — 그 워크스페이스를 보는
-// 화면과 같은 축) 센다. project 는 uuid 이고 볼 수 있는 프로젝트(isHiddenProject 아님)이며 ws 를 같이 보냈으면 그 워크스페이스의 프로젝트일 때만 조회한다.
+// 화면과 같은 축) 센다. project 는 uuid 이고 볼 수 있는 프로젝트(isHiddenProject 아님 — 프로젝트 화면과 같은 판정자라 명단 밖 비공개도 숨김, GG1)이며
+// ws 를 같이 보냈으면 그 워크스페이스의 프로젝트일 때만 조회한다. 비공개 판정이 실패하면 프로젝트 배지·파생 알림은 null(로그) — 숨길 것을 못 숨기느니 세지 않는다.
+// 비공개 판정은 권한 조회와 병렬이다(요청 캐시 — 직렬 왕복을 늘리지 않는다, project 가 있을 때만).
 // 권한 조회가 실패하면(열화) 범위 배지는 모두 null 이고 인박스만 낸다. 안의 조회 함수들도 각자 세션·관문을 다시 지난다.
 import { type NextRequest, NextResponse } from 'next/server'
 import { getInboxFeed } from '@/app/actions/inbox'
@@ -12,6 +14,7 @@ import { getPendingApprovalCount } from '@/lib/data/agentApprovals'
 import { projectsWithModule } from '@/lib/modules/gate'
 import { countMyReview } from '@/lib/data/portal'
 import { getActorViewState } from '@/lib/authz'
+import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isHiddenProject, isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 
@@ -30,9 +33,12 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams
   const wsRaw = uuidOrNull(q.get('ws'))
   const projectRaw = uuidOrNull(q.get('project'))
-  const actor = await actorOrNull()
+  const [actor, hidden] = await Promise.all([
+    actorOrNull(),
+    projectRaw ? nullOnFail('비공개 판정', getHiddenProjectIds()) : Promise.resolve(null),
+  ])
   const ws = actor && wsRaw && isWorkspaceMember(actor, wsRaw) ? wsRaw : null
-  const project = actor && projectRaw && !isHiddenProject(actor, projectRaw) && (!wsRaw || actor.projectWorkspace.get(projectRaw) === wsRaw) ? projectRaw : null
+  const project = actor && projectRaw && hidden && !isHiddenProject(actor, projectRaw, hidden) && (!wsRaw || actor.projectWorkspace.get(projectRaw) === wsRaw) ? projectRaw : null
   const [inbox, notifications, myWorkReview, projectApprovals, projectUnreadAnnouncements] = await Promise.all([
     getInboxFeed(),
     // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(옛 HeaderChrome catch 시맨틱 — 클라이언트는 직전 값을 유지)

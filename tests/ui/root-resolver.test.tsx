@@ -1,10 +1,11 @@
 import { renderToString } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ readCurrentWorkspace: vi.fn(), getWorkspacePrefs: vi.fn(async (): Promise<object> => ({})), getActorViewState: vi.fn(), redirect: vi.fn((u: string) => { throw new Error(`NEXT_REDIRECT:${u}`) }) }))
+const h = vi.hoisted(() => ({ getHiddenProjectIds: vi.fn(async (): Promise<ReadonlySet<string>> => new Set()), readCurrentWorkspace: vi.fn(), getWorkspacePrefs: vi.fn(async (): Promise<object> => ({})), getActorViewState: vi.fn(), redirect: vi.fn((u: string) => { throw new Error(`NEXT_REDIRECT:${u}`) }) }))
 vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.readCurrentWorkspace }))
 vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspacePrefs }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
+vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
 
 import Root from '@/app/page'
@@ -25,6 +26,20 @@ describe('루트 리졸버', () => {
       projectWorkspace: new Map([[P1, WID], [PX, 'ws-x']]) }), degraded: false })
     h.getWorkspacePrefs.mockResolvedValue({ startPage: 'last_project', recentProjects: [{ id: PX, at: 'a' }, { id: '00000000-0000-0000-7e57-0000000016f7', at: 'b' }, { id: P1, at: 'c' }] })
     await expect(Root()).rejects.toThrow(`NEXT_REDIRECT:/p/${P1}/dashboard`)
+  })
+  it('GG1 — 명단 밖 비공개 최근 프로젝트는 건너뛴다(레이아웃과 같은 판정자)', async () => {
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: { id: WID, slug: 'acme', name: 'Acme' } })
+    h.getActorViewState.mockResolvedValue({ actor: makeActor({ workspaceRoles: new Map([[WID, 'member']]), projectWorkspace: new Map([[P1, WID], [PX, WID]]) }), degraded: false })
+    h.getHiddenProjectIds.mockResolvedValue(new Set([PX]))
+    h.getWorkspacePrefs.mockResolvedValue({ startPage: 'last_project', recentProjects: [{ id: PX, at: 'a' }, { id: P1, at: 'c' }] })
+    await expect(Root()).rejects.toThrow(`NEXT_REDIRECT:/p/${P1}/dashboard`)
+  })
+  it('GG1 — 비공개 판정이 실패하면 최근 프로젝트를 판정할 수 없으니 홈으로', async () => {
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: { id: WID, slug: 'acme', name: 'Acme' } })
+    h.getActorViewState.mockResolvedValue({ actor: makeActor({ workspaceRoles: new Map([[WID, 'member']]), projectWorkspace: new Map([[P1, WID]]) }), degraded: false })
+    h.getHiddenProjectIds.mockRejectedValue(new Error('x'))
+    h.getWorkspacePrefs.mockResolvedValue({ startPage: 'last_project', recentProjects: [{ id: P1, at: 'c' }] })
+    await expect(Root()).rejects.toThrow('NEXT_REDIRECT:/w/acme')
   })
   it('권한 조회 열화 — 최근 프로젝트를 판정할 수 없으니 홈으로', async () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: { id: WID, slug: 'acme', name: 'Acme' } })
