@@ -88,6 +88,13 @@ describe('updateProjectSettings — calendar.week_start', () => {
     expect(await updateProjectSettings(PID, patch({ set: { 'calendar.week_start': 'monday' } }))).toMatchObject({ ok: true })
     expect(db.projects.get(PID)!.values['calendar.week_start']).toEqual(MON0)
   })
+  it('주차 detail 해석은 SETTINGS_CODE_IN_USE 토큰에만 — 다른 사용 중 토큰(FORM_MAPPING_IN_USE)은 JSON detail 이 있어도 일반 문구(K7)', async () => {
+    project({ 'calendar.week_start': MON0 })
+    db.refCheck = () => ({ code: '23514', message: 'FORM_MAPPING_IN_USE', details: JSON.stringify({ key: 'calendar.week_start', weeks: ['2026-09-21'] }) })
+    const r = await updateProjectSettings(PID, patch({ unset: ['calendar.week_start'] }))
+    expect(r).toMatchObject({ ok: false, kind: 'invalid', code: 'CONFIG_IN_USE', fieldErrors: [] })
+    expect(r.ok ? '' : r.error).not.toContain('2026-09-21')
+  })
   it('[RF3] unset(기본값으로) 이 월요일 문서에 막히면 CONFIG_IN_USE — 막는 주차가 키 오류 문구에 있다', async () => {
     project({ 'calendar.week_start': MON0 })
     db.weeklyReports.push({ project_id: PID, week_start: '2026-09-21' })

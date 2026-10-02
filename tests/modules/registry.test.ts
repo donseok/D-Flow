@@ -83,7 +83,7 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 20정의(SP5 A calendar.* 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 4·settings 10 이다', () => {
+  it('settings — 20정의(SP5 A calendar.* 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 5·settings 15 다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
     expect(owned).toHaveLength(20)
     for (const [mid, key] of owned) {

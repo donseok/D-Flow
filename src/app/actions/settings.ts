@@ -199,8 +199,9 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
       }
       if (k.kind === 'invalid' && INVALID_CODES.includes(mapped.code)) {
         if (mapped.code === 'CONFIG_IN_USE') {
-          // 참조 검사(settings_ref_check)의 detail 을 키 오류로 — calendar.week_start 는 막는 주차를 보인다(SP5 D53·[RF3])
-          const fe = inUseFieldErrors(mapped.detail)
+          // 참조 검사(settings_ref_check)의 detail 을 키 오류로 — calendar.week_start 는 막는 주차를 보인다(SP5 D53·[RF3]).
+          // 그 토큰에만 — 다른 사용 중 토큰(FORM_MAPPING_IN_USE 등)의 detail 은 이 모양의 약속이 없다(K7)
+          const fe = mapped.token === 'SETTINGS_CODE_IN_USE' ? inUseFieldErrors(mapped.detail) : []
           return invalid(commandId, 'CONFIG_IN_USE', fe, fe[0]?.message ?? mapped.message)
         }
         return invalid(commandId, mapped.code as InvalidCode, [], mapped.message)

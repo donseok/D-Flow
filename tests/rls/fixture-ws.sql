@@ -265,3 +265,13 @@ insert into public.command_receipts (actor, command_id, kind, workspace_id, proj
           '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'fixture',
           '{"status": "applied", "mode": "append", "count": 0, "command_id": "00000000-0000-0000-7e57-0000000018f1"}')
   on conflict do nothing;
+-- SP5 A 월요일 규칙 선기록(위 c1 의 update)이 실제로 1행을 바꿨는지 — 설정 행은 projects_settings_row 트리거가 만든다. 그 트리거가 바뀌어
+-- update 가 조용히 0행이 되면 여기서 멈춘다(A-1 리뷰 K7). 파일 끝에 둔다 — 다른 테스트가 이 파일의 줄 번호를 주석으로 가리킨다
+do $$
+begin
+  if not exists (select 1 from public.project_settings
+                  where project_id = '00000000-0000-0000-7e57-0000000000c1'
+                    and "values" -> 'calendar.week_start' = '[{"day": "monday", "from": null}]'::jsonb) then
+    raise exception 'fixture-ws: c1 의 월요일 주 시작 규칙 선기록이 0행이다(설정 행 없음 — projects_settings_row 트리거 확인)';
+  end if;
+end $$;
