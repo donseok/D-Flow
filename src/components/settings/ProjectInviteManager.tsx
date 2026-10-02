@@ -38,12 +38,10 @@ function canRevoke(s: InviteStatus): boolean {
   return s === 'active' || s === 'expired'
 }
 
-function fmtDateTime(iso: string): string {
+function fmtDateTime(iso: string, timeZone: string, locale = 'ko-KR'): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul', dateStyle: 'short', timeStyle: 'short',
-  }).format(d)
+  return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(d)
 }
 
 /**
@@ -55,13 +53,17 @@ function fmtDateTime(iso: string): string {
  * 목록 조회가 실패했으면 loadError 로 받아 그 사실을 드러낸다: '초대 0건'으로 보이면
  * 관리자가 같은 주소로 다시 발급하다 중복 제약에 이유 없이 막힌다.
  */
-export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView }: {
+export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, locale }: {
   projectId: string
   rows: InviteRow[]
   loadError: string | null
   /** 이 프로젝트에서 고를 수 있는 활성 팀 — 초대는 팀 id 로 저장한다. */
   teamOptions: readonly TeamOption[]
   actorView: ProjectActorView | null
+  /** 만료·합류 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
+  timeZone: string
+  /** 시각 포맷의 locale — 없으면 'ko-KR' */
+  locale?: string
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -278,9 +280,9 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                   <td className="py-2.5 pr-3">
                     <span className={`badge ${STATUS_CLASS[row.status]}`}>{inviteStatusLabel(row.status)}</span>
                   </td>
-                  <td className="py-2.5 pr-3 tabular-nums text-ink-muted">{fmtDateTime(row.expiresAt)}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-ink-muted">{fmtDateTime(row.expiresAt, timeZone, locale)}</td>
                   <td className="py-2.5 pr-3 tabular-nums text-ink-muted">
-                    {row.redeemedAt ? fmtDateTime(row.redeemedAt) : <span className="text-ink-subtle">—</span>}
+                    {row.redeemedAt ? fmtDateTime(row.redeemedAt, timeZone, locale) : <span className="text-ink-subtle">—</span>}
                   </td>
                   <td className="py-2.5 pr-3">
                     {canRevoke(row.status) && (

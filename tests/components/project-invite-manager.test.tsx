@@ -64,7 +64,7 @@ describe('ProjectInviteManager', () => {
 
   function render(rows: InviteRow[] = [], actorView: ProjectActorView | null = WS_ADMIN) {
     act(() => {
-      root.render(<ProjectInviteManager projectId="p-1" rows={rows} loadError={null} teamOptions={TEAMS} actorView={actorView} />)
+      root.render(<ProjectInviteManager projectId="p-1" rows={rows} loadError={null} teamOptions={TEAMS} actorView={actorView} timeZone="Asia/Seoul" />)
     })
   }
   const byLabel = <T extends HTMLElement>(label: string) => container.querySelector<T>(`[aria-label="${label}"]`)!

@@ -2,14 +2,18 @@
 
 import { useState, useTransition } from 'react'
 import { listSettingsHistory, type SettingsHistoryResult, type SettingsHistoryScope } from '@/app/actions/settings'
-import { seoulStamp } from '@/lib/domain/dates'
+import { stampIn } from '@/lib/domain/calendar'
 
 const SOURCE: Record<string, string> = { edit: '직접 변경', create: '생성', copy: '복사', migration: '마이그레이션', internal: '시스템 변경' }
 const formatValue = (value: unknown) => value === null ? '없음' : JSON.stringify(value, null, 2) ?? '없음'
-const formatDate = (iso: string) => Number.isNaN(new Date(iso).getTime()) ? '시각 확인 불가' : seoulStamp(iso)
+const formatDate = (iso: string, timeZone: string) => Number.isNaN(new Date(iso).getTime()) ? '시각 확인 불가' : stampIn(timeZone, iso)
 
 /** 이력은 읽기 전용이다. 커서(id)로 이전 20건씩 읽고, 원문 값은 접어서 보여준다. */
-export function SettingsHistoryList({ scope, initial }: { scope: SettingsHistoryScope; initial: SettingsHistoryResult }) {
+export function SettingsHistoryList({ scope, initial, timeZone }: {
+  scope: SettingsHistoryScope; initial: SettingsHistoryResult
+  /** 변경 시각을 찍을 시간대(그 범위의 calendar.timezone) — 서버가 내려준다 */
+  timeZone: string
+}) {
   const [rows, setRows] = useState(initial.ok ? initial.rows : [])
   const [nextBefore, setNextBefore] = useState(initial.ok ? initial.nextBefore : null)
   const [error, setError] = useState(initial.ok ? null : initial.error)
@@ -35,7 +39,7 @@ export function SettingsHistoryList({ scope, initial }: { scope: SettingsHistory
       {rows.map(row => <li key={row.id} className="space-y-2 py-4 first:pt-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <strong className="text-sm text-ink">{row.key}</strong>
-          <span className="text-xs text-ink-muted">개정 {row.revision} · {formatDate(row.changedAt)}</span>
+          <span className="text-xs text-ink-muted">개정 {row.revision} · {formatDate(row.changedAt, timeZone)}</span>
         </div>
         <p className="text-xs text-ink-muted">{row.changedByName} · {SOURCE[row.source] ?? row.source}{row.copiedFrom ? ` · 복사 원본 ${row.copiedFrom}` : ''}</p>
         <details className="rounded-lg bg-surface-2 p-3 text-xs">

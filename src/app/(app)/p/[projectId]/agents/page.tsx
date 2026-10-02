@@ -54,5 +54,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     actorView: toProjectActorView(actor, projectId),
   }
   // 공통 헤더(탭·요약·타일)는 뷰가 그린다 — 타일이 뷰의 최신 허브 상태를 따라가야 한다(AgentFrame).
-  return <AgentHubView initial={hub} wbs={wbs} />
+  // 시각의 tz — getComputedWbs 가 이미 판독한 프로젝트 달력(손상이면 그 로더가 던졌다). 따로 pickCalendar 로 실패 갈래를 두지 않는다 —
+  // 허브 전체를 ConfigLoadError 로 덮으면 잘못 도는 에이전트를 멈출 길이 없다(FN-8)
+  return <AgentHubView initial={hub} wbs={wbs} timeZone={wbsData.calendar.timezone} />
 }

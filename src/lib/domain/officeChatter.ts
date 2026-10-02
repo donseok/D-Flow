@@ -2,6 +2,7 @@
 // 팀원 보고가 한동안 없으면 팀장이 잔소리를 하고, 팀원이 보고하면 그 요약을 말풍선으로 띄운다.
 // 대사는 nowMs 로 돌리므로(8초마다 다음 줄) 서버·클라이언트가 같은 줄을 고른다. 작업 PC 마다 시작 줄이 다르다.
 import { fnv1a32 } from './seatState'
+import { stampIn, ymdIn } from './calendar'
 import type { RosterDesk, RosterHost } from './agentRoster'
 // 대사는 officeChatter.lines.json 한 곳에 상황별(팀원 있을 때 · 없을 때 · 공통 …)로 모은다.
 // 그 안의 주제 묶음(키)은 자유롭게 늘려도 되고, 여기서 묶음을 모두 합쳐 쓴다.
@@ -39,14 +40,14 @@ export const EMPTY_LINES: readonly string[] = EMPTY_GROUPS.flat()
 const MUSING_GROUPS = groupsOf(LINES['공통 (팀원 있을 때·없을 때 모두)'])
 export const MUSING_LINES: readonly string[] = MUSING_GROUPS.flat()
 
-/** 계절 혼잣말 — 지금 달(한국 시간)에 맞는 묶음만 섞는다. 봄 3~5월 · 여름 6~8월 · 가을 9~11월 · 겨울 12~2월. */
+/** 계절 혼잣말 — 지금 달(그 화면의 시간대)에 맞는 묶음만 섞는다. 봄 3~5월 · 여름 6~8월 · 가을 9~11월 · 겨울 12~2월. */
 export const SEASON_LINES: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter', readonly string[]>> = {
   spring: LINES['계절 혼잣말']['봄'], summer: LINES['계절 혼잣말']['여름'], autumn: LINES['계절 혼잣말']['가을'], winter: LINES['계절 혼잣말']['겨울'],
 }
 
-/** 지금 달에 맞는 계절 묶음(한국 시간 기준). */
-export function seasonOf(nowMs: number): keyof typeof SEASON_LINES {
-  const month = new Date(nowMs + 9 * 3600_000).getUTCMonth() + 1
+/** 지금 달에 맞는 계절 묶음(그 화면의 시간대 기준 — 프로젝트 스튜디오는 프로젝트, 전역은 세션 유일 워크스페이스). */
+export function seasonOf(nowMs: number, timeZone: string): keyof typeof SEASON_LINES {
+  const month = Number(ymdIn(timeZone, new Date(nowMs)).slice(5, 7))
   return month >= 3 && month <= 5 ? 'spring' : month <= 8 && month >= 6 ? 'summer' : month >= 9 && month <= 11 ? 'autumn' : 'winter'
 }
 
@@ -127,14 +128,14 @@ export function memberReportBubble(d: Pick<RosterDesk, 'seat'>, nowMs: number): 
  * 단독 감시(/poll)는 자기가 곧 팀원이라 자기 이름을 부르지 않고 혼잣말 묶음을 쓴다.
  * 결정 대기 팀원만 있으면(공이 사람에게 있다) 말하지 않는다.
  */
-export function leadChatter(host: RosterHost, nowMs: number, lead?: Pick<RosterDesk, 'slot'>): { tone: 'nag' | 'praise' | 'empty'; text: string } | null {
+export function leadChatter(host: RosterHost, nowMs: number, timeZone: string, lead?: Pick<RosterDesk, 'slot'>): { tone: 'nag' | 'praise' | 'empty'; text: string } | null {
   const solo = lead?.slot === 'poll'
   const members = host.desks.filter(d => d.kind === 'member' && d.seat)
   const working = members.filter(d => WORKING.has(d.seat!.state))
   if (working.length === 0) {
     if (members.length > 0) return null
     // 빈자리 한탄과 혼잣말을 번갈아 — 묶음을 한데 섞으면 혼잣말 주제가 많아 "다들 어디 갔어" 가 묻힌다.
-    const lament = slotOf(nowMs) % 2 === 0 ? (solo ? [SOLO_EMPTY_LINES] : EMPTY_GROUPS) : [...MUSING_GROUPS, SEASON_LINES[seasonOf(nowMs)]]
+    const lament = slotOf(nowMs) % 2 === 0 ? (solo ? [SOLO_EMPTY_LINES] : EMPTY_GROUPS) : [...MUSING_GROUPS, SEASON_LINES[seasonOf(nowMs, timeZone)]]
     return { tone: 'empty', text: pick(lament, host.key, nowMs, 2) }
   }
   const latest = working.reduce((a, d) => (reportMs(d) > reportMs(a) ? d : a))
@@ -144,7 +145,7 @@ export function leadChatter(host: RosterHost, nowMs: number, lead?: Pick<RosterD
   const lagging = working.some(d => d.seat!.state === 'STALE' || d.seat!.state === 'OFFLINE')
   const quiet = working.every(d => nowMs - reportMs(d) > QUIET_MS)
   if (!lagging && !quiet) return null
-  if (musingTurn(host.key, nowMs)) return { tone: 'empty', text: pick([...MUSING_GROUPS, SEASON_LINES[seasonOf(nowMs)]], `${host.key}|m`, nowMs, 4) }
+  if (musingTurn(host.key, nowMs)) return { tone: 'empty', text: pick([...MUSING_GROUPS, SEASON_LINES[seasonOf(nowMs, timeZone)]], `${host.key}|m`, nowMs, 4) }
   if (solo) return { tone: 'nag', text: pick([SOLO_NAG_LINES], host.key, nowMs) }
   // 지목 대상 — 끊긴 팀원이 먼저, 그다음 가장 오래 보고가 없는 팀원.
   const rank = (d: RosterDesk) => (d.seat!.state === 'OFFLINE' ? 2 : d.seat!.state === 'STALE' ? 1 : 0)
@@ -182,12 +183,12 @@ export const AWAY_HOLD_MS = 5 * 60_000
 
 /**
  * 빈자리의 지금 부재 사유. 자리 키(empty:<host>:<slot>)로 고르므로 자리마다 다르고, 5분 동안 같다.
- * 점심시간(한국 시간 12시대)과 퇴근 뒤(18시~7시)에는 절반의 확률로 그 시간대 묶음을 쓴다.
+ * 점심시간(그 화면 시간대의 12시대)과 퇴근 뒤(18시~7시)에는 절반의 확률로 그 시간대 묶음을 쓴다.
  * 주제 묶음은 직전 5분과 겹치지 않게 한다(pick 과 같은 규칙).
  */
-export function awayReason(deskKey: string, nowMs: number): string {
+export function awayReason(deskKey: string, nowMs: number, timeZone: string): string {
   const slot = Math.floor(nowMs / AWAY_HOLD_MS)
-  const hour = new Date(nowMs + 9 * 3600_000).getUTCHours()
+  const hour = Number(stampIn(timeZone, new Date(nowMs)).slice(11, 13))
   const timed = hour === 12 ? AWAY_LUNCH_LINES : hour >= 18 || hour < 7 ? AWAY_OFF_HOURS_LINES : null
   if (timed && hash(`${deskKey}|t|${slot}`) % 2 === 0) return timed[hash(`${deskKey}|tl|${slot}`) % timed.length]
   const n = AWAY_GROUPS.length
@@ -199,7 +200,7 @@ export function awayReason(deskKey: string, nowMs: number): string {
 }
 
 /** 빈자리 말풍선 — 팀원 한마디처럼 세 칸에 한 칸만 띄운다. 자리마다 박자가 어긋나 한꺼번에 뜨지 않는다. */
-export function awayBubble(deskKey: string, nowMs: number): string | null {
+export function awayBubble(deskKey: string, nowMs: number, timeZone: string): string | null {
   if ((slotOf(nowMs) + fnv1a32(deskKey)) % MEMBER_TALK_EVERY !== 0) return null
-  return awayReason(deskKey, nowMs)
+  return awayReason(deskKey, nowMs, timeZone)
 }

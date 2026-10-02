@@ -91,7 +91,7 @@ describe('상태 레인(LaneBoard)', () => {
 })
 
 describe('에이전트 보기(RosterBoard)', () => {
-  const render = (m: Seatmap) => act(() => root.render(<RosterBoard roster={assembleRoster(m)} nowMs={NOW} />))
+  const render = (m: Seatmap) => act(() => root.render(<RosterBoard roster={assembleRoster(m)} nowMs={NOW} timeZone="Asia/Seoul" />))
   it('내 팀이 맨 앞이고, 내 팀장·팀원 책상은 data-owner="mine"·명찰, 남의 것은 이름 명찰, 빈자리는 없음', () => {
     render(map(
       [seat({ orderId: 'a', agent: 'hong/alpha/w1', agentOwnerName: '홍길동' }), seat({ orderId: 'b', agent: 'me/zeta/w1', agentMine: true })],

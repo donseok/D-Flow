@@ -65,7 +65,7 @@ describe('AssistantChat v2 스트림', () => {
           return ndjsonResponse([
             JSON.stringify({ v: 1, requestId: 'r2', type: 'delta', text: '후속 답변' }),
             JSON.stringify({
-              v: 1, requestId: 'r2', type: 'done', asOf: '2026-07-19T10:30:00+09:00',
+              v: 1, requestId: 'r2', type: 'done', asOf: '2026-07-19T10:30:00+09:00', timezone: 'Asia/Seoul',
               tools: ['get_weekly_sheet'], truncated: false,
             }),
           ])
@@ -178,6 +178,8 @@ describe('AssistantChat v2 스트림', () => {
       lastEntities: [{ type: 'weekly_report', id: 'wr-1', ref: '첫 번째' }],
     })
     expect(container.textContent).toContain('후속 답변')
+    // 기준 시각은 응답이 실어 온 요청 범위 tz 로 찍고 그 이름을 붙인다(SP5 계획 D-21b)
     expect(container.textContent).toContain('기준 26. 7. 19.')
+    expect(container.textContent).toContain('(Asia/Seoul)')
   })
 })

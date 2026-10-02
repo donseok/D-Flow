@@ -106,6 +106,7 @@ function TrustPanel({
   locale,
   canContribute,
   trustState,
+  timeZone,
 }: {
   projectId: string
   topic: MemoryTopic
@@ -113,6 +114,7 @@ function TrustPanel({
   locale: Locale
   canContribute: boolean
   trustState: WikiTopicTrustState
+  timeZone: string
 }) {
   const status = trustStatusMeta(trustState, locale)
   const reviewDue = trustState === 'review_due'
@@ -138,12 +140,12 @@ function TrustPanel({
         <div className="flex items-start gap-2">
           <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-hidden />
           <dt className="text-ink-subtle">{t(locale, 'wiki.trust.lastVerified')}</dt>
-          <dd className="ml-auto text-right font-medium text-ink">{topic.verifiedAt ? formatWikiDate(topic.verifiedAt, locale) : t(locale, 'wiki.trust.never')}</dd>
+          <dd className="ml-auto text-right font-medium text-ink">{topic.verifiedAt ? formatWikiDate(topic.verifiedAt, locale, false, timeZone) : t(locale, 'wiki.trust.never')}</dd>
         </div>
         <div className="flex items-start gap-2">
           <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-hidden />
           <dt className="text-ink-subtle">{t(locale, 'wiki.trust.nextReview')}</dt>
-          <dd className={`ml-auto text-right font-medium ${reviewDue ? 'text-accent-warning' : 'text-ink'}`}>{topic.reviewDueAt ? formatWikiDate(topic.reviewDueAt, locale) : t(locale, 'wiki.trust.notScheduled')}</dd>
+          <dd className={`ml-auto text-right font-medium ${reviewDue ? 'text-accent-warning' : 'text-ink'}`}>{topic.reviewDueAt ? formatWikiDate(topic.reviewDueAt, locale, false, timeZone) : t(locale, 'wiki.trust.notScheduled')}</dd>
         </div>
         <div className="flex items-start gap-2">
           <BookOpenText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-hidden />
@@ -156,7 +158,7 @@ function TrustPanel({
   )
 }
 
-function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, canAnswer }: { items: WikiItem[]; questions: NonNullable<MemoryTopicDetailData['questions']>; locale: Locale; projectId: string; topicId: string; canCurate: boolean; canAnswer: boolean }) {
+function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, canAnswer, timeZone }: { items: WikiItem[]; questions: NonNullable<MemoryTopicDetailData['questions']>; locale: Locale; projectId: string; topicId: string; canCurate: boolean; canAnswer: boolean; timeZone: string }) {
   if (items.length === 0 && questions.length === 0) return <p className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink-muted">{t(locale, 'wiki.topic.noOpen')}</p>
   return (
     <div className="space-y-3">
@@ -164,16 +166,16 @@ function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, ca
         <article key={question.id} className="rounded-xl border border-line bg-surface px-4 py-3 shadow-[var(--shadow-sm)]">
           <div className="flex items-center gap-2"><CircleHelp className="h-4 w-4 text-pending" aria-hidden /><span className="chip bg-pending-weak text-pending">{t(locale, 'wiki.kind.question')}</span></div>
           <p className="mt-2 text-sm font-medium leading-6 text-ink">{question.question}</p>
-          <p className="mt-1 text-[11px] text-ink-subtle">{formatWikiDate(question.createdAt, locale)}</p>
+          <p className="mt-1 text-[11px] text-ink-subtle">{formatWikiDate(question.createdAt, locale, false, timeZone)}</p>
           {canAnswer && <WikiQuestionAnswerForm projectId={projectId} topicId={topicId} questionId={question.id} locale={locale} />}
         </article>
       ))}
-      {items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} />)}
+      {items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} timeZone={timeZone} />)}
     </div>
   )
 }
 
-function EvidenceAccordion({ items, locale, projectId, canCurate }: { items: WikiItem[]; locale: Locale; projectId: string; canCurate: boolean }) {
+function EvidenceAccordion({ items, locale, projectId, canCurate, timeZone }: { items: WikiItem[]; locale: Locale; projectId: string; canCurate: boolean; timeZone: string }) {
   return (
     <details className="card group overflow-hidden">
       <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden sm:px-6">
@@ -188,7 +190,7 @@ function EvidenceAccordion({ items, locale, projectId, canCurate }: { items: Wik
       <div className="border-t border-line px-5 py-5 sm:px-6">
         <p className="mb-3 text-xs leading-5 text-ink-muted">{t(locale, 'wiki.evidence.desc')}</p>
         {items.length > 0
-          ? <div className="space-y-3">{items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} />)}</div>
+          ? <div className="space-y-3">{items.map((item) => <WikiItemCard key={item.id} item={item} locale={locale} showEvidence curateProjectId={canCurate ? projectId : undefined} timeZone={timeZone} />)}</div>
           : <p className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-muted">{t(locale, 'wiki.noItems')}</p>}
       </div>
     </details>
@@ -203,6 +205,7 @@ export function WikiTopicDetail({
   canEditDocuments = canCurate,
   canVerifyDocuments = canEditDocuments,
   userId,
+  timeZone,
 }: {
   projectId: string
   data: WikiTopicDetailData
@@ -212,6 +215,8 @@ export function WikiTopicDetail({
   canVerifyDocuments?: boolean
   /** 편집기 로컬 초안의 주인. null 이면 초안 기능이 꺼진다. 필수 — 빠뜨리면 초안이 조용히 꺼지므로 호출부가 명시한다. */
   userId: string | null
+  /** instant(갱신·검증·질문·변경 시각)를 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
+  timeZone: string
 }) {
   const data = rawData as MemoryTopicDetailData
   if (!data.topic) {
@@ -276,7 +281,7 @@ export function WikiTopicDetail({
               <span className={`chip ${trustStatus.wrap}`}><TrustStatusIcon className="h-3 w-3" />{trustStatus.label}</span>
             </div>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-ink sm:text-2xl">{topic.title}</h2>
-            <p className="mt-1.5 text-sm text-ink-muted">{topic.ownerTeam ?? t(locale, 'wiki.noOwner')}<span className="mx-2 text-line-strong">·</span>{t(locale, 'wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, locale)}</p>
+            <p className="mt-1.5 text-sm text-ink-muted">{topic.ownerTeam ?? t(locale, 'wiki.noOwner')}<span className="mx-2 text-line-strong">·</span>{t(locale, 'wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, locale, false, timeZone)}</p>
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-2">
             <div className="rounded-xl bg-surface-2 px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-ink">{sourceCount(items)}</div><div className="text-[10px] text-ink-subtle">{t(locale, 'wiki.trust.sources')}</div></div>
@@ -294,6 +299,7 @@ export function WikiTopicDetail({
               projectId={projectId}
               locale={locale}
               userId={userId}
+              timeZone={timeZone}
               topic={{
                 id: topic.id,
                 title: topic.title,
@@ -312,7 +318,7 @@ export function WikiTopicDetail({
               <div className="space-y-3">
                 {proposals.map((item) => (
                   <div key={item.id}>
-                    <WikiItemCard item={item} locale={locale} showEvidence />
+                    <WikiItemCard item={item} locale={locale} showEvidence timeZone={timeZone} />
                     {canReviewMemory && <WikiProposalActions projectId={projectId} topicId={item.topicId} itemId={item.id} locale={locale} />}
                   </div>
                 ))}
@@ -320,14 +326,14 @@ export function WikiTopicDetail({
             </SectionCard>
           )}
 
-          <EvidenceAccordion items={evidenceItems} locale={locale} projectId={projectId} canCurate={canCurateLegacy} />
+          <EvidenceAccordion items={evidenceItems} locale={locale} projectId={projectId} canCurate={canCurateLegacy} timeZone={timeZone} />
         </div>
 
         <div className="space-y-5 xl:sticky xl:top-0">
-          <TrustPanel projectId={projectId} topic={topic} items={items} locale={locale} canContribute={canWriteMemory} trustState={trustState} />
+          <TrustPanel projectId={projectId} topic={topic} items={items} locale={locale} canContribute={canWriteMemory} trustState={trustState} timeZone={timeZone} />
           <SectionCard eyebrow={t(locale, 'wiki.section.open.eyebrow')} title={t(locale, 'wiki.section.open.memoryTitle')} icon={ShieldAlert} actions={<span className="chip bg-pending-weak text-pending">{openItems.length + questions.length}</span>}>
             <p className="-mt-2 mb-3 text-xs text-ink-muted">{t(locale, 'wiki.section.open.memoryDesc')}</p>
-            <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} />
+            <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} timeZone={timeZone} />
           </SectionCard>
         </div>
       </div>
@@ -347,7 +353,7 @@ export function WikiTopicDetail({
                   <li key={revision.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-surface-2/55 px-3 py-2 text-xs">
                     <span className="font-semibold text-ink">v{revision.versionNo} · {revision.title}</span>
                     {revision.editedByName && <span className="text-ink-muted">{revision.editedByName}</span>}
-                    <time className={canWriteMemory ? 'text-ink-subtle' : 'ml-auto text-ink-subtle'}>{formatWikiDate(revision.createdAt, locale, true)}</time>
+                    <time className={canWriteMemory ? 'text-ink-subtle' : 'ml-auto text-ink-subtle'}>{formatWikiDate(revision.createdAt, locale, true, timeZone)}</time>
                     {canWriteMemory
                       && (revision.title !== topic.title || revision.bodyMd !== (topic.bodyMd ?? ''))
                       && (
@@ -365,7 +371,7 @@ export function WikiTopicDetail({
               </ol>
             </div>
           )}
-          <WikiChangeList changes={data.changes} locale={locale} />
+          <WikiChangeList changes={data.changes} locale={locale} timeZone={timeZone} />
           {(data.changesTruncated || data.dataTruncated) && <p className="mt-3 rounded-lg bg-pending-weak px-3 py-2 text-xs text-pending">{t(locale, 'wiki.changes.truncated')}</p>}
         </div>
       </details>

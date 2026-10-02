@@ -24,7 +24,7 @@ import { AgentFrame, type HeroTile } from './AgentFrame'
 import { DelegationTable, type HubFilter } from './DelegationTable'
 import { ApprovalQueue } from './ApprovalQueue'
 
-const hhmmss = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR', { hour12: false, timeZone: 'Asia/Seoul' })
+const hhmmss = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleTimeString(locale, { hour12: false, timeZone })
 const EMPTY_REFS: string[] = [] // 매 렌더 새 리터럴이면 패널 readiness useMemo 가 매번 다시 돈다 — 모듈 상수로 고정.
 
 /** RowDetailPanel 이 요구하는 계산된 WBS 묶음 — WBS 페이지가 WbsGanttSheet 에 넘기는 것과 같은 데이터(서버 페이지가 로드). */
@@ -53,7 +53,13 @@ function flattenComputed(items: ComputedItem[]): ComputedItem[] {
   return out
 }
 
-export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsBundle }) {
+export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale }: {
+  initial: AgentHub; wbs: HubWbsBundle
+  /** 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
+  timeZone: string
+  /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B). 화면 사전 locale(useLocale)과는 다른 값이다 */
+  locale?: string
+}) {
   const { locale } = useLocale()
   const [hub, setHub] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
@@ -148,7 +154,7 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
         watchers={hub.watchers} isAdmin={hub.viewer.isAdmin} />
       <div className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
         <span data-hub-stamp className={error ? 'text-accent-warning' : ''}>
-          {error ? `갱신 실패 ${hhmmss(error.at)} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt)}`}
+          {error ? `갱신 실패 ${hhmmss(error.at, timeZone, timeLocale)} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt, timeZone, timeLocale)}`}
         </span>
         <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>새로고침</button>
       </div>
@@ -161,7 +167,7 @@ export function AgentHubView({ initial, wbs }: { initial: AgentHub; wbs: HubWbsB
         {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
-        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} />
+        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} locale={timeLocale} />
         {selectedItem && wbs.levelLabels === null && (
           <div data-hub-detail-unavailable>
             <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} locale={locale} />

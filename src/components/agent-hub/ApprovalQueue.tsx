@@ -19,11 +19,15 @@ type Props = {
   onHub: (hub: AgentHub) => void
   /** 처리는 됐는데 재조회만 실패했을 때의 재시도(refreshAgentHub 1회). */
   onChanged: () => Promise<void> | void
+  /** 보고 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다(기본값 없음) */
+  timeZone: string
+  /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B) */
+  locale?: string
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })
+const when = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleString(locale, { timeZone, hour12: false })
 
-function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
+function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
   const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -56,7 +60,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged }: { q: HubQueueEnt
           <span className="font-mono text-[11px] text-ink-muted">{q.code}</span>
           <span className="ml-2 text-sm font-semibold text-ink">{q.name}</span>
         </div>
-        <span className="text-[11px] text-ink-subtle">{q.agent} · {when(q.reportedAt)} · {q.percent}%</span>
+        <span className="text-[11px] text-ink-subtle">{q.agent} · {when(q.reportedAt, timeZone, locale)} · {q.percent}%</span>
       </div>
       {q.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-ink">{q.summary}</p>}
       {q.links.length > 0 && (

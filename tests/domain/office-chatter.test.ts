@@ -5,6 +5,9 @@ import type { RosterDesk, RosterHost } from '@/lib/domain/agentRoster'
 import type { Seat } from '@/lib/domain/seatmap'
 import LINES from '@/lib/domain/officeChatter.lines.json'
 
+/** 기존 기대값의 화면 tz — 서울 */
+const TZ = 'Asia/Seoul'
+
 const NOW = Date.parse('2026-09-18T09:00:00Z')
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString()
 const member = (slot: string, seat: Partial<Seat>): RosterDesk => ({
@@ -15,31 +18,31 @@ const host = (...desks: RosterDesk[]): RosterHost => ({ key: 'a/h', label: 'a / 
 
 describe('leadChatter', () => {
   it('최근 보고가 있으면 잔소리하지 않는다', () => {
-    expect(leadChatter(host(member('w1', { lastReport: { kind: 'progress', summary: 's', at: iso(50_000) } })), NOW)).toBeNull()
+    expect(leadChatter(host(member('w1', { lastReport: { kind: 'progress', summary: 's', at: iso(50_000) } })), NOW, TZ)).toBeNull()
   })
   it('한동안 아무도 보고하지 않으면 잔소리하고, {name} 을 가장 조용한 팀원으로 채운다', () => {
-    const c = leadChatter(host(member('w1', {}), member('w2', { lastReport: { kind: 'progress', summary: 's', at: iso(QUIET_MS + 1) } })), NOW)
+    const c = leadChatter(host(member('w1', {}), member('w2', { lastReport: { kind: 'progress', summary: 's', at: iso(QUIET_MS + 1) } })), NOW, TZ)
     expect(['nag', 'empty']).toContain(c?.tone)
     expect(c!.text).not.toContain('{name}')
-    const pool = [...NAG_LINES.map(l => l.replaceAll('{name}', '팀원 1')), ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]]
+    const pool = [...NAG_LINES.map(l => l.replaceAll('{name}', '팀원 1')), ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]]
     expect(pool).toContain(c!.text)
   })
   it('무응답 팀원이 있으면 다른 팀원이 보고 중이어도 그 팀원을 지목한다', () => {
     const h = host(member('w1', { lastReport: { kind: 'progress', summary: 's', at: iso(50_000) } }), member('w2', { state: 'STALE' }))
     for (let t = 0; t < NAG_LINES.length; t++) {
-      const c = leadChatter(h, NOW + t * 8_000)!
-      expect(c.tone === 'nag' || [...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]].includes(c.text)).toBe(true)
+      const c = leadChatter(h, NOW + t * 8_000, TZ)!
+      expect(c.tone === 'nag' || [...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]].includes(c.text)).toBe(true)
       expect(c.text).not.toContain('팀원 1')
     }
   })
   it('막 보고가 들어오면 칭찬한다', () => {
-    const c = leadChatter(host(member('w1', { lastReport: { kind: 'completion', summary: 's', at: iso(20_000) } })), NOW)
+    const c = leadChatter(host(member('w1', { lastReport: { kind: 'completion', summary: 's', at: iso(20_000) } })), NOW, TZ)
     expect(c?.tone).toBe('praise')
     expect(PRAISE_LINES.map(l => l.replaceAll('{name}', '팀원 1'))).toContain(c!.text)
   })
   it('대사는 8초마다 바뀐다', () => {
     const h = host(member('w1', {}))
-    const seen = new Set(Array.from({ length: 6 }, (_, i) => leadChatter(h, NOW + i * 8_000)!.text))
+    const seen = new Set(Array.from({ length: 6 }, (_, i) => leadChatter(h, NOW + i * 8_000, TZ)!.text))
     expect(seen.size).toBeGreaterThan(1)
   })
 })
@@ -59,20 +62,20 @@ describe('memberReportBubble', () => {
 
 describe('leadChatter — 혼자일 때(2026-09-18)', () => {
   it('일하는 팀원이 하나도 없으면(빈자리뿐) 한탄한다', () => {
-    const c = leadChatter(host(), NOW)
+    const c = leadChatter(host(), NOW, TZ)
     expect(c?.tone).toBe('empty')
-    expect([...EMPTY_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]]).toContain(c!.text)
+    expect([...EMPTY_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]]).toContain(c!.text)
   })
   it('결정 대기 팀원만 있으면 말하지 않는다', () => {
-    expect(leadChatter(host(member('w1', { state: 'BLOCKED' })), NOW)).toBeNull()
+    expect(leadChatter(host(member('w1', { state: 'BLOCKED' })), NOW, TZ)).toBeNull()
   })
   it('단독 감시는 자기 이름을 부르지 않고 혼잣말을 한다', () => {
     const me = { ...member('w1', {}), slot: 'poll', label: '단독 감시' }
     const h = host(me)
     for (let i = 0; i < 12; i++) {
-      const nag = leadChatter(h, NOW + i * 8_000, { slot: 'poll' })!
-      expect([...SOLO_NAG_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]]).toContain(nag.text)
-      expect([...SOLO_EMPTY_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]]).toContain(leadChatter(host(), NOW + i * 8_000, { slot: 'poll' })!.text)
+      const nag = leadChatter(h, NOW + i * 8_000, TZ, { slot: 'poll' })!
+      expect([...SOLO_NAG_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]]).toContain(nag.text)
+      expect([...SOLO_EMPTY_LINES, ...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]]).toContain(leadChatter(host(), NOW + i * 8_000, TZ, { slot: 'poll' })!.text)
     }
   })
 })
@@ -80,21 +83,35 @@ describe('leadChatter — 혼자일 때(2026-09-18)', () => {
 describe('leadChatter — 혼잣말(신세 한탄·메뉴 고민)', () => {
   it('잔소리 중에도 네 번에 한 번꼴로 혼잣말이 끼어든다', () => {
     const h = host(member('w1', {}))
-    const texts = Array.from({ length: 40 }, (_, i) => leadChatter(h, NOW + i * 8_000)!.text)
-    const m = texts.filter(t => [...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW)]].includes(t)).length
+    const texts = Array.from({ length: 40 }, (_, i) => leadChatter(h, NOW + i * 8_000, TZ)!.text)
+    const m = texts.filter(t => [...MUSING_LINES, ...SEASON_LINES[seasonOf(NOW, TZ)]].includes(t)).length
     expect(m).toBeGreaterThanOrEqual(8)
     expect(m).toBeLessThanOrEqual(12)
   })
 })
 
-describe('seasonOf — 계절 대사는 한국 시간 달을 따른다', () => {
-  it('봄·여름·가을·겨울', () => {
-    expect(seasonOf(Date.parse('2026-04-10T00:00:00+09:00'))).toBe('spring')
-    expect(seasonOf(Date.parse('2026-07-10T00:00:00+09:00'))).toBe('summer')
-    expect(seasonOf(Date.parse('2026-09-18T09:00:00+09:00'))).toBe('autumn')
-    expect(seasonOf(Date.parse('2026-12-01T00:30:00+09:00'))).toBe('winter')
-    // 11월 30일 밤 UTC 는 이미 한국 12월 — 겨울
-    expect(seasonOf(Date.parse('2026-11-30T15:30:00Z'))).toBe('winter')
+describe('seasonOf — 계절 대사는 그 화면 tz 의 달을 따른다(D-21e)', () => {
+  it('봄·여름·가을·겨울(서울)', () => {
+    const S = 'Asia/Seoul'
+    expect(seasonOf(Date.parse('2026-04-10T00:00:00Z'), S)).toBe('spring')
+    expect(seasonOf(Date.parse('2026-07-10T00:00:00Z'), S)).toBe('summer')
+    expect(seasonOf(Date.parse('2026-09-18T00:00:00Z'), S)).toBe('autumn')
+    expect(seasonOf(Date.parse('2026-12-01T00:30:00Z'), S)).toBe('winter')
+    expect(seasonOf(Date.parse('2026-11-30T15:30:00Z'), S)).toBe('winter')   // 서울은 이미 12월
+  })
+  it('같은 instant 가 LA 에서는 아직 11월 — 가을', () => {
+    expect(seasonOf(Date.parse('2026-11-30T15:30:00Z'), 'America/Los_Angeles')).toBe('autumn')
+  })
+})
+describe('awayReason — 점심·퇴근 뒤 묶음은 그 tz 의 시각', () => {
+  it('UTC 03:00 은 서울 12시(점심 묶음 후보), LA 20시(퇴근 묶음 후보)', () => {
+    const at = Date.parse('2026-10-05T03:00:00Z')
+    const seoul = Array.from({ length: 40 }, (_, i) => awayReason(`empty:h:${i}`, at, 'Asia/Seoul'))
+    const la = Array.from({ length: 40 }, (_, i) => awayReason(`empty:h:${i}`, at, 'America/Los_Angeles'))
+    expect(seoul.some((l) => AWAY_LUNCH_LINES.includes(l))).toBe(true)
+    expect(seoul.some((l) => AWAY_OFF_HOURS_LINES.includes(l))).toBe(false)
+    expect(la.some((l) => AWAY_OFF_HOURS_LINES.includes(l))).toBe(true)
+    expect(la.some((l) => AWAY_LUNCH_LINES.includes(l))).toBe(false)
   })
 })
 
@@ -125,7 +142,7 @@ describe('대사 고르기 — 주제가 고르게 섞인다(2026-09-18 "먹는 
   const MUSE = LINES['공통 (팀원 있을 때·없을 때 모두)'] as Record<string, string[] | string>
   const topicOf = (t: string) => Object.entries(MUSE).find(([k, v]) => !k.startsWith('$') && Array.isArray(v) && v.includes(t))?.[0]
   it('빈자리 혼잣말이 한 주제로 몰리지 않고, 같은 주제가 연달아 나오지 않는다', () => {
-    const topics = Array.from({ length: 120 }, (_, i) => topicOf(leadChatter(host(), NOW + i * 8_000)!.text)).filter(Boolean) as string[]
+    const topics = Array.from({ length: 120 }, (_, i) => topicOf(leadChatter(host(), NOW + i * 8_000, TZ)!.text)).filter(Boolean) as string[]
     const count = new Map<string, number>()
     for (const t of topics) count.set(t, (count.get(t) ?? 0) + 1)
     expect(count.size).toBeGreaterThanOrEqual(6)
@@ -134,7 +151,7 @@ describe('대사 고르기 — 주제가 고르게 섞인다(2026-09-18 "먹는 
     for (let i = 2; i < topics.length; i++) expect(topics[i] === topics[i - 1] && topics[i] === topics[i - 2]).toBe(false)
   })
   it('빈자리일 때 "다들 어디 갔어" 류 한탄이 절반쯤 나온다', () => {
-    const n = Array.from({ length: 40 }, (_, i) => leadChatter(host(), NOW + i * 8_000)!.text).filter(t => EMPTY_LINES.includes(t)).length
+    const n = Array.from({ length: 40 }, (_, i) => leadChatter(host(), NOW + i * 8_000, TZ)!.text).filter(t => EMPTY_LINES.includes(t)).length
     expect(n).toBeGreaterThanOrEqual(15)
   })
   it('연봉 대사가 공통 혼잣말에 있다', () => {
@@ -176,31 +193,31 @@ describe('빈자리 부재 사유(2026-09-19)', () => {
   const DAY = Date.parse('2026-09-18T01:00:00Z') // 한국 시간 10시 — 시간대 묶음이 섞이지 않는다
   it('같은 자리는 5분 동안 같은 사유를 유지하고, 상시 묶음에서 고른다', () => {
     const start = Math.floor(DAY / AWAY_HOLD_MS) * AWAY_HOLD_MS
-    const r = awayReason('empty:a/h:w2', start)
+    const r = awayReason('empty:a/h:w2', start, TZ)
     expect(AWAY_LINES).toContain(r)
-    for (let t = start; t < start + AWAY_HOLD_MS; t += 30_000) expect(awayReason('empty:a/h:w2', t)).toBe(r)
+    for (let t = start; t < start + AWAY_HOLD_MS; t += 30_000) expect(awayReason('empty:a/h:w2', t, TZ)).toBe(r)
   })
   it('자리마다 사유가 흩어지고, 하루 동안 여러 주제가 나온다', () => {
     const keys = Array.from({ length: 12 }, (_, i) => `empty:a/h:w${i}`)
-    expect(new Set(keys.map(k => awayReason(k, DAY))).size).toBeGreaterThan(4)
+    expect(new Set(keys.map(k => awayReason(k, DAY, TZ))).size).toBeGreaterThan(4)
     const seen = new Set<string>()
-    for (let k = 0; k < 60; k++) seen.add(awayReason('empty:a/h:w2', DAY + k * AWAY_HOLD_MS))
+    for (let k = 0; k < 60; k++) seen.add(awayReason('empty:a/h:w2', DAY + k * AWAY_HOLD_MS, TZ))
     expect(seen.size).toBeGreaterThan(10)
   })
   it('점심시간과 퇴근 뒤에는 그 시간대 사유가 섞인다', () => {
     const lunch = Date.parse('2026-09-18T03:10:00Z') // 한국 시간 12:10
     const night = Date.parse('2026-09-18T12:00:00Z') // 한국 시간 21:00
-    const at = (base: number) => Array.from({ length: 30 }, (_, i) => awayReason(`empty:a/h:w${i}`, base))
+    const at = (base: number) => Array.from({ length: 30 }, (_, i) => awayReason(`empty:a/h:w${i}`, base, TZ))
     expect(at(lunch).some(r => AWAY_LUNCH_LINES.includes(r))).toBe(true)
     expect(at(night).some(r => AWAY_OFF_HOURS_LINES.includes(r))).toBe(true)
     expect(at(DAY).some(r => AWAY_LUNCH_LINES.includes(r) || AWAY_OFF_HOURS_LINES.includes(r))).toBe(false)
   })
   it('말풍선은 세 칸에 한 칸이고, 뜨면 그때의 사유다', () => {
-    const shown = Array.from({ length: 30 }, (_, k) => awayBubble('empty:a/h:w2', DAY + k * 8_000))
+    const shown = Array.from({ length: 30 }, (_, k) => awayBubble('empty:a/h:w2', DAY + k * 8_000, TZ))
     expect(shown.filter(Boolean).length).toBe(10)
     for (let k = 0; k < 30; k++) {
       const b = shown[k]
-      if (b) expect(b).toBe(awayReason('empty:a/h:w2', DAY + k * 8_000))
+      if (b) expect(b).toBe(awayReason('empty:a/h:w2', DAY + k * 8_000, TZ))
     }
   })
   it('대사 JSON 에 설명과 묶음이 있다', () => {

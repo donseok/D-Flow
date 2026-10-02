@@ -29,6 +29,8 @@ interface Msg {
   proposalState?: 'pending' | 'applied' | 'cancelled'
   sources?: BotSource[]
   asOf?: string
+  /** asOf 를 찍을 시간대 — 봇 응답(done)이 실어 온 요청 범위 tz. 없으면(옛 대화 복원 등) '기준' 줄을 그리지 않는다 */
+  asOfTimezone?: string
   tools?: string[]
   truncated?: boolean
 }
@@ -302,6 +304,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
         let acc = ''
         let sources: BotSource[] = []
         let asOf: string | undefined
+        let asOfTimezone: string | undefined
         let tools: string[] | undefined
         let truncated: boolean | undefined
 
@@ -314,7 +317,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
             role: 'assistant',
             content: acc,
             ...(sources.length ? { sources } : {}),
-            ...(asOf ? { asOf } : {}),
+            ...(asOf ? { asOf, asOfTimezone } : {}),
             ...(tools ? { tools } : {}),
             ...(truncated !== undefined ? { truncated } : {}),
           }])
@@ -327,7 +330,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
             ...m,
             content: acc,
             ...(sources.length ? { sources } : {}),
-            ...(asOf ? { asOf } : {}),
+            ...(asOf ? { asOf, asOfTimezone } : {}),
             ...(tools ? { tools } : {}),
             ...(truncated !== undefined ? { truncated } : {}),
           } : m)))
@@ -357,6 +360,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
               break
             case 'done':
               asOf = event.asOf
+              asOfTimezone = event.timezone
               tools = event.tools
               truncated = event.truncated
               patchAssistant()
@@ -623,6 +627,7 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
                   content={m.content}
                   sources={m.sources}
                   asOf={m.asOf}
+                  asOfTimezone={m.asOfTimezone}
                   truncated={m.truncated}
                 />
               ),
@@ -661,12 +666,13 @@ export function AssistantChat({ projects }: { projects: { id: string; name: stri
 }
 
 function Bubble({
-  role, content, sources, asOf, truncated,
+  role, content, sources, asOf, asOfTimezone, truncated,
 }: {
   role: Role
   content: string
   sources?: BotSource[]
   asOf?: string
+  asOfTimezone?: string
   truncated?: boolean
 }) {
   const isUser = role === 'user'
@@ -688,7 +694,7 @@ function Bubble({
         }`}
       >
         {content}
-        {!isUser && (safeSources.length > 0 || asOf || truncated) && (
+        {!isUser && (safeSources.length > 0 || (asOf && asOfTimezone) || truncated) && (
           <div className="mt-2 border-t border-brand-ring/30 pt-2 text-[11px] text-ink-subtle">
             {visibleSources.length > 0 && (
               <div className="flex flex-wrap gap-1.5" aria-label="답변 출처">
@@ -710,7 +716,7 @@ function Bubble({
               </div>
             )}
             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {asOf && <span>기준 {formatAsOf(asOf)}</span>}
+              {asOf && asOfTimezone && <span>기준 {formatAsOf(asOf, asOfTimezone)} ({asOfTimezone})</span>}
               {truncated && <span>일부 결과만 표시</span>}
             </div>
           </div>
@@ -720,14 +726,11 @@ function Bubble({
   )
 }
 
-function formatAsOf(value: string): string {
+/** 봇 답의 기준 시각 — 그 응답의 요청 범위 tz 로 찍는다(서울로 대체하지 않는다, 계획 D-21b) */
+function formatAsOf(value: string, timeZone: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
+  return new Intl.DateTimeFormat('ko-KR', { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
 
 function ProposalCard({

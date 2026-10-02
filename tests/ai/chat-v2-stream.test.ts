@@ -35,7 +35,7 @@ describe('chat v2 NDJSON stream', () => {
   it('keeps exactly one successful terminal event', async () => {
     const stream = createChatNdjsonStream(sequence([
       { ...base, type: 'status', message: 'loading' },
-      { ...base, type: 'done', asOf: '2026-07-19T00:00:00.000Z', tools: [], truncated: false },
+      { ...base, type: 'done', asOf: '2026-07-19T00:00:00.000Z', timezone: 'UTC', tools: [], truncated: false },
       { ...base, type: 'error', code: 'LATE', message: 'must not leak', retryable: false },
     ]), { requestId: base.requestId })
     const events = await readEvents(stream)

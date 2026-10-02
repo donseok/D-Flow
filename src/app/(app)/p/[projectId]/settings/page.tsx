@@ -18,7 +18,7 @@ import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
-import { pick } from '@/lib/settings/pick'
+import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ConfigStateNotice } from '@/components/settings/ConfigStateNotice'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
@@ -188,6 +188,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
+  // 이력 시각의 tz = 프로젝트 달력. 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지라 전체를 막지 않는다(계획 D-21a)
+  const historyCal = pc.ok ? pickCalendar(pc.cfg) : null
 
   const scheduleLabel =
     project?.start_date || project?.end_date
@@ -603,7 +605,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </div>
 
         <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
-          <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} />
+          {historyCal === null
+            ? null /* 설정 전체를 못 읽었다 — 페이지 머리의 ConfigLoadError 가 이미 사유를 그린다 */
+            : historyCal.ok
+              ? <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} timeZone={historyCal.calendar.timezone} />
+              : <ConfigLoadError error={historyCal.error} keyName={historyCal.key} kind={historyCal.kind} locale={locale} />}
         </SectionCard>
       </div>
       </SettingsShell>

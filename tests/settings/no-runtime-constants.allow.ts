@@ -44,12 +44,5 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/app/actions/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   'src/lib/domain/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   // 시간대·고정 오프셋(SP5 Phase A calendar.timezone)
-  'src/components/agent-hub/AgentHubView.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/agent-hub/ApprovalQueue.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/agents/SeatmapView.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/chat/AssistantChat.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/settings/ProjectInviteManager.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/components/wiki/WikiShared.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/lib/domain/dates.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/lib/domain/officeChatter.ts': { patterns: ['9 * 3600_000'], removedBy: 'SP5' },
 }

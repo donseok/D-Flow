@@ -14,6 +14,9 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { RosterManager } from '@/components/roster/RosterManager'
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { pickCalendar } from '@/lib/settings/pick'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -33,10 +36,13 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
 
   // 관리자는 명단 편집 화면(listRoster), 그 외는 같은 표를 읽기 전용으로(getProjectRoster) — 둘 다 조회 실패를 '0명' 으로 위장하지 않는다.
   // 초대 조회 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
-  const [roster, invites] = await Promise.all([
+  // 초대 만료·합류 시각의 tz = 프로젝트 달력(초대 칸은 관리자만 보므로 그때만 읽는다). 실패는 초대 칸에만 사유를 그린다.
+  const [roster, invites, pc] = await Promise.all([
     canEdit ? listRoster(projectId) : getProjectRoster(projectId),
     canEdit ? listProjectInvites(projectId) : null,
+    canEdit ? loadProjectConfigForPage(projectId) : null,
   ])
+  const inviteCal = pc?.ok ? pickCalendar(pc.cfg) : null
   const rows = roster.ok ? roster.rows : []
   // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용). 편집(명단 행·초대)에만 쓰므로
   // 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
@@ -82,13 +88,20 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
           )}
           {canEdit && (
             <div className="mt-6 border-t border-line pt-5">
-              <ProjectInviteManager
-                projectId={projectId}
-                rows={invites?.ok ? invites.rows : []}
-                loadError={invites && !invites.ok ? invites.error : null}
-                teamOptions={teamOptions}
-                actorView={toProjectActorView(m, projectId)}
-              />
+              {inviteCal?.ok ? (
+                <ProjectInviteManager
+                  projectId={projectId}
+                  rows={invites?.ok ? invites.rows : []}
+                  loadError={invites && !invites.ok ? invites.error : null}
+                  teamOptions={teamOptions}
+                  actorView={toProjectActorView(m, projectId)}
+                  timeZone={inviteCal.calendar.timezone}
+                />
+              ) : inviteCal ? (
+                <ConfigLoadError error={inviteCal.error} keyName={inviteCal.key} kind={inviteCal.kind} locale={locale} />
+              ) : (
+                <ConfigLoadError error={pc && !pc.ok ? pc.error : ''} locale={locale} />
+              )}
             </div>
           )}
         </SectionCard>

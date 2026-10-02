@@ -12,8 +12,9 @@ import { AnnouncementsView } from '@/components/announcements/AnnouncementsView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { todayIn } from '@/lib/domain/calendar'
-import { requireCalendar } from '@/lib/calendar/load'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
+import { pickCalendar } from '@/lib/settings/pick'
+import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function AnnouncementsPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -33,11 +34,12 @@ export default async function AnnouncementsPage({ params }: { params: Promise<{ 
   const projectName = project?.name ?? t(locale, 'ann.projectFallback')
   const canEdit = isProjectAdmin(m, projectId)
   // 공지를 못 읽었으면 목록 자리에 사유를 두고('공지 없음' 빈 상태·읽음 처리를 하지 않는다) KPI 는 숫자 대신 '—'.
-  // 프로젝트 달력 — 못 읽거나 손상이면 요약 칸만 비우고(조회 실패와 같은 null) 원인은 로그로(과제 21 이 pickCalendar 로 정리한다)
-  let tz: string | null = null
-  if (pc.ok) {
-    try { tz = requireCalendar(pc.cfg).timezone } catch (e) { console.error('[announcements] 프로젝트 달력 손상', { projectId, cause: String(e) }) }
-  }
+  // 프로젝트 달력('오늘'·날짜 표기의 tz, 계획 D-21a) — 못 읽거나 손상이면 KPI 는 '—', 목록 자리에 그 사유(서울·UTC 로 대체하지 않는다)
+  const cal = pc.ok ? pickCalendar(pc.cfg) : null
+  const tz = cal?.ok ? cal.calendar.timezone : null
+  const calendarError = tz ? null
+    : cal && !cal.ok ? <ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} />
+      : <ConfigLoadError error={pc.ok ? '' : pc.error} locale={locale} />
   const summary = annRes.ok && tz ? summarizeAnnouncements(annRes.rows, todayIn(tz, now), tz) : null
 
   return (
@@ -56,14 +58,16 @@ export default async function AnnouncementsPage({ params }: { params: Promise<{ 
         }
       />}
     >
-      {annRes.ok ? (
-        <AnnouncementsView
-          announcements={annRes.rows}
-          lastSeenAt={lastSeenAt}
-          canEdit={canEdit}
-          projectId={projectId}
-        />
-      ) : <LoadErrorNotice message={t(locale, 'common.loadFailed.announcements')} />}
+      {!annRes.ok ? <LoadErrorNotice message={t(locale, 'common.loadFailed.announcements')} />
+        : tz ? (
+          <AnnouncementsView
+            announcements={annRes.rows}
+            lastSeenAt={lastSeenAt}
+            canEdit={canEdit}
+            projectId={projectId}
+            timeZone={tz}
+          />
+        ) : calendarError}
     </ProjectPageShell>
   )
 }

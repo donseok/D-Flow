@@ -17,7 +17,7 @@ describe('SettingsHistoryList', () => {
   afterEach(() => { act(() => root.unmount()); host.remove() })
   it('작성자·전후 값과 커서 페이지를 표시한다', async () => {
     list.mockResolvedValue({ ok: true, rows: [row(1, 'branding.logo')], nextBefore: null })
-    act(() => root.render(<SettingsHistoryList scope={{ workspaceId: 'ws-1' }} initial={{ ok: true, rows: [row(2, 'branding.accent')], nextBefore: 2 }} />))
+    act(() => root.render(<SettingsHistoryList scope={{ workspaceId: 'ws-1' }} initial={{ ok: true, rows: [row(2, 'branding.accent')], nextBefore: 2 }} timeZone="Asia/Seoul" />))
     expect(host.textContent).toContain('관리자')
     expect(host.textContent).toContain('branding.accent')
     const more = [...host.querySelectorAll('button')].find(x => x.textContent?.includes('이전 기록'))!

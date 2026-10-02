@@ -18,7 +18,7 @@ describe('AuthzEventsList', () => {
   beforeEach(() => { list.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
   afterEach(() => { act(() => root.unmount()); host.remove() })
   let n = 0     // 초기 상태는 마운트 때만 읽는다 — 다시 그릴 때는 새로 마운트한다
-  const render = (initial: unknown) => act(() => root.render(<AuthzEventsList key={++n} workspaceId="ws-1" initial={initial as never} />))
+  const render = (initial: unknown) => act(() => root.render(<AuthzEventsList key={++n} workspaceId="ws-1" initial={initial as never} timeZone="Asia/Seoul" />))
   const click = async (text: string) => act(async () => { [...host.querySelectorAll('button')].find(b => b.textContent?.includes(text))!.click() })
 
   it('행위자·대상·요약·원인·시각을 보이고 지워진 계정은 그 이름 그대로 보인다', () => {

@@ -61,6 +61,7 @@ describe('chat v2 protocol', () => {
       requestId: 'req_1',
       type: 'done',
       asOf: '2026-07-19T00:00:00.000Z',
+      timezone: 'UTC',
       tools: [],
       truncated: false,
     }

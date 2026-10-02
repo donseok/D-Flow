@@ -6,6 +6,7 @@ import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { LEGACY_PATHS } from '@/lib/nav/legacyPaths'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { pickCalendar } from '@/lib/settings/pick'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
@@ -52,6 +53,10 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
 
   const allowed = config.keys['modules.allowed']
   const [history, authzEvents] = await Promise.all([listSettingsHistory({ workspaceId: access.id }), listAuthzEvents(access.id)])
+  // 이력 시각의 tz = 워크스페이스 달력. 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지다(계획 D-21a)
+  const historyCal = pickCalendar(config)
+  const historyCalError = historyCal.ok ? null
+    : <ConfigLoadError error={historyCal.error} keyName={historyCal.key} kind={historyCal.kind} locale={locale} />
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-20">
       <div>
@@ -105,12 +110,16 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <div className="space-y-8">
           <section aria-label="설정 변경">
             <h4 className="mb-3 text-sm font-semibold text-ink">설정 변경</h4>
-            <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} />
+            {historyCal.ok
+              ? <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} timeZone={historyCal.calendar.timezone} />
+              : historyCalError}
           </section>
           <section aria-label="권한 변경" className="border-t border-line pt-6">
             <h4 className="mb-1 text-sm font-semibold text-ink">권한 변경</h4>
             <p className="mb-3 text-xs text-ink-muted">누가 누구의 권한을 바꿨는지 남는 기록입니다.{access.isSuperuser ? ' 플랫폼 관리자 지정·해제도 함께 보입니다.' : ''}</p>
-            <AuthzEventsList workspaceId={access.id} initial={authzEvents} />
+            {historyCal.ok
+              ? <AuthzEventsList workspaceId={access.id} initial={authzEvents} timeZone={historyCal.calendar.timezone} />
+              : historyCalError}
           </section>
         </div>
       </SectionCard>

@@ -126,9 +126,12 @@ export function WikiDocumentEditor({
   canEdit = false,
   canVerify = false,
   onDone,
+  timeZone,
 }: {
   projectId: string
   locale: Locale
+  /** 초안 저장 시각을 찍을 시간대(프로젝트 calendar.timezone) */
+  timeZone: string
   /** 초안 키의 주인. null 이면 초안 기능을 끈다(저장·복구 모두 안 함). */
   userId: string | null
   topic?: EditableTopic | null
@@ -340,7 +343,7 @@ export function WikiDocumentEditor({
               {t(locale, 'wiki.document.draftFound')}
               {draft.savedAt && (
                 <span className="ml-1.5 font-normal text-ink-muted">
-                  {formatWikiDate(draft.savedAt, locale)}
+                  {formatWikiDate(draft.savedAt, locale, false, timeZone)}
                 </span>
               )}
             </p>

@@ -59,8 +59,7 @@ describe('Wiki 탐색 계측', () => {
           createdAt: null,
           minuteTitle: '운영 회의',
           minuteDate: '2026-08-01',
-        }]}
-      />,
+        }]} timeZone="Asia/Seoul" />,
     ))
     const sourceLink = container.querySelector<HTMLAnchorElement>('a[href="/minutes/minute-1"]')!
     sourceLink.addEventListener('click', event => event.preventDefault())

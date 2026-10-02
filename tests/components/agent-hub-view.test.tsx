@@ -64,19 +64,19 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers() }
 
 describe('AgentHubView', () => {
   it('상태 줄·표·큐가 그려지고 멤버 기본 필터는 mine, 관리자는 all', () => {
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     expect(host.querySelector('[data-hero-tile="working"]')?.textContent).toBe('1')
     expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
     expect(host.textContent).toContain('승인 대기 없음')
     expect((host.querySelector('[data-hub-filter="mine"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true')
     // 기본 필터는 마운트 시점 초기값이라 새 루트로 다시 그린다.
     act(() => root.unmount()); root = createRoot(host)
-    act(() => root.render(<AgentHubView initial={hub({ viewer: { isAdmin: true, memberIds: [] } })} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub({ viewer: { isAdmin: true, memberIds: [] } })} wbs={wbs()} timeZone="Asia/Seoul" />))
     expect((host.querySelector('[data-hub-filter="all"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true')
   })
   it('갱신 실패는 마지막 데이터를 유지하고 상단에 실패 시각·문구', async () => {
     refresh.mockResolvedValueOnce({ ok: false, error: '에이전트 현황 재조회에 실패했습니다.' })
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     await act(async () => { (host.querySelector('[data-hub-refresh]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
     expect((host.querySelector('[data-hub-stamp]') as HTMLElement).textContent).toContain('갱신 실패')
@@ -84,7 +84,7 @@ describe('AgentHubView', () => {
   })
   it('위임 체크 → 묶음 저장 응답의 허브로 교체하고 refreshAgentHub 는 부르지 않는다(2026-09-14 체크 지연 개선)', async () => {
     apply.mockResolvedValueOnce({ ok: true, hub: hub({ rows: [], counters: { delegated: 0, ready: 0, working: 0, waiting: 0, stuck: 0 } }), failed: [], warnings: [] })
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     const box = host.querySelector('[data-hub-row="a1"] input[data-hub-toggle]') as HTMLInputElement
     await act(async () => { box.click() })
     expect(box.checked).toBe(false); expect(box.disabled).toBe(false)
@@ -97,27 +97,27 @@ describe('AgentHubView', () => {
   })
   it('갱신 성공은 새 데이터로 교체', async () => {
     refresh.mockResolvedValueOnce({ ok: true, hub: hub({ rows: [], counters: { delegated: 0, ready: 0, working: 0, waiting: 0, stuck: 0 } }) })
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     await act(async () => { (host.querySelector('[data-hub-refresh]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-hub-row="a1"]')).toBeNull()
     expect(refresh).toHaveBeenCalledWith('p1')
   })
   it('명단 조회 실패는 표 위에 사유를 띄운다 — 상세 패널의 담당자 목록이 비어도 0명으로 읽히지 않게(3원칙 ①)', () => {
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs({ membersError: '명단을 불러오지 못했습니다.' })} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs({ membersError: '명단을 불러오지 못했습니다.' })} timeZone="Asia/Seoul" />))
     const alert = host.querySelector('[role="alert"][data-roster-load-error]')
     expect(alert?.textContent).toContain('명단을 불러오지 못했습니다.')
     expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     expect(host.querySelector('[data-roster-load-error]')).toBeNull()
   })
   it('좌석 층 섹션이 없다 — 층은 /agents/office 가 그린다(스튜디오 분리 스펙 §6-2)', () => {
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     expect(host.querySelector('section[aria-label="좌석"]')).toBeNull()
     expect(host.querySelector('[data-panel]')).toBeNull()
   })
   it('이름을 누르면 그 항목의 WBS 상세 패널이 이 화면 위에 열리고, 닫으면 닫히며 허브를 1회 재조회한다(WBS 페이지 이동 없음)', async () => {
     refresh.mockResolvedValueOnce({ ok: true, hub: hub() }) // 닫을 때 표를 맞추는 재조회(패널 편집이 이름을 바꿨을 수 있다)
-    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} />))
+    act(() => root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />))
     expect(host.querySelector('[data-detail-panel]')).toBeNull()
     await act(async () => { (host.querySelector('[data-hub-row="a1"] [data-hub-open="a1"]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-detail-panel="a1"]')).not.toBeNull()
@@ -128,7 +128,7 @@ describe('AgentHubView', () => {
   })
   it('단계 이름이 손상(levelLabels null)이면 상태 줄·표·큐는 그리고, 이름을 누르면 패널 자리에 사유만 뜬다(FN-8)', async () => {
     const levelsError = { error: '설정 값이 올바르지 않습니다. (core.level_labels)', key: 'core.level_labels' }
-    act(() => root.render(<AgentHubView initial={hub({ viewer: { isAdmin: true, memberIds: [] } })} wbs={wbs({ levelLabels: null, levelsError })} />))
+    act(() => root.render(<AgentHubView initial={hub({ viewer: { isAdmin: true, memberIds: [] } })} wbs={wbs({ levelLabels: null, levelsError })} timeZone="Asia/Seoul" />))
     expect(host.querySelector('section[aria-label="에이전트 상태"]')).not.toBeNull()      // 킬스위치 줄
     expect(host.querySelector('[data-hub-row="a1"]')).not.toBeNull()
     expect(host.textContent).toContain('승인 대기 없음')
@@ -144,7 +144,7 @@ describe('AgentHubView', () => {
     // {id, stage, actual_pct} 만으로는 **새 카드를 만들 수 없다** — 그래서 부분 패치가 아니라
     // 이미 있는 refreshAgentHub 1회로 추가·갱신·제거를 한꺼번에 덮는다(router.refresh 아님, §7).
     refresh.mockResolvedValue({ ok: true, hub: hub() })
-    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} />) })
+    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />) })
     expect(rt.broadcast).not.toBeNull()
 
     await act(async () => {
@@ -167,7 +167,7 @@ describe('AgentHubView', () => {
     // 이 화면의 상세 패널 데이터(wbs.items)는 서버 페이지가 실어 준 값이라 refreshAgentHub 로는
     // 갱신되지 않는다. 허브만 바뀌고 패널이 낡으면 같은 화면이 서로 다른 숫자를 보여준다.
     refresh.mockResolvedValue({ ok: true, hub: hub() })
-    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} />) })
+    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />) })
     await act(async () => { (host.querySelector('[data-hub-open="a1"]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-detail-panel="a1"]')?.getAttribute('data-detail-actual')).toBe('0')
 
@@ -181,7 +181,7 @@ describe('AgentHubView', () => {
   })
 
   it('형태가 어긋난 실시간 페이로드는 재조회를 부르지 않는다', async () => {
-    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} />) })
+    await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs()} timeZone="Asia/Seoul" />) })
     await act(async () => { rt.broadcast!({ payload: { nope: true } }) })
     await act(async () => { vi.advanceTimersByTime(30_000) })
     expect(refresh).not.toHaveBeenCalled()

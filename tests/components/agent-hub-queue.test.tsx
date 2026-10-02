@@ -41,7 +41,7 @@ const setValue = (el: HTMLTextAreaElement, v: string) => {
 }
 const render = (over: Partial<Parameters<typeof ApprovalQueue>[0]> = {}) => {
   const onHub = vi.fn(), onChanged = vi.fn()
-  act(() => root.render(<ApprovalQueue queue={Q} projectId="p1" isAdmin onHub={onHub} onChanged={onChanged} {...over} />))
+  act(() => root.render(<ApprovalQueue queue={Q} projectId="p1" isAdmin onHub={onHub} onChanged={onChanged} timeZone="Asia/Seoul" {...over} />))
   return { onHub, onChanged }
 }
 
@@ -142,7 +142,7 @@ describe('ApprovalQueue — 처리는 runHubProcessOp 1건, 응답의 허브로 
     L.locale = 'en'
     render({ isAdmin: false, queue: QSELF })
     expect(host.textContent).toContain(t('en', 'agent.queue.selfApprovalHint'))
-    act(() => root.render(<ApprovalQueue queue={QMINE} projectId="p1" isAdmin={false} onHub={vi.fn()} onChanged={vi.fn()} />))
+    act(() => root.render(<ApprovalQueue queue={QMINE} projectId="p1" isAdmin={false} onHub={vi.fn()} onChanged={vi.fn()} timeZone="Asia/Seoul" />))
     expect(host.textContent).toContain(t('en', 'agent.queue.adminApprovesHint'))
     expect(host.textContent).not.toContain('승인은 관리자가 합니다')
     expect(host.textContent).not.toContain('다른 관리자나 상위 담당자가 승인합니다')

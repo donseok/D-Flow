@@ -16,13 +16,13 @@ import {
 } from '@/app/actions/announcements'
 import type { Announcement, AnnouncementCategory } from '@/lib/domain/types'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
-import { seoulToday, seoulYmd } from '@/lib/domain/dates'
+import { todayIn, ymdIn } from '@/lib/domain/calendar'
 
 type CategoryFilter = 'all' | AnnouncementCategory
 
-/** 'YYYY-MM-DD' (Asia/Seoul) — 앱 날짜 표기 관례. 포맷은 정본(seoulYmd)에 위임. */
-function fmtDate(iso: string): string {
-  return seoulYmd(new Date(iso))
+/** 'YYYY-MM-DD' — 그 프로젝트 tz 의 날짜(앱 날짜 표기 관례) */
+function fmtDate(iso: string, timeZone: string): string {
+  return ymdIn(timeZone, new Date(iso))
 }
 
 export function AnnouncementsView({
@@ -30,14 +30,17 @@ export function AnnouncementsView({
   lastSeenAt,
   canEdit,
   projectId,
+  timeZone,
 }: {
   announcements: Announcement[]
   lastSeenAt: string | null
   canEdit: boolean
   projectId: string
+  /** 프로젝트 calendar.timezone — '오늘'(게시 판정·폼 기본값)과 날짜 표기의 기준. 서버가 내려준다 */
+  timeZone: string
 }) {
   const { t } = useLocale()
-  const today = seoulToday()
+  const today = todayIn(timeZone, new Date())
   const searchParams = useSearchParams()
   const [filter, setFilter] = useState<CategoryFilter>('all')
   // 챗봇 딥링크 ?focus= — 최초 마운트에서 해당 공지의 상세를 연다.
@@ -143,6 +146,7 @@ export function AnnouncementsView({
                   unread={isUnread(a, lastSeenAt)}
                   canEdit={canEdit}
                   today={today}
+                  timeZone={timeZone}
                   onRead={() => setReading(a)}
                   onEdit={() => openEdit(a)}
                   onDelete={() => setDeleting(a)}
@@ -156,6 +160,7 @@ export function AnnouncementsView({
       <ReadModal
         item={reading}
         canEdit={canEdit}
+        timeZone={timeZone}
         onClose={() => setReading(null)}
         onEdit={() => reading && openEdit(reading)}
         onDelete={() => {
@@ -169,6 +174,7 @@ export function AnnouncementsView({
         onClose={() => setFormOpen(false)}
         projectId={projectId}
         initial={editing}
+        today={today}
       />
       <DeleteAnnouncementModal item={deleting} onClose={() => setDeleting(null)} />
     </div>
@@ -180,6 +186,7 @@ function AnnouncementRow({
   unread,
   canEdit,
   today,
+  timeZone,
   onRead,
   onEdit,
   onDelete,
@@ -188,6 +195,7 @@ function AnnouncementRow({
   unread: boolean
   canEdit: boolean
   today: string
+  timeZone: string
   onRead: () => void
   onEdit: () => void
   onDelete: () => void
@@ -226,7 +234,7 @@ function AnnouncementRow({
           )}
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums text-ink-subtle">
             <span>
-              {fmtDate(item.createdAt)}
+              {fmtDate(item.createdAt, timeZone)}
               {edited && t('ann.updatedSuffix')}
             </span>
             {period && (
@@ -264,12 +272,14 @@ function AnnouncementRow({
 function ReadModal({
   item,
   canEdit,
+  timeZone,
   onClose,
   onEdit,
   onDelete,
 }: {
   item: Announcement | null
   canEdit: boolean
+  timeZone: string
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
@@ -318,7 +328,7 @@ function ReadModal({
               </span>
             )}
             <span className="text-[11px] tabular-nums text-ink-subtle">
-              {fmtDate(item.createdAt)}
+              {fmtDate(item.createdAt, timeZone)}
               {item.updatedAt !== item.createdAt && t('ann.updatedSuffix')}
             </span>
           </div>
@@ -341,11 +351,14 @@ export function AnnouncementFormModal({
   onClose,
   projectId,
   initial,
+  today,
 }: {
   open: boolean
   onClose: () => void
   projectId: string
   initial: Announcement | null
+  /** 그 프로젝트 tz 의 오늘 — 게시 시작일·마일스톤 기본값(date-only) */
+  today: string
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -369,12 +382,12 @@ export function AnnouncementFormModal({
     setCategory(initial?.category ?? 'general')
     setIsPinned(initial?.isPinned ?? false)
     // 신규·legacy(기간 없음) 공지는 시작일을 오늘로 기본, 종료일은 직접 지정하도록 비운다.
-    setPublishFrom(initial?.publishFrom ?? seoulToday())
+    setPublishFrom(initial?.publishFrom ?? today)
     setPublishTo(initial?.publishTo ?? '')
     setShowMilestone(!!initial?.milestoneDate)
     setMilestoneDate(initial?.milestoneDate ?? '')
     setError(null)
-  }, [open, initial])
+  }, [open, initial, today])
 
   function submit() {
     if (!title.trim()) {
@@ -511,7 +524,7 @@ export function AnnouncementFormModal({
               onChange={(e) => {
                 const on = e.target.checked
                 setShowMilestone(on)
-                if (on && !milestoneDate) setMilestoneDate(publishTo || publishFrom || seoulToday())
+                if (on && !milestoneDate) setMilestoneDate(publishTo || publishFrom || today)
               }}
               className="h-4 w-4 accent-brand"
             />

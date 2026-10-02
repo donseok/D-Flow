@@ -26,7 +26,7 @@ function findSeat(map: Seatmap, orderId: string | null): { seat: Seat; floorName
   return null
 }
 
-const hhmmss = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR', { hour12: false, timeZone: 'Asia/Seoul' })
+const hhmmss = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleTimeString(locale, { hour12: false, timeZone })
 
 /** 평면도(지켜보는 화면) · 상태 레인(처리하는 화면) · 에이전트(누가 어느 PC 어느 자리에서 일하는가, 2026-09-18). */
 type OfficeView = 'floor' | 'lane' | 'agent'
@@ -39,7 +39,13 @@ const CHATTER_KEY = 'dflow.office.chatter'
 /** 좌석표 클라이언트 루트. 30초 폴링, 숨긴 탭은 쉬고 다시 보이면 즉시 1회. 실패는 마지막 데이터 유지 + 표시.
  *  projectId 가 있으면 프로젝트 스튜디오(/p/[id]/agents/office): 재조회를 그 층으로 좁히고 전체 스튜디오 링크를 보인다.
  *  보기는 셋이다 — 에이전트(기본)·평면도(지켜보는 화면)·상태 레인(처리하는 화면). 결재는 평면도·상태 레인의 좌석에 붙는다. */
-export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }: { initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string }) {
+export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, timeZone, locale }: {
+  initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string
+  /** 시각·사무실 대사(계절·점심)의 시간대 — 프로젝트 스튜디오는 프로젝트, 전역은 세션 유일 워크스페이스(viewTimezone) */
+  timeZone: string
+  /** 시각 포맷의 locale — 없으면 'ko-KR' */
+  locale?: string
+}) {
   const [map, setMap] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -219,7 +225,7 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }
         <button type="button" aria-pressed={scope === 'all'} onClick={() => { void refresh('all', true) }}>전체</button>
       </div>
       <div className={`${css.stamp} ${error ? css.stampBad : ''}`}>
-        {error ? <span data-error="">갱신 실패 {hhmmss(error.at)} · {error.message}</span> : <span>갱신 {hhmmss(map.fetchedAt)}</span>}
+        {error ? <span data-error="">갱신 실패 {hhmmss(error.at, timeZone, locale)} · {error.message}</span> : <span>갱신 {hhmmss(map.fetchedAt, timeZone, locale)}{projectId ? '' : ` (${timeZone})`}</span>}
       </div>
     </>
   )
@@ -227,7 +233,7 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName }
     <>
       <AttentionBand items={map.attention} onSelect={setSelected} />
       <main className={css.stage}>
-        {view === 'agent' ? <RosterBoard roster={roster} nowMs={nowMs} /> : (
+        {view === 'agent' ? <RosterBoard roster={roster} nowMs={nowMs} timeZone={timeZone} /> : (
         <section className={css.floors} data-view={view} aria-label={view === 'floor' ? '프로젝트별 좌석' : '상태별 좌석'}>
           {map.floors.length === 0 && (projectId !== undefined
             ? (map.scope === 'mine'

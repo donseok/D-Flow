@@ -241,7 +241,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=ann-2'
     await mount(
       <AnnouncementsView projectId="p1" lastSeenAt={null} canEdit={false}
-        announcements={[announcement(), announcement({ id: 'ann-2', title: '중요 공지' })]} />,
+        announcements={[announcement(), announcement({ id: 'ann-2', title: '중요 공지' })]} timeZone="Asia/Seoul" />,
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('중요 공지')
@@ -254,7 +254,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
         announcements={[
           announcement(),
           announcement({ id: 'ann-3', title: '예정 공지', publishFrom: '2099-01-01', publishTo: '2099-12-31' }),
-        ]} />,
+        ]} timeZone="Asia/Seoul" />,
     )
     expect(dialog()).toBeNull()
   })

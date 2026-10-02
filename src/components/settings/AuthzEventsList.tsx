@@ -2,12 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { listAuthzEvents, type AuthzEventsResult } from '@/app/actions/authzEvents'
-import { seoulStamp } from '@/lib/domain/dates'
+import { stampIn } from '@/lib/domain/calendar'
 
-const formatDate = (iso: string) => Number.isNaN(new Date(iso).getTime()) ? '시각 확인 불가' : seoulStamp(iso)
+const formatDate = (iso: string, timeZone: string) => Number.isNaN(new Date(iso).getTime()) ? '시각 확인 불가' : stampIn(timeZone, iso)
 
 /** 권한 변경 이력(읽기 전용) — 커서(id)로 이전 20건씩 읽는다. 쓰기는 권한 RPC 안의 트리거가 한다. */
-export function AuthzEventsList({ workspaceId, initial }: { workspaceId: string; initial: AuthzEventsResult }) {
+export function AuthzEventsList({ workspaceId, initial, timeZone }: {
+  workspaceId: string; initial: AuthzEventsResult
+  /** 변경 시각을 찍을 시간대(워크스페이스 calendar.timezone) — 서버가 내려준다 */
+  timeZone: string
+}) {
   const [rows, setRows] = useState(initial.ok ? initial.rows : [])
   const [nextBefore, setNextBefore] = useState(initial.ok ? initial.nextBefore : null)
   const [error, setError] = useState(initial.ok ? null : initial.error)
@@ -33,7 +37,7 @@ export function AuthzEventsList({ workspaceId, initial }: { workspaceId: string;
       {rows.map(row => <li key={row.id} className="space-y-1 py-3 first:pt-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <strong className="text-sm text-ink">{row.targetName}{row.projectName ? ` · ${row.projectName}` : ''}</strong>
-          <span className="text-xs text-ink-muted">{formatDate(row.createdAt)}</span>
+          <span className="text-xs text-ink-muted">{formatDate(row.createdAt, timeZone)}</span>
         </div>
         <p className="text-sm text-ink">{row.kindLabel} · {row.summary}</p>
         <p className="text-xs text-ink-muted">{row.actorName} · {row.causeLabel}</p>

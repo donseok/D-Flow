@@ -145,6 +145,8 @@ export interface ChatStateEvent extends ChatStreamEventBase {
 export interface ChatDoneEvent extends ChatStreamEventBase {
   type: 'done'
   asOf: string
+  /** 요청 범위 달력의 시간대(IANA) — 화면이 asOf 를 이 tz 로 찍는다(스펙 SP5 D13 ③, 같은 요청의 '오늘'과 같은 tz) */
+  timezone: string
   tools: string[]
   truncated: boolean
 }

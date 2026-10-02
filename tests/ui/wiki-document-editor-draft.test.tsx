@@ -51,7 +51,7 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
 
   const mount = (userId: string | null, topic = TOPIC) =>
     act(async () => root.render(
-      <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" locale="ko" topic={topic} canEdit userId={userId} />,
+      <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" locale="ko" topic={topic} canEdit userId={userId} timeZone="Asia/Seoul" />,
     ))
   const button = (key: DictKey) =>
     [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('ko', key))

@@ -38,14 +38,14 @@ function deskLook(d: RosterDesk): { character: CharacterName; anim: AnimName } {
   return { character: 'cat', anim: 'empty' }
 }
 /** 책상 한 줄 설명 — 무엇을 하고 있는지. */
-function deskLine(d: RosterDesk, host: RosterHost, nowMs: number, chatter: boolean): string {
+function deskLine(d: RosterDesk, host: RosterHost, nowMs: number, chatter: boolean, timeZone: string): string {
   if (d.kind === 'lead') {
     const w = d.watcher
     const seats = w?.slots != null ? `팀원 ${w.slots}명 배정` : '감시'
     return w?.untilLabel ? `${seats} · ${w.untilLabel} 까지` : seats
   }
   // 잡담이 켜져 있으면 부재 사유(농담)를 붙인다 — 끄면 사실만 남는다.
-  if (d.kind === 'empty') return chatter ? `자리 비움 · ${awayReason(d.key, nowMs)}` : host.watcher ? '빈자리 — 다음 위임을 기다립니다' : '빈자리'
+  if (d.kind === 'empty') return chatter ? `자리 비움 · ${awayReason(d.key, nowMs, timeZone)}` : host.watcher ? '빈자리 — 다음 위임을 기다립니다' : '빈자리'
   return d.seat ? `${d.seat.code} ${d.seat.name}` : ''
 }
 /** 책상의 계정 명찰 — 팀장은 감시자 계정, 팀원은 주문을 잡은 계정. 빈자리는 null. */
@@ -83,7 +83,11 @@ export function useRoster(map: Pick<Seatmap, 'floors'>): Roster {
   return useMemo(() => assembleRoster(map), [map])
 }
 
-export function RosterBoard({ roster, nowMs }: { roster: Roster; nowMs: number }) {
+export function RosterBoard({ roster, nowMs, timeZone }: {
+  roster: Roster; nowMs: number
+  /** 사무실 대사(계절·점심·퇴근 뒤)의 시간대 — 그 스튜디오 화면의 tz */
+  timeZone: string
+}) {
   const [selected, setSelected] = useState<string | null>(null)
   const allDesks = roster.hosts.flatMap(h => h.desks.map(d => ({ d, h })))
   // 고른 자리가 폴링으로 사라지면 결정 대기 → 첫 에이전트 순으로 다시 고른다.
@@ -100,16 +104,16 @@ export function RosterBoard({ roster, nowMs }: { roster: Roster; nowMs: number }
           </p>
         )}
         {roster.hosts.map(h => (
-          <HostCard key={h.key} host={h} nowMs={nowMs} selectedKey={current?.d.key ?? null} onSelect={setSelected} />
+          <HostCard key={h.key} host={h} nowMs={nowMs} timeZone={timeZone} selectedKey={current?.d.key ?? null} onSelect={setSelected} />
         ))}
       </div>
-      {current && <Profile desk={current.d} host={current.h} nowMs={nowMs} />}
+      {current && <Profile desk={current.d} host={current.h} nowMs={nowMs} timeZone={timeZone} />}
     </div>
   )
 }
 
-function HostCard({ host, nowMs, selectedKey, onSelect }: {
-  host: RosterHost; nowMs: number; selectedKey: string | null; onSelect: (k: string) => void
+function HostCard({ host, nowMs, timeZone, selectedKey, onSelect }: {
+  host: RosterHost; nowMs: number; timeZone: string; selectedKey: string | null; onSelect: (k: string) => void
 }) {
   const busy = host.desks.filter(d => d.kind === 'member').length
   const w = host.watcher
@@ -134,14 +138,14 @@ function HostCard({ host, nowMs, selectedKey, onSelect }: {
         {host.slots !== null && <span className="ml-auto text-xs font-semibold tabular-nums text-ink-muted">자리 {busy}/{host.slots}</span>}
       </header>
       <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(172px,1fr))]">
-        {host.desks.map(d => <Desk key={d.key} desk={d} host={host} nowMs={nowMs} selected={d.key === selectedKey} onSelect={onSelect} />)}
+        {host.desks.map(d => <Desk key={d.key} desk={d} host={host} nowMs={nowMs} timeZone={timeZone} selected={d.key === selectedKey} onSelect={onSelect} />)}
       </ul>
     </section>
   )
 }
 
-function Desk({ desk, host, nowMs, selected, onSelect }: {
-  desk: RosterDesk; host: RosterHost; nowMs: number; selected: boolean; onSelect: (k: string) => void
+function Desk({ desk, host, nowMs, timeZone, selected, onSelect }: {
+  desk: RosterDesk; host: RosterHost; nowMs: number; timeZone: string; selected: boolean; onSelect: (k: string) => void
 }) {
   const tone = deskTone(desk)
   const look = deskLook(desk)
@@ -159,7 +163,7 @@ function Desk({ desk, host, nowMs, selected, onSelect }: {
         {/* 위에서부터 단계 말풍선 · 캐릭터 · 모델 명찰(2026-09-18 사용자 선택) — 말풍선 자리는 비어도 높이를 지켜 책상 줄이 맞는다. */}
         <span className="relative flex flex-col items-center pb-2.5 pt-2"
           style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${tone.color} 16%, var(--color-surface)), var(--color-surface))`, '--sm-cell-w': '102px', '--sm-cell-h': '93px' } as React.CSSProperties}>
-          <span className="flex h-[58px] w-full items-end justify-center px-2">{topBubble(desk, host, nowMs, chatter)}</span>
+          <span className="flex h-[58px] w-full items-end justify-center px-2">{topBubble(desk, host, nowMs, chatter, timeZone)}</span>
           <span className={desk.kind === 'empty' ? 'opacity-60' : ''}><Sprite character={look.character} anim={look.anim} /></span>
           <span className="flex h-[26px] items-end justify-center"><Nameplate desk={desk} /></span>
         </span>
@@ -172,7 +176,7 @@ function Desk({ desk, host, nowMs, selected, onSelect }: {
           </span>
           {/* 계정 명찰 줄 — 빈자리도 높이를 지켜 책상 줄이 맞는다. 모델 명찰(캐릭터 발밑)과는 다른 칸이다. */}
           <span className="flex h-4 min-w-0 items-center">{owner && <OwnerTag owner={owner} />}</span>
-          <span className="line-clamp-2 min-h-[2.5em] text-xs text-ink-muted">{deskLine(desk, host, nowMs, chatter)}</span>
+          <span className="line-clamp-2 min-h-[2.5em] text-xs text-ink-muted">{deskLine(desk, host, nowMs, chatter, timeZone)}</span>
           {desk.seat && <Progress pct={desk.seat.progress} color={tone.color} />}
           <span className="text-[11px] tabular-nums text-ink-subtle">{sig ? `신호 ${ageLabel(sig, nowMs)}` : ' '}</span>
         </span>
@@ -186,16 +190,16 @@ function Desk({ desk, host, nowMs, selected, onSelect }: {
  * 작업 중인 팀원은 단계 말풍선 사이사이 한마디씩 한다(세 칸에 한 칸).
  * 대사 고르기는 officeChatter(순수)가 한다. 보고가 식으면(10분) 단계 말풍선으로 돌아간다.
  */
-function topBubble(desk: RosterDesk, host: RosterHost, nowMs: number, chatter: boolean): React.ReactNode {
+function topBubble(desk: RosterDesk, host: RosterHost, nowMs: number, chatter: boolean, timeZone: string): React.ReactNode {
   if (desk.kind === 'lead') {
     // 팀장 대사(잔소리·칭찬·한탄·혼잣말)는 전부 잡담이다 — 끄면 팀장 머리 위는 비운다.
     if (!chatter) return null
-    const c = leadChatter(host, nowMs, desk)
+    const c = leadChatter(host, nowMs, timeZone, desk)
     return c && <ChatBubble key={c.text} kind={c.tone} text={c.text} className="max-w-full" />
   }
   if (desk.kind === 'empty') {
     // 빈자리 부재 사유 — 세 칸에 한 칸만 띄운다. 잡담이라 끄면 비운다.
-    const away = chatter ? awayBubble(desk.key, nowMs) : null
+    const away = chatter ? awayBubble(desk.key, nowMs, timeZone) : null
     return away && <ChatBubble key={away} kind="empty" text={away} className="max-w-full" />
   }
   if (!desk.seat) return null
@@ -302,7 +306,7 @@ function SignalGauge({ at, nowMs, lead }: { at: string | null; nowMs: number; le
   )
 }
 
-function Profile({ desk, host, nowMs }: { desk: RosterDesk; host: RosterHost; nowMs: number }) {
+function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: RosterHost; nowMs: number; timeZone: string }) {
   const chatter = useOfficeChatter()
   const tone = deskTone(desk)
   const look = deskLook(desk)
@@ -361,7 +365,7 @@ function Profile({ desk, host, nowMs }: { desk: RosterDesk; host: RosterHost; no
       )}
       {desk.kind === 'empty' && (
         <p className="text-sm text-ink-muted">
-          {chatter && <b data-away className="mb-1 block text-ink">지금은 {awayReason(desk.key, nowMs)}</b>}
+          {chatter && <b data-away className="mb-1 block text-ink">지금은 {awayReason(desk.key, nowMs, timeZone)}</b>}
           아무도 앉지 않은 자리입니다. 팀장이 다음 위임을 이 자리에 배정합니다.
         </p>
       )}

@@ -212,10 +212,12 @@ function stateChip(item: WikiItem): string {
   return 'bg-brand-weak text-brand'
 }
 
+/** 위키 날짜 표기 — date-only('YYYY-MM-DD')는 변환하지 않고(UTC 로 그대로 찍기), instant 는 프로젝트 tz 로(스펙 SP5 D60, 계획 D-21d) */
 export function formatWikiDate(
   value: string | null | undefined,
   locale: Locale,
-  includeTime = false,
+  includeTime: boolean,
+  timeZone: string,
 ): string {
   if (!value) return ''
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -226,7 +228,8 @@ export function formatWikiDate(
     month: 'short',
     day: 'numeric',
     ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}),
-    timeZone: dateOnly ? 'UTC' : 'Asia/Seoul',
+    // date-only 는 변환하지 않는다(UTC 로 그대로 찍기 — D-21d), instant 는 프로젝트 tz
+    timeZone: dateOnly ? 'UTC' : timeZone,
   }).format(parsed)
 }
 
@@ -270,10 +273,13 @@ export function WikiSourceLinks({
   sources,
   locale,
   showEvidence = false,
+  timeZone,
 }: {
   sources: WikiSource[]
   locale: Locale
   showEvidence?: boolean
+  /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
+  timeZone: string
 }) {
   if (sources.length === 0) return null
   return (
@@ -288,7 +294,7 @@ export function WikiSourceLinks({
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
-              {source.minuteDate ? `${formatWikiDate(source.minuteDate, locale)} · ` : ''}
+              {source.minuteDate ? `${formatWikiDate(source.minuteDate, locale, false, timeZone)} · ` : ''}
               {source.minuteTitle ?? t(locale, 'wiki.viewSource')}
             </span>
             <ExternalLink className="h-3 w-3 shrink-0 opacity-60 transition group-hover/source:opacity-100" />
@@ -314,10 +320,13 @@ export function WikiItemCard({
   locale,
   showEvidence = false,
   curateProjectId,
+  timeZone,
 }: {
   item: WikiItem
   locale: Locale
   showEvidence?: boolean
+  /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
+  timeZone: string
   /** 넘기면 큐레이션 버튼이 붙는다. 읽기 전용 문맥(회의록 영향 카드 등)에서는 생략한다. */
   curateProjectId?: string
 }) {
@@ -354,13 +363,13 @@ export function WikiItemCard({
                 <span className="inline-flex items-center gap-1">
                   <CalendarClock className="h-3 w-3" />
                   {item.dueDate
-                    ? t(locale, 'wiki.dueDate').replace('{date}', formatWikiDate(date, locale))
-                    : t(locale, 'wiki.observedAt').replace('{date}', formatWikiDate(date, locale))}
+                    ? t(locale, 'wiki.dueDate').replace('{date}', formatWikiDate(date, locale, false, timeZone))
+                    : t(locale, 'wiki.observedAt').replace('{date}', formatWikiDate(date, locale, false, timeZone))}
                 </span>
               )}
             </div>
           )}
-          <WikiSourceLinks sources={item.sources} locale={locale} showEvidence={showEvidence} />
+          <WikiSourceLinks sources={item.sources} locale={locale} showEvidence={showEvidence} timeZone={timeZone} />
           {curateProjectId && (
             <WikiItemActions item={item} projectId={curateProjectId} locale={locale} />
           )}
@@ -416,11 +425,14 @@ export function WikiChangeList({
   locale,
   limit,
   emptyText,
+  timeZone,
 }: {
   changes: WikiChangeEvent[]
   locale: Locale
   limit?: number
   emptyText?: string
+  /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
+  timeZone: string
 }) {
   const visible = typeof limit === 'number' ? changes.slice(0, limit) : changes
   if (visible.length === 0) {
@@ -443,7 +455,7 @@ export function WikiChangeList({
                   {changeLabel(locale, change.changeType)}
                 </span>
                 <time className="text-[11px] tabular-nums text-ink-subtle">
-                  {formatWikiDate(change.createdAt, locale, true)}
+                  {formatWikiDate(change.createdAt, locale, true, timeZone)}
                 </time>
               </div>
               {statement && <p className="mt-2 text-sm font-medium leading-5 text-ink">{statement}</p>}
@@ -458,7 +470,7 @@ export function WikiChangeList({
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">
-                    {change.minuteDate ? `${formatWikiDate(change.minuteDate, locale)} · ` : ''}
+                    {change.minuteDate ? `${formatWikiDate(change.minuteDate, locale, false, timeZone)} · ` : ''}
                     {change.minuteTitle ?? t(locale, 'wiki.viewSource')}
                   </span>
                   <ExternalLink className="h-3 w-3 shrink-0" />

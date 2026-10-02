@@ -516,6 +516,7 @@ async function* finishWithEvidence(
   yield event(requestId, {
     type: 'done',
     asOf: pack.asOf,
+    timezone: deps.context.timezone,
     tools: pack.tools,
     truncated: pack.truncated || prompt.truncated,
   })
@@ -545,7 +546,7 @@ async function* executePlannedFlow(
     })
     const prior = request.conversationState ?? { version: 1 as const, lastEntities: [], lastDomains: [] }
     yield event(requestId, { type: 'state', conversationState: prior })
-    yield event(requestId, { type: 'done', asOf: now.toISOString(), tools: [], truncated: false })
+    yield event(requestId, { type: 'done', asOf: now.toISOString(), timezone: deps.context.timezone, tools: [], truncated: false })
     return
   }
 
@@ -615,7 +616,7 @@ export async function* orchestrateChatV2(
     yield event(requestId, { type: 'delta', text: route.message })
     const prior = request.conversationState ?? { version: 1 as const, lastEntities: [], lastDomains: [] }
     yield event(requestId, { type: 'state', conversationState: prior })
-    yield event(requestId, { type: 'done', asOf: now.toISOString(), tools: [], truncated: false })
+    yield event(requestId, { type: 'done', asOf: now.toISOString(), timezone: deps.context.timezone, tools: [], truncated: false })
     return
   }
 

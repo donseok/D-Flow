@@ -37,7 +37,7 @@ describe('공지 폼 — 마일스톤 표시 체크', () => {
   afterEach(() => { act(() => root.unmount()); container.remove() })
 
   const render = (initial: Announcement) => act(async () => root.render(
-    <LocaleProvider initialLocale="ko"><AnnouncementFormModal open onClose={() => {}} projectId="p1" initial={initial} /></LocaleProvider>,
+    <LocaleProvider initialLocale="ko"><AnnouncementFormModal open onClose={() => {}} projectId="p1" initial={initial} today="2026-07-15" /></LocaleProvider>,
   ))
   const checkbox = () => [...document.querySelectorAll('label')].find(l => l.textContent?.includes(LABEL))!.querySelector('input[type=checkbox]') as HTMLInputElement
   const dateInputs = () => [...document.querySelectorAll('input[type=date]')] as HTMLInputElement[]
