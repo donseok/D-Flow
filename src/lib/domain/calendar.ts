@@ -350,9 +350,9 @@ export interface WeekStartPreview {
 export function previewWeekStart(rules: readonly WeekStartRule[], newDay: WeekStartDay, today: string, docKeys: readonly string[]): WeekStartPreview {
   const r = applyWeekStartChange(rules, newDay, today, docKeys.length)
   if (!r.ok) return { effectiveFrom: null, transitionDays: null, keptDocs: docKeys.length, blockingWeeks: [], error: r.error }
-  const prevLast = rules[rules.length - 1]
   const nextLast = r.rules[r.rules.length - 1]
-  const added = r.rules.length > 1 && nextLast.from !== null && (prevLast.from !== nextLast.from || prevLast.day !== nextLast.day)
+  // 새 원소는 덧붙임 갈래에서만 생긴다 — 교체·되돌림·같은 요일은 길이가 같거나 준다(되돌림 뒤 마지막 원소는 이미 지난 전환이다 — K3)
+  const added = r.rules.length > rules.length
   const effectiveFrom = added ? nextLast.from : null
   let transitionDays: 6 | 8 | null = null
   if (effectiveFrom) {

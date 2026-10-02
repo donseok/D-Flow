@@ -405,6 +405,11 @@ describe('previewWeekStart — 미리보기 = 저장 판정과 같은 정의(D38
     expect(previewWeekStart(MON0, 'sunday', '2026-09-23', ['2026-09-21', '2026-09-28', '2026-10-05']))
       .toEqual({ effectiveFrom: '2026-09-27', transitionDays: 6, keptDocs: 1, blockingWeeks: ['2026-09-28', '2026-10-05'], error: null })
   })
+  it('전환을 두 번 한 프로젝트에서 대기 전환을 되돌리면 새 적용일이 없다 — 앞선 과거 전환(09-27)을 새 적용일로 보이지 않는다(K3)', () => {
+    const r3: WeekStartRule[] = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-09-27' }, { day: 'monday', from: '2026-10-12' }]
+    expect(previewWeekStart(r3, 'sunday', '2026-10-07', ['2026-09-21', '2026-09-27', '2026-10-04']))
+      .toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 3, blockingWeeks: [], error: null })
+  })
   it('문서 0건 — 교체라 적용일·과도기가 없다', () => {
     expect(previewWeekStart(MON0, 'sunday', '2026-09-23', [])).toEqual({ effectiveFrom: null, transitionDays: null, keptDocs: 0, blockingWeeks: [], error: null })
   })
