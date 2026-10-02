@@ -11,7 +11,7 @@ import { previewWeekStartChange } from '@/app/actions/settingsPreview'
 import { currentRuleDay, parseTimezone, parseWorkingDays, type IsoDow, type WeekStartDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
-import type { CalendarFieldState } from '@/lib/settings/calendarField'
+import { browserTimezoneSuggestion, type CalendarFieldState } from '@/lib/settings/calendarField'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
 import { TimezoneSelect } from './TimezoneSelect'
@@ -51,6 +51,8 @@ export function CalendarSettingsPanel(props: {
   scope: CalendarScope; revision: number; todayIso: string | null
   timezone: CalendarFieldState<string>; workingDays: CalendarFieldState<IsoDow[]>; weekStart: CalendarFieldState<WeekStartRule[]>
   canEdit: boolean; locale?: Locale
+  /** 워크스페이스 — 시간대가 아직 제품 기본값이면 브라우저 시간대를 제안(D13 ② — 자동 저장 없음, 저장은 관리자가) */
+  suggestBrowserTimezone?: boolean
 }) {
   const { scope, canEdit, locale = 'ko' } = props
   const isProject = 'projectId' in scope
@@ -67,6 +69,11 @@ export function CalendarSettingsPanel(props: {
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const reviewSeq = useRef(0)
+  // 브라우저 값은 마운트 뒤에만 읽는다 — 서버 렌더와 첫 클라이언트 렌더가 같아야 한다
+  const [suggestion, setSuggestion] = useState<string | null>(null)
+  useEffect(() => {
+    if (props.suggestBrowserTimezone && props.timezone.source === 'default') setSuggestion(browserTimezoneSuggestion())
+  }, [props.suggestBrowserTimezone, props.timezone.source])
 
   const corrupted: Record<Key, boolean> = {
     'calendar.timezone': props.timezone.source === 'invalid', 'calendar.working_days': props.workingDays.source === 'invalid',
@@ -190,7 +197,8 @@ export function CalendarSettingsPanel(props: {
       <section className="space-y-2" data-field="calendar.timezone" aria-label={LABEL['calendar.timezone']}>
         {head('calendar.timezone', props.timezone, '즉시 적용(저장된 날짜는 바뀌지 않습니다)', 'calendar-timezone')}
         {corruptNotice('calendar.timezone', props.timezone, '#calendar-timezone')}
-        <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked} locale={locale} />
+        <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked} locale={locale}
+          suggestion={suggestion && suggestion !== draft.timezone.trim() && !inputsLocked ? { label: `이 브라우저의 시간대(${suggestion})로 제안`, value: suggestion } : null} />
         {fieldNotice('calendar.timezone')}
         {keyLine('calendar.timezone')}
       </section>

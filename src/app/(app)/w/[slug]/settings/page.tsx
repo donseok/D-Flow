@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
@@ -18,6 +18,9 @@ import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPanel'
+import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
+import { todayIn } from '@/lib/domain/calendar'
 import { getServerLocale } from '@/lib/i18n/server'
 
 const SIMPLE: Record<SimpleWorkspaceKey, Omit<WorkspaceField, 'key' | 'value' | 'source' | 'error'>> = {
@@ -52,6 +55,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   }
 
   const allowed = config.keys['modules.allowed']
+  // 달력 절(스펙 D36·§5.1 A 둘째 행) — 손상 키도 편집기를 그린다(복구 경로). '오늘'은 tz 가 유효할 때만
+  const calendarFields = workspaceCalendarFieldsOf(config.keys)
+  const calendarToday = calendarFields.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
   const [history, authzEvents] = await Promise.all([listSettingsHistory({ workspaceId: access.id }), listAuthzEvents(access.id)])
   // 이력 시각의 tz = 워크스페이스 달력. 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지다(계획 D-21a)
   const historyCal = pickCalendar(config)
@@ -65,7 +71,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       </div>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-menu', label: '메뉴' },
+        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-menu', label: '메뉴' },
         { id: 'workspace-history', label: '기록' },
       ]}>
       <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
@@ -99,6 +105,15 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           {access.isSuperuser
             ? <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href={LEGACY_PATHS.adminTeams} className="font-medium text-brand underline">팀 관리</Link>에서 편집합니다.</p>
             : <p className="text-sm text-ink-muted">공용 팀 기준정보는 플랫폼 관리자가 팀 관리에서 편집합니다.</p>}
+        </div>
+      </SectionCard>
+      <SectionCard id="workspace-calendar" searchText="calendar.working_days calendar.timezone calendar.week_start 달력 시간대 근무 요일 주 시작"
+        eyebrow="달력" title="시간대·근무 요일·주 시작" icon={CalendarDays}>
+        <div className="space-y-3">
+          <p className="text-sm text-ink-muted">워크스페이스 화면(내 회의·회의록 등)의 오늘 날짜와 달력이 이 값을 따르고, 새 프로젝트를 만들 때 초기값으로 복사됩니다. 이미 있는 프로젝트는 바뀌지 않습니다.</p>
+          {/* 이 페이지는 워크스페이스 관리자만 들인다(access.isAdmin 아니면 redirect) — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
+          <CalendarSettingsPanel scope={{ workspaceId: access.id }} revision={config.revision} todayIso={calendarToday} locale={locale}
+            canEdit suggestBrowserTimezone {...calendarFields} />
         </div>
       </SectionCard>
       <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>

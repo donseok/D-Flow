@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   allowEditor: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-allow-editor" />),
   shell: vi.fn<(p: { items: { id: string; label: string }[]; children: ReactNode }) => ReactNode>(({ children }) => <>{children}</>),
   redirect: vi.fn((to: string): never => { throw new Error(`NEXT_REDIRECT ${to}`) }),
+  calendarPanel: vi.fn<(p: Record<string, unknown>) => null>(() => null),
 }))
 vi.mock('@/lib/settings/workspacePageAccess', () => ({ workspacePageAccess: (...a: unknown[]) => h.access(...a) }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.config(...a) }))
@@ -26,6 +27,7 @@ vi.mock('@/components/settings/LogoEditor', () => ({ LogoEditor: () => null }))
 vi.mock('@/components/settings/AccentEditor', () => ({ AccentEditor: () => null }))
 vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () => null }))
 vi.mock('@/components/settings/SettingsHistoryList', () => ({ SettingsHistoryList: () => null }))
+vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettingsPanel: (p: Record<string, unknown>) => h.calendarPanel(p) }))
 vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ error }: { error: string }) => <p data-load-error>{error}</p> }))
 
 import WorkspaceSettingsPage from '@/app/(app)/w/[slug]/settings/page'
@@ -56,12 +58,33 @@ describe('/w/[slug]/settings 페이지', () => {
     expect(h.config).not.toHaveBeenCalled()
   })
 
-  it('다섯 범주 목차를 스펙 순서로 낸다', async () => {
+  it('여섯 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26)', async () => {
     await render()
     expect(h.shell.mock.calls[0][0].items).toEqual([
       { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-      { id: 'workspace-invites', label: '초대' }, { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-history', label: '기록' },
+      { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' },
+      { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-history', label: '기록' },
     ])
+  })
+
+  it('달력 절 — 워크스페이스 범위·세 키(요일은 규칙 하나로 승격)·브라우저 시간대 제안을 편집기에 넘긴다', async () => {
+    h.config.mockResolvedValue(config({ 'calendar.timezone': 'Europe/Berlin', 'calendar.week_start': 'monday' }))
+    await render()
+    expect(h.calendarPanel).toHaveBeenCalledTimes(1)
+    const p = h.calendarPanel.mock.calls[0][0]
+    expect(p).toMatchObject({
+      scope: { workspaceId: WID }, revision: 7, canEdit: true, suggestBrowserTimezone: true,
+      timezone: { value: 'Europe/Berlin', source: 'set' },
+      workingDays: { value: [1, 2, 3, 4, 5], source: 'default' },
+      weekStart: { value: [{ day: 'monday', from: null }], source: 'set' },
+    })
+    expect(p.todayIso).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('달력 키가 손상이어도 편집기를 그린다(복구 경로) — 오늘은 모른다(null)', async () => {
+    h.config.mockResolvedValue(config({ 'calendar.timezone': '+09:00' }))
+    await render()
+    expect(h.calendarPanel.mock.calls[0][0]).toMatchObject({ timezone: { value: null, source: 'invalid' }, todayIso: null })
   })
 
   it('모듈 허용 구역은 플랫폼 관리자에게만 보인다', async () => {
