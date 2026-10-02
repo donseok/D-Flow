@@ -85,6 +85,10 @@ export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null):
   if (r === undefined) return 'missing'
   return r === 'admin' ? 'ok' : 'denied'
 }
+/** 실제 소속(workspace_members 행이 있다) — 플랫폼 관리자 승계 없음. 본인 기록(개인 설정·방문·현재 워크스페이스 쿠키)을 쓸지 정할 때(U2b-3 보안 리뷰 AA6) */
+export function hasWorkspaceMembership(actor: Actor | null, workspaceId: string): boolean {
+  return !!actor && actor.workspaceRoles.has(workspaceId)
+}
 export function isWorkspaceMember(actor: Actor | null, workspaceId: string | null | undefined): boolean {
   if (!workspaceId) return Boolean(actor?.isSuperuser)
   return workspaceRoleIn(actor, workspaceId) !== null

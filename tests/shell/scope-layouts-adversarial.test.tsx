@@ -133,6 +133,13 @@ describe('플랫폼 관리자 비소속 보기', () => {
     expect(i.workspaces.map((r: Ref) => r.id)).toEqual([A.id])
     expect(h.shellScope).toHaveBeenCalledWith(expect.objectContaining({ workspace: C, persist: false }))
   })
+  it('AA6 — 권한 조회가 열화돼도(actor null) 비소속 워크스페이스면 칩과 비기록이 유지된다(실제 소속 목록 기준)', async () => {
+    h.ws = [A, B, C]; h.members = [{ role: 'admin', at: '2026-01-01', ws: A }]   // RLS 가 플랫폼 관리자에게 C 를 보여 준다
+    h.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
+    renderToString(await ws('charlie'))
+    expect(h.loadShell.mock.calls[0][0].viewingAsPlatformAdmin).toBe(true)
+    expect(h.shellScope).toHaveBeenCalledWith(expect.objectContaining({ workspace: C, persist: false }))
+  })
   it('플랫폼 관리자라도 없는 슬러그·형식 밖은 404', async () => {
     h.ws = [A, B, C]
     h.getActorViewState.mockResolvedValue({ actor: makeSuperuser({ workspaceRoles: new Map() }), degraded: false })

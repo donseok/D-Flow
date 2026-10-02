@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   roleIn, isProjectAdmin, isProjectMember, isAnyProjectAdmin, hasAnyProjectRole, adminProjectIds,
-  toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember,
+  toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember, hasWorkspaceMembership,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
   isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute,
   isAnyWorkspaceAdmin,
@@ -369,5 +369,15 @@ describe('ACCESS_ROLE / WORKSPACE_ROLE', () => {
   it('DB 값(project_members.access_role · workspace_members.role)과 같은 문자열이다', () => {
     expect(ACCESS_ROLE).toEqual({ admin: 'admin', member: 'member' })
     expect(WORKSPACE_ROLE).toEqual({ admin: 'admin', member: 'member' })
+  })
+})
+
+describe('hasWorkspaceMembership — 실제 소속만(플랫폼 관리자 승계 없음, AA6)', () => {
+  const W = '00000000-0000-0000-7e57-0000000016e1', X = '00000000-0000-0000-7e57-0000000016e2'
+  it('소속 행이 있으면 true, 플랫폼 관리자라도 행이 없으면 false, null 이면 false', () => {
+    expect(hasWorkspaceMembership(makeActor({ workspaceRoles: new Map([[W, 'member']]) }), W)).toBe(true)
+    expect(hasWorkspaceMembership(makeSuperuser({ workspaceRoles: new Map([[W, 'admin']]) }), X)).toBe(false)
+    expect(isWorkspaceMember(makeSuperuser({ workspaceRoles: new Map([[W, 'admin']]) }), X)).toBe(true)   // 화면 판정은 승계 — 두 함수가 다른 이유
+    expect(hasWorkspaceMembership(null, W)).toBe(false)
   })
 })

@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClie
 
 import { saveUiPrefs } from '@/app/actions/preferences'
 import { POST } from '@/app/api/prefs/route'
-import { makeActor } from '../fixtures/actor'
+import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 const WS = '00000000-0000-0000-7e57-000000001652'
 const WS_X = '00000000-0000-0000-7e57-000000001651'
@@ -232,6 +232,15 @@ describe('saveUiPrefs — 방문 기록(visits, Y1)', () => {
     expect(await saveUiPrefs({ favoriteProjectIds: [PA] }, { workspaceId: WS, visits: [PB] })).toEqual({ ok: true })
     expect(h.ops).toHaveLength(1)
     expect(h.ops[0][1]).toEqual({ favoriteProjectIds: [PA], recentProjects: [expect.objectContaining({ id: PB })] })
+  })
+  it('AA6 — 플랫폼 관리자의 비소속 워크스페이스에는 방문·워크스페이스 키를 쓰지 않는다(승계가 아니라 실제 소속만, 같은 거부 응답)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.getActor.mockResolvedValue(makeSuperuser({ workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[PA, WS], [PO, WS_X]]) }))
+    h.createServerClient.mockResolvedValue(db({}))
+    expect(await saveUiPrefs({ startPage: 'home' }, { workspaceId: WS_X, visits: [PO] })).toEqual({ ok: false })
+    expect(h.ops).toEqual([])
+    expect(await saveUiPrefs({}, { workspaceId: WS, visits: [PA] })).toEqual({ ok: true })        // 실제 소속이면 그대로 쓴다
+    expect(h.ops.map((o) => o[0])).toEqual(['user_preferences']); err.mockRestore()
   })
   it('/api/prefs — prefs 없이 visits 만 담은 본문도 받는다', async () => {
     h.createServerClient.mockResolvedValue(db({}))

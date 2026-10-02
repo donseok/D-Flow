@@ -51,7 +51,9 @@ export default async function ProjectLayout({ children, params }: { children: Re
     )
   }
   const ws = ref.ws
-  const viewingAsPlatformAdmin = !!actor?.isSuperuser && !mine.rows.some((r) => r.id === ws.id)
+  // 칩·비기록은 권한 조회와 무관한 실제 소속 목록으로 정한다(AA6) — 비소속인데 여기까지 왔으면 플랫폼 관리자 보기다(열화로 actor 가 없어도)
+  const member = mine.rows.some((r) => r.id === ws.id)
+  const viewingAsPlatformAdmin = !member
   const shell = await loadShell({ scope: 'project', ws, actor, degraded, projectId, viewingAsPlatformAdmin, workspaces: mine.rows, userName })
   let teams: Team[] = []
   if (actor) {
@@ -61,7 +63,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   return (
     <ScopeProvider value={{ workspace: ws, projectId }}>
       <TeamsProvider teams={teams}>
-        <ShellScope workspace={ws} projectId={projectId} projects={shell.projects.map((p) => ({ id: p.id, name: p.name }))} persist={!viewingAsPlatformAdmin} />
+        <ShellScope workspace={ws} projectId={projectId} projects={shell.projects.map((p) => ({ id: p.id, name: p.name }))} persist={member} />
         <AppShell {...shell}>{children}</AppShell>
       </TeamsProvider>
     </ScopeProvider>

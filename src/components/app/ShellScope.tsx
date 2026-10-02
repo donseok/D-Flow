@@ -5,7 +5,8 @@
  * 현재 워크스페이스 쿠키(dflow-ws)를 쓰는 곳은 여기 하나다(D3) — 값이 다를 때만. 쿠키는 보안 경계가 아니다(읽는 쪽이 소속을 다시 본다).
  * 프로젝트 범위에 들어오면 방문을 알린다(queueProjectVisit) — 최근 방문 목록은 서버가 자기 행을 읽어 앞에 넣는다(§5.4.3, U2b-2 권한 리뷰 Y1:
  * 클라이언트가 가진 목록은 조회 실패면 '모름'이라 그것으로 덮으면 서버 목록이 지워지고, 디바운스 창 안 연속 이동은 서로 지운다).
- * persist=false(플랫폼 관리자가 소속 아닌 워크스페이스를 볼 때)면 게시만 하고 쿠키·방문을 쓰지 않는다(소속이 아니라 어차피 버려진다).
+ * persist=false(플랫폼 관리자가 소속 아닌 워크스페이스를 볼 때 — 레이아웃이 실제 소속 목록으로 정한다)면 게시만 하고 쿠키·방문을 쓰지 않는다.
+ * 서버도 실제 소속일 때만 방문·워크스페이스 키를 쓴다(saveUiPrefs — 플랫폼 관리자 승계 없음, AA6). 두 겹이다.
  */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { queueProjectVisit } from '@/lib/prefs/debouncedSave'

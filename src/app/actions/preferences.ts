@@ -2,7 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
-import { isHiddenProject, isWorkspaceMember, type Actor } from '@/lib/domain/authz'
+import { hasWorkspaceMembership, isHiddenProject, type Actor } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 import type { UiPrefs } from '@/lib/domain/types'
 import { RECENT_MAX, RETIRED_PREF_KEYS, mergePrefs, pushRecent, splitPrefs } from '@/lib/prefs/split'
@@ -50,8 +50,9 @@ async function mergeUpsert(
 }
 
 /**
- * 개인 설정 부분 병합 저장. 계정 키 → account_preferences, 워크스페이스 키 → opts.workspaceId 행(소속일 때만 — 쿠키를 읽지 않는다).
- * 워크스페이스 판정이 거부면 같은 요청의 계정 키도 쓰지 않는다(전부 아니면 전무). 값 검사·상한은 splitPrefs(notifRead 는 받지 않는다).
+ * 개인 설정 부분 병합 저장. 계정 키 → account_preferences, 워크스페이스 키 → opts.workspaceId 행(실제 소속일 때만 — 플랫폼 관리자 승계로 비소속
+ * 워크스페이스에 본인 행을 만들지 않는다(AA6). 쿠키를 읽지 않는다). 워크스페이스 판정이 거부면 같은 요청의 계정 키도 쓰지 않는다(전부 아니면 전무).
+ * 값 검사·상한은 splitPrefs(notifRead 는 받지 않는다).
  * 결과는 `{ ok }` 하나뿐이다(W10): 비로그인·workspaceId 없음·형식 밖·없는 워크스페이스·비소속·권한 조회 실패·저장 실패가 모두 같은
  * `{ ok: false }` 라 응답으로 워크스페이스의 존재를 가늠할 수 없다(사유는 서버 로그에만). 은퇴 키만 담긴 요청은 조용히 버리고 ok.
  */
@@ -85,7 +86,7 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
       console.error('[saveUiPrefs] 권한 조회 실패 — 저장하지 않는다:', e instanceof Error ? e.message : e)
       return { ok: false }
     }
-    if (!isWorkspaceMember(actor, wid)) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 저장하지 않는다:', wid); return { ok: false } }
+    if (!hasWorkspaceMembership(actor, wid)) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 저장하지 않는다:', wid); return { ok: false } }
     visits = visitsIn(actor, wid, rawVisits)
   }
   const sb = await createServerClient()
