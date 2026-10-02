@@ -256,7 +256,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
 }
 
 // 모듈 라우트의 실행 확인(P15)은 그 라우트의 기존 테스트 파일이 맡는다 — 과제 14·18·20·21 이 모듈 거부 케이스를 더한다
-const sess = (module: ModuleId, delegatedTo: string, note = '로그인 세션 — 프로젝트면 그 프로젝트, 없으면 세션 유일 워크스페이스'): GateEntry => ({ guard: 'session', module, note, delegatedTo })
+const sess = (module: ModuleId, delegatedTo: string, note = '로그인 세션 — 프로젝트면 그 프로젝트(함께 실은 workspaceId 는 그 프로젝트의 것이어야), 아니면 요청의 workspaceId(소속 확인 — 플랫폼 관리자는 실재 확인), 둘 다 없으면 400(D26, 과제 34)'): GateEntry => ({ guard: 'session', module, note, delegatedTo })
 const agent = (): GateEntry => ({
   guard: 'agentPrincipal', module: 'agents', delegatedTo: 'tests/modules/agents-gate.test.ts',
   delegatedStatic: '두 원천 AND — agents-gate 가 경로 문자열로 핸들러의 판정 호출을 보고, 실행은 tests/agent/{wbs-structure,me-route,watch-route} 가 본다(과제 18)',
@@ -267,14 +267,14 @@ const MINUTES_EXT = 'tests/minutes/external-api.test.ts'
 
 export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('brand/[workspaceId]/[slot]')}#GET`]: nul('session', '로그인·워크스페이스 소속 확인 뒤 현재 로고만 RLS 읽기'),
-  [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문)'),
-  [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트 문맥이면 그 프로젝트, 없으면 세션 유일 워크스페이스. ?probe=1 은 관문만(P12)'),
+  [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문). 함께 실은 workspaceId 는 그 프로젝트의 것이어야(과제 34)'),
+  [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트면 그 프로젝트(함께 실은 workspaceId 는 그 프로젝트의 것이어야), 아니면 요청의 workspaceId(소속 확인 — 플랫폼 관리자는 실재 확인), 둘 다 없으면 400(D26, 과제 34). ?probe=1 은 관문만(P12)'),
   [`${R('chat/health')}#GET`]: nul('superuser'),
   [`${R('chat/index/worker')}#POST`]: nul('cronSecret', 'x-cron-secret — 잡마다 moduleState(과제 22)'),
   [`${R('chat/reindex')}#POST`]: { guard: 'projectAdmin', module: 'chatbot', delegatedTo: 'tests/api/chat-reindex.test.ts' },
   [`${R('chat')}#POST`]: sess('chatbot', LEGACY_CHAT),
   [`${R('chat/stream')}#POST`]: sess('chatbot', LEGACY_CHAT),
-  [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 세션 유일 워크스페이스. env 501 은 관문 앞, 강등 501 은 관문 뒤'),
+  [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 요청의 workspaceId(pageContext 우선, 소속 확인), 둘 다 없으면 400(D26, 과제 34). env 501 은 관문 앞, 강등 501 은 관문 뒤'),
   [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: nul('session', '로그인 + 목록 — WBS 내보내기(core)'),
@@ -282,13 +282,13 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),
   [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issues', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
-  [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 세션 유일 워크스페이스'),
-  [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — 세션 유일 워크스페이스(전 회의록 ZIP)'),
+  [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 요청의 workspaceId(소속 확인, 없으면 400 — D26, 과제 34). 검색도 그 워크스페이스로'),
+  [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — ?workspaceId=(소속 확인, 없으면 400 — D26, 과제 34). 그 워크스페이스 회의록 ZIP'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
   [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
   [`${R('shell')}#GET`]: nul('session', '셸 — 범위(ws 소속·볼 수 있는 프로젝트)를 먼저 거르고 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
   [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
-  [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 세션 유일 워크스페이스. 꺼지면 200 skipped(P19)'),
+  [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 본문 workspaceId(소속 확인), 둘 다 없으면 400(D26, 과제 34). 꺼지면 200 skipped(P19)'),
   [`${R('v1/agent/me')}#GET`]: agent(),
   [`${R('v1/agent/watch')}#POST`]: agent(),
   [`${R('v1/agent/work/[id]/claim')}#POST`]: agent(),

@@ -99,6 +99,8 @@ export interface ConversationStateV1 {
 
 export interface ChatRequestV2 {
   projectId: string | null
+  /** 프로젝트 없는 질문의 워크스페이스(셸 범위, D26) — 화면 문맥의 workspaceId 가 우선한다. 서버는 소속 판정 뒤에만 쓴다 */
+  workspaceId?: string | null
   message: string
   history: ChatMessage[]
   pageContext?: PageContextV1
@@ -372,10 +374,13 @@ export function sanitizeChatRequestV2(raw: unknown): ChatRequestValidationResult
   if (pageContext === null || conversationState === null) {
     return { ok: false, error: { code: 'INVALID_REQUEST', message: '문맥 형식이 잘못되었습니다.', status: 400 } }
   }
+  // 프로젝트 없는 질문의 워크스페이스(D26) — 페이지 문맥의 workspaceId 와 같은 규칙(문자열·null 만, 그 밖은 버린다). 소속·형식 판정은 라우트의 관문
+  const workspaceId = nullableString(raw.workspaceId, MAX_ID)
   return {
     ok: true,
     value: {
       projectId: projectId ?? null,
+      ...(workspaceId !== undefined ? { workspaceId } : {}),
       message,
       history: sanitizeHistory(raw.history),
       ...(pageContext ? { pageContext } : {}),

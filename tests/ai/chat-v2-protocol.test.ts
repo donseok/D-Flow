@@ -119,4 +119,16 @@ describe('chat v2 project scope hints', () => {
     expect(ctx(42)).not.toHaveProperty('workspaceId')
     expect(ctx({ id: 'x' })).not.toHaveProperty('workspaceId')
   })
+
+  it('요청 바깥의 workspaceId 도 같은 규칙 — 문자열·null 만, 그 밖은 버린다(판정은 라우트 관문, 과제 34)', () => {
+    const top = (workspaceId: unknown) => {
+      const r = sanitizeChatRequestV2({ projectId: null, message: '질문', history: [], workspaceId })
+      if (!r.ok) throw new Error('거절')
+      return r.value
+    }
+    expect(top('w-1')).toMatchObject({ workspaceId: 'w-1' })
+    expect(top(null)).toMatchObject({ workspaceId: null })
+    expect(top(42)).not.toHaveProperty('workspaceId')
+    expect(top(undefined)).not.toHaveProperty('workspaceId')
+  })
 })

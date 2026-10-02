@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { denyStatus } from '@/lib/authz/errors'
-import { requireSessionModule } from '@/lib/modules/gate'
+import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { runCommandPipeline } from '@/lib/ai/commands/pipeline'
 
@@ -11,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   if (!(await getSession())) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
 
-  let body: { projectId?: unknown; message?: unknown; targetId?: unknown }
+  let body: { projectId?: unknown; workspaceId?: unknown; message?: unknown; targetId?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -29,9 +28,9 @@ export async function POST(req: NextRequest) {
       kind: 'error', message: '프로젝트 화면에서만 명령을 사용할 수 있어요.',
     })
   }
-  // chatbot 관문(스펙 §4.2 챗 위젯 행) — 명령은 프로젝트 화면 전용이라 그 프로젝트로
-  const mod = await requireSessionModule(projectId, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
+  // chatbot 관문(스펙 §4.2 챗 위젯 행) — 명령은 프로젝트 화면 전용이라 그 프로젝트로(워크스페이스를 함께 실으면 그 프로젝트의 것이어야 한다)
+  const mod = await requireScopedSessionModule({ projectId, workspaceId: body.workspaceId }, 'chatbot')
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
 
   const { items } = await getComputedWbs(projectId)
   const proposal = await runCommandPipeline(message, items, targetId)

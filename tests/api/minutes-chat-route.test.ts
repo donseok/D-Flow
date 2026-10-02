@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(),
   streamArchiveAnswer: vi.fn(),
   streamDocAnswer: vi.fn(),
+  workspaceRefById: vi.fn(),
 }))
 const TEAMS = vi.hoisted((): Team[] => {
   const t = (code: string, workspaceId: string, projectId: string | null = null): Team =>
@@ -21,6 +22,8 @@ const TEAMS = vi.hoisted((): Team[] => {
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: mocks.getActor, resolveScope: mocks.resolveScope }))
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: mocks.getHiddenProjectIds }))
+// 플랫폼 관리자 비소속 워크스페이스의 존재 확인(과제 34 — 보기 축)
+vi.mock('@/lib/workspace/resolve', () => ({ workspaceRefById: mocks.workspaceRefById }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: mocks.createServerClient }))
 vi.mock('@/lib/ai/answer', () => ({ sanitizeHistory: () => [] }))
 vi.mock('@/lib/ai/minutes-answer', () => ({
@@ -40,6 +43,7 @@ vi.mock('@/lib/teams/source', async () => {
 import { POST } from '@/app/api/minutes/chat/route'
 import type { Team } from '@/lib/domain/teams'
 import { ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { makeActor, makeSuperuser } from '../fixtures/actor'
 
@@ -58,9 +62,11 @@ function folderClient() {
   b.then = (resolve: (v: unknown) => unknown) => Promise.resolve({ data: FOLDERS, error: null }).then(resolve)
   return { from: vi.fn(() => b) }
 }
-const archive = (filters: Record<string, unknown>) => new NextRequest('http://localhost/api/minutes/chat', {
+/** 보관함 요청 — 회의록 화면의 워크스페이스를 싣는다(과제 34, 기본 ws-a). workspaceId: undefined 면 싣지 않는다 */
+const WS_U = '00000000-0000-0000-7e57-000000001793'
+const archive = (filters: Record<string, unknown>, workspaceId: unknown = 'ws-a') => new NextRequest('http://localhost/api/minutes/chat', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ mode: 'archive', message: '결정 사항?', filters }),
+  body: JSON.stringify({ mode: 'archive', message: '결정 사항?', filters, ...(workspaceId === undefined ? {} : { workspaceId }) }),
 })
 const doc = (minuteId = 'm-1') => new NextRequest('http://localhost/api/minutes/chat', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -103,8 +109,10 @@ describe('/api/minutes/chat archive — 담당 필터는 호출자 워크스페�
 
   it('멤버십 없는 플랫폼 관리자는 전 워크스페이스의 팀으로 본다 — 필터가 조용히 무시되지 않는다', async () => {
     mocks.getActor.mockResolvedValue(makeSuperuser({ workspaceRoles: new Map() }))
-    expect((await POST(archive({ team: 'ERP' }))).status).toBe(200)
+    mocks.workspaceRefById.mockResolvedValue({ ok: true, ws: { id: WS_U, slug: 'acme', name: 'Acme' } })
+    expect((await POST(archive({ team: 'ERP' }, WS_U))).status).toBe(200)
     expect(passedFilters().team).toBe('ERP')
+    expect(mocks.streamArchiveAnswer).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: WS_U }))
   })
 
   it('담당 필터가 없으면 비공개 프로젝트 목록을 읽지 않는다', async () => {
@@ -112,10 +120,10 @@ describe('/api/minutes/chat archive — 담당 필터는 호출자 워크스페�
     expect(mocks.getHiddenProjectIds).not.toHaveBeenCalled()
   })
 
-  it('권한 조회 실패는 500 — 필터를 조용히 넓혀 답하지 않는다', async () => {
+  it('권한 조회 실패는 503(범위 관문) — 필터를 조용히 넓혀 답하지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.getActor.mockRejectedValue(new Error('db down'))
-    expect((await POST(archive({ team: 'PMO' }))).status).toBe(500)
+    expect((await POST(archive({ team: 'PMO' }))).status).toBe(503)
     expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
     spy.mockRestore()
   })
@@ -146,6 +154,13 @@ describe('/api/minutes/chat archive — 폴더 필터의 담당 루트는 그 �
     expect([...(passedFilters().folderIds as string[])].sort()).toEqual(['a-leaf', 'a-sub'])
   })
 
+  it('다른 워크스페이스의 폴더는 400 — 그 워크스페이스 검색에서 조용히 0건이 되지 않는다(과제 34)', async () => {
+    mocks.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([['ws-a', 'member'], ['ws-b', 'member']]) }))
+    const res = await POST(archive({ team: 'PMO', folderId: 'a-sub' }, 'ws-b'))
+    expect(res.status).toBe(400)
+    expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+
   it('다른 팀 루트 아래 폴더는 400 — 필터를 넓히지 않는다', async () => {
     const res = await POST(archive({ team: 'PMO', folderId: 'a-erp-sub' }))
     expect(res.status).toBe(400)
@@ -155,14 +170,43 @@ describe('/api/minutes/chat archive — 폴더 필터의 담당 루트는 그 �
 
 // minutes 모듈 관문(과제 20) — 두 모드의 판정 범위가 다르다(BRANCH_GATE): 보관함은 세션 유일 워크스페이스, 문서는 회의록 행의 워크스페이스.
 describe('/api/minutes/chat — minutes 모듈 관문(과제 20)', () => {
-  it('보관함 모드: minutes 가 꺼지면 404 이고 답을 만들지 않는다 — 세션 유일 워크스페이스로 판정', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+  it('보관함 모드: minutes 가 꺼지면 404 이고 답을 만들지 않는다 — 요청의 워크스페이스로 판정(과제 34)', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await POST(archive({}))
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'minutes')
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-a' }, 'minutes')
+    expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+  it('보관함 모드: 워크스페이스가 없으면 400 — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
+    const omitted = new NextRequest('http://localhost/api/minutes/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'archive', message: '결정 사항?', filters: {} }),
+    })
+    for (const req of [omitted, archive({}, null), archive({}, '')]) {
+      const res = await POST(req)
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: ERR_WORKSPACE_REQUIRED })
+    }
+    expect(requireModule).not.toHaveBeenCalled()
     expect(mocks.getActor).not.toHaveBeenCalled()
     expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['비소속', 'ws-b'],
+    ['형식 밖(대문자)', 'WS-A'],
+    ['형식 밖(줄바꿈)', 'ws-a\n'],
+    ['형식 밖(객체)', { id: 'ws-a' }],
+  ])('보관함 모드 적대 — %s 워크스페이스는 404, 관문·답 없음(과제 34)', async (_n, w) => {
+    const res = await POST(archive({ team: 'PMO' }, w))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: ERR_MISSING })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.streamArchiveAnswer).not.toHaveBeenCalled()
+  })
+  it('보관함 모드: 검색·AI 판정에 그 워크스페이스를 넘긴다(과제 34)', async () => {
+    expect((await POST(archive({}))).status).toBe(200)
+    expect(mocks.streamArchiveAnswer).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: 'ws-a' }))
   })
   it('문서 모드: 회의록 행의 워크스페이스가 꺼지면 404 이고 답을 만들지 않는다', async () => {
     mocks.resolveScope.mockResolvedValue({ ok: true, projectId: null, workspaceId: 'ws-a' })

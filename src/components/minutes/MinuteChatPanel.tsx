@@ -149,8 +149,9 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
   }, [scope, folders, folderWs])
   // 범위별 독립 스레드 — 전환해도 각 대화가 보존되고 LLM 컨텍스트가 섞이지 않는다.
   const doc = useMinutesChat((message, history) => ({ mode: 'doc', minuteId, message, history }))
+  // 보관함 Q&A 의 범위(D26, 과제 34) — 회의록 화면의 워크스페이스, 상세 화면이면 이 회의록의 워크스페이스. 없으면 서버가 400
   const archive = useMinutesChat((message, history) => ({
-    mode: 'archive', message, history,
+    mode: 'archive', message, history, workspaceId: folderWs ?? null,
     filters: { team: team === 'ALL' ? null : team, folderId, from: null, to: null },
   }))
   const chat = scope === 'doc' ? doc : archive

@@ -9,12 +9,8 @@ const ROOTS = ['src/app', 'src/components', 'src/lib']
 const EXCLUDE = new Set(['src/lib/modules/gate.ts', 'src/lib/modules/pageGate.ts', 'src/lib/modules/aiAvailable.ts', 'src/lib/authz/workspace.ts'])
 const isV1 = (f: string) => f.startsWith('src/app/api/v1/')
 
-export const TEMP: Record<string, { count: number; why: string }> = {
-  'src/lib/ai/minutes-answer.ts': { count: 1, why: 'UI-2b: 과제 34 — aiAvailable 범위' },
-  'src/app/api/track/route.ts': { count: 1, why: 'UI-2b: 과제 34 — 세션 라우트 workspaceId' },
-  'src/app/api/minutes/export/route.ts': { count: 3, why: 'UI-2b: 과제 34 — 세션 라우트 workspaceId' },
-  'src/app/api/minutes/chat/route.ts': { count: 1, why: 'UI-2b: 과제 34 — 세션 라우트 workspaceId' },
-}
+// UI-2b 과제 34 로 세션 라우트·minutes-answer 가 요청의 워크스페이스로 판정한다 — 임시 허용 0(V19)
+export const TEMP: Record<string, { count: number; why: string }> = {}
 
 describe('sole-workspace', () => {
   it('판정 호출·언급은 임시 허용 목록의 개수 그대로', () => {

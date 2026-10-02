@@ -67,7 +67,8 @@ function client(projects: string[], error: { message: string } | null = null) {
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(withCount(r)).then(res, rej)
     return b
   })
-  return { from }
+  // 범위 관문(과제 34)의 행위자 조회 — getActor 가 claims 의 sub 로 buildActor 를 부른다(위 네 축 표)
+  return { from, auth: { getClaims: async () => ({ data: { claims: { sub: 'u1' } } }) } }
 }
 
 describe('POST /api/chat/v2/stream composition', () => {
@@ -148,13 +149,14 @@ describe('POST /api/chat/v2/stream composition', () => {
     const response = await POST(request({
       projectId: null, message: '도와줘', history: [],
       pageContext: {
-        contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul',
+        contextVersion: 1, pathname: '/w/acme/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', workspaceId: 'ws-1',
       },
     }))
     expect(response.status).toBe(501)
     expect(await response.json()).toMatchObject({ code: 'CHAT_V2_UNSUPPORTED' })
     expect(mocks.getSession).toHaveBeenCalledOnce()
-    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    // 프로젝트 없는 질문의 범위 관문(과제 34)이 행위자(소속)를 한 번 읽는다 — 라우트의 접근 범위 조회(두 번째 세션 클라이언트)에는 가지 않는다
+    expect(mocks.createServerClient).toHaveBeenCalledTimes(1)
     expect(mocks.createDefaultRegistry).not.toHaveBeenCalled()
   })
 
@@ -162,7 +164,7 @@ describe('POST /api/chat/v2/stream composition', () => {
     const response = await POST(request({
       projectId: null, message: '그 회의 상세', history: [],
       pageContext: {
-        contextVersion: 1, pathname: '/meetings', domain: 'meetings', projectId: null,
+        contextVersion: 1, pathname: '/w/acme/meetings', domain: 'meetings', projectId: null, workspaceId: 'ws-1',
         selectedEntity: { type: 'meeting', id: 'm2' },
         selectedProjectId: 'p2', timezone: 'Asia/Seoul',
       },
@@ -205,7 +207,7 @@ describe('POST /api/chat/v2/stream composition', () => {
 
   it('대화 상태의 옛 엔터티가 허용 밖 프로젝트를 가리키면 그 pid 로 팀을 읽지 않는다', async () => {
     const response = await POST(request({
-      projectId: null, message: 'ERP 작업 현황 알려줘', history: [],
+      projectId: null, workspaceId: 'ws-1', message: 'ERP 작업 현황 알려줘', history: [],
       conversationState: {
         version: 1, lastDomains: ['wbs'],
         lastEntities: [{ type: 'wbs_item', id: 'item-9', ref: 'S1', projectId: 'p2', title: '설계' }],
@@ -220,45 +222,93 @@ describe('POST /api/chat/v2/stream composition', () => {
   it('1차 라우트가 legacy(501)면 팀을 읽지 않는다 — 스코프 조회 전 게이트 유지', async () => {
     const response = await POST(request({
       projectId: null, message: '도와줘', history: [],
-      pageContext: { contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul' },
+      pageContext: { contextVersion: 1, pathname: '/w/acme/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', workspaceId: 'ws-1' },
     }))
     expect(response.status).toBe(501)
-    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).toHaveBeenCalledTimes(1)   // 범위 관문의 행위자 조회뿐(과제 34)
     expect(teams.projectTeams).not.toHaveBeenCalled()
     expect(teams.visibleTeams).not.toHaveBeenCalled()
   })
 
   it('chatbot 모듈이 꺼지면 404 — 검증된 요청의 프로젝트로 판정하고 라우팅·스코프 조회 전에 멈춘다(과제 20)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await POST(request({ projectId: 'p1', message: '이번 주 회의 알려줘', history: [] }))
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED, code: 'MODULE_DISABLED' })
-    expect(requireSessionModule).toHaveBeenCalledWith('p1', 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'chatbot')
+    expect(requireSessionModule).not.toHaveBeenCalled()
     expect(router.routeChatRequest).not.toHaveBeenCalled()
     expect(mocks.createServerClient).not.toHaveBeenCalled()
   })
   it('화면 문맥의 프로젝트가 우선이다 — pageContext.projectId 로 판정(과제 20, P23)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await POST(request({
       projectId: null, message: '이번 주 회의 알려줘', history: [],
       pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul' },
     }))
     expect(res.status).toBe(404)
-    expect(requireSessionModule).toHaveBeenCalledWith('p1', 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'chatbot')
   })
-  it('프로젝트 힌트가 없으면 세션 유일 워크스페이스 — 강등(legacy 501) 경로도 관문을 지난다(과제 20, P23)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+  it('프로젝트 힌트가 없으면 요청의 워크스페이스(화면 문맥 우선, 소속 확인) — 강등(legacy 501) 경로도 관문을 지난다(과제 34, D26)', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await POST(request({
-      projectId: null, message: '도와줘', history: [],
-      pageContext: { contextVersion: 1, pathname: '/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul' },
+      projectId: null, workspaceId: 'ws-x', message: '도와줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/w/acme/projects', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', workspaceId: 'ws-1' },
     }))
     expect(res.status).toBe(404)
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'chatbot')
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED, code: 'MODULE_DISABLED' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-1' }, 'chatbot')
+    expect(requireSessionModule).not.toHaveBeenCalled()
+  })
+  it('프로젝트도 워크스페이스도 없으면 400 WORKSPACE_REQUIRED — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
+    const res = await POST(request({
+      projectId: null, message: '도와줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/account', domain: 'unknown', projectId: null, timezone: 'Asia/Seoul' },
+    }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'WORKSPACE_REQUIRED' })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    expect(router.routeChatRequest).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['비소속 워크스페이스', { workspaceId: 'ws-2' }],
+    ['형식 밖 워크스페이스(줄바꿈)', { workspaceId: 'ws-1\nx' }],
+    ['형식 밖 워크스페이스(65자)', { workspaceId: 'w'.repeat(65) }],
+  ])('적대 — %s 는 404 SCOPE_NOT_FOUND, 관문·라우팅 전에 멈춘다(과제 34)', async (_n, extra) => {
+    const res = await POST(request({
+      projectId: null, message: '도와줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/w/acme', domain: 'projects', projectId: null, timezone: 'Asia/Seoul', ...extra },
+    }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ code: 'SCOPE_NOT_FOUND' })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(router.routeChatRequest).not.toHaveBeenCalled()
+  })
+  it('적대 — 화면 문맥의 프로젝트와 다른 워크스페이스를 실으면 404 SCOPE_NOT_FOUND(조합 불일치, 과제 34)', async () => {
+    const res = await POST(request({
+      projectId: 'p1', message: '이번 주 회의 알려줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul', workspaceId: 'ws-2' },
+    }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ code: 'SCOPE_NOT_FOUND' })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(router.routeChatRequest).not.toHaveBeenCalled()
+  })
+  it('대조 — 같은 워크스페이스를 함께 실은 프로젝트 질문은 그 프로젝트로 통과한다', async () => {
+    const res = await POST(request({
+      projectId: 'p1', workspaceId: 'ws-1', message: '첨부파일 보여줘', history: [],
+      pageContext: { contextVersion: 1, pathname: '/p/p1/wbs', domain: 'wbs', projectId: 'p1', timezone: 'Asia/Seoul', workspaceId: 'ws-1' },
+    }))
+    expect(res.status).toBe(200)
+    await res.text()
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'chatbot')
   })
   it('env 로 꺼져 있으면 관문 전에 501(강등 신호 유지 — 과제 20)', async () => {
     vi.stubEnv('CHAT_V2_ENABLED', 'false')
     expect((await POST(request({ projectId: 'p1', message: 'x', history: [] }))).status).toBe(501)
     expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(requireModule).not.toHaveBeenCalled()
   })
 
   it('returns 501 when the explicit v2 kill switch is off', async () => {

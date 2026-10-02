@@ -124,10 +124,10 @@ describe('회의록 Q&A(minutes-answer.ts) — minutes', () => {
     expect(m.generateAnswerStream).not.toHaveBeenCalled()
     expect(m.createAdminClient).not.toHaveBeenCalled()
   })
-  it('streamArchiveAnswer: (null, { module: minutes }) — 보관함은 세션 유일 워크스페이스(P13), 거짓이면 결정형, LLM 스트림·admin 미호출', async () => {
+  it('streamArchiveAnswer: ({ workspaceId }, { module: minutes }) — 보관함은 라우트가 소속을 확인한 워크스페이스(과제 34, D26), 거짓이면 결정형, LLM 스트림·admin 미호출', async () => {
     m.createServerClient.mockResolvedValue({ from: vi.fn(() => query({ data: [], error: null })), rpc: vi.fn() })
-    expect(await readAll(await streamArchiveAnswer({ message: '요약해 줘', history: [], filters: {} }))).toContain('관련 회의록을 찾지 못했어요')
-    expect(calls()).toStrictEqual([[null, { module: 'minutes' }]])
+    expect(await readAll(await streamArchiveAnswer({ workspaceId: 'ws-a', message: '요약해 줘', history: [], filters: {} }))).toContain('관련 회의록을 찾지 못했어요')
+    expect(calls()).toStrictEqual([[{ workspaceId: 'ws-a' }, { module: 'minutes' }]])
     expect(m.generateAnswerStream).not.toHaveBeenCalled()
     expect(m.createAdminClient).not.toHaveBeenCalled()
   })

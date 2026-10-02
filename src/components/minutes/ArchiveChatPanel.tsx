@@ -7,17 +7,19 @@ import { ChatBubble, ChatComposer, TypingBubble, useMinutesChat } from './Minute
 import { linkifyMinutePaths } from './linkify'
 
 export function ArchiveChatPanel({
-  open, onClose, team, from, to,
+  open, onClose, workspaceId, team, from, to,
 }: {
   open: boolean
   onClose: () => void
+  /** 보관함 Q&A 의 범위(D26, 과제 34) — 회의록 화면의 슬러그 워크스페이스. 서버가 소속을 확인한다 */
+  workspaceId: string
   team: TeamCode | null
   from: string | null
   to: string | null
 }) {
   const { t } = useLocale()
   const { messages, loading, send, reset } = useMinutesChat((message, history) => ({
-    mode: 'archive', message, history, filters: { team, from, to },
+    mode: 'archive', message, history, workspaceId, filters: { team, from, to },
   }))
 
   // onClose는 소비자가 인라인 화살표로 넘기는 게 보통이라 identity가 렌더마다 바뀐다 —

@@ -14,6 +14,8 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import type { BotDomain, BotEntityRef, PageContextV1 } from '@/lib/ai/chat/protocol'
 import { parseScopePath, projectSegmentModule } from '@/lib/nav/active'
 import { MODULES, moduleDef } from '@/lib/modules/registry'
+import { requestWorkspaceId } from '@/lib/workspace/requestScope'
+import { useShellScope } from '@/components/app/ShellScope'
 
 const PROJECT_RE = /\/p\/([0-9a-fA-F-]{8,})/
 // 옛 /minutes/<id> 와 새 /w/<slug>/minutes/<id> 두 형식(D6)
@@ -86,15 +88,18 @@ function inferSelectedEntity(pathname: string, domain: BotDomain, searchParams: 
   return null
 }
 
-function buildUrlContext(pathname: string, searchParams: URLSearchParams): PageContextV1 {
+/** URL 문맥 + 셸 범위의 워크스페이스(D27·D26) — 프로젝트 화면은 null(프로젝트가 판정), 그 밖은 경로 슬러그와 맞는 게시 범위만(requestWorkspaceId) */
+function buildUrlContext(pathname: string, searchParams: URLSearchParams, workspaceId: string | null): PageContextV1 {
   const domain = inferDomain(pathname)
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const projectId = pathname.match(PROJECT_RE)?.[1] ?? null
   return {
     contextVersion: 1,
     pathname,
     domain,
-    projectId: pathname.match(PROJECT_RE)?.[1] ?? null,
+    projectId,
+    workspaceId: projectId ? null : workspaceId,
     selectedEntity: inferSelectedEntity(pathname, domain, searchParams),
     view: searchParams.get('view'),
     date: searchParams.get('date'),
@@ -118,9 +123,12 @@ function mergeContext(base: PageContextV1, entries: RegistrationEntry[]): PageCo
     }), {})
 
   const filters = override.filters === undefined ? base.filters : override.filters
+  const projectId = override.projectId === undefined ? base.projectId : override.projectId
   return {
     ...base,
     ...override,
+    // 프로젝트가 정해지면 워크스페이스를 싣지 않는다 — 판정은 프로젝트가 하고, 섞이면 서버가 조합 불일치(404)로 닫는다(과제 34)
+    workspaceId: projectId ? null : (override.workspaceId === undefined ? base.workspaceId : override.workspaceId),
     // Once a mounted page registers filters, its live UI state is authoritative.
     // In particular `{}` must clear stale query-string filters after an "전체" selection.
     filters: filters && Object.keys(filters).length ? filters : undefined,
@@ -134,6 +142,7 @@ export function BotPageContextProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/'
   const searchParams = useSearchParams()
   const searchKey = searchParams.toString()
+  const workspaceId = requestWorkspaceId(pathname, useShellScope())
   const registrations = useRef(new Map<symbol, RegistrationEntry>())
   const orderRef = useRef(0)
   const [revision, setRevision] = useState(0)
@@ -154,10 +163,10 @@ export function BotPageContextProvider({ children }: { children: ReactNode }) {
 
   const pageContext = useMemo(() => {
     const params = new URLSearchParams(searchKey)
-    return mergeContext(buildUrlContext(pathname, params), [...registrations.current.values()])
+    return mergeContext(buildUrlContext(pathname, params, workspaceId), [...registrations.current.values()])
     // revision invalidates memo when a registration changes; the value itself lives in a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchKey, revision])
+  }, [pathname, searchKey, revision, workspaceId])
 
   // register/unregister는 deps 없는 useCallback이라 API 객체는 마운트 동안 불변이다.
   const registrationApi = useMemo(() => ({ register, unregister }), [register, unregister])

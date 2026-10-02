@@ -136,6 +136,9 @@ export function AssistantChat() {
   const router = useRouter()
   const pageContext = useCurrentBotPageContext()
   const currentProjectId = pageContext.projectId
+  // 프로젝트 없는 질문의 범위(D26, 과제 34) — 화면 문맥이 셸 범위에서 고른 워크스페이스(프로젝트 화면이면 null). 모든 챗 요청에 싣는다
+  const currentWorkspaceId = pageContext.workspaceId ?? null
+  const scopeQuery = `projectId=${currentProjectId ?? ''}${currentWorkspaceId ? `&workspaceId=${encodeURIComponent(currentWorkspaceId)}` : ''}`
   const shellScope = useShellScope()
   const projectList = shellScope?.projects ?? []
   const currentProjectName = projectList.find(p => p.id === currentProjectId)?.name ?? null
@@ -204,7 +207,12 @@ export function AssistantChat() {
     setStreamStatus(null)
     setInput('')
     setCtx(null)
-    fetch(`/api/chat/context?projectId=${currentProjectId ?? ''}`, { cache: 'no-store' })
+    // 범위가 없으면 문맥을 묻지 않는다(서버 400) — 일반 환영문
+    if (!currentProjectId && !currentWorkspaceId) {
+      setMessages([{ id: nextId(), role: 'assistant', content: welcomeText(null, t) }])
+      return
+    }
+    fetch(`/api/chat/context?${scopeQuery}`, { cache: 'no-store' })
       .then(r => (r.ok ? (r.json() as Promise<BotContext>) : null))
       .then(c => {
         if (genRef.current !== gen) return // 그 사이 프로젝트 전환 → 폐기
@@ -222,10 +230,12 @@ export function AssistantChat() {
 
   useEffect(() => () => streamAbortRef.current?.abort(), [])
 
-  // 처음과 프로젝트 전환 때 모듈 관문만 확인한다. 전환 중에는 이전 판정을 유지한다.
+  // 처음과 프로젝트·워크스페이스 전환 때 모듈 관문만 확인한다. 전환 중에는 이전 판정을 유지한다(404 만 닫는다).
+  // 범위가 없으면(첫 게시 전·(global) 화면) 묻지 않고 판정을 바꾸지 않는다 — 서버는 400 이고 추측하지 않는다(과제 34). 게시가 오면 다시 돈다
   useEffect(() => {
+    if (!currentProjectId && !currentWorkspaceId) return
     let alive = true
-    fetch(`/api/chat/context?projectId=${currentProjectId ?? ''}&probe=1`, { cache: 'no-store' })
+    fetch(`/api/chat/context?${scopeQuery}&probe=1`, { cache: 'no-store' })
       .then((response) => {
         if (!alive) return
         if (response.status === 404) {
@@ -238,7 +248,8 @@ export function AssistantChat() {
       })
       .catch(() => { if (alive) setAvailable(true) })
     return () => { alive = false }
-  }, [currentProjectId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scopeQuery 는 두 값에서 만든다
+  }, [currentProjectId, currentWorkspaceId])
 
   // 탐침 결과를 레일 공급자에 싣는다 — 전역 바 아이콘(useAiRailButton)·WBS 전체 화면 툴바 토글이 읽는다. 레일 API 로 열 수 있을 때만
   // (레일로 그리거나, 좁아도 전체 화면 안 자리가 있을 때 — AA3). 그 밖의 좁은 화면은 FAB 가 진입점
@@ -311,7 +322,7 @@ export function AssistantChat() {
         const res = await fetch('/api/chat/command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: currentProjectId, message, targetId }),
+          body: JSON.stringify({ projectId: currentProjectId, workspaceId: currentWorkspaceId, message, targetId }),
         })
         if (!res.ok) return 'not_command' as const // 401/400 등은 스트리밍 경로의 기존 에러 처리로 폴백
         const proposal = (await res.json()) as CommandProposal
@@ -335,7 +346,7 @@ export function AssistantChat() {
         if (genRef.current === gen) setLoading(false) // ← 로딩 고착 방지 (stale이면 다른 세대 소유)
       }
     },
-    [currentProjectId],
+    [currentProjectId, currentWorkspaceId],
   )
 
   const send = useCallback(
@@ -359,6 +370,7 @@ export function AssistantChat() {
       try {
         const request: ChatRequestV2 = {
           projectId: currentProjectId,
+          workspaceId: currentWorkspaceId,
           message: text,
           history,
           pageContext,
@@ -378,7 +390,7 @@ export function AssistantChat() {
           res = await fetch('/api/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId: currentProjectId, message: text, history }),
+            body: JSON.stringify({ projectId: currentProjectId, workspaceId: currentWorkspaceId, message: text, history }),
             signal: abortController.signal,
           })
         }
@@ -499,7 +511,7 @@ export function AssistantChat() {
         }
       }
     },
-    [messages, loading, currentProjectId, pageContext, clearInput, t, requestProposal],
+    [messages, loading, currentProjectId, currentWorkspaceId, pageContext, clearInput, t, requestProposal],
   )
 
   const applyProposal = useCallback(

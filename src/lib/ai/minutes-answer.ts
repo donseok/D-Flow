@@ -103,8 +103,9 @@ export async function streamDocAnswer(input: {
   return llmOrFallbackStream(system, input.history, input.message, fallback, '', await aiAvailable({ minuteId: input.minuteId }, { module: 'minutes' }))
 }
 
-/** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. */
+/** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. 검색·AI 판정은 그 워크스페이스로(D26 — 라우트가 소속을 확인한 값) */
 export async function streamArchiveAnswer(input: {
+  workspaceId: string
   message: string; history: ChatMessage[]
   /** folderIds: 선택 폴더의 하위 트리 전체(자기 포함) — 라우트가 검증·확장을 끝낸 값. */
   filters: { team?: TeamCode | null; from?: string | null; to?: string | null; folderIds?: string[] | null }
@@ -125,13 +126,21 @@ export async function streamArchiveAnswer(input: {
         p_folder_ids: input.filters.folderIds ?? null,
       })
       if (error) console.error('[minutes] match_minute_documents 실패:', error.message)
-      matches = ((data as Record<string, unknown>[] | null) ?? [])
+      const found = ((data as Record<string, unknown>[] | null) ?? [])
         .filter(m => passesSimilarity(m.similarity as number)) // AI 어시스턴트 검색과 동일 컷오프(similarity.ts 단일 출처)
         .map(m => ({
           minuteId: m.minute_id as string, content: m.content as string,
           minuteDate: m.minute_date as string, teamCode: m.team_code as string,
           title: m.title as string, similarity: m.similarity as number,
         }))
+      // 벡터 RPC 는 워크스페이스 인자가 없다 — 찾은 회의록이 그 워크스페이스의 것인지 한 번 더 읽어 거른다(조회 실패면 버린다 — fail-closed)
+      if (found.length) {
+        const ids = [...new Set(found.map(m => m.minuteId))]
+        const own = await sb.from('minutes').select('id').in('id', ids).eq('workspace_id', input.workspaceId)
+        if (own.error) console.error('[minutes] 보관함 검색 워크스페이스 확인 실패 — 벡터 결과를 버린다:', own.error.message)
+        const keep = new Set(own.error ? [] : ((own.data ?? []) as { id: string }[]).map(r => r.id))
+        matches = found.filter(m => keep.has(m.minuteId))
+      }
     }
   }
 
@@ -141,6 +150,7 @@ export async function streamArchiveAnswer(input: {
   if (keywords.length) {
     const pat = ilikeOrPattern(keywords[0])
     let q = sb.from('minutes').select('id, minute_date, team_code, title')
+      .eq('workspace_id', input.workspaceId)
       .is('archived_at', null)
       .or(`title.ilike.${pat},body_md.ilike.${pat}`)
       .order('minute_date', { ascending: false }).limit(10)
@@ -171,5 +181,5 @@ export async function streamArchiveAnswer(input: {
   const fallback = sourceRows.length
     ? `관련 회의록이에요:\n${[...new Set(sourceRows.map(r => `• ${r.minuteDate} · ${r.teamCode} · ${r.title}`))].join('\n')}`
     : '관련 회의록을 찾지 못했어요. 담당·기간 필터를 넓히거나 다른 표현으로 물어보세요.'
-  return llmOrFallbackStream(system, input.history, input.message, fallback, footer, await aiAvailable(null, { module: 'minutes' }))
+  return llmOrFallbackStream(system, input.history, input.message, fallback, footer, await aiAvailable({ workspaceId: input.workspaceId }, { module: 'minutes' }))
 }

@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server'
 const A_PID = 'a0000000-0000-4000-8000-00000000000a'
 const B_PID = 'b0000000-0000-4000-8000-00000000000b'
 const A_TEAM = 'A-ERP'
+const W_A = '00000000-0000-0000-7e57-000000001781', W_B = '00000000-0000-0000-7e57-000000001782'
 
 const mocks = vi.hoisted(() => ({
   listProjectsWithState: vi.fn(),
@@ -15,7 +16,10 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(async () => ({ error: null })),
   teamCodes: vi.fn<(pid: string) => string[]>(() => ['A-ERP']),
   embedDocuments: vi.fn(async (docs: string[]) => docs.map(() => [0.1])),
+  getActor: vi.fn(),
 }))
+// 프로젝트 없는 질문의 범위 관문(과제 34)이 읽는 행위자 — 워크스페이스 W_B 소속, B_PID 는 W_B 의 것
+vi.mock('@/lib/authz', async (orig) => ({ ...(await orig<typeof import('@/lib/authz')>()), getActor: mocks.getActor }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'user-b' })) }))
 vi.mock('@/app/actions/project', () => ({
   listProjectsWithState: mocks.listProjectsWithState,
@@ -71,13 +75,17 @@ import { GET as contextGET } from '@/app/api/chat/context/route'
 import { ingestProject } from '@/lib/ai/ingest'
 import { loadProjectAnalysis } from '@/lib/ai/knowledge'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { makeActor } from '../fixtures/actor'
 
 const post = (url: string, body: unknown) =>
   new NextRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getActor.mockResolvedValue(makeActor({ userId: 'user-b', workspaceRoles: new Map([[W_B, 'member']]), projectWorkspace: new Map([[B_PID, W_B]]) }))
   mocks.listProjectsWithState.mockResolvedValue({ projects: [{ id: B_PID, name: 'B 프로젝트' }], degraded: false })
   mocks.visibleProjectRow.mockImplementation((id: unknown) => (id === B_PID ? { name: 'B 프로젝트' } : null))
 })
@@ -128,47 +136,91 @@ describe('레거시 챗 라우트 — 볼 수 없는 projectId 는 404, service_
 
   // chatbot 모듈 관문(과제 20) — 프로젝트 관문(legacyChatProjectGate) 뒤. 볼 수 있는 B 라도 모듈이 꺼지면 404 이고 답을 만들지 않는다.
   it('chatbot 모듈이 꺼지면 /api/chat 은 404 이고 답을 만들지 않는다(과제 20)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await chatPOST(post('http://l/api/chat', { projectId: B_PID, message: '진행 상황' }))
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireSessionModule).toHaveBeenCalledWith(B_PID, 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: B_PID }, 'chatbot')
     expect(mocks.teamCodes).not.toHaveBeenCalled()
   })
   it('chatbot 모듈이 꺼지면 /api/chat/stream 은 404 이고 스트림을 만들지 않는다(과제 20)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await streamPOST(post('http://l/api/chat/stream', { projectId: B_PID, message: '진행 상황' }))
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireSessionModule).toHaveBeenCalledWith(B_PID, 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: B_PID }, 'chatbot')
     expect(mocks.teamCodes).not.toHaveBeenCalled()
   })
   it('chatbot 모듈이 꺼지면 /api/chat/context 는 404 — probe=1 도 404 이고 문맥을 만들지 않는다(과제 20)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     const ctx = await contextGET(new NextRequest(`http://l/api/chat/context?projectId=${B_PID}`))
     expect(ctx.status).toBe(404)
     expect(await ctx.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
     const probe = await contextGET(new NextRequest(`http://l/api/chat/context?projectId=${B_PID}&probe=1`))
     expect(probe.status).toBe(404)
     expect(await probe.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireSessionModule).toHaveBeenCalledWith(B_PID, 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: B_PID }, 'chatbot')
     expect(mocks.teamCodes).not.toHaveBeenCalled()
   })
-  it('프로젝트 없는 전체 질문은 세션 유일 워크스페이스로 판정한다 — requireSessionModule(null)(과제 20, P13)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
-    const res = await chatPOST(post('http://l/api/chat', { message: '진행 상황' }))
+  it('프로젝트 없는 전체 질문은 요청의 워크스페이스로 판정한다 — 본문·쿼리 workspaceId(소속 확인, 과제 34·D26)', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await chatPOST(post('http://l/api/chat', { message: '진행 상황', workspaceId: W_B }))
     expect(res.status).toBe(404)
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'chatbot')
+    expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: W_B }, 'chatbot')
+    expect(requireSessionModule).not.toHaveBeenCalled()
+    const ctx = await contextGET(new NextRequest(`http://l/api/chat/context?workspaceId=${W_B}&probe=1`))
+    expect(ctx.status).toBe(404)
+    expect(await ctx.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
+  })
+  it('프로젝트도 워크스페이스도 없으면 세 라우트 모두 400 — 세션 유일 워크스페이스로 추측하지 않는다(과제 34)', async () => {
+    for (const res of [
+      await chatPOST(post('http://l/api/chat', { message: '진행 상황' })),
+      await streamPOST(post('http://l/api/chat/stream', { message: '진행 상황' })),
+      await contextGET(new NextRequest('http://l/api/chat/context?probe=1')),
+      await contextGET(new NextRequest('http://l/api/chat/context?projectId=&workspaceId=')),
+    ]) {
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: ERR_WORKSPACE_REQUIRED })
+    }
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.teamCodes).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['비소속(존재하는 남의 워크스페이스)', W_A],
+    ['형식 밖(대문자 변형)', W_B.toUpperCase()],
+    ['형식 밖(세미콜론)', `${W_B};x`],
+  ])('적대 — %s 워크스페이스는 세 라우트 모두 404, 관문·문맥 없음(과제 34)', async (_n, w) => {
+    for (const res of [
+      await chatPOST(post('http://l/api/chat', { message: '진행 상황', workspaceId: w })),
+      await streamPOST(post('http://l/api/chat/stream', { message: '진행 상황', workspaceId: w })),
+      await contextGET(new NextRequest(`http://l/api/chat/context?workspaceId=${encodeURIComponent(w)}`)),
+    ]) {
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: ERR_MISSING })
+    }
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.teamCodes).not.toHaveBeenCalled()
+  })
+  it('적대 — 볼 수 있는 프로젝트(B)와 다른 워크스페이스를 함께 실으면 404(조합 불일치), 같으면 통과(과제 34)', async () => {
+    mocks.getActor.mockResolvedValue(makeActor({ userId: 'user-b', workspaceRoles: new Map([[W_A, 'member'], [W_B, 'member']]), projectWorkspace: new Map([[B_PID, W_B]]) }))
+    const bad = await chatPOST(post('http://l/api/chat', { projectId: B_PID, workspaceId: W_A, message: '진행 상황' }))
+    expect(bad.status).toBe(404)
+    expect((await contextGET(new NextRequest(`http://l/api/chat/context?projectId=${B_PID}&workspaceId=${W_A}`))).status).toBe(404)
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(mocks.teamCodes).not.toHaveBeenCalled()
+    expect((await chatPOST(post('http://l/api/chat', { projectId: B_PID, workspaceId: W_B, message: '팀별 업무 정리해줘' }))).status).toBe(200)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: B_PID }, 'chatbot')
   })
   it('볼 수 없는 프로젝트는 모듈 판정 전에 404 — 프로젝트 관문이 먼저다(과제 20)', async () => {
     expect((await chatPOST(post('http://l/api/chat', { projectId: A_PID, message: '안녕' }))).status).toBe(404)
-    expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(requireModule).not.toHaveBeenCalled()
   })
   it('probe=1 은 관문만 지나고 문맥을 만들지 않는다(과제 20, P12)', async () => {
     const res = await contextGET(new NextRequest(`http://l/api/chat/context?projectId=${B_PID}&probe=1`))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(requireSessionModule).toHaveBeenCalledWith(B_PID, 'chatbot')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: B_PID }, 'chatbot')
     expect(mocks.teamCodes).not.toHaveBeenCalled()   // buildBotContext 가 돌면 B 의 팀 코드를 읽는다(아래 대조)
   })
   it('대조: probe 없는 context 는 문맥을 만든다 — 탐침 분기가 전부를 막는 것이 아니다(과제 20)', async () => {

@@ -11,6 +11,11 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWbsFields: vi
 import { AssistantChat, useAiRailButton } from '@/components/chat/AssistantChat'
 import { RightRailProvider, useRightRail } from '@/components/app/RightRail'
 import { BotPageContextProvider } from '@/components/chat/BotPageContextProvider'
+import { ShellScope, ShellScopeProvider } from '@/components/app/ShellScope'
+/** 셸 범위 게시(과제 34) — 프로젝트 없는 화면(/w/acme)의 탐침은 게시된 워크스페이스가 있어야 나간다 */
+const Scoped = ({ children }: { children: React.ReactNode }) => (
+  <ShellScopeProvider><ShellScope workspace={{ id: '00000000-0000-0000-7e57-000000001799', slug: 'acme', name: 'Acme' }} projectId={null} projects={[]} persist={false} />{children}</ShellScopeProvider>
+)
 
 function Bar() { return <div data-bar>{useAiRailButton()}</div> }
 let rail: ReturnType<typeof useRightRail> | null = null
@@ -35,7 +40,7 @@ const panelInRail = () => document.querySelector('#app-rail [aria-label="chat.di
 
 describe('AssistantChat — 레일 이관(D33·D56)', () => {
   it('① 1024 이상 + 레일 자리: FAB 없음, 전역 바 버튼 → 레일 안 패널', async () => {
-    render(<RightRailProvider><Bar /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><Bar /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await waitFor(() => expect(aiButton()).not.toBeNull())
     expect(fab()).toBeNull()
     fireEvent.click(aiButton()!)
@@ -43,7 +48,7 @@ describe('AssistantChat — 레일 이관(D33·D56)', () => {
   })
   it('② 1024 미만: FAB 이 있고, 저장 바가 보이면 FAB 를 그리지 않는다', async () => {
     h.wide = false
-    render(<RightRailProvider><Bar /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><Bar /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await waitFor(() => expect(fab()).not.toBeNull())
     expect(aiButton()).toBeNull()
     const bar = document.createElement('div'); bar.setAttribute('data-save-bar', '')
@@ -54,12 +59,12 @@ describe('AssistantChat — 레일 이관(D33·D56)', () => {
   })
   it('③ 탐침 404 면 FAB·버튼 둘 다 없다', async () => {
     h.probe = 404
-    render(<RightRailProvider><Bar /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><Bar /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
     expect(fab()).toBeNull(); expect(aiButton()).toBeNull()
   })
   it('④ 레일을 닫았다 다시 열어도 대화가 남는다', async () => {
-    render(<RightRailProvider><Bar /><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><Bar /><RailApi /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await waitFor(() => expect(aiButton()).not.toBeNull())
     fireEvent.click(aiButton()!)
     await waitFor(() => expect(panelInRail()?.textContent).toContain('chat.welcome.greeting'))
@@ -73,7 +78,7 @@ describe('AssistantChat — 레일 이관(D33·D56)', () => {
   })
   it('⑤ 레일 자리가 없으면(옛 셸) 넓어도 FAB·옛 패널 그대로', async () => {
     document.body.innerHTML = ''
-    render(<BotPageContextProvider><AssistantChat /></BotPageContextProvider>)
+    render(<Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped>)
     await waitFor(() => expect(fab()).not.toBeNull())
     fireEvent.click(fab()!)
     await waitFor(() => expect(document.querySelector('[role="dialog"][aria-label="chat.dialog"]')).not.toBeNull())
@@ -91,7 +96,7 @@ describe('AssistantChat — 전체 화면 안 AI(AA3)', () => {
   }
   it('1024 미만 + 전체 화면 열림: aiAvailable 이 켜지고(툴바 토글이 보인다), open("ai") 면 패널이 전체 화면 안 자리에 뜬다 — FAB 는 없다', async () => {
     h.wide = false
-    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><RailApi /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await waitFor(() => expect(fab()).not.toBeNull())
     expect(rail!.aiAvailable).toBe(false)                 // 전체 화면 밖 좁은 화면의 진입점은 FAB
     const { slot } = await openFs()
@@ -103,7 +108,7 @@ describe('AssistantChat — 전체 화면 안 AI(AA3)', () => {
     await waitFor(() => expect(slot.querySelector('[role="dialog"]')).toBeNull())
   })
   it('1024 이상 + 전체 화면: open("ai") 면 레일이 전체 화면 안 자리로 간다(기존 D56)', async () => {
-    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><RailApi /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await waitFor(() => expect(rail!.aiAvailable).toBe(true))
     const { slot } = await openFs()
     act(() => rail!.open('ai'))
@@ -111,7 +116,7 @@ describe('AssistantChat — 전체 화면 안 AI(AA3)', () => {
   })
   it('탐침 404 면 전체 화면에서도 aiAvailable 은 꺼진다', async () => {
     h.wide = false; h.probe = 404
-    render(<RightRailProvider><RailApi /><BotPageContextProvider><AssistantChat /></BotPageContextProvider></RightRailProvider>)
+    render(<RightRailProvider><RailApi /><Scoped><BotPageContextProvider><AssistantChat /></BotPageContextProvider></Scoped></RightRailProvider>)
     await openFs()
     await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
     expect(rail!.aiAvailable).toBe(false)

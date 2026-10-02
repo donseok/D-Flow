@@ -202,7 +202,8 @@ export function MinutesView({
   async function downloadAllMinutes() {
     setExportBusy(true)
     try {
-      const res = await fetch('/api/minutes/export')
+      // 그 워크스페이스의 회의록만(D26, 과제 34) — 서버가 소속을 확인한다
+      const res = await fetch(`/api/minutes/export?workspaceId=${encodeURIComponent(scope.workspaceId)}`)
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null
         toast({
@@ -440,6 +441,7 @@ export function MinutesView({
       )}
       {/* 트리 뷰는 화면이 전 기간이므로 챗 범위도 전 기간으로 일치시킨다(월 라벨 '전체 기간'과 정합) */}
       <ArchiveChatPanel open={chatOpen} onClose={() => setChatOpen(false)}
+        workspaceId={scope.workspaceId}
         team={teamOrNull}
         from={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[0]}
         to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />

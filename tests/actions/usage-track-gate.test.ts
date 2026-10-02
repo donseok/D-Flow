@@ -12,16 +12,25 @@ const { createServerClient } = vi.hoisted(() => ({
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
+// 프로젝트 없는 경로의 범위 관문(과제 34)이 읽는 행위자 — 워크스페이스 W 소속, 프로젝트 PID 는 W 의 것
+const getActorMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/authz', () => ({ getActor: getActorMock }))
 
 import { POST } from '@/app/api/track/route'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { makeActor } from '../fixtures/actor'
 
 const PID = '3f2504e0-4f89-11d3-9a0c-0305e82c3301'
+const W = '00000000-0000-0000-7e57-000000001771', WX = '00000000-0000-0000-7e57-000000001772'
 const req = (body: unknown) =>
   new Request('http://localhost/api/track', { method: 'POST', body: JSON.stringify(body) }) as never
 
 beforeEach(() => {
+  getActorMock.mockReset()
+  getActorMock.mockResolvedValue(makeActor({ workspaceRoles: new Map([[W, 'member']]), projectWorkspace: new Map([[PID, W]]) }))
   insert.mockClear()
   insert.mockResolvedValue({ error: null })
   createAdminClient.mockClear()
@@ -65,7 +74,7 @@ describe('기록 내용 — 본문을 신뢰하지 않는다', () => {
   beforeEach(() => { getClaimsMock.mockResolvedValue({ data: { claims: { sub: 'real-user' } } }) })
 
   it('사용자 id 는 쿠키의 것을 쓰고 본문의 user_id 는 무시한다', async () => {
-    const res = await POST(req({ path: '/minutes', user_id: 'spoofed', menu_key: 'spoofed' }))
+    const res = await POST(req({ path: '/minutes', workspaceId: W, user_id: 'spoofed', menu_key: 'spoofed' }))
     expect(res.status).toBe(200)
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       user_id: 'real-user',
@@ -141,7 +150,7 @@ describe('기록 내용 — 본문을 신뢰하지 않는다', () => {
 
   it('insert 실패는 삼키지 않고 500 으로 올린다', async () => {
     insert.mockResolvedValueOnce({ error: { message: 'boom' } } as never)
-    const res = await POST(req({ path: '/minutes' }))
+    const res = await POST(req({ path: '/minutes', workspaceId: W }))
     expect(res.status).toBe(500)
   })
 })
@@ -158,13 +167,45 @@ describe('usage 모듈 관문(과제 20, P19)', () => {
     expect(insert).not.toHaveBeenCalled()
     expect(createAdminClient).not.toHaveBeenCalled()
   })
-  it('프로젝트 없는 경로는 세션 유일 워크스페이스 — 유일하지 않거나 꺼지면 skipped(Review Focus 5)', async () => {
-    vi.mocked(requireSessionModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(await (await POST(req({ path: '/minutes' }))).json()).toMatchObject({ skipped: 'module_disabled' })
-    expect(requireSessionModule).toHaveBeenCalledWith(null, 'usage')
-    expect(requireModule).not.toHaveBeenCalled()
+  it('프로젝트 없는 경로는 요청의 워크스페이스(소속 확인) — 꺼지면 skipped(Review Focus 5, D26)', async () => {
+    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await (await POST(req({ path: '/w/acme/minutes', workspaceId: W }))).json()).toMatchObject({ skipped: 'module_disabled' })
+    expect(requireModule).toHaveBeenCalledWith({ workspaceId: W }, 'usage')
+    expect(requireSessionModule).not.toHaveBeenCalled()
     expect(insert).not.toHaveBeenCalled()
     expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('프로젝트도 워크스페이스도 없으면 400 — 세션 유일 워크스페이스로 추측하지 않는다(skipped 아님, 기록 없음)', async () => {
+    const res = await POST(req({ path: '/account' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: ERR_WORKSPACE_REQUIRED })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(requireSessionModule).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['비소속', WX],
+    ['형식 밖(줄바꿈)', `${W}\n`],
+    ['형식 밖(숫자)', 7],
+    ['형식 밖(대문자 변형)', W.toUpperCase()],
+  ])('적대 — %s 워크스페이스는 404 이고 관문·기록 없음', async (_n, workspaceId) => {
+    const res = await POST(req({ path: '/w/acme', workspaceId }))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: ERR_MISSING })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('적대 — 경로의 프로젝트와 다른 워크스페이스를 실으면 404(조합 불일치), 같으면 그 프로젝트로 기록', async () => {
+    getActorMock.mockResolvedValue(makeActor({ workspaceRoles: new Map([[W, 'member'], [WX, 'member']]), projectWorkspace: new Map([[PID, W]]) }))
+    expect((await POST(req({ path: `/p/${PID}/wbs`, workspaceId: WX }))).status).toBe(404)
+    expect(createAdminClient).not.toHaveBeenCalled()
+    expect((await POST(req({ path: `/p/${PID}/wbs`, workspaceId: W }))).status).toBe(200)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'usage')
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ project_id: PID }))
+  })
+  it('본문의 워크스페이스는 기록하지 않는다(관문에만)', async () => {
+    expect((await POST(req({ path: '/w/acme/minutes', workspaceId: W }))).status).toBe(200)
+    expect(insert).toHaveBeenCalledWith(expect.not.objectContaining({ workspace_id: expect.anything() }))
   })
   it('잘못된 이벤트 경로는 모듈 판정 전에 400 — 입력 모양 검사는 관문 앞(기존 계약)', async () => {
     expect((await POST(req({ path: `/p/${PID}/wbs`, eventName: 'wiki_search' }))).status).toBe(400)

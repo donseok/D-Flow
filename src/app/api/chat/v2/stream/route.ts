@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { jsonError } from '@/lib/api/http'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
@@ -17,12 +18,14 @@ import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
 import { planningSignals, projectHint, routeChatRequest, type RouteTeam } from '@/lib/ai/chat/router'
 import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
-import { requireSessionModule } from '@/lib/modules/gate'
+import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { projectTeams, visibleTeams } from '@/lib/teams/source'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_REQUEST_BYTES = 262_144
+/** 범위 관문 거부의 기계 코드(모듈 꺼짐 밖) — 상태별 */
+const SCOPE_CODE: Readonly<Record<number, string>> = { 400: 'WORKSPACE_REQUIRED', 401: 'UNAUTHENTICATED', 404: 'SCOPE_NOT_FOUND', 503: 'SCOPE_UNAVAILABLE' }
 
 function requestId(): string {
   return `req_${crypto.randomUUID().replace(/-/g, '')}`
@@ -60,8 +63,13 @@ export async function POST(req: NextRequest) {
   // 강등 경로도 설정을 한 번 읽는다(옛 챗도 같은 관문이라 꺼진 모듈이 강등으로 새지 않는다).
   // 관문이 스코프 검증(validateChatProjectScope) 앞이라, 허용 밖 프로젝트 힌트의 응답은 403 PROJECT_ACCESS_DENIED 가 아니라
   // 404 MODULE_DISABLED 가 된다(은닉 쪽 — 볼 수 없는 프로젝트의 설정은 0행이라 닫힌다). 과제 28 보고에 적는다.
-  const mod = await requireSessionModule(request.pageContext?.projectId ?? request.projectId, 'chatbot')
-  if (!mod.ok) return jsonError(mod.error, 404, 'MODULE_DISABLED')
+  // 프로젝트 없는 질문은 요청의 워크스페이스(화면 문맥 우선 — 셸 범위, 소속 확인, D26)로, 둘 다 없으면 400 WORKSPACE_REQUIRED(추측하지 않는다).
+  // 비소속·형식 밖·프로젝트와 다른 워크스페이스는 404 SCOPE_NOT_FOUND, 권한 조회 실패는 503.
+  const mod = await requireScopedSessionModule({
+    projectId: request.pageContext?.projectId ?? request.projectId,
+    workspaceId: request.pageContext?.workspaceId ?? request.workspaceId,
+  }, 'chatbot')
+  if (!mod.ok) return jsonError(mod.error, mod.status, mod.error === ERR_MODULE_DISABLED ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')
   const now = new Date()
   const plannedRoute = routeChatRequest(request, now)
   // Unsupported questions contain no v2 data and immediately fall back to the legacy bot. Keep this

@@ -1,12 +1,10 @@
 import { Readable } from 'node:stream'
+import type { NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { jsonError } from '@/lib/api/http'
-import { denyStatus } from '@/lib/authz/errors'
-import { requireSessionModule } from '@/lib/modules/gate'
+import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { seoulYmd } from '@/lib/domain/dates'
 import { createServerClient } from '@/lib/supabase/server'
-import { getActor } from '@/lib/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import {
   createMinutesExportArchive,
@@ -60,7 +58,7 @@ function mapRow(row: DbRow): MinuteExportRow {
  * UUID PK keyset으로 전 건을 읽는다. UI 트리의 1,000건 cap/offset pagination을 재사용하지 않는다.
  * 시작 시각 이후 생성된 행은 다음 export로 넘겨 한 번의 ZIP 범위를 고정한다.
  */
-async function loadAllMinutes(cutoffIso: string): Promise<MinuteExportRow[]> {
+async function loadAllMinutes(cutoffIso: string, workspaceId: string): Promise<MinuteExportRow[]> {
   const sb = await createServerClient()
   const rows: MinuteExportRow[] = []
   let cursor: string | null = null
@@ -69,6 +67,7 @@ async function loadAllMinutes(cutoffIso: string): Promise<MinuteExportRow[]> {
   for (;;) {
     let query = sb.from('minutes')
       .select(SELECT_COLUMNS)
+      .eq('workspace_id', workspaceId)
       .is('archived_at', null)
       .lte('created_at', cutoffIso)
       .order('id', { ascending: true })
@@ -100,20 +99,20 @@ async function loadAllMinutes(cutoffIso: string): Promise<MinuteExportRow[]> {
 }
 
 
-/** 로그인 사용자가 현재 열람 가능한 전역 회의록 본문을 분석용 ZIP으로 받는다. */
-export async function GET() {
+/** 로그인 사용자가 현재 열람 가능한 그 워크스페이스의 회의록 본문을 분석용 ZIP으로 받는다(?workspaceId= — 회의록 화면의 슬러그 워크스페이스). */
+export async function GET(req: NextRequest) {
   if (!(await getSession())) return jsonError('인증이 필요합니다.', 401)
-  // 전 회의록 ZIP 이라 대상 행이 없다 — 세션 유일 워크스페이스로 minutes 관문(P13). 첫 DB 접근 앞
-  const mod = await requireSessionModule(null, 'minutes')
-  if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
-  const actor = await getActor()
-  const sole = actor ? resolveSoleWorkspaceId(actor) : null
-  if (!sole?.ok) return jsonError('워크스페이스를 확인할 수 없습니다.', 403)
-  const { productName } = await loadDisplayBranding(sole.workspaceId)
+  // 대상 행이 없는 ZIP — 요청의 워크스페이스(소속 확인, D26)로 minutes 관문. 없으면 400(추측하지 않는다). 첫 DB 접근 앞.
+  // 브랜딩·행 거르기 모두 그 워크스페이스 — 두 워크스페이스 소속자의 ZIP 에 다른 워크스페이스 회의록이 섞이지 않는다.
+  const g = await requireScopedSessionModule({ projectId: null, workspaceId: req.nextUrl.searchParams.get('workspaceId') }, 'minutes')
+  if (!g.ok) return jsonError(g.error, g.status)
+  const workspaceId = g.workspaceId
+  if (!workspaceId) return jsonError('워크스페이스를 확인할 수 없습니다.', 400)   // 프로젝트 없는 판정의 통과는 늘 워크스페이스를 낸다
+  const { productName } = await loadDisplayBranding(workspaceId)
 
   const exportedAt = new Date()
   try {
-    const rows = await loadAllMinutes(exportedAt.toISOString())
+    const rows = await loadAllMinutes(exportedAt.toISOString(), workspaceId)
     if (rows.length === 0) return jsonError('내려받을 회의록이 없습니다.', 404)
 
     const { zip } = createMinutesExportArchive(rows, exportedAt, productName)

@@ -94,6 +94,13 @@ describe('MinuteChatPanel 범위 전환', () => {
     expect(lastBody()).not.toHaveProperty('minuteId')
   })
 
+  it('전체 회의록 탭 전송은 이 회의록의 워크스페이스를 싣는다 — 서버가 소속을 확인한다(과제 34, D26)', async () => {
+    await act(async () => root.render(withTeams(<MinuteChatPanel minuteId="m-1" workspaceId="ws-9" />)))
+    await act(async () => { tab('min.chat.scope.all').click() })
+    await send('결정 사항')
+    expect(lastBody()).toMatchObject({ mode: 'archive', workspaceId: 'ws-9' })
+  })
+
   it('범위 전환 후에도 각 스레드 대화가 보존된다', async () => {
     await mountPanel()
     await send('문서 질문')

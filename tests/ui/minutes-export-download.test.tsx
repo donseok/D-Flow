@@ -92,7 +92,7 @@ describe('MinutesView 전체 회의록 내려받기', () => {
 
     await flushClick(exportButton())
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/minutes/export')
+    expect(fetchMock).toHaveBeenCalledWith('/api/minutes/export?workspaceId=ws-1')   // 화면의 워크스페이스(과제 34)
     expect(createObjectUrl).toHaveBeenCalledWith(blob)
     expect(downloadedName).toBe('회의록_전체.zip')
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:minutes-export')
