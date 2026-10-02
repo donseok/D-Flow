@@ -17,7 +17,7 @@ vi.mock('@/components/chat/AssistantChat', () => ({ useAiRailButton: () => null 
 vi.mock('@/components/app/GlobalBar', () => ({ GlobalBar: (p: unknown) => { h.globalBar(p); return <header data-global-bar /> } }))
 vi.mock('@/components/app/WorkspaceNav', () => ({ WorkspaceNav: (p: unknown) => { h.wsNav(p); return <aside data-ws-nav /> } }))
 vi.mock('@/components/app/ProjectNav', () => ({ ProjectNav: (p: { projectSwitcher: React.ReactNode }) => { h.pNav(p); return <aside data-p-nav>{p.projectSwitcher}</aside> } }))
-vi.mock('@/components/app/ProjectSwitcher', () => ({ ProjectSwitcher: (p: unknown) => { h.pSwitcher(p); return <div data-p-switcher /> } }))
+vi.mock('@/components/app/ProjectSwitcher', () => ({ ProjectSwitcher: (p: unknown) => { h.pSwitcher(p); return <div data-p-switcher /> }, ProjectCrumbSwitcher: () => <div data-p-crumb-switcher /> }))
 vi.mock('@/components/app/WorkspaceSwitcher', () => ({ WorkspaceSwitcher: () => <div data-ws-switcher-stub /> }))
 vi.mock('@/components/app/MobileNavDrawer', () => ({ MobileNavDrawer: (p: unknown) => { h.drawer(p); return null } }))
 
@@ -95,6 +95,7 @@ describe('AppShell', () => {
     expect(last(h.pNav).workspaceHome).toBe('/w/acme')
     expect(last(h.pSwitcher)).toEqual(expect.objectContaining({ currentProjectId: P1, favoriteIds: [P2], recentIds: [P1], projectsFailed: false }))
     expect(last(h.globalBar).crumbs).toEqual({ scope: 'project', workspace: { name: 'Acme', href: '/w/acme' }, project: { name: '하나', href: `/p/${P1}/dashboard` }, screen: 't:nav.dashboard' })
+    expect(last(h.globalBar).projectSwitcher).toBeTruthy()          // AA1 — 브레드크럼 프로젝트 칸의 전환기
   })
   it('⑤ global — 워크스페이스 내비이되 활성 항목 없음(pathname 빈 값)·브레드크럼 화면 이름 없음', () => {
     h.pathname = '/account'

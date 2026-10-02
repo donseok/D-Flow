@@ -1,11 +1,13 @@
 'use client'
 import { useId, useMemo, useState } from 'react'
+import { ChevronsUpDown } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import { MODULE_LABEL } from '@/lib/modules/labels'
 import { withObjectParticle } from '@/lib/i18n/particle'
 import type { ModuleId } from '@/lib/modules/defaults'
 import type { ShellProject } from '@/lib/data/portal'
+import { usePopover } from './usePopover'
 
 const STATUS_LABEL: Record<string, string> = { ready: '준비', active: '진행', done: '완료', overdue: '지연', unknown: '확인 불가' }
 const DEGRADED_TOAST = '설정을 불러오지 못해 개요를 열었습니다'
@@ -14,10 +16,17 @@ const DEGRADED_TOAST = '설정을 불러오지 못해 개요를 열었습니다'
  * 프로젝트 전환기(★6, D41) — 셸이 가진 그 워크스페이스 목록을 클라이언트에서 거른다(⌘K 와 다르다). 고르면 서버가 같은 모듈 유지를 판정한다.
  * 즐겨찾기·최근 id 는 목록(현재 워크스페이스의 가시 프로젝트)에 있는 것만 그린다 — 다른 워크스페이스·숨김 프로젝트 id 는 조용히 빠진다(W14).
  */
-export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false }: {
+export interface ProjectSwitcherProps {
   currentProjectId: string | null; projects: ShellProject[]; favoriteIds: string[]; recentIds: string[]
   /** 셸 목록 조회 실패 — '일치하는 프로젝트가 없습니다' 대신 실패 문구(3원칙 ①) */
   projectsFailed?: boolean
+}
+
+export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false, inPopover = false, onChosen }: ProjectSwitcherProps & {
+  /** 브레드크럼 대화상자 안(AA1) — 열자마자 입력에 초점, 목록은 떠 있지 않고 입력 아래에 이어 그린다 */
+  inPopover?: boolean
+  /** 하나를 골라 이동을 시작했을 때(대화상자를 닫는다) */
+  onChosen?: () => void
 }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams(); const { toast } = useToast()
   const listId = useId(); const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [active, setActive] = useState(0)
@@ -37,6 +46,7 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
 
   async function choose(p: ShellProject) {
     setOpen(false)
+    onChosen?.()
     const query = sp.toString() ? `?${sp.toString()}` : ''
     const url = `/api/nav/switch-target?project=${encodeURIComponent(p.id)}&path=${encodeURIComponent(pathname)}&query=${encodeURIComponent(query)}`
     try {
@@ -67,14 +77,17 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
   }
   let n = -1
   return (
-    <div className="relative mb-2 px-1">
+    <div className={inPopover ? 'relative' : 'relative mb-2 px-1'}>
       <input role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
         aria-activedescendant={open && flat.length ? optId(Math.min(active, last)) : undefined} aria-label="프로젝트 전환"
         value={q} placeholder={currentProjectId ? byId.get(currentProjectId)?.name ?? '프로젝트' : '프로젝트'}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0) }} onKeyDown={onKey}
+        autoFocus={inPopover}
         className="h-9 w-full rounded-(--radius-control) border border-border-input bg-surface px-3 text-control" />
       {open && (
-        <div id={listId} role="listbox" aria-label="프로젝트" className="absolute left-1 right-1 top-full z-(--z-popover) mt-1 max-h-80 overflow-y-auto rounded-(--radius-panel) border border-border bg-surface-raised p-1 shadow-(--shadow-popover)">
+        <div id={listId} role="listbox" aria-label="프로젝트" className={inPopover
+          ? 'mt-1 max-h-80 overflow-y-auto p-1'
+          : 'absolute left-1 right-1 top-full z-(--z-popover) mt-1 max-h-80 overflow-y-auto rounded-(--radius-panel) border border-border bg-surface-raised p-1 shadow-(--shadow-popover)'}>
           {projectsFailed
             ? <div data-projects-failed className="px-2 py-1.5 text-meta text-danger">프로젝트 목록을 불러오지 못했습니다</div>
             : sections.length === 0 && <div className="px-2 py-1.5 text-meta text-fg-secondary">일치하는 프로젝트가 없습니다</div>}
@@ -88,6 +101,29 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
                 </div>) })}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 브레드크럼의 프로젝트 칸 전환기(AA1) — 워크스페이스 전환기와 같은 꼴(이름 + ⇅, 누르면 대화상자). 사이드바가 64px 레일인 1024~1279·명시 접힘에서도
+ * 프로젝트를 바꿀 수 있게 768 이상 전역 바에 늘 있다. 대화상자 안은 같은 콤보박스(같은 모듈 유지 판정 — D41)다. Esc·바깥 클릭은 닫고 트리거로 초점.
+ */
+export function ProjectCrumbSwitcher({ currentName, ...props }: ProjectSwitcherProps & { currentName: string }) {
+  const { open, setOpen, triggerRef, panelRef } = usePopover()
+  return (
+    <div className="relative flex min-w-0">
+      <button ref={triggerRef} type="button" data-project-switcher="crumb" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}
+        className="flex min-w-0 items-center gap-1.5 rounded-(--radius-control) px-2 py-1 hover:bg-surface-hover">
+        <span className="truncate text-control font-semibold text-fg">{currentName}</span>
+        <ChevronsUpDown size={14} aria-hidden className="shrink-0 text-fg-secondary" />
+      </button>
+      {open && (
+        <div ref={panelRef} role="dialog" aria-label="프로젝트 전환"
+          className="absolute left-0 top-full z-(--z-popover) mt-1 w-72 rounded-(--radius-panel) border border-border bg-surface-raised p-2 shadow-(--shadow-popover)">
+          <ProjectSwitcher {...props} inPopover onChosen={() => setOpen(false)} />
         </div>
       )}
     </div>

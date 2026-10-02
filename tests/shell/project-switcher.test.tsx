@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from './_dom'
 const h = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn(), pathname: '/p/p1/issues', search: 'view=board&q=x' }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: h.push }), usePathname: () => h.pathname, useSearchParams: () => new URLSearchParams(h.search) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
-import { ProjectSwitcher } from '@/components/app/ProjectSwitcher'
+import { ProjectCrumbSwitcher, ProjectSwitcher } from '@/components/app/ProjectSwitcher'
 
 const P = (id: string, name: string, status = 'active') => ({ id, name, status: status as 'active', isAdmin: false })
 const projects = [P('p1', 'Apollo'), P('p2', 'Borealis'), P('p3', 'Cygnus', 'done')]
@@ -103,3 +103,30 @@ describe('ProjectSwitcher(★6, D41)', () => {
   })
 })
 
+// AA1 — 1024~1279(레일 64px)·명시 접힘에서도 프로젝트 전환기에 닿게 브레드크럼의 프로젝트 칸에 둔다(워크스페이스 전환기와 같은 꼴)
+describe('ProjectCrumbSwitcher(AA1)', () => {
+  it('트리거는 현재 프로젝트 이름 + aria-haspopup·aria-expanded, 누르면 전환 대화상자 안 콤보박스에 초점', () => {
+    render(<ProjectCrumbSwitcher currentName="Apollo" currentProjectId="p1" projects={projects} favoriteIds={[]} recentIds={[]} />)
+    const trigger = document.querySelector('[data-project-switcher="crumb"]') as HTMLButtonElement
+    expect(trigger.textContent).toContain('Apollo'); expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe('프로젝트 전환')
+    expect(document.activeElement).toBe(screen.getByRole('combobox'))
+  })
+  it('고르면 전환 라우트로 이동하고 대화상자를 닫는다, Esc 는 닫고 트리거로 초점', async () => {
+    fetchMock().mockResolvedValue({ ok: true, json: async () => ({ href: '/p/p2/issues', fallbackModule: null }) })
+    render(<ProjectCrumbSwitcher currentName="Apollo" currentProjectId="p1" projects={projects} favoriteIds={[]} recentIds={[]} />)
+    const trigger = document.querySelector('[data-project-switcher="crumb"]') as HTMLButtonElement
+    fireEvent.click(trigger)
+    const input = screen.getByRole('combobox') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'bor' } }); fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(h.push).toHaveBeenCalledWith('/p/p2/issues'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull(); expect(document.activeElement).toBe(trigger)
+  })
+})

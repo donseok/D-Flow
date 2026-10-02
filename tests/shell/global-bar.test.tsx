@@ -25,6 +25,13 @@ describe('GlobalBar(★10, D28)', () => {
     const gl = renderToString(<GlobalBar {...base} scope="global" crumbs={{ scope: 'global', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: null }} />)
     expect(gl).not.toContain('워크스페이스 전체')
   })
+  it('AA1 — 프로젝트 범위의 브레드크럼 프로젝트 칸은 넘겨받은 전환기(없으면 개요 링크)', () => {
+    const crumbs = { scope: 'project' as const, workspace: { name: 'Acme', href: '/w/acme' }, project: { name: 'Apollo', href: '/p/p1/dashboard' }, screen: '이슈' }
+    const withSlot = renderToString(<GlobalBar {...base} scope="project" crumbs={crumbs} projectSwitcher={<button data-project-switcher="crumb">Apollo</button>} />)
+    expect(withSlot).toContain('data-project-switcher="crumb"'); expect(withSlot).not.toContain('href="/p/p1/dashboard"')
+    const plain = renderToString(<GlobalBar {...base} scope="project" crumbs={crumbs} />)
+    expect(plain).toContain('href="/p/p1/dashboard"')
+  })
   it('AI 아이콘은 넘겨받은 것만 그린다(탐침 404 면 셸이 넘기지 않는다 — D33)', () => {
     const none = renderToString(<GlobalBar {...base} scope="workspace" crumbs={{ scope: 'workspace', workspace: null, project: null, screen: null }} />)
     expect(none).not.toContain('data-ai-open')

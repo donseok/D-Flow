@@ -11,7 +11,7 @@ import { GlobalBar } from './GlobalBar'
 import { WorkspaceNav } from './WorkspaceNav'
 import { ProjectNav } from './ProjectNav'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
-import { ProjectSwitcher } from './ProjectSwitcher'
+import { ProjectCrumbSwitcher, ProjectSwitcher } from './ProjectSwitcher'
 import { MobileNavDrawer } from './MobileNavDrawer'
 import { DegradedNotice } from './DegradedNotice'
 import { useShellEnv } from './ShellEnv'
@@ -42,6 +42,10 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const projectSwitcher = p.scope === 'project' && known
     ? <ProjectSwitcher currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
     : null
+  // 브레드크럼의 프로젝트 칸(AA1) — 768 이상 늘 있다(사이드바가 64px 레일인 1024~1279·명시 접힘에서도 프로젝트를 바꿀 수 있게)
+  const projectCrumb = p.scope === 'project' && known && projectName
+    ? <ProjectCrumbSwitcher currentName={projectName} currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
+    : null
   const navBadges = p.scope === 'project'
     ? { 'p.agents': badges.projectApprovals, 'p.announcements': badges.projectUnreadAnnouncements }
     : { 'ws.my_work': badges.myWorkReview }
@@ -49,7 +53,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
     <div className="flex h-dvh flex-col bg-canvas">
       {p.accentCss && <style>{p.accentCss}</style>}
       <GlobalBar scope={p.scope} brand={p.brand} homeHref={home} identity={p.identity} staging={env.staging} aiButton={aiButton ?? undefined}
-        onOpenDrawer={() => setDrawer(true)} workspaceSwitcher={wsSwitcher ?? undefined}
+        onOpenDrawer={() => setDrawer(true)} workspaceSwitcher={wsSwitcher ?? undefined} projectSwitcher={projectCrumb ?? undefined}
         crumbs={{ scope: p.scope, workspace: known ? { name: p.workspace.name, href: home } : null, project: p.project && projectName ? { name: projectName, href: `/p/${p.project.id}/dashboard` } : null, screen: screenName }} />
       <div className="flex min-h-0 flex-1">
         {p.groups.length > 0 && (p.scope === 'project'
