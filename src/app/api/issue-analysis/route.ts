@@ -3,7 +3,7 @@ import { getDisplayName } from '@/lib/auth'
 import { requireProjectMember } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
 import { toProjectActorView } from '@/lib/domain/authz'
-import { jsonError } from '@/lib/api/http'
+import { configFailureResponse, jsonError } from '@/lib/api/http'
 import { loadSavedIssueAnalysisRun } from '@/lib/data/issueAnalysis'
 import { requireModule } from '@/lib/modules/gate'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const saved = await loadSavedIssueAnalysisRun(projectId, runId)
     if (!saved) return jsonError('저장된 이슈 분석 실행을 찾을 수 없습니다.', 404)
     const authorName = (await getDisplayName())?.trim() || '작성자'
-    // 생성일 라벨·파일명 날짜는 프로젝트 tz — 달력을 못 읽거나 손상이면 아래 catch 의 고정 문구 500(원문은 로그)
+    // 생성일 라벨·파일명 날짜는 프로젝트 tz — 손상이면 422 CALENDAR_INVALID·키, 조회 실패면 503(아래 catch — A-4 리뷰 N5)
     const tz = requireCalendar(await getProjectConfig(projectId)).timezone
     const plan = buildIssueAnalysisDeckPlan(saved.report, {
       projectName: saved.projectName,
@@ -68,6 +68,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (error instanceof IssueAnalysisPptRendererUnavailableError) {
       return jsonError(error.message, 503, error.code)
     }
+    const failed = configFailureResponse(error, 'issue-analysis')
+    if (failed) return failed
     console.error(
       '[issue-analysis] PPT 다운로드 실패:',
       error instanceof Error ? error.message : error,

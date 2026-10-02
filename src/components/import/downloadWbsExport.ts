@@ -38,6 +38,8 @@ export async function downloadWbsExport(
  *  정상 양식을 비우라는 틀린 처방이 나간다. 모르는 code 는 추측하지 않는다(null). code 가 없으면(옛 서버) 상태 코드 매핑.
  *  400 은 호출부로 갈린다: 접기(설정 화면)는 양식보다 깊은 WBS 뿐, 펼침(마법사)은 아웃라인 양식도 있다(api/export). */
 export function exportFailureKey(status: number | null, expand: boolean, code: string | null = null): DictKey | null {
+  // 달력 손상(A-4 리뷰 N5 — 라우트가 calendar.* 키 손상에 CALENDAR_INVALID 를 싣는다) — 단계 이름 문구로 잘못 안내하지 않는다
+  if (code === 'CALENDAR_INVALID') return 'settings.exportErrCalendar'
   if (code === 'CONFIG_INVALID' || code === 'CONFIG_REQUIRED') return 'settings.exportErrLevelLabels'
   if (code === 'PROFILE_CORRUPT') return 'settings.exportErrProfileCorrupt'
   // 팀 원천 실패(503)는 재시도할 만하다 — 제목만 띄우면 사용자가 일시 오류인지 알 수 없다(A2-2 리뷰 정확성 P3)

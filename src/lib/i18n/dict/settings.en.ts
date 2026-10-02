@@ -48,6 +48,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.clearExcelProfileFailed': 'Could not clear the layout',
   'settings.configConflict': 'Someone changed the settings first. Check the latest values and save again.',
   'settings.exportErrLevelLabels': 'The WBS level names setting is damaged or missing, so the export cannot be built — check the WBS level names in Settings.',
+  'settings.exportErrCalendar': 'The project calendar settings (time zone, working days, week start) are invalid, so the export cannot run. Fix them in the Calendar section of the settings and try again.',
   'settings.exportErrProfileCorrupt': 'The saved Excel layout is damaged — clear it with "Clear saved layout" in Settings.',
   'settings.exportErrProfileTooDeep': 'The WBS is deeper than the hierarchy columns of the saved Excel layout — clear it with "Clear saved layout" in Settings.',
   'settings.exportErrRetry': 'The server could not build the Excel file — please try again shortly.',

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 
 /**
  * 라우트 핸들러 공용 에러 응답 — 사본 3벌 정리(issue-analysis · minutes/export · chat/v2).
@@ -14,4 +15,21 @@ export function jsonError(error: string, status: number, code?: string): NextRes
     { error, ...(code ? { code } : {}) },
     { status, headers: { 'Cache-Control': 'no-store' } },
   )
+}
+
+/**
+ * 라우트의 설정·달력 실패 응답 한 꼴(A-4 리뷰 N5) — 클라이언트가 '설정 손상'과 '일시 장애'를 가를 수 있게 세 라우트(내보내기·보고서·
+ * 이슈 분석서)가 같이 쓴다. 달력 키(calendar.*) 손상 → configStatus + code 'CALENDAR_INVALID'·key, 다른 키 손상 → 그 코드·key,
+ * 설정 일시 조회 실패 → 503 고정 문구(원문은 로그). 설정 오류가 아니면 null — 호출부가 결함으로 처리한다.
+ */
+export function configFailureResponse(e: unknown, tag: string): NextResponse | null {
+  if (e instanceof ConfigKeyError) {
+    const code = e.key.startsWith('calendar.') ? 'CALENDAR_INVALID' : e.code
+    return NextResponse.json({ error: e.message, code, key: e.key }, { status: configStatus(e.code), headers: { 'Cache-Control': 'no-store' } })
+  }
+  if (e instanceof ConfigUnavailableError) {
+    console.error(`[${tag}] 프로젝트 설정 조회 실패`, e.message)
+    return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+  }
+  return null
 }

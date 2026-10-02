@@ -119,7 +119,7 @@ describe('GET /api/report — 프로젝트 설정', () => {
     mocks.getComputedWbs.mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.week_start'))
     const res = await GET(req())
     expect(res.status).toBe(422)
-    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.week_start)` })
+    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.week_start)`, code: 'CALENDAR_INVALID', key: 'calendar.week_start' })
     expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
   })
   it('팀 원천 실패는 503 고정 문구 — 보고서를 빈 팀 축으로 만들지 않는다(SP4 A2)', async () => {

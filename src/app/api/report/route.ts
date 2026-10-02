@@ -25,11 +25,11 @@ import { briefFactsHash, buildBriefFacts } from '@/lib/ai/brief'
 import { getAiBrief } from '@/lib/data/aiBriefs'
 import { projectTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
-import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/settings/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { valueOf } from '@/lib/settings/registry'
 import { stampIn } from '@/lib/domain/calendar'
+import { configFailureResponse } from '@/lib/api/http'
 
 // exceljs·템플릿 zip 읽기(fs)는 Node 전용 → Edge 런타임 금지.
 export const runtime = 'nodejs'
@@ -96,11 +96,8 @@ export async function GET(req: NextRequest) {
       areas = cfg.areas.weekly_section
       cal = requireCalendar(cfg)
     } catch (e) {
-      if (e instanceof ConfigUnavailableError) {
-        console.error('[report] 프로젝트 설정 조회 실패(시트 갈래):', e.message)
-        return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
-      }
-      if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message }, { status: configStatus(e.code) })
+      const failed = configFailureResponse(e, 'report(시트 갈래)')   // 손상 → 422 + code·key, 조회 실패 → 503(A-4 리뷰 N5)
+      if (failed) return failed
       throw e
     }
     const weekStart = weekKeyOf(cal.weekStart, week)                 // 임의 날짜 → 그 프로젝트 규칙의 키(SP5 P9)
@@ -138,18 +135,13 @@ export async function GET(req: NextRequest) {
     projectTeams(projectId).then((teams) => ({ ok: true as const, teams }), (e: unknown) => ({ ok: false as const, e })),
   ])
   if (!cfgRes.ok) {
-    if (cfgRes.e instanceof ConfigUnavailableError) {
-      console.error('[report] 프로젝트 설정 조회 실패:', cfgRes.e.message)
-      return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
-    }
+    const failed = configFailureResponse(cfgRes.e, 'report')
+    if (failed) return failed
     throw cfgRes.e
   }
   if (!wbsRes.ok) {
-    if (wbsRes.e instanceof ConfigKeyError) return NextResponse.json({ error: wbsRes.e.message }, { status: configStatus(wbsRes.e.code) })
-    if (wbsRes.e instanceof ConfigUnavailableError) {
-      console.error('[report] 프로젝트 설정 조회 실패(WBS):', wbsRes.e.message)
-      return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 })
-    }
+    const failed = configFailureResponse(wbsRes.e, 'report(WBS)')       // 달력 손상 → 422 CALENDAR_INVALID·key, 조회 실패 → 503(N5)
+    if (failed) return failed
     throw wbsRes.e
   }
   const { items, today, calendar } = wbsRes.w
@@ -159,7 +151,8 @@ export async function GET(req: NextRequest) {
   }
   let levelLabels: string[]
   try { levelLabels = valueOf(cfgRes.cfg, 'core.level_labels') } catch (e) {
-    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message }, { status: configStatus(e.code) })
+    const failed = configFailureResponse(e, 'report')   // 단계 이름 손상도 같은 꼴(code·key — N5)
+    if (failed) return failed
     throw e
   }
   // 명단·회의·공지를 못 읽었으면 '멤버·회의·공지 없는 보고서' 를 내려보내지 않는다(3원칙 ① — 조회 실패를 데이터 없음으로 위장하지 않는다).

@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import { makeMemberActor } from '../fixtures/actor'
 import { calSeoulMon } from '../helpers/calendarFixture'
-import { ConfigKeyError } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, CONFIG_MESSAGES } from '@/lib/settings/errors'
 import {
   buildIssueAnalysisInputSnapshot,
   buildIssueAnalysisReport,
@@ -187,15 +187,23 @@ describe('GET /api/issue-analysis', () => {
     }))
   })
 
-  it('프로젝트 달력이 손상이면 고정 문구 500 — 서울·UTC 로 대체하지 않고 원문은 로그로', async () => {
+  it('프로젝트 달력이 손상이면 422 CALENDAR_INVALID + 키 — 서울·UTC 로 대체하지 않는다(A-4 리뷰 N5 — 세 라우트 같은 꼴)', async () => {
     mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
     mocks.getProjectConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(422)
+    await expect(response.json()).resolves.toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.timezone)`, code: 'CALENDAR_INVALID', key: 'calendar.timezone' })
+    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
+  })
+
+  it('프로젝트 설정 조회 실패는 503 고정 문구(원문은 로그)', async () => {
+    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
+    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const response = await GET(request('?projectId=project-1&runId=run-1'))
     spy.mockRestore()
-    expect(response.status).toBe(500)
-    await expect(response.json()).resolves.toMatchObject({ error: '이슈 분석서 PPT를 생성하지 못했습니다.' })
-    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
   })
 
 })

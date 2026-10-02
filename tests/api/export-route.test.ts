@@ -126,7 +126,15 @@ describe('GET /api/export — 저장 양식 없음 → 표준(W22)', () => {
     mocks.getComputedWbs.mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone'))
     const res = await get('p-mine')
     expect(res.status).toBe(422)
-    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.timezone)`, code: 'CONFIG_INVALID', key: 'calendar.timezone' })
+    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.timezone)`, code: 'CALENDAR_INVALID', key: 'calendar.timezone' })
+  })
+  it('WBS 의 설정 조회 실패(getComputedWbs 의 ConfigUnavailableError)는 503 고정 문구 — 일반 500 이 아니다(A-4 리뷰 N5)', async () => {
+    mocks.getComputedWbs.mockRejectedValueOnce(new ConfigUnavailableError('휴일 조회 실패: boom'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await get('p-mine')
+    err.mockRestore()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
     expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
   })
   it('표준 경로의 빌더 거부는 결함 — 500 고정 문구와 로그(거부 문구 "저장된 양식 비우기"가 표준의 처방으로 나가지 않는다)', async () => {

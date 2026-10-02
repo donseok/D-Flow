@@ -12,6 +12,7 @@ import { ConfigKeyError, ConfigUnavailableError, configStatus } from '@/lib/sett
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { exportHolidayRows } from '@/lib/domain/holidayImport'
+import { configFailureResponse } from '@/lib/api/http'
 
 // 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
 const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.`
@@ -63,8 +64,9 @@ export async function GET(req: NextRequest) {
   try {
     wbs = await getComputedWbs(projectId)
   } catch (e) {
-    // 달력 손상은 설정 키 오류로 — 일반 500 이 아니라 core.level_labels 와 같은 configStatus·키(A-3 리뷰 P3)
-    if (e instanceof ConfigKeyError) return NextResponse.json({ error: e.message, code: e.code, key: e.key }, { status: configStatus(e.code) })
+    // 달력 손상 → 422 CALENDAR_INVALID·키, 설정 조회 실패 → 503 — 세 라우트 같은 꼴(A-3 리뷰 P3·A-4 리뷰 N5)
+    const failed = configFailureResponse(e, 'export(WBS)')
+    if (failed) return failed
     if (!(e instanceof TeamsUnavailableError)) throw e
     console.error('[export] 프로젝트 팀 조회 실패(WBS):', e.message, e.cause)
     return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })

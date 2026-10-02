@@ -95,3 +95,8 @@ it('fetch 가 던지면 ok:false(error·status null) — 던지지 않고 파일
   expect(URL.createObjectURL).not.toHaveBeenCalled()
   expect(err).toHaveBeenCalled()
 })
+
+it('exportFailureKey — 달력 손상(CALENDAR_INVALID)은 단계 이름 문구가 아니라 달력 문구(A-4 리뷰 N5)', () => {
+  expect(exportFailureKey(422, false, 'CALENDAR_INVALID')).toBe('settings.exportErrCalendar')
+  expect(exportFailureKey(422, false, 'CONFIG_INVALID')).toBe('settings.exportErrLevelLabels')
+})
