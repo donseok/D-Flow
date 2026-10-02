@@ -22,3 +22,24 @@ describe('#23 가져오기 — 글자·상태', () => {
     expect(src).toContain("aria-current={")
   })
 })
+
+const WEEKLY_COLOR_FILES = [
+  'src/components/weekly/SheetCell.tsx', 'src/components/weekly/WeeklyAiRewriteModal.tsx',
+  'src/components/weekly/WeeklyLintPanel.tsx', 'src/components/weekly/WeeklySheetView.tsx',
+]
+/** no-raw-color 의 PATTERNS 가 보지 않는 흑백 고정색·style 의 hex 리터럴까지 — 시트가 테마를 따른다(다크 대비 — D52·Q17) */
+const FIXED_COLOR = /(?<![\w-])(?:text|bg|border|outline|ring|fill|stroke)-(?:black|white)(?![\w-])|-\[#[0-9a-fA-F]{3,8}\]|rgba?\(|'#[0-9a-fA-F]{3,8}'/
+
+describe('#25 주간 — 색 토큰', () => {
+  it.each(WEEKLY_COLOR_FILES)('%s — 원색·흑백 고정색 0', (f) => { expect(read(f)).not.toMatch(FIXED_COLOR) })
+  it('no-raw-color 허용 목록에 주간 줄이 없고, 프로젝트 점 색 표의 사유는 SP5 다(스펙 §2.4)', () => {
+    const allow = read('tests/css/no-raw-color.test.ts')
+    expect(allow).not.toContain("'src/components/weekly/")
+    expect(allow).toMatch(/'src\/lib\/domain\/projectColors\.ts': \{[^}]*SP5/)
+  })
+  it('프레즌스 이름 칩은 배경·글자 짝(presenceStyle) — 흰 글자 고정이 없다(레인 B 인계 E)', () => {
+    const src = read('src/components/weekly/SheetCell.tsx')
+    expect(src).toContain('presenceStyle(peer.userId)')
+    expect(src).not.toContain('background: presenceColor(peer.userId)')
+  })
+})

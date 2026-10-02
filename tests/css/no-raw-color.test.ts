@@ -31,12 +31,8 @@ export const ALLOW: Record<string, Counts & { why: string }> = {
   'src/components/ui/DayPopover.tsx': { z: 2, why: '날짜 팝오버 내부 층 — 화면 소유 SP(UI-5)' },
   'src/components/wbs/RowDetailPanel.tsx': { z: 1, why: 'WBS 인스펙터 층 — UI-2b 레일(D56)' },
   'src/components/wbs/WbsGanttSheet.tsx': { z: 3, why: '작업 계획의 z 셋 — z-[25] 는 행 relative z-10 안, z-[45](진척 렌즈 fixed)·z-[60](툴바 토글)은 문서 층에서 셸(70) 아래로 경쟁하는 전역 층(U1b 리뷰 R2 P3) — UI-2b/SPU2 가 토큰으로(전체 화면 +1 은 UI-2b 과제 30 이 FAB 를 --z-rail 로 내리며 뺐다)' },
-  'src/components/weekly/SheetCell.tsx': { hex: 10, rgb: 1, palette: 1, why: '주간 시트(엑셀 모사) — SP4 화면 이행' },
-  'src/components/weekly/WeeklyAiRewriteModal.tsx': { palette: 12, why: '주간 AI 다시쓰기 — SP4 화면 이행' },
-  'src/components/weekly/WeeklyLintPanel.tsx': { palette: 8, why: '주간 점검 패널 — SP4 화면 이행' },
-  'src/components/weekly/WeeklySheetView.tsx': { hex: 4, palette: 12, why: '주간 시트(엑셀 모사) — SP4 화면 이행' },
   'src/lib/domain/issues.ts': { palette: 1, why: '이슈 도메인 색 표 — SP5b(상태 정의 파생)' },
-  'src/lib/domain/projectColors.ts': { palette: 6, why: '프로젝트 색 표 — SP4(팀·영역 색 이행)' },
+  'src/lib/domain/projectColors.ts': { palette: 6, why: '프로젝트 점 색 표(포트폴리오·내 회의) — SP5(회의 화면). 팀·영역 색이 아니다(SP4 스펙 §9)' },
 }
 
 describe('no-raw-color', () => {
