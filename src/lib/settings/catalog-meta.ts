@@ -31,18 +31,21 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   },
   'modules.enabled': A('verified', ['src/lib/modules/effective.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'workflow.stage_credits': A('wired', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0012_settings.sql'], ['tests/settings/registry.test.ts']),
-  // SP5 A(스펙 D44) — 두 스코프 공용 키 이름(메타는 키 이름 하나). 워크스페이스 값은 새 프로젝트의 초기값(seedFrom — 상속 아님),
-  // 프로젝트 값이 소비처의 원천이다. 과제 29 가 정의·편집(설정 화면 달력 절)·소비처·테스트 네 연결을 확인하고 verified 로 올렸다
+  // SP5 A(스펙 D44) — 두 스코프 공용 키 이름(메타는 키 이름 하나 — 스코프별 소비처 (나) 꼴은 SP5 B 마감 판정). 워크스페이스 값의 소비처는
+  // 새 프로젝트의 초기값(createProject 의 seedFrom — 상속 아님)과 워크스페이스 화면 달력(viewZone — merge 뒤 슬러그 워크스페이스), 프로젝트 값의
+  // 소비처는 load.ts·주간·봇 도구 등이다. 과제 29 가 정의·편집(설정 화면 달력 절)·소비처·테스트 네 연결을 확인하고 verified 로 올렸다.
+  // a6 리뷰 Q3 정정: data/usage.ts 는 p_timezone 을 받기만 하고 지금 호출부(/w/[slug]/usage)는 usageTimezone(null) = UTC 고정이다
+  // (워크스페이스 필터는 SP8) — 소비처에서 뺐다. defs/project.ts 는 정의·편집 파일이라 소비처가 아니다(→ actions/project.ts 의 seedFrom)
   'calendar.timezone': S5A('verified',
-    ['src/lib/calendar/load.ts', 'src/lib/settings/workspaceConfig.ts', 'src/app/(app)/p/[projectId]/weekly/page.tsx', 'src/lib/data/usage.ts'],
+    ['src/lib/calendar/load.ts', 'src/lib/settings/workspaceConfig.ts', 'src/app/(app)/p/[projectId]/weekly/page.tsx', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/domain/calendar.test.ts', 'tests/rls/calendar-parity.test.ts', 'tests/calendar/load.test.ts', 'tests/components/time-display-zone.test.tsx', 'tests/scripts/bootstrap-timezone.test.ts'],
   ),
   'calendar.working_days': S5A('verified',
-    ['src/lib/domain/calendar.ts', 'src/lib/calendar/load.ts', 'src/lib/domain/progress.ts'],
+    ['src/lib/domain/calendar.ts', 'src/lib/calendar/load.ts', 'src/lib/domain/progress.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/domain/calendar.test.ts', 'tests/rls/calendar-parity.test.ts', 'tests/components/calendar-first-column.test.tsx', 'tests/settings/calendar-keys.test.ts'],
   ),
   'calendar.week_start': S5A('verified',
-    ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/settings/defs/project.ts'],
+    ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
 }

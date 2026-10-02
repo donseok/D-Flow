@@ -180,6 +180,8 @@ export const WORKSPACE_DEFS = [
   defineSetting<'calendar.week_start', WeekStartDay>({
     key: 'calendar.week_start', scope: 'workspace', module: 'settings', default: 'sunday',
     parse: parseWeekStartDay,
+    // 위젯 정의는 스펙 D6 의 select(일·월 둘 중 하나 — tests/settings/calendar-keys 가 고정)다. 화면은 같은 두 값을 프로젝트와 같은
+    // WeekStartEditor 라디오로 그린다(CalendarSettingsPanel). 카탈로그 '편집 UI' 칸은 이 정의를 적는다 — custom 으로 바꾸려면 스펙 정오표(a6 리뷰 Q3)
     widget: { kind: 'select', options: [
       { value: 'sunday', labelKey: 'settings.calendar.week_start.sunday' }, { value: 'monday', labelKey: 'settings.calendar.week_start.monday' },
     ] },
