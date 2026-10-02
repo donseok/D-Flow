@@ -137,3 +137,19 @@ export class ConfigKeyError extends Error {
     this.key = key
   }
 }
+
+/**
+ * SETTINGS_CODE_IN_USE 의 detail(JSON) → 키별 문구(SP5 D53 — [RF3]). calendar.week_start 는 막는 주차(최대 20)를 싣는다.
+ * 모르는 모양이면 빈 목록 — 호출부가 일반 CONFIG_IN_USE 문구를 쓴다. 순수(throw 없음)
+ */
+export function inUseFieldErrors(detail: string | null): { key: string; message: string }[] {
+  if (!detail) return []
+  let d: unknown
+  try { d = JSON.parse(detail) } catch { return [] }
+  if (typeof d !== 'object' || d === null || Array.isArray(d)) return []
+  const o = d as Record<string, unknown>
+  if (o.key === 'calendar.week_start' && Array.isArray(o.weeks) && o.weeks.length > 0 && o.weeks.every((w) => typeof w === 'string')) {
+    return [{ key: 'calendar.week_start', message: `이미 만든 주간보고(${(o.weeks as string[]).join(', ')})가 새 주 시작 규칙과 맞지 않아 저장할 수 없습니다.` }]
+  }
+  return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []
+}

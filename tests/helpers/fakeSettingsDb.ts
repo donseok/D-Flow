@@ -18,6 +18,9 @@ export class FakeSettingsDb {
   teams: Record<string, unknown>[] = []
   wbsItems: Record<string, unknown>[] = []
   agentProjects: Record<string, unknown>[] = []
+  weeklyReports: Record<string, unknown>[] = []
+  /** apply_*_settings 의 ⑥ 참조 검사 흉내 — 값을 돌려주면 그 오류로 거부한다(SP5 — settings_ref_check 의 SETTINGS_CODE_IN_USE) */
+  refCheck: ((scope: { projectId: string } | { workspaceId: string }, set: Record<string, unknown>, unset: string[]) => { code: string; message: string; details: string | null } | null) | null = null
   history: FakeHistoryRow[] = []
   rpcCalls: { name: string; args: Record<string, unknown> }[] = []
   /** 다음 RPC 호출 직전에 한 번 실행 — 동시 편집을 흉내 낸다(다른 사용자가 먼저 저장) */
@@ -131,6 +134,7 @@ export class FakeSettingsDb {
       case 'teams': return this.teams
       case 'wbs_items': return this.wbsItems
       case 'agent_projects': return this.agentProjects
+      case 'weekly_reports': return this.weeklyReports
       case 'project_settings_history': return this.history.filter((h) => h.project_id) as unknown as Record<string, unknown>[]
       case 'workspace_settings_history': return this.history.filter((h) => h.workspace_id) as unknown as Record<string, unknown>[]
       default: throw new Error(`fake db: 모르는 표 ${table}`)
@@ -160,6 +164,7 @@ export class FakeSettingsDb {
     for (const [k, v] of Object.entries(set)) next[k] = v
     if (JSON.stringify(next) === JSON.stringify(doc.values)) return { data: { status: 'applied', revision: doc.revision, changed: 0 }, error: null }
     if (a.p_expected_revision !== doc.revision) return err('P0001', 'SETTINGS_REVISION_CONFLICT', String(doc.revision))
+    if (this.refCheck) { const e = this.refCheck(scope, set, unset); if (e) return { data: null, error: e } }
     const rev = doc.revision + 1
     const changedKeys = [...new Set([...Object.keys(set), ...unset])].filter((k) => JSON.stringify(next[k]) !== JSON.stringify(doc.values[k]))
     for (const k of changedKeys) {

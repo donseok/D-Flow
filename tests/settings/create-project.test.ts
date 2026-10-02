@@ -50,8 +50,9 @@ describe('createProject', () => {
     expect(r).toMatchObject({ ok: true, status: 'applied' })
     if (!r.ok) return
     const p = db.projects.get(r.projectId)!
-    expect(p.values).toEqual({ 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban', 'meetings', 'issues'] })   // wiki 는 minutes 미허용으로 빠진다
-    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(['create', 'create'])
+    expect(p.values).toEqual({ 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban', 'meetings', 'issues'],   // wiki 는 minutes 미허용으로 빠진다
+      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
+    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(5).fill('create'))
     expect(db.rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_name: 'Acme 신규', p_copy_from: null, p_actor: 'u-admin', p_command_id: CMD, p_schema_version: 1 })
     expect(h.refreshTeams).toHaveBeenCalledOnce(); expect(h.revalidatePath).toHaveBeenCalledWith('/projects')
   })
@@ -67,6 +68,7 @@ describe('createProject', () => {
     expect(db.projects.get(r.projectId)!.values).toEqual({
       'core.level_labels': ['P', 'T', 'A'], 'modules.enabled': ['kanban'],           // agents 미허용, wiki 는 minutes 없음
       'core.milestone_keywords': ['출시'], 'core.extra_axis_label': 'Track',
+      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }],
     })
     expect(db.history.filter((x) => x.project_id === r.projectId).every((x) => x.source === 'copy' && x.copied_from === SRC)).toBe(true)
   })

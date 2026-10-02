@@ -14,7 +14,9 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { refreshTeams } from '@/lib/teams/master'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
-import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
+import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, settingDef, valueOf, type WorkspaceSettingKey } from '@/lib/settings/registry'
+import { copyWeekStartRules } from '@/lib/settings/defs/project'
+import type { WeekStartRule } from '@/lib/domain/calendar'
 import { ERR_MODULES_ALLOWED_BROKEN, workspaceAllowed } from '@/lib/settings/validateConfig'
 import { intersectEnabledWithAllowed } from '@/lib/modules/saveRule'
 import { closeRequires } from '@/lib/modules/closure'
@@ -150,6 +152,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   const values: Record<string, unknown> = {}
   let allowed: ModuleId[]
   let candidate: ModuleId[] = settingDef('project', 'modules.enabled')!.default as ModuleId[]
+  let srcWeekStart: WeekStartRule[] | null = null
   try {
     const ws = await getWorkspaceConfig(workspaceId, { client: admin })
     allowed = workspaceAllowed(ws)                                   // 손상이면 ConfigKeyError — 아래 catch 가 결과로 바꾼다
@@ -175,8 +178,18 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
         else if (s.status === 'set') values[def.key] = s.value
       }
       if (broken.length) return invalidInput('원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.', broken)
+      const sw = src.keys['calendar.week_start']
+      srcWeekStart = sw.status === 'set' || sw.status === 'default' ? sw.value : null
       const srcEnabled = src.keys['modules.enabled']
       candidate = srcEnabled.status === 'set' || srcEnabled.status === 'default' ? srcEnabled.value : candidate
+    }
+    // SP5 A — 생성 시 복사(seedFrom, 상속 아님 — 개정 §4.2.2·§2.8.7). 복사면 원본의 set 값이 위에서 먼저 들어 있다 — 주 시작만 원본 마지막 규칙의
+    // 요일 하나로(전환 이력은 옮기지 않는다). 워크스페이스 값이 손상이면 valueOf 가 ConfigKeyError — 아래 catch 가 결과로 바꾼다(아무것도 만들지 않는다)
+    if (srcWeekStart) values['calendar.week_start'] = copyWeekStartRules(srcWeekStart)
+    for (const def of PROJECT_SETTINGS) {
+      if (!def.seedFrom || def.key in values) continue
+      const wsValue = valueOf(ws, def.seedFrom.key as WorkspaceSettingKey)
+      values[def.key] = def.seedFrom.map ? def.seedFrom.map(wsValue) : wsValue
     }
   } catch (e) {
     if (e instanceof ConfigUnavailableError) return unavailableLogged('설정 판독', ctx, e.message)

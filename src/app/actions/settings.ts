@@ -9,6 +9,7 @@ import { requireProjectAdmin, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { canEditSetting, type Actor } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/validate'
+import { todayIn } from '@/lib/domain/calendar'
 import { adminFor, type AdminClient } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -16,12 +17,13 @@ import { agentsNewlyEnabled, backfillWorkspaceAgentOrders, syncAgentsModule } fr
 import { moduleKeyRule } from '@/lib/modules/saveRule'
 import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
-import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, inUseFieldErrors, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
 import { changedKeysSince, findCommandOutcome, listHistory, type SettingsHistoryRow } from '@/lib/settings/history'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef, type SettingKey, type SettingScope } from '@/lib/settings/registry'
 import { availableOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
 import { getWorkspaceConfig, type WorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { listWeekKeys } from '@/lib/settings/weekKeys'
 import { commandDigestInput } from '@/lib/settings/write'
 import type { KeyState } from '@/lib/settings/resolve'
 
@@ -54,7 +56,8 @@ interface ScopeAdapter {
   history: SettingsHistoryScope
   admin: () => AdminClient                     // 호출마다 새 객체(재기준 판독이 캐시를 비켜 가게)
   load: (admin: AdminClient) => Promise<Loaded>
-  editCtx: EditCtx
+  /** 편집 문맥(입력≠저장 키의 toStored 가 받는다) — 판독 결과에서 만든다(프로젝트 tz 의 오늘 — SP5 §4.2) */
+  editCtx: (loaded: Loaded) => EditCtx
   validate: (admin: AdminClient, next: Record<string, unknown>, loaded: Loaded, allowed: readonly ModuleId[]) => Promise<ValidateResult>
   rpc: (admin: AdminClient, args: RpcArgs) => PromiseLike<{ data: unknown; error: DbErrorLike | null }>
   afterApplied: (admin: AdminClient, prev: Doc, set: Record<string, unknown>, actor: Actor) => Promise<{ ok: true } | { ok: false; what: string; error: string }>
@@ -166,7 +169,12 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     }
     if (notAllowed.length) return invalid(commandId, 'CONFIG_MODULE_NOT_ALLOWED', notAllowed)
     // 4. 저장 형태
-    const built = await buildStored(defs, patch.set as Record<string, unknown>, doc, a.editCtx)
+    let built: Awaited<ReturnType<typeof buildStored>>
+    try { built = await buildStored(defs, patch.set as Record<string, unknown>, doc, a.editCtx(loaded)) } catch (e) {
+      // toStored 의 선행 판독(주간보고 주 키) 실패 — 0건으로 위장하지 않고 중단한다(3원칙 ②)
+      if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '저장 형태 판독', e.message)
+      throw e
+    }
     if (!built.ok) return invalid(commandId, 'CONFIG_INVALID', built.fieldErrors)
     // 5. 교차 불변식
     let v: ValidateResult
@@ -189,7 +197,14 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         console.error('[settings] RPC 거부', { scope: a.history, commandId, token: mapped.token })     // 교착·배포 엇갈림 — 문구는 맞아도 횟수·명령 id 는 로그에만
         return { ok: false, kind: k.kind, code: mapped.code, commandId, error: mapped.message, retryable: k.retryable }
       }
-      if (k.kind === 'invalid' && INVALID_CODES.includes(mapped.code)) return invalid(commandId, mapped.code as InvalidCode, [], mapped.message)
+      if (k.kind === 'invalid' && INVALID_CODES.includes(mapped.code)) {
+        if (mapped.code === 'CONFIG_IN_USE') {
+          // 참조 검사(settings_ref_check)의 detail 을 키 오류로 — calendar.week_start 는 막는 주차를 보인다(SP5 D53·[RF3])
+          const fe = inUseFieldErrors(mapped.detail)
+          return invalid(commandId, 'CONFIG_IN_USE', fe, fe[0]?.message ?? mapped.message)
+        }
+        return invalid(commandId, mapped.code as InvalidCode, [], mapped.message)
+      }
       throw new Error(`[settings] 설정 RPC 가 낼 수 없는 오류: ${mapped.token}`)
     }
     const r = rpcOutcome(data)
@@ -244,7 +259,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   return 'ok' in after ? after : conflict(after)
 }
 
-function projectAdapter(projectId: string): ScopeAdapter {
+function projectAdapter(projectId: string, now: Date): ScopeAdapter {
   return {
     scope: 'project', history: { projectId },
     admin: () => adminFor({ projectId }).admin,
@@ -253,7 +268,12 @@ function projectAdapter(projectId: string): ScopeAdapter {
       const ws = await getWorkspaceConfig(cfg.workspaceId, { client: admin })
       return { cfg, ws, doc: { revision: cfg.revision, schemaAhead: cfg.schemaAhead, keys: cfg.keys } }
     },
-    editCtx: { scope: 'project', projectId, today: new Date().toISOString().slice(0, 10) },
+    // 오늘 = 프로젝트 tz 의 날짜(SP5 §4.2 — UTC 날짜는 서울·LA 에서 하루 어긋난다). tz 가 손상이면 '' — weekStartToStored 가 fail-closed
+    editCtx: (loaded) => {
+      const tz = stateValue(loaded.cfg?.keys['calendar.timezone'])
+      return { scope: 'project', projectId, today: typeof tz === 'string' ? todayIn(tz, now) : '',
+        loadWeekKeys: () => listWeekKeys(adminFor({ projectId }).admin, projectId) }
+    },
     validate: async (admin, next, { ws, cfg }, allowed) => validateProjectConfig(next, await loadProjectValidateDeps(admin, cfg!, ws, { allowed })),
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
@@ -277,7 +297,7 @@ function workspaceAdapter(workspaceId: string): ScopeAdapter {
       const ws = await getWorkspaceConfig(workspaceId, { client: admin })
       return { cfg: null, ws, doc: { revision: ws.revision, schemaAhead: ws.schemaAhead, keys: ws.keys } }
     },
-    editCtx: { scope: 'workspace', workspaceId },
+    editCtx: () => ({ scope: 'workspace', workspaceId }),
     validate: async (_admin, next) => validateWorkspaceConfig(next, { workspaceId }),
     rpc: (admin, x) => admin.rpc('apply_workspace_settings', { p_workspace_id: workspaceId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
@@ -298,7 +318,8 @@ export async function updateProjectSettings(projectId: string, patch: SettingsPa
   if (typeof projectId !== 'string' || !isUuidLike(projectId)) return invalid(commandId, 'CONFIG_INVALID', [], `${CONFIG_MESSAGES.CONFIG_INVALID}: projectId`)
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return denied(commandId, g.error)
-  return runCommand(projectAdapter(projectId), g.actor, patch)
+  const now = new Date()                                         // 진입에서 한 번(계획 P8)
+  return runCommand(projectAdapter(projectId, now), g.actor, patch)
 }
 
 export async function updateWorkspaceSettings(workspaceId: string, patch: SettingsPatch): Promise<SettingsCommandResult> {
