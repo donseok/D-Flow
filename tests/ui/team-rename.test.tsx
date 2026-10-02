@@ -73,6 +73,71 @@ describe('#15 공용 팀 관리 — 개명 입력·팀 색 칩', () => {
   })
 })
 
+describe('개명 입력의 세부(B-2 리뷰 P3 — 붙여넣기 자름·IME·포커스·오류 연결)', () => {
+  const key = (el: Element, init: KeyboardEventInit) => act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init })) })
+  it('40자를 넘는 이름을 조용히 자르지 않는다 — 입력에 길이 상한이 없고, 그대로 서버에 보내 서버의 길이 문구를 보인다', async () => {
+    h.updateTeam.mockResolvedValue({ ok: false, error: '팀 이름은 40자 이하여야 합니다.' })
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    const input = q<HTMLInputElement>('[data-team-rename-input]')!
+    expect(input.hasAttribute('maxlength')).toBe(false)
+    const long = '가'.repeat(41)
+    type(input, long)
+    await save()
+    expect(h.updateTeam).toHaveBeenCalledWith(RES.id, { name: long })
+    expect(q(`[data-team-row="${RES.id}"] [role="alert"]`)!.textContent).toContain('40자 이하')
+  })
+  it('한글 IME 조합 중 Enter 는 저장하지 않는다 — 조합이 끝난 Enter 한 번만 저장한다', async () => {
+    h.updateTeam.mockResolvedValue({ ok: true })
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    const input = q<HTMLInputElement>('[data-team-rename-input]')!
+    type(input, '연구개발')
+    await key(input, { key: 'Enter', isComposing: true })
+    expect(h.updateTeam).not.toHaveBeenCalled()
+    await key(input, { key: 'Enter' })
+    expect(h.updateTeam).toHaveBeenCalledTimes(1)
+  })
+  it('저장 중 다시 저장해도 액션은 한 번 — 재진입 가드', async () => {
+    let resolve!: (v: { ok: boolean }) => void
+    h.updateTeam.mockImplementation(() => new Promise((r) => { resolve = r }))
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    const input = q<HTMLInputElement>('[data-team-rename-input]')!
+    type(input, '연구개발')
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+    })
+    expect(h.updateTeam).toHaveBeenCalledTimes(1)
+    await act(async () => { resolve({ ok: true }) })
+  })
+  it('저장·취소 뒤 포커스는 그 행의 연필 버튼으로 돌아온다', async () => {
+    h.updateTeam.mockResolvedValue({ ok: true })
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    await key(q<HTMLInputElement>('[data-team-rename-input]')!, { key: 'Escape' })
+    expect(document.activeElement).toBe(q(`[data-team-rename="${RES.id}"]`))
+    await startRename(RES.id)
+    type(q<HTMLInputElement>('[data-team-rename-input]')!, '연구개발')
+    await save()
+    expect(document.activeElement).toBe(q(`[data-team-rename="${RES.id}"]`))
+  })
+  it('오류 문구는 입력과 aria-describedby·aria-invalid 로 이어진다', async () => {
+    h.updateTeam.mockResolvedValue({ ok: false, error: '같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다.' })
+    await render(<TeamsManager teams={[OPS, RES]} workspaceId={WS} />)
+    await startRename(RES.id)
+    const input = q<HTMLInputElement>('[data-team-rename-input]')!
+    expect(input.getAttribute('aria-invalid')).not.toBe('true')
+    type(input, 'ops')
+    await save()
+    const alert = q<HTMLElement>(`[data-team-row="${RES.id}"] [role="alert"]`)!
+    expect(alert.id).not.toBe('')
+    expect(input.getAttribute('aria-describedby')).toBe(alert.id)
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+  })
+})
+
 describe('설정 팀 절 — 개명 입력', () => {
   it('전용 팀 행의 개명은 updateProjectTeam(projectId, id, { name })', async () => {
     h.updateProjectTeam.mockResolvedValue({ ok: true })
