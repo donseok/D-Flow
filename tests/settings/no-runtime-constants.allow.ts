@@ -39,7 +39,7 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/lib/domain/attendance.ts': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },
   'src/app/actions/meetings.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
   'src/components/meetings/MeetingFormModal.tsx': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
-  'src/lib/domain/meetings.ts': { patterns: ['MEETING_CATEGORIES', '+09:00'], removedBy: 'SP5' },
+  'src/lib/domain/meetings.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
   'src/lib/minutes/externalApi.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
   'src/app/actions/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   'src/lib/domain/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
@@ -50,8 +50,6 @@ export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removed
   'src/components/chat/AssistantChat.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/components/settings/ProjectInviteManager.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/components/wiki/WikiShared.tsx': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/lib/domain/announcements.ts': { patterns: ['+09:00'], removedBy: 'SP5' },
   'src/lib/domain/dates.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
-  'src/lib/report/issues/deckPlan.ts': { patterns: ['Asia/Seoul'], removedBy: 'SP5' },
   'src/lib/domain/officeChatter.ts': { patterns: ['9 * 3600_000'], removedBy: 'SP5' },
 }

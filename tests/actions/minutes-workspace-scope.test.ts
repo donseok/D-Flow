@@ -28,6 +28,8 @@ vi.mock('@/lib/authz', async () => ({
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: (...a: unknown[]) => createServerClient(...(a as [])) }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+// 녹취 보정의 범위 tz 해석(설정 조회)은 이 파일의 관심 밖 — 옛 기대값(서울 +9)을 그대로 두려고 서울로 고정한다(SP5 과제 20)
+vi.mock('@/lib/minutes/timeFix.server', () => ({ minuteScopeTimezone: vi.fn(async () => 'Asia/Seoul') }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/ai/minutes-ingest', () => ({ ingestMinute: vi.fn() }))
 vi.mock('@/lib/ai/minutes-insights', () => ({

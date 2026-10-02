@@ -17,6 +17,8 @@ const memberActor = makeMemberActor('p1', [])
 const viewerActor = makeActor()
 const superuserActor = { ...memberActor, isSuperuser: true }
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+// 녹취 보정의 범위 tz 해석(설정 조회)은 이 파일의 관심 밖 — 옛 기대값(서울 +9)을 그대로 두려고 서울로 고정한다(SP5 과제 20)
+vi.mock('@/lib/minutes/timeFix.server', () => ({ minuteScopeTimezone: vi.fn(async () => 'Asia/Seoul') }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: adminMocks.createAdminClient,

@@ -98,7 +98,7 @@ export const ISSUE_SEVERITY_META: Record<
   low:    { labelKey: 'issue.severity.low',    chip: 'bg-neutral-weak text-neutral' },
 }
 
-/** 지연 = 기한 경과(당일 제외) + 미해결. today 는 'YYYY-MM-DD'(Asia/Seoul) — 호출부가 계산해 내려준다. */
+/** 지연 = 기한 경과(당일 제외) + 미해결. today 는 'YYYY-MM-DD'(프로젝트 calendar.timezone 의 오늘) — 호출부가 계산해 내려준다. */
 export function isOverdue(issue: Pick<Issue, 'dueDate' | 'status'>, today: string): boolean {
   if (!issue.dueDate || issue.status === 'resolved') return false
   return issue.dueDate < today

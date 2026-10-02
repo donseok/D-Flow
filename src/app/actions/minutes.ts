@@ -32,6 +32,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { correctMinuteBodyTime } from '@/lib/minutes/timeFix'
+import { minuteScopeTimezone } from '@/lib/minutes/timeFix.server'
 import { resolveTeamRootFolderId, refileMinuteAfterProjectChange, loadFolderSnapshot } from '@/lib/minutes/folders'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { activeTeamCodesForMinuteScope, teamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
@@ -50,8 +51,8 @@ export interface MinuteActionResult {
   ok: boolean
   error?: string
   id?: string
-  /** 녹취툴 시간대(+9h) 보정이 적용됐으면 보정 전/후 시각. UI 토스트용. */
-  timeFix?: { from: string; to: string }
+  /** 녹취툴 시간대 보정이 적용됐으면 보정 전/후 시각과 옮겨 간 tz. UI 토스트용. */
+  timeFix?: { from: string; to: string; tz: string }
 }
 
 type Sb = Awaited<ReturnType<typeof createServerClient>>
@@ -289,9 +290,15 @@ export async function createMinute(
   // sb 는 사용자 세션 클라이언트라(admin 아님) resolveTeamRootFolderId 는 읽기만 한다 —
   // 프로젝트 루트가 아직 없으면(지연 생성 미적용) null → 미분류 폴백으로 등록 자체는 막지 않는다.
   const effectiveFolderId = folderId ?? await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId, targetWs)
-  // 녹취툴 산출물이면 시간 줄 +9h(UTC→KST) 보정 — DB·다운스트림 전부 보정본 사용
-  const fix = correctMinuteBodyTime(input.bodyMd)
-  if (fix.corrected) console.info(`[minutes] 시간 보정 적용: ${fix.from} → ${fix.to} (${input.title.trim()})`)
+  // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·다운스트림 전부 보정본 사용(스펙 D13 ④)
+  // 범위 달력을 못 읽으면 쓰기 전 선행 조회 실패 — 중단한다(서울·UTC 로 대체하지 않는다)
+  let scopeTz: string
+  try { scopeTz = await minuteScopeTimezone({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs }) } catch (e) {
+    console.error('[minutes] 회의록 범위 달력 판독 실패', { workspaceId: targetWs, projectId: resolvedProject.projectId ?? null, cause: String(e) })
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  const fix = correctMinuteBodyTime(input.bodyMd, { timeZone: scopeTz, fallbackDate: input.minuteDate })
+  if (fix.corrected) console.info(`[minutes] 시간 보정 적용: ${fix.from} → ${fix.to} (${fix.tz}, ${input.title.trim()})`)
   const bodyMd = fix.body
   const createdByName = displayNameFrom(user.user_metadata, user.email)
   const adm = adminOr('버전 저장 설정을 확인하세요.')
@@ -350,7 +357,7 @@ export async function createMinute(
         : wikiJobId === null ? Promise.resolve(null) : processMinuteWikiJob(wikiJobId),
     ])
   })
-  return { ok: true, id: minuteId, timeFix: fix.corrected ? { from: fix.from!, to: fix.to! } : undefined }
+  return { ok: true, id: minuteId, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined }
 }
 
 export async function updateMinuteMeta(
@@ -683,16 +690,27 @@ export async function replaceMinuteBody(
   if (bodyMd.length > 100_000) return { ok: false, error: '본문은 100,000자 이하여야 합니다.' }
   if (!/\.(md|markdown)$/i.test(file.fileName)) return { ok: false, error: '.md 파일만 가능합니다.' }
   const sb = await createServerClient()
-  const own = await checkOwner(sb, id, g.actor)
+  // minute_date 는 녹취 보정의 fallbackDate — 소유권 확인과 같은 왕복에 싣는다
+  const own = await checkOwner(sb, id, g.actor, { extra: 'minute_date' })
   if (!own.ok) return { ok: false, error: own.error }
   const { projectId } = own.scope
   // 경로 scope 는 DB 의 회의록 행(워크스페이스·현재 프로젝트, resolveScope) — 클라이언트 입력을 믿지 않는다.
   if (!isMinuteFilePathValid(own.scope, id, file.filePath, 'minutes')) {
     return { ok: false, error: '잘못된 파일 경로입니다.' }
   }
-  // 녹취툴 산출물이면 시간 줄 +9h(UTC→KST) 보정 — DB·재매칭·재인제스트 전부 보정본 사용
-  const fix = correctMinuteBodyTime(bodyMd)
-  if (fix.corrected) console.info(`[minutes] 본문 교체 시간 보정 적용: ${fix.from} → ${fix.to} (id=${id})`)
+  // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·재매칭·재인제스트 전부 보정본 사용(스펙 D13 ④)
+  const minuteDate = own.row.minute_date
+  if (typeof minuteDate !== 'string') {
+    console.error('[replaceMinuteBody] 회의록 날짜를 읽지 못했다', { id })
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  let scopeTz: string
+  try { scopeTz = await minuteScopeTimezone({ projectId: own.scope.projectId, workspaceId: own.scope.workspaceId }) } catch (e) {
+    console.error('[replaceMinuteBody] 회의록 범위 달력 판독 실패', { id, workspaceId: own.scope.workspaceId, projectId: own.scope.projectId, cause: String(e) })
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  const fix = correctMinuteBodyTime(bodyMd, { timeZone: scopeTz, fallbackDate: minuteDate })
+  if (fix.corrected) console.info(`[minutes] 본문 교체 시간 보정 적용: ${fix.from} → ${fix.to} (${fix.tz}, id=${id})`)
   const body = fix.body
 
   const adm = adminOr('버전 저장 설정을 확인하세요.')
@@ -740,7 +758,7 @@ export async function replaceMinuteBody(
         : wikiJobId === null ? Promise.resolve(null) : processMinuteWikiJob(wikiJobId),
     ])
   })
-  return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to! } : undefined }
+  return { ok: true, timeFix: fix.corrected ? { from: fix.from!, to: fix.to!, tz: fix.tz! } : undefined }
 }
 
 /** 첨부 확정 가드(0011 minute_files_attachment_guard)의 거부 사유 → 사용자 문구. 모르는 사유는 원문을 싣지 않는다. */

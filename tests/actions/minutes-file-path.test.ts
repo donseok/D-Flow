@@ -11,6 +11,8 @@ vi.mock('@/lib/authz', async () => ({
   resolveScope: (await import('../helpers/resolve-scope-mock')).resolveScopeVia(() => createServerClient()),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+// 녹취 보정의 범위 tz 해석(설정 조회)은 이 파일의 관심 밖 — 옛 기대값(서울 +9)을 그대로 두려고 서울로 고정한다(SP5 과제 20)
+vi.mock('@/lib/minutes/timeFix.server', () => ({ minuteScopeTimezone: vi.fn(async () => 'Asia/Seoul') }))
 vi.mock('next/server', () => ({ after: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: adminMocks.createAdminClient }))
 vi.mock('@/lib/minutes/teamScope', async () => (await import('../helpers/team-scope-mock')).teamScopeMock())
@@ -65,7 +67,7 @@ function fakeDb(result: { data?: unknown; error?: { message: string } | null },
   return { client: { from: vi.fn(() => b) }, insert }
 }
 const row = (over: Record<string, unknown> = {}) =>
-  ({ created_by: 'u1', archived_at: null, project_id: P, workspace_id: W, body_md: '본문', ...over })
+  ({ created_by: 'u1', archived_at: null, project_id: P, workspace_id: W, body_md: '본문', minute_date: '2026-07-30', ...over })
 
 beforeEach(() => {
   getSession.mockReset(); getActor.mockReset(); createServerClient.mockReset()

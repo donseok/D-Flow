@@ -134,6 +134,12 @@ describe('summarizeMeetings', () => {
     expect(s.today).toBe(1)
     expect(s.upcoming7d).toBe(2) // 07-03(포함) ~ 07-09: a,b
   })
+  it('date-only 비교 — 오늘·7일 창은 날짜 문자열로 판정한다(시간대 무관)', () => {
+    const occ = expandMeetings(
+      ['2026-10-03', '2026-10-04', '2026-10-10', '2026-10-11'].map((d, i) => mtg(`m${i}`, d)), [], '2026-10-01', '2026-10-31',
+    )
+    expect(summarizeMeetings(occ, '2026-10-04')).toEqual({ today: 1, upcoming7d: 2, total: 4 })
+  })
 })
 
 describe('meetingEditHref', () => {

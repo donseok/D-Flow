@@ -96,17 +96,29 @@ describe('summarizeAnnouncements', () => {
       ann('c', '2026-06-25T14:59:59+00:00'),          // = 06-25 23:59 KST, 창 밖
       ann('d', '2026-07-02T00:00:00+00:00'),
     ]
-    expect(summarizeAnnouncements(items, '2026-07-02')).toEqual({ total: 4, pinned: 1, recent7d: 3 })
+    expect(summarizeAnnouncements(items, '2026-07-02', 'Asia/Seoul')).toEqual({ total: 4, pinned: 1, recent7d: 3 })
   })
 
   it('KST 이른 아침(00:00–08:59)에 등록된 경계일 공지도 창 안이다', () => {
     // UTC 자정 기준이었다면 빠졌을 케이스: 06-26 05:00 KST = 06-25T20:00Z
     const items = [ann('a', '2026-06-25T20:00:00+00:00')]
-    expect(summarizeAnnouncements(items, '2026-07-02').recent7d).toBe(1)
+    expect(summarizeAnnouncements(items, '2026-07-02', 'Asia/Seoul').recent7d).toBe(1)
   })
 
   it('빈 배열은 전부 0', () => {
-    expect(summarizeAnnouncements([], '2026-07-02')).toEqual({ total: 0, pinned: 0, recent7d: 0 })
+    expect(summarizeAnnouncements([], '2026-07-02', 'Asia/Seoul')).toEqual({ total: 0, pinned: 0, recent7d: 0 })
+  })
+})
+
+describe('summarizeAnnouncements — 최근 7일 경계는 그 tz 의 자정(스펙 §4.4)', () => {
+  const at = (createdAt: string) => ann('x', createdAt)
+  it('서울: 10-04 오늘이면 09-28 00:00 KST(= 09-27T15:00Z) 이상', () => {
+    const items = [at('2026-09-27T14:59:59Z'), at('2026-09-27T15:00:00Z')]
+    expect(summarizeAnnouncements(items, '2026-10-04', 'Asia/Seoul').recent7d).toBe(1)
+  })
+  it('LA: 같은 오늘이라도 경계는 09-28 00:00 PDT(= 09-28T07:00Z)', () => {
+    const items = [at('2026-09-28T06:59:59Z'), at('2026-09-28T07:00:00Z')]
+    expect(summarizeAnnouncements(items, '2026-10-04', 'America/Los_Angeles').recent7d).toBe(1)
   })
 })
 

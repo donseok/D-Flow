@@ -647,7 +647,7 @@ export function MinuteViewer({
       if (res.timeFix) {
         toast({
           title: t('min.timeFix.title'),
-          description: `${t('min.timeFix.desc')}: ${res.timeFix.from} → ${res.timeFix.to}`,
+          description: `${t('min.timeFix.desc')}: ${res.timeFix.from} → ${res.timeFix.to} (${res.timeFix.tz})`,
           variant: 'info',
         })
       }

@@ -56,6 +56,8 @@ export interface IssueAnalysisDeckMeta {
   authorName: string
   authorTeam: string
   generatedAt: string
+  /** 생성일 라벨의 시간대(프로젝트 calendar.timezone) */
+  timeZone: string
 }
 
 export interface IssueAnalysisDeckIssue {
@@ -224,11 +226,11 @@ export function normalizeIssueAnalysisMultilineText(value: string): string {
     .replace(/^\n+|\n+$/g, '')
 }
 
-function formatDateInSeoul(value: string): string {
+function formatDateIn(value: string, timeZone: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) throw new Error('이슈 분석서 생성일시가 올바르지 않습니다.')
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
+    timeZone,
     year: '2-digit',
     month: '2-digit',
     day: '2-digit',
@@ -1022,7 +1024,7 @@ export function buildIssueAnalysisDeckPlan(
   const authorName = compact(meta.authorName)
   const authorTeam = compact(meta.authorTeam)
   const authorLine = compact([authorTeam, authorName].filter(Boolean).join(' '))
-  const dateLabel = formatDateInSeoul(meta.generatedAt)
+  const dateLabel = formatDateIn(meta.generatedAt, meta.timeZone)
   if (!projectName) throw new Error('이슈 분석서 프로젝트명이 없습니다.')
 
   const slides: IssueAnalysisDeckSlide[] = [

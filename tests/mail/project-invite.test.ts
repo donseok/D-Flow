@@ -10,6 +10,7 @@ function render(overrides: Partial<InviteMailInput> = {}) {
     inviterName: '김철수',
     url: URL,
     expiresAt: '2026-08-10T08:00:00Z',
+    timeZone: 'Asia/Seoul',
     ...overrides,
   })
 }
@@ -45,14 +46,25 @@ describe('renderInviteMail — 링크', () => {
 describe('renderInviteMail — 만료 표기', () => {
   it('Asia/Seoul 로 표기한다', () => {
     const { html, text } = render()
-    expect(text).toContain('만료: 2026-08-10 17:00 (한국 시간)')
-    expect(html).toContain('2026-08-10 17:00 (한국 시간)')
+    expect(text).toContain('만료: 2026-08-10 17:00 (Asia/Seoul)')
+    expect(html).toContain('2026-08-10 17:00 (Asia/Seoul)')
   })
 
   it('날짜 경계를 넘기는 UTC 시각도 한국 날짜로 찍는다', () => {
     // 2026-08-10T16:00Z = 2026-08-11 01:00 KST — UTC 로 찍으면 하루 어긋난다.
     expect(render({ expiresAt: '2026-08-10T16:00:00Z' }).text)
-      .toContain('만료: 2026-08-11 01:00 (한국 시간)')
+      .toContain('만료: 2026-08-11 01:00 (Asia/Seoul)')
+  })
+
+  it('만료 시각은 그 tz 로 찍고 꼬리에 IANA 이름을 붙인다(스펙 §4.3)', () => {
+    expect(render({ expiresAt: '2026-08-10T08:00:00Z', timeZone: 'America/Los_Angeles' }).text)
+      .toContain('만료: 2026-08-10 01:00 (America/Los_Angeles)')
+    expect(render({ expiresAt: '2026-08-10T08:00:00Z', timeZone: 'UTC' }).text).toContain('만료: 2026-08-10 08:00 (UTC)')
+  })
+
+  it('한국 시간 문구가 없다', () => {
+    expect(render().text).not.toContain('한국 시간')
+    expect(render().html).not.toContain('한국 시간')
   })
 
   it('파싱 실패를 그럴듯한 날짜로 위장하지 않는다', () => {
@@ -78,7 +90,7 @@ describe('renderInviteMail — 서버 타임존에 흔들리지 않는다', () =
   })
 
   it('음수 오프셋 타임존에서도 만료 표기가 그대로다', () => {
-    expect(render().text).toContain('만료: 2026-08-10 17:00 (한국 시간)')
+    expect(render().text).toContain('만료: 2026-08-10 17:00 (Asia/Seoul)')
   })
 })
 

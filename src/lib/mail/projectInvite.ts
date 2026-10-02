@@ -1,20 +1,19 @@
 // 메일 본문은 한국어 고정 — 수신자의 언어를 알 수 없고 발신자 로케일을 쓰는 것은 틀린 답이다.
 // (src/lib/mail/meetingInvite.ts 와 같은 이유·같은 구성: 순수 렌더 함수, 발송은 호출자가 한다.)
 
-import { seoulStamp as seoulStampCore } from '@/lib/domain/dates'
+import { stampIn } from '@/lib/domain/calendar'
 import { esc } from './esc'
 import { BRAND } from '@/lib/branding'
 
 /**
- * 만료 일시는 Asia/Seoul 고정 표기다. Date 를 로컬 게터로 읽으면 Vercel(UTC)과 개발 PC 가
- * 서로 다른 시각을 찍는다 — 수신자가 보는 시각은 서버 타임존과 무관해야 한다.
- * 선례: src/app/api/report/route.ts seoulStamp.
+ * 만료 일시는 프로젝트 시간대로 찍고 IANA 이름을 꼬리에 붙인다(스펙 SP5 §4.3 메일 시각). Date 를 로컬 게터로 읽으면
+ * 서버 tz 에 따라 시각이 달라진다 — 수신자가 보는 시각은 서버 타임존과 무관해야 한다.
  */
-function seoulStamp(iso: string): string | null {
+function zonedStamp(iso: string, timeZone: string): string | null {
   const at = new Date(iso)
-  // 정본(dates.seoulStamp)은 유효한 입력을 전제한다 — invalid → null 계약은 이 래퍼가 지킨다.
+  // stampIn 은 유효한 입력을 전제한다 — invalid → null 계약은 이 래퍼가 지킨다.
   if (Number.isNaN(at.getTime())) return null
-  return `${seoulStampCore(at)} (한국 시간)`
+  return `${stampIn(timeZone, at)} (${timeZone})`
 }
 
 /**
@@ -22,8 +21,8 @@ function seoulStamp(iso: string): string | null {
  * 확인 불가라고 적는다. 발송 자체는 계속한다: 링크가 도달해야 초대가 쓸모 있고,
  * 만료 판정은 어차피 DB 가 한다(consume_project_invite).
  */
-function expiresLabel(iso: string): string {
-  return seoulStamp(iso) ?? '확인할 수 없음'
+function expiresLabel(iso: string, timeZone: string): string {
+  return zonedStamp(iso, timeZone) ?? '확인할 수 없음'
 }
 
 /** 메일 헤더는 한 줄이다 — 제목의 CR/LF 는 헤더 주입 표면이므로 여기서 잘라낸다. */
@@ -51,8 +50,10 @@ export interface InviteMailInput {
   /** 알 수 없으면 null — 줄 자체를 만들지 않는다(빈 항목을 나열하지 않는다). */
   inviterName: string | null
   url: string
-  /** ISO 8601. 표기는 Asia/Seoul 로 고정한다. */
+  /** ISO 8601. 표기는 timeZone 으로 찍는다. */
   expiresAt: string
+  /** 만료 시각을 찍을 시간대(프로젝트 calendar.timezone). 꼬리에 그대로 적는다 */
+  timeZone: string
   /** 합류하면 오를 팀 이름들. 없거나 비면 줄 자체를 만들지 않는다(빈 항목을 나열하지 않는다). */
   teamNames?: readonly string[]
 }
@@ -62,7 +63,7 @@ type Row = { label: string; value: string }
 export function renderInviteMail(i: InviteMailInput): { subject: string; html: string; text: string } {
   const projectName = i.projectName.trim()
   const inviter = i.inviterName?.trim() || null
-  const expires = expiresLabel(i.expiresAt)
+  const expires = expiresLabel(i.expiresAt, i.timeZone)
 
   const subject = oneLine(`[${i.productName ?? BRAND.productName}] ${projectName} 프로젝트 초대`)
 

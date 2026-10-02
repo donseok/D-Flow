@@ -11,6 +11,8 @@ import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { requireCalendar } from '@/lib/calendar/load'
 import {
   DEFAULT_INVITE_DAYS, inviteStatus, canonicalInviteEmail, isAllowedInviteDomain, normalizeInviteDays,
   normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
@@ -297,7 +299,7 @@ export async function createProjectInvite(
   const url = `${origin}/invite/${token}`
   const row = toInviteRow(inserted as unknown as RawInvite, teamCodes, url, now)
   const mail = await sendInviteMail(admin, {
-    to: email, projectName: String(project.name ?? ''), workspaceId: project.workspace_id as string,
+    to: email, projectId, projectName: String(project.name ?? ''), workspaceId: project.workspace_id as string,
     inviterId: g.actor.userId, url, expiresAt,
     // 메일에는 팀의 표시 이름(개명 — SP4 D37)을 싣는다
     teamNames,
@@ -354,7 +356,7 @@ async function hasAccount(admin: AdminClient, email: string): Promise<boolean | 
 /** 초대 메일 1통. 실패는 결과에 담아 올린다 — 초대 자체는 이미 유효하다. */
 async function sendInviteMail(
   admin: AdminClient,
-  i: { to: string; projectName: string; workspaceId: string; inviterId: string; url: string; expiresAt: string; teamNames: string[] },
+  i: { to: string; projectId: string; projectName: string; workspaceId: string; inviterId: string; url: string; expiresAt: string; teamNames: string[] },
 ): Promise<{ mailed: boolean; mailError?: string }> {
   const branding = await loadDisplayBranding(i.workspaceId, admin)
   const transport = getTransport(branding.mailFromName)
@@ -371,9 +373,14 @@ async function sendInviteMail(
     inviterEmail = inviter.user.email ?? null
   }
 
+  // 만료 시각의 tz — 초대는 이미 저장됐으므로 달력을 못 읽어도 메일은 보낸다. 대신 UTC 로 찍고 꼬리에 'UTC' 라고 적는다(라벨이 사실)
+  let timeZone = 'UTC'
+  try { timeZone = requireCalendar(await getProjectConfig(i.projectId, { client: admin })).timezone } catch (e) {
+    console.error('[createProjectInvite] 프로젝트 달력 판독 실패 — 만료 시각을 UTC 로 표기한다', { projectId: i.projectId, cause: String(e) })
+  }
   const { subject, html, text } = renderInviteMail({
     projectName: i.projectName, productName: branding.productName,
-    inviterName, url: i.url, expiresAt: i.expiresAt, teamNames: i.teamNames,
+    inviterName, url: i.url, expiresAt: i.expiresAt, teamNames: i.teamNames, timeZone,
   })
   try {
     const { rejected } = await transport.send({

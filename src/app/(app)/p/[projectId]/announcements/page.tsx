@@ -11,25 +11,34 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { AnnouncementsView } from '@/components/announcements/AnnouncementsView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
-import { seoulToday } from '@/lib/domain/dates'
+import { todayIn } from '@/lib/domain/calendar'
+import { requireCalendar } from '@/lib/calendar/load'
+import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function AnnouncementsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'announcements')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [annRes, lastSeenAt, m, projects, locale] = await Promise.all([
+  const now = new Date()
+  const [annRes, lastSeenAt, m, projects, locale, pc] = await Promise.all([
     getAnnouncements(projectId),
     getAnnouncementSeenAt(projectId),
     getActorForView(),
     listProjects(),
     getServerLocale(),
+    loadProjectConfigForPage(projectId),
   ])
 
   const project = projects.find((p) => p.id === projectId)
   const projectName = project?.name ?? t(locale, 'ann.projectFallback')
   const canEdit = isProjectAdmin(m, projectId)
   // 공지를 못 읽었으면 목록 자리에 사유를 두고('공지 없음' 빈 상태·읽음 처리를 하지 않는다) KPI 는 숫자 대신 '—'.
-  const summary = annRes.ok ? summarizeAnnouncements(annRes.rows, seoulToday()) : null
+  // 프로젝트 달력 — 못 읽거나 손상이면 요약 칸만 비우고(조회 실패와 같은 null) 원인은 로그로(과제 21 이 pickCalendar 로 정리한다)
+  let tz: string | null = null
+  if (pc.ok) {
+    try { tz = requireCalendar(pc.cfg).timezone } catch (e) { console.error('[announcements] 프로젝트 달력 손상', { projectId, cause: String(e) }) }
+  }
+  const summary = annRes.ok && tz ? summarizeAnnouncements(annRes.rows, todayIn(tz, now), tz) : null
 
   return (
     <ProjectPageShell

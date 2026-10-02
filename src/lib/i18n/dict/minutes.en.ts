@@ -152,7 +152,7 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.wiki.processedAt': 'Last updated',
   'min.source.missing': 'The source moved or was removed, so the document opened at the top.',
   'min.timeFix.title': 'Meeting time corrected',
-  'min.timeFix.desc': 'Auto-corrected recording timezone (UTC→KST, +9h)',
+  'min.timeFix.desc': 'Auto-corrected the recording time from UTC to the minutes time zone',
   'min.chat.doc.title': 'Ask this document',
   'min.chat.archive.title': 'Minutes chatbot',
   'min.chat.placeholder': 'e.g. Summarize only the decisions',

@@ -159,16 +159,13 @@ export function meetingEditHref(projectId: string, seriesId: string, occurrenceD
   return `/p/${projectId}/meetings?${q.toString()}`
 }
 
-const DAY = 86_400_000
-
-/** hero KPI — 오늘/향후 7일(오늘 포함)/전체(현재 그리드 전개분 기준). */
+/** hero KPI — 오늘/향후 7일(오늘 포함)/전체(현재 그리드 전개분 기준). 회차 날짜와 오늘은 둘 다 date-only — 문자열로 비교한다(개정 §4.2.3) */
 export function summarizeMeetings(occ: MeetingOccurrence[], todayIso: string): { today: number; upcoming7d: number; total: number } {
-  const t0 = Date.parse(`${todayIso}T00:00:00+09:00`)
+  const end = addDaysIso(todayIso, 7)
   let today = 0, upcoming7d = 0
   for (const o of occ) {
-    const d = Date.parse(`${o.occurrenceDate}T00:00:00+09:00`)
     if (o.occurrenceDate === todayIso) today++
-    if (d >= t0 && d < t0 + 7 * DAY) upcoming7d++
+    if (o.occurrenceDate >= todayIso && o.occurrenceDate < end) upcoming7d++
   }
   return { today, upcoming7d, total: occ.length }
 }

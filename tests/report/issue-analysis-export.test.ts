@@ -82,6 +82,7 @@ function plan(areas = [area('02', 8)]) {
     authorName: '홍길동',
     authorTeam: '운영팀',
     generatedAt: report.generatedAt,
+    timeZone: 'Asia/Seoul',
   })
 }
 
@@ -129,11 +130,17 @@ function expectCanonicalIssueParagraph(
 }
 
 describe('이슈 분석서 PPT 내보내기', () => {
-  it('프로젝트명과 서울 날짜로 안전한 파일명을 만든다', () => {
+  it('프로젝트명과 프로젝트 tz(서울) 날짜로 안전한 파일명을 만든다', () => {
     expect(buildIssueAnalysisFilename(
       'Acme-Pro / 위젯',
       '2026-07-30T16:00:00Z',
+      'Asia/Seoul',
     )).toBe('Acme-Pro_위젯_이슈분석서_2026-07-31.pptx')
+  })
+
+  it('파일명 날짜는 프로젝트 tz 의 날짜다 — 같은 instant 가 LA 에서는 하루 앞', () => {
+    expect(buildIssueAnalysisFilename('Acme', '2026-07-30T16:00:00Z', 'America/Los_Angeles'))
+      .toBe('Acme_이슈분석서_2026-07-30.pptx')
   })
 
   it('JSZip 운영 렌더러를 ready로 진단한다', () => {

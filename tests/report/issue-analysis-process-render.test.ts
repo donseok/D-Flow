@@ -94,6 +94,7 @@ const META = {
   authorName: '홍길동',
   authorTeam: 'PI팀',
   generatedAt: '2026-08-02T00:00:00Z',
+  timeZone: 'Asia/Seoul',
 }
 
 async function renderedSlides(

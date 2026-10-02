@@ -152,7 +152,7 @@ export const minutesKo = {
   'min.wiki.processedAt': '최근 반영',
   'min.source.missing': '원문 위치가 변경되어 회의록 상단을 열었습니다.',
   'min.timeFix.title': '회의 시간 보정됨',
-  'min.timeFix.desc': '녹취 시간대(UTC→KST, +9h)를 자동 보정했습니다',
+  'min.timeFix.desc': '녹취 시간(UTC)을 회의록 시간대로 자동 보정했습니다',
   'min.chat.doc.title': '이 회의록에 질문',
   'min.chat.archive.title': '회의록 챗봇',
   'min.chat.placeholder': '예: 결정사항만 요약해줘',

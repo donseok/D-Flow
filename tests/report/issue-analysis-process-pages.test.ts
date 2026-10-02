@@ -251,6 +251,7 @@ describe('buildIssueAnalysisDeckPlan 통합', () => {
     authorName: '홍길동',
     authorTeam: 'PI팀',
     generatedAt: '2026-08-02T00:00:00Z',
+    timeZone: 'Asia/Seoul',
   }
 
   it('영역 순서가 트리→정의→이슈 종합이다', () => {

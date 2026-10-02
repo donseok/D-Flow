@@ -99,12 +99,19 @@ function withCauseAnalyses(
 }
 
 describe('buildIssueAnalysisDeckPlan', () => {
+  it('생성일 라벨은 프로젝트 tz 의 날짜다 — 같은 instant 가 LA 에서는 전날', () => {
+    const meta = { projectName: 'Acme', authorName: 'alice', authorTeam: 'RES', generatedAt: '2026-07-31T03:00:00Z' }
+    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'Asia/Seoul' }).meta.dateLabel).toBe('26.07.31')
+    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'America/Los_Angeles' }).meta.dateLabel).toBe('26.07.30')
+  })
+
   it('고정 페이지를 유지하고 8건을 3+5 이슈 페이지로 나눈다', () => {
     const plan = buildIssueAnalysisDeckPlan(report([area(8)]), {
       projectName: 'Acme',
       authorName: '홍길동',
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     expect(plan.slides.map(slide => slide.sourceSlide)).toEqual([
       1, 2, 3, 4, 8, 9, 11, 12,
@@ -147,6 +154,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
@@ -162,6 +170,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '작성자',
       authorTeam: 'TF',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const opportunities = plan.slides.filter(slide => slide.kind === 'opportunity')
     expect(opportunities).toHaveLength(1)
@@ -188,6 +197,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '작성자',
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const causeSlides = plan.slides.filter(slide => slide.kind === 'cause-analysis')
 
@@ -238,6 +248,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const causeSlides = plan.slides.filter(slide => slide.kind === 'cause-analysis')
 
@@ -262,6 +273,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('중복 이슈')
 
     const foreign = area(1)
@@ -271,6 +283,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('영역 밖 이슈')
 
     const uncovered = area(2)
@@ -283,6 +296,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('정확히 1건')
 
     const unsupported = area(1)
@@ -299,6 +313,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('지원하지 않는 원인 Category')
   })
 
@@ -314,6 +329,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const opportunityPages = plan.slides.filter(slide => slide.kind === 'opportunity')
 
@@ -336,6 +352,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('영역 밖 이슈')
 
     const tooMany = area(6)
@@ -345,6 +362,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })).toThrow('1~5건')
   })
 })
@@ -417,6 +435,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
@@ -466,6 +485,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const rows = plan.slides.flatMap(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation'
@@ -498,6 +518,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const rows = plan.slides.flatMap(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation'
@@ -541,6 +562,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '작성자',
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
@@ -581,6 +603,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const pages = plan.slides.filter(slide => slide.kind === 'opportunity')
     const blocks = pages.flatMap(slide => slide.blocks)
@@ -615,6 +638,7 @@ describe('PPT 표시 정규화', () => {
       authorName: '',
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
+      timeZone: 'Asia/Seoul',
     })
     const pages = plan.slides.filter(slide => slide.kind === 'cause-analysis')
     const causeRows = pages.flatMap(slide => slide.causes)

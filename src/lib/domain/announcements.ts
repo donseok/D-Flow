@@ -1,5 +1,7 @@
 import type { Announcement, AnnouncementCategory } from '@/lib/domain/types'
 import { diffDaysCal, type MilestonePoint } from './dashboard'
+import { addDaysIso } from './dates'
+import { zonedMidnightUtc } from './calendar'
 
 /**
  * 카테고리 메타 — 라벨은 dict 키(표시 지점에서 t()로 해석), 색상은 상태 팔레트
@@ -79,17 +81,17 @@ export function countUnread(items: Announcement[], lastSeenAt: string | null): n
   return items.filter((a) => isUnread(a, lastSeenAt)).length
 }
 
-const DAY = 86_400_000
-
 /**
- * KPI 집계 — recent7d는 todayIso('YYYY-MM-DD', Asia/Seoul) 포함 직전 7일.
- * 목록의 날짜 표기(fmtDate, Asia/Seoul)와 일치하도록 KST(+09:00) 자정을 경계로 쓴다.
+ * KPI 집계 — recent7d 는 todayIso(그 프로젝트 tz 의 오늘) 포함 직전 7일.
+ * 경계는 그 tz 의 자정(zonedMidnightUtc) — createdAt 은 instant 라 날짜 경계를 instant 로 바꿔 비교한다(개정 §4.2.3).
+ * 목록의 날짜 표기(fmtDate)도 같은 tz 다.
  */
 export function summarizeAnnouncements(
   items: Announcement[],
   todayIso: string,
+  timeZone: string,
 ): { total: number; pinned: number; recent7d: number } {
-  const cutoff = Date.parse(`${todayIso}T00:00:00+09:00`) - 6 * DAY
+  const cutoff = zonedMidnightUtc(addDaysIso(todayIso, -6), timeZone).getTime()
   let pinned = 0
   let recent7d = 0
   for (const a of items) {

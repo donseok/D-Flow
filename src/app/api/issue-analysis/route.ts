@@ -6,6 +6,8 @@ import { toProjectActorView } from '@/lib/domain/authz'
 import { jsonError } from '@/lib/api/http'
 import { loadSavedIssueAnalysisRun } from '@/lib/data/issueAnalysis'
 import { requireModule } from '@/lib/modules/gate'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { requireCalendar } from '@/lib/calendar/load'
 import { buildIssueAnalysisDeckPlan } from '@/lib/report/issues/deckPlan'
 import {
   ISSUE_ANALYSIS_PPTX_MIME,
@@ -43,15 +45,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const saved = await loadSavedIssueAnalysisRun(projectId, runId)
     if (!saved) return jsonError('저장된 이슈 분석 실행을 찾을 수 없습니다.', 404)
     const authorName = (await getDisplayName())?.trim() || '작성자'
+    // 생성일 라벨·파일명 날짜는 프로젝트 tz — 달력을 못 읽거나 손상이면 아래 catch 의 고정 문구 500(원문은 로그)
+    const tz = requireCalendar(await getProjectConfig(projectId)).timezone
     const plan = buildIssueAnalysisDeckPlan(saved.report, {
       projectName: saved.projectName,
       authorName,
       // 작성 팀 = 이 프로젝트 명단의 대표 팀. 계정 전역 팀은 0003 에서 사라졌다.
       authorTeam: toProjectActorView(guard.actor, projectId)?.primaryTeamCode ?? '',
       generatedAt: saved.report.generatedAt,
+      timeZone: tz,
     })
     const body = await renderIssueAnalysisPpt(plan)
-    const filename = buildIssueAnalysisFilename(saved.projectName, saved.report.generatedAt)
+    const filename = buildIssueAnalysisFilename(saved.projectName, saved.report.generatedAt, tz)
     return new NextResponse(body as unknown as ArrayBuffer, {
       headers: {
         'Content-Type': ISSUE_ANALYSIS_PPTX_MIME,
