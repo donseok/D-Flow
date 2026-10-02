@@ -27,6 +27,9 @@ export type ProjectSettingKey = ProjectDef['key']
 export type SettingKey = WorkspaceSettingKey | ProjectSettingKey
 type ValueOfDef<D> = D extends { parse(raw: unknown): Parsed<infer T> } ? T : never
 export type SettingValue<K extends SettingKey> = ValueOfDef<Extract<WorkspaceDef | ProjectDef, { key: K }>>
+/** 스코프별 값 형 — 같은 이름 키가 두 스코프에 있으면(calendar.*) SettingValue 는 합집합이 된다. 해석기·valueOf 는 이것을 쓴다 */
+export type ProjectSettingValue<K extends ProjectSettingKey> = ValueOfDef<Extract<ProjectDef, { key: K }>>
+export type WorkspaceSettingValue<K extends WorkspaceSettingKey> = ValueOfDef<Extract<WorkspaceDef, { key: K }>>
 
 export function settingDef(scope: 'workspace', key: string): WorkspaceDef | undefined
 export function settingDef(scope: 'project', key: string): ProjectDef | undefined
@@ -75,8 +78,8 @@ assertRegistry()
 export type { ModuleId, NavItemId }
 
 /** 값이 필요한 소비처의 유일한 접근자. invalid → CONFIG_INVALID, required_missing → CONFIG_REQUIRED (그 키를 쓰는 기능만 멈춘다) */
-export function valueOf<K extends ProjectSettingKey>(cfg: ProjectConfig, key: K): SettingValue<K>
-export function valueOf<K extends WorkspaceSettingKey>(cfg: WorkspaceConfig, key: K): SettingValue<K>
+export function valueOf<K extends ProjectSettingKey>(cfg: ProjectConfig, key: K): ProjectSettingValue<K>
+export function valueOf<K extends WorkspaceSettingKey>(cfg: WorkspaceConfig, key: K): WorkspaceSettingValue<K>
 export function valueOf(cfg: ProjectConfig | WorkspaceConfig, key: string): unknown {
   const state = (cfg.keys as Record<string, { status: string; value?: unknown; error?: string }>)[key]
   if (!state) throw new ConfigKeyError('CONFIG_INVALID', key)          // 등록되지 않은 키 — 타입이 막지만 런타임 방어

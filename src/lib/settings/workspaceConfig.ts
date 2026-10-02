@@ -2,7 +2,7 @@
 // 정의의 deployDefault 가 읽고 resolveKeys 가 'deploy' 출처로 표시한다. 0행·오류는 throw(fail-closed — modules.*·ai.enabled·초대 도메인이 이 위에 선다).
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
-import { SETTINGS_SCHEMA_VERSION, WORKSPACE_SETTINGS, type SettingValue, type WorkspaceSettingKey } from './registry'
+import { SETTINGS_SCHEMA_VERSION, WORKSPACE_SETTINGS, type WorkspaceSettingKey, type WorkspaceSettingValue } from './registry'
 import { ConfigUnavailableError } from './errors'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 import type { ConfigReadClient } from './projectConfig'
@@ -10,7 +10,7 @@ import type { ConfigReadClient } from './projectConfig'
 export interface WorkspaceConfig {
   workspaceId: string
   revision: number; schemaVersion: number; schemaAhead: boolean
-  keys: { [K in WorkspaceSettingKey]: KeyState<SettingValue<K>> }
+  keys: { [K in WorkspaceSettingKey]: KeyState<WorkspaceSettingValue<K>> }
   unknownKeys: string[]
 }
 type Row = { workspace_id: string; values: unknown; revision: number | string; schema_version: number }

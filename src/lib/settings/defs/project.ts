@@ -1,10 +1,14 @@
-// 프로젝트 키 6개(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled). 값 형태의 정본은 개정 §2.8.2.
-import { REQUIRED_ON_CREATE, defineSetting, type Parsed, type SettingDef } from '../def'
+// 프로젝트 키 9개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled). 값 형태의 정본은 개정 §2.8.2.
+import { REQUIRED_ON_CREATE, defineSetting, type EditCtx, type Parsed, type SettingDef } from '../def'
 import { OFF_ON_CREATE, PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 import { CREDIT_GAP, CREDIT_STEP, DEFAULT_STAGE_CREDITS, validateStageCredits, type StageCredits } from '@/lib/domain/stageCredits'
 import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { parseModuleList, type ModulesList } from './workspace'
+import {
+  DEFAULT_TIMEZONE, DEFAULT_WEEK_RULES, DEFAULT_WORKING_DAYS, applyWeekStartChange, parseTimezone, parseWeekRules, parseWeekStartDay, parseWorkingDays,
+  type IsoDow, type WeekStartDay, type WeekStartRule,
+} from '@/lib/domain/calendar'
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
 
@@ -56,6 +60,24 @@ export function parseStageCredits(raw: unknown, policy: { step: number; min_gap:
   return v.ok ? { ok: true, value: v.credits } : fail(v.error)
 }
 
+/**
+ * calendar.week_start 편집(개정 §2.8.7·§4.2.4) — 입력은 요일 하나, 목록은 여기서 만든다. 오늘(ctx.today)은 프로젝트 tz 의 오늘이고
+ * 문서 수는 ctx.loadWeekKeys 가 준다(과제 5 의 설정 액션). 둘 중 하나라도 없으면 fail-closed. 판독 오류는 삼키지 않고 던진다(액션이 unavailable 로).
+ * E 이후 문서가 있으면 거부하는 판정은 DB(settings_ref_check — D53)가 설정 행 FOR UPDATE 아래에서 한다.
+ */
+export async function weekStartToStored(prev: WeekStartRule[] | undefined, day: WeekStartDay, ctx: EditCtx): Promise<Parsed<WeekStartRule[]>> {
+  if (ctx.scope !== 'project') return fail('주 시작 규칙은 프로젝트 설정에서만 바꿀 수 있습니다.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ctx.today)) return fail('프로젝트 시간대 설정을 읽지 못해 주 시작을 바꿀 수 없습니다. 시간대를 먼저 확인하세요.')
+  if (!ctx.loadWeekKeys) return fail('주간보고 목록을 확인할 수 없어 주 시작을 바꿀 수 없습니다.')
+  const keys = await ctx.loadWeekKeys()
+  const r = applyWeekStartChange(prev ?? DEFAULT_WEEK_RULES, day, ctx.today, keys.length)
+  return r.ok ? { ok: true, value: r.rules } : fail(r.error)
+}
+/** 프로젝트 복사 = 원본 마지막 규칙의 요일 하나(전환 이력은 옮기지 않는다 — 개정 §2.8.7 복사 행, source='copy') */
+export function copyWeekStartRules(src: readonly WeekStartRule[]): WeekStartRule[] {
+  return [{ day: src[src.length - 1].day, from: null }]
+}
+
 export const PROJECT_DEFS = [
   defineSetting<'core.level_labels', string[]>({
     key: 'core.level_labels', scope: 'project', module: 'wbs', default: REQUIRED_ON_CREATE, explicit: true,
@@ -88,6 +110,26 @@ export const PROJECT_DEFS = [
     parse: (raw) => parseStageCredits(raw),
     widget: { kind: 'custom', component: 'StageCreditSlider' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only'],
     sql: { readers: ['apply_workflow_event'] },
+  }),
+  // SP5 A(스펙 §4.2, 개정 §2.8.2) — 생성 때 워크스페이스 값을 복사한다(seedFrom — createProject 가 쓴다, 과제 5). 상속하지 않는다
+  defineSetting<'calendar.timezone', string>({
+    key: 'calendar.timezone', scope: 'project', module: 'settings', default: DEFAULT_TIMEZONE,
+    parse: parseTimezone, seedFrom: { key: 'calendar.timezone' },
+    widget: { kind: 'custom', component: 'TimezoneSelect' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  defineSetting<'calendar.working_days', IsoDow[]>({
+    key: 'calendar.working_days', scope: 'project', module: 'settings', default: [...DEFAULT_WORKING_DAYS],
+    parse: parseWorkingDays, seedFrom: { key: 'calendar.working_days' },
+    widget: { kind: 'custom', component: 'WorkingDaysEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'],
+    sql: { readers: ['is_workday'] },
+  }),
+  defineSetting<'calendar.week_start', WeekStartRule[], WeekStartDay>({
+    key: 'calendar.week_start', scope: 'project', module: 'settings', default: DEFAULT_WEEK_RULES.map((r) => ({ ...r })),
+    parse: parseWeekRules,
+    seedFrom: { key: 'calendar.week_start', map: (ws) => [{ day: ws as WeekStartDay, from: null }] },   // ws 는 해석기가 검증한 워크스페이스 값
+    edit: { parseInput: parseWeekStartDay, toStored: weekStartToStored },
+    widget: { kind: 'custom', component: 'WeekStartEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only', 'recompute'],
+    sql: { readers: ['week_key_of', 'weekly_reports_week_key_guard', 'settings_ref_check'] },
   }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

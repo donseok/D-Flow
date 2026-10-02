@@ -83,15 +83,15 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 14키가 소유 모듈에 정확히 한 번씩 있고, wbs 4·settings 10 이다', () => {
+  it('settings — 20정의(SP5 A calendar.* 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 4·settings 10 이다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(14)
+    expect(owned).toHaveLength(20)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)
     }
     expect(byId.wbs.settings.map((s) => s.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords', 'wbs.excel_profile', 'workflow.stage_credits'].filter((k) => k !== 'workflow.stage_credits').concat('workflow.stage_credits'))
-    expect(byId.settings.settings).toHaveLength(9)
+    expect(byId.settings.settings).toHaveLength(15)
   })
 })
 

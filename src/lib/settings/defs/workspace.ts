@@ -1,4 +1,4 @@
-// 워크스페이스 키 8개(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+// 워크스페이스 키 11개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
 import { defineSetting, type Parsed, type SettingDef } from '../def'
 import { NON_CORE_MODULES, isModuleId, type ModuleId } from '@/lib/modules/defaults'
 import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
@@ -6,6 +6,7 @@ import { BRANDING_SLOTS, parseBrandingPath, type BrandingSlot } from '../brandin
 import { deriveAccent, parseAccentInput, parseAccentValue, type AccentValue, type Hex } from '../accent'
 import { toAsciiHostname } from '@/lib/domain/hostname'
 import { ANY_DOMAIN } from '@/lib/domain/invites'
+import { DEFAULT_TIMEZONE, DEFAULT_WORKING_DAYS, parseTimezone, parseWeekStartDay, parseWorkingDays, type IsoDow, type WeekStartDay } from '@/lib/domain/calendar'
 
 export type ModulesList = ModuleId[]
 export type BrandingLogo = { full: string | null; full_dark: string | null; mark: string | null }
@@ -164,5 +165,24 @@ export const WORKSPACE_DEFS = [
     key: 'navigation.menu', scope: 'workspace', module: 'settings', default: { order: [], labels: {} },
     parse: parseNavMenu,
     widget: { kind: 'custom', component: 'MenuOrderEditor' }, editor: 'workspace_admin', apply: 'immediate', impact: ['none'], sql: null,
+  }),
+  // SP5 A(스펙 §4.2, 개정 §2.8.1) — 워크스페이스 값은 워크스페이스 화면의 기준이고 새 프로젝트의 초기값(생성 시 복사 — 상속 아님)이다
+  defineSetting<'calendar.timezone', string>({
+    key: 'calendar.timezone', scope: 'workspace', module: 'settings', default: DEFAULT_TIMEZONE,
+    parse: parseTimezone,
+    widget: { kind: 'custom', component: 'TimezoneSelect' }, editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  defineSetting<'calendar.working_days', IsoDow[]>({
+    key: 'calendar.working_days', scope: 'workspace', module: 'settings', default: [...DEFAULT_WORKING_DAYS],
+    parse: parseWorkingDays,
+    widget: { kind: 'custom', component: 'WorkingDaysEditor' }, editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  defineSetting<'calendar.week_start', WeekStartDay>({
+    key: 'calendar.week_start', scope: 'workspace', module: 'settings', default: 'sunday',
+    parse: parseWeekStartDay,
+    widget: { kind: 'select', options: [
+      { value: 'sunday', labelKey: 'settings.calendar.week_start.sunday' }, { value: 'monday', labelKey: 'settings.calendar.week_start.monday' },
+    ] },
+    editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
   }),
 ] as const satisfies readonly SettingDef[]

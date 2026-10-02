@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 14키만 등록, 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 20키 등록(SP5 A 의 calendar.* 여섯 포함 — 같은 이름이 두 스코프), 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,12 +18,12 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 14키 — 워크스페이스 8, 프로젝트 6(스펙 §3.6 표)', () => {
+  it('정확히 20키 — 워크스페이스 11, 프로젝트 9(SP3a §3.6 표 + SP5 A calendar.* 두 스코프)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
-      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu'])
+      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
-      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits'])
-    for (const k of ['agents.stage_workflow', 'portal.widgets', 'views.default', 'core.stage_credits', 'calendar.week_start']) {
+      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start'])
+    for (const k of ['agents.stage_workflow', 'portal.widgets', 'views.default', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
   })
@@ -38,9 +38,11 @@ describe('등록 키', () => {
     expect(row('modules.enabled')).toEqual(['project', 'project_admin', 'settings', 'custom', 'immediate', ['recompute']])
     expect(row('workflow.stage_credits')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only']])
     expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event'] })
-    expect(ALL.filter((d) => d.key !== 'workflow.stage_credits').every((d) => d.sql === null)).toBe(true)
-    expect(ALL.every((d) => d.seedFrom === undefined && d.reindexOn === undefined)).toBe(true)
-    expect(ALL.filter((d) => d.edit).map((d) => d.key)).toEqual(['branding.accent'])
+    // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys)
+    expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/workflow.stage_credits', 'project/calendar.working_days', 'project/calendar.week_start'])
+    expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start'])
+    expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)
+    expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start'])
   })
   it('settingDef 는 스코프와 키로 찾는다 — 다른 스코프의 키는 없음', () => {
     expect(settingDef('project', 'core.level_labels')?.key).toBe('core.level_labels')
@@ -274,7 +276,7 @@ describe('G0-4 — 등록하지 않는 네 선언이 형 검사를 통과하고 
 
 describe('카탈로그 메타와 사전', () => {
   it('등록 키마다 메타가 있고 마감 상태가 §3.6 표와 같다. 미등록 네 키는 PLANNED_KEYS 에 있다', () => {
-    expect(Object.keys(CATALOG_META).sort()).toEqual([...KEYS].sort())
+    expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(KEYS)].sort())
     const status = (k: string) => CATALOG_META[k as keyof typeof CATALOG_META].status
     // wbs.excel_profile 은 SP4 A2 가 verified 로 올렸다(표준 레이아웃·한 경로 내보내기·표기 — catalog-meta.ts 의 그 행)
     expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
@@ -282,7 +284,8 @@ describe('카탈로그 메타와 사전', () => {
     expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label'].map(status))
       .toEqual(Array(5).fill('stored'))
     expect(status('workflow.stage_credits')).toBe('wired')
-    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default', 'calendar.week_start', 'workflow.approval_steps']))
+    expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('stored'))
+    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default', 'workflow.approval_steps']))
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

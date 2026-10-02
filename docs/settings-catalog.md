@@ -19,13 +19,13 @@
 | `branding.accent`<br>강조색 | 워크스페이스 | 워크스페이스 관리자 | `AccentEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `null` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/AccentEditor.tsx` | immediate | 없음 | `tests/settings/accent.test.ts` | stored | SP3a |
 | `branding.mail_from_name`<br>메일 발신 표시명 | 워크스페이스 | 워크스페이스 관리자 | `text` / `updateWorkspaceSettings` | 설정 JSON 문서 | `null` (배포 `MAIL_FROM_NAME` → 제품 기본값) | parse · validateWorkspaceConfig | `src/lib/mail/fromName.ts`, `src/lib/settings/displayBranding.ts` | immediate | 없음 | `tests/settings/display-branding.test.ts` | verified | SP3a |
 | `navigation.menu`<br>메뉴 순서·이름 | 워크스페이스 | 워크스페이스 관리자 | `MenuOrderEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `{"order":[],"labels":{}}` (제품 기본값) | parse · validateWorkspaceConfig | `src/components/settings/MenuOrderEditor.tsx` | immediate | 없음 | `tests/settings/registry.test.ts` | stored | SP3a |
+| `calendar.timezone`<br>시간대 | 워크스페이스 | 워크스페이스 관리자 | `TimezoneSelect` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"UTC"` (제품 기본값) | parse · validateWorkspaceConfig | `src/app/actions/project.ts` | immediate | 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts` | stored | SP5 A |
+| `calendar.working_days`<br>근무 요일 | 워크스페이스 | 워크스페이스 관리자 | `WorkingDaysEditor` / `updateWorkspaceSettings` | 설정 JSON 문서 | `[1,2,3,4,5]` (제품 기본값) | parse · validateWorkspaceConfig | `src/app/actions/project.ts` | immediate | 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts` | stored | SP5 A |
+| `calendar.week_start`<br>주 시작 요일 | 워크스페이스 | 워크스페이스 관리자 | `select` / `updateWorkspaceSettings` | 설정 JSON 문서 | `"sunday"` (제품 기본값) | parse · validateWorkspaceConfig | `src/app/actions/project.ts`, `src/lib/settings/defs/project.ts` | immediate | 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts`, `tests/domain/calendar.test.ts` | stored | SP5 A |
 | `portal.widgets`<br>{ id: PortalWidgetId; enabled: boolean }[] | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP3b |
 | `security.local_drafts`<br>{ allowed: boolean; retention_days: number } | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SPU1 |
-| `calendar.timezone`<br>IANA 시간대 | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
-| `calendar.working_days`<br>number[](ISO 1~7) | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
-| `calendar.week_start`<br>'sunday' \| 'monday' | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
-| `minutes.root_folders`<br>{ mode: 'teams' } \| { mode: 'custom'; names: string[] } | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `minutes.attachments`<br>첨부 정책 객체 | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
+| `minutes.root_folders`<br>{ mode: 'teams' } \| { mode: 'custom'; names: string[] } | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B2 |
+| `minutes.attachments`<br>첨부 정책 객체 | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B3 |
 | `notify.policy`<br>{ [type]: { enabled: boolean } } | 워크스페이스 | — | — | 미등록 | — | — | — | — | — | — | planned | SP8 |
 <!-- catalog:auto:1:end -->
 
@@ -40,22 +40,22 @@
 | `wbs.excel_profile`<br>저장된 엑셀 양식 | 프로젝트 | 프로젝트 관리자 | `ClearExcelProfileButton` / `updateProjectSettings` | 설정 JSON 문서 | `null` (제품 기본값) | parse · validateProjectConfig | `src/app/api/import/inspect/route.ts`, `src/app/api/export/route.ts`, `src/app/api/import/execute/route.ts`, `src/app/(app)/p/[projectId]/settings/page.tsx` | immediate | 없음 | `tests/excel/standard-profile.test.ts`, `tests/api/export-route.test.ts` | verified | SP4 |
 | `modules.enabled`<br>사용 모듈 | 프로젝트 | 프로젝트 관리자 | `ModuleToggleEditor` / `updateProjectSettings` | 설정 JSON 문서 | `["kanban","meetings","weekly","issues","announcements","attendance","agents","wiki","chatbot"]` (제품 기본값) | parse · validateProjectConfig | `src/lib/modules/effective.ts`, `src/app/(app)/p/[projectId]/settings/page.tsx` | immediate | 파생 보기 재계산 | `tests/modules/effective.test.ts`, `tests/settings/config-lifecycle.test.ts` | verified | SP3a |
 | `workflow.stage_credits`<br>단계 실적 크레딧 | 프로젝트 | 프로젝트 관리자 | `StageCreditSlider` / `updateProjectSettings` | 설정 JSON 문서 | `{"default":{"as":0,"ip":30,"rw":50,"im":80,"xx":100}}` (제품 기본값) | parse · validateProjectConfig · SQL: apply_workflow_event | `src/components/settings/StageCreditSlider.tsx`, `supabase/migrations/0012_settings.sql` | immediate | 이후 작업부터 | `tests/settings/registry.test.ts` | wired | SP3a |
+| `calendar.timezone`<br>시간대 | 프로젝트 | 프로젝트 관리자 | `TimezoneSelect` / `updateProjectSettings` | 설정 JSON 문서 | `"UTC"` (제품 기본값) | parse · validateProjectConfig | `src/app/actions/project.ts` | immediate | 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts` | stored | SP5 A |
+| `calendar.working_days`<br>근무 요일 | 프로젝트 | 프로젝트 관리자 | `WorkingDaysEditor` / `updateProjectSettings` | 설정 JSON 문서 | `[1,2,3,4,5]` (제품 기본값) | parse · validateProjectConfig · SQL: is_workday | `src/app/actions/project.ts` | immediate | 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts` | stored | SP5 A |
+| `calendar.week_start`<br>주 시작 요일 | 프로젝트 | 프로젝트 관리자 | `WeekStartEditor` / `updateProjectSettings` | 설정 JSON 문서 | `[{"day":"sunday","from":null}]` (제품 기본값) | parse · validateProjectConfig · SQL: week_key_of, weekly_reports_week_key_guard, settings_ref_check | `src/app/actions/project.ts`, `src/lib/settings/defs/project.ts` | immediate | 이후 작업부터, 파생 보기 재계산 | `tests/settings/calendar-keys.test.ts`, `tests/domain/calendar.test.ts` | stored | SP5 A |
 | `workflow.issue_statuses`<br>{ code; label; color; category; sort; active }[] | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
 | `workflow.wbs_stage_labels`<br>Partial<Record<단계, string>> | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
 | `workflow.approval_steps`<br>{ code; label; approver }[] 1~3 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
 | `workflow.approval_distinct_approvers`<br>boolean | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
 | `workflow.predecessor_gate`<br>'reached' \| 'final' | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
 | `workflow.credit_policy`<br>{ step: 1 \| 5; min_gap: 1..10 } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5b |
-| `issues.id_policy`<br>{ prefix; pattern; counter_scope; reset } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `issues.analysis`<br>'optional' \| 'required' | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `issues.severities`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `issues.cause_categories`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `issues.sources`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `attendance.types`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `meetings.categories`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
-| `calendar.timezone`<br>IANA 시간대(seedFrom) | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
-| `calendar.week_start`<br>규칙 목록 { day; from }[] | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
-| `calendar.working_days`<br>number[](seedFrom) | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase A |
+| `issues.id_policy`<br>{ prefix; pattern; counter_scope; reset } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B1 |
+| `issues.analysis`<br>'optional' \| 'required' | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B1 |
+| `issues.severities`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B4 |
+| `issues.cause_categories`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B4 |
+| `issues.sources`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B4 |
+| `attendance.types`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B4 |
+| `meetings.categories`<br>어휘 목록 | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B4 |
 | `fields.wbs_item`<br>FieldDef[] | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5c |
 | `fields.issue`<br>FieldDef[] | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5c |
 | `fields.weekly_row`<br>FieldDef[] | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5c |
@@ -64,7 +64,7 @@
 | `forms.issue_analysis_pptx`<br>{ template_id; mapping; options } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP6 |
 | `forms.wbs_export_xlsx`<br>{ template_id; mapping; options } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP6 |
 | `minutes.auto_file_by_path`<br>boolean | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP7 |
-| `minutes.attachments`<br>첨부 정책 객체(seedFrom) | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 Phase B |
+| `minutes.attachments`<br>첨부 정책 객체(seedFrom) | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP5 B3 |
 | `views.default`<br>{ wbs: 'sheet'\|'timeline'\|'board'; density } | 프로젝트 | — | — | 미등록 | — | — | — | — | — | — | planned | SP3b |
 <!-- catalog:auto:2:end -->
 

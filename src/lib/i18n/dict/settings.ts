@@ -216,5 +216,9 @@ export const settingsKo = {
   'settings.wbs.excel_profile.label': '저장된 엑셀 양식', 'settings.wbs.excel_profile.desc': '가져오기가 저장한 양식입니다. 내보내기가 같은 양식을 씁니다.',
   'settings.modules.enabled.label': '사용 모듈', 'settings.modules.enabled.desc': '이 프로젝트에서 켤 모듈입니다. 워크스페이스가 허용한 것만 켤 수 있습니다.',
   'settings.workflow.stage_credits.label': '단계 실적 크레딧', 'settings.workflow.stage_credits.desc': '단계 전이 때 기록하는 실적(%)입니다. 이미 기록된 실적은 바뀌지 않습니다.',
+  'settings.calendar.timezone.label': '시간대', 'settings.calendar.timezone.desc': "'오늘'과 시각 표시의 기준입니다. 워크스페이스 값은 새 프로젝트를 만들 때 복사됩니다(이후 바꿔도 기존 프로젝트는 그대로).",
+  'settings.calendar.working_days.label': '근무 요일', 'settings.calendar.working_days.desc': '일정 계산·달력의 쉬는 요일 기준입니다. 이미 저장된 진척 스냅샷은 다시 계산하지 않습니다.',
+  'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
+  'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

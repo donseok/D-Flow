@@ -9,7 +9,7 @@ import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
-import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type SettingValue } from './registry'
+import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type ProjectSettingValue } from './registry'
 import { ConfigUnavailableError } from './errors'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 
@@ -27,7 +27,7 @@ export interface ConfigTeam {
 export interface ProjectConfig {
   projectId: string; workspaceId: string
   revision: number; schemaVersion: number; schemaAhead: boolean
-  keys: { [K in ProjectSettingKey]: KeyState<SettingValue<K>> }
+  keys: { [K in ProjectSettingKey]: KeyState<ProjectSettingValue<K>> }
   unknownKeys: string[]                                          // 롤백 잔여 등. 읽기에서 무시, 진단에 노출
   areas: { weekly_section: ConfigArea[]; issue_area: ConfigArea[] }
   teams: ConfigTeam[]
