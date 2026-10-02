@@ -623,11 +623,13 @@ export function WeeklySheetView({
 
   // ── 문서 없음: StatusMessage + 시작 버튼 2종(스펙 §3 — 자동 생성 금지). 활성 영역이 없으면 시작할 수 없다(W1 — 액션도 CONFIG_REQUIRED) ──
   // 설정의 팀·업무영역 절(#project-team)은 관리자에게만 보인다 — 생성 자격(canCreateRound = isProjectAdmin)과 같은 술어라 그때만 링크를 둔다.
+  // 상태 두 갈래(문서 없음·행 없음)는 시트 상자가 없다 — 채움형에서 main 이 닫히므로 짧은 높이(확대·가로 폰)에서 아래 버튼에
+  // 닿게 루트가 스스로 세로 스크롤한다(B-4 리뷰 I1). 본문 갈래는 시트 상자가 유일한 스크롤 상자라 루트에 두지 않는다.
   const areaSettingsHref = `/p/${projectId}/settings#project-team`
   if (!report) {
     const activeAreaNames = orderAreas(areas.filter(a => a.active)).map(a => a.name)
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         {activeAreaNames.length === 0 ? (
           <StatusMessage
@@ -686,7 +688,7 @@ export function WeeklySheetView({
   //    문서에 행을 넣고(§3.2) 실시간으로 이 화면에 들어온다(mergeServerRow — 그때 표가 나타난다).
   if (rows.length === 0) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         <WeekNav projectId={projectId} weekStart={weekStart} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         <StatusMessage
           kind="needs_setup"

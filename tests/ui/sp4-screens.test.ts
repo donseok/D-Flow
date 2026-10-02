@@ -56,7 +56,16 @@ describe('#25 주간 — 채움형·상태·글자', () => {
     const src = read('src/components/weekly/WeeklySheetView.tsx')
     expect(src).toContain('<div className="isolate min-h-0 flex-1 overflow-auto">')
     expect(src).not.toContain('top-(--frame-sticky-top)')
-    expect(src.match(/className="flex h-full min-h-0 flex-col gap-3"/g)?.length).toBe(3)
+    expect(src.match(/className="flex h-full min-h-0 flex-col gap-3(?: overflow-y-auto)?"/g)?.length).toBe(3)
+  })
+  it('[RF3] 짧은 높이(확대 200~400%·가로 폰) — 스크롤 상자가 없는 상태 두 화면(시트 없음·행 없음)은 루트가 스스로 스크롤한다(B-4 리뷰 I1)', () => {
+    const src = read('src/components/weekly/WeeklySheetView.tsx')
+    // 상태 두 갈래만 — 본문 갈래는 시트 상자가 유일한 스크롤 상자다(중첩 스크롤을 만들지 않는다).
+    expect(src.match(/className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto"/g)?.length).toBe(2)
+    expect(src.match(/className="flex h-full min-h-0 flex-col gap-3"/g)?.length).toBe(1)
+    const body = src.slice(src.indexOf('if (rows.length === 0)'))
+    const bodyRoot = body.indexOf('<div className="flex h-full min-h-0 flex-col gap-3">')
+    expect(bodyRoot).toBeGreaterThan(body.indexOf('return ('))
   })
   it('상태는 StatusMessage — 설정 필요·빈 시트, 매핑 창·AI 다시 쓰기의 오류', () => {
     const view = read('src/components/weekly/WeeklySheetView.tsx')
