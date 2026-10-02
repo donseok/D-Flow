@@ -115,3 +115,16 @@ describe('GET /api/shell — 모듈이 꺼진 항목만 비운다(과제 20)', (
     expect(errSpy).toHaveBeenCalledWith('[shell] 결재 대기 수 조회 실패:', expect.stringContaining('끝까지 읽지 못했습니다'))
   })
 })
+
+describe('공지 배지 — 모름(null)은 배지를 숨기고 실패 표지를 싣는다(A-4 리뷰 N9)', () => {
+  it('null 이면 unreadAnnouncements 0(배지 숨김) + unreadAnnouncementsFailed', async () => {
+    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(null)
+    const body = await (await GET(req('?route=p1&menu=p1'))).json()
+    expect(body).toMatchObject({ unreadAnnouncements: 0, unreadAnnouncementsFailed: true })
+  })
+  it('정상이면 실패 표지 false', async () => {
+    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(2)
+    const body = await (await GET(req('?route=p1&menu=p1'))).json()
+    expect(body).toMatchObject({ unreadAnnouncements: 2, unreadAnnouncementsFailed: false })
+  })
+})

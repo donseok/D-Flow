@@ -188,27 +188,31 @@ export async function getHeaderAnnouncements(
 }
 
 /**
- * 사이드바 배지용 안읽음 공지 수 — 워터마크 이후 생성된 "오늘 게시중" 공지 count.
+ * 사이드바 배지용 안읽음 공지 수 — 워터마크 이후 생성된 "오늘 게시중" 공지 count. 조회·달력 실패는 null(모름 — 셸이 배지를 숨긴다).
  * 게시기간 필터가 없으면 만료 공지가 영구 안읽음으로 남는다(일반 사용자는 만료 공지를
  * 목록에서 볼 수 없어 워터마크가 그것을 넘지 못함). getTopAnnouncements와 같은 조건.
  */
-export async function getUnreadAnnouncementCount(projectId: string): Promise<number> {
+export async function getUnreadAnnouncementCount(projectId: string): Promise<number | null> {
   const user = await getSession()
   if (!user) return 0
   const mod = await requireModule({ projectId }, 'announcements')            // 셸 배지 — 꺼지면 0(§4.2 셸 행)
   if (!mod.ok) return 0
   const sb = await createServerClient()
-  const { data: seen } = await sb
+  const { data: seen, error: seenError } = await sb
     .from('announcement_seen')
     .select('last_seen_at')
     .eq('user_id', user.id)
     .eq('project_id', projectId)
     .maybeSingle()
+  // 실패는 null(모름 — A-4 리뷰 N9): '읽지 않은 공지 0'으로 위장하지 않는다. 셸은 배지를 숨기고 실패 표지를 싣는다. 원인은 로그(표시 = 로깅)
+  if (seenError) {
+    console.error('[announcements] 배지 — 읽음 워터마크 조회 실패:', { projectId, cause: seenError.message })
+    return null
+  }
 
-  // '오늘' = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d). 달력을 못 읽으면 배지를 0 으로 둔다(이 함수는 수만 돌려준다 —
-  // 셸 배지라 실패를 화면에 올릴 자리가 없다) — 원인은 로그로(표시 = 로깅)
+  // '오늘' = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d). 달력을 못 읽으면 모름(null — projectToday 가 원인을 로그로 남긴다)
   const pt = await projectToday(projectId)
-  if (!pt.ok) return 0
+  if (!pt.ok) return null
   const today = pt.today
   // 게시중만: (from is null 또는 from<=today) AND (to is null 또는 to>=today).
   // .or() 는 서로 AND 결합 — 각 경계를 별도 .or() 로 건다.
@@ -219,7 +223,11 @@ export async function getUnreadAnnouncementCount(projectId: string): Promise<num
     .or(`publish_from.is.null,publish_from.lte.${today}`)
     .or(`publish_to.is.null,publish_to.gte.${today}`)
   if (seen?.last_seen_at) query = query.gt('created_at', seen.last_seen_at as string)
-  const { count } = await query
+  const { count, error } = await query
+  if (error) {
+    console.error('[announcements] 배지 — 안읽음 수 조회 실패:', { projectId, cause: error.message })
+    return null
+  }
   return count ?? 0
 }
 

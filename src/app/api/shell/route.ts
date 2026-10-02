@@ -25,7 +25,11 @@ export async function GET(req: NextRequest) {
     getInboxFeed(),
     // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(기존 HeaderChrome catch(() => {}) 시맨틱).
     route ? getNotifications(route).catch(() => null) : Promise.resolve(null),
-    menu ? getUnreadAnnouncementCount(menu).catch(() => 0) : Promise.resolve(0),
+    // 공지 배지 — null(모름: 달력·조회 실패, 액션이 로그)은 배지를 숨기고(0) 실패 표지를 싣는다. 0 으로 위장한 채 끝내지 않는다(A-4 리뷰 N9)
+    menu ? getUnreadAnnouncementCount(menu).catch((e: unknown) => {
+      console.error('[shell] 공지 배지 조회 실패:', e instanceof Error ? e.message : e)
+      return null
+    }) : Promise.resolve(0),
     // 헤더 티커 — 실패를 '공지 0건'으로 위장하지 않고 headerAnnouncementsFailed 로 알린다(표시는 ShellStateProvider·티커).
     route ? getHeaderAnnouncements(route).catch((e: unknown) => {
       console.error('[shell] 헤더 공지 조회 실패:', e instanceof Error ? e.message : e)
@@ -41,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(
     {
-      inbox, notifications, unreadAnnouncements, pendingApprovals,
+      inbox, notifications, unreadAnnouncements: unreadAnnouncements ?? 0, unreadAnnouncementsFailed: unreadAnnouncements === null, pendingApprovals,
       headerAnnouncements: header.ok ? header.rows : [],
       headerAnnouncementsFailed: !header.ok,
     },
