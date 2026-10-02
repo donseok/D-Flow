@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { BadgeCheck, FilePlus2, Pencil, RotateCcw, Save, X } from 'lucide-react'
 import { createWikiDocument, updateWikiDocument, verifyWikiDocument } from '@/app/actions/wiki'
 import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
@@ -177,10 +177,10 @@ export function WikiDocumentEditor({
   // 옛 키는 사람의 결정(복구·폐기·저장·취소·새로 쓰기) 자리에서 지운다(복구 순서 — 결정 전에는 남긴다). 이번 열기가 옛 키에서
   // 읽었는지와 무관하게 지운다 — 결정 없이 닫았다 다시 열면 새 키(옛 키의 사본)에서 읽는데, 그때의 결정이 옛 키를 남기면 다음 열기에
   // 옛 키가 다시 옮겨져 버린 초안이 되살아난다(U2b-5 리뷰 수정 CC5). 없는 키를 지우는 것은 무해하다
-  const settleLegacy = () => {
+  const settleLegacy = useCallback(() => {
     if (!legacyKey) return
     try { settleLegacyDraft(window.localStorage, legacyKey) } catch { /* 저장소를 못 쓰는 환경 */ }
-  }
+  }, [legacyKey])
   useEffect(() => { if (!workspaceId) console.error('[wiki] 범위 없음 — 초안 저장을 끈다') }, [workspaceId])
   // 손대지 않은 템플릿은 "쓴 것"이 아니다. 이걸 구분하지 않으면 새 문서를 열자마자
   // 초안이 쌓이고, 유형을 바꿔도 템플릿이 갈리지 않는다.
@@ -223,7 +223,7 @@ export function WikiDocumentEditor({
       writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
     }, DRAFT_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [editing, dirty, storageKey, title, bodyMd, kind])
+  }, [editing, dirty, storageKey, title, bodyMd, kind, settleLegacy])
 
   // 탭을 닫거나 새로고침하는 경우엔 debounce 를 기다릴 수 없다.
   useEffect(() => {
