@@ -422,3 +422,25 @@
 
 비율(A1 절과 같은 식): 스펙 추정 A2 1.4~1.95주 + 고정 0.2~0.3주 = 1.6~2.25주(8~11.25일). 경과 약 6.6시간 = 0.28일 → **0.024~0.034**(A1 0.021~0.029 와 비슷).
 성능 판정(스펙 §6.5)이 아직 열려 있어 A2 의 끝은 그 재측정까지다 — 이 경과에 들지 않는다.
+
+# B — 성능(보류 — 일괄 측정)
+
+**상태: 보류 — 일괄 측정**(사용자 지시 2026-10-02: 성능은 전체 구현 뒤 한 번에 잰다 — SP4 B 는 재지 않는다, 계획 판정 P15).
+스펙 §7 B 에는 성능 줄이 없지만, 과제 4 가 범위 레이아웃 셋의 팀 원천을 프로세스 캐시에서 요청 범위 조회(세션 RLS)로 바꿨고 레인 B 가
+그 교체를 "성능 R25 재측정과 함께"로 넘겼다(옛 `tests/invariants/teams-master-consumers.test.ts` 머리). 아래는 그때 같은 조건으로 재기 위한 입력이다.
+받는 곳: 레인 A 원장의 "일괄 측정" 목록(과제 16 의 알림 문안).
+
+- **바뀐 경로**: 범위 레이아웃 셋(`(global)`·`w/[slug]`·`p/[projectId]`)이 요청마다 `workspaceTeams`·`projectTeams` 를 읽는다 —
+  `activeTeamsForLayout` 로 `loadShell` 과 **병렬**(`Promise.all([loadShell(…), activeTeamsForLayout(…)])` — 새 직렬 왕복 없음, 과제 4).
+  `p/[projectId]` 의 `projectTeams` 는 같은 요청의 설정 조회(`getProjectConfig(pid).teams`)와 캐시를 나눈다(`src/lib/teams/source.ts`).
+  명단(`/p/<pid>/members`)·`DashboardView` 도 같은 원천. 열화(actor null)면 읽지 않는다.
+- **잴 대상**(admin 페르소나, 800행 시드 — SP4 §6.5 와 같은 시드): `/w/<slug>`(홈) · `/w/<slug>/minutes` · `/p/<pid>/dashboard` · `/p/<pid>/wbs` · `/p/<pid>/members`.
+- **방법**: `docs/baseline/sp4-perf.md`(A2 재측정)와 같다 — `next start -H 127.0.0.1`, 편마다 `db:reset`(자기 트리)·`dev:bootstrap`·800행 시드·
+  `vacuum analyze`·서버 새로 띄움, 경로별 워밍업 3 + 표본 n 100(러너 `scripts/perf-baseline.mjs measure --personas admin` — 대상 경로를 위 다섯으로),
+  라운드 순서 ABBA 교대(라운드 1·3 기준선 → 후보, 2·4 후보 → 기준선 — `.superpowers/sp4/perf-a2/abab.sh` 꼴), `heavy-lock.sh` 안에서만,
+  편마다 측정 앞 1분 load·vm_stat free 기록. 기준선 = B 를 자르기 직전의 main(UI-2 반영 뒤 — `ui/sp4-teams` 의 부모) 스크래치 워크트리 3102,
+  후보 = `sp4-done` 3101.
+  - 계획 과제 14 의 괄호("순차 30회를 3회", "시작 load1 < 3")는 A2 첫 측정의 꼴이다 — A2 재측정이 n 30 의 p95 가 이상치 하나에 흔들려
+    (`sp4-perf.md` "③ n 30 의 p95 는…") n 100·ABBA 4라운드·load ≤ 6 대기로 바꿨으므로 "sp4-perf.md 와 같다"를 따른다(일괄 측정 때 다시 정해도 된다).
+- **판정식**: 대상별 라운드 p95 중앙값의 비율(후보 / 기준선) ≤ 1.20(SP3a·SP4 §6.5 기준, `judgeRegression`). 레인 B 의 R25 누적 한도
+  (`docs/baseline/sp3b-perf.md` — SP2 기준선 대비 p95 +20%, 재조정은 사용자 판단 대기)와 함께 본다.
