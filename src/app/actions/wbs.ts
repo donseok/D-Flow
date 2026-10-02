@@ -16,7 +16,7 @@ import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { failWith } from '@/lib/errors/dbFail'
-import { ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
 import { projectTeams } from '@/lib/teams/source'
 import { teamNameKey } from '@/lib/domain/teamName'
 
@@ -545,7 +545,7 @@ export async function addTaskDependency(
   try {
     calendar = requireCalendar(await getProjectConfig(projectId))
   } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, error: e.message }          // 손상 키 이름이 든 고정 문구(CONFIG_INVALID)
+    if (e instanceof ConfigKeyError) return { ok: false, error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }   // 손상 키 이름이 든 고정 문구(CONFIG_INVALID)
     if (e instanceof ConfigUnavailableError) {
       console.error('[wbs/dependency] 달력 조회 실패', { projectId, cause: e.message })
       return { ok: false, error: ERR_CALENDAR_LOOKUP }

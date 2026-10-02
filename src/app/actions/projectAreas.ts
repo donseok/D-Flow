@@ -18,7 +18,7 @@ import {
   type AreaInput,
 } from '@/lib/domain/areas'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
-import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
@@ -99,7 +99,7 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     const cal = requireCalendar(cfg)
     fromWeek = weekKeyOf(cal.weekStart, todayIn(cal.timezone, new Date()))
   } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: e.message }
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }
     throw e
   }
   const allowed = assignableTeamIds(cfg, a.id)

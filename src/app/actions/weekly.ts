@@ -17,7 +17,7 @@ import {
 import { isUuidLike, isValidIsoDate } from '@/lib/domain/validate'
 import { findCarryOverSource, findWeeklyReportId } from '@/lib/data/weeklySheet'
 import { getProjectConfig, type ConfigArea } from '@/lib/settings/projectConfig'
-import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
@@ -143,7 +143,7 @@ export async function createWeeklyReport(
     // 주 키는 그 프로젝트 규칙의 키(SP5 P9) — 트리거(WEEK_KEY_INVALID)는 마지막 방어다(D8)
     weekStart = weekKeyOf(requireCalendar(cfg).weekStart, weekStartIso)
   } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: e.message }
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }
     throw e
   }
   const areas: ConfigArea[] = cfg.areas.weekly_section

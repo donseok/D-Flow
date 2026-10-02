@@ -8,14 +8,14 @@ import { ensureAgentProject } from '@/lib/agent/ensureOrder'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
-import { ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
 import { requireCalendar } from '@/lib/calendar/load'
 import { CalendarError } from '@/lib/domain/calendar'
 
 /** 달력 실패의 사용자 문구 — 손상 키(키 이름이 든 고정 문구)·근무일 없음(3,660일 상한 — 고정 문구). 그 밖은 null(호출부의 고정 문구) */
 function calendarFailureText(e: unknown): string | null {
-  if (e instanceof ConfigKeyError) return e.message
+  if (e instanceof ConfigKeyError) return `${CONFIG_MESSAGES[e.code]} (${e.key})`
   if (e instanceof CalendarError) return '근무일을 찾지 못해 시작일을 계산할 수 없습니다 — 프로젝트 설정의 근무 요일·휴무 예외를 확인하세요.'
   return null
 }

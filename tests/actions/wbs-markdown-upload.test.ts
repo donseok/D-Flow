@@ -193,7 +193,16 @@ describe('previewWbsUpload', () => {
     db.queues = { wbs_items: [{ data: [] }] } // 기존 ref 조회만
     const r = await previewWbsUpload(PID, SKEL_MD)
     expect(r).toMatchObject({ mode: 'skeleton', levelsStatus: 'seed', canApply: true })
-    expect(cfg.getProjectConfig).not.toHaveBeenCalled()   // 골격은 대조하지 않는다(시드 예정)
+    // 골격은 단계를 대조하지 않는다(시드 예정) — 설정은 시작일 파생의 근무일 달력 때문에 한 번 읽는다(SP5 A 과제 16)
+    expect(cfg.getProjectConfig).toHaveBeenCalledTimes(1)
+  })
+
+  it('달력 키가 손상이면 그 키 문구로 멈춘다 — 기본 달력으로 시작일을 파생하지 않는다(SP5 [RF4])', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.working_days': [] }))
+    const r = await previewWbsUpload(PID, SKEL_MD)
+    spy.mockRestore()
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('calendar.working_days') })
   })
 
   it('검증 에러가 있으면 errors 전량 + canApply:false', async () => {
