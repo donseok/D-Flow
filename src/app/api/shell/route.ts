@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
     getInboxFeed(),
     // 파생 알림은 실패해도 벨 전체를 죽이지 않는다(기존 HeaderChrome catch(() => {}) 시맨틱).
     route ? getNotifications(route).catch(() => null) : Promise.resolve(null),
-    // 공지 배지 — null(모름: 달력·조회 실패, 액션이 로그)은 배지를 숨기고(0) 실패 표지를 싣는다. 0 으로 위장한 채 끝내지 않는다(A-4 리뷰 N9)
+    // 공지 배지 — 모름(달력·조회 실패, 액션이 로그)은 null 그대로 싣는다(레인 B SP3b D34 계약 — 0 으로 위장하지 않는다, A-4 리뷰 N9·A-5 리뷰 O5).
+    // 받는 쪽(셸 배지·알림함)이 null 을 '모름'으로 그린다 — 레인 B UI-2b(D34). 이 브랜치의 옛 셸은 null 을 0 처럼 숨긴다
     menu ? getUnreadAnnouncementCount(menu).catch((e: unknown) => {
       console.error('[shell] 공지 배지 조회 실패:', e instanceof Error ? e.message : e)
       return null
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(
     {
-      inbox, notifications, unreadAnnouncements: unreadAnnouncements ?? 0, unreadAnnouncementsFailed: unreadAnnouncements === null, pendingApprovals,
+      inbox, notifications, unreadAnnouncements, pendingApprovals,
       headerAnnouncements: header.ok ? header.rows : [],
       headerAnnouncementsFailed: !header.ok,
     },

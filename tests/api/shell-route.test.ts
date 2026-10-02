@@ -116,15 +116,23 @@ describe('GET /api/shell — 모듈이 꺼진 항목만 비운다(과제 20)', (
   })
 })
 
-describe('공지 배지 — 모름(null)은 배지를 숨기고 실패 표지를 싣는다(A-4 리뷰 N9)', () => {
-  it('null 이면 unreadAnnouncements 0(배지 숨김) + unreadAnnouncementsFailed', async () => {
+describe('공지 배지 — 모름은 null(레인 B SP3b D34 계약 — 0 으로 위장하지 않고 별도 표지도 두지 않는다, A-5 리뷰 O5)', () => {
+  it('액션이 null(달력·조회 실패)이면 unreadAnnouncements null, 실패 표지 필드는 없다', async () => {
     mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(null)
     const body = await (await GET(req('?route=p1&menu=p1'))).json()
-    expect(body).toMatchObject({ unreadAnnouncements: 0, unreadAnnouncementsFailed: true })
+    expect(body.unreadAnnouncements).toBeNull()
+    expect('unreadAnnouncementsFailed' in body).toBe(false)
   })
-  it('정상이면 실패 표지 false', async () => {
+  it('액션이 throw 해도 null + 로그', async () => {
+    mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockRejectedValueOnce(new Error('boom'))
+    const body = await (await GET(req('?route=p1&menu=p1'))).json()
+    expect(body.unreadAnnouncements).toBeNull()
+    expect(errSpy).toHaveBeenCalledWith('[shell] 공지 배지 조회 실패:', 'boom')
+  })
+  it('정상이면 그 수', async () => {
     mocks.getHeaderAnnouncements.mockResolvedValue({ ok: true, rows: [] }); mocks.getUnreadAnnouncementCount.mockResolvedValue(2)
     const body = await (await GET(req('?route=p1&menu=p1'))).json()
-    expect(body).toMatchObject({ unreadAnnouncements: 2, unreadAnnouncementsFailed: false })
+    expect(body.unreadAnnouncements).toBe(2)
+    expect('unreadAnnouncementsFailed' in body).toBe(false)
   })
 })
