@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AlertTriangle, LogIn, ShieldCheck, UserPlus } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { endSession } from '@/lib/auth/signOut'
 import { useToast } from '@/components/ui/Toast'
 import {
   getInviteSessionState, redeemInvite, redeemInviteWithSignup, type InvitePreview,
@@ -90,10 +91,8 @@ export function InviteRedeemCard({ token, preview, loadError }: {
   async function join(signOutOnMismatch = false) {
     const res = await redeemInvite(token)
     if (!res.ok) {
-      if (signOutOnMismatch && res.error === E_OTHER_ACCOUNT) {
-        const { error: signOutError } = await createBrowserClient().auth.signOut()
-        if (signOutError) console.error('[invite] 불일치 계정 세션 정리 실패:', signOutError.message)
-      }
+      // 서버 로그아웃이 실패·던져도 로컬 세션은 지운다(endSession — 로그아웃 경로는 하나, AA8)
+      if (signOutOnMismatch && res.error === E_OTHER_ACCOUNT) await endSession()
       setError(res.error)
       return
     }

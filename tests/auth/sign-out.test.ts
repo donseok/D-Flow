@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ calls: [] as string[], signOut: vi.fn(), draftsAtSignOut: null as string[] | null }))
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: () => ({ auth: { signOut: h.signOut } }) }))
-import { signOutAndClear } from '@/lib/auth/signOut'
+import { endSession, signOutAndClear } from '@/lib/auth/signOut'
 
 const router = () => ({ replace: vi.fn((href: string) => { h.calls.push(`replace:${href}`) }), refresh: vi.fn(() => { h.calls.push('refresh') }) })
 const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith('wiki-draft'))
@@ -48,5 +48,24 @@ describe('signOutAndClear', () => {
     await signOutAndClear(router())
     expect(h.calls).toContain('replace:/login')
     spy.mockRestore()
+  })
+})
+
+// AA8 — 이동 없는 세션 정리(초대 화면의 불일치 계정 되돌림이 같이 쓴다 — 로그아웃 경로는 하나, W16)
+describe('endSession', () => {
+  it('서버 로그아웃이 되면 그것뿐 — 이동·쿠키·초안 정리 없음', async () => {
+    localStorage.setItem('wiki-draft:v2:u1:p1:t1', 'x')
+    await endSession()
+    expect(h.calls).toEqual(['signOut:global'])
+    expect(localStorage.getItem('wiki-draft:v2:u1:p1:t1')).toBe('x'); expect(document.cookie).toContain('dflow-ws=acme')
+  })
+  it('오류·던짐이면 로컬 로그아웃으로 지운다(로그)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.signOut.mockImplementationOnce(async () => { h.calls.push('signOut:global'); return { error: { message: '503' } } })
+    await endSession()
+    h.signOut.mockImplementationOnce(async () => { h.calls.push('signOut:global'); throw new Error('offline') })
+    await endSession()
+    expect(h.calls).toEqual(['signOut:global', 'signOut:local', 'signOut:global', 'signOut:local'])
+    err.mockRestore()
   })
 })

@@ -11,6 +11,17 @@ import { WS_COOKIE } from '@/lib/workspace/constants'
  */
 export async function signOutAndClear(router: { replace: (href: string) => void; refresh: () => void }): Promise<void> {
   try { clearAllWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
+  await endSession()
+  try { document.cookie = `${WS_COOKIE}=; path=/; max-age=0; samesite=lax` } catch { /* 쿠키를 못 쓰는 환경 */ }
+  router.replace('/login')
+  router.refresh()
+}
+
+/**
+ * 세션만 끊는다(이동·초안·쿠키 정리 없음) — 서버 로그아웃이 오류·던짐이면 로컬 로그아웃(scope:'local')으로 반드시 지운다(Y2).
+ * signOutAndClear 와 초대 화면의 불일치 계정 되돌림이 같이 쓴다(로그아웃 경로는 하나 — W16, U2b-3 보안 리뷰 AA8).
+ */
+export async function endSession(): Promise<void> {
   const auth = createBrowserClient().auth
   let failed: unknown = null
   try { const { error } = await auth.signOut(); if (error) failed = error } catch (e) { failed = e }
@@ -18,7 +29,4 @@ export async function signOutAndClear(router: { replace: (href: string) => void;
     console.error('[signOut] 서버 로그아웃 실패 — 로컬 세션을 지운다:', failed instanceof Error ? failed.message : (failed as { message?: string }).message ?? failed)
     try { await auth.signOut({ scope: 'local' }) } catch (e) { console.error('[signOut] 로컬 로그아웃 실패:', e instanceof Error ? e.message : e) }
   }
-  try { document.cookie = `${WS_COOKIE}=; path=/; max-age=0; samesite=lax` } catch { /* 쿠키를 못 쓰는 환경 */ }
-  router.replace('/login')
-  router.refresh()
 }
