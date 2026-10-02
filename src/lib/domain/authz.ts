@@ -56,15 +56,24 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
   if (actor.workspaceRoles.get(wid) === 'admin') return 'admin'  // ⑤ 워크스페이스 관리자 승계(Q2) — 명단 행보다 먼저
   return actor.projectRoles.get(projectId) ?? 'viewer'           // ⑥ 명단 행
 }
+declare const HIDDEN_PROJECT_IDS: unique symbol
+/**
+ * 명단 밖 비공개 프로젝트 id 집합 — 만드는 곳은 getHiddenProjectIds(src/lib/authz/visibility.ts) 하나다(HH2). 브랜드라 `new Set()`·임의 집합을
+ * isHiddenProject 의 셋째 인자로 넘기면 typecheck 가 실패한다 — 병합 때 두 인자 호출을 빈 집합으로 메우면 명단 밖 비공개가 조용히 열리기 때문이다.
+ * 테스트는 tests/fixtures/actor.ts 의 hiddenIds() 로 만든다. tests/invariants/hidden-project-ids-brand.test.ts 가 고정한다.
+ */
+export type HiddenProjectIds = ReadonlySet<string> & { readonly [HIDDEN_PROJECT_IDS]: true }
 /**
  * 프로젝트 화면 숨김의 한 판정자(UI-2b 최종 리뷰 GG1) — 레이아웃·페이지 재판정·`/api/shell` 프로젝트 배지·전환 대상·최근 방문·루트 시작
  * 화면이 모두 이것으로 가른다. 숨김 = ① 타 워크스페이스·미존재(roleIn null), 플랫폼 관리자는 없는 pid ② 명단 밖 비공개 — 셋째 인자
- * `hiddenPrivate` 는 getHiddenProjectIds()(비공개 ∧ canSeeProject 거짓, 회의록·위키·AI·포털 목록과 같은 정본)의 결과다. 필수 인자라
- * 비공개 축을 빠뜨린 호출이 컴파일되지 않는다. 그 집합을 못 읽었으면(던짐) 호출부가 404 로 위장하지 않고 자기 실패 관례로 돌린다.
+ * `hiddenPrivate` 는 getHiddenProjectIds()(비공개 ∧ canSeeProject 거짓, 회의록·위키·AI·포털 목록과 같은 정본)의 결과다. 필수 인자이고
+ * 브랜드 타입(HiddenProjectIds)이라 비공개 축을 빠뜨린 호출도, 다른 출처의 집합(빈 집합 포함)을 넘긴 호출도 컴파일되지 않는다(HH2).
+ * '명단 밖'의 경계는 access_role 이다 — 명단 행이 있어도 access_role 이 null 이면 projectRoles 에 없으므로 숨는다(canSeeProject 와 같은 축, HH5).
+ * 그 집합을 못 읽었으면(던짐) 호출부가 404 로 위장하지 않고 자기 실패 관례로 돌린다.
  * roleIn 은 플랫폼 관리자에게 pid 가 무엇이든 'superuser' 라 그것만으로는 미존재를 가리지 못한다.
  * buildActor 는 플랫폼 관리자에게 전 프로젝트를 싣으므로 projectWorkspace 에 없으면 미존재다.
  */
-export function isHiddenProject(actor: Actor | null, projectId: string, hiddenPrivate: ReadonlySet<string>): boolean {
+export function isHiddenProject(actor: Actor | null, projectId: string, hiddenPrivate: HiddenProjectIds): boolean {
   if (!actor) return true
   if (hiddenPrivate.has(projectId)) return true
   if (actor.isSuperuser) return !actor.projectWorkspace.has(projectId)

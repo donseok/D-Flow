@@ -32,12 +32,14 @@ const PID = '00000000-0000-0000-7e57-000000001482', MID = '00000000-0000-0000-7e
 const AI_OFF = 'AI 를 사용할 수 없어 이슈 분석서를 생성할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.'
 const calls = () => vi.mocked(aiAvailable).mock.calls
 
-/** 어떤 체인이든 같은 결과로 끝나는 조회 흉내(select·eq·is·or·order·limit·in → maybeSingle 또는 await) */
+/** 어떤 체인이든 같은 결과로 끝나는 조회 흉내(select·eq·is·or·order·limit·in·range → maybeSingle 또는 await).
+ *  배열 결과는 count 를 싣는다 — getHiddenProjectIds 가 쪽 나눔 + count 대조로 읽는다(HH1) */
 function query(result: { data: unknown; error: null }) {
   const c: Record<string, unknown> = {}
-  for (const k of ['select', 'eq', 'is', 'or', 'order', 'limit', 'in']) c[k] = () => c
+  for (const k of ['select', 'eq', 'is', 'or', 'order', 'limit', 'in', 'range']) c[k] = () => c
   c.maybeSingle = async () => result
-  c.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej)
+  const awaited = Array.isArray(result.data) ? { ...result, count: result.data.length } : result
+  c.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(awaited).then(res, rej)
   return c
 }
 async function readAll(stream: ReadableStream<Uint8Array> | null): Promise<string> {

@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor } from '@/lib/authz'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
-import { hasWorkspaceMembership, isHiddenProject, type Actor } from '@/lib/domain/authz'
+import { hasWorkspaceMembership, isHiddenProject, type Actor, type HiddenProjectIds } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 import type { UiPrefs } from '@/lib/domain/types'
 import { RECENT_MAX, RETIRED_PREF_KEYS, mergePrefs, pushRecent, splitPrefs } from '@/lib/prefs/split'
@@ -94,14 +94,15 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
     }
     if (!hasWorkspaceMembership(actor, wid)) { console.error('[saveUiPrefs] 소속이 아닌 워크스페이스 — 저장하지 않는다:', wid); return { ok: false } }
     // 방문은 프로젝트 화면과 같은 판정자로 거른다(GG1 — 명단 밖 비공개 포함). 그 판정이 실패하면 쓰기 전 선행 판정 실패 — 중단한다(원칙 ②)
-    let hidden: ReadonlySet<string> = new Set()
+    // 방문이 없으면 판정하지 않는다(빈 집합으로 대신하지 않는다 — HiddenProjectIds 는 getHiddenProjectIds 만 만든다, HH2)
     if (rawVisits.length) {
+      let hidden: HiddenProjectIds
       try { hidden = await getHiddenProjectIds() } catch {
         console.error('[saveUiPrefs] 비공개 판정 실패 — 저장하지 않는다')
         return { ok: false }
       }
+      visits = visitsIn(actor, wid, rawVisits, hidden)
     }
-    visits = visitsIn(actor, wid, rawVisits, hidden)
   }
   const sb = await createServerClient()
   let ok = true
@@ -119,7 +120,7 @@ export async function saveUiPrefs(patch: Partial<UiPrefs>, opts: { workspaceId?:
 }
 
 /** 방문 id 중 그 워크스페이스에서 볼 수 있는 프로젝트만(소문자 uuid) — 다른 워크스페이스·숨김(명단 밖 비공개 포함)·모르는 id·형식 밖은 버리고 개수만 로그 */
-function visitsIn(actor: Actor | null, wid: string, raw: unknown[], hidden: ReadonlySet<string>): string[] {
+function visitsIn(actor: Actor | null, wid: string, raw: unknown[], hidden: HiddenProjectIds): string[] {
   const out: string[] = []
   let dropped = 0
   for (const v of raw) {
