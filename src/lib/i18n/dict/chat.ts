@@ -12,6 +12,7 @@ export const chatKo = {
   'chat.error.generic': '문제가 발생했어요.',
   'chat.error.empty': '답변을 가져오지 못했어요.',
   'chat.error.retry': '죄송해요, 답변 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.',
+  'chat.error.noScope': '지금 화면의 워크스페이스를 아직 확인하지 못했어요. 잠시 후 다시 물어봐 주세요.',
   'chat.welcome.greeting': '안녕하세요, AI 어시스턴트입니다.',
   'chat.welcome.ask': '궁금한 점을 자유롭게 질문하세요!',
   'chat.welcome.currentProject': '현재 프로젝트',

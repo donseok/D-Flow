@@ -14,6 +14,7 @@ export const chatEn: Record<keyof typeof chatKo, string> = {
   'chat.error.generic': 'Something went wrong.',
   'chat.error.empty': 'Could not get a response.',
   'chat.error.retry': 'Sorry, something went wrong while answering. Please try again in a moment.',
+  'chat.error.noScope': "I couldn't tell which workspace this screen belongs to yet. Please ask again in a moment.",
   'chat.welcome.greeting': 'Hi, this is the AI Assistant.',
   'chat.welcome.ask': 'Ask me anything!',
   'chat.welcome.currentProject': 'Current project',

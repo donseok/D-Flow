@@ -272,7 +272,9 @@ describe('AssistantChat — 요청의 워크스페이스(과제 34)', () => {
     expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WB.id}&probe=1`])
   })
 
-  it('범위가 없는 화면은 묻지 않는다(서버 400 을 쌓지 않는다) — 첫 진입은 위젯 없음, 범위 화면에서 넘어오면 직전 판정 유지', async () => {
+  // U2b-5 리뷰 수정 CC4 — (global) 은 검증된 쿠키 워크스페이스를 게시한다(레이아웃). 그래도 범위가 없는 화면(소속 0 등)은 보낼 수 있는 요청이
+  // 없으므로 진입점을 닫는다 — 직전 판정을 남겨 두면 새 질문이 서버 400 문구('워크스페이스를 지정해야 합니다')로 말풍선에 뜬다
+  it('범위가 없는 화면은 묻지 않고(서버 400 을 쌓지 않는다) 진입점을 닫는다 — 범위 화면에서 넘어와도 닫고, 범위가 돌아오면 다시 연다', async () => {
     nav.pathname = '/account'
     await act(async () => { root.render(scoped(null)); await settle() })
     expect(probes()).toEqual([])
@@ -284,6 +286,28 @@ describe('AssistantChat — 요청의 워크스페이스(과제 34)', () => {
     nav.pathname = '/account'
     await act(async () => { root.render(scoped(null)); await settle() })
     expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WA.id}&probe=1`])
+    expect(fab()).toBeNull()
+    nav.pathname = '/w/acme'
+    await act(async () => { root.render(scoped(WA)); await settle() })
     expect(fab()).not.toBeNull()
+  })
+  it('(global) 이 게시한 범위로 프로젝트 없는 질문을 보낸다 — 400 이 아니다', async () => {
+    nav.pathname = '/account'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(probes()).toEqual([`/api/chat/context?projectId=&workspaceId=${WA.id}&probe=1`])
+    expect(fab()).not.toBeNull()
+  })
+  it('범위가 비는 순간(게시가 한 커밋 늦은 범위 경로)에 보내면 서버로 가지 않고 안내 문장을 낸다 — 서버 400 문구를 말풍선에 싣지 않는다', async () => {
+    nav.pathname = '/w/acme'
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    await openPanel()
+    nav.pathname = '/w/beta'   // 경로는 B, 게시는 아직 A — 요청 워크스페이스 없음(requestWorkspaceId)
+    await act(async () => { root.render(scoped(WA)); await settle() })
+    expect(input()).not.toBeNull()
+    const before = fetchMock.mock.calls.length
+    await type('이번 주 작업 알려줘')
+    await send()
+    expect(fetchMock.mock.calls.slice(before).map(([u]) => String(u)).filter((u) => !u.includes('probe=1'))).toEqual([])
+    expect(container.textContent).toContain('chat.error.noScope')
   })
 })

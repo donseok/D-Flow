@@ -11,6 +11,7 @@ import { ASSISTANT_NAME } from '@/lib/branding'
 import { useCurrentBotPageContext } from './BotPageContextProvider'
 import { consumeChatNdjson, isSafeInternalBotHref } from './chatStream'
 import { QUICK_SUGGESTIONS } from '@/lib/ai/intent'
+import { parseScopePath } from '@/lib/nav/active'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
@@ -139,6 +140,9 @@ export function AssistantChat() {
   // 프로젝트 없는 질문의 범위(D26, 과제 34) — 화면 문맥이 셸 범위에서 고른 워크스페이스(프로젝트 화면이면 null). 모든 챗 요청에 싣는다
   const currentWorkspaceId = pageContext.workspaceId ?? null
   const scopeQuery = `projectId=${currentProjectId ?? ''}${currentWorkspaceId ? `&workspaceId=${encodeURIComponent(currentWorkspaceId)}` : ''}`
+  // 보낼 수 있는 요청이 없는 화면 — 범위 경로(/w/·/p/)가 아니고 게시 범위도 없다(소속 0 등. (global) 은 레이아웃이 검증된 쿠키 워크스페이스를
+  // 게시한다 — CC4). 범위 경로의 빈 순간(게시가 한 커밋 늦음)은 여기에 넣지 않는다 — /w/A → /w/B 전환마다 진입점이 깜박이지 않게
+  const noScope = !currentProjectId && !currentWorkspaceId && parseScopePath(pageContext.pathname) === null
   const shellScope = useShellScope()
   const projectList = shellScope?.projects ?? []
   const currentProjectName = projectList.find(p => p.id === currentProjectId)?.name ?? null
@@ -231,8 +235,10 @@ export function AssistantChat() {
   useEffect(() => () => streamAbortRef.current?.abort(), [])
 
   // 처음과 프로젝트·워크스페이스 전환 때 모듈 관문만 확인한다. 전환 중에는 이전 판정을 유지한다(404 만 닫는다).
-  // 범위가 없으면(첫 게시 전·(global) 화면) 묻지 않고 판정을 바꾸지 않는다 — 서버는 400 이고 추측하지 않는다(과제 34). 게시가 오면 다시 돈다
+  // 범위가 없으면 묻지 않는다 — 서버는 400 이고 추측하지 않는다(과제 34). 범위 없는 화면(noScope)이면 진입점을 닫는다(대화 상태는 이 컴포넌트에
+  // 남는다 — 범위가 돌아오면 탐침이 다시 열고 이어진다, CC4). 범위 경로의 빈 순간은 판정을 바꾸지 않는다. 게시가 오면 다시 돈다
   useEffect(() => {
+    if (noScope) { setOpenRef.current(false); setAvailable(false); return }
     if (!currentProjectId && !currentWorkspaceId) return
     let alive = true
     fetch(`/api/chat/context?${scopeQuery}&probe=1`, { cache: 'no-store' })
@@ -249,7 +255,7 @@ export function AssistantChat() {
       .catch(() => { if (alive) setAvailable(true) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scopeQuery 는 두 값에서 만든다
-  }, [currentProjectId, currentWorkspaceId])
+  }, [currentProjectId, currentWorkspaceId, noScope])
 
   // 탐침 결과를 레일 공급자에 싣는다 — 전역 바 아이콘(useAiRailButton)·WBS 전체 화면 툴바 토글이 읽는다. 레일 API 로 열 수 있을 때만
   // (레일로 그리거나, 좁아도 전체 화면 안 자리가 있을 때 — AA3). 그 밖의 좁은 화면은 FAB 가 진입점
@@ -357,6 +363,11 @@ export function AssistantChat() {
       const history = messages.map(m => ({ role: m.role, content: m.content }))
       setMessages(prev => [...prev, { id: nextId(), role: 'user', content: text }])
       clearInput()
+      // 범위가 비어 있으면(게시가 한 커밋 늦은 순간 등) 보내지 않는다 — 서버 400 문구('워크스페이스를 지정해야 합니다')는 사용자가 어쩔 수 없는 말이다(CC4)
+      if (!currentProjectId && !currentWorkspaceId) {
+        setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: t('chat.error.noScope') }])
+        return
+      }
       if (isCommandUtterance(text)) {
         lastCommandRef.current = text
         const outcome = await requestProposal(text)

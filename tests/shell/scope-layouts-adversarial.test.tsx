@@ -221,8 +221,21 @@ describe('(global) 레이아웃 — 쿠키 워크스페이스', () => {
     h.memberError = 'down'
     await expect(glob()).rejects.toThrow(); expect(h.minimalShell).not.toHaveBeenCalled(); expect(h.loadShell).not.toHaveBeenCalled()
   })
-  it('(global) 은 게시 저장소를 그리지 않는다 — 쿠키를 쓰지 않는다(D3)', async () => {
+  // U2b-5 리뷰 수정 CC4 — (global) 이 범위를 게시하지 않으면 프로젝트 없는 AI 질문이 400, 사용 기록이 공백이었다.
+  // 소속을 다시 본 쿠키 워크스페이스를 게시하되 persist=false 라 쿠키·방문은 쓰지 않는다(D3 — 쓰는 곳은 범위 레이아웃 하나)
+  it('(global) 은 검증된 쿠키 워크스페이스를 게시한다 — 쿠키·방문은 쓰지 않는다(persist=false, D3)', async () => {
     h.cookie = 'bravo'
+    renderToString(await glob())
+    expect(h.shellScope).toHaveBeenCalledTimes(1)
+    expect(h.shellScope).toHaveBeenCalledWith(expect.objectContaining({ workspace: B, projectId: null, persist: false }))
+  })
+  it('(global) 위조 쿠키는 첫 소속을 게시한다 — 남의 워크스페이스를 범위로 싣지 않는다', async () => {
+    h.ws = [A, B, C]; h.cookie = 'charlie'
+    renderToString(await glob())
+    expect(h.shellScope).toHaveBeenCalledWith(expect.objectContaining({ workspace: A, persist: false }))
+  })
+  it('(global) 소속 0 이면 게시하지 않는다 — 범위 없음(AI 진입점은 클라이언트가 닫는다)', async () => {
+    h.members = []; h.cookie = 'acme'
     renderToString(await glob())
     expect(h.shellScope).not.toHaveBeenCalled()
   })
