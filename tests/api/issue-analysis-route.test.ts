@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import { makeMemberActor } from '../fixtures/actor'
+import { calSeoulMon } from '../helpers/calendarFixture'
+import { ConfigKeyError } from '@/lib/settings/errors'
 import {
   buildIssueAnalysisInputSnapshot,
   buildIssueAnalysisReport,
@@ -13,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   loadSavedIssueAnalysisRun: vi.fn(),
   getDiagnostic: vi.fn(),
   renderIssueAnalysisPpt: vi.fn(),
+  getProjectConfig: vi.fn(),
 }))
 
 vi.mock('@/lib/authz', () => ({
@@ -24,6 +27,8 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/data/issueAnalysis', () => ({
   loadSavedIssueAnalysisRun: mocks.loadSavedIssueAnalysisRun,
 }))
+// 생성일 라벨·파일명 날짜의 tz = 프로젝트 달력(SP5 과제 20) — 해석기만 바꿔 끼운다
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/report/issues/export', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/report/issues/export')>()
   return {
@@ -102,6 +107,7 @@ beforeEach(() => {
     }),
   })
   mocks.getDisplayName.mockResolvedValue('홍길동')
+  mocks.getProjectConfig.mockResolvedValue({ calendar: calSeoulMon, calendarError: null })
   mocks.loadSavedIssueAnalysisRun.mockResolvedValue({
     runId: 'run-1',
     projectId: 'project-1',
@@ -180,4 +186,16 @@ describe('GET /api/issue-analysis', () => {
       meta: expect.objectContaining({ authorTeam: '' }),
     }))
   })
+
+  it('프로젝트 달력이 손상이면 고정 문구 500 — 서울·UTC 로 대체하지 않고 원문은 로그로', async () => {
+    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
+    mocks.getProjectConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    spy.mockRestore()
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({ error: '이슈 분석서 PPT를 생성하지 못했습니다.' })
+    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
+  })
+
 })
