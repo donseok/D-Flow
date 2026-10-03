@@ -13,6 +13,7 @@ import { orderAreas } from '@/lib/domain/weeklySheet'
 import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
 import { useToast } from '@/components/ui/Toast'
+import { SettingsSaveBar } from './SettingsSaveBar'
 
 const KIND_LABEL = { weekly_section: '업무영역' } as const
 const TEAM_KIND_LABEL: Record<AreaTeamKind, string> = { primary: '주', support: '보조' }
@@ -209,10 +210,10 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
               활성
             </label>
             {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-ink-muted">{DEACTIVATE_NOTE}</p>}
-            <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
+            <SettingsSaveBar tone="subtle">
               <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setDraft(null); setError(null) }}>취소</button>
-            </div>
+              <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
+            </SettingsSaveBar>
           </form>
         )}
         <p className="mt-3 text-xs leading-5 text-ink-subtle">

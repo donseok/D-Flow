@@ -12,6 +12,7 @@ import { currentRuleDay, parseTimezone, parseWorkingDays, type IsoDow, type Week
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
 import { browserTimezoneSuggestion, type CalendarFieldState } from '@/lib/settings/calendarField'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
 import { TimezoneSelect } from './TimezoneSelect'
@@ -218,13 +219,12 @@ export function CalendarSettingsPanel(props: {
         onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(k => !conflict.invalidKeys.includes(k))} />}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
       {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-      <div data-save-bar className="sticky bottom-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3 shadow-sm">
-        <span className="text-xs text-fg-muted">변경 {changed.length}개</span>
+      <SettingsSaveBar summary={`변경 ${changed.length}개`}>
         {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
         <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>
           {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
         </button>
-      </div>
+      </SettingsSaveBar>
     </div>
   )
 }

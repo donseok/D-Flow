@@ -7,6 +7,7 @@ import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsComman
 import { BRANDING_SLOTS, type BrandingSlot } from '@/lib/settings/brandingPath'
 import type { BrandingLogo } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 const EMPTY: BrandingLogo = { full: null, full_dark: null, mark: null }
@@ -142,9 +143,10 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     {uploadError && <ConfigStateNotice kind="field" locale="ko" message={uploadError} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
-      {uncertainPatch ? '저장 결과 확인 및 재시도' : '로고 설정 저장'}
-    </button>
+    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
+        {uncertainPatch ? '저장 결과 확인 및 재시도' : '로고 설정 저장'}
+      </button>
+    </SettingsSaveBar>
   </div>
 }

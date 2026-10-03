@@ -14,12 +14,9 @@ export function agentTabs(projectId: string): ReadonlyArray<{ key: AgentTabKey; 
   ]
 }
 
+// 톤은 고정 도구 줄의 light 하나다 — 머리(AgentHero)에서 탭이 내려온 뒤 쓰이지 않던 dark 갈래를 지웠다(UI-2b BB4 이월, SP3b UI-3)
 export const TAB_TONE = {
   light: { on: 'bg-brand-weak text-brand', off: 'text-ink-muted hover:text-ink' },
-  dark: {
-    on: 'border border-action/40 bg-action-soft text-action',
-    off: 'border border-border text-fg-secondary hover:text-fg',
-  },
 } as const
 
 export type TabTone = keyof typeof TAB_TONE

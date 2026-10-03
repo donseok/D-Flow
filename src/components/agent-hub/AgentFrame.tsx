@@ -13,7 +13,7 @@ import { useCompactViewport } from '@/lib/hooks/useCompactViewport'
 import { AgentTabs, type TabTone } from './AgentTabs'
 
 /** 고정 도구 줄(늘 light 톤)에 얹는 내비게이션. 기본은 프로젝트의 위임·승인|에이전트 스튜디오 탭이다.
- *  톤 인자는 남아 있지만 지금 호출은 'light' 하나다 — TAB_TONE.dark 갈래는 쓰이지 않는다(정리는 UI-3 이월, BB4) */
+ *  톤은 'light' 하나다(TAB_TONE — dark 갈래는 SP3b UI-3 이 지웠다, BB4 이월). 인자는 OfficeNav 등 바깥 nav 가 같은 톤을 받게 남긴다 */
 export type HeroNav = (tone: TabTone) => ReactNode
 
 /** 헤더 타일 하나. bar=false 면 누적 막대에서 뺀다(합계가 다른 축의 숫자). */

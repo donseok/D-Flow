@@ -7,6 +7,7 @@ import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandR
 import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 export interface ProjectModuleOption { id: ModuleId; label: string; allowed: boolean; available: boolean }
@@ -139,10 +140,9 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
       <p>기존 데이터는 삭제되지 않으며, 다음 요청부터 새 모듈 설정이 적용됩니다.</p>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-    <div className="flex flex-wrap gap-2">
+    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
       <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
       {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
-    </div>
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+    </SettingsSaveBar>
   </div>
 }

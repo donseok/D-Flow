@@ -7,6 +7,7 @@ import { deriveAccent } from '@/lib/settings/accent'
 import type { AccentValue } from '@/lib/settings/accent'
 import { newUuid } from '@/lib/domain/uuid'
 import { ACCENT_TOKENS } from '@/lib/settings/accentTokens'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 function baseOf(value: unknown): string | null {
@@ -108,9 +109,10 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
-      {uncertainPatch ? '저장 결과 확인 및 재시도' : '강조색 저장'}
-    </button>
+    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
+        {uncertainPatch ? '저장 결과 확인 및 재시도' : '강조색 저장'}
+      </button>
+    </SettingsSaveBar>
   </div>
 }

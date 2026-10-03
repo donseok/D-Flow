@@ -11,6 +11,7 @@ import { newUuid } from '@/lib/domain/uuid'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
+import { SettingsSaveBar } from './SettingsSaveBar'
 
 export function messageOf(r: SettingsCommandResult): string | null {
   if (r.ok) return null
@@ -103,8 +104,8 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
           </li>
         ))}
       </ol>
-      <div className="flex items-center gap-2">
-        {labels.length < LEVEL_LABELS_MAX && (
+      {labels.length < LEVEL_LABELS_MAX && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
             data-add-level
@@ -114,18 +115,19 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
           >
             <Plus className="h-4 w-4" /> 단계 추가
           </button>
-        )}
-        <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
-          {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
-        </button>
-      </div>
+        </div>
+      )}
       {conflict && <ConflictCompare rows={[{ key: 'core.level_labels', label: 'WBS 단계', mine: labels.join(' → '), latest: conflict.latest?.join(' → ') ?? '설정 손상' }]}
         latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
         onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
       {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
       {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-      {notice && <p role="status" className="text-xs text-done">{notice}</p>}
+      <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+        <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
+          {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
+        </button>
+      </SettingsSaveBar>
     </div>
   )
 }

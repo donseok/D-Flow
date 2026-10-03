@@ -6,6 +6,7 @@ import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsComman
 import { NAV_GROUP_OF, NAV_ITEM_IDS, type NavGroupId, type NavItemId } from '@/lib/nav/ids'
 import type { NavMenuSetting } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 const GROUPS: readonly { id: NavGroupId; label: string }[] = [
@@ -140,9 +141,10 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
-      {uncertainPatch ? '저장 결과 확인 및 재시도' : '메뉴 설정 저장'}
-    </button>
+    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
+        {uncertainPatch ? '저장 결과 확인 및 재시도' : '메뉴 설정 저장'}
+      </button>
+    </SettingsSaveBar>
   </div>
 }

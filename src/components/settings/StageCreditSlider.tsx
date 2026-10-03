@@ -15,6 +15,7 @@ import { statusOf } from '@/lib/domain/progress'
 import type { DictKey } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import {
   CREDIT_GAP, CREDIT_KEYS, CREDIT_STEP, DEFAULT_STAGE_CREDITS, clampCredit, validateStageCredits,
   type CreditKey, type CreditTable, type StageCredits,
@@ -389,15 +390,16 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
 
       {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
       {error && <div data-credit-error><ConfigStateNotice kind="patch" locale={locale} message={error} /></div>}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</span>
-        {editable && (
+      {editable ? (
+        <SettingsSaveBar summary={t('settings.creditsNoRetro')}>
           <button type="button" data-credit-save onClick={save} disabled={pending || (!dirty && !uncertainPatch) || !!conflict}
-            className="btn btn-primary ml-auto h-8 px-3 text-xs">
+            className="btn btn-primary h-8 px-3 text-xs">
             {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? t('settings.creditsSave') : '변경 내용 검토'}
           </button>
-        )}
-      </div>
+        </SettingsSaveBar>
+      ) : (
+        <p className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</p>
+      )}
       {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
         <h3 className="font-semibold text-ink">변경 내용 검토</h3>
         {CREDIT_KEYS.filter(key => baseline[key] !== table[key]).map(key =>

@@ -8,7 +8,6 @@ const EXEMPT: Record<string, string> = {
   'src/components/wbs/WbsGanttSheet.tsx': '채움형 그리드 자신의 스크롤 영역(열 머리·고정 열)',
   'src/components/agent-hub/DelegationTable.tsx': '표 자신의 스크롤 영역(delegationTable.module.css .box — overflow:auto + max-height)',
   'src/components/members/MemberPicker.tsx': '목록 자신의 스크롤 영역(max-h-52 overflow-y-auto) 안 분류 머리',
-  'src/components/settings/WorkspaceFieldsEditor.tsx': '아래 고정 저장 바(bottom) — 도구 줄과 무관',
 }
 describe('sticky-offset', () => {
   it('예외 밖의 sticky 는 top-0·top-<숫자> 가 아니라 --frame-sticky-top, 층은 z-10 이하', () => {

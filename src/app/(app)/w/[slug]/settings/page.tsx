@@ -18,6 +18,8 @@ import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { PageFrame } from '@/components/app/PageFrame'
+import { PageHeader } from '@/components/app/PageHeader'
 import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPanel'
 import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
 import { todayIn } from '@/lib/domain/calendar'
@@ -53,7 +55,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   } catch (error) {
     if (!(error instanceof ConfigUnavailableError)) throw error
     console.error('[workspace settings] 설정 조회 실패:', { workspaceId: access.id, cause: error.message })
-    return <ConfigLoadError locale={locale} error="워크스페이스 설정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." />
+    return <PageFrame header={<PageHeader title="워크스페이스 설정" meta={access.name} />}>
+      <ConfigLoadError locale={locale} error="워크스페이스 설정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." />
+    </PageFrame>
   }
 
   const allowed = config.keys['modules.allowed']
@@ -66,11 +70,8 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   const historyCalError = historyCal.ok ? null
     : <ConfigLoadError error={historyCal.error} keyName={historyCal.key} kind={historyCal.kind} locale={locale} />
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-20">
-      <div>
-        <p className="eyebrow">Workspace settings</p>
-        <h1 className="mt-1 text-2xl font-bold text-ink">{access.name} 설정</h1>
-      </div>
+    // 머리 하나(PageHeader — 개정 §5.9.3). 본문 폭 800·저장 바 예약은 SettingsShell 이 맡는다(SP3b 스펙 §6.4)
+    <PageFrame header={<PageHeader title="워크스페이스 설정" meta={access.name} />}>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
         { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-menu', label: '메뉴' },
@@ -139,6 +140,6 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         </div>
       </SectionCard>
       </SettingsShell>
-    </div>
+    </PageFrame>
   )
 }

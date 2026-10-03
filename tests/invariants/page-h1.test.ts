@@ -16,7 +16,6 @@ const ALLOW: Record<string, number> = {
   'src/app/login/page.tsx': 1,
   'src/app/invite/[token]/page.tsx': 1,
   'src/app/not-found.tsx': 1,
-  'src/app/(app)/w/[slug]/settings/page.tsx': 1,        // C — 설정 화면 머리(UI-3 이 PageHeader 로)
 }
 describe('page-h1', () => {
   it('<h1 은 허용 목록 파일에만, 개수 그대로', () => {

@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
-import { getComputedWbs } from '@/lib/data/wbs'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
@@ -21,10 +20,9 @@ import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { ConfigStateNotice } from '@/components/settings/ConfigStateNotice'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { PageHeader } from '@/components/app/PageHeader'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { collectLeaves, fmtDate } from '@/components/wbs/shared'
+import { fmtDate } from '@/components/wbs/shared'
 import { ProjectInfoEditButton } from '@/components/settings/ProjectInfoEditButton'
 import { ProjectPrivacyToggle } from '@/components/settings/ProjectPrivacyToggle'
 import { ScheduleManager } from '@/components/settings/ScheduleManager'
@@ -129,15 +127,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const { projectId } = await params
   await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
-  const [wbs, projects, actor] = await Promise.all([
-    // 이 페이지가 트리에서 쓰는 건 표시용 스탯(taskCount)뿐이다 — 날짜 예외는 설정 해석기(pc.cfg.holidays)가 읽는다.
-    // WBS 조회 실패로 페이지 전체가 에러 바운더리로 떨어지면 복구 경로인 엑셀 임포트 UI까지 함께 막힌다 —
-    // 정확성 이득 없이 가용성만 잃으므로 이 페이지에서만 degrade 한다.
-    // (대시보드·WBS·칸반은 트리가 화면의 본체라 throw 를 그대로 둔다.)
-    getComputedWbs(projectId).catch((e: unknown) => {
-      console.error('[settings] WBS 조회 실패 — 통계만 degrade:', e)
-      return null
-    }),
+  // WBS 트리는 읽지 않는다 — 트리에서 쓰던 표시용 스탯(과업 수 KPI)을 머리 교체(SP3b UI-3 — PageHeader)와 함께 지웠다.
+  // 날짜 예외는 설정 해석기(pc.cfg.holidays)가 읽는다.
+  const [projects, actor] = await Promise.all([
     listProjects(),
     getActorForView(),
   ])
@@ -150,7 +142,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const workspaceLink = workspaceId ? (await manageableWorkspaceLinks(actor, workspaceId))[0] : null
   const isSuperuser = actor?.isSuperuser === true
   const canMutate = isAdmin
-  const taskCount = wbs ? collectLeaves(wbs.items).length : '—'
   // 위 Promise.all 에 합류시키지 않는다 — 슈퍼유저에게만 필요한 부가 정보이고,
   // 이 조회의 실패가 페이지 본체(임포트·일정 등)를 막으면 안 된다(배지 degrade 로 흡수).
   // 권한·초대 관리는 팀 구성 페이지로 이동했다(2026-08-20 화면 통합).
@@ -208,33 +199,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       : t(locale, 'settings.tbd')
 
   return (
+    // 머리 하나(PageHeader — 개정 §5.9.3, SP3b 스펙 §6.4). 일정은 meta 로, 과업 수·기준일 KPI 카드는 지웠다(기준일은 '달력' 범주에 있다)
     <ProjectPageShell
-      hero={<PageHero
-        eyebrow="SETTINGS"
-        badge={<HeroBadge>Settings</HeroBadge>}
-        title={`${project?.name ?? t(locale, 'settings.projectFallback')} ${t(locale, 'settings.heroTitleSuffix')}`}
-        description={t(locale, 'settings.heroDesc')}
-        heroKpis={
-          <>
-            <KpiCard variant="hero" label="TASKS" value={taskCount} sub={t(locale, 'settings.kpiTasksSub')} icon={ListTree} tone="brand" />
-            <KpiCard
-              variant="hero"
-              label="BASE DATE"
-              value={project?.base_date ? fmtDate(project.base_date) : t(locale, 'settings.kpiBaseAuto')}
-              sub={project?.base_date ? t(locale, 'settings.kpiBaseSubManual') : t(locale, 'settings.kpiBaseSubToday')}
-              icon={CalendarDays}
-            />
-            <KpiCard
-              variant="hero"
-              label="SCHEDULE"
-              value={<span className="text-[15px] font-bold tabular-nums">{scheduleLabel}</span>}
-              sub={t(locale, 'settings.kpiScheduleSub')}
-              icon={CalendarRange}
-              tone="success"
-            />
-          </>
-        }
-      />}
+      hero={<PageHeader title={locale === 'ko' ? '프로젝트 설정' : 'Project settings'}
+        meta={`${project?.name ?? t(locale, 'settings.projectFallback')} · ${scheduleLabel}`} />}
     >
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },

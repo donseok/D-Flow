@@ -8,6 +8,7 @@ import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { MODULE_LABEL } from '@/lib/modules/labels'
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 const LABEL = MODULE_LABEL
@@ -165,11 +166,10 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
         </div>
       )}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-      <div className="flex gap-2">
+      <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
         <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
         {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
-      </div>
-      {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+      </SettingsSaveBar>
     </div>
   )
 }

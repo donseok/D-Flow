@@ -6,6 +6,7 @@ import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandR
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
+import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 
 const lines = (text: string) => text.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
@@ -99,9 +100,10 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
       onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setReviewing(false); setConflict(null) }}
       onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setReviewing(false); setConflict(null) }} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-    <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
-      {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? '검토 후 저장' : '변경 내용 검토'}
-    </button>
+    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
+        {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? '검토 후 저장' : '변경 내용 검토'}
+      </button>
+    </SettingsSaveBar>
   </div>
 }
