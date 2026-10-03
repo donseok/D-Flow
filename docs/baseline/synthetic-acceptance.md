@@ -118,3 +118,10 @@ SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 �
 - 기존 단계 ✓: `S1-create`·`S1-teams-areas`·`S9-isolation`·`S2-wbs-import`·`S4-weekly-monday`·`boundary-sp4`.
 - 미활성(건너뜀 아님): `S3`(SP5b·SP5c)·`S6`(SP5 B1·SP5b)·`S7`(SP8·SPU1)·`S8`(SP6)·`S10` 나머지(SP5 B1·B4~SP8).
 - 1회차(`0431001e`, 08:16)도 ok — E2E 의 `calendar-tz` 러너 결함과 무관하게 같은 판정이었다. 실행 뒤 `settings:verify` exit 0(프로젝트 17·워크스페이스 5·문제 0).
+
+
+## SP5 B1 — 2026-10-03
+
+- `scripts/e2e-synthetic.mjs`, 전용 3102 `next start`, source HEAD `4eb5fe81`; **exit 0, `ok:true`, 18/18**. 확인한 활성 단계: `S1-issues`, `S6-issue-codes`, `S10-negative`, `S6-pending`, `S10-pending`; SP4 단계 포함 전체 18단계 통과.
+- S10 음성 검사에서 R 대상 7·C 대상 9, 적중·교차 모두 0. 화면 증거는 `weekly_section`만 대상으로 삼아 issue-area 원자료를 주간 출력으로 오인하지 않는다. 합성 영역명 `QA 검사`는 SP4 센티널 단어와 충돌하지 않도록 정했다.
+- 실행 전후 `git diff --quiet -- src supabase` 참. 검사는 로컬 합성 데이터만 사용했다.

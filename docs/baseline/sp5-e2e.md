@@ -56,6 +56,15 @@
 - 커밋 위생(bisect): `90ead30` → `6b36cae`, `ebea4cd` → `ce69c55`, `bafc051`·`1992edb`·`907df97`·`5a64a13` → `a9bab86` 로 건너뛴다. O2(`153d06c8`)의 `Preview-checked` 시각 19:12 는 실제 19:08~09(amend 금지 — 기록으로 정정).
 - merge 커밋 `5e5e82c1` 은 0018 번호가 둘이고(`0018_calendar`·`0018_account_preferences`) 테스트도 빨갛다 — bisect 때 `f9ad12ae` 로 건너뛴다(A 최종 리뷰 P3).
 
+# B1 — 체크포인트(과제 18) · 2026-10-03
+
+- 체크포인트 소스 HEAD `4eb5fe81` (`sp5/b1`), main 기준 `9b50d483` / 마지막 이관 `0019_calendar`; fetch·main 사용자 스택 접근 없음. 전용 `d-flow-sp4` (API 54521, DB 54522)에서 `db:reset`·`dev:bootstrap`·`settings:verify` 문제 0.
+- 마이그레이션 R 왕복: catalog 차이 0·권한 차이 0·데이터 왕복 통과; rollback smoke 20 통과. CI 등가 reset `--version 0001` 뒤 migration up 및 RLS 37 파일·550 통과. 전체 reset/bootstrap 뒤 RLS 재확인.
+- 코드 검사: `ISSUE_MEGA_AREAS`, `issue_mega_areas`, `mega_code`, `pi_issue_code` 사용 0; UI 위험 파일 변경 0; 기존 `schema-invariants` 예외 한 행 제거만. 합성 게이트 `ok:true`, 18/18; 로컬 E2E `ok:true`, 55/55. 이슈 등록·영역별 채번·개명 안정성·분석서·모듈 비활성화 경로를 확인했다. 봇 호출은 외부 LLM 키 없이 단위 검사만.
+- 설정 검사: 4 프로젝트·4 워크스페이스, 문제 0. 전체 Vitest 882 files / 11,648 tests 중 11,647 통과, 기존 macOS firmlink 경로 테스트 1 실패(`tests/scripts/baseline-cli.test.ts`, `.superpowers` 허용 경로를 `/System/Volumes/Data` alias에서도 허용해야 하는 기준선). lint 0 error(기존 경고 4), typecheck 통과.
+- 눈확인: `sp5-ui.md` B1 절, 13 화면 시나리오 × 1440/390 × light/dark; calendar 오류 주입은 전용 DB에서 복구 확인. 빌드는 B1 앱 소스가 마지막 검증된 시점에 성공.
+- 연도 경계: 해당 없음 — 채번 연도는 UTC instant를 설정 시간대로 변환해 산출(`at time zone`); 구간 경계 판정이 아니다.
+
 # B1 — 성능(보류 — 일괄 측정)
 
 - 상태: **보류 — SP5 전체 구현 뒤 일괄 측정**(사용자 지시 2026-10-02, P16). 지금은 이슈 코드 채번·분석 진입 경로의 비용을 대상으로만 기록한다.
