@@ -983,7 +983,7 @@ describe('sp3b-E3 — 칸반 스텁(D36, 스펙 §8.3 E3)', () => {
     const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
     expect(src).toMatch(/sp3b\('E3'/)
     expect(src).toMatch(/kanbanStubCase\(A\.id\)/)
-    expect(src).toMatch(/includes\(KANBAN_BOARD_MARK\)/)
+    expect(src).toMatch(/kanbanBoardRendered\(page\.html\)/)
     expect(KANBAN_BOARD_MARK).toBe('data-kanban-board')       // 과제 14 가 KanbanBoard 루트에 다는 표지와 캡처 행 p-wbs-board 의 기대 선택자
   })
 })

@@ -54,7 +54,7 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  DUO, KANBAN_BOARD_MARK, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, kanbanStubCase, legacyCases,
+  DUO, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, kanbanStubCase, legacyCases,
   shellBadgeVerdict, switcherVerdict,
 } from './lib/e2e.mjs'
 import {
@@ -67,6 +67,16 @@ import { createSessionFactory } from './lib/e2e-session.mjs'
 import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
+import { kanbanBoardRendered, parseE2eSelection, runSelectedE2e } from './lib/e2e-selection.mjs'
+
+// --only sp3b-E3: 레인 B 캡처 시드·3201만 사용한다. 전체 러너의 비밀번호/외부 API 시크릿을 요구하지 않는다.
+try {
+  const selected = parseE2eSelection(process.argv.slice(2))
+  if (selected) process.exit(await runSelectedE2e(selected) ? 0 : 1)
+} catch (e) {
+  console.error(`✗ ${e.message}`)
+  process.exit(1)
+}
 
 class Fail extends Error {}
 const log = (m) => console.error(`· ${m}`)
@@ -1506,7 +1516,7 @@ async function main() {
     const c = kanbanStubCase(A.id)
     for (const x of expectLocation(await raw(ana, c.path), origin, c.want)) p.push(`${c.path}: ${x}`)
     const page = await raw(ana, c.want)
-    if (page.status !== 200 || !page.html.includes(KANBAN_BOARD_MARK)) p.push(`보드가 그려지지 않았다(상태 ${page.status}, 표지 ${page.html.includes(KANBAN_BOARD_MARK)})`)
+    if (page.status !== 200 || !kanbanBoardRendered(page.html)) p.push(`보드가 그려지지 않았다(상태 ${page.status}, 표지 ${kanbanBoardRendered(page.html)})`)
     sp3b('E3', { what: '옛 칸반 → 작업 계획 보드 307(view→group·쿼리 보존)·대상 200 + 보드 표지', from: c.path, to: c.want }, p)
   }
   {

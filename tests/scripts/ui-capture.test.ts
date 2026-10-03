@@ -1140,10 +1140,10 @@ describe('행 prefs 필드(계정 선호 고정 — UI-3 이 projectsView 를 �
 
 describe('railVerdict(§6.7 — 병치에서 필수 열이 잘리면 실패)', () => {
   const all = Object.fromEntries(RAIL_REQUIRED_COLS.map((c: string) => [c, true]))
-  it('필수 열 = 번호·이름·상태·계획 시작·계획 끝', () => { expect(RAIL_REQUIRED_COLS).toEqual(['no', 'name', 'status', 'pstart', 'pend']) })
+  it('필수 열 = 번호·이름·담당팀·진척 상태', () => { expect(RAIL_REQUIRED_COLS).toEqual(['no', 'name', 'owners', 'status']) })
   it('병치 + 필수 열 모두 보임 = 통과', () => { expect(railVerdict({ mode: 'side', cols: all })).toEqual({ ok: true, why: null }) })
   it('병치 + 하나라도 잘림 = 실패(그 열 이름)', () => {
-    expect(railVerdict({ mode: 'side', cols: { ...all, pend: false } })).toEqual({ ok: false, why: 'cut:pend' })
+    expect(railVerdict({ mode: 'side', cols: { ...all, owners: false } })).toEqual({ ok: false, why: 'cut:owners' })
     expect(railVerdict({ mode: 'side', cols: {} })).toEqual({ ok: false, why: 'cut:no' })
   })
   it('오버레이는 열을 보지 않는다(본문이 줄지 않는다)', () => { expect(railVerdict({ mode: 'overlay', cols: {} }).ok).toBe(true) })

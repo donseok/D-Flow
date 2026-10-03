@@ -30,7 +30,7 @@ describe('accentPatch', () => {
     expect(accentPatch({ 'branding.accent': accents.dark }, 'default', accents)).toEqual({ 'branding.accent': null })
   })
   it('같은 값이면 키 순서가 달라도 쓰지 않는다(jsonb 는 키 순서를 보존하지 않는다)', () => {
-    const reordered = Object.fromEntries(Object.entries(accents.light as Record<string, unknown>).reverse())
+    const reordered = JSON.parse(JSON.stringify(accents.light), (_key, value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).reverse()) : value)
     expect(accentPatch({ 'branding.accent': reordered }, 'light', accents)).toBeNull()
   })
   it('모르는 이름은 throw', () => { expect(() => accentPatch({}, 'neon', accents)).toThrow() })

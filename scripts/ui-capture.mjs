@@ -526,7 +526,10 @@ export function contextOptions({ width, height, theme, javaScript }) {
 
 /** 비교 조건 — 늘 같아야 하는 것(날짜·브라우저)과 판·시드의 정체(--allow-cross 참고 대조로만 다를 수 있다, D3) */
 export const META_HARD = Object.freeze(['kstDate', 'seedDate', 'browser'])
-export const META_CROSS = Object.freeze(['scriptCommit', 'routesSha256', 'seedProjectId'])
+export const META_CROSS = Object.freeze(['scriptCommit', 'routesSha256', 'seedProjectId', 'accent'])
+
+/** DB의 중첩 JSON 키 순서에 독립적인 캡처 색 입력. */
+export function accentState(value) { return sha256(canonical(value ?? null)) }
 
 /**
  * 두 라벨이 비교 가능한가 → { problems, warnings }(problems 가 비면 비교한다). KST 날짜·시드 날짜·브라우저가 다르면 늘 거부.
@@ -760,8 +763,11 @@ const once = (onConflict = 'id') => ({ onConflict, ignoreDuplicates: true })
 
 /** 워크스페이스 설정 시드의 한 길 — revision 을 읽고 patch(지금 값 → 쓸 키·값 | null)가 낸 것만 설정 RPC 로 쓴다(설정 쓰기는 RPC 한 길).
  *  쓸 것이 없으면 부르지 않는다 — 이력 행을 늘리지 않는다. 이 파일의 설정 표 읽기·설정 RPC 쓰기는 여기 한 곳이다(settings-writes 의 수) */
+async function readWorkspaceSettings(db, label, workspaceId) {
+  return must(`${label} — 설정 revision`, await db.from('workspace_settings').select('revision, values').eq('workspace_id', workspaceId).single())
+}
 async function seedWorkspaceSettings(db, label, workspaceId, actor, patch) {
-  const row = must(`${label} — 설정 revision`, await db.from('workspace_settings').select('revision, values').eq('workspace_id', workspaceId).single())
+  const row = await readWorkspaceSettings(db, label, workspaceId)
   const set = patch(row.values ?? {})
   if (!set) return { wrote: false, values: row.values ?? {} }
   const res = must(label, await db.rpc('apply_workspace_settings', {
@@ -1051,7 +1057,7 @@ async function resolveSeed(db) {
   if (!project) throw new Error('시드 프로젝트가 없다 — ui-capture.mjs seed 를 먼저')
   const seedDate = String(project.description ?? '').replace('ui-capture seed ', '')
   if (seedDate !== kstToday()) throw new Error(`시드 날짜 ${seedDate} ≠ 오늘(KST) ${kstToday()} — db:reset → dev:bootstrap → seed 를 다시`)
-  return { pid: project.id, seedDate, wsSlug: wsA.slug, ...seedIds(project.id) }
+  return { pid: project.id, seedDate, wsSlug: wsA.slug, wsId: wsA.id, ...seedIds(project.id) }
 }
 
 /** 산출물 가림(순수, UI-0 안전 리뷰 P3-1) — 초대·공유 토큰의 **값**을 자리표시로 바꾼다(경로 모양이 바뀌어도 새지 않는다). 빈 값은 건너뛴다
@@ -1100,6 +1106,7 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
   const doc = JSON.parse(routesText)
   const routes = selectRoutes(doc, opts)
   const seed = await resolveSeed(db)
+  const accent = accentState((await readWorkspaceSettings(db, '캡처 색', seed.wsId)).values?.['branding.accent'])
   // 서버 정체(D3) — 그 실행이 찍는 서버의 빌드 id. 못 찾으면 멈춘다(Next 프로덕션 빌드가 아니거나 다른 것이 그 포트에 떠 있다)
   const loginRes = await fetch(`${baseUrl}/login`)
   if (!loginRes.ok) throw new Error(`앱 서버 확인 실패(${baseUrl}/login → ${loginRes.status})`)
@@ -1164,7 +1171,9 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
       }
     }
   } finally { await browser.close() }
-  return { rows, outDir, baseUrl, browserVersion, seed, warmups, buildId, routesSha256: sha256(routesText) }
+  const afterAccent = accentState((await readWorkspaceSettings(db, '캡처 색 대조', seed.wsId)).values?.['branding.accent'])
+  if (accent !== afterAccent) throw new Error('캡처 중 accent가 변경되어 증거를 사용할 수 없습니다')
+  return { rows, outDir, baseUrl, browserVersion, seed, warmups, buildId, accent, routesSha256: sha256(routesText) }
 }
 
 async function cmdShoot(opts) {
@@ -1192,7 +1201,7 @@ async function cmdShoot(opts) {
   }, env)
   const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}/${x.theme}: ${s}`))
   const meta = { label: opts.label, commit: server.commit, commitSource: server.source, scriptCommit: head, buildId: res.buildId, browser: res.browserVersion,
-    kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
+    kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, accent: res.accent, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
     themes: opts.theme, sizes: opts.sizes, scroll: opts.scroll, javaScript: opts.javaScript, warmups: res.warmups, maskWarnings, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, buildId: res.buildId, commit: `${server.commit}(${server.source})`,
@@ -1277,7 +1286,7 @@ async function cmdAxe(opts) {
   })
   const dir = join(res.outDir, opts.label)
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'axe.json'), JSON.stringify({ browser: res.browserVersion, kstDate: kstToday(), rows: res.rows }, null, 2))
+  writeFileSync(join(dir, 'axe.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, kstDate: kstToday(), rows: res.rows }, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, pages: res.rows.length, violations: res.rows.reduce((s, r) => s + r.violations, 0) }))
 }
 
@@ -1501,7 +1510,7 @@ async function checkTab(opts) {
     return { steps, coverage: cov.hits, unreached: cov.unreached, startProblems,
       failed: steps.filter((s) => !s.ok).length + cov.unreached.length + startProblems.length }
   })
-  writeFileSync(join(res.outDir, opts.label, 'tab.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, kstDate: kstToday(), rows: res.rows }, null, 2))
+  writeFileSync(join(res.outDir, opts.label, 'tab.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, buildId: res.buildId, kstDate: kstToday(), rows: res.rows }, null, 2))
   console.log(JSON.stringify({ ok: true, kind: 'tab', pages: res.rows.length,
     failedSteps: res.rows.flatMap((r) => r.steps.filter((s) => !s.ok).map((s) => `${r.key}/${r.theme}#${s.pass}${s.i} ${s.tag} ${s.label}: ${s.why}`)),
     unreached: res.rows.flatMap((r) => [...r.unreached.map((x) => `${r.key}/${r.theme} target-unreached:${x}`), ...r.startProblems.map((x) => `${r.key}/${r.theme} ${x}`)]) }))
@@ -1520,7 +1529,7 @@ async function checkPrint(opts) {
     const ratios = colors.map(parseRgb).filter(Boolean).map((c) => contrastRgb(blend(c, white), white))
     return { file, texts: ratios.length, lowContrast: ratios.filter((x) => x < 4.5).length, minRatio: ratios.length ? Math.min(...ratios) : null }
   })
-  writeFileSync(join(res.outDir, opts.label, 'print.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, rows: res.rows }, null, 2))
+  writeFileSync(join(res.outDir, opts.label, 'print.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, buildId: res.buildId, rows: res.rows }, null, 2))
   console.log(JSON.stringify({ ok: true, kind: 'print', rows: res.rows.map((r) => `${r.key}/${r.theme} texts ${r.texts} low ${r.lowContrast} min ${r.minRatio?.toFixed(2)}${r.problems.length ? ` problems ${r.problems.join('+')}` : ''}`) }))
 }
 
@@ -1593,15 +1602,17 @@ async function checkShowcase(opts) {
   console.log(JSON.stringify({ ok: true, kind: 'showcase', pairs: pairs.length, unequal: pairs.filter((p) => !p.equal) }))
 }
 
-/** 병치 레일 옆에 남아야 할 표의 필수 열(스펙 §6.7) — 번호·이름·상태·계획 기간. WbsGanttSheet 의 머리 칸 data-wbs-col 키 */
-export const RAIL_REQUIRED_COLS = Object.freeze(['no', 'name', 'status', 'pstart', 'pend'])
+/** 병치 레일 옆의 필수 열(R8) — 번호·작업명·담당팀·진척 상태. 기간 등 후속 열은 가로 스크롤로 확인한다. */
+export const RAIL_REQUIRED_COLS = Object.freeze(['no', 'name', 'owners', 'status'])
 /**
  * 레일 판정(순수, §6.7) — 병치(side)면 필수 열이 모두 스크롤 영역 안에 보여야 통과, 오버레이는 본문이 줄지 않아 열을 보지 않는다,
- * 레일을 찾지 못하면(none) 실패. @param {{ mode: string, cols: Record<string, boolean> }} m @returns {{ ok: boolean, why: string | null }}
+ * 레일을 찾지 못하면(none) 실패. @param {{ mode: string, cols: Record<string, boolean>, overlap?: boolean, expectedMode?: string }} m @returns {{ ok: boolean, why: string | null }}
  */
-export function railVerdict({ mode, cols }) {
+export function railVerdict({ mode, cols, overlap = false, expectedMode }) {
+  if (expectedMode && mode !== expectedMode) return { ok: false, why: `mode:${mode}≠${expectedMode}` }
   if (mode === 'overlay') return { ok: true, why: null }
   if (mode !== 'side') return { ok: false, why: 'no-rail' }
+  if (overlap) return { ok: false, why: 'rail-overlap' }
   const cut = RAIL_REQUIRED_COLS.find((c) => cols?.[c] !== true)
   return cut ? { ok: false, why: `cut:${cut}` } : { ok: true, why: null }
 }
@@ -1619,14 +1630,15 @@ async function checkRail(opts) {
         const h = document.querySelector(`[data-wbs-col="${c}"][data-wbs-col-kind="header"]`)?.getBoundingClientRect()
         return [c, !!(h && region && h.width > 0 && h.right <= region.right + 0.5 && h.left >= region.left - 0.5)]
       }))
-      return { mode, cols, main: document.querySelector('main#main-content')?.clientWidth ?? null, railWidth: rail?.getBoundingClientRect().width ?? null }
+      return { mode, cols, overlap: mode === 'side' && !!(region && rail && region.right > rail.getBoundingClientRect().left + 0.5), main: document.querySelector('main#main-content')?.clientWidth ?? null, railWidth: rail?.getBoundingClientRect().width ?? null }
     }, [...RAIL_REQUIRED_COLS])
-    out.push({ key: r.key, width, collapsed: r.key.endsWith('-collapsed'), ...m, ...railVerdict(m) })
+    const expectedMode = width === 1440 ? 'side' : width === 1280 ? 'overlay' : undefined
+    out.push({ key: r.key, width, collapsed: r.key.endsWith('-collapsed'), ...m, ...railVerdict({ ...m, expectedMode }) })
     return {}
   })
   const rows = out.map((x, i) => ({ ...x, problems: res.rows[i]?.problems ?? [] }))
   mkdirSync(join(res.outDir, opts.label), { recursive: true })
-  writeFileSync(join(res.outDir, opts.label, 'rail.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, rows }, null, 2))
+  writeFileSync(join(res.outDir, opts.label, 'rail.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, buildId: res.buildId, rows }, null, 2))
   console.log(JSON.stringify({ ok: rows.every((x) => x.ok && x.problems.length === 0), kind: 'rail',
     rows: rows.map((x) => `${x.width}${x.collapsed ? '·접힘' : '·펼침'} ${x.mode} main=${x.main} rail=${x.railWidth} ${x.ok ? 'ok' : x.why}${x.problems.length ? ` problems ${x.problems.join('+')}` : ''}`) }))
 }
