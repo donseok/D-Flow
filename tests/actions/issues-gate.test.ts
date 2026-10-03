@@ -223,7 +223,9 @@ describe('updateIssue — 회의록 원천 불변성/0055 이전 이슈 최초 �
     data: { id: string } | null
     error: { message: string } | null
   }, currentSourceType: string | null = null, currentFields: Record<string, unknown> = {}) {
-    const update = vi.fn(() => ({
+    const update = vi.fn((payload: Record<string, unknown>) => {
+      void payload
+      return ({
       eq: vi.fn(() => ({
         select: vi.fn(() => ({
           single: vi.fn(async () => ({
@@ -232,7 +234,7 @@ describe('updateIssue — 회의록 원천 불변성/0055 이전 이슈 최초 �
           })),
         })),
       })),
-    }))
+    }) })
     return {
       update,
       client: {
