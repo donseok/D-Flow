@@ -59,6 +59,30 @@ describe('visibleWidgets', () => {
     const v = visibleWidgets({ ...base, hidden: ['upcoming'], moduleUnion: new Set<ModuleId>(['agents']) })
     expect(v.hiddenCount).toBe(0)
   })
+  // R9 ① — '검토자 아님'(false)과 '판정 불가'(null)를 가른다. null 이면 review 가 조용히 사라지지 않는다
+  it('합집합 실패 + 검토자 판정 불가(null) → review 는 module_unknown 으로 남는다', () => {
+    const v = visibleWidgets({ ...base, moduleUnion: null, reviewer: null })
+    expect(v.side.find((s) => s.id === 'review')).toEqual({ id: 'review', state: 'module_unknown' })
+  })
+  it('합집합 실패 + 검토자 아님(false) → review 없음', () => {
+    expect(ids(visibleWidgets({ ...base, moduleUnion: null, reviewer: false }).side)).not.toContain('review')
+  })
+  it('합집합을 읽었고 agents 가 어디서도 꺼져 있으면 reviewer null 이어도 review 없음', () => {
+    expect(ids(visibleWidgets({ ...base, moduleUnion: new Set<ModuleId>(['meetings']), reviewer: null }).side)).not.toContain('review')
+  })
+  // R9 P3 빈 갈래 셋(u3-2-review) — 지금 동작을 고정한다
+  it('검토자가 아니면서 개인 숨김에 review 가 있으면 숨김 수에 들지 않는다', () => {
+    expect(visibleWidgets({ ...base, reviewer: false, hidden: ['review'] }).hiddenCount).toBe(0)
+  })
+  it('합집합 실패 중 개인 숨김인 모듈 위젯은 숨김 수에 든다(다시 보기를 누르면 실패 카드로 보인다)', () => {
+    const v = visibleWidgets({ ...base, moduleUnion: null, hidden: ['upcoming'] })
+    expect(v.hiddenCount).toBe(1); expect(ids(v.side)).not.toContain('upcoming')
+  })
+  it('설정에 레지스트리 밖 id 가 섞여도 무시한다', () => {
+    const setting = [{ id: 'nope', enabled: true }, ...defaultPortalWidgets()] as unknown as ReturnType<typeof defaultPortalWidgets>
+    const v = visibleWidgets({ ...base, setting })
+    expect([...ids(v.main), ...ids(v.side)]).toEqual(PORTAL_WIDGET_IDS)
+  })
 })
 
 describe('isPortalReviewer(W11)', () => {
@@ -70,5 +94,10 @@ describe('isPortalReviewer(W11)', () => {
   it('검토 수 조회 실패(null)는 관리자일 때만 — 실패를 0 으로 보지도, 모두에게 열지도 않는다', () => {
     expect(isPortalReviewer({ adminOfAgentsProject: false, reviewCount: null })).toBe(false)
     expect(isPortalReviewer({ adminOfAgentsProject: true, reviewCount: null })).toBe(true)
+  })
+  it('관리자 여부 판정 불가(합집합 실패 — null): 검토 0건·조회 실패면 null(판정 불가), 검토 1건이면 검토자(R9 ①)', () => {
+    expect(isPortalReviewer({ adminOfAgentsProject: null, reviewCount: 0 })).toBeNull()
+    expect(isPortalReviewer({ adminOfAgentsProject: null, reviewCount: null })).toBeNull()
+    expect(isPortalReviewer({ adminOfAgentsProject: null, reviewCount: 1 })).toBe(true)
   })
 })

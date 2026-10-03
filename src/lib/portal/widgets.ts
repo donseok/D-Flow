@@ -46,30 +46,40 @@ export function parsePortalWidgets(raw: unknown): Parsed<PortalWidgetSetting> {
   return { ok: true, value: out }
 }
 
-/** 검토자(스펙 §6.1 역할별, W11) — 표시 규칙. 입력의 관리자 여부는 호출부가 domain/authz 의 isProjectAdmin 으로 만든다 */
-export function isPortalReviewer({ adminOfAgentsProject, reviewCount }: { adminOfAgentsProject: boolean; reviewCount: number | null }): boolean {
-  return adminOfAgentsProject || (reviewCount !== null && reviewCount > 0)
+/**
+ * 검토자(스펙 §6.1 역할별, W11) — 표시 규칙. 입력의 관리자 여부는 호출부가 domain/authz 의 isProjectAdmin 으로 만든다.
+ * adminOfAgentsProject = null 은 '판정 불가'(모듈 합집합을 읽지 못해 agents 가 켜진 프로젝트를 모른다 — R9 ①).
+ * 그때 검토 대기가 양수면 검토자, 아니면 null(검토자 아님과 구분 — 노출 식이 review 를 module_unknown 으로 남긴다).
+ */
+export function isPortalReviewer({ adminOfAgentsProject, reviewCount }: { adminOfAgentsProject: boolean | null; reviewCount: number | null }): boolean | null {
+  if (adminOfAgentsProject === true || (reviewCount !== null && reviewCount > 0)) return true
+  return adminOfAgentsProject === null ? null : false
 }
 
 export type WidgetSlot = { id: PortalWidgetId; state: 'show' | 'module_unknown' }
 /**
  * 노출 식(스펙 §6.1) — 설정에서 켜짐 ∧ 개인 숨김 아님 ∧ (모듈 null ∨ 합집합에 있음) ∧ (needs null ∨ 검토자).
  * 합집합을 읽지 못하면(null) 모듈 위젯을 숨기지 않고 module_unknown 으로 남긴다 — 페이지가 그 자리에 실패 카드를 그린다(W10).
- * hiddenCount = 개인 숨김이 없었다면 보였을 위젯 수('숨긴 위젯 N개 다시 보기').
+ * reviewer = null(검토자인지 판정 불가 — R9 ①)도 review 를 숨기지 않고 module_unknown 으로 남긴다(false 면 숨김).
+ * 단 합집합을 읽었고 그 모듈이 어디서도 꺼져 있으면 검토자 여부와 무관하게 없다.
+ * hiddenCount = 개인 숨김이 없었다면 보였을 위젯 수('숨긴 위젯 N개 다시 보기' — module_unknown 으로 보였을 위젯도 센다).
  */
 export function visibleWidgets({ setting, hidden, moduleUnion, reviewer }: {
-  setting: PortalWidgetSetting; hidden: readonly PortalWidgetId[]; moduleUnion: ReadonlySet<ModuleId> | null; reviewer: boolean
+  setting: PortalWidgetSetting; hidden: readonly PortalWidgetId[]; moduleUnion: ReadonlySet<ModuleId> | null; reviewer: boolean | null
 }): { main: WidgetSlot[]; side: WidgetSlot[]; hiddenCount: number } {
   const main: WidgetSlot[] = [], side: WidgetSlot[] = []
   let hiddenCount = 0
   for (const { id, enabled } of setting) {
     const def = BY_ID.get(id)
     if (!def || !enabled) continue
-    if (def.needs === 'reviewer' && !reviewer) continue
     let state: WidgetSlot['state'] = 'show'
     if (def.module !== null) {
       if (moduleUnion === null) state = 'module_unknown'
       else if (!moduleUnion.has(def.module)) continue
+    }
+    if (def.needs === 'reviewer') {
+      if (reviewer === false) continue
+      if (reviewer === null) state = 'module_unknown'                  // '검토자 아님'으로 위장하지 않는다(R9 ①)
     }
     if (hidden.includes(id)) { hiddenCount++; continue }
     ;(def.column === 'main' ? main : side).push({ id, state })
