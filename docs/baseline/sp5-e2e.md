@@ -60,9 +60,10 @@
 
 - 체크포인트 소스 HEAD `4eb5fe81` (`sp5/b1`), main 기준 `9b50d483` / 마지막 이관 `0019_calendar`; fetch·main 사용자 스택 접근 없음. 전용 `d-flow-sp4` (API 54521, DB 54522)에서 `db:reset`·`dev:bootstrap`·`settings:verify` 문제 0.
 - 마이그레이션 R 왕복: catalog 차이 0·권한 차이 0·데이터 왕복 통과; rollback smoke 20 통과. CI 등가 reset `--version 0001` 뒤 migration up 및 RLS 37 파일·550 통과. 전체 reset/bootstrap 뒤 RLS 재확인.
-- 코드 검사: `ISSUE_MEGA_AREAS`, `issue_mega_areas`, `mega_code`, `pi_issue_code` 사용 0; UI 위험 파일 변경 0; 기존 `schema-invariants` 예외 한 행 제거만. 합성 게이트 `ok:true`, 18/18; 로컬 E2E `ok:true`, 55/55. 이슈 등록·영역별 채번·개명 안정성·분석서·모듈 비활성화 경로를 확인했다. 봇 호출은 외부 LLM 키 없이 단위 검사만.
+- 코드 검사: `ISSUE_MEGA_AREAS`, `issue_mega_areas`, `mega_code`, `pi_issue_code` 사용 0; UI 위험 파일 변경 0; 기존 `schema-invariants` 예외 한 행 제거만. 합성 게이트 `ok:true`, 18/18; 로컬 E2E `ok:true`, 55/55. 기본 `ISS-001`, 영역별 `E2E-RND-001` → 개명 후 기존 코드 유지 → `E2E-RND-002`, 목록·분석서의 코드 표시, 분석 모듈 비활성화 시 쓰기 거부·API 404를 확인했다. 봇 호출은 외부 LLM 키 없이 단위 검사만.
 - 설정 검사: 4 프로젝트·4 워크스페이스, 문제 0. 전체 Vitest 882 files / 11,648 tests 중 11,647 통과, 기존 macOS firmlink 경로 테스트 1 실패(`tests/scripts/baseline-cli.test.ts`, `.superpowers` 허용 경로를 `/System/Volumes/Data` alias에서도 허용해야 하는 기준선). lint 0 error(기존 경고 4), typecheck 통과.
 - 눈확인: `sp5-ui.md` B1 절, 13 화면 시나리오 × 1440/390 × light/dark; calendar 오류 주입은 전용 DB에서 복구 확인. 빌드는 B1 앱 소스가 마지막 검증된 시점에 성공.
+- 종료 정리: 전용 DB reset + bootstrap(UTC) 뒤 `settings:verify` 프로젝트 0·워크스페이스 1·문제 0. 사용자 DB 적용 없음.
 - 연도 경계: 해당 없음 — 채번 연도는 UTC instant를 설정 시간대로 변환해 산출(`at time zone`); 구간 경계 판정이 아니다.
 
 # B1 — 성능(보류 — 일괄 측정)
@@ -73,3 +74,12 @@
 - 방법: `docs/baseline/sp4-perf.md` 의 교대 방법과 A 과제 31b 를 따른다. 기준선은 B1 직전 `main`, 후보는 `sp5-b1-done`; 둘 다 `next start`, 워밍업 3회 뒤 경로별 순차 30회 × 3 라운드, ABBA 순서, 측정 앞 1분 load < 3 기록. 두 편의 빌드·시드·`vacuum analyze` 를 맞추고 전용 스택에서 수행한다. 동시 채번용 임시 측정 스크립트는 재현 절차에 두되 커밋하지 않는다.
 - 판정: 페이지·액션 p95 는 라운드별 중앙값의 후보/기준선 비율 ≤ 1.20(D59). 동시 채번은 절대 p95(건당)와 유일·무결번 결과를 기록하되 회귀 비율 기준은 적용하지 않는다.
 - 측정 실행처: 레인 A 원장의 일괄 측정 목록과 과제 18 종료 알림. 측정 시 기준선·후보의 실제 커밋 좌표와 부하 기록을 이 절에 추가한다.
+
+
+## B1 최종 리뷰 — 2026-10-04
+
+- 대상: `sp5-b1-done` = `164ac7c0`, main 기준 `9b50d483`. 스펙 §7 B1 완료 조건과 계획의 완료 조건 표를 실제 소비처·관문·테스트·리허설 기록에 대조했다. **차단 사항 없음**. 최종 리뷰는 단일 작업자가 수행했으며 독립 리뷰어 검증은 포함하지 않는다.
+- 보안/DB: 새 회의록 RPC는 service_role 실행권만, 액션은 프로젝트 멤버·모듈 관문 뒤 원문 검증을 거쳐 가드의 actor ID를 전달한다. 영역 RPC의 행위자 재판정·설정 행 SHARE 잠금·영역 KEY SHARE 잠금·채번 카운터 직렬화·코드 불변 트리거를 확인했다. 롤백 가능 조건과 되돌릴 수 없는 데이터 이관은 사용자 DB 절차서에 명시되어 있다.
+- 소비처: 일반 등록과 분석 필드 쓰기의 모듈 관문 분리, 분석 모듈 OFF일 때 기존 메타를 보존하는 수정 계약, 코드/영역을 사용하는 목록·회의록·분석서·색인, 영역별 채번/정책 렌더 골든 표의 TS·SQL 대응을 확인했다.
+- 제한: 전체 테스트의 알려진 firmlink 실패 1건, 외부 LLM 봇 호출 미실행, 성능 측정은 사용자 지시대로 SP5 전체 구현 뒤 일괄 실행. `.github/workflows/ci.yml`은 `sp5/**` push를 대상으로 하지 않아 B1 원격 CI 실행은 없다(로컬 CI 등가 결과를 사용).
+- GitHub `origin/sp5/b1`에 체크포인트 커밋을 푸시했고 작업 트리는 깨끗하다. 태그는 로컬 유지. main 반영과 사용자 DB 적용은 별도 단계다.

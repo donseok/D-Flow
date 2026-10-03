@@ -67,3 +67,5 @@
 | 에이전트 허브·달력 오류 | `2a7d53ec4cdf` | `925bd4d5a42e` | `fba074fefde7` | `952ffa3f38fb` | `calendar.week_start` 오류 격리, 중단 스위치 유지 |
 
 에이전트 허브 오류 시나리오는 전용 DB의 설정을 임시 손상한 뒤 `finally` 복구를 확인했다. workspace 달력의 한국어 ‘오늘’ 선택 표시와 2026-10-03 회의, 포털의 프로젝트 현지 날짜 표기를 눈으로 확인했다. 모든 dark 캡처에서 `html.dark`가 참이고 대응 light 이미지와 해시가 달랐다.
+
+파일명은 화면에 따라 `issues-list`, `issue-form-analysis-off`, `issue-form-required`, `issue-form-needs-setup`, `issue-detail`, `issue-analysis-modal`, `issue-dashboard-cards`, `issue-settings`, `minute-issue-popover-insight`, `project-meetings-tz`, `workspace-meetings-tz`, `portal-today-meeting`, `agent-hub-calendar-broken`에 `-<1440|390>-<light|dark>.png`를 붙인다. 코어 캡처는 `/tmp/sp5b1-ui.CV5dt6`, 카드/회의록/허브 보완은 각각 `/tmp/sp5b1-dashboard-eye.nX2h0I`, `/tmp/sp5b1-minute-eye.F6j3t1`, `/tmp/sp5b1-agent-eye.1AtR9x`에 남겼다(임시 파일 수명에 의존).
