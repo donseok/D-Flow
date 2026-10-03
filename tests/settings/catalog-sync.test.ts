@@ -22,7 +22,6 @@ const expectedStatus: Record<string, string> = {
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
   // SP3b UI-3 — 키 정의(과제 2·3, U3-2)가 편집기(과제 6·7, U3-3)보다 먼저다. 편집기를 만드는 과제가 그 항목을 지운다(아래 죽은 항목 검사)
-  PortalWidgetsEditor: 'SP3b UI-3 과제 6 — portal.widgets 편집기(네 연결 ②)',
   ViewsDefaultEditor: 'SP3b UI-3 과제 7 — views.default 편집기(네 연결 ②)',
 }
 

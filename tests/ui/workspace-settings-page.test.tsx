@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   shell: vi.fn<(p: { items: { id: string; label: string }[]; children: ReactNode }) => ReactNode>(({ children }) => <>{children}</>),
   redirect: vi.fn((to: string): never => { throw new Error(`NEXT_REDIRECT ${to}`) }),
   calendarPanel: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  widgetsEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
 }))
 vi.mock('@/lib/settings/workspacePageAccess', () => ({ workspacePageAccess: (...a: unknown[]) => h.access(...a) }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.config(...a) }))
@@ -26,6 +27,7 @@ vi.mock('@/components/settings/WorkspaceFieldsEditor', () => ({ WorkspaceFieldsE
 vi.mock('@/components/settings/LogoEditor', () => ({ LogoEditor: () => null }))
 vi.mock('@/components/settings/AccentEditor', () => ({ AccentEditor: () => null }))
 vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () => null }))
+vi.mock('@/components/settings/PortalWidgetsEditor', () => ({ PortalWidgetsEditor: (p: Record<string, unknown>) => h.widgetsEditor(p) }))
 vi.mock('@/components/settings/SettingsHistoryList', () => ({ SettingsHistoryList: () => null }))
 vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettingsPanel: (p: Record<string, unknown>) => h.calendarPanel(p) }))
 vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ error }: { error: string }) => <p data-load-error>{error}</p> }))
@@ -131,5 +133,17 @@ describe('/w/[slug]/settings 페이지', () => {
     h.events.mockResolvedValue({ ok: false, error: '권한 변경 이력을 불러오지 못했습니다.' })
     await render()
     expect(h.eventsList.mock.calls[0][0]).toMatchObject({ initial: { ok: false } })
+  })
+
+  it('메뉴 범주 안 홈 위젯 편집기 — 저장값(기본 = 레지스트리 순서 전부 켬)과 revision, 손상이면 사유를 넘긴다(SP3b UI-3 과제 6)', async () => {
+    const html = await render()
+    expect(html).toContain('id="workspace-portal-widgets"')
+    expect(h.widgetsEditor.mock.calls[0][0]).toMatchObject({ workspaceId: WID, revision: 7, invalidReason: undefined })
+    expect((h.widgetsEditor.mock.calls[0][0].initial as { id: string }[]).map((w) => w.id)).toEqual(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements'])
+    h.widgetsEditor.mockClear()
+    h.config.mockResolvedValue(config({ 'portal.widgets': 'oops' }))
+    await render()
+    expect(h.widgetsEditor.mock.calls[0][0]).toMatchObject({ initial: null })
+    expect(typeof h.widgetsEditor.mock.calls[0][0].invalidReason).toBe('string')
   })
 })

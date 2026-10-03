@@ -50,7 +50,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   ),
   // SP3b UI-3 과제 2 — 정의·테스트(네 연결 ①④)만. 편집기(과제 6 PortalWidgetsEditor)·소비처(과제 10 홈 v1)가 붙으면 상태를 올린다.
   // 지금의 소비처 칸은 노출 식(visibleWidgets)을 가진 위젯 레지스트리다
-  'portal.widgets': { consumers: ['src/lib/portal/widgets.ts'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts'], status: 'stored', sp: 'SP3b' },
+  'portal.widgets': { consumers: ['src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx'], status: 'stored', sp: 'SP3b' },
   // SP3b UI-3 과제 3 — 정의·보드 교차 검사·테스트(네 연결 ①④)만. 편집기(과제 7 ViewsDefaultEditor)·소비처(과제 14 작업 계획 보기 결정)가 붙으면 올린다
   'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts'], tests: ['tests/settings/views-default-def.test.ts'], status: 'stored', sp: 'SP3b' },
 }

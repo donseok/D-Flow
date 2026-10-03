@@ -13,6 +13,7 @@ import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
 import { LogoEditor } from '@/components/settings/LogoEditor'
 import { AccentEditor } from '@/components/settings/AccentEditor'
 import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
+import { PortalWidgetsEditor } from '@/components/settings/PortalWidgetsEditor'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -117,10 +118,17 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             canEdit suggestBrowserTimezone {...calendarFields} />
         </div>
       </SectionCard>
-      <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
+      <SectionCard id="workspace-menu" searchText="navigation.menu portal.widgets 홈 위젯" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
           initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
           invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
+        {/* 홈 위젯(portal.widgets — SP3b UI-3 W20) — 같은 '메뉴' 범주 안 구역(목차 항목을 늘리지 않는다) */}
+        <section aria-labelledby="workspace-portal-widgets" data-settings-search="portal.widgets 홈 위젯" className="mt-8 border-t border-border pt-6">
+          <h4 id="workspace-portal-widgets" className="mb-3 text-sm font-semibold text-fg">홈 위젯</h4>
+          <PortalWidgetsEditor workspaceId={access.id} revision={config.revision}
+            initial={config.keys['portal.widgets'].status === 'set' || config.keys['portal.widgets'].status === 'default' ? config.keys['portal.widgets'].value : null}
+            invalidReason={config.keys['portal.widgets'].status === 'invalid' ? config.keys['portal.widgets'].error : undefined} />
+        </section>
       </SectionCard>
       <SectionCard id="workspace-history" searchText="settings history revision authz 기록 이력 설정 변경 권한 변경" eyebrow="기록" title="변경 이력" icon={History}>
         <div className="space-y-8">
