@@ -2,6 +2,7 @@
 // 소비처: 주간보고 영역(SP4 — 시트·이월·PPT·봇)과 이슈 영역(SP5). 담당 팀 0개를 허용한다 — 주간 영역은 담당 팀 없이도 쓰고
 // 봇의 팀 필터에서 빠질 뿐이다(스펙 §4.1.3). 저장은 RPC upsert_project_area 한 길이고 여기서는 저장 전 형태만 맞춘다.
 import type { Team } from './teams'
+import { ISSUE_AREA_CODE_RE } from './issueAreas'
 
 export const AREA_KINDS = ['weekly_section', 'issue_area'] as const
 export type AreaKind = (typeof AREA_KINDS)[number]
@@ -19,6 +20,8 @@ export interface AreaInput {
 }
 
 /** 영역 순서의 절댓값 상한 — RPC 의 정수 형식(최대 아홉 자리)과 같다 */
+export const ERR_ISSUE_AREA_CODE = '이슈 영역 코드는 영문 대문자·숫자 1~8자입니다.'
+
 export const AREA_SORT_ORDER_MAX = 999_999_999
 
 /** 저장 전 검증. existing 은 같은 프로젝트의 영역(중복 kind/code 대조용) — DB 유니크가 최종 판정이다(upsertArea 는 [] 를 넘기고 23505 로 판정). */
@@ -29,6 +32,7 @@ export function validateArea(
   if (!(AREA_KINDS as readonly string[]).includes(input.kind)) return { ok: false, error: '알 수 없는 영역 종류입니다.' }
   const code = input.code.trim()
   if (!code) return { ok: false, error: '영역 코드를 입력하세요.' }
+  if (input.kind === 'issue_area' && !ISSUE_AREA_CODE_RE.test(code)) return { ok: false, error: ERR_ISSUE_AREA_CODE }
   const name = input.name.trim()
   if (!name) return { ok: false, error: '영역 이름을 입력하세요.' }
   if (typeof input.sortOrder !== 'number' || !Number.isInteger(input.sortOrder)) return { ok: false, error: '순서는 정수여야 합니다.' }

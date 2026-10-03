@@ -10,11 +10,13 @@ import { useRouter } from 'next/navigation'
 import { Pencil, Plus } from 'lucide-react'
 import { upsertArea } from '@/app/actions/projectAreas'
 import { orderAreas } from '@/lib/domain/weeklySheet'
+import { ISSUE_AREA_CODE_RE } from '@/lib/domain/issueAreas'
 import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
+import type { Locale } from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
 
-const KIND_LABEL = { weekly_section: '업무영역' } as const
+const KIND_LABEL = { weekly_section: '업무영역', issue_area: '이슈 영역' } as const
 const TEAM_KIND_LABEL: Record<AreaTeamKind, string> = { primary: '주', support: '보조' }
 const DEACTIVATE_NOTE = '비활성으로 두면 이번 주 이후 주간 시트에서 숨겨지고, 이미 쓴 내용은 남습니다.'
 
@@ -31,10 +33,11 @@ function toDraft(a: ConfigArea): Draft {
   }
 }
 
-export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
+export function ProjectAreasManager({ projectId, kind, areas, teamOptions, locale = 'ko' }: {
   projectId: string
   /** 영역 종류 — A1 은 주간 업무영역 하나다(이슈 영역은 SP5) */
-  kind: 'weekly_section'
+  kind: 'weekly_section' | 'issue_area'
+  locale?: Locale
   areas: readonly ConfigArea[]
   teamOptions: readonly AreaTeamOption[]
 }) {
@@ -45,7 +48,9 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
   const [pending, startTransition] = useTransition()
   // 시트와 같은 순서(sortOrder, code, id) — 해석기는 sort_order 로만 정렬해 동률의 순서가 고정되지 않는다
   const rows = orderAreas(areas.filter(a => a.kind === kind))
-  const label = KIND_LABEL[kind]
+  const label = locale === 'ko' ? KIND_LABEL[kind] : kind === 'issue_area' ? 'Issue areas' : 'Work areas'
+  const issueArea = kind === 'issue_area'
+  const text = locale === 'ko' ? { new: '새 영역', code: '코드', name: '이름', order: '순서', teams: '담당 팀', status: '상태', action: '작업', active: '활성', inactive: '비활성', edit: '편집', empty: issueArea ? '이슈 영역을 추가할 수 있습니다.' : '영역을 하나 이상 저장해야 주간보고를 시작할 수 있습니다.' } : { new: 'New area', code: 'Code', name: 'Name', order: 'Order', teams: 'Teams', status: 'Status', action: 'Actions', active: 'Active', inactive: 'Inactive', edit: 'Edit', empty: issueArea ? 'Add issue areas when needed.' : 'Add at least one area to start weekly reporting.' }
   const teamOf = new Map(teamOptions.map(t => [t.id, t]))
   const teamLabel = (id: string) => {
     const t = teamOf.get(id)
@@ -106,24 +111,24 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <p className="text-sm font-semibold text-ink">{label} {rows.length}개</p>
         <button type="button" onClick={startNew} className="btn btn-primary" disabled={pending}>
-          <Plus className="h-4 w-4" />새 영역
+          <Plus className="h-4 w-4" />{text.new}
         </button>
       </div>
 
       <div className="p-5 sm:p-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-subtle">아직 {label}이 없습니다. 영역을 하나 이상 저장해야 주간보고를 시작할 수 있습니다.</p>
+          <p className="text-sm text-ink-subtle">{locale === 'ko' ? `아직 ${label}이 없습니다. ${text.empty}` : text.empty}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-ink-subtle">
-                  <th className="py-2 pr-3">순서</th>
-                  <th className="py-2 pr-3">코드</th>
-                  <th className="py-2 pr-3">이름</th>
-                  <th className="py-2 pr-3">담당 팀</th>
-                  <th className="py-2 pr-3">상태</th>
-                  <th className="py-2 pr-3 text-right">작업</th>
+                  <th className="py-2 pr-3">{text.order}</th>
+                  <th className="py-2 pr-3">{text.code}</th>
+                  <th className="py-2 pr-3">{text.name}</th>
+                  <th className="py-2 pr-3">{text.teams}</th>
+                  <th className="py-2 pr-3">{text.status}</th>
+                  <th className="py-2 pr-3 text-right">{text.action}</th>
                 </tr>
               </thead>
               <tbody>
@@ -143,12 +148,12 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
                     </td>
                     <td className="py-2.5 pr-3">
                       <span className={`chip ${a.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
-                        {a.active ? '활성' : '비활성'}
+                        {a.active ? text.active : text.inactive}
                       </span>
                     </td>
                     <td className="py-2.5 pr-3 text-right">
                       <button type="button" className="btn btn-ghost btn-sm" disabled={pending}
-                        aria-label={`${a.code} 편집`} onClick={() => { setError(null); setDraft(toDraft(a)) }}>
+                        aria-label={`${a.code} ${text.edit}`} onClick={() => { setError(null); setDraft(toDraft(a)) }}>
                         <Pencil className="h-3.5 w-3.5" />편집
                       </button>
                     </td>
@@ -161,29 +166,30 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
 
         {draft && (
           <form className="panel-soft mt-4 space-y-4 p-5" onSubmit={e => { e.preventDefault(); save() }}>
-            <p className="text-sm font-semibold text-ink">{draft.id ? `${label} 편집` : `새 ${label}`}</p>
+            <p className="text-sm font-semibold text-ink">{draft.id ? `${label} ${text.edit}` : `새 ${label}`}</p>
             {error && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{error}</p>}
             <div className="grid gap-3 sm:grid-cols-[10rem_1fr_6rem]">
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
-                코드
+                {text.code}{issueArea ? ' · 영문 대문자·숫자 1~8자' : ''}
                 <input className={`app-input ${draft.id ? 'bg-surface-2 text-ink-muted' : ''}`} value={draft.code} readOnly={!!draft.id} aria-readonly={!!draft.id}
                   data-area-code
-                  title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : '이름으로 미리 채웁니다. 저장한 뒤에는 바꿀 수 없습니다.'}
+                  pattern={issueArea ? ISSUE_AREA_CODE_RE.source.replace(/^\^|\$$/g, '') : undefined}
+                  title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : issueArea ? '이슈 코드의 {area} 자리에 들어갑니다. 만든 뒤 바꿀 수 없습니다.' : '이름으로 미리 채웁니다. 저장한 뒤에는 바꿀 수 없습니다.'}
                   onChange={e => setDraft({ ...draft, code: e.target.value, codeTouched: true })} disabled={pending} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
-                이름
+                {text.name}
                 <input className="app-input" value={draft.name} data-area-name
                   onChange={e => setName(e.target.value)} disabled={pending} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
-                순서
+                {text.order}
                 <input className="app-input" type="number" step={1} value={draft.sortOrder} data-area-order
                   onChange={e => setDraft({ ...draft, sortOrder: e.target.value })} disabled={pending} />
               </label>
             </div>
             <fieldset className="space-y-2">
-              <legend className="text-xs text-ink-muted">담당 팀</legend>
+              <legend className="text-xs text-ink-muted">{text.teams}</legend>
               {formTeams.length === 0 ? (
                 <p className="text-xs text-ink-subtle">이 프로젝트에 팀이 없습니다.</p>
               ) : (

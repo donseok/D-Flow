@@ -22,7 +22,6 @@ const expectedStatus: Record<string, string> = {
  * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
-  IssuePolicyEditor: 'SP5 B1 과제 11',
 }
 
 describe('설정 카탈로그 동기화', () => {

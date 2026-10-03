@@ -8,6 +8,11 @@ const base = (over: Partial<AreaInput> = {}): AreaInput => ({
 })
 
 describe('validateArea', () => {
+  it('이슈 영역 code 는 영문 대문자·숫자 1~8자로 제한한다', () => {
+    for (const code of ['rnd', 'TOO_LONG_9', '한글']) expect(validateArea(base({ kind: 'issue_area', code }), []).ok).toBe(false)
+    expect(validateArea(base({ kind: 'issue_area', code: 'RND09' }), []).ok).toBe(true)
+    expect(validateArea(base({ kind: 'weekly_section', code: 'rnd' }), []).ok).toBe(true)
+  })
   it('정상 입력은 code·name 을 trim 해 돌려준다', () => {
     const r = validateArea(base({ code: ' PLAN ', name: ' 수급계획 ' }), [])
     expect(r).toEqual({ ok: true, value: base() })

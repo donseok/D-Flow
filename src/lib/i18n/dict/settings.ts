@@ -229,6 +229,8 @@ export const settingsKo = {
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.issues.id_policy.label': '이슈 코드 규칙', 'settings.issues.id_policy.desc': '새 이슈에 매길 코드의 꼴(접두·패턴·번호 범위·초기화)입니다. 바꿔도 기존 이슈의 코드는 그대로입니다.',
   'settings.issues.analysis.label': '이슈 분석 분류', 'settings.issues.analysis.desc': '이슈 분석 모듈이 켜진 프로젝트에서 등록할 때 분석 분류가 필수인지 정합니다. 기존 이슈는 그대로입니다.',
+  'settings.issueAreas.title': '이슈 영역', 'settings.issueAreas.desc': '코드와 담당 팀으로 이슈를 묶습니다. 영역 코드는 영문 대문자·숫자 1~8자이며 만든 뒤 바꿀 수 없습니다.',
+  'settings.issues.policy.title': '이슈 코드·분석 규칙', 'settings.issues.policy.unavailable': '이슈 코드 규칙을 불러오지 못했습니다.',
   'settings.issues.analysisOptional': '분석 분류는 선택', 'settings.issues.analysisRequired': '등록할 때 분석 분류 필수',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

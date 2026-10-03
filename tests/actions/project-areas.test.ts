@@ -240,3 +240,18 @@ describe('RPC 토큰 → 코드(D45·T6) — 원문 비노출', () => {
     expect(logged(err, message)).toBe(true)
   })
 })
+
+
+describe('issue area code RPC guards', () => {
+  it('DB precheck and trigger use the same stable validation message', async () => {
+    const { ERR_ISSUE_AREA_CODE } = await import('@/lib/domain/areas')
+    h.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeAdminActor('p1') })
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
+    const invalid = await upsertArea('p1', { kind: 'issue_area', code: 'lower', name: 'Research', sortOrder: 1, active: true, teams: [] })
+    expect(invalid).toMatchObject({ ok: false, error: ERR_ISSUE_AREA_CODE })
+    expect(h.rpc).not.toHaveBeenCalled()
+    h.rpc.mockResolvedValue({ data: null, error: { code: '23514', message: 'PROJECT_AREA_CODE_INVALID' } })
+    const area = await upsertArea('p1', { kind: 'issue_area', code: 'RND', name: 'Research', sortOrder: 1, active: true, teams: [] })
+    expect(area).toMatchObject({ ok: false, error: ERR_ISSUE_AREA_CODE })
+  })
+})

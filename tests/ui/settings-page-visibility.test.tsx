@@ -23,7 +23,7 @@ vi.mock('@/lib/settings/projectConfig', async () => {
   const area = (id: string, kind: 'weekly_section' | 'issue_area', code: string, name: string) =>
     ({ id, kind, code, name, sortOrder: 0, active: true, teams: [] })
   return {
-    getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'modules.enabled': ['agents', 'kanban'] }, {
+    getProjectConfig: vi.fn(async () => makeProjectConfig({ 'core.level_labels': ['P'], 'modules.enabled': ['agents', 'kanban', 'issues', 'issue_analysis'] }, {
       projectId: 'p1',
       areas: { weekly_section: [area('a-exp', 'weekly_section', 'EXP', '실험')], issue_area: [area('a-iss', 'issue_area', 'ISS', '이슈 표본')] },
     })),
@@ -33,7 +33,7 @@ vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: un
 vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: (...a: unknown[]) => h.links(...a) }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
-vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }), redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/ui/SectionCard', () => ({ SectionCard: ({ children, actions }: { children: ReactNode; actions?: ReactNode }) => <>{actions}{children}</> }))
@@ -79,15 +79,18 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
     expect(h.privacy).toHaveBeenCalledTimes(1)
     expect(h.privacy.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
   })
-  it('주간 영역 편집기는 있고 kind 는 weekly_section 고정 — 이슈 영역은 넘기지 않는다(SP4 D26). 추가 축 이름은 화면에 없다(#8)', async () => {
+  it('주간 업무영역과 이슈 영역 편집기를 각각의 종류와 함께 표시한다(SP4 D26·SP5 B1)', async () => {
     h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]), projectWorkspace: new Map([['p1', WS]]) }))
     const html = await render()
-    expect(h.areas).toHaveBeenCalledTimes(1)
+    expect(h.areas).toHaveBeenCalledTimes(2)
     const props = h.areas.mock.calls[0][0]
     expect(props).toMatchObject({ projectId: 'p1', kind: 'weekly_section' })
     expect((props.areas as Array<{ code: string; kind: string }>).map(a => [a.code, a.kind])).toEqual([['EXP', 'weekly_section']])
     expect(JSON.stringify(props)).not.toContain('issue_area')
-    expect(html).not.toContain('이슈 영역')
+    const issueProps = h.areas.mock.calls.map(call => call[0]).find(p => p.kind === 'issue_area')
+    expect(issueProps).toMatchObject({ kind: 'issue_area', locale: 'ko' })
+    expect((issueProps?.areas as Array<{ code: string; kind: string }>).map(a => [a.code, a.kind])).toEqual([['ISS', 'issue_area']])
+    expect(html).toContain('id="project-issues"')
     expect(html).not.toContain('core.extra_axis_label')
   })
   it('워크스페이스 설정 링크는 그 워크스페이스를 관리할 수 있을 때만 보인다', async () => {
@@ -100,7 +103,7 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
   it('목차의 앵커가 범주 컨테이너 다섯을 스펙 순서로 가리키고 크레딧은 상태·승인 안에 든다', async () => {
     const html = await render()
     const at = (id: string) => html.indexOf(`id="${id}"`)
-    const ids = ['project-general', 'project-modules', 'project-team', 'project-status', 'project-calendar']
+    const ids = ['project-general', 'project-modules', 'project-team', 'project-issues', 'project-status', 'project-calendar']
     expect(ids.map(at).every(i => i >= 0)).toBe(true)
     expect(ids.map(at)).toEqual([...ids.map(at)].sort((a, b) => a - b))
     expect(html.indexOf('mock-slider')).toBeGreaterThan(at('project-status'))

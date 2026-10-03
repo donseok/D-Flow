@@ -231,6 +231,8 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11
   'settings.issues.id_policy.label': 'Issue code rule', 'settings.issues.id_policy.desc': 'The format of codes given to new issues (prefix, pattern, counter scope, reset). Existing issue codes do not change.',
   'settings.issues.analysis.label': 'Issue analysis classification', 'settings.issues.analysis.desc': 'Whether analysis classification is required when creating an issue in a project with issue analysis on. Existing issues stay as they are.',
+  'settings.issueAreas.title': 'Issue areas', 'settings.issueAreas.desc': 'Group issues by code and team. Area codes use 1–8 uppercase letters or digits and cannot be changed after creation.',
+  'settings.issues.policy.title': 'Issue code and analysis rules', 'settings.issues.policy.unavailable': 'Could not load issue code rules.',
   'settings.issues.analysisOptional': 'Analysis optional', 'settings.issues.analysisRequired': 'Analysis required on create',
   'settings.configLoadFailed': 'Settings could not be loaded, so this view cannot be drawn. Refresh in a moment.', 'settings.configLoadFailedKey': 'Corrupt or missing setting: {key}',
 }

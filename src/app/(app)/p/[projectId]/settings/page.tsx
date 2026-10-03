@@ -14,6 +14,10 @@ import { projectOwnTeams, projectTeams, workspaceTeams } from '@/lib/teams/sourc
 import { areaTeamOptions } from '@/lib/domain/areas'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
+import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
+import { moduleState, requireModule } from '@/lib/modules/gate'
+import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
+import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
@@ -42,7 +46,6 @@ import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
-import { requireModule } from '@/lib/modules/gate'
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
 import { MODULES } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
@@ -192,6 +195,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   }
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
+  const issuesGate = pc.ok ? await requireModule({ projectId }, 'issues') : { ok: false as const, error: 'unavailable' }
+  const analysisState = pc.ok ? await moduleState({ projectId }, 'issue_analysis') : 'unknown'
+  const issuePolicy = pc.ok ? pick(pc.cfg, 'issues.id_policy') : null
+  const issueAnalysis = pc.ok ? pick(pc.cfg, 'issues.analysis') : null
+  const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
+  const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
+    ? issueCodeYear(timezoneState.value, new Date()) : null
   // 달력 편집기(스펙 §5.1 A) — 달력 키가 손상이어도 편집기는 그린다(복구 경로). '오늘'(예정 전환·현재 규칙)은 tz 가 유효할 때만
   const calendarFields = pc.ok ? {
     timezone: calendarFieldOf(pc.cfg.keys['calendar.timezone']),
@@ -239,7 +249,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     >
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
-        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []), { id: 'project-status', label: '상태·승인' },
+        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
+        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
       <div className="space-y-5">
@@ -495,6 +506,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 projectId={projectId}
                 kind="weekly_section"
                 areas={pc.cfg.areas.weekly_section}
+                locale={locale}
                 teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.weekly_section)}
               />
             ) : (
@@ -502,7 +514,19 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             )}
           </SectionCard>
         )}
+          {isAdmin && pc.ok && issuesGate.ok && (
+            <SectionCard searchText="issue areas code prefix pattern counter" eyebrow="ISSUES" title={t(locale, 'settings.issueAreas.title')} icon={ListTree}>
+              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issueAreas.desc')}</p>
+              {teams.ok ? <ProjectAreasManager projectId={projectId} kind="issue_area" areas={pc.cfg.areas.issue_area} teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.issue_area)} locale={locale} /> : <p role="alert" className="text-sm text-delayed">{ERR_TEAMS_UI}</p>}
+            </SectionCard>
+          )}
         </div>
+        {isAdmin && pc.ok && issuesGate.ok && <div id="project-issues" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="issues.id_policy issue code analysis policy" eyebrow="ISSUE POLICY" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
+            <p className="mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issues.id_policy.desc')}</p>
+            {issuePolicy?.ok && issueAnalysis?.ok && issueYear !== null ? <IssuePolicyEditor key={`${projectId}-${revision}`} projectId={projectId} policy={issuePolicy.value as IdPolicy} revision={revision} areas={pc.cfg.areas.issue_area} year={issueYear} canEdit={canMutate} analysis={issueAnalysis.value as IssueAnalysisSetting} analysisEnabled={analysisState === 'on'} locale={locale} /> : <ConfigStateNotice kind="unavailable" locale={locale} />}
+          </SectionCard>
+        </div>}
 
         {/* ════ 상태·승인 ════ */}
         <div id="project-status" className="scroll-mt-24 space-y-5">
