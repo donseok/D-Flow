@@ -27,7 +27,7 @@
 //        E10 비소속 배지. E3 은 UI-3 몫이라 없다.
 //   SP5 A: import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞에서 달력 넷 — calendar-week-sunday(일요일 프로젝트 S 와 월요일·월~토
 //        프로젝트 M 의 연속 2주·이월·라벨·범위·기본 보고서 라벨), calendar-week-transition(월요일 T 를 일요일로 전환 — 미리보기 E = 저장 E, 과도기 6일,
-//        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 tz 를 LA 로 바꾼 뒤 만든 L 의 시드·오늘·공지 게시 판정·사용현황 일자, 끝에 tz 복귀),
+//        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 Pago Pago 와 프로젝트 Kiritimati 시간대 검증, 끝에 tz 복귀),
 //        calendar-workday(토요일 근무 예외 → 의존성 연결·계획%, 예외 없는 토요일로 옮기면 거부). 기존 주간 단계의 키는 일요일(워크스페이스 기본값 복사 —
 //        SP5 D5)이고 러너의 '오늘'은 그 범위에 저장된 tz 다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
@@ -58,7 +58,7 @@ import {
 } from './lib/e2e.mjs'
 import {
   A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, nextServerMode,
-  pptText, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict,
+  pptText, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict, issueAnalysisRunFixture, zipHasAll,
   dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
@@ -1144,9 +1144,9 @@ async function main() {
   step('calendar-week-transition', { ...transition, pastUrl: `/p/${calT.id}/weekly?week=${tPastKey}`, midTransitionUrl: `/p/${calT.id}/weekly?week=${shiftDays(kp, 2)}` },
     Object.values(transition.checks).every(Boolean) ? undefined : `주 시작 전환: ${JSON.stringify(transition)}`)
 
-  // calendar-tz — 워크스페이스 A 의 tz 를 LA 로 바꾼 뒤 만든 L 은 그 tz 를 복사한다(seedFrom — 상속 아님). L 의 '오늘'은 LA: 이번 주 문서가 매개변수 없는
-  // 주간 화면에 실리고, 오늘 게시(시작 = 종료 = LA 오늘) 공지는 헤더 티커에 있고 내일 시작 공지는 없다. 사용현황 일자는 결정적 순간
-  // (2026-01-15T03:30Z — LA 01-14·UTC 01-15)의 이벤트 한 행으로 두 tz 를 비교한다(행은 로컬 픽스처 — 끝에 지운다). 끝에 워크스페이스 tz 를 되돌린다
+  // calendar-tz — 워크스페이스 A(Pago Pago)와 새 프로젝트(Kiritimati)를 서로 다른 tz 로 둔다(UTC−11·UTC+14, 날짜 경계가 항상 갈린다).
+  // 프로젝트 '오늘' 기준 주간 문서·공지와 워크스페이스 '오늘'을 따로 계산한다. 사용현황 일자는 결정적 순간
+  // (2026-01-15T03:30Z — Pago Pago 01-14·UTC 01-15)의 이벤트 한 행으로 두 tz 를 비교한다(행은 로컬 픽스처 — 끝에 지운다). 끝에 워크스페이스 tz 를 되돌린다
   // (키가 없던 워크스페이스면 unset — 뒤 단계의 '오늘'이 원래 tz 를 전제한다).
   const wsPage = `/w/${encodeURIComponent(wsARow.slug)}/settings`   // wsARow — 단계 16 이 읽은 워크스페이스 A 의 슬러그
   const wsTzBefore = rows('워크스페이스 A 설정', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values['calendar.timezone']
@@ -1156,18 +1156,22 @@ async function main() {
     const patch = tz === undefined ? { set: {}, unset: ['calendar.timezone'] } : { set: { 'calendar.timezone': tz }, unset: [] }
     return mustOk('updateWorkspaceSettings', (await admin.action(wsPage, 'updateWorkspaceSettings', [wsA, { expectedRevision: doc.revision, commandId: randomUUID(), ...patch }])).result)
   }
-  const LA = 'America/Los_Angeles'
+  const WORKSPACE_TZ = 'Pacific/Pago_Pago'
+  const PROJECT_TZ = 'Pacific/Kiritimati'
   let tzStep
-  await setWorkspaceTz(LA)
+  await setWorkspaceTz(WORKSPACE_TZ)
   try {
     const calL = await newCalProject('L')
+    await setProject(calL, { 'calendar.timezone': PROJECT_TZ })
     const lStored = await storedOf(calL)
+    const workspaceTzStored = storedTimezone(rows('워크스페이스 시간대', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values)
     await withArea(calL)
-    const lToday = todayInTz(LA)
+    const lToday = todayInTz(PROJECT_TZ)
+    const workspaceToday = todayInTz(WORKSPACE_TZ)
     await admin.http('GET', `/p/${calL.id}/weekly`)
     const lDoc = mustOk('L 이번 주', await createWeek(calL, lToday, false))
     const lHtml = await (await admin.http('GET', `/p/${calL.id}/weekly`)).text()
-    const lAfter = todayInTz(LA)
+    const lAfter = todayInTz(PROJECT_TZ)
     await admin.http('GET', `/p/${calL.id}/announcements`)
     const annNow = `E2E 오늘 게시 ${calTag}`
     const annLater = `E2E 내일 게시 ${calTag}`
@@ -1196,8 +1200,8 @@ async function main() {
         return (data ?? []).filter((r) => r.events > 0).map((r) => String(r.d))
       }
       // 일자 판독을 /usage GET 보다 먼저 — 그 화면의 after()(purgeOldUsageEvents)가 보존 기간(90일) 밖인 이 픽스처를 지운다(체크포인트 A 첫 실행에서
-      // LA 판독 뒤 UTC 판독이 빈 배열이었다 — 경합)
-      const la = await day(LA)
+      // Pago Pago 판독 뒤 UTC 판독이 빈 배열이었다 — 경합)
+      const la = await day(WORKSPACE_TZ)
       const utc = await day('UTC')
       const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
       const usageHtml = await (await admin.http('GET', wsPath(wsA, 'usage'))).text()
@@ -1206,11 +1210,13 @@ async function main() {
       await svc.from('usage_events').delete().eq('id', ev.id)
     }
     tzStep = {
-      projectId: calL.id, seeded: { timezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] }, today: lToday,
+      projectId: calL.id, seeded: { workspaceTimezone: workspaceTzStored, projectTimezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] },
+      today: { workspace: workspaceToday, project: lToday, distinct: workspaceToday !== lToday },
       reportOnPage: lHtml.includes(lDoc.reportId) || lToday !== lAfter, unreadBadge, portalHome: { now: homeHtml.includes(annNow), later: homeHtml.includes(annLater) }, usage,
-      discriminating: todayInTz('UTC') !== lToday,
       checks: {
-        seeded: lStored['calendar.timezone'] === LA && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
+        seeded: workspaceTzStored === WORKSPACE_TZ && lStored['calendar.timezone'] === PROJECT_TZ
+          && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
+        todayPair: workspaceToday !== lToday,
         // 자정을 넘긴 순간이면 다음 키 화면이 정답이다 — 그때는 이 항목을 판정하지 않는다(lToday !== lAfter)
         today: lHtml.includes(lDoc.reportId) || lToday !== lAfter,
         badge: unreadBadge === 1,
@@ -1284,10 +1290,10 @@ async function main() {
     // SP4 A1 — B 의 주간(이번 주 W1: 개명한 실험·비활성 운영·신규)과 설정(주간 영역 편집기)
     [`/p/${B.id}/weekly`, [exp.renamed, fresh.name]],
     [`/p/${B.id}/settings`, [exp.renamed, fresh.name]],
-    // SP5 A — 일요일 프로젝트의 주간(라벨·범위), 전환 프로젝트의 과거 URL(옛 월요일 키 — 같은 문서), LA 프로젝트 설정(달력 절)
+    // SP5 A — 일요일 프로젝트의 주간(라벨·범위), 전환 프로젝트의 과거 URL(옛 월요일 키 — 같은 문서), Kiritimati 프로젝트 설정(달력 절)
     [`/p/${calS.id}/weekly?week=${sundayWeek.S.weeks.w1}`, [sundayWeek.S.labels.w1]],
     [`/p/${calT.id}/weekly?week=${transition.docs.past}`, []],
-    [`/p/${calL.id}/settings`, ['America/Los_Angeles']],
+    [`/p/${calL.id}/settings`, ['Pacific/Kiritimati']],
   ]
   const rendered = []
   for (const [path, expectTexts] of pages) {
@@ -1347,6 +1353,118 @@ async function main() {
     if (!response.result?.ok || response.result.kind !== 'applied') throw new Fail(`${what}: updateProjectSettings 결과: ${JSON.stringify(response.result)}`)
     return (await projectModules()).enabled
   }
+
+  // ── issue-code-flow (SP5 B1, P1-AC2): 기본 코드·영역 코드·분석서·색인·모듈 전환을 한 흐름으로 확인한다.
+  const basicName = `E2E 코드 기본 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 코드 기본 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: basicName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const basic = rows('E2E 코드 기본 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', basicName).single())
+  await admin.http('GET', `/p/${basic.id}/issues`)
+  const basicCreated = mustOk('ISS-001 기본 이슈', (await admin.action(`/p/${basic.id}/issues`, 'createIssue', [basic.id, {
+    title: 'E2E 기본 코드 이슈', body: '분석 없이 등록', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId: null, analysis: null,
+  }])).result)
+  const [basicIssue] = rows('기본 이슈 다시 읽기', await admin.sb.from('issues').select('id, issue_no, code').eq('id', basicCreated.id))
+  if (basicCreated.code !== 'ISS-001' || basicIssue?.code !== 'ISS-001') throw new Fail(`새 프로젝트 기본 코드는 ISS-001 이어야 한다: ${JSON.stringify({ action: basicCreated.code, row: basicIssue })}`)
+
+  const aSettingsBefore = rows('A 이슈 흐름 설정 백업', await admin.sb.from('project_settings').select('revision, values').eq('project_id', A.id).single())
+  const aModulesBefore = aSettingsBefore.values['modules.enabled']
+  const aPolicyBefore = aSettingsBefore.values['issues.id_policy']
+  const updateASettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${A.id}/settings`)
+    const doc = rows('A 이슈 흐름 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', A.id).single())
+    return mustOk('A 이슈 흐름 설정 갱신', (await admin.action(`/p/${A.id}/settings`, 'updateProjectSettings',
+      [A.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result)
+  }
+  const analysisPolicy = { prefix: 'E2E', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' }
+  const hasIndexKey = /^(OPENAI|ANTHROPIC|AI_GATEWAY)[A-Z_]*=.+/m.test(text)
+  const enabledForIssueFlow = [...new Set([...aModulesBefore, 'issue_analysis', ...(hasIndexKey ? ['chatbot'] : [])])]
+  await updateASettings({ 'issues.id_policy': analysisPolicy, 'modules.enabled': enabledForIssueFlow })
+  await admin.http('GET', `/p/${A.id}/settings`)
+  const analysisArea = mustOk('RND issue_area', (await admin.action(`/p/${A.id}/settings`, 'upsertArea', [A.id, {
+    kind: 'issue_area', code: 'RND', name: '연구', sortOrder: 1, active: true, teams: [],
+  }])).result)
+  const areaId = analysisArea.id
+  await admin.http('GET', `/p/${A.id}/issues`)
+  const richIssue = mustOk('E2E 분석 분류 이슈', (await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 영역 코드 이슈', body: '영역 코드와 분석 분류가 연결된다.', severity: 'high', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: { majorName: 'E2E 원인', subProcess: '등록 절차', ownerDepartment: 'E2E 부서', relatedSystems: ['E2E 시스템'], sourceType: 'other', sourceDetail: 'E2E 인터뷰' },
+  }])).result)
+  if (richIssue.code !== 'E2E-RND-001') throw new Fail(`영역 이슈 코드가 다르다: ${richIssue.code}`)
+  const [richRow] = rows('영역 코드 이슈 다시 읽기', await admin.sb.from('issues')
+    .select('id, issue_no, code, area_id, code_area_id').eq('id', richIssue.id))
+  if (!richRow || richRow.code !== 'E2E-RND-001' || richRow.area_id !== areaId || richRow.code_area_id !== areaId) {
+    throw new Fail(`이슈 영역 외래 키가 다르다: ${JSON.stringify(richRow)}`)
+  }
+  const issueHtmlBeforeRename = await (await admin.http('GET', `/p/${A.id}/issues`)).text()
+  if (!issueHtmlBeforeRename.includes(richRow.code) || issueHtmlBeforeRename.includes(`#${richRow.issue_no}`)) {
+    throw new Fail('이슈 목록은 업무 코드를 표시하고 #issue_no 를 숨겨야 한다')
+  }
+
+  const analysisJson = { ...issueAnalysisRunFixture({ areaCode: 'RND', areaName: '연구', issueId: richRow.id, code: richRow.code }), projectId: A.id }
+  const [analysisRun] = rows('E2E 저장 분석 실행', await svc.from('issue_analysis_runs').insert({
+    project_id: A.id, input_hash: createHash('sha256').update(`${A.id}:${richRow.id}`).digest('hex'), prompt_version: 'e2e-issue-code-flow',
+    model: 'e2e-fixture', status: 'ready', analysis_json: analysisJson, input_snapshot: {}, issue_count: 1, created_by: me.id,
+  }).select('id'))
+  const deckRes = await admin.http('GET', `/api/issue-analysis?projectId=${A.id}&runId=${analysisRun.id}`)
+  const deck = Buffer.from(await deckRes.arrayBuffer())
+  const deckCheck = await zipHasAll(deck, ['E2E-RND-001', '연구'])
+  if (!deckCheck.ok) throw new Fail(`분석서 텍스트에 영역·이슈 코드가 없다: ${deckCheck.missing.join(', ')}`)
+
+  let bot = { mode: 'unit-only', evidence: 'tests/ai/index-issue-loader.test.ts' }
+  if (hasIndexKey) {
+    const jobKey = ['v1', A.id, 'issues', 'issue', richRow.id].map(encodeURIComponent).join(':')
+    const { error: enqueueError } = await svc.rpc('upsert_ai_index_jobs', { p_jobs: [{
+      job_key: jobKey, operation: 'upsert', project_id: A.id, domain: 'issues', entity_type: 'issue', entity_id: richRow.id,
+      payload: {}, run_after: new Date(Date.now() - 60_000).toISOString(),
+    }] })
+    if (enqueueError) throw new Fail(`이슈 색인 잡 등록 실패: ${enqueueError.message}`)
+    const cronRes = await fetch(`${base}/api/cron/ai-index`, { headers: { authorization: `Bearer ${cronSecret}` }, redirect: 'manual' })
+    const cronJson = await cronRes.json().catch(() => null)
+    if (cronRes.status !== 200) throw new Fail(`이슈 색인 크론 응답 ${cronRes.status}: ${JSON.stringify(cronJson)}`)
+    const docs = rows('이슈 색인 문서', await svc.from('ai_documents').select('title, content')
+      .eq('project_id', A.id).eq('domain', 'issues').eq('entity_type', 'issue').eq('entity_id', richRow.id))
+    const doc = docs[0]
+    if (!doc || !String(doc.title).includes(richRow.code) || String(doc.title).includes(`#${richRow.issue_no}`)
+      || String(doc.content).includes(`#${richRow.issue_no}`)) throw new Fail('색인 문서에 이슈 코드가 없거나 #issue_no 가 남았다')
+    bot = { mode: 'indexed', cron: { status: cronRes.status, claimed: cronJson?.claimed ?? null }, title: doc.title,
+      noIssueNo: !String(doc.content).includes(`#${richRow.issue_no}`) }
+  }
+
+  await admin.http('GET', `/p/${A.id}/settings`)
+  mustOk('RND 영역 개명', (await admin.action(`/p/${A.id}/settings`, 'upsertArea', [A.id, {
+    id: areaId, kind: 'issue_area', code: 'RND', name: '연구개발', sortOrder: 1, active: true, teams: [],
+  }])).result)
+  const [renamedRow] = rows('개명 뒤 코드', await admin.sb.from('issues').select('code, area_id, code_area_id').eq('id', richRow.id))
+  if (renamedRow?.code !== 'E2E-RND-001' || renamedRow.area_id !== areaId || renamedRow.code_area_id !== areaId) {
+    throw new Fail(`영역 개명 뒤 코드·영역 id 가 바뀌었다: ${JSON.stringify(renamedRow)}`)
+  }
+  await updateASettings({ 'modules.enabled': aModulesBefore })
+  const analysisDenied = await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 분석 꺼짐 거부', body: '', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: { majorName: '거부', subProcess: '거부', ownerDepartment: '거부', relatedSystems: [], sourceType: 'other', sourceDetail: '거부' },
+  }])
+  const reportOff = await admin.http('GET', `/api/issue-analysis?projectId=${A.id}&runId=${analysisRun.id}`, { expect: 404 })
+  const reportOffBody = await reportOff.json()
+  if (analysisDenied.result?.ok !== false || analysisDenied.result.error !== ERR_MODULE_DISABLED || reportOffBody?.error !== ERR_MODULE_DISABLED) {
+    throw new Fail(`분석 모듈 꺼짐을 쓰기·다운로드가 거부하지 않았다: ${JSON.stringify({ action: analysisDenied.result, report: reportOffBody })}`)
+  }
+  await admin.http('GET', `/p/${A.id}/issues`)
+  const plainAfterOff = mustOk('분석 꺼진 일반 이슈 등록', (await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 분석 없이 등록', body: '영역 코드는 유지', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: null,
+  }])).result)
+  if (plainAfterOff.code !== 'E2E-RND-002') throw new Fail(`분석 꺼짐이 일반 발급을 막았거나 카운터가 틀리다: ${plainAfterOff.code}`)
+  await updateASettings(aPolicyBefore === undefined ? {} : { 'issues.id_policy': aPolicyBefore }, aPolicyBefore === undefined ? ['issues.id_policy'] : [])
+  step('issue-code-flow', {
+    basic: { projectId: basic.id, code: basicCreated.code },
+    area: { id: areaId, code: richRow.code, areaId: richRow.area_id, codeAreaId: richRow.code_area_id, renamedCode: renamedRow.code, nextCode: plainAfterOff.code },
+    list: { codeRendered: issueHtmlBeforeRename.includes(richRow.code), noIssueNo: !issueHtmlBeforeRename.includes(`#${richRow.issue_no}`) },
+    report: { status: deckRes.status, bytes: deck.length, codeAndArea: deckCheck },
+    analysisOff: { rejectedWrite: analysisDenied.result.error, reportStatus: reportOff.status, plainCodeAfterOff: plainAfterOff.code }, bot,
+  })
 
   // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
   const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`

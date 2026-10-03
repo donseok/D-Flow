@@ -21,12 +21,15 @@ import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { settingDef } from '@/lib/settings/registry'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
 import { weekKeyOf, weekLabelOf } from '@/lib/domain/calendar'
 import { validateArea, type AreaInput } from '@/lib/domain/areas'
+import { parseStoredIssueAnalysisReport } from '@/lib/report/issues/storedRun'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import {
   XLSX_MIME, areaInput, fillWbsWorkbook, importForm, importResultView, inspectForm, shiftDays,
-  dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
+  dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz, issueAnalysisRunFixture, zipHasAll,
 } from '../../scripts/lib/e2e.mjs'
 import { carryOverRows } from '@/lib/domain/weeklyCarry'
 import { LEGACY_SENTINELS, SENTINELS_BY_SP } from '../fixtures/legacy-sentinels'
@@ -39,6 +42,23 @@ import {
 } from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
+
+describe('SP5 B1 E2E 도우미', () => {
+  it('분석 실행 fixture 를 앱 파서가 받아 이슈·영역 코드를 복원한다', () => {
+    const areas: IssueAreaRef[] = [{ id: 'fixture-area', code: 'RND', name: '연구', sortOrder: 1, active: true }]
+    const parsed = parseStoredIssueAnalysisReport(issueAnalysisRunFixture({
+      areaCode: 'RND', areaName: '연구', issueId: 'fixture-issue', code: 'E2E-RND-001',
+    }), 'fixture-project', areas)
+    expect(parsed?.areas[0]).toMatchObject({ areaCode: 'RND', areaName: '연구', issues: [{ id: 'fixture-issue', code: 'E2E-RND-001' }] })
+  })
+  it('zipHasAll 은 zip 텍스트에 기대 문자열이 전부 있을 때만 ok', async () => {
+    const zip = new JSZip()
+    zip.file('ppt/slides/slide1.xml', '<a:t>E2E-RND-001</a:t><a:t>연구</a:t>')
+    const buf = await zip.generateAsync({ type: 'nodebuffer' })
+    await expect(zipHasAll(buf, ['E2E-RND-001', '연구'])).resolves.toEqual({ ok: true, missing: [] })
+    await expect(zipHasAll(buf, ['E2E-RND-001', '빠짐'])).resolves.toEqual({ ok: false, missing: ['빠짐'] })
+  })
+})
 
 describe('양식 행', () => {
   it('헤더는 앱 양식과 같다(드리프트 감지)', () => {
@@ -779,6 +799,15 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
     expect(block).toMatch(/finally \{\s*await setWorkspaceTz\(wsTzBefore\)/)
     expect(block).toMatch(/finally \{\s*await svc\.from\('usage_events'\)\.delete\(\)\.eq\('id', ev\.id\)/)
   })
+  it('calendar-tz 는 날짜가 반드시 다른 Pago Pago·Kiritimati 짝으로 workspace/project 설정과 날짜 판정을 검증한다', () => {
+    const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
+    expect(block).toContain("const WORKSPACE_TZ = 'Pacific/Pago_Pago'")
+    expect(block).toContain("const PROJECT_TZ = 'Pacific/Kiritimati'")
+    expect(block).toContain("await setWorkspaceTz(WORKSPACE_TZ)")
+    expect(block).toContain("await setProject(calL, { 'calendar.timezone': PROJECT_TZ })")
+    expect(block).toContain('todayPair: workspaceToday !== lToday')
+    expect(src).toContain("[`/p/${calL.id}/settings`, ['Pacific/Kiritimati']]")
+  })
   // 체크포인트 A 첫 실행(2026-10-03)의 빨강 둘 — 러너 결함이다(단언은 그대로).
   it('calendar-tz 의 사용현황 일자 판독은 /usage GET 보다 먼저다 — 그 화면의 after()(purgeOldUsageEvents)가 보존 기간(90일) 밖인 픽스처를 지운다', () => {
     const block = src.slice(at('calendar-week-transition'), at('calendar-tz'))
@@ -937,6 +966,25 @@ describe('SP3b E2E UI-2b 순수 판정(E5·E7·E10)', () => {
     expect(shellBadgeVerdict(ok(nulls), 'own')[0]).toMatch(/숫자/)
     expect(shellBadgeVerdict({ status: 404, body: null }, 'hidden')).toEqual(['상태 404 ≠ 200'])
     expect(shellBadgeVerdict({ status: 200, body: {} }, 'hidden')).toEqual(['응답에 badges 가 없다'])
+  })
+})
+
+describe('e2e-local.mjs — SP5 B1 issue-code-flow', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  it('새 프로젝트 ISS-001 → 영역 코드·분석서·색인 → 분석 모듈 off 순서가 issue-code-flow 한 단계에 있다', () => {
+    const at = (name: string) => src.indexOf(`step('${name}'`)
+    expect(at('issue-code-flow')).toBeGreaterThan(-1)
+    expect(at('issue-code-flow')).toBeLessThan(at('module-issues-off'))
+    const start = src.indexOf('// ── issue-code-flow')
+    const end = at('issue-code-flow')
+    const block = src.slice(start, end)
+    for (const needle of ["code !== 'ISS-001'", "code !== 'E2E-RND-001'", "code !== 'E2E-RND-002'", '/api/issue-analysis?', 'issue_analysis_runs', 'upsert_ai_index_jobs', 'ai_documents']) {
+      expect(block, needle).toContain(needle)
+    }
+    expect(block).toContain("kind: 'issue_area'")
+    expect(block).toContain('code_area_id')
+    expect(block).toContain('zipHasAll(deck')
+    expect(block).toContain("mode: 'unit-only'")
   })
 })
 
