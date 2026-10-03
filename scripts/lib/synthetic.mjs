@@ -48,7 +48,7 @@ export const SYNTHETIC_R = Object.freeze({
   issues: Object.freeze({
     idPolicy: Object.freeze({ prefix: 'RS', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' }),
     areas: Object.freeze([
-      ['RND', 'RND 연구'], ['OPS', 'OPS 운영'], ['QA', 'QA 품질'], ['SAF', 'SAF 안전'], ['ENV', 'ENV 환경'],
+      ['RND', 'RND 연구'], ['OPS', 'OPS 운영'], ['QA', 'QA 검사'], ['SAF', 'SAF 안전'], ['ENV', 'ENV 환경'],
       ['DOC', 'DOC 문서'], ['LAB', 'LAB 실험'], ['DAT', 'DAT 데이터'], ['EQP', 'EQP 장비'], ['ADM', 'ADM 관리'],
     ].map(([code, name], i) => Object.freeze({ code, name, sortOrder: i + 1 }))),
   }),

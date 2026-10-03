@@ -8,7 +8,8 @@ import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
 import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
 import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
-import { LEGACY_SENTINELS } from '../fixtures/legacy-sentinels'
+import { findSentinels, LEGACY_SENTINELS } from '../fixtures/legacy-sentinels'
+import { sp4Sentinels, sp5b1Sentinels } from '../../scripts/lib/sentinels.mjs'
 import { parseIdPolicy } from '@/lib/issues/idPolicy'
 
 // 합성 게이트 러너(scripts/e2e-synthetic.mjs)의 구성값은 .mjs 라 TS 픽스처를 import 하지 못해 한 번 더 적는다 — 같은 값인지 대조한다.
@@ -53,10 +54,12 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
 })
 
 describe('S1-issues 합성 — R 영역별·C 연도별 발급 구성', () => {
-  it('R 은 옛 영역명과 겹치지 않는 코드 10개, C 는 영역 없이 두 정책 모두 파서 검증을 통과한다', () => {
+  it('R 은 옛 출력 센티널과 겹치지 않는 코드·이름 10개, C 는 영역 없이 두 정책 모두 파서 검증을 통과한다', () => {
     expect(SYNTHETIC_R.issues.areas).toHaveLength(10)
     expect(new Set(SYNTHETIC_R.issues.areas.map((a: { code: string }) => a.code)).size).toBe(10)
     expect(SYNTHETIC_R.issues.areas.every((a: { code: string }) => /^[A-Z0-9]{1,8}$/.test(a.code))).toBe(true)
+    const outputSentinels = [...sp4Sentinels(), ...sp5b1Sentinels()]
+    expect(SYNTHETIC_R.issues.areas.flatMap((a: { name: string }) => findSentinels(a.name, outputSentinels))).toEqual([])
     expect(SYNTHETIC_R.issues.areas.some((a: { name: string }) => (LEGACY_SENTINELS.issueAreas as readonly string[]).includes(a.name))).toBe(false)
     expect(SYNTHETIC_C.issues.areas).toEqual([])
     expect(parseIdPolicy(SYNTHETIC_R.issues.idPolicy)).toMatchObject({ ok: true })
