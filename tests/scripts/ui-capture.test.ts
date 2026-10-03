@@ -1062,8 +1062,8 @@ describe('행 선택·행 prefs — manual 행과 접힘 선호(과제 37)', () 
     expect(selectRoutes(doc, { routes: null, since: ['UI-2b'] }).map((r) => r.key)).toEqual(['a'])
     expect(selectRoutes(doc, { routes: ['b'], since: ['b4283c0'] }).map((r) => r.key)).toEqual(['b'])
   })
-  it('validateRoutes — prefs 는 허용 키의 불리언 객체뿐', () => {
-    expect(ROW_PREF_KEYS).toEqual(['sidebarCollapsed'])
+  it('validateRoutes — prefs 는 허용 키의 허용 값 객체뿐(sidebarCollapsed 는 불리언)', () => {
+    expect(ROW_PREF_KEYS).toEqual(['projectsView', 'sidebarCollapsed'])
     const doc = { version: 1, commonMask: [], routes: [
       { key: 'a', path: '/a', grade: 'member', since: 'UI-2b', prefs: { sidebarCollapsed: true } },
       { key: 'b', path: '/b', grade: 'member', since: 'UI-2b', prefs: { theme: 'dark' } },
@@ -1117,5 +1117,73 @@ describe('UI-2b 셸 상태 캡처 행(과제 37)', () => {
     expect(picked).not.toContain('ws-settings-broken')
     expect(picked).toContain('ws-switcher-open')
     expect(selectRoutes(routesDoc, { routes: ['ws-settings-broken'], since: [] }).map((x) => x.key)).toEqual(['ws-settings-broken'])
+  })
+})
+
+import { RAIL_REQUIRED_COLS, railVerdict } from '../../scripts/ui-capture.mjs'
+
+describe('행 prefs 필드(계정 선호 고정 — UI-3 이 projectsView 를 더한다)', () => {
+  const base = { version: 1, routes: [{ key: 'ws-projects', path: '/w/{wsSlug}/projects', grade: 'member', since: 'UI-2b', file: '(app)/w/[slug]/projects/page.tsx' }] }
+  const files = ['(app)/w/[slug]/projects/page.tsx']
+  const withRow = (prefs: unknown) => ({ ...base, routes: [...base.routes, { key: 'x', path: '/w/{wsSlug}/projects', grade: 'member', since: 'UI-3', prefs }] })
+  it('허용 키(projectsView·sidebarCollapsed)만', () => {
+    expect(validateRoutes(withRow({ projectsView: 'cards' }), files)).toEqual([])
+    expect(validateRoutes(withRow({ projectsView: 'rows', sidebarCollapsed: true }), files)).toEqual([])
+    expect(validateRoutes(withRow({ theme: 'dark' }), files).join()).toContain('prefs')
+  })
+  it('값은 키마다 닫혀 있다 — projectsView 는 rows|cards, sidebarCollapsed 는 불리언', () => {
+    expect(validateRoutes(withRow({ projectsView: 'grid' }), files).join()).toContain('prefs')
+    expect(validateRoutes(withRow({ projectsView: true }), files).join()).toContain('prefs')
+    expect(validateRoutes(withRow({ sidebarCollapsed: 'cards' }), files).join()).toContain('prefs')
+  })
+})
+
+describe('railVerdict(§6.7 — 병치에서 필수 열이 잘리면 실패)', () => {
+  const all = Object.fromEntries(RAIL_REQUIRED_COLS.map((c: string) => [c, true]))
+  it('필수 열 = 번호·이름·상태·계획 시작·계획 끝', () => { expect(RAIL_REQUIRED_COLS).toEqual(['no', 'name', 'status', 'pstart', 'pend']) })
+  it('병치 + 필수 열 모두 보임 = 통과', () => { expect(railVerdict({ mode: 'side', cols: all })).toEqual({ ok: true, why: null }) })
+  it('병치 + 하나라도 잘림 = 실패(그 열 이름)', () => {
+    expect(railVerdict({ mode: 'side', cols: { ...all, pend: false } })).toEqual({ ok: false, why: 'cut:pend' })
+    expect(railVerdict({ mode: 'side', cols: {} })).toEqual({ ok: false, why: 'cut:no' })
+  })
+  it('오버레이는 열을 보지 않는다(본문이 줄지 않는다)', () => { expect(railVerdict({ mode: 'overlay', cols: {} }).ok).toBe(true) })
+  it('레일을 찾지 못하면 실패', () => { expect(railVerdict({ mode: 'none', cols: all })).toEqual({ ok: false, why: 'no-rail' }) })
+})
+
+describe('checks rail 하위 명령', () => {
+  it('cmdChecks 의 종류 표에 rail 이 있다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
+    expect(src).toMatch(/\{ tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase, rail: checkRail \}/)
+  })
+})
+
+describe('UI-3 라우트 행', () => {
+  type Row = { key: string; since: string; until?: string; expectFinal?: string; prefs?: Record<string, unknown>; clicks?: string[]; expect?: string[]; supplement?: boolean }
+  const key = (k: string) => (routesDoc.routes as Row[]).find((r) => r.key === k)
+  // 계획의 일곱 + 좁은 폭 전체 화면(-compact — UI-2b 의 p-wbs-fullscreen-compact 와 같은 꼴: 1280 이하는 토글이 도구 줄 접힘 안에 있다)
+  const NEW = ['ws-home-wsadmin', 'ws-projects-cards', 'p-wbs-timeline', 'p-wbs-board', 'p-wbs-inspector', 'p-wbs-inspector-collapsed', 'p-wbs-fullscreen-inspector', 'p-wbs-fullscreen-inspector-compact']
+  it('새 행 여덟은 since UI-3·보충 행', () => {
+    for (const k of NEW) {
+      expect(key(k)?.since, k).toBe('UI-3')
+      expect(key(k)?.supplement, k).toBe(true)
+    }
+  })
+  it('카드 보기·접힘 행은 계정 선호로 상태를 고정한다', () => {
+    expect(key('ws-projects-cards')?.prefs).toEqual({ projectsView: 'cards' })
+    expect(key('p-wbs-inspector-collapsed')?.prefs).toEqual({ sidebarCollapsed: true })
+  })
+  it('인스펙터 행은 레일 표지를 기대하고, 전체 화면 행은 토글 뒤 그 안의 행을 연다', () => {
+    for (const k of ['p-wbs-inspector', 'p-wbs-inspector-collapsed', 'p-wbs-fullscreen-inspector', 'p-wbs-fullscreen-inspector-compact']) expect(key(k)?.expect, k).toContain('[data-rail="inspector"]')
+    expect(key('p-wbs-fullscreen-inspector')?.clicks).toEqual(['[data-wbs-fullscreen-toggle]', '[data-wbs-fullscreen="open"] [data-row-id] [data-wbs-col="name"] button[title]'])
+    expect(key('p-wbs-fullscreen-inspector-compact')?.clicks?.slice(0, 2)).toEqual(['[data-wbs-toolbar-toggle]', '[data-wbs-fullscreen-toggle]'])
+  })
+  it('옛 칸반 행은 UI-3 까지(스텁이 된다 — D36), 키로 찍으면 머리는 보드로 간다', () => {
+    expect(key('p-kanban')?.until).toBe('UI-3')
+    expect(key('p-kanban')?.expectFinal).toBe('/p/{pid}/wbs?view=board')     // p-gantt(until UI-2a) 와 같은 꼴 — 키로 찍으면 머리는 스텁을 거쳐 보드
+    const picked = selectRoutes(routesDoc, { routes: null, since: ['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'UI-3', 'C'] }).map((x: { key: string }) => x.key)
+    expect(picked).not.toContain('p-kanban')
+  })
+  it('UI-3 행을 더해도 목록 형식이 맞다', () => {
+    expect(validateRoutes(routesDoc, pageFiles)).toEqual([])
   })
 })

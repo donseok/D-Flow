@@ -1,0 +1,41 @@
+{
+  "default": null,
+  "light": {
+    "base": "#ffe066",
+    "light": {
+      "bg": "#88731b",
+      "fg": "#ffffff",
+      "hover": "#776519",
+      "pressed": "#675714",
+      "soft": "#f8f2dc",
+      "focus": "#88731b"
+    },
+    "dark": {
+      "bg": "#ffe066",
+      "fg": "#1c1601",
+      "hover": "#fef2c3",
+      "pressed": "#ffffff",
+      "soft": "#39331a",
+      "focus": "#ffe066"
+    }
+  },
+  "dark": {
+    "base": "#1b1f3b",
+    "light": {
+      "bg": "#1b1f3b",
+      "fg": "#ffffff",
+      "hover": "#10132e",
+      "pressed": "#070821",
+      "soft": "#eef1fe",
+      "focus": "#1b1f3b"
+    },
+    "dark": {
+      "bg": "#7d84a7",
+      "fg": "#10132e",
+      "hover": "#8c93b7",
+      "pressed": "#9ba3c7",
+      "soft": "#2d3147",
+      "focus": "#7d84a7"
+    }
+  }
+}

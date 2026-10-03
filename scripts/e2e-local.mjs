@@ -24,7 +24,7 @@
 //        /minutes·/admin/…)는 스텁 307 이라 이 러너는 새 경로를 부른다(서버 액션 매니페스트 키도 /w/[slug]/…/page). module-index-skip 뒤에
 //        sp3b- 단계: 두 워크스페이스 계정 duo·B 의 공용 팀·회의록을 더하고 E1 옛 경로 307(쿼리 보존)·E2 회의록 영구 링크·E4 비소속 404·
 //        E6 두 워크스페이스 목록과 인자 워크스페이스 생성·E8 루트 리졸버·E9 전환 대상·E11 소프트 이동(Playwright)·E5 전환기·E7 모듈 끈 메뉴·
-//        E10 비소속 배지. E3 은 UI-3 몫이라 없다.
+//        E10 비소속 배지. E3(옛 칸반 → 작업 계획 보드 307 — UI-3 과제 1 이 더했다, 과제 14 의 스텁 뒤에 초록)은 E1 바로 뒤.
 //   SP5 A: import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞에서 달력 넷 — calendar-week-sunday(일요일 프로젝트 S 와 월요일·월~토
 //        프로젝트 M 의 연속 2주·이월·라벨·범위·기본 보고서 라벨), calendar-week-transition(월요일 T 를 일요일로 전환 — 미리보기 E = 저장 E, 과도기 6일,
 //        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 tz 를 LA 로 바꾼 뒤 만든 L 의 시드·오늘·공지 게시 판정·사용현황 일자, 끝에 tz 복귀),
@@ -54,7 +54,8 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  DUO, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, legacyCases, shellBadgeVerdict, switcherVerdict,
+  DUO, KANBAN_BOARD_MARK, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, kanbanStubCase, legacyCases,
+  shellBadgeVerdict, switcherVerdict,
 } from './lib/e2e.mjs'
 import {
   A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, nextServerMode,
@@ -1497,6 +1498,16 @@ async function main() {
     const cases = legacyCases(slugA, { minuteId: minuteA.minuteId, projectId: A.id })
     for (const c of cases) for (const x of expectLocation(await raw(ana, c.from), origin, c.to)) p.push(`${c.from}: ${x}`)
     sp3b('E1', { what: '옛 경로 → 새 경로 307(쿼리 보존·요청 원점)', cases: cases.length }, p)
+  }
+  {
+    // E3(UI-3, D36) — 옛 칸반 딥링크는 작업 계획의 보드 보기로 307(view → group, 나머지 쿼리 보존), 그 대상이 200 으로 보드를 그린다.
+    // 프로젝트 A 는 칸반이 켜져 있다(단계 20~ 은 이슈·agents·chatbot 만 끈다). ana 는 A 관리자
+    const p = []
+    const c = kanbanStubCase(A.id)
+    for (const x of expectLocation(await raw(ana, c.path), origin, c.want)) p.push(`${c.path}: ${x}`)
+    const page = await raw(ana, c.want)
+    if (page.status !== 200 || !page.html.includes(KANBAN_BOARD_MARK)) p.push(`보드가 그려지지 않았다(상태 ${page.status}, 표지 ${page.html.includes(KANBAN_BOARD_MARK)})`)
+    sp3b('E3', { what: '옛 칸반 → 작업 계획 보드 307(view→group·쿼리 보존)·대상 200 + 보드 표지', from: c.path, to: c.want }, p)
   }
   {
     const p = []

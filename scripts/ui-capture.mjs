@@ -1,5 +1,5 @@
 // scripts/ui-capture.mjs — SP3b 캡처·눈확인 도구(스펙 D48·§3.4, 계획 판정 Q2~Q5·Q8·Q33). 로컬 레인 B 전용
-// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202·3203 — C-port). 하위 명령: seed · shoot · diff · axe · checks · sheet(뒤 둘은 UI-1 이 이어 고침 — 판정 Q28).
+// (api 54421 · db 54422 · 앱 3201, 기준 서버 3202·3203 — C-port). 하위 명령: seed · accent · shoot · diff · axe · checks · sheet(뒤 둘은 UI-1 이 이어 고침 — 판정 Q28, accent·checks rail 은 UI-3).
 // 순수 함수는 export 해 tests/scripts/ui-capture.test.ts 가 import 한다 — 최상위에서 파일·네트워크·env 를 건드리지 않는다(isMain 가드).
 // Playwright 는 package.json 에 없다: `npx --yes -p playwright@1.58.2 node scripts/ui-capture.mjs …` 로 부르고 PATH 에서 찾는다.
 // 주석에 설정 표·설정 RPC 이름을 따옴표로 적지 않는다(settings-writes 게이트가 원문을 센다).
@@ -21,8 +21,13 @@ export const GRADES = Object.freeze(['public', 'member', 'wsAdmin', 'platformAdm
 export const SINCE = Object.freeze(['b4283c0', 'UI-1', 'UI-2a', 'UI-2b', 'UI-3', 'C'])
 export const TEMPLATE_VARS = Object.freeze(['pid', 'minuteId', 'topicId', 'inviteToken', 'shareToken', 'wsSlug'])
 export const DIFF_THRESHOLD = 16
-/** 행의 prefs 로 덮을 수 있는 계정 키 — 서버값이 이겨서 화면 조작·init 으로 못 만드는 상태만(과제 37) */
-export const ROW_PREF_KEYS = Object.freeze(['sidebarCollapsed'])
+/** 행의 prefs 로 덮을 수 있는 계정 키 — 서버값이 이겨서 화면 조작·init 으로 못 만드는 상태만(과제 37, UI-3 이 projectsView) */
+export const ROW_PREF_KEYS = Object.freeze(['projectsView', 'sidebarCollapsed'])
+/** 키마다 허용 값 — 앱의 계정 키 정리 규칙(src/lib/prefs/split.ts)이 받는 값만 둔다(못 받는 값은 PrefsSync 가 버려 행이 의도한 상태를 못 찍는다) */
+const ROW_PREF_VALUE_OK = Object.freeze({
+  projectsView: (v) => v === 'rows' || v === 'cards',
+  sidebarCollapsed: (v) => typeof v === 'boolean',
+})
 export const SAME_RATIO = 0.002
 export const KEY_RE = /^[a-z0-9][a-z0-9-]*$/
 
@@ -254,7 +259,7 @@ export function validateRoutes(doc, pageFiles) {
     if (r?.click !== undefined && (typeof r.click !== 'string' || /[{}<]/.test(r.click))) p.push(`${id}: click 선택자`)
     if (r?.clicks !== undefined && (!Array.isArray(r.clicks) || r.clicks.length === 0 || r.clicks.some((s) => typeof s !== 'string' || !s || /[{}<]/.test(s)))) p.push(`${id}: clicks 선택자`)
     if (r?.clicks !== undefined && r?.click !== undefined) p.push(`${id}: click 과 clicks 를 같이 쓰지 않는다`)
-    if (r?.prefs !== undefined && (typeof r.prefs !== 'object' || r.prefs === null || Array.isArray(r.prefs) || Object.entries(r.prefs).some(([k, v]) => !ROW_PREF_KEYS.includes(k) || typeof v !== 'boolean'))) p.push(`${id}: prefs 는 ${ROW_PREF_KEYS.join('·')} 의 불리언 객체`)
+    if (r?.prefs !== undefined && (typeof r.prefs !== 'object' || r.prefs === null || Array.isArray(r.prefs) || Object.entries(r.prefs).some(([k, v]) => !ROW_PREF_KEYS.includes(k) || !ROW_PREF_VALUE_OK[k](v)))) p.push(`${id}: prefs 는 ${ROW_PREF_KEYS.join('·')} 의 객체(projectsView = rows|cards, sidebarCollapsed = 불리언)`)
     // 선택 필드(판정 Q35): pair = 짝 행(옛·새 경로 — UI-2a 가 diff --pair 로 쓴다), expect = 그려져야 할 선택자, focus* = 과제 23 Tab 순회
     if (r?.pair !== undefined && (r.pair === r.key || !(doc?.routes ?? []).some((x) => x?.key === r.pair))) p.push(`${id}: pair 대상 없음(${r.pair})`)
     for (const f of ['expect', 'focusTargets', 'hide']) {
@@ -491,6 +496,26 @@ export function inviteDomainPatch(values, domain = SEED_INVITE_DOMAIN) {
     throw new Error(`워크스페이스 A 의 ${key} 에 * 가 다른 항목과 섞였다(손상) — 덮지 않는다`)
   }
   return norm.includes(want) ? null : { [key]: [...cur, want] }
+}
+
+/** 캡처 accent 셋(UI-3 판정 W24, 스펙 §6.8) — 이름 → 저장 값. 값은 scripts/ui-capture.accents.json(파생 세트 — .mjs 는 TS 의 파생 함수를
+ *  import 하지 못해 미리 계산해 두고 tests/scripts/ui-capture-accents.test.ts 가 파생 결과와 같음을 고정한다). default = null(제품 기본색) */
+export const ACCENT_CAPTURE_NAMES = Object.freeze(['default', 'light', 'dark'])
+/** 키 순서와 무관한 직렬화 — jsonb 는 객체 키 순서를 보존하지 않아 읽어 온 값을 JSON.stringify 로 비교하면 같은 값도 다르게 나온다 */
+const canonical = (v) => (Array.isArray(v) ? `[${v.map(canonical).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v ?? null))
+/**
+ * 워크스페이스 A 의 강조색 patch(순수) — 그 이름의 값과 지금 값이 같으면 null(쓰지 않아 이력 행을 늘리지 않는다). 미설정 = null 과 같다.
+ * @param {Record<string, unknown> | null | undefined} values @param {string} name @param {Record<string, unknown>} accents
+ * @returns {Record<string, unknown> | null}
+ */
+export function accentPatch(values, name, accents) {
+  if (!ACCENT_CAPTURE_NAMES.includes(name)) throw new Error(`accent 이름 밖: ${name}(${ACCENT_CAPTURE_NAMES.join('·')})`)
+  if (!Object.prototype.hasOwnProperty.call(accents ?? {}, name)) throw new Error(`accent 세트에 ${name} 이 없다(scripts/ui-capture.accents.json)`)
+  const key = 'branding.accent'
+  const want = accents[name] ?? null
+  const cur = (values ?? {})[key] ?? null
+  return canonical(cur) === canonical(want) ? null : { [key]: want }
 }
 
 /** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값. javaScript === false 만 JS 를 끈다(D55 첫 페인트 — 그 밖에는 키를 더하지 않아 기본 조건 그대로)
@@ -834,6 +859,23 @@ async function cmdSeed() {
   console.log(JSON.stringify({ ok: true, today, projectId: pid, wsB: wsB.id, wbs: plan.wbs.length, minutes: plan.minutes.length, inviteDomainsA }))
 }
 COMMANDS.seed = cmdSeed
+
+/** accent <default|light|dark> — 캡처 워크스페이스 A 의 branding.accent 를 그 값으로(사용자 눈확인 ⑪ 의 accent 셋 — 같은 시드에서 바꿔 찍는다).
+ *  쓰기는 seedWorkspaceSettings 한 길(설정 RPC — 이 파일의 설정 쓰기 수는 그대로). 행위자는 A 의 워크스페이스 관리자(그 설정의 편집 등급) */
+async function cmdAccent(opts) {
+  const name = opts.positional[0]
+  if (opts.positional.length !== 1 || !ACCENT_CAPTURE_NAMES.includes(name)) throw new Error(`사용: accent ${ACCENT_CAPTURE_NAMES.join('|')}`)
+  const { db } = laneEnv()
+  const accents = JSON.parse(readFileSync(new URL('./ui-capture.accents.json', import.meta.url), 'utf8'))
+  const slugA = (process.env.BOOTSTRAP_WORKSPACE_SLUG || 'default').trim()
+  const wsA = must('워크스페이스 A 조회', await db.from('workspaces').select('id').eq('slug', slugA).maybeSingle())
+  if (!wsA) throw new Error(`워크스페이스 '${slugA}' 가 없다 — dev:bootstrap·seed 를 먼저`)
+  const actor = await userIdByEmail(db, SEED_ACCOUNTS.wsAdmin)
+  if (!actor) throw new Error(`시드 계정이 없다(${SEED_ACCOUNTS.wsAdmin}) — ui-capture.mjs seed 를 먼저`)
+  const res = await seedWorkspaceSettings(db, `accent ${name}`, wsA.id, actor, (v) => accentPatch(v, name, accents))
+  console.log(JSON.stringify({ ok: true, kind: 'accent', name, wrote: res.wrote, ...(res.wrote ? { status: res.status, revision: res.revision } : {}) }))
+}
+COMMANDS.accent = cmdAccent
 
 export const CDN_HOST = 'https://cdn.jsdelivr.net/'
 const gitHead = () => execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()
@@ -1551,11 +1593,49 @@ async function checkShowcase(opts) {
   console.log(JSON.stringify({ ok: true, kind: 'showcase', pairs: pairs.length, unequal: pairs.filter((p) => !p.equal) }))
 }
 
+/** 병치 레일 옆에 남아야 할 표의 필수 열(스펙 §6.7) — 번호·이름·상태·계획 기간. WbsGanttSheet 의 머리 칸 data-wbs-col 키 */
+export const RAIL_REQUIRED_COLS = Object.freeze(['no', 'name', 'status', 'pstart', 'pend'])
+/**
+ * 레일 판정(순수, §6.7) — 병치(side)면 필수 열이 모두 스크롤 영역 안에 보여야 통과, 오버레이는 본문이 줄지 않아 열을 보지 않는다,
+ * 레일을 찾지 못하면(none) 실패. @param {{ mode: string, cols: Record<string, boolean> }} m @returns {{ ok: boolean, why: string | null }}
+ */
+export function railVerdict({ mode, cols }) {
+  if (mode === 'overlay') return { ok: true, why: null }
+  if (mode !== 'side') return { ok: false, why: 'no-rail' }
+  const cut = RAIL_REQUIRED_COLS.find((c) => cols?.[c] !== true)
+  return cut ? { ok: false, why: `cut:${cut}` } : { ok: true, why: null }
+}
+/** 병치 임계 근처의 폭 넷(§6.7 — 1440 병치·1280 오버레이 사이) */
+const RAIL_SIZES = Object.freeze([[1440, 900], [1400, 900], [1366, 768], [1280, 720]])
+/** checks rail — 인스펙터 행(펼침·접힘)을 임계 폭 넷에서 열고 레일 모드와 필수 열의 보임을 잰다 → <label>/rail.json. 클릭(행 열기)은 forEachShot 이 먼저 한다 */
+async function checkRail(opts) {
+  const out = []
+  const res = await forEachShot({ ...opts, routes: ['p-wbs-inspector', 'p-wbs-inspector-collapsed'], theme: ['light'], sizes: RAIL_SIZES.map((s) => [...s]) }, async (page, { r, width }) => {
+    const m = await page.evaluate((req) => {
+      const rail = document.querySelector('[data-rail="inspector"]')
+      const mode = !rail ? 'none' : rail.closest('[role="dialog"]') ? 'overlay' : 'side'
+      const region = document.querySelector('[data-wbs-scroll-region]')?.getBoundingClientRect()
+      const cols = Object.fromEntries(req.map((c) => {
+        const h = document.querySelector(`[data-wbs-col="${c}"][data-wbs-col-kind="header"]`)?.getBoundingClientRect()
+        return [c, !!(h && region && h.width > 0 && h.right <= region.right + 0.5 && h.left >= region.left - 0.5)]
+      }))
+      return { mode, cols, main: document.querySelector('main#main-content')?.clientWidth ?? null, railWidth: rail?.getBoundingClientRect().width ?? null }
+    }, [...RAIL_REQUIRED_COLS])
+    out.push({ key: r.key, width, collapsed: r.key.endsWith('-collapsed'), ...m, ...railVerdict(m) })
+    return {}
+  })
+  const rows = out.map((x, i) => ({ ...x, problems: res.rows[i]?.problems ?? [] }))
+  mkdirSync(join(res.outDir, opts.label), { recursive: true })
+  writeFileSync(join(res.outDir, opts.label, 'rail.json'), JSON.stringify({ browser: res.browserVersion, buildId: res.buildId, rows }, null, 2))
+  console.log(JSON.stringify({ ok: rows.every((x) => x.ok && x.problems.length === 0), kind: 'rail',
+    rows: rows.map((x) => `${x.width}${x.collapsed ? '·접힘' : '·펼침'} ${x.mode} main=${x.main} rail=${x.railWidth} ${x.ok ? 'ok' : x.why}${x.problems.length ? ` problems ${x.problems.join('+')}` : ''}`) }))
+}
+
 async function cmdChecks(opts) {
   if (!opts.label) throw new Error('--label 이 필요하다')
   const kind = opts.positional[0]
-  const run = { tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase }[kind ?? '']
-  if (!run || opts.positional.length !== 1) throw new Error('사용: checks tab|print|flicker|showcase --label <l> [--routes …] [--theme …]')
+  const run = { tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase, rail: checkRail }[kind ?? '']
+  if (!run || opts.positional.length !== 1) throw new Error('사용: checks tab|print|flicker|showcase|rail --label <l> [--routes …] [--theme …]')
   await run(opts)
 }
 

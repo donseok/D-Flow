@@ -802,6 +802,14 @@ export function expectLocation(res, origin, path) {
   return p
 }
 
+/** 칸반 보드 표지 — 작업 계획 페이지가 보드 보기를 그렸을 때 SSR HTML 에 있다(UI-3 과제 14 가 KanbanBoard 루트에 단다) */
+export const KANBAN_BOARD_MARK = 'data-kanban-board'
+/** 옛 칸반 딥링크 사례(순수, E3 — 스펙 §8.3·D36): view 는 group 으로, 나머지 쿼리는 그대로, 대상은 작업 계획의 보드 보기
+ *  @param {string} pid @returns {{ path: string, want: string }} */
+export function kanbanStubCase(pid) {
+  return { path: `/p/${pid}/kanban?view=phase&team=X`, want: `/p/${pid}/wbs?view=board&group=phase&team=X` }
+}
+
 /** notFound 판정(순수) — HTTP 404 또는 로딩 경계 안 스트리밍 notFound() 의 digest. 센티널(보이면 안 되는 글자)이 본문에 실렸는지도 함께
  *  @param {{ status: number, html: string }} res @param {readonly string[]} [sentinels] @returns {string[]} */
 export function hiddenVerdict({ status, html }, sentinels = []) {

@@ -969,3 +969,21 @@ describe('SP4 B — E2E teams-color-render 단계(스펙 §6.3)', () => {
     expect(src).toMatch(/step\('teams-color-render', \{ pages: seen \}/)
   })
 })
+
+import { KANBAN_BOARD_MARK, kanbanStubCase } from '../../scripts/lib/e2e.mjs'
+
+describe('sp3b-E3 — 칸반 스텁(D36, 스펙 §8.3 E3)', () => {
+  it('view 는 group 으로, 나머지 쿼리는 그대로, 대상은 작업 계획의 보드', () => {
+    expect(kanbanStubCase('00000000-0000-0000-7e57-000000001801')).toEqual({
+      path: '/p/00000000-0000-0000-7e57-000000001801/kanban?view=phase&team=X',
+      want: '/p/00000000-0000-0000-7e57-000000001801/wbs?view=board&group=phase&team=X',
+    })
+  })
+  it('러너의 sp3b- 단계에 E3 이 있다(스텁 307·Location·보드 표지)', () => {
+    const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+    expect(src).toMatch(/sp3b\('E3'/)
+    expect(src).toMatch(/kanbanStubCase\(A\.id\)/)
+    expect(src).toMatch(/includes\(KANBAN_BOARD_MARK\)/)
+    expect(KANBAN_BOARD_MARK).toBe('data-kanban-board')       // 과제 14 가 KanbanBoard 루트에 다는 표지와 캡처 행 p-wbs-board 의 기대 선택자
+  })
+})
