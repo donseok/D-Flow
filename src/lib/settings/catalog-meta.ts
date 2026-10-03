@@ -48,9 +48,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
-  // SP3b UI-3 과제 2 — 정의·테스트(네 연결 ①④)만. 편집기(과제 6 PortalWidgetsEditor)·소비처(과제 10 홈 v1)가 붙으면 상태를 올린다.
-  // 지금의 소비처 칸은 노출 식(visibleWidgets)을 가진 위젯 레지스트리다
-  'portal.widgets': { consumers: ['src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx'], status: 'stored', sp: 'SP3b' },
+  // SP3b UI-3 과제 2·6·10 — 네 연결(정의·편집기 PortalWidgetsEditor·소비처 홈 v1 페이지와 노출 식·테스트) 완료
+  'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SP3b UI-3 과제 3·7 — 정의·보드 교차 검사·편집기·테스트(네 연결 ①②④). 소비처(과제 14 작업 계획 보기 결정)가 붙으면 올린다
   'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts', 'src/components/settings/ViewsDefaultEditor.tsx'], tests: ['tests/settings/views-default-def.test.ts', 'tests/settings/views-default-editor.test.tsx'], status: 'stored', sp: 'SP3b' },
 }
