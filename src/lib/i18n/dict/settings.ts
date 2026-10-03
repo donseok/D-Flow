@@ -226,5 +226,9 @@ export const settingsKo = {
   'settings.calendar.working_days.label': '근무 요일', 'settings.calendar.working_days.desc': '일정 계산·달력의 쉬는 요일 기준입니다. 이미 저장된 진척 스냅샷은 다시 계산하지 않습니다.',
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
+  // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
+  'settings.issues.id_policy.label': '이슈 코드 규칙', 'settings.issues.id_policy.desc': '새 이슈에 매길 코드의 꼴(접두·패턴·번호 범위·초기화)입니다. 바꿔도 기존 이슈의 코드는 그대로입니다.',
+  'settings.issues.analysis.label': '이슈 분석 분류', 'settings.issues.analysis.desc': '이슈 분석 모듈이 켜진 프로젝트에서 등록할 때 분석 분류가 필수인지 정합니다. 기존 이슈는 그대로입니다.',
+  'settings.issues.analysisOptional': '분석 분류는 선택', 'settings.issues.analysisRequired': '등록할 때 분석 분류 필수',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

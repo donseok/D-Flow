@@ -7,6 +7,7 @@ export interface CatalogMeta { consumers: readonly string[]; tests: readonly str
 
 const A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP3a' })
 const S5A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 A' })
+const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B1' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
@@ -48,6 +49,9 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
+  // SP5 B1 과제 3 — 정의만 등록(stored). 발번 트리거·등록 규칙·편집 화면(IssuePolicyEditor·select)이 붙으면 과제 13 이 소비처·테스트를 채우고 verified 로 올린다
+  'issues.id_policy': S5B1('stored', ['src/lib/settings/defs/project.ts'], ['tests/settings/issues-defs.test.ts']),
+  'issues.analysis': S5B1('stored', ['src/lib/settings/defs/project.ts'], ['tests/settings/issues-defs.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
@@ -63,8 +67,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'workflow.approval_distinct_approvers', scope: 'project', sp: 'SP5b', shape: 'boolean' },
   { key: 'workflow.predecessor_gate', scope: 'project', sp: 'SP5b', shape: "'reached' | 'final'" },
   { key: 'workflow.credit_policy', scope: 'project', sp: 'SP5b', shape: '{ step: 1 | 5; min_gap: 1..10 }' },
-  { key: 'issues.id_policy', scope: 'project', sp: 'SP5 B1', shape: '{ prefix; pattern; counter_scope; reset }' },
-  { key: 'issues.analysis', scope: 'project', sp: 'SP5 B1', shape: "'optional' | 'required'" },
   { key: 'issues.severities', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
   { key: 'issues.cause_categories', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
   { key: 'issues.sources', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },

@@ -1,4 +1,4 @@
-// 모듈 레지스트리(정본 §3.2.1·§3.2.2, 개정 §2.7.1) — 17개 정적 목록, 적재 단언, import 방향, 설정 소유.
+// 모듈 레지스트리(정본 §3.2.1·§3.2.2, 개정 §2.7.1) — 18개 정적 목록(SP5 B1 issue_analysis 포함), 적재 단언, import 방향, 설정 소유.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CORE, MODULES, assertModules, moduleDef } from '@/lib/modules/registry'
@@ -11,10 +11,12 @@ const byId = Object.fromEntries(MODULES.map((m) => [m.id, m]))
 const req = (id: Parameters<typeof moduleDef>[0]) => moduleDef(id).requires
 
 describe('목록', () => {
-  it('17개, MODULE_IDS 순서, 필드는 정확히 10개', () => {
+  it('18개, MODULE_IDS 순서, 필드는 정확히 10개', () => {
     expect(MODULES.map((m) => m.id)).toEqual([...MODULE_IDS])
     for (const m of MODULES) expect(Object.keys(m).sort(), m.id).toEqual(['apiPrefixes', 'botDomains', 'core', 'envAvailable', 'id', 'nav', 'requires', 'routePrefixes', 'scope', 'settings'])
-    expect(() => moduleDef('issue_analysis' as never)).toThrow()
+    // SP5 B1(개정 §4.4.2) — issue_analysis 는 등록됐고 issues 를 요구한다
+    expect(() => moduleDef('issue_analysis')).not.toThrow()
+    expect(moduleDef('issue_analysis').requires).toEqual(['issues'])
   })
   it('core·scope 가 정본 §3.2.2 표와 같다', () => {
     expect(MODULES.filter((m) => m.core).map((m) => m.id)).toEqual([...CORE_MODULES])
@@ -27,9 +29,9 @@ describe('목록', () => {
     expect(new Set(MODULES.filter((m) => !m.core && m.scope !== 'workspace').map((m) => m.id))).toEqual(PROJECT_TOGGLABLE)
     expect(new Set(MODULES.filter((m) => m.scope === 'workspace').map((m) => m.id))).toEqual(WORKSPACE_SCOPED)
   })
-  it('requires 닫힘 4건과 core 의 requires: []·envAvailable 상수 true(개정 §2.7.1)', () => {
+  it('requires 닫힘 5건(SP5 B1 issue_analysis → issues 포함)과 core 의 requires: []·envAvailable 상수 true(개정 §2.7.1)', () => {
     expect(MODULES.filter((m) => m.requires.length).map((m) => [m.id, [...m.requires]])).toEqual([
-      ['kanban', ['wbs']], ['wiki', ['minutes']], ['agents', ['wbs']], ['minutes_integration', ['minutes']],
+      ['kanban', ['wbs']], ['issue_analysis', ['issues']], ['wiki', ['minutes']], ['agents', ['wbs']], ['minutes_integration', ['minutes']],
     ])
     for (const id of CORE_MODULES) {
       expect(req(id), id).toEqual([])
@@ -88,9 +90,9 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 20정의(SP5 A calendar.* 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 5·settings 15 다', () => {
+  it('settings — 22정의(SP5 A calendar.*·SP5 B1 issues.* 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 5·settings 15 다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(20)
+    expect(owned).toHaveLength(22)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)

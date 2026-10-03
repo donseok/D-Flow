@@ -1,4 +1,5 @@
-// 프로젝트 키 9개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled). 값 형태의 정본은 개정 §2.8.2.
+// 프로젝트 키 11개(SP5 A 의 calendar.* 셋·SP5 B1 의 issues.* 둘 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled·calendar.*)·
+// issues(issues.id_policy)·issue_analysis(issues.analysis). 값 형태의 정본은 개정 §2.8.2.
 import { REQUIRED_ON_CREATE, defineSetting, type EditCtx, type Parsed, type SettingDef } from '../def'
 import { OFF_ON_CREATE, PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
@@ -9,8 +10,12 @@ import {
   DEFAULT_TIMEZONE, DEFAULT_WEEK_RULES, DEFAULT_WORKING_DAYS, applyWeekStartChange, parseTimezone, parseWeekRules, parseWeekStartDay, parseWorkingDays,
   type IsoDow, type WeekStartDay, type WeekStartRule,
 } from '@/lib/domain/calendar'
+import { DEFAULT_ID_POLICY, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
+
+/** issues.analysis 의 값(스펙 D16) — 분석 모듈이 켜진 프로젝트에서 등록 때 분석 분류가 선택인지 필수인지 */
+export type IssueAnalysisSetting = 'optional' | 'required'
 
 /** 옛 src/app/actions/project.ts:58 의 여섯 — 이제 레지스트리 기본값이다(생성 때 저장하지 않는다. 미설정 = 이 값) */
 export const DEFAULT_MILESTONE_KEYWORDS: readonly string[] = ['마일스톤', 'milestone', '킥오프', 'kick-off', '오픈', '완료보고']
@@ -138,6 +143,20 @@ export const PROJECT_DEFS = [
     edit: { parseInput: parseWeekStartDay, toStored: weekStartToStored },
     widget: { kind: 'custom', component: 'WeekStartEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only', 'recompute'],
     sql: { readers: ['week_key_of', 'weekly_reports_week_key_guard', 'settings_ref_check'] },
+  }),
+  // SP5 B1(스펙 D15·D16, 개정 §2.8.2·§4.4.3) — 발번은 DB 트리거, 여기는 검증·편집. 바꿔도 기존 코드는 그대로(future_only)
+  defineSetting<'issues.id_policy', IdPolicy>({
+    key: 'issues.id_policy', scope: 'project', module: 'issues', default: DEFAULT_ID_POLICY,
+    parse: parseIdPolicy,
+    widget: { kind: 'custom', component: 'IssuePolicyEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only'],
+    sql: { readers: ['assign_issue_code', 'create_issue_from_minute_block', 'settings_ref_check'] },
+  }),
+  defineSetting<'issues.analysis', IssueAnalysisSetting>({
+    key: 'issues.analysis', scope: 'project', module: 'issue_analysis', default: 'optional',
+    parse: (raw) => (raw === 'optional' || raw === 'required' ? { ok: true, value: raw } : fail("'optional' 또는 'required' 여야 합니다.")),
+    widget: { kind: 'select', options: [
+      { value: 'optional', labelKey: 'settings.issues.analysisOptional' }, { value: 'required', labelKey: 'settings.issues.analysisRequired' }] },
+    editor: 'project_admin', apply: 'immediate', impact: ['future_only'], sql: { readers: ['create_issue_from_minute_block'] },
   }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

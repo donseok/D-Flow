@@ -4,7 +4,7 @@ import type { ModuleId } from './defaults'
 
 export const MODULE_LABEL: Readonly<Record<ModuleId, string>> = {
   dashboard: '개요', wbs: '작업 계획', members: '팀 구성', settings: '설정',
-  kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키',
+  kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', issue_analysis: '이슈 분석', wiki: '위키',
   announcements: '공지', attendance: '근태', agents: '에이전트', minutes: '회의록',
   minutes_integration: '회의록 외부 연동', chatbot: '챗봇', portfolio: '포트폴리오', usage: '사용 현황',
 }

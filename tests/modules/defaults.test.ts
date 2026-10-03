@@ -4,25 +4,26 @@ import { AI_MODULES, CORE_MODULES, MODULE_IDS, NON_CORE_MODULES, OFF_ON_CREATE, 
 import { MODULE_FLAG_NAMES, agentApiEnabled, chatV2Enabled, wikiServiceEnabled } from '@/lib/modules/flags'
 
 describe('모듈 상수', () => {
-  it('17개 id, core 4, 프로젝트 토글 9, 워크스페이스 4, AI 2, 생성 때 꺼지는 것 0', () => {
-    expect(MODULE_IDS).toHaveLength(17)
-    expect(new Set(MODULE_IDS).size).toBe(17)
+  it('18개 id, core 4, 프로젝트 토글 10, 워크스페이스 4, AI 2, 생성 때 꺼지는 것 1(SP5 B1 issue_analysis)', () => {
+    expect(MODULE_IDS).toHaveLength(18)
+    expect(new Set(MODULE_IDS).size).toBe(18)
     expect(CORE_MODULES).toEqual(['dashboard', 'wbs', 'members', 'settings'])
-    expect([...PROJECT_TOGGLABLE]).toEqual(['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
+    expect([...PROJECT_TOGGLABLE]).toEqual(['kanban', 'meetings', 'weekly', 'issues', 'issue_analysis', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
     expect([...WORKSPACE_SCOPED]).toEqual(['minutes', 'minutes_integration', 'portfolio', 'usage'])
     expect(AI_MODULES).toEqual(['wiki', 'chatbot'])
-    expect(OFF_ON_CREATE).toEqual([])
+    expect(OFF_ON_CREATE).toEqual(['issue_analysis'])
     expect(NON_CORE_MODULES).toEqual(MODULE_IDS.filter((id) => !CORE_MODULES.includes(id)))
-    expect(NON_CORE_MODULES).toHaveLength(13)
+    expect(NON_CORE_MODULES).toHaveLength(14)
   })
   it('세 집합은 서로 겹치지 않고 합치면 전부다', () => {
     const all = [...CORE_MODULES, ...PROJECT_TOGGLABLE, ...WORKSPACE_SCOPED]
-    expect(new Set(all).size).toBe(17)
+    expect(new Set(all).size).toBe(18)
     expect([...all].sort()).toEqual([...MODULE_IDS].sort())
   })
   it('isModuleId', () => {
     expect(isModuleId('wbs')).toBe(true)
-    expect(isModuleId('issue_analysis')).toBe(false)   // SP5 부터
+    expect(isModuleId('issue_analysis')).toBe(true)    // SP5 B1 부터
+    expect(isModuleId('issue_mega')).toBe(false)
     expect(isModuleId(null)).toBe(false)
   })
 })
