@@ -597,7 +597,11 @@ begin
     raise exception using errcode = '23514', message = 'ISSUE_AREA_REQUIRED';
   end if;
   if pg_catalog.strpos(v_pattern, '{yyyy}') > 0 or pg_catalog.strpos(v_pattern, '{yy}') > 0 then
-    v_year := public.issue_code_year(coalesce(v_values ->> 'calendar.timezone', 'UTC'), pg_catalog.now());
+    -- 키 없음만 제품 기본값이다. JSON null·문자열 아닌 저장값은 손상이며 UTC로 풀지 않는다.
+    if v_values ? 'calendar.timezone' and pg_catalog.jsonb_typeof(v_values -> 'calendar.timezone') is distinct from 'string' then
+      raise exception using errcode = '22023', message = 'CONFIG_INVALID:calendar.timezone';
+    end if;
+    v_year := public.issue_code_year(case when v_values ? 'calendar.timezone' then v_values ->> 'calendar.timezone' else 'UTC' end, pg_catalog.now());
   end if;
   v_scope := pg_catalog.concat_ws('|',
     case when v_policy ->> 'counter_scope' = 'area' then 'a:' || new.area_id end,
