@@ -408,3 +408,18 @@ rebase 로 main 의 SP4 A1·A2 화면 파일 **18개**(`p/[projectId]/{import,se
 | 계정 | 시드 `ui-member`·`ui-wsadmin`·`ui-duo`·`ui-platform`(비밀번호는 대화에만) |
 | 사용자 판정 | "이상없음 계속 진행해" — 지적 없음 |
 | 처리 | 수정 없음. 이 확인으로 UI-2b 체크포인트(빈 커밋)를 만든다. 성능(R25)은 사용자 지시로 전체 구현 완료 뒤 일괄 측정 |
+
+
+## UI-3 과제 11 — 프로젝트 목록 v1 · 2026-10-04
+
+- 브랜치 `ui/sp3-screens`, 최종 빌드 `wnP4CjrgX-408Rve__VDB`. 행·카드 × 1440/1280×720/768/390 × light/dark = 16장, `u3-t11-complete/meta.json` 문제 0. contact sheet 두 장과 모바일·관리자·즐겨찾기 원본을 직접 확인했다.
+- 보조 `u3-t11-interactions` 4장: 행↔카드 저장 후 전환, 즐겨찾기 즉시 저장, 페이지 재조회 후 별 유지, 1440 사이드바 자동 반영, 390 문서 가로 넘침 0. `u3-t11-admin` 2장: 관리자만 생성 가능·`?new=1`·워크스페이스 대상 이름. 총 22장. 조작 뒤 전용 계정의 선호를 복구했다.
+- 즐겨찾기 저장은 최신 성공 목록 기반으로 직렬화한다. 선행 조회 실패 시 쓰기를 막으며, 상한 20개의 신규 추가는 사유를 표시하고 거부한다. 보기 전환은 계정 저장 큐를 비운 뒤 갱신한다. 반복 브라우저 검사의 RSC 부분 갱신 누락 때문에 홈 숨김과 같은 전체 페이지 재조회 경로를 사용한다(페이지 갱신 비용 있음).
+- 테스트: 관련 200 files·1,559 통과, 최종 조작/선호 검사 11 files·75 통과. typecheck 통과, lint 0 errors·기존 경고 4. 구 `projects-home`의 카드 화면 테스트는 새 `projects-page`의 조회 실패·권한·시간대·생성·검색·쪽 나눔 검사로 대체했다.
+
+| 파일(작업 트리 밖 `.superpowers/qa/sp3b/`) | SHA-256 앞 12자리 |
+|---|---|
+| `u3-t11-complete/ws-projects-390x844-light.png` | `9e9de92e6ab8` |
+| `u3-t11-complete/ws-projects-cards-1440x900-dark.png` | `cf643386116f` |
+| `u3-t11-interactions/1440x900-dark.png` | `ad365a955666` |
+| `u3-t11-admin/1440x900-light.png` | `1cc78b62a082` |

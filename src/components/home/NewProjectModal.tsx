@@ -17,6 +17,7 @@ import { newUuid } from '@/lib/domain/uuid'
  */
 export function NewProjectModal({
   workspaceId,
+  workspaceName,
   copyCandidates = [],
   label,
   className = 'btn btn-primary',
@@ -24,6 +25,7 @@ export function NewProjectModal({
 }: {
   /** 만들 워크스페이스 — 슬러그 워크스페이스(SP3b D26). 서버 컴포넌트가 loadWorkspaceScope 결과로 정해 넘긴다. */
   workspaceId: string
+  workspaceName?: string
   copyCandidates?: { id: string; name: string }[]
   label?: string
   className?: string
@@ -177,6 +179,7 @@ export function NewProjectModal({
         }
       >
         <div className="space-y-4">
+          {workspaceName && <p className="text-xs text-ink-muted">만들 워크스페이스: <strong className="text-ink">{workspaceName}</strong></p>}
           <p className="text-sm leading-6 text-ink-muted">
             {t('home.newProjectDesc')}
           </p>

@@ -35,12 +35,24 @@ let prefsTimer: ReturnType<typeof setTimeout> | null = null
 export function queueUiPref(patch: Partial<UiPrefs>, delay = 600): void {
   pendingPrefs = { ...pendingPrefs, ...patch }
   if (prefsTimer) clearTimeout(prefsTimer)
-  prefsTimer = setTimeout(() => {
-    const p = pendingPrefs
-    pendingPrefs = {}
-    prefsTimer = null
-    postPrefs({ prefs: p })
-  }, delay)
+  prefsTimer = setTimeout(() => { void flushUiPrefs() }, delay)
+}
+
+/** 계정 보기 전환처럼 저장 완료를 기다려야 하는 조작. 대기 중인 다른 계정 키도 함께 보존한다. */
+export async function flushUiPrefs(): Promise<boolean> {
+  if (prefsTimer) clearTimeout(prefsTimer)
+  prefsTimer = null
+  const patch = pendingPrefs
+  pendingPrefs = {}
+  if (!Object.keys(patch).length) return true
+  try {
+    const result = await postPrefsNow({ prefs: patch })
+    if (!result.ok) console.warn('[prefs] 서버 저장 실패 — 로컬 적용은 유지:', result.status)
+    return result.ok
+  } catch (e) {
+    console.warn('[prefs] 서버 저장 실패 — 로컬 적용은 유지:', e instanceof Error ? e.message : e)
+    return false
+  }
 }
 
 const wsPending = new Map<string, Partial<UiPrefs>>()
