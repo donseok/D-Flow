@@ -16,6 +16,8 @@
 //        C 의 날짜 예외 둘(10/10 토 휴무·10/25 일 근무)을 일정 화면과 같은 액션(addHoliday)으로. S4-weekly-sunday — R 에서 연속 2주(일요일 키)·이월·
 //        영역 개명. S5-calendar — 기준일 고정(setBaseDate) 뒤 WBS 엑셀의 계획%(R 60·60, C 60·67)와 '오늘'(프로젝트 tz 의 이번 주 문서가 화면에 실린다).
 //        S10-negative 에 시간대 센티널(Asia/Seoul·+09:00)을 더한다. 러너의 '오늘'은 저장된 tz 의 todayInTz 다.
+//   SP5 B1: S1-issues — R·C 정책과 R 의 10 issue_area 를 설정 액션으로. S6-issue-codes — R 영역별 RS·C 베를린 연도별 CN 를 실제 등록·DB 대조.
+//        S10-negative 에 이슈 화면을 더하고 옛 영역명·PI-I- 센티널을 센다(이슈 이름·코드 그려짐도 증명).
 //   S3·S6~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
@@ -30,7 +32,7 @@ import {
   ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, localClientEnv, plannedPctByName, shiftDays,
   storedTimezone, todayInTz, workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
-import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, zipTextParts } from './lib/sentinels.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
@@ -75,6 +77,7 @@ const ACTIONS = {
   updateProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'updateProjectTeam', worker: '/p/[projectId]/settings/page' },
   addHoliday: { filename: 'src/app/actions/project.ts', exportedName: 'addHoliday', worker: '/p/[projectId]/settings/page' },
   setBaseDate: { filename: 'src/app/actions/project.ts', exportedName: 'setBaseDate', worker: '/p/[projectId]/settings/page' },
+  createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -263,6 +266,36 @@ async function main() {
   }
   step('S1-calendar', { R: await applyCalendar('R', wsR, R, SYNTHETIC_R), C: await applyCalendar('C', wsC, C, SYNTHETIC_C) })
 
+  // ── S1-issues(SP5 B1) — 정책·이슈 영역을 화면의 설정/영역 액션으로 기록한다. 두 프로젝트 모두 분석은 켜지 않는다.
+  const applyIssueSetup = async (label, proj, def) => {
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const pDoc = rows(`${label} 이슈 설정`, await admin.sb.from('project_settings').select('revision').eq('project_id', proj.id).single())
+    mustOk(`${label} 이슈 코드 정책`, (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings',
+      [proj.id, { expectedRevision: pDoc.revision, commandId: randomUUID(), set: { 'issues.id_policy': def.issues.idPolicy }, unset: [] }])).result)
+    const areaIds = new Map()
+    for (const a of def.issues.areas) {
+      const r = mustOk(`${label} 이슈 영역 ${a.code}`, (await admin.action(`/p/${proj.id}/settings`, 'upsertArea',
+        [proj.id, { kind: 'issue_area', ...a, active: true, teams: [] }])).result)
+      if (r.status !== 'created') throw new Fail(`${label} 이슈 영역 ${a.code} 가 새로 만들어지지 않았다: ${JSON.stringify(r)}`)
+      areaIds.set(a.code, r.id)
+    }
+    const settings = rows(`${label} 이슈 설정(다시 읽기)`, await admin.sb.from('project_settings').select('values').eq('project_id', proj.id).single()).values
+    same(`${label} 이슈 코드 정책(다시 읽기)`, settings?.['issues.id_policy'], def.issues.idPolicy)
+    const areaRows = rows(`${label} 이슈 영역(다시 읽기)`, await admin.sb.from('project_areas')
+      .select('id, code, name, sort_order, active').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order'))
+    same(`${label} 이슈 영역(다시 읽기)`, areaRows.map((a) => ({ code: a.code, name: a.name, sortOrder: a.sort_order, active: a.active })),
+      def.issues.areas.map((a) => ({ ...a, active: true })))
+    for (const a of areaRows) areaIds.set(a.code, a.id)
+    return { areaIdByCode: areaIds, policy: settings?.['issues.id_policy'], areas: areaRows.length }
+  }
+  const rIssueSetup = await applyIssueSetup('R', R, SYNTHETIC_R)
+  const cIssueSetup = await applyIssueSetup('C', C, SYNTHETIC_C)
+  step('S1-issues', {
+    R: { policy: rIssueSetup.policy, areas: rIssueSetup.areas, areaIds: Object.fromEntries(rIssueSetup.areaIdByCode) },
+    C: { policy: cIssueSetup.policy, areas: cIssueSetup.areas },
+    note: '이슈 정책은 updateProjectSettings, issue_area 는 upsertArea 로 설정 UI와 같은 액션을 쓴다 — 분석 모듈은 켜지지 않았다',
+  })
+
   // ── S9 — 격리
   const snapshot = async (proj) => ({
     project: await readDoc(admin.sb, 'project_settings', 'project_id', proj.id),
@@ -450,7 +483,45 @@ async function main() {
   const s5Ok = ['R', 'C'].every((k) => s5[k].covers && s5[k].reportOnPage && plannedOk(s5[k].plannedPct)) && s5.R.ruleDow === 0 && s5.C.ruleDow === 1
   step('S5-calendar', s5, s5Ok ? undefined : `S5 달력 집계: ${JSON.stringify(s5)}`)
 
-  // ── S10(SP4 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) SP4 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
+  // ── S6-issue-codes(SP5 B1) — DB 트리거가 실제로 정한 코드를 액션 응답과 행에서 함께 대조한다.
+  const createSyntheticIssue = async (label, proj, title, areaId) => {
+    await admin.http('GET', `/p/${proj.id}/issues`)
+    return mustOk(`${label} 이슈 등록`, (await admin.action(`/p/${proj.id}/issues`, 'createIssue', [proj.id, {
+      title, body: '합성 이슈 코드 검증', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+      areaId, analysis: null,
+    }])).result)
+  }
+  const rCodes = []
+  for (const code of ['RND', 'ENV', 'ADM', 'RND']) {
+    const result = await createSyntheticIssue('R', R, `합성 ${code} 이슈 ${rCodes.length + 1}`, rIssueSetup.areaIdByCode.get(code))
+    rCodes.push(result.code)
+  }
+  const { today: cToday } = await projectToday(admin.sb, C.id)
+  const cCodes = []
+  for (let i = 1; i <= 2; i++) {
+    const result = await createSyntheticIssue('C', C, `합성 건설 이슈 ${i}`, null)
+    cCodes.push(result.code)
+  }
+  const rIssueIds = (await admin.sb.from('issues').select('id, code, code_scope, code_area_id').eq('project_id', R.id).order('issue_no')).data
+  const cIssueIds = (await admin.sb.from('issues').select('id, code, code_scope, code_area_id').eq('project_id', C.id).order('issue_no')).data
+  if (!rIssueIds || !cIssueIds) throw new Fail('이슈 코드 다시 읽기 실패')
+  const rExpected = ['RS-RND-001', 'RS-ENV-001', 'RS-ADM-001', 'RS-RND-002']
+  const cExpected = [`CN-${cToday.slice(0, 4)}-0001`, `CN-${cToday.slice(0, 4)}-0002`]
+  same('R 영역별 이슈 코드(액션)', rCodes, rExpected)
+  same('C 연도별 이슈 코드(액션)', cCodes, cExpected)
+  for (const [i, areaCode] of ['RND', 'ENV', 'ADM', 'RND'].entries()) {
+    const row = rIssueIds.find((x) => x.code === rExpected[i])
+    if (!row || row.code_scope !== `a:${rIssueSetup.areaIdByCode.get(areaCode)}` || row.code_area_id !== rIssueSetup.areaIdByCode.get(areaCode)) {
+      throw new Fail(`R ${areaCode} 코드 범위가 다르다: ${JSON.stringify(row)}`)
+    }
+  }
+  for (const code of cExpected) {
+    const row = cIssueIds.find((x) => x.code === code)
+    if (!row || row.code_scope !== `y:${cToday.slice(0, 4)}` || row.code_area_id !== null) throw new Fail(`C 코드 범위가 다르다: ${JSON.stringify(row)}`)
+  }
+  step('S6-issue-codes', { R: { codes: rCodes, scopes: rIssueIds.map((x) => x.code_scope) }, C: { codes: cCodes, scopes: cIssueIds.map((x) => x.code_scope) }, yearBasis: cToday })
+
+  // ── S10(SP4·SP5 A·B1 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) 설정 전환 전 옛 기본값 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
   //    sentinels.mjs 하나다. 등록 이름과 **같은** 센티널만 뺀다(C 의 영역 이름 하나가 11구분명과 같다 — D8). 교차: 팀 code 만(영역 이름은 일반어).
   //    ⑤ 화면 HTML 은 R·C 각자의 워크스페이스 관리자(어느 명단에도 없는 계정)로 받는다 — 앱 셸은 보는 사람의 모든 프로젝트 명단 대표 팀
   //    (identityTeamCodes)을 싣는다. 같은 스택에서 로컬 E2E 가 먼저 돌면 플랫폼 관리자는 프로젝트 A 명단에 옛 팀 코드와 같은 이름의 팀으로 들어 있어
@@ -476,10 +547,13 @@ async function main() {
     await viewer.login(addr, pw)
     return viewer
   }
-  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름(시트의 행 머리), WBS = 루트 항목 이름(S2 가 만든 트리의 첫 단 — 접힘과 무관하게 그려진다)
+  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름, WBS = 루트 항목 이름, 이슈 = 첫 영역 이름·첫 issue code.
   const proofNamesOf = async (proj) => ({
     weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('active', true)).map((x) => x.name),
     wbs: rows('S10 루트 항목 이름', await admin.sb.from('wbs_items').select('name').eq('project_id', proj.id).is('parent_id', null)).map((x) => x.name),
+    issues: [rows('S10 이슈 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order').limit(1)),
+      rows('S10 이슈 코드', await admin.sb.from('issues').select('code').eq('project_id', proj.id).order('issue_no').limit(1))]
+      .flat().map((x) => x.name ?? x.code),
   })
   const capture = async (proj, viewer) => {
     const out = []
@@ -531,7 +605,7 @@ async function main() {
     // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
     const shell = []
     const proofNames = await proofNamesOf(proj)
-    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`]]) {
+    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`], ['issues', `/p/${proj.id}/issues`]]) {
       const text = await (await viewer.http('GET', path)).text()
       out.push({ target: '⑤', path, text, proof: renderedProof(text, proofNames[kind]) })
       shell.push({ path, text: await (await admin.http('GET', path)).text() })
@@ -543,7 +617,7 @@ async function main() {
   const regC = await registeredOf(C)
   const tzSentinels = sp5aSentinels()   // SP5 A — 시간대 센티널(등록 이름 제외 없음 — 시간대 이름은 R·C 가 등록하지 않는다)
   for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
-    const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
+    const sentinels = [...excludeRegistered(sp4Sentinels(), reg.names), ...excludeRegistered(sp5b1Sentinels(), reg.names)]
     const { out: outs, shell, emptyWeeks, unsupportedExports } = await capture(proj, await viewerOf(label, proj.ws))
     s10[label] = {
       targets: outs.map((o) => `${o.target} ${o.path}`),
@@ -560,7 +634,7 @@ async function main() {
     }
   }
   const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].tz.length === 0 && s10[k].cross.length === 0 && s10[k].rendered.every((r) => r.ok))
-  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4·SP5 A 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, tz: s10.R.tz, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, tz: s10.C.tz, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
+  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4·SP5 A·B1 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, tz: s10.R.tz, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, tz: s10.C.tz, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
 
   // ── 경계 행렬 SP4 행(W39) — R·C 각각. 설정 없음: 새 빈 프로젝트(단계 이름만)의 주간 생성 → CONFIG_REQUIRED·문서 0, 엑셀 → 표준과 그 표기.
   //    비활성 유형: 둘째 주간 영역에 차주 계획을 적고 비활성화 → 다음 주 이월이 대기(CARRY_PENDING)에 그 영역을 싣고 활성 영역 목록에서 빠진다,
