@@ -423,3 +423,16 @@ rebase 로 main 의 SP4 A1·A2 화면 파일 **18개**(`p/[projectId]/{import,se
 | `u3-t11-complete/ws-projects-cards-1440x900-dark.png` | `cf643386116f` |
 | `u3-t11-interactions/1440x900-dark.png` | `ad365a955666` |
 | `u3-t11-admin/1440x900-light.png` | `1cc78b62a082` |
+
+## UI-3 과제 12 — 명단 실효 역할 · 2026-10-04
+
+- 브랜치 `ui/sp3-screens`, 빌드 `ZUf9f0Uf4f0svSP499BQJ`. 기본 명단과 관리자 상속 상태 각각 1440/390 × light/dark, 총 8장. 기본 캡처 문제 0, 스모크 통과. 데스크톱 상속 장과 모바일 기본·다크 상속 원본을 직접 확인했다.
+- 전용 시드의 워크스페이스 관리자 명단 권한을 잠시 member로 바꾸어 명단 권한은 멤버, 실효 역할은 관리자·상속 배지로 표시되는 것을 검사했다. 매 조작은 finally에서 원래 권한으로 복구한다. 모바일 표 가로 스크롤 뒤 문서 가로 넘침도 0이다. 숨김 작업 제목의 위치 기준을 열 안으로 제한해 스크롤 후 페이지가 늘어나는 결함을 고쳤다.
+- 권한 판정과 표시는 같은 순수 승계 함수를 사용한다. 역할 표는 세션 RLS·workspace_id 필터·끝까지 쪽 읽기를 적용하며, 조회 실패는 확인 불가로 표시한다. 숨김 프로젝트 판정·공용 팀 원천·기존 명단 편집은 보존했다.
+- 관련 검사 221 files·1,799 통과. 최종 표 수정 뒤 4 files·34 통과. typecheck 통과, lint 0 errors·기존 경고 4.
+
+| 파일(작업 트리 밖 `.superpowers/qa/sp3b/`) | SHA-256 앞 12자리 |
+|---|---|
+| `u3-t12-fixed/p-members-390x844-light.png` | `f2c8d6494cad` |
+| `u3-t12-inherited-role/1440x900-light.png` | `a46aaa70fcab` |
+| `u3-t12-inherited-role/390x844-dark.png` | `1a906da48dd6` |

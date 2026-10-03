@@ -39,6 +39,19 @@ export interface Actor {
   rosterTeams: ReadonlyMap<string, { teamIds: readonly string[]; teamCodes: readonly string[] }>
 }
 
+/** 워크스페이스 관리자 승계와 명단 역할을 한 판정자로 계산한다(D37). */
+export function inheritedProjectRole(wsRole: WorkspaceRole | null, accessRole: ProjectRole | null): 'admin' | 'member' | 'viewer' {
+  return wsRole === 'admin' ? 'admin' : accessRole ?? 'viewer'
+}
+export type EffectiveRoleView = { kind: 'role'; role: 'admin' | 'member' | 'viewer'; inherited: boolean } | { kind: 'external' } | { kind: 'unknown' }
+/** 표시용 판정. 조회 실패는 명단 역할로 대체하지 않고 확인 불가로 표시한다. */
+export function effectiveRoleOfRow(row: { kind: 'account' | 'external'; userId: string | null; accessRole: ProjectRole | null }, wsRoles: ReadonlyMap<string, WorkspaceRole> | null): EffectiveRoleView {
+  if (row.kind === 'external' || !row.userId) return { kind: 'external' }
+  if (!wsRoles) return { kind: 'unknown' }
+  const role = inheritedProjectRole(wsRoles.get(row.userId) ?? null, row.accessRole)
+  return { kind: 'role', role, inherited: role === 'admin' && row.accessRole !== 'admin' }
+}
+
 /**
  * 이 사용자가 이 프로젝트에서 갖는 유효 역할.
  *
@@ -53,8 +66,7 @@ export function roleIn(actor: Actor | null, projectId: string | null): Effective
   if (!projectId) return 'viewer'                                // ③ 미지정 — fail-closed
   const wid = actor.projectWorkspace.get(projectId)
   if (!wid) return null                                          // ④ 타 워크스페이스·미존재 — 존재 은닉
-  if (actor.workspaceRoles.get(wid) === 'admin') return 'admin'  // ⑤ 워크스페이스 관리자 승계(Q2) — 명단 행보다 먼저
-  return actor.projectRoles.get(projectId) ?? 'viewer'           // ⑥ 명단 행
+  return inheritedProjectRole(actor.workspaceRoles.get(wid) ?? null, actor.projectRoles.get(projectId) ?? null) // ⑤⑥ 승계 → 명단
 }
 declare const HIDDEN_PROJECT_IDS: unique symbol
 /**

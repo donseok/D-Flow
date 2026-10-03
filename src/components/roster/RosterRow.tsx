@@ -3,13 +3,14 @@
 import { useEffect, useState, useTransition } from 'react'
 import { Trash2, Unlink } from 'lucide-react'
 import { upsertRosterMember, removeRosterMember } from '@/app/actions/roster'
+import type { EffectiveRoleView } from '@/lib/domain/authz'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import {
   accessRoleLabel, draftFromMember, isDraftDirty, validateDraft, type AccessRole, type RosterDraft,
 } from '@/lib/domain/roster'
 import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
 
-export const ROSTER_COLUMNS = 8
+export const ROSTER_COLUMNS = 9
 
 /** 외부 인력 안내 — 배지 title 과 권한 셀이 같은 문구를 쓴다. */
 export const UNLINKED_HINT = '로그인 계정과 연결되지 않은 사람입니다. 계정이 있어야 권한을 줄 수 있습니다.'
@@ -32,8 +33,16 @@ function NameCell({ member, children }: { member: RosterMember; children?: React
   )
 }
 
+function EffectiveRoleCell({ member, effective }: { member: RosterMember; effective: EffectiveRoleView }) {
+  return <td data-effective-role={member.id} className="py-2.5 pr-3 text-xs text-fg-secondary">
+    {effective.kind === 'unknown' ? '확인 불가' : effective.kind === 'external' ? accessRoleLabel(member.accessRole)
+      : <>{({ admin: '관리자', member: '멤버', viewer: '조회 전용' })[effective.role]}
+        {effective.inherited && <span className="ml-1 chip text-fg-secondary">워크스페이스 관리자에서 상속</span>}</>}
+  </td>
+}
+
 /** 읽기 전용 행 — 비관리자 화면, 또는 관리자 행을 고칠 수 없는 프로젝트 관리자. */
-export function RosterReadRow({ member, note }: { member: RosterMember; note?: string }) {
+export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }: { member: RosterMember; note?: string; effective?: EffectiveRoleView }) {
   return (
     <tr className={`border-b border-line/60 align-top ${member.active ? '' : 'opacity-60'}`} data-roster-row={member.id}>
       <td className="py-2.5 pr-3"><NameCell member={member} /></td>
@@ -50,6 +59,7 @@ export function RosterReadRow({ member, note }: { member: RosterMember; note?: s
       <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.roleLabel ?? '—'}</td>
       <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.title ?? '—'}</td>
       <td className="py-2.5 pr-3 text-xs text-ink-muted">{accessRoleLabel(member.accessRole)}</td>
+      <EffectiveRoleCell member={member} effective={effective} />
       <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.active ? '활성' : '비활성'}</td>
       <td className="py-2.5 text-xs text-ink-subtle">{note ?? ''}</td>
     </tr>
@@ -60,9 +70,10 @@ export function RosterReadRow({ member, note }: { member: RosterMember; note?: s
  * 편집 행 — 초안을 들고 있다가 저장 한 번에 upsertRosterMember(RPC 한 트랜잭션)로 보낸다.
  * 이메일은 인물의 신원이라 여기서 바꾸지 않는다(RPC 가 기존 인물의 이메일을 무시한다).
  */
-export function RosterEditRow({ projectId, member, teamOptions, canGrantAdmin, highlighted, onChanged }: {
+export function RosterEditRow({ projectId, member, effective = { kind: 'unknown' }, teamOptions, canGrantAdmin, highlighted, onChanged }: {
   projectId: string
   member: RosterMember
+  effective?: EffectiveRoleView
   teamOptions: readonly TeamOption[]
   canGrantAdmin: boolean
   highlighted: boolean
@@ -148,6 +159,7 @@ export function RosterEditRow({ projectId, member, teamOptions, canGrantAdmin, h
           </select>
           {unlinked && <p className="mt-1 max-w-[12rem] text-[11px] leading-4 text-ink-subtle" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
         </td>
+        <EffectiveRoleCell member={member} effective={effective} />
         <td className="py-2 pr-3">
           <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
             <input type="checkbox" aria-label={`${who} 활성`} checked={draft.active} disabled={pending}

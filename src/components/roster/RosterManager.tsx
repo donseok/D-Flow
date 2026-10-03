@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { UserPlus } from 'lucide-react'
 import { upsertRosterMember } from '@/app/actions/roster'
 import type { RosterMember } from '@/lib/data/memberSelect'
-import { isAdminAccessRole, type ProjectActorView } from '@/lib/domain/authz'
+import { isAdminAccessRole, type EffectiveRoleView, type ProjectActorView } from '@/lib/domain/authz'
 import { canGrantAdmin, emptyDraft, ERR_DUPLICATE_EMAIL, findRosterByEmail, validateDraft } from '@/lib/domain/roster'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { RosterEditRow, RosterReadRow, ROSTER_COLUMNS } from './RosterRow'
@@ -19,9 +19,10 @@ const ADMIN_ROW_LOCKED = '관리자 행은 워크스페이스 관리자만 수�
  * 관리자 부여·회수는 워크스페이스 관리자 이상에게만 열린다(canGrantAdmin). 가드와 RPC 가 다시 판정한다.
  * canEdit=false(프로젝트 관리자 아님)면 같은 표를 읽기 전용으로 그린다.
  */
-export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit }: {
+export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit, effectiveRoles = {} }: {
   projectId: string
   rows: RosterMember[]
+  effectiveRoles?: Record<string, EffectiveRoleView>
   /** 이 프로젝트에서 고를 수 있는 활성 팀(resolveTeamsForProject 규칙). */
   teamOptions: TeamOption[]
   actorView: ProjectActorView | null
@@ -80,8 +81,9 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
               <th className="py-2 pr-3">역할 라벨</th>
               <th className="py-2 pr-3">직함</th>
               <th className="py-2 pr-3">권한</th>
+              <th className="py-2 pr-3">실효 역할</th>
               <th className="py-2 pr-3">상태</th>
-              <th className="py-2"><span className="sr-only">작업</span></th>
+              <th className="relative py-2"><span className="sr-only">작업</span></th>
             </tr>
           </thead>
           <tbody>
@@ -93,11 +95,11 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
               </tr>
             )}
             {rows.map(m => {
-              if (!canEdit) return <RosterReadRow key={m.id} member={m} />
+              if (!canEdit) return <RosterReadRow key={m.id} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} />
               // 관리자 행은 표시 필드까지 워크스페이스 관리자만 고친다(RPC PROJECT_MEMBER_ADMIN_SLOT·RLS admin_write_member_rows).
-              if (isAdminAccessRole(m.accessRole) && !grantAdmin) return <RosterReadRow key={m.id} member={m} note={ADMIN_ROW_LOCKED} />
+              if (isAdminAccessRole(m.accessRole) && !grantAdmin) return <RosterReadRow key={m.id} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} note={ADMIN_ROW_LOCKED} />
               return (
-                <RosterEditRow key={m.id} projectId={projectId} member={m} teamOptions={teamOptions}
+                <RosterEditRow key={m.id} projectId={projectId} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} teamOptions={teamOptions}
                   canGrantAdmin={grantAdmin} highlighted={highlightId === m.id} onChanged={() => router.refresh()} />
               )
             })}
