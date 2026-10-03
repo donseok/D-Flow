@@ -5,6 +5,7 @@ import { makeAdminActor } from '../fixtures/actor'
 
 const h = vi.hoisted(() => ({
   editor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  views: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   slider: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-slider" />),
   workspaceConfig: vi.fn(),
 }))
@@ -44,6 +45,7 @@ vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => nul
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
 vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor: h.editor }))
+vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: h.views }))
 
 import { requireModule } from '@/lib/modules/gate'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
@@ -82,5 +84,16 @@ describe('설정 페이지 — 프로젝트 모듈', () => {
     expect(html).toContain('에이전트 모듈이 꺼져 있습니다.')
     expect(h.slider.mock.calls[0][0]).toMatchObject({ projectId: 'p1', editable: true })
     expect(html.indexOf('에이전트 모듈이 꺼져 있습니다.')).toBeLessThan(html.indexOf('mock-slider'))
+  })
+  it('모듈·메뉴 범주에 작업 계획 기본 보기 편집기 — 저장값(기본 표)·revision·칸반 관문 결과를 넘긴다(SP3b UI-3 과제 7)', async () => {
+    agentsModule(true)
+    const html = await render()
+    expect(html).toContain('id="project-views-default"')
+    expect(h.views.mock.calls[0][0]).toMatchObject({ projectId: 'p1', revision: 1, initial: { wbs: 'sheet' }, kanbanOn: true, invalidReason: undefined })
+    expect(vi.mocked(requireModule)).toHaveBeenCalledWith({ projectId: 'p1' }, 'kanban')
+    h.views.mockClear()
+    vi.mocked(requireModule).mockImplementation(async (_s, m) => (m === 'kanban' ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+    await render()
+    expect(h.views.mock.calls[0][0]).toMatchObject({ kanbanOn: false })
   })
 })

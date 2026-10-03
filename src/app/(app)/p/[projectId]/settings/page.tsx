@@ -42,6 +42,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { requireModule } from '@/lib/modules/gate'
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
+import { ViewsDefaultEditor } from '@/components/settings/ViewsDefaultEditor'
 import { MODULES } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -156,6 +157,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 에이전트 관문 상태는 크레딧 편집기 안내에만 쓴다. 켜기·중지는 위의 모듈 편집기가 맡는다.
   const agentsGate = await requireModule({ projectId }, 'agents')
   const agentsOn = agentsGate.ok
+  // 작업 계획 기본 보기 편집기(views.default)의 보드 항목 — 칸반이 effective 일 때만 고를 수 있다(D43). 저장 때 서버가 다시 판정한다
+  const kanbanOn = (await requireModule({ projectId }, 'kanban')).ok
   let workspaceModules: Awaited<ReturnType<typeof getWorkspaceConfig>> | null = null
   let workspaceModulesError: string | null = null
   if (pc.ok) {
@@ -373,7 +376,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ════ 모듈·메뉴 ════ */}
         <div id="project-modules" className="scroll-mt-24 space-y-5">
         <div>
-        <SectionCard searchText="modules.enabled 모듈 메뉴" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+        <SectionCard searchText="modules.enabled 모듈 메뉴 views.default 작업 계획 기본 보기" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
           {pc.ok && workspaceModules ? (() => {
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
@@ -392,6 +395,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 requiredMissing={enabled.status === 'required_missing'}
                 options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
+              {/* 작업 계획 기본 보기(views.default — SP3b UI-3 과제 7) — 같은 '모듈·메뉴' 범주 안 구역 */}
+              <section aria-labelledby="project-views-default" data-settings-search="views.default 작업 계획 기본 보기 표 간트 보드" className="mt-8 border-t border-border pt-6">
+                <h4 id="project-views-default" className="mb-3 text-sm font-semibold text-fg">작업 계획 기본 보기</h4>
+                <ViewsDefaultEditor projectId={projectId} revision={pc.cfg.revision} kanbanOn={kanbanOn}
+                  initial={pc.cfg.keys['views.default'].status === 'set' || pc.cfg.keys['views.default'].status === 'default' ? pc.cfg.keys['views.default'].value : null}
+                  invalidReason={pc.cfg.keys['views.default'].status === 'invalid' ? pc.cfg.keys['views.default'].error : undefined} />
+              </section>
             </>
           })() : workspaceModulesError ? <ConfigLoadError error={workspaceModulesError} locale={locale} /> : null}
         </SectionCard>

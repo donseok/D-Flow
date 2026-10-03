@@ -52,6 +52,7 @@ vi.mock('@/components/settings/ReindexButton', () => ({ ReindexButton: () => nul
 vi.mock('@/components/settings/ExportExcelButton', () => ({ ExportExcelButton: () => null }))
 vi.mock('@/components/settings/ClearExcelProfileButton', () => ({ ClearExcelProfileButton: () => null }))
 vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor: h.editor }))
+vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: () => null }))
 
 import { requireModule } from '@/lib/modules/gate'
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'

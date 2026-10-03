@@ -30,6 +30,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: (...a: unknow
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: vi.fn(async () => ({ keys: { 'modules.allowed': { status: 'set', value: ['agents'] } } })) }))
 vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: vi.fn(async () => []) }))
 vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor: () => null }))
+vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: () => null }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
