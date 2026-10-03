@@ -2,7 +2,7 @@
   "version": 1,
   "commonMask": ["[title^=\"함께 보는 중\"]"],
   "routes": [
-    { "key": "root", "path": "/", "file": "page.tsx", "grade": "member", "tags": ["W"], "since": "b4283c0", "expectFinal": "/w/{wsSlug}", "baseFinal": "/projects" },
+    { "key": "root", "path": "/", "file": "page.tsx", "grade": "member", "tags": ["W"], "since": "b4283c0", "expectFinal": "/w/{wsSlug}", "baseFinal": "/w/{wsSlug}" },
     { "key": "login", "path": "/login", "file": "login/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
     { "key": "invite", "path": "/invite/{inviteToken}", "file": "invite/[token]/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
     { "key": "share", "path": "/share/minutes/{shareToken}", "file": "share/minutes/[token]/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
@@ -34,7 +34,7 @@
     { "key": "p-dashboard", "path": "/p/{pid}/dashboard", "file": "(app)/p/[projectId]/dashboard/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "focusStart": "header", "focusTargets": ["[data-side-rail] a, [data-side-rail] button", "header a, header button"] },
     { "key": "p-wbs", "path": "/p/{pid}/wbs", "file": "(app)/p/[projectId]/wbs/page.tsx", "grade": "member", "tags": ["P", "F"], "since": "b4283c0", "focusStart": "[data-wbs-scroll-region]", "focusTargets": ["[data-row-id] button, [data-row-id] [tabindex=\"0\"]"] },
     { "key": "p-gantt", "path": "/p/{pid}/gantt", "file": "(app)/p/[projectId]/gantt/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0", "until": "UI-2a", "expectFinal": "/p/{pid}/wbs?view=timeline" },
-    { "key": "p-kanban", "path": "/p/{pid}/kanban", "file": "(legacy)/p/[projectId]/kanban/route.ts", "grade": "member", "tags": ["P"], "since": "b4283c0", "until": "UI-3", "expectFinal": "/p/{pid}/wbs?view=board" },
+    { "key": "p-kanban", "path": "/p/{pid}/kanban", "file": "(legacy)/p/[projectId]/kanban/route.ts", "grade": "member", "tags": ["P"], "since": "b4283c0", "until": "UI-3", "expectFinal": "/p/{pid}/wbs?view=board", "baseFinal": "/p/{pid}/kanban" },
     { "key": "p-import", "path": "/p/{pid}/import", "file": "(app)/p/[projectId]/import/page.tsx", "grade": "member", "tags": ["P"], "since": "b4283c0" },
     { "key": "p-import-admin", "path": "/p/{pid}/import", "file": "(app)/p/[projectId]/import/page.tsx", "grade": "wsAdmin", "tags": ["P"], "since": "b4283c0", "supplement": true },
     { "key": "p-issues", "path": "/p/{pid}/issues", "file": "(app)/p/[projectId]/issues/page.tsx", "grade": "member", "tags": ["P", "S", "F"], "since": "b4283c0" },

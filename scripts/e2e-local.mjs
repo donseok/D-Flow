@@ -514,10 +514,10 @@ async function main() {
     if (!hidden && entry.problems.length) throw new Fail(`${who.label} ${label} 화면 문제: ${entry.problems.join(', ')}`)
     return entry
   }
-  const wbsTitle = (name) => `${name} WBS · 간트` // wbs/page.tsx 히어로 — 페이지 세그먼트만 그린다(i18n wbs.heroTitleSuffix)
+  const wbsTexts = (name) => ['작업 계획', name] // UI-3 통합 제목과 프로젝트 식별을 각각 확인한다.
   const visibility = []
-  visibility.push(await see(carol, 'A(명단 멤버)', A.id, A.name, { expectTexts: [wbsTitle(A.name), leaf.name] }))
-  visibility.push(await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, { expectTexts: [wbsTitle(B.name)] }))
+  visibility.push(await see(carol, 'A(명단 멤버)', A.id, A.name, { expectTexts: [...wbsTexts(A.name), leaf.name] }))
+  visibility.push(await see(carol, 'B(같은 워크스페이스, 명단 없음)', B.id, B.name, { expectTexts: wbsTexts(B.name) }))
   const denied = (await carol.action(`/p/${B.id}/meetings`, 'createMeeting', [B.id, meetingInput({ date: meetingDate, attendeeIds: [] })])).result
   same('carol 의 B 회의 생성', denied, { ok: false, error: ERR_DENIED })
   const bMeetings = rows('B 회의', await admin.sb.from('meetings').select('id').eq('project_id', B.id))
@@ -525,7 +525,7 @@ async function main() {
   visibility.push({ who: 'carol', project: 'B(같은 워크스페이스, 명단 없음)', action: 'createMeeting', result: denied, bMeetings: bMeetings.length })
   visibility.push(await see(carol, 'C(워크스페이스 B)', C.id, C.name, { hidden: true }))
   visibility.push(await see(carol, '미존재 id', missing, null, { hidden: true }))
-  visibility.push(await see(admin, 'C(워크스페이스 B)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] }))
+  visibility.push(await see(admin, 'C(워크스페이스 B)', C.id, C.name, { expectTexts: wbsTexts(C.name) }))
   step('visibility', { carolUserId: carolUser.id, checks: visibility })
 
   // ── 14. A 관리자 ana(플랫폼 관리자 아님) — 부트스트랩 계정이 createAccount({ workspaceId: A }) 로 만든다. ana 가 createProject(A, …)
@@ -564,7 +564,7 @@ async function main() {
   same('outsider@A2 권한', { accessRole: outsiderRow.accessRole, linked: outsiderRow.linked }, { accessRole: 'member', linked: true })
   await outsider.login(OUTSIDER.email, outsiderPassword)
   const outsiderChecks = [
-    await see(outsider, 'A2(초대받은 프로젝트)', A2.id, A2.name, { expectTexts: [wbsTitle(A2.name)] }),
+    await see(outsider, 'A2(초대받은 프로젝트)', A2.id, A2.name, { expectTexts: wbsTexts(A2.name) }),
     await see(outsider, 'C(워크스페이스 B)', C.id, C.name, { hidden: true }),
   ]
   step('outsider-invite', {
@@ -629,7 +629,7 @@ async function main() {
   const beaChecks = [
     await see(bea, 'A2(워크스페이스 A)', A2.id, A2.name, { hidden: true }),
     await see(bea, 'A(워크스페이스 A) 대시보드', A.id, A.name, { hidden: true, page: 'dashboard' }),
-    await see(bea, 'C(자기 워크스페이스)', C.id, C.name, { expectTexts: [wbsTitle(C.name)] }),
+    await see(bea, 'C(자기 워크스페이스)', C.id, C.name, { expectTexts: wbsTexts(C.name) }),
   ]
   const titles = minutes.map((m) => m.title)
   const aNames = [A.name, B.name, A2.name]

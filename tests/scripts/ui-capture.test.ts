@@ -979,10 +979,14 @@ describe('baseFinal — 기준 서버에서 옛 경로가 기대하는 최종 �
     // baseFinal 이 없는 행은 기준 서버에서도 expectFinal
     expect(finalProblem({ path: '/', expectFinal: '/projects' }, v, new URL('http://x/projects'), { base: true })).toBeNull()
   })
-  it('routes.json — 옛 행 열(root 포함)이 baseFinal 을 갖고 expectFinal 은 새 경로, 형식은 validateRoutes 가 본다', () => {
+  it('routes.json — 옛 행 열한 개(root 포함)의 기준/머리 주소, 형식은 validateRoutes 가 본다', () => {
     const old = (routesDoc.routes as { key: string; expectFinal?: string; baseFinal?: string }[]).filter((x) => x.baseFinal !== undefined)
-    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'portfolio', 'projects', 'root', 'usage'])
-    for (const x of old) expect(x.expectFinal, x.key).toMatch(/^\/w\/\{wsSlug\}/)
+    expect(old.map((x) => x.key).sort()).toEqual(['admin-accounts', 'admin-teams', 'agents', 'meetings', 'minute', 'minutes', 'p-kanban', 'portfolio', 'projects', 'root', 'usage'])
+    for (const x of old.filter(x => x.key !== 'p-kanban')) expect(x.expectFinal, x.key).toMatch(/^\/w\/\{wsSlug\}/)
+    const kanban = old.find(x => x.key === 'p-kanban')!
+    expect(finalProblem({ path: '/p/{pid}/kanban', ...kanban }, { pid: 'p', wsSlug: 'w' }, new URL('http://x/p/p/kanban'), { base: true })).toBeNull()
+    expect(kanban.expectFinal).toBe('/p/{pid}/wbs?view=board')
+    expect(old.find(x => x.key === 'root')?.baseFinal).toBe('/w/{wsSlug}') // UI-3 착수점도 UI-2 리졸버를 쓴다.
     expect(validateRoutes({ version: 1, routes: [{ key: 'a', path: '/a', file: 'a/page.tsx', grade: 'member', since: 'b4283c0', baseFinal: 'x' }] }, ['a/page.tsx'])).toContain('a: baseFinal 경로')
   })
   it('워크스페이스 관리자 등급 행 — 같은 페이지 파일의 보충 행', () => {
