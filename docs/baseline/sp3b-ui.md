@@ -436,3 +436,7 @@ rebase 로 main 의 SP4 A1·A2 화면 파일 **18개**(`p/[projectId]/{import,se
 | `u3-t12-fixed/p-members-390x844-light.png` | `f2c8d6494cad` |
 | `u3-t12-inherited-role/1440x900-light.png` | `a46aaa70fcab` |
 | `u3-t12-inherited-role/390x844-dark.png` | `1a906da48dd6` |
+
+### 과제 11 CI 후속 수정
+
+Actions `37133788930`에서 미정의 `bg-action-weak`와 슬러그 시간대 정적 계약 불일치 두 건을 확인했다. 선언된 `bg-action-soft`로 고치고 `viewTimezone(scope.ws.id)` 계약을 보존했다(동일 워크스페이스 값). 관련 CSS·달력·프로젝트 화면 24 files·461 통과, typecheck·lint 통과(기존 경고 4), 빌드 `oW41puDylLCtTK9N1hpUQ` 스모크 통과. `u3-t11-ci-fix` 1440/390 × light/dark 4장 문제 0, 모바일 라이트 원본의 선택 강조를 확인했다.

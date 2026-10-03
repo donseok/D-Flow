@@ -12,7 +12,7 @@ export function ProjectsToolbar({ slug, q, status, favoritesOnly, view }: { slug
       {status && <input type="hidden" name="status" value={status} />}{favoritesOnly && <input type="hidden" name="fav" value="1" />}<button type="submit" className="btn btn-ghost">검색</button>
     </form>
     <nav aria-label="프로젝트 상태" className="flex flex-wrap gap-2">
-      {[[undefined, '전체'], ...statuses].map(([value, label]) => <Link key={value ?? 'all'} href={wsHref(slug, 'projects', { ...keep, status: value })} aria-current={status === value ? 'page' : undefined} className={`rounded-full border px-2.5 py-1 text-meta ${status === value ? 'border-action bg-action-weak font-semibold text-action' : 'border-border text-fg-secondary hover:bg-surface-hover'}`}>{label}</Link>)}
+      {[[undefined, '전체'], ...statuses].map(([value, label]) => <Link key={value ?? 'all'} href={wsHref(slug, 'projects', { ...keep, status: value })} aria-current={status === value ? 'page' : undefined} className={`rounded-full border px-2.5 py-1 text-meta ${status === value ? 'border-action bg-action-soft font-semibold text-action' : 'border-border text-fg-secondary hover:bg-surface-hover'}`}>{label}</Link>)}
     </nav>
     <Link href={wsHref(slug, 'projects', { ...keep, fav: favoritesOnly ? undefined : '1' })} aria-current={favoritesOnly ? 'page' : undefined} className="text-meta text-action underline">즐겨찾기만</Link>
     <ProjectsViewToggle view={view} />

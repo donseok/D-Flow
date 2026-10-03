@@ -30,7 +30,7 @@ export default async function ProjectsPage({ params, searchParams }: {
   const header = (create?: ReactNode) => <PageHeader title={t(locale, 'nav.allProjects')} meta={ws.name} primaryAction={create} />
   if (!actor) return <PageFrame width="portal" header={header()}><StatusMessage kind="partial_error" blocking title="권한 정보를 읽지 못해 목록을 그리지 못했습니다" /></PageFrame>
   // 기존 달력 손상 경로를 보존한다. 잘못된 시간대로 상태를 지어내지 않는다(R6).
-  const zone = await viewTimezone(ws.id)
+  const zone = await viewTimezone(scope.ws.id)
   if (!zone.ok) return <ConfigLoadError error={zone.error} keyName={zone.key} kind="invalid" locale={locale} />
   const status = (STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status as (typeof STATUSES)[number] : undefined
   const q = sp.q?.trim() || undefined, favoritesOnly = sp.fav === '1'
