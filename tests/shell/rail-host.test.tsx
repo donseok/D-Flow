@@ -71,13 +71,12 @@ describe('RightRail 첫 커밋(U2b-2 충실도 리뷰 Z6·Z11)', () => {
     render(<RightRail occupant="ai" title="도우미" sidebarWidth={232} onClose={() => {}} header={<button data-reset>초기화</button>}><textarea data-autofocus /></RightRail>)
     expect((document.activeElement as HTMLElement).hasAttribute('data-autofocus')).toBe(true)
   })
-  it('전체 화면 안 레일 자리에서는 사이드바 폭을 세지 않는다(전체 화면이 사이드바를 덮는다) — 1280 에서 병치', () => {
+  it('전체 화면도 같은 사이드바 판정 — 1280 오버레이(R4)', () => {
     document.body.innerHTML = '<div data-wbs-fullscreen="open"><div data-rail-host="fullscreen"></div></div><div id="app-rail"></div>'
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
     render(<RightRail occupant="ai" title="도우미" sidebarWidth={232} onClose={() => {}}><button>안</button></RightRail>)
-    expect(document.querySelector('[data-rail-host="fullscreen"] [role="complementary"]')).not.toBeNull()
+    expect(document.querySelector('[data-rail-host="fullscreen"] [role="dialog"]')).not.toBeNull()
   })
 })
 
 import { useEffect as useLayoutEffectLike } from 'react'
-

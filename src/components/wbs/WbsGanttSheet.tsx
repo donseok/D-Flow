@@ -531,7 +531,7 @@ export function WbsGanttSheet({
       // 확대 카드 선택과 내부 패널/편집이 열려 있으면 첫 Esc를 해당 UI에 양보한다.
       if (
         (progressLensEnabled && (progressLensPinnedId || progressLensPreviewId))
-        || selectedId
+        || (selectedId && (!aiRail || aiRail.occupant === 'inspector'))
         || reportOpen
         || addPhase !== null
         || edit
@@ -548,6 +548,7 @@ export function WbsGanttSheet({
   }, [
     addPhase,
     aiOpen,
+    aiRail,
     edit,
     fullscreen,
     progressLensEnabled,
@@ -785,7 +786,7 @@ export function WbsGanttSheet({
     const onKey = (e: KeyboardEvent) => {
       if (
         e.key !== 'Escape'
-        || selectedId
+        || (selectedId && (!aiRail || aiRail.occupant === 'inspector'))
         || reportOpen
         || addPhase !== null
         || edit
@@ -798,6 +799,7 @@ export function WbsGanttSheet({
     return () => document.removeEventListener('keydown', onKey)
   }, [
     addPhase,
+    aiRail,
     edit,
     progressLensEnabled,
     progressLensPinnedId,
@@ -834,6 +836,9 @@ export function WbsGanttSheet({
   // 선택된 행(상세 패널). items가 갱신돼도 id로 다시 찾아 최신값 표시 —
   // itemById(전체 펼침 flatten 색인)가 모든 노드를 담고 있어 트리 재귀 탐색이 불필요하다.
   const selectedItem = selectedId ? itemById.get(selectedId) ?? null : null
+  const selectRow = useCallback((id: string) => { setSelectedId(id); aiRail?.open('inspector') }, [aiRail])
+  const closeDetail = () => { setSelectedId(null); aiRail?.close('inspector') }
+  const showDetail = !!selectedItem && (!aiRail || aiRail.occupant === 'inspector')
 
   // 상세 패널의 선행·후속 항목 클릭 — 대상이 접힌 구간이나 완료 숨김 뒤에 있어도
   // 조상 경로를 임시로 펼쳐 표에서 같이 보이게 한 뒤 선택을 옮긴다(focus 딥링크와 같은 계열).
@@ -843,8 +848,8 @@ export function WbsGanttSheet({
     if (path && hideDone && (hideDoneResult.hiddenIds.has(id) || path.some(p => hideDoneResult.hiddenIds.has(p)))) {
       setHideExempt(prev => new Set([...prev, ...path, id]))
     }
-    setSelectedId(id)
-  }, [hideDone, hideDoneResult, items])
+    selectRow(id)
+  }, [hideDone, hideDoneResult, items, selectRow])
 
   /* ── 날짜 스케일 ── */
   const allDates = items.flatMap(function dates(n): string[] {
@@ -1110,7 +1115,7 @@ export function WbsGanttSheet({
       className={
         fullscreen
           ? // 층은 --z-fullscreen(120) — AI 버튼·패널은 --z-rail(90)로 내려가 그 아래다(z 대응표 §1). 우측 레일은 아래 레일 자리로 포털된다(D56)
-            'fixed inset-0 z-(--z-fullscreen) overflow-auto bg-canvas px-3 py-3 sm:px-6 sm:py-5'
+            'fixed inset-0 z-(--z-fullscreen) flex min-h-0 overflow-hidden bg-canvas'
           : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
@@ -1128,7 +1133,7 @@ export function WbsGanttSheet({
       }
     >
       {/* 전체 화면 안 레일 자리(D56) — 열린 동안 우측 레일(AI·인스펙터)이 전체 화면 층 아래로 숨지 않게 여기로 포털된다(RightRail 의 useRailHost) */}
-      {fullscreen && <div data-rail-host="fullscreen" className="fixed inset-y-0 right-0 z-(--z-rail) flex" />}
+      <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${fullscreen ? 'px-3 py-3 sm:px-6 sm:py-5' : ''}`}>
       {/* ── 툴바 ── */}
       {/* 컴팩트: 툴바를 통째로 걷고 플로팅 버튼으로 연다 — 접힌 한 줄(검색+토글)조차 표 공간을
           먹는다는 피드백(2026-08-21). 분기는 JS(compact)로만 — CSS 반응형 display 유틸은
@@ -1686,7 +1691,7 @@ export function WbsGanttSheet({
                       type="button"
                       onClick={() => {
                         clearProgressLensSelection()
-                        setSelectedId(n.id)
+                        selectRow(n.id)
                       }}
                       className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-brand hover:underline`}
                       title={`${n.name} · ${
@@ -2127,14 +2132,14 @@ export function WbsGanttSheet({
         </div>
       )}
 
-      {selectedItem && (
+      {showDetail && selectedItem && (
         <RowDetailPanel
           item={selectedItem}
           timeZone={cal.timezone}
           allItems={allFlatItems}
           dependencies={dependencies}
           schedule={dependencySchedule.byId.get(selectedItem.id)}
-          onClose={() => setSelectedId(null)}
+          onClose={closeDetail}
           editable={isAdmin && !readOnly}
           canAttach={!readOnly && canAttachDeliverable(selectedItem, actor, projectId)}
           canEditDeliverable={!readOnly && canEditDeliverable(selectedItem, actor, projectId)}
@@ -2147,6 +2152,8 @@ export function WbsGanttSheet({
           unresolvedRefs={unresolvedDepends[selectedItem.id] ?? EMPTY_REFS}
         />
       )}
+      </div>
+      {fullscreen && <div data-rail-host="fullscreen" className="relative z-(--z-rail) flex min-h-0 shrink-0" />}
     </div>
   )
 }

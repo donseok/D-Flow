@@ -301,7 +301,7 @@ export function KanbanBoard({
               className="app-input pl-9 sm:w-56"
             />
           </div>
-          {savingIds.size > 0 && <span className="text-[12px] text-brand">{t('kanban.saving')}</span>}
+          {savingIds.size > 0 && <span className="text-meta text-fg-muted">{t('kanban.saving')}</span>}
         </div>
       </div>
 

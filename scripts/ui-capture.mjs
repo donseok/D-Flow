@@ -1622,6 +1622,9 @@ const RAIL_SIZES = Object.freeze([[1440, 900], [1400, 900], [1366, 768], [1280, 
 async function checkRail(opts) {
   const out = []
   const res = await forEachShot({ ...opts, routes: ['p-wbs-inspector', 'p-wbs-inspector-collapsed'], theme: ['light'], sizes: RAIL_SIZES.map((s) => [...s]) }, async (page, { r, width }) => {
+    // 간트의 오늘 중심 자동 스크롤과 열 수용 폭을 분리한다. 필수 열은 표의 시작 위치에서 측정한다.
+    await page.locator('[data-wbs-scroll-region]').evaluate(el => { el.scrollLeft = 0 })
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
     const m = await page.evaluate((req) => {
       const rail = document.querySelector('[data-rail="inspector"]')
       const mode = !rail ? 'none' : rail.closest('[role="dialog"]') ? 'overlay' : 'side'
@@ -1630,7 +1633,7 @@ async function checkRail(opts) {
         const h = document.querySelector(`[data-wbs-col="${c}"][data-wbs-col-kind="header"]`)?.getBoundingClientRect()
         return [c, !!(h && region && h.width > 0 && h.right <= region.right + 0.5 && h.left >= region.left - 0.5)]
       }))
-      return { mode, cols, overlap: mode === 'side' && !!(region && rail && region.right > rail.getBoundingClientRect().left + 0.5), main: document.querySelector('main#main-content')?.clientWidth ?? null, railWidth: rail?.getBoundingClientRect().width ?? null }
+      return { mode, cols, scrollLeft: document.querySelector('[data-wbs-scroll-region]')?.scrollLeft ?? null, overlap: mode === 'side' && !!(region && rail && region.right > rail.getBoundingClientRect().left + 0.5), main: document.querySelector('main#main-content')?.clientWidth ?? null, railWidth: rail?.getBoundingClientRect().width ?? null }
     }, [...RAIL_REQUIRED_COLS])
     const expectedMode = width === 1440 ? 'side' : width === 1280 ? 'overlay' : undefined
     out.push({ key: r.key, width, collapsed: r.key.endsWith('-collapsed'), ...m, ...railVerdict({ ...m, expectedMode }) })

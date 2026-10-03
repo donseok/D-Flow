@@ -52,7 +52,7 @@ describe('AI 패널 층(z 대응표 §1 — UI-2b)', () => {
   })
   it('전체 화면 컨테이너는 토큰 그대로(임시 +1 없음)·레일 자리를 갖는다', () => {
     const src = read('src/components/wbs/WbsGanttSheet.tsx')
-    expect(src).toContain("'fixed inset-0 z-(--z-fullscreen) overflow-auto")
+    expect(src).toContain("'fixed inset-0 z-(--z-fullscreen) flex min-h-0 overflow-hidden")
     expect(src).toContain('data-rail-host="fullscreen"')
     expect(src).toContain("data-wbs-fullscreen={fullscreen ? 'open' : undefined}")
   })
@@ -68,4 +68,3 @@ describe('전체 화면 안 레일 자리(U2b-2 충실도 리뷰 P1 — Z1)', ()
     expect(zToken(slot![1])).toBeGreaterThan(Math.max(...inner))
   })
 })
-

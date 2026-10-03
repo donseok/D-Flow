@@ -25,6 +25,8 @@ import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
+import { RightRail, useRightRailOptional, useShellSidebarWidth, useRailMode } from '@/components/app/RightRail'
+import { INSPECTOR_WIDTH, clampInspectorWidth, inspectorRailWidth } from '@/lib/wbs/inspectorWidth'
 import type { DictKey } from '@/lib/i18n/dict'
 const EMPTY_MEMBERS: ProjectMember[] = []
 // 매 렌더 새 리터럴이면 readiness useMemo 가 매번 다시 돈다 — 모듈 상수로 고정.
@@ -69,6 +71,15 @@ export function RowDetailPanel({
   const { t } = useLocale()
   const allTeamCodes = useTeamCodes()
   const slotOf = useTeamSlot()
+  const rail = useRightRailOptional()
+  const sidebarWidth = useShellSidebarWidth()
+  const railMode = useRailMode(sidebarWidth, { sync: true })
+  const [viewport, setViewport] = useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth)
+  useEffect(() => {
+    const on = () => setViewport(window.innerWidth)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
   const [logs, setLogs] = useState<ChangeLogEntry[] | null>(null)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -258,21 +269,20 @@ export function RowDetailPanel({
     router.refresh()
   }
 
-  // ── 패널 폭 드래그 조절 — 명세·의존 목록이 길어 고정 448px(max-w-md)로는 좁다(2026-08-20). ──
+  // ── 패널 폭 드래그 조절 — 범위 320~640, 병치는 본문 최소 폭을 우선 확보한다. ──
   // 초기 렌더는 SSR 과 동일한 기본값으로 그리고, 저장값은 마운트 후 적용(하이드레이션 파리티).
-  const DEFAULT_PANEL_WIDTH = 448
-  const MIN_PANEL_WIDTH = 360
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
-  const panelWidthRef = useRef(DEFAULT_PANEL_WIDTH)
+  const [panelWidth, setPanelWidth] = useState<number>(INSPECTOR_WIDTH.default)
+  const panelWidthRef = useRef<number>(INSPECTOR_WIDTH.default)
   useEffect(() => {
     // localStorage 는 프라이빗 모드·일부 테스트 환경에서 없거나 던진다 — 실패는 기본 폭 유지.
-    let saved = NaN
-    try { saved = Number(window.localStorage?.getItem('wbs.detailPanelWidth')) } catch { /* 기본 폭 */ }
-    if (Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH) {
-      const w = Math.min(saved, 1400)
-      panelWidthRef.current = w
-      setPanelWidth(w)
-    }
+    let saved: number | null = null
+    try {
+      const raw = window.localStorage?.getItem('wbs.detailPanelWidth')
+      saved = raw == null ? null : Number(raw)
+    } catch { /* 기본 폭 */ }
+    const w = clampInspectorWidth(saved)
+    panelWidthRef.current = w
+    setPanelWidth(w)
   }, [])
   function startResize(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault()
@@ -280,9 +290,9 @@ export function RowDetailPanel({
     handle.setPointerCapture(e.pointerId)
     const prevUserSelect = document.body.style.userSelect
     document.body.style.userSelect = 'none' // 드래그 중 본문 텍스트 선택 방지
-    const maxW = Math.min(window.innerWidth - 64, 1400)
     const onMove = (ev: PointerEvent) => {
-      const w = Math.round(Math.min(Math.max(window.innerWidth - ev.clientX, MIN_PANEL_WIDTH), maxW))
+      const wanted = window.innerWidth - ev.clientX
+      const w = rail && railMode === 'side' ? inspectorRailWidth(wanted, window.innerWidth, sidebarWidth) : clampInspectorWidth(wanted)
       panelWidthRef.current = w
       setPanelWidth(w)
     }
@@ -298,18 +308,13 @@ export function RowDetailPanel({
     handle.addEventListener('pointercancel', onUp)
   }
   function resetWidth() {
-    panelWidthRef.current = DEFAULT_PANEL_WIDTH
-    setPanelWidth(DEFAULT_PANEL_WIDTH)
+    panelWidthRef.current = INSPECTOR_WIDTH.default
+    setPanelWidth(INSPECTOR_WIDTH.default)
     try { window.localStorage?.removeItem('wbs.detailPanelWidth') } catch { /* 무시 */ }
   }
 
-  return (
-    <div className="fixed inset-0 z-[110]" role="dialog" aria-modal="true" aria-label={`${item.name} ${t('wbs.detailSuffix')}`}>
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={onClose} aria-hidden />
-      <aside
-        style={{ width: `min(${panelWidth}px, 100vw)` }}
-        className="absolute right-0 top-0 flex h-full flex-col bg-surface shadow-[var(--shadow-xl)] animate-[slidein_.18s_ease-out]"
-      >
+  const body = (
+      <>
         <div
           role="separator"
           aria-orientation="vertical"
@@ -708,7 +713,19 @@ export function RowDetailPanel({
           {/* 변경 이력 */}
           <ChangeHistoryList logs={logs} timeZone={timeZone} />
         </div>
-      </aside>
+      </>
+  )
+  const title = `${item.name} ${t('wbs.detailSuffix')}`
+  if (rail) return (
+    <RightRail occupant="inspector" title={title} onClose={onClose} sidebarWidth={sidebarWidth}
+      width={railMode === 'side' ? inspectorRailWidth(panelWidth, viewport, sidebarWidth) : panelWidth} header={null}>
+      <div className="relative flex h-full min-h-0 flex-col bg-surface">{body}</div>
+    </RightRail>
+  )
+  return (
+    <div className="fixed inset-0 z-(--z-overlay)" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-fg/20" onClick={onClose} aria-hidden />
+      <aside style={{ width: panelWidth, maxWidth: '100vw' }} className="absolute right-0 top-0 flex h-full flex-col bg-surface shadow-(--shadow-xl)">{body}</aside>
     </div>
   )
 }

@@ -9,7 +9,8 @@ describe('레일 병치 임계(개정 §5.4.3, §8.1 #9)', () => {
     expect(railSideBySide(1400, 232)).toBe(true)     // 1400-232-400-48 = 720 — 경계 포함
     expect(railSideBySide(1399, 232)).toBe(false)
     expect(railSideBySide(1280, 232)).toBe(false)
-    expect(railSideBySide(1280, 64)).toBe(true)      // 1280-64-400-48 = 768
+    expect(railSideBySide(1280, 64)).toBe(false)     // UI-3 §8.5: 1280 오버레이 우선
+    expect(railSideBySide(1281, 64)).toBe(true)
   })
   it('SSR·첫 렌더는 닫힘(레일은 열린 채로 SSR 하지 않는다 — D55)', () => {
     function Probe() { return <i>{useRailMode(232)}</i> }

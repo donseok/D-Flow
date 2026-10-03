@@ -10,7 +10,7 @@ import type { ComputedItem } from '@/lib/domain/types'
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
-vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
+vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: ({ item, onClose }: { item: { id: string }; onClose(): void }) => <aside data-test-inspector={item.id}><button onClick={onClose}>상세 닫기</button></aside> }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
@@ -70,5 +70,28 @@ describe('WBS 전체 화면 툴바의 AI 토글(AA3)', () => {
     await act(async () => { toggle()!.click() })
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
     expect(container.querySelector('[data-wbs-fullscreen="open"]')).not.toBeNull()
+  })
+  it('행 선택→AI→인스펙터 전환은 선택을 보존하고 점유자 하나만 보인다', async () => {
+    await show(true)
+    const row = container.querySelector<HTMLButtonElement>('[data-row-id="p1"] [data-wbs-col="name"] button[title]')!
+    await act(async () => row.click())
+    expect(rail!.occupant).toBe('inspector')
+    expect(container.querySelector('[data-test-inspector]')?.getAttribute('data-test-inspector')).toBe('p1')
+    await act(async () => rail!.open('ai'))
+    expect(container.querySelector('[data-test-inspector]')).toBeNull()
+    await act(async () => rail!.open('inspector'))
+    expect(container.querySelector('[data-test-inspector]')?.getAttribute('data-test-inspector')).toBe('p1')
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-test-inspector] button')!.click())
+    expect(rail!.occupant).toBeNull()
+    await act(async () => rail!.open('inspector'))
+    expect(container.querySelector('[data-test-inspector]')).toBeNull()
+  })
+  it('AI를 닫은 뒤 보존된 숨은 선택이 전체 화면 Esc를 막지 않는다', async () => {
+    await show(true); await enterFs()
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-row-id="p1"] [data-wbs-col="name"] button[title]')!.click())
+    await act(async () => rail!.open('ai'))
+    await act(async () => rail!.close('ai'))
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(container.querySelector('[data-wbs-fullscreen="open"]')).toBeNull()
   })
 })

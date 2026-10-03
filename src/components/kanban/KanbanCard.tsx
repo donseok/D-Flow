@@ -88,7 +88,7 @@ export function KanbanCard({
 
         <div className="mt-3 flex items-center justify-between gap-2">
           <OwnerBadges owners={card.owners} />
-          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" aria-label={t('kanban.saving')} />}
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-fg-muted" aria-label={t('kanban.saving')} />}
         </div>
       </div>
 
