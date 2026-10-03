@@ -28,16 +28,9 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
 /** 파일 → { patterns, removedBy } */
 export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' }> = {
   // ISSUE_MEGA_AREAS(이슈 영역 — SP5 Phase B 가 project_areas(issue_area) 로)
-  'src/components/dashboard/IssueStatusCard.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/components/issues/IssueAnalysisModal.tsx': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/components/issues/IssueModals.tsx': { patterns: ['ISSUE_MEGA_AREAS', 'ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  'src/components/issues/IssuesView.tsx': { patterns: ['ISSUE_MEGA_AREAS', 'ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  'src/lib/ai/minute-issue-draft.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/lib/domain/issueAnalysis.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/lib/domain/issueDashboard.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/lib/report/issues/model.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/lib/report/issues/processSlideRenderer.ts': { patterns: ['ISSUE_MEGA_AREAS'], removedBy: 'SP5' },
-  'src/lib/report/issues/storedRun.ts': { patterns: ['ISSUE_MEGA_AREAS', 'ISSUE_SEVERITIES'], removedBy: 'SP5' },
+  'src/components/issues/IssueModals.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
+  'src/components/issues/IssuesView.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
+  'src/lib/report/issues/storedRun.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 Phase B)
   'src/components/attendance/AttendanceView.tsx': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },
   'src/lib/ai/tools/attendance.ts': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },

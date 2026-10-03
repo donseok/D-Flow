@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { ISSUE_MEGA_AREAS } from '@/lib/domain/issueAnalysis'
 import {
   CONNECTOR_RE,
   GROUP_SHAPE_RE,
@@ -126,16 +125,17 @@ export function renderProcessTreeSlide(
     throw new Error('[issue-analysis] 프로세스 트리 Sub 행 간격을 읽을 수 없습니다.')
   }
 
-  const activeIndex = ISSUE_MEGA_AREAS.findIndex(area => area.code === slide.megaCode)
+  if (plan.areas.length > chevronSlots.length) throw new Error('[issue-analysis] 현재 템플릿의 영역 표시 용량을 초과했습니다.')
+  const activeIndex = plan.areas.findIndex(area => area.code === slide.areaCode)
   if (activeIndex < 0) {
-    throw new Error(`[issue-analysis] 알 수 없는 Mega 코드입니다: ${slide.megaCode}`)
+    throw new Error(`[issue-analysis] 알 수 없는 Mega 코드입니다: ${slide.areaCode}`)
   }
 
   let xml = setPageFooter(sourceXml, outputPage, plan.meta.authorName)
   xml = setShapeText(
     xml,
     TREE_TITLE_ID,
-    `As-Is 프로세스 체계 – ${slide.megaCode}_${slide.megaName}${seriesSuffix(slide.pageInSeries, slide.pageCount)}`,
+    `As-Is 프로세스 체계 – ${slide.areaCode}_${slide.areaName}${seriesSuffix(slide.pageInSeries, slide.pageCount)}`,
     true,
   )
   xml = setShapeText(xml, TREE_TAG_ID, '2. 영역 별 이슈 및 원인 분석서')
@@ -162,13 +162,13 @@ export function renderProcessTreeSlide(
   const shapes: string[] = []
 
   // 체브론 8칸 — Mega 정본 라벨, 현재 영역만 활성 스타일 프로토타입.
-  ISSUE_MEGA_AREAS.forEach((mega, index) => {
+  plan.areas.forEach((mega, index) => {
     const prototype = index === activeIndex
       ? chevronActivePrototype
       : chevronInactivePrototype
     let shape = withElementId(prototype, takeShapeId())
     shape = withElementTransform(shape, chevronSlots[index])
-    shape = setShapeElementText(shape, `${mega.code}\n${mega.nameKo}`, true)
+    shape = setShapeElementText(shape, `${mega.code}\n${mega.name}`, true)
     shapes.push(shape)
   })
 
@@ -245,12 +245,12 @@ export function renderProcessDefinitionSlide(
   xml = setShapeText(
     xml,
     DEFINITION_TITLE_ID,
-    `As-Is 프로세스 체계 – ${slide.megaCode}_${slide.megaName}${seriesSuffix(slide.pageInSeries, slide.pageCount)}`,
+    `As-Is 프로세스 체계 – ${slide.areaCode}_${slide.areaName}${seriesSuffix(slide.pageInSeries, slide.pageCount)}`,
     true,
   )
   xml = setShapeText(xml, DEFINITION_TAG_ID, '2. 영역 별 이슈 및 원인 분석서')
   xml = setShapeText(xml, DEFINITION_HEADLINE_ID, slide.headline, true)
-  xml = setShapeText(xml, DEFINITION_MEGA_BOX_ID, `${slide.megaCode}. ${slide.megaName}`, true)
+  xml = setShapeText(xml, DEFINITION_MEGA_BOX_ID, `${slide.areaCode}. ${slide.areaName}`, true)
   // 셈플의 정의 문장 표기(▪ 문장). 템플릿 원본 불릿은 Wingdings `§`라 뷰어에 따라
   // 깨질 수 있어(원인분석 표와 같은 선례) 텍스트 기호로 통일한다.
   xml = setShapeText(xml, DEFINITION_MEGA_TEXT_ID, `▪ ${slide.megaDefinition}`, true)

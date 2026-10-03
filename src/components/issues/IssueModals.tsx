@@ -10,7 +10,7 @@ import { AlertTriangle, ExternalLink, FileText, Pencil, Trash2 } from 'lucide-re
 import { Modal } from '@/components/ui/Modal'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
-  createIssue, deleteIssue, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
+  createIssue, deleteIssue, fetchIssueEntryContext, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
   type IssueActionResult, type IssueInput,
 } from '@/app/actions/issues'
 import {
@@ -20,7 +20,6 @@ import {
 import {
   ISSUE_MAJOR_NAME_MAX,
   ISSUE_MAJOR_NAME_NUMBERED_RE,
-  ISSUE_MEGA_AREAS,
   ISSUE_OWNER_DEPARTMENT_MAX,
   ISSUE_RELATED_SYSTEM_MAX,
   ISSUE_RELATED_SYSTEMS_MAX,
@@ -30,9 +29,10 @@ import {
   ISSUE_SUB_PROCESS_MAX,
   formatIssueMajorCode,
   type IssueMajorProcess,
-  type IssueMegaCode,
   type IssueSourceType,
 } from '@/lib/domain/issueAnalysis'
+import { areaLabel, type IssueAreaRef } from '@/lib/domain/issueAreas'
+import type { IssueEntryContext } from '@/lib/issues/context'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
@@ -80,7 +80,7 @@ function sameIds(a: string[], b: string[]): boolean {
 export type IssueFormInput = IssueInput
 
 /** 신규 등록 폼의 선택적 초깃값. 지정하지 않은 값은 일반 신규 등록 기본값을 쓴다. */
-export type IssueFormDraft = Partial<IssueFormInput>
+export type IssueFormDraft = Omit<Partial<IssueFormInput>, 'analysis'> & { analysis?: Partial<NonNullable<IssueFormInput['analysis']>> | null }
 
 /** 회의록 등 이슈가 파생된 원문을 폼에서 읽기 전용으로 확인하기 위한 표시 모델. */
 export interface IssueSourcePreview {
@@ -107,7 +107,7 @@ interface IssueFormSeed {
   assigneeMemberIds: string[]
   startDate: string
   dueDate: string
-  megaCode: IssueMegaCode | ''
+  areaId: string | ''
   majorName: string
   subProcess: string
   ownerDepartment: string
@@ -134,7 +134,7 @@ function issueFormSeed(
       assigneeMemberIds: [...initial.assigneeMemberIds],
       startDate: initial.startDate ?? '',
       dueDate: initial.dueDate ?? '',
-      megaCode: initial.megaCode ?? '',
+      areaId: initial.areaId ?? '',
       majorName: initial.majorName ?? '',
       subProcess: initial.subProcess,
       ownerDepartment: initial.ownerDepartment,
@@ -155,15 +155,15 @@ function issueFormSeed(
     assigneeMemberIds: [...(draft?.assigneeMemberIds ?? [])],
     startDate: draft?.startDate ?? '',
     dueDate: draft?.dueDate ?? '',
-    megaCode: draft?.megaCode ?? '',
-    majorName: draft?.majorName ?? '',
-    subProcess: draft?.subProcess ?? '',
-    ownerDepartment: draft?.ownerDepartment ?? '',
-    relatedSystems: [...(draft?.relatedSystems ?? [])],
+    areaId: draft?.areaId ?? '',
+    majorName: draft?.analysis?.majorName ?? '',
+    subProcess: draft?.analysis?.subProcess ?? '',
+    ownerDepartment: draft?.analysis?.ownerDepartment ?? '',
+    relatedSystems: [...(draft?.analysis?.relatedSystems ?? [])],
     sourceType: minuteSource
       ? 'minutes'
-      : draft?.sourceType === 'minutes' ? 'other' : (draft?.sourceType ?? 'other'),
-    sourceDetail: draft?.sourceDetail?.trim() ? draft.sourceDetail : sourcePreviewDetail(sourcePreview),
+      : draft?.analysis?.sourceType === 'minutes' ? 'other' : (draft?.analysis?.sourceType ?? 'other'),
+    sourceDetail: draft?.analysis?.sourceDetail?.trim() ? draft.analysis!.sourceDetail : sourcePreviewDetail(sourcePreview),
   }
 }
 
@@ -172,16 +172,15 @@ export function normalizeRelatedSystems(raw: string): string[] {
   return [...new Set(raw.split(/[,，]/).map(value => value.trim()).filter(Boolean))]
 }
 
-function megaAreaName(code: IssueMegaCode, locale: 'ko' | 'en' | undefined): string {
-  const area = ISSUE_MEGA_AREAS.find(candidate => candidate.code === code)
-  if (!area) return code
-  return `${area.code} · ${locale === 'en' ? area.nameEn : area.nameKo}`
+function megaAreaName(id: string, areas: readonly IssueAreaRef[]): string {
+  return areaLabel(areas.find(area => area.id === id), id)
 }
 
 export function IssueDetailModal({
-  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, onClose, onEdit, onDelete,
+  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, areas = [], onClose, onEdit, onDelete,
 }: {
   issue: Issue | null
+  areas?: readonly IssueAreaRef[]
   members: ProjectMember[]
   memberName: (id: string | null) => string | null
   /** 이슈 전체 편집·삭제 게이트(작성자 또는 프로젝트 관리자 이상). 이력 등록 권한과는 다른 축이다. */
@@ -198,7 +197,7 @@ export function IssueDetailModal({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const minutesBase = useMinuteLinks().list   // 원문 링크의 기준 경로 — 슬러그 워크스페이스(D38 ①), 범위가 없으면 영구 링크 형식
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -230,10 +229,10 @@ export function IssueDetailModal({
   const statusOptions: IssueStatus[] = issue ? [issue.status, ...STATUS_TRANSITIONS[issue.status]] : []
   const assigneesDirty = issue !== null && !sameIds(assignees, issue.assigneeMemberIds)
   const dirty = issue !== null && (status !== issue.status || assigneesDirty)
-  const analysisMegaLabel = issue?.megaCode ? megaAreaName(issue.megaCode, locale) : '—'
+  const analysisMegaLabel = issue?.areaId ? megaAreaName(issue.areaId, areas) : '—'
   const analysisMajorLabel = issue?.majorName
-    ? issue.megaCode && issue.majorSeq
-      ? `${formatIssueMajorCode(issue.megaCode, issue.majorSeq)} · ${issue.majorName}`
+    ? issue.areaId && issue.majorSeq
+      ? `${formatIssueMajorCode(areas.find(area => area.id === issue.areaId)?.code ?? '?', issue.majorSeq)} · ${issue.majorName}`
       : issue.majorName
     : '—'
   const analysisSourceLabel = issue?.sourceType ? t(ISSUE_SOURCE_META[issue.sourceType].labelKey) : '—'
@@ -277,11 +276,7 @@ export function IssueDetailModal({
     <Modal
       open={issue !== null}
       onClose={onClose}
-      eyebrow={issue
-        ? issue.piIssueCode
-          ? `${issue.piIssueCode} · #${issue.issueNo}`
-          : `#${issue.issueNo}`
-        : undefined}
+      eyebrow={issue?.code}
       title={issue?.title ?? ''}
       size="lg"
       footer={
@@ -478,8 +473,9 @@ function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
 }
 
 export function IssueFormModal({
-  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated,
+  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext,
 }: {
+  entryContext?: IssueEntryContext
   open: boolean
   onClose: () => void
   projectId: string
@@ -496,7 +492,12 @@ export function IssueFormModal({
   /** 신규 등록 성공 응답에 id가 있을 때, DB가 확정한 체번 결과와 함께 한 번 호출된다. */
   onCreated?: (id: string, result: IssueActionResult) => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
+  const [loadedContext, setLoadedContext] = useState<IssueEntryContext | null>(null)
+  const context = entryContext ?? loadedContext
+  const areas = context?.areas ?? []
+  const [analysisEnabled, setAnalysisEnabled] = useState(false)
+  const includeAnalysis = context?.rules.analysis !== 'off' && analysisEnabled
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   // pending 렌더 전에 발생하는 빠른 연속 클릭도 막는다.
@@ -514,7 +515,7 @@ export function IssueFormModal({
   const [assignees, setAssignees] = useState<string[]>([])
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [megaCode, setMegaCode] = useState<IssueMegaCode | ''>('')
+  const [areaId, setAreaId] = useState<string | ''>('')
   const [majorName, setMajorName] = useState('')
   const [majorOptions, setMajorOptions] = useState<IssueMajorProcess[]>([])
   const [subProcess, setSubProcess] = useState('')
@@ -527,15 +528,15 @@ export function IssueFormModal({
   const attachScope = workspaceId ? { workspaceId, projectId } : null
   const minuteSourceLocked = (!isEdit && sourcePreview !== undefined)
     || (isEdit && (initial?.sourceType === 'minutes' || Boolean(initial?.minuteSources.length)))
-  const megaLocked = isEdit && Boolean(initial?.piIssueCode)
+  const megaLocked = isEdit && Boolean(initial?.codeAreaId)
   // 'AI 추천 일치' 판정 — 세 분류 필드가 공통 전제(신규 등록 + 추천 플래그 + Mega 일치)를
   // 각자 복제하다 한 곳만 고쳐져 조건이 어긋나는 것을 막기 위해 한 함수에 모은다.
-  // Mega 자체는 '필드값 = megaCode' 인 경우로 같은 판정을 지난다(코드에 공백이 없어 trim 은 무해).
+  // Mega 자체는 '필드값 = areaId' 인 경우로 같은 판정을 지난다(코드에 공백이 없어 trim 은 무해).
   const matchesAiDraft = (draftValue: string | null | undefined, current: string): boolean => Boolean(
     !isEdit
     && sourcePreview?.classificationRecommended
-    && draft?.megaCode
-    && megaCode === draft.megaCode
+    && draft?.areaId
+    && areaId === draft.areaId
     && draftValue?.trim()
     && current.trim() === draftValue.trim(),
   )
@@ -569,7 +570,7 @@ export function IssueFormModal({
     setAssignees(seed.assigneeMemberIds)
     setStartDate(seed.startDate)
     setDueDate(seed.dueDate)
-    setMegaCode(seed.megaCode)
+    setAreaId(seed.areaId)
     setMajorName(seed.majorName)
     setSubProcess(seed.subProcess)
     setOwnerDepartment(seed.ownerDepartment)
@@ -583,7 +584,7 @@ export function IssueFormModal({
   // Major 자동완성 후보 — 같은 이름 재사용이 기존 체번(02.01…)을 유지하는 핵심이라
   // 열 때마다 프로젝트의 정본 목록을 불러온다. 실패는 입력을 막지 않되 로그로 남긴다.
   useEffect(() => {
-    if (!open || !projectId) {
+    if (!open || !projectId || !includeAnalysis) {
       setMajorOptions([])
       return
     }
@@ -604,10 +605,26 @@ export function IssueFormModal({
         setMajorOptions([])
       })
     return () => { cancelled = true }
-  }, [open, projectId])
+  }, [open, projectId, includeAnalysis])
+
+  useEffect(() => {
+    if (!open || entryContext) return
+    let cancelled = false
+    setLoadedContext(null)
+    fetchIssueEntryContext(projectId).then(result => {
+      if (cancelled) return
+      if (result.ok) setLoadedContext(result.value)
+      else setError(result.error)
+    }).catch(() => { if (!cancelled) setError('이슈 설정을 읽지 못했습니다. 다시 시도하세요.') })
+    return () => { cancelled = true }
+  }, [open, projectId, entryContext])
+  useEffect(() => {
+    if (!open || !context) return
+    setAnalysisEnabled(Boolean(initial?.majorId || draft?.analysis) || (!isEdit && context.rules.analysis === 'required'))
+  }, [open, context, initial?.id, initial?.majorId, isEdit, draft?.analysis])
 
   function submit() {
-    if (submittingRef.current) return
+    if (submittingRef.current || !context) return
     if (!title.trim()) {
       setError(t('issue.err.titleRequired'))
       return
@@ -616,12 +633,12 @@ export function IssueFormModal({
       setError(t('issue.err.dateRange'))
       return
     }
-    if (!megaCode) {
+    if ((context?.rules.areaRequired || includeAnalysis) && !areaId) {
       setError(t('issue.err.megaRequired'))
       return
     }
     const normalizedMajorName = majorName.trim()
-    if (!normalizedMajorName) {
+    if (includeAnalysis && !normalizedMajorName) {
       setError(t('issue.err.majorRequired'))
       return
     }
@@ -634,7 +651,7 @@ export function IssueFormModal({
       return
     }
     const normalizedSubProcess = subProcess.trim()
-    if (!normalizedSubProcess) {
+    if (includeAnalysis && !normalizedSubProcess) {
       setError(t('issue.err.subProcessRequired'))
       return
     }
@@ -643,7 +660,7 @@ export function IssueFormModal({
       return
     }
     const normalizedOwnerDepartment = ownerDepartment.trim()
-    if (!normalizedOwnerDepartment) {
+    if (includeAnalysis && !normalizedOwnerDepartment) {
       setError(t('issue.err.ownerDepartmentRequired'))
       return
     }
@@ -661,7 +678,7 @@ export function IssueFormModal({
       return
     }
     const normalizedSourceType = minuteSourceLocked ? 'minutes' : sourceType
-    if (!normalizedSourceType) {
+    if (includeAnalysis && !normalizedSourceType) {
       setError(t('issue.err.sourceTypeRequired'))
       return
     }
@@ -681,13 +698,13 @@ export function IssueFormModal({
       assigneeMemberIds: assignees,
       startDate: startDate || null,
       dueDate: dueDate || null,
-      megaCode,
-      majorName: normalizedMajorName,
+      areaId: areaId || null,
+      analysis: includeAnalysis ? { majorName: normalizedMajorName,
       subProcess: normalizedSubProcess,
       ownerDepartment: normalizedOwnerDepartment,
       relatedSystems,
-      sourceType: normalizedSourceType,
-      sourceDetail: normalizedSourceDetail,
+      sourceType: normalizedSourceType as IssueSourceType,
+      sourceDetail: normalizedSourceDetail } : null,
     }
     submittingRef.current = true
     startTransition(async () => {
@@ -710,13 +727,14 @@ export function IssueFormModal({
         }
       }
       if (res.ok) {
-        if (!isEdit && res.id) {
-          createdIdRef.current = res.id
+        const createdId = res.id ?? res.issueId
+        if (!isEdit && createdId) {
+          createdIdRef.current = createdId
           // 생성은 이미 확정됐다. 알림 훅의 UI 오류가 재시도(중복 생성)로 이어지지 않게 분리한다.
           // 재시도 경로에서는 이미 한 번 불렀으므로 다시 부르지 않는다.
           if (!alreadyCreated) {
             try {
-              onCreated?.(res.id, res)
+              onCreated?.(createdId, res)
             } catch (cause) {
               console.error('[IssueFormModal] onCreated callback failed:', cause)
             }
@@ -726,7 +744,7 @@ export function IssueFormModal({
           // 닫기 버튼이 막히는데, 업로드 중 창이 닫히지 않는 편이 낫다.
           if (pendingFiles.length > 0) {
             const up = attachScope
-              ? await uploadIssueAttachments(attachScope, res.id, pendingFiles)
+              ? await uploadIssueAttachments(attachScope, createdId, pendingFiles)
               : { ok: false as const, doneCount: 0, fileName: pendingFiles[0]!.name, reason: 'upload' as const, error: t('issue.err.attachNoScope') }
             if (!up.ok) {
               // 이슈는 이미 만들어졌다. 되돌리면 사용자가 입력을 통째로 잃으므로 되돌리지 않고,
@@ -765,7 +783,7 @@ export function IssueFormModal({
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
-          <button onClick={submit} disabled={pending || submittingRef.current} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
+          <button onClick={submit} disabled={pending || submittingRef.current || !context} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>
       }
     >
@@ -817,27 +835,30 @@ export function IssueFormModal({
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.mega')}</span>
               <select
                 className="app-input"
-                value={megaCode}
+                value={areaId}
                 disabled={megaLocked}
-                required
+                required={context?.rules.areaRequired || includeAnalysis}
                 aria-describedby={megaLocked ? 'issue-mega-locked' : undefined}
-                onChange={e => setMegaCode(e.target.value as IssueMegaCode | '')}
+                onChange={e => setAreaId(e.target.value as string | '')}
               >
                 <option value="">{t('issue.analysis.megaPlaceholder')}</option>
-                {ISSUE_MEGA_AREAS.map(area => (
-                  <option key={area.code} value={area.code}>{megaAreaName(area.code, locale)}</option>
+                {areas.filter(area => area.active || area.id === initial?.areaId).map(area => (
+                  <option key={area.id} value={area.id}>{megaAreaName(area.id, areas)}</option>
                 ))}
               </select>
               {megaLocked && (
                 <p id="issue-mega-locked" className="mt-1 text-[11px] leading-4 text-ink-subtle">
-                  {t('issue.analysis.megaLocked').replace('{id}', initial?.piIssueCode ?? '')}
+                  {t('issue.analysis.megaLocked').replace('{id}', initial?.code ?? '')}
                 </p>
               )}
               <AiRecommendedHint
-                show={matchesAiDraft(draft?.megaCode, megaCode)}
-                text={t('issue.analysis.megaRecommended').replace('{code}', draft?.megaCode ?? '')}
+                show={matchesAiDraft(draft?.areaId, areaId)}
+                text={t('issue.analysis.megaRecommended').replace('{code}', draft?.areaId ?? '')}
               />
             </label>
+          </div>
+          {context?.rules.analysis === 'optional' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={analysisEnabled} onChange={e => setAnalysisEnabled(e.target.checked)} />분석 분류 입력</label>}
+          <fieldset disabled={!includeAnalysis} hidden={!includeAnalysis} className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.majorProcess')}</span>
               <input
@@ -854,10 +875,10 @@ export function IssueFormModal({
                   타 Mega 후보를 골라 엉뚱한 영역에 신규 체번되는 것을 막기 위해 후보는
                   Mega 선택 후에만 노출한다. */}
               <datalist id="issue-major-process-options">
-                {(megaCode ? majorOptions.filter(major => major.megaCode === megaCode) : [])
+                {(areaId ? majorOptions.filter(major => major.areaId === areaId) : [])
                   .map(major => (
                     <option key={major.id} value={major.name}>
-                      {`${formatIssueMajorCode(major.megaCode, major.majorSeq)} · ${major.name}`}
+                      {`${formatIssueMajorCode(areas.find(area => area.id === major.areaId)?.code ?? '?', major.majorSeq)} · ${major.name}`}
                     </option>
                   ))}
               </datalist>
@@ -865,7 +886,7 @@ export function IssueFormModal({
                 {t('issue.analysis.majorProcessHint')}
               </span>
               <AiRecommendedHint
-                show={matchesAiDraft(draft?.majorName, majorName)}
+                show={matchesAiDraft(draft?.analysis?.majorName, majorName)}
                 text={t('issue.analysis.majorProcessRecommended')}
               />
             </label>
@@ -880,7 +901,7 @@ export function IssueFormModal({
                 placeholder={t('issue.analysis.subProcessPh')}
               />
               <AiRecommendedHint
-                show={matchesAiDraft(draft?.subProcess, subProcess)}
+                show={matchesAiDraft(draft?.analysis?.subProcess, subProcess)}
                 text={t('issue.analysis.subProcessRecommended')}
               />
             </label>
@@ -940,7 +961,7 @@ export function IssueFormModal({
                 placeholder={t('issue.analysis.sourceDetailPh')}
               />
             </label>
-          </div>
+          </fieldset>
         </section>
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
@@ -1031,7 +1052,7 @@ export function DeleteIssueModal({ issue, onClose }: { issue: Issue | null; onCl
         <p className="text-sm text-ink">{t('issue.delete.confirmPrefix')}</p>
         {issue && (
           <p className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-ink">
-            {issue.piIssueCode ? `${issue.piIssueCode} · #${issue.issueNo}` : `#${issue.issueNo}`} {issue.title}
+            {issue.code} {issue.title}
           </p>
         )}
         {error && <ErrorBox message={error} />}

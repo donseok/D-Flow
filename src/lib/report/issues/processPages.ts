@@ -14,7 +14,7 @@ export interface IssueAnalysisDeckTreeColumn {
 }
 
 export interface IssueAnalysisDeckDefinitionRow {
-  /** `{megaCode}.{seq2}` — 0062 체번을 그대로 노출한다(예: 02.01). */
+  /** `{areaCode}.{seq2}` — 0062 체번을 그대로 노출한다(예: 02.01). */
   seqLabel: string
   name: string
   definition: string
@@ -23,8 +23,8 @@ export interface IssueAnalysisDeckDefinitionRow {
 export interface IssueAnalysisDeckProcessTreeSlide {
   kind: 'process-tree'
   sourceSlide: 5
-  megaCode: string
-  megaName: string
+  areaCode: string
+  areaName: string
   pageInSeries: number
   pageCount: number
   headline: string
@@ -34,8 +34,8 @@ export interface IssueAnalysisDeckProcessTreeSlide {
 export interface IssueAnalysisDeckProcessDefinitionSlide {
   kind: 'process-definition'
   sourceSlide: 6
-  megaCode: string
-  megaName: string
+  areaCode: string
+  areaName: string
   pageInSeries: number
   pageCount: number
   /** 셈플은 트리 페이지의 요약문을 정의 페이지에도 반복한다. */
@@ -64,12 +64,12 @@ function treeColumns(area: IssueAnalysisReportArea): IssueAnalysisDeckTreeColumn
   for (const issue of area.issues) {
     if (issue.majorId !== null && !majorIds.has(issue.majorId)) {
       throw new Error(
-        `${area.megaName} ${issue.piIssueCode} 이슈가 영역 Major 목록에 없는 Major를 참조합니다.`,
+        `${area.areaName} ${issue.code} 이슈가 영역 Major 목록에 없는 Major를 참조합니다.`,
       )
     }
     const sub = compactText(issue.subProcess)
     if (!sub) {
-      throw new Error(`${area.megaName} ${issue.piIssueCode} 이슈의 Sub Process가 비어 있습니다.`)
+      throw new Error(`${area.areaName} ${issue.code} 이슈의 Sub Process가 비어 있습니다.`)
     }
     const key = issue.majorId ?? ''
     const list = subsByKey.get(key)
@@ -108,12 +108,12 @@ function treeHeadline(
   // Sub 마스터가 없어 트리의 Sub는 이슈의 구분에서 관찰된 것만이다(디자인 감사 #1).
   // 셈플처럼 "M개의 Sub로 구성됨"이라고 쓰면 전체 체계 수처럼 읽히므로 출처를 정직하게 쓴다.
   if (!majors.length) {
-    return `현행 ${area.megaName} 프로세스에서 이슈가 확인된 Sub 프로세스는 ${subCount}개임 (Major 미지정)`
+    return `현행 ${area.areaName} 프로세스에서 이슈가 확인된 Sub 프로세스는 ${subCount}개임 (Major 미지정)`
   }
   const names = majors.map(major => major.name)
   const listed = names.slice(0, 3).join(',')
   const suffix = names.length > 3 ? ' 등' : ''
-  return `현행 ${area.megaName} 프로세스는 ${listed}${suffix} ${majors.length}개의 Major 프로세스로 구성되며, 이슈가 확인된 Sub 프로세스는 ${subCount}개임`
+  return `현행 ${area.areaName} 프로세스는 ${listed}${suffix} ${majors.length}개의 Major 프로세스로 구성되며, 이슈가 확인된 Sub 프로세스는 ${subCount}개임`
 }
 
 /**
@@ -133,8 +133,8 @@ export function buildIssueAnalysisProcessSlides(
   const slides: IssueAnalysisDeckProcessSlide[] = treePages.map((pageColumns, index) => ({
     kind: 'process-tree',
     sourceSlide: 5,
-    megaCode: area.megaCode,
-    megaName: area.megaName,
+    areaCode: area.areaCode,
+    areaName: area.areaName,
     pageInSeries: index + 1,
     pageCount: treePages.length,
     headline,
@@ -145,15 +145,15 @@ export function buildIssueAnalysisProcessSlides(
     definitions.majors.map(major => [major.majorId, major.definition]),
   )
   if (definitionById.size !== definitions.majors.length) {
-    throw new Error(`${area.megaName} 프로세스 정의에 중복 Major가 있습니다.`)
+    throw new Error(`${area.areaName} 프로세스 정의에 중복 Major가 있습니다.`)
   }
   const rows = majors.map(major => {
     const definition = definitionById.get(major.id)
     if (definition === undefined) {
-      throw new Error(`${area.megaName} ${major.name} Major의 프로세스 정의가 없습니다.`)
+      throw new Error(`${area.areaName} ${major.name} Major의 프로세스 정의가 없습니다.`)
     }
     return {
-      seqLabel: `${area.megaCode}.${String(major.majorSeq).padStart(2, '0')}`,
+      seqLabel: `${area.areaCode}.${String(major.majorSeq).padStart(2, '0')}`,
       name: major.name,
       definition,
     }
@@ -163,8 +163,8 @@ export function buildIssueAnalysisProcessSlides(
     slides.push({
       kind: 'process-definition',
       sourceSlide: 6,
-      megaCode: area.megaCode,
-      megaName: area.megaName,
+      areaCode: area.areaCode,
+      areaName: area.areaName,
       pageInSeries: index + 1,
       pageCount: definitionPages.length,
       headline,

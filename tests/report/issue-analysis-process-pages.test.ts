@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import {
   ISSUE_ANALYSIS_UNCLASSIFIED_MAJOR_LABEL,
@@ -20,10 +21,10 @@ function issueFixture(over: {
 }): IssueAnalysisReportIssue {
   return {
     id: `issue-${over.megaSeq}`,
-    issueNo: over.megaSeq,
-    piIssueCode: `PI-I-02-${String(over.megaSeq).padStart(2, '0')}`,
-    megaCode: '02',
-    megaSeq: over.megaSeq,
+
+    code: `PI-I-02-${String(over.megaSeq).padStart(2, '0')}`,
+    areaId: '02',
+
     majorId: over.majorId,
     title: `이슈 ${over.megaSeq}`,
     body: `이슈 ${over.megaSeq} 상세 내용`,
@@ -85,9 +86,10 @@ function areaFixture(overrides: {
     }),
   ]
   return {
-    megaCode: '02',
-    megaName: '영업',
-    megaNameEn: 'Sales',
+    areaId: '02',
+    areaCode: '02',
+    areaName: '영업',
+
     majors,
     summary: summaryFixture(issues),
     issues,
@@ -255,7 +257,7 @@ describe('buildIssueAnalysisDeckPlan 통합', () => {
   }
 
   it('영역 순서가 트리→정의→이슈 종합이다', () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(areaFixture()), meta)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(areaFixture()), meta, TEST_AREAS)
     const kinds = plan.slides.map(slide => slide.kind)
     const treeIndex = kinds.indexOf('process-tree')
     expect(treeIndex).toBeGreaterThan(0)
@@ -266,7 +268,7 @@ describe('buildIssueAnalysisDeckPlan 통합', () => {
   it('구버전 보고서는 기존 슬라이드 구성 그대로다', () => {
     const plan = buildIssueAnalysisDeckPlan(
       reportFixture(areaFixture({ withDefinitions: false })),
-      meta,
+      meta, TEST_AREAS,
     )
     expect(plan.slides.some(slide =>
       slide.kind === 'process-tree' || slide.kind === 'process-definition')).toBe(false)

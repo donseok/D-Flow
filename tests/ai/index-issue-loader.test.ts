@@ -30,7 +30,7 @@ describe('이슈 색인 배선', () => {
 
   it('로더가 이슈 본문을 스냅샷으로 만든다', async () => {
     const load = createSupabaseIndexContentLoader(client({
-      id: ISSUE, project_id: PROJECT, issue_no: 42, title: 'MES 권한 신청 절차',
+      id: ISSUE, project_id: PROJECT, code: 'OPS-001', title: 'MES 권한 신청 절차',
       body: '계정 발급은 IT팀 경유', status: 'open', severity: 'high',
       owner_department: '운영팀', created_at: '2026-07-01T00:00:00Z',
       updated_at: '2026-07-02T00:00:00Z',
@@ -41,7 +41,8 @@ describe('이슈 색인 배선', () => {
     // IndexContentSnapshot 은 { documents, sourceUpdatedAt } 이다(types.ts:198-201).
     // title·href 는 스냅샷이 아니라 documents[0] 에 있다.
     const [doc] = result.data.documents
-    expect(doc.title).toContain('MES 권한 신청 절차')
+    expect(doc.title).toBe('OPS-001 MES 권한 신청 절차')
+    expect(doc.content).not.toContain('#42')
     expect(doc.href).toContain(`/p/${PROJECT}/issues`)
   })
 
@@ -55,35 +56,38 @@ describe('이슈 색인 배선', () => {
     expect(result.errorCode).toBe('INDEX_CONTENT_SCOPE_MISMATCH')
   })
 
-  it('연관 시스템과 업무키를 본문에 포함한다', async () => {
+  it('연관 시스템과 DB code를 본문에 포함하고 옛 업무키 줄은 없다', async () => {
     const load = createSupabaseIndexContentLoader(client({
-      id: ISSUE, project_id: PROJECT, issue_no: 42, title: 'MES 관련 이슈',
+      id: ISSUE, project_id: PROJECT, code: 'OPS-001', title: 'MES 관련 이슈',
       body: 'MES가 안 나온다', status: 'open', severity: 'high',
       owner_department: '운영팀', created_at: '2026-07-01T00:00:00Z',
       updated_at: '2026-07-02T00:00:00Z',
-      related_systems: ['MES', 'SAP'], pi_issue_code: 'OPS-001',
+      related_systems: ['MES', 'SAP'],
     }))
     const result = await load(job)
     expect(result.ok).toBe(true)
     if (!result.ok || !result.data) throw new Error('스냅샷이 없다')
     const [doc] = result.data.documents
     expect(doc.content).toContain('연관 시스템: MES, SAP')
-    expect(doc.content).toContain('업무키: OPS-001')
+    expect(doc.content).toContain('# 이슈 OPS-001 MES 관련 이슈')
+    expect(doc.content).not.toContain('업무키:')
+    expect(doc.title).toBe('OPS-001 MES 관련 이슈')
   })
 
   it('빈 연관 시스템 배열이면 줄을 넣지 않는다', async () => {
     const load = createSupabaseIndexContentLoader(client({
-      id: ISSUE, project_id: PROJECT, issue_no: 43, title: '단순 이슈',
+      id: ISSUE, project_id: PROJECT, code: 'OPS-002', title: '단순 이슈',
       body: '내용', status: 'open', severity: 'low',
       owner_department: '운영팀', created_at: '2026-07-01T00:00:00Z',
       updated_at: '2026-07-02T00:00:00Z',
-      related_systems: [], pi_issue_code: 'OPS-002',
+      related_systems: [],
     }))
     const result = await load(job)
     expect(result.ok).toBe(true)
     if (!result.ok || !result.data) throw new Error('스냅샷이 없다')
     const [doc] = result.data.documents
     expect(doc.content).not.toContain('연관 시스템:')
-    expect(doc.content).toContain('업무키: OPS-002')
+    expect(doc.content).toContain('# 이슈 OPS-002 단순 이슈')
+    expect(doc.content).not.toContain('업무키:')
   })
 })

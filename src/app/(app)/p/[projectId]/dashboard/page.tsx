@@ -1,3 +1,4 @@
+import { issueAreasOf } from '@/lib/domain/issueAreas'
 import { notFound } from 'next/navigation'
 import { toCalendarInput } from '@/lib/calendar/load'
 import { after } from 'next/server'
@@ -89,6 +90,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
       {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
       <DashboardView
+        issueAreas={issueAreasOf(pc.cfg.areas.issue_area)}
         items={items}
         projectId={projectId}
         projectName={projectName}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  issueKpis, issueStatusCounts, issueMegaBreakdown, issueTrend as issueTrendReal, issueQueue,
+  issueKpis, issueStatusCounts, issueAreaBreakdown, issueTrend as issueTrendReal, issueQueue,
   DUE_SOON_DAYS, RESOLVED_WINDOW_DAYS, TREND_WEEKS, QUEUE_LIMIT,
   type DashboardIssue,
 } from '@/lib/domain/issueDashboard'
@@ -10,7 +10,12 @@ import { MON_RULES } from '../helpers/calendarFixture'
 /** 기존 기대값의 tz — 서울(옛 서울 고정 버킷팅과 같다). tz 일반화는 아래 describe 가 본다 */
 const SEOUL = 'Asia/Seoul'
 const issueTrend = (issues: Parameters<typeof issueTrendReal>[0], today: string, weeks?: number) => issueTrendReal(issues, MON_RULES, today, SEOUL, weeks)
-import { ISSUE_MEGA_AREAS } from '@/lib/domain/issueAnalysis'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
+const AREAS: IssueAreaRef[] = [
+  { id: 'rnd', code: 'RND', name: '연구', sortOrder: 1, active: true },
+  { id: 'ops', code: 'OPS', name: '운영', sortOrder: 2, active: true },
+  { id: 'qa', code: 'QA', name: '품질', sortOrder: 3, active: false },
+]
 
 const TODAY = '2026-08-28' // 금요일 — 주 시작(월)은 08-24
 
@@ -18,7 +23,7 @@ let seq = 0
 function issue(over: Partial<DashboardIssue> = {}): DashboardIssue {
   seq += 1
   return {
-    id: `i${seq}`, issueNo: seq, piIssueCode: `PI-00-${String(seq).padStart(3, '0')}`, megaCode: '00',
+    id: `i${seq}`, code: `RS-RND-${seq}`, areaId: 'rnd',
     title: `이슈 ${seq}`, status: 'open', severity: 'medium', dueDate: null, resolvedAt: null,
     createdAt: '2026-07-01T00:00:00+00:00', ...over,
   }
@@ -71,29 +76,22 @@ describe('issueStatusCounts', () => {
   })
 })
 
-describe('issueMegaBreakdown', () => {
-  it('8개 Mega 를 코드순 고정으로 돌려주고, 이슈 없는 영역은 total 0 · resolvedPct null', () => {
-    const rows = issueMegaBreakdown([issue({ megaCode: '05' })])
-    expect(rows.map(r => r.code)).toEqual(ISSUE_MEGA_AREAS.map(a => a.code))
-    const ops = rows.find(r => r.code === '05')!
-    expect(ops.total).toBe(1)
-    expect(ops.counts.open).toBe(1)
-    expect(rows.find(r => r.code === '00')).toMatchObject({ total: 0, resolvedPct: null })
+describe('issueAreaBreakdown', () => {
+  it('영역 주입 순서로 정렬하고 비활성 빈 영역만 뺀다', () => {
+    const rows = issueAreaBreakdown([issue({ areaId: 'ops' })], [...AREAS].reverse())
+    expect(rows.map(r => r.areaId)).toEqual(['rnd', 'ops'])
+    expect(rows[0]).toMatchObject({ label: 'RND · 연구', total: 0, resolvedPct: null })
+    expect(rows[1]).toMatchObject({ total: 1, counts: { open: 1 } })
+    expect(issueAreaBreakdown([issue({ areaId: 'qa' })], AREAS).map(r => r.areaId)).toContain('qa')
   })
-
-  it('미분류(megaCode null) 이슈가 있을 때만 마지막에 code null 행을 붙인다', () => {
-    expect(issueMegaBreakdown([issue()]).some(r => r.code === null)).toBe(false)
-    const rows = issueMegaBreakdown([issue({ megaCode: null }), issue({ megaCode: null, status: 'resolved' })])
-    const last = rows[rows.length - 1]
-    expect(last.code).toBeNull()
-    expect(last).toMatchObject({ total: 2, resolvedPct: 50 })
+  it('미분류 이슈가 있을 때만 마지막에 미분류 행을 붙인다', () => {
+    expect(issueAreaBreakdown([issue()], AREAS).some(r => r.areaId === null)).toBe(false)
+    const rows = issueAreaBreakdown([issue({ areaId: null }), issue({ areaId: null, status: 'resolved' })], AREAS)
+    expect(rows.at(-1)).toMatchObject({ areaId: null, label: '미분류', total: 2, resolvedPct: 50 })
   })
-
-  it('resolvedPct 는 정수 반올림', () => {
-    const rows = issueMegaBreakdown([
-      issue({ megaCode: '03', status: 'resolved' }), issue({ megaCode: '03' }), issue({ megaCode: '03' }),
-    ])
-    expect(rows.find(r => r.code === '03')!.resolvedPct).toBe(33)
+  it('해결 비율은 정수 반올림', () => {
+    const rows = issueAreaBreakdown([issue({ status: 'resolved' }), issue(), issue()], AREAS)
+    expect(rows[0].resolvedPct).toBe(33)
   })
 })
 

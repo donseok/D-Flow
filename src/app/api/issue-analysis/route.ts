@@ -33,7 +33,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const guard = await requireProjectMember(projectId)
   if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
-  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 세션 API — 꺼지면 404(존재 은닉)
+  const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 세션 API — 꺼지면 404(존재 은닉)
   if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
 
   const capability = getIssueAnalysisPptExportDiagnostic()
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       authorTeam: toProjectActorView(guard.actor, projectId)?.primaryTeamCode ?? '',
       generatedAt: saved.report.generatedAt,
       timeZone: tz,
-    })
+    }, saved.areas)
     const body = await renderIssueAnalysisPpt(plan)
     const filename = buildIssueAnalysisFilename(saved.projectName, saved.report.generatedAt, tz)
     return new NextResponse(body as unknown as ArrayBuffer, {

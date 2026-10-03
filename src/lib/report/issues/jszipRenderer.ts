@@ -161,7 +161,7 @@ function issueRowValues(issue: IssueAnalysisDeckIssueRow | undefined): string[] 
     ? `\n(계속 ${issue.continuationIndex}/${issue.continuationCount})`
     : ''
   return [
-    `${issue.piIssueCode}${continuation}`,
+    `${issue.code}${continuation}`,
     issue.title,
     issue.body,
     issue.subProcess,
@@ -208,7 +208,7 @@ function issueRowHeights(
       || issue.rowUnits < 1
       || issue.rowUnits > totalUnits
     ) {
-      throw new Error(`[issue-analysis] ${issue.piIssueCode} 이슈 행 비율이 올바르지 않습니다.`)
+      throw new Error(`[issue-analysis] ${issue.code} 이슈 행 비율이 올바르지 않습니다.`)
     }
     const height = index === issues.length - 1
       ? remainingHeight
@@ -448,7 +448,7 @@ function renderCauseAnalysisSlide(
   xml = setShapeText(
     xml,
     '146',
-    `이슈별 원인 분석 – ${slide.megaCode}_${slide.megaName}${continuation}`,
+    `이슈별 원인 분석 – ${slide.areaCode}_${slide.areaName}${continuation}`,
     true,
   )
   xml = setShapeText(xml, '100', '2. 영역 별 이슈 및 원인 분석서')
@@ -532,8 +532,8 @@ function proportionalHeights(
 function opportunityIssueCode(
   issue: IssueAnalysisDeckOpportunityBlock['issues'][number],
 ): string {
-  if (issue.continuationCount === 1) return issue.piIssueCode
-  return `${issue.piIssueCode}\n계속 ${issue.continuationIndex}/${issue.continuationCount}`
+  if (issue.continuationCount === 1) return issue.code
+  return `${issue.code}\n계속 ${issue.continuationIndex}/${issue.continuationCount}`
 }
 
 function renderOpportunitySlide(
@@ -580,7 +580,7 @@ function renderOpportunitySlide(
       ? ` (계속 ${block.continuationIndex}/${block.continuationCount})`
       : ''
     const opportunityText = [
-      `${block.megaCode}-${block.megaName} · ${block.title}${continuation}`,
+      `${block.areaCode}-${block.areaName} · ${block.title}${continuation}`,
       block.description,
     ].filter(Boolean).join('\n')
 
@@ -704,11 +704,11 @@ function renderSlide(
       xml = setShapeText(
         xml,
         '146',
-        `영역별 이슈 종합 – ${slide.megaCode}_${slide.megaName}`,
+        `영역별 이슈 종합 – ${slide.areaCode}_${slide.areaName}`,
       )
       xml = setShapeText(xml, '100', '2. 영역 별 이슈 종합')
       xml = setShapeText(xml, '48', 'Mega')
-      xml = setShapeText(xml, '49', `${slide.megaCode} ${slide.megaName}`)
+      xml = setShapeText(xml, '49', `${slide.areaCode} ${slide.areaName}`)
       // 셈플의 나열 셀 표기(▪ 항목). 머리글 줄은 페이지 분할이 없어 렌더 시점 접두가 안전하다.
       xml = setShapeText(
         xml,
@@ -729,7 +729,7 @@ function renderSlide(
       xml = setShapeText(
         xml,
         '146',
-        `영역별 이슈 종합 – ${slide.megaCode}_${slide.megaName}`,
+        `영역별 이슈 종합 – ${slide.areaCode}_${slide.areaName}`,
       )
       xml = setShapeText(xml, '100', '2. 영역 별 이슈 종합')
       xml = fillIssueTable(xml, slide.issues, 5)
@@ -858,7 +858,7 @@ function validatePlan(plan: IssueAnalysisDeckPlan): void {
         || slide.pageInIssue < 1
         || slide.pageInIssue > slide.pageCount
         || slide.issue.id !== slide.issueId
-        || slide.issue.piIssueCode !== slide.piIssueCode
+        || slide.issue.code !== slide.code
       ) {
         throw new Error(
           `[issue-analysis] 출력 ${index + 1}페이지의 원인분석 배치가 올바르지 않습니다.`,
@@ -873,7 +873,7 @@ function validatePlan(plan: IssueAnalysisDeckPlan): void {
           || !cause.categoryLabel
         ) {
           throw new Error(
-            `[issue-analysis] ${slide.piIssueCode} 원인분석 행 정보가 올바르지 않습니다.`,
+            `[issue-analysis] ${slide.code} 원인분석 행 정보가 올바르지 않습니다.`,
           )
         }
       }
@@ -919,14 +919,14 @@ function slideMetadataTitle(slide: IssueAnalysisDeckSlide): string {
     case 'approach':
       return '이슈 분석 수행 방법'
     case 'process-tree':
-      return `As-Is 프로세스 체계 – ${slide.megaCode}_${slide.megaName}`
+      return `As-Is 프로세스 체계 – ${slide.areaCode}_${slide.areaName}`
     case 'process-definition':
-      return `As-Is 프로세스 정의 – ${slide.megaCode}_${slide.megaName}`
+      return `As-Is 프로세스 정의 – ${slide.areaCode}_${slide.areaName}`
     case 'area-summary':
     case 'area-summary-continuation':
-      return `영역별 이슈 종합 – ${slide.megaCode}_${slide.megaName}`
+      return `영역별 이슈 종합 – ${slide.areaCode}_${slide.areaName}`
     case 'cause-analysis':
-      return `이슈별 원인 분석 – ${slide.piIssueCode} (${slide.pageInIssue}/${slide.pageCount})`
+      return `이슈별 원인 분석 – ${slide.code} (${slide.pageInIssue}/${slide.pageCount})`
     case 'opportunity':
       return `이슈별 개선기회 도출 – ${slide.pageInSection}/${slide.pageCount}`
   }

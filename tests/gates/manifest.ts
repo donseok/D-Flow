@@ -104,7 +104,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('inviteRedeem')}#redeemInvite`]: nul('public', '초대 토큰 + 로그인 세션'),
   [`${A('inviteRedeem')}#redeemInviteWithSignup`]: nul('public', '초대 토큰 — 가입'),
   // ── issueAnalysis
-  [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issues', sample: [P, 'all'] },
+  [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issue_analysis', sample: [P, 'all'] },
   // ── issueAttachments
   [`${A('issueAttachments')}#listIssueAttachments`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트', sample: [U] },
   [`${A('issueAttachments')}#recordIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(requireIssueEditable)', sample: [U, { fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }], ownerBranch: 'requireIssueEditable — issues.created_by' },
@@ -116,12 +116,13 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issueUpdates')}#unarchiveIssueUpdate`]: { guard: 'projectMember', module: 'issues', sample: [U, U] },
   [`${A('issueUpdates')}#purgeIssueUpdate`]: { guard: 'projectMember', module: 'issues', sample: [U, U] },
   // ── issues
-  [`${A('issues')}#fetchIssueMajorProcesses`]: { guard: 'session', module: 'issues', note: '로그인 + 인자 프로젝트', sample: [P] },
+  [`${A('issues')}#fetchIssueEntryContext`]: { guard: 'projectMember', module: 'issues', sample: [P] },
+  [`${A('issues')}#fetchIssueMajorProcesses`]: { guard: 'session', module: 'issue_analysis', note: '로그인 + 인자 프로젝트', sample: [P] },
   [`${A('issues')}#fetchIssueProjectMembers`]: { guard: 'session', module: 'issues', note: '로그인 + 인자 프로젝트', sample: [P] },
-  [`${A('issues')}#createIssue`]: { guard: 'projectMember', module: 'issues', sample: [P, {}] },
+  [`${A('issues')}#createIssue`]: { guard: 'projectMember', module: 'issues', note: '분석 묶음이 있는 경우 checkEntry에서 issue_analysis 조건부 관문', sample: [P, {}] },
   [`${A('issues')}#prepareMinuteIssueDraft`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}] },
   [`${A('issues')}#createIssueFromMinuteBlock`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}, {}] },
-  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate)', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
+  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate); 분석 묶음은 checkEntry에서 issue_analysis 조건부 관문', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   [`${A('issues')}#updateIssueProgress`]: { guard: 'projectMember', module: 'issues', sample: [U, {}] },
   [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   // ── llmConfig — 플랫폼
@@ -282,7 +283,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),
-  [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issues', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
+  [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issue_analysis', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
   [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 요청의 workspaceId(소속 확인, 없으면 400 — D26, 과제 34). 검색도 그 워크스페이스로, 명단 밖 비공개 프로젝트 회의록·폴더는 뺀다(FA1, CC1)'),
   [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — ?workspaceId=(소속 확인, 없으면 400 — D26, 과제 34). 그 워크스페이스 회의록 ZIP, 명단 밖 비공개 프로젝트 회의록은 뺀다(판정 실패 503 — FA1, CC1)'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),

@@ -1,21 +1,7 @@
 // 이슈 분석서 분류 메타 — 순수 함수만(I/O 없음).
-// DB 정본은 0055_issue_analysis_metadata.sql 의 issue_mega_areas seed/check 제약과 함께 유지한다.
+// 영역 정본은 프로젝트 영역(project_areas kind issue_area — SP5 B1)이다.
 
-export const ISSUE_MEGA_AREAS = [
-  { code: '00', nameKo: '기준관리', nameEn: 'Master Data' },
-  { code: '01', nameKo: '손익관리', nameEn: 'Profit and Loss' },
-  { code: '02', nameKo: '영업', nameEn: 'Sales' },
-  { code: '03', nameKo: '품질·설계', nameEn: 'Quality & Design' },
-  { code: '04', nameKo: '생산계획', nameEn: 'Production Planning' },
-  { code: '05', nameKo: '조업', nameEn: 'Operations' },
-  { code: '06', nameKo: '출하', nameEn: 'Shipping' },
-  { code: '07', nameKo: '원가', nameEn: 'Cost' },
-] as const
-
-export type IssueMegaCode = (typeof ISSUE_MEGA_AREAS)[number]['code']
-export const ISSUE_MEGA_CODES = ISSUE_MEGA_AREAS.map(area => area.code) as readonly IssueMegaCode[]
-/** 이슈 목록과 분석서 작성이 공유하는 Mega 범위. */
-export type IssueMegaFilter = 'all' | IssueMegaCode
+export type IssueAreaFilter = 'all' | string
 
 export const ISSUE_SOURCE_TYPES = [
   'minutes',
@@ -52,17 +38,16 @@ export const ISSUE_RELATED_SYSTEMS_MAX = 20
 export const ISSUE_RELATED_SYSTEM_MAX = 100
 export const ISSUE_SOURCE_DETAIL_MAX = 1000
 
-/** 프로젝트×Mega 범위의 Major Process 기준정보(0062). major_seq 는 DB 트리거만 발급한다. */
+/** 프로젝트×영역 범위의 Major Process 기준정보(0062). major_seq 는 DB 트리거만 발급한다. */
 export interface IssueMajorProcess {
   id: string
   projectId: string
-  megaCode: IssueMegaCode
+  areaId: string
   majorSeq: number
   name: string
 }
 
 export interface IssueAnalysisInput {
-  megaCode: IssueMegaCode
   /** Major Process 이름. 같은 이름은 기존 체번을 재사용하고 새 이름은 다음 번호를 받는다. */
   majorName: string
   subProcess: string
@@ -80,10 +65,6 @@ export type IssueAnalysisValidationResult =
   | { ok: true; value: NormalizedIssueAnalysisInput }
   | { ok: false; error: string }
 
-export function isIssueMegaCode(value: unknown): value is IssueMegaCode {
-  return typeof value === 'string' && (ISSUE_MEGA_CODES as readonly string[]).includes(value)
-}
-
 export function isIssueSourceType(value: unknown): value is IssueSourceType {
   return typeof value === 'string' && (ISSUE_SOURCE_TYPES as readonly string[]).includes(value)
 }
@@ -96,8 +77,7 @@ export function normalizeIssueAnalysisInput(
   input: IssueAnalysisInput,
   options: { allowMinutesSource?: boolean } = {},
 ): IssueAnalysisValidationResult {
-  if (!isIssueMegaCode(input?.megaCode)) return { ok: false, error: '잘못된 Mega 영역입니다.' }
-
+  if (!input || typeof input !== 'object') return { ok: false, error: '분석 분류 형식이 올바르지 않습니다.' }
   if (typeof input.majorName !== 'string' || !input.majorName.trim()) {
     return { ok: false, error: 'Major Process를 입력하세요.' }
   }
@@ -153,7 +133,6 @@ export function normalizeIssueAnalysisInput(
   return {
     ok: true,
     value: {
-      megaCode: input.megaCode,
       majorName,
       subProcess,
       ownerDepartment,
@@ -164,14 +143,8 @@ export function normalizeIssueAnalysisInput(
   }
 }
 
-/** 표시 계약: 최소 2자리이며 100부터는 잘라내지 않고 자연스럽게 확장한다. */
-export function formatPiIssueCode(megaCode: IssueMegaCode, sequence: number): string {
-  if (!Number.isSafeInteger(sequence) || sequence <= 0) throw new Error('이슈 일련번호는 양의 정수여야 합니다.')
-  return `PI-I-${megaCode}-${String(sequence).padStart(2, '0')}`
-}
-
-/** Major 표시 계약(템플릿 슬라이드 6·7 실측): `02.01` — pi 코드와 같은 패딩 규칙. */
-export function formatIssueMajorCode(megaCode: IssueMegaCode, sequence: number): string {
+/** 영역 코드와 대분류 순번. 최소 2자리이며 자리 올림을 자르지 않는다. */
+export function formatIssueMajorCode(areaCode: string, sequence: number): string {
   if (!Number.isSafeInteger(sequence) || sequence <= 0) throw new Error('Major 일련번호는 양의 정수여야 합니다.')
-  return `${megaCode}.${String(sequence).padStart(2, '0')}`
+  return `${areaCode}.${String(sequence).padStart(2, '0')}`
 }

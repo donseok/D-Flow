@@ -32,8 +32,7 @@ export interface IssueMinuteSource {
 export interface MinuteLinkedIssue {
   linkId: string
   issueId: string
-  issueNo: number
-  piIssueCode: string | null
+  code: string
   projectId: string
   title: string
   status: 'open' | 'in_progress' | 'resolved' | 'on_hold'

@@ -1,3 +1,4 @@
+import { loadIssueEntryContext } from '@/lib/issues/context'
 import { getIssues } from '@/lib/data/issues'
 import { getProjectRoster } from '@/lib/data/members'
 import { resolveMemberIds } from '@/lib/data/meetings'
@@ -42,6 +43,8 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
   const cal = pickCalendar(pc.cfg)
   if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  const entry = await loadIssueEntryContext(projectId)
+  if (!entry.ok) return <div className="p-6"><ConfigLoadError error={entry.error} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[issues] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
@@ -63,6 +66,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
       }
     >
       <IssuesView
+        entryContext={entry.value}
         issues={issues}
         members={members}
         projectId={projectId}

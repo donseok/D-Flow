@@ -151,9 +151,8 @@ const organizedDraft = {
     '- 재처리 여부와 보완 방안을 협의해야 함',
     '- 동일 누락의 재발 방지 기준을 확인해야 함',
   ].join('\n'),
-  megaCode: '00' as const,
-  majorProcess: '재고관리',
-  subProcess: '재고정보 연계',
+  areaId: '00' as const,
+  analysis: { majorName: '재고관리', subProcess: '재고정보 연계', ownerDepartment: '재고팀', relatedSystems: [], sourceDetail: '' },
   mode: 'ai' as const,
 }
 
@@ -237,9 +236,9 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
 
     expect(container.querySelector('[data-testid="minute-issue-form"]')).not.toBeNull()
     const props = openFormProps()
-    expect(props.draft).toMatchObject(organizedDraft)
+    expect(props.draft).toMatchObject({ title: organizedDraft.title, body: organizedDraft.body, areaId: organizedDraft.areaId, analysis: organizedDraft.analysis })
     // AI 스키마의 majorProcess 는 폼 입력 정본 majorName 으로 변환되어 내려간다.
-    expect(props.draft).toMatchObject({ megaCode: '00', majorName: '재고관리', subProcess: '재고정보 연계' })
+    expect(props.draft).toMatchObject({ areaId: '00', analysis: { majorName: '재고관리', subProcess: '재고정보 연계' } })
     expect(props.sourcePreview).toMatchObject({
       title: '불변 버전 제목',
       date: '2026-07-30',
@@ -252,7 +251,7 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
     act(() => {
       (props.onCreated as (id: string, result: Record<string, unknown>) => void)(
         'issue-1',
-        { ok: true, id: 'issue-1', piIssueCode: 'PI-I-00-04' },
+        { ok: true, id: 'issue-1', code: 'PI-I-00-04' },
       )
     })
     expect(mocks.toast).toHaveBeenCalledWith({
@@ -288,8 +287,8 @@ describe('MinuteViewer 회의록 → 이슈 정리 초안', () => {
 
     expect(container.querySelector('[data-testid="minute-issue-form"]')).not.toBeNull()
     const props = openFormProps()
-    const draft = props.draft as { title: string; body: string; mode: string; majorName?: string }
-    expect(draft.mode).toBe('fallback')
+    const draft = props.draft as { title: string; body: string; analysis: null; majorName?: string }
+    expect(draft.analysis).toBeNull()
     // AI 없는 로컬 폴백은 Major 추천을 지어내지 않는다 — 사용자가 직접 입력해야 한다.
     expect(draft.majorName).toBeUndefined()
     expect(Array.from(draft.title).length).toBeLessThanOrEqual(200)
@@ -449,7 +448,7 @@ describe('MinuteViewer 드래그 선택 → 이슈 등록', () => {
 
     expect(container.querySelector('[data-testid="minute-issue-form"]')).not.toBeNull()
     const props = [...mocks.issueFormProps].reverse().find(candidate => candidate.open)!
-    expect((props.draft as { majorName?: string }).majorName).toBe('재고관리')
+    expect((props.draft as { analysis?: { majorName?: string } }).analysis?.majorName).toBe('재고관리')
     const preview = props.sourcePreview as { excerpt: string; label: string }
     // jsdom Selection.toString() 은 블록 경계 개행을 넣지 않으므로 개행에 의존하지 않고 비교한다.
     expect(preview.excerpt.replace(/\s+/g, '')).toBe('전송누락위험을다룬다.두번째문단은재처리')
@@ -472,8 +471,8 @@ describe('MinuteViewer 드래그 선택 → 이슈 등록', () => {
 
     expect(container.querySelector('[data-testid="minute-issue-form"]')).not.toBeNull()
     const props = [...mocks.issueFormProps].reverse().find(candidate => candidate.open)!
-    const draft = props.draft as { mode: string; body: string }
-    expect(draft.mode).toBe('fallback')
+    const draft = props.draft as { analysis: null; body: string }
+    expect(draft.analysis).toBeNull()
     expect(draft.body.replace(/\s+/g, '')).toContain('전송누락위험을다룬다')
     expect(mocks.toast).toHaveBeenCalledWith({
       title: 'min.issue.fallbackUsed',
@@ -505,7 +504,7 @@ describe('MinuteViewer 드래그 선택 → 이슈 등록', () => {
 
     expect(container.querySelector('[data-testid="minute-issue-form"]')).not.toBeNull()
     const props = [...mocks.issueFormProps].reverse().find(candidate => candidate.open)!
-    expect((props.draft as { majorName?: string }).majorName).toBe('재고관리')
+    expect((props.draft as { analysis?: { majorName?: string } }).analysis?.majorName).toBe('재고관리')
 
     // 유령 disabled 고착 회귀 방지 — 폼을 닫으면 새 선택에 버블이 다시 떠야 한다.
     act(() => { (props.onClose as () => void)() })

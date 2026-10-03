@@ -155,7 +155,7 @@ export function MinuteInsightCard({
                         >
                           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-progress" aria-hidden />
                           <span className="shrink-0 font-semibold text-progress">
-                            {issue.piIssueCode ?? t('min.issue.open').replace('{n}', String(issue.issueNo))}
+                            {issue.code}
                           </span>
                           <span className="min-w-0 flex-1 truncate">{issue.title}</span>
                           <span className={`chip shrink-0 ${meta.chip}`}>{t(meta.labelKey)}</span>

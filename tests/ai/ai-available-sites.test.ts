@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 // hasLLM() 호출부 → aiAvailable(과제 9, D17, 판정 P9) — 호출 지점마다 "무엇으로 판정하는지(범위·모듈)"와 "거짓이면 LLM·쓰기를 부르지
 // 않는지"를 문다. 전역 mock(tests/setup/module-gate.ts)은 인자를 보지 않고 hasLLM 만 따르므로, 여기서 거짓을 주고 인자를 정확히 비교한다.
 // 키(hasLLM)는 참으로 둔다 — 판정을 무시하는 회귀(늘 LLM)가 LLM mock 호출로 드러나게. 인자 비교는 toStrictEqual(둘째 인자 없음까지).
@@ -98,22 +99,23 @@ describe('주간 브리핑(brief.ts) — 모듈 없음(대시보드 core 카드�
 })
 
 describe('이슈 분석(issue-analysis.ts) — issues', () => {
-  const MAJOR = { id: 'aaaa0000-0000-4000-8000-000000000002', megaCode: '02' as const, majorSeq: 1, name: '02 대표 프로세스' }
+  const MAJOR = { id: 'aaaa0000-0000-4000-8000-000000000002', areaId: '02' as const, majorSeq: 1, name: '02 대표 프로세스' }
   const issue: IssueAnalysisIssueInput = {
-    id: '550e8400-e29b-41d4-a716-446655440201', issueNo: 1, piIssueCode: 'PI-I-02-01', projectId: PID,
-    megaCode: '02', megaSeq: 1, majorId: MAJOR.id, title: '02 영역 이슈', body: '업무 처리 기준이 표준화되어 있지 않다.',
+    codeAreaId: null,
+    id: '550e8400-e29b-41d4-a716-446655440201', issueNo: 1, code: 'PI-I-02-01', projectId: PID,
+    areaId: '02',  majorId: MAJOR.id, title: '02 영역 이슈', body: '업무 처리 기준이 표준화되어 있지 않다.',
     status: 'open', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, subProcess: '업무 처리',
     ownerDepartment: 'PI팀', relatedSystems: ['ERP'], sourceType: 'interview', sourceDetail: '현업 인터뷰', minuteSources: [],
     resolutionNote: '', resolvedAt: null, createdBy: 'user-1', createdByName: '테스터',
     createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-30T00:00:00Z',
   }
-  it("ensureIssueAnalysis: ({ projectId }, { module: 'issues' }) — 거짓이면 llm_missing(넓힌 문구), LLM·저장 미호출", async () => {
+  it("ensureIssueAnalysis: ({ projectId }, { module: 'issue_analysis' }) — 거짓이면 llm_missing(넓힌 문구), LLM·저장 미호출", async () => {
     const upsert = vi.fn()
     m.createAdminClient.mockReturnValue({ from: () => ({ ...query({ data: null, error: null }), upsert }) })   // 캐시 조회는 판정 앞(저장된 결과)
-    expect(await ensureIssueAnalysis(PID, [issue], [MAJOR], 'user-1')).toEqual({
+    expect(await ensureIssueAnalysis(PID, [issue], [MAJOR], 'user-1', TEST_AREAS)).toEqual({
       state: 'unavailable', reason: 'llm_missing', error: AI_OFF, inputHash: expect.any(String),
     })
-    expect(calls()).toStrictEqual([[{ projectId: PID }, { module: 'issues' }]])
+    expect(calls()).toStrictEqual([[{ projectId: PID }, { module: 'issue_analysis' }]])
     expect(m.generateAnswer).not.toHaveBeenCalled()
     expect(upsert).not.toHaveBeenCalled()
   })

@@ -43,7 +43,7 @@ describe('정의 — 두 스코프에 같은 이름 셋(스펙 §4.2 정의 행)
   it('SQL 판독 — 근무 요일은 is_workday, 주 시작은 키 함수·트리거·참조 검사(패리티 대상)', () => {
     expect(settingDef('project', 'calendar.working_days')!.sql).toEqual({ readers: ['is_workday'] })
     expect(settingDef('project', 'calendar.week_start')!.sql).toEqual({ readers: ['week_key_of', 'weekly_reports_week_key_guard', 'settings_ref_check'] })
-    expect(settingDef('project', 'calendar.timezone')!.sql).toBeNull()
+    expect(settingDef('project', 'calendar.timezone')!.sql).toEqual({ readers: ['assign_issue_code'] })
     expect(settingDef('project', 'calendar.week_start')!.impact).toEqual(['future_only', 'recompute'])
   })
   it('검증 — 오프셋 꼴 tz·빈 근무 요일·목록 아닌 규칙은 parse 실패', () => {

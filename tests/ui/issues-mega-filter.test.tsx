@@ -1,3 +1,4 @@
+import { TEST_ENTRY_CONTEXT } from '../fixtures/issue-areas'
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -25,21 +26,22 @@ vi.mock('@/components/issues/IssueModals', () => ({
   IssueFormModal: () => null,
 }))
 vi.mock('@/components/issues/IssueAnalysisModal', () => ({
-  IssueAnalysisModal: ({ open, megaFilter }: { open: boolean; megaFilter: string }) => (
-    open ? <div data-analysis-mega={megaFilter} /> : null
+  IssueAnalysisModal: ({ open, areaFilter }: { open: boolean; areaFilter: string }) => (
+    open ? <div data-analysis-mega={areaFilter} /> : null
   ),
 }))
 
 import { IssuesView } from '@/components/issues/IssuesView'
 
-function issue(id: string, megaCode: '00' | '02', title: string): Issue {
+function issue(id: string, areaId: '00' | '02', title: string): Issue {
   return {
+    codeAreaId: null,
     id,
-    issueNo: megaCode === '00' ? 1 : 2,
-    piIssueCode: `PI-I-${megaCode}-01`,
+    issueNo: areaId === '00' ? 1 : 2,
+    code: `PI-I-${areaId}-01`,
     projectId: 'project-1',
-    megaCode,
-    megaSeq: 1,
+    areaId,
+
     title,
     body: '본문',
     status: 'open',
@@ -81,7 +83,7 @@ describe('IssuesView Mega 필터', () => {
   it('Mega 전체에서는 분석서 모달을 열지 않고 한 가지 선택 경고를 표시한다', async () => {
     await act(async () => {
       root.render(
-        <IssuesView timeZone="Asia/Seoul"
+        <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul"
           projectId="project-1"
           currentUserId="user-1"
           canEdit
@@ -108,7 +110,7 @@ describe('IssuesView Mega 필터', () => {
   it('선택 Mega로 목록을 좁히고 같은 범위를 분석서 모달에 전달한다', async () => {
     await act(async () => {
       root.render(
-        <IssuesView timeZone="Asia/Seoul"
+        <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul"
           projectId="project-1"
           currentUserId="user-1"
           canEdit

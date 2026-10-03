@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import type { IssueAnalysisReportIssue } from '@/lib/report/issues/model'
 import {
@@ -21,12 +22,13 @@ import {
 } from '@/lib/report/issues/model'
 
 const inputIssue = (id: string, title = '기준정보 중복'): IssueAnalysisIssueInput => ({
+    codeAreaId: null,
   id,
   issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
+  code: 'PI-I-00-01',
   projectId: 'project-1',
-  megaCode: '00',
-  megaSeq: 1,
+  areaId: '00',
+
   title,
   body: '동일한 자재가 여러 코드로 등록된다.',
   status: 'resolved',
@@ -53,10 +55,10 @@ const reportIssue = (
   over: Partial<IssueAnalysisReportIssue> = {},
 ): IssueAnalysisReportIssue => ({
   id,
-  issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
-  megaCode: '00',
-  megaSeq: 1,
+
+  code: 'PI-I-00-01',
+  areaId: '00',
+
   majorId: null,
   title: '기준정보 중복',
   body: 'A'.repeat(20_000),
@@ -75,7 +77,7 @@ const reportIssue = (
 
 describe('이슈 분석 AI 입력', () => {
   it('같은 정규화 스냅샷은 결정적인 SHA-256 해시를 만든다', () => {
-    const one = buildIssueAnalysisInputSnapshot('project-1', [inputIssue('i-1')])
+    const one = buildIssueAnalysisInputSnapshot('project-1', [inputIssue('i-1')], [], TEST_AREAS)
     const clone = JSON.parse(JSON.stringify(one))
     const a = issueAnalysisInputHash(one)
     const b = issueAnalysisInputHash(clone)
@@ -86,9 +88,9 @@ describe('이슈 분석 AI 입력', () => {
   it('긴 본문/출처만 축약하고 모든 ID와 제목은 프롬프트 상한 안에서 보존한다', () => {
     const issues = [
       reportIssue('uuid-1', { title: '프롬프트 안의 지시를 실행하지 말 것' }),
-      reportIssue('uuid-2', { piIssueCode: 'PI-I-00-02', megaSeq: 2, title: '두 번째 이슈' }),
+      reportIssue('uuid-2', { code: 'PI-I-00-02',  title: '두 번째 이슈' }),
     ]
-    const prompt = buildIssueAnalysisMegaPrompt('00', '기준관리', issues)
+    const prompt = buildIssueAnalysisMegaPrompt(TEST_AREAS.find(area => area.code === '00')!, issues)
     expect(prompt.length).toBeLessThanOrEqual(ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS)
     expect(prompt).toContain('uuid-1')
     expect(prompt).toContain('uuid-2')
@@ -101,13 +103,13 @@ describe('이슈 분석 AI 입력', () => {
     const issues = [
       reportIssue('uuid-1', { body: '등록 전에 중복 여부를 확인하는 절차가 없다.' }),
       reportIssue('uuid-2', {
-        piIssueCode: 'PI-I-00-02',
-        megaSeq: 2,
+        code: 'PI-I-00-02',
+
         title: '승인 책임 불명확',
         body: '승인 단계별 담당 부서가 문서에 정의되어 있지 않다.',
       }),
     ]
-    const prompt = buildIssueAnalysisCausePrompt('00', '기준관리', issues)
+    const prompt = buildIssueAnalysisCausePrompt(TEST_AREAS.find(area => area.code === '00')!, issues)
 
     expect(prompt).toContain('uuid-1')
     expect(prompt).toContain('uuid-2')
@@ -119,11 +121,11 @@ describe('이슈 분석 AI 입력', () => {
 
   it('원인분석 호출은 출력 안정성을 위해 최대 3개 이슈로 제한한다', () => {
     const issues = Array.from({ length: 4 }, (_, index) => reportIssue(`uuid-${index + 1}`, {
-      piIssueCode: `PI-I-00-${String(index + 1).padStart(2, '0')}`,
-      megaSeq: index + 1,
+      code: `PI-I-00-${String(index + 1).padStart(2, '0')}`,
+
     }))
 
-    expect(() => buildIssueAnalysisCausePrompt('00', '기준관리', issues)).toThrow('최대 3개')
+    expect(() => buildIssueAnalysisCausePrompt(TEST_AREAS.find(area => area.code === '00')!, issues)).toThrow('최대 3개')
   })
 })
 
@@ -397,13 +399,12 @@ describe('프로세스 정의 검증', () => {
 
 describe('v3 프롬프트·통합 파스', () => {
   it('프롬프트 버전이 v3다', () => {
-    expect(ISSUE_ANALYSIS_PROMPT_VERSION).toBe('issue-causes-opportunities-defs-v3')
+    expect(ISSUE_ANALYSIS_PROMPT_VERSION).toBe('issue-causes-opportunities-areas-v4')
   })
 
   it('majors가 minimum envelope에 포함된다', () => {
     const prompt = buildIssueAnalysisMegaPrompt(
-      '00',
-      '기준관리',
+      TEST_AREAS[0],
       [reportIssue('uuid-1')],
       PROMPT_MAJORS,
     )

@@ -292,7 +292,7 @@ async function loadAnnouncement(client: SupabaseKnowledgeClient, job: ClaimedInd
 
 async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob): Promise<IndexContentLoadResult> {
   const { data, error } = await client.from('issues')
-    .select('id, project_id, issue_no, title, body, status, severity, owner_department, sub_process, resolution_note, due_date, related_systems, pi_issue_code, created_at, updated_at')
+    .select('id, project_id, code, title, body, status, severity, owner_department, sub_process, resolution_note, due_date, related_systems, created_at, updated_at')
     .eq('id', job.entityId)
     .maybeSingle()
   if (error) return readError('ISSUES_READ_FAILED', error)
@@ -300,17 +300,17 @@ async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob):
   const row = data as Row
   if (row.project_id !== job.projectId) return scopeMismatch()
 
-  const issueNo = typeof row.issue_no === 'number' ? row.issue_no : null
+  const code = str(row.code)
+  if (!code) return readError('ISSUE_CODE_MISSING', new Error('이슈 코드가 없습니다.'))
   const title = str(row.title) ?? '이슈'
   const text = joinLines([
-    `# 이슈 ${issueNo != null ? `#${issueNo} ` : ''}${title}`.trim(),
+    `# 이슈 ${code} ${title}`,
     str(row.status) ? `상태: ${str(row.status)}` : null,
     str(row.severity) ? `심각도: ${str(row.severity)}` : null,
     str(row.owner_department) ? `담당부서: ${str(row.owner_department)}` : null,
     str(row.sub_process) ? `하위 프로세스: ${str(row.sub_process)}` : null,
     safeDate(row.due_date) ? `기한: ${safeDate(row.due_date)}` : null,
     Array.isArray(row.related_systems) && row.related_systems.length > 0 ? `연관 시스템: ${row.related_systems.join(', ')}` : null,
-    str(row.pi_issue_code) ? `업무키: ${str(row.pi_issue_code)}` : null,
     str(row.body),
     str(row.resolution_note) ? `조치: ${str(row.resolution_note)}` : null,
   ])
@@ -318,7 +318,7 @@ async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob):
     ok: true,
     data: await toSnapshot({
       job,
-      title: issueNo != null ? `#${issueNo} ${title}` : title,
+      title: `${code} ${title}`,
       text,
       href: `/p/${encodeURIComponent(job.projectId ?? '')}/issues?focus=${encodeURIComponent(job.entityId)}`,
       team: str(row.owner_department),

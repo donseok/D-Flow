@@ -36,7 +36,7 @@ export function IssueQueueCard({ issues, projectId, today, locale }: {
           {q.rows.map(({ issue, kind, days }) => {
             const meta = ROW_META[kind]
             const sev = ISSUE_SEVERITY_META[issue.severity]
-            const code = issue.piIssueCode ?? `#${issue.issueNo}`
+            const code = issue.code
             const detail = kind === 'overdue' ? `${days}${tr('dash.overdueSuffix')}` : ddayText(days)
             const sevLabel = t(locale, sev.labelKey)
             const due = issue.dueDate ? fmtDate(issue.dueDate) : null

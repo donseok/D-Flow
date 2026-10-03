@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Issue, IssueSeverity, IssueStatus } from '@/lib/domain/issues'
 import type { DashboardIssue } from '@/lib/domain/issueDashboard'
-import type { IssueMegaCode, IssueSourceType } from '@/lib/domain/issueAnalysis'
+import type { IssueSourceType } from '@/lib/domain/issueAnalysis'
 import type {
   IssueMinuteSource,
   IssueMinuteSourceKind,
@@ -20,7 +20,7 @@ export const getIssues = cache(async (projectId: string): Promise<Issue[]> => {
   const sb = await createServerClient()
   const [issuesRes, assigneesRes, linksRes, majorsRes, attachRes] = await Promise.all([
     sb.from('issues')
-      .select('id, issue_no, pi_issue_code, project_id, mega_code, mega_seq, major_id, title, body, status, severity, start_date, due_date, sub_process, owner_department, related_systems, source_type, source_detail, resolution_note, resolved_at, created_by, created_by_name, created_at, updated_at')
+      .select('id, issue_no, code, project_id, area_id, code_area_id, major_id, title, body, status, severity, start_date, due_date, sub_process, owner_department, related_systems, source_type, source_detail, resolution_note, resolved_at, created_by, created_by_name, created_at, updated_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false }),
     // 지정 순서(created_at)로 정렬해 두 번 실행해도 배열 순서가 같게 한다 — 뷰 정렬과 무관한 안정성.
@@ -35,7 +35,7 @@ export const getIssues = cache(async (projectId: string): Promise<Issue[]> => {
       .eq('link_type', 'minute_block')
       .order('created_at', { ascending: true }),
     sb.from('issue_major_processes')
-      .select('id, mega_code, major_seq, name')
+      .select('id, area_id, major_seq, name')
       .eq('project_id', projectId),
     // 첨부 개수(0068). project_id 로 프로젝트 한 방에 긁는다 — .in('issue_id', ids) 로 하면
     // 이슈 조회 결과를 기다려야 해서 이 Promise.all 병렬이 깨지고 왕복이 1회 늘어난다.
@@ -99,10 +99,10 @@ export const getIssues = cache(async (projectId: string): Promise<Issue[]> => {
     return {
     id: r.id as string,
     issueNo: Number(r.issue_no),
-    piIssueCode: (r.pi_issue_code as string | null) ?? null,
+    code: r.code as string,
     projectId: r.project_id as string,
-    megaCode: (r.mega_code as IssueMegaCode | null) ?? null,
-    megaSeq: r.mega_seq == null ? null : Number(r.mega_seq),
+    areaId: (r.area_id as string | null) ?? null,
+    codeAreaId: (r.code_area_id as string | null) ?? null,
     majorId,
     majorSeq: major?.majorSeq ?? null,
     majorName: major?.name ?? null,
@@ -146,7 +146,7 @@ export const getIssuesForDashboard = cache(async (
 ): Promise<{ ok: true; rows: DashboardIssue[] } | { ok: false; error: string }> => {
   const sb = await createServerClient()
   const { data, error } = await sb.from('issues')
-    .select('id, issue_no, pi_issue_code, mega_code, title, status, severity, due_date, resolved_at, created_at')
+    .select('id, code, area_id, title, status, severity, due_date, resolved_at, created_at')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
   if (error) {
@@ -155,9 +155,8 @@ export const getIssuesForDashboard = cache(async (
   }
   return { ok: true, rows: (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string,
-    issueNo: Number(r.issue_no),
-    piIssueCode: (r.pi_issue_code as string | null) ?? null,
-    megaCode: (r.mega_code as IssueMegaCode | null) ?? null,
+    code: r.code as string,
+    areaId: (r.area_id as string | null) ?? null,
     title: r.title as string,
     status: r.status as IssueStatus,
     severity: r.severity as IssueSeverity,
@@ -174,7 +173,7 @@ export const getIssuesForDashboard = cache(async (
 export const getMinuteLinkedIssues = cache(async (minuteId: string): Promise<MinuteLinkedIssue[]> => {
   const sb = await createServerClient()
   const { data, error } = await sb.from('issue_links')
-    .select('id, issue_id, project_id, minute_version_id, body_hash, block_index, block_hash, issues!issue_links_issue_project_fk(issue_no, pi_issue_code, title, status)')
+    .select('id, issue_id, project_id, minute_version_id, body_hash, block_index, block_hash, issues!issue_links_issue_project_fk(code, title, status)')
     .eq('minute_id', minuteId)
     .eq('link_type', 'minute_block')
     .order('created_at', { ascending: true })
@@ -189,8 +188,7 @@ export const getMinuteLinkedIssues = cache(async (minuteId: string): Promise<Min
     return [{
       linkId: r.id as string,
       issueId: r.issue_id as string,
-      issueNo: Number(issue.issue_no),
-      piIssueCode: (issue.pi_issue_code as string | null) ?? null,
+      code: issue.code as string,
       projectId: r.project_id as string,
       title: issue.title as string,
       status: issue.status as IssueStatus,

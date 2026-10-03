@@ -12,14 +12,14 @@ import { DeleteIssueModal, IssueDetailModal, IssueFormModal } from './IssueModal
 import { IssueAnalysisModal } from './IssueAnalysisModal'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import {
-  ISSUE_MEGA_AREAS,
-  type IssueMegaFilter,
+  type IssueAreaFilter,
 } from '@/lib/domain/issueAnalysis'
 import {
   ISSUE_SEVERITIES, ISSUE_SEVERITY_META, ISSUE_STATUSES, ISSUE_STATUS_META,
   canEditIssue, dueDaysLeft, filterIssues, isDueUrgent, isOverdue, sortIssues,
   type Issue, type IssueSeverityFilter, type IssueStatusFilter,
 } from '@/lib/domain/issues'
+import type { IssueEntryContext } from '@/lib/issues/context'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 페이지당 행 수 선택지 — 'all' 은 페이징 없이 전량. 기본은 20(사용자 요청). */
@@ -28,8 +28,9 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext,
 }: {
+  entryContext: IssueEntryContext
   issues: Issue[]
   members: ProjectMember[]
   projectId: string
@@ -45,15 +46,16 @@ export function IssuesView({
   /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
   timeZone: string
 }) {
-  const { locale, t } = useLocale()
+  const { t } = useLocale()
   const { toast } = useToast()
+  const areas = entryContext.areas
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
 
   const [statusFilter, setStatusFilter] = useState<IssueStatusFilter>('all')
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>('all')
-  const [megaFilter, setMegaFilter] = useState<IssueMegaFilter>('all')
+  const [areaFilter, setAreaFilter] = useState<IssueAreaFilter>('all')
   const [mineOnly, setMineOnly] = useState(false)
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
@@ -106,11 +108,11 @@ export function IssuesView({
     () => sortIssues(filterIssues(issues, {
       status: statusFilter,
       severity: severityFilter,
-      mega: megaFilter,
+      area: areaFilter,
       mineOnly,
       myMemberIds: myIds,
     }), today),
-    [issues, statusFilter, severityFilter, megaFilter, mineOnly, myIds, today],
+    [issues, statusFilter, severityFilter, areaFilter, mineOnly, myIds, today],
   )
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(visible.length / pageSize))
@@ -140,7 +142,7 @@ export function IssuesView({
     setFormOpen(true)
   }
   function openAnalysis() {
-    if (megaFilter === 'all') {
+    if (areaFilter === 'all') {
       toast({ title: t('issue.analysis.selectOneMega'), variant: 'error' })
       return
     }
@@ -149,7 +151,7 @@ export function IssuesView({
 
   const filtered = statusFilter !== 'all'
     || severityFilter !== 'all'
-    || megaFilter !== 'all'
+    || areaFilter !== 'all'
     || mineOnly
   // 조회 전용에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
   // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
@@ -173,14 +175,14 @@ export function IssuesView({
         />
         <select
           aria-label={t('issue.filter.mega')}
-          value={megaFilter}
-          onChange={event => { setMegaFilter(event.target.value as IssueMegaFilter); setPage(1) }}
+          value={areaFilter}
+          onChange={event => { setAreaFilter(event.target.value as IssueAreaFilter); setPage(1) }}
           className="app-input h-9 w-full min-w-[180px] text-xs sm:w-auto"
         >
           <option value="all">{t('issue.filter.megaAll')}</option>
-          {ISSUE_MEGA_AREAS.map(area => (
-            <option key={area.code} value={area.code}>
-              {area.code} · {locale === 'en' ? area.nameEn : area.nameKo}
+          {areas.map(area => (
+            <option key={area.id} value={area.id}>
+              {area.code} · {area.name}
             </option>
           ))}
         </select>
@@ -249,7 +251,7 @@ export function IssuesView({
                   const ddayText = daysLeft === null ? '—'
                     : daysLeft >= 0 ? t('issue.dday.left').replace('{n}', String(daysLeft))
                     : t('issue.dday.over').replace('{n}', String(-daysLeft))
-                  const megaArea = ISSUE_MEGA_AREAS.find(area => area.code === issue.megaCode)
+                  const megaArea = areas.find(area => area.id === issue.areaId)
                   const assignees = assigneeLabel(issue) ?? t('issue.unassigned')
                   return (
                     <tr
@@ -261,22 +263,15 @@ export function IssuesView({
                       className="cursor-pointer border-b border-line/70 transition last:border-0 hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2"
                     >
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums">
-                        {issue.piIssueCode ? (
-                          <>
-                            <span className="font-semibold text-ink">{issue.piIssueCode}</span>
-                            <span className="ml-1.5 text-[10px] text-ink-subtle">#{issue.issueNo}</span>
-                          </>
-                        ) : (
-                          <span className="text-ink-muted">#{issue.issueNo}</span>
-                        )}
+                        <span className="font-semibold text-ink">{issue.code}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         {megaArea ? (
                           <span
                             className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-brand-ring bg-brand-weak px-2 py-1 text-[11px] font-semibold text-brand"
-                            title={`${megaArea.code} · ${locale === 'en' ? megaArea.nameEn : megaArea.nameKo}`}
+                            title={`${megaArea.code} · ${megaArea.name}`}
                           >
-                            {megaArea.code} · {locale === 'en' ? megaArea.nameEn : megaArea.nameKo}
+                            {megaArea.code} · {megaArea.name}
                           </span>
                         ) : (
                           <span className="text-ink-subtle">—</span>
@@ -400,6 +395,7 @@ export function IssuesView({
       )}
 
       <IssueDetailModal
+        areas={areas}
         issue={viewing}
         members={members}
         memberName={memberName}
@@ -426,14 +422,15 @@ export function IssuesView({
           setViewingId(null)
         }}
       />
-      <IssueFormModal open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
+      <IssueFormModal entryContext={entryContext} open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
       <IssueAnalysisModal
+        areas={areas}
         open={analysisOpen}
         onClose={() => setAnalysisOpen(false)}
         projectId={projectId}
         issues={issues}
-        megaFilter={megaFilter}
+        areaFilter={areaFilter}
       />
     </div>
   )

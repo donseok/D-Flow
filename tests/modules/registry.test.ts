@@ -79,7 +79,8 @@ describe('목록', () => {
     expect([...byId.minutes_integration.apiPrefixes]).toEqual(['/api/v1/minutes'])
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])
     expect([...byId.usage.apiPrefixes]).toEqual(['/api/track'])
-    expect([...byId.issues.apiPrefixes]).toEqual(['/api/issue-analysis'])   // 스펙 E16 — issue_analysis 모듈은 SP5(과제 4)
+    expect([...byId.issues.apiPrefixes]).toEqual([])
+    expect([...byId.issue_analysis.apiPrefixes]).toEqual(['/api/issue-analysis'])
     expect([...byId.portfolio.routePrefixes]).toEqual(['/w/[slug]/portfolio'])   // 과제 14
     expect([...byId.usage.routePrefixes]).toEqual(['/w/[slug]/usage'])
   })

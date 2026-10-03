@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -22,12 +23,13 @@ import { IssueAnalysisModal } from '@/components/issues/IssueAnalysisModal'
 
 function issue(overrides: Partial<Issue> = {}): Issue {
   return {
+    codeAreaId: null,
     id: 'issue-1',
     issueNo: 1,
-    piIssueCode: 'PI-I-02-01',
+    code: 'PI-I-02-01',
     projectId: 'project-1',
-    megaCode: '02',
-    megaSeq: 1,
+    areaId: '02',
+
     title: '수기 주문 처리',
     body: '주문 승인과 입력이 수기로 이원화되어 처리 시간이 길다.',
     status: 'open',
@@ -71,7 +73,7 @@ describe('IssueAnalysisModal', () => {
   it('Major 미지정 이슈가 있으면 (미지정) 표시 예고를 보여준다', async () => {
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project-1"
@@ -86,7 +88,7 @@ describe('IssueAnalysisModal', () => {
   it('모든 이슈에 Major가 지정되면 미지정 안내가 없다', async () => {
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project-1"
@@ -101,14 +103,14 @@ describe('IssueAnalysisModal', () => {
   it('필수 메타가 빠진 이슈가 있으면 생성 호출 전에 차단하고 사유를 보여준다', async () => {
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project-1"
           issues={[issue({
-            megaCode: null,
-            megaSeq: null,
-            piIssueCode: null,
+            areaId: null,
+
+            code: 'PI-U001',
             subProcess: '',
           })]}
         />,
@@ -118,14 +120,14 @@ describe('IssueAnalysisModal', () => {
     const generate = [...document.querySelectorAll('button')]
       .find(button => button.textContent?.includes('issue.analysis.generate')) as HTMLButtonElement
     expect(generate.disabled).toBe(true)
-    expect(document.body.textContent).toContain('Mega 영역이 지정되지 않았습니다.')
+    expect(document.body.textContent).toContain('이슈 영역이 지정되지 않았거나 현재 영역 목록에 없습니다.')
     expect(document.body.textContent).toContain('Sub Process가 없습니다.')
     expect(ensureIssueAnalysisAction).not.toHaveBeenCalled()
   })
 
   it('서버 검증·AI 결과와 템플릿 차단 상태를 한 화면에 표시한다', async () => {
     const current = issue()
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 승인·입력 통합',
@@ -153,7 +155,7 @@ describe('IssueAnalysisModal', () => {
 
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project-1"
@@ -183,12 +185,12 @@ describe('IssueAnalysisModal', () => {
     const current = issue()
     const blockedOtherArea = issue({
       id: 'issue-00',
-      megaCode: '00',
-      megaSeq: 1,
-      piIssueCode: 'PI-I-00-01',
+      areaId: '00',
+
+      code: 'PI-I-00-01',
       subProcess: '',
     })
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 통합',
@@ -208,12 +210,12 @@ describe('IssueAnalysisModal', () => {
 
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project-1"
           issues={[current, blockedOtherArea]}
-          megaFilter="02"
+          areaFilter="02"
         />,
       )
     })
@@ -236,7 +238,7 @@ describe('IssueAnalysisModal', () => {
 
   it('템플릿과 렌더러가 모두 준비되면 저장 runId 다운로드 링크를 연다', async () => {
     const current = issue()
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 통합',
@@ -264,7 +266,7 @@ describe('IssueAnalysisModal', () => {
 
     await act(async () => {
       root.render(
-        <IssueAnalysisModal
+        <IssueAnalysisModal areas={TEST_AREAS}
           open
           onClose={() => undefined}
           projectId="project/with space"

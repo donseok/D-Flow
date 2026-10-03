@@ -128,7 +128,7 @@ export const PROJECT_DEFS = [
   defineSetting<'calendar.timezone', string>({
     key: 'calendar.timezone', scope: 'project', module: 'settings', default: DEFAULT_TIMEZONE,
     parse: parseTimezone, seedFrom: { key: 'calendar.timezone' },
-    widget: { kind: 'custom', component: 'TimezoneSelect' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+    widget: { kind: 'custom', component: 'TimezoneSelect' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: { readers: ['assign_issue_code'] },
   }),
   defineSetting<'calendar.working_days', IsoDow[]>({
     key: 'calendar.working_days', scope: 'project', module: 'settings', default: [...DEFAULT_WORKING_DAYS],

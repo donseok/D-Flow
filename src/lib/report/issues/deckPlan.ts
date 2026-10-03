@@ -1,3 +1,4 @@
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { IssueSourceType } from '@/lib/domain/issueAnalysis'
 import type {
   IssueAnalysisCauseCategory,
@@ -62,7 +63,7 @@ export interface IssueAnalysisDeckMeta {
 
 export interface IssueAnalysisDeckIssue {
   id: string
-  piIssueCode: string
+  code: string
   title: string
   body: string
   subProcess: string
@@ -90,7 +91,7 @@ export interface IssueAnalysisDeckIssueRow extends IssueAnalysisDeckIssue {
 }
 
 export interface IssueAnalysisDeckOpportunityIssueRow
-  extends Pick<IssueAnalysisDeckIssue, 'id' | 'piIssueCode' | 'title'> {
+  extends Pick<IssueAnalysisDeckIssue, 'id' | 'code' | 'title'> {
   /** 개선기회 페이지 기본 높이 단위의 배수. */
   rowUnits: number
   /** 장문 이슈 제목이 여러 행으로 이어질 때 현재 조각의 순서. */
@@ -99,8 +100,8 @@ export interface IssueAnalysisDeckOpportunityIssueRow
 }
 
 export interface IssueAnalysisDeckOpportunityBlock {
-  megaCode: string
-  megaName: string
+  areaCode: string
+  areaName: string
   opportunityNo: number
   /** 계속 페이지에서도 맥락을 잃지 않도록 제목은 반복한다. */
   title: string
@@ -147,8 +148,8 @@ export type IssueAnalysisDeckSlide =
   | {
       kind: 'area-summary'
       sourceSlide: 8
-      megaCode: string
-      megaName: string
+      areaCode: string
+      areaName: string
       ownerDepartmentLines: string[]
       relatedSystemLines: string[]
       issues: IssueAnalysisDeckIssueRow[]
@@ -156,18 +157,18 @@ export type IssueAnalysisDeckSlide =
   | {
       kind: 'area-summary-continuation'
       sourceSlide: 9
-      megaCode: string
-      megaName: string
+      areaCode: string
+      areaName: string
       pageInArea: number
       issues: IssueAnalysisDeckIssueRow[]
     }
   | {
       kind: 'cause-analysis'
       sourceSlide: 10
-      megaCode: string
-      megaName: string
+      areaCode: string
+      areaName: string
       issueId: string
-      piIssueCode: string
+      code: string
       pageInIssue: number
       pageCount: number
       issue: IssueAnalysisDeckIssueRow
@@ -184,6 +185,7 @@ export type IssueAnalysisDeckSlide =
     }
 
 export interface IssueAnalysisDeckPlan {
+  areas: Array<{ code: string; name: string }>
   schemaVersion: 'issue-analysis-deck.v1'
   projectId: string
   issueCount: number
@@ -267,7 +269,7 @@ export function fullSourceLines(lines: readonly string[]): string[] {
 function toDeckIssue(issue: IssueAnalysisReportIssue): IssueAnalysisDeckIssue {
   return {
     id: issue.id,
-    piIssueCode: issue.piIssueCode,
+    code: issue.code,
     title: compact(issue.title),
     body: normalizeIssueAnalysisMultilineText(issue.body),
     subProcess: compact(issue.subProcess),
@@ -587,7 +589,7 @@ function takeIssuePage(
     const row = rows[next]
     if (page.length && used + row.rowUnits > capacity) break
     if (row.rowUnits > capacity) {
-      throw new Error(`${row.piIssueCode} 이슈 행이 PPT 페이지 높이를 초과합니다.`)
+      throw new Error(`${row.code} 이슈 행이 PPT 페이지 높이를 초과합니다.`)
     }
     page.push(row)
     used += row.rowUnits
@@ -604,8 +606,8 @@ function areaSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSlide[] {
     {
       kind: 'area-summary',
       sourceSlide: 8,
-      megaCode: area.megaCode,
-      megaName: area.megaName,
+      areaCode: area.areaCode,
+      areaName: area.areaName,
       ownerDepartmentLines: fullHeaderLines(area.summary.ownerDepartments),
       relatedSystemLines: fullHeaderLines(area.summary.relatedSystems),
       issues: first.page,
@@ -618,8 +620,8 @@ function areaSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSlide[] {
     slides.push({
       kind: 'area-summary-continuation',
       sourceSlide: 9,
-      megaCode: area.megaCode,
-      megaName: area.megaName,
+      areaCode: area.areaCode,
+      areaName: area.areaName,
       pageInArea,
       issues: next.page,
     })
@@ -667,26 +669,26 @@ function validateCauseAnalysisCoverage(areas: readonly IssueAnalysisReportArea[]
     const counts = new Map<string, number>()
     for (const analysis of analyses) {
       if (!validIssueIds.has(analysis.issueId)) {
-        throw new Error(`${area.megaName} 원인분석이 영역 밖 이슈를 참조합니다: ${analysis.issueId}`)
+        throw new Error(`${area.areaName} 원인분석이 영역 밖 이슈를 참조합니다: ${analysis.issueId}`)
       }
       if (counts.has(analysis.issueId)) {
-        throw new Error(`${area.megaName} 원인분석에 중복 이슈가 있습니다: ${analysis.issueId}`)
+        throw new Error(`${area.areaName} 원인분석에 중복 이슈가 있습니다: ${analysis.issueId}`)
       }
       counts.set(analysis.issueId, 1)
       if (!analysis.causes.length) {
-        throw new Error(`${area.megaName} ${analysis.issueId} 이슈의 원인분석이 비어 있습니다.`)
+        throw new Error(`${area.areaName} ${analysis.issueId} 이슈의 원인분석이 비어 있습니다.`)
       }
     }
     for (const issue of area.issues) {
       if (counts.get(issue.id) !== 1) {
         throw new Error(
-          `${area.megaName} ${issue.piIssueCode} 이슈의 원인분석은 정확히 1건이어야 합니다.`,
+          `${area.areaName} ${issue.code} 이슈의 원인분석은 정확히 1건이어야 합니다.`,
         )
       }
       counts.delete(issue.id)
     }
     if (counts.size) {
-      throw new Error(`${area.megaName} 원인분석이 영역 밖 이슈를 참조합니다.`)
+      throw new Error(`${area.areaName} 원인분석이 영역 밖 이슈를 참조합니다.`)
     }
   }
 }
@@ -734,10 +736,10 @@ function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSl
   const analysesByIssueId = new Map<string, IssueAnalysisIssueCauseAnalysis>()
   for (const analysis of analyses) {
     if (analysesByIssueId.has(analysis.issueId)) {
-      throw new Error(`${area.megaName} 원인분석에 중복 이슈가 있습니다: ${analysis.issueId}`)
+      throw new Error(`${area.areaName} 원인분석에 중복 이슈가 있습니다: ${analysis.issueId}`)
     }
     if (!issuesById.has(analysis.issueId)) {
-      throw new Error(`${area.megaName} 원인분석이 영역 밖 이슈를 참조합니다: ${analysis.issueId}`)
+      throw new Error(`${area.areaName} 원인분석이 영역 밖 이슈를 참조합니다: ${analysis.issueId}`)
     }
     analysesByIssueId.set(analysis.issueId, analysis)
   }
@@ -775,7 +777,7 @@ function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSl
           }
       const remainingUnits = ISSUE_ANALYSIS_CAUSE_PAGE_CAPACITY - issue.rowUnits
       if (remainingUnits < 1) {
-        throw new Error(`${issue.piIssueCode} 원인분석 페이지의 이슈 높이가 너무 큽니다.`)
+        throw new Error(`${issue.code} 원인분석 페이지의 이슈 높이가 너무 큽니다.`)
       }
       const pageCauses: IssueAnalysisDeckCauseRow[] = []
       let used = 0
@@ -801,10 +803,10 @@ function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSl
       slides.push({
         kind: 'cause-analysis',
         sourceSlide: 10,
-        megaCode: area.megaCode,
-        megaName: area.megaName,
+        areaCode: area.areaCode,
+        areaName: area.areaName,
         issueId: reportIssue.id,
-        piIssueCode: deckIssue.piIssueCode,
+        code: deckIssue.code,
         pageInIssue: index + 1,
         pageCount,
         issue: page.issue,
@@ -817,7 +819,7 @@ function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSl
 }
 
 function opportunityIssueRows(
-  issue: Pick<IssueAnalysisDeckIssue, 'id' | 'piIssueCode' | 'title'>,
+  issue: Pick<IssueAnalysisDeckIssue, 'id' | 'code' | 'title'>,
 ): IssueAnalysisDeckOpportunityIssueRow[] {
   const titleChunks = splitIssueAnalysisTextForRows(
     issue.title,
@@ -851,7 +853,7 @@ function takeOpportunityIssuePage(
   while (next < rows.length) {
     const row = rows[next]
     if (row.rowUnits > ISSUE_ANALYSIS_OPPORTUNITY_PAGE_CAPACITY) {
-      throw new Error(`${row.piIssueCode} 주요 이슈가 개선기회 페이지 높이를 초과합니다.`)
+      throw new Error(`${row.code} 주요 이슈가 개선기회 페이지 높이를 초과합니다.`)
     }
     if (page.length && used + row.rowUnits > ISSUE_ANALYSIS_OPPORTUNITY_PAGE_CAPACITY) break
     page.push(row)
@@ -862,7 +864,7 @@ function takeOpportunityIssuePage(
 }
 
 function opportunityIssuePages(
-  issues: readonly Pick<IssueAnalysisDeckIssue, 'id' | 'piIssueCode' | 'title'>[],
+  issues: readonly Pick<IssueAnalysisDeckIssue, 'id' | 'code' | 'title'>[],
 ): IssueAnalysisDeckOpportunityIssueRow[][] {
   const rows = issues.flatMap(opportunityIssueRows)
   const pages: IssueAnalysisDeckOpportunityIssueRow[][] = []
@@ -876,19 +878,19 @@ function opportunityIssuePages(
 }
 
 function opportunityDescriptionChunks(
-  megaCode: string,
-  megaName: string,
+  areaCode: string,
+  areaName: string,
   title: string,
   description: string,
 ): string[] {
-  const heading = `${megaCode}-${megaName} · ${title}`
+  const heading = `${areaCode}-${areaName} · ${title}`
   const headingLines = estimateIssueAnalysisLineCount(
     heading,
     ISSUE_ANALYSIS_OPPORTUNITY_LINE_WIDTH.opportunity,
   )
   const descriptionLines = ISSUE_ANALYSIS_OPPORTUNITY_MAX_LINES - headingLines
   if (descriptionLines < 1) {
-    throw new Error(`${megaName} 개선기회 제목이 PPT 페이지 높이를 초과합니다.`)
+    throw new Error(`${areaName} 개선기회 제목이 PPT 페이지 높이를 초과합니다.`)
   }
   return splitIssueAnalysisTextForRows(
     description,
@@ -907,22 +909,22 @@ function opportunityBlocks(
     || opportunity.issueIds.length > ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY
   ) {
     throw new Error(
-      `${area.megaName} 개선기회 ${opportunityNo}의 연결 이슈는 1~${ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY}건이어야 합니다.`,
+      `${area.areaName} 개선기회 ${opportunityNo}의 연결 이슈는 1~${ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY}건이어야 합니다.`,
     )
   }
   if (new Set(opportunity.issueIds).size !== opportunity.issueIds.length) {
-    throw new Error(`${area.megaName} 개선기회 ${opportunityNo}에 중복 연결 이슈가 있습니다.`)
+    throw new Error(`${area.areaName} 개선기회 ${opportunityNo}에 중복 연결 이슈가 있습니다.`)
   }
   const byId = new Map(area.issues.map(issue => [issue.id, issue]))
   const issues = opportunity.issueIds.map(id => {
     const issue = byId.get(id)
     if (!issue) {
-      throw new Error(`${area.megaName} 개선기회 ${opportunityNo}가 영역 밖 이슈를 참조합니다: ${id}`)
+      throw new Error(`${area.areaName} 개선기회 ${opportunityNo}가 영역 밖 이슈를 참조합니다: ${id}`)
     }
     const deckIssue = toDeckIssue(issue)
     return {
       id: deckIssue.id,
-      piIssueCode: deckIssue.piIssueCode,
+      code: deckIssue.code,
       title: deckIssue.title,
     }
   })
@@ -930,8 +932,8 @@ function opportunityBlocks(
   const description = normalizeIssueAnalysisMultilineText(opportunity.description)
   const issuePages = opportunityIssuePages(issues)
   const descriptionChunks = opportunityDescriptionChunks(
-    area.megaCode,
-    area.megaName,
+    area.areaCode,
+    area.areaName,
     title,
     description,
   )
@@ -942,7 +944,7 @@ function opportunityBlocks(
     const descriptionChunk = descriptionChunks[index] ?? ''
     const issueUnits = pageIssues.reduce((sum, issue) => sum + issue.rowUnits, 0)
     const opportunityText = [
-      `${area.megaCode}-${area.megaName} · ${title}`,
+      `${area.areaCode}-${area.areaName} · ${title}`,
       descriptionChunk,
     ].filter(Boolean).join('\n')
     const textUnits = Math.ceil(
@@ -953,11 +955,11 @@ function opportunityBlocks(
     )
     const rowUnits = Math.max(2, issueUnits, textUnits)
     if (rowUnits > ISSUE_ANALYSIS_OPPORTUNITY_PAGE_CAPACITY) {
-      throw new Error(`${area.megaName} 개선기회 ${opportunityNo}가 PPT 페이지 높이를 초과합니다.`)
+      throw new Error(`${area.areaName} 개선기회 ${opportunityNo}가 PPT 페이지 높이를 초과합니다.`)
     }
     return {
-      megaCode: area.megaCode,
-      megaName: area.megaName,
+      areaCode: area.areaCode,
+      areaName: area.areaName,
       opportunityNo,
       title,
       description: descriptionChunk,
@@ -1014,9 +1016,10 @@ function opportunitySlides(
 export function buildIssueAnalysisDeckPlan(
   report: IssueAnalysisReport,
   meta: IssueAnalysisDeckMeta,
+  areas: readonly IssueAreaRef[],
 ): IssueAnalysisDeckPlan {
   if (report.issueCount < 1) throw new Error('분석서에 포함할 이슈가 없습니다.')
-  const populatedAreas = report.areas.filter(area => area.issues.length > 0)
+  const populatedAreas = report.areas.filter(area => area.issues.length > 0).slice().sort((a, b) => (areas.find(ref => ref.code === a.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) - (areas.find(ref => ref.code === b.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.areaCode.localeCompare(b.areaCode))
   if (!populatedAreas.length) throw new Error('분류된 Mega 영역 이슈가 없습니다.')
   validateCauseAnalysisCoverage(populatedAreas)
 
@@ -1059,6 +1062,8 @@ export function buildIssueAnalysisDeckPlan(
   slides.push(...opportunitySlides(opportunityPageBlocks))
 
   return {
+    areas: [...areas.filter(ref => ref.active || report.areas.some(area => area.areaCode === ref.code)).slice().sort((a, b) => a.sortOrder - b.sortOrder).map(ref => ({ code: ref.code, name: ref.name })),
+      ...report.areas.filter(area => !areas.some(ref => ref.code === area.areaCode)).map(area => ({ code: area.areaCode, name: area.areaName }))],
     schemaVersion: 'issue-analysis-deck.v1',
     projectId: report.projectId,
     issueCount: report.issueCount,

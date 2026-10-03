@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import JSZip from 'jszip'
@@ -27,10 +28,10 @@ function issueFixture(over: {
 }): IssueAnalysisReportIssue {
   return {
     id: `issue-${over.megaSeq}`,
-    issueNo: over.megaSeq,
-    piIssueCode: `PI-I-02-${String(over.megaSeq).padStart(2, '0')}`,
-    megaCode: '02',
-    megaSeq: over.megaSeq,
+
+    code: `PI-I-02-${String(over.megaSeq).padStart(2, '0')}`,
+    areaId: '02',
+
     majorId: over.majorId,
     title: `이슈 ${over.megaSeq}`,
     body: `이슈 ${over.megaSeq} 상세 내용`,
@@ -59,9 +60,10 @@ function reportFixture(): IssueAnalysisReport {
     issueCount: issues.length,
     generatedAt: '2026-08-02T00:00:00Z',
     areas: [{
-      megaCode: '02',
-      megaName: '영업',
-      megaNameEn: 'Sales',
+    areaId: '02',
+      areaCode: '02',
+      areaName: '영업',
+
       majors: [MAJOR_ORDER, MAJOR_EXPORT],
       processDefinitions: {
         megaDefinition: '고객 주문 이행 전반을 관리하는 프로세스임',
@@ -119,7 +121,7 @@ function paragraphTexts(slideXml: string): string {
 
 describe('프로세스 트리 슬라이드 렌더', () => {
   it('체브론 8칸(정본 Mega명)·활성 강조·제목·헤드라인·미지정 열을 그린다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const tree = slides.find(xml => xml.includes('As-Is 프로세스 체계'))
     expect(tree).toBeDefined()
@@ -141,7 +143,7 @@ describe('프로세스 트리 슬라이드 렌더', () => {
   })
 
   it('사용하지 않는 Major 열 박스는 삭제된다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const tree = slides.find(xml => xml.includes('As-Is 프로세스 체계'))!
     // 3열(주문관리·수출관리·미지정)만 사용 → 4~8번째 슬롯 박스 부재
@@ -157,7 +159,7 @@ describe('프로세스 트리 슬라이드 렌더', () => {
 
 describe('프로세스 정의 슬라이드 렌더', () => {
   it('Mega 정의·행 텍스트를 채우고 빈 행 도형을 삭제한다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const definition = slides.find(xml => xml.includes('02.01 주문관리'))
     expect(definition).toBeDefined()
@@ -171,7 +173,7 @@ describe('프로세스 정의 슬라이드 렌더', () => {
   })
 
   it('정의 문장은 셈플처럼 ▪ 글머리 기호로 시작한다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const definition = slides.find(xml => xml.includes('02.01 주문관리'))!
     expect(definition).toContain('▪ 고객 주문 이행 전반을 관리하는 프로세스임')
@@ -183,7 +185,7 @@ describe('프로세스 정의 슬라이드 렌더', () => {
 
 describe('영역 이슈 종합 서식(셈플 정합)', () => {
   it('첫 페이지 헤더는 템플릿 원문(구분 (Sub Process))을 유지한다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const summary = slides.find(xml => xml.includes('영역별 이슈 종합'))!
     // 템플릿 헤더는 '구분 '+'('+'Sub Process)' 세 run으로 나뉘어 있다 — run 경계와
@@ -192,7 +194,7 @@ describe('영역 이슈 종합 서식(셈플 정합)', () => {
   })
 
   it('주관부서·관련 시스템·이슈 원천 줄에 ▪ 기호를 붙인다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const slides = await renderedSlides(plan)
     const summary = slides.find(xml => xml.includes('영역별 이슈 종합'))!
     expect(summary).toContain('▪ 영업팀')
@@ -203,7 +205,7 @@ describe('영역 이슈 종합 서식(셈플 정합)', () => {
 
 describe('덱 검증', () => {
   it('열 9개짜리 트리 슬라이드는 렌더 전에 거부된다', async () => {
-    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META)
+    const plan = buildIssueAnalysisDeckPlan(reportFixture(), META, TEST_AREAS)
     const mutated = JSON.parse(JSON.stringify(plan)) as typeof plan
     const tree = mutated.slides.find(slide => slide.kind === 'process-tree')
     if (tree?.kind !== 'process-tree') throw new Error('tree slide missing')

@@ -1,3 +1,4 @@
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import Link from 'next/link'
 import { calendarOf } from '@/lib/domain/calendar'
 import type { CalendarInput } from '@/lib/calendar/load'
@@ -49,6 +50,7 @@ export async function DashboardView({
   meetings,
   meetingExceptions,
   issues,
+  issueAreas,
   currentUserId = null,
   canManage = false,
   canGenerateBrief = false,
@@ -77,6 +79,7 @@ export async function DashboardView({
   meetings: Meeting[] | null
   meetingExceptions: MeetingException[]
   /** 이슈 현황 카드용 슬라이스(page.tsx 의 getIssuesForDashboard). null = 조회 실패 — 카드 대신 사유를 보인다. */
+  issueAreas: readonly IssueAreaRef[]
   issues: DashboardIssue[] | null
   /** 회의 카드에서 작성자 본인/프로젝트 관리자 이상에게 수정·삭제를 열기 위한 식별자. */
   currentUserId?: string | null
@@ -182,10 +185,10 @@ export async function DashboardView({
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
       {modules.issues && (issues === null ? issuesError : issues.length === 0 ? (
-        <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
           <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} locale={locale} />
         </div>
       ))}

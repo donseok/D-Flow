@@ -21,8 +21,8 @@ function query(result: { data: unknown; error: { message: string } | null }) {
 }
 
 const ISSUE_ROW = {
-  id: 'i1', issue_no: 1, pi_issue_code: null, project_id: 'p1',
-  mega_code: null, mega_seq: null, major_id: null,
+  id: 'i1', issue_no: 1, code: 'PI-U-001', project_id: 'p1',
+  area_id: null, code_area_id: null, mega_seq: null, major_id: null,
   title: '이슈', body: '', status: 'open', severity: 'medium',
   start_date: null, due_date: null, sub_process: '', owner_department: '',
   related_systems: [], source_type: null, source_detail: null,

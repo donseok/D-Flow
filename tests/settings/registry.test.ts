@@ -41,7 +41,7 @@ describe('등록 키', () => {
     expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event'] })
     // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys).
     // SP5 B1 의 issues.* 둘은 SQL 판독만 더한다(tests/settings/issues-defs)
-    expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/workflow.stage_credits', 'project/calendar.working_days', 'project/calendar.week_start',
+    expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/workflow.stage_credits', 'project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start',
       'project/issues.id_policy', 'project/issues.analysis'])
     expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start'])
     expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)

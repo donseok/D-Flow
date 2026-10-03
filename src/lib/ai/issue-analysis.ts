@@ -5,7 +5,7 @@ import { generateAnswer } from '@/lib/ai/llm'
 import { llmConfig } from '@/lib/ai/provider'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { IssueMegaCode } from '@/lib/domain/issueAnalysis'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import {
   ISSUE_ANALYSIS_CAUSE_CATEGORIES,
   ISSUE_ANALYSIS_CAUSES_PER_ISSUE_MAX,
@@ -27,7 +27,7 @@ import {
   type IssueAnalysisReportIssue,
 } from '@/lib/report/issues/model'
 
-export const ISSUE_ANALYSIS_PROMPT_VERSION = 'issue-causes-opportunities-defs-v3'
+export const ISSUE_ANALYSIS_PROMPT_VERSION = 'issue-causes-opportunities-areas-v4'
 export const ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS = 24_000
 export const ISSUE_ANALYSIS_MAX_ISSUE_EVIDENCE_CHARS = 2_400
 const ISSUE_ANALYSIS_MIN_ISSUE_EVIDENCE_CHARS = 160
@@ -165,8 +165,7 @@ export interface IssueAnalysisPromptMajor {
 }
 
 function promptPayload(
-  megaCode: IssueMegaCode,
-  megaName: string,
+  area: IssueAreaRef,
   issues: readonly IssueAnalysisReportIssue[],
   evidenceLimit: number,
   majors?: readonly IssueAnalysisPromptMajor[],
@@ -174,13 +173,14 @@ function promptPayload(
   const bodyLimit = Math.floor(evidenceLimit * 0.6)
   const sourceLimit = evidenceLimit - bodyLimit
   return safePromptJson({
-    megaCode,
-    megaName,
+    areaId: area.id,
+    areaCode: area.code,
+    areaName: area.name,
     ...(majors === undefined ? {} : { majors }),
     issues: issues.map(issue => ({
       // id/title은 예산이 부족해도 절대 생략하거나 축약하지 않는다.
       id: issue.id,
-      piIssueCode: issue.piIssueCode,
+      code: issue.code,
       title: issue.title,
       status: issue.status,
       severity: issue.severity,
@@ -199,17 +199,16 @@ function promptPayload(
  * ID/제목을 보존한 최소 입력조차 상한을 넘으면 일부를 조용히 버리지 않고 명시적으로 실패한다.
  */
 export function buildIssueAnalysisMegaPrompt(
-  megaCode: IssueMegaCode,
-  megaName: string,
+  area: IssueAreaRef,
   issues: readonly IssueAnalysisReportIssue[],
   majors?: readonly IssueAnalysisPromptMajor[],
 ): string {
   if (!issues.length) throw new IssueAnalysisPromptError('분석할 이슈가 없습니다.')
   const envelope = (json: string) => `<issue_data_json>\n${json}\n</issue_data_json>`
-  const minimum = envelope(promptPayload(megaCode, megaName, issues, 0, majors))
+  const minimum = envelope(promptPayload(area, issues, 0, majors))
   if (minimum.length > ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS) {
     throw new IssueAnalysisPromptError(
-      `${megaName} 영역은 이슈 ID/제목을 보존한 최소 입력도 프롬프트 상한(${ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS.toLocaleString()}자)을 초과합니다.`,
+      `${area.name} 영역은 이슈 ID/제목을 보존한 최소 입력도 프롬프트 상한(${ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS.toLocaleString()}자)을 초과합니다.`,
     )
   }
 
@@ -220,11 +219,11 @@ export function buildIssueAnalysisMegaPrompt(
   )
   if (evidenceLimit < ISSUE_ANALYSIS_MIN_ISSUE_EVIDENCE_CHARS) {
     throw new IssueAnalysisPromptError(
-      `${megaName} 영역의 이슈 ${issues.length}건을 근거와 함께 안전하게 분석하기에는 입력 예산이 부족합니다.`,
+      `${area.name} 영역의 이슈 ${issues.length}건을 근거와 함께 안전하게 분석하기에는 입력 예산이 부족합니다.`,
     )
   }
 
-  let result = envelope(promptPayload(megaCode, megaName, issues, evidenceLimit, majors))
+  let result = envelope(promptPayload(area, issues, evidenceLimit, majors))
   // JSON escape 문자까지 반영해 실제 직렬화 길이가 상한 안에 들어오도록 보수적으로 재조정한다.
   while (
     result.length > ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS
@@ -234,11 +233,11 @@ export function buildIssueAnalysisMegaPrompt(
       ISSUE_ANALYSIS_MIN_ISSUE_EVIDENCE_CHARS,
       Math.floor(evidenceLimit * 0.85),
     )
-    result = envelope(promptPayload(megaCode, megaName, issues, evidenceLimit, majors))
+    result = envelope(promptPayload(area, issues, evidenceLimit, majors))
   }
   if (result.length > ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS) {
     throw new IssueAnalysisPromptError(
-      `${megaName} 영역 입력이 프롬프트 상한을 초과합니다. 영역 내 이슈를 정리한 뒤 다시 시도하세요.`,
+      `${area.name} 영역 입력이 프롬프트 상한을 초과합니다. 영역 내 이슈를 정리한 뒤 다시 시도하세요.`,
     )
   }
   return result
@@ -249,8 +248,7 @@ export function buildIssueAnalysisMegaPrompt(
  * 근거 예산 규칙은 개선기회 호출과 같아서 ID·제목 보존 및 프롬프트 경계가 일관된다.
  */
 export function buildIssueAnalysisCausePrompt(
-  megaCode: IssueMegaCode,
-  megaName: string,
+  area: IssueAreaRef,
   issues: readonly IssueAnalysisReportIssue[],
 ): string {
   if (issues.length > ISSUE_ANALYSIS_CAUSE_CHUNK_SIZE) {
@@ -258,7 +256,7 @@ export function buildIssueAnalysisCausePrompt(
       `원인 분석 호출은 최대 ${ISSUE_ANALYSIS_CAUSE_CHUNK_SIZE}개 이슈만 포함할 수 있습니다.`,
     )
   }
-  return buildIssueAnalysisMegaPrompt(megaCode, megaName, issues)
+  return buildIssueAnalysisMegaPrompt(area, issues)
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -607,7 +605,7 @@ export function parseIssueAnalysisCauseAreaResponse(
 export function parseIssueAnalysisResponse(
   raw: string,
   snapshot: IssueAnalysisInputSnapshot,
-): { ok: true; value: Partial<Record<IssueMegaCode, IssueAnalysisOpportunity[]>> }
+): { ok: true; value: Partial<Record<string, IssueAnalysisOpportunity[]>> }
   | { ok: false; error: string } {
   let parsed: unknown
   try {
@@ -620,24 +618,24 @@ export function parseIssueAnalysisResponse(
     return { ok: false, error: 'AI 응답에 areas 배열이 없습니다.' }
   }
   const rawAreas = object.areas
-  const byCode: Partial<Record<IssueMegaCode, IssueAnalysisOpportunity[]>> = {}
+  const byCode: Partial<Record<string, IssueAnalysisOpportunity[]>> = {}
   for (const area of snapshot.areas) {
     if (!area.issues.length) continue
-    const matches = rawAreas.filter(candidate => record(candidate)?.megaCode === area.megaCode)
+    const matches = rawAreas.filter(candidate => record(candidate)?.areaCode === area.areaCode)
     if (matches.length !== 1) {
-      return { ok: false, error: `${area.megaName} 영역 결과가 없거나 중복되었습니다.` }
+      return { ok: false, error: `${area.areaName} 영역 결과가 없거나 중복되었습니다.` }
     }
     const validated = validateIssueAnalysisOpportunities(
       record(matches[0])?.opportunities,
       area.issues,
     )
-    if (!validated.ok) return { ok: false, error: `${area.megaName}: ${validated.error}` }
-    byCode[area.megaCode] = validated.value
+    if (!validated.ok) return { ok: false, error: `${area.areaName}: ${validated.error}` }
+    byCode[area.areaCode] = validated.value
   }
-  const knownCodes = new Set(snapshot.areas.map(area => area.megaCode))
+  const knownCodes = new Set(snapshot.areas.map(area => area.areaCode))
   const unknown = rawAreas.find(candidate => {
-    const code = record(candidate)?.megaCode
-    return typeof code !== 'string' || !knownCodes.has(code as IssueMegaCode)
+    const code = record(candidate)?.areaCode
+    return typeof code !== 'string' || !knownCodes.has(code as string)
   })
   if (unknown) return { ok: false, error: 'AI 응답에 알 수 없는 Mega 영역이 있습니다.' }
   return { ok: true, value: byCode }
@@ -649,13 +647,13 @@ function reportFromCache(
 ): IssueAnalysisReport | null {
   const object = record(value)
   if (!object || !Array.isArray(object.areas) || typeof object.generatedAt !== 'string') return null
-  const opportunities: Partial<Record<IssueMegaCode, IssueAnalysisOpportunity[]>> = {}
-  const causeAnalyses: Partial<Record<IssueMegaCode, IssueAnalysisIssueCauseAnalysis[]>> = {}
+  const opportunities: Partial<Record<string, IssueAnalysisOpportunity[]>> = {}
+  const causeAnalyses: Partial<Record<string, IssueAnalysisIssueCauseAnalysis[]>> = {}
   const processDefinitions: Partial<
-    Record<IssueMegaCode, IssueAnalysisAreaProcessDefinitions>
+    Record<string, IssueAnalysisAreaProcessDefinitions>
   > = {}
   for (const area of snapshot.areas) {
-    const cachedArea = object.areas.find(candidate => record(candidate)?.megaCode === area.megaCode)
+    const cachedArea = object.areas.find(candidate => record(candidate)?.areaCode === area.areaCode)
     const cachedAreaObject = record(cachedArea)
     // prompt v2 캐시는 원인이 optional인 레거시 v1 JSON을 완성된 신규 결과로 재사용하지 않는다.
     if (
@@ -683,10 +681,10 @@ function reportFromCache(
         area.majors,
       )
       if (!validatedDefinitions.ok) return null
-      processDefinitions[area.megaCode] = validatedDefinitions.value
+      processDefinitions[area.areaCode] = validatedDefinitions.value
     }
-    opportunities[area.megaCode] = validated.value
-    causeAnalyses[area.megaCode] = validatedCauses.value
+    opportunities[area.areaCode] = validated.value
+    causeAnalyses[area.areaCode] = validatedCauses.value
   }
   return buildIssueAnalysisReport(
     snapshot,
@@ -762,7 +760,7 @@ function promptMajors(
     }
     return {
       majorId: major.id,
-      seqLabel: `${area.megaCode}.${String(major.majorSeq).padStart(2, '0')}`,
+      seqLabel: `${area.areaCode}.${String(major.majorSeq).padStart(2, '0')}`,
       name: major.name,
       subProcesses,
       issueCount: majorIssues.length,
@@ -797,7 +795,7 @@ async function ensureIssueAnalysisSnapshot(
     }
   }
 
-  if (!(await aiAvailable({ projectId }, { module: 'issues' }))) {
+  if (!(await aiAvailable({ projectId }, { module: 'issue_analysis' }))) {
     return {
       state: 'unavailable',
       reason: 'llm_missing',   // 코드값은 유지 — 키 없음·워크스페이스 AI 끔·issues 꺼짐·판정 실패가 모두 이 갈래다
@@ -806,27 +804,27 @@ async function ensureIssueAnalysisSnapshot(
     }
   }
 
-  const opportunities: Partial<Record<IssueMegaCode, IssueAnalysisOpportunity[]>> = {}
-  const causeAnalyses: Partial<Record<IssueMegaCode, IssueAnalysisIssueCauseAnalysis[]>> = {}
+  const opportunities: Partial<Record<string, IssueAnalysisOpportunity[]>> = {}
+  const causeAnalyses: Partial<Record<string, IssueAnalysisIssueCauseAnalysis[]>> = {}
   const processDefinitions: Partial<
-    Record<IssueMegaCode, IssueAnalysisAreaProcessDefinitions>
+    Record<string, IssueAnalysisAreaProcessDefinitions>
   > = {}
   const causeChunkResults: Partial<
-    Record<IssueMegaCode, IssueAnalysisIssueCauseAnalysis[][]>
+    Record<string, IssueAnalysisIssueCauseAnalysis[][]>
   > = {}
   const tasks: Array<
     | {
         kind: 'opportunity'
-        megaCode: IssueMegaCode
-        megaName: string
+        areaCode: string
+        areaName: string
         issues: IssueAnalysisReportIssue[]
         majors: IssueAnalysisAreaMajor[]
         prompt: string
       }
     | {
         kind: 'cause'
-        megaCode: IssueMegaCode
-        megaName: string
+        areaCode: string
+        areaName: string
         issues: IssueAnalysisReportIssue[]
         chunkIndex: number
         prompt: string
@@ -834,44 +832,43 @@ async function ensureIssueAnalysisSnapshot(
   > = []
   for (const area of snapshot.areas) {
     if (!area.issues.length) {
-      opportunities[area.megaCode] = []
-      causeAnalyses[area.megaCode] = []
+      opportunities[area.areaCode] = []
+      causeAnalyses[area.areaCode] = []
       continue
     }
     try {
       tasks.push({
         kind: 'opportunity',
-        megaCode: area.megaCode,
-        megaName: area.megaName,
+        areaCode: area.areaCode,
+        areaName: area.areaName,
         issues: area.issues,
         majors: area.majors,
         prompt: buildIssueAnalysisMegaPrompt(
-          area.megaCode,
-          area.megaName,
+          { id: area.areaId, code: area.areaCode, name: area.areaName, sortOrder: 0, active: true },
           area.issues,
           promptMajors(area),
         ),
       })
       const chunks: IssueAnalysisIssueCauseAnalysis[][] = []
-      causeChunkResults[area.megaCode] = chunks
+      causeChunkResults[area.areaCode] = chunks
       for (let start = 0; start < area.issues.length; start += ISSUE_ANALYSIS_CAUSE_CHUNK_SIZE) {
         const issues = area.issues.slice(start, start + ISSUE_ANALYSIS_CAUSE_CHUNK_SIZE)
         const chunkIndex = chunks.length
         chunks.push([])
         tasks.push({
           kind: 'cause',
-          megaCode: area.megaCode,
-          megaName: area.megaName,
+          areaCode: area.areaCode,
+          areaName: area.areaName,
           issues,
           chunkIndex,
-          prompt: buildIssueAnalysisCausePrompt(area.megaCode, area.megaName, issues),
+          prompt: buildIssueAnalysisCausePrompt({ id: area.areaId, code: area.areaCode, name: area.areaName, sortOrder: 0, active: true }, issues),
         })
       }
     } catch (error) {
       return {
         state: 'unavailable',
         reason: 'prompt_too_large',
-        error: error instanceof Error ? error.message : `${area.megaName} 입력이 너무 큽니다.`,
+        error: error instanceof Error ? error.message : `${area.areaName} 입력이 너무 큽니다.`,
         inputHash,
       }
     }
@@ -899,7 +896,7 @@ async function ensureIssueAnalysisSnapshot(
         failure.value = {
           state: 'unavailable',
           reason: 'llm_failed',
-          error: `${task.megaName} 영역 ${task.kind === 'cause' ? '원인 분석' : '개선기회'} AI 생성에 실패했습니다. 저장된 부분 결과는 없습니다.`,
+          error: `${task.areaName} 영역 ${task.kind === 'cause' ? '원인 분석' : '개선기회'} AI 생성에 실패했습니다. 저장된 부분 결과는 없습니다.`,
           inputHash,
         }
         return
@@ -910,30 +907,30 @@ async function ensureIssueAnalysisSnapshot(
           failure.value = {
             state: 'unavailable',
             reason: 'invalid_response',
-            error: `${task.megaName} 영역 개선기회 AI 결과 검증 실패: ${parsed.error}`,
+            error: `${task.areaName} 영역 개선기회 AI 결과 검증 실패: ${parsed.error}`,
             inputHash,
           }
           return
         }
-        opportunities[task.megaCode] = parsed.value.opportunities
-        processDefinitions[task.megaCode] = parsed.value.processDefinitions
+        opportunities[task.areaCode] = parsed.value.opportunities
+        processDefinitions[task.areaCode] = parsed.value.processDefinitions
       } else {
         const parsed = parseIssueAnalysisCauseAreaResponse(raw, task.issues)
         if (!parsed.ok) {
           failure.value = {
             state: 'unavailable',
             reason: 'invalid_response',
-            error: `${task.megaName} 영역 원인 분석 AI 결과 검증 실패: ${parsed.error}`,
+            error: `${task.areaName} 영역 원인 분석 AI 결과 검증 실패: ${parsed.error}`,
             inputHash,
           }
           return
         }
-        const chunks = causeChunkResults[task.megaCode]
+        const chunks = causeChunkResults[task.areaCode]
         if (!chunks) {
           failure.value = {
             state: 'unavailable',
             reason: 'invalid_response',
-            error: `${task.megaName} 영역 원인 분석 결과를 결합할 수 없습니다.`,
+            error: `${task.areaName} 영역 원인 분석 결과를 결합할 수 없습니다.`,
             inputHash,
           }
           return
@@ -953,17 +950,17 @@ async function ensureIssueAnalysisSnapshot(
   // 청크별 검증에 더해 Mega 전체 coverage와 입력 순서를 다시 고정한다.
   for (const area of snapshot.areas) {
     if (!area.issues.length) continue
-    const combined = (causeChunkResults[area.megaCode] ?? []).flat()
+    const combined = (causeChunkResults[area.areaCode] ?? []).flat()
     const validated = validateIssueAnalysisCauseAnalyses(combined, area.issues)
     if (!validated.ok) {
       return {
         state: 'unavailable',
         reason: 'invalid_response',
-        error: `${area.megaName} 영역 원인 분석 결합 검증 실패: ${validated.error}`,
+        error: `${area.areaName} 영역 원인 분석 결합 검증 실패: ${validated.error}`,
         inputHash,
       }
     }
-    causeAnalyses[area.megaCode] = validated.value
+    causeAnalyses[area.areaCode] = validated.value
   }
 
   const analysis = buildIssueAnalysisReport(
@@ -1002,8 +999,9 @@ export function ensureIssueAnalysis(
   issues: readonly IssueAnalysisIssueInput[],
   majors: readonly IssueAnalysisMajorProcess[],
   createdBy: string,
+  areas: readonly IssueAreaRef[],
 ): Promise<EnsureIssueAnalysisResult> {
-  const preflight = buildIssueAnalysisPreflight(issues)
+  const preflight = buildIssueAnalysisPreflight(issues, areas)
   if (preflight.totalCount === 0 || preflight.blockedCount > 0) {
     return Promise.resolve({
       state: 'unavailable',
@@ -1014,7 +1012,7 @@ export function ensureIssueAnalysis(
     })
   }
 
-  const snapshot = buildIssueAnalysisInputSnapshot(projectId, issues, majors)
+  const snapshot = buildIssueAnalysisInputSnapshot(projectId, issues, majors, areas)
   const inputHash = issueAnalysisInputHash(snapshot)
   const model = llmConfig().model
   const gateKey = `${projectId}:${ISSUE_ANALYSIS_PROMPT_VERSION}:${model}:${inputHash}`

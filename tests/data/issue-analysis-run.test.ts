@@ -1,3 +1,5 @@
+vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: (await import('../fixtures/issue-areas')).TEST_ENTRY_CONTEXT }) }))
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import {
@@ -32,6 +34,7 @@ import { loadSavedIssueAnalysisRun } from '@/lib/data/issueAnalysis'
 
 function issue(): IssueAnalysisIssueInput {
   return {
+    codeAreaId: null,
     id: 'issue-1',
     issueNo: 1,
     projectId: 'project-1',
@@ -49,9 +52,9 @@ function issue(): IssueAnalysisIssueInput {
     createdByName: '테스터',
     createdAt: '2026-07-30T00:00:00Z',
     updatedAt: '2026-07-30T00:00:00Z',
-    megaCode: '00',
-    megaSeq: 1,
-    piIssueCode: 'PI-I-00-01',
+    areaId: '00',
+
+    code: 'PI-I-00-01',
     majorId: 'major-1',
     majorSeq: 1,
     majorName: '기준정보 표준화',
@@ -65,8 +68,8 @@ function issue(): IssueAnalysisIssueInput {
 
 function report() {
   const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [
-    { id: 'major-1', megaCode: '00', majorSeq: 1, name: '기준정보 표준화' },
-  ])
+    { id: 'major-1', areaId: '00', majorSeq: 1, name: '기준정보 표준화' },
+  ], TEST_AREAS)
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
       title: '기준정보 단일화',
@@ -97,7 +100,7 @@ beforeEach(() => {
 describe('loadSavedIssueAnalysisRun', () => {
   it('RLS 조회한 저장 실행과 프로젝트명을 엄격 검증해 반환한다', async () => {
     const result = await loadSavedIssueAnalysisRun('project-1', 'run-1')
-    expect(result).toMatchObject({
+    expect(result).toMatchObject({ areas: TEST_AREAS,
       runId: 'run-1',
       projectId: 'project-1',
       projectName: 'Acme 프로젝트',

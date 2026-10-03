@@ -21,13 +21,13 @@ beforeEach(() => {
 // 관문 mock 값을 바꾸는 파일 — 통과 구현으로 되돌린다(공통 규칙)
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
-describe('/api/issue-analysis — issues 관문', () => {
-  it('issues 가 꺼지면 404 · ERR_MODULE_DISABLED 이고 저장된 실행을 읽지 않는다', async () => {
+describe('/api/issue-analysis — issue_analysis 관문', () => {
+  it('issue_analysis 가 꺼지면 404 · ERR_MODULE_DISABLED 이고 저장된 실행을 읽지 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await GET(req())
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'issues')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'issue_analysis')
     expect(m.loadSaved).not.toHaveBeenCalled(); expect(m.diag).not.toHaveBeenCalled()
   })
   it('가드가 거부하면 관문을 부르지 않는다', async () => {

@@ -251,9 +251,8 @@ export function MinuteViewer({
       )
     if (!draft) return undefined
     return {
-      ...draft,
-      // AI 초안 스키마의 majorProcess 를 폼 입력 정본(majorName)으로 경계에서 변환한다.
-      majorName: draft.majorProcess,
+      title: draft.title, body: draft.body, areaId: draft.areaId,
+      analysis: draft.analysis ? { ...draft.analysis, sourceType: 'minutes' } : null,
       severity: 'medium',
       assigneeMemberIds: [],
       startDate: null,
@@ -595,8 +594,8 @@ export function MinuteViewer({
   function onIssueCreated(_id: string, result: IssueActionResult) {
     toast({
       title: t('min.issue.created'),
-      description: result.piIssueCode
-        ? t('min.issue.createdCode').replace('{code}', result.piIssueCode)
+      description: result.code
+        ? t('min.issue.createdCode').replace('{code}', result.code)
         : t('min.issue.createdDesc'),
       variant: 'success',
     })
@@ -964,7 +963,7 @@ export function MinuteViewer({
               : t('min.issue.sourceLabel')} · v${currentVersion?.versionNo ?? 1}`,
             organizedDraft: true,
             classificationRecommended: preparedIssueDraft?.mode === 'ai'
-              && Boolean(preparedIssueDraft.megaCode && preparedIssueDraft.subProcess),
+              && Boolean(preparedIssueDraft.areaId && preparedIssueDraft.analysis?.subProcess),
           }}
           onCreate={createLinkedIssue}
           onCreated={onIssueCreated}

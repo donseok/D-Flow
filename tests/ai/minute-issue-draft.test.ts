@@ -1,3 +1,5 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
+import type { MinuteIssueDraftContext, MinuteIssueDraftInput } from '@/lib/ai/minute-issue-draft'
 import { describe, expect, it } from 'vitest'
 import {
   MINUTE_ISSUE_DRAFT_BODY_MAX,
@@ -8,10 +10,10 @@ import {
   MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT,
   MINUTE_ISSUE_DRAFT_TITLE_MAX,
   buildFallbackMinuteIssueDraft,
-  buildMinuteIssueDraft,
-  buildMinuteIssueDraftPrompt,
+  buildMinuteIssueDraft as buildDraft,
+  buildMinuteIssueDraftPrompt as buildPrompt,
   minuteIssueDraftLength,
-  parseMinuteIssueDraftResponse,
+  parseMinuteIssueDraftResponse as parseResponse,
 } from '@/lib/ai/minute-issue-draft'
 import { ISSUE_MAJOR_NAME_MAX } from '@/lib/domain/issueAnalysis'
 
@@ -26,19 +28,16 @@ const VALID_BODY = [
   '- 담당 팀과 재처리 방안을 검토해야 합니다.',
 ].join('\n')
 
-const VALID_CLASSIFICATION = {
-  megaCode: '02' as const,
-  majorProcess: '주문관리',
-  subProcess: '주문접수/등록',
-}
-
+const CONTEXT: MinuteIssueDraftContext = { areas: TEST_AREAS, analysis: 'optional' }
+const ANALYSIS = { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' }
+const VALID_CLASSIFICATION = { areaId: '02', analysis: ANALYSIS }
+const parseMinuteIssueDraftResponse = (raw: string) => parseResponse(raw, CONTEXT)
+const buildMinuteIssueDraft = (input: MinuteIssueDraftInput) => buildDraft({ ...input, context: CONTEXT })
+const buildMinuteIssueDraftPrompt = (source: string, label?: string | null, context: Partial<MinuteIssueDraftContext> = {}) => buildPrompt(source, label, { ...CONTEXT, ...context })
 function aiResponse(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    title: '주문 인터페이스 지연',
-    body: VALID_BODY,
-    ...VALID_CLASSIFICATION,
-    ...overrides,
-  })
+  const { megaCode = '02', majorProcess = ANALYSIS.majorName, subProcess = ANALYSIS.subProcess, ...rest } = overrides
+  return JSON.stringify({ title: '주문 인터페이스 지연', body: VALID_BODY, areaCode: megaCode,
+    analysis: { ...ANALYSIS, majorName: majorProcess, subProcess }, ...rest })
 }
 
 describe('parseMinuteIssueDraftResponse', () => {
@@ -74,12 +73,11 @@ describe('parseMinuteIssueDraftResponse', () => {
     ['추가 키', aiResponse({ title: '제목', reason: '추측' })],
     ['빈 제목', aiResponse({ title: '   ' })],
     ['본문 타입 오류', aiResponse({ title: '제목', body: 1 })],
-    ['잘못된 Mega', aiResponse({ megaCode: '99' })],
     ['Major Process 누락(4키)', JSON.stringify({
       title: '주문 인터페이스 지연',
       body: VALID_BODY,
-      megaCode: VALID_CLASSIFICATION.megaCode,
-      subProcess: VALID_CLASSIFICATION.subProcess,
+      megaCode: VALID_CLASSIFICATION.areaId,
+      subProcess: VALID_CLASSIFICATION.analysis.subProcess,
     })],
     ['빈 Major Process', aiResponse({ majorProcess: '   ' })],
     ['번호 접두 Major Process', aiResponse({ majorProcess: '02.01 주문관리' })],
@@ -126,7 +124,7 @@ describe('parseMinuteIssueDraftResponse', () => {
 
   it('Major Process 이름은 저장 한도까지 허용하고 초과는 거부한다', () => {
     const atLimit = '가'.repeat(ISSUE_MAJOR_NAME_MAX)
-    expect(parseMinuteIssueDraftResponse(aiResponse({ majorProcess: atLimit }))?.majorProcess)
+    expect(parseMinuteIssueDraftResponse(aiResponse({ majorProcess: atLimit }))?.analysis?.majorName)
       .toBe(atLimit)
     expect(parseMinuteIssueDraftResponse(aiResponse({
       majorProcess: '가'.repeat(ISSUE_MAJOR_NAME_MAX + 1),
@@ -357,7 +355,7 @@ describe('buildMinuteIssueDraft', () => {
 
     expect(result).toEqual({ title: 'AI 제목', body: VALID_BODY, ...VALID_CLASSIFICATION, mode: 'ai' })
     expect(Object.keys(result ?? {}).sort()).toEqual(
-      ['body', 'majorProcess', 'megaCode', 'mode', 'subProcess', 'title'],
+      ['analysis', 'areaId', 'body', 'mode', 'title'],
     )
     expect(JSON.stringify(result)).not.toContain('SOURCE-ONLY-991')
     expect(sourceText).toBe('원문 고유 표식 SOURCE-ONLY-991')
@@ -409,44 +407,44 @@ describe('buildMinuteIssueDraftPrompt', () => {
     const prompt = buildMinuteIssueDraftPrompt('주문 입력 오류가 반복됩니다.', '주문 오류', {
       contextText: `영업 주간회의\n${'문맥'.repeat(MINUTE_ISSUE_DRAFT_CONTEXT_MAX)}`,
       knownSubProcesses: [
-        { megaCode: '02', subProcess: '주문접수/등록' },
-        { megaCode: '02', subProcess: '주문접수/등록' },
-        { megaCode: '02', subProcess: '02.02 주문관리' },
-        { megaCode: '07', subProcess: '원가손익분석' },
+        { areaId: '02', subProcess: '주문접수/등록' },
+        { areaId: '02', subProcess: '주문접수/등록' },
+        { areaId: '02', subProcess: '02.02 주문관리' },
+        { areaId: '07', subProcess: '원가손익분석' },
       ],
     })
     const payload = JSON.parse(prompt.split('\n')[1]) as {
       contextText: string
-      knownSubProcesses: Array<{ megaCode: string; subProcess: string }>
+      knownSubProcesses: Array<{ areaCode: string; subProcess: string }>
     }
 
     expect(minuteIssueDraftLength(payload.contextText)).toBe(MINUTE_ISSUE_DRAFT_CONTEXT_MAX)
     expect(payload.contextText).not.toContain('…')
     expect(payload.knownSubProcesses).toEqual([
-      { megaCode: '02', subProcess: '주문접수/등록' },
-      { megaCode: '07', subProcess: '원가손익분석' },
+      { areaCode: '02', subProcess: '주문접수/등록' },
+      { areaCode: '07', subProcess: '원가손익분석' },
     ])
   })
 
   it('기존 Sub Process 후보를 Mega별로 균형 있게 제한한다', () => {
     const knownSubProcesses = [
       ...Array.from({ length: 40 }, (_, index) => ({
-        megaCode: '00' as const,
+        areaId: '00' as const,
         subProcess: `기준업무-${String(index).padStart(2, '0')}`,
       })),
       ...Array.from({ length: 40 }, (_, index) => ({
-        megaCode: '07' as const,
+        areaId: '07' as const,
         subProcess: `원가업무-${String(index).padStart(2, '0')}`,
       })),
     ]
     const prompt = buildMinuteIssueDraftPrompt('원문', null, { knownSubProcesses })
     const payload = JSON.parse(prompt.split('\n')[1]) as {
-      knownSubProcesses: Array<{ megaCode: string; subProcess: string }>
+      knownSubProcesses: Array<{ areaCode: string; subProcess: string }>
     }
 
     expect(payload.knownSubProcesses).toHaveLength(50)
-    expect(payload.knownSubProcesses.filter(item => item.megaCode === '00')).toHaveLength(25)
-    expect(payload.knownSubProcesses.filter(item => item.megaCode === '07')).toHaveLength(25)
+    expect(payload.knownSubProcesses.filter(item => item.areaCode === '00')).toHaveLength(25)
+    expect(payload.knownSubProcesses.filter(item => item.areaCode === '07')).toHaveLength(25)
     expect(payload.knownSubProcesses.length).toBeLessThanOrEqual(
       MINUTE_ISSUE_DRAFT_PROCESS_REFERENCES_MAX,
     )
@@ -455,45 +453,45 @@ describe('buildMinuteIssueDraftPrompt', () => {
   it('체번된 Major Process 후보를 이름 그대로 입력 JSON에 전달한다', () => {
     const prompt = buildMinuteIssueDraftPrompt('주문 입력 오류가 반복됩니다.', '주문 오류', {
       knownMajorProcesses: [
-        { megaCode: '07', name: '원가 배부 관리' },
-        { megaCode: '02', name: '출하 요청 관리' },
-        { megaCode: '02', name: '출하 요청 관리' },
-        { megaCode: '02', name: '주문관리' },
-        { megaCode: '02', name: '   ' },
+        { areaId: '07', name: '원가 배부 관리' },
+        { areaId: '02', name: '출하 요청 관리' },
+        { areaId: '02', name: '출하 요청 관리' },
+        { areaId: '02', name: '주문관리' },
+        { areaId: '02', name: '   ' },
       ],
     })
     const payload = JSON.parse(prompt.split('\n')[1]) as {
-      knownMajorProcesses: Array<{ megaCode: string; name: string }>
+      knownMajorProcesses: Array<{ areaCode: string; name: string }>
     }
 
     // Mega 코드순으로 묶되, 같은 Mega 안에서는 호출자가 넘긴 체번 순서를 보존한다.
     // ('주문관리'가 사전순으로 앞서지만 '출하 요청 관리' 뒤에 남아야 한다.)
     expect(payload.knownMajorProcesses).toEqual([
-      { megaCode: '02', name: '출하 요청 관리' },
-      { megaCode: '02', name: '주문관리' },
-      { megaCode: '07', name: '원가 배부 관리' },
+      { areaCode: '02', name: '출하 요청 관리' },
+      { areaCode: '02', name: '주문관리' },
+      { areaCode: '07', name: '원가 배부 관리' },
     ])
   })
 
   it('Major Process 후보도 Mega별 상한으로 제한하되 입력 순서를 유지한다', () => {
     const knownMajorProcesses = [
       ...Array.from({ length: 40 }, (_, index) => ({
-        megaCode: '00' as const,
+        areaId: '00' as const,
         name: `기준 묶음 ${String(index).padStart(2, '0')}`,
       })),
       ...Array.from({ length: 40 }, (_, index) => ({
-        megaCode: '07' as const,
+        areaId: '07' as const,
         name: `원가 묶음 ${String(39 - index).padStart(2, '0')}`,
       })),
     ]
     const prompt = buildMinuteIssueDraftPrompt('원문', null, { knownMajorProcesses })
     const payload = JSON.parse(prompt.split('\n')[1]) as {
-      knownMajorProcesses: Array<{ megaCode: string; name: string }>
+      knownMajorProcesses: Array<{ areaCode: string; name: string }>
     }
 
     expect(payload.knownMajorProcesses).toHaveLength(50)
-    const master = payload.knownMajorProcesses.filter(item => item.megaCode === '00')
-    const cost = payload.knownMajorProcesses.filter(item => item.megaCode === '07')
+    const master = payload.knownMajorProcesses.filter(item => item.areaCode === '00')
+    const cost = payload.knownMajorProcesses.filter(item => item.areaCode === '07')
     expect(master.map(item => item.name)).toEqual(
       Array.from({ length: 25 }, (_, index) => `기준 묶음 ${String(index).padStart(2, '0')}`),
     )
@@ -509,8 +507,37 @@ describe('buildMinuteIssueDraftPrompt', () => {
 
 describe('MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT', () => {
   it('majorProcess 추천 지침과 예시 JSON을 포함한다', () => {
-    expect(MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT).toContain('majorProcess')
+    expect(MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT).toContain('outputSchema')
     expect(MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT).toContain('knownMajorProcesses')
-    expect(MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT).toContain('"majorProcess":"주문관리"')
+    expect(buildMinuteIssueDraftPrompt('원문')).toContain('majorName')
+  })
+})
+
+describe('프로젝트 영역과 분석 모드', () => {
+  const custom = [{ id: 'rnd-id', code: 'RND', name: '연구', sortOrder: 2, active: true },
+    { id: 'inactive-id', code: 'OPS', name: '운영', sortOrder: 1, active: false }]
+  it('프롬프트는 활성 영역만 제시하고 모델 code를 그 영역 id로 바꾼다', () => {
+    const ctx: MinuteIssueDraftContext = { areas: custom, analysis: 'optional' }
+    const prompt = buildPrompt('원문', null, ctx)
+    expect(prompt).toContain('RND'); expect(prompt).not.toContain('OPS')
+    expect(parseResponse(JSON.stringify({ title: '연구 지연', body: VALID_BODY, areaCode: 'RND', analysis: ANALYSIS }), ctx))
+      .toMatchObject({ areaId: 'rnd-id', analysis: { majorName: '주문관리' } })
+  })
+  it('모델의 임의 영역은 정본 id로 믿지 않고 분석도 비운다', () => {
+    const ctx: MinuteIssueDraftContext = { areas: custom, analysis: 'required' }
+    expect(parseResponse(JSON.stringify({ title: '연구 지연', body: VALID_BODY, areaCode: 'INVENTED', analysis: ANALYSIS }), ctx))
+      .toMatchObject({ areaId: null, analysis: null })
+  })
+  it('분석 off 응답에 분석 키가 있으면 거부하고 분석 없는 초안을 받는다', () => {
+    const ctx: MinuteIssueDraftContext = { areas: custom, analysis: 'off' }
+    const raw = { title: '연구 지연', body: VALID_BODY, areaCode: 'RND' }
+    expect(buildPrompt('원문', null, ctx)).not.toContain('majorName')
+    expect(parseResponse(JSON.stringify(raw), ctx)).toMatchObject({ areaId: 'rnd-id', analysis: null })
+    expect(parseResponse(JSON.stringify({ ...raw, analysis: ANALYSIS }), ctx)).toBeNull()
+  })
+  it('활성 영역이 없으면 code와 분석 칸을 요구하지 않는다', () => {
+    const ctx: MinuteIssueDraftContext = { areas: [], analysis: 'off' }
+    expect(buildPrompt('원문', null, ctx)).not.toContain('areaCode')
+    expect(parseResponse(JSON.stringify({ title: '업무 지연', body: VALID_BODY }), ctx)).toMatchObject({ areaId: null, analysis: null })
   })
 })

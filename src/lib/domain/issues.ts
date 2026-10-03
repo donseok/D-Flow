@@ -2,7 +2,7 @@
 // 상태 전환의 단일 정본은 STATUS_TRANSITIONS — UI(select 옵션)와 서버 액션(전환 검증)이
 // 이 맵만 참조한다. 5번째 상태를 추가할 때 이 파일 + 0041 check 제약만 바꾸면 되게 유지할 것.
 import type { IssueMinuteSource } from './issueMinuteSource'
-import type { IssueMegaCode, IssueMegaFilter, IssueSourceType } from './issueAnalysis'
+import type { IssueAreaFilter, IssueSourceType } from './issueAnalysis'
 import { diffDaysCal } from './dashboard'
 
 export const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'on_hold'] as const
@@ -14,11 +14,11 @@ export type IssueSeverity = (typeof ISSUE_SEVERITIES)[number]
 export interface Issue {
   id: string
   issueNo: number
-  /** 보고서 업무키. 0055 이전 미분류 이슈는 null이며 최초 Mega 분류 때 한 번 발급된다. */
-  piIssueCode: string | null
+  /** DB가 등록 때 발급하는 불변 업무 코드. issueNo는 내부 정렬 보조다. */
+  code: string
   projectId: string
-  megaCode: IssueMegaCode | null
-  megaSeq: number | null
+  areaId: string | null
+  codeAreaId: string | null
   /**
    * Major Process 연결(0062). 레거시(0062 이전 분류) 이슈는 null — 편집으로 백필된다.
    * optional 인 이유: 0062 이전에 만들어진 Issue 픽스처·스냅샷과의 호환(생략 = 미연결).
@@ -153,7 +153,7 @@ export function filterIssues(
   f: {
     status: IssueStatusFilter
     severity: IssueSeverityFilter
-    mega: IssueMegaFilter
+    area: IssueAreaFilter
     mineOnly: boolean
     myMemberIds: ReadonlySet<string>
   },
@@ -161,7 +161,7 @@ export function filterIssues(
   return issues.filter(i =>
     (f.status === 'all' || i.status === f.status)
     && (f.severity === 'all' || i.severity === f.severity)
-    && (f.mega === 'all' || i.megaCode === f.mega)
+    && (f.area === 'all' || i.areaId === f.area)
     && (!f.mineOnly || i.assigneeMemberIds.some(id => f.myMemberIds.has(id))))
 }
 

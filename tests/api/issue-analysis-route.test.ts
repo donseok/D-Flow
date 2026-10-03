@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
@@ -45,6 +46,7 @@ function request(query = ''): NextRequest {
 
 function issue(): IssueAnalysisIssueInput {
   return {
+    codeAreaId: null,
     id: 'issue-1',
     issueNo: 1,
     projectId: 'project-1',
@@ -62,9 +64,9 @@ function issue(): IssueAnalysisIssueInput {
     createdByName: '테스터',
     createdAt: '2026-07-30T00:00:00Z',
     updatedAt: '2026-07-30T00:00:00Z',
-    megaCode: '00',
-    megaSeq: 1,
-    piIssueCode: 'PI-I-00-01',
+    areaId: '00',
+
+    code: 'PI-I-00-01',
     subProcess: '자재 등록',
     ownerDepartment: '기준정보팀',
     relatedSystems: ['ERP'],
@@ -74,7 +76,7 @@ function issue(): IssueAnalysisIssueInput {
 }
 
 function report() {
-  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()])
+  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [], TEST_AREAS)
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
       title: '기준정보 단일화',
@@ -108,7 +110,7 @@ beforeEach(() => {
   })
   mocks.getDisplayName.mockResolvedValue('홍길동')
   mocks.getProjectConfig.mockResolvedValue({ calendar: calSeoulMon, calendarError: null })
-  mocks.loadSavedIssueAnalysisRun.mockResolvedValue({
+  mocks.loadSavedIssueAnalysisRun.mockResolvedValue({ areas: TEST_AREAS,
     runId: 'run-1',
     projectId: 'project-1',
     projectName: 'Acme 프로젝트',

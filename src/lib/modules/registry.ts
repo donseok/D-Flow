@@ -51,10 +51,10 @@ export const MODULES: readonly ModuleDef[] = [
     routePrefixes: ['/p/[projectId]/weekly'], apiPrefixes: ['/api/report'] },
   { id: 'issues', core: false, scope: 'project', requires: [], envAvailable: always, botDomains: ['issues'], settings: settingsOf('issues'),
     nav: { project: { id: 'p.issues', labelKey: 'nav.issues', icon: 'CircleAlert', segment: 'issues', group: 'p.plan', order: 20 } },
-    routePrefixes: ['/p/[projectId]/issues'], apiPrefixes: ['/api/issue-analysis'] },   // 스펙 E16 — SP5 B1 과제 8 이 issue_analysis 모듈로 옮긴다
+    routePrefixes: ['/p/[projectId]/issues'], apiPrefixes: [] },
   // SP5 B1(스펙 D16, 개정 §4.4.2) — 프로세스 분석. issues 에 기대고 새 프로젝트에서 꺼진다(OFF_ON_CREATE). 관문 이동(apiPrefixes·라우트·분석 액션)은 과제 8
   { id: 'issue_analysis', core: false, scope: 'project', requires: ['issues'], envAvailable: always, botDomains: [], settings: settingsOf('issue_analysis'),
-    nav: null, routePrefixes: [], apiPrefixes: [] },
+    nav: null, routePrefixes: [], apiPrefixes: ['/api/issue-analysis'] },
   { id: 'wiki', core: false, scope: 'project', requires: ['minutes'], envAvailable: () => wikiServiceEnabled(), botDomains: ['wiki'], settings: settingsOf('wiki'),
     nav: { project: { id: 'p.wiki', labelKey: 'nav.wiki', icon: 'BookOpenText', segment: 'wiki', group: 'p.collab', order: 20 } },
     routePrefixes: ['/p/[projectId]/wiki'], apiPrefixes: ['/api/wiki'] },

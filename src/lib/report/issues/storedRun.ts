@@ -1,9 +1,7 @@
 import {
-  ISSUE_MEGA_AREAS,
-  formatPiIssueCode,
-  isIssueMegaCode,
   isIssueSourceType,
 } from '@/lib/domain/issueAnalysis'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import { ISSUE_MINUTE_SOURCE_KINDS } from '@/lib/domain/issueMinuteSource'
 import {
   ISSUE_SEVERITIES,
@@ -101,14 +99,13 @@ function parseMinuteSource(value: unknown): IssueAnalysisMinuteSourceSnapshot | 
 
 function parseIssue(
   value: unknown,
-  expectedMegaCode: IssueAnalysisReportArea['megaCode'],
+  expectedAreaCode: string,
+  areaId: string,
 ): IssueAnalysisReportIssue | null {
   const object = record(value)
   if (!object) return null
   const id = nonEmpty(object.id)
-  const issueNo = positiveInteger(object.issueNo)
-  const megaSeq = positiveInteger(object.megaSeq)
-  const piIssueCode = nonEmpty(object.piIssueCode)
+  const code = nonEmpty(object.code ?? object.piIssueCode)
   const title = nonEmpty(object.title)
   const body = nonEmpty(object.body)
   const subProcess = nonEmpty(object.subProcess)
@@ -127,11 +124,9 @@ function parseIssue(
   }
   if (
     !id
-    || issueNo === null
-    || megaSeq === null
-    || !piIssueCode
-    || piIssueCode !== formatPiIssueCode(expectedMegaCode, megaSeq)
-    || object.megaCode !== expectedMegaCode
+    || !code
+    || (object.megaCode !== undefined && object.megaCode !== expectedAreaCode)
+    || (object.areaId !== undefined && object.areaId !== areaId)
     || !title
     || !body
     || !subProcess
@@ -161,10 +156,8 @@ function parseIssue(
 
   return {
     id,
-    issueNo,
-    piIssueCode,
-    megaCode: expectedMegaCode,
-    megaSeq,
+    code,
+    areaId,
     majorId,
     title,
     body,
@@ -403,7 +396,8 @@ function parseCauseAnalyses(
  */
 export function parseStoredIssueAnalysisReport(
   value: unknown,
-  expectedProjectId?: string,
+  expectedProjectId: string | undefined,
+  areaRefs: readonly IssueAreaRef[],
 ): IssueAnalysisReport | null {
   const object = record(value)
   const projectId = object && nonEmpty(object.projectId)
@@ -418,23 +412,21 @@ export function parseStoredIssueAnalysisReport(
     || !Number.isSafeInteger(object.issueCount)
     || Number(object.issueCount) < 1
     || !Array.isArray(object.areas)
-    || object.areas.length !== ISSUE_MEGA_AREAS.length
   ) return null
 
   const allIds = new Set<string>()
   const areas: IssueAnalysisReportArea[] = []
-  for (let index = 0; index < ISSUE_MEGA_AREAS.length; index += 1) {
-    const expected = ISSUE_MEGA_AREAS[index]
-    const areaObject = record(object.areas[index])
-    if (
-      !areaObject
-      || areaObject.megaCode !== expected.code
-      || areaObject.megaName !== expected.nameKo
-      || areaObject.megaNameEn !== expected.nameEn
-      || !isIssueMegaCode(areaObject.megaCode)
-      || !Array.isArray(areaObject.issues)
-    ) return null
-    const issues = areaObject.issues.map(issue => parseIssue(issue, expected.code))
+  const seenCodes = new Set<string>()
+  for (const storedArea of object.areas) {
+    const areaObject = record(storedArea)
+    const areaCode = areaObject && nonEmpty(areaObject.areaCode ?? areaObject.megaCode)
+    if (!areaObject || !areaCode || seenCodes.has(areaCode) || !Array.isArray(areaObject.issues)) return null
+    seenCodes.add(areaCode)
+    const expected = areaRefs.find(area => area.code === areaCode)
+    const areaId = expected?.id ?? nonEmpty(areaObject.areaId) ?? `stored:${areaCode}`
+    const areaName = expected?.name ?? areaCode
+    if (!expected) console.warn('[issue-analysis] 저장 실행의 영역 코드가 현재 정본에 없음:', areaCode)
+    const issues = areaObject.issues.map(issue => parseIssue(issue, areaCode, areaId))
     if (issues.some(issue => issue === null)) return null
     const typedIssues = issues as IssueAnalysisReportIssue[]
     if (typedIssues.some(issue => allIds.has(issue.id))) return null
@@ -469,9 +461,9 @@ export function parseStoredIssueAnalysisReport(
     if (!summary || !opportunities) return null
     if (hasCauseAnalyses && causeAnalyses === null) return null
     areas.push({
-      megaCode: expected.code,
-      megaName: expected.nameKo,
-      megaNameEn: expected.nameEn,
+      areaId,
+      areaCode,
+      areaName,
       ...(majors === undefined || majors === null ? {} : { majors }),
       ...(processDefinitions === undefined || processDefinitions === null
         ? {}
@@ -491,6 +483,6 @@ export function parseStoredIssueAnalysisReport(
     projectId,
     issueCount: Number(object.issueCount),
     generatedAt,
-    areas,
+    areas: areas.sort((a, b) => (areaRefs.find(area => area.code === a.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) - (areaRefs.find(area => area.code === b.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.areaCode.localeCompare(b.areaCode)),
   }
 }
