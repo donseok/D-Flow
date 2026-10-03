@@ -7,6 +7,7 @@ export type NoticeKind = 'unavailable' | 'invalid' | 'required' | 'field' | 'pat
 export const NOTICE_STATUS: Readonly<Record<NoticeKind, StatusKind>> = {
   unavailable: 'partial_error', invalid: 'partial_error', required: 'needs_setup', disabled: 'disabled', field: 'partial_error', patch: 'partial_error',
 }
+// required는 본문을 대체하는 호출도 있지만 의미는 설정 필요(status). 막는 조회/입력 오류와 구분한다(U3-3 P2-3).
 const BLOCKING: ReadonlySet<NoticeKind> = new Set(['unavailable', 'invalid', 'field', 'patch'])
 const RECOVERABLE: ReadonlySet<NoticeKind> = new Set(['invalid', 'required', 'disabled'])
 

@@ -13,7 +13,10 @@ export function SettingsSaveBar({ children, summary, notice, tone = 'surface' }:
   return (
     <div data-save-bar className={`sticky bottom-0 z-10 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 ${tone === 'subtle' ? 'bg-surface-subtle' : 'bg-surface'}`}>
       {/* 저장 결과 알림은 바 안(편집기가 화면 아래로 이어져도 보이게) — 성공 색. 알림이 없으면 요약(변경 n개 등) */}
-      {notice ? <span role="status" className="text-meta text-done">{notice}</span> : <span className="text-meta text-fg-secondary">{summary}</span>}
+      <span className={`text-meta ${notice ? 'text-done' : 'text-fg-secondary'}`}>
+        <span role="status" aria-live="polite" aria-atomic="true">{notice ?? ''}</span>
+        {!notice && summary}
+      </span>
       <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )

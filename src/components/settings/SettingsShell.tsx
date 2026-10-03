@@ -34,18 +34,36 @@ export function SettingsShell({ items, children }: { items: SettingsNavItem[]; c
     return () => io.disconnect()
   }, [items])
   useEffect(() => {                                            // 저장 바 높이 → --settings-save-bar-h(+ main 의 초점 스크롤 여백)
-    const bars = content.current?.querySelectorAll<HTMLElement>('[data-save-bar]') ?? []
-    if (!bars.length || typeof ResizeObserver === 'undefined') return
+    const box = content.current
+    if (!box || typeof ResizeObserver === 'undefined') return
     const main = root.current?.closest('main') ?? null
+    const previousPadding = main?.style.scrollPaddingBottom ?? ''
+    const bars = new Set<Element>()
     const heights = new Map<Element, number>()
-    const ro = new ResizeObserver((entries) => {
-      for (const e of entries) heights.set(e.target, e.contentRect.height)
+    const reserve = () => {
       const h = Math.ceil(Math.max(0, ...heights.values()))
       root.current?.style.setProperty('--settings-save-bar-h', `${h}px`)
-      if (main) main.style.scrollPaddingBottom = `${h + 8}px`
+      if (main) main.style.scrollPaddingBottom = bars.size ? `${h + 8}px` : previousPadding
+    }
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        if (bars.has(e.target)) heights.set(e.target, e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height)
+      }
+      reserve()
     })
-    bars.forEach((b) => ro.observe(b))
-    return () => { ro.disconnect(); if (main) main.style.scrollPaddingBottom = '' }
+    // 영역 편집 폼처럼 서버 children 변경 없이 뒤늦게 생기는 저장 바도 관찰한다(U3-3 P2-1).
+    const sync = () => {
+      const next = new Set(box.querySelectorAll<HTMLElement>('[data-save-bar]'))
+      for (const b of bars) if (!next.has(b as HTMLElement)) { ro.unobserve(b); bars.delete(b); heights.delete(b) }
+      for (const b of next) if (!bars.has(b)) {
+        bars.add(b); heights.set(b, b.getBoundingClientRect().height); ro.observe(b, { box: 'border-box' })
+      }
+      reserve()
+    }
+    sync()
+    const mo = new MutationObserver(sync)
+    mo.observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-save-bar'] })
+    return () => { mo.disconnect(); ro.disconnect(); if (main) main.style.scrollPaddingBottom = previousPadding }
   }, [children])
 
   return <div ref={root} style={{ '--settings-save-bar-h': '0px' } as CSSProperties} className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">

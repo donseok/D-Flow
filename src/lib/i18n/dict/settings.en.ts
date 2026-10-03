@@ -3,15 +3,8 @@
 import type { settingsKo } from './settings'
 
 export const settingsEn: Record<keyof typeof settingsKo, string> = {
-  // Hero / KPI
-  'settings.heroTitleSuffix': 'settings',
+  // Common names
   'settings.projectFallback': 'Project',
-  'settings.heroDesc': 'Manage project metadata and data in one place.',
-  'settings.kpiTasksSub': 'Registered leaf tasks',
-  'settings.kpiBaseAuto': 'Auto',
-  'settings.kpiBaseSubManual': 'Progress base date (manual)',
-  'settings.kpiBaseSubToday': 'Progress base date (today)',
-  'settings.kpiScheduleSub': 'Project schedule',
   'settings.tbd': 'TBD',
   // AI Assistant index badge
   'settings.badgeFresh': 'Index up to date',

@@ -101,7 +101,7 @@ describe('ViewsDefaultEditor', () => {
     expect(radio('간트').getAttribute('aria-checked')).toBe('true')            // 초안은 남는다
     expect(saveBtn().disabled).toBe(false)                                     // 기준선(sheet)이 바뀌지 않았으니 여전히 바뀐 상태
     expect(saveBtn().textContent).toBe('기본 보기 저장')                         // 결과 불명 갈래로 가지 않는다
-    expect(document.querySelector('[data-save-bar] [role="status"]')).toBeNull(); expect(h.refresh).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-save-bar] [role="status"]')?.textContent).toBe(''); expect(h.refresh).not.toHaveBeenCalled()
     fireEvent.click(saveBtn())
     await waitFor(() => expect(h.update).toHaveBeenCalledTimes(2))
     expect(h.update.mock.calls[1][1]).toMatchObject({ expectedRevision: 3 })   // 기준 revision 도 그대로

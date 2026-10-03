@@ -4,6 +4,7 @@
  * 결과 불명 → 같은 명령의 결과 확인 → 그래도 모르면 같은 명령으로 한 번 재전송 → 그래도 모르면 '결과 확인 및 재시도'.
  * 쓰기는 설정 액션(updateWorkspaceSettings·updateProjectSettings → apply_*_settings RPC) 한 길이다(CLAUDE.md 권한 절).
  * C 의 편집기는 이 훅으로 바꾸지 않는다(기능 무변경 — 스펙 §6.4). 새 편집기 둘(UI-3)만 쓴다.
+ * 저장 뒤 동기화 후속이 있는 키에는 쓰지 않는다. appliedRevision(저장 성공·동기화 실패) 채택은 지원하지 않는다(U3-3 P2-10a).
  */
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'

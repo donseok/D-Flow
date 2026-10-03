@@ -361,6 +361,9 @@ export function WbsGanttSheet({
   const [fullscreen, setFullscreen] = useState(false) // 팝업(전체화면 모달)로 크게 보기
   // 전체 화면은 전역 바(AI 아이콘)를 덮는다 — 전체 화면 툴바의 AI 토글이 레일 API 로 연다(AA3, D56). aiAvailable = 탐침 통과 + 레일 API 로 열 수 있음
   const aiRail = useRightRailOptional()
+  const closeRail = aiRail?.close
+  // 페이지를 떠나면 자신의 점유만 회수한다. AI 전환/패널 교체는 선택과 AI 점유를 보존한다.
+  useEffect(() => () => closeRail?.('inspector'), [closeRail])
   const aiOpen = aiRail?.occupant === 'ai'
   const [reportOpen, setReportOpen] = useState(false) // 주간 보고서 모달
   // 의존성 연결선은 상시 표시하지 않는다 — 두 축을 합치면서 선이 너무 많아졌다(2026-08-28).

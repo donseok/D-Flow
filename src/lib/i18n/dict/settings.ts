@@ -1,15 +1,8 @@
 // settings 화면 사전 — 이 파일은 settings 영역 담당만 수정한다.
 // en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const settingsKo = {
-  // Hero / KPI
-  'settings.heroTitleSuffix': '설정',
+  // 공통 이름
   'settings.projectFallback': '프로젝트',
-  'settings.heroDesc': '프로젝트 메타 정보와 데이터 관리를 한곳에서 조정합니다.',
-  'settings.kpiTasksSub': '등록된 리프 작업',
-  'settings.kpiBaseAuto': '자동',
-  'settings.kpiBaseSubManual': '공정율 기준일(수동)',
-  'settings.kpiBaseSubToday': '공정율 기준일(오늘)',
-  'settings.kpiScheduleSub': '프로젝트 일정',
   'settings.tbd': '미정',
   // AI 어시스턴트 색인 배지
   'settings.badgeFresh': '색인 최신',
