@@ -25,6 +25,13 @@ describe('renderIssueCode — 최소 n자리·절단 금지', () => {
     expect(() => renderIssueCode({ prefix: 'R', pattern: '{prefix}-{yyyy}-{seq:3}', counter_scope: 'project', reset: 'yearly' }, { areaCode: null, year: null, seq: 1 }))
       .toThrow('ISSUE_YEAR_REQUIRED')
   })
+  it("치환 값의 $ 특수 패턴($&·$1·$$)을 해석하지 않고 리터럴로 넣는다(순수 함수가 호출자 신뢰에 기대지 않는다)", () => {
+    const rs = { prefix: 'RS', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' } as const
+    expect(renderIssueCode(rs, { areaCode: '$&', year: null, seq: 1 })).toBe('RS-$&-001')
+    expect(renderIssueCode(rs, { areaCode: '$1', year: null, seq: 1 })).toBe('RS-$1-001')
+    expect(renderIssueCode(rs, { areaCode: '$$', year: null, seq: 1 })).toBe('RS-$$-001')
+    expect(renderIssueCode({ ...rs, prefix: '$&' }, { areaCode: 'A', year: null, seq: 1 })).toBe('$&-A-001')
+  })
   it('레거시 형식(이관 전용)은 영역별 템플릿과 겹치지 않는다 — 1..1500 전부(D55)', () => {
     const pi = { prefix: 'PI', pattern: '{prefix}-I-{area}-{seq:2}', counter_scope: 'area', reset: 'never' } as const
     const legacy = { prefix: 'PI', pattern: '{prefix}-U-{seq:3}', counter_scope: 'project', reset: 'never' } as const

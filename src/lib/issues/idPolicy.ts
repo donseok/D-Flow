@@ -5,6 +5,7 @@ import { parseTimezone, ymdIn } from '@/lib/domain/calendar'
 
 export type IdPolicy = { prefix: string; pattern: string; counter_scope: 'project' | 'area'; reset: 'never' | 'yearly' }
 export const DEFAULT_ID_POLICY: IdPolicy = Object.freeze({ prefix: 'ISS', pattern: '{prefix}-{seq:3}', counter_scope: 'project', reset: 'never' })
+// seq 가 n 자리 이내일 때의 최대 — 절단 금지 때문에 이후 자리 올림에서 더 길어질 수 있어 DB 는 code 길이 CHECK 를 걸지 않는다
 export const ID_POLICY_MAX_LENGTH = 40
 
 const KEYS = ['counter_scope', 'pattern', 'prefix', 'reset'] as const
@@ -13,10 +14,9 @@ const SEQ_TOKEN = /\{seq:([2-6])\}/
 const LITERALS = /^[A-Za-z0-9._#/-]*$/
 const fail = (error: string) => ({ ok: false as const, error })
 
-/** SQL issue_id_policy_of 와 같은 순서로 지운다 — {yyyy} 를 {yy} 보다 먼저 */
+/** 토큰을 한 번에(단일 정규식) 지운다 — 순차 치환은 앞 토큰을 지운 자리에서 중첩 토큰이 새로 만들어져 리터럴 규칙이 우회된다. SQL issue_id_policy_of 도 같은 단일 패스여야 한다 */
 function stripTokens(pattern: string): string {
-  return pattern.replaceAll('{prefix}', '').replaceAll('{area}', '').replaceAll('{yyyy}', '').replaceAll('{yy}', '')
-    .replace(new RegExp(SEQ_TOKEN.source, 'g'), '')
+  return pattern.replace(/\{(?:prefix|area|yyyy|yy|seq:[2-6])\}/g, '')
 }
 export const policyNeedsArea = (p: IdPolicy): boolean => p.pattern.includes('{area}')
 export const policyNeedsYear = (p: IdPolicy): boolean => p.pattern.includes('{yyyy}') || p.pattern.includes('{yy}')
@@ -48,9 +48,10 @@ export function renderIssueCode(p: IdPolicy, v: { areaCode: string | null; year:
   const n = Number(SEQ_TOKEN.exec(p.pattern)![1])
   const s = String(v.seq)
   const y = v.year ?? 0
-  return p.pattern.replaceAll('{prefix}', p.prefix).replaceAll('{area}', v.areaCode ?? '')
-    .replaceAll('{yyyy}', String(y).padStart(4, '0')).replaceAll('{yy}', String(y % 100).padStart(2, '0'))
-    .replace(SEQ_TOKEN, s.padStart(Math.max(n, s.length), '0'))
+  // 치환 값은 함수로 준다 — 문자열 인자는 $&·$1 을 특수 패턴으로 해석한다
+  return p.pattern.replaceAll('{prefix}', () => p.prefix).replaceAll('{area}', () => v.areaCode ?? '')
+    .replaceAll('{yyyy}', () => String(y).padStart(4, '0')).replaceAll('{yy}', () => String(y % 100).padStart(2, '0'))
+    .replace(SEQ_TOKEN, () => s.padStart(Math.max(n, s.length), '0'))
 }
 
 export function scopeKeyOf(p: IdPolicy, v: { areaId: string | null; year: number | null }): string {
