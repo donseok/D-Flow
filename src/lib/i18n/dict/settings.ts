@@ -227,5 +227,6 @@ export const settingsKo = {
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '워크스페이스 홈에 보일 위젯과 열 안의 순서를 정합니다. 사람마다 위젯을 숨길 수 있습니다.',
+  'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

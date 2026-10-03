@@ -1,4 +1,4 @@
-// 프로젝트 키 9개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled). 값 형태의 정본은 개정 §2.8.2.
+// 프로젝트 키 10개(SP5 A 의 calendar.* 셋, SP3b UI-3 의 views.default 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(여섯)·settings(modules.enabled·calendar.* 셋). 값 형태의 정본은 개정 §2.8.2.
 import { REQUIRED_ON_CREATE, defineSetting, type EditCtx, type Parsed, type SettingDef } from '../def'
 import { OFF_ON_CREATE, PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
@@ -86,6 +86,22 @@ export function copyWeekStartRules(src: readonly WeekStartRule[]): WeekStartRule
   return [{ day: src[src.length - 1].day, from: null }]
 }
 
+export type WbsView = 'sheet' | 'timeline' | 'board'
+export const WBS_VIEWS: readonly WbsView[] = ['sheet', 'timeline', 'board']
+export type ViewsDefault = { wbs: WbsView }
+/** 기본값 = 현행 동작(첫 보기는 표 — 개정 §2.6.2 R1, D43) */
+export const DEFAULT_VIEWS: ViewsDefault = { wbs: 'sheet' }
+/** { wbs } 만 받는다 — 밀도 등 필드를 나중에 더하는 것은 형태 변경(R5)이라 별도 키다(D43). 보드 ↔ 칸반 교차 검사는 validateProjectConfig(W12) */
+export function parseViewsDefault(raw: unknown): Parsed<ViewsDefault> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('보기 기본값은 { wbs } 여야 합니다.')
+  const keys = Object.keys(raw)
+  if (keys.length !== 1 || keys[0] !== 'wbs') return fail('보기 기본값에는 wbs 만 둡니다.')
+  const wbs = (raw as { wbs: unknown }).wbs
+  return typeof wbs === 'string' && (WBS_VIEWS as readonly string[]).includes(wbs)
+    ? { ok: true, value: { wbs: wbs as WbsView } }
+    : fail('작업 계획 기본 보기는 sheet·timeline·board 중 하나입니다.')
+}
+
 export const PROJECT_DEFS = [
   defineSetting<'core.level_labels', string[]>({
     key: 'core.level_labels', scope: 'project', module: 'wbs', default: REQUIRED_ON_CREATE, explicit: true,
@@ -138,6 +154,13 @@ export const PROJECT_DEFS = [
     edit: { parseInput: parseWeekStartDay, toStored: weekStartToStored },
     widget: { kind: 'custom', component: 'WeekStartEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only', 'recompute'],
     sql: { readers: ['week_key_of', 'weekly_reports_week_key_guard', 'settings_ref_check'] },
+  }),
+  // SP3b UI-3(스펙 §6.4 표 둘째 행, D43) — 작업 계획의 첫 보기. 보드는 칸반이 켜진 프로젝트에서만 저장되고(validateConfig), 저장 뒤 칸반이
+  // 꺼지면 읽는 쪽이 표로 그린다. 보기 결정은 ?view → 이 값 → 'sheet'(소비처는 과제 14)
+  defineSetting<'views.default', ViewsDefault>({
+    key: 'views.default', scope: 'project', module: 'wbs', default: DEFAULT_VIEWS,
+    parse: parseViewsDefault,
+    widget: { kind: 'custom', component: 'ViewsDefaultEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

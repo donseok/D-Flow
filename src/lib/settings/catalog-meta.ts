@@ -51,6 +51,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // SP3b UI-3 과제 2 — 정의·테스트(네 연결 ①④)만. 편집기(과제 6 PortalWidgetsEditor)·소비처(과제 10 홈 v1)가 붙으면 상태를 올린다.
   // 지금의 소비처 칸은 노출 식(visibleWidgets)을 가진 위젯 레지스트리다
   'portal.widgets': { consumers: ['src/lib/portal/widgets.ts'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts'], status: 'stored', sp: 'SP3b' },
+  // SP3b UI-3 과제 3 — 정의·보드 교차 검사·테스트(네 연결 ①④)만. 편집기(과제 7 ViewsDefaultEditor)·소비처(과제 14 작업 계획 보기 결정)가 붙으면 올린다
+  'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts'], tests: ['tests/settings/views-default-def.test.ts'], status: 'stored', sp: 'SP3b' },
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
@@ -81,7 +83,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'forms.wbs_export_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'minutes.auto_file_by_path', scope: 'project', sp: 'SP7', shape: 'boolean' },
   { key: 'minutes.attachments', scope: 'project', sp: 'SP5 B3', shape: '첨부 정책 객체(seedFrom)' },
-  { key: 'views.default', scope: 'project', sp: 'SP3b', shape: "{ wbs: 'sheet'|'timeline'|'board'; density }" },
 ]
 
 /** 개인 설정(개정 §2.8.5) — 계정 키는 계정 행, 워크스페이스 키는 그 워크스페이스의 개인 행(SP3b D9 — 키 목록의 정본은 prefs 의 split.ts).

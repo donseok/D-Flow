@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 21키 등록(SP5 A 의 calendar.* 여섯 포함 — 같은 이름이 두 스코프, SP3b UI-3 의 portal.widgets), 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 22키 등록(SP5 A 의 calendar.* 여섯 포함 — 같은 이름이 두 스코프, SP3b UI-3 의 portal.widgets·views.default), 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,12 +18,12 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 21키 — 워크스페이스 12, 프로젝트 9(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP3b UI-3 portal.widgets)', () => {
+  it('정확히 22키 — 워크스페이스 12, 프로젝트 10(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP3b UI-3 portal.widgets·views.default)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
-      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start'])
-    for (const k of ['agents.stage_workflow', 'views.default', 'core.stage_credits']) {
+      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'views.default'])
+    for (const k of ['agents.stage_workflow', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
   })
@@ -38,6 +38,7 @@ describe('등록 키', () => {
     expect(row('core.milestone_keywords')).toEqual(['project', 'project_admin', 'wbs', 'text_list', 'immediate', ['recompute']])
     expect(row('modules.enabled')).toEqual(['project', 'project_admin', 'settings', 'custom', 'immediate', ['recompute']])
     expect(row('workflow.stage_credits')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only']])
+    expect(row('views.default')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['none']])
     expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event'] })
     // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys)
     expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/workflow.stage_credits', 'project/calendar.working_days', 'project/calendar.week_start'])
@@ -287,10 +288,12 @@ describe('카탈로그 메타와 사전', () => {
     expect(status('workflow.stage_credits')).toBe('wired')
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
-    // SP3b UI-3 과제 2 — portal.widgets 는 정의만(편집기 과제 6·소비처 과제 10 전) stored
+    // SP3b UI-3 과제 2·3 — portal.widgets·views.default 는 정의만(편집기 과제 6·7, 소비처 과제 10·14 전) stored
     expect(status('portal.widgets')).toBe('stored')
-    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['views.default', 'workflow.approval_steps']))
+    expect(status('views.default')).toBe('stored')
+    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['workflow.approval_steps']))
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('portal.widgets')
+    expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('views.default')
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

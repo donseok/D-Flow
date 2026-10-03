@@ -229,5 +229,6 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.week_start.label': 'Week start', 'settings.calendar.week_start.desc': 'The first day of the week for weekly reports and this-week views. A project change applies from next week; past weekly reports stay as they are.',
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
   'settings.portal.widgets.label': 'Home widgets', 'settings.portal.widgets.desc': 'Choose which widgets appear on the workspace home and their order within each column. Each person can still hide widgets.',
+  'settings.views.default.label': 'Default work plan view', 'settings.views.default.desc': 'The view the work plan opens with (sheet, timeline or board). Board needs the kanban module.',
   'settings.configLoadFailed': 'Settings could not be loaded, so this view cannot be drawn. Refresh in a moment.', 'settings.configLoadFailedKey': 'Corrupt or missing setting: {key}',
 }

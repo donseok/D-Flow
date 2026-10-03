@@ -26,6 +26,7 @@ export interface ProjectValidateDeps {
   allowedBroken?: boolean                // 워크스페이스 modules.allowed 가 손상(invalid) — allowed 는 빈 목록이고 거부 사유를 따로 알린다
 }
 export const ERR_MODULES_ALLOWED_BROKEN = '워크스페이스 모듈 허용 설정이 손상돼 새 모듈을 켤 수 없습니다 — 관리자에게 알리세요'
+export const ERR_VIEWS_BOARD_KANBAN_OFF = '칸반이 꺼져 있어 보드를 기본 보기로 고를 수 없습니다.'
 
 const has = <K extends string>(o: Partial<Record<K, unknown>>, k: K) => Object.prototype.hasOwnProperty.call(o, k)
 
@@ -49,6 +50,15 @@ export function validateProjectConfig(next: Partial<Record<ProjectSettingKey, un
     else {
       const r = checkEnabledModules({ next: enabled, prev: deps.prevEnabled, allowed: deps.allowed })
       if (!r.ok) fieldErrors.push({ key: 'modules.enabled', message: r.error })
+    }
+  }
+  if (has(next, 'views.default')) {
+    const v = next['views.default'] as { wbs: string }
+    // 보드는 칸반이 effective 일 때만(D43) — 같은 패치의 modules.enabled 가 있으면 그 값으로 본다(W12). env 는 always 라 허용·켜짐만 본다.
+    // 저장된 enabled 를 모르면(prevEnabled null) 켜짐을 확인하지 못한 것이라 거부한다. 칸반을 끄는 저장 자체는 여기서 막지 않는다
+    const enabledAfter = has(next, 'modules.enabled') ? (next['modules.enabled'] as ModuleId[]) : (deps.prevEnabled ?? [])
+    if (v.wbs === 'board' && !(enabledAfter.includes('kanban') && deps.allowed.includes('kanban'))) {
+      fieldErrors.push({ key: 'views.default', message: ERR_VIEWS_BOARD_KANBAN_OFF })
     }
   }
   return fieldErrors.length ? { ok: false, fieldErrors } : { ok: true }
