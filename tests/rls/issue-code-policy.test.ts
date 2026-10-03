@@ -112,6 +112,15 @@ describe('채번 트리거', () => {
       expect((await add(c)).code).toBe(`RND-${String(y % 100).padStart(2, '0')}-0001`)
     })
   })
+  it.each([null, 123, true, [], {}])('시간대 키가 손상된 JSON %j 이면 UTC로 대체하지 않는다', async (timezone) => {
+    await asService(pool, async (c) => {
+      await scene(c, { prefix: 'RND', pattern: '{prefix}-{yyyy}-{seq:4}', counter_scope: 'project', reset: 'yearly' },
+        { 'calendar.timezone': timezone })
+      expect(await pgError(c, `insert into public.issues (project_id, title) values ($1, 'x')`, [P]))
+        .toMatchObject({ code: '22023', message: 'CONFIG_INVALID:calendar.timezone' })
+      expect((await c.query('select count(*)::int as n from public.issue_number_counters where project_id = $1', [P])).rows[0].n).toBe(0)
+    })
+  })
   it('정책 손상이면 등록이 22023 CONFIG_INVALID:issues.id_policy(fail-closed — 기본값으로 풀지 않는다)', async () => {
     await asService(pool, async (c) => {
       await scene(c, null)
