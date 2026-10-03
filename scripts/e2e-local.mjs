@@ -72,10 +72,11 @@ const log = (m) => console.error(`· ${m}`)
 
 let env
 let adminEnv
+let envText
 try {
-  const text = readFileSync('.env.local', 'utf8')
-  env = localClientEnv(text)
-  adminEnv = localAdminEnv(text) // 타 워크스페이스 픽스처 전용(로컬 판정은 targets.mjs 한 곳)
+  envText = readFileSync('.env.local', 'utf8')
+  env = localClientEnv(envText)
+  adminEnv = localAdminEnv(envText) // 타 워크스페이스 픽스처 전용(로컬 판정은 targets.mjs 한 곳)
 } catch (e) {
   console.error(`✗ ${e.message}`)
   process.exit(1)
@@ -1379,7 +1380,7 @@ async function main() {
       [A.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result)
   }
   const analysisPolicy = { prefix: 'E2E', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' }
-  const hasIndexKey = /^(OPENAI|ANTHROPIC|AI_GATEWAY)[A-Z_]*=.+/m.test(text)
+  const hasIndexKey = /^(OPENAI|ANTHROPIC|AI_GATEWAY)[A-Z_]*=.+/m.test(envText)
   const enabledForIssueFlow = [...new Set([...aModulesBefore, 'issue_analysis', ...(hasIndexKey ? ['chatbot'] : [])])]
   await updateASettings({ 'issues.id_policy': analysisPolicy, 'modules.enabled': enabledForIssueFlow })
   await admin.http('GET', `/p/${A.id}/settings`)
