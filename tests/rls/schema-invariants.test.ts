@@ -62,7 +62,6 @@ describe('스키마 불변식', () => {
   // 판정(isScopedQual) 은 scripts/lib/rls-scope.mjs 순수 모듈 — auth.uid() 단독 존재(`is not null`)는 스코프로
   // 치지 않는다(리뷰 라운드 1). tests/scripts/rls-scope.test.ts 가 그 경계를 DB 없이 고정한다.
   const OPEN_READ_EXCEPTIONS: Record<string, string> = {
-    'public.issue_mega_areas.read_all_issue_mega_areas': 'D2 — 전역 참조 데이터(테넌트 행 없음). 만료: SP5 에서 표가 프로젝트 영역으로 대체',
     'realtime.messages.receive_own_notification_channel':
       "SP1 — topic = 'user-' || auth.uid() || '-notifications'(본인 채널만). auth.uid() 가 문자열 조합 안에 있어 판정기의 '= auth.uid()' 비교로 읽히지 않는다",
   }
