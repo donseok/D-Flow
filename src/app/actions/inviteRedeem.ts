@@ -158,6 +158,9 @@ async function rollbackSignup(
 }
 
 export interface InvitePreview {
+  /** 활성 초대에서만 반환한다. 비활성 링크에는 소속과 권한을 노출하지 않는다. */
+  workspaceName?: string | null
+  accessRole?: AccessRole | null
   projectName: string
   projectDescription: string | null
   /** 전체 주소는 노출하지 않는다 — 링크만 주운 사람에게 수신자를 알려주지 않기 위해. */
@@ -171,6 +174,8 @@ export interface InvitePreview {
 
 interface PreviewRowRaw {
   workspace_id: string
+  access_role: AccessRole | null
+  workspaces: { name: string } | null
   email: string
   expires_at: string
   revoked_at: string | null
@@ -184,9 +189,9 @@ export async function getInvitePreview(
 ): Promise<{ ok: true; preview: InvitePreview } | { ok: false; error: string }> {
   if (!isInviteToken(token)) return { ok: false, error: E_NOT_FOUND }
   const admin = createAdminClient()
-  // 반환 컬럼 화이트리스트 — projects 는 name/description 만(share 페이지 선례).
+  // 반환 컬럼 화이트리스트 — projects name/description, workspaces name, 초대 access_role만. 비활성은 상태만 반환한다.
   const found = await loadInvite<PreviewRowRaw>(
-    admin, token, 'workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, projects(name, description)',
+    admin, token, 'workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, access_role, projects(name, description), workspaces(name)',
   )
   if (!found.ok) return found
   const row = found.invite
@@ -239,6 +244,8 @@ export async function getInvitePreview(
     ok: true,
     preview: {
       projectName: project?.name ?? '',
+      workspaceName: row.workspaces?.name ?? null,
+      accessRole: row.access_role ?? null,
       projectDescription: project?.description ?? null,
       maskedEmail: maskEmail(row.email),
       status,

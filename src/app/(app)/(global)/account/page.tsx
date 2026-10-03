@@ -2,6 +2,8 @@ import { getSession } from '@/lib/auth'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { listProjectsWithState } from '@/app/actions/project'
 import { AccountView } from '@/components/account/AccountView'
+import { readCurrentWorkspace } from '@/lib/workspace/current'
+import { getAccountPrefs, getWorkspacePrefs } from '@/app/actions/preferences'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +12,13 @@ export const dynamic = 'force-dynamic'
  * 리다이렉트하므로 여기서 별도 가드는 두지 않는다((app) 레이아웃 관례).
  */
 export default async function AccountPage() {
-  const [user, projectState] = await Promise.all([getSession(), listProjectsWithState()])
+  const [user, projectState, cur, acc] = await Promise.all([getSession(), listProjectsWithState(), readCurrentWorkspace(), getAccountPrefs()])
+  if (!cur.ok) console.error('[account] 현재 워크스페이스 조회 실패:', cur.error)
+  const ws = cur.ok ? cur.ws : null
+  const wsPrefs = ws ? await getWorkspacePrefs(ws.id, { strict: true }).catch((e: unknown) => {
+    console.error('[account] 워크스페이스 선호 조회 실패:', e)
+    return null
+  }) : {}
   const email = user?.email ?? null
   const displayName = user ? displayNameFrom(user.user_metadata, user.email) : null
 
@@ -19,6 +27,10 @@ export default async function AccountPage() {
       email={email}
       displayName={displayName}
       projects={projectState.projects.map(p => ({ id: p.id, name: p.name }))}
+      currentWorkspace={ws ? { id: ws.id, name: ws.name } : null}
+      currentWorkspaceError={!cur.ok || wsPrefs === null}
+      startPage={wsPrefs?.startPage ?? null}
+      projectsView={acc.projectsView === 'cards' ? 'cards' : 'rows'}
     />
   )
 }

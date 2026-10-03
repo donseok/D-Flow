@@ -61,7 +61,7 @@ function makeAdmin(f: Fixtures = {}) {
   const spies = {
     rpc: vi.fn(), inviteEq: vi.fn(), inviteUpdate: vi.fn(), inviteUpdateEq: vi.fn(), existingEq: vi.fn(),
     profileEq: vi.fn(), profileInsert: vi.fn(), createUser: vi.fn(), deleteUser: vi.fn(), teamsIn: vi.fn(),
-    settingsEq: vi.fn(),
+    settingsEq: vi.fn(), inviteSelect: vi.fn(),
   }
   spies.rpc.mockResolvedValue(f.consume ?? { data: CONSUMED, error: null })
   spies.inviteUpdate.mockResolvedValue(f.inviteUpdate ?? { error: null })
@@ -72,12 +72,12 @@ function makeAdmin(f: Fixtures = {}) {
     from(table: string) {
       if (table === 'project_invites') {
         return {
-          select: () => ({
+          select: (cols: string) => { spies.inviteSelect(cols); return ({
             eq: (col: string, v: unknown) => {
               spies.inviteEq(col, v)
               return { maybeSingle: async () => f.invite ?? { data: INVITE, error: null } }
             },
-          }),
+          }) },
           // update(...).eq(...).eq(...) — 조건을 모두 기록하고, await 시점에 결과를 낸다.
           update: (patch: unknown) => {
             const q = {
@@ -499,6 +499,8 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
 describe('getInvitePreview', () => {
   const PREVIEW_ROW = {
     workspace_id: WS_ID,
+    workspaces: { name: 'Acme' },
+    access_role: 'member',
     email: INVITE.email,
     expires_at: INVITE.expires_at,
     revoked_at: null,
@@ -518,6 +520,8 @@ describe('getInvitePreview', () => {
       ok: true,
       preview: {
         projectName: 'Acme Project',
+        workspaceName: 'Acme',
+        accessRole: 'member',
         projectDescription: '전사 프로젝트',
         maskedEmail: 'mi*******@example.com',
         status: 'active',
@@ -529,6 +533,13 @@ describe('getInvitePreview', () => {
     expect(spies.profileEq).toHaveBeenCalledWith('email', INVITE.email)
     // 팀 없는 초대는 팀 조회도 하지 않는다.
     expect(spies.teamsIn).not.toHaveBeenCalled()
+    expect(spies.inviteSelect).toHaveBeenCalledWith('workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, access_role, projects(name, description), workspaces(name)')
+  })
+
+  it.each(['admin', null])('활성 초대의 권한 %s를 보존한다', async accessRole => {
+    makeAdmin({ invite: { data: { ...PREVIEW_ROW, access_role: accessRole }, error: null } })
+    const res = await getInvitePreview(TOKEN)
+    expect(res.ok && res.preview.accessRole).toBe(accessRole)
   })
 
   it('초대에 담긴 팀을 이름 목록으로 — 초대에 담은 순서(첫 팀이 대표 후보)대로', async () => {

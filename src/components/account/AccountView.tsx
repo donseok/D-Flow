@@ -2,7 +2,9 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { Check, KeyRound, Mail, User as UserIcon } from 'lucide-react'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
+import type { UiPrefs } from '@/lib/domain/types'
+import { WorkspacePrefsSection } from './WorkspacePrefsSection'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
 import { MyTokensSection } from '@/components/account/MyTokensSection'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
@@ -13,33 +15,36 @@ import { useLocale } from '@/components/providers/LocaleProvider'
  * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단·언어 — SP3b UI-1, 결정 #21) · PAT 발급/관리.
  * HeaderChrome 드롭다운의 비밀번호 변경 진입은 이 화면으로 이동했다(ChangePasswordModal 재사용).
  */
-export function AccountView({ email, displayName, projects }: {
+export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows' }: {
   email: string | null
   displayName: string | null
   projects: { id: string; name: string }[]
+  currentWorkspace?: { id: string; name: string } | null
+  currentWorkspaceError?: boolean
+  startPage?: UiPrefs['startPage'] | null
+  projectsView?: 'rows' | 'cards'
 }) {
   const [pwOpen, setPwOpen] = useState(false)
   const { t } = useLocale()
 
   return (
     <div className="space-y-6">
-      <PageHero eyebrow="ACCOUNT" title="내 계정" />
+      <PageHeader title="내 계정" />
 
       <div className="card p-5 sm:p-6">
-        <div className="eyebrow">Profile</div>
         <h2 className="mt-0.5 text-sm font-semibold text-ink">프로필 정보</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
             <UserIcon className="h-4 w-4 text-ink-subtle" />
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">이름</div>
+              <div className="text-meta text-fg-secondary">이름</div>
               <div className="truncate text-sm text-ink">{displayName ?? '—'}</div>
             </div>
           </div>
           <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
             <Mail className="h-4 w-4 text-ink-subtle" />
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">이메일</div>
+              <div className="text-meta text-fg-secondary">이메일</div>
               <div className="truncate text-sm text-ink">{email ?? '—'}</div>
             </div>
           </div>
@@ -50,7 +55,6 @@ export function AccountView({ email, displayName, projects }: {
       </div>
 
       <div data-account-display className="card p-5 sm:p-6">
-        <div className="eyebrow">Display</div>
         <h2 className="mt-0.5 text-sm font-semibold text-ink">{t('chrome.display')}</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -63,6 +67,8 @@ export function AccountView({ email, displayName, projects }: {
           </div>
         </div>
       </div>
+
+      <WorkspacePrefsSection key={currentWorkspace?.id ?? 'none'} currentWorkspace={currentWorkspace} currentWorkspaceError={currentWorkspaceError} startPage={startPage} projectsView={projectsView} />
 
       <MyTokensSection projects={projects} />
 

@@ -9,6 +9,7 @@ vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspa
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: h.listProjectsWithState }))
 vi.mock('@/app/actions/accounts', () => ({ listAccounts: h.listAccounts }))
 vi.mock('@/app/actions/teams', () => ({ listTeamsAdmin: h.listTeamsAdmin }))
+vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: h.notFound }))
 vi.mock('@/components/admin/AccountsManager', () => ({ AccountsManager: (p: unknown) => { h.managerProps(p); return null } }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: () => null }))
@@ -72,7 +73,7 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
     expect(html).toContain('프로젝트 목록을 불러오지 못했습니다')
     expect(h.listAccounts).not.toHaveBeenCalled()
   })
-  it('플랫폼 관리자 흔적(SUPERUSER 타일·비밀번호 리셋 안내)은 플랫폼 관리자에게만(U2a-4 T5)', async () => {
+  it('플랫폼 관리자 여부와 조작은 플랫폼 관리자 페이로드에만(U2a-4 T5, UI-3 머리는 공통 집계)', async () => {
     h.listAccounts.mockResolvedValue({ ok: true, rows: [{ id: 'u1', email: 'a@example.com', name: 'a', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null, createdAt: 'x' }], workspaceId: WS.id })
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
     const ws = await renderAccounts()
@@ -80,8 +81,17 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
     expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ accounts: [expect.not.objectContaining({ isPlatformAdmin: true })] }))
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeSuperuser({ projectWorkspace: new Map([[P1, WS.id]]) })))
     const su = await renderAccounts()
-    expect(su).toContain('SUPERUSER'); expect(su).toContain('리셋')
-    expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ accounts: [expect.objectContaining({ isPlatformAdmin: true })] }))
+    expect(su).not.toContain('SUPERUSER')
+    expect(su).toContain('Acme · 계정 1 · 관리자 0 · 멤버 0')
+    expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ canPlatformOps: true, accounts: [expect.objectContaining({ isPlatformAdmin: true })] }))
+  })
+  it('계정 목록 조회 실패는 표준 오류 상태로 표시한다', async () => {
+    h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
+    h.listAccounts.mockResolvedValue({ ok: false, error: '계정 조회 실패' })
+    const html = await renderAccounts()
+    expect(html).toContain('data-status-kind="partial_error"')
+    expect(html).toContain('계정 목록을 불러오지 못했습니다')
+    expect(h.managerProps).not.toHaveBeenCalled()
   })
   it('열화(actor null)는 그 워크스페이스 홈 — 명단 로더를 부르지 않는다(fail-closed)', async () => {
     h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor: null, degraded: true, role: null })

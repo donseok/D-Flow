@@ -172,6 +172,12 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     <div className="card p-6">
       <p className="eyebrow">초대받은 프로젝트</p>
       <h2 className="mt-2 text-lg font-semibold text-ink">{preview.projectName || '프로젝트'}</h2>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-fg-secondary">워크스페이스</dt><dd className="min-w-0 break-words text-fg">{preview.workspaceName ?? '—'}</dd>
+        <dt className="text-fg-secondary">프로젝트</dt><dd className="min-w-0 break-words text-fg">{preview.projectName || '프로젝트'}</dd>
+        <dt className="text-fg-secondary">받을 권한</dt><dd className="text-fg">{preview.accessRole === 'admin' ? '관리자' : preview.accessRole === 'member' ? '멤버' : '조회 전용'}</dd>
+        <dt className="text-fg-secondary">초대된 이메일</dt><dd className="min-w-0 break-words text-fg">{preview.maskedEmail}</dd>
+      </dl>
       {preview.projectDescription && (
         <p className="mt-1 text-sm leading-6 text-ink-muted">{preview.projectDescription}</p>
       )}
