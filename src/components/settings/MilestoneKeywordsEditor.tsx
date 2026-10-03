@@ -100,7 +100,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
       onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setReviewing(false); setConflict(null) }}
       onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setReviewing(false); setConflict(null) }} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+    <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? '검토 후 저장' : '변경 내용 검토'}
       </button>

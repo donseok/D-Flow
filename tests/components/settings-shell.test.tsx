@@ -83,6 +83,12 @@ describe('SettingsSaveBar', () => {
     expect(h).toContain('data-save-bar'); expect(h).toMatch(/class="[^"]*\bsticky\b[^"]*\bbottom-0\b/); expect(h).toContain('z-10')
     expect(h).not.toContain('z-['); expect(h).toContain('변경 2개'); expect(h).toContain('bg-surface')
   })
+  it('저장 알림(notice)은 바 안 요약 자리에 성공 톤으로 — 있으면 요약 대신(u3-3 리뷰 P2-2)', () => {
+    const on = renderToStaticMarkup(<SettingsSaveBar notice="저장했습니다." summary="변경 2개"><button type="button">저장</button></SettingsSaveBar>)
+    expect(on).toMatch(/<span role="status" class="[^"]*text-done[^"]*">저장했습니다\.<\/span>/); expect(on).not.toContain('변경 2개')
+    const off = renderToStaticMarkup(<SettingsSaveBar notice={null} summary="변경 2개"><button type="button">저장</button></SettingsSaveBar>)
+    expect(off).toContain('변경 2개'); expect(off).not.toContain('role="status"')
+  })
   it('배경이 다른 상자(panel-soft 폼) 안에서는 subtle 배경', () => {
     expect(renderToStaticMarkup(<SettingsSaveBar tone="subtle"><button type="button">저장</button></SettingsSaveBar>)).toContain('bg-surface-subtle')
   })

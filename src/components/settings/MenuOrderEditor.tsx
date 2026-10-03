@@ -141,7 +141,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+    <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '메뉴 설정 저장'}
       </button>

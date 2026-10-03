@@ -48,6 +48,8 @@ vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor:
 vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: h.views }))
 
 import { requireModule } from '@/lib/modules/gate'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import SettingsPage from '@/app/(app)/p/[projectId]/settings/page'
 
@@ -95,5 +97,13 @@ describe('설정 페이지 — 프로젝트 모듈', () => {
     vi.mocked(requireModule).mockImplementation(async (_s, m) => (m === 'kanban' ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
     await render()
     expect(h.views.mock.calls[0][0]).toMatchObject({ kanbanOn: false })
+  })
+  it('views.default 가 손상이면 편집기에 initial null 과 사유를 넘긴다 — 복구 저장 경로(u3-3 리뷰 P2-10(b), workspace-settings-page 의 portal.widgets 손상과 대칭)', async () => {
+    agentsModule(true)
+    vi.mocked(getProjectConfig).mockResolvedValueOnce(makeProjectConfig({ 'core.level_labels': ['P'], 'modules.enabled': ['agents', 'kanban'], 'views.default': 'oops' }))
+    await render()
+    const props = h.views.mock.calls[0][0]
+    expect(props).toMatchObject({ projectId: 'p1', initial: null })
+    expect(typeof props.invalidReason).toBe('string'); expect((props.invalidReason as string).length).toBeGreaterThan(0)
   })
 })

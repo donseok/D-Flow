@@ -398,7 +398,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               {/* 작업 계획 기본 보기(views.default — SP3b UI-3 과제 7) — 같은 '모듈·메뉴' 범주 안 구역 */}
               <section aria-labelledby="project-views-default" data-settings-search="views.default 작업 계획 기본 보기 표 간트 보드" className="mt-8 border-t border-border pt-6">
                 <h4 id="project-views-default" className="mb-3 text-sm font-semibold text-fg">작업 계획 기본 보기</h4>
-                <ViewsDefaultEditor projectId={projectId} revision={pc.cfg.revision} kanbanOn={kanbanOn}
+                <ViewsDefaultEditor projectId={projectId} revision={pc.cfg.revision} kanbanOn={kanbanOn} labelledBy="project-views-default"
                   initial={pc.cfg.keys['views.default'].status === 'set' || pc.cfg.keys['views.default'].status === 'default' ? pc.cfg.keys['views.default'].value : null}
                   invalidReason={pc.cfg.keys['views.default'].status === 'invalid' ? pc.cfg.keys['views.default'].error : undefined} />
               </section>

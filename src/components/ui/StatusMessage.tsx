@@ -14,6 +14,12 @@ export const STATUS_KINDS: readonly StatusKind[] = ['loading', 'empty', 'needs_s
 /** 다음 행동 하나 — 링크 또는 버튼(둘 다는 안 된다) */
 export type StatusAction = { label: string; href: string; onSelect?: never } | { label: string; onSelect: () => void; href?: never }
 
+/**
+ * 링크형 행동(설정에서 복구하기·켜기·설정으로)은 밑줄 링크 — ghost 버튼 모양은 테두리·밑줄이 없어 일반 글자처럼 보였다(u3-3 리뷰 P2-4, 판정 R10 ②).
+ * 옛 ConfigStateNotice 의 밑줄 링크와 같은 색(옛 이름 brand 는 action 의 별칭 — 이 파일은 새 토큰 이름만). 버튼형 행동은 ghost 버튼 그대로
+ */
+const LINK_ACTION = 'inline-flex min-h-6 items-center text-control font-semibold text-action underline underline-offset-2 hover:text-action-hover'
+
 const TONE: Record<Exclude<StatusKind, 'loading'>, { Icon: LucideIcon; cls: string }> = {
   empty: { Icon: Inbox, cls: 'text-fg-muted' },
   needs_setup: { Icon: Settings2, cls: 'text-action' },
@@ -59,7 +65,7 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
         {action && (
           <div className={compact ? 'mt-1' : 'mt-3'}>
             {action.href !== undefined
-              ? <Link href={action.href} className={buttonClass('ghost')}>{action.label}</Link>
+              ? <Link href={action.href} className={LINK_ACTION}>{action.label}</Link>
               : <button type="button" onClick={action.onSelect} className={buttonClass('ghost')}>{action.label}</button>}
           </div>
         )}

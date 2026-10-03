@@ -33,6 +33,7 @@ vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettings
 vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ error }: { error: string }) => <p data-load-error>{error}</p> }))
 
 import WorkspaceSettingsPage from '@/app/(app)/w/[slug]/settings/page'
+import { getServerLocale } from '@/lib/i18n/server'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
@@ -54,6 +55,15 @@ beforeEach(() => {
 })
 
 describe('/w/[slug]/settings 페이지', () => {
+  it('머리 h1 은 로케일을 탄다 — 프로젝트 설정 머리와 같은 갈래(u3-3 리뷰 P2-9)', async () => {
+    expect(await render()).toMatch(/<h1[^>]*>워크스페이스 설정<\/h1>/)
+    vi.mocked(getServerLocale).mockResolvedValueOnce('en')
+    expect(await render()).toMatch(/<h1[^>]*>Workspace settings<\/h1>/)
+    h.config.mockRejectedValueOnce(new ConfigUnavailableError('down'))       // 조회 실패 갈래의 머리도 같다
+    vi.mocked(getServerLocale).mockResolvedValueOnce('en')
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+    expect(await render()).toMatch(/<h1[^>]*>Workspace settings<\/h1>/)
+  })
   it('워크스페이스 관리자가 아니면 그 워크스페이스 홈으로 돌려보내고 설정을 읽지 않는다', async () => {
     h.access.mockResolvedValue(access({ isAdmin: false }))
     await expect(render()).rejects.toThrow('NEXT_REDIRECT /w/alpha')

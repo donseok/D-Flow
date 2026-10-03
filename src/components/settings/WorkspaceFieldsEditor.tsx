@@ -148,9 +148,8 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
     {/* 공용 저장 바(data-save-bar — 셸의 떠 있는 버튼이 저장 바를 가리지 않게 찾는 표지, SP3b 알림 13·D33) */}
-    <SettingsSaveBar summary={`변경 ${changed.length}개`}>
+    <SettingsSaveBar notice={notice} summary={`변경 ${changed.length}개`}>
       <button type="button" className="btn btn-primary" disabled={pending || (!changed.length && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
       </button>

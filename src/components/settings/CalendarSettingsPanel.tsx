@@ -218,8 +218,7 @@ export function CalendarSettingsPanel(props: {
         latest: conflict.invalidKeys.includes(k) ? '설정 손상' : JSON.stringify(conflict.values[k] ?? null) }))}
         onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(k => !conflict.invalidKeys.includes(k))} />}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-      {notice && <p role="status" className="text-sm text-done">{notice}</p>}
-      <SettingsSaveBar summary={`변경 ${changed.length}개`}>
+      <SettingsSaveBar notice={notice} summary={`변경 ${changed.length}개`}>
         {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
         <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>
           {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}

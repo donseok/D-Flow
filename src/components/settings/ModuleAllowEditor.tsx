@@ -166,7 +166,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
         </div>
       )}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-      <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <SettingsSaveBar notice={notice}>
         <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
         {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
       </SettingsSaveBar>

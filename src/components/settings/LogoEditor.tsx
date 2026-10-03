@@ -143,7 +143,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     {uploadError && <ConfigStateNotice kind="field" locale="ko" message={uploadError} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+    <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '로고 설정 저장'}
       </button>

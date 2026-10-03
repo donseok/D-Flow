@@ -140,7 +140,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
       <p>기존 데이터는 삭제되지 않으며, 다음 요청부터 새 모듈 설정이 적용됩니다.</p>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+    <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
       {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
     </SettingsSaveBar>

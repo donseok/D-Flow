@@ -109,7 +109,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-    <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+    <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
         {uncertainPatch ? '저장 결과 확인 및 재시도' : '강조색 저장'}
       </button>

@@ -50,13 +50,14 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   const access = await workspacePageAccess(slug)
   if (!access.isAdmin) redirect(wsHref(access.slug))
   const locale = await getServerLocale()
+  const pageTitle = locale === 'ko' ? '워크스페이스 설정' : 'Workspace settings'      // 프로젝트 설정 머리와 같은 로케일 갈래(u3-3 리뷰 P2-9)
   let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
   try {
     config = await getWorkspaceConfig(access.id)
   } catch (error) {
     if (!(error instanceof ConfigUnavailableError)) throw error
     console.error('[workspace settings] 설정 조회 실패:', { workspaceId: access.id, cause: error.message })
-    return <PageFrame header={<PageHeader title="워크스페이스 설정" meta={access.name} />}>
+    return <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
       <ConfigLoadError locale={locale} error="워크스페이스 설정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." />
     </PageFrame>
   }
@@ -72,7 +73,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     : <ConfigLoadError error={historyCal.error} keyName={historyCal.key} kind={historyCal.kind} locale={locale} />
   return (
     // 머리 하나(PageHeader — 개정 §5.9.3). 본문 폭 800·저장 바 예약은 SettingsShell 이 맡는다(SP3b 스펙 §6.4)
-    <PageFrame header={<PageHeader title="워크스페이스 설정" meta={access.name} />}>
+    <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
         { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-menu', label: '메뉴' },

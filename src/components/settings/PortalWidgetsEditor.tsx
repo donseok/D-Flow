@@ -61,7 +61,7 @@ export function PortalWidgetsEditor({ workspaceId, revision, initial, invalidRea
     {c.conflict && <ConflictCompare rows={[{ key: 'portal.widgets', label: '홈 위젯', mine: summary(c.draft), latest: c.conflict.value ? summary(c.conflict.value) : '설정 손상' }]}
       onMine={c.keepMine} onLatest={c.useLatest} latestAvailable={!!c.conflict.value} />}
     {c.error && <ConfigStateNotice kind="patch" locale="ko" message={c.error} />}
-    <SettingsSaveBar summary={c.notice ? <span role="status">{c.notice}</span> : null}>
+    <SettingsSaveBar notice={c.notice}>
       <button type="button" className="btn btn-primary" aria-label="홈 위젯 저장" disabled={c.pending || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
         {c.uncertain ? '저장 결과 확인 및 재시도' : '홈 위젯 저장'}
       </button>

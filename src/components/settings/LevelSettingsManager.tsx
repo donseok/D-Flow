@@ -123,7 +123,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
         onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
       {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
       {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
-      <SettingsSaveBar summary={notice ? <span role="status">{notice}</span> : null}>
+      <SettingsSaveBar notice={notice}>
         <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
           {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
         </button>
