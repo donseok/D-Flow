@@ -46,6 +46,7 @@ import { requireModule } from '@/lib/modules/gate'
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
 import { MODULES } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
+import { MODULE_LABEL } from '@/lib/modules/labels'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
@@ -410,7 +411,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
             const allowedIds = allowed.status === 'set' || allowed.status === 'default' ? allowed.value : []
-            const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
             return <>
               {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
                 <ConfigStateNotice kind={allowed.status === 'invalid' ? 'invalid' : 'required'} locale={locale} keyName="modules.allowed"
@@ -422,7 +422,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
                 invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
                 requiredMissing={enabled.status === 'required_missing'}
-                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
+                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: MODULE_LABEL[m.id],
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
             </>
           })() : workspaceModulesError ? <ConfigLoadError error={workspaceModulesError} locale={locale} /> : null}
