@@ -22,14 +22,13 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import { getUnreadAnnouncementCount } from '@/app/actions/announcements'
-import { ConfigKeyError } from '@/lib/settings/errors'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  const { calSeoulMon } = await import('../helpers/calendarFixture')
   m.getSession.mockResolvedValue({ id: 'u1' })
   m.requireModule.mockResolvedValue({ ok: true })
-  m.getProjectConfig.mockResolvedValue({ calendar: calSeoulMon, calendarError: null })
+  m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.timezone': 'Asia/Seoul' }))
   m.seen.mockResolvedValue({ data: null, error: null })
   m.count.mockReturnValue({ count: 3, error: null })
 })
@@ -46,8 +45,15 @@ describe('getUnreadAnnouncementCount', () => {
   })
   it('달력 손상은 null(모름) — 0 으로 위장하지 않는다', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    m.getProjectConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+    m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.timezone': 'Asia/Seol' }))
     expect(await getUnreadAnnouncementCount('p1')).toBeNull()
+    err.mockRestore()
+  })
+  it('주 시작 설정만 손상돼도 프로젝트 시간대 기준 배지 수를 돌려준다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'calendar.timezone': 'Asia/Seoul', 'calendar.week_start': 'broken' }))
+    expect(await getUnreadAnnouncementCount('p1')).toBe(3)
+    expect(err).not.toHaveBeenCalledWith('[announcements] 프로젝트 달력 손상:', expect.anything())
     err.mockRestore()
   })
   it('count 조회 오류는 null + 로그(종전에는 로그 없이 0)', async () => {

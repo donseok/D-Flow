@@ -9,7 +9,7 @@ import { expandMeetings } from '@/lib/domain/meetings'
 import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
 import type { MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 import { todayIn } from '@/lib/domain/calendar'
-import { requireCalendar } from '@/lib/calendar/load'
+import { projectTimezone } from '@/lib/calendar/load'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 
@@ -299,7 +299,7 @@ export async function createAnnouncementFromMeeting(
 /** 그 프로젝트 tz 의 오늘(SP5 계획 D-22d) — 설정 조회 실패·달력 손상은 고정 문구 + 로그(원문은 응답에 싣지 않는다) */
 async function projectToday(projectId: string): Promise<{ ok: true; today: string } | { ok: false; error: string }> {
   try {
-    return { ok: true, today: todayIn(requireCalendar(await getProjectConfig(projectId)).timezone, new Date()) }
+    return { ok: true, today: todayIn(projectTimezone(await getProjectConfig(projectId)), new Date()) }
   } catch (e) {
     if (e instanceof ConfigUnavailableError) {
       console.error('[announcements] 프로젝트 설정 조회 실패:', { projectId, cause: e.message })
