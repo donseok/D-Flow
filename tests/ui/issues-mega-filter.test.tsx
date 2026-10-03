@@ -101,7 +101,7 @@ describe('IssuesView Mega 필터', () => {
     await act(async () => analysisButton?.click())
 
     expect(mocks.toast).toHaveBeenCalledWith({
-      title: 'issue.analysis.selectOneMega',
+      title: 'issue.analysis.selectOneArea',
       variant: 'error',
     })
     expect(container.querySelector('[data-analysis-mega]')).toBeNull()
@@ -127,12 +127,12 @@ describe('IssuesView Mega 필터', () => {
     })
 
     const mega = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="issue.filter.mega"]',
+      'select[aria-label="issue.filter.area"]',
     )
     expect(mega).not.toBeNull()
     expect(mega?.textContent).toContain('00 · 기준관리')
     expect(mega?.textContent).toContain('02 · 영업')
-    expect(container.textContent).toContain('issue.col.mega')
+    expect(container.textContent).toContain('issue.col.area')
     expect(container.textContent).toContain('00 · 기준관리')
     expect(container.textContent).toContain('02 · 영업')
 
@@ -143,8 +143,8 @@ describe('IssuesView Mega 필터', () => {
     expect(titleCell?.className).not.toContain('whitespace-nowrap')
     expect(container.querySelector('table')?.className).toContain('table-fixed')
     expect(container.querySelectorAll('colgroup col')).toHaveLength(10)
-    expect(container.querySelector('table')?.className).not.toContain('min-w-[')
-    expect(container.querySelector('table')?.parentElement?.className).not.toContain('overflow-x-auto')
+    expect(container.querySelector('table')?.className).toContain('min-w-[')
+    expect(container.querySelector('table')?.parentElement?.className).toContain('overflow-x-auto')
     expect(container.textContent).toContain('issue.col.endDate')
     expect(container.textContent).toContain('2026-08-31')
     expect(container.textContent).toContain('2026-07-01') // 시작일자 열 — 2026-08-28 사용자 요청으로 표시
@@ -170,4 +170,20 @@ describe('IssuesView Mega 필터', () => {
 
     expect(container.querySelector('[data-analysis-mega="02"]')).not.toBeNull()
   })
+  it('entry context failure retains the list and blocks write affordances', async () => {
+    await act(async () => root.render(<IssuesView entryContext={null} entryError="entry unavailable" timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '00', 'readable issue')]} />))
+    expect(container.textContent).toContain('readable issue')
+    expect(container.querySelector('[data-status-kind="partial_error"]')?.textContent).toContain('entry unavailable')
+    expect(container.textContent).not.toContain('issue.new')
+    expect(container.textContent).not.toContain('issue.analysis.open')
+  })
+  it('analysis off hides report action and filters out unused inactive areas', async () => {
+    const entry = { ...TEST_ENTRY_CONTEXT, rules: { areaRequired: false, analysis: 'off' as const }, areas: TEST_ENTRY_CONTEXT.areas.map(a => ({ ...a, active: a.id !== '02' && a.id !== '03' })) }
+    await act(async () => root.render(<IssuesView entryContext={entry} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '02', 'historic area issue')]} />))
+    expect(container.textContent).not.toContain('issue.analysis.open')
+    const options = [...container.querySelectorAll('select[aria-label="issue.filter.area"] option')].map(o => (o as HTMLOptionElement).value)
+    expect(options).toContain('02')
+    expect(options).not.toContain('03')
+  })
+
 })

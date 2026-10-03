@@ -5,6 +5,8 @@
 // 서버 액션이 같은 규칙을 재검증한다(UI 노출은 편의일 뿐 보안 경계가 아니다).
 import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { IssueAreaSelect } from './IssueAreaSelect'
+import { policyNeedsArea } from '@/lib/issues/idPolicy'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, ExternalLink, FileText, Pencil, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -353,7 +355,7 @@ export function IssueDetailModal({
             </div>
             <dl className="mt-3 grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[11px] font-semibold text-ink-subtle">{t('issue.analysis.mega')}</dt>
+                <dt className="text-[11px] font-semibold text-ink-subtle">{t('issue.analysis.area')}</dt>
                 <dd className="mt-0.5 text-ink">{analysisMegaLabel}</dd>
               </div>
               <div>
@@ -473,9 +475,10 @@ function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
 }
 
 export function IssueFormModal({
-  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext,
+  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext, canManage = false,
 }: {
   entryContext?: IssueEntryContext
+  canManage?: boolean
   open: boolean
   onClose: () => void
   projectId: string
@@ -497,7 +500,9 @@ export function IssueFormModal({
   const context = entryContext ?? loadedContext
   const areas = context?.areas ?? []
   const [analysisEnabled, setAnalysisEnabled] = useState(false)
-  const includeAnalysis = context?.rules.analysis !== 'off' && analysisEnabled
+  const includeAnalysis = !!context && context.rules.analysis !== 'off' && analysisEnabled
+  const areaRequired = !!context && (policyNeedsArea(context.policy) || includeAnalysis || (!initial && context.rules.analysis === 'required'))
+  const showArea = !!context && (areaRequired || !!initial?.areaId || context.rules.analysis !== 'off')
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   // pending 렌더 전에 발생하는 빠른 연속 클릭도 막는다.
@@ -516,6 +521,7 @@ export function IssueFormModal({
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [areaId, setAreaId] = useState<string | ''>('')
+  const needsAreaSetup = areaRequired && !(initial?.areaId && areaId === initial.areaId) && !areas.some(a => a.active)
   const [majorName, setMajorName] = useState('')
   const [majorOptions, setMajorOptions] = useState<IssueMajorProcess[]>([])
   const [subProcess, setSubProcess] = useState('')
@@ -633,8 +639,8 @@ export function IssueFormModal({
       setError(t('issue.err.dateRange'))
       return
     }
-    if ((context?.rules.areaRequired || includeAnalysis) && !areaId) {
-      setError(t('issue.err.megaRequired'))
+    if (areaRequired && !areaId) {
+      setError(t('issue.err.areaRequired'))
       return
     }
     const normalizedMajorName = majorName.trim()
@@ -783,7 +789,7 @@ export function IssueFormModal({
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
-          <button onClick={submit} disabled={pending || submittingRef.current || !context} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
+          <button onClick={submit} disabled={pending || submittingRef.current || !context || needsAreaSetup} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>
       }
     >
@@ -825,40 +831,15 @@ export function IssueFormModal({
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.form.body')}</span>
           <textarea className="app-textarea min-h-[220px] resize-y" value={body} onChange={e => setBody(e.target.value)} placeholder={t('issue.form.bodyPh')} maxLength={20_000} />
         </label>
-        <section className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
+        {context && (showArea || context.rules.analysis !== 'off') && <section className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
           <div>
-            <h3 className="text-xs font-bold text-ink">{t('issue.analysis.fieldsTitle')}</h3>
-            <p className="mt-0.5 text-[11px] leading-5 text-ink-subtle">{t('issue.analysis.fieldsDesc')}</p>
+            <h3 className="text-xs font-bold text-ink">{t(context.rules.analysis === 'off' ? 'issue.analysis.area' : 'issue.analysis.fieldsTitle')}</h3>
+            {context.rules.analysis !== 'off' && <p className="mt-0.5 text-[11px] leading-5 text-ink-subtle">{t('issue.analysis.fieldsDesc')}</p>}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.mega')}</span>
-              <select
-                className="app-input"
-                value={areaId}
-                disabled={megaLocked}
-                required={context?.rules.areaRequired || includeAnalysis}
-                aria-describedby={megaLocked ? 'issue-mega-locked' : undefined}
-                onChange={e => setAreaId(e.target.value as string | '')}
-              >
-                <option value="">{t('issue.analysis.megaPlaceholder')}</option>
-                {areas.filter(area => area.active || area.id === initial?.areaId).map(area => (
-                  <option key={area.id} value={area.id}>{megaAreaName(area.id, areas)}</option>
-                ))}
-              </select>
-              {megaLocked && (
-                <p id="issue-mega-locked" className="mt-1 text-[11px] leading-4 text-ink-subtle">
-                  {t('issue.analysis.megaLocked').replace('{id}', initial?.code ?? '')}
-                </p>
-              )}
-              <AiRecommendedHint
-                show={matchesAiDraft(draft?.areaId, areaId)}
-                text={t('issue.analysis.megaRecommended').replace('{code}', draft?.areaId ?? '')}
-              />
-            </label>
-          </div>
-          {context?.rules.analysis === 'optional' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={analysisEnabled} onChange={e => setAnalysisEnabled(e.target.checked)} />분석 분류 입력</label>}
-          <fieldset disabled={!includeAnalysis} hidden={!includeAnalysis} className="grid gap-3 sm:grid-cols-2">
+          {showArea && <IssueAreaSelect areas={areas} value={areaId} onChange={setAreaId} required={areaRequired} disabled={megaLocked} canManage={canManage} projectId={projectId} />}
+          <AiRecommendedHint show={matchesAiDraft(draft?.areaId, areaId)} text={t('issue.analysis.areaRecommended').replace('{code}', areas.find(a => a.id === draft?.areaId)?.code ?? '')} />
+          {(context?.rules.analysis === 'optional' || (context?.rules.analysis === 'required' && isEdit && !initial?.majorId)) && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={analysisEnabled} onChange={e => setAnalysisEnabled(e.target.checked)} />{t('issue.analysis.enableFields')}</label>}
+          {includeAnalysis && <fieldset className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.majorProcess')}</span>
               <input
@@ -961,8 +942,8 @@ export function IssueFormModal({
                 placeholder={t('issue.analysis.sourceDetailPh')}
               />
             </label>
-          </fieldset>
-        </section>
+          </fieldset>}
+        </section>}
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.form.severity')}</span>

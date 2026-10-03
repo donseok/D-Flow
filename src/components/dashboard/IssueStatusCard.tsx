@@ -114,7 +114,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
         {/* Mega 업무영역별 — 미니 링 타일(8영역 코드순 고정 + 미분류는 있을 때만). 이슈 없는 영역은 흐리게. */}
         <div>
           <div className="mb-2 flex justify-between text-[11px] text-ink-subtle">
-            <span>{tr('dash.issues.byMegaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
+            <span>{tr('dash.issues.byAreaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
             {rows.map(r => {

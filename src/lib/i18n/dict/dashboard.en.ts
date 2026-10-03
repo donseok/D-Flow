@@ -84,7 +84,7 @@ export const dashboardEn: Record<keyof typeof dashboardKo, string> = {
   'dash.issues.kpiHighSub': 'High severity',
   'dash.issues.kpiResolved7d': 'Resolved in 7 days',
   'dash.issues.resolvedRate': 'Resolved',
-  'dash.issues.byMegaRate': 'Resolved rate by Mega area',
+  'dash.issues.byAreaRate': 'Resolved rate by area',
   'dash.issues.ringHint': 'ring = resolved / total',
   'dash.issues.noIssues': 'No issues',
   'dash.issues.backlogNow': 'Open backlog',

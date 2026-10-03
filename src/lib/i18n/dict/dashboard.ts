@@ -92,7 +92,7 @@ export const dashboardKo = {
   'dash.issues.kpiHighSub': '심각도 높음',
   'dash.issues.kpiResolved7d': '최근 7일 해결',
   'dash.issues.resolvedRate': '해결률',
-  'dash.issues.byMegaRate': 'Mega 업무영역별 해결률',
+  'dash.issues.byAreaRate': '영역별 해결률',
   'dash.issues.ringHint': '링 = 해결 / 전체',
   'dash.issues.noIssues': '이슈 없음',
   'dash.issues.backlogNow': '미해결 잔량',

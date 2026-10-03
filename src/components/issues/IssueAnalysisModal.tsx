@@ -193,7 +193,7 @@ export function IssueAnalysisModal({
         {populatedAreas.length > 0 && (
           <section>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-              Mega
+              {t('issue.analysis.area')}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {populatedAreas.map(area => (

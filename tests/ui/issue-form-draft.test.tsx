@@ -63,7 +63,7 @@ describe('IssueFormModal 회의록 초안', () => {
   function labelSelect(labelKey: string): HTMLSelectElement {
     const label = [...document.querySelectorAll('label')]
       .find(node => node.textContent?.includes(labelKey))
-    const select = label?.querySelector('select')
+    const select = label?.querySelector('select') ?? (label?.htmlFor ? document.getElementById(label.htmlFor) : null)
     if (!(select instanceof HTMLSelectElement)) throw new Error(`${labelKey} select not found`)
     return select
   }
@@ -135,7 +135,7 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(labelInput('issue.form.title').value).toBe('전환 지연 위험')
     expect(labelInput('issue.form.start').value).toBe('2026-07-27')
     expect(labelInput('issue.form.due').value).toBe('2026-08-03')
-    expect(labelSelect('issue.analysis.mega').value).toBe('02')
+    expect(labelSelect('issue.analysis.area').value).toBe('02')
     expect(labelInput('issue.analysis.majorProcess').value).toBe(' 주문관리 ')
     expect(labelSelect('issue.analysis.sourceType').value).toBe('minutes')
     expect(labelSelect('issue.analysis.sourceType').disabled).toBe(true)
@@ -143,12 +143,12 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(document.body.textContent).toContain('issue.analysis.minuteAutoLinked')
     expect(document.body.textContent).toContain('issue.analysis.organizedDraft')
     expect(document.body.textContent).toContain('issue.analysis.classificationRecommended')
-    expect(document.body.textContent).toContain('issue.analysis.megaRecommended')
+    expect(document.body.textContent).toContain('issue.analysis.areaRecommended')
     expect(document.body.textContent).toContain('issue.analysis.majorProcessRecommended')
     expect(document.body.textContent).toContain('issue.analysis.subProcessRecommended')
 
     await act(async () => {
-      const mega = labelSelect('issue.analysis.mega')
+      const mega = labelSelect('issue.analysis.area')
       mega.value = '07'
       mega.dispatchEvent(new Event('change', { bubbles: true }))
       const process = labelInput('issue.analysis.subProcess')
@@ -156,7 +156,7 @@ describe('IssueFormModal 회의록 초안', () => {
         .set!.call(process, '원가손익분석')
       process.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    expect(document.body.textContent).not.toContain('issue.analysis.megaRecommended')
+    expect(document.body.textContent).not.toContain('issue.analysis.areaRecommended')
     expect(document.body.textContent).not.toContain('issue.analysis.majorProcessRecommended')
     expect(document.body.textContent).not.toContain('issue.analysis.subProcessRecommended')
 
@@ -305,7 +305,7 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(options()).toEqual([{ value: '주문관리', label: '02.01 · 주문관리' }])
 
     await act(async () => {
-      const mega = labelSelect('issue.analysis.mega')
+      const mega = labelSelect('issue.analysis.area')
       mega.value = '07'
       mega.dispatchEvent(new Event('change', { bubbles: true }))
     })
@@ -334,7 +334,7 @@ describe('IssueFormModal 회의록 초안', () => {
     act(() => save.click())
 
     expect(onCreate).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('issue.err.megaRequired')
+    expect(document.body.textContent).toContain('issue.err.areaRequired')
   })
 
   it('Major Process 누락은 Mega 다음·Sub Process 이전 순서로 서버 호출 전에 막는다', async () => {
@@ -403,7 +403,7 @@ describe('IssueFormModal 회의록 초안', () => {
       )
     })
 
-    expect(labelSelect('issue.analysis.mega').disabled).toBe(true)
+    expect(labelSelect('issue.analysis.area').disabled).toBe(true)
     expect(labelInput('issue.analysis.majorProcess').value).toBe('주문관리')
 
     await act(async () => {
@@ -455,8 +455,10 @@ describe('IssueFormModal 회의록 초안', () => {
       )
     })
 
-    expect(labelSelect('issue.analysis.mega').value).toBe('')
-    expect(labelSelect('issue.analysis.mega').disabled).toBe(false)
+    expect(labelSelect('issue.analysis.area').value).toBe('')
+    expect(labelSelect('issue.analysis.area').disabled).toBe(false)
+    expect(document.querySelector('input[list="issue-major-process-options"]')).toBeNull()
+    await act(async () => { (document.querySelector('input[type=checkbox]') as HTMLInputElement).click() })
     expect(labelInput('issue.analysis.majorProcess').value).toBe('')
     expect(labelSelect('issue.analysis.sourceType').value).toBe('')
   })

@@ -102,7 +102,7 @@ describe('IssueStatusCard', () => {
     const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="en" timeZone="Asia/Seoul" />)
     expect(html).toContain('기준관리')
     expect(html).toContain('Total 6 items')
-    expect(textOf(html)).toContain('Resolved rate by Mega area')
+    expect(textOf(html)).toContain('Resolved rate by area')
   })
 
   it('타일 상태 점은 ISSUE_STATUSES 순(열림→진행중→해결→보류)이고 title·sr-only 가 건수를 글로 나른다', () => {

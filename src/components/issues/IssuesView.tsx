@@ -19,6 +19,8 @@ import {
   canEditIssue, dueDaysLeft, filterIssues, isDueUrgent, isOverdue, sortIssues,
   type Issue, type IssueSeverityFilter, type IssueStatusFilter,
 } from '@/lib/domain/issues'
+import { areaLabel } from '@/lib/domain/issueAreas'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { IssueEntryContext } from '@/lib/issues/context'
 import type { ProjectMember } from '@/lib/domain/types'
 
@@ -28,9 +30,10 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext, entryError,
 }: {
-  entryContext: IssueEntryContext
+  entryContext: IssueEntryContext | null
+  entryError?: string
   issues: Issue[]
   members: ProjectMember[]
   projectId: string
@@ -48,7 +51,8 @@ export function IssuesView({
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
-  const areas = entryContext.areas
+  const areas = entryContext?.areas ?? []
+  const analysisVisible = !!entryContext && entryContext.rules.analysis !== 'off'
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -143,7 +147,7 @@ export function IssuesView({
   }
   function openAnalysis() {
     if (areaFilter === 'all') {
-      toast({ title: t('issue.analysis.selectOneMega'), variant: 'error' })
+      toast({ title: t('issue.analysis.selectOneArea'), variant: 'error' })
       return
     }
     setAnalysisOpen(true)
@@ -155,7 +159,7 @@ export function IssuesView({
     || mineOnly
   // 조회 전용에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
   // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
-  const canWrite = canEdit
+  const canWrite = canEdit && !!entryContext
 
   return (
     <div className="space-y-4">
@@ -174,13 +178,13 @@ export function IssuesView({
           size="sm"
         />
         <select
-          aria-label={t('issue.filter.mega')}
+          aria-label={t('issue.filter.area')}
           value={areaFilter}
           onChange={event => { setAreaFilter(event.target.value as IssueAreaFilter); setPage(1) }}
           className="app-input h-9 w-full min-w-[180px] text-xs sm:w-auto"
         >
-          <option value="all">{t('issue.filter.megaAll')}</option>
-          {areas.map(area => (
+          <option value="all">{t('issue.filter.areaAll')}</option>
+          {areas.filter(area => area.active || issues.some(i => i.areaId === area.id)).map(area => (
             <option key={area.id} value={area.id}>
               {area.code} · {area.name}
             </option>
@@ -193,16 +197,17 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
+        {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
-            <button
+            {analysisVisible && <button
               type="button"
               onClick={openAnalysis}
               className="btn btn-ghost inline-flex items-center gap-1.5 text-xs"
             >
               <Presentation className="h-3.5 w-3.5" />
               {t('issue.analysis.open')}
-            </button>
+            </button>}
             <button onClick={openWrite} className="btn btn-primary inline-flex items-center gap-1.5 text-xs">
               <Plus className="h-3.5 w-3.5" />{t('issue.new')}
             </button>
@@ -213,8 +218,8 @@ export function IssuesView({
       {/* 테이블 (MeetingsView 골격) */}
       {visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
-          <div>
-            <table className="w-full table-fixed border-collapse text-[13px]">
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]">
               {/* 10열 폭 합 100 — 열을 더하거나 뺄 때 합이 어긋나면 table-fixed 가 조용히 뭉갠다. */}
               <colgroup>
                 <col style={{ width: '11%' }} />
@@ -231,7 +236,7 @@ export function IssuesView({
               <thead>
                 <tr className="whitespace-nowrap border-b border-line bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">
                   <th className="px-2.5 py-2.5">{t('issue.col.no')}</th>
-                  <th className="px-2.5 py-2.5">{t('issue.col.mega')}</th>
+                  <th className="px-2.5 py-2.5">{t('issue.col.area')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.title')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.status')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.severity')}</th>
@@ -262,7 +267,7 @@ export function IssuesView({
                       onKeyDown={e => { if (e.key === 'Enter') setViewingId(issue.id) }}
                       className="cursor-pointer border-b border-line/70 transition last:border-0 hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2"
                     >
-                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums">
+                      <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
                         <span className="font-semibold text-ink">{issue.code}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
@@ -274,7 +279,7 @@ export function IssuesView({
                             {megaArea.code} · {megaArea.name}
                           </span>
                         ) : (
-                          <span className="text-ink-subtle">—</span>
+                          <span className="text-ink-subtle">{areaLabel(undefined, issue.areaId)}</span>
                         )}
                       </td>
                       <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-ink" title={issue.title}>
@@ -399,7 +404,7 @@ export function IssuesView({
         issue={viewing}
         members={members}
         memberName={memberName}
-        canEdit={viewing ? canEditIssue(viewing, currentUserId, isProjectAdmin) : false}
+        canEdit={viewing && entryContext ? canEditIssue(viewing, currentUserId, isProjectAdmin) : false}
         canWrite={canWrite}
         currentUserId={currentUserId}
         isProjectAdmin={isProjectAdmin}
@@ -422,7 +427,7 @@ export function IssuesView({
           setViewingId(null)
         }}
       />
-      <IssueFormModal entryContext={entryContext} open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
+      <IssueFormModal entryContext={entryContext ?? undefined} canManage={isProjectAdmin} open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
       <IssueAnalysisModal
         areas={areas}

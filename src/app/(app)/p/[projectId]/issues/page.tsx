@@ -22,7 +22,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 export default async function IssuesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'issues')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [issues, roster, m, projects, locale, { user, myMemberIds }, pc] = await Promise.all([
+  const [issues, roster, m, projects, locale, { user, myMemberIds }, pc, entry] = await Promise.all([
     getIssues(projectId),
     getProjectRoster(projectId),
     getActorForView(),
@@ -38,13 +38,12 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
       return { user, myMemberIds }
     })(),
     loadProjectConfigForPage(projectId),
+    loadIssueEntryContext(projectId),
   ])
   // '오늘'의 tz = 프로젝트 달력(계획 D-22·D-21a) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
   const cal = pickCalendar(pc.cfg)
   if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
-  const entry = await loadIssueEntryContext(projectId)
-  if (!entry.ok) return <div className="p-6"><ConfigLoadError error={entry.error} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[issues] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
@@ -66,7 +65,8 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
       }
     >
       <IssuesView
-        entryContext={entry.value}
+        entryContext={entry.ok ? entry.value : null}
+        entryError={entry.ok ? undefined : entry.error}
         issues={issues}
         members={members}
         projectId={projectId}
