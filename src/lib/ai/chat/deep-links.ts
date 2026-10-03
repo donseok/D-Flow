@@ -8,7 +8,7 @@
  * - 파라미터는 화면이 실제 소비하는 것만 계약에 둔다:
  *   wbs `?focus=` · weekly `?week=` · meetings `?focus=&date=`(내 회의 `/meetings` 동일)
  *   attendance `?from=&to=&team=&type=` · announcements `?focus=` · members `?team=`
- *   kanban `?view=&team=`(team은 칸반 검색어 초기값으로 소비) · minutes `/minutes/{id}`
+ *   kanban `/wbs?view=board&group=&team=`(team은 칸반 검색어 초기값으로 소비) · minutes `/minutes/{id}`
  */
 
 type QueryEntry = [key: string, value: string | null | undefined]
@@ -73,13 +73,14 @@ export function membersHref(projectId: string, team?: string): string {
 }
 
 export interface KanbanHrefFilters {
-  view?: string
+  group?: string
   team?: string
 }
 
 export function kanbanHref(projectId: string, filters: KanbanHrefFilters = {}): string {
-  return withQuery(projectMenuPath(projectId, 'kanban'), [
-    ['view', filters.view],
+  return withQuery(projectMenuPath(projectId, 'wbs'), [
+    ['view', 'board'],
+    ['group', filters.group],
     ['team', filters.team],
   ])
 }

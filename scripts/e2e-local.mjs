@@ -1317,7 +1317,7 @@ async function main() {
   // 범위(공용 팀 WS_TEAM 담당). 보고서는 모달이라 서버 HTML 에 없다 — Playwright 로 WBS 도구 줄의 보고서 버튼을 눌러 그 DOM 을 본다.
   {
     const seen = []
-    for (const path of [`/p/${A.id}/wbs`, `/p/${A.id}/kanban`, `/p/${A.id}/dashboard`, wsPath(wsA, 'minutes')]) {
+    for (const path of [`/p/${A.id}/wbs`, `/p/${A.id}/wbs?view=board`, `/p/${A.id}/dashboard`, wsPath(wsA, 'minutes')]) {
       const html = await (await admin.http('GET', path)).text()
       seen.push({ path, serverMode: nextServerMode(html), problems: pageProblems(html), ...teamSlotVerdict(html) })
     }

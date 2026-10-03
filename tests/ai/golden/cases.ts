@@ -89,7 +89,7 @@ const MY_MEETING_FOCUS = '/meetings?focus='
 const ATTENDANCE_HREF = `/p/${PROJECT_ALPHA}/attendance?from=`
 const ANNOUNCEMENT_FOCUS = `/p/${PROJECT_ALPHA}/announcements?focus=`
 const MINUTE_HREF = '/minutes/'
-const KANBAN_HREF = `/p/${PROJECT_ALPHA}/kanban`
+const KANBAN_HREF = `/p/${PROJECT_ALPHA}/wbs?view=board`
 const DASHBOARD_HREF = `/p/${PROJECT_ALPHA}/dashboard`
 const MEMBERS_HREF = `/p/${PROJECT_ALPHA}/members`
 const SETTINGS_HREF = `/p/${PROJECT_ALPHA}/settings`

@@ -3,7 +3,7 @@ import { useId, useRef, type KeyboardEvent } from 'react'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { useSettingsCommand } from './useSettingsCommand'
-import { DEFAULT_VIEWS, parseViewsDefault, type ViewsDefault, type WbsView } from '@/lib/settings/defs/project'
+import { DEFAULT_VIEWS, parseViewsDefault, type ViewsDefault, type WbsView } from '@/lib/wbs/view'
 
 const OPTIONS: readonly { value: WbsView; label: string; desc: string }[] = [
   { value: 'sheet', label: '표', desc: '행과 열로 편집합니다.' },

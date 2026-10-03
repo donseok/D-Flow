@@ -260,8 +260,8 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     expect(dialog()).toBeNull()
   })
 
-  it('KanbanBoard: ?view=&team= 으로 초기 모드와 검색 필터를 적용한다', async () => {
-    currentSearch = 'view=owner&team=ERP'
+  it('KanbanBoard: ?group=&team= 으로 초기 모드와 검색 필터를 적용한다', async () => {
+    currentSearch = 'view=board&group=owner&team=ERP'
     const items: ComputedItem[] = [
       kanbanLeaf({
         id: 'phase-1', parentId: null, code: '1', name: '구축', owners: [],
@@ -280,10 +280,13 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     expect(search?.value).toBe('ERP')
     expect(container.textContent).toContain('ERP 인터페이스')
     expect(container.textContent).not.toContain('설비 점검')
+    currentSearch = 'view=board&group=phase&team=ERP'
+    await mount(<KanbanBoard projectId="p1" items={items} actorView={null} today="2026-07-19" />)
+    expect(container.querySelector('[data-kanban-group]')?.getAttribute('data-kanban-group')).toBe('phase')
   })
 
-  it('KanbanBoard: 무효 view 는 기본 phase 모드를 유지한다', async () => {
-    currentSearch = 'view=matrix'
+  it('KanbanBoard: 무효 group 은 기본 progress 모드를 유지한다', async () => {
+    currentSearch = 'view=board&group=matrix'
     await mount(
       <KanbanBoard projectId="p1" items={[
         kanbanLeaf({
@@ -295,6 +298,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     // phase 모드면 컬럼 제목이 루트 이름(구축)이다.
     expect(container.textContent).toContain('구축')
     expect(container.textContent).not.toContain('미배정')
+    expect(container.querySelector('[data-kanban-group]')?.getAttribute('data-kanban-group')).toBe('progress')
   })
 
   it('IssuesView: ?focus= 로 해당 이슈 상세를 연다', async () => {

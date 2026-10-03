@@ -14,7 +14,7 @@ const expectedStatus: Record<string, string> = {
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP3b UI-3 — 정의·테스트(네 연결 ①④)까지. 편집기(과제 6·7)·소비처(과제 10·14)가 붙으면 올린다
-  'portal.widgets': 'wired', 'views.default': 'stored',
+  'portal.widgets': 'wired', 'views.default': 'wired',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.

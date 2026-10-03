@@ -88,7 +88,7 @@ export function InboxPanel({
               <Section label={t('inbox.derived')}>
                 {derived.map(n => (
                   <li key={n.id}>
-                    <Link href={`/p/${projectId}/kanban`} className="flex gap-3 px-4 py-3 transition hover:bg-surface-2">
+                    <Link href={`/p/${projectId}/wbs?view=board`} className="flex gap-3 px-4 py-3 transition hover:bg-surface-2">
                       <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${n.severity === 'danger' ? 'bg-delayed-weak text-delayed' : 'bg-pending-weak text-accent-warning'}`}>
                         {n.type === 'delayed' ? <AlertTriangle className="h-3.5 w-3.5" /> : <Clock4 className="h-3.5 w-3.5" />}
                       </span>

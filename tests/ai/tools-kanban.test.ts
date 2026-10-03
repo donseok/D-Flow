@@ -112,7 +112,7 @@ describe('get_kanban_view', () => {
     // 출처 = 칸반 메뉴 루트 1건 + 카드당 1건(?focus= 필수). 루트는 실제 보기(view)를 복원한다.
     expect(result.result.sources[0]).toMatchObject({
       id: 'kanban:p1', domain: 'kanban', entityType: 'project', entityId: 'p1',
-      href: '/p/p1/kanban?view=status', updatedAt: null,
+      href: '/p/p1/wbs?view=board&group=status', updatedAt: null,
     })
     const cardSources = result.result.sources.slice(1)
     expect(cardSources).toHaveLength(5)

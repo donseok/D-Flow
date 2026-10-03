@@ -59,13 +59,11 @@ export function KanbanBoard({
   const teamCodes = useTeamCodes()
   const teams = useTeams()
   const searchParams = useSearchParams()
-  // 챗봇 딥링크 ?view= 초기 모드 — 레거시 'status' 딥링크는 'progress'로 흡수, 무효 값은 조용히 무시(기본 progress).
-  const [mode, setMode] = useState<Mode>(() => {
-    const view = searchParams.get('view')
-    if (view === 'phase' || view === 'owner' || view === 'progress') return view
-    if (view === 'status') return 'progress'
-    return 'progress'
-  })
+  // 묶음 기준은 ?group(D36). ?view는 작업 계획 보기(sheet·timeline·board)다.
+  const group = searchParams.get('group')
+  const urlMode: Mode = group === 'phase' || group === 'owner' ? group : 'progress'
+  const [mode, setMode] = useState<Mode>(urlMode)
+  useEffect(() => setMode(urlMode), [urlMode])
   // 렌즈 기본값 — 관리자 이상이거나 이 프로젝트 명단 팀이 없으면 전체, 그 외(팀 소속 멤버 등)는 내 팀부터.
   // 내 팀 = 이 프로젝트 명단의 팀 전부(한 사람 여러 팀 — 0003). 계정 전역 팀은 더 이상 없다.
   const actor = useMemo(() => actorFromView(actorView, projectId), [actorView, projectId])
@@ -234,21 +232,21 @@ export function KanbanBoard({
     commit(card, Math.max(0, Math.min(100, Math.round(card.rolledActualPct) + delta)))
   const startCard = (card: ComputedItem) => setPromptState({ card, suggested: 30 })
   const reopenCard = (card: ComputedItem) => setPromptState({ card, suggested: 90 })
-  const openInWbs = (card: ComputedItem) => router.push(`/p/${projectId}/wbs?focus=${card.id}`)
+  const openInWbs = (card: ComputedItem) => router.push(`/p/${projectId}/wbs?view=sheet&focus=${card.id}`)
 
   if (items.length === 0) {
     return (
-      <EmptyState
+      <div data-kanban-board><EmptyState
         icon={Inbox}
         title={t('kanban.emptyTitle')}
         description={t('kanban.emptyDesc')}
-      />
+      /></div>
     )
   }
 
   return (
     // 헤드(툴바·안내)는 고정하고 보드만 남은 높이를 채운다 — 세로 스크롤은 컬럼 안에서만 일어난다.
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div data-kanban-board data-kanban-group={mode} className="flex h-full min-h-0 flex-col gap-4">
       {/* 툴바 */}
       <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <SegmentedTabs<Mode>

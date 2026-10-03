@@ -32,9 +32,9 @@ describe('deep-links 빌더', () => {
     expect(announcementHref('p1', 'a1')).toBe('/p/p1/announcements?focus=a1')
     expect(membersHref('p1')).toBe('/p/p1/members')
     expect(membersHref('p1', 'MES')).toBe('/p/p1/members?team=MES')
-    expect(kanbanHref('p1')).toBe('/p/p1/kanban')
-    expect(kanbanHref('p1', { view: 'status' })).toBe('/p/p1/kanban?view=status')
-    expect(kanbanHref('p1', { view: 'owner', team: 'ERP' })).toBe('/p/p1/kanban?view=owner&team=ERP')
+    expect(kanbanHref('p1')).toBe('/p/p1/wbs?view=board')
+    expect(kanbanHref('p1', { group: 'status' })).toBe('/p/p1/wbs?view=board&group=status')
+    expect(kanbanHref('p1', { group: 'owner', team: 'ERP' })).toBe('/p/p1/wbs?view=board&group=owner&team=ERP')
     expect(weeklyHref('p1')).toBe('/p/p1/weekly')
     expect(weeklyHref('p1', '2026-07-13')).toBe('/p/p1/weekly?week=2026-07-13')
     expect(wbsItemHref('p1', 'item-1')).toBe('/p/p1/wbs?focus=item-1')
@@ -45,7 +45,7 @@ describe('deep-links 빌더', () => {
 
   it('빈 문자열 값도 생략한다', () => {
     expect(attendanceHref('p1', { from: '', to: '', team: '', type: '' })).toBe('/p/p1/attendance')
-    expect(kanbanHref('p1', { view: '', team: '' })).toBe('/p/p1/kanban')
+    expect(kanbanHref('p1', { group: '', team: '' })).toBe('/p/p1/wbs?view=board')
     expect(membersHref('p1', '')).toBe('/p/p1/members')
   })
 
@@ -92,7 +92,7 @@ describe('deep-links × verifyBotSources', () => {
       }),
       source({ id: 's6', domain: 'announcements', entityType: 'announcement', entityId: 'ann-1', href: announcementHref('p1', 'ann-1') }),
       source({ id: 's7', domain: 'members', entityType: 'project', entityId: 'p1', href: membersHref('p1', 'ERP') }),
-      source({ id: 's8', domain: 'kanban', entityType: 'project', entityId: 'p1', href: kanbanHref('p1', { view: 'status', team: 'MES' }) }),
+      source({ id: 's8', domain: 'kanban', entityType: 'project', entityId: 'p1', href: kanbanHref('p1', { group: 'status', team: 'MES' }) }),
       source({ id: 's9', domain: 'minutes', entityType: 'minute', entityId: 'min-1', projectId: null, href: minuteHref('min-1') }),
       source({ id: 's10', domain: 'dashboard', entityType: 'project', entityId: 'p1', href: dashboardHref('p1') }),
       source({ id: 's11', domain: 'settings', entityType: 'project', entityId: 'p1', href: settingsHref('p1') }),

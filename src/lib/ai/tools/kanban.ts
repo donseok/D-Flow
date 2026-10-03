@@ -180,7 +180,7 @@ export function createGetKanbanViewTool(repository: WbsBotRepository, teams: Too
           projectId,
           title: '칸반 보드',
           // 화면 기본 모드(phase)와 다를 수 있어 항상 실제 사용한 보기를 복원한다.
-          href: kanbanHref(projectId, { view: effectiveView, team }),
+          href: kanbanHref(projectId, { group: effectiveView, team }),
           updatedAt: null,
         },
         ...cardSources,

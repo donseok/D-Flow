@@ -39,6 +39,13 @@ async function expectRedirect(kind: LegacyKind, path: string, location: string) 
   expect(res.headers.get('cache-control')).toBe('no-store')
 }
 
+it('칸반 스텁(11번째)은 view를 group으로 옮기고 나머지 쿼리를 보존한다(D36)', async () => {
+  await expectRedirect('kanban', `/p/${PID}/kanban?view=phase&team=X`, `/p/${PID}/wbs?view=board&group=phase&team=X`)
+  await expectRedirect('kanban', `/p/${PID}/kanban`, `/p/${PID}/wbs?view=board`)
+  expect(h.readCurrentWorkspace).not.toHaveBeenCalled()
+  expect(h.getActorViewState).not.toHaveBeenCalled()
+})
+
 describe('legacyRedirect — 307·no-store·상대 Location', () => {
   it('목록형 — 현재 워크스페이스(쿠키 → 첫 소속), 쿼리 보존, _rsc 제거', async () => {
     await expectRedirect('meetings', '/meetings', '/w/acme/meetings')

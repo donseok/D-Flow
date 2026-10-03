@@ -288,9 +288,9 @@ describe('카탈로그 메타와 사전', () => {
     expect(status('workflow.stage_credits')).toBe('wired')
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
-    // SP3b UI-3 — portal.widgets 는 소비처(과제 10 홈 v1)까지 네 연결이라 wired, views.default 는 소비처(과제 14) 전이라 stored
+    // SP3b UI-3 — portal.widgets 는 소비처(과제 10 홈 v1)까지 네 연결이라 wired, views.default도 작업 계획 소비처(과제 14)까지 wired
     expect(status('portal.widgets')).toBe('wired')
-    expect(status('views.default')).toBe('stored')
+    expect(status('views.default')).toBe('wired')
     expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['workflow.approval_steps']))
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('portal.widgets')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('views.default')

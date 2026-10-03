@@ -32,6 +32,7 @@ import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { useRightRailOptional } from '@/components/app/RightRail'
 import type { DictKey } from '@/lib/i18n/dict'
 import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
+import { WBS_ADD_PHASE_EVENT } from './WbsAddButton'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 
@@ -299,6 +300,7 @@ export function WbsGanttSheet({
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addPhase, setAddPhase] = useState<string | null>(null) // null=닫힘
+
   const [addBusy, setAddBusy] = useState(false)
   // 간트 배율 — 일 폭(px), 슬라이더 연속 조절. 계정 전역 저장(UiPrefs.wbsGanttScale).
   // 저장값이 범위 밖이거나 숫자가 아니면(옛 버전 잔재 등) clamp/기본값으로 복구한다.
@@ -925,6 +927,12 @@ export function WbsGanttSheet({
   /* ── 편집 (WbsSheet 이식) ── */
   const actor = useMemo(() => actorFromView(actorView, projectId), [actorView, projectId])
   const isAdmin = isProjectAdmin(actor, projectId)
+  useEffect(() => {
+    if (!isAdmin || readOnly) return
+    const open = () => setAddPhase(p => p == null ? '' : p)
+    window.addEventListener(WBS_ADD_PHASE_EVENT, open)
+    return () => window.removeEventListener(WBS_ADD_PHASE_EVENT, open)
+  }, [isAdmin, readOnly])
   const canEditW = canEditWeight(actor, projectId) && !readOnly
   const startEdit = (id: string, field: 'weight' | 'actual', current: string, original = current) => {
     setEdit({ id, field })
@@ -1109,6 +1117,7 @@ export function WbsGanttSheet({
       aria-modal={fullscreen || undefined}
       aria-label={fullscreen ? t('wbs.ariaFullscreen') : undefined}
       data-wbs-fullscreen={fullscreen ? 'open' : undefined}
+      data-wbs-view={defaultView}
       style={
         {
           '--wbs-row-h': `${ROW_H}px`,
@@ -1298,11 +1307,6 @@ export function WbsGanttSheet({
           >
             <Flag className="h-3.5 w-3.5" />
             {showLabels && <span data-btn-label>{t('wbs.milestones')}</span>}
-          </button>
-        )}
-        {isAdmin && !readOnly && (
-          <button onClick={() => setAddPhase(p => (p == null ? '' : null))} title={t('wbs.addPhase')} className="btn btn-ghost h-9 px-3 text-xs">
-            <Icon name="plus" className="h-3.5 w-3.5" /> {showLabels && <span data-btn-label>{t('wbs.addPhaseShort')}</span>}
           </button>
         )}
         <button data-wbs-weekly-report onClick={() => setReportOpen(true)} title={t('wbs.weeklyReportTitle')} className="btn btn-ghost h-9 px-3 text-xs">

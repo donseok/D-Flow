@@ -3,9 +3,9 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const src = readFileSync(join(process.cwd(), 'src/app/(app)/p/[projectId]/kanban/page.tsx'), 'utf8')
+const src = readFileSync(join(process.cwd(), 'src/app/(app)/p/[projectId]/wbs/page.tsx'), 'utf8')
 
-describe('칸반 페이지 — 실시간 재조회', () => {
+describe('작업 계획 보드 — 실시간 재조회(D36)', () => {
   it('WbsRealtimeRefresh 를 그 프로젝트로 건다', () => {
     expect(src).toMatch(/<WbsRealtimeRefresh projectId=\{projectId\}/)
   })

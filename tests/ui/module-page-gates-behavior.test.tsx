@@ -35,7 +35,7 @@ vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: vi.fn(async () =>
 vi.mock('@/lib/data/issues', () => ({ getMinuteLinkedIssues: vi.fn(async () => []) }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: vi.fn(), getMyProjectIds: vi.fn(async () => []) }))
 vi.mock('@/components/minutes/MinuteViewer', () => ({ MinuteViewer: () => null }))
-import KanbanPage from '@/app/(app)/p/[projectId]/kanban/page'
+import WbsPage from '@/app/(app)/p/[projectId]/wbs/page'
 import AgentsPage from '@/app/(app)/w/[slug]/agents/page'
 import MinuteDetailPage from '@/app/(app)/w/[slug]/minutes/[id]/page'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
@@ -48,15 +48,11 @@ beforeEach(() => { vi.clearAllMocks(); m.getActorForView.mockResolvedValue(makeM
 // 관문 mock 값을 바꾸는 파일 — 남은 Once 값이 뒤 케이스로 새지 않게 통과 구현으로 되돌린다(공통 규칙 '전역 mock')
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 describe('페이지 관문 — 거부면 로더가 돌지 않는다', () => {
-  it('프로젝트 페이지(칸반) — { projectId } 와 kanban 으로 판정', async () => {
+  it('프로젝트 페이지(작업 계획) — { projectId } 와 wbs로 판정', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
-    await expect(KanbanPage({ params: Promise.resolve({ projectId: 'p1' }) })).rejects.toThrow('NEXT_NOT_FOUND')
-    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'kanban')
+    await expect(WbsPage({ params: Promise.resolve({ projectId: 'p1' }), searchParams: Promise.resolve({ view: 'board' }) })).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: 'p1' }, 'wbs')
     expect(m.getComputedWbs).not.toHaveBeenCalled()
-  })
-  it('켜지면 로더가 돈다', async () => {
-    await KanbanPage({ params: Promise.resolve({ projectId: 'p1' }) })
-    expect(m.getComputedWbs).toHaveBeenCalledWith('p1')
   })
   it('워크스페이스 페이지(/w/[slug]/agents) — 슬러그 워크스페이스({ workspaceId })로 판정, 거부면 좌석표를 읽지 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })

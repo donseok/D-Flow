@@ -1,4 +1,5 @@
 // 프로젝트 키 10개(SP5 A 의 calendar.* 셋, SP3b UI-3 의 views.default 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(여섯)·settings(modules.enabled·calendar.* 셋). 값 형태의 정본은 개정 §2.8.2.
+import { DEFAULT_VIEWS, parseViewsDefault, type ViewsDefault } from '@/lib/wbs/view'
 import { REQUIRED_ON_CREATE, defineSetting, type EditCtx, type Parsed, type SettingDef } from '../def'
 import { OFF_ON_CREATE, PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
@@ -86,21 +87,7 @@ export function copyWeekStartRules(src: readonly WeekStartRule[]): WeekStartRule
   return [{ day: src[src.length - 1].day, from: null }]
 }
 
-export type WbsView = 'sheet' | 'timeline' | 'board'
-export const WBS_VIEWS: readonly WbsView[] = ['sheet', 'timeline', 'board']
-export type ViewsDefault = { wbs: WbsView }
-/** 기본값 = 현행 동작(첫 보기는 표 — 개정 §2.6.2 R1, D43) */
-export const DEFAULT_VIEWS: ViewsDefault = { wbs: 'sheet' }
-/** { wbs } 만 받는다 — 밀도 등 필드를 나중에 더하는 것은 형태 변경(R5)이라 별도 키다(D43). 보드 ↔ 칸반 교차 검사는 validateProjectConfig(W12) */
-export function parseViewsDefault(raw: unknown): Parsed<ViewsDefault> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('보기 기본값은 { wbs } 여야 합니다.')
-  const keys = Object.keys(raw)
-  if (keys.length !== 1 || keys[0] !== 'wbs') return fail('보기 기본값에는 wbs 만 둡니다.')
-  const wbs = (raw as { wbs: unknown }).wbs
-  return typeof wbs === 'string' && (WBS_VIEWS as readonly string[]).includes(wbs)
-    ? { ok: true, value: { wbs: wbs as WbsView } }
-    : fail('작업 계획 기본 보기는 sheet·timeline·board 중 하나입니다.')
-}
+export { WBS_VIEWS, DEFAULT_VIEWS, parseViewsDefault, type WbsView, type ViewsDefault } from '@/lib/wbs/view'
 
 export const PROJECT_DEFS = [
   defineSetting<'core.level_labels', string[]>({
