@@ -227,6 +227,7 @@ export const settingsKo = {
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
+  'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',
   'settings.issues.id_policy.label': '이슈 코드 규칙', 'settings.issues.id_policy.desc': '새 이슈에 매길 코드의 꼴(접두·패턴·번호 범위·초기화)입니다. 바꿔도 기존 이슈의 코드는 그대로입니다.',
   'settings.issues.analysis.label': '이슈 분석 분류', 'settings.issues.analysis.desc': '이슈 분석 모듈이 켜진 프로젝트에서 등록할 때 분석 분류가 필수인지 정합니다. 기존 이슈는 그대로입니다.',
   'settings.issueAreas.title': '이슈 영역', 'settings.issueAreas.desc': '코드와 담당 팀으로 이슈를 묶습니다. 영역 코드는 영문 대문자·숫자 1~8자이며 만든 뒤 바꿀 수 없습니다.',

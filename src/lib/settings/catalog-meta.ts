@@ -8,6 +8,7 @@ export interface CatalogMeta { consumers: readonly string[]; tests: readonly str
 const A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP3a' })
 const S5A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 A' })
 const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B1' })
+const S5B3 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B3' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
@@ -52,6 +53,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // SP5 B1 — 정의·편집·소비처·검증이 이어졌다(스펙 D44)
   'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
   'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
+  'minutes.attachments': S5B3('stored', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/project.ts'], ['tests/minutes/attachment-policy.test.ts', 'tests/minutes/resolve-attachment-policy.test.ts', 'tests/settings/attachment-defs.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
@@ -59,7 +61,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
   { key: 'minutes.root_folders', scope: 'workspace', sp: 'SP5 B2', shape: "{ mode: 'teams' } | { mode: 'custom'; names: string[] }" },
-  { key: 'minutes.attachments', scope: 'workspace', sp: 'SP5 B3', shape: '첨부 정책 객체' },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
   { key: 'workflow.issue_statuses', scope: 'project', sp: 'SP5b', shape: '{ code; label; color; category; sort; active }[]' },
   { key: 'workflow.wbs_stage_labels', scope: 'project', sp: 'SP5b', shape: 'Partial<Record<단계, string>>' },
@@ -80,7 +81,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'forms.issue_analysis_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'forms.wbs_export_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'minutes.auto_file_by_path', scope: 'project', sp: 'SP7', shape: 'boolean' },
-  { key: 'minutes.attachments', scope: 'project', sp: 'SP5 B3', shape: '첨부 정책 객체(seedFrom)' },
   { key: 'views.default', scope: 'project', sp: 'SP3b', shape: "{ wbs: 'sheet'|'timeline'|'board'; density }" },
 ]
 

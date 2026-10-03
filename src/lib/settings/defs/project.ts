@@ -1,5 +1,6 @@
-// 프로젝트 키 11개(SP5 A 의 calendar.* 셋·SP5 B1 의 issues.* 둘 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled·calendar.*)·
+// 프로젝트 키 12개(SP5 A 의 calendar.* 셋·SP5 B1 의 issues.* 둘 포함)(스펙 §3.6 표, 개정 §2.8.2). 소유 모듈은 wbs(넷)·settings(modules.enabled·calendar.*)·
 // issues(issues.id_policy)·issue_analysis(issues.analysis). 값 형태의 정본은 개정 §2.8.2.
+import { DEFAULT_ATTACHMENT_POLICY, parseAttachmentPolicy, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { REQUIRED_ON_CREATE, defineSetting, type EditCtx, type Parsed, type SettingDef } from '../def'
 import { OFF_ON_CREATE, PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
@@ -157,6 +158,14 @@ export const PROJECT_DEFS = [
     widget: { kind: 'select', options: [
       { value: 'optional', labelKey: 'settings.issues.analysisOptional' }, { value: 'required', labelKey: 'settings.issues.analysisRequired' }] },
     editor: 'project_admin', apply: 'immediate', impact: ['future_only'], sql: { readers: ['create_issue_from_minute_block'] },
+  }),
+  // SP5 B3(D24): 프로젝트는 생성 때 복사, 기존 프로젝트는 제품 기본값. 실시간 상속 없음.
+  defineSetting<'minutes.attachments', AttachmentPolicy>({
+    key: 'minutes.attachments', scope: 'project', module: 'minutes', default: { ...DEFAULT_ATTACHMENT_POLICY },
+    parse: parseAttachmentPolicy,
+    widget: { kind: 'custom', component: 'AttachmentPolicyEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only'],
+    sql: { readers: ['minute_files_attachment_guard'] },
+    seedFrom: { key: 'minutes.attachments' },
   }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

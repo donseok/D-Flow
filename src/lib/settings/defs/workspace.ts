@@ -1,4 +1,5 @@
-// 워크스페이스 키 11개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+// 워크스페이스 키 12개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+import { DEFAULT_ATTACHMENT_POLICY, parseAttachmentPolicy, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { defineSetting, type Parsed, type SettingDef } from '../def'
 import { NON_CORE_MODULES, isModuleId, type ModuleId } from '@/lib/modules/defaults'
 import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
@@ -186,5 +187,12 @@ export const WORKSPACE_DEFS = [
       { value: 'sunday', labelKey: 'settings.calendar.week_start.sunday' }, { value: 'monday', labelKey: 'settings.calendar.week_start.monday' },
     ] },
     editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  // SP5 B3(D24): 프로젝트는 생성 때 복사, 기존 프로젝트는 제품 기본값. 실시간 상속 없음.
+  defineSetting<'minutes.attachments', AttachmentPolicy>({
+    key: 'minutes.attachments', scope: 'workspace', module: 'minutes', default: { ...DEFAULT_ATTACHMENT_POLICY },
+    parse: parseAttachmentPolicy,
+    widget: { kind: 'custom', component: 'AttachmentPolicyEditor' }, editor: 'workspace_admin', apply: 'immediate', impact: ['future_only'],
+    sql: { readers: ['minute_files_attachment_guard'] },
   }),
 ] as const satisfies readonly SettingDef[]

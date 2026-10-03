@@ -12,6 +12,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => 
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 import { createProject, getProjectCopySource, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
+import { DEFAULT_ATTACHMENT_POLICY } from '@/lib/minutes/attachmentPolicy'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { ERR_MODULES_ALLOWED_BROKEN } from '@/lib/settings/validateConfig'
 import { makeActor } from '../fixtures/actor'
@@ -50,8 +51,8 @@ describe('createProject', () => {
     if (!r.ok) return
     const p = db.projects.get(r.projectId)!
     expect(p.values).toEqual({ 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban', 'meetings', 'issues'],   // wiki 는 minutes 미허용으로 빠진다
-      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
-    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(5).fill('create'))
+      'minutes.attachments': DEFAULT_ATTACHMENT_POLICY, 'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
+    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(6).fill('create'))
     expect(db.rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_name: 'Acme 신규', p_copy_from: null, p_actor: 'u-admin', p_command_id: CMD, p_schema_version: 1 })
     expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/w/[slug]', 'layout')
   })
@@ -60,6 +61,30 @@ describe('createProject', () => {
     expect(a.ok && b.ok && a.projectId === b.projectId && b.status === 'duplicate').toBe(true)
     expect(db.projects.size).toBe(3)
   })
+  it('첨부 정책을 생성 때 한 번 복사하며 워크스페이스 변경은 기존 프로젝트에 상속하지 않는다', async () => {
+    const narrow = { ...DEFAULT_ATTACHMENT_POLICY, maxCount: 2, maxTotalBytes: 2 * DEFAULT_ATTACHMENT_POLICY.maxFileBytes }
+    db.workspaces.get(WID)!.values['minutes.attachments'] = narrow
+    const r = await createProject(input())
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+    db.workspaces.get(WID)!.values['minutes.attachments'] = DEFAULT_ATTACHMENT_POLICY
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+  })
+  it('프로젝트 복사는 원본의 명시 첨부 정책을 보존하고 손상된 원본/워크스페이스는 생성하지 않는다', async () => {
+    const narrow = { ...DEFAULT_ATTACHMENT_POLICY, allowedExtensions: ['pdf'] }
+    db.projects.get(SRC)!.values['minutes.attachments'] = narrow
+    const r = await createProject(input({ copyFromProjectId: SRC }))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+    const before = db.projects.size
+    db.projects.get(SRC)!.values['minutes.attachments'] = null
+    expect(await createProject(input({ copyFromProjectId: SRC, commandId: '00000000-0000-4000-8000-00000000dd21' }))).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'minutes.attachments' }] })
+    db.workspaces.get(WID)!.values['minutes.attachments'] = null
+    expect(await createProject(input({ commandId: '00000000-0000-4000-8000-00000000dd22' }))).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'minutes.attachments' }] })
+    expect(db.projects.size).toBe(before)
+  })
   it('복사 — 원본의 set 키 전부를 넘기고 modules.enabled 는 대상 허용과 재교집합, 라벨은 입력값. 이력 source copy', async () => {
     const r = await createProject(input({ copyFromProjectId: SRC, levelLabels: ['P', 'T', 'A'] }))
     expect(r).toMatchObject({ ok: true })
@@ -67,7 +92,7 @@ describe('createProject', () => {
     expect(db.projects.get(r.projectId)!.values).toEqual({
       'core.level_labels': ['P', 'T', 'A'], 'modules.enabled': ['kanban'],           // agents 미허용, wiki 는 minutes 없음
       'core.milestone_keywords': ['출시'], 'core.extra_axis_label': 'Track',
-      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }],
+      'minutes.attachments': DEFAULT_ATTACHMENT_POLICY, 'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }],
     })
     expect(db.history.filter((x) => x.project_id === r.projectId).every((x) => x.source === 'copy' && x.copied_from === SRC)).toBe(true)
   })

@@ -229,6 +229,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.week_start.label': 'Week start', 'settings.calendar.week_start.desc': 'The first day of the week for weekly reports and this-week views. A project change applies from next week; past weekly reports stay as they are.',
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11
+  'settings.minutes.attachments.label': 'Minute attachment policy', 'settings.minutes.attachments.desc': 'Limits size, count, extensions, and previews for new attachments. Existing files are kept; workspace values are copied once to new projects.',
   'settings.issues.id_policy.label': 'Issue code rule', 'settings.issues.id_policy.desc': 'The format of codes given to new issues (prefix, pattern, counter scope, reset). Existing issue codes do not change.',
   'settings.issues.analysis.label': 'Issue analysis classification', 'settings.issues.analysis.desc': 'Whether analysis classification is required when creating an issue in a project with issue analysis on. Existing issues stay as they are.',
   'settings.issueAreas.title': 'Issue areas', 'settings.issueAreas.desc': 'Group issues by code and team. Area codes use 1–8 uppercase letters or digits and cannot be changed after creation.',
