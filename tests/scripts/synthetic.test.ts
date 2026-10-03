@@ -149,6 +149,7 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
     expect(src).toMatch(/excludeRegistered\(sp4Sentinels\(\)/)
     expect(src).toMatch(/excludeRegistered\(sp5b1Sentinels\(\)/)
     expect(src).toContain("['issues', `/p/${proj.id}/issues`]")
+    expect(src).toMatch(/S10 영역 이름[\s\S]*?\.eq\('kind', 'weekly_section'\)/)
     expect(src).not.toMatch(/function findSentinels|SENTINEL_MASKS\s*=/)   // 규칙을 러너에 다시 쓰지 않는다
   })
   it('팀·영역·주간 쓰기는 화면과 같은 서버 액션 넷 — worker 는 그 액션을 쓰는 페이지', () => {
@@ -193,7 +194,7 @@ describe('renderedProof — S10 ⑤ 화면이 실제로 그려졌는지(A2-4 리
 describe('e2e-synthetic.mjs — S10 ⑤ 의 그려짐 단언(W1)', () => {
   const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
   it('주간 HTML 은 활성 영역 이름, WBS HTML 은 루트 항목 이름으로 확인하고 S10 판정이 그것을 요구한다', () => {
-    expect(src).toMatch(/from\('project_areas'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.eq\('active', true\)/)
+    expect(src).toMatch(/from\('project_areas'\)\.select\('name'\)\.eq\('project_id', proj\.id\)[\s\S]*?\.eq\('kind', 'weekly_section'\)\.eq\('active', true\)/)
     expect(src).toMatch(/from\('wbs_items'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.is\('parent_id', null\)/)
     expect(src).toMatch(/renderedProof\(text, /)
     expect(src).toMatch(/s10Ok = \['R', 'C'\]\.every\(\(k\) => [^\n]*rendered\.every\(\(r\) => r\.ok\)/)

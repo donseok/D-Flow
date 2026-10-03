@@ -549,7 +549,8 @@ async function main() {
   }
   // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름, WBS = 루트 항목 이름, 이슈 = 첫 영역 이름·첫 issue code.
   const proofNamesOf = async (proj) => ({
-    weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('active', true)).map((x) => x.name),
+    weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id)
+      .eq('kind', 'weekly_section').eq('active', true)).map((x) => x.name),
     wbs: rows('S10 루트 항목 이름', await admin.sb.from('wbs_items').select('name').eq('project_id', proj.id).is('parent_id', null)).map((x) => x.name),
     issues: [rows('S10 이슈 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order').limit(1)),
       rows('S10 이슈 코드', await admin.sb.from('issues').select('code').eq('project_id', proj.id).order('issue_no').limit(1))]
