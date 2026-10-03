@@ -6,13 +6,23 @@ import type { UiPrefs } from '@/lib/domain/types'
 // 무효화했다(2026-08-18 실측). keepalive 라 페이지 이탈 직전 저장도 유실되지 않는다.
 // 실패는 로컬 적용을 되돌리지 않는다(로컬 캐시가 진실) — 다만 경고 한 줄을 남긴다(SP3b 스펙 §4.8 "로컬 적용 유지 + 로그").
 // 4xx·5xx 도 실패다: 세션 만료(401)로 서버값이 옛 값에 머물면 다음 로그인 때 PrefsSync 가 그 값으로 덮는다 — 원인 기록이 있어야 한다.
-function postPrefs(body: { prefs?: Partial<UiPrefs>; workspaceId?: string; visits?: string[]; wbsCollapse?: { projectId: string; ids: string[] } }): void {
-  void fetch('/api/prefs', {
+type PrefsBody = { prefs?: Partial<UiPrefs>; workspaceId?: string; visits?: string[]; wbsCollapse?: { projectId: string; ids: string[] } }
+
+/**
+ * 즉시 저장(SP3b UI-3 과제 8) — 결과를 돌려준다. 홈의 위젯 숨기기·다시 보기처럼 저장이 끝난 뒤 서버 화면을 다시 그려야 하는 조작이 쓴다
+ * (응답이 ok 가 아니면 호출부가 실패로 보인다 — 숨김 성공처럼 보이지 않게). 네트워크 오류는 그대로 던진다.
+ */
+export function postPrefsNow(body: PrefsBody): Promise<Response> {
+  return fetch('/api/prefs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
     keepalive: true,
-  }).then(
+  })
+}
+
+function postPrefs(body: PrefsBody): void {
+  void postPrefsNow(body).then(
     (res) => { if (!res.ok) console.warn('[prefs] 서버 저장 실패 — 로컬 적용은 유지:', res.status) },
     (e: unknown) => { console.warn('[prefs] 서버 저장 실패 — 로컬 적용은 유지:', e instanceof Error ? e.message : e) },
   )

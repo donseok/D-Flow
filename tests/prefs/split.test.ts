@@ -9,6 +9,7 @@ const ALL: Record<keyof UiPrefs, true> = {
   theme: true, locale: true, sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
   wbsHideDone: true, wbsOutline: true, wbsGanttScale: true, notif: true,
   startPage: true, favoriteProjectIds: true, recentProjects: true, notifRead: true,
+  projectsView: true, portalHiddenWidgets: true,
 }
 
 describe('두 목록 — 서로소이고 합집합 = UiPrefs 키', () => {
@@ -50,5 +51,23 @@ describe('mergePrefs·pushRecent', () => {
     expect(list).toHaveLength(RECENT_MAX)
     expect(list[0]).toEqual({ id: U(5), at: '2026-10-01T01:00:00Z' })
     expect(list.filter((x) => x.id === U(5))).toHaveLength(1)
+  })
+})
+
+describe('UI-3 키(스펙 §5.6 — projectsView 계정, portalHiddenWidgets 워크스페이스)', () => {
+  it('범위', () => {
+    expect(ACCOUNT_PREF_KEYS).toContain('projectsView'); expect(WORKSPACE_PREF_KEYS).toContain('portalHiddenWidgets')
+    expect(splitPrefs({ projectsView: 'cards' }).account).toEqual({ projectsView: 'cards' })
+  })
+  it('projectsView 는 rows·cards 만', () => {
+    const r = splitPrefs({ projectsView: 'grid' as never })
+    expect(r.account).toEqual({}); expect(r.dropped).toContain('projectsView')
+  })
+  it('숨긴 위젯 — 알려진 id 만, 중복 제거, 배열이 아니면 키를 버린다', () => {
+    expect(splitPrefs({ portalHiddenWidgets: ['review', 'nope', 'review', 'announcements'] as never }).workspace)
+      .toEqual({ portalHiddenWidgets: ['review', 'announcements'] })
+    const r = splitPrefs({ portalHiddenWidgets: 'review' as never })
+    expect(r.workspace).toEqual({}); expect(r.dropped).toContain('portalHiddenWidgets')
+    expect(splitPrefs({ portalHiddenWidgets: [] }).workspace).toEqual({ portalHiddenWidgets: [] })     // 빈 배열 = 다시 보기(전부 보이기)
   })
 })

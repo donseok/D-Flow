@@ -93,7 +93,8 @@ export const PERSONAL_PREFS: readonly { key: string; desc: string; scope: '계�
   { key: 'minutesView', desc: '회의록 보기', scope: '계정' }, { key: 'minuteFontSize', desc: '회의록 글자 크기', scope: '계정' },
   { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치', scope: '계정' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김', scope: '계정' },
   { key: 'wbsOutline', desc: 'WBS 아웃라인', scope: '계정' }, { key: 'wbsGanttScale', desc: '간트 축척', scope: '계정' },
-  { key: 'notif', desc: '알림 토글', scope: '계정' },
+  { key: 'notif', desc: '알림 토글', scope: '계정' }, { key: 'projectsView', desc: '프로젝트 목록 보기(행·카드)', scope: '계정' },
   { key: 'startPage', desc: '시작 화면', scope: '워크스페이스' }, { key: 'favoriteProjectIds', desc: '즐겨찾기 프로젝트(최대 20)', scope: '워크스페이스' },
   { key: 'recentProjects', desc: '최근 방문 프로젝트(최대 10)', scope: '워크스페이스' }, { key: 'notifRead', desc: '읽은 알림', scope: '워크스페이스' },
+  { key: 'portalHiddenWidgets', desc: '홈에서 숨긴 위젯', scope: '워크스페이스' },
 ]

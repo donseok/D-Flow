@@ -149,10 +149,12 @@
 | `wbsOutline` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | WBS 아웃라인 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `wbsGanttScale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 간트 축척 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `notif` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 알림 토글 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `projectsView` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 프로젝트 목록 보기(행·카드) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `startPage` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 시작 화면 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `favoriteProjectIds` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 즐겨찾기 프로젝트(최대 20) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `recentProjects` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 최근 방문 프로젝트(최대 10) | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `notifRead` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 읽은 알림 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
+| `portalHiddenWidgets` | 개인·워크스페이스 | 본인 | 계정·화면 | 워크스페이스 개인 설정(그 워크스페이스 행) | 홈에서 숨긴 위젯 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 <!-- catalog:auto:5:end -->
 
 ## 6. 제품 고정

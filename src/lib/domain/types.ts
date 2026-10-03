@@ -1,3 +1,4 @@
+import type { PortalWidgetId } from '@/lib/portal/widgets'
 import type { ThemePref } from '@/lib/theme/policy'
 
 /** DEPRECATED — 깊이 판정에 쓰지 않는다(진실은 parent_id 트리). 프로젝트별 레벨 라벨은 ProjectConfig.levelLabels. */
@@ -207,6 +208,8 @@ export interface UiPrefs {
   startPage?: 'home' | 'my_work' | 'projects' | 'last_project'   // 워크스페이스 키 — 루트 리졸버의 시작 화면(D44)
   favoriteProjectIds?: string[]                                   // 워크스페이스 키 — 즐겨찾기(최대 20)
   recentProjects?: { id: string; at: string }[]                   // 워크스페이스 키 — 최근 방문(최대 10, 셸이 쓴다)
+  projectsView?: 'rows' | 'cards'                                 // 계정 키 — 프로젝트 목록 보기(SP3b UI-3, 스펙 §6.2)
+  portalHiddenWidgets?: PortalWidgetId[]                          // 워크스페이스 키 — 홈에서 숨긴 위젯(스펙 §6.1)
 }
 
 /* ── 회의록 (minutes) ── */
