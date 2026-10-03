@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { AlertTriangle, Folder } from 'lucide-react'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import {
-  MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_ATTACHMENT_MAX, MINUTE_BODY_FILE_MAX,
+  MINUTES_ATTACHMENTS_MAX_COUNT, MINUTES_ATTACHMENT_MAX_BYTES, MINUTE_BODY_FILE_MAX,
   MINUTE_BODY_MAX, stampedFileName, teamSubOfFolder,
 } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
@@ -145,8 +145,8 @@ export function MinuteUploadModal({
     const bodyCand = !bodyFile ? files.find(isMd) ?? null : null
     const rest = files.filter(f => f !== bodyCand)
     if (bodyCand && bodyCand.size > MINUTE_BODY_FILE_MAX) { setErr(t('min.err.bodyFileMax')); return }
-    if (attachments.length + rest.length > MINUTE_ATTACHMENTS_MAX_COUNT) { setErr(t('min.err.attachCount')); return }
-    if (rest.some(f => f.size > MINUTE_ATTACHMENT_MAX)) { setErr(t('min.err.attachMax')); return }
+    if (attachments.length + rest.length > MINUTES_ATTACHMENTS_MAX_COUNT) { setErr(t('min.err.attachCount')); return }
+    if (rest.some(f => f.size > MINUTES_ATTACHMENT_MAX_BYTES)) { setErr(t('min.err.attachMax')); return }
     if (bodyCand) {
       const text = await bodyCand.text()
       if (text.length > MINUTE_BODY_MAX) { setErr(t('min.err.bodyMax')); return }

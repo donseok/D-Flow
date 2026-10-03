@@ -16,7 +16,7 @@ import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
   isTeamRootName, isTeamRootFolder, teamSubOfFolder, normalizeFolderName,
-  MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC, MINUTE_ATTACHMENTS_MAX_COUNT,
+  MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC, MINUTES_ATTACHMENTS_MAX_COUNT,
   type MinuteInput,
 } from '@/lib/domain/minutes'
 import { resolveFolderDrop, type MinuteDropReject } from '@/lib/domain/minutes-drop'
@@ -795,7 +795,7 @@ export async function replaceMinuteBody(
 
 /** 첨부 확정 가드(0011 minute_files_attachment_guard)의 거부 사유 → 사용자 문구. 모르는 사유는 원문을 싣지 않는다. */
 const ATTACHMENT_GUARD_TEXT: ReadonlyArray<readonly [string, string]> = [
-  ['MINUTE_ATTACHMENT_LIMIT', `첨부는 회의록당 ${MINUTE_ATTACHMENTS_MAX_COUNT}개까지입니다.`],
+  ['MINUTE_ATTACHMENT_LIMIT', `첨부는 회의록당 ${MINUTES_ATTACHMENTS_MAX_COUNT}개까지입니다.`],
   ['MINUTE_ATTACHMENT_DUPLICATE', '같은 파일이 이미 첨부돼 있습니다.'],
   ['MINUTE_ATTACHMENT_ARCHIVED', '보관된 회의록에는 첨부할 수 없습니다.'],
   ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],

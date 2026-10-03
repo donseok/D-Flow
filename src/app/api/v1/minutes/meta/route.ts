@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  MINUTE_ATTACHMENT_MAX, MINUTE_ATTACHMENTS_MAX_COUNT, MINUTE_BODY_MAX,
+  MINUTES_ATTACHMENT_MAX_BYTES, MINUTES_ATTACHMENTS_MAX_COUNT, MINUTE_BODY_MAX,
 } from '@/lib/domain/minutes'
 import { workspaceTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
@@ -82,8 +82,8 @@ export async function GET(req: NextRequest) {
       limits: {
         max_body_chars: MINUTE_BODY_MAX,
         max_request_bytes: MINUTES_API_MAX_REQUEST_BYTES,
-        max_attachments: MINUTE_ATTACHMENTS_MAX_COUNT,
-        max_attachment_bytes: MINUTE_ATTACHMENT_MAX,
+        max_attachments: MINUTES_ATTACHMENTS_MAX_COUNT,
+        max_attachment_bytes: MINUTES_ATTACHMENT_MAX_BYTES,
       },
     }
 
