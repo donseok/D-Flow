@@ -46,6 +46,14 @@ const current = (html: string, href: string) => (html.match(/<a\b[^>]*>/g) ?? []
 const widget = (html: string, id: string) => html.match(new RegExp(`<section[^>]*data-widget="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
 
 describe('포털 v1 — 위젯별 부분 실패(⑥)', () => {
+  it('개인 설정 조회 실패는 홈을 유지하며 알리고 숨김 버튼을 막는다', async () => {
+    h.prefs.mockRejectedValue(new Error('down'))
+    const html = await render()
+    expect(h.prefs).toHaveBeenCalledWith(WS.id, { strict: true })
+    expect(html).toContain('개인 설정을 읽지 못해 위젯 숨김을 적용하지 못했습니다')
+    expect(widget(html, 'my_work')).toContain('이 위젯 숨기기')
+    expect(widget(html, 'my_work')).not.toContain('partial_error')
+  })
   it('로더 하나가 { ok: false } 면 그 위젯만 partial_error, 나머지는 그대로', async () => {
     h.upcoming.mockResolvedValue({ ok: false, error: '다가오는 회의를 불러오지 못했습니다.' })
     const html = await render()

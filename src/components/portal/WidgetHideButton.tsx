@@ -24,6 +24,6 @@ export function WidgetHideButton({ widgetId, title }: { workspaceId: string; wid
   }
   return <>
     {err && <span role="alert" className="text-meta text-danger">숨기지 못했습니다</span>}
-    <IconButton aria-label="이 위젯 숨기기" title={`${title} 숨기기`} variant="ghost" disabled={!ready} busy={busy || commands.pending} icon={<EyeOff className="h-4 w-4" aria-hidden />} onClick={hide} />
+    <IconButton aria-label="이 위젯 숨기기" title={`${title} 숨기기`} variant="ghost" disabled={!ready || commands.disabled} busy={busy || commands.pending} icon={<EyeOff className="h-4 w-4" aria-hidden />} onClick={hide} />
   </>
 }

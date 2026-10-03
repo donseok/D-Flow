@@ -9,6 +9,18 @@ const h = vi.hoisted(() => ({ save: vi.fn(), reload: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ postPrefsNow: h.save }))
 vi.mock('@/lib/portal/reload', () => ({ reloadPortalPage: h.reload }))
 beforeEach(() => { h.save.mockReset(); h.reload.mockReset() })
+it('숨김 설정을 읽지 못하면 버튼과 직접 명령 모두 저장을 막는다', async () => {
+  render(<HiddenWidgetsProvider workspaceId="ws" hidden={null}>
+    <WidgetHideButton workspaceId="ws" widgetId="announcements" hidden={[]} title="공지" />
+    <ShowHiddenWidgets workspaceId="ws" count={1} />
+    <Batch />
+  </HiddenWidgetsProvider>)
+  expect((screen.getByRole('button', { name: '이 위젯 숨기기' }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: /다시 보기/ }) as HTMLButtonElement).disabled).toBe(true)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '연속 변경' })) })
+  expect(h.save).not.toHaveBeenCalled()
+  expect(h.reload).not.toHaveBeenCalled()
+})
 function Batch({ restore = false }: { restore?: boolean }) {
   const commands = useHiddenWidgets()
   return <button onClick={() => { void commands.change('announcements'); void commands.change(restore ? null : 'upcoming') }}>연속 변경</button>

@@ -59,14 +59,14 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
       console.error('[home] portal.widgets 읽기 실패 — 기본 배치로 그린다', ws.id, e instanceof Error ? e.message : e)
       return { ok: false as const }
     }),
-    getWorkspacePrefs(ws.id),
+    getWorkspacePrefs(ws.id, { strict: true }).catch(() => null),
     workspaceModuleSets(ws.id, actor),
     getPortalSummary(ws.id, actor, { now }),
   ])
   // 검토자(W11·R9 ①) — 합집합을 못 읽으면 관리자 여부는 '모름'(null). 검토 대기 수는 요약과 같은 원천(왕복이 늘지 않는다)
   const adminOfAgentsProject = mods.ok ? [...mods.sets].some(([pid, s]) => s.has('agents') && isProjectAdmin(actor, pid)) : null
   const reviewer = isPortalReviewer({ adminOfAgentsProject, reviewCount: summary.review.ok ? summary.review.count : null })
-  const hidden = parseHiddenWidgets(prefs.portalHiddenWidgets) ?? []
+  const hidden = parseHiddenWidgets(prefs?.portalHiddenWidgets) ?? []
   const slots = visibleWidgets({ setting: cfg.ok ? cfg.value : defaultPortalWidgets(), hidden, moduleUnion: mods.ok ? mods.union : null, reviewer })
   const tab: HomeTab = rawTab === 'mine' || (rawTab === 'review' && reviewer === true) ? rawTab : 'all'
   const want = new Set([...slots.main, ...slots.side].filter((s) => s.state === 'show').map((s) => s.id))
@@ -83,9 +83,10 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   return (
     <PageFrame width="portal" header={header}>
       {!cfg.ok && <div className="mb-4"><StatusMessage kind="partial_error" compact title="홈 위젯 설정을 읽지 못해 기본 배치로 보입니다" action={settingsAction} /></div>}
+      {prefs === null && <div className="mb-4"><StatusMessage kind="partial_error" compact title="개인 설정을 읽지 못해 위젯 숨김을 적용하지 못했습니다" detail="새로고침 후 다시 시도하세요. 숨기기와 다시 보기는 잠시 사용할 수 없습니다." /></div>}
       {mods.ok && mods.partial && <div className="mb-4"><StatusMessage kind="partial_error" compact title="일부 프로젝트의 기능 설정을 확인하지 못했습니다" /></div>}
       <PortalSummary slug={ws.slug} summary={summary} showReview={reviewer !== false} />
-      <HiddenWidgetsProvider key={ws.id} workspaceId={ws.id} hidden={hidden}>
+      <HiddenWidgetsProvider key={`${ws.id}:${prefs === null ? 'unavailable' : hidden.join(',')}`} workspaceId={ws.id} hidden={prefs === null ? null : hidden}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="min-w-0 space-y-6 lg:col-span-8">{slots.main.map((s) => <WidgetSlotView key={s.id} slot={s} ctx={ctx} />)}</div>
         <div className="min-w-0 space-y-6 lg:col-span-4">{slots.side.map((s) => <WidgetSlotView key={s.id} slot={s} ctx={ctx} />)}</div>

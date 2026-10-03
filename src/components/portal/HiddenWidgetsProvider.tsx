@@ -4,18 +4,20 @@ import { postPrefsNow } from '@/lib/prefs/debouncedSave'
 import { reloadPortalPage } from '@/lib/portal/reload'
 import type { PortalWidgetId } from '@/lib/portal/widgets'
 
-type HiddenWidgetsCommands = { pending: boolean; change(widgetId: PortalWidgetId | null): Promise<boolean> }
+type HiddenWidgetsCommands = { pending: boolean; disabled: boolean; change(widgetId: PortalWidgetId | null): Promise<boolean> }
 const Context = createContext<HiddenWidgetsCommands | null>(null)
 
 /** 페이지 수명의 공유 저장 큐. 다음 변경은 성공한 최신 목록에서 만들고 큐가 빌 때 화면을 한 번만 갱신한다. */
 export function HiddenWidgetsProvider({ workspaceId, hidden, children }: {
-  workspaceId: string; hidden: readonly PortalWidgetId[]; children: ReactNode
+  workspaceId: string; hidden: readonly PortalWidgetId[] | null; children: ReactNode
 }) {
   const [pending, setPending] = useState(false)
-  const state = useRef({ hidden: [...hidden], tail: Promise.resolve(), pending: 0, changed: false })
+  const state = useRef({ hidden: [...(hidden ?? [])], tail: Promise.resolve(), pending: 0, changed: false })
   const commands = useMemo(() => ({
     pending,
+    disabled: hidden === null,
     change(widgetId: PortalWidgetId | null): Promise<boolean> {
+      if (hidden === null) return Promise.resolve(false)
       const s = state.current
       s.pending++
       setPending(true)
@@ -37,7 +39,7 @@ export function HiddenWidgetsProvider({ workspaceId, hidden, children }: {
       })
       return result
     },
-  }), [workspaceId, pending])
+  }), [workspaceId, pending, hidden])
   return <Context.Provider value={commands}>{children}</Context.Provider>
 }
 

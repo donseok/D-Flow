@@ -181,6 +181,18 @@ describe('getUpcomingMeetings(W9 — 내 회차, 그 프로젝트의 오늘부�
 })
 
 describe('getRecentDocuments', () => {
+  it('볼 수 있는 프로젝트의 모듈 판정 실패를 정상 빈 목록으로 위장하지 않는다', async () => {
+    m.many.mockResolvedValue({ sets: new Map([[P1, ON], [PS, ON]]), failed: [P2] })
+    const c = fake(tables())
+    expect(await getRecentDocuments(WA, actor, { client: c as never })).toMatchObject({ ok: false })
+    expect(c.calls.filter((call) => call.table === 'minutes')).toHaveLength(0)
+    expect(err).toHaveBeenCalled()
+  })
+  it('화면에서 숨긴 프로젝트의 판정 실패는 볼 수 있는 회의록 조회를 막지 않는다', async () => {
+    m.many.mockResolvedValue({ sets: new Map([[P1, ON], [P2, ON]]), failed: [PS] })
+    const r = await getRecentDocuments(WA, actor, { client: fake(tables()) as never })
+    expect(r.ok && r.rows.map((row) => row.id)).toEqual(['mn1', 'mn2', 'mn5'])
+  })
   it('그 워크스페이스·보관 안 됨, 워크스페이스 회의록·볼 수 있는 프로젝트의 회의록(회의로 연결된 옛 행 포함)만 — 비공개는 새지 않는다', async () => {
     const c = fake(tables())
     const r = await getRecentDocuments(WA, actor, { client: c as never })

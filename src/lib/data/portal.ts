@@ -357,6 +357,8 @@ export async function getRecentDocuments(workspaceId: string, actor: Actor, opts
   Promise<{ ok: true; rows: RecentDoc[] } | { ok: false; error: string }> {
   try {
     const sc = await scopeOf(workspaceId, actor, opts.client)
+    // 판정 실패로 빠진 프로젝트가 있으면 최신 목록인지 알 수 없다. 숨긴 프로젝트의 실패는 이 목록과 무관하다.
+    if (sc.many.failed.some((pid) => sc.visible.has(pid))) throw new Error('프로젝트의 회의록 모듈 상태를 확인하지 못했습니다.')
     const ws = await effectiveModules({ workspaceId }, { client: sc.c })
     const wsOn = ws.has('minutes')
     const projOn = modsOf(sc.pids, sc.many).on('minutes').filter((p) => sc.visible.has(p))
@@ -438,7 +440,7 @@ export async function getProjectRows(workspaceId: string, actor: Actor, opts: { 
         return q.order('name').order('id').range(f, t)
       }),
       // 개인 설정은 표시용(즐겨찾기 별) — 못 읽으면 별 없이 그리되, 즐겨찾기만 거르는 요청은 빈 목록으로 위장하지 않고 실패로(3원칙 ①)
-      getWorkspacePrefs(workspaceId).then((p) => p, (e: unknown) => { console.error('[portal] 프로젝트 행 — 개인 설정 조회 실패', workspaceId, errMsg(e)); return null }),
+      getWorkspacePrefs(workspaceId, { strict: true }).then((p) => p, (e: unknown) => { console.error('[portal] 프로젝트 행 — 개인 설정 조회 실패', workspaceId, errMsg(e)); return null }),
       workspaceToday(client, workspaceId, opts.now ?? new Date()),
     ])
     // 상태로 거르는데 오늘을 모르면 모든 행이 '모름'이라 거른 결과가 빈 목록으로 위장된다 — 실패로 알린다(3원칙 ①)

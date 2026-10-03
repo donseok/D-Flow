@@ -21,12 +21,17 @@ export async function getAccountPrefs(): Promise<UiPrefs> {
 
 /** 워크스페이스 범위 개인 설정(user_preferences (user_id, workspace_id) 행). 워크스페이스 키만 돌려준다.
  *  비소속 워크스페이스는 RLS(own_user_preferences — is_ws_member)가 0행으로 돌려 {} 다 */
-export async function getWorkspacePrefs(workspaceId: string): Promise<UiPrefs> {
+export async function getWorkspacePrefs(workspaceId: string, opts: { strict?: boolean } = {}): Promise<UiPrefs> {
   const u = await getSession()
   if (!u || typeof workspaceId !== 'string' || !UUID_RE.test(workspaceId)) return {}
   const sb = await createServerClient()
   const { data, error } = await sb.from('user_preferences').select('prefs').eq('user_id', u.id).eq('workspace_id', workspaceId).maybeSingle()
-  if (error) { console.error('[getWorkspacePrefs] 조회 실패:', workspaceId, error.message); return {} }
+  if (error) {
+    console.error('[getWorkspacePrefs] 조회 실패:', workspaceId, error.message)
+    // 목록 필터와 기존 숨김 목록을 바탕으로 저장하는 조작은 조회 실패를 빈 설정으로 취급하면 안 된다.
+    if (opts.strict) throw new Error('개인 설정을 불러오지 못했습니다.')
+    return {}
+  }
   return mergePrefs({}, (data?.prefs as Partial<UiPrefs>) ?? {})
 }
 
