@@ -49,9 +49,9 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
-  // SP5 B1 과제 3 — 정의만 등록(stored). 발번 트리거·등록 규칙·편집 화면(IssuePolicyEditor·select)이 붙으면 과제 13 이 소비처·테스트를 채우고 verified 로 올린다
-  'issues.id_policy': S5B1('stored', ['src/lib/settings/defs/project.ts'], ['tests/settings/issues-defs.test.ts']),
-  'issues.analysis': S5B1('stored', ['src/lib/settings/defs/project.ts'], ['tests/settings/issues-defs.test.ts']),
+  // SP5 B1 — 정의·편집·소비처·검증이 이어졌다(스펙 D44)
+  'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
+  'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */

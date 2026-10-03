@@ -13,8 +13,8 @@ const expectedStatus: Record<string, string> = {
   'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
-  // SP5 B1 — 정의만(과제 3). 편집·소비처·테스트 네 연결을 확인하면 과제 13 이 verified 로 올린다
-  'issues.id_policy': 'stored', 'issues.analysis': 'stored',
+  // SP5 B1 — 정의·편집·소비처·테스트 네 연결
+  'issues.id_policy': 'verified', 'issues.analysis': 'verified',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.

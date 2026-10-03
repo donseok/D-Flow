@@ -3,7 +3,7 @@
 // 한계(a6 리뷰 Q4 — 기록 시점 잔여 0, 스펙 §9 한 행): 시간대 세 패턴은 그 리터럴 꼴만 잡는다 — `9 * 60 * 60 * 1000`·`32400000`·공백 없는
 // `9*3600_000`·다른 나라의 고정 IANA 리터럴(`'Asia/Tokyo'`)·조립(`'Asia/' + 'Seoul'`)은 통과한다(instant-format-zone 은 timeZone 의 유무만 본다).
 export type RuntimeConstantPattern =
-  | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'ISSUE_MEGA_AREAS' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
+  | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000' | 'RESERVED_TEAM_NAMES'
   | 'fixtures/excel/legacyBuild' | 'DEFAULT_LEVEL_LABELS' | 'teamStyle' | 'team-[1-5]'
 
@@ -11,7 +11,7 @@ export type RuntimeConstantPattern =
 export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
   DEFAULT_TEAMS: /\bDEFAULT_TEAMS\b/, WEEKLY_SECTIONS: /\bWEEKLY_SECTIONS\b/, WEEKLY_TEAM_SECTIONS: /\bWEEKLY_TEAM_SECTIONS\b/,
   FALLBACK_SECTION: /\bFALLBACK_SECTION\b/,
-  ISSUE_MEGA_AREAS: /\bISSUE_MEGA_AREAS\b/, LEGACY_EXCEL_PROFILE_V1: /\bLEGACY_EXCEL_PROFILE_V1\b/, LEGACY_LABEL_ABBR: /\bLEGACY_LABEL_ABBR\b/,
+  LEGACY_EXCEL_PROFILE_V1: /\bLEGACY_EXCEL_PROFILE_V1\b/, LEGACY_LABEL_ABBR: /\bLEGACY_LABEL_ABBR\b/,
   ATTENDANCE_TYPES: /\bATTENDANCE_TYPES\b/, MEETING_CATEGORIES: /\bMEETING_CATEGORIES\b/, ISSUE_SEVERITIES: /\bISSUE_SEVERITIES\b/,
   'Asia/Seoul': /Asia\/Seoul/, '+09:00': /\+09:00/, '9 * 3600_000': /9 \* 3600_000/,
   // SP4 A2 가 지운 손 베낀 팀 예약어 — 머리 낱말 단일 출처(src/lib/excel/headerWords.ts)에서 파생한다. 허용 항목 없음 = 영구 가드(D38)
@@ -27,7 +27,6 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
 
 /** 파일 → { patterns, removedBy } */
 export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' }> = {
-  // ISSUE_MEGA_AREAS(이슈 영역 — SP5 Phase B 가 project_areas(issue_area) 로)
   'src/components/issues/IssueModals.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   'src/components/issues/IssuesView.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
   'src/lib/report/issues/storedRun.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
