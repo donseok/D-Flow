@@ -1,4 +1,4 @@
-// 워크스페이스 키 11개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+// 워크스페이스 키 12개(SP5 A 의 calendar.* 셋, SP3b UI-3 의 portal.widgets 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
 import { defineSetting, type Parsed, type SettingDef } from '../def'
 import { NON_CORE_MODULES, isModuleId, type ModuleId } from '@/lib/modules/defaults'
 import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
@@ -6,6 +6,7 @@ import { BRANDING_SLOTS, parseBrandingPath, type BrandingSlot } from '../brandin
 import { deriveAccent, parseAccentInput, parseAccentValue, type AccentValue, type Hex } from '../accent'
 import { toAsciiHostname } from '@/lib/domain/hostname'
 import { ANY_DOMAIN } from '@/lib/domain/invites'
+import { defaultPortalWidgets, parsePortalWidgets, type PortalWidgetSetting } from '@/lib/portal/widgets'
 import { DEFAULT_TIMEZONE, DEFAULT_WORKING_DAYS, parseTimezone, parseWeekStartDay, parseWorkingDays, type IsoDow, type WeekStartDay } from '@/lib/domain/calendar'
 
 export type ModulesList = ModuleId[]
@@ -186,5 +187,11 @@ export const WORKSPACE_DEFS = [
       { value: 'sunday', labelKey: 'settings.calendar.week_start.sunday' }, { value: 'monday', labelKey: 'settings.calendar.week_start.monday' },
     ] },
     editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  // SP3b UI-3(스펙 §6.4 표 첫 행, D25) — 홈 위젯의 켜짐·열 안 순서. 열 배치·모듈·검토 조건은 위젯 레지스트리(src/lib/portal/widgets.ts)가 고정한다
+  defineSetting<'portal.widgets', PortalWidgetSetting>({
+    key: 'portal.widgets', scope: 'workspace', module: 'settings', default: defaultPortalWidgets(),
+    parse: parsePortalWidgets,
+    widget: { kind: 'custom', component: 'PortalWidgetsEditor' }, editor: 'workspace_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
 ] as const satisfies readonly SettingDef[]

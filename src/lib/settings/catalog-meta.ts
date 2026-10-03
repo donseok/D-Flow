@@ -48,11 +48,13 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/lib/report/week.ts', 'src/app/actions/weekly.ts', 'src/lib/ai/tools/weekly.ts', 'src/lib/calendar/viewZone.ts', 'src/app/actions/project.ts'],
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
+  // SP3b UI-3 과제 2 — 정의·테스트(네 연결 ①④)만. 편집기(과제 6 PortalWidgetsEditor)·소비처(과제 10 홈 v1)가 붙으면 상태를 올린다.
+  // 지금의 소비처 칸은 노출 식(visibleWidgets)을 가진 위젯 레지스트리다
+  'portal.widgets': { consumers: ['src/lib/portal/widgets.ts'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts'], status: 'stored', sp: 'SP3b' },
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
 export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: string; shape: string }[] = [
-  { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
   { key: 'minutes.root_folders', scope: 'workspace', sp: 'SP5 B2', shape: "{ mode: 'teams' } | { mode: 'custom'; names: string[] }" },
   { key: 'minutes.attachments', scope: 'workspace', sp: 'SP5 B3', shape: '첨부 정책 객체' },

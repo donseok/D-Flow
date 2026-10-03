@@ -60,4 +60,6 @@ export const homeEn: Record<keyof typeof homeKo, string> = {
   'home.nfTitle': 'Page not found',
   'home.nfDesc': 'The page you requested does not exist or has moved.',
   'home.nfHome': 'Back to home',
+  'portal.widget.my_work': 'My work', 'portal.widget.projects': 'Active projects', 'portal.widget.review': 'Awaiting review',
+  'portal.widget.upcoming': 'Upcoming meetings', 'portal.widget.recent_docs': 'Recent minutes', 'portal.widget.announcements': 'Announcements',
 }

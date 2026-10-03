@@ -226,5 +226,6 @@ export const settingsKo = {
   'settings.calendar.working_days.label': '근무 요일', 'settings.calendar.working_days.desc': '일정 계산·달력의 쉬는 요일 기준입니다. 이미 저장된 진척 스냅샷은 다시 계산하지 않습니다.',
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
+  'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '워크스페이스 홈에 보일 위젯과 열 안의 순서를 정합니다. 사람마다 위젯을 숨길 수 있습니다.',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
 } as const

@@ -65,4 +65,7 @@ export const homeKo = {
   'home.nfTitle': '페이지를 찾을 수 없습니다',
   'home.nfDesc': '요청하신 페이지가 존재하지 않거나 이동되었습니다.',
   'home.nfHome': '홈으로 돌아가기',
+  // 포털 위젯 이름(SP3b UI-3 — src/lib/portal/widgets.ts 의 labelKey)
+  'portal.widget.my_work': '내 업무', 'portal.widget.projects': '진행 중인 프로젝트', 'portal.widget.review': '검토 대기',
+  'portal.widget.upcoming': '다가오는 회의', 'portal.widget.recent_docs': '최근 회의록', 'portal.widget.announcements': '공지',
 } as const
