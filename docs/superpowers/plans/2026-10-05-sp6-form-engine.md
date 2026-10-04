@@ -31,10 +31,11 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - 활성화의 `engineVersion` 불일치는 재스캔하지 않고 재등록 오류로 막는다(OPC `scan` 미구현).
   - [x] S2 등록: `registerFormTemplate` — 다운로드, 매직바이트·OPC·매크로·zip 한도, `v<n>` 이동, `active=false` 행. 토큰 scan 은 하지 않는다(`tokenScan:false`, 활성화 거부). incoming GC 는 아니다.
 - [ ] V: 양식 병합 엔진 및 라우트 연결
-  - PPTX/XLSX 템플릿 병합 엔진 구현
-  - `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백)
-  - `X-Form-Template: default | custom` 응답 헤더
-  - 중립 기본 템플릿 자산 연결
+  - [x] V1: `capItems`·`lineCost`·`paginateGroups`·`paginateLines` 를 `engine/paginate.ts` 로 이동(정본 §4.3·§4.8). `templateFill.ts` 는 재수출만 한다. 렌더 삭제·라우트 전환은 render 이후
+  - [ ] PPTX/XLSX `FormEngine.render` (pptx 슬라이드·행·문단 복제, xlsx duplicateRow, OPC 배선). `FormEngine.scan` 은 만들지 않는다. 활성화는 미스캔 행을 계속 거부
+  - [ ] `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백). 정본 §4.8 은 `/api/issue-analysis` 와 `GET /api/export?form=1` 도 같은 전환
+  - [ ] `X-Form-Template: default | custom` 응답 헤더
+  - [ ] 중립 기본 템플릿 자산 (`assets/default` 4개 + `assets/fixed/issue-analysis-process.pptx`). CI `scan` error 0·warning 0 은 OPC scan 이 있어야 한다
 - [ ] Z: 합성 게이트 S8, 부정 테스트 6, 카탈로그 verified 승격 및 마감
   - 부정 테스트 6 (제조/영업 예시 단어 미노출 검증)
   - `scripts/e2e-synthetic.mjs`에 `S8` 합성 단계 구현 및 `PENDING_STEPS`에서 `S8` 제거

@@ -4,3 +4,4 @@
 export * from './types'
 export * from './scanner'
 export * from '../catalog'
+export { capItems, lineCost, paginateGroups, paginateLines } from './paginate'
