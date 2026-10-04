@@ -20,6 +20,9 @@
 //           measure [--items <n>] [--routes dashboard,wbs,issues,export,weekly(기본 dashboard,wbs,issues)] [--personas admin|admin,member(기본 둘)]
 //           [--expect-items <n>(wbs 화면·export 본문의 서로 다른 시드 항목 이름 수가 n 인지 — 다르면 실패. 표준 내보내기에는 코드 열이 없어
 //           이름으로 센다)]. export 는 바이너리로 읽는다.
+//   SP5b P0: workflow --label <이름> [--n 30] [--items n] — apply_workflow_event 를 pg 로 직접 잰다(D22). PERF 프로젝트의 리프 하나를 한 트랜잭션에서
+//           위임·주문 ready 로 맞추고 service_role 로 에이전트 순환(WORKFLOW_AGENT_CYCLE) + 위임 해제 뒤 사람 순환(set_stage ip·im·xx)을 돈 뒤
+//           롤백한다(데이터 불변). 사건마다 p50/p95 를 JSON 으로. 두 스키마(8인자·9인자)에서 이름 인자로 같은 호출을 한다.
 //   DSN 은 perfDsn(scripts/lib/perf.mjs) — LOCAL_DB_URL 필수(없으면 멈춘다 — 기본 DSN 인 메인 스택으로 떨어지지 않는다), .env.local 의 API 와 같은 스택인지 포트로 대조.
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -28,7 +31,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Pool } from 'pg'
 import { cookieHeader, localClientEnv, notFoundRendered } from './lib/e2e.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
-import { distinctSeedNames, IA_KINDS, iaRoutes, parseNameList, percentile, perfBaseUrl, perfDsn, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, wbsSeedCodes } from './lib/perf.mjs'
+import { distinctSeedNames, IA_KINDS, iaRoutes, parseNameList, percentile, perfBaseUrl, perfDsn, perfProjectName, perfRoutes, PERF_ROUTE_NAMES, PERF_WEEK, summarizeEventSamples, wbsSeedCodes, WORKFLOW_AGENT_CYCLE, WORKFLOW_HUMAN_CYCLE } from './lib/perf.mjs'
 import { zipTextParts } from './lib/sentinels.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 
@@ -327,7 +330,85 @@ async function measure(argv) {
   console.log(JSON.stringify(result))
 }
 
+function parseWorkflowArgs(argv) {
+  const out = { label: null, n: 30, items: 800 }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--label') out.label = argv[++i]
+    else if (a === '--n') out.n = Number(argv[++i])
+    else if (a === '--items') out.items = Number(argv[++i])
+    else fail(`모르는 인자: ${a}`)
+  }
+  if (!out.label) fail('workflow 는 --label <이름> 이 필요하다')
+  if (!Number.isInteger(out.n) || out.n <= 0) fail('--n 은 양의 정수여야 한다')
+  try { perfProjectName(out.items) } catch (e) { fail(e.message) }
+  return out
+}
+
+const WF_CALL = 'select public.apply_workflow_event(p_event => $1, p_actor => $2, p_item_id => $3, p_order_id => $4, p_stage => $5) as r'
+
+/** 사건 하나를 재고 결과가 ok 가 아니면 멈춘다(fail-closed — 실패한 사건을 시간으로 세지 않는다). */
+async function timedEvent(c, samples, key, args) {
+  const started = performance.now()
+  const { rows } = await c.query(WF_CALL, args)
+  const elapsed = performance.now() - started
+  const r = rows[0].r
+  if (!r?.ok) fail(`${key} 실패: ${JSON.stringify(r)}`)
+  ;(samples[key] ??= []).push(elapsed)
+}
+
+async function workflowBench(argv) {
+  const { label, n, items } = parseWorkflowArgs(argv)
+  const env = localClientEnv(envText())
+  const dsn = (() => { try { return perfDsn(process.env, env.url) } catch (e) { return fail(e.message) } })()
+  const adminEmail = (process.env.BOOTSTRAP_EMAIL || 'admin@example.com').trim().toLowerCase()
+  const pool = new Pool({ connectionString: dsn })
+  try {
+    const projectName = perfProjectName(items)
+    const { rows: projects } = await pool.query('select id from public.projects where name = $1', [projectName])
+    if (projects.length !== 1) fail(`${projectName} 프로젝트가 ${projects.length}개다 — seed 를 먼저 돌린다(정확히 1개여야 한다)`)
+    const pid = projects[0].id
+    const { rows: leaves } = await pool.query(
+      `select w.id from public.wbs_items w where w.project_id = $1
+         and not exists (select 1 from public.wbs_items c where c.parent_id = w.id) order by w.id limit 1`, [pid])
+    if (!leaves.length) fail(`${projectName} 에 리프가 없다`)
+    const leaf = leaves[0].id
+    const actor = await findAuthUserIdByEmail(dsn, adminEmail)
+    if (!actor) fail(`행위자 계정이 없다(${adminEmail}) — dev:bootstrap 을 먼저 돌린다`)
+    const { rows: sig } = await pool.query(
+      `select pg_get_function_identity_arguments(p.oid) as args from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'apply_workflow_event'`)
+    const samples = {}
+    for (let i = 0; i < WARMUP + n; i++) {
+      const target = i < WARMUP ? {} : samples
+      const c = await pool.connect()
+      try {
+        await c.query('begin')
+        await c.query('update public.wbs_items set dev_workflow = true, tags = $2, stage = null, actual_pct = 0 where id = $1', [leaf, ['agent']])
+        await c.query('delete from public.agent_work_orders where wbs_item_id = $1', [leaf])
+        const order = randomUUID()
+        await c.query(`insert into public.agent_work_orders (id, project_id, wbs_item_id, status) values ($1, $2, $3, 'ready')`, [order, pid, leaf])
+        await c.query('set local role service_role')
+        for (const event of WORKFLOW_AGENT_CYCLE) await timedEvent(c, target, event, [event, actor, null, order, null])
+        // 사람 경로 — 위임·주문을 걷고(postgres) 단계 지정 순환
+        await c.query('reset role')
+        await c.query('update public.wbs_items set tags = null, stage = null, actual_pct = 0 where id = $1', [leaf])
+        await c.query('delete from public.agent_work_orders where wbs_item_id = $1', [leaf])
+        await c.query('set local role service_role')
+        for (const stage of WORKFLOW_HUMAN_CYCLE) await timedEvent(c, target, `set_stage:${stage}`, ['set_stage', actor, leaf, null, stage])
+      } finally {
+        await c.query('rollback').catch(() => {})
+        c.release()
+      }
+    }
+    console.log(JSON.stringify({ label, n, items, signature: sig.map((r) => r.args), events: summarizeEventSamples(samples) }))
+  } finally {
+    await pool.end()
+  }
+}
+
 const [cmd, ...rest] = process.argv.slice(2)
 if (cmd === 'seed') await seed(rest)
 else if (cmd === 'measure') await measure(rest)
-else fail("사용: node scripts/perf-baseline.mjs seed [--items n] [--weekly] | measure --base <url> --label <이름> [--n 100] [--items n] [--routes a,b] [--personas admin] [--expect-items n] [--ia legacy|ws]")
+else if (cmd === 'workflow') await workflowBench(rest)
+else fail("사용: node scripts/perf-baseline.mjs seed [--items n] [--weekly] | measure --base <url> --label <이름> [--n 100] [--items n] [--routes a,b] [--personas admin] [--expect-items n] [--ia legacy|ws] | workflow --label <이름> [--n 30] [--items n]")

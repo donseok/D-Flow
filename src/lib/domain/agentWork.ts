@@ -28,7 +28,7 @@ export const AGENT_HELD_ORDER_STATUSES = ['claimed', 'reported'] as const
 /**
  * 사람의 단계 지정·실적 100 입력 잠금(§3.5·§3.6) = 위임됨 ∨ 에이전트가 주문을 쥠. 위임된 ready 주문은
  * /dflow-poll 이 자동 claim 하므로 잠그지 않으면 사람이 찍은 완료가 claim 사건으로 되돌아간다.
- * RPC apply_workflow_event 의 set_stage 가 같은 조건을 SQL 로 복제한다(tests/migrations/0096 이 대조).
+ * RPC apply_workflow_event 의 set_stage 가 같은 조건을 SQL 로 복제한다(tests/rls/workflow-parity.test.ts 가 대조).
  */
 export function stageLockedForHuman(p: { delegated: boolean; orderStatus: string | null }): boolean {
   return p.delegated || (p.orderStatus !== null && (AGENT_HELD_ORDER_STATUSES as readonly string[]).includes(p.orderStatus))
