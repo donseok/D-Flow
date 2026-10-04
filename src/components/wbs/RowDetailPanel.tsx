@@ -1,4 +1,5 @@
 'use client'
+import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
 import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
@@ -713,6 +714,8 @@ export function RowDetailPanel({
               {err && !editing && <p className="mt-2 text-xs font-medium text-delayed">{err}</p>}
             </section>
           )}
+
+          <CustomFieldValuesEditor rowId={item.id} values={item.custom} canEdit={editable || canEditDeliverable} />
 
           {/* 산출물 첨부 */}
           <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />

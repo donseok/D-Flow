@@ -57,6 +57,19 @@ describe('getComputedWbs — 의존성 두 축 병합', () => {
     responses.task_dependencies = { data: [], error: null }
   })
 
+  it('custom keeps zero/false/inactive values through tree computation without aliasing arrays', async () => {
+    const custom = { quantity: 0, approved: false, archive: '', tags: ['old'] }
+    responses.wbs_items = { data: [item({ custom })], error: null }
+    const { items } = await getComputedWbs('p-custom')
+    expect(items[0].custom).toEqual(custom)
+    expect(items[0].custom?.tags).not.toBe(custom.tags)
+  })
+
+  it('corrupt custom remains unavailable rather than becoming an empty editable object', async () => {
+    responses.wbs_items = { data: [item({ custom: { invalid: null } })], error: null }
+    expect((await getComputedWbs('p-corrupt')).items[0].custom).toBeNull()
+  })
+
   it('depends 를 합성 의존성으로 올리고 stage 를 항목에 실어 보낸다', async () => {
     // stage 가 빠지면 spec 선행이 전부 '대기'로 굳는다 — 조용히 틀리는 자리라 읽기 경로에서 고정한다.
     responses.wbs_items = {

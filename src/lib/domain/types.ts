@@ -1,3 +1,4 @@
+import type { CustomValues } from './customFields'
 import type { ThemePref } from '@/lib/theme/policy'
 import type { VocabByProject } from '@/lib/settings/vocab'
 
@@ -10,6 +11,8 @@ export type Status = 'not_started' | 'in_progress' | 'delayed' | 'done'
 export type DependencyType = 'FS' | 'SS'
 
 export interface WbsRow {
+  /** Optional for historical fixtures; null means a corrupt stored snapshot and must remain visibly unavailable. */
+  custom?: CustomValues | null
   id: string
   parentId: string | null
   code: string
