@@ -119,4 +119,16 @@ WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추
 - 단위 테스트 3건(`tests/ui/wbs-custom-columns.test.tsx`) 및 전체 단위 테스트 925파일 12,314건 통과, lint 오류 0(기존 경고 4), 프로덕션 빌드 통과.
 - 실제 빌드 앱 3101 + 전용 DB 브라우저 QA(`wbs-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 가로 넘침(overflow) 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/wbs-cols-browser-result.json`, `wbs-cols-desktop.png`, `wbs-cols-mobile.png`.
 
-남은 작업: 주간 값 입력/이월, Excel 왕복, AI 재색인 및 합성/최종 성능 검증. SP5c 전체 미완료, fields 카탈로그 stored 유지.
+## V 주간 시트 사용자 정의 필드 열·편집 모달 (2026-10-05)
+
+주간 업무보고 시트에 `fields.weekly_row` 활성 `show_in_list` 필드를 추가 열로 연결하고, 행 단위 추가 정보 편집 모달을 연동했다.
+- `WeeklyPage`에서 `pick(pc.cfg, 'fields.weekly_row')`를 로드해 `<CustomFieldsProvider>`로 `<WeeklySheetView>`를 감쌌다.
+- `WeeklySheetView`에서 `useCustomFieldScope()` 훅으로 열 정의를 조회하고, `show_in_list && active` 필드들을 `<colgroup>`(공백 텍스트 노드 없는 배열 형태) 및 `<thead>`에 140px 열로 배치했다.
+- 각 행의 업무영역 칸에 필드 정의가 존재할 때 "추가 정보" 버튼을 배치하고, 추가 열 클릭 또는 버튼 클릭 시 `CustomFieldValuesEditor`를 포함한 `<Modal>`을 띄워 값 편집 및 CAS 저장을 지원했다.
+- `fromRecord` 및 `mapAreaRow`에 `custom` 필드를 매핑하고, 쿼리 열 목록(`AREA_ROW_COLS`)에 `custom`을 추가했다.
+- 단위 테스트 3건(`tests/ui/weekly-custom-columns.test.tsx`), colgroup 무공백 불변식 테스트(`tests/ui/weekly-sheet-colgroup.test.tsx`), 주간 시트 쿼리/이월 테스트(`tests/data/weeklySheet.test.ts`, `tests/data/weeklySheet-carryover.test.ts`) 포함 주간 관련 10개 테스트 파일 225건 모두 통과.
+- 프로덕션 빌드·타입 검사·lint(오류 0, 기존 경고 4) 통과.
+- 실제 빌드 앱 3101 + 전용 A DB(54521/54522) 브라우저 QA(`.superpowers/sp5c/weekly-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 모달 오픈 및 편집 확인, 가로 넘침 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/weekly-cols-browser-result.json`, `weekly-cols-desktop.png`, `weekly-cols-mobile.png`.
+
+남은 작업: X(주간 carryCustom 이월 및 WBS Excel 왕복), I(AI 색인), Z(합성/최종 성능 검증). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+

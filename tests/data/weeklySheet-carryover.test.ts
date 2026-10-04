@@ -202,6 +202,7 @@ describe('findCarryOverSource — 임베드 1왕복화 이후에도 반환 계�
     expect(src?.rows[1]).toEqual({
       id: `row-r1-${A_EXP}`, reportId: 'r1', areaId: A_EXP,
       thisContent: '실험 한 일', thisIssue: '', nextContent: `${A_EXP} 차주계획`, nextIssue: '',
+      custom: null,
     })
   })
 
