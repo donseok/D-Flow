@@ -172,3 +172,12 @@ B1-3 과제 7~9 완료(2026-10-04 07:00 경):
 ## 13. 자동 연속 진행 중단 및 Cloud Claude 인수 — 2026-10-04 09:15 KST
 
 Codex 토큰 소진. Claude Haiku 2.1.288 인수, HANDOFF.md 최신화 및 상태 정리만 수행.
+
+## 14. B3 완료 — Claude Cloud 세션 (2026-10-04 09:28 ~ 11:10 KST)
+
+- **B3 과제 5~14 전부 완료**, 브랜치 `sp5/b3` 체크포인트 `0e1e601`(로컬 태그 `sp5-b3-done`). 상세: `docs/superpowers/plans/2026-10-04-sp5-phase-b3.md` 진행표, `docs/baseline/sp5-effort.md` "B3 과제 5~14" 절.
+  - 첨부 삭제 톰스톤·미리보기·정책 조회 액션, 상세 첨부 패널·새 회의록 모달 정책 확인, 산출물·이슈 클릭 발급(60초), 정책 편집기(워크스페이스·프로젝트), 청소 잡 `npm run minutes:sweep`, 의미검색 범위 `0022_semantic_scope`(+롤백), 카탈로그 `minutes.attachments` verified.
+- **검증**: 로컬 db reset(10:48:41 KST) → bootstrap → settings:verify → test:rls 39 files·609/skip0, 단위 891 files·11,806 통과, typecheck·lint·build 초록, 실앱 Playwright 18/18(1440/390 light/dark), 청소 잡 실DB dry-run/--apply/재실행0.
+- **클라우드 컨테이너 주의**: 커널에 IPv6 가 없어 realtime v2.73.2 가 뜨지 않는다 — HTTP 리스너만 `[:inet]` 으로 바꾼 로컬 이미지를 만들어 썼다(리포 변경 없음). 이미지 다운로드가 프록시에서 간헐 403 이라 재시도가 필요하다. `supabase` 는 `npx -y supabase@2.75.0` 으로 부른다.
+- **main 반영**: B1(`0e9e403`)·B3 를 main 에 병합(아래 커밋). 사용자 DB 적용·성능 측정은 하지 않았다(별도 확인).
+- **이월**: v2.9 계약 절의 첨부 운영 상한 한 줄(B2 산출물), 다음은 계획상 B2(회의록 팀·폴더) 또는 B4(어휘 설정).
